@@ -14,6 +14,10 @@ A007 [ ] P0 既有瓶頸基準：來源 docs/multiplayer-legacy-movement-audit.m
 
   2026-11-13：已建立 research/source_manifest.json（12 檔路徑、Git blob SHA、byte size）及 research/README.md；來源最新 HEAD=ab9fb0e10055878488458f371e64d826caf2c111；舊專案根目錄未見 LICENSE，第三方/原作權利仍待核對，禁止拷貝 Old 原件。此 task 因外部授權資訊不足標 [!]，不是完成。
 
+A008 [~] P0 原版素材查核：找齊後期《星夢 Online》原版 Client 的 SPR/SIF/ITF/ITD、人物裝備、地圖圖像、音訊與封包資源；先做唯讀 inventory，逐格式確認 parser/透明度/Frame/Pivot/方向，輸出 Godot 可用 Atlas+SpriteFrames。2026-11-13 已確認公開 Old/ClientData 有 199 SPR、12 SIF、4 ITD、無 ITF；補入唯讀掃描工具和 unit test，實際轉檔仍待進行。法律/來源 Gate 未通過。
+A009 [x] P0 UI 時代選定：2026-11-13 使用者指定後期《星夢 Online》金黃色 UI；docs/OLD_UI_DESIGN.md 已記錄。僅代表選定時代，不代表還原完成。
+A010 [ ] P0 精確原版 UI 核對：收集同一時期登入/選角/HUD/背包/角色資訊/技能/對話截圖與 .itf；建立按鈕、視窗、交互與九宮格圖像對照。缺原件時保留待查，不猜測完美像素一致。
+
 ==== Phase B / M1：工程/CI 基底 ====
 B001 [~] P0 建立真正 Godot 4 Client skeleton：登入/場景/資產生命週期、清楚 presentation vs state vs net 邊界，renderer 可切換，GDScript style/lint/自動 headless test。驗收：啟動/退出/重新進入的 RAM metrics；不可任意複製既有大型 HUD。
   2026-11-13：已提交原創 Godot 4.7.2 基礎專案、可連線 demo scene、WorldState epoch/seq/Action reducer、NetworkPeer 固定 physics poll、單 Canvas renderer 與 headless regression + Actions；尚缺登入/角色/資源釋放和 RAM 實測，狀態保留 [~]。因環境沒有 Godot CLI，尚未執行 PASS（NOT VERIFIED）。
@@ -23,6 +27,9 @@ B003 [ ] P0 建 shared/contracts 版本化 wire schema + generator/兼容測試�
 B004 [ ] P0 GitHub Actions：Linux+Windows 建置、dotnet test、Godot headless import、隔離 PostgreSQL、合約/編碼/地圖驗證；無真素材使用 mock fixture；留 artifacts。
 B005 [ ] P0 Client↔Server 可重連登入/選角/進出單圖 E2E。每個 gate run 可重現，須兼容 Windows 開發。
 B006 [ ] P0 Telemetry 基礎：Client render frame, texture counts, RSS；Server tick/queue/send/db、traceId/seq/serverTime；只統計聚合，不逐包垃圾 log。
+
+B007 [~] P0 Godot 新金色 UI：共用 Theme、UI Scene、可視/交互原型，全部自行製作 Control/Container；不使用 TestGoGo 的 UI 程式碼。保留後期金色外觀與底部/右側 HUD，支援不同解析度；Gallery 和 headless smoke 先確認，再用原版合法素材替換。其餘正式視窗待完成。
+B008 [ ] P0 原版人物紙娃娃：完成可驗證 SPR/SIF→SpriteFrames/圖集的方向、動畫時間、裝備疊層、攻擊/受擊、特效、低記憶體；20 人可視動作驗收。
 
 ==== Phase C / M2：人物第一優先（最重要） ====
 C001 [ ] P0 Server MapActor 固定 Tick / 時間基準/SessionEpoch/MapEpoch/輸入命令順序；無跨玩家大鎖持有 DB/網路 IO。

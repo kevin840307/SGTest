@@ -1,6 +1,6 @@
 # SGTest — 全新 2D MMORPG：高效能、低資源、可維護
 
-> 規劃基準 v1.0｜2026-11-12｜目前狀態：設計文件已建立；遊戲程式、效能驗證與 CI 尚未實作。請勿將「目標」當成「PASS」。
+> 2026-11-13：已有最小 Godot/.NET Server 原型與 GitHub CI。正式 UI 已指定為後期《星夢 Online》金黃色風格，原版素材的來源/轉檔及使用權仍待完成。
 
 ## 專案定位
 
@@ -17,7 +17,8 @@
 5. [物品編碼/強化遷移](docs/ITEM_ID_MIGRATION.md)／[舊版來源查核](docs/LEGACY_REFERENCE.md)
 6. [地圖/資料](docs/MAPS_AND_CONTENT.md)／[玩法模組](docs/GAMEPLAY.md)／[資料模型](docs/DATA_MODEL.md)
 7. [效能預算](docs/PERFORMANCE.md)／[測試/CI](docs/TEST_PLAN.md)／[資安/營運](docs/SECURITY_OPERATIONS.md)
-8. [架構決策 ADR](docs/DECISIONS.md)
+8. [後期金色 UI](docs/OLD_UI_DESIGN.md)／[原版素材轉換](docs/LEGACY_ASSET_PIPELINE.md)
+9. [架構決策 ADR](docs/DECISIONS.md)
 
 ## 參考專案（唯讀，不做舊版修補）
 
@@ -40,4 +41,4 @@
 
 ## 開發起點
 
-目前沒有可執行 Client 或 Server。下一 Session 讀 AGENTS.md + todo.txt，從 A001 與 A002 的證據/資產授權檢查開始，接著建立最小工程與 CI。
+目前已有最小 Client/Server 原型；下一步先執行 A008/A010/B007，重新製作後期星夢金色 UI 並建立原版素材匯入管線。舊 Demo 圓點不是正式 UI。

@@ -10,6 +10,13 @@
 
 「比現版 Godot 更好」必須有同等素材/場景/硬體下的 A/B：玩家畫面、RAM、VRAM、CPU、GPU、Frame P95/P99、Server Tick P95/P99、Net E2E P95/P99。比較方法見 docs/PERFORMANCE.md。
 
+## 1.1 最新選定：後期星夢 Online 金黃色 UI 和原始資產
+- 使用者 2026-11-13 指定後期《星夢 Online》金黃色 UI。早期星空之門藍色 UI 不是正式基準。
+- 用 Godot Control、Container、Theme、.tscn 全新建立 UI，不複製 TestGoGo 的 HUD/視窗/登入/背包等 UI 程式碼。
+- 目標是導入原版素材，但素材來源、版本、格式與合法使用權需要先確認。優先唯讀盤點/獨立解析/匯出 PNG+Atlas+Animation metadata，並確保透明度、方向、偏移、幀時長正確。
+- 原版後期 .itf 目前只有檔名索引，Old/ClientData 沒看到實體 .itf；不能宣稱完整原版 UI 素材已齊。未確認授權不傳到公開 GitHub。
+- 相關文件：docs/OLD_UI_DESIGN.md、docs/LEGACY_ASSET_PIPELINE.md。新的優先 Gate：A008/A009/A010/B007/B008。最小多人 demo 保留，只作技術基線。
+
 ## 2. 技術選型與品質原則
 
 - Client：Godot 4.x，首選 GDScript + 輕量 Data Oriented Entity State；Node 專注 UI/少量互動、畫面可視 Pool。是否改用 C# 或 C++ GDExtension，只能由 Profiler 證據決定，須包含 Runtime 記憶體成本。

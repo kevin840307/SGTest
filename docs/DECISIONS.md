@@ -58,3 +58,10 @@
 - Status: ACCEPTED
 - GitHub headless 可驗證算法、封包、Scene 行為和流程；GPU FPS、VRAM/外觀與真實多人感受需固定 Windows GPU runner/本機測量，不能誤標 PASS。
 - 任務：B004, C008, E005。
+
+## ADR-011 — 後期《星夢 Online》金色 UI（2026-11-13）
+- Status：ACCEPTED，已由使用者選定後期金黃色皮膚（非早期藍色版本）。
+- Client 全部 Godot Control/Theme/.tscn 全新製作，保留 Old 後期的 HUD 排版與風格，不複製 TestGoGo 的 UI/Scene。
+- 原始素材來源/使用權/解析需先確認：Old/ClientData 尚無實體 .itf；現階段先原創 Theme/Gallery，取得合法完整資產再做像素/互動比對。
+- UI 不干涉地圖模擬、人物資料同步、網路連線與低資源模式的固定更新。
+- docs/OLD_UI_DESIGN.md、docs/LEGACY_ASSET_PIPELINE.md 定義驗收門檻。
