@@ -28,7 +28,7 @@ B004 [ ] P0 GitHub Actions：Linux+Windows 建置、dotnet test、Godot headless
 B005 [ ] P0 Client↔Server 可重連登入/選角/進出單圖 E2E。每個 gate run 可重現，須兼容 Windows 開發。
 B006 [ ] P0 Telemetry 基礎：Client render frame, texture counts, RSS；Server tick/queue/send/db、traceId/seq/serverTime；只統計聚合，不逐包垃圾 log。
 
-B007 [~] P0 Godot 新金色 UI：共用 Theme、UI Scene、可視/交互原型，全部自行製作 Control/Container；不使用 TestGoGo 的 UI 程式碼。保留後期金色外觀與底部/右側 HUD，支援不同解析度；Gallery 和 headless smoke 先確認，再用原版合法素材替換。其餘正式視窗待完成。
+B007 [~] P0 Godot 新金色 UI：共用 Theme、UI Scene、可視/交互原型，全部自行製作 Control/Container；不使用 TestGoGo 的 UI 程式碼。保留後期金色外觀與底部/右側 HUD，支援不同解析度；Gallery 和 headless smoke 先確認，再用原版合法素材替換。2026-11-13 已提交 late_gold_theme.tres、late_gold_ui_gallery.tscn / script、獨立 headless UI scene test；尚未取得原版金色視窗完整素材，也未做原圖逐像素比對或實機 RAM 數據。其餘正式視窗待完成。
 B008 [ ] P0 原版人物紙娃娃：完成可驗證 SPR/SIF→SpriteFrames/圖集的方向、動畫時間、裝備疊層、攻擊/受擊、特效、低記憶體；20 人可視動作驗收。
 
 ==== Phase C / M2：人物第一優先（最重要） ====

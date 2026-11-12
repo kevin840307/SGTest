@@ -12,7 +12,7 @@ func _initialize() -> void:
 	call_deferred("_run")
 
 func _run() -> void:
-	var gallery: Control = GALLERY.instantiate()
+	var gallery: Variant = GALLERY.instantiate()
 	root.add_child(gallery)
 	await process_frame
 	check(gallery.theme != null, "gold theme present")
