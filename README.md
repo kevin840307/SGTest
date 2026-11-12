@@ -42,3 +42,11 @@
 ## 開發起點
 
 目前已有最小 Client/Server 原型；下一步先執行 A008/A010/B007，重新製作後期星夢金色 UI 並建立原版素材匯入管線。舊 Demo 圓點不是正式 UI。
+
+## 後期金色 UI 預覽（2026-11-13）
+- 直接在 Godot 編輯器開啟 client/scenes/late_gold_ui_gallery.tscn，這是 SGTest 自製的後期星夢金色主題預覽，與原先簡單多人移動 demo 分開。
+- 主題：client/ui/late_gold_theme.tres；互動：client/ui/late_gold_ui_gallery.gd；場景：client/scenes/late_gold_ui_gallery.tscn。
+- 開啟命令：godot --path client res://scenes/late_gold_ui_gallery.tscn
+- Godot headless 4.7.2 測試 PASS：https://github.com/kevin840307/SGTest/actions/runs/43330537013
+- 原版素材掃描 CLI：python tools/legacy_asset_inventory.py --root "C:\OldGame" --output reports/assets.json --sha256。工具的 GitHub regression PASS：https://github.com/kevin840307/SGTest/actions/runs/43330225634
+- 此 Scene 尚無原版貼圖/字型/ITF，並非逐像素還原；正式素材使用權與全檔解析仍是待辦。
