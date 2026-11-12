@@ -1,0 +1,67 @@
+SGTest 多人 MMORPG 開發 TODO — 2026-11-12
+此檔是唯一跨 ChatGPT/Codex Session 工作狀態；spec/其餘文件定義契約。
+狀態：[ ] 未開始；[~] 進行中；[x] 已完成且證據完整；[!] 受阻；[?] 設計待決。
+規則：每次開始讀 AGENTS.md、最新 SGTest HEAD、參考 repo 最新 HEAD、SPEC.md；先領一個任務；不同 Session 用獨立分支；不可 force push；每個任務先補測試、保留環境及 SHA；未測寫 NOT VERIFIED。
+
+==== Phase A / M0：研究、證據、架構、強化 ID（先做） ====
+A001 [ ] P0 來源權利/授權與基準：核對 TestGoGo/Old/ClientData、Old/服務端、Old/資料庫資料來源與再利用授權；建立 research evidence manifest 含路徑/SHA/大小/格式/風險。未核可素材只能局部 fixture，不搬入 SGTest。驗收：manifest + 權利決策；不存在的授權不自行推斷。
+A002 [ ] P0 原始角色移動/面向/動畫拆解：逐段分析 Old/ClientData/Paradise.exe.lst 的 CSGOMap::MessageMap、CSGOChar::SetMoveloop/MoveStep、敵人 movelogic、收包 state/方向/Animation；再分析 Old/服務端/插件 *.lst 中 SendSyncDestPac/SendSyncPosition/Update/AOI，與現版 player.gd、network_player.gd、remote_player_motion.gd、remote_player_state_policy.gd 做可定位差異矩陣。驗收：packet field/方向/時序/action boundary 源碼位址、已知與未知、時間戳不足註記；所有推論能查證。
+A003 [ ] P0 Old 裝備編碼實證稽核：解析 Dat/Item/Weapon.itd、Equip.itd、ClientData/Item/*.itd、SQL equip/商店/任務掉落；確認+N變體的真正 ID 編碼/排列/例外，不能假設連號即強化。建 golden fixture 與明確來源記錄。
+A004 [ ] P0 新 ItemDefinitionId 重排器：先排序、過濾 +N alias，保留原型；從1生成連續 newDefinitionId，後續 ID 前移補洞，舊 ID→新 ID+enhancementLevel 映射；碰撞/缺值 quarantine；多次執行決定性、反向稽核、全引用修正、不能在發版後重排。驗收 docs/ITEM_ID_MIGRATION.md 契約 + unit tests + diff report。
+A005 [ ] P0 Old 地圖格式稽核：Blocking.dat/Enemy.dat/NPC.dat/safe_area.dat/座標/路徑/Map13, Map15；與 game-editor、Godot 地圖、Server Blocking compare；做 lossless fixture、合法/不可走格對照、不同 zoom/視窗 AOI 研究。
+A006 [ ] P0 架構 ADR：選定 Godot 版本/Renderer、GDScript vs C#/GDExtension、MessagePack vs Protobuf、導航資料/網路時基、DB 隔離、正式 License/第三方依賴；技術 benchmark 後決策。結果寫 docs/DECISIONS.md。
+A007 [ ] P0 既有瓶頸基準：來源 docs/multiplayer-legacy-movement-audit.md、remote-player-hit-motion、Map13 AI tick、現有 Godot 資源 leak、WebSocket queue；準備新舊共通 A/B fixture，明確原版50Hz不等於50包/s。
+
+==== Phase B / M1：工程/CI 基底 ====
+B001 [ ] P0 建立真正 Godot 4 Client skeleton：登入/場景/資產生命週期、清楚 presentation vs state vs net 邊界，renderer 可切換，GDScript style/lint/自動 headless test。驗收：啟動/退出/重新進入的 RAM metrics；不可任意複製既有大型 HUD。
+B002 [ ] P0 建 .NET 10 Server skeleton：API/WebSocket gateway、MapActor/Domain/Application/Infrastructure、DI/health、PostgreSQL Migration、測試 DB；Domain 不依賴 Transport/DB。
+B003 [ ] P0 建 shared/contracts 版本化 wire schema + generator/兼容測試；每種事件具 seq/map epoch/state revision；消息排序/反重放。
+B004 [ ] P0 GitHub Actions：Linux+Windows 建置、dotnet test、Godot headless import、隔離 PostgreSQL、合約/編碼/地圖驗證；無真素材使用 mock fixture；留 artifacts。
+B005 [ ] P0 Client↔Server 可重連登入/選角/進出單圖 E2E。每個 gate run 可重現，須兼容 Windows 開發。
+B006 [ ] P0 Telemetry 基礎：Client render frame, texture counts, RSS；Server tick/queue/send/db、traceId/seq/serverTime；只統計聚合，不逐包垃圾 log。
+
+==== Phase C / M2：人物第一優先（最重要） ====
+C001 [ ] P0 Server MapActor 固定 Tick / 時間基準/SessionEpoch/MapEpoch/輸入命令順序；無跨玩家大鎖持有 DB/網路 IO。
+C002 [ ] P0 玩家 authoritative path/speed/blocking/轉向/停止/追怪/傳送；移動段開始/結束與狀態事件分離；Server 驗證速度與碰撞。
+C003 [ ] P0 Remote-player SnapshotTimeline：Server clock、seq/tick、2~4個時序樣本 buffer（先測後調）、自適應插值延遲、限時外推、校正/warp 判定；晚到的封包不可使動作倒退。
+C004 [ ] P0 FacingDirection 合約：靜止、移動、轉向、攻擊、受擊、機甲/寵物；測8方向/朝向翻轉（依 Old 實證決定方向數）以及不同網速/頻率不抖動、不走反向。
+C005 [ ] P0 Action FSM：locomotion/walk/idle 與 attack/hit/death OneShot 分離；action seq/id、優先級；Move 不重新播放受擊/普通攻擊；死亡立即鎖定，不因掉包復活。
+C006 [ ] P0 LocalPlayer 立即操控且 Server 校正/重播策略；預測不能產生權威攻擊/撿取或穿牆。檢查不同 ping、地形/停止回拉。
+C007 [ ] P0 雙向 AOI 初始/重新進入、Spawn→Move/Stop、Despawn barrier、超寬螢幕/Zoom/Camera offset，邊緣不突然生成在錯位。
+C008 [ ] P0 兩名真人 Client +20 bots 可重現：人物行走/轉向/連續受擊/重登/攻擊動畫/普攻 MISS/看得到其他人傷害，完整錄影與封包 trace。
+
+==== Phase D / M3：大量怪物、掉落、同步 ====
+D001 [ ] P0 Server shared MapAI/World Runtime、網格索引與怪物唯一實例；300/500 怪狀態資料陣列，AI pathfinding 時間預算/阻擋/仇恨脫戰/回巢。
+D002 [ ] P0 NPC/Monster 巡邏 waypoint：不瞬間把權威位置設最終目的地；遠端方向/動畫穩定；攻擊/停止/死亡即正確換狀態。
+D003 [ ] P0 序列化與 SendQueue：玩家/戰鬥優先、可靠事件 FIFO/跨類因果屏障、Move 同 Entity 只取最新；強制測 Queue age P95/P99/flow-control/no-starvation。
+D004 [ ] P0 AOI Delta/Interest 管理：Player > fighting mobs > pets > ambient mobs > ground visual；不同半徑與實際視窗保證完整 coverage；高負載避免全圖 fanout。
+D005 [ ] P0 GroundDrop 權威稀疏快取/可見渲染密度、共用動畫時鐘、查詢與拾取完全分離；500/4500 drops 來回切圖不 ghost/重付。
+D006 [ ] P0 Combat Damage 內存結算與持久化非同步安全交接；同怪物多人同時攻擊只死一次、掉落/EXP守恆、DB不阻塞 Map Tick。
+D007 [ ] P0 20/50/100 真 WebSocket bots 混合走路+普攻+技能+大量掉落、真 Godot observer；延遲/動畫/方向/傷害/資產/queue 指標俱全，無效場景不得宣稱達標。
+
+==== Phase E / M4：低資源 + 真機 A/B ====
+E001 [ ] P0 Client Node/Texture/Atlas/RenderTarget/Animation memory audit；分類哪個資源常駐、誰持有引用。
+E002 [ ] P0 地圖 chunk streaming、Atlas cache、LRU/TTL、Render RID/Scene Pool；無顯示必要的物件不建立重 Node。
+E003 [ ] P0 Drop/monster 視覺使用 batch 或 RenderingServer/CanvasItem 的 profiling A/B，保留 UI/角色紙娃娃分層與點擊命中功能。
+E004 [ ] P0 登出/切圖/AFK/失焦/最小化重覆100次記憶體回收；所有模式 Network/Combat/Tick 完整運行；AFK 回復有進度條並避免重載卡頓。
+E005 [ ] P0 在固定硬體上使用相同資產/地圖/玩家/怪/掉落與舊版 Godot A/B，記 RSS/Private Bytes/VRAM/CPU/GPU/frame P50/P95/P99；未達標則迭代，絕不能降低功能/畫面範圍作弊。
+E006 [ ] P1 C#/GDExtension/更底層 Renderer 僅在 profiling 證明比 GDScript 改善且總 RAM 不變差時評估。
+
+==== Phase F / M5：遊戲系統與工具 ====
+F001 [ ] P1 裝備/強化/耐久/修理/附加屬性，所有裝備類別可存 enhancementLevel，無 +1/+2 variant ID；建立數值公式/強化失敗策略。
+F002 [ ] P1 商店/銀行/倉庫/玩家交易/攤位及錢/物數量守恆，併發+斷線+重放/多次交易測試。
+F003 [ ] P1 任務/對話/NPC/商店/傳點/獎勵完整流程、版本化腳本與 sandbox。
+F004 [ ] P1 主動/被動/範圍技能、命中/MISS、特效/傷害與目標動作，AOE批次計算/單次死亡結算。
+F005 [ ] P1 寵物召喚/跟隨/攻擊/裝備、機甲/部件/升級/外觀，移速與動畫播放速率分離。
+F006 [ ] P1 內容工具：地圖/NPC/怪物/掉落/物品/技能編輯 + deterministic export + Schema validation，不讓 Editor 直接改 DB 真相。
+F007 [ ] P1 GM 後台/倍率/公告/查詢/審計、監測與資訊安全。
+F008 [ ] P1 GitHub CI 端對端測試（商店/交易/裝備強化/任務）及多角色/多人資料隔離。
+
+==== Phase G / M6：擴充、部署與驗收 ====
+G001 [ ] P2 PVP 地圖/藍白粉紅/閃粉/紅名與GM顏色安全管理、完整例外測試。
+G002 [ ] P2 小屋 Housing（家具+權限+儲存+訪客）、公會/好友進階、組隊、交易等各自模組。
+G003 [ ] P2 MapActor 多個 Channel/Pod、跨圖移交/斷線恢復、事件冪等/排序、負載容量與資產守恆。
+G004 [ ] P2 24h soak、部署/備份/恢復、版本升級/DB migration、異常回復、Security review、發行前授權檢查。
+
+==== 本次只完成文件初始化 ====
+[?] 進度說明：README / SPEC / AGENTS / docs / TODO 寫入 GitHub 後，只標「規格建立」；A001~G004 仍待實作，不能誤標完成。請下一 Session 以 GitHub 最新內容為準。
