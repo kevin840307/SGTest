@@ -17,7 +17,8 @@ A007 [ ] P0 既有瓶頸基準：來源 docs/multiplayer-legacy-movement-audit.m
 ==== Phase B / M1：工程/CI 基底 ====
 B001 [~] P0 建立真正 Godot 4 Client skeleton：登入/場景/資產生命週期、清楚 presentation vs state vs net 邊界，renderer 可切換，GDScript style/lint/自動 headless test。驗收：啟動/退出/重新進入的 RAM metrics；不可任意複製既有大型 HUD。
   2026-11-13：已提交原創 Godot 4.7.2 基礎專案、可連線 demo scene、WorldState epoch/seq/Action reducer、NetworkPeer 固定 physics poll、單 Canvas renderer 與 headless regression + Actions；尚缺登入/角色/資源釋放和 RAM 實測，狀態保留 [~]。因環境沒有 Godot CLI，尚未執行 PASS（NOT VERIFIED）。
-B002 [ ] P0 建 .NET 10 Server skeleton：API/WebSocket gateway、MapActor/Domain/Application/Infrastructure、DI/health、PostgreSQL Migration、測試 DB；Domain 不依賴 Transport/DB。
+B002 [~] P0 建 .NET 10 Server skeleton：API/WebSocket gateway、MapActor/Domain/Application/Infrastructure、DI/health、PostgreSQL Migration、測試 DB；Domain 不依賴 Transport/DB。
+  2026-11-13：已提交 SGTest.Domain（30Hz 單寫者權威移動/八方向/Stop屏障/Spawn/Leave/可加入快照）、SGTest.Host（本機匿名 demo WebSocket/health/獨立連線有界送出 queue）、無 NuGet 依賴 console 域測試與 ubuntu/windows .NET10 CI。尚未實作 PostgreSQL、正式驗證、身份認證與資產模組；本環境沒有 .NET10，build 與 CI 未實測（NOT VERIFIED）；仍為 [~]。
 B003 [ ] P0 建 shared/contracts 版本化 wire schema + generator/兼容測試；每種事件具 seq/map epoch/state revision；消息排序/反重放。
 B004 [ ] P0 GitHub Actions：Linux+Windows 建置、dotnet test、Godot headless import、隔離 PostgreSQL、合約/編碼/地圖驗證；無真素材使用 mock fixture；留 artifacts。
 B005 [ ] P0 Client↔Server 可重連登入/選角/進出單圖 E2E。每個 gate run 可重現，須兼容 Windows 開發。
