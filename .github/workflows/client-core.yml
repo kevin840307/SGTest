@@ -1,0 +1,32 @@
+name: Godot Client Core
+on:
+  push:
+    paths:
+      - 'client/**'
+      - '.github/workflows/client-core.yml'
+  pull_request:
+    paths:
+      - 'client/**'
+      - '.github/workflows/client-core.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  godot-headless:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Godot 4.7.2 standard Linux
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 3 -o godot.zip https://github.com/godotengine/godot/releases/download/4.7.2-stable/Godot_v4.7.2-stable_linux.x86_64.zip
+          unzip -q godot.zip
+          chmod +x Godot_v4.7.2-stable_linux.x86_64
+      - name: Import project
+        run: ./Godot_v4.7.2-stable_linux.x86_64 --headless --path client --import
+      - name: Reducer and motion tests
+        run: ./Godot_v4.7.2-stable_linux.x86_64 --headless --path client --script res://tests/world_state_test.gd
+      - name: Scene parse smoke
+        run: ./Godot_v4.7.2-stable_linux.x86_64 --headless --path client --quit-after 8
