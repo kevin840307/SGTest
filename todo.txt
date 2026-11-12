@@ -4,13 +4,15 @@ SGTest 多人 MMORPG 開發 TODO — 2026-11-12
 規則：每次開始讀 AGENTS.md、最新 SGTest HEAD、參考 repo 最新 HEAD、SPEC.md；先領一個任務；不同 Session 用獨立分支；不可 force push；每個任務先補測試、保留環境及 SHA；未測寫 NOT VERIFIED。
 
 ==== Phase A / M0：研究、證據、架構、強化 ID（先做） ====
-A001 [ ] P0 來源權利/授權與基準：核對 TestGoGo/Old/ClientData、Old/服務端、Old/資料庫資料來源與再利用授權；建立 research evidence manifest 含路徑/SHA/大小/格式/風險。未核可素材只能局部 fixture，不搬入 SGTest。驗收：manifest + 權利決策；不存在的授權不自行推斷。
+A001 [!] P0 來源權利/授權與基準：核對 TestGoGo/Old/ClientData、Old/服務端、Old/資料庫資料來源與再利用授權；建立 research evidence manifest 含路徑/SHA/大小/格式/風險。未核可素材只能局部 fixture，不搬入 SGTest。驗收：manifest + 權利決策；不存在的授權不自行推斷。
 A002 [ ] P0 原始角色移動/面向/動畫拆解：逐段分析 Old/ClientData/Paradise.exe.lst 的 CSGOMap::MessageMap、CSGOChar::SetMoveloop/MoveStep、敵人 movelogic、收包 state/方向/Animation；再分析 Old/服務端/插件 *.lst 中 SendSyncDestPac/SendSyncPosition/Update/AOI，與現版 player.gd、network_player.gd、remote_player_motion.gd、remote_player_state_policy.gd 做可定位差異矩陣。驗收：packet field/方向/時序/action boundary 源碼位址、已知與未知、時間戳不足註記；所有推論能查證。
 A003 [ ] P0 Old 裝備編碼實證稽核：解析 Dat/Item/Weapon.itd、Equip.itd、ClientData/Item/*.itd、SQL equip/商店/任務掉落；確認+N變體的真正 ID 編碼/排列/例外，不能假設連號即強化。建 golden fixture 與明確來源記錄。
 A004 [ ] P0 新 ItemDefinitionId 重排器：先排序、過濾 +N alias，保留原型；從1生成連續 newDefinitionId，後續 ID 前移補洞，舊 ID→新 ID+enhancementLevel 映射；碰撞/缺值 quarantine；多次執行決定性、反向稽核、全引用修正、不能在發版後重排。驗收 docs/ITEM_ID_MIGRATION.md 契約 + unit tests + diff report。
 A005 [ ] P0 Old 地圖格式稽核：Blocking.dat/Enemy.dat/NPC.dat/safe_area.dat/座標/路徑/Map13, Map15；與 game-editor、Godot 地圖、Server Blocking compare；做 lossless fixture、合法/不可走格對照、不同 zoom/視窗 AOI 研究。
 A006 [ ] P0 架構 ADR：選定 Godot 版本/Renderer、GDScript vs C#/GDExtension、MessagePack vs Protobuf、導航資料/網路時基、DB 隔離、正式 License/第三方依賴；技術 benchmark 後決策。結果寫 docs/DECISIONS.md。
 A007 [ ] P0 既有瓶頸基準：來源 docs/multiplayer-legacy-movement-audit.md、remote-player-hit-motion、Map13 AI tick、現有 Godot 資源 leak、WebSocket queue；準備新舊共通 A/B fixture，明確原版50Hz不等於50包/s。
+
+  2026-11-13：已建立 research/source_manifest.json（12 檔路徑、Git blob SHA、byte size）及 research/README.md；來源最新 HEAD=ab9fb0e10055878488458f371e64d826caf2c111；舊專案根目錄未見 LICENSE，第三方/原作權利仍待核對，禁止拷貝 Old 原件。此 task 因外部授權資訊不足標 [!]，不是完成。
 
 ==== Phase B / M1：工程/CI 基底 ====
 B001 [ ] P0 建立真正 Godot 4 Client skeleton：登入/場景/資產生命週期、清楚 presentation vs state vs net 邊界，renderer 可切換，GDScript style/lint/自動 headless test。驗收：啟動/退出/重新進入的 RAM metrics；不可任意複製既有大型 HUD。

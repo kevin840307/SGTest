@@ -1,0 +1,84 @@
+{
+  "schema_version": 1,
+  "recorded_at_utc": "2026-11-12",
+  "source_repo": "kevin840307/TestGoGo",
+  "original_url": "https://github.com/kevin840307/SGO/tree/feature/local-server-net8",
+  "branch": "feature/local-server-net8",
+  "source_commit": "ab9fb0e10055878488458f371e64d826caf2c111",
+  "rights_status": "UNVERIFIED_NO_REUSE_ASSUMED",
+  "note": "本檔只保存路徑、Git blob SHA 與位元組長度，不包含源程式碼、二進位內容或遊戲美術。",
+  "sources": [
+    {
+      "path": "Old/ClientData/Paradise.exe.lst",
+      "git_blob_sha": "16710727227dc5ff8d623ea2acab17cc468fc129",
+      "byte_size": 40117423,
+      "kind": "legacy-decompiled-client"
+    },
+    {
+      "path": "Old/服務端/Core.dll.lst",
+      "git_blob_sha": "840353e59bd8ba8cef36a891ac02c54ee21c8785",
+      "byte_size": 11398740,
+      "kind": "legacy-decompiled-server"
+    },
+    {
+      "path": "Old/服務端/plugins/SGOMapService.dll.lst",
+      "git_blob_sha": "0adb6e9a7aeffb5673b2dfabe199af8fa776a381",
+      "byte_size": 28190287,
+      "kind": "legacy-decompiled-server"
+    },
+    {
+      "path": "Old/服務端/plugins/SGOEquip.dll.lst",
+      "git_blob_sha": "fb14a7b5689a79be3db4b4b7c1f9afebb321d966",
+      "byte_size": 27029526,
+      "kind": "legacy-decompiled-server"
+    },
+    {
+      "path": "Old/服務端/Dat/Item/Weapon.itd",
+      "git_blob_sha": "d9342852f783e2916ba81657e4da627c31bd4744",
+      "byte_size": 91031,
+      "kind": "legacy-binary-catalog"
+    },
+    {
+      "path": "Old/服務端/Dat/Item/Equip.itd",
+      "git_blob_sha": "1418c6239decc05e0bc85e340b3249279477f3d5",
+      "byte_size": 388558,
+      "kind": "legacy-binary-catalog"
+    },
+    {
+      "path": "Old/ClientData/Item/Item.itd",
+      "git_blob_sha": "ffe4f7daa2c7cafdf8b733412c43c21176b0abca",
+      "byte_size": 4422869,
+      "kind": "legacy-binary-catalog"
+    },
+    {
+      "path": "Old/服務端/Dat/Map/Map13/Blocking.dat",
+      "git_blob_sha": "9aeeef813bebaf247ce681d596cb68a9b153bdae",
+      "byte_size": 921608,
+      "kind": "legacy-map"
+    },
+    {
+      "path": "Old/服務端/Dat/Map/Map13/Enemy.dat",
+      "git_blob_sha": "3665bb8322044ea7891ef2cfbddbe0bda7f04fab",
+      "byte_size": 17255,
+      "kind": "legacy-map"
+    },
+    {
+      "path": "Old/服務端/Dat/Map/Map13/NPC.dat",
+      "git_blob_sha": "a9a251a28d636b23dba906a5dbafbbccf49d7899",
+      "byte_size": 138,
+      "kind": "legacy-map"
+    },
+    {
+      "path": "Old/服務端/Dat/Map/Map13/safe_area.dat",
+      "git_blob_sha": "5eff13533b24b41f69d7b0e3b64279f74d93c532",
+      "byte_size": 53,
+      "kind": "legacy-map"
+    },
+    {
+      "path": "Old/資料庫/game.sql",
+      "git_blob_sha": "e6569d8329940428dcb205a73fd0d610ed4354b9",
+      "byte_size": 46652,
+      "kind": "legacy-schema"
+    }
+  ]
+}
