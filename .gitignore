@@ -1,0 +1,10 @@
+# Private legacy asset inventory reports and inputs are never checked in.
+reports/
+local-assets/
+legacy-originals/
+*.orig.spr
+*.orig.itf
+*.orig.itd
+client/.godot/
+server/**/bin/
+server/**/obj/

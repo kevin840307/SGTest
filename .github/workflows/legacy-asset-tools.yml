@@ -1,0 +1,23 @@
+name: Legacy asset inventory tools
+on:
+  push:
+    paths:
+      - 'tools/legacy_asset_inventory.py'
+      - 'tools/tests/**'
+      - '.github/workflows/legacy-asset-tools.yml'
+  pull_request:
+    paths:
+      - 'tools/legacy_asset_inventory.py'
+      - 'tools/tests/**'
+      - '.github/workflows/legacy-asset-tools.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inventory regression tests (synthetic fixtures only)
+        run: python3 -m unittest discover -s tools/tests -p 'test_*.py' -v
