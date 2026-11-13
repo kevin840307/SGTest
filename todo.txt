@@ -3,15 +3,15 @@ SGTest TODO — 2026-11-13 / M0 原版素材研究優先
 研究前先看 SPEC.md 第7節、docs/LEGACY_ASSET_PIPELINE.md、research/source_manifest.json；任何下一 Session 不得把旧 demo 視為現存實作。
 
 ===== P0 / AS：素材來源與真實格式，未完成不得開始遊戲實作 =====
-AS001 [~] 取得/盤點後期《星夢 Online》完整原版 Client 安裝目錄、安裝包、更新檔，對檔案分類、SHA256、magic/路徑/大小/版本；原件只讀、本機保留，產生報告。現有 tools/legacy_asset_inventory.py 能列出檔案，但尚未取得本機完整 Client 報告。
-AS002 [ ] 依 Paradise.exe.lst 追蹤原版資源載入/索引/解包/解壓/解碼路徑；輸出函式位址與證據鏈，不以猜測代替解析。
-AS003 [ ] 建立素材可用性/缺漏矩陣：人物8方位(方向數待實證)、站立/移動/攻擊/受擊/死亡、武器/裝備疊層、怪物、NPC、機甲、寵物、技能、物品、地圖、後期金色 UI、音效；按版本分開。
-AS004 [ ] 一個可驗證素材格式的解碼 PoC：原件唯讀，輸出 RGBA PNG 和動畫 JSON（來源hash、方向、frame、幀時長、pivot/offset、疊層、事件）；失敗檔保留錯誤清單。
-AS005 [ ] 原版視覺/影格/方向/透明度/對齊/裝備疊圖實證比對；含靜止/行走/攻擊/受擊/死亡，截圖與錄影人工確認。
-AS006 [ ] 獨立 Legacy Asset Viewer：預覽、逐格、方向/動作、透明度、偏移、圖層、批次匯出；使用自建 fixture 測試。
-AS007 [ ] Godot SpriteFrames/Atlas/共享快取方案基準評估；只做可重現 microbenchmark，不建正式 gameplay scene。
-AS008 [!] 確認原版圖片、UI、音效的本地研究與公開發布/轉換權利；未確認權利不放 GitHub。
-AS009 [ ] 將本機盤點與解碼結果形成 docs/證據矩陣，記錄具體檔案 hash、函式位址、成功/失敗；再判斷是否達成 M0 Gate。
+AS001 [~] 來源 Git tree 已重新盤點（TestGoGo HEAD 0f37c526）；唯讀 inventory 已升 schema v2，追加 header_hex／--header-bytes 0~64。尚未取得使用者本機「後期」完整 Client 及 SHA256 報表，原件版本／封裝檔名未確認；下一步須在合法本機 Client 執行掃描（docs/LEGACY_ASSET_EVIDENCE_20261113.md）。
+AS002 [~] 直接讀取 Paradise.exe.lst Git blob 16710727，已定位 xnFileRead 0x00552090、xnSpr::LoadSpr 0x00552FC0、DecodeFrameLine 0x00553EB0、GroupData::Open 0x00551B60、LzssDecompress 0x0055A0E0、人物 InitAction/DirectionMapping/SmartLoadParts 等；詳研究文件。封包格式、ACT 內部、完整動作頻率仍 NOT VERIFIED。
+AS003 [~] 已建立 docs/LEGACY_ASSET_EVIDENCE_20261113.md 來源缺漏矩陣；ClientData 只有 199 SPR、12 SIF、4 ITD、10 DAT、3 CSV、1 LST，未見原版 ACT/ITF，人物/特效/後期金 UI 缺件；需完整安裝包分類核查。
+AS004 [~] tools/legacy_spr_decoder.py 已支持所觀察 XN footer-row-run 變體、逐影格 RGBA PNG 與 JSON，原始 anchor 保留、未知方向/動作/時長/圖層/事件=null；四個 NPC 原樣本總 627 列結構走訪成功，RGB565 視覺未校正；未取得完整角色 SPR+ACT，PoC 不算通過原版動畫 Gate。
+AS005 [!] 尚缺後期原版遊戲截圖／錄影、完整人物原圖、ACT、裝備等，不可做方向/影格/透明/偏移/速度/z-order E2E 視覺驗收；NOT VERIFIED。
+AS006 [~] 已新增 tools/legacy_asset_viewer.py 獨立 Tkinter Viewer：JSON/PNG 載入、方向/動作資料篩選、逐格/預覽播放、raw anchor/offset/z-order/hash 顯示；缺原版 duration 時僅暫時以 100ms 預覽，不回填。GUI 真機、原版全動作、批次匯出 NOT VERIFIED。
+AS007 [ ] 需等真實人物動畫與原件解析對照完成才做 Godot/Atlas/記憶體/DrawCall 基準；不提前建場景。
+AS008 [!] 原版圖像、UI、聲音、轉換品的本機／公開使用權皆未確認；GitHub 本輪僅存工具、自建 fixture、路徑與 Blob SHA，沒有原版媒體／原版 .lst 全文。
+AS009 [~] docs/LEGACY_ASSET_EVIDENCE_20261113.md + 更新 source_manifest.json 已記錄參考 HEAD、反編譯函式/位址、4 SPR/1 SIF Blob SHA、627掃描列結構結果與缺漏；尚缺使用者本機安裝資料的 SHA256/版本、原版逐格對照與合法性判定；M0 Gate 未通過。
 
 ===== 已確認的事實（不是素材解析完成） =====
 [x] 已指定後期《星夢 Online》金色 UI 的視覺目標。
@@ -31,3 +31,15 @@ M6 [ ] PVP、社交、小屋、多 Channel、維運及最終授權檢查。
 早期 Godot World Demo、金色 Gallery、.NET Server 雛形及其 CI 從 main 移除，只保留研究工具、研究索引與規格文件；不改寫 Git 歷史。
 所有原有 B001/B002/B007 的原型完成敘述不代表現存程式碼；正式重做須從研究 Gate 通過後開始。
 每項任務交付：證據位置/來源 SHA、測試命令、PASS/FAIL/NOT VERIFIED、Git commit、下一步。
+
+
+===== 2026-11-13 原版素材格式實證 Session（未關閉 M0 Gate） =====
+基準：SGTest/main bd652f22b0955cd74e63d6061e999c35a3779a4d；唯讀 TestGoGo feature/local-server-net8 0f37c5268ceeac1144ed13556f3aeb191b93711e。
+研究檔：docs/LEGACY_ASSET_EVIDENCE_20261113.md；指紋：research/source_manifest.json；流程：docs/LEGACY_ASSET_PIPELINE.md。
+新增：tools/legacy_spr_decoder.py（XN SPR 多影格結構解碼／RGBA PNG＋metadata）、tools/legacy_asset_viewer.py（獨立 Tkinter 預覽），擴充 inventory magic/header，新增 fixture tests；不含遊戲素材。
+實驗證據：原始 Git Blob 的 NPC203.spr 109/109、NPC204.spr 99/99、NPC251.spr 322/322、NPC207-R.spr 97/97 列結構走訪，未知 token 0；不代表原版視覺/動畫 PASS。
+已執行 CI：GitHub Actions https://github.com/kevin840307/SGTest/actions/runs/43430135649 ，10 tests PASS（自建資料／unit；CI SHA 0a5c7d7168b0d76f6b7372871410240596ff6c59）。
+已執行本機：python -m unittest discover -s tools/tests -p 'test_*.py' -v （初版 6 tests PASS；CI 補含原 inventory 4 tests）。
+未執行＝NOT VERIFIED：完整安裝包清單、原版 SPR 的 PNG 視覺對照、ACT 時序/方向/紙娃娃、Tkinter GUI 真人目視、完整原版 Decoder 及 Godot A/B。
+Git 工作分支：research/xn-spr-decoder-20261113，已提交階段性程式與文件；完整合併 Git SHA 請見後續 PR/main（不可預填）。
+下一 Session 先跑 AS001 本機完整 Client inventory，並在 AS002 實際解 ACT、DirectionMapping/DrawOrderMapping 與封包，AS004 取得一整套可授權的人物影格；未證實欄位不得自動補 8 方向或 100ms。
