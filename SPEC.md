@@ -117,7 +117,6 @@ M6 PVP、小屋、社交、多 Channel、部署與維運。
 
 **進入 M1 條件**：至少一套原版角色完整方向與動作能重現、素材來源/格式/版本有證據、缺口列表已建立、解析器與 viewer 有可重現測試、權利範圍已確認。若無完整安裝檔，先做目錄/來源查找，不以占位圖假裝已完成原版還原。
 
-
 ## 7.1 2026-11-13 實證更新（不變更 M0 Gate）
 
 參照 [原版素材位元組／呼叫鏈調查](docs/LEGACY_ASSET_EVIDENCE_20261113.md)，已以 `Paradise.exe.lst` 原始 Git Blob 與四個 NPC SPR、一個 SIF 樣本建立可追索證據。
@@ -126,3 +125,11 @@ M6 PVP、小屋、社交、多 Channel、部署與維運。
 - **已實作但非格式完整：** `tools/legacy_asset_inventory.py` schema v2 magic header 掃描；`tools/legacy_spr_decoder.py` 嚴格 XN 變體的逐影格 RGBA PNG＋`animation.json`；`tools/legacy_asset_viewer.py` Tkinter 靜態預覽與逐格試播。未知動作、方向、duration、pivot 精確語意、裝備 Z 層一律標 `null` 或 `UNVERIFIED`；RGB565 需原版視覺核實；Viewer fallback 100ms 僅預覽。
 - **未完成、不得放行：** 後期《星夢 Online》完整 Client 安裝包／更新檔盤點、完整 Player/Effect/Map/金色 ITF 原件、ACT 格式、角色 8 或其他方向數、所有動畫速度與紙娃娃排序、原版畫面逐格校驗、法律授權、Godot 性能 A/B；原版安裝檔缺失是硬性阻礙。不得先實作 Godot UI/Server/Atlas。
 - **測試界線：** 本機自製 SPR/PNG/metadata/viewer 篩選單元案例已執行；原件 row structure 偵測與「動畫正確播放」是不同測試。CI、真正 Tk GUI、完整 Client、視覺對照的結果請依 todo.txt 與 CI URL 查證，不能預設 PASS。
+
+## 8. 補充不變契約：素材共用與 FPS 隔離（2026-11-13）
+
+- **素材原則**：EntityCount 與 UniqueAssetCount 分離；同圖數百怪/數千掉落可能只有少數素材種類，同種類共用 Texture/AnimationDefinition/FrameTable/Material，每實例只保存狀態。離線編譯 512/1024/2048/4096 候選尺寸、Map/Region co-occurrence、hot/warm/cold、Paper Doll 層、Boss 動作分頁；按 RAM/VRAM/Frame/DrawCall 和正確性實測選型。
+- **Network/State 不變**：ServerSimClock、ClientNetworkPump、OrderedEventReducer、PackedWorldState、ViewProjection、WorldRenderer、UIRenderer 必須具清楚責任界線。Client 送收封包、解碼、按序套用、輸入送達與 Server tick **不得由 UI FPS/World FPS 增減而變快或變慢**。失焦/縮小/AFK/低畫質只可調整視覺、音效和資源生命週期。
+- 不能依賴只在 `_process(delta)` 被畫面刷新時才 poll Network；背景/OS throttle 及 Engine FPS 設定影響須實機驗證。動作依 ServerSeq/SimTick/ActionId 的時間軸取 pose，素材未載入不得停網路/State，也不得補播遠端玩家舊位置。
+- **獨立 Gate**：不同 UI/World FPS 下相同 packet trace 的 Rx/Tx、State hash、可靠事件次序與 QueueAge/ReducerDelay；不同解析度/Zoom 下相同 visible world/camera contract 的 Texture/VRAM/DrawCalls 與不卡頓。具體規格見 [docs/ASSET_STREAMING_AND_RENDERING.md](docs/ASSET_STREAMING_AND_RENDERING.md)、[docs/CLIENT_RUNTIME_ISOLATION.md](docs/CLIENT_RUNTIME_ISOLATION.md)。
+- **現況：僅方案，效能與 gameplay 實作 NOT VERIFIED。** AS001～AS009 原任務進度不因此變更。

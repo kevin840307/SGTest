@@ -24,6 +24,12 @@
 ## 後續方向
 Godot 4 Client / .NET Server / PostgreSQL / 多人同步與低資源設計均保留於 SPEC，**不在素材確認前先行實作**。
 
+## 2026-11-13 新增設計（尚未實作）
+
+- [Adaptive Atlas / Map-aware Shared Asset Pool / Streaming](docs/ASSET_STREAMING_AND_RENDERING.md)：512/1024/2048/4096 候選頁、相同怪物/掉落圖共用、地圖熱度、資源回收、多解析度。
+- [Client ↔ Server 與 UI/Render FPS 隔離](docs/CLIENT_RUNTIME_ISOLATION.md)：FPS、失焦、縮小、AFK 僅影響顯示與音效，不得提高或降低封包傳輸/解析/State/戰鬥/移動/撿物節奏。
+- 上述均為 **DESIGN ONLY / NOT VERIFIED**，不得跳過 AS001～AS009 原版素材/授權 Gate。
+
 ## 2026-11-13：已建立可測試的素材研究工具（M0 未通過）
 
 經原版 `Paradise.exe.lst` 與四個 NPC SPR 二進位樣本交叉分析，已找到部分 XN SPR 像素列編碼、SIF 描述資料及 group/LZSS/ACT/ITF 呼叫鏈。請參考上述實證文件區分 DIRECT、HYPOTHESIS、BLOCKED。

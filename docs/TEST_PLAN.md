@@ -67,3 +67,20 @@ T025 所有事件類型可重播 deterministic trace -> 相同 State hash。
 - dotnet run -c Release --project tests/WireLoadProbe -- --bots 20 --monsters 300 --drops 500 --seconds 120
 
 **以上為未來預計建立的介面，不是現在可直接執行的測試。**
+
+## 8. 共用素材／多尺寸圖集與 FPS 隔離測試（新列，未執行）
+
+| ID | 案例 | 驗證 |
+| --- | --- | --- |
+| AS-T01 | 同一種怪 1/20/300/1000 實例 | Texture/FrameTable per type 共用，VRAM 不隨同種類 Entity 線性成長 |
+| AS-T02 | 同地圖 500怪/8種、2000掉落/25種（自製 fixture） | MapAssetPalette hot/warm/cold、AtlasPagesTouched、RAM/VRAM、CacheHit 統計 |
+| AS-T03 | PNG / 固定 1024/2048 / Adaptive 512～4096 | 相同畫面 A/B：RAM/VRAM/DrawCalls/FrameP95/P99/UploadSpike |
+| AS-T04 | 人物8/其他方向、裝備紙娃娃、Boss 分動作頁 | pivot/offset/z-order/命中事件/視覺保真；方向數依原版實證 |
+| AS-T05 | 1080p/1440p/4K/21:9/zoom-out | Camera WorldRect、預載與可視實體一致；無舊版 800×600 外圍瞬移 |
+| CI-T01 | 同 packet trace、30/40/50/60/120 FPS、UI 動畫降頻 | Rx/Tx count、State hash、可靠事件次序一致；QueueAge 無系統性惡化 |
+| CI-T02 | 失焦/最小化/AFK/恢復、20玩家/300怪/500掉落 | IO/Reducer/Command/Server tick 排程不由 UI/Render FPS 控制 |
+| CI-T03 | 同幀128包、Stop/Teleport/Hit/Death/Pickup，含 Texture miss | event barrier 正確、無遺漏、遠端直接顯示最新 pose |
+| CI-T04 | 100次切圖/重登/AFK，快取反覆 warm/evict | ResourceHandle/RID/working set 回歸穩態、無 cache churn 尖峰 |
+
+- 測試報表至少有：Git SHA、fixture hash、OS/GPU、視窗尺寸、Zoom、Render/UI FPS、focused/minimized/AFK、network trace hash、queue P95/P99、Rx/Tx count、State hash、RAM/VRAM、draw calls、frame P95/P99。
+- AS007 真素材效能測試仍需 AS001～AS006 證據及 AS008 授權；目前只寫設計，**所有新案例 NOT VERIFIED**。詳 [ASSET_STREAMING_AND_RENDERING.md](ASSET_STREAMING_AND_RENDERING.md) 與 [CLIENT_RUNTIME_ISOLATION.md](CLIENT_RUNTIME_ISOLATION.md)。
