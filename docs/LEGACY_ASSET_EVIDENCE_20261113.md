@@ -111,7 +111,7 @@ python tools/legacy_asset_viewer.py "C:\SGO\reports\npc203\animation.json"
 python -m unittest discover -s tools/tests -p "test_*.py" -v
 ```
 
-測試層級嚴格區分：已實際在 Python 本機執行自製 SPR 格式、PNG、負面路徑及 JSON 篩選 **6 tests PASS**；對上述四個真 SPR 做逐列結構解析 **109+99+322+97 列均未碰到未識別 token**（不等於視覺驗證）。`inventory` 修改後回歸、GitHub Actions、GUI 真機、原版角色完整動畫、與原版遊戲截圖逐格對照：除非後續另有明確 CI/測試紀錄，一律 **NOT VERIFIED**。
+測試層級嚴格區分：已實際在 Python 本機執行自製 SPR 格式、PNG、負面路徑及 JSON 篩選 **6 tests PASS**；對上述四個真 SPR 做逐列結構解析 **109+99+322+97 列均未碰到未識別 token**（不等於視覺驗證）。**inventory 修改後回歸及 GitHub Actions 已有可追溯成功紀錄**：[整合分支 Actions #43430878232](https://github.com/kevin840307/SGTest/actions/runs/43430878232) 在提交 `a4a3a3a165bada4e4841bd86ce166ee27fb68eef` 執行 `python3 -m unittest discover -s tools/tests -p 'test_*.py' -v`，**10 tests PASS**（僅合成 fixture，含 inventory 4 tests）。GUI 真機、原版角色完整動畫、與原版遊戲截圖逐格對照仍 **NOT VERIFIED**；原件／權利仍 **BLOCKED**。
 
 ## 6. 後續 Session 直接接手（依 AS 順序）
 
