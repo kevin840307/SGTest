@@ -6,7 +6,7 @@ SGTest TODO — 2026-11-13 / M0 原版素材研究優先
 AS001 [~] HK2 實體目錄已唯讀盤點：41,741 檔／1,333,254,792 bytes、SHA-256、magic、相對路徑、大小，報告在本機忽略的 reports/hk2-inventory.json；摘要見 docs/HK2_INVENTORY.md。Data1.dat 內容、安裝包來源、Client.bin/SGOClient.bin 版本仍待查，不能宣稱完整原版資源已齊。
 AS002 [ ] 依 Paradise.exe.lst 追蹤原版資源載入/索引/解包/解壓/解碼路徑；輸出函式位址與證據鏈，不以猜測代替解析。
 AS003 [ ] 建立素材可用性/缺漏矩陣：人物8方位(方向數待實證)、站立/移動/攻擊/受擊/死亡、武器/裝備疊層、怪物、NPC、機甲、寵物、技能、物品、地圖、後期金色 UI、音效；按版本分開。
-AS004 [ ] 一個可驗證素材格式的解碼 PoC：原件唯讀，輸出 RGBA PNG 和動畫 JSON（來源hash、方向、frame、幀時長、pivot/offset、疊層、事件）；失敗檔保留錯誤清單。
+AS004 [~] tools/convert_assets.py 已由 HK2 的 20 個 Enemy SPR 及 1 個 C.D.E. 樣本驗證 RGBA/原始 origin/來源 SHA，詳 docs/HK2_SPR_POC.md；ACT/SIF 的方向、幀時間、疊層與事件仍未知，JSON 明確為 null；原版視覺比對未完成。
 AS005 [ ] 原版視覺/影格/方向/透明度/對齊/裝備疊圖實證比對；含靜止/行走/攻擊/受擊/死亡，截圖與錄影人工確認。
 AS006 [ ] 獨立 Legacy Asset Viewer：預覽、逐格、方向/動作、透明度、偏移、圖層、批次匯出；使用自建 fixture 測試。
 AS007 [ ] Godot SpriteFrames/Atlas/共享快取方案基準評估；只做可重現 microbenchmark，不建正式 gameplay scene。

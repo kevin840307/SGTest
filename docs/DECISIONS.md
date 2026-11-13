@@ -65,3 +65,9 @@
 - 原始素材來源/使用權/解析需先確認：Old/ClientData 尚無實體 .itf；現階段先原創 Theme/Gallery，取得合法完整資產再做像素/互動比對。
 - UI 不干涉地圖模擬、人物資料同步、網路連線與低資源模式的固定更新。
 - docs/OLD_UI_DESIGN.md、docs/LEGACY_ASSET_PIPELINE.md 定義驗收門檻。
+
+## ADR-012 — SPR 輸出佈局（2026-11-13）
+- Status: PROVISIONAL；來源與實測：docs/HK2_SPR_POC.md。
+- 決策：PoC 以原尺寸分幀 PNG 為預設，保留原始幀與 origin；每 SPR atlas 僅作實驗選項，不把全部怪物合成一張全域 atlas。
+- 原因：20 個 HK2 怪物 SPR 樣本的 1024 atlas 將 PNG 數從 141 降至 20，但 RGBA 像素面積由 18.6 MB 升至 22.2 MB；2048 atlas 升至 27.4 MB。這些數字不能推論 Godot 實際幀時間。
+- 影響／下次驗證：先解 ACT/SIF 的方向、動作、幀時間和圖層，再以 Godot 同場景比較分幀、每角色小 atlas、場景分組 atlas 的 RAM/VRAM/draw calls/frame P95 與載入／卸載成本；以可維護的明確分組規則選擇正式方案。

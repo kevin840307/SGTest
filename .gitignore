@@ -1,6 +1,8 @@
 # Private legacy asset inventory reports and inputs are never checked in.
 reports/
 local-assets/
+__pycache__/
+*.pyc
 legacy-originals/
 *.orig.spr
 *.orig.itf
