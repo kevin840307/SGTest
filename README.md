@@ -11,6 +11,7 @@
 - [docs/LEGACY_ASSET_PIPELINE.md](docs/LEGACY_ASSET_PIPELINE.md)：解析、匯出與驗收流程
 - [research/source_manifest.json](research/source_manifest.json)：已知舊 repo 檔案索引（不是完整 Client）
 - [AGENTS.md](AGENTS.md)：協作/安全/測試約束
+- [docs/LEGACY_ASSET_EVIDENCE_20261113.md](docs/LEGACY_ASSET_EVIDENCE_20261113.md)：實際 Paradise.exe.lst 位址、XN SPR/SIF 解析、四個樣本與缺件矩陣
 
 ## 原版資料調查
 - 參考（唯讀）：https://github.com/kevin840307/TestGoGo/tree/feature/local-server-net8
@@ -22,3 +23,15 @@
 
 ## 後續方向
 Godot 4 Client / .NET Server / PostgreSQL / 多人同步與低資源設計均保留於 SPEC，**不在素材確認前先行實作**。
+
+## 2026-11-13：已建立可測試的素材研究工具（M0 未通過）
+
+經原版 `Paradise.exe.lst` 與四個 NPC SPR 二進位樣本交叉分析，已找到部分 XN SPR 像素列編碼、SIF 描述資料及 group/LZSS/ACT/ITF 呼叫鏈。請參考上述實證文件區分 DIRECT、HYPOTHESIS、BLOCKED。
+
+- `tools/legacy_asset_inventory.py`：唯讀清單，可選 SHA256 + 0～64 bytes 的 header_hex。
+- `tools/legacy_spr_decoder.py`：限定已確認的 SPR 變體，輸出逐影格 PNG＋JSON；未知方向、時長、圖層等不造假，RGB565 仍待原版顏色驗證。
+- `tools/legacy_asset_viewer.py`：獨立 Tkinter PNG/metadata 檢視器，未有原版幀時長時 100ms 只用於預覽。
+- `python -m unittest discover -s tools/tests -p "test_*.py" -v`：使用自行合成 fixture，不會把原版素材加入 GitHub。
+- [CI：10 tests PASS（2026-11-13）](https://github.com/kevin840307/SGTest/actions/runs/43430135649)。原版遊戲動畫實測、視覺一致性、完整 Client 與法律 Gate 均尚未完成。
+
+未授權的遊戲安裝檔、原始圖片或匯出 PNG 請只放本機私人目錄，不可 push 至公開 Repo。
