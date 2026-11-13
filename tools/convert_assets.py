@@ -177,7 +177,7 @@ def convert(source: Path, root: Path, dest: Path, side: int, force: bool = False
             layout: str = "frames") -> dict:
     relative = source.relative_to(root)
     target = dest / relative.parent / source.stem
-    manifest_path = target.with_suffix(".json")
+    manifest_path = target.with_name(target.name + ".json")
     raw = source.read_bytes()
     if len(raw) > MAX_FILE:
         raise ValueError("source file exceeds safety limit")
@@ -291,7 +291,7 @@ def main() -> int:
     if out == root or root in out.parents:
         parser.error("output must be outside the client directory")
     categories = set(args.category or [])
-    sources = sorted((p for p in root.rglob("*") if p.is_file() and p.suffix.lower() == ".spr"
+    sources = sorted((p for p in root.rglob("*") if p.is_file() and not p.is_symlink() and p.suffix.lower() == ".spr"
                       and (not categories or p.relative_to(root).parts[0] in categories)),
                      key=lambda p: str(p.relative_to(root)).lower())
     if args.limit is not None:
@@ -308,7 +308,7 @@ def main() -> int:
     act_ok = act_cached = 0
     act_sources = []
     if not args.skip_act:
-        act_sources = sorted((p for p in root.rglob("*") if p.is_file() and p.suffix.lower() == ".act"
+        act_sources = sorted((p for p in root.rglob("*") if p.is_file() and not p.is_symlink() and p.suffix.lower() == ".act"
                               and (not categories or p.relative_to(root).parts[0] in categories)),
                              key=lambda p: str(p.relative_to(root)).lower())
         if args.limit is not None:
@@ -323,7 +323,7 @@ def main() -> int:
     draw_ok = draw_cached = 0
     draw_sources = []
     if not args.skip_draw_order:
-        draw_sources = sorted((p for p in root.rglob("*DrawOrder.dat") if p.is_file()
+        draw_sources = sorted((p for p in root.rglob("*DrawOrder.dat") if p.is_file() and not p.is_symlink()
                                and (not categories or p.relative_to(root).parts[0] in categories)),
                               key=lambda p: str(p.relative_to(root)).lower())
         if args.limit is not None:
@@ -335,11 +335,15 @@ def main() -> int:
                 draw_cached += result == "cached"
             except (OSError, ValueError, UnicodeError) as exc:
                 errors.append({"source": source.relative_to(root).as_posix(), "error": str(exc)})
-    print(json.dumps({"scanned": len(sources), "converted": ok, "cached": cached,
+    summary = {"scanned": len(sources), "converted": ok, "cached": cached,
                       "act_scanned": len(act_sources), "act_converted": act_ok, "act_cached": act_cached,
                       "draw_order_scanned": len(draw_sources), "draw_order_converted": draw_ok,
                       "draw_order_cached": draw_cached,
-                      "failed": len(errors), "errors": errors[:20]}, ensure_ascii=False, indent=2))
+                      "failed": len(errors), "errors": errors}
+    out.mkdir(parents=True, exist_ok=True)
+    (out / "conversion_report.json").write_text(json.dumps(summary, ensure_ascii=False, indent=2) + "\n",
+                                                  encoding="utf-8")
+    print(json.dumps({**summary, "errors": errors[:20]}, ensure_ascii=False, indent=2))
     return 1 if errors else 0
 
 

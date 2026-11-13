@@ -29,7 +29,7 @@ SGTest/
     SGTest.Domain/             # pure rules/entities
     SGTest.Application/        # use cases, world orchestrator
     SGTest.WorldRuntime/       # single-writer map/channel actor
-    SGTest.Infrastructure/     # PostgreSQL, content catalogs, Outbox
+    SGTest.Infrastructure/     # SQLite provider, migrations, content catalogs, Outbox
     tests/                     # domain, protocol, integration, load
   shared/contracts/           # ID schema + generated wire source
   game-data/                   # own/authorized defs, maps, art placeholders
@@ -74,7 +74,7 @@ WebSocketGateway <-> SessionRegistry <-> CommandAdmission
                                |- OutboundEventBuilder
                                +--> Durable command/outbox worker
                                          |
-                                     PostgreSQL
+                                       SQLite
 ~~~
 
 - 以 MapId+ChannelId 決定 Actor，同圖世界 state 單寫者。網路 worker 只投遞有界命令，不持 MapActor 的長鎖。

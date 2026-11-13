@@ -49,4 +49,4 @@
 
 ## 禁止直接大規模變更的區域
 
-物品 ID 轉換、伺服器時間線/佇列、MapActor 生命週期、PostgreSQL 資產交易及原始地圖座標契約都必須先有可重現 fixture 和相容性測試。
+物品 ID 轉換、伺服器時間線/佇列、MapActor 生命週期、SQLite 資產交易及未來 provider 切換、原始地圖座標契約都必須先有可重現 fixture 和相容性測試。

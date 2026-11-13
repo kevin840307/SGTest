@@ -14,6 +14,8 @@ py -m unittest tools.tests.test_convert_assets
 
 不加 `--category`、`--limit` 可掃描所有 `.spr` 與 `.ACT`；單檔失敗會列出前 20 個錯誤並以非零狀態結束。重跑以來源 SHA-256 和輸出檔存在性略過未變檔。輸出是每 SPR 的 PNG 與 JSON，以及每 ACT 的 `.act.json` 原始動作紀錄；SPR JSON 記錄來源相對路徑／SHA-256、幀順序、原始寬高、原始 origin、透明裁切範圍和 atlas 區域。`C.D.E.` 使用 AES-256-CBC 與 raw DEFLATE 解開後再走同一 SPR 解碼器。沒有證據的 animation、facing、duration、draw-order、events 一律輸出 `null`，不可從檔名臆造；ACT 的 `raw_time` 不擅自轉換為毫秒。
 
+完整執行摘要及所有失敗明細寫入輸出根目錄 `conversion_report.json`，終端只顯示前 20 筆錯誤。轉換器也會保真輸出 `Player/*DrawOrder.dat` 的 `.draw_order.json`；其 `+N` 圖層後綴語意仍待查。
+
 ## 目前實測
 
 HK2 `Enemy` 前 20 個 SPR：分幀與 1024／2048 atlas 模式皆 20/20 成功；`Enemy/EN050C_ND1.spr` 是 C.D.E. 樣本，解出 5 幀。人工建構的 2×1 RGB565/RLE fixture 驗證紅色、不透明／透明像素與負原點；來源圖與匯出圖尚未對原始遊戲畫面做視覺校驗。

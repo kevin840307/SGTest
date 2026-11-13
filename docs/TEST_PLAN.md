@@ -7,9 +7,9 @@ GitHub Actions 既要 Build，也要測試遊戲核心；Client Godot 可以用 
 初期 workflow：
 - check-docs-and-data.yml：文檔連結、IDs/JSON schemas/fixture hash、Big5/二進位 encoder/decoder property tests。
 - dotnet-unit-and-contracts.yml：.NET10 restore/build/test、Domain Pure Tests、MessagePack/Protobuf contract 版本、快照回放、事件序列。
-- server-postgres-integration.yml：隔離 PostgreSQL container，wallet/trade/stronger/Shop concurrent tests。
+- server-sqlite-integration.yml：每次測試使用隔離 SQLite DB，啟用 WAL／foreign_keys，跑 wallet/trade/enhancement/shop 並行與 writer-busy/重試契約測試；未來 provider 共用同一組 contract tests。
 - godot-headless.yml：Godot 固定版本安裝與 project import，跑 player motion/facing/action FSM、AOI、resource lifetime headless tests。
-- wire-bots-load.yml：起 Server+Postgres + 2/20/50 bots + observer，真 WebSocket packet telemetry、snapshot/Combat/asset results，CI 時限不允許 24h soak則輸出 SKIP。
+- wire-bots-load.yml：起 Server+SQLite 隔離 DB + 2/20/50 bots + observer，真 WebSocket packet telemetry、snapshot/Combat/asset results、WAL writer 等待；CI 時限不允許 24h soak則輸出 SKIP。
 - client-visual-regression.yml：Windows runner 有軟體繪圖/截圖時檢查 sprite action/Hit/Direction；真 GPU/VRAM 效能與外觀使用自管 Windows runner 或本機審核。
 - release-audit.yml：版本化資料/授權/原創素材檢查，保護敏感資料不被提交。
 

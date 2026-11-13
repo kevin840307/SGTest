@@ -10,20 +10,22 @@
 
 「比現版 Godot 更好」必須有同等素材/場景/硬體下的 A/B：玩家畫面、RAM、VRAM、CPU、GPU、Frame P95/P99、Server Tick P95/P99、Net E2E P95/P99。比較方法見 docs/PERFORMANCE.md。
 
+實作選擇以多人、密集怪物／掉落、即時動作同步下的正確性與效能證據決定。Godot 內建 Physics／Area2D／AnimatedSprite2D 不是強制；若相同場景下較慢或佔用較多，可使用自製空間索引、緊湊狀態、可見繪圖或批次渲染，並以行為回歸及 A/B 證明。不得把效能提升建立在降低戰鬥、網路輪詢或可見重要事件更新率上。
+
 ## 1.1 最新選定：後期星夢 Online 金黃色 UI、現代 UI 與原始資產
 - 使用者 2026-11-13 指定後期《星夢 Online》金黃色 UI。早期星空之門藍色 UI 不是正式基準。
 - 用 Godot Control、Container、Theme、.tscn 全新建立 UI，不複製 TestGoGo 的 HUD/視窗/登入/背包等 UI 程式碼。
 - 可在遊戲設定中切換「後期金色風格」與「現代排版」；兩者讀取同一份 UI ViewModel，切換不改角色狀態、網路輪詢或世界模擬。兩套排版均支援視窗縮放、1400×900、1920×1080、21:9 與更大解析度，並檢查安全區／文字縮放。
 - 原版 UI 圖資缺件時，可用 Godot 原生控件／StyleBox／NinePatch 及自製素材做風格相近且功能完整的金色版；不因缺少原版圖而阻塞 UI 操作。
 - 目標是導入原版素材，但素材來源、版本、格式與合法使用權需要先確認。優先唯讀盤點/獨立解析/匯出 PNG+Atlas+Animation metadata，並確保透明度、方向、偏移、幀時長正確。
-- 原版後期 .itf 目前只有檔名索引，Old/ClientData 沒看到實體 .itf；不能宣稱完整原版 UI 素材已齊。未確認授權不傳到公開 GitHub。
+- HK2 有 20 個實體 .itf，但其中 122 筆 SPR 引用有 59 筆找不到同名實體檔；不能宣稱完整原版 UI 素材已齊。未確認授權不傳到公開 GitHub。
 - 相關文件：docs/OLD_UI_DESIGN.md、docs/LEGACY_ASSET_PIPELINE.md。新的優先 Gate：AS001～AS008；素材來源與可解析性未確認前，不建立正式 Godot 場景、紙娃娃、UI 或 Server。已刪除初期 Demo 原型，Git 歷史仍可回溯。
 
 ## 2. 技術選型與品質原則
 
 - Client：Godot 4.x，首選 GDScript + 輕量 Data Oriented Entity State；Node 專注 UI/少量互動、畫面可視 Pool。是否改用 C# 或 C++ GDExtension，只能由 Profiler 證據決定，須包含 Runtime 記憶體成本。
 - Server：C#/.NET 10 LTS，ASP.NET Core Gateway + MapActor/World State + Domain Application；單體模組化起步，未達負載瓶頸前不拆微服務。
-- DB：PostgreSQL，原子資產事務/Outbox；熱路徑 WorldState 在 RAM，地圖每 Tick 不讀寫角色 DB。
+- DB：初版 SQLite（WAL、明確單寫入排程、原子資產事務/Outbox），透過 Application ports 與獨立 provider/migration 隔離；未來可換 PostgreSQL 等資料庫。熱路徑 WorldState 在 RAM，地圖每 Tick 不讀寫角色 DB。
 - 協定：版本化 MessagePack / Protobuf 擇一（ADR 紀錄）；TLS WebSocket 初版，ServerSeq/SimTick/SessionEpoch/EntityRevision/MapEpoch；不沿用舊 AES/Base64 JSON wire 格式。
 - 內容：原生 JSON/二進位資料包，離線工具轉換 Old；官方原版素材與原始碼需先確認合法使用權，否則以自製/測試素材代替。
 - 開發：GitHub Actions 自動 lint/compile/test/資料驗證/模擬負載；以具體指標改善，無測試就不聲稱達標。

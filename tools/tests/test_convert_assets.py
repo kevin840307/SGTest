@@ -41,6 +41,10 @@ class ConversionTests(unittest.TestCase):
             self.assertIsNone(manifest["frame_duration_ms"])
             self.assertEqual(convert(source, root, out, 1024)["status"], "cached")
             self.assertEqual(convert(source, root, out, 1024, layout="atlas")["status"], "converted")
+            dotted = root / "Enemy" / "test.variant.spr"
+            dotted.write_bytes(one_frame())
+            convert(dotted, root, out, 1024)
+            self.assertTrue((out / "Enemy" / "test.variant.json").exists())
 
     def test_reject_bad_frame_table(self):
         with self.assertRaises(ValueError):

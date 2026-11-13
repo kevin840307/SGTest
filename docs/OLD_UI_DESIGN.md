@@ -35,4 +35,4 @@
 
 ## 原版 UI 檔案狀況
 TestGoGo 的 server/LEGACY_EXE_UI_RESOURCE_INDEX.md 引用 2009 IDA 的 105 個 .itf 名稱，例如 001_Account_Login、004_Select_Character、006_StatusLite、007_HOTKEY_yl、008_MINIMAP_S、013_Character_info、022_equip、027_Skill、029_SYSTEM。
-目前可見 Old/ClientData/Interface 沒有 .itf 檔。**只有檔名索引，不代表具備 UI 圖像、版面或可直接轉檔的完整素材**。須取得原版完整遊戲安裝素材/封包，再確認 .itf 的欄位與載入規則。
+Old/ClientData/Interface 沒有實體 .itf；目前本機 HK2 有 20 個實體 .itf，但 [引用盤點](HK2_UI_REFERENCES.md) 顯示 122 筆 SPR 引用中 59 筆無同名實體檔。這仍不足以宣稱 UI 圖像、版面與互動狀態齊全；須追 .itf 欄位、載入規則與缺件來源。

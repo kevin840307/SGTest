@@ -1,4 +1,4 @@
-# SGTest 資料模型、ID 與交易一致性（PostgreSQL）
+# SGTest 資料模型、ID 與交易一致性（初版 SQLite）
 
 以下為設計骨架，不代表 SQL schema 已建立。實際 table DDL 需 migration + unit/integration tests。
 
@@ -41,13 +41,15 @@ OutboxEvent(id, operation_id, aggregate_id, event_type, payload, published_at, r
 
 ## 3. 實體責任
 
-- PostgreSQL 真相：玩家/背包/錢/強化/交易/任務與可持久化房屋配置；所有變更必須經授權/交易/版本檢查。
+- 持久化真相（初版 SQLite）：玩家/背包/錢/強化/交易/任務與可持久化房屋配置；所有變更必須經授權/交易/版本檢查。Domain/Application 只依 repository ports，不能直接使用 SQLite 型別或方言。
 - MapActor 真相：瞬間怪物/玩家/掉落存在、座標、戰鬥、追擊、AOI/Chat 附近觀察關係；必要持久資料用事件與 repository 持久化。不能在每個 ClientSession 重複一套怪。
 - Client 僅快取：顯示狀態、預期動畫/插值時間、畫面可見物件。Client 預測位置不寫回 Server 權威。
 
 ## 4. DB 操作安全模式
 
 所有資產變更需要 operation_id；BEGIN TRANSACTION→驗證 owner/鎖定條件/數量/版本→一次修改金錢與物品→建立 Outbox→COMMIT→回應 immutable receipt。同一 operation_id 重試回傳同結果，不再扣款。
+- SQLite 啟用 WAL、foreign_keys、明確 busy timeout 和單寫入排程；資產事務保持短且原子。位置背景批次若遇 writer busy 可重試，角色換圖/登出 flush 與資產提交不得直接丟棄。
+- Provider 抽象以「原子資產操作、讀取快照、位置 flush、Outbox」等用例契約為單位，不暴露 SQL 字串或 `DbConnection` 到 Domain；SQLite 與未來其他 SQL provider 跑同一組契約測試。
 - 買一件剩1庫存的商品：10人同時買，最多1成功、其他明確失敗。
 - 同UID 不能同時處於 Inventory+Equipment+Bank+Shop+Ground；唯一鍵/交易層雙重保護。
 - 交易與取消/斷線競速：同一操作結果不能一半成功；賣家下線不得殘留可再次販售的鎖定物品。
@@ -63,4 +65,4 @@ OutboxEvent(id, operation_id, aggregate_id, event_type, payload, published_at, r
 
 ## 6. 測試
 
-資產守恆（Item UID/數量/金錢）、併發交易、防重放、跨圖/下線恢復、被回收掉落不能撿兩次、強化失敗 Rollback、角色重連、DB 隔離與回放一致；端對端必實際接 PostgreSQL，SQLite pass 不算正式 DB pass。
+資產守恆（Item UID/數量/金錢）、併發交易、防重放、跨圖/下線恢復、被回收掉落不能撿兩次、強化失敗 Rollback、角色重連、DB 隔離與回放一致；端對端必實際接初版 SQLite（含 WAL writer 爭用）。未來更換 provider 時，同一契約測試與資料遷移測試必須在新資料庫再次通過。

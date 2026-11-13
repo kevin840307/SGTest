@@ -17,7 +17,7 @@ Debug 與 Release 記錄級別分開；不可輸出 Token/密碼/SQL secrets。
 每類事件保留 ring buffer 最近 N 筆、限量 telemetry；不要每60FPS寫 log。重要資產/GM 審計使用可查詢持久化紀錄，其餘 debug 可以採樣。
 
 ## 5. 備份與部署
-- 開發：可重建 PostgreSQL fixtures；正式：定期備份、PITR、索引/資料遷移、schema compatibility、Rollback plan。
+- 開發：可重建隔離 SQLite fixtures；正式初版：使用 SQLite Online Backup API／一致快照、備份驗證與復原演練，不能只複製仍在寫入的主 `.db`；索引/資料 migration、schema compatibility 與 rollback plan 要版本化。未來換支援 PITR 的 provider 再制定對應備份策略。
 - 新版 Client/DataCatalog 發布帶版本+hash、內容資產合法性清單、遠端版本最低需求。
 - 單體部署後才依 MapActor/Channel 的真容量測試拆 Pod/多節點；跨實例 handoff 使用 ownership epoch/租約、Outbox/去重、防止雙重人物與怪物。
 - 24h soak、故障注入：DB暫停、單個 WS 慢用戶、Server重啟、網路斷線、AOI 大量變更，須在負載中維持資產不重複/玩家恢復一致。
