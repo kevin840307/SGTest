@@ -95,7 +95,7 @@
 - Reason: 同圖實體數雖多但種類通常少；多個 Entity 應共享 Texture/FrameTable，而不是大量重複 Node/Texture。降低 GPU/RAM 工作集並保留原版動畫事件/圖層。
 - Alternatives: 個別 PNG/SpriteFrames、單尺寸 Atlas、所有素材一張 4096、預合成所有玩家裝備、MultiMesh；不能未測就否決。
 - Risks: Y-sort、紙娃娃前後層、padding bleed、頁過大導致 VRAM 浪費、首次 upload spike、跨圖 cache churn。
-- Evidence: 目前僅 HYPOTHESIS，未取得完整原版素材且 AS007 尚未實測。Next: AS007/AS-T01～T05。詳 [ASSET_STREAMING_AND_RENDERING.md](ASSET_STREAMING_AND_RENDERING.md)。
+- Evidence: 乾淨 HK2 已可全量轉換；三組 512～4096 本機 Godot 初測見 [HK2_ATLAS_CANDIDATES.md](HK2_ATLAS_CANDIDATES.md)，但多種類／掉落／快取與完整 AS007 尚未驗證。Next: AS007/AS-T01～T05。詳 [ASSET_STREAMING_AND_RENDERING.md](ASSET_STREAMING_AND_RENDERING.md)。
 
 ## ADR-017 — Client Network/State 與 UI/Render FPS 排程隔離
 - Date: 2026-11-13；Status: **ACCEPTED CONTRACT / IMPLEMENTATION NOT VERIFIED**。

@@ -130,8 +130,8 @@ def decode_spr(blob: bytes) -> list[Frame]:
     return frames
 
 
-def pack(frames: list[Frame], max_side: int) -> tuple[list[Image.Image], list[dict]]:
-    """Experimental deterministic per-SPR shelf packing, not a final runtime policy."""
+def pack(frames: list[Frame], max_side: int, padding: int = 2) -> tuple[list[Image.Image], list[dict]]:
+    """Deterministic shelf packing with extruded edges for filter-safe regions."""
     pages: list[Image.Image] = []
     records: list[dict] = []
     page = Image.new("RGBA", (max_side, max_side))
@@ -155,20 +155,31 @@ def pack(frames: list[Frame], max_side: int) -> tuple[list[Image.Image], list[di
             continue
         cropped = frame.image.crop(bounds)
         w, h = cropped.size
-        if w > max_side or h > max_side:
+        if w + 2 * padding > max_side or h + 2 * padding > max_side:
             raise ValueError(f"frame {w}x{h} exceeds atlas side {max_side}")
-        if x + w > max_side:
-            x, y, shelf_h = 0, y + shelf_h + 1, 0
-        if y + h > max_side:
+        cell_w, cell_h = w + 2 * padding, h + 2 * padding
+        if x + cell_w > max_side:
+            x, y, shelf_h = 0, y + shelf_h, 0
+        if y + cell_h > max_side:
             flush()
-        page.paste(cropped, (x, y))
-        records.append({"page": len(pages), "rect": [x, y, w, h],
+        px, py = x + padding, y + padding
+        page.paste(cropped, (px, py))
+        if padding:
+            left = cropped.crop((0, 0, 1, h)).resize((padding, h))
+            right = cropped.crop((w - 1, 0, w, h)).resize((padding, h))
+            page.paste(left, (x, py))
+            page.paste(right, (px + w, py))
+            top = page.crop((x, py, x + cell_w, py + 1)).resize((cell_w, padding))
+            bottom = page.crop((x, py + h - 1, x + cell_w, py + h)).resize((cell_w, padding))
+            page.paste(top, (x, y))
+            page.paste(bottom, (x, py + h))
+        records.append({"page": len(pages), "rect": [px, py, w, h],
                         "raw_origin": [frame.origin_x, frame.origin_y],
                         "crop": list(bounds),
                         "size": list(frame.image.size)})
-        used_w, used_h = max(used_w, x + w), max(used_h, y + h)
-        x += w + 1
-        shelf_h = max(shelf_h, h)
+        used_w, used_h = max(used_w, x + cell_w), max(used_h, y + cell_h)
+        x += cell_w
+        shelf_h = max(shelf_h, cell_h)
     flush()
     return pages, records
 
@@ -184,7 +195,7 @@ def convert(source: Path, root: Path, dest: Path, side: int, force: bool = False
     digest = hashlib.sha256(raw).hexdigest()
     if manifest_path.exists() and not force:
         old = json.loads(manifest_path.read_text(encoding="utf-8"))
-        if old.get("sha256") == digest and old.get("atlas_side") == side and old.get("layout") == layout and all(
+        if old.get("sha256") == digest and old.get("atlas_side") == side and old.get("layout") == layout and old.get("padding", 0) == (2 if layout == "atlas" else 0) and all(
                 (target.parent / p).exists() for p in old.get("pages", [])):
             return {"source": relative.as_posix(), "status": "cached", "frames": len(old["frames"])}
     decoded = decode_spr(raw)
@@ -207,8 +218,9 @@ def convert(source: Path, root: Path, dest: Path, side: int, force: bool = False
         page.save(temporary, format="PNG", optimize=True)
         temporary.replace(path)
         names.append(name)
-    document = {"version": 1, "source": relative.as_posix(), "sha256": digest,
-                "atlas_side": side, "layout": layout, "pages": names, "frames": records,
+    document = {"version": 2, "source": relative.as_posix(), "sha256": digest,
+                "atlas_side": side, "layout": layout, "padding": 2 if layout == "atlas" else 0,
+                "pages": names, "frames": records,
                 "animation": None, "facing": None, "frame_duration_ms": None,
                 "draw_order": None, "events": None}
     temporary = manifest_path.with_name(manifest_path.name + ".tmp")

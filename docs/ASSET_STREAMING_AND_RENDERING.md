@@ -1,6 +1,6 @@
 # SGTest 高效能素材存取、Atlas 與渲染架構
 
-版本：設計 v1／2026-11-13。**DESIGN ONLY / NOT VERIFIED**。本設計不代表已取得完整原版素材、已完成 Decoder、Atlas 或 Client。必須遵守 AS001～AS009 及 AS008 授權 Gate；目前僅可用自製 fixture 做演算法測試。
+版本：設計 v1／2026-11-13，2026-11-14 加入 HK2 實測。正式 runtime **NOT VERIFIED**。乾淨 HK2 的 SPR/ACT/SIF 已可本機轉換，並有三組實驗 Atlas；不代表原版視覺、動畫、授權或 Client 已完成。必須遵守 AS001～AS009 及 AS008 授權 Gate。詳 [HK2 Atlas 候選實測](HK2_ATLAS_CANDIDATES.md)。
 
 ## 1. 核心目標
 
@@ -99,4 +99,4 @@ Catalog / Map Palette → Prefetch + Prioritized Request Queue
 
 測量：UniqueAssetCount、VisibleInstances、AtlasPagesTouched、PageFillRate、DrawCalls、TextureChanges、Overdraw、RAM WorkingSet/PrivateBytes、VRAM Dedicated/Shared、Frame P95/P99、Load P95、CacheHit/Miss、UploadSpikeP99、EvictionChurn、LogoutGrowth，以及獨立的 network/reducer telemetry。
 
-**沒有真實測試＝NOT VERIFIED。** 原件 Decoder/Viewer/授權先完成；設計不改變現有 AS001～AS009 的完成狀態。
+三組 HK2 真素材已作一次 Godot/OpenGL 300 同種類實例 A/B，見 [實測記錄](HK2_ATLAS_CANDIDATES.md)；它不涵蓋此矩陣的多種類、掉落、快取和解析度案例。其他未實測項目仍為 **NOT VERIFIED**。原版逐格 Viewer、授權與完整 AS001～AS009 Gate 尚未完成。

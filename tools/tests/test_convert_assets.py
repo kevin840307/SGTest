@@ -6,7 +6,7 @@ from pathlib import Path
 import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from convert_assets import convert, convert_act, convert_draw_order, decode_spr, pack
+from convert_assets import Frame, convert, convert_act, convert_draw_order, decode_spr, pack
 
 
 def one_frame() -> bytes:
@@ -23,9 +23,22 @@ class ConversionTests(unittest.TestCase):
         self.assertEqual(frames[0].image.getpixel((0, 0)), (255, 0, 0, 255))
         self.assertEqual(frames[0].image.getpixel((1, 0)), (0, 0, 0, 0))
         pages, records = pack(frames, 1024)
-        self.assertEqual(pages[0].size, (1, 1))
+        self.assertEqual(pages[0].size, (5, 5))
         self.assertEqual(records[0]["raw_origin"], [-3, 7])
         self.assertEqual(records[0]["crop"], [0, 0, 1, 1])
+        self.assertEqual(records[0]["rect"], [2, 2, 1, 1])
+        self.assertEqual(pages[0].getpixel((0, 0)), (255, 0, 0, 255))
+
+    def test_atlas_padding_keeps_adjacent_colors_separate(self):
+        from PIL import Image
+        red = Frame(Image.new("RGBA", (1, 1), (255, 0, 0, 255)), 0, 0)
+        blue = Frame(Image.new("RGBA", (1, 1), (0, 0, 255, 255)), 0, 0)
+        pages, records = pack([red, blue], 16)
+        self.assertEqual(len(pages), 1)
+        self.assertEqual(records[0]["rect"], [2, 2, 1, 1])
+        self.assertEqual(records[1]["rect"], [7, 2, 1, 1])
+        self.assertEqual(pages[0].getpixel((4, 2)), (255, 0, 0, 255))
+        self.assertEqual(pages[0].getpixel((5, 2)), (0, 0, 255, 255))
 
     def test_reproducible_output_and_cache(self):
         with tempfile.TemporaryDirectory() as temp:
