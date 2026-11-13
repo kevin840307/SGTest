@@ -52,8 +52,10 @@ def inventory(root: Path, with_sha256: bool = False, header_bytes: int = 16) -> 
         relative = path.relative_to(root).as_posix()
         suffix = path.suffix.lower() or "[none]"
         size = path.stat().st_size
+        with path.open("rb") as header_stream:
+            header_hex = header_stream.read(header_bytes).hex()
         item = {"relative_path": relative, "extension": suffix, "size_bytes": size,
-                "header_hex": path.open("rb").read(header_bytes).hex()}
+                "header_hex": header_hex}
         if with_sha256:
             item["sha256"] = sha256_file(path)
         files.append(item)
