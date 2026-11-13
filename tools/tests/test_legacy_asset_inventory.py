@@ -20,11 +20,22 @@ class InventoryTests(unittest.TestCase):
             second = inventory(root, with_sha256=True)
             self.assertEqual(first, second)
             self.assertEqual(first["file_count"], 2)
+            self.assertEqual(first["schema_version"], 2)
+            self.assertEqual(first["files"][1]["header_hex"], raw.hex())
             self.assertEqual(first["total_bytes"], 6)
             self.assertEqual(first["extension_counts"], {".itf": 1, ".spr": 1})
             self.assertEqual(first["missing_legacy_formats"], [".itd", ".sif"])
             self.assertEqual(first["files"][1]["sha256"], hashlib.sha256(raw).hexdigest())
             self.assertEqual(first["files"][1]["relative_path"], "NPC/NPC001.SPR")
+
+    def test_header_bytes_and_bounds(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            (root / 'image.spr').write_bytes(b'abcdef')
+            self.assertEqual(inventory(root, header_bytes=3)['files'][0]['header_hex'], '616263')
+            self.assertEqual(inventory(root, header_bytes=0)['files'][0]['header_hex'], '')
+            with self.assertRaises(ValueError):
+                inventory(root, header_bytes=65)
 
     def test_root_must_exist(self):
         with self.assertRaises(ValueError):
