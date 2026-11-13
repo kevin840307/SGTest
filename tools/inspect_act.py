@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
-"""Experimental reader for observed SGO ACT action/frame records.
+"""Read SGO ACT records and preserve the original update-count timing rule.
 
-Only raw keys and integer fields are exposed. Time units and event semantics
-are deliberately not inferred here.
+The original player's update call frequency is not inferred as milliseconds.
 """
 from __future__ import annotations
 
@@ -30,9 +29,8 @@ def parse_act(raw: bytes) -> list[dict]:
             raise ValueError("unterminated ACT action key")
         key = key_raw[:-1].decode("ascii")
         at += name_size
-        if at + 11 > len(raw) or raw[at] != 3 or raw[at + 5] not in (0, 1) or raw[at + 6] != 2:
+        if at + 11 > len(raw) or raw[at] != 3 or struct.unpack_from("<I", raw, at + 1)[0] != 1 or raw[at + 5] not in (0, 1) or raw[at + 6] != 2:
             raise ValueError(f"unknown ACT frame header at {at}")
-        unknown_value = struct.unpack_from("<I", raw, at + 1)[0]
         raw_loop_flag = raw[at + 5]
         count = struct.unpack_from("<I", raw, at + 7)[0]
         at += 11
@@ -41,7 +39,8 @@ def parse_act(raw: bytes) -> list[dict]:
         frames = []
         for _ in range(count):
             index, unknown_time = struct.unpack_from("<II", raw, at)
-            frames.append({"index": index, "raw_time": unknown_time})
+            frames.append({"index": index, "raw_time": unknown_time,
+                           "legacy_default_update_calls": unknown_time * 40 // 25})
             at += 8
         events = []
         while at < len(raw) and raw[at] == 4:
@@ -53,10 +52,17 @@ def parse_act(raw: bytes) -> list[dict]:
                 raise ValueError("bad ACT event length")
             payload = raw[at:at + length]
             at += length
-            events.append({"at_frame_raw": struct.unpack_from("<I", payload)[0],
-                           "raw_payload_hex": payload[4:].hex()})
-        actions.append({"key": key, "raw_value": unknown_value,
-                        "raw_loop_flag": raw_loop_flag,
+            token_bytes = payload[4:]
+            if b"\0" not in token_bytes or any(token_bytes[token_bytes.index(0) + 1:]):
+                raise ValueError("invalid ACT event token")
+            event_frame = struct.unpack_from("<I", payload)[0]
+            if event_frame >= count:
+                raise ValueError("ACT event index outside frames")
+            events.append({"at_frame_raw": event_frame,
+                           "token": token_bytes[:token_bytes.index(0)].decode("ascii"),
+                           "raw_payload_hex": token_bytes.hex()})
+        actions.append({"key": key, "raw_loop_flag": raw_loop_flag,
+                        "loops": bool(raw_loop_flag),
                         "frames": frames, "events": events})
     return actions
 
@@ -81,7 +87,7 @@ def main() -> int:
                 if args.output is not None:
                     target = args.output / path.relative_to(args.act).parent / (path.stem + ".act.json")
                     target.parent.mkdir(parents=True, exist_ok=True)
-                    target.write_text(json.dumps({"version": 1,
+                    target.write_text(json.dumps({"version": 2,
                         "source": path.relative_to(args.act).as_posix(),
                         "sha256": hashlib.sha256(raw).hexdigest(),
                         "time_unit": None, "action_semantics": None,

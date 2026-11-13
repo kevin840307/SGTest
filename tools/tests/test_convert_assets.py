@@ -60,8 +60,10 @@ class ConversionTests(unittest.TestCase):
                                b"\x01\x02\x01\x00\x00\x00" + struct.pack("<II", 0, 6) + b"\xff")
             self.assertEqual(convert_act(source, root, out), "converted")
             exported = json.loads((out / "Enemy" / "test.act.json").read_text())
+            self.assertEqual(exported["version"], 2)
             self.assertIsNone(exported["time_unit"])
             self.assertEqual(exported["actions"][0]["frames"][0]["raw_time"], 6)
+            self.assertEqual(exported["actions"][0]["frames"][0]["legacy_default_update_calls"], 9)
 
     def test_draw_order_preserves_layer_names_and_suffix(self):
         with tempfile.TemporaryDirectory() as temp:

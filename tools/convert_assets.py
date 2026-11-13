@@ -224,12 +224,12 @@ def convert_act(source: Path, root: Path, dest: Path, force: bool = False) -> st
     digest = hashlib.sha256(raw).hexdigest()
     if target.exists() and not force:
         old = json.loads(target.read_text(encoding="utf-8"))
-        if old.get("sha256") == digest:
+        if old.get("sha256") == digest and old.get("version") == 2:
             return "cached"
     actions = parse_act(raw)
     target.parent.mkdir(parents=True, exist_ok=True)
     temporary = target.with_name(target.name + ".tmp")
-    temporary.write_text(json.dumps({"version": 1, "source": relative.as_posix(),
+    temporary.write_text(json.dumps({"version": 2, "source": relative.as_posix(),
                          "sha256": digest, "time_unit": None,
                          "action_semantics": None, "actions": actions},
                          ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
