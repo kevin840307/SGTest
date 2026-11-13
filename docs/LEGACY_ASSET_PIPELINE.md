@@ -40,3 +40,27 @@ python tools/legacy_asset_inventory.py --root "C:\SGO\OldClient" --output report
 - Step 4：建立獨立 Legacy Asset Viewer，原版影片/截圖逐格視覺校驗後才批次匯出 Godot metadata。
 - Step 5：實測 Godot 分開圖和 Atlas 的 RAM/VRAM/Frame/DrawCalls，不預設合圖必較省；權利 Gate 未通過不發佈遊戲素材。
 - 所有實作階段的狀態以 todo.txt AS001～AS009 為準，未驗證一律 NOT VERIFIED。
+
+
+## 2026-11-13 現況：有原始組語／二進位證據，不等於動畫完整還原
+
+完整分析見 [LEGACY_ASSET_EVIDENCE_20261113.md](LEGACY_ASSET_EVIDENCE_20261113.md)。
+來源依據：TestGoGo \`0f37c5268ceeac1144ed13556f3aeb191b93711e\`，\`Paradise.exe.lst\` Git blob \`16710727227dc5ff8d623ea2acab17cc468fc129\`。
+
+- 已直接定位 \`xnFileRead\` / \`xnSpr::LoadSpr\` / \`DecodeFrameLine\` 與群組資料、LZSS 的函式及地址。已在四個原版 NPC SPR 上驗證 footer frame count、frame offsets、每影格寬高／原始 anchor、逐列偏移及三類 RLE token，結構性測試合計 627 列無未識別 token。
+- 已確認 \`NPC203.sif\` 含 SPR 檔名及四個與 SPR 影格標頭對應的整數；但 SIF 額外旗標與精確定位語意未確認。
+- \`.act\` 是原版多處搭配 \`.spr\` 使用的動作描述檔名，尚缺實際原件，**未解出方向、動作、逐格時長或完整裝備疊圖**。原始 \`.itf\` 尚未提供；\`.itd\` 為資料表來源，不應拿來補動作資訊。
+- 已新增唯讀掃描器 \`--header-bytes\`（預設 16，0～64）、XN SPR 解析器、輸出原始 raw anchor + 未知欄位為 null 的 JSON，以及獨立 Tkinter Viewer。當 Viewer 用 100ms 預覽播放時，並不是聲稱原版動畫 100ms。
+- \`RGB565\` 只是目前的暫用 16-bit 色彩解釋；沒有原版截圖像素比對以前，不得宣稱 PNG 色彩／Alpha「完全相同」。
+- 盤點報表 schema 已升至 2；所有未授權原件與轉換圖片均只能保留在本機，不得提交至 SGTest 公開 Git。
+
+下一個 Session **先接 AS001**，在合法持有的原版後期 Client 安裝目錄執行：
+
+\`\`\`powershell
+python tools/legacy_asset_inventory.py --root "C:\SGO\OriginalClient" --output reports/legacy-assets.json --sha256 --header-bytes 32
+python tools/legacy_spr_decoder.py --input "C:\SGO\OriginalClient\NPC\NPC203.spr" --output "C:\SGO\reports\npc203"
+python tools/legacy_asset_viewer.py "C:\SGO\reports\npc203\animation.json"
+python -m unittest discover -s tools/tests -p "test_*.py" -v
+\`\`\`
+
+以上路徑是使用範例，**不是已驗證存在的本機原件路徑**。按 AS002 → AS003 → AS004... 繼續追 trace，沒有完整角色 SPR+ACT/後期 UI 原件與使用權以前，M0 Gate 不可通過，禁止正式 Godot Client/Server/Atlas 實作。
