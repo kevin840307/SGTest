@@ -6,7 +6,7 @@ from pathlib import Path
 import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from convert_assets import convert, convert_act, decode_spr, pack
+from convert_assets import convert, convert_act, convert_draw_order, decode_spr, pack
 
 
 def one_frame() -> bytes:
@@ -58,6 +58,18 @@ class ConversionTests(unittest.TestCase):
             exported = json.loads((out / "Enemy" / "test.act.json").read_text())
             self.assertIsNone(exported["time_unit"])
             self.assertEqual(exported["actions"][0]["frames"][0]["raw_time"], 6)
+
+    def test_draw_order_preserves_layer_names_and_suffix(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp) / "client"
+            out = Path(temp) / "out"
+            (root / "Player").mkdir(parents=True)
+            source = root / "Player" / "CharDrawOrder.dat"
+            source.write_bytes(b"NS1 : Back>leg+2>Body+2>Head\r\n")
+            self.assertEqual(convert_draw_order(source, root, out), "converted")
+            exported = json.loads((out / "Player" / "CharDrawOrder.draw_order.json").read_text())
+            self.assertEqual(exported["rows"][0]["raw_layers"], ["Back", "leg+2", "Body+2", "Head"])
+            self.assertIsNone(exported["layer_suffix_semantics"])
 
 
 if __name__ == "__main__":

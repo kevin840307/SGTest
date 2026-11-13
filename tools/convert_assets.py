@@ -8,6 +8,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 import struct
 import zlib
 from dataclasses import dataclass
@@ -236,6 +237,40 @@ def convert_act(source: Path, root: Path, dest: Path, force: bool = False) -> st
     return "converted"
 
 
+DRAW_ROW = re.compile(r"^([A-Z0-9]+)\s*:\s*(.+)$")
+
+
+def convert_draw_order(source: Path, root: Path, dest: Path, force: bool = False) -> str:
+    relative = source.relative_to(root)
+    target = dest / relative.parent / (source.stem + ".draw_order.json")
+    raw = source.read_bytes()
+    digest = hashlib.sha256(raw).hexdigest()
+    if target.exists() and not force:
+        old = json.loads(target.read_text(encoding="utf-8"))
+        if old.get("sha256") == digest:
+            return "cached"
+    rows = []
+    keys = set()
+    for number, line in enumerate(raw.decode("ascii").splitlines(), 1):
+        if not line.strip():
+            continue
+        match = DRAW_ROW.fullmatch(line.strip())
+        if not match or match[1] in keys:
+            raise ValueError(f"invalid or duplicate draw-order row {number}")
+        layers = [part.strip() for part in match[2].split(">")]
+        if not all(layers):
+            raise ValueError(f"empty draw-order layer at row {number}")
+        keys.add(match[1])
+        rows.append({"key": match[1], "raw_layers": layers})
+    target.parent.mkdir(parents=True, exist_ok=True)
+    temporary = target.with_name(target.name + ".tmp")
+    temporary.write_text(json.dumps({"version": 1, "source": relative.as_posix(),
+                         "sha256": digest, "layer_suffix_semantics": None,
+                         "rows": rows}, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+    temporary.replace(target)
+    return "converted"
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("client", type=Path, help="Original clean client directory")
@@ -246,6 +281,7 @@ def main() -> int:
     parser.add_argument("--category", action="append", help="Convert only these first-level directories")
     parser.add_argument("--limit", type=int, help="Convert first N files, useful for a trial")
     parser.add_argument("--skip-act", action="store_true", help="Only convert SPR, without ACT raw action records")
+    parser.add_argument("--skip-draw-order", action="store_true", help="Do not export Player draw-order tables")
     parser.add_argument("--force", action="store_true")
     args = parser.parse_args()
     root = args.client.resolve()
@@ -284,8 +320,25 @@ def main() -> int:
                 act_cached += result == "cached"
             except (OSError, ValueError, struct.error) as exc:
                 errors.append({"source": source.relative_to(root).as_posix(), "error": str(exc)})
+    draw_ok = draw_cached = 0
+    draw_sources = []
+    if not args.skip_draw_order:
+        draw_sources = sorted((p for p in root.rglob("*DrawOrder.dat") if p.is_file()
+                               and (not categories or p.relative_to(root).parts[0] in categories)),
+                              key=lambda p: str(p.relative_to(root)).lower())
+        if args.limit is not None:
+            draw_sources = draw_sources[:args.limit]
+        for source in draw_sources:
+            try:
+                result = convert_draw_order(source, root, out, args.force)
+                draw_ok += result == "converted"
+                draw_cached += result == "cached"
+            except (OSError, ValueError, UnicodeError) as exc:
+                errors.append({"source": source.relative_to(root).as_posix(), "error": str(exc)})
     print(json.dumps({"scanned": len(sources), "converted": ok, "cached": cached,
                       "act_scanned": len(act_sources), "act_converted": act_ok, "act_cached": act_cached,
+                      "draw_order_scanned": len(draw_sources), "draw_order_converted": draw_ok,
+                      "draw_order_cached": draw_cached,
                       "failed": len(errors), "errors": errors[:20]}, ensure_ascii=False, indent=2))
     return 1 if errors else 0
 

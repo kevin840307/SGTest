@@ -5,8 +5,8 @@ SGTest TODO — 2026-11-13 / M0 原版素材研究優先
 ===== P0 / AS：素材來源與真實格式，未完成不得開始遊戲實作 =====
 AS001 [~] HK2 實體目錄已唯讀盤點：41,741 檔／1,333,254,792 bytes、SHA-256、magic、相對路徑、大小，報告在本機忽略的 reports/hk2-inventory.json；摘要見 docs/HK2_INVENTORY.md。Data1.dat 內容、安裝包來源、Client.bin/SGOClient.bin 版本仍待查，不能宣稱完整原版資源已齊。
 AS002 [~] HK2 全 178 個 ACT 的原始欄位邊界已可解析；Paradise.exe.lst 死亡 ACT/武器特效路徑位址初核，詳 docs/HK2_ACT_RESEARCH.md。尚未追到播放時間單位、方向鏡像、SIF/圖層與完整載入鏈。
-AS003 [~] HK2 實體類別與 ITF→SPR 引用初盤，詳 docs/HK2_INVENTORY.md、docs/HK2_UI_REFERENCES.md；122 筆 UI SPR 引用中 59 筆無實體同名檔。人物方向/裝備疊層/其他類別缺口矩陣仍待補。
-AS004 [~] tools/convert_assets.py 已從 HK2 全量轉出 40,224/40,224 SPR、178/178 ACT、零失敗，保留 RGBA/原始 origin/來源 SHA/ACT 原始時間與事件，詳 docs/HK2_SPR_POC.md；ACT/SIF 的方向、時間單位、疊層仍未知；原版視覺比對未完成。
+AS003 [~] HK2 實體類別、ITF→SPR 引用、9 份人物 draw-order 表及 219 份地圖 manifest 初盤，詳 docs/HK2_INVENTORY.md、docs/HK2_UI_REFERENCES.md、docs/HK2_DRAW_ORDER.md、docs/HK2_MAP_REFERENCES.md；122 筆 UI SPR 引用中 59 筆無實體同名檔，Blocking 只有 121/219 引用有實體檔。人物鏡像規則、裝備實際遮擋與其他類別缺口仍待補。
+AS004 [~] tools/convert_assets.py 已從 HK2 全量轉出 40,224/40,224 SPR、178/178 ACT、零失敗；9/9 draw-order 表也保真輸出。保留 RGBA/原始 origin/來源 SHA/ACT 原始時間與事件，詳 docs/HK2_SPR_POC.md、docs/HK2_DRAW_ORDER.md；方向鏡像、時間單位、`+N` 疊層語意仍未知；原版視覺比對未完成。
 AS005 [ ] 原版視覺/影格/方向/透明度/對齊/裝備疊圖實證比對；含靜止/行走/攻擊/受擊/死亡，截圖與錄影人工確認。
 AS006 [ ] 獨立 Legacy Asset Viewer：預覽、逐格、方向/動作、透明度、偏移、圖層、批次匯出；使用自建 fixture 測試。
 AS007 [~] tools/benchmark_asset_layout.gd 已對同一 20 SPR 樣本比較 Godot headless PNG 解碼：分幀136頁中位83.584ms、512小 atlas40頁中位66.662ms；詳 docs/HK2_SPR_POC.md、docs/ASSET_RUNTIME_STRATEGY.md。GPU VRAM/draw calls/Frame P95、快取回收與多人實景仍未驗證，正式分組未定。

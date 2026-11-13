@@ -12,6 +12,7 @@
 - [docs/ASSET_RUNTIME_STRATEGY.md](docs/ASSET_RUNTIME_STRATEGY.md)：暫定 Godot 分組、可見載入與性能驗收
 - [research/source_manifest.json](research/source_manifest.json)：已知舊 repo 檔案索引（不是完整 Client）
 - [AGENTS.md](AGENTS.md)：協作/安全/測試約束
+- [client/](client/README.md) 與 [server/](server/README.md)：獨立開發工作區與進入 M1 的契約
 
 ## 原版資料調查
 - 參考（唯讀）：https://github.com/kevin840307/TestGoGo/tree/feature/local-server-net8
