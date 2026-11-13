@@ -2,7 +2,7 @@
 
 ## 開始工作前（強制）
 
-1. git fetch，確認 SGTest main 最新 HEAD；先讀 README.md、SPEC.md 第7節、todo.txt、docs/LEGACY_ASSET_PIPELINE.md、research/source_manifest.json；素材 Gate 通過後才讀其他遊戲系統文件。
+1. git fetch，確認 SGTest main 最新 HEAD；先讀 README.md、SPEC.md 第7節、todo.txt、docs/LEGACY_ASSET_PIPELINE.md、docs/HK2_INVENTORY.md；素材 Gate 通過後才讀其他遊戲系統文件。
 2. 若任務需要舊版證據，確認參考 TestGoGo 的 feature/local-server-net8 最新 SHA。首份規格基準：aee7ec7fff9e446452655cf6d2be460dfd7a88f1。引用精確路徑/函式/位址/輸入輸出，不憑記憶臆測。
 3. 檢查 TODO 最新領取狀態；只領一個未完成 Task ID。同時有人處理同檔案，使用個人分支/工作樹；不得 force push、不得覆寫同事的新版本。
 4. 每個 Task 先列「修改前行為、可觀測指標、回歸案例」，之後才修改。拆成可審核的小 commit。測試未執行一律寫 NOT VERIFIED（不可虛稱 PASS）。
@@ -50,3 +50,10 @@
 ## 禁止直接大規模變更的區域
 
 物品 ID 轉換、伺服器時間線/佇列、MapActor 生命週期、SQLite 資產交易及未來 provider 切換、原始地圖座標契約都必須先有可重現 fixture 和相容性測試。
+
+## 新增跨 Session 架構審查（2026-11-13）
+
+- AS001～AS009 仍優先，執行前另讀 [docs/ASSET_STREAMING_AND_RENDERING.md](docs/ASSET_STREAMING_AND_RENDERING.md)、[docs/CLIENT_RUNTIME_ISOLATION.md](docs/CLIENT_RUNTIME_ISOLATION.md) 與 ADR-016/017；這兩份文件只是規格，未有正式 Client。
+- 禁止將 ClientNetworkPump/decoder/CommandGateway/StateReducer 放在 UI FPS、World Render FPS、`_process(delta)`、AFK/失焦/最小化節奏下；FPS 設定只可改呈現，必須以相同 packet trace 驗證。
+- 多怪/多掉落以種類共用 Texture/Atlas/FrameTable、地圖 MapAssetPalette、非同步預載/有界 GPU Commit、登出回收為優先；不可假設單張大圖或 MultiMesh 一定優於分頁。
+- 必須保留原版方向/動作/pivot/offset/z-order 和動作事件，先實證解碼才導入素材。設計文件更新不算 AS007 完成；無測試標記 NOT VERIFIED。

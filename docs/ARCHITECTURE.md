@@ -101,3 +101,13 @@ WebSocketGateway <-> SessionRegistry <-> CommandAdmission
 - 10人同一怪最後一擊只有一次 death/exp/drop；經濟/物品守恆。
 - MapActor Tick p99、actor queue age、Gateway queue age、DB CommitMs 有獨立 metrics；Server 頻寬按 AOI 近遠分層。
 - 角色 Action FSM 在高延遲、同幀收到 Move/Hit/Stop/Death 仍完全正確。
+
+## 7. 多尺寸資產系統及 Client/Server/UI 完整隔離（2026-11-13）
+
+- 主文件：[ASSET_STREAMING_AND_RENDERING.md](ASSET_STREAMING_AND_RENDERING.md)、[CLIENT_RUNTIME_ISOLATION.md](CLIENT_RUNTIME_ISOLATION.md)。
+- NetworkPump/Codec/CommandGateway → bounded ordered queues → OrderedEventReducer（MapEpoch/Seq/Action barrier）→ PackedWorldState → immutable ViewProjection/ViewModel → WorldRenderer／UIRenderer。Server MapActor 有獨立 SimulationClock，Client NetworkPump/StateReducer 與 Render/VisualClock 分離。
+- **無論 UI FPS/Render FPS 30、40、50、60、120 或最小化/失焦/AFK，Client↔Server 收送包/解析/State reducer/command flush/戰鬥/移動/撿物工作率不得因設定改變。** 不可只在被 FPS 控制的 `_process(delta)` 裡 poll Socket。UI 只經 command/event snapshot 互動。
+- MonsterVisual/ItemVisual 以 VisualDefinitionId 共用 Texture/FrameTable；多實例不重複解碼和建立大型 Node。離線 Map Asset Palette 用 shared/map hot/warm/cold + 512～4096 的候選 Atlas，Runtime 用有界 async streaming、GPU commit、lifecycle 管理。
+- Visual 邏輯在資源尚未載入時不得停止 State；素材完成後讀最新 pose，避免 AOI 外圍遠端角色從原點/舊位置瞬移。不同解析度依實際 CameraWorldRect 預載，不能假設 800×600。
+- 原「Client fixed state step 60Hz」屬初始候選頻率，不是由 Render FPS 推導或控制的實作要求。Godot/OS 背景 throttle 需以獨立 IO/Reducer 排程和 telemetry 實機驗證。
+- 本章為設計，**尚未有可執行 Client/Server、NOT VERIFIED**。

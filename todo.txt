@@ -1,6 +1,6 @@
 SGTest TODO — 2026-11-13 / M0 原版素材研究優先
 唯一進度來源。標記：[ ] 未開始 [~] 進行中 [x] 完成且可驗證 [!] 受阻 [?] 待決。
-研究前先看 SPEC.md 第7節、docs/LEGACY_ASSET_PIPELINE.md、research/source_manifest.json；任何下一 Session 不得把旧 demo 視為現存實作。
+研究前先看 SPEC.md 第7節、docs/LEGACY_ASSET_PIPELINE.md、docs/HK2_INVENTORY.md；任何下一 Session 不得把舊 demo 視為現存實作。
 
 ===== P0 / AS：素材來源與真實格式，未完成不得開始遊戲實作 =====
 AS001 [~] HK2 實體目錄已唯讀盤點：41,741 檔／1,333,254,792 bytes、SHA-256、magic、相對路徑、大小，報告在本機忽略的 reports/hk2-inventory.json；摘要見 docs/HK2_INVENTORY.md。Data1.dat 內容、安裝包來源、Client.bin/SGOClient.bin 版本仍待查，不能宣稱完整原版資源已齊。
@@ -15,7 +15,7 @@ AS009 [ ] 將本機盤點與解碼結果形成 docs/證據矩陣，記錄具體�
 
 ===== 已確認的事實（不是素材解析完成） =====
 [x] 已指定後期《星夢 Online》金色 UI 的視覺目標。
-[x] 現有 research/source_manifest.json、舊版程式碼/二進位索引和唯讀盤點工具可用作研究起點。
+[x] 已有 HK2 全量 inventory、舊版反編譯位址與唯讀盤點工具可用作研究起點。
 [!] 早期盤點僅見部分 SPR/SIF/ITD；後期 ITF 實體與完整人物/地圖原圖未確認。
 [ ] 原版 Client 安裝資料夾實際 inventory、格式 Decoder、Viewer、Godot 真素材匯入全部未完成。
 
@@ -39,3 +39,4 @@ AS002（部分）| a182e60 | tools/inspect_act.py、docs/HK2_ACT_RESEARCH.md | 1
 AS004（部分）| 6d51f91 | ACT raw JSON 併入 convert_assets.py | 8 個 Python 單元測試 PASS（當時）；HK2 全量 40,224 SPR／178 ACT 本機批次轉換 PASS（零失敗，後續工作樹驗證）；正式 Godot runtime 包裝與原版畫面比對未完成。
 AS003/AS007（部分）| 05b6d4f | 20 ITF 引用盤點與 Godot headless PNG 解碼基準 | 9 個 Python 測試 PASS；20 SPR 樣本分幀136頁/83.584ms，512 atlas40頁/66.662ms（5次中位，單次實驗）；GPU/正式多人未驗證。
 AS003（部分）| d14e1ed | 9 份人物 draw-order、219 份地圖引用盤點，client/ 與 server/ 分開建立入口 | 11 個 Python 測試 PASS；地圖 Blocking 121/219 有實體檔，缺件與鏡像語意待查。
+AS001～AS009（參考版本研究）| origin/main e497e21 | docs/LEGACY_ASSET_EVIDENCE_20261113.md、tools/legacy_spr_decoder.py、tools/legacy_asset_viewer.py | 參考版本的 4 個 NPC SPR 結構與 1 個 SIF 樣本，曾有 GitHub CI 10 項測試通過；該文件的「尚未取得完整安裝目錄」是當時狀態，現以 HK2 本機盤點與轉換報告為準。與本分支合併後 Python 24 項測試 PASS。

@@ -49,3 +49,12 @@ T0 空登入、選角、登出100次；T1 單人 Map15 城內；T2 單人 Map13 
 - 登出/切圖/AFK 100次無明顯 memory growth；Client 程式未無限保留 world resources；
 - 20bot/300怪混合持續戰鬥中玩家 Move end-to-end P95、DB/AI/Socket queue ages可追；
 - 未到標的項目在 todo.txt 明確阻塞，不可硬勾 [x]。
+
+## 6. 共用素材與 UI FPS 不影響網路的效能驗證（2026-11-13，待執行）
+
+1. 同場景、同素材/品質/可見實體，比較 Individual PNG/SpriteFrames、固定 1024、固定 2048、自適應 512/1024/2048/4096、自適應+MapAssetPalette/co-occurrence 及可見 renderer 方案；**不能透過少顯示人物/掉落或降低 packet/Server tick 假冒省資源**。
+2. 高重用與高 diversity 必須都測：示例 A 500怪僅8種、2000掉落僅25種；示例 B 多種怪、多不同裝備玩家與稀有技能。觀察 UniqueVisualCount、VisibleInstances、AtlasPagesTouched、TextureSwitch/DrawCalls、RAM/VRAM、FrameP95/P99、ResourceMiss、UploadSpike、EvictionChurn。
+3. 固定 Server/packet trace，Client 設 30/40/50/60/120 render FPS、UI animation 低頻、失焦/縮小/AFK/恢復：比對 Rx/Tx events、Reducer state hash、可靠事件完整性、NetworkPollIntervalP95/P99、QueueOldestAgeP95/P99、ReducerDelay/OutgoingCommandDelay；**render 變化不應導致網路和 state 工作率系統性變化**。
+4. 解析度 1080p、1440p、4K、21:9、zoom-out：同一 world rect 與擴大 world rect 分開比較，不混淆像素填充和視野實體數。快切 map、反覆預取/卸載、登出100次需量測 VRAM/RAM 穩態與 GPU RID 洩漏。
+5. 須有相同 trace hash、視覺品質、可見內容、硬體、OS、Godot 版本、seed、3次 run；headless 不代表真 GPU PASS。詳 [ASSET_STREAMING_AND_RENDERING.md](ASSET_STREAMING_AND_RENDERING.md)、[CLIENT_RUNTIME_ISOLATION.md](CLIENT_RUNTIME_ISOLATION.md)。
+6. **截至 2026-11-13：DESIGN ONLY；實測 NOT VERIFIED。**

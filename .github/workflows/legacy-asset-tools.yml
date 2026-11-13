@@ -2,12 +2,12 @@ name: Legacy asset inventory tools
 on:
   push:
     paths:
-      - 'tools/legacy_asset_inventory.py'
+      - 'tools/*.py'
       - 'tools/tests/**'
       - '.github/workflows/legacy-asset-tools.yml'
   pull_request:
     paths:
-      - 'tools/legacy_asset_inventory.py'
+      - 'tools/*.py'
       - 'tools/tests/**'
       - '.github/workflows/legacy-asset-tools.yml'
   workflow_dispatch:

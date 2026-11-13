@@ -10,7 +10,10 @@
 - [todo.txt](todo.txt)：跨 Session 唯一任務進度，AS001 起
 - [docs/LEGACY_ASSET_PIPELINE.md](docs/LEGACY_ASSET_PIPELINE.md)：解析、匯出與驗收流程
 - [docs/ASSET_RUNTIME_STRATEGY.md](docs/ASSET_RUNTIME_STRATEGY.md)：暫定 Godot 分組、可見載入與性能驗收
-- [research/source_manifest.json](research/source_manifest.json)：已知舊 repo 檔案索引（不是完整 Client）
+- [docs/HK2_INVENTORY.md](docs/HK2_INVENTORY.md)：乾淨 HK2 實體檔案盤點
+- [docs/ASSET_STREAMING_AND_RENDERING.md](docs/ASSET_STREAMING_AND_RENDERING.md)：多尺寸素材分組與實測矩陣
+- [docs/CLIENT_RUNTIME_ISOLATION.md](docs/CLIENT_RUNTIME_ISOLATION.md)：多人同步與渲染排程隔離
+- [docs/LEGACY_ASSET_EVIDENCE_20261113.md](docs/LEGACY_ASSET_EVIDENCE_20261113.md)：參考版本的位元組研究
 - [AGENTS.md](AGENTS.md)：協作/安全/測試約束
 - [client/](client/README.md) 與 [server/](server/README.md)：獨立開發工作區與進入 M1 的契約
 
@@ -19,8 +22,8 @@
 - 舊 Client 反編譯：Old/ClientData/Paradise.exe.lst
 - 本機已提供 `C:\SGO\Stargate Online IE HK2`，41,741 個實體檔；[HK2 盤點](docs/HK2_INVENTORY.md)與 [SPR 解碼試跑](docs/HK2_SPR_POC.md) 已記錄。`Data1.dat` 與動作／方向語意尚未完成解析，不宣稱全部素材可用。
 - 唯讀盤點命令：
-  `python tools/legacy_asset_inventory.py --root "C:\\OldGame" --output reports/legacy-assets.json --sha256`
+  `py tools/inventory_client.py "C:\\SGO\\Stargate Online IE HK2" reports/hk2-inventory.json`
 - 執行前需將路徑改為實際遊戲資料夾；reports/ 被 gitignore。勿上傳原版未授權素材或解包產物。
 
 ## 後續方向
-Godot 4 Client / .NET Server / PostgreSQL / 多人同步與低資源設計均保留於 SPEC，**不在素材確認前先行實作**。
+Godot 4 Client / .NET Server / SQLite 初版與未來 SQL provider 切換 / 多人同步與低資源設計均保留於 SPEC，**不在素材確認前先行實作**。
