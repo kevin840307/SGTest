@@ -3,7 +3,7 @@ SGTest TODO — 2026-11-13 / M0 原版素材研究優先
 研究前先看 SPEC.md 第7節、docs/LEGACY_ASSET_PIPELINE.md、research/source_manifest.json；任何下一 Session 不得把旧 demo 視為現存實作。
 
 ===== P0 / AS：素材來源與真實格式，未完成不得開始遊戲實作 =====
-AS001 [~] 取得/盤點後期《星夢 Online》完整原版 Client 安裝目錄、安裝包、更新檔，對檔案分類、SHA256、magic/路徑/大小/版本；原件只讀、本機保留，產生報告。現有 tools/legacy_asset_inventory.py 能列出檔案，但尚未取得本機完整 Client 報告。
+AS001 [~] HK2 實體目錄已唯讀盤點：41,741 檔／1,333,254,792 bytes、SHA-256、magic、相對路徑、大小，報告在本機忽略的 reports/hk2-inventory.json；摘要見 docs/HK2_INVENTORY.md。Data1.dat 內容、安裝包來源、Client.bin/SGOClient.bin 版本仍待查，不能宣稱完整原版資源已齊。
 AS002 [ ] 依 Paradise.exe.lst 追蹤原版資源載入/索引/解包/解壓/解碼路徑；輸出函式位址與證據鏈，不以猜測代替解析。
 AS003 [ ] 建立素材可用性/缺漏矩陣：人物8方位(方向數待實證)、站立/移動/攻擊/受擊/死亡、武器/裝備疊層、怪物、NPC、機甲、寵物、技能、物品、地圖、後期金色 UI、音效；按版本分開。
 AS004 [ ] 一個可驗證素材格式的解碼 PoC：原件唯讀，輸出 RGBA PNG 和動畫 JSON（來源hash、方向、frame、幀時長、pivot/offset、疊層、事件）；失敗檔保留錯誤清單。
