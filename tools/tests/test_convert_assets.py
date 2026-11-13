@@ -6,7 +6,7 @@ from pathlib import Path
 import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from convert_assets import convert, decode_spr, pack
+from convert_assets import convert, convert_act, decode_spr, pack
 
 
 def one_frame() -> bytes:
@@ -45,6 +45,19 @@ class ConversionTests(unittest.TestCase):
     def test_reject_bad_frame_table(self):
         with self.assertRaises(ValueError):
             decode_spr(one_frame()[:-4] + struct.pack("<I", 4000000))
+
+    def test_act_exports_unknown_timing_units_without_guessing(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp) / "client"
+            out = Path(temp) / "out"
+            (root / "Enemy").mkdir(parents=True)
+            source = root / "Enemy" / "test.ACT"
+            source.write_bytes(b"\x01\x02\x00\x00\x00S\x00\x03\x01\x00\x00\x00"
+                               b"\x01\x02\x01\x00\x00\x00" + struct.pack("<II", 0, 6) + b"\xff")
+            self.assertEqual(convert_act(source, root, out), "converted")
+            exported = json.loads((out / "Enemy" / "test.act.json").read_text())
+            self.assertIsNone(exported["time_unit"])
+            self.assertEqual(exported["actions"][0]["frames"][0]["raw_time"], 6)
 
 
 if __name__ == "__main__":

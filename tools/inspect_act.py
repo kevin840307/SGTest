@@ -7,6 +7,7 @@ are deliberately not inferred here.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import struct
 from pathlib import Path
@@ -63,14 +64,28 @@ def parse_act(raw: bytes) -> list[dict]:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("act", type=Path)
+    parser.add_argument("--output", type=Path, help="Private output folder for raw ACT JSON")
     args = parser.parse_args()
+    if args.output is not None and (args.output.resolve() == args.act.resolve()
+                                    or args.act.resolve() in args.output.resolve().parents):
+        parser.error("output must be outside source client")
     if args.act.is_dir():
         paths = sorted(args.act.rglob("*.ACT"))
         failures = []
         keys: set[str] = set()
         for path in paths:
             try:
-                keys.update(action["key"] for action in parse_act(path.read_bytes()))
+                raw = path.read_bytes()
+                actions = parse_act(raw)
+                keys.update(action["key"] for action in actions)
+                if args.output is not None:
+                    target = args.output / path.relative_to(args.act).parent / (path.stem + ".act.json")
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    target.write_text(json.dumps({"version": 1,
+                        "source": path.relative_to(args.act).as_posix(),
+                        "sha256": hashlib.sha256(raw).hexdigest(),
+                        "time_unit": None, "action_semantics": None,
+                        "actions": actions}, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
             except (OSError, ValueError, UnicodeError) as exc:
                 failures.append({"path": path.relative_to(args.act).as_posix(), "error": str(exc)})
         print(json.dumps({"scanned": len(paths), "passed": len(paths) - len(failures),

@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from PIL import Image
+from inspect_act import parse_act
 
 KEY = bytes.fromhex("0d6f041707d3044420574d832b7fc59053290d43f197df2063d4b6b52da68824")
 MAX_FILE = 512 * 1024 * 1024
@@ -212,15 +213,36 @@ def convert(source: Path, root: Path, dest: Path, side: int, force: bool = False
     return {"source": relative.as_posix(), "status": "converted", "frames": len(records)}
 
 
+def convert_act(source: Path, root: Path, dest: Path, force: bool = False) -> str:
+    relative = source.relative_to(root)
+    target = dest / relative.parent / (source.stem + ".act.json")
+    raw = source.read_bytes()
+    digest = hashlib.sha256(raw).hexdigest()
+    if target.exists() and not force:
+        old = json.loads(target.read_text(encoding="utf-8"))
+        if old.get("sha256") == digest:
+            return "cached"
+    actions = parse_act(raw)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    temporary = target.with_name(target.name + ".tmp")
+    temporary.write_text(json.dumps({"version": 1, "source": relative.as_posix(),
+                         "sha256": digest, "time_unit": None,
+                         "action_semantics": None, "actions": actions},
+                         ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+    temporary.replace(target)
+    return "converted"
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("client", type=Path, help="Original clean client directory")
     parser.add_argument("output", type=Path, help="Godot asset output directory")
-    parser.add_argument("--atlas-side", type=int, default=2048, choices=(1024, 2048, 4096))
+    parser.add_argument("--atlas-side", type=int, default=1024, choices=(512, 1024, 2048, 4096))
     parser.add_argument("--layout", choices=("frames", "atlas"), default="frames",
                         help="Lossless separate frames (default) or experimental per-SPR atlas")
     parser.add_argument("--category", action="append", help="Convert only these first-level directories")
     parser.add_argument("--limit", type=int, help="Convert first N files, useful for a trial")
+    parser.add_argument("--skip-act", action="store_true", help="Only convert SPR, without ACT raw action records")
     parser.add_argument("--force", action="store_true")
     args = parser.parse_args()
     root = args.client.resolve()
@@ -244,7 +266,23 @@ def main() -> int:
             cached += result["status"] == "cached"
         except (OSError, ValueError, struct.error, zlib.error) as exc:
             errors.append({"source": source.relative_to(root).as_posix(), "error": str(exc)})
+    act_ok = act_cached = 0
+    act_sources = []
+    if not args.skip_act:
+        act_sources = sorted((p for p in root.rglob("*") if p.is_file() and p.suffix.lower() == ".act"
+                              and (not categories or p.relative_to(root).parts[0] in categories)),
+                             key=lambda p: str(p.relative_to(root)).lower())
+        if args.limit is not None:
+            act_sources = act_sources[:args.limit]
+        for source in act_sources:
+            try:
+                result = convert_act(source, root, out, args.force)
+                act_ok += result == "converted"
+                act_cached += result == "cached"
+            except (OSError, ValueError, struct.error) as exc:
+                errors.append({"source": source.relative_to(root).as_posix(), "error": str(exc)})
     print(json.dumps({"scanned": len(sources), "converted": ok, "cached": cached,
+                      "act_scanned": len(act_sources), "act_converted": act_ok, "act_cached": act_cached,
                       "failed": len(errors), "errors": errors[:20]}, ensure_ascii=False, indent=2))
     return 1 if errors else 0
 
