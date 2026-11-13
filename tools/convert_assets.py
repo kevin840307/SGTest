@@ -237,6 +237,43 @@ def convert_act(source: Path, root: Path, dest: Path, force: bool = False) -> st
     return "converted"
 
 
+def parse_sif(raw: bytes) -> dict:
+    """Preserve the observed map sidecar record without guessing its four values."""
+    if raw.startswith(b"C.D.E."):
+        raw = unwrap_cde(raw)
+    if len(raw) < 2:
+        raise ValueError("short SIF")
+    name_size = raw[0]
+    if not 1 <= name_size <= 127 or len(raw) != 1 + name_size + 1 + 16:
+        raise ValueError("invalid SIF record size")
+    name = raw[1:1 + name_size].decode("ascii")
+    if not name.lower().endswith(".spr"):
+        raise ValueError("SIF does not name a SPR")
+    flag = raw[1 + name_size]
+    values = list(struct.unpack_from("<4i", raw, 2 + name_size))
+    return {"spr_name": name, "raw_flag": flag, "raw_values": values,
+            "coordinate_semantics": None}
+
+
+def convert_sif(source: Path, root: Path, dest: Path, force: bool = False) -> str:
+    relative = source.relative_to(root)
+    target = dest / relative.parent / (source.stem + ".sif.json")
+    raw = source.read_bytes()
+    digest = hashlib.sha256(raw).hexdigest()
+    if target.exists() and not force:
+        old = json.loads(target.read_text(encoding="utf-8"))
+        if old.get("sha256") == digest and old.get("version") == 1:
+            return "cached"
+    record = parse_sif(raw)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    temporary = target.with_name(target.name + ".tmp")
+    temporary.write_text(json.dumps({"version": 1, "source": relative.as_posix(),
+                        "sha256": digest, **record}, ensure_ascii=False,
+                        separators=(",", ":")), encoding="utf-8")
+    temporary.replace(target)
+    return "converted"
+
+
 DRAW_ROW = re.compile(r"^([A-Z0-9]+)\s*:\s*(.+)$")
 
 
@@ -281,6 +318,7 @@ def main() -> int:
     parser.add_argument("--category", action="append", help="Convert only these first-level directories")
     parser.add_argument("--limit", type=int, help="Convert first N files, useful for a trial")
     parser.add_argument("--skip-act", action="store_true", help="Only convert SPR, without ACT raw action records")
+    parser.add_argument("--skip-sif", action="store_true", help="Do not export map SIF sidecars")
     parser.add_argument("--skip-draw-order", action="store_true", help="Do not export Player draw-order tables")
     parser.add_argument("--force", action="store_true")
     args = parser.parse_args()
@@ -321,6 +359,22 @@ def main() -> int:
             except (OSError, ValueError, struct.error) as exc:
                 errors.append({"source": source.relative_to(root).as_posix(), "error": str(exc)})
     draw_ok = draw_cached = 0
+    sif_ok = sif_cached = 0
+    sif_sources = []
+    if not args.skip_sif:
+        sif_sources = sorted((p for p in root.rglob("*") if p.is_file() and not p.is_symlink()
+                              and p.suffix.lower() == ".sif"
+                              and (not categories or p.relative_to(root).parts[0] in categories)),
+                             key=lambda p: str(p.relative_to(root)).lower())
+        if args.limit is not None:
+            sif_sources = sif_sources[:args.limit]
+        for source in sif_sources:
+            try:
+                result = convert_sif(source, root, out, args.force)
+                sif_ok += result == "converted"
+                sif_cached += result == "cached"
+            except (OSError, ValueError, UnicodeError, struct.error, zlib.error) as exc:
+                errors.append({"source": source.relative_to(root).as_posix(), "error": str(exc)})
     draw_sources = []
     if not args.skip_draw_order:
         draw_sources = sorted((p for p in root.rglob("*DrawOrder.dat") if p.is_file() and not p.is_symlink()
@@ -337,6 +391,7 @@ def main() -> int:
                 errors.append({"source": source.relative_to(root).as_posix(), "error": str(exc)})
     summary = {"scanned": len(sources), "converted": ok, "cached": cached,
                       "act_scanned": len(act_sources), "act_converted": act_ok, "act_cached": act_cached,
+                      "sif_scanned": len(sif_sources), "sif_converted": sif_ok, "sif_cached": sif_cached,
                       "draw_order_scanned": len(draw_sources), "draw_order_converted": draw_ok,
                       "draw_order_cached": draw_cached,
                       "failed": len(errors), "errors": errors}
