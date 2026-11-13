@@ -8,9 +8,13 @@ from __future__ import annotations
 
 import argparse
 import json
-import tkinter as tk
 from pathlib import Path
-from tkinter import filedialog, messagebox, ttk
+try:
+    import tkinter as tk
+    from tkinter import filedialog, messagebox, ttk
+except ModuleNotFoundError:  # headless CI: data/filter tests require no GUI
+    tk = None
+    filedialog = messagebox = ttk = None
 
 
 def select_frames(meta: dict, direction: str = "(all)", action: str = "(all)") -> list[dict]:
@@ -19,7 +23,7 @@ def select_frames(meta: dict, direction: str = "(all)", action: str = "(all)") -
             and (action == "(all)" or str(frame.get("action")) == action)]
 
 
-class Viewer(tk.Tk):
+class Viewer(tk.Tk if tk is not None else object):
     def __init__(self, document: Path):
         super().__init__()
         self.title("Legacy Asset Viewer — 未驗證動畫欄位")
@@ -117,6 +121,8 @@ class Viewer(tk.Tk):
 
 
 def main() -> int:
+    if tk is None:
+        raise RuntimeError('Tkinter is required to launch Legacy Asset Viewer (desktop Python installation)')
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("animation_json", type=Path, nargs="?", help="decoder output animation.json")
     args = parser.parse_args()
