@@ -31,3 +31,12 @@ python tools/legacy_asset_inventory.py --root "C:\SGO\OldClient" --output report
 
 ## 效能條件
 原版素材不是全部預載到 RAM：地圖分區載入、角色紙娃娃共用 TextureAtlas、UI Theme 共用，舊 RenderTarget/Resource 在 logout/map switch 釋放；不降低網路/固定 WorldState/Combat 更新頻率來改善表面數據。
+
+## 2026-11-13 優先研究序列（AS001～AS009）
+- Step 0：先調查**真正的原版 Client 安裝包/資料夾**，現有 Old/ClientData 零散 SPR/SIF/ITD 與 .lst 不是完整圖像庫。
+- Step 1：對所有檔案輸出可重現唯讀 inventory，附 header bytes/sha/大小/版本證據；不發布原件。
+- Step 2：回溯 Paradise.exe.lst 中 open/read/decompress/decode/animation/render 的完整呼叫鏈，標出來源函數/位址與證據層級。
+- Step 3：先以一套完整人物方向與動作進行 decoder PoC，保留原始 frame duration、透明度、pivot、offset、裝備圖層與事件；每次失敗可復現。
+- Step 4：建立獨立 Legacy Asset Viewer，原版影片/截圖逐格視覺校驗後才批次匯出 Godot metadata。
+- Step 5：實測 Godot 分開圖和 Atlas 的 RAM/VRAM/Frame/DrawCalls，不預設合圖必較省；權利 Gate 未通過不發佈遊戲素材。
+- 所有實作階段的狀態以 todo.txt AS001～AS009 為準，未驗證一律 NOT VERIFIED。

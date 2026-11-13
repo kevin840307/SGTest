@@ -2,12 +2,18 @@
 
 ## 開始工作前（強制）
 
-1. git fetch，確認 SGTest main 最新 HEAD；讀 README.md、SPEC.md、todo.txt、docs/ARCHITECTURE.md、docs/NETWORK_AND_MOTION.md、docs/ITEM_ID_MIGRATION.md。
+1. git fetch，確認 SGTest main 最新 HEAD；先讀 README.md、SPEC.md 第7節、todo.txt、docs/LEGACY_ASSET_PIPELINE.md、research/source_manifest.json；素材 Gate 通過後才讀其他遊戲系統文件。
 2. 若任務需要舊版證據，確認參考 TestGoGo 的 feature/local-server-net8 最新 SHA。首份規格基準：aee7ec7fff9e446452655cf6d2be460dfd7a88f1。引用精確路徑/函式/位址/輸入輸出，不憑記憶臆測。
 3. 檢查 TODO 最新領取狀態；只領一個未完成 Task ID。同時有人處理同檔案，使用個人分支/工作樹；不得 force push、不得覆寫同事的新版本。
 4. 每個 Task 先列「修改前行為、可觀測指標、回歸案例」，之後才修改。拆成可審核的小 commit。測試未執行一律寫 NOT VERIFIED（不可虛稱 PASS）。
 5. 完成後同步更新 todo.txt：證據、檔案、commit SHA、實際測試命令與結果、未解風險；遇到衝突重新 fetch/rebase，禁止硬蓋其他 Session。
 6. 純文件階段不可擅自宣稱 Client、Server、E2E 已能運作；遊戲程式實作需獨立 Gate。
+
+## 當前 M0 限制
+
+- 2026-11-13 已清掉早期 Godot/.NET Demo 與 CI，禁止把原型視為仍在 main；目前只處理 AS001～AS009 原版素材來源、載入邏輯、解碼與 viewer。
+- 未有完整原版 Client 實證前不得製作正式遊戲畫面、伺服器或 Atlas；不得以副檔名宣稱解碼成功。
+- 原版「方向 × 動作」分離及動畫偏移/幀時間/分層需完整驗證，不得先假定 Sprite Sheet 一定較快。
 
 ## 不可違反
 

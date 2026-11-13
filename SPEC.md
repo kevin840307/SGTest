@@ -1,6 +1,6 @@
-# SGTest 完整開發規格（v1.0 / 2026-11-12）
+# SGTest 完整開發規格（v1.1 / 2026-11-13）
 
-狀態：設計基準，未實作。新遊戲原創開發，唯讀參考 SGO/TestGoGo 的 Old、Client、Server 與測試。性能數字與里程碑都屬「目標」，不是已驗證成果。
+狀態：M0 原版素材研究優先；已移除早期 Godot/.NET 原型，尚未開始正式遊戲實作。新遊戲原創開發，唯讀參考 SGO/TestGoGo 的 Old、Client、Server 與測試。性能數字與里程碑都屬「目標」，不是已驗證成果。
 
 ## 1. 願景、關鍵成功標準與範圍
 
@@ -15,7 +15,7 @@
 - 用 Godot Control、Container、Theme、.tscn 全新建立 UI，不複製 TestGoGo 的 HUD/視窗/登入/背包等 UI 程式碼。
 - 目標是導入原版素材，但素材來源、版本、格式與合法使用權需要先確認。優先唯讀盤點/獨立解析/匯出 PNG+Atlas+Animation metadata，並確保透明度、方向、偏移、幀時長正確。
 - 原版後期 .itf 目前只有檔名索引，Old/ClientData 沒看到實體 .itf；不能宣稱完整原版 UI 素材已齊。未確認授權不傳到公開 GitHub。
-- 相關文件：docs/OLD_UI_DESIGN.md、docs/LEGACY_ASSET_PIPELINE.md。新的優先 Gate：A008/A009/A010/B007/B008。最小多人 demo 保留，只作技術基線。
+- 相關文件：docs/OLD_UI_DESIGN.md、docs/LEGACY_ASSET_PIPELINE.md。新的優先 Gate：AS001～AS008；素材來源與可解析性未確認前，不建立正式 Godot 場景、紙娃娃、UI 或 Server。已刪除初期 Demo 原型，Git 歷史仍可回溯。
 
 ## 2. 技術選型與品質原則
 
@@ -94,3 +94,25 @@ M5 遊戲系統與資料轉換：物品、強化、商店、技能、任務、�
 M6 PVP、小屋、社交、多 Channel、部署與維運。
 
 交付標準：每個 Gate 提交 commit、測試指令、CI URL、負載種子、資產清單、環境、測量值、已知風險。未執行=NOT VERIFIED。
+
+## 7. 2026-11-13 研究優先 Gate：原版遊戲素材取得與解析（先於 M1）
+
+**範圍**：使用者指定後期《星夢 Online》視覺為唯一目標。此階段不開始遊戲 Client/Server，也不預設原版素材已存在或已可解析。優先人類角色（站立/走路/攻擊/受擊/死亡、方向、紙娃娃）、其次怪物/裝備/機甲/寵物、地圖/特效、後期金色 UI、聲音。任何關於檔案格式的結論需標示 DIRECT/AUDIT/HYPOTHESIS。
+
+**AS001 原始安裝包調查**：盤點使用者本機原版 Client 安裝目錄、安裝程式/封包/更新檔、各版本來源；產生相對路徑、大小、SHA256、magic bytes、檔案群組、版本猜測的報表；不可從零星 SVN/Git 檔案宣稱原版素材齊全。保留只讀、不修改原件；權利未確認不公開原件/匯出圖。
+
+**AS002 載入路徑追查**：以 Paradise.exe.lst 定位檔案開啟、資源目錄、解包/解壓、格式讀取、palette/alpha、影格表、方向表、裝備分層及 UI atlas 相關呼叫。產出「證據（檔案路徑、函數/位址）→格式假設→驗證方式」，不能只因副檔名推斷。
+
+**AS003 來源完整性矩陣**：分角色（含男女/職業）、NPC、怪物、武器、裝備、機甲、寵物、技能、物品、地圖、金色 UI、音效；逐類紀錄實體檔、索引存在、缺件與可用性。區別 .spr/.sif/.itf/.itd/DAT 各自實際用途及版本差異；目前 Git 所見零星 SPR/ITD 與 .lst 不等於完整 Client。
+
+**AS004 最小解碼 Proof of Concept**：先以一個有權使用的原版角色/怪物素材做唯讀格式解析，正確輸出多影格 RGBA PNG 與 JSON metadata（source hash、animation、facing、frame index/duration、pivot、offset、z-order、hit/action event）。不修改色盤、透明度或亂補影格。未知欄位必須記錄，不偽造。
+
+**AS005 原版對照驗證**：建立原始遊戲截圖/錄影與解碼影格比對；檢查 8/其他方位數、待命、走路、攻擊、受擊、死亡、武器疊層、幀速度、透明邊緣、腳底錨點。所有解析錯誤明列，不默默略過。測試使用小型自建 fixture；原素材保留本機。
+
+**AS006 Legacy Asset Viewer**：獨立於 Godot 的離線預覽工具，按檔案/角色/方向/動作瀏覽及逐格播放、顯示 frame/pivot/offset/z-order/來源雜湊，並匯出可重現 PNG+metadata。Viewer 不應反過來決定原版格式。
+
+**AS007 Godot 資料契約評估（不實作遊戲）**：只有 AS001～AS006 實證成立後，評估分開 PNG、SpriteFrames、分組 Atlas、共享 Texture、按需載入/卸載；用同一批測試素材量測 RAM/VRAM/Draw Calls/Frame P95。不可先假定全部合成一張圖必然更快。
+
+**AS008 法律及公開發行 Gate**：分清本機研究、修改轉換、公開 Git 發布、遊戲發行與配樂授權。無法確認權利者標 BLOCKED；正式 repo 只保留自行撰寫工具、規格、非侵權測試資料、指紋與研究摘要。
+
+**進入 M1 條件**：至少一套原版角色完整方向與動作能重現、素材來源/格式/版本有證據、缺口列表已建立、解析器與 viewer 有可重現測試、權利範圍已確認。若無完整安裝檔，先做目錄/來源查找，不以占位圖假裝已完成原版還原。
