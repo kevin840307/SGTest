@@ -38,8 +38,8 @@ M6 [ ] PVP、社交、小屋、多 Channel、維運及最終授權檢查。
 研究檔：docs/LEGACY_ASSET_EVIDENCE_20261113.md；指紋：research/source_manifest.json；流程：docs/LEGACY_ASSET_PIPELINE.md。
 新增：tools/legacy_spr_decoder.py（XN SPR 多影格結構解碼／RGBA PNG＋metadata）、tools/legacy_asset_viewer.py（獨立 Tkinter 預覽），擴充 inventory magic/header，新增 fixture tests；不含遊戲素材。
 實驗證據：原始 Git Blob 的 NPC203.spr 109/109、NPC204.spr 99/99、NPC251.spr 322/322、NPC207-R.spr 97/97 列結構走訪，未知 token 0；不代表原版視覺/動畫 PASS。
-已執行 CI：GitHub Actions https://github.com/kevin840307/SGTest/actions/runs/43430135649 ，10 tests PASS（自建資料／unit；CI SHA 0a5c7d7168b0d76f6b7372871410240596ff6c59）。
+已執行 CI：GitHub Actions https://github.com/kevin840307/SGTest/actions/runs/43430878232 ，10 tests PASS（自建資料／unit；整合分支 CI SHA a4a3a3a165bada4e4841bd86ce166ee27fb68eef）。
 已執行本機：python -m unittest discover -s tools/tests -p 'test_*.py' -v （初版 6 tests PASS；CI 補含原 inventory 4 tests）。
 未執行＝NOT VERIFIED：完整安裝包清單、原版 SPR 的 PNG 視覺對照、ACT 時序/方向/紙娃娃、Tkinter GUI 真人目視、完整原版 Decoder 及 Godot A/B。
-Git 工作分支：research/xn-spr-decoder-20261113，已提交階段性程式與文件；完整合併 Git SHA 請見後續 PR/main（不可預填）。
+Git 工作分支：research/xn-spr-decoder-20261113；PR #1 https://github.com/kevin840307/SGTest/pull/1 已合併 SGTest/main；合併 Commit e497e214522d447fe58c68bc3e5e07c466d2445f（保留並行架構 docs commit 21ebcb98，未 force push）。
 下一 Session 先跑 AS001 本機完整 Client inventory，並在 AS002 實際解 ACT、DirectionMapping/DrawOrderMapping 與封包，AS004 取得一整套可授權的人物影格；未證實欄位不得自動補 8 方向或 100ms。
