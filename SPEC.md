@@ -14,6 +14,7 @@
 - 使用者 2026-11-13 指定後期《星夢 Online》金黃色 UI。早期星空之門藍色 UI 不是正式基準。
 - 用 Godot Control、Container、Theme、.tscn 全新建立 UI，不複製 TestGoGo 的 HUD/視窗/登入/背包等 UI 程式碼。
 - 可在遊戲設定中切換「後期金色風格」與「現代排版」；兩者讀取同一份 UI ViewModel，切換不改角色狀態、網路輪詢或世界模擬。兩套排版均支援視窗縮放、1400×900、1920×1080、21:9 與更大解析度，並檢查安全區／文字縮放。
+- 原版 UI 圖資缺件時，可用 Godot 原生控件／StyleBox／NinePatch 及自製素材做風格相近且功能完整的金色版；不因缺少原版圖而阻塞 UI 操作。
 - 目標是導入原版素材，但素材來源、版本、格式與合法使用權需要先確認。優先唯讀盤點/獨立解析/匯出 PNG+Atlas+Animation metadata，並確保透明度、方向、偏移、幀時長正確。
 - 原版後期 .itf 目前只有檔名索引，Old/ClientData 沒看到實體 .itf；不能宣稱完整原版 UI 素材已齊。未確認授權不傳到公開 GitHub。
 - 相關文件：docs/OLD_UI_DESIGN.md、docs/LEGACY_ASSET_PIPELINE.md。新的優先 Gate：AS001～AS008；素材來源與可解析性未確認前，不建立正式 Godot 場景、紙娃娃、UI 或 Server。已刪除初期 Demo 原型，Git 歷史仍可回溯。

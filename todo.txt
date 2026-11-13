@@ -5,11 +5,11 @@ SGTest TODO — 2026-11-13 / M0 原版素材研究優先
 ===== P0 / AS：素材來源與真實格式，未完成不得開始遊戲實作 =====
 AS001 [~] HK2 實體目錄已唯讀盤點：41,741 檔／1,333,254,792 bytes、SHA-256、magic、相對路徑、大小，報告在本機忽略的 reports/hk2-inventory.json；摘要見 docs/HK2_INVENTORY.md。Data1.dat 內容、安裝包來源、Client.bin/SGOClient.bin 版本仍待查，不能宣稱完整原版資源已齊。
 AS002 [~] HK2 全 178 個 ACT 的原始欄位邊界已可解析；Paradise.exe.lst 死亡 ACT/武器特效路徑位址初核，詳 docs/HK2_ACT_RESEARCH.md。尚未追到播放時間單位、方向鏡像、SIF/圖層與完整載入鏈。
-AS003 [ ] 建立素材可用性/缺漏矩陣：人物8方位(方向數待實證)、站立/移動/攻擊/受擊/死亡、武器/裝備疊層、怪物、NPC、機甲、寵物、技能、物品、地圖、後期金色 UI、音效；按版本分開。
-AS004 [~] tools/convert_assets.py 已由 HK2 的 20 個 Enemy SPR 及 1 個 C.D.E. 樣本驗證 RGBA/原始 origin/來源 SHA，詳 docs/HK2_SPR_POC.md；ACT/SIF 的方向、幀時間、疊層與事件仍未知，JSON 明確為 null；原版視覺比對未完成。
+AS003 [~] HK2 實體類別與 ITF→SPR 引用初盤，詳 docs/HK2_INVENTORY.md、docs/HK2_UI_REFERENCES.md；122 筆 UI SPR 引用中 59 筆無實體同名檔。人物方向/裝備疊層/其他類別缺口矩陣仍待補。
+AS004 [~] tools/convert_assets.py 已從 HK2 全量轉出 40,224/40,224 SPR、178/178 ACT、零失敗，保留 RGBA/原始 origin/來源 SHA/ACT 原始時間與事件，詳 docs/HK2_SPR_POC.md；ACT/SIF 的方向、時間單位、疊層仍未知；原版視覺比對未完成。
 AS005 [ ] 原版視覺/影格/方向/透明度/對齊/裝備疊圖實證比對；含靜止/行走/攻擊/受擊/死亡，截圖與錄影人工確認。
 AS006 [ ] 獨立 Legacy Asset Viewer：預覽、逐格、方向/動作、透明度、偏移、圖層、批次匯出；使用自建 fixture 測試。
-AS007 [ ] Godot SpriteFrames/Atlas/共享快取方案基準評估；只做可重現 microbenchmark，不建正式 gameplay scene。
+AS007 [~] tools/benchmark_asset_layout.gd 已對同一 20 SPR 樣本比較 Godot headless PNG 解碼：分幀136頁中位83.584ms、512小 atlas40頁中位66.662ms；詳 docs/HK2_SPR_POC.md、docs/ASSET_RUNTIME_STRATEGY.md。GPU VRAM/draw calls/Frame P95、快取回收與多人實景仍未驗證，正式分組未定。
 AS008 [!] 確認原版圖片、UI、音效的本地研究與公開發布/轉換權利；未確認權利不放 GitHub。
 AS009 [ ] 將本機盤點與解碼結果形成 docs/證據矩陣，記錄具體檔案 hash、函式位址、成功/失敗；再判斷是否達成 M0 Gate。
 
@@ -35,3 +35,5 @@ M6 [ ] PVP、社交、小屋、多 Channel、維運及最終授權檢查。
 ===== 2026-11-13 HK2 本機研究工作日誌 =====
 AS001（部分）| 2b7cfe4 | tools/inventory_client.py、docs/HK2_INVENTORY.md | `py -m unittest tools.tests.test_inventory_client` PASS（2）；HK2 實體檔 SHA/magic 全量盤點 PASS（41,741）；Data1.dat 內容與來源版本未驗證。
 AS004（部分）| dc930b2 | tools/convert_assets.py、docs/HK2_SPR_POC.md | `py -m unittest tools.tests.test_convert_assets` PASS（3）；Enemy 769/769 SPR 轉換、Player/Interface/Map/Effect 各20樣本 PASS；原版動作／方向／幀時長未驗證。
+AS002（部分）| a182e60 | tools/inspect_act.py、docs/HK2_ACT_RESEARCH.md | 178/178 ACT 原始結構解析 PASS；Godot 4.7.2 headless PNG/manifest 讀取 PASS；時間單位、方向和 callback 語意未驗證。
+AS004（部分）| 6d51f91 | ACT raw JSON 併入 convert_assets.py | 8 個 Python 單元測試 PASS（當時）；HK2 全量 40,224 SPR／178 ACT 本機批次轉換 PASS（零失敗，後續工作樹驗證）；正式 Godot runtime 包裝與原版畫面比對未完成。

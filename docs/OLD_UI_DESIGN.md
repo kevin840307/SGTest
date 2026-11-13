@@ -17,6 +17,7 @@
 - UI 支援 1400×900、1920×1080、21:9、最大化/調整大小；不硬綁 800×600。
 - 驗收包含高 DPI、文字縮放、超寬邊緣、縮放相機及重開 UI 後的布局狀態；遊戲 AOI 必須覆蓋實際 viewport 加緩衝。
 - 元件以共用 Godot Theme/StyleBoxFlat 作初期可替換資源；確認原版面板/按鈕圖資可用後使用 StyleBoxTexture/NinePatchRect 取代，維持相同 UI 控件架構。
+- HK2 的 [ITF 引用盤點](HK2_UI_REFERENCES.md) 已見缺件；金色版允許以 Godot 原生 StyleBox、NinePatch、字型與自製圖形重建相近風格，功能完整性不依賴每張原版 UI SPR。原版圖資僅在使用權與版面語意驗證後接入。
 
 ## 主要視窗與優先順序
 1. HUD：左下 HP/MP/EXP、底部偏左聊天、右上小地圖、右側主選單、下方技能快捷欄；位置參考後期遊戲畫面。

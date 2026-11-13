@@ -9,6 +9,7 @@
 - [SPEC.md](SPEC.md)：完整長期需求與第 7 節素材研究 Gate
 - [todo.txt](todo.txt)：跨 Session 唯一任務進度，AS001 起
 - [docs/LEGACY_ASSET_PIPELINE.md](docs/LEGACY_ASSET_PIPELINE.md)：解析、匯出與驗收流程
+- [docs/ASSET_RUNTIME_STRATEGY.md](docs/ASSET_RUNTIME_STRATEGY.md)：暫定 Godot 分組、可見載入與性能驗收
 - [research/source_manifest.json](research/source_manifest.json)：已知舊 repo 檔案索引（不是完整 Client）
 - [AGENTS.md](AGENTS.md)：協作/安全/測試約束
 

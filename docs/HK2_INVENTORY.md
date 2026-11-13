@@ -17,4 +17,6 @@ py -m unittest tools.tests.test_inventory_client
 
 HK2 有 20 個 `.itf` 實體檔，修正先前「本機沒有後期 ITF」的假設；其內容與金黃色 UI 的對應關係尚未驗證。`Player` 目錄含 A/B/R/G/Y 五組大量檔案及 draw-order `.dat`，方向、裝備層次與幀時長仍需從 ACT/SIF/原始客戶端載入邏輯確認。報表不進 Git，亦不含圖像或音訊位元組。
 
+後續 [ITF 引用盤點](HK2_UI_REFERENCES.md) 顯示 122 筆 SPR 引用中 59 筆無實體同名檔，不能用實體目錄數量推論 UI 素材已完整。
+
 下一步：AS002 追查原版讀檔與 ACT/SIF 動作語意；AS003 建立逐分類完整性矩陣；AS004 用已驗證的 SPR 結構做保真影格輸出，再比較 Godot 貼圖組合策略。

@@ -14,7 +14,10 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from PIL import Image
-from inspect_act import parse_act
+if __package__:
+    from .inspect_act import parse_act
+else:
+    from inspect_act import parse_act
 
 KEY = bytes.fromhex("0d6f041707d3044420574d832b7fc59053290d43f197df2063d4b6b52da68824")
 MAX_FILE = 512 * 1024 * 1024
