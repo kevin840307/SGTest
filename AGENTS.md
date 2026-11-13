@@ -18,7 +18,7 @@
 ## 不可違反
 
 - 新專案必須自主、低資源、可擴充、單一真相；不要把舊 Godot 超大網路/HUD/DB 類別複製過來。
-- 使用者已選擇後期《星夢 Online》金黃色 UI，必須用新 Godot Theme/Control/Scene 自製；不得沿用 TestGoGo 現有的 game_hud.gd 或舊 UI .tscn，也不可混用早期藍色 UI。
+- 使用者已選擇後期《星夢 Online》金黃色 UI 與可切換的現代 UI 排版，必須用新 Godot Theme/Control/Scene 自製；兩套 UI 共用資料模型且支援多解析度，不得沿用 TestGoGo 現有的 game_hud.gd 或舊 UI .tscn，也不可混用早期藍色 UI。
 - 原版素材需先做合法使用權/格式/版本查核，未確認權利時只可本機研究，不能把原版/衍生圖檔上傳公開 GitHub。
 - Server 最終決定：座標、碰撞、範圍、傷害、命中/暴擊、死亡、金錢、物品 UID、交易、防重放。
 - Player 的 Spawn/Move/Stop/Attack/Hit/Death/Facing/Teleport/Despawn 要有明確因果與版本邊界，優先於掉落物視覺。不得讓普通 Move 重啟受擊/攻擊/死亡動畫。

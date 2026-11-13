@@ -15,7 +15,7 @@
 ## 原版資料調查
 - 參考（唯讀）：https://github.com/kevin840307/TestGoGo/tree/feature/local-server-net8
 - 舊 Client 反編譯：Old/ClientData/Paradise.exe.lst
-- 本機完整遊戲資料尚未提供；Git 中零散 .spr/.sif/.itd 不足以宣稱素材齊全。
+- 本機已提供 `C:\SGO\Stargate Online IE HK2`，41,741 個實體檔；[HK2 盤點](docs/HK2_INVENTORY.md)與 [SPR 解碼試跑](docs/HK2_SPR_POC.md) 已記錄。`Data1.dat` 與動作／方向語意尚未完成解析，不宣稱全部素材可用。
 - 唯讀盤點命令：
   `python tools/legacy_asset_inventory.py --root "C:\\OldGame" --output reports/legacy-assets.json --sha256`
 - 執行前需將路徑改為實際遊戲資料夾；reports/ 被 gitignore。勿上傳原版未授權素材或解包產物。
