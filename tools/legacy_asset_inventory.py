@@ -16,9 +16,9 @@ import os
 from collections import Counter
 from pathlib import Path
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 KNOWN_EXTENSIONS = {
-    ".spr", ".sif", ".itf", ".itd", ".dat", ".csv", ".lst",
+    ".spr", ".sif", ".act", ".itf", ".itd", ".dat", ".csv", ".lst", ".grp", ".cab",
     ".png", ".bmp", ".tga", ".jpg", ".jpeg", ".webp",
     ".wav", ".ogg", ".mp3", ".mid", ".avi", ".mp4", ".zip"
 }
@@ -32,7 +32,9 @@ def sha256_file(path: Path) -> str:
     return h.hexdigest()
 
 
-def inventory(root: Path, with_sha256: bool = False) -> dict:
+def inventory(root: Path, with_sha256: bool = False, header_bytes: int = 16) -> dict:
+    if not 0 <= header_bytes <= 64:
+        raise ValueError("header_bytes must be between 0 and 64")
     if not root.is_dir():
         raise ValueError("input root must be a directory")
     root = root.resolve(strict=True)
@@ -50,7 +52,10 @@ def inventory(root: Path, with_sha256: bool = False) -> dict:
         relative = path.relative_to(root).as_posix()
         suffix = path.suffix.lower() or "[none]"
         size = path.stat().st_size
-        item = {"relative_path": relative, "extension": suffix, "size_bytes": size}
+        with path.open("rb") as header_stream:
+            header_hex = header_stream.read(header_bytes).hex()
+        item = {"relative_path": relative, "extension": suffix, "size_bytes": size,
+                "header_hex": header_hex}
         if with_sha256:
             item["sha256"] = sha256_file(path)
         files.append(item)
@@ -75,12 +80,14 @@ def main() -> int:
                         help="JSON report path outside the input folder")
     parser.add_argument("--sha256", action="store_true",
                         help="stream files and compute hashes (slower)")
+    parser.add_argument("--header-bytes", type=int, default=16,
+                        help="first N bytes as hex in JSON (default 16, maximum 64)")
     args = parser.parse_args()
     src = args.root.resolve(strict=True)
     dst = args.output.resolve()
     if dst == src or dst.is_relative_to(src):
         parser.error("output must be outside source folder (do not write into originals)")
-    payload = inventory(src, with_sha256=args.sha256)
+    payload = inventory(src, with_sha256=args.sha256, header_bytes=args.header_bytes)
     dst.parent.mkdir(parents=True, exist_ok=True)
     dst.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
                    encoding="utf-8")

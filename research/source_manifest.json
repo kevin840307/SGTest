@@ -1,12 +1,12 @@
 {
   "schema_version": 1,
-  "recorded_at_utc": "2026-11-12",
+  "recorded_at_utc": "2026-11-13",
   "source_repo": "kevin840307/TestGoGo",
-  "original_url": "https://github.com/kevin840307/SGO/tree/feature/local-server-net8",
+  "original_url": "https://github.com/kevin840307/TestGoGo/tree/feature/local-server-net8",
   "branch": "feature/local-server-net8",
-  "source_commit": "ab9fb0e10055878488458f371e64d826caf2c111",
+  "source_commit": "0f37c5268ceeac1144ed13556f3aeb191b93711e",
   "rights_status": "UNVERIFIED_NO_REUSE_ASSUMED",
-  "note": "本檔只保存路徑、Git blob SHA 與位元組長度，不包含源程式碼、二進位內容或遊戲美術。",
+  "note": "本檔只保存路徑、Git blob SHA 與位元組長度，不包含源程式碼、二進位內容或遊戲美術。 2026-11-13 重新讀取最新 TestGoGo branch/tree 與四個 SPR、一個 SIF 二進位樣本（不含原檔於此報告）。",
   "sources": [
     {
       "path": "Old/ClientData/Paradise.exe.lst",
@@ -80,5 +80,54 @@
       "byte_size": 46652,
       "kind": "legacy-schema"
     }
-  ]
+  ],
+  "previous_source_commit": "ab9fb0e10055878488458f371e64d826caf2c111",
+  "audit_samples": [
+    {
+      "path": "Old/ClientData/NPC/NPC203.spr",
+      "git_blob_sha": "980d15e03764e375ec14f91caa2e461e4a212e48",
+      "byte_size": 12014,
+      "width": 53,
+      "height": 109,
+      "structural_rows_checked": 109
+    },
+    {
+      "path": "Old/ClientData/NPC/NPC204.spr",
+      "git_blob_sha": "0169f16d0cfa6b32d594f221e419e5dcfc30435c",
+      "byte_size": 11572,
+      "width": 53,
+      "height": 99,
+      "structural_rows_checked": 99
+    },
+    {
+      "path": "Old/ClientData/NPC/NPC251.spr",
+      "git_blob_sha": "838c63e8591797f8b028771b375dfb87cb95fdbc",
+      "byte_size": 56652,
+      "width": 178,
+      "height": 322,
+      "structural_rows_checked": 322
+    },
+    {
+      "path": "Old/ClientData/NPC/NPC207-R.spr",
+      "git_blob_sha": "34bb6fca7ad7e9d3d9a05668b0decf912d2f1edd",
+      "byte_size": 10768,
+      "width": 52,
+      "height": 97,
+      "structural_rows_checked": 97
+    },
+    {
+      "path": "Old/ClientData/NPC/NPC203.sif",
+      "git_blob_sha": "3247e84e7ae5865fe727c3c7fe58cd5639aa0d26",
+      "byte_size": 28,
+      "interpretation": "filename and four little-endian integers; semantics not verified"
+    }
+  ],
+  "audit_scope": {
+    "assumed_original_client_complete": false,
+    "original_installer_present": false,
+    "original_ui_itf_present": false,
+    "original_act_animation_present": false,
+    "legal_rights_status": "UNVERIFIED_NO_PUBLIC_ASSETS",
+    "reference_assembly": "docs/LEGACY_ASSET_EVIDENCE_20261113.md"
+  }
 }
