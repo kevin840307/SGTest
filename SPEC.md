@@ -116,3 +116,11 @@ M6 PVP、小屋、社交、多 Channel、部署與維運。
 **AS008 法律及公開發行 Gate**：分清本機研究、修改轉換、公開 Git 發布、遊戲發行與配樂授權。無法確認權利者標 BLOCKED；正式 repo 只保留自行撰寫工具、規格、非侵權測試資料、指紋與研究摘要。
 
 **進入 M1 條件**：至少一套原版角色完整方向與動作能重現、素材來源/格式/版本有證據、缺口列表已建立、解析器與 viewer 有可重現測試、權利範圍已確認。若無完整安裝檔，先做目錄/來源查找，不以占位圖假裝已完成原版還原。
+
+## 8. 補充不變契約：素材共用與 FPS 隔離（2026-11-13）
+
+- **素材原則**：EntityCount 與 UniqueAssetCount 分離；同圖數百怪/數千掉落可能只有少數素材種類，同種類共用 Texture/AnimationDefinition/FrameTable/Material，每實例只保存狀態。離線編譯 512/1024/2048/4096 候選尺寸、Map/Region co-occurrence、hot/warm/cold、Paper Doll 層、Boss 動作分頁；按 RAM/VRAM/Frame/DrawCall 和正確性實測選型。
+- **Network/State 不變**：ServerSimClock、ClientNetworkPump、OrderedEventReducer、PackedWorldState、ViewProjection、WorldRenderer、UIRenderer 必須具清楚責任界線。Client 送收封包、解碼、按序套用、輸入送達與 Server tick **不得由 UI FPS/World FPS 增減而變快或變慢**。失焦/縮小/AFK/低畫質只可調整視覺、音效和資源生命週期。
+- 不能依賴只在 `_process(delta)` 被畫面刷新時才 poll Network；背景/OS throttle 及 Engine FPS 設定影響須實機驗證。動作依 ServerSeq/SimTick/ActionId 的時間軸取 pose，素材未載入不得停網路/State，也不得補播遠端玩家舊位置。
+- **獨立 Gate**：不同 UI/World FPS 下相同 packet trace 的 Rx/Tx、State hash、可靠事件次序與 QueueAge/ReducerDelay；不同解析度/Zoom 下相同 visible world/camera contract 的 Texture/VRAM/DrawCalls 與不卡頓。具體規格見 [docs/ASSET_STREAMING_AND_RENDERING.md](docs/ASSET_STREAMING_AND_RENDERING.md)、[docs/CLIENT_RUNTIME_ISOLATION.md](docs/CLIENT_RUNTIME_ISOLATION.md)。
+- **現況：僅方案，效能與 gameplay 實作 NOT VERIFIED。** AS001～AS009 原任務進度不因此變更。

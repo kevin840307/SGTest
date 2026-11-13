@@ -50,3 +50,10 @@
 ## 禁止直接大規模變更的區域
 
 物品 ID 轉換、伺服器時間線/佇列、MapActor 生命週期、PostgreSQL 資產交易及原始地圖座標契約都必須先有可重現 fixture 和相容性測試。
+
+## 新增跨 Session 架構審查（2026-11-13）
+
+- AS001～AS009 仍優先，執行前另讀 [docs/ASSET_STREAMING_AND_RENDERING.md](docs/ASSET_STREAMING_AND_RENDERING.md)、[docs/CLIENT_RUNTIME_ISOLATION.md](docs/CLIENT_RUNTIME_ISOLATION.md) 與 ADR-012/013；這兩份文件只是規格，未有正式 Client。
+- 禁止將 ClientNetworkPump/decoder/CommandGateway/StateReducer 放在 UI FPS、World Render FPS、`_process(delta)`、AFK/失焦/最小化節奏下；FPS 設定只可改呈現，必須以相同 packet trace 驗證。
+- 多怪/多掉落以種類共用 Texture/Atlas/FrameTable、地圖 MapAssetPalette、非同步預載/有界 GPU Commit、登出回收為優先；不可假設單張大圖或 MultiMesh 一定優於分頁。
+- 必須保留原版方向/動作/pivot/offset/z-order 和動作事件，先實證解碼才導入素材。設計文件更新不算 AS007 完成；無測試標記 NOT VERIFIED。

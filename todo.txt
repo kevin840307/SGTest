@@ -31,3 +31,10 @@ M6 [ ] PVP、社交、小屋、多 Channel、維運及最終授權檢查。
 早期 Godot World Demo、金色 Gallery、.NET Server 雛形及其 CI 從 main 移除，只保留研究工具、研究索引與規格文件；不改寫 Git 歷史。
 所有原有 B001/B002/B007 的原型完成敘述不代表現存程式碼；正式重做須從研究 Gate 通過後開始。
 每項任務交付：證據位置/來源 SHA、測試命令、PASS/FAIL/NOT VERIFIED、Git commit、下一步。
+
+===== 2026-11-13 新增設計交接（只更新文件，不代表工程完成） =====
+[x] 完成自適應圖集/共用資源設計文件：docs/ASSET_STREAMING_AND_RENDERING.md；ADR-012（方案暫定）。
+[x] 完成 Client Network/State 與 UI/Render FPS 隔離契約文件：docs/CLIENT_RUNTIME_ISOLATION.md；ADR-013（原則確認，實作未完成）。
+[ ] AS007 仍未開始：先通過 AS001～AS006 與 AS008 權利 Gate，再比較固定 1024/2048、多尺寸 512～4096、Map Palette/Co-occurrence、CanvasItem/RenderingServer 等渲染基準。
+[ ] M1～M4 未實作：NetworkPump/StateReducer/WorldRenderer/UIRenderer 分離；30/40/50/60/120 FPS、失焦/縮小/AFK 的收送包/狀態因果與頻率一致性測試。
+本次設計結論：**DESIGN ONLY / PERFORMANCE NOT VERIFIED / NO CLIENT OR SERVER IMPLEMENTATION**；不變更 AS001～AS009 原狀態。

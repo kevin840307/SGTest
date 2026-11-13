@@ -40,3 +40,11 @@ python tools/legacy_asset_inventory.py --root "C:\SGO\OldClient" --output report
 - Step 4：建立獨立 Legacy Asset Viewer，原版影片/截圖逐格視覺校驗後才批次匯出 Godot metadata。
 - Step 5：實測 Godot 分開圖和 Atlas 的 RAM/VRAM/Frame/DrawCalls，不預設合圖必較省；權利 Gate 未通過不發佈遊戲素材。
 - 所有實作階段的狀態以 todo.txt AS001～AS009 為準，未驗證一律 NOT VERIFIED。
+
+## 後續 AS007 候選：Adaptive Map-aware Asset Atlas（設計、尚未執行）
+
+- 原版分離影格經合法且保真解碼後，才離線輸出 immutable canonical frame+metadata；可還原的 transparent trim、同像素影格去重、deterministic MaxRects；候選 Atlas：512、1024、2048、4096。
+- 圖集不能只看單張圖片大小，要按 Map/Region 常見怪物/掉落物的 **co-occurrence、spawn frequency、Texture/Material、動作使用時機** 分群。500怪/8種、2000掉落/25種僅為示例，需由實際原版數據驗證。
+- Map Asset Palette 預編譯 shared/common、map hot、warm、cold；同素材跨地圖共用；稀有 Boss 技能可分頁。同類多個實例只引用一套 Atlas/FrameTable。
+- 低記憶體 Runtime：AssetCatalog、可視預載、非同步 IO/decode、有界 GPU Commit、RefCount + TTL/LRU + 進出邊界 hysteresis；切圖/登出釋放 World 資源。不能讓 loading queue 阻塞 ClientNetwork/Reducer。
+- AS007 對同場景量測 PNG/SpriteFrames vs 固定圖集 vs adaptive、RAM/VRAM、TextureSwitch/DrawCalls、FrameP95/P99、載入尖峰、資源回收；**設計 NOT VERIFIED**。詳 [ASSET_STREAMING_AND_RENDERING.md](ASSET_STREAMING_AND_RENDERING.md) 與 [CLIENT_RUNTIME_ISOLATION.md](CLIENT_RUNTIME_ISOLATION.md)。
