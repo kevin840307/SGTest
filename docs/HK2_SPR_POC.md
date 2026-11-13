@@ -24,6 +24,8 @@ HK2 `Enemy` 前 20 個 SPR：分幀與 1024／2048 atlas 模式皆 20/20 成功�
 
 2026-11-13 全量更新：上述限制已解除。`py tools/convert_assets.py 'C:\SGO\Stargate Online IE HK2' local-assets/hk2-frames` 掃描 **40,224/40,224 SPR 與 178/178 ACT，零失敗**。其中前次已轉的 37,398 個 SPR 及 53 個 ACT 經 SHA-256 重核走快取；其餘 2,826 個 SPR、125 個 ACT 本次新轉。全量輸出是 153,115 張 PNG（558,642,293 bytes）及 40,402 個 JSON（27,765,411 bytes），僅存在被 Git 忽略的本機目錄。這證明 SPR/ACT 的已觀察格式可全量轉出，**不**證明動畫播放語意或 `Data1.dat` 內資源已覆蓋。如此多單張 PNG 也不應直接全部放入正式 Godot 專案匯入；保真輸出是 QA 中間層。
 
+加入 SIF 支援後，同一完整命令重跑結果：SPR 40,224/40,224、ACT 178/178、SIF 186/186、draw-order 9/9 均由 SHA-256 快取核對，**零失敗**。SIF 的詳細缺件與原始欄位見 [SIF 研究](HK2_SIF_RESEARCH.md)。
+
 Godot 4.7.2 headless 的 `tools/godot_asset_probe.gd` 已讀取 C.D.E. 樣本匯出的 5 頁／5 幀及 atlas 樣本的 1 頁／12 幀，所有區域都在貼圖範圍內。這驗證 Godot 可讀格式與 manifest 邊界，尚不等於 GPU 渲染或多人效能驗證。
 
 | 20 SPR / 136 幀 | PNG 數 | PNG 磁碟總量 | 解碼 RGBA 面積估計 |
