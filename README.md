@@ -11,6 +11,7 @@
 - [docs/LEGACY_ASSET_PIPELINE.md](docs/LEGACY_ASSET_PIPELINE.md)：解析、匯出與驗收流程
 - [docs/ASSET_RUNTIME_STRATEGY.md](docs/ASSET_RUNTIME_STRATEGY.md)：暫定 Godot 分組、可見載入與性能驗收
 - [docs/HK2_INVENTORY.md](docs/HK2_INVENTORY.md)：乾淨 HK2 實體檔案盤點
+- [docs/ASSET_EVIDENCE_MATRIX.md](docs/ASSET_EVIDENCE_MATRIX.md)：AS009 SHA／反編譯位址／測試結果與 M0 Gate 判定
 - [docs/HK2_DATA1_ARCHIVE.md](docs/HK2_DATA1_ARCHIVE.md)：Data1.dat 群組格式、LZSS、base + loose override 實證
 - [docs/HK2_MAP_ASSET_PALETTE.md](docs/HK2_MAP_ASSET_PALETTE.md)：真地圖怪物共現、MapAssetPalette 與 1024 atomic GPU A/B
 - [docs/HK2_ACTION_PAGE_LOCALITY.md](docs/HK2_ACTION_PAGE_LOCALITY.md)：同動作／方向 Atlas 跨頁稽核與原 SPR 局部性 A/B
