@@ -20,6 +20,8 @@
 
 新 catalog：編譯 1/1、隔離 0；動作×方向 40/40 同頁；Godot 4.7.2 headless 解碼／區域檢查：1 怪、5 動作、40 方向、272 播放步 PASS。全部 Python unit tests：46 PASS。
 
+追加同一工具 `benchmark_group_atlas.gd`、每候選 5 回合取中位（Godot 4.7.2 headless）：來源 SPR 局部性 15 頁解碼 **51.512 ms**、ImageTexture 建立 **0.017 ms**；原 dense 4096 單頁解碼 **56.082 ms**、建立 **0.009 ms**。這是 PNG 解碼／headless 資源建立 A/B，OS 快取及執行順序未控制，不能把差額當作顯著效能提升；實際 GPU 上傳、Texture Binding、draw calls、VRAM、frame p95/p99 均 **NOT VERIFIED**。
+
 ```powershell
 cd C:\SGO\SRC\SGTest
 py -m unittest discover -s tools/tests -q
