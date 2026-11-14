@@ -11,6 +11,8 @@ public class Actor
 }
 public sealed class Player : Actor
 {
+    public long CharacterId;
+    public string Name = "";
     public double LastInput, ProtectedUntil;
     public uint Acknowledged, MaximumInput, LifeEpoch = 1;
     public Vector2 LastMotion;
@@ -72,9 +74,10 @@ public sealed class World
         return Navigation?.Slide(from,to) ?? to;
     }
     bool Reachable(Vector2 a,Vector2 b) => Navigation?.Allows(a,b) ?? true;
-    public Player Join(int id)
+    public Player Join(int id,long characterId=0,string name="")
     {
-        var player = new Player { Hp=PlayerHp,Position=Place(Spawn+new Vector2(20*(Players.Count%8),0)),ProtectedUntil=Time+2 };
+        var player = new Player { CharacterId=characterId,Name=name,Hp=PlayerHp,
+            Position=Place(Spawn+new Vector2(20*(Players.Count%8),0)),ProtectedUntil=Time+2 };
         Players.Add(id,player); return player;
     }
     static void ApplyDefinition(Monster monster,MonsterDefinition definition)

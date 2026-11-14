@@ -255,3 +255,13 @@ ADR-026補充：使用者指定Client一般遊玩支援30～90FPS；FPS選項只
 - Evidence: completion rerun 的30/45/60/75/90與Visual5/10/15/no-world同Server authoritative hashes全部一致；正式矩陣 queue P99 最差38.992ms。真Windows minimize/unfocus/restore與unfocus-off均PASS。1/2/4/8 native clients全PASS，8開physics 29.957～30.012Hz、queue P99 33.22ms、0 Server error。
 - Burst/guard: 128 packet burst drain/decode 0.888ms；故意 `--max-fps 5` 仍維持約30Hz固定邏輯，queue P99 24.344ms。
 - Boundary: physical driver VRAM、不同高刷新率顯示器上的實際75/90 render、120FPS額外壓測、cold-disk跨硬體矩陣不屬正式Gate；AS005逐格視覺與AS008發布權仍是獨立未完成Gate。完整證據見 [RUNTIME_ISOLATION_VERIFICATION.md](RUNTIME_ISOLATION_VERIFICATION.md)。
+
+## ADR-035 — F001 Identity lifecycle + SQLite account store（2026-11-14）
+
+- Status: **ACCEPTED**。
+- Decision: WebSocket Session、Account identity、Character identity、World Entity 分離；connect 不 Spawn，select character 才 `World.Join`。logout/disconnect/takeover 必須先 LeaveWorld，再失效 AccountId/CharacterId/Ready/SessionEpoch。
+- Persistence: 正式 Server 預設 `Infrastructure.Sqlite`，初始 schema 為 Account/Character，WAL + foreign_keys + busy_timeout + synchronous=NORMAL；Domain/Application 僅依 `IAccountStore` use-case contract。Memory provider 只供 deterministic/performance benchmark。
+- Password: PBKDF2-SHA256 + per-account random salt；hashing 在 World actor 外，per-session max1、global max4 auth workers，結果經 bounded command queue 回到單 writer。
+- Session expiry: 每次成功驗證取得新的 process-lifetime monotonic SessionEpoch；same-account takeover 立即讓舊 session epoch=0 且移除 World Entity，再可靠送 `session_replaced`。
+- Evidence: C# 376 checks；SQLite provider reopen、full Server restart persistence、same-account takeover/logout、20-client first-login storm 均 PASS。20-client SQLite final storm 約1.55s 全部選角，tick300 P95/P99 2.207/7.596ms。
+- Boundary: Account+Character identity 已持久化；完整角色 stat/inventory/equipment/position 資料隨後續功能加入。Email/password reset/2FA/TLS/production anti-bruteforce 屬 Security/Operations。

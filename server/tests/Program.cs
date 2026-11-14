@@ -2,6 +2,7 @@ using System.Numerics;
 using System.Text.Json;
 using SGTest.Server.Application;
 using SGTest.Server.Domain;
+using SGTest.Server.Infrastructure;
 using SGTest.Server.Transport;
 
 int count=0;
@@ -105,6 +106,69 @@ File.WriteAllText(legacyPopulation,"""{"version":2,"map_id":13,"definitions":[{"
 bool badDefinition=false; try { Population.Load(legacyPopulation,13); } catch(InvalidDataException) { badDefinition=true; }
 Check(badDefinition,"population v2 rejects invalid definition stats");
 File.Delete(legacyPopulation);
+var identityStore=new MemoryAccountStore();
+var identities=new AccountService(identityStore,1000);
+var registered=identities.Register("Kevin_01","password-123");
+Check(registered.Success && registered.AccountId>0,"account registration");
+Check(!identities.Register("kevin_01","password-456").Success,"account username is case-insensitive unique");
+Check(!identities.Login("Kevin_01","wrong-pass").Success,"wrong password rejected");
+var authenticated=identities.Login("KEVIN_01","password-123");
+Check(authenticated.Success && authenticated.AccountId==registered.AccountId,"PBKDF2 account login");
+Check(!identities.Register("x","password-123").Success && !identities.Register("valid_user","short").Success,
+      "account credential validation");
+var firstCharacter=identities.CreateCharacter(authenticated.AccountId,"星夢01");
+Check(firstCharacter.Success && firstCharacter.CharacterId>0,"unicode character creation");
+Check(!identities.CreateCharacter(authenticated.AccountId,"星夢01").Success,"duplicate character name rejected");
+var secondAccount=identities.Register("Second_1","password-456");
+Check(secondAccount.Success && !identities.CreateCharacter(secondAccount.AccountId,"星夢01").Success,
+      "character names are globally unique");
+foreach(string name in new[]{"Alpha2","Alpha3","Alpha4"})
+    Check(identities.CreateCharacter(authenticated.AccountId,name).Success,"up to four characters allowed");
+Check(!identities.CreateCharacter(authenticated.AccountId,"Alpha5").Success,"fifth character rejected");
+Check(identities.Characters(authenticated.AccountId).Length==4 &&
+      identities.Character(authenticated.AccountId,firstCharacter.CharacterId)?.Name=="星夢01",
+      "character list and ownership lookup");
+var raceIdentities=new AccountService(new MemoryAccountStore(),1000);
+var registerRace=Enumerable.Range(0,8).AsParallel()
+    .Select(_=>raceIdentities.Register("Race_User","password-789")).ToArray();
+Check(registerRace.Count(r=>r.Success)==1,"concurrent duplicate registration creates exactly one account");
+var raceAccount=registerRace.Single(r=>r.Success).AccountId;
+var characterRace=Enumerable.Range(0,8).AsParallel()
+    .Select(_=>raceIdentities.CreateCharacter(raceAccount,"RaceHero")).ToArray();
+Check(characterRace.Count(r=>r.Success)==1,"concurrent duplicate character creation creates exactly one character");
+
+string sqliteFolder=Path.Combine(Path.GetTempPath(),"sgtest-sqlite-"+Guid.NewGuid().ToString("N"));
+Directory.CreateDirectory(sqliteFolder);
+string sqlitePath=Path.Combine(sqliteFolder,"identity.db");
+try
+{
+    var sqliteStore=new SqliteAccountStore(sqlitePath);
+    Check(sqliteStore.JournalMode().Equals("wal",StringComparison.OrdinalIgnoreCase),"SQLite account store uses WAL");
+    Check(sqliteStore.ForeignKeysEnabled(),"SQLite account store enables foreign keys");
+    var sqliteIdentities=new AccountService(sqliteStore,1000);
+    var sqliteAccount=sqliteIdentities.Register("Persist_1","password-abc");
+    Check(sqliteAccount.Success,"SQLite account registration");
+    var sqliteCharacter=sqliteIdentities.CreateCharacter(sqliteAccount.AccountId,"持久角");
+    Check(sqliteCharacter.Success,"SQLite character creation");
+    var reopened=new AccountService(new SqliteAccountStore(sqlitePath),1000);
+    var relogin=reopened.Login("persist_1","password-abc");
+    Check(relogin.Success && relogin.AccountId==sqliteAccount.AccountId,"SQLite account survives provider reopen");
+    var reopenedCharacters=reopened.Characters(relogin.AccountId);
+    Check(reopenedCharacters.Length==1 && reopenedCharacters[0].Id==sqliteCharacter.CharacterId,
+          "SQLite character survives provider reopen");
+    long persistedCharacter=reopenedCharacters.Single().Id;
+    Check(reopened.Character(relogin.AccountId,persistedCharacter)?.Name=="持久角",
+          "SQLite character ownership survives provider reopen");
+    var sqliteRace=Enumerable.Range(0,8).AsParallel()
+        .Select(_=>reopened.CreateCharacter(relogin.AccountId,"同名角")).ToArray();
+    Check(sqliteRace.Count(r=>r.Success)==1,"SQLite transaction allows one concurrent duplicate character");
+}
+finally
+{
+    Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
+    Directory.Delete(sqliteFolder,true);
+}
+
 object?[] fixture=[4294967295L,-1,1.25,"方向",new byte[]{1,254},new object?[]{0,true,null}];
 byte[] packet=Wire.Packet(99,fixture); var decoded=Wire.Decode(packet);
 Check(Wire.Integer(decoded[1])==99,"MessagePack envelope");

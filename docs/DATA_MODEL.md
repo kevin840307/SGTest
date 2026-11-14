@@ -1,6 +1,6 @@
 # SGTest 資料模型、ID 與交易一致性（初版 SQLite）
 
-以下為設計骨架，不代表 SQL schema 已建立。實際 table DDL 需 migration + unit/integration tests。
+F001 已建立初版 SQLite migration：`account`、`character`、`schema_migration` 已有實際 DDL、WAL/FK/busy-timeout 與 unit/integration/E2E tests，詳 `docs/IDENTITY_LIFECYCLE.md`。下列其餘資產／交易／任務表仍是後續設計骨架，必須各自以 migration + contract/integration tests 落地後才算完成。
 
 ## 1. ID 原則
 

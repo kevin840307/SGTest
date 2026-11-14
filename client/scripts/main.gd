@@ -12,6 +12,8 @@ var visible_monsters: Dictionary = replica.monsters
 var visible_drops: Dictionary = {}
 var ui_modern := false
 var hud: CanvasLayer
+var world_panel: PanelContainer
+var auth_ui
 var info_label: Label
 var item_label: Label
 var health_label: Label
@@ -72,6 +74,18 @@ var visual_elapsed := 0.0
 var no_world_render := false
 var unfocus_low_power_enabled := true
 var render_target_fps := 60
+var account_id := 0
+var session_epoch := 0
+var selected_character_id := 0
+var selected_character_name := ""
+var authenticated := false
+var bot_login_sent := false
+var bot_register_sent := false
+var bot_create_sent := false
+var bot_select_sent := false
+var bot_logout_after := -1.0
+var bot_logout_sent := false
+var world_enter_local := 0.0
 
 const PLAYER_HP := 100
 var own_id := 0
@@ -95,6 +109,8 @@ func _ready() -> void:
 	for argument in arguments:
 		if argument.begins_with("--bot-index="):
 			bot_index = int(argument.trim_prefix("--bot-index="))
+		if argument.begins_with("--bot-logout-after="):
+			bot_logout_after = maxf(0.5,float(argument.trim_prefix("--bot-logout-after=")))
 		if argument.begins_with("--profile-seconds=") and profiler != null:
 			profiler.sample_seconds = maxf(10.0,float(argument.trim_prefix("--profile-seconds=")))
 		if argument.begins_with("--port="):
@@ -134,6 +150,7 @@ func _ready() -> void:
 	asset_store.configure(24 * 1024 * 1024, 16 * 1024 * 1024)
 	asset_store.start()
 	_build_ui()
+	_build_auth_ui()
 	_load_sample_atlas()
 	_start_client(host)
 	for argument in arguments:
@@ -145,6 +162,141 @@ func _ready() -> void:
 func _start_client(host: String) -> void:
 	network.start("ws://%s:%d/game" % [host,port])
 	print("SGO client connecting to %s:%d" % [host,port])
+
+func _build_auth_ui() -> void:
+	if world_panel != null:
+		world_panel.visible = false
+	if bot or DisplayServer.get_name() == "headless":
+		return
+	auth_ui = preload("res://scripts/auth_ui.gd").new()
+	auth_ui.login_requested.connect(func(username: String,password: String) -> void:
+		if not network.is_open():
+			auth_ui.set_login_status("尚未連上伺服器")
+			return
+		network.send(11,[username,password])
+		auth_ui.set_login_status("登入中…"))
+	auth_ui.register_requested.connect(func(username: String,password: String) -> void:
+		if not network.is_open():
+			auth_ui.set_login_status("尚未連上伺服器")
+			return
+		network.send(10,[username,password])
+		auth_ui.set_login_status("建立帳號中…"))
+	auth_ui.create_character_requested.connect(func(character_name: String) -> void:
+		if authenticated:
+			network.send(12,[character_name]))
+	auth_ui.select_character_requested.connect(func(character_id: int) -> void:
+		if authenticated:
+			network.send(13,[character_id])
+			auth_ui.set_character_status("進入世界中…"))
+	auth_ui.logout_requested.connect(func() -> void:
+		if network.is_open():
+			network.send(14,[]))
+	add_child(auth_ui)
+
+func _bot_username() -> String:
+	return "bot_%04d" % bot_index
+
+func _bot_password() -> String:
+	return "sgtest-bot-password"
+
+func _bot_auth_step() -> void:
+	if not bot or bot_logout_sent or not network.is_open() or authenticated or bot_login_sent:
+		return
+	bot_login_sent = true
+	network.send(11,[_bot_username(),_bot_password()])
+
+func _auth_result(success: bool,code: String,message: String,new_account_id: int) -> void:
+	print("auth_result success=%s code=%s account=%d bot=%s" % [success,code,new_account_id,bot])
+	if success:
+		authenticated = true
+		account_id = new_account_id
+		if auth_ui != null:
+			auth_ui.set_login_status(message)
+		return
+	if bot and code == "account_not_found" and not bot_register_sent:
+		bot_register_sent = true
+		network.send(10,[_bot_username(),_bot_password()])
+		return
+	if auth_ui != null:
+		auth_ui.set_login_status(message)
+	elif bot:
+		push_error("Bot authentication failed: %s (%s)" % [message,code])
+
+func _character_list(rows: Array) -> void:
+	print("character_list count=%d bot=%s create_sent=%s select_sent=%s" % [rows.size(),bot,bot_create_sent,bot_select_sent])
+	if bot:
+		if rows.is_empty():
+			if not bot_create_sent:
+				bot_create_sent = true
+				print("bot_create_character index=%d" % bot_index)
+				network.send(12,["Bot%04d" % bot_index])
+			return
+		if own_id == 0 and not bot_select_sent:
+			bot_select_sent = true
+			network.send(13,[int(rows[0][0])])
+		return
+	if auth_ui != null:
+		auth_ui.show_characters(rows)
+
+func _character_result(success: bool,_code: String,message: String,_character_id: int) -> void:
+	if not success:
+		if bot:
+			push_error("Bot character creation failed: %s" % message)
+		elif auth_ui != null:
+			auth_ui.set_character_status(message)
+	elif auth_ui != null:
+		auth_ui.set_character_status(message)
+
+func _select_result(success: bool,_code: String,message: String,character_id: int,character_name: String,new_session_epoch: int) -> void:
+	if not success:
+		bot_select_sent = false
+		if auth_ui != null:
+			auth_ui.set_character_status(message)
+		return
+	selected_character_id = character_id
+	selected_character_name = character_name
+	session_epoch = new_session_epoch
+	if auth_ui != null:
+		auth_ui.set_character_status(message)
+		auth_ui.hide_all()
+
+func _reset_world_for_logout(message: String) -> void:
+	world_generation += 1
+	map_ready = false
+	own_id = 0
+	selected_character_id = 0
+	selected_character_name = ""
+	authenticated = false
+	account_id = 0
+	session_epoch = 0
+	bot_login_sent = false
+	bot_register_sent = false
+	bot_create_sent = false
+	bot_select_sent = false
+	world_enter_local = 0.0
+	replica.reset()
+	visible_drops.clear()
+	rendered_players.clear()
+	rendered_monsters.clear()
+	prediction.configure(null,WORLD_SIZE)
+	monster_visuals.reset()
+	map_objects.reset()
+	render_order.clear()
+	if terrain != null:
+		terrain.queue_free()
+		terrain = null
+	if world_panel != null:
+		world_panel.visible = false
+	if auth_ui != null:
+		auth_ui.show_login(message)
+
+func _logout_result(success: bool,code: String,message: String) -> void:
+	print("logout_result success=%s code=%s" % [success,code])
+	if not success and code == "session_replaced":
+		# The replaced socket is about to close; do not let an old bot immediately
+		# re-authenticate and steal the account back from the new session.
+		bot_logout_sent = true
+	_reset_world_for_logout(message if success else "%s (%s)" % [message,code])
 
 func _exit_tree() -> void:
 	map_objects.reset(false)
@@ -244,6 +396,11 @@ func _physics_process(delta: float) -> void:
 			network.close()
 			return
 		_dispatch(int(packet[1]),packet[2])
+	_bot_auth_step()
+	if bot and map_ready and bot_logout_after > 0.0 and not bot_logout_sent and world_enter_local > 0.0:
+		if Time.get_ticks_usec()/1000000.0-world_enter_local >= bot_logout_after:
+			bot_logout_sent = true
+			network.send(14,[])
 	# ServerSimClock belongs to fixed logic, never to visual/render cadence.
 	server_time = clock_sync.advance(Time.get_ticks_usec()/1000000.0)
 	diagnostics_time += delta
@@ -322,7 +479,15 @@ func _dispatch(op: int, b: Array) -> void:
 	match op:
 		0:
 			own_id = int(b[0])
-			print("client connected with peer %d" % own_id)
+			world_enter_local = Time.get_ticks_usec()/1000000.0
+			if b.size() >= 4:
+				selected_character_id = int(b[1])
+				selected_character_name = str(b[2])
+			if world_panel != null:
+				world_panel.visible = true
+			if auth_ui != null:
+				auth_ui.hide_all()
+			print("client entered world peer=%d character=%d" % [own_id,selected_character_id])
 		1: _world_info(int(b[0]),str(b[1]),str(b[2]))
 		2: _owner_state(b[0],b[1],b[2],b[3],Vector2(b[4],b[5]),b[6],b[7],b[8],b[9],b[10])
 		3: _snapshot_chunk(b[0],b[1],b[2],b[3])
@@ -334,6 +499,23 @@ func _dispatch(op: int, b: Array) -> void:
 			_inventory(inventory)
 		7: _interest_remove(b[0],b[1],PackedInt32Array(b[2]))
 		8: _clock_pong(b[0],b[1])
+		10:
+			if b.size() >= 4:
+				_auth_result(bool(b[0]),str(b[1]),str(b[2]),int(b[3]))
+		11:
+			if b.size() == 1 and typeof(b[0]) == TYPE_ARRAY:
+				_character_list(b[0])
+			else:
+				push_error("Invalid character-list protocol body: %s" % str(b))
+		12:
+			if b.size() >= 4:
+				_character_result(bool(b[0]),str(b[1]),str(b[2]),int(b[3]))
+		13:
+			if b.size() >= 6:
+				_select_result(bool(b[0]),str(b[1]),str(b[2]),int(b[3]),str(b[4]),int(b[5]))
+		14:
+			if b.size() >= 3:
+				_logout_result(bool(b[0]),str(b[1]),str(b[2]))
 
 func _authority_state_hash() -> String:
 	var rows: Array = []
@@ -591,13 +773,13 @@ func _build_ui() -> void:
 	add_child(camera)
 	hud = CanvasLayer.new()
 	add_child(hud)
-	var panel := PanelContainer.new()
-	panel.name = "Panel"
-	panel.set_anchors_preset(Control.PRESET_TOP_LEFT)
-	panel.position = Vector2(15, 15)
-	hud.add_child(panel)
+	world_panel = PanelContainer.new()
+	world_panel.name = "Panel"
+	world_panel.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	world_panel.position = Vector2(15, 15)
+	hud.add_child(world_panel)
 	var stack := VBoxContainer.new()
-	panel.add_child(stack)
+	world_panel.add_child(stack)
 	info_label = Label.new()
 	info_label.text = "連線中… 方向鍵移動，點怪攻擊，點掉落拾取；F2 切換 UI"
 	stack.add_child(info_label)
@@ -636,6 +818,12 @@ func _build_ui() -> void:
 	unfocus_toggle.toggled.connect(func(enabled: bool) -> void:
 		unfocus_low_power_enabled = enabled)
 	stack.add_child(unfocus_toggle)
+	var logout_button := Button.new()
+	logout_button.text = "登出"
+	logout_button.pressed.connect(func() -> void:
+		if network.is_open():
+			network.send(14,[]))
+	stack.add_child(logout_button)
 	_style_ui()
 
 func _sync_window_size(button: OptionButton, presets: Array) -> void:
@@ -646,7 +834,9 @@ func _sync_window_size(button: OptionButton, presets: Array) -> void:
 		button.text = "自訂 %d × %d" % [size.x, size.y]
 
 func _style_ui() -> void:
-	var panel := hud.get_node("Panel") as PanelContainer
+	var panel := world_panel
+	if panel == null:
+		return
 	var style := StyleBoxFlat.new()
 	style.bg_color = Color(0.07, 0.1, 0.15, 0.94) if ui_modern else Color(0.27, 0.19, 0.1, 0.94)
 	style.border_color = Color(0.2, 0.65, 0.8) if ui_modern else Color(0.78, 0.56, 0.25)

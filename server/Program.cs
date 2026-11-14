@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using SGTest.Server.Application;
 using SGTest.Server.Domain;
+using SGTest.Server.Infrastructure;
 using SGTest.Server.Transport;
 
 var options=args.Where(a=>a.StartsWith("--") && a.Contains('=')).Select(a=>a[2..].Split('=',2)).ToDictionary(a=>a[0],a=>a[1]);
@@ -29,13 +30,23 @@ if(map!=0)
 }
 var world=new World(grid); world.Populate(arena ? 1 : Math.Clamp(Option("monsters",population is null ? 80 : -1),-1,10000),arena ? 0 : Math.Clamp(Option("drops",0),0,5000),population);
 if(arena) { world.Monsters[1].Position=new(1230,800); world.Monsters[1].Damage=50; }
-var host=new WorldHost(world,map,fingerprint,populationHash);
+string accountMode=options.GetValueOrDefault("accounts","sqlite").ToLowerInvariant();
+string databasePath=Path.GetFullPath(options.GetValueOrDefault("db",Path.Combine(AppContext.BaseDirectory,"../../../data/sgtest.db")));
+IAccountStore accountStore=accountMode switch
+{
+    "memory" => new MemoryAccountStore(),
+    "sqlite" => new SqliteAccountStore(databasePath),
+    _ => throw new ArgumentException("--accounts must be sqlite or memory")
+};
+var accounts=new AccountService(accountStore);
+var host=new WorldHost(world,map,fingerprint,populationHash,accounts);
+Console.WriteLine(accountMode=="sqlite" ? $"account_store=sqlite db={databasePath}" : "account_store=memory");
 var builder=WebApplication.CreateBuilder(); builder.Logging.ClearProviders();
 builder.WebHost.UseUrls($"http://{options.GetValueOrDefault("bind","127.0.0.1")}:{port}");
 builder.Services.AddSingleton<IHostedService>(host);
 var app=builder.Build(); app.UseWebSockets(new WebSocketOptions{KeepAliveInterval=TimeSpan.FromSeconds(15)});
 int nextId=1;
-app.MapGet("/health",()=>Results.Ok(new{protocol=2,map}));
+app.MapGet("/health",()=>Results.Ok(new{protocol=2,map,players=host.ActivePlayers,accounts=accountMode}));
 app.Map("/game",async context=>
 {
     if(!context.WebSockets.IsWebSocketRequest) { context.Response.StatusCode=400; return; }

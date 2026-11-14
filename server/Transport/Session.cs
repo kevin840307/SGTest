@@ -6,6 +6,10 @@ namespace SGTest.Server.Transport;
 public sealed class Session(int id,WebSocket socket)
 {
     public int Id { get; }=id;
+    public long AccountId;
+    public long CharacterId;
+    public uint SessionEpoch;
+    public bool AuthPending;
     public bool Ready;
     public readonly HashSet<int>[] Seen=[[],[]];
     public readonly HashSet<int> SeenDrops=[];
