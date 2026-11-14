@@ -45,4 +45,4 @@ python tools/benchmark_runtime_baseline.py 'C:/SGO/Godot/Godot_v4.7.2-stable_win
 
 首次需官方Godot4.7.2 templates：從[官方release](https://github.com/godotengine/godot/releases/tag/4.7.2-stable)下載`Godot_v4.7.2-stable_export_templates.tpz`及SHA512-SUMS，核對SHA512為`ca4d71c4d7b81dfc15d1a98baa07534aa95b03fdda78a0075b06672e1648d2e5f40980c9adc28d23e1b92e732ee7bf3461997aa804af74ec2fcd7a93ccb84079`，只將`templates/windows_release_x86_64.exe`與`templates/windows_debug_x86_64.exe`解壓至`.cache/godot-templates/`。helper另驗證兩個template SHA256，版本不符會停止；不改全機安裝。
 
-尚存範圍：完整Recovered功能、原版Golden視覺與公開媒體權利沒有因此完成；physical driver VRAM仍NOT VERIFIED。取消中的decode queue是否能在密集切圖保持有界，須另補壓力回歸，不能由30次串行載卸推論任意取消情境已通過。
+尚存範圍：完整Recovered功能、原版Golden視覺與公開媒體權利沒有因此完成；physical driver VRAM仍NOT VERIFIED。此輪串行30次不能推論任意取消情境；後續獨立 [PERF003](PERF003_CANCELLATION.md) 已重現並修正取消queue／部分載入帳目問題，另有自製fixture及native回歸。

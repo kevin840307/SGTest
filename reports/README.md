@@ -61,3 +61,5 @@ Map13：230,400 個地磚索引、865 種共用地磚、367 個物件，其中 1
 # PERF002（2026-11-15）
 
 最新Runtime小頁／Windows release的raw JSON為`perf002_release*/multiplayer.json`、`perf002_production/{multiplayer,lifecycle,summary}.json`，weakref Before/After為`perf002_lifetime_{before,after}.json`。場景、正式重建結果、未通過的開發引擎RAM與實體VRAM限制見[PERF002_MEMORY](../docs/PERF002_MEMORY.md)。此處只提交文字量測／指紋；PNG／EXE／PCK不公開。
+
+PERF003取消與partial/error回收的Before／After為`perf003_before.json`、`perf003_after_native.json`；正式重建多人與30cycle回歸在`perf003_production/`。`perf003_idle.json`是無world／network的0/1/8 decoder程序樹CPU探針，並非8個Client。限制及原理見[PERF003_CANCELLATION](../docs/PERF003_CANCELLATION.md)。

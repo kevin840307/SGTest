@@ -204,3 +204,5 @@ M6 PVP、小屋、社交、多 Channel、部署與維運。
 候選只作幾何評估，選定後產圖、比較實際頁數/RGBA、逐格核對crop/size/origin/pixels。ACT/SIF/DrawOrder快取同時比較解碼內容，不能只看source SHA而沿用已被破壞的JSON。
 
 此驗收只完成離線素材轉換範圍，不代表F002～F020或全Recovered功能已完成。Client一般30～90 FPS只改呈現，Client input/Server30Hz、snapshot10Hz仍依既有獨立契約；本次沒有修改同步頻率。具體證據見ASSET_CONVERTER、TODO及reports/converter_*。
+
+PERF003後續取消／失敗回歸：1000次取消queued jobs由1000歸零，部分GPU提交取消／後頁失敗的resident帳目與Texture引用正確回收；metadata/error也受128-item上限。正式Windows release同場景峰值184.88MiB、59.997FPS、frame P95/P99 18.884/19.573ms，30次map載卸回收PASS。此為資源管理邊界修正，未改Render30～90與同步分離契約；範圍／重跑指令見 [PERF003_CANCELLATION](docs/PERF003_CANCELLATION.md)。

@@ -334,3 +334,10 @@ ADR-026補充：使用者指定Client一般遊玩支援30～90FPS；FPS選項只
 - Lifetime: per-job/per-page函式frame解除idle worker對CPU Image／metadata持有；weakref由1/1→0/0。telemetry固定2048筆、idle不追加，一般diagnostics不複製樣本。30次map async load P95 130.829ms、GPU submit P99 1.591ms、frame P99 16.971ms，引用／texture／RSS回收PASS。取消風暴邊界另測，不由串行回收推論完成。
 - Build: 正式Windows EXE＋PCK保留raw PNG／JSON／BIN；專用EditorExportPlugin加入被.gdignore排除的原始bytes。tools/build_client.py驗證官方templateSHA與版本，build後啟動release檢查全部asset/source SHA；benchmark測量前共用此檢查，拒絕stale PCK。EXE/PCK與原版圖像僅留.cache，不公開。
 - Regression: Python tools/tests113、asset_pipeline5、runtime_baseline8；Godot方向／360 logical views／scenery／paper doll／Store／wire六組及native weakref probe PASS。沒有改動C#協定或Server模擬，沒有重跑完整RUNTIME206矩陣；仍維持Render30～90FPS與Client input30Hz／Server30Hz／snapshot10Hz分離契約。
+
+## ADR-042 — 取消須移除工作、ready events與部分載入帳目（2026-11-15）
+
+- Before: 實際paused-worker fixture取消1000次後entry=0但queued jobs=1000；兩頁自製fixture在第一頁GPU上傳後取消或第二頁失敗，owner清除後resident帳目仍4096bytes。原始JSON reports/perf003_before.json。
+- Decision: main與worker共用mutex保護有效token；取消時移除queued request／ready events／token，publisher在相同鎖下拒絕失效token，於job/page邊界停止舊解碼。零byte事件也受128-item上限。ready LRU、部分載入取消、error共用引用／resident帳目清理，錯誤即可釋放已上傳部分，不等logout。
+- Evidence: After取消queue=0、partial／failed resident=0、native Texture弱引用=0、相同path修復後重試PASS；1000generations／priority／MAX_JOBS／zero-byte cap／byte backpressure／close+restart三次PASS。重建Windows release：184.88MiB、59.997FPS、frame P95/P99 18.884/19.573ms；30次map載卸回收PASS。docs/PERF003_CANCELLATION.md及reports/perf003_*。
+- Limits: 正在進行的單頁PNG不做不安全中斷；ready byte budget之外仍可有一頁in-flight。idle worker維持既有poll，獨立idle探針不能稱為8個Client或零CPU；未宣稱idle CPU改善。Server／network／logic頻率不改，完整RUNTIME206矩陣本次未重跑。

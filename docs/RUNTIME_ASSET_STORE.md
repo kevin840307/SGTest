@@ -1,6 +1,6 @@
 # RuntimeAssetStore — ASSET204
 
-日期：2026-11-14。狀態：**ASSET204 PASS / RUNTIME206 MATRIX STILL NOT VERIFIED**。
+日期：2026-11-14，2026-11-15補PERF002/003。ASSET204原Gate已通過；RUNTIME206完整隔離矩陣的獨立證據見 [RUNTIME_ISOLATION_VERIFICATION](RUNTIME_ISOLATION_VERIFICATION.md)，本次未重跑該矩陣。
 
 ## 目的
 
@@ -13,9 +13,9 @@ ASSET203 已證明 `normalized_memory` 的 Atlas packing 本身無法消除同�
 - 一個 worker thread 負責 manifest/PNG CPU decode。
 - Godot `ImageTexture.create_from_image()` 只在 main thread 執行。
 - production `main.gd` 每 frame 呼叫 `poll_gpu(1, 1200)`：最多 1 page，目標 GPU submit budget 1.2ms。
-- decoded ready queue 有 byte budget；單張較大 page 可在 queue 空時通過，避免 deadlock。
+- decoded ready queue 有 byte budget及128個item上限（metadata／error也計數）；單張較大page可在queue空時通過，避免deadlock。另有一個worker中的in-flight page，byte budget不是整個程序RAM上限。
 - manifest page 單張上限 64MiB；job 上限 128。
-- 每個 request 有 token；owner 有 epoch。owner generation 被 release 後，舊 worker result 即使晚到也不能 resurrect atlas。
+- 每個request有token；owner有epoch。最後owner取消loading時，立即移除queued job／ready events／active token；正在進行的PNG decode只能在page邊界停止，但結果不能重新入queue或提交GPU。部分GPU頁及failed atlas也扣回resident bytes並清除引用。重現與回歸見 [PERF003_CANCELLATION](PERF003_CANCELLATION.md)。
 - ready atlas 可被多 owner 共用，同一 path 不重複 decode/upload。
 - unowned ready atlas 是 LRU cache；超過 cache budget 自動 eviction。
 - failed 且已無 owner 的 entry 立即移除，下一 generation 可 retry，不會永久吃掉 MAX_JOBS。
@@ -47,13 +47,14 @@ ASSET203 已證明 `normalized_memory` 的 Atlas packing 本身無法消除同�
 Godot synthetic/real-private-asset tests：
 
 - `test_runtime_asset_store.gd`：owner sharing、cache hit、force purge、loading cancellation、failed-path retry、automatic cache-cap eviction。
+- `test_runtime_asset_cancellation.gd`：1000 generations、MAX_JOBS、過期publish、priority、zero-byte事件數上限、byte backpressure取消、close／restart。`probe_asset_cancel_queue.gd -- --assert-bounded`另驗證部分提交／後頁失敗／相同path重試及native Texture弱引用歸零。
 - `test_monster_visuals_async.gd`：Map13 9 definitions / 360 logical views / **1 map bundle**、generation clear/cancel、owner purge。
 - `test_map_objects_async.gd`：單一 map bundle acquire、viewport draw cull 不改 ownership、map reset 後完整 purge。
 - `test_paper_doll_async.gd`：**1 session bundle**、6 parts + death、normalized draw-order、purge。
 
 ## Lifecycle-bundle 簡化後補充（2026-11-14）
 
-Production 已由多個 per-entity/per-part/per-map-object manifests 收斂成 map/session lifecycle bundles；完整理由見 [ASSET_BUNDLE_ARCHITECTURE.md](ASSET_BUNDLE_ARCHITECTURE.md) 與 [ASSET_NECESSITY_AUDIT.md](ASSET_NECESSITY_AUDIT.md)。早期2048×2 map bundle數據保留在該文件。2026-11-15 PERF002改為Runtime優先512／1024，Map13為1024候選5頁、session2頁，ownership仍不變。修正worker idle持有Image／metadata，telemetry各有2048筆上限、idle不追加，`statistics(false)`不複製樣本。正式release峰值187.09MiB，30次map載卸frame P95/P99 16.822/16.971ms、回收PASS；見 [PERF002_MEMORY](PERF002_MEMORY.md)。任意取消風暴queue邊界仍需獨立壓測，串行30次不證明該範圍完成。
+Production 已由多個 per-entity/per-part/per-map-object manifests 收斂成 map/session lifecycle bundles；完整理由見 [ASSET_BUNDLE_ARCHITECTURE.md](ASSET_BUNDLE_ARCHITECTURE.md) 與 [ASSET_NECESSITY_AUDIT.md](ASSET_NECESSITY_AUDIT.md)。早期2048×2 map bundle數據保留在該文件。2026-11-15 PERF002改為Runtime優先512／1024，Map13為1024候選5頁、session2頁，ownership仍不變。修正worker idle持有Image／metadata，telemetry各有2048筆上限、idle不追加，`statistics(false)`不複製樣本。正式release峰值187.09MiB，30次map載卸frame P95/P99 16.822/16.971ms、回收PASS；見 [PERF002_MEMORY](PERF002_MEMORY.md)。取消／部分載入錯誤邊界另由PERF003自製fixture與native probe實證修正，不能單以串行30次載卸證明。
 
 以下 ASSET204 數字保留為「簡化前 normalized_memory 14-page」歷史基準，用來證明 bounded async store 本身的改善。
 
