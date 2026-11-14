@@ -13,6 +13,8 @@ AS007 [~] tools/build_atlas_groups.py 可從乾淨 HK2 依局部前綴與實際�
 AS008 [!] 確認原版圖片、UI、音效的本地研究與公開發布/轉換權利；未確認權利不放 GitHub。
 AS009 [ ] 將本機盤點與解碼結果形成 docs/證據矩陣，記錄具體檔案 hash、函式位址、成功/失敗；再判斷是否達成 M0 Gate。
 
+AS007（2026-11-14 原始 SPR 局部性 A/B）[~] 已在主線加入 tools/audit_action_page_locality.py、tools/build_atlas_groups.py --source-locality 與單元測試；50 組 adaptive atlas 的 2,000 動作×方向有 173 組跨頁；真 HK2 EN023A 改用 per-SPR 局部性 15 張頁，40/40 動作×方向單頁、Godot headless 272 播放步 PASS；46 項 Python 測試 PASS。尚未對 50 組全量做同場 GPU A/B、物品/人物、原版視覺、多人；見 docs/HK2_ACTION_PAGE_LOCALITY.md。未經驗證不能把候選當正式 runtime。
+
 ===== 已確認的事實（不是素材解析完成） =====
 [x] 已指定後期《星夢 Online》金色 UI 的視覺目標。
 [x] 已有 HK2 全量 inventory、舊版反編譯位址與唯讀盤點工具可用作研究起點。

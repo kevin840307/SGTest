@@ -117,3 +117,10 @@ ADR-016 的逐怪物尺寸實驗補充（2026-11-14）：50 組各測 1024／204
 ## 人物素材研究補充（2026-11-14）
 
 原版 draw-order 的 +2 token 會展開為兩個有序繪圖槽位；素材資料契約必須同時保留原始 token 與展開序列，不能套用物品強化別名清理規則。兩份主要人物表 102 行已稽核，貼圖來源與實際遮擋仍待驗證，詳 [HK2_DRAW_ORDER.md](HK2_DRAW_ORDER.md)。
+
+## ADR-018 — Per-SPR 動作方向局部性候選（2026-11-14）
+
+- Status: **EXPERIMENTAL / NOT SELECTED**。保留現有 dense atlas，不直接改正式策略。
+- Decision: 新增可選 `--source-locality`，按原始 SPR 各自 pack，保留 ACT 原影格、來源 SHA、方位重用與鏡像；再用 `audit_action_page_locality.py` 定量測同動作/方位的跨頁數。若單 SPR 大於頁面仍允許多頁並明確報告，不宣稱一定同頁。
+- Evidence: 舊 50 組 adaptive catalog 有 173/2,000 個動作×方向跨頁；真 HK2 EN023A 15 個 SPR 合成 15 頁，40/40 同頁、Godot headless 272 播放步 PASS；單組離線 RGBA 18,816,668 bytes。資料與執行方式見 [HK2_ACTION_PAGE_LOCALITY.md](HK2_ACTION_PAGE_LOCALITY.md)。
+- Risks/Next: 單獨來源頁可能增加 texture binds/draw calls；須對同場相同實體做 GPU/RAM/載入/切圖 A/B，再決定混用策略。授權、真視覺及多人尚未驗證。

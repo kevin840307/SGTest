@@ -11,6 +11,7 @@
 - [docs/LEGACY_ASSET_PIPELINE.md](docs/LEGACY_ASSET_PIPELINE.md)：解析、匯出與驗收流程
 - [docs/ASSET_RUNTIME_STRATEGY.md](docs/ASSET_RUNTIME_STRATEGY.md)：暫定 Godot 分組、可見載入與性能驗收
 - [docs/HK2_INVENTORY.md](docs/HK2_INVENTORY.md)：乾淨 HK2 實體檔案盤點
+- [docs/HK2_ACTION_PAGE_LOCALITY.md](docs/HK2_ACTION_PAGE_LOCALITY.md)：同動作／方向 Atlas 跨頁稽核與原 SPR 局部性 A/B
 - [docs/ASSET_STREAMING_AND_RENDERING.md](docs/ASSET_STREAMING_AND_RENDERING.md)：多尺寸素材分組與實測矩陣
 - [docs/CLIENT_RUNTIME_ISOLATION.md](docs/CLIENT_RUNTIME_ISOLATION.md)：多人同步與渲染排程隔離
 - [docs/LEGACY_ASSET_EVIDENCE_20261113.md](docs/LEGACY_ASSET_EVIDENCE_20261113.md)：參考版本的位元組研究

@@ -42,6 +42,22 @@ class GroupTests(unittest.TestCase):
                              ["Enemy/EN023A_NS1.spr", "Enemy/EN023A_NW1.spr"])
             self.assertEqual(manifest["frames"][0]["raw_origin"], [1, 0])
 
+    def test_source_locality_keeps_each_spr_on_own_page(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp) / "client"
+            folder = root / "Enemy"
+            folder.mkdir(parents=True)
+            paths = [folder / "EN023A_NS1.spr", folder / "EN023A_NW1.spr"]
+            for path in paths:
+                path.write_bytes(tiny_spr())
+            output = Path(temp) / "out"
+            row = build_group(root, output, Path("Enemy/EN023A"), paths, 512,
+                              source_locality=True)
+            manifest = json.loads((output / "Enemy/EN023A/group.atlas.json").read_text())
+            self.assertEqual(row["pages"], 2)
+            self.assertEqual([f["page"] for f in manifest["frames"]], [0, 1])
+            self.assertEqual(manifest["packing_policy"], "source_spr_locality_v1")
+
     def test_explicit_group_filter(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)

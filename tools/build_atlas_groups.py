@@ -44,22 +44,35 @@ def select_groups(root: Path, category: str | None = None,
             for key, paths in sorted(groups.items(), key=lambda pair: pair[0].as_posix().casefold())}
 
 
-def build_group(root: Path, output: Path, key: Path, paths: list[Path], side: int) -> dict:
+def build_group(root: Path, output: Path, key: Path, paths: list[Path], side: int,
+                source_locality: bool = False) -> dict:
     if not paths or side not in (512, 1024, 2048, 4096):
         raise ValueError("empty group or unsupported atlas side")
     frames = []
     sources = []
     origin_records = []
+    source_ranges = []
     for path in paths:
         raw = path.read_bytes()
         digest = hashlib.sha256(raw).hexdigest()
         decoded = decode_spr(raw)
         relative = path.relative_to(root).as_posix()
         sources.append({"path": relative, "sha256": digest, "frames": len(decoded)})
+        source_ranges.append((len(frames), len(decoded)))
         for index, frame in enumerate(decoded):
             frames.append(frame)
             origin_records.append((relative, index))
-    pages, records = pack(frames, side)
+    if source_locality:
+        pages, records = [], []
+        for start, length in source_ranges:
+            local_pages, local_records = pack(frames[start:start + length], side)
+            for record in local_records:
+                if record["page"] >= 0:
+                    record["page"] += len(pages)
+            pages.extend(local_pages)
+            records.extend(local_records)
+    else:
+        pages, records = pack(frames, side)
     for frame, record in zip(frames, records):
         if record["page"] < 0:
             continue
@@ -83,6 +96,7 @@ def build_group(root: Path, output: Path, key: Path, paths: list[Path], side: in
         record["source_frame"] = index
     document = {"version": 1, "group_key": key.as_posix(), "group_rule": "category_prefix_v1",
                 "atlas_side": side, "padding": 2, "pages": page_names, "sources": sources, "frames": records,
+                "packing_policy": "source_spr_locality_v1" if source_locality else "dense_frames_v1",
                 "animation_semantics": None, "layer_semantics": None}
     manifest = target / "group.atlas.json"
     temporary = target / "group.atlas.json.tmp"
@@ -109,6 +123,8 @@ def main() -> int:
     sizing.add_argument("--atlas-side", type=int, choices=(512, 1024, 2048, 4096))
     sizing.add_argument("--size-plan", type=Path, help="Measured per-group atlas size plan")
     parser.add_argument("--limit-groups", type=int, help="Trial only; stable first N groups")
+    parser.add_argument("--source-locality", action="store_true",
+                        help="Pack each original SPR independently; A/B candidate only")
     args = parser.parse_args()
     root, output = args.client.resolve(), args.output.resolve()
     if not root.is_dir() or output == root or root in output.parents:
@@ -132,7 +148,7 @@ def main() -> int:
     for key, paths in groups.items():
         try:
             side = int(plan[key.as_posix()]["side"]) if plan else args.atlas_side
-            rows.append(build_group(root, output, key, paths, side))
+            rows.append(build_group(root, output, key, paths, side, args.source_locality))
         except (OSError, ValueError) as exc:
             rows.append({"group": key.as_posix(), "error": str(exc)})
     report = {"version": 1, "atlas_side": args.atlas_side, "groups": rows,
