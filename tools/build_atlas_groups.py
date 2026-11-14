@@ -105,7 +105,9 @@ def main() -> int:
     parser.add_argument("--category", help="First-level source category, e.g. Enemy")
     parser.add_argument("--prefix", help="Group key prefix, e.g. Enemy/EN023A")
     parser.add_argument("--group-list", type=Path, help="UTF-8 file with exact group keys, one per line")
-    parser.add_argument("--atlas-side", type=int, required=True, choices=(512, 1024, 2048, 4096))
+    sizing = parser.add_mutually_exclusive_group(required=True)
+    sizing.add_argument("--atlas-side", type=int, choices=(512, 1024, 2048, 4096))
+    sizing.add_argument("--size-plan", type=Path, help="Measured per-group atlas size plan")
     parser.add_argument("--limit-groups", type=int, help="Trial only; stable first N groups")
     args = parser.parse_args()
     root, output = args.client.resolve(), args.output.resolve()
@@ -116,6 +118,12 @@ def main() -> int:
         keys = {line.strip().casefold() for line in args.group_list.read_text(encoding="utf-8").splitlines()
                 if line.strip() and not line.lstrip().startswith("#")}
     groups = select_groups(root, args.category, args.prefix, keys)
+    plan = None
+    if args.size_plan:
+        plan = json.loads(args.size_plan.read_text(encoding="utf-8"))["groups"]
+        groups = {key: paths for key, paths in groups.items() if key.as_posix() in plan}
+        if {key.as_posix() for key in groups} != set(plan):
+            parser.error("size plan contains a group absent from source or filters")
     if keys is not None and {key.as_posix().casefold() for key in groups} != keys:
         parser.error("group list contains a key absent from the clean source")
     if args.limit_groups is not None:
@@ -123,7 +131,8 @@ def main() -> int:
     rows = []
     for key, paths in groups.items():
         try:
-            rows.append(build_group(root, output, key, paths, args.atlas_side))
+            side = int(plan[key.as_posix()]["side"]) if plan else args.atlas_side
+            rows.append(build_group(root, output, key, paths, side))
         except (OSError, ValueError) as exc:
             rows.append({"group": key.as_posix(), "error": str(exc)})
     report = {"version": 1, "atlas_side": args.atlas_side, "groups": rows,

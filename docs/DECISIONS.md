@@ -104,6 +104,8 @@
 - 2026-11-14 物品圖號補充：`item.itd` 的 9,096 筆結構完整解封／掃描，圖號與物品 ID 分欄；8,049 筆圖號落於 `ground.spr`，1,047 筆落於 `ground1.spr` 的**連續分段候選**，13 個 ID 重複。`ground1` 執行時選檔與重複優先序未證實；正式匯入須保留原始圖號及所有衝突，詳 [HK2_ITEM_LIBRARY_MAPPING.md](HK2_ITEM_LIBRARY_MAPPING.md)。
 
 ## ADR-017 — Client Network/State 與 UI/Render FPS 排程隔離
+
+ADR-016 的逐怪物尺寸實驗補充（2026-11-14）：50 組各測 1024／2048／4096，採最低實際 RGBA 的可重現候選，得到 42／4／4 組；保留逐組解碼時間供覆核。正式 runtime 尚未驗證。見 [HK2_PER_ENEMY_ATLAS_SIZES.md](HK2_PER_ENEMY_ATLAS_SIZES.md)。
 - Date: 2026-11-13；Status: **ACCEPTED CONTRACT / IMPLEMENTATION NOT VERIFIED**。
 - Decision: ServerSimClock、ClientNetworkPump、CommandGateway、OrderedEventReducer、PackedWorldState 與 ViewProjection、WorldRenderer、UIRenderer、VisualClock 完全分責。UI FPS 增減、Render FPS、失焦、最小化、AFK **不得提高/降低 Client↔Server 收送包、解碼/State 套用、戰鬥、移動、撿物及 Server Tick 的工作率**。
 - Rejected: 依 `_process(delta)` 的渲染 callback poll socket、以 UI Animation frame 送 Move/Skill、AFK 停止處理 Server events。
