@@ -43,8 +43,9 @@ def asset_identity(monster_assets=None):
 
 def provenance(monster_assets=None):
     files=['client/scripts/main.gd','client/scripts/entity_atlas.gd','client/scripts/monster_visuals.gd',
-           'client/scripts/frame_profiler.gd','client/project.godot','server/bin/Release/net8.0/SGTest.Server.dll',
-           'client/tools/benchmark_asset_lifecycle.gd','tools/benchmark_runtime_baseline.py',
+           'client/scripts/runtime_asset_store.gd','client/scripts/frame_profiler.gd','client/project.godot',
+           'server/bin/Release/net8.0/SGTest.Server.dll','client/tools/benchmark_asset_lifecycle.gd',
+           'client/tools/benchmark_runtime_asset_store.gd','tools/benchmark_runtime_baseline.py',
            'client/assets/generated/catalog.json']
     return {'git_head':subprocess.check_output(['git','rev-parse','HEAD']).decode().strip(),
             'tracked_worktree_diff_sha256':hashlib.sha256(subprocess.check_output(['git','diff','HEAD','--binary'],stderr=subprocess.DEVNULL)).hexdigest(),
@@ -83,14 +84,15 @@ def stop(processes):
             except psutil.NoSuchProcess:pass
         process.wait(timeout=10)
 
-def lifecycle(godot,output,cycles,monster_assets=None):
+def lifecycle(godot,output,cycles,monster_assets=None,loader='sync'):
     native_report=(output/'lifecycle.json').resolve()
     before=provenance(monster_assets)
     Path(str(native_report)+'.progress.json').write_text('{"cycle":-1,"phase":"starting"}',encoding='utf-8')
     started_wall=time.time()
     with tempfile.TemporaryFile(mode='w+',encoding='utf-8') as log:
+        lifecycle_script='tools/benchmark_runtime_asset_store.gd' if loader=='async' else 'tools/benchmark_asset_lifecycle.gd'
         command=[godot,'--path','client','--rendering-method','gl_compatibility','--max-fps','60','--resolution','1440x900',
-                 '--script','tools/benchmark_asset_lifecycle.gd','--',f'--cycles={cycles}',f'--report={native_report}']
+                 '--script',lifecycle_script,'--',f'--cycles={cycles}',f'--report={native_report}']
         if monster_assets:command+=[f'--monster-assets={monster_assets.resolve()}']
         process=subprocess.Popen(command,stdout=log,stderr=subprocess.STDOUT)
         points=[]
@@ -107,7 +109,7 @@ def lifecycle(godot,output,cycles,monster_assets=None):
         log.seek(0);text=log.read()
     result=json.loads(native_report.read_text(encoding='utf-8')) if native_report.exists() and native_report.stat().st_mtime>=started_wall else {}
     after=provenance(monster_assets)
-    result.update({'exit_code':process.returncode,'process_samples':points,'log':text,
+    result.update({'exit_code':process.returncode,'process_samples':points,'log':text,'loader':loader,
                    'rss_peak_bytes':max((p['processes'][0]['rss_bytes'] for p in points),default=0),
                    'measurement_provenance':before,
                    'source_files_unchanged_during_run':before['files']==after['files'] and before['assets']==after['assets']})
@@ -127,7 +129,7 @@ def lifecycle(godot,output,cycles,monster_assets=None):
     else:result['ram_recovery']={'passed':None,'status':'NOT VERIFIED: missing per-cycle RSS samples'}
     result['execution_passed']=process.returncode==0 and 'ERROR:' not in text and bool(result.get('records'))
     native_report.write_text(json.dumps(result,ensure_ascii=False,indent=2),encoding='utf-8')
-    print(json.dumps({k:result.get(k) for k in ['execution_passed','cycles','all_texture_handles_released','engine_texture_recovery_passed','frame_ms_p95','frame_ms_p99','rss_peak_bytes']},indent=2))
+    print(json.dumps({k:result.get(k) for k in ['execution_passed','loader','cycles','all_texture_handles_released','engine_texture_recovery_passed','store_resident_recovery_passed','frame_ms_p95','frame_ms_p99','rss_peak_bytes']},indent=2))
     return result['execution_passed']
 
 def multiplayer(godot,output,clients,monsters,drops,seconds,monster_assets=None):
@@ -185,6 +187,8 @@ def main():
     parser.add_argument('--drops',type=int,default=1000)
     parser.add_argument('--seconds',type=int,default=40)
     parser.add_argument('--monster-assets',type=Path)
+    parser.add_argument('--loader',choices=['sync','async'],default='sync',
+                        help='Lifecycle loader only: synchronous baseline or RuntimeAssetStore')
     args=parser.parse_args()
     args.output.mkdir(parents=True,exist_ok=True)
     if args.cycles<1 or args.clients<1 or args.seconds<20:parser.error('positive cycles/clients and >=20s required')
@@ -193,7 +197,7 @@ def main():
                     'godot_executable_sha256':hashlib.sha256(Path(godot).read_bytes()).hexdigest(),
                     'dotnet_sdk_version':subprocess.check_output([server_command()[0],'--version'],text=True).strip(),
                     'python':platform.python_version()})
-    if args.case in ['lifecycle','all']:passed=lifecycle(godot,args.output,args.cycles,args.monster_assets) and passed
+    if args.case in ['lifecycle','all']:passed=lifecycle(godot,args.output,args.cycles,args.monster_assets,args.loader) and passed
     if args.case in ['multiplayer','all']:passed=multiplayer(godot,args.output,args.clients,args.monsters,args.drops,args.seconds,args.monster_assets) and passed
     return 0 if passed else 1
 

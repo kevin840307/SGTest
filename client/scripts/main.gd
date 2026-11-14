@@ -15,6 +15,7 @@ var hud: CanvasLayer
 var info_label: Label
 var item_label: Label
 var health_label: Label
+var asset_store := preload("res://scripts/runtime_asset_store.gd").new()
 var monster_visuals := preload("res://scripts/monster_visuals.gd").new()
 var world_generation := 0
 var doll := preload("res://scripts/paper_doll.gd").new()
@@ -82,6 +83,8 @@ func _ready() -> void:
 		if argument.begins_with("--monster-assets="):
 			monster_asset_root = argument.trim_prefix("--monster-assets=")
 	print("SGO client starting")
+	asset_store.configure(24 * 1024 * 1024, 16 * 1024 * 1024)
+	asset_store.start()
 	_build_ui()
 	_load_sample_atlas()
 	_start_client(host)
@@ -96,6 +99,10 @@ func _start_client(host: String) -> void:
 	print("SGO client connecting to %s:%d" % [host,port])
 
 func _exit_tree() -> void:
+	map_objects.reset(false)
+	monster_visuals.reset(false)
+	doll.reset(false)
+	asset_store.close()
 	network.close()
 
 func _world_info(server_map: int, fingerprint: String, population_hash: String) -> void:
@@ -119,7 +126,7 @@ func _world_info(server_map: int, fingerprint: String, population_hash: String) 
 			return
 		terrain.z_index = -100
 		add_child(terrain)
-		map_objects.configure(asset_root,terrain.data)
+		map_objects.configure(asset_root,terrain.data,asset_store,"map-objects")
 		var grid := preload("res://scripts/collision_grid.gd").new()
 		if grid.open(asset_root.path_join("maps/%d/blocking.bin" % server_map)) != OK:
 			get_tree().quit(1)
@@ -130,6 +137,7 @@ func _world_info(server_map: int, fingerprint: String, population_hash: String) 
 		info_label.text = "已連線　測試場地"
 		prediction.configure(null,WORLD_SIZE)
 	var definitions: Array = [{"id":0,"sprite":"EN004A","atlas":"enemy/en004a.json"}]
+	var spawn_counts: Dictionary = {0: 1}
 	if server_map != 0:
 		var path := asset_root.path_join("maps/%d/population.json" % server_map)
 		if FileAccess.get_sha256(path) != population_hash:
@@ -141,20 +149,39 @@ func _world_info(server_map: int, fingerprint: String, population_hash: String) 
 			get_tree().quit(1)
 			return
 		definitions = population.definitions
+		spawn_counts.clear()
+		for spawn in population.spawns:
+			var definition_id := int(spawn.definition)
+			spawn_counts[definition_id] = int(spawn_counts.get(definition_id,0)) + 1
 	var started := Time.get_ticks_usec()
+	var monster_root: String = asset_root if monster_asset_root.is_empty() else monster_asset_root
+	if monster_visuals.begin_async(asset_store,"map-monsters") != OK:
+		push_error("Cannot start monster asset owner")
+		get_tree().quit(1)
+		return
 	for definition in definitions:
 		if generation != world_generation:
 			return
-		var error: Error = monster_visuals.add(asset_root if monster_asset_root.is_empty() else monster_asset_root,definition)
+		var priority := int(spawn_counts.get(int(definition.id),0))
+		var error: Error = monster_visuals.add_async(monster_root,definition,priority)
 		if error != OK:
-			push_error("Cannot load monster definition %s (%s)" % [definition.id,error])
+			push_error("Cannot queue monster definition %s (%s)" % [definition.id,error])
 			get_tree().quit(1)
 			return
-		info_label.text = "載入怪物 %d / %d" % [monster_visuals.definitions.size(),definitions.size()]
+	while not monster_visuals.is_ready():
+		if generation != world_generation:
+			return
+		monster_visuals.refresh()
+		var load_error := monster_visuals.first_error()
+		if load_error != OK:
+			push_error("Cannot load monster palette (%s)" % load_error)
+			get_tree().quit(1)
+			return
+		info_label.text = "載入怪物 %d / %d" % [monster_visuals.loaded_count(),monster_visuals.shared.size()]
 		await get_tree().process_frame
 	if generation != world_generation:
 		return
-	print("monster_palette "+JSON.stringify({"definitions":monster_visuals.definitions.size(),"shared_atlases":monster_visuals.shared.size(),"rgba_bytes":monster_visuals.rgba_bytes,"load_ms":(Time.get_ticks_usec()-started)/1000.0}))
+	print("monster_palette "+JSON.stringify({"definitions":monster_visuals.definitions.size(),"shared_atlases":monster_visuals.shared.size(),"rgba_bytes":monster_visuals.rgba_bytes,"load_ms":(Time.get_ticks_usec()-started)/1000.0,"async_store":asset_store.statistics()}))
 	info_label.text = "已連線　%s" % (str(terrain.data.name) if terrain != null else "測試場地")
 	map_ready = true
 	network.send(24,[server_map,fingerprint,population_hash])
@@ -170,6 +197,8 @@ func _physics_process(delta: float) -> void:
 	diagnostics_time += delta
 	if int(diagnostics_time/5.0) > int((diagnostics_time-delta)/5.0) and prediction.initialized:
 		print("prediction_metrics "+JSON.stringify({"pending":prediction.pending.size(),"max_pending":prediction.max_pending,"max_correction_px":prediction.max_correction,"reconciliations":prediction.reconciliations}))
+		var asset_metrics := asset_store.statistics()
+		print("asset_store_metrics "+JSON.stringify({"resident_bytes":asset_metrics.resident_bytes,"ready_queue_bytes":asset_metrics.ready_queue_bytes,"entries":asset_metrics.entries,"pending":asset_metrics.pending,"cache_hits":asset_metrics.cache_hits,"cache_misses":asset_metrics.cache_misses,"evictions":asset_metrics.evictions,"peak_resident_bytes":asset_metrics.peak_resident_bytes}))
 	_client_step(delta)
 
 func _dispatch(op: int, b: Array) -> void:
@@ -452,13 +481,25 @@ func _style_ui() -> void:
 	panel.add_theme_stylebox_override("panel", style)
 
 func _load_sample_atlas() -> void:
+	# Headless clients never draw the paper doll; avoid decoding 8.3 MiB of
+	# visual-only resources while preserving their network/state workload.
+	if DisplayServer.get_name() == "headless":
+		return
 	var player_path := asset_root.path_join("player/b/standard/b-body.json")
 	if FileAccess.file_exists(player_path):
-		var error: Error = doll.open(asset_root)
+		var error: Error = doll.begin_async(asset_store,asset_root,"player-core")
 		if error != OK:
-			push_error("Cannot load player composition: %s" % error)
+			push_error("Cannot queue player composition: %s" % error)
 
 func _process(delta: float) -> void:
+	# One visual commit budget for every owner. Network/state processing stays in
+	# _physics_process and is never gated by visual readiness.
+	asset_store.poll_gpu(1,1200)
+	doll.refresh()
+	monster_visuals.refresh()
+	if doll.first_error() != OK:
+		push_error("Player composition async load failed: %s" % doll.first_error())
+		doll.reset(false)
 	if profiler != null:
 		profiler.sample(delta)
 	server_time = clock_sync.advance(Time.get_ticks_usec()/1000000.0)
@@ -482,7 +523,7 @@ func _process(delta: float) -> void:
 	position = rendered_players.get(own_id, position)
 	var size := get_viewport_rect().size
 	var view := Rect2(position-size*0.5,size)
-	if terrain != null:
+	if terrain != null and map_ready:
 		terrain.position = -position
 		terrain.update_view(view)
 		map_objects.prepare(view.grow(180))

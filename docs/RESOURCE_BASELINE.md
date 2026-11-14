@@ -37,7 +37,7 @@
 
 一般遊玩支援 **30～90FPS**；這只改呈現，不改 Client／Server 傳輸或固定邏輯頻率。5／10／15FPS 與停止世界繪製是另列的低功耗掛機模式。尚未跑完同 trace／背景／2／4／8 開，不能宣稱已支援。
 
-ASSET201 標準動畫定義已完成，見 [NORMALIZED_ANIMATION_DEFINITION.md](NORMALIZED_ANIMATION_DEFINITION.md)。ASSET202/203 亦已完成：以 v2 semantics 建 clip-atomic／Map13 hot-warm-cold 候選並跑相同 lifecycle + multiplayer，選 `normalized_memory` 作 ASSET204 provisional base；clean multiplayer P95/P99 21.54/23.81ms、Video約45.63MiB、30次回收PASS，但同步 loader frame P99 53.52ms 仍 FAIL，詳 [NORMALIZED_ATLAS_CANDIDATES.md](NORMALIZED_ATLAS_CANDIDATES.md)。下一步：ASSET204 有界非同步資源 store → ASSET205 新怪物流程及完整回歸；30 次 raw texture 釋放通過仍不能代替正式切圖／登出 owner purge。
+ASSET201 標準動畫定義與 ASSET202/203 Atlas 選型已完成；`normalized_memory` 是正式 Runtime 的素材基底，詳 [NORMALIZED_ANIMATION_DEFINITION.md](NORMALIZED_ANIMATION_DEFINITION.md) 與 [NORMALIZED_ATLAS_CANDIDATES.md](NORMALIZED_ATLAS_CANDIDATES.md)。ASSET204 也已完成 [RuntimeAssetStore](RUNTIME_ASSET_STORE.md)：30-cycle 同素材同步 loader frame P99 53.52ms FAIL → bounded async 17.028ms PASS，texture handle／Store resident／process RAM recovery 全 PASS；20client/300monster/1000drop P95/P99 22.109/23.949ms、0 ERROR。下一步是 ASSET205 新怪物 definition／atlas／spawn／preview 流程；RUNTIME206 的 30～90FPS、低功耗、失焦／最小化與多開 trace 仍需獨立驗證。
 
 ## 重跑
 

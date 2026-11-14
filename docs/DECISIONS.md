@@ -226,3 +226,13 @@ ADR-026補充：使用者指定Client一般遊玩支援30～90FPS；FPS選項只
 - FPS: `application/run/max_fps=60` 為預設 Render cap；Client physics/input 與 Server simulation 保持 30Hz，FPS 不得改 network/state/combat cadence。
 - Direct evidence: Character `DirectionMapping .text:004C263F～004C283A`；Enemy `SetDirection .text:004CB708～004CB7E8`；Recovered `DIR_STRINGS`、monster 28° presentation hysteresis、remote-player action-facing ownership/dead-reckoning 行為。詳 [RUNTIME_DIRECTION_AND_MOTION.md](RUNTIME_DIRECTION_AND_MOTION.md)。
 - Verification: Python tools/tests 89 PASS；normalized/runtime semantic 16 PASS；C# 350 PASS；8 組 Godot headless tests PASS。原版同版本逐格人工視覺、完整 FPS/背景/多開 trace 仍 NOT VERIFIED。
+
+## ADR-031 — Bounded RuntimeAssetStore 完成 ASSET204（2026-11-14）
+
+- Status: **ASSET204 ACCEPTED / RUNTIME206 MATRIX NOT VERIFIED**。
+- Decision: 正式 Client 共用單一 `RuntimeAssetStore`；manifest/PNG 在 worker thread decode，Godot texture 只在 main thread 建立。Production 每 frame 最多 commit 1 page，budget 1.2ms；ready queue 16MiB、unowned LRU cache 32MiB。Owner+epoch+request token 定義資源生命週期，切圖 generation 可取消 stale job，多 owner 共用同一路徑，failed unowned entry 必須移除以允許 retry。
+- Consumers: Map13 monster 依 spawn count priority preload；Boy core paper-doll 6 parts+death 原子 ready；map object 依 viewport on-demand pin/release；headless client 不載純視覺 paper doll。Map switch/reset/Client close 都走同一 owner release/purge 契約。
+- Evidence: `normalized_memory` 30-cycle 同素材同步 loader P99 53.52ms → async P95/P99 16.885/17.028ms，max 17.309ms；load P95 249.914ms / 15 frames，GPU commit P95 1.205ms；texture handle、engine texture、Store resident、process RAM recovery 全 PASS，final resident=0，provenance unchanged。
+- Multiplayer: 20 clients／300 monsters／1000 drops／40s，mean 59.99FPS、frame P95/P99 22.109/23.949ms、draw P95 422，20/20 snapshot/prediction ready、0 ERROR、max correction 0。Server warm-up tick=300 P99 69.08ms；穩態 P99 5.56～6.43ms。
+- Regression: owner sharing/cache hit、automatic cache-cap eviction、loading cancellation、failed-path retry、monster generation cancel、map-object viewport release、paper-doll atomic ready/purge 均有 Godot headless test。詳 [RUNTIME_ASSET_STORE.md](RUNTIME_ASSET_STORE.md)。
+- Boundary: 這完成資源載入與生命週期 Gate，不代表 RUNTIME206 的 30/45/60/75/90FPS、5/10/15 low-power、unfocus/minimize、1/2/4/8 開 trace 已完成；實體 driver VRAM、完整 cold-disk matrix、AS005/AS008 也仍未完成。

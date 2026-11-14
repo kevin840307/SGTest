@@ -83,7 +83,7 @@ Atlas 不再決定動畫語意。所有 Map13 monster 的 logical facing、sourc
 5. 14 頁雖多於 1024 的 9 頁，但實際多人 draw calls 沒有更差；相反 P95 更低。
 6. 對 ASSET204 而言較細頁面也提供更細的 owner/eviction 粒度。
 
-**但它不是最終 runtime。** 同步 load frame P99 53.52ms FAIL；ASSET204 的 async store 完成並重跑相同 Gate 後，才可宣稱載入頓挫改善。
+ASSET204 已完成 bounded async RuntimeAssetStore 並重跑同一 Gate：`normalized_memory` 30-cycle frame P99 由同步 **53.52ms FAIL** 降至 async **17.028ms PASS**，texture/resident/RAM recovery 全 PASS；20-client/300-monster/1000-drop frame P95/P99 22.109/23.949ms。正式結果與 owner/cache/generation 契約見 [RUNTIME_ASSET_STORE.md](RUNTIME_ASSET_STORE.md)。Atlas packing 本身仍不是解法，改善來自 background decode + bounded GPU commit。
 
 ## 重跑
 
@@ -99,9 +99,8 @@ py tools/benchmark_runtime_baseline.py C:\SGO\Godot\Godot_v4.7.2-stable_win64_co
 py tools/report_normalized_atlas_candidates.py
 ```
 
-## 尚未完成
+## 後續未完成
 
-- ASSET204：正式 bounded async Runtime store、owner refs、共享、priority、CPU/GPU budget、cache cap/LRU、generation cancel、切圖/登出 purge。
 - ASSET205：新增怪物的一鍵 definition/atlas/spawn/preview flow。
 - RUNTIME206：30–90 FPS + 低功耗 5/10/15 + unfocus/minimize 的 network/state/render 隔離實機矩陣。
 - AS005：原版同版本畫面逐格視覺比對。

@@ -9,7 +9,7 @@
 
 ## 最新資源架構重評
 
-先依 [SPEC 第0節](SPEC.md) 交付可重跑基準。ASSET201 的 [Normalized Animation Definition v2](docs/NORMALIZED_ANIMATION_DEFINITION.md) 已完成；ASSET202/203 已用同一 v2 semantics 實測 512／1024／2048／4096 clip-atomic 候選並選出 `normalized_memory` 作下一階段基底，詳 [NORMALIZED_ATLAS_CANDIDATES.md](docs/NORMALIZED_ATLAS_CANDIDATES.md)。同步 loader frame P99 仍 FAIL，因此下一步是 ASSET204 bounded async Runtime store，不可把 Atlas 選型誤稱為載入頓挫已解。
+先依 [SPEC 第0節](SPEC.md) 交付可重跑基準。ASSET201 的 [Normalized Animation Definition v2](docs/NORMALIZED_ANIMATION_DEFINITION.md) 已完成；ASSET202/203 以同一 v2 semantics 選定 `normalized_memory`，ASSET204 的 [RuntimeAssetStore](docs/RUNTIME_ASSET_STORE.md) 也已完成 bounded background decode＋每幀 GPU commit：30-cycle load frame P99 由同步 53.52ms 降到 17.028ms，texture／resident／RAM recovery PASS。下一步是 ASSET205 新增怪物 definition／atlas／spawn／preview 流程；RUNTIME206 的多 FPS／背景／多開同步矩陣仍獨立未完成。
 
 ## 啟動
 
