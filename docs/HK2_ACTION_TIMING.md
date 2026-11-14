@@ -10,8 +10,9 @@ HK2 的 `Client.bin` 與 `SGOClient.bin` 都直接保留與參考 Paradise 同�
 - `SystemSetFrame` 以整數 `1000 / frameRate` 產生固定步進，因此為 **20ms / 50Hz**。
 - `xnAction` 預設 numerator=40、speed=25。
 - 設定/切換幀時：`remaining_updates = floor(raw_time * 40 / speed)`。
-- `xnAction::Update` 每次固定 Update 將 remaining count 減一，到期後切下一幀。
-- 因此預設速度下：`default_duration_ms = floor(raw_time * 40 / 25) * 20`。
+- `xnAction::Update` 每次固定 Update 先將 remaining count 減一，`<=0` 才切下一幀。
+- 因此精確邏輯是 `effective_ticks = max(1, floor(raw_time * 40 / speed))`；預設 speed=25 時 HK2 raw_time>=1，所以等同 `floor(raw_time * 40 / 25)`。
+- 預設速度下：`default_duration_ms = effective_ticks * 20`。
 - HK2 現有 3,303 個 ACT frame record 的 raw_time 最小 1、最大 70，沒有 raw_time=0。
 
 例：raw=6 → 9 fixed updates → **180ms**；raw=3 → 4 updates → **80ms**。
@@ -39,14 +40,14 @@ HK2 的 `Client.bin` 與 `SGOClient.bin` 都直接保留與參考 Paradise 同�
 
 工具：`tools/audit_action_timing_binary.py`。它只讀 PE，fail-closed 驗證唯一 byte signature、PE RVA/rel32 call，以及 `SystemSetFrame` call 前的 push 50。
 
-| binary | SHA-256 | 40/25 | decrement | duration scale | fixed loop | SystemSetFrame(50) |
-| --- | --- | ---: | ---: | ---: | ---: | ---: |
-| Client.bin | `9b45569a0f619b5bf7d99f122c6ed12ae44a1e54576686d88de4fae72dd13147` | 1 | 1 | 2 | 1 | 1 |
-| SGOClient.bin | `6e64368ad43605469246fb5692fd42d8eaa1a7ed0a13aa9a1efac518d46cb3be` | 1 | 1 | 2 | 1 | 1 |
+| binary | SHA-256 | 40/25 | decrement | SetSpeed | duration scale | fixed loop | SystemSetFrame(50) |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Client.bin | `9b45569a0f619b5bf7d99f122c6ed12ae44a1e54576686d88de4fae72dd13147` | 1 | 1 | 1 | 2 | 1 | 1 |
+| SGOClient.bin | `6e64368ad43605469246fb5692fd42d8eaa1a7ed0a13aa9a1efac518d46cb3be` | 1 | 1 | 1 | 2 | 1 | 1 |
 
-Client.bin file offsets：action defaults `0x1AE323`、decrement `0x1AE57A`、duration scale `0x1AE51D/0x1AE5E2`、fixed loop `0x135A10`、SystemSetFrame core `0x135BA7`。
+Client.bin file offsets：action defaults `0x1AE323`、decrement `0x1AE57A`、`xnAction::SetSpeed` `0x1AE530`、duration scale `0x1AE51D/0x1AE5E2`、fixed loop `0x135A10`、SystemSetFrame core `0x135BA7`。
 
-SGOClient.bin file offsets：action defaults `0x1967A3`、decrement `0x1969FA`、duration scale `0x19699D/0x196A62`、fixed loop `0x124420`、SystemSetFrame core `0x1245B7`。
+SGOClient.bin file offsets：action defaults `0x1967A3`、decrement `0x1969FA`、`xnAction::SetSpeed` `0x1969B0`、duration scale `0x19699D/0x196A62`、fixed loop `0x124420`、SystemSetFrame core `0x1245B7`。
 
 兩個 binary 的 timing primitive 與 fixed-loop 結構均唯一命中；audit JSON 寫入 gitignore 的 `reports/hk2-action-timing-audit.json`。
 
@@ -68,13 +69,14 @@ SGOClient.bin file offsets：action defaults `0x1967A3`、decrement `0x1969FA`�
 
 - 動畫時間軸依 server/action timeline + verified frame duration 取樣，**不依 Render FPS 推進**。
 - 玩家/怪物的世界移動速度不得自動乘到動畫播放速度；高速移動不能因此讓腳程、機甲動畫變快。
-- 只有未來確認的明確 action-speed 語意才可改動畫 timeline speed。
+- 只有明確 action-speed 語意才可改動畫 timeline speed；參考 caller/vtable 與 HK2 setter 證據見 [HK2_ACTION_SPEED.md](HK2_ACTION_SPEED.md)。
+- dynamic speed 必須沿用 legacy integer division 與 minimum one fixed tick；例如 raw=1、speed=50 的 stored counter=0，但仍在下一個 20ms Update 才前進。
 - 30/60/120 FPS 只改呈現採樣率，不改 NetworkPump、StateReducer、Server tick 或 action 時間。
 - Hit/Death/Teleport 等 barrier 仍由 server event/action id 決定，不因動畫未播完阻塞 authoritative state。
 
 ## 尚未關閉
 
 - 人物 numeric action ID ↔ ACT key/裝備 source slot 的完整映射。
-- `SetSpeed` 在各戰鬥/技能/特殊動作的所有 caller 與封包欄位語意。
+- HK2 binary 內 action-speed caller 的函式級 mapping／packet/data-driven non-immediate speed 語意；參考版 immediate caller 已在 HK2_ACTION_SPEED.md 稽核。
 - ACT event token 的命中／音效／特效 callback 精確語意。
 - AS005 同版本原版畫面逐格校驗。

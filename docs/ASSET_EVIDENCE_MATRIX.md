@@ -21,7 +21,7 @@ HK2 本機可執行檔與參考版本**不是 binary-identical**：
 | --- | --- | --- | --- | --- |
 | 虛擬檔案系統／Data1 | `Data1.dat` 585,022,714 bytes；SHA-256 `9ae08a8a7bb784720c83bfdd608688c045d717dee3868c13d7b8f444562bfc42`；41,687 entries | `xnFileOpenGroup 0x00552980`、`FileData::ReadBuf 0x00551810/0x00551886`、`xnFileRead 0x00552090`、`LzssDecompress 0x0055A0E0` | `legacy_group_archive.py` + `materialize_legacy_overlay.py`；17 張地圖工作集 461 archive base / 1 override / 2 loose-only；`scan_group_archives.py` 掃 41,741 實體檔只找到 Data1（1/1 valid, 0 rejected） | **DIRECT + AUDIT / PARTIAL**；目前 HK2 tree 的同格式 archive 集合已界定，仍缺原安裝包／更新來源 provenance |
 | XN SPR frame/alpha | Paradise NPC 真樣本 4 份；HK2 loose 全量 40,224 SPR 已轉換；`ground.spr` SHA-256 `6f69a5e9d7192090618f69c5f0d8b31b617ee5fb3e6fb3f5334f6da022341cb6` | `xnSpr::LoadSpr 0x00552FC0`、`DecodeFrameLine 0x00553EB0`、`xnSpr::Draw 0x00553FB0` | fail-closed decoder；frame offset/row RLE/bounds；atlas 還原逐像素比對 | **DIRECT + AUDIT / PARTIAL**；最終 RGB565/alpha 與原版畫面尚未逐像素校驗 |
-| ACT 動作／時間 | `Enemy/EN023A.ACT` 438 bytes；SHA-256 `7185027b043640f87daeb901b4bd7319d869b8940abf0209bd73713a13118609`；HK2 loose 178/178 ACT 完整解析 | `xnAction::Load/Update/SetSpeed .text:005574A3–0055777D`；`SystemSetFrame .text:0050751A`；`CELSystemLoop .text:0050739D`；Map→ClientObj→Char/Enemy→DrawObj→xnAction Update 鏈 | `audit_action_timing_binary.py` 對 Client.bin/SGOClient.bin 各唯一驗證 40/25、decrement、duration scale、fixed loop、SystemSetFrame(50)；3,303 frames，default 20ms tick；50-group Godot 12,976 steps `timing_verified=true` | **DIRECT + AUDIT / PASS for default timing**；`SetSpeed` runtime caller/封包語意仍 PARTIAL |
+| ACT 動作／時間／速度 | `Enemy/EN023A.ACT` 438 bytes；SHA-256 `7185027b043640f87daeb901b4bd7319d869b8940abf0209bd73713a13118609`；HK2 loose 178/178 ACT 完整解析 | `xnAction::Load/Update/SetSpeed .text:005574A3–0055777D`；`CSGOChar::SetSpeed .text:004BF3B5`；`CELxnObj::SetActionSpeed .text:00541BF0`；CDDxDrawObj/CELxnObj vtable `+0x2C=SetActionSpeed`；`SystemSetFrame .text:0050751A`；fixed-loop 與 Map→Char/Enemy→xnAction Update 鏈 | `audit_action_timing_binary.py` 對 Client.bin/SGOClient.bin 各唯一驗證 40/25、decrement、`xnAction::SetSpeed`、duration scale、fixed loop、SystemSetFrame(50)；`audit_action_speed_reference.py` 驗證 world-speed/action-speed 分離，31 個 InitAction→immediate→SetActionSpeed sequence 的 immediate 全為 50；3,303 frames、default 20ms tick；50-group Godot 12,976 steps `timing_verified=true` | **DIRECT + AUDIT / PASS for default timing + reference speed separation**；HK2 caller/packet/data-driven action-speed mapping 仍 PARTIAL |
 | 怪物方向／鏡像 | Data1+loose 已知地圖 29 visual；loose audit 50/53 完整 | `CSGOEnemDrawLogic::SetDirection .text:004CB708–004CB7E8`、`InitAction .text:004CBF8C–004CC111` | 29 known-map groups 1,160/1,160 logical facing 單頁；50 loose groups 2,000/2,000 atomic locality | **DIRECT + AUDIT / PASS for catalog mapping**；EN060A/EN061A/EN115A 舊 loose 特例及原版畫面仍需獨立確認 |
 | 人物方向 | HK2 Player 真 SPR/DrawOrder 存在；來源對應仍在研究 | `CSGOCharDrawLogic::DirectionMapping .text:004C263F–004C283A`、`SetDirection .text:004C24EA–004C25B3` | `legacy_direction.py` 純函式測試 | **DIRECT / PARTIAL**；action ID、紙娃娃圖層來源、鏡像後 pivot 視覺未完成 |
 | 人物 draw-order | `Player/CharDrawOrder.dat` 4,442 bytes；SHA-256 `530bb046a8041e3af33418252784ee46d5295a20f37d639a1c617ba812865284` | `LoadDrawOrderDat .text:00408049`；雙槽位解析 `.text:004082D2–004084BC` | 兩份主要表 102/102 行展開；未知 token fail | **DIRECT + AUDIT / PARTIAL**；實際裝備遮擋畫面尚未逐動作比對 |
@@ -41,7 +41,7 @@ HK2 本機可執行檔與參考版本**不是 binary-identical**：
 
 1. **AS005 原版視覺實證未完成**：人物站立／行走／攻擊／受擊／死亡、裝備遮擋、pivot、鏡像後位置、alpha/color 仍缺同版本原版畫面逐格對照。
 2. **AS008 權利 Gate 阻塞**：尚未確認舊圖、UI、音訊的公開轉換／發布權；因此只能在本機私有素材工作集測試。
-3. ACT **default 毫秒時序已由 HK2 binary 驗證**；仍缺人物 numeric action ID→SPR/ACT、紙娃娃 source slot、`SetSpeed` runtime caller/封包語意。物品 ground page 已由 HK2 binary 驗證，但 12 個 duplicate visual conflict 的 HK2 同版 lookup precedence 仍未證實。
+3. ACT **default 毫秒時序與 HK2 `xnAction::SetSpeed` primitive 已由 binary 驗證**；Paradise reference 也已證實 world movement speed 與 action speed 分離、31 個 immediate action-speed caller 全為 50。仍缺人物 numeric action ID→SPR/ACT、紙娃娃 source slot、HK2 caller/packet/data-driven action-speed mapping。物品 ground page 已由 HK2 binary 驗證，但 12 個 duplicate visual conflict 的 HK2 同版 lookup precedence 仍未證實。
 4. 正式 Client 的 StreamingManager、GPU upload budget、切圖／登出回收與 network/render isolation 尚未進入實作 Gate。
 
 因此目前允許：繼續本機 decoder/viewer/atlas/benchmark/來源研究；**不得把 AS009 PASS 誤寫成整個素材 Gate PASS，也不得宣稱正式 Client/Server 已完成。**
@@ -51,6 +51,7 @@ HK2 本機可執行檔與參考版本**不是 binary-identical**：
 ```powershell
 py -m unittest discover -s tools/tests -q
 py tools/audit_action_timing_binary.py 'C:\\SGO\\Stargate Online IE HK2\\Client.bin' 'C:\\SGO\\Stargate Online IE HK2\\SGOClient.bin' --output reports/hk2-action-timing-audit.json
+py tools/audit_action_speed_reference.py 'C:\\SGO\\Recovered\\Old\\ClientData\\Paradise.exe.lst' --output reports/action-speed-reference-audit.json
 py tools/legacy_group_archive.py 'C:\SGO\Stargate Online IE HK2\Data1.dat' --list
 py tools/audit_enemy_animations.py <private-overlay> reports/enemy-animation-audit.json
 py tools/audit_action_page_locality.py <private-atlas>\enemy_catalog.json --require-single-page

@@ -7,7 +7,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from audit_action_timing_binary import (
     ACTION_DEFAULTS, LOOP_PREFIX, LOOP_SUFFIX, SYSTEM_FRAME_CORE,
     find_all, find_loop_signatures, legacy_default_update_calls,
-    legacy_reference_duration_ms,
+    legacy_effective_update_ticks, legacy_reference_duration_ms,
 )
 
 
@@ -29,6 +29,9 @@ class TimingBinaryTests(unittest.TestCase):
         self.assertEqual(legacy_default_update_calls(3), 4)
         self.assertEqual(legacy_reference_duration_ms(6), 180)
         self.assertEqual(legacy_reference_duration_ms(3), 80)
+        self.assertEqual(legacy_default_update_calls(1, 50), 0)
+        self.assertEqual(legacy_effective_update_ticks(1, 50), 1)
+        self.assertEqual(legacy_reference_duration_ms(1, 50), 20)
 
     def test_invalid_speed(self):
         with self.assertRaises(ValueError):

@@ -12,6 +12,7 @@
 - ViewProjection 輸出不可變 VisualSnapshot/ViewModel；WorldRenderer 與 UIRenderer 只讀取投影，不能直接持有 socket 或呼叫 DB。
 - Client Input/點地板/選怪/按快捷鍵經 CommandGateway 轉成 typed request，按協定即時傳送；只允許無權威的視覺預測。
 - **30 FPS 不表示 network 30Hz，120 FPS 不表示 network 120Hz**。控制面板的 FPS 只能控制呈現工作率，不能控制網路或 State 工作率。
+- **World movement speed 不等於 ACT action speed**：Paradise reference 的 `CSGOChar::SetSpeed` 與 `CELxnObj::SetActionSpeed→xnAction::SetSpeed` 是兩條獨立路徑；未收到明確 action-speed 語意時，不得拿移動速度去乘 `AnimationPlayer.speed_scale` 或任何 clip rate。詳 [HK2_ACTION_SPEED.md](HK2_ACTION_SPEED.md)。
 
 ## 2. 四種獨立時間軸
 

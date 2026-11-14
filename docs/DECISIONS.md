@@ -150,7 +150,16 @@ ADR-016 的逐怪物尺寸實驗補充（2026-11-14）：50 組各測 1024／204
 ## ADR-022 — Animation timeline 使用 verified 50Hz ACT timing，與移動/render FPS 解耦（2026-11-14）
 
 - Status: **ACCEPTED DEFAULT-TIMING CONTRACT / DYNAMIC SPEED PARTIAL**。
-- Decision: HK2 ACT default timing 採 `floor(raw_time * 40 / 25) * 20ms`；50Hz/20ms fixed-update、40/25、decrement 與 `SystemSetFrame(50)` 均由 HK2 Client.bin / SGOClient.bin byte audit 驗證。Runtime 保留 raw_time/ticks/default-ms，`SetSpeed` 未完整映射前不得任意改寫。
+- Decision: HK2 ACT default timing 採 `max(1, floor(raw_time * 40 / 25)) * 20ms`；預設 HK2 raw_time>=1 時與原公式相同。50Hz/20ms fixed-update、40/25、decrement、`xnAction::SetSpeed` 與 `SystemSetFrame(50)` 均由 HK2 Client.bin / SGOClient.bin byte audit 驗證。Runtime 保留 raw_time/ticks/default-ms；dynamic speed 使用同樣 integer division + minimum one fixed tick。
 - Rendering rule: Animation timeline 不由 Render FPS、UI FPS 或 entity world movement speed 推進。30/60/120 FPS 只取樣同一時間軸；角色跑得快、機甲位移快都不能因此讓 walk/attack/hit 動畫自動加速。只有明確 action-speed 語意可改 timeline rate。
 - Evidence: `tools/audit_action_timing_binary.py`、[HK2_ACTION_TIMING.md](HK2_ACTION_TIMING.md)；178/178 ACT schema v3 PASS，50-group Godot 12,976 playback steps `timing_verified=true`。
-- Remaining: 人物 numeric action ID、`SetSpeed` caller/packet 語意、ACT event callback、AS005 原版逐格畫面。
+- Remaining: 人物 numeric action ID、HK2 action-speed caller/packet/data-driven 語意、ACT event callback、AS005 原版逐格畫面。
+
+## ADR-023 — World Movement Speed 與 ACT Action Speed 完全分離（2026-11-14）
+
+- Status: **ACCEPTED RUNTIME CONTRACT / HK2 CALLER MAP PARTIAL**。
+- Decision: 角色／怪物／寵物／機甲的世界位移速度不可自動改變 ACT playback rate。ACT speed 只能由明確 action-speed 語意改變；Render FPS 同樣不得乘入 action timeline。
+- Reference evidence: `CSGOChar::SetSpeed .text:004BF3B5` 只寫 `[this+0x17C]`，沒有呼叫 action speed；`CELxnObj::SetActionSpeed .text:00541BF0` 才呼叫 `xnAction::SetSpeed`。CDDxDrawObj 與 CELxnObj vtable 都以 `+0x2C` 指向 SetActionSpeed。保守掃描「附近 InitAction(+0x24) → push immediate → SetActionSpeed(+0x2C)」得到 31 個 sequence／28 個函式，immediate 值全部為 50。
+- HK2 evidence: Client.bin / SGOClient.bin 各唯一命中 `xnAction::SetSpeed` signature；dynamic duration 使用 integer division，counter=0 仍至少等待下一個 20ms fixed update。
+- Implementation rule: 不得用 `entity_speed`、路段速度、機甲速度或 interpolation velocity 去設 `AnimationPlayer.speed_scale`。若未收到/建立 explicit action-speed，使用 verified ACT default timing。詳 [HK2_ACTION_SPEED.md](HK2_ACTION_SPEED.md)。
+- Remaining: HK2 caller 函式級 mapping、packet/data-driven non-immediate speed、人物 action mapping、event callback。

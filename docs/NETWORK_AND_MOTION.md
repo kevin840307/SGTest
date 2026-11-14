@@ -58,7 +58,7 @@ Teleport/MapTransfer：
 3. Attack/Hit/Skill ActionStarted 可指定面向並鎖到規格化的 action end 或被更高優先事件打斷。
 4. Late Move/Idle 只更新 motion state，不可重播/覆寫一秒內正進行的一次性攻擊/受擊動作。
 5. 死亡/傳送等高優先事件可以打斷任何動畫；重生恢復 Spawn 的初始 Facing。
-6. 本地/遠端/怪物/機甲不因移動速度快而加速動畫播放，clip speed 由獨立 GameplayAnimationSpeed/設計值控制。
+6. 本地/遠端/怪物/機甲不因移動速度快而加速動畫播放。此點已有 Paradise 直接證據：`CSGOChar::SetSpeed .text:004BF3B5` 只寫 world-speed 欄位，不呼叫 ACT action-speed；ACT speed 走獨立 `CELxnObj::SetActionSpeed` 路徑。clip rate 只能由 verified ACT timing + 明確 action-speed 語意控制，詳 [HK2_ACTION_SPEED.md](HK2_ACTION_SPEED.md)。
 
 ## 5. Animation State Machine（不可由 NetworkManager 直接設動畫）
 

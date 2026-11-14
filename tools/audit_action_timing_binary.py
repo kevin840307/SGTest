@@ -15,6 +15,7 @@ from pathlib import Path
 
 ACTION_DEFAULTS = bytes.fromhex("c7431428000000c7431819000000")
 ACTION_DECREMENT = bytes.fromhex("8b4e0c498bc1894e0c85c0")
+ACTION_SET_SPEED = bytes.fromhex("85c974078b442404894118c20400")
 DURATION_SCALE = bytes.fromhex("0faf461499f77e1889460c")
 SYSTEM_FRAME_CORE = bytes.fromhex("b8e803000099f77d08")
 SYSTEM_FRAME_PROLOGUE = bytes.fromhex("558bec51894dfc")
@@ -105,6 +106,7 @@ def audit_binary(path: Path) -> dict:
     sections = parse_pe_sections(blob)
     defaults = find_all(blob, ACTION_DEFAULTS)
     decrement = find_all(blob, ACTION_DECREMENT)
+    set_speed = find_all(blob, ACTION_SET_SPEED)
     duration = find_all(blob, DURATION_SCALE)
     frame_core = find_all(blob, SYSTEM_FRAME_CORE)
     loops = find_loop_signatures(blob)
@@ -124,6 +126,7 @@ def audit_binary(path: Path) -> dict:
     verified = (
         len(defaults) == 1
         and len(decrement) == 1
+        and len(set_speed) == 1
         and len(duration) == 2
         and len(frame_core) == 1
         and len(loops) == 1
@@ -137,6 +140,7 @@ def audit_binary(path: Path) -> dict:
         "offsets": {
             "action_defaults_40_25": defaults,
             "action_update_decrement": decrement,
+            "action_set_speed": set_speed,
             "duration_scale": duration,
             "system_set_frame_core": frame_core,
             "system_loop": loops,
@@ -157,9 +161,14 @@ def legacy_default_update_calls(raw_duration: int, speed: int = 25) -> int:
     return raw_duration * 40 // speed
 
 
+def legacy_effective_update_ticks(raw_duration: int, speed: int = 25) -> int:
+    """Actual fixed updates before a frame can advance; Update decrements first."""
+    return max(1, legacy_default_update_calls(raw_duration, speed))
+
+
 def legacy_reference_duration_ms(raw_duration: int, speed: int = 25,
                                  tick_ms: int = 20) -> int:
-    return legacy_default_update_calls(raw_duration, speed) * tick_ms
+    return legacy_effective_update_ticks(raw_duration, speed) * tick_ms
 
 
 def main() -> int:
@@ -182,6 +191,9 @@ def main() -> int:
             "raw_6_ms_at_50hz": legacy_reference_duration_ms(6),
             "raw_3_update_calls": legacy_default_update_calls(3),
             "raw_3_ms_at_50hz": legacy_reference_duration_ms(3),
+            "raw_1_speed_50_counter": legacy_default_update_calls(1, 50),
+            "raw_1_speed_50_effective_ticks": legacy_effective_update_ticks(1, 50),
+            "raw_1_speed_50_ms": legacy_reference_duration_ms(1, 50),
         },
         "scope": (
             "Byte signatures verify timing primitives and SystemSetFrame(50). "
