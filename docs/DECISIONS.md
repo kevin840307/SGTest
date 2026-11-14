@@ -163,3 +163,12 @@ ADR-016 的逐怪物尺寸實驗補充（2026-11-14）：50 組各測 1024／204
 - HK2 evidence: Client.bin / SGOClient.bin 各唯一命中 `xnAction::SetSpeed` signature；dynamic duration 使用 integer division，counter=0 仍至少等待下一個 20ms fixed update。
 - Implementation rule: 不得用 `entity_speed`、路段速度、機甲速度或 interpolation velocity 去設 `AnimationPlayer.speed_scale`。若未收到/建立 explicit action-speed，使用 verified ACT default timing。詳 [HK2_ACTION_SPEED.md](HK2_ACTION_SPEED.md)。
 - Remaining: HK2 caller 函式級 mapping、packet/data-driven non-immediate speed、人物 action mapping、event callback。
+
+## ADR-024 — main 整合、獨立 Godot Client 與 C#／.NET 8 Server（2026-11-14）
+
+- Status: 使用者明確指定，實作與本機測試。
+- Decision: 在 `C:\SGO\SRC\SGTest` 直接修改 main，保留 master Git 歷史並合入程式；不另建 worktree。client 放 Godot 專案，server 放獨立 C#／.NET 8（覆蓋舊文件 .NET 10 選型）。
+- Server 移植既有權威模擬，無 Godot／圖片依賴；WebSocket + bounded MessagePack v1。Client I/O worker 與渲染分開；完整 FPS／失焦 trace Gate 仍 NOT VERIFIED。
+- Conflict resolution: 保留 main 的 tools/convert_assets.py、inspect_act.py 與研究工具；runtime decoder 改名 runtime_spr.py。新工作目錄原有未提交 ACT／人物研究檔案保留，不覆蓋或夾帶進本次 merge commit。
+- Evidence: C# domain 342 檢查、Godot wire fixture／狀態／預測／方向／地圖測試；8 client／1000 monster／5000 drop，及 2-client combat-arena 與原生 1440×900 測試見 reports。
+- Migration: root/project.godot 移到 client/project.godot；Godot Server 移除，以 dotnet 啟動；生成 Client assets 與 Server collision 分開。M0 視覺／授權缺口不因此宣稱已完成。

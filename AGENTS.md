@@ -1,5 +1,10 @@
 # SGTest 開發與 AI Session 交接規則
 
+## 2026-11-14 使用者最新指定
+
+直接修改 `C:\SGO\SRC\SGTest` 的 main，不另建 worktree；合併 master 的可執行原型，Godot Client 放 client，C#/.NET 8 Server 放 server。這項明確指示優先於下方舊 M0「不得開始原型」與 .NET 10 敘述；原版媒體不公開、格式／原版視覺／授權缺口仍須如實記錄。不要覆蓋工作樹原有 ACT／人物研究修改。
+
+
 ## 開始工作前（強制）
 
 1. git fetch，確認 SGTest main 最新 HEAD；先讀 README.md、SPEC.md 第7節、todo.txt、docs/LEGACY_ASSET_PIPELINE.md、docs/HK2_INVENTORY.md；素材 Gate 通過後才讀其他遊戲系統文件。

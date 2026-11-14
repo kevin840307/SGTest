@@ -1,5 +1,21 @@
-# Server 工作區
+# C#／.NET 8 Server
 
-這個資料夾保留給獨立的 .NET 10 Server；目前 M0 尚未建立正式服務。Server 程式、測試、負載工具與部署設定將只放在 `server/`。Client/Server 只透過版本化 wire 與內容契約交換資料，不共享可變領域物件。
+入口：`SGTest.Server.csproj`。從儲存庫根目錄執行：
 
-初始切片依 [SPEC.md](../SPEC.md)與 [架構](../docs/ARCHITECTURE.md) 建立：WebSocket gateway、單寫入 MapActor、Server 權威座標／碰撞／戰鬥／怪物／多掉落／拾取、AOI 和序列事件。初版使用 SQLite；SQL、交易與 migration 僅在 Infrastructure provider，Domain/Application 對其他 SQL provider 保持獨立。可用地圖 Blocking 與權利範圍需先核對 [HK2 地圖缺口](../docs/HK2_MAP_REFERENCES.md)。目前本機只有 .NET 9 SDK，建立 .NET 10 專案前需安裝對應 SDK 並驗證 CI。
+```powershell
+dotnet run --project server/SGTest.Server.csproj -c Release -- --map=13
+# 純模擬測試
+dotnet run --project server/tests/SGTest.Server.Tests.csproj -c Release
+```
+
+- `Domain/World.cs`：單寫入權威移動／AI／戰鬥／掉落／拾取，無 transport、Godot 或 DB 依賴。
+- `Domain/CollisionGrid.cs`：碰撞、滑動、出生點與不可穿牆契約。
+- `Application/WorldHost.cs`：單調固定 30Hz 模擬、有界 command queue、AOI 及事件發布；不等待網路 Send。
+- `Transport/Wire.cs`：版本化 MessagePack 子集、大小／深度限制與數值驗證。
+- `Transport/Session.cs`：有界非同步發送佇列；慢客戶端關閉並重連，不能無限堆積或靜默丟失戰鬥事件。
+- `Program.cs`：ASP.NET Core WebSocket `/game`、`/health`、連線與命令速率限制。
+- `content/`：由 `tools/export_server_content.py` 生成，只包含碰撞與指紋，不包含圖片。
+
+預設 `127.0.0.1:27888`；參數 `--bind=0.0.0.0 --port=27888 --monsters=1000 --drops=5000 --map=13`。`--content=絕對路徑` 可指定部署資料。使用 workstation GC，避免小型單服因每核心 Server GC heap 增加記憶體。
+
+目前為開發用服務；正式帳號驗證、SQLite 持久化、TLS 部署及完整 MMORPG 規則仍待實作。協定見 [RUNTIME_PROTOCOL.md](../docs/RUNTIME_PROTOCOL.md)。Server 不引用 Client 內部類別。

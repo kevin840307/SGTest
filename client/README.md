@@ -1,7 +1,13 @@
-# Client 工作區
+# Godot 4 Client
 
-這個資料夾保留給獨立的 Godot 4 Client；目前 M0 只完成原版素材研究與本機轉換器，尚未建立正式遊戲場景。Godot 專案、Client 測試與 UI 資源將只放在 `client/`，不引用 Server 專案的內部類別或資料庫。
+Godot 專案入口是本資料夾的 `project.godot`，不是儲存庫根目錄。先啟動 `server/` 的 C#／.NET 8 服務，再執行：
 
-初始切片依 [SPEC.md](../SPEC.md)、[架構](../docs/ARCHITECTURE.md)與 [素材策略](../docs/ASSET_RUNTIME_STRATEGY.md) 實作：版本化協定接收、世界狀態 reducer、依 viewport/zoom 的可見渲染、人物動作與紙娃娃、可切換金色／現代 UI。網路與固定邏輯不隨畫面 FPS 或失焦降頻。
+```powershell
+& 'C:\SGO\Godot\Godot_v4.7.2-stable_win64_console.exe' --path client
+```
 
-視窗規格依使用者 2026-11-14 補充：**最大寬度約 1440 像素**。預設 1280×720，提供 800×600、1024×768、1366×768、1440×810、1440×900 及視窗拖曳調整；UI/文字縮放和世界鏡頭縮放為不同設定。正式 Client 尚未建立，此處是後續實作契約。
+客戶端場景、GDScript、shader、測試及視覺工具都在此目錄。`assets/generated/` 為本機原版轉換產物，不進 Git；從根目錄執行 `tools/rebuild_assets.ps1` 重建。
+
+`scripts/network_client.gd` 的 worker 獨占 WebSocketPeer；`message_pack.gd` 負責協定編解碼；`client_replica.gd` 處理獨立實體狀態與歷史；`local_prediction.gd` 僅控制本地視覺預測。人物、怪物各自取樣動作起始時間，不等整批快照才一起移動。
+
+預設 1280×720，視窗最大寬 1440；UI 可選尺寸、拖曳調整，F2 切換金色／現代樣式。Client 不包含伺服器模擬或資料庫。

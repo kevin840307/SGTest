@@ -1,0 +1,326 @@
+{
+  "passed": true,
+  "clients": 2,
+  "monsters": 1,
+  "drops": 0,
+  "combat_arena": true,
+  "map_id": 0,
+  "seconds": 15,
+  "joined": 2,
+  "snapshots_received_by_all": true,
+  "actions_received_by_all": true,
+  "inventories_received_by_all": false,
+  "health_received_by_all": true,
+  "death_received_by_all": true,
+  "respawn_received_by_all": true,
+  "impairment": null,
+  "prediction_metrics": [
+    [
+      {
+        "max_correction_px": 0.0,
+        "max_pending": 3,
+        "pending": 0,
+        "reconciliations": 35
+      },
+      {
+        "max_correction_px": 0.0,
+        "max_pending": 3,
+        "pending": 0,
+        "reconciliations": 66
+      },
+      {
+        "max_correction_px": 0.0,
+        "max_pending": 4,
+        "pending": 0,
+        "reconciliations": 105
+      }
+    ],
+    [
+      {
+        "max_correction_px": 0.0,
+        "max_pending": 4,
+        "pending": 3,
+        "reconciliations": 46
+      },
+      {
+        "max_correction_px": 0.0,
+        "max_pending": 4,
+        "pending": 0,
+        "reconciliations": 66
+      },
+      {
+        "max_correction_px": 0.0,
+        "max_pending": 4,
+        "pending": 0,
+        "reconciliations": 93
+      }
+    ]
+  ],
+  "prediction_queues_bounded": true,
+  "prediction_ready_by_all": true,
+  "transport": "websocket-messagepack-v1",
+  "server_runtime": ".NET 8",
+  "headless": true,
+  "samples": [
+    [
+      {
+        "cpu_one_core_percent": 13.8,
+        "rss_bytes": 60092416,
+        "processes": 1
+      },
+      {
+        "cpu_one_core_percent": 0.0,
+        "rss_bytes": 139071488,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 0.0,
+        "rss_bytes": 139251712,
+        "processes": 2
+      }
+    ],
+    [
+      {
+        "cpu_one_core_percent": 10.8,
+        "rss_bytes": 60583936,
+        "processes": 1
+      },
+      {
+        "cpu_one_core_percent": 6.2,
+        "rss_bytes": 139079680,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 4.6,
+        "rss_bytes": 139259904,
+        "processes": 2
+      }
+    ],
+    [
+      {
+        "cpu_one_core_percent": 4.6,
+        "rss_bytes": 60829696,
+        "processes": 1
+      },
+      {
+        "cpu_one_core_percent": 6.2,
+        "rss_bytes": 139083776,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 6.2,
+        "rss_bytes": 139264000,
+        "processes": 2
+      }
+    ],
+    [
+      {
+        "cpu_one_core_percent": 0.0,
+        "rss_bytes": 60968960,
+        "processes": 1
+      },
+      {
+        "cpu_one_core_percent": 6.2,
+        "rss_bytes": 139083776,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 6.2,
+        "rss_bytes": 139264000,
+        "processes": 2
+      }
+    ],
+    [
+      {
+        "cpu_one_core_percent": 0.0,
+        "rss_bytes": 61132800,
+        "processes": 1
+      },
+      {
+        "cpu_one_core_percent": 4.6,
+        "rss_bytes": 139096064,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 4.6,
+        "rss_bytes": 139276288,
+        "processes": 2
+      }
+    ],
+    [
+      {
+        "cpu_one_core_percent": 0.0,
+        "rss_bytes": 61259776,
+        "processes": 1
+      },
+      {
+        "cpu_one_core_percent": 1.6,
+        "rss_bytes": 139100160,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 3.1,
+        "rss_bytes": 139280384,
+        "processes": 2
+      }
+    ],
+    [
+      {
+        "cpu_one_core_percent": 1.5,
+        "rss_bytes": 57692160,
+        "processes": 1
+      },
+      {
+        "cpu_one_core_percent": 3.1,
+        "rss_bytes": 139104256,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 3.1,
+        "rss_bytes": 139284480,
+        "processes": 2
+      }
+    ],
+    [
+      {
+        "cpu_one_core_percent": 0.0,
+        "rss_bytes": 57851904,
+        "processes": 1
+      },
+      {
+        "cpu_one_core_percent": 6.2,
+        "rss_bytes": 139108352,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 6.2,
+        "rss_bytes": 139288576,
+        "processes": 2
+      }
+    ],
+    [
+      {
+        "cpu_one_core_percent": 0.0,
+        "rss_bytes": 58580992,
+        "processes": 1
+      },
+      {
+        "cpu_one_core_percent": 4.6,
+        "rss_bytes": 139112448,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 4.6,
+        "rss_bytes": 139292672,
+        "processes": 2
+      }
+    ],
+    [
+      {
+        "cpu_one_core_percent": 0.0,
+        "rss_bytes": 58486784,
+        "processes": 1
+      },
+      {
+        "cpu_one_core_percent": 6.2,
+        "rss_bytes": 139112448,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 6.2,
+        "rss_bytes": 139292672,
+        "processes": 2
+      }
+    ],
+    [
+      {
+        "cpu_one_core_percent": 0.0,
+        "rss_bytes": 57856000,
+        "processes": 1
+      },
+      {
+        "cpu_one_core_percent": 4.7,
+        "rss_bytes": 139116544,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 4.7,
+        "rss_bytes": 139296768,
+        "processes": 2
+      }
+    ],
+    [
+      {
+        "cpu_one_core_percent": 0.0,
+        "rss_bytes": 57991168,
+        "processes": 1
+      },
+      {
+        "cpu_one_core_percent": 1.5,
+        "rss_bytes": 139120640,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 1.5,
+        "rss_bytes": 139300864,
+        "processes": 2
+      }
+    ],
+    [
+      {
+        "cpu_one_core_percent": 0.0,
+        "rss_bytes": 58122240,
+        "processes": 1
+      },
+      {
+        "cpu_one_core_percent": 6.2,
+        "rss_bytes": 139124736,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 6.2,
+        "rss_bytes": 139304960,
+        "processes": 2
+      }
+    ],
+    [
+      {
+        "cpu_one_core_percent": 0.0,
+        "rss_bytes": 58249216,
+        "processes": 1
+      },
+      {
+        "cpu_one_core_percent": 6.2,
+        "rss_bytes": 139128832,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 6.2,
+        "rss_bytes": 139309056,
+        "processes": 2
+      }
+    ],
+    [
+      {
+        "cpu_one_core_percent": 0.0,
+        "rss_bytes": 58826752,
+        "processes": 1
+      },
+      {
+        "cpu_one_core_percent": 1.5,
+        "rss_bytes": 139132928,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 3.1,
+        "rss_bytes": 139313152,
+        "processes": 2
+      }
+    ]
+  ],
+  "logs": [
+    "SGTest C# server listening ws://127.0.0.1:27888/game map=0\nplayer 2 joined\nplayer 3 joined\nserver_metrics tick=300 tick_p95_ms=0.168 tick_p99_ms=2.007 players=2\n",
+    "Godot Engine v4.7.2.stable.official.ed1daf0bf - https://godotengine.org\n\nSGO client starting\nSGO client connecting to 127.0.0.1:27888\nclient connected with peer 3\nprediction_ready\naction_received\nhealth_received\ndeath_received\nsnapshot_received tick=150 players=2 monsters=1 drops=0\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":3,\"pending\":0,\"reconciliations\":35}\nrespawn_received\nsnapshot_received tick=300 players=2 monsters=1 drops=0\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":3,\"pending\":0,\"reconciliations\":66}\nsnapshot_received tick=450 players=2 monsters=1 drops=0\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":4,\"pending\":0,\"reconciliations\":105}\n",
+    "Godot Engine v4.7.2.stable.official.ed1daf0bf - https://godotengine.org\n\nSGO client starting\nSGO client connecting to 127.0.0.1:27888\nclient connected with peer 2\nprediction_ready\naction_received\nhealth_received\ndeath_received\nsnapshot_received tick=150 players=2 monsters=1 drops=0\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":4,\"pending\":3,\"reconciliations\":46}\nrespawn_received\nsnapshot_received tick=300 players=2 monsters=1 drops=0\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":4,\"pending\":0,\"reconciliations\":66}\nsnapshot_received tick=450 players=2 monsters=1 drops=0\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":4,\"pending\":0,\"reconciliations\":93}\n"
+  ]
+}

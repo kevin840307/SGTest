@@ -62,3 +62,13 @@ AS001（HK2 全目錄 group archive 掃描）| pending | tools/scan_group_archiv
 AS002（HK2 ACT default timing）| 074b639 | tools/audit_action_timing_binary.py、inspect_act.py、convert_assets.py、audit_enemy_animations.py、compile_enemy_atlas_catalog.py、godot_enemy_catalog_probe.gd、view_enemy_animation.py、docs/HK2_ACTION_TIMING.md | Client.bin/SGOClient.bin 各唯一命中 40/25、decrement、duration scale、fixed loop、SystemSetFrame(50)，default tick=20ms；HK2 178/178 ACT schema v3 PASS；50 組怪 12,976 playback steps Godot 4.7.2 headless timing_verified=true；真 EN023A S facing1 首幀 180ms；`py -m unittest discover -s tools/tests -q` 83 tests PASS。仍待 SetSpeed caller/packet、人物 action ID、event callback 與 AS005 視覺。
 
 AS002（movement/action-speed separation）| aba7c04 | tools/audit_action_speed_reference.py、audit_action_timing_binary.py、docs/HK2_ACTION_SPEED.md、CLIENT_RUNTIME_ISOLATION.md、NETWORK_AND_MOTION.md | Paradise reference 證實 CSGOChar::SetSpeed 只寫 world-speed，不呼叫 ACT speed；CDDxDrawObj/CELxnObj vtable +0x2C=SetActionSpeed，31 個保守 InitAction→immediate→SetActionSpeed sequence 的 immediate 全為50。HK2 Client.bin/SGOClient.bin 各唯一命中 xnAction::SetSpeed signature；dynamic counter=0 仍至少 1×20ms fixed tick。py -m unittest discover -s tools/tests -q：85 tests PASS。仍待 HK2 caller/packet/data-driven speed、人物 action mapping、event callback、AS005 視覺。
+
+===== 使用者 2026-11-14 最新指示：合併與分離 =====
+INT001 [~] master 合入 main，直接修改目前工作目錄；Godot Client 放 client，C# Server 放 server。使用者已授權繼續開發，不代表 M0 原版逐格視覺／發布權利已通過。
+修改前：main 只有研究工具與空工作區，master 有混合 Godot Client/Server 原型。
+指標：保留研究工具和 Git 歷史；獨立 Godot Client；C# Server 不依賴 Godot／圖片；移動、戰鬥、掉落、拾取不退化。
+回歸：main Python 研究測試、素材管線測試、Godot 狀態與動畫測試、C# world/碰撞/輸入測試、C# Server + Godot Client 實際多人及原生畫面。
+
+INT001 實測更新：C#/.NET 8 build 零警告；339 domain checks；main 研究測試 79（移入新資料夾前）；Godot 5 組狀態／預測／地圖／方向／跨語言 wire 通過；8 client／1000 monster／5000 drop 30秒與2人combat-arena15秒通過。後續在指定新目錄重新驗證後記錄 merge SHA。原有未提交研究更動保留於 worktree，不納入本次提交。
+
+INT001 [x] 在指定的 C:\SGO\SRC\SGTest 重新驗證：89 個研究測試、5 個 runtime asset fixture、3 個 map fixture、342 個 C# domain/wire 檢查，以及 Godot 方向／碰撞／replica-clock／prediction／跨語言 wire 全 PASS。實際 C#/.NET8 + Godot：8客戶端／1000怪／5000掉落30秒 PASS；原生1440×900 GPU視窗 PASS。命令見README；報告見reports/README.md、network_load.json、rendered_probe.json。merge commit 的父節點包含 e2d84c2(main) 及02ca1db(master)，SHA於git log --merges -1查詢。CI workflow已加入，遠端執行結果尚待推送後確認。此項只完成整合／目錄／C#移植，其他M0/M1/M2缺口未改標完成。

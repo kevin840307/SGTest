@@ -1,0 +1,11 @@
+{
+  "draw_calls": 14.0,
+  "fingerprint": "3ff4033bf50d56699a73748f4d234e2ee6d5645af88a46d55f7151ea227fccbb",
+  "map_id": 13,
+  "object_rgba_bytes": 2546340,
+  "renderer": "NVIDIA GeForce RTX 3050",
+  "resident_object_types": 2,
+  "total_terrain_cells": 230400,
+  "visible_objects": 8,
+  "visible_terrain_instances": 1488
+}
