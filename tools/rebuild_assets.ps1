@@ -11,6 +11,8 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Atlas conversion failed; inspect catalog errors' }
     python tools/copy_support_assets.py .cache/client assets/generated
     if ($LASTEXITCODE -ne 0) { throw 'Support asset conversion failed' }
+    python tools/build_maps.py .cache/client assets/generated --map 13
+    if ($LASTEXITCODE -ne 0) { throw 'Original map conversion failed' }
     python tools/validate_assets.py .cache/client assets/generated --all-pixels
     if ($LASTEXITCODE -ne 0) { throw 'Atlas pixel validation failed' }
     & $Godot --headless --path . --script tools/benchmark_atlas.gd

@@ -56,6 +56,13 @@ var health_observed := false
 var death_observed := false
 var respawn_observed := false
 var observed_dead: Dictionary = {}
+var map_id := 13
+var map_fingerprint := ""
+var map_ready := false
+var terrain: MultiMeshInstance2D
+var map_objects := preload("res://scripts/map_objects.gd").new()
+var render_order: Array = []
+var render_elapsed := 1.0
 
 func _ready() -> void:
 	var arguments := OS.get_cmdline_user_args()
@@ -73,6 +80,10 @@ func _ready() -> void:
 			bind_address = argument.trim_prefix("--bind=")
 		if argument.begins_with("--assets="):
 			asset_root = argument.trim_prefix("--assets=")
+		if argument.begins_with("--map="):
+			map_id = maxi(0,int(argument.trim_prefix("--map=")))
+	if combat_arena:
+		map_id = 0
 	multiplayer.peer_disconnected.connect(_on_peer_disconnected)
 	if is_server:
 		_start_server()
@@ -94,6 +105,20 @@ func _ready() -> void:
 				get_viewport().get_texture().get_image().save_png(argument.trim_prefix("--capture="))
 
 func _start_server() -> void:
+	if map_id != 0:
+		var folder := asset_root.path_join("maps/%d" % map_id)
+		var metadata = JSON.parse_string(FileAccess.get_file_as_string(folder.path_join("world.json")))
+		var grid := preload("res://scripts/collision_grid.gd").new()
+		var error: Error = grid.open(folder.path_join("blocking.bin"))
+		if not metadata is Dictionary or int(metadata.get("version",0)) != 2 or error != OK or world.configure_map(grid) != OK:
+			push_error("Cannot load authoritative map %d" % map_id)
+			get_tree().quit(1)
+			return
+		if FileAccess.get_sha256(folder.path_join("blocking.bin")) != str(metadata.collision_sha256):
+			push_error("Map collision bytes do not match the manifest")
+			get_tree().quit(1)
+			return
+		map_fingerprint = metadata.fingerprint
 	var peer := ENetMultiplayerPeer.new()
 	peer.set_bind_ip(bind_address)
 	var error := peer.create_server(PORT, 128)
@@ -133,7 +158,34 @@ func _on_peer_connected(id: int) -> void:
 	if not is_server:
 		return
 	world.join(id)
+	_world_info.rpc_id(id,map_id,map_fingerprint)
 	print("player %d joined" % id)
+
+@rpc("authority", "call_remote", "reliable", 0)
+func _world_info(server_map: int, fingerprint: String) -> void:
+	if is_server:
+		return
+	map_id = server_map
+	if terrain != null:
+		terrain.queue_free()
+		terrain = null
+	map_objects.reset()
+	render_order.clear()
+	render_elapsed = 1.0
+	if server_map != 0:
+		terrain = preload("res://scripts/terrain_renderer.gd").new()
+		var error: Error = terrain.open(asset_root,server_map)
+		if error != OK or terrain.data.fingerprint != fingerprint:
+			push_error("Map assets do not match the server (%d)" % server_map)
+			get_tree().quit(1)
+			return
+		terrain.z_index = -100
+		add_child(terrain)
+		map_objects.configure(asset_root,terrain.data)
+		info_label.text = "已連線　%s" % terrain.data.name
+	else:
+		info_label.text = "已連線　測試場地"
+	map_ready = true
 
 func _on_peer_disconnected(id: int) -> void:
 	if is_server:
@@ -247,28 +299,37 @@ func _pickup(drop_id: int) -> void:
 func _publish_action(kind: int, id: int, state: Dictionary) -> void:
 	for pid in players:
 		if players[pid].p.distance_squared_to(state.p) <= VIEW_RADIUS * VIEW_RADIUS:
-			_action_event.rpc_id(pid, kind, id, state.facing, state.pose, state.action_time,state.hp,state.revision)
+			_action_event.rpc_id(pid, kind, id, state.facing, state.pose, state.action_time,state.hp,state.revision,state.p)
 
 @rpc("authority", "call_remote", "reliable", 4)
-func _action_event(kind: int, id: int, facing: int, pose: int, clock: float, hp: int, revision: int) -> void:
+func _action_event(kind: int, id: int, facing: int, pose: int, clock: float, hp: int, revision: int, at: Vector2) -> void:
 	clock = ACTION.wire_time(clock)
 	if not action_observed:
 		action_observed = true
 		print("action_received")
 	if kind == 1 and visible_monsters.has(id):
 		var state: Dictionary = visible_monsters[id]
-		if revision != state.revision and not ACTION.newer_revision(revision,state.revision):
+		if not ACTION.newer_revision(revision,state.revision):
 			return
 		state.hp = hp
 		state.revision = revision
+		state.p = at
+		if pose == 0 or pose == 4:
+			rendered_monsters[id] = at
 		if pose < 2 or pose == 4 or ACTION.accepts_event(pose, clock, state.action_time, server_time):
 			state.facing = facing
 			state.pose = pose
 			state.action_time = clock
 	elif kind == 0 and player_poses.has(id):
 		var row: Array = player_poses[id]
-		if revision != int(row[7]) and not ACTION.newer_revision(revision,int(row[7])):
+		if not ACTION.newer_revision(revision,int(row[7])):
 			return
+		visible_players[id] = at
+		row[1] = at.x
+		row[2] = at.y
+		if pose == 4 or (pose == 0 and hp > 0):
+			rendered_players[id] = at
+			render_elapsed = 1.0
 		row[3] = hp
 		row[7] = revision
 		if pose < 2 or pose == 4 or ACTION.accepts_event(pose, clock, float(row[6]), server_time):
@@ -316,6 +377,7 @@ func _snapshot_chunk(sequence: int, clock: float, player_count: int, part: int, 
 	var ms := rows.slice(player_count)
 	server_time = clock
 	last_snapshot = sequence
+	render_elapsed = 1.0
 	pending_snapshots.erase(sequence)
 	if sequence % 50 == 0:
 		print("snapshot_received sequence=%d players=%d monsters=%d drops=%d" % [sequence, ps.size(), ms.size(), visible_drops.size()])
@@ -325,22 +387,30 @@ func _snapshot_chunk(sequence: int, clock: float, player_count: int, part: int, 
 	visible_monsters.clear()
 	player_poses.clear()
 	for row in ps:
-		visible_players[int(row[0])] = Vector2(row[1], row[2])
 		player_poses[int(row[0])] = row
 		if previous_poses.has(int(row[0])) and ACTION.newer_revision(int(previous_poses[int(row[0])][7]),int(row[7])):
 			player_poses[int(row[0])] = previous_poses[int(row[0])]
 		var current: Array = player_poses[int(row[0])]
+		visible_players[int(row[0])] = Vector2(current[1],current[2])
+		if previous_poses.has(int(row[0])):
+			var before: Array = previous_poses[int(row[0])]
+			if int(before[5]) != int(current[5]) and (int(before[5]) == 4 or int(current[5]) == 4):
+				rendered_players[int(row[0])] = visible_players[int(row[0])]
 		_update_health(int(row[0]),int(current[3]),int(current[5]))
+	for old_id in observed_dead.keys():
+		if not player_poses.has(old_id):
+			observed_dead.erase(old_id)
 	for row in ms:
 		visible_monsters[int(row[0])] = {"p": Vector2(row[1], row[2]), "hp": int(row[3]),
 			"facing": int(row[4]), "pose": int(row[5]), "action_time": float(row[6]),"revision":int(row[7])}
 		if previous_monsters.has(int(row[0])) and ACTION.newer_revision(previous_monsters[int(row[0])].revision,int(row[7])):
 			var prior: Dictionary = previous_monsters[int(row[0])]
-			visible_monsters[int(row[0])].facing = prior.facing
-			visible_monsters[int(row[0])].pose = prior.pose
-			visible_monsters[int(row[0])].action_time = prior.action_time
-			visible_monsters[int(row[0])].revision = prior.revision
-			visible_monsters[int(row[0])].hp = prior.hp
+			visible_monsters[int(row[0])] = prior
+		if previous_monsters.has(int(row[0])):
+			var before: Dictionary = previous_monsters[int(row[0])]
+			var current: Dictionary = visible_monsters[int(row[0])]
+			if int(before.pose) != int(current.pose) and (int(before.pose) == 4 or int(current.pose) == 4):
+				rendered_monsters[int(row[0])] = current.p
 	var own_id := multiplayer.get_unique_id()
 	if visible_players.has(own_id):
 		var target: Vector2 = visible_players[own_id]
@@ -366,6 +436,8 @@ func _inventory(inventory: Dictionary) -> void:
 
 func _client_step(delta: float) -> void:
 	if multiplayer.multiplayer_peer == null or multiplayer.multiplayer_peer.get_connection_status() != MultiplayerPeer.CONNECTION_CONNECTED:
+		return
+	if not map_ready:
 		return
 	var own_id := multiplayer.get_unique_id()
 	if player_poses.has(own_id) and int(player_poses[own_id][3]) <= 0:
@@ -416,50 +488,64 @@ func _unhandled_input(event: InputEvent) -> void:
 func _draw() -> void:
 	if is_server:
 		return
-	draw_rect(Rect2(-position, WORLD_SIZE), Color(0.12, 0.19, 0.16))
-	for x in range(0, int(WORLD_SIZE.x), 100):
-		draw_line(Vector2(x, 0) - position, Vector2(x, WORLD_SIZE.y) - position, Color(0.18, 0.26, 0.21), 1)
-	for y in range(0, int(WORLD_SIZE.y), 100):
-		draw_line(Vector2(0, y) - position, Vector2(WORLD_SIZE.x, y) - position, Color(0.18, 0.26, 0.21), 1)
+	if terrain == null:
+		draw_rect(Rect2(-position, WORLD_SIZE), Color(0.12, 0.19, 0.16))
+		for x in range(0, int(WORLD_SIZE.x), 100):
+			draw_line(Vector2(x, 0) - position, Vector2(x, WORLD_SIZE.y) - position, Color(0.18, 0.26, 0.21), 1)
+		for y in range(0, int(WORLD_SIZE.y), 100):
+			draw_line(Vector2(0, y) - position, Vector2(WORLD_SIZE.x, y) - position, Color(0.18, 0.26, 0.21), 1)
 	var screen := get_viewport_rect().size
 	var visible := Rect2(-screen * 0.5 - Vector2(100, 160), screen + Vector2(200, 320))
-	for id in visible_monsters:
-		var point: Vector2 = rendered_monsters.get(id, visible_monsters[id].p) - position
-		if not visible.has_point(point):
-			continue
-		if not atlas.pages.is_empty():
-			var monster: Dictionary = visible_monsters[id]
-			var action: String = ["NS", "NW", "FA", "NH", "ND"][monster.pose]
-			var seconds: float = server_time - monster.action_time if monster.pose >= 2 else animation_time
-			var duration: float = ACTION.DEATH_SECONDS if monster.pose == 4 else ACTION.COMBAT_SECONDS
-			atlas.draw_frame(self, point, "EN004A_%s%d" % [action, monster.facing], maxf(seconds, 0.0), 8.0,
-				duration if monster.pose >= 2 else 0.0)
-			if monster.hp > 0 and monster.hp < 30:
-				draw_rect(Rect2(point+Vector2(-20,-150),Vector2(40,4)),Color(0.1,0.1,0.1))
-				draw_rect(Rect2(point+Vector2(-20,-150),Vector2(40.0*monster.hp/30.0,4)),Color.CRIMSON)
-		else:
-			draw_circle(point, 16, Color.CRIMSON)
-	for id in visible_players:
-		var color := Color.CYAN if id == multiplayer.get_unique_id() else Color.LIGHT_BLUE
-		var point: Vector2 = rendered_players.get(id, visible_players[id]) - position
-		if not visible.has_point(point):
-			continue
-		if not doll.parts.is_empty() and player_poses.has(id):
-			var pose: Array = player_poses[id]
-			var seconds: float = maxf(0.0,server_time-float(pose[6])) if int(pose[5]) >= 2 else animation_time
-			doll.draw(self,point,int(pose[5]),int(pose[4]),seconds)
-		else:
-			draw_circle(point, 13, color)
-		if player_poses.has(id):
-			var row: Array = player_poses[id]
-			if int(row[5]) == 2 and server_time-float(row[6]) < 0.35:
-				var direction := [6,7,8,1,2,3,4,5].find(int(row[4]))
-				draw_line(point, point + Vector2.from_angle(direction * PI / 4.0) * 45.0, Color.WHITE, 4)
+	for command in render_order:
+		match int(command[1]):
+			0: _draw_player(int(command[2]),visible)
+			1: _draw_monster(int(command[2]),visible)
+			2: map_objects.draw_object(self,command[2],position,server_time)
+
+func _draw_monster(id: int, visible: Rect2) -> void:
+	if not visible_monsters.has(id):
+		return
+	var point: Vector2 = rendered_monsters.get(id, visible_monsters[id].p) - position
+	if not visible.has_point(point):
+		return
+	if not atlas.pages.is_empty():
+		var monster: Dictionary = visible_monsters[id]
+		var action: String = ["NS", "NW", "FA", "NH", "ND"][monster.pose]
+		var seconds: float = server_time - monster.action_time if monster.pose >= 2 else animation_time
+		var duration: float = ACTION.DEATH_SECONDS if monster.pose == 4 else ACTION.COMBAT_SECONDS
+		atlas.draw_frame(self, point, "EN004A_%s%d" % [action, monster.facing], maxf(seconds, 0.0), 8.0,
+			duration if monster.pose >= 2 else 0.0)
+		if monster.hp > 0 and monster.hp < 30:
+			draw_rect(Rect2(point+Vector2(-20,-150),Vector2(40,4)),Color(0.1,0.1,0.1))
+			draw_rect(Rect2(point+Vector2(-20,-150),Vector2(40.0*monster.hp/30.0,4)),Color.CRIMSON)
+	else:
+		draw_circle(point, 16, Color.CRIMSON)
+
+func _draw_player(id: int, visible: Rect2) -> void:
+	if not visible_players.has(id):
+		return
+	var color := Color.CYAN if id == multiplayer.get_unique_id() else Color.LIGHT_BLUE
+	var point: Vector2 = rendered_players.get(id, visible_players[id]) - position
+	if not visible.has_point(point):
+		return
+	if not doll.parts.is_empty() and player_poses.has(id):
+		var pose: Array = player_poses[id]
+		var seconds: float = maxf(0.0,server_time-float(pose[6])) if int(pose[5]) >= 2 else animation_time
+		doll.draw(self,point,int(pose[5]),int(pose[4]),seconds)
+	else:
+		draw_circle(point, 13, color)
+	if player_poses.has(id):
+		var row: Array = player_poses[id]
+		if int(row[5]) == 2 and server_time-float(row[6]) < 0.35:
+			var direction := [6,7,8,1,2,3,4,5].find(int(row[4]))
+			draw_line(point, point + Vector2.from_angle(direction * PI / 4.0) * 45.0, Color.WHITE, 4)
+
 
 func _build_ui() -> void:
 	get_window().max_size = Vector2i(1440, 1080)
 	get_window().min_size = Vector2i(640, 360)
 	drop_renderer = preload("res://scripts/drop_renderer.gd").new()
+	drop_renderer.z_index = -1
 	add_child(drop_renderer)
 	var camera := Camera2D.new()
 	camera.enabled = true
@@ -543,6 +629,23 @@ func _process(delta: float) -> void:
 		var target: Vector2 = visible_monsters[id].p
 		rendered_monsters[id] = (rendered_monsters.get(id, target) as Vector2).lerp(target, weight)
 	position = rendered_players.get(multiplayer.get_unique_id(), position)
+	var size := get_viewport_rect().size
+	var view := Rect2(position-size*0.5,size)
+	if terrain != null:
+		terrain.position = -position
+		terrain.update_view(view)
+		map_objects.prepare(view.grow(180))
+	render_elapsed += delta
+	if render_elapsed >= 0.1:
+		render_elapsed = 0.0
+		render_order.clear()
+		for object in map_objects.visible:
+			render_order.append([float(object.p[1])+float(object.z),2,object])
+		for id in visible_monsters:
+			render_order.append([visible_monsters[id].p.y,1,id])
+		for id in visible_players:
+			render_order.append([visible_players[id].y,0,id])
+		render_order.sort_custom(func(a: Array,b: Array) -> bool: return a[0] < b[0])
 	drop_renderer.position = -position
 	if drops_dirty:
 		drop_renderer.rebuild(visible_drops)

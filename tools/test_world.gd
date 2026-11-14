@@ -27,6 +27,8 @@ func _initialize() -> void:
 	check(not world.pickup(2,drop_id), "duplicate pickup rejected")
 	world.move(id, INF, NAN)
 	check(world.players[id].move == Vector2.ZERO, "non-finite input rejected")
+	world.move(id, 1.0e300, 1)
+	check(world.players[id].move == Vector2.ZERO, "finite float64 overflow cannot corrupt float32 movement")
 	world.move(id, 1, 1)
 	check(world.players[id].move.length() <= 1.001, "diagonal normalization")
 	world.step(0.6)

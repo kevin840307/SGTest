@@ -30,6 +30,7 @@ python -m pip install -r requirements.txt
 python tools/extract_client.py 'C:/SGO/Stargate Online IE HK' .cache/client
 python tools/build_assets.py .cache/client assets/generated --layout auto
 python tools/copy_support_assets.py .cache/client assets/generated
+python tools/build_maps.py .cache/client assets/generated --map 13
 python tools/validate_assets.py .cache/client assets/generated --all-pixels
 ```
 
@@ -41,6 +42,12 @@ python tools/validate_assets.py .cache/client assets/generated --all-pixels
 ```
 
 方向鍵移動，左鍵點怪攻擊、點掉落拾取。F2 切換面板外觀。遊戲內可選 960×540、1280×720、1440×810、1440×900，也可拖動視窗；上限 1440×1080、下限 640×360，支援不同長寬比。
+
+預設使用已驗證的原版 Map13（尼西亞台地）。`--map=0` 可切換到不載入地圖的開發測試場地；`--combat-arena` 為扣血／死亡／復活同步的測試情境。其他地圖可交給 `build_maps.py --map N`，但本次只對 Map13 做過完整驗證。
+
+Map13 的 230,400 個地磚索引共用 865 種 32px 地磚，打包後紋理約 3.4 MiB。地面僅對視窗附近格子建立 MultiMesh 實例；不為每格建立節點，也不把整張 15360×15360 地圖攤平成巨圖。367 個場景物件沿 BLG／STH 相對引用找原 SPR，17 個多影格物件採明確的 8 FPS 裝飾播放政策，以伺服器時鐘對齊；原檔沒有 ACT 時間表，故不宣稱這是原版精確播放速率。
+
+地圖物件依可見範圍載入並共用紋理，未被畫面使用的紋理採 32 MiB LRU 預算；可見素材不會為了預算被反覆卸載。物件、怪物、人物依腳點深度排序。伺服器使用原版 16px Blocking.dat 格網驗證移動、攻擊與拾取，禁止穿牆與斜角穿越；掉落保留在屍體同側可達位置。地圖定義指紋與檔案 SHA-256 檢查可阻止不一致的客戶端資料。
 
 伺服器預設只綁 localhost；區網測試可加 `--bind=0.0.0.0`，客戶端加 `--host=伺服器IP`。壓測可加 `--monsters=1000 --drops=5000`。目前是開發用協定，尚無登入、加密連線、存檔與正式部署流程。
 
@@ -58,12 +65,17 @@ python tools/validate_assets.py .cache/client assets/generated --all-pixels
 | `scripts/paper_doll.gd` | 原版人物部件、原版圖層順序與八方向鏡射 |
 | `scripts/action_policy.gd` | 一次性動作鎖定、可靠事件與快照時間精度、延遲事件淘汰 |
 | `scripts/drop_renderer.gd` | MultiMesh 批次繪製掉落，資料變化時才重建 |
+| `scripts/terrain_renderer.gd` | 原版地磚索引、視窗範圍 MultiMesh 與單張地磚圖集 |
+| `scripts/map_objects.gd` | 可見物件、共用紋理與 LRU 快取 |
+| `scripts/collision_grid.gd` | 原版碰撞格網、線段檢查、滑動與合法出生位置 |
 
 模擬 30Hz、位置快照 10Hz、輸入約 15Hz（30Hz 模擬下的 50ms 節流）、怪物 AI 5Hz。位置分成 MTU 以下的小封包，限制未完成快照快取並拒絕舊序號；攻擊事件、掉落差異與背包使用獨立可靠通道。掉落新增／拾取即時傳送，AOI 進出每 500ms 對帳。怪物和玩家在每個顯示影格插值；畫面外怪物不送出繪製指令。
 
+同種實體的相同動作／方向／精確時間共用影格解析結果；快取依 clip 有界，不依怪物數或經過時間增長，也不量化時間來省略動畫影格。這項快取降低了大群怪物重複掃描 ACT 的 CPU 成本。
+
 已加入角色 HP、怪物攻擊預備／命中、可打斷攻擊、倒地、三秒復活與兩秒出生保護。倒地時伺服器拒絕移動、攻擊及拾取，復活保留背包。可靠動作事件與快照共用每實體 uint32 版本，避免同 tick 傷害、封包亂序或浮點精度造成狀態倒退。
 
-伺服器不載入圖像資源。客戶端目前共用一種原版怪物與基本男性角色資源；完整角色自訂、物品圖示映射、地圖、裝備、技能、任務與資料持久化仍待開發。
+伺服器不載入圖像資源。客戶端目前共用一種原版怪物與基本男性角色資源。完整角色自訂、物品圖示映射、其他地圖／轉場、裝備、技能、任務與資料持久化仍待開發；怪物目前採直線追逐與碰撞滑動，尚未做障礙繞路尋徑。
 
 ## 驗證
 
@@ -71,6 +83,9 @@ python tools/validate_assets.py .cache/client assets/generated --all-pixels
 python -m unittest discover -s tools -p test_assets.py
 & 'C:\SGO\Godot\Godot_v4.7.2-stable_win64_console.exe' --headless --path . --script tools/test_world.gd
 & 'C:\SGO\Godot\Godot_v4.7.2-stable_win64_console.exe' --headless --path . --script tools/test_combat.gd
+& 'C:\SGO\Godot\Godot_v4.7.2-stable_win64_console.exe' --headless --path . --script tools/test_navigation.gd
+python -m unittest discover -s tools -p test_maps.py
+& 'C:\SGO\Godot\Godot_v4.7.2-stable_win64_console.exe' --path . --resolution 1440x900 --script tools/map_preview.gd
 & 'C:\SGO\Godot\Godot_v4.7.2-stable_win64_console.exe' --headless --path . --script tools/test_directions.gd
 & 'C:\SGO\Godot\Godot_v4.7.2-stable_win64_console.exe' --path . --resolution 1440x900 --script tools/direction_preview.gd
 python tools/benchmark_assets.py .cache/client

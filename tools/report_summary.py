@@ -36,7 +36,7 @@ def main():
     lines += ['', '因此採混合預設：小素材（唯一裁切 RGBA ≤ 1.5 MiB）合成一張，較大素材依方向分張。'
               '兩種方式都維持相同方向的動作在同一區塊；可用 --layout 明確覆寫。門檻是這批樣本的初始策略，並非所有硬體的最優保證。', '',
               '## 多人與實際畫面', '',
-              f"ENet：{network['clients']} 個 headless 客戶端、{network['monsters']:,} 隻怪、{network['drops']:,} 個掉落，持續 {network['seconds']} 秒。"
+              f"ENet：Map{network.get('map_id',0)}、{network['clients']} 個 headless 客戶端、{network['monsters']:,} 隻怪、{network['drops']:,} 個掉落，持續 {network['seconds']} 秒。"
               f"通過：{network['passed']}；每位客戶端均收到位置、動作與背包更新。", '',
               f'略過前三個一秒樣本後，伺服器 CPU 中位數 {server_cpu:.1f}%，客戶端 {client_cpu:.1f}%；'
               f'尖峰 RSS 分別 {server_rss:.1f}／{client_rss:.1f} MiB。CPU 百分比以一個核心為 100%，'
@@ -44,7 +44,7 @@ def main():
               f"原生單客戶端 1440×900、伺服器同樣 1000 怪／5000 掉落，RTX 3050、上限 60 FPS；暖機 2 秒後測 10 秒："
               f"平均 {rendered['mean_fps']:.2f} FPS，影格間隔 P50 {rendered['frame_ms_p50']:.2f}ms、P95 {rendered['frame_ms_p95']:.2f}ms。"
               f"末影格 draw calls {int(rendered['draw_calls_last_frame'])}。使用單調時鐘量測，非 Godot 平滑 delta。", '',
-              '這些是本機開發版測試，非冷磁碟、網際網路丟包或多種硬體測試。完整遊戲功能、角色裝備與外觀自訂、地圖解析及持久化仍待開發。', '',
+              '這些是本機開發版測試，非冷磁碟、網際網路丟包或多種硬體測試。完整遊戲功能、角色裝備與外觀自訂、其他地圖及持久化仍待開發。', '',
               '原始 JSON：asset_inventory.json、asset_validation.json、network_load.json、rendered_load.json、rendered_probe.json、atlas_benchmark/results.json、atlas_benchmark/rendered.json。']
     Path('reports/README.md').write_text('\n'.join(lines)+'\n',encoding='utf-8')
     combat_path = Path('reports/combat_network.json')
@@ -55,6 +55,24 @@ def main():
                          f"扣血／同一角色倒地／復活均收到：{combat['health_received_by_all']}／"
                          f"{combat['death_received_by_all']}／{combat['respawn_received_by_all']}。整體通過：{combat['passed']}。"
                          "此情境沒有掉落，因此不以背包 marker 作通過條件；背包另外由壓測及原子拾取測試驗證。\n")
+    map_path = Path('reports/map_validation.json')
+    if map_path.exists():
+        maps = read(map_path)
+        with Path('reports/README.md').open('a',encoding='utf-8') as report:
+            report.write('\n## 原版地圖重建\n\n')
+            for entry in maps['maps']:
+                report.write(f"Map{entry['map_id']}：{entry['tile_references']:,} 個地磚索引、{entry['tiles']} 種共用地磚、"
+                             f"{entry['objects']} 個物件，其中 {entry['animated_objects']} 個有多影格。"
+                             f"地磚紋理 {entry['terrain_rgba_bytes']/1024**2:.2f} MiB；"
+                             f"重建與地磚像素還原比對耗時 {entry['seconds']:.3f} 秒，通過：{entry['pixel_round_trip']}。"
+                             "索引檔逐位元保留、碰撞資料與地圖尺寸互相驗證；伺服器不載入紋理。\n")
+    render_path = Path('reports/map_render.json')
+    if render_path.exists():
+        scene = read(render_path)
+        with Path('reports/README.md').open('a',encoding='utf-8') as report:
+            report.write(f"\n原生地圖物件對照畫面：總計 {scene['total_terrain_cells']:,} 格中，僅建立 {scene['visible_terrain_instances']:,} 個可見地磚實例；"
+                         f"{scene['visible_objects']} 個物件共用 {scene['resident_object_types']} 組紋理，物件 RGBA 合計 {scene['object_rgba_bytes']/1024**2:.2f} MiB，"
+                         f"含角色的畫面 draw calls 為 {int(scene['draw_calls'])}。此為局部場景證據，不代表整張地圖同時載入。\n")
 
 
 if __name__ == '__main__':

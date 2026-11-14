@@ -23,6 +23,36 @@ var next_drop := 1
 var drop_revision := 0
 var events: Array[Dictionary] = []
 var pending_attacks: Dictionary = {}
+var navigation: RefCounted
+var bounds := SIZE
+var spawn_point := Vector2(1200,800)
+
+func configure_map(grid: RefCounted) -> Error:
+	var spawn: Vector2 = grid.nearest(spawn_point)
+	if spawn.x < 0:
+		return ERR_INVALID_DATA
+	navigation = grid
+	bounds = Vector2(grid.width,grid.height)*grid.CELL
+	spawn_point = spawn
+	return OK
+
+func _place(point: Vector2) -> Vector2:
+	var clamped := point.clamp(Vector2.ZERO,bounds-Vector2.ONE*0.001)
+	if navigation == null:
+		return clamped
+	var nearby: Vector2 = navigation.nearest(clamped)
+	return spawn_point if nearby.x < 0 else nearby
+
+func _move(from: Vector2, to: Vector2) -> Vector2:
+	var target := to.clamp(Vector2.ZERO,bounds-Vector2.ONE*0.001)
+	return target if navigation == null else navigation.slide(from,target)
+
+func _reachable(from: Vector2, to: Vector2) -> bool:
+	return navigation == null or navigation.allows(from,to)
+
+func _drop_point(origin: Vector2, requested: Vector2) -> Vector2:
+	var placed := _place(requested)
+	return placed if _reachable(origin,placed) else origin
 
 static func facing(vector: Vector2) -> int:
 	return [6, 7, 8, 1, 2, 3, 4, 5][posmod(roundi(vector.angle() / (PI / 4.0)), 8)]
@@ -31,16 +61,16 @@ func populate(monster_count: int, drop_count: int) -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 8413
 	for i in monster_count:
-		monsters[i+1] = {"p": Vector2(rng.randf_range(80, SIZE.x-80), rng.randf_range(80, SIZE.y-80)),
+		monsters[i+1] = {"p": _place(Vector2(rng.randf_range(80, SIZE.x-80), rng.randf_range(80, SIZE.y-80))),
 			"hp": 30, "facing": 1, "pose": 0, "action_time": 0.0, "respawn": 0.0,
 			"last_attack": -100.0, "damage": 10, "revision":0}
 	for i in mini(drop_count, MAX_DROPS):
-		drops[next_drop] = {"p": Vector2(rng.randf_range(0, SIZE.x), rng.randf_range(0, SIZE.y)), "item": 1001}
+		drops[next_drop] = {"p": _place(Vector2(rng.randf_range(0, SIZE.x), rng.randf_range(0, SIZE.y))), "item": 1001}
 		next_drop += 1
 	drop_revision += 1
 
 func join(id: int) -> void:
-	players[id] = {"p": Vector2(1200, 800) + Vector2(20*(players.size()%8), 0),
+	players[id] = {"p": _place(spawn_point + Vector2(20*(players.size()%8), 0)),
 		"move": Vector2.ZERO, "last_input": time, "last_attack": -100.0, "inventory": {},
 		"facing": 1, "pose": 0, "action_time": 0.0, "seen_drops": {},
 		"hp": PLAYER_HP, "respawn": 0.0, "protected_until": time+SPAWN_PROTECTION_SECONDS, "revision":0}
@@ -59,7 +89,7 @@ func drain_events() -> Array[Dictionary]:
 	return result
 
 func move(id: int, x: float, y: float) -> void:
-	if players.has(id) and players[id].hp > 0 and is_finite(x) and is_finite(y):
+	if players.has(id) and players[id].hp > 0 and is_finite(x) and is_finite(y) and absf(x) <= 1.0 and absf(y) <= 1.0:
 		players[id].last_input = time
 		players[id].move = Vector2(x,y).limit_length(1.0)
 
@@ -71,13 +101,13 @@ func step(delta: float) -> void:
 			state.move = Vector2.ZERO
 			if time >= state.respawn:
 				state.hp = PLAYER_HP
-				state.p = Vector2(1200,800)+Vector2(20*(id%8),0)
+				state.p = _place(spawn_point+Vector2(20*(id%8),0))
 				state.protected_until = time+SPAWN_PROTECTION_SECONDS
 				_pose(0,id,state,0)
 			continue
 		if time-state.last_input > 0.5:
 			state.move = Vector2.ZERO
-		state.p = (state.p + state.move*SPEED*delta).clamp(Vector2.ZERO, SIZE)
+		state.p = _move(state.p,state.p+state.move*SPEED*delta)
 		var locked: bool = ACTION.active(state.pose, state.action_time, time)
 		if not locked:
 			state.pose = 1 if state.move.length_squared() > 0.01 else 0
@@ -95,7 +125,7 @@ func step(delta: float) -> void:
 		if monster.hp <= 0:
 			if time >= monster.respawn:
 				monster.hp = 30
-				monster.p = Vector2(100+(id*97)%2200, 100+(id*53)%1400)
+				monster.p = _place(Vector2(100+(id*97)%2200,100+(id*53)%1400))
 				_pose(1,id,monster,0)
 			continue
 		if ACTION.active(monster.pose, monster.action_time, time):
@@ -111,7 +141,7 @@ func step(delta: float) -> void:
 				closest = distance
 				target = players[pid].p
 				target_id = pid
-		if target_id != 0 and closest <= MONSTER_ATTACK_RANGE:
+		if target_id != 0 and closest <= MONSTER_ATTACK_RANGE and _reachable(monster.p,target):
 			if time >= players[target_id].protected_until and time-monster.last_attack >= MONSTER_ATTACK_COOLDOWN:
 				monster.last_attack = time
 				monster.facing = facing(target-monster.p)
@@ -120,7 +150,7 @@ func step(delta: float) -> void:
 				continue
 		if closest < 500.0 and closest > 45.0:
 			monster.facing = facing(monster.p.direction_to(target))
-			monster.p = (monster.p + monster.p.direction_to(target)*65.0*elapsed).clamp(Vector2.ZERO, SIZE)
+			monster.p = _move(monster.p,monster.p+monster.p.direction_to(target)*65.0*elapsed)
 		if time-monster.action_time > 0.35:
 			monster.pose = 1 if closest < 500.0 and closest > 45.0 else 0
 
@@ -138,6 +168,8 @@ func _resolve_attacks() -> void:
 			continue
 		if player.hp <= 0 or time < player.protected_until or monster.p.distance_to(player.p) > MONSTER_ATTACK_RANGE:
 			continue
+		if not _reachable(monster.p,player.p):
+			continue
 		player.hp = maxi(0,player.hp-int(monster.damage))
 		if player.hp == 0:
 			player.move = Vector2.ZERO
@@ -151,6 +183,8 @@ func attack(id: int, monster_id: int) -> bool:
 	var monster: Dictionary = monsters[monster_id]
 	if player.hp <= 0 or monster.hp <= 0 or time-player.last_attack < 0.35 or player.p.distance_to(monster.p) > 160.0:
 		return false
+	if not _reachable(player.p,monster.p):
+		return false
 	player.last_attack = time
 	player.facing = facing(monster.p-player.p)
 	_pose(0,id,player,2)
@@ -160,7 +194,7 @@ func attack(id: int, monster_id: int) -> bool:
 		for item in [1001,1002,1003]:
 			if drops.size() >= MAX_DROPS:
 				break
-			drops[next_drop] = {"p": monster.p+Vector2((item-1002)*22,0), "item": item}
+			drops[next_drop] = {"p": _drop_point(monster.p,monster.p+Vector2((item-1002)*22,0)), "item": item}
 			next_drop += 1
 		monster.respawn = time+2.0
 		drop_revision += 1
@@ -169,6 +203,8 @@ func attack(id: int, monster_id: int) -> bool:
 
 func pickup(id: int, drop_id: int) -> bool:
 	if not players.has(id) or players[id].hp <= 0 or not drops.has(drop_id) or players[id].p.distance_to(drops[drop_id].p) > 100.0:
+		return false
+	if not _reachable(players[id].p,drops[drop_id].p):
 		return false
 	var inventory: Dictionary = players[id].inventory
 	var item: int = drops[drop_id].item

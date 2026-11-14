@@ -12,13 +12,14 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('godot', type=Path)
     parser.add_argument('--stress', action='store_true')
+    parser.add_argument('--map',type=int,default=13)
     args = parser.parse_args()
     exe = str(args.godot.resolve())
     output = Path('reports/client.png').resolve()
     output.parent.mkdir(exist_ok=True)
     started = time.time()
     with tempfile.TemporaryFile(mode='w+', encoding='utf-8') as log:
-        extra = ['--monsters=1000','--drops=5000'] if args.stress else []
+        extra = (['--monsters=1000','--drops=5000'] if args.stress else [])+[f'--map={args.map}']
         server = subprocess.Popen([exe,'--headless','--path','.','--max-fps','60','--','--server']+extra,stdout=log,stderr=subprocess.STDOUT)
         try:
             time.sleep(1)
@@ -35,6 +36,7 @@ def main():
             server.wait(timeout=10)
     fresh = output.exists() and output.stat().st_mtime >= started
     result = {'exit_code':client.returncode, 'screenshot_exists':fresh, 'stress':args.stress,
+              'map_id':args.map,
               'server_monsters':1000 if args.stress else 80, 'server_drops':5000 if args.stress else 0,
               'log':client.stdout+client.stderr}
     Path('reports/rendered_probe.json').write_text(json.dumps(result,ensure_ascii=False,indent=2),encoding='utf-8')

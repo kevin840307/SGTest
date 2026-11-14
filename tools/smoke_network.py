@@ -16,6 +16,7 @@ def main():
     parser.add_argument('--drops', type=int, default=5000)
     parser.add_argument('--seconds', type=int, default=15)
     parser.add_argument('--combat-arena', action='store_true', help='idle observers verify HP/death/respawn over real ENet')
+    parser.add_argument('--map',type=int,default=13)
     args = parser.parse_args()
     processes, logs, measurements = [], [], []
     base = [str(args.godot.resolve()), '--headless', '--path', '.', '--max-fps', '60']
@@ -23,7 +24,7 @@ def main():
         for index in range(args.clients+1):
             log = tempfile.TemporaryFile(mode='w+', encoding='utf-8')
             logs.append(log)
-            extra = ['--server', f'--monsters={args.monsters}', f'--drops={args.drops}'] if index == 0 else ['--bot']
+            extra = ['--server', f'--monsters={args.monsters}', f'--drops={args.drops}',f'--map={args.map}'] if index == 0 else ['--bot']
             if args.combat_arena:
                 extra = ['--server','--monsters=1','--drops=0','--combat-arena'] if index == 0 else []
             processes.append(subprocess.Popen(base+['--']+extra, stdout=log, stderr=subprocess.STDOUT))
@@ -66,6 +67,7 @@ def main():
     passed = joined == args.clients and delivered and behavior and not errors
     report = {'passed': passed, 'clients': args.clients, 'monsters': 1 if args.combat_arena else args.monsters,
               'drops': 0 if args.combat_arena else args.drops, 'combat_arena':args.combat_arena,
+              'map_id':0 if args.combat_arena else args.map,
               'seconds': args.seconds, 'joined': joined, 'snapshots_received_by_all': delivered,
               'actions_received_by_all': actions, 'inventories_received_by_all': inventories,
               'health_received_by_all':health,'death_received_by_all':deaths,'respawn_received_by_all':respawns,
