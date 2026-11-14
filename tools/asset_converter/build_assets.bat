@@ -11,5 +11,5 @@ if errorlevel 1 (
   echo ERROR: Python not available in PATH.
   exit /b 2
 )
-python "%~dp0cli.py" build "%~1"
+python "%~dp0cli.py" build %*
 exit /b %errorlevel%

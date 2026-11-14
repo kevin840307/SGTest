@@ -126,6 +126,45 @@ def pack_atomic_rectangles(rectangles: list[tuple[int, int, int]], side: int):
     return placements, bounds
 
 
+def measure_source_blocks(frames, source_ranges: list[tuple[int, int]], side: int):
+    """Measure an Atomic Atlas candidate without allocating or painting texture pages.
+
+    Matches convert_assets.pack's 2px padded shelf geometry per original SPR,
+    followed by the same deterministic MaxRects placement of source blocks.
+    Any source requiring more than one local page is rejected just like the
+    normal packer. Use the real packer exactly once for the chosen candidate.
+    """
+    padding = 2
+    rectangles = []
+    for source_index, (start, length) in enumerate(source_ranges):
+        x = y = shelf_h = used_w = used_h = 0
+        for frame in frames[start:start + length]:
+            crop = frame.image.getbbox()
+            if crop is None:
+                continue
+            cell_w = crop[2] - crop[0] + 2 * padding
+            cell_h = crop[3] - crop[1] + 2 * padding
+            if cell_w > side or cell_h > side:
+                raise ValueError(f"frame {cell_w}x{cell_h} exceeds atlas side {side}")
+            if x + cell_w > side:
+                x, y, shelf_h = 0, y + shelf_h, 0
+            if y + cell_h > side:
+                raise ValueError(f"source SPR needs multiple pages at side {side}")
+            used_w = max(used_w, x + cell_w)
+            used_h = max(used_h, y + cell_h)
+            x += cell_w
+            shelf_h = max(shelf_h, cell_h)
+        if used_w:
+            rectangles.append((source_index, used_w, used_h))
+    _, bounds = pack_atomic_rectangles(rectangles, side)
+    return {
+        "valid": True,
+        "side": side,
+        "pages": len(bounds),
+        "rgba_bytes": sum(width * height * 4 for width, height in bounds),
+    }
+
+
 def pack_source_blocks(frames, source_ranges: list[tuple[int, int]], side: int):
     """Pack each original SPR atomically, then co-pack those blocks onto atlas pages."""
     blocks = []

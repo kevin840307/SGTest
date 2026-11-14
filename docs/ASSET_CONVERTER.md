@@ -18,14 +18,14 @@ run_build_assets.bat "C:\SGO\Stargate Online IE HK2"
 python tools/asset_converter/cli.py build 'C:\SGO\Stargate Online IE HK2'
 ```
 
-單一來源路徑需有原始 `Data1.dat`；會抽取至 `.cache/client`、套用原始遊戲 loose override，增量保存並建置來源 Atlas。若已存在解壓來源可加入 `--extracted-source .cache/client` 節省重複抽取檢查。需要 Python 3.10+ 和 requirements.txt 所列 Pillow。
+單一來源路徑需有原始 `Data1.dat`；會抽取至工具專用 `.cache/asset_converter/source`、套用原始遊戲 loose override，增量保存並建置來源 Atlas。若已存在解壓來源可加入 `--extracted-source .cache/asset_converter/source` 節省重複抽取檢查。需要 Python 3.10+ 和 requirements.txt 所列 Pillow。
 
 ## 研究/局部驗證
 
 ```powershell
-python tools/asset_converter/cli.py build 'C:\SGO\Stargate Online IE HK2' --extracted-source .cache/client --archive-only --category Enemy
-python tools/asset_converter/cli.py build 'C:\SGO\Stargate Online IE HK2' --extracted-source .cache/client --archive-only --prefix player/a/weapon/a-sword014
-python tools/asset_converter/cli.py build 'C:\SGO\Stargate Online IE HK2' --extracted-source .cache/client --runtime-only
+python tools/asset_converter/cli.py build 'C:\SGO\Stargate Online IE HK2' --extracted-source .cache/asset_converter/source --archive-only --category Enemy
+python tools/asset_converter/cli.py build 'C:\SGO\Stargate Online IE HK2' --extracted-source .cache/asset_converter/source --archive-only --prefix player/a/weapon/a-sword014
+python tools/asset_converter/cli.py build 'C:\SGO\Stargate Online IE HK2' --extracted-source .cache/asset_converter/source --runtime-only
 python -m unittest discover -s tools/tests -q
 ```
 
@@ -63,9 +63,9 @@ python -m unittest discover -s tools/tests -q
 
 - Windows RTX3050 / Godot 4.7.2；Map13 9 visuals/78 spawns、573 atlas frames/2 pages；Player base 881 frames/1 page，terrain pixel-roundtrip PASS。
 - Godot tests：directions、monster_visuals、map_objects_async、paper_doll_async、runtime_asset_store 全 PASS。
-- Python tools/tests：92/92 PASS；新增 incremental cache、source change、page corruption rebuild、preview isolation fixture。
+- Python tools/tests：103/103 PASS；新增 incremental cache、source change、page corruption rebuild、preview isolation fixture。
 - Enemy 137/137 groups Adaptive Atlas PASS；武器 A-Sword014 單群組 PASS。
-- 全量離線共 7,893 組的狀態必須檢查進度與 index，不能在完成前宣稱 ALL PASS。
+- 獨立來源快取驗出 7,890 個群組（75,588 SPR）；全量狀態必須檢查進度與 index，不能在完成前宣稱 ALL PASS。
 
 ## 相關
 
@@ -73,3 +73,10 @@ python -m unittest discover -s tools/tests -q
 - [正規化動畫定義](NORMALIZED_ANIMATION_DEFINITION.md)
 - [來源/研究報告](HK2_ATOMIC_BALANCED_ATLAS.md)
 - 舊入口 `tools/rebuild_assets.ps1` 保留相容用途，但會清理正式 `client/assets`；新一鍵工具不會先刪除整個目錄。
+## Adaptive Atlas 候選評估最佳化（2026-11-15）
+
+為避免每次測量 512、1024、2048、4096 都實際建立大型 PIL 畫布，新增 `atlas/build_atlas_groups.py::measure_source_blocks`，純幾何模擬原版 SPR 的 2px padded shelf 與 Atomic MaxRects。每一尺寸的頁數、邊界與 RGBA 理論容量跟 `pack_source_blocks` 保持一致；**只有最終選中的候選會真正繪製 PNG**。這只影響 Builder 速度，不增加 Runtime 分組或 Loader。
+
+以 Player/A/Standard/A-Hair00 原始 SPR（真素材）單次量測：四尺寸原本完整打包累積 3396.8 ms，改為幾何評估累積 25.0 ms；此為候選評估階段單次 A/B，實際完整轉換另含最終打包、像素驗證、PNG 壓縮與磁碟寫入，不能說整體快 136 倍。四尺寸各自的頁數與 RGBA8 理論容量完全相同。原始實測：`local-assets/asset_converter/candidate_geometry_benchmark.json`。
+
+驗收：`tools/tests/test_adaptive_measure.py` 4 組合成案例（含透明影格、多頁拒絕、邊界尺寸），以及實際原版玩家髮型素材一組均 PASS；`tools/tests` 總計 103 PASS。最新全量 source archive 的結果以 `local-assets/asset_converter/complete/index.json` 為準；之前的 preview index 不可當作全量完成證據。

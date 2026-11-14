@@ -14,7 +14,7 @@ from contextlib import ExitStack
 from pathlib import Path
 
 from .selector import choose_candidate
-from .build_atlas_groups import pack_source_blocks
+from .build_atlas_groups import measure_source_blocks, pack_source_blocks
 from ..source.convert_assets import decode_spr
 from ..source import runtime_spr
 
@@ -118,15 +118,7 @@ def _measure_candidates(frames: list, ranges: list) -> list[dict]:
 
     for side in ATLAS_SIDES:
         try:
-            pages, _ = pack_source_blocks(frames, ranges, side)
-            candidates.append(
-                {
-                    "valid": True,
-                    "side": side,
-                    "pages": len(pages),
-                    "rgba_bytes": sum(p.width * p.height * 4 for p in pages),
-                }
-            )
+            candidates.append(measure_source_blocks(frames, ranges, side))
         except ValueError as exc:
             candidates.append({"valid": False, "side": side, "reason": str(exc)})
 
