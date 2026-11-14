@@ -7,6 +7,10 @@
 - **tools/**：原版提取、轉換、研究及驗收工具。
 - **docs/**、**SPEC.md**、**todo.txt**：規格、研究證據與進度；舊 M0／.NET 10 敘述是歷史，最新決策見 ADR-024。
 
+## 最新資源架構重評
+
+先依 [SPEC 第0節](SPEC.md) 交付可重跑基準，再決定標準動畫定義、512／1024／2048／4096混合Atlas及統一Runtime store。報告與執行命令見 [RESOURCE_BASELINE.md](docs/RESOURCE_BASELINE.md)。目前實驗排法／loader均未選定，不能將原型可啟動或單次解碼速度當作全部資源Gate通過。
+
 ## 啟動
 
 從儲存庫根目錄執行，需 .NET 8 SDK、Godot 4（本機 4.7.2）及 Python 3.10+。

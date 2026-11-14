@@ -1,0 +1,3688 @@
+{
+  "execution_passed": true,
+  "scenario": {
+    "clients": 20,
+    "native_clients": 1,
+    "headless_clients": 19,
+    "monster_assets": "C:\\SGO\\SRC\\SGTest\\client\\assets\\generated",
+    "monsters": 300,
+    "drops": 1000,
+    "map": 13,
+    "seconds": 40,
+    "render_cap": 60,
+    "resolution": [
+      1440,
+      900
+    ],
+    "bot_paths": "deterministic per-client phase; not identical trajectories"
+  },
+  "rendered": {
+    "draw_calls_last_frame": 423.0,
+    "draw_calls_p95": 435.0,
+    "frame_ms_max": 40.153,
+    "frame_ms_p50": 16.602,
+    "frame_ms_p95": 22.324,
+    "frame_ms_p99": 24.928,
+    "frames": 2101,
+    "mean_fps": 60.0004312263263,
+    "renderer": "NVIDIA GeForce RTX 3050",
+    "resolution": [
+      1440,
+      900
+    ],
+    "sample_seconds": 35.0,
+    "static_memory_bytes": 63313477,
+    "texture_memory_bytes": 45593087.0,
+    "video_memory_bytes": 52094319.0,
+    "warmup_seconds": 2
+  },
+  "samples": [
+    [
+      {
+        "cpu_one_core_percent": 103.1,
+        "rss_bytes": 82309120
+      },
+      {
+        "cpu_one_core_percent": 40.0,
+        "rss_bytes": 212787200
+      },
+      {
+        "cpu_one_core_percent": 27.7,
+        "rss_bytes": 155201536
+      },
+      {
+        "cpu_one_core_percent": 35.4,
+        "rss_bytes": 155000832
+      },
+      {
+        "cpu_one_core_percent": 33.9,
+        "rss_bytes": 155148288
+      },
+      {
+        "cpu_one_core_percent": 32.3,
+        "rss_bytes": 155148288
+      },
+      {
+        "cpu_one_core_percent": 35.4,
+        "rss_bytes": 155607040
+      },
+      {
+        "cpu_one_core_percent": 33.9,
+        "rss_bytes": 155398144
+      },
+      {
+        "cpu_one_core_percent": 33.9,
+        "rss_bytes": 155942912
+      },
+      {
+        "cpu_one_core_percent": 35.4,
+        "rss_bytes": 154664960
+      },
+      {
+        "cpu_one_core_percent": 27.7,
+        "rss_bytes": 155303936
+      },
+      {
+        "cpu_one_core_percent": 30.8,
+        "rss_bytes": 155189248
+      },
+      {
+        "cpu_one_core_percent": 30.8,
+        "rss_bytes": 154787840
+      },
+      {
+        "cpu_one_core_percent": 30.8,
+        "rss_bytes": 155136000
+      },
+      {
+        "cpu_one_core_percent": 33.9,
+        "rss_bytes": 154619904
+      },
+      {
+        "cpu_one_core_percent": 29.2,
+        "rss_bytes": 154779648
+      },
+      {
+        "cpu_one_core_percent": 29.2,
+        "rss_bytes": 155049984
+      },
+      {
+        "cpu_one_core_percent": 36.9,
+        "rss_bytes": 154812416
+      },
+      {
+        "cpu_one_core_percent": 32.3,
+        "rss_bytes": 155406336
+      },
+      {
+        "cpu_one_core_percent": 27.7,
+        "rss_bytes": 155230208
+      },
+      {
+        "cpu_one_core_percent": 30.8,
+        "rss_bytes": 154963968
+      }
+    ],
+    [
+      {
+        "cpu_one_core_percent": 54.7,
+        "rss_bytes": 83378176
+      },
+      {
+        "cpu_one_core_percent": 39.1,
+        "rss_bytes": 213458944
+      },
+      {
+        "cpu_one_core_percent": 31.2,
+        "rss_bytes": 155668480
+      },
+      {
+        "cpu_one_core_percent": 34.4,
+        "rss_bytes": 155246592
+      },
+      {
+        "cpu_one_core_percent": 28.1,
+        "rss_bytes": 155496448
+      },
+      {
+        "cpu_one_core_percent": 37.5,
+        "rss_bytes": 155418624
+      },
+      {
+        "cpu_one_core_percent": 23.4,
+        "rss_bytes": 155873280
+      },
+      {
+        "cpu_one_core_percent": 37.5,
+        "rss_bytes": 155721728
+      },
+      {
+        "cpu_one_core_percent": 26.6,
+        "rss_bytes": 156020736
+      },
+      {
+        "cpu_one_core_percent": 18.8,
+        "rss_bytes": 155049984
+      },
+      {
+        "cpu_one_core_percent": 31.2,
+        "rss_bytes": 155971584
+      },
+      {
+        "cpu_one_core_percent": 31.2,
+        "rss_bytes": 155508736
+      },
+      {
+        "cpu_one_core_percent": 32.8,
+        "rss_bytes": 155164672
+      },
+      {
+        "cpu_one_core_percent": 25.0,
+        "rss_bytes": 155402240
+      },
+      {
+        "cpu_one_core_percent": 31.2,
+        "rss_bytes": 155025408
+      },
+      {
+        "cpu_one_core_percent": 34.4,
+        "rss_bytes": 155348992
+      },
+      {
+        "cpu_one_core_percent": 28.1,
+        "rss_bytes": 155246592
+      },
+      {
+        "cpu_one_core_percent": 26.6,
+        "rss_bytes": 155521024
+      },
+      {
+        "cpu_one_core_percent": 25.0,
+        "rss_bytes": 155811840
+      },
+      {
+        "cpu_one_core_percent": 32.8,
+        "rss_bytes": 155803648
+      },
+      {
+        "cpu_one_core_percent": 29.7,
+        "rss_bytes": 155377664
+      }
+    ],
+    [
+      {
+        "cpu_one_core_percent": 17.2,
+        "rss_bytes": 83390464
+      },
+      {
+        "cpu_one_core_percent": 37.5,
+        "rss_bytes": 213704704
+      },
+      {
+        "cpu_one_core_percent": 34.4,
+        "rss_bytes": 156041216
+      },
+      {
+        "cpu_one_core_percent": 26.6,
+        "rss_bytes": 155447296
+      },
+      {
+        "cpu_one_core_percent": 29.7,
+        "rss_bytes": 155930624
+      },
+      {
+        "cpu_one_core_percent": 34.4,
+        "rss_bytes": 155697152
+      },
+      {
+        "cpu_one_core_percent": 31.2,
+        "rss_bytes": 156139520
+      },
+      {
+        "cpu_one_core_percent": 26.6,
+        "rss_bytes": 155930624
+      },
+      {
+        "cpu_one_core_percent": 21.9,
+        "rss_bytes": 156291072
+      },
+      {
+        "cpu_one_core_percent": 29.7,
+        "rss_bytes": 155525120
+      },
+      {
+        "cpu_one_core_percent": 26.6,
+        "rss_bytes": 156180480
+      },
+      {
+        "cpu_one_core_percent": 31.2,
+        "rss_bytes": 155734016
+      },
+      {
+        "cpu_one_core_percent": 26.6,
+        "rss_bytes": 155369472
+      },
+      {
+        "cpu_one_core_percent": 26.6,
+        "rss_bytes": 155602944
+      },
+      {
+        "cpu_one_core_percent": 39.1,
+        "rss_bytes": 155291648
+      },
+      {
+        "cpu_one_core_percent": 29.7,
+        "rss_bytes": 155516928
+      },
+      {
+        "cpu_one_core_percent": 25.0,
+        "rss_bytes": 155451392
+      },
+      {
+        "cpu_one_core_percent": 29.7,
+        "rss_bytes": 155992064
+      },
+      {
+        "cpu_one_core_percent": 25.0,
+        "rss_bytes": 156495872
+      },
+      {
+        "cpu_one_core_percent": 28.1,
+        "rss_bytes": 156082176
+      },
+      {
+        "cpu_one_core_percent": 26.6,
+        "rss_bytes": 155521024
+      }
+    ],
+    [
+      {
+        "cpu_one_core_percent": 0.0,
+        "rss_bytes": 83337216
+      },
+      {
+        "cpu_one_core_percent": 40.0,
+        "rss_bytes": 214179840
+      },
+      {
+        "cpu_one_core_percent": 30.8,
+        "rss_bytes": 156266496
+      },
+      {
+        "cpu_one_core_percent": 23.1,
+        "rss_bytes": 156106752
+      },
+      {
+        "cpu_one_core_percent": 29.2,
+        "rss_bytes": 156430336
+      },
+      {
+        "cpu_one_core_percent": 29.2,
+        "rss_bytes": 156209152
+      },
+      {
+        "cpu_one_core_percent": 30.8,
+        "rss_bytes": 156479488
+      },
+      {
+        "cpu_one_core_percent": 24.6,
+        "rss_bytes": 156319744
+      },
+      {
+        "cpu_one_core_percent": 33.8,
+        "rss_bytes": 156897280
+      },
+      {
+        "cpu_one_core_percent": 30.8,
+        "rss_bytes": 156033024
+      },
+      {
+        "cpu_one_core_percent": 27.7,
+        "rss_bytes": 156463104
+      },
+      {
+        "cpu_one_core_percent": 27.7,
+        "rss_bytes": 156311552
+      },
+      {
+        "cpu_one_core_percent": 30.8,
+        "rss_bytes": 156037120
+      },
+      {
+        "cpu_one_core_percent": 29.2,
+        "rss_bytes": 156368896
+      },
+      {
+        "cpu_one_core_percent": 32.3,
+        "rss_bytes": 155762688
+      },
+      {
+        "cpu_one_core_percent": 23.1,
+        "rss_bytes": 155963392
+      },
+      {
+        "cpu_one_core_percent": 23.1,
+        "rss_bytes": 155983872
+      },
+      {
+        "cpu_one_core_percent": 32.3,
+        "rss_bytes": 156434432
+      },
+      {
+        "cpu_one_core_percent": 27.7,
+        "rss_bytes": 156823552
+      },
+      {
+        "cpu_one_core_percent": 26.1,
+        "rss_bytes": 156393472
+      },
+      {
+        "cpu_one_core_percent": 26.1,
+        "rss_bytes": 155983872
+      }
+    ],
+    [
+      {
+        "cpu_one_core_percent": 4.7,
+        "rss_bytes": 83345408
+      },
+      {
+        "cpu_one_core_percent": 43.8,
+        "rss_bytes": 214646784
+      },
+      {
+        "cpu_one_core_percent": 35.9,
+        "rss_bytes": 156483584
+      },
+      {
+        "cpu_one_core_percent": 39.1,
+        "rss_bytes": 156479488
+      },
+      {
+        "cpu_one_core_percent": 32.8,
+        "rss_bytes": 156811264
+      },
+      {
+        "cpu_one_core_percent": 32.8,
+        "rss_bytes": 156717056
+      },
+      {
+        "cpu_one_core_percent": 34.4,
+        "rss_bytes": 156741632
+      },
+      {
+        "cpu_one_core_percent": 31.2,
+        "rss_bytes": 156540928
+      },
+      {
+        "cpu_one_core_percent": 45.3,
+        "rss_bytes": 157171712
+      },
+      {
+        "cpu_one_core_percent": 34.4,
+        "rss_bytes": 156270592
+      },
+      {
+        "cpu_one_core_percent": 28.1,
+        "rss_bytes": 156901376
+      },
+      {
+        "cpu_one_core_percent": 29.7,
+        "rss_bytes": 156663808
+      },
+      {
+        "cpu_one_core_percent": 26.6,
+        "rss_bytes": 156250112
+      },
+      {
+        "cpu_one_core_percent": 34.4,
+        "rss_bytes": 156733440
+      },
+      {
+        "cpu_one_core_percent": 32.8,
+        "rss_bytes": 156041216
+      },
+      {
+        "cpu_one_core_percent": 28.1,
+        "rss_bytes": 156356608
+      },
+      {
+        "cpu_one_core_percent": 35.9,
+        "rss_bytes": 156442624
+      },
+      {
+        "cpu_one_core_percent": 37.5,
+        "rss_bytes": 157028352
+      },
+      {
+        "cpu_one_core_percent": 32.8,
+        "rss_bytes": 156954624
+      },
+      {
+        "cpu_one_core_percent": 28.1,
+        "rss_bytes": 156893184
+      },
+      {
+        "cpu_one_core_percent": 25.0,
+        "rss_bytes": 156360704
+      }
+    ],
+    [
+      {
+        "cpu_one_core_percent": 7.7,
+        "rss_bytes": 83378176
+      },
+      {
+        "cpu_one_core_percent": 43.1,
+        "rss_bytes": 214233088
+      },
+      {
+        "cpu_one_core_percent": 38.4,
+        "rss_bytes": 156946432
+      },
+      {
+        "cpu_one_core_percent": 38.4,
+        "rss_bytes": 156766208
+      },
+      {
+        "cpu_one_core_percent": 33.8,
+        "rss_bytes": 156975104
+      },
+      {
+        "cpu_one_core_percent": 30.8,
+        "rss_bytes": 156811264
+      },
+      {
+        "cpu_one_core_percent": 38.4,
+        "rss_bytes": 156942336
+      },
+      {
+        "cpu_one_core_percent": 27.7,
+        "rss_bytes": 156876800
+      },
+      {
+        "cpu_one_core_percent": 32.3,
+        "rss_bytes": 157237248
+      },
+      {
+        "cpu_one_core_percent": 36.9,
+        "rss_bytes": 156434432
+      },
+      {
+        "cpu_one_core_percent": 33.8,
+        "rss_bytes": 157196288
+      },
+      {
+        "cpu_one_core_percent": 30.8,
+        "rss_bytes": 156930048
+      },
+      {
+        "cpu_one_core_percent": 27.7,
+        "rss_bytes": 156381184
+      },
+      {
+        "cpu_one_core_percent": 33.8,
+        "rss_bytes": 156864512
+      },
+      {
+        "cpu_one_core_percent": 29.2,
+        "rss_bytes": 156106752
+      },
+      {
+        "cpu_one_core_percent": 35.4,
+        "rss_bytes": 156635136
+      },
+      {
+        "cpu_one_core_percent": 30.8,
+        "rss_bytes": 156577792
+      },
+      {
+        "cpu_one_core_percent": 29.2,
+        "rss_bytes": 157265920
+      },
+      {
+        "cpu_one_core_percent": 38.4,
+        "rss_bytes": 157155328
+      },
+      {
+        "cpu_one_core_percent": 26.1,
+        "rss_bytes": 157040640
+      },
+      {
+        "cpu_one_core_percent": 33.8,
+        "rss_bytes": 156585984
+      }
+    ],
+    [
+      {
+        "cpu_one_core_percent": 0.0,
+        "rss_bytes": 83427328
+      },
+      {
+        "cpu_one_core_percent": 42.2,
+        "rss_bytes": 214384640
+      },
+      {
+        "cpu_one_core_percent": 37.5,
+        "rss_bytes": 157229056
+      },
+      {
+        "cpu_one_core_percent": 39.1,
+        "rss_bytes": 156864512
+      },
+      {
+        "cpu_one_core_percent": 34.4,
+        "rss_bytes": 157077504
+      },
+      {
+        "cpu_one_core_percent": 37.5,
+        "rss_bytes": 156979200
+      },
+      {
+        "cpu_one_core_percent": 34.4,
+        "rss_bytes": 157048832
+      },
+      {
+        "cpu_one_core_percent": 37.5,
+        "rss_bytes": 157294592
+      },
+      {
+        "cpu_one_core_percent": 37.5,
+        "rss_bytes": 157372416
+      },
+      {
+        "cpu_one_core_percent": 32.8,
+        "rss_bytes": 156565504
+      },
+      {
+        "cpu_one_core_percent": 31.2,
+        "rss_bytes": 157335552
+      },
+      {
+        "cpu_one_core_percent": 39.1,
+        "rss_bytes": 157130752
+      },
+      {
+        "cpu_one_core_percent": 29.7,
+        "rss_bytes": 156577792
+      },
+      {
+        "cpu_one_core_percent": 37.5,
+        "rss_bytes": 156930048
+      },
+      {
+        "cpu_one_core_percent": 26.6,
+        "rss_bytes": 156241920
+      },
+      {
+        "cpu_one_core_percent": 40.6,
+        "rss_bytes": 156770304
+      },
+      {
+        "cpu_one_core_percent": 34.4,
+        "rss_bytes": 156774400
+      },
+      {
+        "cpu_one_core_percent": 35.9,
+        "rss_bytes": 157454336
+      },
+      {
+        "cpu_one_core_percent": 29.7,
+        "rss_bytes": 157286400
+      },
+      {
+        "cpu_one_core_percent": 28.1,
+        "rss_bytes": 157143040
+      },
+      {
+        "cpu_one_core_percent": 35.9,
+        "rss_bytes": 156786688
+      }
+    ],
+    [
+      {
+        "cpu_one_core_percent": 14.1,
+        "rss_bytes": 83656704
+      },
+      {
+        "cpu_one_core_percent": 45.3,
+        "rss_bytes": 214769664
+      },
+      {
+        "cpu_one_core_percent": 35.9,
+        "rss_bytes": 158060544
+      },
+      {
+        "cpu_one_core_percent": 40.6,
+        "rss_bytes": 157003776
+      },
+      {
+        "cpu_one_core_percent": 25.0,
+        "rss_bytes": 157442048
+      },
+      {
+        "cpu_one_core_percent": 32.8,
+        "rss_bytes": 157335552
+      },
+      {
+        "cpu_one_core_percent": 37.5,
+        "rss_bytes": 157491200
+      },
+      {
+        "cpu_one_core_percent": 28.1,
+        "rss_bytes": 157626368
+      },
+      {
+        "cpu_one_core_percent": 32.8,
+        "rss_bytes": 157650944
+      },
+      {
+        "cpu_one_core_percent": 32.8,
+        "rss_bytes": 156704768
+      },
+      {
+        "cpu_one_core_percent": 32.8,
+        "rss_bytes": 157921280
+      },
+      {
+        "cpu_one_core_percent": 26.6,
+        "rss_bytes": 157798400
+      },
+      {
+        "cpu_one_core_percent": 28.1,
+        "rss_bytes": 156909568
+      },
+      {
+        "cpu_one_core_percent": 26.6,
+        "rss_bytes": 157069312
+      },
+      {
+        "cpu_one_core_percent": 37.5,
+        "rss_bytes": 156770304
+      },
+      {
+        "cpu_one_core_percent": 35.9,
+        "rss_bytes": 157294592
+      },
+      {
+        "cpu_one_core_percent": 31.2,
+        "rss_bytes": 157171712
+      },
+      {
+        "cpu_one_core_percent": 37.5,
+        "rss_bytes": 158121984
+      },
+      {
+        "cpu_one_core_percent": 28.1,
+        "rss_bytes": 157421568
+      },
+      {
+        "cpu_one_core_percent": 31.2,
+        "rss_bytes": 157921280
+      },
+      {
+        "cpu_one_core_percent": 26.6,
+        "rss_bytes": 157196288
+      }
+    ],
+    [
+      {
+        "cpu_one_core_percent": 0.0,
+        "rss_bytes": 83656704
+      },
+      {
+        "cpu_one_core_percent": 43.1,
+        "rss_bytes": 215048192
+      },
+      {
+        "cpu_one_core_percent": 33.9,
+        "rss_bytes": 158257152
+      },
+      {
+        "cpu_one_core_percent": 35.4,
+        "rss_bytes": 157147136
+      },
+      {
+        "cpu_one_core_percent": 27.7,
+        "rss_bytes": 157777920
+      },
+      {
+        "cpu_one_core_percent": 27.7,
+        "rss_bytes": 157691904
+      },
+      {
+        "cpu_one_core_percent": 27.7,
+        "rss_bytes": 157974528
+      },
+      {
+        "cpu_one_core_percent": 26.2,
+        "rss_bytes": 158035968
+      },
+      {
+        "cpu_one_core_percent": 33.9,
+        "rss_bytes": 157986816
+      },
+      {
+        "cpu_one_core_percent": 32.3,
+        "rss_bytes": 157364224
+      },
+      {
+        "cpu_one_core_percent": 29.2,
+        "rss_bytes": 158089216
+      },
+      {
+        "cpu_one_core_percent": 27.7,
+        "rss_bytes": 158072832
+      },
+      {
+        "cpu_one_core_percent": 26.2,
+        "rss_bytes": 157376512
+      },
+      {
+        "cpu_one_core_percent": 26.2,
+        "rss_bytes": 157200384
+      },
+      {
+        "cpu_one_core_percent": 27.7,
+        "rss_bytes": 156839936
+      },
+      {
+        "cpu_one_core_percent": 32.3,
+        "rss_bytes": 157708288
+      },
+      {
+        "cpu_one_core_percent": 26.2,
+        "rss_bytes": 157573120
+      },
+      {
+        "cpu_one_core_percent": 35.4,
+        "rss_bytes": 158326784
+      },
+      {
+        "cpu_one_core_percent": 26.2,
+        "rss_bytes": 157487104
+      },
+      {
+        "cpu_one_core_percent": 27.7,
+        "rss_bytes": 158412800
+      },
+      {
+        "cpu_one_core_percent": 27.7,
+        "rss_bytes": 157261824
+      }
+    ],
+    [
+      {
+        "cpu_one_core_percent": 0.0,
+        "rss_bytes": 78118912
+      },
+      {
+        "cpu_one_core_percent": 41.5,
+        "rss_bytes": 215150592
+      },
+      {
+        "cpu_one_core_percent": 32.3,
+        "rss_bytes": 158322688
+      },
+      {
+        "cpu_one_core_percent": 30.8,
+        "rss_bytes": 157487104
+      },
+      {
+        "cpu_one_core_percent": 29.2,
+        "rss_bytes": 158203904
+      },
+      {
+        "cpu_one_core_percent": 33.8,
+        "rss_bytes": 158081024
+      },
+      {
+        "cpu_one_core_percent": 30.8,
+        "rss_bytes": 158105600
+      },
+      {
+        "cpu_one_core_percent": 29.2,
+        "rss_bytes": 158302208
+      },
+      {
+        "cpu_one_core_percent": 30.8,
+        "rss_bytes": 158339072
+      },
+      {
+        "cpu_one_core_percent": 38.4,
+        "rss_bytes": 157556736
+      },
+      {
+        "cpu_one_core_percent": 29.2,
+        "rss_bytes": 158162944
+      },
+      {
+        "cpu_one_core_percent": 33.8,
+        "rss_bytes": 158175232
+      },
+      {
+        "cpu_one_core_percent": 33.8,
+        "rss_bytes": 157442048
+      },
+      {
+        "cpu_one_core_percent": 27.7,
+        "rss_bytes": 157933568
+      },
+      {
+        "cpu_one_core_percent": 30.8,
+        "rss_bytes": 156905472
+      },
+      {
+        "cpu_one_core_percent": 29.2,
+        "rss_bytes": 157863936
+      },
+      {
+        "cpu_one_core_percent": 32.3,
+        "rss_bytes": 157769728
+      },
+      {
+        "cpu_one_core_percent": 35.4,
+        "rss_bytes": 158601216
+      },
+      {
+        "cpu_one_core_percent": 32.3,
+        "rss_bytes": 158142464
+      },
+      {
+        "cpu_one_core_percent": 30.8,
+        "rss_bytes": 158478336
+      },
+      {
+        "cpu_one_core_percent": 29.2,
+        "rss_bytes": 157392896
+      }
+    ],
+    [
+      {
+        "cpu_one_core_percent": 0.0,
+        "rss_bytes": 78196736
+      },
+      {
+        "cpu_one_core_percent": 39.1,
+        "rss_bytes": 215306240
+      },
+      {
+        "cpu_one_core_percent": 40.6,
+        "rss_bytes": 158617600
+      },
+      {
+        "cpu_one_core_percent": 32.8,
+        "rss_bytes": 158027776
+      },
+      {
+        "cpu_one_core_percent": 32.8,
+        "rss_bytes": 158334976
+      },
+      {
+        "cpu_one_core_percent": 37.5,
+        "rss_bytes": 158666752
+      },
+      {
+        "cpu_one_core_percent": 34.4,
+        "rss_bytes": 158175232
+      },
+      {
+        "cpu_one_core_percent": 29.7,
+        "rss_bytes": 158502912
+      },
+      {
+        "cpu_one_core_percent": 35.9,
+        "rss_bytes": 158658560
+      },
+      {
+        "cpu_one_core_percent": 43.8,
+        "rss_bytes": 157732864
+      },
+      {
+        "cpu_one_core_percent": 35.9,
+        "rss_bytes": 158437376
+      },
+      {
+        "cpu_one_core_percent": 35.9,
+        "rss_bytes": 158371840
+      },
+      {
+        "cpu_one_core_percent": 34.4,
+        "rss_bytes": 157638656
+      },
+      {
+        "cpu_one_core_percent": 32.8,
+        "rss_bytes": 158064640
+      },
+      {
+        "cpu_one_core_percent": 34.4,
+        "rss_bytes": 157040640
+      },
+      {
+        "cpu_one_core_percent": 28.1,
+        "rss_bytes": 157999104
+      },
+      {
+        "cpu_one_core_percent": 35.9,
+        "rss_bytes": 157900800
+      },
+      {
+        "cpu_one_core_percent": 39.1,
+        "rss_bytes": 158703616
+      },
+      {
+        "cpu_one_core_percent": 40.6,
+        "rss_bytes": 158351360
+      },
+      {
+        "cpu_one_core_percent": 32.8,
+        "rss_bytes": 158744576
+      },
+      {
+        "cpu_one_core_percent": 35.9,
+        "rss_bytes": 157925376
+      }
+    ],
+    [
+      {
+        "cpu_one_core_percent": 15.4,
+        "rss_bytes": 78196736
+      },
+      {
+        "cpu_one_core_percent": 43.1,
+        "rss_bytes": 215478272
+      },
+      {
+        "cpu_one_core_percent": 38.5,
+        "rss_bytes": 158748672
+      },
+      {
+        "cpu_one_core_percent": 38.5,
+        "rss_bytes": 158093312
+      },
+      {
+        "cpu_one_core_percent": 32.3,
+        "rss_bytes": 158564352
+      },
+      {
+        "cpu_one_core_percent": 46.2,
+        "rss_bytes": 158920704
+      },
+      {
+        "cpu_one_core_percent": 35.4,
+        "rss_bytes": 158306304
+      },
+      {
+        "cpu_one_core_percent": 32.3,
+        "rss_bytes": 158633984
+      },
+      {
+        "cpu_one_core_percent": 41.6,
+        "rss_bytes": 158724096
+      },
+      {
+        "cpu_one_core_percent": 38.5,
+        "rss_bytes": 157876224
+      },
+      {
+        "cpu_one_core_percent": 40.0,
+        "rss_bytes": 158625792
+      },
+      {
+        "cpu_one_core_percent": 35.4,
+        "rss_bytes": 158437376
+      },
+      {
+        "cpu_one_core_percent": 33.9,
+        "rss_bytes": 157769728
+      },
+      {
+        "cpu_one_core_percent": 35.4,
+        "rss_bytes": 158130176
+      },
+      {
+        "cpu_one_core_percent": 35.4,
+        "rss_bytes": 157442048
+      },
+      {
+        "cpu_one_core_percent": 40.0,
+        "rss_bytes": 158224384
+      },
+      {
+        "cpu_one_core_percent": 36.9,
+        "rss_bytes": 157966336
+      },
+      {
+        "cpu_one_core_percent": 36.9,
+        "rss_bytes": 158937088
+      },
+      {
+        "cpu_one_core_percent": 40.0,
+        "rss_bytes": 158482432
+      },
+      {
+        "cpu_one_core_percent": 36.9,
+        "rss_bytes": 158875648
+      },
+      {
+        "cpu_one_core_percent": 44.6,
+        "rss_bytes": 157990912
+      }
+    ],
+    [
+      {
+        "cpu_one_core_percent": 16.9,
+        "rss_bytes": 78204928
+      },
+      {
+        "cpu_one_core_percent": 43.1,
+        "rss_bytes": 215560192
+      },
+      {
+        "cpu_one_core_percent": 38.4,
+        "rss_bytes": 158814208
+      },
+      {
+        "cpu_one_core_percent": 36.9,
+        "rss_bytes": 158433280
+      },
+      {
+        "cpu_one_core_percent": 27.7,
+        "rss_bytes": 158715904
+      },
+      {
+        "cpu_one_core_percent": 44.6,
+        "rss_bytes": 159059968
+      },
+      {
+        "cpu_one_core_percent": 35.4,
+        "rss_bytes": 158437376
+      },
+      {
+        "cpu_one_core_percent": 27.7,
+        "rss_bytes": 158699520
+      },
+      {
+        "cpu_one_core_percent": 35.4,
+        "rss_bytes": 158859264
+      },
+      {
+        "cpu_one_core_percent": 38.4,
+        "rss_bytes": 158052352
+      },
+      {
+        "cpu_one_core_percent": 40.0,
+        "rss_bytes": 158699520
+      },
+      {
+        "cpu_one_core_percent": 32.3,
+        "rss_bytes": 158576640
+      },
+      {
+        "cpu_one_core_percent": 30.8,
+        "rss_bytes": 157868032
+      },
+      {
+        "cpu_one_core_percent": 36.9,
+        "rss_bytes": 158396416
+      },
+      {
+        "cpu_one_core_percent": 38.4,
+        "rss_bytes": 157642752
+      },
+      {
+        "cpu_one_core_percent": 27.7,
+        "rss_bytes": 158298112
+      },
+      {
+        "cpu_one_core_percent": 32.3,
+        "rss_bytes": 158064640
+      },
+      {
+        "cpu_one_core_percent": 40.0,
+        "rss_bytes": 159076352
+      },
+      {
+        "cpu_one_core_percent": 40.0,
+        "rss_bytes": 161931264
+      },
+      {
+        "cpu_one_core_percent": 32.3,
+        "rss_bytes": 158945280
+      },
+      {
+        "cpu_one_core_percent": 33.8,
+        "rss_bytes": 158121984
+      }
+    ],
+    [
+      {
+        "cpu_one_core_percent": 0.0,
+        "rss_bytes": 78213120
+      },
+      {
+        "cpu_one_core_percent": 43.8,
+        "rss_bytes": 215912448
+      },
+      {
+        "cpu_one_core_percent": 35.9,
+        "rss_bytes": 158949376
+      },
+      {
+        "cpu_one_core_percent": 37.5,
+        "rss_bytes": 158601216
+      },
+      {
+        "cpu_one_core_percent": 31.2,
+        "rss_bytes": 158851072
+      },
+      {
+        "cpu_one_core_percent": 32.8,
+        "rss_bytes": 159191040
+      },
+      {
+        "cpu_one_core_percent": 35.9,
+        "rss_bytes": 158502912
+      },
+      {
+        "cpu_one_core_percent": 32.8,
+        "rss_bytes": 158830592
+      },
+      {
+        "cpu_one_core_percent": 31.2,
+        "rss_bytes": 158924800
+      },
+      {
+        "cpu_one_core_percent": 39.1,
+        "rss_bytes": 158130176
+      },
+      {
+        "cpu_one_core_percent": 34.4,
+        "rss_bytes": 158834688
+      },
+      {
+        "cpu_one_core_percent": 34.4,
+        "rss_bytes": 158707712
+      },
+      {
+        "cpu_one_core_percent": 34.4,
+        "rss_bytes": 157999104
+      },
+      {
+        "cpu_one_core_percent": 40.6,
+        "rss_bytes": 158527488
+      },
+      {
+        "cpu_one_core_percent": 40.6,
+        "rss_bytes": 157773824
+      },
+      {
+        "cpu_one_core_percent": 31.2,
+        "rss_bytes": 158429184
+      },
+      {
+        "cpu_one_core_percent": 40.6,
+        "rss_bytes": 158289920
+      },
+      {
+        "cpu_one_core_percent": 45.3,
+        "rss_bytes": 159215616
+      },
+      {
+        "cpu_one_core_percent": 28.1,
+        "rss_bytes": 161996800
+      },
+      {
+        "cpu_one_core_percent": 31.2,
+        "rss_bytes": 159076352
+      },
+      {
+        "cpu_one_core_percent": 35.9,
+        "rss_bytes": 158253056
+      }
+    ],
+    [
+      {
+        "cpu_one_core_percent": 9.2,
+        "rss_bytes": 78245888
+      },
+      {
+        "cpu_one_core_percent": 44.6,
+        "rss_bytes": 216104960
+      },
+      {
+        "cpu_one_core_percent": 38.4,
+        "rss_bytes": 159211520
+      },
+      {
+        "cpu_one_core_percent": 44.6,
+        "rss_bytes": 158736384
+      },
+      {
+        "cpu_one_core_percent": 26.1,
+        "rss_bytes": 159023104
+      },
+      {
+        "cpu_one_core_percent": 35.4,
+        "rss_bytes": 159289344
+      },
+      {
+        "cpu_one_core_percent": 29.2,
+        "rss_bytes": 158633984
+      },
+      {
+        "cpu_one_core_percent": 30.8,
+        "rss_bytes": 158961664
+      },
+      {
+        "cpu_one_core_percent": 36.9,
+        "rss_bytes": 159199232
+      },
+      {
+        "cpu_one_core_percent": 33.8,
+        "rss_bytes": 158265344
+      },
+      {
+        "cpu_one_core_percent": 36.9,
+        "rss_bytes": 159019008
+      },
+      {
+        "cpu_one_core_percent": 29.2,
+        "rss_bytes": 158965760
+      },
+      {
+        "cpu_one_core_percent": 32.3,
+        "rss_bytes": 158130176
+      },
+      {
+        "cpu_one_core_percent": 36.9,
+        "rss_bytes": 158658560
+      },
+      {
+        "cpu_one_core_percent": 38.4,
+        "rss_bytes": 157904896
+      },
+      {
+        "cpu_one_core_percent": 29.2,
+        "rss_bytes": 158756864
+      },
+      {
+        "cpu_one_core_percent": 38.4,
+        "rss_bytes": 158363648
+      },
+      {
+        "cpu_one_core_percent": 38.4,
+        "rss_bytes": 159281152
+      },
+      {
+        "cpu_one_core_percent": 32.3,
+        "rss_bytes": 162127872
+      },
+      {
+        "cpu_one_core_percent": 32.3,
+        "rss_bytes": 159236096
+      },
+      {
+        "cpu_one_core_percent": 29.2,
+        "rss_bytes": 158384128
+      }
+    ],
+    [
+      {
+        "cpu_one_core_percent": 0.0,
+        "rss_bytes": 78245888
+      },
+      {
+        "cpu_one_core_percent": 45.3,
+        "rss_bytes": 216326144
+      },
+      {
+        "cpu_one_core_percent": 45.3,
+        "rss_bytes": 159342592
+      },
+      {
+        "cpu_one_core_percent": 42.2,
+        "rss_bytes": 158867456
+      },
+      {
+        "cpu_one_core_percent": 31.2,
+        "rss_bytes": 159088640
+      },
+      {
+        "cpu_one_core_percent": 35.9,
+        "rss_bytes": 159420416
+      },
+      {
+        "cpu_one_core_percent": 31.2,
+        "rss_bytes": 158769152
+      },
+      {
+        "cpu_one_core_percent": 31.2,
+        "rss_bytes": 159027200
+      },
+      {
+        "cpu_one_core_percent": 37.5,
+        "rss_bytes": 159330304
+      },
+      {
+        "cpu_one_core_percent": 39.1,
+        "rss_bytes": 158449664
+      },
+      {
+        "cpu_one_core_percent": 37.5,
+        "rss_bytes": 159150080
+      },
+      {
+        "cpu_one_core_percent": 32.8,
+        "rss_bytes": 159096832
+      },
+      {
+        "cpu_one_core_percent": 35.9,
+        "rss_bytes": 158261248
+      },
+      {
+        "cpu_one_core_percent": 37.5,
+        "rss_bytes": 158789632
+      },
+      {
+        "cpu_one_core_percent": 42.2,
+        "rss_bytes": 158040064
+      },
+      {
+        "cpu_one_core_percent": 31.2,
+        "rss_bytes": 158896128
+      },
+      {
+        "cpu_one_core_percent": 37.5,
+        "rss_bytes": 158494720
+      },
+      {
+        "cpu_one_core_percent": 43.8,
+        "rss_bytes": 159412224
+      },
+      {
+        "cpu_one_core_percent": 34.4,
+        "rss_bytes": 162258944
+      },
+      {
+        "cpu_one_core_percent": 35.9,
+        "rss_bytes": 159367168
+      },
+      {
+        "cpu_one_core_percent": 31.2,
+        "rss_bytes": 158449664
+      }
+    ],
+    [
+      {
+        "cpu_one_core_percent": 18.5,
+        "rss_bytes": 78245888
+      },
+      {
+        "cpu_one_core_percent": 36.9,
+        "rss_bytes": 216518656
+      },
+      {
+        "cpu_one_core_percent": 40.0,
+        "rss_bytes": 159490048
+      },
+      {
+        "cpu_one_core_percent": 41.6,
+        "rss_bytes": 158998528
+      },
+      {
+        "cpu_one_core_percent": 27.7,
+        "rss_bytes": 159219712
+      },
+      {
+        "cpu_one_core_percent": 32.3,
+        "rss_bytes": 159617024
+      },
+      {
+        "cpu_one_core_percent": 30.8,
+        "rss_bytes": 158834688
+      },
+      {
+        "cpu_one_core_percent": 32.3,
+        "rss_bytes": 159191040
+      },
+      {
+        "cpu_one_core_percent": 29.2,
+        "rss_bytes": 159461376
+      },
+      {
+        "cpu_one_core_percent": 41.6,
+        "rss_bytes": 158580736
+      },
+      {
+        "cpu_one_core_percent": 32.3,
+        "rss_bytes": 159281152
+      },
+      {
+        "cpu_one_core_percent": 33.9,
+        "rss_bytes": 159170560
+      },
+      {
+        "cpu_one_core_percent": 30.8,
+        "rss_bytes": 158326784
+      },
+      {
+        "cpu_one_core_percent": 29.2,
+        "rss_bytes": 158863360
+      },
+      {
+        "cpu_one_core_percent": 33.9,
+        "rss_bytes": 158109696
+      },
+      {
+        "cpu_one_core_percent": 27.7,
+        "rss_bytes": 158969856
+      },
+      {
+        "cpu_one_core_percent": 30.8,
+        "rss_bytes": 158625792
+      },
+      {
+        "cpu_one_core_percent": 43.1,
+        "rss_bytes": 159543296
+      },
+      {
+        "cpu_one_core_percent": 30.8,
+        "rss_bytes": 162390016
+      },
+      {
+        "cpu_one_core_percent": 27.7,
+        "rss_bytes": 159432704
+      },
+      {
+        "cpu_one_core_percent": 27.7,
+        "rss_bytes": 158715904
+      }
+    ],
+    [
+      {
+        "cpu_one_core_percent": 0.0,
+        "rss_bytes": 78258176
+      },
+      {
+        "cpu_one_core_percent": 35.9,
+        "rss_bytes": 216588288
+      },
+      {
+        "cpu_one_core_percent": 39.1,
+        "rss_bytes": 159600640
+      },
+      {
+        "cpu_one_core_percent": 39.1,
+        "rss_bytes": 159232000
+      },
+      {
+        "cpu_one_core_percent": 29.7,
+        "rss_bytes": 159363072
+      },
+      {
+        "cpu_one_core_percent": 25.0,
+        "rss_bytes": 159686656
+      },
+      {
+        "cpu_one_core_percent": 28.1,
+        "rss_bytes": 158965760
+      },
+      {
+        "cpu_one_core_percent": 29.7,
+        "rss_bytes": 159322112
+      },
+      {
+        "cpu_one_core_percent": 40.6,
+        "rss_bytes": 159531008
+      },
+      {
+        "cpu_one_core_percent": 40.6,
+        "rss_bytes": 158715904
+      },
+      {
+        "cpu_one_core_percent": 31.2,
+        "rss_bytes": 159350784
+      },
+      {
+        "cpu_one_core_percent": 26.6,
+        "rss_bytes": 159305728
+      },
+      {
+        "cpu_one_core_percent": 37.5,
+        "rss_bytes": 158527488
+      },
+      {
+        "cpu_one_core_percent": 31.2,
+        "rss_bytes": 158998528
+      },
+      {
+        "cpu_one_core_percent": 37.5,
+        "rss_bytes": 158371840
+      },
+      {
+        "cpu_one_core_percent": 28.1,
+        "rss_bytes": 159105024
+      },
+      {
+        "cpu_one_core_percent": 34.4,
+        "rss_bytes": 158756864
+      },
+      {
+        "cpu_one_core_percent": 43.8,
+        "rss_bytes": 159674368
+      },
+      {
+        "cpu_one_core_percent": 32.8,
+        "rss_bytes": 162455552
+      },
+      {
+        "cpu_one_core_percent": 31.2,
+        "rss_bytes": 159584256
+      },
+      {
+        "cpu_one_core_percent": 34.4,
+        "rss_bytes": 158846976
+      }
+    ],
+    [
+      {
+        "cpu_one_core_percent": 15.4,
+        "rss_bytes": 78258176
+      },
+      {
+        "cpu_one_core_percent": 27.7,
+        "rss_bytes": 216690688
+      },
+      {
+        "cpu_one_core_percent": 35.4,
+        "rss_bytes": 159641600
+      },
+      {
+        "cpu_one_core_percent": 33.8,
+        "rss_bytes": 159379456
+      },
+      {
+        "cpu_one_core_percent": 27.7,
+        "rss_bytes": 159399936
+      },
+      {
+        "cpu_one_core_percent": 36.9,
+        "rss_bytes": 159813632
+      },
+      {
+        "cpu_one_core_percent": 35.4,
+        "rss_bytes": 159174656
+      },
+      {
+        "cpu_one_core_percent": 26.1,
+        "rss_bytes": 159383552
+      },
+      {
+        "cpu_one_core_percent": 26.1,
+        "rss_bytes": 159629312
+      },
+      {
+        "cpu_one_core_percent": 35.4,
+        "rss_bytes": 158720000
+      },
+      {
+        "cpu_one_core_percent": 32.3,
+        "rss_bytes": 159408128
+      },
+      {
+        "cpu_one_core_percent": 32.3,
+        "rss_bytes": 159334400
+      },
+      {
+        "cpu_one_core_percent": 35.4,
+        "rss_bytes": 158580736
+      },
+      {
+        "cpu_one_core_percent": 36.9,
+        "rss_bytes": 159051776
+      },
+      {
+        "cpu_one_core_percent": 33.8,
+        "rss_bytes": 158453760
+      },
+      {
+        "cpu_one_core_percent": 26.1,
+        "rss_bytes": 159166464
+      },
+      {
+        "cpu_one_core_percent": 38.4,
+        "rss_bytes": 158801920
+      },
+      {
+        "cpu_one_core_percent": 41.5,
+        "rss_bytes": 159711232
+      },
+      {
+        "cpu_one_core_percent": 36.9,
+        "rss_bytes": 162541568
+      },
+      {
+        "cpu_one_core_percent": 32.3,
+        "rss_bytes": 159633408
+      },
+      {
+        "cpu_one_core_percent": 32.3,
+        "rss_bytes": 158875648
+      }
+    ],
+    [
+      {
+        "cpu_one_core_percent": 4.7,
+        "rss_bytes": 78258176
+      },
+      {
+        "cpu_one_core_percent": 43.8,
+        "rss_bytes": 216854528
+      },
+      {
+        "cpu_one_core_percent": 35.9,
+        "rss_bytes": 159653888
+      },
+      {
+        "cpu_one_core_percent": 40.6,
+        "rss_bytes": 159379456
+      },
+      {
+        "cpu_one_core_percent": 32.8,
+        "rss_bytes": 159399936
+      },
+      {
+        "cpu_one_core_percent": 37.5,
+        "rss_bytes": 159813632
+      },
+      {
+        "cpu_one_core_percent": 37.5,
+        "rss_bytes": 159182848
+      },
+      {
+        "cpu_one_core_percent": 28.1,
+        "rss_bytes": 159383552
+      },
+      {
+        "cpu_one_core_percent": 34.4,
+        "rss_bytes": 159645696
+      },
+      {
+        "cpu_one_core_percent": 37.5,
+        "rss_bytes": 158720000
+      },
+      {
+        "cpu_one_core_percent": 37.5,
+        "rss_bytes": 159432704
+      },
+      {
+        "cpu_one_core_percent": 32.8,
+        "rss_bytes": 159334400
+      },
+      {
+        "cpu_one_core_percent": 31.2,
+        "rss_bytes": 158580736
+      },
+      {
+        "cpu_one_core_percent": 39.1,
+        "rss_bytes": 159051776
+      },
+      {
+        "cpu_one_core_percent": 43.8,
+        "rss_bytes": 158453760
+      },
+      {
+        "cpu_one_core_percent": 31.2,
+        "rss_bytes": 159170560
+      },
+      {
+        "cpu_one_core_percent": 39.1,
+        "rss_bytes": 158810112
+      },
+      {
+        "cpu_one_core_percent": 48.4,
+        "rss_bytes": 159711232
+      },
+      {
+        "cpu_one_core_percent": 39.1,
+        "rss_bytes": 162545664
+      },
+      {
+        "cpu_one_core_percent": 32.8,
+        "rss_bytes": 159633408
+      },
+      {
+        "cpu_one_core_percent": 32.8,
+        "rss_bytes": 158875648
+      }
+    ],
+    [
+      {
+        "cpu_one_core_percent": 16.9,
+        "rss_bytes": 78323712
+      },
+      {
+        "cpu_one_core_percent": 47.7,
+        "rss_bytes": 216858624
+      },
+      {
+        "cpu_one_core_percent": 47.7,
+        "rss_bytes": 159653888
+      },
+      {
+        "cpu_one_core_percent": 46.1,
+        "rss_bytes": 159379456
+      },
+      {
+        "cpu_one_core_percent": 29.2,
+        "rss_bytes": 159399936
+      },
+      {
+        "cpu_one_core_percent": 40.0,
+        "rss_bytes": 159813632
+      },
+      {
+        "cpu_one_core_percent": 36.9,
+        "rss_bytes": 159182848
+      },
+      {
+        "cpu_one_core_percent": 27.7,
+        "rss_bytes": 159383552
+      },
+      {
+        "cpu_one_core_percent": 33.8,
+        "rss_bytes": 162852864
+      },
+      {
+        "cpu_one_core_percent": 36.9,
+        "rss_bytes": 158720000
+      },
+      {
+        "cpu_one_core_percent": 40.0,
+        "rss_bytes": 159432704
+      },
+      {
+        "cpu_one_core_percent": 36.9,
+        "rss_bytes": 159346688
+      },
+      {
+        "cpu_one_core_percent": 40.0,
+        "rss_bytes": 158580736
+      },
+      {
+        "cpu_one_core_percent": 35.4,
+        "rss_bytes": 159051776
+      },
+      {
+        "cpu_one_core_percent": 41.5,
+        "rss_bytes": 158453760
+      },
+      {
+        "cpu_one_core_percent": 35.4,
+        "rss_bytes": 159170560
+      },
+      {
+        "cpu_one_core_percent": 41.5,
+        "rss_bytes": 158810112
+      },
+      {
+        "cpu_one_core_percent": 41.5,
+        "rss_bytes": 159715328
+      },
+      {
+        "cpu_one_core_percent": 44.6,
+        "rss_bytes": 162545664
+      },
+      {
+        "cpu_one_core_percent": 32.3,
+        "rss_bytes": 159633408
+      },
+      {
+        "cpu_one_core_percent": 36.9,
+        "rss_bytes": 158875648
+      }
+    ],
+    [
+      {
+        "cpu_one_core_percent": 12.3,
+        "rss_bytes": 78323712
+      },
+      {
+        "cpu_one_core_percent": 44.6,
+        "rss_bytes": 216866816
+      },
+      {
+        "cpu_one_core_percent": 46.2,
+        "rss_bytes": 159653888
+      },
+      {
+        "cpu_one_core_percent": 44.6,
+        "rss_bytes": 159379456
+      },
+      {
+        "cpu_one_core_percent": 30.8,
+        "rss_bytes": 159399936
+      },
+      {
+        "cpu_one_core_percent": 35.4,
+        "rss_bytes": 159866880
+      },
+      {
+        "cpu_one_core_percent": 35.4,
+        "rss_bytes": 162390016
+      },
+      {
+        "cpu_one_core_percent": 29.2,
+        "rss_bytes": 159383552
+      },
+      {
+        "cpu_one_core_percent": 35.4,
+        "rss_bytes": 162852864
+      },
+      {
+        "cpu_one_core_percent": 41.6,
+        "rss_bytes": 158720000
+      },
+      {
+        "cpu_one_core_percent": 40.0,
+        "rss_bytes": 159432704
+      },
+      {
+        "cpu_one_core_percent": 33.9,
+        "rss_bytes": 159354880
+      },
+      {
+        "cpu_one_core_percent": 29.2,
+        "rss_bytes": 158580736
+      },
+      {
+        "cpu_one_core_percent": 38.5,
+        "rss_bytes": 159055872
+      },
+      {
+        "cpu_one_core_percent": 41.6,
+        "rss_bytes": 158453760
+      },
+      {
+        "cpu_one_core_percent": 29.2,
+        "rss_bytes": 159178752
+      },
+      {
+        "cpu_one_core_percent": 27.7,
+        "rss_bytes": 158810112
+      },
+      {
+        "cpu_one_core_percent": 50.8,
+        "rss_bytes": 159821824
+      },
+      {
+        "cpu_one_core_percent": 40.0,
+        "rss_bytes": 162545664
+      },
+      {
+        "cpu_one_core_percent": 33.9,
+        "rss_bytes": 159633408
+      },
+      {
+        "cpu_one_core_percent": 32.3,
+        "rss_bytes": 158875648
+      }
+    ],
+    [
+      {
+        "cpu_one_core_percent": 0.0,
+        "rss_bytes": 78323712
+      },
+      {
+        "cpu_one_core_percent": 43.8,
+        "rss_bytes": 216875008
+      },
+      {
+        "cpu_one_core_percent": 48.4,
+        "rss_bytes": 159653888
+      },
+      {
+        "cpu_one_core_percent": 48.4,
+        "rss_bytes": 159379456
+      },
+      {
+        "cpu_one_core_percent": 32.8,
+        "rss_bytes": 159399936
+      },
+      {
+        "cpu_one_core_percent": 46.9,
+        "rss_bytes": 159911936
+      },
+      {
+        "cpu_one_core_percent": 37.5,
+        "rss_bytes": 162390016
+      },
+      {
+        "cpu_one_core_percent": 37.5,
+        "rss_bytes": 159588352
+      },
+      {
+        "cpu_one_core_percent": 40.6,
+        "rss_bytes": 162852864
+      },
+      {
+        "cpu_one_core_percent": 43.8,
+        "rss_bytes": 158720000
+      },
+      {
+        "cpu_one_core_percent": 35.9,
+        "rss_bytes": 159440896
+      },
+      {
+        "cpu_one_core_percent": 42.2,
+        "rss_bytes": 159367168
+      },
+      {
+        "cpu_one_core_percent": 43.8,
+        "rss_bytes": 158646272
+      },
+      {
+        "cpu_one_core_percent": 42.2,
+        "rss_bytes": 159055872
+      },
+      {
+        "cpu_one_core_percent": 39.1,
+        "rss_bytes": 158461952
+      },
+      {
+        "cpu_one_core_percent": 32.8,
+        "rss_bytes": 159195136
+      },
+      {
+        "cpu_one_core_percent": 39.1,
+        "rss_bytes": 158879744
+      },
+      {
+        "cpu_one_core_percent": 43.8,
+        "rss_bytes": 159887360
+      },
+      {
+        "cpu_one_core_percent": 43.8,
+        "rss_bytes": 162545664
+      },
+      {
+        "cpu_one_core_percent": 45.3,
+        "rss_bytes": 159633408
+      },
+      {
+        "cpu_one_core_percent": 43.8,
+        "rss_bytes": 158875648
+      }
+    ],
+    [
+      {
+        "cpu_one_core_percent": 43.8,
+        "rss_bytes": 78323712
+      },
+      {
+        "cpu_one_core_percent": 43.8,
+        "rss_bytes": 216879104
+      },
+      {
+        "cpu_one_core_percent": 43.8,
+        "rss_bytes": 159653888
+      },
+      {
+        "cpu_one_core_percent": 42.2,
+        "rss_bytes": 159379456
+      },
+      {
+        "cpu_one_core_percent": 29.7,
+        "rss_bytes": 159399936
+      },
+      {
+        "cpu_one_core_percent": 40.6,
+        "rss_bytes": 159911936
+      },
+      {
+        "cpu_one_core_percent": 39.1,
+        "rss_bytes": 162390016
+      },
+      {
+        "cpu_one_core_percent": 34.4,
+        "rss_bytes": 159588352
+      },
+      {
+        "cpu_one_core_percent": 39.1,
+        "rss_bytes": 162852864
+      },
+      {
+        "cpu_one_core_percent": 48.4,
+        "rss_bytes": 158720000
+      },
+      {
+        "cpu_one_core_percent": 39.1,
+        "rss_bytes": 159440896
+      },
+      {
+        "cpu_one_core_percent": 35.9,
+        "rss_bytes": 159375360
+      },
+      {
+        "cpu_one_core_percent": 37.5,
+        "rss_bytes": 158654464
+      },
+      {
+        "cpu_one_core_percent": 35.9,
+        "rss_bytes": 159055872
+      },
+      {
+        "cpu_one_core_percent": 45.3,
+        "rss_bytes": 158461952
+      },
+      {
+        "cpu_one_core_percent": 34.4,
+        "rss_bytes": 159252480
+      },
+      {
+        "cpu_one_core_percent": 40.6,
+        "rss_bytes": 158879744
+      },
+      {
+        "cpu_one_core_percent": 39.1,
+        "rss_bytes": 159891456
+      },
+      {
+        "cpu_one_core_percent": 43.8,
+        "rss_bytes": 162545664
+      },
+      {
+        "cpu_one_core_percent": 34.4,
+        "rss_bytes": 159633408
+      },
+      {
+        "cpu_one_core_percent": 43.8,
+        "rss_bytes": 158875648
+      }
+    ],
+    [
+      {
+        "cpu_one_core_percent": 4.6,
+        "rss_bytes": 78282752
+      },
+      {
+        "cpu_one_core_percent": 41.5,
+        "rss_bytes": 216887296
+      },
+      {
+        "cpu_one_core_percent": 35.4,
+        "rss_bytes": 159653888
+      },
+      {
+        "cpu_one_core_percent": 35.4,
+        "rss_bytes": 159399936
+      },
+      {
+        "cpu_one_core_percent": 30.8,
+        "rss_bytes": 159408128
+      },
+      {
+        "cpu_one_core_percent": 41.5,
+        "rss_bytes": 159911936
+      },
+      {
+        "cpu_one_core_percent": 35.4,
+        "rss_bytes": 162394112
+      },
+      {
+        "cpu_one_core_percent": 30.8,
+        "rss_bytes": 159588352
+      },
+      {
+        "cpu_one_core_percent": 40.0,
+        "rss_bytes": 162852864
+      },
+      {
+        "cpu_one_core_percent": 38.4,
+        "rss_bytes": 158720000
+      },
+      {
+        "cpu_one_core_percent": 32.3,
+        "rss_bytes": 159440896
+      },
+      {
+        "cpu_one_core_percent": 32.3,
+        "rss_bytes": 159375360
+      },
+      {
+        "cpu_one_core_percent": 32.3,
+        "rss_bytes": 158654464
+      },
+      {
+        "cpu_one_core_percent": 38.4,
+        "rss_bytes": 159055872
+      },
+      {
+        "cpu_one_core_percent": 41.5,
+        "rss_bytes": 158461952
+      },
+      {
+        "cpu_one_core_percent": 38.4,
+        "rss_bytes": 159256576
+      },
+      {
+        "cpu_one_core_percent": 33.8,
+        "rss_bytes": 158879744
+      },
+      {
+        "cpu_one_core_percent": 44.6,
+        "rss_bytes": 159891456
+      },
+      {
+        "cpu_one_core_percent": 40.0,
+        "rss_bytes": 162545664
+      },
+      {
+        "cpu_one_core_percent": 27.7,
+        "rss_bytes": 159633408
+      },
+      {
+        "cpu_one_core_percent": 29.2,
+        "rss_bytes": 158875648
+      }
+    ],
+    [
+      {
+        "cpu_one_core_percent": 9.4,
+        "rss_bytes": 78282752
+      },
+      {
+        "cpu_one_core_percent": 43.8,
+        "rss_bytes": 216891392
+      },
+      {
+        "cpu_one_core_percent": 40.6,
+        "rss_bytes": 159653888
+      },
+      {
+        "cpu_one_core_percent": 42.2,
+        "rss_bytes": 159399936
+      },
+      {
+        "cpu_one_core_percent": 32.8,
+        "rss_bytes": 159408128
+      },
+      {
+        "cpu_one_core_percent": 37.5,
+        "rss_bytes": 160043008
+      },
+      {
+        "cpu_one_core_percent": 32.8,
+        "rss_bytes": 162394112
+      },
+      {
+        "cpu_one_core_percent": 31.2,
+        "rss_bytes": 159588352
+      },
+      {
+        "cpu_one_core_percent": 29.7,
+        "rss_bytes": 162852864
+      },
+      {
+        "cpu_one_core_percent": 37.5,
+        "rss_bytes": 158720000
+      },
+      {
+        "cpu_one_core_percent": 29.7,
+        "rss_bytes": 159440896
+      },
+      {
+        "cpu_one_core_percent": 35.9,
+        "rss_bytes": 159387648
+      },
+      {
+        "cpu_one_core_percent": 32.8,
+        "rss_bytes": 158654464
+      },
+      {
+        "cpu_one_core_percent": 39.1,
+        "rss_bytes": 159055872
+      },
+      {
+        "cpu_one_core_percent": 35.9,
+        "rss_bytes": 158461952
+      },
+      {
+        "cpu_one_core_percent": 31.2,
+        "rss_bytes": 159256576
+      },
+      {
+        "cpu_one_core_percent": 37.5,
+        "rss_bytes": 158949376
+      },
+      {
+        "cpu_one_core_percent": 40.6,
+        "rss_bytes": 159891456
+      },
+      {
+        "cpu_one_core_percent": 34.4,
+        "rss_bytes": 162545664
+      },
+      {
+        "cpu_one_core_percent": 29.7,
+        "rss_bytes": 159633408
+      },
+      {
+        "cpu_one_core_percent": 31.2,
+        "rss_bytes": 158875648
+      }
+    ],
+    [
+      {
+        "cpu_one_core_percent": 13.9,
+        "rss_bytes": 78323712
+      },
+      {
+        "cpu_one_core_percent": 44.6,
+        "rss_bytes": 216895488
+      },
+      {
+        "cpu_one_core_percent": 47.7,
+        "rss_bytes": 159653888
+      },
+      {
+        "cpu_one_core_percent": 43.1,
+        "rss_bytes": 159399936
+      },
+      {
+        "cpu_one_core_percent": 32.3,
+        "rss_bytes": 159408128
+      },
+      {
+        "cpu_one_core_percent": 35.4,
+        "rss_bytes": 160047104
+      },
+      {
+        "cpu_one_core_percent": 38.5,
+        "rss_bytes": 162394112
+      },
+      {
+        "cpu_one_core_percent": 24.6,
+        "rss_bytes": 159588352
+      },
+      {
+        "cpu_one_core_percent": 35.4,
+        "rss_bytes": 162852864
+      },
+      {
+        "cpu_one_core_percent": 36.9,
+        "rss_bytes": 158720000
+      },
+      {
+        "cpu_one_core_percent": 32.3,
+        "rss_bytes": 159465472
+      },
+      {
+        "cpu_one_core_percent": 30.8,
+        "rss_bytes": 159387648
+      },
+      {
+        "cpu_one_core_percent": 32.3,
+        "rss_bytes": 158711808
+      },
+      {
+        "cpu_one_core_percent": 40.0,
+        "rss_bytes": 159055872
+      },
+      {
+        "cpu_one_core_percent": 38.5,
+        "rss_bytes": 158461952
+      },
+      {
+        "cpu_one_core_percent": 32.3,
+        "rss_bytes": 159256576
+      },
+      {
+        "cpu_one_core_percent": 35.4,
+        "rss_bytes": 158949376
+      },
+      {
+        "cpu_one_core_percent": 30.8,
+        "rss_bytes": 159891456
+      },
+      {
+        "cpu_one_core_percent": 38.5,
+        "rss_bytes": 162545664
+      },
+      {
+        "cpu_one_core_percent": 30.8,
+        "rss_bytes": 159825920
+      },
+      {
+        "cpu_one_core_percent": 38.5,
+        "rss_bytes": 158875648
+      }
+    ],
+    [
+      {
+        "cpu_one_core_percent": 1.6,
+        "rss_bytes": 79060992
+      },
+      {
+        "cpu_one_core_percent": 51.6,
+        "rss_bytes": 216895488
+      },
+      {
+        "cpu_one_core_percent": 45.3,
+        "rss_bytes": 159653888
+      },
+      {
+        "cpu_one_core_percent": 39.1,
+        "rss_bytes": 159408128
+      },
+      {
+        "cpu_one_core_percent": 31.2,
+        "rss_bytes": 159412224
+      },
+      {
+        "cpu_one_core_percent": 43.8,
+        "rss_bytes": 160051200
+      },
+      {
+        "cpu_one_core_percent": 42.2,
+        "rss_bytes": 162394112
+      },
+      {
+        "cpu_one_core_percent": 26.6,
+        "rss_bytes": 159588352
+      },
+      {
+        "cpu_one_core_percent": 40.6,
+        "rss_bytes": 162852864
+      },
+      {
+        "cpu_one_core_percent": 39.1,
+        "rss_bytes": 158720000
+      },
+      {
+        "cpu_one_core_percent": 42.2,
+        "rss_bytes": 159473664
+      },
+      {
+        "cpu_one_core_percent": 31.2,
+        "rss_bytes": 159395840
+      },
+      {
+        "cpu_one_core_percent": 39.1,
+        "rss_bytes": 158711808
+      },
+      {
+        "cpu_one_core_percent": 40.6,
+        "rss_bytes": 159055872
+      },
+      {
+        "cpu_one_core_percent": 50.0,
+        "rss_bytes": 158461952
+      },
+      {
+        "cpu_one_core_percent": 29.7,
+        "rss_bytes": 159256576
+      },
+      {
+        "cpu_one_core_percent": 45.3,
+        "rss_bytes": 158949376
+      },
+      {
+        "cpu_one_core_percent": 37.5,
+        "rss_bytes": 159891456
+      },
+      {
+        "cpu_one_core_percent": 40.6,
+        "rss_bytes": 162545664
+      },
+      {
+        "cpu_one_core_percent": 40.6,
+        "rss_bytes": 159854592
+      },
+      {
+        "cpu_one_core_percent": 40.6,
+        "rss_bytes": 158875648
+      }
+    ],
+    [
+      {
+        "cpu_one_core_percent": 41.5,
+        "rss_bytes": 79060992
+      },
+      {
+        "cpu_one_core_percent": 43.1,
+        "rss_bytes": 217059328
+      },
+      {
+        "cpu_one_core_percent": 41.5,
+        "rss_bytes": 159621120
+      },
+      {
+        "cpu_one_core_percent": 38.4,
+        "rss_bytes": 159371264
+      },
+      {
+        "cpu_one_core_percent": 32.3,
+        "rss_bytes": 159399936
+      },
+      {
+        "cpu_one_core_percent": 35.4,
+        "rss_bytes": 160018432
+      },
+      {
+        "cpu_one_core_percent": 41.5,
+        "rss_bytes": 162357248
+      },
+      {
+        "cpu_one_core_percent": 36.9,
+        "rss_bytes": 159555584
+      },
+      {
+        "cpu_one_core_percent": 43.1,
+        "rss_bytes": 162811904
+      },
+      {
+        "cpu_one_core_percent": 36.9,
+        "rss_bytes": 158691328
+      },
+      {
+        "cpu_one_core_percent": 38.4,
+        "rss_bytes": 159461376
+      },
+      {
+        "cpu_one_core_percent": 30.8,
+        "rss_bytes": 159363072
+      },
+      {
+        "cpu_one_core_percent": 36.9,
+        "rss_bytes": 158674944
+      },
+      {
+        "cpu_one_core_percent": 35.4,
+        "rss_bytes": 159162368
+      },
+      {
+        "cpu_one_core_percent": 44.6,
+        "rss_bytes": 158461952
+      },
+      {
+        "cpu_one_core_percent": 33.8,
+        "rss_bytes": 159244288
+      },
+      {
+        "cpu_one_core_percent": 38.4,
+        "rss_bytes": 158941184
+      },
+      {
+        "cpu_one_core_percent": 40.0,
+        "rss_bytes": 159891456
+      },
+      {
+        "cpu_one_core_percent": 47.7,
+        "rss_bytes": 162529280
+      },
+      {
+        "cpu_one_core_percent": 33.8,
+        "rss_bytes": 160043008
+      },
+      {
+        "cpu_one_core_percent": 41.5,
+        "rss_bytes": 159064064
+      }
+    ],
+    [
+      {
+        "cpu_one_core_percent": 7.8,
+        "rss_bytes": 79065088
+      },
+      {
+        "cpu_one_core_percent": 45.3,
+        "rss_bytes": 217071616
+      },
+      {
+        "cpu_one_core_percent": 51.6,
+        "rss_bytes": 159621120
+      },
+      {
+        "cpu_one_core_percent": 48.4,
+        "rss_bytes": 159371264
+      },
+      {
+        "cpu_one_core_percent": 32.8,
+        "rss_bytes": 159399936
+      },
+      {
+        "cpu_one_core_percent": 42.2,
+        "rss_bytes": 160018432
+      },
+      {
+        "cpu_one_core_percent": 34.4,
+        "rss_bytes": 162365440
+      },
+      {
+        "cpu_one_core_percent": 37.5,
+        "rss_bytes": 159555584
+      },
+      {
+        "cpu_one_core_percent": 37.5,
+        "rss_bytes": 162811904
+      },
+      {
+        "cpu_one_core_percent": 37.5,
+        "rss_bytes": 158691328
+      },
+      {
+        "cpu_one_core_percent": 35.9,
+        "rss_bytes": 159461376
+      },
+      {
+        "cpu_one_core_percent": 34.4,
+        "rss_bytes": 159363072
+      },
+      {
+        "cpu_one_core_percent": 37.5,
+        "rss_bytes": 158683136
+      },
+      {
+        "cpu_one_core_percent": 37.5,
+        "rss_bytes": 159162368
+      },
+      {
+        "cpu_one_core_percent": 45.3,
+        "rss_bytes": 158461952
+      },
+      {
+        "cpu_one_core_percent": 37.5,
+        "rss_bytes": 159244288
+      },
+      {
+        "cpu_one_core_percent": 37.5,
+        "rss_bytes": 158941184
+      },
+      {
+        "cpu_one_core_percent": 45.3,
+        "rss_bytes": 159891456
+      },
+      {
+        "cpu_one_core_percent": 45.3,
+        "rss_bytes": 162529280
+      },
+      {
+        "cpu_one_core_percent": 40.6,
+        "rss_bytes": 160284672
+      },
+      {
+        "cpu_one_core_percent": 35.9,
+        "rss_bytes": 159350784
+      }
+    ],
+    [
+      {
+        "cpu_one_core_percent": 4.6,
+        "rss_bytes": 79089664
+      },
+      {
+        "cpu_one_core_percent": 44.6,
+        "rss_bytes": 217075712
+      },
+      {
+        "cpu_one_core_percent": 44.6,
+        "rss_bytes": 159621120
+      },
+      {
+        "cpu_one_core_percent": 43.1,
+        "rss_bytes": 159371264
+      },
+      {
+        "cpu_one_core_percent": 32.3,
+        "rss_bytes": 159399936
+      },
+      {
+        "cpu_one_core_percent": 41.5,
+        "rss_bytes": 160018432
+      },
+      {
+        "cpu_one_core_percent": 35.4,
+        "rss_bytes": 162365440
+      },
+      {
+        "cpu_one_core_percent": 29.2,
+        "rss_bytes": 159555584
+      },
+      {
+        "cpu_one_core_percent": 38.4,
+        "rss_bytes": 162811904
+      },
+      {
+        "cpu_one_core_percent": 38.4,
+        "rss_bytes": 158752768
+      },
+      {
+        "cpu_one_core_percent": 41.5,
+        "rss_bytes": 159588352
+      },
+      {
+        "cpu_one_core_percent": 35.4,
+        "rss_bytes": 159404032
+      },
+      {
+        "cpu_one_core_percent": 35.4,
+        "rss_bytes": 158683136
+      },
+      {
+        "cpu_one_core_percent": 32.3,
+        "rss_bytes": 159162368
+      },
+      {
+        "cpu_one_core_percent": 43.1,
+        "rss_bytes": 158461952
+      },
+      {
+        "cpu_one_core_percent": 36.9,
+        "rss_bytes": 159244288
+      },
+      {
+        "cpu_one_core_percent": 35.4,
+        "rss_bytes": 158941184
+      },
+      {
+        "cpu_one_core_percent": 44.6,
+        "rss_bytes": 159948800
+      },
+      {
+        "cpu_one_core_percent": 38.4,
+        "rss_bytes": 162529280
+      },
+      {
+        "cpu_one_core_percent": 38.4,
+        "rss_bytes": 160325632
+      },
+      {
+        "cpu_one_core_percent": 32.3,
+        "rss_bytes": 159383552
+      }
+    ],
+    [
+      {
+        "cpu_one_core_percent": 0.0,
+        "rss_bytes": 79110144
+      },
+      {
+        "cpu_one_core_percent": 43.8,
+        "rss_bytes": 217759744
+      },
+      {
+        "cpu_one_core_percent": 40.6,
+        "rss_bytes": 159621120
+      },
+      {
+        "cpu_one_core_percent": 43.8,
+        "rss_bytes": 159371264
+      },
+      {
+        "cpu_one_core_percent": 31.2,
+        "rss_bytes": 159399936
+      },
+      {
+        "cpu_one_core_percent": 46.9,
+        "rss_bytes": 160030720
+      },
+      {
+        "cpu_one_core_percent": 42.2,
+        "rss_bytes": 162365440
+      },
+      {
+        "cpu_one_core_percent": 28.1,
+        "rss_bytes": 159555584
+      },
+      {
+        "cpu_one_core_percent": 31.2,
+        "rss_bytes": 162811904
+      },
+      {
+        "cpu_one_core_percent": 40.6,
+        "rss_bytes": 158760960
+      },
+      {
+        "cpu_one_core_percent": 37.5,
+        "rss_bytes": 159588352
+      },
+      {
+        "cpu_one_core_percent": 37.5,
+        "rss_bytes": 159408128
+      },
+      {
+        "cpu_one_core_percent": 31.2,
+        "rss_bytes": 158687232
+      },
+      {
+        "cpu_one_core_percent": 39.1,
+        "rss_bytes": 159162368
+      },
+      {
+        "cpu_one_core_percent": 35.9,
+        "rss_bytes": 158461952
+      },
+      {
+        "cpu_one_core_percent": 28.1,
+        "rss_bytes": 159244288
+      },
+      {
+        "cpu_one_core_percent": 37.5,
+        "rss_bytes": 158941184
+      },
+      {
+        "cpu_one_core_percent": 43.8,
+        "rss_bytes": 159948800
+      },
+      {
+        "cpu_one_core_percent": 35.9,
+        "rss_bytes": 162529280
+      },
+      {
+        "cpu_one_core_percent": 35.9,
+        "rss_bytes": 160325632
+      },
+      {
+        "cpu_one_core_percent": 31.2,
+        "rss_bytes": 159383552
+      }
+    ],
+    [
+      {
+        "cpu_one_core_percent": 0.0,
+        "rss_bytes": 79110144
+      },
+      {
+        "cpu_one_core_percent": 39.1,
+        "rss_bytes": 217763840
+      },
+      {
+        "cpu_one_core_percent": 34.4,
+        "rss_bytes": 159621120
+      },
+      {
+        "cpu_one_core_percent": 37.5,
+        "rss_bytes": 159371264
+      },
+      {
+        "cpu_one_core_percent": 29.7,
+        "rss_bytes": 159588352
+      },
+      {
+        "cpu_one_core_percent": 35.9,
+        "rss_bytes": 160038912
+      },
+      {
+        "cpu_one_core_percent": 34.4,
+        "rss_bytes": 162365440
+      },
+      {
+        "cpu_one_core_percent": 31.2,
+        "rss_bytes": 159555584
+      },
+      {
+        "cpu_one_core_percent": 32.8,
+        "rss_bytes": 162811904
+      },
+      {
+        "cpu_one_core_percent": 31.2,
+        "rss_bytes": 158765056
+      },
+      {
+        "cpu_one_core_percent": 31.2,
+        "rss_bytes": 159887360
+      },
+      {
+        "cpu_one_core_percent": 39.1,
+        "rss_bytes": 159424512
+      },
+      {
+        "cpu_one_core_percent": 31.2,
+        "rss_bytes": 158687232
+      },
+      {
+        "cpu_one_core_percent": 31.2,
+        "rss_bytes": 159162368
+      },
+      {
+        "cpu_one_core_percent": 32.8,
+        "rss_bytes": 158461952
+      },
+      {
+        "cpu_one_core_percent": 25.0,
+        "rss_bytes": 159244288
+      },
+      {
+        "cpu_one_core_percent": 37.5,
+        "rss_bytes": 158941184
+      },
+      {
+        "cpu_one_core_percent": 35.9,
+        "rss_bytes": 159952896
+      },
+      {
+        "cpu_one_core_percent": 31.2,
+        "rss_bytes": 162529280
+      },
+      {
+        "cpu_one_core_percent": 37.5,
+        "rss_bytes": 160325632
+      },
+      {
+        "cpu_one_core_percent": 26.6,
+        "rss_bytes": 159457280
+      }
+    ],
+    [
+      {
+        "cpu_one_core_percent": 0.0,
+        "rss_bytes": 78471168
+      },
+      {
+        "cpu_one_core_percent": 46.9,
+        "rss_bytes": 217767936
+      },
+      {
+        "cpu_one_core_percent": 42.2,
+        "rss_bytes": 159621120
+      },
+      {
+        "cpu_one_core_percent": 39.1,
+        "rss_bytes": 159371264
+      },
+      {
+        "cpu_one_core_percent": 34.4,
+        "rss_bytes": 159592448
+      },
+      {
+        "cpu_one_core_percent": 42.2,
+        "rss_bytes": 160043008
+      },
+      {
+        "cpu_one_core_percent": 40.6,
+        "rss_bytes": 162365440
+      },
+      {
+        "cpu_one_core_percent": 31.2,
+        "rss_bytes": 159555584
+      },
+      {
+        "cpu_one_core_percent": 37.5,
+        "rss_bytes": 162811904
+      },
+      {
+        "cpu_one_core_percent": 39.1,
+        "rss_bytes": 158765056
+      },
+      {
+        "cpu_one_core_percent": 42.2,
+        "rss_bytes": 160022528
+      },
+      {
+        "cpu_one_core_percent": 39.1,
+        "rss_bytes": 159424512
+      },
+      {
+        "cpu_one_core_percent": 31.2,
+        "rss_bytes": 158687232
+      },
+      {
+        "cpu_one_core_percent": 45.3,
+        "rss_bytes": 159162368
+      },
+      {
+        "cpu_one_core_percent": 46.9,
+        "rss_bytes": 158461952
+      },
+      {
+        "cpu_one_core_percent": 31.2,
+        "rss_bytes": 159305728
+      },
+      {
+        "cpu_one_core_percent": 34.4,
+        "rss_bytes": 158941184
+      },
+      {
+        "cpu_one_core_percent": 45.3,
+        "rss_bytes": 159952896
+      },
+      {
+        "cpu_one_core_percent": 43.8,
+        "rss_bytes": 162529280
+      },
+      {
+        "cpu_one_core_percent": 37.5,
+        "rss_bytes": 160325632
+      },
+      {
+        "cpu_one_core_percent": 35.9,
+        "rss_bytes": 159461376
+      }
+    ],
+    [
+      {
+        "cpu_one_core_percent": 21.6,
+        "rss_bytes": 78471168
+      },
+      {
+        "cpu_one_core_percent": 44.6,
+        "rss_bytes": 217784320
+      },
+      {
+        "cpu_one_core_percent": 44.6,
+        "rss_bytes": 159789056
+      },
+      {
+        "cpu_one_core_percent": 41.6,
+        "rss_bytes": 159371264
+      },
+      {
+        "cpu_one_core_percent": 33.9,
+        "rss_bytes": 159604736
+      },
+      {
+        "cpu_one_core_percent": 38.5,
+        "rss_bytes": 160043008
+      },
+      {
+        "cpu_one_core_percent": 38.5,
+        "rss_bytes": 162369536
+      },
+      {
+        "cpu_one_core_percent": 32.3,
+        "rss_bytes": 159555584
+      },
+      {
+        "cpu_one_core_percent": 33.9,
+        "rss_bytes": 162811904
+      },
+      {
+        "cpu_one_core_percent": 47.7,
+        "rss_bytes": 158924800
+      },
+      {
+        "cpu_one_core_percent": 40.0,
+        "rss_bytes": 160038912
+      },
+      {
+        "cpu_one_core_percent": 35.4,
+        "rss_bytes": 159424512
+      },
+      {
+        "cpu_one_core_percent": 33.9,
+        "rss_bytes": 158687232
+      },
+      {
+        "cpu_one_core_percent": 36.9,
+        "rss_bytes": 159162368
+      },
+      {
+        "cpu_one_core_percent": 49.3,
+        "rss_bytes": 158461952
+      },
+      {
+        "cpu_one_core_percent": 29.2,
+        "rss_bytes": 159309824
+      },
+      {
+        "cpu_one_core_percent": 35.4,
+        "rss_bytes": 158941184
+      },
+      {
+        "cpu_one_core_percent": 43.1,
+        "rss_bytes": 159952896
+      },
+      {
+        "cpu_one_core_percent": 46.2,
+        "rss_bytes": 162529280
+      },
+      {
+        "cpu_one_core_percent": 36.9,
+        "rss_bytes": 160337920
+      },
+      {
+        "cpu_one_core_percent": 41.6,
+        "rss_bytes": 159477760
+      }
+    ],
+    [
+      {
+        "cpu_one_core_percent": 0.0,
+        "rss_bytes": 78413824
+      },
+      {
+        "cpu_one_core_percent": 46.9,
+        "rss_bytes": 217788416
+      },
+      {
+        "cpu_one_core_percent": 43.8,
+        "rss_bytes": 159789056
+      },
+      {
+        "cpu_one_core_percent": 37.5,
+        "rss_bytes": 159371264
+      },
+      {
+        "cpu_one_core_percent": 34.4,
+        "rss_bytes": 159617024
+      },
+      {
+        "cpu_one_core_percent": 37.5,
+        "rss_bytes": 160043008
+      },
+      {
+        "cpu_one_core_percent": 35.9,
+        "rss_bytes": 162369536
+      },
+      {
+        "cpu_one_core_percent": 34.4,
+        "rss_bytes": 159555584
+      },
+      {
+        "cpu_one_core_percent": 42.2,
+        "rss_bytes": 162811904
+      },
+      {
+        "cpu_one_core_percent": 43.8,
+        "rss_bytes": 158924800
+      },
+      {
+        "cpu_one_core_percent": 45.3,
+        "rss_bytes": 160038912
+      },
+      {
+        "cpu_one_core_percent": 35.9,
+        "rss_bytes": 159432704
+      },
+      {
+        "cpu_one_core_percent": 37.5,
+        "rss_bytes": 158687232
+      },
+      {
+        "cpu_one_core_percent": 31.2,
+        "rss_bytes": 159162368
+      },
+      {
+        "cpu_one_core_percent": 43.8,
+        "rss_bytes": 158461952
+      },
+      {
+        "cpu_one_core_percent": 32.8,
+        "rss_bytes": 159309824
+      },
+      {
+        "cpu_one_core_percent": 37.5,
+        "rss_bytes": 158941184
+      },
+      {
+        "cpu_one_core_percent": 45.3,
+        "rss_bytes": 159956992
+      },
+      {
+        "cpu_one_core_percent": 40.6,
+        "rss_bytes": 162529280
+      },
+      {
+        "cpu_one_core_percent": 37.5,
+        "rss_bytes": 160337920
+      },
+      {
+        "cpu_one_core_percent": 37.5,
+        "rss_bytes": 159477760
+      }
+    ],
+    [
+      {
+        "cpu_one_core_percent": 0.0,
+        "rss_bytes": 78827520
+      },
+      {
+        "cpu_one_core_percent": 43.1,
+        "rss_bytes": 217804800
+      },
+      {
+        "cpu_one_core_percent": 40.0,
+        "rss_bytes": 163139584
+      },
+      {
+        "cpu_one_core_percent": 30.8,
+        "rss_bytes": 159371264
+      },
+      {
+        "cpu_one_core_percent": 33.8,
+        "rss_bytes": 159633408
+      },
+      {
+        "cpu_one_core_percent": 41.5,
+        "rss_bytes": 160067584
+      },
+      {
+        "cpu_one_core_percent": 40.0,
+        "rss_bytes": 162369536
+      },
+      {
+        "cpu_one_core_percent": 32.3,
+        "rss_bytes": 159588352
+      },
+      {
+        "cpu_one_core_percent": 30.8,
+        "rss_bytes": 162811904
+      },
+      {
+        "cpu_one_core_percent": 41.5,
+        "rss_bytes": 158924800
+      },
+      {
+        "cpu_one_core_percent": 36.9,
+        "rss_bytes": 160038912
+      },
+      {
+        "cpu_one_core_percent": 33.8,
+        "rss_bytes": 159432704
+      },
+      {
+        "cpu_one_core_percent": 35.4,
+        "rss_bytes": 158687232
+      },
+      {
+        "cpu_one_core_percent": 30.8,
+        "rss_bytes": 159162368
+      },
+      {
+        "cpu_one_core_percent": 49.2,
+        "rss_bytes": 158461952
+      },
+      {
+        "cpu_one_core_percent": 29.2,
+        "rss_bytes": 159309824
+      },
+      {
+        "cpu_one_core_percent": 32.3,
+        "rss_bytes": 158941184
+      },
+      {
+        "cpu_one_core_percent": 43.1,
+        "rss_bytes": 159956992
+      },
+      {
+        "cpu_one_core_percent": 40.0,
+        "rss_bytes": 162529280
+      },
+      {
+        "cpu_one_core_percent": 33.8,
+        "rss_bytes": 160337920
+      },
+      {
+        "cpu_one_core_percent": 32.3,
+        "rss_bytes": 159477760
+      }
+    ],
+    [
+      {
+        "cpu_one_core_percent": 0.0,
+        "rss_bytes": 78831616
+      },
+      {
+        "cpu_one_core_percent": 43.1,
+        "rss_bytes": 217808896
+      },
+      {
+        "cpu_one_core_percent": 35.4,
+        "rss_bytes": 163139584
+      },
+      {
+        "cpu_one_core_percent": 41.5,
+        "rss_bytes": 159432704
+      },
+      {
+        "cpu_one_core_percent": 30.8,
+        "rss_bytes": 159641600
+      },
+      {
+        "cpu_one_core_percent": 43.1,
+        "rss_bytes": 160075776
+      },
+      {
+        "cpu_one_core_percent": 33.8,
+        "rss_bytes": 162365440
+      },
+      {
+        "cpu_one_core_percent": 36.9,
+        "rss_bytes": 159588352
+      },
+      {
+        "cpu_one_core_percent": 35.4,
+        "rss_bytes": 162811904
+      },
+      {
+        "cpu_one_core_percent": 40.0,
+        "rss_bytes": 158932992
+      },
+      {
+        "cpu_one_core_percent": 27.7,
+        "rss_bytes": 160047104
+      },
+      {
+        "cpu_one_core_percent": 32.3,
+        "rss_bytes": 159432704
+      },
+      {
+        "cpu_one_core_percent": 38.4,
+        "rss_bytes": 158687232
+      },
+      {
+        "cpu_one_core_percent": 33.8,
+        "rss_bytes": 159162368
+      },
+      {
+        "cpu_one_core_percent": 44.6,
+        "rss_bytes": 158461952
+      },
+      {
+        "cpu_one_core_percent": 32.3,
+        "rss_bytes": 159313920
+      },
+      {
+        "cpu_one_core_percent": 30.8,
+        "rss_bytes": 158941184
+      },
+      {
+        "cpu_one_core_percent": 36.9,
+        "rss_bytes": 159956992
+      },
+      {
+        "cpu_one_core_percent": 40.0,
+        "rss_bytes": 162529280
+      },
+      {
+        "cpu_one_core_percent": 32.3,
+        "rss_bytes": 160391168
+      },
+      {
+        "cpu_one_core_percent": 32.3,
+        "rss_bytes": 159477760
+      }
+    ],
+    [
+      {
+        "cpu_one_core_percent": 0.0,
+        "rss_bytes": 78839808
+      },
+      {
+        "cpu_one_core_percent": 48.4,
+        "rss_bytes": 217812992
+      },
+      {
+        "cpu_one_core_percent": 43.8,
+        "rss_bytes": 163147776
+      },
+      {
+        "cpu_one_core_percent": 45.3,
+        "rss_bytes": 159444992
+      },
+      {
+        "cpu_one_core_percent": 34.4,
+        "rss_bytes": 159641600
+      },
+      {
+        "cpu_one_core_percent": 42.2,
+        "rss_bytes": 160075776
+      },
+      {
+        "cpu_one_core_percent": 43.8,
+        "rss_bytes": 162365440
+      },
+      {
+        "cpu_one_core_percent": 43.8,
+        "rss_bytes": 159588352
+      },
+      {
+        "cpu_one_core_percent": 40.6,
+        "rss_bytes": 162811904
+      },
+      {
+        "cpu_one_core_percent": 45.3,
+        "rss_bytes": 159203328
+      },
+      {
+        "cpu_one_core_percent": 40.6,
+        "rss_bytes": 160047104
+      },
+      {
+        "cpu_one_core_percent": 37.5,
+        "rss_bytes": 159453184
+      },
+      {
+        "cpu_one_core_percent": 37.5,
+        "rss_bytes": 158687232
+      },
+      {
+        "cpu_one_core_percent": 42.2,
+        "rss_bytes": 159162368
+      },
+      {
+        "cpu_one_core_percent": 54.7,
+        "rss_bytes": 158601216
+      },
+      {
+        "cpu_one_core_percent": 32.8,
+        "rss_bytes": 159322112
+      },
+      {
+        "cpu_one_core_percent": 32.8,
+        "rss_bytes": 158941184
+      },
+      {
+        "cpu_one_core_percent": 39.1,
+        "rss_bytes": 159956992
+      },
+      {
+        "cpu_one_core_percent": 45.3,
+        "rss_bytes": 162529280
+      },
+      {
+        "cpu_one_core_percent": 42.2,
+        "rss_bytes": 160399360
+      },
+      {
+        "cpu_one_core_percent": 42.2,
+        "rss_bytes": 159543296
+      }
+    ],
+    [
+      {
+        "cpu_one_core_percent": 0.0,
+        "rss_bytes": 78839808
+      },
+      {
+        "cpu_one_core_percent": 44.6,
+        "rss_bytes": 217817088
+      },
+      {
+        "cpu_one_core_percent": 41.6,
+        "rss_bytes": 163147776
+      },
+      {
+        "cpu_one_core_percent": 40.0,
+        "rss_bytes": 159444992
+      },
+      {
+        "cpu_one_core_percent": 32.3,
+        "rss_bytes": 159641600
+      },
+      {
+        "cpu_one_core_percent": 40.0,
+        "rss_bytes": 160075776
+      },
+      {
+        "cpu_one_core_percent": 36.9,
+        "rss_bytes": 162365440
+      },
+      {
+        "cpu_one_core_percent": 30.8,
+        "rss_bytes": 159588352
+      },
+      {
+        "cpu_one_core_percent": 38.5,
+        "rss_bytes": 162811904
+      },
+      {
+        "cpu_one_core_percent": 40.0,
+        "rss_bytes": 159203328
+      },
+      {
+        "cpu_one_core_percent": 41.6,
+        "rss_bytes": 160047104
+      },
+      {
+        "cpu_one_core_percent": 38.5,
+        "rss_bytes": 159453184
+      },
+      {
+        "cpu_one_core_percent": 32.3,
+        "rss_bytes": 158687232
+      },
+      {
+        "cpu_one_core_percent": 35.4,
+        "rss_bytes": 159162368
+      },
+      {
+        "cpu_one_core_percent": 46.2,
+        "rss_bytes": 158601216
+      },
+      {
+        "cpu_one_core_percent": 32.3,
+        "rss_bytes": 159322112
+      },
+      {
+        "cpu_one_core_percent": 35.4,
+        "rss_bytes": 158941184
+      },
+      {
+        "cpu_one_core_percent": 46.2,
+        "rss_bytes": 159956992
+      },
+      {
+        "cpu_one_core_percent": 47.7,
+        "rss_bytes": 162529280
+      },
+      {
+        "cpu_one_core_percent": 32.3,
+        "rss_bytes": 160399360
+      },
+      {
+        "cpu_one_core_percent": 40.0,
+        "rss_bytes": 159543296
+      }
+    ]
+  ],
+  "logs": [
+    "population_loaded monsters=300 definitions=9\nSGTest C# server listening ws://127.0.0.1:27888/game map=13\nplayer 9 joined\nplayer 11 joined\nplayer 3 joined\nplayer 5 joined\nplayer 8 joined\nplayer 10 joined\nplayer 4 joined\nplayer 6 joined\nplayer 12 joined\nplayer 7 joined\nplayer 2 joined\nplayer 13 joined\nplayer 14 joined\nplayer 15 joined\nplayer 16 joined\nplayer 17 joined\nplayer 18 joined\nplayer 19 joined\nplayer 20 joined\nplayer 21 joined\nserver_metrics tick=300 tick_p95_ms=21.942 tick_p99_ms=55.031 players=20\nserver_metrics tick=600 tick_p95_ms=4.031 tick_p99_ms=5.347 players=20\nserver_metrics tick=900 tick_p95_ms=3.563 tick_p99_ms=4.968 players=20\nserver_metrics tick=1200 tick_p95_ms=3.445 tick_p99_ms=4.853 players=20\npeer 17 disconnected: The remote party closed the WebSocket connection without completing the close handshake.\npeer 19 disconnected: The remote party closed the WebSocket connection without completing the close handshake.\npeer 15 disconnected: Aborted\npeer 18 disconnected: Aborted\npeer 16 disconnected: Aborted\npeer 20 disconnected: Aborted\npeer 13 disconnected: Aborted\npeer 14 disconnected: The remote party closed the WebSocket connection without completing the close handshake.\npeer 12 disconnected: Aborted\npeer 11 disconnected: Aborted\npeer 3 disconnected: Aborted\npeer 10 disconnected: Aborted\npeer 5 disconnected: Aborted\npeer 9 disconnected: The remote party closed the WebSocket connection without completing the close handshake.\npeer 7 disconnected: Aborted\npeer 8 disconnected: Aborted\npeer 2 disconnected: Aborted\npeer 4 disconnected: Aborted\npeer 6 disconnected: Aborted\n",
+    "Godot Engine v4.7.2.stable.official.ed1daf0bf - https://godotengine.org\nOpenGL API 3.3.0 NVIDIA 617.42 - Compatibility - Using Device: NVIDIA - NVIDIA GeForce RTX 3050\n\nSGO client starting\nSGO client connecting to 127.0.0.1:27888\nclient connected with peer 21\nmonster_palette {\"definitions\":9,\"load_ms\":113.579,\"rgba_bytes\":11397196,\"shared_atlases\":9}\naction_received\nprediction_ready\nhealth_received\ninventory_received\nsnapshot_received tick=150 players=18 monsters=214 drops=405\ndeath_received\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":4,\"pending\":1,\"reconciliations\":46}\nrespawn_received\nsnapshot_received tick=300 players=20 monsters=245 drops=409\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":4,\"pending\":1,\"reconciliations\":96}\nsnapshot_received tick=450 players=19 monsters=261 drops=343\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":4,\"pending\":1,\"reconciliations\":115}\nsnapshot_received tick=600 players=20 monsters=245 drops=281\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":4,\"pending\":0,\"reconciliations\":143}\nsnapshot_received tick=750 players=20 monsters=251 drops=270\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":4,\"pending\":3,\"reconciliations\":183}\nsnapshot_received tick=900 players=20 monsters=262 drops=387\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":4,\"pending\":3,\"reconciliations\":202}\nsnapshot_received tick=1050 players=20 monsters=256 drops=301\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":4,\"pending\":3,\"reconciliations\":252}\nrendered_load {\"draw_calls_last_frame\":423.0,\"draw_calls_p95\":435.0,\"frame_ms_max\":40.153,\"frame_ms_p50\":16.602,\"frame_ms_p95\":22.324,\"frame_ms_p99\":24.928,\"frames\":2101,\"mean_fps\":60.0004312263263,\"renderer\":\"NVIDIA GeForce RTX 3050\",\"resolution\":[1440,900],\"sample_seconds\":35.0,\"static_memory_bytes\":63313477,\"texture_memory_bytes\":45593087.0,\"video_memory_bytes\":52094319.0,\"warmup_seconds\":2}\nsnapshot_received tick=1200 players=20 monsters=261 drops=405\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":4,\"pending\":0,\"reconciliations\":272}\n",
+    "Godot Engine v4.7.2.stable.official.ed1daf0bf - https://godotengine.org\n\nSGO client starting\nSGO client connecting to 127.0.0.1:27888\nclient connected with peer 6\nmonster_palette {\"definitions\":9,\"load_ms\":110.897,\"rgba_bytes\":11397196,\"shared_atlases\":9}\naction_received\nprediction_ready\ninventory_received\nhealth_received\nsnapshot_received tick=150 players=20 monsters=216 drops=319\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":4,\"pending\":3,\"reconciliations\":42}\ndeath_received\nrespawn_received\nsnapshot_received tick=300 players=20 monsters=261 drops=423\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":4,\"pending\":0,\"reconciliations\":81}\nsnapshot_received tick=450 players=20 monsters=250 drops=341\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":4,\"pending\":3,\"reconciliations\":110}\nsnapshot_received tick=600 players=20 monsters=253 drops=415\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":4,\"pending\":0,\"reconciliations\":145}\nsnapshot_received tick=750 players=19 monsters=253 drops=322\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":4,\"pending\":2,\"reconciliations\":179}\nsnapshot_received tick=900 players=20 monsters=253 drops=344\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":4,\"pending\":2,\"reconciliations\":229}\nsnapshot_received tick=1050 players=20 monsters=258 drops=375\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":4,\"pending\":0,\"reconciliations\":255}\nsnapshot_received tick=1200 players=19 monsters=251 drops=316\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":4,\"pending\":2,\"reconciliations\":298}\n",
+    "Godot Engine v4.7.2.stable.official.ed1daf0bf - https://godotengine.org\n\nSGO client starting\nSGO client connecting to 127.0.0.1:27888\nclient connected with peer 4\nmonster_palette {\"definitions\":9,\"load_ms\":111.192,\"rgba_bytes\":11397196,\"shared_atlases\":9}\nprediction_ready\naction_received\ninventory_received\nhealth_received\nsnapshot_received tick=150 players=19 monsters=199 drops=269\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":5,\"pending\":1,\"reconciliations\":44}\ndeath_received\nrespawn_received\nsnapshot_received tick=300 players=20 monsters=255 drops=346\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":5,\"pending\":1,\"reconciliations\":94}\nsnapshot_received tick=450 players=20 monsters=248 drops=329\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":5,\"pending\":0,\"reconciliations\":113}\nsnapshot_received tick=600 players=20 monsters=249 drops=381\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":5,\"pending\":0,\"reconciliations\":146}\nsnapshot_received tick=750 players=19 monsters=258 drops=368\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":5,\"pending\":2,\"reconciliations\":181}\nsnapshot_received tick=900 players=20 monsters=256 drops=360\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":5,\"pending\":0,\"reconciliations\":226}\nsnapshot_received tick=1050 players=20 monsters=266 drops=346\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":5,\"pending\":2,\"reconciliations\":250}\nsnapshot_received tick=1200 players=20 monsters=254 drops=301\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":5,\"pending\":2,\"reconciliations\":269}\n",
+    "Godot Engine v4.7.2.stable.official.ed1daf0bf - https://godotengine.org\n\nSGO client starting\nSGO client connecting to 127.0.0.1:27888\nclient connected with peer 2\nmonster_palette {\"definitions\":9,\"load_ms\":114.796,\"rgba_bytes\":11397196,\"shared_atlases\":9}\nprediction_ready\naction_received\ninventory_received\nhealth_received\nsnapshot_received tick=150 players=18 monsters=198 drops=313\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":4,\"pending\":1,\"reconciliations\":44}\ndeath_received\nrespawn_received\nsnapshot_received tick=300 players=20 monsters=250 drops=368\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":4,\"pending\":0,\"reconciliations\":75}\nsnapshot_received tick=450 players=18 monsters=271 drops=437\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":4,\"pending\":1,\"reconciliations\":113}\nsnapshot_received tick=600 players=20 monsters=251 drops=425\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":4,\"pending\":3,\"reconciliations\":131}\nsnapshot_received tick=750 players=20 monsters=251 drops=305\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":4,\"pending\":0,\"reconciliations\":163}\nsnapshot_received tick=900 players=19 monsters=256 drops=313\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":4,\"pending\":3,\"reconciliations\":200}\nsnapshot_received tick=1050 players=20 monsters=261 drops=390\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":4,\"pending\":3,\"reconciliations\":219}\nsnapshot_received tick=1200 players=20 monsters=255 drops=330\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":4,\"pending\":0,\"reconciliations\":257}\n",
+    "Godot Engine v4.7.2.stable.official.ed1daf0bf - https://godotengine.org\n\nSGO client starting\nSGO client connecting to 127.0.0.1:27888\nclient connected with peer 8\nmonster_palette {\"definitions\":9,\"load_ms\":110.65,\"rgba_bytes\":11397196,\"shared_atlases\":9}\naction_received\nprediction_ready\ninventory_received\nhealth_received\nsnapshot_received tick=150 players=16 monsters=203 drops=381\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":5,\"pending\":1,\"reconciliations\":43}\ndeath_received\nrespawn_received\nsnapshot_received tick=300 players=20 monsters=245 drops=355\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":5,\"pending\":0,\"reconciliations\":77}\nsnapshot_received tick=450 players=19 monsters=263 drops=357\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":5,\"pending\":1,\"reconciliations\":112}\nsnapshot_received tick=600 players=20 monsters=249 drops=312\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":5,\"pending\":0,\"reconciliations\":131}\nsnapshot_received tick=750 players=20 monsters=261 drops=399\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":5,\"pending\":0,\"reconciliations\":166}\nsnapshot_received tick=900 players=20 monsters=263 drops=384\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":5,\"pending\":0,\"reconciliations\":194}\nsnapshot_received tick=1050 players=20 monsters=256 drops=358\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":5,\"pending\":3,\"reconciliations\":218}\nsnapshot_received tick=1200 players=20 monsters=256 drops=413\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":5,\"pending\":3,\"reconciliations\":237}\n",
+    "Godot Engine v4.7.2.stable.official.ed1daf0bf - https://godotengine.org\n\nSGO client starting\nSGO client connecting to 127.0.0.1:27888\nclient connected with peer 7\nmonster_palette {\"definitions\":9,\"load_ms\":113.039,\"rgba_bytes\":11397196,\"shared_atlases\":9}\naction_received\nprediction_ready\ninventory_received\nhealth_received\nsnapshot_received tick=150 players=19 monsters=211 drops=354\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":4,\"pending\":2,\"reconciliations\":43}\ndeath_received\nrespawn_received\nsnapshot_received tick=300 players=20 monsters=248 drops=414\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":4,\"pending\":0,\"reconciliations\":83}\nsnapshot_received tick=450 players=20 monsters=249 drops=334\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":4,\"pending\":2,\"reconciliations\":112}\nsnapshot_received tick=600 players=20 monsters=253 drops=395\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":4,\"pending\":0,\"reconciliations\":132}\nsnapshot_received tick=750 players=19 monsters=254 drops=287\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":4,\"pending\":1,\"reconciliations\":181}\nsnapshot_received tick=900 players=20 monsters=254 drops=388\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":4,\"pending\":1,\"reconciliations\":200}\nsnapshot_received tick=1050 players=20 monsters=274 drops=404\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":4,\"pending\":1,\"reconciliations\":218}\nsnapshot_received tick=1200 players=20 monsters=280 drops=423\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":4,\"pending\":0,\"reconciliations\":249}\n",
+    "Godot Engine v4.7.2.stable.official.ed1daf0bf - https://godotengine.org\n\nSGO client starting\nSGO client connecting to 127.0.0.1:27888\nclient connected with peer 9\nmonster_palette {\"definitions\":9,\"load_ms\":109.251,\"rgba_bytes\":11397196,\"shared_atlases\":9}\nprediction_ready\naction_received\ninventory_received\nhealth_received\nsnapshot_received tick=150 players=19 monsters=189 drops=303\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":5,\"pending\":2,\"reconciliations\":44}\ndeath_received\nrespawn_received\nsnapshot_received tick=300 players=20 monsters=249 drops=398\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":5,\"pending\":0,\"reconciliations\":79}\nsnapshot_received tick=450 players=20 monsters=248 drops=356\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":5,\"pending\":0,\"reconciliations\":104}\nsnapshot_received tick=600 players=20 monsters=258 drops=328\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":5,\"pending\":0,\"reconciliations\":127}\nsnapshot_received tick=750 players=20 monsters=271 drops=400\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":5,\"pending\":0,\"reconciliations\":150}\nsnapshot_received tick=900 players=20 monsters=253 drops=263\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":5,\"pending\":0,\"reconciliations\":169}\nsnapshot_received tick=1050 players=20 monsters=255 drops=335\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":5,\"pending\":0,\"reconciliations\":214}\nsnapshot_received tick=1200 players=20 monsters=258 drops=407\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":5,\"pending\":0,\"reconciliations\":237}\n",
+    "Godot Engine v4.7.2.stable.official.ed1daf0bf - https://godotengine.org\n\nSGO client starting\nSGO client connecting to 127.0.0.1:27888\nclient connected with peer 5\nmonster_palette {\"definitions\":9,\"load_ms\":113.109,\"rgba_bytes\":11397196,\"shared_atlases\":9}\naction_received\nprediction_ready\ninventory_received\nhealth_received\nsnapshot_received tick=150 players=18 monsters=185 drops=310\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":5,\"pending\":1,\"reconciliations\":43}\ndeath_received\nrespawn_received\nsnapshot_received tick=300 players=20 monsters=249 drops=370\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":5,\"pending\":0,\"reconciliations\":73}\nsnapshot_received tick=450 players=18 monsters=249 drops=384\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":5,\"pending\":1,\"reconciliations\":111}\nsnapshot_received tick=600 players=20 monsters=252 drops=415\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":5,\"pending\":0,\"reconciliations\":130}\nsnapshot_received tick=750 players=20 monsters=256 drops=362\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":5,\"pending\":3,\"reconciliations\":179}\nsnapshot_received tick=900 players=20 monsters=255 drops=405\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":5,\"pending\":0,\"reconciliations\":199}\nsnapshot_received tick=1050 players=20 monsters=254 drops=280\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":5,\"pending\":0,\"reconciliations\":223}\nsnapshot_received tick=1200 players=20 monsters=252 drops=326\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":5,\"pending\":3,\"reconciliations\":267}\n",
+    "Godot Engine v4.7.2.stable.official.ed1daf0bf - https://godotengine.org\n\nSGO client starting\nSGO client connecting to 127.0.0.1:27888\nclient connected with peer 10\nmonster_palette {\"definitions\":9,\"load_ms\":110.773,\"rgba_bytes\":11397196,\"shared_atlases\":9}\nprediction_ready\naction_received\ninventory_received\nhealth_received\nsnapshot_received tick=150 players=20 monsters=212 drops=402\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":4,\"pending\":2,\"reconciliations\":44}\ndeath_received\nrespawn_received\nsnapshot_received tick=300 players=20 monsters=235 drops=332\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":4,\"pending\":3,\"reconciliations\":94}\nsnapshot_received tick=450 players=20 monsters=248 drops=442\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":4,\"pending\":2,\"reconciliations\":113}\nsnapshot_received tick=600 players=20 monsters=261 drops=367\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":4,\"pending\":1,\"reconciliations\":163}\nsnapshot_received tick=750 players=20 monsters=253 drops=402\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":4,\"pending\":1,\"reconciliations\":182}\nsnapshot_received tick=900 players=20 monsters=256 drops=317\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":4,\"pending\":0,\"reconciliations\":219}\nsnapshot_received tick=1050 players=20 monsters=254 drops=294\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":4,\"pending\":1,\"reconciliations\":251}\nsnapshot_received tick=1200 players=20 monsters=257 drops=418\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":4,\"pending\":0,\"reconciliations\":280}\n",
+    "Godot Engine v4.7.2.stable.official.ed1daf0bf - https://godotengine.org\n\nSGO client starting\nSGO client connecting to 127.0.0.1:27888\nclient connected with peer 3\nmonster_palette {\"definitions\":9,\"load_ms\":113.559,\"rgba_bytes\":11397196,\"shared_atlases\":9}\naction_received\nprediction_ready\ninventory_received\nhealth_received\nsnapshot_received tick=150 players=18 monsters=212 drops=390\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":5,\"pending\":2,\"reconciliations\":43}\ndeath_received\nrespawn_received\nsnapshot_received tick=300 players=20 monsters=254 drops=421\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":5,\"pending\":0,\"reconciliations\":91}\nsnapshot_received tick=450 players=20 monsters=250 drops=407\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":5,\"pending\":2,\"reconciliations\":111}\nsnapshot_received tick=600 players=20 monsters=268 drops=347\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":5,\"pending\":0,\"reconciliations\":136}\nsnapshot_received tick=750 players=19 monsters=258 drops=269\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":5,\"pending\":0,\"reconciliations\":177}\nsnapshot_received tick=900 players=20 monsters=259 drops=355\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":5,\"pending\":1,\"reconciliations\":199}\nsnapshot_received tick=1050 players=20 monsters=260 drops=379\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":5,\"pending\":0,\"reconciliations\":223}\nsnapshot_received tick=1200 players=20 monsters=253 drops=348\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":5,\"pending\":1,\"reconciliations\":268}\n",
+    "Godot Engine v4.7.2.stable.official.ed1daf0bf - https://godotengine.org\n\nSGO client starting\nSGO client connecting to 127.0.0.1:27888\nclient connected with peer 11\nmonster_palette {\"definitions\":9,\"load_ms\":112.54,\"rgba_bytes\":11397196,\"shared_atlases\":9}\nprediction_ready\naction_received\ninventory_received\nhealth_received\nsnapshot_received tick=150 players=17 monsters=210 drops=308\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":5,\"pending\":2,\"reconciliations\":44}\ndeath_received\nrespawn_received\nsnapshot_received tick=300 players=20 monsters=261 drops=423\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":5,\"pending\":0,\"reconciliations\":77}\nsnapshot_received tick=450 players=20 monsters=246 drops=329\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":5,\"pending\":1,\"reconciliations\":112}\nsnapshot_received tick=600 players=20 monsters=252 drops=411\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":5,\"pending\":0,\"reconciliations\":144}\nsnapshot_received tick=750 players=19 monsters=256 drops=339\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":5,\"pending\":1,\"reconciliations\":181}\nsnapshot_received tick=900 players=20 monsters=253 drops=329\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":5,\"pending\":0,\"reconciliations\":221}\nsnapshot_received tick=1050 players=20 monsters=276 drops=379\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":5,\"pending\":1,\"reconciliations\":250}\nsnapshot_received tick=1200 players=20 monsters=256 drops=308\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":5,\"pending\":0,\"reconciliations\":269}\n",
+    "Godot Engine v4.7.2.stable.official.ed1daf0bf - https://godotengine.org\n\nSGO client starting\nSGO client connecting to 127.0.0.1:27888\nclient connected with peer 12\nmonster_palette {\"definitions\":9,\"load_ms\":114.247,\"rgba_bytes\":11397196,\"shared_atlases\":9}\nprediction_ready\naction_received\ninventory_received\nhealth_received\nsnapshot_received tick=150 players=19 monsters=198 drops=269\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":5,\"pending\":2,\"reconciliations\":44}\ndeath_received\nrespawn_received\nsnapshot_received tick=300 players=20 monsters=253 drops=427\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":5,\"pending\":0,\"reconciliations\":70}\nsnapshot_received tick=450 players=20 monsters=251 drops=346\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":5,\"pending\":2,\"reconciliations\":113}\nsnapshot_received tick=600 players=20 monsters=252 drops=416\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":5,\"pending\":1,\"reconciliations\":132}\nsnapshot_received tick=750 players=20 monsters=253 drops=401\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":5,\"pending\":1,\"reconciliations\":151}\nsnapshot_received tick=900 players=20 monsters=281 drops=418\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":5,\"pending\":0,\"reconciliations\":174}\nsnapshot_received tick=1050 players=20 monsters=273 drops=399\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":5,\"pending\":1,\"reconciliations\":220}\nsnapshot_received tick=1200 players=20 monsters=255 drops=427\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":5,\"pending\":1,\"reconciliations\":239}\n",
+    "Godot Engine v4.7.2.stable.official.ed1daf0bf - https://godotengine.org\n\nSGO client starting\nSGO client connecting to 127.0.0.1:27888\nclient connected with peer 14\nmonster_palette {\"definitions\":9,\"load_ms\":123.392,\"rgba_bytes\":11397196,\"shared_atlases\":9}\nprediction_ready\naction_received\ninventory_received\nhealth_received\nsnapshot_received tick=150 players=18 monsters=203 drops=337\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":4,\"pending\":0,\"reconciliations\":45}\ndeath_received\nrespawn_received\nsnapshot_received tick=300 players=20 monsters=245 drops=338\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":4,\"pending\":0,\"reconciliations\":76}\nsnapshot_received tick=450 players=20 monsters=270 drops=431\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":4,\"pending\":0,\"reconciliations\":99}\nsnapshot_received tick=600 players=20 monsters=253 drops=341\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":4,\"pending\":2,\"reconciliations\":132}\nsnapshot_received tick=750 players=20 monsters=274 drops=400\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":4,\"pending\":2,\"reconciliations\":151}\nsnapshot_received tick=900 players=20 monsters=280 drops=389\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":4,\"pending\":2,\"reconciliations\":170}\nsnapshot_received tick=1050 players=20 monsters=273 drops=406\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":4,\"pending\":0,\"reconciliations\":194}\nsnapshot_received tick=1200 players=20 monsters=276 drops=422\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":4,\"pending\":0,\"reconciliations\":229}\n",
+    "Godot Engine v4.7.2.stable.official.ed1daf0bf - https://godotengine.org\n\nSGO client starting\nSGO client connecting to 127.0.0.1:27888\nclient connected with peer 13\nmonster_palette {\"definitions\":9,\"load_ms\":115.793,\"rgba_bytes\":11397196,\"shared_atlases\":9}\nprediction_ready\naction_received\ninventory_received\nhealth_received\nsnapshot_received tick=150 players=17 monsters=205 drops=387\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":5,\"pending\":3,\"reconciliations\":44}\ndeath_received\nrespawn_received\nsnapshot_received tick=300 players=20 monsters=251 drops=423\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":5,\"pending\":0,\"reconciliations\":64}\nsnapshot_received tick=450 players=20 monsters=249 drops=400\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":5,\"pending\":0,\"reconciliations\":96}\nsnapshot_received tick=600 players=20 monsters=271 drops=426\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":5,\"pending\":0,\"reconciliations\":126}\nsnapshot_received tick=750 players=20 monsters=256 drops=348\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":5,\"pending\":2,\"reconciliations\":151}\nsnapshot_received tick=900 players=20 monsters=277 drops=377\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":5,\"pending\":2,\"reconciliations\":170}\nsnapshot_received tick=1050 players=20 monsters=259 drops=278\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":5,\"pending\":2,\"reconciliations\":220}\nsnapshot_received tick=1200 players=20 monsters=280 drops=413\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":5,\"pending\":0,\"reconciliations\":248}\n",
+    "Godot Engine v4.7.2.stable.official.ed1daf0bf - https://godotengine.org\n\nSGO client starting\nSGO client connecting to 127.0.0.1:27888\nclient connected with peer 20\nmonster_palette {\"definitions\":9,\"load_ms\":112.065,\"rgba_bytes\":11397196,\"shared_atlases\":9}\naction_received\nprediction_ready\ninventory_received\nhealth_received\nsnapshot_received tick=150 players=18 monsters=199 drops=341\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":5,\"pending\":1,\"reconciliations\":44}\ndeath_received\nrespawn_received\nsnapshot_received tick=300 players=20 monsters=250 drops=420\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":5,\"pending\":0,\"reconciliations\":78}\nsnapshot_received tick=450 players=20 monsters=245 drops=310\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":5,\"pending\":1,\"reconciliations\":113}\nsnapshot_received tick=600 players=20 monsters=253 drops=415\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":5,\"pending\":0,\"reconciliations\":137}\nsnapshot_received tick=750 players=20 monsters=251 drops=292\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":5,\"pending\":0,\"reconciliations\":182}\nsnapshot_received tick=900 players=20 monsters=253 drops=395\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":5,\"pending\":0,\"reconciliations\":202}\nsnapshot_received tick=1050 players=20 monsters=255 drops=303\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":5,\"pending\":0,\"reconciliations\":251}\nsnapshot_received tick=1200 players=20 monsters=256 drops=418\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":5,\"pending\":0,\"reconciliations\":270}\n",
+    "Godot Engine v4.7.2.stable.official.ed1daf0bf - https://godotengine.org\n\nSGO client starting\nSGO client connecting to 127.0.0.1:27888\nclient connected with peer 16\nmonster_palette {\"definitions\":9,\"load_ms\":117.859,\"rgba_bytes\":11397196,\"shared_atlases\":9}\naction_received\nprediction_ready\ninventory_received\nhealth_received\nsnapshot_received tick=150 players=16 monsters=185 drops=289\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":4,\"pending\":1,\"reconciliations\":44}\ndeath_received\nrespawn_received\nsnapshot_received tick=300 players=20 monsters=250 drops=416\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":4,\"pending\":0,\"reconciliations\":72}\nsnapshot_received tick=450 players=20 monsters=248 drops=339\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":4,\"pending\":0,\"reconciliations\":113}\nsnapshot_received tick=600 players=20 monsters=252 drops=422\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":4,\"pending\":0,\"reconciliations\":132}\nsnapshot_received tick=750 players=17 monsters=257 drops=360\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":4,\"pending\":0,\"reconciliations\":180}\nsnapshot_received tick=900 players=20 monsters=261 drops=389\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":4,\"pending\":2,\"reconciliations\":200}\nsnapshot_received tick=1050 players=20 monsters=263 drops=321\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":4,\"pending\":0,\"reconciliations\":228}\nsnapshot_received tick=1200 players=20 monsters=254 drops=287\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":4,\"pending\":0,\"reconciliations\":252}\n",
+    "Godot Engine v4.7.2.stable.official.ed1daf0bf - https://godotengine.org\n\nSGO client starting\nSGO client connecting to 127.0.0.1:27888\nclient connected with peer 18\nmonster_palette {\"definitions\":9,\"load_ms\":116.339,\"rgba_bytes\":11397196,\"shared_atlases\":9}\nprediction_ready\naction_received\ninventory_received\nhealth_received\nsnapshot_received tick=150 players=17 monsters=187 drops=335\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":5,\"pending\":2,\"reconciliations\":45}\ndeath_received\nrespawn_received\nsnapshot_received tick=300 players=20 monsters=245 drops=421\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":5,\"pending\":2,\"reconciliations\":63}\nsnapshot_received tick=450 players=18 monsters=267 drops=388\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":5,\"pending\":1,\"reconciliations\":81}\nsnapshot_received tick=600 players=20 monsters=267 drops=323\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":5,\"pending\":0,\"reconciliations\":131}\nsnapshot_received tick=750 players=20 monsters=272 drops=421\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":5,\"pending\":0,\"reconciliations\":159}\nsnapshot_received tick=900 players=19 monsters=263 drops=326\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":5,\"pending\":0,\"reconciliations\":200}\nsnapshot_received tick=1050 players=20 monsters=263 drops=399\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":5,\"pending\":0,\"reconciliations\":219}\nsnapshot_received tick=1200 players=19 monsters=264 drops=301\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":5,\"pending\":0,\"reconciliations\":238}\n",
+    "Godot Engine v4.7.2.stable.official.ed1daf0bf - https://godotengine.org\n\nSGO client starting\nSGO client connecting to 127.0.0.1:27888\nclient connected with peer 15\nmonster_palette {\"definitions\":9,\"load_ms\":118.739,\"rgba_bytes\":11397196,\"shared_atlases\":9}\nprediction_ready\naction_received\ninventory_received\nhealth_received\nsnapshot_received tick=150 players=20 monsters=217 drops=428\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":4,\"pending\":0,\"reconciliations\":45}\ndeath_received\nrespawn_received\nsnapshot_received tick=300 players=20 monsters=241 drops=354\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":4,\"pending\":0,\"reconciliations\":77}\nsnapshot_received tick=450 players=16 monsters=242 drops=353\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":4,\"pending\":0,\"reconciliations\":114}\nsnapshot_received tick=600 players=20 monsters=252 drops=373\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":4,\"pending\":2,\"reconciliations\":132}\nsnapshot_received tick=750 players=20 monsters=270 drops=413\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":4,\"pending\":0,\"reconciliations\":157}\nsnapshot_received tick=900 players=20 monsters=272 drops=389\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":4,\"pending\":0,\"reconciliations\":188}\nsnapshot_received tick=1050 players=20 monsters=255 drops=303\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":4,\"pending\":2,\"reconciliations\":220}\nsnapshot_received tick=1200 players=20 monsters=256 drops=409\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":4,\"pending\":2,\"reconciliations\":239}\n",
+    "Godot Engine v4.7.2.stable.official.ed1daf0bf - https://godotengine.org\n\nSGO client starting\nSGO client connecting to 127.0.0.1:27888\nclient connected with peer 19\nmonster_palette {\"definitions\":9,\"load_ms\":114.433,\"rgba_bytes\":11397196,\"shared_atlases\":9}\nprediction_ready\naction_received\ninventory_received\nhealth_received\nsnapshot_received tick=150 players=16 monsters=207 drops=376\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":4,\"pending\":1,\"reconciliations\":45}\ndeath_received\nrespawn_received\nsnapshot_received tick=300 players=20 monsters=257 drops=425\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":4,\"pending\":0,\"reconciliations\":81}\nsnapshot_received tick=450 players=20 monsters=248 drops=324\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":4,\"pending\":1,\"reconciliations\":113}\nsnapshot_received tick=600 players=20 monsters=253 drops=394\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":4,\"pending\":0,\"reconciliations\":157}\nsnapshot_received tick=750 players=20 monsters=258 drops=387\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":4,\"pending\":0,\"reconciliations\":180}\nsnapshot_received tick=900 players=20 monsters=253 drops=359\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":4,\"pending\":1,\"reconciliations\":201}\nsnapshot_received tick=1050 players=20 monsters=259 drops=384\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":4,\"pending\":0,\"reconciliations\":222}\nsnapshot_received tick=1200 players=20 monsters=253 drops=343\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":4,\"pending\":1,\"reconciliations\":269}\n",
+    "Godot Engine v4.7.2.stable.official.ed1daf0bf - https://godotengine.org\n\nSGO client starting\nSGO client connecting to 127.0.0.1:27888\nclient connected with peer 17\nmonster_palette {\"definitions\":9,\"load_ms\":110.955,\"rgba_bytes\":11397196,\"shared_atlases\":9}\naction_received\nprediction_ready\ninventory_received\nhealth_received\nsnapshot_received tick=150 players=19 monsters=205 drops=278\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":5,\"pending\":2,\"reconciliations\":44}\ndeath_received\nrespawn_received\nsnapshot_received tick=300 players=20 monsters=256 drops=384\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":5,\"pending\":2,\"reconciliations\":94}\nsnapshot_received tick=450 players=20 monsters=248 drops=435\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":5,\"pending\":2,\"reconciliations\":144}\nsnapshot_received tick=600 players=20 monsters=252 drops=416\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":5,\"pending\":0,\"reconciliations\":163}\nsnapshot_received tick=750 players=20 monsters=258 drops=363\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":5,\"pending\":0,\"reconciliations\":213}\nsnapshot_received tick=900 players=20 monsters=253 drops=396\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":5,\"pending\":3,\"reconciliations\":231}\nsnapshot_received tick=1050 players=20 monsters=256 drops=347\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":5,\"pending\":0,\"reconciliations\":251}\nsnapshot_received tick=1200 players=20 monsters=257 drops=335\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":5,\"pending\":0,\"reconciliations\":300}\n"
+  ],
+  "measurement_provenance": {
+    "git_head": "5762e7348618f6f378b126ad2a43454c65ac2c22",
+    "tracked_worktree_diff_sha256": "8ac6d7fbf52f748ce0d40f2451f8d562b3fc1976bc7a0863130cd7bc8c9d457d",
+    "files": {
+      "client/scripts/main.gd": "ddeba7bf4cafb8170e8c854d4a0316833d0db7bc245e4c7845329df940160e55",
+      "client/scripts/entity_atlas.gd": "75fa6c6feb5cb2401a522a31dd01b5e7b13d4d637f35d15767aa95a476fb2d5d",
+      "client/scripts/monster_visuals.gd": "e39927e8a465ecb9615e004cbab146b1e4f602b0ff2d65275c73189201ade057",
+      "client/scripts/frame_profiler.gd": "22fddf097fed80167c2e6e739d7d0f63195a355517129e04f06dbff2e53c8fe0",
+      "client/project.godot": "444feeb1722ec23bcaf7b77d65f0a7a098cb11495dadd9dc601501957bcf5774",
+      "server/bin/Release/net8.0/SGTest.Server.dll": "d82c7afeb6ad23430cc63c031abbd58a3d8ab7c940c7db187c8d8aeba0614756",
+      "client/tools/benchmark_asset_lifecycle.gd": "21628a38bb96127ff3d04cae5e1bbd828f0f582a34bcb92ca0ae5a3dcfa52f8d",
+      "tools/benchmark_runtime_baseline.py": "36dcd71781de8006fcf61093a3d2bfe106b0326f0818a83e89a43cdb46413c6d",
+      "client/assets/generated/catalog.json": "f19f5e0e68af9c380c0858bb7aedf7b547856e3cd252bf87ac2aeeaf2dc8464a"
+    },
+    "assets": {
+      "root": "C:\\SGO\\SRC\\SGTest\\client\\assets\\generated",
+      "groups": [
+        {
+          "manifest": "enemy/en009a.json",
+          "version": 8,
+          "shape": "consistent",
+          "page_sizes": [
+            [
+              731,
+              700
+            ]
+          ],
+          "pages": 1
+        },
+        {
+          "manifest": "enemy/en010a.json",
+          "version": 8,
+          "shape": "consistent",
+          "page_sizes": [
+            [
+              920,
+              234
+            ]
+          ],
+          "pages": 1
+        },
+        {
+          "manifest": "enemy/en024a.json",
+          "version": 8,
+          "shape": "consistent",
+          "page_sizes": [
+            [
+              1015,
+              413
+            ]
+          ],
+          "pages": 1
+        },
+        {
+          "manifest": "enemy/en025a.json",
+          "version": 8,
+          "shape": "consistent",
+          "page_sizes": [
+            [
+              695,
+              246
+            ],
+            [
+              784,
+              146
+            ],
+            [
+              1187,
+              132
+            ],
+            [
+              281,
+              122
+            ],
+            [
+              279,
+              112
+            ]
+          ],
+          "pages": 5
+        },
+        {
+          "manifest": "enemy/en029a.json",
+          "version": 8,
+          "shape": "consistent",
+          "page_sizes": [
+            [
+              2029,
+              81
+            ]
+          ],
+          "pages": 1
+        },
+        {
+          "manifest": "enemy/en030a.json",
+          "version": 8,
+          "shape": "consistent",
+          "page_sizes": [
+            [
+              906,
+              159
+            ]
+          ],
+          "pages": 1
+        },
+        {
+          "manifest": "enemy/en050a.json",
+          "version": 8,
+          "shape": "consistent",
+          "page_sizes": [
+            [
+              509,
+              443
+            ]
+          ],
+          "pages": 1
+        },
+        {
+          "manifest": "enemy/en058a.json",
+          "version": 8,
+          "shape": "consistent",
+          "page_sizes": [
+            [
+              994,
+              318
+            ]
+          ],
+          "pages": 1
+        },
+        {
+          "manifest": "enemy/en064a.json",
+          "version": 8,
+          "shape": "consistent",
+          "page_sizes": [
+            [
+              761,
+              454
+            ]
+          ],
+          "pages": 1
+        }
+      ],
+      "files": {
+        "C:/SGO/SRC/SGTest/client/assets/generated/enemy/en009a.json": "9d78e46e7c8a9cf07a4e6509dc064bdfd43e3a11ca7d63e1683debf16146c9e5",
+        "C:/SGO/SRC/SGTest/client/assets/generated/enemy/en009a_0.png": "55f6d15422aaa56c08c35b02fae08e7f212a72f427b784d823bcda8f5f5bd31e",
+        "C:/SGO/SRC/SGTest/client/assets/generated/enemy/en010a.json": "6e90da609b5d685dfe124992ab1dbde5a204625780a9cb2f940e5630139885a9",
+        "C:/SGO/SRC/SGTest/client/assets/generated/enemy/en010a_0.png": "65c752d27f3d2aec76a176319ef738c611fe615accb3185c39c1c42bb5c430ba",
+        "C:/SGO/SRC/SGTest/client/assets/generated/enemy/en024a.json": "1ca448ae2fbcd645eeb4feb7d190fb29d101f847b9c25470a33517c39c89d708",
+        "C:/SGO/SRC/SGTest/client/assets/generated/enemy/en024a_0.png": "0032106ae0dae4d4c6046bbbb91f3909f02cd517ec5f987e0228db671adc28d4",
+        "C:/SGO/SRC/SGTest/client/assets/generated/enemy/en025a.json": "b67466df4f1da7fad43b39813ad65075e6d5797b6ad8248b29c694306ec061d7",
+        "C:/SGO/SRC/SGTest/client/assets/generated/enemy/en025a_0.png": "85e08169bfe95b72945ed5f7d9775b30ecb76362573548fe69f5d7a7fd5213fb",
+        "C:/SGO/SRC/SGTest/client/assets/generated/enemy/en025a_1.png": "6507fd1f8c11e08921934aa86e098b9e71ad3ff6d37476b6a3cd32f01577ac38",
+        "C:/SGO/SRC/SGTest/client/assets/generated/enemy/en025a_2.png": "fee7fe61bf9b208034e05d01dfa63fa208d47e0e9f9ea07f329017f178b1c870",
+        "C:/SGO/SRC/SGTest/client/assets/generated/enemy/en025a_3.png": "44df735b73b2c0d35e4b68e7045d00789b10d699935a0ecad54aa606449d9b88",
+        "C:/SGO/SRC/SGTest/client/assets/generated/enemy/en025a_4.png": "5938c96e71b13432d471b25c001cb1778c427488475e53ef73937c8196c00643",
+        "C:/SGO/SRC/SGTest/client/assets/generated/enemy/en029a.json": "3c60e068118eca45d9a77b67a064aa00ab37a1a7261d8be01a68b152c055dc9f",
+        "C:/SGO/SRC/SGTest/client/assets/generated/enemy/en029a_0.png": "ec74e68c69d4dbc2fa231a51e235e16b3cc7f39c1771bf72695657fbcf6d6fb7",
+        "C:/SGO/SRC/SGTest/client/assets/generated/enemy/en030a.json": "2054b1f65f0970cf40a763a2c76c618436cd6b0bcd9204f89f341f3568c11b7c",
+        "C:/SGO/SRC/SGTest/client/assets/generated/enemy/en030a_0.png": "cbfc170dc2905a98f71184618e175a1ddf9a2cff88c6bb6b4e9f682de8326455",
+        "C:/SGO/SRC/SGTest/client/assets/generated/enemy/en050a.json": "74d2435a1cc989f0f8a63796b6514f3f52547f36b7873724ea4ca461756d1e46",
+        "C:/SGO/SRC/SGTest/client/assets/generated/enemy/en050a_0.png": "774fff7daa3554f9aff2bac1d469c615c8097873516d00dfad12babc87b52087",
+        "C:/SGO/SRC/SGTest/client/assets/generated/enemy/en058a.json": "f213d7012d44bdbe969473e484ce7282eb4d5191face2f80c029f92143aaa327",
+        "C:/SGO/SRC/SGTest/client/assets/generated/enemy/en058a_0.png": "ca6d8d688fe97cbe48ac80765a3037aec600932b0d3df318b3acaaa644f43f4a",
+        "C:/SGO/SRC/SGTest/client/assets/generated/enemy/en064a.json": "4a06142a6bb1701e8b031e8bfc4267359bc5130cb64114c889985dd95aed9844",
+        "C:/SGO/SRC/SGTest/client/assets/generated/enemy/en064a_0.png": "4536f8f47b068aaef13954c182e83d8d59a9dde70441e24d143f028684bf9903",
+        "C:/SGO/SRC/SGTest/client/assets/generated/maps/13/population.json": "c8c94f913d0a703969592114b3d6f7aafaab45c716f9f7df1e41d95af26a0fca"
+      },
+      "content_sha256": "46a53ec5390abe060ce2f0764a84ac9dcafd608b54d609c31d43ccb6d0197a1e"
+    },
+    "runtime_environment": {
+      "godot_version": "4.7.2.stable.official.ed1daf0bf",
+      "godot_executable_sha256": "c8f0a6bc45a19b33541501e57f6f7cd972ab18453743266339d495cbbe846643",
+      "dotnet_sdk_version": "8.0.428",
+      "python": "3.10.0"
+    },
+    "os": "Windows-10-10.0.19045-SP0",
+    "cpu_logical": 20,
+    "physical_ram_bytes": 34088599552,
+    "cache": "warm OS cache; cold disk NOT VERIFIED",
+    "physical_driver_vram": "NOT VERIFIED (engine counters reported separately)"
+  },
+  "source_files_unchanged_during_run": true,
+  "frame_p95_target_passed": true,
+  "frame_p99_target_passed": true
+}

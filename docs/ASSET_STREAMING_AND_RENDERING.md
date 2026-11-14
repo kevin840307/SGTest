@@ -2,6 +2,10 @@
 
 版本：設計 v1／2026-11-13，2026-11-14 加入 HK2 實測。正式 runtime **NOT VERIFIED**。乾淨 HK2 的 SPR/ACT/SIF 已可本機轉換，並有三組實驗 Atlas；不代表原版視覺、動畫、授權或 Client 已完成。必須遵守 AS001～AS009 及 AS008 授權 Gate。詳 [HK2 Atlas 候選實測](HK2_ATLAS_CANDIDATES.md)。
 
+## 最新執行狀態（2026-11-14）
+
+已有可執行Godot原型與C#／.NET 8 Server；目前先依 [SPEC §0](../SPEC.md) 交付PERF001可重現基準，再做標準動畫定義、自動混合Builder與統一Runtime store。舊候選實測只適用其場景，不代表最新架構已選定或所有Gate通過。一般遊玩Render FPS支援30～90，Client／Server傳輸與固定邏輯頻率不變；低功耗掛機另驗收，見 [隔離契約](CLIENT_RUNTIME_ISOLATION.md)。
+
 ## 1. 核心目標
 
 - 降低 Client RAM、VRAM、CPU、GPU Draw Calls、載入 Spike，維持人物、怪物、掉落物準確且流暢；正式視窗寬度約 800～1440 像素，支援多種長寬比與鏡頭縮放。
@@ -20,7 +24,7 @@
 
 Canonical Metadata 至少包含：SourceHash、DecoderVersion、VisualDefinitionId、ActionId、FacingId、FrameIndex、DurationMs、原始尺寸、TrimRect、Pivot、Offset、ZOrder、AttachmentPoint、Hit/Action Events、Alpha/Palette 轉換資訊。Unknown 欄位明列，不補假資料。裁邊後使用原始坐標還原，不得改變腳底錨點/武器疊層。
 
-Packing：stable sort + deterministic seed + hash，輸出 `AtlasPageId, RegionRect, UV, TextureVariant, ContentHash`。可允許同一動作跨頁，但絕不改變動畫時間軸。壓縮/縮圖必須經視覺測試；PNG/RGBA 為保真基準，VRAM 壓縮未驗證不得預設啟用。
+Packing：stable sort + deterministic seed + hash，輸出 `AtlasPageId, RegionRect, UV, TextureVariant, ContentHash`。依2026-11-14最新要求，同一entity的同一behavior×logical facing所需影格視為不可拆clip單位；方向alias指向共用來源，不複製像素。不同方向／行為可分頁，但單clip不跨頁；超大clip超過4096時明列不支援／待決策，不默默拆分。絕不改變動畫時間軸。壓縮/縮圖必須經視覺測試；PNG/RGBA 為保真基準，VRAM 壓縮未驗證不得預設啟用。
 
 ## 3. Adaptive Multi-Size Atlas 與地圖感知分群
 

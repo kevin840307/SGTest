@@ -1,0 +1,3337 @@
+{
+  "runs": [
+    {
+      "candidate": "current",
+      "inputs": {
+        "lifecycle": {
+          "path": "reports/runtime_baseline/lifecycle.json",
+          "sha256": "3b392800f8ce29d1b2bd3e5c886d1d37a3ad9968126116167fb358ad2cb6887b",
+          "measurement_provenance": {
+            "git_head": "5762e7348618f6f378b126ad2a43454c65ac2c22",
+            "tracked_worktree_diff_sha256": "8ac6d7fbf52f748ce0d40f2451f8d562b3fc1976bc7a0863130cd7bc8c9d457d",
+            "files": {
+              "client/scripts/main.gd": "ddeba7bf4cafb8170e8c854d4a0316833d0db7bc245e4c7845329df940160e55",
+              "client/scripts/entity_atlas.gd": "75fa6c6feb5cb2401a522a31dd01b5e7b13d4d637f35d15767aa95a476fb2d5d",
+              "client/scripts/monster_visuals.gd": "e39927e8a465ecb9615e004cbab146b1e4f602b0ff2d65275c73189201ade057",
+              "client/scripts/frame_profiler.gd": "22fddf097fed80167c2e6e739d7d0f63195a355517129e04f06dbff2e53c8fe0",
+              "client/project.godot": "444feeb1722ec23bcaf7b77d65f0a7a098cb11495dadd9dc601501957bcf5774",
+              "server/bin/Release/net8.0/SGTest.Server.dll": "d82c7afeb6ad23430cc63c031abbd58a3d8ab7c940c7db187c8d8aeba0614756",
+              "client/tools/benchmark_asset_lifecycle.gd": "21628a38bb96127ff3d04cae5e1bbd828f0f582a34bcb92ca0ae5a3dcfa52f8d",
+              "tools/benchmark_runtime_baseline.py": "36dcd71781de8006fcf61093a3d2bfe106b0326f0818a83e89a43cdb46413c6d",
+              "client/assets/generated/catalog.json": "f19f5e0e68af9c380c0858bb7aedf7b547856e3cd252bf87ac2aeeaf2dc8464a"
+            },
+            "assets": {
+              "root": "C:\\SGO\\SRC\\SGTest\\client\\assets\\generated",
+              "groups": [
+                {
+                  "manifest": "enemy/en009a.json",
+                  "version": 8,
+                  "shape": "consistent",
+                  "page_sizes": [
+                    [
+                      731,
+                      700
+                    ]
+                  ],
+                  "pages": 1
+                },
+                {
+                  "manifest": "enemy/en010a.json",
+                  "version": 8,
+                  "shape": "consistent",
+                  "page_sizes": [
+                    [
+                      920,
+                      234
+                    ]
+                  ],
+                  "pages": 1
+                },
+                {
+                  "manifest": "enemy/en024a.json",
+                  "version": 8,
+                  "shape": "consistent",
+                  "page_sizes": [
+                    [
+                      1015,
+                      413
+                    ]
+                  ],
+                  "pages": 1
+                },
+                {
+                  "manifest": "enemy/en025a.json",
+                  "version": 8,
+                  "shape": "consistent",
+                  "page_sizes": [
+                    [
+                      695,
+                      246
+                    ],
+                    [
+                      784,
+                      146
+                    ],
+                    [
+                      1187,
+                      132
+                    ],
+                    [
+                      281,
+                      122
+                    ],
+                    [
+                      279,
+                      112
+                    ]
+                  ],
+                  "pages": 5
+                },
+                {
+                  "manifest": "enemy/en029a.json",
+                  "version": 8,
+                  "shape": "consistent",
+                  "page_sizes": [
+                    [
+                      2029,
+                      81
+                    ]
+                  ],
+                  "pages": 1
+                },
+                {
+                  "manifest": "enemy/en030a.json",
+                  "version": 8,
+                  "shape": "consistent",
+                  "page_sizes": [
+                    [
+                      906,
+                      159
+                    ]
+                  ],
+                  "pages": 1
+                },
+                {
+                  "manifest": "enemy/en050a.json",
+                  "version": 8,
+                  "shape": "consistent",
+                  "page_sizes": [
+                    [
+                      509,
+                      443
+                    ]
+                  ],
+                  "pages": 1
+                },
+                {
+                  "manifest": "enemy/en058a.json",
+                  "version": 8,
+                  "shape": "consistent",
+                  "page_sizes": [
+                    [
+                      994,
+                      318
+                    ]
+                  ],
+                  "pages": 1
+                },
+                {
+                  "manifest": "enemy/en064a.json",
+                  "version": 8,
+                  "shape": "consistent",
+                  "page_sizes": [
+                    [
+                      761,
+                      454
+                    ]
+                  ],
+                  "pages": 1
+                }
+              ],
+              "files": {
+                "C:/SGO/SRC/SGTest/client/assets/generated/enemy/en009a.json": "9d78e46e7c8a9cf07a4e6509dc064bdfd43e3a11ca7d63e1683debf16146c9e5",
+                "C:/SGO/SRC/SGTest/client/assets/generated/enemy/en009a_0.png": "55f6d15422aaa56c08c35b02fae08e7f212a72f427b784d823bcda8f5f5bd31e",
+                "C:/SGO/SRC/SGTest/client/assets/generated/enemy/en010a.json": "6e90da609b5d685dfe124992ab1dbde5a204625780a9cb2f940e5630139885a9",
+                "C:/SGO/SRC/SGTest/client/assets/generated/enemy/en010a_0.png": "65c752d27f3d2aec76a176319ef738c611fe615accb3185c39c1c42bb5c430ba",
+                "C:/SGO/SRC/SGTest/client/assets/generated/enemy/en024a.json": "1ca448ae2fbcd645eeb4feb7d190fb29d101f847b9c25470a33517c39c89d708",
+                "C:/SGO/SRC/SGTest/client/assets/generated/enemy/en024a_0.png": "0032106ae0dae4d4c6046bbbb91f3909f02cd517ec5f987e0228db671adc28d4",
+                "C:/SGO/SRC/SGTest/client/assets/generated/enemy/en025a.json": "b67466df4f1da7fad43b39813ad65075e6d5797b6ad8248b29c694306ec061d7",
+                "C:/SGO/SRC/SGTest/client/assets/generated/enemy/en025a_0.png": "85e08169bfe95b72945ed5f7d9775b30ecb76362573548fe69f5d7a7fd5213fb",
+                "C:/SGO/SRC/SGTest/client/assets/generated/enemy/en025a_1.png": "6507fd1f8c11e08921934aa86e098b9e71ad3ff6d37476b6a3cd32f01577ac38",
+                "C:/SGO/SRC/SGTest/client/assets/generated/enemy/en025a_2.png": "fee7fe61bf9b208034e05d01dfa63fa208d47e0e9f9ea07f329017f178b1c870",
+                "C:/SGO/SRC/SGTest/client/assets/generated/enemy/en025a_3.png": "44df735b73b2c0d35e4b68e7045d00789b10d699935a0ecad54aa606449d9b88",
+                "C:/SGO/SRC/SGTest/client/assets/generated/enemy/en025a_4.png": "5938c96e71b13432d471b25c001cb1778c427488475e53ef73937c8196c00643",
+                "C:/SGO/SRC/SGTest/client/assets/generated/enemy/en029a.json": "3c60e068118eca45d9a77b67a064aa00ab37a1a7261d8be01a68b152c055dc9f",
+                "C:/SGO/SRC/SGTest/client/assets/generated/enemy/en029a_0.png": "ec74e68c69d4dbc2fa231a51e235e16b3cc7f39c1771bf72695657fbcf6d6fb7",
+                "C:/SGO/SRC/SGTest/client/assets/generated/enemy/en030a.json": "2054b1f65f0970cf40a763a2c76c618436cd6b0bcd9204f89f341f3568c11b7c",
+                "C:/SGO/SRC/SGTest/client/assets/generated/enemy/en030a_0.png": "cbfc170dc2905a98f71184618e175a1ddf9a2cff88c6bb6b4e9f682de8326455",
+                "C:/SGO/SRC/SGTest/client/assets/generated/enemy/en050a.json": "74d2435a1cc989f0f8a63796b6514f3f52547f36b7873724ea4ca461756d1e46",
+                "C:/SGO/SRC/SGTest/client/assets/generated/enemy/en050a_0.png": "774fff7daa3554f9aff2bac1d469c615c8097873516d00dfad12babc87b52087",
+                "C:/SGO/SRC/SGTest/client/assets/generated/enemy/en058a.json": "f213d7012d44bdbe969473e484ce7282eb4d5191face2f80c029f92143aaa327",
+                "C:/SGO/SRC/SGTest/client/assets/generated/enemy/en058a_0.png": "ca6d8d688fe97cbe48ac80765a3037aec600932b0d3df318b3acaaa644f43f4a",
+                "C:/SGO/SRC/SGTest/client/assets/generated/enemy/en064a.json": "4a06142a6bb1701e8b031e8bfc4267359bc5130cb64114c889985dd95aed9844",
+                "C:/SGO/SRC/SGTest/client/assets/generated/enemy/en064a_0.png": "4536f8f47b068aaef13954c182e83d8d59a9dde70441e24d143f028684bf9903",
+                "C:/SGO/SRC/SGTest/client/assets/generated/maps/13/population.json": "c8c94f913d0a703969592114b3d6f7aafaab45c716f9f7df1e41d95af26a0fca"
+              },
+              "content_sha256": "46a53ec5390abe060ce2f0764a84ac9dcafd608b54d609c31d43ccb6d0197a1e"
+            },
+            "runtime_environment": {
+              "godot_version": "4.7.2.stable.official.ed1daf0bf",
+              "godot_executable_sha256": "c8f0a6bc45a19b33541501e57f6f7cd972ab18453743266339d495cbbe846643",
+              "dotnet_sdk_version": "8.0.428",
+              "python": "3.10.0"
+            },
+            "os": "Windows-10-10.0.19045-SP0",
+            "cpu_logical": 20,
+            "physical_ram_bytes": 34088599552,
+            "cache": "warm OS cache; cold disk NOT VERIFIED",
+            "physical_driver_vram": "NOT VERIFIED (engine counters reported separately)"
+          }
+        },
+        "multiplayer": {
+          "path": "reports/runtime_baseline/multiplayer.json",
+          "sha256": "985cc92e79da2ff0a753b6005882cb209c6b0cec35dd6f0e3679aa4091318a7e",
+          "measurement_provenance": {
+            "git_head": "5762e7348618f6f378b126ad2a43454c65ac2c22",
+            "tracked_worktree_diff_sha256": "8ac6d7fbf52f748ce0d40f2451f8d562b3fc1976bc7a0863130cd7bc8c9d457d",
+            "files": {
+              "client/scripts/main.gd": "ddeba7bf4cafb8170e8c854d4a0316833d0db7bc245e4c7845329df940160e55",
+              "client/scripts/entity_atlas.gd": "75fa6c6feb5cb2401a522a31dd01b5e7b13d4d637f35d15767aa95a476fb2d5d",
+              "client/scripts/monster_visuals.gd": "e39927e8a465ecb9615e004cbab146b1e4f602b0ff2d65275c73189201ade057",
+              "client/scripts/frame_profiler.gd": "22fddf097fed80167c2e6e739d7d0f63195a355517129e04f06dbff2e53c8fe0",
+              "client/project.godot": "444feeb1722ec23bcaf7b77d65f0a7a098cb11495dadd9dc601501957bcf5774",
+              "server/bin/Release/net8.0/SGTest.Server.dll": "d82c7afeb6ad23430cc63c031abbd58a3d8ab7c940c7db187c8d8aeba0614756",
+              "client/tools/benchmark_asset_lifecycle.gd": "21628a38bb96127ff3d04cae5e1bbd828f0f582a34bcb92ca0ae5a3dcfa52f8d",
+              "tools/benchmark_runtime_baseline.py": "36dcd71781de8006fcf61093a3d2bfe106b0326f0818a83e89a43cdb46413c6d",
+              "client/assets/generated/catalog.json": "f19f5e0e68af9c380c0858bb7aedf7b547856e3cd252bf87ac2aeeaf2dc8464a"
+            },
+            "assets": {
+              "root": "C:\\SGO\\SRC\\SGTest\\client\\assets\\generated",
+              "groups": [
+                {
+                  "manifest": "enemy/en009a.json",
+                  "version": 8,
+                  "shape": "consistent",
+                  "page_sizes": [
+                    [
+                      731,
+                      700
+                    ]
+                  ],
+                  "pages": 1
+                },
+                {
+                  "manifest": "enemy/en010a.json",
+                  "version": 8,
+                  "shape": "consistent",
+                  "page_sizes": [
+                    [
+                      920,
+                      234
+                    ]
+                  ],
+                  "pages": 1
+                },
+                {
+                  "manifest": "enemy/en024a.json",
+                  "version": 8,
+                  "shape": "consistent",
+                  "page_sizes": [
+                    [
+                      1015,
+                      413
+                    ]
+                  ],
+                  "pages": 1
+                },
+                {
+                  "manifest": "enemy/en025a.json",
+                  "version": 8,
+                  "shape": "consistent",
+                  "page_sizes": [
+                    [
+                      695,
+                      246
+                    ],
+                    [
+                      784,
+                      146
+                    ],
+                    [
+                      1187,
+                      132
+                    ],
+                    [
+                      281,
+                      122
+                    ],
+                    [
+                      279,
+                      112
+                    ]
+                  ],
+                  "pages": 5
+                },
+                {
+                  "manifest": "enemy/en029a.json",
+                  "version": 8,
+                  "shape": "consistent",
+                  "page_sizes": [
+                    [
+                      2029,
+                      81
+                    ]
+                  ],
+                  "pages": 1
+                },
+                {
+                  "manifest": "enemy/en030a.json",
+                  "version": 8,
+                  "shape": "consistent",
+                  "page_sizes": [
+                    [
+                      906,
+                      159
+                    ]
+                  ],
+                  "pages": 1
+                },
+                {
+                  "manifest": "enemy/en050a.json",
+                  "version": 8,
+                  "shape": "consistent",
+                  "page_sizes": [
+                    [
+                      509,
+                      443
+                    ]
+                  ],
+                  "pages": 1
+                },
+                {
+                  "manifest": "enemy/en058a.json",
+                  "version": 8,
+                  "shape": "consistent",
+                  "page_sizes": [
+                    [
+                      994,
+                      318
+                    ]
+                  ],
+                  "pages": 1
+                },
+                {
+                  "manifest": "enemy/en064a.json",
+                  "version": 8,
+                  "shape": "consistent",
+                  "page_sizes": [
+                    [
+                      761,
+                      454
+                    ]
+                  ],
+                  "pages": 1
+                }
+              ],
+              "files": {
+                "C:/SGO/SRC/SGTest/client/assets/generated/enemy/en009a.json": "9d78e46e7c8a9cf07a4e6509dc064bdfd43e3a11ca7d63e1683debf16146c9e5",
+                "C:/SGO/SRC/SGTest/client/assets/generated/enemy/en009a_0.png": "55f6d15422aaa56c08c35b02fae08e7f212a72f427b784d823bcda8f5f5bd31e",
+                "C:/SGO/SRC/SGTest/client/assets/generated/enemy/en010a.json": "6e90da609b5d685dfe124992ab1dbde5a204625780a9cb2f940e5630139885a9",
+                "C:/SGO/SRC/SGTest/client/assets/generated/enemy/en010a_0.png": "65c752d27f3d2aec76a176319ef738c611fe615accb3185c39c1c42bb5c430ba",
+                "C:/SGO/SRC/SGTest/client/assets/generated/enemy/en024a.json": "1ca448ae2fbcd645eeb4feb7d190fb29d101f847b9c25470a33517c39c89d708",
+                "C:/SGO/SRC/SGTest/client/assets/generated/enemy/en024a_0.png": "0032106ae0dae4d4c6046bbbb91f3909f02cd517ec5f987e0228db671adc28d4",
+                "C:/SGO/SRC/SGTest/client/assets/generated/enemy/en025a.json": "b67466df4f1da7fad43b39813ad65075e6d5797b6ad8248b29c694306ec061d7",
+                "C:/SGO/SRC/SGTest/client/assets/generated/enemy/en025a_0.png": "85e08169bfe95b72945ed5f7d9775b30ecb76362573548fe69f5d7a7fd5213fb",
+                "C:/SGO/SRC/SGTest/client/assets/generated/enemy/en025a_1.png": "6507fd1f8c11e08921934aa86e098b9e71ad3ff6d37476b6a3cd32f01577ac38",
+                "C:/SGO/SRC/SGTest/client/assets/generated/enemy/en025a_2.png": "fee7fe61bf9b208034e05d01dfa63fa208d47e0e9f9ea07f329017f178b1c870",
+                "C:/SGO/SRC/SGTest/client/assets/generated/enemy/en025a_3.png": "44df735b73b2c0d35e4b68e7045d00789b10d699935a0ecad54aa606449d9b88",
+                "C:/SGO/SRC/SGTest/client/assets/generated/enemy/en025a_4.png": "5938c96e71b13432d471b25c001cb1778c427488475e53ef73937c8196c00643",
+                "C:/SGO/SRC/SGTest/client/assets/generated/enemy/en029a.json": "3c60e068118eca45d9a77b67a064aa00ab37a1a7261d8be01a68b152c055dc9f",
+                "C:/SGO/SRC/SGTest/client/assets/generated/enemy/en029a_0.png": "ec74e68c69d4dbc2fa231a51e235e16b3cc7f39c1771bf72695657fbcf6d6fb7",
+                "C:/SGO/SRC/SGTest/client/assets/generated/enemy/en030a.json": "2054b1f65f0970cf40a763a2c76c618436cd6b0bcd9204f89f341f3568c11b7c",
+                "C:/SGO/SRC/SGTest/client/assets/generated/enemy/en030a_0.png": "cbfc170dc2905a98f71184618e175a1ddf9a2cff88c6bb6b4e9f682de8326455",
+                "C:/SGO/SRC/SGTest/client/assets/generated/enemy/en050a.json": "74d2435a1cc989f0f8a63796b6514f3f52547f36b7873724ea4ca461756d1e46",
+                "C:/SGO/SRC/SGTest/client/assets/generated/enemy/en050a_0.png": "774fff7daa3554f9aff2bac1d469c615c8097873516d00dfad12babc87b52087",
+                "C:/SGO/SRC/SGTest/client/assets/generated/enemy/en058a.json": "f213d7012d44bdbe969473e484ce7282eb4d5191face2f80c029f92143aaa327",
+                "C:/SGO/SRC/SGTest/client/assets/generated/enemy/en058a_0.png": "ca6d8d688fe97cbe48ac80765a3037aec600932b0d3df318b3acaaa644f43f4a",
+                "C:/SGO/SRC/SGTest/client/assets/generated/enemy/en064a.json": "4a06142a6bb1701e8b031e8bfc4267359bc5130cb64114c889985dd95aed9844",
+                "C:/SGO/SRC/SGTest/client/assets/generated/enemy/en064a_0.png": "4536f8f47b068aaef13954c182e83d8d59a9dde70441e24d143f028684bf9903",
+                "C:/SGO/SRC/SGTest/client/assets/generated/maps/13/population.json": "c8c94f913d0a703969592114b3d6f7aafaab45c716f9f7df1e41d95af26a0fca"
+              },
+              "content_sha256": "46a53ec5390abe060ce2f0764a84ac9dcafd608b54d609c31d43ccb6d0197a1e"
+            },
+            "runtime_environment": {
+              "godot_version": "4.7.2.stable.official.ed1daf0bf",
+              "godot_executable_sha256": "c8f0a6bc45a19b33541501e57f6f7cd972ab18453743266339d495cbbe846643",
+              "dotnet_sdk_version": "8.0.428",
+              "python": "3.10.0"
+            },
+            "os": "Windows-10-10.0.19045-SP0",
+            "cpu_logical": 20,
+            "physical_ram_bytes": 34088599552,
+            "cache": "warm OS cache; cold disk NOT VERIFIED",
+            "physical_driver_vram": "NOT VERIFIED (engine counters reported separately)"
+          }
+        }
+      },
+      "lifecycle": {
+        "cycles": 30,
+        "execution_passed": true,
+        "frame_ms_p95": 46.775,
+        "frame_ms_p99": 60.243,
+        "frame_ms_max": 61.329,
+        "rss_peak_bytes": 169054208,
+        "texture_peak_bytes": 25573467,
+        "source_files_unchanged_during_run": true,
+        "decode_p95_ms": 5.602,
+        "decode_p99_ms": 9.464,
+        "decode_max_ms": 9.694,
+        "submit_p95_ms": 0.178,
+        "submit_p99_ms": 0.487,
+        "submit_max_ms": 0.755,
+        "sync_wait_p95_ms": 0.002,
+        "sync_wait_p99_ms": 0.002,
+        "sync_wait_max_ms": 0.003,
+        "load_wall_p95_ms": 56.363,
+        "pages": 13,
+        "rgba_bytes": 11397196,
+        "ram_recovery": {
+          "warm_baseline_bytes": 167120896,
+          "after_peak_bytes": 167153664,
+          "last10_minus_first10_median_bytes": 24576.0,
+          "passed": true
+        },
+        "gates": {
+          "execution": "PASS",
+          "input_integrity": "PASS",
+          "texture_handles": "PASS",
+          "engine_texture_recovery": "PASS",
+          "rss_recovery": "PASS",
+          "static_recovery": "PASS",
+          "loading_frame": "FAIL",
+          "gpu_submit": "PASS",
+          "thirty_cycles": "PASS"
+        }
+      },
+      "multiplayer": {
+        "scenario": {
+          "clients": 20,
+          "native_clients": 1,
+          "headless_clients": 19,
+          "monster_assets": "C:\\SGO\\SRC\\SGTest\\client\\assets\\generated",
+          "monsters": 300,
+          "drops": 1000,
+          "map": 13,
+          "seconds": 40,
+          "render_cap": 60,
+          "resolution": [
+            1440,
+            900
+          ],
+          "bot_paths": "deterministic per-client phase; not identical trajectories"
+        },
+        "rendered": {
+          "draw_calls_last_frame": 423.0,
+          "draw_calls_p95": 435.0,
+          "frame_ms_max": 40.153,
+          "frame_ms_p50": 16.602,
+          "frame_ms_p95": 22.324,
+          "frame_ms_p99": 24.928,
+          "frames": 2101,
+          "mean_fps": 60.0004312263263,
+          "renderer": "NVIDIA GeForce RTX 3050",
+          "resolution": [
+            1440,
+            900
+          ],
+          "sample_seconds": 35.0,
+          "static_memory_bytes": 63313477,
+          "texture_memory_bytes": 45593087.0,
+          "video_memory_bytes": 52094319.0,
+          "warmup_seconds": 2
+        },
+        "server_rss_peak_bytes": 83656704,
+        "server_cpu_median_one_core_percent": 4.65,
+        "native_client_rss_peak_bytes": 217817088,
+        "native_client_cpu_median_one_core_percent": 43.8,
+        "gates": {
+          "execution": "PASS",
+          "input_integrity": "PASS",
+          "frame_p95": "PASS",
+          "frame_p99": "PASS",
+          "client_ram": "FAIL",
+          "client_cpu": "PASS",
+          "server_cpu": "PASS",
+          "tick_work": "NOT VERIFIED",
+          "physical_driver_vram": "NOT VERIFIED",
+          "fps_background_isolation": "NOT VERIFIED",
+          "runtime_owner_lru_logout": "NOT VERIFIED"
+        }
+      }
+    },
+    {
+      "candidate": "direction_1024",
+      "inputs": {
+        "lifecycle": {
+          "path": "reports/runtime_baseline/direction_1024/lifecycle.json",
+          "sha256": "d3b97d1798375fe6ec59175f1b82f8dd0bd70ec2e73fdb3abc1ecb5ba2e50731",
+          "measurement_provenance": {
+            "git_head": "5762e7348618f6f378b126ad2a43454c65ac2c22",
+            "tracked_worktree_diff_sha256": "8ac6d7fbf52f748ce0d40f2451f8d562b3fc1976bc7a0863130cd7bc8c9d457d",
+            "files": {
+              "client/scripts/main.gd": "ddeba7bf4cafb8170e8c854d4a0316833d0db7bc245e4c7845329df940160e55",
+              "client/scripts/entity_atlas.gd": "75fa6c6feb5cb2401a522a31dd01b5e7b13d4d637f35d15767aa95a476fb2d5d",
+              "client/scripts/monster_visuals.gd": "e39927e8a465ecb9615e004cbab146b1e4f602b0ff2d65275c73189201ade057",
+              "client/scripts/frame_profiler.gd": "22fddf097fed80167c2e6e739d7d0f63195a355517129e04f06dbff2e53c8fe0",
+              "client/project.godot": "444feeb1722ec23bcaf7b77d65f0a7a098cb11495dadd9dc601501957bcf5774",
+              "server/bin/Release/net8.0/SGTest.Server.dll": "d82c7afeb6ad23430cc63c031abbd58a3d8ab7c940c7db187c8d8aeba0614756",
+              "client/tools/benchmark_asset_lifecycle.gd": "21628a38bb96127ff3d04cae5e1bbd828f0f582a34bcb92ca0ae5a3dcfa52f8d",
+              "tools/benchmark_runtime_baseline.py": "36dcd71781de8006fcf61093a3d2bfe106b0326f0818a83e89a43cdb46413c6d",
+              "client/assets/generated/catalog.json": "f19f5e0e68af9c380c0858bb7aedf7b547856e3cd252bf87ac2aeeaf2dc8464a"
+            },
+            "assets": {
+              "root": "C:\\SGO\\SRC\\SGTest\\reports\\atlas_candidates\\direction_1024",
+              "groups": [
+                {
+                  "manifest": "enemy/en009a.json",
+                  "version": 9,
+                  "shape": "consistent",
+                  "page_sizes": [
+                    [
+                      729,
+                      177
+                    ],
+                    [
+                      474,
+                      162
+                    ],
+                    [
+                      502,
+                      252
+                    ],
+                    [
+                      291,
+                      85
+                    ],
+                    [
+                      292,
+                      101
+                    ]
+                  ],
+                  "pages": 5
+                },
+                {
+                  "manifest": "enemy/en010a.json",
+                  "version": 9,
+                  "shape": "consistent",
+                  "page_sizes": [
+                    [
+                      478,
+                      113
+                    ],
+                    [
+                      256,
+                      107
+                    ],
+                    [
+                      883,
+                      58
+                    ],
+                    [
+                      180,
+                      57
+                    ],
+                    [
+                      180,
+                      58
+                    ]
+                  ],
+                  "pages": 5
+                },
+                {
+                  "manifest": "enemy/en024a.json",
+                  "version": 9,
+                  "shape": "consistent",
+                  "page_sizes": [
+                    [
+                      482,
+                      284
+                    ],
+                    [
+                      553,
+                      125
+                    ],
+                    [
+                      472,
+                      207
+                    ],
+                    [
+                      228,
+                      99
+                    ],
+                    [
+                      228,
+                      101
+                    ]
+                  ],
+                  "pages": 5
+                },
+                {
+                  "manifest": "enemy/en025a.json",
+                  "version": 9,
+                  "shape": "consistent",
+                  "page_sizes": [
+                    [
+                      695,
+                      246
+                    ],
+                    [
+                      784,
+                      146
+                    ],
+                    [
+                      485,
+                      352
+                    ],
+                    [
+                      281,
+                      122
+                    ],
+                    [
+                      279,
+                      112
+                    ]
+                  ],
+                  "pages": 5
+                },
+                {
+                  "manifest": "enemy/en029a.json",
+                  "version": 9,
+                  "shape": "consistent",
+                  "page_sizes": [
+                    [
+                      712,
+                      73
+                    ],
+                    [
+                      399,
+                      69
+                    ],
+                    [
+                      650,
+                      77
+                    ],
+                    [
+                      129,
+                      79
+                    ],
+                    [
+                      129,
+                      65
+                    ]
+                  ],
+                  "pages": 5
+                },
+                {
+                  "manifest": "enemy/en030a.json",
+                  "version": 9,
+                  "shape": "consistent",
+                  "page_sizes": [
+                    [
+                      617,
+                      79
+                    ],
+                    [
+                      293,
+                      75
+                    ],
+                    [
+                      609,
+                      76
+                    ],
+                    [
+                      129,
+                      70
+                    ],
+                    [
+                      129,
+                      69
+                    ]
+                  ],
+                  "pages": 5
+                },
+                {
+                  "manifest": "enemy/en050a.json",
+                  "version": 9,
+                  "shape": "consistent",
+                  "page_sizes": [
+                    [
+                      483,
+                      140
+                    ],
+                    [
+                      249,
+                      133
+                    ],
+                    [
+                      256,
+                      238
+                    ],
+                    [
+                      192,
+                      54
+                    ],
+                    [
+                      192,
+                      59
+                    ]
+                  ],
+                  "pages": 5
+                },
+                {
+                  "manifest": "enemy/en058a.json",
+                  "version": 9,
+                  "shape": "consistent",
+                  "page_sizes": [
+                    [
+                      486,
+                      224
+                    ],
+                    [
+                      578,
+                      76
+                    ],
+                    [
+                      504,
+                      235
+                    ],
+                    [
+                      162,
+                      79
+                    ],
+                    [
+                      162,
+                      78
+                    ]
+                  ],
+                  "pages": 5
+                },
+                {
+                  "manifest": "enemy/en064a.json",
+                  "version": 9,
+                  "shape": "consistent",
+                  "page_sizes": [
+                    [
+                      505,
+                      179
+                    ],
+                    [
+                      252,
+                      228
+                    ],
+                    [
+                      722,
+                      148
+                    ],
+                    [
+                      133,
+                      72
+                    ],
+                    [
+                      133,
+                      63
+                    ]
+                  ],
+                  "pages": 5
+                }
+              ],
+              "files": {
+                "C:/SGO/SRC/SGTest/client/assets/generated/maps/13/population.json": "c8c94f913d0a703969592114b3d6f7aafaab45c716f9f7df1e41d95af26a0fca",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_1024/candidate.json": "fe5bd3c9af381774acc9c33bad2ac62ce926a9901017806cd9614fc1b3ddf86c",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_1024/enemy/en009a.json": "335b676e642875d59897895375c2ff21fd48f7e5ae7c043f557f545c111fafb4",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_1024/enemy/en009a_0.png": "b8275e9f6ba4e35e0eb4baf15a14065bc5d9a459a69e56b7ba31fcf9dd937b1f",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_1024/enemy/en009a_1.png": "e126fbed6cd6b694336585d6edf98dfe7b51bbcca97764e4a41cb81c8834b4c7",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_1024/enemy/en009a_2.png": "e1ec505282eb223e2403042e52caf23824463b18979a6f1a9611613e191414bb",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_1024/enemy/en009a_3.png": "1366a31b7fd4e3934acbf805caeabb0dee11f9d02648eda8dca45700e83fe7a1",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_1024/enemy/en009a_4.png": "f26415d68b2a683ddb6c09a99ffd574e5f5385291462771510eb744400e2e879",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_1024/enemy/en010a.json": "de4729a8ac9393df1f9c9df226289a939b5680f1fe5e5f0a0b95df36d1663deb",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_1024/enemy/en010a_0.png": "ab2e13fb56be8f3b65b11d909b228833b65ec565a68dfebf1598d9bb2bf72023",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_1024/enemy/en010a_1.png": "7c4bca34b07dcc4c3302d04d804687ff8fb26aa4b2ab02559bd61047aefe8083",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_1024/enemy/en010a_2.png": "86def00ced030e66ecc3a01fc0aec5e04649db1340524710b97f47d82bb45742",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_1024/enemy/en010a_3.png": "3203e8669e03fe01f1dca19ca20143b01e8315ea398d9f594e38f8dfb7fc00b9",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_1024/enemy/en010a_4.png": "2d22bebd715336dd9672e065a7231fda1e04500de3176efdb905955eb36bd845",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_1024/enemy/en024a.json": "9423d0b864340bf5172913759fbbb492b56fc72e65534d786be4c3c4e0c39c73",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_1024/enemy/en024a_0.png": "e2ee2abdc74480af8f05c46fd53bc832d8f6c49637c3a27c26e78ed9d2eed2ee",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_1024/enemy/en024a_1.png": "08f14459ef2153019acc7be3afb65e4cd8621337d847a5da9ffc0bc3186525f3",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_1024/enemy/en024a_2.png": "e022954b8804d28161376d8107e1d2301154b9986e17ac8130c62ac811df7d19",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_1024/enemy/en024a_3.png": "ba130a9a0a9cfcb2ee3b909aa98e7ab7618bc0bd7e7607913cb6f25a3a4aff4f",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_1024/enemy/en024a_4.png": "d8635c02c05958efd6f59bb2cc9891d3bc2dea8be156fcc12d978311ce592327",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_1024/enemy/en025a.json": "5055a1f3ab9433e40f9b61350dbff27b0283d573c7824d3997eff589f24acf03",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_1024/enemy/en025a_0.png": "85e08169bfe95b72945ed5f7d9775b30ecb76362573548fe69f5d7a7fd5213fb",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_1024/enemy/en025a_1.png": "6507fd1f8c11e08921934aa86e098b9e71ad3ff6d37476b6a3cd32f01577ac38",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_1024/enemy/en025a_2.png": "5e48ab550553b73983da8066f030a9bc52a9746cc2d47b9079e62dd6f5cecfc6",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_1024/enemy/en025a_3.png": "44df735b73b2c0d35e4b68e7045d00789b10d699935a0ecad54aa606449d9b88",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_1024/enemy/en025a_4.png": "5938c96e71b13432d471b25c001cb1778c427488475e53ef73937c8196c00643",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_1024/enemy/en029a.json": "5fc0166e0eac995672b4052d3ec301907731b90a75a10401ba797db2d0ccc9d6",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_1024/enemy/en029a_0.png": "8907ebb87e1e96c07a540e1039033e579c2b77d7b7b53f3102fa9de2beafefa0",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_1024/enemy/en029a_1.png": "9f61a187c8c15f31363ca1754f2713127948a5b7ff1946fbcab4c8f033901e59",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_1024/enemy/en029a_2.png": "87695914f2ed239a8c6637cf133f5f75f2047667807f9f17a07c29690eb425a4",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_1024/enemy/en029a_3.png": "e4e867b6081c809489a99ec3569113b010f46e82d5d2d2ee8d2a36f501b424af",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_1024/enemy/en029a_4.png": "00738b8bfcc687f31acbe1bff9c0b95f119c4253fefbc5bdf1380e85222d69c2",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_1024/enemy/en030a.json": "a2601d19df4b357572b52158f99577e1e9f9d75d56201edf069c71a23a1dd14d",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_1024/enemy/en030a_0.png": "6bf90479412770127affcb8832154a5e08d48a95b2b7e817bd856f96ad2a394f",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_1024/enemy/en030a_1.png": "98b8590ec36a40602f54fee568d94bec4d6259b5436775fa820e02e88584a5be",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_1024/enemy/en030a_2.png": "67d8bcbbd3cd8a83a754bbcd1dd6386446371a18a1c1d3dbad602a092bedd6fe",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_1024/enemy/en030a_3.png": "7ea34a8520d105482f033933f393738f6acd9f4695196120b4efad6feebddfa2",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_1024/enemy/en030a_4.png": "e82428f57813b735ab482c693fd171bd4fd3db65f86e65ddfec7a6cf91f568b5",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_1024/enemy/en050a.json": "72247cf0e3f792be7bc1f2a40a9508e4a13a5807a93eaa19c62c227217fd0164",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_1024/enemy/en050a_0.png": "2d94a221cd78179a4abedcb7eed37995dff92204adcf6f95918ee6ec644777ff",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_1024/enemy/en050a_1.png": "b64d2c9b1a4ac43bfd9590e2dcf14d1de7b19ef1aa738dfe35a223319fd664ea",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_1024/enemy/en050a_2.png": "910d22e741bdf07a1c18a459487f37c8d88f4459c817f0c2c5e1fb47c3500b78",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_1024/enemy/en050a_3.png": "b0512043779e1c1d42fbdd7b9d8082a7afcbcaff14b125d59a89c645bad20e06",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_1024/enemy/en050a_4.png": "552f92c78ccbc6b0628d0cdd7e1f0509c3e51f60589a4320939fcaa94867c0b6",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_1024/enemy/en058a.json": "45b7ae04113c59cf445d3823a57e0ea6465df5480c10adc74c71bfbb1d8e4f83",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_1024/enemy/en058a_0.png": "e11da6d33ba24c97e1f9d02105347d0be7de9a14892bfc714efae81a24154775",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_1024/enemy/en058a_1.png": "e1ab3af567712d1bfd73f157f9b56d13d47992d26b56497f54e3fbb277360868",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_1024/enemy/en058a_2.png": "70345e7444f42b145815f3bd9eed2c5af0472fc45d8f4f2afa1399957e1a3039",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_1024/enemy/en058a_3.png": "388fa280ec953aeb812c2e59a4f8caf79303fc06779dcc721b65974b6708bc12",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_1024/enemy/en058a_4.png": "a8ebcbe914af6113a799dec416ff0c8b3543fce68f503e75137f95ff1c040531",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_1024/enemy/en064a.json": "a0aafc1c6fef1c6939df37a9df1f095774ddbb653e6320143c862ad5eba76ea0",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_1024/enemy/en064a_0.png": "811335cdfa80b007cf53a5f2aee063b3473873318527125e383269d0d8b1ffcb",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_1024/enemy/en064a_1.png": "f34931156af80541175e430aeec9a6f14dcab2c5e5a9e6f0691811d5166aa638",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_1024/enemy/en064a_2.png": "db3f4617a6568c9044e525bc1c3f2d1f48d7d587197ce91a2f869e86e201be53",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_1024/enemy/en064a_3.png": "d0615174b90e9d0f35012130a69be5e6d7a8892f6edd2d776162761df8dae958",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_1024/enemy/en064a_4.png": "b55d89171b26ffa6da9ab0ec0f681ce5d58c9c0490d174836fc4287d294e7308"
+              },
+              "content_sha256": "e59adfde6a8fd8dbcf4b1d3ecbb891aecefd2217fdfe406a1a400cc1d7c75dea"
+            },
+            "runtime_environment": {
+              "godot_version": "4.7.2.stable.official.ed1daf0bf",
+              "godot_executable_sha256": "c8f0a6bc45a19b33541501e57f6f7cd972ab18453743266339d495cbbe846643",
+              "dotnet_sdk_version": "8.0.428",
+              "python": "3.10.0"
+            },
+            "os": "Windows-10-10.0.19045-SP0",
+            "cpu_logical": 20,
+            "physical_ram_bytes": 34088599552,
+            "cache": "warm OS cache; cold disk NOT VERIFIED",
+            "physical_driver_vram": "NOT VERIFIED (engine counters reported separately)"
+          }
+        },
+        "multiplayer": {
+          "path": "reports/runtime_baseline/direction_1024/multiplayer.json",
+          "sha256": "7f402196d26468249cc960e33fd0a5297b80bf5729e0b82c6b88dab4f2b75ba0",
+          "measurement_provenance": {
+            "git_head": "5762e7348618f6f378b126ad2a43454c65ac2c22",
+            "tracked_worktree_diff_sha256": "78717e191e521b8a6a67bedba94c51877d5e776b1f4747a0b3371a570e981419",
+            "files": {
+              "client/scripts/main.gd": "ddeba7bf4cafb8170e8c854d4a0316833d0db7bc245e4c7845329df940160e55",
+              "client/scripts/entity_atlas.gd": "75fa6c6feb5cb2401a522a31dd01b5e7b13d4d637f35d15767aa95a476fb2d5d",
+              "client/scripts/monster_visuals.gd": "e39927e8a465ecb9615e004cbab146b1e4f602b0ff2d65275c73189201ade057",
+              "client/scripts/frame_profiler.gd": "22fddf097fed80167c2e6e739d7d0f63195a355517129e04f06dbff2e53c8fe0",
+              "client/project.godot": "444feeb1722ec23bcaf7b77d65f0a7a098cb11495dadd9dc601501957bcf5774",
+              "server/bin/Release/net8.0/SGTest.Server.dll": "d82c7afeb6ad23430cc63c031abbd58a3d8ab7c940c7db187c8d8aeba0614756",
+              "client/tools/benchmark_asset_lifecycle.gd": "21628a38bb96127ff3d04cae5e1bbd828f0f582a34bcb92ca0ae5a3dcfa52f8d",
+              "tools/benchmark_runtime_baseline.py": "36dcd71781de8006fcf61093a3d2bfe106b0326f0818a83e89a43cdb46413c6d",
+              "client/assets/generated/catalog.json": "f19f5e0e68af9c380c0858bb7aedf7b547856e3cd252bf87ac2aeeaf2dc8464a"
+            },
+            "assets": {
+              "root": "C:\\SGO\\SRC\\SGTest\\reports\\atlas_candidates\\direction_1024",
+              "groups": [
+                {
+                  "manifest": "enemy/en009a.json",
+                  "version": 9,
+                  "shape": "consistent",
+                  "page_sizes": [
+                    [
+                      729,
+                      177
+                    ],
+                    [
+                      474,
+                      162
+                    ],
+                    [
+                      502,
+                      252
+                    ],
+                    [
+                      291,
+                      85
+                    ],
+                    [
+                      292,
+                      101
+                    ]
+                  ],
+                  "pages": 5
+                },
+                {
+                  "manifest": "enemy/en010a.json",
+                  "version": 9,
+                  "shape": "consistent",
+                  "page_sizes": [
+                    [
+                      478,
+                      113
+                    ],
+                    [
+                      256,
+                      107
+                    ],
+                    [
+                      883,
+                      58
+                    ],
+                    [
+                      180,
+                      57
+                    ],
+                    [
+                      180,
+                      58
+                    ]
+                  ],
+                  "pages": 5
+                },
+                {
+                  "manifest": "enemy/en024a.json",
+                  "version": 9,
+                  "shape": "consistent",
+                  "page_sizes": [
+                    [
+                      482,
+                      284
+                    ],
+                    [
+                      553,
+                      125
+                    ],
+                    [
+                      472,
+                      207
+                    ],
+                    [
+                      228,
+                      99
+                    ],
+                    [
+                      228,
+                      101
+                    ]
+                  ],
+                  "pages": 5
+                },
+                {
+                  "manifest": "enemy/en025a.json",
+                  "version": 9,
+                  "shape": "consistent",
+                  "page_sizes": [
+                    [
+                      695,
+                      246
+                    ],
+                    [
+                      784,
+                      146
+                    ],
+                    [
+                      485,
+                      352
+                    ],
+                    [
+                      281,
+                      122
+                    ],
+                    [
+                      279,
+                      112
+                    ]
+                  ],
+                  "pages": 5
+                },
+                {
+                  "manifest": "enemy/en029a.json",
+                  "version": 9,
+                  "shape": "consistent",
+                  "page_sizes": [
+                    [
+                      712,
+                      73
+                    ],
+                    [
+                      399,
+                      69
+                    ],
+                    [
+                      650,
+                      77
+                    ],
+                    [
+                      129,
+                      79
+                    ],
+                    [
+                      129,
+                      65
+                    ]
+                  ],
+                  "pages": 5
+                },
+                {
+                  "manifest": "enemy/en030a.json",
+                  "version": 9,
+                  "shape": "consistent",
+                  "page_sizes": [
+                    [
+                      617,
+                      79
+                    ],
+                    [
+                      293,
+                      75
+                    ],
+                    [
+                      609,
+                      76
+                    ],
+                    [
+                      129,
+                      70
+                    ],
+                    [
+                      129,
+                      69
+                    ]
+                  ],
+                  "pages": 5
+                },
+                {
+                  "manifest": "enemy/en050a.json",
+                  "version": 9,
+                  "shape": "consistent",
+                  "page_sizes": [
+                    [
+                      483,
+                      140
+                    ],
+                    [
+                      249,
+                      133
+                    ],
+                    [
+                      256,
+                      238
+                    ],
+                    [
+                      192,
+                      54
+                    ],
+                    [
+                      192,
+                      59
+                    ]
+                  ],
+                  "pages": 5
+                },
+                {
+                  "manifest": "enemy/en058a.json",
+                  "version": 9,
+                  "shape": "consistent",
+                  "page_sizes": [
+                    [
+                      486,
+                      224
+                    ],
+                    [
+                      578,
+                      76
+                    ],
+                    [
+                      504,
+                      235
+                    ],
+                    [
+                      162,
+                      79
+                    ],
+                    [
+                      162,
+                      78
+                    ]
+                  ],
+                  "pages": 5
+                },
+                {
+                  "manifest": "enemy/en064a.json",
+                  "version": 9,
+                  "shape": "consistent",
+                  "page_sizes": [
+                    [
+                      505,
+                      179
+                    ],
+                    [
+                      252,
+                      228
+                    ],
+                    [
+                      722,
+                      148
+                    ],
+                    [
+                      133,
+                      72
+                    ],
+                    [
+                      133,
+                      63
+                    ]
+                  ],
+                  "pages": 5
+                }
+              ],
+              "files": {
+                "C:/SGO/SRC/SGTest/client/assets/generated/maps/13/population.json": "c8c94f913d0a703969592114b3d6f7aafaab45c716f9f7df1e41d95af26a0fca",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_1024/candidate.json": "fe5bd3c9af381774acc9c33bad2ac62ce926a9901017806cd9614fc1b3ddf86c",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_1024/enemy/en009a.json": "335b676e642875d59897895375c2ff21fd48f7e5ae7c043f557f545c111fafb4",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_1024/enemy/en009a_0.png": "b8275e9f6ba4e35e0eb4baf15a14065bc5d9a459a69e56b7ba31fcf9dd937b1f",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_1024/enemy/en009a_1.png": "e126fbed6cd6b694336585d6edf98dfe7b51bbcca97764e4a41cb81c8834b4c7",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_1024/enemy/en009a_2.png": "e1ec505282eb223e2403042e52caf23824463b18979a6f1a9611613e191414bb",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_1024/enemy/en009a_3.png": "1366a31b7fd4e3934acbf805caeabb0dee11f9d02648eda8dca45700e83fe7a1",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_1024/enemy/en009a_4.png": "f26415d68b2a683ddb6c09a99ffd574e5f5385291462771510eb744400e2e879",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_1024/enemy/en010a.json": "de4729a8ac9393df1f9c9df226289a939b5680f1fe5e5f0a0b95df36d1663deb",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_1024/enemy/en010a_0.png": "ab2e13fb56be8f3b65b11d909b228833b65ec565a68dfebf1598d9bb2bf72023",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_1024/enemy/en010a_1.png": "7c4bca34b07dcc4c3302d04d804687ff8fb26aa4b2ab02559bd61047aefe8083",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_1024/enemy/en010a_2.png": "86def00ced030e66ecc3a01fc0aec5e04649db1340524710b97f47d82bb45742",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_1024/enemy/en010a_3.png": "3203e8669e03fe01f1dca19ca20143b01e8315ea398d9f594e38f8dfb7fc00b9",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_1024/enemy/en010a_4.png": "2d22bebd715336dd9672e065a7231fda1e04500de3176efdb905955eb36bd845",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_1024/enemy/en024a.json": "9423d0b864340bf5172913759fbbb492b56fc72e65534d786be4c3c4e0c39c73",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_1024/enemy/en024a_0.png": "e2ee2abdc74480af8f05c46fd53bc832d8f6c49637c3a27c26e78ed9d2eed2ee",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_1024/enemy/en024a_1.png": "08f14459ef2153019acc7be3afb65e4cd8621337d847a5da9ffc0bc3186525f3",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_1024/enemy/en024a_2.png": "e022954b8804d28161376d8107e1d2301154b9986e17ac8130c62ac811df7d19",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_1024/enemy/en024a_3.png": "ba130a9a0a9cfcb2ee3b909aa98e7ab7618bc0bd7e7607913cb6f25a3a4aff4f",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_1024/enemy/en024a_4.png": "d8635c02c05958efd6f59bb2cc9891d3bc2dea8be156fcc12d978311ce592327",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_1024/enemy/en025a.json": "5055a1f3ab9433e40f9b61350dbff27b0283d573c7824d3997eff589f24acf03",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_1024/enemy/en025a_0.png": "85e08169bfe95b72945ed5f7d9775b30ecb76362573548fe69f5d7a7fd5213fb",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_1024/enemy/en025a_1.png": "6507fd1f8c11e08921934aa86e098b9e71ad3ff6d37476b6a3cd32f01577ac38",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_1024/enemy/en025a_2.png": "5e48ab550553b73983da8066f030a9bc52a9746cc2d47b9079e62dd6f5cecfc6",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_1024/enemy/en025a_3.png": "44df735b73b2c0d35e4b68e7045d00789b10d699935a0ecad54aa606449d9b88",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_1024/enemy/en025a_4.png": "5938c96e71b13432d471b25c001cb1778c427488475e53ef73937c8196c00643",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_1024/enemy/en029a.json": "5fc0166e0eac995672b4052d3ec301907731b90a75a10401ba797db2d0ccc9d6",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_1024/enemy/en029a_0.png": "8907ebb87e1e96c07a540e1039033e579c2b77d7b7b53f3102fa9de2beafefa0",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_1024/enemy/en029a_1.png": "9f61a187c8c15f31363ca1754f2713127948a5b7ff1946fbcab4c8f033901e59",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_1024/enemy/en029a_2.png": "87695914f2ed239a8c6637cf133f5f75f2047667807f9f17a07c29690eb425a4",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_1024/enemy/en029a_3.png": "e4e867b6081c809489a99ec3569113b010f46e82d5d2d2ee8d2a36f501b424af",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_1024/enemy/en029a_4.png": "00738b8bfcc687f31acbe1bff9c0b95f119c4253fefbc5bdf1380e85222d69c2",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_1024/enemy/en030a.json": "a2601d19df4b357572b52158f99577e1e9f9d75d56201edf069c71a23a1dd14d",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_1024/enemy/en030a_0.png": "6bf90479412770127affcb8832154a5e08d48a95b2b7e817bd856f96ad2a394f",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_1024/enemy/en030a_1.png": "98b8590ec36a40602f54fee568d94bec4d6259b5436775fa820e02e88584a5be",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_1024/enemy/en030a_2.png": "67d8bcbbd3cd8a83a754bbcd1dd6386446371a18a1c1d3dbad602a092bedd6fe",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_1024/enemy/en030a_3.png": "7ea34a8520d105482f033933f393738f6acd9f4695196120b4efad6feebddfa2",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_1024/enemy/en030a_4.png": "e82428f57813b735ab482c693fd171bd4fd3db65f86e65ddfec7a6cf91f568b5",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_1024/enemy/en050a.json": "72247cf0e3f792be7bc1f2a40a9508e4a13a5807a93eaa19c62c227217fd0164",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_1024/enemy/en050a_0.png": "2d94a221cd78179a4abedcb7eed37995dff92204adcf6f95918ee6ec644777ff",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_1024/enemy/en050a_1.png": "b64d2c9b1a4ac43bfd9590e2dcf14d1de7b19ef1aa738dfe35a223319fd664ea",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_1024/enemy/en050a_2.png": "910d22e741bdf07a1c18a459487f37c8d88f4459c817f0c2c5e1fb47c3500b78",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_1024/enemy/en050a_3.png": "b0512043779e1c1d42fbdd7b9d8082a7afcbcaff14b125d59a89c645bad20e06",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_1024/enemy/en050a_4.png": "552f92c78ccbc6b0628d0cdd7e1f0509c3e51f60589a4320939fcaa94867c0b6",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_1024/enemy/en058a.json": "45b7ae04113c59cf445d3823a57e0ea6465df5480c10adc74c71bfbb1d8e4f83",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_1024/enemy/en058a_0.png": "e11da6d33ba24c97e1f9d02105347d0be7de9a14892bfc714efae81a24154775",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_1024/enemy/en058a_1.png": "e1ab3af567712d1bfd73f157f9b56d13d47992d26b56497f54e3fbb277360868",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_1024/enemy/en058a_2.png": "70345e7444f42b145815f3bd9eed2c5af0472fc45d8f4f2afa1399957e1a3039",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_1024/enemy/en058a_3.png": "388fa280ec953aeb812c2e59a4f8caf79303fc06779dcc721b65974b6708bc12",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_1024/enemy/en058a_4.png": "a8ebcbe914af6113a799dec416ff0c8b3543fce68f503e75137f95ff1c040531",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_1024/enemy/en064a.json": "a0aafc1c6fef1c6939df37a9df1f095774ddbb653e6320143c862ad5eba76ea0",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_1024/enemy/en064a_0.png": "811335cdfa80b007cf53a5f2aee063b3473873318527125e383269d0d8b1ffcb",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_1024/enemy/en064a_1.png": "f34931156af80541175e430aeec9a6f14dcab2c5e5a9e6f0691811d5166aa638",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_1024/enemy/en064a_2.png": "db3f4617a6568c9044e525bc1c3f2d1f48d7d587197ce91a2f869e86e201be53",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_1024/enemy/en064a_3.png": "d0615174b90e9d0f35012130a69be5e6d7a8892f6edd2d776162761df8dae958",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_1024/enemy/en064a_4.png": "b55d89171b26ffa6da9ab0ec0f681ce5d58c9c0490d174836fc4287d294e7308"
+              },
+              "content_sha256": "e59adfde6a8fd8dbcf4b1d3ecbb891aecefd2217fdfe406a1a400cc1d7c75dea"
+            },
+            "runtime_environment": {
+              "godot_version": "4.7.2.stable.official.ed1daf0bf",
+              "godot_executable_sha256": "c8f0a6bc45a19b33541501e57f6f7cd972ab18453743266339d495cbbe846643",
+              "dotnet_sdk_version": "8.0.428",
+              "python": "3.10.0"
+            },
+            "os": "Windows-10-10.0.19045-SP0",
+            "cpu_logical": 20,
+            "physical_ram_bytes": 34088599552,
+            "cache": "warm OS cache; cold disk NOT VERIFIED",
+            "physical_driver_vram": "NOT VERIFIED (engine counters reported separately)"
+          }
+        }
+      },
+      "lifecycle": {
+        "cycles": 30,
+        "execution_passed": true,
+        "frame_ms_p95": 41.112,
+        "frame_ms_p99": 43.229,
+        "frame_ms_max": 51.994,
+        "rss_peak_bytes": 168226816,
+        "texture_peak_bytes": 23417771,
+        "source_files_unchanged_during_run": true,
+        "decode_p95_ms": 1.832,
+        "decode_p99_ms": 2.002,
+        "decode_max_ms": 2.64,
+        "submit_p95_ms": 0.071,
+        "submit_p99_ms": 0.123,
+        "submit_max_ms": 0.29,
+        "sync_wait_p95_ms": 0.001,
+        "sync_wait_p99_ms": 0.002,
+        "sync_wait_max_ms": 0.004,
+        "load_wall_p95_ms": 39.214,
+        "pages": 45,
+        "rgba_bytes": 9786512,
+        "ram_recovery": {
+          "warm_baseline_bytes": 167358464,
+          "after_peak_bytes": 168136704,
+          "last10_minus_first10_median_bytes": 770048.0,
+          "passed": true
+        },
+        "gates": {
+          "execution": "PASS",
+          "input_integrity": "PASS",
+          "texture_handles": "PASS",
+          "engine_texture_recovery": "PASS",
+          "rss_recovery": "PASS",
+          "static_recovery": "PASS",
+          "loading_frame": "FAIL",
+          "gpu_submit": "PASS",
+          "thirty_cycles": "PASS"
+        }
+      },
+      "multiplayer": {
+        "scenario": {
+          "clients": 20,
+          "native_clients": 1,
+          "headless_clients": 19,
+          "monster_assets": "C:\\SGO\\SRC\\SGTest\\reports\\atlas_candidates\\direction_1024",
+          "monsters": 300,
+          "drops": 1000,
+          "map": 13,
+          "seconds": 40,
+          "render_cap": 60,
+          "resolution": [
+            1440,
+            900
+          ],
+          "bot_paths": "deterministic per-client phase; not identical trajectories"
+        },
+        "rendered": {
+          "draw_calls_last_frame": 402.0,
+          "draw_calls_p95": 446.0,
+          "frame_ms_max": 36.443,
+          "frame_ms_p50": 16.619,
+          "frame_ms_p95": 22.4,
+          "frame_ms_p99": 24.185,
+          "frames": 2101,
+          "mean_fps": 59.9891174430165,
+          "renderer": "NVIDIA GeForce RTX 3050",
+          "resolution": [
+            1440,
+            900
+          ],
+          "sample_seconds": 35.0,
+          "static_memory_bytes": 63373109,
+          "texture_memory_bytes": 40067547.0,
+          "video_memory_bytes": 46565371.0,
+          "warmup_seconds": 2
+        },
+        "server_rss_peak_bytes": 83169280,
+        "server_cpu_median_one_core_percent": 6.2,
+        "native_client_rss_peak_bytes": 212492288,
+        "native_client_cpu_median_one_core_percent": 42.650000000000006,
+        "gates": {
+          "execution": "PASS",
+          "input_integrity": "PASS",
+          "frame_p95": "PASS",
+          "frame_p99": "PASS",
+          "client_ram": "FAIL",
+          "client_cpu": "PASS",
+          "server_cpu": "PASS",
+          "tick_work": "NOT VERIFIED",
+          "physical_driver_vram": "NOT VERIFIED",
+          "fps_background_isolation": "NOT VERIFIED",
+          "runtime_owner_lru_logout": "NOT VERIFIED"
+        }
+      }
+    },
+    {
+      "candidate": "direction_2048",
+      "inputs": {
+        "lifecycle": {
+          "path": "reports/runtime_baseline/direction_2048/lifecycle.json",
+          "sha256": "abf801415a785bd98341aa660fe1e12f7ec93adc6978f9ca2af0a33e56ed204d",
+          "measurement_provenance": {
+            "git_head": "5762e7348618f6f378b126ad2a43454c65ac2c22",
+            "tracked_worktree_diff_sha256": "8ac6d7fbf52f748ce0d40f2451f8d562b3fc1976bc7a0863130cd7bc8c9d457d",
+            "files": {
+              "client/scripts/main.gd": "ddeba7bf4cafb8170e8c854d4a0316833d0db7bc245e4c7845329df940160e55",
+              "client/scripts/entity_atlas.gd": "75fa6c6feb5cb2401a522a31dd01b5e7b13d4d637f35d15767aa95a476fb2d5d",
+              "client/scripts/monster_visuals.gd": "e39927e8a465ecb9615e004cbab146b1e4f602b0ff2d65275c73189201ade057",
+              "client/scripts/frame_profiler.gd": "22fddf097fed80167c2e6e739d7d0f63195a355517129e04f06dbff2e53c8fe0",
+              "client/project.godot": "444feeb1722ec23bcaf7b77d65f0a7a098cb11495dadd9dc601501957bcf5774",
+              "server/bin/Release/net8.0/SGTest.Server.dll": "d82c7afeb6ad23430cc63c031abbd58a3d8ab7c940c7db187c8d8aeba0614756",
+              "client/tools/benchmark_asset_lifecycle.gd": "21628a38bb96127ff3d04cae5e1bbd828f0f582a34bcb92ca0ae5a3dcfa52f8d",
+              "tools/benchmark_runtime_baseline.py": "36dcd71781de8006fcf61093a3d2bfe106b0326f0818a83e89a43cdb46413c6d",
+              "client/assets/generated/catalog.json": "f19f5e0e68af9c380c0858bb7aedf7b547856e3cd252bf87ac2aeeaf2dc8464a"
+            },
+            "assets": {
+              "root": "C:\\SGO\\SRC\\SGTest\\reports\\atlas_candidates\\direction_2048",
+              "groups": [
+                {
+                  "manifest": "enemy/en009a.json",
+                  "version": 9,
+                  "shape": "consistent",
+                  "page_sizes": [
+                    [
+                      729,
+                      177
+                    ],
+                    [
+                      474,
+                      162
+                    ],
+                    [
+                      502,
+                      252
+                    ],
+                    [
+                      291,
+                      85
+                    ],
+                    [
+                      292,
+                      101
+                    ]
+                  ],
+                  "pages": 5
+                },
+                {
+                  "manifest": "enemy/en010a.json",
+                  "version": 9,
+                  "shape": "consistent",
+                  "page_sizes": [
+                    [
+                      478,
+                      113
+                    ],
+                    [
+                      256,
+                      107
+                    ],
+                    [
+                      883,
+                      58
+                    ],
+                    [
+                      180,
+                      57
+                    ],
+                    [
+                      180,
+                      58
+                    ]
+                  ],
+                  "pages": 5
+                },
+                {
+                  "manifest": "enemy/en024a.json",
+                  "version": 9,
+                  "shape": "consistent",
+                  "page_sizes": [
+                    [
+                      1059,
+                      112
+                    ],
+                    [
+                      553,
+                      125
+                    ],
+                    [
+                      472,
+                      207
+                    ],
+                    [
+                      228,
+                      99
+                    ],
+                    [
+                      228,
+                      101
+                    ]
+                  ],
+                  "pages": 5
+                },
+                {
+                  "manifest": "enemy/en025a.json",
+                  "version": 9,
+                  "shape": "consistent",
+                  "page_sizes": [
+                    [
+                      695,
+                      246
+                    ],
+                    [
+                      784,
+                      146
+                    ],
+                    [
+                      1187,
+                      132
+                    ],
+                    [
+                      281,
+                      122
+                    ],
+                    [
+                      279,
+                      112
+                    ]
+                  ],
+                  "pages": 5
+                },
+                {
+                  "manifest": "enemy/en029a.json",
+                  "version": 9,
+                  "shape": "consistent",
+                  "page_sizes": [
+                    [
+                      712,
+                      73
+                    ],
+                    [
+                      399,
+                      69
+                    ],
+                    [
+                      650,
+                      77
+                    ],
+                    [
+                      129,
+                      79
+                    ],
+                    [
+                      129,
+                      65
+                    ]
+                  ],
+                  "pages": 5
+                },
+                {
+                  "manifest": "enemy/en030a.json",
+                  "version": 9,
+                  "shape": "consistent",
+                  "page_sizes": [
+                    [
+                      617,
+                      79
+                    ],
+                    [
+                      293,
+                      75
+                    ],
+                    [
+                      609,
+                      76
+                    ],
+                    [
+                      129,
+                      70
+                    ],
+                    [
+                      129,
+                      69
+                    ]
+                  ],
+                  "pages": 5
+                },
+                {
+                  "manifest": "enemy/en050a.json",
+                  "version": 9,
+                  "shape": "consistent",
+                  "page_sizes": [
+                    [
+                      483,
+                      140
+                    ],
+                    [
+                      249,
+                      133
+                    ],
+                    [
+                      256,
+                      238
+                    ],
+                    [
+                      192,
+                      54
+                    ],
+                    [
+                      192,
+                      59
+                    ]
+                  ],
+                  "pages": 5
+                },
+                {
+                  "manifest": "enemy/en058a.json",
+                  "version": 9,
+                  "shape": "consistent",
+                  "page_sizes": [
+                    [
+                      486,
+                      224
+                    ],
+                    [
+                      578,
+                      76
+                    ],
+                    [
+                      504,
+                      235
+                    ],
+                    [
+                      162,
+                      79
+                    ],
+                    [
+                      162,
+                      78
+                    ]
+                  ],
+                  "pages": 5
+                },
+                {
+                  "manifest": "enemy/en064a.json",
+                  "version": 9,
+                  "shape": "consistent",
+                  "page_sizes": [
+                    [
+                      505,
+                      179
+                    ],
+                    [
+                      252,
+                      228
+                    ],
+                    [
+                      1254,
+                      85
+                    ],
+                    [
+                      133,
+                      72
+                    ],
+                    [
+                      133,
+                      63
+                    ]
+                  ],
+                  "pages": 5
+                }
+              ],
+              "files": {
+                "C:/SGO/SRC/SGTest/client/assets/generated/maps/13/population.json": "c8c94f913d0a703969592114b3d6f7aafaab45c716f9f7df1e41d95af26a0fca",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_2048/candidate.json": "cc3dfcf6140f337b3db4dc0737ba157064f00500f3d2c6f4ac657c7de7b5b47c",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_2048/enemy/en009a.json": "ceb7d569eec3fb9a685c7519a216967ffbb042dbd7edc82ce812f049ebdfec93",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_2048/enemy/en009a_0.png": "b8275e9f6ba4e35e0eb4baf15a14065bc5d9a459a69e56b7ba31fcf9dd937b1f",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_2048/enemy/en009a_1.png": "e126fbed6cd6b694336585d6edf98dfe7b51bbcca97764e4a41cb81c8834b4c7",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_2048/enemy/en009a_2.png": "e1ec505282eb223e2403042e52caf23824463b18979a6f1a9611613e191414bb",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_2048/enemy/en009a_3.png": "1366a31b7fd4e3934acbf805caeabb0dee11f9d02648eda8dca45700e83fe7a1",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_2048/enemy/en009a_4.png": "f26415d68b2a683ddb6c09a99ffd574e5f5385291462771510eb744400e2e879",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_2048/enemy/en010a.json": "5358506f369cf907c3ec608c85218397f285c196606c648d7853986ca75ea064",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_2048/enemy/en010a_0.png": "ab2e13fb56be8f3b65b11d909b228833b65ec565a68dfebf1598d9bb2bf72023",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_2048/enemy/en010a_1.png": "7c4bca34b07dcc4c3302d04d804687ff8fb26aa4b2ab02559bd61047aefe8083",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_2048/enemy/en010a_2.png": "86def00ced030e66ecc3a01fc0aec5e04649db1340524710b97f47d82bb45742",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_2048/enemy/en010a_3.png": "3203e8669e03fe01f1dca19ca20143b01e8315ea398d9f594e38f8dfb7fc00b9",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_2048/enemy/en010a_4.png": "2d22bebd715336dd9672e065a7231fda1e04500de3176efdb905955eb36bd845",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_2048/enemy/en024a.json": "0e4e192f953ce4231f729778b951a1412f9dc4b13650af02179d83ca2a214584",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_2048/enemy/en024a_0.png": "3314c7894fb4d8d334b12564e9544a8425c41981aeb9fa45839aa5b887b39a5f",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_2048/enemy/en024a_1.png": "08f14459ef2153019acc7be3afb65e4cd8621337d847a5da9ffc0bc3186525f3",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_2048/enemy/en024a_2.png": "e022954b8804d28161376d8107e1d2301154b9986e17ac8130c62ac811df7d19",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_2048/enemy/en024a_3.png": "ba130a9a0a9cfcb2ee3b909aa98e7ab7618bc0bd7e7607913cb6f25a3a4aff4f",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_2048/enemy/en024a_4.png": "d8635c02c05958efd6f59bb2cc9891d3bc2dea8be156fcc12d978311ce592327",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_2048/enemy/en025a.json": "79a0ac44229150affa7840cf02101fe99d340fe6b63330bc9fcaccdbb5c84518",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_2048/enemy/en025a_0.png": "85e08169bfe95b72945ed5f7d9775b30ecb76362573548fe69f5d7a7fd5213fb",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_2048/enemy/en025a_1.png": "6507fd1f8c11e08921934aa86e098b9e71ad3ff6d37476b6a3cd32f01577ac38",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_2048/enemy/en025a_2.png": "fee7fe61bf9b208034e05d01dfa63fa208d47e0e9f9ea07f329017f178b1c870",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_2048/enemy/en025a_3.png": "44df735b73b2c0d35e4b68e7045d00789b10d699935a0ecad54aa606449d9b88",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_2048/enemy/en025a_4.png": "5938c96e71b13432d471b25c001cb1778c427488475e53ef73937c8196c00643",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_2048/enemy/en029a.json": "a58a49f5261633149aed946cdca363c92cead08d0631eda9148e386e3e0e054e",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_2048/enemy/en029a_0.png": "8907ebb87e1e96c07a540e1039033e579c2b77d7b7b53f3102fa9de2beafefa0",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_2048/enemy/en029a_1.png": "9f61a187c8c15f31363ca1754f2713127948a5b7ff1946fbcab4c8f033901e59",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_2048/enemy/en029a_2.png": "87695914f2ed239a8c6637cf133f5f75f2047667807f9f17a07c29690eb425a4",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_2048/enemy/en029a_3.png": "e4e867b6081c809489a99ec3569113b010f46e82d5d2d2ee8d2a36f501b424af",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_2048/enemy/en029a_4.png": "00738b8bfcc687f31acbe1bff9c0b95f119c4253fefbc5bdf1380e85222d69c2",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_2048/enemy/en030a.json": "da9d3e1de570951a1f33dab79d32a7d1bda6515b3d0a732ff55a5dabca4ef23e",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_2048/enemy/en030a_0.png": "6bf90479412770127affcb8832154a5e08d48a95b2b7e817bd856f96ad2a394f",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_2048/enemy/en030a_1.png": "98b8590ec36a40602f54fee568d94bec4d6259b5436775fa820e02e88584a5be",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_2048/enemy/en030a_2.png": "67d8bcbbd3cd8a83a754bbcd1dd6386446371a18a1c1d3dbad602a092bedd6fe",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_2048/enemy/en030a_3.png": "7ea34a8520d105482f033933f393738f6acd9f4695196120b4efad6feebddfa2",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_2048/enemy/en030a_4.png": "e82428f57813b735ab482c693fd171bd4fd3db65f86e65ddfec7a6cf91f568b5",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_2048/enemy/en050a.json": "e0ed20b8e421c568c27d2bc05c35b155849a6d670d011ebeff7515239a2d97d2",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_2048/enemy/en050a_0.png": "2d94a221cd78179a4abedcb7eed37995dff92204adcf6f95918ee6ec644777ff",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_2048/enemy/en050a_1.png": "b64d2c9b1a4ac43bfd9590e2dcf14d1de7b19ef1aa738dfe35a223319fd664ea",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_2048/enemy/en050a_2.png": "910d22e741bdf07a1c18a459487f37c8d88f4459c817f0c2c5e1fb47c3500b78",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_2048/enemy/en050a_3.png": "b0512043779e1c1d42fbdd7b9d8082a7afcbcaff14b125d59a89c645bad20e06",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_2048/enemy/en050a_4.png": "552f92c78ccbc6b0628d0cdd7e1f0509c3e51f60589a4320939fcaa94867c0b6",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_2048/enemy/en058a.json": "619ceaf69051a2585b93762625f7a2fd42af9dfa7fafc3d331247479d54911e7",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_2048/enemy/en058a_0.png": "e11da6d33ba24c97e1f9d02105347d0be7de9a14892bfc714efae81a24154775",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_2048/enemy/en058a_1.png": "e1ab3af567712d1bfd73f157f9b56d13d47992d26b56497f54e3fbb277360868",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_2048/enemy/en058a_2.png": "70345e7444f42b145815f3bd9eed2c5af0472fc45d8f4f2afa1399957e1a3039",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_2048/enemy/en058a_3.png": "388fa280ec953aeb812c2e59a4f8caf79303fc06779dcc721b65974b6708bc12",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_2048/enemy/en058a_4.png": "a8ebcbe914af6113a799dec416ff0c8b3543fce68f503e75137f95ff1c040531",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_2048/enemy/en064a.json": "d8876319886472eb583cc87d76c41581692f660f69c893ea75c24bdc7a3da62d",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_2048/enemy/en064a_0.png": "811335cdfa80b007cf53a5f2aee063b3473873318527125e383269d0d8b1ffcb",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_2048/enemy/en064a_1.png": "f34931156af80541175e430aeec9a6f14dcab2c5e5a9e6f0691811d5166aa638",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_2048/enemy/en064a_2.png": "0a1e092e942d8b7264110c76f0ac2c3f07a13d655804ad5033048a2f45b49cc2",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_2048/enemy/en064a_3.png": "d0615174b90e9d0f35012130a69be5e6d7a8892f6edd2d776162761df8dae958",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_2048/enemy/en064a_4.png": "b55d89171b26ffa6da9ab0ec0f681ce5d58c9c0490d174836fc4287d294e7308"
+              },
+              "content_sha256": "83ccdd5765f1148aa0c16ee3b1b6d36b04da6036662214b1598e440a4d9662db"
+            },
+            "runtime_environment": {
+              "godot_version": "4.7.2.stable.official.ed1daf0bf",
+              "godot_executable_sha256": "c8f0a6bc45a19b33541501e57f6f7cd972ab18453743266339d495cbbe846643",
+              "dotnet_sdk_version": "8.0.428",
+              "python": "3.10.0"
+            },
+            "os": "Windows-10-10.0.19045-SP0",
+            "cpu_logical": 20,
+            "physical_ram_bytes": 34088599552,
+            "cache": "warm OS cache; cold disk NOT VERIFIED",
+            "physical_driver_vram": "NOT VERIFIED (engine counters reported separately)"
+          }
+        }
+      },
+      "lifecycle": {
+        "cycles": 30,
+        "execution_passed": true,
+        "frame_ms_p95": 40.523,
+        "frame_ms_p99": 42.191,
+        "frame_ms_max": 42.35,
+        "rss_peak_bytes": 168402944,
+        "texture_peak_bytes": 23242327,
+        "source_files_unchanged_during_run": true,
+        "decode_p95_ms": 1.743,
+        "decode_p99_ms": 1.977,
+        "decode_max_ms": 2.403,
+        "submit_p95_ms": 0.061,
+        "submit_p99_ms": 0.12,
+        "submit_max_ms": 0.396,
+        "sync_wait_p95_ms": 0.001,
+        "sync_wait_p99_ms": 0.002,
+        "sync_wait_max_ms": 0.002,
+        "load_wall_p95_ms": 38.883,
+        "pages": 45,
+        "rgba_bytes": 9656184,
+        "ram_recovery": {
+          "warm_baseline_bytes": 167972864.0,
+          "after_peak_bytes": 168030208,
+          "last10_minus_first10_median_bytes": 6144.0,
+          "passed": true
+        },
+        "gates": {
+          "execution": "PASS",
+          "input_integrity": "PASS",
+          "texture_handles": "PASS",
+          "engine_texture_recovery": "PASS",
+          "rss_recovery": "PASS",
+          "static_recovery": "PASS",
+          "loading_frame": "FAIL",
+          "gpu_submit": "PASS",
+          "thirty_cycles": "PASS"
+        }
+      }
+    },
+    {
+      "candidate": "direction_4096",
+      "inputs": {
+        "lifecycle": {
+          "path": "reports/runtime_baseline/direction_4096/lifecycle.json",
+          "sha256": "f0a8d86d99f6c40d3190ed6cd93ed04a2251bc7dd6e48ebc6000ab5c00d20788",
+          "measurement_provenance": {
+            "git_head": "5762e7348618f6f378b126ad2a43454c65ac2c22",
+            "tracked_worktree_diff_sha256": "8ac6d7fbf52f748ce0d40f2451f8d562b3fc1976bc7a0863130cd7bc8c9d457d",
+            "files": {
+              "client/scripts/main.gd": "ddeba7bf4cafb8170e8c854d4a0316833d0db7bc245e4c7845329df940160e55",
+              "client/scripts/entity_atlas.gd": "75fa6c6feb5cb2401a522a31dd01b5e7b13d4d637f35d15767aa95a476fb2d5d",
+              "client/scripts/monster_visuals.gd": "e39927e8a465ecb9615e004cbab146b1e4f602b0ff2d65275c73189201ade057",
+              "client/scripts/frame_profiler.gd": "22fddf097fed80167c2e6e739d7d0f63195a355517129e04f06dbff2e53c8fe0",
+              "client/project.godot": "444feeb1722ec23bcaf7b77d65f0a7a098cb11495dadd9dc601501957bcf5774",
+              "server/bin/Release/net8.0/SGTest.Server.dll": "d82c7afeb6ad23430cc63c031abbd58a3d8ab7c940c7db187c8d8aeba0614756",
+              "client/tools/benchmark_asset_lifecycle.gd": "21628a38bb96127ff3d04cae5e1bbd828f0f582a34bcb92ca0ae5a3dcfa52f8d",
+              "tools/benchmark_runtime_baseline.py": "36dcd71781de8006fcf61093a3d2bfe106b0326f0818a83e89a43cdb46413c6d",
+              "client/assets/generated/catalog.json": "f19f5e0e68af9c380c0858bb7aedf7b547856e3cd252bf87ac2aeeaf2dc8464a"
+            },
+            "assets": {
+              "root": "C:\\SGO\\SRC\\SGTest\\reports\\atlas_candidates\\direction_4096",
+              "groups": [
+                {
+                  "manifest": "enemy/en009a.json",
+                  "version": 9,
+                  "shape": "consistent",
+                  "page_sizes": [
+                    [
+                      729,
+                      177
+                    ],
+                    [
+                      474,
+                      162
+                    ],
+                    [
+                      502,
+                      252
+                    ],
+                    [
+                      291,
+                      85
+                    ],
+                    [
+                      292,
+                      101
+                    ]
+                  ],
+                  "pages": 5
+                },
+                {
+                  "manifest": "enemy/en010a.json",
+                  "version": 9,
+                  "shape": "consistent",
+                  "page_sizes": [
+                    [
+                      478,
+                      113
+                    ],
+                    [
+                      256,
+                      107
+                    ],
+                    [
+                      883,
+                      58
+                    ],
+                    [
+                      180,
+                      57
+                    ],
+                    [
+                      180,
+                      58
+                    ]
+                  ],
+                  "pages": 5
+                },
+                {
+                  "manifest": "enemy/en024a.json",
+                  "version": 9,
+                  "shape": "consistent",
+                  "page_sizes": [
+                    [
+                      1059,
+                      112
+                    ],
+                    [
+                      553,
+                      125
+                    ],
+                    [
+                      472,
+                      207
+                    ],
+                    [
+                      228,
+                      99
+                    ],
+                    [
+                      228,
+                      101
+                    ]
+                  ],
+                  "pages": 5
+                },
+                {
+                  "manifest": "enemy/en025a.json",
+                  "version": 9,
+                  "shape": "consistent",
+                  "page_sizes": [
+                    [
+                      695,
+                      246
+                    ],
+                    [
+                      784,
+                      146
+                    ],
+                    [
+                      1187,
+                      132
+                    ],
+                    [
+                      281,
+                      122
+                    ],
+                    [
+                      279,
+                      112
+                    ]
+                  ],
+                  "pages": 5
+                },
+                {
+                  "manifest": "enemy/en029a.json",
+                  "version": 9,
+                  "shape": "consistent",
+                  "page_sizes": [
+                    [
+                      712,
+                      73
+                    ],
+                    [
+                      399,
+                      69
+                    ],
+                    [
+                      650,
+                      77
+                    ],
+                    [
+                      129,
+                      79
+                    ],
+                    [
+                      129,
+                      65
+                    ]
+                  ],
+                  "pages": 5
+                },
+                {
+                  "manifest": "enemy/en030a.json",
+                  "version": 9,
+                  "shape": "consistent",
+                  "page_sizes": [
+                    [
+                      617,
+                      79
+                    ],
+                    [
+                      293,
+                      75
+                    ],
+                    [
+                      609,
+                      76
+                    ],
+                    [
+                      129,
+                      70
+                    ],
+                    [
+                      129,
+                      69
+                    ]
+                  ],
+                  "pages": 5
+                },
+                {
+                  "manifest": "enemy/en050a.json",
+                  "version": 9,
+                  "shape": "consistent",
+                  "page_sizes": [
+                    [
+                      483,
+                      140
+                    ],
+                    [
+                      249,
+                      133
+                    ],
+                    [
+                      256,
+                      238
+                    ],
+                    [
+                      192,
+                      54
+                    ],
+                    [
+                      192,
+                      59
+                    ]
+                  ],
+                  "pages": 5
+                },
+                {
+                  "manifest": "enemy/en058a.json",
+                  "version": 9,
+                  "shape": "consistent",
+                  "page_sizes": [
+                    [
+                      486,
+                      224
+                    ],
+                    [
+                      578,
+                      76
+                    ],
+                    [
+                      504,
+                      235
+                    ],
+                    [
+                      162,
+                      79
+                    ],
+                    [
+                      162,
+                      78
+                    ]
+                  ],
+                  "pages": 5
+                },
+                {
+                  "manifest": "enemy/en064a.json",
+                  "version": 9,
+                  "shape": "consistent",
+                  "page_sizes": [
+                    [
+                      505,
+                      179
+                    ],
+                    [
+                      252,
+                      228
+                    ],
+                    [
+                      1254,
+                      85
+                    ],
+                    [
+                      133,
+                      72
+                    ],
+                    [
+                      133,
+                      63
+                    ]
+                  ],
+                  "pages": 5
+                }
+              ],
+              "files": {
+                "C:/SGO/SRC/SGTest/client/assets/generated/maps/13/population.json": "c8c94f913d0a703969592114b3d6f7aafaab45c716f9f7df1e41d95af26a0fca",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_4096/candidate.json": "04e8ecf298aa4e82880e4f4fd82f74eeb54b2dd12b2421a370b1026a61e4f544",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_4096/enemy/en009a.json": "d9a7a268f11359de07c5b64dd8c60922be8a2d72b5d6a90d31aa67725daefb18",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_4096/enemy/en009a_0.png": "b8275e9f6ba4e35e0eb4baf15a14065bc5d9a459a69e56b7ba31fcf9dd937b1f",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_4096/enemy/en009a_1.png": "e126fbed6cd6b694336585d6edf98dfe7b51bbcca97764e4a41cb81c8834b4c7",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_4096/enemy/en009a_2.png": "e1ec505282eb223e2403042e52caf23824463b18979a6f1a9611613e191414bb",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_4096/enemy/en009a_3.png": "1366a31b7fd4e3934acbf805caeabb0dee11f9d02648eda8dca45700e83fe7a1",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_4096/enemy/en009a_4.png": "f26415d68b2a683ddb6c09a99ffd574e5f5385291462771510eb744400e2e879",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_4096/enemy/en010a.json": "0710afbc5ea390257780749416527ebba3776e2defee76e9001f0ada155bc50d",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_4096/enemy/en010a_0.png": "ab2e13fb56be8f3b65b11d909b228833b65ec565a68dfebf1598d9bb2bf72023",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_4096/enemy/en010a_1.png": "7c4bca34b07dcc4c3302d04d804687ff8fb26aa4b2ab02559bd61047aefe8083",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_4096/enemy/en010a_2.png": "86def00ced030e66ecc3a01fc0aec5e04649db1340524710b97f47d82bb45742",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_4096/enemy/en010a_3.png": "3203e8669e03fe01f1dca19ca20143b01e8315ea398d9f594e38f8dfb7fc00b9",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_4096/enemy/en010a_4.png": "2d22bebd715336dd9672e065a7231fda1e04500de3176efdb905955eb36bd845",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_4096/enemy/en024a.json": "c48e87f5120356e5008fd88aaf221a717fecf8ec2b29a77ad063b0fd318ebc7d",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_4096/enemy/en024a_0.png": "3314c7894fb4d8d334b12564e9544a8425c41981aeb9fa45839aa5b887b39a5f",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_4096/enemy/en024a_1.png": "08f14459ef2153019acc7be3afb65e4cd8621337d847a5da9ffc0bc3186525f3",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_4096/enemy/en024a_2.png": "e022954b8804d28161376d8107e1d2301154b9986e17ac8130c62ac811df7d19",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_4096/enemy/en024a_3.png": "ba130a9a0a9cfcb2ee3b909aa98e7ab7618bc0bd7e7607913cb6f25a3a4aff4f",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_4096/enemy/en024a_4.png": "d8635c02c05958efd6f59bb2cc9891d3bc2dea8be156fcc12d978311ce592327",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_4096/enemy/en025a.json": "4c1ae98cd2754bebe53af9d846ffaf47fa7246c8c3d712091125bf8060a63b0b",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_4096/enemy/en025a_0.png": "85e08169bfe95b72945ed5f7d9775b30ecb76362573548fe69f5d7a7fd5213fb",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_4096/enemy/en025a_1.png": "6507fd1f8c11e08921934aa86e098b9e71ad3ff6d37476b6a3cd32f01577ac38",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_4096/enemy/en025a_2.png": "fee7fe61bf9b208034e05d01dfa63fa208d47e0e9f9ea07f329017f178b1c870",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_4096/enemy/en025a_3.png": "44df735b73b2c0d35e4b68e7045d00789b10d699935a0ecad54aa606449d9b88",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_4096/enemy/en025a_4.png": "5938c96e71b13432d471b25c001cb1778c427488475e53ef73937c8196c00643",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_4096/enemy/en029a.json": "a485455772d6031072a4377345489edae3892bc73a96c238fa8119dbc6f676d5",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_4096/enemy/en029a_0.png": "8907ebb87e1e96c07a540e1039033e579c2b77d7b7b53f3102fa9de2beafefa0",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_4096/enemy/en029a_1.png": "9f61a187c8c15f31363ca1754f2713127948a5b7ff1946fbcab4c8f033901e59",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_4096/enemy/en029a_2.png": "87695914f2ed239a8c6637cf133f5f75f2047667807f9f17a07c29690eb425a4",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_4096/enemy/en029a_3.png": "e4e867b6081c809489a99ec3569113b010f46e82d5d2d2ee8d2a36f501b424af",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_4096/enemy/en029a_4.png": "00738b8bfcc687f31acbe1bff9c0b95f119c4253fefbc5bdf1380e85222d69c2",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_4096/enemy/en030a.json": "6713024da8f561b544e3d1f86c96e2c6d06f0a11d682f559595b86d3d3042935",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_4096/enemy/en030a_0.png": "6bf90479412770127affcb8832154a5e08d48a95b2b7e817bd856f96ad2a394f",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_4096/enemy/en030a_1.png": "98b8590ec36a40602f54fee568d94bec4d6259b5436775fa820e02e88584a5be",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_4096/enemy/en030a_2.png": "67d8bcbbd3cd8a83a754bbcd1dd6386446371a18a1c1d3dbad602a092bedd6fe",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_4096/enemy/en030a_3.png": "7ea34a8520d105482f033933f393738f6acd9f4695196120b4efad6feebddfa2",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_4096/enemy/en030a_4.png": "e82428f57813b735ab482c693fd171bd4fd3db65f86e65ddfec7a6cf91f568b5",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_4096/enemy/en050a.json": "b35fa90734e78b0181e3c40402433148614199b6c30feb3dad5b91bd9e04dbcb",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_4096/enemy/en050a_0.png": "2d94a221cd78179a4abedcb7eed37995dff92204adcf6f95918ee6ec644777ff",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_4096/enemy/en050a_1.png": "b64d2c9b1a4ac43bfd9590e2dcf14d1de7b19ef1aa738dfe35a223319fd664ea",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_4096/enemy/en050a_2.png": "910d22e741bdf07a1c18a459487f37c8d88f4459c817f0c2c5e1fb47c3500b78",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_4096/enemy/en050a_3.png": "b0512043779e1c1d42fbdd7b9d8082a7afcbcaff14b125d59a89c645bad20e06",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_4096/enemy/en050a_4.png": "552f92c78ccbc6b0628d0cdd7e1f0509c3e51f60589a4320939fcaa94867c0b6",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_4096/enemy/en058a.json": "6121ddcafca3811823f33289065b85f9eadd2452dcee470c2badfe59c8655498",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_4096/enemy/en058a_0.png": "e11da6d33ba24c97e1f9d02105347d0be7de9a14892bfc714efae81a24154775",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_4096/enemy/en058a_1.png": "e1ab3af567712d1bfd73f157f9b56d13d47992d26b56497f54e3fbb277360868",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_4096/enemy/en058a_2.png": "70345e7444f42b145815f3bd9eed2c5af0472fc45d8f4f2afa1399957e1a3039",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_4096/enemy/en058a_3.png": "388fa280ec953aeb812c2e59a4f8caf79303fc06779dcc721b65974b6708bc12",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_4096/enemy/en058a_4.png": "a8ebcbe914af6113a799dec416ff0c8b3543fce68f503e75137f95ff1c040531",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_4096/enemy/en064a.json": "40cb60a72e0ccb13da54cfed73ee8f51b5485206d4e80e858b02500843253ded",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_4096/enemy/en064a_0.png": "811335cdfa80b007cf53a5f2aee063b3473873318527125e383269d0d8b1ffcb",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_4096/enemy/en064a_1.png": "f34931156af80541175e430aeec9a6f14dcab2c5e5a9e6f0691811d5166aa638",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_4096/enemy/en064a_2.png": "0a1e092e942d8b7264110c76f0ac2c3f07a13d655804ad5033048a2f45b49cc2",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_4096/enemy/en064a_3.png": "d0615174b90e9d0f35012130a69be5e6d7a8892f6edd2d776162761df8dae958",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_4096/enemy/en064a_4.png": "b55d89171b26ffa6da9ab0ec0f681ce5d58c9c0490d174836fc4287d294e7308"
+              },
+              "content_sha256": "bc858e4850adba0508e8655cb81a3bcbbfef57f975871101a74f2ddfdad7e88c"
+            },
+            "runtime_environment": {
+              "godot_version": "4.7.2.stable.official.ed1daf0bf",
+              "godot_executable_sha256": "c8f0a6bc45a19b33541501e57f6f7cd972ab18453743266339d495cbbe846643",
+              "dotnet_sdk_version": "8.0.428",
+              "python": "3.10.0"
+            },
+            "os": "Windows-10-10.0.19045-SP0",
+            "cpu_logical": 20,
+            "physical_ram_bytes": 34088599552,
+            "cache": "warm OS cache; cold disk NOT VERIFIED",
+            "physical_driver_vram": "NOT VERIFIED (engine counters reported separately)"
+          }
+        }
+      },
+      "lifecycle": {
+        "cycles": 30,
+        "execution_passed": true,
+        "frame_ms_p95": 40.998,
+        "frame_ms_p99": 47.426,
+        "frame_ms_max": 57.123,
+        "rss_peak_bytes": 167198720,
+        "texture_peak_bytes": 23242327,
+        "source_files_unchanged_during_run": true,
+        "decode_p95_ms": 1.754,
+        "decode_p99_ms": 1.994,
+        "decode_max_ms": 3.203,
+        "submit_p95_ms": 0.071,
+        "submit_p99_ms": 0.144,
+        "submit_max_ms": 0.223,
+        "sync_wait_p95_ms": 0.001,
+        "sync_wait_p99_ms": 0.001,
+        "sync_wait_max_ms": 0.002,
+        "load_wall_p95_ms": 42.085,
+        "pages": 45,
+        "rgba_bytes": 9656184,
+        "ram_recovery": {
+          "warm_baseline_bytes": 167145472.0,
+          "after_peak_bytes": 167161856,
+          "last10_minus_first10_median_bytes": 8192.0,
+          "passed": true
+        },
+        "gates": {
+          "execution": "PASS",
+          "input_integrity": "PASS",
+          "texture_handles": "PASS",
+          "engine_texture_recovery": "PASS",
+          "rss_recovery": "PASS",
+          "static_recovery": "PASS",
+          "loading_frame": "FAIL",
+          "gpu_submit": "PASS",
+          "thirty_cycles": "PASS"
+        }
+      }
+    },
+    {
+      "candidate": "direction_512",
+      "inputs": {
+        "lifecycle": {
+          "path": "reports/runtime_baseline/direction_512/lifecycle.json",
+          "sha256": "b38adee3d5677b12b056f16c27c7ed3c6dece96293d54ec39b7d1eee77cfebc5",
+          "measurement_provenance": {
+            "git_head": "5762e7348618f6f378b126ad2a43454c65ac2c22",
+            "tracked_worktree_diff_sha256": "8ac6d7fbf52f748ce0d40f2451f8d562b3fc1976bc7a0863130cd7bc8c9d457d",
+            "files": {
+              "client/scripts/main.gd": "ddeba7bf4cafb8170e8c854d4a0316833d0db7bc245e4c7845329df940160e55",
+              "client/scripts/entity_atlas.gd": "75fa6c6feb5cb2401a522a31dd01b5e7b13d4d637f35d15767aa95a476fb2d5d",
+              "client/scripts/monster_visuals.gd": "e39927e8a465ecb9615e004cbab146b1e4f602b0ff2d65275c73189201ade057",
+              "client/scripts/frame_profiler.gd": "22fddf097fed80167c2e6e739d7d0f63195a355517129e04f06dbff2e53c8fe0",
+              "client/project.godot": "444feeb1722ec23bcaf7b77d65f0a7a098cb11495dadd9dc601501957bcf5774",
+              "server/bin/Release/net8.0/SGTest.Server.dll": "d82c7afeb6ad23430cc63c031abbd58a3d8ab7c940c7db187c8d8aeba0614756",
+              "client/tools/benchmark_asset_lifecycle.gd": "21628a38bb96127ff3d04cae5e1bbd828f0f582a34bcb92ca0ae5a3dcfa52f8d",
+              "tools/benchmark_runtime_baseline.py": "36dcd71781de8006fcf61093a3d2bfe106b0326f0818a83e89a43cdb46413c6d",
+              "client/assets/generated/catalog.json": "f19f5e0e68af9c380c0858bb7aedf7b547856e3cd252bf87ac2aeeaf2dc8464a"
+            },
+            "assets": {
+              "root": "C:\\SGO\\SRC\\SGTest\\reports\\atlas_candidates\\direction_512",
+              "groups": [
+                {
+                  "manifest": "enemy/en009a.json",
+                  "version": 9,
+                  "shape": "consistent",
+                  "page_sizes": [
+                    [
+                      474,
+                      318
+                    ],
+                    [
+                      474,
+                      162
+                    ],
+                    [
+                      502,
+                      252
+                    ],
+                    [
+                      291,
+                      85
+                    ],
+                    [
+                      292,
+                      101
+                    ]
+                  ],
+                  "pages": 5
+                },
+                {
+                  "manifest": "enemy/en010a.json",
+                  "version": 9,
+                  "shape": "consistent",
+                  "page_sizes": [
+                    [
+                      478,
+                      113
+                    ],
+                    [
+                      256,
+                      107
+                    ],
+                    [
+                      249,
+                      211
+                    ],
+                    [
+                      180,
+                      57
+                    ],
+                    [
+                      180,
+                      58
+                    ]
+                  ],
+                  "pages": 5
+                },
+                {
+                  "manifest": "enemy/en024a.json",
+                  "version": 9,
+                  "shape": "consistent",
+                  "page_sizes": [
+                    [
+                      482,
+                      284
+                    ],
+                    [
+                      476,
+                      211
+                    ],
+                    [
+                      472,
+                      207
+                    ],
+                    [
+                      228,
+                      99
+                    ],
+                    [
+                      228,
+                      101
+                    ]
+                  ],
+                  "pages": 5
+                },
+                {
+                  "manifest": "enemy/en025a.json",
+                  "version": 9,
+                  "shape": "consistent",
+                  "page_sizes": [
+                    [
+                      509,
+                      358
+                    ],
+                    [
+                      499,
+                      260
+                    ],
+                    [
+                      485,
+                      352
+                    ],
+                    [
+                      281,
+                      122
+                    ],
+                    [
+                      279,
+                      112
+                    ]
+                  ],
+                  "pages": 5
+                },
+                {
+                  "manifest": "enemy/en029a.json",
+                  "version": 9,
+                  "shape": "consistent",
+                  "page_sizes": [
+                    [
+                      259,
+                      259
+                    ],
+                    [
+                      399,
+                      69
+                    ],
+                    [
+                      246,
+                      214
+                    ],
+                    [
+                      129,
+                      79
+                    ],
+                    [
+                      129,
+                      65
+                    ]
+                  ],
+                  "pages": 5
+                },
+                {
+                  "manifest": "enemy/en030a.json",
+                  "version": 9,
+                  "shape": "consistent",
+                  "page_sizes": [
+                    [
+                      256,
+                      210
+                    ],
+                    [
+                      293,
+                      75
+                    ],
+                    [
+                      221,
+                      216
+                    ],
+                    [
+                      129,
+                      70
+                    ],
+                    [
+                      129,
+                      69
+                    ]
+                  ],
+                  "pages": 5
+                },
+                {
+                  "manifest": "enemy/en050a.json",
+                  "version": 9,
+                  "shape": "consistent",
+                  "page_sizes": [
+                    [
+                      483,
+                      140
+                    ],
+                    [
+                      249,
+                      133
+                    ],
+                    [
+                      256,
+                      238
+                    ],
+                    [
+                      192,
+                      54
+                    ],
+                    [
+                      192,
+                      59
+                    ]
+                  ],
+                  "pages": 5
+                },
+                {
+                  "manifest": "enemy/en058a.json",
+                  "version": 9,
+                  "shape": "consistent",
+                  "page_sizes": [
+                    [
+                      486,
+                      224
+                    ],
+                    [
+                      252,
+                      200
+                    ],
+                    [
+                      504,
+                      235
+                    ],
+                    [
+                      162,
+                      79
+                    ],
+                    [
+                      162,
+                      78
+                    ]
+                  ],
+                  "pages": 5
+                },
+                {
+                  "manifest": "enemy/en064a.json",
+                  "version": 9,
+                  "shape": "consistent",
+                  "page_sizes": [
+                    [
+                      505,
+                      179
+                    ],
+                    [
+                      252,
+                      228
+                    ],
+                    [
+                      507,
+                      219
+                    ],
+                    [
+                      133,
+                      72
+                    ],
+                    [
+                      133,
+                      63
+                    ]
+                  ],
+                  "pages": 5
+                }
+              ],
+              "files": {
+                "C:/SGO/SRC/SGTest/client/assets/generated/maps/13/population.json": "c8c94f913d0a703969592114b3d6f7aafaab45c716f9f7df1e41d95af26a0fca",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_512/candidate.json": "0234e225e32fd46bd878f81a57c454aa4220866ce60ebbea5e7bce2a43973a62",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_512/enemy/en009a.json": "59aa9206d2cb0e062624d1be9149a68b6a5344cd6614b90d636d38c35b67f693",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_512/enemy/en009a_0.png": "209177cecf8e9779659f347835110c9f8e9d7b7cc218f00fea534fd067f9a900",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_512/enemy/en009a_1.png": "e126fbed6cd6b694336585d6edf98dfe7b51bbcca97764e4a41cb81c8834b4c7",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_512/enemy/en009a_2.png": "e1ec505282eb223e2403042e52caf23824463b18979a6f1a9611613e191414bb",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_512/enemy/en009a_3.png": "1366a31b7fd4e3934acbf805caeabb0dee11f9d02648eda8dca45700e83fe7a1",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_512/enemy/en009a_4.png": "f26415d68b2a683ddb6c09a99ffd574e5f5385291462771510eb744400e2e879",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_512/enemy/en010a.json": "34c0aa9d4832deff59dca16ffed1ebb8974c7c78d4841b8f69486eba9dd37def",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_512/enemy/en010a_0.png": "ab2e13fb56be8f3b65b11d909b228833b65ec565a68dfebf1598d9bb2bf72023",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_512/enemy/en010a_1.png": "7c4bca34b07dcc4c3302d04d804687ff8fb26aa4b2ab02559bd61047aefe8083",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_512/enemy/en010a_2.png": "707ddeff80e7d5e05640f5a8c12e2fa7404bc35da0c7b8bd431425ad491b18be",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_512/enemy/en010a_3.png": "3203e8669e03fe01f1dca19ca20143b01e8315ea398d9f594e38f8dfb7fc00b9",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_512/enemy/en010a_4.png": "2d22bebd715336dd9672e065a7231fda1e04500de3176efdb905955eb36bd845",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_512/enemy/en024a.json": "16d41fd59cff4a2723adcd0ebf6a7a78a414727d00feeea0147150984f75b873",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_512/enemy/en024a_0.png": "e2ee2abdc74480af8f05c46fd53bc832d8f6c49637c3a27c26e78ed9d2eed2ee",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_512/enemy/en024a_1.png": "a0983d2d78980a1ce13a1b90e75e01c6c71a0847f98ac60dbbeb698daec63c66",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_512/enemy/en024a_2.png": "e022954b8804d28161376d8107e1d2301154b9986e17ac8130c62ac811df7d19",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_512/enemy/en024a_3.png": "ba130a9a0a9cfcb2ee3b909aa98e7ab7618bc0bd7e7607913cb6f25a3a4aff4f",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_512/enemy/en024a_4.png": "d8635c02c05958efd6f59bb2cc9891d3bc2dea8be156fcc12d978311ce592327",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_512/enemy/en025a.json": "ed76210de415602a6ba54d65bb4562adece54e708da269169dcaf16dbf744930",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_512/enemy/en025a_0.png": "85f4ea7205dfc456cfdd3fbb89c059336baee9903cd3953a759ab85107cf2ca7",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_512/enemy/en025a_1.png": "8c7f835f921849e7498819fb4ef6674e01537f04c9a56c2d73f36281b84fe2e1",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_512/enemy/en025a_2.png": "5e48ab550553b73983da8066f030a9bc52a9746cc2d47b9079e62dd6f5cecfc6",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_512/enemy/en025a_3.png": "44df735b73b2c0d35e4b68e7045d00789b10d699935a0ecad54aa606449d9b88",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_512/enemy/en025a_4.png": "5938c96e71b13432d471b25c001cb1778c427488475e53ef73937c8196c00643",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_512/enemy/en029a.json": "fdbf714b5415c5bc30e7bd0402f907c2375777d5486a324b92bf2aab7ba85ce7",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_512/enemy/en029a_0.png": "ae6334dd7bdae0d4d438a21f8e647d7aaab4c9c67c1a62e37f65b9571d1808c5",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_512/enemy/en029a_1.png": "9f61a187c8c15f31363ca1754f2713127948a5b7ff1946fbcab4c8f033901e59",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_512/enemy/en029a_2.png": "5c237961411861bee8b422b605236eba6003c01de50c338ada30211a81c1f332",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_512/enemy/en029a_3.png": "e4e867b6081c809489a99ec3569113b010f46e82d5d2d2ee8d2a36f501b424af",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_512/enemy/en029a_4.png": "00738b8bfcc687f31acbe1bff9c0b95f119c4253fefbc5bdf1380e85222d69c2",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_512/enemy/en030a.json": "ac86f35f4da8d4daf58e545ffebf2070c959f7dbf39f9bb2842ea2dd6c94917d",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_512/enemy/en030a_0.png": "9da5192b77e37d9b5b97e68cffb7445cac2d28c8be7a39365ecc8cfa6a88e849",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_512/enemy/en030a_1.png": "98b8590ec36a40602f54fee568d94bec4d6259b5436775fa820e02e88584a5be",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_512/enemy/en030a_2.png": "f76a4c562e90f9489227d7bd3325b9759e351e71d84147e27d56be10a4373477",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_512/enemy/en030a_3.png": "7ea34a8520d105482f033933f393738f6acd9f4695196120b4efad6feebddfa2",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_512/enemy/en030a_4.png": "e82428f57813b735ab482c693fd171bd4fd3db65f86e65ddfec7a6cf91f568b5",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_512/enemy/en050a.json": "81322ffeeedda811cabf3cc6c814f850312ca47b9962b9e4321e4af2537dcc7f",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_512/enemy/en050a_0.png": "2d94a221cd78179a4abedcb7eed37995dff92204adcf6f95918ee6ec644777ff",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_512/enemy/en050a_1.png": "b64d2c9b1a4ac43bfd9590e2dcf14d1de7b19ef1aa738dfe35a223319fd664ea",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_512/enemy/en050a_2.png": "910d22e741bdf07a1c18a459487f37c8d88f4459c817f0c2c5e1fb47c3500b78",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_512/enemy/en050a_3.png": "b0512043779e1c1d42fbdd7b9d8082a7afcbcaff14b125d59a89c645bad20e06",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_512/enemy/en050a_4.png": "552f92c78ccbc6b0628d0cdd7e1f0509c3e51f60589a4320939fcaa94867c0b6",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_512/enemy/en058a.json": "d72eff386f2607209e90738073b45bc8eb983642ed23103bfd07933a9791d928",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_512/enemy/en058a_0.png": "e11da6d33ba24c97e1f9d02105347d0be7de9a14892bfc714efae81a24154775",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_512/enemy/en058a_1.png": "7799c2ca087abfa70b0b734698e8aec112ea7fbdd2f3deeb61d524b00accf336",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_512/enemy/en058a_2.png": "70345e7444f42b145815f3bd9eed2c5af0472fc45d8f4f2afa1399957e1a3039",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_512/enemy/en058a_3.png": "388fa280ec953aeb812c2e59a4f8caf79303fc06779dcc721b65974b6708bc12",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_512/enemy/en058a_4.png": "a8ebcbe914af6113a799dec416ff0c8b3543fce68f503e75137f95ff1c040531",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_512/enemy/en064a.json": "84956a257f1edc464c4f18913ee2d1de58fc54faffa496d1b0c315214a0e9887",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_512/enemy/en064a_0.png": "811335cdfa80b007cf53a5f2aee063b3473873318527125e383269d0d8b1ffcb",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_512/enemy/en064a_1.png": "f34931156af80541175e430aeec9a6f14dcab2c5e5a9e6f0691811d5166aa638",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_512/enemy/en064a_2.png": "0786a41ad31ffebb389ff4563f9dd3f8db2fdcc65940df1b8687017f4dc0438a",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_512/enemy/en064a_3.png": "d0615174b90e9d0f35012130a69be5e6d7a8892f6edd2d776162761df8dae958",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/direction_512/enemy/en064a_4.png": "b55d89171b26ffa6da9ab0ec0f681ce5d58c9c0490d174836fc4287d294e7308"
+              },
+              "content_sha256": "2470f5a30dbca4b9de8ce2e1af3bb7736cb85e39a2a9802de91ac87071ebe3d3"
+            },
+            "runtime_environment": {
+              "godot_version": "4.7.2.stable.official.ed1daf0bf",
+              "godot_executable_sha256": "c8f0a6bc45a19b33541501e57f6f7cd972ab18453743266339d495cbbe846643",
+              "dotnet_sdk_version": "8.0.428",
+              "python": "3.10.0"
+            },
+            "os": "Windows-10-10.0.19045-SP0",
+            "cpu_logical": 20,
+            "physical_ram_bytes": 34088599552,
+            "cache": "warm OS cache; cold disk NOT VERIFIED",
+            "physical_driver_vram": "NOT VERIFIED (engine counters reported separately)"
+          }
+        }
+      },
+      "lifecycle": {
+        "cycles": 30,
+        "execution_passed": true,
+        "frame_ms_p95": 42.064,
+        "frame_ms_p99": 44.287,
+        "frame_ms_max": 45.108,
+        "rss_peak_bytes": 167882752,
+        "texture_peak_bytes": 24036335,
+        "source_files_unchanged_during_run": true,
+        "decode_p95_ms": 1.769,
+        "decode_p99_ms": 2.008,
+        "decode_max_ms": 2.357,
+        "submit_p95_ms": 0.069,
+        "submit_p99_ms": 0.124,
+        "submit_max_ms": 0.183,
+        "sync_wait_p95_ms": 0.001,
+        "sync_wait_p99_ms": 0.002,
+        "sync_wait_max_ms": 0.003,
+        "load_wall_p95_ms": 41.047,
+        "pages": 45,
+        "rgba_bytes": 10249232,
+        "ram_recovery": {
+          "warm_baseline_bytes": 167305216.0,
+          "after_peak_bytes": 167841792,
+          "last10_minus_first10_median_bytes": 520192.0,
+          "passed": true
+        },
+        "gates": {
+          "execution": "PASS",
+          "input_integrity": "PASS",
+          "texture_handles": "PASS",
+          "engine_texture_recovery": "PASS",
+          "rss_recovery": "PASS",
+          "static_recovery": "PASS",
+          "loading_frame": "FAIL",
+          "gpu_submit": "PASS",
+          "thirty_cycles": "PASS"
+        }
+      }
+    },
+    {
+      "candidate": "entity",
+      "inputs": {
+        "lifecycle": {
+          "path": "reports/runtime_baseline/entity/lifecycle.json",
+          "sha256": "825e4a2556d87250920dd1c4e445f2ba36579a43f6858730ac8a571cb3a560ad",
+          "measurement_provenance": {
+            "git_head": "5762e7348618f6f378b126ad2a43454c65ac2c22",
+            "tracked_worktree_diff_sha256": "8ac6d7fbf52f748ce0d40f2451f8d562b3fc1976bc7a0863130cd7bc8c9d457d",
+            "files": {
+              "client/scripts/main.gd": "ddeba7bf4cafb8170e8c854d4a0316833d0db7bc245e4c7845329df940160e55",
+              "client/scripts/entity_atlas.gd": "75fa6c6feb5cb2401a522a31dd01b5e7b13d4d637f35d15767aa95a476fb2d5d",
+              "client/scripts/monster_visuals.gd": "e39927e8a465ecb9615e004cbab146b1e4f602b0ff2d65275c73189201ade057",
+              "client/scripts/frame_profiler.gd": "22fddf097fed80167c2e6e739d7d0f63195a355517129e04f06dbff2e53c8fe0",
+              "client/project.godot": "444feeb1722ec23bcaf7b77d65f0a7a098cb11495dadd9dc601501957bcf5774",
+              "server/bin/Release/net8.0/SGTest.Server.dll": "d82c7afeb6ad23430cc63c031abbd58a3d8ab7c940c7db187c8d8aeba0614756",
+              "client/tools/benchmark_asset_lifecycle.gd": "21628a38bb96127ff3d04cae5e1bbd828f0f582a34bcb92ca0ae5a3dcfa52f8d",
+              "tools/benchmark_runtime_baseline.py": "36dcd71781de8006fcf61093a3d2bfe106b0326f0818a83e89a43cdb46413c6d",
+              "client/assets/generated/catalog.json": "f19f5e0e68af9c380c0858bb7aedf7b547856e3cd252bf87ac2aeeaf2dc8464a"
+            },
+            "assets": {
+              "root": "C:\\SGO\\SRC\\SGTest\\reports\\atlas_candidates\\entity",
+              "groups": [
+                {
+                  "manifest": "enemy/en009a.json",
+                  "version": 9,
+                  "shape": "consistent",
+                  "page_sizes": [
+                    [
+                      731,
+                      700
+                    ]
+                  ],
+                  "pages": 1
+                },
+                {
+                  "manifest": "enemy/en010a.json",
+                  "version": 9,
+                  "shape": "consistent",
+                  "page_sizes": [
+                    [
+                      509,
+                      388
+                    ]
+                  ],
+                  "pages": 1
+                },
+                {
+                  "manifest": "enemy/en024a.json",
+                  "version": 9,
+                  "shape": "consistent",
+                  "page_sizes": [
+                    [
+                      1015,
+                      413
+                    ]
+                  ],
+                  "pages": 1
+                },
+                {
+                  "manifest": "enemy/en025a.json",
+                  "version": 9,
+                  "shape": "consistent",
+                  "page_sizes": [
+                    [
+                      1753,
+                      382
+                    ]
+                  ],
+                  "pages": 1
+                },
+                {
+                  "manifest": "enemy/en029a.json",
+                  "version": 9,
+                  "shape": "consistent",
+                  "page_sizes": [
+                    [
+                      2029,
+                      81
+                    ]
+                  ],
+                  "pages": 1
+                },
+                {
+                  "manifest": "enemy/en030a.json",
+                  "version": 9,
+                  "shape": "consistent",
+                  "page_sizes": [
+                    [
+                      906,
+                      159
+                    ]
+                  ],
+                  "pages": 1
+                },
+                {
+                  "manifest": "enemy/en050a.json",
+                  "version": 9,
+                  "shape": "consistent",
+                  "page_sizes": [
+                    [
+                      509,
+                      443
+                    ]
+                  ],
+                  "pages": 1
+                },
+                {
+                  "manifest": "enemy/en058a.json",
+                  "version": 9,
+                  "shape": "consistent",
+                  "page_sizes": [
+                    [
+                      994,
+                      318
+                    ]
+                  ],
+                  "pages": 1
+                },
+                {
+                  "manifest": "enemy/en064a.json",
+                  "version": 9,
+                  "shape": "consistent",
+                  "page_sizes": [
+                    [
+                      761,
+                      454
+                    ]
+                  ],
+                  "pages": 1
+                }
+              ],
+              "files": {
+                "C:/SGO/SRC/SGTest/client/assets/generated/maps/13/population.json": "c8c94f913d0a703969592114b3d6f7aafaab45c716f9f7df1e41d95af26a0fca",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/entity/candidate.json": "21b756e78f617699d68c994e431d0899086a40052ec6c42a3711d360c7c1b4e8",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/entity/enemy/en009a.json": "35dda6dcf325f784c109269c5fdc84bbee5bf0a17476f2bff9b9fa1490a869a8",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/entity/enemy/en009a_0.png": "55f6d15422aaa56c08c35b02fae08e7f212a72f427b784d823bcda8f5f5bd31e",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/entity/enemy/en010a.json": "d61c5a0f68cfc3957206f5dba2a22f42473e836ff0106f60c503f15dd9fc3d69",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/entity/enemy/en010a_0.png": "c65557515afaa05cec8c18d291fb9de6624c0b360147079c6cd7265dce496e59",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/entity/enemy/en024a.json": "5048e68eeb6644f060e1e9129128a2d8c9bd62b2c6c463b4d14a63a6bce7a5bf",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/entity/enemy/en024a_0.png": "0032106ae0dae4d4c6046bbbb91f3909f02cd517ec5f987e0228db671adc28d4",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/entity/enemy/en025a.json": "e491955cfdff541bcfd1dfb28a073cbb2abeacfaad6d00574782c379ed0c619d",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/entity/enemy/en025a_0.png": "e69fbf26c2d045df5f17b34bc12fdb677f005c33ef4034fa34db4395afcd4aa5",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/entity/enemy/en029a.json": "4b15d34ba1d2363f8e45f6bb15d5c86f4ca1ed43cd9ee4d32f5b4f1bcbc3d161",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/entity/enemy/en029a_0.png": "ec74e68c69d4dbc2fa231a51e235e16b3cc7f39c1771bf72695657fbcf6d6fb7",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/entity/enemy/en030a.json": "acca48737d4fd165f73d36d1e9f2cb1f8fa854e1234d8bfa57ce99f6cdfff3d9",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/entity/enemy/en030a_0.png": "cbfc170dc2905a98f71184618e175a1ddf9a2cff88c6bb6b4e9f682de8326455",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/entity/enemy/en050a.json": "6ec2a3360aa2e6feb70e13f128366af3dbc38ee89e515ac18d9f526f393458d4",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/entity/enemy/en050a_0.png": "774fff7daa3554f9aff2bac1d469c615c8097873516d00dfad12babc87b52087",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/entity/enemy/en058a.json": "0995b75ff04653a9bdf90aa5ce0184f5cf8e7a70e9c8bd5397b3c5a68ce109b3",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/entity/enemy/en058a_0.png": "ca6d8d688fe97cbe48ac80765a3037aec600932b0d3df318b3acaaa644f43f4a",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/entity/enemy/en064a.json": "0258712404a912f24ef1b9f3d3d5960f1e3e3931f291cfb609f36b894ce8e27a",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/entity/enemy/en064a_0.png": "4536f8f47b068aaef13954c182e83d8d59a9dde70441e24d143f028684bf9903"
+              },
+              "content_sha256": "66bf3eff2583f6be13f1b0951d24c3496f6f75b5b2beb3f8c0fb5c2683ea9659"
+            },
+            "runtime_environment": {
+              "godot_version": "4.7.2.stable.official.ed1daf0bf",
+              "godot_executable_sha256": "c8f0a6bc45a19b33541501e57f6f7cd972ab18453743266339d495cbbe846643",
+              "dotnet_sdk_version": "8.0.428",
+              "python": "3.10.0"
+            },
+            "os": "Windows-10-10.0.19045-SP0",
+            "cpu_logical": 20,
+            "physical_ram_bytes": 34088599552,
+            "cache": "warm OS cache; cold disk NOT VERIFIED",
+            "physical_driver_vram": "NOT VERIFIED (engine counters reported separately)"
+          }
+        },
+        "multiplayer": {
+          "path": "reports/runtime_baseline/entity/multiplayer.json",
+          "sha256": "a03793495ca543083edfd8dc4d610e81f4de08aee4998c7504f19b8fe2988def",
+          "measurement_provenance": {
+            "git_head": "5762e7348618f6f378b126ad2a43454c65ac2c22",
+            "tracked_worktree_diff_sha256": "0749fdbe88e96dd01a73713a8a7e180aea3017f8cad6fe8d2a2ac81cc4b3f2cf",
+            "files": {
+              "client/scripts/main.gd": "ddeba7bf4cafb8170e8c854d4a0316833d0db7bc245e4c7845329df940160e55",
+              "client/scripts/entity_atlas.gd": "75fa6c6feb5cb2401a522a31dd01b5e7b13d4d637f35d15767aa95a476fb2d5d",
+              "client/scripts/monster_visuals.gd": "e39927e8a465ecb9615e004cbab146b1e4f602b0ff2d65275c73189201ade057",
+              "client/scripts/frame_profiler.gd": "22fddf097fed80167c2e6e739d7d0f63195a355517129e04f06dbff2e53c8fe0",
+              "client/project.godot": "444feeb1722ec23bcaf7b77d65f0a7a098cb11495dadd9dc601501957bcf5774",
+              "server/bin/Release/net8.0/SGTest.Server.dll": "d82c7afeb6ad23430cc63c031abbd58a3d8ab7c940c7db187c8d8aeba0614756",
+              "client/tools/benchmark_asset_lifecycle.gd": "21628a38bb96127ff3d04cae5e1bbd828f0f582a34bcb92ca0ae5a3dcfa52f8d",
+              "tools/benchmark_runtime_baseline.py": "36dcd71781de8006fcf61093a3d2bfe106b0326f0818a83e89a43cdb46413c6d",
+              "client/assets/generated/catalog.json": "f19f5e0e68af9c380c0858bb7aedf7b547856e3cd252bf87ac2aeeaf2dc8464a"
+            },
+            "assets": {
+              "root": "C:\\SGO\\SRC\\SGTest\\reports\\atlas_candidates\\entity",
+              "groups": [
+                {
+                  "manifest": "enemy/en009a.json",
+                  "version": 9,
+                  "shape": "consistent",
+                  "page_sizes": [
+                    [
+                      731,
+                      700
+                    ]
+                  ],
+                  "pages": 1
+                },
+                {
+                  "manifest": "enemy/en010a.json",
+                  "version": 9,
+                  "shape": "consistent",
+                  "page_sizes": [
+                    [
+                      509,
+                      388
+                    ]
+                  ],
+                  "pages": 1
+                },
+                {
+                  "manifest": "enemy/en024a.json",
+                  "version": 9,
+                  "shape": "consistent",
+                  "page_sizes": [
+                    [
+                      1015,
+                      413
+                    ]
+                  ],
+                  "pages": 1
+                },
+                {
+                  "manifest": "enemy/en025a.json",
+                  "version": 9,
+                  "shape": "consistent",
+                  "page_sizes": [
+                    [
+                      1753,
+                      382
+                    ]
+                  ],
+                  "pages": 1
+                },
+                {
+                  "manifest": "enemy/en029a.json",
+                  "version": 9,
+                  "shape": "consistent",
+                  "page_sizes": [
+                    [
+                      2029,
+                      81
+                    ]
+                  ],
+                  "pages": 1
+                },
+                {
+                  "manifest": "enemy/en030a.json",
+                  "version": 9,
+                  "shape": "consistent",
+                  "page_sizes": [
+                    [
+                      906,
+                      159
+                    ]
+                  ],
+                  "pages": 1
+                },
+                {
+                  "manifest": "enemy/en050a.json",
+                  "version": 9,
+                  "shape": "consistent",
+                  "page_sizes": [
+                    [
+                      509,
+                      443
+                    ]
+                  ],
+                  "pages": 1
+                },
+                {
+                  "manifest": "enemy/en058a.json",
+                  "version": 9,
+                  "shape": "consistent",
+                  "page_sizes": [
+                    [
+                      994,
+                      318
+                    ]
+                  ],
+                  "pages": 1
+                },
+                {
+                  "manifest": "enemy/en064a.json",
+                  "version": 9,
+                  "shape": "consistent",
+                  "page_sizes": [
+                    [
+                      761,
+                      454
+                    ]
+                  ],
+                  "pages": 1
+                }
+              ],
+              "files": {
+                "C:/SGO/SRC/SGTest/client/assets/generated/maps/13/population.json": "c8c94f913d0a703969592114b3d6f7aafaab45c716f9f7df1e41d95af26a0fca",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/entity/candidate.json": "21b756e78f617699d68c994e431d0899086a40052ec6c42a3711d360c7c1b4e8",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/entity/enemy/en009a.json": "35dda6dcf325f784c109269c5fdc84bbee5bf0a17476f2bff9b9fa1490a869a8",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/entity/enemy/en009a_0.png": "55f6d15422aaa56c08c35b02fae08e7f212a72f427b784d823bcda8f5f5bd31e",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/entity/enemy/en010a.json": "d61c5a0f68cfc3957206f5dba2a22f42473e836ff0106f60c503f15dd9fc3d69",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/entity/enemy/en010a_0.png": "c65557515afaa05cec8c18d291fb9de6624c0b360147079c6cd7265dce496e59",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/entity/enemy/en024a.json": "5048e68eeb6644f060e1e9129128a2d8c9bd62b2c6c463b4d14a63a6bce7a5bf",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/entity/enemy/en024a_0.png": "0032106ae0dae4d4c6046bbbb91f3909f02cd517ec5f987e0228db671adc28d4",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/entity/enemy/en025a.json": "e491955cfdff541bcfd1dfb28a073cbb2abeacfaad6d00574782c379ed0c619d",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/entity/enemy/en025a_0.png": "e69fbf26c2d045df5f17b34bc12fdb677f005c33ef4034fa34db4395afcd4aa5",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/entity/enemy/en029a.json": "4b15d34ba1d2363f8e45f6bb15d5c86f4ca1ed43cd9ee4d32f5b4f1bcbc3d161",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/entity/enemy/en029a_0.png": "ec74e68c69d4dbc2fa231a51e235e16b3cc7f39c1771bf72695657fbcf6d6fb7",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/entity/enemy/en030a.json": "acca48737d4fd165f73d36d1e9f2cb1f8fa854e1234d8bfa57ce99f6cdfff3d9",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/entity/enemy/en030a_0.png": "cbfc170dc2905a98f71184618e175a1ddf9a2cff88c6bb6b4e9f682de8326455",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/entity/enemy/en050a.json": "6ec2a3360aa2e6feb70e13f128366af3dbc38ee89e515ac18d9f526f393458d4",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/entity/enemy/en050a_0.png": "774fff7daa3554f9aff2bac1d469c615c8097873516d00dfad12babc87b52087",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/entity/enemy/en058a.json": "0995b75ff04653a9bdf90aa5ce0184f5cf8e7a70e9c8bd5397b3c5a68ce109b3",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/entity/enemy/en058a_0.png": "ca6d8d688fe97cbe48ac80765a3037aec600932b0d3df318b3acaaa644f43f4a",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/entity/enemy/en064a.json": "0258712404a912f24ef1b9f3d3d5960f1e3e3931f291cfb609f36b894ce8e27a",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/entity/enemy/en064a_0.png": "4536f8f47b068aaef13954c182e83d8d59a9dde70441e24d143f028684bf9903"
+              },
+              "content_sha256": "66bf3eff2583f6be13f1b0951d24c3496f6f75b5b2beb3f8c0fb5c2683ea9659"
+            },
+            "runtime_environment": {
+              "godot_version": "4.7.2.stable.official.ed1daf0bf",
+              "godot_executable_sha256": "c8f0a6bc45a19b33541501e57f6f7cd972ab18453743266339d495cbbe846643",
+              "dotnet_sdk_version": "8.0.428",
+              "python": "3.10.0"
+            },
+            "os": "Windows-10-10.0.19045-SP0",
+            "cpu_logical": 20,
+            "physical_ram_bytes": 34088599552,
+            "cache": "warm OS cache; cold disk NOT VERIFIED",
+            "physical_driver_vram": "NOT VERIFIED (engine counters reported separately)"
+          }
+        }
+      },
+      "lifecycle": {
+        "cycles": 30,
+        "execution_passed": true,
+        "frame_ms_p95": 42.517,
+        "frame_ms_p99": 58.722,
+        "frame_ms_max": 61.298,
+        "rss_peak_bytes": 169525248,
+        "texture_peak_bytes": 26342987,
+        "source_files_unchanged_during_run": true,
+        "decode_p95_ms": 6.618,
+        "decode_p99_ms": 9.261,
+        "decode_max_ms": 12.295,
+        "submit_p95_ms": 0.273,
+        "submit_p99_ms": 0.503,
+        "submit_max_ms": 0.707,
+        "sync_wait_p95_ms": 0.002,
+        "sync_wait_p99_ms": 0.002,
+        "sync_wait_max_ms": 0.003,
+        "load_wall_p95_ms": 55.313,
+        "pages": 9,
+        "rgba_bytes": 11974036,
+        "ram_recovery": {
+          "warm_baseline_bytes": 166805504,
+          "after_peak_bytes": 166846464,
+          "last10_minus_first10_median_bytes": 18432.0,
+          "passed": true
+        },
+        "gates": {
+          "execution": "PASS",
+          "input_integrity": "PASS",
+          "texture_handles": "PASS",
+          "engine_texture_recovery": "PASS",
+          "rss_recovery": "PASS",
+          "static_recovery": "PASS",
+          "loading_frame": "FAIL",
+          "gpu_submit": "PASS",
+          "thirty_cycles": "PASS"
+        }
+      },
+      "multiplayer": {
+        "scenario": {
+          "clients": 20,
+          "native_clients": 1,
+          "headless_clients": 19,
+          "monster_assets": "C:\\SGO\\SRC\\SGTest\\reports\\atlas_candidates\\entity",
+          "monsters": 300,
+          "drops": 1000,
+          "map": 13,
+          "seconds": 40,
+          "render_cap": 60,
+          "resolution": [
+            1440,
+            900
+          ],
+          "bot_paths": "deterministic per-client phase; not identical trajectories"
+        },
+        "rendered": {
+          "draw_calls_last_frame": 401.0,
+          "draw_calls_p95": 427.0,
+          "frame_ms_max": 35.91,
+          "frame_ms_p50": 16.651,
+          "frame_ms_p95": 21.917,
+          "frame_ms_p99": 23.226,
+          "frames": 2101,
+          "mean_fps": 59.9916011758354,
+          "renderer": "NVIDIA GeForce RTX 3050",
+          "resolution": [
+            1440,
+            900
+          ],
+          "sample_seconds": 35.0,
+          "static_memory_bytes": 63305485,
+          "texture_memory_bytes": 42992763.0,
+          "video_memory_bytes": 49489003.0,
+          "warmup_seconds": 2
+        },
+        "server_rss_peak_bytes": 83066880,
+        "server_cpu_median_one_core_percent": 9.2,
+        "native_client_rss_peak_bytes": 212553728,
+        "native_client_cpu_median_one_core_percent": 43.1,
+        "gates": {
+          "execution": "PASS",
+          "input_integrity": "PASS",
+          "frame_p95": "PASS",
+          "frame_p99": "PASS",
+          "client_ram": "FAIL",
+          "client_cpu": "PASS",
+          "server_cpu": "PASS",
+          "tick_work": "NOT VERIFIED",
+          "physical_driver_vram": "NOT VERIFIED",
+          "fps_background_isolation": "NOT VERIFIED",
+          "runtime_owner_lru_logout": "NOT VERIFIED"
+        }
+      }
+    },
+    {
+      "candidate": "readable_auto",
+      "inputs": {
+        "lifecycle": {
+          "path": "reports/runtime_baseline/readable_auto/lifecycle.json",
+          "sha256": "b45e5a50a51c322400dbed63ca391f13f09146971090df19f26b31ebc68234f9",
+          "measurement_provenance": {
+            "git_head": "5762e7348618f6f378b126ad2a43454c65ac2c22",
+            "tracked_worktree_diff_sha256": "8ac6d7fbf52f748ce0d40f2451f8d562b3fc1976bc7a0863130cd7bc8c9d457d",
+            "files": {
+              "client/scripts/main.gd": "ddeba7bf4cafb8170e8c854d4a0316833d0db7bc245e4c7845329df940160e55",
+              "client/scripts/entity_atlas.gd": "75fa6c6feb5cb2401a522a31dd01b5e7b13d4d637f35d15767aa95a476fb2d5d",
+              "client/scripts/monster_visuals.gd": "e39927e8a465ecb9615e004cbab146b1e4f602b0ff2d65275c73189201ade057",
+              "client/scripts/frame_profiler.gd": "22fddf097fed80167c2e6e739d7d0f63195a355517129e04f06dbff2e53c8fe0",
+              "client/project.godot": "444feeb1722ec23bcaf7b77d65f0a7a098cb11495dadd9dc601501957bcf5774",
+              "server/bin/Release/net8.0/SGTest.Server.dll": "d82c7afeb6ad23430cc63c031abbd58a3d8ab7c940c7db187c8d8aeba0614756",
+              "client/tools/benchmark_asset_lifecycle.gd": "21628a38bb96127ff3d04cae5e1bbd828f0f582a34bcb92ca0ae5a3dcfa52f8d",
+              "tools/benchmark_runtime_baseline.py": "36dcd71781de8006fcf61093a3d2bfe106b0326f0818a83e89a43cdb46413c6d",
+              "client/assets/generated/catalog.json": "f19f5e0e68af9c380c0858bb7aedf7b547856e3cd252bf87ac2aeeaf2dc8464a"
+            },
+            "assets": {
+              "root": "C:\\SGO\\SRC\\SGTest\\reports\\atlas_candidates\\readable_auto",
+              "groups": [
+                {
+                  "manifest": "enemy/en009a.json",
+                  "version": 9,
+                  "shape": "readable",
+                  "page_sizes": [
+                    [
+                      1431,
+                      474
+                    ]
+                  ],
+                  "pages": 1
+                },
+                {
+                  "manifest": "enemy/en010a.json",
+                  "version": 9,
+                  "shape": "readable",
+                  "page_sizes": [
+                    [
+                      570,
+                      481
+                    ]
+                  ],
+                  "pages": 1
+                },
+                {
+                  "manifest": "enemy/en024a.json",
+                  "version": 9,
+                  "shape": "readable",
+                  "page_sizes": [
+                    [
+                      1128,
+                      501
+                    ]
+                  ],
+                  "pages": 1
+                },
+                {
+                  "manifest": "enemy/en025a.json",
+                  "version": 9,
+                  "shape": "readable",
+                  "page_sizes": [
+                    [
+                      1366,
+                      161
+                    ],
+                    [
+                      790,
+                      176
+                    ],
+                    [
+                      1197,
+                      162
+                    ],
+                    [
+                      283,
+                      152
+                    ],
+                    [
+                      281,
+                      142
+                    ]
+                  ],
+                  "pages": 5
+                },
+                {
+                  "manifest": "enemy/en029a.json",
+                  "version": 9,
+                  "shape": "readable",
+                  "page_sizes": [
+                    [
+                      612,
+                      384
+                    ]
+                  ],
+                  "pages": 1
+                },
+                {
+                  "manifest": "enemy/en030a.json",
+                  "version": 9,
+                  "shape": "readable",
+                  "page_sizes": [
+                    [
+                      522,
+                      459
+                    ]
+                  ],
+                  "pages": 1
+                },
+                {
+                  "manifest": "enemy/en050a.json",
+                  "version": 9,
+                  "shape": "readable",
+                  "page_sizes": [
+                    [
+                      548,
+                      535
+                    ]
+                  ],
+                  "pages": 1
+                },
+                {
+                  "manifest": "enemy/en058a.json",
+                  "version": 9,
+                  "shape": "readable",
+                  "page_sizes": [
+                    [
+                      714,
+                      681
+                    ]
+                  ],
+                  "pages": 1
+                },
+                {
+                  "manifest": "enemy/en064a.json",
+                  "version": 9,
+                  "shape": "readable",
+                  "page_sizes": [
+                    [
+                      2298,
+                      203
+                    ]
+                  ],
+                  "pages": 1
+                }
+              ],
+              "files": {
+                "C:/SGO/SRC/SGTest/client/assets/generated/maps/13/population.json": "c8c94f913d0a703969592114b3d6f7aafaab45c716f9f7df1e41d95af26a0fca",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/readable_auto/candidate.json": "66cb8ebff7c1ec3502d731e58e2fc52ac7d21e47d74e5c4576059f588d9eb77d",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/readable_auto/enemy/en009a.json": "8585473567afd7f82288f9a0e064327a6e25cd1526424801c29341883163c06f",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/readable_auto/enemy/en009a_0.png": "d3e1c43a4612f89798863efca9cada50d64505c85594cd453061164f4a4fa64d",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/readable_auto/enemy/en010a.json": "51dd81577b76650d275e63e2224bfeefd065395039d66bfa4e83282ab4798ae9",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/readable_auto/enemy/en010a_0.png": "2627f3ce71a13d43c6d72ef6a474ae9e0193c7addb55d69ef22304673d4c89d2",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/readable_auto/enemy/en024a.json": "415a72378a4deb57f0338de56b89fdf492be86bdcc3ce1f96537a9f7c9672979",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/readable_auto/enemy/en024a_0.png": "97e422b42bb81a37f693ca88b3891e35b000cb0015ccdb0dccdb841a840aa92e",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/readable_auto/enemy/en025a.json": "98b7ee76e570eb94ad8f4c0b3ad9f9b7eb3688d7b08dc89eee9a298538371993",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/readable_auto/enemy/en025a_0.png": "f8e74e38bafd08b1ecd744d1ec27e90969251e4e8af32c4595f88c2ab1d8020d",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/readable_auto/enemy/en025a_1.png": "16f4c70cac6657150fee6e9fdb5e6e746476f38a654fba6aa6e65c343f89fb89",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/readable_auto/enemy/en025a_2.png": "5913062d3e6dd34b6696d134d2019cb0be395ed12800fdfa6eb8b8c9cb0e7015",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/readable_auto/enemy/en025a_3.png": "5866ac0c52d7e1c3d56baf523c1d8fb3c0572d2cabec4b6ed86816e5693803e5",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/readable_auto/enemy/en025a_4.png": "68b21a76358b8d5b7b65434513e765cfa3c584baa343210172c1073e03118803",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/readable_auto/enemy/en029a.json": "41bb9acb1a6b1b488bbb5d7d96cc3a9af974536c0e3fb52eaf5cca00c9e469aa",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/readable_auto/enemy/en029a_0.png": "82b48c4a92ec5c8de9a1cfa87c6ebb0273c1cc95d01c613befecf834ac9ffbdc",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/readable_auto/enemy/en030a.json": "b0c48cc4297b73b8f54c0bf525574b8196b0c8bbdca684ab0fd0e28809fb6589",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/readable_auto/enemy/en030a_0.png": "7d98c80f429538bcc0346cfc9c8330cb38efec8f843e7c36cf8515c0ea807fe2",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/readable_auto/enemy/en050a.json": "e73173c842843cab478de41ccea1277b33039761e7a6469a61cc9454afef0749",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/readable_auto/enemy/en050a_0.png": "8f6e97e32dc2cc3e7f793486c1b00d66d59e09e29e05158256685ab1a0c33dfa",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/readable_auto/enemy/en058a.json": "386c1615bc8fed3336dc117506d18b3f6c2efce58816d0d026744a65b8f5a0cc",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/readable_auto/enemy/en058a_0.png": "5686184bab320c12bd1175f36028b13aed04a9b5f077f171edbe7c384b8ab24d",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/readable_auto/enemy/en064a.json": "8d44b91362b6f04e5cc24d798a601357b4917743f249c28582630f826d1cc893",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/readable_auto/enemy/en064a_0.png": "12e75bed36a091dfc94cf81810a43b142f4651513aafe15ccbc20cfccfef82dd"
+              },
+              "content_sha256": "a7870e583f342cdcb71ad9de0265b2d3454f2458b0723afbb01c6a00fd93251b"
+            },
+            "runtime_environment": {
+              "godot_version": "4.7.2.stable.official.ed1daf0bf",
+              "godot_executable_sha256": "c8f0a6bc45a19b33541501e57f6f7cd972ab18453743266339d495cbbe846643",
+              "dotnet_sdk_version": "8.0.428",
+              "python": "3.10.0"
+            },
+            "os": "Windows-10-10.0.19045-SP0",
+            "cpu_logical": 20,
+            "physical_ram_bytes": 34088599552,
+            "cache": "warm OS cache; cold disk NOT VERIFIED",
+            "physical_driver_vram": "NOT VERIFIED (engine counters reported separately)"
+          }
+        },
+        "multiplayer": {
+          "path": "reports/runtime_baseline/readable_auto/multiplayer.json",
+          "sha256": "bdbe77005a795eccab89fe74abeed5829c695f72f7c34b5a14fe66b7fa4411d3",
+          "measurement_provenance": {
+            "git_head": "5762e7348618f6f378b126ad2a43454c65ac2c22",
+            "tracked_worktree_diff_sha256": "9a73589d3f5670abd3f1e84b0ccf0c21d49b8de56fe88473a32768857615dc87",
+            "files": {
+              "client/scripts/main.gd": "ddeba7bf4cafb8170e8c854d4a0316833d0db7bc245e4c7845329df940160e55",
+              "client/scripts/entity_atlas.gd": "75fa6c6feb5cb2401a522a31dd01b5e7b13d4d637f35d15767aa95a476fb2d5d",
+              "client/scripts/monster_visuals.gd": "e39927e8a465ecb9615e004cbab146b1e4f602b0ff2d65275c73189201ade057",
+              "client/scripts/frame_profiler.gd": "22fddf097fed80167c2e6e739d7d0f63195a355517129e04f06dbff2e53c8fe0",
+              "client/project.godot": "444feeb1722ec23bcaf7b77d65f0a7a098cb11495dadd9dc601501957bcf5774",
+              "server/bin/Release/net8.0/SGTest.Server.dll": "d82c7afeb6ad23430cc63c031abbd58a3d8ab7c940c7db187c8d8aeba0614756",
+              "client/tools/benchmark_asset_lifecycle.gd": "21628a38bb96127ff3d04cae5e1bbd828f0f582a34bcb92ca0ae5a3dcfa52f8d",
+              "tools/benchmark_runtime_baseline.py": "36dcd71781de8006fcf61093a3d2bfe106b0326f0818a83e89a43cdb46413c6d",
+              "client/assets/generated/catalog.json": "f19f5e0e68af9c380c0858bb7aedf7b547856e3cd252bf87ac2aeeaf2dc8464a"
+            },
+            "assets": {
+              "root": "C:\\SGO\\SRC\\SGTest\\reports\\atlas_candidates\\readable_auto",
+              "groups": [
+                {
+                  "manifest": "enemy/en009a.json",
+                  "version": 9,
+                  "shape": "readable",
+                  "page_sizes": [
+                    [
+                      1431,
+                      474
+                    ]
+                  ],
+                  "pages": 1
+                },
+                {
+                  "manifest": "enemy/en010a.json",
+                  "version": 9,
+                  "shape": "readable",
+                  "page_sizes": [
+                    [
+                      570,
+                      481
+                    ]
+                  ],
+                  "pages": 1
+                },
+                {
+                  "manifest": "enemy/en024a.json",
+                  "version": 9,
+                  "shape": "readable",
+                  "page_sizes": [
+                    [
+                      1128,
+                      501
+                    ]
+                  ],
+                  "pages": 1
+                },
+                {
+                  "manifest": "enemy/en025a.json",
+                  "version": 9,
+                  "shape": "readable",
+                  "page_sizes": [
+                    [
+                      1366,
+                      161
+                    ],
+                    [
+                      790,
+                      176
+                    ],
+                    [
+                      1197,
+                      162
+                    ],
+                    [
+                      283,
+                      152
+                    ],
+                    [
+                      281,
+                      142
+                    ]
+                  ],
+                  "pages": 5
+                },
+                {
+                  "manifest": "enemy/en029a.json",
+                  "version": 9,
+                  "shape": "readable",
+                  "page_sizes": [
+                    [
+                      612,
+                      384
+                    ]
+                  ],
+                  "pages": 1
+                },
+                {
+                  "manifest": "enemy/en030a.json",
+                  "version": 9,
+                  "shape": "readable",
+                  "page_sizes": [
+                    [
+                      522,
+                      459
+                    ]
+                  ],
+                  "pages": 1
+                },
+                {
+                  "manifest": "enemy/en050a.json",
+                  "version": 9,
+                  "shape": "readable",
+                  "page_sizes": [
+                    [
+                      548,
+                      535
+                    ]
+                  ],
+                  "pages": 1
+                },
+                {
+                  "manifest": "enemy/en058a.json",
+                  "version": 9,
+                  "shape": "readable",
+                  "page_sizes": [
+                    [
+                      714,
+                      681
+                    ]
+                  ],
+                  "pages": 1
+                },
+                {
+                  "manifest": "enemy/en064a.json",
+                  "version": 9,
+                  "shape": "readable",
+                  "page_sizes": [
+                    [
+                      2298,
+                      203
+                    ]
+                  ],
+                  "pages": 1
+                }
+              ],
+              "files": {
+                "C:/SGO/SRC/SGTest/client/assets/generated/maps/13/population.json": "c8c94f913d0a703969592114b3d6f7aafaab45c716f9f7df1e41d95af26a0fca",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/readable_auto/candidate.json": "66cb8ebff7c1ec3502d731e58e2fc52ac7d21e47d74e5c4576059f588d9eb77d",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/readable_auto/enemy/en009a.json": "8585473567afd7f82288f9a0e064327a6e25cd1526424801c29341883163c06f",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/readable_auto/enemy/en009a_0.png": "d3e1c43a4612f89798863efca9cada50d64505c85594cd453061164f4a4fa64d",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/readable_auto/enemy/en010a.json": "51dd81577b76650d275e63e2224bfeefd065395039d66bfa4e83282ab4798ae9",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/readable_auto/enemy/en010a_0.png": "2627f3ce71a13d43c6d72ef6a474ae9e0193c7addb55d69ef22304673d4c89d2",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/readable_auto/enemy/en024a.json": "415a72378a4deb57f0338de56b89fdf492be86bdcc3ce1f96537a9f7c9672979",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/readable_auto/enemy/en024a_0.png": "97e422b42bb81a37f693ca88b3891e35b000cb0015ccdb0dccdb841a840aa92e",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/readable_auto/enemy/en025a.json": "98b7ee76e570eb94ad8f4c0b3ad9f9b7eb3688d7b08dc89eee9a298538371993",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/readable_auto/enemy/en025a_0.png": "f8e74e38bafd08b1ecd744d1ec27e90969251e4e8af32c4595f88c2ab1d8020d",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/readable_auto/enemy/en025a_1.png": "16f4c70cac6657150fee6e9fdb5e6e746476f38a654fba6aa6e65c343f89fb89",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/readable_auto/enemy/en025a_2.png": "5913062d3e6dd34b6696d134d2019cb0be395ed12800fdfa6eb8b8c9cb0e7015",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/readable_auto/enemy/en025a_3.png": "5866ac0c52d7e1c3d56baf523c1d8fb3c0572d2cabec4b6ed86816e5693803e5",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/readable_auto/enemy/en025a_4.png": "68b21a76358b8d5b7b65434513e765cfa3c584baa343210172c1073e03118803",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/readable_auto/enemy/en029a.json": "41bb9acb1a6b1b488bbb5d7d96cc3a9af974536c0e3fb52eaf5cca00c9e469aa",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/readable_auto/enemy/en029a_0.png": "82b48c4a92ec5c8de9a1cfa87c6ebb0273c1cc95d01c613befecf834ac9ffbdc",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/readable_auto/enemy/en030a.json": "b0c48cc4297b73b8f54c0bf525574b8196b0c8bbdca684ab0fd0e28809fb6589",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/readable_auto/enemy/en030a_0.png": "7d98c80f429538bcc0346cfc9c8330cb38efec8f843e7c36cf8515c0ea807fe2",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/readable_auto/enemy/en050a.json": "e73173c842843cab478de41ccea1277b33039761e7a6469a61cc9454afef0749",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/readable_auto/enemy/en050a_0.png": "8f6e97e32dc2cc3e7f793486c1b00d66d59e09e29e05158256685ab1a0c33dfa",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/readable_auto/enemy/en058a.json": "386c1615bc8fed3336dc117506d18b3f6c2efce58816d0d026744a65b8f5a0cc",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/readable_auto/enemy/en058a_0.png": "5686184bab320c12bd1175f36028b13aed04a9b5f077f171edbe7c384b8ab24d",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/readable_auto/enemy/en064a.json": "8d44b91362b6f04e5cc24d798a601357b4917743f249c28582630f826d1cc893",
+                "C:/SGO/SRC/SGTest/reports/atlas_candidates/readable_auto/enemy/en064a_0.png": "12e75bed36a091dfc94cf81810a43b142f4651513aafe15ccbc20cfccfef82dd"
+              },
+              "content_sha256": "a7870e583f342cdcb71ad9de0265b2d3454f2458b0723afbb01c6a00fd93251b"
+            },
+            "runtime_environment": {
+              "godot_version": "4.7.2.stable.official.ed1daf0bf",
+              "godot_executable_sha256": "c8f0a6bc45a19b33541501e57f6f7cd972ab18453743266339d495cbbe846643",
+              "dotnet_sdk_version": "8.0.428",
+              "python": "3.10.0"
+            },
+            "os": "Windows-10-10.0.19045-SP0",
+            "cpu_logical": 20,
+            "physical_ram_bytes": 34088599552,
+            "cache": "warm OS cache; cold disk NOT VERIFIED",
+            "physical_driver_vram": "NOT VERIFIED (engine counters reported separately)"
+          }
+        }
+      },
+      "lifecycle": {
+        "cycles": 30,
+        "execution_passed": true,
+        "frame_ms_p95": 50.353,
+        "frame_ms_p99": 60.549,
+        "frame_ms_max": 78.241,
+        "rss_peak_bytes": 174333952,
+        "texture_peak_bytes": 31037407,
+        "source_files_unchanged_during_run": true,
+        "decode_p95_ms": 6.511,
+        "decode_p99_ms": 11.169,
+        "decode_max_ms": 17.291,
+        "submit_p95_ms": 0.256,
+        "submit_p99_ms": 0.408,
+        "submit_max_ms": 0.952,
+        "sync_wait_p95_ms": 0.002,
+        "sync_wait_p99_ms": 0.002,
+        "sync_wait_max_ms": 0.002,
+        "load_wall_p95_ms": 58.656,
+        "pages": 13,
+        "rgba_bytes": 15495616,
+        "ram_recovery": {
+          "warm_baseline_bytes": 171405312,
+          "after_peak_bytes": 171622400,
+          "last10_minus_first10_median_bytes": 8192.0,
+          "passed": true
+        },
+        "gates": {
+          "execution": "PASS",
+          "input_integrity": "PASS",
+          "texture_handles": "PASS",
+          "engine_texture_recovery": "PASS",
+          "rss_recovery": "PASS",
+          "static_recovery": "PASS",
+          "loading_frame": "FAIL",
+          "gpu_submit": "PASS",
+          "thirty_cycles": "PASS"
+        }
+      },
+      "multiplayer": {
+        "scenario": {
+          "clients": 20,
+          "native_clients": 1,
+          "headless_clients": 19,
+          "monster_assets": "C:\\SGO\\SRC\\SGTest\\reports\\atlas_candidates\\readable_auto",
+          "monsters": 300,
+          "drops": 1000,
+          "map": 13,
+          "seconds": 40,
+          "render_cap": 60,
+          "resolution": [
+            1440,
+            900
+          ],
+          "bot_paths": "deterministic per-client phase; not identical trajectories"
+        },
+        "rendered": {
+          "draw_calls_last_frame": 404.0,
+          "draw_calls_p95": 427.0,
+          "frame_ms_max": 36.595,
+          "frame_ms_p50": 16.653,
+          "frame_ms_p95": 21.632,
+          "frame_ms_p99": 22.761,
+          "frames": 2101,
+          "mean_fps": 60.0010446635954,
+          "renderer": "NVIDIA GeForce RTX 3050",
+          "resolution": [
+            1440,
+            900
+          ],
+          "sample_seconds": 35.0,
+          "static_memory_bytes": 63764817,
+          "texture_memory_bytes": 47687183.0,
+          "video_memory_bytes": 54190063.0,
+          "warmup_seconds": 2
+        },
+        "server_rss_peak_bytes": 83488768,
+        "server_cpu_median_one_core_percent": 5.45,
+        "native_client_rss_peak_bytes": 212865024,
+        "native_client_cpu_median_one_core_percent": 41.5,
+        "gates": {
+          "execution": "PASS",
+          "input_integrity": "PASS",
+          "frame_p95": "PASS",
+          "frame_p99": "PASS",
+          "client_ram": "FAIL",
+          "client_cpu": "PASS",
+          "server_cpu": "PASS",
+          "tick_work": "NOT VERIFIED",
+          "physical_driver_vram": "NOT VERIFIED",
+          "fps_background_isolation": "NOT VERIFIED",
+          "runtime_owner_lru_logout": "NOT VERIFIED"
+        }
+      }
+    }
+  ],
+  "selection": "NOT SELECTED: baseline only; mixed builder and runtime store pending"
+}

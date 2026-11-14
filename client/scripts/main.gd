@@ -24,6 +24,7 @@ var rendered_monsters: Dictionary = {}
 var last_snapshot := -1
 var input_elapsed := 0.0
 var bot := false
+var bot_index := 0
 const CODEC = preload("res://scripts/snapshot_codec.gd")
 const ACTION = preload("res://scripts/action_policy.gd")
 const INPUT = preload("res://scripts/input_codec.gd")
@@ -37,6 +38,7 @@ var drops_dirty := false
 var action_observed := false
 var inventory_observed := false
 var asset_root := "res://assets/generated"
+var monster_asset_root := ""
 var profiler: RefCounted
 var diagnostics_time := 0.0
 var health_observed := false
@@ -67,12 +69,18 @@ func _ready() -> void:
 		profiler = preload("res://scripts/frame_profiler.gd").new()
 	var host := "127.0.0.1"
 	for argument in arguments:
+		if argument.begins_with("--bot-index="):
+			bot_index = int(argument.trim_prefix("--bot-index="))
+		if argument.begins_with("--profile-seconds=") and profiler != null:
+			profiler.sample_seconds = maxf(10.0,float(argument.trim_prefix("--profile-seconds=")))
 		if argument.begins_with("--port="):
 			port = clampi(int(argument.trim_prefix("--port=")),1024,65535)
 		if argument.begins_with("--host="):
 			host = argument.trim_prefix("--host=")
 		if argument.begins_with("--assets="):
 			asset_root = argument.trim_prefix("--assets=")
+		if argument.begins_with("--monster-assets="):
+			monster_asset_root = argument.trim_prefix("--monster-assets=")
 	print("SGO client starting")
 	_build_ui()
 	_load_sample_atlas()
@@ -137,7 +145,7 @@ func _world_info(server_map: int, fingerprint: String, population_hash: String) 
 	for definition in definitions:
 		if generation != world_generation:
 			return
-		var error: Error = monster_visuals.add(asset_root,definition)
+		var error: Error = monster_visuals.add(asset_root if monster_asset_root.is_empty() else monster_asset_root,definition)
 		if error != OK:
 			push_error("Cannot load monster definition %s (%s)" % [definition.id,error])
 			get_tree().quit(1)
@@ -285,7 +293,7 @@ func _client_step(delta: float) -> void:
 		return
 	var motion := Input.get_vector("ui_left", "ui_right", "ui_up", "ui_down")
 	if bot:
-		motion = Vector2.from_angle(Time.get_ticks_msec() / 1000.0)
+		motion = Vector2.from_angle(Time.get_ticks_msec()/1000.0+bot_index*0.733)
 	prediction.step_input(motion,Time.get_ticks_usec()/1000000.0,server_time)
 	var packet := prediction.packet()
 	if not packet.is_empty():

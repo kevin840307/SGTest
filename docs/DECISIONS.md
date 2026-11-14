@@ -186,4 +186,14 @@ ADR-016 的逐怪物尺寸實驗補充（2026-11-14）：50 組各測 1024／204
 - Status: ACCEPTED REQUIREMENT；完整實作／實機矩陣 NOT VERIFIED。
 - Decision: Render FPS、Client固定邏輯／network與C# .NET 8 Server模擬分離。5／10／15FPS及不繪製世界的掛機模式只降低呈現與音效；Server30Hz、snapshot10Hz、Client input30Hz不變。背景／最小化需實測，不能只改Godot FPS上限。
 - Evidence: Socket worker已獨立，但main物理回呼仍消化state／command，render回呼仍送時鐘ping；因此尚未完成隔離。使用者觀察頓挫，根因未定位，不以平均FPS宣稱正常。
-- Validation: SPEC §0.4的同trace因果、實際頻率與queue門檻；5～120FPS／背景恢復、1／2／4／8開CPU／RAM／GPU、各角色連續位移。先建立PERF001證據，依缺口完成獨立排程，再驗收；不藉降同步頻率通過效能目標。
+- Validation: SPEC §0.4的同trace因果、實際頻率與queue門檻；5／10／15FPS掛機及30～90FPS一般遊玩／背景恢復、1／2／4／8開CPU／RAM／GPU、各角色連續位移。先建立PERF001證據，依缺口完成獨立排程，再驗收；不藉降同步頻率通過效能目標。
+
+ADR-026補充：使用者指定Client一般遊玩支援30～90FPS；FPS選項只控制呈現，傳輸與邏輯頻率維持既有獨立契約。120FPS可額外壓測，但不作正式支援範圍。
+
+## ADR-027 — PERF001基準保留失敗，暫不選定排法（2026-11-14）
+
+- Status: BASELINE DELIVERED；ASSET201～205與RUNTIME206未完成。
+- Evidence: [RESOURCE_BASELINE.md](RESOURCE_BASELINE.md)及reports/runtime_baseline的7組30次lifecycle／4組20client-300monster-1000drop實際JSON；版本、工作樹與PNG指紋已記錄。7組raw texture references與RSS／engine texture回收PASS，載入frame P99均超過40ms。4組一般場景約60FPS／frame P99 22.76～24.93ms，但原生Client RSS峰值202.65～207.73MiB，200MiB目標FAIL。
+- Decision: 不把decode／submit平均值或較少PNG當作無頓挫證據；先做標準動畫定義，再測clip原子／map共現／hot-warm-cold混合分組與有界非同步資源管理。當前9頁entity、45頁direction及13頁readable都只保留為基準候選，4096不預設勝出；2048與4096候選可能裁切成同尺寸，單次時間差不能證明尺寸因果。
+- Limits: raw texture loop不是實際map/logout owner refs／LRU驗收；一般場景1原生＋19headless不是多GPU視窗掛機。冷磁碟、實體driver VRAM、tick work長尾、完整動作／背景trace仍NOT VERIFIED。不降低目標或同步頻率來隱藏失敗。
+- Validation: 7項基準判定／實驗packing fixture、89項現有研究工作樹測試、5項原型assets／4 maps／1 population、C#346 checks及Godot方向／navigation／replica／prediction／wire／9visual360動作方向測試PASS。CI另行確認，工作樹研究修改未夾帶提交。

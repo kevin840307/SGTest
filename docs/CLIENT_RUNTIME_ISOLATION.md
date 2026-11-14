@@ -66,7 +66,7 @@ Socket receive、decode、可靠事件套用禁止從 UI `_process`、`_physics_
 | 模式 | Network / Decode / Reducer / Command | Server | UI / World Rendering / Audio |
 | --- | --- | --- | --- |
 | 60 FPS 正常 | 正常獨立節奏 | 不變 | 一般更新 |
-| 30 / 40 / 50 / 120 FPS | **相同協定節奏、狀態結果與事件因果** | 不變 | 按指定 FPS 取樣呈現 |
+| 30～90 FPS（含45／75／90） | **相同協定節奏、狀態結果與事件因果** | 不變 | 按指定 FPS 取樣呈現 |
 | UI 動畫降頻（若支援） | **完全不受影響** | 不變 | 非必要 UI animation 可降頻 |
 | 失焦 / 最小化 | **不可停止/降頻** | 不變 | 僅減少或跳過視覺與音效 |
 | AFK | **不可停止/降頻** | 不變 | 可卸載 world visual，保留 compact state |
@@ -84,7 +84,7 @@ Socket receive、decode、可靠事件套用禁止從 UI `_process`、`_physics_
 
 ## 7. 回歸與實測必備（尚未執行）
 
-1. 同一 packet trace、相同 server seed，比較 30/40/50/60/120 FPS + UI animation 限速：RX/TX 數、可靠事件次序、Reducer processed event hash、HP/XY/Combat/Drop state hash **必須一致**（視覺影格可不同）。
+1. 同一 packet trace、相同 server seed，比較 30/45/60/75/90 FPS + UI animation 限速：RX/TX 數、可靠事件次序、Reducer processed event hash、HP/XY/Combat/Drop state hash **必須一致**（視覺影格可不同）。
 2. 前景→失焦→最小化→AFK→回復：`NetworkPollIntervalP95/P99`、`RxQueueOldestAgeP95/P99`、`ReducerDelayP95/P99`、`OutgoingCommandDelayP95/P99` 不得隨渲染 FPS 降低而系統性增加。
 3. 同幀 128 封包 + 0/50/100/250/750ms jitter、20 玩家+300 怪+500 掉落，驗證 Stop/Teleport/Death barrier、Miss/Hit 正確、旁觀者動作、遠邊進 AOI 不瞬移。
 4. 大型 Texture 首次 async 載入、GPU upload、切圖、登出100次：不能因資源未就緒丟 reliable events 或讓 IO queue 無限擴大；記 GPU spike 和資源釋放。
@@ -103,4 +103,6 @@ Socket receive、decode、可靠事件套用禁止從 UI `_process`、`_physics_
 - `client/scripts/main.gd::_process` 仍發送時鐘ping，屬明確待移出的網路排程。此處角色插值、camera與繪圖可留在呈現層；ACT取樣不改時間軸。
 - `client/project.godot` 的30Hz物理設定只代表設定值，未證明5FPS、失焦、最小化時仍及時處理state／input。不可直接調 Engine.max_fps 就宣稱低功耗模式完成。
 
-新增驗收：5／10／15／30／60／120FPS，以及停止世界繪製但保留邏輯；單開及2／4／8開，記錄每程序與總CPU／RAM／GPU。前景→失焦→最小化→掛機→恢復期間，記錄實際logic/input/snapshot/tick頻率、queue P99、因果／狀態hash、獨立實體位移與資源恢復。低FPS畫面本身較不連續是預期，但不可造成Server或其他觀察者同步頓挫。全部新增矩陣目前 **NOT VERIFIED**。
+新增驗收：5／10／15／30／45／60／75／90FPS，以及停止世界繪製但保留邏輯；單開及2／4／8開，記錄每程序與總CPU／RAM／GPU。前景→失焦→最小化→掛機→恢復期間，記錄實際logic/input/snapshot/tick頻率、queue P99、因果／狀態hash、獨立實體位移與資源恢復。低FPS畫面本身較不連續是預期，但不可造成Server或其他觀察者同步頓挫。全部新增矩陣目前 **NOT VERIFIED**。
+
+一般遊玩正式支援範圍為 **30～90 FPS**（使用者2026-11-14指定）；5／10／15FPS屬獨立低功耗驗收模式。兩者都不能改變Client↔Server傳輸／邏輯頻率。120FPS舊矩陣僅為額外壓測，不屬目前正式支援承諾。

@@ -64,3 +64,5 @@ T0 空登入、選角、登出100次；T1 單人 Map15 城內；T2 單人 Map13 
 新增強制矩陣與數值門檻見 [SPEC §0.4](../SPEC.md)，實作缺口見 [CLIENT_RUNTIME_ISOLATION §8](CLIENT_RUNTIME_ISOLATION.md)。5／10／15FPS、停止世界繪製、失焦及最小化只降低呈現成本；30Hz Client input／Server模擬及10Hz snapshot不得連帶降低。相同trace檢查邏輯因果，真實連線量實際頻率與queue延遲；2／4／8開逐程序及總量記錄，不能用單開省電推論多開已通過。
 
 頓挫必須分別檢查frame pacing、單角色插值／prediction修正、快照間隔、排序／camera、載入CPU／GPU尖峰。平均FPS、headless成功及Socket worker存在皆不能替代此驗收。目前低FPS／背景完整矩陣 NOT VERIFIED；使用者觀察列為待重現問題。
+
+一般遊玩支援30～90FPS，至少測30／45／60／75／90；60FPS為效能對照基準。低功耗掛機模式另列，所有FPS設定皆不得改變Client／Server傳輸頻率。

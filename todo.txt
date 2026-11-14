@@ -108,3 +108,9 @@ ASSET205 [ ] 新增怪物腳本／預覽／definition與出生流程；生命週
 
 PERF001補充（2026-11-14）：使用者觀察畫面頓挫，原因待定位；加入frame pacing／獨立實體插值／prediction修正／snapshot queue／載入CPU-GPU尖峰分段，不以平均FPS判PASS。
 RUNTIME206 [ ] PERF001基準後驗證與完成渲染／Client邏輯／Server獨立排程；5/10/15/30/60/120FPS、不繪製世界、失焦／最小化／恢復、1/2/4/8開。Before：Socket worker已獨立，state/input仍物理回呼，ping仍render回呼。After目標／指標／回歸：SPEC §0.4、CLIENT_RUNTIME_ISOLATION §8；同步頻率不降、queue門檻與trace因果一致、記錄逐程序CPU/RAM/GPU。文件補充完成；程式隔離及實機矩陣 NOT VERIFIED，尚未領取第二個實作Task。
+
+RUNTIME206補充：Client一般遊玩支援30～90FPS；最低覆蓋30/45/60/75/90，5/10/15為掛機另測，FPS不影響Client↔Server傳輸／固定邏輯。原120FPS項目保留額外壓測用途，不是正式支援範圍。
+
+PERF001 [x] 首個「基準工具＋原始JSON＋報告」交付，非效能全部達標。工具benchmark_runtime_baseline.py／report_runtime_baseline.py／build_baseline_candidates.py及client/tools/benchmark_asset_lifecycle.gd；報告docs/RESOURCE_BASELINE.md與reports/runtime_baseline_summary.json。7組30次raw texture回收PASS；同步載入frame P99全部FAIL；4組20client/300monster/1000drop一般frame達標，但Client RSS 202.65～207.73MiB高於200MiB，FAIL。詳細命令／NOT VERIFIED項目見報告，ADR-027。
+測試：python -m unittest discover -s tools -p test_runtime_baseline.py（7 PASS）；tools/tests（89 PASS，包含保留的本機研究修改）；test_assets（5）、test_maps（4）、test_population（1）PASS；.cache/dotnet/dotnet.exe run --project server/tests/SGTest.Server.Tests.csproj -c Release（346 PASS）；Godot tests/test_directions/navigation/replica/prediction/wire/monster_visuals.gd全部PASS。本機GPU不是CI替代品，完整低FPS／背景trace／owner-LRU登出／冷快取／實體driverVRAM仍NOT VERIFIED。
+ASSET201 [~] 下一個唯一領取任務：建立與pack位置獨立的entity→behavior→8facing→frame標準定義，保留raw ACT／alias／pivot／source；先fixture及本機9怪／人物部件驗證。ASSET202～205與RUNTIME206仍待實作，基準失敗項目不可標完成。

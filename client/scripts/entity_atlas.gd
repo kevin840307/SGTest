@@ -12,7 +12,7 @@ func open(path: String) -> Error:
 	var parsed = JSON.parse_string(FileAccess.get_file_as_string(path))
 	if not parsed is Dictionary:
 		return ERR_FILE_CORRUPT
-	if int(parsed.get("version", 0)) not in [3, 4, 5, 6, 7]:
+	if int(parsed.get("version", 0)) not in [3, 4, 5, 6, 7, 8, 9]:
 		return ERR_FILE_CORRUPT
 	data = parsed
 	pages.clear()
