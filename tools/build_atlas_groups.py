@@ -25,7 +25,8 @@ def group_key(relative: Path) -> Path:
 
 
 def select_groups(root: Path, category: str | None = None,
-                  prefix: str | None = None) -> dict[Path, list[Path]]:
+                  prefix: str | None = None,
+                  keys: set[str] | None = None) -> dict[Path, list[Path]]:
     groups: dict[Path, list[Path]] = defaultdict(list)
     for path in root.rglob("*"):
         if not path.is_file() or path.is_symlink() or path.suffix.lower() != ".spr":
@@ -35,6 +36,8 @@ def select_groups(root: Path, category: str | None = None,
             continue
         key = group_key(relative)
         if prefix and not key.as_posix().casefold().startswith(prefix.casefold()):
+            continue
+        if keys is not None and key.as_posix().casefold() not in keys:
             continue
         groups[key].append(path)
     return {key: sorted(paths, key=lambda p: p.relative_to(root).as_posix().casefold())
@@ -85,8 +88,13 @@ def build_group(root: Path, output: Path, key: Path, paths: list[Path], side: in
     temporary = target / "group.atlas.json.tmp"
     temporary.write_text(json.dumps(document, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
     temporary.replace(manifest)
+    page_area = sum(p.width * p.height for p in pages)
+    crop_area = sum((record["crop"][2] - record["crop"][0])
+                    * (record["crop"][3] - record["crop"][1]) for record in records)
     return {"group": key.as_posix(), "sources": len(sources), "frames": len(records),
-            "pages": len(page_names), "rgba_area_bytes": sum(p.width * p.height * 4 for p in pages),
+            "pages": len(page_names), "crop_rect_pixels": crop_area,
+            "page_fill_ratio": round(crop_area / page_area, 6) if page_area else 0.0,
+            "rgba_area_bytes": page_area * 4,
             "png_bytes": sum((target / name).stat().st_size for name in page_names)}
 
 
@@ -96,13 +104,20 @@ def main() -> int:
     parser.add_argument("output", type=Path)
     parser.add_argument("--category", help="First-level source category, e.g. Enemy")
     parser.add_argument("--prefix", help="Group key prefix, e.g. Enemy/EN023A")
+    parser.add_argument("--group-list", type=Path, help="UTF-8 file with exact group keys, one per line")
     parser.add_argument("--atlas-side", type=int, required=True, choices=(512, 1024, 2048, 4096))
     parser.add_argument("--limit-groups", type=int, help="Trial only; stable first N groups")
     args = parser.parse_args()
     root, output = args.client.resolve(), args.output.resolve()
     if not root.is_dir() or output == root or root in output.parents:
         parser.error("source must exist and output must be outside the clean client")
-    groups = select_groups(root, args.category, args.prefix)
+    keys = None
+    if args.group_list is not None:
+        keys = {line.strip().casefold() for line in args.group_list.read_text(encoding="utf-8").splitlines()
+                if line.strip() and not line.lstrip().startswith("#")}
+    groups = select_groups(root, args.category, args.prefix, keys)
+    if keys is not None and {key.as_posix().casefold() for key in groups} != keys:
+        parser.error("group list contains a key absent from the clean source")
     if args.limit_groups is not None:
         groups = dict(list(groups.items())[:args.limit_groups])
     rows = []

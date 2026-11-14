@@ -9,7 +9,7 @@ AS003 [~] HK2 實體類別、ITF→SPR 引用、9 份人物 draw-order 表、219
 AS004 [~] tools/convert_assets.py 已從 HK2 全量轉出 40,224/40,224 SPR、178/178 ACT、186/186 SIF、9/9 draw-order 表，加入 SIF 後同一命令全量快取核對零失敗。保留 RGBA/原始 origin/來源 SHA/ACT 循環／事件與預設 Update 呼叫數、SIF 原始數值，詳 docs/HK2_SPR_POC.md、docs/HK2_DRAW_ORDER.md、docs/HK2_SIF_RESEARCH.md；人物方位映射已查清但尚未與動畫載入鏈整合，實際毫秒與 `+N` 疊層語意仍未知；原版視覺比對未完成。
 AS005 [ ] 原版視覺/影格/方向/透明度/對齊/裝備疊圖實證比對；含靜止/行走/攻擊/受擊/死亡，截圖與錄影人工確認。
 AS006 [~] 獨立 tools/view_legacy_asset.py 可直接讀原始 SPR 或轉換 manifest，逐格、固定速度預覽、鏡像、原始 origin、透明棋盤與放大；自建 atlas fixture 及 HK2 分幀/atlas 還原通過。ACT 動作選單、紙娃娃圖層、批次匯出及原版視覺校驗仍待做；詳 docs/HK2_ASSET_VIEWER.md。
-AS007 [~] 已有 tools/build_atlas_groups.py 從乾淨 HK2 依局部前綴與實際尺寸組頁；三組 512／1024／2048／4096 候選經 Godot headless PNG 解碼與 RTX 3050 OpenGL 300 實例實機繪圖初測，見 docs/HK2_ATLAS_CANDIDATES.md。GPU VRAM／上傳尖峰、多人多種類／掉落完整場景、快取回收仍未驗證；正式分組未定。
+AS007 [~] tools/build_atlas_groups.py 可從乾淨 HK2 依局部前綴與實際尺寸組頁；tools/select_mixed_benchmark_groups.py 自動選高面積怪物組。三組單外觀候選及 8 種怪＋20 玩家代理＋500 小圖代理混合場景已在 Godot 4.7.2／RTX 3050 初測，含 1080p 三回合及 4K 單次、Godot Video Mem 監測；ImageTexture 載入／釋放 10 次回到基線。見 docs/HK2_ATLAS_CANDIDATES.md、docs/HK2_MIXED_ATLAS_BENCHMARK.md。真正物品圖、GPU 上傳尖峰、網路同步、正式切圖回收仍未驗證；正式分組未定。
 AS008 [!] 確認原版圖片、UI、音效的本地研究與公開發布/轉換權利；未確認權利不放 GitHub。
 AS009 [ ] 將本機盤點與解碼結果形成 docs/證據矩陣，記錄具體檔案 hash、函式位址、成功/失敗；再判斷是否達成 M0 Gate。
 

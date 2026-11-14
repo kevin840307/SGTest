@@ -1,6 +1,6 @@
 # Godot 素材組合與生命週期方案
 
-日期：2026-11-14（Asia/Taipei）。狀態：PROVISIONAL，待方向／動作完整對照及大規模 GPU 負載測試。來源：[HK2 全量轉換](HK2_SPR_POC.md)、[三組 atlas 實測](HK2_ATLAS_CANDIDATES.md)、[ACT 研究](HK2_ACT_RESEARCH.md)、ADR-012/016。此文件描述正式 runtime 包裝目標，現有轉換器的逐幀 PNG 是保真 QA 中間層。
+日期：2026-11-14（Asia/Taipei）。狀態：PROVISIONAL，待方向／動作完整對照及正式多人場景測試。來源：[HK2 全量轉換](HK2_SPR_POC.md)、[三組 atlas 實測](HK2_ATLAS_CANDIDATES.md)、[混合場景／釋放初測](HK2_MIXED_ATLAS_BENCHMARK.md)、[ACT 研究](HK2_ACT_RESEARCH.md)、ADR-012/016。此文件描述正式 runtime 包裝目標，現有轉換器的逐幀 PNG 是保真 QA 中間層。
 
 ## 建議的組合單位
 

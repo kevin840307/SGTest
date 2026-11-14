@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from build_atlas_groups import build_group, group_key
+from build_atlas_groups import build_group, group_key, select_groups
 
 
 def tiny_spr() -> bytes:
@@ -36,10 +36,21 @@ class GroupTests(unittest.TestCase):
             row = build_group(root, output, Path("Enemy/EN023A"), paths, 512)
             manifest = json.loads((output / "Enemy/EN023A/group.atlas.json").read_text())
             self.assertEqual((row["sources"], row["frames"], row["pages"]), (2, 2, 1))
+            self.assertGreater(row["page_fill_ratio"], 0)
             self.assertEqual([f["source_frame"] for f in manifest["frames"]], [0, 0])
             self.assertEqual([f["source"] for f in manifest["frames"]],
                              ["Enemy/EN023A_NS1.spr", "Enemy/EN023A_NW1.spr"])
             self.assertEqual(manifest["frames"][0]["raw_origin"], [1, 0])
+
+    def test_explicit_group_filter(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            (root / "Enemy").mkdir()
+            for name in ("EN001_NS1.spr", "EN001_NW1.spr", "EN002_NS1.spr"):
+                (root / "Enemy" / name).write_bytes(tiny_spr())
+            groups = select_groups(root, keys={"enemy/en001"})
+            self.assertEqual(list(groups), [Path("Enemy/EN001")])
+            self.assertEqual(len(next(iter(groups.values()))), 2)
 
 
 if __name__ == "__main__":
