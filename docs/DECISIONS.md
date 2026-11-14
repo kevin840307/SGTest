@@ -180,3 +180,10 @@ ADR-016 的逐怪物尺寸實驗補充（2026-11-14）：50 組各測 1024／204
 - Wire v2：28-byte snapshot新增definitionId，Action亦帶definition，World/Ready增加population SHA。v1明確拒絕；跨語言fixture同步更新。
 - 驗證：C#346項檢查、Python合成population fixture、Godot9visual／360 action-facing／共享生命周期、8-client1000怪5000掉落30秒、2-client戰鬥與原生1440×900壓測PASS。多種類圖集RGBA16,424,596bytes，原生預載約121ms（包含分影格讓出），平均58.50FPS（60cap）、P9523.50ms。原始媒體／population只留本機。
 - 下一步：使用者補充圖集橫直排法需更一致；將另以可重跑腳本與尺寸／載入／記憶體A/B決定，不任意旋轉或拉伸原影格。
+
+## ADR-026 — 低功耗多開只調呈現，保留獨立同步節奏（2026-11-14）
+
+- Status: ACCEPTED REQUIREMENT；完整實作／實機矩陣 NOT VERIFIED。
+- Decision: Render FPS、Client固定邏輯／network與C# .NET 8 Server模擬分離。5／10／15FPS及不繪製世界的掛機模式只降低呈現與音效；Server30Hz、snapshot10Hz、Client input30Hz不變。背景／最小化需實測，不能只改Godot FPS上限。
+- Evidence: Socket worker已獨立，但main物理回呼仍消化state／command，render回呼仍送時鐘ping；因此尚未完成隔離。使用者觀察頓挫，根因未定位，不以平均FPS宣稱正常。
+- Validation: SPEC §0.4的同trace因果、實際頻率與queue門檻；5～120FPS／背景恢復、1／2／4／8開CPU／RAM／GPU、各角色連續位移。先建立PERF001證據，依缺口完成獨立排程，再驗收；不藉降同步頻率通過效能目標。

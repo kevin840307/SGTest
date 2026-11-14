@@ -58,3 +58,9 @@ T0 空登入、選角、登出100次；T1 單人 Map15 城內；T2 單人 Map13 
 4. 視窗 800×600 至寬度約 1440 的各預設及 zoom-out：同一 world rect 與擴大 world rect 分開比較，不混淆像素填充和視野實體數。快切 map、反覆預取/卸載、登出100次需量測 VRAM/RAM 穩態與 GPU RID 洩漏。1080p/4K 舊實驗只作超規壓力參考。
 5. 須有相同 trace hash、視覺品質、可見內容、硬體、OS、Godot 版本、seed、3次 run；headless 不代表真 GPU PASS。詳 [ASSET_STREAMING_AND_RENDERING.md](ASSET_STREAMING_AND_RENDERING.md)、[CLIENT_RUNTIME_ISOLATION.md](CLIENT_RUNTIME_ISOLATION.md)。
 6. **截至 2026-11-13：DESIGN ONLY；實測 NOT VERIFIED。**
+
+## 低 FPS、多開掛機與頓挫定位（2026-11-14）
+
+新增強制矩陣與數值門檻見 [SPEC §0.4](../SPEC.md)，實作缺口見 [CLIENT_RUNTIME_ISOLATION §8](CLIENT_RUNTIME_ISOLATION.md)。5／10／15FPS、停止世界繪製、失焦及最小化只降低呈現成本；30Hz Client input／Server模擬及10Hz snapshot不得連帶降低。相同trace檢查邏輯因果，真實連線量實際頻率與queue延遲；2／4／8開逐程序及總量記錄，不能用單開省電推論多開已通過。
+
+頓挫必須分別檢查frame pacing、單角色插值／prediction修正、快照間隔、排序／camera、載入CPU／GPU尖峰。平均FPS、headless成功及Socket worker存在皆不能替代此驗收。目前低FPS／背景完整矩陣 NOT VERIFIED；使用者觀察列為待重現問題。

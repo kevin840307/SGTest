@@ -1,6 +1,6 @@
 # SGTest Client ↔ Server / 邏輯 / UI / 渲染完全分離契約
 
-版本：2026-11-13。**ACCEPTED 架構原則；IMPLEMENTATION NOT VERIFIED**。目前 SGTest 仍處於 M0 素材研究階段。本文件為未來工程和回歸測試的硬性限制。
+版本：2026-11-14。**ACCEPTED 架構原則；完整 FPS／背景隔離 IMPLEMENTATION NOT VERIFIED**。目前已有 Godot Client 與獨立 C#／.NET 8 Server 原型。本文件為工程和回歸測試的硬性限制。
 
 ## 1. 不變條件（Hard Invariant）
 
@@ -91,3 +91,16 @@ Socket receive、decode、可靠事件套用禁止從 UI `_process`、`_physics_
 5. 記錄 FPS、focused/minimized/AFK、OS/GPU、ServerSeq、packet trace hash、queue metrics、frame P95/P99、RAM/VRAM；GitHub headless 邏輯測試不等於 Windows 真 GPU PASS。
 
 **以上全為規格與驗收設計，實作與測試：NOT VERIFIED。** 配合 [ASSET_STREAMING_AND_RENDERING.md](ASSET_STREAMING_AND_RENDERING.md)、[ARCHITECTURE.md](ARCHITECTURE.md) 與 [TEST_PLAN.md](TEST_PLAN.md)。
+
+## 8. 低功耗多開與實際缺口（2026-11-14）
+
+使用者觀察測試畫面仍有頓挫，尚未定位原因。一般多人場景的平均FPS不能代替載入、每角色位移與背景模式量測。最新順序及門檻以 [SPEC §0.4](../SPEC.md) 為準；不能為省電降低同步頻率。
+
+現有程式檢查（非完整通過證據）：
+
+- `client/scripts/network_client.gd::_run` 的 WebSocket poll／收送在獨立 worker，bounded queue 與畫面分開。
+- `client/scripts/main.gd::_physics_process` 才消化收包、decode／dispatch及執行 `_client_step`。主循環卡住或背景節流仍可能延後state／command；需實測並改為獨立邏輯排程與安全快照。
+- `client/scripts/main.gd::_process` 仍發送時鐘ping，屬明確待移出的網路排程。此處角色插值、camera與繪圖可留在呈現層；ACT取樣不改時間軸。
+- `client/project.godot` 的30Hz物理設定只代表設定值，未證明5FPS、失焦、最小化時仍及時處理state／input。不可直接調 Engine.max_fps 就宣稱低功耗模式完成。
+
+新增驗收：5／10／15／30／60／120FPS，以及停止世界繪製但保留邏輯；單開及2／4／8開，記錄每程序與總CPU／RAM／GPU。前景→失焦→最小化→掛機→恢復期間，記錄實際logic/input/snapshot/tick頻率、queue P99、因果／狀態hash、獨立實體位移與資源恢復。低FPS畫面本身較不連續是預期，但不可造成Server或其他觀察者同步頓挫。全部新增矩陣目前 **NOT VERIFIED**。

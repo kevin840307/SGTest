@@ -1,6 +1,55 @@
 # SGTest 完整開發規格（v1.1 / 2026-11-13）
 
-狀態：M0 原版素材研究優先；已移除早期 Godot/.NET 原型，尚未開始正式遊戲實作。新遊戲原創開發，唯讀參考 SGO/TestGoGo 的 Old、Client、Server 與測試。性能數字與里程碑都屬「目標」，不是已驗證成果。
+狀態：已有可執行原型，現在依第0節先建立資源架構基準再選型；舊M0紀錄保留供追溯。新遊戲原創開發，唯讀參考 SGO/TestGoGo 的 Old、Client、Server 與測試。性能數字與里程碑都屬「目標」，不是已驗證成果。
+
+## 0. 2026-11-14 最新執行契約：先基準，再選型與實作
+
+本節優先於舊 M0 狀態及舊 .NET 10 選型。現有為 Godot Client／C# .NET 8 Server 原型；直接修改 `C:\SGO\SRC\SGTest` 的 main。使用者最新要求採「標準化動畫定義＋自動混合 Atlas Builder＋統一 Runtime 資源管理」，不把目前實驗排法或 loader 草稿視為定案。
+
+### 0.1 明確順序與首個交付
+
+1. **PERF001：首個可交付成果是可重跑的基準工具、原始 JSON、可讀報告與本節／TODO。** 記錄硬體、Godot／.NET、Git HEAD＋工作樹指紋、素材catalog SHA、場景、解析度、FPS上限、暖機及快取狀態。先量目前方案的CPU解碼、GPU提交／同步等待、載入／重載、RAM／Godot追蹤的GPU記憶體、卸載、Draw Calls與多人場景。數據缺少就寫NOT VERIFIED。
+2. **ASSET201：定義標準化。** Entity（怪物／角色／部件）→Behavior→八個LogicalFacing→Frame；保留原SPR來源／索引、alias／flip、trim／pivot／z-order、ACT raw time／事件。動畫速率與位移／Render FPS分開。最小實體fixture、八方向及一次性動作回歸先通過。
+3. **ASSET202：候選比較。** 同一批定義測來源SPR分開、按action×direction原子分組、依map共現／使用頻率混合分組；候選512／1024／2048／4096。不強制全entity一張，也不只比較PNG大小。Frame順序與來源可檢查，另輸出標示預覽；runtime頁內可讀性與透明空白一起量測。
+4. **ASSET203：資料支持的決策。** 比較載入／重載、GPU提交尖峰、卸載粒度、RAM／GPU峰值、CPU、Draw Calls、Frame P95/P99及cache amplification，再更新ADR／SPEC／TODO。沒有實測不能宣稱某尺寸／單張／MultiMesh較快。
+5. **ASSET204：統一Runtime實作。** 統一Definition／Page ID；同種及多人共享immutable動畫與Texture。owner引用計數、有界CPU解碼queue、主執行緒GPU提交預算、按需／預載、cache上限、只淘汰ref=0的LRU、取消generation。切圖／登出釋放owner及不必要常駐資源。Net／State／Command／Server頻率不受載入或渲染限制影響。
+6. **ASSET205：新增怪物流程及最終回歸。** 原始SPR/ACT＋一份definition／出生設定→驗證→混合builder→標示預覽→client/server內容。新增種類不需改C#／GDScript；ID與內容指紋穩定。重跑30次生命週期、多人／多怪／掉落及30/60/120FPS／失焦trace。
+
+### 0.2 可接受門檻（目標，非已通過）
+
+本機基準：RTX3050、Compatibility/OpenGL、1440×900、上限60FPS；20players／300monsters（至少9visual）／1000drops；暖機2秒後至少30秒。另保留1000怪／5000掉落壓測，不拿較輕場景取代。
+
+| 項目 | 驗收目標 |
+|---|---|
+| 正常遊玩 Frame | P95≤25ms、P99≤40ms；新方案較同場基準P95/P99不退化超過10% |
+| 載入主執行緒 GPU submit | 每頁P95≤4ms、P99≤8ms、單次≤16ms；大頁不能靠平均值隱藏尖峰 |
+| 載入期間畫面 | frame P99≤40ms、max≤66.7ms；超過需拆分／預載，不可用降同步頻率通過 |
+| 熱OS快取 map working set ready | ≤1秒；將CPU decode、GPU submit、GPU同步等待、等待預算時間分開記錄 |
+| Client RAM | 正常場景尖峰RSS≤200MiB；metadata／CPU解碼／GPU各有明確上限 |
+| GPU | 當前map＋角色的managed texture working set目標≤96MiB；RenderServer texture/video counters另列，不能稱為整卡／driver實際VRAM |
+| CPU | 正常單客戶端CPU中位數≤一核心100%；Server中位數≤一核心30%，超過記錄並優化，不改既有tick |
+| Server／網路 | Server30Hz、snapshot10Hz、input30Hz不減；tick work P95≤10ms、P99≤20ms；同trace因果／狀態結果一致 |
+| 引用與卸載 | owner釋放後資源handle／引用歸零；兩個render frame後engine-tracked texture bytes回暖基線+1MiB內 |
+| 30次載入／卸載 | 先2次暖機；卸載後RSS≤暖基線+max(16MiB,10%)，Godot static memory≤暖基線+max(8MiB,10%)；最後10次對最初10次RSS中位數增幅≤8MiB，無持續上升趨勢 |
+| 正確性 | pixel／frame順序／八方向alias／pivot／ACT及多觀察者Move/Stop/Hit/Death等回歸零錯誤；未測項目不標PASS |
+
+4096可採用，但需通過相同GPU尖峰／常駐與卸載門檻。門檻屬目前硬體的可接受目標；若原始素材或基準不符，先明示失敗、提出實測取捨並更新決策，不偷偷降低場景、FPS或同步頻率。
+
+### 0.3 資源管理必備契約
+
+- GPU page為共用／引用／LRU單位，Entity definition不直接強持有所有世界圖片；只預載當前map／角色需要的working set。
+- hot/warm/cold分類及共現決定co-pack；冷死亡／特效不必和所有待機／行走常駐一張，但重要動作未ready時State仍即時套用，不補播過期動作。
+- decoder單一或有界worker；只在主執行緒做GPU commit，限制每frame時間／頁數。取消切圖後的過期CPU結果不得再建立GPU資源。
+- 明確分開active/pinned refs、無引用warm cache、LRU eviction與force purge。登出／測試purge必須能回基線；快取快不等於永不卸載。
+- `RenderingServer.force_sync()`只在基準隔離同步完成成本時使用，不在正式每次載入強制卡住CPU／GPU。WDDM等不支援per-process實體VRAM時標N/A，不用RSS代稱VRAM。
+
+### 0.4 渲染／Client／Server 分離與低功耗多開（2026-11-14 補充）
+
+- 渲染 FPS 只決定視覺取樣與提交頻率。Server 模擬維持30Hz、snapshot10Hz、Client input30Hz；收包、解碼、可靠事件套用、命令、時鐘同步不得掛在渲染回呼或受 FPS 上限、VSync、失焦、最小化節流影響。Client 固定邏輯須有獨立排程證據，僅設定 physics_ticks_per_second=30 不算完成隔離。
+- 一般遊玩以60FPS為基準；低功耗多開需驗證15／10／5FPS及停止世界繪製的掛機模式。可降低呈現／音效／非必要視覺資源，既有戰鬥、撿物、狀態與連線持續正常。恢復畫面直接取當前狀態，不補播積壓動畫。這些模式目前是待實作與待驗證需求。
+- 頓挫調查分開量 frame pacing（P95／P99／max、長幀數）、每角色插值／修正位移、snapshot 到達間隔／queue age、CPU decode／GPU submit 尖峰。平均60FPS不能單獨證明流暢；各角色不可等全場批次更新才一起移動。原版低影格動畫與世界座標平滑分別檢查。
+- 驗收使用相同輸入／packet trace、seed及時間戳，覆蓋5／10／15／30／60／120FPS、前景／失焦／最小化／掛機與恢復，單開及2／4／8開。離線確定性trace的命令／可靠事件因果與最終狀態hash須一致；真實連線另量實際頻率、queue延遲、CPU／RAM／GPU及每個程序的數值，不能要求不同網路排程的封包總數逐位相同。
+- 正常本機條件下，Client固定邏輯／input／Server tick實際頻率各在目標±5%內；snapshot發送維持10Hz（無相關實體時依協定），相較60FPS同負載基準的Client reducer／command queue P99延遲增加≤10ms且絕對值≤50ms，可靠事件遺失為0；CPU／RAM／GPU省多少依實測填寫。5FPS仍正常同步不能靠每200ms一次追趕批次通過。上述為目標，NOT VERIFIED。
 
 ## 1. 願景、關鍵成功標準與範圍
 

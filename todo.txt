@@ -86,3 +86,25 @@ Before：Server以固定種怪物隨機填滿，Client固定EN004A；已知原�
 回歸：自製population fixture、28-byte快照與v2契約、每實體revision／方向／同種共享、C#原版內容匹配與碰撞、多種類Godot原生場景及8-client壓測。舊版ENet及v1報告不能當v2證據。
 
 INT002 [x] Map13 78原版出生／9種類已接入；原版CLI啟動log為78／9，protocol2。Python合成fixture PASS；C#346 checks PASS；Godot9visual／360 action-facing＋共享reset PASS，八方向／碰撞／replica／prediction／跨語言wire PASS；8client／1000怪／5000掉落30秒與2client combat15秒 PASS；原生1440×900平均58.50FPS、P9523.50ms，9圖集RGBA約15.66MiB、分影格載入約121ms。實際報告見reports；未把私有population或圖片納入Git。下一步INT003圖集排列一致性A/B。
+
+INT003 [~] 使用者補充：圖集直橫方向需一致、方便新增，必須由原始檔腳本轉換且兼顧資源／流暢度。
+Before：方向區塊已集中，但shelf最小面積候選會在直／橫之間變動。
+指標：比較compact與統一landscape候選，維持不旋轉原影格、同方向不拆、像素可還原；完整catalog幾何面積／空白成本、代表素材Godot載入及多種類FPS有直接證據後才改預設與重建。
+回歸：人工細長／不同方向fixture、原始SPR逐幀像素回建、原版9種runtime及C#同步不受排法影響；增量重建只需指定entity。
+
+INT003使用者最新補充：只統一橫向仍不夠，需容易看懂方向／動作／影格規律，容許沒有顯著影響的記憶體差異；載入不能讓玩家感到lag。下一個A/B以方向panel→動作row/grid→原始frame順序為主，保留原始方位重用並提供可讀預覽，不以最緊密但難讀的矩形排序作最終答案。
+INT004待辦（INT003完成後領取）：新增怪物需資料定義＋原始SPR/ACT＋出生設定的腳本流程，不要求使用者改C#／GDScript。現有ID／動作／數值／來源缺件要驗證，避免手改生成PNG。
+
+INT003補充驗收：使用者要求GPU載入速度、CPU／記憶體、容易卸載與快速重載。需拆量PNG解碼、主執行緒GPU提交／frame尾延遲、GPU紋理計數與容量，以及重複載入／卸載後基線；圖集張數／大小依這些實測與可讀性一起決定，不能只用PNG大小或CPU解碼數字。
+
+===== 2026-11-14 使用者指定資源架構重評，先交付基準 =====
+INT003 [?] 先前橫向／readable／grid排法及asset_stream為實驗，不能視為最終方案。v8 consistent曾全量回建282,990影格PASS，但使用者最新架構／可讀性／GPU／引用生命週期要求尚未完成。
+PERF001 [~] 首個交付：SPEC第0節的可重跑基準工具＋實際JSON／報告，先測目前同步載入／卸載30次、CPU解碼／GPU提交／同步等待、RAM／GPU峰值、Draw Calls及20player/300monster/1000drop場景；資料不足標NOT VERIFIED。
+ASSET201 [ ] 標準定義：monster/character→behavior→8facing→frame，來源／alias／pivot／ACT／z-order。
+ASSET202 [ ] 512/1024/2048/4096混合Atlas候選，按原子clip／map共現／hot-warm-cold作相同基準A/B。
+ASSET203 [ ] 依數據更新決策，兼顧可讀性／載入與卸載粒度，不強制所有動作方向一張。
+ASSET204 [ ] 統一Runtime store：owner refs、共享、按需／預載、CPU/GPU預算、cache caps、LRU、generation取消、切圖／登出purge及不影響同步。
+ASSET205 [ ] 新增怪物腳本／預覽／definition與出生流程；生命週期／多人／不同FPS及失焦最終回歸。
+
+PERF001補充（2026-11-14）：使用者觀察畫面頓挫，原因待定位；加入frame pacing／獨立實體插值／prediction修正／snapshot queue／載入CPU-GPU尖峰分段，不以平均FPS判PASS。
+RUNTIME206 [ ] PERF001基準後驗證與完成渲染／Client邏輯／Server獨立排程；5/10/15/30/60/120FPS、不繪製世界、失焦／最小化／恢復、1/2/4/8開。Before：Socket worker已獨立，state/input仍物理回呼，ping仍render回呼。After目標／指標／回歸：SPEC §0.4、CLIENT_RUNTIME_ISOLATION §8；同步頻率不降、queue門檻與trace因果一致、記錄逐程序CPU/RAM/GPU。文件補充完成；程式隔離及實機矩陣 NOT VERIFIED，尚未領取第二個實作Task。
