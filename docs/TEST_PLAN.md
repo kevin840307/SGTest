@@ -21,7 +21,7 @@ T003 jitter：收包 delay 0/50/100/250/750ms、同幀 128包、重複/故意延
 T004 motion 跨100/250/350ms update cadence，於30/50/60/120fps Render 值一致；沒有「快走一下停一下」或假傳送。
 T005 面向：4/8向 clip/Facing 與 Run/Idle/Attack/Hit/Death、flip 端點一致，普通 Move 不能打斷 OneShot。
 T006 人物被連打/兩人同時攻擊/普通 MISS：自己與旁觀者都能看到浮字與動作，死亡只一次。
-T007 camera/Zoom/Window：1400×900/1920×1080/超寬/4K遠外圍進 AOI 位置正確，新入圖玩家不由零位移動畫。
+T007 camera/Zoom/Window：800×600/1280×720/1440×810/1440×900、可調整視窗與鏡頭 Zoom，外圍進 AOI 位置正確，新入圖玩家不由零位移動畫。
 T008 換圖/重連 session epoch stale Move/Stop/Drop/Death 不能復活舊 Entity。
 T009 min/AFK/失焦中 30FPS 渲染不影響網路/HP/撿物/戰鬥時間。
 T010 local movement self prediction + Server correction，碰撞合法、攻擊距離與行走動作完全一致。
@@ -76,7 +76,7 @@ T025 所有事件類型可重播 deterministic trace -> 相同 State hash。
 | AS-T02 | 同地圖 500怪/8種、2000掉落/25種（自製 fixture） | MapAssetPalette hot/warm/cold、AtlasPagesTouched、RAM/VRAM、CacheHit 統計 |
 | AS-T03 | PNG / 固定 1024/2048 / Adaptive 512～4096 | 相同畫面 A/B：RAM/VRAM/DrawCalls/FrameP95/P99/UploadSpike |
 | AS-T04 | 人物8/其他方向、裝備紙娃娃、Boss 分動作頁 | pivot/offset/z-order/命中事件/視覺保真；方向數依原版實證 |
-| AS-T05 | 1080p/1440p/4K/21:9/zoom-out | Camera WorldRect、預載與可視實體一致；無舊版 800×600 外圍瞬移 |
+| AS-T05 | 800×600/1280×720/1440×810/1440×900/zoom-out | Camera WorldRect、預載與可視實體一致；無沿用原版固定 800×600 視野造成的外圍瞬移 |
 | CI-T01 | 同 packet trace、30/40/50/60/120 FPS、UI 動畫降頻 | Rx/Tx count、State hash、可靠事件次序一致；QueueAge 無系統性惡化 |
 | CI-T02 | 失焦/最小化/AFK/恢復、20玩家/300怪/500掉落 | IO/Reducer/Command/Server tick 排程不由 UI/Render FPS 控制 |
 | CI-T03 | 同幀128包、Stop/Teleport/Hit/Death/Pickup，含 Texture miss | event barrier 正確、無遺漏、遠端直接顯示最新 pose |

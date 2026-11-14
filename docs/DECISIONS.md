@@ -76,7 +76,8 @@
 ## ADR-013 — 多解析度與雙 UI（2026-11-13）
 - Status: ACCEPTED；來源：使用者明確要求原版相近 UI 加可切換現代排版，並超越原版 800×600 限制。
 - 決策：後期金色風格與現代排版讀取同一份唯讀 ViewModel；Control/Container 的錨點、安全區和文字縮放適應視窗；AOI 由實際 viewport、zoom、位置和緩衝推算，不由 HUD 外觀或固定 800×600 決定。
-- 影響／下次驗證：1400×900、1920×1080、21:9、最大化、高 DPI 與縮放場景檢查 UI 遮擋、地圖邊界 Spawn/Despawn、多人／怪物／掉落負載；切換 UI 不改網路或世界 Tick。
+- 2026-11-14 使用者補充：視窗**最大寬度約 1440 像素**，不是 1440p；預設 1280×720，提供 800×600、1024×768、1366×768、1440×810、1440×900 與拖曳調整。UI/文字縮放與世界鏡頭縮放分開；先前 1080p/4K A/B 僅作超規壓力研究。
+- 影響／下次驗證：以上尺寸、高 DPI 與縮放場景檢查 UI 遮擋、地圖邊界 Spawn/Despawn、多人／怪物／掉落負載；切換 UI 不改網路或世界 Tick。
 
 ## ADR-014 — 碰撞與實體渲染的實作選擇（2026-11-13）
 - Status: PROVISIONAL；來源：使用者要求多人／多怪／多掉落、低資源及即時動作優先，允許不用 Godot 內建碰撞等功能。
@@ -90,12 +91,12 @@
 - 性能風險：SQLite 單寫入者在多怪持續傷害與位置保存下可能爭用；需量測 write gate、busy、commit P95/P99，保留權威順序，不用延遲 HP/資產提交偽造低延遲。
 
 ## ADR-016 — Map-aware Shared Asset Pool / Adaptive Multi-Size Atlas
-- Date: 2026-11-13；Status: **PROVISIONAL（DESIGN ONLY）**。
+- Date: 2026-11-13；Status: **PROVISIONAL（部分 Godot 實測，正式 runtime 未驗證）**。
 - Decision: 正確解碼後使用 canonical Frame + Metadata、deterministic 多尺寸 Atlas（512/1024/2048/4096 候選）、按 Map/Region co-occurrence、Monster/Drop 視覺種類重用、hot/warm/cold、材質與動畫用途分群，執行時引用計數/有界串流/回收。
 - Reason: 同圖實體數雖多但種類通常少；多個 Entity 應共享 Texture/FrameTable，而不是大量重複 Node/Texture。降低 GPU/RAM 工作集並保留原版動畫事件/圖層。
 - Alternatives: 個別 PNG/SpriteFrames、單尺寸 Atlas、所有素材一張 4096、預合成所有玩家裝備、MultiMesh；不能未測就否決。
 - Risks: Y-sort、紙娃娃前後層、padding bleed、頁過大導致 VRAM 浪費、首次 upload spike、跨圖 cache churn。
-- Evidence: 乾淨 HK2 已可全量轉換；三組 512～4096 本機 Godot 初測見 [HK2_ATLAS_CANDIDATES.md](HK2_ATLAS_CANDIDATES.md)，但多種類／掉落／快取與完整 AS007 尚未驗證。Next: AS007/AS-T01～T05。詳 [ASSET_STREAMING_AND_RENDERING.md](ASSET_STREAMING_AND_RENDERING.md)。
+- Evidence: 乾淨 HK2 已可全量轉換；單外觀初測見 [HK2_ATLAS_CANDIDATES.md](HK2_ATLAS_CANDIDATES.md)，8 種怪／20 玩家代理／500 小圖代理及 10 次貼圖釋放見 [HK2_MIXED_ATLAS_BENCHMARK.md](HK2_MIXED_ATLAS_BENCHMARK.md)。真正掉落圖、多人同步、正式快取及完整 AS007 尚未驗證。Next: AS007/AS-T01～T05。
 
 ## ADR-017 — Client Network/State 與 UI/Render FPS 排程隔離
 - Date: 2026-11-13；Status: **ACCEPTED CONTRACT / IMPLEMENTATION NOT VERIFIED**。

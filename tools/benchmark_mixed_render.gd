@@ -49,7 +49,10 @@ func _run() -> void:
 		printerr("Viewport too small")
 		quit(2)
 		return
+	DisplayServer.window_set_min_size(Vector2i(640, 480))
 	DisplayServer.window_set_size(Vector2i(width, height))
+	root.min_size = Vector2i(640, 480)
+	root.size = Vector2i(width, height)
 	DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_DISABLED)
 	var canvas := MixedCanvas.new()
 	var page_count := 0

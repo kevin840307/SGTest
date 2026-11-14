@@ -6,7 +6,7 @@
 
 可重跑：`py tools/inspect_act.py 'C:\SGO\Stargate Online IE HK2'`；`py -m unittest tools.tests.test_inspect_act`。
 
-`Enemy/EN023A.ACT` 的摘要：S=10 幀、W=10、D=2、A=11、H=1；S/W 循環，D/A/H 播完結束。S/W 前幾幀 raw duration=6，H=3。相鄰 `EN023A_NS1.spr`、`EN023A_NW1.spr` 各有 10 幀，與 S/W 數量吻合，但**仍不能單憑此證明** S/W 字義、方向鏡像和其他動作與 SPR 的完整對應。事件 token 保留原文；token 如何對應音效、命中或其他 callback 仍待查。
+`Enemy/EN023A.ACT` 的摘要：S=10 播放紀錄、W=10、D=2、A=11、H=1；S/W 循環，D/A/H 播完結束。S/W 前幾筆 raw duration=6，H=3。相鄰 `EN023A_NS1.spr`、`EN023A_NW1.spr` 各有 10 幀。後續已由原版 `SetEnemSprite` 直接確認怪物 ACT key→SPR 後綴，並稽核 53 組實體來源；見 [怪物動畫映射](HK2_ENEMY_ANIMATION_MAPPING.md)。ACT 的播放紀錄數可大於 SPR 幀數，必須逐筆檢查索引；事件 token 如何對應音效、命中或其他 callback 仍待查。
 
 `Paradise.exe.lst` 的 `xnAction::Load`（`.text:005574CB`～`0055757B`）逐 tag 讀入上述欄位，把事件放在指定 frame index。`xnAction::Update`（`.text:005576FA`～`0055777D`）每次呼叫將剩餘計數減一；到期後前進一幀，循環旗標為 1 時回到幀 0，否則回傳結束狀態。Load 在 `.text:005574A3`、`005574AA` 設 40 與 25；`SetAction` 的 `.text:0055769D`～`005576A5` 以及 `Update` 的 `.text:0055775E`～`0055776A` 將 raw duration 乘 40 再除播放速度（預設 25，整數截斷），因此預設 6→9 次 Update 呼叫。`SetSpeed`（`.text:005576B0`～`005576BB`）可改速度。這些是**Update 呼叫次數**，還不能直接當毫秒；需追呼叫頻率及原版播放速度變更點。
 

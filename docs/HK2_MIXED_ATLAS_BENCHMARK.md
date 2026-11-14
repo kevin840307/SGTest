@@ -14,7 +14,7 @@ py tools/build_atlas_groups.py 'C:\SGO\Stargate Online IE HK2' local-assets/mixe
 & 'C:\SGO\Godot\Godot_v4.7.2-stable_win64_console.exe' --rendering-method gl_compatibility --script tools/benchmark_mixed_render.gd -- local-assets/mixed-heavy/1024 1920 1080
 ```
 
-同法改成 2048、4096，另可把視窗參數改為 `3840 2160`。Godot 4.7.2／OpenGL Compatibility、NVIDIA GeForce RTX 3050，Y 座標排序繪製 20 個玩家代理、300 隻 8 種怪、500 個 25 種小圖代理。每回合 160 幀，前 40 幀暖機，後 120 幀取 frame p95 和 draw calls。1080p 每尺寸以交錯順序跑三回合，載入耗時及 frame p95 下表為三回合中位；GPU 記憶體監測值以後續同設定的一次 Godot 監測為準，**含引擎／視窗開銷，不是純 atlas VRAM**。
+同法改成 2048、4096，正式視窗測試可傳 `1440 900` 或 `800 600`。Godot 4.7.2／OpenGL Compatibility、NVIDIA GeForce RTX 3050，Y 座標排序繪製 20 個玩家代理、300 隻 8 種怪、500 個 25 種小圖代理。每回合 160 幀，前 40 幀暖機，後 120 幀取 frame p95 和 draw calls。先前 1080p 每尺寸以交錯順序跑三回合，載入耗時及 frame p95 下表為三回合中位；GPU 記憶體監測值以後續同設定的一次 Godot 監測為準，**含引擎／視窗開銷，不是純 atlas VRAM**。
 
 | 最大頁邊 | 頁數 | 實際 RGBA 面積 bytes | PNG bytes | 1080p 載入中位 ms | Draw calls p50 | Frame p95 中位 ms | Godot Video Mem 監測 bytes |
 | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
@@ -22,7 +22,7 @@ py tools/build_atlas_groups.py 'C:\SGO\Stargate Online IE HK2' local-assets/mixe
 | 2048 | 44 | 206,281,432 | 31,440,178 | 658.716 | 892 | 7.986 | 299,891,971 |
 | 4096 | 34 | 224,978,452 | 31,243,536 | 702.356 | 892 | 7.911 | 324,815,867 |
 
-4K 視窗可建立，單次 frame p95 為 1024=7.934ms、2048=7.931ms、4096=7.995ms；Godot Video Mem 監測分別為 335,281,859／349,658,371／374,582,267 bytes。這次各候選的 draw calls 都相同，影格差距落在試跑波動內。4096 比 1024 減少 53 頁、PNG 少約 0.45 MB，但 Godot Video Mem 監測多約 39.3 MB；全域採 4096 沒有這組證據支持。2048 載入中位約少 56 ms，但比 1024 多約 14.4 MB Video Mem。載入測試是一次性全載且受 OS 檔案快取影響，並非有界串流或 GPU 上傳尖峰。
+正式寬度上限附近的 1440×900 單次測試，1024／2048／4096 frame p95 分別為 8.000／7.969／8.007ms，Godot Video Mem 監測為 279,294,659／293,671,171／318,595,067 bytes；800×600 的 1024 組測得 p95=8.003ms、272,769,803 bytes。基準腳本先前要求 800×600 時曾因視窗設定得到 1080×675，已改用 `root.size` 並重測，實際視窗確認 800×600。先前 4K 的單次數值只保留作超規壓力研究，不列正式驗收。這次各候選的 draw calls 都相同，影格差距落在試跑波動內。4096 比 1024 減少 53 頁、PNG 少約 0.45 MB，但 1080p Godot Video Mem 監測多約 39.3 MB；全域採 4096 沒有這組證據支持。2048 載入中位約少 56 ms，但比 1024 多約 14.4 MB Video Mem。載入測試是一次性全載且受 OS 檔案快取影響，並非有界串流或 GPU 上傳尖峰。
 
 **暫定策略**：小型且一頁能放下的外觀用 1024；超過 1024 的幀或經實景測得 1024 分頁載入尖峰的外觀可選 2048；4096 只在單一外觀確實需要且可見工作集／GPU 記憶體預算容許時使用。這是素材包裝候選，正式 Map Asset Palette 仍需原版地圖刷怪、實際掉落圖、ACT 動作時序、紙娃娃疊層和多解析度可見範圍證據。
 

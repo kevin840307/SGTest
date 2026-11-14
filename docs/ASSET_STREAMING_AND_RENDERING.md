@@ -4,7 +4,7 @@
 
 ## 1. 核心目標
 
-- 降低 Client RAM、VRAM、CPU、GPU Draw Calls、載入 Spike，維持人物、怪物、掉落物準確且流暢，支援 1080p／1440p／4K／21:9／Zoom-out。
+- 降低 Client RAM、VRAM、CPU、GPU Draw Calls、載入 Spike，維持人物、怪物、掉落物準確且流暢；正式視窗寬度約 800～1440 像素，支援多種長寬比與鏡頭縮放。
 - **EntityCount ≠ UniqueAssetCount ≠ AtlasPageCount ≠ Godot NodeCount**：一張圖有 500 隻怪、2,000 件掉落物，實際可能只有 8 種怪、25 種物品圖。每個種類只共享一份 Texture、FrameTable、材質和動畫定義；實例只保留自己的 EntityId／座標／方向／ActionTimeline。
 - State/Network/Server 權威絕不等待 Texture 讀取、動畫或視覺更新；FPS 不得影響收送包和戰鬥。見 [CLIENT_RUNTIME_ISOLATION.md](CLIENT_RUNTIME_ISOLATION.md)。
 - 原版方向×動作×影格及 duration、pivot、offset、palette、alpha、z-order、attachment、事件一律保真。方向數由真實 decoder 證據確立，不預設八向。
@@ -87,7 +87,7 @@ Catalog / Map Palette → Prefetch + Prioritized Request Queue
 - Cache key 包含 VisualDefinitionId、version/hash、material、quality、appearance，cache 容量有上限，裝備改變需 invalidate。
 - 缺圖只影響視覺，不得令 Entity/HP/Position/Action 消失。資源完成時以**最新** WorldState 直接顯示現在 pose，不回放舊 Move。
 
-## 6. 解析度、4K 與超寬螢幕
+## 6. 多視窗尺寸與鏡頭縮放
 
 相同 Atlas/Animation Metadata 服務各解析度。區分「相同世界視野但像素變多」及「WorldRect/Zoom 擴大、同屏更多實體」；前者偏 GPU 像素成本，後者會擴張 Chunk 和 VisibleInstances/AOI/資產工作集。必須從 Camera Transform 計算實際世界可見邊界及預載 margin，不可沿用原版 800×600 的固定距離。
 
@@ -95,7 +95,7 @@ Catalog / Map Palette → Prefetch + Prioritized Request Queue
 
 ## 7. AS007 實測矩陣與驗收 Gate
 
-比較 A 個別 PNG/SpriteFrames、B 固定 1024、C 固定 2048、D 混合 512/1024/2048/4096、E D+Map co-occurrence hot/warm/cold、F E+不同 rendering backend。保持**相同可視實體、動畫、貼圖解析度、材質品質與硬體**；測試同圖「500怪/8種、2000掉落/25種」的高重用示例與高 unique 種類壓力例；另測不同裝備玩家、Boss、快速切圖、100次登出、1080p/4K/21:9/Zoom-out。
+比較 A 個別 PNG/SpriteFrames、B 固定 1024、C 固定 2048、D 混合 512/1024/2048/4096、E D+Map co-occurrence hot/warm/cold、F E+不同 rendering backend。保持**相同可視實體、動畫、貼圖解析度、材質品質與硬體**；測試同圖「500怪/8種、2000掉落/25種」的高重用示例與高 unique 種類壓力例；另測不同裝備玩家、Boss、快速切圖、100次登出、800×600/1280×720/1440×810/1440×900/Zoom-out。先前 1080p/4K 測量僅為超規壓力參考，不是正式視窗需求。
 
 測量：UniqueAssetCount、VisibleInstances、AtlasPagesTouched、PageFillRate、DrawCalls、TextureChanges、Overdraw、RAM WorkingSet/PrivateBytes、VRAM Dedicated/Shared、Frame P95/P99、Load P95、CacheHit/Miss、UploadSpikeP99、EvictionChurn、LogoutGrowth，以及獨立的 network/reducer telemetry。
 
