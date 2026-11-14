@@ -139,3 +139,10 @@ ADR-016 的逐怪物尺寸實驗補充（2026-11-14）：50 組各測 1024／204
 - Decision: 已知地圖怪物以 MapAssetPalette 決定預載 visual，單 visual 預設 atomic MaxRects 1024。每個原 SPR block 不拆、不同 block 可 co-pack；logical facing 的鏡像只存在 metadata/runtime，不複製像素。只有 1024 無法保持 locality 時才依量測升 2048。
 - Evidence: Data1+loose 的 29 種 known-map visual，atomic 1024 共 32 pages／62,287,496 RGBA bytes，1,160/1,160 action-facing 單頁；17 張地圖工作集約 3.305～17.441 MiB。Map13 78/300 monster RTX3050 A/B 的 draw calls 與 frame P95 未退化，Video/Texture memory 比 dense 約少 1 MB。詳 HK2_MAP_ASSET_PALETTE.md。
 - Constraint: 不把此策略直接套用 Player 紙娃娃、掉落或 UI；各類型仍需自己的 A/B。全世界素材一次常駐仍被拒絕。
+
+## ADR-021 — Enemy Full-Catalog Atomic Measured Multi-Size（2026-11-14）
+
+- Status: **PROVISIONAL SELECTED BUILD STRATEGY / RUNTIME MAP STREAMING REQUIRED**。
+- Decision: 完整 Enemy catalog 的 build-time atlas 使用 `source_spr_atomic_maxrects_v3`，並由 `plan_enemy_atomic_sizes.py` 對 512/1024/2048/4096 真實 packing 面積選尺寸；預設先最低 RGBA，再允許 5% 記憶體 overhead 換較少頁。每個原 SPR 是不可拆 atomic block，但不同 SPR block 可 co-pack；ACT logical facing 的鏡像只保留 metadata。
+- Evidence: 50 組計畫為 512×1、1024×21、2048×19、4096×9，共 65 pages／442,769,264 RGBA bytes，2,000/2,000 action-facing 單頁；Godot probe 50 groups／250 actions／2,000 directions／12,976 steps PASS。RTX3050 1440×900、300 怪：8 種時 pages 12→9、draw p95 286→275；50 種壓力 draw p95 372→372。詳 [HK2_ATOMIC_BALANCED_ATLAS.md](HK2_ATOMIC_BALANCED_ATLAS.md)。
+- Runtime boundary: 不允許全 50 種常駐；ADR-020 MapAssetPalette 仍決定實際地圖工作集。完整 catalog 的全量 Video Memory 僅為壓力參考。Player／ground item／UI 必須各自驗證，不能照抄 Enemy 策略。

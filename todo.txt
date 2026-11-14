@@ -14,6 +14,7 @@ AS008 [!] 確認原版圖片、UI、音效的本地研究與公開發布/轉換�
 AS009 [x] 已建立 docs/ASSET_EVIDENCE_MATRIX.md：集中記錄 Data1／Client binaries／SPR／ACT／人物 draw-order／item.itd／ground pages／Map13 Enemy.dat 的具體 SHA、HK2／參考 Paradise.exe 函式位址、可重跑驗證與 PASS/PARTIAL/BLOCKED。AS009 本身 PASS；M0 Gate 明確 NOT PASSED，因 AS005 原版逐格視覺與 AS008 發布權利仍未完成，另有人物 action/paper-doll、duplicate item ID precedence 等技術缺口；ground1 runtime 選檔已於 2026-11-14 由 HK2 binary 直接關閉。
 
 AS001/AS002/AS007（2026-11-14 Data1＋真地圖）[~] 新增 tools/legacy_group_archive.py、materialize_legacy_overlay.py、build_enemy_map_palette.py、compile_map_asset_palette.py、atomic MaxRects v3 與 GPU A/B runner。Data1 41,687 entries 可只讀索引／選擇性抽取；17 張已知地圖共 29 visual，base+overlay materialize 464 files（461 base／1 override／2 loose-only），29/29 ACT 完整。Map13 78 spawns／9 visuals／9 pages，atomic v3 Video Mem 約33.55 MB、dense約34.54 MB，draw calls相同；300怪壓測亦同。Python 單元測試目前 63 項 PASS。原版視覺／人物紙娃娃／正式 Client runtime 仍 NOT VERIFIED。
+AS007（2026-11-14 atomic balanced 全 catalog）[~] 新增 tools/plan_enemy_atomic_sizes.py，以真 SPR 在 512/1024/2048/4096 執行 atomic packing 實測後選尺寸；50 組得到 512×1、1024×21、2048×19、4096×9，共 65 pages／442,769,264 RGBA bytes，2,000/2,000 action-facing 單頁，Godot 12,976 steps PASS。RTX3050 1440×900/300怪：8種 draw p95 286→275、50種 372→372；frame p95 無可宣稱退化，完整 50 種壓力 Video Mem 約 +13.7 MB，因此 runtime 仍必須 MapAssetPalette 串流，不得全量常駐。`py -m unittest discover -s tools/tests -q` 77 tests PASS（加入 planner 測試後）。詳 docs/HK2_ATOMIC_BALANCED_ATLAS.md。
 
 ===== 已確認的事實（不是素材解析完成） =====
 [x] 已指定後期《星夢 Online》金色 UI 的視覺目標。
