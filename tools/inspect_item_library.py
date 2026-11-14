@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 import struct
 from collections import Counter
 from pathlib import Path
@@ -24,6 +25,9 @@ PAYLOAD_SIZES = {0: 1093, 1: 1200, 2: 1151, 3: 1149, 4: 1151, 6: 329}
 # Offsets include the one-byte type tag. Reference InitItemLib writes +0x0A
 # (one-based picture number) and +0x0C (definition ID) in each derived record.
 PICTURE_OFFSETS = {0: 10, 1: 13, 2: 6, 3: 6, 4: 6, 6: 6}
+# HK2 Client.bin 0x004F4ECC..0x004F4F54 divides the zero-based
+# picture index by 500. Page 0 is ground.spr; page N>0 is groundN.spr.
+GROUND_PAGE_SIZE = 500
 
 
 def scan_records(data: bytes) -> list[tuple[int, int]]:
@@ -50,39 +54,77 @@ def extract_definitions(data: bytes) -> list[dict]:
     return rows
 
 
-def audit(source: Path, ground_frame_counts: tuple[int, int]) -> dict:
+def resolve_ground_picture(picture_number_one_based: int,
+                           ground_frame_counts: tuple[int, ...]) -> tuple[str | None, int | None]:
+    """Apply the HK2 Client.bin ground%d.spr page formula and validate bounds."""
+    if picture_number_one_based <= 0:
+        return None, None
+    index = picture_number_one_based - 1
+    page = index // GROUND_PAGE_SIZE
+    frame = index % GROUND_PAGE_SIZE
+    if page >= len(ground_frame_counts) or frame >= ground_frame_counts[page]:
+        return None, None
+    source = "Interface/ground.spr" if page == 0 else f"Interface/ground{page}.spr"
+    return source, frame
+
+
+def classify_duplicate_ground_visuals(rows: list[dict]) -> tuple[list[dict], list[dict]]:
+    """Return duplicate IDs with conflicting versus equivalent ground visuals."""
+    definitions_by_id = {}
+    for row in rows:
+        definitions_by_id.setdefault(row["legacy_definition_id"], []).append(row)
+    conflicts = []
+    equivalent = []
+    for definition_id, definitions in definitions_by_id.items():
+        if len(definitions) <= 1:
+            continue
+        visuals = {(row.get("source"), row.get("source_frame")) for row in definitions}
+        entry = {
+            "legacy_definition_id": definition_id,
+            "visuals": sorted(
+                [{"source": source_name, "source_frame": frame}
+                 for source_name, frame in visuals],
+                key=lambda row: (row["source"] or "",
+                                 -1 if row["source_frame"] is None else row["source_frame"]),
+            ),
+            "record_offsets": [row["offset"] for row in definitions],
+        }
+        (conflicts if len(visuals) > 1 else equivalent).append(entry)
+    return conflicts, equivalent
+
+
+def audit(source: Path, ground_frame_counts: tuple[int, ...]) -> dict:
     raw = source.read_bytes()
     plain = unwrap_cde(raw)
     rows = extract_definitions(plain)
-    first_count, second_count = ground_frame_counts
     ids = Counter(row["legacy_definition_id"] for row in rows)
-    direct = 0
-    second_candidate = 0
+    by_source = Counter()
     outside = 0
     for row in rows:
-        picture = row["picture_number_one_based"]
-        if 1 <= picture <= first_count:
-            row["source_candidate"] = "Interface/ground.spr"
-            row["source_frame_candidate"] = picture - 1
-            direct += 1
-        elif first_count < picture <= first_count + second_count:
-            row["source_candidate"] = "Interface/ground1.spr"
-            row["source_frame_candidate"] = picture - first_count - 1
-            second_candidate += 1
-        else:
-            row["source_candidate"] = None
-            row["source_frame_candidate"] = None
+        source_name, frame = resolve_ground_picture(
+            row["picture_number_one_based"], ground_frame_counts)
+        row["source"] = source_name
+        row["source_frame"] = frame
+        if source_name is None:
             outside += 1
+        else:
+            by_source[source_name] += 1
+    duplicate_visual_conflicts, duplicate_visual_equivalent = classify_duplicate_ground_visuals(rows)
     return {"source": "Item/item.itd", "source_sha256": hashlib.sha256(raw).hexdigest(),
             "plain_bytes": len(plain), "records": len(rows),
             "types": dict(sorted(Counter(row["type_tag"] for row in rows).items())),
             "unique_definition_ids": len(ids),
             "duplicate_definition_ids": sorted(key for key, count in ids.items() if count > 1),
+            "duplicate_ground_visual_conflicts": duplicate_visual_conflicts,
+            "duplicate_ground_visual_equivalent": duplicate_visual_equivalent,
+            "duplicate_lookup_precedence_verified": False,
+            "ground_page_size": GROUND_PAGE_SIZE,
             "ground_frame_counts": list(ground_frame_counts),
-            "first_ground_references": direct, "second_ground_candidates": second_candidate,
+            "ground_references_by_source": dict(sorted(by_source.items())),
             "outside_ground_references": outside,
             "max_picture_number": max(row["picture_number_one_based"] for row in rows),
-            "second_ground_runtime_selection_verified": False,
+            "ground_runtime_selection_verified": True,
+            "hk2_client_rule_va": "0x004F4ECC-0x004F4F54",
             "definitions": rows}
 
 
@@ -95,20 +137,30 @@ def main() -> int:
     source = root / "Item" / "item.itd"
     if not source.is_file() or output == root or root in output.parents:
         parser.error("Item/item.itd must exist and output must be outside the clean client")
-    from_ground = root / "Interface" / "ground.spr"
-    second_ground = root / "Interface" / "ground1.spr"
-    if not from_ground.is_file() or not second_ground.is_file():
-        parser.error("both ground.spr and ground1.spr must exist for this audit")
+    interface = root / "Interface"
+    ground_paths = {}
+    base_ground = interface / "ground.spr"
+    if not base_ground.is_file():
+        parser.error("Interface/ground.spr must exist for this audit")
+    ground_paths[0] = base_ground
+    for path in interface.glob("ground*.spr"):
+        match = re.fullmatch(r"ground([1-9]\d*)\.spr", path.name, re.IGNORECASE)
+        if match:
+            ground_paths[int(match.group(1))] = path
+    max_page = max(ground_paths)
+    if set(ground_paths) != set(range(max_page + 1)):
+        parser.error("ground sprite pages must be contiguous from ground.spr")
     if __package__:
         from .convert_assets import decode_spr
     else:
         from convert_assets import decode_spr
-    ground_frame_counts = (len(decode_spr(from_ground.read_bytes())),
-                           len(decode_spr(second_ground.read_bytes())))
+    ground_frame_counts = tuple(
+        len(decode_spr(ground_paths[index].read_bytes())) for index in range(max_page + 1))
     report = audit(source, ground_frame_counts)
     report["ground_source_sha256"] = {
-        "Interface/ground.spr": hashlib.sha256(from_ground.read_bytes()).hexdigest(),
-        "Interface/ground1.spr": hashlib.sha256(second_ground.read_bytes()).hexdigest(),
+        ("Interface/ground.spr" if index == 0 else f"Interface/ground{index}.spr"):
+            hashlib.sha256(path.read_bytes()).hexdigest()
+        for index, path in sorted(ground_paths.items())
     }
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")

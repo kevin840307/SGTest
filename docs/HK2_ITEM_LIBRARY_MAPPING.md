@@ -16,6 +16,14 @@ py -m unittest discover -s tools/tests -q
 
 `tools/inspect_item_library.py` 使用既有 CDE 解封裝器，依上述固定長度逐筆掃描，未知 tag／截斷則停止；完整定義明細只寫入 git 忽略的私有 JSON，命令列只印摘要。HK2 `Item/item.itd` SHA-256 `585aeec6943830b2cde7eee42294014f0bdc80a1e852e7ca723a48da35547fb2`，解封裝後 8,236,329 bytes；**9,096／9,096 筆**剛好耗盡輸入，tag 計數：0=5239、1=1291、2=1、3=45、4=85、6=2435。共有 9,083 個不同定義 ID，13 個 ID 重複，重複項保持在私有報告，不擅自選一筆作正式定義。
 
-`Interface/ground.spr` SHA-256 `6f69a5e9d7192090618f69c5f0d8b31b617ee5fb3e6fb3f5334f6da022341cb6`，500 幀；`Interface/ground1.spr` SHA-256 `04af9e76170d71b49c4cc81442bcec5c9ea3d494b14922904de411fe647136b4`，另 500 幀。9,096 筆圖號都在 **1～765**：8,049 筆可落在 `ground.spr` 0～499 幀；另 1,047 筆若以連續分段假設計算，會落在 `ground1.spr` 0～264 幀；超出兩檔總範圍 0 筆。**`ground1` 的執行時選檔規則尚未在反編譯路徑證實**，因此報告稱 `source_candidate`，不得把這 1,047 筆標為已驗證可顯示。
+## HK2 Client.bin 的 ground page 直接證據
 
-這個結果修正前一輪的「`ground.spr` 500 幀就是完整物品圖」可能誤讀。先前 25／500 圖同場 benchmark 仍只測 `ground.spr` 本身，效能數據成立但覆蓋面不代表全部定義。正式 Map Asset Palette 需要先釐清 `ground1` 選檔、重複 ID 優先順序、地圖怪物掉落表與實際畫面；新物品 ID 及舊 `+N` 別名整理必須在固定映射與相容性 fixture 後另行處理。
+2009 HK2 `Client.bin` SHA-256 `9b45569a0f619b5bf7d99f122c6ed12ae44a1e54576686d88de4fae72dd13147` 內同時存在 `Interface\\ground.spr` 與 `Interface\\ground%d.spr`。反組譯 `0x004F4ECC～0x004F4F54` 直接顯示：物件內的 **zero-based** picture index 若小於 500，載入 `ground.spr`；否則以 signed divide 500 得商數，使用 `ground%d.spr` 格式化檔名，再以 `index - quotient*500` 作 frame index。2008 `SGOClient.bin`（SHA-256 `6e64368ad43605469246fb5692fd42d8eaa1a7ed0a13aa9a1efac518d46cb3be`）在 `0x004E7042～0x004E709E` 也有同一個 ÷500／format-string 流程。這是目標 HK2 binary 的 DIRECT 證據，不再依賴 2004 Paradise 對 `ground1` 的缺失。
+
+因此 item.itd 的 one-based picture number 先減 1 後，正式公式為：`page = index // 500`、`frame = index % 500`；page 0 使用 `Interface/ground.spr`，page N>0 使用 `Interface/groundN.spr`。目前 HK2 實體只有 `ground.spr` 與 `ground1.spr`，兩者各 500 幀，SHA-256 分別為 `6f69a5e9d7192090618f69c5f0d8b31b617ee5fb3e6fb3f5334f6da022341cb6`、`04af9e76170d71b49c4cc81442bcec5c9ea3d494b14922904de411fe647136b4`。9,096 筆真定義重跑後為 **8,049 → ground.spr、1,047 → ground1.spr、0 越界**；最大 picture number 765。工具現在輸出已驗證的 `source/source_frame`，並會掃描連續 `groundN.spr`、用實際 frame count 做 bounds check。
+
+## 重複 ID 隔離
+
+13 個 duplicate definition ID 中，`10305` 的兩筆都映射 `ground.spr` frame 298；其餘 **12 個 ID（32374、32375、32870～32879）有不同地上圖**。參考 Paradise 的 `GetItemByID 0x00403AC1～0x00403B75` 對已排序的 MotherItem array 呼叫 `CELArray<MotherItem*>::BinarySearch`；該 template 在 `0x00409AF0～0x00409B23` 直接委派 CRT `bsearch`。對相同 key，這不足以提供可移植的 first/last precedence 契約，因此工具明列 `duplicate_ground_visual_conflicts` 且維持 `duplicate_lookup_precedence_verified=false`。正式匯入不得任選其中一筆。
+
+這個結果關閉先前的 `ground1` 選檔技術缺口，但先前 25／500 圖 benchmark 仍只涵蓋 `ground.spr`。下一步的物品 MapAssetPalette 應同時納入 ground/ground1 與真掉落共現；12 個 duplicate visual conflicts 在取得 HK2 同版本 lookup 實證前保持 quarantine。新物品 ID 及舊 `+N` 別名整理仍須依固定映射與相容性 fixture 另行處理。
