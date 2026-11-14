@@ -9,7 +9,7 @@
 
 ## 最新資源架構重評
 
-先依 [SPEC 第0節](SPEC.md) 交付可重跑基準。ASSET201 的 [Normalized Animation Definition v2](docs/NORMALIZED_ANIMATION_DEFINITION.md) 已完成；ASSET202/203 以同一 v2 semantics 選定 `normalized_memory`，ASSET204 的 [RuntimeAssetStore](docs/RUNTIME_ASSET_STORE.md) 也已完成 bounded background decode＋每幀 GPU commit：30-cycle load frame P99 由同步 53.52ms 降到 17.028ms，texture／resident／RAM recovery PASS。下一步是 ASSET205 新增怪物 definition／atlas／spawn／preview 流程；RUNTIME206 的多 FPS／背景／多開同步矩陣仍獨立未完成。
+先依 [SPEC 第0節](SPEC.md) 交付可重跑基準。ASSET201～204 的 normalized animation、Atlas 選型與 [RuntimeAssetStore](docs/RUNTIME_ASSET_STORE.md) 已完成；ASSET205 的 [Monster Content Workflow](docs/MONSTER_CONTENT_WORKFLOW.md) 也已完成：一份 `*.monster.json` recipe 可驗證原始 SPR/ACT、產 40-view private preview、runtime atlas、population v2 stats/spawn 與 Server content，不需再改 C#/GDScript，full rebuild 會自動重套 recipes。下一個主 Gate 是 RUNTIME206 的多 FPS／低功耗／背景／多開同步矩陣。
 
 ## 啟動
 

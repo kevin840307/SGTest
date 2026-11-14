@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "map_id": 13,
+  "replace": false,
+  "definition": {
+    "id": 81,
+    "sprite": "EN010A",
+    "stats": {
+      "hp": 120,
+      "damage": 12,
+      "move_speed": 72,
+      "aggro_range": 520,
+      "attack_range": 75,
+      "chase_stop_range": 45,
+      "attack_interval_seconds": 0.9,
+      "respawn_seconds": 3
+    }
+  },
+  "spawns": [
+    {
+      "p": [6428, 4881],
+      "source_flags": 0
+    }
+  ]
+}

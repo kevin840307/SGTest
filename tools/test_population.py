@@ -18,6 +18,9 @@ class PopulationTest(unittest.TestCase):
             result=compile_population(rows,catalog,assets,13)
             self.assertEqual([d['id'] for d in result['definitions']],[7,12])
             self.assertEqual([r['definition'] for r in result['spawns']],[12,7,12])
+            self.assertEqual(result['version'],2)
+            self.assertEqual(result['definitions'][0]['stats']['hp'],30)
+            self.assertEqual(result['definitions'][0]['stats']['move_speed'],65.0)
             self.assertEqual(result['spawns'][2]['p'],[300,30])
             self.assertEqual(result['spawns'][2]['source_index'],2)
             del catalog[12]

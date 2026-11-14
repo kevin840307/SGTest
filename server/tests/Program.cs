@@ -71,18 +71,40 @@ for(int i=0;i<30;i++)
 Check(npcs.Monsters[1].ActionTime!=npcs.Monsters[2].ActionTime,"independent animation phase");
 
 
-var population=new Population([1,2],[new(1,new(900,800)),new(2,new(1500,800))]);
+var population=new Population(new Dictionary<uint,MonsterDefinition>{
+    [1]=new(1,45,7,80,600,75,42,.8,3),
+    [2]=MonsterDefinition.Default(2)
+},[new(1,new(900,800)),new(2,new(1500,800))]);
 var original=new World(); original.Populate(-1,0,population);
 Check(original.Monsters.Count==2 && original.Monsters[1].Definition==1 && original.Monsters[2].Position==new Vector2(1500,800),"source population preserves identity and position");
+Check(original.Monsters[1].Hp==45 && original.Monsters[1].MaxHp==45 && original.Monsters[1].Damage==7 &&
+      original.Monsters[1].MoveSpeed==80 && original.Monsters[1].AggroRange==600 &&
+      original.Monsters[1].AttackRange==75 && original.Monsters[1].ChaseStopRange==42 &&
+      original.Monsters[1].AttackIntervalSeconds==.8 && original.Monsters[1].RespawnSeconds==3,
+      "population v2 definition stats configure monster runtime");
 original.Monsters[1].Hp=0; original.Monsters[1].Respawn=0; original.Monsters[1].Position=Vector2.Zero; original.Step(.3);
-Check(original.Monsters[1].Position==new Vector2(900,800) && original.Monsters[1].Definition==1,"respawn keeps definition and home");
+Check(original.Monsters[1].Position==new Vector2(900,800) && original.Monsters[1].Definition==1 && original.Monsters[1].Hp==45,
+      "respawn keeps definition/home and restores definition max hp");
 original.Populate(5,0,population);
-Check(original.Monsters[5].Definition==1 && original.Monsters[4].Definition==2,"stress cycles original definition palette");
+Check(original.Monsters[5].Definition==1 && original.Monsters[5].MaxHp==45 &&
+      original.Monsters[4].Definition==2 && original.Monsters[4].MaxHp==30,
+      "stress cycles original definition palette and stats");
 if(File.Exists("server/content/maps/13/population.json"))
 {
     var actualPopulation=Population.Load("server/content/maps/13/population.json",13);
-    Check(actualPopulation.Spawns.Length==78 && actualPopulation.Definitions.Count==9,"original Map13 population loads");
+    Check(actualPopulation.Spawns.Length==78 && actualPopulation.Definitions.Count==9 &&
+          actualPopulation.Definitions.Values.All(d=>d.Hp==30 && d.MoveSpeed==65),
+          "original Map13 population v2 loads with explicit legacy-equivalent stats");
 }
+string legacyPopulation=Path.GetTempFileName();
+File.WriteAllText(legacyPopulation,"""{"version":1,"map_id":13,"definitions":[{"id":1}],"spawns":[{"definition":1,"p":[100,100]}]}""");
+var legacyLoaded=Population.Load(legacyPopulation,13);
+Check(legacyLoaded.Definitions[1].Hp==30 && legacyLoaded.Definitions[1].MoveSpeed==65,
+      "population v1 remains backward compatible with default stats");
+File.WriteAllText(legacyPopulation,"""{"version":2,"map_id":13,"definitions":[{"id":1,"stats":{"hp":0,"damage":1,"move_speed":65,"aggro_range":500,"attack_range":70,"chase_stop_range":45,"attack_interval_seconds":1,"respawn_seconds":2}}],"spawns":[{"definition":1,"p":[100,100]}]}""");
+bool badDefinition=false; try { Population.Load(legacyPopulation,13); } catch(InvalidDataException) { badDefinition=true; }
+Check(badDefinition,"population v2 rejects invalid definition stats");
+File.Delete(legacyPopulation);
 object?[] fixture=[4294967295L,-1,1.25,"方向",new byte[]{1,254},new object?[]{0,true,null}];
 byte[] packet=Wire.Packet(99,fixture); var decoded=Wire.Decode(packet);
 Check(Wire.Integer(decoded[1])==99,"MessagePack envelope");

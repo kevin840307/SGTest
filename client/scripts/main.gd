@@ -145,7 +145,7 @@ func _world_info(server_map: int, fingerprint: String, population_hash: String) 
 			get_tree().quit(1)
 			return
 		var population: Variant = JSON.parse_string(FileAccess.get_file_as_string(path))
-		if not population is Dictionary or int(population.get("version",0)) != 1:
+		if not population is Dictionary or int(population.get("version",0)) not in [1,2]:
 			get_tree().quit(1)
 			return
 		definitions = population.definitions

@@ -29,6 +29,7 @@ jobs:
       - run: python -m unittest discover -s tools -p test_assets.py
       - run: python -m unittest discover -s tools -p test_maps.py
       - run: python -m unittest discover -s tools -p test_population.py
+      - run: python -m unittest discover -s tools -p test_monster_workflow.py
       - run: python -m unittest discover -s tools -p test_runtime_baseline.py
       - run: python -m unittest discover -s tools -p test_animation_definition.py
       - run: python -m unittest discover -s tools -p test_normalized_atlas_candidates.py

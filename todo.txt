@@ -93,7 +93,7 @@ Before：方向區塊已集中，但shelf最小面積候選會在直／橫之間
 回歸：人工細長／不同方向fixture、原始SPR逐幀像素回建、原版9種runtime及C#同步不受排法影響；增量重建只需指定entity。
 
 INT003使用者最新補充：只統一橫向仍不夠，需容易看懂方向／動作／影格規律，容許沒有顯著影響的記憶體差異；載入不能讓玩家感到lag。下一個A/B以方向panel→動作row/grid→原始frame順序為主，保留原始方位重用並提供可讀預覽，不以最緊密但難讀的矩形排序作最終答案。
-INT004待辦（INT003完成後領取）：新增怪物需資料定義＋原始SPR/ACT＋出生設定的腳本流程，不要求使用者改C#／GDScript。現有ID／動作／數值／來源缺件要驗證，避免手改生成PNG。
+INT004 [x] 新增怪物資料流程完成：`content/monster_recipes/*.monster.json` 為 source of truth；`tools/monster_workflow.py` 驗證 ID／SPR／ACT／5 actions×8 facings／runtime stats／collision spawn，產 private 40-view preview、normalized definition、必要時 runtime atlas，並更新 population v2＋Server copy。full rebuild 自動重套 recipes，不需改 C#/GDScript 或手改生成 PNG；詳 docs/MONSTER_CONTENT_WORKFLOW.md。
 
 INT003補充驗收：使用者要求GPU載入速度、CPU／記憶體、容易卸載與快速重載。需拆量PNG解碼、主執行緒GPU提交／frame尾延遲、GPU紋理計數與容量，以及重複載入／卸載後基線；圖集張數／大小依這些實測與可讀性一起決定，不能只用PNG大小或CPU解碼數字。
 
@@ -104,10 +104,10 @@ ASSET201 [x] 標準定義 v2：monster/character→behavior→8facing→frame，
 ASSET202 [x] v2 normalized clip-atomic 候選完成：Map13 9 visual／78 spawns 依 hot6/warm2/cold1，實測 512/1024/2048/4096 並產 7 組候選；manifest 在寫出前模擬 EntityAtlas direct/alias resolution，360 logical facings 全部必須符合 schema v2。7 組跑過 30-cycle lifecycle＋20client/300monster/1000drop；正式 clean finalists 詳 docs/NORMALIZED_ATLAS_CANDIDATES.md。
 ASSET203 [x] 依 clean PERF001 選 `normalized_memory` 作 ASSET204 provisional base：14 pages／10,741,992 RGBA bytes；multiplayer P95/P99 21.54/23.81ms、draw P95 421、Video約45.63MiB、texture/RAM recovery PASS。同步 loader frame P99 53.52ms FAIL，明確不得宣稱 Atlas 已解決頓挫。
 ASSET204 [x] bounded async RuntimeAssetStore 完成：owner refs／共享／priority preload＋viewport on-demand／worker decode／16MiB ready queue／production 每幀1 page+1.2ms GPU commit／32MiB unowned LRU cache／failed retry／generation token cancel／map-owner reset／close purge 已實作與測試。`normalized_memory` 30-cycle：同步 P99 53.52ms→async P95/P99 16.885/17.028ms、load P95 249.914ms/15 frames、texture+resident+RAM recovery PASS、final resident=0；20client/300monster/1000drop：59.99FPS、P95/P99 22.109/23.949ms、0 ERROR、20/20 snapshot/prediction ready，穩態 Server P99 5.56～6.43ms。詳 docs/RUNTIME_ASSET_STORE.md。
-ASSET205 [~] 下一個唯一領取任務：新增怪物腳本／預覽／definition與出生流程；生命週期／多人／不同FPS及失焦最終回歸。
+ASSET205 [x] 新增怪物資料流程完成：recipe→來源/動作/stats/spawn fail-closed→normalized definition→memory-first clip-atomic atlas→40-view private preview→population v2/client+server。真 EN010A validate/E2E PASS；臨時 live-add definition81 後 10 definitions/79 spawns，20 clients 40s：59.998FPS、P95/P99 17.71/17.907ms、10 definitions/9 shared atlases、20/20 snapshot+prediction ready、0 ERROR，Server穩態P99約0.26～0.29ms；測後已由原始 Dat 恢復正式 v2 9/78。完整不同FPS/失焦/多開 trace 統一留給 RUNTIME206。詳 docs/MONSTER_CONTENT_WORKFLOW.md。
 
 PERF001補充（2026-11-14）：使用者觀察畫面頓挫，原因待定位；加入frame pacing／獨立實體插值／prediction修正／snapshot queue／載入CPU-GPU尖峰分段，不以平均FPS判PASS。
-RUNTIME206 [ ] PERF001基準後驗證與完成渲染／Client邏輯／Server獨立排程；5/10/15/30/60/120FPS、不繪製世界、失焦／最小化／恢復、1/2/4/8開。Before：Socket worker已獨立，state/input仍物理回呼，ping仍render回呼。After目標／指標／回歸：SPEC §0.4、CLIENT_RUNTIME_ISOLATION §8；同步頻率不降、queue門檻與trace因果一致、記錄逐程序CPU/RAM/GPU。文件補充完成；程式隔離及實機矩陣 NOT VERIFIED，尚未領取第二個實作Task。
+RUNTIME206 [~] 下一個主 Gate：完成渲染／Client邏輯／Server獨立排程與同 trace 實機矩陣。一般遊玩正式覆蓋30/45/60/75/90FPS；5/10/15FPS為低功耗掛機另測，120FPS保留額外壓測；另含不繪製世界、失焦／最小化／恢復、1/2/4/8開。方向／遠端motion、AOI hysteresis、預設Render60FPS與async資源載入已完成部分實作，但完整 queue age／RX-TX-state hash／逐程序CPU-RAM-GPU 因果矩陣仍 NOT VERIFIED；同步頻率不得下降。
 
 RUNTIME206補充：Client一般遊玩支援30～90FPS；最低覆蓋30/45/60/75/90，5/10/15為掛機另測，FPS不影響Client↔Server傳輸／固定邏輯。原120FPS項目保留額外壓測用途，不是正式支援範圍。
 
@@ -115,7 +115,7 @@ PERF001 [x] 首個「基準工具＋原始JSON＋報告」交付，非效能全�
 測試：python -m unittest discover -s tools -p test_runtime_baseline.py（7 PASS）；tools/tests（89 PASS，包含保留的本機研究修改）；test_assets（5）、test_maps（4）、test_population（1）PASS；.cache/dotnet/dotnet.exe run --project server/tests/SGTest.Server.Tests.csproj -c Release（346 PASS）；Godot tests/test_directions/navigation/replica/prediction/wire/monster_visuals.gd全部PASS。本機GPU不是CI替代品，完整低FPS／背景trace／owner-LRU登出／冷快取／實體driverVRAM仍NOT VERIFIED。
 ASSET201 [x] 完成：`sgtest.animation` schema v2 已保留 raw ACT／alias／pivot／source／event／draw-order raw layers＋expanded slots；Python tools/tests 89 PASS、definition 10 PASS、Godot consumer PASS；本機9怪＋Boy6 core＋death共16 definitions／992 facings，z-order 624/624 PASS；四種族 core mapping complete。舊 runtime 有182個方向差異已報告、不靜默接受。AS005視覺與AS008授權仍未完成。
 ASSET202 [x]／ASSET203 [x] 完成：normalized clip-atomic 7 候選已 A/B，clean finalists 選 normalized_memory 作 ASSET204 基底；詳 docs/NORMALIZED_ATLAS_CANDIDATES.md。同步 loader P99 仍 FAIL，packing alone 不算解決。
-ASSET204 [x] 完成並通過 PERF001 async lifecycle／multiplayer Gate；同步 loader 的 53.52ms P99 已由 bounded async commit 降至 17.028ms，詳 docs/RUNTIME_ASSET_STORE.md。ASSET205 [~] 為目前唯一領取任務；RUNTIME206完整矩陣仍待實作。
+ASSET204 [x] 完成並通過 PERF001 async lifecycle／multiplayer Gate；同步 loader 的 53.52ms P99 已由 bounded async commit 降至 17.028ms，詳 docs/RUNTIME_ASSET_STORE.md。ASSET205 [x] monster recipe/population v2/live-add Gate 完成，詳 docs/MONSTER_CONTENT_WORKFLOW.md。RUNTIME206 [~] 為下一個主 Gate。
 
 RUNTIME206方向／順移阻塞修正（2026-11-14）[~]：使用者實機回報人物／怪物方向錯誤、卡頓與順移後，已對照 Paradise.exe `CSGOCharDrawLogic::DirectionMapping`、`CSGOEnemDrawLogic::SetDirection` 與 Recovered 行為修正 Runtime。`logical_views` 現優先於同名 physical clip；authoritative facing 與 presentation facing 分離，walking 用實際位移＋28° hysteresis、attack/hit event 鎖定畫面方向；attack/hit 不再 position snap；Server AOI 改 1100 enter／1250 exit hysteresis；預設 Render 60FPS、physics/Server 仍30Hz。Python tools/tests 89 PASS＋normalized/runtime semantic 18 PASS；C# 350 PASS；Godot 8 組 headless tests PASS。另跑預設資產 20-client/300-monster/1000-drop/40s：60.00 FPS、frame P95/P99 23.53/25.58ms、draw P95 414、20/20 snapshot+prediction ready、0 ERROR、provenance unchanged；Server warm-up tick=300 P99 83.69ms，穩態 tick=600/900/1200 P99 5.90/7.32/7.40ms。詳 docs/RUNTIME_DIRECTION_AND_MOTION.md。完整 30/45/60/75/90、5/10/15、失焦／最小化／1/2/4/8 開實機 trace 與 AS005 人工逐格視覺仍 NOT VERIFIED；不得因此把 RUNTIME206 標完成。
-ASSET204 [x] RuntimeAssetStore 已完成並保留方向／同步 hotfix；ASSET205 [~] 接續。RUNTIME206仍不得因單一60FPS多人 Gate而標完成。
+ASSET204 [x] RuntimeAssetStore 已完成並保留方向／同步 hotfix；ASSET205 [x] recipe/population v2 workflow 完成。RUNTIME206 [~] 接續，仍不得因單一60FPS多人 Gate而標完成。

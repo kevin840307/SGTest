@@ -19,7 +19,9 @@ public sealed class Player : Actor
 }
 public sealed class Monster : Actor
 {
-    public int Damage = 10;
+    public int MaxHp = 30, Damage = 10;
+    public float MoveSpeed = 65, AggroRange = 500, AttackRange = 70, ChaseStopRange = 45;
+    public double AttackIntervalSeconds = 1, RespawnSeconds = 2;
     public float Phase;
     public uint Definition;
     public Vector2 Home;
@@ -33,7 +35,7 @@ public sealed class World
 {
     static readonly int[] Headings=[6,7,8,1,2,3,4,5];
     public const float PlayerSpeed = 230, MonsterSpeed = 65;
-    public const int PlayerHp = 100, MaximumDrops = 5000;
+    public const int PlayerHp = 100, MonsterHp = 30, MaximumDrops = 5000;
     public readonly Dictionary<int,Player> Players = [];
     public readonly Dictionary<int,Monster> Monsters = [];
     public readonly Dictionary<int,Drop> Drops = [];
@@ -75,6 +77,16 @@ public sealed class World
         var player = new Player { Hp=PlayerHp,Position=Place(Spawn+new Vector2(20*(Players.Count%8),0)),ProtectedUntil=Time+2 };
         Players.Add(id,player); return player;
     }
+    static void ApplyDefinition(Monster monster,MonsterDefinition definition)
+    {
+        definition.Validate();
+        monster.Definition=definition.Id;
+        monster.MaxHp=definition.Hp; monster.Hp=definition.Hp; monster.Damage=definition.Damage;
+        monster.MoveSpeed=definition.MoveSpeed; monster.AggroRange=definition.AggroRange;
+        monster.AttackRange=definition.AttackRange; monster.ChaseStopRange=definition.ChaseStopRange;
+        monster.AttackIntervalSeconds=definition.AttackIntervalSeconds;
+        monster.RespawnSeconds=definition.RespawnSeconds;
+    }
     public void Populate(int count,int drops,Population? population=null)
     {
         Monsters.Clear(); attacks.Clear(); Drops.Clear(); NextDrop=1;
@@ -95,11 +107,17 @@ public sealed class World
                 for(int i=0;i<population.Spawns.Length;i++)
                 {
                     var spawn=population.Spawns[i];
-                    Monsters[i+1]=new Monster{Position=Place(spawn.Position),Definition=spawn.Definition,
+                    var monster=new Monster{Position=Place(spawn.Position),
                         Phase=(i%17)*.037f,ActionTime=-(i%17)*.037};
+                    ApplyDefinition(monster,population.Definitions[spawn.Definition]);
+                    Monsters[i+1]=monster;
                 }
             }
-            else foreach(var (id,m) in Monsters) m.Definition=population.Spawns[(id-1)%population.Spawns.Length].Definition;
+            else foreach(var (id,m) in Monsters)
+            {
+                uint definition=population.Spawns[(id-1)%population.Spawns.Length].Definition;
+                ApplyDefinition(m,population.Definitions[definition]);
+            }
         }
         foreach(var monster in Monsters.Values) monster.Home=monster.Position;
     }
@@ -170,26 +188,26 @@ public sealed class World
         {
             if (Time>=m.Respawn)
             {
-                m.Hp=30; m.Position=Place(m.Home); m.Velocity=Vector2.Zero;
+                m.Hp=m.MaxHp; m.Position=Place(m.Home); m.Velocity=Vector2.Zero;
                 Pose(1,id,m,0);
             }
             return;
         }
         if (Active(m,Time)) return;
-        float closest=500; int target=0; Vector2 destination=default;
+        float closest=m.AggroRange; int target=0; Vector2 destination=default;
         foreach (var (pid,p) in Players)
         {
             float distance=Vector2.Distance(m.Position,p.Position);
             if (p.Hp>0 && distance<closest) { closest=distance; target=pid; destination=p.Position; }
         }
-        if (target!=0 && closest<=70 && Reachable(m.Position,destination) && Time>=Players[target].ProtectedUntil && Time-m.LastAttack>=1)
+        if (target!=0 && closest<=m.AttackRange && Reachable(m.Position,destination) && Time>=Players[target].ProtectedUntil && Time-m.LastAttack>=m.AttackIntervalSeconds)
         {
             m.LastAttack=Time; m.Facing=Heading(destination-m.Position); m.Velocity=Vector2.Zero;
             Pose(1,id,m,2); attacks[id]=new(target,Time+.2,Time); return;
         }
-        if (closest<500 && closest>45)
+        if (closest<m.AggroRange && closest>m.ChaseStopRange)
         {
-            m.Velocity=Vector2.Normalize(destination-m.Position)*MonsterSpeed; m.Facing=Heading(m.Velocity);
+            m.Velocity=Vector2.Normalize(destination-m.Position)*m.MoveSpeed; m.Facing=Heading(m.Velocity);
             Locomotion(m,1,m.Phase);
         }
         else { m.Velocity=Vector2.Zero; Locomotion(m,0,m.Phase); }
@@ -202,7 +220,7 @@ public sealed class World
             attacks.Remove(id);
             if (!Monsters.TryGetValue(id,out var m) || !Players.TryGetValue(pending.Target,out var p) || m.Hp<=0 ||
                 m.Pose!=2 || m.ActionTime!=pending.Started || p.Hp<=0 || Time<p.ProtectedUntil ||
-                Vector2.Distance(m.Position,p.Position)>70 || !Reachable(m.Position,p.Position)) continue;
+                Vector2.Distance(m.Position,p.Position)>m.AttackRange || !Reachable(m.Position,p.Position)) continue;
             p.Hp=Math.Max(0,p.Hp-m.Damage);
             if (p.Hp==0) { p.Velocity=Vector2.Zero; p.Inputs.Clear(); p.LastMotion=Vector2.Zero; p.Respawn=Time+3; }
             Pose(0,pending.Target,p,p.Hp==0 ? 4 : 3);
@@ -222,7 +240,7 @@ public sealed class World
                 var at=Place(m.Position+new Vector2((item-1002)*22,0));
                 Drops[NextDrop++]=new(Reachable(m.Position,at) ? at : m.Position,item);
             }
-            m.Respawn=Time+2; DropRevision++;
+            m.Respawn=Time+m.RespawnSeconds; DropRevision++;
         }
         Pose(1,monster,m,m.Hp<=0 ? 4 : 3); return true;
     }

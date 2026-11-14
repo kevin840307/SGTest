@@ -20,6 +20,12 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Original map monster population conversion failed' }
     python tools/apply_normalized_runtime_semantics.py --source .cache/client --runtime-assets client/assets/generated
     if ($LASTEXITCODE -ne 0) { throw 'Normalized direction/timing semantic overlay failed' }
+    if (Test-Path 'content\monster_recipes') {
+        Get-ChildItem 'content\monster_recipes' -Filter '*.monster.json' | Sort-Object Name | ForEach-Object {
+            python tools/monster_workflow.py $_.FullName --source .cache/client --assets client/assets/generated --server-content server/content
+            if ($LASTEXITCODE -ne 0) { throw ('Monster recipe failed: ' + $_.Name) }
+        }
+    }
     python tools/export_server_content.py
     if ($LASTEXITCODE -ne 0) { throw 'Server collision export failed' }
     & $Godot --headless --path client --script tools/benchmark_atlas.gd

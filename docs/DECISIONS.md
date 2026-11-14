@@ -236,3 +236,13 @@ ADR-026補充：使用者指定Client一般遊玩支援30～90FPS；FPS選項只
 - Multiplayer: 20 clients／300 monsters／1000 drops／40s，mean 59.99FPS、frame P95/P99 22.109/23.949ms、draw P95 422，20/20 snapshot/prediction ready、0 ERROR、max correction 0。Server warm-up tick=300 P99 69.08ms；穩態 P99 5.56～6.43ms。
 - Regression: owner sharing/cache hit、automatic cache-cap eviction、loading cancellation、failed-path retry、monster generation cancel、map-object viewport release、paper-doll atomic ready/purge 均有 Godot headless test。詳 [RUNTIME_ASSET_STORE.md](RUNTIME_ASSET_STORE.md)。
 - Boundary: 這完成資源載入與生命週期 Gate，不代表 RUNTIME206 的 30/45/60/75/90FPS、5/10/15 low-power、unfocus/minimize、1/2/4/8 開 trace 已完成；實體 driver VRAM、完整 cold-disk matrix、AS005/AS008 也仍未完成。
+
+## ADR-032 — Monster Recipe 與 Population v2 完成 ASSET205（2026-11-14）
+
+- Status: **ASSET205 ACCEPTED / RUNTIME206 FULL MATRIX NOT VERIFIED**。
+- Decision: 正式新增怪物的 source of truth 改為 `content/monster_recipes/*.monster.json`。Recipe 維護 definition id、sprite identity、runtime stats、spawn 與明確 replace 意圖；原始 SPR/ACT 仍 private。`tools/monster_workflow.py` 由 recipe fail-closed 驗證來源、5 actions×8 logical facings、stats 與 collision spawn，產 normalized definition、private 40-view preview、必要時 memory-first clip-atomic atlas、population v2 與 Server copy；不要求每新增一種怪修改 C#/GDScript。
+- Population migration: v2 每 definition 明確保存 HP、Damage、MoveSpeed、AggroRange、AttackRange、ChaseStopRange、AttackInterval、Respawn；Server v1 仍 backward-compatible 並使用 legacy-equivalent defaults。Map13 base 已由原始 Dat 重建為 v2 9 definitions／78 spawns，預設值與舊硬編碼完全相同。
+- Runtime: `World.Populate` 把 definition stats 套進 Monster instance；AI 移速、追擊/攻擊距離、攻擊間隔、傷害、respawn/MaxHp 全由資料決定，stress palette 也同步切換 stats。Client population parser 接受 v1/v2。
+- Rebuild: `rebuild_assets.ps1` 在重建原始 base population 與 normalized semantics 後，依檔名排序重套所有 `*.monster.json` recipes，再 export Server content；因此 custom monster 不靠手改 generated JSON/PNG 存活。
+- Evidence: 真 HK2 EN010A validate-only 16 source files／5 behaviors／40 logical views／spawn collision PASS／preview 768×495；無既有 atlas 時可自行產 runtime v9/schema v2 1 page 252×684。Temporary live-add definition81 後 Server 載入 79 monsters／10 definitions；20 clients/40s mean 59.998FPS、frame P95/P99 17.71/17.907ms、20/20 snapshot/prediction ready、0 ERROR，且 10 definitions 共用 9 atlases；Server穩態 tick P99 約0.26～0.29ms。測後已由原始 Dat 還原正式 v2 9/78。
+- Boundary: Recipe v1 只涵蓋目前 monster 五動作與 prototype combat stats；特殊 Boss action schema、掉落/技能/任務/behavior tree 仍需獨立版本。完整 30/45/60/75/90FPS、5/10/15 low-power、失焦／最小化／恢復、1/2/4/8 開 trace 統一屬 RUNTIME206。詳 [MONSTER_CONTENT_WORKFLOW.md](MONSTER_CONTENT_WORKFLOW.md)。
