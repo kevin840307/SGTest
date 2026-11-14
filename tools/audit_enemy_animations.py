@@ -82,17 +82,32 @@ def audit_all(root: Path) -> dict:
             "issue_count": sum(len(row["issues"]) for row in rows)}
 
 
+def complete_group_keys(report: dict) -> list[str]:
+    """Deterministic atlas keys for groups with all audited ACT references valid."""
+    return sorted((f'Enemy/{row["enemy"]}' for row in report["groups"]
+                   if row["complete_source_mapping"]), key=str.casefold)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("client", type=Path)
     parser.add_argument("output", type=Path, help="Private report path outside the clean client")
+    parser.add_argument("--complete-group-list", type=Path,
+                        help="Optional private UTF-8 group list for atlas conversion")
     args = parser.parse_args()
     root, output = args.client.resolve(), args.output.resolve()
     if not root.is_dir() or output == root or root in output.parents:
         parser.error("source must exist and output must be outside the clean client")
+    group_list = args.complete_group_list.resolve() if args.complete_group_list else None
+    if group_list is not None and (group_list == root or root in group_list.parents):
+        parser.error("group list must be outside the clean client")
     report = audit_all(root)
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    if group_list is not None:
+        group_list.parent.mkdir(parents=True, exist_ok=True)
+        group_list.write_text("".join(key + "\n" for key in complete_group_keys(report)),
+                              encoding="utf-8")
     print(json.dumps({"act_groups": report["act_groups"],
                       "source_complete_groups": report["source_complete_groups"],
                       "issue_groups": report["issue_groups"],

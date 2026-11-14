@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from audit_enemy_animations import audit_group
+from audit_enemy_animations import audit_group, complete_group_keys
 
 
 def act(key: str, indices: list[int]) -> bytes:
@@ -22,6 +22,12 @@ def spr() -> bytes:
 
 
 class EnemyAuditTests(unittest.TestCase):
+    def test_complete_group_keys_are_sorted_and_exclude_issues(self):
+        report = {"groups": [{"enemy": "EN002", "complete_source_mapping": True},
+                             {"enemy": "EN001", "complete_source_mapping": False},
+                             {"enemy": "EN000", "complete_source_mapping": True}]}
+        self.assertEqual(complete_group_keys(report), ["Enemy/EN000", "Enemy/EN002"])
+
     def test_all_logical_facings_use_shared_source_and_flip(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
