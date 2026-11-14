@@ -74,3 +74,8 @@ INT001 實測更新：C#/.NET 8 build 零警告；339 domain checks；main 研�
 INT001 [x] 在指定的 C:\SGO\SRC\SGTest 重新驗證：89 個研究測試、5 個 runtime asset fixture、3 個 map fixture、342 個 C# domain/wire 檢查，以及 Godot 方向／碰撞／replica-clock／prediction／跨語言 wire 全 PASS。實際 C#/.NET8 + Godot：8客戶端／1000怪／5000掉落30秒 PASS；原生1440×900 GPU視窗 PASS。命令見README；報告見reports/README.md、network_load.json、rendered_probe.json。merge commit 的父節點包含 e2d84c2(main) 及02ca1db(master)，SHA於git log --merges -1查詢。CI workflow已加入，遠端執行結果尚待推送後確認。此項只完成整合／目錄／C#移植，其他M0/M1/M2缺口未改標完成。
 
 INT001 CI修正：6eb4941 的 Linux C# server job PASS，原 main研究CI PASS；runtime asset CI 的地圖別名測試意外依賴 .cache 原版檔案，已改為必跑的自製 BLG→STH→SPR fixture，原版案例僅在私有資料存在時執行，避免上傳素材。重跑4個本機map tests PASS。CI：https://github.com/kevin840307/SGTest/actions/runs/43575276776；修正後結果另見最新 run。
+
+INT001 最終整合證據：merge 6eb4941（parents e2d84c2＋02ca1db），可攜測試修正16a32cd，均已正常push origin/main。16a32cd 的 Runtime C# and asset contracts 與 Legacy asset inventory tools 均為SUCCESS：
+https://github.com/kevin840307/SGTest/actions/runs/43575396466
+https://github.com/kevin840307/SGTest/actions/runs/43575396469
+本機342項C#檢查、89項目前工作樹研究測試、Godot與多人原生測試PASS；CI只驗證已提交版本，不包含工作樹尚未提交的ACT／人物研究修改。完整遊戲與原版視覺／發布權利Gate仍未完成。
