@@ -1,6 +1,6 @@
 # Stargate Reborn / SGTest
 
-目前交付原版素材重建工具與可執行的 Godot 多人客戶端／權威伺服器原型。已接入原版怪物圖集；人物目前使用簡單標記。這不是原遊戲全部功能已完成的版本。
+目前交付原版素材重建工具與可執行的 Godot 多人客戶端／權威伺服器原型。已接入原版怪物與基本男性角色紙娃娃；人物六個部件及死亡圖集由所有實例共用，圖層順序讀取原版 CharDrawOrder.dat。這不是原遊戲全部功能已完成的版本。
 
 ## 素材策略
 
@@ -55,17 +55,21 @@ python tools/validate_assets.py .cache/client assets/generated --all-pixels
 | `scripts/spatial_grid.gd` | AOI／AI 鄰近查詢，減少每個玩家全表掃描 |
 | `scripts/snapshot_codec.gd` | 20-byte 實體資料；每包最多 800-byte payload |
 | `scripts/entity_atlas.gd` | 多實例共享紋理、裁切原點、方向 alias 與 ACT 播放 |
+| `scripts/paper_doll.gd` | 原版人物部件、原版圖層順序與八方向鏡射 |
+| `scripts/action_policy.gd` | 一次性動作鎖定、可靠事件與快照時間精度、延遲事件淘汰 |
 | `scripts/drop_renderer.gd` | MultiMesh 批次繪製掉落，資料變化時才重建 |
 
 模擬 30Hz、位置快照 10Hz、輸入約 15Hz（30Hz 模擬下的 50ms 節流）、怪物 AI 5Hz。位置分成 MTU 以下的小封包，限制未完成快照快取並拒絕舊序號；攻擊事件、掉落差異與背包使用獨立可靠通道。掉落新增／拾取即時傳送，AOI 進出每 500ms 對帳。怪物和玩家在每個顯示影格插值；畫面外怪物不送出繪製指令。
 
-伺服器不載入圖像資源。客戶端目前共用一種原版怪物資源作為壓測／接線示範；完整角色、物品圖示映射、地圖、裝備、技能、任務、角色 HP／怪物攻擊玩家與資料持久化仍待開發。
+伺服器不載入圖像資源。客戶端目前共用一種原版怪物與基本男性角色資源；完整角色自訂、物品圖示映射、地圖、裝備、技能、任務、角色 HP／怪物攻擊玩家與資料持久化仍待開發。
 
 ## 驗證
 
 ```powershell
 python -m unittest discover -s tools -p test_assets.py
 & 'C:\SGO\Godot\Godot_v4.7.2-stable_win64_console.exe' --headless --path . --script tools/test_world.gd
+& 'C:\SGO\Godot\Godot_v4.7.2-stable_win64_console.exe' --headless --path . --script tools/test_directions.gd
+& 'C:\SGO\Godot\Godot_v4.7.2-stable_win64_console.exe' --path . --resolution 1440x900 --script tools/direction_preview.gd
 python tools/benchmark_assets.py .cache/client
 python tools/benchmark_rendered.py C:/SGO/Godot/Godot_v4.7.2-stable_win64_console.exe
 python tools/smoke_network.py C:/SGO/Godot/Godot_v4.7.2-stable_win64_console.exe --clients 8 --seconds 30

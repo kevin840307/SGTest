@@ -27,10 +27,10 @@ RTX 3050、Compatibility/OpenGL；熱 OS 快取，計時不含程式啟動。每
 
 ENet：8 個 headless 客戶端、1,000 隻怪、5,000 個掉落，持續 30 秒。通過：True；每位客戶端均收到位置、動作與背包更新。
 
-略過前三個一秒樣本後，伺服器 CPU 中位數 16.9%，客戶端 29.2%；尖峰 RSS 分別 105.3／122.7 MiB。CPU 百分比以一個核心為 100%，含 Windows console 啟動器及其實際 Godot 子程序，不能解讀為整台電腦百分比。
+略過前三個一秒樣本後，伺服器 CPU 中位數 20.0%，客戶端 36.9%；尖峰 RSS 分別 105.0／136.3 MiB。CPU 百分比以一個核心為 100%，含 Windows console 啟動器及其實際 Godot 子程序，不能解讀為整台電腦百分比。
 
-原生單客戶端 1440×900、伺服器同樣 1000 怪／5000 掉落，RTX 3050、上限 60 FPS；暖機 2 秒後測 10 秒：平均 59.08 FPS，影格間隔 P50 16.68ms、P95 20.55ms。末影格 draw calls 95。使用單調時鐘量測，非 Godot 平滑 delta。
+原生單客戶端 1440×900、伺服器同樣 1000 怪／5000 掉落，RTX 3050、上限 60 FPS；暖機 2 秒後測 10 秒：平均 59.11 FPS，影格間隔 P50 16.66ms、P95 21.25ms。末影格 draw calls 101。使用單調時鐘量測，非 Godot 平滑 delta。
 
-這些是本機開發版測試，非冷磁碟、網際網路丟包或多種硬體測試。完整遊戲功能、紙娃娃、地圖解析及持久化仍待開發。
+這些是本機開發版測試，非冷磁碟、網際網路丟包或多種硬體測試。完整遊戲功能、角色裝備與外觀自訂、地圖解析及持久化仍待開發。
 
 原始 JSON：asset_inventory.json、asset_validation.json、network_load.json、rendered_load.json、rendered_probe.json、atlas_benchmark/results.json、atlas_benchmark/rendered.json。

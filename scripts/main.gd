@@ -23,6 +23,7 @@ var hud: CanvasLayer
 var info_label: Label
 var item_label: Label
 var atlas := preload("res://scripts/entity_atlas.gd").new()
+var doll := preload("res://scripts/paper_doll.gd").new()
 var monster_grid := preload("res://scripts/spatial_grid.gd").new()
 var drop_grid := preload("res://scripts/spatial_grid.gd").new()
 var player_grid := preload("res://scripts/spatial_grid.gd").new()
@@ -36,6 +37,7 @@ var bot := false
 var seed_drops := 0
 var bind_address := "127.0.0.1"
 const CODEC = preload("res://scripts/snapshot_codec.gd")
+const ACTION = preload("res://scripts/action_policy.gd")
 var pending_snapshots: Dictionary = {}
 var player_poses: Dictionary = {}
 var server_time := 0.0
@@ -237,18 +239,19 @@ func _publish_action(kind: int, id: int, state: Dictionary) -> void:
 
 @rpc("authority", "call_remote", "reliable", 4)
 func _action_event(kind: int, id: int, facing: int, pose: int, clock: float) -> void:
+	clock = ACTION.wire_time(clock)
 	if not action_observed:
 		action_observed = true
 		print("action_received")
 	if kind == 1 and visible_monsters.has(id):
 		var state: Dictionary = visible_monsters[id]
-		if clock >= state.action_time:
+		if ACTION.accepts_event(pose, clock, state.action_time, server_time):
 			state.facing = facing
 			state.pose = pose
 			state.action_time = clock
 	elif kind == 0 and player_poses.has(id):
 		var row: Array = player_poses[id]
-		if clock >= row[6]:
+		if ACTION.accepts_event(pose, clock, float(row[6]), server_time):
 			row[4] = facing
 			row[5] = pose
 			row[6] = clock
@@ -384,13 +387,22 @@ func _draw() -> void:
 			var monster: Dictionary = visible_monsters[id]
 			var action: String = ["NS", "NW", "FA", "NH", "ND"][monster.pose]
 			var seconds: float = server_time - monster.action_time if monster.pose >= 2 else animation_time
-			atlas.draw_frame(self, point, "EN004A_%s%d" % [action, monster.facing], maxf(seconds, 0.0))
+			var duration: float = ACTION.DEATH_SECONDS if monster.pose == 4 else ACTION.COMBAT_SECONDS
+			atlas.draw_frame(self, point, "EN004A_%s%d" % [action, monster.facing], maxf(seconds, 0.0), 8.0,
+				duration if monster.pose >= 2 else 0.0)
 		else:
 			draw_circle(point, 16, Color.CRIMSON)
 	for id in visible_players:
 		var color := Color.CYAN if id == multiplayer.get_unique_id() else Color.LIGHT_BLUE
 		var point: Vector2 = rendered_players.get(id, visible_players[id]) - position
-		draw_circle(point, 13, color)
+		if not visible.has_point(point):
+			continue
+		if not doll.parts.is_empty() and player_poses.has(id):
+			var pose: Array = player_poses[id]
+			var seconds: float = maxf(0.0,server_time-float(pose[6])) if int(pose[5]) >= 2 else animation_time
+			doll.draw(self,point,int(pose[5]),int(pose[4]),seconds)
+		else:
+			draw_circle(point, 13, color)
 		if player_poses.has(id):
 			var row: Array = player_poses[id]
 			if int(row[5]) == 2 and server_time-float(row[6]) < 0.35:
@@ -453,6 +465,11 @@ func _load_sample_atlas() -> void:
 		var error: Error = atlas.open(path)
 		if error != OK:
 			push_error("Cannot load entity atlas: %s" % error)
+	var player_path := asset_root.path_join("player/b/standard/b-body.json")
+	if FileAccess.file_exists(player_path):
+		var error: Error = doll.open(asset_root)
+		if error != OK:
+			push_error("Cannot load player composition: %s" % error)
 
 func _process(delta: float) -> void:
 	if is_server:

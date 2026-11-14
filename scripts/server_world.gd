@@ -6,6 +6,7 @@ const SIZE := Vector2(2400, 1600)
 const SPEED := 230.0
 const MAX_DROPS := 5000
 const GRID = preload("res://scripts/spatial_grid.gd")
+const ACTION = preload("res://scripts/action_policy.gd")
 var players: Dictionary = {}
 var monsters: Dictionary = {}
 var drops: Dictionary = {}
@@ -46,9 +47,10 @@ func step(delta: float) -> void:
 		if time-state.last_input > 0.5:
 			state.move = Vector2.ZERO
 		state.p = (state.p + state.move*SPEED*delta).clamp(Vector2.ZERO, SIZE)
-		if time-state.action_time > 0.35:
+		var locked: bool = ACTION.active(state.pose, state.action_time, time)
+		if not locked:
 			state.pose = 1 if state.move.length_squared() > 0.01 else 0
-		if state.move.length_squared() > 0.01:
+		if not locked and state.move.length_squared() > 0.01:
 			state.facing = facing(state.move)
 	ai_elapsed += delta
 	if ai_elapsed < 0.2:
@@ -63,6 +65,8 @@ func step(delta: float) -> void:
 				monster.hp = 30
 				monster.pose = 0
 				monster.p = Vector2(100+(id*97)%2200, 100+(id*53)%1400)
+			continue
+		if ACTION.active(monster.pose, monster.action_time, time):
 			continue
 		var closest := 500.0
 		var target := Vector2.ZERO
