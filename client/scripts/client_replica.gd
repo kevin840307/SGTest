@@ -62,7 +62,7 @@ func _advance(tick: int) -> void:
 func _state(row: Array) -> Dictionary:
 	return {"p":Vector2(row[1],row[2]),"hp":int(row[3]),"facing":int(row[4]),
 		"pose":int(row[5]),"action_time":float(row[6]),"revision":int(row[7]),
-		"snapshot_tick":-1,"event_tick":-1,"tick":-1}
+		"definition":int(row[8]) if row.size() > 8 else 0,"snapshot_tick":-1,"event_tick":-1,"tick":-1}
 
 func snapshot(kind: int, tick: int, row: Array) -> int:
 	if kind not in [0,1] or row.size() < 8 or tick < latest_tick-MAX_SNAPSHOT_AGE:
@@ -83,6 +83,7 @@ func snapshot(kind: int, tick: int, row: Array) -> int:
 		result = 2 # spawn, death or respawn must not interpolate across the map.
 	var state: Dictionary = previous if not previous.is_empty() else _state(row)
 	state.p = Vector2(row[1],row[2])
+	state.definition = int(row[8]) if row.size() > 8 else 0
 	state.hp = int(row[3])
 	state.facing = int(row[4])
 	state.pose = int(row[5])
@@ -94,7 +95,7 @@ func snapshot(kind: int, tick: int, row: Array) -> int:
 	states[id] = state
 	return result
 
-func event(kind: int, id: int, tick: int, at: Vector2, hp: int, facing: int, pose: int, started: float, revision: int) -> int:
+func event(kind: int, id: int, tick: int, at: Vector2, hp: int, facing: int, pose: int, started: float, revision: int, definition: int = 0) -> int:
 	if kind not in [0,1] or int(removed[kind].get(id,-1)) >= tick:
 		return 0
 	var states := group(kind)
@@ -107,6 +108,7 @@ func event(kind: int, id: int, tick: int, at: Vector2, hp: int, facing: int, pos
 	var result := 2 if previous.is_empty() or pose in [0,4] else 1
 	var state: Dictionary = previous if not previous.is_empty() else _state([id,at.x,at.y,hp,facing,pose,started,revision])
 	state.p = at
+	state.definition = definition
 	state.hp = hp
 	state.facing = facing
 	state.pose = pose

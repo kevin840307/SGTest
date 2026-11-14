@@ -9,7 +9,7 @@ namespace SGTest.Server.Application;
 
 public readonly record struct Command(int Id,int Op,object?[] Body,Session? Session=null);
 
-public sealed class WorldHost(World world,int map,string fingerprint) : BackgroundService
+public sealed class WorldHost(World world,int map,string fingerprint,string populationHash) : BackgroundService
 {
     public readonly Channel<Command> Commands=Channel.CreateBounded<Command>(8192);
     readonly Dictionary<int,Session> sessions=[];
@@ -31,7 +31,7 @@ public sealed class WorldHost(World world,int map,string fingerprint) : Backgrou
             foreach(var action in World.Events)
                 foreach(var session in sessions.Values)
                     if(session.Ready && Near(World.Players[session.Id].Position,action.Position))
-                        session.Send(4,action.Kind,action.Id,action.Facing,action.Pose,action.Started,action.Hp,action.Revision,action.Position.X,action.Position.Y,World.Tick);
+                        session.Send(4,action.Kind,action.Id,action.Facing,action.Pose,action.Started,action.Hp,action.Revision,action.Position.X,action.Position.Y,World.Tick,action.Definition);
             World.Events.Clear();
             if(World.Tick%3==0) foreach(var session in sessions.Values) if(session.Ready) Snapshot(session);
             if(World.Tick%15==0) foreach(var session in sessions.Values) if(session.Ready) Ground(session);
@@ -49,7 +49,7 @@ public sealed class WorldHost(World world,int map,string fingerprint) : Backgrou
         int id=command.Id; var body=command.Body;
         if(command.Op==-1 && command.Session is {} joining)
         {
-            sessions.Add(id,joining); World.Join(id); joining.Send(0,id); joining.Send(1,map,fingerprint);
+            sessions.Add(id,joining); World.Join(id); joining.Send(0,id); joining.Send(1,map,fingerprint,populationHash);
             Console.WriteLine($"player {id} joined"); return;
         }
         if(command.Op==-2) { sessions.Remove(id); World.Players.Remove(id); return; }
@@ -58,7 +58,7 @@ public sealed class WorldHost(World world,int map,string fingerprint) : Backgrou
         {
             switch(command.Op)
             {
-                case 24 when body.Length==2 && Wire.Integer(body[0])==map && body[1] is string hash && hash==fingerprint:
+                case 24 when body.Length==3 && Wire.Integer(body[0])==map && body[1] is string hash && hash==fingerprint && body[2] is string population && population==populationHash:
                     session.Ready=true; break;
                 case 20 when session.Ready && body.Length==2 && body[1] is byte[] input && input.Length is >0 and <=36 && input.Length%12==0:
                     uint epoch=checked((uint)Wire.Integer(body[0]));
@@ -102,19 +102,8 @@ public sealed class WorldHost(World world,int map,string fingerprint) : Backgrou
             var removed=s.Seen[kind].Except(current).Select(id=>(object?)id).ToArray();
             if(removed.Length>0) s.Send(7,World.Tick,kind,removed);
             s.Seen[kind]=current;
-            foreach(var chunk in rows.Chunk(33))
-            {
-                byte[] bytes=new byte[chunk.Length*24];
-                for(int i=0;i<chunk.Length;i++)
-                {
-                    var row=chunk[i]; var a=row.Value; var span=bytes.AsSpan(i*24,24);
-                    BinaryPrimitives.WriteInt32LittleEndian(span,row.Key);
-                    BinaryPrimitives.WriteSingleLittleEndian(span[4..],a.Position.X); BinaryPrimitives.WriteSingleLittleEndian(span[8..],a.Position.Y);
-                    BinaryPrimitives.WriteUInt16LittleEndian(span[12..],(ushort)a.Hp); span[14]=(byte)a.Facing; span[15]=(byte)a.Pose;
-                    BinaryPrimitives.WriteSingleLittleEndian(span[16..],(float)a.ActionTime); BinaryPrimitives.WriteUInt32LittleEndian(span[20..],a.Revision);
-                }
-                s.Send(3,World.Tick,World.Time,kind,bytes);
-            }
+            foreach(var chunk in rows.Chunk(SnapshotCodec.RowsPerPacket))
+                s.Send(3,World.Tick,World.Time,kind,SnapshotCodec.Encode(chunk));
         }
         Owner(s);
     }

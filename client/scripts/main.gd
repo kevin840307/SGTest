@@ -16,7 +16,8 @@ var hud: CanvasLayer
 var info_label: Label
 var item_label: Label
 var health_label: Label
-var atlas := preload("res://scripts/entity_atlas.gd").new()
+var monster_visuals := preload("res://scripts/monster_visuals.gd").new()
+var world_generation := 0
 var doll := preload("res://scripts/paper_doll.gd").new()
 var rendered_players: Dictionary = {}
 var rendered_monsters: Dictionary = {}
@@ -89,7 +90,11 @@ func _start_client(host: String) -> void:
 func _exit_tree() -> void:
 	network.close()
 
-func _world_info(server_map: int, fingerprint: String) -> void:
+func _world_info(server_map: int, fingerprint: String, population_hash: String) -> void:
+	world_generation += 1
+	var generation := world_generation
+	map_ready = false
+	monster_visuals.reset()
 	map_id = server_map
 	if terrain != null:
 		terrain.queue_free()
@@ -116,8 +121,35 @@ func _world_info(server_map: int, fingerprint: String) -> void:
 	else:
 		info_label.text = "已連線　測試場地"
 		prediction.configure(null,WORLD_SIZE)
+	var definitions: Array = [{"id":0,"sprite":"EN004A","atlas":"enemy/en004a.json"}]
+	if server_map != 0:
+		var path := asset_root.path_join("maps/%d/population.json" % server_map)
+		if FileAccess.get_sha256(path) != population_hash:
+			push_error("Monster population does not match server")
+			get_tree().quit(1)
+			return
+		var population: Variant = JSON.parse_string(FileAccess.get_file_as_string(path))
+		if not population is Dictionary or int(population.get("version",0)) != 1:
+			get_tree().quit(1)
+			return
+		definitions = population.definitions
+	var started := Time.get_ticks_usec()
+	for definition in definitions:
+		if generation != world_generation:
+			return
+		var error: Error = monster_visuals.add(asset_root,definition)
+		if error != OK:
+			push_error("Cannot load monster definition %s (%s)" % [definition.id,error])
+			get_tree().quit(1)
+			return
+		info_label.text = "載入怪物 %d / %d" % [monster_visuals.definitions.size(),definitions.size()]
+		await get_tree().process_frame
+	if generation != world_generation:
+		return
+	print("monster_palette "+JSON.stringify({"definitions":monster_visuals.definitions.size(),"shared_atlases":monster_visuals.shared.size(),"rgba_bytes":monster_visuals.rgba_bytes,"load_ms":(Time.get_ticks_usec()-started)/1000.0}))
+	info_label.text = "已連線　%s" % (str(terrain.data.name) if terrain != null else "測試場地")
 	map_ready = true
-	network.send(24,[server_map,fingerprint])
+	network.send(24,[server_map,fingerprint,population_hash])
 
 func _physics_process(delta: float) -> void:
 	for bytes in network.receive():
@@ -137,10 +169,10 @@ func _dispatch(op: int, b: Array) -> void:
 		0:
 			own_id = int(b[0])
 			print("client connected with peer %d" % own_id)
-		1: _world_info(int(b[0]),str(b[1]))
+		1: _world_info(int(b[0]),str(b[1]),str(b[2]))
 		2: _owner_state(b[0],b[1],b[2],b[3],Vector2(b[4],b[5]),b[6],b[7],b[8],b[9],b[10])
 		3: _snapshot_chunk(b[0],b[1],b[2],b[3])
-		4: _action_event(b[0],b[1],b[2],b[3],b[4],b[5],b[6],Vector2(b[7],b[8]),b[9])
+		4: _action_event(b[0],b[1],b[2],b[3],b[4],b[5],b[6],Vector2(b[7],b[8]),b[9],b[10])
 		5: _ground_delta(b[0],PackedInt32Array(b[1]))
 		6:
 			var inventory: Dictionary = {}
@@ -167,11 +199,11 @@ func _owner_state(tick: int, clock: float, acknowledged: int, epoch: int, at: Ve
 			prediction_observed = true
 			print("prediction_ready")
 
-func _action_event(kind: int, id: int, facing: int, pose: int, clock: float, hp: int, revision: int, at: Vector2, tick: int) -> void:
+func _action_event(kind: int, id: int, facing: int, pose: int, clock: float, hp: int, revision: int, at: Vector2, tick: int, definition: int) -> void:
 	if not action_observed:
 		action_observed = true
 		print("action_received")
-	var changed: int = replica.event(kind,id,tick,at,hp,facing,pose,clock,revision)
+	var changed: int = replica.event(kind,id,tick,at,hp,facing,pose,clock,revision,definition)
 	_replica_changed(kind,id,changed)
 
 func _replica_changed(kind: int, id: int, changed: int) -> void:
@@ -317,12 +349,14 @@ func _draw_monster(id: int, visible: Rect2) -> void:
 	var point: Vector2 = rendered_monsters.get(id, visible_monsters[id].p) - position
 	if not visible.has_point(point):
 		return
-	if not atlas.pages.is_empty():
-		var monster: Dictionary = visible_monsters[id]
+	var monster: Dictionary = visible_monsters[id]
+	var visual: Dictionary = monster_visuals.resolve(int(monster.definition))
+	if not visual.is_empty():
+		var atlas: RefCounted = visual.atlas
 		var action: String = ["NS", "NW", "FA", "NH", "ND"][monster.pose]
 		var seconds: float = maxf(0.0,server_time-monster.action_time)
 		var duration: float = ACTION.DEATH_SECONDS if monster.pose == 4 else ACTION.COMBAT_SECONDS
-		atlas.draw_frame(self, point, "EN004A_%s%d" % [action, monster.facing], maxf(seconds, 0.0), 8.0,
+		atlas.draw_frame(self, point, "%s_%s%d" % [visual.prefix,action,monster.facing], maxf(seconds, 0.0), 8.0,
 			duration if monster.pose >= 2 else 0.0)
 		if monster.hp > 0 and monster.hp < 30:
 			draw_rect(Rect2(point+Vector2(-20,-150),Vector2(40,4)),Color(0.1,0.1,0.1))
@@ -409,11 +443,6 @@ func _style_ui() -> void:
 	panel.add_theme_stylebox_override("panel", style)
 
 func _load_sample_atlas() -> void:
-	var path := asset_root.path_join("enemy/en004a.json")
-	if FileAccess.file_exists(path):
-		var error: Error = atlas.open(path)
-		if error != OK:
-			push_error("Cannot load entity atlas: %s" % error)
 	var player_path := asset_root.path_join("player/b/standard/b-body.json")
 	if FileAccess.file_exists(player_path):
 		var error: Error = doll.open(asset_root)

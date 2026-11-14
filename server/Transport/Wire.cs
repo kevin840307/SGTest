@@ -7,7 +7,7 @@ namespace SGTest.Server.Transport;
 // booleans and nil. No typeless object activation or reflection deserialization.
 public static class Wire
 {
-    public const int Version=1, MaxPacket=65536;
+    public const int Version=2, MaxPacket=65536;
     public static byte[] Packet(int op,params object?[] body) => Encode(new object?[]{Version,op,body});
     public static byte[] Encode(object? value)
     {

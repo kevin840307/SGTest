@@ -1,0 +1,7 @@
+{
+  "passed": true,
+  "default_monsters": 78,
+  "definition_count": 9,
+  "protocol": 2,
+  "log": "population_loaded monsters=78 definitions=9\nSGTest C# server listening ws://127.0.0.1:27901/game map=13\n"
+}

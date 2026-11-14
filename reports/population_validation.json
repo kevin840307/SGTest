@@ -1,0 +1,10 @@
+{
+  "map_id": 13,
+  "definitions": 9,
+  "spawns": 78,
+  "sha256": "c8c94f913d0a703969592114b3d6f7aafaab45c716f9f7df1e41d95af26a0fca",
+  "sources": {
+    "Map/Map13/Enemy.dat": "04b4b2b223019d229142f6868d10ecab83c7613a6ef163b1f8bff2d7f995324e",
+    "Enemy/Enemy_Data.csv": "c586249969e8b3069b84fe18bebdeaeb109545beb22160cdb22537fa8812d52c"
+  }
+}

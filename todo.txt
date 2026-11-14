@@ -79,3 +79,10 @@ INT001 最終整合證據：merge 6eb4941（parents e2d84c2＋02ca1db），可�
 https://github.com/kevin840307/SGTest/actions/runs/43575396466
 https://github.com/kevin840307/SGTest/actions/runs/43575396469
 本機342項C#檢查、89項目前工作樹研究測試、Godot與多人原生測試PASS；CI只驗證已提交版本，不包含工作樹尚未提交的ACT／人物研究修改。完整遊戲與原版視覺／發布權利Gate仍未完成。
+
+INT002 [~] 接入已知Map13原版怪物出生／種類與多圖集呈現。
+Before：Server以固定種怪物隨機填滿，Client固定EN004A；已知原版78個出生／9種visual仍只作研究報表。
+指標：預設真出生與定義ID，壓測明確指定數量；同種共用圖集，不把不同種類畫成同一隻；死亡復活保留種類與出生區；只載入當前地圖palette。
+回歸：自製population fixture、28-byte快照與v2契約、每實體revision／方向／同種共享、C#原版內容匹配與碰撞、多種類Godot原生場景及8-client壓測。舊版ENet及v1報告不能當v2證據。
+
+INT002 [x] Map13 78原版出生／9種類已接入；原版CLI啟動log為78／9，protocol2。Python合成fixture PASS；C#346 checks PASS；Godot9visual／360 action-facing＋共享reset PASS，八方向／碰撞／replica／prediction／跨語言wire PASS；8client／1000怪／5000掉落30秒與2client combat15秒 PASS；原生1440×900平均58.50FPS、P9523.50ms，9圖集RGBA約15.66MiB、分影格載入約121ms。實際報告見reports；未把私有population或圖片納入Git。下一步INT003圖集排列一致性A/B。

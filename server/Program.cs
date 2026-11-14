@@ -10,7 +10,8 @@ int Option(string name,int fallback) => options.TryGetValue(name,out var text) ?
 bool arena=args.Contains("--combat-arena");
 int map=arena ? 0 : Option("map",13), port=Option("port",27888);
 string content=Path.GetFullPath(options.GetValueOrDefault("content",Path.Combine(AppContext.BaseDirectory,"../../../content")));
-string fingerprint="";
+string fingerprint="", populationHash="";
+Population? population=null;
 CollisionGrid? grid=null;
 if(map!=0)
 {
@@ -22,16 +23,19 @@ if(map!=0)
     if(!Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(collision))).ToLowerInvariant().Equals(metadata.GetProperty("collision_sha256").GetString(),StringComparison.Ordinal))
         throw new InvalidDataException("Map hash mismatch");
     grid=CollisionGrid.Load(collision); fingerprint=metadata.GetProperty("fingerprint").GetString()!;
+    string populationPath=Path.Combine(folder,"population.json");
+    population=Population.Load(populationPath,map);
+    populationHash=Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(populationPath))).ToLowerInvariant();
 }
-var world=new World(grid); world.Populate(arena ? 1 : Math.Clamp(Option("monsters",80),0,10000),arena ? 0 : Math.Clamp(Option("drops",0),0,5000));
+var world=new World(grid); world.Populate(arena ? 1 : Math.Clamp(Option("monsters",population is null ? 80 : -1),-1,10000),arena ? 0 : Math.Clamp(Option("drops",0),0,5000),population);
 if(arena) { world.Monsters[1].Position=new(1230,800); world.Monsters[1].Damage=50; }
-var host=new WorldHost(world,map,fingerprint);
+var host=new WorldHost(world,map,fingerprint,populationHash);
 var builder=WebApplication.CreateBuilder(); builder.Logging.ClearProviders();
 builder.WebHost.UseUrls($"http://{options.GetValueOrDefault("bind","127.0.0.1")}:{port}");
 builder.Services.AddSingleton<IHostedService>(host);
 var app=builder.Build(); app.UseWebSockets(new WebSocketOptions{KeepAliveInterval=TimeSpan.FromSeconds(15)});
 int nextId=1;
-app.MapGet("/health",()=>Results.Ok(new{protocol=1,map}));
+app.MapGet("/health",()=>Results.Ok(new{protocol=2,map}));
 app.Map("/game",async context=>
 {
     if(!context.WebSockets.IsWebSocketRequest) { context.Response.StatusCode=400; return; }
@@ -69,5 +73,6 @@ app.Map("/game",async context=>
         try { await writer; } catch(Exception ex) when(ex is WebSocketException or OperationCanceledException or InvalidDataException) { }
     }
 });
+Console.WriteLine($"population_loaded monsters={world.Monsters.Count} definitions={world.Monsters.Values.Select(m=>m.Definition).Distinct().Count()}");
 Console.WriteLine($"SGTest C# server listening ws://127.0.0.1:{port}/game map={map}");
 await app.RunAsync();

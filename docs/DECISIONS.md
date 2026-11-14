@@ -172,3 +172,11 @@ ADR-016 的逐怪物尺寸實驗補充（2026-11-14）：50 組各測 1024／204
 - Conflict resolution: 保留 main 的 tools/convert_assets.py、inspect_act.py 與研究工具；runtime decoder 改名 runtime_spr.py。新工作目錄原有未提交 ACT／人物研究檔案保留，不覆蓋或夾帶進本次 merge commit。
 - Evidence: C# domain 342 檢查、Godot wire fixture／狀態／預測／方向／地圖測試；8 client／1000 monster／5000 drop，及 2-client combat-arena 與原生 1440×900 測試見 reports。
 - Migration: root/project.godot 移到 client/project.godot；Godot Server 移除，以 dotnet 啟動；生成 Client assets 與 Server collision 分開。M0 視覺／授權缺口不因此宣稱已完成。
+
+## ADR-025 — Map13 原版出生與多種類圖集（2026-11-14）
+
+- 使用 HK2 圖像與 Recovered/Old 原始服務端 Dat 的既有解析器，將78出生／9visual編譯為本機population.json；保留原始ID、位置、來源旗標與SHA，戰鬥數值仍是原型預設，不假稱完整原版怪物規則。
+- Server 預設原版出生，明確`--monsters=`才用壓測數量；死亡復活回Home並保留Definition。Client只載入當前地圖9圖集，同種共用，重置地圖時清空；預載每個種類後讓出一個影格。
+- Wire v2：28-byte snapshot新增definitionId，Action亦帶definition，World/Ready增加population SHA。v1明確拒絕；跨語言fixture同步更新。
+- 驗證：C#346項檢查、Python合成population fixture、Godot9visual／360 action-facing／共享生命周期、8-client1000怪5000掉落30秒、2-client戰鬥與原生1440×900壓測PASS。多種類圖集RGBA16,424,596bytes，原生預載約121ms（包含分影格讓出），平均58.50FPS（60cap）、P9523.50ms。原始媒體／population只留本機。
+- 下一步：使用者補充圖集橫直排法需更一致；將另以可重跑腳本與尺寸／載入／記憶體A/B決定，不任意旋轉或拉伸原影格。

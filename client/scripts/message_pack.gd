@@ -7,7 +7,7 @@ var valid := true
 func encode(op: int, body: Array) -> PackedByteArray:
 	stream = StreamPeerBuffer.new()
 	stream.big_endian = true
-	_write([1,op,body])
+	_write([2,op,body])
 	return stream.data_array
 
 func _write(value: Variant) -> void:
@@ -43,7 +43,7 @@ func decode(bytes: PackedByteArray) -> Array:
 	var result: Variant = _read(0)
 	if not valid or stream.get_available_bytes() != 0 or not result is Array or result.size() != 3:
 		return []
-	return result if result[0] == 1 and result[1] is int and result[2] is Array else []
+	return result if result[0] == 2 and result[1] is int and result[2] is Array else []
 
 func _need(count: int) -> bool:
 	if count < 0 or count > stream.get_available_bytes():

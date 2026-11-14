@@ -65,6 +65,19 @@ for(int i=0;i<30;i++)
 }
 Check(npcs.Monsters[1].ActionTime!=npcs.Monsters[2].ActionTime,"independent animation phase");
 
+
+var population=new Population([1,2],[new(1,new(900,800)),new(2,new(1500,800))]);
+var original=new World(); original.Populate(-1,0,population);
+Check(original.Monsters.Count==2 && original.Monsters[1].Definition==1 && original.Monsters[2].Position==new Vector2(1500,800),"source population preserves identity and position");
+original.Monsters[1].Hp=0; original.Monsters[1].Respawn=0; original.Monsters[1].Position=Vector2.Zero; original.Step(.3);
+Check(original.Monsters[1].Position==new Vector2(900,800) && original.Monsters[1].Definition==1,"respawn keeps definition and home");
+original.Populate(5,0,population);
+Check(original.Monsters[5].Definition==1 && original.Monsters[4].Definition==2,"stress cycles original definition palette");
+if(File.Exists("server/content/maps/13/population.json"))
+{
+    var actualPopulation=Population.Load("server/content/maps/13/population.json",13);
+    Check(actualPopulation.Spawns.Length==78 && actualPopulation.Definitions.Count==9,"original Map13 population loads");
+}
 object?[] fixture=[4294967295L,-1,1.25,"方向",new byte[]{1,254},new object?[]{0,true,null}];
 byte[] packet=Wire.Packet(99,fixture); var decoded=Wire.Decode(packet);
 Check(Wire.Integer(decoded[1])==99,"MessagePack envelope");
@@ -75,7 +88,8 @@ foreach(var bad in new[]{packet[..^1],new byte[]{0xdd,0xff,0xff,0xff,0xff},new b
     Check(rejected,"malformed/truncated/oversized wire rejected");
 }
 Directory.CreateDirectory("reports");
-File.WriteAllText("reports/wire_fixture.json",JsonSerializer.Serialize(new { hex=Convert.ToHexString(packet).ToLowerInvariant() }));
+var snapshot=SnapshotCodec.Encode([new(42,new Monster{Definition=99,Position=new(1.25f,-2.5f),Revision=uint.MaxValue})]);
+File.WriteAllText("reports/wire_fixture.json",JsonSerializer.Serialize(new { hex=Convert.ToHexString(packet).ToLowerInvariant(),snapshot_hex=Convert.ToHexString(snapshot).ToLowerInvariant() }));
 if(File.Exists("server/content/maps/13/blocking.bin"))
 {
     var actual=CollisionGrid.Load("server/content/maps/13/blocking.bin");

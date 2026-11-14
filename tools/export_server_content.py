@@ -20,6 +20,9 @@ def main():
         shutil.copyfile(collision,dest/'blocking.bin')
         # This minimal contract matches the client's full manifest fingerprint.
         (dest/'world.json').write_text(json.dumps({k:data[k] for k in ['version','fingerprint','collision_sha256']},indent=2),encoding='utf-8')
+        population=manifest.with_name('population.json')
+        if population.is_file():
+            shutil.copyfile(population,dest/'population.json')
         print(f'exported server collision/map contract: {dest}')
 
 if __name__=='__main__': main()

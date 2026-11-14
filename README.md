@@ -38,19 +38,20 @@ python tools/extract_client.py 'C:/SGO/Stargate Online IE HK2' .cache/client
 python tools/build_assets.py .cache/client client/assets/generated --layout auto
 python tools/copy_support_assets.py .cache/client client/assets/generated
 python tools/build_maps.py .cache/client client/assets/generated --map 13
+python tools/build_population.py 'C:/SGO/Recovered/Old/服務端/Dat' --map 13
 python tools/export_server_content.py
 python tools/validate_assets.py .cache/client client/assets/generated --all-pixels
 ```
 
-`tools/convert_assets.py` 保留 main 的研究版與新 ACT 結果；runtime 素材管線使用獨立 `tools/runtime_spr.py`，不覆蓋研究版本。Client 圖片只放 `client/assets/generated/`；Server 只接收 `server/content/` 的碰撞資料與內容指紋。
+`tools/convert_assets.py` 保留 main 的研究版與新 ACT 結果；runtime 素材管線使用獨立 `tools/runtime_spr.py`，不覆蓋研究版本。Client 圖片只放 `client/assets/generated/`；Server 只接收 `server/content/` 的碰撞／出生／種類ID與內容指紋。怪物圖集在 Client 按當前地圖palette載入，同種共用、切圖清空。原版出生／visual 的對照來自使用者指定的 Recovered/Old 原始服務端 Dat；戰鬥數值仍是明確的原型預設，未宣稱還原全部怪物AI／數值。
 
 ## 已實作與驗證
 
-C# Server 權威決定移動、碰撞、八方向、攻擊、扣血、死亡復活、掉落與原子拾取。30Hz 固定模擬、10Hz 快照；每隻怪 AI 分組 5Hz，位置持續 30Hz。Server 不依 Client FPS 推進。
+C# Server 權威決定移動、碰撞、八方向、攻擊、扣血、死亡復活、掉落與原子拾取。Map13 預設按原版78個出生點配置；`--monsters=1000` 明確進入多種類壓測分布。30Hz 固定模擬、10Hz 快照；每隻怪 AI 分組 5Hz，位置持續 30Hz。Server 不依 Client FPS 推進。
 
 Client 具有本地輸入預測／確認重播、各實體獨立位置歷史、單調 RTT 時鐘及分開的動畫相位。WebSocket I/O 使用獨立 worker 與有界佇列，圖像載入／繪圖不直接驅動 socket。狀態套用仍由 Client 固定步消費；完整失焦／最小化／各 FPS 的 trace 一致性尚待驗證，不能只因有 worker 就宣稱全數通過。
 
-基本男性紙娃娃、單種怪物、Map13 地磚／物件／碰撞已接入。視窗預設 1280×720，最大寬 1440，可拖曳調整或選擇解析度；F2 切換金色／現代樣式。
+基本男性紙娃娃、Map13 的9種怪物、78個原版出生點、地磚／物件／碰撞已接入。視窗預設 1280×720，最大寬 1440，可拖曳調整或選擇解析度；F2 切換金色／現代樣式。
 
 目前為開發原型，尚無正式登入、持久化、完整裝備／物品外觀、其他地圖轉場及怪物繞路尋徑。
 

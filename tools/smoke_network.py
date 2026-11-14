@@ -80,17 +80,18 @@ def main():
     prediction_metrics = [[json.loads(m) for m in re.findall(r'prediction_metrics (.*)',c)] for c in contents[1:]]
     queues_bounded = all(rows and max(r['max_pending'] for r in rows) <= 64 for rows in prediction_metrics)
     passed = queues_bounded and predicted and joined == args.clients and delivered and behavior and not errors
-    report = {'passed': passed, 'clients': args.clients, 'monsters': 1 if args.combat_arena else args.monsters,
+    palettes = [[json.loads(m) for m in re.findall(r'monster_palette (.*)',c)] for c in contents[1:]]
+    report = {'monster_palettes':palettes,'passed': passed, 'clients': args.clients, 'monsters': 1 if args.combat_arena else args.monsters,
               'drops': 0 if args.combat_arena else args.drops, 'combat_arena':args.combat_arena,
               'map_id':0 if args.combat_arena else args.map,
               'seconds': args.seconds, 'joined': joined, 'snapshots_received_by_all': delivered,
               'actions_received_by_all': actions, 'inventories_received_by_all': inventories,
               'health_received_by_all':health,'death_received_by_all':deaths,'respawn_received_by_all':respawns,
-              'impairment':impairment,'prediction_metrics':prediction_metrics,'prediction_queues_bounded':queues_bounded,'prediction_ready_by_all':predicted, 'transport':'websocket-messagepack-v1','server_runtime':'.NET 8', 'headless': True, 'samples': measurements, 'logs': contents}
+              'impairment':impairment,'prediction_metrics':prediction_metrics,'prediction_queues_bounded':queues_bounded,'prediction_ready_by_all':predicted, 'transport':'websocket-messagepack-v2','server_runtime':'.NET 8', 'headless': True, 'samples': measurements, 'logs': contents}
     out = Path('reports/impaired_combat.json' if args.combat_arena else 'reports/impaired_network.json') if args.impaired else Path('reports/combat_network.json' if args.combat_arena else 'reports/network_load.json')
     out.parent.mkdir(exist_ok=True)
     out.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding='utf-8')
-    print(json.dumps({k:v for k,v in report.items() if k not in ('samples', 'logs','prediction_metrics')}, indent=2))
+    print(json.dumps({k:v for k,v in report.items() if k not in ('samples', 'logs','prediction_metrics','monster_palettes')}, indent=2))
     for content in errors:
         print(content)
     return 0 if passed else 1

@@ -1,10 +1,10 @@
 class_name SnapshotCodec
 extends RefCounted
 
-# 24 bytes/entity, including uint32 state revision. RPC chunks stay <=800 bytes.
+# 28 bytes/entity, including definition ID and revision. Payload stays <=800 bytes.
 # Kind: 0 player, 1 monster. Positions retain float precision; IDs use uint32.
-const STRIDE := 24
-const ROWS_PER_PACKET := 33
+const STRIDE := 28
+const ROWS_PER_PACKET := 28
 
 static func encode(rows: Array) -> PackedByteArray:
 	var bytes := PackedByteArray()
@@ -20,6 +20,7 @@ static func encode(rows: Array) -> PackedByteArray:
 		bytes[at+15] = int(row[5])
 		bytes.encode_float(at+16, float(row[6]))
 		bytes.encode_u32(at+20, int(row[7]) if row.size() > 7 else 0)
+		bytes.encode_u32(at+24,int(row[8]) if row.size() > 8 else 0)
 	return bytes
 
 static func decode(bytes: PackedByteArray) -> Array:
@@ -28,5 +29,5 @@ static func decode(bytes: PackedByteArray) -> Array:
 		return rows
 	for at in range(0, bytes.size(), STRIDE):
 		rows.append([bytes.decode_u32(at), bytes.decode_float(at+4), bytes.decode_float(at+8),
-			bytes.decode_u16(at+12), bytes[at+14], bytes[at+15], bytes.decode_float(at+16),bytes.decode_u32(at+20)])
+			bytes.decode_u16(at+12), bytes[at+14], bytes[at+15], bytes.decode_float(at+16),bytes.decode_u32(at+20),bytes.decode_u32(at+24)])
 	return rows

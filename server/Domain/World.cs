@@ -21,9 +21,11 @@ public sealed class Monster : Actor
 {
     public int Damage = 10;
     public float Phase;
+    public uint Definition;
+    public Vector2 Home;
 }
 public readonly record struct Drop(Vector2 Position,int Item);
-public readonly record struct ActionEvent(int Kind,int Id,Vector2 Position,int Hp,int Facing,int Pose,double Started,uint Revision);
+public readonly record struct ActionEvent(int Kind,int Id,Vector2 Position,int Hp,int Facing,int Pose,double Started,uint Revision,uint Definition);
 public readonly record struct PendingAttack(int Target,double Due,double Started);
 
 // Single writer. Domain has no sockets, Godot resources or database calls.
@@ -73,7 +75,7 @@ public sealed class World
         var player = new Player { Hp=PlayerHp,Position=Place(Spawn+new Vector2(20*(Players.Count%8),0)),ProtectedUntil=Time+2 };
         Players.Add(id,player); return player;
     }
-    public void Populate(int count,int drops)
+    public void Populate(int count,int drops,Population? population=null)
     {
         Monsters.Clear(); attacks.Clear(); Drops.Clear(); NextDrop=1;
         var random = new Random(8413);
@@ -83,6 +85,23 @@ public sealed class World
         for (int i=0;i<Math.Min(drops,MaximumDrops);i++)
             Drops.Add(NextDrop++,new Drop(Place(new Vector2(random.Next(2400),random.Next(1600))),1001));
         DropRevision++;
+        if(population is not null)
+        {
+            // Explicit stress counts cycle the map's real definition palette;
+            // default count=-1 uses the original source spawn positions.
+            if(count<0)
+            {
+                Monsters.Clear();
+                for(int i=0;i<population.Spawns.Length;i++)
+                {
+                    var spawn=population.Spawns[i];
+                    Monsters[i+1]=new Monster{Position=Place(spawn.Position),Definition=spawn.Definition,
+                        Phase=(i%17)*.037f,ActionTime=-(i%17)*.037};
+                }
+            }
+            else foreach(var (id,m) in Monsters) m.Definition=population.Spawns[(id-1)%population.Spawns.Length].Definition;
+        }
+        foreach(var monster in Monsters.Values) monster.Home=monster.Position;
     }
     public bool QueueInput(int id,uint epoch,uint sequence,Vector2 motion)
     {
@@ -105,7 +124,7 @@ public sealed class World
     void Pose(int kind,int id,Actor a,int pose)
     {
         a.Pose=pose; a.ActionTime=Time; a.Revision++;
-        Events.Add(new(kind,id,a.Position,a.Hp,a.Facing,pose,Time,a.Revision));
+        Events.Add(new(kind,id,a.Position,a.Hp,a.Facing,pose,Time,a.Revision,a is Monster m ? m.Definition : 0));
     }
     void Locomotion(Actor a,int pose,double phase=0)
     {
@@ -151,7 +170,7 @@ public sealed class World
         {
             if (Time>=m.Respawn)
             {
-                m.Hp=30; m.Position=Place(new Vector2(100+(id*97)%2200,100+(id*53)%1400)); m.Velocity=Vector2.Zero;
+                m.Hp=30; m.Position=Place(m.Home); m.Velocity=Vector2.Zero;
                 Pose(1,id,m,0);
             }
             return;
