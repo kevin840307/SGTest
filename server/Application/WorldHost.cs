@@ -11,6 +11,10 @@ public readonly record struct Command(int Id,int Op,object?[] Body,Session? Sess
 
 public sealed class WorldHost(World world,int map,string fingerprint,string populationHash) : BackgroundService
 {
+    // 1440x1080 plus client-side visual margin reaches roughly 1078px from
+    // screen center. Keep a bounded enter/exit hysteresis so an actor cannot
+    // despawn while still visible and respawn later at a newer coordinate.
+    public const float InterestEnterRadius=1100f, InterestExitRadius=1250f;
     public readonly Channel<Command> Commands=Channel.CreateBounded<Command>(8192);
     readonly Dictionary<int,Session> sessions=[];
     readonly List<double> timings=[];
@@ -30,7 +34,8 @@ public sealed class WorldHost(World world,int map,string fingerprint,string popu
             World.Step(1.0/30);
             foreach(var action in World.Events)
                 foreach(var session in sessions.Values)
-                    if(session.Ready && Near(World.Players[session.Id].Position,action.Position))
+                    if(session.Ready && InInterest(World.Players[session.Id].Position,action.Position,
+                        action.Kind is >=0 and <2 && session.Seen[action.Kind].Contains(action.Id)))
                         session.Send(4,action.Kind,action.Id,action.Facing,action.Pose,action.Started,action.Hp,action.Revision,action.Position.X,action.Position.Y,World.Tick,action.Definition);
             World.Events.Clear();
             if(World.Tick%3==0) foreach(var session in sessions.Values) if(session.Ready) Snapshot(session);
@@ -43,7 +48,11 @@ public sealed class WorldHost(World world,int map,string fingerprint,string popu
             deadline+=1.0/30;
         }
     }
-    static bool Near(Vector2 a,Vector2 b) => Vector2.DistanceSquared(a,b)<=900*900;
+    public static bool InInterest(Vector2 center,Vector2 position,bool alreadySeen)
+    {
+        float radius=alreadySeen ? InterestExitRadius : InterestEnterRadius;
+        return Vector2.DistanceSquared(center,position)<=radius*radius;
+    }
     void Handle(Command command)
     {
         int id=command.Id; var body=command.Body;
@@ -97,7 +106,7 @@ public sealed class WorldHost(World world,int map,string fingerprint,string popu
             IEnumerable<KeyValuePair<int,Actor>> source=kind==0
                 ? World.Players.Select(p=>new KeyValuePair<int,Actor>(p.Key,p.Value))
                 : World.Monsters.Select(p=>new KeyValuePair<int,Actor>(p.Key,p.Value));
-            var rows=source.Where(p=>Near(center,p.Value.Position)).ToArray();
+            var rows=source.Where(p=>InInterest(center,p.Value.Position,s.Seen[kind].Contains(p.Key))).ToArray();
             var current=rows.Select(p=>p.Key).ToHashSet();
             var removed=s.Seen[kind].Except(current).Select(id=>(object?)id).ToArray();
             if(removed.Length>0) s.Send(7,World.Tick,kind,removed);
@@ -110,7 +119,7 @@ public sealed class WorldHost(World world,int map,string fingerprint,string popu
     void Ground(Session s)
     {
         Vector2 center=World.Players[s.Id].Position;
-        var current=World.Drops.Where(p=>Near(center,p.Value.Position)).ToDictionary(p=>p.Key,p=>p.Value);
+        var current=World.Drops.Where(p=>InInterest(center,p.Value.Position,s.SeenDrops.Contains(p.Key))).ToDictionary(p=>p.Key,p=>p.Value);
         var added=current.Where(p=>!s.SeenDrops.Contains(p.Key)).Select(p=>(object?)new object?[]{p.Key,p.Value.Position.X,p.Value.Position.Y,p.Value.Item}).ToArray();
         var removed=s.SeenDrops.Except(current.Keys).Select(id=>(object?)id).ToArray();
         foreach(var chunk in added.Chunk(20)) s.Send(5,chunk,Array.Empty<object?>());

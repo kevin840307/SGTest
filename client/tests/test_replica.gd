@@ -51,9 +51,24 @@ func _initialize() -> void:
 		check(absf(at.x-prior.x-1.0) < 0.001,"remote velocity remains uniform between packets")
 		prior = at
 	check(smooth.position_at(smooth.monsters[2],1.32).x < 100,"independent actor can move in opposite direction")
-	check(smooth.position_at(smooth.monsters[1],10).x <= 24.001,"lost stream extrapolation is bounded")
-	smooth.event(1,1,40,Vector2(900,10),0,6,4,1.333,1)
-	check(smooth.position_at(smooth.monsters[1],1.34).x == 900,"death snaps immediately without a cross-map streak")
+	check(smooth.position_at(smooth.monsters[1],10).x <= 33.001,"lost stream extrapolation is bounded while bridging normal jitter")
+	# Presentation facing follows actual movement, not a stale/reordered packet facing.
+	smooth.snapshot(1,30,[3,0.0,0.0,30,6,1,1.0,0])
+	smooth.snapshot(1,33,[3,0.0,15.0,30,6,1,1.1,0])
+	check(smooth.facing_at(smooth.monsters[3]) == 8,"downward movement resolves original facing 8")
+	smooth.snapshot(1,36,[3,5.0,25.0,30,7,1,1.2,0])
+	check(smooth.facing_at(smooth.monsters[3]) == 8,"28-degree hysteresis prevents boundary facing churn")
+	smooth.snapshot(1,39,[3,15.0,35.0,30,7,1,1.3,0])
+	check(smooth.facing_at(smooth.monsters[3]) == 7,"clear diagonal movement changes to original facing 7")
+	check(smooth.event(1,3,40,Vector2(16,36),30,2,2,1.333,1) == 1,"attack event accepted")
+	check(smooth.facing_at(smooth.monsters[3]) == 2,"reliable attack owns presentation facing")
+	smooth.snapshot(1,42,[3,17.0,37.0,30,8,2,1.333,1])
+	check(smooth.facing_at(smooth.monsters[3]) == 2,"movement snapshot cannot flip active one-shot facing")
+	# Attack/hit no longer snap presentation to the newest authoritative point.
+	check(smooth.event(1,1,40,Vector2(24,10),30,6,2,1.333,1) == 1,"attack event accepted for smoothing")
+	check(smooth.position_at(smooth.monsters[1],1.34).x < 24.0,"attack entry preserves interpolated visual position")
+	smooth.event(1,1,41,Vector2(900,10),0,6,4,1.366,2)
+	check(smooth.position_at(smooth.monsters[1],1.38).x == 900,"death snaps immediately without a cross-map streak")
 	var clock := preload("res://scripts/server_clock.gd").new()
 	clock.observe_snapshot(10,0)
 	var previous := clock.time

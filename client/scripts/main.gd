@@ -3,7 +3,6 @@ extends Node2D
 # Godot presentation and prediction. Authority lives in the C# server.
 var port := 27888
 const WORLD_SIZE := Vector2(2400, 1600)
-const VIEW_RADIUS := 900.0
 const MAX_DROPS := 5000
 
 var local_state: Dictionary = {}
@@ -28,6 +27,7 @@ var bot_index := 0
 const CODEC = preload("res://scripts/snapshot_codec.gd")
 const ACTION = preload("res://scripts/action_policy.gd")
 const INPUT = preload("res://scripts/input_codec.gd")
+const LEGACY_FACING = preload("res://scripts/legacy_facing.gd")
 var prediction := preload("res://scripts/local_prediction.gd").new()
 var prediction_observed := false
 var clock_sync := preload("res://scripts/server_clock.gd").new()
@@ -364,7 +364,8 @@ func _draw_monster(id: int, visible: Rect2) -> void:
 		var action: String = ["NS", "NW", "FA", "NH", "ND"][monster.pose]
 		var seconds: float = maxf(0.0,server_time-monster.action_time)
 		var duration: float = ACTION.DEATH_SECONDS if monster.pose == 4 else ACTION.COMBAT_SECONDS
-		atlas.draw_frame(self, point, "%s_%s%d" % [visual.prefix,action,monster.facing], maxf(seconds, 0.0), 8.0,
+		var facing := replica.facing_at(monster)
+		atlas.draw_frame(self, point, "%s_%s%d" % [visual.prefix,action,facing], maxf(seconds, 0.0), 8.0,
 			duration if monster.pose >= 2 else 0.0)
 		if monster.hp > 0 and monster.hp < 30:
 			draw_rect(Rect2(point+Vector2(-20,-150),Vector2(40,4)),Color(0.1,0.1,0.1))
@@ -381,7 +382,7 @@ func _draw_player(id: int, visible: Rect2) -> void:
 		return
 	var state: Dictionary = visible_players[id]
 	var pose: int = state.pose
-	var facing: int = state.facing
+	var facing: int = replica.facing_at(state)
 	var seconds: float = maxf(0.0,server_time-state.action_time)
 	if id == own_id and prediction.initialized and state.hp > 0 and not ACTION.active(pose,state.action_time,server_time):
 		pose = 0 if prediction.motion.is_zero_approx() else 1
@@ -392,8 +393,8 @@ func _draw_player(id: int, visible: Rect2) -> void:
 	else:
 		draw_circle(point,13,color)
 	if state.pose == 2 and ACTION.active(state.pose,state.action_time,server_time):
-		var direction := [6,7,8,1,2,3,4,5].find(int(state.facing))
-		draw_line(point,point+Vector2.from_angle(direction*PI/4.0)*45.0,Color.WHITE,4)
+		var direction := LEGACY_FACING.vector(replica.facing_at(state))
+		draw_line(point,point+direction*45.0,Color.WHITE,4)
 
 
 func _build_ui() -> void:
@@ -492,9 +493,9 @@ func _process(delta: float) -> void:
 		for object in map_objects.visible:
 			render_order.append([float(object.p[1])+float(object.z),2,object])
 		for id in visible_monsters:
-			render_order.append([visible_monsters[id].p.y,1,id])
+			render_order.append([rendered_monsters.get(id,visible_monsters[id].p).y,1,id])
 		for id in visible_players:
-			render_order.append([visible_players[id].p.y,0,id])
+			render_order.append([rendered_players.get(id,visible_players[id].p).y,0,id])
 		render_order.sort_custom(func(a: Array,b: Array) -> bool: return a[0] < b[0])
 	drop_renderer.position = -position
 	if drops_dirty:

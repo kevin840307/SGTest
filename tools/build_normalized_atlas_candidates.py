@@ -16,10 +16,12 @@ from pathlib import Path
 if __package__:
     from .animation_definition import validate_definition
     from .build_atlas_groups import pack_source_blocks
+    from .runtime_animation_semantics import logical_views as build_logical_views
     from .runtime_spr import decode_spr
 else:
     from animation_definition import validate_definition
     from build_atlas_groups import pack_source_blocks
+    from runtime_animation_semantics import logical_views as build_logical_views
     from runtime_spr import decode_spr
 
 SIDES = (512, 1024, 2048, 4096)
@@ -184,16 +186,26 @@ def validate_runtime_semantics(definition: dict, manifest: dict) -> None:
     prefix = next(iter(prefixes))
     checked = 0
     for behavior_code, behavior in definition["behaviors"].items():
-        expected_timeline = [[step["frame_index"], step["raw_time"]]
-                             for step in behavior["timeline"]]
+        expected_raw_timeline = [[step["frame_index"], step["raw_time"]]
+                                 for step in behavior["timeline"]]
+        expected_tick_timeline = [[step["frame_index"], step["default_ticks"]]
+                                  for step in behavior["timeline"]]
         runtime_action = manifest["act"].get(behavior["act_key"])
-        if runtime_action is None or runtime_action["timeline"] != expected_timeline:
-            raise ValueError(f"{behavior_code}: runtime ACT timeline differs from normalized definition")
+        if runtime_action is None or runtime_action["timeline"] != expected_raw_timeline:
+            raise ValueError(f"{behavior_code}: runtime ACT provenance differs from normalized definition")
         if bool(runtime_action["loop"]) != bool(behavior["loop"]):
             raise ValueError(f"{behavior_code}: runtime loop differs from normalized definition")
         for facing, expected in behavior["facings"].items():
             requested = f"{prefix}_{behavior_code}{facing}"
-            if requested in manifest["clips"]:
+            logical = manifest.get("logical_views", {}).get(requested)
+            if logical is not None:
+                resolved = logical["clip"]
+                flip = bool(logical["flip_h"])
+                if logical.get("timeline_ticks") != expected_tick_timeline:
+                    raise ValueError(f"{requested}: runtime tick timeline differs from normalized definition")
+                if bool(logical.get("loop")) != bool(behavior["loop"]):
+                    raise ValueError(f"{requested}: runtime logical loop differs from normalized definition")
+            elif requested in manifest["clips"]:
                 resolved = requested
                 flip = False
             else:
@@ -253,6 +265,7 @@ def build_entity(definition: dict, source_root: Path, output_root: Path, side: i
         "clips": clip_indices,
         "aliases": semantic["aliases"],
         "act": semantic["act"],
+        "logical_views": build_logical_views(definition),
         "sources": sources,
         "normalized_schema_version": int(definition["version"]),
         "normalized_definition_sha256": definition["content_sha256"],

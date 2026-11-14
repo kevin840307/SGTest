@@ -1,5 +1,6 @@
 using System.Numerics;
 using System.Text.Json;
+using SGTest.Server.Application;
 using SGTest.Server.Domain;
 using SGTest.Server.Transport;
 
@@ -22,6 +23,10 @@ var stopped=p.Position; world.Step(.1); Check(stopped==p.Position,"input timeout
 Check(World.Newer(0,uint.MaxValue) && !World.Newer(uint.MaxValue,0),"uint32 wrap ordering");
 int[] headings=[6,7,8,1,2,3,4,5];
 for(int i=0;i<8;i++) Check(World.Heading(new Vector2(MathF.Cos(i*MathF.PI/4),MathF.Sin(i*MathF.PI/4)))==headings[i],"eight facing mapping");
+Check(WorldHost.InInterest(Vector2.Zero,new(1099,0),false),"AOI enter covers maximum viewport edge");
+Check(!WorldHost.InInterest(Vector2.Zero,new(1101,0),false),"AOI enter remains bounded");
+Check(WorldHost.InInterest(Vector2.Zero,new(1200,0),true),"AOI exit hysteresis prevents edge churn");
+Check(!WorldHost.InInterest(Vector2.Zero,new(1251,0),true),"AOI exit remains bounded");
 
 var grid=new CollisionGrid(3,3,[0,1,0,0,1,0,0,1,0]);
 Check(!grid.Allows(new(8,24),new(40,24)),"no wall tunneling");

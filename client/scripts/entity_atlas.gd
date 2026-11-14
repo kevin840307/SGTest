@@ -33,24 +33,42 @@ func sample(clip: String, seconds: float, fps: float = 8.0, duration: float = 0.
 		return cached.result
 	if not compiled.has(requested):
 		var flip := false
-		if not data.clips.has(clip):
-			var alias: Dictionary = data.aliases.get(clip,{})
-			if alias.is_empty():
+		var timeline_ticks: Array = []
+		var looping := false
+		var logical: Dictionary = data.get("logical_views",{}).get(requested,{})
+		if not logical.is_empty():
+			clip = str(logical.get("clip",""))
+			flip = bool(logical.get("flip_h",false))
+			if not data.clips.has(clip):
 				return {}
-			clip = alias.clip
-			flip = alias.flip_h
+			timeline_ticks = logical.get("timeline_ticks",[])
+			looping = bool(logical.get("loop",false))
+		else:
+			if not data.clips.has(clip):
+				var alias: Dictionary = data.aliases.get(clip,{})
+				if alias.is_empty():
+					return {}
+				clip = alias.clip
+				flip = alias.flip_h
+			var action := clip.substr(clip.length()-2,1)
+			var timing: Dictionary = data.act.get(action,{})
+			for entry in timing.get("timeline",[]):
+				timeline_ticks.append([int(entry[0]),maxi(1,int(entry[1])*40/25)])
+			looping = bool(timing.get("loop",action in ["S","W","R","U"]))
 		var indices: Array = data.clips[clip]
 		if indices.is_empty():
 			return {}
-		var action := clip.substr(clip.length()-2,1)
-		var timing: Dictionary = data.act.get(action,{})
 		var ends := PackedInt32Array()
 		var timeline_indices := PackedInt32Array()
 		var total := 0
-		for entry in timing.get("timeline",[]):
-			total += maxi(1,int(entry[1])*40/25)
+		for entry in timeline_ticks:
+			var frame_index := int(entry[0])
+			var ticks := int(entry[1])
+			if frame_index < 0 or frame_index >= indices.size() or ticks < 1:
+				return {}
+			total += ticks
 			ends.append(total)
-			timeline_indices.append(clampi(int(entry[0]),0,indices.size()-1))
+			timeline_indices.append(frame_index)
 		var frames: Array = []
 		for frame_id in indices:
 			var frame: Dictionary = data.frames[frame_id]
@@ -60,7 +78,7 @@ func sample(clip: String, seconds: float, fps: float = 8.0, duration: float = 0.
 			frames.append({"frame":frame,"flip_h":flip,"clip":clip,
 				"rect":Rect2(rect[0],rect[1],rect[2],rect[3]),"offset":Vector2(trim[0]-origin[0],trim[1]-origin[1])})
 		compiled[requested] = {"frames":frames,"ends":ends,"indices":timeline_indices,
-			"total":total,"loop":bool(timing.get("loop",action in ["S","W","R","U"]))}
+			"total":total,"loop":looping}
 	var plan: Dictionary = compiled[requested]
 	var advance := int(seconds*fps)
 	if duration > 0.0 and not plan.loop:

@@ -216,3 +216,13 @@ ADR-026補充：使用者指定Client一般遊玩支援30～90FPS；FPS選項只
 - Rejected as final fix: 只調 Atlas packing。三個 clean finalists 的同步 lifecycle frame P99 均 >40ms；normalized_memory 為53.52ms，因此 packing alone 不解決載入頓挫。
 - Consequence: ASSET204 必須 background decode + bounded main-thread GPU commit，並保留 owner refs、generation cancel、cache cap/LRU、切圖/登出 purge；完成前 `normalized_memory` 只是基底，不是 final runtime。
 - Evidence: [NORMALIZED_ATLAS_CANDIDATES.md](NORMALIZED_ATLAS_CANDIDATES.md)。原始 A/B JSON/PNG 位於 gitignore 的 reports/，不提交媒體。
+
+## ADR-030 — 原版方向語意與 Remote Motion 呈現分離（2026-11-14）
+
+- Status: **ACCEPTED RUNTIME CORRECTION / FULL VISUAL MATRIX NOT VERIFIED**。
+- Problem: Server 八方位數值本身已與 Recovered `6,7,8,1,2,3,4,5` 一致，但舊 `EntityAtlas` 會讓同名 physical clip 優先於 action-specific DirectionMapping；remote snapshot 又直接覆寫 facing，且 attack/hit active 時 position 直接 snap 到 authoritative endpoint。Server AOI 900px 亦小於 1440×1080 + cull margin 的約 1078px 可視角落。
+- Decision: `sgtest.animation/v2 logical_views` 成為 Runtime requested-facing 的第一優先；physical clip 只承載像素。Client state 分 authoritative `facing` 與 presentation `visual_facing`；walking 由實際位移向量 + 28° hysteresis 決定畫面方向，可靠 action event 取得 one-shot facing 所有權。Attack/hit 不再當 position teleport barrier；spawn/death/respawn 仍是 barrier。
+- AOI: bounded interest 改 enter=1100px、already-seen exit=1250px；Player/monster/drop/action event 共用 hysteresis，避免畫面邊緣 Despawn→Respawn 順移，不改成全圖廣播。
+- FPS: `application/run/max_fps=60` 為預設 Render cap；Client physics/input 與 Server simulation 保持 30Hz，FPS 不得改 network/state/combat cadence。
+- Direct evidence: Character `DirectionMapping .text:004C263F～004C283A`；Enemy `SetDirection .text:004CB708～004CB7E8`；Recovered `DIR_STRINGS`、monster 28° presentation hysteresis、remote-player action-facing ownership/dead-reckoning 行為。詳 [RUNTIME_DIRECTION_AND_MOTION.md](RUNTIME_DIRECTION_AND_MOTION.md)。
+- Verification: Python tools/tests 89 PASS；normalized/runtime semantic 16 PASS；C# 350 PASS；8 組 Godot headless tests PASS。原版同版本逐格人工視覺、完整 FPS/背景/多開 trace 仍 NOT VERIFIED。

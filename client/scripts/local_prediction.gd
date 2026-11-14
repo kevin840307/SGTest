@@ -3,6 +3,7 @@ extends RefCounted
 const MOTOR = preload("res://scripts/movement.gd")
 const POLICY = preload("res://scripts/action_policy.gd")
 const INPUT = preload("res://scripts/input_codec.gd")
+const LEGACY_FACING = preload("res://scripts/legacy_facing.gd")
 const MAX_PENDING := 64
 const MAX_AUTHORITY_AGE := 0.5
 var navigation: RefCounted
@@ -93,7 +94,7 @@ func step_input(requested: Vector2, local: float, clock: float) -> bool:
 		walk_started = clock
 	motion = next_motion
 	if not motion.is_zero_approx():
-		facing = [6,7,8,1,2,3,4,5][posmod(roundi(motion.angle()/(PI/4.0)),8)]
+		facing = LEGACY_FACING.from_vector(motion,facing)
 	sequence = (sequence+1)&0xffffffff
 	pending.append({"sequence":sequence,"motion":motion})
 	max_pending = maxi(max_pending,pending.size())

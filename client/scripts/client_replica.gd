@@ -3,6 +3,7 @@ extends RefCounted
 # Transport-independent authoritative client state. Unreliable packets update
 # individual entities; one missing packet never blocks an entire world frame.
 const POLICY = preload("res://scripts/action_policy.gd")
+const LEGACY_FACING = preload("res://scripts/legacy_facing.gd")
 const MAX_SNAPSHOT_AGE := 9 # 300ms at the authoritative 30Hz simulation.
 const TOMBSTONE_TICKS := 90
 var players: Dictionary = {}
@@ -11,7 +12,11 @@ var removed := [{},{}]
 var latest_tick := -1
 var prune_tick := -1
 const INTERPOLATION_DELAY := 0.12
-const MAX_EXTRAPOLATION := 0.1
+# Server snapshots arrive every 100ms. A 250ms bounded visual horizon bridges
+# normal jitter/backpressure without changing authoritative state or collision.
+const MAX_EXTRAPOLATION := 0.25
+const MAX_PRESENT_SPEED := 650.0
+const FACING_HOLD_DEGREES := 28.0
 
 func _remember(state: Dictionary, tick: int, snap: bool) -> void:
 	if snap or not state.has("history"):
@@ -23,11 +28,25 @@ func _remember(state: Dictionary, tick: int, snap: bool) -> void:
 	if history.size() > 8:
 		history.pop_front()
 
+func _movement_visual_facing(previous: Dictionary, next_position: Vector2, incoming_facing: int, pose: int) -> int:
+	if previous.is_empty():
+		return incoming_facing if LEGACY_FACING.valid(incoming_facing) else 1
+	var current := int(previous.get("visual_facing",previous.get("facing",incoming_facing)))
+	if pose != 1:
+		return current
+	var displacement := next_position-Vector2(previous.p)
+	return LEGACY_FACING.from_vector(displacement,current,FACING_HOLD_DEGREES)
+
+func facing_at(state: Dictionary) -> int:
+	return int(state.get("visual_facing",state.get("facing",1)))
+
 # Each actor owns its own small history. Missing another actor's packet never
 # changes this timeline. Linear interpolation avoids easing at every snapshot.
 func position_at(state: Dictionary, clock: float, navigation: RefCounted = null) -> Vector2:
 	var history: Array = state.get("history",[])
-	if history.size() < 2 or POLICY.active(state.pose,state.action_time,clock):
+	# Attack/hit are presentation one-shots, not teleport barriers. Keep the
+	# same position timeline through them; only spawn/death/respawn reset history.
+	if history.size() < 2:
 		return state.p
 	var target := (clock-INTERPOLATION_DELAY)*30.0
 	var result: Vector2 = history[0][1]
@@ -43,6 +62,7 @@ func position_at(state: Dictionary, clock: float, navigation: RefCounted = null)
 	var previous: Array = history[-2]
 	origin = last[1]
 	var velocity: Vector2 = (last[1]-previous[1])/float(last[0]-previous[0]) if int(state.pose) == 1 else Vector2.ZERO
+	velocity = velocity.limit_length(MAX_PRESENT_SPEED/30.0)
 	result = origin+velocity*clampf(target-float(last[0]),0,MAX_EXTRAPOLATION*30.0)
 	return result if navigation == null else navigation.slide(origin,result)
 
@@ -61,7 +81,7 @@ func _advance(tick: int) -> void:
 
 func _state(row: Array) -> Dictionary:
 	return {"p":Vector2(row[1],row[2]),"hp":int(row[3]),"facing":int(row[4]),
-		"pose":int(row[5]),"action_time":float(row[6]),"revision":int(row[7]),
+		"visual_facing":int(row[4]),"pose":int(row[5]),"action_time":float(row[6]),"revision":int(row[7]),
 		"definition":int(row[8]) if row.size() > 8 else 0,"snapshot_tick":-1,"event_tick":-1,"tick":-1}
 
 func snapshot(kind: int, tick: int, row: Array) -> int:
@@ -81,12 +101,17 @@ func snapshot(kind: int, tick: int, row: Array) -> int:
 	var result := 1
 	if previous.is_empty() or (int(previous.pose) != int(row[5]) and (int(previous.pose) == 4 or int(row[5]) == 4)):
 		result = 2 # spawn, death or respawn must not interpolate across the map.
+	var next_position := Vector2(row[1],row[2])
+	var next_pose := int(row[5])
+	var incoming_facing := int(row[4])
+	var visual_facing := incoming_facing if result == 2 else _movement_visual_facing(previous,next_position,incoming_facing,next_pose)
 	var state: Dictionary = previous if not previous.is_empty() else _state(row)
-	state.p = Vector2(row[1],row[2])
+	state.p = next_position
 	state.definition = int(row[8]) if row.size() > 8 else 0
 	state.hp = int(row[3])
-	state.facing = int(row[4])
-	state.pose = int(row[5])
+	state.facing = incoming_facing
+	state.visual_facing = visual_facing
+	state.pose = next_pose
 	state.action_time = float(row[6])
 	state.revision = int(row[7])
 	state.snapshot_tick = tick
@@ -111,6 +136,10 @@ func event(kind: int, id: int, tick: int, at: Vector2, hp: int, facing: int, pos
 	state.definition = definition
 	state.hp = hp
 	state.facing = facing
+	# Reliable action state owns presentation facing. Movement snapshots arriving
+	# around the same action may move the body but must not flip/restart the pose.
+	if LEGACY_FACING.valid(facing):
+		state.visual_facing = facing
 	state.pose = pose
 	state.action_time = POLICY.wire_time(started)
 	state.revision = revision

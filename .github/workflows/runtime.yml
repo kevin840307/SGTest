@@ -32,4 +32,5 @@ jobs:
       - run: python -m unittest discover -s tools -p test_runtime_baseline.py
       - run: python -m unittest discover -s tools -p test_animation_definition.py
       - run: python -m unittest discover -s tools -p test_normalized_atlas_candidates.py
+      - run: python -m unittest discover -s tools -p test_runtime_animation_semantics.py
       - run: python -m unittest discover -s tools -p test_report_normalized_atlas_candidates.py

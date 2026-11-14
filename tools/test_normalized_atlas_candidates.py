@@ -76,9 +76,30 @@ class NormalizedAtlasCandidateTests(unittest.TestCase):
                 "clips": {name: [0] for name in view["canonical_clips"]},
                 "aliases": view["aliases"],
                 "act": view["act"],
+                "logical_views": {
+                    requested: {
+                        "clip": logical["clip"],
+                        "flip_h": logical["flip_h"],
+                        "timeline_ticks": [[0, 8]],
+                        "loop": True,
+                    }
+                    for requested, logical in {
+                        "E_NS1": {"clip": "E_NS1", "flip_h": False},
+                        "E_NS2": {"clip": "E_NS1", "flip_h": False},
+                        "E_NS3": {"clip": "E_NS3", "flip_h": False},
+                        "E_NS4": {"clip": "E_NS3", "flip_h": True},
+                        "E_NS5": {"clip": "E_NS3", "flip_h": True},
+                        "E_NS6": {"clip": "E_NS1", "flip_h": True},
+                        "E_NS7": {"clip": "E_NS1", "flip_h": True},
+                        "E_NS8": {"clip": "E_NS1", "flip_h": True},
+                    }.items()
+                },
             }
             validate_runtime_semantics(definition, manifest)
+            # A same-named physical clip is harmless because logical_views wins.
             manifest["clips"]["E_NS2"] = [0]
+            validate_runtime_semantics(definition, manifest)
+            manifest["logical_views"]["E_NS2"]["clip"] = "E_NS2"
             with self.assertRaisesRegex(ValueError, "runtime resolves"):
                 validate_runtime_semantics(definition, manifest)
 
