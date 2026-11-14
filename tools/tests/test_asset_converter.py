@@ -119,6 +119,7 @@ class ConverterTests(unittest.TestCase):
             (original/'Data1.dat').write_bytes(b'fixture')
             coverage = {'expected_spr':2,'actual_spr':1,'missing':['enemy/missing.spr'],'extra':[]}
             with patch.object(sys,'argv',['cli.py','build',str(original),'--runtime-only','--extracted-source',str(source)]), \
+                 patch.object(cli,'REPO',Path(temp)), \
                  patch.object(cli,'audit_sprite_coverage',return_value=coverage), \
                  patch.object(cli,'build_runtime_assets') as build, patch.object(cli,'write_json') as write:
                 self.assertEqual(cli.main(),1)

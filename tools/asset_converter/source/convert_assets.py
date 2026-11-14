@@ -123,27 +123,7 @@ def convert(source: Path, root: Path, dest: Path, side: int, force: bool = False
 
 
 def convert_act(source: Path, root: Path, dest: Path, force: bool = False) -> str:
-    relative = source.relative_to(root)
-    target = dest / relative.parent / (source.stem + ".act.json")
-    raw = source.read_bytes()
-    digest = hashlib.sha256(raw).hexdigest()
-    if target.exists() and not force:
-        old = json.loads(target.read_text(encoding="utf-8"))
-        if old.get("sha256") == digest and old.get("version") == 4:
-            return "cached"
-    actions = parse_act(raw)
-    target.parent.mkdir(parents=True, exist_ok=True)
-    temporary = target.with_name(target.name + ".tmp")
-    temporary.write_text(json.dumps({"version": 4, "source": relative.as_posix(),
-                         "sha256": digest,
-                         "timing_basis": "legacy_reference_fixed_50hz_default_speed",
-                         "legacy_fixed_update_hz": 50, "legacy_fixed_update_ms": 20,
-                         "legacy_default_action_speed": 25,
-                         "runtime_speed_can_override": True,
-                         "action_semantics": None, "actions": actions},
-                         ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
-    temporary.replace(target)
-    return "converted"
+    return _convert_sidecar(source, root, dest, ".act", force)
 
 
 def parse_sif(raw: bytes) -> dict:
@@ -165,36 +145,13 @@ def parse_sif(raw: bytes) -> dict:
 
 
 def convert_sif(source: Path, root: Path, dest: Path, force: bool = False) -> str:
-    relative = source.relative_to(root)
-    target = dest / relative.parent / (source.stem + ".sif.json")
-    raw = source.read_bytes()
-    digest = hashlib.sha256(raw).hexdigest()
-    if target.exists() and not force:
-        old = json.loads(target.read_text(encoding="utf-8"))
-        if old.get("sha256") == digest and old.get("version") == 1:
-            return "cached"
-    record = parse_sif(raw)
-    target.parent.mkdir(parents=True, exist_ok=True)
-    temporary = target.with_name(target.name + ".tmp")
-    temporary.write_text(json.dumps({"version": 1, "source": relative.as_posix(),
-                        "sha256": digest, **record}, ensure_ascii=False,
-                        separators=(",", ":")), encoding="utf-8")
-    temporary.replace(target)
-    return "converted"
+    return _convert_sidecar(source, root, dest, ".sif", force)
 
 
 DRAW_ROW = re.compile(r"^([A-Z0-9]+)\s*:\s*(.+)$")
 
 
-def convert_draw_order(source: Path, root: Path, dest: Path, force: bool = False) -> str:
-    relative = source.relative_to(root)
-    target = dest / relative.parent / (source.stem + ".draw_order.json")
-    raw = source.read_bytes()
-    digest = hashlib.sha256(raw).hexdigest()
-    if target.exists() and not force:
-        old = json.loads(target.read_text(encoding="utf-8"))
-        if old.get("sha256") == digest:
-            return "cached"
+def parse_draw_order(raw: bytes) -> list[dict]:
     rows = []
     keys = set()
     for number, line in enumerate(raw.decode("ascii").splitlines(), 1):
@@ -208,13 +165,48 @@ def convert_draw_order(source: Path, root: Path, dest: Path, force: bool = False
             raise ValueError(f"empty draw-order layer at row {number}")
         keys.add(match[1])
         rows.append({"key": match[1], "raw_layers": layers})
-    target.parent.mkdir(parents=True, exist_ok=True)
-    temporary = target.with_name(target.name + ".tmp")
-    temporary.write_text(json.dumps({"version": 1, "source": relative.as_posix(),
-                         "sha256": digest, "layer_suffix_semantics": None,
-                         "rows": rows}, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+    return rows
+
+
+def sidecar_document(source: Path, root: Path, kind: str) -> dict:
+    relative = source.relative_to(root)
+    raw = source.read_bytes()
+    document = {"version":4 if kind==".act" else 1,"source":relative.as_posix(),
+                "sha256":hashlib.sha256(raw).hexdigest()}
+    if kind==".act":
+        document.update({"timing_basis":"legacy_reference_fixed_50hz_default_speed",
+                         "legacy_fixed_update_hz":50,"legacy_fixed_update_ms":20,
+                         "legacy_default_action_speed":25,"runtime_speed_can_override":True,
+                         "action_semantics":None,"actions":parse_act(raw)})
+    elif kind==".sif":
+        document.update(parse_sif(raw))
+    elif kind=="draw_order":
+        document.update({"layer_suffix_semantics":None,"rows":parse_draw_order(raw)})
+    else:
+        raise ValueError("unknown sidecar kind: "+kind)
+    return document
+
+
+def _convert_sidecar(source: Path, root: Path, dest: Path, kind: str, force: bool) -> str:
+    relative = source.relative_to(root)
+    suffix = ".draw_order.json" if kind=="draw_order" else kind+".json"
+    target = dest/relative.parent/(source.stem+suffix)
+    document = sidecar_document(source,root,kind)
+    if not force:
+        try:
+            if json.loads(target.read_text(encoding="utf-8")) == document:
+                return "cached"
+        except (OSError,ValueError,TypeError):
+            pass
+    target.parent.mkdir(parents=True,exist_ok=True)
+    temporary = target.with_name(target.name+".tmp")
+    temporary.write_text(json.dumps(document,ensure_ascii=False,separators=(",",":")),encoding="utf-8")
     temporary.replace(target)
     return "converted"
+
+
+def convert_draw_order(source: Path, root: Path, dest: Path, force: bool = False) -> str:
+    return _convert_sidecar(source,root,dest,"draw_order",force)
 
 
 def main() -> int:

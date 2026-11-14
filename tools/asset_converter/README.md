@@ -83,3 +83,9 @@ tools/asset_converter/
 從專案根目錄重跑離線評估：`python tools/benchmark_converter_planning.py --source .cache/asset_converter/source`。三組真素材各跑3次；快速幾何路徑每次batch 100次取單次CPU時間，避免Windows process CPU timer把短測量量成0。報告含來源SHA與打包模組SHA，只比較候選評估，沒有包含最終PNG產出／磁碟／遊戲FPS。
 
 2026-11-15三次中位數：EN010A 765.625→1.719ms；Boy body 3093.750→30.625ms；Boy hair00 3062.500→36.250ms。四候選尺寸的頁數／RGBA面積全相等；160組隨機候選以及透明／atomic失敗／無畫布配置測試PASS。最終真打包的頁數與RGBA成本另須吻合選定候選，否則拒絕發布。`reports/converter_planning_geometry.json`保留原始樣本與指紋，不把此結果推論成遊戲FPS或整體建置相同比例加速。
+
+## 完整驗收與互斥
+
+`python tools/asset_converter/cli.py verify "C:\SGO\Stargate Online IE HK2"`驗收完整索引、PNG與sidecar來源；不會改寫離線圖集／Runtime。報告預設`reports/converter_archive_verification.json`。preview不是完整驗收證據，build/verify不可同時操作相同checkout（OS lock，busy exit2）。ACT/SIF/DrawOrder的cached條件包含實際解碼內容相等，JSON壞掉可自動重建。
+
+2026-11-15完整7890 groups／75588 SPR／282968 frames、613 ACT／1165 SIF／9 DrawOrder皆PASS。新產物已做Runtime資源／多人回歸；Client RAM目標仍未通過，最新範圍與數據見`docs/ASSET_CONVERTER.md`。完整離線素材不是整個Recovered玩法已完成。

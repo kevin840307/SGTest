@@ -80,3 +80,21 @@ python -m unittest discover -s tools/tests -q
 以 Player/A/Standard/A-Hair00 原始 SPR（真素材）單次量測：四尺寸原本完整打包累積 3396.8 ms，改為幾何評估累積 25.0 ms；此為候選評估階段單次 A/B，實際完整轉換另含最終打包、像素驗證、PNG 壓縮與磁碟寫入，不能說整體快 136 倍。四尺寸各自的頁數與 RGBA8 理論容量完全相同。原始實測：`local-assets/asset_converter/candidate_geometry_benchmark.json`。
 
 驗收：`tools/tests/test_adaptive_measure.py` 4 組合成案例（含透明影格、多頁拒絕、邊界尺寸），以及實際原版玩家髮型素材一組均 PASS；`tools/tests` 總計 103 PASS。最新全量 source archive 的結果以 `local-assets/asset_converter/complete/index.json` 為準；之前的 preview index 不可當作全量完成證據。
+
+## 完整來源與一鍵建置驗收（2026-11-15）
+
+`build <原始遊戲資料夾>`已實際完成：原版Data1 SHA `9ae08a8a7bb784720c83bfdd608688c045d717dee3868c13d7b8f444562bfc42`，完整SPR來源集合75,588，missing/extra皆0；7,890 groups、282,968 frames、8,094 pages，建置錯誤0。613 ACT、1,165 SIF、9 DrawOrder皆完成，並由verify從原始來源重解析比對內容。舊7,893/75,591是舊cache範圍，不能套作目前原版完整度門檻。
+
+完整離線RGBA總量5,010,743,500 bytes、PNG 998,196,066 bytes，保留local-assets，不是Runtime常駐。原始路徑的一鍵驗收本次246.95秒，已使用既有抽取／圖集快取，不代表空cache首建時間。實際Runtime發布11檔：Map13九種怪／78出生、573 frames/2頁；Boy base 881 frames/1頁；865 terrain tiles/367 objects，地形pixel-roundtrip PASS。
+
+只讀驗收入口（同一個CLI）：
+
+```powershell
+python tools/asset_converter/cli.py verify 'C:\SGO\Stargate Online IE HK2'
+```
+
+驗證完整index與source group集合、source/decoder/metadata/page SHA、影格來源順序、實際PNG尺寸／幾何及ACT/SIF/DrawOrder解碼內容。verify不重播builder的全量pixel比較，報告明示此範圍。build/verify使用checkout內OS lock互斥；busy回傳2並保留舊報告，程序結束（含異常結束）會釋放鎖，不以lock檔存在判斷執行狀態。Sidecar快取重新比對原始解碼內容，source SHA沒變而JSON被改壞也會重建。
+
+證據：`reports/converter_full_build.json`、`reports/converter_archive_verification.json`、`reports/asset_converter_acceptance/summary.json`及原始lifecycle/multiplayer JSON。Python113 PASS；C#376 PASS；Godot方向／9visual360方向動作／map objects／paper doll／store／wire六組PASS。
+
+新產物30次async載入卸載：frame P95/P99 16.826/16.955ms、全部紋理handle與Store resident回收PASS、RSS回收PASS。20實際Client（1原生＋19headless）/300怪/1000掉落/40秒：59.996FPS、frame P95/P99 18.965/20.444ms；Client CPU中位數30.8%一核心、Server2.35%。Client RSS峰值216.96MiB，仍高於200MiB目標，**FAIL**，後續需獨立優化。這輪只測60FPS，未重新跑完整背景／多FPS矩陣；AS005原版畫面人工對照與其它Recovered功能亦未完成。

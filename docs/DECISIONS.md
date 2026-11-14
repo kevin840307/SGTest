@@ -318,3 +318,11 @@ ADR-026補充：使用者指定Client一般遊玩支援30～90FPS；FPS選項只
 - Decision: 保持原SPR atomic／2px shelf／MaxRects的實際演算法，512/1024/2048/4096候選評估不建立PIL頁面。只繪製最終選中方案；發布前actual page count/RGBA必須與候選一致，再逐格比對source crop/size/origin/pixels。
 - Evidence: `tools/benchmark_converter_planning.py`，三次CPU process_time中位數：EN010A 765.625→1.719ms、Boy body 3093.750→30.625ms、hair00 3062.500→36.250ms；geometry batch100避免短測量量化成0。四尺寸候選頁數／RGBA相等。原始樣本與source/module SHA見reports/converter_planning_geometry.json。此為候選評估，非全建置／Runtime FPS或RAM提升宣稱。
 - Regression: 160組隨機候選對照真打包、全透明／atomic多頁拒絕／無畫布配置、錯誤估值拒絕發布、JSON類型壞cache重建；tools/tests共108 PASS。全量archive仍獨立驗收，ASSET209尚未完成。
+
+## ADR-040 — 完整Archive驗收與build/verify操作隔離（2026-11-15）
+
+- Status: ASSET209完整離線轉換PASS；整體遊戲／RAM目標未完成。
+- Decision: 同一CLI提供build/verify；verify以原始來源集合和完整index稽核所有群組，拒絕preview/partial作完整證據，檢查source/decoder/metadata/page SHA、frame identity、PNG實際尺寸及候選成本。ACT/SIF/DrawOrder使用共用document解析器重新比對，cache不只看source SHA。驗收不假稱重新做全量pixel replay。
+- Concurrency: 已重現解包與verify重疊時會讀到暫態來源，因此同checkout採OS lock互斥；busy exit2、不改舊報告。lock檔殘留不是活程序證據，跨程序／異常退出解鎖已測。
+- Evidence: 7890groups/75588SPR/282968frames/8094pages、613ACT/1165SIF/9DrawOrder，0錯誤；原始路徑一鍵build與後續verify PASS。docs/ASSET_CONVERTER.md、reports/converter_full_build.json、converter_archive_verification.json。113 Python／376 C#／6組Godot PASS；30cycle async回收與20client場景PASS，原始JSON見reports/asset_converter_acceptance。
+- Open: Client RSS216.96MiB仍高於200MiB（FAIL），PERF002先定位CPU Image／metadata／worker持有再優化；不改同步頻率或減畫質。其它Recovered功能及AS005/AS008仍是獨立未完成範圍。

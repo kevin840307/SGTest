@@ -1,0 +1,43 @@
+{
+  "status": "pass",
+  "counts": {
+    "groups": 7890,
+    "sources": 75588,
+    "frames": 282968,
+    "pages": 8094,
+    "rgba_bytes": 5010743500,
+    "png_bytes": 998196066
+  },
+  "expected_groups": 7890,
+  "index_sha256": "a9f5c9c0efd3e4967243ff19dd625e3021f71de9c07aafa213978d4e16e40528",
+  "decoder_sha256": "8ce01c3828e10ac7d79cd78071ff61aa86b1afb2f11a5fc3313c29a115a5085d",
+  "sidecars": {
+    ".act": {
+      "found": 613,
+      "ok": 613
+    },
+    ".sif": {
+      "found": 1165,
+      "ok": 1165
+    },
+    "draw_order": {
+      "found": 9,
+      "ok": 9
+    }
+  },
+  "sidecars_verified": {
+    ".act": 613,
+    ".sif": 1165,
+    "draw_order": 9
+  },
+  "errors": [],
+  "scope": "source/cache integrity + frame identities + PNG geometry + source sidecar replay; builder pixel comparison not replayed",
+  "source_coverage": {
+    "expected_spr": 75588,
+    "actual_spr": 75588,
+    "missing": [],
+    "extra": [],
+    "archive_entries": 41687,
+    "scope": "SPR presence; byte integrity checked by decoder"
+  }
+}

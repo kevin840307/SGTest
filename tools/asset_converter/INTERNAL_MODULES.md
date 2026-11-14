@@ -17,10 +17,12 @@ run_build_assets.bat "C:\SGO\Stargate Online IE HK2"
 - `animation_definition.py`、`runtime_animation_semantics.py`、`audit_character_layers.py`：動作方向、鏡像、原點與紙娃娃層級定義。
 - `build_assets.py`、`build_maps.py`、`build_enemy_map_palette.py`、`build_population.py`、`asset_pipeline.py`：地圖資料、怪物分布與已接線的 Map13／Session Bundle 建置。
 
-上述 15 個依賴模組全部與入口放在同一個 Python package，內部使用 `from .xxx import ...`，不是由新 CLI 往上層匯入散落的 `tools/*.py`。外層同名腳本暫保留給舊分析／既有測試，**新正式流程以本資料夾實作為主**；外層未同步更動不會改變一鍵轉換結果。
+所有依賴模組與入口放在同一個 Python package，內部使用 `from .xxx import ...`，不是由新 CLI 往上層匯入散落的 `tools/*.py`。外層同名腳本暫保留給舊分析／既有測試，**新正式流程以本資料夾實作為主**；外層未同步更動不會改變一鍵轉換結果。
 
 必要第三方套件：`python -m pip install -r tools/asset_converter/requirements.txt`。不自動修改 Python 環境。
 
 注意：使用者要求的單一路徑執行是指此 repo 下不再需要尋找多個轉換工具；專有原版素材、.NET Client／Server、原版 Server Dat 仍是指定來源或既有資料，不會打包進這個資料夾；完整素材輸出保留在 Git-ignore 的 local-assets，而非 client Runtime 全量載入。
 
 最新驗證見 `docs/ASSET_CONVERTER.md` 和 `tools/tests/test_asset_converter.py`。
+
+`atlas/archive_audit.py`負責完整離線索引／source/page/metadata與sidecar驗收；`operation_lock.py`以OS鎖保護同一checkout的build/verify，程序結束即釋放，不依賴lock檔存在與否。兩者均屬離線工具，不新增Runtime類別。

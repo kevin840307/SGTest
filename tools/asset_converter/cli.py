@@ -9,6 +9,8 @@ sys.path.insert(0, str(REPO / "tools"))
 
 from asset_converter.atlas.adaptive_atlas import build_group, POLICY
 from asset_converter.atlas.build_atlas_groups import select_groups
+from asset_converter.atlas.archive_audit import audit_archive
+from asset_converter.operation_lock import converter_operation, ConverterBusy
 from asset_converter.source.convert_assets import (
     convert_act,
     convert_draw_order,
@@ -282,7 +284,36 @@ def main() -> int:
     )
     p.add_argument("--skip-sidecars", action="store_true")
     p.add_argument("--force", action="store_true")
+    verify = sub.add_parser('verify',help='audit the complete private archive against the original SPR source set')
+    verify.add_argument('original',type=Path)
+    verify.add_argument('--extracted-source',type=Path,default=REPO/'.cache/asset_converter/source')
+    verify.add_argument('--archive-output',type=Path,default=REPO/'local-assets/asset_converter/complete')
+    verify.add_argument('--report',type=Path,default=REPO/'reports/converter_archive_verification.json')
     args = ap.parse_args()
+    try:
+        with converter_operation(REPO/'.cache/asset_converter/operation.lock'):
+            return _execute(args)
+    except ConverterBusy as error:
+        print(json.dumps({'status':'busy','error':str(error)},ensure_ascii=False),flush=True)
+        return 2
+
+
+def _execute(args):
+    if args.command=='verify':
+        report={'status':'failed'}
+        try:
+            source=resolve_source(args)
+            coverage=audit_sprite_coverage(args.original,source)
+            report=audit_archive(source,args.archive_output)
+            report['source_coverage']=coverage
+            if coverage['missing'] or coverage['extra']:
+                report['status']='failed'
+                report['errors'].append({'source':'original SPR presence mismatch'})
+        except (OSError,ValueError,KeyError,TypeError) as error:
+            report={'status':'failed','error':str(error)}
+        write_json(args.report,report)
+        print(json.dumps(report,ensure_ascii=False,indent=2),flush=True)
+        return 0 if report['status']=='pass' else 1
     if args.archive_only and args.runtime_only:
         ap.error("archive-only and runtime-only conflict")
     started = time.perf_counter()

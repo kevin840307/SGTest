@@ -52,3 +52,9 @@ Map13：230,400 個地磚索引、865 種共用地磚、367 個物件，其中 1
 ## 舊 Godot/ENet 歷史 UDP 測試（不代表新 C# Server）：impaired_combat.json
 
 2 客戶端、20 秒，實際 ENet 經 UDP 代理：每向 70±25ms、5% 丟包及亂序。已轉送 2,321 包，丟棄 130 包；通過：True。 最大待確認輸入 17／64，最大校正 0.00px。 這是可重跑的本機網路退化情境，非真實跨國連線或所有網路情況的保證。
+
+## 2026-11-15 完整原始素材轉換驗收
+
+`converter_full_build.json`記錄原始路徑的一鍵build；`converter_archive_verification.json`記錄後續穩定輸出的完整驗收，75588 SPR／282968 frames、7890 groups，613 ACT／1165 SIF／9 DrawOrder，0錯誤。早期asset_inventory/asset_validation的75591/282990屬舊cache範圍，保留為歷史，不能代替這次原版集合驗收。圖像只保留local-assets。
+
+`asset_converter_acceptance/`有30-cycle async及20client/300monster/1000drop的實際原始JSON與摘要。Frame與引用／GPU回收通過；Client RSS216.96MiB高於200MiB目標，FAIL。此輪只驗收60FPS；不是全部Recovered功能／原版Golden／driver實體VRAM已完成的證據。

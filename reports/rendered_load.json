@@ -1,20 +1,20 @@
 {
-  "draw_calls_last_frame": 231.0,
-  "draw_calls_p95": 228.0,
-  "frame_ms_max": 27.512,
-  "frame_ms_p50": 16.678,
-  "frame_ms_p95": 18.947,
-  "frame_ms_p99": 20.322,
+  "draw_calls_last_frame": 291.0,
+  "draw_calls_p95": 280.0,
+  "frame_ms_max": 31.683,
+  "frame_ms_p50": 16.66,
+  "frame_ms_p95": 18.965,
+  "frame_ms_p99": 20.444,
   "frames": 2101,
-  "mean_fps": 59.9988034508022,
+  "mean_fps": 59.9961495093766,
   "renderer": "NVIDIA GeForce RTX 3050",
   "resolution": [
     1440,
     900
   ],
   "sample_seconds": 35.0,
-  "static_memory_bytes": 68961657,
+  "static_memory_bytes": 69249567,
   "texture_memory_bytes": 46035499.0,
-  "video_memory_bytes": 52534347.0,
+  "video_memory_bytes": 54667099.0,
   "warmup_seconds": 2
 }

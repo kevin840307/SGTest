@@ -1,0 +1,80 @@
+{
+  "scope": "fresh rebuild acceptance; not a complete Recovered feature or FPS/background matrix",
+  "lifecycle": {
+    "execution_passed": true,
+    "cycles": 30,
+    "all_texture_handles_released": true,
+    "engine_texture_recovery_passed": true,
+    "store_resident_recovery_passed": true,
+    "frame_ms_p95": 16.826,
+    "frame_ms_p99": 16.955,
+    "frame_ms_max": 17.265,
+    "rss_peak_bytes": 208195584,
+    "ram_recovery": {
+      "warm_baseline_bytes": 178475008.0,
+      "after_peak_bytes": 190582784.0,
+      "last10_minus_first10_median_bytes": 5222400.0,
+      "passed": true
+    },
+    "source_files_unchanged_during_run": true
+  },
+  "multiplayer": {
+    "scenario": {
+      "clients": 20,
+      "native_clients": 1,
+      "headless_clients": 19,
+      "monster_assets": "C:\\SGO\\SRC\\SGTest\\client\\assets",
+      "monsters": 300,
+      "drops": 1000,
+      "map": 13,
+      "seconds": 40,
+      "render_cap": 60,
+      "resolution": [
+        1440,
+        900
+      ],
+      "bot_paths": "deterministic per-client phase; not identical trajectories"
+    },
+    "rendered": {
+      "draw_calls_last_frame": 291.0,
+      "draw_calls_p95": 280.0,
+      "frame_ms_max": 31.683,
+      "frame_ms_p50": 16.66,
+      "frame_ms_p95": 18.965,
+      "frame_ms_p99": 20.444,
+      "frames": 2101,
+      "mean_fps": 59.9961495093766,
+      "renderer": "NVIDIA GeForce RTX 3050",
+      "resolution": [
+        1440,
+        900
+      ],
+      "sample_seconds": 35.0,
+      "static_memory_bytes": 69249567,
+      "texture_memory_bytes": 46035499.0,
+      "video_memory_bytes": 54667099.0,
+      "warmup_seconds": 2
+    },
+    "server_rss_peak_bytes": 84086784,
+    "server_cpu_median_one_core_percent": 2.35,
+    "native_client_rss_peak_bytes": 227504128,
+    "native_client_cpu_median_one_core_percent": 30.8,
+    "gates": {
+      "execution": "PASS",
+      "input_integrity": "PASS",
+      "frame_p95": "PASS",
+      "frame_p99": "PASS",
+      "client_ram": "FAIL",
+      "client_cpu": "PASS",
+      "server_cpu": "PASS",
+      "tick_work": "NOT VERIFIED",
+      "physical_driver_vram": "NOT VERIFIED",
+      "fps_background_isolation": "NOT VERIFIED",
+      "runtime_owner_lru_logout": "NOT VERIFIED"
+    }
+  },
+  "inputs": {
+    "lifecycle.json": "97a6d8d3c464d3cf3da8a648c56e6068e9823f5c1e6e1eb0d7c2d2f27dffb5af",
+    "multiplayer.json": "7ecd4e0f9fce42468b28abd3f757bffc2c0f3944516465cad4312d1a81fd1b57"
+  }
+}

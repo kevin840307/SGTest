@@ -192,3 +192,15 @@ M6 PVP、小屋、社交、多 Channel、部署與維運。
 - **Network/State 不變**：ServerSimClock、ClientNetworkPump、OrderedEventReducer、PackedWorldState、ViewProjection、WorldRenderer、UIRenderer 必須具清楚責任界線。Client 送收封包、解碼、按序套用、輸入送達與 Server tick **不得由 UI FPS/World FPS 增減而變快或變慢**。失焦/縮小/AFK/低畫質只可調整視覺、音效和資源生命週期。
 - 不能依賴只在 `_process(delta)` 被畫面刷新時才 poll Network；動作依 ServerSeq/SimTick/ActionId 的時間軸取 pose，素材未載入不得停 Network/State，也不得補播遠端玩家舊位置。
 - 完整素材必要性稽核與本機數據見 [docs/ASSET_NECESSITY_AUDIT.md](docs/ASSET_NECESSITY_AUDIT.md)；Render/Logic/Network 隔離驗證見 [docs/RUNTIME_ISOLATION_VERIFICATION.md](docs/RUNTIME_ISOLATION_VERIFICATION.md)。AS005 原版逐格人工視覺與 AS008 發布權仍是獨立未完成 Gate。
+
+## 9. asset_converter 完整離線來源驗收（2026-11-15）
+
+正式素材轉換只修改／使用`tools/asset_converter/`，由原始Data1+loose產生Godot所需素材；原版唯讀，八方向的來源重用／flip與ACT時間不能被packing改寫。原版完整SPR集合由當次來源稽核，不沿用舊cache中的固定總數。
+
+目前原版來源75,588 SPR、7,890 groups、282,968 frames、8,094 pages完成離線建置；613 ACT、1,165 SIF、9 DrawOrder可從來源重解析比對。完整離線總量保留local-assets，不當作Runtime常駐；live仍只輸出真正有consumer的map/session/on-demand資源。Map13為9 visuals/78 spawns、573 frames/2頁；Boy base 881 frames/1頁。
+
+單入口`cli.py build <original>`先解包、來源稽核、增量建置再staging發布；`cli.py verify <original>`只驗收既有離線產物並輸出報告，檢查完整index、source/decoder/metadata/page SHA、影格來源序列、PNG尺寸及sidecar內容。verify不重播全量逐像素比對；pixel equality由builder建立並綁定前述指紋。preview或partial index不能通過完整驗收。build/verify以OS lock互斥，busy回傳2且不覆蓋先前報告；lock檔存在不代表程序仍執行。
+
+候選只作幾何評估，選定後產圖、比較實際頁數/RGBA、逐格核對crop/size/origin/pixels。ACT/SIF/DrawOrder快取同時比較解碼內容，不能只看source SHA而沿用已被破壞的JSON。
+
+此驗收只完成離線素材轉換範圍，不代表F002～F020或全Recovered功能已完成。Client一般30～90 FPS只改呈現，Client input/Server30Hz、snapshot10Hz仍依既有獨立契約；本次沒有修改同步頻率。具體證據見ASSET_CONVERTER、TODO及reports/converter_*。

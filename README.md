@@ -43,14 +43,14 @@ run_build_assets.bat "C:\SGO\Stargate Online IE HK2"
 
 ## 素材
 
-原版來源是 `C:\SGO\Stargate Online IE HK2`；`Recovered` 及其 `Old` 僅作唯讀參考。Data1.dat 解包後套用 loose override。已生成 75,591 SPR／282,990 影格，像素重建驗證見 `reports/asset_validation.json`；這不等於原版遊戲畫面逐格／授權 Gate 已通過。
+原版來源是 `C:\SGO\Stargate Online IE HK2`；`Recovered` 及其 `Old` 僅作唯讀參考。Data1.dat 解包後套用 loose override。目前原版 archive＋loose 集合為 75,588 SPR／282,968 影格；完整離線索引、PNG幾何／來源指紋與sidecar重解析驗收見 `reports/converter_archive_verification.json`，一鍵建置結果見 `reports/converter_full_build.json`；這不等於原版遊戲畫面逐格／授權 Gate 已通過。
 
 正式 sprite pipeline 不再要求開發者選 entity/direction/readable/hot-warm-cold。從原始檔重建只需：
 
 ```powershell
 run_build_assets.bat "C:\SGO\Stargate Online IE HK2"
-# 或已存在 .cache/client 時只重建 Runtime sprite bundles：
-python tools\asset_pipeline.py
+# 已存在專用抽取快取時，只重建 Runtime：
+python tools/asset_converter/cli.py build "C:\SGO\Stargate Online IE HK2" --extracted-source .cache/asset_converter/source --runtime-only
 ```
 
 Builder 內部仍保留原 SPR clip atomic、8 logical facing、alias/mirror、pivot、ACT timeline、paper-doll z-order；每個 normalized entity 另有 `inspect[action][facing]`，所以怪物的動作／方向可以獨立查閱，與最後 physical packing 無關。Atlas side 由相同素材 A/B 決定。舊 `build_assets.py`、`build_atlas_groups.py`、`build_normalized_atlas_candidates.py` 等保留為研究／回歸工具，不是 production API。Client Runtime 素材直接放 `client/assets/`，不再多一層 `generated/`；正式 rebuild 只輸出目前真的被 Runtime 使用的 `bundles/` 與 `maps/`，原始／未使用素材留 `.cache/client`。Map13 static objects 與 monsters 共用 map lifecycle bundle，viewport 只做 draw cull；drops 目前是單一 MultiMesh，沒有另立 texture-atlas 分類。完整稽核見 `docs/ASSET_NECESSITY_AUDIT.md`。
@@ -63,7 +63,7 @@ Client 具有本地輸入預測／確認重播、各實體獨立位置歷史、�
 
 基本男性紙娃娃、Map13 的9種怪物、78個原版出生點、地磚／物件／碰撞已接入。視窗預設 1280×720，最大寬 1440，可拖曳調整或選擇解析度；F2 切換金色／現代樣式。
 
-目前為開發原型，尚無正式登入、持久化、完整裝備／物品外觀、其他地圖轉場及怪物繞路尋徑。
+目前為開發原型，已有帳號／角色與SQLite身分資料流程；完整裝備／物品外觀、其他地圖轉場、怪物繞路尋徑與其餘Recovered功能仍未完成。
 
 ## 驗證指令
 
