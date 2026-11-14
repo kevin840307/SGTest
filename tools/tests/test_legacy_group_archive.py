@@ -5,7 +5,9 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from legacy_group_archive import GroupArchive, lzss_decompress, safe_output_path
+from legacy_group_archive import (GroupArchive, lzss_decompress, probe_archive_footer,
+                                  safe_output_path)
+from scan_group_archives import scan_archives
 
 
 def literal_lzss(data: bytes) -> bytes:
@@ -49,6 +51,24 @@ class ArchiveTests(unittest.TestCase):
             self.assertEqual(archive.read_entry(archive.entries[1]), b"ABC")
             self.assertEqual([e.path for e in archive.find("enemy/*.BIN")],
                              ["Enemy/A.bin", "Enemy/B.bin"])
+
+    def test_footer_probe_and_full_tree_scan(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            archive_path = root / "Data1.dat"
+            make_archive(archive_path)
+            (root / "plain.dat").write_bytes(b"not an archive footer")
+            footer = probe_archive_footer(archive_path)
+            self.assertIsNotNone(footer)
+            self.assertEqual(footer["file_size"], archive_path.stat().st_size)
+            self.assertIsNone(probe_archive_footer(root / "plain.dat"))
+            report = scan_archives(root)
+            self.assertEqual(report["scanned_files"], 2)
+            self.assertEqual(report["footer_candidate_count"], 1)
+            self.assertEqual(report["valid_archive_count"], 1)
+            self.assertEqual(report["rejected_candidate_count"], 0)
+            self.assertEqual(report["valid_archives"][0]["path"], "Data1.dat")
+            self.assertEqual(report["valid_archives"][0]["entry_count"], 2)
 
     def test_safe_output_rejects_parent(self):
         with tempfile.TemporaryDirectory() as temp:

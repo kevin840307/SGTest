@@ -33,6 +33,17 @@ Old Server Map13 Enemy.dat 有 78 個出生點，只使用 9 種 visual：EN009A
 
 17 張具有 Enemy.dat 的已知舊 Server 地圖合計只用 29 種怪物 visual。對這 29 種建立工作集時得到 464 files：461 archive base、1 loose override、2 loose-only；實際 override 是 Enemy/EN061A.ACT，loose-only 是 EN061A_ND1.spr、EN061A_ND3.spr。29/29 ACT 群組 audit 完整。
 
+## 全安裝目錄 group archive 掃描
+
+新增 `tools/scan_group_archives.py`，對乾淨 HK2 目錄的**全部 41,741 個實體檔**先做 fail-closed footer 預篩：最後 4 bytes 必須能指向合法 index header，且 `index_offset + 8 + compressed_index_size == file_size - 4` 完全成立；只有命中者才交給 `GroupArchive` 做 LZSS index 完整解析與 entry bounds 驗證。這不抽取媒體內容。
+
+2026-11-14 真檔掃描：41,741 files、footer candidates=1、valid archives=1、rejected=0，唯一命中為 `Data1.dat`。因此對**目前提供的 HK2 安裝目錄**，沒有發現第二個採用相同 xnFile group archive 格式的檔案。這個結論不等於證明原始發行安裝包從未有其他 archive；它只界定目前研究工作集的虛擬檔案來源。
+
+可重跑：
+```powershell
+py tools/scan_group_archives.py 'C:\SGO\Stargate Online IE HK2' reports/hk2-group-archives.json
+```
+
 ## 尚未完成
 
-Client.bin / SGOClient.bin 與參考 Paradise.exe 的版本等同性仍未證實；Data1 以外是否還有其他 group archive 需繼續查。原版媒體授權／公開發布權也未確認，因此 parser 與 metadata 可進 Git，原始／衍生媒體不可進公開 repo。
+HK2 `Client.bin`／`SGOClient.bin` 已用 PE timestamp 排除與 2004 Paradise binary-identical；但安裝包／更新來源 provenance 仍未建立。原版媒體授權／公開發布權也未確認，因此 parser 與 metadata 可進 Git，原始／衍生媒體不可進公開 repo。

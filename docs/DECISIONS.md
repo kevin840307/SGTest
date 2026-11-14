@@ -131,7 +131,7 @@ ADR-016 的逐怪物尺寸實驗補充（2026-11-14）：50 組各測 1024／204
 - Decision: 素材來源不再把 loose 目錄視為完整真相。依原版 xnFileRead 行為，虛擬檔案系統 precedence 固定為 loose path override > opened group archive base；工具以 case-insensitive path identity 比對，但 manifest 保留實際來源檔名與 SHA。
 - Direct evidence: xnFileOpenGroup .text:00552980、FileData::ReadBuf .text:00551810、LzssDecompress .text:0055A0E0、xnFileRead .text:00552090。HK2 Data1.dat 實證 41,687 entries，詳 HK2_DATA1_ARCHIVE.md。
 - Implementation: legacy_group_archive.py 只讀索引／LZSS／選擇性抽取；materialize_legacy_overlay.py 只 materialize 指定 pattern/palette 到 gitignore 私有目錄。禁止把原始／衍生媒體提交公開 Git。
-- Evidence: 17 張已知 Enemy.dat 地圖共 29 visual；materialize 464 files，其中 461 archive base、1 loose override、2 loose-only；29/29 ACT audit complete。
+- Evidence: 17 張已知 Enemy.dat 地圖共 29 visual；materialize 464 files，其中 461 archive base、1 loose override、2 loose-only；29/29 ACT audit complete。`scan_group_archives.py` 另對目前 HK2 41,741 個實體檔做 fail-closed footer + LZSS index 掃描，只有 Data1.dat 1 個 valid archive、0 rejected candidate；因此目前工作集沒有第二個同 xnFile group 格式 archive，但不把此結果擴張成原始發行包 provenance 結論。
 
 ## ADR-020 — Map-aware Enemy Atomic 1024 Runtime Candidate（2026-11-14）
 

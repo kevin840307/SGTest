@@ -112,6 +112,43 @@ def parse_index(data: bytes) -> list[ArchiveEntry]:
     return entries
 
 
+def probe_archive_footer(path: Path) -> dict | None:
+    """Cheap fail-closed xnFile group footer prefilter without decompressing media."""
+    path = path.resolve()
+    try:
+        file_size = path.stat().st_size
+    except OSError:
+        return None
+    if file_size < 12:
+        return None
+    try:
+        with path.open("rb") as stream:
+            stream.seek(-4, 2)
+            footer = stream.read(4)
+            if len(footer) != 4:
+                return None
+            index_offset = struct.unpack("<I", footer)[0]
+            if index_offset > file_size - 12:
+                return None
+            stream.seek(index_offset)
+            header = stream.read(8)
+            if len(header) != 8:
+                return None
+            raw_size, compressed_size = struct.unpack("<II", header)
+    except OSError:
+        return None
+    if raw_size < 4 or compressed_size <= 0:
+        return None
+    if index_offset + 8 + compressed_size != file_size - 4:
+        return None
+    return {
+        "file_size": file_size,
+        "index_offset": index_offset,
+        "index_raw_size": raw_size,
+        "index_compressed_size": compressed_size,
+    }
+
+
 class GroupArchive:
     def __init__(self, path: Path):
         self.path = path.resolve()
