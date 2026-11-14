@@ -46,6 +46,12 @@ func _initialize() -> void:
 	check(atlas.sample("TEST_NS1", 1.0).frame.id == 0, "untimed idle loops")
 	atlas.data.act = {"D":{"timeline":[[0,5],[1,5]],"loop":false}}
 	check(atlas.sample("TEST_ND1", 0.24, 8, 0.35).frame.id == 1, "ACT sequence fits authoritative action interval")
+	check(atlas.sample("TEST_ND1",0.174,8,0.35).frame.id == 0 and atlas.sample("TEST_ND1",0.176,8,0.35).frame.id == 1,
+		"sample cache preserves exact transition times without frame-clock quantization")
+	var entries: int = atlas.sample_cache.size()
+	for i in 1000:
+		atlas.sample("TEST_ND1",i*0.01,8,0.35)
+	check(atlas.sample_cache.size() == entries, "sample cache grows by clip, not elapsed time or monster count")
 	var doll := preload("res://scripts/paper_doll.gd").new()
 	check(doll.open("res://assets/generated") == OK, "original player parts and layer table load")
 	for part in doll.parts:

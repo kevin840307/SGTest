@@ -2,8 +2,10 @@ class_name EntityAtlas
 extends RefCounted
 
 # One object per entity type, shared by all instances; no textures per monster.
+# Metadata and returned sample descriptors are immutable; reload through open().
 var data: Dictionary = {}
 var pages: Array[Texture2D] = []
+var sample_cache: Dictionary = {}
 
 func open(path: String) -> Error:
 	var parsed = JSON.parse_string(FileAccess.get_file_as_string(path))
@@ -13,6 +15,7 @@ func open(path: String) -> Error:
 		return ERR_FILE_CORRUPT
 	data = parsed
 	pages.clear()
+	sample_cache.clear()
 	for page in data.pages:
 		var image := Image.load_from_file(path.get_base_dir().path_join(page))
 		if image == null:
@@ -21,6 +24,11 @@ func open(path: String) -> Error:
 	return OK
 
 func sample(clip: String, seconds: float, fps: float = 8.0, duration: float = 0.0) -> Dictionary:
+	seconds = maxf(seconds, 0.0)
+	var requested := clip
+	var cached: Dictionary = sample_cache.get(requested,{})
+	if not cached.is_empty() and cached.seconds == seconds and cached.fps == fps and cached.duration == duration:
+		return cached.result
 	var flip := false
 	if not data.clips.has(clip):
 		var alias: Dictionary = data.aliases.get(clip, {})
@@ -31,7 +39,6 @@ func sample(clip: String, seconds: float, fps: float = 8.0, duration: float = 0.
 	var indices: Array = data.clips[clip]
 	if indices.is_empty():
 		return {}
-	seconds = maxf(seconds, 0.0)
 	var action := clip.substr(clip.length() - 2, 1)
 	var timing: Dictionary = data.act.get(action, {})
 	var timeline: Array = timing.get("timeline", [])
@@ -56,7 +63,15 @@ func sample(clip: String, seconds: float, fps: float = 8.0, duration: float = 0.
 					break
 				tick -= int(entry[1])
 	var frame: Dictionary = data.frames[indices[index]]
-	return {"frame": frame, "flip_h": flip, "clip": clip}
+	var rect: Array = frame.get("rect",[0,0,0,0])
+	var trim: Array = frame.get("trim",[0,0])
+	var origin: Array = frame.get("origin",[0,0])
+	var result := {"frame": frame, "flip_h": flip, "clip": clip,
+		"rect":Rect2(rect[0],rect[1],rect[2],rect[3]),"offset":Vector2(trim[0]-origin[0],trim[1]-origin[1])}
+	# Exact input equality, no time quantization or lost animation frames. Most
+	# monsters share a clip and the same frame clock, so evaluate ACT once.
+	sample_cache[requested] = {"seconds":seconds,"fps":fps,"duration":duration,"result":result}
+	return result
 
 func draw_frame(canvas: CanvasItem, at: Vector2, clip: String, seconds: float, fps: float = 8.0, duration: float = 0.0) -> void:
 	var resolved := sample(clip, seconds, fps, duration)
@@ -65,8 +80,6 @@ func draw_frame(canvas: CanvasItem, at: Vector2, clip: String, seconds: float, f
 	var frame: Dictionary = resolved.frame
 	if frame.page < 0:
 		return
-	var rect := Rect2(frame.rect[0], frame.rect[1], frame.rect[2], frame.rect[3])
-	var offset := Vector2(frame.trim[0] - frame.origin[0], frame.trim[1] - frame.origin[1])
 	canvas.draw_set_transform(at, 0.0, Vector2(-1, 1) if resolved.flip_h else Vector2.ONE)
-	canvas.draw_texture_rect_region(pages[frame.page], Rect2(offset, rect.size), rect)
+	canvas.draw_texture_rect_region(pages[frame.page], Rect2(resolved.offset, resolved.rect.size), resolved.rect)
 	canvas.draw_set_transform(Vector2.ZERO)
