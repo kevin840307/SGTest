@@ -108,7 +108,9 @@ func acquire(path: String, owner: String, epoch: int = -1, priority: int = 0) ->
 			_metric_increment("cache_hits")
 		return OK
 	if _entries.size() >= MAX_JOBS:
-		purge_unowned(false)
+		# Small ready atlases may fill the entry cap while still below the byte
+		# budget. Reserve one slot using the same unowned LRU policy.
+		purge_unowned(false, MAX_JOBS-1)
 		if _entries.size() >= MAX_JOBS:
 			return ERR_BUSY
 	var token := _next_token
@@ -175,8 +177,9 @@ func release_owner(owner: String) -> void:
 	for path in _entries.keys().duplicate():
 		release(str(path), owner)
 
-func purge_unowned(force: bool = false) -> int:
+func purge_unowned(force: bool = false, entry_limit: int = MAX_JOBS) -> int:
 	var evicted := 0
+	entry_limit = maxi(0,entry_limit)
 	# Failed requests carry no useful resident texture and must not permanently
 	# consume MAX_JOBS. Once their last owner leaves, drop them even when the
 	# byte cache is under budget so a later map generation may retry the path.
@@ -187,7 +190,7 @@ func purge_unowned(force: bool = false) -> int:
 			_entries.erase(path)
 			_metric_increment("evictions")
 			evicted += 1
-	while force or _resident_bytes > cache_budget_bytes:
+	while force or _resident_bytes > cache_budget_bytes or _entries.size() > entry_limit:
 		var candidate := ""
 		var oldest := 0x7fffffffffffffff
 		for path in _entries:

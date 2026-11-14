@@ -341,3 +341,10 @@ ADR-026補充：使用者指定Client一般遊玩支援30～90FPS；FPS選項只
 - Decision: main與worker共用mutex保護有效token；取消時移除queued request／ready events／token，publisher在相同鎖下拒絕失效token，於job/page邊界停止舊解碼。零byte事件也受128-item上限。ready LRU、部分載入取消、error共用引用／resident帳目清理，錯誤即可釋放已上傳部分，不等logout。
 - Evidence: After取消queue=0、partial／failed resident=0、native Texture弱引用=0、相同path修復後重試PASS；1000generations／priority／MAX_JOBS／zero-byte cap／byte backpressure／close+restart三次PASS。重建Windows release：184.88MiB、59.997FPS、frame P95/P99 18.884/19.573ms；30次map載卸回收PASS。docs/PERF003_CANCELLATION.md及reports/perf003_*。
 - Limits: 正在進行的單頁PNG不做不安全中斷；ready byte budget之外仍可有一頁in-flight。idle worker維持既有poll，獨立idle探針不能稱為8個Client或零CPU；未宣稱idle CPU改善。Server／network／logic頻率不改，完整RUNTIME206矩陣本次未重跑。
+
+## ADR-043 — Entry壓力與byte壓力共用無引用LRU（2026-11-15）
+
+- Before: 自製128個32×32 Texture共524288bytes、byte budget16MiB，只有1項pinned，其餘已release；第129個path仍ERR_BUSY(44)，無任何eviction。不是網路或檔案遺失。
+- Decision: acquire遇到128-entry上限時，呼叫同一purge_unowned並指定entry_limit=127，按原last_used規則騰出位置；預設purge維持128上限及既有bytes規則。不能直接force清光cache，也不能淘汰有owner的項目。只有cache hit／未滿情境不改。
+- Evidence: headless/native均新acquire=OK、恰1個最舊無owner項目移除、pinned與最近觸及項目保留，resident帳目同步減4096bytes，最後close歸0。全部128項都有owner時仍ERR_BUSY，釋放一項後成功。reports/perf004_before.json、perf004_after.json、perf004_after_native.json，test_runtime_asset_cache_pressure.gd；Store與cancellation既有回歸PASS。
+- Scope: 沒有改動Atlas、影格／方向、network／logic／Server、GPU提交頻率。本次未重跑一般2-bundle多人FPS／RAM與RUNTIME206矩陣，不把前一版本數值當作本次重測。此修正覆蓋滿128項才會進入的cache admission分支。

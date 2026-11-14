@@ -18,6 +18,7 @@ ASSET203 已證明 `normalized_memory` 的 Atlas packing 本身無法消除同�
 - 每個request有token；owner有epoch。最後owner取消loading時，立即移除queued job／ready events／active token；正在進行的PNG decode只能在page邊界停止，但結果不能重新入queue或提交GPU。部分GPU頁及failed atlas也扣回resident bytes並清除引用。重現與回歸見 [PERF003_CANCELLATION](PERF003_CANCELLATION.md)。
 - ready atlas 可被多 owner 共用，同一 path 不重複 decode/upload。
 - unowned ready atlas 是 LRU cache；超過 cache budget 自動 eviction。
+- entry數也受128上限約束；新增path遇到滿額時，以同一LRU規則先騰一格，即使bytes未超標。只淘汰無owner的ready atlas；全部仍被引用時回傳ERR_BUSY，釋放後可恢復。PERF004自製fixture在512KiB／128項已重現並驗證修正。
 - failed 且已無 owner 的 entry 立即移除，下一 generation 可 retry，不會永久吃掉 MAX_JOBS。
 - `close()` 釋放所有 owner、force purge、清空 decoded queue 並 join worker。
 
@@ -48,6 +49,7 @@ Godot synthetic/real-private-asset tests：
 
 - `test_runtime_asset_store.gd`：owner sharing、cache hit、force purge、loading cancellation、failed-path retry、automatic cache-cap eviction。
 - `test_runtime_asset_cancellation.gd`：1000 generations、MAX_JOBS、過期publish、priority、zero-byte事件數上限、byte backpressure取消、close／restart。`probe_asset_cancel_queue.gd -- --assert-bounded`另驗證部分提交／後頁失敗／相同path重試及native Texture弱引用歸零。
+- `test_runtime_asset_cache_pressure.gd`：128個真小Texture低於byte budget時，第129個path可按LRU騰一格；保護pinned／最近使用項目、所有項目有owner時維持ERR_BUSY、釋放一項後恢復；headless及native均PASS。Before/After在`reports/perf004_*.json`。
 - `test_monster_visuals_async.gd`：Map13 9 definitions / 360 logical views / **1 map bundle**、generation clear/cancel、owner purge。
 - `test_map_objects_async.gd`：單一 map bundle acquire、viewport draw cull 不改 ownership、map reset 後完整 purge。
 - `test_paper_doll_async.gd`：**1 session bundle**、6 parts + death、normalized draw-order、purge。
