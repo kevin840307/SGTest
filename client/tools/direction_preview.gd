@@ -13,7 +13,7 @@ class Preview extends Node2D:
 				if row < 3:
 					doll.draw(self,at,row,headings[i],0.175)
 				else:
-					monster.draw_frame(self,at,"EN004A_NW%d" % headings[i],0.175)
+					monster.draw_frame(self,at,"EN010A_NW%d" % headings[i],0.175)
 				var from := at+Vector2(0,16)
 				var to := from+Vector2.from_angle(i*PI/4.0)*22
 				draw_line(from,to,Color.CYAN,2)
@@ -25,7 +25,7 @@ func _initialize() -> void:
 	var preview := Preview.new()
 	var error: Error = preview.doll.open("res://assets/generated")
 	if error == OK:
-		error = preview.monster.open("res://assets/generated/enemy/en004a.json")
+		error = preview.monster.open("res://assets/generated/bundles/map/13/sprites.json")
 	if error != OK:
 		push_error("direction preview asset load failed: %d" % error)
 		quit(1)

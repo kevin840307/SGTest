@@ -35,10 +35,16 @@ func sample(clip: String, seconds: float, fps: float = 8.0, duration: float = 0.
 		var flip := false
 		var timeline_ticks: Array = []
 		var looping := false
+		var draw_order_key: Variant = null
+		var draw_layers: Variant = null
+		var draw_slots: Variant = null
 		var logical: Dictionary = data.get("logical_views",{}).get(requested,{})
 		if not logical.is_empty():
 			clip = str(logical.get("clip",""))
 			flip = bool(logical.get("flip_h",false))
+			draw_order_key = logical.get("draw_order_key")
+			draw_layers = logical.get("draw_layers")
+			draw_slots = logical.get("draw_slots")
 			if not data.clips.has(clip):
 				return {}
 			timeline_ticks = logical.get("timeline_ticks",[])
@@ -76,6 +82,7 @@ func sample(clip: String, seconds: float, fps: float = 8.0, duration: float = 0.
 			var trim: Array = frame.get("trim",[0,0])
 			var origin: Array = frame.get("origin",[0,0])
 			frames.append({"frame":frame,"flip_h":flip,"clip":clip,
+				"draw_order_key":draw_order_key,"draw_layers":draw_layers,"draw_slots":draw_slots,
 				"rect":Rect2(rect[0],rect[1],rect[2],rect[3]),"offset":Vector2(trim[0]-origin[0],trim[1]-origin[1])})
 		compiled[requested] = {"frames":frames,"ends":ends,"indices":timeline_indices,
 			"total":total,"loop":looping}

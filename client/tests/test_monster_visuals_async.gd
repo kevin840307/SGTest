@@ -27,7 +27,9 @@ func _run() -> void:
 		frames += 1
 		assert(frames < 300)
 		await process_frame
-	assert(visuals.loaded_count() == 9)
+	assert(visuals.definitions.size() == 9)
+	assert(visuals.loaded_count() == 1,"nine map definitions must share one lifecycle bundle")
+	assert(int(store.statistics().entries) == 1)
 	for row in population.definitions:
 		var visual: Dictionary = visuals.resolve(int(row.id))
 		assert(visual.atlas != null)

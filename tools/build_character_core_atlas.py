@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""Build character-core atlas candidates with paper-doll state locality.
+"""RESEARCH-ONLY paper-doll packing A/B; not a production asset category.
+
+Production base avatar parts share one session lifecycle bundle.
+Build character-core atlas candidates with paper-doll state locality.
 
 A state bundle is one physical action + source direction and includes all core
 paper-doll layer SPRs needed by that state. State-local packing guarantees the

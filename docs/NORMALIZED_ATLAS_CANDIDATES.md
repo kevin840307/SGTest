@@ -1,6 +1,8 @@
 # ASSET202/203 — Normalized Clip-Atomic Atlas 候選與選型
 
-日期：2026-11-14。狀態：**ASSET202 PASS / ASSET203 PASS / ASSET204 REQUIRED**。
+日期：2026-11-14。狀態：**HISTORICAL A/B / ASSET202+203 evidence retained**。
+
+> Production 已由 ADR-034 收斂成 lifecycle bundles；本文件的 per-entity hot/warm/cold 與 7 組尺寸策略只保留作研究證據，不再是 Runtime 對外分類。現行架構與 1024/2048 bundle A/B 見 [ASSET_BUNDLE_ARCHITECTURE.md](ASSET_BUNDLE_ARCHITECTURE.md)。
 
 ## 核心原則
 

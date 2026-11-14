@@ -1,4 +1,7 @@
-"""Reproducible entity atlases from a decoded original Data1 tree (plain/CDE SPR).
+"""RESEARCH-ONLY legacy per-entity/direction atlas candidate builder.
+
+Production runtime sprites are built by asset_pipeline.py from lifecycle bundles.
+Reproducible entity atlases from a decoded original Data1 tree (plain/CDE SPR).
 
 Never scans a client plus its extracted duplicates: pass the output directory.
 One entity/part owns its actions. Each direction is contiguous and never split;

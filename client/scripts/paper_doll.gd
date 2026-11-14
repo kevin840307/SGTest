@@ -1,39 +1,20 @@
 extends RefCounted
 
-# Bare Boy composition. All player instances share these immutable atlases.
-# The production path can acquire them from RuntimeAssetStore without blocking
-# startup/network. open() remains the deterministic synchronous fixture path.
+# One session-lifetime base-avatar bundle. Parts are logical clip prefixes inside
+# one EntityAtlas; body/leg/head/hair/arms/death are not independent unload units.
 const ATLAS = preload("res://scripts/entity_atlas.gd")
 const ACTION = preload("res://scripts/action_policy.gd")
 const PARTS := {"body":"body", "leg":"leg", "head":"head", "hair":"hair00", "l-arm":"l-arm", "r-arm":"r-arm"}
+const BUNDLE_RELATIVE := "bundles/session/player-b-base.json"
+
 var parts: Dictionary = {}
-var orders: Dictionary = {}
 var death: RefCounted
 
 var store: RefCounted
 var store_owner := ""
 var store_epoch := 0
-var root := ""
-var pending: Dictionary = {}
-var loaded: Dictionary = {}
-var death_path := ""
-
-func _load_orders(asset_root: String, available: Dictionary) -> Error:
-	var result: Dictionary = {}
-	for line in FileAccess.get_file_as_string(asset_root.path_join("data/player/chardraworder.dat")).split("\n"):
-		var separator := line.find(":")
-		if separator < 0:
-			continue
-		var order: Array[String] = []
-		for token in line.substr(separator+1).strip_edges().split(">"):
-			var part: String = token.split("+")[0].strip_edges().to_lower()
-			if available.has(part):
-				order.append(part)
-		result[line.substr(0,separator).strip_edges()] = order
-	if result.is_empty():
-		return ERR_FILE_CORRUPT
-	orders = result
-	return OK
+var bundle_path := ""
+var bundle: RefCounted
 
 func reset(force_purge: bool = false) -> void:
 	if store != null and not store_owner.is_empty():
@@ -41,108 +22,87 @@ func reset(force_purge: bool = false) -> void:
 		if force_purge:
 			store.purge_unowned(true)
 	parts.clear()
-	orders.clear()
 	death = null
-	pending.clear()
-	loaded.clear()
-	death_path = ""
+	bundle = null
+	bundle_path = ""
 	store_owner = ""
 	store_epoch = 0
-	root = ""
+
+func _bind(value: RefCounted) -> void:
+	bundle = value
+	parts.clear()
+	for key in PARTS:
+		parts[key] = value
+	death = value
 
 func open(asset_root: String) -> Error:
 	reset(false)
-	var sync_loaded: Dictionary = {}
-	for key in PARTS:
-		var atlas := ATLAS.new()
-		var error: Error = atlas.open(asset_root.path_join("player/b/standard/b-%s.json" % PARTS[key]))
-		if error != OK:
-			return error
-		sync_loaded[key] = atlas
-	var death_atlas := ATLAS.new()
-	var death_error: Error = death_atlas.open(asset_root.path_join("player/b/standard/b-death.json"))
-	if death_error != OK:
-		return death_error
-	var order_error := _load_orders(asset_root, sync_loaded)
-	if order_error != OK:
-		return order_error
-	parts = sync_loaded
-	death = death_atlas
+	var atlas := ATLAS.new()
+	var error: Error = atlas.open(asset_root.path_join(BUNDLE_RELATIVE))
+	if error != OK:
+		return error
+	_bind(atlas)
 	return OK
 
-func begin_async(value: RefCounted, asset_root: String, owner: String = "player-core") -> Error:
+func begin_async(value: RefCounted, asset_root: String, owner: String = "player-base") -> Error:
 	if value == null or asset_root.is_empty() or owner.is_empty():
 		return ERR_INVALID_PARAMETER
 	reset(false)
 	store = value
 	store_owner = owner
 	store_epoch = store.begin_owner(owner)
-	root = asset_root
-	var available: Dictionary = {}
-	for key in PARTS:
-		available[key] = true
-	var order_error := _load_orders(asset_root, available)
-	if order_error != OK:
-		return order_error
-	for key in PARTS:
-		var path := asset_root.path_join("player/b/standard/b-%s.json" % PARTS[key])
-		var error: Error = store.acquire(path, store_owner, store_epoch, 1000)
-		if error != OK:
-			return error
-		pending[key] = path
-	death_path = asset_root.path_join("player/b/standard/b-death.json")
-	var death_error: Error = store.acquire(death_path, store_owner, store_epoch, 1000)
-	if death_error != OK:
-		return death_error
-	return OK
+	if store_epoch <= 0:
+		return ERR_INVALID_DATA
+	bundle_path = asset_root.path_join(BUNDLE_RELATIVE)
+	return store.acquire(bundle_path, store_owner, store_epoch, 1000)
 
 func refresh() -> void:
-	if store == null or store_owner.is_empty():
+	if store == null or bundle != null or bundle_path.is_empty():
 		return
-	for key in pending.keys().duplicate():
-		var path := str(pending[key])
-		if store.is_ready(path):
-			var atlas: RefCounted = store.get_atlas(path)
-			if atlas != null:
-				loaded[key] = atlas
-				pending.erase(key)
-	if death == null and not death_path.is_empty() and store.is_ready(death_path):
-		death = store.get_atlas(death_path)
-	if pending.is_empty() and death != null and parts.is_empty():
-		parts = loaded.duplicate()
+	if store.is_ready(bundle_path):
+		var atlas: RefCounted = store.get_atlas(bundle_path)
+		if atlas != null:
+			_bind(atlas)
 
 func first_error() -> Error:
-	if store == null:
+	if store == null or bundle_path.is_empty():
 		return OK
-	for path in pending.values():
-		if store.is_failed(str(path)):
-			return store.error(str(path))
-	if death == null and not death_path.is_empty() and store.is_failed(death_path):
-		return store.error(death_path)
-	return OK
+	return store.error(bundle_path) if bundle == null and store.is_failed(bundle_path) else OK
 
 func is_ready() -> bool:
-	return not parts.is_empty() and death != null and pending.is_empty()
+	return bundle != null and parts.size() == PARTS.size() and death != null
+
+func _draw_order(body: Dictionary) -> Array[String]:
+	var order: Array[String] = []
+	var layers: Variant = body.get("draw_layers")
+	if layers is Array:
+		for raw in layers:
+			var part := str(raw).split("+")[0].strip_edges().to_lower()
+			if PARTS.has(part) and part not in order:
+				order.append(part)
+	# Normalized v2 must normally provide draw layers. Keep this tiny fallback
+	# only for synthetic/legacy fixtures; production does not read a second table.
+	if order.is_empty():
+		return ["leg","r-arm","body","l-arm","head","hair"]
+	return order
 
 func draw(canvas: CanvasItem, at: Vector2, pose: int, facing: int, seconds: float) -> void:
-	if parts.is_empty():
+	if bundle == null:
 		return
 	if pose == 4:
-		if death != null:
-			# BaseEntity's original death policy always uses the first source view.
-			death.draw_frame(canvas,at,"B-DEATH_ND1",seconds,8.0,ACTION.DEATH_SECONDS)
+		# BaseEntity's original death policy always uses the first source view.
+		bundle.draw_frame(canvas,at,"B-DEATH_ND1",seconds,8.0,ACTION.DEATH_SECONDS)
 		return
 	var action: String = ["NS","NR","AA","AH","NS"][clampi(pose,0,4)]
 	var requested := "%s%d" % [action,facing]
-	var body: Dictionary = parts.body.sample("B-BODY_"+requested, seconds)
+	var body: Dictionary = bundle.sample("B-BODY_"+requested,seconds)
 	if body.is_empty():
 		return
-	var suffix: String = str(body.clip).get_slice("_",1)
-	var order: Array = orders.get(suffix, ["leg","r-arm","body","l-arm","head","hair"])
+	var order := _draw_order(body)
 	canvas.draw_set_transform(at,0,Vector2(1,0.3))
 	canvas.draw_circle(Vector2.ZERO,16,Color(0,0,0,0.3))
 	canvas.draw_set_transform(Vector2.ZERO)
 	for part in order:
 		var prefix: String = ("B-"+str(PARTS[part])).to_upper()
-		parts[part].draw_frame(canvas,at,prefix+"_"+requested,seconds,8.0,
+		bundle.draw_frame(canvas,at,prefix+"_"+requested,seconds,8.0,
 			ACTION.COMBAT_SECONDS if pose >= 2 else 0.0)

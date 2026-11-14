@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Build Map13 atlas candidates from sgtest.animation/v2 definitions.
+"""RESEARCH-ONLY Map13 candidate matrix; not the production builder.
+
+Production uses asset_pipeline.py and lifecycle ownership instead of exposing
+fixed-size or hot/warm/cold candidates as runtime types.
+Build Map13 atlas candidates from sgtest.animation/v2 definitions.
 
 Animation semantics come only from normalized definitions. Packing is allowed
 to change page/rect placement, never logical facing, ACT timing, pivot or

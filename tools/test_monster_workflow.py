@@ -46,7 +46,7 @@ class MonsterWorkflowTests(unittest.TestCase):
         base = {
             "version": 1,
             "map_id": 13,
-            "definitions": [{"id": 1, "sprite": "EN001A", "atlas": "enemy/en001a.json"}],
+            "definitions": [{"id": 1, "sprite": "EN001A", "atlas": "bundles/map/13/sprites.json"}],
             "spawns": [{"definition": 1, "p": [8, 8], "source_index": 0, "source_flags": 9}],
         }
         merged = merge_population(base, recipe, recipe["spawns"])

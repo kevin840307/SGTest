@@ -2,7 +2,7 @@ extends SceneTree
 
 func _initialize() -> void:
 	var args := OS.get_cmdline_user_args()
-	var path := args[0] if not args.is_empty() else "res://assets/generated/enemy/en004a.json"
+	var path := args[0] if not args.is_empty() else "res://assets/generated/bundles/map/13/sprites.json"
 	var atlas := preload("res://scripts/entity_atlas.gd").new()
 	var start := Time.get_ticks_usec()
 	var error: Error = atlas.open(path)

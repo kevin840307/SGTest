@@ -15,7 +15,7 @@
 - spawn positions / source flags
 - 是否明確 replace 已有 definition
 
-工具 `tools/monster_workflow.py` 會 fail-closed 驗證 source、ACT、8方位、stats、collision，再產 normalized definition、private preview、runtime atlas（必要時）、population v2 與 Server copy。
+工具 `tools/monster_workflow.py` 會 fail-closed 驗證 source、ACT、8方位、stats、collision，再產 normalized definition、private preview、population v2，並**重建該 map 的共享 lifecycle sprite bundle** 與 Server copy。新增怪物不再建立新的 per-monster production atlas 分類。
 
 ## Recipe v1
 
@@ -70,7 +70,7 @@ sprite `ENxxxx` 會對應 private extracted source：
 
 工具固定要求 monster 5 個 behavior：`NS / NW / FA / NH / ND`，以 `sgtest.animation/v2` 與 `legacy_direction.py` 驗證 8 logical facing，共 **40 logical views**。缺 ACT、缺必要 SPR、timeline frame 越界、pivot/hash 不一致都直接失敗。
 
-若既有 runtime atlas 的 `normalized_definition_sha256` 與 source definition 一致，直接共享；否則用 ASSET203 memory-first clip-atomic packing 在 512/1024/2048/4096 中量測後重建。不能手改 atlas。
+Animation source of truth 仍是 `sgtest.animation/v2`。Production packing 改由 [ASSET_BUNDLE_ARCHITECTURE.md](ASSET_BUNDLE_ARCHITECTURE.md) 的 lifecycle policy：同 map definitions 一起重建 `bundles/map/<map>/sprites.json`，目前經 1024/2048 A/B 選 2048。512/1024/2048/4096 是 builder 內部候選，不是對外 Runtime 類型；不能手改 atlas。
 
 ## Private preview
 
@@ -117,10 +117,10 @@ ASSET205 把 population contract 從 v1 升成 v2。v1 Server 仍可讀，並套
 
 `tools/rebuild_assets.ps1` 流程：
 
-1. 從 private original client/server material 重建 base assets/map/population。
-2. 套 normalized direction/timing semantics。
-3. 依檔名排序重套 `content/monster_recipes/*.monster.json`。
-4. export Server content。
+1. 從 private original client/server material 解出 source、support assets 與 map。
+2. `asset_pipeline.py` 直接以 normalized v2 建立 map/session lifecycle bundles 與 base population。
+3. 依檔名排序重套 `content/monster_recipes/*.monster.json`；每次修改 definition/spawn 後重建該 map 的共享 bundle。
+4. export Server collision/population content。
 
 所以正式 custom monster 必須提交 recipe，而不是提交 private PNG/SPR/ACT。
 
@@ -128,7 +128,7 @@ ASSET205 把 population contract 從 v1 升成 v2。v1 Server 仍可讀，並套
 
 - 新 recipe 若 definition id 已存在，預設 FAIL。
 - 只有 recipe `"replace": true` 或 CLI `--replace` 才會刪除該 definition 原 spawns，改用 recipe 新 definition/spawns。
-- 同 sprite 可被多個 definition id 共用；RuntimeAssetStore 以 path 共用同一 atlas，不會每 definition 複製 texture。
+- 同 sprite 或不同 sprite 的 definitions，只要屬於同一 map lifetime，都共用該 map bundle。RuntimeAssetStore 以 bundle path 建一個 texture owner；definition id 只決定 stats/spawn/prefix。
 
 ## 實測
 

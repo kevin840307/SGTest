@@ -2,9 +2,9 @@
 """Data-driven monster add/update workflow for SGTest.
 
 One recipe validates original SPR/ACT, normalized 8-facing semantics, runtime
-stats and spawn collision. Normal mode emits/reuses the runtime atlas, creates
-a private preview, updates population v2 and mirrors it to server content.
-No C#/GDScript edit or hand-edited generated PNG/JSON is required per monster.
+stats and spawn collision. Normal mode updates population v2, rebuilds the map
+lifecycle bundle, creates a private preview, and mirrors population to server
+content. Adding a monster never creates a new production atlas category.
 """
 from __future__ import annotations
 
@@ -19,9 +19,7 @@ from pathlib import Path
 from PIL import Image, ImageDraw, ImageOps
 
 from animation_definition import compile_definition, validate_definition
-from build_normalized_atlas_candidates import (
-    build_entity, choose_candidate, measure_entity, validate_runtime_semantics,
-)
+from asset_pipeline import build_map_bundle
 from build_population import DEFAULT_STATS, validate_stats
 from runtime_spr import decode_spr
 
@@ -196,7 +194,7 @@ def merge_population(population: dict, recipe: dict, spawns: list[dict],
     result["definitions"].append({
         "id": definition_id,
         "sprite": definition["sprite"],
-        "atlas": f"enemy/{definition['sprite'].lower()}.json",
+        "atlas": f"bundles/map/{recipe['map_id']}/sprites.json",
         "stats": definition["stats"],
     })
     result["definitions"].sort(key=lambda row: int(row["id"]))
@@ -264,37 +262,17 @@ def render_preview(source_root: Path, definition: dict, destination: Path) -> di
     }
 
 
-def ensure_runtime_atlas(source_root: Path, assets: Path, definition: dict,
-                         spawn_count: int) -> dict:
-    target = assets / (definition["entity"] + ".json")
-    if target.is_file():
-        current = json.loads(target.read_text(encoding="utf-8"))
-        if (int(current.get("normalized_schema_version", 0)) == 2 and
-                current.get("normalized_definition_sha256") == definition["content_sha256"]):
-            validate_runtime_semantics(definition, current)
-            return {
-                "reused": True,
-                "manifest": target.as_posix(),
-                "pages": len(current["pages"]),
-                "rgba_bytes": sum(int(w) * int(h) * 4 for w, h in current["page_sizes"]),
-                "side": int(current.get("atlas_side", 0)),
-            }
-    _, measured = measure_entity(definition, source_root)
-    candidates = measured["candidates"]
-    choice = choose_candidate(candidates, "memory", "cold")
-    row = build_entity(
-        definition, source_root, assets, int(choice["side"]),
-        {"tier": "cold", "spawn_count": spawn_count},
-        "monster_workflow", candidates,
-    )
-    manifest = json.loads(target.read_text(encoding="utf-8"))
-    validate_runtime_semantics(definition, manifest)
+def ensure_runtime_bundle(source_root: Path, assets: Path,
+                          population: dict, map_id: int) -> dict:
+    """Rebuild the one production sprite bundle owned by this map lifetime."""
+    row = build_map_bundle(source_root, assets, population, map_id)
     return {
-        "reused": False,
-        "manifest": target.as_posix(),
+        "bundle_id": row["bundle_id"],
+        "manifest": row["manifest"],
         "pages": row["pages"],
         "rgba_bytes": row["rgba_bytes"],
         "side": row["side"],
+        "entities": row["entities"],
     }
 
 
@@ -364,8 +342,8 @@ def main() -> int:
     }
 
     if not args.validate_only:
-        atlas = ensure_runtime_atlas(source_root, assets, definition, len(spawns))
-        report["atlas"] = atlas
+        bundle = ensure_runtime_bundle(source_root, assets, candidate_population, recipe["map_id"])
+        report["bundle"] = bundle
         write_json(population_path, candidate_population)
         destination = server_content / "maps" / str(recipe["map_id"]) / "population.json"
         destination.parent.mkdir(parents=True, exist_ok=True)

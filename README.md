@@ -9,7 +9,7 @@
 
 ## 最新資源架構重評
 
-先依 [SPEC 第0節](SPEC.md) 交付可重跑基準。ASSET201～204 的 normalized animation、Atlas 選型與 [RuntimeAssetStore](docs/RUNTIME_ASSET_STORE.md) 已完成；ASSET205 的 [Monster Content Workflow](docs/MONSTER_CONTENT_WORKFLOW.md) 也已完成：一份 `*.monster.json` recipe 可驗證原始 SPR/ACT、產 40-view private preview、runtime atlas、population v2 stats/spawn 與 Server content，不需再改 C#/GDScript，full rebuild 會自動重套 recipes。RUNTIME206 的 Render/Logic/Network 隔離、多 FPS／低功耗／背景／多開矩陣也已完成，證據見 [RUNTIME_ISOLATION_VERIFICATION.md](docs/RUNTIME_ISOLATION_VERIFICATION.md)；預設60FPS，UI 可選30/45/60/75/90，Unfocus 節能可關閉，而最小化永遠停止世界呈現但不停止同步。
+資源 Runtime 已收斂為單一簡單模型，詳 [Runtime Asset Bundle Architecture](docs/ASSET_BUNDLE_ARCHITECTURE.md)：`sgtest.animation/v2` 定義動畫語意、lifecycle bundle 決定一起載／卸的範圍、[RuntimeAssetStore](docs/RUNTIME_ASSET_STORE.md) 負責有界 async decode/GPU commit/cache。Production 對外只保留 **map / session / 真正 on-demand** 三種 ownership；怪物種類、方向、動作、人物部位、512/1024/2048/4096、hot/warm/cold 都不再是 Runtime 資產分類。Map13 九種怪目前共用一個 2048 map bundle，Boy base 六部位＋death 共用一個 2048 session bundle。ASSET205 的 [Monster Content Workflow](docs/MONSTER_CONTENT_WORKFLOW.md) 新增怪物時會重建該 map bundle，不再產生新的 per-monster atlas 類型。RUNTIME206 的 Render/Logic/Network 隔離、多 FPS／低功耗／背景／多開矩陣已完成，見 [RUNTIME_ISOLATION_VERIFICATION.md](docs/RUNTIME_ISOLATION_VERIFICATION.md)。
 
 ## 啟動
 
@@ -35,25 +35,21 @@ python -m pip install -r requirements.txt
 
 原版來源是 `C:\SGO\Stargate Online IE HK2`；`Recovered` 及其 `Old` 僅作唯讀參考。Data1.dat 解包後套用 loose override。已生成 75,591 SPR／282,990 影格，像素重建驗證見 `reports/asset_validation.json`；這不等於原版遊戲畫面逐格／授權 Gate 已通過。
 
-同一方向的所有動作集中管理，保留 alias、鏡射、原點與偏移。小素材合成單張，大素材依方向分張；可用 `build_assets.py --layout entity|direction|auto` 覆寫。策略與載入 A/B 見 `reports/README.md`。
+正式 sprite pipeline 不再要求開發者選 entity/direction/readable/hot-warm-cold。從原始檔重建只需：
 
 ```powershell
-python tools/extract_client.py 'C:/SGO/Stargate Online IE HK2' .cache/client
-python tools/build_assets.py .cache/client client/assets/generated --layout auto
-python tools/copy_support_assets.py .cache/client client/assets/generated
-python tools/build_maps.py .cache/client client/assets/generated --map 13
-python tools/build_population.py 'C:/SGO/Recovered/Old/服務端/Dat' --map 13
-python tools/export_server_content.py
-python tools/validate_assets.py .cache/client client/assets/generated --all-pixels
+.\tools\rebuild_assets.ps1 -Client 'C:\SGO\Stargate Online IE HK2'
+# 或已存在 .cache/client 時只重建 Runtime sprite bundles：
+python tools\asset_pipeline.py
 ```
 
-`tools/convert_assets.py` 保留 main 的研究版與新 ACT 結果；runtime 素材管線使用獨立 `tools/runtime_spr.py`，不覆蓋研究版本。Client 圖片只放 `client/assets/generated/`；Server 只接收 `server/content/` 的碰撞／出生／種類ID與內容指紋。怪物圖集在 Client 按當前地圖palette載入，同種共用、切圖清空。原版出生／visual 的對照來自使用者指定的 Recovered/Old 原始服務端 Dat；戰鬥數值仍是明確的原型預設，未宣稱還原全部怪物AI／數值。
+Builder 內部仍保留原 SPR clip atomic、8 logical facing、alias/mirror、pivot、ACT timeline、paper-doll z-order；Atlas side 由相同素材 A/B 決定。舊 `build_assets.py`、`build_atlas_groups.py`、`build_normalized_atlas_candidates.py` 等保留為研究／回歸工具，不是 production API。Client 生成圖片只放 `client/assets/generated/`；Server 仍只接收 `server/content/` 的 collision/population/content contract，不讀 Atlas pixels。Map static objects 因能隨 viewport 真正獨立 release，仍保留細粒度 on-demand；drops 目前是單一 MultiMesh，沒有另立 texture-atlas 分類。
 
 ## 已實作與驗證
 
 C# Server 權威決定移動、碰撞、八方向、攻擊、扣血、死亡復活、掉落與原子拾取。Map13 預設按原版78個出生點配置；`--monsters=1000` 明確進入多種類壓測分布。30Hz 固定模擬、10Hz 快照；每隻怪 AI 分組 5Hz，位置持續 30Hz。Server 不依 Client FPS 推進。
 
-Client 具有本地輸入預測／確認重播、各實體獨立位置歷史、單調 RTT 時鐘及分開的動畫相位。WebSocket I/O 使用獨立 worker 與有界佇列，圖像載入／繪圖不直接驅動 socket。狀態套用仍由 Client 固定步消費；完整失焦／最小化／各 FPS 的 trace 一致性尚待驗證，不能只因有 worker 就宣稱全數通過。
+Client 具有本地輸入預測／確認重播、各實體獨立位置歷史、單調 RTT 時鐘及分開的動畫相位。WebSocket I/O 使用獨立 worker 與有界佇列，圖像載入／繪圖不直接驅動 socket。狀態套用由 Client 固定步消費；30/45/60/75/90FPS、Visual5/10/15、no-world、真 Windows unfocus/minimize/restore 與 1/2/4/8 開的 state-hash / queue-age 矩陣已完成，見 `docs/RUNTIME_ISOLATION_VERIFICATION.md`。
 
 基本男性紙娃娃、Map13 的9種怪物、78個原版出生點、地磚／物件／碰撞已接入。視窗預設 1280×720，最大寬 1440，可拖曳調整或選擇解析度；F2 切換金色／現代樣式。
 

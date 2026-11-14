@@ -160,7 +160,11 @@ def multiplayer(godot,output,clients,monsters,drops,seconds,monster_assets=None)
         log.seek(0);contents.append(log.read());log.close()
     profile_path=Path('reports/rendered_load.json')
     profile=json.loads(profile_path.read_text(encoding='utf-8')) if profile_path.exists() and profile_path.stat().st_mtime>=started else None
-    passed=(contents[0].count(' joined')==clients and profile is not None and
+    # Support both the original immediate-join server log and the newer
+    # authenticated character-selection flow. The acceptance condition is
+    # still exactly N server-side playable sessions plus N ready clients.
+    server_playable=max(contents[0].count(' joined'),contents[0].count(' selected character '))
+    passed=(server_playable==clients and profile is not None and
             all('prediction_ready' in log and 'snapshot_received' in log for log in contents[1:]) and
             not any('ERROR:' in log for log in contents))
     after=provenance(monster_assets)

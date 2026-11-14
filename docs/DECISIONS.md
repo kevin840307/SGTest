@@ -256,6 +256,20 @@ ADR-026補充：使用者指定Client一般遊玩支援30～90FPS；FPS選項只
 - Burst/guard: 128 packet burst drain/decode 0.888ms；故意 `--max-fps 5` 仍維持約30Hz固定邏輯，queue P99 24.344ms。
 - Boundary: physical driver VRAM、不同高刷新率顯示器上的實際75/90 render、120FPS額外壓測、cold-disk跨硬體矩陣不屬正式Gate；AS005逐格視覺與AS008發布權仍是獨立未完成Gate。完整證據見 [RUNTIME_ISOLATION_VERIFICATION.md](RUNTIME_ISOLATION_VERIFICATION.md)。
 
+
+## ADR-034 — Runtime Atlas 分類收斂為 lifecycle bundles（2026-11-14）
+
+- Status: **ACCEPTED**。
+- Problem: 研究階段留下 per-entity、per-direction、per-action/state、paper-doll part、hot/warm/cold、readable/dense/source-locality、固定尺寸等多種分類；其中多數只是在比較 packing，不代表不同 Runtime lifetime。把研究維度直接暴露成 production category 會增加 manifest、decode jobs、owner refs、texture switches 與維護成本。
+- Decision: Production 對外只用 ownership/lifetime 分組：**map / session / 真正 on-demand**。方向、動作、mirror、pivot、ACT、z-order 留在 sgtest.animation/v2；512/1024/2048/4096 只是 builder 內部候選。新增分類必須同時證明低頻、可獨立卸載、不同 owner lifetime，且 load/frame/draw/RAM/texture/video A/B 有收益。
+- Map13: 9 monster definitions 改共用 bundles/map/13/sprites.json。1024/3頁 vs 2048/1頁 A/B：load P95 83.56→66.70ms、load frames 5→4；300 mixed draws P95 254→73；frame P95/P99 幾乎相同；texture/video peak 幾乎不變。4096 無頁數收益而拒絕。Production 選 2048。
+- Player base: body/leg/head/hair00/l-arm/r-arm/death 改共用 bundles/session/player-b-base.json。1024/2頁 vs 2048/1頁：load P95 83.19→66.47ms、load frames 5→4、draw P95 123→73；frame pacing 不退化。Runtime z-order 改直接讀 normalized draw metadata，不再第二次解析 draw-order 表。
+- Necessary split retained: map_objects 依 viewport pin/release，因為離開視野可真實獨立卸載；terrain 是單 map texture + viewport MultiMesh；drops 目前是單一 MultiMesh，沒有另立 texture-atlas category。
+- Cleanup: 被新 bundles 明確取代的 Map13 九個 per-enemy + Boy base 七個 per-part generated manifests/pages 共刪 40 個檔；hair01 等尚未納入 base 的素材保留。Legacy builders 保留研究/回歸能力但標為 research-only，production rebuild 只走 asset_pipeline.py。
+- Regression: 刪除舊 generated manifests 後 Python top-level 45 PASS、tools/tests 89 PASS、全部 tracked Godot Client tests PASS。Production map bundle 30-cycle async P95/P99 16.752/16.809ms、texture/engine/store recovery PASS；20client/300monster/1000drop/40s execution PASS，59.996FPS、frame P95/P99 19.236/20.422ms、draw P95 236、20/20 prediction/snapshot ready。
+- Server boundary: Server 不讀 Atlas pixels；definition id/stats/spawns、30Hz simulation、snapshot/network/combat cadence 不因 bundling 改變。
+- Evidence: [ASSET_BUNDLE_ARCHITECTURE.md](ASSET_BUNDLE_ARCHITECTURE.md)。
+
 ## ADR-035 — F001 Identity lifecycle + SQLite account store（2026-11-14）
 
 - Status: **ACCEPTED**。

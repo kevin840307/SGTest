@@ -2,6 +2,8 @@
 
 本報告由 `tools/report_runtime_baseline.py` 從實際 JSON 產生。執行成功與達到效能門檻分開；未測項目不標完成。
 
+> **Production update（2026-11-14）**：下方 `entity/direction/readable/current` 表格現在是歷史 A/B 基準，不是正式資產分類。Production 已收斂為 ownership/lifetime bundle，見 [ASSET_BUNDLE_ARCHITECTURE.md](ASSET_BUNDLE_ARCHITECTURE.md)：Map13 九種怪共一個 2048 map bundle、Boy base 共一個 2048 session bundle；方向/動作/尺寸只留在 builder/normalized metadata。簡化後 30-cycle async P95/P99 16.752/16.809ms；20client/300monster/1000drop P95/P99 19.236/20.422ms，execution PASS。
+
 ## 測試界線
 
 - 本機 Windows／RTX3050、Godot Compatibility、1440×900、60FPS cap；版本／檔案 SHA／素材頁 SHA 見摘要 JSON 的 provenance。

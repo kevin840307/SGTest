@@ -336,7 +336,7 @@ func _world_info(server_map: int, fingerprint: String, population_hash: String) 
 	else:
 		info_label.text = "已連線　測試場地"
 		prediction.configure(null,WORLD_SIZE)
-	var definitions: Array = [{"id":0,"sprite":"EN004A","atlas":"enemy/en004a.json"}]
+	var definitions: Array = [{"id":0,"sprite":"EN010A","atlas":"bundles/map/13/sprites.json"}]
 	var spawn_counts: Dictionary = {0: 1}
 	if server_map != 0:
 		var path := asset_root.path_join("maps/%d/population.json" % server_map)
@@ -355,7 +355,7 @@ func _world_info(server_map: int, fingerprint: String, population_hash: String) 
 			spawn_counts[definition_id] = int(spawn_counts.get(definition_id,0)) + 1
 	var started := Time.get_ticks_usec()
 	var monster_root: String = asset_root if monster_asset_root.is_empty() else monster_asset_root
-	if monster_visuals.begin_async(asset_store,"map-monsters") != OK:
+	if monster_visuals.begin_async(asset_store,"map:%d:sprites" % server_map) != OK:
 		push_error("Cannot start monster asset owner")
 		get_tree().quit(1)
 		return
@@ -845,13 +845,13 @@ func _style_ui() -> void:
 	panel.add_theme_stylebox_override("panel", style)
 
 func _load_sample_atlas() -> void:
-	# Headless clients never draw the paper doll; avoid decoding 8.3 MiB of
-	# visual-only resources while preserving their network/state workload.
+	# Headless clients never draw the paper doll; avoid decoding the session
+	# base-avatar bundle while preserving their network/state workload.
 	if DisplayServer.get_name() == "headless":
 		return
-	var player_path := asset_root.path_join("player/b/standard/b-body.json")
+	var player_path := asset_root.path_join("bundles/session/player-b-base.json")
 	if FileAccess.file_exists(player_path):
-		var error: Error = doll.begin_async(asset_store,asset_root,"player-core")
+		var error: Error = doll.begin_async(asset_store,asset_root,"session:player:b:base")
 		if error != OK:
 			push_error("Cannot queue player composition: %s" % error)
 

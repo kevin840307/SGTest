@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""Apply normalized v2 animation semantics to private runtime atlas manifests.
+"""LEGACY migration/research helper for pre-bundle manifests.
+
+Production asset_pipeline.py emits normalized logical semantics directly.
+Apply normalized v2 animation semantics to private runtime atlas manifests.
 
 PNG pages/rectangles stay unchanged. This only adds logical facing/timing data
 so physical SPR availability can never override the audited original mapping.
