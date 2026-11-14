@@ -73,7 +73,7 @@ class ConversionTests(unittest.TestCase):
                                b"\x01\x02\x01\x00\x00\x00" + struct.pack("<II", 0, 6) + b"\xff")
             self.assertEqual(convert_act(source, root, out), "converted")
             exported = json.loads((out / "Enemy" / "test.act.json").read_text())
-            self.assertEqual(exported["version"], 3)
+            self.assertEqual(exported["version"], 4)
             self.assertEqual(exported["legacy_fixed_update_hz"], 50)
             self.assertEqual(exported["legacy_fixed_update_ms"], 20)
             self.assertTrue(exported["runtime_speed_can_override"])

@@ -67,7 +67,13 @@ def parse_act(raw: bytes) -> list[dict]:
             event_frame = struct.unpack_from("<I", payload)[0]
             if event_frame >= count:
                 raise ValueError("ACT event index outside frames")
+            default_offset_ms = sum(
+                frame["legacy_reference_default_duration_ms"]
+                for frame in frames[:event_frame]
+            )
             events.append({"at_frame_raw": event_frame,
+                           "fires_on_enter_frame": True,
+                           "legacy_reference_default_offset_ms": default_offset_ms,
                            "token": token_bytes[:token_bytes.index(0)].decode("ascii"),
                            "raw_payload_hex": token_bytes.hex()})
         actions.append({"key": key, "raw_loop_flag": raw_loop_flag,
@@ -96,7 +102,7 @@ def main() -> int:
                 if args.output is not None:
                     target = args.output / path.relative_to(args.act).parent / (path.stem + ".act.json")
                     target.parent.mkdir(parents=True, exist_ok=True)
-                    target.write_text(json.dumps({"version": 3,
+                    target.write_text(json.dumps({"version": 4,
                         "source": path.relative_to(args.act).as_posix(),
                         "sha256": hashlib.sha256(raw).hexdigest(),
                         "timing_basis": "legacy_reference_fixed_50hz_default_speed",

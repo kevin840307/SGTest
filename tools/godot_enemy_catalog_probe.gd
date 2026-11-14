@@ -22,6 +22,7 @@ func _initialize() -> void:
 	var actions := 0
 	var logical_directions := 0
 	var steps := 0
+	var events := 0
 	for group in catalog.groups:
 		var dimensions: Array[Vector2i] = []
 		for page in group.pages:
@@ -31,6 +32,15 @@ func _initialize() -> void:
 				return
 			dimensions.append(image.get_size())
 		for action in group.actions:
+			if timing_verified:
+				for event in action.events:
+					if not bool(event.get("fires_on_enter_frame", false)):
+						_fail("Verified timing catalog event is missing enter-frame semantics")
+						return
+					if not event.has("legacy_reference_default_offset_ms") or int(event.legacy_reference_default_offset_ms) < 0:
+						_fail("Verified timing catalog event is missing default offset ms")
+						return
+					events += 1
 			if action.directions.size() != 8:
 				_fail("Action does not have eight logical facings")
 				return
@@ -55,8 +65,9 @@ func _initialize() -> void:
 			actions += 1
 		groups += 1
 	print(JSON.stringify({"groups": groups, "actions": actions,
-		"logical_directions": logical_directions, "steps": steps,
-		"timing_verified": timing_verified, "visual_alignment_verified": false}))
+		"logical_directions": logical_directions, "steps": steps, "events": events,
+		"timing_verified": timing_verified, "event_timing_verified": timing_verified,
+		"visual_alignment_verified": false}))
 	quit(0)
 
 

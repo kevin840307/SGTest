@@ -93,6 +93,11 @@ def main():
                              f"最大校正 {max(r['max_correction_px'] for r in rows):.2f}px。")
             report.write(" 這是可重跑的本機網路退化情境，非真實跨國連線或所有網路情況的保證。\n")
 
+    shape_path=Path('reports/ATLAS_LAYOUT.md')
+    if shape_path.exists():
+        with Path('reports/README.md').open('a',encoding='utf-8') as report:
+            report.write('\n## 最新圖集排列\n\n預設 consistent：多影格圖集橫向、單張原圖保留比例；完整原始檔重建、形狀／容量／原生載入比較見 [ATLAS_LAYOUT.md](ATLAS_LAYOUT.md)。舊 atlas_benchmark 排法保留為歷史，不能當新 shape 的載入成績。\n')
+
 
 if __name__ == '__main__':
     main()
