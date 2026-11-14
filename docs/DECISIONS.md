@@ -113,3 +113,7 @@ ADR-016 的逐怪物尺寸實驗補充（2026-11-14）：50 組各測 1024／204
 - Rejected: 依 `_process(delta)` 的渲染 callback poll socket、以 UI Animation frame 送 Move/Skill、AFK 停止處理 Server events。
 - Risks: Godot/OS 背景 throttle、queue backlog、worker Thread 不安全地觸碰 SceneTree、GPU upload 卡住主執行緒。
 - Verification: 同 packet trace 30/40/50/60/120 + UI 限速 + 失焦/最小化/AFK，RX/TX/State hash 與 QueueAge P95/P99；CI-T01～T04 以及實機 GPU 延遲。詳 [CLIENT_RUNTIME_ISOLATION.md](CLIENT_RUNTIME_ISOLATION.md)。
+
+## 人物素材研究補充（2026-11-14）
+
+原版 draw-order 的 +2 token 會展開為兩個有序繪圖槽位；素材資料契約必須同時保留原始 token 與展開序列，不能套用物品強化別名清理規則。兩份主要人物表 102 行已稽核，貼圖來源與實際遮擋仍待驗證，詳 [HK2_DRAW_ORDER.md](HK2_DRAW_ORDER.md)。
