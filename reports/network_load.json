@@ -1,0 +1,1435 @@
+{
+  "passed": true,
+  "clients": 8,
+  "monsters": 1000,
+  "drops": 5000,
+  "seconds": 30,
+  "joined": 8,
+  "snapshots_received_by_all": true,
+  "actions_received_by_all": true,
+  "inventories_received_by_all": true,
+  "headless": true,
+  "samples": [
+    [
+      {
+        "cpu_one_core_percent": 23.1,
+        "rss_bytes": 109793280,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 35.4,
+        "rss_bytes": 127094784,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 29.2,
+        "rss_bytes": 127262720,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 35.4,
+        "rss_bytes": 126861312,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 29.2,
+        "rss_bytes": 126930944,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 30.8,
+        "rss_bytes": 126771200,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 30.8,
+        "rss_bytes": 126914560,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 32.3,
+        "rss_bytes": 127139840,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 30.8,
+        "rss_bytes": 126910464,
+        "processes": 2
+      }
+    ],
+    [
+      {
+        "cpu_one_core_percent": 20.0,
+        "rss_bytes": 109830144,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 33.8,
+        "rss_bytes": 127094784,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 29.2,
+        "rss_bytes": 127279104,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 30.8,
+        "rss_bytes": 126902272,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 27.7,
+        "rss_bytes": 127008768,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 33.8,
+        "rss_bytes": 126771200,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 29.2,
+        "rss_bytes": 127143936,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 24.6,
+        "rss_bytes": 127160320,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 23.1,
+        "rss_bytes": 126910464,
+        "processes": 2
+      }
+    ],
+    [
+      {
+        "cpu_one_core_percent": 20.0,
+        "rss_bytes": 109838336,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 29.2,
+        "rss_bytes": 127094784,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 26.1,
+        "rss_bytes": 127389696,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 24.6,
+        "rss_bytes": 126902272,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 26.1,
+        "rss_bytes": 127012864,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 27.7,
+        "rss_bytes": 126771200,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 26.1,
+        "rss_bytes": 127164416,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 21.5,
+        "rss_bytes": 127160320,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 21.5,
+        "rss_bytes": 126910464,
+        "processes": 2
+      }
+    ],
+    [
+      {
+        "cpu_one_core_percent": 20.3,
+        "rss_bytes": 109830144,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 29.7,
+        "rss_bytes": 127094784,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 31.2,
+        "rss_bytes": 127426560,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 32.8,
+        "rss_bytes": 126902272,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 28.1,
+        "rss_bytes": 127041536,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 32.8,
+        "rss_bytes": 126771200,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 34.4,
+        "rss_bytes": 127209472,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 31.2,
+        "rss_bytes": 127430656,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 29.7,
+        "rss_bytes": 126910464,
+        "processes": 2
+      }
+    ],
+    [
+      {
+        "cpu_one_core_percent": 20.0,
+        "rss_bytes": 109895680,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 38.5,
+        "rss_bytes": 127094784,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 33.9,
+        "rss_bytes": 127598592,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 35.4,
+        "rss_bytes": 127082496,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 35.4,
+        "rss_bytes": 127041536,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 32.3,
+        "rss_bytes": 126771200,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 33.9,
+        "rss_bytes": 127209472,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 35.4,
+        "rss_bytes": 127455232,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 33.9,
+        "rss_bytes": 126910464,
+        "processes": 2
+      }
+    ],
+    [
+      {
+        "cpu_one_core_percent": 23.1,
+        "rss_bytes": 109965312,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 36.9,
+        "rss_bytes": 127094784,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 33.8,
+        "rss_bytes": 127598592,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 35.4,
+        "rss_bytes": 127082496,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 38.4,
+        "rss_bytes": 127041536,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 36.9,
+        "rss_bytes": 126771200,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 36.9,
+        "rss_bytes": 127209472,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 33.8,
+        "rss_bytes": 127455232,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 30.8,
+        "rss_bytes": 126910464,
+        "processes": 2
+      }
+    ],
+    [
+      {
+        "cpu_one_core_percent": 16.9,
+        "rss_bytes": 109969408,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 33.9,
+        "rss_bytes": 127094784,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 32.3,
+        "rss_bytes": 127606784,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 35.4,
+        "rss_bytes": 127082496,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 30.8,
+        "rss_bytes": 127041536,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 33.9,
+        "rss_bytes": 126771200,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 40.0,
+        "rss_bytes": 127213568,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 33.9,
+        "rss_bytes": 127455232,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 35.4,
+        "rss_bytes": 126910464,
+        "processes": 2
+      }
+    ],
+    [
+      {
+        "cpu_one_core_percent": 12.5,
+        "rss_bytes": 109985792,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 31.2,
+        "rss_bytes": 127094784,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 23.4,
+        "rss_bytes": 127606784,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 28.1,
+        "rss_bytes": 127086592,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 21.9,
+        "rss_bytes": 127041536,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 26.6,
+        "rss_bytes": 126779392,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 29.7,
+        "rss_bytes": 127213568,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 26.6,
+        "rss_bytes": 127455232,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 26.6,
+        "rss_bytes": 126914560,
+        "processes": 2
+      }
+    ],
+    [
+      {
+        "cpu_one_core_percent": 16.9,
+        "rss_bytes": 109985792,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 23.1,
+        "rss_bytes": 127094784,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 21.5,
+        "rss_bytes": 127606784,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 29.2,
+        "rss_bytes": 127086592,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 21.5,
+        "rss_bytes": 127041536,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 30.8,
+        "rss_bytes": 126779392,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 27.7,
+        "rss_bytes": 127213568,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 27.7,
+        "rss_bytes": 127455232,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 26.1,
+        "rss_bytes": 126914560,
+        "processes": 2
+      }
+    ],
+    [
+      {
+        "cpu_one_core_percent": 16.9,
+        "rss_bytes": 110002176,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 30.8,
+        "rss_bytes": 127094784,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 26.1,
+        "rss_bytes": 127606784,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 26.1,
+        "rss_bytes": 127086592,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 29.2,
+        "rss_bytes": 127041536,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 38.4,
+        "rss_bytes": 126779392,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 30.8,
+        "rss_bytes": 127225856,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 23.1,
+        "rss_bytes": 127549440,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 24.6,
+        "rss_bytes": 126918656,
+        "processes": 2
+      }
+    ],
+    [
+      {
+        "cpu_one_core_percent": 13.9,
+        "rss_bytes": 110014464,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 30.8,
+        "rss_bytes": 127094784,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 30.8,
+        "rss_bytes": 127635456,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 29.2,
+        "rss_bytes": 127090688,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 30.8,
+        "rss_bytes": 127041536,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 35.4,
+        "rss_bytes": 126779392,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 33.9,
+        "rss_bytes": 127225856,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 24.6,
+        "rss_bytes": 127582208,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 26.2,
+        "rss_bytes": 127164416,
+        "processes": 2
+      }
+    ],
+    [
+      {
+        "cpu_one_core_percent": 17.2,
+        "rss_bytes": 110129152,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 34.4,
+        "rss_bytes": 127094784,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 32.8,
+        "rss_bytes": 127635456,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 34.4,
+        "rss_bytes": 127090688,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 32.8,
+        "rss_bytes": 127041536,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 37.5,
+        "rss_bytes": 126779392,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 34.4,
+        "rss_bytes": 127225856,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 32.8,
+        "rss_bytes": 127586304,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 31.2,
+        "rss_bytes": 127205376,
+        "processes": 2
+      }
+    ],
+    [
+      {
+        "cpu_one_core_percent": 15.4,
+        "rss_bytes": 110374912,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 33.8,
+        "rss_bytes": 127180800,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 30.8,
+        "rss_bytes": 127643648,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 27.7,
+        "rss_bytes": 127090688,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 27.7,
+        "rss_bytes": 127041536,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 35.4,
+        "rss_bytes": 126783488,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 32.3,
+        "rss_bytes": 127225856,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 29.2,
+        "rss_bytes": 127586304,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 29.2,
+        "rss_bytes": 127213568,
+        "processes": 2
+      }
+    ],
+    [
+      {
+        "cpu_one_core_percent": 16.9,
+        "rss_bytes": 110399488,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 29.2,
+        "rss_bytes": 127205376,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 26.1,
+        "rss_bytes": 127643648,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 29.2,
+        "rss_bytes": 127090688,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 29.2,
+        "rss_bytes": 127041536,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 30.8,
+        "rss_bytes": 126783488,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 32.3,
+        "rss_bytes": 127225856,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 30.8,
+        "rss_bytes": 127586304,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 29.2,
+        "rss_bytes": 127213568,
+        "processes": 2
+      }
+    ],
+    [
+      {
+        "cpu_one_core_percent": 10.8,
+        "rss_bytes": 110399488,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 27.7,
+        "rss_bytes": 127205376,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 23.1,
+        "rss_bytes": 127643648,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 26.2,
+        "rss_bytes": 127090688,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 26.2,
+        "rss_bytes": 127041536,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 30.8,
+        "rss_bytes": 126783488,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 24.6,
+        "rss_bytes": 127225856,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 27.7,
+        "rss_bytes": 127586304,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 26.2,
+        "rss_bytes": 127213568,
+        "processes": 2
+      }
+    ],
+    [
+      {
+        "cpu_one_core_percent": 15.4,
+        "rss_bytes": 110399488,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 30.8,
+        "rss_bytes": 127205376,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 24.6,
+        "rss_bytes": 127643648,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 24.6,
+        "rss_bytes": 127090688,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 30.8,
+        "rss_bytes": 127041536,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 27.7,
+        "rss_bytes": 126783488,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 29.2,
+        "rss_bytes": 127225856,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 27.7,
+        "rss_bytes": 127586304,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 27.7,
+        "rss_bytes": 127213568,
+        "processes": 2
+      }
+    ],
+    [
+      {
+        "cpu_one_core_percent": 12.3,
+        "rss_bytes": 110407680,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 32.3,
+        "rss_bytes": 127205376,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 18.5,
+        "rss_bytes": 127655936,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 29.2,
+        "rss_bytes": 127090688,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 29.2,
+        "rss_bytes": 127041536,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 30.8,
+        "rss_bytes": 126795776,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 33.9,
+        "rss_bytes": 127225856,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 26.2,
+        "rss_bytes": 127586304,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 29.2,
+        "rss_bytes": 127213568,
+        "processes": 2
+      }
+    ],
+    [
+      {
+        "cpu_one_core_percent": 12.5,
+        "rss_bytes": 110403584,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 31.2,
+        "rss_bytes": 127205376,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 26.6,
+        "rss_bytes": 127664128,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 25.0,
+        "rss_bytes": 127090688,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 28.1,
+        "rss_bytes": 127041536,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 39.1,
+        "rss_bytes": 126803968,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 29.7,
+        "rss_bytes": 127225856,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 26.6,
+        "rss_bytes": 127586304,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 26.6,
+        "rss_bytes": 127213568,
+        "processes": 2
+      }
+    ],
+    [
+      {
+        "cpu_one_core_percent": 16.9,
+        "rss_bytes": 110403584,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 26.1,
+        "rss_bytes": 127205376,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 24.6,
+        "rss_bytes": 127664128,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 30.8,
+        "rss_bytes": 127090688,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 33.8,
+        "rss_bytes": 127041536,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 32.3,
+        "rss_bytes": 126803968,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 32.3,
+        "rss_bytes": 127414272,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 36.9,
+        "rss_bytes": 127586304,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 29.2,
+        "rss_bytes": 127213568,
+        "processes": 2
+      }
+    ],
+    [
+      {
+        "cpu_one_core_percent": 14.1,
+        "rss_bytes": 110403584,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 28.1,
+        "rss_bytes": 127205376,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 26.6,
+        "rss_bytes": 127672320,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 29.7,
+        "rss_bytes": 127090688,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 25.0,
+        "rss_bytes": 127041536,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 32.8,
+        "rss_bytes": 126803968,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 31.2,
+        "rss_bytes": 127483904,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 34.4,
+        "rss_bytes": 127586304,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 28.1,
+        "rss_bytes": 127213568,
+        "processes": 2
+      }
+    ],
+    [
+      {
+        "cpu_one_core_percent": 10.8,
+        "rss_bytes": 110411776,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 26.1,
+        "rss_bytes": 127205376,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 26.1,
+        "rss_bytes": 127672320,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 24.6,
+        "rss_bytes": 127090688,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 26.1,
+        "rss_bytes": 127041536,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 23.1,
+        "rss_bytes": 126803968,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 26.1,
+        "rss_bytes": 127516672,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 27.7,
+        "rss_bytes": 127586304,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 27.7,
+        "rss_bytes": 127213568,
+        "processes": 2
+      }
+    ],
+    [
+      {
+        "cpu_one_core_percent": 15.6,
+        "rss_bytes": 110411776,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 26.6,
+        "rss_bytes": 127205376,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 28.1,
+        "rss_bytes": 127672320,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 28.1,
+        "rss_bytes": 127090688,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 28.1,
+        "rss_bytes": 127041536,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 21.9,
+        "rss_bytes": 126803968,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 29.7,
+        "rss_bytes": 127528960,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 29.7,
+        "rss_bytes": 127586304,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 26.6,
+        "rss_bytes": 127213568,
+        "processes": 2
+      }
+    ],
+    [
+      {
+        "cpu_one_core_percent": 16.9,
+        "rss_bytes": 110411776,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 29.2,
+        "rss_bytes": 127213568,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 29.2,
+        "rss_bytes": 127672320,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 29.2,
+        "rss_bytes": 127098880,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 32.3,
+        "rss_bytes": 127041536,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 24.6,
+        "rss_bytes": 126803968,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 29.2,
+        "rss_bytes": 127574016,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 30.8,
+        "rss_bytes": 127610880,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 32.3,
+        "rss_bytes": 127463424,
+        "processes": 2
+      }
+    ],
+    [
+      {
+        "cpu_one_core_percent": 20.0,
+        "rss_bytes": 110407680,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 26.1,
+        "rss_bytes": 127213568,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 27.7,
+        "rss_bytes": 127672320,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 33.8,
+        "rss_bytes": 127098880,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 27.7,
+        "rss_bytes": 127041536,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 27.7,
+        "rss_bytes": 126803968,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 32.3,
+        "rss_bytes": 127574016,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 35.4,
+        "rss_bytes": 127610880,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 32.3,
+        "rss_bytes": 127475712,
+        "processes": 2
+      }
+    ],
+    [
+      {
+        "cpu_one_core_percent": 13.8,
+        "rss_bytes": 110407680,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 29.2,
+        "rss_bytes": 127213568,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 30.8,
+        "rss_bytes": 127672320,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 35.4,
+        "rss_bytes": 127098880,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 30.8,
+        "rss_bytes": 127041536,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 29.2,
+        "rss_bytes": 126803968,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 33.8,
+        "rss_bytes": 127574016,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 36.9,
+        "rss_bytes": 127610880,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 33.8,
+        "rss_bytes": 127475712,
+        "processes": 2
+      }
+    ],
+    [
+      {
+        "cpu_one_core_percent": 20.0,
+        "rss_bytes": 110407680,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 26.2,
+        "rss_bytes": 127213568,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 32.3,
+        "rss_bytes": 127672320,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 29.2,
+        "rss_bytes": 127098880,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 33.9,
+        "rss_bytes": 127041536,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 35.4,
+        "rss_bytes": 126803968,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 27.7,
+        "rss_bytes": 127582208,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 29.2,
+        "rss_bytes": 127610880,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 29.2,
+        "rss_bytes": 127545344,
+        "processes": 2
+      }
+    ],
+    [
+      {
+        "cpu_one_core_percent": 13.8,
+        "rss_bytes": 110407680,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 26.1,
+        "rss_bytes": 127213568,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 32.3,
+        "rss_bytes": 127672320,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 20.0,
+        "rss_bytes": 127098880,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 27.7,
+        "rss_bytes": 127041536,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 32.3,
+        "rss_bytes": 126803968,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 30.8,
+        "rss_bytes": 127582208,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 24.6,
+        "rss_bytes": 127610880,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 26.1,
+        "rss_bytes": 127643648,
+        "processes": 2
+      }
+    ],
+    [
+      {
+        "cpu_one_core_percent": 10.8,
+        "rss_bytes": 110370816,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 32.3,
+        "rss_bytes": 127213568,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 24.6,
+        "rss_bytes": 127672320,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 21.6,
+        "rss_bytes": 127098880,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 26.2,
+        "rss_bytes": 127041536,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 26.2,
+        "rss_bytes": 126803968,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 24.6,
+        "rss_bytes": 127582208,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 21.6,
+        "rss_bytes": 127610880,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 20.0,
+        "rss_bytes": 127660032,
+        "processes": 2
+      }
+    ],
+    [
+      {
+        "cpu_one_core_percent": 17.2,
+        "rss_bytes": 110370816,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 29.7,
+        "rss_bytes": 127172608,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 26.6,
+        "rss_bytes": 127655936,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 25.0,
+        "rss_bytes": 127078400,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 23.4,
+        "rss_bytes": 127045632,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 23.4,
+        "rss_bytes": 126783488,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 29.7,
+        "rss_bytes": 127639552,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 25.0,
+        "rss_bytes": 127598592,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 26.6,
+        "rss_bytes": 128487424,
+        "processes": 2
+      }
+    ],
+    [
+      {
+        "cpu_one_core_percent": 16.9,
+        "rss_bytes": 110370816,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 33.8,
+        "rss_bytes": 127172608,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 26.1,
+        "rss_bytes": 127655936,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 26.1,
+        "rss_bytes": 127078400,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 27.7,
+        "rss_bytes": 127049728,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 35.4,
+        "rss_bytes": 127004672,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 30.8,
+        "rss_bytes": 127639552,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 27.7,
+        "rss_bytes": 127598592,
+        "processes": 2
+      },
+      {
+        "cpu_one_core_percent": 27.7,
+        "rss_bytes": 128626688,
+        "processes": 2
+      }
+    ]
+  ],
+  "logs": [
+    "Godot Engine v4.7.2.stable.official.ed1daf0bf - https://godotengine.org\n\nSGO server listening on UDP 27888 with 1000 monsters\nplayer 1360298456 joined\nplayer 1251115024 joined\nplayer 1158022508 joined\nplayer 942025929 joined\nplayer 1563374005 joined\nplayer 2022295054 joined\nplayer 363198364 joined\nplayer 1900041499 joined\n",
+    "Godot Engine v4.7.2.stable.official.ed1daf0bf - https://godotengine.org\n\nSGO client starting\nSGO client UI ready\nSGO client connecting to 127.0.0.1:27888\nclient connected with peer 1158022508\naction_received\ninventory_received\nclient peer status 2\nsnapshot_received sequence=50 players=8 monsters=595 drops=2371\nsnapshot_received sequence=100 players=8 monsters=557 drops=2128\nsnapshot_received sequence=150 players=8 monsters=660 drops=2501\nsnapshot_received sequence=200 players=8 monsters=667 drops=2748\nsnapshot_received sequence=250 players=8 monsters=698 drops=2487\nsnapshot_received sequence=300 players=8 monsters=567 drops=2166\n",
+    "Godot Engine v4.7.2.stable.official.ed1daf0bf - https://godotengine.org\n\nSGO client starting\nSGO client UI ready\nSGO client connecting to 127.0.0.1:27888\nclient connected with peer 942025929\naction_received\ninventory_received\nclient peer status 2\nsnapshot_received sequence=50 players=8 monsters=593 drops=2364\nsnapshot_received sequence=100 players=8 monsters=558 drops=2127\nsnapshot_received sequence=150 players=8 monsters=664 drops=2490\nsnapshot_received sequence=200 players=8 monsters=672 drops=2751\nsnapshot_received sequence=250 players=8 monsters=694 drops=2500\nsnapshot_received sequence=300 players=8 monsters=558 drops=2142\n",
+    "Godot Engine v4.7.2.stable.official.ed1daf0bf - https://godotengine.org\n\nSGO client starting\nSGO client UI ready\nSGO client connecting to 127.0.0.1:27888\nclient connected with peer 1360298456\naction_received\ninventory_received\nclient peer status 2\nsnapshot_received sequence=50 players=8 monsters=591 drops=2366\nsnapshot_received sequence=100 players=8 monsters=557 drops=2144\nsnapshot_received sequence=150 players=8 monsters=649 drops=2498\nsnapshot_received sequence=200 players=8 monsters=672 drops=2726\nsnapshot_received sequence=250 players=8 monsters=702 drops=2480\nsnapshot_received sequence=300 players=8 monsters=575 drops=2137\n",
+    "Godot Engine v4.7.2.stable.official.ed1daf0bf - https://godotengine.org\n\nSGO client starting\nSGO client UI ready\nSGO client connecting to 127.0.0.1:27888\nclient connected with peer 1563374005\naction_received\ninventory_received\nclient peer status 2\nsnapshot_received sequence=50 players=8 monsters=591 drops=2350\nsnapshot_received sequence=100 players=8 monsters=556 drops=2132\nsnapshot_received sequence=150 players=8 monsters=669 drops=2503\nsnapshot_received sequence=200 players=8 monsters=667 drops=2737\nsnapshot_received sequence=250 players=8 monsters=689 drops=2511\nsnapshot_received sequence=300 players=8 monsters=553 drops=2141\n",
+    "Godot Engine v4.7.2.stable.official.ed1daf0bf - https://godotengine.org\n\nSGO client starting\nSGO client UI ready\nSGO client connecting to 127.0.0.1:27888\nclient connected with peer 1900041499\naction_received\ninventory_received\nclient peer status 2\nsnapshot_received sequence=50 players=8 monsters=590 drops=2356\nsnapshot_received sequence=100 players=8 monsters=563 drops=2129\nsnapshot_received sequence=150 players=8 monsters=689 drops=2500\nsnapshot_received sequence=200 players=8 monsters=674 drops=2739\nsnapshot_received sequence=250 players=8 monsters=676 drops=2523\n",
+    "Godot Engine v4.7.2.stable.official.ed1daf0bf - https://godotengine.org\n\nSGO client starting\nSGO client UI ready\nSGO client connecting to 127.0.0.1:27888\nclient connected with peer 1251115024\naction_received\ninventory_received\nclient peer status 2\nsnapshot_received sequence=50 players=8 monsters=588 drops=2355\nsnapshot_received sequence=100 players=8 monsters=559 drops=2140\nsnapshot_received sequence=150 players=8 monsters=660 drops=2509\nsnapshot_received sequence=200 players=8 monsters=668 drops=2736\nsnapshot_received sequence=250 players=8 monsters=702 drops=2469\nsnapshot_received sequence=300 players=8 monsters=568 drops=2154\n",
+    "Godot Engine v4.7.2.stable.official.ed1daf0bf - https://godotengine.org\n\nSGO client starting\nSGO client UI ready\nSGO client connecting to 127.0.0.1:27888\nclient connected with peer 2022295054\naction_received\ninventory_received\nclient peer status 2\nsnapshot_received sequence=50 players=8 monsters=589 drops=2344\nsnapshot_received sequence=100 players=8 monsters=563 drops=2120\nsnapshot_received sequence=150 players=8 monsters=680 drops=2504\nsnapshot_received sequence=200 players=8 monsters=675 drops=2731\nsnapshot_received sequence=250 players=8 monsters=685 drops=2508\nsnapshot_received sequence=300 players=8 monsters=548 drops=2139\n",
+    "Godot Engine v4.7.2.stable.official.ed1daf0bf - https://godotengine.org\n\nSGO client starting\nSGO client UI ready\nSGO client connecting to 127.0.0.1:27888\nclient connected with peer 363198364\naction_received\ninventory_received\nclient peer status 2\nsnapshot_received sequence=50 players=8 monsters=587 drops=2340\nsnapshot_received sequence=100 players=8 monsters=561 drops=2123\nsnapshot_received sequence=150 players=8 monsters=685 drops=2516\nsnapshot_received sequence=200 players=8 monsters=673 drops=2736\nsnapshot_received sequence=250 players=8 monsters=680 drops=2512\nsnapshot_received sequence=300 players=8 monsters=541 drops=2135\n"
+  ]
+}

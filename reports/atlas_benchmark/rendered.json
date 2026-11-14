@@ -1,0 +1,53 @@
+{
+  "cache": "warm OS file cache; process startup excluded",
+  "rows": [
+    {
+      "entity": "enemy/en004a",
+      "layout": "entity",
+      "rgba_bytes": 10811656,
+      "decode_upload_ms": 61.323,
+      "pages": 1,
+      "renderer": "NVIDIA GeForce RTX 3050"
+    },
+    {
+      "entity": "enemy/en004a",
+      "layout": "direction",
+      "rgba_bytes": 4194508,
+      "decode_upload_ms": 36.899,
+      "pages": 5,
+      "renderer": "NVIDIA GeForce RTX 3050"
+    },
+    {
+      "entity": "enemy/en023a",
+      "layout": "entity",
+      "rgba_bytes": 60202056,
+      "decode_upload_ms": 162.663,
+      "pages": 1,
+      "renderer": "NVIDIA GeForce RTX 3050"
+    },
+    {
+      "entity": "enemy/en023a",
+      "layout": "direction",
+      "rgba_bytes": 19192528,
+      "decode_upload_ms": 91.629,
+      "pages": 5,
+      "renderer": "NVIDIA GeForce RTX 3050"
+    },
+    {
+      "entity": "enemy/en050b",
+      "layout": "entity",
+      "rgba_bytes": 2625984,
+      "decode_upload_ms": 20.112,
+      "pages": 1,
+      "renderer": "NVIDIA GeForce RTX 3050"
+    },
+    {
+      "entity": "enemy/en050b",
+      "layout": "direction",
+      "rgba_bytes": 1511688,
+      "decode_upload_ms": 26.473,
+      "pages": 5,
+      "renderer": "NVIDIA GeForce RTX 3050"
+    }
+  ]
+}

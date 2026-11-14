@@ -1,0 +1,9 @@
+.godot/
+assets/generated/
+.cache/
+reports/atlas_benchmark/*/
+reports/*.png
+reports/direction_trial/
+__pycache__/
+.pytest_cache/
+*.pyc

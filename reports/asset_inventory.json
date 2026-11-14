@@ -1,0 +1,16 @@
+{
+  "source_sprites": 75591,
+  "entities_or_parts": 4821,
+  "frames": 282990,
+  "textures": 6854,
+  "direction_aliases": 70763,
+  "support_assets": 5557,
+  "errors": [],
+  "archive": {
+    "archive_sha256": "9ae08a8a7bb784720c83bfdd608688c045d717dee3868c13d7b8f444562bfc42",
+    "archive_entries": 41687,
+    "extracted": 41687,
+    "loose_overlays": 41707,
+    "client": "C:\\SGO\\Stargate Online IE HK"
+  }
+}
