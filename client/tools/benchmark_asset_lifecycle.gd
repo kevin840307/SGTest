@@ -3,7 +3,7 @@ extends SceneTree
 # Baseline only: intentionally synchronous CPU decode / GPU upload. No draft
 # resource manager is used, so its spikes and recovery can be measured honestly.
 var cycles := 30
-var root_path := "res://assets/generated"
+var root_path := "res://assets"
 var report_path := ""
 var monster_root := ""
 var records: Array = []

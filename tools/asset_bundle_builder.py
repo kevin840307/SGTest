@@ -73,10 +73,34 @@ def _clip_sources(definition: dict) -> dict[str, str]:
     return {clip: definition["clips"][clip]["source"] for clip in sorted(used)}
 
 
-def collect_bundle(definitions: list[dict], source_root: Path) -> dict:
-    """Decode each physical source once and merge many definitions into one bundle."""
-    if not definitions:
-        raise ValueError("bundle needs at least one normalized definition")
+def _inspection_index(definition: dict) -> dict[str, dict[str, str]]:
+    """Keep per-entity action/facing lookup independent from physical packing."""
+    prefixes = {view["clip"].rsplit("_", 1)[0]
+                for behavior in definition["behaviors"].values()
+                for view in behavior["facings"].values()}
+    if len(prefixes) != 1:
+        raise ValueError("normalized definition has multiple clip prefixes")
+    prefix = next(iter(prefixes))
+    return {
+        behavior_code: {
+            str(facing): f"{prefix}_{behavior_code}{facing}"
+            for facing in sorted(behavior["facings"], key=int)
+        }
+        for behavior_code, behavior in sorted(definition["behaviors"].items())
+    }
+
+
+def collect_bundle(definitions: list[dict], source_root: Path,
+                   raw_sources: list[Path] | None = None) -> dict:
+    """Merge normalized entities plus optional untimed raw SPR clips.
+
+    Raw clips are for map decoration or other assets without ACT semantics. They
+    keep original frame order/pivot and use EntityAtlas' deterministic untimed
+    playback; they do not create a new runtime asset type.
+    """
+    raw_sources = raw_sources or []
+    if not definitions and not raw_sources:
+        raise ValueError("bundle needs at least one normalized definition or raw SPR")
     frames = []
     ranges = []
     clips: dict[str, list[int]] = {}
@@ -84,6 +108,7 @@ def collect_bundle(definitions: list[dict], source_root: Path) -> dict:
     sources = []
     merged_views = {}
     entities = []
+    raw_clips = []
 
     for definition in definitions:
         validate_definition(definition)
@@ -135,8 +160,34 @@ def collect_bundle(definitions: list[dict], source_root: Path) -> dict:
             "entity": definition["entity"],
             "definition_sha256": definition["content_sha256"],
             "logical_views": len(entity_views),
+            "inspect": _inspection_index(definition),
             "physical_clips": sorted(physical),
         })
+
+    for path in sorted(raw_sources, key=lambda value: value.as_posix().casefold()):
+        path = path.resolve()
+        if not path.is_relative_to(source_root.resolve()):
+            raise ValueError(f"raw source outside source root: {path}")
+        relative = path.relative_to(source_root.resolve()).as_posix()
+        clip = path.stem.upper()
+        if clip in clips:
+            raise ValueError(f"duplicate physical clip name in bundle: {clip}")
+        raw = path.read_bytes()
+        decoded = decode_spr(raw)
+        start = len(frames)
+        indices = []
+        for frame in decoded:
+            frames.append(frame)
+            indices.append(len(frames) - 1)
+        ranges.append((start, len(decoded)))
+        clips[clip] = indices
+        source_to_indices[relative] = indices
+        sources.append({
+            "path": relative,
+            "sha256": hashlib.sha256(raw).hexdigest(),
+            "frames": len(decoded),
+        })
+        raw_clips.append({"clip": clip, "source": relative, "frames": len(decoded)})
 
     return {
         "frames": frames,
@@ -145,6 +196,7 @@ def collect_bundle(definitions: list[dict], source_root: Path) -> dict:
         "logical_views": merged_views,
         "sources": sources,
         "entities": entities,
+        "raw_clips": raw_clips,
     }
 
 
@@ -168,21 +220,28 @@ def measure_bundle(collected: dict) -> list[dict]:
 
 
 def choose_candidate(candidates: list[dict], overhead: float = 0.05,
-                     same_page_memory_tolerance: float = 0.02) -> dict:
+                     same_page_memory_tolerance: float = 0.02,
+                     auto_max_side: int = 2048) -> dict:
     """Pick by measured memory/page cost; never expose size as a runtime type.
 
-    First stay within a small overhead of the global minimum decoded area, then
-    minimize page count. When equal-page candidates are within 2% memory, prefer
-    the smaller side: a larger texture needs a measurable benefit, not a tiny
-    packing win.
+    Auto mode first stays within the measured <=2048 pool when it is valid,
+    then stays within a small overhead of that pool's minimum decoded area and
+    minimizes page count. 4096 remains measured/researchable and is an automatic
+    fallback only when smaller sides cannot hold an atomic source block.
     """
     valid = [row for row in candidates if row.get("valid")]
     if not valid:
         raise ValueError("no atlas side can hold the bundle")
-    if overhead < 0 or same_page_memory_tolerance < 0:
-        raise ValueError("candidate tolerances must be nonnegative")
-    minimum = min(row["rgba_bytes"] for row in valid)
-    allowed = [row for row in valid if row["rgba_bytes"] <= minimum * (1.0 + overhead)]
+    if overhead < 0 or same_page_memory_tolerance < 0 or auto_max_side < 1:
+        raise ValueError("candidate policy values must be valid")
+    # 4096 remains measured and can be forced for research, but current real
+    # lifecycle/render A/B shows no frame/load gain over 2048 and a much larger
+    # transient decode workspace. Auto mode therefore uses <=2048 whenever it
+    # can hold every atomic source block; 4096 is a correctness fallback.
+    preferred = [row for row in valid if int(row["side"]) <= auto_max_side]
+    pool = preferred or valid
+    minimum = min(row["rgba_bytes"] for row in pool)
+    allowed = [row for row in pool if row["rgba_bytes"] <= minimum * (1.0 + overhead)]
     fewest_pages = min(row["pages"] for row in allowed)
     page_candidates = [row for row in allowed if row["pages"] == fewest_pages]
     page_minimum = min(row["rgba_bytes"] for row in page_candidates)
@@ -193,10 +252,11 @@ def choose_candidate(candidates: list[dict], overhead: float = 0.05,
 
 def build_bundle(definitions: list[dict], source_root: Path, destination: Path,
                  bundle_id: str, scope: str, side: int | None = None,
-                 overhead: float = 0.05) -> dict:
+                 overhead: float = 0.05,
+                 raw_sources: list[Path] | None = None) -> dict:
     if scope not in ("map", "session", "on-demand"):
         raise ValueError("scope must be map/session/on-demand")
-    collected = collect_bundle(definitions, source_root)
+    collected = collect_bundle(definitions, source_root, raw_sources)
     candidates = measure_bundle(collected)
     chosen = next((row for row in candidates if row.get("valid") and row["side"] == side), None) if side else None
     if side is not None and chosen is None:
@@ -243,12 +303,15 @@ def build_bundle(definitions: list[dict], source_root: Path, destination: Path,
         "act": {},
         "sources": collected["sources"],
         "entities": collected["entities"],
+        "raw_clips": collected["raw_clips"],
         "candidate_measurements": candidates,
     }
     manifest["semantic_sha256"] = hashlib.sha256(
         json.dumps({
             "entities": [(row["entity"], row["definition_sha256"]) for row in collected["entities"]],
             "logical_views": collected["logical_views"],
+            "raw_clips": collected["raw_clips"],
+            "sources": [(row["path"], row["sha256"]) for row in collected["sources"]],
         }, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()
     ).hexdigest()
     _write_json(destination, manifest)
@@ -261,6 +324,7 @@ def build_bundle(definitions: list[dict], source_root: Path, destination: Path,
         "rgba_bytes": sum(page.width * page.height * 4 for page in pages),
         "png_bytes": sum((destination.parent / name).stat().st_size for name in page_names),
         "entities": [row["entity"] for row in collected["entities"]],
+        "raw_clips": [row["clip"] for row in collected["raw_clips"]],
         "candidate_measurements": candidates,
     }
 
@@ -272,7 +336,7 @@ def map_definitions(source: Path, population: dict) -> list[dict]:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source", type=Path, default=Path(".cache/client"))
-    parser.add_argument("--assets", type=Path, default=Path("client/assets/generated"))
+    parser.add_argument("--assets", type=Path, default=Path("client/assets"))
     parser.add_argument("--map", type=int, default=13)
     parser.add_argument("--output", type=Path)
     parser.add_argument("--scope", choices=("map", "session"), required=True)
@@ -282,9 +346,15 @@ def main() -> int:
 
     source = args.source.resolve()
     assets = args.assets.resolve()
+    raw_sources: list[Path] = []
     if args.scope == "map":
         population = json.loads((assets / f"maps/{args.map}/population.json").read_text(encoding="utf-8"))
         definitions = map_definitions(source, population)
+        world_path = assets / f"maps/{args.map}/world.json"
+        if world_path.is_file():
+            world = json.loads(world_path.read_text(encoding="utf-8"))
+            raw_sources = sorted({source / str(row["source"]) for row in world.get("objects", [])},
+                                 key=lambda value: value.as_posix().casefold())
         output = args.output or (assets / f"bundles/map/{args.map}/sprites.json")
         bundle_id = f"map:{args.map}:sprites"
     else:
@@ -294,7 +364,7 @@ def main() -> int:
 
     result = build_bundle(
         definitions, source, output.resolve(), bundle_id, args.scope,
-        side=args.side, overhead=args.memory_overhead,
+        side=args.side, overhead=args.memory_overhead, raw_sources=raw_sources,
     )
     print(json.dumps(result, ensure_ascii=False, indent=2))
     return 0

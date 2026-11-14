@@ -51,7 +51,7 @@ def compile_recipe(recipe: dict, source: Path) -> dict:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source", type=Path, default=Path(".cache/client"))
-    parser.add_argument("--runtime-assets", type=Path, default=Path("client/assets/generated"))
+    parser.add_argument("--runtime-assets", type=Path, default=Path("client/assets"))
     args = parser.parse_args()
     source = args.source.resolve()
     runtime = args.runtime_assets.resolve()

@@ -42,7 +42,7 @@ def plan(document,shape):
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--assets',type=Path,default=Path('client/assets/generated'))
+    parser.add_argument('--assets',type=Path,default=Path('client/assets'))
     parser.add_argument('--entity',action='append')
     parser.add_argument('--output',type=Path,default=Path('reports/atlas_shapes.json'))
     args=parser.parse_args()

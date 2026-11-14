@@ -13,7 +13,7 @@ from animation_definition import compile_definition, validate_definition
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--source', type=Path, default=Path('.cache/client'))
-    parser.add_argument('--runtime-assets', type=Path, default=Path('client/assets/generated'))
+    parser.add_argument('--runtime-assets', type=Path, default=Path('client/assets'))
     parser.add_argument('--output', type=Path, default=Path('reports/normalized'))
     parser.add_argument('--report', type=Path, default=Path('reports/normalized_definition_audit.json'))
     args = parser.parse_args()

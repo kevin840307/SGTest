@@ -66,7 +66,7 @@ def compile_population(spawns, catalog, assets, map_id):
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('server_dat',type=Path)
-    parser.add_argument('--assets',type=Path,default=Path('client/assets/generated'))
+    parser.add_argument('--assets',type=Path,default=Path('client/assets'))
     parser.add_argument('--map',type=int,default=13)
     args=parser.parse_args()
     source=args.server_dat/'Map'/f'Map{args.map}'/'Enemy.dat'

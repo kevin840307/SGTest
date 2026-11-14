@@ -21,16 +21,16 @@ class Scene extends Node2D:
 func _initialize() -> void:
 	root.content_scale_size = Vector2i(1440,900)
 	var floor := preload("res://scripts/terrain_renderer.gd").new()
-	var error: Error = floor.open("res://assets/generated",13)
+	var error: Error = floor.open("res://assets",13)
 	if error != OK:
 		push_error("terrain load failed: %d" % error)
 		quit(1)
 		return
 	var view := Rect2(4500,1200,1440,900)
 	var scene := Scene.new()
-	scene.objects.configure("res://assets/generated",floor.data)
+	scene.objects.configure("res://assets",floor.data)
 	scene.objects.prepare(view)
-	error = scene.doll.open("res://assets/generated")
+	error = scene.doll.open("res://assets")
 	if error != OK:
 		quit(1)
 		return

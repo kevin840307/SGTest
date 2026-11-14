@@ -33,14 +33,23 @@ func _initialize() -> void:
 	check(facing.from_vector(Vector2(5,10),8,28.0) == 8, "original-style hysteresis holds near sector boundary")
 
 	var atlas := preload("res://scripts/entity_atlas.gd").new()
-	atlas.data = JSON.parse_string(FileAccess.get_file_as_string("res://assets/generated/bundles/map/13/sprites.json"))
+	atlas.data = JSON.parse_string(FileAccess.get_file_as_string("res://assets/bundles/map/13/sprites.json"))
 	check(atlas.data.get("bundle_id","") == "map:13:sprites","Map13 uses one lifecycle bundle")
-	var population: Dictionary = JSON.parse_string(FileAccess.get_file_as_string("res://assets/generated/maps/13/population.json"))
+	var population: Dictionary = JSON.parse_string(FileAccess.get_file_as_string("res://assets/maps/13/population.json"))
+	var entity_index: Dictionary = {}
+	for entity_row in atlas.data.get("entities",[]):
+		entity_index[str(entity_row.entity)] = entity_row
 	for definition in population.definitions:
 		var sprite := str(definition.sprite)
+		var entity := "enemy/%s" % sprite.to_lower()
+		check(entity_index.has(entity), "%s keeps an independent inspection index" % entity)
+		var inspect: Dictionary = entity_index.get(entity,{}).get("inspect",{})
 		for direction in range(1,9):
 			for action in ["NS","NW","FA","NH","ND"]:
-				var result: Dictionary = atlas.sample("%s_%s%d" % [sprite,action,direction],0.0)
+				var requested := "%s_%s%d" % [sprite,action,direction]
+				check(str(inspect.get(action,{}).get(str(direction),"")) == requested,
+					"%s action/facing remains independently queryable" % requested)
+				var result: Dictionary = atlas.sample(requested,0.0)
 				check(not result.is_empty(), "%s %s direction %d resolves" % [sprite,action,direction])
 	check(atlas.sample("EN010A_NS2",0).clip == "EN010A_NS1" and not atlas.sample("EN010A_NS2",0).flip_h,
 		"physical EN010A_NS2 cannot override original logical facing mapping")
@@ -72,7 +81,7 @@ func _initialize() -> void:
 	check(atlas.sample_cache.size() == entries, "sample cache grows by clip, not elapsed time or monster count")
 
 	var doll := preload("res://scripts/paper_doll.gd").new()
-	check(doll.open("res://assets/generated") == OK, "player base lifecycle bundle loads")
+	check(doll.open("res://assets") == OK, "player base lifecycle bundle loads")
 	check(doll.parts.size() == 6 and doll.death != null, "six base parts and death share one bundle")
 	check(doll.parts.body == doll.parts.head and doll.parts.body == doll.death,
 		"base avatar parts are logical prefixes, not independent texture owners")

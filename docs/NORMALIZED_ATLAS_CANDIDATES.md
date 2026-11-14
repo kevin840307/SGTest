@@ -16,7 +16,7 @@ Atlas 不再決定動畫語意。所有 Map13 monster 的 logical facing、sourc
 
 - source：`.cache/client` 私有原始 SPR。
 - semantics：`reports/normalized` 的 ASSET201 v2 definitions。
-- workload：`client/assets/generated/maps/13/population.json`。
+- workload：`client/assets/maps/13/population.json`。
 - 每個 physical source clip（原 SPR）保持 atomic；不同 clip block 可共同放入一頁。
 - 512 / 1024 / 2048 / 4096 全部實際 pack 後再決定，不以怪物顯示尺寸猜測。
 - Map13 78 個 spawn 依累積出現比例分：hot 6 visual、warm 2、cold 1。
@@ -92,7 +92,7 @@ ASSET204 已完成 bounded async RuntimeAssetStore 並重跑同一 Gate：`norma
 ```powershell
 cd C:\SGO\SRC\SGTest
 
-py tools/build_normalized_atlas_candidates.py --source .cache/client --definitions reports/normalized --population client/assets/generated/maps/13/population.json --output reports/normalized_atlas_candidates
+py tools/build_normalized_atlas_candidates.py --source .cache/client --definitions reports/normalized --population client/assets/maps/13/population.json --output reports/normalized_atlas_candidates
 
 py tools/benchmark_runtime_baseline.py C:\SGO\Godot\Godot_v4.7.2-stable_win64_console.exe --case lifecycle --cycles 30 --monster-assets reports/normalized_atlas_candidates/normalized_memory --output reports/runtime_asset202_clean/normalized_memory
 

@@ -10,7 +10,7 @@ def main():
     parser.add_argument('--source',type=Path,default=Path('.cache/client'))
     parser.add_argument('--output',type=Path,default=Path('reports/atlas_candidates'))
     args=parser.parse_args()
-    population=json.loads(Path('client/assets/generated/maps/13/population.json').read_text(encoding='utf-8'))
+    population=json.loads(Path('client/assets/maps/13/population.json').read_text(encoding='utf-8'))
     keys={Path(d['atlas']).with_suffix('').as_posix() for d in population['definitions']}
     sources={key:[] for key in keys}
     root=args.source.resolve()
@@ -30,7 +30,7 @@ def main():
                          'rgba_bytes':sum(w*h*4 for w,h in doc['page_sizes']),'source_fingerprint':doc['sha256']})
         report={'candidate':label,'mode':mode,'requested_sides':sides,'shape':shape,'groups':rows,
                 'pages':sum(row['pages'] for row in rows),'rgba_bytes':sum(row['rgba_bytes'] for row in rows),
-                'population_sha256':hashlib.sha256(Path('client/assets/generated/maps/13/population.json').read_bytes()).hexdigest(),
+                'population_sha256':hashlib.sha256(Path('client/assets/maps/13/population.json').read_bytes()).hexdigest(),
                 'note':'preferred size with measured fallback; not a final mixed/atomic/map-aware builder'}
         write_json(args.output/label/'candidate.json',report)
         records.append(report)

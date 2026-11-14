@@ -96,9 +96,15 @@ def build_map_bundle(source: Path, assets: Path, population: dict, map_id: int,
     for row in population["definitions"]:
         row["atlas"] = relative
     definitions = map_definitions(source, population)
+    world_path = assets / f"maps/{map_id}/world.json"
+    raw_sources: list[Path] = []
+    if world_path.is_file():
+        world = json.loads(world_path.read_text(encoding="utf-8"))
+        raw_sources = sorted({source / str(row["source"]) for row in world.get("objects", [])},
+                             key=lambda value: value.as_posix().casefold())
     result = build_bundle(
         definitions, source, assets / relative,
-        f"map:{map_id}:sprites", "map", side=side,
+        f"map:{map_id}:sprites", "map", side=side, raw_sources=raw_sources,
     )
     return result
 
@@ -170,6 +176,7 @@ def build_all(source: Path, assets: Path, server_dat: Path, map_id: int,
                 "scope": "map",
                 "manifest": f"bundles/map/{map_id}/sprites.json",
                 "members": map_result["entities"],
+                "raw_clips": map_result["raw_clips"],
                 "side": map_result["side"],
                 "pages": map_result["pages"],
                 "rgba_bytes": map_result["rgba_bytes"],
@@ -211,7 +218,7 @@ def build_all(source: Path, assets: Path, server_dat: Path, map_id: int,
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source", type=Path, default=Path(".cache/client"))
-    parser.add_argument("--assets", type=Path, default=Path("client/assets/generated"))
+    parser.add_argument("--assets", type=Path, default=Path("client/assets"))
     parser.add_argument("--server-dat", type=Path,
                         help="override Server Dat; otherwise auto-discover under Recovered/Old")
     parser.add_argument("--map", type=int, default=13)

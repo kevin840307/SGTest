@@ -280,7 +280,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("recipe", type=Path)
     parser.add_argument("--source", type=Path, default=Path(".cache/client"))
-    parser.add_argument("--assets", type=Path, default=Path("client/assets/generated"))
+    parser.add_argument("--assets", type=Path, default=Path("client/assets"))
     parser.add_argument("--server-content", type=Path, default=Path("server/content"))
     parser.add_argument("--report-root", type=Path, default=Path("reports/monster_workflow"))
     parser.add_argument("--replace", action="store_true",

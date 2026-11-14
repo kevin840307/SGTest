@@ -23,9 +23,9 @@ class Preview extends Node2D:
 func _initialize() -> void:
 	root.content_scale_size = Vector2i(1440,900)
 	var preview := Preview.new()
-	var error: Error = preview.doll.open("res://assets/generated")
+	var error: Error = preview.doll.open("res://assets")
 	if error == OK:
-		error = preview.monster.open("res://assets/generated/bundles/map/13/sprites.json")
+		error = preview.monster.open("res://assets/bundles/map/13/sprites.json")
 	if error != OK:
 		push_error("direction preview asset load failed: %d" % error)
 		quit(1)

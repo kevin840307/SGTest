@@ -68,6 +68,15 @@ class AssetPipelineTests(unittest.TestCase):
             {"side": 4096, "valid": True, "pages": 1, "rgba_bytes": 1000},
         ]
         self.assertEqual(choose_candidate(near_equal_one_page, 0.05)["side"], 2048)
+        map_like = [
+            {"side": 1024, "valid": True, "pages": 5, "rgba_bytes": 1010},
+            {"side": 2048, "valid": True, "pages": 2, "rgba_bytes": 1008},
+            {"side": 4096, "valid": True, "pages": 1, "rgba_bytes": 1000},
+        ]
+        self.assertEqual(choose_candidate(map_like, 0.05)["side"], 2048)
+        only_large = [{"side": 2048, "valid": False},
+                      {"side": 4096, "valid": True, "pages": 1, "rgba_bytes": 1000}]
+        self.assertEqual(choose_candidate(only_large)["side"], 4096)
 
     def test_server_dat_auto_discovery_requires_exactly_one_candidate(self):
         with tempfile.TemporaryDirectory() as temp:

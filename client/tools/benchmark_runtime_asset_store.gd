@@ -6,7 +6,7 @@ extends SceneTree
 const STORE = preload("res://scripts/runtime_asset_store.gd")
 
 var cycles := 30
-var root_path := "res://assets/generated"
+var root_path := "res://assets"
 var monster_root := ""
 var report_path := ""
 var records: Array = []

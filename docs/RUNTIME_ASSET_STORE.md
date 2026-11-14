@@ -23,11 +23,10 @@ ASSET203 已證明 `normalized_memory` 的 Atlas packing 本身無法消除同�
 
 正式 `main.gd` 設定：
 
-- cache budget：32MiB。
-- ready/decode queue budget：16MiB。
+- production unowned cache budget：24MiB；ready/decode queue budget 16MiB。Map/session active owners 不受 unowned LRU budget 強制驅逐。
 - Map13 九種 monster 現在共用一個 `map:13:sprites` lifecycle bundle；definition 只保留 prefix/stats，不再產生九個 texture owners。
 - player base（6 paper-doll parts + death）共用一個 `session:player:b:base` bundle；headless client 不載純視覺 paper doll。
-- map objects 仍依目前 viewport on-demand acquire，離開 viewport 後移除 local strong ref，交回 Store 做 bounded LRU；這是有實際獨立 lifetime 的必要細粒度。
+- map objects 已與 monster 共用 `map:13:sprites`；viewport 只做 draw cull，不再建立 21～30 個 per-view texture owners。Map13 A/B 顯示細拆只省約 1.8～2.8MiB object resident，代價不足以維持另一套 cache/lifetime。
 
 ## Owner / lifecycle
 
@@ -37,7 +36,7 @@ ASSET203 已證明 `normalized_memory` 的 Atlas packing 本身無法消除同�
 
 ### Map objects
 
-`map_objects.configure(..., store, owner)` 建立 map owner；`prepare(view)` 只 pin 可視 atlas。離開 view 後 release 該 path owner，Store 可保留成 LRU；切圖 reset 會釋放 map owner。
+`map_objects.configure(..., store, owner)` 只 acquire `world.sprite_bundle` 一次；Map13 scenery 與 monsters 指向同一 manifest/path，因此 RuntimeAssetStore 共用同一 atlas entry。`prepare(view)` 只更新可視 object draw list，不變更 texture ownership；切圖 reset 釋放 map owner。
 
 ### Player paper doll
 
@@ -49,12 +48,12 @@ Godot synthetic/real-private-asset tests：
 
 - `test_runtime_asset_store.gd`：owner sharing、cache hit、force purge、loading cancellation、failed-path retry、automatic cache-cap eviction。
 - `test_monster_visuals_async.gd`：Map13 9 definitions / 360 logical views / **1 map bundle**、generation clear/cancel、owner purge。
-- `test_map_objects_async.gd`：viewport acquire、離開 viewport local release、LRU purge。
+- `test_map_objects_async.gd`：單一 map bundle acquire、viewport draw cull 不改 ownership、map reset 後完整 purge。
 - `test_paper_doll_async.gd`：**1 session bundle**、6 parts + death、normalized draw-order、purge。
 
 ## Lifecycle-bundle 簡化後補充（2026-11-14）
 
-Production 已由多個 per-entity/per-part manifests 收斂成 map/session lifecycle bundles；完整理由與 1024/2048 A/B 見 [ASSET_BUNDLE_ARCHITECTURE.md](ASSET_BUNDLE_ARCHITECTURE.md)。刪除被取代的 40 個 generated legacy manifest/page 後，production map bundle 30-cycle async lifecycle：frame P95/P99 **16.752/16.809ms**，texture handles、engine texture、Store resident recovery 全 PASS。20client/300monster/1000drop/40s：**59.996FPS**、frame P95/P99 **19.236/20.422ms**、draw P95 **236**、execution PASS。
+Production 已由多個 per-entity/per-part/per-map-object manifests 收斂成 map/session lifecycle bundles；完整理由見 [ASSET_BUNDLE_ARCHITECTURE.md](ASSET_BUNDLE_ARCHITECTURE.md) 與 [ASSET_NECESSITY_AUDIT.md](ASSET_NECESSITY_AUDIT.md)。目前 Map13 monster + scenery 共用 2048×2 map bundle。After 的 30-cycle async lifecycle：frame P95/P99 **16.824/16.906ms**，texture handles、engine texture、Store resident recovery 全 PASS。20client/300monster/1000drop/40s：**59.999FPS**、frame P95/P99 **18.947/20.322ms**、draw P95 **228**、execution PASS；代價是 texture/video monitor 約增加 7MiB，並已明確記錄為 lifecycle/維護性 trade-off，不宣稱 RAM/VRAM 最佳化。
 
 以下 ASSET204 數字保留為「簡化前 normalized_memory 14-page」歷史基準，用來證明 bounded async store 本身的改善。
 

@@ -17,7 +17,7 @@ from runtime_processes import server_command
 RUN_ENV = {}
 
 def asset_identity(monster_assets=None):
-    root=Path('client/assets/generated').resolve()
+    root=Path('client/assets').resolve()
     population=root/'maps/13/population.json'
     definition=json.loads(population.read_text(encoding='utf-8'))
     atlas_root=Path(monster_assets).resolve() if monster_assets else root
@@ -46,7 +46,12 @@ def provenance(monster_assets=None):
            'client/scripts/runtime_asset_store.gd','client/scripts/frame_profiler.gd','client/project.godot',
            'server/bin/Release/net8.0/SGTest.Server.dll','client/tools/benchmark_asset_lifecycle.gd',
            'client/tools/benchmark_runtime_asset_store.gd','tools/benchmark_runtime_baseline.py',
-           'client/assets/generated/catalog.json']
+           'client/assets/bundles/index.json','client/assets/maps/13/world.json',
+           'client/assets/maps/13/population.json','client/assets/bundles/session/player-b-base.json']
+    session=Path('client/assets/bundles/session/player-b-base.json')
+    if session.is_file():
+        manifest=json.loads(session.read_text(encoding='utf-8'))
+        files.extend((session.parent/page).as_posix() for page in manifest.get('pages',[]))
     return {'git_head':subprocess.check_output(['git','rev-parse','HEAD']).decode().strip(),
             'tracked_worktree_diff_sha256':hashlib.sha256(subprocess.check_output(['git','diff','HEAD','--binary'],stderr=subprocess.DEVNULL)).hexdigest(),
             'files':{name:hashlib.sha256(Path(name).read_bytes()).hexdigest() for name in files},

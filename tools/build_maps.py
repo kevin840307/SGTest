@@ -14,8 +14,8 @@ from pathlib import Path, PureWindowsPath
 import struct
 import time
 from PIL import Image
-from build_assets import group_key, write_json
-from runtime_spr import unwrap_cde
+from build_assets import write_json
+from runtime_spr import decode_spr, unwrap_cde
 
 
 def plain(path):
@@ -42,9 +42,10 @@ def dimensions(raw, stride):
     return w,h
 
 
-def objects(raw, source, output):
+def objects(raw, source, bundle_relative):
     count = struct.unpack_from('<I',raw)[0]
     at, result = 4, []
+    decoded_cache = {}
     for _ in range(count):
         length = raw[at]
         at += 1
@@ -55,25 +56,27 @@ def objects(raw, source, output):
         resource = resolve(source,'map/'+name)
         sprite = object_sprite(source,resource)
         relative = sprite.relative_to(source)
-        manifest = group_key(relative)+'.json'
-        data = json.loads((output/manifest).read_text(encoding='utf-8'))
-        clip = sprite.stem.upper()
-        indices = data['clips'][clip]
-        boxes = []
-        for index in indices:
-            record = data['frames'][index]
-            if record['page'] < 0:
-                continue
-            ox,oy = record['origin']
-            tx,ty = record['trim']
-            _,_,w,h = record['rect']
-            boxes.append((x+tx-ox,y+ty-oy,x+tx-ox+w,y+ty-oy+h))
-        left = min((b[0] for b in boxes),default=x)
-        top = min((b[1] for b in boxes),default=y)
-        right = max((b[2] for b in boxes),default=x)
-        bottom = max((b[3] for b in boxes),default=y)
-        result.append({'atlas':manifest,'clip':clip,'p':[x,y], 'z':z,
-                       'bounds':[left,top,right-left,bottom-top],'frames':len(indices),'source':relative.as_posix()})
+        key = relative.as_posix()
+        cached = decoded_cache.get(key)
+        if cached is None:
+            decoded = decode_spr(sprite.read_bytes())
+            local_boxes = []
+            for frame in decoded:
+                crop = frame.image.getbbox()
+                if crop:
+                    left, top, right, bottom = crop
+                    local_boxes.append((left-frame.origin_x, top-frame.origin_y,
+                                        right-frame.origin_x, bottom-frame.origin_y))
+            cached = (sprite.stem.upper(), local_boxes, len(decoded))
+            decoded_cache[key] = cached
+        clip, local_boxes, frame_count = cached
+        left = min((x+b[0] for b in local_boxes), default=x)
+        top = min((y+b[1] for b in local_boxes), default=y)
+        right = max((x+b[2] for b in local_boxes), default=x)
+        bottom = max((y+b[3] for b in local_boxes), default=y)
+        result.append({'atlas':bundle_relative,'clip':clip,'p':[x,y], 'z':z,
+                       'bounds':[left,top,right-left,bottom-top],'frames':frame_count,
+                       'source':key})
     if raw[at:] not in (b'',b'\0\0\0\0'):
         raise ValueError('unexpected ObjectList trailer')
     return result
@@ -130,12 +133,14 @@ def build(source, output, map_id):
     (dest/'tiles.bin').write_bytes(tile_bytes)
     (dest/'blocking.bin').write_bytes(blocking)
     object_path = resolve(source,settings['List'])
-    placed = objects(plain(object_path),source,output)
+    bundle_relative = f'bundles/map/{map_id}/sprites.json'
+    placed = objects(plain(object_path),source,bundle_relative)
     hashes = {p.relative_to(source).as_posix():hashlib.sha256(plain(p)).hexdigest()
               for p in [config_path,pic_path,tile_path,blocking_path,object_path]}
     document = {'version':2,'map_id':map_id,'name':settings.get('Name',''), 'tile_side':side,
                 'tile_width':w,'tile_height':h,'collision_cell':16,'size':[w*side,h*side],
-                'atlas_grid':[columns,rows],'tile_ids':used,'objects':placed,'source_hashes':hashes,
+                'atlas_grid':[columns,rows],'tile_ids':used,'objects':placed,
+                'sprite_bundle':bundle_relative,'source_hashes':hashes,
                 'tiles_sha256':hashlib.sha256(tile_bytes).hexdigest(),
                 'collision_sha256':hashlib.sha256(blocking).hexdigest(),
                 'terrain_sha256':hashlib.sha256((dest/'terrain.png').read_bytes()).hexdigest()}

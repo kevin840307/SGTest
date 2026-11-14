@@ -7,7 +7,7 @@ import shutil
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--source',type=Path,default=Path('client/assets/generated'))
+    parser.add_argument('--source',type=Path,default=Path('client/assets'))
     parser.add_argument('--output',type=Path,default=Path('server/content'))
     args=parser.parse_args()
     for manifest in sorted((args.source/'maps').glob('*/world.json')):

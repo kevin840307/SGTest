@@ -231,7 +231,7 @@ ADR-026補充：使用者指定Client一般遊玩支援30～90FPS；FPS選項只
 
 - Status: **ASSET204 ACCEPTED / RUNTIME206 MATRIX NOT VERIFIED**。
 - Decision: 正式 Client 共用單一 `RuntimeAssetStore`；manifest/PNG 在 worker thread decode，Godot texture 只在 main thread 建立。Production 每 frame 最多 commit 1 page，budget 1.2ms；ready queue 16MiB、unowned LRU cache 32MiB。Owner+epoch+request token 定義資源生命週期，切圖 generation 可取消 stale job，多 owner 共用同一路徑，failed unowned entry 必須移除以允許 retry。
-- Consumers: Map13 monster 依 spawn count priority preload；Boy core paper-doll 6 parts+death 原子 ready；map object 依 viewport on-demand pin/release；headless client 不載純視覺 paper doll。Map switch/reset/Client close 都走同一 owner release/purge 契約。
+- Consumers: 當時 Map13 monster 依 spawn count priority preload、Boy core paper-doll 6 parts+death 原子 ready、map object 依 viewport on-demand pin/release；後續全素材稽核已由 ADR-036 以實測推翻 map-object 細拆，改為 scenery + monster 共用 map lifecycle bundle。headless client 不載純視覺 paper doll。
 - Evidence: `normalized_memory` 30-cycle 同素材同步 loader P99 53.52ms → async P95/P99 16.885/17.028ms，max 17.309ms；load P95 249.914ms / 15 frames，GPU commit P95 1.205ms；texture handle、engine texture、Store resident、process RAM recovery 全 PASS，final resident=0，provenance unchanged。
 - Multiplayer: 20 clients／300 monsters／1000 drops／40s，mean 59.99FPS、frame P95/P99 22.109/23.949ms、draw P95 422，20/20 snapshot/prediction ready、0 ERROR、max correction 0。Server warm-up tick=300 P99 69.08ms；穩態 P99 5.56～6.43ms。
 - Regression: owner sharing/cache hit、automatic cache-cap eviction、loading cancellation、failed-path retry、monster generation cancel、map-object viewport release、paper-doll atomic ready/purge 均有 Godot headless test。詳 [RUNTIME_ASSET_STORE.md](RUNTIME_ASSET_STORE.md)。
@@ -264,8 +264,8 @@ ADR-026補充：使用者指定Client一般遊玩支援30～90FPS；FPS選項只
 - Decision: Production 對外只用 ownership/lifetime 分組：**map / session / 真正 on-demand**。方向、動作、mirror、pivot、ACT、z-order 留在 sgtest.animation/v2；512/1024/2048/4096 只是 builder 內部候選。新增分類必須同時證明低頻、可獨立卸載、不同 owner lifetime，且 load/frame/draw/RAM/texture/video A/B 有收益。
 - Map13: 9 monster definitions 改共用 bundles/map/13/sprites.json。1024/3頁 vs 2048/1頁 A/B：load P95 83.56→66.70ms、load frames 5→4；300 mixed draws P95 254→73；frame P95/P99 幾乎相同；texture/video peak 幾乎不變。4096 無頁數收益而拒絕。Production 選 2048。
 - Player base: body/leg/head/hair00/l-arm/r-arm/death 改共用 bundles/session/player-b-base.json。1024/2頁 vs 2048/1頁：load P95 83.19→66.47ms、load frames 5→4、draw P95 123→73；frame pacing 不退化。Runtime z-order 改直接讀 normalized draw metadata，不再第二次解析 draw-order 表。
-- Necessary split retained: map_objects 依 viewport pin/release，因為離開視野可真實獨立卸載；terrain 是單 map texture + viewport MultiMesh；drops 目前是單一 MultiMesh，沒有另立 texture-atlas category。
-- Cleanup: 被新 bundles 明確取代的 Map13 九個 per-enemy + Boy base 七個 per-part generated manifests/pages 共刪 40 個檔；hair01 等尚未納入 base 的素材保留。Legacy builders 保留研究/回歸能力但標為 research-only，production rebuild 只走 asset_pipeline.py。
+- Necessary split（後續修訂）：ADR-034 初版曾保留 map_objects viewport pin/release；ADR-036 以 1440 viewport working-set + multiplayer A/B 證明其節省不足以合理化 21～30 個 owners，已改併 map lifecycle bundle。terrain 仍是單 map texture + viewport MultiMesh；drops 目前是單一 MultiMesh。
+- Cleanup（第一階段）：先移除被 bundles 取代的 40 個 per-enemy/per-part generated files；ADR-036 後進一步把 production asset root 從全量轉檔鏡像收斂為只生成真 Runtime consumers。Legacy builders 保留研究/回歸能力但標為 research-only。
 - Regression: 刪除舊 generated manifests 後 Python top-level 45 PASS、tools/tests 89 PASS、全部 tracked Godot Client tests PASS。Production map bundle 30-cycle async P95/P99 16.752/16.809ms、texture/engine/store recovery PASS；20client/300monster/1000drop/40s execution PASS，59.996FPS、frame P95/P99 19.236/20.422ms、draw P95 236、20/20 prediction/snapshot ready。
 - Server boundary: Server 不讀 Atlas pixels；definition id/stats/spawns、30Hz simulation、snapshot/network/combat cadence 不因 bundling 改變。
 - Evidence: [ASSET_BUNDLE_ARCHITECTURE.md](ASSET_BUNDLE_ARCHITECTURE.md)。
@@ -279,3 +279,17 @@ ADR-026補充：使用者指定Client一般遊玩支援30～90FPS；FPS選項只
 - Session expiry: 每次成功驗證取得新的 process-lifetime monotonic SessionEpoch；same-account takeover 立即讓舊 session epoch=0 且移除 World Entity，再可靠送 `session_replaced`。
 - Evidence: C# 376 checks；SQLite provider reopen、full Server restart persistence、same-account takeover/logout、20-client first-login storm 均 PASS。20-client SQLite final storm 約1.55s 全部選角，tick300 P95/P99 2.207/7.596ms。
 - Boundary: Account+Character identity 已持久化；完整角色 stat/inventory/equipment/position 資料隨後續功能加入。Email/password reset/2FA/TLS/production anti-bruteforce 屬 Security/Operations。
+
+## ADR-036 — 全素材分類必要性稽核；查閱粒度與 physical packing 分離（2026-11-14）
+
+- Status: **ACCEPTED**。
+- Scope: Enemy、Player、NPC、Equipment、Item、Pet、Mecha、Map、Effect、UI、Ground Drop，以及 Builder/Bundle/Loader/Cache。
+- Decision: normalized definition 保留每個 entity 可獨立查閱的 action/facing/mirror/pivot/timeline/z-order；production manifest 另保留 `inspect[action][facing]`。Debug/Viewer 的查閱粒度不再與 PNG/page/bundle boundary 綁定；physical packing 只由 lifecycle + Before/After A/B 決定。
+- Runtime categories: production 不因素材種類、entity、direction、action、部位、來源檔、512/1024/2048/4096、hot/warm/cold 等建立新 Runtime type。正式 sprite runtime 只用 EntityAtlas + RuntimeAssetStore + 少量 map/session/真正 on-demand lifetime boundaries；尚未有 consumer 的 NPC/Equipment/Item/Pet/Mecha/Effect/Legacy UI 不預建 Loader/Bundle。
+- Runtime root: 移除 `client/assets/generated` 額外層；`client/assets` 是可重建 Runtime output，不是完整原版素材鏡像。完整 rebuild 先清理舊輸出，只生成目前真正消費的 `bundles/` + `maps/`。Before 17,274 files / 1,179.31MiB → After 12 files / 9.036MiB；原始素材仍在 `.cache/client`。
+- Map13 scenery audit: 367 placements / 45 unique old object atlases；1440 viewport+margin P50 21 atlases/4.394MiB、P95 30/5.414MiB、全量7.222MiB。細拆只省約1.8～2.8MiB object resident，維護成本不足，故 scenery 與9種 monster 共用 map lifecycle sprite bundle。
+- Atlas A/B: monster+scenery 1024=5 pages/18,572,476 RGBA；2048=2/18,569,428；4096=1/18,478,500。4096 lifecycle load/frame 無明顯勝利且 transient static/decode peak 36,911,847→53,543,643 bytes，因此 auto mode 優先 <=2048；4096 保留研究 override / 2048 無法容納時的 correctness fallback。
+- Multiplayer trade-off: 20 clients/300 monsters/1000 drops/40s Before→After：draw P95 236→228、frame P95 19.236→18.947ms、P99 20.422→20.322ms；texture 39.06→46.04MiB、video 45.56→52.53MiB、process RSS 約 +6.47MiB/client。此變更是 lifecycle/維護性與小幅 draw/frame 改善，不宣稱 RAM/VRAM 最佳化。
+- Release: 30-cycle async lifecycle all texture handles released、engine texture recovery、Store resident recovery 全 PASS，P95/P99 16.824/16.906ms。
+- Tools: `tools/README.md` 固定 production / research / benchmark / viewer-diagnostic / tests 邊界；不得為每個素材小功能建立另一套 production Builder/CLI/Loader。
+- Evidence: [ASSET_NECESSITY_AUDIT.md](ASSET_NECESSITY_AUDIT.md)、[ASSET_BUNDLE_ARCHITECTURE.md](ASSET_BUNDLE_ARCHITECTURE.md)。AS005 原版逐格人工視覺與 AS008 發布權仍未完成。

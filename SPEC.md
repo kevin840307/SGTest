@@ -180,10 +180,15 @@ M6 PVP、小屋、社交、多 Channel、部署與維運。
 - **未完成、不得放行：** 後期《星夢 Online》完整 Client 安裝包／更新檔盤點、完整 Player/Effect/Map/金色 ITF 原件、ACT 格式、角色 8 或其他方向數、所有動畫速度與紙娃娃排序、原版畫面逐格校驗、法律授權、Godot 性能 A/B；原版安裝檔缺失是硬性阻礙。不得先實作 Godot UI/Server/Atlas。
 - **測試界線：** 本機自製 SPR/PNG/metadata/viewer 篩選單元案例已執行；原件 row structure 偵測與「動畫正確播放」是不同測試。CI、真正 Tk GUI、完整 Client、視覺對照的結果請依 todo.txt 與 CI URL 查證，不能預設 PASS。
 
-## 8. 補充不變契約：素材共用與 FPS 隔離（2026-11-13）
+## 8. 不變契約：素材共用、分組最小化與 FPS 隔離（2026-11-14）
 
-- **素材原則**：EntityCount 與 UniqueAssetCount 分離；同圖數百怪/數千掉落可能只有少數素材種類，同種類共用 Texture/AnimationDefinition/FrameTable/Material，每實例只保存狀態。離線編譯 512/1024/2048/4096 候選尺寸、Map/Region co-occurrence、hot/warm/cold、Paper Doll 層、Boss 動作分頁；按 RAM/VRAM/Frame/DrawCall 和正確性實測選型。
+- **查閱粒度與實體打包分離**：Enemy／Player／NPC／Equipment／Item／Pet／Mecha／Effect 等每個 normalized entity 的 action、facing、mirror、pivot、timeline、z-order 必須可獨立查閱與測試；這不代表一個 entity、方向、動作或部位要獨立 PNG／Atlas／Bundle。正式圖片如何合圖由 Builder 依相同 workload 的 A/B 自動決定。
+- **Runtime 分組只看生命週期與實測收益**：不要因素材類型、怪物種類、方向、動作、圖片尺寸、來源檔不同而新增 Atlas／Bundle／Loader／Cache。經常一起載入、一起使用、一起卸載者優先共用；只有拆開能真實釋放可觀 RAM／VRAM，且 load、GPU upload、draw、frame P95/P99 或維護性有 Before/After 收益時才新增 boundary。沒有證據時預設較少分組。
+- **Atlas side 不是資產類型**：512／1024／2048／4096 只可作 Builder 候選參數。4096 不因「一頁」自動勝出；需同時比較 CPU decode、transient workspace、GPU upload、texture/video memory、draw calls、frame pacing、切圖與卸載。
+- **不要預建未出現的分類**：Boss、Rare、Hot、Warm、Cold、Direction、Action，以及尚未有 consumer 的 NPC／Equipment／Item／Pet／Mecha／Effect／Legacy UI 專屬 Runtime 類型，不得提前建立。新增素材優先只增加資料／definition，沿用 EntityAtlas + RuntimeAssetStore。
+- **單一實體資源共用**：同一 manifest/page path 在 RuntimeAssetStore 只有一份 ready atlas，可由多個 owner 引用；owner generation、引用計數、bounded cache 與 release/purge 定義生命週期。新增內容不得要求修改 Runtime 核心才能載入。
+- **Production assets 不是原始素材鏡像**：`client/assets` 只放目前 Runtime 真正使用的可重建輸出；完整原始／研究素材留 `.cache/client` 或 reports。正式 rebuild 不因「未來可能會用」把全部 Enemy/NPC/UI/Effect/Item 等搬入 Godot asset root。
+- **完整成本 Gate**：任何「最佳化完成」必須提供同 workload Before/After：CPU decode、GPU upload、Draw Calls、process RAM、Godot texture/video monitor（driver VRAM 若可量另列）、首次載入、切圖、卸載、cache hit/recovery、Frame P95/P99、長時間 lifecycle/soak。沒有證據只能標研究候選。
 - **Network/State 不變**：ServerSimClock、ClientNetworkPump、OrderedEventReducer、PackedWorldState、ViewProjection、WorldRenderer、UIRenderer 必須具清楚責任界線。Client 送收封包、解碼、按序套用、輸入送達與 Server tick **不得由 UI FPS/World FPS 增減而變快或變慢**。失焦/縮小/AFK/低畫質只可調整視覺、音效和資源生命週期。
-- 不能依賴只在 `_process(delta)` 被畫面刷新時才 poll Network；背景/OS throttle 及 Engine FPS 設定影響須實機驗證。動作依 ServerSeq/SimTick/ActionId 的時間軸取 pose，素材未載入不得停網路/State，也不得補播遠端玩家舊位置。
-- **獨立 Gate**：不同 UI/World FPS 下相同 packet trace 的 Rx/Tx、State hash、可靠事件次序與 QueueAge/ReducerDelay；不同解析度/Zoom 下相同 visible world/camera contract 的 Texture/VRAM/DrawCalls 與不卡頓。具體規格見 [docs/ASSET_STREAMING_AND_RENDERING.md](docs/ASSET_STREAMING_AND_RENDERING.md)、[docs/CLIENT_RUNTIME_ISOLATION.md](docs/CLIENT_RUNTIME_ISOLATION.md)。
-- **現況：僅方案，效能與 gameplay 實作 NOT VERIFIED。** AS001～AS009 原任務進度不因此變更。
+- 不能依賴只在 `_process(delta)` 被畫面刷新時才 poll Network；動作依 ServerSeq/SimTick/ActionId 的時間軸取 pose，素材未載入不得停 Network/State，也不得補播遠端玩家舊位置。
+- 完整素材必要性稽核與本機數據見 [docs/ASSET_NECESSITY_AUDIT.md](docs/ASSET_NECESSITY_AUDIT.md)；Render/Logic/Network 隔離驗證見 [docs/RUNTIME_ISOLATION_VERIFICATION.md](docs/RUNTIME_ISOLATION_VERIFICATION.md)。AS005 原版逐格人工視覺與 AS008 發布權仍是獨立未完成 Gate。

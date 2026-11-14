@@ -1,5 +1,8 @@
-"""Preserve original audio/tables/maps and convert standalone images for Godot.
+"""RESEARCH/ON-DEMAND support-asset exporter, not production bulk rebuild.
 
+Production keeps original unused material in .cache/client and only converts a
+support resource when a runtime feature actually references it. This tool is
+retained for inventory/viewer work and future data-driven feature onboarding.
 Map/table bytes are preserved, not claimed to be parsed by the prototype.
 """
 import argparse

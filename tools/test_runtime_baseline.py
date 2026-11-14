@@ -60,7 +60,7 @@ class BaselineReportTests(unittest.TestCase):
             previous = Path.cwd()
             try:
                 os.chdir(temp)
-                root = Path('client/assets/generated')
+                root = Path('client/assets')
                 (root/'maps/13').mkdir(parents=True)
                 (root/'enemy').mkdir()
                 (root/'maps/13/population.json').write_text(json.dumps({'definitions': [{'atlas':'enemy/a.json'}]}))

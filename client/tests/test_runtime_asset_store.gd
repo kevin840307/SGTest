@@ -17,10 +17,13 @@ func _initialize() -> void:
 
 func _run() -> void:
 	var store := STORE.new()
-	store.configure(16 * 1024 * 1024, 4 * 1024 * 1024)
+	# Map13 now contains monsters + scenery in one ~18 MiB lifecycle bundle;
+	# use a cache budget above that size for the shared-owner/cache-hit checks.
+	# The tiny-cache block below separately verifies oversized LRU eviction.
+	store.configure(32 * 1024 * 1024, 4 * 1024 * 1024)
 	var owner_a := "test-map-a"
 	var epoch_a := store.begin_owner(owner_a)
-	var path := "res://assets/generated/bundles/map/13/sprites.json"
+	var path := "res://assets/bundles/map/13/sprites.json"
 	assert(store.acquire(path, owner_a, epoch_a, 10) == OK)
 	assert(await wait_ready(store, path), "async atlas did not become ready")
 	var atlas: RefCounted = store.get_atlas(path)
@@ -51,7 +54,7 @@ func _run() -> void:
 	# Pending work becomes stale when its owner generation is released.
 	var cancel_owner := "cancel-map"
 	var cancel_epoch := store.begin_owner(cancel_owner)
-	var cancel_path := "res://assets/generated/bundles/session/player-b-base.json"
+	var cancel_path := "res://assets/bundles/session/player-b-base.json"
 	assert(store.acquire(cancel_path, cancel_owner, cancel_epoch, 1) == OK)
 	store.release_owner(cancel_owner)
 	for _i in 8:

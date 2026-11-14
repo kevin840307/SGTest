@@ -327,7 +327,7 @@ def main() -> int:
     parser.add_argument("--source", type=Path, default=Path(".cache/client"))
     parser.add_argument("--definitions", type=Path, default=Path("reports/normalized"))
     parser.add_argument("--population", type=Path,
-                        default=Path("client/assets/generated/maps/13/population.json"))
+                        default=Path("client/assets/maps/13/population.json"))
     parser.add_argument("--output", type=Path, default=Path("reports/normalized_atlas_candidates"))
     args = parser.parse_args()
     source_root = args.source.resolve()

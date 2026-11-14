@@ -1,1 +1,57 @@
-{"source_sprites":75591,"entities_or_parts":4821,"frames":282990,"textures":6854,"direction_aliases":70763,"support_assets":5557,"rgba_bytes":4788274976,"manifest_version":8,"catalog_sha256":"f19f5e0e68af9c380c0858bb7aedf7b547856e3cd252bf87ac2aeeaf2dc8464a","orientations":{"native":2236,"landscape":2585},"shape_policies":{"consistent":4821},"errors":[],"archive":{"archive_sha256":"9ae08a8a7bb784720c83bfdd608688c045d717dee3868c13d7b8f444562bfc42","archive_entries":41687,"extracted":171,"loose_overlays":41707,"client":"C:\\SGO\\Stargate Online IE HK2"}}
+{
+  "version": 2,
+  "asset_root": "C:/SGO/SRC/SGTest/client/assets",
+  "files": 12,
+  "disk_bytes": 9475454,
+  "top_level": {
+    ".gdignore": {
+      "files": 1,
+      "bytes": 48
+    },
+    "bundles": {
+      "files": 6,
+      "bytes": 6694573
+    },
+    "maps": {
+      "files": 5,
+      "bytes": 2780833
+    }
+  },
+  "bundles": [
+    {
+      "id": "map:13:sprites",
+      "scope": "map",
+      "manifest": "bundles/map/13/sprites.json",
+      "side": 2048,
+      "pages": 2,
+      "rgba_bytes": 18569428,
+      "normalized_entities": 9,
+      "raw_clips": 45,
+      "sources": 180
+    },
+    {
+      "id": "session:player:b:base",
+      "scope": "session",
+      "manifest": "bundles/session/player-b-base.json",
+      "side": 2048,
+      "pages": 1,
+      "rgba_bytes": 4390912,
+      "normalized_entities": 7,
+      "raw_clips": 0,
+      "sources": 283
+    }
+  ],
+  "maps": [
+    {
+      "map_id": 13,
+      "objects": 367,
+      "object_clips": 45,
+      "sprite_bundle": "bundles/map/13/sprites.json",
+      "terrain_bytes": 1323379,
+      "collision_bytes": 921608,
+      "tiles_bytes": 460808
+    }
+  ],
+  "unexpected_top_level": [],
+  "production_clean": true
+}

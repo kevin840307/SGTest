@@ -11,14 +11,14 @@ func _run() -> void:
 	var visuals := VISUALS.new()
 	assert(visuals.begin_async(store, "map13-test") == OK)
 	var population: Dictionary = JSON.parse_string(
-		FileAccess.get_file_as_string("res://assets/generated/maps/13/population.json")
+		FileAccess.get_file_as_string("res://assets/maps/13/population.json")
 	)
 	var counts: Dictionary = {}
 	for spawn in population.spawns:
 		var id := int(spawn.definition)
 		counts[id] = int(counts.get(id, 0)) + 1
 	for definition in population.definitions:
-		assert(visuals.add_async("res://assets/generated", definition,
+		assert(visuals.add_async("res://assets", definition,
 			int(counts.get(int(definition.id), 0))) == OK)
 	var frames := 0
 	while not visuals.is_ready():
@@ -46,12 +46,12 @@ func _run() -> void:
 	assert(visuals.definitions.is_empty() and visuals.shared.is_empty())
 	store.purge_unowned(true)
 	for definition in population.definitions:
-		assert(visuals.add_async("res://assets/generated", definition,
+		assert(visuals.add_async("res://assets", definition,
 			int(counts.get(int(definition.id), 0))) == OK)
 	assert(visuals.begin_async(store, "map13-test") == OK)
 	assert(visuals.definitions.is_empty() and visuals.shared.is_empty())
 	var current: Dictionary = population.definitions[0]
-	assert(visuals.add_async("res://assets/generated", current, 1) == OK)
+	assert(visuals.add_async("res://assets", current, 1) == OK)
 	frames = 0
 	while not visuals.is_ready():
 		visuals.poll_gpu(1, 1200)

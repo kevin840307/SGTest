@@ -20,19 +20,24 @@ try {
     python tools/extract_client.py $Client .cache/client
     if ($LASTEXITCODE -ne 0) { throw 'Original client extraction failed' }
 
-    # Non-SPR support resources and maps keep their own format-specific
-    # converters. Runtime SPR atlases are built only by asset_pipeline.py.
-    python tools/copy_support_assets.py .cache/client client/assets/generated
-    if ($LASTEXITCODE -ne 0) { throw 'Support asset conversion failed' }
-    python tools/build_maps.py .cache/client client/assets/generated --map 13
+    # client/assets is a reproducible runtime output root, not an archive of
+    # every original asset. Keep raw/research material under .cache or reports.
+    $assetRoot = Join-Path (Get-Location) 'client\assets'
+    New-Item -ItemType Directory -Force -Path $assetRoot | Out-Null
+    Get-ChildItem $assetRoot -Force | Where-Object { $_.Name -ne '.gdignore' } |
+        Remove-Item -Recurse -Force
+
+    # Build only resources the current runtime actually consumes. New content
+    # categories join the same lifecycle pipeline when a feature uses them.
+    python tools/build_maps.py .cache/client client/assets --map 13
     if ($LASTEXITCODE -ne 0) { throw 'Original map conversion failed' }
 
-    python tools/asset_pipeline.py --source .cache/client --assets client/assets/generated --server-dat $ServerDat --map 13
+    python tools/asset_pipeline.py --source .cache/client --assets client/assets --server-dat $ServerDat --map 13
     if ($LASTEXITCODE -ne 0) { throw 'Unified lifecycle bundle build failed' }
 
     if (Test-Path 'content\monster_recipes') {
         Get-ChildItem 'content\monster_recipes' -Filter '*.monster.json' | Sort-Object Name | ForEach-Object {
-            python tools/monster_workflow.py $_.FullName --source .cache/client --assets client/assets/generated --server-content server/content
+            python tools/monster_workflow.py $_.FullName --source .cache/client --assets client/assets --server-content server/content
             if ($LASTEXITCODE -ne 0) { throw ('Monster recipe failed: ' + $_.Name) }
         }
     }
@@ -47,8 +52,15 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Direction/animation bundle validation failed' }
     & $Godot --headless --path client --script res://tests/test_monster_visuals.gd
     if ($LASTEXITCODE -ne 0) { throw 'Map sprite bundle validation failed' }
+    & $Godot --headless --path client --script res://tests/test_map_objects_async.gd
+    if ($LASTEXITCODE -ne 0) { throw 'Map scenery shared-bundle validation failed' }
     & $Godot --headless --path client --script res://tests/test_paper_doll_async.gd
     if ($LASTEXITCODE -ne 0) { throw 'Player base bundle validation failed' }
+    & $Godot --headless --path client --script res://tests/test_runtime_asset_store.gd
+    if ($LASTEXITCODE -ne 0) { throw 'RuntimeAssetStore lifecycle validation failed' }
+
+    python tools/summarize_assets.py
+    if ($LASTEXITCODE -ne 0) { throw 'Runtime asset root contains unexpected bulk output' }
 } finally {
     Pop-Location
 }

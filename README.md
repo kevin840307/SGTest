@@ -43,7 +43,7 @@ python -m pip install -r requirements.txt
 python tools\asset_pipeline.py
 ```
 
-Builder 內部仍保留原 SPR clip atomic、8 logical facing、alias/mirror、pivot、ACT timeline、paper-doll z-order；Atlas side 由相同素材 A/B 決定。舊 `build_assets.py`、`build_atlas_groups.py`、`build_normalized_atlas_candidates.py` 等保留為研究／回歸工具，不是 production API。Client 生成圖片只放 `client/assets/generated/`；Server 仍只接收 `server/content/` 的 collision/population/content contract，不讀 Atlas pixels。Map static objects 因能隨 viewport 真正獨立 release，仍保留細粒度 on-demand；drops 目前是單一 MultiMesh，沒有另立 texture-atlas 分類。
+Builder 內部仍保留原 SPR clip atomic、8 logical facing、alias/mirror、pivot、ACT timeline、paper-doll z-order；每個 normalized entity 另有 `inspect[action][facing]`，所以怪物的動作／方向可以獨立查閱，與最後 physical packing 無關。Atlas side 由相同素材 A/B 決定。舊 `build_assets.py`、`build_atlas_groups.py`、`build_normalized_atlas_candidates.py` 等保留為研究／回歸工具，不是 production API。Client Runtime 素材直接放 `client/assets/`，不再多一層 `generated/`；正式 rebuild 只輸出目前真的被 Runtime 使用的 `bundles/` 與 `maps/`，原始／未使用素材留 `.cache/client`。Map13 static objects 與 monsters 共用 map lifecycle bundle，viewport 只做 draw cull；drops 目前是單一 MultiMesh，沒有另立 texture-atlas 分類。完整稽核見 `docs/ASSET_NECESSITY_AUDIT.md`。
 
 ## 已實作與驗證
 

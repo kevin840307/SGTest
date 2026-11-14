@@ -50,7 +50,7 @@ hair01～10、裝備、武器不因「是部位」自動塞進 base；只有低�
 | Player base part | **移除** | 同 session lifetime |
 | Map sprite bundle | **保留** | 進圖一起需要、切圖一起 release |
 | Session base bundle | **保留** | 登入後一起需要、登出一起 release |
-| Map static object atlas | **保留 viewport 粒度** | 可視才 pin，離開 viewport 能獨立 release |
+| Map static object atlas | **移除 production 細拆** | Map13 實測只省約 1.8～2.8MiB object resident，卻需 21～30 個 viewport owners；改與 monster 共用 map lifecycle bundle |
 | Terrain | **獨立 map resource** | 單 texture + viewport MultiMesh |
 | Ground drops | **目前無 texture atlas 類別** | DropRenderer 是單一 MultiMesh |
 | Rare equipment / skill FX | **未來 on-demand 候選** | 必須低頻 + 可獨立卸載 + 實測有收益 |
@@ -59,32 +59,22 @@ hair01～10、裝備、武器不因「是部位」自動塞進 base；只有低�
 
 不是因為「大圖比較快」，而是同素材 A/B。
 
-### Map13 九種怪合成一個 map bundle
+### Map13：九種怪物 + 45 種場景 SPR 共用 map lifecycle bundle
+
+原先 monster-only bundle 的 1024/2048 A/B 證明 2048 可有效減頁；本輪再把真正同 map lifetime 的 scenery 納入同一候選。
 
 | Side | Pages | RGBA bytes |
 |---:|---:|---:|
-| 512 | 11 | 10,297,356 |
-| 1024 | 3 | 10,598,644 |
-| **2048** | **1** | **10,805,780** |
-| 4096 | 1 | 11,476,296 |
+| 512 | invalid | 885×711 frame 超過 side |
+| 1024 | 5 | 18,572,476 |
+| **2048** | **2** | **18,569,428** |
+| 4096 | 1 | 18,478,500 |
 
-2048 相對最低 RGBA 的 512 多約 4.9%，但頁數 11→1。4096 沒再減頁，因此拒絕。
+4096 雖少一頁，但 20-cycle lifecycle 的 load/frame 幾乎沒有改善，transient static/decode peak 卻從 **36,911,847 → 53,543,643 bytes**。300 draw synthetic 中 4096 draw P95 73、2048 draw P95 206，但 frame P95 4096 約 7.76～8.01ms，2048 約 7.02～7.05ms，沒有 frame 勝利。
 
-RuntimeAssetStore 20-cycle：
+因此 auto mode 會量測 4096，但只要 2048 能容納 atomic source block，就優先 <=2048；4096 只作研究 override 或 correctness fallback。尺寸仍是 Builder 參數，不是 Runtime 類型。
 
-| Candidate | Load P95 | Load frames P95 | Frame P95/P99 | Texture peak | Video peak |
-|---|---:|---:|---:|---:|---:|
-| 1024 / 3 pages | 83.56ms | 5 | 16.764 / 16.857ms | 24,521,643 | 30,932,275 |
-| **2048 / 1 page** | **66.70ms** | **4** | **16.782 / 16.827ms** | 24,798,879 | 31,209,511 |
-
-300 mixed-frame render（三輪）：
-
-| Candidate | Draw P50/P95 | Frame P95 | Frame P99 |
-|---|---:|---:|---:|
-| 1024 / 3 pages | 250 / 254 | 約7.99ms | 約8.05～8.08ms |
-| **2048 / 1 page** | **73 / 73** | 約7.91～8.01ms | 約8.01～8.09ms |
-
-2048 transient decode/static 工作區約多 8MiB，但常駐 texture/video 幾乎相同；換來較少 upload frames 與大量較少 texture switches/draw calls。
+Map13 1440 最大視窗 + preload margin 的 scenery working set：P50 21 atlases / 4.394MiB，P95 30 atlases / 5.414MiB；全 45 種只有 7.222MiB。細拆常態僅省約 1.8～2.8MiB object resident，卻維護 21～30 個 owner/acquire/release，因此不保留這個 production boundary。
 
 ### Boy base 七 logical parts
 
@@ -104,35 +94,36 @@ RuntimeAssetStore 20-cycle：
 
 ## 真正刪除舊分類後的 Gate
 
-新 bundle 建立後，Map13 九個舊 per-enemy manifests/pages + Boy base 七個舊 per-part manifests/pages 共移除 **40 個 generated files**。hair01 等未被新 bundle 取代的素材保留。
+Production rebuild 現在會先清空可重建的 `client/assets`（只保留 `.gdignore`），不再把整套原始素材鏡像進 Godot Runtime root。
 
-刪除後：
+- Before：**17,274 files / 1,179.31MiB**
+- After：**12 files / 9.036MiB**
+- After 頂層只有 `bundles/`、`maps/`、`.gdignore`
+- `tools/summarize_assets.py`：`unexpected_top_level=[]`、`production_clean=true`
+- 原始素材仍完整保留在 `.cache/client`，Viewer／研究工具可獨立查閱
 
-- Python top-level：45 tests PASS。
-- tools/tests：89 tests PASS。
-- Git tracked Godot Client tests全部 PASS。
-- Map13：9 definitions / 360 action-direction combinations / **1 map bundle** PASS。
-- Player：6 parts + death / normalized draw-order / **1 session bundle** PASS。
-- RuntimeAssetStore owner/share/cache/cancel/purge PASS。
-- 128 packet queue drain/decode 約0.9ms。
+Map13 production manifest 同時包含 9 normalized monster entities + 45 raw scenery clips；每個 normalized entity 另保留 `inspect[action][facing]`，所以逐怪物／逐動作／逐方向查閱能力不受 physical packing 影響。
 
-Production map bundle 30-cycle async lifecycle：
+正式 multiplayer Before → After（20 Client / 300 monster / 1000 drop / 40s）：
 
-- frame P95/P99 **16.752 / 16.809ms**
+- mean FPS：59.996 → **59.999**
+- draw P95：236 → **228**
+- frame P95：19.236 → **18.947ms**
+- frame P99：20.422 → **20.322ms**
+- texture monitor：39,057,403 → **46,035,499 bytes**
+- video monitor：45,557,371 → **52,534,347 bytes**
+- 約每 Client process RSS peak：144.69 → **151.16MiB**
+
+因此這次不是 RAM/VRAM 最佳化；它用約 +6～7MiB/client resident 換掉 45 個 per-object manifests 與 21～30 個 viewport owners，並得到較簡單的 lifecycle、可重現 clean rebuild，以及小幅 draw/frame 改善。
+
+After 的 30-cycle async lifecycle：
+
+- frame P95/P99 **16.824 / 16.906ms**
 - texture handles release PASS
 - engine texture recovery PASS
 - store resident recovery PASS
 
-20 Client / 300 monster / 1000 drop / 40s：
-
-- execution PASS
-- mean **59.996 FPS**
-- frame P95/P99 **19.236 / 20.422ms**
-- draw-call P95 **236**
-- texture monitor 39,057,403 bytes
-- video monitor 45,557,371 bytes
-- 20/20 prediction/snapshot ready
-- source files unchanged
+完整分類稽核與 Before/After 見 [ASSET_NECESSITY_AUDIT.md](ASSET_NECESSITY_AUDIT.md)。
 
 Server protocol、30Hz simulation、snapshot cadence、definition id、stats、spawn contract 沒有因合圖改變。Server 不讀 PNG/Atlas pixels。
 
@@ -164,7 +155,7 @@ Client：
 - RuntimeAssetStore 是唯一 async decode/GPU commit/cache/owner store。
 - MonsterVisuals：definition id → prefix，多種怪共用 map manifest。
 - PaperDoll：logical part prefix，六部位＋death 共用 session manifest。
-- map_objects 保留 viewport pin/release，因為它真的有不同 lifetime。
+- map_objects 與 monster 共用同一 map sprite bundle；viewport 只決定 draw cull，不再決定 texture owner。場景物件沒有另一套 Loader/Cache。
 
 Server：
 

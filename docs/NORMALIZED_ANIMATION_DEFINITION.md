@@ -97,7 +97,7 @@ py -m unittest test_animation_definition -q
 cd ..
 & 'C:\SGO\Godot\Godot_v4.7.2-stable_win64_console.exe' --headless --path client --script res://tests/test_animation_definition.gd
 py tools/audit_character_standard.py .cache/client local-assets/player-core-audit.json
-py tools/audit_normalized_definitions.py --source .cache/client --runtime-assets client/assets/generated --output reports/normalized --report reports/normalized_definition_audit.json
+py tools/audit_normalized_definitions.py --source .cache/client --runtime-assets client/assets --output reports/normalized --report reports/normalized_definition_audit.json
 ```
 
 本次結果：

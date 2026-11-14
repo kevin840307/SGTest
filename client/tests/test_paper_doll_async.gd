@@ -10,7 +10,7 @@ func _run() -> void:
 	var store := STORE.new()
 	store.configure(24*1024*1024,8*1024*1024)
 	var doll := DOLL.new()
-	assert(doll.begin_async(store,"res://assets/generated","player-base-test") == OK)
+	assert(doll.begin_async(store,"res://assets","player-base-test") == OK)
 	var frames := 0
 	while not doll.is_ready():
 		store.poll_gpu(1,1200)

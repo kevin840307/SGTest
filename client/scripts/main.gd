@@ -40,7 +40,7 @@ var drop_renderer: MultiMeshInstance2D
 var drops_dirty := false
 var action_observed := false
 var inventory_observed := false
-var asset_root := "res://assets/generated"
+var asset_root := "res://assets"
 var monster_asset_root := ""
 var profiler: RefCounted
 var diagnostics_time := 0.0
