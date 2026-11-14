@@ -28,6 +28,7 @@ ACTION_ID = {key: index for index, key in enumerate(ACTION_SUFFIX)}
 def audit_group(enemy_dir: Path, act: Path) -> dict:
     raw_act = act.read_bytes()
     actions = parse_act(raw_act)
+    file_lookup = {path.name.casefold(): path for path in enemy_dir.iterdir() if path.is_file()}
     sources: dict[str, dict] = {}
     issues: list[dict] = []
     rows = []
@@ -40,16 +41,17 @@ def audit_group(enemy_dir: Path, act: Path) -> dict:
         for facing in range(1, 9):
             source_direction, flipped = map_enemy_direction(facing, ACTION_ID[key])
             name = f"{act.stem}_{ACTION_SUFFIX[key]}{source_direction}.spr"
-            path = enemy_dir / name
-            if not path.is_file():
+            path = file_lookup.get(name.casefold())
+            if path is None:
                 issues.append({"action": key, "facing": facing, "source": name,
                                "reason": "missing_spr"})
                 continue
-            if name not in sources:
+            actual_name = path.name
+            if actual_name not in sources:
                 raw = path.read_bytes()
-                sources[name] = {"sha256": hashlib.sha256(raw).hexdigest(),
-                                 "frame_count": len(decode_spr(raw))}
-            count = sources[name]["frame_count"]
+                sources[actual_name] = {"sha256": hashlib.sha256(raw).hexdigest(),
+                                        "frame_count": len(decode_spr(raw))}
+            count = sources[actual_name]["frame_count"]
             invalid = sorted({frame["index"] for frame in action["frames"]
                               if frame["index"] >= count})
             if invalid:
@@ -57,13 +59,13 @@ def audit_group(enemy_dir: Path, act: Path) -> dict:
                                "reason": "frame_index_out_of_range", "invalid_indices": invalid,
                                "source_frame_count": count})
                 continue
-            directions.append({"facing": facing, "source": name,
+            directions.append({"facing": facing, "source": actual_name,
                                "source_direction": source_direction, "flip_x": flipped})
         rows.append({"key": key, "action_id": ACTION_ID[key], "loops": action["loops"],
                      "frames": action["frames"], "events": action["events"],
                      "directions": directions,
                      "special_init_path": key == "H"})
-    return {"enemy": act.stem, "act_sha256": hashlib.sha256(raw_act).hexdigest(),
+    return {"enemy": act.stem.upper(), "act_sha256": hashlib.sha256(raw_act).hexdigest(),
             "sources": sources, "actions": rows, "issues": issues,
             "complete_source_mapping": not issues,
             "runtime_timing_verified": False, "visual_alignment_verified": False}

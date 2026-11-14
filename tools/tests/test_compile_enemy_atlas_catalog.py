@@ -53,6 +53,29 @@ class CatalogTests(unittest.TestCase):
             result = compile_catalog({"groups": [audit]}, atlas)
             self.assertEqual(result["quarantined_groups"], 1)
 
+    def test_source_filename_matching_is_case_insensitive(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp) / "client"
+            enemy = root / "Enemy"
+            enemy.mkdir(parents=True)
+            paths = [enemy / "EN001_NS1.spr", enemy / "EN001_NS3.spr"]
+            for path in paths:
+                path.write_bytes(spr())
+            act_path = enemy / "EN001.ACT"
+            act_path.write_bytes(act())
+            audit = audit_group(enemy, act_path)
+            atlas = Path(temp) / "atlas"
+            build_group(root, atlas, Path("Enemy/EN001"), paths, 512)
+            manifest = atlas / "Enemy/EN001/group.atlas.json"
+            document = json.loads(manifest.read_text(encoding="utf-8"))
+            for source in document["sources"]:
+                source["path"] = source["path"].lower()
+            for frame in document["frames"]:
+                frame["source"] = frame["source"].lower()
+            manifest.write_text(json.dumps(document), encoding="utf-8")
+            result = compile_catalog({"groups": [audit]}, atlas)
+            self.assertEqual((result["compiled_groups"], result["quarantined_groups"]), (1, 0))
+
     def test_incomplete_source_mapping_is_quarantined(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp) / "client"

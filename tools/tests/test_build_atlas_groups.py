@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from build_atlas_groups import build_group, group_key, select_groups
+from build_atlas_groups import build_group, group_key, pack_atomic_rectangles, select_groups
 
 
 def tiny_spr() -> bytes:
@@ -19,6 +19,7 @@ def tiny_spr() -> bytes:
 class GroupTests(unittest.TestCase):
     def test_prefix_key_preserves_directory(self):
         self.assertEqual(group_key(Path("Enemy/EN023A_NS1.spr")), Path("Enemy/EN023A"))
+        self.assertEqual(group_key(Path("Enemy/En023a_NS1.spr")), Path("Enemy/EN023A"))
         self.assertEqual(group_key(Path("Player/A/Cloth/A-Back07_AS1.spr")),
                          Path("Player/A/Cloth/A-Back07"))
         self.assertEqual(group_key(Path("Map/Gaea_building/GAEA_CITY_004.spr")),
@@ -42,7 +43,7 @@ class GroupTests(unittest.TestCase):
                              ["Enemy/EN023A_NS1.spr", "Enemy/EN023A_NW1.spr"])
             self.assertEqual(manifest["frames"][0]["raw_origin"], [1, 0])
 
-    def test_source_locality_keeps_each_spr_on_own_page(self):
+    def test_source_locality_keeps_spr_atomic_but_copacks_blocks(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp) / "client"
             folder = root / "Enemy"
@@ -54,9 +55,25 @@ class GroupTests(unittest.TestCase):
             row = build_group(root, output, Path("Enemy/EN023A"), paths, 512,
                               source_locality=True)
             manifest = json.loads((output / "Enemy/EN023A/group.atlas.json").read_text())
-            self.assertEqual(row["pages"], 2)
-            self.assertEqual([f["page"] for f in manifest["frames"]], [0, 1])
-            self.assertEqual(manifest["packing_policy"], "source_spr_locality_v1")
+            self.assertEqual(row["pages"], 1)
+            self.assertEqual([f["page"] for f in manifest["frames"]], [0, 0])
+            self.assertEqual(manifest["packing_policy"], "source_spr_atomic_maxrects_v3")
+
+    def test_atomic_rectangles_pack_without_overlap(self):
+        placements, bounds = pack_atomic_rectangles(
+            [(0, 300, 200), (1, 200, 300), (2, 180, 180), (3, 100, 100)], 512)
+        self.assertLessEqual(len(bounds), 2)
+        rects = []
+        sizes = {0: (300, 200), 1: (200, 300), 2: (180, 180), 3: (100, 100)}
+        for block_id, (page, x, y) in placements.items():
+            w, h = sizes[block_id]
+            self.assertLessEqual(x + w, bounds[page][0])
+            self.assertLessEqual(y + h, bounds[page][1])
+            for other_page, ox, oy, ow, oh in rects:
+                if other_page != page:
+                    continue
+                self.assertTrue(x + w <= ox or ox + ow <= x or y + h <= oy or oy + oh <= y)
+            rects.append((page, x, y, w, h))
 
     def test_explicit_group_filter(self):
         with tempfile.TemporaryDirectory() as temp:

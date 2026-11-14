@@ -11,6 +11,8 @@
 - [docs/LEGACY_ASSET_PIPELINE.md](docs/LEGACY_ASSET_PIPELINE.md)：解析、匯出與驗收流程
 - [docs/ASSET_RUNTIME_STRATEGY.md](docs/ASSET_RUNTIME_STRATEGY.md)：暫定 Godot 分組、可見載入與性能驗收
 - [docs/HK2_INVENTORY.md](docs/HK2_INVENTORY.md)：乾淨 HK2 實體檔案盤點
+- [docs/HK2_DATA1_ARCHIVE.md](docs/HK2_DATA1_ARCHIVE.md)：Data1.dat 群組格式、LZSS、base + loose override 實證
+- [docs/HK2_MAP_ASSET_PALETTE.md](docs/HK2_MAP_ASSET_PALETTE.md)：真地圖怪物共現、MapAssetPalette 與 1024 atomic GPU A/B
 - [docs/HK2_ACTION_PAGE_LOCALITY.md](docs/HK2_ACTION_PAGE_LOCALITY.md)：同動作／方向 Atlas 跨頁稽核與原 SPR 局部性 A/B
 - [docs/ASSET_STREAMING_AND_RENDERING.md](docs/ASSET_STREAMING_AND_RENDERING.md)：多尺寸素材分組與實測矩陣
 - [docs/CLIENT_RUNTIME_ISOLATION.md](docs/CLIENT_RUNTIME_ISOLATION.md)：多人同步與渲染排程隔離
@@ -21,7 +23,7 @@
 ## 原版資料調查
 - 參考（唯讀）：https://github.com/kevin840307/TestGoGo/tree/feature/local-server-net8
 - 舊 Client 反編譯：Old/ClientData/Paradise.exe.lst
-- 本機已提供 `C:\SGO\Stargate Online IE HK2`，41,741 個實體檔；[HK2 盤點](docs/HK2_INVENTORY.md)與 [SPR 解碼試跑](docs/HK2_SPR_POC.md) 已記錄。`Data1.dat` 與動作／方向語意尚未完成解析，不宣稱全部素材可用。
+- 本機已提供 `C:\SGO\Stargate Online IE HK2`。除 41,741 個 loose 實體檔外，`Data1.dat` 已按原版 `xnFileOpenGroup/FileData::ReadBuf/LzssDecompress` 還原索引格式，含 41,687 archive entries；原版查找順序為 loose override > archive base。詳 [HK2 Data1](docs/HK2_DATA1_ARCHIVE.md)。人物紙娃娃、原版視覺與授權仍未完成，因此不宣稱整體素材 Gate 已通過。
 - 唯讀盤點命令：
   `py tools/inventory_client.py "C:\\SGO\\Stargate Online IE HK2" reports/hk2-inventory.json`
 - 執行前需將路徑改為實際遊戲資料夾；reports/ 被 gitignore。勿上傳原版未授權素材或解包產物。

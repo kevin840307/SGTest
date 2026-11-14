@@ -12,6 +12,8 @@ import json
 from collections import defaultdict
 from pathlib import Path
 
+from PIL import Image
+
 if __package__:
     from .convert_assets import decode_spr, pack
 else:
@@ -19,8 +21,11 @@ else:
 
 
 def group_key(relative: Path) -> Path:
+    category = relative.parts[0].casefold()
     stem = (relative.stem.split("_", 1)[0]
-            if relative.parts[0].casefold() in ("enemy", "player") else relative.stem)
+            if category in ("enemy", "player") else relative.stem)
+    if category == "enemy":
+        stem = stem.upper()
     return relative.parent / stem
 
 
@@ -44,6 +49,112 @@ def select_groups(root: Path, category: str | None = None,
             for key, paths in sorted(groups.items(), key=lambda pair: pair[0].as_posix().casefold())}
 
 
+def _contains_rect(outer, inner) -> bool:
+    ox, oy, ow, oh = outer
+    ix, iy, iw, ih = inner
+    return ix >= ox and iy >= oy and ix + iw <= ox + ow and iy + ih <= oy + oh
+
+
+def _split_free_rect(free, used):
+    fx, fy, fw, fh = free
+    ux, uy, uw, uh = used
+    if ux >= fx + fw or ux + uw <= fx or uy >= fy + fh or uy + uh <= fy:
+        return [free]
+    out = []
+    if ux > fx:
+        out.append((fx, fy, ux - fx, fh))
+    if ux + uw < fx + fw:
+        out.append((ux + uw, fy, fx + fw - ux - uw, fh))
+    if uy > fy:
+        out.append((fx, fy, fw, uy - fy))
+    if uy + uh < fy + fh:
+        out.append((fx, uy + uh, fw, fy + fh - uy - uh))
+    return [rect for rect in out if rect[2] > 0 and rect[3] > 0]
+
+
+def _prune_free_rects(rects):
+    unique = list(dict.fromkeys(rects))
+    return [rect for i, rect in enumerate(unique)
+            if not any(i != j and _contains_rect(other, rect)
+                       for j, other in enumerate(unique))]
+
+
+def pack_atomic_rectangles(rectangles: list[tuple[int, int, int]], side: int):
+    """Deterministic no-rotation MaxRects-style placement for source SPR blocks."""
+    ordered = sorted(rectangles, key=lambda row: (-(row[1] * row[2]),
+                                                  -max(row[1], row[2]),
+                                                  -min(row[1], row[2]), row[0]))
+    pages = []
+    placements = {}
+    for block_id, width, height in ordered:
+        if width > side or height > side:
+            raise ValueError(f"atomic block {width}x{height} exceeds atlas side {side}")
+        best = None
+        for page_index, page in enumerate(pages):
+            for free in page["free"]:
+                x, y, free_w, free_h = free
+                if width > free_w or height > free_h:
+                    continue
+                new_w = max(page["used_w"], x + width)
+                new_h = max(page["used_h"], y + height)
+                growth = new_w * new_h - page["used_w"] * page["used_h"]
+                waste = free_w * free_h - width * height
+                score = (growth, waste, min(free_w - width, free_h - height),
+                         page_index, y, x)
+                if best is None or score < best[0]:
+                    best = (score, page_index, x, y)
+        if best is None:
+            pages.append({"free": [(0, 0, side, side)], "used_w": 0, "used_h": 0})
+            best = ((width * height, side * side - width * height,
+                     min(side - width, side - height), len(pages) - 1, 0, 0),
+                    len(pages) - 1, 0, 0)
+        _, page_index, x, y = best
+        page = pages[page_index]
+        used = (x, y, width, height)
+        split = []
+        for free in page["free"]:
+            split.extend(_split_free_rect(free, used))
+        page["free"] = _prune_free_rects(split)
+        page["used_w"] = max(page["used_w"], x + width)
+        page["used_h"] = max(page["used_h"], y + height)
+        placements[block_id] = (page_index, x, y)
+    bounds = [(page["used_w"], page["used_h"]) for page in pages]
+    return placements, bounds
+
+
+def pack_source_blocks(frames, source_ranges: list[tuple[int, int]], side: int):
+    """Pack each original SPR atomically, then co-pack those blocks onto atlas pages."""
+    blocks = []
+    records = [None] * len(frames)
+    for source_index, (start, length) in enumerate(source_ranges):
+        local_pages, local_records = pack(frames[start:start + length], side)
+        if len(local_pages) > 1:
+            raise ValueError(f"source SPR needs {len(local_pages)} pages at side {side}")
+        if not local_pages:
+            for offset, record in enumerate(local_records):
+                records[start + offset] = record
+            continue
+        blocks.append((source_index, start, local_pages[0], local_records))
+
+    placements, bounds = pack_atomic_rectangles(
+        [(source_index, block.width, block.height)
+         for source_index, _, block, _ in blocks], side)
+    pages = [Image.new("RGBA", (width, height)) for width, height in bounds]
+    for source_index, start, block, local_records in blocks:
+        page_index, x, y = placements[source_index]
+        pages[page_index].paste(block, (x, y))
+        for offset, record in enumerate(local_records):
+            record = dict(record)
+            if record["page"] >= 0:
+                rx, ry, rw, rh = record["rect"]
+                record["page"] = page_index
+                record["rect"] = [rx + x, ry + y, rw, rh]
+            records[start + offset] = record
+    if any(record is None for record in records):
+        raise ValueError("internal source-locality record gap")
+    return pages, records
+
+
 def build_group(root: Path, output: Path, key: Path, paths: list[Path], side: int,
                 source_locality: bool = False) -> dict:
     if not paths or side not in (512, 1024, 2048, 4096):
@@ -63,14 +174,7 @@ def build_group(root: Path, output: Path, key: Path, paths: list[Path], side: in
             frames.append(frame)
             origin_records.append((relative, index))
     if source_locality:
-        pages, records = [], []
-        for start, length in source_ranges:
-            local_pages, local_records = pack(frames[start:start + length], side)
-            for record in local_records:
-                if record["page"] >= 0:
-                    record["page"] += len(pages)
-            pages.extend(local_pages)
-            records.extend(local_records)
+        pages, records = pack_source_blocks(frames, source_ranges, side)
     else:
         pages, records = pack(frames, side)
     for frame, record in zip(frames, records):
@@ -96,7 +200,7 @@ def build_group(root: Path, output: Path, key: Path, paths: list[Path], side: in
         record["source_frame"] = index
     document = {"version": 1, "group_key": key.as_posix(), "group_rule": "category_prefix_v1",
                 "atlas_side": side, "padding": 2, "pages": page_names, "sources": sources, "frames": records,
-                "packing_policy": "source_spr_locality_v1" if source_locality else "dense_frames_v1",
+                "packing_policy": "source_spr_atomic_maxrects_v3" if source_locality else "dense_frames_v1",
                 "animation_semantics": None, "layer_semantics": None}
     manifest = target / "group.atlas.json"
     temporary = target / "group.atlas.json.tmp"

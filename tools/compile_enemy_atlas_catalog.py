@@ -25,13 +25,13 @@ def compile_one(audit: dict, manifest_path: Path, atlas_root: Path) -> dict:
     for page in pages:
         with Image.open(page) as image:
             dimensions.append(image.size)
-    source_hashes = {Path(row["path"]).name: row["sha256"] for row in manifest["sources"]}
+    source_hashes = {Path(row["path"]).name.casefold(): row["sha256"] for row in manifest["sources"]}
     for name, source in audit["sources"].items():
-        if source_hashes.get(name) != source["sha256"]:
+        if source_hashes.get(name.casefold()) != source["sha256"]:
             raise ValueError(f"source hash differs: {name}")
     regions = {}
     for record in manifest["frames"]:
-        key = (Path(record["source"]).name, record["source_frame"])
+        key = (Path(record["source"]).name.casefold(), record["source_frame"])
         if key in regions:
             raise ValueError(f"duplicate atlas source frame: {key}")
         page_index = record["page"]
@@ -50,7 +50,7 @@ def compile_one(audit: dict, manifest_path: Path, atlas_root: Path) -> dict:
             source = direction["source"]
             frames = []
             for step in action["frames"]:
-                key = (source, step["index"])
+                key = (source.casefold(), step["index"])
                 if key not in regions:
                     raise ValueError(f"atlas missing source frame: {key}")
                 region = regions[key]
