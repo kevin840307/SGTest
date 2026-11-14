@@ -98,6 +98,7 @@
 - Risks: Y-sort、紙娃娃前後層、padding bleed、頁過大導致 VRAM 浪費、首次 upload spike、跨圖 cache churn。
 - Evidence: 乾淨 HK2 已可全量轉換；單外觀初測見 [HK2_ATLAS_CANDIDATES.md](HK2_ATLAS_CANDIDATES.md)，8 種怪／20 玩家代理／500 小圖代理及 10 次貼圖釋放見 [HK2_MIXED_ATLAS_BENCHMARK.md](HK2_MIXED_ATLAS_BENCHMARK.md)。真正掉落圖、多人同步、正式快取及完整 AS007 尚未驗證。Next: AS007/AS-T01～T05。
 - 2026-11-14 資料契約補充：以來源 SHA、ACT 動作／索引及專用怪物方向映射編譯局部 Atlas catalog；引用不完整的群組隔離，保留原始時間、事件和方位鏡像，不推測毫秒或視覺校正。Godot headless 實證 8 群組可讀，詳 [HK2_ENEMY_ATLAS_CATALOG.md](HK2_ENEMY_ATLAS_CATALOG.md)。
+- 2026-11-14 離線視覺檢查補充：怪物 ACT Viewer 以 catalog 選動作／方位，只解碼目前引用的頁面，保留原始索引、事件與時間欄位；固定 100ms 僅供檢查，不能回寫為動畫定義。詳 [HK2_ASSET_VIEWER.md](HK2_ASSET_VIEWER.md)。
 - 使用者補充可接受每物品／怪物各自圖片，條件是效能與資源實測勝出。現有候選以**每怪物外觀一個獨立群組**、其他單一 SPR（含本次 MS 代理）各自分組，群組可能因尺寸分成多頁；沒有跨怪物合成一張全域圖。正式決策需以同一可見工作集比較逐來源貼圖、單外觀頁面與地圖共同使用的局部頁面，兼看維護成本、記憶體與載入尖峰。
 - 2026-11-14 真正地上物品圖 `Interface/ground.spr` A/B：500 實例／25 或 500 種同屏，逐圖 25／500 張與局部 1024 單頁對照，draw calls 約 572→73；500 種載入中位約 162→36ms，Godot Video Mem monitor 約 21.3→23.5 MB。2048／4096 在此集合無收益。暫選地圖共現物品用 1024，單一稀有圖可獨立；正式 item ID 對應及真地圖工作集待查，詳 [HK2_GROUND_ART_BENCHMARK.md](HK2_GROUND_ART_BENCHMARK.md)。
 - 2026-11-14 物品圖號補充：`item.itd` 的 9,096 筆結構完整解封／掃描，圖號與物品 ID 分欄；8,049 筆圖號落於 `ground.spr`，1,047 筆落於 `ground1.spr` 的**連續分段候選**，13 個 ID 重複。`ground1` 執行時選檔與重複優先序未證實；正式匯入須保留原始圖號及所有衝突，詳 [HK2_ITEM_LIBRARY_MAPPING.md](HK2_ITEM_LIBRARY_MAPPING.md)。
