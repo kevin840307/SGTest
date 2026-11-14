@@ -1,7 +1,7 @@
 # 全 Godot 素材分類必要性稽核
 
-日期：2026-11-14  
-範圍：Enemy、Player、NPC、Equipment、Item、Pet、Mecha、Map、Effect、UI、Ground Drop，以及所有 Builder / Bundle / Loader / Cache。  
+日期：2026-11-14
+範圍：Enemy、Player、NPC、Equipment、Item、Pet、Mecha、Map、Effect、UI、Ground Drop，以及所有 Builder / Bundle / Loader / Cache。
 狀態：**Production policy / Before-After evidence recorded**。AS005 原版逐格人工視覺與 AS008 發布權仍是獨立 Gate。
 
 ## 結論
@@ -53,8 +53,8 @@ Production bundle manifest 的每個 normalized entity 都保留：
 
 因此：
 
-**Debug / Viewer 的查閱粒度 = entity / action / facing。**  
-**Runtime 的卸載粒度 = 實測 lifecycle bundle。**  
+**Debug / Viewer 的查閱粒度 = entity / action / facing。**
+**Runtime 的卸載粒度 = 實測 lifecycle bundle。**
 兩者不綁定。
 
 ## Runtime asset root 清理 Before / After
