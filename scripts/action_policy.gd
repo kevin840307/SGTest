@@ -3,6 +3,10 @@ extends RefCounted
 const COMBAT_SECONDS := 0.35
 const DEATH_SECONDS := 2.0
 
+static func newer_revision(incoming: int, previous: int) -> bool:
+	var difference := (incoming-previous)&0xffffffff
+	return difference > 0 and difference < 0x80000000
+
 # Reliable RPC numbers and packed snapshot floats must compare at the same
 # precision. Otherwise a rounded-down snapshot can preserve an old attack.
 static func wire_time(seconds: float) -> float:

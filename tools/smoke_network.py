@@ -15,6 +15,7 @@ def main():
     parser.add_argument('--monsters', type=int, default=1000)
     parser.add_argument('--drops', type=int, default=5000)
     parser.add_argument('--seconds', type=int, default=15)
+    parser.add_argument('--combat-arena', action='store_true', help='idle observers verify HP/death/respawn over real ENet')
     args = parser.parse_args()
     processes, logs, measurements = [], [], []
     base = [str(args.godot.resolve()), '--headless', '--path', '.', '--max-fps', '60']
@@ -23,6 +24,8 @@ def main():
             log = tempfile.TemporaryFile(mode='w+', encoding='utf-8')
             logs.append(log)
             extra = ['--server', f'--monsters={args.monsters}', f'--drops={args.drops}'] if index == 0 else ['--bot']
+            if args.combat_arena:
+                extra = ['--server','--monsters=1','--drops=0','--combat-arena'] if index == 0 else []
             processes.append(subprocess.Popen(base+['--']+extra, stdout=log, stderr=subprocess.STDOUT))
             if index == 0:
                 time.sleep(1)
@@ -56,12 +59,18 @@ def main():
     errors = [c for c in contents if 'SCRIPT ERROR' in c or 'ERROR:' in c]
     actions = all('action_received' in content for content in contents[1:])
     inventories = all('inventory_received' in content for content in contents[1:])
-    passed = joined == args.clients and delivered and actions and inventories and not errors
-    report = {'passed': passed, 'clients': args.clients, 'monsters': args.monsters, 'drops': args.drops,
+    health = all('health_received' in content for content in contents[1:])
+    deaths = all('death_received' in content for content in contents[1:])
+    respawns = all('respawn_received' in content for content in contents[1:])
+    behavior = health and deaths and respawns if args.combat_arena else actions and inventories
+    passed = joined == args.clients and delivered and behavior and not errors
+    report = {'passed': passed, 'clients': args.clients, 'monsters': 1 if args.combat_arena else args.monsters,
+              'drops': 0 if args.combat_arena else args.drops, 'combat_arena':args.combat_arena,
               'seconds': args.seconds, 'joined': joined, 'snapshots_received_by_all': delivered,
               'actions_received_by_all': actions, 'inventories_received_by_all': inventories,
+              'health_received_by_all':health,'death_received_by_all':deaths,'respawn_received_by_all':respawns,
               'headless': True, 'samples': measurements, 'logs': contents}
-    out = Path('reports/network_load.json')
+    out = Path('reports/combat_network.json' if args.combat_arena else 'reports/network_load.json')
     out.parent.mkdir(exist_ok=True)
     out.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding='utf-8')
     print(json.dumps({k:v for k,v in report.items() if k not in ('samples', 'logs')}, indent=2))

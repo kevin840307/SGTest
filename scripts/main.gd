@@ -22,6 +22,7 @@ var ui_modern := false
 var hud: CanvasLayer
 var info_label: Label
 var item_label: Label
+var health_label: Label
 var atlas := preload("res://scripts/entity_atlas.gd").new()
 var doll := preload("res://scripts/paper_doll.gd").new()
 var monster_grid := preload("res://scripts/spatial_grid.gd").new()
@@ -50,11 +51,17 @@ var indexed_drop_revision := -1
 var asset_root := "res://assets/generated"
 var profiler: RefCounted
 var diagnostics_time := 0.0
+var combat_arena := false
+var health_observed := false
+var death_observed := false
+var respawn_observed := false
+var observed_dead: Dictionary = {}
 
 func _ready() -> void:
 	var arguments := OS.get_cmdline_user_args()
 	is_server = arguments.has("--server")
 	bot = arguments.has("--bot")
+	combat_arena = arguments.has("--combat-arena")
 	if arguments.has("--profile") and not is_server:
 		profiler = preload("res://scripts/frame_profiler.gd").new()
 	for argument in arguments:
@@ -97,6 +104,11 @@ func _start_server() -> void:
 	multiplayer.multiplayer_peer = peer
 	multiplayer.peer_connected.connect(_on_peer_connected)
 	world.populate(monster_count, seed_drops)
+	if combat_arena:
+		world.monsters.clear()
+		world.populate(1,0)
+		world.monsters[1].p = Vector2(1230,800)
+		world.monsters[1].damage = 50
 	drop_grid.rebuild(drops)
 	print("SGO server listening on UDP %d with %d monsters" % [PORT, monster_count])
 
@@ -139,6 +151,8 @@ func _physics_process(delta: float) -> void:
 func _server_step(delta: float) -> void:
 	world.step(delta)
 	sim_time = world.time
+	for event in world.drain_events():
+		_publish_action(event.kind,event.id,event)
 	if indexed_drop_revision != world.drop_revision:
 		drop_grid.rebuild(drops)
 		indexed_drop_revision = world.drop_revision
@@ -163,11 +177,11 @@ func _send_snapshot(pid: int) -> void:
 	for id in player_grid.query(center, VIEW_RADIUS):
 		if center.distance_squared_to(players[id].p) <= VIEW_RADIUS * VIEW_RADIUS:
 			var player: Dictionary = players[id]
-			ps.append([id, player.p.x, player.p.y, 0, player.facing, player.pose, player.action_time])
+			ps.append([id, player.p.x, player.p.y, player.hp, player.facing, player.pose, player.action_time,player.revision])
 	for id in monster_grid.query(center, VIEW_RADIUS):
 		var monster: Dictionary = monsters[id]
 		if center.distance_squared_to(monster.p) <= VIEW_RADIUS * VIEW_RADIUS:
-			ms.append([id, monster.p.x, monster.p.y, monster.hp, monster.facing, monster.pose, monster.action_time])
+			ms.append([id, monster.p.x, monster.p.y, monster.hp, monster.facing, monster.pose, monster.action_time,monster.revision])
 	var encoded := CODEC.encode(ps + ms)
 	var count := maxi(1, ceili(encoded.size() / 800.0))
 	for index in count:
@@ -208,8 +222,6 @@ func _attack(monster_id: int) -> void:
 	var id := multiplayer.get_remote_sender_id()
 	var first_drop: int = world.next_drop
 	if world.attack(id, monster_id):
-		_publish_action(0, id, players[id])
-		_publish_action(1, monster_id, monsters[monster_id])
 		for pid in players:
 			var added: Array = []
 			for drop_id in range(first_drop, world.next_drop):
@@ -235,26 +247,51 @@ func _pickup(drop_id: int) -> void:
 func _publish_action(kind: int, id: int, state: Dictionary) -> void:
 	for pid in players:
 		if players[pid].p.distance_squared_to(state.p) <= VIEW_RADIUS * VIEW_RADIUS:
-			_action_event.rpc_id(pid, kind, id, state.facing, state.pose, state.action_time)
+			_action_event.rpc_id(pid, kind, id, state.facing, state.pose, state.action_time,state.hp,state.revision)
 
 @rpc("authority", "call_remote", "reliable", 4)
-func _action_event(kind: int, id: int, facing: int, pose: int, clock: float) -> void:
+func _action_event(kind: int, id: int, facing: int, pose: int, clock: float, hp: int, revision: int) -> void:
 	clock = ACTION.wire_time(clock)
 	if not action_observed:
 		action_observed = true
 		print("action_received")
 	if kind == 1 and visible_monsters.has(id):
 		var state: Dictionary = visible_monsters[id]
-		if ACTION.accepts_event(pose, clock, state.action_time, server_time):
+		if revision != state.revision and not ACTION.newer_revision(revision,state.revision):
+			return
+		state.hp = hp
+		state.revision = revision
+		if pose < 2 or pose == 4 or ACTION.accepts_event(pose, clock, state.action_time, server_time):
 			state.facing = facing
 			state.pose = pose
 			state.action_time = clock
 	elif kind == 0 and player_poses.has(id):
 		var row: Array = player_poses[id]
-		if ACTION.accepts_event(pose, clock, float(row[6]), server_time):
+		if revision != int(row[7]) and not ACTION.newer_revision(revision,int(row[7])):
+			return
+		row[3] = hp
+		row[7] = revision
+		if pose < 2 or pose == 4 or ACTION.accepts_event(pose, clock, float(row[6]), server_time):
 			row[4] = facing
 			row[5] = pose
 			row[6] = clock
+		_update_health(id,hp,pose)
+
+func _update_health(id: int, hp: int, pose: int) -> void:
+	if not health_observed and hp < world.PLAYER_HP:
+		health_observed = true
+		print("health_received")
+	if not death_observed and hp == 0:
+		death_observed = true
+		print("death_received")
+	if hp == 0:
+		observed_dead[id] = true
+	if observed_dead.has(id) and not respawn_observed and hp > 0 and pose < 2:
+		respawn_observed = true
+		print("respawn_received")
+		observed_dead.erase(id)
+	if id == multiplayer.get_unique_id():
+		health_label.text = "生命 %d / %d%s" % [hp,world.PLAYER_HP,"　倒地，等待復活" if hp == 0 else ""]
 
 @rpc("authority", "call_remote", "unreliable", 2)
 func _snapshot_chunk(sequence: int, clock: float, player_count: int, part: int, total: int, payload: PackedByteArray) -> void:
@@ -290,16 +327,20 @@ func _snapshot_chunk(sequence: int, clock: float, player_count: int, part: int, 
 	for row in ps:
 		visible_players[int(row[0])] = Vector2(row[1], row[2])
 		player_poses[int(row[0])] = row
-		if previous_poses.has(int(row[0])) and previous_poses[int(row[0])][6] > row[6]:
+		if previous_poses.has(int(row[0])) and ACTION.newer_revision(int(previous_poses[int(row[0])][7]),int(row[7])):
 			player_poses[int(row[0])] = previous_poses[int(row[0])]
+		var current: Array = player_poses[int(row[0])]
+		_update_health(int(row[0]),int(current[3]),int(current[5]))
 	for row in ms:
 		visible_monsters[int(row[0])] = {"p": Vector2(row[1], row[2]), "hp": int(row[3]),
-			"facing": int(row[4]), "pose": int(row[5]), "action_time": float(row[6])}
-		if previous_monsters.has(int(row[0])) and previous_monsters[int(row[0])].action_time > float(row[6]):
+			"facing": int(row[4]), "pose": int(row[5]), "action_time": float(row[6]),"revision":int(row[7])}
+		if previous_monsters.has(int(row[0])) and ACTION.newer_revision(previous_monsters[int(row[0])].revision,int(row[7])):
 			var prior: Dictionary = previous_monsters[int(row[0])]
 			visible_monsters[int(row[0])].facing = prior.facing
 			visible_monsters[int(row[0])].pose = prior.pose
 			visible_monsters[int(row[0])].action_time = prior.action_time
+			visible_monsters[int(row[0])].revision = prior.revision
+			visible_monsters[int(row[0])].hp = prior.hp
 	var own_id := multiplayer.get_unique_id()
 	if visible_players.has(own_id):
 		var target: Vector2 = visible_players[own_id]
@@ -325,6 +366,9 @@ func _inventory(inventory: Dictionary) -> void:
 
 func _client_step(delta: float) -> void:
 	if multiplayer.multiplayer_peer == null or multiplayer.multiplayer_peer.get_connection_status() != MultiplayerPeer.CONNECTION_CONNECTED:
+		return
+	var own_id := multiplayer.get_unique_id()
+	if player_poses.has(own_id) and int(player_poses[own_id][3]) <= 0:
 		return
 	input_elapsed += delta
 	if input_elapsed < 0.05:
@@ -390,6 +434,9 @@ func _draw() -> void:
 			var duration: float = ACTION.DEATH_SECONDS if monster.pose == 4 else ACTION.COMBAT_SECONDS
 			atlas.draw_frame(self, point, "EN004A_%s%d" % [action, monster.facing], maxf(seconds, 0.0), 8.0,
 				duration if monster.pose >= 2 else 0.0)
+			if monster.hp > 0 and monster.hp < 30:
+				draw_rect(Rect2(point+Vector2(-20,-150),Vector2(40,4)),Color(0.1,0.1,0.1))
+				draw_rect(Rect2(point+Vector2(-20,-150),Vector2(40.0*monster.hp/30.0,4)),Color.CRIMSON)
 		else:
 			draw_circle(point, 16, Color.CRIMSON)
 	for id in visible_players:
@@ -432,6 +479,9 @@ func _build_ui() -> void:
 	item_label = Label.new()
 	item_label.text = "物品：{}"
 	stack.add_child(item_label)
+	health_label = Label.new()
+	health_label.text = "生命 —"
+	stack.add_child(health_label)
 	var sizes := OptionButton.new()
 	var window_sizes := [Vector2i(960, 540), Vector2i(1280, 720), Vector2i(1440, 810), Vector2i(1440, 900)]
 	for size in window_sizes:
@@ -487,7 +537,8 @@ func _process(delta: float) -> void:
 			rendered_monsters.erase(id)
 	for id in visible_players:
 		var target: Vector2 = visible_players[id]
-		rendered_players[id] = (rendered_players.get(id, target) as Vector2).lerp(target, weight)
+		var previous: Vector2 = rendered_players.get(id,target)
+		rendered_players[id] = target if previous.distance_squared_to(target) > 300.0*300.0 else previous.lerp(target, weight)
 	for id in visible_monsters:
 		var target: Vector2 = visible_monsters[id].p
 		rendered_monsters[id] = (rendered_monsters.get(id, target) as Vector2).lerp(target, weight)

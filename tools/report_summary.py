@@ -47,6 +47,14 @@ def main():
               '這些是本機開發版測試，非冷磁碟、網際網路丟包或多種硬體測試。完整遊戲功能、角色裝備與外觀自訂、地圖解析及持久化仍待開發。', '',
               '原始 JSON：asset_inventory.json、asset_validation.json、network_load.json、rendered_load.json、rendered_probe.json、atlas_benchmark/results.json、atlas_benchmark/rendered.json。']
     Path('reports/README.md').write_text('\n'.join(lines)+'\n',encoding='utf-8')
+    combat_path = Path('reports/combat_network.json')
+    if combat_path.exists():
+        combat = read(combat_path)
+        with Path('reports/README.md').open('a',encoding='utf-8') as report:
+            report.write(f"\n## 雙向戰鬥同步\n\n{combat['clients']} 位獨立 ENet 觀察客戶端、{combat['seconds']} 秒，"
+                         f"扣血／同一角色倒地／復活均收到：{combat['health_received_by_all']}／"
+                         f"{combat['death_received_by_all']}／{combat['respawn_received_by_all']}。整體通過：{combat['passed']}。"
+                         "此情境沒有掉落，因此不以背包 marker 作通過條件；背包另外由壓測及原子拾取測試驗證。\n")
 
 
 if __name__ == '__main__':
