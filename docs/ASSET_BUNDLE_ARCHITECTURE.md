@@ -15,11 +15,11 @@ SGTest 正式 Runtime 不再把「怪物種類、方向、動作、人物部位�
 
 方向、動作、mirror、pivot、ACT timeline、人物 z-order 全部留在 sgtest.animation/v2，只是 bundle 內部 logical metadata，不是 unload boundary。
 
-Production sprite pipeline 唯一入口：
+Production 一鍵轉換入口：
 
-    python tools/asset_pipeline.py
+    run_build_assets.bat "C:\SGO\Stargate Online IE HK2"
 
-完整重建仍由 tools/rebuild_assets.ps1 呼叫。舊 build_assets.py、build_atlas_groups.py、build_character_core_atlas.py、build_normalized_atlas_candidates.py 保留作研究、歷史 A/B、原版素材驗證，不是 production Runtime 分類入口。
+底層 Runtime-only（供研發及回歸）保留 `python tools/asset_pipeline.py`。獨立轉換工具位於 `tools/asset_converter/`，採 Adaptive Atomic Atlas，離線全部 SPR 候選放在 gitignore 的 `local-assets`，而非新建 Runtime Bundle 分類或 `assets/generated`。舊 `tools/rebuild_assets.ps1` 保留相容用途，其全量清理行為不再是新轉換器預設。舊 build_assets.py、build_atlas_groups.py、build_character_core_atlas.py、build_normalized_atlas_candidates.py 保留作研究、歷史 A/B、原版素材驗證，不是 production Runtime 分類入口。
 
 ## 為什麼舊分類過度
 

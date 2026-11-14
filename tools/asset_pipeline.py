@@ -169,7 +169,7 @@ def build_all(source: Path, assets: Path, server_dat: Path, map_id: int,
     index = {
         "version": 1,
         "public_grouping": "ownership-lifetime-only",
-        "packing_policy": "normalized clip atomic; 2048 selected by lifecycle/render A/B",
+        "packing_policy": "Adaptive Atomic Atlas; measured RGBA/page balance, lifecycle ownership",
         "bundles": [
             {
                 "id": map_result["bundle_id"],

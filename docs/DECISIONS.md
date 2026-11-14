@@ -293,3 +293,14 @@ ADR-026補充：使用者指定Client一般遊玩支援30～90FPS；FPS選項只
 - Release: 30-cycle async lifecycle all texture handles released、engine texture recovery、Store resident recovery 全 PASS，P95/P99 16.824/16.906ms。
 - Tools: `tools/README.md` 固定 production / research / benchmark / viewer-diagnostic / tests 邊界；不得為每個素材小功能建立另一套 production Builder/CLI/Loader。
 - Evidence: [ASSET_NECESSITY_AUDIT.md](ASSET_NECESSITY_AUDIT.md)、[ASSET_BUNDLE_ARCHITECTURE.md](ASSET_BUNDLE_ARCHITECTURE.md)。AS005 原版逐格人工視覺與 AS008 發布權仍未完成。
+
+## ADR-037 — Adaptive Atomic Atlas 與一鍵原始素材轉換（2026-11-14）
+
+- Status: **ACCEPTED**；完整來源離線生成仍需獨立完成結果驗收。
+- Naming: 原研究「Mode 4」正式命名 **Adaptive Atomic Atlas（自適應原子圖集）**，實際 `packing_policy=adaptive_atomic_atlas_v1`。名字代表來源 SPR 先作完整動畫區塊、再用 MaxRects 裝箱和 RGBA/page 成本選尺寸，必要時多頁，不意味所有來源都合成單張。
+- Scope: `tools/asset_converter/` 對外提供唯一單次執行 CLI／batch；支援原版 Data1.dat+loose overlay、完整原始 SPR 私有離線 index、ACT/SIF/DrawOrder sidecars、Map13 與 Player Base 現有 Runtime Bundle。其他 map/equipment/UI gameplay consumers **不因此宣稱已實作**。
+- Lifecycle: 完整來源圖像只放 gitignore `local-assets/asset_converter/complete/`，不塞進 `client/assets` 和 GPU；Runtime 只保留 `map/session/on-demand` owner，既有 EntityAtlas/RuntimeAssetStore、Render/Logic/Network 隔離均不變；不加 `generated/`、獨立種類 Loader 或對應 Cache。
+- Optimizations: 單幀候選避免重複建立四組 PIL packing workspace；全量逐群組流式處理與 SHA256 增量快取；頁面損壞自動重建；預設 <=2048（現有 Runtime）、4096 僅過大來源 correctness fallback；原始畫素逐幀比較、origin/crop/source index 保留。
+- Safety: 原版只讀；Runtime staging 驗證後逐檔 atomic replace；不在開始前刪除所有 live assets；gitignore 防止原版衍生圖上傳。舊 `tools/rebuild_assets.ps1` 保留相容用途但不是推薦新入口。
+- Evidence: `docs/ASSET_CONVERTER.md`、`tools/asset_converter/README.md`、`local-assets/asset_converter/build_report.json`。Map13 9 visuals/78 spawns、573 frames/2 pages，Boy base 881 frames/1 page；Godot tests 5 PASS，Python tools/tests 92 PASS；Enemy 137 group all PASS、Weapon A-Sword014 1 group PASS；是否有全 7,893 群組全部通過以離線 `index.json` 為準。
+- Limits: 完整原版 screenshot Golden（AS005）與公開授權（AS008）、所有遊戲內容 Runtime integration、實際 GPU timing/切圖冷熱載入 Before/After 均 NOT VERIFIED；源 SPR 全轉換與玩法完整性不能混為一談。

@@ -11,6 +11,16 @@
 
 資源 Runtime 已收斂為單一簡單模型，詳 [Runtime Asset Bundle Architecture](docs/ASSET_BUNDLE_ARCHITECTURE.md)：`sgtest.animation/v2` 定義動畫語意、lifecycle bundle 決定一起載／卸的範圍、[RuntimeAssetStore](docs/RUNTIME_ASSET_STORE.md) 負責有界 async decode/GPU commit/cache。Production 對外只保留 **map / session / 真正 on-demand** 三種 ownership；怪物種類、方向、動作、人物部位、512/1024/2048/4096、hot/warm/cold 都不再是 Runtime 資產分類。Map13 九種怪目前共用一個 2048 map bundle，Boy base 六部位＋death 共用一個 2048 session bundle。ASSET205 的 [Monster Content Workflow](docs/MONSTER_CONTENT_WORKFLOW.md) 新增怪物時會重建該 map bundle，不再產生新的 per-monster atlas 類型。RUNTIME206 的 Render/Logic/Network 隔離、多 FPS／低功耗／背景／多開矩陣已完成，見 [RUNTIME_ISOLATION_VERIFICATION.md](docs/RUNTIME_ISOLATION_VERIFICATION.md)。
 
+## Adaptive Atomic Atlas 一鍵資產轉換
+
+正式名稱為 **Adaptive Atomic Atlas（自適應原子圖集）**。資產轉換程式集中在 `tools/asset_converter/`，使用原始遊戲路徑即可轉換並驗證。詳細說明見 [ASSET_CONVERTER](docs/ASSET_CONVERTER.md)。
+
+```bat
+run_build_assets.bat "C:\SGO\Stargate Online IE HK2"
+```
+
+完整原始 SPR Atlas、ACT、SIF 與 DrawOrder 索引保留在 **本機私有的** `local-assets/asset_converter/complete/`，避免所有素材被 Godot 常駐；目前有消費端的 Map13／Player Base 直接輸出到 `client/assets/bundles/` 與 `client/assets/maps/`。不需要額外的 `generated/` 目錄。原版與衍生圖片均不推 Git。
+
 ## 啟動
 
 從儲存庫根目錄執行，需 .NET 8 SDK、Godot 4（本機 4.7.2）及 Python 3.10+。
@@ -18,7 +28,7 @@
 ```powershell
 # 首次建立本機素材（原版只讀；生成圖像不進 Git）
 python -m pip install -r requirements.txt
-.\tools\rebuild_assets.ps1 -Client 'C:\SGO\Stargate Online IE HK2'
+run_build_assets.bat "C:\SGO\Stargate Online IE HK2"
 
 # 終端一：C# 伺服器
  dotnet run --project server/SGTest.Server.csproj -c Release -- --map=13
@@ -38,7 +48,7 @@ python -m pip install -r requirements.txt
 正式 sprite pipeline 不再要求開發者選 entity/direction/readable/hot-warm-cold。從原始檔重建只需：
 
 ```powershell
-.\tools\rebuild_assets.ps1 -Client 'C:\SGO\Stargate Online IE HK2'
+run_build_assets.bat "C:\SGO\Stargate Online IE HK2"
 # 或已存在 .cache/client 時只重建 Runtime sprite bundles：
 python tools\asset_pipeline.py
 ```

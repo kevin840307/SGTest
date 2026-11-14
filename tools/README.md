@@ -4,11 +4,13 @@
 
 ## Production asset path
 
-日常完整重建只使用：
+新的完整原版素材轉換與 Runtime 重建入口：
 
-```powershell
-.\tools\rebuild_assets.ps1 -Client 'C:\SGO\Stargate Online IE HK2'
+```bat
+run_build_assets.bat "C:\SGO\Stargate Online IE HK2"
 ```
+
+`tools/asset_converter/` 為獨立入口，詳見 `docs/ASSET_CONVERTER.md`；已存在的 `tools/rebuild_assets.ps1` 保留舊式驗收／相容用途（會清除 live assets），不要作為新轉換器的預設操作。
 
 已存在 `.cache/client` 時，sprite/runtime bundle 入口是：
 
@@ -20,7 +22,8 @@ Production 組成：
 
 - `extract_client.py`：唯讀提取原始 Client 到 `.cache/client`。
 - `build_maps.py`：從原始 map/grid/object references 產生目前 Runtime 會用的 terrain、collision、world metadata；場景 SPR bounds 直接解原檔，不依賴舊 generated atlas。
-- `asset_pipeline.py`：唯一公開 sprite runtime pipeline；依 lifetime 建 map/session bundle。
+- `asset_converter/cli.py`：**Adaptive Atomic Atlas** 唯一公開離線全素材／Runtime 一鍵 CLI；封裝抽取、逐格驗證、增量建置和安全發布。
+- `asset_pipeline.py`：由上述 CLI 調用的 Runtime bundle 底層入口；依 lifetime 建 map/session bundle。
 - `asset_bundle_builder.py`：pipeline 內部共同 packing primitive；normalized animation 與無 ACT raw SPR 都走同一 manifest/runtime。
 - `monster_workflow.py`：資料驅動新增／更新怪物；重建既有 map bundle，不建立新 Loader。
 - `export_server_content.py`：只輸出 Server 所需 collision/population contract，不輸出圖片。
