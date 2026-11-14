@@ -37,3 +37,5 @@ py tools/build_atlas_groups.py 'C:\SGO\Stargate Online IE HK2' local-assets/mixe
 這只證明獨立 ImageTexture 釋放在此測試中沒有累積；未來的 AssetCatalog、地圖切換、玩家外觀引用、Godot ResourceLoader 快取及 AFK 生命週期還未實作，不能宣稱整個 Client 沒有漏資源。
 
 未測：正式資源管理器的地圖切換與 GPU/RAM 回收、相同資產跨地圖共用、混合玩家裝備、實際 500 掉落圖示、網路事件即時同步、原版影格定位及 Recovered 同機對照。不能從這份渲染代理負載推論 Client／Server 遊戲已達標。
+
+後續已從原版 `CSGOItemDrawLogic::InitItem` 找到真正的地上物品圖 `Interface/ground.spr`，其逐圖／1024／2048／4096 A/B 見 [HK2_GROUND_ART_BENCHMARK.md](HK2_GROUND_ART_BENCHMARK.md)。本頁的 `MS` 負載仍保留為舊測試代理，不改稱真掉落物。
