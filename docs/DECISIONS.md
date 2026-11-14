@@ -311,3 +311,10 @@ ADR-026補充：使用者指定Client一般遊玩支援30～90FPS；FPS選項只
 - Decision: source/convert_assets共用source/runtime_spr的RGB565/indexed/CDE解碼；原始來源唯讀。每組來源錯誤帶相對路徑＋SHA；每50組checkpoint保留結果。完整SPR集合對原版Data1+loose稽核，禁止殘缺extracted cache通過完整建置並發布Runtime。
 - Cache: decoder SHA與metadata SHA加入manifest；舊cache重新decode並驗證像素／crop／size／pivot後只更新metadata，不重pack正確PNG。圖或metadata損毀重建，空白影格不得補成假圖。
 - Evidence: 目前原版union 75,588 SPR／隔離source 75,588，missing=0、extra=0，實際分組7890；舊75591/7893不是本次基準。Indexed fixture保留綠色pixel與origin、CLI跨工作目錄啟動、cache修復與incomplete-source拒絕已測；全量完成與sidecar統計另補，不提前勾選ASSET209。
+
+## ADR-039 — 候選只量幾何，選定後產圖並雙向驗證（2026-11-15）
+
+- Status: 4924dc4幾何評估實作已合入；本次補可重跑A/B與發布保護。
+- Decision: 保持原SPR atomic／2px shelf／MaxRects的實際演算法，512/1024/2048/4096候選評估不建立PIL頁面。只繪製最終選中方案；發布前actual page count/RGBA必須與候選一致，再逐格比對source crop/size/origin/pixels。
+- Evidence: `tools/benchmark_converter_planning.py`，三次CPU process_time中位數：EN010A 765.625→1.719ms、Boy body 3093.750→30.625ms、hair00 3062.500→36.250ms；geometry batch100避免短測量量化成0。四尺寸候選頁數／RGBA相等。原始樣本與source/module SHA見reports/converter_planning_geometry.json。此為候選評估，非全建置／Runtime FPS或RAM提升宣稱。
+- Regression: 160組隨機候選對照真打包、全透明／atomic多頁拒絕／無畫布配置、錯誤估值拒絕發布、JSON類型壞cache重建；tools/tests共108 PASS。全量archive仍獨立驗收，ASSET209尚未完成。

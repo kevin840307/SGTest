@@ -44,7 +44,8 @@ def _source_fingerprint(root: Path, paths: list[Path]) -> tuple[str, list[dict]]
 
 def _previous_manifest(path: Path) -> dict:
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
+        parsed = json.loads(path.read_text(encoding="utf-8"))
+        return parsed if isinstance(parsed,dict) else {}
     except (OSError, ValueError, TypeError):
         return {}
 
@@ -223,6 +224,8 @@ def build_group(
     candidates = _measure_candidates(frames, source_ranges)
     selected = choose_candidate(candidates)
     pages, records = pack_source_blocks(frames, source_ranges, int(selected["side"]))
+    if len(pages) != selected['pages'] or sum(page.width*page.height*4 for page in pages) != selected['rgba_bytes']:
+        raise ValueError('measured atlas geometry differs from actual packed pages')
     _verify_packed_frames(frames, pages, records)
 
     folder.mkdir(parents=True, exist_ok=True)

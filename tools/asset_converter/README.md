@@ -77,3 +77,9 @@ tools/asset_converter/
 增量manifest保留decoder SHA與metadata SHA；舊cache先逐像素／size／crop／pivot驗證才升級stamp，已正確的PNG不重新packing。metadata或PNG損毀會重建。每50組寫 `checkpoint.json`，保留成功與失敗來源，最終看 `index.json.status`／errors，進度數字不代表完成。
 
 完整SPR來源數以當次原版 archive+loose union為準，不把舊7893組/75591 SPR硬寫成門檻。2026-11-15隔離抽取的實際集合為7890組/75588 SPR，presence audit無缺檔／額外檔；完整Atlas與sidecar結果仍須驗收，不等同全部遊戲功能已接線。
+
+## 候選幾何評估回歸與A/B
+
+從專案根目錄重跑離線評估：`python tools/benchmark_converter_planning.py --source .cache/asset_converter/source`。三組真素材各跑3次；快速幾何路徑每次batch 100次取單次CPU時間，避免Windows process CPU timer把短測量量成0。報告含來源SHA與打包模組SHA，只比較候選評估，沒有包含最終PNG產出／磁碟／遊戲FPS。
+
+2026-11-15三次中位數：EN010A 765.625→1.719ms；Boy body 3093.750→30.625ms；Boy hair00 3062.500→36.250ms。四候選尺寸的頁數／RGBA面積全相等；160組隨機候選以及透明／atomic失敗／無畫布配置測試PASS。最終真打包的頁數與RGBA成本另須吻合選定候選，否則拒絕發布。`reports/converter_planning_geometry.json`保留原始樣本與指紋，不把此結果推論成遊戲FPS或整體建置相同比例加速。

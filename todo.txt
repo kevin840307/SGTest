@@ -139,3 +139,5 @@ ASSET209續作（2026-11-15）[~]：修改前：asset_converter/cli.py含literal
 ASSET209修復驗證（2026-11-15）：tool package compileall PASS；tools/tests 99 PASS（含10項asset_converter fixture）；Godot directions/monster_visuals/map_objects_async/paper_doll_async/runtime_asset_store五項PASS。已修復共用indexed/RGB565 decoder、CLI語法、decoder/metadata hash快取及來源集合拒絕；原版SPR presence 75588/75588、missing=0 extra=0，7890groups。全量archive目前仍在實際執行，未完成不標[x]；進度與錯誤checkpoint已可稽核。另一組batch/ASSET_CONVERTER文件更新保留，不夾帶本修復commit。
 
 ASSET209 幾何尺寸評估最佳化（2026-11-15）[x]：`atlas/build_atlas_groups.measure_source_blocks` 以純幾何模擬來源 SPR padded shelf＋MaxRects，在四個尺寸候選只算頁數與 RGBA 面積，最終仍用原 pack_source_blocks 繪製一次且逐格像素/來源原點驗證。Player/A/Standard/A-Hair00 四候選舊3,396.8ms→新24.97ms（僅候選量測，不是整體轉換速度）；四候選頁數/面積精確一致。新增 tools/tests/test_adaptive_measure.py 4組回歸（透明、多頁、padding 邊界），工具測試 103 PASS；真原版玩家髮型單群組建置 PASS。完整離線 archive 稽核仍需驗證 index.json，未完成不標[x]。
+
+ASSET209補充驗證（2026-11-15）：已對4924dc4幾何評估加入可重跑三次A/B、160組隨機候選對照／無PIL頁配置／選定估值與真打包成本一致保護／非dict壞cache重建。tools/tests 108 PASS；實測CPU及範圍見ADR-039、reports/converter_planning_geometry.json。第一個舊評估程序在6750/7890時有意結束，因已證明幾何等價且CPU節省顯著；新程序續用逐像素驗證後的cache，原始資料未變，沒有因觀察逾時重啟。全量來源及sidecars仍在驗收，不提前勾選。
