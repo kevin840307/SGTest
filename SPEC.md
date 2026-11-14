@@ -14,6 +14,7 @@
 4. **ASSET203：資料支持的決策。** 比較載入／重載、GPU提交尖峰、卸載粒度、RAM／GPU峰值、CPU、Draw Calls、Frame P95/P99及cache amplification，再更新ADR／SPEC／TODO。沒有實測不能宣稱某尺寸／單張／MultiMesh較快。
 5. **ASSET204：統一Runtime實作。** 統一Definition／Page ID；同種及多人共享immutable動畫與Texture。owner引用計數、有界CPU解碼queue、主執行緒GPU提交預算、按需／預載、cache上限、只淘汰ref=0的LRU、取消generation。切圖／登出釋放owner及不必要常駐資源。Net／State／Command／Server頻率不受載入或渲染限制影響。
 6. **ASSET205：新增怪物資料流程。** 原始SPR/ACT＋一份 recipe（definition id／runtime stats／出生設定）→fail-closed驗證→normalized definition／clip-atomic builder→40-view private preview→population v2／client/server內容。新增種類不需改C#／GDScript；ID、來源hash與內容指紋穩定，full rebuild會由 `content/monster_recipes/*.monster.json` 重套。ASSET205需跑離線/E2E與標準60FPS多人 live-add Gate；30/45/60/75/90FPS、5/10/15 low-power、失焦／最小化／1/2/4/8開完整trace統一歸 RUNTIME206，不重複宣稱。
+7. **RUNTIME206：Render／Client Logic／Network／Server 隔離。** 已完成正式 Gate：一般30/45/60/75/90FPS、Visual 5/10/15低功耗、no-world、真 Windows unfocus/minimize/restore、Unfocus toggle、1/2/4/8開、queue age與同Server authoritative state hash。預設Render60FPS；UI只改呈現，physics／input／network reducer／Server固定30Hz。完整重跑命令與限制見 `docs/RUNTIME_ISOLATION_VERIFICATION.md`。
 
 ### 0.2 可接受門檻（目標，非已通過）
 

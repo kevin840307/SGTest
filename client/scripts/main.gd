@@ -53,6 +53,25 @@ var terrain: MultiMeshInstance2D
 var map_objects := preload("res://scripts/map_objects.gd").new()
 var render_order: Array = []
 var render_elapsed := 1.0
+var runtime_trace := false
+var trace_started_usec := 0
+var trace_last_usec := 0
+var trace_physics_steps := 0
+var trace_render_frames := 0
+var trace_visual_updates := 0
+var trace_snapshots := 0
+var trace_owner_states := 0
+var trace_actions := 0
+var trace_input_commands := 0
+var trace_last_rx := 0
+var trace_last_tx := 0
+var trace_origin := Vector2.ZERO
+var trace_origin_set := false
+var visual_target_fps := 0
+var visual_elapsed := 0.0
+var no_world_render := false
+var unfocus_low_power_enabled := true
+var render_target_fps := 60
 
 const PLAYER_HP := 100
 var own_id := 0
@@ -62,6 +81,10 @@ var wire := preload("res://scripts/message_pack.gd").new()
 func _ready() -> void:
 	var arguments := OS.get_cmdline_user_args()
 	bot = arguments.has("--bot")
+	runtime_trace = arguments.has("--runtime-trace")
+	if runtime_trace:
+		trace_started_usec = Time.get_ticks_usec()
+		trace_last_usec = trace_started_usec
 	if arguments.has("--server"):
 		push_error("Start the C# server with dotnet run --project server/SGTest.Server.csproj")
 		get_tree().quit(1)
@@ -82,6 +105,31 @@ func _ready() -> void:
 			asset_root = argument.trim_prefix("--assets=")
 		if argument.begins_with("--monster-assets="):
 			monster_asset_root = argument.trim_prefix("--monster-assets=")
+		if argument.begins_with("--visual-fps="):
+			visual_target_fps = int(argument.trim_prefix("--visual-fps="))
+		if argument.begins_with("--render-fps="):
+			render_target_fps = int(argument.trim_prefix("--render-fps="))
+		if argument.begins_with("--unfocus-low-power="):
+			unfocus_low_power_enabled = int(argument.trim_prefix("--unfocus-low-power=")) != 0
+		if argument == "--no-world-render":
+			no_world_render = true
+	if render_target_fps < 30 or render_target_fps > 90:
+		push_error("--render-fps must be within 30..90")
+		get_tree().quit(1)
+		return
+	if visual_target_fps not in [0,5,10,15]:
+		push_error("--visual-fps supports only 5/10/15 low-power presentation rates")
+		get_tree().quit(1)
+		return
+	# Network/state/input live on the 30Hz fixed logic contract. Never allow an
+	# external/project render cap below 30 to turn physics catch-up into 200ms
+	# packet/command bursts; 5/10/15 low-power is presentation-only.
+	if Engine.max_fps > 0 and Engine.max_fps < 30:
+		Engine.max_fps = 30
+	if "--render-fps=%d" % render_target_fps in arguments:
+		Engine.max_fps = render_target_fps
+	if visual_target_fps > 0:
+		Engine.max_fps = 30
 	print("SGO client starting")
 	asset_store.configure(24 * 1024 * 1024, 16 * 1024 * 1024)
 	asset_store.start()
@@ -187,6 +235,8 @@ func _world_info(server_map: int, fingerprint: String, population_hash: String) 
 	network.send(24,[server_map,fingerprint,population_hash])
 
 func _physics_process(delta: float) -> void:
+	if runtime_trace:
+		trace_physics_steps += 1
 	for bytes in network.receive():
 		var packet: Array = wire.decode(bytes)
 		if packet.is_empty():
@@ -194,12 +244,79 @@ func _physics_process(delta: float) -> void:
 			network.close()
 			return
 		_dispatch(int(packet[1]),packet[2])
+	# ServerSimClock belongs to fixed logic, never to visual/render cadence.
+	server_time = clock_sync.advance(Time.get_ticks_usec()/1000000.0)
 	diagnostics_time += delta
 	if int(diagnostics_time/5.0) > int((diagnostics_time-delta)/5.0) and prediction.initialized:
 		print("prediction_metrics "+JSON.stringify({"pending":prediction.pending.size(),"max_pending":prediction.max_pending,"max_correction_px":prediction.max_correction,"reconciliations":prediction.reconciliations}))
 		var asset_metrics := asset_store.statistics()
 		print("asset_store_metrics "+JSON.stringify({"resident_bytes":asset_metrics.resident_bytes,"ready_queue_bytes":asset_metrics.ready_queue_bytes,"entries":asset_metrics.entries,"pending":asset_metrics.pending,"cache_hits":asset_metrics.cache_hits,"cache_misses":asset_metrics.cache_misses,"evictions":asset_metrics.evictions,"peak_resident_bytes":asset_metrics.peak_resident_bytes}))
 	_client_step(delta)
+	ping_elapsed += delta
+	if ping_elapsed >= 1.0 and map_ready and network.is_open():
+		ping_elapsed = 0.0
+		network.send(23,[Time.get_ticks_usec()/1000000.0])
+	if runtime_trace:
+		_runtime_trace_report()
+
+func _runtime_trace_report() -> void:
+	var now := Time.get_ticks_usec()
+	var elapsed := (now-trace_last_usec)/1000000.0
+	if elapsed < 5.0:
+		return
+	var net := network.statistics()
+	var rx := int(net.received_packets)
+	var tx := int(net.sent_packets)
+	var own_state: Dictionary = visible_players.get(own_id,{})
+	var own_position: Vector2 = own_state.get("p",Vector2.ZERO)
+	if not trace_origin_set and prediction.initialized:
+		trace_origin = own_position
+		trace_origin_set = true
+	var focused := true
+	var window_mode := -1
+	if DisplayServer.get_name() != "headless":
+		focused = DisplayServer.window_is_focused()
+		window_mode = int(DisplayServer.window_get_mode())
+	var report := {"elapsed_s":(now-trace_started_usec)/1000000.0,
+		"window_s":elapsed,
+		"physics_hz":trace_physics_steps/elapsed,
+		"engine_frame_hz":trace_render_frames/elapsed,
+		"visual_update_hz":trace_visual_updates/elapsed,
+		"visual_target_fps":visual_target_fps,
+		"no_world_render":no_world_render,
+		"window_focused":focused,
+		"window_mode":window_mode,
+		"prediction_sequence":prediction.sequence,
+		"prediction_last_tick":prediction.last_tick,
+		"prediction_pending":prediction.pending.size(),
+		"own_relative":[own_position.x-trace_origin.x,own_position.y-trace_origin.y] if trace_origin_set else [0.0,0.0],
+		"texture_memory_bytes":int(RenderingServer.get_rendering_info(RenderingServer.RENDERING_INFO_TEXTURE_MEM_USED)),
+		"video_memory_bytes":int(RenderingServer.get_rendering_info(RenderingServer.RENDERING_INFO_VIDEO_MEM_USED)),
+		"static_memory_bytes":OS.get_static_memory_usage(),
+		"rx_packets":rx-trace_last_rx,
+		"tx_packets":tx-trace_last_tx,
+		"snapshots":trace_snapshots,
+		"owner_states":trace_owner_states,
+		"actions":trace_actions,
+		"input_commands":trace_input_commands,
+		"input_hz":trace_input_commands/elapsed,
+		"queue_age_p95_ms":net.age_p95_ms,
+		"queue_age_p99_ms":net.age_p99_ms,
+		"queue_age_max_ms":net.age_max_ms,
+		"incoming_depth":net.incoming_depth,
+		"max_incoming_depth":net.max_incoming_depth,
+		"network_failed":net.failed}
+	print("runtime_trace "+JSON.stringify(report))
+	trace_last_usec = now
+	trace_physics_steps = 0
+	trace_render_frames = 0
+	trace_visual_updates = 0
+	trace_snapshots = 0
+	trace_owner_states = 0
+	trace_actions = 0
+	trace_input_commands = 0
+	trace_last_rx = rx
+	trace_last_tx = tx
 
 func _dispatch(op: int, b: Array) -> void:
 	match op:
@@ -218,7 +335,33 @@ func _dispatch(op: int, b: Array) -> void:
 		7: _interest_remove(b[0],b[1],PackedInt32Array(b[2]))
 		8: _clock_pong(b[0],b[1])
 
+func _authority_state_hash() -> String:
+	var rows: Array = []
+	var player_ids := visible_players.keys()
+	player_ids.sort()
+	for id in player_ids:
+		var state: Dictionary = visible_players[id]
+		var p: Vector2 = state.p
+		rows.append([0,int(id),roundi(p.x*1000.0),roundi(p.y*1000.0),int(state.hp),
+			int(state.facing),int(state.pose),int(state.revision),int(state.get("definition",0))])
+	var monster_ids := visible_monsters.keys()
+	monster_ids.sort()
+	for id in monster_ids:
+		var state: Dictionary = visible_monsters[id]
+		var p: Vector2 = state.p
+		rows.append([1,int(id),roundi(p.x*1000.0),roundi(p.y*1000.0),int(state.hp),
+			int(state.facing),int(state.pose),int(state.revision),int(state.get("definition",0))])
+	var drop_ids := visible_drops.keys()
+	drop_ids.sort()
+	for id in drop_ids:
+		var drop: Dictionary = visible_drops[id]
+		var p: Vector2 = drop.p
+		rows.append([2,int(id),roundi(p.x*1000.0),roundi(p.y*1000.0),int(drop.get("definition",0))])
+	return JSON.stringify(rows).sha256_text()
+
 func _owner_state(tick: int, clock: float, acknowledged: int, epoch: int, at: Vector2, hp: int, facing: int, pose: int, started: float, revision: int) -> void:
+	if runtime_trace:
+		trace_owner_states += 1
 	if not map_ready:
 		return
 	var id := own_id
@@ -227,7 +370,6 @@ func _owner_state(tick: int, clock: float, acknowledged: int, epoch: int, at: Ve
 		if ACTION.newer_revision(current.revision,revision) and (int(current.hp) == 0) != (hp == 0):
 			return
 	clock_sync.observe_snapshot(clock,Time.get_ticks_usec()/1000000.0)
-	server_time = clock_sync.advance(Time.get_ticks_usec()/1000000.0)
 	_replica_changed(0,id,replica.snapshot(0,tick,[id,at.x,at.y,hp,facing,pose,started,revision]))
 	if prediction.authority(tick,acknowledged,epoch,at,hp,Time.get_ticks_usec()/1000000.0):
 		if prediction.motion.is_zero_approx():
@@ -235,8 +377,13 @@ func _owner_state(tick: int, clock: float, acknowledged: int, epoch: int, at: Ve
 		if not prediction_observed:
 			prediction_observed = true
 			print("prediction_ready")
+	if runtime_trace and tick%150 == 0:
+		print("state_checkpoint "+JSON.stringify({"tick":tick,"hash":_authority_state_hash(),
+			"players":visible_players.size(),"monsters":visible_monsters.size(),"drops":visible_drops.size()}))
 
 func _action_event(kind: int, id: int, facing: int, pose: int, clock: float, hp: int, revision: int, at: Vector2, tick: int, definition: int) -> void:
+	if runtime_trace:
+		trace_actions += 1
 	if not action_observed:
 		action_observed = true
 		print("action_received")
@@ -277,6 +424,8 @@ func _update_health(id: int, hp: int, pose: int) -> void:
 		health_label.text = "生命 %d / %d%s" % [hp,PLAYER_HP,"　倒地，等待復活" if hp == 0 else ""]
 
 func _snapshot_chunk(tick: int, clock: float, kind: int, payload: PackedByteArray) -> void:
+	if runtime_trace:
+		trace_snapshots += 1
 	if kind not in [0,1] or payload.size() > CODEC.ROWS_PER_PACKET*CODEC.STRIDE:
 		return
 	clock_sync.observe_snapshot(clock,Time.get_ticks_usec()/1000000.0)
@@ -285,7 +434,8 @@ func _snapshot_chunk(tick: int, clock: float, kind: int, payload: PackedByteArra
 	if tick%150 == 0 and tick != last_snapshot:
 		last_snapshot = tick
 		print("snapshot_received tick=%d players=%d monsters=%d drops=%d" % [tick,visible_players.size(),visible_monsters.size(),visible_drops.size()])
-	queue_redraw()
+	# World redraw cadence is owned by VisualClock in _process. Network/state
+	# updates must not force a render frame in low-power/no-world modes.
 
 func _interest_remove(tick: int, kind: int, ids: PackedInt32Array) -> void:
 	replica.erase_interest(kind,tick,ids)
@@ -322,11 +472,15 @@ func _client_step(delta: float) -> void:
 		return
 	var motion := Input.get_vector("ui_left", "ui_right", "ui_up", "ui_down")
 	if bot:
-		motion = Vector2.from_angle(Time.get_ticks_msec()/1000.0+bot_index*0.733)
+		# Deterministic per-input-sequence bot trace. Render FPS and wall-clock
+		# scheduling cannot change the requested motion series.
+		motion = Vector2.from_angle(float((prediction.sequence+1)%360)*PI/180.0+bot_index*0.733)
 	prediction.step_input(motion,Time.get_ticks_usec()/1000000.0,server_time)
 	var packet := prediction.packet()
 	if not packet.is_empty():
 		network.send(20,[prediction.epoch,packet])
+		if runtime_trace:
+			trace_input_commands += 1
 	input_elapsed += delta
 	if input_elapsed < 0.05:
 		return
@@ -462,6 +616,26 @@ func _build_ui() -> void:
 		get_window().size = window_sizes[index])
 	get_window().size_changed.connect(func() -> void: _sync_window_size(sizes, window_sizes))
 	stack.add_child(sizes)
+
+	var performance_title := Label.new()
+	performance_title.text = "效能"
+	stack.add_child(performance_title)
+	var fps_button := OptionButton.new()
+	var fps_options := [30,45,60,75,90]
+	for fps in fps_options:
+		fps_button.add_item("%d FPS" % fps)
+	var fps_index := fps_options.find(render_target_fps)
+	fps_button.select(fps_index if fps_index >= 0 else fps_options.find(60))
+	fps_button.item_selected.connect(func(index: int) -> void:
+		render_target_fps = int(fps_options[index])
+		Engine.max_fps = render_target_fps)
+	stack.add_child(fps_button)
+	var unfocus_toggle := CheckBox.new()
+	unfocus_toggle.text = "Unfocus 節能（失焦降為 15 FPS）"
+	unfocus_toggle.button_pressed = unfocus_low_power_enabled
+	unfocus_toggle.toggled.connect(func(enabled: bool) -> void:
+		unfocus_low_power_enabled = enabled)
+	stack.add_child(unfocus_toggle)
 	_style_ui()
 
 func _sync_window_size(button: OptionButton, presets: Array) -> void:
@@ -492,6 +666,8 @@ func _load_sample_atlas() -> void:
 			push_error("Cannot queue player composition: %s" % error)
 
 func _process(delta: float) -> void:
+	if runtime_trace:
+		trace_render_frames += 1
 	# One visual commit budget for every owner. Network/state processing stays in
 	# _physics_process and is never gated by visual readiness.
 	asset_store.poll_gpu(1,1200)
@@ -502,11 +678,27 @@ func _process(delta: float) -> void:
 		doll.reset(false)
 	if profiler != null:
 		profiler.sample(delta)
-	server_time = clock_sync.advance(Time.get_ticks_usec()/1000000.0)
-	ping_elapsed += delta
-	if ping_elapsed >= 1.0 and map_ready and network.is_open():
-		ping_elapsed = 0.0
-		network.send(23,[Time.get_ticks_usec()/1000000.0])
+	visual_elapsed += delta
+	var minimized := false
+	var focused := true
+	if DisplayServer.get_name() != "headless":
+		minimized = DisplayServer.window_get_mode() == DisplayServer.WINDOW_MODE_MINIMIZED
+		focused = DisplayServer.window_is_focused()
+	# Minimized windows always stop world rendering without unloading resources.
+	# Unfocused windows default to 15 FPS presentation and can be disabled by the
+	# future performance setting/CLI; network, reducer and fixed logic stay 30Hz.
+	if no_world_render or minimized:
+		return
+	var effective_visual_fps := visual_target_fps
+	if unfocus_low_power_enabled and not focused:
+		effective_visual_fps = 15 if effective_visual_fps == 0 else mini(effective_visual_fps,15)
+	if effective_visual_fps > 0:
+		var interval := 1.0/float(effective_visual_fps)
+		if visual_elapsed + 0.000001 < interval:
+			return
+		visual_elapsed = fmod(visual_elapsed,interval)
+	if runtime_trace:
+		trace_visual_updates += 1
 	for id in rendered_players.keys():
 		if not visible_players.has(id):
 			rendered_players.erase(id)

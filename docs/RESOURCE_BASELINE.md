@@ -35,9 +35,9 @@
 
 這是當前同步載入與舊分組的基準，尚未選定最終 Atlas 尺寸或排法。檢查各列 FAIL；不能只因 load 小於 1 秒便宣稱玩家無感，亦不能以平均 60FPS 排除角色位移頓挫。原始記錄、輸入 SHA 與各 gate 詳見 [摘要](../reports/runtime_baseline_summary.json)。
 
-一般遊玩支援 **30～90FPS**；這只改呈現，不改 Client／Server 傳輸或固定邏輯頻率。5／10／15FPS 與停止世界繪製是另列的低功耗掛機模式。尚未跑完同 trace／背景／2／4／8 開，不能宣稱已支援。
+一般遊玩支援 **30～90FPS**；這只改呈現，不改 Client／Server 傳輸或固定邏輯頻率。5／10／15FPS 與停止世界繪製是另列的低功耗掛機模式。RUNTIME206 已以同 Server deterministic state hash、真 Windows unfocus/minimize/restore 與 1／2／4／8 開矩陣完成驗證；完整證據見 [RUNTIME_ISOLATION_VERIFICATION.md](RUNTIME_ISOLATION_VERIFICATION.md)。
 
-ASSET201～205 已完成：標準動畫定義、Atlas 選型、bounded async RuntimeAssetStore 與資料驅動 Monster Content Workflow 分別見 [NORMALIZED_ANIMATION_DEFINITION.md](NORMALIZED_ANIMATION_DEFINITION.md)、[NORMALIZED_ATLAS_CANDIDATES.md](NORMALIZED_ATLAS_CANDIDATES.md)、[RUNTIME_ASSET_STORE.md](RUNTIME_ASSET_STORE.md)、[MONSTER_CONTENT_WORKFLOW.md](MONSTER_CONTENT_WORKFLOW.md)。`normalized_memory` 30-cycle 同素材同步 loader frame P99 53.52ms FAIL → bounded async 17.028ms PASS；20client/300monster/1000drop P95/P99 22.109/23.949ms。下一個主 Gate 是 RUNTIME206：30/45/60/75/90FPS、5/10/15低功耗、失焦／最小化／恢復、1/2/4/8開的同 trace network/state/render 因果矩陣。
+ASSET201～205 已完成：標準動畫定義、Atlas 選型、bounded async RuntimeAssetStore 與資料驅動 Monster Content Workflow 分別見 [NORMALIZED_ANIMATION_DEFINITION.md](NORMALIZED_ANIMATION_DEFINITION.md)、[NORMALIZED_ATLAS_CANDIDATES.md](NORMALIZED_ATLAS_CANDIDATES.md)、[RUNTIME_ASSET_STORE.md](RUNTIME_ASSET_STORE.md)、[MONSTER_CONTENT_WORKFLOW.md](MONSTER_CONTENT_WORKFLOW.md)。`normalized_memory` 30-cycle 同素材同步 loader frame P99 53.52ms FAIL → bounded async 17.028ms PASS；20client/300monster/1000drop P95/P99 22.109/23.949ms。RUNTIME206 亦已完成：30/45/60/75/90FPS、5/10/15低功耗、失焦／最小化／恢復、1/2/4/8開皆驗證 network/state 固定節奏與 authoritative state hash 不因 Render 改變。
 
 ## 重跑
 

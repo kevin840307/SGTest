@@ -246,3 +246,12 @@ ADR-026補充：使用者指定Client一般遊玩支援30～90FPS；FPS選項只
 - Rebuild: `rebuild_assets.ps1` 在重建原始 base population 與 normalized semantics 後，依檔名排序重套所有 `*.monster.json` recipes，再 export Server content；因此 custom monster 不靠手改 generated JSON/PNG 存活。
 - Evidence: 真 HK2 EN010A validate-only 16 source files／5 behaviors／40 logical views／spawn collision PASS／preview 768×495；無既有 atlas 時可自行產 runtime v9/schema v2 1 page 252×684。Temporary live-add definition81 後 Server 載入 79 monsters／10 definitions；20 clients/40s mean 59.998FPS、frame P95/P99 17.71/17.907ms、20/20 snapshot/prediction ready、0 ERROR，且 10 definitions 共用 9 atlases；Server穩態 tick P99 約0.26～0.29ms。測後已由原始 Dat 還原正式 v2 9/78。
 - Boundary: Recipe v1 只涵蓋目前 monster 五動作與 prototype combat stats；特殊 Boss action schema、掉落/技能/任務/behavior tree 仍需獨立版本。完整 30/45/60/75/90FPS、5/10/15 low-power、失焦／最小化／恢復、1/2/4/8 開 trace 統一屬 RUNTIME206。詳 [MONSTER_CONTENT_WORKFLOW.md](MONSTER_CONTENT_WORKFLOW.md)。
+
+## ADR-033 — RUNTIME206 Render/Logic/Network isolation accepted（2026-11-14）
+
+- Status: **ACCEPTED**。
+- Decision: Render FPS、Visual low-power、Unfocus、Minimize、no-world 只屬 presentation policy；Client fixed physics/input、socket pump、packet reducer、ServerSimClock 與 Server simulation 維持獨立30Hz。一般遊玩支援30/45/60/75/90FPS，預設60FPS；5/10/15為 VisualClock low-power。低於30的 Engine cap 會被 runtime guard 拉回30。
+- UI: HUD「效能」提供30/45/60/75/90 FPS及 Unfocus 節能開關；Minimize 永遠停止世界呈現，不受 Unfocus toggle 影響，且不斷 network/state。
+- Evidence: completion rerun 的30/45/60/75/90與Visual5/10/15/no-world同Server authoritative hashes全部一致；正式矩陣 queue P99 最差38.992ms。真Windows minimize/unfocus/restore與unfocus-off均PASS。1/2/4/8 native clients全PASS，8開physics 29.957～30.012Hz、queue P99 33.22ms、0 Server error。
+- Burst/guard: 128 packet burst drain/decode 0.888ms；故意 `--max-fps 5` 仍維持約30Hz固定邏輯，queue P99 24.344ms。
+- Boundary: physical driver VRAM、不同高刷新率顯示器上的實際75/90 render、120FPS額外壓測、cold-disk跨硬體矩陣不屬正式Gate；AS005逐格視覺與AS008發布權仍是獨立未完成Gate。完整證據見 [RUNTIME_ISOLATION_VERIFICATION.md](RUNTIME_ISOLATION_VERIFICATION.md)。

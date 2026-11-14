@@ -9,7 +9,7 @@
 
 ## 最新資源架構重評
 
-先依 [SPEC 第0節](SPEC.md) 交付可重跑基準。ASSET201～204 的 normalized animation、Atlas 選型與 [RuntimeAssetStore](docs/RUNTIME_ASSET_STORE.md) 已完成；ASSET205 的 [Monster Content Workflow](docs/MONSTER_CONTENT_WORKFLOW.md) 也已完成：一份 `*.monster.json` recipe 可驗證原始 SPR/ACT、產 40-view private preview、runtime atlas、population v2 stats/spawn 與 Server content，不需再改 C#/GDScript，full rebuild 會自動重套 recipes。下一個主 Gate 是 RUNTIME206 的多 FPS／低功耗／背景／多開同步矩陣。
+先依 [SPEC 第0節](SPEC.md) 交付可重跑基準。ASSET201～204 的 normalized animation、Atlas 選型與 [RuntimeAssetStore](docs/RUNTIME_ASSET_STORE.md) 已完成；ASSET205 的 [Monster Content Workflow](docs/MONSTER_CONTENT_WORKFLOW.md) 也已完成：一份 `*.monster.json` recipe 可驗證原始 SPR/ACT、產 40-view private preview、runtime atlas、population v2 stats/spawn 與 Server content，不需再改 C#/GDScript，full rebuild 會自動重套 recipes。RUNTIME206 的 Render/Logic/Network 隔離、多 FPS／低功耗／背景／多開矩陣也已完成，證據見 [RUNTIME_ISOLATION_VERIFICATION.md](docs/RUNTIME_ISOLATION_VERIFICATION.md)；預設60FPS，UI 可選30/45/60/75/90，Unfocus 節能可關閉，而最小化永遠停止世界呈現但不停止同步。
 
 ## 啟動
 
