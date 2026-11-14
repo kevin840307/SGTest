@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Inspect audited Enemy ACT actions and logical facings from a private atlas catalog.
 
-Playback is a fixed manual preview interval, never a claim about legacy timing.
-Only pages for the selected action and facing are decoded at a time.
+Verified v2 catalogs play each frame using the audited HK2 default duration.
+Older/unverified catalogs fall back to a fixed 100ms inspection interval. Only
+pages for the selected action and facing are decoded at a time.
 """
 from __future__ import annotations
 
@@ -22,8 +23,8 @@ else:
 
 def read_catalog(path: Path) -> dict:
     catalog = json.loads(path.read_text(encoding="utf-8"))
-    if catalog.get("version") != 1 or not catalog.get("groups"):
-        raise ValueError("not a nonempty Enemy atlas catalog")
+    if catalog.get("version") not in (1, 2) or not catalog.get("groups"):
+        raise ValueError("not a supported nonempty Enemy atlas catalog")
     names = [group["enemy"] for group in catalog["groups"]]
     if len(names) != len(set(names)):
         raise ValueError("duplicate Enemy catalog name")
@@ -63,10 +64,20 @@ def load_selection(path: Path, group: dict, action_key: str, facing: int) -> tup
                       "source_frame": row["source_frame"],
                       "raw_time": row["raw_time"],
                       "legacy_default_update_calls": row["legacy_default_update_calls"],
+                      "legacy_reference_default_duration_ms": row.get("legacy_reference_default_duration_ms"),
                       "flip_x": direction["flip_x"]})
     if not steps:
         raise ValueError("action has no playback steps")
     return steps, action
+
+
+def playback_delay_ms(step: dict, timing_verified: bool) -> int:
+    if timing_verified:
+        value = step.get("legacy_reference_default_duration_ms")
+        if not isinstance(value, int) or value <= 0:
+            raise ValueError("verified timing step has no positive default duration")
+        return value
+    return 100
 
 
 def main() -> int:
@@ -80,7 +91,9 @@ def main() -> int:
     groups = {group["enemy"]: group for group in catalog["groups"]}
 
     window = tk.Tk()
-    window.title("SGO Enemy ACT Viewer — fixed preview timing")
+    timing_verified = bool(catalog.get("default_timing_verified", False))
+    window.title("SGO Enemy ACT Viewer — verified default timing" if timing_verified
+                 else "SGO Enemy ACT Viewer — fallback preview timing")
     window.geometry("1000x700")
     window.minsize(800, 600)
     window.maxsize(1440, 900)
@@ -125,8 +138,9 @@ def main() -> int:
                  f'source frame {step["source_frame"]} flip_x={step["flip_x"]} '
                  f'origin=({step["frame"].origin_x},{step["frame"].origin_y}) '
                  f'raw_time={step["raw_time"]} default Update calls={step["legacy_default_update_calls"]} '
+                 f'default_ms={step.get("legacy_reference_default_duration_ms")} '
                  f'events={len(action["events"])} H_special={action["special_init_path"]} '
-                 'preview=100ms (legacy milliseconds NOT VERIFIED)')
+                 f'playback={"verified default" if timing_verified else "100ms fallback"}')
 
     def select() -> None:
         state["playing"] = False
@@ -153,16 +167,20 @@ def main() -> int:
             state["index"] = (state["index"] + delta) % len(state["steps"])
             redraw()
 
+    def schedule_current() -> None:
+        current = state["steps"][state["index"]]
+        state["timer"] = window.after(playback_delay_ms(current, timing_verified), tick)
+
     def tick() -> None:
         state["timer"] = None
         if state["playing"]:
             step(1)
-            state["timer"] = window.after(100, tick)
+            schedule_current()
 
     def toggle_play() -> None:
         state["playing"] = not state["playing"]
         if state["playing"]:
-            state["timer"] = window.after(100, tick)
+            schedule_current()
         elif state["timer"] is not None:
             window.after_cancel(state["timer"])
             state["timer"] = None

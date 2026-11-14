@@ -146,3 +146,11 @@ ADR-016 的逐怪物尺寸實驗補充（2026-11-14）：50 組各測 1024／204
 - Decision: 完整 Enemy catalog 的 build-time atlas 使用 `source_spr_atomic_maxrects_v3`，並由 `plan_enemy_atomic_sizes.py` 對 512/1024/2048/4096 真實 packing 面積選尺寸；預設先最低 RGBA，再允許 5% 記憶體 overhead 換較少頁。每個原 SPR 是不可拆 atomic block，但不同 SPR block 可 co-pack；ACT logical facing 的鏡像只保留 metadata。
 - Evidence: 50 組計畫為 512×1、1024×21、2048×19、4096×9，共 65 pages／442,769,264 RGBA bytes，2,000/2,000 action-facing 單頁；Godot probe 50 groups／250 actions／2,000 directions／12,976 steps PASS。RTX3050 1440×900、300 怪：8 種時 pages 12→9、draw p95 286→275；50 種壓力 draw p95 372→372。詳 [HK2_ATOMIC_BALANCED_ATLAS.md](HK2_ATOMIC_BALANCED_ATLAS.md)。
 - Runtime boundary: 不允許全 50 種常駐；ADR-020 MapAssetPalette 仍決定實際地圖工作集。完整 catalog 的全量 Video Memory 僅為壓力參考。Player／ground item／UI 必須各自驗證，不能照抄 Enemy 策略。
+
+## ADR-022 — Animation timeline 使用 verified 50Hz ACT timing，與移動/render FPS 解耦（2026-11-14）
+
+- Status: **ACCEPTED DEFAULT-TIMING CONTRACT / DYNAMIC SPEED PARTIAL**。
+- Decision: HK2 ACT default timing 採 `floor(raw_time * 40 / 25) * 20ms`；50Hz/20ms fixed-update、40/25、decrement 與 `SystemSetFrame(50)` 均由 HK2 Client.bin / SGOClient.bin byte audit 驗證。Runtime 保留 raw_time/ticks/default-ms，`SetSpeed` 未完整映射前不得任意改寫。
+- Rendering rule: Animation timeline 不由 Render FPS、UI FPS 或 entity world movement speed 推進。30/60/120 FPS 只取樣同一時間軸；角色跑得快、機甲位移快都不能因此讓 walk/attack/hit 動畫自動加速。只有明確 action-speed 語意可改 timeline rate。
+- Evidence: `tools/audit_action_timing_binary.py`、[HK2_ACTION_TIMING.md](HK2_ACTION_TIMING.md)；178/178 ACT schema v3 PASS，50-group Godot 12,976 playback steps `timing_verified=true`。
+- Remaining: 人物 numeric action ID、`SetSpeed` caller/packet 語意、ACT event callback、AS005 原版逐格畫面。

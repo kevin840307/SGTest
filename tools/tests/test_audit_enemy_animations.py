@@ -40,6 +40,9 @@ class EnemyAuditTests(unittest.TestCase):
             self.assertEqual(len(result["actions"][0]["directions"]), 8)
             self.assertEqual(result["actions"][0]["directions"][5]["source_direction"], 1)
             self.assertTrue(result["actions"][0]["directions"][5]["flip_x"])
+            self.assertFalse(result["default_timing_verified"])
+            verified = audit_group(root, action, timing_verified=True)
+            self.assertTrue(verified["default_timing_verified"])
 
     def test_missing_and_invalid_indices_are_reported(self):
         with tempfile.TemporaryDirectory() as temp:

@@ -1,15 +1,37 @@
-# HK2 ACT 動作資料初步解析
+# HK2 ACT 動作資料解析
 
-日期：2026-11-13（Asia/Taipei）。證據等級：DIRECT（HK2 原始位元組及 `C:\SGO\Recovered\Old\ClientData\Paradise.exe.lst` 指定位址），語意推論另列 HYPOTHESIS。沒有把原件或反編譯文本複製入 Git。
+日期：2026-11-14（Asia/Taipei）。證據等級：DIRECT + AUDIT。完整 timing 證據見 [HK2_ACTION_TIMING.md](HK2_ACTION_TIMING.md)。
 
-`tools/inspect_act.py` 按原版 `xnAction::Load` 與 HK2 位元組解析：ASCII 動作鍵、type 3 的 1-byte 循環旗標、type 2 幀表、逐幀的 frame index / raw duration 兩個 32-bit 整數、可選 type 4 事件（frame index + NUL 結尾 token），末尾 `FF`。HK2 全部 178 個 `.ACT` 皆完整解析；共 3,303 個幀紀錄、514 個事件，事件索引全在各自幀表內。
+`tools/inspect_act.py` 按原版 `xnAction::Load` 與 HK2 位元組解析 ASCII 動作鍵、循環旗標、frame index/raw_time、type 4 event 與結尾 FF。HK2 全部 **178/178 ACT** 完整解析，共 3,303 frame records、514 events；事件索引皆在所屬幀表範圍。
 
-可重跑：`py tools/inspect_act.py 'C:\SGO\Stargate Online IE HK2'`；`py -m unittest tools.tests.test_inspect_act`。
+`Enemy/EN023A.ACT`：S=10、W=10、D=2、A=11、H=1；S/W 循環，D/A/H 結束。怪物 `SWDAH`→`NS/NW/ND/FA/NH` 及八方位來源重用/鏡像已由參考程式直接定位並對 HK2 53 組來源稽核，50 組完整、3 組特殊例外；詳 [HK2_ENEMY_ANIMATION_MAPPING.md](HK2_ENEMY_ANIMATION_MAPPING.md)。
 
-`Enemy/EN023A.ACT` 的摘要：S=10 播放紀錄、W=10、D=2、A=11、H=1；S/W 循環，D/A/H 播完結束。S/W 前幾筆 raw duration=6，H=3。相鄰 `EN023A_NS1.spr`、`EN023A_NW1.spr` 各有 10 幀。後續已由原版 `SetEnemSprite` 直接確認怪物 ACT key→SPR 後綴，並稽核 53 組實體來源；見 [怪物動畫映射](HK2_ENEMY_ANIMATION_MAPPING.md)。ACT 的播放紀錄數可大於 SPR 幀數，必須逐筆檢查索引；事件 token 如何對應音效、命中或其他 callback 仍待查。
+## Default timing 已驗證
 
-`Paradise.exe.lst` 的 `xnAction::Load`（`.text:005574CB`～`0055757B`）逐 tag 讀入上述欄位，把事件放在指定 frame index。`xnAction::Update`（`.text:005576FA`～`0055777D`）每次呼叫將剩餘計數減一；到期後前進一幀，循環旗標為 1 時回到幀 0，否則回傳結束狀態。Load 在 `.text:005574A3`、`005574AA` 設 40 與 25；`SetAction` 的 `.text:0055769D`～`005576A5` 以及 `Update` 的 `.text:0055775E`～`0055776A` 將 raw duration 乘 40 再除播放速度（預設 25，整數截斷），因此預設 6→9 次 Update 呼叫。`SetSpeed`（`.text:005576B0`～`005576BB`）可改速度。這些是**Update 呼叫次數**，還不能直接當毫秒；需追呼叫頻率及原版播放速度變更點。
+參考 Paradise 的 GameManager 是固定 50Hz update：`SystemSetFrame(50)`，`SystemSetFrame` 計算 `1000 / 50 = 20ms`；Map ClientObj → Character/Enemy → DrawLogic → DrawObj → `CELxnObj::Update` → `xnAction::Update` 的呼叫鏈可直接定位。
 
-原版反編譯直接證據：`Paradise.exe.lst` `.text:004BDD40` 建立 `Player\%s\%s-Death.ACT` 路徑，`.text:004BDD77` 經虛函式讀取，`.text:004BDD84` 設死亡動作 callback；`.text:004B74C2` 也建立武器特效 ACT 路徑。這證明 ACT 用於動作流程，但時間倍率與圖層順序仍要追該函式實作。上述位址來自參考版本，與 HK2 二進位是否完全相同尚未校對。
+HK2 `Client.bin` 與 `SGOClient.bin` 又各自唯一命中相同的 40/25、duration scale、action decrement、fixed-loop 與 `SystemSetFrame(50)` 機器碼；因此 default timing 不再只是參考版假設。
 
-人物方向鏡像已另外查到原版 `CSGOCharDrawLogic::DirectionMapping`；見 `docs/HK2_DIRECTION_MAPPING.md`。下一步：追 ACT `Update` 呼叫頻率、action ID 與 ACT key 對應、SIF／draw-order DAT、比對原版錄影。直到完成前，Godot 只能準確讀到影像幀，不能聲稱角色動作已還原。
+預設速度：
+
+```text
+update_calls = floor(raw_time * 40 / 25)
+default_duration_ms = update_calls * 20
+```
+
+例如 raw=6 → 9 ticks → 180ms；raw=3 → 4 ticks → 80ms。HK2 3,303 frame records 的 raw_time 範圍 1～70，沒有 0。
+
+`SetSpeed` 可改 action speed，因此 pipeline 仍以 raw_time 為 canonical，並另外輸出 `legacy_default_update_calls` 與 `legacy_reference_default_duration_ms`；不得把 default ms 當成所有技能/特殊動作永遠固定的時間。
+
+## Pipeline 驗證
+
+- `inspect_act.py` / `convert_assets.py`：ACT schema v3，保留 50Hz/20ms/default speed=25 與 runtime override flag。
+- `audit_action_timing_binary.py`：fail-closed 驗證 HK2 Client.bin / SGOClient.bin timing primitives。
+- `audit_enemy_animations.py --timing-audit ...`：只有 binary audit PASS 才標記 default timing verified。
+- `compile_enemy_atlas_catalog.py`：把 default ms 帶到每個播放步。
+- Godot 4.7.2 headless：50 groups / 250 actions / 2,000 logical directions / 12,976 playback steps，`timing_verified=true`。
+- `view_enemy_animation.py`：verified v2 catalog 用逐幀 default ms 播放；舊/unverified catalog 才 fallback 100ms。
+
+## 尚待研究
+
+人物 numeric action ID→ACT key、紙娃娃 source slot、`SetSpeed` 各 caller/封包語意、event token 的 hit/audio/FX callback，以及 AS005 原版實機逐格視覺比對仍未完成。Render FPS/移動速度不可自行改變 action timeline；正式規則見 [CLIENT_RUNTIME_ISOLATION.md](CLIENT_RUNTIME_ISOLATION.md)。

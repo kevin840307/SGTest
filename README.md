@@ -15,6 +15,7 @@
 - [docs/HK2_DATA1_ARCHIVE.md](docs/HK2_DATA1_ARCHIVE.md)：Data1.dat 群組格式、LZSS、base + loose override 實證
 - [docs/HK2_MAP_ASSET_PALETTE.md](docs/HK2_MAP_ASSET_PALETTE.md)：真地圖怪物共現、MapAssetPalette 與 1024 atomic GPU A/B
 - [docs/HK2_ATOMIC_BALANCED_ATLAS.md](docs/HK2_ATOMIC_BALANCED_ATLAS.md)：50 組怪 atomic 多尺寸規劃、單頁 locality 與 RTX 3050 A/B
+- [docs/HK2_ACTION_TIMING.md](docs/HK2_ACTION_TIMING.md)：HK2 50Hz ACT timing binary audit、default ms 與 runtime 時間軸契約
 - [docs/HK2_ACTION_PAGE_LOCALITY.md](docs/HK2_ACTION_PAGE_LOCALITY.md)：同動作／方向 Atlas 跨頁稽核與原 SPR 局部性 A/B
 - [docs/ASSET_STREAMING_AND_RENDERING.md](docs/ASSET_STREAMING_AND_RENDERING.md)：多尺寸素材分組與實測矩陣
 - [docs/CLIENT_RUNTIME_ISOLATION.md](docs/CLIENT_RUNTIME_ISOLATION.md)：多人同步與渲染排程隔離

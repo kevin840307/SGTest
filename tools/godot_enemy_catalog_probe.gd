@@ -1,7 +1,9 @@
 extends SceneTree
 
 # Validate the generated visual catalog in the same image decoder Godot will use.
-# This does not validate legacy animation timing or visual alignment.
+# Validates atlas regions and, when the catalog carries a verified HK2 timing
+# audit, verifies that default-duration milliseconds are present. Visual
+# alignment still requires original-screen comparison.
 func _initialize() -> void:
 	var args := OS.get_cmdline_user_args()
 	if args.size() != 1:
@@ -15,6 +17,7 @@ func _initialize() -> void:
 		quit(2)
 		return
 	var atlas_root := path.get_base_dir()
+	var timing_verified: bool = bool(catalog.get("default_timing_verified", false))
 	var groups := 0
 	var actions := 0
 	var logical_directions := 0
@@ -37,6 +40,10 @@ func _initialize() -> void:
 					if page_index < -1 or page_index >= dimensions.size():
 						_fail("Frame refers to invalid page")
 						return
+					if timing_verified:
+						if not frame.has("legacy_reference_default_duration_ms") or int(frame.legacy_reference_default_duration_ms) < 0:
+							_fail("Verified timing catalog is missing default duration ms")
+							return
 					if page_index >= 0:
 						var rect: Array = frame.rect
 						var size := dimensions[page_index]
@@ -49,7 +56,7 @@ func _initialize() -> void:
 		groups += 1
 	print(JSON.stringify({"groups": groups, "actions": actions,
 		"logical_directions": logical_directions, "steps": steps,
-		"timing_verified": false, "visual_alignment_verified": false}))
+		"timing_verified": timing_verified, "visual_alignment_verified": false}))
 	quit(0)
 
 

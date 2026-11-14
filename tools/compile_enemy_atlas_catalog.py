@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Compile verified Enemy ACT/facing references into Godot atlas regions.
 
-The catalog is visual-only and keeps timing as raw legacy update counts. Runtime
-milliseconds, hit events, origin transforms and HK2-vs-reference parity remain
-unverified. Original and derived media stay in the private atlas directory.
+The catalog preserves raw timing plus default milliseconds when the upstream
+HK2 binary timing audit verified the 50 Hz fixed-update contract. Dynamic
+SetActionSpeed remains a runtime override. Original/derived media stay private.
 """
 from __future__ import annotations
 
@@ -58,7 +58,8 @@ def compile_one(audit: dict, manifest_path: Path, atlas_root: Path) -> dict:
                                "raw_origin": region["raw_origin"], "crop": region["crop"],
                                "size": region["size"], "source_frame": step["index"],
                                "raw_time": step["raw_time"],
-                               "legacy_default_update_calls": step["legacy_default_update_calls"]})
+                               "legacy_default_update_calls": step["legacy_default_update_calls"],
+                               "legacy_reference_default_duration_ms": step["legacy_reference_default_duration_ms"]})
             directions.append({"facing": direction["facing"],
                                "source_direction": direction["source_direction"],
                                "flip_x": direction["flip_x"], "frames": frames})
@@ -70,7 +71,11 @@ def compile_one(audit: dict, manifest_path: Path, atlas_root: Path) -> dict:
                         "directions": directions})
     return {"enemy": audit["enemy"], "act_sha256": audit["act_sha256"],
             "pages": [page.relative_to(atlas_root).as_posix() for page in pages],
-            "actions": actions, "time_unit": None, "visual_alignment_verified": False}
+            "actions": actions,
+            "default_timing_verified": bool(audit.get("default_timing_verified", False)),
+            "legacy_fixed_update_hz": 50, "legacy_fixed_update_ms": 20,
+            "runtime_speed_can_override": True,
+            "visual_alignment_verified": False}
 
 
 def compile_catalog(audit_report: dict, atlas_root: Path) -> dict:
@@ -87,8 +92,11 @@ def compile_catalog(audit_report: dict, atlas_root: Path) -> dict:
             compiled.append(compile_one(audit, manifest_path, atlas_root))
         except (OSError, ValueError, KeyError, IndexError) as exc:
             quarantined.append({"enemy": name, "reason": str(exc)})
-    return {"version": 1, "page_paths_relative_to": "atlas_root",
-            "animation_timing_verified": False,
+    default_timing_verified = bool(compiled) and all(
+        group.get("default_timing_verified", False) for group in compiled)
+    return {"version": 2, "page_paths_relative_to": "atlas_root",
+            "default_timing_verified": default_timing_verified,
+            "runtime_speed_can_override": True,
             "compiled_groups": len(compiled), "quarantined_groups": len(quarantined),
             "groups": compiled, "quarantined": quarantined}
 

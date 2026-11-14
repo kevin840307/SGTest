@@ -21,7 +21,7 @@ HK2 本機可執行檔與參考版本**不是 binary-identical**：
 | --- | --- | --- | --- | --- |
 | 虛擬檔案系統／Data1 | `Data1.dat` 585,022,714 bytes；SHA-256 `9ae08a8a7bb784720c83bfdd608688c045d717dee3868c13d7b8f444562bfc42`；41,687 entries | `xnFileOpenGroup 0x00552980`、`FileData::ReadBuf 0x00551810/0x00551886`、`xnFileRead 0x00552090`、`LzssDecompress 0x0055A0E0` | `legacy_group_archive.py` + `materialize_legacy_overlay.py`；17 張地圖工作集 461 archive base / 1 override / 2 loose-only；`scan_group_archives.py` 掃 41,741 實體檔只找到 Data1（1/1 valid, 0 rejected） | **DIRECT + AUDIT / PARTIAL**；目前 HK2 tree 的同格式 archive 集合已界定，仍缺原安裝包／更新來源 provenance |
 | XN SPR frame/alpha | Paradise NPC 真樣本 4 份；HK2 loose 全量 40,224 SPR 已轉換；`ground.spr` SHA-256 `6f69a5e9d7192090618f69c5f0d8b31b617ee5fb3e6fb3f5334f6da022341cb6` | `xnSpr::LoadSpr 0x00552FC0`、`DecodeFrameLine 0x00553EB0`、`xnSpr::Draw 0x00553FB0` | fail-closed decoder；frame offset/row RLE/bounds；atlas 還原逐像素比對 | **DIRECT + AUDIT / PARTIAL**；最終 RGB565/alpha 與原版畫面尚未逐像素校驗 |
-| ACT 動作 | `Enemy/EN023A.ACT` 438 bytes；SHA-256 `7185027b043640f87daeb901b4bd7319d869b8940abf0209bd73713a13118609`；HK2 loose 178/178 ACT 完整解析 | `xnAction::Load .text:005574CB–0055757B`、`Update .text:005576FA–0055777D`、`SetSpeed .text:005576B0–005576BB` | 3,303 frame records、514 events；index bounds；enemy catalog playback probe | **DIRECT + AUDIT / PARTIAL**；raw duration 已知但 Update 呼叫頻率→毫秒仍未證實 |
+| ACT 動作／時間 | `Enemy/EN023A.ACT` 438 bytes；SHA-256 `7185027b043640f87daeb901b4bd7319d869b8940abf0209bd73713a13118609`；HK2 loose 178/178 ACT 完整解析 | `xnAction::Load/Update/SetSpeed .text:005574A3–0055777D`；`SystemSetFrame .text:0050751A`；`CELSystemLoop .text:0050739D`；Map→ClientObj→Char/Enemy→DrawObj→xnAction Update 鏈 | `audit_action_timing_binary.py` 對 Client.bin/SGOClient.bin 各唯一驗證 40/25、decrement、duration scale、fixed loop、SystemSetFrame(50)；3,303 frames，default 20ms tick；50-group Godot 12,976 steps `timing_verified=true` | **DIRECT + AUDIT / PASS for default timing**；`SetSpeed` runtime caller/封包語意仍 PARTIAL |
 | 怪物方向／鏡像 | Data1+loose 已知地圖 29 visual；loose audit 50/53 完整 | `CSGOEnemDrawLogic::SetDirection .text:004CB708–004CB7E8`、`InitAction .text:004CBF8C–004CC111` | 29 known-map groups 1,160/1,160 logical facing 單頁；50 loose groups 2,000/2,000 atomic locality | **DIRECT + AUDIT / PASS for catalog mapping**；EN060A/EN061A/EN115A 舊 loose 特例及原版畫面仍需獨立確認 |
 | 人物方向 | HK2 Player 真 SPR/DrawOrder 存在；來源對應仍在研究 | `CSGOCharDrawLogic::DirectionMapping .text:004C263F–004C283A`、`SetDirection .text:004C24EA–004C25B3` | `legacy_direction.py` 純函式測試 | **DIRECT / PARTIAL**；action ID、紙娃娃圖層來源、鏡像後 pivot 視覺未完成 |
 | 人物 draw-order | `Player/CharDrawOrder.dat` 4,442 bytes；SHA-256 `530bb046a8041e3af33418252784ee46d5295a20f37d639a1c617ba812865284` | `LoadDrawOrderDat .text:00408049`；雙槽位解析 `.text:004082D2–004084BC` | 兩份主要表 102/102 行展開；未知 token fail | **DIRECT + AUDIT / PARTIAL**；實際裝備遮擋畫面尚未逐動作比對 |
@@ -29,7 +29,7 @@ HK2 本機可執行檔與參考版本**不是 binary-identical**：
 | 地上物 Atlas | `ground.spr` / `ground1.spr` 各 500 frames，item 定義可完整映射 | HK2 ground-page formula 如上；舊 `CSGOItemDrawLogic::InitItem .text:004CCD17–004CCDA9` 為早期單頁 lineage | 1440×900 / 500 instances 的 ground.spr 逐圖 vs 1024 atlas 已量 draw calls/load/Video Mem | **AUDIT / PROVISIONAL**；ground1 映射已驗證，但 ground1 同場 A/B、真地圖 drop co-occurrence 與 StreamingManager 尚未驗 |
 | Data1 + 真 Map13 | `Old/服務端/Dat/Map/Map13/Enemy.dat` 17,255 bytes；SHA-256 `04b4b2b223019d229142f6868d10ecab83c7613a6ef163b1f8bff2d7f995324e` | Server DAT 為內容來源；Client archive precedence 由上述 file I/O 證據支持 | Map13 78 spawns / 9 visuals；9/9 ACT 完整；atomic palette 約 10.620 MiB atlas RGBA | **AUDIT / PASS for known-map palette input** |
 | Enemy atomic Atlas | Data1+loose 29 known-map visuals；50 loose stress set | 無假設「大 atlas 一定快」；以原 SPR 為 atomic action/facing block | 29 groups：32 pages / 62,287,496 RGBA / 1,160/1,160 locality；Map13 78/300 monster RTX3050 draw calls 不增加 | **AUDIT / PROVISIONAL SELECTED**；正式 async GPU upload、eviction、logout 仍未實作 |
-| 50-kind 極端 stress | 50 visual 全載，非正式 runtime 工作集 | — | dense：133 pages / 432,604,792 RGBA / load median 1289.209ms / frame p95 7.955ms / draw p95 372 / Video Mem 595,191,887；atomic：119 pages / 466,182,124 RGBA / 1342.386ms / 7.983ms / 372 / 639,997,855 | **AUDIT / STRESS ONLY**；證明不能全世界常駐，需 map palette |
+| 50-kind 極端 stress | 50 visual 全載，非正式 runtime 工作集 | — | dense：133 pages / 432,604,792 RGBA / load median 1281.023ms / frame p95 7.924ms / draw p95 372 / Video Mem 595,191,887；measured atomic balanced：65 pages / 442,769,264 RGBA / 1289.890ms / 7.110ms / 372 / 608,852,731 | **AUDIT / STRESS ONLY**；頁數減半且 default action-facing 2,000/2,000 單頁，但不能全世界常駐，仍需 map palette |
 | 原版畫面逐格比對 | 尚無正式錄影／同版本 runtime baseline | Viewer 僅能展示 decoded frame + raw origin | EN023A atlas 還原像素與來源 SPR 一致；Tk viewer 可啟動 | **NOT VERIFIED**；AS005 仍未完成 |
 | 公開發布／轉換權 | 使用者本機持有檔案不等於公開發行授權 | — | repo 僅提交 parser/metadata/fixture，不提交原圖 | **BLOCKED**；AS008 維持阻塞 |
 
@@ -41,7 +41,7 @@ HK2 本機可執行檔與參考版本**不是 binary-identical**：
 
 1. **AS005 原版視覺實證未完成**：人物站立／行走／攻擊／受擊／死亡、裝備遮擋、pivot、鏡像後位置、alpha/color 仍缺同版本原版畫面逐格對照。
 2. **AS008 權利 Gate 阻塞**：尚未確認舊圖、UI、音訊的公開轉換／發布權；因此只能在本機私有素材工作集測試。
-3. 人物 action ID→SPR/ACT、紙娃娃 source slot、真實毫秒時序仍未完成；物品 ground page 已由 HK2 binary 驗證，但 12 個 duplicate visual conflict 的 HK2 同版 lookup precedence 仍未證實。
+3. ACT **default 毫秒時序已由 HK2 binary 驗證**；仍缺人物 numeric action ID→SPR/ACT、紙娃娃 source slot、`SetSpeed` runtime caller/封包語意。物品 ground page 已由 HK2 binary 驗證，但 12 個 duplicate visual conflict 的 HK2 同版 lookup precedence 仍未證實。
 4. 正式 Client 的 StreamingManager、GPU upload budget、切圖／登出回收與 network/render isolation 尚未進入實作 Gate。
 
 因此目前允許：繼續本機 decoder/viewer/atlas/benchmark/來源研究；**不得把 AS009 PASS 誤寫成整個素材 Gate PASS，也不得宣稱正式 Client/Server 已完成。**
@@ -50,6 +50,7 @@ HK2 本機可執行檔與參考版本**不是 binary-identical**：
 
 ```powershell
 py -m unittest discover -s tools/tests -q
+py tools/audit_action_timing_binary.py 'C:\\SGO\\Stargate Online IE HK2\\Client.bin' 'C:\\SGO\\Stargate Online IE HK2\\SGOClient.bin' --output reports/hk2-action-timing-audit.json
 py tools/legacy_group_archive.py 'C:\SGO\Stargate Online IE HK2\Data1.dat' --list
 py tools/audit_enemy_animations.py <private-overlay> reports/enemy-animation-audit.json
 py tools/audit_action_page_locality.py <private-atlas>\enemy_catalog.json --require-single-page

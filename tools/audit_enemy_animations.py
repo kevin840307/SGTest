@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Join original Enemy ACT keys, SPR suffixes and action-specific facing maps.
 
-This validates source availability and frame indices; it does not infer real-time
-milliseconds or assert that the reference executable matches the HK2 binary.
+This validates source availability, frame indices and verified default timing.
+Pass --timing-audit from audit_action_timing_binary.py to promote default
+milliseconds; dynamic SetActionSpeed remains a runtime override.
 """
 from __future__ import annotations
 
@@ -25,7 +26,7 @@ ACTION_SUFFIX = {"S": "NS", "W": "NW", "D": "ND", "A": "FA", "H": "NH"}
 ACTION_ID = {key: index for index, key in enumerate(ACTION_SUFFIX)}
 
 
-def audit_group(enemy_dir: Path, act: Path) -> dict:
+def audit_group(enemy_dir: Path, act: Path, timing_verified: bool = False) -> dict:
     raw_act = act.read_bytes()
     actions = parse_act(raw_act)
     file_lookup = {path.name.casefold(): path for path in enemy_dir.iterdir() if path.is_file()}
@@ -68,16 +69,18 @@ def audit_group(enemy_dir: Path, act: Path) -> dict:
     return {"enemy": act.stem.upper(), "act_sha256": hashlib.sha256(raw_act).hexdigest(),
             "sources": sources, "actions": rows, "issues": issues,
             "complete_source_mapping": not issues,
-            "runtime_timing_verified": False, "visual_alignment_verified": False}
+            "default_timing_verified": bool(timing_verified),
+            "runtime_speed_can_override": True, "visual_alignment_verified": False}
 
 
-def audit_all(root: Path) -> dict:
+def audit_all(root: Path, timing_verified: bool = False) -> dict:
     enemy = root / "Enemy"
     if not enemy.is_dir():
         raise ValueError("clean client has no Enemy directory")
-    rows = [audit_group(enemy, act) for act in sorted(enemy.glob("*.ACT"),
+    rows = [audit_group(enemy, act, timing_verified) for act in sorted(enemy.glob("*.ACT"),
              key=lambda p: p.name.casefold())]
-    return {"version": 1, "source_root": str(root), "groups": rows,
+    return {"version": 2, "source_root": str(root), "groups": rows,
+            "default_timing_verified": bool(timing_verified),
             "act_groups": len(rows),
             "source_complete_groups": sum(row["complete_source_mapping"] for row in rows),
             "issue_groups": sum(bool(row["issues"]) for row in rows),
@@ -96,6 +99,8 @@ def main() -> int:
     parser.add_argument("output", type=Path, help="Private report path outside the clean client")
     parser.add_argument("--complete-group-list", type=Path,
                         help="Optional private UTF-8 group list for atlas conversion")
+    parser.add_argument("--timing-audit", type=Path,
+                        help="JSON from audit_action_timing_binary.py; required to mark default ms verified")
     args = parser.parse_args()
     root, output = args.client.resolve(), args.output.resolve()
     if not root.is_dir() or output == root or root in output.parents:
@@ -103,7 +108,13 @@ def main() -> int:
     group_list = args.complete_group_list.resolve() if args.complete_group_list else None
     if group_list is not None and (group_list == root or root in group_list.parents):
         parser.error("group list must be outside the clean client")
-    report = audit_all(root)
+    timing_verified = False
+    if args.timing_audit:
+        timing = json.loads(args.timing_audit.read_text(encoding="utf-8"))
+        timing_verified = bool(timing.get("all_timing_primitives_verified"))
+        if not timing_verified:
+            parser.error("timing audit did not verify all supplied binaries")
+    report = audit_all(root, timing_verified)
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     if group_list is not None:

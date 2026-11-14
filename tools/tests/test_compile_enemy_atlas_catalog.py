@@ -45,6 +45,8 @@ class CatalogTests(unittest.TestCase):
             facing6 = group["actions"][0]["directions"][5]
             self.assertTrue(facing6["flip_x"])
             self.assertEqual(facing6["frames"][0]["legacy_default_update_calls"], 8)
+            self.assertEqual(facing6["frames"][0]["legacy_reference_default_duration_ms"], 160)
+            self.assertFalse(result["default_timing_verified"])
             self.assertTrue(group["pages"][0].startswith("Enemy/EN001/"))
             manifest = atlas / "Enemy/EN001/group.atlas.json"
             document = json.loads(manifest.read_text(encoding="utf-8"))
@@ -52,6 +54,23 @@ class CatalogTests(unittest.TestCase):
             manifest.write_text(json.dumps(document), encoding="utf-8")
             result = compile_catalog({"groups": [audit]}, atlas)
             self.assertEqual(result["quarantined_groups"], 1)
+
+    def test_verified_default_timing_propagates(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp) / "client"
+            enemy = root / "Enemy"
+            enemy.mkdir(parents=True)
+            paths = [enemy / "EN001_NS1.spr", enemy / "EN001_NS3.spr"]
+            for path in paths:
+                path.write_bytes(spr())
+            act_path = enemy / "EN001.ACT"
+            act_path.write_bytes(act())
+            audit = audit_group(enemy, act_path, timing_verified=True)
+            atlas = Path(temp) / "atlas"
+            build_group(root, atlas, Path("Enemy/EN001"), paths, 512)
+            result = compile_catalog({"groups": [audit]}, atlas)
+            self.assertTrue(result["default_timing_verified"])
+            self.assertTrue(result["groups"][0]["default_timing_verified"])
 
     def test_source_filename_matching_is_case_insensitive(self):
         with tempfile.TemporaryDirectory() as temp:

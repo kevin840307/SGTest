@@ -63,7 +63,7 @@ class ConversionTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             decode_spr(one_frame()[:-4] + struct.pack("<I", 4000000))
 
-    def test_act_exports_unknown_timing_units_without_guessing(self):
+    def test_act_exports_verified_default_timing_and_raw_values(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp) / "client"
             out = Path(temp) / "out"
@@ -73,10 +73,14 @@ class ConversionTests(unittest.TestCase):
                                b"\x01\x02\x01\x00\x00\x00" + struct.pack("<II", 0, 6) + b"\xff")
             self.assertEqual(convert_act(source, root, out), "converted")
             exported = json.loads((out / "Enemy" / "test.act.json").read_text())
-            self.assertEqual(exported["version"], 2)
-            self.assertIsNone(exported["time_unit"])
-            self.assertEqual(exported["actions"][0]["frames"][0]["raw_time"], 6)
-            self.assertEqual(exported["actions"][0]["frames"][0]["legacy_default_update_calls"], 9)
+            self.assertEqual(exported["version"], 3)
+            self.assertEqual(exported["legacy_fixed_update_hz"], 50)
+            self.assertEqual(exported["legacy_fixed_update_ms"], 20)
+            self.assertTrue(exported["runtime_speed_can_override"])
+            frame = exported["actions"][0]["frames"][0]
+            self.assertEqual(frame["raw_time"], 6)
+            self.assertEqual(frame["legacy_default_update_calls"], 9)
+            self.assertEqual(frame["legacy_reference_default_duration_ms"], 180)
 
     def test_draw_order_preserves_layer_names_and_suffix(self):
         with tempfile.TemporaryDirectory() as temp:

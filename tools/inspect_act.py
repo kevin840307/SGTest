@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
-"""Read SGO ACT records and preserve the original update-count timing rule.
+"""Read SGO ACT records and preserve verified legacy default timing metadata.
 
-The original player's update call frequency is not inferred as milliseconds.
+HK2 Client.bin and SGOClient.bin contain the same 40/speed action counter and
+50 Hz fixed-update primitives as the reference client. Dynamic SetActionSpeed
+can change later-frame timing, so raw_time and update counts remain canonical.
 """
 from __future__ import annotations
 
@@ -10,6 +12,11 @@ import hashlib
 import json
 import struct
 from pathlib import Path
+
+LEGACY_ACTION_NUMERATOR = 40
+LEGACY_DEFAULT_SPEED = 25
+LEGACY_FIXED_UPDATE_HZ = 50
+LEGACY_FIXED_UPDATE_MS = 20
 
 
 def parse_act(raw: bytes) -> list[dict]:
@@ -39,8 +46,10 @@ def parse_act(raw: bytes) -> list[dict]:
         frames = []
         for _ in range(count):
             index, unknown_time = struct.unpack_from("<II", raw, at)
+            update_calls = unknown_time * LEGACY_ACTION_NUMERATOR // LEGACY_DEFAULT_SPEED
             frames.append({"index": index, "raw_time": unknown_time,
-                           "legacy_default_update_calls": unknown_time * 40 // 25})
+                           "legacy_default_update_calls": update_calls,
+                           "legacy_reference_default_duration_ms": update_calls * LEGACY_FIXED_UPDATE_MS})
             at += 8
         events = []
         while at < len(raw) and raw[at] == 4:
@@ -87,10 +96,15 @@ def main() -> int:
                 if args.output is not None:
                     target = args.output / path.relative_to(args.act).parent / (path.stem + ".act.json")
                     target.parent.mkdir(parents=True, exist_ok=True)
-                    target.write_text(json.dumps({"version": 2,
+                    target.write_text(json.dumps({"version": 3,
                         "source": path.relative_to(args.act).as_posix(),
                         "sha256": hashlib.sha256(raw).hexdigest(),
-                        "time_unit": None, "action_semantics": None,
+                        "timing_basis": "legacy_reference_fixed_50hz_default_speed",
+                        "legacy_fixed_update_hz": LEGACY_FIXED_UPDATE_HZ,
+                        "legacy_fixed_update_ms": LEGACY_FIXED_UPDATE_MS,
+                        "legacy_default_action_speed": LEGACY_DEFAULT_SPEED,
+                        "runtime_speed_can_override": True,
+                        "action_semantics": None,
                         "actions": actions}, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
             except (OSError, ValueError, UnicodeError) as exc:
                 failures.append({"path": path.relative_to(args.act).as_posix(), "error": str(exc)})

@@ -24,7 +24,8 @@ class ActTests(unittest.TestCase):
         result = parse_act(raw)
         self.assertEqual([x["key"] for x in result], ["S", "D"])
         self.assertEqual(result[0]["frames"][1], {"index": 1, "raw_time": 6,
-                                                     "legacy_default_update_calls": 9})
+                                                     "legacy_default_update_calls": 9,
+                                                     "legacy_reference_default_duration_ms": 180})
         self.assertEqual(result[0]["events"][0]["at_frame_raw"], 2)
         self.assertEqual(result[0]["events"][0]["token"], "X")
         self.assertEqual(result[1]["raw_loop_flag"], 0)
