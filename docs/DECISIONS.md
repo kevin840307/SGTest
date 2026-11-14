@@ -97,6 +97,7 @@
 - Alternatives: 個別 PNG/SpriteFrames、單尺寸 Atlas、所有素材一張 4096、預合成所有玩家裝備、MultiMesh；不能未測就否決。
 - Risks: Y-sort、紙娃娃前後層、padding bleed、頁過大導致 VRAM 浪費、首次 upload spike、跨圖 cache churn。
 - Evidence: 乾淨 HK2 已可全量轉換；單外觀初測見 [HK2_ATLAS_CANDIDATES.md](HK2_ATLAS_CANDIDATES.md)，8 種怪／20 玩家代理／500 小圖代理及 10 次貼圖釋放見 [HK2_MIXED_ATLAS_BENCHMARK.md](HK2_MIXED_ATLAS_BENCHMARK.md)。真正掉落圖、多人同步、正式快取及完整 AS007 尚未驗證。Next: AS007/AS-T01～T05。
+- 2026-11-14 資料契約補充：以來源 SHA、ACT 動作／索引及專用怪物方向映射編譯局部 Atlas catalog；引用不完整的群組隔離，保留原始時間、事件和方位鏡像，不推測毫秒或視覺校正。Godot headless 實證 8 群組可讀，詳 [HK2_ENEMY_ATLAS_CATALOG.md](HK2_ENEMY_ATLAS_CATALOG.md)。
 
 ## ADR-017 — Client Network/State 與 UI/Render FPS 排程隔離
 - Date: 2026-11-13；Status: **ACCEPTED CONTRACT / IMPLEMENTATION NOT VERIFIED**。
