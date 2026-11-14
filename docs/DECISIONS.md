@@ -326,3 +326,11 @@ ADR-026補充：使用者指定Client一般遊玩支援30～90FPS；FPS選項只
 - Concurrency: 已重現解包與verify重疊時會讀到暫態來源，因此同checkout採OS lock互斥；busy exit2、不改舊報告。lock檔殘留不是活程序證據，跨程序／異常退出解鎖已測。
 - Evidence: 7890groups/75588SPR/282968frames/8094pages、613ACT/1165SIF/9DrawOrder，0錯誤；原始路徑一鍵build與後續verify PASS。docs/ASSET_CONVERTER.md、reports/converter_full_build.json、converter_archive_verification.json。113 Python／376 C#／6組Godot PASS；30cycle async回收與20client場景PASS，原始JSON見reports/asset_converter_acceptance。
 - Open: Client RSS216.96MiB仍高於200MiB（FAIL），PERF002先定位CPU Image／metadata／worker持有再優化；不改同步頻率或減畫質。其它Recovered功能及AS005/AS008仍是獨立未完成範圍。
+
+## ADR-041 — Runtime小頁工作空間及Windows release實測（2026-11-15）
+
+- Decision: Runtime bundle自動優先512／1024；原SPR atomic block放不下才採最小有效2048／4096。維持語意／ownership、shared texture、畫質／實體數／同步頻率；完整離線archive不改。尺寸由Builder內部處理，新增怪物不增加Runtime分類。
+- Evidence: 同1440×900／20連線／300怪／1000掉落／40秒，release2048 packed峰值199.80MiB（另早期217.08FAIL），1024 packed三次184.95～189.11MiB，frame P95≤18.602／P99≤19.294ms。正式原版來源重建及release打包後187.09MiB、60.003FPS、18.549／19.200ms。增加Draw Calls與極小texture bytes是明列取捨；實體driver VRAM未測，開發引擎仍超200MiB。詳docs/PERF002_MEMORY.md與reports/perf002_production/。
+- Lifetime: per-job/per-page函式frame解除idle worker對CPU Image／metadata持有；weakref由1/1→0/0。telemetry固定2048筆、idle不追加，一般diagnostics不複製樣本。30次map async load P95 130.829ms、GPU submit P99 1.591ms、frame P99 16.971ms，引用／texture／RSS回收PASS。取消風暴邊界另測，不由串行回收推論完成。
+- Build: 正式Windows EXE＋PCK保留raw PNG／JSON／BIN；專用EditorExportPlugin加入被.gdignore排除的原始bytes。tools/build_client.py驗證官方templateSHA與版本，build後啟動release檢查全部asset/source SHA；benchmark測量前共用此檢查，拒絕stale PCK。EXE/PCK與原版圖像僅留.cache，不公開。
+- Regression: Python tools/tests113、asset_pipeline5、runtime_baseline8；Godot方向／360 logical views／scenery／paper doll／Store／wire六組及native weakref probe PASS。沒有改動C#協定或Server模擬，沒有重跑完整RUNTIME206矩陣；仍維持Render30～90FPS與Client input30Hz／Server30Hz／snapshot10Hz分離契約。

@@ -13,11 +13,12 @@ import tempfile
 import time
 import psutil
 from runtime_processes import server_command
+from build_client import verify_package
 
 RUN_ENV = {}
 
-def asset_identity(monster_assets=None):
-    root=Path('client/assets').resolve()
+def asset_identity(monster_assets=None,assets=None):
+    root=Path(assets or 'client/assets').resolve()
     population=root/'maps/13/population.json'
     definition=json.loads(population.read_text(encoding='utf-8'))
     atlas_root=Path(monster_assets).resolve() if monster_assets else root
@@ -41,21 +42,22 @@ def asset_identity(monster_assets=None):
             'content_sha256':hashlib.sha256(json.dumps(identity,sort_keys=True).encode()).hexdigest()}
 
 
-def provenance(monster_assets=None):
+def provenance(monster_assets=None,assets=None):
+    root=Path(assets or 'client/assets')
     files=['client/scripts/main.gd','client/scripts/entity_atlas.gd','client/scripts/monster_visuals.gd',
            'client/scripts/runtime_asset_store.gd','client/scripts/frame_profiler.gd','client/project.godot',
            'server/bin/Release/net8.0/SGTest.Server.dll','client/tools/benchmark_asset_lifecycle.gd',
            'client/tools/benchmark_runtime_asset_store.gd','tools/benchmark_runtime_baseline.py',
-           'client/assets/bundles/index.json','client/assets/maps/13/world.json',
-           'client/assets/maps/13/population.json','client/assets/bundles/session/player-b-base.json']
-    session=Path('client/assets/bundles/session/player-b-base.json')
+           *(str(root/relative) for relative in ['bundles/index.json','maps/13/world.json',
+                                                'maps/13/population.json','bundles/session/player-b-base.json'])]
+    session=root/'bundles/session/player-b-base.json'
     if session.is_file():
         manifest=json.loads(session.read_text(encoding='utf-8'))
         files.extend((session.parent/page).as_posix() for page in manifest.get('pages',[]))
     return {'git_head':subprocess.check_output(['git','rev-parse','HEAD']).decode().strip(),
             'tracked_worktree_diff_sha256':hashlib.sha256(subprocess.check_output(['git','diff','HEAD','--binary'],stderr=subprocess.DEVNULL)).hexdigest(),
             'files':{name:hashlib.sha256(Path(name).read_bytes()).hexdigest() for name in files},
-            'assets':asset_identity(monster_assets),'runtime_environment':RUN_ENV,
+            'assets':asset_identity(monster_assets,assets),'runtime_environment':RUN_ENV,
             'os':platform.platform(),'cpu_logical':psutil.cpu_count(),'physical_ram_bytes':psutil.virtual_memory().total,
             'cache':'warm OS cache; cold disk NOT VERIFIED','physical_driver_vram':'NOT VERIFIED (engine counters reported separately)'}
 
@@ -71,11 +73,15 @@ def meters(processes):
 def sample(groups):
     values=[]
     for group in groups:
-        current={'cpu_one_core_percent':0,'rss_bytes':0}
+        current={'cpu_one_core_percent':0,'rss_bytes':0,'os_peak_rss_bytes':0}
         for process in group:
             try:
                 current['cpu_one_core_percent']+=process.cpu_percent()
-                current['rss_bytes']+=process.memory_info().rss
+                memory=process.memory_info()
+                current['rss_bytes']+=memory.rss
+                peak=getattr(memory,'peak_wset',None)
+                if peak is None:current['os_peak_rss_bytes']=None
+                elif current['os_peak_rss_bytes'] is not None:current['os_peak_rss_bytes']+=peak
             except psutil.NoSuchProcess:pass
         values.append(current)
     return values
@@ -89,9 +95,9 @@ def stop(processes):
             except psutil.NoSuchProcess:pass
         process.wait(timeout=10)
 
-def lifecycle(godot,output,cycles,monster_assets=None,loader='sync'):
+def lifecycle(godot,output,cycles,monster_assets=None,loader='sync',assets=None):
     native_report=(output/'lifecycle.json').resolve()
-    before=provenance(monster_assets)
+    before=provenance(monster_assets,assets)
     Path(str(native_report)+'.progress.json').write_text('{"cycle":-1,"phase":"starting"}',encoding='utf-8')
     started_wall=time.time()
     with tempfile.TemporaryFile(mode='w+',encoding='utf-8') as log:
@@ -99,6 +105,7 @@ def lifecycle(godot,output,cycles,monster_assets=None,loader='sync'):
         command=[godot,'--path','client','--rendering-method','gl_compatibility','--max-fps','60','--resolution','1440x900',
                  '--script',lifecycle_script,'--',f'--cycles={cycles}',f'--report={native_report}']
         if monster_assets:command+=[f'--monster-assets={monster_assets.resolve()}']
+        if assets:command+=[f'--assets={assets.resolve()}']
         process=subprocess.Popen(command,stdout=log,stderr=subprocess.STDOUT)
         points=[]
         try:
@@ -113,9 +120,12 @@ def lifecycle(godot,output,cycles,monster_assets=None,loader='sync'):
         finally:stop([process])
         log.seek(0);text=log.read()
     result=json.loads(native_report.read_text(encoding='utf-8')) if native_report.exists() and native_report.stat().st_mtime>=started_wall else {}
-    after=provenance(monster_assets)
+    after=provenance(monster_assets,assets)
     result.update({'exit_code':process.returncode,'process_samples':points,'log':text,'loader':loader,
                    'rss_peak_bytes':max((p['processes'][0]['rss_bytes'] for p in points),default=0),
+                   'os_peak_rss_bytes':max((p['processes'][0]['os_peak_rss_bytes'] for p in points
+                                            if p['processes'][0]['os_peak_rss_bytes'] is not None),default=None),
+                   'os_peak_scope':'Windows peak working-set sum over process tree (conservative non-simultaneous upper bound); unavailable elsewhere',
                    'measurement_provenance':before,
                    'source_files_unchanged_during_run':before['files']==after['files'] and before['assets']==after['assets']})
     unload_rss={}
@@ -137,21 +147,23 @@ def lifecycle(godot,output,cycles,monster_assets=None,loader='sync'):
     print(json.dumps({k:result.get(k) for k in ['execution_passed','loader','cycles','all_texture_handles_released','engine_texture_recovery_passed','store_resident_recovery_passed','frame_ms_p95','frame_ms_p99','rss_peak_bytes']},indent=2))
     return result['execution_passed']
 
-def multiplayer(godot,output,clients,monsters,drops,seconds,monster_assets=None):
+def multiplayer(godot,output,clients,monsters,drops,seconds,monster_assets=None,exported_client=False,assets=None,packed_assets=None):
     processes=[];logs=[];points=[]
     started=time.time()
-    before=provenance(monster_assets)
+    before=provenance(monster_assets,assets or packed_assets)
+    profile_path=(output/'rendered_profile.json').resolve()
     try:
         for index in range(clients+1):
             log=tempfile.TemporaryFile(mode='w+',encoding='utf-8');logs.append(log)
             if index==0:command=server_command()+[f'--monsters={monsters}',f'--drops={drops}','--map=13']
             else:
-                command=[godot,'--path','client','--max-fps','60']
+                command=[godot]+([] if exported_client else ['--path','client'])+['--max-fps','60']
                 if index==1:command+=['--rendering-method','gl_compatibility','--resolution','1440x900']
                 else:command+=['--headless']
                 command+=['--','--bot',f'--bot-index={index}']
                 if monster_assets:command+=[f'--monster-assets={monster_assets.resolve()}']
-                if index==1:command+=['--profile',f'--profile-seconds={seconds-5}']
+                if assets:command+=[f'--assets={assets.resolve()}']
+                if index==1:command+=['--profile',f'--profile-seconds={seconds-5}',f'--profile-report={profile_path}']
             processes.append(subprocess.Popen(command,stdout=log,stderr=subprocess.STDOUT))
             if index==0:time.sleep(1)
         time.sleep(1);groups=meters(processes)
@@ -163,7 +175,6 @@ def multiplayer(godot,output,clients,monsters,drops,seconds,monster_assets=None)
     contents=[]
     for log in logs:
         log.seek(0);contents.append(log.read());log.close()
-    profile_path=Path('reports/rendered_load.json')
     profile=json.loads(profile_path.read_text(encoding='utf-8')) if profile_path.exists() and profile_path.stat().st_mtime>=started else None
     # Support both the original immediate-join server log and the newer
     # authenticated character-selection flow. The acceptance condition is
@@ -172,9 +183,12 @@ def multiplayer(godot,output,clients,monsters,drops,seconds,monster_assets=None)
     passed=(server_playable==clients and profile is not None and
             all('prediction_ready' in log and 'snapshot_received' in log for log in contents[1:]) and
             not any('ERROR:' in log for log in contents))
-    after=provenance(monster_assets)
+    if exported_client:passed=passed and bool((profile or {}).get('engine_features',{}).get('template_release'))
+    after=provenance(monster_assets,assets or packed_assets)
     report={'execution_passed':passed,'scenario':{'clients':clients,'native_clients':1,'headless_clients':clients-1,
             'monster_assets':before['assets']['root'],
+            'client_build':'exported release' if exported_client else 'development engine',
+            'asset_storage':'loose override' if assets else 'embedded PCK' if exported_client else 'project files',
             'monsters':monsters,'drops':drops,'map':13,'seconds':seconds,'render_cap':60,'resolution':[1440,900],
             'bot_paths':'deterministic per-client phase; not identical trajectories'},
             'rendered':profile,'samples':points,'logs':contents,'measurement_provenance':before,
@@ -196,18 +210,30 @@ def main():
     parser.add_argument('--drops',type=int,default=1000)
     parser.add_argument('--seconds',type=int,default=40)
     parser.add_argument('--monster-assets',type=Path)
+    parser.add_argument('--assets',type=Path,help='override the entire runtime asset root, including scenery/session/terrain')
+    parser.add_argument('--packed-assets',type=Path,help='source folder embedded in the PCK, for integrity/provenance only')
+    parser.add_argument('--exported-client',action='store_true',help='run a packed release app; multiplayer case only')
     parser.add_argument('--loader',choices=['sync','async'],default='sync',
                         help='Lifecycle loader only: synchronous baseline or RuntimeAssetStore')
     args=parser.parse_args()
     args.output.mkdir(parents=True,exist_ok=True)
     if args.cycles<1 or args.clients<1 or args.seconds<20:parser.error('positive cycles/clients and >=20s required')
+    if args.exported_client and args.case!='multiplayer':parser.error('exported app supports multiplayer benchmark; use development engine for script-based lifecycle tests')
+    if args.packed_assets and (not args.exported_client or args.assets):parser.error('packed-assets requires exported-client and cannot be combined with a loose override')
     passed=True;godot=str(args.godot.resolve())
     RUN_ENV.update({'godot_version':subprocess.check_output([godot,'--version'],text=True).strip(),
                     'godot_executable_sha256':hashlib.sha256(Path(godot).read_bytes()).hexdigest(),
                     'dotnet_sdk_version':subprocess.check_output([server_command()[0],'--version'],text=True).strip(),
                     'python':platform.python_version()})
-    if args.case in ['lifecycle','all']:passed=lifecycle(godot,args.output,args.cycles,args.monster_assets,args.loader) and passed
-    if args.case in ['multiplayer','all']:passed=multiplayer(godot,args.output,args.clients,args.monsters,args.drops,args.seconds,args.monster_assets) and passed
+    if args.exported_client:
+        package=Path(godot).with_suffix('.pck')
+        if not package.is_file():parser.error('exported app PCK missing')
+        check_path=(args.output/'export_integrity.json').resolve()
+        packed_root=Path(args.packed_assets or 'client/assets')
+        verify_package(godot,packed_root,check_path)
+        RUN_ENV['package_sha256']=hashlib.sha256(package.read_bytes()).hexdigest()
+    if args.case in ['lifecycle','all']:passed=lifecycle(godot,args.output,args.cycles,args.monster_assets,args.loader,args.assets) and passed
+    if args.case in ['multiplayer','all']:passed=multiplayer(godot,args.output,args.clients,args.monsters,args.drops,args.seconds,args.monster_assets,args.exported_client,args.assets,args.packed_assets) and passed
     return 0 if passed else 1
 
 if __name__=='__main__':raise SystemExit(main())

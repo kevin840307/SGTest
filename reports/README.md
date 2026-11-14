@@ -58,3 +58,6 @@ Map13：230,400 個地磚索引、865 種共用地磚、367 個物件，其中 1
 `converter_full_build.json`記錄原始路徑的一鍵build；`converter_archive_verification.json`記錄後續穩定輸出的完整驗收，75588 SPR／282968 frames、7890 groups，613 ACT／1165 SIF／9 DrawOrder，0錯誤。早期asset_inventory/asset_validation的75591/282990屬舊cache範圍，保留為歷史，不能代替這次原版集合驗收。圖像只保留local-assets。
 
 `asset_converter_acceptance/`有30-cycle async及20client/300monster/1000drop的實際原始JSON與摘要。Frame與引用／GPU回收通過；Client RSS216.96MiB高於200MiB目標，FAIL。此輪只驗收60FPS；不是全部Recovered功能／原版Golden／driver實體VRAM已完成的證據。
+# PERF002（2026-11-15）
+
+最新Runtime小頁／Windows release的raw JSON為`perf002_release*/multiplayer.json`、`perf002_production/{multiplayer,lifecycle,summary}.json`，weakref Before/After為`perf002_lifetime_{before,after}.json`。場景、正式重建結果、未通過的開發引擎RAM與實體VRAM限制見[PERF002_MEMORY](../docs/PERF002_MEMORY.md)。此處只提交文字量測／指紋；PNG／EXE／PCK不公開。

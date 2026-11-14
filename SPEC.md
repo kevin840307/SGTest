@@ -197,7 +197,7 @@ M6 PVP、小屋、社交、多 Channel、部署與維運。
 
 正式素材轉換只修改／使用`tools/asset_converter/`，由原始Data1+loose產生Godot所需素材；原版唯讀，八方向的來源重用／flip與ACT時間不能被packing改寫。原版完整SPR集合由當次來源稽核，不沿用舊cache中的固定總數。
 
-目前原版來源75,588 SPR、7,890 groups、282,968 frames、8,094 pages完成離線建置；613 ACT、1,165 SIF、9 DrawOrder可從來源重解析比對。完整離線總量保留local-assets，不當作Runtime常駐；live仍只輸出真正有consumer的map/session/on-demand資源。Map13為9 visuals/78 spawns、573 frames/2頁；Boy base 881 frames/1頁。
+目前原版來源75,588 SPR、7,890 groups、282,968 frames、8,094 pages完成離線建置；613 ACT、1,165 SIF、9 DrawOrder可從來源重解析比對。完整離線總量保留local-assets，不當作Runtime常駐；live仍只輸出真正有consumer的map/session/on-demand資源。PERF002實測後，Runtime優先512／1024候選，原SPR放不下再逐級使用2048／4096；離線archive策略不改。Map13為9 visuals/78 spawns、573 frames/5頁；Boy base 881 frames/2頁。Windows release正式重建驗收：OS記憶體峰值187.09MiB、frame P95/P99 18.549/19.200ms；地圖async 30次載卸回收通過，load P95 130.829ms、GPU submit P99 1.591ms。詳 [PERF002_MEMORY](docs/PERF002_MEMORY.md)；開發引擎仍超200MiB、實體driver VRAM及其餘未測項不能標PASS。
 
 單入口`cli.py build <original>`先解包、來源稽核、增量建置再staging發布；`cli.py verify <original>`只驗收既有離線產物並輸出報告，檢查完整index、source/decoder/metadata/page SHA、影格來源序列、PNG尺寸及sidecar內容。verify不重播全量逐像素比對；pixel equality由builder建立並綁定前述指紋。preview或partial index不能通過完整驗收。build/verify以OS lock互斥，busy回傳2且不覆蓋先前報告；lock檔存在不代表程序仍執行。
 

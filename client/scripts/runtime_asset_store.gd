@@ -9,6 +9,7 @@ const DEFAULT_CACHE_BUDGET := 64 * 1024 * 1024
 const DEFAULT_READY_BUDGET := 16 * 1024 * 1024
 const MAX_PAGE_BYTES := 64 * 1024 * 1024
 const MAX_JOBS := 128
+const MAX_METRIC_SAMPLES := 2048
 
 var cache_budget_bytes := DEFAULT_CACHE_BUDGET
 var ready_budget_bytes := DEFAULT_READY_BUDGET
@@ -26,6 +27,8 @@ var _owner_epochs: Dictionary = {}
 var _next_token := 1
 var _resident_bytes := 0
 var _clock := 0
+var _metric_cursors: Dictionary = {}
+var _metric_totals: Dictionary = {}
 var _metrics := {
 	"requests": 0,
 	"cache_hits": 0,
@@ -48,7 +51,14 @@ func _metric_increment(key: String, amount: int = 1) -> void:
 
 func _metric_append(key: String, value: float) -> void:
 	_mutex.lock()
-	_metrics[key].append(value)
+	var samples: Array = _metrics[key]
+	_metric_totals[key] = int(_metric_totals.get(key,0))+1
+	if samples.size() < MAX_METRIC_SAMPLES:
+		samples.append(value)
+	else:
+		var cursor := int(_metric_cursors.get(key,0))
+		samples[cursor] = value
+		_metric_cursors[key] = (cursor+1)%MAX_METRIC_SAMPLES
 	_mutex.unlock()
 
 func _metric_max(key: String, value: int) -> void:
@@ -194,6 +204,7 @@ func poll_gpu(max_pages: int = 1, budget_usec: int = 1500) -> int:
 	max_pages = maxi(1, max_pages)
 	budget_usec = maxi(100, budget_usec)
 	var uploaded := 0
+	var processed := 0
 	var started := Time.get_ticks_usec()
 	while uploaded < max_pages and Time.get_ticks_usec() - started < budget_usec:
 		_mutex.lock()
@@ -203,6 +214,7 @@ func poll_gpu(max_pages: int = 1, budget_usec: int = 1500) -> int:
 		_mutex.unlock()
 		if item.is_empty():
 			break
+		processed += 1
 		var path := str(item.path)
 		if not _entries.has(path):
 			continue
@@ -243,7 +255,10 @@ func poll_gpu(max_pages: int = 1, budget_usec: int = 1500) -> int:
 				if entry.remaining == 0:
 					entry.state = "ready"
 				_entries[path] = entry
-	_metric_append("gpu_commit_frame_ms", (Time.get_ticks_usec() - started) / 1000.0)
+	# Idle polling must not grow telemetry forever. Frame pacing is measured by
+	# FrameProfiler; this metric records only polls that actually consumed work.
+	if processed > 0:
+		_metric_append("gpu_commit_frame_ms", (Time.get_ticks_usec() - started) / 1000.0)
 	purge_unowned(false)
 	return uploaded
 
@@ -257,9 +272,18 @@ func pending_count() -> int:
 func resident_bytes() -> int:
 	return _resident_bytes
 
-func statistics() -> Dictionary:
+func statistics(include_samples: bool = true) -> Dictionary:
 	_mutex.lock()
-	var result: Dictionary = _metrics.duplicate(true)
+	var result: Dictionary = _metrics.duplicate(include_samples)
+	for key in ["decode_ms","upload_submit_ms","gpu_commit_frame_ms"]:
+		if not include_samples:
+			result.erase(key)
+		elif _metric_cursors.has(key):
+			var cursor := int(_metric_cursors[key])
+			var samples: Array = result[key]
+			result[key] = samples.slice(cursor)+samples.slice(0,cursor)
+	result["metric_sample_totals"] = _metric_totals.duplicate()
+	result["metric_sample_limit"] = MAX_METRIC_SAMPLES
 	result["ready_queue_bytes"] = _ready_bytes
 	result["queued_decode_jobs"] = _requests.size()
 	_mutex.unlock()
@@ -317,41 +341,45 @@ func _decode_loop() -> void:
 		if job.is_empty():
 			OS.delay_msec(1)
 			continue
-		var manifest_path := str(job.path)
-		if not FileAccess.file_exists(manifest_path):
-			_publish({"path": job.path, "token": job.token, "kind": "error", "error": ERR_FILE_CANT_READ})
-			continue
-		var parser := JSON.new()
-		if parser.parse(FileAccess.get_file_as_string(manifest_path)) != OK:
-			_publish({"path": job.path, "token": job.token, "kind": "error", "error": ERR_FILE_CORRUPT})
-			continue
-		var data: Variant = parser.data
-		if not data is Dictionary or int(data.get("version", 0)) not in [3,4,5,6,7,8,9] or not data.get("pages") is Array:
-			_publish({"path": job.path, "token": job.token, "kind": "error", "error": ERR_FILE_CORRUPT})
-			continue
-		if not _publish({"path": job.path, "token": job.token, "kind": "metadata", "data": data}):
-			continue
-		for index in data.pages.size():
-			var name := str(data.pages[index])
-			if name != name.get_file() or name.is_absolute_path():
-				_publish({"path": job.path, "token": job.token, "kind": "error", "error": ERR_INVALID_DATA})
-				break
-			var stamp := Time.get_ticks_usec()
-			var image := Image.load_from_file(str(job.path).get_base_dir().path_join(name))
-			var decode_ms := (Time.get_ticks_usec() - stamp) / 1000.0
-			_mutex.lock()
-			_metrics.decode_ms.append(decode_ms)
-			_mutex.unlock()
-			if image == null:
-				_publish({"path": job.path, "token": job.token, "kind": "error", "error": ERR_FILE_CANT_READ})
-				break
-			var bytes := image.get_width() * image.get_height() * 4
-			if bytes > MAX_PAGE_BYTES:
-				_publish({"path": job.path, "token": job.token, "kind": "error", "error": ERR_OUT_OF_MEMORY})
-				break
-			_mutex.lock()
-			_metrics.decoded_pages += 1
-			_mutex.unlock()
-			if not _publish({"path": job.path, "token": job.token, "kind": "image",
-					"index": index, "image": image, "bytes": bytes}, bytes):
-				break
+		_decode_job(job)
+
+func _decode_job(job: Dictionary) -> void:
+	# A returning function frame releases JSON parser/data/string temporaries.
+	# Keeping them in the permanent worker loop retains the last request while idle.
+	var manifest_path := str(job.path)
+	if not FileAccess.file_exists(manifest_path):
+		_publish({"path":job.path,"token":job.token,"kind":"error","error":ERR_FILE_CANT_READ})
+		return
+	var parser := JSON.new()
+	if parser.parse(FileAccess.get_file_as_string(manifest_path)) != OK:
+		_publish({"path":job.path,"token":job.token,"kind":"error","error":ERR_FILE_CORRUPT})
+		return
+	var data: Variant = parser.data
+	if not data is Dictionary or int(data.get("version",0)) not in [3,4,5,6,7,8,9] or not data.get("pages") is Array:
+		_publish({"path":job.path,"token":job.token,"kind":"error","error":ERR_FILE_CORRUPT})
+		return
+	if not _publish({"path":job.path,"token":job.token,"kind":"metadata","data":data}):
+		return
+	for index in data.pages.size():
+		if not _decode_page(job,index,str(data.pages[index])):
+			return
+
+func _decode_page(job: Dictionary, index: int, name: String) -> bool:
+	# Image and publish temporaries belong to one page, not the next decode or
+	# the worker's idle lifetime. Only the bounded ready queue retains the Image.
+	if name != name.get_file() or name.is_absolute_path():
+		_publish({"path":job.path,"token":job.token,"kind":"error","error":ERR_INVALID_DATA})
+		return false
+	var stamp := Time.get_ticks_usec()
+	var image := Image.load_from_file(str(job.path).get_base_dir().path_join(name))
+	_metric_append("decode_ms",(Time.get_ticks_usec()-stamp)/1000.0)
+	if image == null:
+		_publish({"path":job.path,"token":job.token,"kind":"error","error":ERR_FILE_CANT_READ})
+		return false
+	var bytes := image.get_width()*image.get_height()*4
+	if bytes > MAX_PAGE_BYTES:
+		_publish({"path":job.path,"token":job.token,"kind":"error","error":ERR_OUT_OF_MEMORY})
+		return false
+	_metric_increment("decoded_pages")
+	return _publish({"path":job.path,"token":job.token,"kind":"image",
+		"index":index,"image":image,"bytes":bytes},bytes)

@@ -8,8 +8,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from animation_definition import compile_definition
-from asset_bundle_builder import build_bundle, choose_candidate
-from asset_pipeline import prune_legacy_runtime_assets, resolve_server_dat
+from asset_converter.content.asset_bundle_builder import build_bundle, choose_candidate, choose_runtime_candidate
+from asset_converter.content.asset_pipeline import prune_legacy_runtime_assets, resolve_server_dat
 from test_assets import spr
 
 
@@ -21,6 +21,26 @@ def action(key: str):
 
 
 class AssetPipelineTests(unittest.TestCase):
+    def test_runtime_small_pages_and_atomic_fallback(self):
+        rows = [
+            {"side": 512, "valid": True, "pages": 20, "rgba_bytes": 100},
+            {"side": 1024, "valid": True, "pages": 5, "rgba_bytes": 103},
+            {"side": 2048, "valid": True, "pages": 2, "rgba_bytes": 101},
+            {"side": 4096, "valid": True, "pages": 1, "rgba_bytes": 99},
+        ]
+        self.assertEqual(choose_runtime_candidate(rows)["side"], 1024)
+        self.assertEqual(choose_runtime_candidate(rows, .02)["side"], 512)
+        # A source larger than 1024 must remain atomic: use 2048 even if 4096
+        # would have fewer pages and slightly lower total packed RGBA bytes.
+        for row in rows[:2]:
+            row["valid"] = False
+        self.assertEqual(choose_runtime_candidate(rows)["side"], 2048)
+        rows[2]["valid"] = False
+        self.assertEqual(choose_runtime_candidate(rows)["side"], 4096)
+        rows[3]["valid"] = False
+        with self.assertRaises(ValueError):
+            choose_runtime_candidate(rows)
+
     def definition(self, root: Path, prefix: str) -> dict:
         enemy = root / "enemy"
         enemy.mkdir(exist_ok=True)

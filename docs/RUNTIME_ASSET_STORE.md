@@ -53,7 +53,7 @@ Godot synthetic/real-private-asset tests：
 
 ## Lifecycle-bundle 簡化後補充（2026-11-14）
 
-Production 已由多個 per-entity/per-part/per-map-object manifests 收斂成 map/session lifecycle bundles；完整理由見 [ASSET_BUNDLE_ARCHITECTURE.md](ASSET_BUNDLE_ARCHITECTURE.md) 與 [ASSET_NECESSITY_AUDIT.md](ASSET_NECESSITY_AUDIT.md)。目前 Map13 monster + scenery 共用 2048×2 map bundle。After 的 30-cycle async lifecycle：frame P95/P99 **16.824/16.906ms**，texture handles、engine texture、Store resident recovery 全 PASS。20client/300monster/1000drop/40s：**59.999FPS**、frame P95/P99 **18.947/20.322ms**、draw P95 **228**、execution PASS；代價是 texture/video monitor 約增加 7MiB，並已明確記錄為 lifecycle/維護性 trade-off，不宣稱 RAM/VRAM 最佳化。
+Production 已由多個 per-entity/per-part/per-map-object manifests 收斂成 map/session lifecycle bundles；完整理由見 [ASSET_BUNDLE_ARCHITECTURE.md](ASSET_BUNDLE_ARCHITECTURE.md) 與 [ASSET_NECESSITY_AUDIT.md](ASSET_NECESSITY_AUDIT.md)。早期2048×2 map bundle數據保留在該文件。2026-11-15 PERF002改為Runtime優先512／1024，Map13為1024候選5頁、session2頁，ownership仍不變。修正worker idle持有Image／metadata，telemetry各有2048筆上限、idle不追加，`statistics(false)`不複製樣本。正式release峰值187.09MiB，30次map載卸frame P95/P99 16.822/16.971ms、回收PASS；見 [PERF002_MEMORY](PERF002_MEMORY.md)。任意取消風暴queue邊界仍需獨立壓測，串行30次不證明該範圍完成。
 
 以下 ASSET204 數字保留為「簡化前 normalized_memory 14-page」歷史基準，用來證明 bounded async store 本身的改善。
 

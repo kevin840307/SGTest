@@ -20,7 +20,26 @@ from .runtime_animation_semantics import logical_views
 from ..source.runtime_spr import decode_spr
 
 SIDES = (512, 1024, 2048, 4096)
+RUNTIME_PREFERRED_SIDE = 1024
 MONSTER_ACTIONS = ("NS", "NW", "FA", "NH", "ND")
+
+
+def choose_runtime_candidate(candidates: list[dict], overhead: float = 0.05) -> dict:
+    """Prefer measured small-page workspace; preserve atomic SPR correctness.
+
+    Map13/Boy release A/B is recorded in docs/PERF002_MEMORY.md. This policy
+    applies only to runtime bundles, not the complete offline source archive.
+    If an atomic SPR cannot fit, use the smallest valid larger side rather
+    than trading a much larger decode workspace for one fewer texture page.
+    """
+    valid = [row for row in candidates if row.get("valid")]
+    if not valid:
+        raise ValueError("no atlas side can hold the bundle")
+    pool = [row for row in valid if int(row["side"]) <= RUNTIME_PREFERRED_SIDE]
+    if not pool:
+        smallest = min(int(row["side"]) for row in valid)
+        pool = [row for row in valid if int(row["side"]) == smallest]
+    return choose_candidate(pool, overhead, auto_max_side=RUNTIME_PREFERRED_SIDE)
 
 
 def _write_json(path: Path, value: dict) -> None:
@@ -234,7 +253,7 @@ def build_bundle(definitions: list[dict], source_root: Path, destination: Path,
     chosen = next((row for row in candidates if row.get("valid") and row["side"] == side), None) if side else None
     if side is not None and chosen is None:
         raise ValueError(f"requested side {side} cannot hold bundle")
-    chosen = chosen or choose_candidate(candidates, overhead)
+    chosen = chosen or choose_runtime_candidate(candidates, overhead)
     pages, records = pack_source_blocks(collected["frames"], collected["ranges"], int(chosen["side"]))
 
     manifest_frames = []
@@ -264,6 +283,8 @@ def build_bundle(definitions: list[dict], source_root: Path, destination: Path,
         "bundle_id": bundle_id,
         "bundle_scope": scope,
         "packing_policy": "adaptive_atomic_atlas_v1",
+        "selection_policy": "runtime_small_page_workspace_v1",
+        "preferred_max_side": RUNTIME_PREFERRED_SIDE,
         "semantic_source": "sgtest.animation/v2",
         "normalized_schema_version": 2,
         "atlas_side": int(chosen["side"]),

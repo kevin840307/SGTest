@@ -55,7 +55,11 @@ hair01～10、裝備、武器不因「是部位」自動塞進 base；只有低�
 | Ground drops | **目前無 texture atlas 類別** | DropRenderer 是單一 MultiMesh |
 | Rare equipment / skill FX | **未來 on-demand 候選** | 必須低頻 + 可獨立卸載 + 實測有收益 |
 
-## 為何 production 選 2048
+## 最新Runtime選擇：優先512／1024（2026-11-15）
+
+完整Windows release／多人與RAM峰值A/B後改採Runtime小頁優先，詳 [PERF002_MEMORY](PERF002_MEMORY.md)。Map13仍是一個map owner／bundle但內含1024候選5頁，Boy base是一個session bundle內含2頁；跨頁不新增Runtime類型。原SPR過大才使用最小有效2048／4096，離線archive政策不改。正式重建release峰值187.09MiB、約60FPS，30次map資源載卸回收PASS。較多頁可能增加Draw Calls；不宣稱所有指標同時改善。
+
+## 歷史2048決策及候選量測（由上節實測更新）
 
 不是因為「大圖比較快」，而是同素材 A/B。
 
@@ -72,7 +76,7 @@ hair01～10、裝備、武器不因「是部位」自動塞進 base；只有低�
 
 4096 雖少一頁，但 20-cycle lifecycle 的 load/frame 幾乎沒有改善，transient static/decode peak 卻從 **36,911,847 → 53,543,643 bytes**。300 draw synthetic 中 4096 draw P95 73、2048 draw P95 206，但 frame P95 4096 約 7.76～8.01ms，2048 約 7.02～7.05ms，沒有 frame 勝利。
 
-因此 auto mode 會量測 4096，但只要 2048 能容納 atomic source block，就優先 <=2048；4096 只作研究 override 或 correctness fallback。尺寸仍是 Builder 參數，不是 Runtime 類型。
+此輪原先auto優先<=2048；這項Runtime選擇已由PERF002更新為上節小頁策略。尺寸仍是Builder參數，不是Runtime類型。下列為當時數據，保留供比較。
 
 Map13 1440 最大視窗 + preload margin 的 scenery working set：P50 21 atlases / 4.394MiB，P95 30 atlases / 5.414MiB；全 45 種只有 7.222MiB。細拆常態僅省約 1.8～2.8MiB object resident，卻維護 21～30 個 owner/acquire/release，因此不保留這個 production boundary。
 

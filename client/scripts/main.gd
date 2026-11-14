@@ -94,6 +94,13 @@ var wire := preload("res://scripts/message_pack.gd").new()
 
 func _ready() -> void:
 	var arguments := OS.get_cmdline_user_args()
+	if arguments.has("--verify-pack"):
+		var export_report := ""
+		for argument in arguments:
+			if argument.begins_with("--export-check-report="):
+				export_report = argument.trim_prefix("--export-check-report=")
+		get_tree().quit(preload("res://scripts/verify_export.gd").new().run(export_report))
+		return
 	bot = arguments.has("--bot")
 	runtime_trace = arguments.has("--runtime-trace")
 	if runtime_trace:
@@ -113,6 +120,8 @@ func _ready() -> void:
 			bot_logout_after = maxf(0.5,float(argument.trim_prefix("--bot-logout-after=")))
 		if argument.begins_with("--profile-seconds=") and profiler != null:
 			profiler.sample_seconds = maxf(10.0,float(argument.trim_prefix("--profile-seconds=")))
+		if argument.begins_with("--profile-report=") and profiler != null:
+			profiler.report_path = argument.trim_prefix("--profile-report=")
 		if argument.begins_with("--port="):
 			port = clampi(int(argument.trim_prefix("--port=")),1024,65535)
 		if argument.begins_with("--host="):
@@ -381,7 +390,7 @@ func _world_info(server_map: int, fingerprint: String, population_hash: String) 
 		await get_tree().process_frame
 	if generation != world_generation:
 		return
-	print("monster_palette "+JSON.stringify({"definitions":monster_visuals.definitions.size(),"shared_atlases":monster_visuals.shared.size(),"rgba_bytes":monster_visuals.rgba_bytes,"load_ms":(Time.get_ticks_usec()-started)/1000.0,"async_store":asset_store.statistics()}))
+	print("monster_palette "+JSON.stringify({"definitions":monster_visuals.definitions.size(),"shared_atlases":monster_visuals.shared.size(),"rgba_bytes":monster_visuals.rgba_bytes,"load_ms":(Time.get_ticks_usec()-started)/1000.0,"async_store":asset_store.statistics(false)}))
 	info_label.text = "已連線　%s" % (str(terrain.data.name) if terrain != null else "測試場地")
 	map_ready = true
 	network.send(24,[server_map,fingerprint,population_hash])
@@ -406,7 +415,7 @@ func _physics_process(delta: float) -> void:
 	diagnostics_time += delta
 	if int(diagnostics_time/5.0) > int((diagnostics_time-delta)/5.0) and prediction.initialized:
 		print("prediction_metrics "+JSON.stringify({"pending":prediction.pending.size(),"max_pending":prediction.max_pending,"max_correction_px":prediction.max_correction,"reconciliations":prediction.reconciliations}))
-		var asset_metrics := asset_store.statistics()
+		var asset_metrics := asset_store.statistics(false)
 		print("asset_store_metrics "+JSON.stringify({"resident_bytes":asset_metrics.resident_bytes,"ready_queue_bytes":asset_metrics.ready_queue_bytes,"entries":asset_metrics.entries,"pending":asset_metrics.pending,"cache_hits":asset_metrics.cache_hits,"cache_misses":asset_metrics.cache_misses,"evictions":asset_metrics.evictions,"peak_resident_bytes":asset_metrics.peak_resident_bytes}))
 	_client_step(delta)
 	ping_elapsed += delta

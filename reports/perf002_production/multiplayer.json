@@ -1,0 +1,4431 @@
+{
+  "execution_passed": true,
+  "scenario": {
+    "clients": 20,
+    "native_clients": 1,
+    "headless_clients": 19,
+    "monster_assets": "C:\\SGO\\SRC\\SGTest\\client\\assets",
+    "client_build": "exported release",
+    "asset_storage": "embedded PCK",
+    "monsters": 300,
+    "drops": 1000,
+    "map": 13,
+    "seconds": 40,
+    "render_cap": 60,
+    "resolution": [
+      1440,
+      900
+    ],
+    "bot_paths": "deterministic per-client phase; not identical trajectories"
+  },
+  "rendered": {
+    "draw_calls_last_frame": 172.0,
+    "draw_calls_p95": 244.0,
+    "engine_features": {
+      "debug": false,
+      "editor": false,
+      "template_release": true
+    },
+    "frame_ms_max": 20.331,
+    "frame_ms_p50": 16.667,
+    "frame_ms_p95": 18.549,
+    "frame_ms_p99": 19.2,
+    "frames": 2101,
+    "mean_fps": 60.0030786919957,
+    "renderer": "NVIDIA GeForce RTX 3050",
+    "resolution": [
+      1440,
+      900
+    ],
+    "sample_seconds": 35.0,
+    "static_memory_bytes": 0,
+    "texture_memory_bytes": 46083839.0,
+    "video_memory_bytes": 52572895.0,
+    "warmup_seconds": 2
+  },
+  "samples": [
+    [
+      {
+        "cpu_one_core_percent": 121.5,
+        "rss_bytes": 79106048,
+        "os_peak_rss_bytes": 79110144
+      },
+      {
+        "cpu_one_core_percent": 32.3,
+        "rss_bytes": 190881792,
+        "os_peak_rss_bytes": 196182016
+      },
+      {
+        "cpu_one_core_percent": 23.1,
+        "rss_bytes": 124678144,
+        "os_peak_rss_bytes": 124682240
+      },
+      {
+        "cpu_one_core_percent": 21.5,
+        "rss_bytes": 124801024,
+        "os_peak_rss_bytes": 124805120
+      },
+      {
+        "cpu_one_core_percent": 23.1,
+        "rss_bytes": 124334080,
+        "os_peak_rss_bytes": 124338176
+      },
+      {
+        "cpu_one_core_percent": 33.8,
+        "rss_bytes": 125063168,
+        "os_peak_rss_bytes": 125067264
+      },
+      {
+        "cpu_one_core_percent": 24.6,
+        "rss_bytes": 124366848,
+        "os_peak_rss_bytes": 124370944
+      },
+      {
+        "cpu_one_core_percent": 27.7,
+        "rss_bytes": 125079552,
+        "os_peak_rss_bytes": 125083648
+      },
+      {
+        "cpu_one_core_percent": 26.1,
+        "rss_bytes": 123985920,
+        "os_peak_rss_bytes": 123990016
+      },
+      {
+        "cpu_one_core_percent": 21.5,
+        "rss_bytes": 124768256,
+        "os_peak_rss_bytes": 124772352
+      },
+      {
+        "cpu_one_core_percent": 27.7,
+        "rss_bytes": 125067264,
+        "os_peak_rss_bytes": 125071360
+      },
+      {
+        "cpu_one_core_percent": 21.5,
+        "rss_bytes": 124399616,
+        "os_peak_rss_bytes": 124403712
+      },
+      {
+        "cpu_one_core_percent": 20.0,
+        "rss_bytes": 124481536,
+        "os_peak_rss_bytes": 124485632
+      },
+      {
+        "cpu_one_core_percent": 27.7,
+        "rss_bytes": 125206528,
+        "os_peak_rss_bytes": 125210624
+      },
+      {
+        "cpu_one_core_percent": 32.3,
+        "rss_bytes": 124997632,
+        "os_peak_rss_bytes": 125001728
+      },
+      {
+        "cpu_one_core_percent": 29.2,
+        "rss_bytes": 124633088,
+        "os_peak_rss_bytes": 124637184
+      },
+      {
+        "cpu_one_core_percent": 30.8,
+        "rss_bytes": 124170240,
+        "os_peak_rss_bytes": 124174336
+      },
+      {
+        "cpu_one_core_percent": 30.8,
+        "rss_bytes": 124706816,
+        "os_peak_rss_bytes": 124710912
+      },
+      {
+        "cpu_one_core_percent": 29.2,
+        "rss_bytes": 124522496,
+        "os_peak_rss_bytes": 124526592
+      },
+      {
+        "cpu_one_core_percent": 29.2,
+        "rss_bytes": 124915712,
+        "os_peak_rss_bytes": 124919808
+      },
+      {
+        "cpu_one_core_percent": 27.7,
+        "rss_bytes": 124796928,
+        "os_peak_rss_bytes": 124801024
+      }
+    ],
+    [
+      {
+        "cpu_one_core_percent": 115.5,
+        "rss_bytes": 83914752,
+        "os_peak_rss_bytes": 83972096
+      },
+      {
+        "cpu_one_core_percent": 27.7,
+        "rss_bytes": 191393792,
+        "os_peak_rss_bytes": 196182016
+      },
+      {
+        "cpu_one_core_percent": 21.6,
+        "rss_bytes": 124993536,
+        "os_peak_rss_bytes": 124997632
+      },
+      {
+        "cpu_one_core_percent": 24.6,
+        "rss_bytes": 125214720,
+        "os_peak_rss_bytes": 125218816
+      },
+      {
+        "cpu_one_core_percent": 23.1,
+        "rss_bytes": 124829696,
+        "os_peak_rss_bytes": 124833792
+      },
+      {
+        "cpu_one_core_percent": 26.2,
+        "rss_bytes": 125730816,
+        "os_peak_rss_bytes": 125734912
+      },
+      {
+        "cpu_one_core_percent": 23.1,
+        "rss_bytes": 124764160,
+        "os_peak_rss_bytes": 124768256
+      },
+      {
+        "cpu_one_core_percent": 26.2,
+        "rss_bytes": 125571072,
+        "os_peak_rss_bytes": 125575168
+      },
+      {
+        "cpu_one_core_percent": 23.1,
+        "rss_bytes": 124309504,
+        "os_peak_rss_bytes": 124313600
+      },
+      {
+        "cpu_one_core_percent": 26.2,
+        "rss_bytes": 125169664,
+        "os_peak_rss_bytes": 125173760
+      },
+      {
+        "cpu_one_core_percent": 24.6,
+        "rss_bytes": 125267968,
+        "os_peak_rss_bytes": 125272064
+      },
+      {
+        "cpu_one_core_percent": 24.6,
+        "rss_bytes": 124829696,
+        "os_peak_rss_bytes": 124833792
+      },
+      {
+        "cpu_one_core_percent": 23.1,
+        "rss_bytes": 124755968,
+        "os_peak_rss_bytes": 124760064
+      },
+      {
+        "cpu_one_core_percent": 29.2,
+        "rss_bytes": 125677568,
+        "os_peak_rss_bytes": 125681664
+      },
+      {
+        "cpu_one_core_percent": 29.2,
+        "rss_bytes": 125501440,
+        "os_peak_rss_bytes": 125505536
+      },
+      {
+        "cpu_one_core_percent": 26.2,
+        "rss_bytes": 125042688,
+        "os_peak_rss_bytes": 125046784
+      },
+      {
+        "cpu_one_core_percent": 30.8,
+        "rss_bytes": 124743680,
+        "os_peak_rss_bytes": 124747776
+      },
+      {
+        "cpu_one_core_percent": 26.2,
+        "rss_bytes": 124878848,
+        "os_peak_rss_bytes": 124882944
+      },
+      {
+        "cpu_one_core_percent": 21.6,
+        "rss_bytes": 124706816,
+        "os_peak_rss_bytes": 124710912
+      },
+      {
+        "cpu_one_core_percent": 33.9,
+        "rss_bytes": 125317120,
+        "os_peak_rss_bytes": 125321216
+      },
+      {
+        "cpu_one_core_percent": 24.6,
+        "rss_bytes": 124973056,
+        "os_peak_rss_bytes": 124977152
+      }
+    ],
+    [
+      {
+        "cpu_one_core_percent": 69.2,
+        "rss_bytes": 84365312,
+        "os_peak_rss_bytes": 84369408
+      },
+      {
+        "cpu_one_core_percent": 29.2,
+        "rss_bytes": 191594496,
+        "os_peak_rss_bytes": 196182016
+      },
+      {
+        "cpu_one_core_percent": 20.0,
+        "rss_bytes": 125136896,
+        "os_peak_rss_bytes": 125140992
+      },
+      {
+        "cpu_one_core_percent": 20.0,
+        "rss_bytes": 125341696,
+        "os_peak_rss_bytes": 125345792
+      },
+      {
+        "cpu_one_core_percent": 21.5,
+        "rss_bytes": 124973056,
+        "os_peak_rss_bytes": 124977152
+      },
+      {
+        "cpu_one_core_percent": 21.5,
+        "rss_bytes": 125874176,
+        "os_peak_rss_bytes": 125878272
+      },
+      {
+        "cpu_one_core_percent": 21.5,
+        "rss_bytes": 124907520,
+        "os_peak_rss_bytes": 124911616
+      },
+      {
+        "cpu_one_core_percent": 16.9,
+        "rss_bytes": 125710336,
+        "os_peak_rss_bytes": 125714432
+      },
+      {
+        "cpu_one_core_percent": 23.1,
+        "rss_bytes": 124448768,
+        "os_peak_rss_bytes": 124452864
+      },
+      {
+        "cpu_one_core_percent": 16.9,
+        "rss_bytes": 125411328,
+        "os_peak_rss_bytes": 125415424
+      },
+      {
+        "cpu_one_core_percent": 23.1,
+        "rss_bytes": 125513728,
+        "os_peak_rss_bytes": 125517824
+      },
+      {
+        "cpu_one_core_percent": 21.5,
+        "rss_bytes": 124985344,
+        "os_peak_rss_bytes": 124989440
+      },
+      {
+        "cpu_one_core_percent": 18.5,
+        "rss_bytes": 124895232,
+        "os_peak_rss_bytes": 124899328
+      },
+      {
+        "cpu_one_core_percent": 23.1,
+        "rss_bytes": 125906944,
+        "os_peak_rss_bytes": 125911040
+      },
+      {
+        "cpu_one_core_percent": 24.6,
+        "rss_bytes": 125681664,
+        "os_peak_rss_bytes": 125685760
+      },
+      {
+        "cpu_one_core_percent": 20.0,
+        "rss_bytes": 125272064,
+        "os_peak_rss_bytes": 125276160
+      },
+      {
+        "cpu_one_core_percent": 26.1,
+        "rss_bytes": 124887040,
+        "os_peak_rss_bytes": 124891136
+      },
+      {
+        "cpu_one_core_percent": 27.7,
+        "rss_bytes": 125083648,
+        "os_peak_rss_bytes": 125087744
+      },
+      {
+        "cpu_one_core_percent": 18.5,
+        "rss_bytes": 124862464,
+        "os_peak_rss_bytes": 124866560
+      },
+      {
+        "cpu_one_core_percent": 21.5,
+        "rss_bytes": 125489152,
+        "os_peak_rss_bytes": 125493248
+      },
+      {
+        "cpu_one_core_percent": 21.5,
+        "rss_bytes": 125050880,
+        "os_peak_rss_bytes": 125054976
+      }
+    ],
+    [
+      {
+        "cpu_one_core_percent": 1.6,
+        "rss_bytes": 84410368,
+        "os_peak_rss_bytes": 84414464
+      },
+      {
+        "cpu_one_core_percent": 25.0,
+        "rss_bytes": 191741952,
+        "os_peak_rss_bytes": 196182016
+      },
+      {
+        "cpu_one_core_percent": 15.6,
+        "rss_bytes": 125218816,
+        "os_peak_rss_bytes": 125222912
+      },
+      {
+        "cpu_one_core_percent": 20.3,
+        "rss_bytes": 125468672,
+        "os_peak_rss_bytes": 125472768
+      },
+      {
+        "cpu_one_core_percent": 18.8,
+        "rss_bytes": 125087744,
+        "os_peak_rss_bytes": 125091840
+      },
+      {
+        "cpu_one_core_percent": 20.3,
+        "rss_bytes": 125952000,
+        "os_peak_rss_bytes": 125956096
+      },
+      {
+        "cpu_one_core_percent": 17.2,
+        "rss_bytes": 125095936,
+        "os_peak_rss_bytes": 125100032
+      },
+      {
+        "cpu_one_core_percent": 20.3,
+        "rss_bytes": 125845504,
+        "os_peak_rss_bytes": 125849600
+      },
+      {
+        "cpu_one_core_percent": 15.6,
+        "rss_bytes": 124530688,
+        "os_peak_rss_bytes": 124534784
+      },
+      {
+        "cpu_one_core_percent": 21.9,
+        "rss_bytes": 125534208,
+        "os_peak_rss_bytes": 125538304
+      },
+      {
+        "cpu_one_core_percent": 18.8,
+        "rss_bytes": 125661184,
+        "os_peak_rss_bytes": 125665280
+      },
+      {
+        "cpu_one_core_percent": 17.2,
+        "rss_bytes": 125128704,
+        "os_peak_rss_bytes": 125132800
+      },
+      {
+        "cpu_one_core_percent": 20.3,
+        "rss_bytes": 125087744,
+        "os_peak_rss_bytes": 125091840
+      },
+      {
+        "cpu_one_core_percent": 18.8,
+        "rss_bytes": 126046208,
+        "os_peak_rss_bytes": 126050304
+      },
+      {
+        "cpu_one_core_percent": 18.8,
+        "rss_bytes": 125825024,
+        "os_peak_rss_bytes": 125829120
+      },
+      {
+        "cpu_one_core_percent": 18.8,
+        "rss_bytes": 125411328,
+        "os_peak_rss_bytes": 125415424
+      },
+      {
+        "cpu_one_core_percent": 17.2,
+        "rss_bytes": 125067264,
+        "os_peak_rss_bytes": 125071360
+      },
+      {
+        "cpu_one_core_percent": 17.2,
+        "rss_bytes": 125222912,
+        "os_peak_rss_bytes": 125227008
+      },
+      {
+        "cpu_one_core_percent": 17.2,
+        "rss_bytes": 124989440,
+        "os_peak_rss_bytes": 124993536
+      },
+      {
+        "cpu_one_core_percent": 17.2,
+        "rss_bytes": 125603840,
+        "os_peak_rss_bytes": 125607936
+      },
+      {
+        "cpu_one_core_percent": 21.9,
+        "rss_bytes": 125239296,
+        "os_peak_rss_bytes": 125243392
+      }
+    ],
+    [
+      {
+        "cpu_one_core_percent": 16.9,
+        "rss_bytes": 84418560,
+        "os_peak_rss_bytes": 84422656
+      },
+      {
+        "cpu_one_core_percent": 21.6,
+        "rss_bytes": 191946752,
+        "os_peak_rss_bytes": 196182016
+      },
+      {
+        "cpu_one_core_percent": 15.4,
+        "rss_bytes": 125358080,
+        "os_peak_rss_bytes": 125362176
+      },
+      {
+        "cpu_one_core_percent": 18.5,
+        "rss_bytes": 125648896,
+        "os_peak_rss_bytes": 125652992
+      },
+      {
+        "cpu_one_core_percent": 13.9,
+        "rss_bytes": 125157376,
+        "os_peak_rss_bytes": 125161472
+      },
+      {
+        "cpu_one_core_percent": 16.9,
+        "rss_bytes": 126087168,
+        "os_peak_rss_bytes": 126091264
+      },
+      {
+        "cpu_one_core_percent": 10.8,
+        "rss_bytes": 125165568,
+        "os_peak_rss_bytes": 125169664
+      },
+      {
+        "cpu_one_core_percent": 21.6,
+        "rss_bytes": 125919232,
+        "os_peak_rss_bytes": 125923328
+      },
+      {
+        "cpu_one_core_percent": 12.3,
+        "rss_bytes": 124649472,
+        "os_peak_rss_bytes": 124653568
+      },
+      {
+        "cpu_one_core_percent": 12.3,
+        "rss_bytes": 125616128,
+        "os_peak_rss_bytes": 125620224
+      },
+      {
+        "cpu_one_core_percent": 16.9,
+        "rss_bytes": 125730816,
+        "os_peak_rss_bytes": 125734912
+      },
+      {
+        "cpu_one_core_percent": 18.5,
+        "rss_bytes": 125255680,
+        "os_peak_rss_bytes": 125259776
+      },
+      {
+        "cpu_one_core_percent": 16.9,
+        "rss_bytes": 125222912,
+        "os_peak_rss_bytes": 125227008
+      },
+      {
+        "cpu_one_core_percent": 13.9,
+        "rss_bytes": 126119936,
+        "os_peak_rss_bytes": 126124032
+      },
+      {
+        "cpu_one_core_percent": 16.9,
+        "rss_bytes": 125890560,
+        "os_peak_rss_bytes": 125894656
+      },
+      {
+        "cpu_one_core_percent": 9.2,
+        "rss_bytes": 125612032,
+        "os_peak_rss_bytes": 125616128
+      },
+      {
+        "cpu_one_core_percent": 16.9,
+        "rss_bytes": 125140992,
+        "os_peak_rss_bytes": 125145088
+      },
+      {
+        "cpu_one_core_percent": 15.4,
+        "rss_bytes": 125292544,
+        "os_peak_rss_bytes": 125296640
+      },
+      {
+        "cpu_one_core_percent": 13.9,
+        "rss_bytes": 125124608,
+        "os_peak_rss_bytes": 125128704
+      },
+      {
+        "cpu_one_core_percent": 13.9,
+        "rss_bytes": 125743104,
+        "os_peak_rss_bytes": 125747200
+      },
+      {
+        "cpu_one_core_percent": 18.5,
+        "rss_bytes": 125313024,
+        "os_peak_rss_bytes": 125317120
+      }
+    ],
+    [
+      {
+        "cpu_one_core_percent": 0.0,
+        "rss_bytes": 84418560,
+        "os_peak_rss_bytes": 84422656
+      },
+      {
+        "cpu_one_core_percent": 21.9,
+        "rss_bytes": 192045056,
+        "os_peak_rss_bytes": 196182016
+      },
+      {
+        "cpu_one_core_percent": 18.8,
+        "rss_bytes": 125427712,
+        "os_peak_rss_bytes": 125431808
+      },
+      {
+        "cpu_one_core_percent": 14.1,
+        "rss_bytes": 125718528,
+        "os_peak_rss_bytes": 125722624
+      },
+      {
+        "cpu_one_core_percent": 15.6,
+        "rss_bytes": 125222912,
+        "os_peak_rss_bytes": 125227008
+      },
+      {
+        "cpu_one_core_percent": 18.8,
+        "rss_bytes": 126169088,
+        "os_peak_rss_bytes": 126173184
+      },
+      {
+        "cpu_one_core_percent": 12.5,
+        "rss_bytes": 125231104,
+        "os_peak_rss_bytes": 125235200
+      },
+      {
+        "cpu_one_core_percent": 14.1,
+        "rss_bytes": 125984768,
+        "os_peak_rss_bytes": 125988864
+      },
+      {
+        "cpu_one_core_percent": 9.4,
+        "rss_bytes": 124727296,
+        "os_peak_rss_bytes": 124731392
+      },
+      {
+        "cpu_one_core_percent": 7.8,
+        "rss_bytes": 125710336,
+        "os_peak_rss_bytes": 125714432
+      },
+      {
+        "cpu_one_core_percent": 15.6,
+        "rss_bytes": 125800448,
+        "os_peak_rss_bytes": 125804544
+      },
+      {
+        "cpu_one_core_percent": 10.9,
+        "rss_bytes": 125526016,
+        "os_peak_rss_bytes": 125530112
+      },
+      {
+        "cpu_one_core_percent": 17.2,
+        "rss_bytes": 125288448,
+        "os_peak_rss_bytes": 125292544
+      },
+      {
+        "cpu_one_core_percent": 10.9,
+        "rss_bytes": 126160896,
+        "os_peak_rss_bytes": 126164992
+      },
+      {
+        "cpu_one_core_percent": 15.6,
+        "rss_bytes": 125956096,
+        "os_peak_rss_bytes": 125960192
+      },
+      {
+        "cpu_one_core_percent": 7.8,
+        "rss_bytes": 125722624,
+        "os_peak_rss_bytes": 125726720
+      },
+      {
+        "cpu_one_core_percent": 14.1,
+        "rss_bytes": 125206528,
+        "os_peak_rss_bytes": 125210624
+      },
+      {
+        "cpu_one_core_percent": 15.6,
+        "rss_bytes": 125362176,
+        "os_peak_rss_bytes": 125366272
+      },
+      {
+        "cpu_one_core_percent": 15.6,
+        "rss_bytes": 125263872,
+        "os_peak_rss_bytes": 125267968
+      },
+      {
+        "cpu_one_core_percent": 17.2,
+        "rss_bytes": 125808640,
+        "os_peak_rss_bytes": 125812736
+      },
+      {
+        "cpu_one_core_percent": 17.2,
+        "rss_bytes": 125378560,
+        "os_peak_rss_bytes": 125382656
+      }
+    ],
+    [
+      {
+        "cpu_one_core_percent": 0.0,
+        "rss_bytes": 84418560,
+        "os_peak_rss_bytes": 84422656
+      },
+      {
+        "cpu_one_core_percent": 21.9,
+        "rss_bytes": 191119360,
+        "os_peak_rss_bytes": 196182016
+      },
+      {
+        "cpu_one_core_percent": 14.1,
+        "rss_bytes": 125505536,
+        "os_peak_rss_bytes": 125509632
+      },
+      {
+        "cpu_one_core_percent": 12.5,
+        "rss_bytes": 125886464,
+        "os_peak_rss_bytes": 125890560
+      },
+      {
+        "cpu_one_core_percent": 14.1,
+        "rss_bytes": 125493248,
+        "os_peak_rss_bytes": 125497344
+      },
+      {
+        "cpu_one_core_percent": 15.6,
+        "rss_bytes": 126234624,
+        "os_peak_rss_bytes": 126238720
+      },
+      {
+        "cpu_one_core_percent": 10.9,
+        "rss_bytes": 125300736,
+        "os_peak_rss_bytes": 125304832
+      },
+      {
+        "cpu_one_core_percent": 17.2,
+        "rss_bytes": 126054400,
+        "os_peak_rss_bytes": 126058496
+      },
+      {
+        "cpu_one_core_percent": 14.1,
+        "rss_bytes": 124792832,
+        "os_peak_rss_bytes": 124796928
+      },
+      {
+        "cpu_one_core_percent": 12.5,
+        "rss_bytes": 125825024,
+        "os_peak_rss_bytes": 125829120
+      },
+      {
+        "cpu_one_core_percent": 15.6,
+        "rss_bytes": 126017536,
+        "os_peak_rss_bytes": 126021632
+      },
+      {
+        "cpu_one_core_percent": 14.1,
+        "rss_bytes": 125681664,
+        "os_peak_rss_bytes": 125685760
+      },
+      {
+        "cpu_one_core_percent": 15.6,
+        "rss_bytes": 125353984,
+        "os_peak_rss_bytes": 125358080
+      },
+      {
+        "cpu_one_core_percent": 12.5,
+        "rss_bytes": 126255104,
+        "os_peak_rss_bytes": 126259200
+      },
+      {
+        "cpu_one_core_percent": 14.1,
+        "rss_bytes": 126021632,
+        "os_peak_rss_bytes": 126025728
+      },
+      {
+        "cpu_one_core_percent": 10.9,
+        "rss_bytes": 125759488,
+        "os_peak_rss_bytes": 125763584
+      },
+      {
+        "cpu_one_core_percent": 14.1,
+        "rss_bytes": 125272064,
+        "os_peak_rss_bytes": 125276160
+      },
+      {
+        "cpu_one_core_percent": 12.5,
+        "rss_bytes": 125456384,
+        "os_peak_rss_bytes": 125460480
+      },
+      {
+        "cpu_one_core_percent": 15.6,
+        "rss_bytes": 125513728,
+        "os_peak_rss_bytes": 125517824
+      },
+      {
+        "cpu_one_core_percent": 12.5,
+        "rss_bytes": 125874176,
+        "os_peak_rss_bytes": 125878272
+      },
+      {
+        "cpu_one_core_percent": 21.9,
+        "rss_bytes": 125587456,
+        "os_peak_rss_bytes": 125591552
+      }
+    ],
+    [
+      {
+        "cpu_one_core_percent": 0.0,
+        "rss_bytes": 84594688,
+        "os_peak_rss_bytes": 84602880
+      },
+      {
+        "cpu_one_core_percent": 21.5,
+        "rss_bytes": 191205376,
+        "os_peak_rss_bytes": 196182016
+      },
+      {
+        "cpu_one_core_percent": 9.2,
+        "rss_bytes": 125571072,
+        "os_peak_rss_bytes": 125575168
+      },
+      {
+        "cpu_one_core_percent": 15.4,
+        "rss_bytes": 125984768,
+        "os_peak_rss_bytes": 125988864
+      },
+      {
+        "cpu_one_core_percent": 15.4,
+        "rss_bytes": 125595648,
+        "os_peak_rss_bytes": 125599744
+      },
+      {
+        "cpu_one_core_percent": 18.5,
+        "rss_bytes": 126300160,
+        "os_peak_rss_bytes": 126304256
+      },
+      {
+        "cpu_one_core_percent": 15.4,
+        "rss_bytes": 125366272,
+        "os_peak_rss_bytes": 125370368
+      },
+      {
+        "cpu_one_core_percent": 15.4,
+        "rss_bytes": 126119936,
+        "os_peak_rss_bytes": 126124032
+      },
+      {
+        "cpu_one_core_percent": 9.2,
+        "rss_bytes": 124862464,
+        "os_peak_rss_bytes": 124866560
+      },
+      {
+        "cpu_one_core_percent": 15.4,
+        "rss_bytes": 125964288,
+        "os_peak_rss_bytes": 125968384
+      },
+      {
+        "cpu_one_core_percent": 13.8,
+        "rss_bytes": 126152704,
+        "os_peak_rss_bytes": 126156800
+      },
+      {
+        "cpu_one_core_percent": 15.4,
+        "rss_bytes": 125849600,
+        "os_peak_rss_bytes": 125853696
+      },
+      {
+        "cpu_one_core_percent": 18.5,
+        "rss_bytes": 125857792,
+        "os_peak_rss_bytes": 125861888
+      },
+      {
+        "cpu_one_core_percent": 15.4,
+        "rss_bytes": 126320640,
+        "os_peak_rss_bytes": 126324736
+      },
+      {
+        "cpu_one_core_percent": 9.2,
+        "rss_bytes": 126087168,
+        "os_peak_rss_bytes": 126091264
+      },
+      {
+        "cpu_one_core_percent": 12.3,
+        "rss_bytes": 125837312,
+        "os_peak_rss_bytes": 125841408
+      },
+      {
+        "cpu_one_core_percent": 15.4,
+        "rss_bytes": 125751296,
+        "os_peak_rss_bytes": 125755392
+      },
+      {
+        "cpu_one_core_percent": 15.4,
+        "rss_bytes": 125779968,
+        "os_peak_rss_bytes": 125784064
+      },
+      {
+        "cpu_one_core_percent": 16.9,
+        "rss_bytes": 125698048,
+        "os_peak_rss_bytes": 125702144
+      },
+      {
+        "cpu_one_core_percent": 16.9,
+        "rss_bytes": 126029824,
+        "os_peak_rss_bytes": 126033920
+      },
+      {
+        "cpu_one_core_percent": 20.0,
+        "rss_bytes": 125652992,
+        "os_peak_rss_bytes": 125657088
+      }
+    ],
+    [
+      {
+        "cpu_one_core_percent": 4.6,
+        "rss_bytes": 84594688,
+        "os_peak_rss_bytes": 84602880
+      },
+      {
+        "cpu_one_core_percent": 20.0,
+        "rss_bytes": 191713280,
+        "os_peak_rss_bytes": 196182016
+      },
+      {
+        "cpu_one_core_percent": 12.3,
+        "rss_bytes": 125636608,
+        "os_peak_rss_bytes": 125640704
+      },
+      {
+        "cpu_one_core_percent": 18.5,
+        "rss_bytes": 126861312,
+        "os_peak_rss_bytes": 126865408
+      },
+      {
+        "cpu_one_core_percent": 13.8,
+        "rss_bytes": 125693952,
+        "os_peak_rss_bytes": 125698048
+      },
+      {
+        "cpu_one_core_percent": 15.4,
+        "rss_bytes": 126369792,
+        "os_peak_rss_bytes": 126373888
+      },
+      {
+        "cpu_one_core_percent": 13.8,
+        "rss_bytes": 125902848,
+        "os_peak_rss_bytes": 125906944
+      },
+      {
+        "cpu_one_core_percent": 13.8,
+        "rss_bytes": 126185472,
+        "os_peak_rss_bytes": 126189568
+      },
+      {
+        "cpu_one_core_percent": 13.8,
+        "rss_bytes": 125128704,
+        "os_peak_rss_bytes": 125132800
+      },
+      {
+        "cpu_one_core_percent": 20.0,
+        "rss_bytes": 126361600,
+        "os_peak_rss_bytes": 126365696
+      },
+      {
+        "cpu_one_core_percent": 18.5,
+        "rss_bytes": 126230528,
+        "os_peak_rss_bytes": 126234624
+      },
+      {
+        "cpu_one_core_percent": 13.8,
+        "rss_bytes": 125919232,
+        "os_peak_rss_bytes": 125923328
+      },
+      {
+        "cpu_one_core_percent": 21.5,
+        "rss_bytes": 126205952,
+        "os_peak_rss_bytes": 126210048
+      },
+      {
+        "cpu_one_core_percent": 18.5,
+        "rss_bytes": 126578688,
+        "os_peak_rss_bytes": 126582784
+      },
+      {
+        "cpu_one_core_percent": 12.3,
+        "rss_bytes": 126164992,
+        "os_peak_rss_bytes": 126169088
+      },
+      {
+        "cpu_one_core_percent": 10.8,
+        "rss_bytes": 125902848,
+        "os_peak_rss_bytes": 125906944
+      },
+      {
+        "cpu_one_core_percent": 16.9,
+        "rss_bytes": 125882368,
+        "os_peak_rss_bytes": 125886464
+      },
+      {
+        "cpu_one_core_percent": 18.5,
+        "rss_bytes": 126070784,
+        "os_peak_rss_bytes": 126074880
+      },
+      {
+        "cpu_one_core_percent": 13.8,
+        "rss_bytes": 125947904,
+        "os_peak_rss_bytes": 125952000
+      },
+      {
+        "cpu_one_core_percent": 16.9,
+        "rss_bytes": 126095360,
+        "os_peak_rss_bytes": 126099456
+      },
+      {
+        "cpu_one_core_percent": 16.9,
+        "rss_bytes": 125980672,
+        "os_peak_rss_bytes": 125984768
+      }
+    ],
+    [
+      {
+        "cpu_one_core_percent": 4.6,
+        "rss_bytes": 80326656,
+        "os_peak_rss_bytes": 84611072
+      },
+      {
+        "cpu_one_core_percent": 20.0,
+        "rss_bytes": 191799296,
+        "os_peak_rss_bytes": 196182016
+      },
+      {
+        "cpu_one_core_percent": 15.4,
+        "rss_bytes": 125997056,
+        "os_peak_rss_bytes": 126001152
+      },
+      {
+        "cpu_one_core_percent": 20.0,
+        "rss_bytes": 127037440,
+        "os_peak_rss_bytes": 127041536
+      },
+      {
+        "cpu_one_core_percent": 12.3,
+        "rss_bytes": 125882368,
+        "os_peak_rss_bytes": 125886464
+      },
+      {
+        "cpu_one_core_percent": 10.8,
+        "rss_bytes": 126435328,
+        "os_peak_rss_bytes": 126439424
+      },
+      {
+        "cpu_one_core_percent": 24.6,
+        "rss_bytes": 126177280,
+        "os_peak_rss_bytes": 126181376
+      },
+      {
+        "cpu_one_core_percent": 21.6,
+        "rss_bytes": 127119360,
+        "os_peak_rss_bytes": 127123456
+      },
+      {
+        "cpu_one_core_percent": 15.4,
+        "rss_bytes": 125464576,
+        "os_peak_rss_bytes": 125468672
+      },
+      {
+        "cpu_one_core_percent": 24.6,
+        "rss_bytes": 126623744,
+        "os_peak_rss_bytes": 126627840
+      },
+      {
+        "cpu_one_core_percent": 23.1,
+        "rss_bytes": 126492672,
+        "os_peak_rss_bytes": 126496768
+      },
+      {
+        "cpu_one_core_percent": 16.9,
+        "rss_bytes": 126427136,
+        "os_peak_rss_bytes": 126431232
+      },
+      {
+        "cpu_one_core_percent": 20.0,
+        "rss_bytes": 126337024,
+        "os_peak_rss_bytes": 126341120
+      },
+      {
+        "cpu_one_core_percent": 24.6,
+        "rss_bytes": 126980096,
+        "os_peak_rss_bytes": 126984192
+      },
+      {
+        "cpu_one_core_percent": 18.5,
+        "rss_bytes": 126771200,
+        "os_peak_rss_bytes": 126775296
+      },
+      {
+        "cpu_one_core_percent": 20.0,
+        "rss_bytes": 126550016,
+        "os_peak_rss_bytes": 126554112
+      },
+      {
+        "cpu_one_core_percent": 26.2,
+        "rss_bytes": 126017536,
+        "os_peak_rss_bytes": 126021632
+      },
+      {
+        "cpu_one_core_percent": 24.6,
+        "rss_bytes": 126566400,
+        "os_peak_rss_bytes": 126570496
+      },
+      {
+        "cpu_one_core_percent": 21.6,
+        "rss_bytes": 126304256,
+        "os_peak_rss_bytes": 126308352
+      },
+      {
+        "cpu_one_core_percent": 16.9,
+        "rss_bytes": 126164992,
+        "os_peak_rss_bytes": 126169088
+      },
+      {
+        "cpu_one_core_percent": 23.1,
+        "rss_bytes": 126226432,
+        "os_peak_rss_bytes": 126230528
+      }
+    ],
+    [
+      {
+        "cpu_one_core_percent": 0.0,
+        "rss_bytes": 80330752,
+        "os_peak_rss_bytes": 84611072
+      },
+      {
+        "cpu_one_core_percent": 28.1,
+        "rss_bytes": 192028672,
+        "os_peak_rss_bytes": 196182016
+      },
+      {
+        "cpu_one_core_percent": 23.4,
+        "rss_bytes": 126279680,
+        "os_peak_rss_bytes": 126283776
+      },
+      {
+        "cpu_one_core_percent": 20.3,
+        "rss_bytes": 127102976,
+        "os_peak_rss_bytes": 127107072
+      },
+      {
+        "cpu_one_core_percent": 18.8,
+        "rss_bytes": 126558208,
+        "os_peak_rss_bytes": 126562304
+      },
+      {
+        "cpu_one_core_percent": 18.8,
+        "rss_bytes": 127193088,
+        "os_peak_rss_bytes": 127197184
+      },
+      {
+        "cpu_one_core_percent": 26.6,
+        "rss_bytes": 126459904,
+        "os_peak_rss_bytes": 126464000
+      },
+      {
+        "cpu_one_core_percent": 29.7,
+        "rss_bytes": 127291392,
+        "os_peak_rss_bytes": 127295488
+      },
+      {
+        "cpu_one_core_percent": 25.0,
+        "rss_bytes": 126001152,
+        "os_peak_rss_bytes": 126005248
+      },
+      {
+        "cpu_one_core_percent": 25.0,
+        "rss_bytes": 127164416,
+        "os_peak_rss_bytes": 127168512
+      },
+      {
+        "cpu_one_core_percent": 31.2,
+        "rss_bytes": 127242240,
+        "os_peak_rss_bytes": 127246336
+      },
+      {
+        "cpu_one_core_percent": 25.0,
+        "rss_bytes": 126795776,
+        "os_peak_rss_bytes": 126799872
+      },
+      {
+        "cpu_one_core_percent": 21.9,
+        "rss_bytes": 126414848,
+        "os_peak_rss_bytes": 126418944
+      },
+      {
+        "cpu_one_core_percent": 28.1,
+        "rss_bytes": 127426560,
+        "os_peak_rss_bytes": 127430656
+      },
+      {
+        "cpu_one_core_percent": 29.7,
+        "rss_bytes": 127016960,
+        "os_peak_rss_bytes": 127021056
+      },
+      {
+        "cpu_one_core_percent": 28.1,
+        "rss_bytes": 127041536,
+        "os_peak_rss_bytes": 127045632
+      },
+      {
+        "cpu_one_core_percent": 18.8,
+        "rss_bytes": 126083072,
+        "os_peak_rss_bytes": 126087168
+      },
+      {
+        "cpu_one_core_percent": 31.2,
+        "rss_bytes": 126849024,
+        "os_peak_rss_bytes": 126853120
+      },
+      {
+        "cpu_one_core_percent": 18.8,
+        "rss_bytes": 126644224,
+        "os_peak_rss_bytes": 126648320
+      },
+      {
+        "cpu_one_core_percent": 23.4,
+        "rss_bytes": 126857216,
+        "os_peak_rss_bytes": 126861312
+      },
+      {
+        "cpu_one_core_percent": 25.0,
+        "rss_bytes": 126361600,
+        "os_peak_rss_bytes": 126365696
+      }
+    ],
+    [
+      {
+        "cpu_one_core_percent": 0.0,
+        "rss_bytes": 80351232,
+        "os_peak_rss_bytes": 84611072
+      },
+      {
+        "cpu_one_core_percent": 35.9,
+        "rss_bytes": 192692224,
+        "os_peak_rss_bytes": 196182016
+      },
+      {
+        "cpu_one_core_percent": 23.4,
+        "rss_bytes": 126418944,
+        "os_peak_rss_bytes": 126423040
+      },
+      {
+        "cpu_one_core_percent": 20.3,
+        "rss_bytes": 127234048,
+        "os_peak_rss_bytes": 127238144
+      },
+      {
+        "cpu_one_core_percent": 25.0,
+        "rss_bytes": 126689280,
+        "os_peak_rss_bytes": 126693376
+      },
+      {
+        "cpu_one_core_percent": 35.9,
+        "rss_bytes": 127442944,
+        "os_peak_rss_bytes": 127447040
+      },
+      {
+        "cpu_one_core_percent": 21.9,
+        "rss_bytes": 126529536,
+        "os_peak_rss_bytes": 126533632
+      },
+      {
+        "cpu_one_core_percent": 28.1,
+        "rss_bytes": 127426560,
+        "os_peak_rss_bytes": 127430656
+      },
+      {
+        "cpu_one_core_percent": 28.1,
+        "rss_bytes": 126169088,
+        "os_peak_rss_bytes": 126173184
+      },
+      {
+        "cpu_one_core_percent": 25.0,
+        "rss_bytes": 127361024,
+        "os_peak_rss_bytes": 127365120
+      },
+      {
+        "cpu_one_core_percent": 26.6,
+        "rss_bytes": 127406080,
+        "os_peak_rss_bytes": 127410176
+      },
+      {
+        "cpu_one_core_percent": 21.9,
+        "rss_bytes": 126930944,
+        "os_peak_rss_bytes": 126935040
+      },
+      {
+        "cpu_one_core_percent": 20.3,
+        "rss_bytes": 126545920,
+        "os_peak_rss_bytes": 126550016
+      },
+      {
+        "cpu_one_core_percent": 29.7,
+        "rss_bytes": 127586304,
+        "os_peak_rss_bytes": 127590400
+      },
+      {
+        "cpu_one_core_percent": 25.0,
+        "rss_bytes": 127148032,
+        "os_peak_rss_bytes": 127152128
+      },
+      {
+        "cpu_one_core_percent": 26.6,
+        "rss_bytes": 127111168,
+        "os_peak_rss_bytes": 127115264
+      },
+      {
+        "cpu_one_core_percent": 21.9,
+        "rss_bytes": 126156800,
+        "os_peak_rss_bytes": 126160896
+      },
+      {
+        "cpu_one_core_percent": 34.4,
+        "rss_bytes": 126980096,
+        "os_peak_rss_bytes": 126984192
+      },
+      {
+        "cpu_one_core_percent": 29.7,
+        "rss_bytes": 126877696,
+        "os_peak_rss_bytes": 126881792
+      },
+      {
+        "cpu_one_core_percent": 29.7,
+        "rss_bytes": 127275008,
+        "os_peak_rss_bytes": 127279104
+      },
+      {
+        "cpu_one_core_percent": 26.6,
+        "rss_bytes": 126492672,
+        "os_peak_rss_bytes": 126496768
+      }
+    ],
+    [
+      {
+        "cpu_one_core_percent": 67.2,
+        "rss_bytes": 80359424,
+        "os_peak_rss_bytes": 84611072
+      },
+      {
+        "cpu_one_core_percent": 31.2,
+        "rss_bytes": 192835584,
+        "os_peak_rss_bytes": 196182016
+      },
+      {
+        "cpu_one_core_percent": 21.9,
+        "rss_bytes": 126554112,
+        "os_peak_rss_bytes": 126558208
+      },
+      {
+        "cpu_one_core_percent": 21.9,
+        "rss_bytes": 127365120,
+        "os_peak_rss_bytes": 127369216
+      },
+      {
+        "cpu_one_core_percent": 26.6,
+        "rss_bytes": 126869504,
+        "os_peak_rss_bytes": 126873600
+      },
+      {
+        "cpu_one_core_percent": 31.2,
+        "rss_bytes": 127541248,
+        "os_peak_rss_bytes": 127545344
+      },
+      {
+        "cpu_one_core_percent": 23.4,
+        "rss_bytes": 126664704,
+        "os_peak_rss_bytes": 126668800
+      },
+      {
+        "cpu_one_core_percent": 25.0,
+        "rss_bytes": 127557632,
+        "os_peak_rss_bytes": 127561728
+      },
+      {
+        "cpu_one_core_percent": 26.6,
+        "rss_bytes": 126308352,
+        "os_peak_rss_bytes": 126312448
+      },
+      {
+        "cpu_one_core_percent": 21.9,
+        "rss_bytes": 127496192,
+        "os_peak_rss_bytes": 127500288
+      },
+      {
+        "cpu_one_core_percent": 26.6,
+        "rss_bytes": 127549440,
+        "os_peak_rss_bytes": 127553536
+      },
+      {
+        "cpu_one_core_percent": 21.9,
+        "rss_bytes": 127049728,
+        "os_peak_rss_bytes": 127053824
+      },
+      {
+        "cpu_one_core_percent": 18.8,
+        "rss_bytes": 126676992,
+        "os_peak_rss_bytes": 126681088
+      },
+      {
+        "cpu_one_core_percent": 28.1,
+        "rss_bytes": 127721472,
+        "os_peak_rss_bytes": 127725568
+      },
+      {
+        "cpu_one_core_percent": 23.4,
+        "rss_bytes": 127279104,
+        "os_peak_rss_bytes": 127283200
+      },
+      {
+        "cpu_one_core_percent": 23.4,
+        "rss_bytes": 127246336,
+        "os_peak_rss_bytes": 127250432
+      },
+      {
+        "cpu_one_core_percent": 18.8,
+        "rss_bytes": 126222336,
+        "os_peak_rss_bytes": 126226432
+      },
+      {
+        "cpu_one_core_percent": 32.8,
+        "rss_bytes": 127127552,
+        "os_peak_rss_bytes": 127131648
+      },
+      {
+        "cpu_one_core_percent": 25.0,
+        "rss_bytes": 127021056,
+        "os_peak_rss_bytes": 127025152
+      },
+      {
+        "cpu_one_core_percent": 28.1,
+        "rss_bytes": 127414272,
+        "os_peak_rss_bytes": 127418368
+      },
+      {
+        "cpu_one_core_percent": 25.0,
+        "rss_bytes": 126558208,
+        "os_peak_rss_bytes": 126562304
+      }
+    ],
+    [
+      {
+        "cpu_one_core_percent": 4.6,
+        "rss_bytes": 79179776,
+        "os_peak_rss_bytes": 84611072
+      },
+      {
+        "cpu_one_core_percent": 29.2,
+        "rss_bytes": 192999424,
+        "os_peak_rss_bytes": 196182016
+      },
+      {
+        "cpu_one_core_percent": 21.5,
+        "rss_bytes": 126685184,
+        "os_peak_rss_bytes": 126689280
+      },
+      {
+        "cpu_one_core_percent": 20.0,
+        "rss_bytes": 127430656,
+        "os_peak_rss_bytes": 127434752
+      },
+      {
+        "cpu_one_core_percent": 20.0,
+        "rss_bytes": 126935040,
+        "os_peak_rss_bytes": 126939136
+      },
+      {
+        "cpu_one_core_percent": 23.1,
+        "rss_bytes": 127713280,
+        "os_peak_rss_bytes": 127717376
+      },
+      {
+        "cpu_one_core_percent": 13.8,
+        "rss_bytes": 126730240,
+        "os_peak_rss_bytes": 126734336
+      },
+      {
+        "cpu_one_core_percent": 21.5,
+        "rss_bytes": 127688704,
+        "os_peak_rss_bytes": 127692800
+      },
+      {
+        "cpu_one_core_percent": 23.1,
+        "rss_bytes": 126439424,
+        "os_peak_rss_bytes": 126443520
+      },
+      {
+        "cpu_one_core_percent": 18.5,
+        "rss_bytes": 127561728,
+        "os_peak_rss_bytes": 127565824
+      },
+      {
+        "cpu_one_core_percent": 24.6,
+        "rss_bytes": 127614976,
+        "os_peak_rss_bytes": 127619072
+      },
+      {
+        "cpu_one_core_percent": 13.8,
+        "rss_bytes": 127135744,
+        "os_peak_rss_bytes": 127139840
+      },
+      {
+        "cpu_one_core_percent": 24.6,
+        "rss_bytes": 126746624,
+        "os_peak_rss_bytes": 126750720
+      },
+      {
+        "cpu_one_core_percent": 27.7,
+        "rss_bytes": 127987712,
+        "os_peak_rss_bytes": 127991808
+      },
+      {
+        "cpu_one_core_percent": 16.9,
+        "rss_bytes": 127344640,
+        "os_peak_rss_bytes": 127348736
+      },
+      {
+        "cpu_one_core_percent": 15.4,
+        "rss_bytes": 127389696,
+        "os_peak_rss_bytes": 127393792
+      },
+      {
+        "cpu_one_core_percent": 18.5,
+        "rss_bytes": 126287872,
+        "os_peak_rss_bytes": 126291968
+      },
+      {
+        "cpu_one_core_percent": 26.1,
+        "rss_bytes": 127266816,
+        "os_peak_rss_bytes": 127270912
+      },
+      {
+        "cpu_one_core_percent": 26.1,
+        "rss_bytes": 127152128,
+        "os_peak_rss_bytes": 127156224
+      },
+      {
+        "cpu_one_core_percent": 26.1,
+        "rss_bytes": 127479808,
+        "os_peak_rss_bytes": 127483904
+      },
+      {
+        "cpu_one_core_percent": 18.5,
+        "rss_bytes": 126689280,
+        "os_peak_rss_bytes": 126693376
+      }
+    ],
+    [
+      {
+        "cpu_one_core_percent": 15.4,
+        "rss_bytes": 79192064,
+        "os_peak_rss_bytes": 84611072
+      },
+      {
+        "cpu_one_core_percent": 24.6,
+        "rss_bytes": 193146880,
+        "os_peak_rss_bytes": 196182016
+      },
+      {
+        "cpu_one_core_percent": 15.4,
+        "rss_bytes": 126763008,
+        "os_peak_rss_bytes": 126767104
+      },
+      {
+        "cpu_one_core_percent": 27.7,
+        "rss_bytes": 127578112,
+        "os_peak_rss_bytes": 127582208
+      },
+      {
+        "cpu_one_core_percent": 20.0,
+        "rss_bytes": 127000576,
+        "os_peak_rss_bytes": 127004672
+      },
+      {
+        "cpu_one_core_percent": 21.5,
+        "rss_bytes": 127778816,
+        "os_peak_rss_bytes": 127782912
+      },
+      {
+        "cpu_one_core_percent": 13.8,
+        "rss_bytes": 126803968,
+        "os_peak_rss_bytes": 126808064
+      },
+      {
+        "cpu_one_core_percent": 21.5,
+        "rss_bytes": 127762432,
+        "os_peak_rss_bytes": 127766528
+      },
+      {
+        "cpu_one_core_percent": 20.0,
+        "rss_bytes": 126504960,
+        "os_peak_rss_bytes": 126509056
+      },
+      {
+        "cpu_one_core_percent": 18.5,
+        "rss_bytes": 127700992,
+        "os_peak_rss_bytes": 127705088
+      },
+      {
+        "cpu_one_core_percent": 18.5,
+        "rss_bytes": 127746048,
+        "os_peak_rss_bytes": 127750144
+      },
+      {
+        "cpu_one_core_percent": 13.8,
+        "rss_bytes": 127209472,
+        "os_peak_rss_bytes": 127213568
+      },
+      {
+        "cpu_one_core_percent": 27.7,
+        "rss_bytes": 126877696,
+        "os_peak_rss_bytes": 126881792
+      },
+      {
+        "cpu_one_core_percent": 18.5,
+        "rss_bytes": 128118784,
+        "os_peak_rss_bytes": 128122880
+      },
+      {
+        "cpu_one_core_percent": 18.5,
+        "rss_bytes": 127410176,
+        "os_peak_rss_bytes": 127414272
+      },
+      {
+        "cpu_one_core_percent": 12.3,
+        "rss_bytes": 127455232,
+        "os_peak_rss_bytes": 127459328
+      },
+      {
+        "cpu_one_core_percent": 26.1,
+        "rss_bytes": 126652416,
+        "os_peak_rss_bytes": 126656512
+      },
+      {
+        "cpu_one_core_percent": 26.1,
+        "rss_bytes": 127434752,
+        "os_peak_rss_bytes": 127438848
+      },
+      {
+        "cpu_one_core_percent": 21.5,
+        "rss_bytes": 127283200,
+        "os_peak_rss_bytes": 127287296
+      },
+      {
+        "cpu_one_core_percent": 20.0,
+        "rss_bytes": 127610880,
+        "os_peak_rss_bytes": 127614976
+      },
+      {
+        "cpu_one_core_percent": 20.0,
+        "rss_bytes": 126754816,
+        "os_peak_rss_bytes": 126758912
+      }
+    ],
+    [
+      {
+        "cpu_one_core_percent": 0.0,
+        "rss_bytes": 79192064,
+        "os_peak_rss_bytes": 84611072
+      },
+      {
+        "cpu_one_core_percent": 25.0,
+        "rss_bytes": 193216512,
+        "os_peak_rss_bytes": 196182016
+      },
+      {
+        "cpu_one_core_percent": 17.2,
+        "rss_bytes": 126881792,
+        "os_peak_rss_bytes": 126885888
+      },
+      {
+        "cpu_one_core_percent": 29.7,
+        "rss_bytes": 127643648,
+        "os_peak_rss_bytes": 127647744
+      },
+      {
+        "cpu_one_core_percent": 20.3,
+        "rss_bytes": 127131648,
+        "os_peak_rss_bytes": 127135744
+      },
+      {
+        "cpu_one_core_percent": 21.9,
+        "rss_bytes": 127844352,
+        "os_peak_rss_bytes": 127848448
+      },
+      {
+        "cpu_one_core_percent": 12.5,
+        "rss_bytes": 126943232,
+        "os_peak_rss_bytes": 126947328
+      },
+      {
+        "cpu_one_core_percent": 31.2,
+        "rss_bytes": 128016384,
+        "os_peak_rss_bytes": 128020480
+      },
+      {
+        "cpu_one_core_percent": 20.3,
+        "rss_bytes": 126574592,
+        "os_peak_rss_bytes": 126578688
+      },
+      {
+        "cpu_one_core_percent": 14.1,
+        "rss_bytes": 127766528,
+        "os_peak_rss_bytes": 127770624
+      },
+      {
+        "cpu_one_core_percent": 20.3,
+        "rss_bytes": 127811584,
+        "os_peak_rss_bytes": 127815680
+      },
+      {
+        "cpu_one_core_percent": 12.5,
+        "rss_bytes": 127340544,
+        "os_peak_rss_bytes": 127344640
+      },
+      {
+        "cpu_one_core_percent": 21.9,
+        "rss_bytes": 127008768,
+        "os_peak_rss_bytes": 127012864
+      },
+      {
+        "cpu_one_core_percent": 21.9,
+        "rss_bytes": 128184320,
+        "os_peak_rss_bytes": 128188416
+      },
+      {
+        "cpu_one_core_percent": 20.3,
+        "rss_bytes": 127475712,
+        "os_peak_rss_bytes": 127479808
+      },
+      {
+        "cpu_one_core_percent": 15.6,
+        "rss_bytes": 127520768,
+        "os_peak_rss_bytes": 127524864
+      },
+      {
+        "cpu_one_core_percent": 23.4,
+        "rss_bytes": 126795776,
+        "os_peak_rss_bytes": 126799872
+      },
+      {
+        "cpu_one_core_percent": 23.4,
+        "rss_bytes": 127524864,
+        "os_peak_rss_bytes": 127528960
+      },
+      {
+        "cpu_one_core_percent": 17.2,
+        "rss_bytes": 127414272,
+        "os_peak_rss_bytes": 127418368
+      },
+      {
+        "cpu_one_core_percent": 21.9,
+        "rss_bytes": 127676416,
+        "os_peak_rss_bytes": 127680512
+      },
+      {
+        "cpu_one_core_percent": 32.8,
+        "rss_bytes": 126963712,
+        "os_peak_rss_bytes": 126967808
+      }
+    ],
+    [
+      {
+        "cpu_one_core_percent": 7.7,
+        "rss_bytes": 79200256,
+        "os_peak_rss_bytes": 84611072
+      },
+      {
+        "cpu_one_core_percent": 20.0,
+        "rss_bytes": 193286144,
+        "os_peak_rss_bytes": 196182016
+      },
+      {
+        "cpu_one_core_percent": 16.9,
+        "rss_bytes": 126947328,
+        "os_peak_rss_bytes": 126951424
+      },
+      {
+        "cpu_one_core_percent": 23.1,
+        "rss_bytes": 127774720,
+        "os_peak_rss_bytes": 127778816
+      },
+      {
+        "cpu_one_core_percent": 18.5,
+        "rss_bytes": 127250432,
+        "os_peak_rss_bytes": 127254528
+      },
+      {
+        "cpu_one_core_percent": 20.0,
+        "rss_bytes": 127975424,
+        "os_peak_rss_bytes": 127979520
+      },
+      {
+        "cpu_one_core_percent": 18.5,
+        "rss_bytes": 127008768,
+        "os_peak_rss_bytes": 127012864
+      },
+      {
+        "cpu_one_core_percent": 26.2,
+        "rss_bytes": 128159744,
+        "os_peak_rss_bytes": 128163840
+      },
+      {
+        "cpu_one_core_percent": 16.9,
+        "rss_bytes": 126640128,
+        "os_peak_rss_bytes": 126644224
+      },
+      {
+        "cpu_one_core_percent": 13.9,
+        "rss_bytes": 127897600,
+        "os_peak_rss_bytes": 127901696
+      },
+      {
+        "cpu_one_core_percent": 21.6,
+        "rss_bytes": 127877120,
+        "os_peak_rss_bytes": 127881216
+      },
+      {
+        "cpu_one_core_percent": 18.5,
+        "rss_bytes": 127533056,
+        "os_peak_rss_bytes": 127537152
+      },
+      {
+        "cpu_one_core_percent": 18.5,
+        "rss_bytes": 127074304,
+        "os_peak_rss_bytes": 127078400
+      },
+      {
+        "cpu_one_core_percent": 15.4,
+        "rss_bytes": 128323584,
+        "os_peak_rss_bytes": 128327680
+      },
+      {
+        "cpu_one_core_percent": 15.4,
+        "rss_bytes": 127606784,
+        "os_peak_rss_bytes": 127610880
+      },
+      {
+        "cpu_one_core_percent": 13.9,
+        "rss_bytes": 127594496,
+        "os_peak_rss_bytes": 127598592
+      },
+      {
+        "cpu_one_core_percent": 21.6,
+        "rss_bytes": 126861312,
+        "os_peak_rss_bytes": 126865408
+      },
+      {
+        "cpu_one_core_percent": 24.6,
+        "rss_bytes": 127590400,
+        "os_peak_rss_bytes": 127594496
+      },
+      {
+        "cpu_one_core_percent": 20.0,
+        "rss_bytes": 127479808,
+        "os_peak_rss_bytes": 127483904
+      },
+      {
+        "cpu_one_core_percent": 18.5,
+        "rss_bytes": 127762432,
+        "os_peak_rss_bytes": 127766528
+      },
+      {
+        "cpu_one_core_percent": 27.7,
+        "rss_bytes": 127090688,
+        "os_peak_rss_bytes": 127094784
+      }
+    ],
+    [
+      {
+        "cpu_one_core_percent": 0.0,
+        "rss_bytes": 79200256,
+        "os_peak_rss_bytes": 84611072
+      },
+      {
+        "cpu_one_core_percent": 30.8,
+        "rss_bytes": 193355776,
+        "os_peak_rss_bytes": 196182016
+      },
+      {
+        "cpu_one_core_percent": 21.5,
+        "rss_bytes": 127012864,
+        "os_peak_rss_bytes": 127016960
+      },
+      {
+        "cpu_one_core_percent": 16.9,
+        "rss_bytes": 127905792,
+        "os_peak_rss_bytes": 127909888
+      },
+      {
+        "cpu_one_core_percent": 16.9,
+        "rss_bytes": 127320064,
+        "os_peak_rss_bytes": 127324160
+      },
+      {
+        "cpu_one_core_percent": 18.5,
+        "rss_bytes": 128040960,
+        "os_peak_rss_bytes": 128045056
+      },
+      {
+        "cpu_one_core_percent": 18.5,
+        "rss_bytes": 127090688,
+        "os_peak_rss_bytes": 127094784
+      },
+      {
+        "cpu_one_core_percent": 27.7,
+        "rss_bytes": 128225280,
+        "os_peak_rss_bytes": 128229376
+      },
+      {
+        "cpu_one_core_percent": 10.8,
+        "rss_bytes": 126771200,
+        "os_peak_rss_bytes": 126775296
+      },
+      {
+        "cpu_one_core_percent": 13.8,
+        "rss_bytes": 127930368,
+        "os_peak_rss_bytes": 127934464
+      },
+      {
+        "cpu_one_core_percent": 18.5,
+        "rss_bytes": 127942656,
+        "os_peak_rss_bytes": 127946752
+      },
+      {
+        "cpu_one_core_percent": 26.1,
+        "rss_bytes": 127651840,
+        "os_peak_rss_bytes": 127655936
+      },
+      {
+        "cpu_one_core_percent": 20.0,
+        "rss_bytes": 127205376,
+        "os_peak_rss_bytes": 127209472
+      },
+      {
+        "cpu_one_core_percent": 18.5,
+        "rss_bytes": 128389120,
+        "os_peak_rss_bytes": 128393216
+      },
+      {
+        "cpu_one_core_percent": 18.5,
+        "rss_bytes": 127672320,
+        "os_peak_rss_bytes": 127676416
+      },
+      {
+        "cpu_one_core_percent": 12.3,
+        "rss_bytes": 127668224,
+        "os_peak_rss_bytes": 127672320
+      },
+      {
+        "cpu_one_core_percent": 16.9,
+        "rss_bytes": 126992384,
+        "os_peak_rss_bytes": 126996480
+      },
+      {
+        "cpu_one_core_percent": 21.5,
+        "rss_bytes": 127889408,
+        "os_peak_rss_bytes": 127893504
+      },
+      {
+        "cpu_one_core_percent": 23.1,
+        "rss_bytes": 127705088,
+        "os_peak_rss_bytes": 127709184
+      },
+      {
+        "cpu_one_core_percent": 20.0,
+        "rss_bytes": 127864832,
+        "os_peak_rss_bytes": 127868928
+      },
+      {
+        "cpu_one_core_percent": 27.7,
+        "rss_bytes": 127225856,
+        "os_peak_rss_bytes": 127229952
+      }
+    ],
+    [
+      {
+        "cpu_one_core_percent": 0.0,
+        "rss_bytes": 79200256,
+        "os_peak_rss_bytes": 84611072
+      },
+      {
+        "cpu_one_core_percent": 23.4,
+        "rss_bytes": 193495040,
+        "os_peak_rss_bytes": 196182016
+      },
+      {
+        "cpu_one_core_percent": 20.3,
+        "rss_bytes": 127139840,
+        "os_peak_rss_bytes": 127143936
+      },
+      {
+        "cpu_one_core_percent": 14.1,
+        "rss_bytes": 127971328,
+        "os_peak_rss_bytes": 127975424
+      },
+      {
+        "cpu_one_core_percent": 14.1,
+        "rss_bytes": 127385600,
+        "os_peak_rss_bytes": 127389696
+      },
+      {
+        "cpu_one_core_percent": 17.2,
+        "rss_bytes": 128106496,
+        "os_peak_rss_bytes": 128110592
+      },
+      {
+        "cpu_one_core_percent": 12.5,
+        "rss_bytes": 127156224,
+        "os_peak_rss_bytes": 127160320
+      },
+      {
+        "cpu_one_core_percent": 18.8,
+        "rss_bytes": 128356352,
+        "os_peak_rss_bytes": 128360448
+      },
+      {
+        "cpu_one_core_percent": 9.4,
+        "rss_bytes": 126836736,
+        "os_peak_rss_bytes": 126840832
+      },
+      {
+        "cpu_one_core_percent": 15.6,
+        "rss_bytes": 128028672,
+        "os_peak_rss_bytes": 128032768
+      },
+      {
+        "cpu_one_core_percent": 15.6,
+        "rss_bytes": 128008192,
+        "os_peak_rss_bytes": 128012288
+      },
+      {
+        "cpu_one_core_percent": 23.4,
+        "rss_bytes": 127774720,
+        "os_peak_rss_bytes": 127778816
+      },
+      {
+        "cpu_one_core_percent": 12.5,
+        "rss_bytes": 127270912,
+        "os_peak_rss_bytes": 127275008
+      },
+      {
+        "cpu_one_core_percent": 17.2,
+        "rss_bytes": 128454656,
+        "os_peak_rss_bytes": 128458752
+      },
+      {
+        "cpu_one_core_percent": 18.8,
+        "rss_bytes": 127737856,
+        "os_peak_rss_bytes": 127741952
+      },
+      {
+        "cpu_one_core_percent": 9.4,
+        "rss_bytes": 127733760,
+        "os_peak_rss_bytes": 127737856
+      },
+      {
+        "cpu_one_core_percent": 14.1,
+        "rss_bytes": 127057920,
+        "os_peak_rss_bytes": 127062016
+      },
+      {
+        "cpu_one_core_percent": 25.0,
+        "rss_bytes": 128024576,
+        "os_peak_rss_bytes": 128028672
+      },
+      {
+        "cpu_one_core_percent": 20.3,
+        "rss_bytes": 127799296,
+        "os_peak_rss_bytes": 127803392
+      },
+      {
+        "cpu_one_core_percent": 20.3,
+        "rss_bytes": 127938560,
+        "os_peak_rss_bytes": 127942656
+      },
+      {
+        "cpu_one_core_percent": 18.8,
+        "rss_bytes": 127373312,
+        "os_peak_rss_bytes": 127377408
+      }
+    ],
+    [
+      {
+        "cpu_one_core_percent": 1.5,
+        "rss_bytes": 79200256,
+        "os_peak_rss_bytes": 84611072
+      },
+      {
+        "cpu_one_core_percent": 15.4,
+        "rss_bytes": 193568768,
+        "os_peak_rss_bytes": 196182016
+      },
+      {
+        "cpu_one_core_percent": 18.5,
+        "rss_bytes": 127205376,
+        "os_peak_rss_bytes": 127209472
+      },
+      {
+        "cpu_one_core_percent": 15.4,
+        "rss_bytes": 127995904,
+        "os_peak_rss_bytes": 128000000
+      },
+      {
+        "cpu_one_core_percent": 18.5,
+        "rss_bytes": 127578112,
+        "os_peak_rss_bytes": 127582208
+      },
+      {
+        "cpu_one_core_percent": 13.9,
+        "rss_bytes": 128233472,
+        "os_peak_rss_bytes": 128237568
+      },
+      {
+        "cpu_one_core_percent": 20.0,
+        "rss_bytes": 127336448,
+        "os_peak_rss_bytes": 127340544
+      },
+      {
+        "cpu_one_core_percent": 15.4,
+        "rss_bytes": 128421888,
+        "os_peak_rss_bytes": 128425984
+      },
+      {
+        "cpu_one_core_percent": 15.4,
+        "rss_bytes": 126902272,
+        "os_peak_rss_bytes": 126906368
+      },
+      {
+        "cpu_one_core_percent": 12.3,
+        "rss_bytes": 128094208,
+        "os_peak_rss_bytes": 128098304
+      },
+      {
+        "cpu_one_core_percent": 16.9,
+        "rss_bytes": 128073728,
+        "os_peak_rss_bytes": 128077824
+      },
+      {
+        "cpu_one_core_percent": 15.4,
+        "rss_bytes": 127873024,
+        "os_peak_rss_bytes": 127877120
+      },
+      {
+        "cpu_one_core_percent": 15.4,
+        "rss_bytes": 127287296,
+        "os_peak_rss_bytes": 127291392
+      },
+      {
+        "cpu_one_core_percent": 15.4,
+        "rss_bytes": 128520192,
+        "os_peak_rss_bytes": 128524288
+      },
+      {
+        "cpu_one_core_percent": 15.4,
+        "rss_bytes": 127803392,
+        "os_peak_rss_bytes": 127807488
+      },
+      {
+        "cpu_one_core_percent": 10.8,
+        "rss_bytes": 127803392,
+        "os_peak_rss_bytes": 127807488
+      },
+      {
+        "cpu_one_core_percent": 12.3,
+        "rss_bytes": 127066112,
+        "os_peak_rss_bytes": 127070208
+      },
+      {
+        "cpu_one_core_percent": 21.6,
+        "rss_bytes": 128110592,
+        "os_peak_rss_bytes": 128114688
+      },
+      {
+        "cpu_one_core_percent": 18.5,
+        "rss_bytes": 127811584,
+        "os_peak_rss_bytes": 127815680
+      },
+      {
+        "cpu_one_core_percent": 15.4,
+        "rss_bytes": 128004096,
+        "os_peak_rss_bytes": 128008192
+      },
+      {
+        "cpu_one_core_percent": 15.4,
+        "rss_bytes": 127438848,
+        "os_peak_rss_bytes": 127442944
+      }
+    ],
+    [
+      {
+        "cpu_one_core_percent": 0.0,
+        "rss_bytes": 79200256,
+        "os_peak_rss_bytes": 84611072
+      },
+      {
+        "cpu_one_core_percent": 15.6,
+        "rss_bytes": 193679360,
+        "os_peak_rss_bytes": 196182016
+      },
+      {
+        "cpu_one_core_percent": 15.6,
+        "rss_bytes": 127336448,
+        "os_peak_rss_bytes": 127340544
+      },
+      {
+        "cpu_one_core_percent": 15.6,
+        "rss_bytes": 128024576,
+        "os_peak_rss_bytes": 128028672
+      },
+      {
+        "cpu_one_core_percent": 25.0,
+        "rss_bytes": 127655936,
+        "os_peak_rss_bytes": 127660032
+      },
+      {
+        "cpu_one_core_percent": 10.9,
+        "rss_bytes": 128299008,
+        "os_peak_rss_bytes": 128303104
+      },
+      {
+        "cpu_one_core_percent": 25.0,
+        "rss_bytes": 127467520,
+        "os_peak_rss_bytes": 127471616
+      },
+      {
+        "cpu_one_core_percent": 17.2,
+        "rss_bytes": 128454656,
+        "os_peak_rss_bytes": 128458752
+      },
+      {
+        "cpu_one_core_percent": 14.1,
+        "rss_bytes": 126967808,
+        "os_peak_rss_bytes": 126971904
+      },
+      {
+        "cpu_one_core_percent": 12.5,
+        "rss_bytes": 128159744,
+        "os_peak_rss_bytes": 128163840
+      },
+      {
+        "cpu_one_core_percent": 15.6,
+        "rss_bytes": 128278528,
+        "os_peak_rss_bytes": 128282624
+      },
+      {
+        "cpu_one_core_percent": 15.6,
+        "rss_bytes": 127893504,
+        "os_peak_rss_bytes": 127897600
+      },
+      {
+        "cpu_one_core_percent": 15.6,
+        "rss_bytes": 127324160,
+        "os_peak_rss_bytes": 127328256
+      },
+      {
+        "cpu_one_core_percent": 17.2,
+        "rss_bytes": 128577536,
+        "os_peak_rss_bytes": 128581632
+      },
+      {
+        "cpu_one_core_percent": 14.1,
+        "rss_bytes": 127840256,
+        "os_peak_rss_bytes": 127844352
+      },
+      {
+        "cpu_one_core_percent": 10.9,
+        "rss_bytes": 128110592,
+        "os_peak_rss_bytes": 128114688
+      },
+      {
+        "cpu_one_core_percent": 12.5,
+        "rss_bytes": 127188992,
+        "os_peak_rss_bytes": 127193088
+      },
+      {
+        "cpu_one_core_percent": 15.6,
+        "rss_bytes": 128126976,
+        "os_peak_rss_bytes": 128131072
+      },
+      {
+        "cpu_one_core_percent": 23.4,
+        "rss_bytes": 127819776,
+        "os_peak_rss_bytes": 127823872
+      },
+      {
+        "cpu_one_core_percent": 14.1,
+        "rss_bytes": 128135168,
+        "os_peak_rss_bytes": 128139264
+      },
+      {
+        "cpu_one_core_percent": 15.6,
+        "rss_bytes": 127451136,
+        "os_peak_rss_bytes": 127455232
+      }
+    ],
+    [
+      {
+        "cpu_one_core_percent": 7.7,
+        "rss_bytes": 79159296,
+        "os_peak_rss_bytes": 84611072
+      },
+      {
+        "cpu_one_core_percent": 21.5,
+        "rss_bytes": 193736704,
+        "os_peak_rss_bytes": 196182016
+      },
+      {
+        "cpu_one_core_percent": 24.6,
+        "rss_bytes": 127500288,
+        "os_peak_rss_bytes": 127504384
+      },
+      {
+        "cpu_one_core_percent": 12.3,
+        "rss_bytes": 128024576,
+        "os_peak_rss_bytes": 128028672
+      },
+      {
+        "cpu_one_core_percent": 18.5,
+        "rss_bytes": 127688704,
+        "os_peak_rss_bytes": 127692800
+      },
+      {
+        "cpu_one_core_percent": 20.0,
+        "rss_bytes": 128606208,
+        "os_peak_rss_bytes": 128610304
+      },
+      {
+        "cpu_one_core_percent": 21.5,
+        "rss_bytes": 127512576,
+        "os_peak_rss_bytes": 127516672
+      },
+      {
+        "cpu_one_core_percent": 13.8,
+        "rss_bytes": 128471040,
+        "os_peak_rss_bytes": 128475136
+      },
+      {
+        "cpu_one_core_percent": 15.4,
+        "rss_bytes": 127016960,
+        "os_peak_rss_bytes": 127021056
+      },
+      {
+        "cpu_one_core_percent": 13.8,
+        "rss_bytes": 128184320,
+        "os_peak_rss_bytes": 128188416
+      },
+      {
+        "cpu_one_core_percent": 23.1,
+        "rss_bytes": 128352256,
+        "os_peak_rss_bytes": 128356352
+      },
+      {
+        "cpu_one_core_percent": 13.8,
+        "rss_bytes": 127893504,
+        "os_peak_rss_bytes": 127897600
+      },
+      {
+        "cpu_one_core_percent": 20.0,
+        "rss_bytes": 127324160,
+        "os_peak_rss_bytes": 127328256
+      },
+      {
+        "cpu_one_core_percent": 24.6,
+        "rss_bytes": 128638976,
+        "os_peak_rss_bytes": 128643072
+      },
+      {
+        "cpu_one_core_percent": 21.5,
+        "rss_bytes": 128282624,
+        "os_peak_rss_bytes": 128286720
+      },
+      {
+        "cpu_one_core_percent": 26.1,
+        "rss_bytes": 128356352,
+        "os_peak_rss_bytes": 128360448
+      },
+      {
+        "cpu_one_core_percent": 9.2,
+        "rss_bytes": 127254528,
+        "os_peak_rss_bytes": 127258624
+      },
+      {
+        "cpu_one_core_percent": 16.9,
+        "rss_bytes": 128126976,
+        "os_peak_rss_bytes": 128131072
+      },
+      {
+        "cpu_one_core_percent": 18.5,
+        "rss_bytes": 127819776,
+        "os_peak_rss_bytes": 127823872
+      },
+      {
+        "cpu_one_core_percent": 18.5,
+        "rss_bytes": 128163840,
+        "os_peak_rss_bytes": 128167936
+      },
+      {
+        "cpu_one_core_percent": 16.9,
+        "rss_bytes": 127451136,
+        "os_peak_rss_bytes": 127455232
+      }
+    ],
+    [
+      {
+        "cpu_one_core_percent": 0.0,
+        "rss_bytes": 79159296,
+        "os_peak_rss_bytes": 84611072
+      },
+      {
+        "cpu_one_core_percent": 35.9,
+        "rss_bytes": 193904640,
+        "os_peak_rss_bytes": 196182016
+      },
+      {
+        "cpu_one_core_percent": 21.9,
+        "rss_bytes": 127504384,
+        "os_peak_rss_bytes": 127508480
+      },
+      {
+        "cpu_one_core_percent": 15.6,
+        "rss_bytes": 128024576,
+        "os_peak_rss_bytes": 128028672
+      },
+      {
+        "cpu_one_core_percent": 18.8,
+        "rss_bytes": 127827968,
+        "os_peak_rss_bytes": 127832064
+      },
+      {
+        "cpu_one_core_percent": 20.3,
+        "rss_bytes": 128671744,
+        "os_peak_rss_bytes": 128675840
+      },
+      {
+        "cpu_one_core_percent": 14.1,
+        "rss_bytes": 127512576,
+        "os_peak_rss_bytes": 127516672
+      },
+      {
+        "cpu_one_core_percent": 18.8,
+        "rss_bytes": 128471040,
+        "os_peak_rss_bytes": 128475136
+      },
+      {
+        "cpu_one_core_percent": 17.2,
+        "rss_bytes": 127279104,
+        "os_peak_rss_bytes": 127283200
+      },
+      {
+        "cpu_one_core_percent": 21.9,
+        "rss_bytes": 128417792,
+        "os_peak_rss_bytes": 128421888
+      },
+      {
+        "cpu_one_core_percent": 26.6,
+        "rss_bytes": 128356352,
+        "os_peak_rss_bytes": 128360448
+      },
+      {
+        "cpu_one_core_percent": 18.8,
+        "rss_bytes": 127893504,
+        "os_peak_rss_bytes": 127897600
+      },
+      {
+        "cpu_one_core_percent": 20.3,
+        "rss_bytes": 127324160,
+        "os_peak_rss_bytes": 127328256
+      },
+      {
+        "cpu_one_core_percent": 25.0,
+        "rss_bytes": 128643072,
+        "os_peak_rss_bytes": 128647168
+      },
+      {
+        "cpu_one_core_percent": 23.4,
+        "rss_bytes": 128299008,
+        "os_peak_rss_bytes": 128303104
+      },
+      {
+        "cpu_one_core_percent": 21.9,
+        "rss_bytes": 128430080,
+        "os_peak_rss_bytes": 128434176
+      },
+      {
+        "cpu_one_core_percent": 17.2,
+        "rss_bytes": 127279104,
+        "os_peak_rss_bytes": 127283200
+      },
+      {
+        "cpu_one_core_percent": 12.5,
+        "rss_bytes": 128126976,
+        "os_peak_rss_bytes": 128131072
+      },
+      {
+        "cpu_one_core_percent": 18.8,
+        "rss_bytes": 127819776,
+        "os_peak_rss_bytes": 127823872
+      },
+      {
+        "cpu_one_core_percent": 28.1,
+        "rss_bytes": 128249856,
+        "os_peak_rss_bytes": 128253952
+      },
+      {
+        "cpu_one_core_percent": 20.3,
+        "rss_bytes": 127451136,
+        "os_peak_rss_bytes": 127455232
+      }
+    ],
+    [
+      {
+        "cpu_one_core_percent": 16.9,
+        "rss_bytes": 79159296,
+        "os_peak_rss_bytes": 84611072
+      },
+      {
+        "cpu_one_core_percent": 32.3,
+        "rss_bytes": 193974272,
+        "os_peak_rss_bytes": 196182016
+      },
+      {
+        "cpu_one_core_percent": 18.5,
+        "rss_bytes": 127504384,
+        "os_peak_rss_bytes": 127508480
+      },
+      {
+        "cpu_one_core_percent": 18.5,
+        "rss_bytes": 128024576,
+        "os_peak_rss_bytes": 128028672
+      },
+      {
+        "cpu_one_core_percent": 24.6,
+        "rss_bytes": 127827968,
+        "os_peak_rss_bytes": 127832064
+      },
+      {
+        "cpu_one_core_percent": 23.1,
+        "rss_bytes": 128671744,
+        "os_peak_rss_bytes": 128675840
+      },
+      {
+        "cpu_one_core_percent": 13.8,
+        "rss_bytes": 127512576,
+        "os_peak_rss_bytes": 127516672
+      },
+      {
+        "cpu_one_core_percent": 21.5,
+        "rss_bytes": 128540672,
+        "os_peak_rss_bytes": 128544768
+      },
+      {
+        "cpu_one_core_percent": 24.6,
+        "rss_bytes": 127414272,
+        "os_peak_rss_bytes": 127418368
+      },
+      {
+        "cpu_one_core_percent": 20.0,
+        "rss_bytes": 128421888,
+        "os_peak_rss_bytes": 128425984
+      },
+      {
+        "cpu_one_core_percent": 21.5,
+        "rss_bytes": 128356352,
+        "os_peak_rss_bytes": 128360448
+      },
+      {
+        "cpu_one_core_percent": 20.0,
+        "rss_bytes": 127959040,
+        "os_peak_rss_bytes": 127963136
+      },
+      {
+        "cpu_one_core_percent": 20.0,
+        "rss_bytes": 127324160,
+        "os_peak_rss_bytes": 127328256
+      },
+      {
+        "cpu_one_core_percent": 21.5,
+        "rss_bytes": 128643072,
+        "os_peak_rss_bytes": 128647168
+      },
+      {
+        "cpu_one_core_percent": 23.1,
+        "rss_bytes": 128299008,
+        "os_peak_rss_bytes": 128303104
+      },
+      {
+        "cpu_one_core_percent": 20.0,
+        "rss_bytes": 128430080,
+        "os_peak_rss_bytes": 128434176
+      },
+      {
+        "cpu_one_core_percent": 18.5,
+        "rss_bytes": 127291392,
+        "os_peak_rss_bytes": 127295488
+      },
+      {
+        "cpu_one_core_percent": 18.5,
+        "rss_bytes": 128184320,
+        "os_peak_rss_bytes": 128188416
+      },
+      {
+        "cpu_one_core_percent": 15.4,
+        "rss_bytes": 127832064,
+        "os_peak_rss_bytes": 127836160
+      },
+      {
+        "cpu_one_core_percent": 24.6,
+        "rss_bytes": 128249856,
+        "os_peak_rss_bytes": 128253952
+      },
+      {
+        "cpu_one_core_percent": 23.1,
+        "rss_bytes": 127451136,
+        "os_peak_rss_bytes": 127455232
+      }
+    ],
+    [
+      {
+        "cpu_one_core_percent": 18.5,
+        "rss_bytes": 79159296,
+        "os_peak_rss_bytes": 84611072
+      },
+      {
+        "cpu_one_core_percent": 26.2,
+        "rss_bytes": 193986560,
+        "os_peak_rss_bytes": 196182016
+      },
+      {
+        "cpu_one_core_percent": 21.6,
+        "rss_bytes": 127504384,
+        "os_peak_rss_bytes": 127508480
+      },
+      {
+        "cpu_one_core_percent": 16.9,
+        "rss_bytes": 128032768,
+        "os_peak_rss_bytes": 128036864
+      },
+      {
+        "cpu_one_core_percent": 23.1,
+        "rss_bytes": 127827968,
+        "os_peak_rss_bytes": 127832064
+      },
+      {
+        "cpu_one_core_percent": 23.1,
+        "rss_bytes": 128671744,
+        "os_peak_rss_bytes": 128675840
+      },
+      {
+        "cpu_one_core_percent": 12.3,
+        "rss_bytes": 127512576,
+        "os_peak_rss_bytes": 127516672
+      },
+      {
+        "cpu_one_core_percent": 26.2,
+        "rss_bytes": 128540672,
+        "os_peak_rss_bytes": 128544768
+      },
+      {
+        "cpu_one_core_percent": 21.6,
+        "rss_bytes": 127414272,
+        "os_peak_rss_bytes": 127418368
+      },
+      {
+        "cpu_one_core_percent": 21.6,
+        "rss_bytes": 128421888,
+        "os_peak_rss_bytes": 128425984
+      },
+      {
+        "cpu_one_core_percent": 18.5,
+        "rss_bytes": 128356352,
+        "os_peak_rss_bytes": 128360448
+      },
+      {
+        "cpu_one_core_percent": 24.6,
+        "rss_bytes": 128090112,
+        "os_peak_rss_bytes": 128094208
+      },
+      {
+        "cpu_one_core_percent": 20.0,
+        "rss_bytes": 127328256,
+        "os_peak_rss_bytes": 127332352
+      },
+      {
+        "cpu_one_core_percent": 23.1,
+        "rss_bytes": 128643072,
+        "os_peak_rss_bytes": 128647168
+      },
+      {
+        "cpu_one_core_percent": 21.6,
+        "rss_bytes": 128299008,
+        "os_peak_rss_bytes": 128303104
+      },
+      {
+        "cpu_one_core_percent": 15.4,
+        "rss_bytes": 128430080,
+        "os_peak_rss_bytes": 128434176
+      },
+      {
+        "cpu_one_core_percent": 21.6,
+        "rss_bytes": 127291392,
+        "os_peak_rss_bytes": 127295488
+      },
+      {
+        "cpu_one_core_percent": 15.4,
+        "rss_bytes": 128184320,
+        "os_peak_rss_bytes": 128188416
+      },
+      {
+        "cpu_one_core_percent": 26.2,
+        "rss_bytes": 127967232,
+        "os_peak_rss_bytes": 127971328
+      },
+      {
+        "cpu_one_core_percent": 24.6,
+        "rss_bytes": 128249856,
+        "os_peak_rss_bytes": 128253952
+      },
+      {
+        "cpu_one_core_percent": 21.6,
+        "rss_bytes": 127451136,
+        "os_peak_rss_bytes": 127455232
+      }
+    ],
+    [
+      {
+        "cpu_one_core_percent": 0.0,
+        "rss_bytes": 78954496,
+        "os_peak_rss_bytes": 84611072
+      },
+      {
+        "cpu_one_core_percent": 28.1,
+        "rss_bytes": 194039808,
+        "os_peak_rss_bytes": 196182016
+      },
+      {
+        "cpu_one_core_percent": 17.2,
+        "rss_bytes": 127504384,
+        "os_peak_rss_bytes": 127508480
+      },
+      {
+        "cpu_one_core_percent": 18.8,
+        "rss_bytes": 128032768,
+        "os_peak_rss_bytes": 128036864
+      },
+      {
+        "cpu_one_core_percent": 17.2,
+        "rss_bytes": 127832064,
+        "os_peak_rss_bytes": 127836160
+      },
+      {
+        "cpu_one_core_percent": 18.8,
+        "rss_bytes": 128671744,
+        "os_peak_rss_bytes": 128675840
+      },
+      {
+        "cpu_one_core_percent": 17.2,
+        "rss_bytes": 127512576,
+        "os_peak_rss_bytes": 127516672
+      },
+      {
+        "cpu_one_core_percent": 28.1,
+        "rss_bytes": 128540672,
+        "os_peak_rss_bytes": 128544768
+      },
+      {
+        "cpu_one_core_percent": 20.3,
+        "rss_bytes": 127414272,
+        "os_peak_rss_bytes": 127418368
+      },
+      {
+        "cpu_one_core_percent": 21.9,
+        "rss_bytes": 128421888,
+        "os_peak_rss_bytes": 128425984
+      },
+      {
+        "cpu_one_core_percent": 18.8,
+        "rss_bytes": 128356352,
+        "os_peak_rss_bytes": 128360448
+      },
+      {
+        "cpu_one_core_percent": 28.1,
+        "rss_bytes": 128090112,
+        "os_peak_rss_bytes": 128094208
+      },
+      {
+        "cpu_one_core_percent": 17.2,
+        "rss_bytes": 127328256,
+        "os_peak_rss_bytes": 127332352
+      },
+      {
+        "cpu_one_core_percent": 18.8,
+        "rss_bytes": 128643072,
+        "os_peak_rss_bytes": 128647168
+      },
+      {
+        "cpu_one_core_percent": 20.3,
+        "rss_bytes": 128299008,
+        "os_peak_rss_bytes": 128303104
+      },
+      {
+        "cpu_one_core_percent": 21.9,
+        "rss_bytes": 128430080,
+        "os_peak_rss_bytes": 128434176
+      },
+      {
+        "cpu_one_core_percent": 23.4,
+        "rss_bytes": 127561728,
+        "os_peak_rss_bytes": 127565824
+      },
+      {
+        "cpu_one_core_percent": 18.8,
+        "rss_bytes": 128184320,
+        "os_peak_rss_bytes": 128188416
+      },
+      {
+        "cpu_one_core_percent": 28.1,
+        "rss_bytes": 127967232,
+        "os_peak_rss_bytes": 127971328
+      },
+      {
+        "cpu_one_core_percent": 21.9,
+        "rss_bytes": 128249856,
+        "os_peak_rss_bytes": 128253952
+      },
+      {
+        "cpu_one_core_percent": 21.9,
+        "rss_bytes": 127451136,
+        "os_peak_rss_bytes": 127455232
+      }
+    ],
+    [
+      {
+        "cpu_one_core_percent": 0.0,
+        "rss_bytes": 79171584,
+        "os_peak_rss_bytes": 84611072
+      },
+      {
+        "cpu_one_core_percent": 25.0,
+        "rss_bytes": 194043904,
+        "os_peak_rss_bytes": 196182016
+      },
+      {
+        "cpu_one_core_percent": 15.6,
+        "rss_bytes": 127504384,
+        "os_peak_rss_bytes": 127508480
+      },
+      {
+        "cpu_one_core_percent": 26.6,
+        "rss_bytes": 128307200,
+        "os_peak_rss_bytes": 128311296
+      },
+      {
+        "cpu_one_core_percent": 21.9,
+        "rss_bytes": 127832064,
+        "os_peak_rss_bytes": 127836160
+      },
+      {
+        "cpu_one_core_percent": 15.6,
+        "rss_bytes": 128671744,
+        "os_peak_rss_bytes": 128675840
+      },
+      {
+        "cpu_one_core_percent": 14.1,
+        "rss_bytes": 127512576,
+        "os_peak_rss_bytes": 127516672
+      },
+      {
+        "cpu_one_core_percent": 21.9,
+        "rss_bytes": 128540672,
+        "os_peak_rss_bytes": 128544768
+      },
+      {
+        "cpu_one_core_percent": 17.2,
+        "rss_bytes": 127414272,
+        "os_peak_rss_bytes": 127418368
+      },
+      {
+        "cpu_one_core_percent": 12.5,
+        "rss_bytes": 128421888,
+        "os_peak_rss_bytes": 128425984
+      },
+      {
+        "cpu_one_core_percent": 14.1,
+        "rss_bytes": 128356352,
+        "os_peak_rss_bytes": 128360448
+      },
+      {
+        "cpu_one_core_percent": 18.8,
+        "rss_bytes": 128090112,
+        "os_peak_rss_bytes": 128094208
+      },
+      {
+        "cpu_one_core_percent": 23.4,
+        "rss_bytes": 127594496,
+        "os_peak_rss_bytes": 127598592
+      },
+      {
+        "cpu_one_core_percent": 20.3,
+        "rss_bytes": 128643072,
+        "os_peak_rss_bytes": 128647168
+      },
+      {
+        "cpu_one_core_percent": 12.5,
+        "rss_bytes": 128299008,
+        "os_peak_rss_bytes": 128303104
+      },
+      {
+        "cpu_one_core_percent": 14.1,
+        "rss_bytes": 128430080,
+        "os_peak_rss_bytes": 128434176
+      },
+      {
+        "cpu_one_core_percent": 23.4,
+        "rss_bytes": 127561728,
+        "os_peak_rss_bytes": 127565824
+      },
+      {
+        "cpu_one_core_percent": 21.9,
+        "rss_bytes": 128188416,
+        "os_peak_rss_bytes": 128192512
+      },
+      {
+        "cpu_one_core_percent": 17.2,
+        "rss_bytes": 127967232,
+        "os_peak_rss_bytes": 127971328
+      },
+      {
+        "cpu_one_core_percent": 21.9,
+        "rss_bytes": 128249856,
+        "os_peak_rss_bytes": 128253952
+      },
+      {
+        "cpu_one_core_percent": 17.2,
+        "rss_bytes": 127451136,
+        "os_peak_rss_bytes": 127455232
+      }
+    ],
+    [
+      {
+        "cpu_one_core_percent": 32.3,
+        "rss_bytes": 79880192,
+        "os_peak_rss_bytes": 84611072
+      },
+      {
+        "cpu_one_core_percent": 21.5,
+        "rss_bytes": 194129920,
+        "os_peak_rss_bytes": 196182016
+      },
+      {
+        "cpu_one_core_percent": 15.4,
+        "rss_bytes": 127504384,
+        "os_peak_rss_bytes": 127508480
+      },
+      {
+        "cpu_one_core_percent": 21.5,
+        "rss_bytes": 128307200,
+        "os_peak_rss_bytes": 128311296
+      },
+      {
+        "cpu_one_core_percent": 18.5,
+        "rss_bytes": 127881216,
+        "os_peak_rss_bytes": 127885312
+      },
+      {
+        "cpu_one_core_percent": 18.5,
+        "rss_bytes": 128671744,
+        "os_peak_rss_bytes": 128675840
+      },
+      {
+        "cpu_one_core_percent": 13.8,
+        "rss_bytes": 127512576,
+        "os_peak_rss_bytes": 127516672
+      },
+      {
+        "cpu_one_core_percent": 23.1,
+        "rss_bytes": 128540672,
+        "os_peak_rss_bytes": 128544768
+      },
+      {
+        "cpu_one_core_percent": 18.5,
+        "rss_bytes": 127414272,
+        "os_peak_rss_bytes": 127418368
+      },
+      {
+        "cpu_one_core_percent": 13.8,
+        "rss_bytes": 128421888,
+        "os_peak_rss_bytes": 128425984
+      },
+      {
+        "cpu_one_core_percent": 20.0,
+        "rss_bytes": 128356352,
+        "os_peak_rss_bytes": 128360448
+      },
+      {
+        "cpu_one_core_percent": 12.3,
+        "rss_bytes": 128094208,
+        "os_peak_rss_bytes": 128098304
+      },
+      {
+        "cpu_one_core_percent": 24.6,
+        "rss_bytes": 127598592,
+        "os_peak_rss_bytes": 127602688
+      },
+      {
+        "cpu_one_core_percent": 18.5,
+        "rss_bytes": 128643072,
+        "os_peak_rss_bytes": 128647168
+      },
+      {
+        "cpu_one_core_percent": 20.0,
+        "rss_bytes": 128299008,
+        "os_peak_rss_bytes": 128303104
+      },
+      {
+        "cpu_one_core_percent": 16.9,
+        "rss_bytes": 128430080,
+        "os_peak_rss_bytes": 128434176
+      },
+      {
+        "cpu_one_core_percent": 18.5,
+        "rss_bytes": 127569920,
+        "os_peak_rss_bytes": 127574016
+      },
+      {
+        "cpu_one_core_percent": 21.5,
+        "rss_bytes": 128249856,
+        "os_peak_rss_bytes": 128253952
+      },
+      {
+        "cpu_one_core_percent": 20.0,
+        "rss_bytes": 127975424,
+        "os_peak_rss_bytes": 127979520
+      },
+      {
+        "cpu_one_core_percent": 15.4,
+        "rss_bytes": 128249856,
+        "os_peak_rss_bytes": 128253952
+      },
+      {
+        "cpu_one_core_percent": 21.5,
+        "rss_bytes": 127451136,
+        "os_peak_rss_bytes": 127455232
+      }
+    ],
+    [
+      {
+        "cpu_one_core_percent": 0.0,
+        "rss_bytes": 79888384,
+        "os_peak_rss_bytes": 84611072
+      },
+      {
+        "cpu_one_core_percent": 23.4,
+        "rss_bytes": 194121728,
+        "os_peak_rss_bytes": 196182016
+      },
+      {
+        "cpu_one_core_percent": 14.1,
+        "rss_bytes": 127516672,
+        "os_peak_rss_bytes": 127520768
+      },
+      {
+        "cpu_one_core_percent": 21.9,
+        "rss_bytes": 128319488,
+        "os_peak_rss_bytes": 128323584
+      },
+      {
+        "cpu_one_core_percent": 14.1,
+        "rss_bytes": 127889408,
+        "os_peak_rss_bytes": 127893504
+      },
+      {
+        "cpu_one_core_percent": 14.1,
+        "rss_bytes": 128679936,
+        "os_peak_rss_bytes": 128684032
+      },
+      {
+        "cpu_one_core_percent": 15.6,
+        "rss_bytes": 127553536,
+        "os_peak_rss_bytes": 127557632
+      },
+      {
+        "cpu_one_core_percent": 20.3,
+        "rss_bytes": 128552960,
+        "os_peak_rss_bytes": 128557056
+      },
+      {
+        "cpu_one_core_percent": 17.2,
+        "rss_bytes": 127434752,
+        "os_peak_rss_bytes": 127438848
+      },
+      {
+        "cpu_one_core_percent": 10.9,
+        "rss_bytes": 128462848,
+        "os_peak_rss_bytes": 128466944
+      },
+      {
+        "cpu_one_core_percent": 17.2,
+        "rss_bytes": 128364544,
+        "os_peak_rss_bytes": 128368640
+      },
+      {
+        "cpu_one_core_percent": 17.2,
+        "rss_bytes": 128126976,
+        "os_peak_rss_bytes": 128131072
+      },
+      {
+        "cpu_one_core_percent": 18.8,
+        "rss_bytes": 127606784,
+        "os_peak_rss_bytes": 127610880
+      },
+      {
+        "cpu_one_core_percent": 20.3,
+        "rss_bytes": 128655360,
+        "os_peak_rss_bytes": 128659456
+      },
+      {
+        "cpu_one_core_percent": 14.1,
+        "rss_bytes": 128307200,
+        "os_peak_rss_bytes": 128311296
+      },
+      {
+        "cpu_one_core_percent": 14.1,
+        "rss_bytes": 128442368,
+        "os_peak_rss_bytes": 128446464
+      },
+      {
+        "cpu_one_core_percent": 25.0,
+        "rss_bytes": 127574016,
+        "os_peak_rss_bytes": 127578112
+      },
+      {
+        "cpu_one_core_percent": 21.9,
+        "rss_bytes": 128278528,
+        "os_peak_rss_bytes": 128282624
+      },
+      {
+        "cpu_one_core_percent": 18.8,
+        "rss_bytes": 127983616,
+        "os_peak_rss_bytes": 127987712
+      },
+      {
+        "cpu_one_core_percent": 20.3,
+        "rss_bytes": 128323584,
+        "os_peak_rss_bytes": 128327680
+      },
+      {
+        "cpu_one_core_percent": 20.3,
+        "rss_bytes": 127479808,
+        "os_peak_rss_bytes": 127483904
+      }
+    ],
+    [
+      {
+        "cpu_one_core_percent": 0.0,
+        "rss_bytes": 79888384,
+        "os_peak_rss_bytes": 84611072
+      },
+      {
+        "cpu_one_core_percent": 21.9,
+        "rss_bytes": 194129920,
+        "os_peak_rss_bytes": 196182016
+      },
+      {
+        "cpu_one_core_percent": 14.1,
+        "rss_bytes": 127516672,
+        "os_peak_rss_bytes": 127520768
+      },
+      {
+        "cpu_one_core_percent": 18.8,
+        "rss_bytes": 128319488,
+        "os_peak_rss_bytes": 128323584
+      },
+      {
+        "cpu_one_core_percent": 14.1,
+        "rss_bytes": 127889408,
+        "os_peak_rss_bytes": 127893504
+      },
+      {
+        "cpu_one_core_percent": 20.3,
+        "rss_bytes": 128679936,
+        "os_peak_rss_bytes": 128684032
+      },
+      {
+        "cpu_one_core_percent": 14.1,
+        "rss_bytes": 127553536,
+        "os_peak_rss_bytes": 127557632
+      },
+      {
+        "cpu_one_core_percent": 17.2,
+        "rss_bytes": 128552960,
+        "os_peak_rss_bytes": 128557056
+      },
+      {
+        "cpu_one_core_percent": 20.3,
+        "rss_bytes": 127434752,
+        "os_peak_rss_bytes": 127438848
+      },
+      {
+        "cpu_one_core_percent": 14.1,
+        "rss_bytes": 128462848,
+        "os_peak_rss_bytes": 128466944
+      },
+      {
+        "cpu_one_core_percent": 15.6,
+        "rss_bytes": 128364544,
+        "os_peak_rss_bytes": 128368640
+      },
+      {
+        "cpu_one_core_percent": 15.6,
+        "rss_bytes": 128126976,
+        "os_peak_rss_bytes": 128131072
+      },
+      {
+        "cpu_one_core_percent": 18.8,
+        "rss_bytes": 127606784,
+        "os_peak_rss_bytes": 127610880
+      },
+      {
+        "cpu_one_core_percent": 21.9,
+        "rss_bytes": 128655360,
+        "os_peak_rss_bytes": 128659456
+      },
+      {
+        "cpu_one_core_percent": 12.5,
+        "rss_bytes": 128307200,
+        "os_peak_rss_bytes": 128311296
+      },
+      {
+        "cpu_one_core_percent": 15.6,
+        "rss_bytes": 128442368,
+        "os_peak_rss_bytes": 128446464
+      },
+      {
+        "cpu_one_core_percent": 18.8,
+        "rss_bytes": 127574016,
+        "os_peak_rss_bytes": 127578112
+      },
+      {
+        "cpu_one_core_percent": 23.4,
+        "rss_bytes": 128278528,
+        "os_peak_rss_bytes": 128282624
+      },
+      {
+        "cpu_one_core_percent": 17.2,
+        "rss_bytes": 127983616,
+        "os_peak_rss_bytes": 127987712
+      },
+      {
+        "cpu_one_core_percent": 21.9,
+        "rss_bytes": 128323584,
+        "os_peak_rss_bytes": 128327680
+      },
+      {
+        "cpu_one_core_percent": 21.9,
+        "rss_bytes": 127479808,
+        "os_peak_rss_bytes": 127483904
+      }
+    ],
+    [
+      {
+        "cpu_one_core_percent": 0.0,
+        "rss_bytes": 79888384,
+        "os_peak_rss_bytes": 84611072
+      },
+      {
+        "cpu_one_core_percent": 20.3,
+        "rss_bytes": 194134016,
+        "os_peak_rss_bytes": 196182016
+      },
+      {
+        "cpu_one_core_percent": 15.6,
+        "rss_bytes": 127516672,
+        "os_peak_rss_bytes": 127520768
+      },
+      {
+        "cpu_one_core_percent": 17.2,
+        "rss_bytes": 128319488,
+        "os_peak_rss_bytes": 128323584
+      },
+      {
+        "cpu_one_core_percent": 15.6,
+        "rss_bytes": 127889408,
+        "os_peak_rss_bytes": 127893504
+      },
+      {
+        "cpu_one_core_percent": 21.9,
+        "rss_bytes": 128679936,
+        "os_peak_rss_bytes": 128684032
+      },
+      {
+        "cpu_one_core_percent": 25.0,
+        "rss_bytes": 127770624,
+        "os_peak_rss_bytes": 127774720
+      },
+      {
+        "cpu_one_core_percent": 20.3,
+        "rss_bytes": 128552960,
+        "os_peak_rss_bytes": 128557056
+      },
+      {
+        "cpu_one_core_percent": 21.9,
+        "rss_bytes": 127434752,
+        "os_peak_rss_bytes": 127438848
+      },
+      {
+        "cpu_one_core_percent": 21.9,
+        "rss_bytes": 128462848,
+        "os_peak_rss_bytes": 128466944
+      },
+      {
+        "cpu_one_core_percent": 23.4,
+        "rss_bytes": 128364544,
+        "os_peak_rss_bytes": 128368640
+      },
+      {
+        "cpu_one_core_percent": 26.6,
+        "rss_bytes": 128126976,
+        "os_peak_rss_bytes": 128131072
+      },
+      {
+        "cpu_one_core_percent": 15.6,
+        "rss_bytes": 127606784,
+        "os_peak_rss_bytes": 127610880
+      },
+      {
+        "cpu_one_core_percent": 21.9,
+        "rss_bytes": 128655360,
+        "os_peak_rss_bytes": 128659456
+      },
+      {
+        "cpu_one_core_percent": 14.1,
+        "rss_bytes": 128307200,
+        "os_peak_rss_bytes": 128311296
+      },
+      {
+        "cpu_one_core_percent": 17.2,
+        "rss_bytes": 128442368,
+        "os_peak_rss_bytes": 128446464
+      },
+      {
+        "cpu_one_core_percent": 18.8,
+        "rss_bytes": 127574016,
+        "os_peak_rss_bytes": 127578112
+      },
+      {
+        "cpu_one_core_percent": 25.0,
+        "rss_bytes": 128278528,
+        "os_peak_rss_bytes": 128282624
+      },
+      {
+        "cpu_one_core_percent": 20.3,
+        "rss_bytes": 127983616,
+        "os_peak_rss_bytes": 127987712
+      },
+      {
+        "cpu_one_core_percent": 17.2,
+        "rss_bytes": 128323584,
+        "os_peak_rss_bytes": 128327680
+      },
+      {
+        "cpu_one_core_percent": 23.4,
+        "rss_bytes": 127483904,
+        "os_peak_rss_bytes": 127488000
+      }
+    ],
+    [
+      {
+        "cpu_one_core_percent": 0.0,
+        "rss_bytes": 79888384,
+        "os_peak_rss_bytes": 84611072
+      },
+      {
+        "cpu_one_core_percent": 23.1,
+        "rss_bytes": 194138112,
+        "os_peak_rss_bytes": 196182016
+      },
+      {
+        "cpu_one_core_percent": 16.9,
+        "rss_bytes": 127516672,
+        "os_peak_rss_bytes": 127520768
+      },
+      {
+        "cpu_one_core_percent": 10.8,
+        "rss_bytes": 128319488,
+        "os_peak_rss_bytes": 128323584
+      },
+      {
+        "cpu_one_core_percent": 18.5,
+        "rss_bytes": 127889408,
+        "os_peak_rss_bytes": 127893504
+      },
+      {
+        "cpu_one_core_percent": 23.1,
+        "rss_bytes": 128679936,
+        "os_peak_rss_bytes": 128684032
+      },
+      {
+        "cpu_one_core_percent": 30.8,
+        "rss_bytes": 127770624,
+        "os_peak_rss_bytes": 127774720
+      },
+      {
+        "cpu_one_core_percent": 24.6,
+        "rss_bytes": 128552960,
+        "os_peak_rss_bytes": 128557056
+      },
+      {
+        "cpu_one_core_percent": 18.5,
+        "rss_bytes": 127434752,
+        "os_peak_rss_bytes": 127438848
+      },
+      {
+        "cpu_one_core_percent": 18.5,
+        "rss_bytes": 128462848,
+        "os_peak_rss_bytes": 128466944
+      },
+      {
+        "cpu_one_core_percent": 26.1,
+        "rss_bytes": 128495616,
+        "os_peak_rss_bytes": 128499712
+      },
+      {
+        "cpu_one_core_percent": 27.7,
+        "rss_bytes": 128126976,
+        "os_peak_rss_bytes": 128131072
+      },
+      {
+        "cpu_one_core_percent": 15.4,
+        "rss_bytes": 127606784,
+        "os_peak_rss_bytes": 127610880
+      },
+      {
+        "cpu_one_core_percent": 24.6,
+        "rss_bytes": 128659456,
+        "os_peak_rss_bytes": 128663552
+      },
+      {
+        "cpu_one_core_percent": 21.5,
+        "rss_bytes": 128307200,
+        "os_peak_rss_bytes": 128311296
+      },
+      {
+        "cpu_one_core_percent": 16.9,
+        "rss_bytes": 128442368,
+        "os_peak_rss_bytes": 128446464
+      },
+      {
+        "cpu_one_core_percent": 26.1,
+        "rss_bytes": 127840256,
+        "os_peak_rss_bytes": 127844352
+      },
+      {
+        "cpu_one_core_percent": 24.6,
+        "rss_bytes": 128278528,
+        "os_peak_rss_bytes": 128282624
+      },
+      {
+        "cpu_one_core_percent": 16.9,
+        "rss_bytes": 127983616,
+        "os_peak_rss_bytes": 127987712
+      },
+      {
+        "cpu_one_core_percent": 18.5,
+        "rss_bytes": 128323584,
+        "os_peak_rss_bytes": 128327680
+      },
+      {
+        "cpu_one_core_percent": 21.5,
+        "rss_bytes": 127483904,
+        "os_peak_rss_bytes": 127488000
+      }
+    ],
+    [
+      {
+        "cpu_one_core_percent": 0.0,
+        "rss_bytes": 79695872,
+        "os_peak_rss_bytes": 84611072
+      },
+      {
+        "cpu_one_core_percent": 32.8,
+        "rss_bytes": 194154496,
+        "os_peak_rss_bytes": 196182016
+      },
+      {
+        "cpu_one_core_percent": 23.4,
+        "rss_bytes": 127516672,
+        "os_peak_rss_bytes": 127520768
+      },
+      {
+        "cpu_one_core_percent": 15.6,
+        "rss_bytes": 128319488,
+        "os_peak_rss_bytes": 128323584
+      },
+      {
+        "cpu_one_core_percent": 15.6,
+        "rss_bytes": 127889408,
+        "os_peak_rss_bytes": 127893504
+      },
+      {
+        "cpu_one_core_percent": 23.4,
+        "rss_bytes": 128679936,
+        "os_peak_rss_bytes": 128684032
+      },
+      {
+        "cpu_one_core_percent": 23.4,
+        "rss_bytes": 127778816,
+        "os_peak_rss_bytes": 127782912
+      },
+      {
+        "cpu_one_core_percent": 21.9,
+        "rss_bytes": 128552960,
+        "os_peak_rss_bytes": 128557056
+      },
+      {
+        "cpu_one_core_percent": 15.6,
+        "rss_bytes": 127434752,
+        "os_peak_rss_bytes": 127438848
+      },
+      {
+        "cpu_one_core_percent": 17.2,
+        "rss_bytes": 128462848,
+        "os_peak_rss_bytes": 128466944
+      },
+      {
+        "cpu_one_core_percent": 29.7,
+        "rss_bytes": 128499712,
+        "os_peak_rss_bytes": 128503808
+      },
+      {
+        "cpu_one_core_percent": 23.4,
+        "rss_bytes": 128126976,
+        "os_peak_rss_bytes": 128131072
+      },
+      {
+        "cpu_one_core_percent": 17.2,
+        "rss_bytes": 127606784,
+        "os_peak_rss_bytes": 127610880
+      },
+      {
+        "cpu_one_core_percent": 25.0,
+        "rss_bytes": 128790528,
+        "os_peak_rss_bytes": 128794624
+      },
+      {
+        "cpu_one_core_percent": 21.9,
+        "rss_bytes": 128372736,
+        "os_peak_rss_bytes": 128376832
+      },
+      {
+        "cpu_one_core_percent": 15.6,
+        "rss_bytes": 128442368,
+        "os_peak_rss_bytes": 128446464
+      },
+      {
+        "cpu_one_core_percent": 26.6,
+        "rss_bytes": 127840256,
+        "os_peak_rss_bytes": 127844352
+      },
+      {
+        "cpu_one_core_percent": 23.4,
+        "rss_bytes": 128278528,
+        "os_peak_rss_bytes": 128282624
+      },
+      {
+        "cpu_one_core_percent": 20.3,
+        "rss_bytes": 127983616,
+        "os_peak_rss_bytes": 127987712
+      },
+      {
+        "cpu_one_core_percent": 23.4,
+        "rss_bytes": 128331776,
+        "os_peak_rss_bytes": 128335872
+      },
+      {
+        "cpu_one_core_percent": 20.3,
+        "rss_bytes": 127483904,
+        "os_peak_rss_bytes": 127488000
+      }
+    ],
+    [
+      {
+        "cpu_one_core_percent": 6.2,
+        "rss_bytes": 79126528,
+        "os_peak_rss_bytes": 84611072
+      },
+      {
+        "cpu_one_core_percent": 31.2,
+        "rss_bytes": 194158592,
+        "os_peak_rss_bytes": 196182016
+      },
+      {
+        "cpu_one_core_percent": 31.2,
+        "rss_bytes": 127516672,
+        "os_peak_rss_bytes": 127520768
+      },
+      {
+        "cpu_one_core_percent": 17.2,
+        "rss_bytes": 128319488,
+        "os_peak_rss_bytes": 128323584
+      },
+      {
+        "cpu_one_core_percent": 18.8,
+        "rss_bytes": 127889408,
+        "os_peak_rss_bytes": 127893504
+      },
+      {
+        "cpu_one_core_percent": 28.1,
+        "rss_bytes": 128679936,
+        "os_peak_rss_bytes": 128684032
+      },
+      {
+        "cpu_one_core_percent": 17.2,
+        "rss_bytes": 127778816,
+        "os_peak_rss_bytes": 127782912
+      },
+      {
+        "cpu_one_core_percent": 21.9,
+        "rss_bytes": 128552960,
+        "os_peak_rss_bytes": 128557056
+      },
+      {
+        "cpu_one_core_percent": 18.8,
+        "rss_bytes": 127434752,
+        "os_peak_rss_bytes": 127438848
+      },
+      {
+        "cpu_one_core_percent": 25.0,
+        "rss_bytes": 128516096,
+        "os_peak_rss_bytes": 128520192
+      },
+      {
+        "cpu_one_core_percent": 26.6,
+        "rss_bytes": 128499712,
+        "os_peak_rss_bytes": 128503808
+      },
+      {
+        "cpu_one_core_percent": 23.4,
+        "rss_bytes": 128126976,
+        "os_peak_rss_bytes": 128131072
+      },
+      {
+        "cpu_one_core_percent": 17.2,
+        "rss_bytes": 127606784,
+        "os_peak_rss_bytes": 127610880
+      },
+      {
+        "cpu_one_core_percent": 32.8,
+        "rss_bytes": 128794624,
+        "os_peak_rss_bytes": 128798720
+      },
+      {
+        "cpu_one_core_percent": 29.7,
+        "rss_bytes": 128372736,
+        "os_peak_rss_bytes": 128376832
+      },
+      {
+        "cpu_one_core_percent": 26.6,
+        "rss_bytes": 128458752,
+        "os_peak_rss_bytes": 128462848
+      },
+      {
+        "cpu_one_core_percent": 23.4,
+        "rss_bytes": 127844352,
+        "os_peak_rss_bytes": 127848448
+      },
+      {
+        "cpu_one_core_percent": 23.4,
+        "rss_bytes": 128278528,
+        "os_peak_rss_bytes": 128282624
+      },
+      {
+        "cpu_one_core_percent": 20.3,
+        "rss_bytes": 127983616,
+        "os_peak_rss_bytes": 127987712
+      },
+      {
+        "cpu_one_core_percent": 21.9,
+        "rss_bytes": 128524288,
+        "os_peak_rss_bytes": 128528384
+      },
+      {
+        "cpu_one_core_percent": 20.3,
+        "rss_bytes": 127483904,
+        "os_peak_rss_bytes": 127488000
+      }
+    ],
+    [
+      {
+        "cpu_one_core_percent": 24.6,
+        "rss_bytes": 79253504,
+        "os_peak_rss_bytes": 84611072
+      },
+      {
+        "cpu_one_core_percent": 29.2,
+        "rss_bytes": 194207744,
+        "os_peak_rss_bytes": 196182016
+      },
+      {
+        "cpu_one_core_percent": 24.6,
+        "rss_bytes": 127516672,
+        "os_peak_rss_bytes": 127520768
+      },
+      {
+        "cpu_one_core_percent": 18.5,
+        "rss_bytes": 128319488,
+        "os_peak_rss_bytes": 128323584
+      },
+      {
+        "cpu_one_core_percent": 16.9,
+        "rss_bytes": 127893504,
+        "os_peak_rss_bytes": 127897600
+      },
+      {
+        "cpu_one_core_percent": 26.2,
+        "rss_bytes": 128679936,
+        "os_peak_rss_bytes": 128684032
+      },
+      {
+        "cpu_one_core_percent": 21.6,
+        "rss_bytes": 127778816,
+        "os_peak_rss_bytes": 127782912
+      },
+      {
+        "cpu_one_core_percent": 21.6,
+        "rss_bytes": 128557056,
+        "os_peak_rss_bytes": 128561152
+      },
+      {
+        "cpu_one_core_percent": 16.9,
+        "rss_bytes": 127434752,
+        "os_peak_rss_bytes": 127438848
+      },
+      {
+        "cpu_one_core_percent": 24.6,
+        "rss_bytes": 128516096,
+        "os_peak_rss_bytes": 128520192
+      },
+      {
+        "cpu_one_core_percent": 27.7,
+        "rss_bytes": 128499712,
+        "os_peak_rss_bytes": 128503808
+      },
+      {
+        "cpu_one_core_percent": 18.5,
+        "rss_bytes": 128126976,
+        "os_peak_rss_bytes": 128131072
+      },
+      {
+        "cpu_one_core_percent": 18.5,
+        "rss_bytes": 127606784,
+        "os_peak_rss_bytes": 127610880
+      },
+      {
+        "cpu_one_core_percent": 26.2,
+        "rss_bytes": 128794624,
+        "os_peak_rss_bytes": 128798720
+      },
+      {
+        "cpu_one_core_percent": 24.6,
+        "rss_bytes": 128372736,
+        "os_peak_rss_bytes": 128376832
+      },
+      {
+        "cpu_one_core_percent": 21.6,
+        "rss_bytes": 128458752,
+        "os_peak_rss_bytes": 128462848
+      },
+      {
+        "cpu_one_core_percent": 20.0,
+        "rss_bytes": 127844352,
+        "os_peak_rss_bytes": 127848448
+      },
+      {
+        "cpu_one_core_percent": 21.6,
+        "rss_bytes": 128278528,
+        "os_peak_rss_bytes": 128282624
+      },
+      {
+        "cpu_one_core_percent": 21.6,
+        "rss_bytes": 127983616,
+        "os_peak_rss_bytes": 127987712
+      },
+      {
+        "cpu_one_core_percent": 26.2,
+        "rss_bytes": 128524288,
+        "os_peak_rss_bytes": 128528384
+      },
+      {
+        "cpu_one_core_percent": 21.6,
+        "rss_bytes": 127483904,
+        "os_peak_rss_bytes": 127488000
+      }
+    ],
+    [
+      {
+        "cpu_one_core_percent": 0.0,
+        "rss_bytes": 79257600,
+        "os_peak_rss_bytes": 84611072
+      },
+      {
+        "cpu_one_core_percent": 20.3,
+        "rss_bytes": 194220032,
+        "os_peak_rss_bytes": 196182016
+      },
+      {
+        "cpu_one_core_percent": 18.8,
+        "rss_bytes": 127516672,
+        "os_peak_rss_bytes": 127520768
+      },
+      {
+        "cpu_one_core_percent": 21.9,
+        "rss_bytes": 128319488,
+        "os_peak_rss_bytes": 128323584
+      },
+      {
+        "cpu_one_core_percent": 21.9,
+        "rss_bytes": 127893504,
+        "os_peak_rss_bytes": 127897600
+      },
+      {
+        "cpu_one_core_percent": 23.4,
+        "rss_bytes": 128679936,
+        "os_peak_rss_bytes": 128684032
+      },
+      {
+        "cpu_one_core_percent": 20.3,
+        "rss_bytes": 127778816,
+        "os_peak_rss_bytes": 127782912
+      },
+      {
+        "cpu_one_core_percent": 20.3,
+        "rss_bytes": 128557056,
+        "os_peak_rss_bytes": 128561152
+      },
+      {
+        "cpu_one_core_percent": 17.2,
+        "rss_bytes": 127434752,
+        "os_peak_rss_bytes": 127438848
+      },
+      {
+        "cpu_one_core_percent": 21.9,
+        "rss_bytes": 128516096,
+        "os_peak_rss_bytes": 128520192
+      },
+      {
+        "cpu_one_core_percent": 23.4,
+        "rss_bytes": 128499712,
+        "os_peak_rss_bytes": 128503808
+      },
+      {
+        "cpu_one_core_percent": 15.6,
+        "rss_bytes": 128126976,
+        "os_peak_rss_bytes": 128131072
+      },
+      {
+        "cpu_one_core_percent": 21.9,
+        "rss_bytes": 127606784,
+        "os_peak_rss_bytes": 127610880
+      },
+      {
+        "cpu_one_core_percent": 23.4,
+        "rss_bytes": 128794624,
+        "os_peak_rss_bytes": 128798720
+      },
+      {
+        "cpu_one_core_percent": 25.0,
+        "rss_bytes": 128372736,
+        "os_peak_rss_bytes": 128376832
+      },
+      {
+        "cpu_one_core_percent": 23.4,
+        "rss_bytes": 128499712,
+        "os_peak_rss_bytes": 128503808
+      },
+      {
+        "cpu_one_core_percent": 20.3,
+        "rss_bytes": 127844352,
+        "os_peak_rss_bytes": 127848448
+      },
+      {
+        "cpu_one_core_percent": 28.1,
+        "rss_bytes": 128286720,
+        "os_peak_rss_bytes": 128290816
+      },
+      {
+        "cpu_one_core_percent": 23.4,
+        "rss_bytes": 127983616,
+        "os_peak_rss_bytes": 127987712
+      },
+      {
+        "cpu_one_core_percent": 28.1,
+        "rss_bytes": 128524288,
+        "os_peak_rss_bytes": 128528384
+      },
+      {
+        "cpu_one_core_percent": 28.1,
+        "rss_bytes": 127483904,
+        "os_peak_rss_bytes": 127488000
+      }
+    ],
+    [
+      {
+        "cpu_one_core_percent": 0.0,
+        "rss_bytes": 79314944,
+        "os_peak_rss_bytes": 84611072
+      },
+      {
+        "cpu_one_core_percent": 24.6,
+        "rss_bytes": 194244608,
+        "os_peak_rss_bytes": 196182016
+      },
+      {
+        "cpu_one_core_percent": 13.8,
+        "rss_bytes": 127516672,
+        "os_peak_rss_bytes": 127520768
+      },
+      {
+        "cpu_one_core_percent": 23.1,
+        "rss_bytes": 128319488,
+        "os_peak_rss_bytes": 128323584
+      },
+      {
+        "cpu_one_core_percent": 23.1,
+        "rss_bytes": 127893504,
+        "os_peak_rss_bytes": 127897600
+      },
+      {
+        "cpu_one_core_percent": 23.1,
+        "rss_bytes": 128679936,
+        "os_peak_rss_bytes": 128684032
+      },
+      {
+        "cpu_one_core_percent": 20.0,
+        "rss_bytes": 127778816,
+        "os_peak_rss_bytes": 127782912
+      },
+      {
+        "cpu_one_core_percent": 21.5,
+        "rss_bytes": 128557056,
+        "os_peak_rss_bytes": 128561152
+      },
+      {
+        "cpu_one_core_percent": 15.4,
+        "rss_bytes": 127434752,
+        "os_peak_rss_bytes": 127438848
+      },
+      {
+        "cpu_one_core_percent": 16.9,
+        "rss_bytes": 128516096,
+        "os_peak_rss_bytes": 128520192
+      },
+      {
+        "cpu_one_core_percent": 26.1,
+        "rss_bytes": 128499712,
+        "os_peak_rss_bytes": 128503808
+      },
+      {
+        "cpu_one_core_percent": 18.5,
+        "rss_bytes": 128126976,
+        "os_peak_rss_bytes": 128131072
+      },
+      {
+        "cpu_one_core_percent": 21.5,
+        "rss_bytes": 127606784,
+        "os_peak_rss_bytes": 127610880
+      },
+      {
+        "cpu_one_core_percent": 20.0,
+        "rss_bytes": 128794624,
+        "os_peak_rss_bytes": 128798720
+      },
+      {
+        "cpu_one_core_percent": 20.0,
+        "rss_bytes": 128372736,
+        "os_peak_rss_bytes": 128376832
+      },
+      {
+        "cpu_one_core_percent": 18.5,
+        "rss_bytes": 128499712,
+        "os_peak_rss_bytes": 128503808
+      },
+      {
+        "cpu_one_core_percent": 24.6,
+        "rss_bytes": 127844352,
+        "os_peak_rss_bytes": 127848448
+      },
+      {
+        "cpu_one_core_percent": 30.8,
+        "rss_bytes": 128286720,
+        "os_peak_rss_bytes": 128290816
+      },
+      {
+        "cpu_one_core_percent": 30.8,
+        "rss_bytes": 127995904,
+        "os_peak_rss_bytes": 128000000
+      },
+      {
+        "cpu_one_core_percent": 26.1,
+        "rss_bytes": 128524288,
+        "os_peak_rss_bytes": 128528384
+      },
+      {
+        "cpu_one_core_percent": 27.7,
+        "rss_bytes": 127483904,
+        "os_peak_rss_bytes": 127488000
+      }
+    ],
+    [
+      {
+        "cpu_one_core_percent": 1.6,
+        "rss_bytes": 79319040,
+        "os_peak_rss_bytes": 84611072
+      },
+      {
+        "cpu_one_core_percent": 20.3,
+        "rss_bytes": 194314240,
+        "os_peak_rss_bytes": 196182016
+      },
+      {
+        "cpu_one_core_percent": 18.8,
+        "rss_bytes": 127516672,
+        "os_peak_rss_bytes": 127520768
+      },
+      {
+        "cpu_one_core_percent": 31.2,
+        "rss_bytes": 128319488,
+        "os_peak_rss_bytes": 128323584
+      },
+      {
+        "cpu_one_core_percent": 23.4,
+        "rss_bytes": 127893504,
+        "os_peak_rss_bytes": 127897600
+      },
+      {
+        "cpu_one_core_percent": 23.4,
+        "rss_bytes": 128679936,
+        "os_peak_rss_bytes": 128684032
+      },
+      {
+        "cpu_one_core_percent": 14.1,
+        "rss_bytes": 127778816,
+        "os_peak_rss_bytes": 127782912
+      },
+      {
+        "cpu_one_core_percent": 15.6,
+        "rss_bytes": 128557056,
+        "os_peak_rss_bytes": 128561152
+      },
+      {
+        "cpu_one_core_percent": 21.9,
+        "rss_bytes": 127434752,
+        "os_peak_rss_bytes": 127438848
+      },
+      {
+        "cpu_one_core_percent": 17.2,
+        "rss_bytes": 128528384,
+        "os_peak_rss_bytes": 128532480
+      },
+      {
+        "cpu_one_core_percent": 26.6,
+        "rss_bytes": 128499712,
+        "os_peak_rss_bytes": 128503808
+      },
+      {
+        "cpu_one_core_percent": 17.2,
+        "rss_bytes": 128126976,
+        "os_peak_rss_bytes": 128131072
+      },
+      {
+        "cpu_one_core_percent": 21.9,
+        "rss_bytes": 127868928,
+        "os_peak_rss_bytes": 127873024
+      },
+      {
+        "cpu_one_core_percent": 20.3,
+        "rss_bytes": 128802816,
+        "os_peak_rss_bytes": 128806912
+      },
+      {
+        "cpu_one_core_percent": 12.5,
+        "rss_bytes": 128372736,
+        "os_peak_rss_bytes": 128376832
+      },
+      {
+        "cpu_one_core_percent": 17.2,
+        "rss_bytes": 128503808,
+        "os_peak_rss_bytes": 128507904
+      },
+      {
+        "cpu_one_core_percent": 29.7,
+        "rss_bytes": 127844352,
+        "os_peak_rss_bytes": 127848448
+      },
+      {
+        "cpu_one_core_percent": 25.0,
+        "rss_bytes": 128286720,
+        "os_peak_rss_bytes": 128290816
+      },
+      {
+        "cpu_one_core_percent": 29.7,
+        "rss_bytes": 128000000,
+        "os_peak_rss_bytes": 128004096
+      },
+      {
+        "cpu_one_core_percent": 25.0,
+        "rss_bytes": 128528384,
+        "os_peak_rss_bytes": 128532480
+      },
+      {
+        "cpu_one_core_percent": 26.6,
+        "rss_bytes": 127483904,
+        "os_peak_rss_bytes": 127488000
+      }
+    ],
+    [
+      {
+        "cpu_one_core_percent": 13.9,
+        "rss_bytes": 79319040,
+        "os_peak_rss_bytes": 84611072
+      },
+      {
+        "cpu_one_core_percent": 23.1,
+        "rss_bytes": 194363392,
+        "os_peak_rss_bytes": 196182016
+      },
+      {
+        "cpu_one_core_percent": 18.5,
+        "rss_bytes": 127516672,
+        "os_peak_rss_bytes": 127520768
+      },
+      {
+        "cpu_one_core_percent": 26.2,
+        "rss_bytes": 128319488,
+        "os_peak_rss_bytes": 128323584
+      },
+      {
+        "cpu_one_core_percent": 16.9,
+        "rss_bytes": 127893504,
+        "os_peak_rss_bytes": 127897600
+      },
+      {
+        "cpu_one_core_percent": 12.3,
+        "rss_bytes": 128679936,
+        "os_peak_rss_bytes": 128684032
+      },
+      {
+        "cpu_one_core_percent": 18.5,
+        "rss_bytes": 127778816,
+        "os_peak_rss_bytes": 127782912
+      },
+      {
+        "cpu_one_core_percent": 21.6,
+        "rss_bytes": 128561152,
+        "os_peak_rss_bytes": 128565248
+      },
+      {
+        "cpu_one_core_percent": 20.0,
+        "rss_bytes": 127434752,
+        "os_peak_rss_bytes": 127438848
+      },
+      {
+        "cpu_one_core_percent": 12.3,
+        "rss_bytes": 128528384,
+        "os_peak_rss_bytes": 128532480
+      },
+      {
+        "cpu_one_core_percent": 26.2,
+        "rss_bytes": 128557056,
+        "os_peak_rss_bytes": 128561152
+      },
+      {
+        "cpu_one_core_percent": 23.1,
+        "rss_bytes": 128126976,
+        "os_peak_rss_bytes": 128131072
+      },
+      {
+        "cpu_one_core_percent": 24.6,
+        "rss_bytes": 128135168,
+        "os_peak_rss_bytes": 128139264
+      },
+      {
+        "cpu_one_core_percent": 20.0,
+        "rss_bytes": 128802816,
+        "os_peak_rss_bytes": 128806912
+      },
+      {
+        "cpu_one_core_percent": 18.5,
+        "rss_bytes": 128376832,
+        "os_peak_rss_bytes": 128380928
+      },
+      {
+        "cpu_one_core_percent": 15.4,
+        "rss_bytes": 128503808,
+        "os_peak_rss_bytes": 128507904
+      },
+      {
+        "cpu_one_core_percent": 21.6,
+        "rss_bytes": 127844352,
+        "os_peak_rss_bytes": 127848448
+      },
+      {
+        "cpu_one_core_percent": 23.1,
+        "rss_bytes": 128286720,
+        "os_peak_rss_bytes": 128290816
+      },
+      {
+        "cpu_one_core_percent": 27.7,
+        "rss_bytes": 128020480,
+        "os_peak_rss_bytes": 128024576
+      },
+      {
+        "cpu_one_core_percent": 23.1,
+        "rss_bytes": 128528384,
+        "os_peak_rss_bytes": 128532480
+      },
+      {
+        "cpu_one_core_percent": 21.6,
+        "rss_bytes": 127483904,
+        "os_peak_rss_bytes": 127488000
+      }
+    ],
+    [
+      {
+        "cpu_one_core_percent": 0.0,
+        "rss_bytes": 79323136,
+        "os_peak_rss_bytes": 84611072
+      },
+      {
+        "cpu_one_core_percent": 25.0,
+        "rss_bytes": 194387968,
+        "os_peak_rss_bytes": 196182016
+      },
+      {
+        "cpu_one_core_percent": 17.2,
+        "rss_bytes": 127520768,
+        "os_peak_rss_bytes": 127524864
+      },
+      {
+        "cpu_one_core_percent": 21.9,
+        "rss_bytes": 128319488,
+        "os_peak_rss_bytes": 128323584
+      },
+      {
+        "cpu_one_core_percent": 12.5,
+        "rss_bytes": 127893504,
+        "os_peak_rss_bytes": 127897600
+      },
+      {
+        "cpu_one_core_percent": 15.6,
+        "rss_bytes": 128679936,
+        "os_peak_rss_bytes": 128684032
+      },
+      {
+        "cpu_one_core_percent": 12.5,
+        "rss_bytes": 127778816,
+        "os_peak_rss_bytes": 127782912
+      },
+      {
+        "cpu_one_core_percent": 21.9,
+        "rss_bytes": 128561152,
+        "os_peak_rss_bytes": 128565248
+      },
+      {
+        "cpu_one_core_percent": 10.9,
+        "rss_bytes": 127434752,
+        "os_peak_rss_bytes": 127438848
+      },
+      {
+        "cpu_one_core_percent": 14.1,
+        "rss_bytes": 128528384,
+        "os_peak_rss_bytes": 128532480
+      },
+      {
+        "cpu_one_core_percent": 26.6,
+        "rss_bytes": 128557056,
+        "os_peak_rss_bytes": 128561152
+      },
+      {
+        "cpu_one_core_percent": 25.0,
+        "rss_bytes": 128126976,
+        "os_peak_rss_bytes": 128131072
+      },
+      {
+        "cpu_one_core_percent": 21.9,
+        "rss_bytes": 128135168,
+        "os_peak_rss_bytes": 128139264
+      },
+      {
+        "cpu_one_core_percent": 14.1,
+        "rss_bytes": 128802816,
+        "os_peak_rss_bytes": 128806912
+      },
+      {
+        "cpu_one_core_percent": 17.2,
+        "rss_bytes": 128376832,
+        "os_peak_rss_bytes": 128380928
+      },
+      {
+        "cpu_one_core_percent": 12.5,
+        "rss_bytes": 128503808,
+        "os_peak_rss_bytes": 128507904
+      },
+      {
+        "cpu_one_core_percent": 21.9,
+        "rss_bytes": 127844352,
+        "os_peak_rss_bytes": 127848448
+      },
+      {
+        "cpu_one_core_percent": 20.3,
+        "rss_bytes": 128286720,
+        "os_peak_rss_bytes": 128290816
+      },
+      {
+        "cpu_one_core_percent": 20.3,
+        "rss_bytes": 128020480,
+        "os_peak_rss_bytes": 128024576
+      },
+      {
+        "cpu_one_core_percent": 23.4,
+        "rss_bytes": 128528384,
+        "os_peak_rss_bytes": 128532480
+      },
+      {
+        "cpu_one_core_percent": 25.0,
+        "rss_bytes": 127483904,
+        "os_peak_rss_bytes": 127488000
+      }
+    ]
+  ],
+  "logs": [
+    "account_store=memory\npopulation_loaded monsters=300 definitions=9\nSGTest C# server listening ws://127.0.0.1:27888/game map=13\npeer 2 connected; awaiting login\npeer 4 connected; awaiting login\npeer 9 connected; awaiting login\npeer 3 connected; awaiting login\npeer 11 connected; awaiting login\npeer 8 connected; awaiting login\npeer 6 connected; awaiting login\npeer 10 connected; awaiting login\npeer 5 connected; awaiting login\npeer 7 connected; awaiting login\npeer 12 connected; awaiting login\npeer 13 connected; awaiting login\npeer 14 connected; awaiting login\npeer 15 connected; awaiting login\npeer 16 connected; awaiting login\npeer 17 connected; awaiting login\npeer 18 connected; awaiting login\npeer 19 connected; awaiting login\npeer 20 connected; awaiting login\nplayer 8 selected character 3 Bot0004\nplayer 5 selected character 5 Bot0002\nplayer 7 selected character 2 Bot0008\nplayer 4 selected character 6 Bot0003\nplayer 2 selected character 1 Bot0006\nplayer 10 selected character 4 Bot0007\nplayer 16 selected character 9 Bot0018\nplayer 18 selected character 10 Bot0017\nplayer 12 selected character 7 Bot0012\nplayer 13 selected character 8 Bot0014\nplayer 20 selected character 13 Bot0019\nplayer 9 selected character 15 Bot0005\nplayer 14 selected character 11 Bot0013\nplayer 15 selected character 12 Bot0016\nplayer 17 selected character 14 Bot0015\nplayer 11 selected character 17 Bot0010\nplayer 6 selected character 18 Bot0011\nplayer 19 selected character 16 Bot0020\nplayer 3 selected character 19 Bot0009\npeer 21 connected; awaiting login\nplayer 21 selected character 20 Bot0001\nserver_metrics tick=300 tick_p95_ms=39.393 tick_p99_ms=104.582 players=20\nserver_metrics tick=600 tick_p95_ms=2.413 tick_p99_ms=3.448 players=20\nserver_metrics tick=900 tick_p95_ms=1.980 tick_p99_ms=2.813 players=20\nserver_metrics tick=1200 tick_p95_ms=2.336 tick_p99_ms=3.067 players=20\npeer 19 disconnected: The remote party closed the WebSocket connection without completing the close handshake.\npeer 20 disconnected: The remote party closed the WebSocket connection without completing the close handshake.\npeer 16 disconnected: Aborted\npeer 18 disconnected: Aborted\npeer 15 disconnected: Aborted\npeer 17 disconnected: Aborted\npeer 13 disconnected: Aborted\npeer 14 disconnected: The remote party closed the WebSocket connection without completing the close handshake.\npeer 12 disconnected: Aborted\npeer 6 disconnected: Aborted\npeer 11 disconnected: Aborted\npeer 3 disconnected: Aborted\npeer 7 disconnected: Aborted\npeer 10 disconnected: Aborted\npeer 2 disconnected: Aborted\npeer 9 disconnected: Aborted\npeer 8 disconnected: The remote party closed the WebSocket connection without completing the close handshake.\npeer 4 disconnected: Aborted\npeer 5 disconnected: Aborted\npeer 21 disconnected: Aborted\n",
+    "Godot Engine v4.7.2.stable.official.ed1daf0bf - https://godotengine.org\nOpenGL API 3.3.0 NVIDIA 617.42 - Compatibility - Using Device: NVIDIA - NVIDIA GeForce RTX 3050\n\nSGO client starting\nSGO client connecting to 127.0.0.1:27888\nauth_result success=false code=account_not_found account=0 bot=true\nauth_result success=true code=registered account=20 bot=true\ncharacter_list count=0 bot=true create_sent=false select_sent=false\nbot_create_character index=1\ncharacter_list count=1 bot=true create_sent=true select_sent=false\nclient entered world peer=21 character=20\nmonster_palette {\"async_store\":{\"cache_hits\":0,\"cache_misses\":2,\"cancelled_jobs\":0,\"decoded_pages\":7,\"entries\":2,\"evictions\":0,\"metric_sample_limit\":2048,\"metric_sample_totals\":{\"decode_ms\":7,\"gpu_commit_frame_ms\":9,\"upload_submit_ms\":7},\"peak_ready_bytes\":8306888,\"peak_resident_bytes\":23000540,\"pending\":0,\"queued_decode_jobs\":0,\"ready_queue_bytes\":0,\"requests\":3,\"resident_bytes\":23000540,\"uploaded_pages\":7},\"definitions\":9,\"load_ms\":120.618,\"rgba_bytes\":18572476,\"shared_atlases\":1}\naction_received\nprediction_ready\ninventory_received\nhealth_received\nsnapshot_received tick=150 players=20 monsters=257 drops=374\ndeath_received\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":6,\"pending\":0,\"reconciliations\":45}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":2,\"entries\":2,\"evictions\":0,\"peak_resident_bytes\":23000540,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":23000540}\nrespawn_received\nsnapshot_received tick=300 players=13 monsters=180 drops=232\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":6,\"pending\":0,\"reconciliations\":83}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":2,\"entries\":2,\"evictions\":0,\"peak_resident_bytes\":23000540,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":23000540}\nsnapshot_received tick=450 players=20 monsters=299 drops=239\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":6,\"pending\":0,\"reconciliations\":114}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":2,\"entries\":2,\"evictions\":0,\"peak_resident_bytes\":23000540,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":23000540}\nsnapshot_received tick=600 players=12 monsters=174 drops=180\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":6,\"pending\":0,\"reconciliations\":157}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":2,\"entries\":2,\"evictions\":0,\"peak_resident_bytes\":23000540,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":23000540}\nsnapshot_received tick=750 players=20 monsters=300 drops=255\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":6,\"pending\":2,\"reconciliations\":182}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":2,\"entries\":2,\"evictions\":0,\"peak_resident_bytes\":23000540,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":23000540}\nsnapshot_received tick=900 players=12 monsters=178 drops=141\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":6,\"pending\":0,\"reconciliations\":229}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":2,\"entries\":2,\"evictions\":0,\"peak_resident_bytes\":23000540,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":23000540}\nsnapshot_received tick=1050 players=20 monsters=300 drops=263\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":6,\"pending\":2,\"reconciliations\":251}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":2,\"entries\":2,\"evictions\":0,\"peak_resident_bytes\":23000540,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":23000540}\nrendered_load {\"draw_calls_last_frame\":172.0,\"draw_calls_p95\":244.0,\"engine_features\":{\"debug\":false,\"editor\":false,\"template_release\":true},\"frame_ms_max\":20.331,\"frame_ms_p50\":16.667,\"frame_ms_p95\":18.549,\"frame_ms_p99\":19.2,\"frames\":2101,\"mean_fps\":60.0030786919957,\"renderer\":\"NVIDIA GeForce RTX 3050\",\"resolution\":[1440,900],\"sample_seconds\":35.0,\"static_memory_bytes\":0,\"texture_memory_bytes\":46083839.0,\"video_memory_bytes\":52572895.0,\"warmup_seconds\":2}\nsnapshot_received tick=1200 players=14 monsters=175 drops=141\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":6,\"pending\":3,\"reconciliations\":301}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":2,\"entries\":2,\"evictions\":0,\"peak_resident_bytes\":23000540,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":23000540}\n",
+    "Godot Engine v4.7.2.stable.official.ed1daf0bf - https://godotengine.org\n\nSGO client starting\nSGO client connecting to 127.0.0.1:27888\nauth_result success=false code=account_not_found account=0 bot=true\nauth_result success=true code=registered account=3 bot=true\ncharacter_list count=0 bot=true create_sent=false select_sent=false\nbot_create_character index=2\ncharacter_list count=1 bot=true create_sent=true select_sent=false\nclient entered world peer=5 character=5\nmonster_palette {\"async_store\":{\"cache_hits\":0,\"cache_misses\":1,\"cancelled_jobs\":0,\"decoded_pages\":5,\"entries\":1,\"evictions\":0,\"metric_sample_limit\":2048,\"metric_sample_totals\":{\"decode_ms\":5,\"gpu_commit_frame_ms\":6,\"upload_submit_ms\":5},\"peak_ready_bytes\":6209428,\"peak_resident_bytes\":18572476,\"pending\":0,\"queued_decode_jobs\":0,\"ready_queue_bytes\":0,\"requests\":2,\"resident_bytes\":18572476,\"uploaded_pages\":5},\"definitions\":9,\"load_ms\":152.575,\"rgba_bytes\":18572476,\"shared_atlases\":1}\nprediction_ready\naction_received\ninventory_received\nhealth_received\nsnapshot_received tick=150 players=16 monsters=242 drops=378\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":6,\"pending\":1,\"reconciliations\":43}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\ndeath_received\nrespawn_received\nsnapshot_received tick=300 players=13 monsters=174 drops=227\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":6,\"pending\":0,\"reconciliations\":72}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\nsnapshot_received tick=450 players=19 monsters=296 drops=213\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":6,\"pending\":1,\"reconciliations\":112}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\nsnapshot_received tick=600 players=14 monsters=191 drops=229\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":6,\"pending\":0,\"reconciliations\":155}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\nsnapshot_received tick=750 players=20 monsters=300 drops=244\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":6,\"pending\":0,\"reconciliations\":181}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\nsnapshot_received tick=900 players=12 monsters=192 drops=211\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":6,\"pending\":0,\"reconciliations\":231}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\nsnapshot_received tick=1050 players=20 monsters=300 drops=273\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":6,\"pending\":1,\"reconciliations\":249}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\nsnapshot_received tick=1200 players=12 monsters=244 drops=187\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":6,\"pending\":0,\"reconciliations\":277}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\n",
+    "Godot Engine v4.7.2.stable.official.ed1daf0bf - https://godotengine.org\n\nSGO client starting\nSGO client connecting to 127.0.0.1:27888\nauth_result success=false code=account_not_found account=0 bot=true\nauth_result success=true code=registered account=5 bot=true\ncharacter_list count=0 bot=true create_sent=false select_sent=false\nbot_create_character index=3\ncharacter_list count=1 bot=true create_sent=true select_sent=false\nclient entered world peer=4 character=6\nmonster_palette {\"async_store\":{\"cache_hits\":0,\"cache_misses\":1,\"cancelled_jobs\":0,\"decoded_pages\":5,\"entries\":1,\"evictions\":0,\"metric_sample_limit\":2048,\"metric_sample_totals\":{\"decode_ms\":5,\"gpu_commit_frame_ms\":6,\"upload_submit_ms\":5},\"peak_ready_bytes\":4157520,\"peak_resident_bytes\":18572476,\"pending\":0,\"queued_decode_jobs\":0,\"ready_queue_bytes\":0,\"requests\":2,\"resident_bytes\":18572476,\"uploaded_pages\":5},\"definitions\":9,\"load_ms\":136.306,\"rgba_bytes\":18572476,\"shared_atlases\":1}\nprediction_ready\naction_received\ninventory_received\nhealth_received\nsnapshot_received tick=150 players=15 monsters=244 drops=392\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":7,\"pending\":1,\"reconciliations\":43}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\ndeath_received\nrespawn_received\nsnapshot_received tick=300 players=13 monsters=175 drops=219\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":7,\"pending\":1,\"reconciliations\":62}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\nsnapshot_received tick=450 players=18 monsters=228 drops=231\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":7,\"pending\":0,\"reconciliations\":89}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\nsnapshot_received tick=600 players=15 monsters=210 drops=249\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":7,\"pending\":0,\"reconciliations\":131}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\nsnapshot_received tick=750 players=16 monsters=187 drops=173\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":7,\"pending\":0,\"reconciliations\":177}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\nsnapshot_received tick=900 players=20 monsters=300 drops=228\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":7,\"pending\":3,\"reconciliations\":199}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\nsnapshot_received tick=1050 players=16 monsters=179 drops=207\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":7,\"pending\":3,\"reconciliations\":249}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\nsnapshot_received tick=1200 players=20 monsters=300 drops=201\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":7,\"pending\":0,\"reconciliations\":300}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\n",
+    "Godot Engine v4.7.2.stable.official.ed1daf0bf - https://godotengine.org\n\nSGO client starting\nSGO client connecting to 127.0.0.1:27888\nauth_result success=false code=account_not_found account=0 bot=true\nauth_result success=true code=registered account=6 bot=true\ncharacter_list count=0 bot=true create_sent=false select_sent=false\nbot_create_character index=4\ncharacter_list count=1 bot=true create_sent=true select_sent=false\nclient entered world peer=8 character=3\nmonster_palette {\"async_store\":{\"cache_hits\":0,\"cache_misses\":1,\"cancelled_jobs\":0,\"decoded_pages\":5,\"entries\":1,\"evictions\":0,\"metric_sample_limit\":2048,\"metric_sample_totals\":{\"decode_ms\":5,\"gpu_commit_frame_ms\":6,\"upload_submit_ms\":5},\"peak_ready_bytes\":4157520,\"peak_resident_bytes\":18572476,\"pending\":0,\"queued_decode_jobs\":0,\"ready_queue_bytes\":0,\"requests\":2,\"resident_bytes\":18572476,\"uploaded_pages\":5},\"definitions\":9,\"load_ms\":154.029,\"rgba_bytes\":18572476,\"shared_atlases\":1}\nprediction_ready\naction_received\ninventory_received\nhealth_received\nsnapshot_received tick=150 players=14 monsters=245 drops=399\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":6,\"pending\":1,\"reconciliations\":43}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\ndeath_received\nrespawn_received\nsnapshot_received tick=300 players=12 monsters=197 drops=171\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":6,\"pending\":0,\"reconciliations\":75}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\nsnapshot_received tick=450 players=19 monsters=261 drops=236\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":6,\"pending\":1,\"reconciliations\":111}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\nsnapshot_received tick=600 players=14 monsters=192 drops=161\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":6,\"pending\":0,\"reconciliations\":161}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\nsnapshot_received tick=750 players=20 monsters=300 drops=232\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":6,\"pending\":0,\"reconciliations\":186}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\nsnapshot_received tick=900 players=13 monsters=197 drops=209\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":6,\"pending\":0,\"reconciliations\":230}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\nsnapshot_received tick=1050 players=17 monsters=226 drops=173\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":6,\"pending\":0,\"reconciliations\":261}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\nsnapshot_received tick=1200 players=15 monsters=297 drops=218\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":6,\"pending\":0,\"reconciliations\":299}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\n",
+    "Godot Engine v4.7.2.stable.official.ed1daf0bf - https://godotengine.org\n\nSGO client starting\nSGO client connecting to 127.0.0.1:27888\nauth_result success=false code=account_not_found account=0 bot=true\nauth_result success=true code=registered account=17 bot=true\ncharacter_list count=0 bot=true create_sent=false select_sent=false\nbot_create_character index=5\ncharacter_list count=1 bot=true create_sent=true select_sent=false\nclient entered world peer=9 character=15\nmonster_palette {\"async_store\":{\"cache_hits\":0,\"cache_misses\":1,\"cancelled_jobs\":0,\"decoded_pages\":5,\"entries\":1,\"evictions\":0,\"metric_sample_limit\":2048,\"metric_sample_totals\":{\"decode_ms\":5,\"gpu_commit_frame_ms\":6,\"upload_submit_ms\":5},\"peak_ready_bytes\":4157520,\"peak_resident_bytes\":18572476,\"pending\":0,\"queued_decode_jobs\":0,\"ready_queue_bytes\":0,\"requests\":2,\"resident_bytes\":18572476,\"uploaded_pages\":5},\"definitions\":9,\"load_ms\":119.655,\"rgba_bytes\":18572476,\"shared_atlases\":1}\naction_received\nprediction_ready\ninventory_received\nhealth_received\nsnapshot_received tick=150 players=17 monsters=267 drops=378\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":7,\"pending\":2,\"reconciliations\":42}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\ndeath_received\nrespawn_received\nsnapshot_received tick=300 players=9 monsters=170 drops=188\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":7,\"pending\":0,\"reconciliations\":80}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\nsnapshot_received tick=450 players=20 monsters=293 drops=250\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":7,\"pending\":2,\"reconciliations\":111}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\nsnapshot_received tick=600 players=11 monsters=198 drops=145\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":7,\"pending\":0,\"reconciliations\":156}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\nsnapshot_received tick=750 players=20 monsters=298 drops=261\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":7,\"pending\":1,\"reconciliations\":180}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\nsnapshot_received tick=900 players=11 monsters=197 drops=125\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":7,\"pending\":1,\"reconciliations\":230}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\nsnapshot_received tick=1050 players=20 monsters=298 drops=230\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":7,\"pending\":1,\"reconciliations\":280}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\nsnapshot_received tick=1200 players=14 monsters=258 drops=146\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":7,\"pending\":1,\"reconciliations\":330}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\n",
+    "Godot Engine v4.7.2.stable.official.ed1daf0bf - https://godotengine.org\n\nSGO client starting\nSGO client connecting to 127.0.0.1:27888\nauth_result success=false code=account_not_found account=0 bot=true\nauth_result success=true code=registered account=4 bot=true\ncharacter_list count=0 bot=true create_sent=false select_sent=false\nbot_create_character index=6\ncharacter_list count=1 bot=true create_sent=true select_sent=false\nclient entered world peer=2 character=1\nmonster_palette {\"async_store\":{\"cache_hits\":0,\"cache_misses\":1,\"cancelled_jobs\":0,\"decoded_pages\":5,\"entries\":1,\"evictions\":0,\"metric_sample_limit\":2048,\"metric_sample_totals\":{\"decode_ms\":5,\"gpu_commit_frame_ms\":6,\"upload_submit_ms\":5},\"peak_ready_bytes\":4157520,\"peak_resident_bytes\":18572476,\"pending\":0,\"queued_decode_jobs\":0,\"ready_queue_bytes\":0,\"requests\":2,\"resident_bytes\":18572476,\"uploaded_pages\":5},\"definitions\":9,\"load_ms\":136.306,\"rgba_bytes\":18572476,\"shared_atlases\":1}\nprediction_ready\naction_received\ninventory_received\nhealth_received\nsnapshot_received tick=150 players=14 monsters=254 drops=339\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":7,\"pending\":3,\"reconciliations\":43}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\ndeath_received\nrespawn_received\nsnapshot_received tick=300 players=9 monsters=175 drops=183\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":7,\"pending\":2,\"reconciliations\":62}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\nsnapshot_received tick=450 players=16 monsters=241 drops=169\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":7,\"pending\":3,\"reconciliations\":112}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\nsnapshot_received tick=600 players=14 monsters=192 drops=182\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":7,\"pending\":0,\"reconciliations\":142}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\nsnapshot_received tick=750 players=18 monsters=284 drops=202\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":7,\"pending\":2,\"reconciliations\":181}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\nsnapshot_received tick=900 players=12 monsters=182 drops=168\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":7,\"pending\":0,\"reconciliations\":218}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\nsnapshot_received tick=1050 players=20 monsters=297 drops=228\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":7,\"pending\":2,\"reconciliations\":250}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\nsnapshot_received tick=1200 players=14 monsters=168 drops=153\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":7,\"pending\":2,\"reconciliations\":300}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\n",
+    "Godot Engine v4.7.2.stable.official.ed1daf0bf - https://godotengine.org\n\nSGO client starting\nSGO client connecting to 127.0.0.1:27888\nauth_result success=false code=account_not_found account=0 bot=true\nauth_result success=true code=registered account=2 bot=true\ncharacter_list count=0 bot=true create_sent=false select_sent=false\nbot_create_character index=7\ncharacter_list count=1 bot=true create_sent=true select_sent=false\nclient entered world peer=10 character=4\nmonster_palette {\"async_store\":{\"cache_hits\":0,\"cache_misses\":1,\"cancelled_jobs\":0,\"decoded_pages\":5,\"entries\":1,\"evictions\":0,\"metric_sample_limit\":2048,\"metric_sample_totals\":{\"decode_ms\":5,\"gpu_commit_frame_ms\":6,\"upload_submit_ms\":5},\"peak_ready_bytes\":4157520,\"peak_resident_bytes\":18572476,\"pending\":0,\"queued_decode_jobs\":0,\"ready_queue_bytes\":0,\"requests\":2,\"resident_bytes\":18572476,\"uploaded_pages\":5},\"definitions\":9,\"load_ms\":135.991,\"rgba_bytes\":18572476,\"shared_atlases\":1}\nprediction_ready\naction_received\ninventory_received\nhealth_received\nsnapshot_received tick=150 players=13 monsters=222 drops=356\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":7,\"pending\":0,\"reconciliations\":44}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\ndeath_received\nrespawn_received\nsnapshot_received tick=300 players=10 monsters=152 drops=164\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":7,\"pending\":0,\"reconciliations\":69}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\nsnapshot_received tick=450 players=19 monsters=280 drops=202\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":7,\"pending\":0,\"reconciliations\":98}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\nsnapshot_received tick=600 players=17 monsters=271 drops=207\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":7,\"pending\":2,\"reconciliations\":131}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\nsnapshot_received tick=750 players=18 monsters=168 drops=178\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":7,\"pending\":2,\"reconciliations\":150}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\nsnapshot_received tick=900 players=12 monsters=235 drops=174\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":7,\"pending\":0,\"reconciliations\":188}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\nsnapshot_received tick=1050 players=20 monsters=294 drops=215\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":7,\"pending\":2,\"reconciliations\":219}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\nsnapshot_received tick=1200 players=13 monsters=178 drops=140\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":7,\"pending\":0,\"reconciliations\":269}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\n",
+    "Godot Engine v4.7.2.stable.official.ed1daf0bf - https://godotengine.org\n\nSGO client starting\nSGO client connecting to 127.0.0.1:27888\nauth_result success=false code=account_not_found account=0 bot=true\nauth_result success=true code=registered account=1 bot=true\ncharacter_list count=0 bot=true create_sent=false select_sent=false\nbot_create_character index=8\ncharacter_list count=1 bot=true create_sent=true select_sent=false\nclient entered world peer=7 character=2\nmonster_palette {\"async_store\":{\"cache_hits\":0,\"cache_misses\":1,\"cancelled_jobs\":0,\"decoded_pages\":5,\"entries\":1,\"evictions\":0,\"metric_sample_limit\":2048,\"metric_sample_totals\":{\"decode_ms\":5,\"gpu_commit_frame_ms\":6,\"upload_submit_ms\":5},\"peak_ready_bytes\":6209428,\"peak_resident_bytes\":18572476,\"pending\":0,\"queued_decode_jobs\":0,\"ready_queue_bytes\":0,\"requests\":2,\"resident_bytes\":18572476,\"uploaded_pages\":5},\"definitions\":9,\"load_ms\":135.218,\"rgba_bytes\":18572476,\"shared_atlases\":1}\nprediction_ready\naction_received\ninventory_received\nhealth_received\nsnapshot_received tick=150 players=16 monsters=230 drops=358\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":7,\"pending\":3,\"reconciliations\":43}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\ndeath_received\nrespawn_received\nsnapshot_received tick=300 players=10 monsters=155 drops=172\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":7,\"pending\":3,\"reconciliations\":93}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\nsnapshot_received tick=450 players=20 monsters=299 drops=234\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":7,\"pending\":0,\"reconciliations\":144}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\nsnapshot_received tick=600 players=13 monsters=163 drops=126\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":7,\"pending\":2,\"reconciliations\":193}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\nsnapshot_received tick=750 players=20 monsters=300 drops=251\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":7,\"pending\":2,\"reconciliations\":212}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\nsnapshot_received tick=900 players=13 monsters=207 drops=167\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":7,\"pending\":2,\"reconciliations\":231}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\nsnapshot_received tick=1050 players=15 monsters=191 drops=186\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":7,\"pending\":0,\"reconciliations\":258}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\nsnapshot_received tick=1200 players=16 monsters=247 drops=163\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":7,\"pending\":2,\"reconciliations\":299}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\n",
+    "Godot Engine v4.7.2.stable.official.ed1daf0bf - https://godotengine.org\n\nSGO client starting\nSGO client connecting to 127.0.0.1:27888\nauth_result success=false code=account_not_found account=0 bot=true\nauth_result success=true code=registered account=18 bot=true\ncharacter_list count=0 bot=true create_sent=false select_sent=false\nbot_create_character index=9\ncharacter_list count=1 bot=true create_sent=true select_sent=false\nclient entered world peer=3 character=19\nmonster_palette {\"async_store\":{\"cache_hits\":0,\"cache_misses\":1,\"cancelled_jobs\":0,\"decoded_pages\":5,\"entries\":1,\"evictions\":0,\"metric_sample_limit\":2048,\"metric_sample_totals\":{\"decode_ms\":5,\"gpu_commit_frame_ms\":6,\"upload_submit_ms\":5},\"peak_ready_bytes\":4157520,\"peak_resident_bytes\":18572476,\"pending\":0,\"queued_decode_jobs\":0,\"ready_queue_bytes\":0,\"requests\":2,\"resident_bytes\":18572476,\"uploaded_pages\":5},\"definitions\":9,\"load_ms\":119.028,\"rgba_bytes\":18572476,\"shared_atlases\":1}\naction_received\nprediction_ready\ninventory_received\nhealth_received\nsnapshot_received tick=150 players=16 monsters=245 drops=351\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":6,\"pending\":2,\"reconciliations\":42}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\ndeath_received\nrespawn_received\nsnapshot_received tick=300 players=13 monsters=178 drops=198\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":6,\"pending\":2,\"reconciliations\":92}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\nsnapshot_received tick=450 players=20 monsters=299 drops=246\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":6,\"pending\":2,\"reconciliations\":142}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\nsnapshot_received tick=600 players=14 monsters=193 drops=152\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":6,\"pending\":1,\"reconciliations\":192}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\nsnapshot_received tick=750 players=20 monsters=300 drops=270\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":6,\"pending\":1,\"reconciliations\":211}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\nsnapshot_received tick=900 players=15 monsters=182 drops=123\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":6,\"pending\":1,\"reconciliations\":261}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\nsnapshot_received tick=1050 players=18 monsters=193 drops=201\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":6,\"pending\":1,\"reconciliations\":280}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\nsnapshot_received tick=1200 players=15 monsters=226 drops=121\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":6,\"pending\":1,\"reconciliations\":330}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\n",
+    "Godot Engine v4.7.2.stable.official.ed1daf0bf - https://godotengine.org\n\nSGO client starting\nSGO client connecting to 127.0.0.1:27888\nauth_result success=false code=account_not_found account=0 bot=true\nauth_result success=true code=registered account=15 bot=true\ncharacter_list count=0 bot=true create_sent=false select_sent=false\nbot_create_character index=10\ncharacter_list count=1 bot=true create_sent=true select_sent=false\nclient entered world peer=11 character=17\nmonster_palette {\"async_store\":{\"cache_hits\":0,\"cache_misses\":1,\"cancelled_jobs\":0,\"decoded_pages\":5,\"entries\":1,\"evictions\":0,\"metric_sample_limit\":2048,\"metric_sample_totals\":{\"decode_ms\":5,\"gpu_commit_frame_ms\":6,\"upload_submit_ms\":5},\"peak_ready_bytes\":6209428,\"peak_resident_bytes\":18572476,\"pending\":0,\"queued_decode_jobs\":0,\"ready_queue_bytes\":0,\"requests\":2,\"resident_bytes\":18572476,\"uploaded_pages\":5},\"definitions\":9,\"load_ms\":138.239,\"rgba_bytes\":18572476,\"shared_atlases\":1}\naction_received\nprediction_ready\ninventory_received\nhealth_received\nsnapshot_received tick=150 players=18 monsters=253 drops=364\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":7,\"pending\":0,\"reconciliations\":43}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\ndeath_received\nrespawn_received\nsnapshot_received tick=300 players=13 monsters=197 drops=241\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":7,\"pending\":0,\"reconciliations\":76}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\nsnapshot_received tick=450 players=20 monsters=299 drops=202\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":7,\"pending\":0,\"reconciliations\":111}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\nsnapshot_received tick=600 players=11 monsters=185 drops=220\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":7,\"pending\":0,\"reconciliations\":150}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\nsnapshot_received tick=750 players=20 monsters=300 drops=232\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":7,\"pending\":2,\"reconciliations\":179}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\nsnapshot_received tick=900 players=12 monsters=185 drops=200\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":7,\"pending\":2,\"reconciliations\":229}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\nsnapshot_received tick=1050 players=20 monsters=300 drops=266\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":7,\"pending\":2,\"reconciliations\":279}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\nsnapshot_received tick=1200 players=17 monsters=291 drops=171\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":7,\"pending\":2,\"reconciliations\":298}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\n",
+    "Godot Engine v4.7.2.stable.official.ed1daf0bf - https://godotengine.org\n\nSGO client starting\nSGO client connecting to 127.0.0.1:27888\nauth_result success=false code=account_not_found account=0 bot=true\nauth_result success=true code=registered account=9 bot=true\ncharacter_list count=0 bot=true create_sent=false select_sent=false\nbot_create_character index=11\ncharacter_list count=1 bot=true create_sent=true select_sent=false\nclient entered world peer=6 character=18\nmonster_palette {\"async_store\":{\"cache_hits\":0,\"cache_misses\":1,\"cancelled_jobs\":0,\"decoded_pages\":5,\"entries\":1,\"evictions\":0,\"metric_sample_limit\":2048,\"metric_sample_totals\":{\"decode_ms\":5,\"gpu_commit_frame_ms\":6,\"upload_submit_ms\":5},\"peak_ready_bytes\":4157520,\"peak_resident_bytes\":18572476,\"pending\":0,\"queued_decode_jobs\":0,\"ready_queue_bytes\":0,\"requests\":2,\"resident_bytes\":18572476,\"uploaded_pages\":5},\"definitions\":9,\"load_ms\":119.163,\"rgba_bytes\":18572476,\"shared_atlases\":1}\naction_received\nprediction_ready\ninventory_received\nhealth_received\nsnapshot_received tick=150 players=16 monsters=240 drops=386\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":6,\"pending\":0,\"reconciliations\":43}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\ndeath_received\nrespawn_received\nsnapshot_received tick=300 players=12 monsters=172 drops=228\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":6,\"pending\":0,\"reconciliations\":69}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\nsnapshot_received tick=450 players=18 monsters=285 drops=232\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":6,\"pending\":0,\"reconciliations\":107}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\nsnapshot_received tick=600 players=20 monsters=300 drops=264\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":6,\"pending\":2,\"reconciliations\":129}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\nsnapshot_received tick=750 players=19 monsters=205 drops=236\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":6,\"pending\":2,\"reconciliations\":148}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\nsnapshot_received tick=900 players=13 monsters=220 drops=216\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":6,\"pending\":0,\"reconciliations\":185}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\nsnapshot_received tick=1050 players=20 monsters=300 drops=248\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":6,\"pending\":2,\"reconciliations\":217}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\nsnapshot_received tick=1200 players=15 monsters=220 drops=215\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":6,\"pending\":2,\"reconciliations\":235}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\n",
+    "Godot Engine v4.7.2.stable.official.ed1daf0bf - https://godotengine.org\n\nSGO client starting\nSGO client connecting to 127.0.0.1:27888\nauth_result success=false code=account_not_found account=0 bot=true\nauth_result success=true code=registered account=7 bot=true\ncharacter_list count=0 bot=true create_sent=false select_sent=false\nbot_create_character index=12\ncharacter_list count=1 bot=true create_sent=true select_sent=false\nclient entered world peer=12 character=7\nmonster_palette {\"async_store\":{\"cache_hits\":0,\"cache_misses\":1,\"cancelled_jobs\":0,\"decoded_pages\":5,\"entries\":1,\"evictions\":0,\"metric_sample_limit\":2048,\"metric_sample_totals\":{\"decode_ms\":5,\"gpu_commit_frame_ms\":6,\"upload_submit_ms\":5},\"peak_ready_bytes\":6209428,\"peak_resident_bytes\":18572476,\"pending\":0,\"queued_decode_jobs\":0,\"ready_queue_bytes\":0,\"requests\":2,\"resident_bytes\":18572476,\"uploaded_pages\":5},\"definitions\":9,\"load_ms\":135.641,\"rgba_bytes\":18572476,\"shared_atlases\":1}\nprediction_ready\naction_received\ninventory_received\nhealth_received\nsnapshot_received tick=150 players=15 monsters=231 drops=384\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":6,\"pending\":0,\"reconciliations\":44}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\ndeath_received\nrespawn_received\nsnapshot_received tick=300 players=20 monsters=300 drops=279\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":6,\"pending\":0,\"reconciliations\":63}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\nsnapshot_received tick=450 players=19 monsters=231 drops=232\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":6,\"pending\":0,\"reconciliations\":81}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\nsnapshot_received tick=600 players=14 monsters=202 drops=233\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":6,\"pending\":2,\"reconciliations\":130}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\nsnapshot_received tick=750 players=17 monsters=228 drops=185\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":6,\"pending\":0,\"reconciliations\":175}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\nsnapshot_received tick=900 players=20 monsters=300 drops=231\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":6,\"pending\":2,\"reconciliations\":199}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\nsnapshot_received tick=1050 players=16 monsters=185 drops=162\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":6,\"pending\":2,\"reconciliations\":249}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\nsnapshot_received tick=1200 players=15 monsters=250 drops=153\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":6,\"pending\":2,\"reconciliations\":267}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\n",
+    "Godot Engine v4.7.2.stable.official.ed1daf0bf - https://godotengine.org\n\nSGO client starting\nSGO client connecting to 127.0.0.1:27888\nauth_result success=false code=account_not_found account=0 bot=true\nauth_result success=true code=registered account=11 bot=true\ncharacter_list count=0 bot=true create_sent=false select_sent=false\nbot_create_character index=13\ncharacter_list count=1 bot=true create_sent=true select_sent=false\nclient entered world peer=14 character=11\nmonster_palette {\"async_store\":{\"cache_hits\":0,\"cache_misses\":1,\"cancelled_jobs\":0,\"decoded_pages\":5,\"entries\":1,\"evictions\":0,\"metric_sample_limit\":2048,\"metric_sample_totals\":{\"decode_ms\":5,\"gpu_commit_frame_ms\":6,\"upload_submit_ms\":5},\"peak_ready_bytes\":6209428,\"peak_resident_bytes\":18572476,\"pending\":0,\"queued_decode_jobs\":0,\"ready_queue_bytes\":0,\"requests\":2,\"resident_bytes\":18572476,\"uploaded_pages\":5},\"definitions\":9,\"load_ms\":122.7,\"rgba_bytes\":18572476,\"shared_atlases\":1}\naction_received\nprediction_ready\ninventory_received\nhealth_received\nsnapshot_received tick=150 players=17 monsters=262 drops=399\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":7,\"pending\":1,\"reconciliations\":43}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\ndeath_received\nrespawn_received\nsnapshot_received tick=300 players=10 monsters=168 drops=173\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":7,\"pending\":1,\"reconciliations\":93}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\nsnapshot_received tick=450 players=20 monsters=300 drops=266\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":7,\"pending\":1,\"reconciliations\":143}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\nsnapshot_received tick=600 players=15 monsters=189 drops=147\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":7,\"pending\":0,\"reconciliations\":184}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\nsnapshot_received tick=750 players=20 monsters=298 drops=262\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":7,\"pending\":3,\"reconciliations\":211}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\nsnapshot_received tick=900 players=11 monsters=200 drops=128\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":7,\"pending\":0,\"reconciliations\":262}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\nsnapshot_received tick=1050 players=20 monsters=298 drops=218\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":7,\"pending\":0,\"reconciliations\":312}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\nsnapshot_received tick=1200 players=13 monsters=293 drops=149\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":7,\"pending\":3,\"reconciliations\":361}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\n",
+    "Godot Engine v4.7.2.stable.official.ed1daf0bf - https://godotengine.org\n\nSGO client starting\nSGO client connecting to 127.0.0.1:27888\nauth_result success=false code=account_not_found account=0 bot=true\nauth_result success=true code=registered account=8 bot=true\ncharacter_list count=0 bot=true create_sent=false select_sent=false\nbot_create_character index=14\ncharacter_list count=1 bot=true create_sent=true select_sent=false\nclient entered world peer=13 character=8\nmonster_palette {\"async_store\":{\"cache_hits\":0,\"cache_misses\":1,\"cancelled_jobs\":0,\"decoded_pages\":5,\"entries\":1,\"evictions\":0,\"metric_sample_limit\":2048,\"metric_sample_totals\":{\"decode_ms\":5,\"gpu_commit_frame_ms\":6,\"upload_submit_ms\":5},\"peak_ready_bytes\":4157520,\"peak_resident_bytes\":18572476,\"pending\":0,\"queued_decode_jobs\":0,\"ready_queue_bytes\":0,\"requests\":2,\"resident_bytes\":18572476,\"uploaded_pages\":5},\"definitions\":9,\"load_ms\":137.632,\"rgba_bytes\":18572476,\"shared_atlases\":1}\naction_received\nprediction_ready\ninventory_received\nhealth_received\nsnapshot_received tick=150 players=16 monsters=270 drops=366\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":7,\"pending\":1,\"reconciliations\":43}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\ndeath_received\nrespawn_received\nsnapshot_received tick=300 players=9 monsters=169 drops=180\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":7,\"pending\":0,\"reconciliations\":68}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\nsnapshot_received tick=450 players=20 monsters=287 drops=180\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":7,\"pending\":1,\"reconciliations\":112}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\nsnapshot_received tick=600 players=13 monsters=177 drops=186\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":7,\"pending\":0,\"reconciliations\":157}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\nsnapshot_received tick=750 players=20 monsters=300 drops=256\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":7,\"pending\":3,\"reconciliations\":180}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\nsnapshot_received tick=900 players=10 monsters=191 drops=142\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":7,\"pending\":3,\"reconciliations\":230}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\nsnapshot_received tick=1050 players=14 monsters=167 drops=173\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":7,\"pending\":3,\"reconciliations\":249}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\nsnapshot_received tick=1200 players=12 monsters=209 drops=116\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":7,\"pending\":3,\"reconciliations\":299}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\n",
+    "Godot Engine v4.7.2.stable.official.ed1daf0bf - https://godotengine.org\n\nSGO client starting\nSGO client connecting to 127.0.0.1:27888\nauth_result success=false code=account_not_found account=0 bot=true\nauth_result success=true code=registered account=16 bot=true\ncharacter_list count=0 bot=true create_sent=false select_sent=false\nbot_create_character index=15\ncharacter_list count=1 bot=true create_sent=true select_sent=false\nclient entered world peer=17 character=14\nmonster_palette {\"async_store\":{\"cache_hits\":0,\"cache_misses\":1,\"cancelled_jobs\":0,\"decoded_pages\":5,\"entries\":1,\"evictions\":0,\"metric_sample_limit\":2048,\"metric_sample_totals\":{\"decode_ms\":5,\"gpu_commit_frame_ms\":6,\"upload_submit_ms\":5},\"peak_ready_bytes\":6209428,\"peak_resident_bytes\":18572476,\"pending\":0,\"queued_decode_jobs\":0,\"ready_queue_bytes\":0,\"requests\":2,\"resident_bytes\":18572476,\"uploaded_pages\":5},\"definitions\":9,\"load_ms\":135.398,\"rgba_bytes\":18572476,\"shared_atlases\":1}\naction_received\nprediction_ready\ninventory_received\nhealth_received\nsnapshot_received tick=150 players=14 monsters=237 drops=335\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":7,\"pending\":2,\"reconciliations\":43}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\ndeath_received\nrespawn_received\nsnapshot_received tick=300 players=10 monsters=157 drops=175\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":7,\"pending\":0,\"reconciliations\":70}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\nsnapshot_received tick=450 players=20 monsters=294 drops=184\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":7,\"pending\":2,\"reconciliations\":112}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\nsnapshot_received tick=600 players=12 monsters=169 drops=182\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":7,\"pending\":0,\"reconciliations\":151}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\nsnapshot_received tick=750 players=20 monsters=300 drops=228\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":7,\"pending\":1,\"reconciliations\":181}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\nsnapshot_received tick=900 players=12 monsters=181 drops=167\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":7,\"pending\":1,\"reconciliations\":231}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\nsnapshot_received tick=1050 players=16 monsters=235 drops=170\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":7,\"pending\":1,\"reconciliations\":250}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\nsnapshot_received tick=1200 players=14 monsters=222 drops=161\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":7,\"pending\":1,\"reconciliations\":300}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\n",
+    "Godot Engine v4.7.2.stable.official.ed1daf0bf - https://godotengine.org\n\nSGO client starting\nSGO client connecting to 127.0.0.1:27888\nauth_result success=false code=account_not_found account=0 bot=true\nauth_result success=true code=registered account=13 bot=true\ncharacter_list count=0 bot=true create_sent=false select_sent=false\nbot_create_character index=16\ncharacter_list count=1 bot=true create_sent=true select_sent=false\nclient entered world peer=15 character=12\nmonster_palette {\"async_store\":{\"cache_hits\":0,\"cache_misses\":1,\"cancelled_jobs\":0,\"decoded_pages\":5,\"entries\":1,\"evictions\":0,\"metric_sample_limit\":2048,\"metric_sample_totals\":{\"decode_ms\":5,\"gpu_commit_frame_ms\":6,\"upload_submit_ms\":5},\"peak_ready_bytes\":4157520,\"peak_resident_bytes\":18572476,\"pending\":0,\"queued_decode_jobs\":0,\"ready_queue_bytes\":0,\"requests\":2,\"resident_bytes\":18572476,\"uploaded_pages\":5},\"definitions\":9,\"load_ms\":126.243,\"rgba_bytes\":18572476,\"shared_atlases\":1}\naction_received\nprediction_ready\ninventory_received\nhealth_received\nsnapshot_received tick=150 players=14 monsters=222 drops=346\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":7,\"pending\":1,\"reconciliations\":43}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\ndeath_received\nrespawn_received\nsnapshot_received tick=300 players=20 monsters=294 drops=250\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":7,\"pending\":1,\"reconciliations\":62}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\nsnapshot_received tick=450 players=15 monsters=187 drops=182\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":7,\"pending\":0,\"reconciliations\":85}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\nsnapshot_received tick=600 players=13 monsters=195 drops=189\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":7,\"pending\":0,\"reconciliations\":131}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\nsnapshot_received tick=750 players=18 monsters=204 drops=141\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":7,\"pending\":0,\"reconciliations\":169}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\nsnapshot_received tick=900 players=16 monsters=285 drops=185\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":7,\"pending\":0,\"reconciliations\":197}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\nsnapshot_received tick=1050 players=20 monsters=298 drops=226\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":7,\"pending\":0,\"reconciliations\":218}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\nsnapshot_received tick=1200 players=20 monsters=299 drops=202\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":7,\"pending\":3,\"reconciliations\":235}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\n",
+    "Godot Engine v4.7.2.stable.official.ed1daf0bf - https://godotengine.org\n\nSGO client starting\nSGO client connecting to 127.0.0.1:27888\nauth_result success=false code=account_not_found account=0 bot=true\nauth_result success=true code=registered account=12 bot=true\ncharacter_list count=0 bot=true create_sent=false select_sent=false\nbot_create_character index=17\ncharacter_list count=1 bot=true create_sent=true select_sent=false\nclient entered world peer=18 character=10\nmonster_palette {\"async_store\":{\"cache_hits\":0,\"cache_misses\":1,\"cancelled_jobs\":0,\"decoded_pages\":5,\"entries\":1,\"evictions\":0,\"metric_sample_limit\":2048,\"metric_sample_totals\":{\"decode_ms\":5,\"gpu_commit_frame_ms\":6,\"upload_submit_ms\":5},\"peak_ready_bytes\":4157520,\"peak_resident_bytes\":18572476,\"pending\":0,\"queued_decode_jobs\":0,\"ready_queue_bytes\":0,\"requests\":2,\"resident_bytes\":18572476,\"uploaded_pages\":5},\"definitions\":9,\"load_ms\":136.409,\"rgba_bytes\":18572476,\"shared_atlases\":1}\nprediction_ready\naction_received\ninventory_received\nhealth_received\nsnapshot_received tick=150 players=14 monsters=220 drops=339\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":7,\"pending\":2,\"reconciliations\":44}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\ndeath_received\nrespawn_received\nsnapshot_received tick=300 players=12 monsters=181 drops=173\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":7,\"pending\":2,\"reconciliations\":94}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\nsnapshot_received tick=450 players=20 monsters=298 drops=219\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":7,\"pending\":2,\"reconciliations\":144}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\nsnapshot_received tick=600 players=20 monsters=300 drops=263\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":7,\"pending\":1,\"reconciliations\":163}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\nsnapshot_received tick=750 players=17 monsters=205 drops=132\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":7,\"pending\":1,\"reconciliations\":213}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\nsnapshot_received tick=900 players=15 monsters=280 drops=222\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":7,\"pending\":1,\"reconciliations\":263}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\nsnapshot_received tick=1050 players=17 monsters=246 drops=190\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":7,\"pending\":0,\"reconciliations\":300}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\nsnapshot_received tick=1200 players=20 monsters=299 drops=182\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":7,\"pending\":1,\"reconciliations\":332}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\n",
+    "Godot Engine v4.7.2.stable.official.ed1daf0bf - https://godotengine.org\n\nSGO client starting\nSGO client connecting to 127.0.0.1:27888\nauth_result success=false code=account_not_found account=0 bot=true\nauth_result success=true code=registered account=10 bot=true\ncharacter_list count=0 bot=true create_sent=false select_sent=false\nbot_create_character index=18\ncharacter_list count=1 bot=true create_sent=true select_sent=false\nclient entered world peer=16 character=9\nmonster_palette {\"async_store\":{\"cache_hits\":0,\"cache_misses\":1,\"cancelled_jobs\":0,\"decoded_pages\":5,\"entries\":1,\"evictions\":0,\"metric_sample_limit\":2048,\"metric_sample_totals\":{\"decode_ms\":5,\"gpu_commit_frame_ms\":6,\"upload_submit_ms\":5},\"peak_ready_bytes\":6209428,\"peak_resident_bytes\":18572476,\"pending\":0,\"queued_decode_jobs\":0,\"ready_queue_bytes\":0,\"requests\":2,\"resident_bytes\":18572476,\"uploaded_pages\":5},\"definitions\":9,\"load_ms\":136.233,\"rgba_bytes\":18572476,\"shared_atlases\":1}\nprediction_ready\naction_received\ninventory_received\nhealth_received\nsnapshot_received tick=150 players=15 monsters=240 drops=333\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":6,\"pending\":1,\"reconciliations\":44}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\ndeath_received\nrespawn_received\nsnapshot_received tick=300 players=13 monsters=192 drops=238\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":6,\"pending\":1,\"reconciliations\":94}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\nsnapshot_received tick=450 players=20 monsters=299 drops=237\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":6,\"pending\":1,\"reconciliations\":144}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\nsnapshot_received tick=600 players=20 monsters=300 drops=254\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":6,\"pending\":0,\"reconciliations\":163}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\nsnapshot_received tick=750 players=17 monsters=222 drops=170\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":6,\"pending\":0,\"reconciliations\":185}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\nsnapshot_received tick=900 players=16 monsters=262 drops=147\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":6,\"pending\":0,\"reconciliations\":232}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\nsnapshot_received tick=1050 players=17 monsters=187 drops=237\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":6,\"pending\":0,\"reconciliations\":277}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\nsnapshot_received tick=1200 players=20 monsters=300 drops=220\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":6,\"pending\":0,\"reconciliations\":300}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\n",
+    "Godot Engine v4.7.2.stable.official.ed1daf0bf - https://godotengine.org\n\nSGO client starting\nSGO client connecting to 127.0.0.1:27888\nauth_result success=false code=account_not_found account=0 bot=true\nauth_result success=true code=registered account=14 bot=true\ncharacter_list count=0 bot=true create_sent=false select_sent=false\nbot_create_character index=19\ncharacter_list count=1 bot=true create_sent=true select_sent=false\nclient entered world peer=20 character=13\nmonster_palette {\"async_store\":{\"cache_hits\":0,\"cache_misses\":1,\"cancelled_jobs\":0,\"decoded_pages\":5,\"entries\":1,\"evictions\":0,\"metric_sample_limit\":2048,\"metric_sample_totals\":{\"decode_ms\":5,\"gpu_commit_frame_ms\":6,\"upload_submit_ms\":5},\"peak_ready_bytes\":4157520,\"peak_resident_bytes\":18572476,\"pending\":0,\"queued_decode_jobs\":0,\"ready_queue_bytes\":0,\"requests\":2,\"resident_bytes\":18572476,\"uploaded_pages\":5},\"definitions\":9,\"load_ms\":122.143,\"rgba_bytes\":18572476,\"shared_atlases\":1}\nprediction_ready\naction_received\ninventory_received\nhealth_received\nsnapshot_received tick=150 players=16 monsters=249 drops=383\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":7,\"pending\":2,\"reconciliations\":44}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\ndeath_received\nrespawn_received\nsnapshot_received tick=300 players=13 monsters=183 drops=228\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":7,\"pending\":0,\"reconciliations\":81}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\nsnapshot_received tick=450 players=20 monsters=299 drops=239\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":7,\"pending\":2,\"reconciliations\":112}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\nsnapshot_received tick=600 players=13 monsters=184 drops=224\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":7,\"pending\":1,\"reconciliations\":162}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\nsnapshot_received tick=750 players=20 monsters=300 drops=276\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":7,\"pending\":1,\"reconciliations\":181}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\nsnapshot_received tick=900 players=12 monsters=186 drops=198\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":7,\"pending\":1,\"reconciliations\":231}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\nsnapshot_received tick=1050 players=16 monsters=218 drops=239\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":7,\"pending\":0,\"reconciliations\":252}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\nsnapshot_received tick=1200 players=14 monsters=271 drops=186\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":7,\"pending\":0,\"reconciliations\":284}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\n",
+    "Godot Engine v4.7.2.stable.official.ed1daf0bf - https://godotengine.org\n\nSGO client starting\nSGO client connecting to 127.0.0.1:27888\nauth_result success=false code=account_not_found account=0 bot=true\nauth_result success=true code=registered account=19 bot=true\ncharacter_list count=0 bot=true create_sent=false select_sent=false\nbot_create_character index=20\ncharacter_list count=1 bot=true create_sent=true select_sent=false\nclient entered world peer=19 character=16\nmonster_palette {\"async_store\":{\"cache_hits\":0,\"cache_misses\":1,\"cancelled_jobs\":0,\"decoded_pages\":5,\"entries\":1,\"evictions\":0,\"metric_sample_limit\":2048,\"metric_sample_totals\":{\"decode_ms\":5,\"gpu_commit_frame_ms\":6,\"upload_submit_ms\":5},\"peak_ready_bytes\":8213680,\"peak_resident_bytes\":18572476,\"pending\":0,\"queued_decode_jobs\":0,\"ready_queue_bytes\":0,\"requests\":2,\"resident_bytes\":18572476,\"uploaded_pages\":5},\"definitions\":9,\"load_ms\":135.407,\"rgba_bytes\":18572476,\"shared_atlases\":1}\naction_received\nprediction_ready\ninventory_received\nhealth_received\nsnapshot_received tick=150 players=14 monsters=237 drops=388\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":6,\"pending\":2,\"reconciliations\":43}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\ndeath_received\nrespawn_received\nsnapshot_received tick=300 players=12 monsters=174 drops=211\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":6,\"pending\":2,\"reconciliations\":62}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\nsnapshot_received tick=450 players=17 monsters=224 drops=229\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":6,\"pending\":0,\"reconciliations\":98}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\nsnapshot_received tick=600 players=19 monsters=288 drops=252\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":6,\"pending\":1,\"reconciliations\":131}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\nsnapshot_received tick=750 players=20 monsters=200 drops=266\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":6,\"pending\":1,\"reconciliations\":150}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\nsnapshot_received tick=900 players=13 monsters=227 drops=224\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":6,\"pending\":1,\"reconciliations\":169}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\nsnapshot_received tick=1050 players=18 monsters=241 drops=247\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":6,\"pending\":0,\"reconciliations\":199}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\nsnapshot_received tick=1200 players=17 monsters=294 drops=222\nprediction_metrics {\"max_correction_px\":0.0,\"max_pending\":6,\"pending\":0,\"reconciliations\":228}\nasset_store_metrics {\"cache_hits\":0,\"cache_misses\":1,\"entries\":1,\"evictions\":0,\"peak_resident_bytes\":18572476,\"pending\":0,\"ready_queue_bytes\":0,\"resident_bytes\":18572476}\n"
+  ],
+  "measurement_provenance": {
+    "git_head": "86f6174d8695871fb0897edaa5863cbb576752e8",
+    "tracked_worktree_diff_sha256": "d6a59b150bccedf9b48bf6065e5108c3718eced0416b4adba6f88d939e44d069",
+    "files": {
+      "client/scripts/main.gd": "b40ead1031de0d1381fee0579e7f79d0a8a715066c5d6d6a3d0fca76b4ca2e09",
+      "client/scripts/entity_atlas.gd": "0ab959b7553e763f731d9e30184aea2a7e2dbbae43e386707af8e6d27b1b5f6d",
+      "client/scripts/monster_visuals.gd": "06ccaa1a4f3f3380388493054eb3f441ed37335a79837b3f32020e76bb74e1bd",
+      "client/scripts/runtime_asset_store.gd": "6d5847aeadee1fe8e922fb358f8125ce700def3154492f5f1fecc2dcad86c0a2",
+      "client/scripts/frame_profiler.gd": "d4e8c0ba6c84691a115705167c36d59c037c2e2792bff22cba5ec17a2d9571f6",
+      "client/project.godot": "729a3fa00297e98e7d852bdd7bade01ab6748054d1014d5b8d9b57cb31b6aeb1",
+      "server/bin/Release/net8.0/SGTest.Server.dll": "18dacc392b2d1e2269a12039b113484e0929425711819c695087d1f23fe0c4c2",
+      "client/tools/benchmark_asset_lifecycle.gd": "ebef3737721fa15f7e79d2e4789b7ed062addabc8cb9d267b9968ed80dd9ddcb",
+      "client/tools/benchmark_runtime_asset_store.gd": "d64d5a3eae3e724fa22c62ad38d53a6c24cd68b727a222380f5dfe0427bcaf01",
+      "tools/benchmark_runtime_baseline.py": "9fdce3b93327e000d46efa9785af180d43fe20042883f2e8ecc31c28562e4048",
+      "client\\assets\\bundles\\index.json": "f6c8198e1ff4cda599cbd330043235c22bd0c95c19c580251641f69df5b9538f",
+      "client\\assets\\maps\\13\\world.json": "6fa30ca84e8bdaa83b13dad0d0c54c10512b188fee7db5ce27b7b125ba25de4e",
+      "client\\assets\\maps\\13\\population.json": "7260919190fa752f0d685c503c929cdd700d5c76d0c689c2fdf6880c76224806",
+      "client\\assets\\bundles\\session\\player-b-base.json": "fbbf47d55219c76242854711fd9d86a5203f4868795b08f00e80b1a63e986b04",
+      "client/assets/bundles/session/player-b-base_0.png": "b1e3f339d63798e069976c143c2a3167f29ff6cecf1da66ca4d941bd70aee3d3",
+      "client/assets/bundles/session/player-b-base_1.png": "45cb6de57ccc05301bb29a0bf52ac59aec1215891f789329b42b234ae198c633"
+    },
+    "assets": {
+      "root": "C:\\SGO\\SRC\\SGTest\\client\\assets",
+      "groups": [
+        {
+          "manifest": "bundles/map/13/sprites.json",
+          "version": 9,
+          "shape": "unspecified",
+          "page_sizes": [
+            [
+              1019,
+              1018
+            ],
+            [
+              1019,
+              1020
+            ],
+            [
+              1004,
+              1010
+            ],
+            [
+              1003,
+              1023
+            ],
+            [
+              1016,
+              518
+            ]
+          ],
+          "pages": 5
+        }
+      ],
+      "files": {
+        "C:/SGO/SRC/SGTest/client/assets/bundles/map/13/sprites.json": "0a0d96c12028d3c027fb5af59c38b432f1d4db5e511eb5705018c20efcc59568",
+        "C:/SGO/SRC/SGTest/client/assets/bundles/map/13/sprites_0.png": "937e55ca2c3757ea5ffc3f2b416bc9f6dd00a10c77927b4cdb6293cf4dfd3006",
+        "C:/SGO/SRC/SGTest/client/assets/bundles/map/13/sprites_1.png": "afbb58df88e1a43c27f99417af718cebb9bf287dab199464ee35e418cfed41ee",
+        "C:/SGO/SRC/SGTest/client/assets/bundles/map/13/sprites_2.png": "1baf27bbb8ac443f8e1ee2432768a3708b7b492177a339ca54d70b50efb8a85a",
+        "C:/SGO/SRC/SGTest/client/assets/bundles/map/13/sprites_3.png": "458f78e2981818c15425beee84775f472e183fc04364b6bbb8db0f8a2cf947c1",
+        "C:/SGO/SRC/SGTest/client/assets/bundles/map/13/sprites_4.png": "2ac54ff568457b0149326d231ef3fec90b7f3c5f62fac9001c3a282d990a69e2",
+        "C:/SGO/SRC/SGTest/client/assets/maps/13/population.json": "7260919190fa752f0d685c503c929cdd700d5c76d0c689c2fdf6880c76224806"
+      },
+      "content_sha256": "43ac2d0ff23a19925ca55ba1e2451fa5cc1e279e52881a8f2a07889a7b93abd2"
+    },
+    "runtime_environment": {
+      "godot_version": "4.7.2.stable.official.ed1daf0bf",
+      "godot_executable_sha256": "d34d36f3be1a6c49c56525ae86469b92e4f417ddf0b43cf00dd80c385c4b0562",
+      "dotnet_sdk_version": "8.0.428",
+      "python": "3.10.0",
+      "package_sha256": "dcfc16c883af0a85d51c96e35791fb65c9350e41d56fafa6d211ba2f87e201a5"
+    },
+    "os": "Windows-10-10.0.19045-SP0",
+    "cpu_logical": 20,
+    "physical_ram_bytes": 34088599552,
+    "cache": "warm OS cache; cold disk NOT VERIFIED",
+    "physical_driver_vram": "NOT VERIFIED (engine counters reported separately)"
+  },
+  "source_files_unchanged_during_run": true,
+  "frame_p95_target_passed": true,
+  "frame_p99_target_passed": true
+}

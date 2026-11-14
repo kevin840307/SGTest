@@ -34,6 +34,15 @@ class BaselineReportTests(unittest.TestCase):
         self.assertEqual(result['gates']['client_ram'], 'FAIL')
         self.assertEqual(result['gates']['server_cpu'], 'PASS')
 
+    def test_sampled_low_rss_does_not_prove_peak_memory_budget(self):
+        rows=[[{'rss_bytes':70*1048576,'cpu_one_core_percent':5},
+               {'rss_bytes':180*1048576,'cpu_one_core_percent':45}]]
+        self.assertEqual(multiplayer_summary({'samples':rows})['gates']['client_ram'],'NOT VERIFIED')
+        rows[0][1]['os_peak_rss_bytes']=210*1048576
+        self.assertEqual(multiplayer_summary({'samples':rows})['gates']['client_ram'],'FAIL')
+        rows[0][1]['os_peak_rss_bytes']=190*1048576
+        self.assertEqual(multiplayer_summary({'samples':rows})['gates']['client_ram'],'PASS')
+
     def test_warmup_is_excluded_but_long_loading_frame_fails(self):
         record = {'warmup': False, 'pages': 1, 'after_unload': {'godot_static_bytes': 10},
                   'loading': {'rgba_bytes': 4, 'decode_ms': [2], 'upload_submit_ms': [1],

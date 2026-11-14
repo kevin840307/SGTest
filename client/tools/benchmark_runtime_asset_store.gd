@@ -19,6 +19,14 @@ func marker(cycle: int, phase: String) -> void:
 		JSON.stringify({"cycle": cycle, "phase": phase})
 	)
 
+func metric_delta(before: Dictionary, after: Dictionary, key: String) -> Array:
+	var previous := int(before.get("metric_sample_totals",{}).get(key,0))
+	var current := int(after.get("metric_sample_totals",{}).get(key,0))
+	var count := current-previous
+	var samples: Array = after[key]
+	assert(count >= 0 and count <= samples.size(),"metric ring cannot cover this interval; do not report truncated data as complete")
+	return samples.slice(samples.size()-count) if count > 0 else []
+
 func _initialize() -> void:
 	for arg in OS.get_cmdline_user_args():
 		if arg.begins_with("--cycles="): cycles = maxi(1, int(arg.trim_prefix("--cycles=")))
@@ -127,16 +135,13 @@ func _run() -> void:
 			page_count += atlas.pages.size()
 			atlas = null
 		var after_load := store.statistics()
-		var decode_start := int(before.decode_ms.size())
-		var upload_start := int(before.upload_submit_ms.size())
-		var commit_start := int(before.gpu_commit_frame_ms.size())
 		var loading := {
 			"load_wall_ms": load_wall_ms,
 			"load_frames": load_frames,
 			"rgba_bytes": rgba_bytes,
-			"decode_ms": after_load.decode_ms.slice(decode_start),
-			"upload_submit_ms": after_load.upload_submit_ms.slice(upload_start),
-			"gpu_commit_frame_ms": after_load.gpu_commit_frame_ms.slice(commit_start),
+			"decode_ms": metric_delta(before,after_load,"decode_ms"),
+			"upload_submit_ms": metric_delta(before,after_load,"upload_submit_ms"),
+			"gpu_commit_frame_ms": metric_delta(before,after_load,"gpu_commit_frame_ms"),
 			"gpu_sync_wait_ms": [],
 		}
 

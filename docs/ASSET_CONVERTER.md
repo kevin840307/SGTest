@@ -85,7 +85,7 @@ python -m unittest discover -s tools/tests -q
 
 `build <原始遊戲資料夾>`已實際完成：原版Data1 SHA `9ae08a8a7bb784720c83bfdd608688c045d717dee3868c13d7b8f444562bfc42`，完整SPR來源集合75,588，missing/extra皆0；7,890 groups、282,968 frames、8,094 pages，建置錯誤0。613 ACT、1,165 SIF、9 DrawOrder皆完成，並由verify從原始來源重解析比對內容。舊7,893/75,591是舊cache範圍，不能套作目前原版完整度門檻。
 
-完整離線RGBA總量5,010,743,500 bytes、PNG 998,196,066 bytes，保留local-assets，不是Runtime常駐。原始路徑的一鍵驗收本次246.95秒，已使用既有抽取／圖集快取，不代表空cache首建時間。實際Runtime發布11檔：Map13九種怪／78出生、573 frames/2頁；Boy base 881 frames/1頁；865 terrain tiles/367 objects，地形pixel-roundtrip PASS。
+完整離線RGBA總量5,010,743,500 bytes、PNG 998,196,066 bytes，保留local-assets，不是Runtime常駐。原始路徑的首次一鍵驗收246.95秒，已使用既有抽取／圖集快取，不代表空cache首建時間；當時Runtime發布11檔（map2頁／session1頁）。PERF002實測後Runtime優先512／1024，小頁不夠才逐級fallback2048／4096，完整archive策略不變；最新Runtime-only原始來源重建35.94秒，發布15檔：Map13九種怪／78出生、573 frames/5頁；Boy base 881 frames/2頁；865 terrain tiles/367 objects，地形pixel-roundtrip PASS。實測與打包指令見 [PERF002_MEMORY](PERF002_MEMORY.md)。
 
 只讀驗收入口（同一個CLI）：
 

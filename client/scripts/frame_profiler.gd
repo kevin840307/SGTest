@@ -7,6 +7,7 @@ var started_usec := 0
 var previous_usec := 0
 var sample_seconds := 10.0
 var draw_calls: Array[float] = []
+var report_path := ""
 
 func sample(_delta: float) -> void:
 	if finished:
@@ -32,6 +33,7 @@ func sample(_delta: float) -> void:
 	for value in intervals:
 		total += value
 	var report := {"renderer": RenderingServer.get_video_adapter_name(),
+		"engine_features":{"editor":OS.has_feature("editor"),"debug":OS.has_feature("debug"),"template_release":OS.has_feature("template_release")},
 		"warmup_seconds": 2, "sample_seconds": sample_seconds, "frames": intervals.size(),
 		"mean_fps": 1000.0 / (total / intervals.size()),
 		"frame_ms_p50": intervals[intervals.size()/2],
@@ -44,7 +46,8 @@ func sample(_delta: float) -> void:
 		"texture_memory_bytes": Performance.get_monitor(Performance.RENDER_TEXTURE_MEM_USED),
 		"video_memory_bytes": Performance.get_monitor(Performance.RENDER_VIDEO_MEM_USED),
 		"resolution": [DisplayServer.window_get_size().x, DisplayServer.window_get_size().y]}
-	var output := FileAccess.open(ProjectSettings.globalize_path("res://").path_join("../reports/rendered_load.json"), FileAccess.WRITE)
+	var target := report_path if not report_path.is_empty() else ProjectSettings.globalize_path("res://").path_join("../reports/rendered_load.json")
+	var output := FileAccess.open(target, FileAccess.WRITE)
 	if output != null:
 		output.store_string(JSON.stringify(report, "  "))
 	print("rendered_load " + JSON.stringify(report))

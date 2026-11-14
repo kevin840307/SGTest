@@ -1,0 +1,23 @@
+{
+  "passed": true,
+  "bundles": [
+    {
+      "manifest": "bundles/map/13/sprites.json",
+      "frames": 573,
+      "transparent_frames": 2,
+      "pages": 5,
+      "semantic_sha256": "af6cedf7bdcfe1b3ed2f9b2bad5b0d06008722222e184ecdd0ab0a51b4aa5f3f",
+      "manifest_sha256": "0a0d96c12028d3c027fb5af59c38b432f1d4db5e511eb5705018c20efcc59568",
+      "pixel_crop_pivot_size_trim_passed": true
+    },
+    {
+      "manifest": "bundles/session/player-b-base.json",
+      "frames": 881,
+      "transparent_frames": 0,
+      "pages": 2,
+      "semantic_sha256": "32b2e17e55eea71b8b6c037dcf6d76e1086afa37b5b090b1798fe8c858914452",
+      "manifest_sha256": "fbbf47d55219c76242854711fd9d86a5203f4868795b08f00e80b1a63e986b04",
+      "pixel_crop_pivot_size_trim_passed": true
+    }
+  ]
+}

@@ -60,14 +60,20 @@ def multiplayer_summary(data):
     for index, label in [(0, 'server'), (1, 'native_client')]:
         group = [row[index] for row in samples if len(row) > index]
         result[label + '_rss_peak_bytes'] = max((row['rss_bytes'] for row in group), default=None)
+        result[label + '_os_peak_rss_bytes'] = max((row['os_peak_rss_bytes'] for row in group
+                                                  if row.get('os_peak_rss_bytes') is not None),default=None)
         result[label + '_cpu_median_one_core_percent'] = statistics.median(
             row['cpu_one_core_percent'] for row in group) if group else None
+    native_peak=result['native_client_os_peak_rss_bytes']
+    sampled_peak=result['native_client_rss_peak_bytes']
+    ram_gate=(native_peak<=200*MIB if native_peak is not None else
+              False if sampled_peak is not None and sampled_peak>200*MIB else None)
+    result['ram_gate_scope']='Windows OS peak process-tree working set' if native_peak is not None else 'sampled RSS; insufficient to prove an upper bound'
     gates = {'execution': data.get('execution_passed'),
              'input_integrity': data.get('source_files_unchanged_during_run'),
              'frame_p95': rendered['frame_ms_p95'] <= 25 if 'frame_ms_p95' in rendered else None,
              'frame_p99': rendered['frame_ms_p99'] <= 40 if 'frame_ms_p99' in rendered else None,
-             'client_ram': result['native_client_rss_peak_bytes'] <= 200*MIB
-                           if result['native_client_rss_peak_bytes'] is not None else None,
+             'client_ram': ram_gate,
              'client_cpu': result['native_client_cpu_median_one_core_percent'] <= 100
                            if result['native_client_cpu_median_one_core_percent'] is not None else None,
              'server_cpu': result['server_cpu_median_one_core_percent'] <= 30
