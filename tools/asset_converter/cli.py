@@ -14,7 +14,7 @@ from asset_converter.source.convert_assets import (
     convert_draw_order,
     convert_sif,
 )
-from asset_converter.source.extract_client import extract
+from asset_converter.source.extract_client import extract, audit_sprite_coverage
 from asset_converter.content.build_maps import build as build_map
 from asset_converter.content.asset_pipeline import (
     build_all as build_runtime,
@@ -82,8 +82,10 @@ def archive_all(source: Path, archive: Path, args) -> dict:
         "source_scope": "filtered"
         if (args.preview_groups or args.category or prefix)
         else "all SPR",
+        "status":"running",
     }
     total = len(keys)
+    write_json(archive / 'checkpoint.json',summary)
     for n, (key, files) in enumerate(keys.items(), 1):
         try:
             row = build_group(source, archive / "sprites", key, files, args.force)
@@ -103,6 +105,7 @@ def archive_all(source: Path, archive: Path, args) -> dict:
                     "failures": len(summary["errors"]),
                 },
             )
+            write_json(archive / 'checkpoint.json',summary)
     if (
         not args.preview_groups
         and not args.category
@@ -155,6 +158,9 @@ def archive_all(source: Path, archive: Path, args) -> dict:
     summary["cached_groups"] = sum(
         row["status"] == "cached" for row in summary["groups"]
     )
+    summary['revalidated_groups'] = sum(row['status']=='revalidated' for row in summary['groups'])
+    summary['status'] = 'partial' if summary['errors'] else 'complete'
+    write_json(archive / 'checkpoint.json',summary)
     write_json(archive / "index.json", summary)
     return summary
 
@@ -284,8 +290,18 @@ def main() -> int:
     try:
         source = resolve_source(args)
         report["source"] = str(source)
+        if (args.original.resolve()/'Data1.dat').is_file():
+            coverage = audit_sprite_coverage(args.original,source)
+            report['source_coverage'] = coverage
+            if (coverage['missing'] or coverage['extra']) and not (args.category or args.prefix or args.preview_groups):
+                raise ValueError(f'extracted SPR source is incomplete or contains extras: '
+                                 f"missing={len(coverage['missing'])}, extra={len(coverage['extra'])}; rebuild from original")
         if not args.runtime_only:
-            archive_root = args.archive_output or (\n                REPO / "local-assets" / "asset_converter"\n                / ("preview" if (args.category or args.prefix or args.preview_groups) else "complete")\n            )\n            report["archive"] = archive_all(source, archive_root.resolve(), args)
+            archive_root = args.archive_output or (
+                REPO / "local-assets" / "asset_converter"
+                / ("preview" if (args.category or args.prefix or args.preview_groups) else "complete")
+            )
+            report["archive"] = archive_all(source, archive_root.resolve(), args)
         if (
             not args.archive_only
             and not args.preview_groups

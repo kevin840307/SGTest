@@ -9,15 +9,19 @@ from __future__ import annotations
 
 import hashlib
 import json
+import struct
+from contextlib import ExitStack
 from pathlib import Path
 
 from .selector import choose_candidate
 from .build_atlas_groups import pack_source_blocks
 from ..source.convert_assets import decode_spr
+from ..source import runtime_spr
 
 ATLAS_SIDES = (512, 1024, 2048, 4096)
 POLICY = "adaptive_atomic_atlas_v1"
 MANIFEST_VERSION = 2
+DECODER_SHA256 = hashlib.sha256(Path(runtime_spr.__file__).read_bytes()).hexdigest()
 
 
 def _sha256(path: Path) -> str:
@@ -45,12 +49,19 @@ def _previous_manifest(path: Path) -> dict:
         return {}
 
 
+def _metadata_digest(data: dict) -> str:
+    fields = {key:value for key,value in data.items() if key != 'metadata_sha256'}
+    return hashlib.sha256(json.dumps(fields,sort_keys=True,separators=(',',':'),ensure_ascii=False).encode()).hexdigest()
+
+
 def _is_cached(folder: Path, old: dict, source_digest: str) -> bool:
     if (
         old.get("version") != MANIFEST_VERSION
         or old.get("packing_policy") != POLICY
         or old.get("source_digest") != source_digest
     ):
+        return False
+    if old.get('metadata_sha256') is not None and old['metadata_sha256'] != _metadata_digest(old):
         return False
 
     page_names = old.get("pages", [])
@@ -127,6 +138,14 @@ def _verify_packed_frames(frames: list, pages: list, records: list) -> None:
         raise ValueError("source frames missing from atlas")
 
     for original, record in zip(frames, records):
+        bounds = original.image.getbbox()
+        if list(record['crop']) != list(bounds or (0,0,0,0)):
+            raise ValueError('atlas crop differs from source bounds')
+        if list(record['size']) != list(original.image.size):
+            raise ValueError('atlas source size differs from SPR')
+        origin = record.get('origin',record.get('raw_origin'))
+        if list(origin) != [original.origin_x,original.origin_y]:
+            raise ValueError('atlas source pivot differs from SPR')
         page_id = int(record["page"])
         if page_id < 0:
             if original.image.getbbox() is not None:
@@ -166,7 +185,8 @@ def build_group(
     source_digest, source_details = _source_fingerprint(root, paths)
     old = _previous_manifest(manifest_path)
 
-    if not force and _is_cached(folder, old, source_digest):
+    cached = not force and _is_cached(folder, old, source_digest)
+    if cached and old.get('decoder_sha256') == DECODER_SHA256 and old.get('metadata_sha256'):
         return {
             "group": key.as_posix(),
             "status": "cached",
@@ -180,12 +200,33 @@ def build_group(
     source_ranges = []
     frame_sources = []
     for source, details in zip(paths, source_details):
-        decoded = decode_spr(source.read_bytes())
+        try:
+            decoded = decode_spr(source.read_bytes())
+        except (ValueError,struct.error) as exc:
+            raise ValueError(f'{details["path"]} (SHA256 {details["sha256"]}): {exc}') from exc
         details["frames"] = len(decoded)
         source_ranges.append((len(frames), len(decoded)))
         for index, frame in enumerate(decoded):
             frames.append(frame)
             frame_sources.append((details["path"], index))
+
+    if cached:
+        # Migrate old caches by decoding/revalidating pixels and pivots once;
+        # do not repack thousands of already-correct pages just for a decoder stamp.
+        from PIL import Image
+        try:
+            with ExitStack() as stack:
+                pages = [stack.enter_context(Image.open(folder/name)) for name in old['pages']]
+                _verify_packed_frames(frames,pages,old['frames'])
+            old['decoder_sha256'] = DECODER_SHA256
+            old['metadata_sha256'] = _metadata_digest(old)
+            temporary = manifest_path.with_name('atlas.json.tmp')
+            temporary.write_text(json.dumps(old,ensure_ascii=False,separators=(',',':'))+'\n',encoding='utf-8')
+            temporary.replace(manifest_path)
+            return {'group':key.as_posix(),'status':'revalidated','pages':len(old['pages']),
+                    'frames':len(frames),'rgba_bytes':old['rgba_bytes'],'png_bytes':old['png_bytes']}
+        except (OSError,ValueError,KeyError,TypeError):
+            pass  # Current source remains valid; rebuild a stale/invalid cache.
 
     candidates = _measure_candidates(frames, source_ranges)
     selected = choose_candidate(candidates)
@@ -223,6 +264,7 @@ def build_group(
         "packing_policy": POLICY,
         "group": key.as_posix(),
         "source_digest": source_digest,
+        "decoder_sha256": DECODER_SHA256,
         "sources": source_details,
         "atlas_side": int(selected["side"]),
         "pages": names,
@@ -233,6 +275,7 @@ def build_group(
         "rgba_bytes": rgba_bytes,
         "png_bytes": png_bytes,
     }
+    document['metadata_sha256'] = _metadata_digest(document)
 
     temporary_manifest = folder / "atlas.json.tmp"
     temporary_manifest.write_text(

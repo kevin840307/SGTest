@@ -3,16 +3,23 @@
 import hashlib
 import json
 import struct
+import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO / "tools"))
 sys.path.insert(0, str(REPO / "tools" / "asset_converter"))
 from asset_converter.atlas.adaptive_atlas import build_group, POLICY
 from asset_converter.cli import archive_all, check_runtime
+from asset_converter import cli
+from asset_converter.source.convert_assets import decode_spr, convert
+from asset_converter.source.runtime_spr import decode_spr as runtime_decode
+from PIL import Image
+from asset_converter.source.extract_client import audit_sprite_coverage
 
 
 def tiny_spr(rgb=0xF800):
@@ -29,6 +36,111 @@ class Settings:
 
 
 class ConverterTests(unittest.TestCase):
+    def test_cli_can_start_from_another_directory(self):
+        with tempfile.TemporaryDirectory() as temp:
+            result = subprocess.run([sys.executable,str(REPO/'tools/asset_converter/cli.py'),'--help'],
+                                    cwd=temp,capture_output=True,text=True)
+            self.assertEqual(result.returncode,0,result.stderr)
+            self.assertIn('build',result.stdout)
+
+    def test_indexed_spr_is_shared_by_archive_and_runtime_and_roundtrips(self):
+        row = struct.pack('<H',1)+b'\x07'+struct.pack('<H',0x8000)
+        header = struct.pack('<IIiiI',1,1,2,3,0)
+        palette = [0]*256
+        palette[7] = 0x07e0
+        palette_at = len(row)+len(header)
+        blob = row+header+struct.pack('<I',1)+struct.pack('<256H',*palette)
+        blob += struct.pack('<I',palette_at)+b'Ver\x08'+struct.pack('<II',len(row),1)
+        self.assertIs(decode_spr,runtime_decode)
+        self.assertEqual(decode_spr(blob)[0].image.getpixel((0,0)),(0,255,0,255))
+        with tempfile.TemporaryDirectory() as temp:
+            source = Path(temp)/'source'
+            source.mkdir()
+            path = source/'palette.spr'
+            path.write_bytes(blob)
+            output = Path(temp)/'out'
+            result = build_group(source,output,Path('palette'),[path])
+            self.assertEqual(result['frames'],1)
+            manifest = json.loads((output/'palette/atlas.json').read_text())
+            frame = manifest['frames'][0]
+            self.assertEqual(frame['origin'],[2,3])
+            x,y,w,h = frame['rect']
+            with Image.open(output/'palette'/manifest['pages'][0]) as page:
+                self.assertEqual(page.crop((x,y,x+w,y+h)).getpixel((0,0)),(0,255,0,255))
+            # Public per-file converter must keep working after decoder consolidation.
+            convert(path,source,Path(temp)/'per-file',512,False)
+
+    def test_old_cache_is_pixel_revalidated_and_bad_pivot_is_rebuilt(self):
+        with tempfile.TemporaryDirectory() as temp:
+            source = Path(temp)/'source'
+            source.mkdir()
+            path = source/'one.spr'
+            path.write_bytes(tiny_spr())
+            output = Path(temp)/'out'
+            build_group(source,output,Path('one'),[path])
+            manifest = output/'one/atlas.json'
+            data = json.loads(manifest.read_text())
+            data.pop('decoder_sha256')
+            data.pop('metadata_sha256')
+            manifest.write_text(json.dumps(data))
+            self.assertEqual(build_group(source,output,Path('one'),[path])['status'],'revalidated')
+            data = json.loads(manifest.read_text())
+            data.pop('decoder_sha256')
+            data.pop('metadata_sha256')
+            data['frames'][0]['origin'][0] += 100
+            manifest.write_text(json.dumps(data))
+            self.assertEqual(build_group(source,output,Path('one'),[path])['status'],'converted')
+            self.assertEqual(json.loads(manifest.read_text())['frames'][0]['origin'],[1,0])
+            data = json.loads(manifest.read_text())
+            data['frames'][0]['origin'][0] += 1
+            manifest.write_text(json.dumps(data))
+            self.assertEqual(build_group(source,output,Path('one'),[path])['status'],'converted')
+
+    def test_truncated_extraction_and_loose_only_sources_are_reported(self):
+        with tempfile.TemporaryDirectory() as temp:
+            original, source = Path(temp)/'original', Path(temp)/'source'
+            (original/'Enemy').mkdir(parents=True)
+            (source/'enemy').mkdir(parents=True)
+            (original/'Data1.dat').write_bytes(b'fixture')
+            (original/'Enemy/loose.spr').write_bytes(tiny_spr())
+            (source/'enemy/base.spr').write_bytes(tiny_spr())
+            entries = [(Path('enemy/base.spr'),0,0,0),(Path('enemy/missing.spr'),0,0,0)]
+            with patch('asset_converter.source.extract_client.read_index',return_value=entries):
+                report = audit_sprite_coverage(original,source)
+            self.assertEqual(report['expected_spr'],3)
+            self.assertEqual(report['missing'],['enemy/loose.spr','enemy/missing.spr'])
+            self.assertEqual(report['extra'],[])
+
+    def test_full_build_rejects_partial_source_before_touching_live_assets(self):
+        with tempfile.TemporaryDirectory() as temp:
+            original, source = Path(temp)/'original', Path(temp)/'source'
+            original.mkdir()
+            source.mkdir()
+            (original/'Data1.dat').write_bytes(b'fixture')
+            coverage = {'expected_spr':2,'actual_spr':1,'missing':['enemy/missing.spr'],'extra':[]}
+            with patch.object(sys,'argv',['cli.py','build',str(original),'--runtime-only','--extracted-source',str(source)]), \
+                 patch.object(cli,'audit_sprite_coverage',return_value=coverage), \
+                 patch.object(cli,'build_runtime_assets') as build, patch.object(cli,'write_json') as write:
+                self.assertEqual(cli.main(),1)
+                build.assert_not_called()
+                report = write.call_args.args[1]
+                self.assertEqual(report['status'],'failed')
+                self.assertIn('incomplete',report['error'])
+
+    def test_archive_persists_failed_group_with_source_identity(self):
+        with tempfile.TemporaryDirectory() as temp:
+            source = Path(temp)/'source'
+            (source/'Enemy').mkdir(parents=True)
+            path = source/'Enemy/EN001_NS1.spr'
+            path.write_bytes(b'corrupt SPR')
+            output = Path(temp)/'out'
+            report = archive_all(source,output,Settings())
+            self.assertEqual(report['status'],'partial')
+            self.assertEqual(len(report['errors']),1)
+            self.assertIn('EN001_NS1.spr',report['errors'][0]['error'])
+            self.assertIn(hashlib.sha256(path.read_bytes()).hexdigest(),report['errors'][0]['error'])
+            self.assertEqual(json.loads((output/'checkpoint.json').read_text())['status'],'partial')
+
     def test_all_project_converter_dependencies_are_local(self):
         import importlib
 

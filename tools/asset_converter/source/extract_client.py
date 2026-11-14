@@ -16,6 +16,28 @@ LIMIT = 512 * 1024 * 1024
 CATEGORIES = {'audio', 'effect', 'enemy', 'interface', 'item', 'ma', 'map', 'ms', 'npc', 'player', 'sr'}
 
 
+def audit_sprite_coverage(client, source):
+    """Check extracted SPR presence against archive + actual loose overlays.
+
+    Presence is separate from byte/pixel validity, which decoding verifies.
+    Do not call a truncated cache a complete extraction.
+    """
+    client, source = Path(client).resolve(), Path(source).resolve()
+    with (client/'Data1.dat').open('rb') as handle:
+        entries = read_index(handle)
+    expected = {path.as_posix().casefold() for path,*_ in entries if path.suffix.casefold()=='.spr'}
+    for directory in client.iterdir():
+        if directory.is_dir() and directory.name.casefold() in CATEGORIES:
+            expected.update(safe_relative(str(path.relative_to(client))).as_posix().casefold()
+                            for path in directory.rglob('*') if path.is_file() and path.suffix.casefold()=='.spr')
+    expected.update(path.name.casefold() for path in client.iterdir() if path.is_file() and path.suffix.casefold()=='.spr')
+    actual = {path.relative_to(source).as_posix().casefold() for path in source.rglob('*')
+              if path.is_file() and path.suffix.casefold()=='.spr'}
+    return {'expected_spr':len(expected),'actual_spr':len(actual),
+            'missing':sorted(expected-actual),'extra':sorted(actual-expected),
+            'archive_entries':len(entries),'scope':'SPR presence; byte integrity checked by decoder'}
+
+
 def lzss(data, size):
     if size < 0 or size > LIMIT:
         raise ValueError('invalid LZSS output size')

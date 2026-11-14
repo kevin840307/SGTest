@@ -67,3 +67,13 @@ tools/asset_converter/
 轉換「全部來源素材」代表所有可解碼 SPR 的私有圖集與支援的 ACT/SIF/DrawOrder 中介資料；**不是**完整遊戲所有地圖、武器/裝備紙娃娃、UI、音效都已串接到 Godot Runtime。目前正式 Runtime consumer 仍以 Map13 和基礎玩家為主。若遇原版檔格式不合法會在索引中標示錯誤，不會用空白圖冒充成功。未確認素材授權前不公開分發原圖或生成圖片。
 
 詳細範圍見 `docs/ASSET_CONVERTER.md`。
+
+## 2026-11-15 解碼與完整度修正
+
+離線Atlas與Runtime bundle統一使用 `source/runtime_spr.py`，同時支援RGB565與`Ver\x08` indexed SPR；不要另加只認第一影格offset=0的簡化解碼器。Indexed格式的像素可位於header之前，不能據此判為少圖或壞檔。
+
+原版Data1路徑搭配完整建置時會先核對SPR來源檔案集合；指定不完整的 `--extracted-source` 會報錯，避免把殘缺cache輸出當完整目錄。filtered/preview只代表指定範圍，並不宣稱來源完整。此核對是檔案存在性，逐格解碼／像素驗證另外執行。
+
+增量manifest保留decoder SHA與metadata SHA；舊cache先逐像素／size／crop／pivot驗證才升級stamp，已正確的PNG不重新packing。metadata或PNG損毀會重建。每50組寫 `checkpoint.json`，保留成功與失敗來源，最終看 `index.json.status`／errors，進度數字不代表完成。
+
+完整SPR來源數以當次原版 archive+loose union為準，不把舊7893組/75591 SPR硬寫成門檻。2026-11-15隔離抽取的實際集合為7890組/75588 SPR，presence audit無缺檔／額外檔；完整Atlas與sidecar結果仍須驗收，不等同全部遊戲功能已接線。

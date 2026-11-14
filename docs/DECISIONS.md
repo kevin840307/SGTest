@@ -304,3 +304,10 @@ ADR-026補充：使用者指定Client一般遊玩支援30～90FPS；FPS選項只
 - Safety: 原版只讀；Runtime staging 驗證後逐檔 atomic replace；不在開始前刪除所有 live assets；gitignore 防止原版衍生圖上傳。舊 `tools/rebuild_assets.ps1` 保留相容用途但不是推薦新入口。
 - Evidence: `docs/ASSET_CONVERTER.md`、`tools/asset_converter/README.md`、`local-assets/asset_converter/build_report.json`。Map13 9 visuals/78 spawns、573 frames/2 pages，Boy base 881 frames/1 page；Godot tests 5 PASS，Python tools/tests 92 PASS；Enemy 137 group all PASS、Weapon A-Sword014 1 group PASS；是否有全 7,893 群組全部通過以離線 `index.json` 為準。
 - Limits: 完整原版 screenshot Golden（AS005）與公開授權（AS008）、所有遊戲內容 Runtime integration、實際 GPU timing/切圖冷熱載入 Before/After 均 NOT VERIFIED；源 SPR 全轉換與玩法完整性不能混為一談。
+## ADR-038 — 單一SPR解碼器與可追溯的完整離線轉換（2026-11-15）
+
+- Status: 實作／fixture驗證；ASSET209全量與sidecar驗收進行中。
+- Before: asset_converter入口含literal換行逃逸造成SyntaxError；離線strict decoder拒絕indexed Ver08的非零frame offset，與Runtime解碼分叉。舊progress停6650/7893、242失敗，但沒有可稽核的完整index。不能認定這些素材已損毀。
+- Decision: source/convert_assets共用source/runtime_spr的RGB565/indexed/CDE解碼；原始來源唯讀。每組來源錯誤帶相對路徑＋SHA；每50組checkpoint保留結果。完整SPR集合對原版Data1+loose稽核，禁止殘缺extracted cache通過完整建置並發布Runtime。
+- Cache: decoder SHA與metadata SHA加入manifest；舊cache重新decode並驗證像素／crop／size／pivot後只更新metadata，不重pack正確PNG。圖或metadata損毀重建，空白影格不得補成假圖。
+- Evidence: 目前原版union 75,588 SPR／隔離source 75,588，missing=0、extra=0，實際分組7890；舊75591/7893不是本次基準。Indexed fixture保留綠色pixel與origin、CLI跨工作目錄啟動、cache修復與incomplete-source拒絕已測；全量完成與sidecar統計另補，不提前勾選ASSET209。
