@@ -86,7 +86,10 @@ class AnimationDefinitionTests(unittest.TestCase):
         self.assertTrue(views['4']['flip_h'])
         self.assertTrue(views['8']['flip_h'])
         self.assertEqual(data['draw_order']['AS3'], ['Body+2','Head'])
+        self.assertEqual(data['draw_slots']['AS3'], [10,9,0])
         self.assertEqual(views['4']['draw_order_key'], 'AS3')
+        self.assertEqual(views['4']['draw_layers'], ['Body+2','Head'])
+        self.assertEqual(views['4']['draw_slots'], [10,9,0])
 
     def test_one_shot_has_explicit_single_view_policy(self):
         path = self.root/'B-DEATH_ND1.spr'
@@ -96,6 +99,13 @@ class AnimationDefinitionTests(unittest.TestCase):
         self.assertFalse(data['behaviors']['ND']['loop'])
         self.assertTrue(all(view['source_facing']==1 and not view['flip_h']
                             for view in data['behaviors']['ND']['facings'].values()))
+
+    def test_v1_schema_is_rejected_after_z_order_contract_upgrade(self):
+        data = self.compile()
+        data['version'] = 1
+        data['content_sha256'] = content_hash({k:v for k,v in data.items() if k!='content_sha256'})
+        with self.assertRaisesRegex(ValueError, 'unsupported animation definition schema'):
+            validate_definition(data)
 
     def test_hash_and_reference_corruption_rejected(self):
         data = self.compile()
@@ -108,6 +118,23 @@ class AnimationDefinitionTests(unittest.TestCase):
         damaged['content_sha256'] = content_hash({k:v for k,v in damaged.items() if k!='content_sha256'})
         with self.assertRaisesRegex(ValueError, 'invalid frame reference'):
             validate_definition(damaged)
+
+    def test_character_draw_order_corruption_is_rejected(self):
+        names = self.root/'names.dat'
+        names.write_text('NS,NR,NU,NB,AS,AH,AA,AB,AG,GS,GH,GA,GB,',encoding='ascii')
+        draw = self.root/'draw.dat'
+        draw.write_text('AS1: Body+2>Head\nAS2: Head>Body+2\nAS3: Body+2>Head\n',encoding='ascii')
+        self.act.write_bytes(action('AS',1,[(0,5)])+b'\xff')
+        sources = []
+        for facing in [1,2,3]:
+            path = self.root/f'B-BODY_AS{facing}.spr'
+            path.write_bytes(spr())
+            sources.append(path)
+        data = compile_definition('player/b/body',sources,self.root,'character_part',self.act,names,draw)
+        data['behaviors']['AS']['facings']['4']['draw_slots'] = [0]
+        data['content_sha256'] = content_hash({k:v for k,v in data.items() if k!='content_sha256'})
+        with self.assertRaisesRegex(ValueError, 'draw-order view does not match normalized table'):
+            validate_definition(data)
 
 
 if __name__ == '__main__':

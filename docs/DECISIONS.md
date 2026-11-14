@@ -197,3 +197,12 @@ ADR-026補充：使用者指定Client一般遊玩支援30～90FPS；FPS選項只
 - Decision: 不把decode／submit平均值或較少PNG當作無頓挫證據；先做標準動畫定義，再測clip原子／map共現／hot-warm-cold混合分組與有界非同步資源管理。當前9頁entity、45頁direction及13頁readable都只保留為基準候選，4096不預設勝出；2048與4096候選可能裁切成同尺寸，單次時間差不能證明尺寸因果。
 - Limits: raw texture loop不是實際map/logout owner refs／LRU驗收；一般場景1原生＋19headless不是多GPU視窗掛機。冷磁碟、實體driver VRAM、tick work長尾、完整動作／背景trace仍NOT VERIFIED。不降低目標或同步頻率來隱藏失敗。
 - Validation: 7項基準判定／實驗packing fixture、89項現有研究工作樹測試、5項原型assets／4 maps／1 population、C#346 checks及Godot方向／navigation／replica／prediction／wire／9visual360動作方向測試PASS。CI另行確認，工作樹研究修改未夾帶提交。
+
+## ADR-028 — Normalized Animation Definition v2 固化 z-order（2026-11-14）
+
+- Status: **ASSET201 ACCEPTED / RUNTIME ATLAS MIGRATION NOT YET IMPLEMENTED**。
+- Decision: 動畫語意改以 `sgtest.animation` schema v2 為 pack-independent source of truth。每個 entity→behavior→8 facing 明確保存 source clip alias、mirror、frame source/index、pivot/trim、ACT timeline/event；character facing 另外必須保存 legacy `draw_order_key`、raw `draw_layers` 與已驗證展開的 `draw_slots`。Atlas page/UV/streaming handle 不得寫回此契約。
+- Versioning: v1 不包含必要 z-order 契約，因此 Python validator 與 Godot consumer 都明確拒絕 v1；不做 silent fallback。未來增加非必要欄位可向後相容，但任何會改播放/疊層語意的變更必須升 schema。
+- Evidence: 真素材 normalized audit 9 Map13 monster + Boy 6 core parts + explicit death＝16 definitions／992 logical facings；624 character draw-order views 全部 `normalized_z_order_verified=true`，0 failure。另重跑四種族 core audit：A/B/G 各 282 sources、R 235 sources，各 104 logical states、0 issue、0 missing draw-order。
+- Regression: `tools/tests` 89 PASS；`tools/test_animation_definition.py` 10 PASS；Godot `client/tests/test_animation_definition.gd` PASS。舊 runtime 與 reference-normalized mapping 有 182 個 facing differences，保留報告並禁止靜默沿用。
+- Boundary: 這只完成 ASSET201 資料契約，不代表 AS005 原版逐格畫面、AS008 授權、ASSET202 Atlas 選型、ASSET204 Runtime store 或正式 migration 已完成。詳 [NORMALIZED_ANIMATION_DEFINITION.md](NORMALIZED_ANIMATION_DEFINITION.md)。

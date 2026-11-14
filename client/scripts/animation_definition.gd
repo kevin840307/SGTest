@@ -6,7 +6,7 @@ var plans: Dictionary = {}
 
 func configure(source: Dictionary) -> Error:
 	plans.clear()
-	if source.get("schema") != "sgtest.animation" or int(source.get("version",0)) != 1:
+	if source.get("schema") != "sgtest.animation" or int(source.get("version",0)) != 2:
 		return ERR_FILE_CORRUPT
 	var data: Dictionary = source.duplicate(true)
 	var shared_views: Dictionary = {}
@@ -39,7 +39,21 @@ func configure(source: Dictionary) -> Error:
 				if index >= frame_ids.size():
 					plans.clear()
 					return ERR_FILE_CORRUPT
-			var key := "%s:%s:%s" % [view.clip,view.get("flip_h",false),view.get("draw_order_key","")]
+			var draw_key: Variant = view.get("draw_order_key")
+			var draw_layers: Variant = view.get("draw_layers")
+			var draw_slots: Variant = view.get("draw_slots")
+			if draw_key != null:
+				if not draw_layers is Array or draw_layers.is_empty() or not draw_slots is Array or draw_slots.is_empty():
+					plans.clear()
+					return ERR_FILE_CORRUPT
+				for slot in draw_slots:
+					if not slot is int or int(slot) < 0 or int(slot) > 15:
+						plans.clear()
+						return ERR_FILE_CORRUPT
+			elif draw_layers != null or draw_slots != null:
+				plans.clear()
+				return ERR_FILE_CORRUPT
+			var key := "%s:%s:%s" % [view.clip,view.get("flip_h",false),str(draw_key)]
 			if not shared_views.has(key):
 				var descriptors: Array = []
 				for frame_id in frame_ids:
@@ -47,7 +61,8 @@ func configure(source: Dictionary) -> Error:
 						plans.clear()
 						return ERR_FILE_CORRUPT
 					descriptors.append({"frame":data.frames[int(frame_id)],"flip_h":bool(view.get("flip_h",false)),
-						"clip":view.clip,"draw_order_key":view.get("draw_order_key")})
+						"clip":view.clip,"draw_order_key":draw_key,
+						"draw_layers":draw_layers,"draw_slots":draw_slots})
 				shared_views[key] = descriptors
 			views[facing] = shared_views[key]
 		plans[code] = {"ends":ends,"indices":indices,"total":total,"views":views,

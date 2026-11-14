@@ -56,9 +56,16 @@ def main():
                     expected = {'clip':view['clip'],'flip_h':view['flip_h']}
                     if previous != expected:
                         mismatch.append({'behavior':code,'facing':int(facing),'old':previous,'normalized':expected})
-            records.append({'entity':key, 'content_sha256':data['content_sha256'], 'frames':len(data['frames']),
+            draw_views = [view for behavior in data['behaviors'].values()
+                          for view in behavior['facings'].values()
+                          if view.get('draw_order_key') is not None]
+            records.append({'entity':key, 'schema_version':data['version'],
+                            'content_sha256':data['content_sha256'], 'frames':len(data['frames']),
                             'behaviors':len(data['behaviors']), 'logical_facings':len(data['behaviors'])*8,
                             'source_files':len(data['source_sha256']),
+                            'draw_order_views':len(draw_views),
+                            'normalized_z_order_verified':all(view.get('draw_layers') and view.get('draw_slots')
+                                                              for view in draw_views),
                             'unused_act_actions':data['unused_act_actions'],
                             'unreferenced_source_clips':data['unreferenced_source_clips'],
                             'old_atlas_has_no_act_timing':not bool(baseline.get('act')),
@@ -68,7 +75,10 @@ def main():
             failures.append({'entity':key,'error':str(error)})
     report = {'scope':'current Map13 nine monsters + Boy six core parts + explicit single-view death',
               'source':'original SPR/ACT; reference facing helpers; HK2 visual parity NOT VERIFIED',
+              'schema_version':2,
               'schema_validation_passed':not failures and len(records)==len(recipes),
+              'character_draw_order_views':sum(row['draw_order_views'] for row in records),
+              'normalized_z_order_verified':all(row['normalized_z_order_verified'] for row in records),
               'entities':records,'failures':failures,'old_runtime_direction_differences':differences,
               'runtime_migration':'NOT IMPLEMENTED; differences are reported, not silently accepted as visual parity',
               'source_pixel_comparison':'fixture PASS; full normalized reconstruction pending mixed builder'}
@@ -76,6 +86,8 @@ def main():
     args.report.write_text(json.dumps(report,ensure_ascii=False,indent=2),encoding='utf-8')
     print(json.dumps({'passed':report['schema_validation_passed'], 'entities':len(records),
                       'logical_facings':sum(row['logical_facings'] for row in records),
+                      'character_draw_order_views':report['character_draw_order_views'],
+                      'normalized_z_order_verified':report['normalized_z_order_verified'],
                       'old_runtime_direction_differences':len(differences),'failures':failures},ensure_ascii=False))
     return 0 if report['schema_validation_passed'] else 1
 

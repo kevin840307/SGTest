@@ -100,8 +100,8 @@ INT003補充驗收：使用者要求GPU載入速度、CPU／記憶體、容易�
 ===== 2026-11-14 使用者指定資源架構重評，先交付基準 =====
 INT003 [?] 先前橫向／readable／grid排法及asset_stream為實驗，不能視為最終方案。v8 consistent曾全量回建282,990影格PASS，但使用者最新架構／可讀性／GPU／引用生命週期要求尚未完成。
 PERF001 [~] 首個交付：SPEC第0節的可重跑基準工具＋實際JSON／報告，先測目前同步載入／卸載30次、CPU解碼／GPU提交／同步等待、RAM／GPU峰值、Draw Calls及20player/300monster/1000drop場景；資料不足標NOT VERIFIED。
-ASSET201 [ ] 標準定義：monster/character→behavior→8facing→frame，來源／alias／pivot／ACT／z-order。
-ASSET202 [ ] 512/1024/2048/4096混合Atlas候選，按原子clip／map共現／hot-warm-cold作相同基準A/B。
+ASSET201 [x] 標準定義 v2：monster/character→behavior→8facing→frame，來源／alias／pivot／ACT／z-order 已與 pack 位置解耦；v1 明確拒絕。真素材 audit 16 definitions／992 logical facings／624 character draw-order views／0 failure，四種族 core audit A/B/G 各282來源、R235來源、各104 states、0 issue。詳 docs/NORMALIZED_ANIMATION_DEFINITION.md。
+ASSET202 [~] 下一個唯一領取任務：以 ASSET201 v2 definition 為 source of truth，建立 512/1024/2048/4096 混合 Atlas 候選，按原子 clip／map 共現／hot-warm-cold 做相同 PERF001 lifecycle + multiplayer A/B；不得用舊 runtime alias 反推語意。
 ASSET203 [ ] 依數據更新決策，兼顧可讀性／載入與卸載粒度，不強制所有動作方向一張。
 ASSET204 [ ] 統一Runtime store：owner refs、共享、按需／預載、CPU/GPU預算、cache caps、LRU、generation取消、切圖／登出purge及不影響同步。
 ASSET205 [ ] 新增怪物腳本／預覽／definition與出生流程；生命週期／多人／不同FPS及失焦最終回歸。
@@ -113,4 +113,5 @@ RUNTIME206補充：Client一般遊玩支援30～90FPS；最低覆蓋30/45/60/75/
 
 PERF001 [x] 首個「基準工具＋原始JSON＋報告」交付，非效能全部達標。工具benchmark_runtime_baseline.py／report_runtime_baseline.py／build_baseline_candidates.py及client/tools/benchmark_asset_lifecycle.gd；報告docs/RESOURCE_BASELINE.md與reports/runtime_baseline_summary.json。7組30次raw texture回收PASS；同步載入frame P99全部FAIL；4組20client/300monster/1000drop一般frame達標，但Client RSS 202.65～207.73MiB高於200MiB，FAIL。詳細命令／NOT VERIFIED項目見報告，ADR-027。
 測試：python -m unittest discover -s tools -p test_runtime_baseline.py（7 PASS）；tools/tests（89 PASS，包含保留的本機研究修改）；test_assets（5）、test_maps（4）、test_population（1）PASS；.cache/dotnet/dotnet.exe run --project server/tests/SGTest.Server.Tests.csproj -c Release（346 PASS）；Godot tests/test_directions/navigation/replica/prediction/wire/monster_visuals.gd全部PASS。本機GPU不是CI替代品，完整低FPS／背景trace／owner-LRU登出／冷快取／實體driverVRAM仍NOT VERIFIED。
-ASSET201 [~] 下一個唯一領取任務：建立與pack位置獨立的entity→behavior→8facing→frame標準定義，保留raw ACT／alias／pivot／source；先fixture及本機9怪／人物部件驗證。ASSET202～205與RUNTIME206仍待實作，基準失敗項目不可標完成。
+ASSET201 [x] 完成：`sgtest.animation` schema v2 已保留 raw ACT／alias／pivot／source／event／draw-order raw layers＋expanded slots；Python tools/tests 89 PASS、definition 10 PASS、Godot consumer PASS；本機9怪＋Boy6 core＋death共16 definitions／992 facings，z-order 624/624 PASS；四種族 core mapping complete。舊 runtime 有182個方向差異已報告、不靜默接受。AS005視覺與AS008授權仍未完成。
+ASSET202 [~] 目前唯一領取任務；ASSET203～205與RUNTIME206仍待實作，PERF001失敗項目不可標完成。

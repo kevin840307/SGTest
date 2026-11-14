@@ -9,7 +9,7 @@
 
 ## 最新資源架構重評
 
-先依 [SPEC 第0節](SPEC.md) 交付可重跑基準，再決定標準動畫定義、512／1024／2048／4096混合Atlas及統一Runtime store。報告與執行命令見 [RESOURCE_BASELINE.md](docs/RESOURCE_BASELINE.md)。目前實驗排法／loader均未選定，不能將原型可啟動或單次解碼速度當作全部資源Gate通過。
+先依 [SPEC 第0節](SPEC.md) 交付可重跑基準。ASSET201 的 [Normalized Animation Definition v2](docs/NORMALIZED_ANIMATION_DEFINITION.md) 已完成，source／alias／pivot／ACT／event／人物 z-order 已與 Atlas 排版解耦；下一步以同一 definition 比較 512／1024／2048／4096混合Atlas及統一Runtime store。基準與執行命令見 [RESOURCE_BASELINE.md](docs/RESOURCE_BASELINE.md)。目前 Atlas／loader 最終選型仍未完成，不能將原型可啟動或單次解碼速度當作全部資源 Gate 通過。
 
 ## 啟動
 

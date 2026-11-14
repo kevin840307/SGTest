@@ -15,12 +15,14 @@ if __package__:
     from .inspect_act import parse_act
     from .legacy_direction import map_character_direction, map_enemy_direction
     from .runtime_spr import decode_spr
+    from .audit_character_layers import expand_layers
 else:
     from inspect_act import parse_act
     from legacy_direction import map_character_direction, map_enemy_direction
     from runtime_spr import decode_spr
+    from audit_character_layers import expand_layers
 
-SCHEMA = 1
+SCHEMA = 2
 CLIP_NAME = re.compile(r'^(.+)_([A-Z]{2})([1-8])$', re.I)
 ENEMY_ACTIONS = {'NS': ('S', 0), 'NW': ('W', 1), 'ND': ('D', 2), 'FA': ('A', 3), 'NH': ('H', 4)}
 
@@ -59,6 +61,7 @@ def compile_definition(entity, sources, root, kind, act_path, character_actions=
     elif kind not in ('monster', 'single_view'):
         raise ValueError(f'unknown definition kind: {kind}')
     draw_order = {}
+    draw_slots = {}
     if draw_order_path is not None:
         _, raw = read(draw_order_path)
         for line in raw.decode('ascii').splitlines():
@@ -68,7 +71,9 @@ def compile_definition(entity, sources, root, kind, act_path, character_actions=
             key = key.strip().upper()
             if key in draw_order:
                 raise ValueError(f'duplicate draw-order key: {key}')
-            draw_order[key] = [token.strip() for token in value.split('>')]
+            tokens = [token.strip() for token in value.split('>')]
+            draw_order[key] = tokens
+            draw_slots[key] = expand_layers(tokens)
 
     frames, clips, prefixes, seen = [], {}, set(), set()
     for path in sorted(map(Path, sources), key=lambda path: path.as_posix().casefold()):
@@ -145,7 +150,9 @@ def compile_definition(entity, sources, root, kind, act_path, character_actions=
             if kind == 'character_part' and draw_key not in draw_order:
                 raise ValueError(f'missing original draw-order key: {draw_key}')
             facings[str(facing)] = {'clip':source_clip, 'source_facing':source_direction,
-                                   'flip_h':flip, 'draw_order_key':draw_key if draw_order else None}
+                                   'flip_h':flip, 'draw_order_key':draw_key if draw_order else None,
+                                   'draw_layers':draw_order[draw_key] if draw_order else None,
+                                   'draw_slots':draw_slots[draw_key] if draw_order else None}
             used_clips.add(source_clip)
         # Keep source events losslessly, without depending on uncommitted audit extensions.
         events = [{'step_index':event['at_frame_raw'], 'token':event['token'],
@@ -159,6 +166,7 @@ def compile_definition(entity, sources, root, kind, act_path, character_actions=
                 'mapping_evidence':'reference_decompilation; HK2 visual parity NOT VERIFIED',
                 'act_source':act_relative, 'source_sha256':dict(sorted(inputs.items())),
                 'frames':frames, 'clips':clips, 'behaviors':behaviors, 'draw_order':draw_order,
+                'draw_slots':draw_slots,
                 'unreferenced_source_clips':sorted(set(clips)-used_clips),
                 'unused_act_actions':sorted(set(actions)-{row['act_key'] for row in behaviors.values()})}
     document['content_sha256'] = content_hash(document)
@@ -179,6 +187,18 @@ def validate_definition(data):
             if any(step['frame_index'] < 0 or step['frame_index'] >= len(clip['frames']) or step['default_ticks'] < 1
                    for step in behavior['timeline']):
                 raise ValueError('invalid timeline')
+            draw_key = view.get('draw_order_key')
+            if draw_key is not None:
+                raw_layers = data.get('draw_order', {}).get(draw_key)
+                slots = data.get('draw_slots', {}).get(draw_key)
+                if not isinstance(raw_layers, list) or not raw_layers:
+                    raise ValueError('missing normalized draw-order layers')
+                if not isinstance(slots, list) or not slots or any(not isinstance(slot, int) or slot < 0 or slot > 15 for slot in slots):
+                    raise ValueError('invalid normalized draw-order slots')
+                if view.get('draw_layers') != raw_layers or view.get('draw_slots') != slots:
+                    raise ValueError('draw-order view does not match normalized table')
+            elif view.get('draw_layers') is not None or view.get('draw_slots') is not None:
+                raise ValueError('draw-order metadata without draw-order key')
         if any(event['step_index'] < 0 or event['step_index'] >= len(behavior['timeline']) for event in behavior['events']):
             raise ValueError('invalid event step')
     expected = content_hash({key:value for key,value in data.items() if key != 'content_sha256'})
