@@ -206,3 +206,13 @@ ADR-026補充：使用者指定Client一般遊玩支援30～90FPS；FPS選項只
 - Evidence: 真素材 normalized audit 9 Map13 monster + Boy 6 core parts + explicit death＝16 definitions／992 logical facings；624 character draw-order views 全部 `normalized_z_order_verified=true`，0 failure。另重跑四種族 core audit：A/B/G 各 282 sources、R 235 sources，各 104 logical states、0 issue、0 missing draw-order。
 - Regression: `tools/tests` 89 PASS；`tools/test_animation_definition.py` 10 PASS；Godot `client/tests/test_animation_definition.gd` PASS。舊 runtime 與 reference-normalized mapping 有 182 個 facing differences，保留報告並禁止靜默沿用。
 - Boundary: 這只完成 ASSET201 資料契約，不代表 AS005 原版逐格畫面、AS008 授權、ASSET202 Atlas 選型、ASSET204 Runtime store 或正式 migration 已完成。詳 [NORMALIZED_ANIMATION_DEFINITION.md](NORMALIZED_ANIMATION_DEFINITION.md)。
+
+## ADR-029 — v2 clip-atomic Atlas 選型與 async loader 邊界（2026-11-14）
+
+- Status: **ASSET202/203 ACCEPTED / ASSET204 REQUIRED**。
+- Decision: Map13 monster Atlas 必須以 `sgtest.animation` v2 為唯一動畫語意來源；physical SPR clip atomic，512/1024/2048/4096 只改 page/rect。候選 builder 必須在寫出前模擬目前 EntityAtlas direct/alias resolution，避免實體但非 canonical 的方向檔凌駕已驗證 alias。
+- Workload: Map13 78 spawns、9 visuals，依累積共現頻率分 hot6/warm2/cold1；產生 7 組 fixed-preference/memory/balanced/pages 候選並使用 PERF001 lifecycle + 20-client/300-monster/1000-drop 同場 A/B。
+- Selection: clean finalists 選 `normalized_memory` 作 ASSET204 provisional base：14 pages／10,741,992 RGBA bytes；clean multiplayer P95/P99 21.54/23.81ms、draw P95 421、Video memory 約45.63MiB，texture/RAM recovery PASS。
+- Rejected as final fix: 只調 Atlas packing。三個 clean finalists 的同步 lifecycle frame P99 均 >40ms；normalized_memory 為53.52ms，因此 packing alone 不解決載入頓挫。
+- Consequence: ASSET204 必須 background decode + bounded main-thread GPU commit，並保留 owner refs、generation cancel、cache cap/LRU、切圖/登出 purge；完成前 `normalized_memory` 只是基底，不是 final runtime。
+- Evidence: [NORMALIZED_ATLAS_CANDIDATES.md](NORMALIZED_ATLAS_CANDIDATES.md)。原始 A/B JSON/PNG 位於 gitignore 的 reports/，不提交媒體。

@@ -37,7 +37,7 @@
 
 一般遊玩支援 **30～90FPS**；這只改呈現，不改 Client／Server 傳輸或固定邏輯頻率。5／10／15FPS 與停止世界繪製是另列的低功耗掛機模式。尚未跑完同 trace／背景／2／4／8 開，不能宣稱已支援。
 
-ASSET201 標準動畫定義已完成，見 [NORMALIZED_ANIMATION_DEFINITION.md](NORMALIZED_ANIMATION_DEFINITION.md)：schema v2 已把 source／alias／pivot／ACT／event／人物 z-order 與 Atlas page 解耦。下一步順序：ASSET202 clip 原子／map 共現／hot-warm-cold 混合候選 → ASSET203 同場量測及 ADR 選型 → ASSET204 有界非同步資源 store → ASSET205 新怪物流程及完整回歸。新方案還須同素材像素／八方向／pivot／ACT 時間與原版對照；30 次 raw texture 釋放通過不能代替遊戲切圖／登出回收。
+ASSET201 標準動畫定義已完成，見 [NORMALIZED_ANIMATION_DEFINITION.md](NORMALIZED_ANIMATION_DEFINITION.md)。ASSET202/203 亦已完成：以 v2 semantics 建 clip-atomic／Map13 hot-warm-cold 候選並跑相同 lifecycle + multiplayer，選 `normalized_memory` 作 ASSET204 provisional base；clean multiplayer P95/P99 21.54/23.81ms、Video約45.63MiB、30次回收PASS，但同步 loader frame P99 53.52ms 仍 FAIL，詳 [NORMALIZED_ATLAS_CANDIDATES.md](NORMALIZED_ATLAS_CANDIDATES.md)。下一步：ASSET204 有界非同步資源 store → ASSET205 新怪物流程及完整回歸；30 次 raw texture 釋放通過仍不能代替正式切圖／登出 owner purge。
 
 ## 重跑
 
