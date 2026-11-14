@@ -1,7 +1,7 @@
 extends Node2D
 
 # Standalone, server authoritative prototype. Start server with --headless -- --server.
-const PORT := 27888
+var port := 27888
 const WORLD_SIZE := Vector2(2400, 1600)
 const VIEW_RADIUS := 900.0
 var monster_count := 80
@@ -15,8 +15,9 @@ var drops: Dictionary = world.drops
 var sim_time := 0.0
 var snapshot_time := 0.0
 var local_state: Dictionary = {}
-var visible_players: Dictionary = {}
-var visible_monsters: Dictionary = {}
+var replica := preload("res://scripts/client_replica.gd").new()
+var visible_players: Dictionary = replica.players
+var visible_monsters: Dictionary = replica.monsters
 var visible_drops: Dictionary = {}
 var ui_modern := false
 var hud: CanvasLayer
@@ -30,17 +31,18 @@ var drop_grid := preload("res://scripts/spatial_grid.gd").new()
 var player_grid := preload("res://scripts/spatial_grid.gd").new()
 var rendered_players: Dictionary = {}
 var rendered_monsters: Dictionary = {}
-var snapshot_sequence := 0
 var last_snapshot := -1
 var input_elapsed := 0.0
-var animation_time := 0.0
 var bot := false
 var seed_drops := 0
 var bind_address := "127.0.0.1"
 const CODEC = preload("res://scripts/snapshot_codec.gd")
 const ACTION = preload("res://scripts/action_policy.gd")
-var pending_snapshots: Dictionary = {}
-var player_poses: Dictionary = {}
+const INPUT = preload("res://scripts/input_codec.gd")
+var prediction := preload("res://scripts/local_prediction.gd").new()
+var prediction_observed := false
+var clock_sync := preload("res://scripts/server_clock.gd").new()
+var ping_elapsed := 0.0
 var server_time := 0.0
 var ground_elapsed := 0.0
 var drop_renderer: MultiMeshInstance2D
@@ -80,6 +82,8 @@ func _ready() -> void:
 			bind_address = argument.trim_prefix("--bind=")
 		if argument.begins_with("--assets="):
 			asset_root = argument.trim_prefix("--assets=")
+		if argument.begins_with("--port="):
+			port = clampi(int(argument.trim_prefix("--port=")),1024,65535)
 		if argument.begins_with("--map="):
 			map_id = maxi(0,int(argument.trim_prefix("--map=")))
 	if combat_arena:
@@ -97,7 +101,7 @@ func _ready() -> void:
 			if argument.begins_with("--host="):
 				host = argument.trim_prefix("--host=")
 		_start_client(host)
-		print("SGO client connecting to %s:%d" % [host, PORT])
+		print("SGO client connecting to %s:%d" % [host, port])
 		for argument in arguments:
 			if argument.begins_with("--capture="):
 				await get_tree().create_timer(3.0).timeout
@@ -121,7 +125,7 @@ func _start_server() -> void:
 		map_fingerprint = metadata.fingerprint
 	var peer := ENetMultiplayerPeer.new()
 	peer.set_bind_ip(bind_address)
-	var error := peer.create_server(PORT, 128)
+	var error := peer.create_server(port, 128)
 	if error != OK:
 		push_error("Cannot start server: %s" % error)
 		get_tree().quit(1)
@@ -135,11 +139,11 @@ func _start_server() -> void:
 		world.monsters[1].p = Vector2(1230,800)
 		world.monsters[1].damage = 50
 	drop_grid.rebuild(drops)
-	print("SGO server listening on UDP %d with %d monsters" % [PORT, monster_count])
+	print("SGO server listening on UDP %d with %d monsters" % [port, monster_count])
 
 func _start_client(host: String) -> void:
 	var peer := ENetMultiplayerPeer.new()
-	var error := peer.create_client(host, PORT)
+	var error := peer.create_client(host, port)
 	if error != OK:
 		info_label.text = "連線失敗：%s" % error
 		return
@@ -182,9 +186,15 @@ func _world_info(server_map: int, fingerprint: String) -> void:
 		terrain.z_index = -100
 		add_child(terrain)
 		map_objects.configure(asset_root,terrain.data)
+		var grid := preload("res://scripts/collision_grid.gd").new()
+		if grid.open(asset_root.path_join("maps/%d/blocking.bin" % server_map)) != OK:
+			get_tree().quit(1)
+			return
+		prediction.configure(grid,Vector2(terrain.data.size[0],terrain.data.size[1]))
 		info_label.text = "已連線　%s" % terrain.data.name
 	else:
 		info_label.text = "已連線　測試場地"
+		prediction.configure(null,WORLD_SIZE)
 	map_ready = true
 
 func _on_peer_disconnected(id: int) -> void:
@@ -198,6 +208,8 @@ func _physics_process(delta: float) -> void:
 		diagnostics_time += delta
 		if diagnostics_time > 1.0 and diagnostics_time - delta <= 1.0:
 			print("client peer status %d" % multiplayer.multiplayer_peer.get_connection_status())
+		if int(diagnostics_time/5.0) > int((diagnostics_time-delta)/5.0) and prediction.initialized:
+			print("prediction_metrics "+JSON.stringify({"pending":prediction.pending.size(),"max_pending":prediction.max_pending,"max_correction_px":prediction.max_correction,"reconciliations":prediction.reconciliations}))
 		_client_step(delta)
 
 func _server_step(delta: float) -> void:
@@ -216,7 +228,6 @@ func _server_step(delta: float) -> void:
 	snapshot_time += delta
 	if snapshot_time >= 0.1:
 		snapshot_time -= 0.1
-		snapshot_sequence += 1
 		monster_grid.rebuild(monsters)
 		player_grid.rebuild(players)
 		for pid in players:
@@ -234,11 +245,45 @@ func _send_snapshot(pid: int) -> void:
 		var monster: Dictionary = monsters[id]
 		if center.distance_squared_to(monster.p) <= VIEW_RADIUS * VIEW_RADIUS:
 			ms.append([id, monster.p.x, monster.p.y, monster.hp, monster.facing, monster.pose, monster.action_time,monster.revision])
-	var encoded := CODEC.encode(ps + ms)
-	var count := maxi(1, ceili(encoded.size() / 800.0))
-	for index in count:
-		_snapshot_chunk.rpc_id(pid, snapshot_sequence, sim_time, ps.size(), index, count,
-			encoded.slice(index * 800, mini((index+1)*800, encoded.size())))
+	for kind in 2:
+		var rows: Array = ps if kind == 0 else ms
+		var seen: Dictionary = players[pid].seen_entities[kind]
+		var current: Dictionary = {}
+		for row in rows:
+			current[int(row[0])] = true
+		var removed := PackedInt32Array()
+		for id in seen:
+			if not current.has(id):
+				removed.append(id)
+		players[pid].seen_entities[kind] = current
+		for offset in range(0,removed.size(),128):
+			_interest_remove.rpc_id(pid,world.tick,kind,removed.slice(offset,offset+128))
+		for offset in range(0,rows.size(),CODEC.ROWS_PER_PACKET):
+			_snapshot_chunk.rpc_id(pid,world.tick,sim_time,kind,CODEC.encode(rows.slice(offset,offset+CODEC.ROWS_PER_PACKET)))
+	_send_owner_state(pid)
+
+func _send_owner_state(pid: int) -> void:
+	var state: Dictionary = players[pid]
+	_owner_state.rpc_id(pid,world.tick,world.time,state.input_ack,state.life_epoch,state.p,state.hp,state.facing,state.pose,state.action_time,state.revision)
+
+@rpc("authority", "call_remote", "unreliable_ordered", 7)
+func _owner_state(tick: int, clock: float, acknowledged: int, epoch: int, at: Vector2, hp: int, facing: int, pose: int, started: float, revision: int) -> void:
+	if is_server or not map_ready:
+		return
+	var id := multiplayer.get_unique_id()
+	if visible_players.has(id):
+		var current: Dictionary = visible_players[id]
+		if ACTION.newer_revision(current.revision,revision) and (int(current.hp) == 0) != (hp == 0):
+			return
+	clock_sync.observe_snapshot(clock,Time.get_ticks_usec()/1000000.0)
+	server_time = clock_sync.advance(Time.get_ticks_usec()/1000000.0)
+	_replica_changed(0,id,replica.snapshot(0,tick,[id,at.x,at.y,hp,facing,pose,started,revision]))
+	if prediction.authority(tick,acknowledged,epoch,at,hp,Time.get_ticks_usec()/1000000.0):
+		if prediction.motion.is_zero_approx():
+			prediction.facing = facing
+		if not prediction_observed:
+			prediction_observed = true
+			print("prediction_ready")
 
 func _send_ground_delta(pid: int) -> void:
 	var seen: Dictionary = players[pid].seen_drops
@@ -262,10 +307,12 @@ func _send_ground_delta(pid: int) -> void:
 		_ground_delta.rpc_id(pid, [], removed.slice(offset, offset+128))
 
 @rpc("any_peer", "call_remote", "unreliable_ordered", 1)
-func _move_input(x: float, y: float) -> void:
+func _move_input(epoch: int, payload: PackedByteArray) -> void:
 	if not is_server:
 		return
-	world.move(multiplayer.get_remote_sender_id(), x, y)
+	var id := multiplayer.get_remote_sender_id()
+	for frame in INPUT.decode(payload):
+		world.queue_input(id,epoch,int(frame.sequence),frame.motion)
 
 @rpc("any_peer", "reliable")
 func _attack(monster_id: int) -> void:
@@ -299,44 +346,34 @@ func _pickup(drop_id: int) -> void:
 func _publish_action(kind: int, id: int, state: Dictionary) -> void:
 	for pid in players:
 		if players[pid].p.distance_squared_to(state.p) <= VIEW_RADIUS * VIEW_RADIUS:
-			_action_event.rpc_id(pid, kind, id, state.facing, state.pose, state.action_time,state.hp,state.revision,state.p)
+			_action_event.rpc_id(pid, kind, id, state.facing, state.pose, state.action_time,state.hp,state.revision,state.p,world.tick)
+	if kind == 0 and state.pose in [0,4] and players.has(id):
+		_send_owner_state(id)
 
 @rpc("authority", "call_remote", "reliable", 4)
-func _action_event(kind: int, id: int, facing: int, pose: int, clock: float, hp: int, revision: int, at: Vector2) -> void:
-	clock = ACTION.wire_time(clock)
+func _action_event(kind: int, id: int, facing: int, pose: int, clock: float, hp: int, revision: int, at: Vector2, tick: int) -> void:
 	if not action_observed:
 		action_observed = true
 		print("action_received")
-	if kind == 1 and visible_monsters.has(id):
-		var state: Dictionary = visible_monsters[id]
-		if not ACTION.newer_revision(revision,state.revision):
-			return
-		state.hp = hp
-		state.revision = revision
-		state.p = at
-		if pose == 0 or pose == 4:
-			rendered_monsters[id] = at
-		if pose < 2 or pose == 4 or ACTION.accepts_event(pose, clock, state.action_time, server_time):
-			state.facing = facing
-			state.pose = pose
-			state.action_time = clock
-	elif kind == 0 and player_poses.has(id):
-		var row: Array = player_poses[id]
-		if not ACTION.newer_revision(revision,int(row[7])):
-			return
-		visible_players[id] = at
-		row[1] = at.x
-		row[2] = at.y
-		if pose == 4 or (pose == 0 and hp > 0):
-			rendered_players[id] = at
-			render_elapsed = 1.0
-		row[3] = hp
-		row[7] = revision
-		if pose < 2 or pose == 4 or ACTION.accepts_event(pose, clock, float(row[6]), server_time):
-			row[4] = facing
-			row[5] = pose
-			row[6] = clock
-		_update_health(id,hp,pose)
+	var changed: int = replica.event(kind,id,tick,at,hp,facing,pose,clock,revision)
+	_replica_changed(kind,id,changed)
+
+func _replica_changed(kind: int, id: int, changed: int) -> void:
+	if changed == 0:
+		return
+	var state: Dictionary = replica.group(kind)[id]
+	if changed == 2:
+		if kind == 0:
+			rendered_players[id] = state.p
+			if id == multiplayer.get_unique_id():
+				prediction.freeze(state.p)
+		else:
+			rendered_monsters[id] = state.p
+	if kind == 0:
+		if id == multiplayer.get_unique_id() and state.pose >= 2:
+			prediction.facing = state.facing
+		_update_health(id,state.hp,state.pose)
+	render_elapsed = 1.0
 
 func _update_health(id: int, hp: int, pose: int) -> void:
 	if not health_observed and hp < world.PLAYER_HP:
@@ -355,68 +392,34 @@ func _update_health(id: int, hp: int, pose: int) -> void:
 		health_label.text = "生命 %d / %d%s" % [hp,world.PLAYER_HP,"　倒地，等待復活" if hp == 0 else ""]
 
 @rpc("authority", "call_remote", "unreliable", 2)
-func _snapshot_chunk(sequence: int, clock: float, player_count: int, part: int, total: int, payload: PackedByteArray) -> void:
-	if is_server or sequence <= last_snapshot:
+func _snapshot_chunk(tick: int, clock: float, kind: int, payload: PackedByteArray) -> void:
+	if is_server or kind not in [0,1] or payload.size() > CODEC.ROWS_PER_PACKET*CODEC.STRIDE:
 		return
-	if total < 1 or total > 512 or part < 0 or part >= total or payload.size() > 800:
-		return
-	if not pending_snapshots.has(sequence):
-		pending_snapshots[sequence] = {}
-	var chunks: Dictionary = pending_snapshots[sequence]
-	chunks[part] = payload
-	for old in pending_snapshots.keys():
-		if old < sequence - 2:
-			pending_snapshots.erase(old)
-	if chunks.size() != total:
-		return
-	var bytes := PackedByteArray()
-	for index in total:
-		bytes.append_array(chunks[index])
-	var rows := CODEC.decode(bytes)
-	var ps := rows.slice(0, player_count)
-	var ms := rows.slice(player_count)
-	server_time = clock
-	last_snapshot = sequence
-	render_elapsed = 1.0
-	pending_snapshots.erase(sequence)
-	if sequence % 50 == 0:
-		print("snapshot_received sequence=%d players=%d monsters=%d drops=%d" % [sequence, ps.size(), ms.size(), visible_drops.size()])
-	visible_players.clear()
-	var previous_monsters := visible_monsters.duplicate()
-	var previous_poses := player_poses.duplicate()
-	visible_monsters.clear()
-	player_poses.clear()
-	for row in ps:
-		player_poses[int(row[0])] = row
-		if previous_poses.has(int(row[0])) and ACTION.newer_revision(int(previous_poses[int(row[0])][7]),int(row[7])):
-			player_poses[int(row[0])] = previous_poses[int(row[0])]
-		var current: Array = player_poses[int(row[0])]
-		visible_players[int(row[0])] = Vector2(current[1],current[2])
-		if previous_poses.has(int(row[0])):
-			var before: Array = previous_poses[int(row[0])]
-			if int(before[5]) != int(current[5]) and (int(before[5]) == 4 or int(current[5]) == 4):
-				rendered_players[int(row[0])] = visible_players[int(row[0])]
-		_update_health(int(row[0]),int(current[3]),int(current[5]))
-	for old_id in observed_dead.keys():
-		if not player_poses.has(old_id):
-			observed_dead.erase(old_id)
-	for row in ms:
-		visible_monsters[int(row[0])] = {"p": Vector2(row[1], row[2]), "hp": int(row[3]),
-			"facing": int(row[4]), "pose": int(row[5]), "action_time": float(row[6]),"revision":int(row[7])}
-		if previous_monsters.has(int(row[0])) and ACTION.newer_revision(previous_monsters[int(row[0])].revision,int(row[7])):
-			var prior: Dictionary = previous_monsters[int(row[0])]
-			visible_monsters[int(row[0])] = prior
-		if previous_monsters.has(int(row[0])):
-			var before: Dictionary = previous_monsters[int(row[0])]
-			var current: Dictionary = visible_monsters[int(row[0])]
-			if int(before.pose) != int(current.pose) and (int(before.pose) == 4 or int(current.pose) == 4):
-				rendered_monsters[int(row[0])] = current.p
-	var own_id := multiplayer.get_unique_id()
-	if visible_players.has(own_id):
-		var target: Vector2 = visible_players[own_id]
-		if rendered_players.is_empty():
-			position = target
+	clock_sync.observe_snapshot(clock,Time.get_ticks_usec()/1000000.0)
+	for row in CODEC.decode(payload):
+		_replica_changed(kind,int(row[0]),replica.snapshot(kind,tick,row))
+	if tick%150 == 0 and tick != last_snapshot:
+		last_snapshot = tick
+		print("snapshot_received tick=%d players=%d monsters=%d drops=%d" % [tick,visible_players.size(),visible_monsters.size(),visible_drops.size()])
 	queue_redraw()
+
+@rpc("authority", "call_remote", "reliable", 4)
+func _interest_remove(tick: int, kind: int, ids: PackedInt32Array) -> void:
+	replica.erase_interest(kind,tick,ids)
+	if kind == 0:
+		for id in ids:
+			if not visible_players.has(id):
+				observed_dead.erase(id)
+	render_elapsed = 1.0
+
+@rpc("any_peer", "call_remote", "unreliable", 6)
+func _clock_ping(sent: float) -> void:
+	if is_server and players.has(multiplayer.get_remote_sender_id()):
+		_clock_pong.rpc_id(multiplayer.get_remote_sender_id(),sent,world.time)
+
+@rpc("authority", "call_remote", "unreliable", 6)
+func _clock_pong(sent: float, stamp: float) -> void:
+	clock_sync.observe_pong(sent,Time.get_ticks_usec()/1000000.0,stamp)
 
 @rpc("authority", "call_remote", "reliable", 3)
 func _ground_delta(added: Array, removed: PackedInt32Array) -> void:
@@ -440,16 +443,21 @@ func _client_step(delta: float) -> void:
 	if not map_ready:
 		return
 	var own_id := multiplayer.get_unique_id()
-	if player_poses.has(own_id) and int(player_poses[own_id][3]) <= 0:
+	if visible_players.has(own_id) and int(visible_players[own_id].hp) <= 0:
 		return
+	var motion := Input.get_vector("ui_left", "ui_right", "ui_up", "ui_down")
+	if bot:
+		motion = Vector2.from_angle(Time.get_ticks_msec() / 1000.0)
+	prediction.step_input(motion,Time.get_ticks_usec()/1000000.0,server_time)
+	var packet := prediction.packet()
+	if not packet.is_empty():
+		_move_input.rpc_id(1,prediction.epoch,packet)
 	input_elapsed += delta
 	if input_elapsed < 0.05:
 		return
 	input_elapsed = 0.0
-	var motion := Input.get_vector("ui_left", "ui_right", "ui_up", "ui_down")
 	if bot:
-		motion = Vector2.from_angle(Time.get_ticks_msec() / 1000.0)
-		var own: Vector2 = visible_players.get(multiplayer.get_unique_id(), Vector2.ZERO)
+		var own: Vector2 = visible_players.get(multiplayer.get_unique_id(), {"p":Vector2.ZERO}).p
 		for id in visible_monsters:
 			if visible_monsters[id].hp > 0 and own.distance_squared_to(visible_monsters[id].p) < 150.0*150.0:
 				_attack.rpc_id(1,id)
@@ -458,7 +466,6 @@ func _client_step(delta: float) -> void:
 			if own.distance_squared_to(visible_drops[id].p) < 90.0*90.0:
 				_pickup.rpc_id(1,id)
 				break
-	_move_input.rpc_id(1, motion.x, motion.y)
 
 func _unhandled_input(event: InputEvent) -> void:
 	if is_server:
@@ -511,7 +518,7 @@ func _draw_monster(id: int, visible: Rect2) -> void:
 	if not atlas.pages.is_empty():
 		var monster: Dictionary = visible_monsters[id]
 		var action: String = ["NS", "NW", "FA", "NH", "ND"][monster.pose]
-		var seconds: float = server_time - monster.action_time if monster.pose >= 2 else animation_time
+		var seconds: float = maxf(0.0,server_time-monster.action_time)
 		var duration: float = ACTION.DEATH_SECONDS if monster.pose == 4 else ACTION.COMBAT_SECONDS
 		atlas.draw_frame(self, point, "EN004A_%s%d" % [action, monster.facing], maxf(seconds, 0.0), 8.0,
 			duration if monster.pose >= 2 else 0.0)
@@ -525,20 +532,24 @@ func _draw_player(id: int, visible: Rect2) -> void:
 	if not visible_players.has(id):
 		return
 	var color := Color.CYAN if id == multiplayer.get_unique_id() else Color.LIGHT_BLUE
-	var point: Vector2 = rendered_players.get(id, visible_players[id]) - position
+	var point: Vector2 = rendered_players.get(id, visible_players[id].p) - position
 	if not visible.has_point(point):
 		return
-	if not doll.parts.is_empty() and player_poses.has(id):
-		var pose: Array = player_poses[id]
-		var seconds: float = maxf(0.0,server_time-float(pose[6])) if int(pose[5]) >= 2 else animation_time
-		doll.draw(self,point,int(pose[5]),int(pose[4]),seconds)
+	var state: Dictionary = visible_players[id]
+	var pose: int = state.pose
+	var facing: int = state.facing
+	var seconds: float = maxf(0.0,server_time-state.action_time)
+	if id == multiplayer.get_unique_id() and prediction.initialized and state.hp > 0 and not ACTION.active(pose,state.action_time,server_time):
+		pose = 0 if prediction.motion.is_zero_approx() else 1
+		facing = prediction.facing
+		seconds = maxf(0.0,server_time-prediction.walk_started)
+	if not doll.parts.is_empty():
+		doll.draw(self,point,pose,facing,seconds)
 	else:
-		draw_circle(point, 13, color)
-	if player_poses.has(id):
-		var row: Array = player_poses[id]
-		if int(row[5]) == 2 and server_time-float(row[6]) < 0.35:
-			var direction := [6,7,8,1,2,3,4,5].find(int(row[4]))
-			draw_line(point, point + Vector2.from_angle(direction * PI / 4.0) * 45.0, Color.WHITE, 4)
+		draw_circle(point,13,color)
+	if state.pose == 2 and ACTION.active(state.pose,state.action_time,server_time):
+		var direction := [6,7,8,1,2,3,4,5].find(int(state.facing))
+		draw_line(point,point+Vector2.from_angle(direction*PI/4.0)*45.0,Color.WHITE,4)
 
 
 func _build_ui() -> void:
@@ -612,9 +623,11 @@ func _process(delta: float) -> void:
 		return
 	if profiler != null:
 		profiler.sample(delta)
-	animation_time += delta
-	server_time += delta
-	var weight := 1.0 - exp(-delta * 20.0)
+	server_time = clock_sync.advance(Time.get_ticks_usec()/1000000.0)
+	ping_elapsed += delta
+	if ping_elapsed >= 1.0 and map_ready and multiplayer.multiplayer_peer != null and multiplayer.multiplayer_peer.get_connection_status() == MultiplayerPeer.CONNECTION_CONNECTED:
+		ping_elapsed = 0.0
+		_clock_ping.rpc_id(1,Time.get_ticks_usec()/1000000.0)
 	for id in rendered_players.keys():
 		if not visible_players.has(id):
 			rendered_players.erase(id)
@@ -622,12 +635,12 @@ func _process(delta: float) -> void:
 		if not visible_monsters.has(id):
 			rendered_monsters.erase(id)
 	for id in visible_players:
-		var target: Vector2 = visible_players[id]
-		var previous: Vector2 = rendered_players.get(id,target)
-		rendered_players[id] = target if previous.distance_squared_to(target) > 300.0*300.0 else previous.lerp(target, weight)
+		if id == multiplayer.get_unique_id() and prediction.initialized:
+			rendered_players[id] = prediction.render(Engine.get_physics_interpolation_fraction(),delta)
+			continue
+		rendered_players[id] = replica.position_at(visible_players[id],server_time,prediction.navigation)
 	for id in visible_monsters:
-		var target: Vector2 = visible_monsters[id].p
-		rendered_monsters[id] = (rendered_monsters.get(id, target) as Vector2).lerp(target, weight)
+		rendered_monsters[id] = replica.position_at(visible_monsters[id],server_time,prediction.navigation)
 	position = rendered_players.get(multiplayer.get_unique_id(), position)
 	var size := get_viewport_rect().size
 	var view := Rect2(position-size*0.5,size)
@@ -644,7 +657,7 @@ func _process(delta: float) -> void:
 		for id in visible_monsters:
 			render_order.append([visible_monsters[id].p.y,1,id])
 		for id in visible_players:
-			render_order.append([visible_players[id].y,0,id])
+			render_order.append([visible_players[id].p.y,0,id])
 		render_order.sort_custom(func(a: Array,b: Array) -> bool: return a[0] < b[0])
 	drop_renderer.position = -position
 	if drops_dirty:

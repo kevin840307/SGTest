@@ -44,6 +44,8 @@ func _initialize() -> void:
 	atlas.data = {"clips":{"TEST_ND1":[0,1],"TEST_NS1":[0,1]}, "aliases":{}, "act":{}, "frames":[{"id":0},{"id":1}]}
 	check(atlas.sample("TEST_ND1", 1.0).frame.id == 1, "untimed death holds final frame")
 	check(atlas.sample("TEST_NS1", 1.0).frame.id == 0, "untimed idle loops")
+	atlas.compiled.clear()
+	atlas.sample_cache.clear()
 	atlas.data.act = {"D":{"timeline":[[0,5],[1,5]],"loop":false}}
 	check(atlas.sample("TEST_ND1", 0.24, 8, 0.35).frame.id == 1, "ACT sequence fits authoritative action interval")
 	check(atlas.sample("TEST_ND1",0.174,8,0.35).frame.id == 0 and atlas.sample("TEST_ND1",0.176,8,0.35).frame.id == 1,

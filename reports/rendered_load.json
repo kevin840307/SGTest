@@ -1,15 +1,15 @@
 {
   "draw_calls_last_frame": 134.0,
-  "frame_ms_p50": 16.668,
-  "frame_ms_p95": 20.276,
+  "frame_ms_p50": 16.666,
+  "frame_ms_p95": 21.93,
   "frames": 586,
-  "mean_fps": 58.5021201028559,
+  "mean_fps": 58.5322196895994,
   "renderer": "NVIDIA GeForce RTX 3050",
   "resolution": [
     1440,
     900
   ],
   "sample_seconds": 10,
-  "static_memory_bytes": 57451544,
+  "static_memory_bytes": 59650413,
   "warmup_seconds": 2
 }

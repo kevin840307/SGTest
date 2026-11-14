@@ -6,6 +6,7 @@ extends RefCounted
 var data: Dictionary = {}
 var pages: Array[Texture2D] = []
 var sample_cache: Dictionary = {}
+var compiled: Dictionary = {}
 
 func open(path: String) -> Error:
 	var parsed = JSON.parse_string(FileAccess.get_file_as_string(path))
@@ -16,6 +17,7 @@ func open(path: String) -> Error:
 	data = parsed
 	pages.clear()
 	sample_cache.clear()
+	compiled.clear()
 	for page in data.pages:
 		var image := Image.load_from_file(path.get_base_dir().path_join(page))
 		if image == null:
@@ -29,48 +31,58 @@ func sample(clip: String, seconds: float, fps: float = 8.0, duration: float = 0.
 	var cached: Dictionary = sample_cache.get(requested,{})
 	if not cached.is_empty() and cached.seconds == seconds and cached.fps == fps and cached.duration == duration:
 		return cached.result
-	var flip := false
-	if not data.clips.has(clip):
-		var alias: Dictionary = data.aliases.get(clip, {})
-		if alias.is_empty():
+	if not compiled.has(requested):
+		var flip := false
+		if not data.clips.has(clip):
+			var alias: Dictionary = data.aliases.get(clip,{})
+			if alias.is_empty():
+				return {}
+			clip = alias.clip
+			flip = alias.flip_h
+		var indices: Array = data.clips[clip]
+		if indices.is_empty():
 			return {}
-		clip = alias.clip
-		flip = alias.flip_h
-	var indices: Array = data.clips[clip]
-	if indices.is_empty():
-		return {}
-	var action := clip.substr(clip.length() - 2, 1)
-	var timing: Dictionary = data.act.get(action, {})
-	var timeline: Array = timing.get("timeline", [])
-	var looped: bool = timing.get("loop", action in ["S", "W", "R", "U"])
-	var advance := int(seconds * fps)
-	if duration > 0.0 and not looped:
-		advance = int(seconds * indices.size() / duration)
-	var index := advance % indices.size() if looped else mini(advance, indices.size()-1)
-	if not timeline.is_empty():
+		var action := clip.substr(clip.length()-2,1)
+		var timing: Dictionary = data.act.get(action,{})
+		var ends := PackedInt32Array()
+		var timeline_indices := PackedInt32Array()
 		var total := 0
-		for entry in timeline:
+		for entry in timing.get("timeline",[]):
 			total += int(entry[1])
-		# Tick rate is explicit policy (50Hz), raw ACT ticks remain in manifest.
-		var tick := int(seconds * 50.0)
-		if total > 0:
-			if duration > 0.0:
-				tick = int(seconds * total / duration)
-			tick = tick % total if looped else mini(tick, total - 1)
-			for entry in timeline:
-				if tick < int(entry[1]):
-					index = clampi(int(entry[0]), 0, indices.size() - 1)
-					break
-				tick -= int(entry[1])
-	var frame: Dictionary = data.frames[indices[index]]
-	var rect: Array = frame.get("rect",[0,0,0,0])
-	var trim: Array = frame.get("trim",[0,0])
-	var origin: Array = frame.get("origin",[0,0])
-	var result := {"frame": frame, "flip_h": flip, "clip": clip,
-		"rect":Rect2(rect[0],rect[1],rect[2],rect[3]),"offset":Vector2(trim[0]-origin[0],trim[1]-origin[1])}
-	# Exact input equality, no time quantization or lost animation frames. Most
-	# monsters share a clip and the same frame clock, so evaluate ACT once.
-	sample_cache[requested] = {"seconds":seconds,"fps":fps,"duration":duration,"result":result}
+			ends.append(total)
+			timeline_indices.append(clampi(int(entry[0]),0,indices.size()-1))
+		var frames: Array = []
+		for frame_id in indices:
+			var frame: Dictionary = data.frames[frame_id]
+			var rect: Array = frame.get("rect",[0,0,0,0])
+			var trim: Array = frame.get("trim",[0,0])
+			var origin: Array = frame.get("origin",[0,0])
+			frames.append({"frame":frame,"flip_h":flip,"clip":clip,
+				"rect":Rect2(rect[0],rect[1],rect[2],rect[3]),"offset":Vector2(trim[0]-origin[0],trim[1]-origin[1])})
+		compiled[requested] = {"frames":frames,"ends":ends,"indices":timeline_indices,
+			"total":total,"loop":bool(timing.get("loop",action in ["S","W","R","U"]))}
+	var plan: Dictionary = compiled[requested]
+	var advance := int(seconds*fps)
+	if duration > 0.0 and not plan.loop:
+		advance = int(seconds*plan.frames.size()/duration)
+	var index: int = advance%plan.frames.size() if plan.loop else mini(advance,plan.frames.size()-1)
+	if plan.total > 0:
+		var tick := int(seconds*plan.total/duration) if duration > 0.0 else int(seconds*50.0)
+		tick = tick%int(plan.total) if plan.loop else mini(tick,int(plan.total)-1)
+		# Endpoints are exclusive: a tick on the boundary selects the next frame.
+		index = plan.indices[plan.ends.bsearch(tick,false)]
+	var result: Dictionary = plan.frames[index]
+	# Exact input equality, no time quantization or lost animation frames.
+	# Monsters may have different phases; compiled timelines and frame descriptors
+	# avoid scanning ACT or allocating dictionaries for each actor.
+	if cached.is_empty():
+		cached = {"seconds":seconds,"fps":fps,"duration":duration,"result":result}
+		sample_cache[requested] = cached
+	else:
+		cached.seconds = seconds
+		cached.fps = fps
+		cached.duration = duration
+		cached.result = result
 	return result
 
 func draw_frame(canvas: CanvasItem, at: Vector2, clip: String, seconds: float, fps: float = 8.0, duration: float = 0.0) -> void:

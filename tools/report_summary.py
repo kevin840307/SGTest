@@ -44,7 +44,7 @@ def main():
               f"原生單客戶端 1440×900、伺服器同樣 1000 怪／5000 掉落，RTX 3050、上限 60 FPS；暖機 2 秒後測 10 秒："
               f"平均 {rendered['mean_fps']:.2f} FPS，影格間隔 P50 {rendered['frame_ms_p50']:.2f}ms、P95 {rendered['frame_ms_p95']:.2f}ms。"
               f"末影格 draw calls {int(rendered['draw_calls_last_frame'])}。使用單調時鐘量測，非 Godot 平滑 delta。", '',
-              '這些是本機開發版測試，非冷磁碟、網際網路丟包或多種硬體測試。完整遊戲功能、角色裝備與外觀自訂、其他地圖及持久化仍待開發。', '',
+              '這些是本機開發版測試，非冷磁碟或多種硬體測試；受控 UDP 丟包測試另列如下。完整遊戲功能、角色裝備與外觀自訂、其他地圖及持久化仍待開發。', '',
               '原始 JSON：asset_inventory.json、asset_validation.json、network_load.json、rendered_load.json、rendered_probe.json、atlas_benchmark/results.json、atlas_benchmark/rendered.json。']
     Path('reports/README.md').write_text('\n'.join(lines)+'\n',encoding='utf-8')
     combat_path = Path('reports/combat_network.json')
@@ -73,6 +73,25 @@ def main():
             report.write(f"\n原生地圖物件對照畫面：總計 {scene['total_terrain_cells']:,} 格中，僅建立 {scene['visible_terrain_instances']:,} 個可見地磚實例；"
                          f"{scene['visible_objects']} 個物件共用 {scene['resident_object_types']} 組紋理，物件 RGBA 合計 {scene['object_rgba_bytes']/1024**2:.2f} MiB，"
                          f"含角色的畫面 draw calls 為 {int(scene['draw_calls'])}。此為局部場景證據，不代表整張地圖同時載入。\n")
+
+    for filename in ['impaired_network.json','impaired_combat.json']:
+        path = Path('reports')/filename
+        if not path.exists():
+            continue
+        test = read(path)
+        impairment = test['impairment']
+        metrics = test.get('prediction_metrics',[])
+        rows = [row for client in metrics for row in client]
+        with Path('reports/README.md').open('a',encoding='utf-8') as report:
+            report.write(f"\n## 受控 UDP 測試：{filename}\n\n"
+                         f"{test['clients']} 客戶端、{test['seconds']} 秒，實際 ENet 經 UDP 代理：每向 "
+                         f"{impairment['one_way_delay_ms']:.0f}±{impairment['jitter_ms']:.0f}ms、"
+                         f"{impairment['configured_loss']:.0%} 丟包及亂序。"
+                         f"已轉送 {impairment['forwarded']:,} 包，丟棄 {impairment['dropped']:,} 包；通過：{test['passed']}。")
+            if rows:
+                report.write(f" 最大待確認輸入 {max(r['max_pending'] for r in rows)}／64，"
+                             f"最大校正 {max(r['max_correction_px'] for r in rows):.2f}px。")
+            report.write(" 這是可重跑的本機網路退化情境，非真實跨國連線或所有網路情況的保證。\n")
 
 
 if __name__ == '__main__':
