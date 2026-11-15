@@ -187,7 +187,7 @@ def check_runtime(stage: Path, assets: Path, map_id: int) -> dict:
             raise ValueError(f"missing independent map object asset: {relative}")
     monster_paths = sorted({str(row.get("atlas","")) for row in population.get("definitions",[])})
     for relative in monster_paths:
-        if not relative.startswith("monsters/") or not relative.endswith("/atlas.json"):
+        if not relative.startswith("Enemy/") or not relative.endswith("/atlas.json"):
             raise ValueError(f"monster is not an independent asset: {relative}")
         if not (assets / relative).is_file():
             raise ValueError(f"missing independent monster asset: {relative}")

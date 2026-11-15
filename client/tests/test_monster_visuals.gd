@@ -6,7 +6,7 @@ func _initialize() -> void:
 	var population: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(path))
 	assert(population.definitions.size() == 9)
 	var first: Dictionary = population.definitions[0]
-	assert(str(first.atlas).begins_with("monsters/"))
+	assert(str(first.atlas).begins_with("Enemy/"))
 	assert(visuals.add("res://assets",first) == OK)
 	var first_bytes := visuals.rgba_bytes
 	var alias := first.duplicate(true)
@@ -19,7 +19,7 @@ func _initialize() -> void:
 	visuals.reset()
 	var expected_paths: Dictionary = {}
 	for row in population.definitions:
-		assert(str(row.atlas) == "monsters/%s/atlas.json" % str(row.sprite).to_lower())
+		assert(str(row.atlas) == "Enemy/%s/atlas.json" % str(row.sprite).to_lower())
 		expected_paths[str(row.atlas)] = true
 		assert(visuals.add("res://assets",row) == OK)
 	assert(visuals.definitions.size() == 9)

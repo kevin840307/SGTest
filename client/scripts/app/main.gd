@@ -350,7 +350,7 @@ func _world_info(server_map: int, fingerprint: String, population_hash: String) 
 	else:
 		info_label.text = "已連線　測試場地"
 		prediction.configure(null,WORLD_SIZE)
-	var definitions: Array = [{"id":0,"sprite":"EN010A","atlas":"monsters/en010a/atlas.json"}]
+	var definitions: Array = [{"id":0,"sprite":"EN010A","atlas":"Enemy/en010a/atlas.json"}]
 	var spawn_counts: Dictionary = {0: 1}
 	if server_map != 0:
 		var path := asset_root.path_join("maps/%d/population.json" % server_map)

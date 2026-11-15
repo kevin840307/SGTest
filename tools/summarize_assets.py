@@ -7,7 +7,7 @@ from collections import Counter
 from pathlib import Path
 
 ALLOWED_TOP_LEVEL = {
-    "catalog", "maps", "monsters", "npcs", "players", "equipment",
+    "catalog", "maps", "Enemy", "npcs", "players", "equipment",
     "pets", "mecha", "items", "effects", "ui", "audio", "data", ".gdignore",
 }
 
@@ -84,7 +84,7 @@ def summarize(assets: Path) -> dict:
                 atlas = str(definition.get("atlas", ""))
                 if atlas:
                     monster_assets.add(atlas)
-                    if not atlas.startswith("monsters/"):
+                    if not atlas.startswith("Enemy/"):
                         cross_asset_bundle = True
         maps.append({
             "map_id": int(world["map_id"]),

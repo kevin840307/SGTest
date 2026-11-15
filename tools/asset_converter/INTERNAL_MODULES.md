@@ -16,7 +16,7 @@ run_build_assets.bat "C:\SGO\Stargate Online IE HK2"
 - `atlas/adaptive_atlas.py`、`atlas/build_atlas_groups.py`、`atlas/selector.py`：只處理**單一 logical asset 內**的 physical packing / candidate 評估；不同素材不得在此合併。
 - `content/asset_paths.py`、`content/export_assets.py`：canonical logical id 與全量 per-asset 發布。
 - `content/build_maps.py`：terrain、scenery placement 與原版 `blocking.dat`；Map 不包含 Monster pixels。
-- `content/build_population.py`：Server monster definition / spawn 指向獨立 `monsters/<id>/atlas.json`。
+- `content/build_population.py`：Server monster definition / spawn 指向獨立 `Enemy/<id>/atlas.json`。
 - `content/animation_definition.py`、`runtime_animation_semantics.py`：動作方向、鏡像、原點與紙娃娃語義。
 - 舊 `content/asset_bundle_builder.py`、`content/asset_pipeline.py` 已移除；歷史結果只保留在 Git history / 舊報告，不得重新導入 map/session lifecycle bundle。
 

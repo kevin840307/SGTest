@@ -35,7 +35,7 @@ python tools/asset_converter/cli.py build "C:\SGO\Stargate Online IE HK2"
 `tools/monster_workflow.py`：
 
 - 驗證新增/修改 Monster definition、ACT、spawn。
-- population 只引用既有 `monsters/<sprite>/atlas.json`。
+- population 只引用既有 `Enemy/<sprite>/atlas.json`。
 - **不重建 Map + Monster bundle**。
 
 `tools/export_server_content.py`：

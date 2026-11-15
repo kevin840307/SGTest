@@ -51,7 +51,7 @@ client/assets/
 │           ├── atlas.json
 │           └── page_N.png
 │
-├── monsters/
+├── Enemy/
 │   └── <sprite_id>/
 │       ├── atlas.json
 │       ├── definition.json
@@ -94,7 +94,7 @@ Map 只描述世界本身：
 
 Map visual 只能指向 `maps/visuals/**`。
 
-Monster visual 只能指向 `monsters/<sprite>/atlas.json`。Server population definition 決定某張地圖出現哪個 Monster；地圖貼圖本身不包含 Monster pixels。
+Monster visual 只能指向 `Enemy/<sprite>/atlas.json`。Server population definition 決定某張地圖出現哪個 Monster；地圖貼圖本身不包含 Monster pixels。
 
 好處：
 
@@ -255,3 +255,23 @@ Asset boundary 已定案；physical packing 仍可替換。最新同素材 bench
 這不代表把不同素材合併。Monster/NPC/scenery/Player part/equipment 的 logical/physical boundary 完全不變。
 
 目前 production builder 尚維持 Adaptive Atomic，直到使用者確認切換；不要在其它 Session 先自行改 production policy。
+
+## 14. Current Packing Baseline（2026-11-15）
+
+最新 Model1 / Recovered / multi-size benchmark 後，若後續要切 production，baseline 名稱使用：
+
+**Per-Asset Height-Dense Atlas**
+
+規則：
+
+- 不同 asset 永遠獨立。
+- 同一 asset 內 trim 後，以 frame height descending、再 width descending 排序。
+- 搜尋實際 atlas 寬度，不固定2048。
+- 優先單 page <=4096。
+- 現階段不按 action/source/size 建 hard bucket。
+- P0/P1 尚未定案：0px 最省，但必須完成 filter/bleeding A/B；1px extrude 是保守候選。
+- MaxRects 不作主路徑；只保留未來單 asset 超過4096時的 paged fallback 研究。
+
+更重要的是：Recovered native benchmark 顯示 SGTest 目前最大的差距來自 texture loader / representation 與 GDScript draw path，而不是 atlas packing。後續先測 external PCK imported texture / ResourceLoader 與 renderer allocation，再決定 production switch。
+
+實體 Enemy 路徑固定為 `Enemy/<id>/atlas.json`。

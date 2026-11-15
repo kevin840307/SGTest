@@ -25,7 +25,7 @@ func _initialize() -> void:
 	var preview := Preview.new()
 	var error: Error = preview.doll.open("res://assets")
 	if error == OK:
-		error = preview.monster.open("res://assets/monsters/en010a/atlas.json")
+		error = preview.monster.open("res://assets/Enemy/en010a/atlas.json")
 	if error != OK:
 		push_error("direction preview asset load failed: %d" % error)
 		quit(1)

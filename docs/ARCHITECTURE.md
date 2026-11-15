@@ -126,7 +126,7 @@ Godot Runtime 不照抄原版目錄，而以內容語意直接分類：
 
 ```text
 maps/
-monsters/
+Enemy/
 npcs/
 players/
 equipment/
@@ -138,7 +138,7 @@ audio/
 data/
 ```
 
-每個來源素材保持獨立 logical/physical identity；PCK 只是磁碟容器，不代表共同載入。Map 只放 terrain/layout/blocking 與 scenery reference，Monster appearance 永遠放在 `monsters/` 並由 Server definition 決定。
+每個來源素材保持獨立 logical/physical identity；PCK 只是磁碟容器，不代表共同載入。Map 只放 terrain/layout/blocking 與 scenery reference，Monster appearance 永遠放在 `Enemy/` 並由 Server definition 決定。
 
 Asset lifetime 是 metadata：
 

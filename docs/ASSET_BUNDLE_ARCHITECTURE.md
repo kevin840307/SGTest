@@ -30,7 +30,7 @@ Player body/head/leg/arms/death shared physical atlas
 - 每個素材保持獨立 logical/physical asset identity。
 - 同一 asset 內 action/facing/frame 可重新 packing。
 - 同 visual 的很多 instance 共用同一 AssetStore entry。
-- Map 只引用 scenery；Monster 由 Server population definition 指向 `monsters/<id>/atlas.json`。
+- Map 只引用 scenery；Monster 由 Server population definition 指向 `Enemy/<id>/atlas.json`。
 - Player parts 可共用 owner lifetime，但不 physical merge。
 - 磁碟檔案多可以接受；Runtime working set 才是主要最佳化目標。
 - external `assets.pck` 是檔案容器，不是 lifecycle bundle。

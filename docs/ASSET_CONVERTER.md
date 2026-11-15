@@ -95,7 +95,7 @@ local-assets/asset_converter/complete/
 client/assets/
 ├── catalog/
 ├── maps/
-├── monsters/
+├── Enemy/
 ├── npcs/
 ├── players/
 ├── equipment/
@@ -145,7 +145,7 @@ maps/<id>/
 
 `world.json.objects[].atlas` 指向獨立 `maps/visuals/**/atlas.json`。
 
-`population.json.definitions[].atlas` 指向獨立 `monsters/<sprite>/atlas.json`。
+`population.json.definitions[].atlas` 指向獨立 `Enemy/<sprite>/atlas.json`。
 
 禁止產生 `sprite_bundle`。
 

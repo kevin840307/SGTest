@@ -16,7 +16,7 @@ func _run() -> void:
 	for object in world.objects:
 		var relative := str(object.get("atlas",""))
 		assert(relative.begins_with("maps/visuals/") and relative.ends_with("/atlas.json"))
-		assert(not relative.begins_with("monsters/"))
+		assert(not relative.begins_with("Enemy/"))
 		unique[relative] = true
 	assert(unique.size() > 1,"Map13 scenery must keep independent source assets")
 

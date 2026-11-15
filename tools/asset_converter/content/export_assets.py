@@ -45,7 +45,7 @@ def publish(source: Path, archive: Path, assets: Path) -> dict:
     owned_path = assets/'catalog/_export_files.json'
     previous = json.loads(owned_path.read_text(encoding='utf-8')).get('files',{}) if owned_path.is_file() else {}
     files, entries, coverage, semantic_counts = {}, {}, {}, Counter()
-    categories = {key:{} for key in ['maps','monsters','npcs','players','equipment','pets','mecha','items','effects','ui','audio','data']}
+    categories = {key:{} for key in ['maps','Enemy','npcs','players','equipment','pets','mecha','items','effects','ui','audio','data']}
 
     def target(relative):
         result = assets.joinpath(*safe_relative(relative).parts).resolve()

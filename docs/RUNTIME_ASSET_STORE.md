@@ -27,7 +27,7 @@ ASSET203 已證明 `normalized_memory` 的 Atlas packing 本身無法消除同�
 正式 `main.gd` 設定：
 
 - production unowned cache budget：24MiB；ready/decode queue budget 16MiB。active owners 不受 unowned LRU budget 強制驅逐。
-- 每個 Monster visual 使用自己的 `monsters/<sprite>/atlas.json`；同 sprite 的多個 definition/instance 共用相同 path entry。
+- 每個 Monster visual 使用自己的 `Enemy/<sprite>/atlas.json`；同 sprite 的多個 definition/instance 共用相同 path entry。
 - Player B base/death 是 7 個獨立 manifests，但可共用一個 character owner；headless client 不載純視覺 paper doll。
 - Map scenery 每個來源 visual 獨立，`map_objects` 只對 viewport 需要的 paths acquire；超出視野一段時間後 release，仍由同一 Store/LRU 控制。
 - PCK 只是磁碟容器，不改變 per-asset cache entry。

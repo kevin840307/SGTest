@@ -133,7 +133,7 @@ func _load_map(base: String, canvas: BenchCanvas) -> Dictionary:
 		if not bounds.intersects(view):
 			continue
 		var relative := str(raw.atlas)
-		if not relative.begins_with("maps/visuals/") or relative.begins_with("monsters/"):
+		if not relative.begins_with("maps/visuals/") or relative.begins_with("Enemy/"):
 			push_error("Map object crosses asset boundary: "+relative)
 			quit(2)
 			return {}

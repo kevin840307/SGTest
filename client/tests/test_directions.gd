@@ -38,11 +38,11 @@ func _initialize() -> void:
 	for definition in population.definitions:
 		var sprite := str(definition.sprite)
 		var relative := str(definition.atlas)
-		check(relative == "monsters/%s/atlas.json" % sprite.to_lower(),
+		check(relative == "Enemy/%s/atlas.json" % sprite.to_lower(),
 			"%s uses its own monster asset" % sprite)
 		var atlas := atlas_script.new()
 		atlas.data = JSON.parse_string(FileAccess.get_file_as_string("res://assets/"+relative))
-		check(str(atlas.data.get("asset_id","")) == "monsters/%s" % sprite.to_lower(),
+		check(str(atlas.data.get("asset_id","")) == "Enemy/%s" % sprite.to_lower(),
 			"%s manifest identity is independent" % sprite)
 		monster_atlases[sprite] = atlas
 		for direction in range(1,9):

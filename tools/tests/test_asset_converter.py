@@ -267,14 +267,14 @@ class ConverterTests(unittest.TestCase):
                 "definitions": [{
                     "id": 1,
                     "sprite": "EN001A",
-                    "atlas": "monsters/en001a/atlas.json",
+                    "atlas": "Enemy/en001a/atlas.json",
                 }],
                 "spawns": [],
             }
             (map_dir / "population.json").write_text(json.dumps(population))
             required = [
                 "maps/visuals/tree/atlas.json",
-                "monsters/en001a/atlas.json",
+                "Enemy/en001a/atlas.json",
                 "players/b/base/body/atlas.json",
                 "players/b/base/leg/atlas.json",
                 "players/b/base/head/atlas.json",

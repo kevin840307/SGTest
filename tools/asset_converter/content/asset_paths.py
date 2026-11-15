@@ -10,7 +10,7 @@ import re
 
 
 TOP_LEVEL = (
-    "maps", "monsters", "npcs", "players", "equipment", "pets",
+    "maps", "Enemy", "npcs", "players", "equipment", "pets",
     "mecha", "items", "effects", "ui", "audio", "data",
 )
 
@@ -51,7 +51,7 @@ def sprite_asset_id(group: str) -> tuple[str, str]:
     rest = "/".join(rest_parts)
 
     if category == "enemy":
-        return "monsters/" + rest, "monster"
+        return "Enemy/" + rest, "monster"
 
     if category == "npc":
         return "npcs/" + rest, "npc"
@@ -124,7 +124,7 @@ def monster_manifest(sprite: str) -> str:
     name = sprite.strip().casefold()
     if not name or not name.replace("_", "").replace("-", "").isalnum():
         raise ValueError("invalid monster sprite id: " + sprite)
-    return atlas_manifest("monsters/" + name)
+    return atlas_manifest("Enemy/" + name)
 
 
 def source_sprite_manifest(relative_source: str) -> str:

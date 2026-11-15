@@ -22,7 +22,7 @@ func _run() -> void:
 	store.configure(32 * 1024 * 1024, 4 * 1024 * 1024)
 	var owner_a := "test-map-a"
 	var epoch_a := store.begin_owner(owner_a)
-	var path := "res://assets/monsters/en010a/atlas.json"
+	var path := "res://assets/Enemy/en010a/atlas.json"
 	assert(store.acquire(path, owner_a, epoch_a, 10) == OK)
 	assert(await wait_ready(store, path), "async atlas did not become ready")
 	var atlas: RefCounted = store.get_atlas(path)

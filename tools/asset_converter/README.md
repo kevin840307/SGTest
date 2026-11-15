@@ -49,7 +49,13 @@ tools/asset_converter/
     └── packing/
         ├── build_candidates.py
         ├── benchmark.gd
-        └── run.py
+        ├── run.py
+        ├── geometry.py
+        ├── build_model1_variants.py
+        ├── recovered_native.gd
+        ├── sgtest_native.gd
+        ├── run_native_matrix.py
+        └── run_resource_matrix.py
 ```
 
 ## 職責
@@ -91,7 +97,7 @@ Runtime disk assets：
 ```text
 client/assets/
 ├── maps/
-├── monsters/
+├── Enemy/
 ├── npcs/
 ├── players/
 ├── equipment/

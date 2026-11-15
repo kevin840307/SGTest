@@ -193,7 +193,7 @@ def merge_population(population: dict, recipe: dict, spawns: list[dict],
     result["definitions"].append({
         "id": definition_id,
         "sprite": definition["sprite"],
-        "atlas": f"monsters/{definition['sprite'].lower()}/atlas.json",
+        "atlas": f"Enemy/{definition['sprite'].lower()}/atlas.json",
         "stats": definition["stats"],
     })
     result["definitions"].sort(key=lambda row: int(row["id"]))

@@ -67,7 +67,7 @@ func _run() -> void:
 	var control_alive_after_release: bool = weak.get_ref() != null
 	var store := ProbeStore.new()
 	var epoch := store.begin_owner("probe")
-	var paths := ["res://assets/monsters/en010a/atlas.json","res://assets/players/b/base/body/atlas.json"]
+	var paths := ["res://assets/Enemy/en010a/atlas.json","res://assets/players/b/base/body/atlas.json"]
 	for path in paths:assert(store.acquire(path,"probe",epoch) == OK)
 	var deadline := Time.get_ticks_msec()+15000
 	while not paths.all(func(path: String) -> bool: return store.is_ready(path)):

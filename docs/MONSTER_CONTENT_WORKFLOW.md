@@ -70,7 +70,7 @@ sprite `ENxxxx` 會對應 private extracted source：
 
 工具固定要求 monster 5 個 behavior：`NS / NW / FA / NH / ND`，以 `sgtest.animation/v2` 與 `legacy_direction.py` 驗證 8 logical facing，共 **40 logical views**。缺 ACT、缺必要 SPR、timeline frame 越界、pivot/hash 不一致都直接失敗。
 
-Animation source of truth 仍是 `sgtest.animation/v2`。Production asset boundary 依 [ASSET_ARCHITECTURE.md](ASSET_ARCHITECTURE.md)：每個 Monster visual 保持獨立 `monsters/<sprite>/atlas.json`，Map population 只引用它；新增怪物不允許重建 Map + Monster shared atlas。512/1024/2048/4096 與 Dense/Atomic 都只是單一 asset 內部 packing 候選，不是 Runtime 類型；不能手改 atlas。
+Animation source of truth 仍是 `sgtest.animation/v2`。Production asset boundary 依 [ASSET_ARCHITECTURE.md](ASSET_ARCHITECTURE.md)：每個 Monster visual 保持獨立 `Enemy/<sprite>/atlas.json`，Map population 只引用它；新增怪物不允許重建 Map + Monster shared atlas。512/1024/2048/4096 與 Dense/Atomic 都只是單一 asset 內部 packing 候選，不是 Runtime 類型；不能手改 atlas。
 
 ## Private preview
 
@@ -119,7 +119,7 @@ ASSET205 把 population contract 從 v1 升成 v2。v1 Server 仍可讀，並套
 
 1. 呼叫 `tools/asset_converter/cli.py build`，發布 per-asset 素材。
 2. 建立 Map world/population contract；不重新合併 Map/Monster。
-3. custom monster recipe 只修改 definition/spawn，並要求對應 `monsters/<sprite>/atlas.json` 已存在。
+3. custom monster recipe 只修改 definition/spawn，並要求對應 `Enemy/<sprite>/atlas.json` 已存在。
 4. export Server `world.json / population.json / blocking.dat` contract。
 
 所以正式 custom monster 必須提交 recipe，而不是提交 private PNG/SPR/ACT，也不能藉 recipe 建立 shared map atlas。
@@ -128,7 +128,7 @@ ASSET205 把 population contract 從 v1 升成 v2。v1 Server 仍可讀，並套
 
 - 新 recipe 若 definition id 已存在，預設 FAIL。
 - 只有 recipe `"replace": true` 或 CLI `--replace` 才會刪除該 definition 原 spawns，改用 recipe 新 definition/spawns。
-- 同 sprite 的多個 definitions 可以共用同一個 `monsters/<sprite>/atlas.json` AssetStore entry；不同 sprite 永遠是不同 asset。definition id 只決定 stats/spawn/appearance reference，不建立 shared map atlas。
+- 同 sprite 的多個 definitions 可以共用同一個 `Enemy/<sprite>/atlas.json` AssetStore entry；不同 sprite 永遠是不同 asset。definition id 只決定 stats/spawn/appearance reference，不建立 shared map atlas。
 
 ## 實測
 

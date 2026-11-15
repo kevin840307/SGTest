@@ -166,7 +166,7 @@ server/content/maps/<id>/
 └── blocking.dat
 ```
 
-Monster visual id 由 population definition 傳給 Client；真正 visual asset 位於 Client `monsters/<id>/`。
+Monster visual id 由 population definition 傳給 Client；真正 visual asset 位於 Client `Enemy/<id>/`。
 
 ## 10. 新功能歸類
 

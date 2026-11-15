@@ -194,7 +194,7 @@ client/assets/
 │   │   ├── tiles.bin
 │   │   └── blocking.dat
 │   └── visuals/<asset>/
-├── monsters/<asset>/
+├── Enemy/<asset>/
 ├── npcs/<asset>/
 ├── players/...
 ├── equipment/...
@@ -240,7 +240,7 @@ Godot：
 
 - folder / file：`snake_case`
 - class_name：`PascalCase`
-- logical asset id：小寫、語意清楚，例如 `monsters/en023a`
+- logical asset id：小寫、語意清楚，例如 `Enemy/en023a`
 
 避免：
 

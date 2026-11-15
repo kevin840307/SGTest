@@ -12,8 +12,8 @@
 正確：
 
 ```text
-monsters/en023a/atlas.json
-monsters/en089a/atlas.json
+Enemy/en023a/atlas.json
+Enemy/en089a/atlas.json
 npcs/npc001/atlas.json
 maps/visuals/tree001/atlas.json
 maps/visuals/house014/atlas.json
@@ -80,7 +80,7 @@ Monster 出生與 appearance 由 Server population / entity definition 決定：
 
 ```text
 definition.sprite = EN023A
-definition.atlas  = monsters/en023a/atlas.json
+definition.atlas  = Enemy/en023a/atlas.json
 ```
 
 同一 monster 可以跨多張地圖共用，不因 map 重包。

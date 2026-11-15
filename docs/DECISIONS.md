@@ -289,7 +289,7 @@ ADR-026補充：使用者指定Client一般遊玩支援30～90FPS；FPS選項只
 - Runtime root: 移除 `client/assets/generated` 額外層；`client/assets` 是可重建 Runtime output，不是完整原版素材鏡像。完整 rebuild 先清理舊輸出，只生成目前真正消費的 `bundles/` + `maps/`。Before 17,274 files / 1,179.31MiB → After 12 files / 9.036MiB；原始素材仍在 `.cache/client`。
 - Map13 scenery audit: 367 placements / 45 unique old object atlases；1440 viewport+margin P50 21 atlases/4.394MiB、P95 30/5.414MiB、全量7.222MiB。細拆只省約1.8～2.8MiB object resident，維護成本不足，故 scenery 與9種 monster 共用 map lifecycle sprite bundle。
 - Atlas A/B: monster+scenery 1024=5 pages/18,572,476 RGBA；2048=2/18,569,428；4096=1/18,478,500。4096 lifecycle load/frame 無明顯勝利且 transient static/decode peak 36,911,847→53,543,643 bytes，因此 auto mode 優先 <=2048；4096 保留研究 override / 2048 無法容納時的 correctness fallback。
-- Multiplayer trade-off: 20 clients/300 monsters/1000 drops/40s Before→After：draw P95 236→228、frame P95 19.236→18.947ms、P99 20.422→20.322ms；texture 39.06→46.04MiB、video 45.56→52.53MiB、process RSS 約 +6.47MiB/client。此變更是 lifecycle/維護性與小幅 draw/frame 改善，不宣稱 RAM/VRAM 最佳化。
+- Multiplayer trade-off: 20 clients/300 Enemy/1000 drops/40s Before→After：draw P95 236→228、frame P95 19.236→18.947ms、P99 20.422→20.322ms；texture 39.06→46.04MiB、video 45.56→52.53MiB、process RSS 約 +6.47MiB/client。此變更是 lifecycle/維護性與小幅 draw/frame 改善，不宣稱 RAM/VRAM 最佳化。
 - Release: 30-cycle async lifecycle all texture handles released、engine texture recovery、Store resident recovery 全 PASS，P95/P99 16.824/16.906ms。
 - Tools: `tools/README.md` 固定 production / research / benchmark / viewer-diagnostic / tests 邊界；不得為每個素材小功能建立另一套 production Builder/CLI/Loader。
 - Evidence: [ASSET_NECESSITY_AUDIT.md](ASSET_NECESSITY_AUDIT.md)、[ASSET_BUNDLE_ARCHITECTURE.md](ASSET_BUNDLE_ARCHITECTURE.md)。AS005 原版逐格人工視覺與 AS008 發布權仍未完成。
@@ -363,7 +363,7 @@ ADR-026補充：使用者指定Client一般遊玩支援30～90FPS；FPS選項只
 - Client: 主要模組為 app / networking / world / gameplay / rendering / assets / ui / diagnostics；Render FPS、UI FPS、Network I/O、World State 必須隔離。AFK 可停止 world rendering、降低可重建 visual replication、釋放 GPU world assets，但不能降低 heartbeat、reliable gameplay event、state reducer 或 authoritative state 的處理正確性。
 - Server: 維持單一 .NET 8 project，主要模組為 Networking / Accounts / World / Combat / Items / Social / Persistence / Content / Diagnostics；不再擴大 Application / Domain / Infrastructure / Transport 目錄。
 - Naming: 模糊的 `Session` 類別名稱已移除；網路連線使用 `ClientConnection`，既有 wire 世代欄位內部命名改為 `ConnectionEpoch`。AOI/角色狀態若未來複雜度需要再抽 `VisibilityState` / `PlayerState`，不先建立空類別。
-- Assets: Converter source catalog 可保留原版 Player/Enemy/NPC/Pet/MA/MS/SR/Item/Effect/Map/Interface/Audio key；Runtime catalog 使用 maps/monsters/npcs/players/equipment/pets/items/effects/ui/audio/data。每個素材保持獨立 identity；生命週期以 app/character/map/on_demand metadata/owner 表達，不用資料夾或 physical merge 代表 ownership。
+- Assets: Converter source catalog 可保留原版 Player/Enemy/NPC/Pet/MA/MS/SR/Item/Effect/Map/Interface/Audio key；Runtime catalog 使用 maps/Enemy/npcs/players/equipment/pets/items/effects/ui/audio/data。每個素材保持獨立 identity；生命週期以 app/character/map/on_demand metadata/owner 表達，不用資料夾或 physical merge 代表 ownership。
 - Source of truth: docs/ARCHITECTURE.md、docs/CLIENT_ARCHITECTURE.md、docs/SERVER_ARCHITECTURE.md。其他 Session 在修改對應端前必須先讀這三份與相關專題規格。
 
 ## ADR-039 — 移除 raw-assets EditorPlugin，改用跨平台 external asset pack（2026-11-15）
@@ -380,7 +380,7 @@ ADR-026補充：使用者指定Client一般遊玩支援30～90FPS；FPS選項只
 
 - Status: **STRUCTURE ACCEPTED / PACKING MODE PENDING USER CHOICE**。
 - Boundary: 每個原版素材保持獨立 logical/physical identity。Monster、NPC、scenery、Player body part、equipment 不因 map 或 character lifetime 被合成同一 atlas。PCK 只作磁碟容器，Runtime 仍由單一 AssetStore 按需載入/釋放。
-- Map: `maps/<id>/` 只放 `world.json / terrain.png / tiles.bin / blocking.dat`；scenery placement 只引用 `maps/visuals/<asset>/atlas.json`。Monster visual 不屬於 map asset；Server population/definition 指向 `monsters/<sprite>/atlas.json`。
+- Map: `maps/<id>/` 只放 `world.json / terrain.png / tiles.bin / blocking.dat`；scenery placement 只引用 `maps/visuals/<asset>/atlas.json`。Monster visual 不屬於 map asset；Server population/definition 指向 `Enemy/<sprite>/atlas.json`。
 - Collision: `blocking.dat` 保留原版 Blocking.dat byte grid，不轉 Godot CollisionShape；Client/Server 共用 hash 與 O(1) cell lookup。
 - Full export evidence: 75,588 SPR → 7,890 independent groups → 7,890 unique logical IDs，0 collision、0 export error；21,723 managed files，約1.31GiB；Map13 contract 367 placements / 45 scenery assets、9 monster definitions / 9 monster assets、7 Player-B base parts，cross_asset_bundle=false。
 - Benchmark correction: 舊 Mode4 root 有超過固定12隻怪，舊腳本排序後取前12；Mode1/2/3 root 只有固定12隻，因此舊 Mode4 12-kind cross-mode數字失效。新版測試固定同一12個 monster IDs、固定 Map13 independent asset、每 Mode 獨立 Godot process，2/12 kinds×1000 instances×3 repeats，repeat 2 反轉模式順序。
