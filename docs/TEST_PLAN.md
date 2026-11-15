@@ -83,7 +83,7 @@ dotnet run -c Release --project tools/tests/wire_aoi_probe/WireAoiProbe.csproj
 工作順序與完成狀態在根目錄 todo.txt，歷史測試與結果在 [research/INDEX](research/INDEX.md)。
 ## 新增的必要驗收案例
 
-- **MAP-DATA002**：原始 Map15 的 15 筆 `Building_object` 只有 XY 的格式變體，必須解析全部 1,848 筆且 trailer 完整、`z_source_present=false` 明確；測試混合 XY/XYZ、損毀名稱、無效 count、截斷與尾端垃圾須 fail-closed；Map13 正常 367 筆不退化。**來源解析 PASS，原版特殊 Z 值的 Godot 3D/DrawOrder 顯示 NOT VERIFIED**。
+- **MAP-DATA002**：ObjectList root name+XY+child_count／children name+XY；count包含children，world v3保留parent_index，z=0。Map15=1833根+15子／5父建築，Map13=367根。舊「15筆缺Z」解讀已撤回，DIRECT位址與遷移見ASSET_CONVERTER。測試負／溢出count、截斷、編碼、尾端垃圾、非BLG父物件與錯誤巢狀count；合成trim/origin bounds及來源順序／絕對XY不變。原版特殊建築遮擋與真Renderer **NOT VERIFIED**。
 - **PATH001**：Map13／台地階梯／障礙角 A*，單擊地板、點擊怪物繞障、追逐目標移動、斷線 correction，Client/Server 都不能穿牆；Blocking.dat 必須以原始資料驗證。
 - **HOLD001**：長按 1 秒後持續導航，左／右鍵停止、右鍵選單正常；UI 操作、移速變更、傳點、受擊、死亡、AFK、切圖都能取消並重新取得正確狀態。
 - **FPS001**：完整同一組 packet trace，Render=0／30／60／90、正常／Unfocus／最小化／AFK，Client State hash、Command sequence、可靠事件和 Server Tick 不變。刻意阻塞 Renderer 不得阻塞 Network。
@@ -149,3 +149,7 @@ Store pump 僅是呈現資源交接；測試不代表 Network／WorldReducer FPS
 `python client/tests/run_terrain.py "C:\SGO\Godot\Godot_v4.7.2-stable_win64_console.exe" --rounds 3 --report reports/terrain_decision.json`：三候選 fresh process 各三輪；同雙圖／PCK／Atlas、1280×720和1920×1080、90暖機＋240固定trace樣本、40遠距跳轉。16 viewport capture／輪候選，獨立CPU原始tile合成比對，144張全部0差異，native engine無error/leak；WH／u16／65535空格、重複／未知ID／尾端bytes／越界fixture PASS。共用Mesh builder優化後重測，依資源／準備／tail選正式 terrain.gd，兩Mesh僅在tests。詳CLIENT_ARCHITECTURE選型表。原生GPU圖、rawlog、source/PCK SHA均留reports/，不進Git。
 
 Python Converter 67 tests PASS。這不代表地物／角色共同Y-sort／pivot、NPC timing／Animation、Server碰撞／A*、角色／多人畫面、AFK資源回基線或完整MVP002／MVP E2E通過；GPU engine counters 不直接當 OS VRAM 驗收。
+
+### 2026-11-16 world v3階層回歸
+
+Converter 68 tests PASS；雙圖runtime-only PASS；新PCK 242 BPTC／242 ASTC匯入PASS，SHA256 `5ae7608c8b756983efc186d2e162c9dc29bbb36c362bf03f97602e42cd1a74a6`。AssetStore 30次palette循環／3競態情境PASS；正式terrain draw同雙圖720p/1080p的16張GPU capture與CPU合成0像素差異PASS。首輪因TerrainData仍檢查v2而FAIL，修正及新增v2拒絕案例後重跑PASS；最終私有報告 `reports/scenery_hierarchy_terrain_final.json`。此輪未重做三候選效能比較，因只修正資料schema／階層且未改繪製策略，不產生新的效能勝出結論。CI、建築前緣遮擋、室內外／動畫與多人E2E仍NOT VERIFIED。

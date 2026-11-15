@@ -14,7 +14,7 @@ func configure(asset: Dictionary) -> Error:
 		return ERR_INVALID_DATA
 	var world: Dictionary = asset.manifest
 	var bytes: PackedByteArray = asset.extra.get("tiles", PackedByteArray())
-	if world.get("version") != 2 or bytes.size() < 8:
+	if world.get("version") != 3 or bytes.size() < 8:
 		return ERR_INVALID_DATA
 	var w := int(world.get("tile_width", 0))
 	var h := int(world.get("tile_height", 0))

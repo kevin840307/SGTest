@@ -44,7 +44,7 @@ func fixture() -> void:
 		bytes.encode_u16(8 + index * 2, [3, 65535, 5, 3][index])
 	var image := Image.create(64, 32, false, Image.FORMAT_RGBA8)
 	var texture := ImageTexture.create_from_image(image)
-	var asset := {"manifest":{"version":2,"tile_width":2,"tile_height":2,"tile_side":32,"atlas_grid":[2,1],"tile_ids":[3,5]},
+	var asset := {"manifest":{"version":3,"tile_width":2,"tile_height":2,"tile_side":32,"atlas_grid":[2,1],"tile_ids":[3,5]},
 		"extra":{"tiles":bytes},"pages":[texture]}
 	var data := Data.new()
 	check(data.configure(asset) == OK and data.cells == PackedInt32Array([0,-1,1,0]), "Original tile remap/empty cell failed")
@@ -57,6 +57,9 @@ func fixture() -> void:
 	drawing.free()
 	check(data.visible_cells(Rect2(-128,-128,32,32)).size == Vector2i.ZERO, "Off-map view not empty")
 	var corrupt: Dictionary = asset.duplicate(true)
+	corrupt.manifest.version = 2
+	check(Data.new().configure(corrupt) == ERR_INVALID_DATA, "Legacy world v2 accepted without hierarchy rebuild")
+	corrupt = asset.duplicate(true)
 	corrupt.extra.tiles.append(0)
 	check(Data.new().configure(corrupt) == ERR_INVALID_DATA, "Trailing tile bytes accepted")
 	corrupt = asset.duplicate(true)

@@ -61,3 +61,7 @@ Map terrain/scenery 和 Enemy 必須分離。Server Population 定義怪物出�
 ## 新 Client 資源 owner
 
 `client/assets_runtime/asset_store.gd` 已從零實作。單一 Store 管 Atlas／terrain，metadata 背景 worker、threaded Texture 與取消 drain，不新增按類別分開的 Loader／Cache；map palette 只持參照，載入種類仍由 owner 決定。owner epoch 是資源世代，和 Server MapEpoch 分開。scope 冪等持有，資料唯讀且跨 owner 共用；end_scope 不會強制釋放外部 Scene 還保留的引用。具體容量／取消 API、30 次 palette 測試與 Texture job 1/2 比較見 CLIENT_ARCHITECTURE。RGBA 預算值是保守頁面估計，headless 引用歸零不等於 VRAM／RSS 返回基線，實機 Gate 保持未驗證。
+
+### 2026-11-16 景物階層契約修正
+
+地圖資料改world v3，AssetStore拒絕v2，需重跑runtime-only及PCK。ObjectList的XY後整數為子物件數而非Z；Map15保留5棟父建築與15子物件，parent_index使用來源objects陣列索引，子物件p仍為絕對座標；所有z=0。維持唯一AssetStore／Atlas／PCK，不增加第二套載入流程。原版建築有mode與前緣比較、父子顯示關係，不能將「共同World排序」直接等同所有Node2D啟用y_sort。DIRECT來源／位址／schema遷移詳ASSET_CONVERTER；原版遮擋、室內外、動畫時間及完整景物Renderer仍NOT VERIFIED。

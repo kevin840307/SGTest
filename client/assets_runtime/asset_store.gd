@@ -38,7 +38,7 @@ class DecodeJob extends RefCounted:
 		var extra: Dictionary = {}
 		if asset_id.begins_with("maps/") and asset_id.get_slice_count("/") == 2:
 			var map_id := int(asset_id.get_slice("/", 1))
-			if manifest.get("map_id") != map_id or manifest.get("version") != 2:
+			if manifest.get("map_id") != map_id or manifest.get("version") != 3:
 				result = {"error": "Wrong world map/schema"}
 				return
 			var grid = manifest.get("atlas_grid", [])

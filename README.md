@@ -65,3 +65,5 @@ powershell -ExecutionPolicy Bypass -File tools/asset_converter/verify_converter.
 - 舊版 Godot Client 與 C# Server 皆已從正式重建版移除；未來重建 **Godot 4 Client + .NET 8 C# Server**。
 - `tools/asset_converter` 已整合 Height-Dense P0、外部 VRAM-compressed `assets.pck`；已淘汰的 benchmark 腳本只保留於 Git 歷史，未來效能測試以新 Client/Server 實際負載為準。
 - 只靠現有原版素材轉換工具與文件即可開始重建；新 Client/Server 功能標示為未完成，請依 `SPEC.md` 及 `todo.txt`。
+
+2026-11-16 資料修正：world v3保留原版建築父子關係（Map15=1833根+15子），撤回先前「15筆缺Z」解讀；根記錄XY後為child_count，世界z=0。舊v2須由唯一Converter重建runtime/PCK，AssetStore拒絕v2。原版建築前緣排序／室內外顯示尚未實作，完整景物層與MVP仍未完成；見ASSET_CONVERTER的DIRECT證據及TEST_PLAN。

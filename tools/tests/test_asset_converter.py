@@ -250,7 +250,7 @@ class ConverterTests(unittest.TestCase):
             collision = b"original-blocking-grid"
             (map_dir / "blocking.dat").write_bytes(collision)
             world = {
-                "version": 2,
+                "version": 3, "map_id": 13,
                 "collision_sha256": hashlib.sha256(collision).hexdigest(),
                 "objects": [{
                     "atlas": "maps/visuals/tree/atlas.json",
@@ -297,6 +297,11 @@ class ConverterTests(unittest.TestCase):
             self.assertEqual(result["player_part_assets"], 7)
             self.assertEqual(result['npc_visual_assets'], 1)
             self.assertFalse(result['gameplay_ready'])
+            for broken in ({**world, 'version':2}, {**world, 'map_id':15}):
+                (map_dir/'world.json').write_text(json.dumps(broken))
+                with self.assertRaisesRegex(ValueError,'world v3'):
+                    check_runtime(stage, assets, 13)
+            (map_dir/'world.json').write_text(json.dumps(world))
             npc_atlas = assets/'npcs/npc001/atlas.json'
             npc_atlas.unlink()
             with self.assertRaisesRegex(ValueError,'missing independent NPC'):

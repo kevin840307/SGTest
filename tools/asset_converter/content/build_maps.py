@@ -2,7 +2,8 @@
 
 Map INI selects PIC (uint32 width/height, RGB565 strip), MapBlock (uint32
 width/height then uint16 tile IDs; 65535 empty), Blocking (uint32 width/height
-then one byte/cell), and ObjectList (uint32 count, byte-length name + 3 int32).
+then one byte/cell), and ObjectList (total count including children, name + XY
+and a child count on top-level records only).
 Sprite object images remain shared with build_assets output; no recovered scenes.
 """
 import argparse
@@ -55,27 +56,13 @@ def dimensions(raw, stride):
     return w,h
 
 
-def _next_object_header(raw, at):
-    """Confirm a complete next path header, not merely an arbitrary length byte."""
-    if at >= len(raw):
-        return False
-    length = raw[at]
-    if length < 1 or at + 1 + length + 8 > len(raw):
-        return False
-    try:
-        name = raw[at+1:at+1+length].decode('cp950')
-    except UnicodeDecodeError:
-        return False
-    return (name.startswith(('OBJECT\\', 'BUILDING\\'))
-            and name.lower().endswith(('.blg', '.sth', '.sif')))
-
-
 def object_records(raw):
-    """Preserve Map15's original short building records without shifting all later objects.
+    """Decode the hierarchy, not a guessed XYZ layout.
 
-    Fifteen Map15 placements have XY only, with the next object's length+path
-    immediately after Y. Normal placements use XYZ. An absent Z is explicitly
-    marked rather than misreading the following object as a giant Z integer.
+    DIRECT: Paradise.exe CELMap2D::MapObjListConvert, 0x005291B5–0x005297AB.
+    The header includes children; only roots have a following int32 child count.
+    Children are name+XY, have no own count, and retain absolute world XY.
+    Both root and child SetWorldPosition calls explicitly pass zero Z.
     """
     if len(raw) < 4:
         raise ValueError('short ObjectList header')
@@ -83,6 +70,7 @@ def object_records(raw):
     if count > 1_000_000:
         raise ValueError('ObjectList count outside supported bounds')
     at, records = 4, []
+    parent_index, children_left = None, 0
     for index in range(count):
         if at >= len(raw):
             raise ValueError(f'truncated ObjectList record {index}')
@@ -97,15 +85,22 @@ def object_records(raw):
         at += length
         x, y = struct.unpack_from('<ii', raw, at)
         at += 8
-        z_present = True
-        if index + 1 < count and _next_object_header(raw, at):
-            z, z_present = 0, False
+        if children_left:
+            child_count = 0
+            children_left -= 1
+            parent = parent_index
         else:
             if at + 4 > len(raw):
-                raise ValueError(f'truncated ObjectList Z at record {index}')
-            z = struct.unpack_from('<i', raw, at)[0]
+                raise ValueError(f'truncated ObjectList child count at record {index}')
+            child_count = struct.unpack_from('<i', raw, at)[0]
             at += 4
-        records.append((name, x, y, z, z_present))
+            if child_count < 0 or child_count > count-index-1:
+                raise ValueError(f'ObjectList child count outside remaining records at {index}')
+            if child_count and not name.lower().endswith('.blg'):
+                raise ValueError(f'ObjectList non-building parent at record {index}')
+            parent, parent_index, children_left = None, index, child_count
+        records.append({'name':name, 'p':[x,y], 'parent_index':parent,
+                        'child_count':child_count})
     if raw[at:] not in (b'', b'\0\0\0\0'):
         raise ValueError('unexpected ObjectList trailer or record alignment')
     return records
@@ -114,7 +109,9 @@ def object_records(raw):
 def objects(raw, source):
     result = []
     decoded_cache = {}
-    for name, x, y, z, z_present in object_records(raw):
+    for record in object_records(raw):
+        name = record['name']
+        x, y = record['p']
         resource = resolve(source,'map/'+name)
         sprite = object_sprite(source,resource)
         relative = sprite.relative_to(source)
@@ -136,8 +133,8 @@ def objects(raw, source):
         top = min((y+b[1] for b in local_boxes), default=y)
         right = max((x+b[2] for b in local_boxes), default=x)
         bottom = max((y+b[3] for b in local_boxes), default=y)
-        result.append({'atlas':source_sprite_manifest(key),'clip':clip,'p':[x,y], 'z':z,
-                       'z_source_present':z_present,
+        result.append({'atlas':source_sprite_manifest(key),'clip':clip,'p':[x,y], 'z':0,
+                       'parent_index':record['parent_index'], 'child_count':record['child_count'],
                        'bounds':[left,top,right-left,bottom-top],'frames':frame_count,
                        'source':key})
     return result
@@ -197,7 +194,7 @@ def build(source, output, map_id):
     placed = objects(plain(object_path),source)
     hashes = {p.relative_to(source).as_posix():hashlib.sha256(plain(p)).hexdigest()
               for p in [config_path,pic_path,tile_path,blocking_path,object_path]}
-    document = {'version':2,'map_id':map_id,'name':settings.get('Name',''), 'tile_side':side,
+    document = {'version':3,'map_id':map_id,'name':settings.get('Name',''), 'tile_side':side,
                 'tile_width':w,'tile_height':h,'collision_cell':16,'size':[w*side,h*side],
                 'atlas_grid':[columns,rows],'tile_ids':used,'objects':placed,
                 'source_hashes':hashes,

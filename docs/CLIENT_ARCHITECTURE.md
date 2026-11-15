@@ -144,3 +144,7 @@ Windows／Godot 4.7.2／NVIDIA GeForce RTX 3050／OpenGL3；VSync disabled、無
 Raw report=`reports/terrain_decision.json`，含每候選／每輪／每圖／解析度的 P95/P99/Max、準備時間、更新時間、draw calls、記憶體、process CPU、來源 SHA／PCK SHA／command／GPU captures。三候選 engine CPU 秒範圍分別5.125–5.219／5.313–5.484／5.688–5.797，包含載入、截圖編碼、準備與 trace。Frame 是 render-only native loop 區間，第一 view 不含共用 tiles 正規化（約10.2–11.4ms）和 AssetStore 載入；不是可玩 Client FPS／input-to-render。網路不適用。外部背景程序未控制，OS／driver spike 不作 hard realtime 保證（觀測 Frame Max：區域1.702ms、全圖9.516ms、可視chunk3.828ms）。
 
 引擎 Texture counter 在相同 viewport 尺寸歸還後回到13,373,731 bytes；buffer pool 留有高水位，這只代表引擎計數，**不等於 OS dedicated VRAM／RSS 全部回到基線**。GPU／driver cache、30次完整 World 生命週期與 AFK、terrain混合地物／角色／Y-sort／pivot／動畫、相機 zoom、macOS／Release、網路與多人 E2E 均 NOT VERIFIED。初版比較曾誤把LRU上限套到全圖候選，已修正並重跑；不以該錯誤淘汰全圖 Mesh。早期只有快取候選跑遠距跳轉／wall混入Python比對的報告不作最終選型數據，最終三候選使用相同 trace 並只記原生程序 wall。
+
+### 2026-11-16 景物階層契約修正
+
+地圖資料改world v3，AssetStore拒絕v2，需重跑runtime-only及PCK。ObjectList的XY後整數為子物件數而非Z；Map15保留5棟父建築與15子物件，parent_index使用來源objects陣列索引，子物件p仍為絕對座標；所有z=0。維持唯一AssetStore／Atlas／PCK，不增加第二套載入流程。原版建築有mode與前緣比較、父子顯示關係，不能將「共同World排序」直接等同所有Node2D啟用y_sort。DIRECT來源／位址／schema遷移詳ASSET_CONVERTER；原版遮擋、室內外、動畫時間及完整景物Renderer仍NOT VERIFIED。
