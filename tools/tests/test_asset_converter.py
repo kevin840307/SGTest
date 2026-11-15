@@ -13,7 +13,7 @@ from unittest.mock import patch
 REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO / "tools"))
 sys.path.insert(0, str(REPO / "tools" / "asset_converter"))
-from asset_converter.atlas.adaptive_atlas import build_group, POLICY
+from asset_converter.atlas.dense_atlas import build_group, POLICY
 from asset_converter.cli import archive_all, check_runtime
 from asset_converter import cli
 from asset_converter.source.convert_assets import decode_spr, convert
@@ -148,6 +148,7 @@ class ConverterTests(unittest.TestCase):
         package = REPO / "tools" / "asset_converter"
         modules = [
             "adaptive_atlas",
+            "dense_atlas",
             "selector",
             "animation_definition",
             "asset_paths",
@@ -175,7 +176,7 @@ class ConverterTests(unittest.TestCase):
             "inspect_act": "source",
             "legacy_direction": "source",
             "build_assets": "source",
-            "adaptive_atlas": "atlas", "selector": "atlas",
+            "adaptive_atlas": "atlas", "dense_atlas": "atlas", "selector": "atlas",
             "build_atlas_groups": "atlas",
             "animation_definition": "content",
             "runtime_animation_semantics": "content",
@@ -199,7 +200,7 @@ class ConverterTests(unittest.TestCase):
                 "converter dependency must be packaged locally: " + name,
             )
 
-    def test_atomic_build_incremental_repair_and_source_edit(self):
+    def test_dense_build_incremental_repair_and_source_edit(self):
         with tempfile.TemporaryDirectory() as t:
             src = Path(t) / "client"
             dst = Path(t) / "out"

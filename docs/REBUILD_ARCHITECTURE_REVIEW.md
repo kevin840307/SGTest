@@ -114,3 +114,7 @@
 - 在確認無程序占用與 worktree 依賴後，刪除主專案可重建的 `.cache` 約 11.24 GiB、`local-assets` 約 1.11 GiB、`reports` 約 0.09 GiB、舊 `client/assets` 約 1.28 GiB、`server/content` 產物；保留 `client/assets/.gdignore`。4 支本機一次性整理腳本已封存，不作正式 Converter。
 - 此工作目前安全存在於 `rebuild/clean-slate-20261115` 分支；**不要把主 `main` 仍保留的舊 Runtime 誤報為已刪除**。Main 快速前進／合併前，先由原工作階段決定尚未提交的轉換器改動如何獨立提交或移交。
 - 刪掉 `.cache` 包含本地 .NET SDK／Godot template 快取；後續重建 Client/Server 和打包需要重新安裝/下載，不是 Converter 遺失。原圖、Sidecar、Benchmark 皆需依正式 CLI 重新產生。
+
+## 最終整合註記
+
+本文件前述「另一 Session 尚未提交／尚未合併」均是清理當時的**歷史盤點**，並非最終專案狀態。最新狀態以根目錄 `SPEC.md`／`todo.txt` 為準：已逐檔驗證並合併 Height-Dense/PCK Converter 與對照測試工具，舊 Client/Server 保持移除；正式主線及唯一維護位置為 `main`／`C:\SGO\SRC\SGTest`。WIP 快照只作安全備份，不是第二個需維護的專案。

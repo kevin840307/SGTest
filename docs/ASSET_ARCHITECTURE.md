@@ -1,6 +1,6 @@
 # SGTest — Asset Architecture
 
-**狀態：已決策的資料契約；新 Client Runtime 尚未實作。** 保留工具在 tools/asset_converter；其他 Session 的 Height-Dense/PCK 工作尚未整合進本 clean-slate 分支。
+**目前狀態：Height-Dense P0 Builder + 外部 PCK Converter 已整合與測試；新版 Client AssetStore/World Renderer 仍未實作。** 正式實作位於 `tools/asset_converter/atlas/dense_atlas.py`、`runtime_pack.py`，不需另一個維護路徑。
 
 ## 一個原始素材 = 一個獨立資產
 
@@ -51,3 +51,9 @@ Map terrain/scenery 和 Enemy 必須分離。Server Population 定義怪物出�
 單一 AssetStore 按需 acquire／release／cancel，map palette 可預取**參照**但不能使不在畫面的整張地圖怪物常駐 VRAM。原始視圖資料要保留 8 方向 alias、鏡像、Origin/trim、逐幀 ticks、attack/hit/death 時序、paper doll draw order。
 
 外部 PCK 與主程式分離；Godot imported VRAM compressed Texture 的 Windows 桌面與 macOS 所需格式須分平台驗證。**PCK 只是封裝，不是 Atlas 共用依據**。Windows 取得的壓縮結果不能推論 macOS 實測已通過。
+
+## 已落地的可維護策略
+
+將 Atlas layout 與 Godot Renderer **分開決策**，防止日後替換 Canvas／Sprite 就必須重新轉換原始素材。現在正式 Builder 已保留：每素材獨立、Height-Dense P0、依尺寸自動選擇單頁、原版方向/Frame/Origin metadata、失效 cache 來源雜湊檢查。外部 PCK 使用 Godot VRAM-compressed importer；小型 UI/Icon 保持 lossless。GPU format 由平台支援情況決定，不假設 BPTC 等於 Mac 的實際硬體壓縮格式。
+
+**Runtime 首選**為同 Enemy 共用 `SpriteFrames`、可見實體獨立 `AnimatedSprite2D`、所有類型共用 World Y-sort；但屬於新 Client 待實作，不把隔離式 Benchmark 當成已交付的遊戲功能。

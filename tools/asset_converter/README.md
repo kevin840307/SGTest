@@ -19,7 +19,7 @@ python tools/asset_converter/cli.py build "C:\SGO\Stargate Online IE HK2"
 - benchmarks/ — Packing/Recovered 原生 Renderer、壓縮與畫面對照測試，**不是 production runtime**
 - operation_lock.py — build 互斥鎖，避免產物被多個 Session 同時覆蓋
 
-其他 Session 工作樹中的 Height-Dense、runtime_pack.py、GPU imported Texture/PCK 和相關測試尚未提交至本 clean-slate 分支；**不可假裝它們已存在或通過測試**。在 REB002 安全合併完成前不要發布正式 Client 資產版本。
+**目前正式政策已合併：Per-Asset Height-Dense P0 + `runtime_pack.py` 外部壓縮 PCK。** 舊 Adaptive Atomic 只保留研究／比較用途；Client／Server 原型已刪除，正式建置不應依賴舊 `client/project.godot`。
 
 ## 轉換輸出
 
@@ -42,3 +42,11 @@ powershell -ExecutionPolicy Bypass -File tools/asset_converter/verify_converter.
 不使用已移除的 client/project.godot、server/*.csproj 做必需驗證。大量影像與 EXE 發行必須在新專案建置後另測。
 
 技術規格：[docs/ASSET_CONVERTER.md](../../docs/ASSET_CONVERTER.md)；歷史研究：[docs/research/INDEX.md](../../docs/research/INDEX.md)。
+
+## Production Height-Dense / external PCK
+
+- `atlas/dense_atlas.py`：唯一正式 per-asset Height-Dense P0，按照 Frame 高／寬降序排序，單頁最大 4096、超量同素材分頁；逐幀檢查裁切/像素/Origin/hash。
+- `runtime_pack.py` + `runtime_pack_packer.gd`：匯入 Godot `Texture2D`、世界 Atlas 採 VRAM 壓縮、UI/icons 保持 lossless，將各**獨立資產**輸出到外部 `assets.pck`。
+- `smoke_runtime_pack.py <godot.exe>`：獨立建立測試 Atlas、壓縮 PCK，再在空白 Godot 專案掛載，檢查 `ResourceLoader`。此 Smoke 不要求原始遊戲 Client/Server。
+- `benchmarks/packing/`：保留 Recovered Model1、Sprite、Map13、MaxRects/POT 對照程序與候選，不是第二套正式 Builder。
+- 先跑 `verify_converter.ps1`；完整原版來源仍須重新驗證全量 SPR/ACT，發行前 Windows/macOS 要另測。

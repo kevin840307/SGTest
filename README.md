@@ -38,7 +38,7 @@ powershell -ExecutionPolicy Bypass -File tools/asset_converter/verify_converter.
 
 輸出位置通常為 `local-assets/`（完整私有索引）、`client/assets/`（未來 Client 內容）、`server/content/`（未來 Server 內容）。後兩者**是資料輸出目錄，不代表可執行程式存在**。原版及衍生圖片不得推送至公開 GitHub。
 
-現有已提交的轉換器基線可能與另一個 Session 尚未提交的 **Height-Dense / external PCK** 改動不同；該改動需先獨立測試、提交，再安全合併。**不要用重建 Client 的理由刪除正在開發的轉換器工作樹。**
+目前已將經實測的 **Per-Asset Height-Dense P0 Builder、VRAM imported Texture、外部 assets.pck Converter 與 Recovered/Map13 benchmark 腳本**整合回正式重建基線，沒有保留另一個可執行 Client/Server 原型。所有功能後續只在 `main` 和原本 `C:\SGO\SRC\SGTest` 開發。
 
 ## 新版核心約束
 
@@ -51,3 +51,10 @@ powershell -ExecutionPolicy Bypass -File tools/asset_converter/verify_converter.
 - Server 對位置、碰撞、戰鬥、經濟、交易保持權威；DB 不阻塞 World Tick。
 
 **目前不提供任何 `dotnet run` 或 Godot Client 啟動命令，直到重新開發實際完成並通過測試。**
+
+## 重建狀態（2026-11-15）
+
+- **唯一正式維護目錄：`C:\SGO\SRC\SGTest`，分支：`main`。** 不需管理第二套專案路徑。
+- 舊版 Godot Client 與 C# Server 皆已從正式重建版移除；未來重建 **Godot 4 Client + .NET 8 C# Server**。
+- `tools/asset_converter` 已整合 Height-Dense P0、外部 VRAM-compressed `assets.pck` 與對照 benchmark；請用該唯一 Converter CLI。
+- 只靠現有原版素材轉換工具與文件即可開始重建；新 Client/Server 功能標示為未完成，請依 `SPEC.md` 及 `todo.txt`。

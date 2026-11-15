@@ -8,7 +8,7 @@ import json
 from pathlib import Path
 from PIL import Image
 
-from .adaptive_atlas import _is_cached, _source_fingerprint, DECODER_SHA256
+from .dense_atlas import _is_cached, _source_fingerprint, DECODER_SHA256
 from .build_atlas_groups import select_groups
 from ..source.convert_assets import sidecar_document
 

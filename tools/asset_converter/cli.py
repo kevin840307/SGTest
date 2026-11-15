@@ -7,7 +7,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO / "tools"))
 
-from asset_converter.atlas.adaptive_atlas import build_group, POLICY
+from asset_converter.atlas.dense_atlas import build_group, POLICY
 from asset_converter.atlas.build_atlas_groups import select_groups
 from asset_converter.atlas.archive_audit import audit_archive
 from asset_converter.operation_lock import converter_operation, ConverterBusy
@@ -98,7 +98,7 @@ def archive_all(source: Path, archive: Path, args) -> dict:
             summary["errors"].append({"group": key.as_posix(), "error": str(exc)})
         if n % 50 == 0 or n == total:
             print(
-                f"[ADAPTIVE ATLAS] {n}/{total} groups; failures={len(summary['errors'])}",
+                f"[HEIGHT DENSE] {n}/{total} groups; failures={len(summary['errors'])}",
                 flush=True,
             )
             write_json(
@@ -267,7 +267,7 @@ def main() -> int:
     sub = ap.add_subparsers(dest="command", required=True)
     p = sub.add_parser(
         "build",
-        help="extract original source, build Adaptive Atomic Atlas for SPR, then runtime bundles",
+        help="extract original source, build per-asset Height-Dense Atlas for SPR, then runtime contracts",
     )
     p.add_argument(
         "original", type=Path, help="original HK2 client folder containing Data1.dat"

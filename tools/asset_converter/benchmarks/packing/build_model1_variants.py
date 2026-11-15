@@ -35,6 +35,8 @@ for monster in FIXED_12:
     SAMPLES.setdefault("mixed_"+monster,"enemy/"+monster)
 
 WIDTHS=(128,160,192,224,256,320,384,448,512,640,768,896,1024,1152,1280,1408,1536,1664,1792,1920,2048,2304,2560,2816,3072,3328,3584,3840,4096)
+POT_WIDTHS=(128,256,512,1024,2048,4096)
+POT_HEIGHTS=(64,128,256,512,1024,2048,4096)
 
 def group_index():
     return {k.as_posix().casefold():(k,v) for k,v in select_groups(SOURCE).items()}
@@ -76,6 +78,81 @@ def best_height(frames,padding):
         if best is None or candidate[:4]<best[:4]: best=candidate
     if best is None: raise ValueError("height packing failed")
     _,_,w,h,placements=best
+    return render(frames,values,w,h,placements,padding)
+
+def align4(value):
+    return (value + 3) & ~3
+
+def best_height_bc4(frames, extrude_edges):
+    values=order_height(rows(frames)); best=None
+    for width in WIDTHS:
+        if any(align4(r["w"])>width for r in values):
+            continue
+        x=y=shelf_h=0; placements={}; used_w=0
+        valid=True
+        for r in values:
+            cell_w=align4(r["w"]); cell_h=align4(r["h"])
+            if x and x+cell_w>width:
+                y+=shelf_h; x=0; shelf_h=0
+            if y+cell_h>4096:
+                valid=False
+                break
+            placements[r["id"]]=(x,y)
+            x+=cell_w
+            shelf_h=max(shelf_h,cell_h)
+            used_w=max(used_w,x)
+        if not valid:
+            continue
+        used_h=y+shelf_h
+        candidate=(used_w*used_h,max(used_w,used_h),used_w,used_h,placements)
+        if best is None or candidate[:4]<best[:4]:
+            best=candidate
+    if best is None:
+        raise ValueError("BC4-aligned height packing failed")
+    _,_,w,h,placements=best
+    return render_bc4(frames,values,w,h,placements,extrude_edges)
+
+def render_bc4(frames, values, w, h, placements, extrude_edges):
+    page=Image.new("RGBA",(w,h))
+    records=[{"page":-1,"rect":[0,0,0,0],"trim":[0,0],"origin":[f.origin_x,f.origin_y],"size":list(f.image.size)} for f in frames]
+    for r in values:
+        x,y=placements[r["id"]]
+        crop=frames[r["id"]].image.crop(r["bbox"])
+        page.paste(crop,(x,y))
+        cell_w=align4(crop.width); cell_h=align4(crop.height)
+        if extrude_edges:
+            right=cell_w-crop.width
+            bottom=cell_h-crop.height
+            if right>0:
+                page.paste(crop.crop((crop.width-1,0,crop.width,crop.height)).resize((right,crop.height)),(x+crop.width,y))
+            if bottom>0:
+                last_row=page.crop((x,y+crop.height-1,x+cell_w,y+crop.height))
+                page.paste(last_row.resize((cell_w,bottom)),(x,y+crop.height))
+        records[r["id"]].update(page=0,rect=[x,y,crop.width,crop.height],trim=[r["bbox"][0],r["bbox"][1]])
+    return page,records
+
+def best_height_pot(frames,padding):
+    values=order_height(rows(frames)); best=None
+    for width in POT_WIDTHS:
+        if any(r["w"]+padding*2>width for r in values):
+            continue
+        x=y=shelf_h=0; placements={}
+        for r in values:
+            cw,ch=r["w"]+padding*2,r["h"]+padding*2
+            if x and x+cw>width:
+                y+=shelf_h; x=0; shelf_h=0
+            placements[r["id"]]=(x,y)
+            x+=cw; shelf_h=max(shelf_h,ch)
+        used_h=y+shelf_h
+        height=next((candidate for candidate in POT_HEIGHTS if candidate>=used_h),None)
+        if height is None:
+            continue
+        candidate=(width*height,max(width,height),width,height,placements,used_h)
+        if best is None or candidate[:4]<best[:4]:
+            best=candidate
+    if best is None:
+        raise ValueError("power-of-two rectangular height packing failed")
+    _,_,w,h,placements,_=best
     return render(frames,values,w,h,placements,padding)
 
 def best_maxrects(frames,padding):
@@ -137,8 +214,25 @@ def main():
         key,paths=groups[lookup.casefold()]
         frames,meta=decode(paths)
         for strategy,padding,packer in [
-            ("height_p0",0,"height"),("height_p1",1,"height"),("height_p2",2,"height"),("maxrects_p1",1,"maxrects")]:
-            page,records=best_height(frames,padding) if packer=="height" else best_maxrects(frames,padding)
+            ("height_p0",0,"height"),
+            ("height_p1",1,"height"),
+            ("height_p2",2,"height"),
+            ("height_bc4_transparent",0,"bc4_transparent"),
+            ("height_bc4_extrude",0,"bc4_extrude"),
+            ("height_pot_p0",0,"height_pot"),
+            ("height_pot_p1",1,"height_pot"),
+            ("maxrects_p1",1,"maxrects"),
+        ]:
+            if packer=="height":
+                page,records=best_height(frames,padding)
+            elif packer=="bc4_transparent":
+                page,records=best_height_bc4(frames,False)
+            elif packer=="bc4_extrude":
+                page,records=best_height_bc4(frames,True)
+            elif packer=="height_pot":
+                page,records=best_height_pot(frames,padding)
+            else:
+                page,records=best_maxrects(frames,padding)
             report.append(save(strategy,name,key.as_posix(),page,records,meta))
         print(name,"done",flush=True)
     out=OUTPUT.parent/"model1_variant_build.json";out.write_text(json.dumps({"samples":SAMPLES,"rows":report},indent=2),encoding="utf8")

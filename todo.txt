@@ -5,7 +5,7 @@
 ## 基線與轉換器
 
 - REB001 [x] 2026-11-15 clean-slate 基線完成：舊 Client/Server 可執行程式、專屬 CI、舊渲染／身份／效能工具已移出；Converter 與必要原始格式工具保留。原 docs 約 63 份整理為 12 份正式文件＋4 份研究彙編＋索引，54 份研究來源 SHA-256 全部對應 Git 歷史，正式文件連結 0 broken；Converter tests 79 PASS、純 Python contracts 27 tests OK (1 skipped)；CLI --help PASS、verify_converter.ps1 PASS。原本 main 未提交的 Height-Dense/PCK WIP 沒有修改或刪除。
-- REB002 [ ] 將**其他 Session 工作樹**尚未提交的 Per-Asset Height-Dense Builder、runtime_pack.py、平台壓縮 import、相關測試獨立驗證並安全合併。不能視為本清理分支已完成。不得 stash/reset 覆寫。
+- REB002 [x] **Height-Dense/PCK Converter 合併完成**：19 個主工作樹 WIP Converter/benchmark 來源檔案 SHA-256 逐檔對照轉入正式單一 Converter；含 `atlas/dense_atlas.py`、`runtime_pack.py`、`runtime_pack_packer.gd`、新增測試；84 項 Converter 測試通過；Godot 4.7.2 外部 assets.pck（Enemy VRAM 壓縮／UI lossless）BPTC/ASTC 匯入，獨立空白 Godot 專案 ResourceLoader 2/2 通過，提供可重跑 `smoke_runtime_pack.py`。完整原版資料與 macOS 實機仍未驗證。
 - REB003 [ ] 重新驗證 7,890 Asset／75,588 SPR 覆蓋與無跨素材合圖；P0/壓縮邊緣在不同縮放驗證；Windows/Mac 資產格式；Converter 應能在沒有 Client/Server 可執行原型時運作。
 
 ## Client 新版（尚未實作）
@@ -34,5 +34,5 @@
 - REB004 [x] Review 與增補既有精簡文件：Client/Server 的功能型目錄、高聚力低耦合、單一 AssetStore／Server Single Writer、阻塞隔離、A* 原版 Blocking、點地板／長按 1 秒鎖定／停止、Recovered/Old 唯讀參考、跨類型 Y-sort、多開、Render FPS 與 Network/Server Tick 分離、AFK Render 0／釋放 GPU／可靠事件不丟失；不額外建立規格碎檔。
 - REB005 [x] 純 Converter 重新驗收：`verify_converter.ps1` 不再錯誤地假設空白 `client/assets` 可做 `--runtime-only`；79 項 Converter、27 項格式/內容契約（1 skipped）皆 PASS；`-Client` 可選用少量來源抽樣重建（**全量來源重新跑仍未驗證**）。
 - REB006 [x] 安全清掉主專案生成資料：原 Data1.dat 確認存在、Git worktree 從 `.cache` 移出、其他工作階段 32 個未提交檔案另做 CRC PASS 備份；刪除約 13.7 GiB 的 `.cache`、`local-assets`、`reports`、Client 圖片與 Server 內容產物，保留 `client/assets/.gdignore`。原版來源、Recovered/Old 和 Converter WIP 未變更。
-- REB007 [ ] **仍須安全整合**：目前 clean-slate 在 `rebuild/clean-slate-20261115`，原 `main` 有其他 Session 未提交的 Converter WIP，不可直接 reset/stash/覆蓋來切分支。待原 Session 提交或移交後，合併完整 Height-Dense / external PCK Converter，驗證再進主線。新 Client/Server 尚未寫。
+- REB007 [x] Clean-slate 與 Height-Dense/PCK 已完成安全移交並整合到單一正式基線；在主 `main` 快速前進前逐檔驗證 SHA-256、獨立備份未提交 WIP（CRC PASS）及保留原版素材；合併後僅 `C:\SGO\SRC\SGTest` 作為維護路徑，舊 Client/Server 實作不帶回。
 - REB008 [ ] 新版 Client/Server 從 todo 的 REB010/020 開始，必須驗收 A*／長按／Render 0 AFK／多開與真正多人 AOI；舊 Prototype 的 PASS 不算數。

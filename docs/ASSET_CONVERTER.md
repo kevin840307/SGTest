@@ -1,6 +1,6 @@
 # SGTest 素材轉換器（重建版本）
 
-**狀態：tools/asset_converter 是唯一維護的正式 Converter。** clean-slate 分支保留已提交版本；其他 Session 尚未提交的 Height-Dense / runtime_pack 不能當作本分支已具備的功能。
+**目前狀態：正式唯一 Converter 包含 Height-Dense Builder 及 Godot external assets.pck packer，已完成純 Python unit tests 與空白 Godot 專案掛載 PCK 的 smoke；完整原版素材重新轉換、Windows Release 與 macOS 實機尚未完成。**
 
 ## 正式入口
 
@@ -22,7 +22,7 @@ Converter **不應依賴**可執行的 client/project.godot 或 server/*.csproj�
 | atlas/ | 依 asset ID 抽幀、裁切、排列、像素驗證／候選演算法 |
 | content/ | AssetCatalog、Map terrain/blocking/scenery、Server Population、NPC、DrawOrder、可索引資產發布 |
 | benchmarks/ | 回歸／素材編排／Model1 比對；**不是正式 Runtime** |
-| runtime_pack.py（待合併） | Godot imported textures、壓縮 remap、產生外部 assets.pck；不得依賴舊可執行 Client |
+| `runtime_pack.py` + `runtime_pack_packer.gd` | **已整合**：Godot imported textures，BPTC/ASTC remap、UI lossless、external assets.pck；不依賴可執行 Client，macOS 實機仍待驗證 |
 
 不新增第二套「依怪物／裝備／地圖類別」的 Converter，也不回復舊 map/session bundles。
 
@@ -58,3 +58,20 @@ python tools/asset_converter/cli.py build "C:\SGO\Stargate Online IE HK2" --serv
 ```
 
 `--server-dat` 所示為**示例佔位路徑**，必須換成實際原始 Server Dat；無該來源時 Converter 可做 SPR/Atlas，但不能宣稱 Server population 已重建。目錄 `.cache` 和 `local-assets` 會按命令重新建立，舊圖片不在 Git。避免讓正式轉換器依賴已刪除的 `client/project.godot` 或舊 `server/*.csproj`。
+
+## 已合併的 Height-Dense 與 external PCK 驗證
+
+```powershell
+# 不依賴舊 Client/Server 的 Converter 合約測試
+powershell -ExecutionPolicy Bypass -File tools/asset_converter/verify_converter.ps1
+
+# 真正呼叫 Godot 4 Editor Import／PCKPacker，
+# 建立 1 份壓縮 Enemy 圖與 1 份無損 UI 圖，
+# 再用完全空白 Godot 專案載入外部 assets.pck；所有暫存自動清除
+python tools/asset_converter/smoke_runtime_pack.py "C:\SGO\Godot\Godot_v4.7.2-stable_win64_console.exe"
+
+# 有完整已轉換素材時再輸出正式外部 PCK
+python tools/asset_converter/runtime_pack.py "C:\SGO\Godot\Godot_v4.7.2-stable_win64_console.exe" --assets client/assets --output .cache/client-release/assets/assets.pck
+```
+
+以上 Smoke 已在 Windows/Godot 4.7.2 通過，驗證 PCK 實際可由**另一個空白 Godot 專案**載入。這**不是**正式遊戲的 Windows Release、多機多開或 macOS GPU 格式相容性驗證。壓縮 UI icon 及字體必須繼續使用 lossless 模式。
