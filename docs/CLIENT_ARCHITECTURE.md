@@ -148,3 +148,9 @@ Raw report=`reports/terrain_decision.json`，含每候選／每輪／每圖／�
 ### 2026-11-16 景物階層契約修正
 
 地圖資料改world v3，AssetStore拒絕v2，需重跑runtime-only及PCK。ObjectList的XY後整數為子物件數而非Z；Map15保留5棟父建築與15子物件，parent_index使用來源objects陣列索引，子物件p仍為絕對座標；所有z=0。維持唯一AssetStore／Atlas／PCK，不增加第二套載入流程。原版建築有mode與前緣比較、父子顯示關係，不能將「共同World排序」直接等同所有Node2D啟用y_sort。DIRECT來源／位址／schema遷移詳ASSET_CONVERTER；原版遮擋、室內外、動畫時間及完整景物Renderer仍NOT VERIFIED。
+
+### 2026-11-16 景物共用定義與alternate覆蓋
+
+world v3新增scenery_schema v1；scenery_definitions按原始BLG/STH共用metadata，placement保留definition／parent_index／絕對p，避免重複點集。定義包含sorting_mode、SIF draw_group、前緣raw/effective、兩appearance與來源hash。Scenery／角色共同排序必須區分sorting_mode與draw_group；GetMode的0/1/2與建築前緣不能用Godot單一Y值取代。Renderer仍未實作，不把資料Gate當成遮擋PASS。
+
+AssetStore仍是唯一資產入口；測試palette改遍歷所有appearance，Map15從221增至233 Asset（含terrain及Player等），Map13仍63。Catalog新增12個alternate，總254 Asset，PCK更新見ASSET_CONVERTER。30次palette循環／3競態與16張terrain GPU像素回歸PASS；這不是建築切換／NPC timing／多人同步／VRAM斜率測試。下一步以可重跑的原版front比較及兩欄切換fixture實作景物與角色遮擋，fade cadence須再驗證。

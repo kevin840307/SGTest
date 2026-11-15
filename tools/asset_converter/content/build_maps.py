@@ -17,6 +17,7 @@ import time
 from PIL import Image
 from ..json_files import write_json
 from ..source.runtime_spr import decode_spr, unwrap_cde
+from ..source.scenery import Reader, parse_blg, parse_sif_contract
 from .asset_paths import source_sprite_manifest
 
 
@@ -106,34 +107,82 @@ def object_records(raw):
     return records
 
 
-def objects(raw, source):
+def scenery_definition(source, resource):
+    """Preserve two building appearances, SIF mode and original front geometry."""
+    building = resource.suffix.lower() == '.blg'
+    definition = {'sorting_mode':0 if building else 1}
+    if building:
+        definition.update(parse_blg(plain(resource)))
+        refs = [definition.pop('primary'), definition.pop('alternate')]
+    else:
+        refs = [resource.name]
+    hashes = {resource.relative_to(source).as_posix():hashlib.sha256(plain(resource)).hexdigest()}
+    appearances = []
+    for reference in refs:
+        if not reference:
+            appearances.append(None)
+            continue
+        path = resolve(source,reference,resource.parent)
+        sprite = object_sprite(source,path)
+        sif_path = path.with_suffix('.sif')
+        sif = parse_sif_contract(plain(sif_path))
+        if resolve(source,sif['spr_name'],sif_path.parent) != sprite:
+            raise ValueError(f'SIF/appearance SPR mismatch: {path}')
+        for dependency in (path,sif_path,sprite):
+            hashes[dependency.relative_to(source).as_posix()] = hashlib.sha256(plain(dependency)).hexdigest()
+        key = sprite.relative_to(source).as_posix()
+        appearances.append({'source':key,'atlas':source_sprite_manifest(key),
+                            'clip':sprite.stem.upper(), **{k:v for k,v in sif.items() if k != 'spr_name'}})
+    primary = appearances[0]
+    # Original ctor gets mode from primary, but geometry from the last nonempty
+    # SIF (alternate overwrites center/size). Preserve per-appearance values too.
+    geometry = next(row for row in reversed(appearances) if row is not None)
+    definition.update(appearances=appearances, draw_group=primary['mode'] if primary['mode'] in (0,1,2) else 1,
+                      center=geometry['center'], size=geometry['size'], source_hashes=hashes)
+    return definition
+
+
+def objects(raw, source, definitions=None):
     result = []
     decoded_cache = {}
+    definitions = {} if definitions is None else definitions
     for record in object_records(raw):
         name = record['name']
         x, y = record['p']
         resource = resolve(source,'map/'+name)
-        sprite = object_sprite(source,resource)
-        relative = sprite.relative_to(source)
-        key = relative.as_posix()
-        cached = decoded_cache.get(key)
-        if cached is None:
-            decoded = decode_spr(sprite.read_bytes())
-            local_boxes = []
-            for frame in decoded:
-                crop = frame.image.getbbox()
-                if crop:
-                    left, top, right, bottom = crop
-                    local_boxes.append((left-frame.origin_x, top-frame.origin_y,
-                                        right-frame.origin_x, bottom-frame.origin_y))
-            cached = (sprite.stem.upper(), local_boxes, len(decoded))
-            decoded_cache[key] = cached
-        clip, local_boxes, frame_count = cached
+        definition_id = resource.relative_to(source).as_posix()
+        if definition_id not in definitions:
+            definition = scenery_definition(source,resource)
+            for appearance in definition['appearances']:
+                if appearance is None:
+                    continue
+                key = appearance['source']
+                if key not in decoded_cache:
+                    decoded = decode_spr((source/key).read_bytes())
+                    boxes = []
+                    for frame in decoded:
+                        crop = frame.image.getbbox()
+                        if crop:
+                            l,t,r,b = crop
+                            boxes.append((l-frame.origin_x,t-frame.origin_y,r-frame.origin_x,b-frame.origin_y))
+                    decoded_cache[key] = (boxes,len(decoded))
+                boxes, count = decoded_cache[key]
+                appearance['frames'] = count
+                appearance['local_bounds'] = [min((b[0] for b in boxes),default=0),
+                                              min((b[1] for b in boxes),default=0),
+                                              max((b[2] for b in boxes),default=0),
+                                              max((b[3] for b in boxes),default=0)]
+            definitions[definition_id] = definition
+        definition = definitions[definition_id]
+        primary = definition['appearances'][0]
+        key, clip, frame_count = primary['source'], primary['clip'], primary['frames']
+        local_boxes = [a['local_bounds'] for a in definition['appearances'] if a is not None]
         left = min((x+b[0] for b in local_boxes), default=x)
         top = min((y+b[1] for b in local_boxes), default=y)
         right = max((x+b[2] for b in local_boxes), default=x)
         bottom = max((y+b[3] for b in local_boxes), default=y)
         result.append({'atlas':source_sprite_manifest(key),'clip':clip,'p':[x,y], 'z':0,
+                       'definition':definition_id,
                        'parent_index':record['parent_index'], 'child_count':record['child_count'],
                        'bounds':[left,top,right-left,bottom-top],'frames':frame_count,
                        'source':key})
@@ -147,14 +196,28 @@ def object_sprite(source, resource):
         extension = resource.suffix.lower()
         if extension == '.spr':
             return resource
-        data, at, names = plain(resource), 0, []
+        reader, names = Reader(plain(resource)), []
+        if extension not in ('.sif','.sth','.blg'):
+            raise ValueError('unsupported scenery reference extension: '+extension)
         for _ in range(1 if extension == '.sif' else 2):
-            size = data[at]
-            at += 1
-            names.append(data[at:at+size].decode('cp950'))
-            at += size
+            names.append(reader.name())
+        if not names[-1]:
+            raise ValueError('empty scenery SPR reference')
         resource = resolve(source,names[-1],resource.parent)
     raise ValueError('cyclic/unsupported building sprite reference')
+
+
+def scenery_asset_paths(world):
+    """Single reference traversal for scoped publication and runtime validation."""
+    if world.get('scenery_schema') != 'sgtest.scenery/v1':
+        raise ValueError('scenery v1 required; rebuild map presentation metadata')
+    definitions = world.get('scenery_definitions', {})
+    for row in world.get('objects', []):
+        definition = definitions.get(row.get('definition'))
+        if not definition or row.get('atlas') != definition['appearances'][0]['atlas']:
+            raise ValueError('missing/mismatched scenery definition')
+    return {appearance['atlas'] for definition in definitions.values()
+            for appearance in definition['appearances'] if appearance is not None}
 
 
 def build(source, output, map_id):
@@ -191,12 +254,14 @@ def build(source, output, map_id):
     (dest/'tiles.bin').write_bytes(tile_bytes)
     (dest/'blocking.dat').write_bytes(blocking)
     object_path = resolve(source,settings['List'])
-    placed = objects(plain(object_path),source)
+    definitions = {}
+    placed = objects(plain(object_path),source,definitions)
     hashes = {p.relative_to(source).as_posix():hashlib.sha256(plain(p)).hexdigest()
               for p in [config_path,pic_path,tile_path,blocking_path,object_path]}
     document = {'version':3,'map_id':map_id,'name':settings.get('Name',''), 'tile_side':side,
                 'tile_width':w,'tile_height':h,'collision_cell':16,'size':[w*side,h*side],
                 'atlas_grid':[columns,rows],'tile_ids':used,'objects':placed,
+                'scenery_schema':'sgtest.scenery/v1','scenery_definitions':definitions,
                 'source_hashes':hashes,
                 'tiles_sha256':hashlib.sha256(tile_bytes).hexdigest(),
                 'collision_sha256':hashlib.sha256(blocking).hexdigest(),

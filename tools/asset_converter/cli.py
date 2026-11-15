@@ -22,7 +22,7 @@ from asset_converter.content.build_maps import build as build_map
 from asset_converter.content.npc_content import build as build_npcs
 from asset_converter.content.export_assets import publish as export_assets, map_asset_ids, PLAYER_PART_ASSETS
 from asset_converter.content.server_source import resolve_server_dat
-from asset_converter.content.build_maps import server_map_directory
+from asset_converter.content.build_maps import server_map_directory, scenery_asset_paths
 from asset_converter.content.build_enemy_map_palette import read_enemy_catalog, read_enemy_dat
 from asset_converter.content.build_population import compile_population, compile_spawn_evidence
 from asset_converter.content.asset_paths import source_sprite_manifest
@@ -196,7 +196,7 @@ def check_runtime(stage: Path, assets: Path, map_id: int) -> dict:
     collision = stage / f"maps/{map_id}/blocking.dat"
     if hashlib.sha256(collision.read_bytes()).hexdigest() != world["collision_sha256"]:
         raise ValueError("map collision is not the verified original byte grid")
-    object_paths = sorted({str(row.get("atlas","")) for row in world.get("objects",[])})
+    object_paths = sorted(scenery_asset_paths(world))
     for relative in object_paths:
         if not relative.startswith("maps/visuals/") or not relative.endswith("/atlas.json"):
             raise ValueError(f"map object is not an independent scenery asset: {relative}")
@@ -401,7 +401,7 @@ def _execute(args):
                          'content/build_enemy_map_palette.py','content/asset_paths.py',
                          'content/audit_character_layers.py','source/inspect_act.py',
                          'source/legacy_direction.py','source/legacy_npc.py',
-                         'source/runtime_spr.py']]
+                         'source/runtime_spr.py','source/scenery.py']]
         modules = {name:hashlib.sha256((REPO/name).read_bytes()).hexdigest() for name in module_paths}
         try:
             original = args.original.resolve()

@@ -79,6 +79,15 @@ func _run() -> void:
 		job.path = invalid_file
 		job.run()
 		check(job.result.has("error"), "Invalid metadata did not fail closed")
+	for broken in [{"map_id":13,"version":2}, {"map_id":13,"version":3}]:
+		var file := FileAccess.open(invalid_file, FileAccess.WRITE)
+		file.store_string(JSON.stringify(broken))
+		file.close()
+		var job = Store.DecodeJob.new()
+		job.asset_id = "maps/13"
+		job.path = invalid_file
+		job.run()
+		check(job.result.has("error"), "Map without scenery contract accepted")
 	DirAccess.remove_absolute(invalid_file)
 	check(store.open_pack(args[0], "bad digest") == ERR_FILE_CORRUPT, "Wrong pack checksum accepted")
 	check(store.open_pack(args[0]) == OK, "Cannot open pack/catalog")
@@ -136,8 +145,10 @@ func _run() -> void:
 		if map_data.is_empty():
 			break
 		var palette := {}
-		for row in map_data.manifest.objects:
-			palette[str(row.atlas).trim_suffix("/atlas.json")] = true
+		for definition in map_data.manifest.scenery_definitions.values():
+			for appearance in definition.appearances:
+				if appearance != null:
+					palette[str(appearance.atlas).trim_suffix("/atlas.json")] = true
 		for row in map_data.extra.npcs.npcs:
 			if row.visual.resolved:
 				palette[str(row.visual.atlas).trim_suffix("/atlas.json")] = true

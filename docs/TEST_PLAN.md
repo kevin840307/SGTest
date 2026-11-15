@@ -153,3 +153,11 @@ Python Converter 67 tests PASS。這不代表地物／角色共同Y-sort／pivot
 ### 2026-11-16 world v3階層回歸
 
 Converter 68 tests PASS；雙圖runtime-only PASS；新PCK 242 BPTC／242 ASTC匯入PASS，SHA256 `5ae7608c8b756983efc186d2e162c9dc29bbb36c362bf03f97602e42cd1a74a6`。AssetStore 30次palette循環／3競態情境PASS；正式terrain draw同雙圖720p/1080p的16張GPU capture與CPU合成0像素差異PASS。首輪因TerrainData仍檢查v2而FAIL，修正及新增v2拒絕案例後重跑PASS；最終私有報告 `reports/scenery_hierarchy_terrain_final.json`。此輪未重做三候選效能比較，因只修正資料schema／階層且未改繪製策略，不產生新的效能勝出結論。CI、建築前緣遮擋、室內外／動畫與多人E2E仍NOT VERIFIED。
+
+### 2026-11-16 景物metadata與alternate回歸
+
+`python -m unittest discover -s tools/tests -p "test_*.py" -q` 72 PASS。新增synthetic SIF舊16／17 byte、mode保存、BLG四strings／兩點集／front clamp、無效count／NUL／截斷、絕對runtime路徑、SIF與SPR衝突、definition共用及兩appearance覆蓋；runtime checker對缺alternate Atlas拒絕。來源probe確認兩圖所有definition source hash／manifest clip／Atlas page hash，四個map檔重跑byte完全一致，`reports/scenery_metadata_validation.json`。
+
+同一CLI export-assets --map 13 --map 15完整Archive audit PASS，再runtime-only雙圖PASS（10.16秒）。runtime_pack PASS：254 BPTC／254 ASTC，PCK SHA見ASSET_CONVERTER。原命令 `run_asset_store.py --report reports/scenery_metadata_asset_store.json` 30次雙圖palette循環PASS（Map15=233含新alternate／Map13=63；final counts全0），`--script tests/test_asset_store_epochs.gd --report reports/scenery_metadata_epochs.json` 三競態PASS；`run_terrain.py --rounds 1 --mode draw --report reports/scenery_metadata_terrain.json` 16張GPU capture獨立CPU像素比對0差異、無engine error/leak。這次只回歸選定draw策略，未重做三候選benchmark。
+
+首輪新增SIF測試曾錯把17-byte tail少1 byte當必定非法（實際可等同合法16-byte舊格式），FAIL後改為無歧義截斷並記錄hash完整性限制；不把錯誤fixture當產品錯誤或PASS。CI、原版建築前緣遮擋／同Y／室內外fade／動作時間、Server／多人E2E均NOT VERIFIED。

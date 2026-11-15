@@ -155,3 +155,18 @@ python tools/asset_converter/smoke_runtime_pack.py "C:\SGO\Godot\Godot_v4.7.2-st
 ### 景物遮擋的原版邊界
 
 同一份DIRECT來源：`CELMap2D::WorldToScreenLoc` 0x00528517–0x00528595 將世界XY減相機XY，沒有套用Z；`SortMapObject` 0x00529CAA–0x00529DBC、`QuickSortMapObject` 0x00529B63–0x00529CA9 對一般物件比較Y，但sorting mode=0的建築使用 `CELBldg2D::CheckPointInFront` 0x00549560–0x005496C2／CheckBldgInFront。`DrawMapObj` 0x0052A057–0x0052A08A 還有前／主／後draw list。因此不能將所有Scenery與建築直接套Godot y_sort，或將舊誤判count當z_index。下一切片須解析SIF mode、BLG前緣及室內／室外來源，再驗證角色交錯、同Y與建築子物件顯示；當前只完成資料階層修正。
+
+### 景物 presentation metadata 與兩欄素材（2026-11-16）
+
+沿用world v3，新增明確的 `scenery_schema=sgtest.scenery/v1` 與共用 `scenery_definitions`。每個placement只增加definition引用，同BLG/STH的模式、幾何、點集與來源hash不逐實例重複。舊v3缺scenery_schema也必須用唯一CLI重建；AssetStore拒絕缺契約的map。這是尚未完成景物Renderer前的加法契約，沒有第二套素材載入管線。
+
+- SIF：length-prefixed SPR名，舊16-byte尾為center X/Y、width/length且mode預設1；17-byte尾多一個mode byte。保留mode及是否來源實際帶byte，不改原始Archive `parse_sif` 的raw sidecar定義。mode非0/1/2仍保留，draw_group依原版switch fallback=1。17-byte尾若恰少1 byte可能符合舊格式，不能單靠長度辨識損毀；必須以來源完整性hash控管。
+- BLG：四個length-prefixed名稱（兩組authoring/runtime），兩個前緣端點（4×int32）及兩組count+XY點。authoring絕對路徑只略過，不發布／追蹤為依賴；runtime路徑仍檢查不能離開原始tree。保留front_raw及file-based constructor將正Y改-10的front；inside_cells/outside_cells保留兩組原始整數點，未實作遊戲出入口判定。空alternate可為null；空primary目前明確拒絕，不憑空補素材。
+- appearances[0]/[1]保留原始兩欄，名稱採primary/alternate順序，不靠檔名猜室內外；每欄有source／atlas／clip、SIF mode／center／size、frame count與local_bounds（LTRB）。placement bounds為兩欄全部SPR原點及非透明像素的保守聯集（XYWH）；primary的舊atlas／clip欄位是同一資產的相容引用。mode來自primary；共用center／size依原版ctor被最後一個非空SIF覆寫。sorting_mode由物件類型決定（BLG=0，static=1），與SIF draw_group不同。
+- `scenery_asset_paths`供唯一scoped export與runtime checker共同遍歷所有appearance；兩欄都要進Catalog／PCK，不能只按placement.primary選資產。每個definition記錄解包後BLG/STH/SIF/SPR SHA；既有Height-Dense Atlas／logical ID不變。
+
+DIRECT證據仍是上述同SHA的Paradise.exe.lst：`CELStaticObj2D(char*,char*,int)` 0x0054A172（0x0054A385–0x0054A44D辨識16/17尾、寫mode／center／size）；`CELBldg2D(char*,char*,int)` 0x005485BF（0x005488D5–0x00548905 primary mode、0x00548AF9–0x00548BA3 alternate幾何、0x00548C14–0x00548CC6 front與clamp）；vtable 0x005C5894／0x005C58CC將+0x18映射GetSortingMode、+0x1C映射GetMode，GetMode函式本體在lst折疊，mode欄位用途由constructor及具名virtual call串接。MapObjLoad／MapObjListConvert依GetMode分0/1/2 lists並SetSortingMode(0/1)。`CELDrawBldgLogic2D::Draw` 0x005506CE–0x00550EA0依InOut選兩欄並有交疊fade及子物件draw；`SetInOut` 0x005504DE將fade設256，Step 0x0055050A每次減16，**更新的實際時間節奏仍未驗證，不得直接當16ms或Render FPS**。CheckBldgEntrance 0x00549950與CheckPointInsideBuilding 0x00549879提供後續切換證據；本輪只保留資料，未宣稱切換alpha／遮擋／碰撞規則PASS。
+
+真來源：Map13 45 definitions／85非空appearance欄／45 distinct Scenery Asset；Map15 182 definitions／358欄／194 distinct Asset，其中12 definitions兩欄不同。雙圖scoped Catalog從242增至254個獨立Asset／254頁／2281 frames（207 Scenery＋10 Enemy＋30 NPC＋7 Player），25,959,843 bytes；完整Archive audit再通過，79.027秒。舊Archive頁面未重做，沒有上傳原圖。兩圖world JSON分別159,175／753,882 bytes；world/terrain/tiles/blocking四檔重跑逐byte一致。來源與page SHA／clip覆蓋報告 `reports/scenery_metadata_validation.json`。
+
+新版PCK SHA256=`7784d572ffd0c0bb769d7df4b90bd36597422639ffc67e74a756a70ed67ec57d`，86,385,080 bytes，254 BPTC＋254 ASTC；上述CLI runtime-only／runtime_pack命令不變。72項Python tests PASS；AssetStore完整30次雙圖palette循環PASS（Map15 peak233 Asset、預算95,161,196 bytes，final counts全0；engine無error/leak），epochs三情境PASS；正式Terrain同雙圖720p/1080p 16 captures像素0差異PASS。詳TEST_PLAN。新增素材提高PCK大小，未據此聲稱效能改善；Renderer對完整palette與逐視野預載的選型仍待公平測量。

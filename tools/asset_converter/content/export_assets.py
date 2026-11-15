@@ -31,7 +31,7 @@ def map_asset_ids(source: Path, server_dat: Path, map_ids: list[int]) -> set[str
 
     This selects visual data only; it does not invent NPC timing or combat rules.
     """
-    from .build_maps import build as build_map
+    from .build_maps import build as build_map, scenery_asset_paths
     from .npc_content import build as build_npcs
     from .build_population import compile_spawn_evidence
 
@@ -42,7 +42,7 @@ def map_asset_ids(source: Path, server_dat: Path, map_ids: list[int]) -> set[str
             build_map(source, stage, map_id)
             folder = stage / f'maps/{map_id}'
             world = json.loads((folder/'world.json').read_text(encoding='utf-8'))
-            result.update(row['atlas'].removesuffix('/atlas.json') for row in world['objects'])
+            result.update(path.removesuffix('/atlas.json') for path in scenery_asset_paths(world))
             build_npcs(source, server_dat, map_id, folder/'npcs.json')
             npcs = json.loads((folder/'npcs.json').read_text(encoding='utf-8'))
             for row in npcs['npcs']:

@@ -42,3 +42,5 @@ python client/tests/run_terrain.py "C:\SGO\Godot\Godot_v4.7.2-stable_win64_conso
 兩種 Mesh 策略只在 tests/，共用相同 Mesh builder；不是平行 Client。以 RTX 3050／OpenGL3、1280×720 與 1920×1080，三候選各三輪都通過 16 張 viewport 擷取／輪與獨立 CPU 合成圖精確像素比對（共144張，重複相同測例）；正式區域繪製的資源／首次呈現／跳轉 tail 較均衡。完整數據、失敗的測試分類修正與限制見 CLIENT_ARCHITECTURE。截圖與 reports 留在本機。這只呈現地形；地物／角色共同 Y-sort、pivot、NPC timing、遊戲同步與完整 client main scene 仍待完成。
 
 2026-11-16 資料修正：world v3保留原版建築父子關係（Map15=1833根+15子），撤回先前「15筆缺Z」解讀；根記錄XY後為child_count，世界z=0。舊v2須由唯一Converter重建runtime/PCK，AssetStore拒絕v2。原版建築前緣排序／室內外顯示尚未實作，完整景物層與MVP仍未完成；見ASSET_CONVERTER的DIRECT證據及TEST_PLAN。
+
+2026-11-16 景物資料進度：共用scenery v1定義已保留BLG兩appearance、SIF模式／幾何與建築前緣，補入12個alternate素材；正式Catalog現在254獨立Asset。72 tests、雙圖PCK／30次AssetStore循環／Terrain 16張像素回歸PASS。景物遮擋Renderer與切換時間仍未完成；詳ASSET_CONVERTER／CLIENT_ARCHITECTURE。

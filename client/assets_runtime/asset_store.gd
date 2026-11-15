@@ -41,6 +41,9 @@ class DecodeJob extends RefCounted:
 			if manifest.get("map_id") != map_id or manifest.get("version") != 3:
 				result = {"error": "Wrong world map/schema"}
 				return
+			if manifest.get("scenery_schema") != "sgtest.scenery/v1":
+				result = {"error": "Missing scenery presentation contract"}
+				return
 			var grid = manifest.get("atlas_grid", [])
 			if not grid is Array or grid.size() != 2 or int(manifest.get("tile_side", 0)) <= 0:
 				result = {"error": "Invalid map terrain dimensions"}

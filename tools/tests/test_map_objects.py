@@ -63,7 +63,8 @@ class MapObjectRecordsTests(unittest.TestCase):
             sprite = source/'map'/'test.spr'
             sprite.parent.mkdir()
             sprite.write_bytes(b'synthetic')
-            with patch('asset_converter.content.build_maps.object_sprite',return_value=sprite), \
+            definition = {'appearances':[{'source':'map/test.spr','clip':'TEST'}]}
+            with patch('asset_converter.content.build_maps.scenery_definition',side_effect=lambda *_: {'appearances':[dict(definition['appearances'][0])]}), \
                  patch('asset_converter.content.build_maps.decode_spr',return_value=[frame]) as decode:
                 rows = objects(raw,source)
                 self.assertEqual(decode.call_count,1)

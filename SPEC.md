@@ -102,3 +102,5 @@ World Rendering / Animation / UI / Audio
 Map15／Map13 原始 tile 地形已有唯一正式 Terrain Renderer；三種合理候選同圖／同trace／同Atlas／同解析度原生OpenGL各三輪、GPU截圖與獨立CPU合成零差異後，按準備／Frame tail／CPU/RSS／引擎資源與維護成本選可視tile區域繪製。數據與限制見 CLIENT_ARCHITECTURE；尚未完成地物／人物共同Y-sort、原版pivot／動畫、WorldState／Server與多人E2E，MVP002維持未完成。
 
 2026-11-16 資料修正：world v3保留原版建築父子關係（Map15=1833根+15子），撤回先前「15筆缺Z」解讀；根記錄XY後為child_count，世界z=0。舊v2須由唯一Converter重建runtime/PCK，AssetStore拒絕v2。原版建築前緣排序／室內外顯示尚未實作，完整景物層與MVP仍未完成；見ASSET_CONVERTER的DIRECT證據及TEST_PLAN。
+
+2026-11-16 景物資料進度：共用scenery v1定義已保留BLG兩appearance、SIF模式／幾何與建築前緣，補入12個alternate素材；正式Catalog現在254獨立Asset。72 tests、雙圖PCK／30次AssetStore循環／Terrain 16張像素回歸PASS。景物遮擋Renderer與切換時間仍未完成；詳ASSET_CONVERTER／CLIENT_ARCHITECTURE。

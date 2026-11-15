@@ -161,6 +161,7 @@ class ConverterTests(unittest.TestCase):
             "npc_content",
             "runtime_animation_semantics",
             "runtime_spr",
+            "scenery",
             "server_source",
             "cli",
             "json_files",
@@ -169,6 +170,7 @@ class ConverterTests(unittest.TestCase):
             "extract_client": "source",
             "convert_assets": "source",
             "runtime_spr": "source",
+            "scenery": "source",
             "inspect_act": "source",
             "legacy_direction": "source",
             "dense_atlas": "atlas",
@@ -251,10 +253,13 @@ class ConverterTests(unittest.TestCase):
             (map_dir / "blocking.dat").write_bytes(collision)
             world = {
                 "version": 3, "map_id": 13,
+                "scenery_schema":"sgtest.scenery/v1",
+                "scenery_definitions":{"tree":{"appearances":[{"atlas":"maps/visuals/tree/atlas.json"}]}},
                 "collision_sha256": hashlib.sha256(collision).hexdigest(),
                 "objects": [{
                     "atlas": "maps/visuals/tree/atlas.json",
                     "source": "map/tree.spr",
+                    "definition":"tree",
                 }],
             }
             (map_dir / "world.json").write_text(json.dumps(world))
@@ -297,6 +302,12 @@ class ConverterTests(unittest.TestCase):
             self.assertEqual(result["player_part_assets"], 7)
             self.assertEqual(result['npc_visual_assets'], 1)
             self.assertFalse(result['gameplay_ready'])
+            appearances = world['scenery_definitions']['tree']['appearances']
+            appearances.append({'atlas':'maps/visuals/alternate/atlas.json'})
+            (map_dir/'world.json').write_text(json.dumps(world))
+            with self.assertRaisesRegex(ValueError,'missing independent map object asset'):
+                check_runtime(stage, assets, 13)
+            appearances.pop()
             for broken in ({**world, 'version':2}, {**world, 'map_id':15}):
                 (map_dir/'world.json').write_text(json.dumps(broken))
                 with self.assertRaisesRegex(ValueError,'world v3'):
