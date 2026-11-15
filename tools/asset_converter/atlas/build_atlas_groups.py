@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """RESEARCH-ONLY atlas packing primitives and historical candidate builder.
 
-Production uses asset_pipeline.py / asset_bundle_builder.py; packing helpers in
-this module remain shared and regression-tested.
+Production per-asset packing is driven by adaptive_atlas.py; packing helpers in
+this module remain shared and regression-tested. They must never merge different logical assets.
 Build deterministic appearance-local atlas candidates from a clean client.
 
 Enemy and Player share a directory plus prefix before the first underscore.

@@ -1,6 +1,8 @@
 # RuntimeAssetStore — ASSET204
 
-日期：2026-11-14，2026-11-15補PERF002/003。ASSET204原Gate已通過；RUNTIME206完整隔離矩陣的獨立證據見 [RUNTIME_ISOLATION_VERIFICATION](RUNTIME_ISOLATION_VERIFICATION.md)，本次未重跑該矩陣。
+> **2026-11-15 CURRENT POLICY:** RuntimeAssetStore 現在管理 per-asset manifests；Map/Monster/scenery/Player parts 不再 physical merge。下方所有舊 `map/session bundle` 數據只保留作歷史效能證據，現行邊界以 [ASSET_ARCHITECTURE](ASSET_ARCHITECTURE.md) 為準。
+
+日期：2026-11-14，2026-11-15補PERF002/003/ASSET211。ASSET204原Gate已通過；RUNTIME206完整隔離矩陣的獨立證據見 [RUNTIME_ISOLATION_VERIFICATION](RUNTIME_ISOLATION_VERIFICATION.md)，本次未重跑該矩陣。
 
 ## 目的
 
@@ -24,24 +26,25 @@ ASSET203 已證明 `normalized_memory` 的 Atlas packing 本身無法消除同�
 
 正式 `main.gd` 設定：
 
-- production unowned cache budget：24MiB；ready/decode queue budget 16MiB。Map/session active owners 不受 unowned LRU budget 強制驅逐。
-- Map13 九種 monster 現在共用一個 `map:13:sprites` lifecycle bundle；definition 只保留 prefix/stats，不再產生九個 texture owners。
-- player base（6 paper-doll parts + death）共用一個 `session:player:b:base` bundle；headless client 不載純視覺 paper doll。
-- map objects 已與 monster 共用 `map:13:sprites`；viewport 只做 draw cull，不再建立 21～30 個 per-view texture owners。Map13 A/B 顯示細拆只省約 1.8～2.8MiB object resident，代價不足以維持另一套 cache/lifetime。
+- production unowned cache budget：24MiB；ready/decode queue budget 16MiB。active owners 不受 unowned LRU budget 強制驅逐。
+- 每個 Monster visual 使用自己的 `monsters/<sprite>/atlas.json`；同 sprite 的多個 definition/instance 共用相同 path entry。
+- Player B base/death 是 7 個獨立 manifests，但可共用一個 character owner；headless client 不載純視覺 paper doll。
+- Map scenery 每個來源 visual 獨立，`map_objects` 只對 viewport 需要的 paths acquire；超出視野一段時間後 release，仍由同一 Store/LRU 控制。
+- PCK 只是磁碟容器，不改變 per-asset cache entry。
 
 ## Owner / lifecycle
 
 ### Monster palette
 
-`monster_visuals.begin_async()` 每次 map generation 先 release 舊 owner、清除 definition→prefix 與 manifest strong refs，再取得新 epoch。Map13 9 definitions 全部指向同一 map manifest，所以 Store 只有一個 atlas entry；切圖途中尚未完成的舊 job 仍由 token/epoch cancel。
+`monster_visuals.begin_async()` 每次 map generation 先 release 舊 owner、清除 definition→path refs，再取得新 epoch。每個不同 sprite path 是獨立 Store entry；同一 sprite 的多個 definition/instance 只共用同一 entry。切圖途中尚未完成的舊 job 仍由 token/epoch cancel。
 
 ### Map objects
 
-`map_objects.configure(..., store, owner)` 只 acquire `world.sprite_bundle` 一次；Map13 scenery 與 monsters 指向同一 manifest/path，因此 RuntimeAssetStore 共用同一 atlas entry。`prepare(view)` 只更新可視 object draw list，不變更 texture ownership；切圖 reset 釋放 map owner。
+`map_objects.configure(..., store, owner)` 讀 `world.objects[].atlas` 的獨立 scenery paths。`prepare(view)` 只 acquire 可視／預取範圍需要的 assets；離開視野超過 release timeout 後釋放該 path。不同 scenery 不共用 physical atlas，但仍共用同一 Store worker/cache。
 
 ### Player paper doll
 
-`paper_doll.begin_async()` 只 acquire 一個 session base manifest；body/leg/head/hair00/arms/death 是同一 EntityAtlas 裡的 logical prefixes。z-order 直接由 normalized `draw_layers/draw_slots` 取得，不再另讀第二套 draw-order Runtime 表。登入/Client 結束時 release owner；Store close 會回收。
+`paper_doll.begin_async()` acquire body/leg/head/hair/left-arm/right-arm/death 七個獨立 manifests；它們共用 character owner epoch。z-order 仍由 normalized `draw_layers/draw_slots` 取得。登入/Client 結束時 release owner；Store close 會回收。
 
 ## correctness tests
 
@@ -50,13 +53,14 @@ Godot synthetic/real-private-asset tests：
 - `test_runtime_asset_store.gd`：owner sharing、cache hit、force purge、loading cancellation、failed-path retry、automatic cache-cap eviction。
 - `test_runtime_asset_cancellation.gd`：1000 generations、MAX_JOBS、過期publish、priority、zero-byte事件數上限、byte backpressure取消、close／restart。`probe_asset_cancel_queue.gd -- --assert-bounded`另驗證部分提交／後頁失敗／相同path重試及native Texture弱引用歸零。
 - `test_runtime_asset_cache_pressure.gd`：128個真小Texture低於byte budget時，第129個path可按LRU騰一格；保護pinned／最近使用項目、所有項目有owner時維持ERR_BUSY、釋放一項後恢復；headless及native均PASS。Before/After在`reports/perf004_*.json`。
-- `test_monster_visuals_async.gd`：Map13 9 definitions / 360 logical views / **1 map bundle**、generation clear/cancel、owner purge。
-- `test_map_objects_async.gd`：單一 map bundle acquire、viewport draw cull 不改 ownership、map reset 後完整 purge。
-- `test_paper_doll_async.gd`：**1 session bundle**、6 parts + death、normalized draw-order、purge。
+- `test_monster_visuals.gd`：Map13 9 definitions 指向獨立 monster assets；同 sprite reuse、360 logical views PASS。
+- `test_map_objects_async.gd`：獨立 scenery assets、viewport demand、shared Store、reset/purge PASS。
+- `test_paper_doll_async.gd`：7 independent base/death manifests、normalized draw-order、shared owner、purge PASS。
+- `test_runtime_asset_cache_pressure.gd`：128 independent entries、LRU/pinned/recent/backpressure/recovery，final resident=0。
 
-## Lifecycle-bundle 簡化後補充（2026-11-14）
+## 歷史：Lifecycle-bundle 實驗（2026-11-14，**SUPERSEDED**）
 
-Production 已由多個 per-entity/per-part/per-map-object manifests 收斂成 map/session lifecycle bundles；完整理由見 [ASSET_BUNDLE_ARCHITECTURE.md](ASSET_BUNDLE_ARCHITECTURE.md) 與 [ASSET_NECESSITY_AUDIT.md](ASSET_NECESSITY_AUDIT.md)。早期2048×2 map bundle數據保留在該文件。2026-11-15 PERF002改為Runtime優先512／1024，Map13為1024候選5頁、session2頁，ownership仍不變。修正worker idle持有Image／metadata，telemetry各有2048筆上限、idle不追加，`statistics(false)`不複製樣本。正式release峰值187.09MiB，30次map載卸frame P95/P99 16.822/16.971ms、回收PASS；見 [PERF002_MEMORY](PERF002_MEMORY.md)。取消／部分載入錯誤邊界另由PERF003自製fixture與native probe實證修正，不能單以串行30次載卸證明。
+以下資料只保留歷史 Before/After；2026-11-15 已由 per-asset architecture 取代。當時曾由多個 per-entity/per-part/per-map-object manifests 收斂成 map/session lifecycle bundles；完整理由見 [ASSET_BUNDLE_ARCHITECTURE.md](ASSET_BUNDLE_ARCHITECTURE.md) 與 [ASSET_NECESSITY_AUDIT.md](ASSET_NECESSITY_AUDIT.md)。早期2048×2 map bundle數據保留在該文件。2026-11-15 PERF002改為Runtime優先512／1024，Map13為1024候選5頁、session2頁，ownership仍不變。修正worker idle持有Image／metadata，telemetry各有2048筆上限、idle不追加，`statistics(false)`不複製樣本。正式release峰值187.09MiB，30次map載卸frame P95/P99 16.822/16.971ms、回收PASS；見 [PERF002_MEMORY](PERF002_MEMORY.md)。取消／部分載入錯誤邊界另由PERF003自製fixture與native probe實證修正，不能單以串行30次載卸證明。
 
 以下 ASSET204 數字保留為「簡化前 normalized_memory 14-page」歷史基準，用來證明 bounded async store 本身的改善。
 

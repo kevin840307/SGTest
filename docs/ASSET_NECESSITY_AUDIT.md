@@ -1,5 +1,7 @@
 # 全 Godot 素材分類必要性稽核
 
+> **HISTORICAL / SUPERSEDED 2026-11-15:** 本文件記錄舊 lifecycle-bundle A/B，不能再當 Production 邊界。現行規則是每素材獨立 identity，見 [ASSET_ARCHITECTURE](ASSET_ARCHITECTURE.md) 與 [ASSET_PACKING_BENCHMARK](ASSET_PACKING_BENCHMARK.md)。
+
 日期：2026-11-14
 範圍：Enemy、Player、NPC、Equipment、Item、Pet、Mecha、Map、Effect、UI、Ground Drop，以及所有 Builder / Bundle / Loader / Cache。
 狀態：**Production policy / Before-After evidence recorded**。AS005 原版逐格人工視覺與 AS008 發布權仍是獨立 Gate。

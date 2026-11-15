@@ -290,7 +290,7 @@ def main() -> int:
     p.add_argument(
         "--runtime-only",
         action="store_true",
-        help="only build wired map/session bundle",
+        help="only rebuild map/world/population contracts from already-published independent assets",
     )
     p.add_argument(
         "--archive-only", action="store_true", help="do not touch live client assets"

@@ -115,20 +115,20 @@ ASSET205 把 population contract 從 v1 升成 v2。v1 Server 仍可讀，並套
 
 ## Full rebuild 不會丟 custom monster
 
-`tools/rebuild_assets.ps1` 流程：
+`tools/rebuild_assets.ps1` 現在只是正式 converter 的相容 wrapper：
 
-1. 從 private original client/server material 解出 source、support assets 與 map。
-2. `asset_pipeline.py` 直接以 normalized v2 建立 map/session lifecycle bundles 與 base population。
-3. 依檔名排序重套 `content/monster_recipes/*.monster.json`；每次修改 definition/spawn 後重建該 map 的共享 bundle。
-4. export Server collision/population content。
+1. 呼叫 `tools/asset_converter/cli.py build`，發布 per-asset 素材。
+2. 建立 Map world/population contract；不重新合併 Map/Monster。
+3. custom monster recipe 只修改 definition/spawn，並要求對應 `monsters/<sprite>/atlas.json` 已存在。
+4. export Server `world.json / population.json / blocking.dat` contract。
 
-所以正式 custom monster 必須提交 recipe，而不是提交 private PNG/SPR/ACT。
+所以正式 custom monster 必須提交 recipe，而不是提交 private PNG/SPR/ACT，也不能藉 recipe 建立 shared map atlas。
 
 ## Replace / 重複 ID
 
 - 新 recipe 若 definition id 已存在，預設 FAIL。
 - 只有 recipe `"replace": true` 或 CLI `--replace` 才會刪除該 definition 原 spawns，改用 recipe 新 definition/spawns。
-- 同 sprite 或不同 sprite 的 definitions，只要屬於同一 map lifetime，都共用該 map bundle。RuntimeAssetStore 以 bundle path 建一個 texture owner；definition id 只決定 stats/spawn/prefix。
+- 同 sprite 的多個 definitions 可以共用同一個 `monsters/<sprite>/atlas.json` AssetStore entry；不同 sprite 永遠是不同 asset。definition id 只決定 stats/spawn/appearance reference，不建立 shared map atlas。
 
 ## 實測
 
