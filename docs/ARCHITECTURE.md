@@ -58,7 +58,7 @@ Render FPS 可 0 / 30 / 60 / 90；network/Client Reducer/Server tick 不可因�
 - client/：只有 README、assets 輸出定位標記；**無 Godot 專案**。
 - server/：只有 README；**無 C# 專案**。
 - docs/：上述設計文件；docs/research 為歷史研究原文彙編。
-- SPEC.md：功能來源，包含舊階段狀態，不應直接當新版進度。
+- SPEC.md：當期核心規格與技術契約；舊 SPEC 全文僅保留於 research 歷史彙編。
 - todo.txt：**新版唯一進度入口**。
 
 請按照 todo.txt 逐項實作。不要把 Git 歷史中的舊 main.gd 或舊 Server World 複製回來作新版骨架。

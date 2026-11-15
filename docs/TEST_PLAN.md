@@ -23,13 +23,13 @@ python -m unittest discover -s tools/tests -p "test_*.py" -q
 ## Gate 2 — 視覺、戰鬥與 AOI
 
 - 地圖、Player/Equipment、Enemy、Scenery/Drop 共用 World Y-sort。
-- 原版 ACT、Origin、Direction、flip、DrawOrder 機率為零的錯誤（指定測例全部通過）。
+- 原版 ACT、Origin、Direction、flip、DrawOrder 的指定回歸測例 **0 筆不一致**；另列出未覆蓋的素材／動作，不把未測情境算 PASS。
 - Attack、Hit、Death、Move 的 action priority 不混亂。
 - 20/100 玩家與 300/1000 Enemy 真實 Spawn/Despawn、攻擊／死亡、換圖、掉落拾取。
 
 ## Gate 3 — 效能與生命週期
 
-- 30、45、60、90FPS／低功耗 0~15FPS／Unfocus／AFK 不改變可靠 state 和命令頻率。
+- 正常可選 FPS 不低於 30（測 30/45/60/90）；Unfocus／最小化／AFK 可減少或停止**畫面渲染**，但不能改變可靠 State、WorldReducer 或 Server Tick。
 - Render P95/P99、CPU、RAM、Texture/VRAM、load latency 與 Model1 **同規格測試**。
 - 30 次登入登出／換圖／AFK 與多開。記憶體沒有逐輪上升趨勢。
 - 不同解析度／縮放與 Pixel/UV edge alias artifact 測試。
@@ -46,10 +46,13 @@ python -m unittest discover -s tools/tests -p "test_*.py" -q
 - **PATH001**：Map13／台地階梯／障礙角 A*，單擊地板、點擊怪物繞障、追逐目標移動、斷線 correction，Client/Server 都不能穿牆；Blocking.dat 必須以原始資料驗證。
 - **HOLD001**：長按 1 秒後持續導航，左／右鍵停止、右鍵選單正常；UI 操作、移速變更、傳點、受擊、死亡、AFK、切圖都能取消並重新取得正確狀態。
 - **FPS001**：完整同一組 packet trace，Render=0／30／60／90、正常／Unfocus／最小化／AFK，Client State hash、Command sequence、可靠事件和 Server Tick 不變。刻意阻塞 Renderer 不得阻塞 Network。
-- **AFK001**：切 AFK 後至少 95% 的世界畫面節點／Texture 是否按設計卸載要由資源清單驗證，世界渲染提交趨近 0，網路仍完整；退出 AFK 復原 AOI、動作與 WorldReady，不得有舊圖或事件重播。
+- **AFK001**：切 AFK 後按資產引用清單驗證非必要世界節點／Texture 釋放，量測與正常模式相比的 Process RSS、Texture/VRAM、CPU/GPU 與恢復延遲（**先定基線，不憑空宣稱 95% 可卸載**）；世界內容繪製趨近 0，網路仍完整；退出 AFK 復原 AOI、動作與 WorldReady，不得有舊圖或事件重播。
 - **MULTI001**：1、2、4、8 個 Client 同機混合正常與 AFK，測各程序 Peak RSS、CPU／GPU、帶寬、queue age、輸入到畫面 P95/P99 和斷線／恢復。比較前須包含同一玩家/怪物密度與圖形品質。
 - **LOAD001**：20／100 玩家、300／1000 Enemy、500／5000 Drop、動作與技能高峰，Server World Tick/AOI/Send Queue 分別 profiling；幀率與網路完整性分開評估。
 - **RESTART001**：30 次登入、傳點換圖、AFK 進出，記錄 RSS/Texture/Node/Cache owners 趨勢；Mac 與 Windows Release 外部 PCK 各自驗證。
+- **QUEUE001**：可靠事件／命令有界 queue 過載、慢接收者、網路抖動與重連；驗證無 World Tick 阻塞、沒有無限 RAM 成長，缺序能拒絕或 resync，冪等交易／拾取不重複結算。
+- **AOI001**：不同解析度、相機 zoom、多人同時登入與可見邊界，雙向 Spawn/Despawn、快照基準與新舊 MapEpoch 交錯；Server 對客戶端 viewport 要有限幅與限頻。
+- **GAME001**：第二階段裝備強化、NPC 商店／銀行／修理、技能、寵物／機甲、交易／玩家商店、PvP 顏色／GM 權限逐功能建立可重跑合約、多人及持久化測例。
 
 任何腳本未實際執行時記錄 **NOT VERIFIED**，不可把先前 isolated Monster Benchmark 當成完成上述 Gate。
 
@@ -60,7 +63,7 @@ python -m unittest discover -s tools/tests -p "test_*.py" -q
 比較，不能用簡化 Sprite 畫面推估完整遊戲 FPS。
 
 每次測試記錄：input-to-render latency、frame P50/P95/P99/Max、
-超過 16.7ms 的長幀數、CPU/GPU 開銷、draw calls、Process Peak RSS、
+超過當次目標幀預算的長幀數（30 FPS 約 33.3ms、60 FPS 約 16.7ms、90 FPS 約 11.1ms）、CPU/GPU 開銷、draw calls、Process Peak RSS、
 Godot Texture/Video memory（**不等同實體 dedicated VRAM**）、
 載入與卸載時間、Server World Tick P95/P99、封包佇列 age、
 AOI fanout、可靠事件延遲、動畫方向/受擊/死亡/位移錯誤。

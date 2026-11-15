@@ -29,6 +29,8 @@ AFK/Unfocus                             — may suspend only visual work
 
 需要建立**同一 packet trace**在 0、30、60、90FPS、失焦、縮小、AFK，以及多開狀態下的狀態 hash、事件序號和 queue-age 對照。
 
+**執行機制要可驗證**：Transport/Decode 不得由 `_process()` 或 UI 動畫回呼輪詢；Reducer 必須具獨立時鐘／調度，不可因背景視窗停止繪製就停止處理。背景 worker 不得直接操作 Godot SceneTree、Texture 或 Control；狀態變化由明確、安全的跨執行緒交接提交，渲染僅讀取穩定快照。
+
 ## 一致的 World Y-sort
 
 所有可能遮擋的 Player、Enemy、NPC、Pet、Scenery、Ground items 應在**統一的 world-space sorting contract** 裡；不能讓 Enemy Sprite 子節點繞開角色／場景的排序。若部分效果採 MultiMesh 或集中 Canvas，必須有視覺驗收。
@@ -42,9 +44,11 @@ AFK/Unfocus                             — may suspend only visual work
 
 從獨立外部 PCK 掛載 res://assets/**，以 AssetCatalog 解析，單一 AssetStore 負責有界 worker、GPU commit、owner 取得／釋放／epoch 取消與快取淘汰。新的檔案先驗證 source path、Origin、page 和 frame 索引。切圖與登出後無持續累積的 Texture、SpriteFrames、Node。
 
+**滿載／缺序處置**：Movement/Facing 的舊快照可按 EntityRevision 合併；Spawn/Despawn、換圖、角色／物品／戰鬥的權威結果不得因渲染慢而悄悄丟掉。若發現可靠事件缺序、MapEpoch 不符或佇列溢出，停止套用有歧義的增量，要求新 WorldReady／完整快照；不得無限擴張 inbox 或用落後畫面假裝已同步。詳 [Wire Contract](RUNTIME_PROTOCOL.md)。
+
 ## UI 與解析度
 
-新 Godot Theme/Control 自製後期《星夢 Online》金色 UI，提供可選現代 UI。支援多解析度，camera viewport 改變需更新可視 AOI，不可固定舊 800×600。移動速率、機甲速度與動畫播放速度解耦。
+新 Godot Theme/Control 先自製後期《星夢 Online》金色 UI；現代 Theme 等未來需求確定再評估，**不必提前實作雙套 UI**。支援多解析度，camera viewport 改變需更新可視 AOI，不可固定舊 800×600。移動速率、機甲速度與動畫播放速度解耦。
 
 ## 開發順序／Gate
 

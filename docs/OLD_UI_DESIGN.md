@@ -4,7 +4,7 @@
 
 ## 唯一選定的視覺基準
 - **後期星夢 Online 金黃色 UI**；早期星空之門藍色 UI 不採為正式版本。
-- 另提供可切換的現代 UI 排版；與金色版共用資料模型與互動命令，切換時不重建遊戲連線或改變世界 Tick。
+- **本輪只實作金色 UI**，不提前維護兩套 Theme／佈局。未來若明確要求現代 UI，仍共用相同資料模型與互動命令，且切換不得重建連線或改變 World Tick。
 - 歷史三個時期：https://www.2000fun.com/thread-5046304-1-1.html
 - 後期遊戲畫面（角色屬性、物品、底部聊天、金色視窗）：https://forum.gamer.com.tw/C.php?bsn=6325&snA=8758
 - 另一張舊遊戲畫面：https://forum.gamer.com.tw/Co.php?bsn=06325&sn=40585

@@ -32,6 +32,7 @@
 - `client/`、`server/` 為未來位置；新增檔案之前先對照對應 ARCHITECTURE 與當期 TODO，不複製舊原型大類別。
 - `docs/` 為規格、研究證據與決策，`docs/research/FEATURE_DECISION_HISTORY.md#source-todo-pre-rebuild-20261115-txt` 只作歷史；`todo.txt` 才是現在的任務。
 - 每次完成記錄：任務 ID、行為 Before/After、檔案、測試命令與結果、Commit SHA、未解風險。
+- **文件同步**：修改協定、AFK、AOI、素材格式或測試 Gate 時，同步核對 SPEC／對應 ARCHITECTURE／TEST_PLAN／TODO；歷史研究彙編僅供證據，不為修正現行設計而改寫歷史原文。
 
 ## 多 Session 安全
 

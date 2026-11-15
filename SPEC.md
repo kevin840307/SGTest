@@ -8,10 +8,11 @@
 
 重建《星夢 Online》風格 2D 即時多人 MMORPG：多玩家、多怪物、多掉落、頻繁移動與攻擊時仍保持即時、畫面正確、資源低且容易維護，支援同機多開與幾乎不渲染的 AFK 掛機模式。
 
-- **Client：Godot 4（Windows / macOS）**。重製 UI，參考原版風格，不複製舊 TestGoGo 介面。
+- **Client：Godot 4（Windows / macOS）**。先完成後期原版金色風格 UI，不複製舊 TestGoGo 介面；其他 Theme 暫不列入第一階段，以免過度設計。
 - **Server：.NET 8 / C#**；權威的地圖、走路、碰撞、戰鬥、AI、背包／物品與交易。資料儲存初期 SQLite，應用程式、網路、資料存取彼此隔離。
 - **設計方式：功能導向 modular monolith**，高聚力、低耦合；不要預先建立重複的 Manager／Engine／Cache、不同素材類型專用 Loader，或空白多層分組。Client、Server 透過明確封包／資料契約整合，不共享可變狀態。
 - **Server single-writer world authority**：同張地圖的可變 State 有明確單寫者；DB I/O、Socket Send、慢路徑查詢不能阻塞固定 Tick。
+- **有界佇列與恢復**：所有網路／World 命令／視覺事件佇列都要有容量、延遲指標與過載政策；可合併過時的非可靠移動快照，**不得默默丟失金錢、物品、交易、角色狀態、權威戰鬥結果等可靠結果**。無法保證連續性時須觸發重同步或安全斷線，不能無限堆積記憶體。
 
 ## 2. 資產轉換（必須保留已驗證方案）
 

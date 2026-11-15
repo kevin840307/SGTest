@@ -55,5 +55,5 @@ powershell -ExecutionPolicy Bypass -File tools/asset_converter/verify_converter.
 
 - **唯一正式維護目錄：`C:\SGO\SRC\SGTest`，分支：`main`。** 不需管理第二套專案路徑。
 - 舊版 Godot Client 與 C# Server 皆已從正式重建版移除；未來重建 **Godot 4 Client + .NET 8 C# Server**。
-- `tools/asset_converter` 已整合 Height-Dense P0、外部 VRAM-compressed `assets.pck` 與對照 benchmark；請用該唯一 Converter CLI。
+- `tools/asset_converter` 已整合 Height-Dense P0、外部 VRAM-compressed `assets.pck`；已淘汰的 benchmark 腳本只保留於 Git 歷史，未來效能測試以新 Client/Server 實際負載為準。
 - 只靠現有原版素材轉換工具與文件即可開始重建；新 Client/Server 功能標示為未完成，請依 `SPEC.md` 及 `todo.txt`。
