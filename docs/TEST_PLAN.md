@@ -129,3 +129,7 @@ Recovered P95 7.470ms、舊 SGTest P95 6.900ms。
 ## CATALOG001 — 雙圖定向發布（2026-11-15 PASS，僅資料）
 
 完整 Archive audit 為前置，原版 Map13／Map15 真實參照發布 242 個獨立 Atlas／242 頁／2,269 Frame，兩次反向指定 map ID 的 517 個檔案 SHA 完全一致。完整 62 Python tests PASS；新回歸涵蓋 full export、選取 scope、未知 ID／空集合 fail closed、未選 Asset 損毀也不可繞過完整 audit、managed stale removal／人工修改保留與確定性。命令及資料範圍見 [Converter](ASSET_CONVERTER.md#雙圖定向-catalogmvp001-catalog-scope)。**未驗證 NPC timing／全部動畫語意、真圖 ResourceLoader、PCK、Renderer 與 Client/Server E2E**。
+
+## RUNTIME-CONTENT001 — 雙圖內容契約（2026-11-15 PASS，非遊戲 E2E）
+
+唯一 CLI `build --runtime-only --extracted-source .cache/asset_converter/source --server-dat "C:\SGO\Recovered\Old\服務端\Dat" --map 13 --map 15` 真實來源輸出每圖 6 檔；Map13 3 NPC／78 Enemy Spawn，Map15 52 NPC／4 Enemy Spawn；反向 map 順序重跑 12 檔 SHA 全一致。全部 NPC Atlas 參照存在；population v3 拒絕 v2／猜測 stats、保留原始 Spawn 及 Flags 並明示 gameplay_ready=false。65 tests PASS；新增 synthetic map/NPC staging 失敗時不覆寫舊輸出、population 不採未核實 stats 的整合回歸。PCK ResourceLoader、NPC timing／互動、權威 World／A*／Combat、多人 E2E 仍 NOT VERIFIED。

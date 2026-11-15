@@ -12,7 +12,7 @@ def compile_spawn_evidence(source: Path, server_dat: Path, map_id: int) -> dict:
     """Original Enemy.dat + ACT evidence, without invented combat stats or live assets.
 
     This is separate from compile_population(), which requires published Atlas
-    manifests and may use provisional runtime stats. Source evidence must never
+    manifests but does not supply unverified combat stats. Source evidence must never
     publish either those defaults or placeholder atlas files as verified facts.
     """
     server_dat = Path(server_dat).resolve()
@@ -59,41 +59,6 @@ def compile_spawn_evidence(source: Path, server_dat: Path, map_id: int) -> dict:
     }
 
 
-DEFAULT_STATS = {
-    'hp': 30,
-    'damage': 10,
-    'move_speed': 65.0,
-    'aggro_range': 500.0,
-    'attack_range': 70.0,
-    'chase_stop_range': 45.0,
-    'attack_interval_seconds': 1.0,
-    'respawn_seconds': 2.0,
-}
-
-def validate_stats(value):
-    stats = {**DEFAULT_STATS, **(value or {})}
-    numeric = all(isinstance(stats[key], (int, float)) and not isinstance(stats[key], bool)
-                  for key in DEFAULT_STATS)
-    if not numeric:
-        raise ValueError('monster stats must be numeric')
-    if not (1 <= int(stats['hp']) <= 1_000_000 and
-            0 <= int(stats['damage']) <= 1_000_000 and
-            0 <= float(stats['move_speed']) <= 2000 and
-            0 <= float(stats['aggro_range']) <= 5000 and
-            0 <= float(stats['attack_range']) <= 1000 and
-            0 <= float(stats['chase_stop_range']) <= 1000 and
-            0.05 <= float(stats['attack_interval_seconds']) <= 60 and
-            0 <= float(stats['respawn_seconds']) <= 3600 and
-            float(stats['attack_range']) <= float(stats['aggro_range']) and
-            float(stats['chase_stop_range']) <= float(stats['aggro_range'])):
-        raise ValueError('monster stats outside supported bounds')
-    stats['hp'] = int(stats['hp'])
-    stats['damage'] = int(stats['damage'])
-    for key in DEFAULT_STATS:
-        if key not in ('hp', 'damage'):
-            stats[key] = float(stats[key])
-    return stats
-
 def compile_population(spawns, catalog, assets, map_id):
     definitions=[]
     for enemy_id in sorted({row['enemy_id'] for row in spawns}):
@@ -114,8 +79,9 @@ def compile_population(spawns, catalog, assets, map_id):
                         and clip not in manifest.get('aliases',{})):
                     raise ValueError(f'missing logical action/direction {clip}')
         definitions.append({'id':enemy_id,'sprite':sprite,'atlas':relative,
-                            'stats':validate_stats(definition.get('stats'))})
-    return {'version':2,'map_id':map_id,'definitions':definitions,
+                            'stats':None,'stats_verified':False})
+    return {'version':3,'map_id':map_id,'definitions':definitions,
+            'kind':'visual_spawn_content','stats_verified':False,'gameplay_ready':False,
             'spawns':[{'definition':r['enemy_id'],'p':[r['x'],r['y']],
                        'source_index':r['source_index'],'source_flags':r['flags']} for r in spawns],
             'policy':'original spawn positions; each monster visual is an independent runtime asset selected by the server definition'}

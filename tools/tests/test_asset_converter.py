@@ -259,18 +259,25 @@ class ConverterTests(unittest.TestCase):
             }
             (map_dir / "world.json").write_text(json.dumps(world))
             population = {
-                "version": 2,
+                "version": 3, "map_id": 13, "kind": "visual_spawn_content",
+                "stats_verified": False, "gameplay_ready": False,
                 "definitions": [{
                     "id": 1,
                     "sprite": "EN001A",
                     "atlas": "Enemy/en001a/atlas.json",
+                    "stats": None, "stats_verified": False,
                 }],
                 "spawns": [],
             }
             (map_dir / "population.json").write_text(json.dumps(population))
+            npc_document = {'schema':'sgtest.npcs/v1','map_id':13,'npcs':[
+                {'visual':{'resolved':True,'source':'npc/npc001.spr','atlas':'npcs/npc001/atlas.json'}}]}
+            npc_path = map_dir/'npcs.json'
+            npc_path.write_text(json.dumps(npc_document))
             required = [
                 "maps/visuals/tree/atlas.json",
                 "Enemy/en001a/atlas.json",
+                "npcs/npc001/atlas.json",
                 "players/b/base/body/atlas.json",
                 "players/b/base/leg/atlas.json",
                 "players/b/base/head/atlas.json",
@@ -288,6 +295,35 @@ class ConverterTests(unittest.TestCase):
             self.assertEqual(result["map_visual_assets"], 1)
             self.assertEqual(result["monster_visual_assets"], 1)
             self.assertEqual(result["player_part_assets"], 7)
+            self.assertEqual(result['npc_visual_assets'], 1)
+            self.assertFalse(result['gameplay_ready'])
+            npc_atlas = assets/'npcs/npc001/atlas.json'
+            npc_atlas.unlink()
+            with self.assertRaisesRegex(ValueError,'missing independent NPC'):
+                check_runtime(stage, assets, 13)
+            npc_atlas.write_text('{}')
+            for broken in (
+                {'schema':'sgtest.npcs/v1','map_id':15,'npcs':[]},
+                {'schema':'sgtest.npcs/v1','map_id':13,'npcs':[
+                    {'visual':{'resolved':False,'reason':'type_not_in_table'}}]},
+                {'schema':'sgtest.npcs/v1','map_id':13,'npcs':[
+                    {'visual':{'resolved':True,'source':'npc/npc001.spr','atlas':'npcs/wrong/atlas.json'}}]},
+            ):
+                npc_path.write_text(json.dumps(broken))
+                with self.assertRaises(ValueError):
+                    check_runtime(stage, assets, 13)
+            npc_path.write_text(json.dumps(npc_document))
+            population['version'] = 2
+            (map_dir/'population.json').write_text(json.dumps(population))
+            with self.assertRaisesRegex(ValueError,'population v3'):
+                check_runtime(stage, assets, 13)
+            population['version'] = 3
+            population['definitions'][0]['stats'] = {'hp':30}
+            (map_dir/'population.json').write_text(json.dumps(population))
+            with self.assertRaisesRegex(ValueError,'population v3'):
+                check_runtime(stage, assets, 13)
+            population['definitions'][0]['stats'] = None
+            (map_dir/'population.json').write_text(json.dumps(population))
             world["sprite_bundle"] = "bundles/map/13/sprites.json"
             (map_dir / "world.json").write_text(json.dumps(world))
             with self.assertRaises(ValueError):

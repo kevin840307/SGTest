@@ -60,3 +60,7 @@ Server 使用**原版 Blocking.dat byte grid** 或經可驗證的無損對應資
 - **AOI 先於封包編碼與廣播**：用 map-local spatial hash/grid 或實測合適的索引維護每位玩家的訂閱集合；只將相關 Player／Enemy／NPC／Drop 更新給有權接收的觀察者，**不能全圖每 Tick 廣播或每封包掃描所有實體**。登入／進出視野／換圖有可靠 Spawn/Despawn／WorldReady 基準，視野邊界使用適當 margin/hysteresis；同一實體未改變不重送相同狀態，位置／Facing 的過時快照可按版本合併。可靠傷害、物品與交易結果須送給正確對象且不可被視覺 AOI 吞掉。不同解析度或相機範圍保持周邊同步一致；**Client 回報的 viewport/zoom 必須由 Server 限幅與限頻**，防止過大視野或頻繁改尺寸放大廣播成本。
 - **AFK/多開**：Server 永遠按權威 Tick 推進；可依明確的 AFK interest subscription 降低不重要的視覺 Snapshot，但**不得因 Client Render FPS／視窗焦點改變核心 Tick、Reliable Events 或角色防作弊驗證**。每個連線維持獨立權限／輸出隊列配額，慢客戶端不能拖垮整張地圖。
 - 20／100 人、300／1000 怪、500／5000 掉落的測試必須記錄 AI budget、World tick P95/P99、packet queue age、AOI fanout、記憶體、慢連線和斷線情境。
+
+### population v3 的資料邊界
+
+Converter 當前輸出 `visual_spawn_content` v3：原始位置／外觀可供資料驗證；`stats=null`、`stats_verified=false`、`gameplay_ready=false` 表示原版戰鬥／AI 規則未完成。正式 Server 必須在原版數值與規則完成驗證後才啟用玩法，不能把空值補成先前原型的 HP／damage／速度。v2 產物需以唯一 CLI 重建，沒有正式 Server／DB consumer 需要線上遷移。NPC 檔保留 script_required 與未核實動畫旗標，資料輸出不代表已執行 NPC 商店／銀行／任務。

@@ -129,3 +129,11 @@ Catalog 的 `source_scope=selected_sprite_assets` 與 `_source_coverage.json` �
 2026-11-15 真實雙圖發布 PASS：195 地物＋10 Enemy＋30 NPC 外觀＋7 Player 部位＝242 Asset／242 頁／2,269 Frame／756 SPR，515 managed files，20,332,844 bytes（約 19.4 MiB）。10 Enemy＋7 Player 動畫定義已 normalized，225 個地物／NPC 僅 source clips，**不宣稱 NPC 動畫時間／方向已驗證**。反向 `--map 15 --map 13` 重跑，517 個實際檔案（含追蹤檔及 `.gdignore`）SHA 全部一致；報告 `reports/mvp_scoped_asset_export*.json`、`reports/mvp_scoped_asset_repeatability.json`。完整 62 項 Python tests PASS，含 full export 相容、scope 切換／保留修改、未知 ID、無關素材損毀仍拒絕及 deterministic replay。
 
 未包含本階段沒有參照的裝備／UI／掉落／Pet／Mecha；後續功能需擴同一素材選取流程。Runtime map content／PCK ResourceLoader／NPC timing／紙娃娃真畫面與 Client/Server E2E 仍 NOT VERIFIED。定向是依真實參照排除未用資料，沿用同一 packing，非 Atlas／Renderer 性能選型，不宣稱改善遊戲 FPS。
+
+## Runtime 地圖資料 v3（MVP001-RUNTIME-CONTENT）
+
+`build --runtime-only --map 13 --map 15` 現在沿用同一 Map／NPC／Enemy compiler，每張圖輸出 6 個檔案（world.json、terrain.png、tiles.bin、blocking.dat、population.json、npcs.json）。NPC visual 加入由 source SPR 確定性推導的獨立 Atlas 參照，內容 fingerprint 隨新欄位重算；驗證 schema／map identity、原始來源映射與 Atlas 存在性。未知 type／缺 SPR／缺 Atlas／錯映射 fail closed；原版明示 empty_primary_slot 可保留無視覺 NPC。沿用暫存 stage，驗證失敗不覆寫該地圖原發布內容。
+
+**population v2 → v3：必須重建資料，不做補值遷移。** 移除無原版依據的 DEFAULT_STATS／validate_stats；v3 `kind=visual_spawn_content`，根與各 definition `stats_verified=false`，definition `stats=null`，根 `gameplay_ready=false`。原始 Spawn 位置／definition ID／source_index／flags／source SHA／Atlas 不改；外部傳入的猜測 stats 也不會成為原版已驗證數值。現有 validator 拒絕 v2 與夾帶 stats／虛稱 verified 的資料。此 repo 沒有正式 Client/Server 或資料庫 schema consumer，遷移方式是刪除舊輸出依既有 CLI 重跑，**不是移植假的怪物數值**。正式 Server 在原版規則未驗證前不可啟用戰鬥／AI；來源規則研究仍為後續工作。
+
+2026-11-15 真實來源重建與反向重跑 PASS：Map13 3 NPC／78 Enemy Spawn，Map15 52 NPC／4 Enemy Spawn，全部 NPC 外觀參照存在；兩圖 12 檔 SHA 重跑完全一致，stats 全部 null／未驗證。`reports/runtime_content_validation.json` 記錄 SHA 與範圍。65 項 Python tests PASS，包括缺 NPC Atlas 不覆寫舊輸出、錯圖／錯映射／未知 NPC fail closed、v2 拒絕及移除猜測 stats。CLI PASS 僅為資料契約；NPC 動畫／腳本執行、權威 Spawn／A*／Combat、PCK／真 Client/Server E2E 仍 NOT VERIFIED。

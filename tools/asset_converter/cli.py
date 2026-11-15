@@ -25,6 +25,7 @@ from asset_converter.content.server_source import resolve_server_dat
 from asset_converter.content.build_maps import server_map_directory
 from asset_converter.content.build_enemy_map_palette import read_enemy_catalog, read_enemy_dat
 from asset_converter.content.build_population import compile_population, compile_spawn_evidence
+from asset_converter.content.asset_paths import source_sprite_manifest
 
 
 def resolve_source(args) -> Path:
@@ -166,6 +167,28 @@ def check_runtime(stage: Path, assets: Path, map_id: int) -> dict:
     population_path = stage / f"maps/{map_id}/population.json"
     world = json.loads(world_path.read_text(encoding="utf-8"))
     population = json.loads(population_path.read_text(encoding="utf-8"))
+    npc_document = json.loads((stage/f'maps/{map_id}/npcs.json').read_text(encoding='utf-8'))
+    if npc_document.get('schema') != 'sgtest.npcs/v1' or npc_document.get('map_id') != map_id:
+        raise ValueError('NPC content schema/map identity differs')
+    if (population.get('version') != 3 or population.get('map_id') != map_id
+            or population.get('kind') != 'visual_spawn_content'
+            or population.get('stats_verified') is not False or population.get('gameplay_ready') is not False
+            or any(row.get('stats', 'missing') is not None or row.get('stats_verified') is not False
+                   for row in population.get('definitions', []))):
+        raise ValueError('population v3 must explicitly withhold unverified gameplay stats; rebuild v2 content')
+    npc_paths = set()
+    for row in npc_document['npcs']:
+        visual = row['visual']
+        if not visual['resolved']:
+            if visual.get('reason') == 'empty_primary_slot':
+                continue
+            raise ValueError(f'unresolved NPC visual: {visual}')
+        relative = source_sprite_manifest(visual['source'])
+        if visual.get('atlas') != relative:
+            raise ValueError('NPC atlas differs from original source mapping')
+        if not (assets/relative).is_file():
+            raise ValueError(f'missing independent NPC asset: {relative}')
+        npc_paths.add(relative)
     if "sprite_bundle" in world:
         raise ValueError("map contract still contains a cross-asset sprite bundle")
     collision = stage / f"maps/{map_id}/blocking.dat"
@@ -192,6 +215,10 @@ def check_runtime(stage: Path, assets: Path, map_id: int) -> dict:
         "map_visual_assets": len(object_paths),
         "monster_definitions": len(population.get("definitions",[])),
         "monster_visual_assets": len(monster_paths),
+        "npcs": len(npc_document['npcs']),
+        "npc_visual_assets": len(npc_paths),
+        "combat_stats_verified": False,
+        "gameplay_ready": False,
         "player_part_assets": len(player_paths),
         "collision_format": "original_blocking_byte_grid",
         "cross_asset_bundle": False,
@@ -214,6 +241,7 @@ def build_runtime_assets(source: Path, output: Path, args) -> dict:
         stage = Path(scratch)
         print(f"[RUNTIME] map {args.map} contract; scenery/monster/player assets stay independent", flush=True)
         map_result = build_map(source, stage, args.map)
+        npc_result = build_npcs(source, server_dat, args.map, stage/f'maps/{args.map}/npcs.json')
         map_dir = server_map_directory(server_dat,args.map)
         enemy_dat = map_dir / "Enemy.dat"
         enemy_catalog = server_dat / "Enemy" / "Enemy_Data.csv"
@@ -235,10 +263,12 @@ def build_runtime_assets(source: Path, output: Path, args) -> dict:
             temporary = dest.with_name(dest.name + ".asset_converter.tmp")
             shutil.copyfile(p, temporary)
             temporary.replace(dest)
+    npc_result['output'] = str(output/f'maps/{args.map}/npcs.json')
     return {
         "status": "built",
         "map_id": args.map,
         "map": map_result,
+        "npc_content": npc_result,
         "validation": validated,
         "definitions": len(population["definitions"]),
         "spawns": len(population["spawns"]),

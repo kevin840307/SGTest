@@ -12,6 +12,7 @@ import re
 from ..source.legacy_npc import npc_placements, npc_visual_table, plain
 from ..source.runtime_spr import decode_spr
 from .build_maps import dimensions, resolve, server_map_directory as map_directory
+from .asset_paths import source_sprite_manifest
 
 TRANSFER_TEMPLATE_SHA256 = '8c972667f520ef00441f2b12c5a16fa1475a2e0a5ce1dd20e16bb79e37697562'
 _SHORT_STRING = r'"(?:[^"\\\r\n]|\\[^\r\n])*"'
@@ -166,6 +167,7 @@ def build(source: Path, server_dat: Path, map_id: int, output: Path) -> dict:
                     if path.is_file():
                         frames = decode_spr(read(path, source, 'client'))
                         visual = {'resolved': True, 'source': path.relative_to(source).as_posix(),
+                                  'atlas': source_sprite_manifest(path.relative_to(source).as_posix()),
                                   'frames': len(frames), 'source_slots': fields,
                                   'timing_verified': False, 'direction_mapping_verified': False}
                     else:
