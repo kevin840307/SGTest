@@ -35,10 +35,10 @@
 
 - SPR/Data1 原始來源覆蓋、錯誤來源 fail-closed、ACT/SIF/DrawOrder/Origin/flip。
 - Asset ID 唯一、不同 Enemy／Map scenery／Player parts **禁止跨素材共圖**。
-- Map13 與 Map15 的原版 `world.json`／`terrain.png`／`tiles.bin`／`blocking.dat`／NPC 來源相容；**Enemy population、正式 Runtime Atlas/PCK 仍未驗證**。
+- Map13 與 Map15 的原版 `world.json`／`terrain.png`／`tiles.bin`／`blocking.dat`／NPC 來源相容；**population v3、定向 Atlas／雙圖 PCK 資料載入已通過下列分項；權威 Server／真畫面仍未驗證**。
 - **MAP-DATA001（2026-11-15 PASS）**：兩張原始地圖一鍵輸出；Map13 367 Object、Map15 1,848 Object（其中 15 筆缺少原始 Z，須標記）、兩圖 Tile Pixel Round-trip PASS；原版 Server Blocking.dat SHA 匹配，雙圖重跑及反向指定建置時 10/10 私有輸出檔案 SHA 不變。原始 Enemy source evidence 追加後現行 Python 共 57 項 PASS，真遊戲 E2E NOT VERIFIED。
 - **MAP-ENEMY001（2026-11-15 source-only PASS）**：唯讀 Old Server 原版 Map13 78 Spawn／9 種、Map15 4 Spawn／1 種，與 Data1 解出的 10 種 ACT/SPR、5 動作、8 方向及 source SHA 一一對應。輸出 `population_evidence.json` 只保留原始值且 `stats_verified=false`，缺來源及未知 Enemy fail closed，雙圖反向重跑 SHA 2/2 一致；原 Builder 獨立編譯 10 頁／557 Frame PASS。**正式 catalog、完整 PCK、權威 Server AI／Combat／Spawn、Godot 真畫面 NOT VERIFIED**。
-- Height-Dense P0、VRAM import、external PCK 已整合且有獨立 Smoke；**完整來源覆蓋、Windows Release 和 macOS 實機仍未驗證**。
+- Height-Dense P0、VRAM import、external PCK 已整合且有獨立 Smoke；**完整來源覆蓋已通過 ARCHIVE001；Windows Release 和 macOS 實機仍未驗證**。
 - 在**沒有 client/project.godot 和 server/*.csproj**的 clean-slate 基線仍可執行純 Converter 測試。
 
 ~~~powershell
@@ -133,3 +133,7 @@ Recovered P95 7.470ms、舊 SGTest P95 6.900ms。
 ## RUNTIME-CONTENT001 — 雙圖內容契約（2026-11-15 PASS，非遊戲 E2E）
 
 唯一 CLI `build --runtime-only --extracted-source .cache/asset_converter/source --server-dat "C:\SGO\Recovered\Old\服務端\Dat" --map 13 --map 15` 真實來源輸出每圖 6 檔；Map13 3 NPC／78 Enemy Spawn，Map15 52 NPC／4 Enemy Spawn；反向 map 順序重跑 12 檔 SHA 全一致。全部 NPC Atlas 參照存在；population v3 拒絕 v2／猜測 stats、保留原始 Spawn 及 Flags 並明示 gameplay_ready=false。65 tests PASS；新增 synthetic map/NPC staging 失敗時不覆寫舊輸出、population 不採未核實 stats 的整合回歸。PCK ResourceLoader、NPC timing／互動、權威 World／A*／Combat、多人 E2E 仍 NOT VERIFIED。
+
+## PCK001-REAL-MAPS — 空白 Godot 真圖資源（2026-11-15 PASS）
+
+既有 smoke 工具支援 --assets client/assets --map 13 --map 15，沿用唯一 Builder，244/244 Texture ResourceLoader 尺寸 PASS（242 Atlas＋2 Terrain）；526 個封裝 raw file SHA 相符，242 BPTC／242 ASTC 變體匯入 PASS。原 synthetic Enemy＋lossless UI 2/2 回歸 PASS。實際空白 Godot verifier 收到錯誤的 Map13 Blocking expected SHA 時 exit 3，拒絕且無成功旗標。Python suite 67 PASS。可重跑命令／PCK SHA／本機報告見 ASSET_CONVERTER 的「真實雙圖 external PCK」。這不是實際遊戲渲染／VRAM 或 P0 邊緣驗證，也不是 Server Spawn／A*／Combat／多人 E2E／Release。

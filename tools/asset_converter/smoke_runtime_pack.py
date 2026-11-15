@@ -1,13 +1,14 @@
 """End-to-end external assets.pck smoke without any playable Client or Server.
 
-Builds one VRAM-compressed Enemy atlas and one lossless UI atlas, packs both
-in an external Godot PCK, then mounts the PCK in a completely empty Godot
-project and loads both textures via ResourceLoader. Temporary files are
-automatically deleted and original game media is never required.
+By default, builds one synthetic Enemy and one lossless UI atlas. --assets
+instead verifies a real published catalog and optional map contracts. Both
+paths mount the external PCK in an empty Godot project and load textures via
+ResourceLoader. Original media remains private; --output can retain the PCK.
 """
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import subprocess
@@ -21,6 +22,8 @@ REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO / "tools"))
 
 from asset_converter.runtime_pack import build_runtime_pack
+from asset_converter.cli import check_runtime
+from asset_converter.json_files import write_json
 
 
 LOAD_SMOKE_GDSCRIPT = """
@@ -52,6 +55,83 @@ func _initialize() -> void:
 """
 
 
+REAL_LOAD_GDSCRIPT = """
+extends SceneTree
+
+func _initialize() -> void:
+    var args := OS.get_cmdline_user_args()
+    if args.size() != 2 or not ProjectSettings.load_resource_pack(args[0], true):
+        push_error("Cannot mount external PCK")
+        quit(2)
+        return
+    var expected = JSON.parse_string(FileAccess.get_file_as_string(args[1]))
+    for path in expected.files:
+        if FileAccess.get_sha256(path) != expected.files[path]:
+            push_error("PCK file hash mismatch: " + path)
+            quit(3)
+            return
+    for item in expected.textures:
+        var texture := ResourceLoader.load(item.path, "Texture2D", ResourceLoader.CACHE_MODE_IGNORE) as Texture2D
+        if texture == null or texture.get_width() != int(item.width) or texture.get_height() != int(item.height):
+            push_error("Invalid PCK texture: " + item.path)
+            quit(4)
+            return
+        print("PCK_RESOURCE_PASS ", item.path)
+    print("PCK_RUNTIME_SMOKE_PASS")
+    quit(0)
+"""
+
+
+def real_contract(assets: Path, map_ids: list[int]) -> tuple[dict, dict]:
+    """Bind actual source metadata/pages to an independently mounted pack."""
+    files, textures, maps = {}, {}, {}
+    def include(path):
+        relative = path.relative_to(assets).as_posix()
+        files['res://assets/'+relative] = hashlib.sha256(path.read_bytes()).hexdigest()
+    def texture(path, size):
+        relative = path.relative_to(assets).as_posix()
+        include(path)
+        with Image.open(path) as original:
+            if list(original.size) != list(size):
+                raise ValueError('texture source dimensions differ: '+relative)
+        textures[relative] = {'path':'res://assets/'+relative,'width':size[0],'height':size[1]}
+    catalog_path = assets/'catalog/assets.json'
+    catalog = json.loads(catalog_path.read_text(encoding='utf-8'))
+    include(catalog_path)
+    manifests = 0
+    for category in catalog['categories'].values():
+        index_path = assets/category['index']
+        include(index_path)
+        for entry in json.loads(index_path.read_text(encoding='utf-8'))['assets'].values():
+            if entry['kind'] != 'sprite_atlas':
+                continue
+            manifest_path = assets/entry['file']
+            include(manifest_path)
+            manifest = json.loads(manifest_path.read_text(encoding='utf-8'))
+            manifests += 1
+            if len(manifest['pages']) != len(manifest['page_sizes']):
+                raise ValueError('atlas page dimension count differs: '+str(manifest_path))
+            for name, size in zip(manifest['pages'], manifest['page_sizes']):
+                path = manifest_path.parent/name
+                if hashlib.sha256(path.read_bytes()).hexdigest() != manifest['page_sha256'][name]:
+                    raise ValueError('atlas page hash differs: '+str(path))
+                texture(path, size)
+            definition = manifest.get('animation_semantics',{}).get('definition')
+            if definition:
+                include(assets/definition)
+    if not textures:
+        raise ValueError('catalog has no texture pages')
+    for map_id in map_ids:
+        maps[map_id] = check_runtime(assets, assets, map_id)
+        folder = assets/f'maps/{map_id}'
+        for name in ('world.json','population.json','npcs.json','blocking.dat','tiles.bin'):
+            include(folder/name)
+        with Image.open(folder/'terrain.png') as terrain:
+            size = terrain.size
+        texture(folder/'terrain.png', size)
+    return {'files':files,'textures':list(textures.values())}, {'maps':maps,'atlas_assets':manifests}
+
+
 def prepare_fixture(source: Path) -> None:
     for directory_name in ("Enemy/en_smoke", "ui/account_smoke"):
         folder = source / directory_name
@@ -77,22 +157,33 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("godot", type=Path,
                         help="Godot 4 console executable supporting --headless and --import")
+    parser.add_argument('--assets', type=Path, help='test a published real asset catalog instead of synthetic fixtures')
+    parser.add_argument('--map', type=int, action='append', help='also validate real map contracts and terrain')
+    parser.add_argument('--output', type=Path, help='retain the generated private external PCK here')
+    parser.add_argument('--report', type=Path, help='write a persistent smoke result')
     args = parser.parse_args()
+    if args.map and (not args.assets or len(set(args.map)) != len(args.map) or any(not 1 <= n <= 65535 for n in args.map)):
+        parser.error('map IDs require assets and must be unique integers between 1 and 65535')
     godot = args.godot.resolve()
     if not godot.is_file():
         parser.error(f"Godot executable not found: {godot}")
 
     with tempfile.TemporaryDirectory(prefix="sgtest-pck-smoke-") as working:
         tmp = Path(working)
-        source = tmp / "source_assets"
-        prepare_fixture(source)
-        output = tmp / "assets.pck"
+        source = args.assets.resolve() if args.assets else tmp / "source_assets"
+        metadata = {}
+        contract = None
+        if args.assets:
+            contract, metadata = real_contract(source, sorted(args.map or []))
+        else:
+            prepare_fixture(source)
+        output = args.output.resolve() if args.output else tmp / "assets.pck"
         report = build_runtime_pack(
             godot, source, output, stage=tmp / "stage"
         )
-        if report["vram_atlas_pages"] != 1 or report["lossless_atlas_pages"] != 1:
+        if not args.assets and (report["vram_atlas_pages"] != 1 or report["lossless_atlas_pages"] != 1):
             raise RuntimeError(f"unexpected compression policy: {report}")
-        if report["bptc"] != 1 or report["astc"] != 1:
+        if not args.assets and (report["bptc"] != 1 or report["astc"] != 1):
             raise RuntimeError(f"missing imported format remaps: {report}")
 
         empty_client = tmp / "empty_client"
@@ -101,11 +192,15 @@ def main() -> int:
             "config_version=5\n", encoding="utf-8"
         )
         script = tmp / "load_external_pack.gd"
-        script.write_text(LOAD_SMOKE_GDSCRIPT, encoding="utf-8")
+        script.write_text(REAL_LOAD_GDSCRIPT if args.assets else LOAD_SMOKE_GDSCRIPT, encoding="utf-8")
         command = [
             str(godot), "--headless", "--path", str(empty_client),
             "--script", str(script), "--", str(output),
         ]
+        if contract is not None:
+            contract_path = tmp/'expected.json'
+            write_json(contract_path, contract)
+            command.append(str(contract_path))
         result = subprocess.run(command, cwd=REPO, capture_output=True,
                                 text=True, encoding="utf-8", errors="replace",
                                 timeout=120)
@@ -114,10 +209,11 @@ def main() -> int:
                 f"external PCK ResourceLoader smoke failed (exit={result.returncode})"
                 f"\n{result.stdout}\n{result.stderr}"
             )
-        if result.stdout.count("PCK_RESOURCE_PASS") != 2:
+        expected_count = len(contract['textures']) if contract is not None else 2
+        if result.stdout.count("PCK_RESOURCE_PASS") != expected_count:
             raise RuntimeError("Not all PCK resources were loaded")
         print(result.stdout, end="")
-        print(json.dumps({
+        summary = {
             "status": "PASS",
             "source_files": report["source_files"],
             "vram_atlas_pages": report["vram_atlas_pages"],
@@ -127,7 +223,16 @@ def main() -> int:
             "pck_bytes": report["bytes"],
             "tested_with_empty_client": True,
             "temporary_files_deleted_on_exit": True,
-        }, ensure_ascii=False))
+            'pck_retained': bool(args.output),
+            'pck_sha256': report['sha256'],
+            'textures_loaded': expected_count,
+            'raw_files_hashed': len(contract['files']) if contract is not None else 0,
+            **metadata,
+            'scope':'external PCK ResourceLoader; not rendered gameplay or Client/Server E2E',
+        }
+        if args.report:
+            write_json(args.report, summary)
+        print(json.dumps(summary, ensure_ascii=False))
     return 0
 
 
