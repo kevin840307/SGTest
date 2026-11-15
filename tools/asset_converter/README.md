@@ -34,7 +34,9 @@ python tools/asset_converter/cli.py build "C:\SGO\Stargate Online IE HK2"
 python -m unittest discover -s tools/tests -p "test_*.py" -q
 python -m unittest discover -s tools -p "test_*.py" -q
 # 需要原始私有 HK2 來源才進行完整 Coverage
-powershell -ExecutionPolicy Bypass -File tools/asset_converter/verify_converter.ps1 -Client "C:\SGO\Stargate Online IE HK2"
+powershell -ExecutionPolicy Bypass -File tools/asset_converter/verify_converter.ps1
+# 要連同原始客戶端一起做少量原圖解碼試跑時（此步驟較慢）
+powershell -ExecutionPolicy Bypass -File tools/asset_converter/verify_converter.ps1 -Client "C:\SGO\Stargate Online IE HK2" -PreviewGroups 2
 ~~~
 
 不使用已移除的 client/project.godot、server/*.csproj 做必需驗證。大量影像與 EXE 發行必須在新專案建置後另測。

@@ -28,3 +28,11 @@
 
 - REB030 [ ] Windows 真正可執行 Client+Server，多機／20~100 人、300~1000 Enemy、500~5000 Drop；原版 vs 新版同條件 Input-to-Render、P95/P99、RSS/Texture、AOI 與動畫正確。
 - REB031 [ ] Windows Release external assets.pck、Mac 實機資產/Renderer 測試，UI 多解析度、30 次換圖/登出/AFK/Unfocus，無遞增記憶體洩漏。
+
+## 本輪架構補強與安全清理（2026-11-15）
+
+- REB004 [x] Review 與增補既有精簡文件：Client/Server 的功能型目錄、高聚力低耦合、單一 AssetStore／Server Single Writer、阻塞隔離、A* 原版 Blocking、點地板／長按 1 秒鎖定／停止、Recovered/Old 唯讀參考、跨類型 Y-sort、多開、Render FPS 與 Network/Server Tick 分離、AFK Render 0／釋放 GPU／可靠事件不丟失；不額外建立規格碎檔。
+- REB005 [x] 純 Converter 重新驗收：`verify_converter.ps1` 不再錯誤地假設空白 `client/assets` 可做 `--runtime-only`；79 項 Converter、27 項格式/內容契約（1 skipped）皆 PASS；`-Client` 可選用少量來源抽樣重建（**全量來源重新跑仍未驗證**）。
+- REB006 [x] 安全清掉主專案生成資料：原 Data1.dat 確認存在、Git worktree 從 `.cache` 移出、其他工作階段 32 個未提交檔案另做 CRC PASS 備份；刪除約 13.7 GiB 的 `.cache`、`local-assets`、`reports`、Client 圖片與 Server 內容產物，保留 `client/assets/.gdignore`。原版來源、Recovered/Old 和 Converter WIP 未變更。
+- REB007 [ ] **仍須安全整合**：目前 clean-slate 在 `rebuild/clean-slate-20261115`，原 `main` 有其他 Session 未提交的 Converter WIP，不可直接 reset/stash/覆蓋來切分支。待原 Session 提交或移交後，合併完整 Height-Dense / external PCK Converter，驗證再進主線。新 Client/Server 尚未寫。
+- REB008 [ ] 新版 Client/Server 從 todo 的 REB010/020 開始，必須驗收 A*／長按／Render 0 AFK／多開與真正多人 AOI；舊 Prototype 的 PASS 不算數。

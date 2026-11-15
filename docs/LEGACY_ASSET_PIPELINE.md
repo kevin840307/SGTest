@@ -32,3 +32,18 @@ python -m unittest discover -s tools/tests -p "test_*.py" -q
 ~~~
 
 建議先以 synthetic fixture 驗證 decoder／錯誤處理，再以完整私有來源做 archive coverage 和 Origin/ACT 語意驗證。Converter 不應依賴尚未重建的 Godot Client／C# Server。
+## 可參考的原版反編譯與 Recovered 位置
+
+原始遊戲和 Recovered／Old 均為**唯讀參考來源**，不列為新版編譯依賴：
+
+```text
+C:\SGO\Stargate Online IE HK2\          # 原始 Data1.dat、遊戲素材
+C:\SGO\Recovered\client\              # Recovered Godot Client：素材/動畫/走路/紙娃娃
+TestGoGo/Old/                            # 舊原版 Client/Server 資料和反編譯
+Old/Paradise.exe.lst                     # 原版 Client 反編譯（存在時）
+Old/服務端/*.lst 或 DLL 反編譯           # 原版 Server 對照（存在時）
+```
+
+**用途分工**：Recovered 優先參考 A* 尋路、長按走路、SpriteFrames/AtlasTexture、DrawOrder、UI、動畫時間；Old/Paradise.exe.lst 和原版 Server 反編譯用於核實封包節奏、Blocking、追怪範圍／攻擊距離、技能與移動判斷。參考來源以行為測試、格式證據／相容協議呈現，不直接拷貝不可散布的素材或反編譯原文。
+
+若 Recovered 的實作是兼容舊 800×600 或某個單機假設，不能照抄；新版需獨立驗證多解析度、多人 AOI、AFK Render 0 和權威 Client/Server 同步。

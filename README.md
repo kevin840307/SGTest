@@ -32,6 +32,8 @@ run_build_assets.bat "C:\SGO\Stargate Online IE HK2"
 python tools/asset_converter/cli.py build "C:\SGO\Stargate Online IE HK2"
 # 轉換器合約測試（不需要 Godot Client / Server）
 python -m unittest discover -s tools/tests -p "test_*.py" -q
+# 不依賴舊 Godot Client／Server 的獨立驗證
+powershell -ExecutionPolicy Bypass -File tools/asset_converter/verify_converter.ps1
 ```
 
 輸出位置通常為 `local-assets/`（完整私有索引）、`client/assets/`（未來 Client 內容）、`server/content/`（未來 Server 內容）。後兩者**是資料輸出目錄，不代表可執行程式存在**。原版及衍生圖片不得推送至公開 GitHub。

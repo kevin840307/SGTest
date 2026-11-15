@@ -23,6 +23,8 @@
 - **Server**：authority 管理位置、Blocking.dat 碰撞、戰鬥、物品、金錢、交易；World 單寫者設計，外部 DB I/O 不能卡住 Tick；網路與遊戲規則分離。
 - **維護性**：以少數功能模組構成 modular monolith；不要過度抽象、重複 Manager/Loader/Cache 或為分類而分類。
 - **證據**：Recovered 與新 Client 比較時同工作負載、同素材、同 GPU 設定，報告 Process RSS、Texture metric、載入、P95/P99、Draw Calls、畫面與同步正確性。未完成發行測試一律不得稱 PASS。
+- **移動／AFK**：Server Blocking.dat 權威 A*；長按 1 秒鎖定移動，左／右鍵停止且右鍵選單不能失效；參考 Recovered/Old 行為。AFK 基本 Render 0／釋放 GPU，網路／WorldReducer 與 FPS 獨立；同機多開需量測 CPU／RSS／GPU。
+- **快取**：原始遊戲 Data1.dat 與轉換器原始程式是來源；`.cache` 是可重建輸出，不可含唯一程式碼或 Git worktree。清除前檢查所有 worktree、執行中的工作與私有來源；不可清理其他 Session 未保留的 WIP。
 
 ## 程式／文件路由
 

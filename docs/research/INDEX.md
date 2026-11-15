@@ -60,3 +60,5 @@ Use [Architecture](../ARCHITECTURE.md), [Converter](../ASSET_CONVERTER.md) and r
 | `SECURITY_OPERATIONS.md` | [RUNTIME_PROTOCOL_EVIDENCE.md](./RUNTIME_PROTOCOL_EVIDENCE.md#source-security-operations-md) |
 | `SPEC.md` | [FEATURE_DECISION_HISTORY.md](./FEATURE_DECISION_HISTORY.md#source-spec-md) |
 | `TODO_PRE_REBUILD_20261115.txt` | [FEATURE_DECISION_HISTORY.md](./FEATURE_DECISION_HISTORY.md#source-todo-pre-rebuild-20261115-txt) |
+
+> 注意：研究彙編刻意保留舊文件的原文與 SHA 證據，因此正文內某些相對連結仍指向已移除的舊版規格／報告。**正式導航請用本索引及 [架構總覽](../ARCHITECTURE.md)**；想看當時完整原檔請在 Git 歷史 `f755a47` 尋找，不要將彙編中的舊連結視為新版檔案應存在的要求。這些舊報告已從 clean-slate Git HEAD 移除，但歷史仍可回溯。

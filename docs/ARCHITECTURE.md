@@ -63,3 +63,46 @@ Render FPS 可 0 / 30 / 60 / 90；network/Client Reducer/Server tick 不可因�
 - todo.txt：**新版唯一進度入口**。
 
 請按照 todo.txt 逐項實作。不要把 Git 歷史中的舊 main.gd 或舊 Server World 複製回來作新版骨架。
+## 建議的最小目錄配置（功能先於分類）
+
+以下是**逐步建立時的目標目錄**，不是宣稱目前已存在：
+
+```text
+client/
+  project.godot
+  scenes/                     # 啟動畫面、World、UI，只有真的需要才新增
+  scripts/
+    app/                      # 極薄啟動與生命週期組裝
+    network/                  # Transport、Codec、bounded message queues
+    world/                    # State、Reducer、prediction、navigation、AOI
+    rendering/                # World Y-sort、動畫、插值與視覺快取
+    assets/                   # 唯一 AssetCatalog / AssetStore
+    ui/                       # 控制項／Theme／ViewModel
+  assets/                     # Converter 輸出；各原素材各自獨立
+server/
+  src/
+    Network/                  # Connection、Wire、序號／封包驗證
+    World/                    # Map authoritative tick、AOI、Blocking、A*
+    Gameplay/                 # Combat、Monster AI、Drops、Items（需要時拆）
+    Accounts/                 # 登入／角色
+    Persistence/              # SQLite／交易
+  tests/
+  content/                    # Converter 產出；不包含貼圖
+tools/
+  asset_converter/            # 唯一正式轉換器（source/atlas/content）
+  tests/                      # 與轉換器相關的研究／合約驗證
+docs/                         # 少量正式設計；research 為歷史證據彙編
+```
+
+不事先建立空的 Manager、Repository、Service、Engine 或不同類型專用 Cache；
+未來若設計真正需要再拆。Client 和 Server 共用**規格／資料格式／測試向量**，
+不共用彼此 executable code。Windows／macOS 使用相同 logical asset identity；
+Texture import／發行包可有平台差異。
+
+## 交互關注的責任及不可妥協條件
+
+- 高聚力低耦合：每個模組只有一個主要變動原因。網路不能呼叫渲染；渲染不能推進 World tick；資產載入完成不能重新排序權威事件。
+- 同機多開：每個 Client 都有自己的連線和狀態；**同一個 Client 實例內**素材去重，不跨程序共享易出錯的可變 Texture／World state。量測單開、2 開、4 開、8 開的 RSS、CPU、GPU、queue age、操作延遲。
+- FPS：UI/World 渲染可設定 0/30/60/90，伺服器 Tick 與 Client command/reducer/network worker 依獨立時鐘運作。動畫播放固定原版 ACT 時間，不因移速／FPS 改速。
+- AFK 不是停網路：允許卸載大部分 GPU Texture/Node、停止遊戲內容繪製，保留必要網路收送、狀態 reducer、可靠事件、重連及回復全量快照；顯示器最小化可直接進 Render 0。
+- 對 A*、長按移動、Blocking 及原版互動邏輯，先對照 Recovered/Old 反編譯或既有行為測例，**移植行為而非盲目複製已不相容的代碼**。

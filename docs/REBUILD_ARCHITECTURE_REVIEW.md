@@ -14,7 +14,7 @@
 | `tools/asset_converter/`、各種原版解析／地圖／人口／NPC 轉換、驗證測試 | **保留** | 真正的可重用來源、資料契約 |
 | `client/assets/.gdignore`、client/server README | **保留最小輸出位置** | Converter 仍可產出未來 Client/Server 消費的資料 |
 | `docs/`、`SPEC.md`、歷史 TODO | **全部保留** | 功能需求／原版來源／實測證據 |
-| `.cache/`、`local-assets/`、`reports/`、私有 media | **未刪、Git 忽略** | 是研究與 Builder 的私有／工作中資料，不能當垃圾強刪 |
+| `.cache/`、`local-assets/`、`reports/`、私有 media | **快取可重建，私有來源另行確認** | 根據各目錄 ownership 清除；Git worktree 與他人 WIP 不能直接 `Remove-Item` |
 | 其他 Session 未提交的 Height-Dense／PCK Builder | **原工作樹不動** | 不能清理時破壞其他人的程式與驗證 |
 
 > 注意：獨立清理分支從已提交的 `main` 建立，因此尚未提交的 Height-Dense/PCK 變更**不在本分支內**。先在原工作階段整理完成、測試並提交，再安全合併；不可聲稱已納入清理基線。
@@ -105,3 +105,12 @@
 **建議全面重寫 Client／Server，保留 Converter／資料契約／實測證據。** 目前的功能導向 modular monolith 概念可保留，但**必須由 Packet/WorldState/Renderer/AssetStore 的真實依賴和測試劃分責任**，而不是把舊 `main.gd` 拆到不同檔案而已。
 
 最後正式選型以**玩家能感受到的動作流暢、網路因果正確性和可接受的 RAM/Texture/CPU**為準；不追求每一項孤立數字第一。
+
+## 8. 2026-11-15 實體快取清理與保護紀錄
+
+- 清理前檢查原始 `C:\SGO\Stargate Online IE HK2\Data1.dat` 存在，且 `Recovered`／`Old` 不在任何刪除清單。
+- `main` 尚有另一工作階段未提交的 Height-Dense／PCK Converter 內容；先驗證 WIP 檔案快照與 ZIP CRC，**沒有 stash、reset、清掉或修改它們**。
+- 原 clean-slate Git worktree 由 `.cache/clean_slate_worktree` 透過 `git worktree move` 移到獨立的 `SGTest-rebuild`，而非直接從檔案系統刪除。
+- 在確認無程序占用與 worktree 依賴後，刪除主專案可重建的 `.cache` 約 11.24 GiB、`local-assets` 約 1.11 GiB、`reports` 約 0.09 GiB、舊 `client/assets` 約 1.28 GiB、`server/content` 產物；保留 `client/assets/.gdignore`。4 支本機一次性整理腳本已封存，不作正式 Converter。
+- 此工作目前安全存在於 `rebuild/clean-slate-20261115` 分支；**不要把主 `main` 仍保留的舊 Runtime 誤報為已刪除**。Main 快速前進／合併前，先由原工作階段決定尚未提交的轉換器改動如何獨立提交或移交。
+- 刪掉 `.cache` 包含本地 .NET SDK／Godot template 快取；後續重建 Client/Server 和打包需要重新安裝/下載，不是 Converter 遺失。原圖、Sidecar、Benchmark 皆需依正式 CLI 重新產生。

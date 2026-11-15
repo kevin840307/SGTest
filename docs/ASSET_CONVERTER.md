@@ -44,3 +44,17 @@ Converter **不應依賴**可執行的 client/project.godot 或 server/*.csproj�
 - 外部 PCK 的 Windows Release 與 macOS import/remap/載入有獨立 Gate。
 
 歷史文件全文見 [research/INDEX](research/INDEX.md)，最新重建任務見根目錄 todo.txt。
+## 保持轉換器獨立與可驗證
+
+```powershell
+# 純 Python 契約：不會啟動或依賴任何 Client/Server
+powershell -ExecutionPolicy Bypass -File tools/asset_converter/verify_converter.ps1
+
+# 額外從原始 Data1.dat 抽樣重建（需重新解包，清掉快取後會較慢）
+powershell -ExecutionPolicy Bypass -File tools/asset_converter/verify_converter.ps1 -Client "C:\SGO\Stargate Online IE HK2" -PreviewGroups 2
+
+# 真正全量轉換，Server population 的原版 Dat 可用 --server-dat 提供
+python tools/asset_converter/cli.py build "C:\SGO\Stargate Online IE HK2" --server-dat "C:\SGO\original-server-Dat-path"
+```
+
+`--server-dat` 所示為**示例佔位路徑**，必須換成實際原始 Server Dat；無該來源時 Converter 可做 SPR/Atlas，但不能宣稱 Server population 已重建。目錄 `.cache` 和 `local-assets` 會按命令重新建立，舊圖片不在 Git。避免讓正式轉換器依賴已刪除的 `client/project.godot` 或舊 `server/*.csproj`。
