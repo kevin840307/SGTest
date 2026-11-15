@@ -94,3 +94,5 @@
 - MVP001-ARCHIVE-INTEGRITY [ ] 範圍：正式完整 Archive／Catalog 發布前的 manifest 一致性。修改前：audit 以 set 比對 group，重複 index row 會被掩蓋，row 的 Frame/Page/Bytes 未對照實際 manifest。預期：重複 group、row 計數不符均 fail closed；合法完整 Archive 不退化。指標：7,890 group／75,588 SPR 全量建置與來源 coverage、錯誤清單、合成損毀索引回歸。已啟動唯一 CLI 完整私有 build；完成前全量結果 NOT VERIFIED。
 
   - 本輪實作：`atlas/archive_audit.py` 新增重複 group／row 計數／manifest 身分與 PNG 大小驗證；`test_converter_planning.py` 補損毀與還原測試。Before→After：重複／錯誤 row 可通過 audit → 明確 failed。8 項 focused tests PASS；隔離 tools snapshot 的完整 `python -m unittest discover -s tools/tests -p "test_*.py" -q`：58 PASS。主 checkout 同命令首次執行 4 FAIL（正式建置持鎖，非格式回歸），待正式建置結束重跑。`git diff --check` PASS；CI 未執行，NOT VERIFIED。完整 Archive 尚未完成，任務保持未勾選。
+
+  - Git：`8585f1b160abfd9867d41174709a118d599ab64e` 已推送 origin/main；追加發布入口回歸證明錯誤索引會在改寫輸出前被拒絕。原版 SPR presence audit 實跑 75,588 expected／75,588 actual，missing=0／extra=0；私有報告 `reports/mvp_archive_source_coverage.json`，僅證明路徑覆蓋，非逐檔原版位元組比較。完整 Builder session=81363 持續執行；接手先 poll 該 process，不能因 observation timeout 重啟；若確認已停止才使用原命令重跑（Builder 可重驗 cache）。

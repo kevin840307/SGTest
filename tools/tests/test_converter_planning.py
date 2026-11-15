@@ -12,6 +12,7 @@ sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from asset_converter.atlas.dense_atlas import build_group
 from test_asset_converter import tiny_spr
 from asset_converter.atlas.archive_audit import audit_archive
+from asset_converter.content.export_assets import publish
 from asset_converter.cli import archive_all
 from asset_converter import cli
 from asset_converter.source.convert_assets import convert_act,convert_sif,convert_draw_order
@@ -143,6 +144,15 @@ except ConverterBusy:sys.exit(2)
                     index_path.write_text(json.dumps(corrupted),encoding='utf-8')
                     report=audit_archive(source,archive)
                     self.assertEqual(report['status'],'failed',report)
+                    # The publication gate must fail before touching live files.
+                    assets=Path(temp)/'assets'
+                    assets.mkdir(exist_ok=True)
+                    marker=assets/'keep.txt'
+                    marker.write_text('existing asset output',encoding='utf-8')
+                    with self.assertRaisesRegex(ValueError,'complete archive audit failed'):
+                        publish(source,archive,assets)
+                    self.assertEqual(marker.read_text(encoding='utf-8'),'existing asset output')
+                    self.assertEqual(list(assets.iterdir()),[marker])
             index_path.write_text(json.dumps(original),encoding='utf-8')
             self.assertEqual(audit_archive(source,archive)['status'],'pass')
 
