@@ -358,11 +358,11 @@ ADR-026補充：使用者指定Client一般遊玩支援30～90FPS；FPS選項只
 
 ## ADR-038 — Client / Server 目標目錄與命名（2026-11-15）
 
-- Status: **ACCEPTED TARGET ARCHITECTURE**；目前程式碼尚未全部搬移。
+- Status: **ACCEPTED / IMPLEMENTED STRUCTURE**；2026-11-15 Client/Server 主程式已完成目錄搬移，後續不得再擴大舊分層。
 - Style: Client 與 Server 都採功能導向 modular monolith；禁止為了形式建立多層 Clean Architecture、每素材獨立 Loader、或抽象的 Common/Utils/Manager 雜物層。
 - Client: 主要模組為 app / networking / world / gameplay / rendering / assets / ui / diagnostics；Render FPS、UI FPS、Network I/O、World State 必須隔離。AFK 可停止 world rendering、降低可重建 visual replication、釋放 GPU world assets，但不能降低 heartbeat、reliable gameplay event、state reducer 或 authoritative state 的處理正確性。
 - Server: 維持單一 .NET 8 project，主要模組為 Networking / Accounts / World / Combat / Items / Social / Persistence / Content / Diagnostics；不再擴大 Application / Domain / Infrastructure / Transport 目錄。
-- Naming: 移除模糊的 Session 作為目標架構名稱。網路連線使用 ClientConnection；AOI 狀態使用 VisibilityState；角色世界狀態使用 PlayerState；epoch 使用 ConnectionEpoch / MapEpoch。現有 Session.cs 與 bundles/session 只屬 legacy implementation，需獨立搬移 commit 後才算完成。
+- Naming: 模糊的 `Session` 類別名稱已移除；網路連線使用 `ClientConnection`，既有 wire 世代欄位內部命名改為 `ConnectionEpoch`。AOI/角色狀態若未來複雜度需要再抽 `VisibilityState` / `PlayerState`，不先建立空類別。
 - Assets: Converter source catalog 可保留原版 Player/Enemy/NPC/Pet/MA/MS/SR/Item/Effect/Map/Interface/Audio key；Runtime catalog 使用 maps/monsters/npcs/players/equipment/pets/items/effects/ui/audio/data。每個素材保持獨立 identity；生命週期以 app/character/map/on_demand metadata/owner 表達，不用資料夾或 physical merge 代表 ownership。
 - Source of truth: docs/ARCHITECTURE.md、docs/CLIENT_ARCHITECTURE.md、docs/SERVER_ARCHITECTURE.md。其他 Session 在修改對應端前必須先讀這三份與相關專題規格。
 
@@ -370,7 +370,7 @@ ADR-026補充：使用者指定Client一般遊玩支援30～90FPS；FPS選項只
 
 - Status: **ACCEPTED / WINDOWS VERIFIED / macOS APP EXPORT NOT VERIFIED**。
 - Remove: `client/addons/raw_assets_export/` 與 `project.godot [editor_plugins]`。Runtime 原本就由 AssetStore 直接讀 JSON/PNG；舊 addon 只負責 Export 階段把 `.gdignore` raw files 塞進主 PCK，屬多餘特殊機制。
-- Build: `client/tools/pack_assets.gd` 使用 Godot PCKPacker，把 `client/assets/**` 以相同 `res://assets/**` path 打成平台無關的 `assets/assets.pck`；main application export 明確排除 `assets/**`。
+- Build: `client/tools/build/pack_assets.gd` 使用 Godot PCKPacker，把 `client/assets/**` 以相同 `res://assets/**` path 打成平台無關的 `assets/assets.pck`；main application export 明確排除 `assets/**`。
 - Runtime: autoload `scripts/asset_pack.gd` 在 gameplay 前呼叫 `ProjectSettings.load_resource_pack()`。Windows 預設 `<exe dir>/assets/assets.pck`；macOS 支援 distribution sibling `<app parent>/assets/assets.pck`、`.app/Contents/Resources/assets/assets.pck` 與顯式 `--asset-pack=`。掛載後 Renderer/AssetStore 只看 `res://assets/**`，不得處理平台 path。
 - Same rules: Windows/macOS 共用**完全相同**的 asset pack、catalog、logical ids、ownership metadata 與 AFK resource policy；平台差異只在啟動 path resolver。
 - AFK: pack 可持續掛載；省資源依 AssetStore 釋放 world textures/GPU refs，不用 unmount，不降低 Network/Reducer/authoritative state。
@@ -384,5 +384,5 @@ ADR-026補充：使用者指定Client一般遊玩支援30～90FPS；FPS選項只
 - Collision: `blocking.dat` 保留原版 Blocking.dat byte grid，不轉 Godot CollisionShape；Client/Server 共用 hash 與 O(1) cell lookup。
 - Full export evidence: 75,588 SPR → 7,890 independent groups → 7,890 unique logical IDs，0 collision、0 export error；21,723 managed files，約1.31GiB；Map13 contract 367 placements / 45 scenery assets、9 monster definitions / 9 monster assets、7 Player-B base parts，cross_asset_bundle=false。
 - Benchmark correction: 舊 Mode4 root 有超過固定12隻怪，舊腳本排序後取前12；Mode1/2/3 root 只有固定12隻，因此舊 Mode4 12-kind cross-mode數字失效。新版測試固定同一12個 monster IDs、固定 Map13 independent asset、每 Mode 獨立 Godot process，2/12 kinds×1000 instances×3 repeats，repeat 2 反轉模式順序。
-- Fair result: Mode1 Dense 在固定大型怪物集合的 texture footprint / pages / load cost 綜合最佳；最新版 Mode4 Adaptive Atomic 不再顯示舊版記錄中的巨大記憶體優勢。正式 packing mode 不在此 ADR 偷改，等使用者依新版比較決定。
-- Runtime tests: Python tools/tests 121 PASS；monster workflow 4 PASS；Godot directions/map objects/monster visuals/paper doll/runtime store/navigation + cache-pressure PASS；使用 `.cache/dotnet` SDK 8.0.428 從 repo root 執行 C# **376 PASS**，包含原版 Map13 collision contract。
+- Fair result: **Per-Asset Dense Single** 在固定大型怪物集合的 texture footprint / pages 綜合最佳；Adaptive Atomic 不再顯示舊版記錄中的巨大記憶體優勢。另以完整 archive frame metadata 掃描 7,890/7,890 logical assets，全部可在單一 <=4096 Dense page 幾何限制內放下。正式 packing mode 不在此 ADR 偷改，等使用者確認是否切為 Per-Asset Dense Atlas。
+- Runtime tests: Python tools/tests 123 PASS；root-level contracts 37 PASS/1 SKIP；Godot 現有 `client/tests/test_*.gd` 15/15 PASS；`verify_runtime.ps1` 完整 PASS；使用 `.cache/dotnet` SDK 8.0.428 從 repo root執行 C# build 0 warning/0 error、tests **376 PASS**。

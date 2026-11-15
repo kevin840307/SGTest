@@ -3,7 +3,7 @@ extends SceneTree
 # PERF002 diagnostic: weak sentinels reveal retained CPU Images/JSON metadata.
 # No gameplay or asset-file mutation; the extra object exists only in memory.
 class ProbeStore:
-	extends "res://scripts/runtime_asset_store.gd"
+	extends "res://scripts/assets/runtime_asset_store.gd"
 	var images: Array = []
 	var metadata: Array = []
 	func _publish(item: Dictionary, bytes: int = 0) -> bool:
@@ -35,7 +35,7 @@ func memory() -> Dictionary:
 		"texture_bytes":RenderingServer.get_rendering_info(RenderingServer.RENDERING_INFO_TEXTURE_MEM_USED)}
 
 func _check_metric_bounds() -> void:
-	var store := preload("res://scripts/runtime_asset_store.gd").new()
+	var store := preload("res://scripts/assets/runtime_asset_store.gd").new()
 	for poll in 10000:store.poll_gpu(1,1200)
 	assert(store.statistics().gpu_commit_frame_ms.is_empty(),"idle polling must not allocate telemetry samples")
 	var limit: int = store.MAX_METRIC_SAMPLES
@@ -90,7 +90,7 @@ func _run() -> void:
 		"control_image_alive_with_texture":control_alive_with_texture,
 		"control_image_alive_after_release":control_alive_after_release,
 		"loaded":loaded,"released":released,"closed":closed,
-		"store_sha256":FileAccess.get_sha256("res://scripts/runtime_asset_store.gd")}
+		"store_sha256":FileAccess.get_sha256("res://scripts/assets/runtime_asset_store.gd")}
 	var target := ProjectSettings.globalize_path("res://../reports/perf002_lifetime.json")
 	for arg in OS.get_cmdline_user_args():
 		if arg.begins_with("--report="):target = arg.trim_prefix("--report=")

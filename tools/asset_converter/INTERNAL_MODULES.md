@@ -18,7 +18,7 @@ run_build_assets.bat "C:\SGO\Stargate Online IE HK2"
 - `content/build_maps.py`：terrain、scenery placement 與原版 `blocking.dat`；Map 不包含 Monster pixels。
 - `content/build_population.py`：Server monster definition / spawn 指向獨立 `monsters/<id>/atlas.json`。
 - `content/animation_definition.py`、`runtime_animation_semantics.py`：動作方向、鏡像、原點與紙娃娃語義。
-- `content/asset_bundle_builder.py`、`content/asset_pipeline.py`：**LEGACY RESEARCH ONLY**；保留歷史回歸，production CLI 不再依賴，也不得重新導入 map/session lifecycle bundle。
+- 舊 `content/asset_bundle_builder.py`、`content/asset_pipeline.py` 已移除；歷史結果只保留在 Git history / 舊報告，不得重新導入 map/session lifecycle bundle。
 
 所有依賴模組與入口放在同一個 Python package，內部使用 `from .xxx import ...`，不是由新 CLI 往上層匯入散落的 `tools/*.py`。外層同名腳本暫保留給舊分析／既有測試，**新正式流程以本資料夾實作為主**；外層未同步更動不會改變一鍵轉換結果。
 

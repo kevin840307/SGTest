@@ -46,7 +46,7 @@ Recovered 的 `GameConstants.DIR_STRINGS = [6,7,8,1,2,3,4,5]` 與 Server 一致�
 - `EN010A_NS2` physical SPR 即使存在，logical facing 2 仍可依怪物原版規則重用 `EN010A_NS1`。
 - `B-BODY_AS4` physical SPR 即使存在，人物 action AS 的 logical facing 4 仍依原版 `DirectionMapping` 使用 `AS3 + flip`。
 
-`tools/rebuild_assets.ps1` 在 build population 後執行 `apply_normalized_runtime_semantics.py`，重建不會再把這個修正丟掉。
+目前 per-asset converter 直接在 manifest/definition 發布時保留 normalized animation semantics；舊 `apply_normalized_runtime_semantics.py` 與 lifecycle bundle rebuild 流程已移除。
 
 ### 2. authoritative facing 與 presentation facing 分離
 
@@ -121,7 +121,7 @@ Player、monster、drop 與 reliable action event 使用同一 bounded interest 
 cd C:\SGO\SRC\SGTest
 py -m unittest discover -s tools/tests -q
 cd tools
-py -m unittest test_animation_definition test_normalized_atlas_candidates test_runtime_animation_semantics -q
+py -m unittest test_animation_definition test_runtime_animation_semantics -q
 cd ..
 .\.cache\dotnet\dotnet.exe build server\SGTest.Server.csproj -c Release
 .\.cache\dotnet\dotnet.exe run --project server\tests\SGTest.Server.Tests.csproj -c Release

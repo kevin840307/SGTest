@@ -1,7 +1,7 @@
 extends SceneTree
 
 var failures := 0
-const GRID = preload("res://scripts/collision_grid.gd")
+const GRID = preload("res://scripts/world/collision_grid.gd")
 
 func check(condition: bool, message: String) -> void:
 	if not condition:
@@ -25,7 +25,7 @@ func _initialize() -> void:
 	check(original.open("res://assets/maps/13/blocking.dat") == OK, "original Map13 collision loads")
 	check(original.width == 960 and original.height == 960, "original dimensions preserved")
 	check(original.walkable(Vector2(1200,800)), "actual spawn is legal")
-	var terrain := preload("res://scripts/terrain_renderer.gd").new()
+	var terrain := preload("res://scripts/rendering/terrain_renderer.gd").new()
 	check(terrain.open("res://assets",13) == OK, "terrain atlas/checksums load")
 	terrain.update_view(Rect2(0,0,1440,900))
 	check(terrain.multimesh.instance_count <= 1600, "only viewport terrain has GPU instances")

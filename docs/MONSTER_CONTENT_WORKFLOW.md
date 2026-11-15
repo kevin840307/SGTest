@@ -59,7 +59,7 @@ python tools/monster_workflow.py content/monster_recipes/my_monster.monster.json
 python tools/export_server_content.py
 ```
 
-一般不需第二行：workflow 本身會同步該 map 的 population 到 `server/content`；完整 `rebuild_assets.ps1` 仍會在最後統一 export collision/map contract。
+一般不需第二行：workflow 本身會同步該 map 的 population 到 `server/content`；完整 Runtime 驗證入口為 `tools/asset_converter/verify_runtime.ps1`，最後會統一 export collision/map contract。
 
 ## Source / animation Gate
 
@@ -113,9 +113,9 @@ ASSET205 把 population contract 從 v1 升成 v2。v1 Server 仍可讀，並套
 
 既有 Map13 已由原始 Dat 重建成 population v2：**9 definitions / 78 spawns**，所有 stats 與舊硬編碼值完全相同，因此 schema 升版不應改變既有手感。
 
-## Full rebuild 不會丟 custom monster
+## Runtime verify 不會重建 shared bundle
 
-`tools/rebuild_assets.ps1` 現在只是正式 converter 的相容 wrapper：
+`tools/asset_converter/verify_runtime.ps1` 是 build 後的 Runtime 驗證入口：
 
 1. 呼叫 `tools/asset_converter/cli.py build`，發布 per-asset 素材。
 2. 建立 Map world/population contract；不重新合併 Map/Monster。
@@ -178,5 +178,5 @@ cd tools
 py -m unittest test_population test_monster_workflow -q
 cd ..
 .\.cache\dotnet\dotnet.exe run --project server\tests\SGTest.Server.Tests.csproj -c Release
-& 'C:\SGO\Godot\Godot_v4.7.2-stable_win64_console.exe' --headless --path client --script res://tests/test_monster_visuals_async.gd
+& 'C:\SGO\Godot\Godot_v4.7.2-stable_win64_console.exe' --headless --path client --script res://tests/test_monster_visuals.gd
 ```

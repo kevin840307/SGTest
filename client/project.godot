@@ -20,7 +20,7 @@ window/stretch/aspect="expand"
 common/physics_ticks_per_second=30
 
 [autoload]
-AssetPack="*res://scripts/asset_pack.gd"
+AssetPack="*res://scripts/assets/asset_pack.gd"
 
 [rendering]
 renderer/rendering_method="gl_compatibility"

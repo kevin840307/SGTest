@@ -197,11 +197,12 @@ Before（monster bundle + per-object viewport atlases）對 After（monster + sc
 
 `tools/README.md` 定義：
 
-- Production：`rebuild_assets.ps1`、`asset_pipeline.py`、`asset_bundle_builder.py`、`build_maps.py`、`export_server_content.py`
-- Research / Experiment：舊 atlas builders、全量 support exporter、尺寸候選等
-- Benchmark：`benchmark_*`
-- Viewer / Diagnostic：viewer、audit、inspect、report、summarize
-- Test：production contract 與 research regression 分開
+- Production build：`run_build_assets.bat` → `tools/asset_converter/cli.py`
+- Runtime verify：`tools/asset_converter/verify_runtime.ps1`
+- Server contract export：`tools/export_server_content.py`
+- Packing benchmark：`tools/asset_converter/benchmarks/packing/`
+- Research / Viewer：原版格式 audit/inspect/viewer；不得成為 Runtime dependency
+- 舊 lifecycle bundle / normalized candidate builder 與對應 tests 已移除
 
 不為每個素材類別建立資料夾層級、Builder、CLI 或 Loader。
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """RESEARCH-ONLY atlas packing primitives and historical candidate builder.
 
-Production uses asset_pipeline.py / asset_bundle_builder.py; packing helpers in
+RESEARCH/COMPATIBILITY candidate builder. Production uses tools/asset_converter/; packing helpers in
 this module remain shared and regression-tested.
 Build deterministic appearance-local atlas candidates from a clean client.
 

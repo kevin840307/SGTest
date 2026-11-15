@@ -1,8 +1,8 @@
 extends SceneTree
 
 func _initialize() -> void:
-	var client := preload("res://scripts/network_client.gd").new()
-	var wire := preload("res://scripts/message_pack.gd").new()
+	var client := preload("res://scripts/networking/network_client.gd").new()
+	var wire := preload("res://scripts/networking/message_pack.gd").new()
 	var packet: PackedByteArray = wire.encode(24,[1.0])
 	var now := Time.get_ticks_usec()
 	for index in 128:

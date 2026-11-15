@@ -245,3 +245,13 @@ Map13 contract：
 4. 得到使用者明確同意。
 
 否則視為架構回歸。
+
+## 12. Physical Packing Recommendation（2026-11-15）
+
+Asset boundary 已定案；physical packing 仍可替換。最新同素材 benchmark 見 `ASSET_PACKING_BENCHMARK.md`。
+
+目前建議 **Per-Asset Dense Atlas**：一個 logical asset 優先一張 <=4096 的 Dense atlas；目前正式 7,890 groups 幾何掃描全部符合。未來只有真的無法在4096內放下的單一 asset 才採 Paged Dense fallback。
+
+這不代表把不同素材合併。Monster/NPC/scenery/Player part/equipment 的 logical/physical boundary 完全不變。
+
+目前 production builder 尚維持 Adaptive Atomic，直到使用者確認切換；不要在其它 Session 先自行改 production policy。

@@ -1,7 +1,7 @@
 extends SceneTree
 
 func _init() -> void:
-	var loader = preload("res://scripts/asset_pack.gd")
+	var loader = preload("res://scripts/assets/asset_pack.gd")
 	var windows := loader.default_candidates("C:/Games/SGTest/SGTest.exe","Windows")
 	assert(windows == ["C:/Games/SGTest/assets/assets.pck"])
 	var macos := loader.default_candidates("/Games/SGTest/Stargate Reborn.app/Contents/MacOS/Stargate Reborn","macOS")

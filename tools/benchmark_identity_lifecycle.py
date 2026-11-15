@@ -107,12 +107,12 @@ def main() -> int:
     complete=all(isinstance(row,dict) for row in results)
     character_ids=[int(row["character_id"]) for row in results if isinstance(row,dict)]
     account_ids=[int(row["account_id"]) for row in results if isinstance(row,dict)]
-    session_epochs=[int(row.get("session_epoch",0)) for row in results if isinstance(row,dict)]
+    connection_epochs=[int(row.get("connection_epoch",0)) for row in results if isinstance(row,dict)]
     passed=(
         complete
         and len(set(character_ids))==1 and character_ids[0]>0
         and len(set(account_ids))==1 and account_ids[0]>0
-        and len(session_epochs)==3 and all(epoch>0 for epoch in session_epochs) and len(set(session_epochs))==3
+        and len(connection_epochs)==3 and all(epoch>0 for epoch in connection_epochs) and len(set(connection_epochs))==3
         and results[0]["reason"]=="session_replaced"
         and results[1]["reason"]=="session_replaced"
         and results[2]["reason"]=="logged_out"

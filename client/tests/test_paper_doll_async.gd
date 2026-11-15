@@ -1,7 +1,7 @@
 extends SceneTree
 
-const STORE = preload("res://scripts/runtime_asset_store.gd")
-const DOLL = preload("res://scripts/paper_doll.gd")
+const STORE = preload("res://scripts/assets/runtime_asset_store.gd")
+const DOLL = preload("res://scripts/rendering/paper_doll.gd")
 
 func _initialize() -> void:
 	call_deferred("_run")

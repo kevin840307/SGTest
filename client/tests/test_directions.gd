@@ -17,22 +17,22 @@ func layer_index(sample: Dictionary, name: String) -> int:
 	return -1
 
 func _initialize() -> void:
-	var policy = preload("res://scripts/action_policy.gd")
-	var codec = preload("res://scripts/snapshot_codec.gd")
+	var policy = preload("res://scripts/gameplay/action_policy.gd")
+	var codec = preload("res://scripts/networking/snapshot_codec.gd")
 	var original := 1.36
 	var row: Array = codec.decode(codec.encode([[1,0,0,30,6,2,original]]))[0]
 	check(policy.wire_time(original) == row[6], "reliable and snapshot action clocks compare exactly")
 	check(not policy.accepts_event(2, original, original, 2.0), "delayed attack cannot overwrite completed movement")
 	check(not policy.accepts_event(2, 1.0, 1.36, 1.4), "old action rejected")
 	check(int(ProjectSettings.get_setting("application/run/max_fps",-1)) == 60, "default render cap is 60 FPS")
-	var facing = preload("res://scripts/legacy_facing.gd")
+	var facing = preload("res://scripts/rendering/legacy_facing.gd")
 	check(facing.from_vector(Vector2.RIGHT) == 6, "original right facing is 6")
 	check(facing.from_vector(Vector2.DOWN) == 8, "original down facing is 8")
 	check(facing.from_vector(Vector2.LEFT) == 2, "original left facing is 2")
 	check(facing.from_vector(Vector2.UP) == 4, "original up facing is 4")
 	check(facing.from_vector(Vector2(5,10),8,28.0) == 8, "original-style hysteresis holds near sector boundary")
 
-	var atlas_script = preload("res://scripts/entity_atlas.gd")
+	var atlas_script = preload("res://scripts/assets/entity_atlas.gd")
 	var population: Dictionary = JSON.parse_string(FileAccess.get_file_as_string("res://assets/maps/13/population.json"))
 	var monster_atlases: Dictionary = {}
 	for definition in population.definitions:
@@ -81,7 +81,7 @@ func _initialize() -> void:
 		atlas.sample("TEST_ND1",i*0.01,8,0.35)
 	check(atlas.sample_cache.size() == entries, "sample cache grows by clip, not elapsed time or monster count")
 
-	var doll := preload("res://scripts/paper_doll.gd").new()
+	var doll := preload("res://scripts/rendering/paper_doll.gd").new()
 	check(doll.open("res://assets") == OK, "independent player base assets load")
 	check(doll.parts.size() == 6 and doll.death != null, "six base parts and death load independently")
 	check(doll.parts.body != doll.parts.head and doll.parts.body != doll.death,

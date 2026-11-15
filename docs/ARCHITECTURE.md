@@ -14,7 +14,7 @@
 - [Asset Runtime Strategy](ASSET_RUNTIME_STRATEGY.md)
 - [Asset Converter](ASSET_CONVERTER.md)
 
-> Client / Server 的目標 Tree 已重新規劃；目前程式碼仍有部分舊目錄，**文件是後續搬移方向，不代表已全部搬完**。
+> Client / Server 主程式已在 2026-11-15 搬到本文件定義的功能導向結構；之後新增功能不得再建立舊 Application/Domain/Transport 或平鋪 scripts 根目錄。
 
 ---
 
@@ -200,15 +200,18 @@ Windows 與 macOS 使用相同 `assets.pck` 內容與 `res://assets/**` logical 
 
 ## 8. 現況
 
-目前 Client 尚有多數 script 平放於 `client/scripts/`，Server 尚保留：
+Client 主程式目前已實際分到：
 
 ```text
-Application/
-Domain/
-Infrastructure/
-Transport/
+app / assets / diagnostics / gameplay / networking / rendering / ui / world
 ```
 
-這些是**待逐步搬移的現況**。新功能不要再擴大舊分層；重構時先保持行為，再移到目標模組。
+Server 主程式目前已實際分到：
 
-詳細 mapping 參考 Client / Server Architecture。
+```text
+Accounts / Networking / Persistence / World
+```
+
+Combat / Items / Social / Content / Diagnostics 等 Server 模組只在真正有獨立實作時建立，不先做空架構。
+
+ClientConnection 與 ConnectionEpoch 已取代模糊的 Session 命名。詳細實際檔案 Tree 見 Client / Server Architecture。

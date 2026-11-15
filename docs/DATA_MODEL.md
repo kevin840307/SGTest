@@ -6,7 +6,7 @@ F001 已建立初版 SQLite migration：`account`、`character`、`schema_migrat
 
 - account_id：獨立帳號
 - character_id：持久玩家角色
-- session_id / session_epoch：短期連線身份，重登須更新 epoch
+- session_id / connection_epoch：短期連線身份，重登須更新 epoch
 - map_definition_id / channel_id / map_epoch：地圖定義、負載分組、換圖/重建版本
 - entity_id / entity_revision：世界暫態物件身份/版本（不可當背包物品 ID）
 - item_definition_id：跨全伺服器共用且封版後不可重排的物品種類

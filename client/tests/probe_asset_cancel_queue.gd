@@ -1,9 +1,9 @@
 extends SceneTree
 
-const STORE = preload("res://scripts/runtime_asset_store.gd")
+const STORE = preload("res://scripts/assets/runtime_asset_store.gd")
 
 class PausedStore:
-	extends "res://scripts/runtime_asset_store.gd"
+	extends "res://scripts/assets/runtime_asset_store.gd"
 	func start() -> void:
 		_running = true
 
@@ -89,7 +89,7 @@ func _run() -> void:
 		file.close()
 	for name in ["sprites.json","page.png"]:DirAccess.remove_absolute(folder.path_join(name))
 	DirAccess.remove_absolute(folder)
-	results["store_sha256"] = FileAccess.get_sha256("res://scripts/runtime_asset_store.gd")
+	results["store_sha256"] = FileAccess.get_sha256("res://scripts/assets/runtime_asset_store.gd")
 	var report_path := ""
 	for argument in OS.get_cmdline_user_args():
 		if argument.begins_with("--report="):report_path = argument.trim_prefix("--report=")

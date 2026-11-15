@@ -44,19 +44,38 @@ def asset_identity(monster_assets=None,assets=None):
 
 def provenance(monster_assets=None,assets=None):
     root=Path(assets or 'client/assets')
-    files=['client/scripts/main.gd','client/scripts/entity_atlas.gd','client/scripts/monster_visuals.gd',
-           'client/scripts/runtime_asset_store.gd','client/scripts/frame_profiler.gd','client/project.godot',
-           'server/bin/Release/net8.0/SGTest.Server.dll','client/tools/benchmark_asset_lifecycle.gd',
-           'client/tools/benchmark_runtime_asset_store.gd','tools/benchmark_runtime_baseline.py',
-           *(str(root/relative) for relative in ['bundles/index.json','maps/13/world.json',
-                                                'maps/13/population.json','bundles/session/player-b-base.json'])]
-    session=root/'bundles/session/player-b-base.json'
-    if session.is_file():
-        manifest=json.loads(session.read_text(encoding='utf-8'))
-        files.extend((session.parent/page).as_posix() for page in manifest.get('pages',[]))
+    files=[
+        Path('client/scripts/app/main.gd'),
+        Path('client/scripts/assets/entity_atlas.gd'),
+        Path('client/scripts/assets/runtime_asset_store.gd'),
+        Path('client/scripts/diagnostics/frame_profiler.gd'),
+        Path('client/scripts/rendering/monster_visuals.gd'),
+        Path('client/project.godot'),
+        Path('server/bin/Release/net8.0/SGTest.Server.dll'),
+        Path('client/tools/benchmarks/asset_lifecycle.gd'),
+        Path('client/tools/benchmarks/runtime_asset_store.gd'),
+        Path('tools/benchmark_runtime_baseline.py'),
+    ]
+    for relative in ('catalog/assets.json','maps/13/world.json','maps/13/population.json'):
+        path=root/relative
+        if path.is_file():
+            files.append(path)
+    for relative in (
+        'players/b/base/body/atlas.json','players/b/base/leg/atlas.json',
+        'players/b/base/head/atlas.json','players/b/hair/hair00/atlas.json',
+        'players/b/base/left_arm/atlas.json','players/b/base/right_arm/atlas.json',
+        'players/b/base/death/atlas.json',
+    ):
+        manifest_path=root/relative
+        if not manifest_path.is_file():
+            continue
+        files.append(manifest_path)
+        manifest=json.loads(manifest_path.read_text(encoding='utf-8'))
+        files.extend(manifest_path.parent/page for page in manifest.get('pages',[]))
+    files=list(dict.fromkeys(path.resolve() for path in files))
     return {'git_head':subprocess.check_output(['git','rev-parse','HEAD']).decode().strip(),
             'tracked_worktree_diff_sha256':hashlib.sha256(subprocess.check_output(['git','diff','HEAD','--binary'],stderr=subprocess.DEVNULL)).hexdigest(),
-            'files':{name:hashlib.sha256(Path(name).read_bytes()).hexdigest() for name in files},
+            'files':{path.as_posix():hashlib.sha256(path.read_bytes()).hexdigest() for path in files},
             'assets':asset_identity(monster_assets,assets),'runtime_environment':RUN_ENV,
             'os':platform.platform(),'cpu_logical':psutil.cpu_count(),'physical_ram_bytes':psutil.virtual_memory().total,
             'cache':'warm OS cache; cold disk NOT VERIFIED','physical_driver_vram':'NOT VERIFIED (engine counters reported separately)'}
@@ -101,7 +120,7 @@ def lifecycle(godot,output,cycles,monster_assets=None,loader='sync',assets=None)
     Path(str(native_report)+'.progress.json').write_text('{"cycle":-1,"phase":"starting"}',encoding='utf-8')
     started_wall=time.time()
     with tempfile.TemporaryFile(mode='w+',encoding='utf-8') as log:
-        lifecycle_script='tools/benchmark_runtime_asset_store.gd' if loader=='async' else 'tools/benchmark_asset_lifecycle.gd'
+        lifecycle_script='tools/benchmarks/runtime_asset_store.gd' if loader=='async' else 'tools/benchmarks/asset_lifecycle.gd'
         command=[godot,'--path','client','--rendering-method','gl_compatibility','--max-fps','60','--resolution','1440x900',
                  '--script',lifecycle_script,'--',f'--cycles={cycles}',f'--report={native_report}']
         if monster_assets:command+=[f'--monster-assets={monster_assets.resolve()}']

@@ -1,9 +1,9 @@
 extends SceneTree
 
-const STORE = preload("res://scripts/runtime_asset_store.gd")
+const STORE = preload("res://scripts/assets/runtime_asset_store.gd")
 
 class PausedStore:
-	extends "res://scripts/runtime_asset_store.gd"
+	extends "res://scripts/assets/runtime_asset_store.gd"
 	var order: Array = []
 	func start() -> void:
 		_running = true

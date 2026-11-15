@@ -56,11 +56,12 @@ Player base parts merged into one physical atlas
 
 同一 logical asset 內可以自行 pack action/facing/frame；不同 asset 不可以跨界合併。
 
-## Legacy compatibility
+## Build / verify entry
 
-`tools/rebuild_assets.ps1` 只是一個相容 wrapper，必須呼叫正式 `asset_converter/cli.py`。不得再自行執行舊 lifecycle bundle builder。
+- Build：`run_build_assets.bat` → `tools/asset_converter/cli.py build`。
+- Runtime verification：`tools/asset_converter/verify_runtime.ps1`，會 export Server contract 並跑 Godot asset regressions。
 
-舊 lifecycle bundle 原始實作若仍存在於 Git history / research code，只能當歷史 A/B 參考，不是 production path。
+舊 lifecycle bundle builder、normalized candidate scripts 與對應 tests 已從工作樹移除；歷史結果只存在 Git history / 舊報告，不是 production path。
 
 ## Research / benchmark
 

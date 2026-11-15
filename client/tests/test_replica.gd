@@ -1,7 +1,7 @@
 extends SceneTree
 
 var failures := 0
-const REPLICA = preload("res://scripts/client_replica.gd")
+const REPLICA = preload("res://scripts/world/client_replica.gd")
 
 func check(condition: bool, message: String) -> void:
 	if not condition:
@@ -69,7 +69,7 @@ func _initialize() -> void:
 	check(smooth.position_at(smooth.monsters[1],1.34).x < 24.0,"attack entry preserves interpolated visual position")
 	smooth.event(1,1,41,Vector2(900,10),0,6,4,1.366,2)
 	check(smooth.position_at(smooth.monsters[1],1.38).x == 900,"death snaps immediately without a cross-map streak")
-	var clock := preload("res://scripts/server_clock.gd").new()
+	var clock := preload("res://scripts/networking/server_clock.gd").new()
 	clock.observe_snapshot(10,0)
 	var previous := clock.time
 	for i in 600:

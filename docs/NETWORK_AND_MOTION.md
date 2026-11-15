@@ -14,7 +14,7 @@
 ## 2. 訊息設計（初稿）
 
 每包 Header：
- ProtocolVersion / SessionEpoch / MapEpoch / ServerTick / ServerTimestamp / StreamSequence / TraceId / MessageType
+ ProtocolVersion / ConnectionEpoch / MapEpoch / ServerTick / ServerTimestamp / StreamSequence / TraceId / MessageType
 每個 EntityEvent：
  EntityId / EntityRevision / EventSequence / CausalityId（必要時）/ EntityKind
 MoveIntent：

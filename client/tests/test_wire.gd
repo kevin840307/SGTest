@@ -1,7 +1,7 @@
 extends SceneTree
 
 func _initialize() -> void:
-	var wire := preload("res://scripts/message_pack.gd").new()
+	var wire := preload("res://scripts/networking/message_pack.gd").new()
 	var path := ProjectSettings.globalize_path("res://").path_join("../reports/wire_fixture.json")
 	var fixture: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(path))
 	var bytes: PackedByteArray = str(fixture.hex).hex_decode()
@@ -11,7 +11,7 @@ func _initialize() -> void:
 	assert(packet[2][2] == 1.25 and packet[2][3] == "方向")
 	assert(packet[2][4] == PackedByteArray([1,254]))
 	assert(wire.encode(99,packet[2]) == bytes)
-	var codec := preload("res://scripts/snapshot_codec.gd")
+	var codec := preload("res://scripts/networking/snapshot_codec.gd")
 	var snapshot: PackedByteArray = str(fixture.snapshot_hex).hex_decode()
 	var rows: Array = codec.decode(snapshot)
 	assert(rows.size() == 1 and rows[0][0] == 42 and rows[0][8] == 99)

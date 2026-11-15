@@ -21,7 +21,7 @@ def cpu_time(group):
 def run(godot, count, seconds):
     with tempfile.TemporaryFile(mode='w+', encoding='utf-8') as log:
         process = subprocess.Popen([str(godot), '--headless', '--path', str(REPO/'client'),
-                                    '--max-fps', '10', '--script', 'tools/benchmark_asset_worker_idle.gd',
+                                    '--max-fps', '10', '--script', 'tools/benchmarks/asset_worker_idle.gd',
                                     '--', f'--stores={count}'], cwd=REPO, stdout=log, stderr=subprocess.STDOUT)
         try:
             deadline = time.monotonic()+10
@@ -68,7 +68,7 @@ def main():
     report = {'scope': 'one headless process, 10 FPS, no world/network/assets; 0/1/8 idle decoder threads, not eight clients',
               'cpu_counter_note': 'Short-window process CPU counters may quantize small values to zero; zero does not prove zero CPU or an improvement.',
               'godot_version': subprocess.check_output([str(godot), '--version'], text=True).strip(),
-              'os': platform.platform(), 'store_sha256': hashlib.sha256((REPO/'client/scripts/runtime_asset_store.gd').read_bytes()).hexdigest(),
+              'os': platform.platform(), 'store_sha256': hashlib.sha256((REPO/'client/scripts/assets/runtime_asset_store.gd').read_bytes()).hexdigest(),
               'samples': [run(godot, count, args.seconds) for count in [0, 1, 8]]}
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(report, indent=2), encoding='utf-8')

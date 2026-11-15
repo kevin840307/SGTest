@@ -8,9 +8,9 @@ class PopulationTest(unittest.TestCase):
     def test_source_spawn_identity_and_shared_visual(self):
         with tempfile.TemporaryDirectory() as folder:
             assets=Path(folder)
-            (assets/'enemy').mkdir()
+            (assets/'monsters/en001a').mkdir(parents=True)
             clips={f'EN001A_{a}{d}':[0] for a in ['NS','NW','FA','NH','ND'] for d in range(1,9)}
-            path=assets/'enemy/en001a.json'
+            path=assets/'monsters/en001a/atlas.json'
             path.write_text(json.dumps({'clips':clips,'aliases':{}}))
             rows=[{'enemy_id':id,'x':x,'y':30,'source_index':i,'flags':9}
                   for i,(id,x) in enumerate([(12,100),(7,200),(12,300)])]

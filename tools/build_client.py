@@ -26,7 +26,7 @@ def build_asset_pack(godot: Path, assets: Path, output: Path) -> dict:
     result = subprocess.run(
         [
             str(godot), "--headless", "--path", str(REPO / "client"),
-            "--script", "res://tools/pack_assets.gd", "--",
+            "--script", "res://tools/build/pack_assets.gd", "--",
             f"--source={assets}", f"--output={output}",
         ],
         cwd=REPO,
@@ -88,8 +88,8 @@ def main():
         path = REPO / ".cache/godot-templates" / name
         if not path.is_file() or sha256(path) != digest:
             parser.error(f"official template missing/mismatched: {path}; see docs/PERF002_MEMORY.md")
-    if not (assets / "catalog/assets.json").is_file() and not (assets / "bundles/index.json").is_file():
-        parser.error("build runtime assets first; expected catalog/assets.json or bundles/index.json")
+    if not (assets / "catalog/assets.json").is_file():
+        parser.error("build per-asset runtime assets first; expected catalog/assets.json")
 
     output.parent.mkdir(parents=True, exist_ok=True)
     asset_pack = output.parent / "assets" / "assets.pck"

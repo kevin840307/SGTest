@@ -17,7 +17,7 @@ def main():
             best = min((r for r in rows if r['entity']==entity and r['layout']==mode),key=lambda r:r['rgba_bytes'])
             manifest = (root/f"{best['requested_side']}_{mode}"/(entity+'.json')).resolve()
             probe = subprocess.run([str(args.godot.resolve()),'--path','client','--rendering-method','gl_compatibility',
-                                    '--script','tools/benchmark_atlas.gd','--',str(manifest)],
+                                    '--script','tools/research/atlas_benchmark.gd','--',str(manifest)],
                                    capture_output=True,text=True,encoding='utf-8',errors='replace',timeout=20)
             if probe.returncode:
                 raise RuntimeError(probe.stdout+probe.stderr)

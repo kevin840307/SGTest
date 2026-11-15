@@ -1,6 +1,6 @@
 extends SceneTree
 func _initialize() -> void:
-	var model := preload("res://scripts/local_prediction.gd").new()
+	var model := preload("res://scripts/world/local_prediction.gd").new()
 	model.configure(null,Vector2(2400,1600))
 	assert(model.authority(0,0,1,Vector2(100,100),100,0))
 	assert(model.step_input(Vector2.RIGHT,0.03,0.03))
@@ -11,7 +11,7 @@ func _initialize() -> void:
 	assert(not model.authority(3,1,1,Vector2.ZERO,100,.06))
 	assert(model.predicted == Vector2(200,200))
 	assert(not model.step_input(Vector2.RIGHT,1,1))
-	var grid := preload("res://scripts/collision_grid.gd").new()
+	var grid := preload("res://scripts/world/collision_grid.gd").new()
 	grid.width=3
 	grid.height=3
 	grid.cells=PackedByteArray([0,1,0,0,1,0,0,1,0])

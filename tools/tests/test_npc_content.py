@@ -13,7 +13,8 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from asset_converter.source.legacy_npc import npc_placements, npc_visual_table
 from asset_converter.content.npc_content import build, map_directory
-from asset_converter.content.asset_pipeline import original_population
+from asset_converter.content.build_maps import server_map_directory
+from asset_converter.content.build_enemy_map_palette import read_enemy_dat
 from test_assets import spr
 
 REPO = Path(__file__).resolve().parents[2]
@@ -138,11 +139,11 @@ class NpcContentTests(unittest.TestCase):
             (root/'Map/Map07/Enemy.dat').write_bytes(struct.pack('<i',0))
             (root/'Enemy/Enemy_Data.csv').write_bytes(b'')
             self.assertEqual(map_directory(root,7),root/'Map/Map07')
-            self.assertEqual(original_population(root,7,'bundles/map/7/sprites.json')['spawns'],[])
+            self.assertEqual(read_enemy_dat(server_map_directory(root,7)/'Enemy.dat'),[])
             previous = Path.cwd()
             try:
                 os.chdir(root)
-                self.assertEqual(original_population(Path('.'),7,'bundle.json')['spawns'],[])
+                self.assertEqual(read_enemy_dat(server_map_directory(Path('.'),7)/'Enemy.dat'),[])
             finally:
                 os.chdir(previous)
             (root/'Map/Map7').mkdir()

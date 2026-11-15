@@ -1,10 +1,10 @@
 using System.Net.WebSockets;
 using System.Security.Cryptography;
 using System.Text.Json;
-using SGTest.Server.Application;
-using SGTest.Server.Domain;
-using SGTest.Server.Infrastructure;
-using SGTest.Server.Transport;
+using SGTest.Server.Accounts;
+using SGTest.Server.Networking;
+using SGTest.Server.Persistence;
+using SGTest.Server.World;
 
 var options=args.Where(a=>a.StartsWith("--") && a.Contains('=')).Select(a=>a[2..].Split('=',2)).ToDictionary(a=>a[0],a=>a[1]);
 int Option(string name,int fallback) => options.TryGetValue(name,out var text) ? int.Parse(text) : fallback;
@@ -51,7 +51,7 @@ app.Map("/game",async context=>
 {
     if(!context.WebSockets.IsWebSocketRequest) { context.Response.StatusCode=400; return; }
     using var socket=await context.WebSockets.AcceptWebSocketAsync();
-    int id=Interlocked.Increment(ref nextId); var session=new Session(id,socket);
+    int id=Interlocked.Increment(ref nextId); var session=new ClientConnection(id,socket);
     using var stop=CancellationTokenSource.CreateLinkedTokenSource(context.RequestAborted);
     if(!host.Submit(new(id,-1,[],session))) { socket.Abort(); return; }
     var writer=session.Write(stop.Token);

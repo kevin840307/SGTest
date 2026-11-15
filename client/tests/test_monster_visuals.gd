@@ -1,7 +1,7 @@
 extends SceneTree
 
 func _initialize() -> void:
-	var visuals := preload("res://scripts/monster_visuals.gd").new()
+	var visuals := preload("res://scripts/rendering/monster_visuals.gd").new()
 	var path := "res://assets/maps/13/population.json"
 	var population: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(path))
 	assert(population.definitions.size() == 9)

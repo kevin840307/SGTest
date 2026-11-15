@@ -1,6 +1,6 @@
 extends SceneTree
 
-const STORE = preload("res://scripts/runtime_asset_store.gd")
+const STORE = preload("res://scripts/assets/runtime_asset_store.gd")
 
 func wait_ready(store: RefCounted, path: String, frames: int = 240) -> bool:
 	for _i in frames:

@@ -41,6 +41,7 @@ python tools/asset_converter/cli.py build "C:\SGO\Stargate Online IE HK2" ^
 tools/asset_converter/
 ├── cli.py
 ├── operation_lock.py
+├── verify_runtime.ps1
 ├── atlas/
 │   ├── adaptive_atlas.py
 │   ├── build_atlas_groups.py
@@ -52,10 +53,12 @@ tools/asset_converter/
 │   ├── build_population.py
 │   ├── npc_content.py
 │   └── server_source.py
-└── source/
-    ├── extract_client.py
-    ├── convert_assets.py
-    └── runtime_spr.py
+├── source/
+│   ├── extract_client.py
+│   ├── convert_assets.py
+│   └── runtime_spr.py
+└── benchmarks/
+    └── packing/
 ```
 
 正式 converter 需要的程式應放在此資料夾。不要再新增第二套 production converter。
@@ -238,17 +241,19 @@ Release 可把所有獨立檔案裝進外部 `assets.pck`；PCK 只是容器，�
 
 重要：舊 12-kind Adaptive benchmark 曾因 root 內容不同而選到不同的 12 隻 Monster；舊 76.59 MiB 數字已作廢。
 
-目前 production 仍是 Adaptive Atomic；是否改成 Dense 或新的 Adaptive Per-Asset policy，要用同素材公平 benchmark 再更新 ADR，不得直接改。
+目前 production 仍是 Adaptive Atomic。公平 A/B 與全量幾何掃描目前建議下一版採 **Per-Asset Dense Atlas**：7,890/7,890 正式 logical assets 都可在單一 <=4096 Dense page 放下；只有未來真的超過上限的單一 asset 才使用 Paged Dense fallback。這仍只是建議，未經使用者確認不得直接切 production Builder。
 
 ## 12. 驗證
 
 已執行：
 
-- Python `tools/tests`：121 PASS。
-- Monster workflow fixture：4 PASS。
-- Godot：directions / map_objects_async / monster_visuals / paper_doll_async / runtime_asset_store / navigation PASS。
-- AssetStore cache-pressure PASS。
-- 24 次公平 packing benchmark PASS（4 modes × 2 scenarios × 3 repeats）。
-- .NET Server tests：使用專案 `.cache/dotnet` SDK 8.0.428，從 repo root 執行 **376 PASS**（包含原版 Map13 collision contract）。
+- Python `tools/tests`：123 PASS。
+- Root-level Python contract tests：37 PASS / 1 SKIP。
+- Godot：目前所有 `client/tests/test_*.gd` 共 15/15 PASS。
+- AssetStore cancellation/cache-pressure/store regressions PASS。
+- 24 次公平 packing benchmark PASS（4 candidates × 2 scenarios × 3 repeats）。
+- `tools/summarize_assets.py`：13,464 catalog entries、`unexpected_top_level=[]`、`cross_asset_bundle=false`、`production_clean=true`。
+- `tools/asset_converter/verify_runtime.ps1`：75,588/75,588 SPR coverage、Map13 45 scenery assets / 9 monster assets / 7 player parts、6 asset regressions PASS。
+- .NET Server build：0 warning / 0 error；tests **376 PASS**。
 
 原始與衍生專有圖片保持本機，不推 Git。

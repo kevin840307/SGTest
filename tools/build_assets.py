@@ -1,6 +1,6 @@
 """RESEARCH-ONLY legacy per-entity/direction atlas candidate builder.
 
-Production runtime sprites are built by asset_pipeline.py from lifecycle bundles.
+RESEARCH/COMPATIBILITY helper. Production assets are built by tools/asset_converter/cli.py; do not add lifecycle bundles here.
 Reproducible entity atlases from a decoded original Data1 tree (plain/CDE SPR).
 
 Never scans a client plus its extracted duplicates: pass the output directory.

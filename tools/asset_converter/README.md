@@ -1,92 +1,168 @@
-# Adaptive Atomic Atlas — 可獨立維護的素材轉換工具
+# SGTest Asset Converter
 
-**正式入口只有一個**，所有轉換程式與專案內部依賴都收在本資料夾。
-不因 Enemy、Player、Weapon、NPC、Map、Effect 等素材類型再建立獨立 Loader／Cache。
+狀態：**PRODUCTION ENTRY / PER-ASSET BOUNDARY**
+日期：2026-11-15
 
-## 一鍵執行
-
-從 SGTest 根目錄：
+正式 build 只有一套：
 
 ```bat
 run_build_assets.bat "C:\SGO\Stargate Online IE HK2"
 ```
 
-或在本工具目錄：
-
-```bat
-build_assets.bat "C:\SGO\Stargate Online IE HK2"
-```
-
-需 Python 3.10+，依賴請安裝：
+或直接：
 
 ```powershell
-python -m pip install -r tools/asset_converter/requirements.txt
+python tools/asset_converter/cli.py build "C:\SGO\Stargate Online IE HK2"
 ```
 
-## 架構
+## 目錄
 
 ```text
 tools/asset_converter/
-├── cli.py                      # 唯一 CLI：建置、驗證、報告、發布
-├── build_assets.bat            # Windows 一鍵啟動
-├── requirements.txt
-├── README.md
-├── source/                     # 原始格式，不含 Godot Runtime
-│   ├── extract_client.py       # Data1.dat + loose overlay
-│   ├── runtime_spr.py          # 原始 SPR 解碼與 CDE
-│   ├── convert_assets.py       # SPR/ACT/SIF/DrawOrder 轉換
+├── cli.py
+├── build_assets.bat
+├── verify_runtime.ps1
+├── operation_lock.py
+├── source/
+│   ├── extract_client.py
+│   ├── runtime_spr.py
+│   ├── convert_assets.py
 │   ├── inspect_act.py
 │   ├── legacy_direction.py
-│   └── build_assets.py         # 地圖原始格式支援
-├── atlas/                      # 唯一共用 Atlas 打包核心
-│   ├── adaptive_atlas.py       # 自適應選尺寸/快取/逐幀驗證
-│   ├── build_atlas_groups.py   # 單一素材內的 packing primitives
-│   └── selector.py             # candidate selection
-└── content/                    # logical asset / world contract
-    ├── asset_paths.py          # source group -> canonical logical id
-    ├── export_assets.py        # 全量 per-asset Runtime 發布
-    ├── animation_definition.py
-    ├── runtime_animation_semantics.py
-    ├── build_maps.py           # terrain/scenery placement/original blocking
-    ├── build_enemy_map_palette.py
-    ├── build_population.py     # Server monster definition -> independent asset
-    └── server_source.py
+│   └── legacy_npc.py
+├── atlas/
+│   ├── adaptive_atlas.py
+│   ├── build_atlas_groups.py
+│   ├── selector.py
+│   └── archive_audit.py
+├── content/
+│   ├── asset_paths.py
+│   ├── export_assets.py
+│   ├── animation_definition.py
+│   ├── runtime_animation_semantics.py
+│   ├── build_maps.py
+│   ├── build_population.py
+│   ├── build_enemy_map_palette.py
+│   ├── npc_content.py
+│   └── server_source.py
+└── benchmarks/
+    └── packing/
+        ├── build_candidates.py
+        ├── benchmark.gd
+        └── run.py
 ```
 
-`source` 管格式及還原、`atlas` 管影格物理位置、`content` 管動畫語義和現有消費端；不同素材種類不是額外的程式架構層。原始包裝器和舊工具仍在 `tools/` 作相容/回歸，不是新 CLI 的依賴。**正式變更一律修改本工具包內部實作。**
+## 職責
 
-## 輸出與驗證
+- `source/`：只理解原版資料格式。
+- `atlas/`：單一 logical asset 內的 packing / pixel verification。
+- `content/`：canonical logical id、Map/Population contract、Runtime publication。
+- `benchmarks/`：可重跑 A/B，不是 production dependency。
 
-- **完整離線來源圖集**：`local-assets/asset_converter/complete/sprites/`、`sidecars/`。避免未使用的所有圖直接導入 Godot。
-- **Runtime 發布資產**：直接依內容語意放在 `client/assets/maps/`、`monsters/`、`npcs/`、`players/`、`equipment/`、`pets/`、`items/`、`effects/`、`ui/`、`audio/`、`data/`；每個素材保持獨立 identity，不建立 `bundles/map`、`bundles/session` 或 `generated/`。
-- **可觀測報告**：`local-assets/asset_converter/complete/index.json`、`local-assets/asset_converter/build_report.json`。
-- **安全**：原版唯讀、逐幀像素驗證、來源＋圖片 SHA256、增量建置、staging 後才發布、保留未修改的 live 資產。
-- **測試**：`python -m unittest discover -s tools/tests -q`；也可執行 `--archive-only --prefix player/a/weapon/a-sword014` 只驗證一種原版武器。
+禁止重新建立：
 
-## 完整度邊界
+- lifecycle bundle builder。
+- map/session atlas。
+- normalized candidate 的另一條 production pipeline。
+- 每素材類型一套 Loader/Cache。
 
-轉換「全部來源素材」代表所有可解碼 SPR 的私有圖集與支援的 ACT/SIF/DrawOrder 中介資料；**不是**完整遊戲所有地圖、武器/裝備紙娃娃、UI、音效都已串接到 Godot Runtime。目前正式 Runtime consumer 仍以 Map13 和基礎玩家為主。若遇原版檔格式不合法會在索引中標示錯誤，不會用空白圖冒充成功。未確認素材授權前不公開分發原圖或生成圖片。
+## Asset Boundary
 
-詳細範圍見 `docs/ASSET_CONVERTER.md`。
+```text
+one Monster    = one independent asset
+one NPC        = one independent asset
+one scenery    = one independent asset
+one Player part= one independent asset
+one equipment  = one independent asset
+```
 
-## 2026-11-15 解碼與完整度修正
+同一 asset 內 action/facing/frame 可以重新 packing；不同 asset 不可以合併。
 
-離線 Atlas 與 Runtime per-asset 發布統一使用 `source/runtime_spr.py`，同時支援RGB565與`Ver\x08` indexed SPR；不要另加只認第一影格offset=0的簡化解碼器。Indexed格式的像素可位於header之前，不能據此判為少圖或壞檔。
+## Output
 
-原版Data1路徑搭配完整建置時會先核對SPR來源檔案集合；指定不完整的 `--extracted-source` 會報錯，避免把殘缺cache輸出當完整目錄。filtered/preview只代表指定範圍，並不宣稱來源完整。此核對是檔案存在性，逐格解碼／像素驗證另外執行。
+Canonical private archive：
 
-增量manifest保留decoder SHA與metadata SHA；舊cache先逐像素／size／crop／pivot驗證才升級stamp，已正確的PNG不重新packing。metadata或PNG損毀會重建。每50組寫 `checkpoint.json`，保留成功與失敗來源，最終看 `index.json.status`／errors，進度數字不代表完成。
+```text
+local-assets/asset_converter/complete/
+```
 
-完整SPR來源數以當次原版 archive+loose union為準，不把舊7893組/75591 SPR硬寫成門檻。2026-11-15隔離抽取的實際集合為7890組/75588 SPR，presence audit無缺檔／額外檔；完整Atlas與sidecar結果仍須驗收，不等同全部遊戲功能已接線。
+Runtime disk assets：
 
-## 候選幾何評估回歸與A/B
+```text
+client/assets/
+├── maps/
+├── monsters/
+├── npcs/
+├── players/
+├── equipment/
+├── pets/
+├── items/
+├── effects/
+├── ui/
+├── audio/
+└── data/
+```
 
-從專案根目錄重跑離線評估：`python tools/benchmark_converter_planning.py --source .cache/asset_converter/source`。三組真素材各跑3次；快速幾何路徑每次batch 100次取單次CPU時間，避免Windows process CPU timer把短測量量成0。報告含來源SHA與打包模組SHA，只比較候選評估，沒有包含最終PNG產出／磁碟／遊戲FPS。
+不建立 `generated/`、`generation/`、`bundles/map/`、`bundles/session/`。
 
-2026-11-15三次中位數：EN010A 765.625→1.719ms；Boy body 3093.750→30.625ms；Boy hair00 3062.500→36.250ms。四候選尺寸的頁數／RGBA面積全相等；160組隨機候選以及透明／atomic失敗／無畫布配置測試PASS。最終真打包的頁數與RGBA成本另須吻合選定候選，否則拒絕發布。`reports/converter_planning_geometry.json`保留原始樣本與指紋，不把此結果推論成遊戲FPS或整體建置相同比例加速。
+## Build / Verify
 
-## 完整驗收與互斥
+完整 build：
 
-`python tools/asset_converter/cli.py verify "C:\SGO\Stargate Online IE HK2"`驗收完整索引、PNG與sidecar來源；不會改寫離線圖集／Runtime。報告預設`reports/converter_archive_verification.json`。preview不是完整驗收證據，build/verify不可同時操作相同checkout（OS lock，busy exit2）。ACT/SIF/DrawOrder的cached條件包含實際解碼內容相等，JSON壞掉可自動重建。
+```bat
+run_build_assets.bat "C:\SGO\Stargate Online IE HK2"
+```
 
-2026-11-15完整7890 groups／75588 SPR／282968 frames、613 ACT／1165 SIF／9 DrawOrder皆PASS。新產物已做Runtime資源／多人回歸；Client RAM目標仍未通過，最新範圍與數據見`docs/ASSET_CONVERTER.md`。完整離線素材不是整個Recovered玩法已完成。
+只驗完整 archive：
+
+```powershell
+python tools/asset_converter/cli.py verify "C:\SGO\Stargate Online IE HK2"
+```
+
+Runtime contract + Godot asset regressions：
+
+```powershell
+tools\asset_converter\verify_runtime.ps1 -Client "C:\SGO\Stargate Online IE HK2"
+```
+
+## Packing Research
+
+目前 production physical policy 仍是 Adaptive Atomic；asset boundary 已與 packing 解耦。
+
+最新候選：
+
+- Per-Asset Dense Single。
+- Adaptive Dense Shelf。
+- Adaptive Dense MaxRects。
+- Adaptive Atomic。
+
+重跑：
+
+```powershell
+python tools/asset_converter/benchmarks/packing/build_candidates.py
+python tools/asset_converter/benchmarks/packing/run.py
+```
+
+結果只寫入：
+
+```text
+.cache/asset_packing_benchmark/
+```
+
+不要把 A/B 產物再放進 `local-assets/`。
+
+最新結果與建議見 `docs/ASSET_PACKING_BENCHMARK.md`。目前正式 7,890 asset 的幾何掃描全部可使用單一 Dense page <=4096；若使用者確認切換，才修改 production Builder 並重跑完整 pixel/origin/hash verification。
+
+## Legacy Research
+
+`tools/` 根目錄仍有少數原版格式研究／viewer script，供 Recovered/Old 對照。它們不是 production converter dependency。
+
+已移除：
+
+- lifecycle `asset_bundle_builder.py` / `asset_pipeline.py`
+- normalized atlas candidate builder/reporter/tests
+- bundle lifecycle Godot benchmark
+- shared-bundle monster async test
+- 舊 `local-assets` packing experiments
+
+不要為了「看起來乾淨」刪掉仍負責解析原版 SPR/ACT/SIF/ITF 的研究工具；production 與 research 的界線以本文件為準。

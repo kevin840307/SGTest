@@ -1,7 +1,7 @@
 # 資安、營運、GM、儲存與擴充政策
 
 ## 1. Session/防作弊/封包安全
-WebSocket 用 TLS、認證 token/SessionEpoch、有效期、斷線即失效、心跳/重連握手、序列化上限、每包長度與欄位驗證、授權先於世界/資產動作。輸入視為不可信：速度/位置/攻擊距離/技能 CD/物品與金錢全部 Server 決定。
+WebSocket 用 TLS、認證 token/ConnectionEpoch、有效期、斷線即失效、心跳/重連握手、序列化上限、每包長度與欄位驗證、授權先於世界/資產動作。輸入視為不可信：速度/位置/攻擊距離/技能 CD/物品與金錢全部 Server 決定。
 反重放：AuthNonce、requestId/operationId、角色 version，所有資產操作冪等。封包包含 server/client schema version，禁止舊版本隱形解讀錯欄位。
 
 ## 2. 玩家操作與攻擊驗證

@@ -124,13 +124,14 @@ cd C:\SGO\SRC\SGTest
 
 # Store/component tests
 & 'C:\SGO\Godot\Godot_v4.7.2-stable_win64_console.exe' --headless --path client --script res://tests/test_runtime_asset_store.gd
-& 'C:\SGO\Godot\Godot_v4.7.2-stable_win64_console.exe' --headless --path client --script res://tests/test_monster_visuals_async.gd
+& 'C:\SGO\Godot\Godot_v4.7.2-stable_win64_console.exe' --headless --path client --script res://tests/test_monster_visuals.gd
 & 'C:\SGO\Godot\Godot_v4.7.2-stable_win64_console.exe' --headless --path client --script res://tests/test_map_objects_async.gd
 & 'C:\SGO\Godot\Godot_v4.7.2-stable_win64_console.exe' --headless --path client --script res://tests/test_paper_doll_async.gd
 
-# 30-cycle async lifecycle
-py tools/benchmark_runtime_baseline.py C:\SGO\Godot\Godot_v4.7.2-stable_win64_console.exe --case lifecycle --loader async --cycles 30 --monster-assets reports/normalized_atlas_candidates/normalized_memory --output reports/runtime_asset204_final
+# Current per-asset packing A/B (outputs only to .cache)
+py tools/asset_converter/benchmarks/packing/build_candidates.py
+py tools/asset_converter/benchmarks/packing/run.py
 
-# Multiplayer Gate
-py tools/benchmark_runtime_baseline.py C:\SGO\Godot\Godot_v4.7.2-stable_win64_console.exe --case multiplayer --clients 20 --monsters 300 --drops 1000 --seconds 40 --monster-assets reports/normalized_atlas_candidates/normalized_memory --output reports/runtime_asset204_final
+# General runtime isolation/lifecycle regression remains separate
+py tools/benchmark_runtime_baseline.py C:\SGO\Godot\Godot_v4.7.2-stable_win64_console.exe --case lifecycle --loader async --cycles 30 --output reports/runtime_asset_lifecycle
 ```

@@ -1,9 +1,9 @@
 using System.Numerics;
 using System.Text.Json;
-using SGTest.Server.Application;
-using SGTest.Server.Domain;
-using SGTest.Server.Infrastructure;
-using SGTest.Server.Transport;
+using SGTest.Server.Accounts;
+using SGTest.Server.Networking;
+using SGTest.Server.Persistence;
+using SGTest.Server.World;
 
 int count=0;
 void Check(bool ok,string why) { count++; if(!ok) throw new Exception(why); }

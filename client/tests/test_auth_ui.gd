@@ -4,7 +4,7 @@ func _initialize() -> void:
 	call_deferred("_run")
 
 func _run() -> void:
-	var ui = preload("res://scripts/auth_ui.gd").new()
+	var ui = preload("res://scripts/ui/auth_ui.gd").new()
 	get_root().add_child(ui)
 	await process_frame
 	assert(ui.login_center.visible)

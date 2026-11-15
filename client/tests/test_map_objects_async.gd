@@ -1,7 +1,7 @@
 extends SceneTree
 
-const STORE = preload("res://scripts/runtime_asset_store.gd")
-const MAP_OBJECTS = preload("res://scripts/map_objects.gd")
+const STORE = preload("res://scripts/assets/runtime_asset_store.gd")
+const MAP_OBJECTS = preload("res://scripts/rendering/map_objects.gd")
 
 func _initialize() -> void:
 	call_deferred("_run")

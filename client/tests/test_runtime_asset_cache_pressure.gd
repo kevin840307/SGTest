@@ -1,6 +1,6 @@
 extends SceneTree
 
-const STORE = preload("res://scripts/runtime_asset_store.gd")
+const STORE = preload("res://scripts/assets/runtime_asset_store.gd")
 var _files: Array[String] = []
 var _folder := ""
 
@@ -23,7 +23,7 @@ func _ready(store: RefCounted, path: String) -> void:
 		await process_frame
 
 func _report(result: Dictionary) -> void:
-	result["store_sha256"] = FileAccess.get_sha256("res://scripts/runtime_asset_store.gd")
+	result["store_sha256"] = FileAccess.get_sha256("res://scripts/assets/runtime_asset_store.gd")
 	for argument in OS.get_cmdline_user_args():
 		if argument.begins_with("--report="):
 			FileAccess.open(argument.trim_prefix("--report="),FileAccess.WRITE).store_string(JSON.stringify(result,"  "))

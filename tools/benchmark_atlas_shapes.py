@@ -61,7 +61,7 @@ def main():
                  'pixel_frames_checked':checked,'decode_ms_p50':statistics.median(durations)}
             if args.godot:
                 native=subprocess.run([str(args.godot.resolve()),'--path','client','--rendering-method','gl_compatibility',
-                                       '--script','tools/benchmark_atlas.gd','--',str((output/(key+'.json')).resolve())],
+                                       '--script','tools/research/atlas_benchmark.gd','--',str((output/(key+'.json')).resolve())],
                                       capture_output=True,text=True,encoding='utf-8',errors='replace',timeout=30)
                 if native.returncode or 'ERROR:' in native.stdout+native.stderr:raise RuntimeError(native.stdout+native.stderr)
                 row['native']=json.loads(next(line for line in native.stdout.splitlines() if line.startswith('{')))

@@ -15,7 +15,7 @@
 - [Client Architecture](docs/CLIENT_ARCHITECTURE.md)
 - [Server Architecture](docs/SERVER_ARCHITECTURE.md)
 
-其中 Client 的 Network / World State / Rendering / UI / Assets 明確分離；Server 維持單一 .NET 8 project，按 Networking / Accounts / World / Combat / Items 等實際功能分類。文件是**目標架構**，目前程式碼仍有部分舊目錄，搬移必須與行為修改分開。
+Client 主程式已按 app / networking / world / gameplay / rendering / assets / ui / diagnostics 分類；Server 已移除 Application / Domain / Infrastructure / Transport 主分層，改為 Accounts / Networking / Persistence / World，後續只有真正出現獨立責任才新增 Combat / Items / Social 等模組。
 
 ## 最新資源架構重評
 
@@ -23,7 +23,7 @@
 
 ## 一鍵資產轉換與 Atlas packing
 
-資產轉換程式集中在 `tools/asset_converter/`，使用原始遊戲路徑即可轉換並驗證。現在 production builder 仍可輸出 **Adaptive Atomic Atlas**，但 2026-11-15 的公平重測顯示 Dense Single 在固定大型怪物集合的記憶體／page／load 綜合更好，因此最終 physical packing policy **等待依新版 benchmark 決策，不沿用舊 Mode4 優勢結論**。詳細說明見 [ASSET_CONVERTER](docs/ASSET_CONVERTER.md) 與 [ASSET_PACKING_BENCHMARK](docs/ASSET_PACKING_BENCHMARK.md)。
+資產轉換程式集中在 `tools/asset_converter/`，使用原始遊戲路徑即可轉換並驗證。目前 production builder 仍是 **Adaptive Atomic Atlas**；新版公平測試的建議候選改名為 **Per-Asset Dense Atlas**。目前 7,890 個正式 asset 的幾何掃描全部可在單一 <=4096 page 內放下，且固定怪物 A/B 的 pages / decoded texture footprint 綜合優於 Atomic；本輪先保留 production policy，等待確認後才切 Builder。詳細說明見 [ASSET_CONVERTER](docs/ASSET_CONVERTER.md) 與 [ASSET_PACKING_BENCHMARK](docs/ASSET_PACKING_BENCHMARK.md)。
 
 ```bat
 run_build_assets.bat "C:\SGO\Stargate Online IE HK2"
@@ -31,7 +31,7 @@ run_build_assets.bat "C:\SGO\Stargate Online IE HK2"
 
 完整原始 SPR Atlas、ACT、SIF 與 DrawOrder 索引保留在 **本機私有的** `local-assets/asset_converter/complete/`；正式 `export-assets` 會把可索引的素材依 `maps / monsters / npcs / players / equipment / pets / items / effects / ui / audio / data` 發布到 `client/assets/`，但 Runtime 仍按需載入，不會因磁碟存在就全常駐 RAM/VRAM。不需要額外的 `generated/` 目錄。原版與衍生圖片均不推 Git。
 
-正式 Client 發行時，`client/assets/**` 不再由自製 Godot addon 塞進主 PCK；`client/addons/raw_assets_export` 已移除。改由 `client/tools/pack_assets.gd` 產生平台共用的外部 `assets/assets.pck`，Windows 與 macOS 使用同一份 pack / catalog / `res://assets/**` 路徑。Client 啟動時由 `scripts/asset_pack.gd` 掛載，之後仍由單一 AssetStore 按需載入；AFK 釋放 GPU world resources，不需要卸載 PCK。Windows Release 已實測通過，macOS 實際 .app export 尚未在本機驗證。
+正式 Client 發行時，`client/assets/**` 不再由自製 Godot addon 塞進主 PCK；`client/addons/raw_assets_export` 已移除。改由 `client/tools/build/pack_assets.gd` 產生平台共用的外部 `assets/assets.pck`，Windows 與 macOS 使用同一份 pack / catalog / `res://assets/**` 路徑。Client 啟動時由 `scripts/assets/asset_pack.gd` 掛載，之後仍由單一 AssetStore 按需載入；AFK 釋放 GPU world resources，不需要卸載 PCK。Windows Release 已實測通過，macOS 實際 .app export 尚未在本機驗證。
 
 ## 啟動
 

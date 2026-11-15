@@ -1,7 +1,7 @@
 extends SceneTree
 
-var network := preload("res://scripts/network_client.gd").new()
-var wire := preload("res://scripts/message_pack.gd").new()
+var network := preload("res://scripts/networking/network_client.gd").new()
+var wire := preload("res://scripts/networking/message_pack.gd").new()
 var port := 27931
 var result_path := ""
 var mode := "hold"
@@ -17,7 +17,7 @@ var entered := false
 var replaced := false
 var logged_out := false
 var account_id := 0
-var session_epoch := 0
+var connection_epoch := 0
 var entity_id := 0
 var character_id := 0
 var entered_at := 0.0
@@ -101,7 +101,7 @@ func _dispatch(op: int, body: Array) -> void:
 			else:
 				character_id = int(body[3])
 				if body.size() >= 6:
-					session_epoch = int(body[5])
+					connection_epoch = int(body[5])
 		0:
 			entity_id = int(body[0])
 			if body.size() >= 2:
@@ -136,7 +136,7 @@ func _finish(success: bool,reason: String) -> void:
 		"mode":mode,
 		"authenticated":authenticated,
 		"account_id":account_id,
-		"session_epoch":session_epoch,
+		"connection_epoch":connection_epoch,
 		"entity_id":entity_id,
 		"character_id":character_id,
 		"entered":entered,

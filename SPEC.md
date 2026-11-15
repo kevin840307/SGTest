@@ -76,7 +76,7 @@
 - Client：Godot 4.x，首選 GDScript + 輕量 Data Oriented Entity State；Node 專注 UI/少量互動、畫面可視 Pool。是否改用 C# 或 C++ GDExtension，只能由 Profiler 證據決定，須包含 Runtime 記憶體成本。
 - Server：C#/.NET 10 LTS，ASP.NET Core Gateway + MapActor/World State + Domain Application；單體模組化起步，未達負載瓶頸前不拆微服務。
 - DB：初版 SQLite（WAL、明確單寫入排程、原子資產事務/Outbox），透過 Application ports 與獨立 provider/migration 隔離；未來可換 PostgreSQL 等資料庫。熱路徑 WorldState 在 RAM，地圖每 Tick 不讀寫角色 DB。
-- 協定：版本化 MessagePack / Protobuf 擇一（ADR 紀錄）；TLS WebSocket 初版，ServerSeq/SimTick/SessionEpoch/EntityRevision/MapEpoch；不沿用舊 AES/Base64 JSON wire 格式。
+- 協定：版本化 MessagePack / Protobuf 擇一（ADR 紀錄）；TLS WebSocket 初版，ServerSeq/SimTick/ConnectionEpoch/EntityRevision/MapEpoch；不沿用舊 AES/Base64 JSON wire 格式。
 - 內容：原生 JSON/二進位資料包，離線工具轉換 Old；官方原版素材與原始碼需先確認合法使用權，否則以自製/測試素材代替。
 - 開發：GitHub Actions 自動 lint/compile/test/資料驗證/模擬負載；以具體指標改善，無測試就不聲稱達標。
 

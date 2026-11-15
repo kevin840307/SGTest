@@ -12,7 +12,7 @@ func _initialize() -> void:
 		"clips":{"TEST_NS1":{"frames":[0,1]}},
 		"behaviors":{"NS":{"loop":true,"timeline":[{"default_ticks":8,"frame_index":0},
 			{"default_ticks":8,"frame_index":1}],"facings":facing_views,"events":[]}}}
-	var definition := preload("res://scripts/animation_definition.gd").new()
+	var definition := preload("res://scripts/rendering/animation_definition.gd").new()
 	assert(definition.configure(source) == OK)
 	assert(definition.sample("NS",1,0.159).frame.id == "fixture#0")
 	assert(definition.sample("NS",1,0.160).frame.id == "fixture#1")
