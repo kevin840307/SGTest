@@ -5,6 +5,59 @@ import json
 from pathlib import Path
 from .build_enemy_map_palette import read_enemy_catalog, read_enemy_dat
 from .asset_paths import monster_manifest
+from .build_maps import server_map_directory
+from .animation_definition import compile_definition
+
+def compile_spawn_evidence(source: Path, server_dat: Path, map_id: int) -> dict:
+    """Original Enemy.dat + ACT evidence, without invented combat stats or live assets.
+
+    This is separate from compile_population(), which requires published Atlas
+    manifests and may use provisional runtime stats. Source evidence must never
+    publish either those defaults or placeholder atlas files as verified facts.
+    """
+    server_dat = Path(server_dat).resolve()
+    source = Path(source).resolve()
+    enemy_dat = server_map_directory(server_dat, map_id) / 'Enemy.dat'
+    catalog_path = server_dat / 'Enemy' / 'Enemy_Data.csv'
+    spawns = read_enemy_dat(enemy_dat)
+    catalog = read_enemy_catalog(catalog_path)
+    definitions = []
+    for enemy_id in sorted({row['enemy_id'] for row in spawns}):
+        if enemy_id not in catalog:
+            raise ValueError(f'unresolved original Enemy_Data.csv definition {enemy_id}')
+        entry = catalog[enemy_id]
+        sprite = entry['sprite'].lower()
+        if not sprite.isascii() or not sprite.isalnum():
+            raise ValueError(f'unsafe Enemy sprite name for {enemy_id}')
+        sprite_dir = source / 'enemy'
+        act = sprite_dir / f'{sprite}.act'
+        files = sorted(sprite_dir.glob(f'{sprite}_*.spr'))
+        if not act.is_file() or not files:
+            raise ValueError(f'missing original ACT/SPR for Enemy {enemy_id}: {sprite}')
+        animation = compile_definition('Enemy/'+sprite, files, source, 'monster', act)
+        definitions.append({
+            'enemy_id': enemy_id, 'name': entry['name'], 'level': entry['level'],
+            'sprite': entry['sprite'], 'atlas': monster_manifest(entry['sprite']),
+            'animation_content_sha256': animation['content_sha256'],
+            'animation_behaviors': sorted(animation['behaviors']),
+            'logical_facings': 8, 'frame_count': len(animation['frames']),
+            'source_files_sha256': animation['source_sha256'],
+            'combat_stats_verified': False,
+        })
+    return {
+        'version': 1, 'kind': 'original_spawn_evidence_not_runtime',
+        'map_id': map_id,
+        'definitions': definitions,
+        'spawns': [{'source_index': row['source_index'], 'definition': row['enemy_id'],
+                    'p': [row['x'], row['y']], 'source_flags': row['flags']}
+                   for row in spawns],
+        'sources': {
+            p.relative_to(server_dat).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
+            for p in (enemy_dat, catalog_path)
+        },
+        'stats_verified': False, 'runtime_implemented': False,
+    }
+
 
 DEFAULT_STATS = {
     'hp': 30,

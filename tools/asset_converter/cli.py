@@ -24,7 +24,7 @@ from asset_converter.content.export_assets import publish as export_assets
 from asset_converter.content.server_source import resolve_server_dat
 from asset_converter.content.build_maps import server_map_directory
 from asset_converter.content.build_enemy_map_palette import read_enemy_catalog, read_enemy_dat
-from asset_converter.content.build_population import compile_population
+from asset_converter.content.build_population import compile_population, compile_spawn_evidence
 
 
 def resolve_source(args) -> Path:
@@ -315,6 +315,8 @@ def main() -> int:
     world.add_argument('--report',type=Path)
     world.add_argument('--include-map',action='store_true',
                        help='also compile original terrain, objects and blocking per map into output-root')
+    world.add_argument('--include-population',action='store_true',
+                       help='audit Enemy.dat spawn records against original SPR/ACT, without guessed runtime stats')
     publication = sub.add_parser('export-assets',help='audit complete archive and publish all private source assets with a logical Godot catalog')
     publication.add_argument('original',type=Path)
     publication.add_argument('--extracted-source',type=Path)
@@ -329,8 +331,8 @@ def main() -> int:
         if len(set(selected_maps)) != len(selected_maps) or any(not 1 <= n <= 65535 for n in selected_maps):
             ap.error('map IDs must be unique integers between 1 and 65535')
         args.map_ids = sorted(selected_maps)
-    if args.command == 'world-content' and args.output and (args.all_maps or len(args.map_ids) > 1 or args.include_map):
-        ap.error('multiple maps and include-map use output-root, not a single output file')
+    if args.command == 'world-content' and args.output and (args.all_maps or len(args.map_ids) > 1 or args.include_map or args.include_population):
+        ap.error('multiple maps, include-map and include-population use output-root, not a single output file')
     try:
         with converter_operation(REPO/'.cache/asset_converter/operation.lock'):
             return _execute(args)
@@ -363,13 +365,18 @@ def _execute(args):
                                          f'reports/world_content_map{args.map_ids[0]}.json')
         started = time.perf_counter()
         module_paths = ['tools/asset_converter/'+name for name in
-                        ['cli.py','content/npc_content.py','content/build_maps.py','source/legacy_npc.py','source/runtime_spr.py']]
+                        ['cli.py','content/npc_content.py','content/build_maps.py',
+                         'content/build_population.py','content/animation_definition.py',
+                         'content/build_enemy_map_palette.py','content/asset_paths.py',
+                         'content/audit_character_layers.py','source/inspect_act.py',
+                         'source/legacy_direction.py','source/legacy_npc.py',
+                         'source/runtime_spr.py']]
         modules = {name:hashlib.sha256((REPO/name).read_bytes()).hexdigest() for name in module_paths}
         try:
             original = args.original.resolve()
             source = resolve_source(args)
             server_dat = resolve_server_dat(args.server_dat)
-            output = (args.output or destination/f'maps/{args.map}/npcs.json').resolve()
+            output = (args.output or destination/f'maps/{args.map_ids[0]}/npcs.json').resolve()
             for root in (original,source,server_dat):
                 if output == root or output.is_relative_to(root):
                     raise ValueError('world content output must not overwrite original sources')
@@ -377,6 +384,15 @@ def _execute(args):
                 row = build_npcs(source, server_dat, map_id, npc_output)
                 if args.include_map:
                     row['terrain'] = build_map(source, destination, map_id)
+                if args.include_population:
+                    evidence = compile_spawn_evidence(source, server_dat, map_id)
+                    write_json(destination/f'maps/{map_id}/population_evidence.json', evidence)
+                    row['enemy_source'] = {
+                        'spawns': len(evidence['spawns']),
+                        'definitions': len(evidence['definitions']),
+                        'runtime_implemented': False,
+                        'stats_verified': False,
+                    }
                 return row
             if args.all_maps:
                 map_ids, absent = [], []

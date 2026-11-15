@@ -17,7 +17,7 @@
 
 ## 1.0 MVP：Map15 主城 + Map13 台地，功能完整且真實跨圖
 
-**MVP 正式涵蓋兩張原版地圖**：Map15（主城：登入、選角、NPC／商店／銀行／倉庫、裝備、交易、玩家商店、社交等）與 Map13（尼西亞台地：Blocking／A*、多人／怪物／掉落、攻擊／技能、AI、AOI／同步）。須先核對原版兩圖 NPC/怪物／傳送位置，不能將角色定位或原版地圖規則自行編造。已找到兩張原始 Map 檔與 Recovered scn；**完整地圖資產／Blocking／NPC／傳送連線仍需驗證**。
+**MVP 正式涵蓋兩張原版地圖**：Map15（主城：登入、選角、NPC／商店／銀行／倉庫、裝備、交易、玩家商店、社交等）與 Map13（尼西亞台地：Blocking／A*、多人／怪物／掉落、攻擊／技能、AI、AOI／同步）。須先核對原版兩圖 NPC/怪物／傳送位置，不能將角色定位或原版地圖規則自行編造。2026-11-15 已由唯一 Converter 實測 Map15／Map13 原始 Terrain、Blocking、Scenery 與 NPC 靜態傳點資料，另解析 82 筆原版 Enemy Spawn、10 種怪物的 SPR/ACT（557 動畫 Frame）並以正式 Height-Dense Builder 試轉 10 張獨立 Atlas；詳見 `todo.txt` 的 MVP001 子項。**仍未完成正式 Atlas Catalog/PCK、原版 NPC 動態規則、Server 權威 Spawn/Blocking 與跨圖 Client/Server E2E**。
 
 **兩圖必須真實互通**：Server 權威 Map Change、MapEpoch、WorldReady、AOI 舊圖清理／新圖快照、AssetStore 地圖切換資源釋放與預取、位置合法性、重連／返回已掉落物。要測 Map15 → Map13 → Map15 與多人同時換圖，不能將跨圖 E2E 延後 MVP。
 

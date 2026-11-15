@@ -38,7 +38,11 @@ python tools/asset_converter/cli.py build "C:\SGO\Stargate Online IE HK2" `
 
 **Map15 特例**：原始 ObjectList.dat 的 15 筆 `Building_object` 記錄只寫 XY、未寫 int32 Z；固定讀 XYZ 會造成後續記錄錯位。轉換器以可驗證的下一筆路徑標頭及完整記錄計數辨識，輸出缺少 Z 的 `z=0` 視覺預設，另以 `z_source_present=false` 保留來源缺欄位事實。**Z 預設及各特殊建築的正式 DrawOrder/UI 表現仍待真 Renderer 驗證**，不得以 converter PASS 抵銷視覺 Gate。
 
-**尚未通過**：全部原版 SPR/ACT/Enemy 的正式完整轉換及 source coverage、正式 `client/assets` Catalog、Godot Atlas/ResourceLoader、正式 PCK、跨圖 E2E、Server 權威路徑／NPC 腳本規則及 AssetStore 引用釋放。MVP001 仍保持未完成；兩圖資料檔互不覆蓋不等於交替完整 PCK Build PASS。
+**2026-11-15 Enemy 原始來源驗證**：同一 Converter 支援 `world-content --include-population --map 13 --map 15`（另選 `--include-map` 可同時輸出地形）。在 `--output-root/maps/<id>/population_evidence.json` 寫入**原版來源證據**而非正式 Server population：從唯讀 Old Server `Enemy.dat` + `Enemy_Data.csv` 讀取原始 Enemy ID／出生座標／Flags，結合 Data1 解出的真實 ACT/SPR、完整 8 方向與每一動作的 Frame，記錄每個輸入檔 SHA-256、可追溯的動畫定義 content hash，**不填寫未經證實的 HP、傷害、攻擊範圍或 AI 參數**。來源缺失／截斷／未知 Enemy 會 fail closed。
+
+Map13 **78 Spawn／9 Enemy、488 原始 Frame**；Map15 **4 Spawn／1 Enemy、69 Frame**；10 種共 557 Frame、10 個 Enemy ACT/SPR 定義都成功解析。使用正式 `atlas/dense_atlas.py` Builder 在 `local-assets/asset_converter/mvp_enemy_preview/sprites` 以原版素材試轉 **10/10 獨立 Atlas、10 頁／557 Frame PASS**；重跑兩圖 `population_evidence.json` SHA 2/2 一致、57 項 Python tests PASS。**此 smoke 為分組編譯驗證，不能視為正式 Runtime Catalog、完整 Archive 或 Godot ResourceLoader 成功。** 所有原版 Spawn 位置仍需在權威 World／Blocking 和實際客戶端驗證。
+
+**尚未通過**：全部原版 SPR/ACT 的完整 Archive/source coverage、Player／NPC／Scenery／Enemy 正式 `client/assets` Catalog、Godot 真圖 ResourceLoader、正式 PCK、跨圖 E2E、Server 權威路徑／NPC 腳本與 Enemy 玩法規則及 AssetStore 引用釋放。MVP001 仍保持未完成；兩圖資料檔互不覆蓋不等於交替完整 PCK Build PASS。
 
 MVP 通過後再逐張擴其他地圖、全部素材與完整 Windows/macOS Release，不能將兩圖來源覆蓋稱為全 7,890 asset PASS。
 

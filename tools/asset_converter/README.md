@@ -42,7 +42,9 @@ python tools/asset_converter/smoke_runtime_pack.py "C:\SGO\Godot\Godot_v4.7.2-st
 
 MVP001 也可透過**同一 CLI** 的 `world-content --include-map --map 13 --map 15`，從原始來源定向重建兩張地圖的地形、地物、Blocking、NPC 與已靜態驗證的傳點資料，私有輸出位於 `local-assets/asset_converter/world/maps/<id>/`。配合 `--extracted-source .cache/asset_converter/source` 可重用已解包來源，避免每次重新展開 Data1.dat；詳細可重跑命令見 `docs/ASSET_CONVERTER.md`。
 
-`build --runtime-only` 同樣接受多次 `--map`，但要先有正式 `client/assets/catalog/assets.json` 和完整獨立 Atlas；目前只有地圖資料層已 PASS，**Runtime/PCK/Godot E2E 仍 NOT VERIFIED**。多圖輸出拒絕重複 ID，隔離及重跑 SHA 回歸見 `tools/tests/test_npc_content.py`。
+`world-content` 可加 `--include-population`，讀取原版 `Enemy.dat` + `Enemy_Data.csv` 與真實 SPR/ACT，在每張地圖輸出 `population_evidence.json`；只驗證 Spawn/定義/動畫來源，不發明 HP/ATK/AI，也不偽裝成 Server Runtime population。2026-11-15 原版 Map13／Map15 合計 82 Spawn、10 種 Enemy、557 原始動畫 Frame 驗證 PASS；正式 Height-Dense Builder 獨立預覽 10/10 Atlas PASS。相關回歸在 `test_population_evidence.py`。
+
+`build --runtime-only` 同樣接受多次 `--map`，但要先有正式 `client/assets/catalog/assets.json` 和完整獨立 Atlas；目前只有地圖／Enemy 來源資料層已 PASS，**Runtime/PCK/Godot E2E 仍 NOT VERIFIED**。多圖輸出拒絕重複 ID，隔離及重跑 SHA 回歸見 `tools/tests/test_npc_content.py`。
 
 ## 輸出（均可刪除後重新建置）
 
