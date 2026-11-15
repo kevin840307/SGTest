@@ -31,6 +31,8 @@ run_build_assets.bat "C:\SGO\Stargate Online IE HK2"
 
 完整原始 SPR Atlas、ACT、SIF 與 DrawOrder 索引保留在 **本機私有的** `local-assets/asset_converter/complete/`，避免所有素材被 Godot 常駐；目前有消費端的 Map13／Player Base 直接輸出到 `client/assets/bundles/` 與 `client/assets/maps/`。不需要額外的 `generated/` 目錄。原版與衍生圖片均不推 Git。
 
+正式 Client 發行時，`client/assets/**` 不再由自製 Godot addon 塞進主 PCK；`client/addons/raw_assets_export` 已移除。改由 `client/tools/pack_assets.gd` 產生平台共用的外部 `assets/assets.pck`，Windows 與 macOS 使用同一份 pack / catalog / `res://assets/**` 路徑。Client 啟動時由 `scripts/asset_pack.gd` 掛載，之後仍由單一 AssetStore 按需載入；AFK 釋放 GPU world resources，不需要卸載 PCK。Windows Release 已實測通過，macOS 實際 .app export 尚未在本機驗證。
+
 ## 啟動
 
 從儲存庫根目錄執行，需 .NET 8 SDK、Godot 4（本機 4.7.2）及 Python 3.10+。

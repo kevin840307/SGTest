@@ -142,6 +142,18 @@ app / character / map / on_demand
 
 不是資料夾或多套 loader。
 
+正式發行的遊戲素材使用**平台共用 external PCK**，不塞進主程式 PCK：
+
+```text
+Application package
+├── executable / .app
+├── main PCK
+└── assets/
+    └── assets.pck
+```
+
+Windows 與 macOS 使用相同 `assets.pck` 內容與 `res://assets/**` logical path；只有啟動時的實體路徑解析不同。Client startup 先掛載 external pack，再由單一 AssetStore 按需 decode / GPU commit。
+
 ---
 
 ## 6. 命名方向

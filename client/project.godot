@@ -19,8 +19,8 @@ window/stretch/aspect="expand"
 [physics]
 common/physics_ticks_per_second=30
 
-[editor_plugins]
-enabled=PackedStringArray("res://addons/raw_assets_export/plugin.cfg")
+[autoload]
+AssetPack="*res://scripts/asset_pack.gd"
 
 [rendering]
 renderer/rendering_method="gl_compatibility"

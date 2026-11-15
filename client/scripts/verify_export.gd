@@ -1,28 +1,35 @@
 extends RefCounted
 
 func run(report_path: String) -> int:
-	var errors: Array = []
-	var parsed: Variant = JSON.parse_string(FileAccess.get_file_as_string("res://assets/export_manifest.json"))
-	var count := 0
-	var asset_hashes: Dictionary = {}
-	if not parsed is Dictionary or int(parsed.get("version",0)) != 1:
-		errors.append("export asset manifest missing or invalid")
-	else:
-		for file in parsed.get("files",[]):
-			var path := str(file.path)
-			if not path.begins_with("res://assets/") or FileAccess.get_sha256(path) != str(file.sha256):
-				errors.append("raw asset mismatch: "+path)
-			asset_hashes[path] = str(file.sha256)
-			count += 1
-	if count == 0:errors.append("no raw assets verified")
-	var result := {"passed":errors.is_empty(),"files":count,"errors":errors,
-		"asset_sha256":asset_hashes,
-		"source_sha256":parsed.get("source_sha256",{}) if parsed is Dictionary else {},
-		"editor_build":OS.has_feature("editor"),"debug_build":OS.has_feature("debug"),
-		"template_release":OS.has_feature("template_release")}
+	var errors: Array[String] = []
+	var pack = Engine.get_main_loop().root.get_node_or_null("AssetPack")
+	var status: Dictionary = pack.status() if pack != null else {}
+	if pack == null or not bool(status.get("ready",false)):
+		errors.append("external asset pack loader is not ready")
+	if str(status.get("pack","")).is_empty():
+		errors.append("release verification requires an external asset pack")
+	var markers := []
+	for path in ["res://assets/catalog/assets.json","res://assets/bundles/index.json"]:
+		if FileAccess.file_exists(path):
+			markers.append(path)
+	if markers.is_empty():
+		errors.append("no runtime asset catalog/index found after pack mount")
+	var pack_path := str(status.get("pack",""))
+	var result := {
+		"passed": errors.is_empty(),
+		"errors": errors,
+		"external_asset_pack": not pack_path.is_empty(),
+		"asset_pack_path": pack_path,
+		"asset_pack_sha256": FileAccess.get_sha256(pack_path) if not pack_path.is_empty() and FileAccess.file_exists(pack_path) else "",
+		"markers": markers,
+		"editor_build": OS.has_feature("editor"),
+		"debug_build": OS.has_feature("debug"),
+		"template_release": OS.has_feature("template_release"),
+	}
 	if not report_path.is_empty():
 		var output := FileAccess.open(report_path,FileAccess.WRITE)
-		if output == null:return 1
+		if output == null:
+			return 1
 		output.store_string(JSON.stringify(result,"  "))
 	print("export_integrity "+JSON.stringify(result))
 	return 0 if errors.is_empty() else 1

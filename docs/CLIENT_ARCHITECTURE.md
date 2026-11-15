@@ -426,21 +426,88 @@ Godot：
 
 ---
 
-## 10. Addons 決策
+## 10. 外部 Asset Pack（2026-11-15 已採用）
 
-目前 `client/addons/raw_assets_export/` 是匯出插件，不是 gameplay module。
+`client/addons/raw_assets_export/` 已移除。Client 不再依賴自製 `EditorExportPlugin` 將 raw PNG/JSON/BIN 塞進主 PCK。
 
-不能只因 Recovered 沒有 addons 就直接刪除。
+正式發行採 **主程式與大量遊戲資產分離**：
 
-刪除前必須證明替代方案可：
+```text
+Windows
+├── SGTest.exe
+├── SGTest.pck
+└── assets/
+    └── assets.pck
 
-1. Windows export 成功。
-2. PCK/EXE 包含 Runtime 所需 raw PNG/JSON/BIN。
-3. AssetStore 在 release build 可以讀取。
-4. Login -> Map -> Player/Monster/Map assets 全正常。
-5. 匯出大小、載入時間、記憶體沒有不可接受退化。
+macOS
+├── Stargate Reborn.app
+└── assets/
+    └── assets.pck
+```
 
-若 Godot 標準 resource/import 可以取代自製 plugin，則優先移除 addons，減少維護面。
+同一份 `assets.pck` 同時供 Windows / macOS 使用；內容、logical catalog、hash 與 `res://assets/...` 路徑完全相同，平台差異只存在於啟動時定位實體檔案。
+
+macOS loader 另外接受 app bundle 標準備援位置：
+
+```text
+Stargate Reborn.app/Contents/Resources/assets/assets.pck
+```
+
+### Build
+
+`client/tools/pack_assets.gd` 使用 Godot `PCKPacker`，把 `client/assets/**` 原始檔案以相同的 `res://assets/**` 路徑封裝成一個 external PCK。
+
+它：
+
+- 不經 Godot texture importer。
+- 不需要 EditorPlugin。
+- 不改 Atlas / Catalog。
+- 不依賴 Windows 專屬格式。
+- 所有檔案排序後 deterministic 加入 pack。
+- `.gdignore` 保留，避免 Editor 大量 import Runtime Atlas。
+
+### Runtime
+
+`scripts/asset_pack.gd` 是極小的 startup loader，透過 `ProjectSettings.load_resource_pack()` 在 gameplay 啟動前掛載外部 pack。
+
+掛載後其他模組完全不需要知道 PCK 的實體位置：
+
+```text
+AssetPack
+   ↓ mount
+res://assets/...
+   ↓
+AssetStore
+   ↓
+Renderer
+```
+
+Renderer、World、Networking 不允許直接處理 OS 路徑。
+
+### AFK / Lifetime
+
+掛載 PCK 不代表其內容全部進 RAM/VRAM。
+
+AFK：
+
+- external PCK 可維持掛載。
+- AssetStore 可釋放 World Texture / ImageTexture / atlas references。
+- Network、Reducer、authoritative state 繼續運作。
+- 恢復時依最新 state 按需重新建立 GPU resources。
+
+因此不需要用 unmount PCK 作為 AFK 省資源機制。
+
+### 驗證狀態
+
+2026-11-15 Windows Godot 4.7.2 Release：
+
+- main PCK 排除 `assets/**`。
+- external `assets/assets.pck` 建置成功。
+- Release process 預設路徑自動掛載成功。
+- `res://assets/bundles/index.json` 可從 external pack 存取。
+- Runtime 回報 external pack SHA256 與 build output 一致。
+
+macOS 使用同一 pack 規則與 path resolver；候選路徑單元測試已通過，但此 Windows 開發機沒有執行真正 macOS `.app` export，因此 macOS executable Gate 仍為 **NOT VERIFIED**。
 
 ---
 

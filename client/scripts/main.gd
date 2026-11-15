@@ -93,6 +93,11 @@ var network := preload("res://scripts/network_client.gd").new()
 var wire := preload("res://scripts/message_pack.gd").new()
 
 func _ready() -> void:
+	var pack_loader = get_node_or_null("/root/AssetPack")
+	if pack_loader == null or not pack_loader.is_ready():
+		push_error("Runtime asset pack unavailable")
+		get_tree().quit(1)
+		return
 	var arguments := OS.get_cmdline_user_args()
 	if arguments.has("--verify-pack"):
 		var export_report := ""
