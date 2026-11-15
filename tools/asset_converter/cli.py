@@ -8,9 +8,10 @@ REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO / "tools"))
 
 from asset_converter.atlas.dense_atlas import build_group, POLICY
-from asset_converter.atlas.build_atlas_groups import select_groups
+from asset_converter.atlas.layout import select_groups
 from asset_converter.atlas.archive_audit import audit_archive
 from asset_converter.operation_lock import converter_operation, ConverterBusy
+from asset_converter.json_files import write_json
 from asset_converter.source.convert_assets import (
     convert_act,
     convert_draw_order,
@@ -24,15 +25,6 @@ from asset_converter.content.server_source import resolve_server_dat
 from asset_converter.content.build_maps import server_map_directory
 from asset_converter.content.build_enemy_map_palette import read_enemy_catalog, read_enemy_dat
 from asset_converter.content.build_population import compile_population
-
-
-def write_json(path: Path, obj: dict) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_name(path.name + ".tmp")
-    tmp.write_text(
-        json.dumps(obj, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
-    )
-    tmp.replace(path)
 
 
 def resolve_source(args) -> Path:

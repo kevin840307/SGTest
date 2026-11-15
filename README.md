@@ -5,19 +5,18 @@
 
 ## 這個儲存庫目前保留什麼
 
-- `tools/asset_converter/`：原始素材解包、SPR/ACT/SIF、方向／Origin／DrawOrder、Atlas、地圖、人口、NPC、Runtime 資產輸出；轉換器與 Runtime 實作互不依賴。
-- `tools/`：轉換器需要的來源研究、驗收、相容性工具（**不是 Client/Server 程式**）。
+- `tools/asset_converter/`：原始素材解包、SPR/ACT/SIF、方向／Origin／DrawOrder、Height-Dense Atlas、地圖、人口、NPC、外部 PCK；轉換器與 Runtime 實作互不依賴。
+- `tools/tests/`：正式 Converter、原始格式及佈署包契約測試（**不是 Client/Server 程式**）；舊獨立轉換器與 Viewer 已從工作樹移除，可從 Git 歷史查閱。
 - `docs/`、`SPEC.md`、`todo.txt`：正式設計與原版研究證據；歷史完成紀錄見 `docs/research/FEATURE_DECISION_HISTORY.md#source-todo-pre-rebuild-20261115-txt`。
 - `client/assets/.gdignore`：**僅保留轉換輸出的定位標記**，不是 Godot Runtime。
 - `client/README.md`、`server/README.md`：未來實作位置，**沒有可執行程式**。
 
 ## 從哪份文件開始重建
 
-1. [重新開發架構 Review / 取捨](docs/REBUILD_ARCHITECTURE_REVIEW.md)
-2. [正式架構總覽](docs/ARCHITECTURE.md)
-3. [Client 新設計](docs/CLIENT_ARCHITECTURE.md) 與 [Server 新設計](docs/SERVER_ARCHITECTURE.md)
-4. [Asset 結構](docs/ASSET_ARCHITECTURE.md)、[素材轉換](docs/ASSET_CONVERTER.md)、[效能對照](docs/research/ASSET_RENDERER_EVIDENCE.md#source-renderer-parity-v2-2026-11-15-md)
-5. [重建任務](todo.txt) 與 [開發規則](AGENTS.md)
+1. [正式架構總覽與重建決策](docs/ARCHITECTURE.md)
+2. [Client 新設計](docs/CLIENT_ARCHITECTURE.md) 與 [Server 新設計](docs/SERVER_ARCHITECTURE.md)
+3. [Asset 結構](docs/ASSET_ARCHITECTURE.md)、[素材轉換](docs/ASSET_CONVERTER.md)、[歷史效能證據](docs/research/ASSET_RENDERER_EVIDENCE.md)
+4. [測試與效能 Gate](docs/TEST_PLAN.md)、[重建任務](todo.txt)、[開發規則](AGENTS.md)
 
 歷史文獻、原型效能研究和舊 SPEC 大部分內容保留供對照，但**不能以其中「已實作／已通過」的說法代替新版本驗證**。
 
@@ -38,7 +37,7 @@ powershell -ExecutionPolicy Bypass -File tools/asset_converter/verify_converter.
 
 輸出位置通常為 `local-assets/`（完整私有索引）、`client/assets/`（未來 Client 內容）、`server/content/`（未來 Server 內容）。後兩者**是資料輸出目錄，不代表可執行程式存在**。原版及衍生圖片不得推送至公開 GitHub。
 
-目前已將經實測的 **Per-Asset Height-Dense P0 Builder、VRAM imported Texture、外部 assets.pck Converter 與 Recovered/Map13 benchmark 腳本**整合回正式重建基線，沒有保留另一個可執行 Client/Server 原型。所有功能後續只在 `main` 和原本 `C:\SGO\SRC\SGTest` 開發。
+目前已將經實測的 **Per-Asset Height-Dense P0 Builder、VRAM imported Texture、外部 assets.pck Converter**整合回正式重建基線；過期的 Recovered/Map13 Benchmark 腳本保留於 Git 歷史，沒有保留另一個可執行 Client/Server 原型。所有功能後續只在 `main` 和原本 `C:\SGO\SRC\SGTest` 開發。
 
 ## 新版核心約束
 

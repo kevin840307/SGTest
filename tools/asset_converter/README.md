@@ -1,52 +1,53 @@
-# Asset Converter — SGTest Clean-slate
+# SGTest Asset Converter
 
-**只有這個目錄的 cli.py 為正式轉換器入口**。Client/Server 已從重建分支移除；素材可以產出到它們將來的資料目錄，但這不是可執行的遊戲。
+**唯一正式入口：`tools/asset_converter/cli.py`。**
+本目錄不需要舊版 Godot Client 或 .NET Server，可從原始遊戲目錄
+重新產生素材。不同 Enemy、裝備、場景和人物部位保持獨立；PCK 是
+配送容器，不是跨 Asset 合圖。
 
-## 建置
+## 結構
 
-~~~powershell
+```text
+asset_converter/
+  cli.py                 # 原始素材處理與資料產出入口
+  source/                # Data1/SPR/ACT/SIF 及原版 Decoder
+  atlas/
+    dense_atlas.py       # 正式 Height-Dense P0 Builder
+    layout.py            # 原素材分組及超限單 Asset 分頁 fallback
+    archive_audit.py     # 來源 / atlas integrity
+  content/               # catalog、map/blocking、NPC、population
+  json_files.py          # 原子寫入、避免輸出半套 JSON
+  runtime_pack.py        # Godot import 與外部 PCK
+  runtime_pack_packer.gd
+  smoke_runtime_pack.py  # 獨立的 PCK ResourceLoader smoke
+  operation_lock.py      # 避免並行建置覆蓋產物
+```
+
+不維護舊 Adaptive Atomic/Selector、多套 Loader、過期 packing／Renderer
+Benchmarks；研究結果與原始腳本仍可在 [歷史資料](../../docs/research/INDEX.md)／Git 歷史找到。
+
+## 建置與驗證
+
+```powershell
 python -m pip install -r requirements.txt
-run_build_assets.bat "C:\SGO\Stargate Online IE HK2"
-# 或
 python tools/asset_converter/cli.py build "C:\SGO\Stargate Online IE HK2"
-~~~
-
-## 目前已提交的轉換器
-
-- source/ — Data1＋loose override／SPR/ACT/SIF／方向、Origin、DrawOrder
-- atlas/ — 一個原素材一個獨立 Atlas／像素驗證；本分支原始 HEAD 使用 Adaptive Atomic
-- content/ — catalog、Map/Blocking、NPC／Population、Runtime 資產發布
-- benchmarks/ — Packing/Recovered 原生 Renderer、壓縮與畫面對照測試，**不是 production runtime**
-- operation_lock.py — build 互斥鎖，避免產物被多個 Session 同時覆蓋
-
-**目前正式政策已合併：Per-Asset Height-Dense P0 + `runtime_pack.py` 外部壓縮 PCK。** 舊 Adaptive Atomic 只保留研究／比較用途；Client／Server 原型已刪除，正式建置不應依賴舊 `client/project.godot`。
-
-## 轉換輸出
-
-- local-assets/asset_converter/complete — 私有完整 archive，原始／衍生媒體不進 Git
-- client/assets — Client 未來使用的獨立 Atlas／Manifest、Enemy/<id> 不與 Map 合圖
-- server/content — Map/Population/Blocking.dat，無貼圖
-- .cache/、reports/ — 本機驗證／快取，不推 Git
-
-## 純 Converter 驗證
-
-~~~powershell
-python -m unittest discover -s tools/tests -p "test_*.py" -q
-python -m unittest discover -s tools -p "test_*.py" -q
-# 需要原始私有 HK2 來源才進行完整 Coverage
 powershell -ExecutionPolicy Bypass -File tools/asset_converter/verify_converter.ps1
-# 要連同原始客戶端一起做少量原圖解碼試跑時（此步驟較慢）
-powershell -ExecutionPolicy Bypass -File tools/asset_converter/verify_converter.ps1 -Client "C:\SGO\Stargate Online IE HK2" -PreviewGroups 2
-~~~
 
-不使用已移除的 client/project.godot、server/*.csproj 做必需驗證。大量影像與 EXE 發行必須在新專案建置後另測。
+# 另外檢查 Godot imported Texture + external PCK 能被空白專案讀取
+python tools/asset_converter/smoke_runtime_pack.py "C:\SGO\Godot\Godot_v4.7.2-stable_win64_console.exe"
+```
 
-技術規格：[docs/ASSET_CONVERTER.md](../../docs/ASSET_CONVERTER.md)；歷史研究：[docs/research/INDEX.md](../../docs/research/INDEX.md)。
+`-Client "原始遊戲路徑" -PreviewGroups 2` 可交給 `verify_converter.ps1`
+對 Data1.dat 做少量來源試轉，但全量覆蓋必須另外執行 Gate。
 
-## Production Height-Dense / external PCK
+## 輸出（均可刪除後重新建置）
 
-- `atlas/dense_atlas.py`：唯一正式 per-asset Height-Dense P0，按照 Frame 高／寬降序排序，單頁最大 4096、超量同素材分頁；逐幀檢查裁切/像素/Origin/hash。
-- `runtime_pack.py` + `runtime_pack_packer.gd`：匯入 Godot `Texture2D`、世界 Atlas 採 VRAM 壓縮、UI/icons 保持 lossless，將各**獨立資產**輸出到外部 `assets.pck`。
-- `smoke_runtime_pack.py <godot.exe>`：獨立建立測試 Atlas、壓縮 PCK，再在空白 Godot 專案掛載，檢查 `ResourceLoader`。此 Smoke 不要求原始遊戲 Client/Server。
-- `benchmarks/packing/`：保留 Recovered Model1、Sprite、Map13、MaxRects/POT 對照程序與候選，不是第二套正式 Builder。
-- 先跑 `verify_converter.ps1`；完整原版來源仍須重新驗證全量 SPR/ACT，發行前 Windows/macOS 要另測。
+- `local-assets/asset_converter/complete`：私有 archive，不進 Git。
+- `client/assets`：各獨立 logical Atlas／Manifest，例如 `Enemy/<id>/`。
+- `server/content`：原版 Map/Blocking.dat/Population；沒有圖片。
+- `.cache` 與 `reports`：暫存、benchmark／匯入產物；不是 Git 原始碼。
+
+舊 Renderer Benchmark 需要已刪除的實驗快取，**不作現行工具入口**；
+未來正式 Client/Server 建立後，才新增對應可重跑的實際遊戲效能測試。
+
+詳見 [正式規格](../../docs/ASSET_CONVERTER.md)、[歷史對照](../../docs/research/ASSET_RENDERER_EVIDENCE.md)。

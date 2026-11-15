@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from convert_assets import convert_sif, parse_sif
+from asset_converter.source.convert_assets import convert_sif, parse_sif
 
 
 class SifTests(unittest.TestCase):

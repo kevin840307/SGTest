@@ -7,12 +7,11 @@
 - SPR/Data1 原始來源覆蓋、錯誤來源 fail-closed、ACT/SIF/DrawOrder/Origin/flip。
 - Asset ID 唯一、不同 Enemy／Map scenery／Player parts **禁止跨素材共圖**。
 - Map13 world／population／blocking 檔案相容。
-- 日後 Height-Dense、VRAM import、external PCK、Windows/macOS remap，須先將另一工作階段改動安全合併再測。
+- Height-Dense P0、VRAM import、external PCK 已整合且有獨立 Smoke；**完整來源覆蓋、Windows Release 和 macOS 實機仍未驗證**。
 - 在**沒有 client/project.godot 和 server/*.csproj**的 clean-slate 基線仍可執行純 Converter 測試。
 
 ~~~powershell
 python -m unittest discover -s tools/tests -p "test_*.py" -q
-python -m unittest discover -s tools -p "test_*.py" -q
 ~~~
 
 ## Gate 1 — Protocol + World
@@ -53,3 +52,25 @@ python -m unittest discover -s tools -p "test_*.py" -q
 - **RESTART001**：30 次登入、傳點換圖、AFK 進出，記錄 RSS/Texture/Node/Cache owners 趨勢；Mac 與 Windows Release 外部 PCK 各自驗證。
 
 任何腳本未實際執行時記錄 **NOT VERIFIED**，不可把先前 isolated Monster Benchmark 當成完成上述 Gate。
+
+## 共同效能指標與公平比較
+
+新 Client/Server 對 Recovered Model1 必須在相同原版素材、地圖、
+可見實體數、解析度、縮放、VSync 和 GPU 設定下，以各自完整 Renderer
+比較，不能用簡化 Sprite 畫面推估完整遊戲 FPS。
+
+每次測試記錄：input-to-render latency、frame P50/P95/P99/Max、
+超過 16.7ms 的長幀數、CPU/GPU 開銷、draw calls、Process Peak RSS、
+Godot Texture/Video memory（**不等同實體 dedicated VRAM**）、
+載入與卸載時間、Server World Tick P95/P99、封包佇列 age、
+AOI fanout、可靠事件延遲、動畫方向/受擊/死亡/位移錯誤。
+
+歷史隔離基準（**不是新版本 PASS**）：12 種 Enemy × 2000 隻，
+Recovered P95 6.576ms / RSS 219.8MiB，舊 SGTest 壓縮 Sprite
+P95 5.602ms / RSS 178.7MiB；Map13 視覺替身混合測試
+Recovered P95 7.470ms、舊 SGTest P95 6.900ms。
+完整方法留於 [歷史效能研究](research/ASSET_RENDERER_EVIDENCE.md)。
+
+選型先排除畫面錯誤、權威事件遺失、過量記憶體；
+其餘以玩家可感知的流暢度和穩定 P95/P99 為先，
+**不得透過降低 Network／Client reducer／Server Tick 換取假 FPS**。

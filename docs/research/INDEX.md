@@ -2,6 +2,8 @@
 
 This is a searchable archive of original research text, not the new Client/Server specification.
 Original individual files remain in Git history at commit `f755a47`.
+本彙編保留當時的檔名與命令作證據：其中的舊 `tools/*.py`、所有 cache-dependent packing／Renderer Benchmarks、舊獨立 Viewer/Client/Server **已從目前 main 移除**。
+請使用 [正式 Converter](../ASSET_CONVERTER.md) 的命令；要重跑歷史工具，須從對應舊 commit 取得，不可誤以為它們仍是當期產線。
 Use [Architecture](../ARCHITECTURE.md), [Converter](../ASSET_CONVERTER.md) and root todo.txt for current decisions.
 
 | Historical document | Current archive location |

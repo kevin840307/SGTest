@@ -16,8 +16,8 @@ try {
     python -m unittest discover -s tools/tests -p 'test_*.py' -q
     if ($LASTEXITCODE -ne 0) { throw 'Asset converter tests failed' }
 
-    python -m unittest discover -s tools -p 'test_*.py' -q
-    if ($LASTEXITCODE -ne 0) { throw 'Legacy format/content contracts failed' }
+    # Legacy standalone tests were retired; the single suite above verifies
+    # original source formats, Height-Dense, converter planning and PCK policy.
 
     if (-not [string]::IsNullOrWhiteSpace($Client)) {
         $original = (Resolve-Path $Client -ErrorAction Stop).Path

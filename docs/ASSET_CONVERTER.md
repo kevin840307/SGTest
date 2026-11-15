@@ -21,7 +21,6 @@ Converter **不應依賴**可執行的 client/project.godot 或 server/*.csproj�
 | source/ | Data1.dat / 原版 client extraction、SPR、ACT、SIF、方向／Item/NPC 原始格式 |
 | atlas/ | 依 asset ID 抽幀、裁切、排列、像素驗證／候選演算法 |
 | content/ | AssetCatalog、Map terrain/blocking/scenery、Server Population、NPC、DrawOrder、可索引資產發布 |
-| benchmarks/ | 回歸／素材編排／Model1 比對；**不是正式 Runtime** |
 | `runtime_pack.py` + `runtime_pack_packer.gd` | **已整合**：Godot imported textures，BPTC/ASTC remap、UI lossless、external assets.pck；不依賴可執行 Client，macOS 實機仍待驗證 |
 
 不新增第二套「依怪物／裝備／地圖類別」的 Converter，也不回復舊 map/session bundles。
@@ -31,7 +30,7 @@ Converter **不應依賴**可執行的 client/project.godot 或 server/*.csproj�
 - local-assets/asset_converter/complete：完整私有來源／sidecars／index。
 - client/assets：runtime 資產，含 Enemy/<id>/atlas.json 等獨立頁／Manifest。
 - server/content：只輸出權威 Server 要用的地圖、Blocking.dat、Population，不包含圖片。
-- .cache 與 reports：本機測試／分析產物；Git 忽略。
+- .cache 與 reports：可重建的本機測試／分析產物；Git 忽略。
 
 有清除／重新產生需要時**只處理有明確 ownership 的輸出目錄**，不得直接清空 source game、Recovered、其他 Session 的 .cache。
 

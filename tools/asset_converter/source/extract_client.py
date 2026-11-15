@@ -10,7 +10,7 @@ import json
 from pathlib import Path, PureWindowsPath
 import shutil
 import struct
-from .build_assets import write_json
+from ..json_files import write_json
 
 LIMIT = 512 * 1024 * 1024
 CATEGORIES = {'audio', 'effect', 'enemy', 'interface', 'item', 'ma', 'map', 'ms', 'npc', 'player', 'sr'}

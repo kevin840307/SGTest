@@ -15,7 +15,9 @@ from asset_converter.source.legacy_npc import npc_placements, npc_visual_table
 from asset_converter.content.npc_content import build, map_directory
 from asset_converter.content.build_maps import server_map_directory
 from asset_converter.content.build_enemy_map_palette import read_enemy_dat
-from test_assets import spr
+def spr(color=0xF800):
+    row = struct.pack('<HHH', 1, color, 0x8000)
+    return struct.pack('<IIiiI', 1, 1, 2, 3, 20) + row + struct.pack('<II', 0, 1)
 
 REPO = Path(__file__).resolve().parents[2]
 COMMON = b'-- synthetic trusted template fixture, not legacy code\n'

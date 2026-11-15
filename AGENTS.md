@@ -9,7 +9,7 @@
 ## 開工前
 
 1. 先 `git fetch`，確認目前分支與遠端狀態，查看 `git status --short`，避免踩到其他 Session 未提交的工作。
-2. 先讀 `README.md`、`docs/REBUILD_ARCHITECTURE_REVIEW.md`、`docs/ARCHITECTURE.md`、`docs/CLIENT_ARCHITECTURE.md`、`docs/SERVER_ARCHITECTURE.md`、`todo.txt`；依任務補讀相關素材／原版證據文件。
+2. 先讀 `README.md`、`docs/ARCHITECTURE.md`、`docs/CLIENT_ARCHITECTURE.md`、`docs/SERVER_ARCHITECTURE.md`、`todo.txt`；依任務補讀相關素材／原版證據文件。
 3. 若與其他 Session 共用工作樹且有 WIP，**建立自己的 worktree/branch**，不要 stash、reset、clean、覆寫、刪除他人的未提交內容。
 4. 領取一項具體 TODO，先寫預期行為、指標、驗收測試，再動手；完成才勾選，未跑寫 NOT VERIFIED。
 5. 確保拆成小 commit，commit 僅包含自己變更的檔案；每次更新 TODO 與架構決策證據。
@@ -35,4 +35,4 @@
 
 ## 多 Session 安全
 
-未提交檔案不屬於清理任務可隨意覆蓋的垃圾。若其他 Session 正開發 `tools/asset_converter/atlas/dense_atlas.py`、`runtime_pack.py` 等未提交工具，必須保護並等待其獨立提交、審查後合併；不能將其已完成狀態寫入新基線。
+未提交檔案不屬於清理任務可隨意覆蓋的垃圾。若有任何其他 Session 尚未提交的修改，先確認檔案所有權；本次已整合的 Height-Dense/PCK 只從唯一 `main` 維護，不要另建需要長期同步的轉換器分支。

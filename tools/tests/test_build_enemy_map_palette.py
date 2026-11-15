@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from build_enemy_map_palette import build_palettes, read_enemy_dat
+from asset_converter.content.build_enemy_map_palette import build_palettes, read_enemy_dat
 
 
 def record(enemy_id: int, x: int, y: int) -> bytes:

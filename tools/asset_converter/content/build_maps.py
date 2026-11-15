@@ -14,7 +14,7 @@ from pathlib import Path, PureWindowsPath
 import struct
 import time
 from PIL import Image
-from ..source.build_assets import write_json
+from ..json_files import write_json
 from ..source.runtime_spr import decode_spr, unwrap_cde
 from .asset_paths import source_sprite_manifest
 

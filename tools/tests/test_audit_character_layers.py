@@ -2,7 +2,7 @@ import sys
 import unittest
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from audit_character_layers import expand_layers
+from asset_converter.content.audit_character_layers import expand_layers
 
 
 class LayerTests(unittest.TestCase):

@@ -8,14 +8,13 @@
 
 | 主題 | 文件 | 用途 |
 |---|---|---|
-| 重建決策與舊版缺點 | [REBUILD_ARCHITECTURE_REVIEW](REBUILD_ARCHITECTURE_REVIEW.md) | 取捨、過度設計避免事項 |
 | Client | [CLIENT_ARCHITECTURE](CLIENT_ARCHITECTURE.md) | 運行時資料流、World Y-sort、FPS 隔離 |
 | Server | [SERVER_ARCHITECTURE](SERVER_ARCHITECTURE.md) | 權威狀態、Tick、AOI、DB |
 | 素材 | [ASSET_ARCHITECTURE](ASSET_ARCHITECTURE.md) | 一素材一 Atlas／AssetStore 契約 |
 | 轉換與發行 | [ASSET_CONVERTER](ASSET_CONVERTER.md) | SPR/ACT/SIF、轉換器與獨立 PCK |
 | Wire | [RUNTIME_PROTOCOL](RUNTIME_PROTOCOL.md) | Epoch/序號／事件與資料合約 |
 | 遊戲功能 | [GAMEPLAY](GAMEPLAY.md) | 核心功能與階段 |
-| 測試／效能 | [TEST_PLAN](TEST_PLAN.md)、[PERFORMANCE](PERFORMANCE.md) | 測試 Gate 與 Model1 公平比較 |
+| 測試／效能 | [TEST_PLAN](TEST_PLAN.md) | 測試 Gate、Model1 公平比較、AFK／多開驗收 |
 | 素材原版證據 | [LEGACY_ASSET_PIPELINE](LEGACY_ASSET_PIPELINE.md) | 原始素材與可追溯資訊 |
 | UI | [OLD_UI_DESIGN](OLD_UI_DESIGN.md) | 原版後期金色視覺的設計參考 |
 
@@ -55,7 +54,7 @@ Render FPS 可 0 / 30 / 60 / 90；network/Client Reducer/Server tick 不可因�
 ## 目前儲存庫
 
 - tools/asset_converter：唯一正式素材 Converter；保留轉換／研究／格式測試。
-- tools：必要的素材研究、契約與驗證工具；不是 Runtime。
+- tools/tests：只保留正式 Converter 的契約與格式驗證；舊 Viewer、第二套建置器與已淘汰 Benchmark 不在新版本維護。
 - client/：只有 README、assets 輸出定位標記；**無 Godot 專案**。
 - server/：只有 README；**無 C# 專案**。
 - docs/：上述設計文件；docs/research 為歷史研究原文彙編。

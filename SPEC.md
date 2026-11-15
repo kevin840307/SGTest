@@ -29,7 +29,7 @@
 
 不得跨素材合併：Enemy、NPC、Player part、Equipment、Item、Pet、Mecha、Scenery、Effect、UI 各自以原 Asset ID 為邊界。正式怪物目錄只用 `client/assets/Enemy/<id>/`，不增加 `generation/`。動畫資料必須保留 ACT tick、Action、8 方向／鏡像、Trim、Origin、來源幀序與事件。P0 如發現真實壓縮邊緣污染改 P1，POT／MaxRects／強制尺寸分桶不是預設策略。
 
-`tools/asset_converter/atlas/dense_atlas.py` 是正式 Builder；`tools/asset_converter/runtime_pack.py` + `runtime_pack_packer.gd` 是 PCK 輸出。Benchmarks 只做回歸對照，不作第二條正式產線。Windows/macOS 共用 logical ID／metadata；平台 GPU 格式與 macOS Release **仍須實機驗證**。
+`tools/asset_converter/atlas/dense_atlas.py` 是正式 Builder；`tools/asset_converter/runtime_pack.py` + `runtime_pack_packer.gd` 是 PCK 輸出。舊版 Benchmark 方法與結果封存在 docs/research／Git 歷史，不作第二條正式產線；未來新版 Client/Server 必須另做真實負載測試。Windows/macOS 共用 logical ID／metadata；平台 GPU 格式與 macOS Release **仍須實機驗證**。
 
 ## 3. Client 與 Renderer 必須彼此隔離
 

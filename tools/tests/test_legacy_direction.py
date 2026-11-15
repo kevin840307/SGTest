@@ -3,7 +3,7 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from legacy_direction import map_character_direction, map_enemy_direction
+from asset_converter.source.legacy_direction import map_character_direction, map_enemy_direction
 
 
 class DirectionTests(unittest.TestCase):

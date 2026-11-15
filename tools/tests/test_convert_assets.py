@@ -6,7 +6,7 @@ from pathlib import Path
 import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from convert_assets import Frame, convert, convert_act, convert_draw_order, decode_spr, pack
+from asset_converter.source.convert_assets import convert_act, convert_draw_order, decode_spr
 
 
 def one_frame() -> bytes:
@@ -17,47 +17,8 @@ def one_frame() -> bytes:
 
 
 class ConversionTests(unittest.TestCase):
-    def test_rgba_origin_and_atlas_crop(self):
-        frames = decode_spr(one_frame())
-        self.assertEqual(len(frames), 1)
-        self.assertEqual(frames[0].image.getpixel((0, 0)), (255, 0, 0, 255))
-        self.assertEqual(frames[0].image.getpixel((1, 0)), (0, 0, 0, 0))
-        pages, records = pack(frames, 1024)
-        self.assertEqual(pages[0].size, (5, 5))
-        self.assertEqual(records[0]["raw_origin"], [-3, 7])
-        self.assertEqual(records[0]["crop"], [0, 0, 1, 1])
-        self.assertEqual(records[0]["rect"], [2, 2, 1, 1])
-        self.assertEqual(pages[0].getpixel((0, 0)), (255, 0, 0, 255))
 
-    def test_atlas_padding_keeps_adjacent_colors_separate(self):
-        from PIL import Image
-        red = Frame(Image.new("RGBA", (1, 1), (255, 0, 0, 255)), 0, 0)
-        blue = Frame(Image.new("RGBA", (1, 1), (0, 0, 255, 255)), 0, 0)
-        pages, records = pack([red, blue], 16)
-        self.assertEqual(len(pages), 1)
-        self.assertEqual(records[0]["rect"], [2, 2, 1, 1])
-        self.assertEqual(records[1]["rect"], [7, 2, 1, 1])
-        self.assertEqual(pages[0].getpixel((4, 2)), (255, 0, 0, 255))
-        self.assertEqual(pages[0].getpixel((5, 2)), (0, 0, 255, 255))
 
-    def test_reproducible_output_and_cache(self):
-        with tempfile.TemporaryDirectory() as temp:
-            root = Path(temp) / "input"
-            out = Path(temp) / "output"
-            (root / "Enemy").mkdir(parents=True)
-            source = root / "Enemy" / "test.spr"
-            source.write_bytes(one_frame())
-            result = convert(source, root, out, 1024)
-            self.assertEqual(result["status"], "converted")
-            manifest = json.loads((out / "Enemy" / "test.json").read_text())
-            self.assertEqual(manifest["layout"], "frames")
-            self.assertIsNone(manifest["frame_duration_ms"])
-            self.assertEqual(convert(source, root, out, 1024)["status"], "cached")
-            self.assertEqual(convert(source, root, out, 1024, layout="atlas")["status"], "converted")
-            dotted = root / "Enemy" / "test.variant.spr"
-            dotted.write_bytes(one_frame())
-            convert(dotted, root, out, 1024)
-            self.assertTrue((out / "Enemy" / "test.variant.json").exists())
 
     def test_reject_bad_frame_table(self):
         with self.assertRaises(ValueError):

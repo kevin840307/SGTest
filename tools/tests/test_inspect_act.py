@@ -4,7 +4,7 @@ from pathlib import Path
 import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from inspect_act import parse_act
+from asset_converter.source.inspect_act import parse_act
 
 
 def action(key: str, loop: int, frames: list[tuple[int, int]]) -> bytes:

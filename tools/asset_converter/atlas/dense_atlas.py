@@ -17,7 +17,7 @@ from pathlib import Path
 
 from PIL import Image
 
-from .build_atlas_groups import pack_atomic_rectangles
+from .layout import pack_atomic_rectangles
 from ..source.convert_assets import decode_spr
 from ..source import runtime_spr
 

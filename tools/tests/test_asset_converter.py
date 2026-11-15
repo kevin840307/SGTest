@@ -1,4 +1,4 @@
-"""Portable fixture tests for Adaptive Atomic Atlas, without copyrighted content."""
+"""Converter tests for the independent Height-Dense asset pipeline."""
 
 import hashlib
 import json
@@ -16,7 +16,7 @@ sys.path.insert(0, str(REPO / "tools" / "asset_converter"))
 from asset_converter.atlas.dense_atlas import build_group, POLICY
 from asset_converter.cli import archive_all, check_runtime
 from asset_converter import cli
-from asset_converter.source.convert_assets import decode_spr, convert
+from asset_converter.source.convert_assets import decode_spr
 from asset_converter.source.runtime_spr import decode_spr as runtime_decode
 from PIL import Image
 from asset_converter.source.extract_client import audit_sprite_coverage
@@ -67,8 +67,6 @@ class ConverterTests(unittest.TestCase):
             x,y,w,h = frame['rect']
             with Image.open(output/'palette'/manifest['pages'][0]) as page:
                 self.assertEqual(page.crop((x,y,x+w,y+h)).getpixel((0,0)),(0,255,0,255))
-            # Public per-file converter must keep working after decoder consolidation.
-            convert(path,source,Path(temp)/'per-file',512,False)
 
     def test_old_cache_is_pixel_revalidated_and_bad_pivot_is_rebuilt(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -147,14 +145,11 @@ class ConverterTests(unittest.TestCase):
 
         package = REPO / "tools" / "asset_converter"
         modules = [
-            "adaptive_atlas",
             "dense_atlas",
-            "selector",
             "animation_definition",
             "asset_paths",
             "audit_character_layers",
-            "build_assets",
-            "build_atlas_groups",
+            "layout",
             "build_enemy_map_palette",
             "build_maps",
             "build_population",
@@ -168,6 +163,7 @@ class ConverterTests(unittest.TestCase):
             "runtime_spr",
             "server_source",
             "cli",
+            "json_files",
         ]
         group_by_module = {
             "extract_client": "source",
@@ -175,9 +171,8 @@ class ConverterTests(unittest.TestCase):
             "runtime_spr": "source",
             "inspect_act": "source",
             "legacy_direction": "source",
-            "build_assets": "source",
-            "adaptive_atlas": "atlas", "dense_atlas": "atlas", "selector": "atlas",
-            "build_atlas_groups": "atlas",
+            "dense_atlas": "atlas",
+            "layout": "atlas",
             "animation_definition": "content",
             "runtime_animation_semantics": "content",
             "audit_character_layers": "content",
@@ -192,7 +187,7 @@ class ConverterTests(unittest.TestCase):
         for name in modules:
             mod = importlib.import_module(
                 "asset_converter."
-                + (group_by_module.get(name, "") + ("." if name != "cli" else ""))
+                + (group_by_module.get(name, "") + ("." if name not in ("cli","json_files") else ""))
                 + name
             )
             self.assertTrue(
