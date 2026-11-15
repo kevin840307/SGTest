@@ -20,6 +20,15 @@ python -m unittest discover -s tools/tests -p "test_*.py" -q
 - Packet trace 可重播，相同輸入得相同狀態 hash。
 - Server Single Writer 與 DB/socket I/O 隔離；阻塞外部儲存不影響 Map tick。
 
+### 初步 Wire / AOI 性能 Probe（非 Gate 1 驗收）
+
+~~~powershell
+dotnet run -c Release --project tools/tests/wire_aoi_probe/WireAoiProbe.csproj
+& "C:\SGO\Godot\Godot_v4.7.2-stable_win64_console.exe" --headless --path . --script tools/tests/wire_aoi_probe/verify_binary.gd
+~~~
+
+檢查 RESULT ... PASS 與 WIRE_GODOT_GOLDEN_PASS；使用人工資料，已驗證 Binary Golden Fixture／Spatial Grid 與 brute-force 等價、Hysteresis 和密集 AOI 反例。**未**驗證正式 Server/WebSocket、多機、真實封包延遲、MessagePack/Protobuf、Map13 E2E；結果與限制記於 [Wire Contract](RUNTIME_PROTOCOL.md)。
+
 ## Gate 2 — 視覺、戰鬥與 AOI
 
 - 地圖、Player/Equipment、Enemy、Scenery/Drop 共用 World Y-sort。

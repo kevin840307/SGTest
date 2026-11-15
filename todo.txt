@@ -11,6 +11,7 @@
 ## Wire/AOI 基線（新 Client/Server 前必須核實；尚未實作）
 
 - REB019 [ ] 原版／Recovered 封包研究與負載矩陣：比較 JSON、header + compact binary、MessagePack／Protobuf 等合理候選（不得預設），定義正式 framing/schema、Godot↔C# fixture、傳輸／可靠性／Backpressure、AOI interest/delta/Spawn 契約；測 bytes/sec、P95/P99 codec、alloc/GC。選型結果更新 RUNTIME_PROTOCOL 與測試，不能只憑推測選型。
+- REB019-PROBE [x] 初步實測（**非正式協定定版**）：Recovered 現有 WebSocket Text + JSON/AES-CBC/Base64 與 Spatial AOI 已唯讀確認；新增 .NET 8 + Godot 4.7.2 可重跑的 tools/tests/wire_aoi_probe，Binary Golden Fixture PASS、合成 AOI spatial vs brute-force／Hysteresis PASS。單筆 109-byte JSON vs 32-byte binary（-70.6%）；均勻 100 Player／1000 Enemy／5000 Drop AOI candidate -96.59%，密集 AOI 0% saving。**MessagePack/Protobuf、正式傳輸安全／可靠事件、Map13 真實負載、E2E 仍 NOT VERIFIED**，REB019 保持未完成。
 
 ## Client 新版（尚未實作）
 

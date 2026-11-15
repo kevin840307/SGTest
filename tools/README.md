@@ -11,6 +11,7 @@ tools/
     content/            # Asset catalog、Map/Blocking/NPC/Enemy/Player 資料
     runtime_pack.py     # 外部 Godot compressed assets.pck
   tests/                # Converter、原版格式與 pack policy 測試
+    wire_aoi_probe/      # 新版 Wire/AOI 選型的合成實測（不是正式 Client/Server）
 ```
 
 `tools/` 根目錄沒有可執行的舊版 `build_*.py`、`convert_*.py`、
@@ -26,5 +27,7 @@ powershell -ExecutionPolicy Bypass -File tools/asset_converter/verify_converter.
 ```
 
 轉換器不依賴可執行 Client/Server；`.cache` 是可重建產物而非來源。
+Wire/AOI 第一輪實測：dotnet run -c Release --project tools/tests/wire_aoi_probe/WireAoiProbe.csproj；Godot Golden Fixture 指令與侷限見 [測試計畫](../docs/TEST_PLAN.md)。
+
 完整實作與命令請看 [Converter README](asset_converter/README.md) 和
 [素材轉換架構](../docs/ASSET_CONVERTER.md)。

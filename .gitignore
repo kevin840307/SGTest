@@ -22,3 +22,5 @@ __pycache__/
 .venv/
 server/**/bin/
 server/**/obj/
+tools/tests/**/bin/
+tools/tests/**/obj/
