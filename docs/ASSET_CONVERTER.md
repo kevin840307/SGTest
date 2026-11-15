@@ -1,6 +1,6 @@
 # SGTest 素材轉換器（重建版本）
 
-**目前狀態：正式唯一 Converter 包含 Height-Dense Builder 及 Godot external assets.pck packer，已完成純 Python unit tests 與空白 Godot 專案掛載 PCK 的 smoke；完整原版素材重新轉換、Windows Release 與 macOS 實機尚未完成。**
+**目前狀態：正式唯一 Converter 包含 Height-Dense Builder 及 Godot external assets.pck packer，已完成純 Python unit tests 與空白 Godot 專案掛載 PCK 的 smoke；完整私有 Archive 重新建置與獨立稽核已通過；正式 Runtime Catalog／PCK、Windows Release 與 macOS 實機尚未完成。**
 
 ## 正式入口
 
@@ -42,7 +42,7 @@ python tools/asset_converter/cli.py build "C:\SGO\Stargate Online IE HK2" `
 
 Map13 **78 Spawn／9 Enemy、488 原始 Frame**；Map15 **4 Spawn／1 Enemy、69 Frame**；10 種共 557 Frame、10 個 Enemy ACT/SPR 定義都成功解析。使用正式 `atlas/dense_atlas.py` Builder 在 `local-assets/asset_converter/mvp_enemy_preview/sprites` 以原版素材試轉 **10/10 獨立 Atlas、10 頁／557 Frame PASS**；重跑兩圖 `population_evidence.json` SHA 2/2 一致、57 項 Python tests PASS。**此 smoke 為分組編譯驗證，不能視為正式 Runtime Catalog、完整 Archive 或 Godot ResourceLoader 成功。** 所有原版 Spawn 位置仍需在權威 World／Blocking 和實際客戶端驗證。
 
-**尚未通過**：全部原版 SPR/ACT 的完整 Archive/source coverage、Player／NPC／Scenery／Enemy 正式 `client/assets` Catalog、Godot 真圖 ResourceLoader、正式 PCK、跨圖 E2E、Server 權威路徑／NPC 腳本與 Enemy 玩法規則及 AssetStore 引用釋放。MVP001 仍保持未完成；兩圖資料檔互不覆蓋不等於交替完整 PCK Build PASS。
+**尚未通過**：Player／NPC／Scenery／Enemy 正式 `client/assets` Catalog、Godot 真圖 ResourceLoader、正式 PCK、跨圖 E2E、Server 權威路徑／NPC 腳本與 Enemy 玩法規則及 AssetStore 引用釋放。MVP001 仍保持未完成；兩圖資料檔互不覆蓋不等於交替完整 PCK Build PASS。
 
 MVP 通過後再逐張擴其他地圖、全部素材與完整 Windows/macOS Release，不能將兩圖來源覆蓋稱為全 7,890 asset PASS。
 
@@ -111,4 +111,6 @@ python tools/asset_converter/runtime_pack.py "C:\SGO\Godot\Godot_v4.7.2-stable_w
 
 完整 Archive 的 `index.json` 不只是清單：發布前 audit 必須拒絕重複 group，且每個 row 的 frames/pages/rgba_bytes/png_bytes 須等於驗證後的獨立 manifest 與實體 PNG；manifest group 身分及 PNG 大小也必須一致。來源 group set 的 set 比對不足以發現重複 row，否則發布器逐 row 輸出可能重複註冊 logical ID 或回報不實統計。此修正沿用唯一 audit／Builder，沒有新增產線或改變 Atlas 格式；屬一致性修正，無實質替代方案，無需另做效能選型。
 
-回歸包含重複 group、四種 row 計數損毀、還原後合法 Archive、既有 Preview 拒絕及 PNG 損毀；2026-11-15 以臨時目錄複製當前 tools 執行同一 unittest suite，58 tests PASS。使用隔離快照是避免測試 CLI 與正式長時間建置競爭每 checkout 的 OS lock，不停用正式互斥鎖。完整 7,890 group 建置進行中，完整 Archive／Catalog／PCK 仍 NOT VERIFIED。
+回歸包含重複 group、四種 row 計數損毀、還原後合法 Archive、既有 Preview 拒絕及 PNG 損毀；2026-11-15 以臨時目錄複製當前 tools 執行同一 unittest suite，58 tests PASS。使用隔離快照是避免測試 CLI 與正式長時間建置競爭每 checkout 的 OS lock，不停用正式互斥鎖。完整建置及獨立 audit 已 PASS；Catalog／PCK 仍 NOT VERIFIED。
+
+2026-11-15 正式全量重新驗證：唯一 CLI `build --archive-only --extracted-source .cache/asset_converter/source`（822.07 秒）與後續 `verify` 皆 exit 0。實際 7,890 group／75,588 SPR／282,968 Frame／7,871 頁，613 ACT／1,165 SIF／9 DrawOrder，全部無錯誤。PNG 合計 960,300,862 bytes；未壓縮頁面理論 RGBA 4,107,323,520 bytes，**不是 Runtime RSS 或 VRAM 常駐量**。Archive index SHA256：`bd6b8a6397f23bbba33f4ade59092c4abe40a446512a524b904a67047836ea55`，本機報告 `reports/mvp_complete_archive_verification.json`。Builder 做逐幀像素／原點比較；audit 獨立重算來源、metadata、PNG hash／幾何、來源幀 identity 和 sidecar，不重播像素比較。主 checkout 完整 suite 在 CLI 結束後單獨執行 58 tests PASS。原版／衍生圖及來源 JSON 均不進 Git；這仍不是全動畫語意、P0 壓縮畫質或正式 Client/Server PASS。

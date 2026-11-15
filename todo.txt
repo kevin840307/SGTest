@@ -91,8 +91,12 @@
 
 ## 本 Session 領取（2026-11-15）
 
-- MVP001-ARCHIVE-INTEGRITY [ ] 範圍：正式完整 Archive／Catalog 發布前的 manifest 一致性。修改前：audit 以 set 比對 group，重複 index row 會被掩蓋，row 的 Frame/Page/Bytes 未對照實際 manifest。預期：重複 group、row 計數不符均 fail closed；合法完整 Archive 不退化。指標：7,890 group／75,588 SPR 全量建置與來源 coverage、錯誤清單、合成損毀索引回歸。已啟動唯一 CLI 完整私有 build；完成前全量結果 NOT VERIFIED。
+- MVP001-ARCHIVE-INTEGRITY [x] 範圍：正式完整 Archive／Catalog 發布前的 manifest 一致性。修改前：audit 以 set 比對 group，重複 index row 會被掩蓋，row 的 Frame/Page/Bytes 未對照實際 manifest。預期：重複 group、row 計數不符均 fail closed；合法完整 Archive 不退化。指標：7,890 group／75,588 SPR 全量建置與來源 coverage、錯誤清單、合成損毀索引回歸。已啟動唯一 CLI 完整私有 build；完成前全量結果 NOT VERIFIED。
 
   - 本輪實作：`atlas/archive_audit.py` 新增重複 group／row 計數／manifest 身分與 PNG 大小驗證；`test_converter_planning.py` 補損毀與還原測試。Before→After：重複／錯誤 row 可通過 audit → 明確 failed。8 項 focused tests PASS；隔離 tools snapshot 的完整 `python -m unittest discover -s tools/tests -p "test_*.py" -q`：58 PASS。主 checkout 同命令首次執行 4 FAIL（正式建置持鎖，非格式回歸），待正式建置結束重跑。`git diff --check` PASS；CI 未執行，NOT VERIFIED。完整 Archive 尚未完成，任務保持未勾選。
 
   - Git：`8585f1b160abfd9867d41174709a118d599ab64e` 已推送 origin/main；追加發布入口回歸證明錯誤索引會在改寫輸出前被拒絕。原版 SPR presence audit 實跑 75,588 expected／75,588 actual，missing=0／extra=0；私有報告 `reports/mvp_archive_source_coverage.json`，僅證明路徑覆蓋，非逐檔原版位元組比較。完整 Builder session=81363 持續執行；接手先 poll 該 process，不能因 observation timeout 重啟；若確認已停止才使用原命令重跑（Builder 可重驗 cache）。
+
+  - 2026-11-15 完工：唯一 CLI 完整 build --archive-only PASS（822.07 秒），7,890 groups／75,588 SPR／282,968 Frame／7,871 頁，0 error；613 ACT／1,165 SIF／9 DrawOrder 全部成功。後續獨立 `verify` PASS，逐來源 SHA／metadata／PNG SHA 與幾何／frame identity／sidecar replay 完整一致，index SHA256=`bd6b8a6397f23bbba33f4ade59092c4abe40a446512a524b904a67047836ea55`。private report=`reports/mvp_complete_archive_verification.json`；session 81363、9829 均已 exit 0。正式 Native suite 在稽核結束後單獨執行：58 tests PASS；並行稽核時曾有 4 個鎖競爭 FAIL，未列為 PASS。
+  - 可重跑命令：`python tools/asset_converter/cli.py build "C:\SGO\Stargate Online IE HK2" --extracted-source .cache/asset_converter/source --archive-only`；`python tools/asset_converter/cli.py verify "C:\SGO\Stargate Online IE HK2" --extracted-source .cache/asset_converter/source --report reports/mvp_complete_archive_verification.json`；`python -m unittest discover -s tools/tests -p "test_*.py" -q`（須依序執行，不能和正式 CLI 競爭鎖）。
+  - Before→After：只有十種 Enemy preview → 完整私有 Archive 與獨立 audit PASS；全部 7,890 group Asset ID 映射預檢無 collision，B 人物標準 17 部位動畫定義編譯預檢 PASS（`reports/player_b_semantic_preflight.json`，非視覺測試）。尚未通過：Catalog 發布／定向 Runtime、P0 壓縮邊緣、PCK 真圖載入、正式 Client/Server、Windows/Mac Release；REB003／MVP001 不因此全項完成。

@@ -121,3 +121,7 @@ Recovered P95 7.470ms、舊 SGTest P95 6.900ms。
 選型先排除畫面錯誤、權威事件遺失、過量記憶體；
 其餘以玩家可感知的流暢度和穩定 P95/P99 為先，
 **不得透過降低 Network／Client reducer／Server Tick 換取假 FPS**。
+
+## ARCHIVE001 — 完整私有素材重新驗證（2026-11-15 PASS）
+
+正式 Builder 重新產出 7,890 groups／75,588 SPR／282,968 Frame／7,871 頁，逐幀像素／origin 比較及 sidecar 613 ACT／1,165 SIF／9 DrawOrder 成功；後續唯一 CLI verify 來源／metadata／頁面 SHA、幀 identity、PNG 幾何與 sidecar replay PASS，0 error。測試命令、index SHA 與限制見 [Converter](ASSET_CONVERTER.md#archive-索引一致性mvp001-archive-integrity)。主 checkout 58 項 Python tests PASS。Archive PASS 不包含所有動畫語意／壓縮邊緣／PCK／Renderer／Client/Server；其餘 Gate 保持 NOT VERIFIED。
