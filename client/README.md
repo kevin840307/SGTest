@@ -1,6 +1,6 @@
 # SGTest Client 資源基礎
 
-已新增 Godot 4.7.2 專案及單一 `assets_runtime/asset_store.gd`。目前可執行資源生命週期測試；地形 Renderer 已完成原生 GPU 切片；尚無遊戲 main scene、完整 World Renderer、網路／WorldState／登入／多人玩法。新程式沒有取回舊 prototype。
+已新增 Godot 4.7.2 專案及單一 `assets_runtime/asset_store.gd`。目前可執行資源生命週期測試；地形與靜態景物／角色交錯 Renderer 已完成原生 GPU 切片；尚無遊戲 main scene、完整 World Renderer、網路／WorldState／登入／多人玩法。新程式沒有取回舊 prototype。
 
 ## 驗證
 
@@ -44,3 +44,15 @@ python client/tests/run_terrain.py "C:\SGO\Godot\Godot_v4.7.2-stable_win64_conso
 2026-11-16 資料修正：world v3保留原版建築父子關係（Map15=1833根+15子），撤回先前「15筆缺Z」解讀；根記錄XY後為child_count，世界z=0。舊v2須由唯一Converter重建runtime/PCK，AssetStore拒絕v2。原版建築前緣排序／室內外顯示尚未實作，完整景物層與MVP仍未完成；見ASSET_CONVERTER的DIRECT證據及TEST_PLAN。
 
 2026-11-16 景物資料進度：共用scenery v1定義已保留BLG兩appearance、SIF模式／幾何與建築前緣，補入12個alternate素材；正式Catalog現在254獨立Asset。72 tests、雙圖PCK／30次AssetStore循環／Terrain 16張像素回歸PASS。景物遮擋Renderer與切換時間仍未完成；詳ASSET_CONVERTER／CLIENT_ARCHITECTURE。
+
+## 靜態景物與角色交錯驗證
+
+```powershell
+python client/tests/run_world.py "C:\SGO\Godot\Godot_v4.7.2-stable_win64_console.exe" --rounds 3 --report reports/world_render_final.json
+# 只跑正式Canvas的回歸
+python client/tests/run_world.py "C:\SGO\Godot\Godot_v4.7.2-stable_win64_console.exe" --mode canvas --report reports/world_render_canvas.json
+```
+
+正式`rendering/world_order.gd`處理原版front交換／Actor插入；`world_draw_list.gd`由唯讀world、同一AssetStore的資產與明確frame／inside快照建立可見命令；`world_canvas.gd`只繪製，不載入資產或推進時鐘。先clear renderer／draw list再結束AssetStore scope。固定景物排序只在Converter離線計算，Client不每幀bubble-sort整圖。Sprite2D比較候選只在tests/，重用節點且與Canvas消耗相同命令，不是第二套正式Renderer。
+
+3輪／兩圖／兩解析度／室內外及frame0/1，144 captures的排序／座標／UV／texture identity與獨立CPU合成通過；110個來源SPR幀的origin及未壓縮Atlas crop逐byte一致。GPU壓縮影像取樣允許明確的1e-5 texel邊界不確定性與2色階rounding，實際超界最大1；不能稱為原圖與壓縮GPU完全0差異。錯排序／位置+1／整圖位移1px的負向控制均拒絕。動畫時序／建築fade與入口、自身遮擋ghost、zoom／多開／AFK、多人Server仍NOT VERIFIED。

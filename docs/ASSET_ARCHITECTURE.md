@@ -67,3 +67,5 @@ Map terrain/scenery 和 Enemy 必須分離。Server Population 定義怪物出�
 地圖資料改world v3，AssetStore拒絕v2，需重跑runtime-only及PCK。ObjectList的XY後整數為子物件數而非Z；Map15保留5棟父建築與15子物件，parent_index使用來源objects陣列索引，子物件p仍為絕對座標；所有z=0。維持唯一AssetStore／Atlas／PCK，不增加第二套載入流程。原版建築有mode與前緣比較、父子顯示關係，不能將「共同World排序」直接等同所有Node2D啟用y_sort。DIRECT來源／位址／schema遷移詳ASSET_CONVERTER；原版遮擋、室內外、動畫時間及完整景物Renderer仍NOT VERIFIED。
 
 景物metadata進度（2026-11-16）：world v3/scenery v1共用definition保留BLG雙appearance、SIF mode與前緣／點集。scoped Catalog已涵蓋兩欄，242→254獨立Asset（新增12 alternate），完整Archive audit及新PCK原生載入回歸PASS；原有per-asset Height-Dense與AssetStore策略不變。兩appearance bounds取聯集，避免切換後超出primary邊界遭提前剔除。完整Renderer／fade時間／遮擋仍未完成，證據與來源限制見ASSET_CONVERTER。
+
+2026-11-16 靜態World切片：原版三組景物順序由唯一Converter離線編譯為scenery_order，不把非全序predicate交給一般sort；Client在可見root順序中插入Actor，將FrameTable origin/trim、兩appearance與children轉成集中Canvas命令。原生比較後正式選world_canvas，Sprite2D候選僅tests。144 GPU captures／110個原始SPR幀／卸載Texture基線驗證PASS；取樣精度與P0壓縮品質限制見CLIENT_ARCHITECTURE，並非完整原版時序或MVP PASS。下一階段仍須比較全palette預載與逐視野預取，不能把本輪benchmark的全palette前提當成最終資源策略。

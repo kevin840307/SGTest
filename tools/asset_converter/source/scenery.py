@@ -82,3 +82,65 @@ def parse_blg(raw):
             effective[index] = -10
     return {'primary':primary, 'alternate':alternate, 'front_raw':front,
             'front':effective, 'inside_cells':groups[0], 'outside_cells':groups[1]}
+
+
+def point_in_front(position, front, point):
+    """DIRECT CheckPointInFront 0x00549560; equality stays behind."""
+    x, y = point[0]-position[0], point[1]-position[1]
+    left, ly, right, ry = front
+    if x <= 0 and x <= left:
+        return y > ly
+    if x > 0 and x >= right:
+        return y > ry
+    return 2*(ly-y)-(left-x) < 0 or 2*(ry-y)+(right-x) < 0
+
+
+def swap_required(first, second):
+    """Original boolean swap predicate, NOT a strict ordering comparator.
+
+    Inputs are presentation records with p, sorting_mode, front (buildings).
+    DIRECT SortMapObject 0x00529CAA; CheckBldgInFront 0x005497EE.
+    """
+    first_building = first['sorting_mode'] == 0
+    second_building = second['sorting_mode'] == 0
+    if first_building and second_building:
+        # Pick the other building's edge closest to this building's X.
+        offset = 2 if second['p'][0] < first['p'][0] else 0
+        x = second['p'][0]+second['front'][offset]
+        y = second['p'][1]+second['front'][offset+1]
+        threshold = first['front'][1 if x <= first['p'][0] else 3]+first['p'][1]
+        return y < threshold
+    if first_building:
+        return not point_in_front(first['p'],first['front'],second['p'])
+    if second_building:
+        return point_in_front(second['p'],second['front'],first['p'])
+    return second['p'][1] < first['p'][1]
+
+
+def compile_scenery_order(placements, definitions):
+    """Bake legacy root ordering once, outside the Client's frame loop.
+
+    DIRECT CELList::BubbleSort 0x0052AB10–0x0052ABED: adjacent swaps,
+    stop when unchanged or after 1025 full passes. Children are not roots.
+    """
+    groups, records, passes, settled = [[],[],[]], {}, [], []
+    for index, placement in enumerate(placements):
+        if placement['parent_index'] is not None:
+            continue
+        definition = definitions[placement['definition']]
+        records[index] = {'p':placement['p'],'sorting_mode':definition['sorting_mode'],
+                          'front':definition.get('front')}
+        groups[definition['draw_group']].append(index)
+    for group in groups:
+        changed = False
+        for pass_index in range(1025):
+            changed = False
+            for at in range(len(group)-1):
+                if swap_required(records[group[at]],records[group[at+1]]):
+                    group[at],group[at+1] = group[at+1],group[at]
+                    changed = True
+            if not changed:
+                break
+        passes.append(pass_index+1)
+        settled.append(not changed)
+    return {'version':1,'groups':groups,'passes':passes,'settled':settled}

@@ -9,13 +9,13 @@
 - `tools/tests/`：正式 Converter、原始格式及佈署包契約測試（**不是 Client/Server 程式**）；舊獨立轉換器與 Viewer 已從工作樹移除，可從 Git 歷史查閱。
 - `docs/`、`SPEC.md`、`todo.txt`：正式設計與原版研究證據；歷史完成紀錄見 `docs/research/FEATURE_DECISION_HISTORY.md#source-todo-pre-rebuild-20261115-txt`。
 - `client/assets/.gdignore`：**僅保留轉換輸出的定位標記**，不是 Godot Runtime。
-- `client/`：新 Godot 4.7.2 資源模組／測試專案；單一 AssetStore 已有有界非同步與 owner-epoch 生命週期回歸，已加入地形 Renderer 的原生 GPU／像素驗證，**尚無可玩 main scene／完整 World Renderer／網路**。`server/` 仍為未實作位置。
+- `client/`：新 Godot 4.7.2 資源模組／測試專案；單一 AssetStore 已有有界非同步與 owner-epoch 生命週期回歸，已加入地形及靜態景物／角色交錯 Renderer 的原生 GPU／像素驗證，**尚無可玩 main scene／完整 World Renderer／網路**。`server/` 仍為未實作位置。
 
 ## 現階段 MVP：Map15 主城 + Map13 尼西亞台地
 
 **兩張原版真地圖 + 大部分完整玩法**，不是單圖 Demo：先確認兩圖資產／Blocking／NPC／傳點；Map15 用於登入、角色、NPC 商店／銀行／倉庫、裝備、交易／玩家商店，Map13 用於 A*／長按、怪物 AI、技能戰鬥、大量掉落和多人 AOI；中間要完成**Map15 ↔ Map13 真實雙向傳點**、MapEpoch/WorldReady、資源釋放及多人重連。
 
-目前 Map13／Map15 原始地形、Blocking、NPC 與兩圖共 82 筆 Enemy Spawn／10 種 SPR-ACT 已完成來源轉換驗證（詳 `todo.txt` 的 MVP001 子項）；完整 7,890 素材 Archive audit 與兩圖 242 個獨立 Atlas／Catalog 定向發布已 PASS；雙圖 Runtime content 與外部 PCK 的空白 Godot ResourceLoader 已 PASS（244 Texture）；可執行 Client/Server 仍未完成。先小型切片逐步做到兩真 Godot Client、Map13 同圖 20 連線／300 Enemy／500 Drop、Map15 多人城市互動及兩圖同時活躍、AFK／多開 Gate。按 todo.txt 的 MVP001～MVP010 進行，**不是只做每種功能一條 happy path**；所有適用原版規則、異常／多人競態及 Server authority 要驗證，好友暫緩。選型多方案先實測 ALT001；MVP 通過後才擴所有地圖／品項及更大負載。
+目前 Map13／Map15 原始地形、Blocking、NPC 與兩圖共 82 筆 Enemy Spawn／10 種 SPR-ACT 已完成來源轉換驗證（詳 `todo.txt` 的 MVP001 子項）；完整 7,890 素材 Archive audit 與兩圖 254 個獨立 Atlas／Catalog 定向發布已 PASS；雙圖 Runtime content 與外部 PCK 的空白 Godot ResourceLoader 已 PASS（244 Texture）；可執行 Client/Server 仍未完成。先小型切片逐步做到兩真 Godot Client、Map13 同圖 20 連線／300 Enemy／500 Drop、Map15 多人城市互動及兩圖同時活躍、AFK／多開 Gate。按 todo.txt 的 MVP001～MVP010 進行，**不是只做每種功能一條 happy path**；所有適用原版規則、異常／多人競態及 Server authority 要驗證，好友暫緩。選型多方案先實測 ALT001；MVP 通過後才擴所有地圖／品項及更大負載。
 
 ## 從哪份文件開始重建
 
@@ -69,3 +69,5 @@ powershell -ExecutionPolicy Bypass -File tools/asset_converter/verify_converter.
 2026-11-16 資料修正：world v3保留原版建築父子關係（Map15=1833根+15子），撤回先前「15筆缺Z」解讀；根記錄XY後為child_count，世界z=0。舊v2須由唯一Converter重建runtime/PCK，AssetStore拒絕v2。原版建築前緣排序／室內外顯示尚未實作，完整景物層與MVP仍未完成；見ASSET_CONVERTER的DIRECT證據及TEST_PLAN。
 
 2026-11-16 景物資料進度：共用scenery v1定義已保留BLG兩appearance、SIF模式／幾何與建築前緣，補入12個alternate素材；正式Catalog現在254獨立Asset。72 tests、雙圖PCK／30次AssetStore循環／Terrain 16張像素回歸PASS。景物遮擋Renderer與切換時間仍未完成；詳ASSET_CONVERTER／CLIENT_ARCHITECTURE。
+
+2026-11-16 景物繪製切片：Converter離線產出原版三組root排序，正式world_canvas＋world_draw_list保留前緣插入、兩欄、子物件及逐幀origin/trim；目前以明確指定的frame／inside狀態驗證，尚無原版動畫時間／fade cadence或可玩main scene。集中Canvas與重用Sprite2D各三輪原生回歸PASS（144 captures／110原始SPR幀），選較簡單Canvas；不是多人／Server／MVP PASS。命令與限制見CLIENT_ARCHITECTURE／TEST_PLAN。

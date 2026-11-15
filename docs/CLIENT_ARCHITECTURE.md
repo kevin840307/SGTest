@@ -151,6 +151,41 @@ Raw report=`reports/terrain_decision.json`，含每候選／每輪／每圖／�
 
 ### 2026-11-16 景物共用定義與alternate覆蓋
 
-world v3新增scenery_schema v1；scenery_definitions按原始BLG/STH共用metadata，placement保留definition／parent_index／絕對p，避免重複點集。定義包含sorting_mode、SIF draw_group、前緣raw/effective、兩appearance與來源hash。Scenery／角色共同排序必須區分sorting_mode與draw_group；GetMode的0/1/2與建築前緣不能用Godot單一Y值取代。Renderer仍未實作，不把資料Gate當成遮擋PASS。
+world v3新增scenery_schema v1；scenery_definitions按原始BLG/STH共用metadata，placement保留definition／parent_index／絕對p，避免重複點集。定義包含sorting_mode、SIF draw_group、前緣raw/effective、兩appearance與來源hash。Scenery／角色共同排序必須區分sorting_mode與draw_group；GetMode的0/1/2與建築前緣不能用Godot單一Y值取代。此為metadata切片時狀態；目前靜態快照Renderer進度見下一節，完整原版時序仍未完成。
 
 AssetStore仍是唯一資產入口；測試palette改遍歷所有appearance，Map15從221增至233 Asset（含terrain及Player等），Map13仍63。Catalog新增12個alternate，總254 Asset，PCK更新見ASSET_CONVERTER。30次palette循環／3競態與16張terrain GPU像素回歸PASS；這不是建築切換／NPC timing／多人同步／VRAM斜率測試。下一步以可重跑的原版front比較及兩欄切換fixture實作景物與角色遮擋，fade cadence須再驗證。
+
+## 靜態World景物／角色交錯切片（2026-11-16）
+
+正式使用`world_order.gd`／`world_draw_list.gd`／`world_canvas.gd`，共用同一AssetStore的Texture與manifest。Draw list不做ResourceLoader／網路／世界更新，Caller用穩定Actor輸入順序、明確clip-frame與inside快照驅動；沒有_process時鐘或自行假設NPC／景物FPS。全map metadata先configure，預先合併root+children保守bounds，可見root保持離線順序，Actor只插入可見main list；同Y保持輸入順序，不能依相機距離改順序。inside快照true選primary並draw children，false選alternate（缺alternate回primary）。目前是兩端狀態驗證，原版中間fade／入口／自身ghost與動畫cadence尚未實作。
+
+原始SortMapObject是**交換predicate而非嚴格全序**；合成兩建築可出現swap(A,B)及swap(B,A)都true。Converter依DIRECT CELList::BubbleSort 0x0052AB10–0x0052ABED，做相鄰交換至settled或1025輪上限，寫入world.scenery_order v1（0/1/2三組root索引及passes／settled）。原版三組sort呼叫在0x005297BD–0x005297F7；PointInFront 0x00549560、建築互比0x005497EE及InsertObjectToDrawList 0x0052A6CC提供Client幾何。來源仍為ASSET_CONVERTER所列同SHA的Paradise.exe.lst，沒有複製組語進Repo。Map13三組33／334／0 roots、1／29／1輪；Map15 89／1744／0、2／71／1輪；兩圖全部settled。Client不對它呼叫sort_custom，也不每幀重新排序全圖。
+
+每frame按`position + trim - origin`及原始Atlas region畫；合法空白SPR幀使用page=-1／zero rect，不應錯當缺素材，亦不應偷偷換成前一幀。configure拒絕重複root、未知definition／clip／page、越界父子關係；無效frame回ERR_INVALID_PARAMETER。全clip驗證需支援JSON的float數字，不能拿float Array與int Array型別差異誤拒絕空白幀。
+
+### ALT001候選與結果
+
+相同原始254 Asset PCK、同一draw list／Actor／camera trace、RTX3050 OpenGL3、720p及1080p；集中Canvas與**重用**Sprite2D各fresh process三輪。每map／round有每解析度60 warmup＋120樣本（總240），每三步一次遠距切換（總80 jump）；另24 captures／round/candidate覆蓋兩圖、密集／疏場景、inside兩端與frame0/1，共144。兩候選都無engine error/leak、排序／UV／source identity一致，110原始SPR幀的origin與未壓縮Atlas crop逐byte一致。
+
+| 指標（三輪範圍） | 集中Canvas（正式） | 重用Sprite2D（僅tests） |
+|---|---:|---:|
+| Map15準備P95／P99 ms | 1.150–1.250／1.223–1.460 | 1.394–1.622／1.478–1.791 |
+| Map13準備P95／P99 ms | 0.526–0.557／0.541–0.626 | 0.674–0.690／0.688–0.793 |
+| Map15 Frame P99 ms | 2.456–3.414 | 3.206–3.415 |
+| Map13 Frame P99 ms | 1.591–3.346 | 1.731–3.147 |
+| Map15 jump P99 ms | 2.655–3.451 | 3.381–3.790 |
+| Map13 jump P99 ms | 1.601–4.812 | 1.737–3.199 |
+| Map15首次view ms（不含Store／configure） | 1.998–2.107 | 2.190–2.402 |
+| Peak Process RSS MiB | 213.89–217.20 | 213.80–214.79 |
+
+兩候選draw calls相同（測點Map15=129／Map13=51，含viewport預覽與terrain）；engine Texture counter同為Map15 55,603,407／Map13 29,838,159 bytes，歸還相同720p viewport後都回13,373,731；Buffer pool保留12,801,208，Canvas一次高水位14,931,400。這些counter不等於OS dedicated VRAM或RSS全回基線。每個fresh process含載入／readback／PNG的CPU為Canvas12.422–12.750秒、Sprites12.484–12.703秒；runner wall還含Python驗證，不拿它冒充Frame延遲。共用configure：Map15約13–14ms，Map13約2.6–3.4ms，未納入first-view欄。
+
+**決策**：Frame tail跨輪／map沒有穩定全面勝負，RSS差異小；Canvas準備成本較低且只有一個Canvas節點／短繪製迴圈，不必維護可變Sprite節點集合，依「差異不明顯選簡單」選它。並未宣稱低階GPU／300怪物／500掉落或大量移動Actor時仍最佳；那些需在後續同負載Gate重測。固定景物共用Atlas／FrameTable與Store，不導入第二套素材／網路／WorldState。
+
+### 像素oracle的精度與限制
+
+原始SPR→未壓縮Atlas的crop、origin／trim、命令排序／座標／UV／頁面identity是嚴格比對。GPU紋理在非4倍數頁面可能有block-aligned底層影像而Texture2D保留logical尺寸；CPU參考用normalized nearest取樣重現它。只有**1e-5 texel**範圍的精確邊界允許相鄰取樣，對alpha重疊傳遞上下界；色階rounding容許2，實際所有capture超出取樣界的最大差1、超過2的pixel=0。不可把它寫成原圖／GPU RGB逐pixel零差異。原始P0視覺品質、BC7匯入resize是否應用padding避免、Mac／其它backend仍NOT VERIFIED。
+
+驗證器負向控制：錯誤順序／destination+1都因命令契約拒絕；整張畫面x+1導致789,194 pixel超界而FAIL（`reports/world_render_negative_controls.json`）。不是放寬整張圖誤差來通過。最終`reports/world_render_final.json`含source SHA前後一致、實際engine／raw metrics／144 capture；較早pilot的GDScript型別、空白幀型別判定及未處理GPU底層尺寸／tie的FAIL已修正，不作正式PASS證據。
+
+尚存：動畫時間／事件、原版fade cadence與入口／自身ghost、視野資產非同步預取的ALT、完整World生命週期斜率／AFK／多開、Camera zoom、Player紙娃娃／Server／多人E2E、Mac／Release。全map palette預載只是本輪公平比較前提，不能作最終低資源載入策略已完成的宣稱。

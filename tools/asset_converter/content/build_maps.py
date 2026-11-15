@@ -17,7 +17,7 @@ import time
 from PIL import Image
 from ..json_files import write_json
 from ..source.runtime_spr import decode_spr, unwrap_cde
-from ..source.scenery import Reader, parse_blg, parse_sif_contract
+from ..source.scenery import Reader, parse_blg, parse_sif_contract, compile_scenery_order
 from .asset_paths import source_sprite_manifest
 
 
@@ -262,6 +262,7 @@ def build(source, output, map_id):
                 'tile_width':w,'tile_height':h,'collision_cell':16,'size':[w*side,h*side],
                 'atlas_grid':[columns,rows],'tile_ids':used,'objects':placed,
                 'scenery_schema':'sgtest.scenery/v1','scenery_definitions':definitions,
+                'scenery_order':compile_scenery_order(placed,definitions),
                 'source_hashes':hashes,
                 'tiles_sha256':hashlib.sha256(tile_bytes).hexdigest(),
                 'collision_sha256':hashlib.sha256(blocking).hexdigest(),

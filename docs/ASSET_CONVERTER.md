@@ -170,3 +170,9 @@ DIRECT證據仍是上述同SHA的Paradise.exe.lst：`CELStaticObj2D(char*,char*,
 真來源：Map13 45 definitions／85非空appearance欄／45 distinct Scenery Asset；Map15 182 definitions／358欄／194 distinct Asset，其中12 definitions兩欄不同。雙圖scoped Catalog從242增至254個獨立Asset／254頁／2281 frames（207 Scenery＋10 Enemy＋30 NPC＋7 Player），25,959,843 bytes；完整Archive audit再通過，79.027秒。舊Archive頁面未重做，沒有上傳原圖。兩圖world JSON分別159,175／753,882 bytes；world/terrain/tiles/blocking四檔重跑逐byte一致。來源與page SHA／clip覆蓋報告 `reports/scenery_metadata_validation.json`。
 
 新版PCK SHA256=`7784d572ffd0c0bb769d7df4b90bd36597422639ffc67e74a756a70ed67ec57d`，86,385,080 bytes，254 BPTC＋254 ASTC；上述CLI runtime-only／runtime_pack命令不變。72項Python tests PASS；AssetStore完整30次雙圖palette循環PASS（Map15 peak233 Asset、預算95,161,196 bytes，final counts全0；engine無error/leak），epochs三情境PASS；正式Terrain同雙圖720p/1080p 16 captures像素0差異PASS。詳TEST_PLAN。新增素材提高PCK大小，未據此聲稱效能改善；Renderer對完整palette與逐視野預載的選型仍待公平測量。
+
+### 原版景物順序離線編譯（2026-11-16）
+
+world v3／scenery v1新增`scenery_order` v1：三個groups（原版GetMode 0/1/2），各為來源objects的root索引，children只隨父物件畫，不當root重排；保留passes／settled。來源DIRECT與有界1025輪算法見CLIENT_ARCHITECTURE。普通同Y穩定，但建築比較不是嚴格全序，禁止換成一般sort而改變結果。只在同一Converter建置時執行一次，Client不用每幀做整圖排序。Map13 group counts=33/334/0、passes=1/29/1；Map15=89/1744/0、passes=2/71/1，皆settled；同資料重算完全一致（reports/world_order_validation.json）。
+
+唯一CLI雙圖runtime-only PASS，13.55秒；PCK重建PASS，254 BPTC／254 ASTC不變，SHA256=`0346cc610d3cbd643dc12b4efd8d0921b9d6b132e9e5e2bdb6d1a2a8ea65b409`，86,394,680 bytes。Python suite75 PASS，原生靜態景物／角色交錯驗證與兩候選比較見TEST_PLAN／CLIENT_ARCHITECTURE。Archive頁面／邏輯Asset ID未改，原始素材仍只在本機。動畫與出入口時序、P0壓縮品質及正式Client/Server仍未完成。

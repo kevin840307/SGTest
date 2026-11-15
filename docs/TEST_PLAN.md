@@ -161,3 +161,12 @@ Converter 68 tests PASS；雙圖runtime-only PASS；新PCK 242 BPTC／242 ASTC�
 同一CLI export-assets --map 13 --map 15完整Archive audit PASS，再runtime-only雙圖PASS（10.16秒）。runtime_pack PASS：254 BPTC／254 ASTC，PCK SHA見ASSET_CONVERTER。原命令 `run_asset_store.py --report reports/scenery_metadata_asset_store.json` 30次雙圖palette循環PASS（Map15=233含新alternate／Map13=63；final counts全0），`--script tests/test_asset_store_epochs.gd --report reports/scenery_metadata_epochs.json` 三競態PASS；`run_terrain.py --rounds 1 --mode draw --report reports/scenery_metadata_terrain.json` 16張GPU capture獨立CPU像素比對0差異、無engine error/leak。這次只回歸選定draw策略，未重做三候選benchmark。
 
 首輪新增SIF測試曾錯把17-byte tail少1 byte當必定非法（實際可等同合法16-byte舊格式），FAIL後改為無歧義截斷並記錄hash完整性限制；不把錯誤fixture當產品錯誤或PASS。CI、原版建築前緣遮擋／同Y／室內外fade／動作時間、Server／多人E2E均NOT VERIFIED。
+
+### 2026-11-16 World靜態景物／Actor前緣切片
+
+- Python `python -m unittest discover -s tools/tests -p "test_*.py" -q`：75 PASS。原版對稱斜前緣2916點邊界chart、同Y穩定、三組root／子物件分離、互相要求交換的建築與1025輪上限；native同一chart、Actor插入與空白frame／重複root拒絕。world_order_validation.json確認雙圖順序可重算，runtime-only及新版PCK PASS。
+- `python client/tests/run_world.py "C:\SGO\Godot\Godot_v4.7.2-stable_win64_console.exe" --rounds 3 --report reports/world_render_final.json`：集中Canvas與重用Sprite2D各fresh-process三輪，兩圖／720p與1080p、同camera trace及明確inside／frame快照。每map每round 240有效樣本／80跳轉；合計144 captures排序／座標／UV／texture identity及CPU合成PASS，110原始SPR frame origin與未壓縮Atlas crop逐byte一致。兩候選engine error/leak=0、Store final counts=0、Texture counter回同viewport baseline；source SHA前後未變。
+- GPU oracle只允許nearest精確texel邊界1e-5的取樣上下界及2色階rounding，實際所有capture超界最大1、pixels_over_tolerance=0。**不能寫為原始圖與GPU RGB零差異**。錯誤命令順序與destination+1拒絕，整圖位移1px有789,194 pixel超界；私有world_render_negative_controls.json。初期型別／空白幀／未重現block-aligned底層尺寸與sampler tie的pilot FAIL，不列PASS。
+- ALT001選Canvas：準備P99 Map15=1.223–1.460ms／Map13=0.541–0.626ms；Sprite=1.478–1.791／0.688–0.793。Frame P99與RSS無穩定全面勝負，選較少節點／較簡單Canvas，不宣稱所有硬體或動態怪物最佳。完整表、first-view／CPU／RSS／engine memory與限制見CLIENT_ARCHITECTURE。此輪network不適用，OS dedicated VRAM NOT VERIFIED。
+
+尚存Gate：動畫／NPC timing與事件、出入口fade cadence／自身ghost、P0（含Godot非4倍數Atlas頁面的匯入取樣品質）、逐視野預取ALT、多開／Render0／資源斜率、A*／Server／多人E2E／Mac／Release仍NOT VERIFIED。MVP002-SCENERY-CONTRACT維持未完成。接手可用`--mode canvas --rounds 1`快速重跑正式路徑；全量三輪命令如上。
