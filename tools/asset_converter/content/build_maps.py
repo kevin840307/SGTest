@@ -18,6 +18,18 @@ from ..source.build_assets import write_json
 from ..source.runtime_spr import decode_spr, unwrap_cde
 
 
+def server_map_directory(server_dat: Path, map_id: int) -> Path:
+    """Resolve legacy Map07 and Map13 without guessing between duplicates."""
+    if not 1 <= map_id <= 65535:
+        raise ValueError('invalid original map id')
+    base = server_dat.resolve()
+    candidates = {base/'Map'/f'Map{map_id}', base/'Map'/f'Map{map_id:02d}'}
+    found = [path.resolve() for path in candidates if path.is_dir()]
+    if len(found) != 1 or not found[0].is_relative_to(base):
+        raise ValueError(f'missing/ambiguous original Map{map_id} directory')
+    return found[0]
+
+
 def plain(path):
     raw = path.read_bytes()
     return unwrap_cde(raw) if raw.startswith(b'C.D.E.') else raw

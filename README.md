@@ -65,6 +65,8 @@ Client 具有本地輸入預測／確認重播、各實體獨立位置歷史、�
 
 目前為開發原型，已有帳號／角色與SQLite身分資料流程；完整裝備／物品外觀、其他地圖轉場、怪物繞路尋徑與其餘Recovered功能仍未完成。
 
+NPC／傳點的離線來源轉換已有 `asset_converter/cli.py world-content`：24份NPC.dat／275筆、49個已審確認式傳點模板，226筆仍需腳本引擎。完整JSON只留本機，尚未接成可遊玩的跨圖功能；實作順序與證據見 [F002_WORLD_TRANSITIONS](docs/F002_WORLD_TRANSITIONS.md)。
+
 ## 驗證指令
 
 ```powershell

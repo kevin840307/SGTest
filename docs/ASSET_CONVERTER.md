@@ -20,6 +20,8 @@ python tools/asset_converter/cli.py build 'C:\SGO\Stargate Online IE HK2'
 
 單一來源路徑需有原始 `Data1.dat`；會抽取至工具專用 `.cache/asset_converter/source`、套用原始遊戲 loose override，增量保存並建置來源 Atlas。若已存在解壓來源可加入 `--extracted-source .cache/asset_converter/source` 節省重複抽取檢查。需要 Python 3.10+ 和 requirements.txt 所列 Pillow。
 
+新增離線世界內容入口：`world-content <原始遊戲路徑> --map 13`，或`--all-maps`編譯所有現存NPC.dat；`--server-dat`指定權威出生／腳本來源，`--output-root`可改私有輸出根目錄。它重用原始抽取器、CDE／SPR decoder，輸出`local-assets/asset_converter/world/maps/<id>/npcs.json`，沒有增加Client常駐或宣稱傳點已可玩。24份NPC.dat／275筆及49個已審模板傳點的實測、226筆未解腳本、缺檔地圖與下一步見 [F002_WORLD_TRANSITIONS](F002_WORLD_TRANSITIONS.md)。
+
 ## 研究/局部驗證
 
 ```powershell

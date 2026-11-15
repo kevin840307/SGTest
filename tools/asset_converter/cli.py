@@ -1,7 +1,7 @@
 """Single-entry SGTest legacy asset converter. Run from any working directory."""
 
 from __future__ import annotations
-import argparse, json, os, shutil, sys, tempfile, time
+import argparse, hashlib, json, os, re, shutil, sys, tempfile, time
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
@@ -18,6 +18,7 @@ from asset_converter.source.convert_assets import (
 )
 from asset_converter.source.extract_client import extract, audit_sprite_coverage
 from asset_converter.content.build_maps import build as build_map
+from asset_converter.content.npc_content import build as build_npcs
 from asset_converter.content.asset_pipeline import (
     build_all as build_runtime,
     resolve_server_dat,
@@ -289,7 +290,22 @@ def main() -> int:
     verify.add_argument('--extracted-source',type=Path,default=REPO/'.cache/asset_converter/source')
     verify.add_argument('--archive-output',type=Path,default=REPO/'local-assets/asset_converter/complete')
     verify.add_argument('--report',type=Path,default=REPO/'reports/converter_archive_verification.json')
+    world = sub.add_parser('world-content',help='extract original client NPC visuals and compile private NPC/transfer evidence from original server Dat')
+    world.add_argument('original',type=Path)
+    world.add_argument('--extracted-source',type=Path)
+    world.add_argument('--server-dat',type=Path)
+    maps = world.add_mutually_exclusive_group()
+    maps.add_argument('--map',type=int,default=13)
+    maps.add_argument('--all-maps',action='store_true',help='compile all NPC.dat files present in server Dat; absent files are reported, not guessed empty')
+    destinations = world.add_mutually_exclusive_group()
+    destinations.add_argument('--output',type=Path,help='single-map JSON destination')
+    destinations.add_argument('--output-root',type=Path,help='private catalog root; output maps/<id>/npcs.json')
+    world.add_argument('--report',type=Path)
     args = ap.parse_args()
+    if args.command == 'build' and args.archive_only and args.runtime_only:
+        ap.error('archive-only and runtime-only conflict')
+    if args.command == 'world-content' and args.all_maps and args.output:
+        ap.error('all-maps uses output-root, not a single output file')
     try:
         with converter_operation(REPO/'.cache/asset_converter/operation.lock'):
             return _execute(args)
@@ -299,6 +315,52 @@ def main() -> int:
 
 
 def _execute(args):
+    if args.command == 'world-content':
+        report = {'status':'failed'}
+        destination = (args.output_root or REPO/'local-assets/asset_converter/world').resolve()
+        report_path = args.report or REPO/('reports/world_content_all.json' if args.all_maps else f'reports/world_content_map{args.map}.json')
+        started = time.perf_counter()
+        module_paths = ['tools/asset_converter/'+name for name in
+                        ['cli.py','content/npc_content.py','content/build_maps.py','source/legacy_npc.py','source/runtime_spr.py']]
+        modules = {name:hashlib.sha256((REPO/name).read_bytes()).hexdigest() for name in module_paths}
+        try:
+            original = args.original.resolve()
+            source = resolve_source(args)
+            server_dat = resolve_server_dat(args.server_dat)
+            output = (args.output or destination/f'maps/{args.map}/npcs.json').resolve()
+            for root in (original,source,server_dat):
+                if output == root or output.is_relative_to(root):
+                    raise ValueError('world content output must not overwrite original sources')
+            if args.all_maps:
+                map_ids, absent = [], []
+                for folder in sorted((server_dat/'Map').iterdir()):
+                    match = re.fullmatch(r'Map([0-9]+)',folder.name)
+                    if match and folder.is_dir():
+                        (map_ids if (folder/'NPC.dat').is_file() else absent).append(int(match[1]))
+                if not map_ids or len(map_ids) != len(set(map_ids)):
+                    raise ValueError('missing/ambiguous NPC map source set')
+                rows = []
+                for map_id in sorted(map_ids):
+                    try:
+                        rows.append(build_npcs(source,server_dat,map_id,destination/f'maps/{map_id}/npcs.json'))
+                    except (OSError,ValueError,KeyError,TypeError) as error:
+                        rows.append({'status':'failed','map_id':map_id,'error':str(error)})
+                report = {'status':'pass' if all(row['status']=='pass' for row in rows) else 'partial',
+                          'scope':'NPC.dat files present in supplied server Dat; missing files are not assumed empty',
+                          'maps':rows,'map_files':len(map_ids),'maps_without_npc_file':sorted(absent),
+                          'npcs':sum(row.get('npcs',0) for row in rows),'runtime_transfer_implemented':False}
+            else:
+                report = build_npcs(source,server_dat,args.map,output)
+        except (OSError,ValueError,KeyError,TypeError) as error:
+            report = {'status':'failed','error':str(error),'runtime_transfer_implemented':False}
+        report['elapsed_seconds'] = round(time.perf_counter()-started,3)
+        report['converter_sha256'] = modules
+        report['converter_files_unchanged'] = modules == {name:hashlib.sha256((REPO/name).read_bytes()).hexdigest() for name in module_paths}
+        if not report['converter_files_unchanged']:
+            report.update(status='failed',error='converter files changed during execution; rerun before acceptance')
+        write_json(report_path,report)
+        print(json.dumps(report,ensure_ascii=False,indent=2),flush=True)
+        return 0 if report['status']=='pass' else 1
     if args.command=='verify':
         report={'status':'failed'}
         try:
@@ -314,8 +376,6 @@ def _execute(args):
         write_json(args.report,report)
         print(json.dumps(report,ensure_ascii=False,indent=2),flush=True)
         return 0 if report['status']=='pass' else 1
-    if args.archive_only and args.runtime_only:
-        ap.error("archive-only and runtime-only conflict")
     started = time.perf_counter()
     report = {"version": 1, "atlas_policy": POLICY, "status": "failed"}
     try:

@@ -19,6 +19,7 @@ from pathlib import Path
 from .asset_bundle_builder import build_bundle, compile_player_base, map_definitions
 from .build_enemy_map_palette import read_enemy_catalog, read_enemy_dat
 from .build_population import validate_stats
+from .build_maps import server_map_directory
 
 def resolve_server_dat(value: Path | None,
                        old_root: Path = Path(r"C:\SGO\Recovered\Old")) -> Path:
@@ -53,7 +54,8 @@ def write_json(path: Path, value: dict, compact: bool = False) -> bytes:
 
 
 def original_population(server_dat: Path, map_id: int, bundle_relative: str) -> dict:
-    source = server_dat / "Map" / f"Map{map_id}" / "Enemy.dat"
+    server_dat = server_dat.resolve()
+    source = server_map_directory(server_dat, map_id) / "Enemy.dat"
     catalog_path = server_dat / "Enemy" / "Enemy_Data.csv"
     spawns = read_enemy_dat(source)
     catalog = read_enemy_catalog(catalog_path)

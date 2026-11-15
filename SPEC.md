@@ -85,6 +85,7 @@
 ### Phase P0 — 可玩最小多人核心
 - F001 帳戶/登入/登出/選角/建角/多角色/重連/身分過期，重登不得保留幽靈 Entity。
 - F002 地圖載入（登入→選角→入圖多階段進度）、Blocking/視野/傳點、世界座標與地圖局部座標轉換；AOI 半徑依實際 viewport／zoom／角色位置與緩衝計算，不能沿用原版 800×600 固定可見範圍，須測各預設、視窗拖曳及地圖邊角。
+  - F002A離線NPC／傳點來源契約已有實際交付：24份NPC.dat／275筆保真輸出，49個已審確認式TS模板、226筆script_required；41／46缺檔明列。由asset_converter從原始Client解包外觀表／SPR，再讀原版Server出生及腳本，不靠檔名猜測。這不是可遊玩切圖；Server MapCatalog／MapEpoch協定／Client loading／雙圖E2E仍未完成。順序與證據見 [F002_WORLD_TRANSITIONS](docs/F002_WORLD_TRANSITIONS.md)。
 - F003 玩家本地即時操控、點地面/點怪/NPC、停走、轉向、追路、人物速度；Local Input→Server command，視覺可預測但戰鬥/阻擋由 Server 驗證。
 - F004 遠端玩家 Spawn/Despawn、初始方向/外觀、移動、停止、轉彎、跳圖/重連；不得跳格、回拉、原地跑步；同畫面 20 人行走時優先維護。
 - F005 怪物 AI：出生、巡邏、追擊、脫戰/回巢、不能穿牆、方向/動作、攻擊、死亡、重生；數百怪共享地圖運算，不能每 Session 有獨立副本。

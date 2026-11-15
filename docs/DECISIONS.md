@@ -348,3 +348,10 @@ ADR-026補充：使用者指定Client一般遊玩支援30～90FPS；FPS選項只
 - Decision: acquire遇到128-entry上限時，呼叫同一purge_unowned並指定entry_limit=127，按原last_used規則騰出位置；預設purge維持128上限及既有bytes規則。不能直接force清光cache，也不能淘汰有owner的項目。只有cache hit／未滿情境不改。
 - Evidence: headless/native均新acquire=OK、恰1個最舊無owner項目移除、pinned與最近觸及項目保留，resident帳目同步減4096bytes，最後close歸0。全部128項都有owner時仍ERR_BUSY，釋放一項後成功。reports/perf004_before.json、perf004_after.json、perf004_after_native.json，test_runtime_asset_cache_pressure.gd；Store與cancellation既有回歸PASS。
 - Scope: 沒有改動Atlas、影格／方向、network／logic／Server、GPU提交頻率。本次未重跑一般2-bundle多人FPS／RAM與RUNTIME206矩陣，不把前一版本數值當作本次重測。此修正覆蓋滿128項才會進入的cache admission分支。
+
+## ADR-044 — NPC及傳點先保真內容，再接權威多地圖（2026-11-15）
+
+- Decision: asset_converter新增world-content離線入口；保留NPC type／原座標／reserved／source index／Big5 name bytes／六個visual slots與來源hash。原始CDE外觀表必須先解包，不把未知方向／時間填成假八向。原版Server Map07目錄與Map7採唯一候選解析，NPC與population共用。
+- Portal: 不依_to_或抽第一個MovePlayer決定傳點。只將直接閱讀過的TS_Common固定hash及完整靜態主檔形狀編譯為確認式transfer，動態／未知／停用腳本明列狀態；原目的地以原Blocking檢查，不擅自移位。其餘226筆仍需F013完整腳本／對話引擎。
+- Evidence: 原始Client路徑抽取＋Map13三筆PASS；全24份NPC.dat原header合計275筆、輸出275、0未解primary SPR；49已審模板／226script_required，Map41/46缺檔另列。快取內容編譯1.241s，非Runtime或冷抽取數字。reports/world_content_all.json及F002_WORLD_TRANSITIONS.md；Python tools/tests121、asset_pipeline5、maps3+1SKIP。
+- Scope: 僅離線F002A，不宣稱Server／Client切圖、完整NPC動畫、任務或Recovered全部功能完成。接續MapCatalog／權威transfer fixture→MapEpoch與共用Server時鐘→Client loading／資源解除→真雙圖多人及資源回歸；同步頻率維持既有契約。原版內容JSON及圖片不公開。
