@@ -49,7 +49,7 @@ def summarize(assets: Path) -> dict:
             "object_clips": len({str(row.get("clip", "")) for row in world.get("objects", [])}),
             "sprite_bundle": world.get("sprite_bundle"),
             "terrain_bytes": world_path.with_name("terrain.png").stat().st_size,
-            "collision_bytes": world_path.with_name("blocking.bin").stat().st_size,
+            "collision_bytes": world_path.with_name("blocking.dat").stat().st_size,
             "tiles_bytes": world_path.with_name("tiles.bin").stat().st_size,
         })
 

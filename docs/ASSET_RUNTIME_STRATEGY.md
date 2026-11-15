@@ -1,28 +1,215 @@
-# Godot 素材組合與生命週期方案
+# Runtime Asset Strategy
 
-日期：2026-11-14（Asia/Taipei）。狀態：PROVISIONAL，待方向／動作完整對照及正式多人場景測試。來源：[HK2 全量轉換](HK2_SPR_POC.md)、[三組 atlas 實測](HK2_ATLAS_CANDIDATES.md)、[混合場景／釋放初測](HK2_MIXED_ATLAS_BENCHMARK.md)、[ACT 研究](HK2_ACT_RESEARCH.md)、ADR-012/016。此文件描述正式 runtime 包裝目標，現有轉換器的逐幀 PNG 是保真 QA 中間層。
+日期：2026-11-15
+狀態：**ACCEPTED STRUCTURE / PACKING MODE PENDING FINAL USER CHOICE**
 
-## 建議的組合單位
+本文件是 Runtime 資產邊界的正式規則。重點不是減少磁碟檔案數，而是降低執行期 RAM / VRAM、載入延遲、draw call、CPU/GPU 成本，並讓 AFK 可以可靠釋放世界渲染資源。
 
-| 資產 | 包裝與載入 | 原因 |
-|---|---|---|
-| 怪物／NPC | 每種外觀依同時會用的動作／方向測試 512／1024／2048／4096；同類實例共用 Texture 與動畫表 | 300 隻怪不等於 300 份圖。只載入畫面實際出現的種類，切圖後可卸載 |
-| 玩家紙娃娃／武器／裝備 | 身體與各裝備層分開，按外觀與動作載入；合成順序由原始 draw-order 證據決定 | 避免把所有裝備組合預烘成天文數量貼圖；保留換裝與方向正確性 |
-| 地圖 | 依可見區塊與預取緩衝切片；遮擋／碰撞資料與視覺分開 | 大於 800×600、21:9、zoom 時只取必要區塊，不為單張全地圖常駐記憶體 |
-| 掉落物／小圖示 | 同屏常見圖示共用有限 atlas；實體位置與物品 UID 留在資料陣列，視覺按可見範圍繪製 | 數百掉落不建立數百個獨立載入器或重複 Texture |
-| UI | 金色相近版與現代版共用 Godot ViewModel；各自 Theme/Control，缺少原版圖時用 StyleBox/NinePatch/自製圖 | 可切換、多解析度、功能不依賴缺件原圖 |
+## 1. 每個素材必須保持獨立 identity
 
-不建議將**所有怪物放進一張圖**：同屏只出現一小部分種類時仍須載入無關圖像，超大圖也不利於版本更新與單種怪物修正。也不建議在正式 `res://` 原樣匯入 153,115 張保真 PNG，會增加編輯器與資源管理負擔。每個 SPR 一張 atlas 可作基準，但不是最終分組規則；需以 ACT 動作、同屏使用率、裁切空白與紋理尺寸共同決定。
+正式 Runtime 不允許為了方便或減少檔案數，將不同素材綁成一個生命週期資產。
 
-## 執行時契約
+正確：
 
-- 單一 `AssetCatalog` 持有來源鍵→包／幀／原始偏移／動作／方向／圖層的映射；不存在的方向只能在原版鏡像規則已證明時鏡像。
-- 貼圖快取按地圖與同屏外觀請求，共用引用；切圖、登出、UI 切換後回收不再使用的包。載入與解壓可在背景做，但 Godot Texture 建立／銷毀需遵守主執行緒限制。
-- 網路權威狀態、動畫事件與渲染互不覆蓋：Move/Stop、Attack/Hit/Death 依 ServerSeq／SessionEpoch／EntityRevision 保持因果；渲染 LOD 只能降低非必要效果，不改收包、攻擊或拾取。
-- 世界可見範圍由 viewport、camera zoom、玩家位置及預取緩衝算出；Server AOI 需覆蓋所有可見角落。正式測 800×600、1280×720、1440×810、1440×900、地圖邊界與縮放；最大視窗寬約 1440 像素。
+```text
+monsters/en023a/atlas.json
+monsters/en089a/atlas.json
+npcs/npc001/atlas.json
+maps/visuals/tree001/atlas.json
+maps/visuals/house014/atlas.json
+players/b/base/body/atlas.json
+players/b/base/head/atlas.json
+equipment/b/weapon/sword014/atlas.json
+```
 
-## 決策所需的下一輪證據
+不允許：
 
-1. 完成 ACT/SIF、人物方向與 draw-order 的原版對照；先通過站立／走路／攻擊／受擊／死亡及換裝像素定位。
-2. 同一批怪物、玩家裝備與掉落，對比分幀、每 SPR atlas、按外觀／動作小 atlas：RAM、VRAM、Godot 匯入時間、Draw Calls、Frame P95/P99、地圖切換後基線。
-3. 以 20 玩家、300 怪、500 掉落，含密集攻擊／移動與超寬／zoom 驗證；同硬體對照原版與 Recovered。達標前不宣稱更快。
+```text
+bundles/map/13/sprites.json       # map + monster + scenery
+bundles/session/player-b-base     # body/head/arm/death 合成一份 physical asset
+all_monsters.pck                  # 若它被當成共同載入生命週期
+```
+
+同一素材內可以有多 page，也可以將它自己的多動作／多方向影格重新 packing；**不能跨 monster / NPC / scenery / player part 合圖**。
+
+## 2. PCK 只是磁碟容器，不是 Runtime Bundle
+
+Windows / macOS 共用：
+
+```text
+assets/assets.pck
+```
+
+PCK 可以包含很多獨立檔案，這不表示 Runtime 會一起載入。
+
+```text
+external PCK
+    ↓ mount
+res://assets/...
+    ↓
+AssetCatalog
+    ↓
+AssetStore
+    ↓
+只 decode / upload 目前需要的 individual assets
+```
+
+磁碟檔多可以接受；不能為了減少檔案數把 Runtime ownership 綁在一起。
+
+## 3. Map 與 Monster 完全分離
+
+`assets/maps/<id>/` 只包含地圖本身：
+
+```text
+maps/13/
+├── world.json
+├── terrain.png
+├── tiles.bin
+└── blocking.dat
+```
+
+`world.json` 的 scenery object 只參考：
+
+```text
+maps/visuals/<asset>/atlas.json
+```
+
+Map 不包含 Monster image。
+
+Monster 出生與 appearance 由 Server population / entity definition 決定：
+
+```text
+definition.sprite = EN023A
+definition.atlas  = monsters/en023a/atlas.json
+```
+
+同一 monster 可以跨多張地圖共用，不因 map 重包。
+
+## 4. Collision 使用原版 Blocking.dat
+
+碰撞不建立大量 Godot `CollisionShape2D`。
+
+原版：
+
+```text
+Blocking.dat
+uint32 width
+uint32 height
+byte[width*height]
+```
+
+Runtime 保留原 byte grid 為：
+
+```text
+maps/<id>/blocking.dat
+```
+
+Client / Server 都用 cell index O(1) 查詢；目前 walkability 規則維持原驗證邏輯 `(cell & 7) == 0`。
+
+優點：
+
+- 不建立數十萬 Node / Shape。
+- Server / Client 可使用相同 source hash。
+- 原始碰撞不因 Godot scene 轉換產生誤差。
+- 路徑、預測與權威碰撞容易對帳。
+
+## 5. Runtime Loading
+
+仍然只有一套 `AssetStore`：
+
+- bounded async decode
+- bounded GPU commit
+- refcount / owner epoch
+- LRU eviction
+- cache byte limit
+- cancel stale load
+- AFK / map transition resource release
+
+不因素材獨立而建立：
+
+- MonsterLoader
+- NPCLoader
+- MapObjectLoader
+- EquipmentLoader
+
+Renderer 可以不同，但實體資源載入機制共用。
+
+## 6. AFK
+
+AFK：
+
+```text
+Network               ON
+Reducer / WorldState  ON
+Reliable events       ON
+World rendering       OFF
+World textures        可釋放
+External PCK          保持掛載
+```
+
+PCK 掛載本身不代表 Texture 常駐；真正 RAM/VRAM 成本由 AssetStore loaded entries 決定。
+
+## 7. Packing Mode 公平測試規則
+
+任何 Atlas Mode 比較必須：
+
+1. 使用**完全相同的 monster IDs / source SPR**。
+2. Map asset 固定且與 monster asset 分開。
+3. 每一個 Mode 使用獨立 Godot process。
+4. 不把 Map + Monster / Monster + NPC 合成後再宣稱是 monster packing 結果。
+5. 同一實例數、相同 action/facing deterministic workload。
+6. 至少重複三次，以中位數比較。
+7. 報告分開列 map cost 與 monster cost。
+
+2026-11-15 發現舊 Mode4 12-kind benchmark 不符合第1點：Mode1/2/3 root 只有固定12隻，但舊 Mode4 root 有更多怪，舊腳本排序後取前12隻，因此舊的 Mode4 12-kind 優勢數字 **INVALID FOR CROSS-MODE COMPARISON**。
+
+新版 benchmark：
+
+```text
+Map13 + 2 kinds  x 1000 monsters
+Map13 + 12 kinds x 1000 monsters
+4 modes
+3 independent repeats
+repeat 2 反轉 mode 順序
+```
+
+Map13 terrain/blocking/scenery 固定；monster root 才依 Mode 改變。每個 trial 都驗證 Map/Monster asset root 分離。
+
+完整私有結果：
+
+```text
+local-assets/four-mode-benchmark/map_separated_trials/summary.json
+```
+
+目前結果顯示 Mode1 Dense 在這組固定怪物上具有最低或接近最低的 Runtime texture footprint、低 page count 與較低 load cost；最新版 Adaptive Atomic 並未在這組大型怪物上勝過 Dense。因此正式 packing mode **不得再以舊 benchmark 直接指定 Mode4**，需依這次公平結果重新決策。
+
+## 8. 目前實際驗證
+
+全量來源：
+
+- 75,588 SPR
+- 7,890 independent sprite groups
+- 7,890 unique logical asset IDs
+- 0 logical path collision
+- 0 export error
+- 8,094 atlas pages
+- 282,968 frames
+
+Map13 runtime contract：
+
+- 367 placed scenery objects
+- 45 independent scenery visual assets
+- 9 monster definitions
+- 9 independent monster assets
+- 7 independent Player-B base parts
+- cross-asset bundle = false
+- collision = original Blocking byte grid
+
+## 9. 後續規則
+
+- 新增怪物：只新增／更新該 monster asset。
+- 地圖換怪：只改 Server population / definition，不重包 map。
+- scenery 修圖：只更新該 scenery asset。
+- Player 換裝：body / hair / equipment layer 分離。
+- 磁碟檔案數不是 optimization target。
+- RAM / VRAM / load latency / draw calls / frame P95/P99 / AFK release 才是 Runtime optimization target。

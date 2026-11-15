@@ -181,9 +181,9 @@ foreach(var bad in new[]{packet[..^1],new byte[]{0xdd,0xff,0xff,0xff,0xff},new b
 Directory.CreateDirectory("reports");
 var snapshot=SnapshotCodec.Encode([new(42,new Monster{Definition=99,Position=new(1.25f,-2.5f),Revision=uint.MaxValue})]);
 File.WriteAllText("reports/wire_fixture.json",JsonSerializer.Serialize(new { hex=Convert.ToHexString(packet).ToLowerInvariant(),snapshot_hex=Convert.ToHexString(snapshot).ToLowerInvariant() }));
-if(File.Exists("server/content/maps/13/blocking.bin"))
+if(File.Exists("server/content/maps/13/blocking.dat"))
 {
-    var actual=CollisionGrid.Load("server/content/maps/13/blocking.bin");
+    var actual=CollisionGrid.Load("server/content/maps/13/blocking.dat");
     Check(actual.Width==960 && actual.Height==960 && actual.Walkable(new(1200,800)),"actual Map13 collision");
 }
 else Console.WriteLine("Original Map13 collision: NOT VERIFIED (private content absent)");

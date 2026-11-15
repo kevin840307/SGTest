@@ -7,7 +7,7 @@
 
 ## 開始工作前（強制）
 
-1. git fetch，確認 SGTest main 最新 HEAD；先讀 README.md、docs/ARCHITECTURE.md，若改 Client 再讀 docs/CLIENT_ARCHITECTURE.md，若改 Server 再讀 docs/SERVER_ARCHITECTURE.md；接著依任務讀 SPEC.md、todo.txt 與相關專題文件。素材任務再讀 docs/LEGACY_ASSET_PIPELINE.md、docs/HK2_INVENTORY.md。Client/Server 新功能不得擴大舊的 scripts 平鋪或 Application/Domain/Infrastructure/Transport 分層，應遵守新目標架構。
+1. git fetch，確認 SGTest main 最新 HEAD；先讀 README.md、docs/ARCHITECTURE.md，若改 Client 再讀 docs/CLIENT_ARCHITECTURE.md，若改 Server 再讀 docs/SERVER_ARCHITECTURE.md；接著依任務讀 SPEC.md、todo.txt 與相關專題文件。素材任務先讀 docs/ASSET_ARCHITECTURE.md、docs/ASSET_CONVERTER.md、docs/ASSET_PACKING_BENCHMARK.md，再讀 docs/LEGACY_ASSET_PIPELINE.md、docs/HK2_INVENTORY.md；禁止重新引入跨素材 Map/Monster、Monster/Monster、scenery/scenery 或 Player-part shared atlas。Client/Server 新功能不得擴大舊的 scripts 平鋪或 Application/Domain/Infrastructure/Transport 分層，應遵守新目標架構。
 2. 若任務需要舊版證據，確認參考 TestGoGo 的 feature/local-server-net8 最新 SHA。首份規格基準：aee7ec7fff9e446452655cf6d2be460dfd7a88f1。引用精確路徑/函式/位址/輸入輸出，不憑記憶臆測。
 3. 檢查 TODO 最新領取狀態；只領一個未完成 Task ID。同時有人處理同檔案，使用個人分支/工作樹；不得 force push、不得覆寫同事的新版本。
 4. 每個 Task 先列「修改前行為、可觀測指標、回歸案例」，之後才修改。拆成可審核的小 commit。測試未執行一律寫 NOT VERIFIED（不可虛稱 PASS）。

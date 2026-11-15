@@ -12,12 +12,12 @@ def main():
     args=parser.parse_args()
     for manifest in sorted((args.source/'maps').glob('*/world.json')):
         data=json.loads(manifest.read_text(encoding='utf-8'))
-        collision=manifest.with_name('blocking.bin')
+        collision=manifest.with_name('blocking.dat')
         if hashlib.sha256(collision.read_bytes()).hexdigest()!=data['collision_sha256']:
             raise ValueError(f'collision hash mismatch: {manifest}')
         dest=args.output/'maps'/manifest.parent.name
         dest.mkdir(parents=True,exist_ok=True)
-        shutil.copyfile(collision,dest/'blocking.bin')
+        shutil.copyfile(collision,dest/'blocking.dat')
         # This minimal contract matches the client's full manifest fingerprint.
         (dest/'world.json').write_text(json.dumps({k:data[k] for k in ['version','fingerprint','collision_sha256']},indent=2),encoding='utf-8')
         population=manifest.with_name('population.json')

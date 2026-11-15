@@ -19,17 +19,17 @@
 
 ## 最新資源架構重評
 
-資源 Runtime 維持**單一 AssetStore + logical catalog**，詳 [Client Architecture](docs/CLIENT_ARCHITECTURE.md) 與 [Runtime Asset Bundle Architecture](docs/ASSET_BUNDLE_ARCHITECTURE.md)。資料夾描述「內容是什麼」：`characters / items / effects / maps / ui / audio / data`；載入生命週期則用 metadata 表達為 **app / character / map / on_demand**，不再把 `session` 當成目標架構名稱。現有 `bundles/session/` 與相關欄位屬舊實作名稱，後續會以獨立搬移 commit 調整，不在文件階段假裝已完成。怪物種類、方向、動作、人物部位、Atlas 尺寸都不是 Runtime Loader 類型。RUNTIME206 已驗證 Render/Logic/Network 隔離、多 FPS、低功耗、背景與多開；AFK 可以停止世界渲染和釋放 GPU world assets，但 Network / Reducer / authoritative state 仍維持正常節奏。
+資源 Runtime 維持**單一 AssetStore + logical catalog**，詳 [Asset Architecture](docs/ASSET_ARCHITECTURE.md) 與 [Client Architecture](docs/CLIENT_ARCHITECTURE.md)。資料夾描述「內容是什麼」：`maps / monsters / npcs / players / equipment / pets / items / effects / ui / audio / data`；每個素材保持獨立 identity，不再使用 `bundles/map` 或 `bundles/session`。生命週期只用 metadata/owner 表達為 **app / character / map / on_demand**；owner 相同不代表 physical atlas 合併。RUNTIME206 已驗證 Render/Logic/Network 隔離、多 FPS、低功耗、背景與多開；AFK 可以停止世界渲染和釋放 GPU world assets，但 Network / Reducer / authoritative state 仍維持正常節奏。
 
-## Adaptive Atomic Atlas 一鍵資產轉換
+## 一鍵資產轉換與 Atlas packing
 
-正式名稱為 **Adaptive Atomic Atlas（自適應原子圖集）**。資產轉換程式集中在 `tools/asset_converter/`，使用原始遊戲路徑即可轉換並驗證。詳細說明見 [ASSET_CONVERTER](docs/ASSET_CONVERTER.md)。
+資產轉換程式集中在 `tools/asset_converter/`，使用原始遊戲路徑即可轉換並驗證。現在 production builder 仍可輸出 **Adaptive Atomic Atlas**，但 2026-11-15 的公平重測顯示 Dense Single 在固定大型怪物集合的記憶體／page／load 綜合更好，因此最終 physical packing policy **等待依新版 benchmark 決策，不沿用舊 Mode4 優勢結論**。詳細說明見 [ASSET_CONVERTER](docs/ASSET_CONVERTER.md) 與 [ASSET_PACKING_BENCHMARK](docs/ASSET_PACKING_BENCHMARK.md)。
 
 ```bat
 run_build_assets.bat "C:\SGO\Stargate Online IE HK2"
 ```
 
-完整原始 SPR Atlas、ACT、SIF 與 DrawOrder 索引保留在 **本機私有的** `local-assets/asset_converter/complete/`，避免所有素材被 Godot 常駐；目前有消費端的 Map13／Player Base 直接輸出到 `client/assets/bundles/` 與 `client/assets/maps/`。不需要額外的 `generated/` 目錄。原版與衍生圖片均不推 Git。
+完整原始 SPR Atlas、ACT、SIF 與 DrawOrder 索引保留在 **本機私有的** `local-assets/asset_converter/complete/`；正式 `export-assets` 會把可索引的素材依 `maps / monsters / npcs / players / equipment / pets / items / effects / ui / audio / data` 發布到 `client/assets/`，但 Runtime 仍按需載入，不會因磁碟存在就全常駐 RAM/VRAM。不需要額外的 `generated/` 目錄。原版與衍生圖片均不推 Git。
 
 正式 Client 發行時，`client/assets/**` 不再由自製 Godot addon 塞進主 PCK；`client/addons/raw_assets_export` 已移除。改由 `client/tools/pack_assets.gd` 產生平台共用的外部 `assets/assets.pck`，Windows 與 macOS 使用同一份 pack / catalog / `res://assets/**` 路徑。Client 啟動時由 `scripts/asset_pack.gd` 掛載，之後仍由單一 AssetStore 按需載入；AFK 釋放 GPU world resources，不需要卸載 PCK。Windows Release 已實測通過，macOS 實際 .app export 尚未在本機驗證。
 
@@ -65,7 +65,7 @@ run_build_assets.bat "C:\SGO\Stargate Online IE HK2"
 python tools/asset_converter/cli.py build "C:\SGO\Stargate Online IE HK2" --extracted-source .cache/asset_converter/source --runtime-only
 ```
 
-Builder 內部仍保留原 SPR clip atomic、8 logical facing、alias/mirror、pivot、ACT timeline、paper-doll z-order；每個 normalized entity 另有 `inspect[action][facing]`，所以怪物的動作／方向可以獨立查閱，與最後 physical packing 無關。Atlas side 由相同素材 A/B 決定。舊 `build_assets.py`、`build_atlas_groups.py`、`build_normalized_atlas_candidates.py` 等保留為研究／回歸工具，不是 production API。Client Runtime 素材直接放 `client/assets/`，不再多一層 `generated/`；正式 rebuild 只輸出目前真的被 Runtime 使用的 `bundles/` 與 `maps/`，原始／未使用素材留 `.cache/client`。Map13 static objects 與 monsters 共用 map lifecycle bundle，viewport 只做 draw cull；drops 目前是單一 MultiMesh，沒有另立 texture-atlas 分類。完整稽核見 `docs/ASSET_NECESSITY_AUDIT.md`。
+Builder 保留 8 logical facing、alias/mirror、pivot、ACT timeline、paper-doll z-order；動作／方向可獨立查閱，與 physical packing 無關。**不同素材禁止跨 asset 合圖**：Map scenery、Monster、NPC、Player parts 各自有 manifest/page；同一素材內才允許 Dense/Atomic/side 候選。Client Runtime 素材直接放 `client/assets/`，不再多一層 `generated/`。Map13 的 terrain/scenery 與 Monster assets 分離，Monster appearance 由 Server population definition 決定。公平 packing 實測與舊錯誤 benchmark 更正見 `docs/ASSET_PACKING_BENCHMARK.md`。
 
 ## 已實作與驗證
 

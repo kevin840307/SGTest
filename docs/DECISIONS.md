@@ -363,7 +363,7 @@ ADR-026補充：使用者指定Client一般遊玩支援30～90FPS；FPS選項只
 - Client: 主要模組為 app / networking / world / gameplay / rendering / assets / ui / diagnostics；Render FPS、UI FPS、Network I/O、World State 必須隔離。AFK 可停止 world rendering、降低可重建 visual replication、釋放 GPU world assets，但不能降低 heartbeat、reliable gameplay event、state reducer 或 authoritative state 的處理正確性。
 - Server: 維持單一 .NET 8 project，主要模組為 Networking / Accounts / World / Combat / Items / Social / Persistence / Content / Diagnostics；不再擴大 Application / Domain / Infrastructure / Transport 目錄。
 - Naming: 移除模糊的 Session 作為目標架構名稱。網路連線使用 ClientConnection；AOI 狀態使用 VisibilityState；角色世界狀態使用 PlayerState；epoch 使用 ConnectionEpoch / MapEpoch。現有 Session.cs 與 bundles/session 只屬 legacy implementation，需獨立搬移 commit 後才算完成。
-- Assets: Converter source catalog 可保留原版 Player/Enemy/NPC/Pet/MA/MS/SR/Item/Effect/Map/Interface/Audio key；Runtime catalog 使用 characters/items/effects/maps/ui/audio/data。生命週期以 app/character/map/on_demand metadata 表達，不用資料夾代表 ownership。
+- Assets: Converter source catalog 可保留原版 Player/Enemy/NPC/Pet/MA/MS/SR/Item/Effect/Map/Interface/Audio key；Runtime catalog 使用 maps/monsters/npcs/players/equipment/pets/items/effects/ui/audio/data。每個素材保持獨立 identity；生命週期以 app/character/map/on_demand metadata/owner 表達，不用資料夾或 physical merge 代表 ownership。
 - Source of truth: docs/ARCHITECTURE.md、docs/CLIENT_ARCHITECTURE.md、docs/SERVER_ARCHITECTURE.md。其他 Session 在修改對應端前必須先讀這三份與相關專題規格。
 
 ## ADR-039 — 移除 raw-assets EditorPlugin，改用跨平台 external asset pack（2026-11-15）
@@ -375,3 +375,14 @@ ADR-026補充：使用者指定Client一般遊玩支援30～90FPS；FPS選項只
 - Same rules: Windows/macOS 共用**完全相同**的 asset pack、catalog、logical ids、ownership metadata 與 AFK resource policy；平台差異只在啟動 path resolver。
 - AFK: pack 可持續掛載；省資源依 AssetStore 釋放 world textures/GPU refs，不用 unmount，不降低 Network/Reducer/authoritative state。
 - Evidence: Godot 4.7.2 Windows Release 主 PCK 無 asset files，external pack 9,414,272 bytes / 15 current runtime files，release process 預設路徑自動掛載並讀到 `res://assets/bundles/index.json`；pack SHA256 `12111f73f074af449eaa8239c1f12b6f50e96d1766780155ea33fd4e91146c88` 與 runtime 回報一致。macOS path unit test PASS，但真正 macOS app export 尚未執行。
+
+## ADR-045 — Runtime 素材改為 per-asset identity；Map/Monster 分離；公平四模式重測（2026-11-15）
+
+- Status: **STRUCTURE ACCEPTED / PACKING MODE PENDING USER CHOICE**。
+- Boundary: 每個原版素材保持獨立 logical/physical identity。Monster、NPC、scenery、Player body part、equipment 不因 map 或 character lifetime 被合成同一 atlas。PCK 只作磁碟容器，Runtime 仍由單一 AssetStore 按需載入/釋放。
+- Map: `maps/<id>/` 只放 `world.json / terrain.png / tiles.bin / blocking.dat`；scenery placement 只引用 `maps/visuals/<asset>/atlas.json`。Monster visual 不屬於 map asset；Server population/definition 指向 `monsters/<sprite>/atlas.json`。
+- Collision: `blocking.dat` 保留原版 Blocking.dat byte grid，不轉 Godot CollisionShape；Client/Server 共用 hash 與 O(1) cell lookup。
+- Full export evidence: 75,588 SPR → 7,890 independent groups → 7,890 unique logical IDs，0 collision、0 export error；21,723 managed files，約1.31GiB；Map13 contract 367 placements / 45 scenery assets、9 monster definitions / 9 monster assets、7 Player-B base parts，cross_asset_bundle=false。
+- Benchmark correction: 舊 Mode4 root 有超過固定12隻怪，舊腳本排序後取前12；Mode1/2/3 root 只有固定12隻，因此舊 Mode4 12-kind cross-mode數字失效。新版測試固定同一12個 monster IDs、固定 Map13 independent asset、每 Mode 獨立 Godot process，2/12 kinds×1000 instances×3 repeats，repeat 2 反轉模式順序。
+- Fair result: Mode1 Dense 在固定大型怪物集合的 texture footprint / pages / load cost 綜合最佳；最新版 Mode4 Adaptive Atomic 不再顯示舊版記錄中的巨大記憶體優勢。正式 packing mode 不在此 ADR 偷改，等使用者依新版比較決定。
+- Runtime tests: Python tools/tests 121 PASS；monster workflow 4 PASS；Godot directions/map objects/monster visuals/paper doll/runtime store/navigation + cache-pressure PASS；使用 `.cache/dotnet` SDK 8.0.428 從 repo root 執行 C# **376 PASS**，包含原版 Map13 collision contract。

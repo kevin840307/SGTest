@@ -342,7 +342,7 @@ func _world_info(server_map: int, fingerprint: String, population_hash: String) 
 		add_child(terrain)
 		map_objects.configure(asset_root,terrain.data,asset_store,"map-objects")
 		var grid := preload("res://scripts/collision_grid.gd").new()
-		if grid.open(asset_root.path_join("maps/%d/blocking.bin" % server_map)) != OK:
+		if grid.open(asset_root.path_join("maps/%d/blocking.dat" % server_map)) != OK:
 			get_tree().quit(1)
 			return
 		prediction.configure(grid,Vector2(terrain.data.size[0],terrain.data.size[1]))
@@ -350,7 +350,7 @@ func _world_info(server_map: int, fingerprint: String, population_hash: String) 
 	else:
 		info_label.text = "已連線　測試場地"
 		prediction.configure(null,WORLD_SIZE)
-	var definitions: Array = [{"id":0,"sprite":"EN010A","atlas":"bundles/map/13/sprites.json"}]
+	var definitions: Array = [{"id":0,"sprite":"EN010A","atlas":"monsters/en010a/atlas.json"}]
 	var spawn_counts: Dictionary = {0: 1}
 	if server_map != 0:
 		var path := asset_root.path_join("maps/%d/population.json" % server_map)
@@ -369,7 +369,7 @@ func _world_info(server_map: int, fingerprint: String, population_hash: String) 
 			spawn_counts[definition_id] = int(spawn_counts.get(definition_id,0)) + 1
 	var started := Time.get_ticks_usec()
 	var monster_root: String = asset_root if monster_asset_root.is_empty() else monster_asset_root
-	if monster_visuals.begin_async(asset_store,"map:%d:sprites" % server_map) != OK:
+	if monster_visuals.begin_async(asset_store,"map:%d:monsters" % server_map) != OK:
 		push_error("Cannot start monster asset owner")
 		get_tree().quit(1)
 		return
@@ -863,9 +863,9 @@ func _load_sample_atlas() -> void:
 	# base-avatar bundle while preserving their network/state workload.
 	if DisplayServer.get_name() == "headless":
 		return
-	var player_path := asset_root.path_join("bundles/session/player-b-base.json")
+	var player_path := asset_root.path_join("players/b/base/body/atlas.json")
 	if FileAccess.file_exists(player_path):
-		var error: Error = doll.begin_async(asset_store,asset_root,"session:player:b:base")
+		var error: Error = doll.begin_async(asset_store,asset_root,"character:player:b:base")
 		if error != OK:
 			push_error("Cannot queue player composition: %s" % error)
 

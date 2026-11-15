@@ -9,6 +9,8 @@
 - [Server Architecture](SERVER_ARCHITECTURE.md)
 - [Client Runtime Isolation](CLIENT_RUNTIME_ISOLATION.md)
 - [Network and Motion](NETWORK_AND_MOTION.md)
+- [Asset Architecture](ASSET_ARCHITECTURE.md)
+- [Asset Packing Benchmark](ASSET_PACKING_BENCHMARK.md)
 - [Asset Runtime Strategy](ASSET_RUNTIME_STRATEGY.md)
 - [Asset Converter](ASSET_CONVERTER.md)
 
@@ -120,19 +122,23 @@ AFK 可降低**可重建的 visual replication payload**，但 transport heartbe
 
 Converter 可以保留原始分類。
 
-Godot Runtime 不照抄原版目錄，而以：
+Godot Runtime 不照抄原版目錄，而以內容語意直接分類：
 
 ```text
-characters/
+maps/
+monsters/
+npcs/
+players/
+equipment/
+pets/
 items/
 effects/
-maps/
 ui/
 audio/
 data/
 ```
 
-作為 logical catalog。
+每個來源素材保持獨立 logical/physical identity；PCK 只是磁碟容器，不代表共同載入。Map 只放 terrain/layout/blocking 與 scenery reference，Monster appearance 永遠放在 `monsters/` 並由 Server definition 決定。
 
 Asset lifetime 是 metadata：
 

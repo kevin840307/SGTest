@@ -4,6 +4,7 @@ import hashlib
 import json
 from pathlib import Path
 from .build_enemy_map_palette import read_enemy_catalog, read_enemy_dat
+from .asset_paths import monster_manifest
 
 DEFAULT_STATS = {
     'hp': 30,
@@ -49,19 +50,22 @@ def compile_population(spawns, catalog, assets, map_id):
         sprite=definition['sprite'].upper()
         if not sprite.isascii() or not sprite.isalnum():
             raise ValueError(f'invalid sprite identity {sprite}')
-        path=assets/'enemy'/(sprite.lower()+'.json')
+        relative=monster_manifest(sprite)
+        path=assets/relative
         manifest=json.loads(path.read_text(encoding='utf-8'))
         for action in ['NS','NW','FA','NH','ND']:
             for facing in range(1,9):
                 clip=f'{sprite}_{action}{facing}'
-                if clip not in manifest['clips'] and clip not in manifest['aliases']:
-                    raise ValueError(f'missing action/direction {clip}')
-        definitions.append({'id':enemy_id,'sprite':sprite,'atlas':f'enemy/{sprite.lower()}.json',
+                if (clip not in manifest.get('logical_views',{})
+                        and clip not in manifest.get('clips',{})
+                        and clip not in manifest.get('aliases',{})):
+                    raise ValueError(f'missing logical action/direction {clip}')
+        definitions.append({'id':enemy_id,'sprite':sprite,'atlas':relative,
                             'stats':validate_stats(definition.get('stats'))})
     return {'version':2,'map_id':map_id,'definitions':definitions,
             'spawns':[{'definition':r['enemy_id'],'p':[r['x'],r['y']],
                        'source_index':r['source_index'],'source_flags':r['flags']} for r in spawns],
-            'policy':'original spawn positions/visuals; monster runtime stats are explicit per-definition data'}
+            'policy':'original spawn positions; each monster visual is an independent runtime asset selected by the server definition'}
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__)

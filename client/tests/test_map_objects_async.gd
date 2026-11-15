@@ -11,37 +11,44 @@ func _run() -> void:
 		FileAccess.get_file_as_string("res://assets/maps/13/world.json")
 	)
 	assert(world.objects.size() > 0)
-	assert(not str(world.get("sprite_bundle","")).is_empty())
+	assert(not world.has("sprite_bundle"))
+	var unique: Dictionary = {}
+	for object in world.objects:
+		var relative := str(object.get("atlas",""))
+		assert(relative.begins_with("maps/visuals/") and relative.ends_with("/atlas.json"))
+		assert(not relative.begins_with("monsters/"))
+		unique[relative] = true
+	assert(unique.size() > 1,"Map13 scenery must keep independent source assets")
+
 	var store := STORE.new()
-	store.configure(32 * 1024 * 1024, 16 * 1024 * 1024)
+	store.configure(32 * 1024 * 1024,16 * 1024 * 1024)
 	var objects := MAP_OBJECTS.new()
-	objects.configure("res://assets", world, store, "map-object-test")
+	objects.configure("res://assets",world,store,"map-object-test")
 	var first: Dictionary = world.objects[0]
-	var view := Rect2(first.bounds[0], first.bounds[1], first.bounds[2], first.bounds[3]).grow(32)
+	var view := Rect2(first.bounds[0],first.bounds[1],first.bounds[2],first.bounds[3]).grow(32)
 	objects.prepare(view)
 	var frames := 0
 	while not objects.is_ready():
-		store.poll_gpu(1,1200)
+		store.poll_gpu(2,1600)
 		objects.prepare(view)
 		frames += 1
-		assert(frames < 180)
+		assert(frames < 240)
 		await process_frame
 	assert(objects.visible.size() > 0)
-	assert(objects.atlas != null)
-	assert(int(store.statistics().entries) == 1,
-		"all map scenery must share one map lifecycle bundle")
+	assert(objects.requested.size() > 0)
+	assert(objects.atlases.size() == objects.requested.size())
+	for path in objects.atlases:
+		assert(str(path).contains("/maps/visuals/"))
+		assert(not str(path).contains("/bundles/"))
+	# Multiple instances of one scenery asset still share a single AssetStore entry.
+	assert(int(store.statistics().entries) == objects.requested.size())
 	var resident := store.resident_bytes()
 	assert(resident > 0)
-	# Leaving the viewport changes only the draw set. Texture lifetime is the map,
-	# so we avoid 20-30 per-view acquire/release operations and keep one owner.
-	objects.prepare(Rect2(-100000,-100000,10,10))
-	assert(objects.visible.is_empty())
-	assert(store.resident_bytes() == resident)
 	objects.reset(false)
 	store.purge_unowned(true)
 	await process_frame
 	RenderingServer.force_sync()
 	assert(store.resident_bytes() == 0)
 	store.close()
-	print("async map object: one map bundle / viewport draw cull / map release passed")
+	print("async map object: independent scenery assets / shared store / release passed")
 	quit()

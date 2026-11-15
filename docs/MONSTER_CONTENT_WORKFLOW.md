@@ -70,7 +70,7 @@ sprite `ENxxxx` 會對應 private extracted source：
 
 工具固定要求 monster 5 個 behavior：`NS / NW / FA / NH / ND`，以 `sgtest.animation/v2` 與 `legacy_direction.py` 驗證 8 logical facing，共 **40 logical views**。缺 ACT、缺必要 SPR、timeline frame 越界、pivot/hash 不一致都直接失敗。
 
-Animation source of truth 仍是 `sgtest.animation/v2`。Production packing 改由 [ASSET_BUNDLE_ARCHITECTURE.md](ASSET_BUNDLE_ARCHITECTURE.md) 的 lifecycle policy：同 map definitions 一起重建 `bundles/map/<map>/sprites.json`，目前經 1024/2048 A/B 選 2048。512/1024/2048/4096 是 builder 內部候選，不是對外 Runtime 類型；不能手改 atlas。
+Animation source of truth 仍是 `sgtest.animation/v2`。Production asset boundary 依 [ASSET_ARCHITECTURE.md](ASSET_ARCHITECTURE.md)：每個 Monster visual 保持獨立 `monsters/<sprite>/atlas.json`，Map population 只引用它；新增怪物不允許重建 Map + Monster shared atlas。512/1024/2048/4096 與 Dense/Atomic 都只是單一 asset 內部 packing 候選，不是 Runtime 類型；不能手改 atlas。
 
 ## Private preview
 
@@ -86,7 +86,7 @@ preview 是 5 actions × 8 facings 的 40-view contact sheet，依 source frame 
 
 ## Spawn collision Gate
 
-`blocking.bin` 使用與 Server `CollisionGrid` 相同規則：16px cell、`cell & 7 == 0` 才可走。
+`blocking.dat` 直接保留原版 Blocking.dat byte grid，Client/Server 使用相同 `CollisionGrid` 規則：16px cell、`cell & 7 == 0` 才可走。
 
 - 預設：blocked/out-of-map spawn 直接拒絕，並回報最近可走建議。
 - 只有明確 `--snap-spawns` 才自動移到 64-cell 搜尋範圍內最近 open cell。

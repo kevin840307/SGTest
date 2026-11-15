@@ -16,6 +16,7 @@ import time
 from PIL import Image
 from ..source.build_assets import write_json
 from ..source.runtime_spr import decode_spr, unwrap_cde
+from .asset_paths import source_sprite_manifest
 
 
 def server_map_directory(server_dat: Path, map_id: int) -> Path:
@@ -54,7 +55,7 @@ def dimensions(raw, stride):
     return w,h
 
 
-def objects(raw, source, bundle_relative):
+def objects(raw, source):
     count = struct.unpack_from('<I',raw)[0]
     at, result = 4, []
     decoded_cache = {}
@@ -86,7 +87,7 @@ def objects(raw, source, bundle_relative):
         top = min((y+b[1] for b in local_boxes), default=y)
         right = max((x+b[2] for b in local_boxes), default=x)
         bottom = max((y+b[3] for b in local_boxes), default=y)
-        result.append({'atlas':bundle_relative,'clip':clip,'p':[x,y], 'z':z,
+        result.append({'atlas':source_sprite_manifest(key),'clip':clip,'p':[x,y], 'z':z,
                        'bounds':[left,top,right-left,bottom-top],'frames':frame_count,
                        'source':key})
     if raw[at:] not in (b'',b'\0\0\0\0'):
@@ -143,16 +144,15 @@ def build(source, output, map_id):
     dest.mkdir(parents=True,exist_ok=True)
     atlas.save(dest/'terrain.png',compress_level=3)
     (dest/'tiles.bin').write_bytes(tile_bytes)
-    (dest/'blocking.bin').write_bytes(blocking)
+    (dest/'blocking.dat').write_bytes(blocking)
     object_path = resolve(source,settings['List'])
-    bundle_relative = f'bundles/map/{map_id}/sprites.json'
-    placed = objects(plain(object_path),source,bundle_relative)
+    placed = objects(plain(object_path),source)
     hashes = {p.relative_to(source).as_posix():hashlib.sha256(plain(p)).hexdigest()
               for p in [config_path,pic_path,tile_path,blocking_path,object_path]}
     document = {'version':2,'map_id':map_id,'name':settings.get('Name',''), 'tile_side':side,
                 'tile_width':w,'tile_height':h,'collision_cell':16,'size':[w*side,h*side],
                 'atlas_grid':[columns,rows],'tile_ids':used,'objects':placed,
-                'sprite_bundle':bundle_relative,'source_hashes':hashes,
+                'source_hashes':hashes,
                 'tiles_sha256':hashlib.sha256(tile_bytes).hexdigest(),
                 'collision_sha256':hashlib.sha256(blocking).hexdigest(),
                 'terrain_sha256':hashlib.sha256((dest/'terrain.png').read_bytes()).hexdigest()}

@@ -73,7 +73,7 @@ class MonsterWorkflowTests(unittest.TestCase):
 
     def test_collision_exact_and_optional_snap(self):
         with tempfile.TemporaryDirectory() as temp:
-            path = Path(temp) / "blocking.bin"
+            path = Path(temp) / "blocking.dat"
             # 3x3, center blocked.
             cells = bytearray(9)
             cells[4] = 1

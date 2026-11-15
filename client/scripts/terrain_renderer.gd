@@ -13,7 +13,7 @@ func open(root: String, map_id: int) -> Error:
 	if not parsed is Dictionary or int(parsed.get("version",0)) != 2:
 		return ERR_FILE_CORRUPT
 	data = parsed
-	for entry in [["tiles.bin","tiles_sha256"],["blocking.bin","collision_sha256"],["terrain.png","terrain_sha256"]]:
+	for entry in [["tiles.bin","tiles_sha256"],["blocking.dat","collision_sha256"],["terrain.png","terrain_sha256"]]:
 		if FileAccess.get_sha256(folder.path_join(entry[0])) != str(data[entry[1]]):
 			return ERR_FILE_CORRUPT
 	tiles = FileAccess.get_file_as_bytes(folder.path_join("tiles.bin"))

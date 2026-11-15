@@ -103,52 +103,49 @@ client/
 │
 ├── assets/
 │   ├── catalog/
-│   │   ├── assets.json                 # logical asset id -> file/page/metadata
-│   │   └── animations.json
+│   │   ├── assets.json                 # logical id -> manifest / metadata
+│   │   ├── monsters.json
+│   │   ├── npcs.json
+│   │   ├── players.json
+│   │   └── ...
 │   │
-│   ├── characters/
-│   │   ├── players/
-│   │   │   ├── body/
-│   │   │   ├── hair/
-│   │   │   └── equipment/
-│   │   ├── monsters/
-│   │   ├── npcs/
-│   │   ├── pets/
-│   │   └── mecha/
+│   ├── maps/
+│   │   ├── <map_id>/
+│   │   │   ├── world.json              # terrain/object placement metadata only
+│   │   │   ├── population.json         # Server-selected entity definitions/spawns
+│   │   │   ├── terrain.png
+│   │   │   ├── tiles.bin
+│   │   │   └── blocking.dat            # original Blocking.dat byte grid
+│   │   └── visuals/
+│   │       └── <source_asset>/          # each scenery source is independent
+│   │           ├── atlas.json
+│   │           └── page_*.png
 │   │
+│   ├── monsters/
+│   │   └── <monster_id>/                # one monster appearance = one asset
+│   │       ├── atlas.json
+│   │       └── page_*.png
+│   │
+│   ├── npcs/
+│   │   └── <npc_asset>/
+│   ├── players/
+│   │   └── <race>/
+│   │       ├── base/                    # body/head/leg/arms/death remain separate
+│   │       └── hair/
+│   ├── equipment/                       # cloth/weapon/etc; each source asset separate
+│   ├── pets/
+│   ├── mecha/                           # only after legacy source semantics are verified
 │   ├── items/
 │   │   ├── icons/
 │   │   ├── photos/
 │   │   └── ground/
-│   │
 │   ├── effects/
-│   │   ├── skills/
-│   │   ├── weapons/
-│   │   ├── combat/
-│   │   └── environment/
-│   │
-│   ├── maps/
-│   │   └── <map_id>/
-│   │       ├── terrain/
-│   │       ├── scenery/
-│   │       ├── objects/
-│   │       └── metadata/
-│   │
 │   ├── ui/
-│   │   ├── common/
-│   │   ├── windows/
-│   │   ├── cursors/
-│   │   └── icons/
-│   │
 │   ├── audio/
 │   │   ├── bgm/
 │   │   └── sfx/
-│   │
 │   └── data/
-│       ├── quests/
-│       ├── skills/
-│       ├── items/
-│       └── tables/
+│       └── legacy/                      # unverified MA/MS/SR/source payloads; do not guess semantics
 │
 ├── shaders/
 ├── tests/
@@ -216,7 +213,7 @@ source catalog
 Runtime 只使用較穩定的語意分類：
 
 ```text
-characters / items / effects / maps / ui / audio / data
+maps / monsters / npcs / players / equipment / pets / items / effects / ui / audio / data
 ```
 
 Runtime 不需要知道來源是 SPR、Recovered PNG、MA、MS 還是 SR；它只依 logical asset id 取 definition。
@@ -379,7 +376,7 @@ Godot：
 - script：`snake_case.gd`
 - scene：`snake_case.tscn`
 - class_name：`PascalCase`
-- logical asset ids：穩定的小寫 namespace，例如 `characters/monsters/en023a`
+- logical asset ids：穩定的小寫 namespace，例如 `monsters/en023a`、`maps/visuals/tree001`
 
 優先使用明確名稱：
 

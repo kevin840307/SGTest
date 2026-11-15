@@ -22,7 +22,7 @@ func _initialize() -> void:
 	grid.cells[4] = 3
 	check(not grid.walkable(Vector2(24,24)), "special terrain remains blocked for normal character")
 	var original := GRID.new()
-	check(original.open("res://assets/maps/13/blocking.bin") == OK, "original Map13 collision loads")
+	check(original.open("res://assets/maps/13/blocking.dat") == OK, "original Map13 collision loads")
 	check(original.width == 960 and original.height == 960, "original dimensions preserved")
 	check(original.walkable(Vector2(1200,800)), "actual spawn is legal")
 	var terrain := preload("res://scripts/terrain_renderer.gd").new()

@@ -19,10 +19,11 @@ from asset_converter.source.convert_assets import (
 from asset_converter.source.extract_client import extract, audit_sprite_coverage
 from asset_converter.content.build_maps import build as build_map
 from asset_converter.content.npc_content import build as build_npcs
-from asset_converter.content.asset_pipeline import (
-    build_all as build_runtime,
-    resolve_server_dat,
-)
+from asset_converter.content.export_assets import publish as export_assets
+from asset_converter.content.server_source import resolve_server_dat
+from asset_converter.content.build_maps import server_map_directory
+from asset_converter.content.build_enemy_map_palette import read_enemy_catalog, read_enemy_dat
+from asset_converter.content.build_population import compile_population
 
 
 def write_json(path: Path, obj: dict) -> None:
@@ -168,42 +169,49 @@ def archive_all(source: Path, archive: Path, args) -> dict:
     return summary
 
 
-def check_runtime(stage: Path, map_id: int) -> dict:
-    result = {}
-    for name, relative in (
-        ("map", f"bundles/map/{map_id}/sprites.json"),
-        ("session", "bundles/session/player-b-base.json"),
-    ):
-        path = stage / relative
-        doc = json.loads(path.read_text(encoding="utf-8"))
-        pages = doc["pages"]
-        if not pages or len(doc["page_sizes"]) != len(pages):
-            raise ValueError(f"{name}: no valid pages")
-        for page_name, size in zip(pages, doc["page_sizes"]):
-            if (
-                Path(page_name).name != page_name
-                or not (path.parent / page_name).is_file()
-            ):
-                raise ValueError(f"{name}: missing or unsafe page {page_name}")
-            if max(size) > 4096:
-                raise ValueError(f"{name}: unsafe maximum texture dimension")
-        for frame in doc["frames"]:
-            pg = frame["page"]
-            if pg < 0:
-                continue
-            if pg >= len(pages):
-                raise ValueError(f"{name}: frame page invalid")
-            x, y, w, h = frame["rect"]
-            pw, ph = doc["page_sizes"][pg]
-            if x < 0 or y < 0 or w <= 0 or h <= 0 or x + w > pw or y + h > ph:
-                raise ValueError(f"{name}: frame region outside atlas")
-        result[name] = {
-            "pages": len(pages),
-            "frames": len(doc["frames"]),
-            "scope": doc["bundle_scope"],
-            "packing_policy": doc["packing_policy"],
-        }
-    return result
+def check_runtime(stage: Path, assets: Path, map_id: int) -> dict:
+    world_path = stage / f"maps/{map_id}/world.json"
+    population_path = stage / f"maps/{map_id}/population.json"
+    world = json.loads(world_path.read_text(encoding="utf-8"))
+    population = json.loads(population_path.read_text(encoding="utf-8"))
+    if "sprite_bundle" in world:
+        raise ValueError("map contract still contains a cross-asset sprite bundle")
+    collision = stage / f"maps/{map_id}/blocking.dat"
+    if hashlib.sha256(collision.read_bytes()).hexdigest() != world["collision_sha256"]:
+        raise ValueError("map collision is not the verified original byte grid")
+    object_paths = sorted({str(row.get("atlas","")) for row in world.get("objects",[])})
+    for relative in object_paths:
+        if not relative.startswith("maps/visuals/") or not relative.endswith("/atlas.json"):
+            raise ValueError(f"map object is not an independent scenery asset: {relative}")
+        if not (assets / relative).is_file():
+            raise ValueError(f"missing independent map object asset: {relative}")
+    monster_paths = sorted({str(row.get("atlas","")) for row in population.get("definitions",[])})
+    for relative in monster_paths:
+        if not relative.startswith("monsters/") or not relative.endswith("/atlas.json"):
+            raise ValueError(f"monster is not an independent asset: {relative}")
+        if not (assets / relative).is_file():
+            raise ValueError(f"missing independent monster asset: {relative}")
+    player_paths = [
+        "players/b/base/body/atlas.json",
+        "players/b/base/leg/atlas.json",
+        "players/b/base/head/atlas.json",
+        "players/b/hair/hair00/atlas.json",
+        "players/b/base/left_arm/atlas.json",
+        "players/b/base/right_arm/atlas.json",
+        "players/b/base/death/atlas.json",
+    ]
+    for relative in player_paths:
+        if not (assets / relative).is_file():
+            raise ValueError(f"missing independent player part asset: {relative}")
+    return {
+        "map_objects": len(world.get("objects",[])),
+        "map_visual_assets": len(object_paths),
+        "monster_definitions": len(population.get("definitions",[])),
+        "monster_visual_assets": len(monster_paths),
+        "player_part_assets": len(player_paths),
+        "collision_format": "original_blocking_byte_grid",
+        "cross_asset_bundle": False,
+    }
 
 
 def build_runtime_assets(source: Path, output: Path, args) -> dict:
@@ -213,15 +221,27 @@ def build_runtime_assets(source: Path, output: Path, args) -> dict:
         return {"status": "not_built", "reason": str(exc)}
     if output == source or output in source.parents or source in output.parents:
         raise ValueError("runtime output must not overlap original source")
+    catalog = output / "catalog/assets.json"
+    if not catalog.is_file():
+        raise ValueError("independent asset catalog missing; publish assets before runtime map contracts")
     stage_parent = REPO / ".cache" / "asset_converter"
     stage_parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="stage-", dir=stage_parent) as scratch:
         stage = Path(scratch)
-        print(f"[RUNTIME] map {args.map} + session, staged before publish", flush=True)
+        print(f"[RUNTIME] map {args.map} contract; scenery/monster/player assets stay independent", flush=True)
         map_result = build_map(source, stage, args.map)
-        report = build_runtime(source, stage, server_dat, args.map, prune=False)
-        validated = check_runtime(stage, args.map)
-        # Copy only verified generated resources; leave unrelated live assets alone.
+        map_dir = server_map_directory(server_dat,args.map)
+        enemy_dat = map_dir / "Enemy.dat"
+        enemy_catalog = server_dat / "Enemy" / "Enemy_Data.csv"
+        population = compile_population(
+            read_enemy_dat(enemy_dat),read_enemy_catalog(enemy_catalog),output,args.map
+        )
+        population["sources"] = {
+            enemy_dat.relative_to(server_dat).as_posix(): hashlib.sha256(enemy_dat.read_bytes()).hexdigest(),
+            enemy_catalog.relative_to(server_dat).as_posix(): hashlib.sha256(enemy_catalog.read_bytes()).hexdigest(),
+        }
+        write_json(stage / f"maps/{args.map}/population.json",population)
+        validated = check_runtime(stage,output,args.map)
         files = [p for p in stage.rglob("*") if p.is_file()]
         files.sort(key=lambda p: (p.suffix.lower() == ".json", p.as_posix()))
         for p in files:
@@ -236,8 +256,8 @@ def build_runtime_assets(source: Path, output: Path, args) -> dict:
         "map_id": args.map,
         "map": map_result,
         "validation": validated,
-        "definitions": report["definitions"],
-        "spawns": report["spawns"],
+        "definitions": len(population["definitions"]),
+        "spawns": len(population["spawns"]),
         "files_published": len(files),
     }
 
@@ -301,6 +321,12 @@ def main() -> int:
     destinations.add_argument('--output',type=Path,help='single-map JSON destination')
     destinations.add_argument('--output-root',type=Path,help='private catalog root; output maps/<id>/npcs.json')
     world.add_argument('--report',type=Path)
+    publication = sub.add_parser('export-assets',help='audit complete archive and publish all private source assets with a logical Godot catalog')
+    publication.add_argument('original',type=Path)
+    publication.add_argument('--extracted-source',type=Path)
+    publication.add_argument('--archive-output',type=Path,default=REPO/'local-assets/asset_converter/complete')
+    publication.add_argument('--assets',type=Path,default=REPO/'client/assets')
+    publication.add_argument('--report',type=Path,default=REPO/'reports/asset_export.json')
     args = ap.parse_args()
     if args.command == 'build' and args.archive_only and args.runtime_only:
         ap.error('archive-only and runtime-only conflict')
@@ -315,6 +341,21 @@ def main() -> int:
 
 
 def _execute(args):
+    if args.command == 'export-assets':
+        report = {'status':'failed'}
+        started = time.perf_counter()
+        try:
+            output = args.assets.resolve()
+            original = args.original.resolve()
+            if output == original or output.is_relative_to(original):
+                raise ValueError('asset output must not overwrite original game')
+            report = export_assets(resolve_source(args),args.archive_output,output)
+        except (OSError,ValueError,KeyError,TypeError) as error:
+            report = {'status':'failed','error':str(error),'complete_asset_conversion':False}
+        report['elapsed_seconds'] = round(time.perf_counter()-started,3)
+        write_json(args.report,report)
+        print(json.dumps(report,ensure_ascii=False,indent=2),flush=True)
+        return 0 if report['status']=='pass' else 1
     if args.command == 'world-content':
         report = {'status':'failed'}
         destination = (args.output_root or REPO/'local-assets/asset_converter/world').resolve()
@@ -393,12 +434,14 @@ def _execute(args):
                 / ("preview" if (args.category or args.prefix or args.preview_groups) else "complete")
             )
             report["archive"] = archive_all(source, archive_root.resolve(), args)
-        if (
-            not args.archive_only
-            and not args.preview_groups
-            and not args.category
-            and not args.prefix
-        ):
+        full_build = not (args.preview_groups or args.category or args.prefix)
+        if not args.archive_only and not args.runtime_only and full_build:
+            report["asset_export"] = export_assets(
+                source,
+                args.archive_output or REPO/"local-assets/asset_converter/complete",
+                args.runtime_output,
+            )
+        if not args.archive_only and full_build:
             report["runtime"] = build_runtime_assets(
                 source, args.runtime_output.resolve(), args
             )
@@ -408,6 +451,7 @@ def _execute(args):
             "pass"
             if (
                 not report.get("archive", {}).get("errors")
+                and report.get('asset_export',{}).get('status','pass') == 'pass'
                 and report.get("runtime", {}).get("status")
                 in ("built", "not_requested")
             )

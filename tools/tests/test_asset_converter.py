@@ -240,31 +240,58 @@ class ConverterTests(unittest.TestCase):
             self.assertTrue((dst / "index.json").is_file())
             self.assertFalse((dst / "sprites" / "Interface").exists())
 
-    def test_runtime_manifest_validation_rejects_unsafe_or_bad_rect(self):
+    def test_runtime_contract_requires_independent_assets(self):
         with tempfile.TemporaryDirectory() as t:
             root = Path(t)
-            for name, relative in (
-                ("map", "bundles/map/13/sprites.json"),
-                ("session", "bundles/session/player-b-base.json"),
-            ):
-                manifest = root / relative
-                manifest.parent.mkdir(parents=True)
-                (manifest.parent / "page_0.png").write_bytes(b"test")
-                doc = {
-                    "pages": ["page_0.png"],
-                    "page_sizes": [[16, 16]],
-                    "frames": [{"page": 0, "rect": [1, 1, 5, 5]}],
-                    "bundle_scope": name,
-                    "packing_policy": "test",
-                }
-                manifest.write_text(json.dumps(doc))
-            self.assertEqual(check_runtime(root, 13)["map"]["frames"], 1)
-            target = root / "bundles" / "map" / "13" / "sprites.json"
-            bad = json.loads(target.read_text())
-            bad["frames"][0]["rect"] = [20, 10, 5, 5]
-            target.write_text(json.dumps(bad))
+            stage = root / "stage"
+            assets = root / "assets"
+            map_dir = stage / "maps" / "13"
+            map_dir.mkdir(parents=True)
+            collision = b"original-blocking-grid"
+            (map_dir / "blocking.dat").write_bytes(collision)
+            world = {
+                "version": 2,
+                "collision_sha256": hashlib.sha256(collision).hexdigest(),
+                "objects": [{
+                    "atlas": "maps/visuals/tree/atlas.json",
+                    "source": "map/tree.spr",
+                }],
+            }
+            (map_dir / "world.json").write_text(json.dumps(world))
+            population = {
+                "version": 2,
+                "definitions": [{
+                    "id": 1,
+                    "sprite": "EN001A",
+                    "atlas": "monsters/en001a/atlas.json",
+                }],
+                "spawns": [],
+            }
+            (map_dir / "population.json").write_text(json.dumps(population))
+            required = [
+                "maps/visuals/tree/atlas.json",
+                "monsters/en001a/atlas.json",
+                "players/b/base/body/atlas.json",
+                "players/b/base/leg/atlas.json",
+                "players/b/base/head/atlas.json",
+                "players/b/hair/hair00/atlas.json",
+                "players/b/base/left_arm/atlas.json",
+                "players/b/base/right_arm/atlas.json",
+                "players/b/base/death/atlas.json",
+            ]
+            for relative in required:
+                path = assets / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("{}")
+            result = check_runtime(stage, assets, 13)
+            self.assertFalse(result["cross_asset_bundle"])
+            self.assertEqual(result["map_visual_assets"], 1)
+            self.assertEqual(result["monster_visual_assets"], 1)
+            self.assertEqual(result["player_part_assets"], 7)
+            world["sprite_bundle"] = "bundles/map/13/sprites.json"
+            (map_dir / "world.json").write_text(json.dumps(world))
             with self.assertRaises(ValueError):
-                check_runtime(root, 13)
+                check_runtime(stage, assets, 13)
 
 
 if __name__ == "__main__":

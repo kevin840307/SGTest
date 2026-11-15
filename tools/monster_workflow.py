@@ -2,9 +2,9 @@
 """Data-driven monster add/update workflow for SGTest.
 
 One recipe validates original SPR/ACT, normalized 8-facing semantics, runtime
-stats and spawn collision. Normal mode updates population v2, rebuilds the map
-lifecycle bundle, creates a private preview, and mirrors population to server
-content. Adding a monster never creates a new production atlas category.
+stats and spawn collision. Normal mode updates population v2, keeps the monster
+as an independent runtime asset, creates a private preview, and mirrors population
+to server content. Adding a monster never merges it into a map/scenery atlas.
 """
 from __future__ import annotations
 
@@ -19,7 +19,6 @@ from pathlib import Path
 from PIL import Image, ImageDraw, ImageOps
 
 from animation_definition import compile_definition, validate_definition
-from asset_pipeline import build_map_bundle
 from build_population import DEFAULT_STATS, validate_stats
 from runtime_spr import decode_spr
 
@@ -194,7 +193,7 @@ def merge_population(population: dict, recipe: dict, spawns: list[dict],
     result["definitions"].append({
         "id": definition_id,
         "sprite": definition["sprite"],
-        "atlas": f"bundles/map/{recipe['map_id']}/sprites.json",
+        "atlas": f"monsters/{definition['sprite'].lower()}/atlas.json",
         "stats": definition["stats"],
     })
     result["definitions"].sort(key=lambda row: int(row["id"]))
@@ -262,18 +261,17 @@ def render_preview(source_root: Path, definition: dict, destination: Path) -> di
     }
 
 
-def ensure_runtime_bundle(source_root: Path, assets: Path,
-                          population: dict, map_id: int) -> dict:
-    """Rebuild the one production sprite bundle owned by this map lifetime."""
-    row = build_map_bundle(source_root, assets, population, map_id)
-    return {
-        "bundle_id": row["bundle_id"],
-        "manifest": row["manifest"],
-        "pages": row["pages"],
-        "rgba_bytes": row["rgba_bytes"],
-        "side": row["side"],
-        "entities": row["entities"],
-    }
+def ensure_runtime_asset(source_root: Path, assets: Path,
+                         population: dict, map_id: int) -> dict:
+    """Require every population visual to exist as an independent asset."""
+    manifests = sorted({str(row["atlas"]) for row in population["definitions"]})
+    missing = [relative for relative in manifests if not (assets/relative).is_file()]
+    if missing:
+        raise ValueError(
+            "independent monster asset missing; run asset_converter export-assets: "
+            + ", ".join(missing[:3])
+        )
+    return {"map_id":map_id,"manifests":manifests,"assets":len(manifests)}
 
 
 def main() -> int:
@@ -303,7 +301,7 @@ def main() -> int:
 
     map_root = assets / "maps" / str(recipe["map_id"])
     population_path = map_root / "population.json"
-    blocking = map_root / "blocking.bin"
+    blocking = map_root / "blocking.dat"
     if not population_path.is_file() or not blocking.is_file():
         raise ValueError(f"map {recipe['map_id']} runtime population/blocking is missing")
     spawns = validate_spawns(recipe["spawns"], blocking, args.snap_spawns)
@@ -342,8 +340,8 @@ def main() -> int:
     }
 
     if not args.validate_only:
-        bundle = ensure_runtime_bundle(source_root, assets, candidate_population, recipe["map_id"])
-        report["bundle"] = bundle
+        runtime_assets = ensure_runtime_asset(source_root, assets, candidate_population, recipe["map_id"])
+        report["runtime_assets"] = runtime_assets
         write_json(population_path, candidate_population)
         destination = server_content / "maps" / str(recipe["map_id"]) / "population.json"
         destination.parent.mkdir(parents=True, exist_ok=True)

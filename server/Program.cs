@@ -20,7 +20,7 @@ if(map!=0)
     using var manifest=JsonDocument.Parse(File.ReadAllBytes(Path.Combine(folder,"world.json")));
     var metadata=manifest.RootElement;
     if(metadata.GetProperty("version").GetInt32()!=2) throw new InvalidDataException("Unsupported map version");
-    string collision=Path.Combine(folder,"blocking.bin");
+    string collision=Path.Combine(folder,"blocking.dat");
     if(!Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(collision))).ToLowerInvariant().Equals(metadata.GetProperty("collision_sha256").GetString(),StringComparison.Ordinal))
         throw new InvalidDataException("Map hash mismatch");
     grid=CollisionGrid.Load(collision); fingerprint=metadata.GetProperty("fingerprint").GetString()!;

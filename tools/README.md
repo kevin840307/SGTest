@@ -1,67 +1,89 @@
 # SGTest tools
 
-工具維持少量清楚入口，不因 Enemy / NPC / Item / Effect 等素材類型建立專屬 Loader 或多套 CLI。
+工具維持少量、明確入口。Production 資產轉換只有一套，不因 Enemy / NPC / Item / Effect 建立多套 CLI、Loader 或 Cache。
 
-## Production asset path
-
-新的完整原版素材轉換與 Runtime 重建入口：
+## Production asset entry
 
 ```bat
 run_build_assets.bat "C:\SGO\Stargate Online IE HK2"
 ```
 
-`tools/asset_converter/` 為獨立入口，詳見 `docs/ASSET_CONVERTER.md`；已存在的 `tools/rebuild_assets.ps1` 保留舊式驗收／相容用途（會清除 live assets），不要作為新轉換器的預設操作。
-
-已存在 `.cache/client` 時，sprite/runtime bundle 入口是：
+實際入口：
 
 ```powershell
-python tools\asset_pipeline.py
+python tools/asset_converter/cli.py build "C:\SGO\Stargate Online IE HK2"
 ```
 
-Production 組成：
+詳見：
 
-- `extract_client.py`：唯讀提取原始 Client 到 `.cache/client`。
-- `build_maps.py`：從原始 map/grid/object references 產生目前 Runtime 會用的 terrain、collision、world metadata；場景 SPR bounds 直接解原檔，不依賴舊 generated atlas。
-- `asset_converter/cli.py`：**Adaptive Atomic Atlas** 唯一公開離線全素材／Runtime 一鍵 CLI；封裝抽取、逐格驗證、增量建置和安全發布。
-- `asset_pipeline.py`：由上述 CLI 調用的 Runtime bundle 底層入口；依 lifetime 建 map/session bundle。
-- `asset_bundle_builder.py`：pipeline 內部共同 packing primitive；normalized animation 與無 ACT raw SPR 都走同一 manifest/runtime。
-- `monster_workflow.py`：資料驅動新增／更新怪物；重建既有 map bundle，不建立新 Loader。
-- `export_server_content.py`：只輸出 Server 所需 collision/population contract，不輸出圖片。
+- `docs/ASSET_ARCHITECTURE.md`
+- `docs/ASSET_CONVERTER.md`
+- `docs/ASSET_PACKING_BENCHMARK.md`
 
-`client/assets` 是可重建 Runtime output，不是完整原始素材鏡像。未被 Runtime 使用的原始檔留在 `.cache/client`。
+## Production responsibilities
 
-## Research / experiment
+`tools/asset_converter/`：
 
-以下工具保留格式研究、A/B 或歷史回歸能力，但不是 production build 入口：
+- 唯讀抽取原版 Client。
+- SPR decode / pixel/pivot/hash 驗證。
+- per-asset Atlas build。
+- logical catalog。
+- Map terrain / original Blocking grid / world references。
+- Server population → independent Monster asset references。
+- 全量 Runtime disk export。
 
-- `build_assets.py`
-- `build_atlas_groups.py`
-- `build_character_core_atlas.py`
-- `build_normalized_atlas_candidates.py`
-- `build_baseline_candidates.py`
-- `copy_support_assets.py`
-- `convert_assets.py`
-- `tools/experiments/*`
+`tools/monster_workflow.py`：
 
-不要讓研究候選名稱（direction、hot/warm/cold、512/1024/2048/4096 等）變成 Runtime asset type。
+- 驗證新增/修改 Monster definition、ACT、spawn。
+- population 只引用既有 `monsters/<sprite>/atlas.json`。
+- **不重建 Map + Monster bundle**。
 
-## Benchmark
+`tools/export_server_content.py`：
 
-`benchmark_*.py`、`benchmark_*.gd` 只量測 Before/After。沒有同 workload Before/After，不得在文件中宣稱最佳化完成。
+- 只輸出 Server 需要的 `world.json / population.json / blocking.dat`。
+- 不輸出任何 PNG/Atlas pixels。
 
-## Viewer / diagnostic
+## 禁止的 production output
 
-- Viewer：`legacy_asset_viewer.py`、`view_legacy_asset.py`、`client/tools/*preview.gd`。
-- Diagnostic：`audit_*.py`、`inspect_*.py`、`report_*.py`、`summarize_assets.py`。
+```text
+client/assets/bundles/map/
+client/assets/bundles/session/
+Map + Monster shared atlas
+different Monsters shared physical atlas
+different scenery source assets shared physical atlas
+Player base parts merged into one physical atlas
+```
 
-它們可以讀 `.cache/client` 或 reports，但不能自行建立另一套 production cache/loader。
+同一 logical asset 內可以自行 pack action/facing/frame；不同 asset 不可以跨界合併。
+
+## Legacy compatibility
+
+`tools/rebuild_assets.ps1` 只是一個相容 wrapper，必須呼叫正式 `asset_converter/cli.py`。不得再自行執行舊 lifecycle bundle builder。
+
+舊 lifecycle bundle 原始實作若仍存在於 Git history / research code，只能當歷史 A/B 參考，不是 production path。
+
+## Research / benchmark
+
+研究工具可測 Dense / Per-Source / Strict Row / Adaptive 等 physical packing，但必須：
+
+- 使用相同 asset IDs。
+- Map 與 Monster root 分離。
+- 每個 mode 獨立 process。
+- 不把研究輸出寫成新的 Runtime asset category。
+
+## Runtime
+
+Runtime 永遠只有共用：
+
+```text
+AssetCatalog -> RuntimeAssetStore -> Renderer
+```
+
+「每素材獨立」是 data/manifest boundary，不是每素材建立 Loader。
 
 ## Tests
 
-- 根目錄 `tools/test_*.py`：production pipeline/contract tests。
-- `tools/tests/`：parser、research builder、legacy evidence regression。
+- `tools/test_*.py`：workflow/contract。
+- `tools/tests/`：converter/parser/evidence regression。
 - `client/tests/`：Godot Runtime behavior。
-
-## 新素材規則
-
-新增 Enemy、NPC、Equipment、Item、Pet、Mecha、Effect 或 UI 時，預設只新增資料／definition，沿用 `asset_pipeline.py + EntityAtlas + RuntimeAssetStore`。只有不同生命週期且有 load/RAM/VRAM/draw/frame Before/After 證據時，才允許新增 bundle boundary；只有現有 Runtime 無法表達需求時，才考慮新增 Loader。
+- Packing 比較結果：`docs/ASSET_PACKING_BENCHMARK.md`。

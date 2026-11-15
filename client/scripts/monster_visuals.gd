@@ -1,7 +1,7 @@
 extends RefCounted
 
-# Monster definitions are logical prefixes. Runtime ownership is by manifest
-# path/lifetime, so many monster types on the same map can share one atlas.
+# Each monster visual keeps its own atlas manifest. Definitions that reference the
+# same visual share one AssetStore entry; different monster visuals never merge.
 const ATLAS = preload("res://scripts/entity_atlas.gd")
 
 var definitions: Dictionary = {} # definition id -> {prefix,path}

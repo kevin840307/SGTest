@@ -40,16 +40,17 @@ tools/asset_converter/
 │   └── build_assets.py         # 地圖原始格式支援
 ├── atlas/                      # 唯一共用 Atlas 打包核心
 │   ├── adaptive_atlas.py       # 自適應選尺寸/快取/逐幀驗證
-│   ├── build_atlas_groups.py   # 來源 SPR Atomic MaxRects
-│   └── asset_bundle_builder.py # 正式 Bundle 素材打包
-└── content/                    # 產生遊戲能直接使用的內容
+│   ├── build_atlas_groups.py   # 單一素材內的 packing primitives
+│   └── selector.py             # candidate selection
+└── content/                    # logical asset / world contract
+    ├── asset_paths.py          # source group -> canonical logical id
+    ├── export_assets.py        # 全量 per-asset Runtime 發布
     ├── animation_definition.py
     ├── runtime_animation_semantics.py
-    ├── audit_character_layers.py
-    ├── build_maps.py
+    ├── build_maps.py           # terrain/scenery placement/original blocking
     ├── build_enemy_map_palette.py
-    ├── build_population.py
-    └── asset_pipeline.py       # Map/session Runtime Bundle
+    ├── build_population.py     # Server monster definition -> independent asset
+    └── server_source.py
 ```
 
 `source` 管格式及還原、`atlas` 管影格物理位置、`content` 管動畫語義和現有消費端；不同素材種類不是額外的程式架構層。原始包裝器和舊工具仍在 `tools/` 作相容/回歸，不是新 CLI 的依賴。**正式變更一律修改本工具包內部實作。**
@@ -57,7 +58,7 @@ tools/asset_converter/
 ## 輸出與驗證
 
 - **完整離線來源圖集**：`local-assets/asset_converter/complete/sprites/`、`sidecars/`。避免未使用的所有圖直接導入 Godot。
-- **實際 Runtime 使用資產**：`client/assets/bundles/map/13/`、`bundles/session/`、`maps/13/`，不另建立 `generated/` 目錄。
+- **Runtime 發布資產**：直接依內容語意放在 `client/assets/maps/`、`monsters/`、`npcs/`、`players/`、`equipment/`、`pets/`、`items/`、`effects/`、`ui/`、`audio/`、`data/`；每個素材保持獨立 identity，不建立 `bundles/map`、`bundles/session` 或 `generated/`。
 - **可觀測報告**：`local-assets/asset_converter/complete/index.json`、`local-assets/asset_converter/build_report.json`。
 - **安全**：原版唯讀、逐幀像素驗證、來源＋圖片 SHA256、增量建置、staging 後才發布、保留未修改的 live 資產。
 - **測試**：`python -m unittest discover -s tools/tests -q`；也可執行 `--archive-only --prefix player/a/weapon/a-sword014` 只驗證一種原版武器。
@@ -70,7 +71,7 @@ tools/asset_converter/
 
 ## 2026-11-15 解碼與完整度修正
 
-離線Atlas與Runtime bundle統一使用 `source/runtime_spr.py`，同時支援RGB565與`Ver\x08` indexed SPR；不要另加只認第一影格offset=0的簡化解碼器。Indexed格式的像素可位於header之前，不能據此判為少圖或壞檔。
+離線 Atlas 與 Runtime per-asset 發布統一使用 `source/runtime_spr.py`，同時支援RGB565與`Ver\x08` indexed SPR；不要另加只認第一影格offset=0的簡化解碼器。Indexed格式的像素可位於header之前，不能據此判為少圖或壞檔。
 
 原版Data1路徑搭配完整建置時會先核對SPR來源檔案集合；指定不完整的 `--extracted-source` 會報錯，避免把殘缺cache輸出當完整目錄。filtered/preview只代表指定範圍，並不宣稱來源完整。此核對是檔案存在性，逐格解碼／像素驗證另外執行。
 
