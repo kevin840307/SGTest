@@ -1,259 +1,46 @@
-# SGTest Asset Converter
+# SGTest 素材轉換器（重建版本）
 
-狀態：**PRODUCTION ENTRY / PER-ASSET OUTPUT**
-日期：2026-11-15
+**狀態：tools/asset_converter 是唯一維護的正式 Converter。** clean-slate 分支保留已提交版本；其他 Session 尚未提交的 Height-Dense / runtime_pack 不能當作本分支已具備的功能。
 
-正式名稱仍使用 **Adaptive Atomic Atlas** 描述目前 SPR physical packing；但 Runtime 邊界以 [Asset Architecture](ASSET_ARCHITECTURE.md) 為準：**每個素材獨立，不允許跨素材 bundle**。
+## 正式入口
 
-## 1. 唯一正式入口
-
-```powershell
+~~~powershell
+python -m pip install -r requirements.txt
+run_build_assets.bat "C:\SGO\Stargate Online IE HK2"
+# 等效入口
 python tools/asset_converter/cli.py build "C:\SGO\Stargate Online IE HK2"
-```
+python -m unittest discover -s tools/tests -p "test_*.py" -q
+~~~
 
-已抽取來源可加：
+Converter **不應依賴**可執行的 client/project.godot 或 server/*.csproj。保留的 client/assets/ 和 server/content/ 僅供輸出。
 
-```powershell
---extracted-source .cache/asset_converter/source
-```
+## 主要責任
 
-只發布完整 source catalog 到 `client/assets`：
+| 區域 | 職責 |
+|---|---|
+| source/ | Data1.dat / 原版 client extraction、SPR、ACT、SIF、方向／Item/NPC 原始格式 |
+| atlas/ | 依 asset ID 抽幀、裁切、排列、像素驗證／候選演算法 |
+| content/ | AssetCatalog、Map terrain/blocking/scenery、Server Population、NPC、DrawOrder、可索引資產發布 |
+| benchmarks/ | 回歸／素材編排／Model1 比對；**不是正式 Runtime** |
+| runtime_pack.py（待合併） | Godot imported textures、壓縮 remap、產生外部 assets.pck；不得依賴舊可執行 Client |
 
-```powershell
-python tools/asset_converter/cli.py export-assets "C:\SGO\Stargate Online IE HK2" ^
-  --extracted-source .cache/asset_converter/source ^
-  --archive-output local-assets/asset_converter/complete ^
-  --assets client/assets
-```
+不新增第二套「依怪物／裝備／地圖類別」的 Converter，也不回復舊 map/session bundles。
 
-Map13 contract（不重新合圖）：
+## 輸出
 
-```powershell
-python tools/asset_converter/cli.py build "C:\SGO\Stargate Online IE HK2" ^
-  --extracted-source .cache/asset_converter/source ^
-  --runtime-output client/assets ^
-  --runtime-only --map 13
-```
+- local-assets/asset_converter/complete：完整私有來源／sidecars／index。
+- client/assets：runtime 資產，含 Enemy/<id>/atlas.json 等獨立頁／Manifest。
+- server/content：只輸出權威 Server 要用的地圖、Blocking.dat、Population，不包含圖片。
+- .cache 與 reports：本機測試／分析產物；Git 忽略。
 
-## 2. 工具目錄
+有清除／重新產生需要時**只處理有明確 ownership 的輸出目錄**，不得直接清空 source game、Recovered、其他 Session 的 .cache。
 
-```text
-tools/asset_converter/
-├── cli.py
-├── operation_lock.py
-├── verify_runtime.ps1
-├── atlas/
-│   ├── adaptive_atlas.py
-│   ├── build_atlas_groups.py
-│   └── selector.py
-├── content/
-│   ├── asset_paths.py
-│   ├── export_assets.py
-│   ├── build_maps.py
-│   ├── build_population.py
-│   ├── npc_content.py
-│   └── server_source.py
-├── source/
-│   ├── extract_client.py
-│   ├── convert_assets.py
-│   └── runtime_spr.py
-└── benchmarks/
-    └── packing/
-```
+## 重要驗收
 
-正式 converter 需要的程式應放在此資料夾。不要再新增第二套 production converter。
+- 來源覆蓋／hash：先前原型曾完成 75,588 SPR、282,968 frame／7,890 asset groups；此為**歷史基準，clean-slate 重新跑才算當次通過**。
+- 每個 Asset 必須保持獨立 logical/physical identity，Map13 Monster 外觀以 Enemy logical ID 查找。
+- 來源 SPR/ACT、trim、Origin、8 方向、事件時間與紙娃娃 DrawOrder 可完整索引和驗證。
+- 同一素材 P0/P1 与 VRAM compression 的畫質與 Texture/Load/Frame 指標需做實測。
+- 外部 PCK 的 Windows Release 與 macOS import/remap/載入有獨立 Gate。
 
-## 3. Source / Archive / Runtime 三層
-
-### Extracted source
-
-```text
-.cache/asset_converter/source/
-```
-
-保留原版來源結構，例如 Enemy / Player / NPC / Map / Interface / MA / MS / SR。
-
-### Verified archive
-
-```text
-local-assets/asset_converter/complete/
-```
-
-用途：
-
-- 完整 SPR decode。
-- Adaptive Atlas source archive。
-- pixel/pivot/hash audit。
-- ACT/SIF/DrawOrder sidecars。
-- benchmark/research。
-
-不代表全部會同時進 VRAM。
-
-### Runtime assets
-
-```text
-client/assets/
-├── catalog/
-├── maps/
-├── Enemy/
-├── npcs/
-├── players/
-├── equipment/
-├── pets/
-├── mecha/
-├── items/
-├── effects/
-├── ui/
-├── audio/
-└── data/
-```
-
-不使用 `generated/`、`generation/`、`bundles/map/`、`bundles/session/`。
-
-## 4. 每素材一個 identity
-
-`asset_paths.py` 是 source group → Runtime logical id 的 canonical mapping。
-
-硬性條件：
-
-```text
-source groups count == unique logical ids count
-```
-
-2026-11-15 全量驗證：
-
-```text
-7,890 source groups
-7,890 unique logical ids
-0 path collisions
-```
-
-原版存在重名但不同 source tree 的素材（例如 Player Cloth legacy alternate path）時，必須保留不同 identity，不能因名稱相同覆蓋。
-
-## 5. Map build
-
-Map build 只建立：
-
-```text
-maps/<id>/
-├── world.json
-├── population.json
-├── terrain.png
-├── tiles.bin
-└── blocking.dat
-```
-
-`world.json.objects[].atlas` 指向獨立 `maps/visuals/**/atlas.json`。
-
-`population.json.definitions[].atlas` 指向獨立 `Enemy/<sprite>/atlas.json`。
-
-禁止產生 `sprite_bundle`。
-
-## 6. Collision
-
-`blocking.dat` 是原版 Blocking.dat 的 compact byte grid，不轉 Godot CollisionShape。
-
-Client / Server 使用同一內容與 SHA contract，避免整張 MMORPG 地圖建立大量物理節點。
-
-## 7. Player
-
-Player B base 已改為：
-
-```text
-players/b/base/body/atlas.json
-players/b/base/leg/atlas.json
-players/b/base/head/atlas.json
-players/b/hair/hair00/atlas.json
-players/b/base/left_arm/atlas.json
-players/b/base/right_arm/atlas.json
-players/b/base/death/atlas.json
-```
-
-七個 physical assets 分離，但 ACT/DirectionMapping/DrawOrder metadata 仍由原版資料正規化。
-
-## 8. 未驗證語意
-
-不能因檔名看起來像機甲、寵物或裝備就自行重新命名。
-
-MA / MS / SR 等尚未完整確認的來源：
-
-```text
-data/legacy/<source-code>/...
-```
-
-等原版程式語意證實後再移到正式 semantic category。
-
-## 9. 全量發布結果（2026-11-15）
-
-`export-assets` PASS：
-
-- source files：81,162。
-- SPR groups：7,890。
-- frames：282,968。
-- archive pages：8,094。
-- managed Runtime disk files：21,723。
-- output bytes：1,402,595,018。
-- errors：0。
-
-Semantic categories：
-
-- maps：1,183。
-- monsters：137。
-- npcs：643。
-- players：60。
-- equipment：1,451。
-- pets：96。
-- items：3。
-- effects：648。
-- ui：514。
-- audio：220。
-- 未解/資料類放 data，不能虛構語意。
-
-Map13 Runtime contract：
-
-- 367 scenery placements。
-- 45 independent scenery visuals。
-- 9 Monster definitions / 9 independent Monster visuals。
-- 78 Monster spawns。
-- 7 Player base/death independent assets。
-- `cross_asset_bundle=false`。
-- original Blocking byte grid preserved。
-
-## 10. Runtime
-
-磁碟很多檔案不代表 Runtime 常駐很多資源。
-
-Godot 仍只有：
-
-```text
-AssetCatalog -> RuntimeAssetStore -> Renderer
-```
-
-RuntimeAssetStore 負責 async decode、bounded GPU upload、owner/refcount/LRU。2026-11-15 cache-pressure fixture 驗證 128 independent entries、pinned/recent/LRU/backpressure/recovery，最後 resident=0。
-
-Release 可把所有獨立檔案裝進外部 `assets.pck`；PCK 只是容器，不是一起載入的 bundle。
-
-## 11. Packing benchmark
-
-四種 physical packing 的公平比較見：
-
-- [Asset Packing Benchmark](ASSET_PACKING_BENCHMARK.md)
-
-重要：舊 12-kind Adaptive benchmark 曾因 root 內容不同而選到不同的 12 隻 Monster；舊 76.59 MiB 數字已作廢。
-
-目前 production 仍是 Adaptive Atomic。公平 A/B 與全量幾何掃描目前建議下一版採 **Per-Asset Dense Atlas**：7,890/7,890 正式 logical assets 都可在單一 <=4096 Dense page 放下；只有未來真的超過上限的單一 asset 才使用 Paged Dense fallback。這仍只是建議，未經使用者確認不得直接切 production Builder。
-
-## 12. 驗證
-
-已執行：
-
-- Python `tools/tests`：123 PASS。
-- Root-level Python contract tests：37 PASS / 1 SKIP。
-- Godot：目前所有 `client/tests/test_*.gd` 共 15/15 PASS。
-- AssetStore cancellation/cache-pressure/store regressions PASS。
-- 24 次公平 packing benchmark PASS（4 candidates × 2 scenarios × 3 repeats）。
-- `tools/summarize_assets.py`：13,464 catalog entries、`unexpected_top_level=[]`、`cross_asset_bundle=false`、`production_clean=true`。
-- `tools/asset_converter/verify_runtime.ps1`：75,588/75,588 SPR coverage、Map13 45 scenery assets / 9 monster assets / 7 player parts、6 asset regressions PASS。
-- .NET Server build：0 warning / 0 error；tests **376 PASS**。
-
-原始與衍生專有圖片保持本機，不推 Git。
+歷史文件全文見 [research/INDEX](research/INDEX.md)，最新重建任務見根目錄 todo.txt。

@@ -1,182 +1,40 @@
-# SGTest Server Architecture
+# SGTest Server — 重建設計
 
-狀態：**CANONICAL / IMPLEMENTED STRUCTURE**
-日期：2026-11-15
+**狀態：規格，尚無 .NET 專案。** 目標 .NET 8，單體功能模組，固定世界模擬與獨立 Transport/Persistence。
 
-Server 是單一 .NET 8 modular monolith。目錄按功能分類，不使用 Application / Domain / Infrastructure / Transport 四層作主要架構。
+## 核心邊界
 
-## 1. 原則
+| 責任 | 內容 | 禁止 |
+|---|---|---|
+| Gateway/Connection | socket、身份驗證、ConnectionEpoch、有界佇列 | 直接計算傷害／操作 DB 於 Tick |
+| Wire | MessagePack schema、版本、長度限制、重播保護 | 隱式依賴 Godot 角色類別 |
+| Map World | 單寫者 authoritative positions、collision、AI、combat、drop | 在 Tick 同步等磁碟／Send |
+| AOI & Snapshot | per-player visibility、Spawn/Despawn、entity revisions、有限頻率更新 | 把看不到當死亡，或跨 map 沿用 epoch |
+| Accounts | Account、Character、Session 安全與授權 | 將 ConnectionEpoch 當永久角色身份 |
+| Persistence | SQLite WAL／migration／UID／交易原子性 | 用 DB 查詢驅動每隻怪 AI |
 
-- Server authority：位置、碰撞、戰鬥、掉落、物品與交易最終都由 Server 決定。
-- World simulation 固定時間步，與 Client FPS 無關。
-- Network connection 不持 gameplay rule。
-- DB I/O 不阻塞 World tick。
-- 同一 World state 優先 single writer。
-- 不建立沒有實作內容的空 Combat/Items/Social 模組。
-- 不使用 Common/Utils/Manager/Service 雜物層。
+暫不建立多個空 project、抽象 Service 層、事件總線和微服務。當 Combat/Items/Social 複雜到需要獨立測試才拆成模組。
 
-## 2. 目前實際 Tree
+## 時鐘與事件
 
-```text
-server/
-├── SGTest.Server.csproj
-├── Program.cs
-├── Accounts/
-│   └── AccountService.cs
-├── Networking/
-│   ├── ClientConnection.cs
-│   ├── SnapshotCodec.cs
-│   └── Wire.cs
-├── Persistence/
-│   └── SqliteAccountStore.cs
-├── World/
-│   ├── CollisionGrid.cs
-│   ├── Population.cs
-│   ├── World.cs
-│   └── WorldHost.cs
-└── tests/
-    ├── SGTest.Server.Tests.csproj
-    └── Program.cs
-```
+- World Tick 以 30Hz 作原型參考起點，Snapshot 10Hz 作起點；未重新實測前不是硬性完成值。
+- Map command queue 必須有界，single writer 推進世界。
+- 事件應有 ConnectionEpoch、MapEpoch、EntityRevision、MovementSequence、ActionSequence 等對應世代，不能拿一個 SessionId 混用。
+- Combat 命中／MISS／死亡／復活、掉落物 UID 與原子拾取應是 Server 權威結果，不依賴 Client 動畫幀。
+- 玩家進出 AOI、換圖、重連時應正確同步 Spawn/Despawn、初始位置／動畫狀態，避免幽靈角色或外圍順移。
 
-未來只有 Combat / Items / Social / Content / Diagnostics 真正出現獨立責任時才建立對應目錄。
+## 內容格式
 
-## 3. Accounts
+Server 使用**原版 Blocking.dat byte grid** 或經可驗證的無損對應資料；只載入 Map world/population/collision 和必要規則，不解碼 PNG/Atlas。Enemy 外觀由 Server population logical ID 傳給 Client（其目錄為 Enemy/<id>）。
 
-`AccountService.cs` 目前包含：
+資料由 tools/asset_converter/content 輸出。新 Server 沒有可執行專案仍可先產生 content 與驗證 mapping。
 
-- account/character identity contracts。
-- authentication rules。
-- memory account store fixture。
+## 必須重做的回歸
 
-持久化實作不放這裡。
+- 身份／權限／連線世代與 protocol fuzz。
+- 20/100 人同地圖，300/1000 隻怪與大量掉落，AOI/AI/Combat 線性負載與分佈。
+- Map Tick P95/P99、socket queue age、DB transaction wall-time 分離測試。
+- 遠端角色走動／攻擊／受擊／死亡是獨立有序事件，Client FPS 和 Unfocus 不影響權威狀態。
+- 登出、切圖、重連、交易重試的可靠一致性。
 
-## 4. Persistence
-
-`SqliteAccountStore.cs`：
-
-- SQLite schema/migration。
-- account/character durable data。
-- repository implementation。
-
-Persistence 不反向推進 World tick。
-
-## 5. Networking
-
-### ClientConnection
-
-只代表網路連線與 transport state：
-
-- Connection Id。
-- WebSocket。
-- outbound bounded queue。
-- account/character connection context。
-- AOI seen cache（目前仍在 connection，未來有必要才抽 VisibilityState）。
-- `ConnectionEpoch`。
-
-舊 `Session` 類別名稱已移除。
-
-### Wire
-
-bounded MessagePack contract，不做 gameplay calculation。
-
-### SnapshotCodec
-
-只編碼 snapshot rows。
-
-## 6. World
-
-### WorldHost
-
-World actor / scheduler：
-
-- 固定 30Hz。
-- command queue。
-- authentication result dispatch。
-- AOI / replication。
-- snapshot/ground publish。
-
-### World
-
-目前權威 simulation：
-
-- Player / Monster state。
-- movement。
-- AI。
-- combat。
-- drops / pickup。
-- respawn。
-
-未來 Combat/Items 複雜度真的增加時再把純規則搬到 `Combat/`、`Items/`；不要為了形式先拆。
-
-### CollisionGrid
-
-直接讀原版 `blocking.dat` compact byte grid；不依賴 Godot CollisionShape。
-
-### Population
-
-原版 Server population contract。
-
-## 7. Dependency Direction
-
-```text
-Program
-  ├── Networking
-  ├── Accounts
-  ├── Persistence
-  └── World
-
-Networking → command/DTO → World / Accounts
-Accounts   → persistence abstraction
-World      → compact content/collision state
-```
-
-禁止：
-
-- Persistence 驅動 World Tick。
-- Networking 計算 damage。
-- Client Render FPS 決定 Server simulation。
-- Server 讀 Client atlas/PNG。
-
-## 8. ConnectionEpoch
-
-不再使用模糊 `SessionEpoch`。
-
-`ConnectionEpoch` 用來區分一次有效登入/連線世代；舊連線的訊息不能取得新世代權限。這是 wire 中既有欄位語意的命名整理，欄位位置沒有因此改變。
-
-未來跨地圖另使用：
-
-- `MapEpoch`
-- `EntityRevision`
-- `MovementSequence`
-- `ActionSequence`
-
-不要用一個 Session id 同時代表所有世代。
-
-## 9. Content / Assets
-
-Server 不載入 PNG/Atlas。
-
-Server map content 只需要：
-
-```text
-server/content/maps/<id>/
-├── world.json
-├── population.json
-└── blocking.dat
-```
-
-Monster visual id 由 population definition 傳給 Client；真正 visual asset 位於 Client `Enemy/<id>/`。
-
-## 10. 新功能歸類
-
-- 登入/角色身份 → Accounts。
-- socket / codec / connection → Networking。
-- SQLite/DB → Persistence。
-- map/player/monster/visibility/simulation → World。
-- 戰鬥規則大到可獨立測試與維護後 → Combat。
-- inventory/equipment/shop 等大到獨立責任後 → Items。
-- trade/chat/player shop → Social。
-- metrics/trace → Diagnostics。
-
-一個小檔案不值得獨立架構層。
+歷史原型 Server 程式與 376 PASS 不在重建分支內；任何新版完成狀態皆以 todo.txt 和新測試為準。

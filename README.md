@@ -1,95 +1,51 @@
-# SGTest
+# SGTest — 文件與素材轉換基線
 
-目前直接在 `C:\SGO\SRC\SGTest` 的 **main** 開發。已合併 master 的可執行原型，並保留 main 原有素材研究工具及文件。
+> **2026-11-15 重新開發決策：現有 Godot Client 與 C# Server 原型已自本基線移除。**
+> 此儲存庫目前**不是可執行的遊戲專案**。舊程式仍保存在 Git 歷史，請勿引用舊測試結果宣稱新版本已完成。
 
-- **client/**：獨立 Godot 4 客戶端，入口 `client/project.godot`。
-- **server/**：獨立 **C#／.NET 8** 伺服器，入口 `server/SGTest.Server.csproj`；無 Godot 或圖像依賴。
-- **tools/**：原版提取、轉換、研究及驗收工具。
-- **docs/**、**SPEC.md**、**todo.txt**：規格、研究證據與進度；舊 M0／.NET 10 敘述是歷史，最新決策見 ADR-024。
+## 這個儲存庫目前保留什麼
 
-## 架構入口
+- `tools/asset_converter/`：原始素材解包、SPR/ACT/SIF、方向／Origin／DrawOrder、Atlas、地圖、人口、NPC、Runtime 資產輸出；轉換器與 Runtime 實作互不依賴。
+- `tools/`：轉換器需要的來源研究、驗收、相容性工具（**不是 Client/Server 程式**）。
+- `docs/`、`SPEC.md`、`todo.txt`：正式設計與原版研究證據；歷史完成紀錄見 `docs/research/FEATURE_DECISION_HISTORY.md#source-todo-pre-rebuild-20261115-txt`。
+- `client/assets/.gdignore`：**僅保留轉換輸出的定位標記**，不是 Godot Runtime。
+- `client/README.md`、`server/README.md`：未來實作位置，**沒有可執行程式**。
 
-目前正式目標架構採 **功能導向的模組化單體**，避免過度分層與模糊的 Manager / Session / Core 命名。後續 Client／Server 開發先讀：
+## 從哪份文件開始重建
 
-- [總架構](docs/ARCHITECTURE.md)
-- [Client Architecture](docs/CLIENT_ARCHITECTURE.md)
-- [Server Architecture](docs/SERVER_ARCHITECTURE.md)
+1. [重新開發架構 Review / 取捨](docs/REBUILD_ARCHITECTURE_REVIEW.md)
+2. [正式架構總覽](docs/ARCHITECTURE.md)
+3. [Client 新設計](docs/CLIENT_ARCHITECTURE.md) 與 [Server 新設計](docs/SERVER_ARCHITECTURE.md)
+4. [Asset 結構](docs/ASSET_ARCHITECTURE.md)、[素材轉換](docs/ASSET_CONVERTER.md)、[效能對照](docs/research/ASSET_RENDERER_EVIDENCE.md#source-renderer-parity-v2-2026-11-15-md)
+5. [重建任務](todo.txt) 與 [開發規則](AGENTS.md)
 
-Client 主程式已按 app / networking / world / gameplay / rendering / assets / ui / diagnostics 分類；Server 已移除 Application / Domain / Infrastructure / Transport 主分層，改為 Accounts / Networking / Persistence / World，後續只有真正出現獨立責任才新增 Combat / Items / Social 等模組。
+歷史文獻、原型效能研究和舊 SPEC 大部分內容保留供對照，但**不能以其中「已實作／已通過」的說法代替新版本驗證**。
 
-## 最新資源架構重評
+## 素材轉換
 
-資源 Runtime 維持**單一 AssetStore + logical catalog**，詳 [Asset Architecture](docs/ASSET_ARCHITECTURE.md) 與 [Client Architecture](docs/CLIENT_ARCHITECTURE.md)。資料夾描述「內容是什麼」：`maps / monsters / npcs / players / equipment / pets / items / effects / ui / audio / data`；每個素材保持獨立 identity，不再使用 `bundles/map` 或 `bundles/session`。生命週期只用 metadata/owner 表達為 **app / character / map / on_demand**；owner 相同不代表 physical atlas 合併。RUNTIME206 已驗證 Render/Logic/Network 隔離、多 FPS、低功耗、背景與多開；AFK 可以停止世界渲染和釋放 GPU world assets，但 Network / Reducer / authoritative state 仍維持正常節奏。
-
-## 一鍵資產轉換與 Atlas packing
-
-資產轉換程式集中在 `tools/asset_converter/`，使用原始遊戲路徑即可轉換並驗證。目前 production builder 仍是 **Adaptive Atomic Atlas**；新版公平測試的建議候選改名為 **Per-Asset Dense Atlas**。目前 7,890 個正式 asset 的幾何掃描全部可在單一 <=4096 page 內放下，且固定怪物 A/B 的 pages / decoded texture footprint 綜合優於 Atomic；本輪先保留 production policy，等待確認後才切 Builder。詳細說明見 [ASSET_CONVERTER](docs/ASSET_CONVERTER.md) 與 [ASSET_PACKING_BENCHMARK](docs/ASSET_PACKING_BENCHMARK.md)。
-
-```bat
-run_build_assets.bat "C:\SGO\Stargate Online IE HK2"
-```
-
-完整原始 SPR Atlas、ACT、SIF 與 DrawOrder 索引保留在 **本機私有的** `local-assets/asset_converter/complete/`；正式 `export-assets` 會把可索引的素材依 `maps / monsters / npcs / players / equipment / pets / items / effects / ui / audio / data` 發布到 `client/assets/`，但 Runtime 仍按需載入，不會因磁碟存在就全常駐 RAM/VRAM。不需要額外的 `generated/` 目錄。原版與衍生圖片均不推 Git。
-
-正式 Client 發行時，`client/assets/**` 不再由自製 Godot addon 塞進主 PCK；`client/addons/raw_assets_export` 已移除。改由 `client/tools/build/pack_assets.gd` 產生平台共用的外部 `assets/assets.pck`，Windows 與 macOS 使用同一份 pack / catalog / `res://assets/**` 路徑。Client 啟動時由 `scripts/assets/asset_pack.gd` 掛載，之後仍由單一 AssetStore 按需載入；AFK 釋放 GPU world resources，不需要卸載 PCK。Windows Release 已實測通過，macOS 實際 .app export 尚未在本機驗證。
-
-## 啟動
-
-從儲存庫根目錄執行，需 .NET 8 SDK、Godot 4（本機 4.7.2）及 Python 3.10+。
+環境：Python 3.10+，必要時 Godot 4（獨立實驗／匯入 Texture），未安裝或未重建 Client / Server 仍可執行純素材轉換。
 
 ```powershell
-# 首次建立本機素材（原版只讀；生成圖像不進 Git）
 python -m pip install -r requirements.txt
 run_build_assets.bat "C:\SGO\Stargate Online IE HK2"
-
-# 終端一：C# 伺服器
- dotnet run --project server/SGTest.Server.csproj -c Release -- --map=13
-
-# 終端二：Godot 客戶端
-& 'C:\SGO\Godot\Godot_v4.7.2-stable_win64_console.exe' --path client
+# 或
+python tools/asset_converter/cli.py build "C:\SGO\Stargate Online IE HK2"
+# 轉換器合約測試（不需要 Godot Client / Server）
+python -m unittest discover -s tools/tests -p "test_*.py" -q
 ```
 
-也可直接開 Godot 的 `client/project.godot`。客戶端以 `-- --host=127.0.0.1 --port=27888` 指定伺服器；伺服器預設只綁本機，`--bind=0.0.0.0` 可開放區網。`--map=0` 為不載入原版地圖的模擬場地；`--combat-arena` 為戰鬥驗收場地。
+輸出位置通常為 `local-assets/`（完整私有索引）、`client/assets/`（未來 Client 內容）、`server/content/`（未來 Server 內容）。後兩者**是資料輸出目錄，不代表可執行程式存在**。原版及衍生圖片不得推送至公開 GitHub。
 
-本機未安裝 .NET 8 時，可用此工作目錄內已有的 `.cache/dotnet/dotnet.exe` 代替 `dotnet`；該 SDK 快取不進 Git。`global.json` 選擇 .NET 8 SDK。
+現有已提交的轉換器基線可能與另一個 Session 尚未提交的 **Height-Dense / external PCK** 改動不同；該改動需先獨立測試、提交，再安全合併。**不要用重建 Client 的理由刪除正在開發的轉換器工作樹。**
 
-## 素材
+## 新版核心約束
 
-原版來源是 `C:\SGO\Stargate Online IE HK2`；`Recovered` 及其 `Old` 僅作唯讀參考。Data1.dat 解包後套用 loose override。目前原版 archive＋loose 集合為 75,588 SPR／282,968 影格；完整離線索引、PNG幾何／來源指紋與sidecar重解析驗收見 `reports/converter_archive_verification.json`，一鍵建置結果見 `reports/converter_full_build.json`；這不等於原版遊戲畫面逐格／授權 Gate 已通過。
+**低資源、高效能、好維護，玩家端同步與畫面正確性優先。**
 
-正式 sprite pipeline 不再要求開發者選 entity/direction/readable/hot-warm-cold。從原始檔重建只需：
+- 每個 Enemy / NPC / scenery / player part / Equipment 分別保留自己的 Asset ID 和物理 Atlas，僅同一素材的 Frame／方向／動作允許合圖；不跨素材合併，也不增加 `assets/generation/`。
+- AssetPack 是分發容器，AssetStore 依需求載入、共用、釋放。不要為每個類型重複建立 Loader／Cache。
+- Client 收包、World State、輸入與 Server 權威更新和 Render/UI FPS **完全解耦**。
+- 怪物 Animator 可採共享 `SpriteFrames + AnimatedSprite2D` 作第一候選；**跨 Player/Enemy/Scenery World Y-sort 必須正確**，不能只依隔離 Benchmark 宣稱全面勝出。
+- Server 對位置、碰撞、戰鬥、經濟、交易保持權威；DB 不阻塞 World Tick。
 
-```powershell
-run_build_assets.bat "C:\SGO\Stargate Online IE HK2"
-# 已存在專用抽取快取時，只重建 Runtime：
-python tools/asset_converter/cli.py build "C:\SGO\Stargate Online IE HK2" --extracted-source .cache/asset_converter/source --runtime-only
-```
-
-Builder 保留 8 logical facing、alias/mirror、pivot、ACT timeline、paper-doll z-order；動作／方向可獨立查閱，與 physical packing 無關。**不同素材禁止跨 asset 合圖**：Map scenery、Monster、NPC、Player parts 各自有 manifest/page；同一素材內才允許 Dense/Atomic/side 候選。Client Runtime 素材直接放 `client/assets/`，不再多一層 `generated/`。Map13 的 terrain/scenery 與 Monster assets 分離，Monster appearance 由 Server population definition 決定。公平 packing 實測與舊錯誤 benchmark 更正見 `docs/ASSET_PACKING_BENCHMARK.md`。
-
-## 已實作與驗證
-
-C# Server 權威決定移動、碰撞、八方向、攻擊、扣血、死亡復活、掉落與原子拾取。Map13 預設按原版78個出生點配置；`--monsters=1000` 明確進入多種類壓測分布。30Hz 固定模擬、10Hz 快照；每隻怪 AI 分組 5Hz，位置持續 30Hz。Server 不依 Client FPS 推進。
-
-Client 具有本地輸入預測／確認重播、各實體獨立位置歷史、單調 RTT 時鐘及分開的動畫相位。WebSocket I/O 使用獨立 worker 與有界佇列，圖像載入／繪圖不直接驅動 socket。狀態套用由 Client 固定步消費；30/45/60/75/90FPS、Visual5/10/15、no-world、真 Windows unfocus/minimize/restore 與 1/2/4/8 開的 state-hash / queue-age 矩陣已完成，見 `docs/RUNTIME_ISOLATION_VERIFICATION.md`。
-
-基本男性紙娃娃、Map13 的9種怪物、78個原版出生點、地磚／物件／碰撞已接入。視窗預設 1280×720，最大寬 1440，可拖曳調整或選擇解析度；F2 切換金色／現代樣式。
-
-目前為開發原型，已有帳號／角色與SQLite身分資料流程；完整裝備／物品外觀、其他地圖轉場、怪物繞路尋徑與其餘Recovered功能仍未完成。
-
-NPC／傳點的離線來源轉換已有 `asset_converter/cli.py world-content`：24份NPC.dat／275筆、49個已審確認式傳點模板，226筆仍需腳本引擎。完整JSON只留本機，尚未接成可遊玩的跨圖功能；實作順序與證據見 [F002_WORLD_TRANSITIONS](docs/F002_WORLD_TRANSITIONS.md)。
-
-## 驗證指令
-
-```powershell
-python -m unittest discover -s tools/tests -q
-python -m unittest discover -s tools -p test_assets.py
-python -m unittest discover -s tools -p test_maps.py
-dotnet run --project server/tests/SGTest.Server.Tests.csproj -c Release
-& 'C:\SGO\Godot\Godot_v4.7.2-stable_win64_console.exe' --headless --path client --script tests/test_wire.gd
-python tools/smoke_network.py C:/SGO/Godot/Godot_v4.7.2-stable_win64_console.exe --clients 8 --seconds 30
-python tools/smoke_network.py C:/SGO/Godot/Godot_v4.7.2-stable_win64_console.exe --clients 2 --seconds 15 --combat-arena
-python tools/visual_probe.py C:/SGO/Godot/Godot_v4.7.2-stable_win64_console.exe --stress
-```
-
-最新 C#／Godot 實測與限制見 [reports/README.md](reports/README.md)。先前 ENet／UDP impairment 是舊 Godot Server 的歷史數據，不能代表目前 WebSocket Server 的退化網路表現。原版及衍生媒體只保留本機，不上傳 Git。
+**目前不提供任何 `dotnet run` 或 Godot Client 啟動命令，直到重新開發實際完成並通過測試。**

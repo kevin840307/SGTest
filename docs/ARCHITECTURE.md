@@ -1,217 +1,65 @@
-# SGTest Architecture
+# SGTest — 新版架構總覽
 
-狀態：**CANONICAL ARCHITECTURE INDEX / ACCEPTED**
-日期：2026-11-15
+**狀態：設計已決策；Client 與 Server 皆尚未重新實作。** 版本：2026-11-15。
 
-本文件是 SGTest 架構入口。詳細目標結構分開維護：
+使用者決定移除舊版可執行原型，保留素材轉換程式和歷史研究，從協定、世界狀態與渲染責任重新開發。任何舊測試 PASS 不等於新版本 PASS。
 
-- [Client Architecture](CLIENT_ARCHITECTURE.md)
-- [Server Architecture](SERVER_ARCHITECTURE.md)
-- [Client Runtime Isolation](CLIENT_RUNTIME_ISOLATION.md)
-- [Network and Motion](NETWORK_AND_MOTION.md)
-- [Asset Architecture](ASSET_ARCHITECTURE.md)
-- [Asset Packing Benchmark](ASSET_PACKING_BENCHMARK.md)
-- [Asset Runtime Strategy](ASSET_RUNTIME_STRATEGY.md)
-- [Asset Converter](ASSET_CONVERTER.md)
+## 正式文件（唯一入口）
 
-> Client / Server 主程式已在 2026-11-15 搬到本文件定義的功能導向結構；之後新增功能不得再建立舊 Application/Domain/Transport 或平鋪 scripts 根目錄。
+| 主題 | 文件 | 用途 |
+|---|---|---|
+| 重建決策與舊版缺點 | [REBUILD_ARCHITECTURE_REVIEW](REBUILD_ARCHITECTURE_REVIEW.md) | 取捨、過度設計避免事項 |
+| Client | [CLIENT_ARCHITECTURE](CLIENT_ARCHITECTURE.md) | 運行時資料流、World Y-sort、FPS 隔離 |
+| Server | [SERVER_ARCHITECTURE](SERVER_ARCHITECTURE.md) | 權威狀態、Tick、AOI、DB |
+| 素材 | [ASSET_ARCHITECTURE](ASSET_ARCHITECTURE.md) | 一素材一 Atlas／AssetStore 契約 |
+| 轉換與發行 | [ASSET_CONVERTER](ASSET_CONVERTER.md) | SPR/ACT/SIF、轉換器與獨立 PCK |
+| Wire | [RUNTIME_PROTOCOL](RUNTIME_PROTOCOL.md) | Epoch/序號／事件與資料合約 |
+| 遊戲功能 | [GAMEPLAY](GAMEPLAY.md) | 核心功能與階段 |
+| 測試／效能 | [TEST_PLAN](TEST_PLAN.md)、[PERFORMANCE](PERFORMANCE.md) | 測試 Gate 與 Model1 公平比較 |
+| 素材原版證據 | [LEGACY_ASSET_PIPELINE](LEGACY_ASSET_PIPELINE.md) | 原始素材與可追溯資訊 |
+| UI | [OLD_UI_DESIGN](OLD_UI_DESIGN.md) | 原版後期金色視覺的設計參考 |
 
----
+完整的舊研究報告／ADR／歷史 TODO 不刪內容，集中至 [research/INDEX](research/INDEX.md)。其中「已實作」敘述全是**舊原型歷史**。
 
-## 1. 架構風格
+## 架構風格
 
-SGTest 採 **功能導向的模組化單體**：
+**Godot 4 Client + .NET 8 Server + Python Asset Converter**。Client、Server 各是功能導向 modular monolith，不拆微服務，也不建立空 Manager／Core／Domain 階層。
 
-- Client：Godot 單一專案。
-- Server：單一 .NET 8 project。
-- Asset Converter：獨立離線工具。
-- 不為架構形式建立多個空 project / loader / manager。
-- 以明確責任邊界達成低耦合、高聚力。
+1. **Authority** — Server 決定座標、Blocking.dat 碰撞、攻擊、死亡、掉落、物品 UID、金錢、交易與跨圖。
+2. **Network ≠ Render** — 網路 I/O、decode 與可靠事件處理不依賴 UI FPS、視窗焦點或 AFK。
+3. **State ≠ Render** — Client WorldState 可重播；Renderer 只是讀取狀態的投影。
+4. **Asset ≠ State** — 影像未就緒仍正常處理 Spawn/Move/Hit/Death。
+5. **DB ≠ World Tick** — 持久化與 socket I/O 不得阻塞 Map tick。
+6. **Logical asset ≠ pack bundle** — PCK 是發行容器，同素材才合 Atlas，不跨 Enemy/NPC/Player part/Scenery 混圖。
 
----
+## 最小資料流
 
-## 2. Repository 目標
+~~~text
+User input → Client Command Queue → Network I/O → Server Command Queue
+                                                ↓
+                            authoritative single-writer World Tick
+                                                ↓
+                            ordered snapshots / reliable events
+                                                ↓
+Client Network I/O → Decoder → World Reducer → WorldState
+                                                  ↓
+                       Prediction / Interpolation / Action state
+                                                  ↓
+                         Visual World (one common Y-sort root)
+                                       ↓
+                      AssetCatalog / AssetStore / external PCK
+~~~
 
-```text
-SGTest/
-├── client/                     # Godot runtime
-├── server/                     # .NET authoritative server
-├── tools/
-│   └── asset_converter/        # 原版素材離線轉換
-├── docs/
-├── reports/
-├── SPEC.md
-├── todo.txt
-└── AGENTS.md
-```
+Render FPS 可 0 / 30 / 60 / 90；network/Client Reducer/Server tick 不可因此節流。Server 30Hz、Snapshot 10Hz 為**原型參考 baseline**，新版本須測試後決定。
 
-原版、Recovered、Old 都是唯讀研究來源，不搬進 production Runtime tree。
+## 目前儲存庫
 
----
+- tools/asset_converter：唯一正式素材 Converter；保留轉換／研究／格式測試。
+- tools：必要的素材研究、契約與驗證工具；不是 Runtime。
+- client/：只有 README、assets 輸出定位標記；**無 Godot 專案**。
+- server/：只有 README；**無 C# 專案**。
+- docs/：上述設計文件；docs/research 為歷史研究原文彙編。
+- SPEC.md：功能來源，包含舊階段狀態，不應直接當新版進度。
+- todo.txt：**新版唯一進度入口**。
 
-## 3. 五個硬性邊界
-
-### Authority
-
-Server 決定：
-
-- position validity
-- collision
-- combat
-- HP
-- items
-- money
-- pickup
-- trade
-- map transition
-
-Client prediction 只能改善畫面。
-
-### Network != Render
-
-Network I/O / decode / reducer 不依賴 Render FPS。
-
-### Logic != Render
-
-WorldState 先更新，Renderer 只是讀目前 state。
-
-### Asset != State
-
-Texture 尚未載入不能阻止 Spawn / Hit / Death / Pickup state 生效。
-
-### Persistence != World Tick
-
-DB 不可放進 movement / monster tick 熱路徑。
-
----
-
-## 4. 時鐘與低功耗
-
-```text
-Server Simulation Clock     fixed
-Client Network I/O          independent
-Client State/Logic          fixed/queue-driven
-Client Render               configurable
-UI animation                presentation only
-```
-
-支援：
-
-- Render 30/45/60/75/90FPS。
-- Low-power visual 5/10/15FPS。
-- Minimized / AFK world render 0FPS。
-- Network / state reducer / authoritative results 不因上述模式降低。
-
-AFK 可降低**可重建的 visual replication payload**，但 transport heartbeat、reliable gameplay events 和 protocol processing 不降頻。
-
----
-
-## 5. 資產原則
-
-原版來源實際包含大量：
-
-- Player paper-doll / weapons / clothing / hair
-- Enemy / NPC / Pet
-- MA / MS / SR
-- Item icon / photo / ground
-- Effects
-- Map / scenery
-- Interface / UI
-- Audio
-- ACT / SIF / DrawOrder / data
-
-Converter 可以保留原始分類。
-
-Godot Runtime 不照抄原版目錄，而以內容語意直接分類：
-
-```text
-maps/
-Enemy/
-npcs/
-players/
-equipment/
-pets/
-items/
-effects/
-ui/
-audio/
-data/
-```
-
-每個來源素材保持獨立 logical/physical identity；PCK 只是磁碟容器，不代表共同載入。Map 只放 terrain/layout/blocking 與 scenery reference，Monster appearance 永遠放在 `Enemy/` 並由 Server definition 決定。
-
-Asset lifetime 是 metadata：
-
-```text
-app / character / map / on_demand
-```
-
-不是資料夾或多套 loader。
-
-正式發行的遊戲素材使用**平台共用 external PCK**，不塞進主程式 PCK：
-
-```text
-Application package
-├── executable / .app
-├── main PCK
-└── assets/
-    └── assets.pck
-```
-
-Windows 與 macOS 使用相同 `assets.pck` 內容與 `res://assets/**` logical path；只有啟動時的實體路徑解析不同。Client startup 先掛載 external pack，再由單一 AssetStore 按需 decode / GPU commit。
-
----
-
-## 6. 命名方向
-
-避免模糊名稱：
-
-- Session
-- Manager
-- Helper
-- Utils
-- Common
-- Core
-- BaseService
-
-優先使用實際責任：
-
-- ClientConnection
-- WorldState
-- VisibilityState
-- AssetStore
-- MapWorld
-- CombatSystem
-- MonsterRenderer
-
----
-
-## 7. 開發規則
-
-1. 先確認該功能屬於哪個模組。
-2. 不跨層偷改 state。
-3. 不為單一素材種類新增 Runtime loader/cache。
-4. 新資料夾需有實際責任與至少一組實作，不建立空架構。
-5. 搬移檔案與改行為分開 commit。
-6. Protocol、authority、DB schema、資產 ownership 改變需更新 ADR。
-7. Client / Server 任務開始前分別閱讀對應 Architecture 文件。
-
----
-
-## 8. 現況
-
-Client 主程式目前已實際分到：
-
-```text
-app / assets / diagnostics / gameplay / networking / rendering / ui / world
-```
-
-Server 主程式目前已實際分到：
-
-```text
-Accounts / Networking / Persistence / World
-```
-
-Combat / Items / Social / Content / Diagnostics 等 Server 模組只在真正有獨立實作時建立，不先做空架構。
-
-ClientConnection 與 ConnectionEpoch 已取代模糊的 Session 命名。詳細實際檔案 Tree 見 Client / Server Architecture。
+請按照 todo.txt 逐項實作。不要把 Git 歷史中的舊 main.gd 或舊 Server World 複製回來作新版骨架。

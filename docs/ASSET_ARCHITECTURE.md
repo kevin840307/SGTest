@@ -1,277 +1,53 @@
-# SGTest Asset Architecture
+# SGTest — Asset Architecture
 
-狀態：**CANONICAL / ACCEPTED**
-日期：2026-11-15
+**狀態：已決策的資料契約；新 Client Runtime 尚未實作。** 保留工具在 tools/asset_converter；其他 Session 的 Height-Dense/PCK 工作尚未整合進本 clean-slate 分支。
 
-> 本文件是 SGTest 資產邊界的 source of truth。
-> 2026-11-15 起，舊的 map/session lifecycle bundle 政策失效。磁碟檔案數不是優先目標；Runtime RAM/VRAM、載入延遲、Draw Calls、Frame P95/P99、可釋放性與維護性才是。
+## 一個原始素材 = 一個獨立資產
 
-## 1. 核心規則：每個素材保持獨立 identity
+- Enemy/<id>（原資料夾名稱保留 Enemy，不使用 monsters）
+- NPC、Player base／部位、Equipment、Pet、Mecha、Effects、Scenery、UI、Item 等**每個 logical asset 物理獨立**。
+- 同一 asset 的方向、動作、Frame 可以共用 Atlas；**不同 asset 不可合圖**，包括不同 Enemy、Map+Monster、不同 scenery、Player+Equipment。
+- 不依 action/direction/source/pixel-size 建立硬分桶，也不在 assets 下多建立 generation 資料夾。
 
-原版的一個 logical visual asset，在 Runtime 仍是一個獨立 asset：
+## 素材編譯
 
-- 一隻 Monster ≠ 另一隻 Monster。
-- 一個 NPC ≠ 另一個 NPC。
-- 一個 scenery SPR ≠ 另一個 scenery SPR。
-- Player body / leg / head / hair / left arm / right arm / death 各自獨立。
-- Equipment / Pet / Effect / Item 等同樣遵守。
-- **禁止**把 Map + Monster、不同 Monster、不同 NPC、不同 scenery、Player 多部位為了少檔案而合成跨素材 atlas。
+~~~text
+Old SPR/ACT/SIF/DrawOrder / Map
+       ↓ parse + pixel/origin validation
+one asset ID -> frames (+trim/pivot/timeline/flip/event)
+       ↓ Height-Dense / candidate evaluator
+one asset -> Atlas pages + manifest
+       ↓ imported Texture2D / compression
+external assets.pck -> ResourceLoader -> shared AssetStore
+~~~
 
-同一素材內的 action / facing / frame 可以由 Builder 排進一張或多張 page；logical action/facing/frame 必須仍可獨立查閱。
+**最新推薦**：每個 Asset 內依 Frame 高度再寬度降序，候選寬高動態取最佳；偏向一頁 <=4096×4096，單一素材確實超限才分頁。1024×256 等 2 次方矩形桶可保留候選，**不強制**。P0 (0px padding) 省資源，但必須驗證壓縮和過濾不污染透明邊；必要才切 1px extrude。
 
-> Physical packing 可以最佳化，logical identity 不可以被 packing 改掉。
+原型獨立 Benchmark 說明 Render/Loader 選擇：壓縮 Texture2D + 共享 SpriteFrames/AnimatedSprite2D 在多種怪物負載下能兼顧低 P95 與 RAM；單一超大型 Enemy 部分情境 Recovered 較快。這不是新版可執行 Client 的 Gate；詳 [research/ASSET_RENDERER_EVIDENCE](research/ASSET_RENDERER_EVIDENCE.md)。
 
-## 2. Runtime Asset Tree
+## Runtime logical tree（本機生成，不進公開 Git）
 
-```text
+~~~text
 client/assets/
 ├── catalog/
-│   ├── assets.json
-│   ├── maps.json
-│   ├── monsters.json
-│   ├── npcs.json
-│   ├── players.json
-│   ├── equipment.json
-│   ├── pets.json
-│   ├── items.json
-│   ├── effects.json
-│   ├── ui.json
-│   ├── audio.json
-│   └── data.json
-│
-├── maps/
-│   ├── <map_id>/
-│   │   ├── world.json
-│   │   ├── population.json
-│   │   ├── terrain.png
-│   │   ├── tiles.bin
-│   │   └── blocking.dat
-│   └── visuals/
-│       └── <original-map-visual>/
-│           ├── atlas.json
-│           └── page_N.png
-│
-├── Enemy/
-│   └── <sprite_id>/
-│       ├── atlas.json
-│       ├── definition.json
-│       └── page_N.png
-│
-├── npcs/
-│   └── <asset_id>/
-│       ├── atlas.json
-│       └── page_N.png
-│
-├── players/
-│   └── <race>/
-│       ├── base/
-│       └── hair/
-│
-├── equipment/
-│   └── <race>/<family>/<asset>/
-│
-├── pets/
-├── mecha/                  # 只有來源語意確認後才發布到此類
-├── items/
-├── effects/
-├── ui/
+├── maps/<map-id>/           # terrain/layout/blocking/scenery references
+├── maps/visuals/<asset>/    # 每個場景素材獨立
+├── Enemy/<asset>/
+├── npcs/<asset>/
+├── players/<asset>/
+├── equipment/<asset>/
+├── pets/<asset>/
+├── items/<asset>/
+├── effects/<asset>/
+├── ui/<asset>/
 ├── audio/
 └── data/
-    └── legacy/             # MA/MS/SR 等未證實語意先保留來源代號
-```
+~~~
 
-不要增加 `generated/`、`generation/` 或 `bundles/session/`。
+Map terrain/scenery 和 Enemy 必須分離。Server Population 定義怪物出生／外觀 logical ID；地圖不應偷放怪物像素。Asset owner 是 app / character / map / on_demand **生命週期 metadata**，不是 bundle/資料夾分組。
 
-## 3. Map 與 Monster 完全分離
+## Loader/發行契約
 
-Map 只描述世界本身：
+單一 AssetStore 按需 acquire／release／cancel，map palette 可預取**參照**但不能使不在畫面的整張地圖怪物常駐 VRAM。原始視圖資料要保留 8 方向 alias、鏡像、Origin/trim、逐幀 ticks、attack/hit/death 時序、paper doll draw order。
 
-- terrain / tile array
-- scenery placement/reference
-- blocking / navigation
-- map metadata
-- population reference data
-
-Map visual 只能指向 `maps/visuals/**`。
-
-Monster visual 只能指向 `Enemy/<sprite>/atlas.json`。Server population definition 決定某張地圖出現哪個 Monster；地圖貼圖本身不包含 Monster pixels。
-
-好處：
-
-- 同一 Monster 跨地圖直接重用。
-- 換 Monster 不需重包 Map。
-- Map scenery 和 Monster 可以各自按需載入/釋放。
-- Benchmark 可以真正量到 Monster packing，而不是把 Map 成本混進去。
-
-## 4. Player / Equipment
-
-Player 紙娃娃保持原版分層 identity：
-
-```text
-players/b/base/body/
-players/b/base/leg/
-players/b/base/head/
-players/b/hair/hair00/
-players/b/base/left_arm/
-players/b/base/right_arm/
-players/b/base/death/
-equipment/...
-```
-
-Runtime 可以讓這些 part 共用同一 owner lifetime，但 **owner 相同不代表 physical atlas 必須合併**。
-
-DrawOrder、ACT timeline、DirectionMapping 是 metadata；不為了獨立 asset 而丟失原版動畫語意。
-
-## 5. 碰撞：直接使用原版 Blocking.dat
-
-Map collision 不轉成 Godot CollisionShape2D 節點群。
-
-正式輸出：
-
-```text
-maps/<id>/blocking.dat
-```
-
-內容保持原版 Blocking byte grid：
-
-- Header：width / height。
-- 每格 1 byte。
-- 目前已驗證 cell = 16 px。
-- Client / Server 都使用 compact grid O(1) 查詢。
-- source SHA / collision SHA 驗證原始資料一致。
-
-這比為整張 MMORPG 地圖建立大量 Node/Shape 更省 RAM、建立時間與碰撞查詢成本。
-
-## 6. 磁碟很多檔案可以接受
-
-優先順序：
-
-1. Runtime resident RAM / VRAM。
-2. Frame P95/P99。
-3. Draw Calls / CPU / GPU。
-4. 載入與卸載 latency。
-5. AFK 能否釋放 GPU world resources。
-6. 可維護、可 patch、可驗證。
-7. 最後才是磁碟檔案數。
-
-正式 Release 可以把大量獨立檔案放入同一個外部 `assets.pck`。PCK 只是磁碟容器，**不是 lifecycle bundle**；放在同一個 PCK 不代表一起載入 RAM/VRAM。
-
-## 7. Runtime 仍只有一個 AssetStore
-
-每素材獨立不代表每素材一套 Loader。
-
-```text
-Catalog
-   ↓ logical id / manifest
-AssetStore
-   ↓ async decode + bounded GPU commit + refcount/LRU
-Renderer
-```
-
-同一 visual 的 1、100、1000 個 instance 共用同一 Texture/Atlas。不同 visual 才有不同 manifest/cache entry。
-
-Map scenery 採 viewport demand；Monster 依 Server population/AOI demand；AFK 可以釋放 world texture references，Network/WorldState 不受影響。
-
-## 8. Packing 規則
-
-目前正式 Builder 名稱：**Adaptive Atomic Atlas**。
-
-但是 packing policy 只是 physical implementation，不是 Runtime 類型。未來 Builder 可以在同一 logical asset 內比較 Dense / Atomic / page side 候選，只要：
-
-- 不跨 asset。
-- 所有來源 pixels/pivot/frame identity 驗證一致。
-- action/facing/frame metadata 不丟失。
-- 使用同一批素材做公平 A/B 後才改 production policy。
-
-## 9. Benchmark 公平性 Gate
-
-比較任何 Atlas 策略時必須：
-
-1. Map 與 Monster 使用不同 asset roots。
-2. 四個模式使用**完全相同 monster IDs**。
-3. 每個 mode 獨立 Godot process。
-4. 同 window、instances、frames、deterministic action/facing trajectory。
-5. Map/scenery background 完全相同。
-6. 分開記錄 map load/RGBA 與 monster load/RGBA。
-7. 至少 3 repeats，執行順序至少一輪反轉。
-8. 不允許以「不同素材組」的結果比較 packing policy。
-
-2026-11-15 稽核發現舊 12-kind benchmark 的 Mode1～3 root 只有固定 12 隻，但舊 Adaptive root 含更多怪物；腳本排序後取前 12，導致 Adaptive 實際測到不同怪物。舊的「Adaptive 12-kind 76.59 MiB」**作廢，不再作 production 決策證據**。
-
-最新公平測試見 [Asset Packing Benchmark](ASSET_PACKING_BENCHMARK.md)。
-
-## 10. 2026-11-15 全量發布證據
-
-原版來源：
-
-- 75,588 SPR presence verified，missing=0 / extra=0。
-- 7,890 source groups。
-- 282,968 frames。
-- 8,094 source-atlas pages。
-- 7,890 source groups → **7,890 unique logical asset ids**，collision=0。
-
-`export-assets`：
-
-- source files covered：81,162。
-- managed runtime files：21,723。
-- disk bytes：約 1.31 GiB。
-- Monster：137 independent assets。
-- NPC：643。
-- Player：60。
-- Equipment：1,451。
-- Pet：96。
-- Map visuals：1,183。
-- Effect：648。
-- UI：514。
-- Audio：220。
-- 未驗證來源語意保留在 `data/legacy`，不自行猜 MA/MS/SR 意義。
-
-Map13 contract：
-
-- 367 placed scenery objects。
-- 45 independent scenery assets。
-- 9 monster definitions / 9 independent monster assets。
-- 7 independent Player base/death assets。
-- `cross_asset_bundle=false`。
-- original `blocking.dat` byte grid preserved。
-
-## 11. 開發硬規則
-
-任何 Session 若要重新引入跨素材合圖，必須先：
-
-1. 更新本文件與 ADR。
-2. 使用相同素材集做公平 benchmark。
-3. 證明 Runtime RAM/VRAM/frame/load 獲益足以抵銷 coupling。
-4. 得到使用者明確同意。
-
-否則視為架構回歸。
-
-## 12. Physical Packing Recommendation（2026-11-15）
-
-Asset boundary 已定案；physical packing 仍可替換。最新同素材 benchmark 見 `ASSET_PACKING_BENCHMARK.md`。
-
-目前建議 **Per-Asset Dense Atlas**：一個 logical asset 優先一張 <=4096 的 Dense atlas；目前正式 7,890 groups 幾何掃描全部符合。未來只有真的無法在4096內放下的單一 asset 才採 Paged Dense fallback。
-
-這不代表把不同素材合併。Monster/NPC/scenery/Player part/equipment 的 logical/physical boundary 完全不變。
-
-目前 production builder 尚維持 Adaptive Atomic，直到使用者確認切換；不要在其它 Session 先自行改 production policy。
-
-## 14. Current Packing Baseline（2026-11-15）
-
-最新 Model1 / Recovered / multi-size benchmark 後，若後續要切 production，baseline 名稱使用：
-
-**Per-Asset Height-Dense Atlas**
-
-規則：
-
-- 不同 asset 永遠獨立。
-- 同一 asset 內 trim 後，以 frame height descending、再 width descending 排序。
-- 搜尋實際 atlas 寬度，不固定2048。
-- 優先單 page <=4096。
-- 現階段不按 action/source/size 建 hard bucket。
-- P0/P1 尚未定案：0px 最省，但必須完成 filter/bleeding A/B；1px extrude 是保守候選。
-- MaxRects 不作主路徑；只保留未來單 asset 超過4096時的 paged fallback 研究。
-
-更重要的是：Recovered native benchmark 顯示 SGTest 目前最大的差距來自 texture loader / representation 與 GDScript draw path，而不是 atlas packing。後續先測 external PCK imported texture / ResourceLoader 與 renderer allocation，再決定 production switch。
-
-實體 Enemy 路徑固定為 `Enemy/<id>/atlas.json`。
+外部 PCK 與主程式分離；Godot imported VRAM compressed Texture 的 Windows 桌面與 macOS 所需格式須分平台驗證。**PCK 只是封裝，不是 Atlas 共用依據**。Windows 取得的壓縮結果不能推論 macOS 實測已通過。

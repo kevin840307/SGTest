@@ -1,0 +1,2 @@
+# Historical research bundles preserve original Markdown hard line breaks and trailing newlines.
+docs/research/*.md whitespace=-blank-at-eol,-blank-at-eof

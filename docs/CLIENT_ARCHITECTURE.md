@@ -1,276 +1,58 @@
-# SGTest Client Architecture
-
-狀態：**CANONICAL / IMPLEMENTED STRUCTURE**
-日期：2026-11-15
+# SGTest Client — 重建設計
 
-本文件描述目前 Client 的實際程式結構與新增程式時必須遵守的模組邊界。不要再建立平鋪的 `client/scripts/*.gd`，也不要為尚未存在的功能預先建立空目錄或空 Manager。
-
-## 1. 原則
-
-Client 採功能導向 modular monolith：
-
-- Networking、World、Rendering、Assets、UI 分離。
-- Server authority 不依賴 Client Render FPS。
-- Render FPS / UI FPS 可調；Network I/O、World state/reducer 正確性不可跟著降頻。
-- AFK 可停止 world rendering 並釋放 world GPU assets，但 connection、可靠事件與 authoritative state 仍運作。
-- 全 Client 只有一套 RuntimeAssetStore；不同 Monster/NPC/Item 不建立不同 Loader。
-- 不使用 `Common/`、`Utils/`、`Helpers/`、`Managers/`、`Core/` 當雜物桶。
+**狀態：規格，尚無實作。** 目標 Godot 4.7.2 / GDScript；功能導向的單一 Godot 專案。
 
-## 2. 實際 Script Tree
+## 職責分離（不要為了分層先建立空檔案）
 
-```text
-client/scripts/
-├── app/
-│   └── main.gd
-├── assets/
-│   ├── asset_pack.gd
-│   ├── entity_atlas.gd
-│   ├── runtime_asset_store.gd
-│   └── verify_export.gd
-├── diagnostics/
-│   └── frame_profiler.gd
-├── gameplay/
-│   └── action_policy.gd
-├── networking/
-│   ├── input_codec.gd
-│   ├── message_pack.gd
-│   ├── network_client.gd
-│   ├── server_clock.gd
-│   └── snapshot_codec.gd
-├── rendering/
-│   ├── animation_definition.gd
-│   ├── drop_renderer.gd
-│   ├── legacy_facing.gd
-│   ├── map_objects.gd
-│   ├── monster_visuals.gd
-│   ├── paper_doll.gd
-│   └── terrain_renderer.gd
-├── ui/
-│   └── auth_ui.gd
-└── world/
-    ├── client_replica.gd
-    ├── collision_grid.gd
-    ├── local_prediction.gd
-    ├── movement.gd
-    └── spatial_grid.gd
-```
+| 責任 | 輸入 | 輸出 | 不可以做 |
+|---|---|---|---|
+| Transport | socket bytes / outgoing commands | 有界接收佇列／傳送結果 | 操作 Texture、UI、World Node |
+| Decode | MessagePack bytes | 驗證過的 versioned DTO | 修改場景 |
+| World reducer | 有序事件、snapshot、Epoch | 可回放的 Client WorldState | 等待 Asset、依 Render FPS 推進 |
+| Prediction | 本地輸入／Server correction | 自己平滑座標、可重播 command | 替 Server 決定合法傷害 |
+| Interpolation | 每實體版本化位置歷史 | 遠端視覺位置與 Facing | 將畫面座標寫回權威 state |
+| Assets | logical ID、owner、generation | Texture／FrameTable 或取消 | 為每種類重複建立一套 Cache |
+| Renderer | 唯讀 WorldState／動畫 metadata | 視覺節點與 Y-sort | 消耗網路封包或推進世界邏輯 |
+| UI | ViewModel、使用者意圖 | 指令、HUD、系統偏好 | 直接改 Network reducer／Server state |
 
-只有真正新增功能後才建立新檔案。例如未來 inventory UI 真實作時才新增 `ui/inventory_ui.gd`；不要先建立空殼。
+composition root 僅做啟動／組裝／生命週期協調，**不得重建舊版大而全的 main.gd**。
 
-## 3. 各模組責任
+## 不受 FPS 影響的更新
 
-### app
+~~~text
+socket worker / decode / ordered inbox — independent
+client reducer / command dispatch      — fixed or event-driven
+local/remote movement state             — tick + sequence timestamps
+visual interpolation + animation        — configurable FPS
+AFK/Unfocus                             — may suspend only visual work
+~~~
 
-Composition root。負責：
+需要建立**同一 packet trace**在 0、30、60、90FPS、失焦、縮小、AFK，以及多開狀態下的狀態 hash、事件序號和 queue-age 對照。
 
-- 啟動流程。
-- 模組組裝。
-- Scene / app lifecycle。
-- AFK / foreground mode 協調。
+## 一致的 World Y-sort
 
-不應逐漸變成 combat、network codec 或 asset cache 的實作位置。
+所有可能遮擋的 Player、Enemy、NPC、Pet、Scenery、Ground items 應在**統一的 world-space sorting contract** 裡；不能讓 Enemy Sprite 子節點繞開角色／場景的排序。若部分效果採 MultiMesh 或集中 Canvas，必須有視覺驗收。
 
-### networking
+- Enemy 首選候選：每種怪共享 SpriteFrames／AtlasTexture；每個可見實例 AnimatedSprite2D；逐幀 Origin／翻轉／ACT 時間與事件一致。
+- Player：紙娃娃各部位不同資產，DrawOrder 與切換動作不可用單一 Enemy Sprite 規則取代。
+- Monster、NPC、Equipment、Map、UI 的**素材存取共用單一 AssetStore**，不是合成同張 Atlas。
+- Render 0 FPS 仍要保留 WorldState、可靠事件和 reconnect/teleport 正確性。
 
-只處理 transport 與 wire contract：
+## Asset lifecycle
 
-- WebSocket worker。
-- bounded queues。
-- MessagePack。
-- input/snapshot codec。
-- Server clock。
+從獨立外部 PCK 掛載 res://assets/**，以 AssetCatalog 解析，單一 AssetStore 負責有界 worker、GPU commit、owner 取得／釋放／epoch 取消與快取淘汰。新的檔案先驗證 source path、Origin、page 和 frame 索引。切圖與登出後無持續累積的 Texture、SpriteFrames、Node。
 
-Networking 不畫圖、不 decode PNG、不計算 UI FPS。
+## UI 與解析度
 
-### world
+新 Godot Theme/Control 自製後期《星夢 Online》金色 UI，提供可選現代 UI。支援多解析度，camera viewport 改變需更新可視 AOI，不可固定舊 800×600。移動速率、機甲速度與動畫播放速度解耦。
 
-持有與權威世界對齊的 Client-side state：
+## 開發順序／Gate
 
-- replica。
-- prediction。
-- movement。
-- collision。
-- spatial queries。
-
-World 可以被 Rendering 讀取，但不應直接操作 CanvasItem / Texture。
-
-### gameplay
-
-放 Client input/presentation side 的 gameplay policy。Server 仍是戰鬥、物品、移動的 authority。
-
-### rendering
-
-把 World state 投影成畫面：
-
-- terrain/scenery。
-- monster/player paper doll。
-- drops。
-- animation/facing。
-
-Rendering 可因 FPS、Unfocus、AFK 降低或停止；不能因此改變 Network 收包或 Server state reducer。
-
-### assets
-
-唯一資產存取層：
-
-```text
-AssetPack
-   ↓
-logical manifest
-   ↓
-RuntimeAssetStore
-   ↓
-EntityAtlas / Texture
-```
-
-不同素材保持獨立 manifest，但共用同一 Store、worker、LRU、refcount、GPU commit queue。
-
-### ui
-
-Control/UI interaction。UI 不直接實作 socket、world simulation 或 asset eviction。
-
-### diagnostics
-
-只觀測，不改 gameplay 行為。
-
-## 4. 依賴方向
-
-```text
-UI / Input
-    ↓
-App
-    ↓
-Networking ──→ World
-                 ↓
-              Rendering
-                 ↓
-               Assets
-```
-
-更精確：
-
-- Networking 可以產生 protocol/state update。
-- World 消費 update 並維護 state。
-- Rendering 讀 World，不反向推進 World time。
-- Assets 不依賴 Rendering FPS。
-- UI 可以讀 View state，不直接改 Server-authoritative entity state。
-
-避免循環依賴。
-
-## 5. Render / Network / AFK
-
-正常遊玩：
-
-```text
-Network I/O       independent
-World state       fixed correctness
-Render FPS        30~90 configurable
-UI FPS            presentation concern
-```
-
-AFK：
-
-```text
-Network              ON
-World state/reducer  ON
-Reliable events      ON
-World rendering      OFF
-World GPU assets     releasable
-External asset PCK   mounted
-```
-
-PCK 掛載不代表 texture 常駐。
-
-## 6. Runtime Asset Tree
-
-```text
-client/assets/
-├── catalog/
-├── maps/
-│   ├── <map_id>/
-│   │   ├── world.json
-│   │   ├── population.json
-│   │   ├── terrain.png
-│   │   ├── tiles.bin
-│   │   └── blocking.dat
-│   └── visuals/<asset>/
-├── Enemy/<asset>/
-├── npcs/<asset>/
-├── players/...
-├── equipment/...
-├── pets/...
-├── items/...
-├── effects/...
-├── ui/...
-├── audio/...
-└── data/legacy/...
-```
-
-Hard rule：不同 logical asset 永遠不跨 asset atlas。詳見 `ASSET_ARCHITECTURE.md`。
-
-## 7. Client Tool Tree
-
-```text
-client/tools/
-├── build/
-│   └── pack_assets.gd
-├── benchmarks/
-│   ├── asset_lifecycle.gd
-│   ├── asset_worker_idle.gd
-│   └── runtime_asset_store.gd
-├── previews/
-│   ├── direction_preview.gd
-│   └── map_preview.gd
-└── research/
-    └── atlas_benchmark.gd
-```
-
-分類規則：
-
-- build：正式 build support。
-- benchmarks：可重跑效能/生命週期量測。
-- previews：人工查看工具。
-- research：非 production policy 的研究程式。
-
-不要把 benchmark script 再放回 `client/tools/` 根目錄。
-
-## 8. Naming
-
-Godot：
-
-- folder / file：`snake_case`
-- class_name：`PascalCase`
-- logical asset id：小寫、語意清楚，例如 `Enemy/en023a`
-
-避免：
-
-- Session
-- Manager
-- Helper
-- Utils
-- Common
-- Core
-
-優先：
-
-- `network_client.gd`
-- `client_replica.gd`
-- `runtime_asset_store.gd`
-- `monster_visuals.gd`
-- `collision_grid.gd`
-
-連線世代命名使用 `connection_epoch`，不再使用 `session_epoch`。
-
-## 9. 新功能放哪裡
-
-判斷順序：
-
-1. 是 wire/socket/clock？→ networking。
-2. 是 replicated state/prediction/collision？→ world。
-3. 是純畫面？→ rendering。
-4. 是 asset lifetime/decode/cache？→ assets。
-5. 是 UI interaction？→ ui。
-6. 是 Client gameplay input/policy？→ gameplay。
-7. 都不是才重新思考是否真的需要新模組。
-
-不要因為「Monster」「NPC」「Pet」不同就複製整套架構。
+1. 最小 socket/codec + bounded queue，驗證低 FPS 不影響收包。
+2. Reducer/WorldState/MapEpoch/Prediction/Interpolation，packet trace 可重播。
+3. AssetStore／外部 PCK／ResourceLoader，30 次生命週期測試。
+4. World Y-sort + Enemy Sprite + Player paper-doll（含 ACT/Origin/Direction）。
+5. 真 Server 多人 AOI、戰鬥及動畫中斷＋UI／AFK。
+6. Windows Release 與 macOS 真實 GPU 驗證。
+
+已有的 Model1/SGTest 隔離基準見 [research/ASSET_RENDERER_EVIDENCE](research/ASSET_RENDERER_EVIDENCE.md)，**不等於此新 Client 已測試通過**。

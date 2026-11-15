@@ -17,7 +17,7 @@
 - UI 預設 1280×720，支援 800×600、1024×768、1366×768、1440×810、1440×900 與使用者調整大小；寬度目標上限約 1440 像素。不硬綁原版 800×600，UI/文字縮放與世界鏡頭縮放獨立。
 - 驗收包含高 DPI、文字縮放、超寬邊緣、縮放相機及重開 UI 後的布局狀態；遊戲 AOI 必須覆蓋實際 viewport 加緩衝。
 - 元件以共用 Godot Theme/StyleBoxFlat 作初期可替換資源；確認原版面板/按鈕圖資可用後使用 StyleBoxTexture/NinePatchRect 取代，維持相同 UI 控件架構。
-- HK2 的 [ITF 引用盤點](HK2_UI_REFERENCES.md) 已見缺件；金色版允許以 Godot 原生 StyleBox、NinePatch、字型與自製圖形重建相近風格，功能完整性不依賴每張原版 UI SPR。原版圖資僅在使用權與版面語意驗證後接入。
+- HK2 的 [ITF 引用盤點](research/LEGACY_SOURCE_RESEARCH.md#source-hk2-ui-references-md) 已見缺件；金色版允許以 Godot 原生 StyleBox、NinePatch、字型與自製圖形重建相近風格，功能完整性不依賴每張原版 UI SPR。原版圖資僅在使用權與版面語意驗證後接入。
 
 ## 主要視窗與優先順序
 1. HUD：左下 HP/MP/EXP、底部偏左聊天、右上小地圖、右側主選單、下方技能快捷欄；位置參考後期遊戲畫面。
@@ -35,4 +35,4 @@
 
 ## 原版 UI 檔案狀況
 TestGoGo 的 server/LEGACY_EXE_UI_RESOURCE_INDEX.md 引用 2009 IDA 的 105 個 .itf 名稱，例如 001_Account_Login、004_Select_Character、006_StatusLite、007_HOTKEY_yl、008_MINIMAP_S、013_Character_info、022_equip、027_Skill、029_SYSTEM。
-Old/ClientData/Interface 沒有實體 .itf；目前本機 HK2 有 20 個實體 .itf，但 [引用盤點](HK2_UI_REFERENCES.md) 顯示 122 筆 SPR 引用中 59 筆無同名實體檔。這仍不足以宣稱 UI 圖像、版面與互動狀態齊全；須追 .itf 欄位、載入規則與缺件來源。
+Old/ClientData/Interface 沒有實體 .itf；目前本機 HK2 有 20 個實體 .itf，但 [引用盤點](research/LEGACY_SOURCE_RESEARCH.md#source-hk2-ui-references-md) 顯示 122 筆 SPR 引用中 59 筆無同名實體檔。這仍不足以宣稱 UI 圖像、版面與互動狀態齊全；須追 .itf 欄位、載入規則與缺件來源。

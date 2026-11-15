@@ -1,30 +1,24 @@
-# Private legacy asset inventory reports and inputs are never checked in.
-reports/
+# Private original game data and all converted artwork (never publish).
 local-assets/
-__pycache__/
-*.pyc
+reports/
 legacy-originals/
 *.orig.spr
 *.orig.itf
 *.orig.itd
-client/.godot/
-server/**/bin/
-server/**/obj/
 
-.godot/
-.cache/
-reports/atlas_benchmark/*/
-reports/*.png
-reports/direction_trial/
-__pycache__/
-.pytest_cache/
-*.pyc
-
+# Generated client/server data: the directory marker is retained.
 client/assets/**
 !client/assets/.gdignore
-.cache/
-
 server/content/
-
-# Local SQLite runtime state.
 server/data/
+
+# Local builds, caches and virtual environments.
+.cache/
+.godot/
+client/.godot/
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+server/**/bin/
+server/**/obj/
