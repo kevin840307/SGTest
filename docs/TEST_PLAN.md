@@ -137,3 +137,9 @@ Recovered P95 7.470ms、舊 SGTest P95 6.900ms。
 ## PCK001-REAL-MAPS — 空白 Godot 真圖資源（2026-11-15 PASS）
 
 既有 smoke 工具支援 --assets client/assets --map 13 --map 15，沿用唯一 Builder，244/244 Texture ResourceLoader 尺寸 PASS（242 Atlas＋2 Terrain）；526 個封裝 raw file SHA 相符，242 BPTC／242 ASTC 變體匯入 PASS。原 synthetic Enemy＋lossless UI 2/2 回歸 PASS。實際空白 Godot verifier 收到錯誤的 Map13 Blocking expected SHA 時 exit 3，拒絕且無成功旗標。Python suite 67 PASS。可重跑命令／PCK SHA／本機報告見 ASSET_CONVERTER 的「真實雙圖 external PCK」。這不是實際遊戲渲染／VRAM 或 P0 邊緣驗證，也不是 Server Spawn／A*／Combat／多人 E2E／Release。
+
+## ASSETSTORE001 — Client 資源 owner 基礎（2026-11-15 PASS，headless 範圍）
+
+`python client/tests/run_asset_store.py "C:\SGO\Godot\Godot_v4.7.2-stable_win64_console.exe" --compare --rounds 3 --report reports/client_asset_store_engine_comparison.json`：正式 PCK、完整 palette、各候選 fresh process 三輪。選定 Texture job=1 三輪皆完成每輪 30 次 Map15 221／Map13 63 Asset 載入／釋放，無引擎 ERROR／RID leak；相同 trace 的 job=2 三輪失敗（不以腳本單獨 PASS 抵銷引擎錯誤）。共用 Texture instance／readonly、最後引用 weak ref、在途取消／過期 epoch、容量／RGBA budget／無效 metadata 均有驗證；每輪 final owner/assets/jobs/bytes=0。來源與 metrics 見 CLIENT_ARCHITECTURE，raw logs／sources SHA／實際 engine CPU／Peak RSS 由 runner 留在 reports/。Python Converter 67 tests PASS。
+
+Store pump 僅是呈現資源交接；測試不代表 Network／WorldReducer FPS 解耦已通過。實際視窗／GPU／VRAM 釋放、memory slope、Renderer／動畫／AFK／多人 E2E 均 NOT VERIFIED。新 client/project.godot 僅供資源模組與測試，尚無 main scene。

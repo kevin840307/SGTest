@@ -17,7 +17,7 @@
 
 ## 1.0 MVP：Map15 主城 + Map13 台地，功能完整且真實跨圖
 
-**MVP 正式涵蓋兩張原版地圖**：Map15（主城：登入、選角、NPC／商店／銀行／倉庫、裝備、交易、玩家商店、社交等）與 Map13（尼西亞台地：Blocking／A*、多人／怪物／掉落、攻擊／技能、AI、AOI／同步）。須先核對原版兩圖 NPC/怪物／傳送位置，不能將角色定位或原版地圖規則自行編造。2026-11-15 已由唯一 Converter 實測 Map15／Map13 原始 Terrain、Blocking、Scenery 與 NPC 靜態傳點資料，另解析 82 筆原版 Enemy Spawn、10 種怪物的 SPR/ACT（557 動畫 Frame）並以正式 Height-Dense Builder 試轉 10 張獨立 Atlas；詳見 `todo.txt` 的 MVP001 子項。完整 7,890 素材 Archive audit 與兩圖 242 Asset／2,269 Frame 的定向 Catalog 已 PASS。雙圖 Runtime content／外部 PCK 資源 Gate 已 PASS（244 Texture）。**仍未完成 NPC 動畫／動態規則、真 Renderer／AssetStore、Server 權威 Spawn/Blocking 與跨圖 Client/Server E2E**。
+**MVP 正式涵蓋兩張原版地圖**：Map15（主城：登入、選角、NPC／商店／銀行／倉庫、裝備、交易、玩家商店、社交等）與 Map13（尼西亞台地：Blocking／A*、多人／怪物／掉落、攻擊／技能、AI、AOI／同步）。須先核對原版兩圖 NPC/怪物／傳送位置，不能將角色定位或原版地圖規則自行編造。2026-11-15 已由唯一 Converter 實測 Map15／Map13 原始 Terrain、Blocking、Scenery 與 NPC 靜態傳點資料，另解析 82 筆原版 Enemy Spawn、10 種怪物的 SPR/ACT（557 動畫 Frame）並以正式 Height-Dense Builder 試轉 10 張獨立 Atlas；詳見 `todo.txt` 的 MVP001 子項。完整 7,890 素材 Archive audit 與兩圖 242 Asset／2,269 Frame 的定向 Catalog 已 PASS。雙圖 Runtime content／外部 PCK 資源 Gate 已 PASS（244 Texture）。**仍未完成 NPC 動畫／動態規則、真 Renderer／GPU 資產生命週期、Server 權威 Spawn/Blocking 與跨圖 Client/Server E2E**。
 
 **兩圖必須真實互通**：Server 權威 Map Change、MapEpoch、WorldReady、AOI 舊圖清理／新圖快照、AssetStore 地圖切換資源釋放與預取、位置合法性、重連／返回已掉落物。要測 Map15 → Map13 → Map15 與多人同時換圖，不能將跨圖 E2E 延後 MVP。
 
@@ -92,3 +92,7 @@ World Rendering / Animation / UI / Audio
 - **已完成**：獨立素材轉換器模組、Height-Dense 單素材 Builder 測試、PCK Policy 測試、原版動畫與渲染隔離 benchmark、文件／清理。
 - **未完成（NOT VERIFIED）**：新版 Client/Server 真正連線、Map13 Server A*、紙娃娃與多人同步、AFK／切圖 30 次後記憶體、多開 1/2/4/8、Windows Release 外部 PCK、macOS 實機及 20/100 人＋300/1000 怪＋500/5000 掉落的 E2E 壓測。
 - 每項新任務都依 [docs/TEST_PLAN.md](docs/TEST_PLAN.md) 定義可重現測試，完成後才更新 [todo.txt](todo.txt)。主要架構：[Client](docs/CLIENT_ARCHITECTURE.md)、[Server](docs/SERVER_ARCHITECTURE.md)、[Assets](docs/ASSET_ARCHITECTURE.md)、[Converter](docs/ASSET_CONVERTER.md)。
+
+## Client 資源模組進度（2026-11-15）
+
+單一 AssetStore 有界 metadata worker／threaded Texture、owner-epoch 去重／取消與釋放已實作，正式 PCK 的完整雙圖 palette 每輪 30 次、三輪 headless 回歸 PASS。job 並行 1／2 同 trace 比較依正確性選 1。詳細 API、CPU／RSS／pump 指標與失敗候選見 CLIENT_ARCHITECTURE／TEST_PLAN；這不是可玩 Client，也未驗證 Renderer／GPU 釋放或網路 FPS 解耦，MVP002／REB012 保持未完成。

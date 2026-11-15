@@ -1,6 +1,6 @@
 # SGTest Client — 重建設計
 
-**狀態：規格，尚無實作。** 目標 Godot 4.7.2 / GDScript；功能導向的單一 Godot 專案。
+**狀態：AssetStore 資源基礎已實作並有 headless 回歸；Renderer／Network／WorldState／玩法仍待實作。** 目標 Godot 4.7.2 / GDScript；功能導向的單一 Godot 專案。
 
 ## 職責分離（不要為了分層先建立空檔案）
 
@@ -97,3 +97,26 @@ Map13 同圖測 20 連線／300 Enemy／500 Drop（兩個真 Client 測畫面，
 多開測試：正常＋AFK 的混合 1/2/4/8 實例；限制每個背景實例的 CPU 動畫提交、GPU texture 存量與快取上限，紀錄各程序 RSS／CPU/GPU、隊列 age、斷線及回復時間；不可藉降低封包正確性換低功耗。
 
 **高優先順序 Gate**：用同一份封包 trace，在 Render=0／30／60／90、AFK、Unfocus、最小化時 WorldState hash／可靠事件序號相同。所有遊戲模式獨立於渲染線程。
+
+## MVP002-ASSETSTORE 實作與選擇（2026-11-15）
+
+唯一實作 `client/assets_runtime/asset_store.gd`：RefCounted owner／epoch store，Catalog 索引＋既有 maps/<id> world 契約；背景 DecodeJob（FileAccess／JSON／SHA／幾何驗證，無 SceneTree）與 Godot threaded ResourceLoader；main-thread pump 接收完成結果，唯讀 FrameTable／manifest／Texture 由不同 owner 共用。scope release 之後，無 owner 的 entries 直接移除，過期 serial 的工作排空後丟棄；不發舊 epoch ready、不持有額外 idle Texture cache。`begin_scope`／`end_scope` 不是伺服器 MapEpoch，而是本機視覺資源取消世代；不可拿它替代權威版本。
+
+數量預算：metadata worker 2、Texture job 預設 1、active assets／scopes 各至多 256、RGBA 頁面估算 256 MiB。主 pump 的 max_commits 限制完成 Texture 的交接數，Godot／driver 的實際 GPU upload 時間仍須另測；metadata 初始化時只讀固定 Catalog 索引，完整 manifest／地圖 companions 在背景解析。兩 owner 同素材共用同 Texture instance。外部 consumer 若還握著 Texture／data，Store 不能強制回收；離圖必須先拆 Scene／放下引用，再 end_scope，並持續排空取消工作。
+
+### ALT001：Texture job 並行數（同程式、同資料、同 trace）
+
+測試：Godot 4.7.2、Windows headless/dummy、同 PCK SHA `4df45ef43ffcbe03e2e5255bca087baeefaf45210ddb7ca9ecca93714d76ae7a`；每個候選 fresh process 三輪，每輪 30 次完整 Map15／Map13 palette 往返。Map15 221 Asset／Map13 63 Asset，包含 terrain、全部當圖地物／NPC／Enemy 與 B Player 七部位；不改畫質／素材數量，沒有 Network 或 Server Tick。
+
+| Texture jobs | 正確性 | 每輪 wall 秒 | Engine CPU 秒 | Engine Peak RSS bytes | pump P95／P99 µs | 決定 |
+|---|---|---|---|---|---|---|
+| 1 | 3/3 PASS，無引擎錯誤 | 32.270–32.732 | 13.156–17.641 | 146,333,696–149,008,384 | 304–370／420–502 | 預設 |
+| 2 | 0/3，dummy texture 初始化錯誤／RID leak | 18.594–18.605 | 12.969–13.406 | 149,458,944–150,761,472 | 285–332／331–440 | 淘汰 |
+
+DIRECT：2 jobs 的三輪引擎日誌分別記錄 17／7／3 個 error/leak 診斷，即使腳本的 Store counter 已歸零也判 FAIL。HYPOTHESIS：Godot dummy Texture storage 在並行建立／回收時有競態；未追蹤引擎組語／原始碼，不宣稱已證明根因或一般 GPU backend 也相同。1 job 的完整 trace 三輪無診斷，選其為可驗證的簡單 baseline；未宣稱為真實遊戲最佳吞吐。這只調整非必要視覺載入排程，沒有放慢網路／World Tick。
+
+實際 engine exe 由 Windows console wrapper 的 sibling 執行，CPU／Peak RSS 不含 wrapper 的假低值。初次 wrapper 計數已標為不可用，保留於 `reports/client_asset_store_launcher_comparison.json`；正確報告為 `reports/client_asset_store_engine_comparison.json`／`client_asset_store_validation.json`，含 raw logs、commands、PCK／程式來源 hash。背景其他程序未控制，CPU／wall 數值為此 trace 的描述性量測；pump 百分位是函式 CPU 區間，不是遊戲 Frame／input latency。
+
+通過內容：唯讀資料／共用實例、consumer 放下引用後 Texture weak ref 釋放、在途 Texture 取消／舊 epoch 無 ready、完整 palette 每次 release 後 owner／entry／job／RGBA 預算歸零、容量與 byte budget 拒絕、壞 metadata fail closed。峰值 221 active assets，RGBA 預算計數 70,769,968 bytes。真正顯示視窗、GPU/VRAM 釋放／記憶體 slope、SpriteFrames／Y-sort／NPC timing、AFK 邏輯與 packet trace／多人 E2E 均 NOT VERIFIED；REB012／MVP002 的整體 Gate 保持未完成。重跑命令見 client/README.md。
+
+補充 `test_asset_store_epochs.gd` 三情境 PASS（runner --script tests/test_asset_store_epochs.gd）：同地圖 CPU job 在途重取、同 Texture path 在途重取、ready handler 同時釋放兩個 owner。舊 serial 不得通知新 scope；回呼重入不會存取已移除 owner 或向已結束的 peer 通知。raw report=`reports/client_asset_store_epochs.json`，沒有改變上述完整 palette 比較的 trace。
