@@ -11,6 +11,12 @@
 - `client/assets/.gdignore`：**僅保留轉換輸出的定位標記**，不是 Godot Runtime。
 - `client/README.md`、`server/README.md`：未來實作位置，**沒有可執行程式**。
 
+## 目前先完成 Map13：單圖但主要功能完整的 MVP
+
+**限制地圖與全量資料，不限制核心功能。** 順序：Map13 地形／Blocking／素材 → Godot 4.7.2 地圖 → .NET 8 Server／帳號／A*／長按 → 兩個真 Client AOI、八方向與動畫 → 多種怪物／技能／戰鬥／大量掉落 → 背包裝備、NPC 商店銀行倉庫、寵物機甲、交易／玩家商店／PvP／GM 等完整單圖玩法 → AFK／多開／資源測試與 20 Player/300 Enemy/500 Drop → MVP Gate → 全地圖／全物種／全內容與 100/1000/5000 負載。
+
+詳細先照 todo.txt 的 MVP001～MVP009，已有 Converter 的 --map/--category/--prefix 選項只代表支援參數，單圖資產覆蓋仍要實際驗證。MVP 不等於功能 Demo；每個系統必須依原版有 Server Authority、錯誤／邊界／多人測試；跨圖 E2E 因僅一圖可先標 NOT VERIFIED，後續加入第二圖補足。好友暫緩。多種實作先依 ALT001 公平比較；資料與程式隨每個切片同步更新。
+
 ## 從哪份文件開始重建
 
 1. [正式架構總覽與重建決策](docs/ARCHITECTURE.md)
@@ -19,6 +25,8 @@
 4. [測試與效能 Gate](docs/TEST_PLAN.md)、[重建任務](todo.txt)、[開發規則](AGENTS.md)
 
 歷史文獻、原型效能研究和舊 SPEC 大部分內容保留供對照，但**不能以其中「已實作／已通過」的說法代替新版本驗證**。
+
+**開發流程：有多種合理方案時先對等測試，選整體最佳方案再繼續。** 詳見 AGENTS.md 的「多方案先比較」及 docs/TEST_PLAN.md 的 ALT001；判斷同時考慮即時正確性、低資源、P95/P99、網路 AOI 與可維護性，不新增長期平行實作。
 
 ## 素材轉換
 

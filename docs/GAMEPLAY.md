@@ -2,6 +2,12 @@
 
 **狀態：需求，不代表已實作。** 後期《星夢 Online》風格；遊戲結果由 Server 權威決定。詳細原始需求可追溯 SPEC.md 與 [research/FEATURE_DECISION_HISTORY](research/FEATURE_DECISION_HISTORY.md)。
 
+## MVP：單張 Map13，原版核心玩法完整
+
+MVP 不是只做最小示範：**單圖主要遊戲系統的規則／操作／驗證必須完整**。包括登入／創角多角色、A*／長按、八方向／動作／碰撞與 AOI、多玩家多怪物不同節奏的行走及攻擊、所有主要戰鬥狀態／技能／MISS／死亡復活、多掉落／撿取、背包／裝備／強化、NPC 商店／倉庫／銀行／修理、寵物／機甲／卡片／升級、交易／玩家商店／聊天、PvP 顏色與 GM 指令、資料存取與 AFK。每功能需從原版／Recovered 建立 Server Authority、重送／異常／多人競態測試；不能用「只測 UI」或「一個代表流程」冒充功能完整。好友暫緩。
+
+逐步驗證，最後同圖 20 位連線玩家、300 怪物、500 掉落，至少兩個真 Godot Client 的正確動畫／AOI 畫面；再檢查資源、幀尾延遲和同步。MVP 後才擴所有地圖／原版全部資料、跨圖真 E2E、100/1000/5000 負載及全平台發行。
+
 ## 開發優先順序
 
 **人物動作與同步正確 > 戰鬥因果 > 資源與流暢度 > 畫面完整性 > 其他功能。**
@@ -17,7 +23,7 @@
 | P0 UI | 金色原版風格 Godot UI（其他 Theme 暫緩） | 不影響 World Tick；多解析度 |
 | P0 效能 | AFK/Unfocus、Render FPS、畫質／顯示偏好 | 只影響呈現，不影響 Network/Reducer |
 
-## 第二階段
+## MVP 內必須完成的主要系統（全量內容覆蓋待 MVP 後）
 
 - Equipment：每件裝備獨立定義、ItemInstance UID、通用強化數值；強化 +1/+2 不額外佔用新 ItemDefinition ID。
 - NPC：商店／倉庫／銀行／修理／傳點／對話／任務。價格、持久化和交易具 Server 權威。

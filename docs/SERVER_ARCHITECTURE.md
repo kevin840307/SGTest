@@ -29,6 +29,12 @@
 - 對相同 World Tick 與可見 AOI，量測每玩家 bytes/sec、訊息／秒、Serialize/Deserialize P95/P99、GC alloc、AOI 候選與扇出成本、Send Queue Age、輸入到畫面延遲；須與全圖無過濾基準公平比較，確認可節流網路且不破壞同步。
 - AI 的各怪物決策時間與位置推進分離；獨立 NextDecisionTick／分散預算避免所有怪物同時轉向／移動，Server 仍維持可重播且單寫者權威，不能用同一批群體動畫假裝自然 AI。
 
+## MVP Server：單 Map13 全核心功能權威驗證
+
+先建 Map13 的 Single-writer World、Blocking/A*、身份／角色／登入／持久化、可測 Wire、每連線 AOI/WorldReady 與有界佇列，再接 Enemy/AI/Combat/Skills/Drop。**MVP 內需完成所有可在單張地圖驗證的主要規則**：物品 UID／強化、背包／銀行／倉庫／商店／修理、NPC 互動、技能/Buff/MISS/Death、寵物、機甲／卡片／升級、交易／玩家商店、PvP 顏色與 GM 權限。每項需要真實資料與 Server 端合法性檢查、異常／重送／斷線／多人競態、原版行為比對，不只是少數 Happy Path。
+
+怪物 AI 使用可重現且分散的獨立決策排程，允許部分靜止；不因共同 Tick 造成怪物同時移動或瞬移。單圖壓測階段須有 20 連線玩家／300 怪／500 Drop（至少兩個真 Client 驗證畫面），測 AOI fanout、Queue、World Tick P95/P99、CPU/GC/RSS、安全背壓與可靠事件。只有跨地圖真正 E2E 因先一圖可記錄未驗證，MVP 後加入第二真圖再補 Gate；所有地圖／全物種資料與 100/1000/5000 的擴量也留 MVP 後。
+
 ## 內容格式
 
 Server 使用**原版 Blocking.dat byte grid** 或經可驗證的無損對應資料；只載入 Map world/population/collision 和必要規則，不解碼 PNG/Atlas。Enemy 外觀由 Server population logical ID 傳給 Client（其目錄為 Enemy/<id>）。

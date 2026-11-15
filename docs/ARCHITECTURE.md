@@ -29,7 +29,23 @@
 3. **State ≠ Render** — Client WorldState 可重播；Renderer 只是讀取狀態的投影。
 4. **Asset ≠ State** — 影像未就緒仍正常處理 Spawn/Move/Hit/Death。
 5. **DB ≠ World Tick** — 持久化與 socket I/O 不得阻塞 Map tick。
-6. **Logical asset ≠ pack bundle** — PCK 是發行容器，同素材才合 Atlas，不跨 Enemy/NPC/Player part/Scenery 混圖。\n7. **AOI ≠ full-map broadcast** — Server 先依 Interest 過濾可見與必要事件，只為需要更新的實體產生 Delta；不因地圖有大量怪物／掉落物就向每位玩家傳全部。\n8. **Wire ≠ JSON** — 不預設 JSON、MessagePack 或自訂二進位，先研究原版／Recovered，採同負載實測選擇低成本、可維護的單一正式協定。
+6. **Logical asset ≠ pack bundle** — PCK 是發行容器，同素材才合 Atlas，不跨 Enemy/NPC/Player part/Scenery 混圖。
+7. **AOI ≠ full-map broadcast** — Server 先依 Interest 過濾可見與必要事件，只為需要更新的實體產生 Delta；不因地圖有大量怪物／掉落物就向每位玩家傳全部。
+8. **Wire ≠ JSON** — 不預設 JSON、MessagePack 或自訂二進位，先研究原版／Recovered，採同負載實測選擇低成本、可維護的單一正式協定。
+
+## 單 Map13 MVP：功能完整、內容範圍有限
+
+先用原版 Map13 真實 terrain／scenery／Blocking／動作／八方向建一張能遊玩的地圖，確保座標、碰撞、原點、同一 World Y-sort。由此逐步建立 Godot Client/.NET 8 Server、身份／連線、權威 A*、AOI、平滑移動／方向、Combat、怪物 AI、Drop、資產載入及 AFK。
+
+**MVP 在這張圖上必須具備原版大部分主要系統的完整操作與規則**：登入多角色、人物／怪物／寵物／機甲動畫、技能／死亡／Buff、物品裝備／強化／修理、商店倉庫銀行、寵物／機甲、交易／玩家商店／聊天、PvP 與 GM、持久化及異常／重試／競態。不是一套簡化 UI 或只有每個系統一個代表流程。好友暫緩。
+
+MVP Gate：至少兩個真 Client 視覺 AOI/Attack/Hit/Death/Facing，並完成同圖 20 連線玩家（可有 Bot）、300 怪、500 掉落的稀疏／密集以及 AFK／多開資源正確性測試。只有需要兩張真圖的跨圖功能可先以 fixture 驗證契約並標記實機 E2E 待測；MVP 後才擴所有地圖／全部素材／種類與 100/1000/5000 壓測。核心責任分離與 AOI 從第一階段建立，但不造空模組或永久平行架構。
+
+## 多方案比較 Gate
+
+若封包／AOI、AI 排程／A*、Animation/Interpolation、Renderer、Atlas/PCK、Cache、AFK 等有合理的替代設計，**先核對原版／Recovered，依 TEST_PLAN.md 的 ALT001 比較同條件的正確性、資源、網路和尾延遲，選最佳方案後才實作後續依賴。**
+
+優先淘汰不正確、不安全、遺失可靠事件或洩漏資源的候選；性能接近時保留較簡單、低耦合的實作。只整合勝出方案與必要可重跑測試，不保留第二套正式路徑。結果寫回本來就存在的文件和 TODO。
 
 ## 最小資料流
 
@@ -54,7 +70,7 @@ Render FPS 可 0 / 30 / 60 / 90；network/Client Reducer/Server tick 不可因�
 ## 目前儲存庫
 
 - tools/asset_converter：唯一正式素材 Converter；保留轉換／研究／格式測試。
-- tools/tests：只保留正式 Converter 的契約與格式驗證；舊 Viewer、第二套建置器與已淘汰 Benchmark 不在新版本維護。
+- tools/tests：保留 Converter 契約／格式測試及獨立 Wire/AOI 合成比較 Probe；後者不是可執行 Client/Server，也不能當成真實 E2E Gate。
 - client/：只有 README、assets 輸出定位標記；**無 Godot 專案**。
 - server/：只有 README；**無 C# 專案**。
 - docs/：上述設計文件；docs/research 為歷史研究原文彙編。

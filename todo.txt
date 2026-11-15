@@ -2,6 +2,28 @@
 
 狀態說明：本檔只記錄**刪除舊原型後**的新版本工作。舊流程、完成紀錄及測試結果保留在 `docs/research/FEATURE_DECISION_HISTORY.md#source-todo-pre-rebuild-20261115-txt`，不得將它們當成新版本 PASS。
 
+## MVP 主線：只做一張地圖，但功能必須完整（全部尚未完成）
+
+**先 Map13 → 走路／AOI／方向／多怪／多掉落 → 全部單圖主要玩法 → 20 玩家／300 怪／500 掉落 Gate → 再擴全地圖全內容**。不是每系統做一條 happy-path 就稱完成。每個 TODO 都要正常、錯誤／重試、多人邊界／原版規則與 Server authority 測試；若有多方案先按 ALT001 比較，選最佳整體方案再持續開發。
+
+- MVP001 [ ] **Map13 原始資料與資產**：驗證 Map/Scenery/Blocking.dat／座標／原點／Y-sort，唯一 Converter 定向輸出必要真素材、metadata、PCK、權威碰撞與 SHA-256，不把私有原圖推公開 Git。
+- MVP002 [ ] **Godot 4.7.2 地圖 Renderer**：Map13 相機／多解析度、World Y-sort、AssetStore Acquire/Release、正確人物／Enemy 動作方向素材和地圖資源載入／釋放；與原版／Recovered 真畫面比對。
+- MVP003 [ ] **.NET 8 Server／帳號與移動**：Wire 比較／正式單一 Codec、認證、登入創角多角色／選角、WorldReady、Blocking/A*、地板點擊／長按與 Server 位置驗證、重連一致性。
+- MVP004 [ ] **多 Client AOI／方向／動畫同步**：兩個真 Godot Client 互相 Spawn/Despawn、Move/Stop/Facing、八方向、攻擊／受擊／死亡／技能與 pet/mecha 動畫，Interpolation、MapEpoch／EntityRevision、不同解析度、邊界／登入／重連、bounded queue。
+- MVP005 [ ] **多種怪物／戰鬥／大量 Drop**：多類體型／動畫方向原版 Enemy，分散 AI（站立／巡邏／追擊／脫戰）、普攻與單體／範圍技能、Buff、MISS、死亡復活、權威傷害、掉落／撿取／AOI；先小規模再進入 300 怪／500 掉落。
+- MVP006 [ ] **功能完整度 Gate**：背包／物品／裝備／強化／修理、NPC 商店／倉庫／銀行、寵物／機甲／卡片／升級、玩家交易／玩家商店／聊天、PvP 名稱狀態／GM 指令、權限與資料庫持久化，依原版檢查完整正常／錯誤／邊界／多人競態流程；好友暫緩。
+- MVP007 [ ] **低資源與多人大負載（單圖）**：至少兩個真 Client 畫面 E2E；同圖分級測 2/4/20 連線玩家（Bot 明確標示）、300 怪、500 Drop、稀疏／密集、角色方向與各怪 AI 不同步、AFK／Unfocus、FPS/network 解耦、1/2/4 開、CPU/RSS/VRAM/Network/World Tick/Queue/Frame P95/P99、10 次生命週期回歸。
+- MVP008 [ ] **MVP Gate**：MVP-MAP/ACCOUNT-WALK/AOI-MOTION/AI-COMBAT/ITEM-ECONOMY/SYSTEM/NET-SECURITY/RESOURCE-LOAD 全數通過，單圖功能完成、權威、同步、效能、文件一致，才能勾選；單圖不可能實測的跨圖功能於本 Gate 標 E2E NOT VERIFIED，MVP 後補第二張真圖。
+- MVP009 [ ] **MVP 後完整內容與跨圖擴展**：所有地圖／怪物／NPC／技能／物品，第二圖真正傳點與 MapEpoch E2E，依原 REB024～027 補全量內容，再做 100 玩家／1000 怪／5000 Drop 與 8 開／Windows/Mac 發行驗收。此任務不得在 MVP008 完成前誤標 PASS。
+
+## 舊 REB 任務依賴對照
+
+原 REB003 是全素材 Gate、REB019 是正式 Wire 全量選型、REB010～023 是 Client/Server 核心；REB024～027 原列第二階段的**系統邏輯**已被提前納入 MVP005～006，只有全原版資料內容／跨圖 E2E 才留 MVP009。REB030～032 全量壓測與發行仍在 MVP 後進行。**舊 REB 編號保留方便追蹤，但不得用「第二階段」說法延後 MVP 必要功能。**
+
+## 每個開發任務的選型門檻（長期規則，非單次完成事項）
+
+**多種做法 → 先比較 → 用相同資料／負載實測 → 選最佳整體解 → 整合唯一正式程式 → 更新文件／TODO → 再繼續下一步。** 依 AGENTS.md 與 docs/TEST_PLAN.md 的 ALT001；正確性、安全、可靠事件先過關，再看體感 P95/P99、CPU/RSS/VRAM、網路流量／GC、維護成本。沒明顯差距選簡單方案。隔離基準不等於 E2E；未測標註 NOT VERIFIED。沒有實質替代方案的小改動直接做必要回歸；禁止無止盡 Benchmark。
+
 ## 基線與轉換器
 
 - REB001 [x] 2026-11-15 clean-slate 基線完成：舊 Client/Server 可執行程式、專屬 CI、舊渲染／身份／效能工具已移出；Converter 與必要原始格式工具保留。原 docs 約 63 份整理為 12 份正式文件＋4 份研究彙編＋索引，54 份研究來源 SHA-256 全部對應 Git 歷史，正式文件連結 0 broken；Converter tests 79 PASS、純 Python contracts 27 tests OK (1 skipped)；CLI --help PASS、verify_converter.ps1 PASS。原本 main 未提交的 Height-Dense/PCK WIP 沒有修改或刪除。

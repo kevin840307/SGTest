@@ -57,6 +57,12 @@ AFK/Unfocus                             — may suspend only visual work
 
 新 Godot Theme/Control 先自製後期《星夢 Online》金色 UI；現代 Theme 等未來需求確定再評估，**不必提前實作雙套 UI**。支援多解析度，camera viewport 改變需更新可視 AOI，不可固定舊 800×600。移動速率、機甲速度與動畫播放速度解耦。
 
+## MVP Client：單地圖但全部主要玩法需要完整畫面／互動
+
+先建立 Map13/Scenery/Blocking/metadata、相機、多解析度、World Y-sort、八方向／鏡像、Attack/Hit/Death/Skill 動畫與 AssetStore。兩個真 Godot Client 驗證 AOI、位置插值與角色／Enemy／Pet／Mecha 狀態。**MVP 要有完整可操作的單圖 UI：角色、背包、裝備／強化、技能、NPC 商店／倉庫／銀行／修理、寵物／機甲、交易／玩家商店、聊天、PvP／GM 等；不是單純開窗或使用假素材的 Demo。** 先一個模組一個模組驗證、缺原始資產先補唯一 Converter。
+
+同圖逐步加至 20 連線玩家／300 怪／500 掉落（Bot 不可冒充真 Client 畫面），檢查方向／動作、碰撞、AOI、AFK/Unfocus、資源 Acquire/Release 及 FPS/network 分離。只在 MVP Gate PASS 後導入全圖／全品項／全部素材與正式大規模發行。
+
 ## 開發順序／Gate
 
 1. 最小 socket/codec + bounded queue，驗證低 FPS 不影響收包。

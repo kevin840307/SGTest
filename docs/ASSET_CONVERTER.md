@@ -14,6 +14,12 @@ python -m unittest discover -s tools/tests -p "test_*.py" -q
 
 Converter **不應依賴**可執行的 client/project.godot 或 server/*.csproj。保留的 client/assets/ 和 server/content/ 僅供輸出。
 
+## MVP Map13 的完整功能素材供應
+
+先定向提取真實 Map13、Scenery、Blocking、地圖 metadata，逐類轉換本圖要使用的 Player 八方向／裝備／技能特效、Enemy 各尺寸與 Action、地面 Drop、NPC、Pet、Mecha、UI。**MVP 不必轉所有地圖／所有物種／全道具圖庫，但單圖主要玩法需要的真素材不能缺**；若缺素材先查原版遊戲與 Recovered/Old，再擴充唯一 Converter 及測試，而不是人工偽造／第二套長期腳本。
+
+已確認 CLI build 具有 --map、--category、--prefix，world-content 具有 --map；但實際對哪些原始資料／Asset 有效，必須用原始來源、SHA256、frame/atlas/Blocking/Godot ResourceLoader／PCK 測試確認。缺少自動化定向能力則直接改善既有工具。MVP 完整的功能視覺與生命週期通過後，才做所有原版素材覆蓋、第二張／全部地圖與 Windows/Mac Release Gate。
+
 ## 主要責任
 
 | 區域 | 職責 |
