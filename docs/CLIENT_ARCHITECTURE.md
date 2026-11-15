@@ -7,7 +7,7 @@
 | 責任 | 輸入 | 輸出 | 不可以做 |
 |---|---|---|---|
 | Transport | socket bytes / outgoing commands | 有界接收佇列／傳送結果 | 操作 Texture、UI、World Node |
-| Decode | MessagePack bytes | 驗證過的 versioned DTO | 修改場景 |
+| Decode | 協定選型後的 framed bytes／binary payload | 驗證過的 versioned DTO | 修改場景或綁死某種序列化函式庫 |
 | World reducer | 有序事件、snapshot、Epoch | 可回放的 Client WorldState | 等待 Asset、依 Render FPS 推進 |
 | Prediction | 本地輸入／Server correction | 自己平滑座標、可重播 command | 替 Server 決定合法傷害 |
 | Interpolation | 每實體版本化位置歷史 | 遠端視覺位置與 Facing | 將畫面座標寫回權威 state |
@@ -39,6 +39,13 @@ AFK/Unfocus                             — may suspend only visual work
 - Player：紙娃娃各部位不同資產，DrawOrder 與切換動作不可用單一 Enemy Sprite 規則取代。
 - Monster、NPC、Equipment、Map、UI 的**素材存取共用單一 AssetStore**，不是合成同張 Atlas。
 - Render 0 FPS 仍要保留 WorldState、可靠事件和 reconnect/teleport 正確性。
+
+## AOI 與視覺狀態的邊界
+
+- Client 只保留自己 MapEpoch／AOI 訂閱範圍內需要的遠端實體視覺資源；WorldState reducer 按 Spawn/Despawn、版本與 WorldReady 同步，不以 Client Render FPS 控制訂閱或收包。
+- 相機／解析度／縮放改變時，提供 viewport 與 interest hint；**Server 仍為 AOI 權威**，依上限與更新節流決定實際可見集合；Viewport 邊緣加緩衝／hysteresis，遠端 Spawn 要帶初始位置與動作以免外圍瞬移。
+- 位置與 Facing Delta 使用獨立 interpolation history；僅合併**已被更高版本取代**的非可靠狀態，不把 Spawn/Despawn、Damage/MISS、掉落拾取與交易結果當可隨意丟棄資料。
+- 不在視野／AOI 內的遠端視覺節點可卸載或池化，但 AssetStore 仍需遵守 owner 引用與恢復的 epoch；AFK 可明確協議低視覺 AOI，不能減少可靠狀態。
 
 ## Asset lifecycle
 

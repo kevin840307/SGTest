@@ -8,9 +8,13 @@
 - REB002 [x] **Height-Dense/PCK Converter 合併完成**：19 個主工作樹 WIP Converter/benchmark 來源檔案 SHA-256 逐檔對照轉入正式單一 Converter；含 `atlas/dense_atlas.py`、`runtime_pack.py`、`runtime_pack_packer.gd`、新增測試；84 項 Converter 測試通過；Godot 4.7.2 外部 assets.pck（Enemy VRAM 壓縮／UI lossless）BPTC/ASTC 匯入，獨立空白 Godot 專案 ResourceLoader 2/2 通過，提供可重跑 `smoke_runtime_pack.py`。完整原版資料與 macOS 實機仍未驗證。
 - REB003 [ ] 重新驗證 7,890 Asset／75,588 SPR 覆蓋與無跨素材合圖；P0/壓縮邊緣在不同縮放驗證；Windows/Mac 資產格式；Converter 應能在沒有 Client/Server 可執行原型時運作。
 
+## Wire/AOI 基線（新 Client/Server 前必須核實；尚未實作）
+
+- REB019 [ ] 原版／Recovered 封包研究與負載矩陣：比較 JSON、header + compact binary、MessagePack／Protobuf 等合理候選（不得預設），定義正式 framing/schema、Godot↔C# fixture、傳輸／可靠性／Backpressure、AOI interest/delta/Spawn 契約；測 bytes/sec、P95/P99 codec、alloc/GC。選型結果更新 RUNTIME_PROTOCOL 與測試，不能只憑推測選型。
+
 ## Client 新版（尚未實作）
 
-- REB010 [ ] 最小 Godot 4 Client 骨架、純協定 DTO、Transport worker 與 bounded queue；render=0/30/60/90 下收包順序與邏輯不變的測試。
+- REB010 [ ] 最小 Godot 4 Client 骨架、正式實測選型的 Wire DTO/Codec、Transport worker 與 bounded queue；render=0/30/60/90 下收包順序與邏輯不變的測試。
 - REB011 [ ] WorldState/Reducer/MapEpoch/EntityRevision/行動序列、玩家自身 prediction + reconciliation、遠端 interpolation，Packet trace 可重播。
 - REB012 [ ] AssetStore 單一 owner/cache、外部 PCK ResourceLoader，按地圖/角色/OnDemand 取得、取消、釋放，AFK/登出/換圖 30 次 memory baseline。
 - REB013 [ ] Enemy 共享 SpriteFrames／可見實例 AnimatedSprite2D + 正確 Origin/ACT/Direction；與 Player、NPC、Scenery 共用 Y-sort，換圖清除舊 AOI。
@@ -19,8 +23,8 @@
 
 ## Server 新版（尚未實作）
 
-- REB020 [ ] .NET 8 Server 最小結構：Wire codec + ConnectionEpoch + Identity + bounded queues，純合約測試。
-- REB021 [ ] 單寫者 World / 30Hz tick／10Hz snapshot baseline、可靠事件、AOI、Blocking.dat 碰撞與 MapEpoch。
+- REB020 [ ] .NET 8 Server 最小結構：先研究原版／Recovered 並比較 binary header/framing、MessagePack 等格式，選定正式 Wire codec + ConnectionEpoch + Identity + bounded queues；C#／GDScript golden fixture 與效能對照（WIRE001）先於定版。
+- REB021 [ ] 單寫者 World / 30Hz tick／10Hz snapshot baseline、可靠事件、Server-authoritative AOI（spatial index／Interest／Spawn/Despawn／變化 Delta／viewport 限幅、hysteresis）、Blocking.dat 碰撞與 MapEpoch；先測 AOI 再擴充多人廣播。
 - REB022 [ ] Combat、AI、damage/MISS/Death、Drop/Pickup/Respawn；World Tick 不可等待資料庫或 socket send。
 - REB023 [ ] SQLite Account/Character persistence、UID 與交易原子性、重試／斷線一致性。
 
@@ -28,16 +32,18 @@
 
 - REB024 [ ] NPC 商店／倉庫／銀行／修理／傳點／任務；金錢、ItemInstance UID、持久化與冪等交易驗收。
 - REB025 [ ] Equipment 強化（不另編 +1/+2 Definition ID）、單體／範圍技能、Buff/Debuff、寵物、機甲／卡片／升級；依原版資料與動畫驗證。
-- REB026 [ ] 玩家交易／玩家商店 AOI、聊天／社交及 PvP 地圖規則、藍白粉紅紅名、GM 指令；須含多人競態／權限測試。
+- REB026 [ ] 玩家交易／玩家商店 AOI、聊天／社交（好友系統暫不做）及 PvP 地圖規則、藍白粉紅紅名、GM 指令；須含多人競態／權限測試。
 - REB027 [ ] 遊戲功能回歸與持久化 Gate：NPC/交易/強化/技能/寵物/機甲/PvP 的 Server authority、Client 畫面及重連一致性。
 
 ## 最終 Gate（不能由舊測試抵扣）
 
 - REB030 [ ] Windows 真正可執行 Client+Server，多機／20~100 人、300~1000 Enemy、500~5000 Drop；原版 vs 新版同條件 Input-to-Render、P95/P99、RSS/Texture、AOI 與動畫正確。
 - REB031 [ ] Windows Release external assets.pck、Mac 實機資產/Renderer 測試，UI 多解析度、30 次換圖/登出/AFK/Unfocus，無遞增記憶體洩漏。
-- REB032 [ ] 固定 Tick／Renderer 獨立的 packet-trace 0/30/60/90 FPS 回歸、bounded queue 滿載與重同步、不同 viewport AOI 限幅與雙向 Spawn、慢 Client 不能阻塞 Tick。
+- REB032 [ ] 固定 Tick／Renderer 獨立的 packet-trace 0/30/60/90 FPS 回歸、bounded queue 滿載與重同步、不同 viewport AOI 限幅與雙向 Spawn、慢 Client 不能阻塞 Tick；同負載 WIRE001/002、AOI001/002 的傳輸量、延遲與負載測試不得跳過。
 
 ## 本輪架構補強與安全清理（2026-11-15）
+
+- REB019-DOC [x] Wire/AOI 規格補充（**僅文件、NOT IMPLEMENTED**）：取消 JSON/MessagePack 預設，先研究 Recovered/Old 並以 Godot↔C# fixture、公平效能負載選擇 header/binary 或其他方案；AOI 定義 Server authoritative interest、spatial index、可見實體變化 Delta、Spawn/Despawn、限幅/hysteresis、慢 Client 與可靠事件，不得全圖無條件廣播；新增 WIRE001/002、AOI002 Gate。好友暫緩。
 
 - REB004 [x] Review 與增補既有精簡文件：Client/Server 的功能型目錄、高聚力低耦合、單一 AssetStore／Server Single Writer、阻塞隔離、A* 原版 Blocking、點地板／長按 1 秒鎖定／停止、Recovered/Old 唯讀參考、跨類型 Y-sort、多開、Render FPS 與 Network/Server Tick 分離、AFK Render 0／釋放 GPU／可靠事件不丟失；不額外建立規格碎檔。
 - REB005 [x] 純 Converter 重新驗收：`verify_converter.ps1` 不再錯誤地假設空白 `client/assets` 可做 `--runtime-only`；79 項 Converter、27 項格式/內容契約（1 skipped）皆 PASS；`-Client` 可選用少量來源抽樣重建（**全量來源重新跑仍未驗證**）。

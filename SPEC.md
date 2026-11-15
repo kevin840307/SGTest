@@ -13,6 +13,7 @@
 - **設計方式：功能導向 modular monolith**，高聚力、低耦合；不要預先建立重複的 Manager／Engine／Cache、不同素材類型專用 Loader，或空白多層分組。Client、Server 透過明確封包／資料契約整合，不共享可變狀態。
 - **Server single-writer world authority**：同張地圖的可變 State 有明確單寫者；DB I/O、Socket Send、慢路徑查詢不能阻塞固定 Tick。
 - **有界佇列與恢復**：所有網路／World 命令／視覺事件佇列都要有容量、延遲指標與過載政策；可合併過時的非可靠移動快照，**不得默默丟失金錢、物品、交易、角色狀態、權威戰鬥結果等可靠結果**。無法保證連續性時須觸發重同步或安全斷線，不能無限堆積記憶體。
+- **Wire 不綁特定資料格式**：JSON、MessagePack、Protobuf、自訂 packet header + binary payload 都只是候選，先對照原版／Recovered 與實測 bytes/sec、編解碼延遲、CPU／配置／GC、Godot/.NET 實作成本，再選單一正式協定；不因好寫就把高頻即時封包預設為 JSON。
 
 ## 2. 資產轉換（必須保留已驗證方案）
 
@@ -61,7 +62,7 @@ World Rendering / Animation / UI / Audio
 - Server 使用原版 **Blocking.dat** 做地圖合法性與權威 A*；Client 可用相同網格局部規劃、路徑預測與 correction。阻擋角、台地階梯、追怪距離與重規劃需保留。
 - **地板長按約 1 秒鎖定走路**，左／右鍵或重新點地板取消，右鍵選單不得受影響。Client 不得依 Render FPS 重送 Move 封包；攻擊、受擊、死亡、換圖都能中斷／釋放鎖定。
 - 移動與攻擊距離使用原始遊戲數值／公式，不以武器種類硬編碼；移動速度不應讓角色腳步或機甲動畫倍速播放。
-- Server 可採 map-local spatial grid/index 處理 AOI，多怪物巡邏／追擊、掉落物和廣播必須有界預算；Slow Packet、World Tick、Monster AI、Send Queue 拆開量測。AOI Spawn/Despawn、可靠戰鬥與拾取事件不能被可視距離合併快照吞掉。
+- **AOI 是核心網路傳輸契約**：Server 依 Map、權威位置、受限的 viewport／interest 範圍和適當緩衝，只發送觀察者需要的 Player、Enemy、Drop 等；用 map-local spatial grid/index 避免全圖掃描／廣播。進出以可靠 Spawn/Despawn 和 WorldReady 同步，持續用有變化才發的 Delta、批次與舊位置合併減少傳輸，視野邊界使用 margin/hysteresis；可靠戰鬥／拾取／交易結果仍按權限送達。多怪物巡邏／追擊、掉落物和廣播必須有界預算；Slow Packet、World Tick、Monster AI、AOI、Send Queue 分開量測。
 - **參考來源（唯讀）**：`C:\SGO\Recovered\client`（動畫／UI／A*／長按）、原版 `Old` 及 `Paradise.exe.lst`、原版 Server 反編譯，以及原始遊戲安裝目錄。可以移植行為與測試，不讓新版 Client/Server 的編譯依賴 Recovered／Old。
 
 ## 6. 已驗證證據與尚未完成的 Gate

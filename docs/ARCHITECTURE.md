@@ -29,7 +29,7 @@
 3. **State ≠ Render** — Client WorldState 可重播；Renderer 只是讀取狀態的投影。
 4. **Asset ≠ State** — 影像未就緒仍正常處理 Spawn/Move/Hit/Death。
 5. **DB ≠ World Tick** — 持久化與 socket I/O 不得阻塞 Map tick。
-6. **Logical asset ≠ pack bundle** — PCK 是發行容器，同素材才合 Atlas，不跨 Enemy/NPC/Player part/Scenery 混圖。
+6. **Logical asset ≠ pack bundle** — PCK 是發行容器，同素材才合 Atlas，不跨 Enemy/NPC/Player part/Scenery 混圖。\n7. **AOI ≠ full-map broadcast** — Server 先依 Interest 過濾可見與必要事件，只為需要更新的實體產生 Delta；不因地圖有大量怪物／掉落物就向每位玩家傳全部。\n8. **Wire ≠ JSON** — 不預設 JSON、MessagePack 或自訂二進位，先研究原版／Recovered，採同負載實測選擇低成本、可維護的單一正式協定。
 
 ## 最小資料流
 
