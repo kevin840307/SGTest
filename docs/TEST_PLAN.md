@@ -2,7 +2,7 @@
 
 **狀態：測試規格。舊 Client/Server 的 PASS 不能沿用。**
 
-## MVP001 — 雙地圖 Map15 + Map13、完整功能與多人壓測（尚未實作）
+## MVP001 — 雙地圖 Map15 + Map13、完整功能與多人壓測（來源資料部分完成，E2E 未完成）
 
 **兩張真圖都需要正式 Godot 4.7.2 + .NET 8 C# Client/Server E2E**；原版／Recovered 只有證據作用，既有 Converter／Wire microbenchmark 不等於遊戲 PASS。
 
@@ -35,7 +35,8 @@
 
 - SPR/Data1 原始來源覆蓋、錯誤來源 fail-closed、ACT/SIF/DrawOrder/Origin/flip。
 - Asset ID 唯一、不同 Enemy／Map scenery／Player parts **禁止跨素材共圖**。
-- Map13 world／population／blocking 檔案相容。
+- Map13 與 Map15 的原版 `world.json`／`terrain.png`／`tiles.bin`／`blocking.dat`／NPC 來源相容；**Enemy population、正式 Runtime Atlas/PCK 仍未驗證**。
+- **MAP-DATA001（2026-11-15 PASS）**：兩張原始地圖一鍵輸出；Map13 367 Object、Map15 1,848 Object（其中 15 筆缺少原始 Z，須標記）、兩圖 Tile Pixel Round-trip PASS；原版 Server Blocking.dat SHA 匹配，雙圖重跑及反向指定建置時 10/10 私有輸出檔案 SHA 不變。Python 53 項測試 PASS，真遊戲 E2E NOT VERIFIED。
 - Height-Dense P0、VRAM import、external PCK 已整合且有獨立 Smoke；**完整來源覆蓋、Windows Release 和 macOS 實機仍未驗證**。
 - 在**沒有 client/project.godot 和 server/*.csproj**的 clean-slate 基線仍可執行純 Converter 測試。
 
@@ -81,6 +82,7 @@ dotnet run -c Release --project tools/tests/wire_aoi_probe/WireAoiProbe.csproj
 工作順序與完成狀態在根目錄 todo.txt，歷史測試與結果在 [research/INDEX](research/INDEX.md)。
 ## 新增的必要驗收案例
 
+- **MAP-DATA002**：原始 Map15 的 15 筆 `Building_object` 只有 XY 的格式變體，必須解析全部 1,848 筆且 trailer 完整、`z_source_present=false` 明確；測試混合 XY/XYZ、損毀名稱、無效 count、截斷與尾端垃圾須 fail-closed；Map13 正常 367 筆不退化。**來源解析 PASS，原版特殊 Z 值的 Godot 3D/DrawOrder 顯示 NOT VERIFIED**。
 - **PATH001**：Map13／台地階梯／障礙角 A*，單擊地板、點擊怪物繞障、追逐目標移動、斷線 correction，Client/Server 都不能穿牆；Blocking.dat 必須以原始資料驗證。
 - **HOLD001**：長按 1 秒後持續導航，左／右鍵停止、右鍵選單正常；UI 操作、移速變更、傳點、受擊、死亡、AFK、切圖都能取消並重新取得正確狀態。
 - **FPS001**：完整同一組 packet trace，Render=0／30／60／90、正常／Unfocus／最小化／AFK，Client State hash、Command sequence、可靠事件和 Server Tick 不變。刻意阻塞 Renderer 不得阻塞 Network。

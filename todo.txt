@@ -7,6 +7,9 @@
 **先驗證兩張真地圖，再走路／多人 AOI／雙向傳點、完整玩法與多怪／多掉落**；Map15 以城市互動為主，Map13 以多人／AI／戰鬥壓測為主；實際原版人口／NPC／傳點均需原始資料核實。兩圖互通是 MVP 必要條件，**不再將跨圖實測排到第二階段**。每一項有原版行為、Server Authority、錯誤／多人競態與回歸測試；存在多種可行架構時先做 ALT001 比較，選最優解後再繼續。
 
 - MVP001 [ ] **Map15 + Map13 原始資料／素材驗證**：確認原版兩圖 Map/Scenery/Blocking/NPC/Enemy／傳點資料；唯一 Converter 分圖定向生成必要資產及 Server authoritative map content；兩次 --map build 需避免輸出互相覆蓋／污染，驗證 SHA256、Godot Atlas/ResourceLoader/PCK，原版素材不得上傳公開 Git。
+  - MVP001-MAP-DATA [x] 2026-11-15 原始 Data1.dat（41,687 entries + 41,707 overlays）解包、雙圖 `world-content --include-map --map 13 --map 15` 私有內容輸出 PASS：Map13 865 tile／367 Scenery／3 NPC，Map15 976 tile／1,848 Scenery／52 NPC；原版兩張 Blocking 與 Old Server Dat 同圖 SHA256 一致；兩張 terrain PNG 像素往返 PASS；檔案反向建置重跑 10/10 SHA256 一致；共 **53 項現行 Python 測試 PASS**。Map15 原 ObjectList 15 筆 `Building_object` 只有 XY，已修解析器並標示 `z_source_present=false`。此項只驗證**地圖／NPC 來源內容**，不是整個 MVP001。
+  - MVP001-PORTAL-EVIDENCE [x] 靜態原版腳本核實 Map15 NPC spawn_id=46 → Map13 (2560,2880)；Map13 NPC spawn_id=1 → Map15 (7872,11296)；Map15 48 個 NPC 仍需動態 Quest/Shop/Bank 等原版規則研究，**runtime transfer NOT VERIFIED**。
+  - MVP001-NEXT [ ] **下一可交付工作**：在唯一 Converter 中產出兩圖 Enemy population、Player／Enemy／NPC／Scenery 正式 Per-Asset Atlas 與 `client/assets/catalog/assets.json`（完整 archive/source coverage 前不可標 PASS），接著雙圖 `build --runtime-only --map 13 --map 15`、external PCK ResourceLoader 真圖測試，確認分圖 build、ResourceLoader、Spawn/Blocking 契約不衝突；再進 MVP002 新 Godot Client（不可把空白 PCK smoke 當作真畫面）。
 - MVP002 [ ] **兩張地圖 Godot Renderer**：Map15 主城先實作 camera／Y-sort／原始 scenery 與角色；再 Map13 階梯／障礙／Enemy 場景。使用單一 AssetStore、Map lifecycle 與可重用 Renderer，驗證八方向、不同解析度及載入／卸載。
 - MVP003 [ ] **.NET 8 Server／帳號／移動**：完成實測選型 Wire、登入／多角色、Server Map15/Map13 authority、Blocking/A*、點地板／怪物及長按走路，NPC／移動與 MapEpoch 合約。
 - MVP004 [ ] **兩個真 Client AOI／方向動作**：兩圖 Player Spawn/Despawn、八方向／Move/Attack/Hit/Death/Skill、Interpolation／WorldReady/Revision、不同解析度、邊界／重連，不集體順移。

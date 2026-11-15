@@ -132,8 +132,26 @@ except ConverterBusy:sys.exit(2)
             self.assertIsInstance(json.loads(manifest.read_text()),dict)
 
 
-
-
+    def test_runtime_only_batch_compiles_both_maps_without_reextracting(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            source = root/'original'
+            source.mkdir()
+            built = []
+            def fake_runtime(source_path, destination, args):
+                built.append(args.map)
+                return {'status':'built', 'map_id':args.map}
+            with patch.object(cli,'REPO',root), \
+                 patch.object(cli,'resolve_source',return_value=source) as extracted, \
+                 patch.object(cli,'build_runtime_assets',side_effect=fake_runtime), \
+                 patch.object(sys,'argv',['cli.py','build',str(source), '--runtime-only',
+                                          '--map','15','--map','13']):
+                self.assertEqual(cli.main(),0)
+            self.assertEqual(built,[13,15])
+            extracted.assert_called_once()
+            report=json.loads((root/'local-assets/asset_converter/build_report.json').read_text())
+            self.assertEqual(report['runtime']['status'],'built')
+            self.assertEqual([row['map_id'] for row in report['runtime']['maps']],[13,15])
 
 
 if __name__ == '__main__':

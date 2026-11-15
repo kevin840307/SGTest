@@ -40,6 +40,10 @@ python tools/asset_converter/smoke_runtime_pack.py "C:\SGO\Godot\Godot_v4.7.2-st
 `-Client "原始遊戲路徑" -PreviewGroups 2` 可交給 `verify_converter.ps1`
 對 Data1.dat 做少量來源試轉，但全量覆蓋必須另外執行 Gate。
 
+MVP001 也可透過**同一 CLI** 的 `world-content --include-map --map 13 --map 15`，從原始來源定向重建兩張地圖的地形、地物、Blocking、NPC 與已靜態驗證的傳點資料，私有輸出位於 `local-assets/asset_converter/world/maps/<id>/`。配合 `--extracted-source .cache/asset_converter/source` 可重用已解包來源，避免每次重新展開 Data1.dat；詳細可重跑命令見 `docs/ASSET_CONVERTER.md`。
+
+`build --runtime-only` 同樣接受多次 `--map`，但要先有正式 `client/assets/catalog/assets.json` 和完整獨立 Atlas；目前只有地圖資料層已 PASS，**Runtime/PCK/Godot E2E 仍 NOT VERIFIED**。多圖輸出拒絕重複 ID，隔離及重跑 SHA 回歸見 `tools/tests/test_npc_content.py`。
+
 ## 輸出（均可刪除後重新建置）
 
 - `local-assets/asset_converter/complete`：私有 archive，不進 Git。

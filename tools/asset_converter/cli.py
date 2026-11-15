@@ -278,7 +278,7 @@ def main() -> int:
         type=Path,
         help="original server Dat required for authoritative map population",
     )
-    p.add_argument("--map", type=int, default=13)
+    p.add_argument("--map", type=int, action="append", help="repeat for more maps; defaults to Map13")
     p.add_argument(
         "--runtime-only",
         action="store_true",
@@ -307,12 +307,14 @@ def main() -> int:
     world.add_argument('--extracted-source',type=Path)
     world.add_argument('--server-dat',type=Path)
     maps = world.add_mutually_exclusive_group()
-    maps.add_argument('--map',type=int,default=13)
+    maps.add_argument('--map',type=int,action='append',help='repeatable map ID; default Map13')
     maps.add_argument('--all-maps',action='store_true',help='compile all NPC.dat files present in server Dat; absent files are reported, not guessed empty')
     destinations = world.add_mutually_exclusive_group()
     destinations.add_argument('--output',type=Path,help='single-map JSON destination')
     destinations.add_argument('--output-root',type=Path,help='private catalog root; output maps/<id>/npcs.json')
     world.add_argument('--report',type=Path)
+    world.add_argument('--include-map',action='store_true',
+                       help='also compile original terrain, objects and blocking per map into output-root')
     publication = sub.add_parser('export-assets',help='audit complete archive and publish all private source assets with a logical Godot catalog')
     publication.add_argument('original',type=Path)
     publication.add_argument('--extracted-source',type=Path)
@@ -322,8 +324,13 @@ def main() -> int:
     args = ap.parse_args()
     if args.command == 'build' and args.archive_only and args.runtime_only:
         ap.error('archive-only and runtime-only conflict')
-    if args.command == 'world-content' and args.all_maps and args.output:
-        ap.error('all-maps uses output-root, not a single output file')
+    if args.command in ('build', 'world-content'):
+        selected_maps = args.map or [13]
+        if len(set(selected_maps)) != len(selected_maps) or any(not 1 <= n <= 65535 for n in selected_maps):
+            ap.error('map IDs must be unique integers between 1 and 65535')
+        args.map_ids = sorted(selected_maps)
+    if args.command == 'world-content' and args.output and (args.all_maps or len(args.map_ids) > 1 or args.include_map):
+        ap.error('multiple maps and include-map use output-root, not a single output file')
     try:
         with converter_operation(REPO/'.cache/asset_converter/operation.lock'):
             return _execute(args)
@@ -351,7 +358,9 @@ def _execute(args):
     if args.command == 'world-content':
         report = {'status':'failed'}
         destination = (args.output_root or REPO/'local-assets/asset_converter/world').resolve()
-        report_path = args.report or REPO/('reports/world_content_all.json' if args.all_maps else f'reports/world_content_map{args.map}.json')
+        report_path = args.report or REPO/('reports/world_content_all.json' if args.all_maps else
+                                         'reports/world_content_maps.json' if len(args.map_ids) > 1 else
+                                         f'reports/world_content_map{args.map_ids[0]}.json')
         started = time.perf_counter()
         module_paths = ['tools/asset_converter/'+name for name in
                         ['cli.py','content/npc_content.py','content/build_maps.py','source/legacy_npc.py','source/runtime_spr.py']]
@@ -364,6 +373,11 @@ def _execute(args):
             for root in (original,source,server_dat):
                 if output == root or output.is_relative_to(root):
                     raise ValueError('world content output must not overwrite original sources')
+            def compile_one(map_id, npc_output):
+                row = build_npcs(source, server_dat, map_id, npc_output)
+                if args.include_map:
+                    row['terrain'] = build_map(source, destination, map_id)
+                return row
             if args.all_maps:
                 map_ids, absent = [], []
                 for folder in sorted((server_dat/'Map').iterdir()):
@@ -375,15 +389,27 @@ def _execute(args):
                 rows = []
                 for map_id in sorted(map_ids):
                     try:
-                        rows.append(build_npcs(source,server_dat,map_id,destination/f'maps/{map_id}/npcs.json'))
+                        rows.append(compile_one(map_id,destination/f'maps/{map_id}/npcs.json'))
                     except (OSError,ValueError,KeyError,TypeError) as error:
                         rows.append({'status':'failed','map_id':map_id,'error':str(error)})
                 report = {'status':'pass' if all(row['status']=='pass' for row in rows) else 'partial',
                           'scope':'NPC.dat files present in supplied server Dat; missing files are not assumed empty',
                           'maps':rows,'map_files':len(map_ids),'maps_without_npc_file':sorted(absent),
                           'npcs':sum(row.get('npcs',0) for row in rows),'runtime_transfer_implemented':False}
+            elif len(args.map_ids) > 1:
+                rows = []
+                for map_id in args.map_ids:
+                    try:
+                        rows.append(compile_one(map_id,
+                                                destination/f'maps/{map_id}/npcs.json'))
+                    except (OSError, ValueError, KeyError, TypeError) as error:
+                        rows.append({'status':'failed','map_id':map_id,'error':str(error)})
+                report = {'status':'pass' if all(row['status']=='pass' for row in rows) else 'partial',
+                          'maps':rows, 'map_files':len(rows),
+                          'npcs':sum(row.get('npcs',0) for row in rows),
+                          'runtime_transfer_implemented':False}
             else:
-                report = build_npcs(source,server_dat,args.map,output)
+                report = compile_one(args.map_ids[0],output)
         except (OSError,ValueError,KeyError,TypeError) as error:
             report = {'status':'failed','error':str(error),'runtime_transfer_implemented':False}
         report['elapsed_seconds'] = round(time.perf_counter()-started,3)
@@ -434,9 +460,18 @@ def _execute(args):
                 args.runtime_output,
             )
         if not args.archive_only and full_build:
-            report["runtime"] = build_runtime_assets(
-                source, args.runtime_output.resolve(), args
-            )
+            runtime_rows = []
+            for map_id in args.map_ids:
+                map_args = argparse.Namespace(**vars(args))
+                map_args.map = map_id
+                row = build_runtime_assets(source, args.runtime_output.resolve(), map_args)
+                runtime_rows.append(row)
+                if row.get('status') != 'built':
+                    break  # fail closed; do not report a partial multi-map build as complete
+            report['runtime'] = (runtime_rows[0] if len(args.map_ids) == 1 else
+                                 {'status':'built' if len(runtime_rows) == len(args.map_ids) and
+                                  all(row.get('status') == 'built' for row in runtime_rows) else 'partial',
+                                  'requested_maps':args.map_ids,'maps':runtime_rows})
         else:
             report["runtime"] = {"status": "not_requested"}
         report["status"] = (

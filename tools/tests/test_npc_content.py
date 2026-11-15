@@ -45,8 +45,15 @@ class NpcContentTests(unittest.TestCase):
         (server/'Quest/TS_Common.txt').write_bytes(COMMON)
         for map_id in [1, 2]:
             (source/f'map/map{map_id}').mkdir(parents=True)
-            (source/f'map/map{map_id}.map').write_text(f'[Map]\nBlocking=map/map{map_id}/blocking.dat\n')
+            (source/f'map/map{map_id}.map').write_text(
+                f'[Map]\nBlocking=map/map{map_id}/blocking.dat\n'
+                f'Tiles=map/map{map_id}/tiles.pic\n'
+                f'Array=map/map{map_id}/mapblock.dat\n'
+                f'List=map/map{map_id}/objectlist.dat\n')
             (source/f'map/map{map_id}/blocking.dat').write_bytes(struct.pack('<II',4,4)+bytes(16))
+            (source/f'map/map{map_id}/tiles.pic').write_bytes(struct.pack('<II',16,16)+bytes(16*16*2))
+            (source/f'map/map{map_id}/mapblock.dat').write_bytes(struct.pack('<II',4,4)+bytes(4*4*2))
+            (source/f'map/map{map_id}/objectlist.dat').write_bytes(struct.pack('<I',0)+bytes(4))
         return source, server, root/'out/npcs.json'
 
     def compile(self, source, server, output):
@@ -172,6 +179,69 @@ class NpcContentTests(unittest.TestCase):
             self.assertEqual(data['npcs'],1)
             self.assertEqual(data['maps_without_npc_file'],[2])
             self.assertTrue((Path(folder)/'private/maps/1/npcs.json').is_file())
+
+    def test_cli_explicit_two_map_builds_are_isolated_and_repeatable(self):
+        with tempfile.TemporaryDirectory() as folder:
+            source, server, _ = self.fixture(folder)
+            (server/'Map/Map02').mkdir()
+            (server/'Map/Map02/NPC.dat').write_bytes(struct.pack('<i', 0))
+            private = Path(folder)/'private'
+            report = Path(folder)/'report.json'
+            command = [sys.executable, str(REPO/'tools/asset_converter/cli.py'),
+                       'world-content', str(source), '--server-dat', str(server),
+                       '--output-root', str(private), '--report', str(report)]
+            first = subprocess.run(command+['--map','1','--map','2'], cwd=folder,
+                                   capture_output=True, text=True)
+            self.assertEqual(first.returncode, 0, first.stderr+first.stdout)
+            data = json.loads(report.read_text(encoding='utf-8'))
+            self.assertEqual(data['status'], 'pass')
+            self.assertEqual([row['map_id'] for row in data['maps']], [1, 2])
+            paths = [private/f'maps/{map_id}/npcs.json' for map_id in (1, 2)]
+            before = [hashlib.sha256(path.read_bytes()).hexdigest() for path in paths]
+            self.assertEqual([len(json.loads(path.read_text())['npcs']) for path in paths], [1, 0])
+            replay = subprocess.run(command+['--map','2','--map','1'], cwd=folder,
+                                    capture_output=True, text=True)
+            self.assertEqual(replay.returncode, 0, replay.stderr+replay.stdout)
+            self.assertEqual([hashlib.sha256(path.read_bytes()).hexdigest() for path in paths], before)
+            self.assertEqual([row['map_id'] for row in json.loads(report.read_text())['maps']], [1, 2])
+            invalid = subprocess.run(command+['--map','1','--map','1'], cwd=folder,
+                                     capture_output=True, text=True)
+            self.assertEqual(invalid.returncode, 2)
+            self.assertEqual([hashlib.sha256(path.read_bytes()).hexdigest() for path in paths], before)
+
+    def test_cli_multi_map_terrain_and_npc_with_stable_hashes(self):
+        with tempfile.TemporaryDirectory() as folder:
+            source, server, _ = self.fixture(folder)
+            (server/'Map/Map02').mkdir()
+            (server/'Map/Map02/NPC.dat').write_bytes(struct.pack('<i', 0))
+            private, report = Path(folder)/'private', Path(folder)/'report.json'
+            command = [sys.executable, str(REPO/'tools/asset_converter/cli.py'),
+                       'world-content', str(source), '--server-dat', str(server),
+                       '--include-map', '--output-root', str(private), '--report', str(report)]
+            first = subprocess.run(command+['--map','2','--map','1'], cwd=folder,
+                                   capture_output=True, text=True)
+            self.assertEqual(first.returncode, 0, first.stderr+first.stdout)
+            first_report = json.loads(report.read_text(encoding='utf-8'))
+            self.assertEqual(first_report['status'], 'pass')
+            self.assertEqual([row['map_id'] for row in first_report['maps']], [1, 2])
+            self.assertEqual([row['terrain']['objects'] for row in first_report['maps']], [0, 0])
+            self.assertTrue(all(row['terrain']['pixel_round_trip'] for row in first_report['maps']))
+            files = [private/f'maps/{map_id}/{name}' for map_id in (1,2)
+                     for name in ('npcs.json','world.json','blocking.dat','tiles.bin','terrain.png')]
+            digests = [hashlib.sha256(path.read_bytes()).hexdigest() for path in files]
+            again = subprocess.run(command+['--map','1','--map','2'], cwd=folder,
+                                   capture_output=True, text=True)
+            self.assertEqual(again.returncode, 0, again.stderr+again.stdout)
+            self.assertEqual([hashlib.sha256(path.read_bytes()).hexdigest() for path in files], digests)
+            for map_id in (1,2):
+                base = private/f'maps/{map_id}'
+                world = json.loads((base/'world.json').read_text(encoding='utf-8'))
+                self.assertEqual(world['collision_sha256'],
+                                 hashlib.sha256((base/'blocking.dat').read_bytes()).hexdigest())
+            denied = subprocess.run(command+['--output',str(Path(folder)/'shared.json')],
+                                    cwd=folder,capture_output=True,text=True)
+            self.assertEqual(denied.returncode,2)
+            self.assertEqual([hashlib.sha256(path.read_bytes()).hexdigest() for path in files], digests)
 
 
 if __name__ == '__main__':

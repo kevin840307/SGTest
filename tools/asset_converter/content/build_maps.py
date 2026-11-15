@@ -55,17 +55,66 @@ def dimensions(raw, stride):
     return w,h
 
 
-def objects(raw, source):
-    count = struct.unpack_from('<I',raw)[0]
-    at, result = 4, []
-    decoded_cache = {}
-    for _ in range(count):
+def _next_object_header(raw, at):
+    """Confirm a complete next path header, not merely an arbitrary length byte."""
+    if at >= len(raw):
+        return False
+    length = raw[at]
+    if length < 1 or at + 1 + length + 8 > len(raw):
+        return False
+    try:
+        name = raw[at+1:at+1+length].decode('cp950')
+    except UnicodeDecodeError:
+        return False
+    return (name.startswith(('OBJECT\\', 'BUILDING\\'))
+            and name.lower().endswith(('.blg', '.sth', '.sif')))
+
+
+def object_records(raw):
+    """Preserve Map15's original short building records without shifting all later objects.
+
+    Fifteen Map15 placements have XY only, with the next object's length+path
+    immediately after Y. Normal placements use XYZ. An absent Z is explicitly
+    marked rather than misreading the following object as a giant Z integer.
+    """
+    if len(raw) < 4:
+        raise ValueError('short ObjectList header')
+    count = struct.unpack_from('<I', raw)[0]
+    if count > 1_000_000:
+        raise ValueError('ObjectList count outside supported bounds')
+    at, records = 4, []
+    for index in range(count):
+        if at >= len(raw):
+            raise ValueError(f'truncated ObjectList record {index}')
         length = raw[at]
         at += 1
-        name = raw[at:at+length].decode('cp950')
+        if not length or at + length + 8 > len(raw):
+            raise ValueError(f'invalid ObjectList path length at record {index}')
+        try:
+            name = raw[at:at+length].decode('cp950')
+        except UnicodeDecodeError as error:
+            raise ValueError(f'invalid ObjectList name encoding at record {index}') from error
         at += length
-        x,y,z = struct.unpack_from('<iii',raw,at)
-        at += 12
+        x, y = struct.unpack_from('<ii', raw, at)
+        at += 8
+        z_present = True
+        if index + 1 < count and _next_object_header(raw, at):
+            z, z_present = 0, False
+        else:
+            if at + 4 > len(raw):
+                raise ValueError(f'truncated ObjectList Z at record {index}')
+            z = struct.unpack_from('<i', raw, at)[0]
+            at += 4
+        records.append((name, x, y, z, z_present))
+    if raw[at:] not in (b'', b'\0\0\0\0'):
+        raise ValueError('unexpected ObjectList trailer or record alignment')
+    return records
+
+
+def objects(raw, source):
+    result = []
+    decoded_cache = {}
+    for name, x, y, z, z_present in object_records(raw):
         resource = resolve(source,'map/'+name)
         sprite = object_sprite(source,resource)
         relative = sprite.relative_to(source)
@@ -88,10 +137,9 @@ def objects(raw, source):
         right = max((x+b[2] for b in local_boxes), default=x)
         bottom = max((y+b[3] for b in local_boxes), default=y)
         result.append({'atlas':source_sprite_manifest(key),'clip':clip,'p':[x,y], 'z':z,
+                       'z_source_present':z_present,
                        'bounds':[left,top,right-left,bottom-top],'frames':frame_count,
                        'source':key})
-    if raw[at:] not in (b'',b'\0\0\0\0'):
-        raise ValueError('unexpected ObjectList trailer')
     return result
 
 

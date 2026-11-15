@@ -18,7 +18,27 @@ Converter **不應依賴**可執行的 client/project.godot 或 server/*.csproj�
 
 先確認原版 Map15／Map13 的 Map、Scenery、Blocking、原始座標、Server population/NPC、傳點；用唯一 Converter 產出兩圖必要資產及 Server content，不預先全量解包所有 Runtime 素材。Map15 先供應城市 NPC、Item/Equipment、UI、Player；Map13 供應 Enemy 多種體型與各 Action／方向、地上 Drop、技能與世界地物；Pet/Mecha 依玩法逐步補充。**素材缺失先擴充同一 Converter／metadata，不新增第二套 Map15 或 Map13 腳本。**
 
-build CLI 已有 --map、--category、--prefix；world-content 有 --map，但**分別建置兩張圖會不會覆蓋彼此 catalog/PCK、是否能定向完整素材仍 NOT VERIFIED**。MVP001 要實測兩張圖交替打包、SHA256、source coverage、Height-Dense、Texture import、External assets.pck、Blocking/Spawn 與 AssetStore 進出圖資源釋放。只保留一套兩圖共用的正式建置與載入流程。
+`build` 與 `world-content` 現在都接受**可重複的 `--map`**，會排序／拒絕重複 map ID。`world-content --include-map` 使用**同一正式 CLI** 一次輸出 `maps/<id>/world.json`、`terrain.png`、`tiles.bin`、`blocking.dat`、`npcs.json` 到私有 `--output-root`，不需要重建 Client／Server／完整 Atlas；每張圖的 Sprite Atlas 參照仍保有單獨 Asset ID。此為**原始內容資料產出**，不能冒稱完整 Runtime/PCK 已就緒。
+
+~~~powershell
+# 首次由 Data1.dat 抽出完整來源；之後指定 --extracted-source 重用本機 .cache
+python tools/asset_converter/cli.py world-content "C:\SGO\Stargate Online IE HK2" `
+  --extracted-source .cache/asset_converter/source `
+  --server-dat "C:\SGO\Recovered\Old\服務端\Dat" `
+  --map 15 --map 13 --include-map `
+  --output-root local-assets/asset_converter/world `
+  --report reports/world_content_mvp_maps.json
+# 已發布完完整獨立 Atlas Catalog 後才可使用下列 Runtime 專用建置
+python tools/asset_converter/cli.py build "C:\SGO\Stargate Online IE HK2" `
+  --extracted-source .cache/asset_converter/source --runtime-only `
+  --server-dat "C:\SGO\Recovered\Old\服務端\Dat" --map 15 --map 13
+~~~
+
+**2026-11-15 來源實測 PASS（僅此範圍）**：Data1.dat 索引 41,687 筆、loose overlays 41,707；`world-content --include-map --map 15 --map 13` 完成兩圖、Converter SHA 執行前後一致。Map13：865 種 tile、230,400 tile 引用、367 個地物／17 動畫地物、3 NPC（3 個已驗證靜態傳點）。Map15：976 種 tile、230,400 tile 引用、1,848 個地物／44 動畫地物、52 NPC（4 個已驗證靜態傳點；48 個 script_required）。兩圖 terrain 像素往返驗證 PASS，兩張原版 Blocking.dat 與原版 Server Dat 同圖版本 SHA256 完全相同。
+
+**Map15 特例**：原始 ObjectList.dat 的 15 筆 `Building_object` 記錄只寫 XY、未寫 int32 Z；固定讀 XYZ 會造成後續記錄錯位。轉換器以可驗證的下一筆路徑標頭及完整記錄計數辨識，輸出缺少 Z 的 `z=0` 視覺預設，另以 `z_source_present=false` 保留來源缺欄位事實。**Z 預設及各特殊建築的正式 DrawOrder/UI 表現仍待真 Renderer 驗證**，不得以 converter PASS 抵銷視覺 Gate。
+
+**尚未通過**：全部原版 SPR/ACT/Enemy 的正式完整轉換及 source coverage、正式 `client/assets` Catalog、Godot Atlas/ResourceLoader、正式 PCK、跨圖 E2E、Server 權威路徑／NPC 腳本規則及 AssetStore 引用釋放。MVP001 仍保持未完成；兩圖資料檔互不覆蓋不等於交替完整 PCK Build PASS。
 
 MVP 通過後再逐張擴其他地圖、全部素材與完整 Windows/macOS Release，不能將兩圖來源覆蓋稱為全 7,890 asset PASS。
 
