@@ -1,7 +1,7 @@
-"""Publish the complete private source catalog into Godot's assets tree.
+"""Publish a complete or scoped private catalog into Godot's assets tree.
 
 Physical pages stay unchanged. The v9 adapter exposes source clips to the one
-existing AssetStore; verified enemy semantics reuse the normalized compiler.
+future AssetStore; verified enemy semantics reuse the normalized compiler.
 Unresolved legacy semantics remain explicit instead of invented animations.
 """
 from collections import Counter
@@ -10,12 +10,50 @@ import json
 from pathlib import Path, PurePosixPath
 import re
 import shutil
+import tempfile
 
 from ..atlas.archive_audit import audit_archive
 from ..source.runtime_spr import unwrap_cde
 from .animation_definition import compile_definition
 from .runtime_animation_semantics import logical_views
-from .asset_paths import sprite_asset_id
+from .asset_paths import sprite_asset_id, source_sprite_manifest
+
+
+PLAYER_PART_ASSETS = (
+    'players/b/base/body', 'players/b/base/leg', 'players/b/base/head',
+    'players/b/hair/hair00', 'players/b/base/left_arm',
+    'players/b/base/right_arm', 'players/b/base/death',
+)
+
+
+def map_asset_ids(source: Path, server_dat: Path, map_ids: list[int]) -> set[str]:
+    """Follow original map references using the existing content compilers.
+
+    This selects visual data only; it does not invent NPC timing or combat rules.
+    """
+    from .build_maps import build as build_map
+    from .npc_content import build as build_npcs
+    from .build_population import compile_spawn_evidence
+
+    result = set(PLAYER_PART_ASSETS)
+    with tempfile.TemporaryDirectory(prefix='sgtest-asset-selection-') as scratch:
+        stage = Path(scratch)
+        for map_id in sorted(map_ids):
+            build_map(source, stage, map_id)
+            folder = stage / f'maps/{map_id}'
+            world = json.loads((folder/'world.json').read_text(encoding='utf-8'))
+            result.update(row['atlas'].removesuffix('/atlas.json') for row in world['objects'])
+            build_npcs(source, server_dat, map_id, folder/'npcs.json')
+            npcs = json.loads((folder/'npcs.json').read_text(encoding='utf-8'))
+            for row in npcs['npcs']:
+                visual = row['visual']
+                if visual['resolved']:
+                    result.add(source_sprite_manifest(visual['source']).removesuffix('/atlas.json'))
+                elif visual['reason'] != 'empty_primary_slot':
+                    raise ValueError(f'missing NPC visual for map {map_id}: {visual}')
+            population = compile_spawn_evidence(source, server_dat, map_id)
+            result.update(row['atlas'].removesuffix('/atlas.json') for row in population['definitions'])
+    return result
 
 
 def digest(path):
@@ -33,7 +71,7 @@ def safe_relative(value):
     return path
 
 
-def publish(source: Path, archive: Path, assets: Path) -> dict:
+def publish(source: Path, archive: Path, assets: Path, asset_ids: set[str] | None = None) -> dict:
     source, archive, assets = source.resolve(), archive.resolve(), assets.resolve()
     if any(assets == root or assets.is_relative_to(root) or root.is_relative_to(assets) for root in (source,archive)):
         raise ValueError('asset output overlaps source/archive')
@@ -41,6 +79,12 @@ def publish(source: Path, archive: Path, assets: Path) -> dict:
     if audit['status'] != 'pass':
         raise ValueError('complete archive audit failed: '+json.dumps(audit['errors'][:3]))
     index = json.loads((archive/'index.json').read_text(encoding='utf-8'))
+    groups = index['groups']
+    if asset_ids is not None:
+        available = {sprite_asset_id(row['group'])[0] for row in groups}
+        if not asset_ids or asset_ids - available:
+            raise ValueError('empty or unknown selected asset IDs: '+str(sorted(asset_ids - available)))
+        groups = [row for row in groups if sprite_asset_id(row['group'])[0] in asset_ids]
     assets.mkdir(parents=True,exist_ok=True)
     owned_path = assets/'catalog/_export_files.json'
     previous = json.loads(owned_path.read_text(encoding='utf-8')).get('files',{}) if owned_path.is_file() else {}
@@ -82,7 +126,7 @@ def publish(source: Path, archive: Path, assets: Path) -> dict:
         entries[asset_id] = entry
         categories[asset_id.split('/')[0]][asset_id] = entry
 
-    for row in index['groups']:
+    for row in groups:
         group = row['group']
         original_folder = archive/'sprites'/group
         raw = json.loads((original_folder/'atlas.json').read_text(encoding='utf-8'))
@@ -143,6 +187,7 @@ def publish(source: Path, archive: Path, assets: Path) -> dict:
         if not original.is_file() or len(original.relative_to(source).parts) < 2:continue
         relative = original.relative_to(source).as_posix()
         if relative in coverage:continue
+        if asset_ids is not None:continue  # Scoped visuals include only selected SPR and compiled definitions.
         suffix = original.suffix.lower()
         if suffix == '.spr':raise ValueError('SPR missing from verified archive: '+relative)
         sidecar_suffix = '.draw_order.json' if original.name.lower().endswith('draworder.dat') else suffix+'.json'
@@ -186,11 +231,15 @@ def publish(source: Path, archive: Path, assets: Path) -> dict:
 
     for category, values in categories.items():
         document('catalog/'+category+'.json',{'schema':'sgtest.asset_catalog/v1','assets':values})
-    source_files = {p.relative_to(source).as_posix() for p in source.rglob('*') if p.is_file() and len(p.relative_to(source).parts)>1}
+    source_files = ({item['path'] for row in groups
+                     for item in json.loads((archive/'sprites'/row['group']/'atlas.json').read_text(encoding='utf-8'))['sources']}
+                    if asset_ids is not None else
+                    {p.relative_to(source).as_posix() for p in source.rglob('*') if p.is_file() and len(p.relative_to(source).parts)>1})
     if source_files != set(coverage):raise ValueError('incomplete asset source coverage')
     catalog = {'schema':'sgtest.asset_catalog_root/v1','loading':'lazy_category_or_direct_id',
                'categories':{key:{'index':'catalog/'+key+'.json','assets':len(value)} for key,value in categories.items()},
-               'source_files':len(coverage),'sprite_groups':len(index['groups']),
+               'source_scope':'selected_sprite_assets' if asset_ids is not None else 'all_source_files',
+               'source_files':len(coverage),'sprite_groups':len(groups),
                'animation_semantics':dict(semantic_counts),'runtime_path_migration_complete':False,
                'opaque_payloads':opaque,'errors':errors}
     document('catalog/assets.json',catalog)
@@ -206,9 +255,9 @@ def publish(source: Path, archive: Path, assets: Path) -> dict:
     temporary = tracking.with_name(tracking.name+'.tmp')
     temporary.write_text(json.dumps({'version':1,'files':files},separators=(',',':'))+'\n',encoding='utf-8')
     temporary.replace(tracking)
-    return {'status':'pass' if not errors else 'partial','scope':'complete disk export; semantic/runtime migration still partial',
-            'source_files':len(coverage),'sprite_groups':len(index['groups']),'sprite_frames':sum(row['frames'] for row in index['groups']),
-            'sprite_pages':sum(row['pages'] for row in index['groups']),'audio_files':audio,'sidecars':sidecars,
+    return {'status':'pass' if not errors else 'partial','scope':catalog['source_scope']+'; semantic/runtime migration still partial',
+            'source_files':len(coverage),'sprite_groups':len(groups),'sprite_frames':sum(row['frames'] for row in groups),
+            'sprite_pages':sum(row['pages'] for row in groups),'audio_files':audio,'sidecars':sidecars,
             'opaque_payloads':opaque,'animation_semantics':dict(semantic_counts),'categories':catalog['categories'],
             'managed_files':len(files),'bytes':sum(target(name).stat().st_size for name in files),
             'modified_stale_files_retained':retained,'errors':errors,'archive_index_sha256':audit['index_sha256'],

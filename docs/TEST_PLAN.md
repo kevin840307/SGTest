@@ -125,3 +125,7 @@ Recovered P95 7.470ms、舊 SGTest P95 6.900ms。
 ## ARCHIVE001 — 完整私有素材重新驗證（2026-11-15 PASS）
 
 正式 Builder 重新產出 7,890 groups／75,588 SPR／282,968 Frame／7,871 頁，逐幀像素／origin 比較及 sidecar 613 ACT／1,165 SIF／9 DrawOrder 成功；後續唯一 CLI verify 來源／metadata／頁面 SHA、幀 identity、PNG 幾何與 sidecar replay PASS，0 error。測試命令、index SHA 與限制見 [Converter](ASSET_CONVERTER.md#archive-索引一致性mvp001-archive-integrity)。主 checkout 58 項 Python tests PASS。Archive PASS 不包含所有動畫語意／壓縮邊緣／PCK／Renderer／Client/Server；其餘 Gate 保持 NOT VERIFIED。
+
+## CATALOG001 — 雙圖定向發布（2026-11-15 PASS，僅資料）
+
+完整 Archive audit 為前置，原版 Map13／Map15 真實參照發布 242 個獨立 Atlas／242 頁／2,269 Frame，兩次反向指定 map ID 的 517 個檔案 SHA 完全一致。完整 62 Python tests PASS；新回歸涵蓋 full export、選取 scope、未知 ID／空集合 fail closed、未選 Asset 損毀也不可繞過完整 audit、managed stale removal／人工修改保留與確定性。命令及資料範圍見 [Converter](ASSET_CONVERTER.md#雙圖定向-catalogmvp001-catalog-scope)。**未驗證 NPC timing／全部動畫語意、真圖 ResourceLoader、PCK、Renderer 與 Client/Server E2E**。

@@ -28,7 +28,12 @@ python tools/asset_converter/cli.py world-content "C:\SGO\Stargate Online IE HK2
   --map 15 --map 13 --include-map `
   --output-root local-assets/asset_converter/world `
   --report reports/world_content_mvp_maps.json
-# 已發布完完整獨立 Atlas Catalog 後才可使用下列 Runtime 專用建置
+# 必須先有通過完整 audit 的 Archive；只發布兩張地圖參照的正式獨立 Atlas
+python tools/asset_converter/cli.py export-assets "C:\SGO\Stargate Online IE HK2" `
+  --extracted-source .cache/asset_converter/source `
+  --server-dat "C:\SGO\Recovered\Old\服務端\Dat" --map 13 --map 15 `
+  --report reports/mvp_scoped_asset_export.json
+# 已發布兩圖所需獨立 Atlas Catalog 後才可使用下列 Runtime 專用建置
 python tools/asset_converter/cli.py build "C:\SGO\Stargate Online IE HK2" `
   --extracted-source .cache/asset_converter/source --runtime-only `
   --server-dat "C:\SGO\Recovered\Old\服務端\Dat" --map 15 --map 13
@@ -114,3 +119,13 @@ python tools/asset_converter/runtime_pack.py "C:\SGO\Godot\Godot_v4.7.2-stable_w
 回歸包含重複 group、四種 row 計數損毀、還原後合法 Archive、既有 Preview 拒絕及 PNG 損毀；2026-11-15 以臨時目錄複製當前 tools 執行同一 unittest suite，58 tests PASS。使用隔離快照是避免測試 CLI 與正式長時間建置競爭每 checkout 的 OS lock，不停用正式互斥鎖。完整建置及獨立 audit 已 PASS；Catalog／PCK 仍 NOT VERIFIED。
 
 2026-11-15 正式全量重新驗證：唯一 CLI `build --archive-only --extracted-source .cache/asset_converter/source`（822.07 秒）與後續 `verify` 皆 exit 0。實際 7,890 group／75,588 SPR／282,968 Frame／7,871 頁，613 ACT／1,165 SIF／9 DrawOrder，全部無錯誤。PNG 合計 960,300,862 bytes；未壓縮頁面理論 RGBA 4,107,323,520 bytes，**不是 Runtime RSS 或 VRAM 常駐量**。Archive index SHA256：`bd6b8a6397f23bbba33f4ade59092c4abe40a446512a524b904a67047836ea55`，本機報告 `reports/mvp_complete_archive_verification.json`。Builder 做逐幀像素／原點比較；audit 獨立重算來源、metadata、PNG hash／幾何、來源幀 identity 和 sidecar，不重播像素比較。主 checkout 完整 suite 在 CLI 結束後單獨執行 58 tests PASS。原版／衍生圖及來源 JSON 均不進 Git；這仍不是全動畫語意、P0 壓縮畫質或正式 Client/Server PASS。
+
+## 雙圖定向 Catalog（MVP001-CATALOG-SCOPE）
+
+`export-assets --map 13 --map 15` 沿用既有 Map／NPC／Enemy evidence 編譯器追蹤原始參照，加上目前基礎 B Player 七部位，選取需發布的完整 Asset，**不裁去其動作／方向／Frame**。所有 Atlas 仍來自同一份完整、已 audit 的 Archive；不建立第二套 Builder。未指定 `--map` 保持完整來源發布。空集合／未知 Asset ID 與完整 Archive audit 失敗均在建立輸出前拒絕；未知 NPC type／缺 SPR 不可假裝沒有外觀。只有原始 NPC 空 primary slot 允許無 visual；兩圖實測 55 NPC 均已解析外觀。
+
+Catalog 的 `source_scope=selected_sprite_assets` 與 `_source_coverage.json` 明確只涵蓋選取 SPR；不複製不相關音效、ACT sidecar 或 opaque payload，所需 Enemy／Player 的編譯動畫定義隨 Atlas 輸出。這是原有 Publisher 的可選範圍，沒有額外 Loader／Cache 或平行 Converter。每個 Asset 內維持完整 Frame／來源 hash／頁面 hash／Origin；切換發布範圍只刪除前次追蹤且 hash 仍相同的舊輸出，人工修改保留並列入 report。
+
+2026-11-15 真實雙圖發布 PASS：195 地物＋10 Enemy＋30 NPC 外觀＋7 Player 部位＝242 Asset／242 頁／2,269 Frame／756 SPR，515 managed files，20,332,844 bytes（約 19.4 MiB）。10 Enemy＋7 Player 動畫定義已 normalized，225 個地物／NPC 僅 source clips，**不宣稱 NPC 動畫時間／方向已驗證**。反向 `--map 15 --map 13` 重跑，517 個實際檔案（含追蹤檔及 `.gdignore`）SHA 全部一致；報告 `reports/mvp_scoped_asset_export*.json`、`reports/mvp_scoped_asset_repeatability.json`。完整 62 項 Python tests PASS，含 full export 相容、scope 切換／保留修改、未知 ID、無關素材損毀仍拒絕及 deterministic replay。
+
+未包含本階段沒有參照的裝備／UI／掉落／Pet／Mecha；後續功能需擴同一素材選取流程。Runtime map content／PCK ResourceLoader／NPC timing／紙娃娃真畫面與 Client/Server E2E 仍 NOT VERIFIED。定向是依真實參照排除未用資料，沿用同一 packing，非 Atlas／Renderer 性能選型，不宣稱改善遊戲 FPS。

@@ -20,7 +20,7 @@ from asset_converter.source.convert_assets import (
 from asset_converter.source.extract_client import extract, audit_sprite_coverage
 from asset_converter.content.build_maps import build as build_map
 from asset_converter.content.npc_content import build as build_npcs
-from asset_converter.content.export_assets import publish as export_assets
+from asset_converter.content.export_assets import publish as export_assets, map_asset_ids, PLAYER_PART_ASSETS
 from asset_converter.content.server_source import resolve_server_dat
 from asset_converter.content.build_maps import server_map_directory
 from asset_converter.content.build_enemy_map_palette import read_enemy_catalog, read_enemy_dat
@@ -183,15 +183,7 @@ def check_runtime(stage: Path, assets: Path, map_id: int) -> dict:
             raise ValueError(f"monster is not an independent asset: {relative}")
         if not (assets / relative).is_file():
             raise ValueError(f"missing independent monster asset: {relative}")
-    player_paths = [
-        "players/b/base/body/atlas.json",
-        "players/b/base/leg/atlas.json",
-        "players/b/base/head/atlas.json",
-        "players/b/hair/hair00/atlas.json",
-        "players/b/base/left_arm/atlas.json",
-        "players/b/base/right_arm/atlas.json",
-        "players/b/base/death/atlas.json",
-    ]
+    player_paths = [asset_id+'/atlas.json' for asset_id in PLAYER_PART_ASSETS]
     for relative in player_paths:
         if not (assets / relative).is_file():
             raise ValueError(f"missing independent player part asset: {relative}")
@@ -323,10 +315,12 @@ def main() -> int:
     publication.add_argument('--archive-output',type=Path,default=REPO/'local-assets/asset_converter/complete')
     publication.add_argument('--assets',type=Path,default=REPO/'client/assets')
     publication.add_argument('--report',type=Path,default=REPO/'reports/asset_export.json')
+    publication.add_argument('--map',type=int,action='append',help='publish only original map visuals, enemies, NPCs and standard player parts')
+    publication.add_argument('--server-dat',type=Path,help='original server Dat for map-scoped asset selection')
     args = ap.parse_args()
     if args.command == 'build' and args.archive_only and args.runtime_only:
         ap.error('archive-only and runtime-only conflict')
-    if args.command in ('build', 'world-content'):
+    if args.command in ('build', 'world-content', 'export-assets'):
         selected_maps = args.map or [13]
         if len(set(selected_maps)) != len(selected_maps) or any(not 1 <= n <= 65535 for n in selected_maps):
             ap.error('map IDs must be unique integers between 1 and 65535')
@@ -350,7 +344,12 @@ def _execute(args):
             original = args.original.resolve()
             if output == original or output.is_relative_to(original):
                 raise ValueError('asset output must not overwrite original game')
-            report = export_assets(resolve_source(args),args.archive_output,output)
+            source = resolve_source(args)
+            selected = map_asset_ids(source,resolve_server_dat(args.server_dat),args.map_ids) if args.map else None
+            report = export_assets(source,args.archive_output,output,asset_ids=selected)
+            if selected is not None:
+                report['requested_maps'] = args.map_ids
+                report['selected_assets'] = sorted(selected)
         except (OSError,ValueError,KeyError,TypeError) as error:
             report = {'status':'failed','error':str(error),'complete_asset_conversion':False}
         report['elapsed_seconds'] = round(time.perf_counter()-started,3)

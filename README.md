@@ -15,7 +15,7 @@
 
 **兩張原版真地圖 + 大部分完整玩法**，不是單圖 Demo：先確認兩圖資產／Blocking／NPC／傳點；Map15 用於登入、角色、NPC 商店／銀行／倉庫、裝備、交易／玩家商店，Map13 用於 A*／長按、怪物 AI、技能戰鬥、大量掉落和多人 AOI；中間要完成**Map15 ↔ Map13 真實雙向傳點**、MapEpoch/WorldReady、資源釋放及多人重連。
 
-目前 Map13／Map15 原始地形、Blocking、NPC 與兩圖共 82 筆 Enemy Spawn／10 種 SPR-ACT 已完成來源轉換驗證（詳 `todo.txt` 的 MVP001 子項）；正式 Atlas Catalog、PCK 和可執行 Client/Server 仍未完成。先小型切片逐步做到兩真 Godot Client、Map13 同圖 20 連線／300 Enemy／500 Drop、Map15 多人城市互動及兩圖同時活躍、AFK／多開 Gate。按 todo.txt 的 MVP001～MVP010 進行，**不是只做每種功能一條 happy path**；所有適用原版規則、異常／多人競態及 Server authority 要驗證，好友暫緩。選型多方案先實測 ALT001；MVP 通過後才擴所有地圖／品項及更大負載。
+目前 Map13／Map15 原始地形、Blocking、NPC 與兩圖共 82 筆 Enemy Spawn／10 種 SPR-ACT 已完成來源轉換驗證（詳 `todo.txt` 的 MVP001 子項）；完整 7,890 素材 Archive audit 與兩圖 242 個獨立 Atlas／Catalog 定向發布已 PASS；PCK 和可執行 Client/Server 仍未完成。先小型切片逐步做到兩真 Godot Client、Map13 同圖 20 連線／300 Enemy／500 Drop、Map15 多人城市互動及兩圖同時活躍、AFK／多開 Gate。按 todo.txt 的 MVP001～MVP010 進行，**不是只做每種功能一條 happy path**；所有適用原版規則、異常／多人競態及 Server authority 要驗證，好友暫緩。選型多方案先實測 ALT001；MVP 通過後才擴所有地圖／品項及更大負載。
 
 ## 從哪份文件開始重建
 
