@@ -171,3 +171,5 @@
   - ALT001：集中Canvas與重用Sprite2D同draw list、AssetStore、兩圖／720p/1080p／密集與疏場景、inside端點、frame0/1、240樣本及80跳轉／map／round。Canvas準備P99 Map15 1.223–1.460ms、Map13 0.541–0.626；Sprite1.478–1.791／0.688–0.793。Frame tail跨輪不穩定、RSS接近，選較簡單Canvas；兩候選texture相同，buffer高水位不等於OS VRAM或RSS回基線。詳細數據／原理／DIRECT函式位址見CLIENT_ARCHITECTURE。Sprite僅tests，沒有第二套正式pipeline。
   - 驗證精度：SPR→未壓縮Atlas嚴格byte／origin比對；GPU實體compressed image可能block-aligned，CPU以normalized nearest取樣，僅1e-5 texel精確tie上下界＋2色階rounding，實際最大超界差1、超過2的pixel=0，不能宣稱GPU/原圖零差異。負向control錯order／destination+1拒絕，整圖x+1有789194 pixel FAIL（world_render_negative_controls.json）。pilot曾因GDScript推斷型別、合法空白幀的JSON float array及reference未處理GPU尺寸/tie而FAIL，修正後完整重跑，不把pilot當PASS。
   - 尚存與下一步：MVP002-SCENERY-CONTRACT仍[ ]，原版動畫cadence／事件、inside入口fade／自身ghost未完成；P0壓縮品質與非4倍數頁面是否需要padding、逐視野預取ALT、Render0／多開／回收斜率、WorldState／A*／Server／多人E2E／Mac／Release仍NOT VERIFIED。先從原版ACT／Update節奏及壓縮P0缺口繼續，不得用固定Render FPS假造時間。source／Screenshot／PCK都只留private reports/.cache。
+
+  - 靜態景物Renderer／離線root順序／原生比較與文件 SHA：`911f632`，已推送origin/main。下一輪保持MVP002-SCENERY-CONTRACT主項未完成，優先處理原版動畫／fade cadence與P0壓縮取樣缺口；不可把fixture NPC當正式角色／多人Client。
