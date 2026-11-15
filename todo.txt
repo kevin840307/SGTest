@@ -131,3 +131,16 @@
   - `python -m unittest discover -s tools/tests -p "test_*.py" -q`：67 PASS；Godot --check-only PASS；git diff --check PASS。文件：client/README、CLIENT_ARCHITECTURE（方案表／限制）、ASSET_ARCHITECTURE、SPEC、TEST_PLAN、README／TODO。CI NOT VERIFIED；尚無 main scene／Renderer／Network，GPU時間硬預算、RSS/VRAM回基線／memory slope、AFK／packet trace、動畫／多人E2E仍 NOT VERIFIED。MVP002／REB012整體未完成。下一項：真圖 Renderer 小切片，先比較 terrain候選並驗證共同Y-sort／pivot，NPC timing研究不可略過。
 
   - 補充 Native 競態回歸 PASS：`python client/tests/run_asset_store.py "C:\SGO\Godot\Godot_v4.7.2-stable_win64_console.exe" --script tests/test_asset_store_epochs.gd --report reports/client_asset_store_epochs.json`；CPU在途同圖重取、同Texture路徑在途重取、ready handler重入釋放自己與peer共3情境，無引擎錯誤，final counts全0。
+
+  - AssetStore 實作 SHA：`c1b9aba` 已推送 origin/main。
+
+- MVP002-TERRAIN [x] 領取：真圖 Terrain Renderer 正確性／ALT001 選型。修改前：Client 只有 AssetStore，沒有地形呈現。原始依據：唯一 Converter build_maps.build 的 Map13／15 480×480 uint16 tiles.bin（8-byte WH header；65535空格）、32px tile、原始 tile_ids→terrain Atlas 無損對應。預期：同資料／同相機 trace／同解析度，公平比較可視 tile draw_texture_rect_region 與固定 chunk Mesh；獨立 CPU 原始 atlas＋tile 合成像素比對及邊界／空格／小數相機；正確後才看準備／Frame tail／CPU／RSS／Texture metrics，選唯一正式 Renderer。地物Y-sort／pivot、NPC timing、Server／多人 E2E 不屬此小項 PASS。
+
+  - 2026-11-16 完工（僅地形）：正式 `client/rendering/terrain.gd`＋terrain_data.gd，保留原始world pixel／tile ID來源。Native三候選各三輪PASS（RTX3050 OpenGL3、兩圖、720p／1080p、相同90暖機240樣本及40跳轉）；每輪16 GPU captures與獨立PIL原始tile合成精確一致，共144張0差異，engine無error/leak。Synthetic WH/u16／空格／壞ID／尾端bytes／越界／重新configure PASS。最終優化Mesh後重測=`reports/terrain_decision.json`；最初LRU約束誤套全圖的測試錯誤已修正，最終數據不採用錯誤FAIL。
+  - ALT001選區域Canvas：Frame P95 0.601–1.183ms、P99 0.648–1.277ms、jumpP99 0.961–1.157ms，first view 1.044–1.306ms（不含共用資料準備和Store載入），PeakRSS188.23–190.77MiB。全圖Meshfirst view229–240ms／PeakRSS242–244MiB；可視MeshjumpP99 9.619–19.123ms。兩Mesh僅在tests/，共用builder；沒有第二個正式Renderer／Converter。每候選詳細case／rawlog／source hash／PCK hash／限制見CLIENT_ARCHITECTURE。
+  - 命令：`python client/tests/run_terrain.py "C:\SGO\Godot\Godot_v4.7.2-stable_win64_console.exe" --rounds 3 --report reports/terrain_decision.json`；單候選 `--rounds 1 --mode draw`。`python -m unittest discover -s tools/tests -p "test_*.py" -q` 67 PASS；Godot check-only與git diff --check PASS，CI NOT VERIFIED。檔案：rendering/terrain*.gd、tests/test_terrain.gd／run_terrain.py／terrain_*_candidate.gd；文件同步README／SPEC／Client與Asset架構／TEST_PLAN。
+  - 尚存：地物／角色Y-sort／pivot／原版Animation/NPC timing、正式main scene／WorldState／Server權威Spawn/Blocking／A*／多人E2E／GPU記憶體斜率／AFK／Mac。MVP002／REB003不因此全項完成。下一項：以原始地物fixture與可靠原版證據建立共同排序／pivot契約，再接地物層與人物。
+
+  - Terrain 程式／回歸 SHA：`b5370fb78a2edd254f6ad97a2ce87a8063f5ef64`。補充最終選型數據（Mesh builder常數／尺寸查詢已優化，正式路徑）：區域 Frame P95 0.601–1.183／P99 0.648–1.277ms、jump P99 0.961–1.157ms、PeakRSS188.23–190.77MiB；全圖Mesh first view228.867–240.498ms／RSS242.25–244.21MiB，可視Mesh jump P99 9.619–19.123ms。以 reports/terrain_decision.json 為最終數據，早期pilot不取代它。
+
+- MVP002-SCENERY-CONTRACT [ ] 下一項已領取：先核對原版地物的 SPR origin／trim、p/z、可見clip／frame、排序用途與缺Z特例，建立可重現fixture後實作共同Y-sort／pivot地物切片。修改前：只有地形，尚無地物／角色層；不能把未驗證z或動畫時間當正式規則。指標／回歸：原點世界位置、遮擋／前後排序、不同相機位置與換圖清除、原始來源與誤差分級。先研究現有研究彙編及唯讀原始資料／Recovered，再落實可信部分；NPC timing／完整角色動畫／網路E2E保持未完成。

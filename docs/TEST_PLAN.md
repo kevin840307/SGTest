@@ -143,3 +143,9 @@ Recovered P95 7.470ms、舊 SGTest P95 6.900ms。
 `python client/tests/run_asset_store.py "C:\SGO\Godot\Godot_v4.7.2-stable_win64_console.exe" --compare --rounds 3 --report reports/client_asset_store_engine_comparison.json`：正式 PCK、完整 palette、各候選 fresh process 三輪。選定 Texture job=1 三輪皆完成每輪 30 次 Map15 221／Map13 63 Asset 載入／釋放，無引擎 ERROR／RID leak；相同 trace 的 job=2 三輪失敗（不以腳本單獨 PASS 抵銷引擎錯誤）。共用 Texture instance／readonly、最後引用 weak ref、在途取消／過期 epoch、容量／RGBA budget／無效 metadata 均有驗證；每輪 final owner/assets/jobs/bytes=0。來源與 metrics 見 CLIENT_ARCHITECTURE，raw logs／sources SHA／實際 engine CPU／Peak RSS 由 runner 留在 reports/。Python Converter 67 tests PASS。
 
 Store pump 僅是呈現資源交接；測試不代表 Network／WorldReducer FPS 解耦已通過。實際視窗／GPU／VRAM 釋放、memory slope、Renderer／動畫／AFK／多人 E2E 均 NOT VERIFIED。新 client/project.godot 僅供資源模組與測試，尚無 main scene。
+
+## TERRAIN001 — 原生 GPU 地形（2026-11-16 PASS，地形範圍）
+
+`python client/tests/run_terrain.py "C:\SGO\Godot\Godot_v4.7.2-stable_win64_console.exe" --rounds 3 --report reports/terrain_decision.json`：三候選 fresh process 各三輪；同雙圖／PCK／Atlas、1280×720和1920×1080、90暖機＋240固定trace樣本、40遠距跳轉。16 viewport capture／輪候選，獨立CPU原始tile合成比對，144張全部0差異，native engine無error/leak；WH／u16／65535空格、重複／未知ID／尾端bytes／越界fixture PASS。共用Mesh builder優化後重測，依資源／準備／tail選正式 terrain.gd，兩Mesh僅在tests。詳CLIENT_ARCHITECTURE選型表。原生GPU圖、rawlog、source/PCK SHA均留reports/，不進Git。
+
+Python Converter 67 tests PASS。這不代表地物／角色共同Y-sort／pivot、NPC timing／Animation、Server碰撞／A*、角色／多人畫面、AFK資源回基線或完整MVP002／MVP E2E通過；GPU engine counters 不直接當 OS VRAM 驗收。

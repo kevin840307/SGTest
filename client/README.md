@@ -1,6 +1,6 @@
 # SGTest Client 資源基礎
 
-已新增 Godot 4.7.2 專案及單一 `assets_runtime/asset_store.gd`。目前可執行資源生命週期測試；尚無遊戲 main scene、Renderer、網路／WorldState／登入／多人玩法。新程式沒有取回舊 prototype。
+已新增 Godot 4.7.2 專案及單一 `assets_runtime/asset_store.gd`。目前可執行資源生命週期測試；地形 Renderer 已完成原生 GPU 切片；尚無遊戲 main scene、完整 World Renderer、網路／WorldState／登入／多人玩法。新程式沒有取回舊 prototype。
 
 ## 驗證
 
@@ -27,3 +27,16 @@ python client/tests/run_asset_store.py "C:\SGO\Godot\Godot_v4.7.2-stable_win64_c
 2026-11-15 完整 palette 換圖測試：每輪 30 次，Map15 221／Map13 63 assets；一 Texture job 三輪全通過、無引擎 error／RID leak。共用 Texture instance、最後一個 consumer 釋放後 weak ref 消失、epoch 取消、容量／byte budget、錯 metadata 均有回歸。兩並行 job 在 Godot headless dummy backend 三輪皆失敗，預設採一個。詳 [Client 架構](../docs/CLIENT_ARCHITECTURE.md)。真 Renderer／GPU 記憶體基線／AFK／多人與跨圖 E2E 仍 NOT VERIFIED。
 
 快速 epoch／callback 競態回歸：`python client/tests/run_asset_store.py "Godot console exe" --script tests/test_asset_store_epochs.gd --report reports/client_asset_store_epochs.json`。測同地圖在 CPU 與 Texture 工作階段重取、ready callback 釋放自己與其他 owner，三種情境 PASS。
+
+## 地形 Renderer（2026-11-16）
+
+正式唯一路徑 `rendering/terrain.gd`：可視 tile 區域 Canvas 繪製，搭配 `terrain_data.gd` 無損讀取原始 WH/u16 tiles.bin／Atlas 對應。從 AssetStore 的 maps/<id> ready data 產生 TerrainData，configure 新 Node，依相機的世界可視 Rect2 呼叫 set_view_rect；可視 tile 矩形沒變就重用 Canvas commands。相機左上角採原始 world pixel，不改地圖／角色座標。離圖放下 renderer／TerrainData 引用後再結束 Store scope。
+
+```powershell
+# 單一正式實作的 Native OpenGL GPU／像素回歸
+python client/tests/run_terrain.py "C:\SGO\Godot\Godot_v4.7.2-stable_win64_console.exe" --rounds 1 --mode draw --report reports/terrain_validation.json
+# 同 Atlas／地圖／相機 trace，三種候選各三輪；會開啟自動結束的縮圖測試視窗
+python client/tests/run_terrain.py "C:\SGO\Godot\Godot_v4.7.2-stable_win64_console.exe" --rounds 3 --report reports/terrain_comparison.json
+```
+
+兩種 Mesh 策略只在 tests/，共用相同 Mesh builder；不是平行 Client。以 RTX 3050／OpenGL3、1280×720 與 1920×1080，三候選各三輪都通過 16 張 viewport 擷取／輪與獨立 CPU 合成圖精確像素比對（共144張，重複相同測例）；正式區域繪製的資源／首次呈現／跳轉 tail 較均衡。完整數據、失敗的測試分類修正與限制見 CLIENT_ARCHITECTURE。截圖與 reports 留在本機。這只呈現地形；地物／角色共同 Y-sort、pivot、NPC timing、遊戲同步與完整 client main scene 仍待完成。

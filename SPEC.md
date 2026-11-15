@@ -96,3 +96,7 @@ World Rendering / Animation / UI / Audio
 ## Client 資源模組進度（2026-11-15）
 
 單一 AssetStore 有界 metadata worker／threaded Texture、owner-epoch 去重／取消與釋放已實作，正式 PCK 的完整雙圖 palette 每輪 30 次、三輪 headless 回歸 PASS。job 並行 1／2 同 trace 比較依正確性選 1。詳細 API、CPU／RSS／pump 指標與失敗候選見 CLIENT_ARCHITECTURE／TEST_PLAN；這不是可玩 Client，也未驗證 Renderer／GPU 釋放或網路 FPS 解耦，MVP002／REB012 保持未完成。
+
+## 地形 Renderer 小階段（2026-11-16）
+
+Map15／Map13 原始 tile 地形已有唯一正式 Terrain Renderer；三種合理候選同圖／同trace／同Atlas／同解析度原生OpenGL各三輪、GPU截圖與獨立CPU合成零差異後，按準備／Frame tail／CPU/RSS／引擎資源與維護成本選可視tile區域繪製。數據與限制見 CLIENT_ARCHITECTURE；尚未完成地物／人物共同Y-sort、原版pivot／動畫、WorldState／Server與多人E2E，MVP002維持未完成。

@@ -1,6 +1,6 @@
 # SGTest Client — 重建設計
 
-**狀態：AssetStore 資源基礎已實作並有 headless 回歸；Renderer／Network／WorldState／玩法仍待實作。** 目標 Godot 4.7.2 / GDScript；功能導向的單一 Godot 專案。
+**狀態：AssetStore 資源基礎已實作並有 headless 回歸；Terrain Renderer 已有 Native GPU 切片；完整 World Renderer／Network／WorldState／玩法仍待實作。** 目標 Godot 4.7.2 / GDScript；功能導向的單一 Godot 專案。
 
 ## 職責分離（不要為了分層先建立空檔案）
 
@@ -120,3 +120,27 @@ DIRECT：2 jobs 的三輪引擎日誌分別記錄 17／7／3 個 error/leak 診�
 通過內容：唯讀資料／共用實例、consumer 放下引用後 Texture weak ref 釋放、在途 Texture 取消／舊 epoch 無 ready、完整 palette 每次 release 後 owner／entry／job／RGBA 預算歸零、容量與 byte budget 拒絕、壞 metadata fail closed。峰值 221 active assets，RGBA 預算計數 70,769,968 bytes。真正顯示視窗、GPU/VRAM 釋放／記憶體 slope、SpriteFrames／Y-sort／NPC timing、AFK 邏輯與 packet trace／多人 E2E 均 NOT VERIFIED；REB012／MVP002 的整體 Gate 保持未完成。重跑命令見 client/README.md。
 
 補充 `test_asset_store_epochs.gd` 三情境 PASS（runner --script tests/test_asset_store_epochs.gd）：同地圖 CPU job 在途重取、同 Texture path 在途重取、ready handler 同時釋放兩個 owner。舊 serial 不得通知新 scope；回呼重入不會存取已移除 owner 或向已結束的 peer 通知。raw report=`reports/client_asset_store_epochs.json`，沒有改變上述完整 palette 比較的 trace。
+
+## MVP002-TERRAIN：原始 tile 地形選型（2026-11-16）
+
+DIRECT 來源：唯一 `tools/asset_converter/content/build_maps.py::build` 保留原始 Map13／Map15 tiles.bin：8-byte little-endian width/height、480×480 uint16 原始 tile ID、65535 空格；world.json 的 tile_ids 確定性指向 terrain.png 格位，tile_side=32，world=15,360×15,360 pixel。Renderer 不改來源／邏輯 ID／原始座標；`TerrainData.configure` 驗證 WH／長度／ID／Atlas尺寸後，建立私有繪圖索引及矩形。Synthetic fixture 驗證空格、未知／重複原始 ID、尾端 bytes 拒絕、可視區越界及重新 configure 清掉舊 view。
+
+正式唯一 Renderer 是 `client/rendering/terrain.gd`。以 Node2D `_draw` 對可視範圍（多一格 margin）呼叫 draw_texture_rect_region；只在可視 tile 矩形變更時 queue_redraw，使用 nearest 與 clip_uv。每張圖只有一個 ground node，共用 Store terrain Texture，沒有全圖 Mesh／額外 Texture cache，ground z=-100。這是呈現層，不承擔碰撞／移動或 authority。地物／人物排序和來源 Z/pivot 另有 Gate。
+
+### ALT001 三個合理候選
+
+| 候選 | 穩態 Frame P95／P99 ms | 首個 view 就緒 ms | 遠距跳轉 P99 ms | Process Peak RSS MiB | Engine buffer peak bytes | 結果 |
+|---|---|---|---|---|---|---|
+| 可視 tile 區域 Canvas | 0.601–1.183／0.648–1.277 | 1.044–1.306 | 0.961–1.157 | 188.23–190.77 | 12,801,208 | 正式 baseline |
+| 固定32×32 tile全圖Mesh | 0.314–0.576／0.420–1.497 | 228.867–240.498 | 0.387–2.912 | 242.25–244.21 | 32,441,800 | 僅測試 |
+| 可視Mesh、32 chunk硬上限／LRU | 0.285–0.606／0.687–1.993 | 3.054–5.335 | 9.619–19.123 | 194.45–195.14 | 16,642,996 | 僅測試 |
+
+Windows／Godot 4.7.2／NVIDIA GeForce RTX 3050／OpenGL3；VSync disabled、無 FPS cap，1280×720 與1920×1080，Map15／13。同 PCK／terrain Texture、相同相機座標 trace；各組90-frame暖機＋240-frame樣本、另40次相同遠距跳轉，三輪交替候選順序、fresh process。兩 Mesh 策略共用同 builder；已把 corners/triangles 常數與 texture size 查詢移出 per-tile 內圈再量測。全圖225 chunk 與 LRU32 chunk 的保留策略是有實質差異的資源／延遲候選，不增加正式 Loader。
+
+三候選均3/3 PASS，無引擎 ERROR／leak。每輪每候選16張 GPU capture（兩圖×兩解析度×原點邊界／圖內／0.25,0.125小數相機／遠端越界），由獨立 Python PIL 路徑使用原始 tiles.bin 與 Atlas 合成預期 RGB，逐像素完全一致；三候選三輪共144張，非144個獨立視角，也非全世界所有像素。空格與壞資料另有人工 fixture。
+
+**決策**：Mesh 穩態快，但全圖建立與約54MiB額外 RSS 成本高；可視 Mesh 節省保留量，跨視野重建 tail 仍明顯。區域 Canvas 在此 trace 的 P99／首次呈現／跳轉／維護成本較均衡，選它作當前 baseline；未宣稱一般硬體或含大量角色時仍全面勝出。兩 Mesh 留在 `tests/terrain_*_candidate.gd`，正式 rendering/ 只保留 TerrainData＋選定 Renderer。實作搬到正式路徑後的 GPU 回歸亦 PASS；最終優化後完整重測使用目前正式路徑。
+
+Raw report=`reports/terrain_decision.json`，含每候選／每輪／每圖／解析度的 P95/P99/Max、準備時間、更新時間、draw calls、記憶體、process CPU、來源 SHA／PCK SHA／command／GPU captures。三候選 engine CPU 秒範圍分別5.125–5.219／5.313–5.484／5.688–5.797，包含載入、截圖編碼、準備與 trace。Frame 是 render-only native loop 區間，第一 view 不含共用 tiles 正規化（約10.2–11.4ms）和 AssetStore 載入；不是可玩 Client FPS／input-to-render。網路不適用。外部背景程序未控制，OS／driver spike 不作 hard realtime 保證（觀測 Frame Max：區域1.702ms、全圖9.516ms、可視chunk3.828ms）。
+
+引擎 Texture counter 在相同 viewport 尺寸歸還後回到13,373,731 bytes；buffer pool 留有高水位，這只代表引擎計數，**不等於 OS dedicated VRAM／RSS 全部回到基線**。GPU／driver cache、30次完整 World 生命週期與 AFK、terrain混合地物／角色／Y-sort／pivot／動畫、相機 zoom、macOS／Release、網路與多人 E2E 均 NOT VERIFIED。初版比較曾誤把LRU上限套到全圖候選，已修正並重跑；不以該錯誤淘汰全圖 Mesh。早期只有快取候選跑遠距跳轉／wall混入Python比對的報告不作最終選型數據，最終三候選使用相同 trace 並只記原生程序 wall。

@@ -1,6 +1,6 @@
 # SGTest — Asset Architecture
 
-**目前狀態：Height-Dense P0 Builder + 外部 PCK Converter 已整合與測試；新版 Client AssetStore 已有有界非同步／owner-epoch 資源基礎與 headless 生命週期回歸；World Renderer／真 GPU 生命週期仍未實作／驗證。** 正式實作位於 `tools/asset_converter/atlas/dense_atlas.py`、`runtime_pack.py`，不需另一個維護路徑。
+**目前狀態：Height-Dense P0 Builder + 外部 PCK Converter 已整合與測試；新版 Client AssetStore 已有有界非同步／owner-epoch 資源基礎與 headless 生命週期回歸；Terrain Renderer 已有原生 GPU／像素切片；完整 World Renderer／真 GPU 生命週期仍未完成驗證。** 正式實作位於 `tools/asset_converter/atlas/dense_atlas.py`、`runtime_pack.py`，不需另一個維護路徑。
 
 ## 一個原始素材 = 一個獨立資產
 
