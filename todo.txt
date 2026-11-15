@@ -88,3 +88,9 @@
 - REB009-CLEANUP [x] 最終工具複查：清除全部僅依賴舊測試快取的 `asset_converter/benchmarks` 執行腳本（歷史方法仍可由 `docs/research` 與 Git 歷史查閱），移除重複的 nested requirements 與未使用的 `psutil` 依賴；工具現在只有 `asset_converter/`、`tests/` 與單份 `tools/README.md`。**這些 benchmark 不再當作現行可執行測試，未來要以真正新 Client/Server 建立 E2E perf harness**。
 
 - REB009-DOCREVIEW [x] 2026-11-15 正式文件 Review：核對 README、SPEC、AGENTS、10 份 docs 架構／設計、工具說明、Client/Server placeholder 與 research 索引；修正過時 benchmark、舊 SPEC 說法、UI 過度擴充、FPS／AFK 驗收條件，補齊 bounded queue 過載／可靠性與重同步、Server AOI viewport 限幅、多機多開與第二階段 Gameplay TODO。19 份正式文件／導航的 104 個內部連結 PASS，47 項現行 Converter 測試 PASS，`git diff --check` PASS。**未更動歷史研究原文或遊戲程式；新版 E2E／全量 Converter／macOS 仍 NOT VERIFIED**。
+
+## 本 Session 領取（2026-11-15）
+
+- MVP001-ARCHIVE-INTEGRITY [ ] 範圍：正式完整 Archive／Catalog 發布前的 manifest 一致性。修改前：audit 以 set 比對 group，重複 index row 會被掩蓋，row 的 Frame/Page/Bytes 未對照實際 manifest。預期：重複 group、row 計數不符均 fail closed；合法完整 Archive 不退化。指標：7,890 group／75,588 SPR 全量建置與來源 coverage、錯誤清單、合成損毀索引回歸。已啟動唯一 CLI 完整私有 build；完成前全量結果 NOT VERIFIED。
+
+  - 本輪實作：`atlas/archive_audit.py` 新增重複 group／row 計數／manifest 身分與 PNG 大小驗證；`test_converter_planning.py` 補損毀與還原測試。Before→After：重複／錯誤 row 可通過 audit → 明確 failed。8 項 focused tests PASS；隔離 tools snapshot 的完整 `python -m unittest discover -s tools/tests -p "test_*.py" -q`：58 PASS。主 checkout 同命令首次執行 4 FAIL（正式建置持鎖，非格式回歸），待正式建置結束重跑。`git diff --check` PASS；CI 未執行，NOT VERIFIED。完整 Archive 尚未完成，任務保持未勾選。

@@ -119,6 +119,33 @@ except ConverterBusy:sys.exit(2)
             self.assertEqual(report['status'],'failed')
             self.assertTrue(any('index' in error for error in report['errors']))
 
+    def test_archive_rejects_duplicate_index_groups_and_false_counts(self):
+        class Settings:
+            category=None
+            prefix=None
+            preview_groups=None
+            skip_sidecars=False
+            force=False
+        with tempfile.TemporaryDirectory() as temp:
+            source,archive=Path(temp)/'source',Path(temp)/'archive'
+            source.mkdir()
+            (source/'one.spr').write_bytes(tiny_spr())
+            archive_all(source,archive,Settings())
+            index_path=archive/'index.json'
+            original=json.loads(index_path.read_text(encoding='utf-8'))
+            for field in ('frames','pages','rgba_bytes','png_bytes','duplicate'):
+                with self.subTest(field=field):
+                    corrupted=json.loads(json.dumps(original))
+                    if field=='duplicate':
+                        corrupted['groups'].append(dict(corrupted['groups'][0]))
+                    else:
+                        corrupted['groups'][0][field]+=1
+                    index_path.write_text(json.dumps(corrupted),encoding='utf-8')
+                    report=audit_archive(source,archive)
+                    self.assertEqual(report['status'],'failed',report)
+            index_path.write_text(json.dumps(original),encoding='utf-8')
+            self.assertEqual(audit_archive(source,archive)['status'],'pass')
+
     def test_invalid_json_type_is_rebuilt_as_a_cache_miss(self):
         with tempfile.TemporaryDirectory() as temp:
             source,output = Path(temp)/'source',Path(temp)/'output'

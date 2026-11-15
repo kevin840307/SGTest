@@ -106,3 +106,9 @@ python tools/asset_converter/runtime_pack.py "C:\SGO\Godot\Godot_v4.7.2-stable_w
 ```
 
 以上 Smoke 已在 Windows/Godot 4.7.2 通過，驗證 PCK 實際可由**另一個空白 Godot 專案**載入。這**不是**正式遊戲的 Windows Release、多機多開或 macOS GPU 格式相容性驗證。壓縮 UI icon 及字體必須繼續使用 lossless 模式。
+
+## Archive 索引一致性（MVP001-ARCHIVE-INTEGRITY）
+
+完整 Archive 的 `index.json` 不只是清單：發布前 audit 必須拒絕重複 group，且每個 row 的 frames/pages/rgba_bytes/png_bytes 須等於驗證後的獨立 manifest 與實體 PNG；manifest group 身分及 PNG 大小也必須一致。來源 group set 的 set 比對不足以發現重複 row，否則發布器逐 row 輸出可能重複註冊 logical ID 或回報不實統計。此修正沿用唯一 audit／Builder，沒有新增產線或改變 Atlas 格式；屬一致性修正，無實質替代方案，無需另做效能選型。
+
+回歸包含重複 group、四種 row 計數損毀、還原後合法 Archive、既有 Preview 拒絕及 PNG 損毀；2026-11-15 以臨時目錄複製當前 tools 執行同一 unittest suite，58 tests PASS。使用隔離快照是避免測試 CLI 與正式長時間建置競爭每 checkout 的 OS lock，不停用正式互斥鎖。完整 7,890 group 建置進行中，完整 Archive／Catalog／PCK 仍 NOT VERIFIED。

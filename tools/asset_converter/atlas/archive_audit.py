@@ -19,8 +19,12 @@ def audit_archive(source: Path, archive: Path) -> dict:
     index=json.loads(index_path.read_text(encoding='utf-8'))
     if not isinstance(index,dict):raise ValueError('invalid index document type')
     expected=select_groups(source)
-    recorded={row['group'] for row in index.get('groups',[])}
+    rows=index.get('groups',[])
+    recorded={row['group'] for row in rows}
+    indexed={row['group']:row for row in rows}
     errors=[]
+    if len(rows)!=len(recorded):
+        errors.append({'index':'duplicate source group records'})
     if index.get('status')!='complete' or index.get('source_scope')!='all SPR' or index.get('errors'):
         errors.append({'index':'full, error-free completed index required'})
     wanted={key.as_posix() for key in expected}
@@ -49,6 +53,14 @@ def audit_archive(source: Path, archive: Path) -> dict:
                     if list(image.size)!=size or image.format!='PNG' or max(size)>4096:
                         raise ValueError('PNG header/dimension mismatch')
             rgba=sum(width*height*4 for width,height in data['page_sizes'])
+            png_bytes=sum((folder/name).stat().st_size for name in data['pages'])
+            actual={'frames':len(data['frames']),'pages':len(data['pages']),
+                    'rgba_bytes':rgba,'png_bytes':png_bytes}
+            if any(indexed.get(key.as_posix(),{}).get(field)!=value
+                   for field,value in actual.items()):
+                raise ValueError('index group counts differ from verified manifest/pages')
+            if data.get('group')!=key.as_posix() or data.get('png_bytes')!=png_bytes:
+                raise ValueError('manifest group identity or PNG byte count differs')
             selected=next(row for row in data['candidates'] if row['side']==data['atlas_side'])
             if (not selected['valid'] or selected['pages']!=len(data['pages']) or
                 selected['rgba_bytes']!=rgba or data['rgba_bytes']!=rgba):
@@ -66,7 +78,7 @@ def audit_archive(source: Path, archive: Path) -> dict:
             counts['frames']+=len(data['frames'])
             counts['pages']+=len(data['pages'])
             counts['rgba_bytes']+=rgba
-            counts['png_bytes']+=sum((folder/name).stat().st_size for name in data['pages'])
+            counts['png_bytes']+=png_bytes
         except (OSError,ValueError,KeyError,TypeError,IndexError,StopIteration) as error:
             errors.append({'group':key.as_posix(),'error':str(error)})
     sidecars={'.act':0,'.sif':0,'draw_order':0}
