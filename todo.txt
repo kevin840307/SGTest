@@ -106,3 +106,8 @@
   - 完工：唯一 CLI `export-assets --extracted-source .cache/asset_converter/source --server-dat "C:\SGO\Recovered\Old\服務端\Dat" --map 13 --map 15` 真實來源 PASS；242 Asset／242 頁／2,269 Frame／756 SPR，195 地物、10 Enemy、30 NPC、7 Player，20,332,844 bytes。反向指定雙圖，517 個檔案 SHA 全不變 PASS。`python -m unittest discover -s tools/tests -p "test_*.py" -q`：62 PASS；`git diff --check` PASS。新增 `test_scoped_export.py`，修改 `cli.py`／`content/export_assets.py`，詳 ASSET_CONVERTER 的範圍／原理／未解缺口。此為資料發布 PASS；225 個地物／NPC 動畫語意、PCK 與真 Client/Server 未驗證。下一步正式 Runtime map content 含 NPC 參照、真圖外部 PCK/ResourceLoader；原版 Combat stats 目前仍有 provisional defaults，不能當原版規則。CI NOT VERIFIED。
 
   - 獨立參照驗收：原始雙圖私有 world／population_evidence／npcs 共 235 個 visual Asset 參照全部在正式 Catalog，另有 7 個 Player 部位；242 頁逐頁 SHA 與 manifest 一致 PASS，`reports/mvp_catalog_reference_check.json`。完整 Archive 證據提交 `6bca5dd` 已推送。
+
+  - Catalog 實作 SHA：`ff00d5e` 已推送 origin/main。
+
+- MVP001-RUNTIME-CONTENT [ ] 下一項已領取：雙圖 runtime-only 資料契約補齊。2026-11-15 用正式 242 Asset Catalog 實跑 `build --runtime-only --map 13 --map 15` exit 0、兩圖 terrain pixel round-trip／Blocking SHA／地物及 Enemy／Player Atlas 存在性驗證成功（10.16 秒）。**不能視為完整 Runtime Gate**：輸出兩圖都沒有 `npcs.json`，而 population v2 沿用 provisional stats 且缺少 `stats_verified`，會讓下游誤當原版戰鬥規則。
+  - 修改前行為：Runtime 只發布每圖 5 個檔案，沒有 NPC 參照與 stats 可信度。預期：沿用既有 NPC compiler 輸出 NPC／Atlas 參照並驗證缺資產；所有暫定 Combat stats 明確未驗證，不能被當成正式原版；保留來源 Spawn／Blocking。回歸：NPC 遺漏／缺 Atlas／未知映射 fail closed，雙圖互不污染，population 明示 provisional，既有正常／異常測例；再做真圖 PCK/ResourceLoader。當前沒有正式 Client/Server，E2E NOT VERIFIED。
