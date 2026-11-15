@@ -14,19 +14,20 @@
 4. 領取一項具體 TODO，先寫預期行為、指標、驗收測試，再動手；完成才勾選，未跑寫 NOT VERIFIED。
 5. 確保拆成小 commit，commit 僅包含自己變更的檔案；每次更新 TODO 與架構決策證據。
 
-## 單地圖、功能完整的 MVP（不是功能示範）
+## 雙地圖 Map15 + Map13、功能完整的 MVP（不是功能示範）
 
-**MVP = 一張可玩的真實 Map13 + 大部分原版功能完整運作 + 多人／多怪／多掉落正確與順暢。**
-只延後「所有地圖、所有怪物及所有物品的內容量」與跨地圖實際場景，不延後單圖中已能運作的遊戲規則／功能。好友系統依使用者要求暫緩。
+**MVP = Map15 主城 + Map13 尼西亞台地兩張真實地圖、原版主要功能完整、多人／多怪／多掉落順暢且正確。** 限制的是「全世界所有地圖／怪物／物品的資料量」，不是功能；好友依使用者要求暫緩。
 
-- **第一步一定先地圖**：核對 Map13 terrain/scenery、Blocking.dat、座標、原點、Y-sort、相機與原版八方向素材；使用唯一 Converter 有需要才逐類產出必要資產。來源不足需記錄並以證據選另一張可驗證的單地圖。
-- **功能完整度不能用一條 happy-path 取代**：登入／多角色／建立選擇、斷線恢復、原版 A*／長按與人物／機甲／怪物方向動畫、多人 AOI、攻擊／受擊／技能／狀態／MISS／死亡復活、怪物獨立 AI、Drop／Pickup、物品／裝備／強化、NPC 商店／倉庫／銀行／修理、技能／寵物／機甲、玩家交易／玩家商店、聊天、PvP／名稱顏色及 GM 管理，都需按原版規則實作並有正常／錯誤／邊界及 Server Authority 測試。
-- **只有地圖限制的例外**：跨圖傳點／多圖 AOI／跨圖入口等需第二張真地圖的實機驗收，MVP 先完成資料合約、原版規則與可重播 fixture，清楚標 NOT VERIFIED；MVP 後補第二張地圖的真 E2E，不能把 fixture 說成全圖驗收。
-- **逐步垂直切片，不一次堆大專案**：Map13 Converter/Blocking → Godot Map Renderer → .NET 8 Wire/World/A* → 兩個真 Client AOI/方向／動畫 → 多種怪物／戰鬥／大量掉落 → 全部上述主要單圖功能逐項完成 → AFK／Unfocus／多開及 20 Player/300 Enemy/500 Drop 單圖壓測 → MVP Gate。
-- **MVP 多人效能 Gate**：至少兩個真 Godot Client 做畫面 E2E；再遞增 2/4/20 名連線（可部分用明確標示的 Bot）、300 怪、500 掉落，含稀疏與密集、部分怪物靜止與獨立移動、多人互相走動／攻擊／拾取；1/2/4 開與 AFK。測 P95/P99、CPU/RSS/VRAM、World Tick、bytes/sec、Queue Age、畫面／方向與可靠事件。
-- **MVP 後**才展開全部地圖／物種／品項、跨圖實機 Gate、50～100 Player/1000 Enemy/5000 Drop 與 macOS 等全量發行 Gate。MVP 選出的方案擴量後必須按 ALT001 再比較，不能宣稱永久最優。
+- **先地圖**：先驗證原版 Map15 與 Map13 的 Map／Scenery／Blocking.dat／Map metadata／座標／相機／八方向；兩張圖所需的 Player、NPC、Enemy、Drop 等真素材逐步使用唯一 Converter 產出。已確認原版兩張 Map 檔及 Recovered 兩張 scn 皆存在，但尚未驗證完整資料／轉換。
+- **先主城 Map15**：登入／創角選角、Spawn、NPC 商店／銀行／倉庫／修理、裝備／強化／背包、聊天／玩家交易／玩家商店、寵物／機甲及 UI／資產生命週期等在可控場景驗收；以真實 NPC／原版規則為準，若地圖內容不符須記錄。
+- **再台地 Map13**：Blocking／A*／長按走路、多人 AOI、八方向／Attack/Hit/Death、怪物各自獨立 AI／追擊、技能／MISS／死亡復活、掉落 Spawn/Pickup、PvP 地圖規則（依原版可否打架），逐項通過 Server Authority、異常／競態與視覺 Gate。
+- **雙圖跨圖必測**：至少兩個真 Godot Client 來回 Map15 ↔ Map13；Server 驗證傳點／權限，MapEpoch／WorldReady／AOI 舊圖清除、新圖 Spawn／資源卸載／預取／載入、重新登入／重連與狀態持久化皆需 PASS，不能只靠 fixture。
+- **完整功能而非 happy path**：登入／多角色、移動／地圖／傳點、物品 UID、裝備／強化、商店銀行倉庫、技能／Buff／死亡、Pet／Mecha／卡片／升級、玩家交易／玩家商店／聊天、PvP 名稱／GM 等可在兩張圖測的主要系統，需對照原版並有正常／錯誤／多人競態／重試與 Server Authority 驗收。
+- **效能按階段升級**：先 2～4 人／少量實體跑通方向與行為，再 Map13 同圖提升至 20 名連線（可含明確標示 Bot）、300 Enemy／500 Drop（含稀疏／密集）；Map15 驗證多人 NPC／商店／玩家商店 AOI，雙圖同時活躍並驗證換圖成本。至少兩個真 Godot Client 驗證畫面、1/2/4 開及 AFK；記錄 CPU/RSS/VRAM、Network bytes/sec、Queue/World Tick/Frame P95/P99。
+- **測完方案再往下**：依 ALT001 對有實質差異的 Wire/AOI/AI/Atlas/Renderer/Cache 等用相同資料實測、選可維護的最佳解，MVP 通過後擴張時再驗證一次。
+- **MVP 後**才擴全部地圖／全部原版資料與 100 Player／1000 Enemy／5000 Drop、8 開及跨平台完整發行。不得把單一 Map13 大負載當作雙圖傳點 PASS，或把兩圖 PASS 當全地圖 PASS。
 
-每個系統先最小功能、再錯誤／斷線／多人邊界、再整合；未通過必要測試不得標 MVP 完成，所有文件與 TODO 隨程式即時更新。
+逐步切片：兩張原版地圖資料 → Map15 地圖與基礎 UI／登入 → Server／移動 → Map13 A*／多人 AOI → **雙向傳點** → 原版主要系統完整 → 多怪／多掉落／效能 → MVP Gate；每一階段補測試、同步 SPEC／TODO，未跑標 NOT VERIFIED。
 
 ## 多方案先比較、選最佳解、才繼續開發（每個重大決策的必要 Gate）
 

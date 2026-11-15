@@ -2,19 +2,20 @@
 
 狀態說明：本檔只記錄**刪除舊原型後**的新版本工作。舊流程、完成紀錄及測試結果保留在 `docs/research/FEATURE_DECISION_HISTORY.md#source-todo-pre-rebuild-20261115-txt`，不得將它們當成新版本 PASS。
 
-## MVP 主線：只做一張地圖，但功能必須完整（全部尚未完成）
+## MVP 主線：Map15 主城 + Map13 台地，兩圖功能完整（全部未完成）
 
-**先 Map13 → 走路／AOI／方向／多怪／多掉落 → 全部單圖主要玩法 → 20 玩家／300 怪／500 掉落 Gate → 再擴全地圖全內容**。不是每系統做一條 happy-path 就稱完成。每個 TODO 都要正常、錯誤／重試、多人邊界／原版規則與 Server authority 測試；若有多方案先按 ALT001 比較，選最佳整體方案再持續開發。
+**先驗證兩張真地圖，再走路／多人 AOI／雙向傳點、完整玩法與多怪／多掉落**；Map15 以城市互動為主，Map13 以多人／AI／戰鬥壓測為主；實際原版人口／NPC／傳點均需原始資料核實。兩圖互通是 MVP 必要條件，**不再將跨圖實測排到第二階段**。每一項有原版行為、Server Authority、錯誤／多人競態與回歸測試；存在多種可行架構時先做 ALT001 比較，選最優解後再繼續。
 
-- MVP001 [ ] **Map13 原始資料與資產**：驗證 Map/Scenery/Blocking.dat／座標／原點／Y-sort，唯一 Converter 定向輸出必要真素材、metadata、PCK、權威碰撞與 SHA-256，不把私有原圖推公開 Git。
-- MVP002 [ ] **Godot 4.7.2 地圖 Renderer**：Map13 相機／多解析度、World Y-sort、AssetStore Acquire/Release、正確人物／Enemy 動作方向素材和地圖資源載入／釋放；與原版／Recovered 真畫面比對。
-- MVP003 [ ] **.NET 8 Server／帳號與移動**：Wire 比較／正式單一 Codec、認證、登入創角多角色／選角、WorldReady、Blocking/A*、地板點擊／長按與 Server 位置驗證、重連一致性。
-- MVP004 [ ] **多 Client AOI／方向／動畫同步**：兩個真 Godot Client 互相 Spawn/Despawn、Move/Stop/Facing、八方向、攻擊／受擊／死亡／技能與 pet/mecha 動畫，Interpolation、MapEpoch／EntityRevision、不同解析度、邊界／登入／重連、bounded queue。
-- MVP005 [ ] **多種怪物／戰鬥／大量 Drop**：多類體型／動畫方向原版 Enemy，分散 AI（站立／巡邏／追擊／脫戰）、普攻與單體／範圍技能、Buff、MISS、死亡復活、權威傷害、掉落／撿取／AOI；先小規模再進入 300 怪／500 掉落。
-- MVP006 [ ] **功能完整度 Gate**：背包／物品／裝備／強化／修理、NPC 商店／倉庫／銀行、寵物／機甲／卡片／升級、玩家交易／玩家商店／聊天、PvP 名稱狀態／GM 指令、權限與資料庫持久化，依原版檢查完整正常／錯誤／邊界／多人競態流程；好友暫緩。
-- MVP007 [ ] **低資源與多人大負載（單圖）**：至少兩個真 Client 畫面 E2E；同圖分級測 2/4/20 連線玩家（Bot 明確標示）、300 怪、500 Drop、稀疏／密集、角色方向與各怪 AI 不同步、AFK／Unfocus、FPS/network 解耦、1/2/4 開、CPU/RSS/VRAM/Network/World Tick/Queue/Frame P95/P99、10 次生命週期回歸。
-- MVP008 [ ] **MVP Gate**：MVP-MAP/ACCOUNT-WALK/AOI-MOTION/AI-COMBAT/ITEM-ECONOMY/SYSTEM/NET-SECURITY/RESOURCE-LOAD 全數通過，單圖功能完成、權威、同步、效能、文件一致，才能勾選；單圖不可能實測的跨圖功能於本 Gate 標 E2E NOT VERIFIED，MVP 後補第二張真圖。
-- MVP009 [ ] **MVP 後完整內容與跨圖擴展**：所有地圖／怪物／NPC／技能／物品，第二圖真正傳點與 MapEpoch E2E，依原 REB024～027 補全量內容，再做 100 玩家／1000 怪／5000 Drop 與 8 開／Windows/Mac 發行驗收。此任務不得在 MVP008 完成前誤標 PASS。
+- MVP001 [ ] **Map15 + Map13 原始資料／素材驗證**：確認原版兩圖 Map/Scenery/Blocking/NPC/Enemy／傳點資料；唯一 Converter 分圖定向生成必要資產及 Server authoritative map content；兩次 --map build 需避免輸出互相覆蓋／污染，驗證 SHA256、Godot Atlas/ResourceLoader/PCK，原版素材不得上傳公開 Git。
+- MVP002 [ ] **兩張地圖 Godot Renderer**：Map15 主城先實作 camera／Y-sort／原始 scenery 與角色；再 Map13 階梯／障礙／Enemy 場景。使用單一 AssetStore、Map lifecycle 與可重用 Renderer，驗證八方向、不同解析度及載入／卸載。
+- MVP003 [ ] **.NET 8 Server／帳號／移動**：完成實測選型 Wire、登入／多角色、Server Map15/Map13 authority、Blocking/A*、點地板／怪物及長按走路，NPC／移動與 MapEpoch 合約。
+- MVP004 [ ] **兩個真 Client AOI／方向動作**：兩圖 Player Spawn/Despawn、八方向／Move/Attack/Hit/Death/Skill、Interpolation／WorldReady/Revision、不同解析度、邊界／重連，不集體順移。
+- MVP005 [ ] **Map15 ↔ Map13 真實傳點**：雙向傳送位置驗證、MapEpoch／WorldReady、舊 AOI Despawn、新 AOI snapshot、Server session/map state、AssetStore unload/preload、斷線／多玩家同時傳點及回主城重現實體／掉落，至少兩個真 Client E2E。
+- MVP006 [ ] **Map13 多怪物、戰鬥、大量 Drop**：多種原版 Enemy 的獨立 AI（站立／巡邏／追擊／脫戰）、各自動畫／方向、Combat／單體／範圍技能／Damage/MISS/Death、地面 Drop/Pickup／AOI；先小量驗證再提高至 300 Enemy/500 Drop。
+- MVP007 [ ] **Map15 城市功能與兩圖完整玩法**：物品 UID／背包／裝備／強化／修理、NPC 商店／銀行／倉庫、Pet／Mecha／卡片／升級、聊天／玩家交易／商店、PvP 地圖權限與名稱顏色、GM 指令、SQLite persistence；所有主要系統要有正常／異常／競態／重連的完整原版規則測試，好友暫緩。
+- MVP008 [ ] **雙圖效能、AFK、多開 Gate**：至少兩個真 Godot Client；Map13 同圖 20 連線玩家（Bot 明確標記）／300 Enemy／500 Drop；Map15 多人 NPC／玩家商店互動、兩圖同時活躍／頻繁切圖；1/2/4 開、FPS 0/30/60、AFK／Unfocus、至少 10 次切換／重新登入，ALT001 比較 CPU/RSS/VRAM、Network/Queue/World Tick/Frame P95/P99／同步正確性與資源釋放。
+- MVP009 [ ] **MVP 正式 Gate**：MVP-MAP15/MAP13/ACCOUNT-WALK/CROSSMAP/AOI-MOTION/AI-COMBAT/ITEM-ECONOMY/SYSTEM/WIRE-SECURITY/RESOURCE-LOAD 全部通過，雙向傳點、功能完整、方向／動作、多玩家／多怪／多掉落、低資源與文件一致，才可標記 PASS。
+- MVP010 [ ] **MVP 後全地圖／所有內容／超大負載**：逐步導入所有 Map/Enemy/NPC/Item/Skill、完整傳點網絡，再測 100 玩家／1000 Enemy／5000 Drop、8 開、Windows/Mac Release。未完成 MVP009 不得提前宣稱全量 PASS。
 
 ## 舊 REB 任務依賴對照
 

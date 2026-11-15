@@ -2,22 +2,23 @@
 
 **狀態：測試規格。舊 Client/Server 的 PASS 不能沿用。**
 
-## MVP001 — 單地圖、完整功能與多人負載的驗收矩陣（全部尚未實作）
+## MVP001 — 雙地圖 Map15 + Map13、完整功能與多人壓測（尚未實作）
 
-**僅限制使用一張 Map13，不省略任何可在單圖驗收的主要原版玩法**；禁止以 Recovered PASS、合成封包性能或單一 happy path 代替新版 Client/Server 的實測。
+**兩張真圖都需要正式 Godot 4.7.2 + .NET 8 C# Client/Server E2E**；原版／Recovered 只有證據作用，既有 Converter／Wire microbenchmark 不等於遊戲 PASS。
 
-- **MVP-MAP**：唯一 Converter 提取 Map13 真實 terrain／Scenery／Blocking／metadata／PCK；尺寸、位置、原點、遮擋／Y-sort、相機、不同解析度、載入／卸載與來源覆蓋 PASS。
-- **MVP-ACCOUNT/WALK**：帳號／多角色／創角選角／登入登出／重連、世界進入、點地板／長按 1 秒／點怪追逐／A*／障礙角／停止操作、Server 路徑合法性與速度驗證、狀態持久化／重試。
-- **MVP-AOI/MOTION**：至少兩個真 Godot Client；雙向 Spawn/Despawn、WorldReady/MapEpoch、AOI 視野變化、不同解析度、位置插值、本人與他人的八方向／鏡像／Move/Stop/Attack/Hit/Death/Skill、人物／寵物／機甲動畫；可靠事件、視野外圍及上線瞬間不順移。
-- **MVP-AI/COMBAT**：多種大小／動畫／方向的原版 Enemy；個體 AI 可站立、分散決策／隨機巡邏／追擊／脫戰，不能成批動作；普攻、單體／範圍技能、Buff、MISS、Damage、HP、死亡／復活、怪物掉落、拾取，Server Authority、對象可見權限與序號正確。
-- **MVP-ITEM/ECONOMY**：背包／物品 UID／堆疊／使用／裝備／卸裝／強化／修理、金錢、NPC 商店／倉庫／銀行、地面物品 Spawn/Despawn/Pickup，確實測試錯誤輸入、物品競爭拾取、交易原子性／重送／斷線一致性。
-- **MVP-SYSTEM**：寵物召喚／跟隨／攻擊／收回、機甲裝備／卡片／升級／屬性、技能效果及 CD、玩家交易／玩家商店 AOI、聊天、PvP 地圖規則／藍白粉紅紅名、GM 指令與授權；原版功能規則需有多種代表資料的完整測例，不能只測 UI 開窗。
-- **MVP-NET/SECURITY**：Wire 正式選型前 ALT001 方案比較，Server-side permission/validation、bounded queue／backpressure、缺序／重連 resync、可靠事件冪等及惡意封包；FPS 改變不能改變 Client reducer／Server Tick。
-- **MVP-RESOURCE/LOAD**：逐步提高到**同一張圖 20 位連線玩家／300 怪／500 掉落**，至少 2 個真 Godot Client 測方向／畫面，其餘 Bot 明確標示；測稀疏與密集 AOI、AI 時序、bytes/sec、Codec/Queue P95/P99、World Tick、CPU、RSS、VRAM、draw calls、Frame P95/P99，1/2/4 開、FPS 0/30/60、AFK/Unfocus、至少 10 次重載／登入恢復。
-- **MVP-CROSSMAP-LIMIT**：單張地圖無法完成的跨圖／傳點／多地圖 AOI E2E，先驗證 MapEpoch/WorldReady 與轉圖契約／偽資料測試，明確標記 **E2E NOT VERIFIED**；MVP 後加第二張真圖再補完整驗收。
-- **MVP-GATE**：以上所有**適用於單張地圖的**必要案例 PASS，主要功能按原版規則、Server 權威、正確方向／動作、多玩家／多怪／多掉落和低資源都已驗證；文件與 TODO 同步、ALT001 有公平數據，才可宣稱 MVP 完成。
+- **MVP-MAP15**：原版 Map15 地形／Scenery／Blocking／metadata、NPC／主城互動位置、正確原點／Y-sort／八方向素材、camera／解析度、唯一 Converter + external PCK，Godot 真圖顯示與 ResourceLoader／AssetStore Acquire/Release。
+- **MVP-MAP13**：原版 Map13 地圖／Blocking 台地階梯、地物／人口／Enemy 出生位置／掉落資源、相機／渲染／碰撞、AssetStore、來源覆蓋與原版畫面一致性；與 Map15 使用同一地圖載入及資源路徑。
+- **MVP-ACCOUNT/WALK**：帳號／多角色／創角選角／登入登出／重連、Server A*／路徑合法性、點地板／長按約 1 秒／點怪追逐與停止，正確八方向／移動／攻擊優先級及跨地圖 Spawn。
+- **MVP-CROSSMAP**：**Map15 → Map13 → Map15 真實雙向傳點**；Server 權威驗證、MapEpoch／WorldReady、AOI 清除舊圖、在目標圖收到新 snapshot、角色位置、怪物／Drop 恢復、Texture/Node 釋放及新圖載入，至少兩真 Client 同時／錯開切圖、重登與斷線恢復，不可有舊實體殘影／異地封包污染。
+- **MVP-AOI/MOTION**：至少兩個真 Client，Map15 主城與 Map13 的雙向 Spawn/Despawn、視野／解析度／camera、Player/Enemy/Pet/Mecha Facing、Move/Stop/Attack/Hit/Death/Skill、動作固定 ACT timing、不在視野外圍順移、可靠事件與有界佇列。
+- **MVP-AI/COMBAT**：Map13 多種尺寸／行為 Enemy，可站立、獨立 NextDecisionTick、分散巡邏／追擊／脫戰，不集體同步；普攻、單體／範圍技能、Buff、MISS、Death／Respawn、掉落與拾取；Server 判定和多人觀看一致。
+- **MVP-ITEM/ECONOMY**：Map15 NPC 商店／倉庫／銀行／修理、物品 UID／背包／強化／金錢、玩家交易／商店；Map13 地面 Drop/Pickup，含併發拾取、餘額／UID 原子性、重送／非法操作／斷線一致性。
+- **MVP-SYSTEM**：Pet／Mecha 裝備卡片升級、技能效果與 CD、聊天／交易／玩家商店、PvP 原版地圖權限／名稱顏色／GM 指令，兩圖適用場景依原版規則測試，Server Authority 及錯誤／多人競態，好友暫緩。
+- **MVP-WIRE/SECURITY**：ALT001 方案比較、Godot↔C# golden fixture、header/framing／replay／invalid input、Epoch/Sequence、bounded queue、慢 Client/backpressure、AFK／FPS 0/30/60 還能可靠同步。
+- **MVP-RESOURCE/LOAD**：Map13 同圖逐步到 **20 連線玩家／300 Enemy／500 Drop**（至少兩個真 Godot Client 觀察動畫，Bot 明確標記）；Map15 多玩家互動、兩地圖同時活躍、往返切圖至少 10 次、1/2/4 開、AFK/Unfocus，稀疏／密集 AOI、AI 與 Protocol FPS 影響。量測 bytes/sec、Queue Age、World Tick/Frame P95/P99、Input latency、CPU、Process RSS、Texture/VRAM、GC、載入／釋放與可靠事件；不能將 Bot Server 負載等同所有真 Client 畫面 PASS。
+- **MVP-GATE**：以上全部可重跑且正確性／功能完整度／資源 Gate PASS，Map15／Map13 雙向真實傳點必須完成，ALT001 選型有資料，文件／TODO 跟上後才准宣稱 MVP 完成。
 
-**MVP 後的完整內容與規模 Gate**：逐張地圖／真實跨圖傳點、全部原版怪物／NPC／裝備／技能／物品與素材覆蓋、100 人／1000 怪／5000 掉落、同機 8 開、Windows/macOS Release。MVP 小場景不能直接外推為全圖 PASS；擴量須重新測 ALT001。好友功能暫緩。
+**MVP 後的全圖／全種類／更大負載**：其他地圖與完整傳點網絡、所有原版 NPC/Enemy/裝備/技能、100 Player／1000 Enemy／5000 Drop、多開 8、Windows/Mac 完整發行；MVP 不能代替全量驗收。
 
 ## ALT001 — 多方案公平比較／決策 Gate
 

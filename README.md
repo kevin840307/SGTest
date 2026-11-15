@@ -11,11 +11,11 @@
 - `client/assets/.gdignore`：**僅保留轉換輸出的定位標記**，不是 Godot Runtime。
 - `client/README.md`、`server/README.md`：未來實作位置，**沒有可執行程式**。
 
-## 目前先完成 Map13：單圖但主要功能完整的 MVP
+## 現階段 MVP：Map15 主城 + Map13 尼西亞台地
 
-**限制地圖與全量資料，不限制核心功能。** 順序：Map13 地形／Blocking／素材 → Godot 4.7.2 地圖 → .NET 8 Server／帳號／A*／長按 → 兩個真 Client AOI、八方向與動畫 → 多種怪物／技能／戰鬥／大量掉落 → 背包裝備、NPC 商店銀行倉庫、寵物機甲、交易／玩家商店／PvP／GM 等完整單圖玩法 → AFK／多開／資源測試與 20 Player/300 Enemy/500 Drop → MVP Gate → 全地圖／全物種／全內容與 100/1000/5000 負載。
+**兩張原版真地圖 + 大部分完整玩法**，不是單圖 Demo：先確認兩圖資產／Blocking／NPC／傳點；Map15 用於登入、角色、NPC 商店／銀行／倉庫、裝備、交易／玩家商店，Map13 用於 A*／長按、怪物 AI、技能戰鬥、大量掉落和多人 AOI；中間要完成**Map15 ↔ Map13 真實雙向傳點**、MapEpoch/WorldReady、資源釋放及多人重連。
 
-詳細先照 todo.txt 的 MVP001～MVP009，已有 Converter 的 --map/--category/--prefix 選項只代表支援參數，單圖資產覆蓋仍要實際驗證。MVP 不等於功能 Demo；每個系統必須依原版有 Server Authority、錯誤／邊界／多人測試；跨圖 E2E 因僅一圖可先標 NOT VERIFIED，後續加入第二圖補足。好友暫緩。多種實作先依 ALT001 公平比較；資料與程式隨每個切片同步更新。
+先小型切片逐步做到兩真 Godot Client、Map13 同圖 20 連線／300 Enemy／500 Drop、Map15 多人城市互動及兩圖同時活躍、AFK／多開 Gate。按 todo.txt 的 MVP001～MVP010 進行，**不是只做每種功能一條 happy path**；所有適用原版規則、異常／多人競態及 Server authority 要驗證，好友暫緩。選型多方案先實測 ALT001；MVP 通過後才擴所有地圖／品項及更大負載。
 
 ## 從哪份文件開始重建
 

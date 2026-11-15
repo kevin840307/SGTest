@@ -57,11 +57,13 @@ AFK/Unfocus                             — may suspend only visual work
 
 新 Godot Theme/Control 先自製後期《星夢 Online》金色 UI；現代 Theme 等未來需求確定再評估，**不必提前實作雙套 UI**。支援多解析度，camera viewport 改變需更新可視 AOI，不可固定舊 800×600。移動速率、機甲速度與動畫播放速度解耦。
 
-## MVP Client：單地圖但全部主要玩法需要完整畫面／互動
+## MVP Client：Map15 + Map13，完整玩法與真實切圖
 
-先建立 Map13/Scenery/Blocking/metadata、相機、多解析度、World Y-sort、八方向／鏡像、Attack/Hit/Death/Skill 動畫與 AssetStore。兩個真 Godot Client 驗證 AOI、位置插值與角色／Enemy／Pet／Mecha 狀態。**MVP 要有完整可操作的單圖 UI：角色、背包、裝備／強化、技能、NPC 商店／倉庫／銀行／修理、寵物／機甲、交易／玩家商店、聊天、PvP／GM 等；不是單純開窗或使用假素材的 Demo。** 先一個模組一個模組驗證、缺原始資產先補唯一 Converter。
+先由 Converter 的兩張原圖建立**單一可重用 Map Loader/AssetStore + Renderer**：Map15 主城 UI/NPC/裝備/交易，Map13 A*／地物／Enemy／Drop／Combat；原始 Scenery/Y-sort、八方向／鏡像／ACT timing、相機和不同解析度需一致。兩個真 Client 分別在同圖及不同圖測 AOI、人物／怪物／寵物／機甲 Facing、Attack/Hit/Death、可靠事件。
 
-同圖逐步加至 20 連線玩家／300 怪／500 掉落（Bot 不可冒充真 Client 畫面），檢查方向／動作、碰撞、AOI、AFK/Unfocus、資源 Acquire/Release 及 FPS/network 分離。只在 MVP Gate PASS 後導入全圖／全品項／全部素材與正式大規模發行。
+**Map15 ↔ Map13 是 MVP 真實 E2E**：離圖必須清空舊 MapEpoch/AOI/節點、釋放非必要 Texture；入圖需 WorldReady baseline、完整新可見集合及 ResourceLoader preload/cancel，往返後不得殘留老地圖、變黑圖或重播錯誤事件。UI 的 NPC 銀行倉庫商店、角色物品裝備／技能、Pet/Mecha、交易/玩家商店/PvP/GM 必須有完整操作及 Server authority 回饋，不是空窗 Demo。
+
+Map13 同圖測 20 連線／300 Enemy／500 Drop（兩個真 Client 測畫面，Bot 只測負載），Map15 多人互動、兩圖同時活躍；FPS/AFK/Unfocus 對網路和 reducer 不可節流，記錄 CPU/RSS/VRAM／Queue/Frame tail latency；MVP 後才擴所有地圖與內容。
 
 ## 開發順序／Gate
 

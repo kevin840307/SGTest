@@ -15,17 +15,17 @@
 - **有界佇列與恢復**：所有網路／World 命令／視覺事件佇列都要有容量、延遲指標與過載政策；可合併過時的非可靠移動快照，**不得默默丟失金錢、物品、交易、角色狀態、權威戰鬥結果等可靠結果**。無法保證連續性時須觸發重同步或安全斷線，不能無限堆積記憶體。
 - **Wire 不綁特定資料格式**：JSON、MessagePack、Protobuf、自訂 packet header + binary payload 都只是候選，先對照原版／Recovered 與實測 bytes/sec、編解碼延遲、CPU／配置／GC、Godot/.NET 實作成本，再選單一正式協定；不因好寫就把高頻即時封包預設為 JSON。
 
-## 1.0 MVP：先單張 Map13，但主要功能必須完整
+## 1.0 MVP：Map15 主城 + Map13 台地，功能完整且真實跨圖
 
-第一階段**只限制地圖數量，不限制可在單張圖完成的核心功能**。MVP 預設 Map13；先驗證原版地圖 scenery、Blocking.dat、原點／Y-sort、素材方向、碰撞與相機，再逐步接入 Godot 4.7.2／.NET 8 C#。
+**MVP 正式涵蓋兩張原版地圖**：Map15（主城：登入、選角、NPC／商店／銀行／倉庫、裝備、交易、玩家商店、社交等）與 Map13（尼西亞台地：Blocking／A*、多人／怪物／掉落、攻擊／技能、AI、AOI／同步）。須先核對原版兩圖 NPC/怪物／傳送位置，不能將角色定位或原版地圖規則自行編造。已找到兩張原始 Map 檔與 Recovered scn；**完整地圖資產／Blocking／NPC／傳送連線仍需驗證**。
 
-MVP 需完整實作並驗收單圖上可使用的原版主要系統：登入／創角／多角色／選角／重連、點地板／怪物 A* 與長按移動、人物／Enemy／Pet／Mecha 各方向及狀態動畫、Server AOI 與多角色同步、怪物獨立 AI／追擊／脫戰／攻擊、普攻／單體與範圍技能／MISS／受擊／死亡復活／Buff、地上掉落／撿取、背包／物品 UID／裝備／強化／修理、NPC 商店／倉庫／銀行、寵物、機甲／卡片／升級、玩家交易／玩家商店／聊天、PvP 名稱規則／GM 操作、持久化／斷線一致性、AFK／Unfocus／多開／資源生命週期。**不是只有各做一個示範按鈕；需要正常、錯誤、邊界及多人競態測試。好友功能暫緩。**
+**兩圖必須真實互通**：Server 權威 Map Change、MapEpoch、WorldReady、AOI 舊圖清理／新圖快照、AssetStore 地圖切換資源釋放與預取、位置合法性、重連／返回已掉落物。要測 Map15 → Map13 → Map15 與多人同時換圖，不能將跨圖 E2E 延後 MVP。
 
-開發依賴路線：Map13 原版資源與 Blocking → Godot 正確地圖顯示／相機／Y-sort → .NET 8 最小 Server 與公平選型 Wire → 角色登入／移動／Server 判定 → 兩個真 Client AOI／WorldReady／正確方向與動作 → 多種怪物及 Combat／技能／Drop → 其他完整單圖玩法與持久化 → AFK／FPS／多開及單圖負載 → MVP Gate。每段必須有可重現正確性測試再往下，不提前全地圖匯入。
+兩圖 MVP 必須完整實作且依原版驗證主要玩法：登入／創角／多角色／角色選擇、A*／長按與傳點、Player／Enemy／Pet／Mecha 八方向／ACT／DrawOrder、AOI／移動補間、怪物獨立 AI、普攻／單體／範圍技能、MISS／死亡復活、Item UID／背包／裝備／強化／修理、NPC 商店／倉庫／銀行、地面掉落／撿取、寵物與機甲／卡片／升級、玩家交易／玩家商店／聊天、PvP 名稱規則／GM、SQLite 持久化、AFK／Unfocus、多開及錯誤／斷線／多人競態。**功能完整度不等於只做示範按鈕或單一 happy path；好友暫緩。**
 
-負載在 MVP 同圖分級到**20 名連線玩家／300 怪／500 掉落**，至少兩個真 Godot Client 驗證畫面（其餘可明確標記 Bot）；測怪物獨立時序、方向、AOI、可靠事件與局部密集時 P95/P99。MVP 通過後才擴所有地圖、全部怪物／物品／NPC／技能內容，做 **100 玩家／1000 怪／5000 掉落**與多平台發布測試。
+依序：Map15 與 Map13 原版素材／Blocking → Godot 主城地圖與相機／Y-sort → .NET 8 Server／公平選型 Wire → 登入／角色／Server 移動 → Map13 與兩個真 Client AOI／方向動畫 → 雙向 Map15↔Map13 傳點 → 多種怪物／Combat／技能／Drop → 兩圖完整遊戲／社交／經濟系統 → AFK、AssetStore／FPS 解耦及性能 Gate → MVP PASS。先做小型可重跑切片，合格再擴後續依賴。
 
-跨圖切換／不同地圖 AOI 等**必須有第二張真地圖才可完整驗證**的項目，MVP 先完成必要的資料與伺服器規則、序號／MapEpoch 及 fixture；實際跨圖 E2E 於 MVP 後補測，不能宣稱提前完成。
+MVP 負載：Map13 **同張地圖**逐級驗證到 20 名連線玩家／300 Enemy／500 Drop（至少兩個真 Godot Client，其他 Bot 必須明確標記）；Map15 多人 NPC／玩家商店交互，雙圖同時有人及往返切圖，測 AOI／Tick／可靠事件／傳輸／CPU／RAM／VRAM／P95/P99。**100 玩家／1000 怪／5000 掉落、全地圖及全部原版內容**才是 MVP 後擴量 Gate，不能外推 MVP 成果。
 
 ## 1.1 多方案選型與逐步開發契約
 

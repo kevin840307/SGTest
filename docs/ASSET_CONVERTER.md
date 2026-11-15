@@ -14,11 +14,13 @@ python -m unittest discover -s tools/tests -p "test_*.py" -q
 
 Converter **不應依賴**可執行的 client/project.godot 或 server/*.csproj。保留的 client/assets/ 和 server/content/ 僅供輸出。
 
-## MVP Map13 的完整功能素材供應
+## MVP Map15 + Map13 定向素材與資料轉換
 
-先定向提取真實 Map13、Scenery、Blocking、地圖 metadata，逐類轉換本圖要使用的 Player 八方向／裝備／技能特效、Enemy 各尺寸與 Action、地面 Drop、NPC、Pet、Mecha、UI。**MVP 不必轉所有地圖／所有物種／全道具圖庫，但單圖主要玩法需要的真素材不能缺**；若缺素材先查原版遊戲與 Recovered/Old，再擴充唯一 Converter 及測試，而不是人工偽造／第二套長期腳本。
+先確認原版 Map15／Map13 的 Map、Scenery、Blocking、原始座標、Server population/NPC、傳點；用唯一 Converter 產出兩圖必要資產及 Server content，不預先全量解包所有 Runtime 素材。Map15 先供應城市 NPC、Item/Equipment、UI、Player；Map13 供應 Enemy 多種體型與各 Action／方向、地上 Drop、技能與世界地物；Pet/Mecha 依玩法逐步補充。**素材缺失先擴充同一 Converter／metadata，不新增第二套 Map15 或 Map13 腳本。**
 
-已確認 CLI build 具有 --map、--category、--prefix，world-content 具有 --map；但實際對哪些原始資料／Asset 有效，必須用原始來源、SHA256、frame/atlas/Blocking/Godot ResourceLoader／PCK 測試確認。缺少自動化定向能力則直接改善既有工具。MVP 完整的功能視覺與生命週期通過後，才做所有原版素材覆蓋、第二張／全部地圖與 Windows/Mac Release Gate。
+build CLI 已有 --map、--category、--prefix；world-content 有 --map，但**分別建置兩張圖會不會覆蓋彼此 catalog/PCK、是否能定向完整素材仍 NOT VERIFIED**。MVP001 要實測兩張圖交替打包、SHA256、source coverage、Height-Dense、Texture import、External assets.pck、Blocking/Spawn 與 AssetStore 進出圖資源釋放。只保留一套兩圖共用的正式建置與載入流程。
+
+MVP 通過後再逐張擴其他地圖、全部素材與完整 Windows/macOS Release，不能將兩圖來源覆蓋稱為全 7,890 asset PASS。
 
 ## 主要責任
 

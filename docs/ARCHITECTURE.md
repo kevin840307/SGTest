@@ -33,13 +33,13 @@
 7. **AOI ≠ full-map broadcast** — Server 先依 Interest 過濾可見與必要事件，只為需要更新的實體產生 Delta；不因地圖有大量怪物／掉落物就向每位玩家傳全部。
 8. **Wire ≠ JSON** — 不預設 JSON、MessagePack 或自訂二進位，先研究原版／Recovered，採同負載實測選擇低成本、可維護的單一正式協定。
 
-## 單 Map13 MVP：功能完整、內容範圍有限
+## MVP 範圍：Map15 主城 + Map13 台地，兩張真地圖互通
 
-先用原版 Map13 真實 terrain／scenery／Blocking／動作／八方向建一張能遊玩的地圖，確保座標、碰撞、原點、同一 World Y-sort。由此逐步建立 Godot Client/.NET 8 Server、身份／連線、權威 A*、AOI、平滑移動／方向、Combat、怪物 AI、Drop、資產載入及 AFK。
+地圖先行，用唯一 Converter 先驗證兩圖 terrain／scenery／Blocking／NPC／傳點及原始方向動畫；不能因增加第二張圖就先建全圖多套 Loader。Map15 優先驗證登入角色、NPC 商店銀行倉庫修理、背包裝備、玩家交易／商店等主城互動；Map13 驗證 A*、追擊、Server authoritative AI/Combat、多人 AOI、掉落／拾取與正確 Facing/Attack/Hit/Death。實際原版地圖人口與功能必須由來源核對。
 
-**MVP 在這張圖上必須具備原版大部分主要系統的完整操作與規則**：登入多角色、人物／怪物／寵物／機甲動畫、技能／死亡／Buff、物品裝備／強化／修理、商店倉庫銀行、寵物／機甲、交易／玩家商店／聊天、PvP 與 GM、持久化及異常／重試／競態。不是一套簡化 UI 或只有每個系統一個代表流程。好友暫緩。
+**雙圖轉換和 MapEpoch/WorldReady 是 MVP 必須完成的功能**：Map15↔Map13 雙向傳點、AOI 舊實體清除、快照重建、資產載入／卸載、位置檢查、同時換圖／斷線恢復，至少兩個真 Client E2E。資料不足時擴充單一 Converter 並記錄阻礙，不能用偽 Map 代替已完成真圖。
 
-MVP Gate：至少兩個真 Client 視覺 AOI/Attack/Hit/Death/Facing，並完成同圖 20 連線玩家（可有 Bot）、300 怪、500 掉落的稀疏／密集以及 AFK／多開資源正確性測試。只有需要兩張真圖的跨圖功能可先以 fixture 驗證契約並標記實機 E2E 待測；MVP 後才擴所有地圖／全部素材／種類與 100/1000/5000 壓測。核心責任分離與 AOI 從第一階段建立，但不造空模組或永久平行架構。
+每一張圖上能使用的主要原版系統仍需完整 Server Authority、正常／錯誤／競態測試；好友暫緩。MVP 總 Gate：Map13 同圖 20 玩家／300 Enemy／500 Drop，Map15 多人城市互動，兩圖同時活躍／往返傳點、AFK／多開和 CPU/RSS/VRAM／Network／P95/P99。**MVP 後**再擴其餘地圖／全種類與 100/1000/5000 正式大負載，不把兩張圖視為全部原版覆蓋。
 
 ## 多方案比較 Gate
 
