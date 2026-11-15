@@ -7,9 +7,19 @@
 - **tools/**：原版提取、轉換、研究及驗收工具。
 - **docs/**、**SPEC.md**、**todo.txt**：規格、研究證據與進度；舊 M0／.NET 10 敘述是歷史，最新決策見 ADR-024。
 
+## 架構入口
+
+目前正式目標架構採 **功能導向的模組化單體**，避免過度分層與模糊的 Manager / Session / Core 命名。後續 Client／Server 開發先讀：
+
+- [總架構](docs/ARCHITECTURE.md)
+- [Client Architecture](docs/CLIENT_ARCHITECTURE.md)
+- [Server Architecture](docs/SERVER_ARCHITECTURE.md)
+
+其中 Client 的 Network / World State / Rendering / UI / Assets 明確分離；Server 維持單一 .NET 8 project，按 Networking / Accounts / World / Combat / Items 等實際功能分類。文件是**目標架構**，目前程式碼仍有部分舊目錄，搬移必須與行為修改分開。
+
 ## 最新資源架構重評
 
-資源 Runtime 已收斂為單一簡單模型，詳 [Runtime Asset Bundle Architecture](docs/ASSET_BUNDLE_ARCHITECTURE.md)：`sgtest.animation/v2` 定義動畫語意、lifecycle bundle 決定一起載／卸的範圍、[RuntimeAssetStore](docs/RUNTIME_ASSET_STORE.md) 負責有界 async decode/GPU commit/cache。Production 對外只保留 **map / session / 真正 on-demand** 三種 ownership；怪物種類、方向、動作、人物部位、512/1024/2048/4096、hot/warm/cold 都不再是 Runtime 資產分類。Map13 九種怪與scenery共用一個 map bundle（目前1024候選5頁），Boy base 六部位＋death共用一個 session bundle（2頁）。Runtime優先512／1024，原SPR放不下再用2048／4096；實際Windows release峰值187.09MiB、約60FPS及30次載卸證據見 [PERF002_MEMORY](docs/PERF002_MEMORY.md)。ASSET205 的 [Monster Content Workflow](docs/MONSTER_CONTENT_WORKFLOW.md) 新增怪物時會重建該 map bundle，不再產生新的 per-monster atlas 類型。RUNTIME206 的 Render/Logic/Network 隔離、多 FPS／低功耗／背景／多開矩陣已完成，見 [RUNTIME_ISOLATION_VERIFICATION.md](docs/RUNTIME_ISOLATION_VERIFICATION.md)。
+資源 Runtime 維持**單一 AssetStore + logical catalog**，詳 [Client Architecture](docs/CLIENT_ARCHITECTURE.md) 與 [Runtime Asset Bundle Architecture](docs/ASSET_BUNDLE_ARCHITECTURE.md)。資料夾描述「內容是什麼」：`characters / items / effects / maps / ui / audio / data`；載入生命週期則用 metadata 表達為 **app / character / map / on_demand**，不再把 `session` 當成目標架構名稱。現有 `bundles/session/` 與相關欄位屬舊實作名稱，後續會以獨立搬移 commit 調整，不在文件階段假裝已完成。怪物種類、方向、動作、人物部位、Atlas 尺寸都不是 Runtime Loader 類型。RUNTIME206 已驗證 Render/Logic/Network 隔離、多 FPS、低功耗、背景與多開；AFK 可以停止世界渲染和釋放 GPU world assets，但 Network / Reducer / authoritative state 仍維持正常節奏。
 
 ## Adaptive Atomic Atlas 一鍵資產轉換
 

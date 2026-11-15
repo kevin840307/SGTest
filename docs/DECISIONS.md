@@ -355,3 +355,13 @@ ADR-026補充：使用者指定Client一般遊玩支援30～90FPS；FPS選項只
 - Portal: 不依_to_或抽第一個MovePlayer決定傳點。只將直接閱讀過的TS_Common固定hash及完整靜態主檔形狀編譯為確認式transfer，動態／未知／停用腳本明列狀態；原目的地以原Blocking檢查，不擅自移位。其餘226筆仍需F013完整腳本／對話引擎。
 - Evidence: 原始Client路徑抽取＋Map13三筆PASS；全24份NPC.dat原header合計275筆、輸出275、0未解primary SPR；49已審模板／226script_required，Map41/46缺檔另列。快取內容編譯1.241s，非Runtime或冷抽取數字。reports/world_content_all.json及F002_WORLD_TRANSITIONS.md；Python tools/tests121、asset_pipeline5、maps3+1SKIP。
 - Scope: 僅離線F002A，不宣稱Server／Client切圖、完整NPC動畫、任務或Recovered全部功能完成。接續MapCatalog／權威transfer fixture→MapEpoch與共用Server時鐘→Client loading／資源解除→真雙圖多人及資源回歸；同步頻率維持既有契約。原版內容JSON及圖片不公開。
+
+## ADR-038 — Client / Server 目標目錄與命名（2026-11-15）
+
+- Status: **ACCEPTED TARGET ARCHITECTURE**；目前程式碼尚未全部搬移。
+- Style: Client 與 Server 都採功能導向 modular monolith；禁止為了形式建立多層 Clean Architecture、每素材獨立 Loader、或抽象的 Common/Utils/Manager 雜物層。
+- Client: 主要模組為 app / networking / world / gameplay / rendering / assets / ui / diagnostics；Render FPS、UI FPS、Network I/O、World State 必須隔離。AFK 可停止 world rendering、降低可重建 visual replication、釋放 GPU world assets，但不能降低 heartbeat、reliable gameplay event、state reducer 或 authoritative state 的處理正確性。
+- Server: 維持單一 .NET 8 project，主要模組為 Networking / Accounts / World / Combat / Items / Social / Persistence / Content / Diagnostics；不再擴大 Application / Domain / Infrastructure / Transport 目錄。
+- Naming: 移除模糊的 Session 作為目標架構名稱。網路連線使用 ClientConnection；AOI 狀態使用 VisibilityState；角色世界狀態使用 PlayerState；epoch 使用 ConnectionEpoch / MapEpoch。現有 Session.cs 與 bundles/session 只屬 legacy implementation，需獨立搬移 commit 後才算完成。
+- Assets: Converter source catalog 可保留原版 Player/Enemy/NPC/Pet/MA/MS/SR/Item/Effect/Map/Interface/Audio key；Runtime catalog 使用 characters/items/effects/maps/ui/audio/data。生命週期以 app/character/map/on_demand metadata 表達，不用資料夾代表 ownership。
+- Source of truth: docs/ARCHITECTURE.md、docs/CLIENT_ARCHITECTURE.md、docs/SERVER_ARCHITECTURE.md。其他 Session 在修改對應端前必須先讀這三份與相關專題規格。
