@@ -146,3 +146,9 @@ C# live 30Hz two-player tests cover WorldReady/Spawn/Delta/Despawn and bounded o
 `ServerWorld.TryTrustedNpcInteract` checks the authenticated ActorId, ConnectionEpoch, MapEpoch and monotonic interaction sequence, the map-scoped NPC SpawnId, server-known actor coordinates within a **candidate** 96px interaction radius (legacy distance NOT VERIFIED), and the authoritative destination Blocking. All checks and the existing `TryTrustedTransfer` occur atomically on the single World owner thread; no client-supplied destination is accepted. `ServerWorldHost.TrustedNpcInteractAsync` uses the existing bounded trusted control path. `WorldResultRouter.TrustedNpcInteractAsync` advances the same authenticated Gateway's MapEpoch only after a successful World transfer; if its TLS binding disappeared during the handoff it releases the new World generation to avoid a ghost actor.
 
 This slice alone does **not** introduce an unauthenticated RPC or production NPC command wire. Actual client interaction and true-original Map15/13 private content validation remain separate.
+
+## MVP003-TLS-LISTENER：Host服務組裝（2026-11-16）
+
+`TlsGatewayListener`只負責接入與Socket生命週期，借用有效憑證及唯一IdentityTlsAuthorization／WorldResultRouter，不另建Wire／Auth或遊戲狀態。總容量128／每IP8／backlog128為有界預設，含握手與登入中Socket；拒絕不建立TLS任務。IPv4-mapped address先規格化；計數與Task集合的小鎖不執行DB或Send。正常認證／格式拒絕仍可繼續接入；非預期會話故障終止listener並讓supervisor觀測Task fault。取消會等待可信Disconnect及Router detach，並行Dispose共用清理Task，憑證／World／DB須存活至清理完。
+
+Host `serve`明確讀取兩圖world／blocking與已稽核npcs、SQLite identity及PFX，預設loopback而非自動公開監聽；不產生帳密或憑證。World 30Hz owner、Router Results單reader、AOI ChangedBatches單reader與TLS網路相互獨立，任一pipeline停止／fault都停止服務；正常關閉先排空Socket，再停World與pumps。既有限時無網路smoke仍可用。未新增DB／Wire版本；Startup／參數命令見server README。已完成本機7項針對測試與Host建置；私有雙圖、Godot連正式listener、長時間／20人壓測與Release NOT VERIFIED。

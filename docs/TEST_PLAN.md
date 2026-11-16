@@ -281,3 +281,9 @@ Verified on GitHub `main` commit `116ea15420d04bfd3fa98722f9e5695217cf37f6`: Cli
 
 
 **NPCPORTAL-WIRE-TLS002 (2026-11-16, CI pending):** C# `NpcPortalWireChecks` and Godot `test_npc_portal_wire.gd` assert exact 24B request and 29B Accepted/TooFar result Golden Fixtures, reject bad lengths/status/IDs, verify that raw client bytes cannot set ActorId/ConnectionEpoch, and that the Gateway bounded reliable FIFO explicitly backpressures instead of dropping results. Godot checks accepted→Map13 WorldReady, denied NPC no map mutation, duplicated result ignored, and an accepted result arriving AFTER new WorldReady. `Server.LoginFixture --portal` reuses the one official runtime TLS/Gateway/WorldAoiPump with two real concurrent Godot ClientSession processes; test-only audited NPC metadata maps source Map15 spawn_id46 → Map13 and Map13 spawn_id1 → Map15, on **synthetic** maps. The actor must receive UnknownNpc rejection, then send genuine `npc_interact(46)` / `npc_interact(1)`, increment MapEpoch, receive WorldReady and MoveReceipt, while the observer receives old-map Despawn and return Spawn. No test-only arbitrary teleport command is used. CI command `python client/tests/run_tls_login.py /path/to/Godot_v4.7.2-stable_linux.x86_64 --portal --timeout 70`. Not proof of original NPC/Quest execution, private Map13/15 coordinates, rendered UI or Windows RSS parity.
+
+## MVP003-TLS-LISTENER（Server Tier A）
+
+先`dotnet build server/host/SGTest.Server.Host -c Release`，再`dotnet run --project server/tests/SGTest.Server.Checks -c Release -- --listener-only`，本機7/7 PASS。涵蓋部署憑證／容量參數、global及per-IP拒絕、慢TLS取消／埠重用、真TLS Auth／Choose／WorldReady／MoveReceipt／重連世代與角色路由清理、錯密碼／明文隔離、內部會話fault停止接入、實際Host process載入合成雙圖與PFX／啟停／錯CLI。Checks預設完整CI也含同組測例；需先建置Host，GitHub server-core既有步驟已滿足。
+
+只驗證bounded listener與服務生命週期；未因此重跑Godot／PCK／來源Archive／Renderer。私有真圖持續服務、真Godot直連Host、時間型login rate limit、ACK/resync、20/300/500與Release仍NOT VERIFIED。正式main CI與SHA見todo。

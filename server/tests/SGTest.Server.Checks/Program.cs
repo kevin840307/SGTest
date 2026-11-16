@@ -82,6 +82,12 @@ static class Checks
         Directory.CreateDirectory(root);
         try
         {
+            if (args is ["--listener-only"])
+            {
+                TlsGatewayListenerChecks.Verify(root);
+                Console.WriteLine($"SERVER_LISTENER_CHECKS PASS total={_passes}");
+                return 0;
+            }
             string opened = Fixture(root, 31, 5, 5, (_, _) => 0);
             var grid = BlockingGrid.Load(opened, 31);
             var navigation = new MapNavigator(grid);
@@ -220,6 +226,7 @@ static class Checks
             IdentityStoreChecks.Verify();
             IdentityTlsAuthorizationChecks.Verify(root);
             IdentityTlsLifecycleChecks.Verify(root);
+            TlsGatewayListenerChecks.Verify(root);
             WorldSimulationChecks.Verify(root);
             WorldHostChecks.Verify(root);
 
@@ -306,7 +313,7 @@ static class Checks
                 return 2;
             }
 
-            Console.WriteLine($"SERVER_WORLD_CHECKS PASS total={_passes} scope=collision_Astar_30Hz_host_wire_auth_character_gateway_TLS_SQLite_identity_no_public_listener_no_Godot_clients");
+            Console.WriteLine($"SERVER_WORLD_CHECKS PASS total={_passes} scope=collision_Astar_30Hz_host_wire_auth_character_gateway_bounded_TLS_listener_SQLite_identity_no_Godot_clients");
             return 0;
         }
         finally

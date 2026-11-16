@@ -1,6 +1,23 @@
-# SGTest Server — .NET 8 重建（碰撞／導航／權威 World＋離線 30Hz Host）
+# SGTest Server — .NET 8 重建（權威 World／TLS Host）
 
-新版 Server 是**從零重建**，不還原舊 SGO 原型。`src/SGTest.Server` 目前提供 Map13／Map15 權威碰撞/A*、單寫者 `ServerWorld`、30Hz Host、compact-binary V1、trusted Gateway，以及真 loopback 驗證過的 **TLS 1.2/1.3 單連線 TCP session**。Production Host 仍不開 listener，也沒有內建測試帳密；真正 Account Auth/CharacterChoose、WorldReady／AOI、DB／怪物／戰鬥或 Godot 連線 Client 仍未完成。
+新版 Server 是**從零重建**，不還原舊 SGO 原型。現有權威 Blocking/A*、30Hz World、SQLite帳號／選角、compact-binary V1、TLS授權、WorldReady／AOI及NPC轉圖。Host新增明確啟用的`serve`模式，透過有界TLS listener接入同一組正式授權／Router／AOI；無內建帳密、明文或自動測試憑證。創角協定、座標保存、怪物戰鬥、完整雙Client遊戲畫面與Release仍未完成。
+
+## 持續運行的TLS Host（MVP003-TLS-LISTENER）
+
+```powershell
+# PFX必須有目前有效的private key；密碼由環境提供，不放在命令列或repo。
+dotnet run --project server/host/SGTest.Server.Host -c Release -- serve --content C:/private/runtime --identity C:/private/identity.db --certificate C:/private/server.pfx --bind 127.0.0.1 --port 7777
+# 可選：--max-connections 128 --max-per-address 8 --seconds 60
+# 精準檢查先建置Host，再執行；只用合成地圖與臨時憑證，不需遊戲素材。
+dotnet build server/host/SGTest.Server.Host -c Release
+dotnet run --project server/tests/SGTest.Server.Checks -c Release -- --listener-only
+```
+
+PFX密碼環境名稱為`SGTEST_TLS_PASSWORD`；未加密PFX可不設定。Host讀取唯一Converter產出的兩圖world／blocking及`npcs.json`，缺失／無效內容拒絕啟動；不讀貼圖。Identity DB初始化不會創建帳號或角色，需由可信管理工具預先建置（現有SqliteIdentityStore API）；公開註冊／創角流程尚未接通。Godot登入面板的host／port／TLS名稱與信任鏈須配合實際憑證。
+
+預設只監聽127.0.0.1，Ctrl+C或期限到期停止；總連線上限包含握手、登入與清理中的Socket，每IP另有限額。Socket讀寫與KDF沿用既有有界實作，不在World鎖或Tick內執行。關閉順序為停止接入／排空授權Socket與可信Disconnect→停止World→停止Router/AOI，pump故障不會繼續提供半套服務。`TLS_HOST_READY`／`TLS_HOST_STOPPED`輸出實際endpoint與統計，無帳密。
+
+本機7項targeted checks與受影響Release build PASS；main CI結果見todo。此為持續登入服務切片，不代表公開網際網路安全／壓測／Release完成；時間型登入速率限制、WorldReady ACK/resync與持久座標仍待驗證。下方限時無網路Host命令保留作smoke，並非serve模式。
 
 ## 正式內容契約
 

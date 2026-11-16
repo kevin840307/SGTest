@@ -4,10 +4,11 @@ using SGTest.Server.World;
 
 internal static class Program
 {
-    // Deliberately NO listener, login, test credentials, insecure auth or sample game account.
-    // This executes the actual fixed-rate world thread against original private collision data.
+    // The original bounded offline smoke remains available. Network startup is
+    // explicit and requires a deployment certificate and persistent identity DB.
     public static async Task<int> Main(string[] args)
     {
+        if (args is ["serve", .. var serveArgs]) return await TlsHost.RunAsync(serveArgs);
         if (args.Length != 4 || args[0] != "--content" || args[2] != "--seconds" ||
             !int.TryParse(args[3], out int seconds) || seconds is < 1 or > 30)
         {

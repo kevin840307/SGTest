@@ -293,7 +293,7 @@ public static class TlsWireConnection
         }
     }
 
-    private static void Validate(TlsWireConnectionOptions options)
+    internal static void Validate(TlsWireConnectionOptions options)
     {
         if (options.HandshakeTimeoutMilliseconds is < 100 or > 30000 ||
             options.AuthorizationTimeoutMilliseconds is < 1000 or > 600000 ||
@@ -305,7 +305,7 @@ public static class TlsWireConnection
                 "TLS connection options exceed bounded runtime limits");
     }
 
-    private static void ValidateCertificate(X509Certificate2 certificate)
+    internal static void ValidateCertificate(X509Certificate2 certificate)
     {
         var now = DateTime.UtcNow;
         if (!certificate.HasPrivateKey ||
