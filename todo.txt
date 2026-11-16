@@ -2,7 +2,7 @@
 
 - MVP003-LOGIN-UI [x] Before：main僅離線檢視。After：`ui/session_panel.gd`與main接正式threaded ClientSession，支援安全TLS登入／角色列表選擇／登出；WorldReady驅動唯一WorldView切圖與初始相機定位，連線期間停用且守衛離線地圖按鈕；可顯示地圖時左鍵提交Server Move。密碼立即從UI清除，TLS採預設CA或明確指定憑證，無unsafe fallback；失敗／取消／退出停止Session執行緒，離線檢視不冒充在線傳送。
   - 精準驗證：`python client/tests/run_tls_login.py Godot --app-ui --ui-screenshot reports/session_ui_login.png --timeout 45` 真Windows Godot4.7.2／RTX3050 main UI→C#正式TLS授權／WorldReady／MoveReceipt／logout PASS；含短密碼拒絕、注入失敗Session返回登入、密碼清除、離線按鈕鎖定，native圖已檢視。`run_world_view.py Godot --pack C:/SGO/SRC/SGTest-map15fix/.cache/client-release/assets/assets.pck --assets C:/SGO/SRC/SGTest-map15fix/client/assets --report reports/session_ui_world_view_current.json` 既有雙圖12capture／38原始幀、輸入／取消回歸PASS，final Store全0／無engine error；只讀既有修正版私有產物，PCK SHA5ecee8d59fcde47554766b01c9c752b0c43784ef9ec1dafc6cf6ff2c0638c1ac。首次使用主目錄舊PCK缺tile_source_rule而FAIL，未放寬驗證。`run_world_view`新增--assets以匹配指定PCK的只讀oracle。
-  - CI新增main/ui paths與`--app-ui` Gate，目前NOT VERIFIED（待推送檢查）；不重跑無關全量Atlas／效能選型。主工作樹既有project.godot editor改動、.uid與.vs WIP保留，不提交。未完成：創角、正式Host TLS listener/admission、玩家紙娃娃與插值／真私有地圖連線視覺、NPC點擊、多Client畫面；MVP003/MVP004保持[ ]。
+  - 實作SHA `d57753deed6b50739fe2fbd7e5c44e0cb0a30810` 已推送main。GitHub [Client core checks 43892952468](https://github.com/kevin840307/SGTest/actions/runs/43892952468)全部PASS，含新main/ui路徑的--app-ui登入／選角／登出Gate、既有FPS獨立及雙Client AOI／crossmap／NPC portal回歸。不重跑無關Atlas／效能選型。主工作樹既有project.godot editor改動、.uid與.vs WIP保留，不提交。未完成：創角、正式Host TLS listener/admission、玩家紙娃娃與插值／真私有地圖連線視覺、NPC點擊、多Client畫面；MVP003/MVP004保持[ ]，下一項優先正式Host listener。
 
 狀態說明：本檔只記錄**刪除舊原型後**的新版本工作。舊流程、完成紀錄及測試結果保留在 `docs/research/FEATURE_DECISION_HISTORY.md#source-todo-pre-rebuild-20261115-txt`，不得將它們當成新版本 PASS。
 
