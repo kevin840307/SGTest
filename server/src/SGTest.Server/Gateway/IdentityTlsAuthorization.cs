@@ -31,7 +31,7 @@ public sealed class IdentityTlsAuthorization
     /// and releases BOTH the route and the World actor after the socket ends.
     /// No listener, credentials or plaintext fallback are provided here.
     /// </summary>
-    public Task<TlsWireConnectionResult> RunAuthenticatedSocketAsync(
+    public async Task<TlsWireConnectionResult> RunAuthenticatedSocketAsync(
         TcpClient client, X509Certificate2 certificate, WorldResultRouter router,
         TlsWireConnectionOptions? options = null,
         CancellationToken cancellationToken = default)
@@ -39,6 +39,8 @@ public sealed class IdentityTlsAuthorization
         ArgumentNullException.ThrowIfNull(client);
         ArgumentNullException.ThrowIfNull(certificate);
         ArgumentNullException.ThrowIfNull(router);
+        var bindingGate = new object();
+        bool sessionFinished = false;
         GatewayConnection? boundConnection = null;
 
         async ValueTask<GatewayConnection?> Authorize(SslStream stream, CancellationToken token)
@@ -46,7 +48,17 @@ public sealed class IdentityTlsAuthorization
             var connection = await AuthorizeAndBindAsync(stream, token).ConfigureAwait(false);
             if (connection is null) return null;
             var binding = connection.Binding;
-            if (token.IsCancellationRequested || !router.TryAttach(connection))
+            bool attached;
+            lock (bindingGate)
+            {
+                // The TLS outer authorization timeout may win its WaitAsync race
+                // just before this callback returns. Never attach after the
+                // socket runner's finally has already released the session.
+                attached = !sessionFinished && !token.IsCancellationRequested &&
+                    router.TryAttach(connection);
+                if (attached) boundConnection = connection;
+            }
+            if (!attached)
             {
                 connection.Close();
                 await _world.TrustedDisconnectAsync(
@@ -54,20 +66,49 @@ public sealed class IdentityTlsAuthorization
                     .ConfigureAwait(false);
                 return null;
             }
-            boundConnection = connection;
             return connection;
         }
 
         async Task Release(ConnectionBinding binding)
         {
-            if (boundConnection is not null) router.TryDetach(boundConnection);
+            GatewayConnection? connection;
+            lock (bindingGate)
+            {
+                connection = boundConnection;
+                boundConnection = null;
+            }
+            if (connection is not null) router.TryDetach(connection);
             await _world.TrustedDisconnectAsync(
                 binding.ActorId, binding.ConnectionEpoch, binding.MapEpoch)
                 .ConfigureAwait(false);
         }
 
-        return TlsWireConnection.RunServerAsync(client, certificate, Authorize,
-            _world.TryPostMove, options, cancellationToken, Release);
+        try
+        {
+            return await TlsWireConnection.RunServerAsync(client, certificate,
+                Authorize, _world.TryPostMove, options, cancellationToken, Release)
+                .ConfigureAwait(false);
+        }
+        finally
+        {
+            // Also covers a rare outer WaitAsync timeout while the auth callback
+            // has already attached a Gateway but has not yet returned it.
+            GatewayConnection? abandoned;
+            lock (bindingGate)
+            {
+                sessionFinished = true;
+                abandoned = boundConnection;
+                boundConnection = null;
+            }
+            if (abandoned is not null)
+            {
+                router.TryDetach(abandoned);
+                var binding = abandoned.Binding;
+                await _world.TrustedDisconnectAsync(
+                    binding.ActorId, binding.ConnectionEpoch, binding.MapEpoch)
+                    .ConfigureAwait(false);
+            }
+        }
     }
 
     public async ValueTask<GatewayConnection?> AuthorizeAndBindAsync(
