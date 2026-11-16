@@ -210,7 +210,7 @@ internal static class Program
                     System.Security.Authentication.SslProtocols.Tls13) ||
                     results[0].Reason != TlsWireEndReason.CleanEof ||
                     results[1].Reason != TlsWireEndReason.CleanEof ||
-                    results[1].CommandsAccepted != (portals ? 4 : crossmap ? 2 : 1) ||
+                    results[1].CommandsAccepted != (portals ? 5 : crossmap ? 2 : 1) ||
                     router.Statistics.ActiveSessions != 0 ||
                     router.Statistics.ReceiptsQueued < (crossmap || portals ? 2 : 1) ||
                     aoiPump.FramesQueued < (crossmap || portals ? 10 : 6))
