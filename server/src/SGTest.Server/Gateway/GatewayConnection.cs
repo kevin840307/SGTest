@@ -43,6 +43,7 @@ public sealed class GatewayConnection
         private readonly Queue<byte[]> _frames = new();
         private readonly int _maxFrames;
         private readonly int _maxBytes;
+        private readonly SemaphoreSlim _available = new(0);
         private int _bytes;
 
         public ReliableFrameQueue(int maxFrames, int maxBytes)
@@ -62,18 +63,36 @@ public sealed class GatewayConnection
                     return false;
                 _frames.Enqueue(frame);
                 _bytes += frame.Length;
-                return true;
             }
+            _available.Release();
+            return true;
         }
 
         public bool TryDequeue(out byte[] frame)
         {
+            if (!_available.Wait(0))
+            {
+                frame = Array.Empty<byte>();
+                return false;
+            }
             lock (_gate)
             {
                 if (!_frames.TryDequeue(out frame!))
-                    return false;
+                    throw new InvalidOperationException("Reliable queue signal/state diverged");
                 _bytes -= frame.Length;
                 return true;
+            }
+        }
+
+        public async ValueTask<byte[]?> DequeueAsync(CancellationToken cancellationToken)
+        {
+            await _available.WaitAsync(cancellationToken).ConfigureAwait(false);
+            lock (_gate)
+            {
+                if (!_frames.TryDequeue(out var frame))
+                    return null; // Close may clear after the signal was acquired.
+                _bytes -= frame.Length;
+                return frame;
             }
         }
 
@@ -83,6 +102,7 @@ public sealed class GatewayConnection
             {
                 _frames.Clear();
                 _bytes = 0;
+                while (_available.Wait(0)) { }
             }
         }
     }
@@ -215,27 +235,25 @@ public sealed class GatewayConnection
     /// </summary>
     public GatewaySendStatus QueueReceipt(MoveReceipt receipt)
     {
-        ConnectionBinding bound;
         lock (_bindingGate)
         {
             if (_closed) return GatewaySendStatus.Closed;
-            bound = _binding;
+            var bound = _binding;
+            if (receipt.ActorId != bound.ActorId ||
+                receipt.ConnectionEpoch != bound.ConnectionEpoch ||
+                receipt.MapEpoch <= 0 ||
+                receipt.MapEpoch > bound.MapEpoch)
+                return GatewaySendStatus.GenerationMismatch;
+
+            var frame = WireProtocol.EncodeMoveReceipt(new MoveReceiptWire(
+                receipt.MapEpoch,
+                receipt.MovementSequence,
+                receipt.Status,
+                receipt.Tick));
+            return _reliable.TryEnqueue(frame)
+                ? GatewaySendStatus.Enqueued
+                : GatewaySendStatus.Backpressured;
         }
-
-        if (receipt.ActorId != bound.ActorId ||
-            receipt.ConnectionEpoch != bound.ConnectionEpoch ||
-            receipt.MapEpoch <= 0 ||
-            receipt.MapEpoch > bound.MapEpoch)
-            return GatewaySendStatus.GenerationMismatch;
-
-        var frame = WireProtocol.EncodeMoveReceipt(new MoveReceiptWire(
-            receipt.MapEpoch,
-            receipt.MovementSequence,
-            receipt.Status,
-            receipt.Tick));
-        return _reliable.TryEnqueue(frame)
-            ? GatewaySendStatus.Enqueued
-            : GatewaySendStatus.Backpressured;
     }
 
     public bool TryDequeueReliable(out byte[] frame)
@@ -246,6 +264,12 @@ public sealed class GatewayConnection
             return false;
         }
         return _reliable.TryDequeue(out frame);
+    }
+
+    public async ValueTask<byte[]?> DequeueReliableAsync(CancellationToken cancellationToken)
+    {
+        if (IsClosed) return null;
+        return await _reliable.DequeueAsync(cancellationToken).ConfigureAwait(false);
     }
 
     public void Close()
