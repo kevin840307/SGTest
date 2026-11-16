@@ -10,7 +10,7 @@ namespace SGTest.Server.Gateway;
 
 public sealed record TlsWireConnectionOptions(
     int HandshakeTimeoutMilliseconds = 5000,
-    int AuthorizationTimeoutMilliseconds = 5000,
+    int AuthorizationTimeoutMilliseconds = 120000,
     int ReadBufferBytes = 16 * 1024,
     int BackpressureRetryMilliseconds = 2,
     int MaxBackpressureMilliseconds = 2000);
@@ -236,7 +236,7 @@ public static class TlsWireConnection
     private static void Validate(TlsWireConnectionOptions options)
     {
         if (options.HandshakeTimeoutMilliseconds is < 100 or > 30000 ||
-            options.AuthorizationTimeoutMilliseconds is < 100 or > 30000 ||
+            options.AuthorizationTimeoutMilliseconds is < 1000 or > 600000 ||
             options.ReadBufferBytes is < 512 or > 65536 ||
             options.BackpressureRetryMilliseconds is < 1 or > 100 ||
             options.MaxBackpressureMilliseconds is < 10 or > 30000 ||

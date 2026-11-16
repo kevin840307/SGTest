@@ -127,3 +127,17 @@ python -m unittest discover -s tools/tests -p "test_*.py" -q
 ### 2026-11-16 Identity core boundary
 
 The Server now has persistent Account/Character records and real Argon2id password verification, but identity is **not yet a gameplay wire protocol**. The existing TLS session still accepts only an injected `authorizeAndBind` callback. The next protocol slice must add bounded Auth + CharacterList/CharacterChoose messages inside TLS, authenticate through `SqliteIdentityStore`, verify selected-character ownership, then call trusted World registration and construct `GatewayConnection`. Until that wiring exists, the Production Host still exposes no public listener and REB020 remains incomplete.
+
+### 2026-11-16 AUTHWIRE001 identity/login wire
+
+All identity messages are legal **only inside the already-established TLS authorization phase**. They use the same V1 8-byte header (`uint32 frameBytes, uint16 version, uint16 opcode`, little-endian):
+
+- opcode 10 `AuthRequest`: `uint16 usernameUtf8Bytes + uint16 passwordUtf8Bytes + username + password`; username 3..32 bytes, password 8..256 bytes, strict UTF-8.
+- opcode 11 `AuthResult`: one byte status: `0 Success, 1 InvalidCredentials, 2 Disabled`.
+- opcode 12 `CharacterList`: `uint8 count` then repeated `int64 characterId + uint8 slot + uint16 nameUtf8Bytes + name`; max 32 entries and 4096-byte frame.
+- opcode 13 `CharacterChoose`: `int64 characterId`.
+- opcode 14 `CharacterChooseResult`: `uint8 status + int64 characterId + int32 mapId + float64 x + float64 y + int64 mapEpoch`; status `0 Success, 1 NotOwned, 2 WorldRejected`. Failure frames carry zeroed identity/spawn fields.
+
+`IdentityTlsAuthorization` verifies password first, emits only that Account's CharacterList, checks ownership again on CharacterChoose, then uses persistent `character_id` plus stored server spawn to call `TrustedRegisterAsync`. Only the returned ActorSnapshot creates the gameplay Gateway binding. Thus a Client may select from server-advertised IDs but cannot assert authoritative ActorId/ConnectionEpoch or spawn. Successful result exposes MapEpoch because MoveTarget requires it; ConnectionEpoch remains server-only.
+
+The TLS handshake timeout remains 5s. The overall pre-gameplay authorization/character-selection timeout is configurable, default 120s and bounded to 10 minutes; the future production listener must add global/per-IP admission and rate limiting. After Gateway binding, identity opcodes are protocol violations. Godot support for these new opcodes is the next client slice and remains NOT VERIFIED.

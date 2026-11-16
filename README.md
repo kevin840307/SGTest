@@ -81,3 +81,7 @@ powershell -ExecutionPolicy Bypass -File tools/asset_converter/verify_converter.
 ### 2026-11-16 Server identity progress
 
 Server identity persistence now includes SQLite Account/Character schema v1 and bounded Argon2id authentication with 46/46 Release server checks PASS locally. This is a core service only: there is still no public login listener and no completed Godot login/CharacterChoose flow. The next network slice binds authenticated character ownership to the existing TLS authorization callback and trusted World registration.
+
+### 2026-11-16 TLS login/CharacterChoose server flow
+
+Server-side TLS login can now authenticate the SQLite Account, return only owned characters, validate CharacterChoose, register the persisted character into the authoritative World, and bind gameplay Gateway identity without trusting Client ActorId/ConnectionEpoch. Local Release gate is 51/51 PASS. Production listener/certificate/admission and the Godot TLS/login client are still pending.

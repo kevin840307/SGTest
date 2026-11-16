@@ -122,3 +122,7 @@ Map15／Map13 原始 tile 地形已有唯一正式 Terrain Renderer；三種合�
 ### Identity persistence baseline - 2026-11-16
 
 Account/Character persistence baseline is SQLite schema v1. Passwords use Argon2id with bounded concurrent work; DB/KDF operations are outside World Tick. Character identity is server-owned and persistent; future CharacterChoose must prove authenticated ownership before `character_id` becomes trusted ActorId. Client-supplied ActorId/ConnectionEpoch is forbidden. Current core tests PASS, but wire login/CharacterChoose, production listener, save/reconnect lifecycle and Godot E2E are still incomplete.
+
+### TLS identity binding baseline - 2026-11-16
+
+Inside mandatory TLS, V1 identity flow is AuthRequest -> AuthResult -> CharacterList -> CharacterChoose -> CharacterChooseResult. Character ownership is checked server-side; successful selection uses persistent character_id and stored spawn to perform trusted World registration. Only that World result creates Gateway identity. Client never supplies ConnectionEpoch or authoritative ActorId. Godot identity transport, production listener/admission/rate limits and WorldReady/reconnect remain later gates.
