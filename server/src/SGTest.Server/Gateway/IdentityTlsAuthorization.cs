@@ -1,5 +1,7 @@
 using System.Buffers.Binary;
 using System.Net.Security;
+using System.Net.Sockets;
+using System.Security.Cryptography.X509Certificates;
 using SGTest.Server.Identity;
 using SGTest.Server.Wire;
 using SGTest.Server.World;
@@ -21,6 +23,51 @@ public sealed class IdentityTlsAuthorization
     {
         _identity = identity ?? throw new ArgumentNullException(nameof(identity));
         _world = world ?? throw new ArgumentNullException(nameof(world));
+    }
+
+    /// <summary>
+    /// The official authenticated socket lifecycle for a future production
+    /// listener: binds the selected character, registers the receipt route,
+    /// and releases BOTH the route and the World actor after the socket ends.
+    /// No listener, credentials or plaintext fallback are provided here.
+    /// </summary>
+    public Task<TlsWireConnectionResult> RunAuthenticatedSocketAsync(
+        TcpClient client, X509Certificate2 certificate, WorldResultRouter router,
+        TlsWireConnectionOptions? options = null,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(client);
+        ArgumentNullException.ThrowIfNull(certificate);
+        ArgumentNullException.ThrowIfNull(router);
+        GatewayConnection? boundConnection = null;
+
+        async ValueTask<GatewayConnection?> Authorize(SslStream stream, CancellationToken token)
+        {
+            var connection = await AuthorizeAndBindAsync(stream, token).ConfigureAwait(false);
+            if (connection is null) return null;
+            var binding = connection.Binding;
+            if (token.IsCancellationRequested || !router.TryAttach(connection))
+            {
+                connection.Close();
+                await _world.TrustedDisconnectAsync(
+                    binding.ActorId, binding.ConnectionEpoch, binding.MapEpoch)
+                    .ConfigureAwait(false);
+                return null;
+            }
+            boundConnection = connection;
+            return connection;
+        }
+
+        async Task Release(ConnectionBinding binding)
+        {
+            if (boundConnection is not null) router.TryDetach(boundConnection);
+            await _world.TrustedDisconnectAsync(
+                binding.ActorId, binding.ConnectionEpoch, binding.MapEpoch)
+                .ConfigureAwait(false);
+        }
+
+        return TlsWireConnection.RunServerAsync(client, certificate, Authorize,
+            _world.TryPostMove, options, cancellationToken, Release);
     }
 
     public async ValueTask<GatewayConnection?> AuthorizeAndBindAsync(
@@ -61,11 +108,13 @@ public sealed class IdentityTlsAuthorization
             return null;
         }
 
+        // Do not cancel ONLY the waiter: the trusted World queue may finish
+        // registration after the TLS authorization timeout, leaking a character.
         ActorSnapshot? actor;
         try
         {
             actor = await _world.TrustedRegisterAsync(character.CharacterId,
-                character.MapId, character.X, character.Y).WaitAsync(cancellationToken).ConfigureAwait(false);
+                character.MapId, character.X, character.Y).ConfigureAwait(false);
         }
         catch (InvalidOperationException)
         {
@@ -73,16 +122,35 @@ public sealed class IdentityTlsAuthorization
         }
         if (actor is null)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             await WriteFrameAsync(tls, WireProtocol.EncodeCharacterChooseResult(new(
                 CharacterChooseWireStatus.WorldRejected, 0, 0, 0, 0, 0)), cancellationToken).ConfigureAwait(false);
             return null;
         }
 
         var snapshot = actor.Value;
-        await WriteFrameAsync(tls, WireProtocol.EncodeCharacterChooseResult(new(
-            CharacterChooseWireStatus.Success, snapshot.ActorId, snapshot.MapId,
-            snapshot.X, snapshot.Y, snapshot.MapEpoch)), cancellationToken).ConfigureAwait(false);
-        return new GatewayConnection(snapshot);
+        bool completed = false;
+        try
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            await WriteFrameAsync(tls, WireProtocol.EncodeCharacterChooseResult(new(
+                CharacterChooseWireStatus.Success, snapshot.ActorId, snapshot.MapId,
+                snapshot.X, snapshot.Y, snapshot.MapEpoch)), cancellationToken).ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
+            var gateway = new GatewayConnection(snapshot);
+            completed = true;
+            return gateway;
+        }
+        finally
+        {
+            if (!completed)
+            {
+                // Failed/cancelled handshake after TrustedRegister must not leave
+                // a ghost actor that blocks this character's next login.
+                await _world.TrustedDisconnectAsync(snapshot.ActorId,
+                    snapshot.ConnectionEpoch, snapshot.MapEpoch).ConfigureAwait(false);
+            }
+        }
     }
 
     private static async Task<byte[]?> ReadFrameAsync(SslStream tls, CancellationToken cancellationToken)
