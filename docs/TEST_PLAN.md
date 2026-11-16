@@ -60,6 +60,8 @@ dotnet run -c Release --project tools/tests/wire_aoi_probe/WireAoiProbe.csproj
 
 檢查 RESULT ... PASS 與 WIRE_GODOT_GOLDEN_PASS；使用人工資料，已驗證 Binary Golden Fixture／Spatial Grid 與 brute-force 等價、Hysteresis 和密集 AOI 反例。**未**驗證正式 Server/WebSocket、多機、真實封包延遲、MessagePack/Protobuf、Map13 E2E；結果與限制記於 [Wire Contract](RUNTIME_PROTOCOL.md)。
 
+**REB020-FRAMING-PROBE（2026-11-16，合成測試 PASS，WIRE001 主項 NOT VERIFIED）**：沿用既有 Wire/AOI probe，新增可重播 TCP framing byte-stream 候選，32-byte Move fixture 的全部33拆包切點、100組seeded三封包黏包／拆包、5非法length、3非法version/opcode/payload-width、半包reset與合法後非法拒絕，.NET 8與Godot 4.7.2皆PASS；現行Python 81 tests PASS。Godot standalone：`& "C:\SGO\Godot\Godot_v4.7.2-stable_win64_console.exe" --headless --script (Resolve-Path tools/tests/wire_aoi_probe/verify_framing.gd).Path`。此為test-only bounded 64-byte fuzz，沒有Socket／MessagePack公平對比／TLS／ServerQueue／reconnect E2E；未測不得宣稱單一正式Wire已定版。完整重跑命令與待測指標見RUNTIME_PROTOCOL。
+
 ## Gate 2 — 視覺、戰鬥與 AOI
 
 - 地圖、Player/Equipment、Enemy、Scenery/Drop 共用 World Y-sort。
