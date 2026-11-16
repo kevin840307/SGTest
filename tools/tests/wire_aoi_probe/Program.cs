@@ -88,6 +88,7 @@ static class Program
         var bb=EncodeBinary(p);
         Check(Convert.ToHexString(bb)=="200000000100010039300000D8190000781200002A0000000300010007000000","Godot shared golden fixture");
         Check(DecodeBinary(bb)==p,"binary roundtrip");
+        FramingCases.Verify(bb);
         Check(JsonDocument.Parse(jb).RootElement.GetProperty("entityId").GetInt32()==p.EntityId,"json roundtrip");
         foreach(var bad in new[]{0,1,7,31,33,4096})
         {

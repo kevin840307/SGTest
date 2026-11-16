@@ -52,6 +52,7 @@
 ## Server 新版（尚未實作）
 
 - REB020 [ ] .NET 8 Server 最小結構：先研究原版／Recovered 並比較 binary header/framing、MessagePack 等格式，選定正式 Wire codec + ConnectionEpoch + Identity + bounded queues；C#／GDScript golden fixture 與效能對照（WIRE001）先於定版。
+- REB020-FRAMING-PROBE [x] 2026-11-16 test-only TCP framing candidate added to the existing `tools/tests/wire_aoi_probe`; C#/.NET 8 and Godot 4.7.2 both PASS: 33 byte-split boundaries, 100 seeded fragmented/coalesced streams (3 frames each), 5 invalid lengths, 3 invalid version/opcode/payload widths, partial-frame reset, valid-then-invalid ordering. C# buffer bounded at 64 bytes during fuzz; Python unit suite 81 PASS. This is **NOT** a production wire codec, socket test, TLS, queue, full WIRE001 selection or Server/Client E2E. Next: verify Recovered/Old, compare compact binary with real MessagePack/Protobuf candidates under the same AOI/combat/drop trace (bytes, P95/P99, CPU, alloc/GC); then choose a single protocol and implement ConnectionEpoch, bounded queues and reconnect tests. `docs/RUNTIME_PROTOCOL.md` provides commands and limits. REB020 remains unchecked.
 - REB021 [ ] 單寫者 World / 30Hz tick／10Hz snapshot baseline、可靠事件、Server-authoritative AOI（spatial index／Interest／Spawn/Despawn／變化 Delta／viewport 限幅、hysteresis）、Blocking.dat 碰撞與 MapEpoch；先測 AOI 再擴充多人廣播。
 - REB022 [ ] Combat、AI、damage/MISS/Death、Drop/Pickup/Respawn；World Tick 不可等待資料庫或 socket send。
 - REB023 [ ] SQLite Account/Character persistence、UID 與交易原子性、重試／斷線一致性。

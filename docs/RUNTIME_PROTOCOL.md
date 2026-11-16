@@ -82,3 +82,18 @@ AOI 的進出與 WorldReady 初始狀態應定義**確定的覆蓋／重放邊�
 - 模擬 128+ 筆 burst、網路 jitter/out-of-order/packet loss 時不能造成 ghost spawn 或永久卡住 action。
 
 舊版測試向量／行為證據見 [research/RUNTIME_PROTOCOL_EVIDENCE](research/RUNTIME_PROTOCOL_EVIDENCE.md)。
+## 2026-11-16 REB020-FRAMING-CANDIDATE（僅候選合約驗證）
+
+在既有 `tools/tests/wire_aoi_probe/` 加入 `FramingProbe.cs` 與 `verify_framing.gd`，針對**目前測試用的** little-endian `uint32 frame_bytes + uint16 version + uint16 opcode + 24-byte Move`（32-byte frame）驗證 TCP byte stream 任意拆包／黏包。這不是建立正式 `server/` 或 `client/network/` 協定。C# parser 的暫用上限為 65,536 bytes（本輪 fuzz 採64 bytes），只接受 version=1、opcode=1、Move width=32；拒絕負向／超限 length、未知版本／Opcode、僅8-byte header但遺失 Move payload，重連需 Reset 清除舊連線部分封包。C# 使用有界儲存與同步 ReadOnlySpan 消費 callback（不能留存 span 到非同步佇列）；正式 Queue、connection epoch、ack／重播與慢客戶端仍需要另外實作。
+
+可重跑命令（Windows、.NET 8 Release、Godot 4.7.2；在 repo 根目錄執行）：
+
+```powershell
+dotnet run -c Release --project tools/tests/wire_aoi_probe/WireAoiProbe.csproj
+$godot = "C:\SGO\Godot\Godot_v4.7.2-stable_win64_console.exe"
+& $godot --headless --script (Resolve-Path tools/tests/wire_aoi_probe/verify_binary.gd).Path
+& $godot --headless --script (Resolve-Path tools/tests/wire_aoi_probe/verify_framing.gd).Path
+python -m unittest discover -s tools/tests -p "test_*.py" -q
+```
+
+本輪**合成資料實跑 PASS**：.NET 和 Godot 兩端對相同 32-byte Golden Fixture、全部 33 個單點分段、100 組 seeded 多段／黏包（每組三 frame）、5 種不合法 length、3 種不合法 header/payload、半包 Reset、合法 frame 後緊接不合法 frame 都通過；.NET 程式確認 bounded buffer 不超過預設限制。現行 Python 81 tests PASS；無 socket／TLS、無 Packet Queue、未作實際網路延遲／P95/P99 或 MessagePack/Protobuf 公平比較，**WIRE001／REB020 仍 NOT VERIFIED**。早期微基準只比較 synthetic JSON／Binary 單筆 encode/decode，不能用來推斷 TCP 端到端效能、選定協定或宣稱低 GC 的正式 Server。
