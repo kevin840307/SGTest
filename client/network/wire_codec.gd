@@ -10,6 +10,10 @@ const OPCODE_AUTH_RESULT := 11
 const OPCODE_CHARACTER_LIST := 12
 const OPCODE_CHARACTER_CHOOSE := 13
 const OPCODE_CHARACTER_CHOOSE_RESULT := 14
+const OPCODE_WORLD_READY := 20
+const OPCODE_ENTITY_SPAWN := 21
+const OPCODE_ENTITY_DESPAWN := 22
+const OPCODE_ENTITY_DELTA := 23
 const MOVE_TARGET_FRAME_BYTES := 28
 const MOVE_RECEIPT_FRAME_BYTES := 30
 const AUTH_RESULT_FRAME_BYTES := 9
@@ -17,6 +21,9 @@ const CHARACTER_CHOOSE_FRAME_BYTES := 16
 const CHARACTER_CHOOSE_RESULT_FRAME_BYTES := 45
 const MAX_AUTH_REQUEST_FRAME_BYTES := 300
 const MAX_CHARACTER_LIST_FRAME_BYTES := 4096
+const WORLD_READY_FRAME_BYTES := 44
+const ENTITY_STATE_FRAME_BYTES := 73
+const ENTITY_DESPAWN_FRAME_BYTES := 40
 
 static func encode_move_target(map_epoch: int, movement_sequence: int, target_x: int, target_y: int) -> PackedByteArray:
 	if map_epoch <= 0 or movement_sequence <= 0 or movement_sequence > 0xffffffff:
@@ -147,6 +154,51 @@ static func decode_character_choose_result(frame: PackedByteArray) -> Dictionary
 		return {}
 	return {"status": status, "character_id": character_id, "map_id": map_id, "x": x, "y": y, "map_epoch": map_epoch}
 
+static func decode_world_ready(frame: PackedByteArray) -> Dictionary:
+	if not _valid_header(frame, OPCODE_WORLD_READY, WORLD_READY_FRAME_BYTES):
+		return {}
+	var reader := _reader(frame, 8)
+	var epoch := reader.get_64()
+	var tick := reader.get_64()
+	var actor_id := reader.get_64()
+	var map_id := reader.get_32()
+	var x := reader.get_float()
+	var y := reader.get_float()
+	if epoch <= 0 or tick < 0 or actor_id <= 0 or map_id <= 0 or not is_finite(x) or not is_finite(y) or x < 0 or y < 0:
+		return {}
+	return {"map_epoch": epoch, "server_tick": tick, "actor_id": actor_id, "map_id": map_id, "x": x, "y": y}
+
+static func decode_entity_state(frame: PackedByteArray) -> Dictionary:
+	if frame_opcode(frame) not in [OPCODE_ENTITY_SPAWN, OPCODE_ENTITY_DELTA] or frame.size() != ENTITY_STATE_FRAME_BYTES:
+		return {}
+	var reader := _reader(frame, 8)
+	var receiver_epoch := reader.get_64()
+	var tick := reader.get_64()
+	var actor_id := reader.get_64()
+	var connection_epoch := reader.get_64()
+	var entity_map_epoch := reader.get_64()
+	var map_id := reader.get_32()
+	var revision := reader.get_64()
+	var x := reader.get_float()
+	var y := reader.get_float()
+	var moving := reader.get_u8()
+	var action_sequence := reader.get_u32()
+	if receiver_epoch <= 0 or tick < 0 or actor_id <= 0 or connection_epoch <= 0 or entity_map_epoch <= 0 or map_id <= 0 or revision <= 0 or moving > 1 or not is_finite(x) or not is_finite(y) or x < 0 or y < 0:
+		return {}
+	return {"receiver_map_epoch": receiver_epoch, "server_tick": tick, "actor_id": actor_id, "connection_epoch": connection_epoch, "entity_map_epoch": entity_map_epoch, "map_id": map_id, "revision": revision, "x": x, "y": y, "moving": moving == 1, "movement_action_sequence": action_sequence}
+
+static func decode_entity_despawn(frame: PackedByteArray) -> Dictionary:
+	if not _valid_header(frame, OPCODE_ENTITY_DESPAWN, ENTITY_DESPAWN_FRAME_BYTES):
+		return {}
+	var reader := _reader(frame, 8)
+	var epoch := reader.get_64()
+	var tick := reader.get_64()
+	var actor_id := reader.get_64()
+	var connection_epoch := reader.get_64()
+	if epoch <= 0 or tick < 0 or actor_id <= 0 or connection_epoch <= 0:
+		return {}
+	return {"receiver_map_epoch": epoch, "server_tick": tick, "actor_id": actor_id, "connection_epoch": connection_epoch}
+
 static func frame_opcode(frame: PackedByteArray) -> int:
 	if frame.size() < HEADER_BYTES or frame_length_prefix(frame) != frame.size():
 		return -1
@@ -155,7 +207,7 @@ static func frame_opcode(frame: PackedByteArray) -> int:
 	if reader.get_u16() != VERSION:
 		return -1
 	var opcode := reader.get_u16()
-	if opcode not in [OPCODE_MOVE_TARGET, OPCODE_MOVE_RECEIPT, OPCODE_AUTH_REQUEST, OPCODE_AUTH_RESULT, OPCODE_CHARACTER_LIST, OPCODE_CHARACTER_CHOOSE, OPCODE_CHARACTER_CHOOSE_RESULT]:
+	if opcode not in [OPCODE_MOVE_TARGET, OPCODE_MOVE_RECEIPT, OPCODE_AUTH_REQUEST, OPCODE_AUTH_RESULT, OPCODE_CHARACTER_LIST, OPCODE_CHARACTER_CHOOSE, OPCODE_CHARACTER_CHOOSE_RESULT, OPCODE_WORLD_READY, OPCODE_ENTITY_SPAWN, OPCODE_ENTITY_DESPAWN, OPCODE_ENTITY_DELTA]:
 		return -1
 	return opcode
 

@@ -25,6 +25,10 @@ var last_receipt_status := -1
 var last_server_tick := -1
 var stale_receipts := 0
 var protocol_error := ""
+var world_ready := false
+var entities := {}
+var last_aoi_tick := -1
+var stale_aoi_events := 0
 
 func mark_auth_sent() -> bool:
 	if state != STATE_NEW:
@@ -58,6 +62,12 @@ func apply_frame(frame: PackedByteArray) -> bool:
 			return _apply_choose(frame)
 		WireCodec.OPCODE_MOVE_RECEIPT:
 			return _apply_receipt(frame)
+		WireCodec.OPCODE_WORLD_READY:
+			return _apply_world_ready(frame)
+		WireCodec.OPCODE_ENTITY_SPAWN, WireCodec.OPCODE_ENTITY_DELTA:
+			return _apply_entity_state(frame, opcode)
+		WireCodec.OPCODE_ENTITY_DESPAWN:
+			return _apply_entity_despawn(frame)
 		_:
 			return fail("unexpected_server_opcode_%d" % opcode)
 
@@ -83,6 +93,10 @@ func snapshot() -> Dictionary:
 		"last_server_tick": last_server_tick,
 		"stale_receipts": stale_receipts,
 		"protocol_error": protocol_error,
+		"world_ready": world_ready,
+		"entities": entities.duplicate(true),
+		"last_aoi_tick": last_aoi_tick,
+		"stale_aoi_events": stale_aoi_events,
 	}
 
 func _apply_auth(frame: PackedByteArray) -> bool:
@@ -130,6 +144,10 @@ func _apply_choose(frame: PackedByteArray) -> bool:
 	last_receipt_sequence = 0
 	last_receipt_status = -1
 	last_server_tick = -1
+	world_ready = false
+	entities.clear()
+	last_aoi_tick = -1
+	stale_aoi_events = 0
 	state = STATE_IN_WORLD
 	return true
 
@@ -157,4 +175,95 @@ func _apply_receipt(frame: PackedByteArray) -> bool:
 	last_receipt_sequence = sequence
 	last_receipt_status = int(decoded.status)
 	last_server_tick = server_tick
+	return true
+
+func _apply_world_ready(frame: PackedByteArray) -> bool:
+	if state != STATE_IN_WORLD:
+		return fail("world_ready_out_of_state")
+	var ready := WireCodec.decode_world_ready(frame)
+	if ready.is_empty():
+		return fail("invalid_world_ready")
+	if int(ready.actor_id) != actor_id:
+		return fail("world_ready_wrong_actor")
+	var next_epoch := int(ready.map_epoch)
+	var tick := int(ready.server_tick)
+	if next_epoch < map_epoch or (next_epoch == map_epoch and tick < last_aoi_tick):
+		stale_aoi_events += 1
+		return true
+	if next_epoch == map_epoch and int(ready.map_id) != map_id:
+		return fail("world_ready_changed_map_without_epoch")
+	if next_epoch > map_epoch:
+		map_epoch = next_epoch
+		map_id = int(ready.map_id)
+		movement_sequence = 0
+		last_receipt_sequence = 0
+		last_receipt_status = -1
+		last_server_tick = -1
+	x = float(ready.x)
+	y = float(ready.y)
+	world_ready = true
+	entities.clear()
+	last_aoi_tick = tick
+	return true
+
+func _check_aoi_generation(receiver_epoch: int, tick: int) -> int:
+	if not world_ready or state != STATE_IN_WORLD:
+		fail("aoi_before_world_ready")
+		return -1
+	if receiver_epoch > map_epoch:
+		fail("future_aoi_map_epoch")
+		return -1
+	if receiver_epoch < map_epoch or tick < last_aoi_tick:
+		stale_aoi_events += 1
+		return 0
+	return 1
+
+func _apply_entity_state(frame: PackedByteArray, opcode: int) -> bool:
+	var value := WireCodec.decode_entity_state(frame)
+	if value.is_empty():
+		return fail("invalid_entity_state")
+	var disposition := _check_aoi_generation(int(value.receiver_map_epoch), int(value.server_tick))
+	if disposition <= 0:
+		return disposition == 0
+	if int(value.map_id) != map_id or int(value.actor_id) == actor_id:
+		return fail("aoi_entity_wrong_map_or_self")
+	var id := int(value.actor_id)
+	var previous: Dictionary = entities.get(id, {})
+	if opcode == WireCodec.OPCODE_ENTITY_SPAWN:
+		if not previous.is_empty():
+			if int(previous.connection_epoch) != int(value.connection_epoch) or int(previous.entity_map_epoch) != int(value.entity_map_epoch):
+				return fail("entity_spawn_without_despawn")
+			if int(value.revision) > int(previous.revision):
+				return fail("new_spawn_without_despawn")
+			stale_aoi_events += 1
+			return true
+		entities[id] = value
+	else:
+		if previous.is_empty():
+			return fail("delta_without_spawn")
+		if int(previous.connection_epoch) != int(value.connection_epoch) or int(previous.entity_map_epoch) != int(value.entity_map_epoch):
+			return fail("delta_wrong_entity_generation")
+		if int(value.revision) <= int(previous.revision):
+			stale_aoi_events += 1
+			return true
+		entities[id] = value
+	last_aoi_tick = maxi(last_aoi_tick, int(value.server_tick))
+	return true
+
+func _apply_entity_despawn(frame: PackedByteArray) -> bool:
+	var value := WireCodec.decode_entity_despawn(frame)
+	if value.is_empty():
+		return fail("invalid_entity_despawn")
+	var disposition := _check_aoi_generation(int(value.receiver_map_epoch), int(value.server_tick))
+	if disposition <= 0:
+		return disposition == 0
+	var id := int(value.actor_id)
+	var previous: Dictionary = entities.get(id, {})
+	if previous.is_empty() or int(value.connection_epoch) < int(previous.connection_epoch):
+		stale_aoi_events += 1
+		return true
+	if int(value.connection_epoch) != int(previous.connection_epoch):
+		return fail("despawn_wrong_entity_generation")
+	entities.erase(id)
+	last_aoi_tick = maxi(last_aoi_tick, int(value.server_tick))
 	return true

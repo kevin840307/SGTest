@@ -256,6 +256,58 @@ public sealed class GatewayConnection
         }
     }
 
+    /// <summary>
+    /// Reliable AOI event (WorldReady/Spawn/Delta/Despawn), already filtered by
+    /// trusted WorldAoi. A future-map or stale-map AOI event must never leak
+    /// across the current connection/map generation. Shares receipt FIFO.
+    /// </summary>
+    public GatewaySendStatus QueueAoi(AoiEvent evt)
+    {
+        lock (_bindingGate)
+        {
+            if (_closed) return GatewaySendStatus.Closed;
+            var bound = _binding;
+            if (evt.ReceiverMapEpoch != bound.MapEpoch || evt.Tick < 0)
+                return GatewaySendStatus.GenerationMismatch;
+            byte[] frame;
+            switch (evt.Kind)
+            {
+                case AoiEventKind.WorldReady when evt.Entity is { } ready &&
+                     ready.ActorId == bound.ActorId &&
+                     ready.ConnectionEpoch == bound.ConnectionEpoch &&
+                     ready.MapEpoch == bound.MapEpoch:
+                    frame = WireProtocol.EncodeWorldReady(new(
+                        evt.ReceiverMapEpoch, evt.Tick, ready.ActorId,
+                        ready.MapId, (float)ready.X, (float)ready.Y));
+                    break;
+
+                case AoiEventKind.Spawn or AoiEventKind.Delta
+                    when evt.Entity is { } entity && entity.ActorId != bound.ActorId:
+                    frame = WireProtocol.EncodeEntityState(
+                        evt.Kind == AoiEventKind.Spawn
+                            ? WireOpcode.EntitySpawn : WireOpcode.EntityDelta,
+                        new(evt.ReceiverMapEpoch, evt.Tick, entity.ActorId,
+                            entity.ConnectionEpoch, entity.MapEpoch, entity.MapId,
+                            entity.EntityRevision, (float)entity.X, (float)entity.Y,
+                            entity.IsMoving, entity.MovementActionSequence));
+                    break;
+
+                case AoiEventKind.Despawn
+                    when evt.EntityActorId > 0 && evt.EntityConnectionEpoch > 0:
+                    frame = WireProtocol.EncodeEntityDespawn(new(
+                        evt.ReceiverMapEpoch, evt.Tick, evt.EntityActorId,
+                        evt.EntityConnectionEpoch));
+                    break;
+
+                default:
+                    return GatewaySendStatus.GenerationMismatch;
+            }
+            return _reliable.TryEnqueue(frame)
+                ? GatewaySendStatus.Enqueued
+                : GatewaySendStatus.Backpressured;
+        }
+    }
+
     public bool TryDequeueReliable(out byte[] frame)
     {
         if (IsClosed)

@@ -212,6 +212,7 @@ static class Checks
             GatewayConnectionChecks.Verify();
             WorldResultRouterChecks.Verify(root);
             WorldAoiChecks.Verify(root);
+            AoiWireChecks.Verify();
             TlsSocketChecks.Verify();
             IdentityStoreChecks.Verify();
             IdentityTlsAuthorizationChecks.Verify(root);

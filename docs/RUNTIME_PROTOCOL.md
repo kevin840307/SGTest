@@ -145,3 +145,16 @@ The TLS handshake timeout remains 5s. The overall pre-gameplay authorization/cha
 ### 2026-11-16 Godot V1 identity codec / transport
 
 The Godot Client now implements the V1 identity frames it actually sends/receives and a stream framing helper. A dedicated threaded `ClientTransport` owns `StreamPeerTCP` + `StreamPeerTLS`; full frames are handed across bounded queues. Production TLS uses normal certificate/hostname validation. The local C# fixture E2E proves the Godot layout is interoperable with `WireProtocol.cs` through Auth, owned CharacterChoose and the first authenticated Move. The production Host still has no public listener, so this fixture is evidence of protocol/transport interoperability rather than a deployment claim.
+
+### 2026-11-16 AOI compact binary V1 frames (Server→Client)
+
+All frames retain the common little-endian `uint32 frameBytes + uint16 version(1) + uint16 opcode` header. Four *server-only* AOI opcodes extend the same formal codec (no alternate serialization library):
+
+| Opcode | Event | Total bytes | Payload, little endian |
+|---|---|---:|---|
+| 20 | WorldReady | 44 | `int64 receiverMapEpoch, int64 serverTick, int64 ownActorId, int32 mapId, float32 x, float32 y` |
+| 21 | EntitySpawn | 73 | `int64 receiverMapEpoch, int64 serverTick, int64 actorId, int64 entityConnectionEpoch, int64 entityMapEpoch, int32 mapId, int64 entityRevision, float32 x, float32 y, uint8 moving, uint32 movementActionSequence` |
+| 22 | EntityDespawn | 40 | `int64 receiverMapEpoch, int64 serverTick, int64 actorId, int64 entityConnectionEpoch` |
+| 23 | EntityDelta | 73 | Same payload as EntitySpawn |
+
+`float32` positions give sub-0.002-pixel resolution within the current ~15K-pixel map range; C# Server World retains double-precision authoritative movement. The Godot Client validates versions, advertised lengths, finite/nonnegative coordinates, legal moving bit, generation/revision, same-map identity and WorldReady-before-Spawn/Delta. A trusted transfer's larger MapEpoch allows WorldReady to clear the old map atomically; older AOI frames are ignored and future-map entity frames fail closed. AOI frames are routed only through the existing Gateway reliable FIFO after trusted binding and do not accept any raw Client ActorId. **WorldReady ACK, real AOI sender pump and complete two-client E2E are not implemented in this codec slice.**

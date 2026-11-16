@@ -12,7 +12,11 @@ public enum WireOpcode : ushort
     AuthResult = 11,
     CharacterList = 12,
     CharacterChoose = 13,
-    CharacterChooseResult = 14
+    CharacterChooseResult = 14,
+    WorldReady = 20,
+    EntitySpawn = 21,
+    EntityDespawn = 22,
+    EntityDelta = 23
 }
 
 public enum AuthWireStatus : byte { Success = 0, InvalidCredentials = 1, Disabled = 2 }
@@ -29,6 +33,15 @@ public readonly record struct CharacterChooseWire(long CharacterId);
 public readonly record struct CharacterChooseResultWire(
     CharacterChooseWireStatus Status, long CharacterId, int MapId,
     double X, double Y, long MapEpoch);
+public readonly record struct WorldReadyWire(
+    long ReceiverMapEpoch, long ServerTick, long ActorId,
+    int MapId, float X, float Y);
+public readonly record struct EntityStateWire(
+    long ReceiverMapEpoch, long ServerTick, long ActorId,
+    long ConnectionEpoch, long EntityMapEpoch, int MapId,
+    long Revision, float X, float Y, bool IsMoving, uint MovementActionSequence);
+public readonly record struct EntityDespawnWire(
+    long ReceiverMapEpoch, long ServerTick, long ActorId, long ConnectionEpoch);
 
 /// <summary>
 /// Version 1 complete-frame codec. Transport/TLS/socket buffering is separate.
@@ -50,6 +63,11 @@ public static class WireProtocol
     public const int CharacterChooseResultFrameBytes = HeaderBytes + 37;
     public const int MaxAuthRequestFrameBytes = HeaderBytes + 4 + 32 + 256;
     public const int MaxCharacterListFrameBytes = 4096;
+    // Single-precision coordinates suffice across the original ~15k-pixel maps
+    // (sub-0.002px resolution), saving bandwidth vs storing double on wire.
+    public const int WorldReadyFrameBytes = 44;
+    public const int EntityStateFrameBytes = 73;
+    public const int EntityDespawnFrameBytes = 40;
     private static readonly UTF8Encoding StrictUtf8 = new(false, true);
 
     public static byte[] EncodeMoveTarget(MoveTargetWire value)
@@ -266,6 +284,120 @@ public static class WireProtocol
         value = new(status, id, map, x, y, epoch); return true;
     }
 
+    public static byte[] EncodeWorldReady(WorldReadyWire value)
+    {
+        if (!ValidMapState(value.ReceiverMapEpoch, value.ServerTick, value.ActorId,
+                           value.MapId, value.X, value.Y))
+            throw new ArgumentOutOfRangeException(nameof(value));
+        var frame = NewFrame(WireOpcode.WorldReady, WorldReadyFrameBytes);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(8, 8), value.ReceiverMapEpoch);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(16, 8), value.ServerTick);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(24, 8), value.ActorId);
+        BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(32, 4), value.MapId);
+        WriteFloat(frame.AsSpan(36, 4), value.X);
+        WriteFloat(frame.AsSpan(40, 4), value.Y);
+        return frame;
+    }
+
+    public static bool TryDecodeWorldReady(ReadOnlySpan<byte> frame, out WorldReadyWire value)
+    {
+        value = default;
+        if (!TryReadHeader(frame, out var header) || header.Opcode != WireOpcode.WorldReady)
+            return false;
+        value = new(
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(8, 8)),
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(16, 8)),
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(24, 8)),
+            BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(32, 4)),
+            ReadFloat(frame.Slice(36, 4)), ReadFloat(frame.Slice(40, 4)));
+        return ValidMapState(value.ReceiverMapEpoch, value.ServerTick, value.ActorId,
+                             value.MapId, value.X, value.Y);
+    }
+
+    public static byte[] EncodeEntityState(WireOpcode opcode, EntityStateWire value)
+    {
+        if (opcode is not (WireOpcode.EntitySpawn or WireOpcode.EntityDelta) ||
+            !ValidMapState(value.ReceiverMapEpoch, value.ServerTick, value.ActorId,
+                           value.MapId, value.X, value.Y) ||
+            value.ConnectionEpoch <= 0 || value.EntityMapEpoch <= 0 || value.Revision <= 0)
+            throw new ArgumentOutOfRangeException(nameof(value));
+        var frame = NewFrame(opcode, EntityStateFrameBytes);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(8, 8), value.ReceiverMapEpoch);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(16, 8), value.ServerTick);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(24, 8), value.ActorId);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(32, 8), value.ConnectionEpoch);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(40, 8), value.EntityMapEpoch);
+        BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(48, 4), value.MapId);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(52, 8), value.Revision);
+        WriteFloat(frame.AsSpan(60, 4), value.X);
+        WriteFloat(frame.AsSpan(64, 4), value.Y);
+        frame[68] = value.IsMoving ? (byte)1 : (byte)0;
+        BinaryPrimitives.WriteUInt32LittleEndian(frame.AsSpan(69, 4), value.MovementActionSequence);
+        return frame;
+    }
+
+    public static bool TryDecodeEntityState(ReadOnlySpan<byte> frame,
+        out WireOpcode opcode, out EntityStateWire value)
+    {
+        opcode = 0; value = default;
+        if (!TryReadHeader(frame, out var header) ||
+            header.Opcode is not (WireOpcode.EntitySpawn or WireOpcode.EntityDelta) ||
+            frame[68] > 1)
+            return false;
+        opcode = header.Opcode;
+        value = new(
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(8, 8)),
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(16, 8)),
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(24, 8)),
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(32, 8)),
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(40, 8)),
+            BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(48, 4)),
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(52, 8)),
+            ReadFloat(frame.Slice(60, 4)), ReadFloat(frame.Slice(64, 4)),
+            frame[68] != 0, BinaryPrimitives.ReadUInt32LittleEndian(frame.Slice(69, 4)));
+        return ValidMapState(value.ReceiverMapEpoch, value.ServerTick, value.ActorId,
+                             value.MapId, value.X, value.Y) &&
+               value.ConnectionEpoch > 0 && value.EntityMapEpoch > 0 && value.Revision > 0;
+    }
+
+    public static byte[] EncodeEntityDespawn(EntityDespawnWire value)
+    {
+        if (value.ReceiverMapEpoch <= 0 || value.ServerTick < 0 ||
+            value.ActorId <= 0 || value.ConnectionEpoch <= 0)
+            throw new ArgumentOutOfRangeException(nameof(value));
+        var frame = NewFrame(WireOpcode.EntityDespawn, EntityDespawnFrameBytes);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(8, 8), value.ReceiverMapEpoch);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(16, 8), value.ServerTick);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(24, 8), value.ActorId);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(32, 8), value.ConnectionEpoch);
+        return frame;
+    }
+
+    public static bool TryDecodeEntityDespawn(ReadOnlySpan<byte> frame, out EntityDespawnWire value)
+    {
+        value = default;
+        if (!TryReadHeader(frame, out var header) || header.Opcode != WireOpcode.EntityDespawn)
+            return false;
+        value = new(
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(8, 8)),
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(16, 8)),
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(24, 8)),
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(32, 8)));
+        return value.ReceiverMapEpoch > 0 && value.ServerTick >= 0 &&
+               value.ActorId > 0 && value.ConnectionEpoch > 0;
+    }
+
+    private static bool ValidMapState(long receiverMapEpoch, long tick,
+        long actorId, int mapId, float x, float y) =>
+        receiverMapEpoch > 0 && tick >= 0 && actorId > 0 && mapId > 0 &&
+        float.IsFinite(x) && float.IsFinite(y) && x >= 0 && y >= 0;
+
+    private static void WriteFloat(Span<byte> target, float value) =>
+        BinaryPrimitives.WriteInt32LittleEndian(target, BitConverter.SingleToInt32Bits(value));
+
+    private static float ReadFloat(ReadOnlySpan<byte> source) =>
+        BitConverter.Int32BitsToSingle(BinaryPrimitives.ReadInt32LittleEndian(source));
+
     public static bool TryReadHeader(ReadOnlySpan<byte> frame, out WireFrameHeader header)
     {
         header = default;
@@ -279,7 +411,9 @@ public static class WireProtocol
             1 => WireOpcode.MoveTarget, 2 => WireOpcode.MoveReceipt,
             10 => WireOpcode.AuthRequest, 11 => WireOpcode.AuthResult,
             12 => WireOpcode.CharacterList, 13 => WireOpcode.CharacterChoose,
-            14 => WireOpcode.CharacterChooseResult, _ => 0
+            14 => WireOpcode.CharacterChooseResult,
+            20 => WireOpcode.WorldReady, 21 => WireOpcode.EntitySpawn,
+            22 => WireOpcode.EntityDespawn, 23 => WireOpcode.EntityDelta, _ => 0
         };
         if (opcode == 0) return false;
         bool sizeOk = opcode switch
@@ -291,6 +425,9 @@ public static class WireProtocol
             WireOpcode.CharacterList => advertised is >= 9 and <= MaxCharacterListFrameBytes,
             WireOpcode.CharacterChoose => advertised == CharacterChooseFrameBytes,
             WireOpcode.CharacterChooseResult => advertised == CharacterChooseResultFrameBytes,
+            WireOpcode.WorldReady => advertised == WorldReadyFrameBytes,
+            WireOpcode.EntitySpawn or WireOpcode.EntityDelta => advertised == EntityStateFrameBytes,
+            WireOpcode.EntityDespawn => advertised == EntityDespawnFrameBytes,
             _ => false
         };
         if (!sizeOk) return false;
