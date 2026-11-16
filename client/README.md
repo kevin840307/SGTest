@@ -119,3 +119,7 @@ GitHub `Client core checks` downloads the official Godot 4.7.2 Linux standard bi
 ## 2026-11-16 TLS MoveReceipt round-trip
 
 `client/tests/run_tls_login.py` now requires the complete **server-to-client receipt return path**, not merely that the Server accepted Move. The C# fixture enqueues its authoritative MoveReceipt on the bound Gateway connection; the TLS writer sends it, and Godot `ClientSession`/`WorldState` must observe the accepted sequence and ServerTick before the test can PASS. GitHub CI passed this one-client secure loopback test; production reliable result routing/AOI/WorldReady, login UI and multi-client graphics remain pending.
+
+## 2026-11-16 WorldReady real TLS E2E
+
+`client/tests/run_tls_login.py` now requires the real Godot `ClientSession` to receive and reduce **WorldReady and MoveReceipt** on a certificate-validated TLS connection. The C# fixture starts the production `WorldAoiPump` path, routes the trusted lifecycle event through the existing Gateway reliable FIFO and independently logs `LOGIN_FIXTURE_WORLD_READY_ROUTED`. GitHub Client core E2E PASS. This confirms one Godot headless client’s protocol/WorldState path, **not** actual two-client drawing/animation, Enemy/Drop visibility, WorldReady ACK or reconnection resync.

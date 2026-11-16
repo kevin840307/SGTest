@@ -256,3 +256,7 @@ The deterministic cadence gate uses a thread-safe scripted fake transport. With 
 ## 2026-11-16 AOI wire reducer
 
 The existing `network/wire_codec.gd` now decodes the four production compact-binary AOI opcodes 20–23. The non-render `WorldState` owns `world_ready`, a generation-keyed entity dictionary and monotonic AOI tick/revision. Spawn requires a WorldReady and an unseen entity; Delta requires a prior matching Spawn; Despawn checks entity connection generation; trusted map transfer WorldReady atomically clears the previous map's visible entities. Stale old-map frames are ignored, future-map frames fail closed. `ClientSession` already reduces these through its dedicated network-independent thread; Renderer must consume immutable snapshot copies. This is an **AOI protocol/reducer foundation**, not yet active two-client world rendering.
+
+### AOI reducer real TLS gate (2026-11-16)
+
+The real Godot↔C# fixture now proves WorldReady reaches the threaded ClientSession/WorldState through TLS and is reduced successfully, together with MoveReceipt. The Client and Server use the same production compact wire; 0/30/60/90 simulated render cadence checks for Auth/Move remain intact. Future AOI visualization must bind only to the WorldState snapshot and never drive packet reception from Render FPS. This fixture runs **one** Godot Client, not two visual clients, and does not verify 20-player movement/AOI rendering.
