@@ -167,11 +167,12 @@ refused:
         Require(await host.TrustedDisconnectAsync(
             final.ActorId, final.ConnectionEpoch, final.MapEpoch),
             "prepared actor could not complete disconnect");
-        var next = await host.TrustedRegisterAsync(actor.ActorId, 90, final.X, final.Y);
-        Require(next is not null && next.Value.ConnectionEpoch > actor.ConnectionEpoch,
-            "same character could not enter after persistence barrier completed");
-        await host.TrustedDisconnectAsync(next.Value.ActorId,
-            next.Value.ConnectionEpoch, next.Value.MapEpoch);
+        var next = await host.TrustedRegisterAsync(actor.ActorId, 90, final.X, final.Y)
+            ?? throw new Exception("same character could not enter after persistence barrier completed");
+        Require(next.ConnectionEpoch > actor.ConnectionEpoch,
+            "reconnected character did not advance connection generation");
+        await host.TrustedDisconnectAsync(next.ActorId,
+            next.ConnectionEpoch, next.MapEpoch);
         await host.StopAsync();
     }
 
