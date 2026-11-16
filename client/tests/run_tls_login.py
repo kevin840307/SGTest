@@ -17,6 +17,8 @@ def main() -> int:
     parser.add_argument("--timeout", type=float, default=30.0)
     parser.add_argument("--multi", action="store_true",
                         help="run two concurrent real Godot TLS clients against the same 30Hz World")
+    parser.add_argument("--crossmap", action="store_true",
+                        help="run two-client Map15 -> Map13 -> Map15 trusted transfer TLS E2E")
     args = parser.parse_args()
     repo = Path(__file__).resolve().parents[2]
     fixture = repo / "server/tests/SGTest.Server.LoginFixture/SGTest.Server.LoginFixture.csproj"
@@ -29,6 +31,8 @@ def main() -> int:
     if build.returncode != 0:
         print(build.stdout)
         return 2
+    if args.crossmap:
+        return run_crossmap(args, repo, fixture, env)
     if args.multi:
         return run_multiplayer(args, repo, fixture, env)
 
@@ -203,6 +207,129 @@ def run_multiplayer(args, repo: Path, fixture: Path, env: dict[str, str]) -> int
                 server.wait(timeout=3)
             except subprocess.TimeoutExpired:
                 server.kill()
+
+
+
+def run_crossmap(args, repo: Path, fixture: Path, env: dict[str, str]) -> int:
+    """Two actual Godot processes on one TLS World; test-only trusted transfer signals.
+
+    Python waits until the observing Godot process has *actually seen* the
+    first Delta before asking the C# fixture to transfer the other actor.
+    No time-based teleport and no client-supplied arbitrary MapId.
+    """
+    def start_reader(process, lines: list[str], events: queue.Queue[str]) -> None:
+        assert process.stdout is not None
+        for line in process.stdout:
+            value = line.rstrip()
+            lines.append(value)
+            events.put(value)
+
+    def until(events: queue.Queue[str], token: str, deadline: float,
+              process: subprocess.Popen) -> str:
+        while time.monotonic() < deadline:
+            if process.poll() is not None and events.empty():
+                raise RuntimeError(f"{token}: process exited {process.returncode}")
+            try:
+                value = events.get(timeout=0.15)
+            except queue.Empty:
+                continue
+            if token in value:
+                return value
+        raise TimeoutError(f"{token}: timed out")
+
+    server = subprocess.Popen(
+        ["dotnet", "run", "--project", str(fixture), "-c", "Release",
+         "--no-build", "--", "--crossmap"],
+        cwd=repo, env=env, text=True, stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE, stderr=subprocess.STDOUT, bufsize=1)
+    server_lines: list[str] = []
+    server_events: queue.Queue[str] = queue.Queue()
+    threading.Thread(target=start_reader, args=(server, server_lines,
+                                                server_events), daemon=True).start()
+    observer = None
+    actor = None
+    observer_lines: list[str] = []
+    actor_lines: list[str] = []
+    observer_events: queue.Queue[str] = queue.Queue()
+    actor_events: queue.Queue[str] = queue.Queue()
+    deadline = time.monotonic() + args.timeout
+    try:
+        ready = until(server_events, "CROSSMAP_FIXTURE_READY", deadline, server)
+        match = re.search(
+            r"CROSSMAP_FIXTURE_READY port=(\d+) cert=(.+?) actor_a=(\d+) actor_b=(\d+)",
+            ready)
+        if match is None:
+            raise RuntimeError("invalid cross-map fixture readiness: " + ready)
+        port, certificate = match.group(1), match.group(2)
+        command = [args.godot, "--headless", "--path", str(repo / "client"),
+                   "--script", "res://tests/test_client_multiplayer_tls.gd", "--",
+                   port, certificate]
+        observer = subprocess.Popen(
+            [*command, "observer", "crossmap"], cwd=repo, text=True,
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, bufsize=1)
+        threading.Thread(target=start_reader,
+                         args=(observer, observer_lines, observer_events),
+                         daemon=True).start()
+        until(observer_events, "CLIENT_CROSSMAP_READY role=observer",
+              deadline, observer)
+
+        actor = subprocess.Popen(
+            [*command, "actor", "crossmap"], cwd=repo, text=True,
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, bufsize=1)
+        threading.Thread(target=start_reader, args=(actor, actor_lines, actor_events),
+                         daemon=True).start()
+
+        # Exact cross-process milestones eliminate an arbitrary time delay
+        # between client movement and the server-authorized transfer.
+        until(observer_events, "CLIENT_CROSSMAP_DELTA_SEEN", deadline, observer)
+        assert server.stdin is not None
+        server.stdin.write("TO13\n")
+        server.stdin.flush()
+        until(actor_events, "CLIENT_CROSSMAP_MAP13_MOVE_ACK", deadline, actor)
+        server.stdin.write("TO15\n")
+        server.stdin.flush()
+
+        until(observer_events, "CLIENT_CROSSMAP_PASS role=observer",
+              deadline, observer)
+        until(actor_events, "CLIENT_CROSSMAP_PASS role=actor", deadline, actor)
+
+        observer.wait(timeout=max(1.0, deadline - time.monotonic()))
+        actor.wait(timeout=max(1.0, deadline - time.monotonic()))
+        server.wait(timeout=max(1.0, deadline - time.monotonic()))
+
+        if any(p.returncode != 0 for p in (observer, actor, server)) or not any(
+            "CROSSMAP_FIXTURE_PASS" in line for line in server_lines
+        ) or not any("CROSSMAP_FIXTURE_TRANSFER map=13" in line
+                     for line in server_lines) or not any(
+            "CROSSMAP_FIXTURE_TRANSFER map=15" in line for line in server_lines):
+            raise RuntimeError("cross-map server/client process failed")
+
+        for lines in (observer_lines, actor_lines, server_lines):
+            for line in lines:
+                if line.startswith(("CLIENT_CROSSMAP_", "CROSSMAP_FIXTURE_")):
+                    print(line)
+        print("GODOT_CSHARP_TWO_CLIENT_CROSSMAP_E2E_PASS "
+              "tls=true map15_to_map13_to_map15=true "
+              "world_ready=true old_map_clear=true "
+              "despawn=true return_spawn=true "
+              "same_authoritative_30hz_world=true")
+        return 0
+    except Exception as error:
+        print("TLS_CROSSMAP_RUNNER_FAIL", error, file=sys.stderr)
+        for name, lines in (("server", server_lines), ("observer", observer_lines),
+                            ("actor", actor_lines)):
+            for line in lines[-18:]:
+                print(name, line, file=sys.stderr)
+        return 1
+    finally:
+        for process in (observer, actor, server):
+            if process is None or process.poll() is not None:
+                continue
+            process.terminate()
+            try:
+                process.wait(timeout=3)
+            except subprocess.TimeoutExpired:
+                process.kill()
 
 
 if __name__ == "__main__":

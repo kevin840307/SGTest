@@ -17,7 +17,9 @@ internal static class Program
     public static async Task<int> Main(string[] args)
     {
         if (args is ["--multi"])
-            return await RunMultiplayerAsync().ConfigureAwait(false);
+            return await RunMultiplayerAsync(false).ConfigureAwait(false);
+        if (args is ["--crossmap"])
+            return await RunMultiplayerAsync(true).ConfigureAwait(false);
         if (args.Length != 0)
             return 2;
         string root = Path.Combine(Path.GetTempPath(), "sgtest_login_fixture_" + Guid.NewGuid().ToString("N"));
@@ -110,7 +112,7 @@ internal static class Program
         }
     }
 
-    private static async Task<int> RunMultiplayerAsync()
+    private static async Task<int> RunMultiplayerAsync(bool crossmap)
     {
         string root = Path.Combine(Path.GetTempPath(),
             "sgtest_multi_login_" + Guid.NewGuid().ToString("N"));
@@ -118,7 +120,10 @@ internal static class Program
         try
         {
             var map = BlockingGrid.Load(CreateMap(root, 15), 15);
-            await using var world = new ServerWorldHost([map]);
+            var maps = crossmap
+                ? new[] { map, BlockingGrid.Load(CreateMap(root, 13), 13) }
+                : new[] { map };
+            await using var world = new ServerWorldHost(maps);
             await world.StartAsync().ConfigureAwait(false);
             using var store = new SqliteIdentityStore(Path.Combine(root, "identity.db"));
             await store.InitializeAsync().ConfigureAwait(false);
@@ -148,7 +153,8 @@ internal static class Program
             try
             {
                 int port = ((IPEndPoint)listener.LocalEndpoint).Port;
-                Console.WriteLine($"MULTI_FIXTURE_READY port={port} cert={certPath} actor_a={aId} actor_b={bId}");
+                var prefix = crossmap ? "CROSSMAP" : "MULTI";
+                Console.WriteLine($"{prefix}_FIXTURE_READY port={port} cert={certPath} actor_a={aId} actor_b={bId}");
                 Console.Out.Flush();
 
                 using var first = await listener.AcceptTcpClientAsync()
@@ -161,6 +167,30 @@ internal static class Program
                 var secondTask = authorization.RunAuthenticatedSocketAsync(
                     second, certificate, router,
                     new TlsWireConnectionOptions(AuthorizationTimeoutMilliseconds: 15000));
+                if (crossmap)
+                {
+                    // Test-only coordination: Python waits for real Godot's
+                    // observer to see authoritative Delta BEFORE triggering
+                    // the trusted server transition. No teleport RPC exists.
+                    async Task TransferOnSignalAsync(string command, int mapId)
+                    {
+                        string? received = await Console.In.ReadLineAsync()
+                            .WaitAsync(TimeSpan.FromSeconds(15)).ConfigureAwait(false);
+                        if (received != command)
+                            throw new InvalidOperationException(
+                                $"Expected test-only command {command}, got {received ?? "<EOF>"}");
+                        var moved = await resultRouter.TrustedTransferAsync(
+                            world, bId, mapId, 24, 8).ConfigureAwait(false)
+                            ?? throw new InvalidOperationException(
+                                $"Authoritative transfer to map {mapId} denied");
+                        Console.WriteLine(
+                            $"CROSSMAP_FIXTURE_TRANSFER map={moved.MapId} epoch={moved.MapEpoch} connection={moved.ConnectionEpoch}");
+                        Console.Out.Flush();
+                    }
+
+                    await TransferOnSignalAsync("TO13", 13).ConfigureAwait(false);
+                    await TransferOnSignalAsync("TO15", 15).ConfigureAwait(false);
+                }
                 var results = await Task.WhenAll(firstTask, secondTask)
                     .WaitAsync(TimeSpan.FromSeconds(20)).ConfigureAwait(false);
                 var deadline = DateTime.UtcNow.AddSeconds(3);
@@ -176,17 +206,17 @@ internal static class Program
                     System.Security.Authentication.SslProtocols.Tls13) ||
                     results[0].Reason != TlsWireEndReason.CleanEof ||
                     results[1].Reason != TlsWireEndReason.CleanEof ||
-                    results[1].CommandsAccepted != 1 ||
+                    results[1].CommandsAccepted != (crossmap ? 2 : 1) ||
                     router.Statistics.ActiveSessions != 0 ||
-                    router.Statistics.ReceiptsQueued < 1 ||
-                    aoiPump.FramesQueued < 6)
+                    router.Statistics.ReceiptsQueued < (crossmap ? 2 : 1) ||
+                    aoiPump.FramesQueued < (crossmap ? 10 : 6))
                     throw new InvalidOperationException(
                         $"multiplayer TLS/AOI incomplete a={results[0].Reason} b={results[1].Reason} " +
                         $"moves={results[1].CommandsAccepted} routes={router.Statistics.ActiveSessions} " +
                         $"receipts={router.Statistics.ReceiptsQueued} aoi_frames={aoiPump.FramesQueued}");
                 await world.StopAsync().ConfigureAwait(false);
                 await routerTask.WaitAsync(TimeSpan.FromSeconds(3)).ConfigureAwait(false);
-                Console.WriteLine($"MULTI_FIXTURE_PASS actor_a={aId} actor_b={bId} moves={results[1].CommandsAccepted} aoi_frames={aoiPump.FramesQueued} active=0");
+                Console.WriteLine($"{prefix}_FIXTURE_PASS actor_a={aId} actor_b={bId} moves={results[1].CommandsAccepted} aoi_frames={aoiPump.FramesQueued} active=0");
                 Console.Out.Flush();
                 return 0;
             }
@@ -199,7 +229,7 @@ internal static class Program
         }
         catch (Exception error)
         {
-            Console.Error.WriteLine("MULTI_FIXTURE_FAIL " + error);
+            Console.Error.WriteLine((crossmap ? "CROSSMAP" : "MULTI") + "_FIXTURE_FAIL " + error);
             return 1;
         }
         finally
@@ -210,7 +240,7 @@ internal static class Program
 
     private static string CreateMap(string root, int mapId)
     {
-        string directory = Path.Combine(root, "map");
+        string directory = Path.Combine(root, "map_" + mapId);
         Directory.CreateDirectory(directory);
         const int width = 3, height = 3, cell = 16;
         var raw = new byte[8 + width * height];

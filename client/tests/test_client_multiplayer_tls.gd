@@ -14,10 +14,11 @@ func _fail(message: String, session = null) -> void:
 
 func _initialize() -> void:
 	var args := OS.get_cmdline_user_args()
-	if args.size() != 3 or not str(args[0]).is_valid_int() or str(args[2]) not in ["observer", "actor"]:
+	if args.size() not in [3, 4] or not str(args[0]).is_valid_int() or str(args[2]) not in ["observer", "actor"] or (args.size() == 4 and str(args[3]) != "crossmap"):
 		_fail("expected TLS port, certificate path, observer|actor")
 		return
 	var role := str(args[2])
+	var crossmap := args.size() == 4
 	var cert := X509Certificate.new()
 	if cert.load(str(args[1])) != OK:
 		_fail("test-only TLS certificate missing")
@@ -43,12 +44,12 @@ func _initialize() -> void:
 		_fail("%s WorldReady missing %s" % [role, session.snapshot()], session)
 		return
 	if role == "observer":
-		print("CLIENT_MULTI_READY role=observer actor=%d epoch=%d" % [self_id, int(ready.map_epoch)])
-		_observe(session, self_id)
+		print("CLIENT_%s_READY role=observer actor=%d epoch=%d" % ["CROSSMAP" if crossmap else "MULTI", self_id, int(ready.map_epoch)])
+		_observe(session, self_id, crossmap)
 	else:
-		_move(session, self_id)
+		_move(session, self_id, crossmap)
 
-func _observe(session, self_id: int) -> void:
+func _observe(session, self_id: int, crossmap: bool = false) -> void:
 	var first := _wait_remote(session, 7000)
 	if first.is_empty():
 		_fail("observer never received another player's Spawn %s" % session.snapshot(), session)
@@ -72,6 +73,8 @@ func _observe(session, self_id: int) -> void:
 	if moved.is_empty():
 		_fail("observer did not receive authoritative Delta %s" % session.snapshot(), session)
 		return
+	if crossmap:
+		print("CLIENT_CROSSMAP_DELTA_SEEN role=observer remote=%d" % remote_id)
 	var gone := false
 	deadline = Time.get_ticks_msec() + 7000
 	while Time.get_ticks_msec() < deadline:
@@ -85,11 +88,33 @@ func _observe(session, self_id: int) -> void:
 	if not gone:
 		_fail("observer still sees disconnected player / missing Despawn %s" % session.snapshot(), session)
 		return
+	if crossmap:
+		print("CLIENT_CROSSMAP_DESPAWN_SEEN role=observer remote=%d" % remote_id)
+		var returned := {}
+		deadline = Time.get_ticks_msec() + 7000
+		while Time.get_ticks_msec() < deadline:
+			var value: Dictionary = session.snapshot()
+			if int(value.state) == WorldState.STATE_FAILED:
+				break
+			if value.entities.has(remote_id) and int(value.entities[remote_id].entity_map_epoch) > int(first.entities[remote_id].entity_map_epoch):
+				returned = value
+				break
+			OS.delay_msec(2)
+		if returned.is_empty() or int(returned.map_id) != 15 or int(returned.map_epoch) != int(first.map_epoch):
+			_fail("returning Map15 player did not respawn with a new generation %s" % session.snapshot(), session)
+			return
+		# Keep the observer alive briefly so the returning actor can
+		# also reduce its authoritative peer Spawn, not only WorldReady.
+		OS.delay_msec(650)
+		session.stop()
+		print("CLIENT_CROSSMAP_PASS role=observer map15=PASS delta=PASS despawn=PASS respawn=PASS remote=%d" % remote_id)
+		quit(0)
+		return
 	session.stop()
 	print("CLIENT_MULTI_PASS role=observer world_ready=PASS spawn=PASS delta=PASS despawn=PASS other_actor=%d" % remote_id)
 	quit(0)
 
-func _move(session, self_id: int) -> void:
+func _move(session, self_id: int, crossmap: bool = false) -> void:
 	var seen := _wait_remote(session, 7000)
 	if seen.is_empty():
 		_fail("actor never received observer's Spawn %s" % session.snapshot(), session)
@@ -112,6 +137,58 @@ func _move(session, self_id: int) -> void:
 		OS.delay_msec(2)
 	if ack.is_empty() or int(ack.last_receipt_status) != 0 or not bool(ack.world_ready):
 		_fail("actor did not receive accepted MoveReceipt %s" % session.snapshot(), session)
+		return
+	if crossmap:
+		var original_epoch := int(ack.map_epoch)
+		var in_map13 := {}
+		deadline = Time.get_ticks_msec() + 7000
+		while Time.get_ticks_msec() < deadline:
+			var value: Dictionary = session.snapshot()
+			if int(value.state) == WorldState.STATE_FAILED:
+				break
+			if bool(value.world_ready) and int(value.map_id) == 13 and int(value.map_epoch) > original_epoch and value.entities.is_empty():
+				in_map13 = value
+				break
+			OS.delay_msec(2)
+		if in_map13.is_empty():
+			_fail("Map13 WorldReady/old AOI clear not observed %s" % session.snapshot(), session)
+			return
+		print("CLIENT_CROSSMAP_MAP13_READY role=actor epoch=%d" % int(in_map13.map_epoch))
+		if not session.move_target(40, 8):
+			_fail("Map13 MoveTarget rejected", session)
+			return
+		var map13_ack := {}
+		deadline = Time.get_ticks_msec() + 7000
+		while Time.get_ticks_msec() < deadline:
+			var value: Dictionary = session.snapshot()
+			if int(value.state) == WorldState.STATE_FAILED:
+				break
+			if int(value.map_id) == 13 and int(value.last_receipt_sequence) == 1 and int(value.last_receipt_status) == 0:
+				map13_ack = value
+				break
+			OS.delay_msec(2)
+		if map13_ack.is_empty():
+			_fail("Map13 move ACK failed after epoch reset %s" % session.snapshot(), session)
+			return
+		print("CLIENT_CROSSMAP_MAP13_MOVE_ACK role=actor epoch=%d" % int(map13_ack.map_epoch))
+		var returned := {}
+		deadline = Time.get_ticks_msec() + 7000
+		while Time.get_ticks_msec() < deadline:
+			var value: Dictionary = session.snapshot()
+			if int(value.state) == WorldState.STATE_FAILED:
+				break
+			if bool(value.world_ready) and int(value.map_id) == 15 and int(value.map_epoch) > int(in_map13.map_epoch) and value.entities.size() == 1:
+				returned = value
+				break
+			OS.delay_msec(2)
+		if returned.is_empty() or int(returned.entities.keys()[0]) == self_id:
+			_fail("return Map15 WorldReady and peer Spawn missing %s" % session.snapshot(), session)
+			return
+		# The spectator must see re-entry before this actor logs out.
+		OS.delay_msec(700)
+		session.stop()
+		print("CLIENT_CROSSMAP_PASS role=actor map15_map13_map15=PASS new_epochs=PASS world_ready=PASS old_aoi_clear=PASS")
+		quit(0)
 		return
 	# Allow a couple of 30Hz World ticks for authoritative movement,
 	# independent of the headless test's render cadence.
