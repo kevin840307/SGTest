@@ -9,7 +9,7 @@
 - `tools/tests/`：正式 Converter、原始格式及佈署包契約測試（**不是 Client/Server 程式**）；舊獨立轉換器與 Viewer 已從工作樹移除，可從 Git 歷史查閱。
 - `docs/`、`SPEC.md`、`todo.txt`：正式設計與原版研究證據；歷史完成紀錄見 `docs/research/FEATURE_DECISION_HISTORY.md#source-todo-pre-rebuild-20261115-txt`。
 - `client/assets/.gdignore`：**僅保留轉換輸出的定位標記**，不是 Godot Runtime。
-- `client/`：新 Godot 4.7.2 資源模組／測試專案；單一 AssetStore 已有有界非同步與 owner-epoch 生命週期回歸，已加入地形及靜態景物／角色交錯 Renderer 的原生 GPU／像素驗證，**尚無可玩 main scene／完整 World Renderer／網路**。`server/` 仍為未實作位置。
+- `client/`：新 Godot 4.7.2 資源模組／測試專案；單一 AssetStore、真地形／景物 Renderer、雙圖檢視用 main scene 與可平移的呈現相機已有原生 GPU／像素驗證；**仍無角色操作、權威 Server、完整 WorldState／網路，也不可當作可玩主程式**。`server/` 仍為未實作位置。
 
 ## 現階段 MVP：Map15 主城 + Map13 尼西亞台地
 
@@ -57,7 +57,7 @@ powershell -ExecutionPolicy Bypass -File tools/asset_converter/verify_converter.
 - 怪物 Animator 可採共享 `SpriteFrames + AnimatedSprite2D` 作第一候選；**跨 Player/Enemy/Scenery World Y-sort 必須正確**，不能只依隔離 Benchmark 宣稱全面勝出。
 - Server 對位置、碰撞、戰鬥、經濟、交易保持權威；DB 不阻塞 World Tick。
 
-**目前可執行 Converter／Client 資源回歸（見 client/README.md）；正式遊戲啟動與 Server 命令仍待實作。**
+**目前可執行 Converter、Client 真圖 Viewer／資源回歸（見 client/README.md）；正式可玩遊戲與 Server 啟動仍待實作。**
 
 ## 重建狀態（2026-11-15）
 

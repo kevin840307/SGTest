@@ -77,3 +77,21 @@ Visibility owner按連續fixed update及同epoch呼叫advance；候選由draw_li
 ## Atlas頁面座標更新
 
 2026-11-16 Publisher新增`height_dense_p0_block4_v1`：Frame間仍P0，只補頁右／下透明留白至4倍數，保持來源texel與rect／origin／trim。需依ASSET_CONVERTER的block4命令重新export＋pack，才能配合新manifest。PCK smoke同時驗證logical／physical extent；World GPU驗證精度不放寬。細節codec畫質與Mac仍待驗證。
+
+
+## 雙圖檢視入口（2026-11-16；MVP002-CAMERA-ENTRY）
+
+已新增正式的最小 Godot `client/app/main.tscn`（由 `project.godot` 的 main_scene 指向），**僅供原版 Map15／Map13 地圖及景物檢視**。它透過唯一 AssetStore 與已選定的 Terrain/World Canvas 載入私有 `assets.pck`；Map15／Map13 按鈕是本地 Viewer 切換，不是權威 NPC 傳點。方向鍵平移、中鍵拖曳、Home 置中、視窗 resize；UI 可攔截操作，失焦清除按鍵，切圖使用 owner epoch 丟棄過時載入。沒有 Player 控制、帳號、Socket、權威 Blocking、遊戲 AOI、AFK 或正式操作功能。
+
+```powershell
+# 原始素材只在私人本機保留：先依 ASSET_CONVERTER 重建最新版 PCK
+& "C:\SGO\Godot\Godot_v4.7.2-stable_win64.exe" --path client
+# 如需指定自訂私人封裝：加上 -- --pack "C:\private\assets.pck"
+
+# 真 Godot OpenGL 畫面、12 個 GPU 擷取、38 個原始 SPR 來源影格、獨立 CPU raster 驗證
+python client/tests/run_world_view.py "C:\SGO\Godot\Godot_v4.7.2-stable_win64_console.exe" --report reports/world_view_native.json
+```
+
+2026-11-16 RTX3050／Godot 4.7.2 原生測試 PASS：Map13/15 × 1280×720、1001×701 × 多個 focus 共12張；獨立 `run_world.validate_capture` 檢查來源 sprite 的 origin／trim、命令排序／UV／像素 sampler envelope，12/12 沒有超容差像素（max outside envelope=1；容許的GPU取樣/rounding 不代表 RGB 0 差異）；38 個獨立 SPR frame 檢查。快速切換／epoch、鍵盤／中鍵／UI消費事件／失焦／camera奇數尺寸及 30/60/120 Hz 相同 pan 距離測例 PASS。AssetStore assets、scopes、jobs、rgba_bytes 清除回0；本測試 PeakRSS 226,193,408 bytes、CPU5.219秒／wall5.75秒（測試程式／非遊戲FPS/多人測試）。
+
+原有 `run_world.py --mode canvas --rounds 1` 亦回歸 PASS，現行 Python suite 81/81 PASS。報告在 `reports/`，原圖、PCK 與 GPU 截圖均不得推送。下階段仍需玩家 actor/Paper-doll、權威 Server A*、網路收包與 Render FPS 解耦、多開及 AFK/Unfocus；Viewer PASS 不能當作可玩 Client 或正式 Release。

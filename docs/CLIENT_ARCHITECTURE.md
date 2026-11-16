@@ -223,3 +223,14 @@ DIRECT仍為同SHA Paradise.exe.lst：InsideBuildObjEdit 0x0052A3EF–0x0052A59B
 ### Atlas physical extent契約（2026-11-16）
 
 Renderer的FrameTable UV為原始pixel座標，必須對應Texture2D實體texel。原239個非4倍數頁匯入後被整頁nearest伸展，normalized UV雖可由舊oracle模擬，仍造成來源圖形變化。已在唯一Publisher補右下透明留白，不在Renderer加比例修正／第二份texture。Frame rect、origin、trim與景物bounds不變；更新manifest後須重建外部PCK。候選品質與byte成本見ASSET_ARCHITECTURE，實際GPU回歸見TEST_PLAN；codec仍有細節誤差，不宣稱原圖零差異或整體MVP完成。
+
+
+## 2026-11-16 MVP002-CAMERA-ENTRY：單一雙圖檢視入口
+
+正式 `client/app/main.tscn`／`main.gd` 只組裝 `WorldView` 與輕量地圖選擇工具列；`rendering/world_camera.gd` 是無時鐘的唯讀式 presentation camera，保存 focus 的小數移動累積，僅將 view origin 向下取整供1:1像素繪製；world↔screen、四邊clamp、小世界置中、非有限值／舊epoch拒絕是獨立測試。它**不是玩家的 Server authority position**，UI 30/60/120/FPS0 的相機測例不得轉換成 Network/WorldState 時鐘。
+
+`rendering/world_view.gd` 為單一可見地圖 owner：`open_pack→begin_scope→maps/<id>→Scenery Atlas→TerrainData/WorldDrawList→WorldCanvas`；每次 request 先清上一個 Canvas/Terrain/DrawList、再 end_scope，舊的 Store worker 仍按既有 pump 取消/drain。選圖按鈕只切換本地 Viewer，**不是 MapEpoch/WorldReady／NPC 傳點，也沒有登入/角色/Combat**。使用原有唯一 Renderer/AssetStore，沒有新增第二種 Cache 或 PCK。
+
+可重播 `python client/tests/run_world_view.py Godot --report reports/world_view_native.json`：真 Windows OpenGL3／RTX3050／正式私有 PCK，12 個 Map13/15 × 兩視窗大小×三 focus GPU capture，CPU 原始 SPR／Atlas crop／world draw order／像素采樣驗證 12/12 PASS、38 distinct SPR frame，沒有 over-tolerance pixel；原版的 CPU 素材與壓縮 GPU 仍按已聲明 sampler/rounding 界檢查，不謊稱逐 RGB 完全一致。快速 6 組反覆切圖、Input UI 攔截、相機 epoch、退出 drain 正確，final scopes/assets/jobs/RGBA=0。single-process PeakRSS226.19MB、5.75s wall，只是 Viewer E2E，不代表正式遊戲 frame tail 或多人 8 開。
+
+後續 MVP002：把 Presenter 連接到真正的 WorldState／network command reducer／角色固定動畫與 Render FPS 解耦；逐視野資產預載和 AFK Render0 資源成本仍待公平選型。MVP003/REB020 的 Server/Wire／A*／MapEpoch 不可由此推論完成。

@@ -207,3 +207,10 @@ MVP002-ATLAS-BLOCK-EXTENT：相同254素材／2281幀的原P0、右下block4 P0�
 - `run_asset_store.py Godot --report reports/atlas_block_asset_store.json`：30次雙圖完整palette循環PASS、final全0、peak預算95,818,176 bytes。git diff --check PASS，CI NOT VERIFIED。
 
 尚存：細節codec最大色差247，花草／蝴蝶／EN064A等逐素材畫質政策、linear／zoom、Mac／Release、可操作相機／Player、Server／多人E2E仍NOT VERIFIED；MVP002與完整素材品質Gate維持未完成。原始source texel無損與GPU有損codec不可混成同一個零差異宣稱。
+
+
+### MVP002-CAMERA-ENTRY（2026-11-16，檢視器驗證 PASS，完整 Client NOT VERIFIED）
+
+`python client/tests/run_world_view.py "C:\SGO\Godot\Godot_v4.7.2-stable_win64_console.exe" --report reports/world_view_native.json` 在原版私有雙圖 PCK 實跑：Godot 4.7.2 OpenGL3／RTX3050，12 張 Map15/13、1280×720 與 1001×701 × 三focus擷取；CPU 獨立驗證原始 SPR frame、rect／origin／trim、WorldDrawList 順序、UV 與 compressed nearest sampler，38 distinct source frame，0 over-tolerance pixel、max outside envelope=1。相機 world↔screen、奇數尺寸／clamp、epoch拒絕、連續小數移動、快速切圖／UI按鈕／中鍵／失焦與 Store drain 皆 PASS；final assets/scopes/jobs/rgba_bytes=0，source files SHA 未變。單進程 wall5.75s／CPU5.219s／PeakRSS226,193,408 bytes，**非正式遊戲FPS／效能結論**。另外原先 Canvas Renderer 24 張 GPU 回歸 PASS、81 Python Tests PASS。PCK、報告與影像只留私人本機。
+
+僅證明雙圖 Viewer；完整 WorldState、人物操作／動畫、Server Authority、網路／AOI、AFK、壓力／多開、Windows/Mac Release 仍 NOT VERIFIED；MVP002 和 MVP 整體不能因本項通過標記 PASS。
