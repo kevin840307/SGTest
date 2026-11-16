@@ -14,8 +14,12 @@ internal static class Program
     private const string Username = "fixture_user";
     private const string Password = "Fixture-Password-123!";
 
-    public static async Task<int> Main()
+    public static async Task<int> Main(string[] args)
     {
+        if (args is ["--multi"])
+            return await RunMultiplayerAsync().ConfigureAwait(false);
+        if (args.Length != 0)
+            return 2;
         string root = Path.Combine(Path.GetTempPath(), "sgtest_login_fixture_" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
         try
@@ -103,6 +107,104 @@ internal static class Program
             foreach (var receipt in result.Receipts)
                 if (receipt.ActorId == actorId && receipt.MovementSequence == 1)
                     return receipt;
+        }
+    }
+
+    private static async Task<int> RunMultiplayerAsync()
+    {
+        string root = Path.Combine(Path.GetTempPath(),
+            "sgtest_multi_login_" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var map = BlockingGrid.Load(CreateMap(root, 15), 15);
+            await using var world = new ServerWorldHost([map]);
+            await world.StartAsync().ConfigureAwait(false);
+            using var store = new SqliteIdentityStore(Path.Combine(root, "identity.db"));
+            await store.InitializeAsync().ConfigureAwait(false);
+            long aAccount = (await store.CreateAccountAsync(
+                "fixture_one", Password)).AccountId;
+            long bAccount = (await store.CreateAccountAsync(
+                "fixture_two", Password)).AccountId;
+            var aRecord = await store.CreateCharacterAsync(aAccount, 0,
+                "MultiHeroOne", new CharacterSpawn(15, 8, 8));
+            var bRecord = await store.CreateCharacterAsync(bAccount, 0,
+                "MultiHeroTwo", new CharacterSpawn(15, 24, 8));
+            long aId = aRecord.Character?.CharacterId ??
+                throw new InvalidOperationException("multi fixture first character missing");
+            long bId = bRecord.Character?.CharacterId ??
+                throw new InvalidOperationException("multi fixture second character missing");
+            var router = new WorldResultRouter();
+            var authorization = new IdentityTlsAuthorization(store, world);
+            var aoiPump = new WorldAoiPump(router);
+            var routerTask = router.RunAsync(world.Results);
+            using var aoiStop = new CancellationTokenSource();
+            var aoiTask = aoiPump.RunAsync(aoiStop.Token);
+            using var certificate = CreateCertificate();
+            string certPath = Path.Combine(root, "fixture-cert.pem");
+            WriteCertificatePem(certPath, certificate);
+            var listener = new TcpListener(IPAddress.Loopback, 0);
+            listener.Start(2);
+            try
+            {
+                int port = ((IPEndPoint)listener.LocalEndpoint).Port;
+                Console.WriteLine($"MULTI_FIXTURE_READY port={port} cert={certPath} actor_a={aId} actor_b={bId}");
+                Console.Out.Flush();
+
+                using var first = await listener.AcceptTcpClientAsync()
+                    .WaitAsync(TimeSpan.FromSeconds(15)).ConfigureAwait(false);
+                var firstTask = authorization.RunAuthenticatedSocketAsync(
+                    first, certificate, router,
+                    new TlsWireConnectionOptions(AuthorizationTimeoutMilliseconds: 15000));
+                using var second = await listener.AcceptTcpClientAsync()
+                    .WaitAsync(TimeSpan.FromSeconds(15)).ConfigureAwait(false);
+                var secondTask = authorization.RunAuthenticatedSocketAsync(
+                    second, certificate, router,
+                    new TlsWireConnectionOptions(AuthorizationTimeoutMilliseconds: 15000));
+                var results = await Task.WhenAll(firstTask, secondTask)
+                    .WaitAsync(TimeSpan.FromSeconds(20)).ConfigureAwait(false);
+                var deadline = DateTime.UtcNow.AddSeconds(3);
+                while (world.Statistics.ActiveActors != 0)
+                {
+                    if (DateTime.UtcNow >= deadline)
+                        throw new InvalidOperationException("multi fixture left ghost World actors");
+                    await Task.Delay(5).ConfigureAwait(false);
+                }
+                if (results[0].Protocol is not (System.Security.Authentication.SslProtocols.Tls12 or
+                    System.Security.Authentication.SslProtocols.Tls13) ||
+                    results[1].Protocol is not (System.Security.Authentication.SslProtocols.Tls12 or
+                    System.Security.Authentication.SslProtocols.Tls13) ||
+                    results[0].Reason != TlsWireEndReason.CleanEof ||
+                    results[1].Reason != TlsWireEndReason.CleanEof ||
+                    results[1].CommandsAccepted != 1 ||
+                    router.Statistics.ActiveSessions != 0 ||
+                    router.Statistics.ReceiptsQueued < 1 ||
+                    aoiPump.FramesQueued < 6)
+                    throw new InvalidOperationException(
+                        $"multiplayer TLS/AOI incomplete a={results[0].Reason} b={results[1].Reason} " +
+                        $"moves={results[1].CommandsAccepted} routes={router.Statistics.ActiveSessions} " +
+                        $"receipts={router.Statistics.ReceiptsQueued} aoi_frames={aoiPump.FramesQueued}");
+                await world.StopAsync().ConfigureAwait(false);
+                await routerTask.WaitAsync(TimeSpan.FromSeconds(3)).ConfigureAwait(false);
+                Console.WriteLine($"MULTI_FIXTURE_PASS actor_a={aId} actor_b={bId} moves={results[1].CommandsAccepted} aoi_frames={aoiPump.FramesQueued} active=0");
+                Console.Out.Flush();
+                return 0;
+            }
+            finally
+            {
+                listener.Stop();
+                aoiStop.Cancel();
+                await aoiTask.ConfigureAwait(false);
+            }
+        }
+        catch (Exception error)
+        {
+            Console.Error.WriteLine("MULTI_FIXTURE_FAIL " + error);
+            return 1;
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { }
         }
     }
 

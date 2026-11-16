@@ -58,3 +58,5 @@ jobs:
         run: .cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64 --headless --path client --script res://tests/test_client_fps_independence.gd
       - name: Real Godot to CSharp secure TLS login E2E
         run: python client/tests/run_tls_login.py "$PWD/.cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64"
+      - name: Two concurrent Godot Clients TLS player AOI E2E
+        run: python client/tests/run_tls_login.py "$PWD/.cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64" --multi --timeout 50
