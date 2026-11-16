@@ -292,4 +292,6 @@ Verified on GitHub `main` commit `116ea15420d04bfd3fa98722f9e5695217cf37f6`: Cli
 
 先建置Host，再跑`dotnet run --project server/tests/SGTest.Server.Checks -c Release -- --identity-admin-only`。本機首輪前4項PASS：真CLI建置／重開DB、明文不保留／重複帳號不重設、缺密碼／錯參數／nonfinite／出界／Blocking hash或阻擋拒絕、錯密碼／disabled／名稱與slot拒絕、兩獨立程序slot恰一成功。第5項CLI建DB→真Host TLS首次在Windows EOF；修正Host私鑰載入旗標後，只重跑同一Gate的`--identity-admin-only --tls`，1/1 PASS（Auth／Choose／WorldReady／MoveReceipt，停止時socket／actor／route全0）。完整5項納入server-core CI，最終SHA／run見todo；不是手動accepted-socket fixture冒充Host。
 
-合成來源、臨時DB／憑證僅在測試自有temp目錄；不執行Godot、PCK或原版素材／效能Gate。schema及Wire未改；互動ReadKey手動輸入、原版出生點規則／真私有地圖／Godot畫面與Release NOT VERIFIED。
+合成來源、臨時DB／憑證僅在測試自有temp目錄；不執行Godot、PCK或原版素材／效能Gate。schema及Wire未改；原版出生點規則／真私有地圖／Godot畫面與Release NOT VERIFIED。
+
+2026-11-17 Windows ConPTY補驗PASS：隱藏密碼建帳號、emoji＋Backspace後正確驗證原密碼並建角色、Esc取消回傳4且未建DB。檢查過長輸入時修正ReadKey即時拋錯的邊界：改為有界儲存並讀至Enter才拒絕，280字元輸入實測不回顯且不建DB，避免殘餘字元交回Shell；另加257-byte環境密碼拒絕測例。未把這些Console測試當Godot／正式遊戲Gate。

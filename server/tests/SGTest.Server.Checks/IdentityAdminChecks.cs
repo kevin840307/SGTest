@@ -124,6 +124,8 @@ internal static class IdentityAdminChecks
         var c = Create(root);
         Checks.Require((await Run(null, Account(c))).Exit == 2 && !File.Exists(c.Database), "missing noninteractive secret created DB");
         Checks.Require((await Run("short", Account(c))).Exit == 2 && !File.Exists(c.Database), "short password created DB");
+        Checks.Require((await Run(new string('x',257), Account(c))).Exit == 2 && !File.Exists(c.Database),
+            "overlong password created DB or was silently truncated");
         Checks.Require((await Run(Password, Account(c).Concat(["--password", "Forbidden-Cli-Secret"]).ToArray())).Exit == 2,
             "CLI plaintext password option was accepted");
         Checks.Require((await Run(Password, Account(c))).Exit == 0, "input fixture account failed");

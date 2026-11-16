@@ -35,7 +35,7 @@ dotnet run --project server/tests/SGTest.Server.Checks -c Release -- --identity-
 
 自動化須由祕密來源注入`SGTEST_ACCOUNT_PASSWORD`；命令不接受`--password`，stdout不輸出密碼，CLI結束後應清除呼叫端環境。非互動且未提供環境變數會拒絕；互動隱藏輸入可按Esc取消。本入口只供有本機DB存取權的管理者，不新增網路註冊／GM RPC或預設帳號。
 
-退出碼0=建立成功、2=參數／密碼格式／出生地拒絕、3=重複／帳密或角色政策拒絕、1=來源／DB錯誤、4=互動取消。已驗證DB重開、錯誤／disabled、跨程序slot競態，以及CLI建置DB→實際Host serve→TLS Auth／選角／WorldReady／MoveReceipt與清理。互動ReadKey手動輸入、私有原版地圖與Godot直連此Host的畫面仍NOT VERIFIED。
+退出碼0=建立成功、2=參數／密碼格式／出生地拒絕、3=重複／帳密或角色政策拒絕、1=來源／DB錯誤、4=互動取消。已驗證DB重開、錯誤／disabled、跨程序slot競態，以及CLI建置DB→實際Host serve→TLS Auth／選角／WorldReady／MoveReceipt與清理。Windows互動終端另驗證隱藏輸入、emoji退格後帳密正確、Esc取消碼4／無DB、過長輸入無回顯／無DB；超限後持續讀至Enter才拒絕，不截斷或留下尾端給Shell。私有原版地圖與Godot直連此Host的畫面仍NOT VERIFIED。
 
 ## 正式內容契約
 

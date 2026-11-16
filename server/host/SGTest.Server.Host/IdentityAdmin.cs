@@ -116,11 +116,18 @@ internal static class IdentityAdmin
             throw new ArgumentException("Non-interactive use requires " + PasswordEnvironment);
         Console.Write("Password (hidden): ");
         var text = new StringBuilder();
+        bool exceeded = false;
         while (true)
         {
             var key = Console.ReadKey(intercept: true);
-            if (key.Key == ConsoleKey.Enter) { Console.WriteLine(); return text.ToString(); }
+            if (key.Key == ConsoleKey.Enter)
+            {
+                Console.WriteLine();
+                if (exceeded) throw new ArgumentException("Password input exceeded the limit; re-enter without truncation");
+                return text.ToString();
+            }
             if (key.Key == ConsoleKey.Escape) throw new OperationCanceledException();
+            if (exceeded) continue; // Drain through Enter rather than exposing unread tail to the shell.
             if (key.Key == ConsoleKey.Backspace)
             {
                 if (text.Length >= 2 && char.IsLowSurrogate(text[^1]) && char.IsHighSurrogate(text[^2]))
@@ -129,7 +136,7 @@ internal static class IdentityAdmin
                 continue;
             }
             if (key.KeyChar == '\0') continue;
-            if (text.Length >= 256) throw new ArgumentException("Password exceeds bounded input length");
+            if (text.Length >= 256) { exceeded = true; continue; }
             text.Append(key.KeyChar);
         }
     }
