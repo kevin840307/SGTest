@@ -81,3 +81,7 @@ This is **not** a public login endpoint yet. Production listener/certificate set
 The server can now perform the complete **server-side** pre-gameplay identity flow over an already accepted TLS socket: AuthRequest, AuthResult, owned CharacterList, CharacterChoose, trusted World registration and Gateway binding. Persistent `character_id` becomes ActorId only after ownership verification; ConnectionEpoch is still never accepted from the Client. Wrong passwords and foreign-character selections never create a World actor.
 
 This is not yet an Internet-facing login server: `SGTest.Server.Host` still does not open a production listener, certificate deployment/admission/rate limiting are pending, and the Godot client does not yet implement these identity frames. Current local Release gate: **51/51 checks PASS**.
+
+## 2026-11-16 World results → authenticated Gateway
+
+`Gateway/WorldResultRouter.cs` consumes `ServerWorldHost.Results` outside the 30Hz World owner thread. It routes per-actor reliable MoveReceipts to the correct authenticated Gateway, prevents old connections from stealing new sessions, and retains Changed batches for the next AOI slice through a bounded channel. Over-capacity Changed/reliable output is fail-closed and requires supervisor/reconnect recovery, not DropOldest. The test-only real Godot TLS login fixture now uses this same router. GitHub Server checks 56/56 PASS and Client core TLS E2E PASS. **Still needed:** runtime AOI consumer, WorldReady/delta wire, production listener/admission, cross-map resync and two-client E2E.
