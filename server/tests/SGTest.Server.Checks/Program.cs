@@ -208,6 +208,7 @@ static class Checks
             });
 
             WorldSimulationChecks.Verify(root);
+            WorldHostChecks.Verify(root);
 
             if (args.Length == 2 && args[0] == "--assets")
             {
@@ -284,6 +285,7 @@ static class Checks
                     }
                 });
                 WorldSimulationChecks.VerifyOriginal(assets);
+                WorldHostChecks.VerifyOriginal(assets);
             }
             else if (args.Length != 0)
             {
@@ -291,7 +293,7 @@ static class Checks
                 return 2;
             }
 
-            Console.WriteLine($"SERVER_WORLD_CHECKS PASS total={_passes} scope=original_collision_Astar_manual_world_ticks_no_Wire_no_realtime_scheduler");
+            Console.WriteLine($"SERVER_WORLD_CHECKS PASS total={_passes} scope=original_collision_Astar_real_30Hz_host_no_Wire_no_real_clients");
             return 0;
         }
         finally
