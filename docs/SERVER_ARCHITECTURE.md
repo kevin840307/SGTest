@@ -1,6 +1,6 @@
 # SGTest Server — 重建設計
 
-**狀態：已建立 .NET 8 Blocking/A* Class Library，但尚無可執行 Server、Socket、World Tick 或 Client/Server E2E。** 目標為單體功能模組，固定世界模擬與獨立 Transport/Persistence。
+**狀態：已建立 .NET 8 Blocking/A*＋單寫者手動 World Tick Class Library，但尚無可執行 Host、30Hz排程、Socket 或 Client/Server E2E。** 目標為單體功能模組，固定世界模擬與獨立 Transport/Persistence。
 
 ## 核心邊界
 
@@ -74,3 +74,13 @@ Segment collision 使用完整 cell supercover＋禁止穿格角；8-neighbor A*
 測試使用 `server/tests/SGTest.Server.Checks`，不依賴外部 NuGet／原版私有圖片；9 組合成 case 加兩張原版資產交叉驗證一組，共10組PASS。原版近距 128 deterministic 目的地嘗試／圖（有效目標 Map13=77、Map15=119）全成功，A* query P95 約59.5／26.0µs、allocated 10.2／10.9KB/request；是單一 Windows 實機 isolation trace，**不是實際 20 人、300 怪或 World Tick Gate**。Map-level Navigator 應共用，但這版 query scratch 尚會配置 Dictionary/PriorityQueue，未比較池化／多負載，不宣稱低 allocation 最佳化已完成。詳 `server/README.md` 的重跑命令。
 
 下一步須以原版 Direct 證據確認特殊格旗標與走路語意，再接單寫者 Map Tick、budgeted path jobs、可信命令來源／MovementSequence／MapEpoch 與 Client actor 的完整路徑使用；尚未啟動 Socket/World Simulation。
+
+## 2026-11-16 REB021-WORLD-CORE：單寫者手動 Tick（未接正式 Server Host）
+
+實際新增 `server/src/SGTest.Server/World/ServerWorld.cs`，依賴既有 `BlockingGrid` 和 per-map `MapNavigator`，不依賴 Socket／Godot／DB，未引入第二套導航資料源。建構 Thread 是唯一可修改 Actor 的 owner；外部 Producer 只可透過 MPSC `TryPostMove` 非阻塞入列。MaxPendingCommands（預設512）採 CAS 限幅，Tick 每輪至多 MaxCommandsPerTick=64 和 MaxPathRequestsPerTick=8，避免無限路徑搜尋／命令累積；當滿載明確拒絕或產生 `TickRouteBudgetExhausted` receipt，不能誤當成功並讓 Client 順移。Tick 回傳最新 Actor delta 與 Receipt，但是**尚未有權威網路可靠事件佇列／backpressure/per-connection fairness**。
+
+每個 Actor 只有已確認的 Server MapId／Position；`ConnectionEpoch` 遞增識別重新登入、`MapEpoch` 遞增識別可信換圖、`LastMovementSequence` 消費輸入、`MovementActionSequence` 標示最後**成功授權**的 Move／Stop、`EntityRevision` 標示可見狀態更新。先驗證世代及序號才以 immutable 原圖 `Blocking.dat` 做 A*，每個固定步進都複核線段碰撞。錯誤命令不終止既有合法路線；Stop 即使不移動亦發修訂，避免其他玩家一直顯示走路。Debug StateHash 可確認相同指令 trace 在不同 Render-read 取樣頻率下仍一致。Session 建立／轉圖／登出是**可信 Server 內部 API**，尚未實作登入、NPC 傳點權限與 WorldReady／AOI，絕不能直接映射到不可信 Client 封包。
+
+世界目前**只有手動 `Tick()`，沒有真正每秒30次的 scheduler**；`MovementPixelsPerTick=8` 是固定測試候選值，不是原版速度。正式的 actor rate/mount mode、可取消長路徑、超時重連、Snapshot ACK 與可靠事件的 Gateway 還需建立。原版 special terrain 權限仍未驗證，raw 0 walkable／其餘 flags 禁行保守 fail-closed。詳 `server/README.md`；`MVP003` 與 `REB021` 主項未完成。
+
+可重跑 `dotnet run -c Release --project server/tests/SGTest.Server.Checks/SGTest.Server.Checks.csproj`，合成21/21 PASS；加 `-- --assets <private_client_assets>` 在真 Map13／Map15 核對再加3組，合計24/24 PASS，其中有20個合成 Actor 同圖、一次 Tick 6 路徑／14拒絕的上限驗證。沒有20條Socket、300隻Enemy或雙真Client，也未測實際30Hz的P95/P99。

@@ -9,7 +9,7 @@
 - `tools/tests/`：正式 Converter、原始格式及佈署包契約測試（**不是 Client/Server 程式**）；舊獨立轉換器與 Viewer 已從工作樹移除，可從 Git 歷史查閱。
 - `docs/`、`SPEC.md`、`todo.txt`：正式設計與原版研究證據；歷史完成紀錄見 `docs/research/FEATURE_DECISION_HISTORY.md#source-todo-pre-rebuild-20261115-txt`。
 - `client/assets/.gdignore`：**僅保留轉換輸出的定位標記**，不是 Godot Runtime。
-- `client/`：新 Godot 4.7.2 資源模組／測試專案；單一 AssetStore、真地形／景物 Renderer、雙圖檢視用 main scene 與可平移的呈現相機已有原生 GPU／像素驗證；**仍無角色操作、正式 WorldState／網路，也不可當作可玩主程式**。`server/` 已建立 .NET 8 權威 Blocking／A* 基礎 Class Library 與可重跑原版雙圖檢查，**但尚無可執行 Server、World Tick、Socket、AOI、帳號或正式人物移動**；見 [Server 進度](server/README.md)。
+- `client/`：新 Godot 4.7.2 資源模組／測試專案；單一 AssetStore、真地形／景物 Renderer、雙圖檢視用 main scene 與可平移的呈現相機已有原生 GPU／像素驗證；**仍無角色操作、正式 WorldState／網路，也不可當作可玩主程式**。`server/` 已建立 .NET 8 權威 Blocking／A* 基礎與**單寫者手動 World Tick／有界移動命令** Class Library、可重跑原版雙圖檢查，**但尚無可執行 Server Host、實際30Hz排程、Socket、AOI、帳號或真正連線人物**；見 [Server 進度](server/README.md)。
 
 ## 現階段 MVP：Map15 主城 + Map13 尼西亞台地
 

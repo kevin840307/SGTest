@@ -8,7 +8,7 @@ static class Checks
 {
     private static int _passes;
 
-    private static void Require(bool condition, string name)
+    internal static void Require(bool condition, string name)
     {
         if (!condition) throw new Exception("SERVER_NAV_FAIL " + name);
     }
@@ -21,14 +21,14 @@ static class Checks
         Require(rejected, name);
     }
 
-    private static void Run(string name, Action check)
+    internal static void Run(string name, Action check)
     {
         check();
         _passes++;
         Console.WriteLine("PASS " + name);
     }
 
-    private static string Fixture(string root, int mapId, int width, int height,
+    internal static string Fixture(string root, int mapId, int width, int height,
                                   Func<int, int, byte> flags, int version = 3,
                                   int cell = 16)
     {
@@ -53,7 +53,7 @@ static class Checks
         return directory;
     }
 
-    private static (double X, double Y) Center(GridCell cell) =>
+    internal static (double X, double Y) Center(GridCell cell) =>
         (cell.X * BlockingGrid.CellPixels + 8, cell.Y * BlockingGrid.CellPixels + 8);
 
     private static void AssertPath(BlockingGrid grid, NavigationPath path, GridCell start, GridCell goal)
@@ -207,6 +207,8 @@ static class Checks
                 MustReject<InvalidDataException>(() => BlockingGrid.Load(dir, 37), "corrupt dimensions");
             });
 
+            WorldSimulationChecks.Verify(root);
+
             if (args.Length == 2 && args[0] == "--assets")
             {
                 string assets = args[1];
@@ -281,6 +283,7 @@ static class Checks
 
                     }
                 });
+                WorldSimulationChecks.VerifyOriginal(assets);
             }
             else if (args.Length != 0)
             {
@@ -288,7 +291,7 @@ static class Checks
                 return 2;
             }
 
-            Console.WriteLine($"SERVER_BLOCKING_CHECKS PASS total={_passes} scope=collision_Astar_only_no_Wire_no_WorldTick_no_real_movement");
+            Console.WriteLine($"SERVER_WORLD_CHECKS PASS total={_passes} scope=original_collision_Astar_manual_world_ticks_no_Wire_no_realtime_scheduler");
             return 0;
         }
         finally
