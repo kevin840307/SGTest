@@ -207,6 +207,7 @@ static class Checks
                 MustReject<InvalidDataException>(() => BlockingGrid.Load(dir, 37), "corrupt dimensions");
             });
 
+            WireCodecChecks.Verify();
             WorldSimulationChecks.Verify(root);
             WorldHostChecks.Verify(root);
 
