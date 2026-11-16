@@ -131,6 +131,48 @@ public sealed class WorldResultRouter
     }
 
     /// <summary>
+    /// Server-authorized map transfer for an ALREADY authenticated actor.
+    /// The caller must validate the relevant NPC/portal and its destination:
+    /// this is not an exposed client RPC or generic teleport permission.
+    /// Host World generation changes before the trusted Gateway changes.
+    /// If the TLS session disconnects during that hand-off, release the new
+    /// World generation so a stale old-epoch disconnect cannot leave a ghost.
+    /// No socket, database, or AOI work occurs on the World Tick owner thread.
+    /// </summary>
+    public async Task<ActorSnapshot?> TrustedTransferAsync(
+        ServerWorldHost world, long actorId, int destinationMapId,
+        double destinationX, double destinationY)
+    {
+        ArgumentNullException.ThrowIfNull(world);
+        GatewayConnection gateway;
+        ConnectionBinding before;
+        lock (_gate)
+        {
+            if (!_connections.TryGetValue(actorId, out gateway!) ||
+                gateway.IsClosed)
+                return null;
+            before = gateway.Binding;
+        }
+
+        ActorSnapshot? result = await world.TrustedTransferAsync(
+            before.ActorId, before.ConnectionEpoch, before.MapEpoch,
+            destinationMapId, destinationX, destinationY).ConfigureAwait(false);
+        if (result is not { } after)
+            return null; // no map/position mutation occurred
+
+        // A closed/changed session cannot be advanced. Clean the newly
+        // transferred generation even if its old socket has already exited.
+        if (TryAdvanceTrustedMap(gateway, after))
+            return after;
+
+        TryDetach(gateway);
+        await world.TrustedDisconnectAsync(
+            after.ActorId, after.ConnectionEpoch, after.MapEpoch).ConfigureAwait(false);
+        throw new InvalidOperationException(
+            "Map transfer succeeded in World but trusted Gateway binding was lost; actor released");
+    }
+
+    /// <summary>
     /// Short immutable snapshot for the non-World AOI pump; it never exposes
     /// Client-supplied identities. A late disconnect may invalidate a binding
     /// before QueueAoi; that case is rejected without sending stale frames.

@@ -178,7 +178,8 @@ public sealed class ServerWorld
     /// Trusted transfer ONLY after NPC/portal validation performed elsewhere.
     /// Client may NOT request arbitrary map/position via a MoveTargetCommand.
     /// Clearing its route atomically also invalidates all queued old-map commands.
-    /// This does NOT implement WorldReady, AOI or gameplay portal permissions.
+    /// Joined/Left lifecycle is published on the next Tick for WorldReady/AOI;
+    /// upstream gameplay portal permissions and client RPC are separate work.
     /// </summary>
     public bool TryTrustedTransfer(long actorId, long connectionEpoch, long mapEpoch,
                                    int newMapId, double x, double y, out ActorSnapshot snapshot)

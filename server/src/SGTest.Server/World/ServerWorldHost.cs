@@ -170,7 +170,8 @@ public sealed class ServerWorldHost : IAsyncDisposable
 
     /// <summary>
     /// ONLY after upstream NPC/portal permission verification. Not a Client RPC.
-    /// Does not publish a WorldReady/AOI transition (future work).
+    /// Emits trusted Leave/Join lifecycle via next World Tick (AOI/WorldReady).
+    /// Upstream must still validate the NPC/portal destination.
     /// </summary>
     public Task<ActorSnapshot?> TrustedTransferAsync(
         long actorId, long connectionEpoch, long mapEpoch, int newMap, double x, double y)
