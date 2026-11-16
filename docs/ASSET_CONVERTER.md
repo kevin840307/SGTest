@@ -176,3 +176,11 @@ DIRECT證據仍是上述同SHA的Paradise.exe.lst：`CELStaticObj2D(char*,char*,
 world v3／scenery v1新增`scenery_order` v1：三個groups（原版GetMode 0/1/2），各為來源objects的root索引，children只隨父物件畫，不當root重排；保留passes／settled。來源DIRECT與有界1025輪算法見CLIENT_ARCHITECTURE。普通同Y穩定，但建築比較不是嚴格全序，禁止換成一般sort而改變結果。只在同一Converter建置時執行一次，Client不用每幀做整圖排序。Map13 group counts=33/334/0、passes=1/29/1；Map15=89/1744/0、passes=2/71/1，皆settled；同資料重算完全一致（reports/world_order_validation.json）。
 
 唯一CLI雙圖runtime-only PASS，13.55秒；PCK重建PASS，254 BPTC／254 ASTC不變，SHA256=`0346cc610d3cbd643dc12b4efd8d0921b9d6b132e9e5e2bdb6d1a2a8ea65b409`，86,394,680 bytes。Python suite75 PASS，原生靜態景物／角色交錯驗證與兩候選比較見TEST_PLAN／CLIENT_ARCHITECTURE。Archive頁面／邏輯Asset ID未改，原始素材仍只在本機。動畫與出入口時序、P0壓縮品質及正式Client/Server仍未完成。
+
+### 景物ACT default profile（2026-11-16）
+
+唯一export-assets新增map/來源的字面`action`綁定；有ACT才輸出`atlas.v9.act[clip]`的`sgtest.action_timeline/v1`，固定50Hz／numerator40／default_speed25、raw_time／frame index／loop／events與ACT來源SHA。未知key／空action／clip index越界拒絕，沒有ACT就保留source_clips_only，不猜FPS。8種normalized_scenery_act、10 Enemy、7 Player、229 source_clips_only，總254 Asset／254頁／2281 Frame不變；Archive audit完整再通過，372.769秒。Scenery timing只涵蓋default25；dynamic_speed_verified=false，事件callback與視覺逐格舊Client parity仍未驗證。WorldDrawList只替原版CELStaticObj2D類型綁定，不把BLG引用同素材當成會播放ACT。
+
+FISH01 ACT首index1，最後index10為raw300的合法長空白幀；不能依SPR幀數平均時間。Map13有5種／17實例，Map15有6種／44實例，兩圖全部多幀景物61實例已涵蓋，source-clips-only的NPC等時序不因此完成。私有bindings／ACT SHA見reports/scenery_time_bindings.json；本輪重新hash兩個HK2 binary與歷史timing audit版本一致，精度／DIRECT+AUDIT呼叫鏈見CLIENT_ARCHITECTURE。
+
+PCK重建PASS：SHA256 `02d05d9ae68f7760d6ded076c34c1c4f77c9bd0342f552a1a8df323df6cbb9d4`，86,399,320 bytes，254 BPTC＋254 ASTC；只有metadata增加，頁面／ID未改。79項Python tests PASS，原生ACT／fade與端點／epoch回歸見TEST_PLAN。原始素材與ACT產物仍只在本機，未上傳公開Git。

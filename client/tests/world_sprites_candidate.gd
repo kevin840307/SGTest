@@ -14,6 +14,7 @@ func present(commands: Array) -> void:
 		var command: Dictionary = commands[index]
 		var sprite := get_child(index) as Sprite2D
 		sprite.texture = command.texture
+		sprite.modulate = command.modulate
 		sprite.centered = false
 		sprite.region_enabled = true
 		sprite.region_filter_clip_enabled = true

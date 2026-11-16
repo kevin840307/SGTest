@@ -8,6 +8,7 @@ import unittest
 from test_asset_converter import tiny_spr
 from asset_converter.cli import archive_all
 from asset_converter.content.export_assets import publish
+from test_scenery_timing import act
 
 
 class Settings:
@@ -43,6 +44,19 @@ class ScopedExportTests(unittest.TestCase):
             before = {p.relative_to(assets):p.read_bytes() for p in assets.rglob('*') if p.is_file()}
             publish(source, archive, assets, {'maps/visuals/one'})
             self.assertEqual(before, {p.relative_to(assets):p.read_bytes() for p in assets.rglob('*') if p.is_file()})
+
+    def test_scenery_act_is_embedded_only_when_original_literal_action_exists(self):
+        with tempfile.TemporaryDirectory() as folder:
+            source,archive,assets = self.fixture(folder)
+            payload = act(((0,6),))
+            (source/'map/one.act').write_bytes(payload)
+            archive_all(source,archive,Settings())
+            report = publish(source,archive,assets,{'maps/visuals/one','maps/visuals/two'})
+            self.assertEqual(report['animation_semantics']['normalized_scenery_act'],1)
+            manifest = json.loads((assets/'maps/visuals/one/atlas.json').read_text())
+            self.assertEqual(manifest['act']['ONE']['frames'],[{'index':0,'raw_time':6}])
+            self.assertEqual(manifest['act']['ONE']['source_sha256'],hashlib.sha256(payload).hexdigest())
+            self.assertEqual(json.loads((assets/'maps/visuals/two/atlas.json').read_text())['act'],{})
 
     def test_unknown_or_empty_selection_rejects_before_output(self):
         with tempfile.TemporaryDirectory() as folder:

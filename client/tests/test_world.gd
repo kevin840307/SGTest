@@ -7,6 +7,8 @@ const Canvas = preload("res://rendering/world_canvas.gd")
 const Sprites = preload("res://tests/world_sprites_candidate.gd")
 const TerrainData = preload("res://rendering/terrain_data.gd")
 const Terrain = preload("res://rendering/terrain.gd")
+const Timeline = preload("res://rendering/action_timeline.gd")
+const Fade = preload("res://rendering/building_fade.gd")
 var store = Store.new()
 var failures: Array = []
 var captures: Array = []
@@ -51,6 +53,61 @@ func fixture() -> void:
 	check(List._valid_clip(empty,"EMPTY"),"Empty source frame rejected")
 	empty.manifest.frames[0].rect = [0,0,1,1]
 	check(not List._valid_clip(empty,"EMPTY"),"Nonempty frame with missing page accepted")
+	var timeline := Timeline.new()
+	var definition := {"schema":"sgtest.action_timeline/v1","fixed_hz":50,"default_speed":25,"numerator":40,
+		"loops":true,"frames":[{"index":1,"raw_time":6},{"index":10,"raw_time":300}]}
+	check(timeline.configure(definition) == OK,"Timeline configuration failed")
+	var step := 0
+	var remaining := 9
+	for tick in 2000:
+		check(timeline.frame_at_update(tick) == (1 if step == 0 else 10),"Fixed-update counter mismatch")
+		remaining -= 1
+		if remaining == 0:
+			step = 1 - step
+			remaining = 9 if step == 0 else 480
+	for fps in [30,60,120,0]:
+		if fps > 0:
+			for sample in fps * 10:
+				timeline.frame_at_update(int(sample * 50.0 / fps))
+		for tick in [0,8,9,488,489,1000000000000]:
+			check(timeline.frame_at_update(tick) == (1 if tick % 489 < 9 else 10),"FPS/AFK changed timeline")
+	definition.loops = false
+	definition.frames = [{"index":0,"raw_time":0},{"index":4,"raw_time":1}]
+	check(timeline.configure(definition) == OK,"Nonloop action rejected")
+	check(timeline.frame_at_update(0) == 0 and timeline.frame_at_update(1) == 4 and timeline.frame_at_update(100) == 4,"Minimum tick/end frame incorrect")
+	check(not timeline.is_complete(1) and timeline.is_complete(2),"Action completion boundary incorrect")
+	definition.frames[0].raw_time = 0.5
+	check(timeline.configure(definition) == ERR_INVALID_DATA and timeline.frame_at_update(0) == -1,"Malformed action retained previous timeline")
+	definition.frames[0].raw_time = 1
+	definition.default_speed = 50
+	check(timeline.configure(definition) == ERR_INVALID_DATA,"Unverified speed override accepted")
+	for updates in [-1,0,1,8,15,16,17]:
+		var remaining_alpha := 256 - 16 * clampi(updates,0,16)
+		var entering := Fade.layers(true,updates)
+		var leaving := Fade.layers(false,updates)
+		check(entering.primary_alpha == 255 and entering.alternate_alpha == mini(remaining_alpha,255) and entering.children,"Inside fade incorrect")
+		check(leaving.primary_alpha == mini(remaining_alpha,255) and leaving.alternate_alpha == mini(256-remaining_alpha,255) and leaving.children == (remaining_alpha>0),"Outside fade incorrect")
+	# The same asset can be referenced as a building or static object. Only the
+	# static object's original ctor initializes 'action'; do not animate BLGs.
+	definition.default_speed = 25
+	definition.loops = true
+	definition.frames = [{"index":1,"raw_time":1}]
+	var image := Image.create(2,1,false,Image.FORMAT_RGBA8)
+	var texture := ImageTexture.create_from_image(image)
+	var fixture_asset := {"manifest":{"clips":{"TEST":[0,1]},"act":{"TEST":definition},"frames":[
+		{"page":0,"rect":[0,0,1,1],"trim":[0,0],"origin":[0,0]},
+		{"page":0,"rect":[1,0,1,1],"trim":[0,0],"origin":[0,0]}]},"pages":[texture]}
+	var appearance := {"atlas":"fixture/atlas.json","clip":"TEST"}
+	var world := {"scenery_schema":"sgtest.scenery/v1","scenery_order":{"version":1,"groups":[[],[0,1],[]]},
+		"scenery_definitions":{"b":{"sorting_mode":0,"draw_group":1,"front":[-1,-1,1,-1],"appearances":[appearance]},
+			"s":{"sorting_mode":1,"draw_group":1,"appearances":[appearance]}},"objects":[
+		{"definition":"b","parent_index":null,"child_count":0,"p":[0,0],"bounds":[0,0,1,1]},
+		{"definition":"s","parent_index":null,"child_count":0,"p":[1,1],"bounds":[1,1,1,1]}]}
+	var list := List.new()
+	check(list.configure(world,{"fixture":fixture_asset}) == OK,"Shared asset type fixture failed")
+	var poses := list.frames_at_update(0)
+	check(poses.size() == 1 and poses.get(1) == 1 and not poses.has(0),"Building incorrectly inherited static action")
+	list.clear()
 
 
 func load_ids(owner: StringName, epoch: int, ids: Array) -> Dictionary:
@@ -84,7 +141,7 @@ func save_commands(commands: Array) -> Array:
 				check(image.decompress() == OK,"Page decompression failed")
 			check(image.save_png(file) == OK,"Page reference save failed")
 			pages[id] = file
-		trace.append({"index":command.index,"slot":command.slot,"frame":command.frame,"actor_id":command.actor_id,
+		trace.append({"index":command.index,"slot":command.slot,"frame":command.frame,"actor_id":command.actor_id,"alpha":command.alpha,
 			"texture_size":[command.texture.get_width(),command.texture.get_height()],
 			"page":pages[id],"texture_source":texture_sources[id],"destination":[command.destination.position.x,command.destination.position.y,command.destination.size.x,command.destination.size.y],
 			"uv":[command.uv.position.x,command.uv.position.y,command.uv.size.x,command.uv.size.y]})
@@ -98,10 +155,11 @@ func render_memory() -> Dictionary:
 
 func _run() -> void:
 	var args := OS.get_cmdline_user_args()
-	if args.size() != 3 or args[1] not in ["canvas","sprites"]:
+	if args.size() not in [3,4] or args[1] not in ["canvas","sprites"]:
 		quit(2)
 		return
 	output = args[2]
+	var timing := args.size() == 4 and args[3] == "timing"
 	fixture()
 	check(store.open_pack(args[0]) == OK,"Pack load failed")
 	store.asset_failed.connect(func(_owner,_epoch,id,reason):check(false,id+": "+reason))
@@ -145,6 +203,12 @@ func _run() -> void:
 		var configure_begin := Time.get_ticks_usec()
 		check(list.configure(world,assets) == OK,"World configuration failed")
 		var configure_us := Time.get_ticks_usec()-configure_begin
+		if timing:
+			check(not list._timelines.is_empty(),"No real scenery ACT was loaded")
+			var initial_poses := list.frames_at_update(0)
+			var first_index: int = initial_poses.keys()[0]
+			var phases := {first_index:9}
+			check(list.frames_at_update(9,phases)[first_index] == initial_poses[first_index],"Per-placement start update ignored")
 		var data := TerrainData.new()
 		check(data.configure(map_asset) == OK,"Terrain configuration failed")
 		var terrain := Terrain.new()
@@ -153,6 +217,12 @@ func _run() -> void:
 		var renderer: Node2D = Canvas.new() if args[1] == "canvas" else Sprites.new()
 		view.add_child(renderer)
 		var cameras: Array = [Vector2(8200,8500),Vector2(10500,9900),Vector2(12500,10400)] if map_id == 15 else [Vector2(5120,2400),Vector2(3200,3840),Vector2(5760,3840)]
+		if timing:
+			for placement in world.objects:
+				var suffix := "a_fly_blackbload_l" if map_id == 15 else "fish01"
+				if str(placement.atlas).get_base_dir().ends_with("/"+suffix):
+					cameras[2] = Vector2(placement.p[0],placement.p[1])-Vector2(640,420)
+					break
 		var first_view_us := 0
 		var preparations: Array = []
 		var samples: Array = []
@@ -160,7 +230,14 @@ func _run() -> void:
 		for size in [Vector2i(1280,720),Vector2i(1920,1080)]:
 			view.size = size
 			for camera in cameras:
-				for inside_mode in [false,true]:
+				var phases: Array = [{"inside":false,"updates":-1,"elapsed":0},{"inside":true,"updates":-1,"elapsed":0}]
+				if timing:
+					phases = [{"inside":false,"updates":0,"elapsed":0},{"inside":true,"updates":1,"elapsed":8},
+						{"inside":true,"updates":8,"elapsed":9},{"inside":true,"updates":16,"elapsed":81},
+						{"inside":false,"updates":1,"elapsed":560},{"inside":false,"updates":8,"elapsed":561},
+						{"inside":false,"updates":16,"elapsed":1000000}]
+				for phase in phases:
+					var inside_mode: bool = phase.inside
 					var inside := {}
 					if inside_mode:
 						for index in world.objects.size():
@@ -168,12 +245,17 @@ func _run() -> void:
 								inside[index] = true
 					var actors := [{"id":"fixture_actor","p":camera+Vector2(640,420),"asset":"npcs/npc001","clip":"NPC001","frame":0}]
 					var frames := {}
-					if inside_mode:
-						for index in world.objects.size():
-							if int(world.objects[index].frames) > 1:
-								frames[index] = 1
+					if timing:
+						frames = list.frames_at_update(int(phase.elapsed))
+					var transitions := {}
+					for index in world.objects.size():
+						var definition: Dictionary = world.scenery_definitions[world.objects[index].definition]
+						if not timing and inside_mode and int(world.objects[index].frames) > 1:
+							frames[index] = 1
+						if timing and world.objects[index].parent_index == null and definition.sorting_mode == 0 and definition.appearances.size() > 1 and definition.appearances[1] != null and definition.appearances[0].source != definition.appearances[1].source:
+							transitions[index] = {"inside":inside_mode,"updates":phase.updates}
 					var first_begin := Time.get_ticks_usec()
-					var commands: Array = list.build(Rect2(camera,Vector2(size)),actors,inside,frames)
+					var commands: Array = list.build(Rect2(camera,Vector2(size)),actors,inside,frames,transitions)
 					check(list.error == OK,"Draw list failed")
 					view.canvas_transform = Transform2D(0,-camera)
 					terrain.set_view_rect(Rect2(camera,Vector2(size)))
@@ -185,6 +267,8 @@ func _run() -> void:
 					var file := output.path_join("capture_%d.png" % captures.size())
 					view.get_texture().get_image().save_png(file)
 					captures.append({"map":map_id,"camera":[camera.x,camera.y],"size":[size.x,size.y],"inside":inside_mode,
+						"timing":timing,"fade_updates":phase.updates,"elapsed_updates":phase.elapsed,
+						"sampled_frames":frames,
 						"actors":[{"id":"fixture_actor","p":[actors[0].p.x,actors[0].p.y],"asset":"npcs/npc001","clip":"NPC001","frame":0}],
 						"commands":save_commands(commands),"file":file})
 					commands = []
@@ -205,6 +289,7 @@ func _run() -> void:
 					if step % 3 == 0:
 						jumps.append(elapsed)
 		metrics.append({"map":map_id,"prepare_us":preparations,"frame_us":samples,"jump_us":jumps,
+			"scenery_act_assets":list._timelines.size(),
 			"configure_us":configure_us,"first_view_us":first_view_us,
 			"render_memory":render_memory(),"baseline_memory":baseline,
 			"draw_calls":RenderingServer.get_rendering_info(RenderingServer.RENDERING_INFO_TOTAL_DRAW_CALLS_IN_FRAME)})

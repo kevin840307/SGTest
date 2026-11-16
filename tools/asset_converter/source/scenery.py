@@ -4,6 +4,7 @@ DIRECT Paradise.exe: CELBldg2D ctor 0x005485BF, CELStaticObj2D ctor
 0x0054A172, CELBldg2D::CheckBldgEntrance 0x00549950. No source text copied.
 """
 import struct
+from .inspect_act import parse_act
 
 
 class Reader:
@@ -144,3 +145,17 @@ def compile_scenery_order(placements, definitions):
         passes.append(pass_index+1)
         settled.append(not changed)
     return {'version':1,'groups':groups,'passes':passes,'settled':settled}
+
+
+def compile_scenery_action(raw, frame_count):
+    """Bind the static-object ctor's literal 'action'; never invent a frame rate."""
+    actions = [action for action in parse_act(raw) if action['key'] == 'action']
+    if len(actions) != 1 or not actions[0]['frames']:
+        raise ValueError('scenery ACT requires exactly one nonempty action key')
+    action = actions[0]
+    if any(frame['index'] < 0 or frame['index'] >= frame_count for frame in action['frames']):
+        raise ValueError('scenery ACT frame outside source clip')
+    return {'schema':'sgtest.action_timeline/v1','act_key':'action','fixed_hz':50,
+            'default_speed':25,'numerator':40,'loops':action['loops'],
+            'frames':[{'index':frame['index'],'raw_time':frame['raw_time']} for frame in action['frames']],
+            'events':action['events'],'dynamic_speed_verified':False}

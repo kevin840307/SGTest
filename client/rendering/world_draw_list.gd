@@ -3,9 +3,13 @@ extends RefCounted
 ## Caller owns AssetStore scope; clear this and all commands before scope release.
 
 const Order = preload("res://rendering/world_order.gd")
+const Fade = preload("res://rendering/building_fade.gd")
+const Timeline = preload("res://rendering/action_timeline.gd")
 var _world: Dictionary = {}
 var _assets: Dictionary = {}
 var _roots: Array = []
+var _timelines: Dictionary = {}
+var _animated: Dictionary = {}
 var error := OK
 
 
@@ -13,6 +17,8 @@ func clear() -> void:
 	_world = {}
 	_assets = {}
 	_roots.clear()
+	_timelines.clear()
+	_animated.clear()
 	error = OK
 
 
@@ -68,7 +74,36 @@ func configure(world: Dictionary, assets: Dictionary) -> Error:
 				return ERR_INVALID_DATA
 			bounds = bounds.merge(_bounds(world.objects[child].bounds))
 		_roots.append({"index":index, "bounds":bounds})
+	for index in world.objects.size():
+		var scenery: Dictionary = world.scenery_definitions[world.objects[index].definition]
+		if int(scenery.sorting_mode) != 1:
+			continue  # Only CELStaticObj2D initializes the literal scenery action.
+		var appearance: Dictionary = scenery.appearances[0]
+		var id := str(appearance.atlas).trim_suffix("/atlas.json")
+		var definition = assets[id].manifest.get("act",{}).get(appearance.clip)
+		if definition == null:
+			continue
+		var key := id + ":" + str(appearance.clip)
+		if not _timelines.has(key):
+			var timeline := Timeline.new()
+			if timeline.configure(definition) != OK:
+				clear()
+				return ERR_INVALID_DATA
+			for step in definition.frames:
+				if int(step.index) >= assets[id].manifest.clips[appearance.clip].size():
+					clear()
+					return ERR_INVALID_DATA
+			_timelines[key] = timeline
+		_animated[index] = _timelines[key]
 	return OK
+
+
+func frames_at_update(now: int, started_at: Dictionary = {}) -> Dictionary:
+	# Epoch/phase belongs to the caller. No render callback mutates a clock.
+	var frames := {}
+	for index in _animated:
+		frames[index] = _animated[index].frame_at_update(now - int(started_at.get(index,0)))
+	return frames
 
 
 static func _valid_clip(asset: Dictionary, clip: String) -> bool:
@@ -100,7 +135,7 @@ func _record(index: int) -> Dictionary:
 		"sorting_mode":definition.sorting_mode,"front":definition.get("front", [])}
 
 
-func build(view: Rect2, actors: Array = [], inside: Dictionary = {}, frames: Dictionary = {}) -> Array:
+func build(view: Rect2, actors: Array = [], inside: Dictionary = {}, frames: Dictionary = {}, transitions: Dictionary = {}) -> Array:
 	error = OK
 	if _world.is_empty():
 		error = ERR_UNCONFIGURED
@@ -130,23 +165,39 @@ func build(view: Rect2, actors: Array = [], inside: Dictionary = {}, frames: Dic
 				_append(commands, _assets[record.asset], record.clip, int(record.get("frame",0)), record.p, view, -1, 0, record.id)
 			else:
 				var index := int(record.index)
-				_placement(commands, index, view, bool(inside.get(index,false)), frames)
-				if bool(inside.get(index,false)):
+				var target := bool(inside.get(index,false))
+				var definition: Dictionary = _world.scenery_definitions[_world.objects[index].definition]
+				var fade := {"primary_alpha":255 if target else 0,"alternate_alpha":0 if target else 255,"children":target}
+				if transitions.has(index):
+					var transition: Dictionary = transitions[index]
+					if not transition.has_all(["inside","updates"]) or definition.sorting_mode != 0:
+						error = ERR_INVALID_DATA
+						return []
+					fade = Fade.layers(bool(transition.inside),int(transition.updates))
+				var dual: bool = definition.appearances.size() > 1 and definition.appearances[1] != null
+				_placement(commands,index,view,0,frames,int(fade.primary_alpha) if int(definition.sorting_mode) == 0 else 255)
+				if bool(fade.children):
 					for child in range(index + 1, index + int(_world.objects[index].child_count) + 1):
-						_placement(commands, child, view, false, frames)
+						var child_definition: Dictionary = _world.scenery_definitions[_world.objects[child].definition]
+						var child_slot := 1 if child_definition.appearances.size() > 1 and child_definition.appearances[1] != null else 0
+						if int(child_definition.sorting_mode) != 0 or child_slot == 1:
+							_placement(commands, child, view, child_slot, frames,255)
+				if dual:
+					_placement(commands,index,view,1,frames,int(fade.alternate_alpha))
 	return commands if error == OK else []
 
 
-func _placement(commands: Array, index: int, view: Rect2, inside: bool, frames: Dictionary) -> void:
+func _placement(commands: Array, index: int, view: Rect2, slot: int, frames: Dictionary, alpha: int) -> void:
+	if alpha <= 0:
+		return
 	var placement: Dictionary = _world.objects[index]
 	var definition: Dictionary = _world.scenery_definitions[placement.definition]
-	var slot := 1 if not inside and definition.appearances.size() > 1 and definition.appearances[1] != null else 0
 	var appearance: Dictionary = definition.appearances[slot]
 	var id := str(appearance.atlas).trim_suffix("/atlas.json")
-	_append(commands, _assets[id], appearance.clip, int(frames.get(index,0)), Vector2(placement.p[0],placement.p[1]), view, index, slot, "")
+	_append(commands, _assets[id], appearance.clip, int(frames.get(index,0)), Vector2(placement.p[0],placement.p[1]), view, index, slot, "",alpha)
 
 
-func _append(commands: Array, asset: Dictionary, clip: String, frame_index: int, position: Vector2, view: Rect2, index: int, slot: int, actor_id: String) -> void:
+func _append(commands: Array, asset: Dictionary, clip: String, frame_index: int, position: Vector2, view: Rect2, index: int, slot: int, actor_id: String, alpha: int = 255) -> void:
 	var indices: Array = asset.manifest.clips[clip]
 	if frame_index < 0 or frame_index >= indices.size():
 		error = ERR_INVALID_PARAMETER
@@ -159,4 +210,5 @@ func _append(commands: Array, asset: Dictionary, clip: String, frame_index: int,
 	var destination := Rect2(at,uv.size)
 	if destination.intersects(view):
 		commands.append({"texture":asset.pages[int(frame.page)],"destination":destination,"uv":uv,
-			"index":index,"slot":slot,"frame":frame_index,"actor_id":actor_id})
+			"index":index,"slot":slot,"frame":frame_index,"actor_id":actor_id,"alpha":alpha,
+			"modulate":Color(1,1,1,alpha/255.0)})

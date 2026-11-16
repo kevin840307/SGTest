@@ -170,3 +170,15 @@ Converter 68 tests PASS；雙圖runtime-only PASS；新PCK 242 BPTC／242 ASTC�
 - ALT001選Canvas：準備P99 Map15=1.223–1.460ms／Map13=0.541–0.626ms；Sprite=1.478–1.791／0.688–0.793。Frame P99與RSS無穩定全面勝負，選較少節點／較簡單Canvas，不宣稱所有硬體或動態怪物最佳。完整表、first-view／CPU／RSS／engine memory與限制見CLIENT_ARCHITECTURE。此輪network不適用，OS dedicated VRAM NOT VERIFIED。
 
 尚存Gate：動畫／NPC timing與事件、出入口fade cadence／自身ghost、P0（含Godot非4倍數Atlas頁面的匯入取樣品質）、逐視野預取ALT、多開／Render0／資源斜率、A*／Server／多人E2E／Mac／Release仍NOT VERIFIED。MVP002-SCENERY-CONTRACT維持未完成。接手可用`--mode canvas --rounds 1`快速重跑正式路徑；全量三輪命令如上。
+
+### 2026-11-16 景物預設時序／fade回歸
+
+`python -m unittest discover -s tools/tests -p "test_*.py" -q` 79 PASS。新增ACT字面action綁定／缺key／duplicate／index越界／非零起幀／長hold／raw0保存、scoped publish嵌入與缺ACT不猜FPS；現行唯一CLI export-assets完整Archive audit再PASS（372.769秒），8 normalized_scenery_act／10 Enemy／7 Player／229 source-clips-only，254 Asset不變。兩個HK2 binary重新SHA與既有timing audit完全相同；這是版本核對，並非啟動原版動態視覺驗證。
+
+`python client/tests/run_world.py "C:\SGO\Godot\Godot_v4.7.2-stable_win64_console.exe" --timing --report reports/scenery_time_verified.json`：正式Canvas與重用Sprite候選各1次Native PASS，84 captures／候選（雙圖／兩解析度／3相機／7組inside與elapsed狀態），總168，source SHA前後一致，127原始SPR幀嚴格origin與未壓縮Atlas crop驗證，命令順序／alpha／frame／UV／texture identity及GPU合成通過。仍採既有1e-5 texel邊界與2色階rounding規則；新增modulate只對source alpha取floor/ceil的1色階界以涵蓋GPU浮點alpha，實際max_outside_sampler_envelope=2、pixels_over_tolerance=0，不宣稱原圖RGB零差異。
+
+Native fixture包含逐fixed-update counter對照2000步、30/60/120與AFK不取樣／巨幅時間跳轉、nonloop最後幀／completion、min1 update／fractional錯資料／不支援speed profile拒絕、per-placement phase與相同Atlas的BLG／static角色隔離。source資料證實61個多幀景物實例皆為static root。FISH01實測updates0/8→frame1，9→2，81/560→空白frame10，561→1。fade0/1/8/15/16、進／出target重設、children只隨原版分支顯示。錯alpha240改255立即被拒絕，reports/scenery_time_negative_controls.json。
+
+兩候選退出Store counts全0、texture counter回13,373,731 bytes、engine error/leak=0；峰值Process RSS約222.35／221.60MiB（包含更多capture／readback，非steady-state改善證據）。`run_world.py --mode canvas --report reports/scenery_time_endpoints_verified.json` 原24端點回歸PASS；`run_asset_store.py --script tests/test_asset_store_epochs.gd --report reports/scenery_time_epochs.json` 三競態情境PASS。PCK SHA與來源profile見ASSET_CONVERTER；此輪不重新選Renderer、不將含PNG的wall time當Frame效能。CI NOT VERIFIED。
+
+尚存：入口與inside事件phase／版本去重、自身ghost、visible-only原版phase政策、ACT token callback／dynamic speed、NPC／Player完整Animator、P0品質／非4倍數壓縮頁面、視野預取／AFK實機、多開／Server／多人E2E。時間取樣是純呈現函式，沒有把render呼叫當權威fixed tick。

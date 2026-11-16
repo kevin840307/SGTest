@@ -69,3 +69,5 @@ Map terrain/scenery 和 Enemy 必須分離。Server Population 定義怪物出�
 景物metadata進度（2026-11-16）：world v3/scenery v1共用definition保留BLG雙appearance、SIF mode與前緣／點集。scoped Catalog已涵蓋兩欄，242→254獨立Asset（新增12 alternate），完整Archive audit及新PCK原生載入回歸PASS；原有per-asset Height-Dense與AssetStore策略不變。兩appearance bounds取聯集，避免切換後超出primary邊界遭提前剔除。完整Renderer／fade時間／遮擋仍未完成，證據與來源限制見ASSET_CONVERTER。
 
 2026-11-16 靜態World切片：原版三組景物順序由唯一Converter離線編譯為scenery_order，不把非全序predicate交給一般sort；Client在可見root順序中插入Actor，將FrameTable origin/trim、兩appearance與children轉成集中Canvas命令。原生比較後正式選world_canvas，Sprite2D候選僅tests。144 GPU captures／110個原始SPR幀／卸載Texture基線驗證PASS；取樣精度與P0壓縮品質限制見CLIENT_ARCHITECTURE，並非完整原版時序或MVP PASS。下一階段仍須比較全palette預載與逐視野預取，不能把本輪benchmark的全palette前提當成最終資源策略。
+
+2026-11-16 景物時序切片：8個原版ACT已發布default25／50Hz時間metadata，涵蓋雙圖61個多幀景物實例；呈現以明確elapsed updates取樣，支援非零起始index與長空白幀。建築fade按原版256counter／每Step減16／alpha clamp255及原始疊層順序繪製，不依Render FPS累進。入口／版本狀態、dynamic action speed、NPC／Player完整時序與事件、P0壓縮品質、Server／多人仍未完成；詳CLIENT_ARCHITECTURE／TEST_PLAN。

@@ -56,3 +56,11 @@ python client/tests/run_world.py "C:\SGO\Godot\Godot_v4.7.2-stable_win64_console
 正式`rendering/world_order.gd`處理原版front交換／Actor插入；`world_draw_list.gd`由唯讀world、同一AssetStore的資產與明確frame／inside快照建立可見命令；`world_canvas.gd`只繪製，不載入資產或推進時鐘。先clear renderer／draw list再結束AssetStore scope。固定景物排序只在Converter離線計算，Client不每幀bubble-sort整圖。Sprite2D比較候選只在tests/，重用節點且與Canvas消耗相同命令，不是第二套正式Renderer。
 
 3輪／兩圖／兩解析度／室內外及frame0/1，144 captures的排序／座標／UV／texture identity與獨立CPU合成通過；110個來源SPR幀的origin及未壓縮Atlas crop逐byte一致。GPU壓縮影像取樣允許明確的1e-5 texel邊界不確定性與2色階rounding，實際超界最大1；不能稱為原圖與壓縮GPU完全0差異。錯排序／位置+1／整圖位移1px的負向控制均拒絕。動畫時序／建築fade與入口、自身遮擋ghost、zoom／多開／AFK、多人Server仍NOT VERIFIED。
+
+## 景物時序與fade
+
+```powershell
+python client/tests/run_world.py "C:\SGO\Godot\Godot_v4.7.2-stable_win64_console.exe" --timing --report reports/scenery_time_verified.json
+```
+
+`world_draw_list.frames_at_update(fixed_now, started_at)`按8個原版ACT的raw時間回傳景物幀，再傳給build的frames參數；completed fixed updates由owner提供，不累加Render delta。build的transitions參數可提供`{placement_index:{inside:true,updates:8}}`，按原版primary／children／alternate順序及255-clamped alpha繪製中間狀態。沒有ACT的素材不會自訂FPS；BLG不因共享同Atlas而誤啟動static action。這些是呈現函式，不代表入口偵測、WorldState／網路或完整動畫事件已完成。

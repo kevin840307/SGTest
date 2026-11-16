@@ -14,6 +14,7 @@ import tempfile
 
 from ..atlas.archive_audit import audit_archive
 from ..source.runtime_spr import unwrap_cde
+from ..source.scenery import compile_scenery_action
 from .animation_definition import compile_definition
 from .runtime_animation_semantics import logical_views
 from .asset_paths import sprite_asset_id, source_sprite_manifest
@@ -139,7 +140,7 @@ def publish(source: Path, archive: Path, assets: Path, asset_ids: set[str] | Non
             clip = PurePosixPath(frame['source']).stem.upper()
             clips.setdefault(clip,[]).append(number)
         semantics = {'status':'source_clips_only','timing_verified':False,'direction_mapping_verified':False}
-        views = {}
+        views, act_timelines = {}, {}
         if group.startswith('enemy/'):
             act = source/(group+'.act')
             if act.is_file():
@@ -151,6 +152,20 @@ def publish(source: Path, archive: Path, assets: Path, asset_ids: set[str] | Non
                                  'timing_verified':True,'direction_mapping_verified':True}
                 except (ValueError,KeyError) as error:
                     semantics['reason'] = str(error)
+        elif group.startswith('map/'):
+            act_path = source/(group+'.act')
+            if act_path.is_file():
+                if len(clips) != 1:
+                    raise ValueError('scenery ACT requires one source clip: '+group)
+                clip = next(iter(clips))
+                payload = act_path.read_bytes()
+                payload = unwrap_cde(payload) if payload.startswith(b'C.D.E.') else payload
+                timeline = compile_scenery_action(payload,len(clips[clip]))
+                timeline['source'] = act_path.relative_to(source).as_posix()
+                timeline['source_sha256'] = hashlib.sha256(act_path.read_bytes()).hexdigest()
+                act_timelines[clip] = timeline
+                semantics = {'status':'normalized_scenery_act','timing_verified':True,
+                             'direction_mapping_verified':False,'timing_scope':'default_25_only'}
         elif group.startswith('player/b/standard/'):
             try:
                 paths = [source/item['path'] for item in raw['sources']]
@@ -174,7 +189,7 @@ def publish(source: Path, archive: Path, assets: Path, asset_ids: set[str] | Non
         manifest = {'version':9,'asset_id':asset_id,'ownership':'on_demand',
                     'source_group':group,'classification':classification,'source_digest':raw['source_digest'],
                     'pages':raw['pages'],'page_sizes':raw['page_sizes'],'page_sha256':raw['page_sha256'],
-                    'frames':frames,'clips':clips,'aliases':{},'act':{},'logical_views':views,
+                    'frames':frames,'clips':clips,'aliases':{},'act':act_timelines,'logical_views':views,
                     'sources':raw['sources'],'animation_semantics':semantics}
         for name in raw['pages']:
             copy(asset_id+'/'+name,original_folder/name,raw['page_sha256'][name])

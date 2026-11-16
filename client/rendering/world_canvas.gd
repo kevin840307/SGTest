@@ -16,4 +16,4 @@ func clear() -> void:
 
 func _draw() -> void:
 	for command in _commands:
-		draw_texture_rect_region(command.texture, command.destination, command.uv, Color.WHITE, false, true)
+		draw_texture_rect_region(command.texture, command.destination, command.uv, command.modulate, false, true)

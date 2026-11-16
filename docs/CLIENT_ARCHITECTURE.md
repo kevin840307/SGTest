@@ -189,3 +189,15 @@ AssetStore仍是唯一資產入口；測試palette改遍歷所有appearance，Ma
 驗證器負向控制：錯誤順序／destination+1都因命令契約拒絕；整張畫面x+1導致789,194 pixel超界而FAIL（`reports/world_render_negative_controls.json`）。不是放寬整張圖誤差來通過。最終`reports/world_render_final.json`含source SHA前後一致、實際engine／raw metrics／144 capture；較早pilot的GDScript型別、空白幀型別判定及未處理GPU底層尺寸／tie的FAIL已修正，不作正式PASS證據。
 
 尚存：動畫時間／事件、原版fade cadence與入口／自身ghost、視野資產非同步預取的ALT、完整World生命週期斜率／AFK／多開、Camera zoom、Player紙娃娃／Server／多人E2E、Mac／Release。全map palette預載只是本輪公平比較前提，不能作最終低資源載入策略已完成的宣稱。
+
+## 景物ACT預設時序與建築fade（2026-11-16）
+
+新增`action_timeline.gd`：只接受action_timeline/v1的50Hz／40÷25預設profile，保留原始frame index與raw_time，以`max(1,raw_time*40//25)`建立累計updates；binary search取樣，不因Render呼叫次數改變狀態。非loop停在最後frame，loop按總updates取餘數，raw_time=0至少1 update；SetSpeed動態覆寫不在此sampler範圍，不能把移動速度或FPS當倍率。WorldDrawList按Asset+clip共用不可變timeline，`frames_at_update(now, started_at)`回傳placement幀；phase／epoch與fixed-update計數由caller擁有，clear／換圖清除綁定。沒有_process／Timer／網路或ACT事件消耗。
+
+只有sorting_mode=1的CELStaticObj2D綁定字面`action`；BLG不能因共享同Atlas就繼承動畫。雙圖254 Asset裡8個景物ACT已由同一Exporter嵌入v9 manifest.act；Map13 5種／17個實例、Map15 6種／44實例，兩圖所有61個多幀景物實例皆有ACT。其餘229個source_clips_only（含NPC）未因此宣稱時序／方向完成。FISH01起幀是1而非0，9個可見步各9 updates後，frame10為480 updates空白；總561 updates後回frame1，不可把空白幀換前一幀。
+
+`building_fade.gd`是純completed-update→疊層資料：SetInOut重設counter=256，每次Step減16到0；Draw將alpha上限截255。進入時primary=255、children始終畫、alternate=min(counter,255)最後疊上；離開時primary=min(counter,255)、counter>0才畫children、alternate=min(256-counter,255)最後畫。這不是把兩圖各乘互補權重的簡單crossfade。`build(...,transitions)`接受owner提供inside／updates，Canvas與Sprite候選都用alpha/255；沒有自行啟動fade時鐘。0／1／8／16個completed updates均可測；若SetInOut發生在InsideBuildObjEdit，當次UpdateHandle已Step一次，之後Draw看到updates=1。16次更新完成，但不能忽略呼叫phase就宣稱從事件起固定再等320ms；逆轉重設亦由owner的新事件決定。入口偵測、去重／版本及自身ghost仍未實作。
+
+DIRECT來源同SHA Paradise.exe.lst：CSGOMap::Update 0x004CF1B2透過vtable+0x60（0x005C3958=CSGOMap::UpdateMapObj）到CELMap2D::UpdateMapObj 0x0052A08B；它先InsideBuildObjEdit，再UpdateHandle。CELBldg2D::Update 0x00549AF5經draw-logic vtable+0x18（0x005C5B34）呼叫Step 0x0055050A；SetInOut 0x005504DE將counter設256。Draw 0x005506CE依inside及counter安排primary／children／alternate；CDDxDrawObj::Draw 0x005188BF的0x005188F5–0x00518919截alpha到255並除255。CELStaticObj2D ctor 0x0054A172／InitAction 0x005514C7使用字面action，Step 0x005510FE呼叫DrawObj.Update→CELxnObj::Update 0x005419A7→xnAction.Update 0x005576E0。50Hz呼叫鏈與HK2 timing primitive的舊稽核是AUDIT；本輪重新計算Client.bin／SGOClient.bin SHA仍精確等於9b45569a…dd13147／6e64368a…6cb3be，同版本原始證據未變，未宣稱實際啟動舊Client逐幀觀測。
+
+Native回歸：固定tick逐步counter對照2000步、30/60/120與AFK跳過取樣、每placement起始phase、非loop／0-duration／超長elapsed／錯profile與fractional raw_time、共享Atlas的BLG/static型別隔離、fade0/1/8/15/16與children規則。GPU用兩圖／兩解析度／7組進出fade與ACT時刻，見TEST_PLAN。原版visible-only更新／離開視野後phase由未來owner明確決定；本sampler只消耗elapsed updates，不把展示採樣率當原版時間。ACT events僅保留metadata，不在render取樣觸發聲音／特效，更不當權威戰鬥事件。
