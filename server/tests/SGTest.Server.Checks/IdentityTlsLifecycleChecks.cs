@@ -13,7 +13,8 @@ internal static class IdentityTlsLifecycleChecks
     private static void Require(bool ok, string name) => Checks.Require(ok, name);
 
     private sealed record Session(TcpClient Client, SslStream Tls,
-        Task<TlsWireConnectionResult> Server, long MapEpoch) : IAsyncDisposable
+        Task<TlsWireConnectionResult> Server, int MapId, double X, double Y,
+        long MapEpoch) : IAsyncDisposable
     {
         public async ValueTask DisposeAsync()
         {
@@ -28,6 +29,8 @@ internal static class IdentityTlsLifecycleChecks
             () => Reconnect(root).GetAwaiter().GetResult());
         Checks.Run("TLS protocol violation releases authenticated actor for subsequent login",
             () => ProtocolFailureCleanup(root).GetAwaiter().GetResult());
+        Checks.Run("TLS clean disconnect persists final authoritative position before reconnect",
+            () => PositionPersistsAcrossReconnect(root).GetAwaiter().GetResult());
     }
 
     private static async Task Reconnect(string root)
@@ -51,6 +54,47 @@ internal static class IdentityTlsLifecycleChecks
         Require(endedAgain.Reason is TlsWireEndReason.CleanEof or TlsWireEndReason.TransportError &&
                 fixture.Router.Statistics.ActiveSessions == 0,
             "second socket cleanup left stale Gateway");
+        await WaitForZeroActors(fixture.Host);
+    }
+
+    private static async Task PositionPersistsAcrossReconnect(string root)
+    {
+        using var fixture = await Fixture.CreateAsync(root, 99);
+        await using var first = await OpenAsync(fixture);
+        Require(first.X == 8 && first.Y == 8, "initial persisted position mismatch");
+        await first.Tls.WriteAsync(WireProtocol.EncodeMoveTarget(
+            new MoveTargetWire(first.MapEpoch, 1, 40, 8)));
+        await first.Tls.FlushAsync();
+
+        using (var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(3)))
+        {
+            bool reached = false;
+            while (!reached)
+            {
+                var tick = await fixture.Host.Results.ReadAsync(timeout.Token);
+                reached = tick.Changed.Any(x => x.ActorId == fixture.CharacterId &&
+                    Math.Abs(x.X - 40) < 0.001 && Math.Abs(x.Y - 8) < 0.001 &&
+                    !x.IsMoving);
+            }
+        }
+
+        await first.DisposeAsync();
+        var ended = await first.Server.WaitAsync(TimeSpan.FromSeconds(3));
+        Require(ended.Reason is TlsWireEndReason.CleanEof or TlsWireEndReason.TransportError,
+            "moved session did not close cleanly");
+        await WaitForZeroActors(fixture.Host);
+
+        var stored = await fixture.Store.ListCharactersAsync(fixture.AccountId);
+        Require(stored.Count == 1 && stored[0].MapId == first.MapId &&
+            Math.Abs(stored[0].X - 40) < 0.001 && Math.Abs(stored[0].Y - 8) < 0.001,
+            "final authoritative position not persisted");
+
+        await using var second = await OpenAsync(fixture);
+        Require(second.MapId == first.MapId &&
+            Math.Abs(second.X - 40) < 0.001 && Math.Abs(second.Y - 8) < 0.001,
+            "reconnect did not spawn from durable final position");
+        await second.DisposeAsync();
+        await second.Server.WaitAsync(TimeSpan.FromSeconds(3));
         await WaitForZeroActors(fixture.Host);
     }
 
@@ -107,7 +151,8 @@ internal static class IdentityTlsLifecycleChecks
                     choose.Status == CharacterChooseWireStatus.Success &&
                     choose.CharacterId == fixture.CharacterId && choose.MapEpoch > 0,
                 "reconnect World registration was rejected");
-            return new Session(client, tls, server, choose.MapEpoch);
+            return new Session(client, tls, server,
+                choose.MapId, choose.X, choose.Y, choose.MapEpoch);
         }
         catch
         {
@@ -150,6 +195,7 @@ internal static class IdentityTlsLifecycleChecks
         public required IdentityTlsAuthorization Auth;
         public required X509Certificate2 Certificate;
         public long CharacterId;
+        public long AccountId;
 
         public static async Task<Fixture> CreateAsync(string root, int mapId)
         {
@@ -166,7 +212,8 @@ internal static class IdentityTlsLifecycleChecks
             var router = new WorldResultRouter();
             return new Fixture { Host = host, Store = store,
                 Router = router, Auth = new IdentityTlsAuthorization(store, host),
-                Certificate = TlsSocketChecks.CreateCertificate(), CharacterId = characterId };
+                Certificate = TlsSocketChecks.CreateCertificate(),
+                CharacterId = characterId, AccountId = accountId };
         }
 
         public void Dispose()

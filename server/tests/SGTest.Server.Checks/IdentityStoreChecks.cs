@@ -97,6 +97,15 @@ internal static class IdentityStoreChecks
                     CharacterCreateStatus.NameTaken, "unicode-normalized duplicate name accepted");
                 Checks.Require((await store.CreateCharacterAsync(accountId, 1, "Second", new CharacterSpawn(13, 2560, 2880))).Status ==
                     CharacterCreateStatus.Created, "second character create failed");
+                await store.UpdateCharacterSpawnAsync(characterId, new CharacterSpawn(13, 1234.5, 2345.5));
+                bool invalidSpawnRejected = false;
+                try { await store.UpdateCharacterSpawnAsync(characterId, new CharacterSpawn(13, double.NaN, 1)); }
+                catch (ArgumentOutOfRangeException) { invalidSpawnRejected = true; }
+                Checks.Require(invalidSpawnRejected, "non-finite persisted position accepted");
+                bool missingRejected = false;
+                try { await store.UpdateCharacterSpawnAsync(long.MaxValue, new CharacterSpawn(13, 1, 1)); }
+                catch (KeyNotFoundException) { missingRejected = true; }
+                Checks.Require(missingRejected, "unknown character position update silently succeeded");
                 bool limited = false;
                 try { await store.CreateCharacterAsync(accountId, 2, "Third", new CharacterSpawn(13, 1, 1)); }
                 catch (ArgumentOutOfRangeException) { limited = true; }
@@ -112,6 +121,9 @@ internal static class IdentityStoreChecks
             Checks.Require(account.Characters.Count == 2 && account.Characters[0].CharacterId == characterId &&
                 account.Characters[0].Slot == 0 && account.Characters[1].Slot == 1,
                 "character persistence/order failed");
+            Checks.Require(account.Characters[0].MapId == 13 &&
+                account.Characters[0].X == 1234.5 && account.Characters[0].Y == 2345.5,
+                "updated authoritative spawn did not survive reopen");
         }
         finally { Directory.Delete(root, true); }
     }

@@ -81,9 +81,29 @@ public sealed class IdentityTlsAuthorization
                 boundConnection = null;
             }
             if (connection is not null) router.TryDetach(connection);
-            await _world.TrustedDisconnectAsync(
+
+            // Keep the character registered while its final authoritative
+            // coordinates are committed. This prevents a reconnect from reading
+            // the old SQLite spawn in the small DB-write window.
+            ActorSnapshot? final = await _world.TrustedPrepareDisconnectAsync(
                 binding.ActorId, binding.ConnectionEpoch, binding.MapEpoch)
                 .ConfigureAwait(false);
+            try
+            {
+                if (final is { } snapshot)
+                    await _identity.UpdateCharacterSpawnAsync(snapshot.ActorId,
+                        new CharacterSpawn(snapshot.MapId, snapshot.X, snapshot.Y))
+                        .ConfigureAwait(false);
+            }
+            finally
+            {
+                var release = final ?? new ActorSnapshot(
+                    binding.ActorId, 0, binding.ConnectionEpoch, binding.MapEpoch,
+                    0, 0, 0, 0, 0, false);
+                await _world.TrustedDisconnectAsync(
+                    release.ActorId, release.ConnectionEpoch, release.MapEpoch)
+                    .ConfigureAwait(false);
+            }
         }
 
         try

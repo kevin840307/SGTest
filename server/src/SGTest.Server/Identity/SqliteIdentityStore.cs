@@ -183,6 +183,29 @@ VALUES($key,$display,$hash,$created); SELECT last_insert_rowid();";
         return await Task.Run(() => ReadCharacters(accountId), cancellationToken).ConfigureAwait(false);
     }
 
+    public async Task UpdateCharacterSpawnAsync(long characterId, CharacterSpawn spawn,
+        CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        if (characterId <= 0) throw new ArgumentOutOfRangeException(nameof(characterId));
+        ValidateSpawn(spawn);
+        await Task.Run(() =>
+        {
+            using var connection = Open();
+            using var command = connection.CreateCommand();
+            command.CommandText = @"UPDATE characters
+SET map_id=$map,x=$x,y=$y,updated_unix_ms=$updated
+WHERE character_id=$id;";
+            command.Parameters.AddWithValue("$map", spawn.MapId);
+            command.Parameters.AddWithValue("$x", spawn.X);
+            command.Parameters.AddWithValue("$y", spawn.Y);
+            command.Parameters.AddWithValue("$updated", DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
+            command.Parameters.AddWithValue("$id", characterId);
+            if (command.ExecuteNonQuery() != 1)
+                throw new KeyNotFoundException("Unknown character");
+        }, cancellationToken).ConfigureAwait(false);
+    }
+
     public async Task SetDisabledAsync(long accountId, bool disabled,
         CancellationToken cancellationToken = default)
     {

@@ -56,6 +56,9 @@ internal static class WorldHostChecks
         Checks.Run("30Hz host serializes trusted two-map transfer and rejects old movement",
             () => TrustedTransfer([first, second]).GetAwaiter().GetResult());
 
+        Checks.Run("graceful persistence barrier freezes queued movement and blocks relogin race",
+            () => PersistenceBarrier([first]).GetAwaiter().GetResult());
+
         Checks.Run("slow consumer fills bounded result channel and FAILS CLOSED, never drop oldest",
             () => FailClosedBackpressure([first]).GetAwaiter().GetResult());
 
@@ -129,6 +132,46 @@ refused:
             == false, "stale disconnect removed transferred actor");
         Require(await host.TrustedDisconnectAsync(33, changed.ConnectionEpoch,
             changed.MapEpoch), "current disconnect refused");
+        await host.StopAsync();
+    }
+
+    private static async Task PersistenceBarrier(BlockingGrid[] maps)
+    {
+        await using var host = new ServerWorldHost(maps, options:
+            new WorldHostOptions(TickHz: 30, ResultCapacity: 64));
+        await host.StartAsync();
+        var actor = await host.TrustedRegisterAsync(444, 90, 24, 24)
+            ?? throw new Exception("persistence actor register failed");
+        Require(host.TryPostMove(new MoveTargetCommand(
+            actor.ActorId, actor.ConnectionEpoch, actor.MapEpoch, 1, 120, 24)),
+            "queued move before release rejected");
+
+        var final = await host.TrustedPrepareDisconnectAsync(
+            actor.ActorId, actor.ConnectionEpoch, actor.MapEpoch)
+            ?? throw new Exception("prepare disconnect rejected current actor");
+        Require(final.X == 24 && final.Y == 24 && !final.IsMoving,
+            "prepare disconnect did not freeze authoritative snapshot");
+
+        var duplicate = await host.TrustedRegisterAsync(actor.ActorId, 90, 40, 40);
+        Require(duplicate is null,
+            "same character re-entered before persistence barrier completed");
+
+        long before = host.Statistics.Ticks;
+        await WaitForTicks(host, before + 2);
+        var results = new List<WorldTickResult>();
+        while (host.Results.TryRead(out var tick)) results.Add(tick);
+        Require(results.SelectMany(x => x.Changed)
+                .All(x => x.ActorId != actor.ActorId || (x.X == 24 && x.Y == 24)),
+            "queued movement changed actor after persistence snapshot");
+
+        Require(await host.TrustedDisconnectAsync(
+            final.ActorId, final.ConnectionEpoch, final.MapEpoch),
+            "prepared actor could not complete disconnect");
+        var next = await host.TrustedRegisterAsync(actor.ActorId, 90, final.X, final.Y);
+        Require(next is not null && next.Value.ConnectionEpoch > actor.ConnectionEpoch,
+            "same character could not enter after persistence barrier completed");
+        await host.TrustedDisconnectAsync(next.Value.ActorId,
+            next.Value.ConnectionEpoch, next.Value.MapEpoch);
         await host.StopAsync();
     }
 

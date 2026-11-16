@@ -75,6 +75,7 @@ public sealed class ServerWorld
         public uint LastPortalSequence; // per-MapEpoch authenticated NPC interaction replay guard
         public byte Facing = 1; // Initial spawn policy; movement owns subsequent facing.
         public long Revision = 1;
+        public bool Closing; // trusted persistence barrier; raw client can never set this.
         public IReadOnlyList<GridCell> Route = Array.Empty<GridCell>();
         public int RouteIndex;
 
@@ -165,6 +166,27 @@ public sealed class ServerWorld
         return true;
     }
 
+    /// <summary>
+    /// Starts graceful session release on the single World writer. The actor stays
+    /// registered (so a same-character login cannot race the SQLite save), but its
+    /// route is frozen and all already-queued MoveTarget commands are rejected.
+    /// The returned snapshot is the only position persistence may write.
+    /// </summary>
+    public bool TryTrustedPrepareDisconnect(long actorId, long connectionEpoch, long mapEpoch,
+                                            out ActorSnapshot snapshot)
+    {
+        EnsureOwner();
+        snapshot = default;
+        if (!_actors.TryGetValue(actorId, out var actor) ||
+            actor.ConnectionEpoch != connectionEpoch || actor.MapEpoch != mapEpoch ||
+            actor.Closing)
+            return false;
+        actor.Closing = true;
+        actor.ClearRoute();
+        snapshot = actor.Snapshot();
+        return true;
+    }
+
     /// <summary>Trusted lifecycle call; old disconnects cannot remove a new connection/map.</summary>
     public bool TryTrustedDisconnect(long actorId, long connectionEpoch, long mapEpoch)
     {
@@ -190,7 +212,7 @@ public sealed class ServerWorld
         snapshot = default;
         if (!_actors.TryGetValue(actorId, out var actor) ||
             actor.ConnectionEpoch != connectionEpoch || actor.MapEpoch != mapEpoch ||
-            !_maps.TryGetValue(newMapId, out var grid) ||
+            actor.Closing || !_maps.TryGetValue(newMapId, out var grid) ||
             !grid.TryWorldCell(x, y, out var cell) || !grid.IsWalkable(cell) ||
             actor.MapEpoch == long.MaxValue || actor.Revision == long.MaxValue)
             return false;
@@ -225,7 +247,8 @@ public sealed class ServerWorld
         ArgumentNullException.ThrowIfNull(catalog);
         if (!_actors.TryGetValue(actorId, out var actor) ||
             actor.ConnectionEpoch != connectionEpoch ||
-            actor.MapEpoch != mapEpoch || actorId <= 0 || interactionSequence == 0)
+            actor.MapEpoch != mapEpoch || actor.Closing ||
+            actorId <= 0 || interactionSequence == 0)
             return new(NpcPortalStatus.StaleGeneration, null);
         if (interactionSequence <= actor.LastPortalSequence)
             return new(NpcPortalStatus.ReplayedSequence, null);
@@ -318,6 +341,10 @@ public sealed class ServerWorld
             return MoveReceiptStatus.OldConnectionEpoch;
         if (actor.MapEpoch != input.MapEpoch)
             return MoveReceiptStatus.OldMapEpoch;
+        // A closing authenticated socket has been detached already. Preserve the
+        // final persistence snapshot by refusing commands that were queued before EOF.
+        if (actor.Closing)
+            return MoveReceiptStatus.UnknownActor;
         if (input.MovementSequence == 0 || input.MovementSequence <= actor.LastSequence)
             return MoveReceiptStatus.ReplayedSequence;
 
