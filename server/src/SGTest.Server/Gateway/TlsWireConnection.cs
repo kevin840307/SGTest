@@ -1,0 +1,258 @@
+using System.Buffers;
+using System.Diagnostics;
+using System.Net.Security;
+using System.Net.Sockets;
+using System.Security.Authentication;
+using System.Security.Cryptography.X509Certificates;
+using SGTest.Server.World;
+
+namespace SGTest.Server.Gateway;
+
+public sealed record TlsWireConnectionOptions(
+    int HandshakeTimeoutMilliseconds = 5000,
+    int AuthorizationTimeoutMilliseconds = 5000,
+    int ReadBufferBytes = 16 * 1024,
+    int BackpressureRetryMilliseconds = 2,
+    int MaxBackpressureMilliseconds = 2000);
+
+public enum TlsWireEndReason
+{
+    CleanEof,
+    AuthorizationRejected,
+    ProtocolViolation,
+    BufferOverflow,
+    BackpressureTimeout,
+    GatewayClosed,
+    Cancelled,
+    HandshakeFailed,
+    HandshakeTimeout,
+    AuthorizationTimeout,
+    TransportError
+}
+
+public sealed record TlsWireConnectionResult(
+    TlsWireEndReason Reason,
+    SslProtocols Protocol,
+    long CommandsAccepted,
+    long ReliableFramesSent);
+
+/// <summary>
+/// Owns one accepted TCP client. TLS is mandatory; there is no plaintext fallback.
+/// The authorization callback runs AFTER TLS and BEFORE any gameplay read. It must
+/// validate account/session/CharacterChoose and return a GatewayConnection created
+/// from a trusted ActorSnapshot. Returning null rejects the connection.
+///
+/// This class deliberately does NOT expose a listener or test credentials. The
+/// future host may accept TcpClient instances only after deployment policy is ready.
+/// </summary>
+public static class TlsWireConnection
+{
+    public static async Task<TlsWireConnectionResult> RunServerAsync(
+        TcpClient client,
+        X509Certificate2 serverCertificate,
+        Func<SslStream, CancellationToken, ValueTask<GatewayConnection?>> authorizeAndBind,
+        Func<MoveTargetCommand, bool> postMove,
+        TlsWireConnectionOptions? options = null,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(client);
+        ArgumentNullException.ThrowIfNull(serverCertificate);
+        ArgumentNullException.ThrowIfNull(authorizeAndBind);
+        ArgumentNullException.ThrowIfNull(postMove);
+
+        var configured = options ?? new TlsWireConnectionOptions();
+        Validate(configured);
+        ValidateCertificate(serverCertificate);
+
+        using (client)
+        using (var tls = new SslStream(client.GetStream(), leaveInnerStreamOpen: false))
+        {
+            client.NoDelay = true;
+
+            try
+            {
+                using var handshakeCts =
+                    CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                handshakeCts.CancelAfter(configured.HandshakeTimeoutMilliseconds);
+                await tls.AuthenticateAsServerAsync(new SslServerAuthenticationOptions
+                {
+                    ServerCertificate = serverCertificate,
+                    ClientCertificateRequired = false,
+                    EnabledSslProtocols = SslProtocols.Tls12 | SslProtocols.Tls13,
+                    CertificateRevocationCheckMode = X509RevocationMode.NoCheck
+                }, handshakeCts.Token).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+            {
+                return new(TlsWireEndReason.HandshakeTimeout, SslProtocols.None, 0, 0);
+            }
+            catch (OperationCanceledException)
+            {
+                return new(TlsWireEndReason.Cancelled, SslProtocols.None, 0, 0);
+            }
+            catch (Exception error) when (error is AuthenticationException or IOException)
+            {
+                return new(TlsWireEndReason.HandshakeFailed, SslProtocols.None, 0, 0);
+            }
+
+            GatewayConnection? gateway;
+            try
+            {
+                using var authCts =
+                    CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                authCts.CancelAfter(configured.AuthorizationTimeoutMilliseconds);
+                gateway = await authorizeAndBind(tls, authCts.Token)
+                    .AsTask().WaitAsync(authCts.Token).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+            {
+                return new(TlsWireEndReason.AuthorizationTimeout, tls.SslProtocol, 0, 0);
+            }
+            catch (OperationCanceledException)
+            {
+                return new(TlsWireEndReason.Cancelled, tls.SslProtocol, 0, 0);
+            }
+            catch (Exception error) when (error is AuthenticationException or IOException)
+            {
+                return new(TlsWireEndReason.TransportError, tls.SslProtocol, 0, 0);
+            }
+
+            if (gateway is null)
+                return new(TlsWireEndReason.AuthorizationRejected, tls.SslProtocol, 0, 0);
+
+            using var sessionCts =
+                CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            long reliableSent = 0;
+            Exception? writerFault = null;
+            var writer = WriteReliableLoopAsync();
+
+            async Task WriteReliableLoopAsync()
+            {
+                try
+                {
+                    while (!sessionCts.IsCancellationRequested)
+                    {
+                        var frame = await gateway.DequeueReliableAsync(sessionCts.Token)
+                            .ConfigureAwait(false);
+                        if (frame is null) return;
+                        await tls.WriteAsync(frame, sessionCts.Token).ConfigureAwait(false);
+                        await tls.FlushAsync(sessionCts.Token).ConfigureAwait(false);
+                        Interlocked.Increment(ref reliableSent);
+                    }
+                }
+                catch (OperationCanceledException) when (sessionCts.IsCancellationRequested) { }
+                catch (Exception error) when (error is IOException or AuthenticationException or ObjectDisposedException)
+                {
+                    writerFault = error;
+                    sessionCts.Cancel();
+                }
+            }
+
+            long commandsAccepted = 0;
+            var reason = TlsWireEndReason.CleanEof;
+            byte[] rented = ArrayPool<byte>.Shared.Rent(configured.ReadBufferBytes);
+            try
+            {
+                while (!sessionCts.IsCancellationRequested)
+                {
+                    int count = await tls.ReadAsync(
+                        rented.AsMemory(0, configured.ReadBufferBytes), sessionCts.Token)
+                        .ConfigureAwait(false);
+                    if (count == 0)
+                    {
+                        reason = TlsWireEndReason.CleanEof;
+                        break;
+                    }
+
+                    var status = gateway.FeedClientBytes(
+                        rented.AsSpan(0, count), postMove, out int accepted);
+                    commandsAccepted += accepted;
+
+                    if (status == WireFeedStatus.Backpressured)
+                    {
+                        long started = Stopwatch.GetTimestamp();
+                        do
+                        {
+                            if (Stopwatch.GetElapsedTime(started).TotalMilliseconds >=
+                                configured.MaxBackpressureMilliseconds)
+                            {
+                                reason = TlsWireEndReason.BackpressureTimeout;
+                                goto finished;
+                            }
+
+                            await Task.Delay(
+                                configured.BackpressureRetryMilliseconds, sessionCts.Token)
+                                .ConfigureAwait(false);
+                            status = gateway.ResumeClientIngress(postMove, out accepted);
+                            commandsAccepted += accepted;
+                        }
+                        while (status == WireFeedStatus.Backpressured);
+                    }
+
+                    reason = status switch
+                    {
+                        WireFeedStatus.Accepted or WireFeedStatus.NeedMoreData =>
+                            TlsWireEndReason.CleanEof,
+                        WireFeedStatus.ProtocolViolation =>
+                            TlsWireEndReason.ProtocolViolation,
+                        WireFeedStatus.BufferOverflow =>
+                            TlsWireEndReason.BufferOverflow,
+                        WireFeedStatus.Closed =>
+                            TlsWireEndReason.GatewayClosed,
+                        _ => throw new InvalidOperationException(
+                            "Unhandled gateway feed status: " + status)
+                    };
+
+                    if (status is WireFeedStatus.ProtocolViolation or
+                        WireFeedStatus.BufferOverflow or WireFeedStatus.Closed)
+                        break;
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                reason = cancellationToken.IsCancellationRequested
+                    ? TlsWireEndReason.Cancelled
+                    : writerFault is not null
+                        ? TlsWireEndReason.TransportError
+                        : TlsWireEndReason.Cancelled;
+            }
+            catch (Exception error) when (error is IOException or AuthenticationException or ObjectDisposedException)
+            {
+                reason = TlsWireEndReason.TransportError;
+            }
+
+        finished:
+            ArrayPool<byte>.Shared.Return(rented, clearArray: false);
+            sessionCts.Cancel();
+            gateway.Close();
+            try { await writer.ConfigureAwait(false); }
+            catch (OperationCanceledException) { }
+
+            return new(reason, tls.SslProtocol,
+                commandsAccepted, Interlocked.Read(ref reliableSent));
+        }
+    }
+
+    private static void Validate(TlsWireConnectionOptions options)
+    {
+        if (options.HandshakeTimeoutMilliseconds is < 100 or > 30000 ||
+            options.AuthorizationTimeoutMilliseconds is < 100 or > 30000 ||
+            options.ReadBufferBytes is < 512 or > 65536 ||
+            options.BackpressureRetryMilliseconds is < 1 or > 100 ||
+            options.MaxBackpressureMilliseconds is < 10 or > 30000 ||
+            options.MaxBackpressureMilliseconds < options.BackpressureRetryMilliseconds)
+            throw new ArgumentOutOfRangeException(nameof(options),
+                "TLS connection options exceed bounded runtime limits");
+    }
+
+    private static void ValidateCertificate(X509Certificate2 certificate)
+    {
+        var now = DateTime.UtcNow;
+        if (!certificate.HasPrivateKey ||
+            now < certificate.NotBefore.ToUniversalTime() ||
+            now > certificate.NotAfter.ToUniversalTime())
+            throw new ArgumentException(
+                "TLS server certificate must contain a currently valid private key",
+                nameof(certificate));
+    }
+}

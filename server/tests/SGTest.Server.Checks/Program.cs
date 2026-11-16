@@ -209,6 +209,7 @@ static class Checks
 
             WireCodecChecks.Verify();
             GatewayConnectionChecks.Verify();
+            TlsSocketChecks.Verify();
             WorldSimulationChecks.Verify(root);
             WorldHostChecks.Verify(root);
 
