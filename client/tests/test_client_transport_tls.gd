@@ -54,9 +54,20 @@ func _initialize() -> void:
 	if int(moved.movement_sequence) != 1:
 		_fail("move was not emitted %s" % moved, session)
 		return
-	OS.delay_msec(250)
+	var receipt_deadline := Time.get_ticks_msec() + 3000
+	var acknowledged: Dictionary = session.snapshot()
+	while Time.get_ticks_msec() < receipt_deadline:
+		acknowledged = session.snapshot()
+		if int(acknowledged.last_receipt_sequence) == 1:
+			break
+		if int(acknowledged.state) == WorldState.STATE_FAILED:
+			break
+		OS.delay_msec(2)
+	if int(acknowledged.state) != WorldState.STATE_IN_WORLD or int(acknowledged.last_receipt_sequence) != 1 or int(acknowledged.last_receipt_status) != 0 or int(acknowledged.last_server_tick) < 0 or int(acknowledged.map_epoch) != int(in_world.map_epoch):
+		_fail("authoritative MoveReceipt was not received/reduced %s" % acknowledged, session)
+		return
 	session.stop()
-	print("CLIENT_TLS_LOGIN_PASS auth=PASS character=%d map_epoch=%d move_sequence=1 transport_thread=true reducer_thread=true certificate_validation=PASS" % [character_id, int(in_world.map_epoch)])
+	print("CLIENT_TLS_LOGIN_PASS auth=PASS character=%d map_epoch=%d move_sequence=1 receipt=PASS server_tick=%d transport_thread=true reducer_thread=true certificate_validation=PASS" % [character_id, int(in_world.map_epoch), int(acknowledged.last_server_tick)])
 	quit(0)
 
 func _wait_state(session, expected: int, timeout_ms: int) -> Dictionary:

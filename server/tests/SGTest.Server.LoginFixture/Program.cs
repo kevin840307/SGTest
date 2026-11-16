@@ -1,5 +1,6 @@
 using System.Buffers.Binary;
 using System.Net;
+using System.Net.Security;
 using System.Net.Sockets;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
@@ -29,6 +30,14 @@ internal static class Program
             var created = await store.CreateCharacterAsync(accountId, 0, "FixtureHero", new CharacterSpawn(15, 8, 8));
             long characterId = created.Character?.CharacterId ?? throw new InvalidOperationException("fixture character create failed");
             var authorization = new IdentityTlsAuthorization(store, world);
+            GatewayConnection? authenticatedGateway = null;
+
+            async ValueTask<GatewayConnection?> AuthorizeAndCaptureAsync(SslStream stream, CancellationToken token)
+            {
+                var bound = await authorization.AuthorizeAndBindAsync(stream, token).ConfigureAwait(false);
+                Volatile.Write(ref authenticatedGateway, bound);
+                return bound;
+            }
             using var certificate = CreateCertificate();
             string certPath = Path.Combine(root, "fixture-cert.pem");
             WriteCertificatePem(certPath, certificate);
@@ -41,19 +50,25 @@ internal static class Program
                 Console.Out.Flush();
                 using var client = await listener.AcceptTcpClientAsync().WaitAsync(TimeSpan.FromSeconds(15));
                 var serverTask = TlsWireConnection.RunServerAsync(client, certificate,
-                    authorization.AuthorizeAndBindAsync, world.TryPostMove,
+                    AuthorizeAndCaptureAsync, world.TryPostMove,
                     new TlsWireConnectionOptions(AuthorizationTimeoutMilliseconds: 15000));
 
                 using var receiptCts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
                 var receipt = await WaitForMoveAsync(world, characterId, receiptCts.Token);
                 if (receipt.Status != MoveReceiptStatus.Accepted)
                     throw new InvalidOperationException("fixture move rejected: " + receipt.Status);
+                var connection = Volatile.Read(ref authenticatedGateway)
+                    ?? throw new InvalidOperationException("authenticated Gateway binding was not captured");
+                var route = connection.QueueReceipt(receipt);
+                if (route != GatewaySendStatus.Enqueued)
+                    throw new InvalidOperationException("authoritative MoveReceipt routing failed: " + route);
                 Console.WriteLine($"LOGIN_FIXTURE_MOVE_PASS actor={receipt.ActorId} map_epoch={receipt.MapEpoch} sequence={receipt.MovementSequence}");
+                Console.WriteLine($"LOGIN_FIXTURE_RECEIPT_ROUTED actor={receipt.ActorId} sequence={receipt.MovementSequence} status={receipt.Status}");
                 Console.Out.Flush();
 
                 var ended = await serverTask.WaitAsync(TimeSpan.FromSeconds(5));
-                if (ended.CommandsAccepted != 1)
-                    throw new InvalidOperationException("fixture command count mismatch: " + ended.CommandsAccepted);
+                if (ended.CommandsAccepted != 1 || ended.ReliableFramesSent != 1)
+                    throw new InvalidOperationException($"fixture send/receive mismatch commands={ended.CommandsAccepted} receipts={ended.ReliableFramesSent}");
                 await world.StopAsync();
                 Console.WriteLine($"LOGIN_FIXTURE_PASS tls={ended.Protocol} commands={ended.CommandsAccepted}");
                 Console.Out.Flush();
