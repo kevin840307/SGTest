@@ -123,3 +123,7 @@ GitHub `Client core checks` downloads the official Godot 4.7.2 Linux standard bi
 ## 2026-11-16 WorldReady real TLS E2E
 
 `client/tests/run_tls_login.py` now requires the real Godot `ClientSession` to receive and reduce **WorldReady and MoveReceipt** on a certificate-validated TLS connection. The C# fixture starts the production `WorldAoiPump` path, routes the trusted lifecycle event through the existing Gateway reliable FIFO and independently logs `LOGIN_FIXTURE_WORLD_READY_ROUTED`. GitHub Client core E2E PASS. This confirms one Godot headless client’s protocol/WorldState path, **not** actual two-client drawing/animation, Enemy/Drop visibility, WorldReady ACK or reconnection resync.
+
+## 2026-11-16 Cross-map two-client TLS regression
+
+The existing `client/tests/run_tls_login.py` supports `--crossmap --timeout 70`, reusing the **single** `.NET 8 Server.LoginFixture` and two genuine concurrent Godot 4.7.2 `ClientSession` processes. The fixture uses only a *test-only trusted server control* for Map15→Map13→Map15 after actual Godot observation barriers; it does not give a Client an arbitrary teleport RPC. It asserts new `WorldReady` and monotonic MapEpoch, clear old entities, Map13 MoveReceipt with reset sequence, Map15 spectator Despawn and fresh-generation Spawn, and finally no ghost World actors. GitHub Client workflow **43880543810 PASS**; Server **43880543863 PASS 69/69**. Actual original portal/NPC validation, private original two-map rendering and Windows performance are NOT VERIFIED.
