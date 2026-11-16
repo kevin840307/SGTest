@@ -154,7 +154,13 @@ Store pump 僅是呈現資源交接；測試不代表 Network／WorldReducer FPS
 
 ## TERRAIN001 — 原生 GPU 地形（2026-11-16 PASS，地形範圍）
 
-`python client/tests/run_terrain.py "C:\SGO\Godot\Godot_v4.7.2-stable_win64_console.exe" --rounds 3 --report reports/terrain_decision.json`：三候選 fresh process 各三輪；同雙圖／PCK／Atlas、1280×720和1920×1080、90暖機＋240固定trace樣本、40遠距跳轉。16 viewport capture／輪候選，獨立CPU原始tile合成比對，144張全部0差異，native engine無error/leak；WH／u16／65535空格、重複／未知ID／尾端bytes／越界fixture PASS。共用Mesh builder優化後重測，依資源／準備／tail選正式 terrain.gd，兩Mesh僅在tests。詳CLIENT_ARCHITECTURE選型表。原生GPU圖、rawlog、source/PCK SHA均留reports/，不進Git。
+`python client/tests/run_terrain.py "C:\SGO\Godot\Godot_v4.7.2-stable_win64_console.exe" --rounds 3 --report reports/terrain_decision.json`：三候選 fresh process 各三輪；同雙圖／PCK／Atlas、1280×720和1920×1080、90暖機＋240固定trace樣本、40遠距跳轉。16 viewport capture／輪候選，獨立CPU原始tile合成比對，144張全部0差異，native engine無error/leak；WH／raw u16、原版 signed-int16 +1 wrap（含 0xffff→PIC0）、重複／未知ID／尾端bytes／越界fixture PASS。共用Mesh builder優化後重測，依資源／準備／tail選正式 terrain.gd，兩Mesh僅在tests。詳CLIENT_ARCHITECTURE選型表。原生GPU圖、rawlog、source/PCK SHA均留reports/，不進Git。
+
+### TERRAIN002 — 原版 PIC source-index 回歸（2026-11-16 PASS）
+
+使用者回報 Map15 有地磚看似位置錯誤後，直接核對原版 `Paradise.exe`：`ReadTileArray/DrawTile` 將 MapBlock signed int16 +1，`CDDxTile::LoadTile/Convert` 在略過 PIC 8-byte header 後用該 ushort index 讀 32×32 RGB565。新增 `tools/tests/test_map_tiles.py` 以四張不同 RGB565 tile 驗證 raw `(0,1,0xffff,2)` 必須對應 PIC `(1,2,0,3)`，並要求 runtime `tile_source_rule=int16_plus_one_wrap`；舊 direct-index manifest 由 AssetStore/TerrainData fail closed。真資料差異掃描：Map15 230,400/230,400 格、Map13 230,393/230,400 格的 direct-index source tile 與原版規則不同。
+
+實跑：Python Converter **82/82 PASS**；私有 Map13/15 `build --runtime-only` PASS（Map13 866 raw ID、Map15 976、pixel_round_trip=true）；external PCK smoke PASS＝256 textures／508 codec extents，SHA256 `5ecee8d59fcde47554766b01c9c752b0c43784ef9ec1dafc6cf6ff2c0638c1ac`；正式 Godot terrain draw 16 capture 全0 pixel mismatch；World-view 12 capture／38 original SPR frame、max pixels over tolerance=0、final AssetStore counts全0；World Canvas一輪無 engine/validation error。報告在 ignored `reports/map15_tile_fix_*`，不進 Git。此修正不改 row-major XY placement／Renderer algorithm，因此不重做三候選效能選型；角色、多人與 Server E2E 仍 NOT VERIFIED。
 
 Python Converter 67 tests PASS。這不代表地物／角色共同Y-sort／pivot、NPC timing／Animation、Server碰撞／A*、角色／多人畫面、AFK資源回基線或完整MVP002／MVP E2E通過；GPU engine counters 不直接當 OS VRAM 驗收。
 
