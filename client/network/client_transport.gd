@@ -294,4 +294,3 @@ func _add_frame_received() -> void:
 	_mutex.lock()
 	_frames_received += 1
 	_mutex.unlock()
-

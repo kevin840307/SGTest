@@ -104,4 +104,3 @@ func _wait_sent(transport, count: int, timeout_ms: int) -> bool:
 			return false
 		OS.delay_msec(2)
 	return false
-
