@@ -246,8 +246,13 @@ internal static class TlsSocketChecks
             new X509KeyUsageExtension(X509KeyUsageFlags.DigitalSignature, false));
         request.CertificateExtensions.Add(
             new X509SubjectKeyIdentifierExtension(request.PublicKey, false));
-        return request.CreateSelfSigned(
+        using var ephemeral = request.CreateSelfSigned(
             DateTimeOffset.UtcNow.AddMinutes(-5),
             DateTimeOffset.UtcNow.AddHours(1));
+        // Windows Schannel cannot always use an ephemeral private key for server TLS.
+        // Re-import the test-only PFX into the current-user key store so this same
+        // loopback check is portable across Windows and Linux CI.
+        return new X509Certificate2(ephemeral.Export(X509ContentType.Pfx), string.Empty,
+            X509KeyStorageFlags.UserKeySet | X509KeyStorageFlags.Exportable);
     }
 }

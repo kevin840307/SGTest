@@ -77,3 +77,7 @@ powershell -ExecutionPolicy Bypass -File tools/asset_converter/verify_converter.
 2026-11-16 建築焦點切片：已接連續fixed-update／epoch保護的inside呈現狀態與快照，保留原版last-wins、ShowInside／SetInOut差異、可見counter及室內Actor／家具額外排序。此為原版reference幾何與顯示規則實作，不是Server入口／碰撞或正式相機／多人Client完成；精度與驗證見CLIENT_ARCHITECTURE／TEST_PLAN。
 
 2026-11-16 Atlas頁面修正：254頁三候選實測後，Publisher保留Height-Dense P0幀配置，只補右下透明留白至4倍數，避免239頁的整頁匯入重採樣。壓縮base-level byte數不變；細節codec畫質仍未全通過，不等同完整P0／MVP Gate。資料遷移、選型與回歸見ASSET_ARCHITECTURE／ASSET_CONVERTER。
+
+### 2026-11-16 Server identity progress
+
+Server identity persistence now includes SQLite Account/Character schema v1 and bounded Argon2id authentication with 46/46 Release server checks PASS locally. This is a core service only: there is still no public login listener and no completed Godot login/CharacterChoose flow. The next network slice binds authenticated character ownership to the existing TLS authorization callback and trusted World registration.

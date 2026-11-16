@@ -94,3 +94,11 @@ World 必須在它自己的單一專屬 Thread 上建立／Tick；Stopwatch 單�
 WorldTickResult 有權威 Receipt/Delta；送出 Channel **不使用 DropOldest**，滿載則 Host 異常終止，讓未來連線層進行斷線／完整快照重同步，避免事件在背壓下消失。Stop 仍未處理的命令視為未確認，不能將 TryPostMove=true 當成最終交易／行動 ACK；正式 Gateway 必須訂出重送與操作序號的可靠性。Host 現在只有 Result Channel，不具備每玩家隔離、AOI 過濾、ACK、慢消費者分流、WorldReady 及 DB/AI；這些仍屬 REB019/020/021 後續項目。
 
 真兩圖 5秒 idle Windows 實測：151 ticks／5020.14ms、30.079Hz、SkippedDeadline=0、max single tick work 1219μs（**0個 Actor，無 socket/AI/Drop**），作為將來 20人/300怪/500Drop 世界Tick p95/p99的**起始空載對照，不宣稱滿載性能**。合成27組、含原始Map13/15則共31組 Server 回歸 PASS。使用命令詳 `server/README.md`。
+
+## 2026-11-16 REB023-IDENTITY-STORE
+
+Identity persistence is a separate non-World service. `PasswordHasher` uses one production Argon2id format (`v=19,m=9216,t=4,p=1`, 16-byte random salt, 32-byte hash) with a bounded concurrent-KDF semaphore; parameters are encoded with the hash so a later policy can rehash on successful login. `SqliteIdentityStore` owns schema v1, WAL/foreign-key configuration, Account/Character constraints and transactions. Connection pooling is intentionally disabled: identity traffic is not a Tick hot path, and deterministic file/connection lifetime is preferred over hidden pooled state.
+
+Security boundary: Account authentication returns server-owned account/character records only. The future TLS authorization flow must select a character owned by that authenticated account and use the persistent `character_id` as the trusted identity when calling `TrustedRegisterAsync`; Client packets must never carry an authoritative ActorId/ConnectionEpoch. DB/KDF calls must never execute on the World single-writer thread.
+
+Current gate: six Identity checks plus existing TLS/Gateway/World checks = **46/46 PASS** locally on Windows; Server/Host Release build 0 warnings/errors. TLS Auth/CharacterChoose wire integration and production listener remain NOT VERIFIED.

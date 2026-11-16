@@ -123,3 +123,7 @@ python -m unittest discover -s tools/tests -p "test_*.py" -q
 ```
 
 本輪**合成資料實跑 PASS**：.NET 和 Godot 兩端對相同 32-byte Golden Fixture、全部 33 個單點分段、100 組 seeded 多段／黏包（每組三 frame）、5 種不合法 length、3 種不合法 header/payload、半包 Reset、合法 frame 後緊接不合法 frame 都通過；.NET 程式確認 bounded buffer 不超過預設限制。這是 framing 候選的歷史證據；其後 WIRE001-CODEC 已補做 MessagePack/Protobuf 公平比較並選 compact binary。此 test-only parser 仍不是正式 Socket parser；無 TLS/Auth、per-player Packet Queue、實際網路延遲／P95/P99 或 reconnect E2E，故 **REB020 仍 NOT VERIFIED**。
+
+### 2026-11-16 Identity core boundary
+
+The Server now has persistent Account/Character records and real Argon2id password verification, but identity is **not yet a gameplay wire protocol**. The existing TLS session still accepts only an injected `authorizeAndBind` callback. The next protocol slice must add bounded Auth + CharacterList/CharacterChoose messages inside TLS, authenticate through `SqliteIdentityStore`, verify selected-character ownership, then call trusted World registration and construct `GatewayConnection`. Until that wiring exists, the Production Host still exposes no public listener and REB020 remains incomplete.

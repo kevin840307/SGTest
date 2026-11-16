@@ -69,3 +69,9 @@ dotnet run -c Release --project server/tests/SGTest.Server.Checks/SGTest.Server.
 權威 `WorldTickResult` 透過**有界輸出 Channel** 供未來傳輸層讀取，Receipts/Changed 不使用 DropOldest。讀者太慢導致寫滿會觸發 `WorldHostBackpressureException`、Host **fail closed**，而不是無聲丟失事件；上層必須關閉連線、驗證後重新取得 WorldReady snapshot。**目前還沒有正式 Gateway／可靠 ACK／慢連線隔離**，這種 fail-closed 是明確的安全邊界，**不等於玩家斷線恢復已完成**。Stop 之前已提交但尚未處理的 Move 不保證得到回覆，未來傳輸層必須以 disconnect/resync 拒絕沿用該連線的未知結果。可信控制流程只可由已授權伺服器內部使用，不可暴露為 Client RPC。
 
 實測 Windows／.NET 8 Release、RTX3050 同機雙圖私有格網、**沒有玩家／怪物網路負載**：`--seconds 5` wall=5020.14ms、151 Tick、實際30.079Hz、SkippedDeadlines=0、max tick work=1219µs、PublishedResults=0、OutputOverflow=0、activeActors=0；此為**單次 idle smoke，不是 20玩家／300怪的P95/P99**。新增的 cadence/生命周期/慢消費者錯誤/可信控制預算與真圖 Host 測試使新版 Server 統計達合成27/27、加上雙圖原版共31/31 PASS。正式 30Hz Tick/snapshot/AOI 與大量玩家AI負載仍待 ALT001 及 E2E 選型。
+
+## 2026-11-16 Identity persistence/auth core
+
+`src/SGTest.Server/Identity/` now provides SQLite schema v1 for Account/Character and bounded Argon2id password verification. The DB/KDF path is deliberately outside the authoritative 30Hz World thread. Account names are normalized for identity, character slot/name uniqueness is enforced by SQLite constraints, schema mismatch fails closed, and passwords are never stored plaintext. Character records persist server-authorized map/position and a stable `character_id`; a future TLS `CharacterChoose` layer will convert only a server-owned selected character into `TrustedRegisterAsync`/`GatewayConnection` identity.
+
+This is **not** a public login endpoint yet. Production listener/certificate setup, Auth/CharacterChoose wire messages, session-token/rate-limit policy, selected-character binding, save/reconnect lifecycle and Godot login E2E remain NOT VERIFIED. Current local Release evidence: Server + Host builds 0 warnings/errors; Server checks 46/46 PASS.

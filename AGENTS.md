@@ -68,3 +68,13 @@
 ## 多 Session 安全
 
 未提交檔案不屬於清理任務可隨意覆蓋的垃圾。若有任何其他 Session 尚未提交的修改，先確認檔案所有權；本次已整合的 Height-Dense/PCK 只從唯一 `main` 維護，不要另建需要長期同步的轉換器分支。
+
+## Delivery cadence / validation tiers
+
+Keep quality gates, but do not repeat expensive validation without a reason.
+
+1. **Tier A - ordinary code/server/docs changes:** run the narrowest relevant test first, build only affected projects, then run the relevant GitHub Actions workflow once on the final branch head before merge. Do not run Godot/PCK/private-asset/full-archive tests for server-only work.
+2. **Tier B - rendering/private source/platform behavior:** use Remote Desktop only when the result depends on Godot Windows, private original assets/recovered executable evidence, GPU rendering, PCK/Release packaging, or platform-specific behavior. Run the minimum targeted private test, then the normal public CI gate.
+3. **Tier C - architecture/algorithm choice:** use ALT001 only when multiple materially different production approaches are plausible. Compare them once under the same representative workload, choose one production path, document the decision, and do not rerun the benchmark unless a later change can materially alter the result.
+4. Batch repository reads/edits/tests where practical. Do not repeatedly fetch the same files or rerun a full suite after every small edit. A failed targeted test should be fixed and rerun at the narrowest scope first.
+5. Update TODO/spec/architecture/test evidence once per deliverable slice, immediately before final CI/merge. Never trade correctness, security, fail-closed behavior, concurrency safety, source fidelity, or reproducible tests for speed.

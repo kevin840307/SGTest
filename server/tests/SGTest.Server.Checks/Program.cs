@@ -210,6 +210,7 @@ static class Checks
             WireCodecChecks.Verify();
             GatewayConnectionChecks.Verify();
             TlsSocketChecks.Verify();
+            IdentityStoreChecks.Verify();
             WorldSimulationChecks.Verify(root);
             WorldHostChecks.Verify(root);
 
@@ -296,7 +297,7 @@ static class Checks
                 return 2;
             }
 
-            Console.WriteLine($"SERVER_WORLD_CHECKS PASS total={_passes} scope=collision_Astar_30Hz_host_wire_gateway_TLS_loopback_no_public_listener_no_Godot_clients");
+            Console.WriteLine($"SERVER_WORLD_CHECKS PASS total={_passes} scope=collision_Astar_30Hz_host_wire_gateway_TLS_SQLite_identity_no_public_listener_no_Godot_clients");
             return 0;
         }
         finally

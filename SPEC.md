@@ -118,3 +118,7 @@ Map15／Map13 原始 tile 地形已有唯一正式 Terrain Renderer；三種合�
 2026-11-16 續增 REB021-WORLD-CORE：新版 `.NET 8` `ServerWorld` 已用單一 immutable Map13/15 Blocking 加有界 A* 建立**手動Tick** 的 World Core：MPSC inbound bounded queue、每Tick命令／路徑預算、trusted session bootstrap／transfer 增世代、拒絕過期 ConnectionEpoch／MapEpoch／MovementSequence、逐步權威位移＋Segment collision、EntityRevision 的正確 Stop 事件、可重播 StateHash。合成21組＋原版雙圖額外3組=24/24 PASS（20個模擬Actor只驗證當Tick預算；**非20真玩家**）。沒有正式30Hz host、登入權限、正式 Wire、AOI、真Godot玩家／多怪 AI／雙向 NPC 傳點；MVP003/REB021 仍未完成。規格以 `docs/SERVER_ARCHITECTURE.md`／`docs/TEST_PLAN.md`／`todo.txt` 為準。
 
 2026-11-16 REB021-HOST-CADENCE 進展：新 .NET 8 Host Console 已能載入真 Map13／Map15 並在唯一 World Thread 按 Stopwatch 30Hz 驅動原 `ServerWorld.Tick()`，有界 trusted control／結果通道、遲到 clock deadline skip、Stop釋放及 output overflow fail-closed；與 Godot FPS／AFK 渲染無關。5秒空載真圖測試151 ticks/30.079Hz/Skipped0，Server合成27項＋真圖合計31項PASS。**尚無網路/登入/真玩家AOI/WorldReady、正式10Hz快照、可靠ACK、怪物/掉落/戰鬥與多開**，所以 MVP003／REB021 主項不得提前標完成。詳 `docs/SERVER_ARCHITECTURE.md` 與 `docs/TEST_PLAN.md`。
+
+### Identity persistence baseline - 2026-11-16
+
+Account/Character persistence baseline is SQLite schema v1. Passwords use Argon2id with bounded concurrent work; DB/KDF operations are outside World Tick. Character identity is server-owned and persistent; future CharacterChoose must prove authenticated ownership before `character_id` becomes trusted ActorId. Client-supplied ActorId/ConnectionEpoch is forbidden. Current core tests PASS, but wire login/CharacterChoose, production listener, save/reconnect lifecycle and Godot E2E are still incomplete.
