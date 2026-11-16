@@ -230,7 +230,7 @@ func _online_gate_tick() -> void:
 		_online_gate_fail("timeout_phase_%d_state_%s_view_%s_status_%s" % [_online_gate_phase,str(_last_snapshot.get("state","none")),world_view.phase,session_panel.status.text])
 		return
 	if world_view.phase == "failed":
-		_online_gate_fail("world_view_failed_"+session_panel.status.text)
+		_online_gate_fail("world_view_failed_"+_status.text.replace(" ","_"))
 		return
 	if not session_panel.active:
 		_online_gate_fail("session_inactive_"+session_panel.status.text)
