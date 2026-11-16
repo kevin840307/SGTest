@@ -296,7 +296,7 @@ static class Checks
                 return 2;
             }
 
-            Console.WriteLine($"SERVER_WORLD_CHECKS PASS total={_passes} scope=collision_Astar_30Hz_host_wire_gateway_boundary_no_socket_no_real_clients");
+            Console.WriteLine($"SERVER_WORLD_CHECKS PASS total={_passes} scope=collision_Astar_30Hz_host_wire_gateway_TLS_loopback_no_public_listener_no_Godot_clients");
             return 0;
         }
         finally
