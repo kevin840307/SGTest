@@ -1,0 +1,28 @@
+name: Server core checks
+on:
+  push:
+    paths:
+      - "server/**"
+      - ".github/workflows/server-core.yml"
+  pull_request:
+    paths:
+      - "server/**"
+      - ".github/workflows/server-core.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  server-core:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+      - name: Build server core
+        run: dotnet build server/src/SGTest.Server/SGTest.Server.csproj -c Release --nologo
+      - name: Build 30Hz host
+        run: dotnet build server/host/SGTest.Server.Host/SGTest.Server.Host.csproj -c Release --nologo
+      - name: Synthetic authoritative world, wire and gateway checks
+        run: dotnet run --project server/tests/SGTest.Server.Checks/SGTest.Server.Checks.csproj -c Release

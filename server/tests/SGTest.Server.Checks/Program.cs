@@ -208,6 +208,7 @@ static class Checks
             });
 
             WireCodecChecks.Verify();
+            GatewayConnectionChecks.Verify();
             WorldSimulationChecks.Verify(root);
             WorldHostChecks.Verify(root);
 
@@ -294,7 +295,7 @@ static class Checks
                 return 2;
             }
 
-            Console.WriteLine($"SERVER_WORLD_CHECKS PASS total={_passes} scope=original_collision_Astar_real_30Hz_host_no_Wire_no_real_clients");
+            Console.WriteLine($"SERVER_WORLD_CHECKS PASS total={_passes} scope=collision_Astar_30Hz_host_wire_gateway_boundary_no_socket_no_real_clients");
             return 0;
         }
         finally

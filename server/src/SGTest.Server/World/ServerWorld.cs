@@ -38,7 +38,8 @@ public enum MoveReceiptStatus
 }
 
 public readonly record struct MoveReceipt(
-    long ActorId, uint MovementSequence, MoveReceiptStatus Status, long Tick);
+    long ActorId, long ConnectionEpoch, long MapEpoch,
+    uint MovementSequence, MoveReceiptStatus Status, long Tick);
 
 public readonly record struct ActorSnapshot(
     long ActorId, int MapId, long ConnectionEpoch, long MapEpoch,
@@ -232,7 +233,9 @@ public sealed class ServerWorld
             if (!_incoming.TryDequeue(out var input)) break;
             Interlocked.Decrement(ref _reserved);
             var status = ApplyMove(input, ref routeQueries, changedCommands);
-            receipts.Add(new MoveReceipt(input.ActorId, input.MovementSequence, status, _tick));
+            receipts.Add(new MoveReceipt(
+                input.ActorId, input.ConnectionEpoch, input.MapEpoch,
+                input.MovementSequence, status, _tick));
         }
 
         // Stable order, independent of inbound thread scheduling and render FPS.
@@ -311,7 +314,8 @@ public sealed class ServerWorld
             if (!_maps[actor.Map].IsDirectClear(actor.X, actor.Y, nx, ny))
             {
                 actor.ClearRoute();
-                receipts.Add(new MoveReceipt(actor.Id, actor.LastSequence,
+                receipts.Add(new MoveReceipt(
+                    actor.Id, actor.ConnectionEpoch, actor.MapEpoch, actor.LastSequence,
                     MoveReceiptStatus.RouteBecameBlocked, _tick));
                 updated = true;
                 break;
