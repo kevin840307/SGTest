@@ -184,6 +184,26 @@ public sealed class ServerWorldHost : IAsyncDisposable
         return tcs.Task;
     }
 
+    /// <summary>
+    /// Trusted authenticated NPC choice. PortalCatalog contains only audited
+    /// converter-produced static transfers; player position and proximity are
+    /// checked on the authoritative World owner thread, not the socket worker.
+    /// </summary>
+    public Task<NpcPortalOutcome> TrustedNpcInteractAsync(
+        long actorId, long connectionEpoch, long mapEpoch,
+        uint interactionSequence, int spawnId, PortalCatalog portals)
+    {
+        ArgumentNullException.ThrowIfNull(portals);
+        var tcs = new TaskCompletionSource<NpcPortalOutcome>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        QueueTrusted(new TrustedControl(
+            world => tcs.TrySetResult(world.TryTrustedNpcInteract(
+                actorId, connectionEpoch, mapEpoch,
+                interactionSequence, spawnId, portals)),
+            error => tcs.TrySetException(error)));
+        return tcs.Task;
+    }
+
     public Task<bool> TrustedDisconnectAsync(long actorId, long connectionEpoch, long mapEpoch)
     {
         var tcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);

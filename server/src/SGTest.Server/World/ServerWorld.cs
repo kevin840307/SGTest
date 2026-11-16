@@ -72,6 +72,7 @@ public sealed class ServerWorld
         public required double Y;
         public uint LastSequence; // highest client command sequence consumed
         public uint MovementActionSequence; // last accepted authoritative movement/stop
+        public uint LastPortalSequence; // per-MapEpoch authenticated NPC interaction replay guard
         public long Revision = 1;
         public IReadOnlyList<GridCell> Route = Array.Empty<GridCell>();
         public int RouteIndex;
@@ -205,6 +206,45 @@ public sealed class ServerWorld
         snapshot = actor.Snapshot();
         _lifecycle.Add(new(ActorLifecycleKind.Joined, snapshot));
         return true;
+    }
+
+    /// <summary>
+    /// Trusted authenticated NPC interaction; ALL decisions execute atomically
+    /// on the single World writer. The request supplies only a map-scoped NPC
+    /// SpawnId: actor identity, map and coordinates are server-owned.
+    /// The source NPC must be within the configured interaction radius.
+    /// Only cataloged audited static transfers are eligible. Never call this
+    /// directly from a raw client packet outside a trusted Gateway binding.
+    /// </summary>
+    public NpcPortalOutcome TryTrustedNpcInteract(
+        long actorId, long connectionEpoch, long mapEpoch,
+        uint interactionSequence, int spawnId, PortalCatalog catalog)
+    {
+        EnsureOwner();
+        ArgumentNullException.ThrowIfNull(catalog);
+        if (!_actors.TryGetValue(actorId, out var actor) ||
+            actor.ConnectionEpoch != connectionEpoch ||
+            actor.MapEpoch != mapEpoch || actorId <= 0 || interactionSequence == 0)
+            return new(NpcPortalStatus.StaleGeneration, null);
+        if (interactionSequence <= actor.LastPortalSequence)
+            return new(NpcPortalStatus.ReplayedSequence, null);
+        actor.LastPortalSequence = interactionSequence;
+
+        if (!catalog.TryGet(actor.Map, spawnId, out var portal))
+            return new(NpcPortalStatus.UnknownNpc, null);
+        double deltaX = actor.X - portal.NpcX;
+        double deltaY = actor.Y - portal.NpcY;
+        double distance = catalog.MaximumInteractionDistance;
+        if (deltaX * deltaX + deltaY * deltaY > distance * distance)
+            return new(NpcPortalStatus.TooFar, null);
+
+        if (!TryTrustedTransfer(actorId, connectionEpoch, mapEpoch,
+                portal.DestinationMapId, portal.DestinationX,
+                portal.DestinationY, out var transferred))
+            return new(NpcPortalStatus.DestinationRejected, null);
+
+        actor.LastPortalSequence = 0; // new MapEpoch starts new client sequence
+        return new(NpcPortalStatus.Accepted, transferred);
     }
 
     public ActorSnapshot? GetActor(long actorId)

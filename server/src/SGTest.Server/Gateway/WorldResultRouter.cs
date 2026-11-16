@@ -173,6 +173,46 @@ public sealed class WorldResultRouter
     }
 
     /// <summary>
+    /// Trusted RPC boundary used by the authenticated TLS NPC action handler.
+    /// The connection supplies only an NPC SpawnId and request sequence; the
+    /// World owner validates current map, distance and audited portal content.
+    /// On success, advance the same Gateway MapEpoch, or release the World
+    /// generation if the TLS socket disappeared during the async hand-off.
+    /// </summary>
+    public async Task<NpcPortalOutcome> TrustedNpcInteractAsync(
+        ServerWorldHost world, PortalCatalog portals, ConnectionBinding requester,
+        uint sequence, int npcSpawnId)
+    {
+        ArgumentNullException.ThrowIfNull(world);
+        ArgumentNullException.ThrowIfNull(portals);
+        GatewayConnection gateway;
+        lock (_gate)
+        {
+            if (!_connections.TryGetValue(requester.ActorId, out gateway!) ||
+                gateway.IsClosed || gateway.Binding != requester)
+                return new(NpcPortalStatus.StaleGeneration, null);
+        }
+
+        var outcome = await world.TrustedNpcInteractAsync(
+            requester.ActorId, requester.ConnectionEpoch, requester.MapEpoch,
+            sequence, npcSpawnId, portals).ConfigureAwait(false);
+
+        if (outcome.TransferredActor is not { } after)
+            return outcome;
+
+        if (outcome.Status != NpcPortalStatus.Accepted ||
+            !TryAdvanceTrustedMap(gateway, after))
+        {
+            TryDetach(gateway);
+            await world.TrustedDisconnectAsync(
+                after.ActorId, after.ConnectionEpoch, after.MapEpoch).ConfigureAwait(false);
+            throw new InvalidOperationException(
+                "NPC portal advanced World but gateway session disappeared; trusted actor released");
+        }
+        return outcome;
+    }
+
+    /// <summary>
     /// Short immutable snapshot for the non-World AOI pump; it never exposes
     /// Client-supplied identities. A late disconnect may invalidate a binding
     /// before QueueAoi; that case is rejected without sending stale frames.
