@@ -1,6 +1,6 @@
 # SGTest — Client / Server Wire Contract
 
-**狀態：WIRE001 codec 與 Server-side Gateway boundary 核心已完成第一階段；正式 Runtime 採單一 versioned compact binary。** `WireProtocol.cs`／Godot `wire_codec.gd` 提供 MoveTarget／MoveReceipt；Server `GatewayConnection` 已提供 trusted connection binding、bounded byte-stream parser 與 bounded reliable egress。**真正 Socket/TLS/Auth/WorldReady/ACK/reconnect 仍未完成。** MessagePack／Protobuf 只保留在 test probe，不是第二套正式協定。
+**狀態：WIRE001 codec、Server Gateway boundary 與單連線 TCP+TLS 1.2/1.3 session 已完成第一階段；正式 Runtime 採單一 versioned compact binary。** `GatewayConnection` 提供 trusted binding／bounded parser／reliable egress；`TlsWireConnection` 強制 TLS 並要求 TLS 內的 Auth/CharacterChoose callback 成功後才進 gameplay。**真正 Account Auth/CharacterChoose、production listener/cert deployment、WorldReady/ACK/reconnect 與 Godot TLS Client 仍未完成。** MessagePack／Protobuf 只保留在 test probe。
 
 ## 原則
 
@@ -36,7 +36,13 @@
 
 已完成的 Server-side transport-independent 邊界：Client Move frame 不含 ActorId/ConnectionEpoch；`GatewayConnection` 只能由可信 `ActorSnapshot` 建立，將 connection identity 補成 `MoveTargetCommand`；`MoveReceipt` 內部帶 ActorId/ConnectionEpoch/MapEpoch 供安全路由。固定容量 `WireStreamParser` 不在 backpressure 時吞掉完整 frame；可靠輸出佇列有 frame/byte 雙上限、FIFO、無 DropOldest。MapEpoch 只能在同一 ConnectionEpoch 上由 trusted transfer 單調更新；重連必須建立新 GatewayConnection。
 
-尚未完成：正式 TCP/TLS listener、真正 Auth/CharacterChoose、socket lifetime、應用層 ACK、WorldReady/AOI snapshot、重連/resync、batching 與 20 真連線。這些保持 **NOT VERIFIED**，不可用 Gateway core PASS 代替 REB020／MVP003 完成。
+### 2026-11-16 TLS001 Server socket slice
+
+`TlsWireConnection` 已可接收**一個已 accept 的 `TcpClient`**，強制 TLS 1.2/1.3，沒有 plaintext fallback。TLS handshake 完成後，必須先執行上游 `authorizeAndBind(SslStream,...)`；只有 callback 驗證 Account/session/CharacterChoose 並回傳由可信 `ActorSnapshot` 建立的 `GatewayConnection` 後，才開始讀 gameplay frame。Production Host **尚未開 listener**，也沒有內建 test account。Handshake/Auth/read/backpressure 都有明確上限；可靠輸出以 awaitable queue 寫入 TLS，不 busy-poll；World ingress 暫滿時保留完整 frame 並有限時間等待，超過 budget 關閉 session。
+
+GitHub Ubuntu 24.04 / .NET 8 的真 loopback `TcpListener + TcpClient + SslStream`：授權前 gameplay gate＋MoveReceipt roundtrip、Auth reject、plaintext reject、backpressure retry 共4項 PASS；Server/Host build 0 warning/error，整體 synthetic checks **40/40 PASS**。自簽 certificate 只存在測試記憶體，**不是 production certificate policy**。
+
+尚未完成：真正 Account DB/password Auth、CharacterChoose wire flow、production listener/certificate deployment、應用層 ACK、WorldReady/AOI snapshot、重連/resync、Godot TLS Client、batching 與 20 真連線。這些保持 **NOT VERIFIED**，不可用 TLS loopback PASS 代替 REB020／MVP003 完成。
 
 ## 世代與序號
 
