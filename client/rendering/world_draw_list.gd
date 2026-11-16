@@ -193,7 +193,7 @@ func build(view: Rect2, actors: Array = [], inside: Dictionary = {}, frames: Dic
 				overlay.append(_record(child))
 	# Actor order is the caller's stable presentation order, independent of camera.
 	for actor in actors:
-		if not actor.has_all(["id", "p", "asset", "clip"]) or not _assets.has(actor.asset) or not _valid_clip(_assets[actor.asset], actor.clip):
+		if not _valid_actor(actor):
 			error = ERR_INVALID_DATA
 			return []
 		var record: Dictionary = actor.duplicate()
@@ -209,7 +209,7 @@ func build(view: Rect2, actors: Array = [], inside: Dictionary = {}, frames: Dic
 	for group in groups:
 		for record in group:
 			if record.index == -1:
-				_append(commands, _assets[record.asset], record.clip, int(record.get("frame",0)), record.p, view, -1, 0, record.id)
+				_append_actor(commands,record,view)
 			else:
 				var index := int(record.index)
 				var target := bool(inside.get(index,false))
@@ -232,7 +232,7 @@ func build(view: Rect2, actors: Array = [], inside: Dictionary = {}, frames: Dic
 					# visible children are drawn again after the building Draw.
 					for inside_record in overlay:
 						if inside_record.index == -1:
-							_append(commands,_assets[inside_record.asset],inside_record.clip,int(inside_record.get("frame",0)),inside_record.p,view,-1,0,inside_record.id)
+							_append_actor(commands,inside_record,view)
 						else:
 							_child(commands,int(inside_record.index),view,frames)
 	return commands if error == OK else []
@@ -260,7 +260,7 @@ func _placement(commands: Array, index: int, view: Rect2, slot: int, frames: Dic
 	_append(commands, _assets[id], appearance.clip, int(frames.get(index,0)), Vector2(placement.p[0],placement.p[1]), view, index, slot, "",alpha)
 
 
-func _append(commands: Array, asset: Dictionary, clip: String, frame_index: int, position: Vector2, view: Rect2, index: int, slot: int, actor_id: String, alpha: int = 255) -> void:
+func _append(commands: Array, asset: Dictionary, clip: String, frame_index: int, position: Vector2, view: Rect2, index: int, slot: int, actor_id: String, alpha: int = 255, flip_h: bool = false) -> void:
 	var indices: Array = asset.manifest.clips[clip]
 	if frame_index < 0 or frame_index >= indices.size():
 		error = ERR_INVALID_PARAMETER
@@ -271,7 +271,29 @@ func _append(commands: Array, asset: Dictionary, clip: String, frame_index: int,
 	var uv := _bounds(frame.rect)
 	var at := position + Vector2(frame.trim[0]-frame.origin[0], frame.trim[1]-frame.origin[1])
 	var destination := Rect2(at,uv.size)
-	if destination.intersects(view):
+	if flip_h:
+		# Mirror around the original SPR origin, including trimmed asymmetry.
+		destination.position.x = position.x - (at.x-position.x)
+		destination.size.x = -destination.size.x
+	if destination.abs().intersects(view):
 		commands.append({"texture":asset.pages[int(frame.page)],"destination":destination,"uv":uv,
 			"index":index,"slot":slot,"frame":frame_index,"actor_id":actor_id,"alpha":alpha,
 			"modulate":Color(1,1,1,alpha/255.0)})
+
+
+func _valid_actor(actor: Dictionary) -> bool:
+	if not actor.has_all(["id","p"]) or not actor.p is Vector2 or not actor.p.is_finite():
+		return false
+	var parts = actor.get("parts",[actor])
+	if not parts is Array or parts.is_empty():
+		return false
+	for part in parts:
+		if not part is Dictionary or not part.has_all(["asset","clip"]) or not _assets.has(part.asset) or not _valid_clip(_assets[part.asset],part.clip):
+			return false
+	return true
+
+
+func _append_actor(commands: Array, actor: Dictionary, view: Rect2) -> void:
+	# The whole paper doll occupies one position in scenery/actor order.
+	for part in actor.get("parts",[actor]):
+		_append(commands,_assets[part.asset],part.clip,int(part.get("frame",0)),actor.p,view,-1,int(part.get("part_slot",0)),actor.id,255,bool(part.get("flip_h",false)))

@@ -36,6 +36,33 @@ func configure(definition: Dictionary) -> Error:
 	return OK
 
 
+func configure_ticks(steps: Array, loops: bool) -> Error:
+	# Converter logical_views already contain normalized fixed-50Hz durations.
+	_ends.clear()
+	_frames.clear()
+	_total = 0
+	if steps.is_empty() or steps.size() > 65536:
+		return ERR_INVALID_DATA
+	var ends := PackedInt64Array()
+	var frames := PackedInt32Array()
+	var total := 0
+	for step in steps:
+		if not step is Array or step.size() != 2:
+			return ERR_INVALID_DATA
+		var index := int(step[0])
+		var ticks := int(step[1])
+		if float(step[0]) != index or float(step[1]) != ticks or index < 0 or index > 2147483647 or ticks < 1 or ticks > 6871947672:
+			return ERR_INVALID_DATA
+		total += ticks
+		ends.append(total)
+		frames.append(index)
+	_ends = ends
+	_frames = frames
+	_total = total
+	_loops = loops
+	return OK
+
+
 func frame_at_update(elapsed: int) -> int:
 	if _total == 0:
 		return -1

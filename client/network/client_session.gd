@@ -118,7 +118,7 @@ func _logic_loop(username: String, password: String) -> void:
 			_publish()
 
 		_process_first_intent()
-		if int(_world.snapshot().state) == WorldState.STATE_FAILED:
+		if int(_world.state) == WorldState.STATE_FAILED:
 			_transport.stop()
 			break
 		OS.delay_msec(LOGIC_SLEEP_MS)
@@ -130,7 +130,7 @@ func _process_first_intent() -> void:
 		return
 	var kind := str(intent.get("type", ""))
 	if kind == "choose":
-		if int(_world.snapshot().state) != WorldState.STATE_SELECTING_CHARACTER:
+		if int(_world.state) != WorldState.STATE_SELECTING_CHARACTER:
 			return
 		var character_id := int(intent.character_id)
 		var frame := WireCodec.encode_character_choose(character_id)

@@ -77,6 +77,34 @@ def expected_focus(world,capture):
             'transitions':{str(i):{'inside':s['inside'],'updates':(256-s['counter'])//16} for i,s in states.items()}}
 
 
+def expected_players(assets, states):
+    # Independent reconstruction from normalized Converter metadata, not runtime
+    # command data: selects logical facing before resolving physical source art.
+    profiles = {12:('players/b/base/leg','B-LEG'),7:('players/b/base/right_arm','B-R-ARM'),
+                9:('players/b/base/body','B-BODY'),5:('players/b/base/left_arm','B-L-ARM'),
+                0:('players/b/base/head','B-HEAD'),1:('players/b/hair/hair00','B-HAIR00')}
+    manifests={slot:json.loads((assets/p[0]/'atlas.json').read_text(encoding='utf-8')) for slot,p in profiles.items()}
+    output=[]
+    for state in sorted(states,key=lambda x:x['id']):
+        action='NR' if state['moving'] else 'NS'
+        requested=action+str(state['facing'])
+        order=manifests[9]['logical_views']['B-BODY_'+requested]['draw_slots']
+        parts=[]
+        for slot in order:
+            if slot not in profiles:continue
+            asset,prefix=profiles[slot]
+            view=manifests[slot]['logical_views'][prefix+'_'+requested]
+            total=sum(row[1] for row in view['timeline_ticks'])
+            tick=max(0,state['elapsed_updates'])
+            tick=tick%total if view['loop'] else min(tick,total-1)
+            for index,duration in view['timeline_ticks']:
+                if tick<duration:break
+                tick-=duration
+            parts.append({'asset':asset,'clip':view['clip'],'frame':index,'flip_h':view['flip_h'],'part_slot':slot})
+        output.append({'id':str(state['id']),'p':state['p'],'parts':parts})
+    return output
+
+
 def expected_commands(assets, capture):
     world = json.loads((assets/f"maps/{capture['map']}/world.json").read_text(encoding='utf-8'))
     placements, definitions = world['objects'],world['scenery_definitions']
@@ -94,7 +122,12 @@ def expected_commands(assets, capture):
         selected = focus['selected']
         overlay = [{'index':i,'p':placements[i]['p'],**definitions[placements[i]['definition']]}
                    for i in range(selected+1,selected+1+placements[selected]['child_count']) if intersects(placements[i]['bounds'],view)]
-    for actor in capture['actors']:
+    actors = capture['actors']
+    if 'player_states' in capture:
+        expected_actors = expected_players(assets,capture['player_states'])
+        if expected_actors != actors:
+            raise ValueError('player logical view/timing/order differs from source metadata')
+    for actor in actors:
         record = {**actor,'index':-1,'sorting_mode':1}
         inside = False
         if focus is not None and focus['selected'] >= 0:
@@ -108,7 +141,7 @@ def expected_commands(assets, capture):
         target.insert(at,record)
     output = []
 
-    def append(asset_id,clip,frame,p,index,slot,actor_id,alpha=255):
+    def append(asset_id,clip,frame,p,index,slot,actor_id,alpha=255,flip=False):
         if alpha <= 0:
             return
         manifest = json.loads((assets/asset_id/'atlas.json').read_text(encoding='utf-8'))
@@ -116,9 +149,13 @@ def expected_commands(assets, capture):
         if row['page'] == -1:
             return
         destination = [p[0]+row['trim'][0]-row['origin'][0],p[1]+row['trim'][1]-row['origin'][1],*row['rect'][2:]]
-        if intersects(destination,view):
+        if flip:
+            destination[0] = 2*p[0]-destination[0]
+            destination[2] = -destination[2]
+        bounds = [destination[0]+min(0,destination[2]),destination[1],abs(destination[2]),destination[3]]
+        if intersects(bounds,view):
             output.append({'index':index,'slot':slot,'frame':frame,'actor_id':actor_id,'destination':destination,'alpha':alpha,
-                           'uv':row['rect'],'texture_source':[asset_id,row['page']], 'source':row})
+                           'uv':row['rect'],'texture_source':[asset_id,row['page']], 'source':row,'flip':flip})
 
     def placement(index,slot,alpha):
         row = placements[index]
@@ -153,7 +190,8 @@ def expected_commands(assets, capture):
     for group in groups:
         for row in group:
             if row['index'] == -1:
-                append(row['asset'],row['clip'],row['frame'],row['p'],-1,0,row['id'])
+                for part in row.get('parts',[row]):
+                    append(part['asset'],part['clip'],part['frame'],row['p'],-1,part.get('part_slot',0),row['id'],flip=part.get('flip_h',False))
             else:
                 index = row['index']
                 item = placements[index]
@@ -246,7 +284,10 @@ def validate_capture(assets, source, capture, originals):
                         variant.putalpha(sprite.getchannel('A').point(lambda a:rounding(a*command['alpha']/255)))
                         variants.append(variant)
                 sprites = variants
-        dx,dy,_,_ = command['destination']
+        dx,dy,dw,_ = command['destination']
+        if command.get('flip'):
+            sprites = [sprite.transpose(Image.Transpose.FLIP_LEFT_RIGHT) for sprite in sprites]
+            dx += dw
         dx,dy = int(dx-capture['camera'][0]),int(dy-capture['camera'][1])
         output.alpha_composite(sprites[-1],(dx,dy))
         rect = (max(0,dx),max(0,dy),min(output.width,dx+int(w)),min(output.height,dy+int(h)))

@@ -24,6 +24,7 @@ def main() -> int:
     parser.add_argument("--source", type=Path, default=REPO / ".cache/asset_converter/source")
     parser.add_argument("--report", type=Path, default=REPO / "reports/world_view_native.json")
     parser.add_argument("--timeout", type=int, default=180)
+    parser.add_argument("--players", action="store_true", help="native B base paper doll logical view, origin/mirror and source raster gate")
     args = parser.parse_args()
     exe = args.godot.resolve()
     if exe.name.endswith("_console.exe"):
@@ -56,6 +57,8 @@ def main() -> int:
         "gl_compatibility", "--disable-vsync", "--script",
         "res://tests/test_world_view.gd", "--", str(pack), str(folder),
     ]
+    if args.players:
+        command.append("players")
     metrics = ProcessMetrics()
     start = time.monotonic()
     with (folder / "engine.log").open("w", encoding="utf-8") as log:
@@ -91,13 +94,13 @@ def main() -> int:
     }
     passed = (
         process.returncode == 0 and not engine_errors and result.get("status") == "PASS"
-        and not result.get("failures") and len(checks) == 12
+        and not result.get("failures") and len(checks) == (20 if args.players else 12)
         and not validation_errors and all(c["pixels_over_tolerance"] == 0 for c in checks)
         and counts_zero and stable
     )
     summary = {
         "status": "PASS" if passed else "FAIL",
-        "scope": "map_view_only_not_player_server_or_multiplayer",
+        "scope": "player_source_GPU_not_network_or_multiplayer" if args.players else "map_view_only_not_player_server_or_multiplayer",
         "exit_code": process.returncode,
         "engine_errors": engine_errors,
         "validation_errors": validation_errors,

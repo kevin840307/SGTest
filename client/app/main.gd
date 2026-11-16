@@ -11,7 +11,6 @@ var _status := Label.new()
 var toolbar := PanelContainer.new()
 var session_panel := SessionPanel.new()
 var _map_buttons: Array[Button] = []
-var _pending_focus := {}
 
 
 func _ready() -> void:
@@ -51,6 +50,7 @@ func _ready() -> void:
 	session_panel.position = Vector2(16,64)
 	session_panel.connection_changed.connect(_connection_changed)
 	session_panel.world_ready.connect(_server_world_ready)
+	session_panel.world_snapshot.connect(world_view.set_player_snapshot)
 	var login_toggle := Button.new()
 	login_toggle.text = "登入／連線"
 	login_toggle.focus_mode = Control.FOCUS_NONE
@@ -89,6 +89,8 @@ func _resize() -> void:
 func _unhandled_key_input(event: InputEvent) -> void:
 	if event is InputEventKey:
 		var key: int = event.physical_keycode
+		if session_panel.active:
+			return
 		if key in [KEY_LEFT,KEY_RIGHT,KEY_UP,KEY_DOWN]:
 			if event.pressed:
 				_held[key] = true
@@ -100,9 +102,11 @@ func _unhandled_key_input(event: InputEvent) -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed and session_panel.active and world_view.phase == "ready" and _pending_focus.is_empty():
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed and session_panel.active and world_view.phase == "ready":
 		session_panel.submit_move(world_view.camera.screen_to_world(event.position))
 		get_viewport().set_input_as_handled()
+		return
+	if session_panel.active:
 		return
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_MIDDLE:
 		_dragging = event.pressed
@@ -118,10 +122,7 @@ func _process(delta: float) -> void:
 		if pending.decode_jobs + pending.texture_jobs == 0:
 			get_tree().quit()
 		return
-	if not _pending_focus.is_empty() and world_view.phase == "ready" and world_view.epoch == int(_pending_focus.epoch):
-		world_view.camera.set_focus(world_view.epoch,_pending_focus.position)
-		_pending_focus = {}
-	if world_view.phase == "ready":
+	if world_view.phase == "ready" and not session_panel.active:
 		var direction := Vector2(int(_held.has(KEY_RIGHT))-int(_held.has(KEY_LEFT)),int(_held.has(KEY_DOWN))-int(_held.has(KEY_UP)))
 		if direction != Vector2.ZERO:
 			world_view.camera.pan(world_view.epoch,direction.normalized()*600.0*delta)
@@ -144,8 +145,8 @@ func _connection_changed(active: bool) -> void:
 		button.disabled = active
 	_held.clear()
 	_dragging = false
-	_pending_focus = {}
 	world_view.clear_map()
+	world_view.show_players = active
 	if active:
 		_status.text = "連線中"
 	else:
@@ -158,9 +159,8 @@ func _inspect_map(id: int) -> void:
 
 
 func _server_world_ready(snapshot: Dictionary) -> void:
-	_pending_focus = {}
 	if world_view.request_map(int(snapshot.map_id)) == OK:
-		_pending_focus = {"epoch":world_view.epoch,"position":Vector2(snapshot.x,snapshot.y)}
+		world_view.set_player_snapshot(snapshot)
 	else:
 		_status.text = "已連線，地圖素材未就緒"
 

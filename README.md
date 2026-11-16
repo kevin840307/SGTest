@@ -1,7 +1,7 @@
-# SGTest — 文件與素材轉換基線
+# SGTest — MMORPG 重建
 
 > **2026-11-15 重新開發決策：現有 Godot Client 與 C# Server 原型已自本基線移除。**
-> 此儲存庫目前**不是可執行的遊戲專案**。舊程式仍保存在 Git 歷史，請勿引用舊測試結果宣稱新版本已完成。
+> 新版已逐步建立可啟動的 Godot Client 與 .NET Server；目前仍在重建主要玩法，**不是完整遊戲或 Release**。舊測試不能代替新版驗證。
 
 ## 這個儲存庫目前保留什麼
 
@@ -9,7 +9,7 @@
 - `tools/tests/`：正式 Converter、原始格式及佈署包契約測試（**不是 Client/Server 程式**）；舊獨立轉換器與 Viewer 已從工作樹移除，可從 Git 歷史查閱。
 - `docs/`、`SPEC.md`、`todo.txt`：正式設計與原版研究證據；歷史完成紀錄見 `docs/research/FEATURE_DECISION_HISTORY.md#source-todo-pre-rebuild-20261115-txt`。
 - `client/assets/.gdignore`：**僅保留轉換輸出的定位標記**，不是 Godot Runtime。
-- `client/`：Godot 4.7.2 單一 AssetStore、真地形／景物 Renderer與雙圖檢視入口；正式ClientSession已獨立執行緒處理TLS／WorldState，main已有登入／選角／登出介面。Server已有帳號／選角、權威Blocking／A*、30Hz World、AOI與跨圖協定，Host新增明確啟用的有界TLS `serve`模式（見[啟動命令](server/README.md)）。**創角、座標持久化與玩家動畫／多人遊戲畫面整合仍未完成，不能稱作完整可玩Client或Release**。目前證據以[todo.txt](todo.txt)為準。
+- `client/`：Godot 4.7.2 單一 AssetStore、真地形／景物 Renderer與雙圖檢視入口；正式ClientSession已獨立執行緒處理TLS／WorldState，main已有登入／選角／登出介面。Server已有帳號／選角、權威Blocking／A*、30Hz World、AOI與跨圖協定，Host新增明確啟用的有界TLS `serve`模式（見[啟動命令](server/README.md)）。**公開創角、座標持久化、平滑內插與主要玩法仍未完成；在線角色已接入暫定 B 基礎紙娃娃／站立走路與自身相機跟隨，正式外觀／裝備及雙 Client 真圖連線畫面仍待驗證，不能稱作完整可玩Client或Release**。目前證據以[todo.txt](todo.txt)為準。
 
 ## 現階段 MVP：Map15 主城 + Map13 尼西亞台地
 

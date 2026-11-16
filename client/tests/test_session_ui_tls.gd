@@ -83,7 +83,7 @@ func run() -> void:
 	if not panel.active or int(entered.get("state",-1)) != State.STATE_IN_WORLD or not bool(entered.get("world_ready",false)):
 		fail("UI did not observe WorldReady")
 		return
-	if not app._pending_focus.is_empty() or app.world_view.phase != "closed":
+	if app.world_view.phase != "closed":
 		fail("Missing private assets must not fake a ready map")
 		return
 	if not panel.submit_move(Vector2(24,8)):

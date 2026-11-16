@@ -2,6 +2,7 @@ extends PanelContainer
 ## UI adapter only. ClientSession owns transport/reduction on its own threads.
 signal connection_changed(active: bool)
 signal world_ready(snapshot: Dictionary)
+signal world_snapshot(snapshot: Dictionary)
 
 const Session = preload("res://network/client_session.gd")
 const State = preload("res://network/world_state.gd")
@@ -172,6 +173,8 @@ func _process(delta: float) -> void:
 		if bool(_latest.world_ready) and int(_latest.map_epoch) != _world_epoch:
 			_world_epoch = int(_latest.map_epoch)
 			world_ready.emit(_latest)
+		if bool(_latest.world_ready):
+			world_snapshot.emit(_latest)
 
 
 func _exit_tree() -> void:

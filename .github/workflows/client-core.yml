@@ -4,6 +4,7 @@ on:
     paths:
       - "client/network/**"
       - "client/app/**"
+      - "client/rendering/**"
       - "client/ui/**"
       - "client/tests/**"
       - "server/src/SGTest.Server/Wire/**"
@@ -15,6 +16,7 @@ on:
     paths:
       - "client/network/**"
       - "client/app/**"
+      - "client/rendering/**"
       - "client/ui/**"
       - "client/tests/**"
       - "server/src/SGTest.Server/Wire/**"
@@ -62,6 +64,13 @@ jobs:
         run: .cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64 --headless --path client --script res://tests/test_world_state.gd
       - name: Render-FPS independent reducer gate
         run: .cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64 --headless --path client --script res://tests/test_client_fps_independence.gd
+      - name: Normalized player paper doll and atomic actor draw order
+        shell: bash
+        run: |
+          set -euo pipefail
+          .cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64 --headless --path client --script res://tests/test_player_presentation.gd 2>&1 | tee /tmp/sgtest-player-presentation.log
+          grep -q '^PLAYER_PRESENTATION_PASS ' /tmp/sgtest-player-presentation.log
+          ! grep -E 'ERROR:|SCRIPT ERROR:|leaked|still in use' /tmp/sgtest-player-presentation.log
       - name: Real Godot to CSharp secure TLS login E2E
         run: python client/tests/run_tls_login.py "$PWD/.cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64"
       - name: Real application login selection and logout UI over TLS

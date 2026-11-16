@@ -1,6 +1,6 @@
 # SGTest Server — 重建設計
 
-**狀態：已建立 .NET 8 Blocking/A*、單寫者 World、30Hz Host、compact-binary V1、generation-safe Gateway，以及真 loopback TCP+TLS 1.2/1.3 單連線 session；Production Host 仍不開 listener，尚無真正 Account Auth/CharacterChoose、正式 AOI 或 Godot Client/Server E2E。** 目標為單體功能模組，固定世界模擬與獨立 Transport/Persistence。
+**狀態：已建立 .NET 8 Blocking/A*、單寫者 30Hz World、compact-binary V1、TLS listener／帳號選角與本機 provision、generation-safe AOI／跨圖及自身權威位置／方向。座標持久化、登入節流、ACK/resync、主要玩法與規模／Release Gate 仍未完成。** 目標為單體功能模組，固定世界模擬與獨立 Transport/Persistence。
 
 ## 核心邊界
 

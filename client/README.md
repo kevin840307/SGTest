@@ -1,6 +1,6 @@
 # SGTest Client 資源基礎
 
-已新增 Godot 4.7.2 專案及單一 `assets_runtime/asset_store.gd`。目前可執行資源生命週期測試；地形與靜態景物／角色交錯 Renderer 已完成原生 GPU 切片。WIRE001 已選定 compact-binary V1，`network/wire_codec.gd` 已有 MoveTarget encode／MoveReceipt decode 與 C# 共用 golden fixture；**尚無 Transport worker、Socket/TLS、WorldState／登入／多人玩法**。新程式沒有取回舊 prototype。
+Godot 4.7.2 單一 Client，沿用 AssetStore／External PCK 與既有地形景物 Renderer。正式 threaded TLS／WorldState 已接登入、選角與權威位置／方向；在線 WorldView 新增暫定 B 基礎六部件紙娃娃、logical view／ACT／鏡像、共同排序及自身相機跟隨。**平滑內插、正式角色外觀／裝備同步、戰鬥與主要多人玩法仍未完成**。新程式沒有取回舊 prototype。
 
 ## 驗證
 
@@ -148,3 +148,21 @@ python client/tests/run_tls_login.py "C:/SGO/Godot/Godot_v4.7.2-stable_win64.exe
 ```
 
 Windows真TLS UI Gate與雙圖既有12張GPU／38原始幀回歸PASS。地形PCK必須含最新`int16_plus_one_wrap`契約；舊PCK會被拒絕。`run_world_view.py --pack PATH --assets MATCHING_PUBLISHED_ASSETS`可指定對應的只讀Oracle，避免改寫其他Session輸出。這些分別驗證UI網路路徑與Renderer回歸，尚非兩個真Client在原版地圖上的連線視覺E2E。
+
+## 在線基礎玩家呈現（2026-11-17）
+
+使用對應最新 Converter 契約的私有 PCK（包含 `PLAYER_PART_ASSETS`），啟動既有 main；在登入介面輸入帳密，選角後會載入 Server WorldReady 指定地圖並跟隨自身。範例：
+
+```powershell
+& "<Godot4.7.2>" --path client -- --pack "<assets.pck>" --host 127.0.0.1 --port 7777 --tls-name localhost --trusted-cert "<trusted.pem>"
+```
+
+未提供 trusted-cert 時使用系統正常 CA 驗證；不會停用憑證驗證。在線左鍵送 Server Move，方向鍵／中鍵／Home 的自由檢視僅限離線；登出、跨圖先清除畫面與角色引用，再結束原 scope。現有所有角色暫用 B 基礎六部件（含 hair00），尚不是帳號角色的正式外觀／裝備。資料更新與動畫只影響呈現，WorldState／收包仍在各自 worker；此版位置直接呈現權威更新，平滑內插為下一 Gate。
+
+`test_player_presentation.gd` 是公開 synthetic headless Gate。私有 GPU/source Gate 沿用現有 runner：
+
+```powershell
+python client/tests/run_world_view.py "<Godot4.7.2-console>" --pack "<assets.pck>" --assets "<matching client/assets>" --players --report reports/player_view.json
+```
+
+此測試為兩個角色的呈現 fixture，不能稱為兩個連線 Client 或完整玩法驗收。

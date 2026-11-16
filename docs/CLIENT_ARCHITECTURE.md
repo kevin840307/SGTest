@@ -1,6 +1,6 @@
 # SGTest Client — 重建設計
 
-**狀態：AssetStore 資源基礎已實作並有 headless 回歸；Terrain Renderer 已有 Native GPU 切片；完整 World Renderer／Network／WorldState／玩法仍待實作。** 目標 Godot 4.7.2 / GDScript；功能導向的單一 Godot 專案。
+**狀態：單一 AssetStore／Terrain／Scenery、threaded TLS／WorldState 與登入 UI 已實作；目前新增暫定 B 基礎玩家呈現與相機跟隨。平滑內插、正式外觀裝備、戰鬥及完整多人視覺 Gate 仍未完成。** 目標 Godot 4.7.2 / GDScript；功能導向的單一 Godot 專案。
 
 ## 職責分離（不要為了分層先建立空檔案）
 
@@ -279,3 +279,11 @@ The non-render WorldState reducer accepts the sole V1 SelfState opcode 24 into `
 ### 2026-11-17 Authoritative facing consumer
 
 WorldState exposes `facing` for self, initialized by WorldReady and updated by SelfState; remote entities carry their own `facing`. The formal codec requires 1..8 in the new exact 45/74-byte state frames. Presentation must select Converter logical views from this direction rather than derive authoritative facing from render displacement. This closes the state prerequisite; paper-doll rendering, interpolation, animation locks and camera-follow are not completed by the wire field.
+
+### 2026-11-17 Base player presentation integration
+
+Online WorldView adds only the existing six B base part assets to its existing map scope/palette; offline inspection keeps its previous palette. PlayerPresentation compiles normalized logical views into the existing ActionTimeline sampler, retains per-actor action phase across snapshot polls/facing changes, and removes despawned/generation-replaced actors. NS/NR use Converter timing, direction-specific physical clip, flip_h and draw_slots; one actor is inserted into WorldDrawList once, and its parts are emitted consecutively. Explicit Canvas transform mirrors texture and trimmed geometry around the SPR pivot (negative destination width alone was experimentally insufficient).
+
+SessionPanel emits its non-authoritative presentation snapshot after WorldReady; WorldView caches updates during loading, follows current own XY when ready and renders remote AOI too. main no longer applies a stale one-shot Ready focus over a newer snapshot. Online free camera controls are disabled; map/connection clear drops draw commands, actor/timeline state and snapshot before ending the same AssetStore scope. The B base profile is provisional for every actor; no appearance/equipment protocol is invented. Positions are currently latest authoritative samples: interpolation/prediction, combat locks, actual profile synchronization and AFK resource behavior remain later gates.
+
+The session worker reads its own reducer state field for idle failure/choose checks rather than deep-copying the full entity snapshot every 2ms. Cross-thread publication and UI snapshots remain copies; no worker-owned WorldState reference is exposed to rendering. No measured CPU/P95 improvement is claimed by this local removal of redundant copies.

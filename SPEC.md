@@ -142,3 +142,7 @@ V1 server-only SelfState (opcode 24, 73 bytes, existing EntityState layout) deli
 ### 2026-11-17 Authoritative eight-way facing
 
 Server legal path segments now determine Facing using the original E6/SE7/S8/SW1/W2/NW3/N4/NE5 convention. Stop/rejected commands retain it; trusted transfer preserves it. Both formal V1 endpoints carry Facing in WorldReady (45 bytes) and Spawn/Delta/SelfState (74 bytes), rejecting illegal values rather than inventing a Client direction. Initial spawn Facing=1 is provisional; original default/persistent facing, player rendering/interpolation/action locks and visual multiplayer gates remain NOT VERIFIED.
+
+### 2026-11-17 Initial online player presentation
+
+The formal Client now presents own/remote authoritative player snapshots in WorldView through the same AssetStore, normalized Converter logical views, Canvas renderer and scenery/actor order. Current provisional profile is six B base parts; NS/NR timing, mirrored trim/origin and consecutive paper-doll layers are implemented, and camera follows self including states received during load. No game rules are driven by rendering. This does **not** complete true character appearance/equipment sync, interpolation, attack/hit/death animation locks, two private-map online visual Clients or resource/scale release gates.
