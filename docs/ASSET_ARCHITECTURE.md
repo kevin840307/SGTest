@@ -21,7 +21,7 @@ one asset -> Atlas pages + manifest
 external assets.pck -> ResourceLoader -> shared AssetStore
 ~~~
 
-**最新推薦**：每個 Asset 內依 Frame 高度再寬度降序，候選寬高動態取最佳；偏向一頁 <=4096×4096，單一素材確實超限才分頁。1024×256 等 2 次方矩形桶可保留候選，**不強制**。P0 (0px padding) 省資源，但必須驗證壓縮和過濾不污染透明邊；必要才切 1px extrude。
+**最新推薦**：每個 Asset 內依 Frame 高度再寬度降序，候選寬高動態取最佳；偏向一頁 <=4096×4096，單一素材確實超限才分頁。1024×256 等 2 次方矩形桶可保留候選，**不強制**。Frame間維持P0；Publisher只補右／下透明留白到4倍數，避免壓縮器重採樣整張非區塊對齊頁。這不是幀間padding或POT桶。P0與1px extrude實測、殘留codec畫質限制見下節。
 
 原型獨立 Benchmark 說明 Render/Loader 選擇：壓縮 Texture2D + 共享 SpriteFrames/AnimatedSprite2D 在多種怪物負載下能兼顧低 P95 與 RAM；單一超大型 Enemy 部分情境 Recovered 較快。這不是新版可執行 Client 的 Gate；詳 [research/ASSET_RENDERER_EVIDENCE](research/ASSET_RENDERER_EVIDENCE.md)。
 
@@ -73,3 +73,19 @@ Map terrain/scenery 和 Enemy 必須分離。Server Population 定義怪物出�
 2026-11-16 景物時序切片：8個原版ACT已發布default25／50Hz時間metadata，涵蓋雙圖61個多幀景物實例；呈現以明確elapsed updates取樣，支援非零起始index與長空白幀。建築fade按原版256counter／每Step減16／alpha clamp255及原始疊層順序繪製，不依Render FPS累進。入口／版本狀態、dynamic action speed、NPC／Player完整時序與事件、P0壓縮品質、Server／多人仍未完成；詳CLIENT_ARCHITECTURE／TEST_PLAN。
 
 2026-11-16 建築焦點切片：已接連續fixed-update／epoch保護的inside呈現狀態與快照，保留原版last-wins、ShowInside／SetInOut差異、可見counter及室內Actor／家具額外排序。此為原版reference幾何與顯示規則實作，不是Server入口／碰撞或正式相機／多人Client完成；精度與驗證見CLIENT_ARCHITECTURE／TEST_PLAN。
+
+## 壓縮頁面座標修正（2026-11-16，MVP002-ATLAS-BLOCK-EXTENT）
+
+Archive仍為原版逐幀像素驗證的Height-Dense P0；唯一Publisher `content/export_assets.runtime_page`把Runtime頁右／下延伸至4倍數，原texel、FrameTable rect／origin／trim、Asset ID與頁數不動。atlas v9新增`page_layout=height_dense_p0_block4_v1`、`archive_page_sizes`／`archive_page_sha256`；`page_sizes`／`page_sha256`綁定真正發布的PNG。已對齊頁保留原PNG bytes。舊Catalog／PCK須重新export及pack，沒有DB或Wire schema遷移；不修改原始來源或完整Archive。
+
+三候選使用相同254素材／2281幀、native Texture2D codec readback、原尺寸nearest pixel center及黑／白背景source-over RGB比較；150,007,584 channel samples。Godot 4.7.2官方build ed1daf0、RTX3050／OpenGL，實際選BC7。`reports/atlas_block_comparison_final.json`（--archive重播修正前P0，不受新發布頁留白影響）：
+
+|候選|logical≠physical頁|合成MAE|P95／P99色差|壓縮base-level bytes|
+|---|---:|---:|---:|---:|
+|原P0|239|9.04731|51／121|25,772,400|
+|右下block4留白P0|0|1.40433|7／15|25,772,400|
+|每幀1px extrude＋block4頁|0|1.40266|7／15|26,322,928|
+
+選block4 P0：恢復FrameTable的逐texel座標契約，壓縮大小不增加；extrude整體改善不明顯且部分素材更差、大小增加2.14%。不是以平均值宣稱每素材畫質完成：block4最大channel差247，蝴蝶／花草／EN064A等細節仍須品質審查／codec政策，Mac／ASTC實機、linear／zoom仍NOT VERIFIED。此為codec隔離比較，沒有以PNG讀回wall time推論遊戲P95、CPU或VRAM改善；Network不適用。
+
+外部機制參考：[Godot CVTT](https://github.com/godotengine/godot/blob/master/modules/cvtt/image_compress_cvtt.cpp)的`image_compress_cvtt`及[ASTC importer](https://github.com/godotengine/godot/blob/master/modules/astcenc/image_compress_astcenc.cpp)有向上區塊對齊後nearest resize。master參考不等於安裝版逐指令驗證；本機239頁extent／合成圖負向測例才是此版本的直接實測證據。完整P0畫質Gate保持未完成，不能靠放寬World raster verifier掩蓋色差。

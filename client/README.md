@@ -73,3 +73,7 @@ python client/tests/run_world.py "C:\SGO\Godot\Godot_v4.7.2-stable_win64_console
 ```
 
 Visibility owner按連續fixed update及同epoch呼叫advance；候選由draw_list.visible_main_indices(view)取得，snapshot交給build_focus並檢查owner期望update。此為純視覺：相機focus決定屋頂內外，沒有改Server Blocking／碰撞。室內Actor與家具在selected建築後排序，室外Actor留一般main list；角色範例仍是fixture NPC，不是可玩或已連線角色。source與邊界／選擇規則見CLIENT_ARCHITECTURE。
+
+## Atlas頁面座標更新
+
+2026-11-16 Publisher新增`height_dense_p0_block4_v1`：Frame間仍P0，只補頁右／下透明留白至4倍數，保持來源texel與rect／origin／trim。需依ASSET_CONVERTER的block4命令重新export＋pack，才能配合新manifest。PCK smoke同時驗證logical／physical extent；World GPU驗證精度不放寬。細節codec畫質與Mac仍待驗證。

@@ -194,3 +194,16 @@ Native fixture：2501點half-open diamond邊界（61×41）、Manhattan1000/1001
 `python -m unittest discover -s tools/tests -p "test_*.py" -q` 79 PASS；`run_world.py --mode canvas --report reports/building_focus_legacy.json` 原24端點回歸PASS；AssetStore epochs三情境PASS（reports/building_focus_epochs.json）。初輪focus測試舊手動frame1覆蓋ACT frame輸入，已排除並重跑；只以building_focus_release作完整新狀態／室內分流證據。CI NOT VERIFIED。
 
 未驗證：HK2入口函式逐指令等版／實際舊Client動態畫面、真正相機controller／Player／傳點、odd viewport／zoom、正式Wire版本／Server碰撞與權限／多人E2E；目前重現的是可定位reference的呈現規則。P0／視野預取／完整World lifecycle與實機AFK等Gate不因此完成。
+
+### 2026-11-16 Runtime Atlas block extent回歸
+
+MVP002-ATLAS-BLOCK-EXTENT：相同254素材／2281幀的原P0、右下block4 P0、幀邊extrude1＋block4頁codec比較完成，logical／physical不一致239→0；P0與block4壓縮base-level大小相同，合成MAE9.04731→1.40433。extrude1無明顯整體改善、大小+2.14%，選block4 P0。詳細表與來源機制見ASSET_ARCHITECTURE；比較工具的PASS不是全素材codec畫質核准。原始資料與readback PNG僅存private reports/.cache。
+
+- `python -m unittest discover -s tools/tests -p "test_*.py" -q`：81 PASS，含1×1／51×102／已對齊／4095邊界、原texel（含alpha0的RGB）／透明擴展／冪等、Archive追溯、scope重跑與錯dimension／偽block4拒絕。
+- 唯一CLI完整Archive audit＋export PASS（364.554秒）；獨立驗證254頁、239頁補邊、2281幀rect／size／origin／trim／source全部保持，PNG來源區域逐byte相同、擴展透明。Archive index SHA仍bd6b8a63…68ea55；reports/atlas_block_publication_validation.json。RGBA保守預算+740,816 bytes，不能當作GPU增量。
+- `smoke_runtime_pack.py Godot --assets client/assets --map 13 --map 15 --output .cache/client-release/assets/assets.pck --report reports/atlas_block_pck_final.json`：550 raw SHA、256 Texture載入、254 BPTC＋254 ASTC的508個stored codec extent PASS。後者以CompressedTexture2D.load／get_image核對尺寸，**不是ASTC／Mac GPU畫質驗收**。完整命令見ASSET_CONVERTER；新PCK SHA8423f141880ab2c3dae673be7070b11fa1629614c25e516cd9e346bbec735f44，86,456,568 bytes，兩次pack同SHA。
+- 負向合成51×102 logical／52×104 physical在正式PCK verifier exit5拒絕，無成功旗標（atlas_block_physical_rejection.json）。額外ASTC probe初次ResourceLoader.load內部ctex失敗並timeout；修正用CompressedTexture2D.load後才成功，不能使用初次結果當PASS。
+- `run_world.py Godot --focus --report reports/atlas_block_world.json`：兩候選168 GPU captures、105原始SPR幀、source SHA不變、engine error/leak=0；原sampler envelope＋2色階界不變、實際max2、超界pixel=0。每圖釋放Texture回13,373,731 bytes、Store全0。此輪只回歸、不重選Renderer或宣稱Frame／RSS效能提升。
+- `run_asset_store.py Godot --report reports/atlas_block_asset_store.json`：30次雙圖完整palette循環PASS、final全0、peak預算95,818,176 bytes。git diff --check PASS，CI NOT VERIFIED。
+
+尚存：細節codec最大色差247，花草／蝴蝶／EN064A等逐素材畫質政策、linear／zoom、Mac／Release、可操作相機／Player、Server／多人E2E仍NOT VERIFIED；MVP002與完整素材品質Gate維持未完成。原始source texel無損與GPU有損codec不可混成同一個零差異宣稱。

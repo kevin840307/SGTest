@@ -48,6 +48,22 @@ class RuntimePackPolicyTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError,'dimension count differs'):
                 real_contract(assets, [])
 
+    def test_real_smoke_checks_physical_extent_for_block_aligned_publication(self):
+        with tempfile.TemporaryDirectory() as folder:
+            assets, manifest = self.fixture(folder)
+            manifest['page_layout']='height_dense_p0_block4_v1'
+            path=assets/'Enemy/fixture/atlas.json'
+            path.write_text(json.dumps(manifest),encoding='utf-8')
+            contract,_=real_contract(assets,[])
+            self.assertTrue(contract['textures'][0]['block_aligned'])
+            page=assets/'Enemy/fixture/page_0.png'
+            Image.new('RGBA',(7,11),(40,80,120,255)).save(page)
+            manifest['page_sizes']=[[7,11]]
+            manifest['page_sha256']['page_0.png']=hashlib.sha256(page.read_bytes()).hexdigest()
+            path.write_text(json.dumps(manifest),encoding='utf-8')
+            with self.assertRaisesRegex(ValueError,'not block aligned'):
+                real_contract(assets,[])
+
     def test_world_visuals_use_vram_compression(self):
         for value in [
             "Enemy/en001a/page_0.png",

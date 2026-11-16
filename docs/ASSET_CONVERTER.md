@@ -184,3 +184,15 @@ world v3／scenery v1新增`scenery_order` v1：三個groups（原版GetMode 0/1
 FISH01 ACT首index1，最後index10為raw300的合法長空白幀；不能依SPR幀數平均時間。Map13有5種／17實例，Map15有6種／44實例，兩圖全部多幀景物61實例已涵蓋，source-clips-only的NPC等時序不因此完成。私有bindings／ACT SHA見reports/scenery_time_bindings.json；本輪重新hash兩個HK2 binary與歷史timing audit版本一致，精度／DIRECT+AUDIT呼叫鏈見CLIENT_ARCHITECTURE。
 
 PCK重建PASS：SHA256 `02d05d9ae68f7760d6ded076c34c1c4f77c9bd0342f552a1a8df323df6cbb9d4`，86,399,320 bytes，254 BPTC＋254 ASTC；只有metadata增加，頁面／ID未改。79項Python tests PASS，原生ACT／fade與端點／epoch回歸見TEST_PLAN。原始素材與ACT產物仍只在本機，未上傳公開Git。
+
+### Runtime block4頁面（2026-11-16）
+
+唯一`export-assets`在完整Archive audit後，以`runtime_page`保留原始Frame rect／origin／trim與頁面所有來源texel，只補右下透明留白至4倍數。Archive頁與索引不重做；Runtime atlas v9另外保留archive_page_sizes／archive_page_sha256，page_sizes／page_sha256改為真正發布頁。重新export後必須重新pack；不能把新manifest配舊PCK。選型／codec誤差與未解畫質見ASSET_ARCHITECTURE。
+
+```powershell
+python tools/asset_converter/check_atlas_compression.py "C:\SGO\Godot\Godot_v4.7.2-stable_win64_console.exe" --archive local-assets/asset_converter/complete --work .cache/atlas-block-comparison-new --report reports/atlas_block_comparison_new.json
+python tools/asset_converter/cli.py export-assets "C:\SGO\Stargate Online IE HK2" --extracted-source .cache/asset_converter/source --server-dat "C:\SGO\Recovered\Old\服務端\Dat" --map 13 --map 15 --report reports/atlas_block_export.json
+python tools/asset_converter/smoke_runtime_pack.py "C:\SGO\Godot\Godot_v4.7.2-stable_win64_console.exe" --assets client/assets --map 13 --map 15 --output .cache/client-release/assets/assets.pck --report reports/atlas_block_pck.json
+```
+
+比較工具只建私有候選、共用正式Height-Dense geometry與PCK，`--work`須為未用過目錄；不發布第二套Catalog或維護第二個Builder。`--archive`核對原始／已發布Frame幾何一致後，以原始P0頁重播修正前239頁基線；未指定則p0是現有發布頁，不代表修正前結果。正式證據為帶素材／測試程式hash的atlas_block_comparison_final.json。比較PASS只表示完成比較與extent gate，並非全素材codec畫質核准。空白PCK smoke現在對標記block4的頁，同時檢查Texture2D logical和get_image physical extent，並用CompressedTexture2D.load逐一核對封裝內BPTC／ASTC兩個變體的實體尺寸；不直接ResourceLoader.load內部ctex路徑，也不把ASTC metadata載入當Mac GPU測試。

@@ -75,3 +75,5 @@ powershell -ExecutionPolicy Bypass -File tools/asset_converter/verify_converter.
 2026-11-16 景物時序切片：8個原版ACT已發布default25／50Hz時間metadata，涵蓋雙圖61個多幀景物實例；呈現以明確elapsed updates取樣，支援非零起始index與長空白幀。建築fade按原版256counter／每Step減16／alpha clamp255及原始疊層順序繪製，不依Render FPS累進。入口／版本狀態、dynamic action speed、NPC／Player完整時序與事件、P0壓縮品質、Server／多人仍未完成；詳CLIENT_ARCHITECTURE／TEST_PLAN。
 
 2026-11-16 建築焦點切片：已接連續fixed-update／epoch保護的inside呈現狀態與快照，保留原版last-wins、ShowInside／SetInOut差異、可見counter及室內Actor／家具額外排序。此為原版reference幾何與顯示規則實作，不是Server入口／碰撞或正式相機／多人Client完成；精度與驗證見CLIENT_ARCHITECTURE／TEST_PLAN。
+
+2026-11-16 Atlas頁面修正：254頁三候選實測後，Publisher保留Height-Dense P0幀配置，只補右下透明留白至4倍數，避免239頁的整頁匯入重採樣。壓縮base-level byte數不變；細節codec畫質仍未全通過，不等同完整P0／MVP Gate。資料遷移、選型與回歸見ASSET_ARCHITECTURE／ASSET_CONVERTER。

@@ -219,3 +219,7 @@ DIRECT仍為同SHA Paradise.exe.lst：InsideBuildObjEdit 0x0052A3EF–0x0052A59B
 原版動態舊Client視覺、真正相機／Player controller、zoom／odd viewport、packet EntityRevision／ConnectionEpoch、Server碰撞／權限、NPC規則與多人E2E仍NOT VERIFIED。MapEpoch目前是呈現owner的generation契約，不把診斷中使用的AssetStore scope序號當成正式Server protocol定版。Render0 numeric trace不等於實際多人AFK驗收。P0壓縮品質／視野預取與完整World記憶體斜率仍待後續Gate。
 
 本切片驗證：building_focus_release的兩候選共168 captures、105 source frames，含同畫面室內／室外Actor、Court子物件兩次draw，Python投影座標重播與GPU合成PASS；400 fixed updates在30/60/120/0呈現採樣下完整trace一致。負向錯selected／counter／少overlay／錯Actor順序全部拒絕，詳細命令與精度見TEST_PLAN。普通build保留手動快照相容；實際focus路徑應使用帶selected與epoch的build_focus，才能包含原版OnlineObjectShowHandle室內分流。
+
+### Atlas physical extent契約（2026-11-16）
+
+Renderer的FrameTable UV為原始pixel座標，必須對應Texture2D實體texel。原239個非4倍數頁匯入後被整頁nearest伸展，normalized UV雖可由舊oracle模擬，仍造成來源圖形變化。已在唯一Publisher補右下透明留白，不在Renderer加比例修正／第二份texture。Frame rect、origin、trim與景物bounds不變；更新manifest後須重建外部PCK。候選品質與byte成本見ASSET_ARCHITECTURE，實際GPU回歸見TEST_PLAN；codec仍有細節誤差，不宣稱原圖零差異或整體MVP完成。

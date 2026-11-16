@@ -65,6 +65,7 @@ func _initialize() -> void:
         quit(2)
         return
     var expected = JSON.parse_string(FileAccess.get_file_as_string(args[1]))
+    var codec_extents := 0
     for path in expected.files:
         if FileAccess.get_sha256(path) != expected.files[path]:
             push_error("PCK file hash mismatch: " + path)
@@ -76,7 +77,34 @@ func _initialize() -> void:
             push_error("Invalid PCK texture: " + item.path)
             quit(4)
             return
+        if item.get("block_aligned",false):
+            var image := texture.get_image()
+            if image == null or image.get_width() != int(item.width) or image.get_height() != int(item.height):
+                push_error("PCK physical texture extent differs: " + item.path)
+                quit(5)
+                return
+            # Inspect both stored variants without assuming this device can
+            # render ASTC. Metadata/readback extent is not a macOS GPU test.
+            var metadata := ConfigFile.new()
+            if metadata.load(item.path + ".import") != OK:
+                push_error("Missing PCK import metadata: " + item.path)
+                quit(6)
+                return
+            for key in ["path.bptc","path.astc"]:
+                if not metadata.has_section_key("remap",key):
+                    continue # Lossless UI pages have no codec variants.
+                var imported := CompressedTexture2D.new()
+                if imported.load(metadata.get_value("remap",key)) != OK:
+                    quit(6)
+                    return
+                var physical := imported.get_image()
+                if physical == null or physical.get_width() != int(item.width) or physical.get_height() != int(item.height):
+                    push_error("PCK stored codec extent differs: " + item.path + " " + key)
+                    quit(7)
+                    return
+                codec_extents += 1
         print("PCK_RESOURCE_PASS ", item.path)
+    print("PCK_CODEC_EXTENTS_PASS ",codec_extents)
     print("PCK_RUNTIME_SMOKE_PASS")
     quit(0)
 """
@@ -88,13 +116,17 @@ def real_contract(assets: Path, map_ids: list[int]) -> tuple[dict, dict]:
     def include(path):
         relative = path.relative_to(assets).as_posix()
         files['res://assets/'+relative] = hashlib.sha256(path.read_bytes()).hexdigest()
-    def texture(path, size):
+    def texture(path, size, block_aligned=False):
         relative = path.relative_to(assets).as_posix()
         include(path)
         with Image.open(path) as original:
             if list(original.size) != list(size):
                 raise ValueError('texture source dimensions differ: '+relative)
         textures[relative] = {'path':'res://assets/'+relative,'width':size[0],'height':size[1]}
+        if block_aligned:
+            if any(side%4 for side in size):
+                raise ValueError('runtime atlas page is not block aligned: '+relative)
+            textures[relative]['block_aligned'] = True
     catalog_path = assets/'catalog/assets.json'
     catalog = json.loads(catalog_path.read_text(encoding='utf-8'))
     include(catalog_path)
@@ -115,7 +147,7 @@ def real_contract(assets: Path, map_ids: list[int]) -> tuple[dict, dict]:
                 path = manifest_path.parent/name
                 if hashlib.sha256(path.read_bytes()).hexdigest() != manifest['page_sha256'][name]:
                     raise ValueError('atlas page hash differs: '+str(path))
-                texture(path, size)
+                texture(path, size, manifest.get('page_layout')=='height_dense_p0_block4_v1')
             definition = manifest.get('animation_semantics',{}).get('definition')
             if definition:
                 include(assets/definition)
@@ -227,6 +259,8 @@ def main() -> int:
             'pck_sha256': report['sha256'],
             'textures_loaded': expected_count,
             'raw_files_hashed': len(contract['files']) if contract is not None else 0,
+            'stored_codec_extents_checked': next((int(line.split()[-1]) for line in result.stdout.splitlines()
+                                                 if line.startswith('PCK_CODEC_EXTENTS_PASS ')),0),
             **metadata,
             'scope':'external PCK ResourceLoader; not rendered gameplay or Client/Server E2E',
         }

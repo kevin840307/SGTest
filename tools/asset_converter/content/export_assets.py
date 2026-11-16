@@ -1,16 +1,20 @@
 """Publish a complete or scoped private catalog into Godot's assets tree.
 
-Physical pages stay unchanged. The v9 adapter exposes source clips to the one
+Frame placement stays unchanged. Runtime pages receive transparent right/bottom
+alignment to 4x4 codec blocks without resampling. The v9 adapter exposes clips to the one
 future AssetStore; verified enemy semantics reuse the normalized compiler.
 Unresolved legacy semantics remain explicit instead of invented animations.
 """
 from collections import Counter
 import hashlib
+import io
 import json
 from pathlib import Path, PurePosixPath
 import re
 import shutil
 import tempfile
+
+from PIL import Image
 
 from ..atlas.archive_audit import audit_archive
 from ..source.runtime_spr import unwrap_cde
@@ -25,6 +29,28 @@ PLAYER_PART_ASSETS = (
     'players/b/hair/hair00', 'players/b/base/left_arm',
     'players/b/base/right_arm', 'players/b/base/death',
 )
+
+PAGE_LAYOUT = 'height_dense_p0_block4_v1'
+
+
+def runtime_page(payload: bytes, expected_size: list[int]) -> tuple[bytes, list[int]]:
+    """Keep every source texel/rect; only extend the bottom/right page boundary.
+
+    Godot's BC7/ASTC importers otherwise resize a non-block-aligned image. A
+    FrameTable refers to original pixel coordinates, so that resize is unsafe.
+    This does not extrude frames or change the verified source Archive.
+    """
+    with Image.open(io.BytesIO(payload)) as source:
+        if list(source.size) != expected_size:
+            raise ValueError('runtime page source dimension mismatch')
+        size = [(side+3)//4*4 for side in source.size]
+        if size == expected_size:
+            return payload, size
+        page = Image.new('RGBA',tuple(size))
+        page.paste(source.convert('RGBA'),(0,0))
+        stream = io.BytesIO()
+        page.save(stream,format='PNG',compress_level=3)
+    return stream.getvalue(), size
 
 
 def map_asset_ids(source: Path, server_dat: Path, map_ids: list[int]) -> set[str]:
@@ -186,13 +212,22 @@ def publish(source: Path, archive: Path, assets: Path, asset_ids: set[str] | Non
             except (ValueError,KeyError) as error:
                 semantics['reason'] = str(error)
         semantic_counts[semantics['status']] += 1
+        page_sizes, page_hashes = [], {}
+        for name, size in zip(raw['pages'],raw['page_sizes']):
+            payload = (original_folder/name).read_bytes()
+            if hashlib.sha256(payload).hexdigest() != raw['page_sha256'][name]:
+                raise ValueError('archive page changed during publication: '+group+'/'+name)
+            payload, aligned_size = runtime_page(payload,size)
+            write(asset_id+'/'+name,payload)
+            page_sizes.append(aligned_size)
+            page_hashes[name] = hashlib.sha256(payload).hexdigest()
         manifest = {'version':9,'asset_id':asset_id,'ownership':'on_demand',
                     'source_group':group,'classification':classification,'source_digest':raw['source_digest'],
-                    'pages':raw['pages'],'page_sizes':raw['page_sizes'],'page_sha256':raw['page_sha256'],
+                    'pages':raw['pages'],'page_sizes':page_sizes,'page_sha256':page_hashes,
+                    'page_layout':PAGE_LAYOUT,'archive_page_sizes':raw['page_sizes'],
+                    'archive_page_sha256':raw['page_sha256'],
                     'frames':frames,'clips':clips,'aliases':{},'act':act_timelines,'logical_views':views,
                     'sources':raw['sources'],'animation_semantics':semantics}
-        for name in raw['pages']:
-            copy(asset_id+'/'+name,original_folder/name,raw['page_sha256'][name])
         document(asset_id+'/atlas.json',manifest)
         register(asset_id,'sprite_atlas',asset_id+'/atlas.json',classification=classification)
         for item in raw['sources']:coverage[item['path']] = asset_id
