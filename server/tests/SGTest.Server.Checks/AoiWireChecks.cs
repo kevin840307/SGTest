@@ -73,7 +73,7 @@ internal static class AoiWireChecks
         var owner = new ActorSnapshot(11, 15, 1, 1, 0, 0, 24, 8, 1, false);
         var other = new ActorSnapshot(22, 15, 2, 1, 0, 4, 48, 24, 7, true);
         var gateway = new GatewayConnection(owner, new GatewayConnectionOptions(
-            MaxReliableFrames: 3, MaxReliableBytes: 256));
+            MaxReliableFrames: 3, MaxReliableBytes: WireProtocol.MaximumFrameBytes));
         Require(gateway.QueueAoi(new(AoiEventKind.WorldReady, 42, 1, owner)) ==
                 GatewaySendStatus.Enqueued, "own Ready enqueue");
         Require(gateway.QueueAoi(new(AoiEventKind.Spawn, 43, 1, other)) ==
