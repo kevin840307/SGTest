@@ -78,7 +78,10 @@ def main() -> int:
 
             run_checked(["openssl", "req", "-x509", "-newkey", "rsa:2048", "-sha256",
                          "-nodes", "-keyout", str(key), "-out", str(cert), "-days", "1",
-                         "-subj", "/CN=localhost"], repo, base_env, args.timeout)
+                         "-subj", "/CN=localhost",
+                         "-addext", "subjectAltName=DNS:localhost,IP:127.0.0.1",
+                         "-addext", "extendedKeyUsage=serverAuth"],
+                        repo, base_env, args.timeout)
             run_checked(["openssl", "pkcs12", "-export", "-out", str(pfx), "-inkey",
                          str(key), "-in", str(cert), "-passout", "pass:" + PFX_PASSWORD],
                         repo, base_env, args.timeout)
