@@ -1,6 +1,6 @@
 # SGTest — Client / Server Wire Contract
 
-**狀態：WIRE001 codec 選型已完成第一階段，正式 Runtime 採單一 versioned compact binary；Transport／TLS／Auth／完整 Opcode schema 仍未完成。** `server/src/SGTest.Server/Wire/WireProtocol.cs` 與 `client/network/wire_codec.gd` 已建立第一個正式 MoveTarget／MoveReceipt cross-runtime 契約。MessagePack／Protobuf 僅保留於 `tools/tests/wire_aoi_probe` 作選型證據，不是第二套正式協定。
+**狀態：WIRE001 codec 與 Server-side Gateway boundary 核心已完成第一階段；正式 Runtime 採單一 versioned compact binary。** `WireProtocol.cs`／Godot `wire_codec.gd` 提供 MoveTarget／MoveReceipt；Server `GatewayConnection` 已提供 trusted connection binding、bounded byte-stream parser 與 bounded reliable egress。**真正 Socket/TLS/Auth/WorldReady/ACK/reconnect 仍未完成。** MessagePack／Protobuf 只保留在 test probe，不是第二套正式協定。
 
 ## 原則
 
@@ -34,7 +34,9 @@
 - `MoveTarget(1)`：frame 28 bytes；payload = `int64 MapEpoch + uint32 MovementSequence + int32 TargetX + int32 TargetY`。ActorId／ConnectionEpoch **不由 Client 傳入**，未來 Gateway 必須由已驗證 connection binding 補入 Server command。
 - `MoveReceipt(2)`：frame 30 bytes；payload = `int64 MapEpoch + uint32 MovementSequence + uint16 Status + int64 ServerTick`。Status 使用明確 0..10 mapping，不依賴 C# enum 隱式 ordinal。
 
-尚未完成：正式 TCP/TLS listener、Auth/Character binding、ConnectionEpoch lifecycle、byte-stream parser 與 per-connection bounded ingress/egress、ACK/reliable queue、WorldReady/AOI snapshot、重連/resync、batching 與 20 真連線。這些保持 **NOT VERIFIED**，不可用 codec PASS 代替 REB020／MVP003 完成。
+已完成的 Server-side transport-independent 邊界：Client Move frame 不含 ActorId/ConnectionEpoch；`GatewayConnection` 只能由可信 `ActorSnapshot` 建立，將 connection identity 補成 `MoveTargetCommand`；`MoveReceipt` 內部帶 ActorId/ConnectionEpoch/MapEpoch 供安全路由。固定容量 `WireStreamParser` 不在 backpressure 時吞掉完整 frame；可靠輸出佇列有 frame/byte 雙上限、FIFO、無 DropOldest。MapEpoch 只能在同一 ConnectionEpoch 上由 trusted transfer 單調更新；重連必須建立新 GatewayConnection。
+
+尚未完成：正式 TCP/TLS listener、真正 Auth/CharacterChoose、socket lifetime、應用層 ACK、WorldReady/AOI snapshot、重連/resync、batching 與 20 真連線。這些保持 **NOT VERIFIED**，不可用 Gateway core PASS 代替 REB020／MVP003 完成。
 
 ## 世代與序號
 

@@ -1,12 +1,12 @@
 # SGTest Server — 重建設計
 
-**狀態：已建立 .NET 8 Blocking/A*、單寫者 World、可執行的 30Hz 離線 Host，以及 WIRE001 選定的 compact-binary V1 codec 第一切片；尚無 Socket/TLS/Auth、正式 AOI 或 Client/Server E2E。** 目標為單體功能模組，固定世界模擬與獨立 Transport/Persistence。
+**狀態：已建立 .NET 8 Blocking/A*、單寫者 World、30Hz 離線 Host、compact-binary V1 codec，以及不開 Socket 的 generation-safe Gateway boundary；尚無真正 Socket/TLS/Auth、正式 AOI 或 Client/Server E2E。** 目標為單體功能模組，固定世界模擬與獨立 Transport/Persistence。
 
 ## 核心邊界
 
 | 責任 | 內容 | 禁止 |
 |---|---|---|
-| Gateway/Connection | socket、身份驗證、ConnectionEpoch、有界佇列 | 直接計算傷害／操作 DB 於 Tick |
+| Gateway/Connection | trusted Actor binding、ConnectionEpoch、bounded parser/reliable queue；後續 socket/TLS/Auth | 讓 Client 宣稱 ActorId/ConnectionEpoch、直接計算傷害／操作 DB 於 Tick |
 | Wire | 實測選型的 binary/framed codec、版本、長度限制、重播保護 | 綁死 JSON／MessagePack、隱式依賴 Godot 角色類別 |
 | Map World | 單寫者 authoritative positions、collision、AI、combat、drop | 在 Tick 同步等磁碟／Send |
 | AOI & Snapshot | per-player visibility、Spawn/Despawn、entity revisions、有限頻率更新 | 把看不到當死亡，或跨 map 沿用 epoch |
@@ -25,7 +25,7 @@
 
 ## Wire 選型與 AOI 流量 Gate
 
-- REB020/WIRE001 已比較 compact binary、MessagePack、Protobuf 並選定**單一 compact-binary V1**；正式 `WireProtocol.cs` 目前只含 MoveTarget／MoveReceipt。MessagePack／Protobuf 只存在測試 Probe，不是 Runtime 依賴。下一 Gate 是 TLS/Auth、connection→Actor identity binding、ConnectionEpoch、有界 byte-stream parser／send queue、ACK／WorldReady／reconnect；在此之前不得打開不受保護的 Client RPC。
+- REB020/WIRE001 已選定**單一 compact-binary V1**；Server-side `GatewayConnection` 已用 trusted `ActorSnapshot` 綁定 ActorId/ConnectionEpoch，正式 bounded byte-stream parser 與 per-connection reliable queue 已有合成 Gate。World receipt 也攜帶 ConnectionEpoch/MapEpoch 防止舊登入結果誤送新連線。下一 Gate 是在這個邊界外加 TLS/Auth/CharacterChoose + 真 Socket lifetime，再接 ACK／WorldReady／reconnect；在此之前仍不得開放不受保護的 Client RPC。
 - 對相同 World Tick 與可見 AOI，量測每玩家 bytes/sec、訊息／秒、Serialize/Deserialize P95/P99、GC alloc、AOI 候選與扇出成本、Send Queue Age、輸入到畫面延遲；須與全圖無過濾基準公平比較，確認可節流網路且不破壞同步。
 - AI 的各怪物決策時間與位置推進分離；獨立 NextDecisionTick／分散預算避免所有怪物同時轉向／移動，Server 仍維持可重播且單寫者權威，不能用同一批群體動畫假裝自然 AI。
 
