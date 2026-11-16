@@ -14,7 +14,7 @@ func configure(asset: Dictionary) -> Error:
 		return ERR_INVALID_DATA
 	var world: Dictionary = asset.manifest
 	var bytes: PackedByteArray = asset.extra.get("tiles", PackedByteArray())
-	if world.get("version") != 3 or bytes.size() < 8:
+	if world.get("version") != 3 or world.get("tile_source_rule") != "int16_plus_one_wrap" or bytes.size() < 8:
 		return ERR_INVALID_DATA
 	var w := int(world.get("tile_width", 0))
 	var h := int(world.get("tile_height", 0))
@@ -33,7 +33,7 @@ func configure(asset: Dictionary) -> Error:
 	var rects: Array[Rect2] = []
 	for original_id in world.get("tile_ids", []):
 		var id := int(original_id)
-		if id < 0 or id >= 65535 or remap[id] >= 0 or rects.size() >= int(grid[0]) * int(grid[1]):
+		if id < 0 or id > 65535 or remap[id] >= 0 or rects.size() >= int(grid[0]) * int(grid[1]):
 			return ERR_INVALID_DATA
 		var index := rects.size()
 		remap[id] = index
@@ -42,7 +42,7 @@ func configure(asset: Dictionary) -> Error:
 	indices.resize(w * h)
 	for index in indices.size():
 		var original := bytes.decode_u16(8 + index * 2)
-		if original != 65535 and remap[original] < 0:
+		if remap[original] < 0:
 			return ERR_INVALID_DATA
 		indices[index] = remap[original]
 	texture = page

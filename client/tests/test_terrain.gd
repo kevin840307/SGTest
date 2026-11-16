@@ -42,13 +42,13 @@ func fixture() -> void:
 	bytes.encode_u32(4, 2)
 	for index in 4:
 		bytes.encode_u16(8 + index * 2, [3, 65535, 5, 3][index])
-	var image := Image.create(64, 32, false, Image.FORMAT_RGBA8)
+	var image := Image.create(96, 32, false, Image.FORMAT_RGBA8)
 	var texture := ImageTexture.create_from_image(image)
-	var asset := {"manifest":{"version":3,"tile_width":2,"tile_height":2,"tile_side":32,"atlas_grid":[2,1],"tile_ids":[3,5]},
+	var asset := {"manifest":{"version":3,"tile_width":2,"tile_height":2,"tile_side":32,"atlas_grid":[3,1],"tile_ids":[3,5,65535],"tile_source_rule":"int16_plus_one_wrap"},
 		"extra":{"tiles":bytes},"pages":[texture]}
 	var data := Data.new()
-	check(data.configure(asset) == OK and data.cells == PackedInt32Array([0,-1,1,0]), "Original tile remap/empty cell failed")
-	check(data.regions[1] == Rect2(32,0,32,32), "Tile UV remap failed")
+	check(data.configure(asset) == OK and data.cells == PackedInt32Array([0,2,1,0]), "Original signed tile +1 remap failed")
+	check(data.regions[2] == Rect2(64,0,32,32), "Tile UV remap failed")
 	var drawing := Draw.new()
 	drawing.configure(data)
 	drawing.set_view_rect(Rect2(0,0,64,64))
@@ -59,6 +59,9 @@ func fixture() -> void:
 	var corrupt: Dictionary = asset.duplicate(true)
 	corrupt.manifest.version = 2
 	check(Data.new().configure(corrupt) == ERR_INVALID_DATA, "Legacy world v2 accepted without hierarchy rebuild")
+	corrupt = asset.duplicate(true)
+	corrupt.manifest.erase("tile_source_rule")
+	check(Data.new().configure(corrupt) == ERR_INVALID_DATA, "Old direct-index terrain contract accepted")
 	corrupt = asset.duplicate(true)
 	corrupt.extra.tiles.append(0)
 	check(Data.new().configure(corrupt) == ERR_INVALID_DATA, "Trailing tile bytes accepted")

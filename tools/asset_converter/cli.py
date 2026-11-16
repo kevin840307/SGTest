@@ -166,8 +166,9 @@ def check_runtime(stage: Path, assets: Path, map_id: int) -> dict:
     world_path = stage / f"maps/{map_id}/world.json"
     population_path = stage / f"maps/{map_id}/population.json"
     world = json.loads(world_path.read_text(encoding="utf-8"))
-    if world.get('version') != 3 or world.get('map_id') != map_id:
-        raise ValueError('world v3 required; rebuild v2 scenery hierarchy from original ObjectList')
+    if (world.get('version') != 3 or world.get('map_id') != map_id
+            or world.get('tile_source_rule') != 'int16_plus_one_wrap'):
+        raise ValueError('world v3 + original tile source rule required; rebuild runtime map from original data')
     population = json.loads(population_path.read_text(encoding="utf-8"))
     npc_document = json.loads((stage/f'maps/{map_id}/npcs.json').read_text(encoding='utf-8'))
     if npc_document.get('schema') != 'sgtest.npcs/v1' or npc_document.get('map_id') != map_id:

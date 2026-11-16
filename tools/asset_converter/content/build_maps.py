@@ -1,8 +1,9 @@
 """Build compact original terrain atlases, object references and collision grids.
 
 Map INI selects PIC (uint32 width/height, RGB565 strip), MapBlock (uint32
-width/height then uint16 tile IDs; 65535 empty), Blocking (uint32 width/height
-then one byte/cell), and ObjectList (total count including children, name + XY
+width/height then int16 tile IDs; the original client adds one and wraps to
+ushort before indexing the PIC, so raw -1/0xffff selects PIC tile 0), Blocking
+(uint32 width/height then one byte/cell), and ObjectList (total count including children, name + XY
 and a child count on top-level records only).
 Sprite object images remain shared with build_assets output; no recovered scenes.
 """
@@ -239,15 +240,23 @@ def build(source, output, map_id):
     if (bw*16,bh*16) != (w*side,h*side):
         raise ValueError('terrain and collision world dimensions disagree')
     tile_ids = struct.unpack_from(f'<{w*h}H',tile_bytes,8)
-    used = sorted(set(tile_ids)-{65535})
-    if used and used[-1] >= height//side:
-        raise ValueError('tile ID outside original PIC')
+    # DIRECT: Paradise.exe CELMap2D::ReadTileArray 0x0052803B adds 1 to the
+    # signed int16 map value; CDDxTile::LoadTile/Convert 0x00547F50/0x00548205
+    # then indexes the pixel payload with that wrapped ushort * (32*32*2).
+    # Therefore raw 0 -> PIC 1 and raw 0xffff (-1) -> PIC 0.
+    used = sorted(set(tile_ids))
+    source_index = {tile:(tile+1)&0xffff for tile in used}
+    tile_count = height//side
+    if any(index >= tile_count for index in source_index.values()):
+        raise ValueError('tile ID + original bias outside original PIC')
     columns = max(1,math.ceil(math.sqrt(len(used))))
     rows = max(1,math.ceil(len(used)/columns))
     atlas = Image.new('RGBA',(columns*side,rows*side))
     strip = Image.frombytes('RGB',(side,height),pic[8:],'raw','BGR;16')
     for index,tile in enumerate(used):
-        atlas.paste(strip.crop((0,tile*side,side,(tile+1)*side)),(index%columns*side,index//columns*side))
+        pic_index = source_index[tile]
+        atlas.paste(strip.crop((0,pic_index*side,side,(pic_index+1)*side)),
+                    (index%columns*side,index//columns*side))
     dest = output/f'maps/{map_id}'
     dest.mkdir(parents=True,exist_ok=True)
     atlas.save(dest/'terrain.png',compress_level=3)
@@ -260,7 +269,8 @@ def build(source, output, map_id):
               for p in [config_path,pic_path,tile_path,blocking_path,object_path]}
     document = {'version':3,'map_id':map_id,'name':settings.get('Name',''), 'tile_side':side,
                 'tile_width':w,'tile_height':h,'collision_cell':16,'size':[w*side,h*side],
-                'atlas_grid':[columns,rows],'tile_ids':used,'objects':placed,
+                'atlas_grid':[columns,rows],'tile_ids':used,
+                'tile_source_rule':'int16_plus_one_wrap','objects':placed,
                 'scenery_schema':'sgtest.scenery/v1','scenery_definitions':definitions,
                 'scenery_order':compile_scenery_order(placed,definitions),
                 'source_hashes':hashes,
@@ -274,8 +284,9 @@ def build(source, output, map_id):
     checked = Image.open(dest/'terrain.png').convert('RGB')
     for index,tile in enumerate(used):
         rect = (index%columns*side,index//columns*side,(index%columns+1)*side,(index//columns+1)*side)
-        if checked.crop(rect).tobytes() != strip.crop((0,tile*side,side,(tile+1)*side)).tobytes():
-            raise ValueError(f'tile round-trip mismatch: {tile}')
+        pic_index = source_index[tile]
+        if checked.crop(rect).tobytes() != strip.crop((0,pic_index*side,side,(pic_index+1)*side)).tobytes():
+            raise ValueError(f'tile round-trip mismatch: raw={tile} source={pic_index}')
     return {'map_id':map_id,'tiles':len(used),'tile_references':len(tile_ids),'objects':len(placed),
             'animated_objects':sum(o['frames'] > 1 for o in placed),
             'terrain_rgba_bytes':atlas.width*atlas.height*4,'size':document['size'],
