@@ -67,18 +67,18 @@ def main() -> int:
             cwd=repo, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
             timeout=args.timeout)
         print(client.stdout, end="")
-        if client.returncode != 0 or "CLIENT_TLS_LOGIN_PASS" not in client.stdout:
+        if client.returncode != 0 or "CLIENT_TLS_LOGIN_PASS" not in client.stdout or "receipt=PASS" not in client.stdout:
             raise RuntimeError("Godot TLS login test failed")
         remaining = max(1.0, deadline - time.monotonic())
         server.wait(timeout=remaining)
         reader.join(timeout=2)
         output = "\n".join(lines)
-        if server.returncode != 0 or "LOGIN_FIXTURE_MOVE_PASS" not in output or "LOGIN_FIXTURE_PASS" not in output:
+        if server.returncode != 0 or "LOGIN_FIXTURE_MOVE_PASS" not in output or "LOGIN_FIXTURE_PASS" not in output or "LOGIN_FIXTURE_RECEIPT_ROUTED" not in output:
             raise RuntimeError("C# fixture did not confirm authenticated Move")
         for line in lines:
             if line.startswith("LOGIN_FIXTURE_"):
                 print(line)
-        print("GODOT_CSHARP_TLS_LOGIN_E2E_PASS secure_tls=true transport_thread=true reducer_thread=true")
+        print("GODOT_CSHARP_TLS_LOGIN_E2E_PASS secure_tls=true authenticated_move=true authoritative_receipt_returned=true transport_thread=true reducer_thread=true")
         return 0
     except Exception as error:
         print("TLS_LOGIN_RUNNER_FAIL", error, file=sys.stderr)
