@@ -131,6 +131,29 @@ public sealed class WorldResultRouter
     }
 
     /// <summary>
+    /// Short immutable snapshot for the non-World AOI pump; it never exposes
+    /// Client-supplied identities. A late disconnect may invalidate a binding
+    /// before QueueAoi; that case is rejected without sending stale frames.
+    /// </summary>
+    public ConnectionBinding[] SnapshotActiveBindings()
+    {
+        lock (_gate)
+            return _connections.Values.Where(c => !c.IsClosed)
+                .Select(c => c.Binding).ToArray();
+    }
+
+    public GatewaySendStatus QueueAoi(ConnectionBinding viewer, AoiEvent evt)
+    {
+        lock (_gate)
+        {
+            if (!_connections.TryGetValue(viewer.ActorId, out var connection) ||
+                connection.Binding != viewer)
+                return GatewaySendStatus.GenerationMismatch;
+            return connection.QueueAoi(evt);
+        }
+    }
+
+    /// <summary>
     /// Synchronous bounded fanout, called by exactly one result-consumer.
     /// Changed batches are retained first: overflow fails before any receipt
     /// in this Tick is enqueued. Receipt queue overflow also fails closed.

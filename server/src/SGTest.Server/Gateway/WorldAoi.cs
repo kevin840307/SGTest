@@ -90,6 +90,31 @@ public sealed class WorldAoi
         return true;
     }
 
+    /// <summary>
+    /// Peek/confirm is intentionally split: a reliable AOI event is removed
+    /// only AFTER the authenticated Gateway accepted it into bounded egress.
+    /// These methods share the same single AOI consumer thread as Apply.
+    /// </summary>
+    public bool TryPeek(long actorId, long connectionEpoch, long mapEpoch, out AoiEvent result)
+    {
+        result = default;
+        return _observers.TryGetValue(actorId, out var observer) &&
+               observer.Self.ConnectionEpoch == connectionEpoch &&
+               observer.Self.MapEpoch == mapEpoch &&
+               observer.Pending.TryPeek(out result);
+    }
+
+    public bool TryConfirmQueued(long actorId, long connectionEpoch, long mapEpoch)
+    {
+        if (!_observers.TryGetValue(actorId, out var observer) ||
+            observer.Self.ConnectionEpoch != connectionEpoch ||
+            observer.Self.MapEpoch != mapEpoch ||
+            observer.Pending.Count == 0)
+            return false;
+        observer.Pending.Dequeue();
+        return true;
+    }
+
     public void Apply(WorldChangedBatch batch)
     {
         ArgumentNullException.ThrowIfNull(batch);

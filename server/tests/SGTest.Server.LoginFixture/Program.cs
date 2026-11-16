@@ -31,6 +31,7 @@ internal static class Program
             long characterId = created.Character?.CharacterId ?? throw new InvalidOperationException("fixture character create failed");
             var authorization = new IdentityTlsAuthorization(store, world);
             var resultRouter = new WorldResultRouter();
+            var aoiPump = new WorldAoiPump(resultRouter);
 
             using var certificate = CreateCertificate();
             string certPath = Path.Combine(root, "fixture-cert.pem");
@@ -43,6 +44,10 @@ internal static class Program
                 Console.WriteLine($"LOGIN_FIXTURE_READY port={port} cert={certPath} username={Username} character={characterId}");
                 Console.Out.Flush();
                 using var client = await listener.AcceptTcpClientAsync().WaitAsync(TimeSpan.FromSeconds(15));
+                using var aoiStop = new CancellationTokenSource();
+                var aoiTask = aoiPump.RunAsync(aoiStop.Token);
+                try
+                {
                 var serverTask = authorization.RunAuthenticatedSocketAsync(client,
                     certificate, resultRouter,
                     new TlsWireConnectionOptions(AuthorizationTimeoutMilliseconds: 15000));
@@ -58,13 +63,20 @@ internal static class Program
                 Console.Out.Flush();
 
                 var ended = await serverTask.WaitAsync(TimeSpan.FromSeconds(5));
-                if (ended.CommandsAccepted != 1 || ended.ReliableFramesSent != 1 ||
-                    resultRouter.Statistics.ActiveSessions != 0)
-                    throw new InvalidOperationException($"fixture disconnect or send mismatch commands={ended.CommandsAccepted} receipts={ended.ReliableFramesSent} active_routes={resultRouter.Statistics.ActiveSessions}");
+                if (ended.CommandsAccepted != 1 || ended.ReliableFramesSent < 2 ||
+                    aoiPump.FramesQueued < 1 || resultRouter.Statistics.ActiveSessions != 0)
+                    throw new InvalidOperationException($"fixture disconnect or send mismatch commands={ended.CommandsAccepted} reliable_frames={ended.ReliableFramesSent} aoi={aoiPump.FramesQueued} active_routes={resultRouter.Statistics.ActiveSessions}");
+                Console.WriteLine($"LOGIN_FIXTURE_WORLD_READY_ROUTED aoi_frames={aoiPump.FramesQueued}");
                 await world.StopAsync();
                 Console.WriteLine($"LOGIN_FIXTURE_PASS tls={ended.Protocol} commands={ended.CommandsAccepted}");
                 Console.Out.Flush();
                 return 0;
+                }
+                finally
+                {
+                    aoiStop.Cancel();
+                    await aoiTask.ConfigureAwait(false);
+                }
             }
             finally
             {
