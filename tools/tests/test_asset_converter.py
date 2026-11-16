@@ -253,6 +253,7 @@ class ConverterTests(unittest.TestCase):
             (map_dir / "blocking.dat").write_bytes(collision)
             world = {
                 "version": 3, "map_id": 13,
+                "tile_source_rule":"int16_plus_one_wrap",
                 "scenery_schema":"sgtest.scenery/v1",
                 "scenery_definitions":{"tree":{"appearances":[{"atlas":"maps/visuals/tree/atlas.json"}]}},
                 "collision_sha256": hashlib.sha256(collision).hexdigest(),

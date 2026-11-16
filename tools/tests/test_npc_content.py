@@ -51,7 +51,9 @@ class NpcContentTests(unittest.TestCase):
                 f'Array=map/map{map_id}/mapblock.dat\n'
                 f'List=map/map{map_id}/objectlist.dat\n')
             (source/f'map/map{map_id}/blocking.dat').write_bytes(struct.pack('<II',4,4)+bytes(16))
-            (source/f'map/map{map_id}/tiles.pic').write_bytes(struct.pack('<II',16,16)+bytes(16*16*2))
+            # Original terrain IDs are signed int16 + 1 before PIC lookup, so
+            # raw map ID 0 requires source PIC tile 1 (two tiles total here).
+            (source/f'map/map{map_id}/tiles.pic').write_bytes(struct.pack('<II',16,32)+bytes(16*32*2))
             (source/f'map/map{map_id}/mapblock.dat').write_bytes(struct.pack('<II',4,4)+bytes(4*4*2))
             (source/f'map/map{map_id}/objectlist.dat').write_bytes(struct.pack('<I',0)+bytes(4))
         return source, server, root/'out/npcs.json'

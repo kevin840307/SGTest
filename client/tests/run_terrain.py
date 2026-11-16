@@ -23,6 +23,8 @@ def expected_view(assets, capture):
     tiles = struct.unpack_from(f'<{width*height}H', raw, 8)
     side = world['tile_side']
     columns = world['atlas_grid'][0]
+    if world.get('tile_source_rule') != 'int16_plus_one_wrap':
+        raise ValueError('runtime map missing original signed tile +1 contract')
     mapping = {original:index for index,original in enumerate(world['tile_ids'])}
     output = Image.new('RGB', tuple(capture['size']), 'black')
     # Raster pixel centers with nearest filtering; test fractions avoid ambiguous ties.
@@ -32,8 +34,6 @@ def expected_view(assets, capture):
         for y in range(max(0,oy//side), min(height,math.ceil((oy+output.height)/side))):
             for x in range(max(0,ox//side), min(width,math.ceil((ox+output.width)/side))):
                 original = tiles[y*width+x]
-                if original == 65535:
-                    continue
                 index = mapping[original]
                 sx, sy = index%columns*side, index//columns*side
                 output.paste(atlas.crop((sx,sy,sx+side,sy+side)), (x*side-ox,y*side-oy))
