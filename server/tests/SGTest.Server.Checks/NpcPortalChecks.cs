@@ -114,8 +114,10 @@ internal static class NpcPortalChecks
                 "wrong NPC or replay changed map");
         var accepted = world.TryTrustedNpcInteract(901, a.ConnectionEpoch, a.MapEpoch,
             2, 46, catalog);
+        var in13 = accepted.TransferredActor ??
+            throw new Exception("accepted portal lacks transferred actor");
         Require(accepted.Status == NpcPortalStatus.Accepted &&
-                accepted.TransferredActor is { MapId: 13 } in13 &&
+                in13.MapId == 13 &&
                 in13.MapEpoch > a.MapEpoch && in13.X == 56,
                 "validated NPC click did not transfer to Map13");
         Require(world.TryTrustedNpcInteract(901, a.ConnectionEpoch, a.MapEpoch,
@@ -171,14 +173,18 @@ internal static class NpcPortalChecks
                 "invalid NPC altered live Gateway");
             var go = await router.TrustedNpcInteractAsync(
                 host, catalog, connection.Binding, 2, 46);
+            var moved = go.TransferredActor ??
+                throw new Exception("live Map13 transfer missing actor");
             Require(go.Status == NpcPortalStatus.Accepted &&
-                    go.TransferredActor is { MapId: 13 } moved &&
+                    moved.MapId == 13 &&
                     connection.Binding.MapEpoch == moved.MapEpoch,
                 "host NPC transfer did not advance trusted Gateway");
             var back = await router.TrustedNpcInteractAsync(
                 host, catalog, connection.Binding, 1, 1);
+            var returned = back.TransferredActor ??
+                throw new Exception("live Map15 transfer missing actor");
             Require(back.Status == NpcPortalStatus.Accepted &&
-                    back.TransferredActor is { MapId: 15 } returned &&
+                    returned.MapId == 15 &&
                     returned.MapEpoch > moved.MapEpoch &&
                     connection.Binding.MapEpoch == returned.MapEpoch,
                 "host NPC return failed");
