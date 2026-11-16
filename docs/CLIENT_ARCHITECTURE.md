@@ -236,3 +236,11 @@ Renderer的FrameTable UV為原始pixel座標，必須對應Texture2D實體texel�
 可重播 `python client/tests/run_world_view.py Godot --report reports/world_view_native.json`：真 Windows OpenGL3／RTX3050／正式私有 PCK，12 個 Map13/15 × 兩視窗大小×三 focus GPU capture，CPU 原始 SPR／Atlas crop／world draw order／像素采樣驗證 12/12 PASS、38 distinct SPR frame，沒有 over-tolerance pixel；原版的 CPU 素材與壓縮 GPU 仍按已聲明 sampler/rounding 界檢查，不謊稱逐 RGB 完全一致。快速 6 組反覆切圖、Input UI 攔截、相機 epoch、退出 drain 正確，final scopes/assets/jobs/RGBA=0。single-process PeakRSS226.19MB、5.75s wall，只是 Viewer E2E，不代表正式遊戲 frame tail 或多人 8 開。
 
 後續 MVP002：把 Presenter 連接到真正的 WorldState／network command reducer／角色固定動畫與 Render FPS 解耦；逐視野資產預載和 AFK Render0 資源成本仍待公平選型。MVP003/REB020 的 Server/Wire／A*／MapEpoch 不可由此推論完成。
+
+## REB010-GODOT-TLS-LOGIN (2026-11-16)
+
+The first Client network boundary is deliberately independent of rendering. `ClientTransport` is a `RefCounted` owner of a dedicated Godot `Thread`; only that worker touches `StreamPeerTCP`/`StreamPeerTLS`. The main/application side submits complete bounded wire frames and drains bounded frame events. TCP connect and TLS handshake have finite deadlines; TLS must be polled before checking available bytes. Sending uses `put_partial_data` and receiving uses `get_partial_data`, so the worker does not wait for a whole application frame in one blocking call. A fixed receive cap protects against coalesced/malformed input, and a full event queue closes/fails rather than silently discarding authoritative data.
+
+Security: `start_secure()` uses `TLSOptions.client()` and certificate/hostname validation. `start_test_unsafe()` exists only for debug builds and is not the production default. The actual E2E does not use unsafe mode: the C# fixture emits a self-signed public certificate, Godot loads it as the explicit trusted chain, and validates `localhost` before exchanging identity frames.
+
+Observed E2E on Godot 4.7.2 Windows: Auth succeeds, one owned character is listed, CharacterChoose returns authoritative MapEpoch, Godot sends MoveTarget, and C# World confirms `actor=1, sequence=1`; client counters are 3 sent / 3 received. This proves socket/TLS/framing/login are no longer tied to render polling. It does **not** yet prove complete gameplay logic independence at render 0/30/60/90, because a dedicated non-render WorldState/reducer/event consumer is the next layer.

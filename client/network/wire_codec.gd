@@ -5,8 +5,18 @@ const HEADER_BYTES := 8
 const MAX_FRAME_BYTES := 65536
 const OPCODE_MOVE_TARGET := 1
 const OPCODE_MOVE_RECEIPT := 2
+const OPCODE_AUTH_REQUEST := 10
+const OPCODE_AUTH_RESULT := 11
+const OPCODE_CHARACTER_LIST := 12
+const OPCODE_CHARACTER_CHOOSE := 13
+const OPCODE_CHARACTER_CHOOSE_RESULT := 14
 const MOVE_TARGET_FRAME_BYTES := 28
 const MOVE_RECEIPT_FRAME_BYTES := 30
+const AUTH_RESULT_FRAME_BYTES := 9
+const CHARACTER_CHOOSE_FRAME_BYTES := 16
+const CHARACTER_CHOOSE_RESULT_FRAME_BYTES := 45
+const MAX_AUTH_REQUEST_FRAME_BYTES := 300
+const MAX_CHARACTER_LIST_FRAME_BYTES := 4096
 
 static func encode_move_target(map_epoch: int, movement_sequence: int, target_x: int, target_y: int) -> PackedByteArray:
 	if map_epoch <= 0 or movement_sequence <= 0 or movement_sequence > 0xffffffff:
@@ -25,49 +35,143 @@ static func encode_move_target(map_epoch: int, movement_sequence: int, target_x:
 static func decode_move_target(frame: PackedByteArray) -> Dictionary:
 	if not _valid_header(frame, OPCODE_MOVE_TARGET, MOVE_TARGET_FRAME_BYTES):
 		return {}
-	var reader := StreamPeerBuffer.new()
-	reader.big_endian = false
-	reader.data_array = frame
-	reader.seek(8)
+	var reader := _reader(frame, 8)
 	var map_epoch := reader.get_64()
 	var sequence := reader.get_u32()
 	var target_x := reader.get_32()
 	var target_y := reader.get_32()
 	if map_epoch <= 0 or sequence == 0:
 		return {}
-	return {
-		"map_epoch": map_epoch,
-		"movement_sequence": sequence,
-		"target_x": target_x,
-		"target_y": target_y,
-	}
+	return {"map_epoch": map_epoch, "movement_sequence": sequence, "target_x": target_x, "target_y": target_y}
 
 static func decode_move_receipt(frame: PackedByteArray) -> Dictionary:
 	if not _valid_header(frame, OPCODE_MOVE_RECEIPT, MOVE_RECEIPT_FRAME_BYTES):
 		return {}
-	var reader := StreamPeerBuffer.new()
-	reader.big_endian = false
-	reader.data_array = frame
-	reader.seek(8)
+	var reader := _reader(frame, 8)
 	var map_epoch := reader.get_64()
 	var sequence := reader.get_u32()
 	var status := reader.get_u16()
 	var server_tick := reader.get_64()
 	if map_epoch <= 0 or sequence == 0 or status > 10 or server_tick < 0:
 		return {}
-	return {
-		"map_epoch": map_epoch,
-		"movement_sequence": sequence,
-		"status": status,
-		"server_tick": server_tick,
-	}
+	return {"map_epoch": map_epoch, "movement_sequence": sequence, "status": status, "server_tick": server_tick}
 
-static func _valid_header(frame: PackedByteArray, expected_opcode: int, expected_bytes: int) -> bool:
-	if frame.size() != expected_bytes or frame.size() < HEADER_BYTES or frame.size() > MAX_FRAME_BYTES:
-		return false
+static func encode_auth_request(username: String, password: String) -> PackedByteArray:
+	var username_bytes := username.to_utf8_buffer()
+	var password_bytes := password.to_utf8_buffer()
+	if username_bytes.size() < 3 or username_bytes.size() > 32 or password_bytes.size() < 8 or password_bytes.size() > 256:
+		return PackedByteArray()
+	var frame_bytes := HEADER_BYTES + 4 + username_bytes.size() + password_bytes.size()
+	if frame_bytes > MAX_AUTH_REQUEST_FRAME_BYTES:
+		return PackedByteArray()
+	var writer := StreamPeerBuffer.new()
+	writer.big_endian = false
+	writer.put_u32(frame_bytes)
+	writer.put_u16(VERSION)
+	writer.put_u16(OPCODE_AUTH_REQUEST)
+	writer.put_u16(username_bytes.size())
+	writer.put_u16(password_bytes.size())
+	writer.put_data(username_bytes)
+	writer.put_data(password_bytes)
+	return writer.data_array
+
+static func decode_auth_result(frame: PackedByteArray) -> Dictionary:
+	if not _valid_header(frame, OPCODE_AUTH_RESULT, AUTH_RESULT_FRAME_BYTES):
+		return {}
+	var status := frame[8]
+	if status > 2:
+		return {}
+	return {"status": status}
+
+static func decode_character_list(frame: PackedByteArray) -> Dictionary:
+	if not _valid_variable_header(frame, OPCODE_CHARACTER_LIST, 9, MAX_CHARACTER_LIST_FRAME_BYTES):
+		return {}
+	var reader := _reader(frame, 8)
+	var count := reader.get_u8()
+	if count > 32:
+		return {}
+	var characters: Array[Dictionary] = []
+	var ids := {}
+	var slots := {}
+	for _i in range(count):
+		if reader.get_available_bytes() < 11:
+			return {}
+		var character_id := reader.get_64()
+		var slot := reader.get_u8()
+		var name_bytes_count := reader.get_u16()
+		if character_id <= 0 or slot > 31 or name_bytes_count < 1 or name_bytes_count > 96 or reader.get_available_bytes() < name_bytes_count:
+			return {}
+		if ids.has(character_id) or slots.has(slot):
+			return {}
+		var result := reader.get_data(name_bytes_count)
+		if result[0] != OK:
+			return {}
+		var name_bytes: PackedByteArray = result[1]
+		var name := name_bytes.get_string_from_utf8()
+		if name.to_utf8_buffer() != name_bytes:
+			return {}
+		ids[character_id] = true
+		slots[slot] = true
+		characters.append({"character_id": character_id, "slot": slot, "name": name})
+	if reader.get_available_bytes() != 0:
+		return {}
+	return {"characters": characters}
+
+static func encode_character_choose(character_id: int) -> PackedByteArray:
+	if character_id <= 0:
+		return PackedByteArray()
+	var writer := StreamPeerBuffer.new()
+	writer.big_endian = false
+	writer.put_u32(CHARACTER_CHOOSE_FRAME_BYTES)
+	writer.put_u16(VERSION)
+	writer.put_u16(OPCODE_CHARACTER_CHOOSE)
+	writer.put_64(character_id)
+	return writer.data_array
+
+static func decode_character_choose_result(frame: PackedByteArray) -> Dictionary:
+	if not _valid_header(frame, OPCODE_CHARACTER_CHOOSE_RESULT, CHARACTER_CHOOSE_RESULT_FRAME_BYTES):
+		return {}
+	var reader := _reader(frame, 8)
+	var status := reader.get_u8()
+	var character_id := reader.get_64()
+	var map_id := reader.get_32()
+	var x := reader.get_double()
+	var y := reader.get_double()
+	var map_epoch := reader.get_64()
+	if status > 2:
+		return {}
+	if status == 0:
+		if character_id <= 0 or map_id <= 0 or map_epoch <= 0 or not is_finite(x) or not is_finite(y):
+			return {}
+	elif character_id != 0 or map_id != 0 or map_epoch != 0 or x != 0.0 or y != 0.0:
+		return {}
+	return {"status": status, "character_id": character_id, "map_id": map_id, "x": x, "y": y, "map_epoch": map_epoch}
+
+static func frame_length_prefix(buffer: PackedByteArray) -> int:
+	if buffer.size() < 4:
+		return -1
+	var reader := StreamPeerBuffer.new()
+	reader.big_endian = false
+	reader.data_array = buffer.slice(0, 4)
+	var size := reader.get_u32()
+	if size < HEADER_BYTES or size > MAX_FRAME_BYTES:
+		return -1
+	return size
+
+static func _reader(frame: PackedByteArray, offset: int) -> StreamPeerBuffer:
 	var reader := StreamPeerBuffer.new()
 	reader.big_endian = false
 	reader.data_array = frame
+	reader.seek(offset)
+	return reader
+
+static func _valid_header(frame: PackedByteArray, expected_opcode: int, expected_bytes: int) -> bool:
+	return frame.size() == expected_bytes and _valid_variable_header(frame, expected_opcode, expected_bytes, expected_bytes)
+
+static func _valid_variable_header(frame: PackedByteArray, expected_opcode: int, minimum_bytes: int, maximum_bytes: int) -> bool:
+	if frame.size() < minimum_bytes or frame.size() > maximum_bytes or frame.size() < HEADER_BYTES or frame.size() > MAX_FRAME_BYTES:
+		return false
+	var reader := _reader(frame, 0)
 	var advertised := reader.get_u32()
 	var version := reader.get_u16()
 	var opcode := reader.get_u16()

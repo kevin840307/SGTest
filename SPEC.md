@@ -126,3 +126,7 @@ Account/Character persistence baseline is SQLite schema v1. Passwords use Argon2
 ### TLS identity binding baseline - 2026-11-16
 
 Inside mandatory TLS, V1 identity flow is AuthRequest -> AuthResult -> CharacterList -> CharacterChoose -> CharacterChooseResult. Character ownership is checked server-side; successful selection uses persistent character_id and stored spawn to perform trusted World registration. Only that World result creates Gateway identity. Client never supplies ConnectionEpoch or authoritative ActorId. Godot identity transport, production listener/admission/rate limits and WorldReady/reconnect remain later gates.
+
+### Client transport baseline - 2026-11-16
+
+Client TCP/TLS I/O runs on a dedicated worker thread and is not driven by render `_process()`. Queues and receive buffering are bounded; no authoritative frame may be silently DropOldest. Production mode validates TLS certificates and hostname. The current real Godot<->C# fixture passes Auth/CharacterChoose/Move, but the non-render WorldState/reducer and explicit render=0/30/60/90 equivalence gate remain required before claiming full network/game-logic independence from UI FPS.

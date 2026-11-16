@@ -24,5 +24,7 @@ jobs:
         run: dotnet build server/src/SGTest.Server/SGTest.Server.csproj -c Release --nologo
       - name: Build 30Hz host
         run: dotnet build server/host/SGTest.Server.Host/SGTest.Server.Host.csproj -c Release --nologo
+      - name: Build Godot TLS login fixture
+        run: dotnet build server/tests/SGTest.Server.LoginFixture/SGTest.Server.LoginFixture.csproj -c Release --nologo
       - name: Synthetic authoritative world, wire and gateway checks
         run: dotnet run --project server/tests/SGTest.Server.Checks/SGTest.Server.Checks.csproj -c Release
