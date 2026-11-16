@@ -9,7 +9,7 @@
 - `tools/tests/`：正式 Converter、原始格式及佈署包契約測試（**不是 Client/Server 程式**）；舊獨立轉換器與 Viewer 已從工作樹移除，可從 Git 歷史查閱。
 - `docs/`、`SPEC.md`、`todo.txt`：正式設計與原版研究證據；歷史完成紀錄見 `docs/research/FEATURE_DECISION_HISTORY.md#source-todo-pre-rebuild-20261115-txt`。
 - `client/assets/.gdignore`：**僅保留轉換輸出的定位標記**，不是 Godot Runtime。
-- `client/`：新 Godot 4.7.2 資源模組／測試專案；單一 AssetStore、真地形／景物 Renderer、雙圖檢視用 main scene 與可平移的呈現相機已有原生 GPU／像素驗證；**仍無角色操作、正式 WorldState／網路，也不可當作可玩主程式**。`server/` 已建立 .NET 8 權威 Blocking／A* 基礎與**單寫者手動 World Tick／有界移動命令** Class Library、可重跑原版雙圖檢查，**目前已有不開放網路 Port 的可執行 30Hz 離線 Host，但尚無 Socket、登入認證、AOI、WorldReady 或真正連線人物**；見 [Server 進度](server/README.md)。
+- `client/`：新 Godot 4.7.2 資源模組／測試專案；單一 AssetStore、真地形／景物 Renderer、雙圖檢視用 main scene 與可平移的呈現相機已有原生 GPU／像素驗證；WIRE001 已新增正式 compact-binary V1 `network/wire_codec.gd` 第一切片，**仍無 Transport worker、角色操作、正式 WorldState／登入，也不可當作可玩主程式**。`server/` 已建立 .NET 8 權威 Blocking／A*、單寫者 World、有界移動命令、可執行 30Hz 離線 Host與正式 `WireProtocol.cs` 第一切片，**但尚無 Socket/TLS、登入認證、connection→Actor binding、AOI、WorldReady 或真正連線人物**；見 [Server 進度](server/README.md)。
 
 ## 現階段 MVP：Map15 主城 + Map13 尼西亞台地
 
@@ -57,7 +57,7 @@ powershell -ExecutionPolicy Bypass -File tools/asset_converter/verify_converter.
 - 怪物 Animator 可採共享 `SpriteFrames + AnimatedSprite2D` 作第一候選；**跨 Player/Enemy/Scenery World Y-sort 必須正確**，不能只依隔離 Benchmark 宣稱全面勝出。
 - Server 對位置、碰撞、戰鬥、經濟、交易保持權威；DB 不阻塞 World Tick。
 
-**目前可執行 Converter、Client 真圖 Viewer／資源回歸（見 client/README.md）；正式可玩遊戲與 Server 啟動仍待實作。**
+**目前可執行 Converter、Client 真圖 Viewer／資源回歸與不開網路埠的 .NET 8 30Hz Server Host；正式可玩 Client/Server 網路整合仍待實作。**
 
 ## 重建狀態（2026-11-15）
 

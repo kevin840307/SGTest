@@ -58,9 +58,11 @@ dotnet run -c Release --project tools/tests/wire_aoi_probe/WireAoiProbe.csproj
 & "C:\SGO\Godot\Godot_v4.7.2-stable_win64_console.exe" --headless --path . --script tools/tests/wire_aoi_probe/verify_binary.gd
 ~~~
 
-檢查 RESULT ... PASS 與 WIRE_GODOT_GOLDEN_PASS；使用人工資料，已驗證 Binary Golden Fixture／Spatial Grid 與 brute-force 等價、Hysteresis 和密集 AOI 反例。**未**驗證正式 Server/WebSocket、多機、真實封包延遲、MessagePack/Protobuf、Map13 E2E；結果與限制記於 [Wire Contract](RUNTIME_PROTOCOL.md)。
+檢查 RESULT ... PASS 與 WIRE_GODOT_GOLDEN_PASS；使用人工資料，已驗證 Binary Golden Fixture／Spatial Grid 與 brute-force 等價、Hysteresis 和密集 AOI 反例。MessagePack/Protobuf 公平 codec 對比已於 2026-11-16 的 WIRE001-CODEC 補齊；**仍未**驗證正式 Socket/TLS、多機、真實網路延遲、正式 AOI/Map13 E2E。結果與限制記於 [Wire Contract](RUNTIME_PROTOCOL.md)。
 
-**REB020-FRAMING-PROBE（2026-11-16，合成測試 PASS，WIRE001 主項 NOT VERIFIED）**：沿用既有 Wire/AOI probe，新增可重播 TCP framing byte-stream 候選，32-byte Move fixture 的全部33拆包切點、100組seeded三封包黏包／拆包、5非法length、3非法version/opcode/payload-width、半包reset與合法後非法拒絕，.NET 8與Godot 4.7.2皆PASS；現行Python 81 tests PASS。Godot standalone：`& "C:\SGO\Godot\Godot_v4.7.2-stable_win64_console.exe" --headless --script (Resolve-Path tools/tests/wire_aoi_probe/verify_framing.gd).Path`。此為test-only bounded 64-byte fuzz，沒有Socket／MessagePack公平對比／TLS／ServerQueue／reconnect E2E；未測不得宣稱單一正式Wire已定版。完整重跑命令與待測指標見RUNTIME_PROTOCOL。
+**REB020-FRAMING-PROBE（2026-11-16，合成測試 PASS）**：沿用既有 Wire/AOI probe，32-byte Move fixture 的全部33拆包切點、100組seeded三封包黏包／拆包、5非法length、3非法version/opcode/payload-width、半包reset與合法後非法拒絕，.NET 8與Godot 4.7.2皆PASS。此 parser 仍是 test-only framing evidence，不等於正式 Socket parser。
+
+**WIRE001-CODEC（2026-11-16，選型 PASS；Transport/E2E 仍 NOT VERIFIED）**：同一 deterministic 4,000-event Move／Combat／Drop／Spawn trace 比較 compact binary、MessagePack 3.1.12、Google.Protobuf 3.36.2；三者 C# round-trip 與 Godot Move cross-runtime fixture 都 PASS。平均 framed bytes/event=35.40／28.61／29.39；.NET compact P50 encode/decode=0.080/0.118µs，MessagePack=0.273/0.382µs，Protobuf=0.230/0.287µs；Godot Move fixture compact=1.205/0.922µs、MessagePack test codec=2.135/3.506µs、Protobuf test codec=4.021/5.278µs。依 CPU／GC／Godot dependency／維護成本選 compact binary 為唯一正式 Runtime codec；正式 MoveTarget 28B、MoveReceipt 30B 的 C#↔GDScript golden fixtures及畸形輸入拒絕皆PASS。Python 81/81、Server/Host Release build 0 warning/error。仍沒有 TLS/Auth／Connection binding／正式 byte-stream parser／per-player queue／ACK／WorldReady／reconnect／真 Socket，故 REB020／MVP003 不得勾選。完整數據與限制見 RUNTIME_PROTOCOL。
 
 ## Gate 2 — 視覺、戰鬥與 AOI
 

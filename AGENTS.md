@@ -47,7 +47,7 @@
 - **資產**：一個原素材一個獨立 logical/physical Asset（Enemy / NPC / Scenery / Player part / Equipment 等）；Frame 高度排序、POT 尺寸只是同一 Asset 內策略。禁止跨素材合圖，怪物目錄使用 `Enemy/`，不得多一層 `generation/`。
 - **來源**：`Old`、`Recovered`、`TestGoGo` 為唯讀研究來源；未有發佈權時不可把原圖、音效、反編譯文本複製進公開 Git。
 - **Client**：network transport、message codec、state reducer、prediction、render/UI 分工明確；AFK/Unfocus/Render FPS 只能改變畫面/音效，不可節流可靠事件、收包與固定遊戲邏輯。
-- **Wire 選型**：不預設 JSON 或 MessagePack。先觀察 Recovered/Old 原版格式，建立 C#／Godot 相同 fixture，實測 framing／header/binary/序列化方案的 bytes/sec、延遲、alloc/GC、跨平台和維護成本；正式只保留一套相容協定。
+- **Wire 選型**：2026-11-16 WIRE001 已依公平實測選定單一 little-endian compact-binary V1；正式 Runtime 不加入 MessagePack／Protobuf 第二套。後續直接在此契約上完成 TLS/Auth、ConnectionEpoch identity binding、bounded parser/queue、ACK/WorldReady/reconnect；只有新證據顯示重大問題時才重開選型，並必須重新跑相同 Gate。
 - **AOI 優先**：Server 先以權威 map/position + 受限 viewport/interest 過濾玩家、怪物、掉落物，先訂閱再發 Delta；可靠 Spawn/Despawn、戰鬥、物品、交易事件不得被合併快照吞掉。避免全圖廣播、群體同步怪物動作及每 Tick 無意義的重複狀態。
 - **動畫**：不因 Move 事件不當覆蓋 Attack/Hit/Death；保留方向、ACT timing、trim/origin、flip、紙娃娃 draw order、地圖物件與所有角色共同 Y-sort。
 - **Server**：authority 管理位置、Blocking.dat 碰撞、戰鬥、物品、金錢、交易；World 單寫者設計，外部 DB I/O 不能卡住 Tick；網路與遊戲規則分離。

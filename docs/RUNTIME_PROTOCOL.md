@@ -1,6 +1,6 @@
 # SGTest — Client / Server Wire Contract
 
-**狀態：提案規格，尚未建置新的 wire codec。** 目前**沒有指定 JSON、MessagePack、Protobuf 或自訂二進位格式**；先比對原版／Recovered 和可重現測試，再決定封包頭、傳輸、Payload、enum 與版本化契約，不直接沿用舊程式碼的隱式格式。
+**狀態：WIRE001 codec 選型已完成第一階段，正式 Runtime 採單一 versioned compact binary；Transport／TLS／Auth／完整 Opcode schema 仍未完成。** `server/src/SGTest.Server/Wire/WireProtocol.cs` 與 `client/network/wire_codec.gd` 已建立第一個正式 MoveTarget／MoveReceipt cross-runtime 契約。MessagePack／Protobuf 僅保留於 `tools/tests/wire_aoi_probe` 作選型證據，不是第二套正式協定。
 
 ## 原則
 
@@ -9,7 +9,7 @@
 - Client Transport 接收後先 Decode/Validate，再放入**有界、順序一致**的事件佇列。Renderer FPS／AFK 不會決定封包處理速度。
 - 同一 wire schema 可產生 C#／GDScript fixture，但兩個 Runtime **不能互相引用對方 executable code**。
 
-## 通訊格式選型（先量測，不能預設 JSON／MessagePack）
+## 通訊格式選型（已依 WIRE001 實測收斂）
 
 - **用途分離**：遊戲即時通訊可選固定長度 header + 緊湊二進位 payload、Length-prefix + Opcode、MessagePack、Protobuf 或其他可證明合適的方案。JSON 可作設定／除錯／工具資料，**不是線上遊戲封包的必要格式**。
 - **先確認原版**：唯讀查看 Recovered Client／Server、Recovered/Old、原版反編譯中的封包 framing、欄位寬度、端序、時序及更新頻率；用 fixture 驗證觀察結果，區分已證實與推測。
@@ -17,6 +17,24 @@
 - **封包頭候選**：可包含 Length、ProtocolVersion、Opcode、Flags（及必要時序號／Epoch）；header 寬度、變長編碼、最大長度、endianness、checksum、可靠性語意、batching、壓縮閾值由比較與安全需求決定，不先鎖死，也不能把業務資料與傳輸封裝耦合。
 - **零拷貝／少配置**：優先預配置／buffer pooling、分段讀寫與有界批次；先 Profile 才加入複雜壓縮或混合傳輸。TCP 需處理拆包／黏包及隊首阻塞；若評估 UDP／多通道，須明確設計可靠性、排序、重傳、驗證、加密、防作弊及部署成本。
 - **格式變更**：C#／GDScript 共用 fixture 與明確版本契約；Codec 可替換但**不得多套正式 Wire Protocol 同時長期維護**。記錄選型與否決方案的實測數據後才更新正式規格。
+
+### 2026-11-16 WIRE001 codec 選型結果
+
+同一個 deterministic 4,000-event Move／Combat／Drop／Spawn trace，以共同 8-byte framing 計入線路大小；三候選皆先通過 C# round-trip，再以相同 Move fixture 做 Godot 4.7.2 byte-for-byte cross-runtime 驗證。Recovered 私有來源也重新核對：現行舊實作確為 JSON → AES-CBC/PKCS7 → Base64 + WebSocket text，Client 世界內以每 physics frame 最多 128 packet／4ms budget drain；這只作 legacy 行為證據，不沿用其固定 IV／JSON envelope。
+
+| 候選 | 平均 frame bytes/event | C# encode P50/P95/P99 µs | C# decode P50/P95/P99 µs | C# encode/decode alloc B/event | Godot Move encode/decode µs |
+|---|---:|---:|---:|---:|---:|
+| compact binary | 35.40 | 0.080 / 0.096 / 0.107 | 0.118 / 0.123 / 0.203 | 51.6 / 0.0 | 1.205 / 0.922 |
+| MessagePack | 28.61 | 0.273 / 0.539 / 0.608 | 0.382 / 0.396 / 0.436 | 168.4 / 0.0 | 2.135 / 3.506 |
+| Protobuf | 29.39 | 0.230 / 0.291 / 0.300 | 0.287 / 0.372 / 0.390 | 169.4 / 224.8 | 4.021 / 5.278 |
+
+因此正式 Runtime 選 **compact binary**。在此 trace 它比 MessagePack 約多 23.7% bytes/event、比 Protobuf約多20.4%，但 C#／Godot encode/decode 都顯著較快、decode 可做到零配置、沒有第三方序列化 runtime 依賴，且欄位寬度與安全驗證可完全明確。對本專案大量移動/AOI更新、多開、低 CPU/GC 與 Godot 維護成本的整體權重較合適；未來主要網路節省應由 AOI、changed-only、coalescing/batching 帶來，而不是為數 byte 付出每封包較高 CPU。此結果是本機 Release／headless microbenchmark，不是 TCP/TLS 或真多人 latency Gate。
+
+正式 V1 header 為 little-endian `uint32 frame_bytes + uint16 version + uint16 opcode`，最大 frame 65,536 bytes。目前只定義：
+- `MoveTarget(1)`：frame 28 bytes；payload = `int64 MapEpoch + uint32 MovementSequence + int32 TargetX + int32 TargetY`。ActorId／ConnectionEpoch **不由 Client 傳入**，未來 Gateway 必須由已驗證 connection binding 補入 Server command。
+- `MoveReceipt(2)`：frame 30 bytes；payload = `int64 MapEpoch + uint32 MovementSequence + uint16 Status + int64 ServerTick`。Status 使用明確 0..10 mapping，不依賴 C# enum 隱式 ordinal。
+
+尚未完成：正式 TCP/TLS listener、Auth/Character binding、ConnectionEpoch lifecycle、byte-stream parser 與 per-connection bounded ingress/egress、ACK/reliable queue、WorldReady/AOI snapshot、重連/resync、batching 與 20 真連線。這些保持 **NOT VERIFIED**，不可用 codec PASS 代替 REB020／MVP003 完成。
 
 ## 世代與序號
 
@@ -72,7 +90,7 @@ AOI 的進出與 WorldReady 初始狀態應定義**確定的覆蓋／重放邊�
 - **Godot 4.7.2 headless**：32-byte Binary Golden Fixture 雙向編解碼 **PASS**；GDScript 單筆 JSON 編碼／解碼約 **3.510/3.064 μs**、binary 約 **0.900/0.562 μs**（各 20,000 次；單次測量，非跨機保證）。
 - **AOI correctness**：模擬 100 Player + 1,000 Enemy + 5,000 Drop，均勻散布 24,000×24,000；Spatial Grid cell 1024／enter 2600／exit 3000，比 brute-force 得到相同可見集合；候選接收者 **609,900 → 20,812**（-96.59%），變動實體接收者 **17,666 → 601**（-96.60%）；Hysteresis PASS。
 - **AOI 最差密集情境**：全員／全物件集中同一 AOI，**609,900／609,900 都可見（節省 0%）**。因此 AOI 不能單獨保證高密度戰鬥低負載，仍需 changed-only Delta、可靠／非可靠流量區分、批次、Client/Server 佇列背壓及 AI 分散更新。
-- **尚缺**：原版反編譯 wire 逐欄核實、MessagePack/Protobuf 公平比較、真正 transport（TCP/WS/UDP、TLS/AEAD）、真實 Map13/怪物分布、AOI 連線與可靠事件驗收、Godot 非 headless 實機 FPS／Latency、Server Tick／GC 與擴展負載。**REB019 尚未完成，不得因上述結果就定版**。
+- **當時尚缺／後續狀態**：MessagePack/Protobuf 公平 codec 比較已於 2026-11-16 WIRE001-CODEC 完成並選定 compact binary；仍缺原版 Old wire 逐欄核實（僅作歷史相容研究，不阻擋新版 codec）、真正 transport（TCP/TLS）、真實 Map13/怪物 AOI 連線與可靠事件驗收、Godot 非 headless 實機 latency、Server Tick／GC 與擴展負載。不得用本段早期結果冒充正式網路 Gate。
 
 ## 第一版測試先於新 Runtime
 
@@ -96,4 +114,4 @@ $godot = "C:\SGO\Godot\Godot_v4.7.2-stable_win64_console.exe"
 python -m unittest discover -s tools/tests -p "test_*.py" -q
 ```
 
-本輪**合成資料實跑 PASS**：.NET 和 Godot 兩端對相同 32-byte Golden Fixture、全部 33 個單點分段、100 組 seeded 多段／黏包（每組三 frame）、5 種不合法 length、3 種不合法 header/payload、半包 Reset、合法 frame 後緊接不合法 frame 都通過；.NET 程式確認 bounded buffer 不超過預設限制。現行 Python 81 tests PASS；無 socket／TLS、無 Packet Queue、未作實際網路延遲／P95/P99 或 MessagePack/Protobuf 公平比較，**WIRE001／REB020 仍 NOT VERIFIED**。早期微基準只比較 synthetic JSON／Binary 單筆 encode/decode，不能用來推斷 TCP 端到端效能、選定協定或宣稱低 GC 的正式 Server。
+本輪**合成資料實跑 PASS**：.NET 和 Godot 兩端對相同 32-byte Golden Fixture、全部 33 個單點分段、100 組 seeded 多段／黏包（每組三 frame）、5 種不合法 length、3 種不合法 header/payload、半包 Reset、合法 frame 後緊接不合法 frame 都通過；.NET 程式確認 bounded buffer 不超過預設限制。這是 framing 候選的歷史證據；其後 WIRE001-CODEC 已補做 MessagePack/Protobuf 公平比較並選 compact binary。此 test-only parser 仍不是正式 Socket parser；無 TLS/Auth、per-player Packet Queue、實際網路延遲／P95/P99 或 reconnect E2E，故 **REB020 仍 NOT VERIFIED**。

@@ -1,6 +1,6 @@
 # SGTest Server — .NET 8 重建（碰撞／導航／權威 World＋離線 30Hz Host）
 
-新版 Server 是**從零重建**，不還原舊 SGO 原型。`src/SGTest.Server` 目前提供 Map13／Map15 原版權威碰撞驗證、有界 A*，以及不依賴 Wire／Godot 的 **單寫者手動 `ServerWorld.Tick()`** 與經序號／世代檢查的移動命令。**已可執行不開放網路連接埠的 30Hz 離線 Host**；仍無 Socket／Wire、登入認證、WorldReady／AOI、DB／怪物／戰鬥或連線 Client，不代表遊戲已可上線。
+新版 Server 是**從零重建**，不還原舊 SGO 原型。`src/SGTest.Server` 目前提供 Map13／Map15 原版權威碰撞驗證、有界 A*、單寫者 `ServerWorld`、不開放網路埠的 30Hz 離線 Host，以及 WIRE001 已選定的 **compact-binary V1 codec 第一切片**（MoveTarget／MoveReceipt）。仍無 Socket/TLS、登入認證、正式 connection→Actor binding、WorldReady／AOI、DB／怪物／戰鬥或連線 Client，不代表遊戲已可上線。
 
 ## 正式內容契約
 
@@ -23,7 +23,7 @@ dotnet build server/src/SGTest.Server/SGTest.Server.csproj -c Release
 
 2026-11-16 的初步 Blocking/A* 基準：合成＋雙圖原版 **10 組 PASS**（已保留於現行更完整的 24 組測試中）。Map13／Map15 各 960×960，原始 source SHA 匹配，靜態雙向傳點目的地座標對應可走格並有鄰格路徑（**不是實際傳點**）。128 個 deterministic 候選目的地／圖的獨立 query trace，Map13 77 個可走目標／77 成功、Map15 119/119 成功，無超出 1500 cell 預算；樣本 query P95 Map13 59.5µs／Map15 26.0µs，managed bytes/attempt 約10.2KB／10.9KB。**此為當次私有資料／单程序查詢時間，不是 Server Tick P95/P99、300 怪／多人效能或網路延遲。**
 
-所有原版資料、圖片、PCK、測試輸出都只保留在未追蹤的私有目錄；本 repo 只提交格式解析／導航程式和合成驗收。下一項：原版特殊 terrain/Blocking 旗標核實、固定 Tick 的權威路徑排程、movement command validation、限流與 map scope；Wire 仍須完成 REB020 公平選型。
+所有原版資料、圖片、PCK、測試輸出都只保留在未追蹤的私有目錄；本 repo 只提交格式解析／導航／權威 World／正式 Wire codec 與可重跑驗收。WIRE001 codec 已完成公平選型；下一個網路 Gate 是 TLS/Auth、Character→Actor/ConnectionEpoch 綁定、有界 stream parser／per-player send queue、ACK/WorldReady/reconnect。特殊 terrain/Blocking 旗標與原版速度仍須另外核實。
 
 
 ## REB021-WORLD-CORE（2026-11-16：手動模擬核心，非已啟動 Server）

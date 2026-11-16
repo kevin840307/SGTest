@@ -1,6 +1,6 @@
 # SGTest Client 資源基礎
 
-已新增 Godot 4.7.2 專案及單一 `assets_runtime/asset_store.gd`。目前可執行資源生命週期測試；地形與靜態景物／角色交錯 Renderer 已完成原生 GPU 切片；尚無遊戲 main scene、完整 World Renderer、網路／WorldState／登入／多人玩法。新程式沒有取回舊 prototype。
+已新增 Godot 4.7.2 專案及單一 `assets_runtime/asset_store.gd`。目前可執行資源生命週期測試；地形與靜態景物／角色交錯 Renderer 已完成原生 GPU 切片。WIRE001 已選定 compact-binary V1，`network/wire_codec.gd` 已有 MoveTarget encode／MoveReceipt decode 與 C# 共用 golden fixture；**尚無 Transport worker、Socket/TLS、WorldState／登入／多人玩法**。新程式沒有取回舊 prototype。
 
 ## 驗證
 

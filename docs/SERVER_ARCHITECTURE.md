@@ -1,6 +1,6 @@
 # SGTest Server — 重建設計
 
-**狀態：已建立 .NET 8 Blocking/A*、單寫者 World 與可執行的 30Hz 離線 Host；尚無 Socket、Auth、正式 AOI 或 Client/Server E2E。** 目標為單體功能模組，固定世界模擬與獨立 Transport/Persistence。
+**狀態：已建立 .NET 8 Blocking/A*、單寫者 World、可執行的 30Hz 離線 Host，以及 WIRE001 選定的 compact-binary V1 codec 第一切片；尚無 Socket/TLS/Auth、正式 AOI 或 Client/Server E2E。** 目標為單體功能模組，固定世界模擬與獨立 Transport/Persistence。
 
 ## 核心邊界
 
@@ -25,7 +25,7 @@
 
 ## Wire 選型與 AOI 流量 Gate
 
-- REB020 先依 [Wire Contract](RUNTIME_PROTOCOL.md) 做封包頭／緊湊二進位、MessagePack 等候選的 C# ↔ GDScript golden fixture 和實測，**不要求使用 JSON**；選定後才把單一 Codec 寫成正式契約。
+- REB020/WIRE001 已比較 compact binary、MessagePack、Protobuf 並選定**單一 compact-binary V1**；正式 `WireProtocol.cs` 目前只含 MoveTarget／MoveReceipt。MessagePack／Protobuf 只存在測試 Probe，不是 Runtime 依賴。下一 Gate 是 TLS/Auth、connection→Actor identity binding、ConnectionEpoch、有界 byte-stream parser／send queue、ACK／WorldReady／reconnect；在此之前不得打開不受保護的 Client RPC。
 - 對相同 World Tick 與可見 AOI，量測每玩家 bytes/sec、訊息／秒、Serialize/Deserialize P95/P99、GC alloc、AOI 候選與扇出成本、Send Queue Age、輸入到畫面延遲；須與全圖無過濾基準公平比較，確認可節流網路且不破壞同步。
 - AI 的各怪物決策時間與位置推進分離；獨立 NextDecisionTick／分散預算避免所有怪物同時轉向／移動，Server 仍維持可重播且單寫者權威，不能用同一批群體動畫假裝自然 AI。
 
