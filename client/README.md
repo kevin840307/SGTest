@@ -107,3 +107,11 @@ python client/tests/run_tls_login.py "C:\SGO\Godot\Godot_v4.7.2-stable_win64_con
 ```
 
 The runner starts `SGTest.Server.LoginFixture`, loads its public test certificate into Godot as the trusted chain, and verifies TLS Auth -> CharacterList -> CharacterChoose -> Move. Both sides must print PASS. This is a transport/login gate only: the application scene/login UI, non-render WorldState reducer, reconnect/WorldReady and render=0/30/60/90 packet-order tests are still NOT VERIFIED.
+
+## 2026-11-16 non-render WorldState / ClientSession
+
+`network/world_state.gd` is a presentation-free protocol reducer. `network/client_session.gd` owns it on a dedicated logic thread and drains `ClientTransport` frames independently of render callbacks. Application/render code only submits bounded intents and reads copied snapshots. Current transitions cover Auth, CharacterList, CharacterChoose and MoveReceipt with MapEpoch/sequence fail-closed rules.
+
+`test_client_fps_independence.gd` runs the same Auth -> Choose -> Move script at simulated render polling 0/30/60/90 and requires identical final state and exact outgoing frame order. The zero-render case performs no snapshot polling during the work interval, proving this current logic path is not advanced by render FPS. The real TLS runner now uses `ClientSession` too.
+
+GitHub `Client core checks` downloads the official Godot 4.7.2 Linux standard binary, verifies its published SHA256, caches it, and runs codec/transport/WorldState/FPS plus the Godot<->C# secure TLS E2E. Real WorldReady/AOI/snapshot interpolation/reconnect and the app UI integration are still later gates.

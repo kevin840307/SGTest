@@ -78,7 +78,7 @@ def main() -> int:
         for line in lines:
             if line.startswith("LOGIN_FIXTURE_"):
                 print(line)
-        print("GODOT_CSHARP_TLS_LOGIN_E2E_PASS secure_tls=true worker_thread=true")
+        print("GODOT_CSHARP_TLS_LOGIN_E2E_PASS secure_tls=true transport_thread=true reducer_thread=true")
         return 0
     except Exception as error:
         print("TLS_LOGIN_RUNNER_FAIL", error, file=sys.stderr)
