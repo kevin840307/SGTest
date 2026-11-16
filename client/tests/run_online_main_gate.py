@@ -99,8 +99,8 @@ def main() -> int:
             provision_env["SGTEST_ACCOUNT_PASSWORD"] = PASSWORD
             provision_env["SGTEST_TLS_PASSWORD"] = PFX_PASSWORD
             for username, character, x, y in [
-                ("gate_observer", "GateObserver", "40", "40"),
-                ("gate_actor", "GateActor", "24", "24"),
+                ("gate_observer", "GateObserver", "880", "800"),
+                ("gate_actor", "GateActor", "760", "800"),
             ]:
                 out = run_checked(
                     ["dotnet", str(host_dll), "account-create", "--identity", str(database),

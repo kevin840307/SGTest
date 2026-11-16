@@ -101,16 +101,17 @@ func build() -> void:
 		if not make_texture(terrain,16,16,Color(0.12,0.18,0.12),Color(0.22,0.28,0.18)):
 			fail("terrain texture")
 			return
+		const CELLS := 128
 		var tiles := PackedByteArray()
-		tiles.resize(8 + 4*4*2)
-		tiles.encode_u32(0,4)
-		tiles.encode_u32(4,4)
-		for i in 16:
+		tiles.resize(8 + CELLS*CELLS*2)
+		tiles.encode_u32(0,CELLS)
+		tiles.encode_u32(4,CELLS)
+		for i in CELLS*CELLS:
 			tiles.encode_u16(8+i*2,0)
 		var blocking := PackedByteArray()
-		blocking.resize(8 + 4*4)
-		blocking.encode_u32(0,4)
-		blocking.encode_u32(4,4)
+		blocking.resize(8 + CELLS*CELLS)
+		blocking.encode_u32(0,CELLS)
+		blocking.encode_u32(4,CELLS)
 		if not write_bytes(map_assets.path_join("tiles.bin"),tiles) or not write_bytes(map_assets.path_join("blocking.dat"),blocking):
 			fail("map bytes")
 			return
@@ -118,20 +119,20 @@ func build() -> void:
 		var target := 13 if map_id == 15 else 15
 		var npcs := {
 			"schema":"sgtest.npcs/v1","coordinate_space":"world_pixels","map_id":map_id,
-			"npcs":[{"spawn_id":spawn_id,"p":[24,24],"interaction":{
+			"npcs":[{"spawn_id":spawn_id,"p":[800,800],"interaction":{
 				"mode":"confirm_transfer","adapter":"audited_TS_Common_v1",
 				"dependencies_complete":true,"destination_status":"walkable","choice":0,
-				"destination":{"map_id":target,"p":[24,24]}
+				"destination":{"map_id":target,"p":[800,800]}
 			}}]
 		}
 		var population := {"version":3,"map_id":map_id,"definitions":[]}
 		var world := {
-			"version":3,"map_id":map_id,"collision_cell":16,"size":[64,64],
+			"version":3,"map_id":map_id,"collision_cell":16,"size":[2048,2048],
 			"collision_sha256":FileAccess.get_sha256(map_assets.path_join("blocking.dat")),
 			"tiles_sha256":FileAccess.get_sha256(map_assets.path_join("tiles.bin")),
 			"terrain_sha256":FileAccess.get_sha256(terrain),
 			"scenery_schema":"sgtest.scenery/v1","tile_source_rule":"int16_plus_one_wrap",
-			"atlas_grid":[1,1],"tile_side":16,"tile_width":4,"tile_height":4,"tile_ids":[0],
+			"atlas_grid":[1,1],"tile_side":16,"tile_width":128,"tile_height":128,"tile_ids":[0],
 			"scenery_order":{"version":1,"groups":[[],[],[]]},
 			"objects":[],"scenery_definitions":{}
 		}

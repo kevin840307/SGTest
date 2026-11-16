@@ -282,14 +282,14 @@ func _online_gate_actor() -> void:
 	if _online_gate_phase == 0:
 		if _online_gate_ready(15):
 			print("ONLINE_MAIN_GATE_READY role=actor")
-			if not session_panel.submit_move(Vector2(40,24)):
+			if not session_panel.submit_move(Vector2(800,800)):
 				_online_gate_fail("move_enqueue")
 				return
 			_online_gate_phase = 1
 		return
 	if _online_gate_phase == 1:
 		var at := Vector2(float(_last_snapshot.get("x",0.0)),float(_last_snapshot.get("y",0.0)))
-		if at.distance_to(Vector2(40,24)) <= 1.0 and _online_gate_ready(15):
+		if at.distance_to(Vector2(800,800)) <= 1.0 and _online_gate_ready(15):
 			print("ONLINE_MAIN_GATE_MOVE_CAMERA role=actor")
 			_online_gate_not_before = Time.get_ticks_msec() + 350
 			_online_gate_phase = 2
