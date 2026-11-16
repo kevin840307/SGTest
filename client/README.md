@@ -115,3 +115,7 @@ The runner starts `SGTest.Server.LoginFixture`, loads its public test certificat
 `test_client_fps_independence.gd` runs the same Auth -> Choose -> Move script at simulated render polling 0/30/60/90 and requires identical final state and exact outgoing frame order. The zero-render case performs no snapshot polling during the work interval, proving this current logic path is not advanced by render FPS. The real TLS runner now uses `ClientSession` too.
 
 GitHub `Client core checks` downloads the official Godot 4.7.2 Linux standard binary, verifies its published SHA256, caches it, and runs codec/transport/WorldState/FPS plus the Godot<->C# secure TLS E2E. Real WorldReady/AOI/snapshot interpolation/reconnect and the app UI integration are still later gates.
+
+## 2026-11-16 TLS MoveReceipt round-trip
+
+`client/tests/run_tls_login.py` now requires the complete **server-to-client receipt return path**, not merely that the Server accepted Move. The C# fixture enqueues its authoritative MoveReceipt on the bound Gateway connection; the TLS writer sends it, and Godot `ClientSession`/`WorldState` must observe the accepted sequence and ServerTick before the test can PASS. GitHub CI passed this one-client secure loopback test; production reliable result routing/AOI/WorldReady, login UI and multi-client graphics remain pending.
