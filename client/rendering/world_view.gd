@@ -140,6 +140,11 @@ func _process(_delta: float) -> void:
 func present() -> void:
 	if phase != "ready":
 		return
+	var now_usec := Time.get_ticks_usec()
+	if show_players and not _player_snapshot.is_empty():
+		var focus := players.position_at(int(_player_snapshot.actor_id),now_usec)
+		if focus.is_finite():
+			camera.set_focus(epoch,focus)
 	var rect := camera.view_rect()
 	# Stateless ACT sampling; no callbacks, combat, or visibility state advances.
 	var update := (Time.get_ticks_msec()-_started_at)*50/1000
@@ -147,7 +152,7 @@ func present() -> void:
 		return
 	get_viewport().canvas_transform = Transform2D(0,-rect.position)
 	_terrain.set_view_rect(rect)
-	var actors: Array = players.actors_at(Time.get_ticks_usec()) if show_players else []
+	var actors: Array = players.actors_at(now_usec) if show_players else []
 	_canvas.present(draw_list.build(rect,actors,{},draw_list.frames_at_update(update)))
 	_players_dirty = false
 	_last_rect = rect
@@ -177,5 +182,8 @@ func set_player_snapshot(snapshot: Dictionary) -> void:
 	_player_snapshot = snapshot
 	_players_dirty = true
 	if phase == "ready":
-		players.apply_snapshot(snapshot,Time.get_ticks_usec())
-		camera.set_focus(epoch,Vector2(snapshot.x,snapshot.y))
+		var now_usec := Time.get_ticks_usec()
+		players.apply_snapshot(snapshot,now_usec)
+		var focus := players.position_at(int(snapshot.actor_id),now_usec)
+		if focus.is_finite():
+			camera.set_focus(epoch,focus)

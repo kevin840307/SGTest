@@ -30,11 +30,11 @@ func run() -> void:
 	check(players.configure(assets)==OK,"normalized base profile configure")
 	var draw := DrawList.new()
 	check(draw.configure({"scenery_schema":"sgtest.scenery/v1","scenery_order":{"version":1,"groups":[[],[],[]]},"objects":[],"scenery_definitions":{}},assets,1)==OK,"draw configure")
-	var own := {"actor_id":1,"connection_epoch":1,"entity_map_epoch":1,"x":10.0,"y":10.0,"facing":6,"moving":true,"movement_action_sequence":1}
+	var own := {"actor_id":1,"connection_epoch":1,"entity_map_epoch":1,"x":10.0,"y":10.0,"facing":6,"moving":true,"movement_action_sequence":1,"server_tick":1}
 	var remote := own.duplicate()
 	remote.actor_id=2
 	remote.y=20.0
-	var snapshot := {"world_ready":true,"map_epoch":1,"map_id":15,"actor_id":1,"x":10.0,"y":10.0,"facing":6,"self_state":own,"entities":{2:remote}}
+	var snapshot := {"world_ready":true,"map_epoch":1,"map_id":15,"actor_id":1,"x":10.0,"y":10.0,"facing":6,"self_state":own,"entities":{2:remote},"last_aoi_tick":1}
 	players.apply_snapshot(snapshot,0)
 	players.apply_snapshot(snapshot,100000)
 	var actors := players.actors_at(160000)
@@ -55,6 +55,7 @@ func run() -> void:
 	snapshot.map_id=13
 	snapshot.self_state={}
 	snapshot.x=50.0
+	snapshot.last_aoi_tick=2
 	players.apply_snapshot(snapshot,300000)
 	actors=players.actors_at(300000)
 	check(actors.size()==1 and actors[0].p==Vector2(50,10),"transfer retained old owner")

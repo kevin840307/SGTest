@@ -1,6 +1,7 @@
 extends RefCounted
 ## Presentation of the current provisional B base profile. No network or authority.
 const Timeline = preload("res://rendering/action_timeline.gd")
+const PositionHistory = preload("res://rendering/position_history.gd")
 # Original slot groups; base art appears once, equipment overlay slots stay empty.
 const PARTS := {
 	12: ["players/b/base/leg", "B-LEG"],
@@ -69,7 +70,8 @@ func apply_snapshot(snapshot: Dictionary, now_usec: int) -> void:
 	var own: Dictionary = snapshot.self_state.duplicate()
 	if own.is_empty():
 		own = {"actor_id":snapshot.actor_id,"connection_epoch":0,"entity_map_epoch":epoch,
-			"x":snapshot.x,"y":snapshot.y,"facing":snapshot.facing,"moving":false,"movement_action_sequence":0}
+			"x":snapshot.x,"y":snapshot.y,"facing":snapshot.facing,"moving":false,
+			"movement_action_sequence":0,"server_tick":int(snapshot.get("last_aoi_tick",0))}
 	var visible: Dictionary = snapshot.entities.duplicate()
 	visible[int(snapshot.actor_id)] = own
 	for id in _actors.keys():
@@ -79,8 +81,13 @@ func apply_snapshot(snapshot: Dictionary, now_usec: int) -> void:
 		var value: Dictionary = visible[id]
 		var old: Dictionary = _actors.get(id,{})
 		var action := "NR" if bool(value.moving) else "NS"
-		var restarted: bool = old.is_empty() or int(old.value.connection_epoch) != int(value.connection_epoch) or int(old.value.entity_map_epoch) != int(value.entity_map_epoch) or old.action != action or int(old.value.movement_action_sequence) != int(value.movement_action_sequence)
-		_actors[id] = {"value":value,"action":action,"started":now_usec if restarted else int(old.started)}
+		var generation_changed: bool = old.is_empty() or int(old.value.connection_epoch) != int(value.connection_epoch) or int(old.value.entity_map_epoch) != int(value.entity_map_epoch)
+		var restarted: bool = generation_changed or old.action != action or int(old.value.movement_action_sequence) != int(value.movement_action_sequence)
+		var history = PositionHistory.new() if generation_changed else old.history
+		var tick := int(value.get("server_tick",snapshot.get("last_aoi_tick",-1)))
+		if tick < 0 or not history.push(tick,Vector2(float(value.x),float(value.y)),now_usec):
+			continue
+		_actors[id] = {"value":value,"action":action,"started":now_usec if restarted else int(old.started),"history":history}
 
 func actors_at(now_usec: int) -> Array:
 	var result: Array = []
@@ -103,5 +110,16 @@ func actors_at(now_usec: int) -> Array:
 			parts.append({"asset":part[0],"clip":resolved.view.clip,
 				"frame":resolved.timeline.frame_at_update(maxi(0,now_usec-int(actor.started))*50/1000000),
 				"flip_h":resolved.view.flip_h,"part_slot":int(slot)})
-		result.append({"id":str(id),"p":Vector2(value.x,value.y),"parts":parts})
+		var sampled: Vector2 = actor.history.sample(now_usec)
+		if not sampled.is_finite():
+			sampled = Vector2(float(value.x),float(value.y))
+		result.append({"id":str(id),"p":sampled,"parts":parts})
 	return result
+
+
+func position_at(actor_id: int, now_usec: int) -> Vector2:
+	var actor: Dictionary = _actors.get(actor_id,{})
+	if actor.is_empty():
+		return Vector2.INF
+	var sampled: Vector2 = actor.history.sample(now_usec)
+	return sampled if sampled.is_finite() else Vector2(float(actor.value.x),float(actor.value.y))
