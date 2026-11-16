@@ -89,3 +89,7 @@ Server-side TLS login can now authenticate the SQLite Account, return only owned
 ### 2026-11-16 Godot secure login transport
 
 The new Godot Client now has a dedicated threaded TCP/TLS transport and V1 identity codec. A real secure local Godot 4.7.2 -> C# fixture test validates the test certificate/hostname, logs in to SQLite/Argon2id, lists the owned character, chooses it, receives authoritative MapEpoch and sends the first accepted World Move. The production listener/login UI/WorldState/AOI/reconnect path is still incomplete.
+
+### 2026-11-16 WorldState / render-FPS separation
+
+The Client now has a presentation-free WorldState reducer and a separate ClientSession logic thread between the TLS transport and rendering. The current Auth/CharacterChoose/MoveReceipt path produces identical state and outbound packet order at simulated render polling 0/30/60/90, including a zero-render interval. GitHub Client core CI now runs these Godot tests and the secure Godot<->C# login E2E. WorldReady/AOI/entity snapshots and real app/login UI integration remain incomplete.

@@ -130,3 +130,7 @@ Inside mandatory TLS, V1 identity flow is AuthRequest -> AuthResult -> Character
 ### Client transport baseline - 2026-11-16
 
 Client TCP/TLS I/O runs on a dedicated worker thread and is not driven by render `_process()`. Queues and receive buffering are bounded; no authoritative frame may be silently DropOldest. Production mode validates TLS certificates and hostname. The current real Godot<->C# fixture passes Auth/CharacterChoose/Move, but the non-render WorldState/reducer and explicit render=0/30/60/90 equivalence gate remain required before claiming full network/game-logic independence from UI FPS.
+
+### Non-render Client state baseline - 2026-11-16
+
+Transport, protocol/world reduction and rendering are separate clocks. ClientTransport owns socket/TLS on one worker; ClientSession owns bounded intents and WorldState reduction on another non-render worker; render code only reads snapshots. Current Auth/Choose/Move logic is verified to produce the same final state and packet order when presentation polling is 0/30/60/90. Every future authoritative WorldReady/AOI/entity-delta message must pass the same gate before it is considered FPS-independent.

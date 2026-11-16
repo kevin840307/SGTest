@@ -147,6 +147,18 @@ static func decode_character_choose_result(frame: PackedByteArray) -> Dictionary
 		return {}
 	return {"status": status, "character_id": character_id, "map_id": map_id, "x": x, "y": y, "map_epoch": map_epoch}
 
+static func frame_opcode(frame: PackedByteArray) -> int:
+	if frame.size() < HEADER_BYTES or frame_length_prefix(frame) != frame.size():
+		return -1
+	var reader := _reader(frame, 0)
+	reader.get_u32()
+	if reader.get_u16() != VERSION:
+		return -1
+	var opcode := reader.get_u16()
+	if opcode not in [OPCODE_MOVE_TARGET, OPCODE_MOVE_RECEIPT, OPCODE_AUTH_REQUEST, OPCODE_AUTH_RESULT, OPCODE_CHARACTER_LIST, OPCODE_CHARACTER_CHOOSE, OPCODE_CHARACTER_CHOOSE_RESULT]:
+		return -1
+	return opcode
+
 static func frame_length_prefix(buffer: PackedByteArray) -> int:
 	if buffer.size() < 4:
 		return -1
