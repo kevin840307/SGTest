@@ -70,11 +70,12 @@ internal static class WorldHostChecks
         await host.StartAsync().WaitAsync(TimeSpan.FromSeconds(3));
         var rejected = await host.TrustedRegisterAsync(123, 90, -1, 24).WaitAsync(TimeSpan.FromSeconds(3));
         Require(rejected is null, "invalid spawn must be refused");
-        var actor = await host.TrustedRegisterAsync(123, 90, 24, 24).WaitAsync(TimeSpan.FromSeconds(3));
-        Require(actor.HasValue && actor.Value.ConnectionEpoch == 1, "trusted register");
+        var actorMaybe = await host.TrustedRegisterAsync(123, 90, 24, 24).WaitAsync(TimeSpan.FromSeconds(3));
+        var actor = actorMaybe ?? throw new Exception("trusted register returned null");
+        Require(actor.ConnectionEpoch == 1, "trusted register");
         var initial = host.Statistics.Ticks;
-        var input = new MoveTargetCommand(actor.Value.ActorId, actor.Value.ConnectionEpoch,
-            actor.Value.MapEpoch, 1, 168, 24);
+        var input = new MoveTargetCommand(actor.ActorId, actor.ConnectionEpoch,
+            actor.MapEpoch, 1, 168, 24);
         Require(host.TryPostMove(input), "host ingress refused a legitimate move");
         await WaitForTicks(host, initial + 12);
 
@@ -83,7 +84,7 @@ internal static class WorldHostChecks
         Require(results.Any(x => x.Receipts.Any(r => r.Status == MoveReceiptStatus.Accepted)),
             "authoritative Move receipt missing");
         Require(results.Any(x => x.Changed.Any(c => c.ActorId == 123 && c.X > 24 &&
-            c.EntityRevision > actor.Value.EntityRevision)), "authoritative movement delta missing");
+            c.EntityRevision > actor.EntityRevision)), "authoritative movement delta missing");
         Require(results.All(x => x.Receipts.Count <= 64 && x.Changed.Count <= 128),
             "one Tick exceeded bounded payload shape");
         long ticksBeforeStop = host.Statistics.Ticks;
@@ -108,14 +109,15 @@ refused:
         await using var host = new ServerWorldHost(maps, options:
             new WorldHostOptions(TickHz: 30, ResultCapacity: 64));
         await host.StartAsync();
-        var old = await host.TrustedRegisterAsync(33, 90, 24, 24);
-        Require(old.HasValue, "register Map90");
-        var changed = await host.TrustedTransferAsync(33, old.Value.ConnectionEpoch,
-            old.Value.MapEpoch, 91, 40, 40);
-        Require(changed.HasValue && changed.Value.MapId == 91 &&
-                changed.Value.MapEpoch > old.Value.MapEpoch, "trusted Map90->Map91");
-        Require(host.TryPostMove(new MoveTargetCommand(33, old.Value.ConnectionEpoch,
-            old.Value.MapEpoch, 1, 72, 24)), "old Map command enqueue");
+        var oldMaybe = await host.TrustedRegisterAsync(33, 90, 24, 24);
+        var old = oldMaybe ?? throw new Exception("register Map90 returned null");
+        var changedMaybe = await host.TrustedTransferAsync(33, old.ConnectionEpoch,
+            old.MapEpoch, 91, 40, 40);
+        var changed = changedMaybe ?? throw new Exception("trusted Map90->Map91 returned null");
+        Require(changed.MapId == 91 && changed.MapEpoch > old.MapEpoch,
+            "trusted Map90->Map91");
+        Require(host.TryPostMove(new MoveTargetCommand(33, old.ConnectionEpoch,
+            old.MapEpoch, 1, 72, 24)), "old Map command enqueue");
         var before = host.Statistics.Ticks;
         await WaitForTicks(host, before + 3);
         var items = new List<WorldTickResult>();
@@ -123,10 +125,10 @@ refused:
         Require(items.Any(t => t.Receipts.Any(r =>
             r.Status == MoveReceiptStatus.OldMapEpoch)),
             "late old-map movement escaped epoch rejection");
-        Require(await host.TrustedDisconnectAsync(33, old.Value.ConnectionEpoch, old.Value.MapEpoch)
+        Require(await host.TrustedDisconnectAsync(33, old.ConnectionEpoch, old.MapEpoch)
             == false, "stale disconnect removed transferred actor");
-        Require(await host.TrustedDisconnectAsync(33, changed.Value.ConnectionEpoch,
-            changed.Value.MapEpoch), "current disconnect refused");
+        Require(await host.TrustedDisconnectAsync(33, changed.ConnectionEpoch,
+            changed.MapEpoch), "current disconnect refused");
         await host.StopAsync();
     }
 
@@ -137,10 +139,10 @@ refused:
         try
         {
             await host.StartAsync();
-            var actor = await host.TrustedRegisterAsync(888, 90, 24, 24);
-            Require(actor.HasValue, "register");
-            Require(host.TryPostMove(new MoveTargetCommand(888, actor.Value.ConnectionEpoch,
-                actor.Value.MapEpoch, 1, 168, 24)), "move enqueue");
+            var actorMaybe = await host.TrustedRegisterAsync(888, 90, 24, 24);
+            var actor = actorMaybe ?? throw new Exception("register returned null");
+            Require(host.TryPostMove(new MoveTargetCommand(888, actor.ConnectionEpoch,
+                actor.MapEpoch, 1, 168, 24)), "move enqueue");
             bool failedClosed = false;
             try { await host.Completion.WaitAsync(TimeSpan.FromSeconds(3)); }
             catch (WorldHostBackpressureException) { failedClosed = true; }
@@ -150,7 +152,7 @@ refused:
                 firstResult!.Receipts.Any(r => r.Status == MoveReceiptStatus.Accepted),
                 "previously published reliable receipt lost");
             Require(!host.TryPostMove(new MoveTargetCommand(888,
-                actor.Value.ConnectionEpoch, actor.Value.MapEpoch, 2, 24, 24)),
+                actor.ConnectionEpoch, actor.MapEpoch, 2, 24, 24)),
                 "broken host accepted inbound command");
         }
         finally
@@ -196,15 +198,17 @@ refused:
         await host.StartAsync();
         var initial = host.Statistics.Ticks;
         await WaitForTicks(host, initial + 8);
-        var from = await host.TrustedRegisterAsync(710, 13, 2560, 2880);
-        Require(from.HasValue && from.Value.MapId == 13, "original Map13 authorized seed");
-        var changed = await host.TrustedTransferAsync(710, from.Value.ConnectionEpoch,
-            from.Value.MapEpoch, 15, 7872, 11296);
-        Require(changed.HasValue && changed.Value.MapId == 15, "original Map15 transfer seed");
-        var back = await host.TrustedTransferAsync(710, changed.Value.ConnectionEpoch,
-            changed.Value.MapEpoch, 13, 2560, 2880);
-        Require(back.HasValue && back.Value.MapEpoch > changed.Value.MapEpoch,
-            "original Map13 back seed");
+        var fromMaybe = await host.TrustedRegisterAsync(710, 13, 2560, 2880);
+        var from = fromMaybe ?? throw new Exception("original Map13 authorized seed returned null");
+        Require(from.MapId == 13, "original Map13 authorized seed");
+        var changedMaybe = await host.TrustedTransferAsync(710, from.ConnectionEpoch,
+            from.MapEpoch, 15, 7872, 11296);
+        var changed = changedMaybe ?? throw new Exception("original Map15 transfer seed returned null");
+        Require(changed.MapId == 15, "original Map15 transfer seed");
+        var backMaybe = await host.TrustedTransferAsync(710, changed.ConnectionEpoch,
+            changed.MapEpoch, 13, 2560, 2880);
+        var back = backMaybe ?? throw new Exception("original Map13 back seed returned null");
+        Require(back.MapEpoch > changed.MapEpoch, "original Map13 back seed");
         await host.StopAsync();
         Require(host.Statistics.Ticks >= 8 && host.Statistics.ResultOverflowFailures == 0,
             "real-map 30Hz timing");
