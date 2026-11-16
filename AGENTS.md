@@ -13,6 +13,7 @@
 3. 若與其他 Session 共用工作樹且有 WIP，**建立自己的 worktree/branch**，不要 stash、reset、clean、覆寫、刪除他人的未提交內容。
 4. 領取一項具體 TODO，先寫預期行為、指標、驗收測試，再動手；完成才勾選，未跑寫 NOT VERIFIED。
 5. 確保拆成小 commit，commit 僅包含自己變更的檔案；每次更新 TODO 與架構決策證據。
+6. **能在 GitHub 驗證就先用 GitHub。** Server-only／純公開 repo 工作優先以 branch/PR + GitHub Actions（目前 `.github/workflows/server-core.yml`）跑 build/checks，再考慮 Remote Desktop；只有 Godot Windows 實機、private assets、原版安裝檔、GPU/畫面或 GitHub 無法執行的測試才使用 Remote Desktop Commander。
 
 ## 雙地圖 Map15 + Map13、功能完整的 MVP（不是功能示範）
 

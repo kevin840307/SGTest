@@ -13,7 +13,7 @@
 - **設計方式：功能導向 modular monolith**，高聚力、低耦合；不要預先建立重複的 Manager／Engine／Cache、不同素材類型專用 Loader，或空白多層分組。Client、Server 透過明確封包／資料契約整合，不共享可變狀態。
 - **Server single-writer world authority**：同張地圖的可變 State 有明確單寫者；DB I/O、Socket Send、慢路徑查詢不能阻塞固定 Tick。
 - **有界佇列與恢復**：所有網路／World 命令／視覺事件佇列都要有容量、延遲指標與過載政策；可合併過時的非可靠移動快照，**不得默默丟失金錢、物品、交易、角色狀態、權威戰鬥結果等可靠結果**。無法保證連續性時須觸發重同步或安全斷線，不能無限堆積記憶體。
-- **Wire 已依 WIRE001 選定單一 compact-binary V1**：2026-11-16 以相同 4,000-event trace 公平比較 compact binary、MessagePack、Protobuf，三者 round-trip／Godot↔C# fixture 均通過後，依 CPU／GC／Godot依賴／維護成本選 compact binary。正式 Runtime 不依賴 MessagePack/Protobuf；目前只定義 MoveTarget／MoveReceipt，Socket/TLS/Auth、ConnectionEpoch identity binding、bounded queues、ACK/WorldReady/reconnect 仍未完成。詳 `docs/RUNTIME_PROTOCOL.md`。
+- **Wire 已依 WIRE001 選定單一 compact-binary V1**：正式 Runtime 不依賴 MessagePack/Protobuf；MoveTarget/MoveReceipt 與 Server-side connection→Actor/ConnectionEpoch binding、bounded stream parser、bounded reliable queue 已有合成 CI Gate。Client 不能在 Move frame 內提供 ActorId/ConnectionEpoch；World receipt 攜帶 ConnectionEpoch/MapEpoch 供安全路由。真正 Socket/TLS/Auth/CharacterChoose、ACK/WorldReady/reconnect 仍未完成。詳 `docs/RUNTIME_PROTOCOL.md`。
 
 ## 1.0 MVP：Map15 主城 + Map13 台地，功能完整且真實跨圖
 
@@ -23,7 +23,7 @@
 
 兩圖 MVP 必須完整實作且依原版驗證主要玩法：登入／創角／多角色／角色選擇、A*／長按與傳點、Player／Enemy／Pet／Mecha 八方向／ACT／DrawOrder、AOI／移動補間、怪物獨立 AI、普攻／單體／範圍技能、MISS／死亡復活、Item UID／背包／裝備／強化／修理、NPC 商店／倉庫／銀行、地面掉落／撿取、寵物與機甲／卡片／升級、玩家交易／玩家商店／聊天、PvP 名稱規則／GM、SQLite 持久化、AFK／Unfocus、多開及錯誤／斷線／多人競態。**功能完整度不等於只做示範按鈕或單一 happy path；好友暫緩。**
 
-依序：Map15 與 Map13 原版素材／Blocking → Godot 主城地圖與相機／Y-sort → .NET 8 Server／WIRE001 選型 → **TLS/Auth + identity binding + Transport/Queue** → 登入／角色／Server 移動 → Map13 與兩個真 Client AOI／方向動畫 → 雙向 Map15↔Map13 傳點 → 多種怪物／Combat／技能／Drop → 兩圖完整遊戲／社交／經濟系統 → AFK、AssetStore／FPS 解耦及性能 Gate → MVP PASS。先做小型可重跑切片，合格再擴後續依賴。
+依序：Map15 與 Map13 原版素材／Blocking → Godot 主城地圖與相機／Y-sort → .NET 8 Server／WIRE001 選型 → identity/generation + bounded Transport core → **TLS/Auth/CharacterChoose + 真 Socket** → 登入／角色／Server 移動 → Map13 與兩個真 Client AOI／方向動畫 → 雙向 Map15↔Map13 傳點 → 多種怪物／Combat／技能／Drop → 兩圖完整遊戲／社交／經濟系統 → AFK、AssetStore／FPS 解耦及性能 Gate → MVP PASS。先做小型可重跑切片，合格再擴後續依賴。
 
 MVP 負載：Map13 **同張地圖**逐級驗證到 20 名連線玩家／300 Enemy／500 Drop（至少兩個真 Godot Client，其他 Bot 必須明確標記）；Map15 多人 NPC／玩家商店交互，雙圖同時有人及往返切圖，測 AOI／Tick／可靠事件／傳輸／CPU／RAM／VRAM／P95/P99。**100 玩家／1000 怪／5000 掉落、全地圖及全部原版內容**才是 MVP 後擴量 Gate，不能外推 MVP 成果。
 
