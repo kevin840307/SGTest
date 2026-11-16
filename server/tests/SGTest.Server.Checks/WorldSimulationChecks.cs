@@ -8,10 +8,11 @@ internal static class WorldSimulationChecks
                                           double x, double y) =>
         new(actor.ActorId, actor.ConnectionEpoch, actor.MapEpoch, sequence, x, y);
 
-    private static void HasReceipt(WorldTickResult result, MoveReceiptStatus status)
+    private static MoveReceipt HasReceipt(WorldTickResult result, MoveReceiptStatus status)
     {
-        Check(result.Receipts.Any(r => r.Status == status),
-              "missing command receipt: " + status);
+        var matches = result.Receipts.Where(r => r.Status == status).ToArray();
+        Check(matches.Length > 0, "missing command receipt: " + status);
+        return matches[0];
     }
 
     public static void Verify(string root)
@@ -90,14 +91,24 @@ internal static class WorldSimulationChecks
             Check(world.TryTrustedRegister(13, 81, 24, 24, out var session), "register");
             Check(world.TryPostMove(Move(session with { ConnectionEpoch = 0 }, 1, 72, 24)),
                   "enqueue obsolete connection");
-            HasReceipt(world.Tick(), MoveReceiptStatus.OldConnectionEpoch);
+            var oldConnection = HasReceipt(world.Tick(), MoveReceiptStatus.OldConnectionEpoch);
+            Check(oldConnection.ActorId == session.ActorId &&
+                  oldConnection.ConnectionEpoch == 0 &&
+                  oldConnection.MapEpoch == session.MapEpoch,
+                  "old connection receipt lost command generations");
             Check(world.TryPostMove(Move(session with { MapEpoch = 0 }, 1, 72, 24)),
                   "enqueue obsolete map");
-            HasReceipt(world.Tick(), MoveReceiptStatus.OldMapEpoch);
+            var oldMap = HasReceipt(world.Tick(), MoveReceiptStatus.OldMapEpoch);
+            Check(oldMap.ConnectionEpoch == session.ConnectionEpoch &&
+                  oldMap.MapEpoch == 0,
+                  "old map receipt lost command generations");
             Check(world.TryPostMove(Move(session, 0, 72, 24)), "enqueue sequence zero");
             HasReceipt(world.Tick(), MoveReceiptStatus.ReplayedSequence);
             Check(world.TryPostMove(Move(session, 1, 72, 24)), "enqueue move");
-            HasReceipt(world.Tick(), MoveReceiptStatus.Accepted);
+            var acceptedReceipt = HasReceipt(world.Tick(), MoveReceiptStatus.Accepted);
+            Check(acceptedReceipt.ConnectionEpoch == session.ConnectionEpoch &&
+                  acceptedReceipt.MapEpoch == session.MapEpoch,
+                  "accepted receipt lost active generations");
             Check(world.TryPostMove(Move(session, 1, 72, 24)), "enqueue replay");
             HasReceipt(world.Tick(), MoveReceiptStatus.ReplayedSequence);
             Check(world.GetActor(13)!.Value.LastMovementSequence == 1,
