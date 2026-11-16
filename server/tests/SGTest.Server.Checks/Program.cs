@@ -214,6 +214,7 @@ static class Checks
             TlsSocketChecks.Verify();
             IdentityStoreChecks.Verify();
             IdentityTlsAuthorizationChecks.Verify(root);
+            IdentityTlsLifecycleChecks.Verify(root);
             WorldSimulationChecks.Verify(root);
             WorldHostChecks.Verify(root);
 

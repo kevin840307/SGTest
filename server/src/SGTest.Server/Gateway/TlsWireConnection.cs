@@ -53,7 +53,8 @@ public static class TlsWireConnection
         Func<SslStream, CancellationToken, ValueTask<GatewayConnection?>> authorizeAndBind,
         Func<MoveTargetCommand, bool> postMove,
         TlsWireConnectionOptions? options = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        Func<ConnectionBinding, Task>? releaseBoundSession = null)
     {
         ArgumentNullException.ThrowIfNull(client);
         ArgumentNullException.ThrowIfNull(serverCertificate);
@@ -224,9 +225,19 @@ public static class TlsWireConnection
         finished:
             ArrayPool<byte>.Shared.Return(rented, clearArray: false);
             sessionCts.Cancel();
+            var finalBinding = gateway.Binding;
             gateway.Close();
             try { await writer.ConfigureAwait(false); }
             catch (OperationCanceledException) { }
+            finally
+            {
+                // Release the authoritative actor after every bound session end
+                // (clean EOF, protocol violation, writer fault or cancellation).
+                // Cleanup is NOT cancelled with the socket: a cancelled socket
+                // must not leave a permanently logged-in World actor.
+                if (releaseBoundSession is not null)
+                    await releaseBoundSession(finalBinding).ConfigureAwait(false);
+            }
 
             return new(reason, tls.SslProtocol,
                 commandsAccepted, Interlocked.Read(ref reliableSent));

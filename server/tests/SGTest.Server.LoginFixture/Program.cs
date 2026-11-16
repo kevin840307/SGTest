@@ -32,13 +32,6 @@ internal static class Program
             var authorization = new IdentityTlsAuthorization(store, world);
             var resultRouter = new WorldResultRouter();
 
-            async ValueTask<GatewayConnection?> AuthorizeAndCaptureAsync(SslStream stream, CancellationToken token)
-            {
-                var bound = await authorization.AuthorizeAndBindAsync(stream, token).ConfigureAwait(false);
-                if (bound is not null && !resultRouter.TryAttach(bound))
-                    throw new InvalidOperationException("trusted Gateway route could not attach");
-                return bound;
-            }
             using var certificate = CreateCertificate();
             string certPath = Path.Combine(root, "fixture-cert.pem");
             WriteCertificatePem(certPath, certificate);
@@ -50,8 +43,8 @@ internal static class Program
                 Console.WriteLine($"LOGIN_FIXTURE_READY port={port} cert={certPath} username={Username} character={characterId}");
                 Console.Out.Flush();
                 using var client = await listener.AcceptTcpClientAsync().WaitAsync(TimeSpan.FromSeconds(15));
-                var serverTask = TlsWireConnection.RunServerAsync(client, certificate,
-                    AuthorizeAndCaptureAsync, world.TryPostMove,
+                var serverTask = authorization.RunAuthenticatedSocketAsync(client,
+                    certificate, resultRouter,
                     new TlsWireConnectionOptions(AuthorizationTimeoutMilliseconds: 15000));
 
                 using var receiptCts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
@@ -65,8 +58,9 @@ internal static class Program
                 Console.Out.Flush();
 
                 var ended = await serverTask.WaitAsync(TimeSpan.FromSeconds(5));
-                if (ended.CommandsAccepted != 1 || ended.ReliableFramesSent != 1)
-                    throw new InvalidOperationException($"fixture send/receive mismatch commands={ended.CommandsAccepted} receipts={ended.ReliableFramesSent}");
+                if (ended.CommandsAccepted != 1 || ended.ReliableFramesSent != 1 ||
+                    resultRouter.Statistics.ActiveSessions != 0)
+                    throw new InvalidOperationException($"fixture disconnect or send mismatch commands={ended.CommandsAccepted} receipts={ended.ReliableFramesSent} active_routes={resultRouter.Statistics.ActiveSessions}");
                 await world.StopAsync();
                 Console.WriteLine($"LOGIN_FIXTURE_PASS tls={ended.Protocol} commands={ended.CommandsAccepted}");
                 Console.Out.Flush();
