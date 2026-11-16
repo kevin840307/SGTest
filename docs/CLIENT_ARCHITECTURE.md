@@ -123,7 +123,9 @@ DIRECT：2 jobs 的三輪引擎日誌分別記錄 17／7／3 個 error/leak 診�
 
 ## MVP002-TERRAIN：原始 tile 地形選型（2026-11-16）
 
-DIRECT 來源：唯一 `tools/asset_converter/content/build_maps.py::build` 保留原始 Map13／Map15 tiles.bin：8-byte little-endian width/height、480×480 uint16 原始 tile ID、65535 空格；world.json 的 tile_ids 確定性指向 terrain.png 格位，tile_side=32，world=15,360×15,360 pixel。Renderer 不改來源／邏輯 ID／原始座標；`TerrainData.configure` 驗證 WH／長度／ID／Atlas尺寸後，建立私有繪圖索引及矩形。Synthetic fixture 驗證空格、未知／重複原始 ID、尾端 bytes 拒絕、可視區越界及重新 configure 清掉舊 view。
+DIRECT 來源：唯一 `tools/asset_converter/content/build_maps.py::build` 保留原始 Map13／Map15 MapBlock bytes：8-byte little-endian width/height、480×480 raw 16-bit 值。2026-11-16 重新由原版 `Paradise.exe` 確認：`CELMap2D::ReadTileArray`（0x0052803B）／`DrawTile` 先把 signed int16 raw ID **+1**，再 wrap 成 ushort；`CDDxTile::LoadTile/Convert`（0x00547F50／0x00548205）略過 PIC 8-byte header 後以該 index × 32×32×2 讀 RGB565。因此 raw 0→PIC1、raw -1/0xffff→PIC0，65535 **不是空格**。world.json 以 `tile_source_rule=int16_plus_one_wrap` 鎖定此契約，raw tile_ids 確定性指向已按原版 source index 擷取的 terrain.png 格位；tile_side=32、world=15,360×15,360 pixel。`TerrainData.configure` 驗證 WH／長度／ID／Atlas尺寸與 source-rule 後建立私有繪圖索引；舊 direct-index runtime 輸出 fail closed。Synthetic fixture 直接驗證 raw 0/1/0xffff→PIC1/2/0、未知／重複 ID、尾端 bytes、可視區越界及重新 configure。
+
+來源修正實測：舊 direct-index 規則相對原版在 Map15 **230,400/230,400** 格、Map13 **230,393/230,400** 格會選到不同 PIC tile；這會讓接縫看起來像地磚位置錯誤，但 row-major `y*width+x` 與 32px 世界座標本身和原版 `DrawTile` 一致。修正後 Python 82/82、雙圖私有 runtime rebuild、PCK ResourceLoader（256 textures／508 codec extents）、Godot Terrain 16 GPU captures（720p/1080p，全0 mismatch）、World-view 12 captures／38原始SPR frame、World Canvas 一輪皆 PASS；PCK SHA256 `5ecee8d59fcde47554766b01c9c752b0c43784ef9ec1dafc6cf6ff2c0638c1ac`。這是資料來源契約修正，未重開 ALT001 Renderer 選型。
 
 正式唯一 Renderer 是 `client/rendering/terrain.gd`。以 Node2D `_draw` 對可視範圍（多一格 margin）呼叫 draw_texture_rect_region；只在可視 tile 矩形變更時 queue_redraw，使用 nearest 與 clip_uv。每張圖只有一個 ground node，共用 Store terrain Texture，沒有全圖 Mesh／額外 Texture cache，ground z=-100。這是呈現層，不承擔碰撞／移動或 authority。地物／人物排序和來源 Z/pivot 另有 Gate。
 

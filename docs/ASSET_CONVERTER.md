@@ -132,6 +132,8 @@ Catalog 的 `source_scope=selected_sprite_assets` 與 `_source_coverage.json` �
 
 ## Runtime 地圖資料 v3（MVP001-RUNTIME-CONTENT）
 
+**Terrain source-index 契約（2026-11-16 原版執行檔直接核實）**：MapBlock 的格值必須按 signed int16 解讀後 +1，再 wrap 成 ushort 去索引 `Map.pic` 的 pixel payload；PIC 前8 bytes是 width/height header，不屬於 tile pixels。原版 `ReadTileArray/DrawTile` 與 `CDDxTile::LoadTile/Convert` 均證明這個流程，所以 raw 0→PIC1、raw -1/0xffff→PIC0，65535 不可視為空白。Converter 保留 raw MapBlock bytes，在 `terrain.png` 擷取時套此 source mapping，並寫入 `tile_source_rule=int16_plus_one_wrap`；Runtime validator、AssetStore 與 TerrainData 都拒絕缺此欄位的舊 direct-index 輸出，遷移方式是從原始資料重建 runtime/PCK，不做就地猜測修補。
+
 `build --runtime-only --map 13 --map 15` 現在沿用同一 Map／NPC／Enemy compiler，每張圖輸出 6 個檔案（world.json、terrain.png、tiles.bin、blocking.dat、population.json、npcs.json）。NPC visual 加入由 source SPR 確定性推導的獨立 Atlas 參照，內容 fingerprint 隨新欄位重算；驗證 schema／map identity、原始來源映射與 Atlas 存在性。未知 type／缺 SPR／缺 Atlas／錯映射 fail closed；原版明示 empty_primary_slot 可保留無視覺 NPC。沿用暫存 stage，驗證失敗不覆寫該地圖原發布內容。
 
 **population v2 → v3：必須重建資料，不做補值遷移。** 移除無原版依據的 DEFAULT_STATS／validate_stats；v3 `kind=visual_spawn_content`，根與各 definition `stats_verified=false`，definition `stats=null`，根 `gameplay_ready=false`。原始 Spawn 位置／definition ID／source_index／flags／source SHA／Atlas 不改；外部傳入的猜測 stats 也不會成為原版已驗證數值。現有 validator 拒絕 v2 與夾帶 stats／虛稱 verified 的資料。此 repo 沒有正式 Client/Server 或資料庫 schema consumer，遷移方式是刪除舊輸出依既有 CLI 重跑，**不是移植假的怪物數值**。正式 Server 在原版規則未驗證前不可啟用戰鬥／AI；來源規則研究仍為後續工作。
