@@ -59,6 +59,7 @@ def main() -> int:
     try:
         with tempfile.TemporaryDirectory(prefix="sgtest-online-main-") as temp_text:
             temp = Path(temp_text)
+            source_assets = temp / "source_assets"
             pack = temp / "assets.pck"
             content = temp / "content"
             database = temp / "identity.db"
@@ -66,13 +67,21 @@ def main() -> int:
             key = temp / "key.pem"
             pfx = temp / "cert.pfx"
 
-            build_pack = run_checked(
+            build_source = run_checked(
                 [args.godot, "--headless", "--path", str(repo / "client"),
                  "--script", "res://tests/build_online_gate_pack.gd", "--",
-                 str(pack), str(content)],
+                 str(source_assets), str(content)],
                 repo, base_env, args.timeout)
-            if "ONLINE_GATE_PACK_READY" not in build_pack:
-                raise RuntimeError("synthetic pack/content builder did not confirm readiness")
+            if "ONLINE_GATE_SOURCE_READY" not in build_source:
+                raise RuntimeError("synthetic source/content builder did not confirm readiness")
+
+            sys.path.insert(0, str(repo / "tools"))
+            from asset_converter.runtime_pack import build_runtime_pack
+            pack_report = build_runtime_pack(
+                Path(args.godot), source_assets, pack, stage=temp / "pack-stage")
+            if not pack.is_file() or pack_report.get("source_files", 0) < 1:
+                raise RuntimeError("formal runtime pack pipeline produced no external PCK")
+
             run_checked(["dotnet", "build", str(host_project), "-c", "Release", "--nologo"],
                         repo, base_env, args.timeout)
 
