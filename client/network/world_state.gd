@@ -18,6 +18,7 @@ var actor_id := 0
 var map_id := 0
 var x := 0.0
 var y := 0.0
+var facing := 1
 var map_epoch := 0
 var movement_sequence := 0
 var npc_interaction_sequence := 0
@@ -108,6 +109,7 @@ func snapshot() -> Dictionary:
 		"map_id": map_id,
 		"x": x,
 		"y": y,
+		"facing": facing,
 		"map_epoch": map_epoch,
 		"movement_sequence": movement_sequence,
 		"npc_interaction_sequence": npc_interaction_sequence,
@@ -281,6 +283,7 @@ func _apply_world_ready(frame: PackedByteArray) -> bool:
 	self_state.clear()
 	x = float(ready.x)
 	y = float(ready.y)
+	facing = int(ready.facing)
 	world_ready = true
 	entities.clear()
 	last_aoi_tick = tick
@@ -370,5 +373,6 @@ func _apply_self_state(frame: PackedByteArray) -> bool:
 	self_state = value
 	x = float(value.x)
 	y = float(value.y)
+	facing = int(value.facing)
 	last_aoi_tick = maxi(last_aoi_tick, int(value.server_tick))
 	return true

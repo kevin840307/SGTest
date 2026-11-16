@@ -1,5 +1,7 @@
 # SGTest 新版重建 TODO（2026-11-15）
 
+- MVP003-FACING [ ] 預期：Server依實際合法路徑段更新八方向並於停止保留，WorldReady／Spawn／Delta／SelfState帶同一Facing；Client僅讀Server方向，拒絕0／9，不從目標或Render推導權威。驗收：C# targeted AOI 13/13 PASS（新增八向／阻擋／停止／同格停止／轉彎／跨圖）、C#↔Godot 45/74-byte golden及非法Facing拒絕、NPC／FPS回歸與真TLS東向移動停止PASS；最終main CI待驗。初始Facing=1明示provisional，原版出生方向／持久方向／攻擊受擊鎖定／人物視覺仍NOT VERIFIED。
+
 - MVP003-SELF-STATE [x]：Server每次自身revision改變經既有有界可靠FIFO送SelfState，idle不重送；Client獨立於Render FPS更新權威XY／moving／action sequence，拒絕錯誤Actor／map／connection，忽略過期epoch／revision，跨圖重建。驗收：C# AOI targeted 12/12 PASS、Godot同73-byte golden／owner與remote隔離／錯Actor-map-connection-action fail-closed／過期revision與跨圖／重複Ready不倒退PASS、真TLS從(8,8)到(24,8)並停止PASS、0/30/60/90 FPS自身狀態與送包一致PASS。實作`2f9a8737d1855f38c639d42286dbfb842cb5cd9e`的[Server CI 43905278553](https://github.com/kevin840307/SGTest/actions/runs/43905278553) **87/87 PASS**、[Client CI 43905278578](https://github.com/kevin840307/SGTest/actions/runs/43905278578)全PASS（含TLS、自身移動停止、UI、雙Client AOI／雙向換圖／NPC傳點）；平滑／方向動畫／紙娃娃／相機跟隨、原圖雙Client視覺與規模效能仍NOT VERIFIED。詳docs/TEST_PLAN.md。下一切片：以Server Tick／MapEpoch狀態接唯讀自身及遠端呈現，先研究方向／ACT映射和既有Player part契約，再接同一WorldDrawList／AssetStore／相機跟隨；不可用Render去驅動網路或權威位置。
 
 - MVP003-IDENTITY-ADMIN [x]：Before新serve DB無可執行的建置入口；After Host加入本機account-create／character-create，沿用Store既有各自原子API、schema v1，不新增網路／GM RPC或預設帳號。終端隱藏密碼或SGTEST_ACCOUNT_PASSWORD環境來源，拒絕CLI明碼；角色必須使用管理者明示的Map13/15可走座標，Blocking來源SHA／有限數／邊界／flag0先驗證，再驗證帳密／disabled及Store名稱／slot政策。不把兩步驟宣稱跨交易，也不把指定座標當原版預設出生點。

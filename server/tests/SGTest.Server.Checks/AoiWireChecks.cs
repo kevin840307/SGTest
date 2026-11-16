@@ -5,10 +5,10 @@ using SGTest.Server.World;
 internal static class AoiWireChecks
 {
     private static void Require(bool ok, string name) => Checks.Require(ok, name);
-    private const string Ready = "2C0000000100140001000000000000002A000000000000000B000000000000000F0000000000C04100000041";
-    private const string Spawn = "490000000100150001000000000000002B000000000000001600000000000000020000000000000001000000000000000F0000000700000000000000000040420000C0410104000000";
-    private const string Delta = "490000000100170001000000000000002C000000000000001600000000000000020000000000000001000000000000000F0000000800000000000000000060420000C0410005000000";
-    private const string Self = "490000000100180001000000000000002C000000000000000B00000000000000020000000000000001000000000000000F0000000800000000000000000060420000C0410005000000";
+    private const string Ready = "2D0000000100140001000000000000002A000000000000000B000000000000000F0000000000C0410000004101";
+    private const string Spawn = "4A0000000100150001000000000000002B000000000000001600000000000000020000000000000001000000000000000F0000000700000000000000000040420000C041010400000001";
+    private const string Delta = "4A0000000100170001000000000000002C000000000000001600000000000000020000000000000001000000000000000F0000000800000000000000000060420000C041000500000001";
+    private const string Self = "4A0000000100180001000000000000002C000000000000000B00000000000000020000000000000001000000000000000F0000000800000000000000000060420000C041000500000006";
     private const string Despawn = "280000000100160001000000000000002D0000000000000016000000000000000200000000000000";
 
     public static void Verify()
@@ -42,7 +42,7 @@ internal static class AoiWireChecks
                 WireProtocol.TryDecodeEntityState(delta, out kind, out parsed) &&
                 kind == WireOpcode.EntityDelta && parsed == e,
                 "Delta binary fixture");
-        var self = e with { ActorId = 11 };
+        var self = e with { ActorId = 11, Facing = 6 };
         byte[] ownBytes = WireProtocol.EncodeEntityState(WireOpcode.SelfState, self);
         Require(Convert.ToHexString(ownBytes) == Self &&
                 WireProtocol.TryDecodeEntityState(ownBytes, out kind, out parsed) &&
@@ -60,6 +60,13 @@ internal static class AoiWireChecks
         bad[68] = 2;
         Require(!WireProtocol.TryDecodeEntityState(bad, out _, out _),
                 "invalid moving bit accepted");
+        foreach (var invalid in new byte[] {0,9,255})
+        {
+            var badSelf = Convert.FromHexString(Self); badSelf[73] = invalid;
+            Require(!WireProtocol.TryDecodeEntityState(badSelf,out _,out _), "invalid entity facing accepted");
+            var badReady = Convert.FromHexString(Ready); badReady[44] = invalid;
+            Require(!WireProtocol.TryDecodeWorldReady(badReady,out _), "invalid Ready facing accepted");
+        }
         bad = Convert.FromHexString(Ready);
         bad[0] = 43;
         Require(!WireProtocol.TryDecodeWorldReady(bad, out _),

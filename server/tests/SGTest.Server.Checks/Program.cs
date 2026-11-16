@@ -96,6 +96,7 @@ static class Checks
             }
             if (args is ["--aoi-only"])
             {
+                FacingChecks.Verify(root);
                 WorldAoiChecks.Verify(root);
                 AoiWireChecks.Verify();
                 WorldAoiPumpChecks.Verify(root);
@@ -249,6 +250,7 @@ static class Checks
             TlsGatewayListenerChecks.Verify(root);
             IdentityAdminChecks.Verify(root);
             WorldSimulationChecks.Verify(root);
+            FacingChecks.Verify(root);
             WorldHostChecks.Verify(root);
 
             if (args.Length == 2 && args[0] == "--assets")

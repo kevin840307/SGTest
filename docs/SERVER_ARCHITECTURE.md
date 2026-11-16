@@ -162,3 +162,7 @@ Host的本機`account-create`／`character-create`委派同一SqliteIdentityStor
 ### 2026-11-17 Changed-only owner state
 
 WorldAoi now enqueues SelfState on an owner's increasing authoritative revision, separately from the unchanged remote interest filtering. It reuses ActorSnapshot, the existing single AOI consumer, bounded pending FIFO, Gateway reliable FIFO and fail-closed overflow supervisor; no new timer, broadcast, manager or serializer. Gateway requires the owner ActorId/ConnectionEpoch/MapEpoch binding. Idle revisions emit nothing. This is an additive V1 opcode using the existing 73-byte EntityState layout, a correctness fix to the established delivery path rather than a new algorithm selection. A future rate/coalescing change must preserve reliable events and measure the affected workload.
+
+### 2026-11-17 Authoritative route facing
+
+ActorSnapshot carries Facing (byte 1..8). The single World writer quantizes each successfully traversed path segment using the original world-space convention (E6/SE7/S8/SW1/W2/NW3/N4/NE5); blocked/invalid commands cannot rotate the actor. Stop retains the last direction, and transfer preserves it in WorldReady. Facing participates in the deterministic state hash and in changed authoritative snapshots; no idle direction heartbeat was added. Initial Facing=1 remains a provisional spawn policy until original spawn rules and persistent orientation are implemented. V1 WorldReady/EntityState are now 45/74 bytes; see RUNTIME_PROTOCOL.

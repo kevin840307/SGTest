@@ -331,7 +331,7 @@ public sealed class GatewayConnection
                      ready.MapEpoch == bound.MapEpoch:
                     frame = WireProtocol.EncodeWorldReady(new(
                         evt.ReceiverMapEpoch, evt.Tick, ready.ActorId,
-                        ready.MapId, (float)ready.X, (float)ready.Y));
+                        ready.MapId, (float)ready.X, (float)ready.Y, ready.Facing));
                     break;
 
                 case AoiEventKind.SelfState when evt.Entity is { } self &&
@@ -342,7 +342,7 @@ public sealed class GatewayConnection
                         new(evt.ReceiverMapEpoch, evt.Tick, self.ActorId,
                             self.ConnectionEpoch, self.MapEpoch, self.MapId,
                             self.EntityRevision, (float)self.X, (float)self.Y,
-                            self.IsMoving, self.MovementActionSequence));
+                            self.IsMoving, self.MovementActionSequence, self.Facing));
                     break;
 
                 case AoiEventKind.Spawn or AoiEventKind.Delta
@@ -353,7 +353,7 @@ public sealed class GatewayConnection
                         new(evt.ReceiverMapEpoch, evt.Tick, entity.ActorId,
                             entity.ConnectionEpoch, entity.MapEpoch, entity.MapId,
                             entity.EntityRevision, (float)entity.X, (float)entity.Y,
-                            entity.IsMoving, entity.MovementActionSequence));
+                            entity.IsMoving, entity.MovementActionSequence, entity.Facing));
                     break;
 
                 case AoiEventKind.Despawn

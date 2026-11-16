@@ -7,12 +7,12 @@ const AUTH := "0900000001000B0000"
 const LIST := "1800000001000C00010B000000000000000004004865726F"
 const CHOOSE := "2D00000001000E00000B000000000000000F000000000000000000204000000000000020400100000000000000"
 # Matches C# WireProtocol V1 fixed little-endian fixtures.
-const READY := "2C0000000100140001000000000000002A000000000000000B000000000000000F0000000000C04100000041"
-const SPAWN := "490000000100150001000000000000002B000000000000001600000000000000020000000000000001000000000000000F0000000700000000000000000040420000C0410104000000"
-const DELTA := "490000000100170001000000000000002C000000000000001600000000000000020000000000000001000000000000000F0000000800000000000000000060420000C0410005000000"
-const SELF := "490000000100180001000000000000002C000000000000000B00000000000000020000000000000001000000000000000F0000000800000000000000000060420000C0410005000000"
+const READY := "2D0000000100140001000000000000002A000000000000000B000000000000000F0000000000C0410000004101"
+const SPAWN := "4A0000000100150001000000000000002B000000000000001600000000000000020000000000000001000000000000000F0000000700000000000000000040420000C041010400000001"
+const DELTA := "4A0000000100170001000000000000002C000000000000001600000000000000020000000000000001000000000000000F0000000800000000000000000060420000C041000500000001"
+const SELF := "4A0000000100180001000000000000002C000000000000000B00000000000000020000000000000001000000000000000F0000000800000000000000000060420000C041000500000006"
 const DESPAWN := "280000000100160001000000000000002D0000000000000016000000000000000200000000000000"
-const MAP13_READY := "2C00000001001400020000000000000032000000000000000B000000000000000D000000000020420000A042"
+const MAP13_READY := "2D00000001001400020000000000000032000000000000000B000000000000000D000000000020420000A04201"
 
 func _fail(message: String) -> void:
 	push_error("AOI_WIRE_FAIL " + message)
@@ -52,6 +52,11 @@ func _initialize() -> void:
 		_fail("NaN position accepted")
 		return
 
+	for invalid in [0,9,255]:
+		if not WireCodec.decode_entity_state(_mutate_u8(SELF.hex_decode(),73,invalid)).is_empty() or not WireCodec.decode_world_ready(_mutate_u8(READY.hex_decode(),44,invalid)).is_empty():
+			_fail("invalid Facing accepted")
+			return
+
 	var world = WorldState.new()
 	if not world.mark_auth_sent() or not world.apply_frame(AUTH.hex_decode()) or not world.apply_frame(LIST.hex_decode()) or not world.mark_choose_sent(11) or not world.apply_frame(CHOOSE.hex_decode()):
 		_fail("auth/choose prereq")
@@ -89,7 +94,7 @@ func _initialize() -> void:
 	if world.apply_frame(future) or int(world.snapshot().state) != WorldState.STATE_FAILED:
 		_fail("future map AOI did not fail closed")
 		return
-	print("AOI_WIRE_GODOT_PASS ready=44 spawn=73 delta=73 despawn=40 worldstate=PASS map_epoch=PASS stale=IGNORED future=FAIL_CLOSED")
+	print("AOI_WIRE_GODOT_PASS ready=45 spawn=74 delta=74 despawn=40 worldstate=PASS map_epoch=PASS stale=IGNORED future=FAIL_CLOSED")
 	quit(0)
 
 func _mutate_u8(bytes: PackedByteArray, offset: int, value: int) -> PackedByteArray:
@@ -113,7 +118,7 @@ func _verify_self() -> bool:
 		_fail("SelfState C# golden")
 		return false
 	var world = _ready_world()
-	if not world.apply_frame(SELF.hex_decode()) or float(world.snapshot().x) != 56.0 or bool(world.snapshot().self_state.moving) or not world.snapshot().entities.is_empty():
+	if not world.apply_frame(SELF.hex_decode()) or float(world.snapshot().x) != 56.0 or int(world.snapshot().facing) != 6 or bool(world.snapshot().self_state.moving) or not world.snapshot().entities.is_empty():
 		_fail("SelfState did not update own state independently of remote AOI")
 		return false
 	# Duplicate Ready cannot clear own generation/revision or rewind coordinates.
@@ -176,5 +181,5 @@ func _verify_self() -> bool:
 	if not world.apply_frame(new_self) or world.x != 72.0:
 		_fail("new-map self baseline did not reset")
 		return false
-	print("SELF_STATE_GODOT_PASS bytes=73 identity=FAIL_CLOSED stale=IGNORED transfer=PASS ready_replay=IGNORED")
+	print("SELF_STATE_GODOT_PASS bytes=74 identity=FAIL_CLOSED stale=IGNORED transfer=PASS ready_replay=IGNORED")
 	return true

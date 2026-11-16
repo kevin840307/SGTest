@@ -44,7 +44,7 @@ public readonly record struct MoveReceipt(
 public readonly record struct ActorSnapshot(
     long ActorId, int MapId, long ConnectionEpoch, long MapEpoch,
     uint LastMovementSequence, uint MovementActionSequence, double X, double Y,
-    long EntityRevision, bool IsMoving);
+    long EntityRevision, bool IsMoving, byte Facing = 1);
 
 public enum ActorLifecycleKind { Joined, Left }
 public readonly record struct ActorLifecycleEvent(ActorLifecycleKind Kind, ActorSnapshot Actor);
@@ -73,12 +73,13 @@ public sealed class ServerWorld
         public uint LastSequence; // highest client command sequence consumed
         public uint MovementActionSequence; // last accepted authoritative movement/stop
         public uint LastPortalSequence; // per-MapEpoch authenticated NPC interaction replay guard
+        public byte Facing = 1; // Initial spawn policy; movement owns subsequent facing.
         public long Revision = 1;
         public IReadOnlyList<GridCell> Route = Array.Empty<GridCell>();
         public int RouteIndex;
 
         public ActorSnapshot Snapshot() => new(Id, Map, ConnectionEpoch, MapEpoch,
-            LastSequence, MovementActionSequence, X, Y, Revision, RouteIndex < Route.Count);
+            LastSequence, MovementActionSequence, X, Y, Revision, RouteIndex < Route.Count, Facing);
 
         public void ClearRoute()
         {
@@ -374,6 +375,7 @@ public sealed class ServerWorld
                 updated = true;
                 break;
             }
+            actor.Facing = FacingFromDisplacement(dx, dy);
             actor.X = nx;
             actor.Y = ny;
             remaining -= pixels;
@@ -397,6 +399,14 @@ public sealed class ServerWorld
         }
     }
 
+    private static byte FacingFromDisplacement(double dx, double dy)
+    {
+        // Original world-space convention: E=6, SE=7, S=8, SW=1,
+        // W=2, NW=3, N=4, NE=5. Only a legal traversed segment calls this.
+        int sector = (int)Math.Floor(Math.Atan2(dy, dx) / (Math.PI / 4) + 0.5);
+        return (byte)(((sector + 5) % 8 + 8) % 8 + 1);
+    }
+
     /// <summary>Deterministic single-writer test trace, NOT network state encoding.</summary>
     public string StateHash()
     {
@@ -407,7 +417,7 @@ public sealed class ServerWorld
             sb.Append('|').Append(a.Id).Append('/').Append(a.Map)
                 .Append('/').Append(a.ConnectionEpoch).Append('/').Append(a.MapEpoch)
                 .Append('/').Append(a.LastSequence)
-                .Append('/').Append(a.MovementActionSequence)
+                .Append('/').Append(a.MovementActionSequence).Append('/').Append(a.Facing)
                 .Append('/').Append(a.Revision)
                 .Append('/').Append(BitConverter.DoubleToInt64Bits(a.X))
                 .Append('/').Append(BitConverter.DoubleToInt64Bits(a.Y))

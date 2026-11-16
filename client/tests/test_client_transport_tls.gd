@@ -66,11 +66,11 @@ func _initialize() -> void:
 	if int(acknowledged.state) != WorldState.STATE_IN_WORLD or not bool(acknowledged.world_ready) or int(acknowledged.last_receipt_sequence) != 1 or int(acknowledged.last_receipt_status) != 0 or int(acknowledged.last_server_tick) < 0 or int(acknowledged.map_epoch) != int(in_world.map_epoch):
 		_fail("authoritative MoveReceipt was not received/reduced %s" % acknowledged, session)
 		return
-	if acknowledged.self_state.is_empty() or bool(acknowledged.self_state.moving) or float(acknowledged.x) != 24.0 or float(acknowledged.y) != 8.0:
+	if acknowledged.self_state.is_empty() or bool(acknowledged.self_state.moving) or float(acknowledged.x) != 24.0 or float(acknowledged.y) != 8.0 or int(acknowledged.facing) != 6:
 		_fail("authoritative self movement/stop was not reduced %s" % acknowledged, session)
 		return
 	session.stop()
-	print("CLIENT_TLS_LOGIN_PASS auth=PASS character=%d map_epoch=%d move_sequence=1 receipt=PASS world_ready=PASS self_movement_stop=PASS server_tick=%d transport_thread=true reducer_thread=true certificate_validation=PASS" % [character_id, int(in_world.map_epoch), int(acknowledged.last_server_tick)])
+	print("CLIENT_TLS_LOGIN_PASS auth=PASS character=%d map_epoch=%d move_sequence=1 receipt=PASS world_ready=PASS self_movement_stop=PASS facing_east=PASS server_tick=%d transport_thread=true reducer_thread=true certificate_validation=PASS" % [character_id, int(in_world.map_epoch), int(acknowledged.last_server_tick)])
 	quit(0)
 
 func _wait_state(session, expected: int, timeout_ms: int) -> Dictionary:

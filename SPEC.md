@@ -138,3 +138,7 @@ Transport, protocol/world reduction and rendering are separate clocks. ClientTra
 ### 2026-11-17 Own authoritative movement delivery
 
 V1 server-only SelfState (opcode 24, 73 bytes, existing EntityState layout) delivers changed authoritative owner XY/moving/action sequence through the bounded reliable AOI path. Client WorldState updates independently of Render FPS, validates identity/generation/revision and preserves remote-AOI self exclusion. Duplicate same-epoch WorldReady cannot rewind accepted owner state. This slice does not complete prediction/interpolation, player rendering, camera follow, movement persistence or ACK/resync; private two-client visual/scale gates remain NOT VERIFIED.
+
+### 2026-11-17 Authoritative eight-way facing
+
+Server legal path segments now determine Facing using the original E6/SE7/S8/SW1/W2/NW3/N4/NE5 convention. Stop/rejected commands retain it; trusted transfer preserves it. Both formal V1 endpoints carry Facing in WorldReady (45 bytes) and Spawn/Delta/SelfState (74 bytes), rejecting illegal values rather than inventing a Client direction. Initial spawn Facing=1 is provisional; original default/persistent facing, player rendering/interpolation/action locks and visual multiplayer gates remain NOT VERIFIED.

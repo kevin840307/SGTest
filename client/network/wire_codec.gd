@@ -26,8 +26,8 @@ const CHARACTER_CHOOSE_FRAME_BYTES := 16
 const CHARACTER_CHOOSE_RESULT_FRAME_BYTES := 45
 const MAX_AUTH_REQUEST_FRAME_BYTES := 300
 const MAX_CHARACTER_LIST_FRAME_BYTES := 4096
-const WORLD_READY_FRAME_BYTES := 44
-const ENTITY_STATE_FRAME_BYTES := 73
+const WORLD_READY_FRAME_BYTES := 45
+const ENTITY_STATE_FRAME_BYTES := 74
 const ENTITY_DESPAWN_FRAME_BYTES := 40
 
 static func encode_move_target(map_epoch: int, movement_sequence: int, target_x: int, target_y: int) -> PackedByteArray:
@@ -209,9 +209,10 @@ static func decode_world_ready(frame: PackedByteArray) -> Dictionary:
 	var map_id := reader.get_32()
 	var x := reader.get_float()
 	var y := reader.get_float()
-	if epoch <= 0 or tick < 0 or actor_id <= 0 or map_id <= 0 or not is_finite(x) or not is_finite(y) or x < 0 or y < 0:
+	var facing := reader.get_u8()
+	if facing < 1 or facing > 8 or epoch <= 0 or tick < 0 or actor_id <= 0 or map_id <= 0 or not is_finite(x) or not is_finite(y) or x < 0 or y < 0:
 		return {}
-	return {"map_epoch": epoch, "server_tick": tick, "actor_id": actor_id, "map_id": map_id, "x": x, "y": y}
+	return {"map_epoch": epoch, "server_tick": tick, "actor_id": actor_id, "map_id": map_id, "x": x, "y": y, "facing": facing}
 
 static func decode_entity_state(frame: PackedByteArray) -> Dictionary:
 	if frame_opcode(frame) not in [OPCODE_ENTITY_SPAWN, OPCODE_ENTITY_DELTA, OPCODE_SELF_STATE] or frame.size() != ENTITY_STATE_FRAME_BYTES:
@@ -228,9 +229,10 @@ static func decode_entity_state(frame: PackedByteArray) -> Dictionary:
 	var y := reader.get_float()
 	var moving := reader.get_u8()
 	var action_sequence := reader.get_u32()
-	if receiver_epoch <= 0 or tick < 0 or actor_id <= 0 or connection_epoch <= 0 or entity_map_epoch <= 0 or map_id <= 0 or revision <= 0 or moving > 1 or not is_finite(x) or not is_finite(y) or x < 0 or y < 0:
+	var facing := reader.get_u8()
+	if facing < 1 or facing > 8 or receiver_epoch <= 0 or tick < 0 or actor_id <= 0 or connection_epoch <= 0 or entity_map_epoch <= 0 or map_id <= 0 or revision <= 0 or moving > 1 or not is_finite(x) or not is_finite(y) or x < 0 or y < 0:
 		return {}
-	return {"receiver_map_epoch": receiver_epoch, "server_tick": tick, "actor_id": actor_id, "connection_epoch": connection_epoch, "entity_map_epoch": entity_map_epoch, "map_id": map_id, "revision": revision, "x": x, "y": y, "moving": moving == 1, "movement_action_sequence": action_sequence}
+	return {"receiver_map_epoch": receiver_epoch, "server_tick": tick, "actor_id": actor_id, "connection_epoch": connection_epoch, "entity_map_epoch": entity_map_epoch, "map_id": map_id, "revision": revision, "x": x, "y": y, "moving": moving == 1, "movement_action_sequence": action_sequence, "facing": facing}
 
 static func decode_entity_despawn(frame: PackedByteArray) -> Dictionary:
 	if not _valid_header(frame, OPCODE_ENTITY_DESPAWN, ENTITY_DESPAWN_FRAME_BYTES):

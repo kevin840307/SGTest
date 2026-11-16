@@ -282,7 +282,7 @@ public sealed class WorldAoi
     private static void ValidateActor(ActorSnapshot actor)
     {
         if (actor.ActorId <= 0 || actor.ConnectionEpoch <= 0 || actor.MapEpoch <= 0 ||
-            actor.MapId <= 0 || actor.EntityRevision <= 0 ||
+            actor.MapId <= 0 || actor.EntityRevision <= 0 || actor.Facing is < 1 or > 8 ||
             !double.IsFinite(actor.X) || !double.IsFinite(actor.Y) ||
             actor.X < 0 || actor.Y < 0)
             throw new InvalidOperationException("Invalid authoritative AOI actor snapshot");

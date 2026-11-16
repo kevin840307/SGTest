@@ -42,11 +42,11 @@ public readonly record struct CharacterChooseResultWire(
     double X, double Y, long MapEpoch);
 public readonly record struct WorldReadyWire(
     long ReceiverMapEpoch, long ServerTick, long ActorId,
-    int MapId, float X, float Y);
+    int MapId, float X, float Y, byte Facing = 1);
 public readonly record struct EntityStateWire(
     long ReceiverMapEpoch, long ServerTick, long ActorId,
     long ConnectionEpoch, long EntityMapEpoch, int MapId,
-    long Revision, float X, float Y, bool IsMoving, uint MovementActionSequence);
+    long Revision, float X, float Y, bool IsMoving, uint MovementActionSequence, byte Facing = 1);
 public readonly record struct EntityDespawnWire(
     long ReceiverMapEpoch, long ServerTick, long ActorId, long ConnectionEpoch);
 
@@ -74,8 +74,8 @@ public static class WireProtocol
     public const int MaxCharacterListFrameBytes = 4096;
     // Single-precision coordinates suffice across the original ~15k-pixel maps
     // (sub-0.002px resolution), saving bandwidth vs storing double on wire.
-    public const int WorldReadyFrameBytes = 44;
-    public const int EntityStateFrameBytes = 73;
+    public const int WorldReadyFrameBytes = 45;
+    public const int EntityStateFrameBytes = 74;
     public const int EntityDespawnFrameBytes = 40;
     private static readonly UTF8Encoding StrictUtf8 = new(false, true);
 
@@ -352,7 +352,7 @@ public static class WireProtocol
     public static byte[] EncodeWorldReady(WorldReadyWire value)
     {
         if (!ValidMapState(value.ReceiverMapEpoch, value.ServerTick, value.ActorId,
-                           value.MapId, value.X, value.Y))
+                           value.MapId, value.X, value.Y) || value.Facing is < 1 or > 8)
             throw new ArgumentOutOfRangeException(nameof(value));
         var frame = NewFrame(WireOpcode.WorldReady, WorldReadyFrameBytes);
         BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(8, 8), value.ReceiverMapEpoch);
@@ -361,6 +361,7 @@ public static class WireProtocol
         BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(32, 4), value.MapId);
         WriteFloat(frame.AsSpan(36, 4), value.X);
         WriteFloat(frame.AsSpan(40, 4), value.Y);
+        frame[44] = value.Facing;
         return frame;
     }
 
@@ -374,9 +375,9 @@ public static class WireProtocol
             BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(16, 8)),
             BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(24, 8)),
             BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(32, 4)),
-            ReadFloat(frame.Slice(36, 4)), ReadFloat(frame.Slice(40, 4)));
+            ReadFloat(frame.Slice(36, 4)), ReadFloat(frame.Slice(40, 4)), frame[44]);
         return ValidMapState(value.ReceiverMapEpoch, value.ServerTick, value.ActorId,
-                             value.MapId, value.X, value.Y);
+                             value.MapId, value.X, value.Y) && value.Facing is >= 1 and <= 8;
     }
 
     public static byte[] EncodeEntityState(WireOpcode opcode, EntityStateWire value)
@@ -384,7 +385,8 @@ public static class WireProtocol
         if (opcode is not (WireOpcode.EntitySpawn or WireOpcode.EntityDelta or WireOpcode.SelfState) ||
             !ValidMapState(value.ReceiverMapEpoch, value.ServerTick, value.ActorId,
                            value.MapId, value.X, value.Y) ||
-            value.ConnectionEpoch <= 0 || value.EntityMapEpoch <= 0 || value.Revision <= 0)
+            value.ConnectionEpoch <= 0 || value.EntityMapEpoch <= 0 || value.Revision <= 0 ||
+            value.Facing is < 1 or > 8)
             throw new ArgumentOutOfRangeException(nameof(value));
         var frame = NewFrame(opcode, EntityStateFrameBytes);
         BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(8, 8), value.ReceiverMapEpoch);
@@ -398,6 +400,7 @@ public static class WireProtocol
         WriteFloat(frame.AsSpan(64, 4), value.Y);
         frame[68] = value.IsMoving ? (byte)1 : (byte)0;
         BinaryPrimitives.WriteUInt32LittleEndian(frame.AsSpan(69, 4), value.MovementActionSequence);
+        frame[73] = value.Facing;
         return frame;
     }
 
@@ -407,7 +410,7 @@ public static class WireProtocol
         opcode = 0; value = default;
         if (!TryReadHeader(frame, out var header) ||
             header.Opcode is not (WireOpcode.EntitySpawn or WireOpcode.EntityDelta or WireOpcode.SelfState) ||
-            frame[68] > 1)
+            frame[68] > 1 || frame[73] is < 1 or > 8)
             return false;
         opcode = header.Opcode;
         value = new(
@@ -419,7 +422,7 @@ public static class WireProtocol
             BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(48, 4)),
             BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(52, 8)),
             ReadFloat(frame.Slice(60, 4)), ReadFloat(frame.Slice(64, 4)),
-            frame[68] != 0, BinaryPrimitives.ReadUInt32LittleEndian(frame.Slice(69, 4)));
+            frame[68] != 0, BinaryPrimitives.ReadUInt32LittleEndian(frame.Slice(69, 4)), frame[73]);
         return ValidMapState(value.ReceiverMapEpoch, value.ServerTick, value.ActorId,
                              value.MapId, value.X, value.Y) &&
                value.ConnectionEpoch > 0 && value.EntityMapEpoch > 0 && value.Revision > 0;

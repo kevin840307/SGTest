@@ -275,3 +275,7 @@ The real Godot↔C# fixture now proves WorldReady reaches the threaded ClientSes
 ### 2026-11-17 Owner state delivery
 
 The non-render WorldState reducer accepts the sole V1 SelfState opcode 24 into `self_state` and authoritative `x/y`; remote `entities` remains a separate AOI dictionary and cannot contain self. The trusted first owner update establishes ConnectionEpoch, later updates require the same generation plus increasing revision and nondecreasing action sequence. New-map WorldReady clears the baseline; a duplicate same-map Ready cannot rewind it. Snapshot consumers receive copies; Render FPS/AFK does not control delivery. Local rendering/prediction/camera-follow are still separate unimplemented gates. See RUNTIME_PROTOCOL for validation and exact payload.
+
+### 2026-11-17 Authoritative facing consumer
+
+WorldState exposes `facing` for self, initialized by WorldReady and updated by SelfState; remote entities carry their own `facing`. The formal codec requires 1..8 in the new exact 45/74-byte state frames. Presentation must select Converter logical views from this direction rather than derive authoritative facing from render displacement. This closes the state prerequisite; paper-doll rendering, interpolation, animation locks and camera-follow are not completed by the wire field.
