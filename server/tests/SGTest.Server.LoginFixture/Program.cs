@@ -179,7 +179,7 @@ internal static class Program
                         if (received != command)
                             throw new InvalidOperationException(
                                 $"Expected test-only command {command}, got {received ?? "<EOF>"}");
-                        var moved = await resultRouter.TrustedTransferAsync(
+                        var moved = await router.TrustedTransferAsync(
                             world, bId, mapId, 24, 8).ConfigureAwait(false)
                             ?? throw new InvalidOperationException(
                                 $"Authoritative transfer to map {mapId} denied");
