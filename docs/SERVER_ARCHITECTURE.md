@@ -1,6 +1,6 @@
 # SGTest Server — 重建設計
 
-**狀態：規格，尚無 .NET 專案。** 目標 .NET 8，單體功能模組，固定世界模擬與獨立 Transport/Persistence。
+**狀態：已建立 .NET 8 Blocking/A* Class Library，但尚無可執行 Server、Socket、World Tick 或 Client/Server E2E。** 目標為單體功能模組，固定世界模擬與獨立 Transport/Persistence。
 
 ## 核心邊界
 
@@ -64,3 +64,13 @@ Server 使用**原版 Blocking.dat byte grid** 或經可驗證的無損對應資
 ### population v3 的資料邊界
 
 Converter 當前輸出 `visual_spawn_content` v3：原始位置／外觀可供資料驗證；`stats=null`、`stats_verified=false`、`gameplay_ready=false` 表示原版戰鬥／AI 規則未完成。正式 Server 必須在原版數值與規則完成驗證後才啟用玩法，不能把空值補成先前原型的 HP／damage／速度。v2 產物需以唯一 CLI 重建，沒有正式 Server／DB consumer 需要線上遷移。NPC 檔保留 script_required 與未核實動畫旗標，資料輸出不代表已執行 NPC 商店／銀行／任務。
+
+## 2026-11-16 REB021-BLOCKING-NAV：首個 .NET 8 World 核心切片
+
+`server/src/SGTest.Server` 現有**不依賴正式 Wire 方案**的 `BlockingGrid` 與 `MapNavigator`。原版 `Blocking.dat` 是 8-byte 小端 width/height＋width×height raw flags，world v3 指明的 `collision_cell=16`、`size`、`map_id` 與 SHA-256 必須全部吻合才能載入。Map13/15 兩張原圖為 960×960 cell（15360×15360 world pixels），flag 分佈僅 0／6／7；目前嚴格 raw 0=walkable，6／7=blocked，其它值 fail-closed。**原版 3 等特殊地形權限尚未直接核實**，舊 SGO prototype 的推測不直接納入正式 Server。
+
+Segment collision 使用完整 cell supercover＋禁止穿格角；8-neighbor A*（10/14 cost、octile heuristic）禁止斜角切障，tie-break 決定性、路徑含起終 cell，擴展預算預設4096、用完明確拒絕。原版 Map13 2560/2880、Map15 7872/11296 的 portal destination 格和相鄰路徑查詢已核對，但**沒有權威傳送／Session／MapEpoch Runtime**。
+
+測試使用 `server/tests/SGTest.Server.Checks`，不依賴外部 NuGet／原版私有圖片；9 組合成 case 加兩張原版資產交叉驗證一組，共10組PASS。原版近距 128 deterministic 目的地嘗試／圖（有效目標 Map13=77、Map15=119）全成功，A* query P95 約59.5／26.0µs、allocated 10.2／10.9KB/request；是單一 Windows 實機 isolation trace，**不是實際 20 人、300 怪或 World Tick Gate**。Map-level Navigator 應共用，但這版 query scratch 尚會配置 Dictionary/PriorityQueue，未比較池化／多負載，不宣稱低 allocation 最佳化已完成。詳 `server/README.md` 的重跑命令。
+
+下一步須以原版 Direct 證據確認特殊格旗標與走路語意，再接單寫者 Map Tick、budgeted path jobs、可信命令來源／MovementSequence／MapEpoch 與 Client actor 的完整路徑使用；尚未啟動 Socket/World Simulation。

@@ -112,3 +112,5 @@ Map15／Map13 原始 tile 地形已有唯一正式 Terrain Renderer；三種合�
 2026-11-16 建築焦點切片：已接連續fixed-update／epoch保護的inside呈現狀態與快照，保留原版last-wins、ShowInside／SetInOut差異、可見counter及室內Actor／家具額外排序。此為原版reference幾何與顯示規則實作，不是Server入口／碰撞或正式相機／多人Client完成；精度與驗證見CLIENT_ARCHITECTURE／TEST_PLAN。
 
 2026-11-16 Atlas座標契約：Runtime頁面以右／下透明留白對齊4倍數，維持每素材獨立Height-Dense P0、Frame rect／origin／trim與原texel，不讓Godot壓縮器以整頁resize改變座標。archive頁不變，atlas v9記錄Runtime與Archive各自尺寸／SHA；舊輸出需重新export及pack。254頁候選實測與殘留codec畫質限制見ASSET_ARCHITECTURE；此修正不代表MVP／Mac／Release完成。
+
+2026-11-16 Server Blocking／A* 狀態補記（REB021-BLOCKING-NAV）：已新增真正可編譯的 .NET 8 `server/src/SGTest.Server` Class Library，直接驗證原版 Map13／Map15 `world.json` v3、16px `Blocking.dat` 與 SHA-256，拒絕壞資料／越界／穿牆、建立 8 方向不穿角的 bounded A*。兩張原圖 960×960、傳點目的地相鄰格與原始 flags 驗證、合成案例共10組PASS。**但沒有 Server executable、網路／登入、World Tick、權威玩家路徑接收、原版特殊通行權限或真 Client/Server E2E**；此為導航基礎，不代表 MVP003／REB021 已完成。細節與命令見 `server/README.md`、`docs/SERVER_ARCHITECTURE.md` 和 `docs/TEST_PLAN.md`。
