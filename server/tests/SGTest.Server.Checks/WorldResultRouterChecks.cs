@@ -193,8 +193,13 @@ internal static class WorldResultRouterChecks
                 WireProtocol.TryDecodeMoveReceipt(secondFrame, out var second) &&
                 second.MovementSequence == 3 && second.Status == MoveReceiptStatus.Accepted,
                 "second player real 30Hz ACK wrong");
-        Require(router.ChangedBatches.TryRead(out var changes) &&
-                changes.Changed.Count > 0, "live world delta lost");
+        // Trusted Join now publishes a lifecycle-only batch before movement.
+        // Verify that a real movement Delta arrives without discarding/pretending
+        // that the earlier Join/WorldReady source batch was a movement update.
+        bool sawDelta = false;
+        while (router.ChangedBatches.TryRead(out var changes))
+            sawDelta |= changes.Changed.Count > 0;
+        Require(sawDelta, "live world delta lost");
         await host.StopAsync().WaitAsync(TimeSpan.FromSeconds(3));
         await pump.WaitAsync(TimeSpan.FromSeconds(3));
         Require(router.Statistics.ReceiptsQueued == 2 &&
