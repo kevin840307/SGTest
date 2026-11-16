@@ -1,6 +1,6 @@
 # SGTest Server — 重建設計
 
-**狀態：已建立 .NET 8 Blocking/A*＋單寫者手動 World Tick Class Library，但尚無可執行 Host、30Hz排程、Socket 或 Client/Server E2E。** 目標為單體功能模組，固定世界模擬與獨立 Transport/Persistence。
+**狀態：已建立 .NET 8 Blocking/A*、單寫者 World 與可執行的 30Hz 離線 Host；尚無 Socket、Auth、正式 AOI 或 Client/Server E2E。** 目標為單體功能模組，固定世界模擬與獨立 Transport/Persistence。
 
 ## 核心邊界
 
@@ -84,3 +84,13 @@ Segment collision 使用完整 cell supercover＋禁止穿格角；8-neighbor A*
 世界目前**只有手動 `Tick()`，沒有真正每秒30次的 scheduler**；`MovementPixelsPerTick=8` 是固定測試候選值，不是原版速度。正式的 actor rate/mount mode、可取消長路徑、超時重連、Snapshot ACK 與可靠事件的 Gateway 還需建立。原版 special terrain 權限仍未驗證，raw 0 walkable／其餘 flags 禁行保守 fail-closed。詳 `server/README.md`；`MVP003` 與 `REB021` 主項未完成。
 
 可重跑 `dotnet run -c Release --project server/tests/SGTest.Server.Checks/SGTest.Server.Checks.csproj`，合成21/21 PASS；加 `-- --assets <private_client_assets>` 在真 Map13／Map15 核對再加3組，合計24/24 PASS，其中有20個合成 Actor 同圖、一次 Tick 6 路徑／14拒絕的上限驗證。沒有20條Socket、300隻Enemy或雙真Client，也未測實際30Hz的P95/P99。
+
+## 2026-11-16 REB021-HOST-CADENCE：真正的固定時鐘但尚非網路伺服器
+
+`server/host/SGTest.Server.Host` + `server/src/SGTest.Server/World/ServerWorldHost.cs` 使原先需要手動呼叫 Tick 的 World 核心可用 .NET 8 Release 獨立 Console Host 持續按 30Hz 模擬。**此 Host 不開 Socket／HTTP，也不提供帳號或 Gameplay**；它不等於完整 Server、30Hz+10Hz AOI Snapshot、正式 Client/Server E2E。
+
+World 必須在它自己的單一專屬 Thread 上建立／Tick；Stopwatch 單調 deadline 不耦合 UI FPS、Sleep 無忙等，落後週期累積 `SkippedDeadlines` 並**跳過過時 deadline**，避免集中 catch-up 壓垮 AI/網路。Host 控制命令和 TickResult 各使用固定容量 Channel；可信註冊/轉圖/斷線只能由已經驗證授權的 Server 內部使用；即使 TryPostMove 是 thread-safe，未有 Gateway 綁定身份，不准原樣暴露給外部連線。每輪 TrustedControl / A* / Move 皆有各自上限。
+
+WorldTickResult 有權威 Receipt/Delta；送出 Channel **不使用 DropOldest**，滿載則 Host 異常終止，讓未來連線層進行斷線／完整快照重同步，避免事件在背壓下消失。Stop 仍未處理的命令視為未確認，不能將 TryPostMove=true 當成最終交易／行動 ACK；正式 Gateway 必須訂出重送與操作序號的可靠性。Host 現在只有 Result Channel，不具備每玩家隔離、AOI 過濾、ACK、慢消費者分流、WorldReady 及 DB/AI；這些仍屬 REB019/020/021 後續項目。
+
+真兩圖 5秒 idle Windows 實測：151 ticks／5020.14ms、30.079Hz、SkippedDeadline=0、max single tick work 1219μs（**0個 Actor，無 socket/AI/Drop**），作為將來 20人/300怪/500Drop 世界Tick p95/p99的**起始空載對照，不宣稱滿載性能**。合成27組、含原始Map13/15則共31組 Server 回歸 PASS。使用命令詳 `server/README.md`。

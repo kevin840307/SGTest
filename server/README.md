@@ -1,6 +1,6 @@
-# SGTest Server — .NET 8 重建（碰撞／導航＋手動 World Tick 核心）
+# SGTest Server — .NET 8 重建（碰撞／導航／權威 World＋離線 30Hz Host）
 
-新版 Server 是**從零重建**，不還原舊 SGO 原型。`src/SGTest.Server` 目前提供 Map13／Map15 原版權威碰撞驗證、有界 A*，以及不依賴 Wire／Godot 的 **單寫者手動 `ServerWorld.Tick()`** 與經序號／世代檢查的移動命令。**尚無可執行 Server Host、實際 30Hz 排程、Socket／Wire、登入認證、WorldReady／AOI、DB／怪物／戰鬥或連線 Client**；不代表遊戲已可上線。
+新版 Server 是**從零重建**，不還原舊 SGO 原型。`src/SGTest.Server` 目前提供 Map13／Map15 原版權威碰撞驗證、有界 A*，以及不依賴 Wire／Godot 的 **單寫者手動 `ServerWorld.Tick()`** 與經序號／世代檢查的移動命令。**已可執行不開放網路連接埠的 30Hz 離線 Host**；仍無 Socket／Wire、登入認證、WorldReady／AOI、DB／怪物／戰鬥或連線 Client，不代表遊戲已可上線。
 
 ## 正式內容契約
 
@@ -8,7 +8,7 @@
 
 本階段僅將原始 raw flag **0 視為可走**；Map13/15 目前原始值為 0、6、7，6/7 禁止通行。特殊地形／機甲跨越權限尚待直接驗證 Old 原版，不沿用舊原型的假設；未知非0 flag 全拒絕。世界座標用 floor(x/16,y/16)，不 clamp 出界和非有限值。沿線碰撞採 supercover，恰好越過格點角落需兩個側鄰格皆可走，避免穿牆／穿斜角。
 
-`World/MapNavigator.cs` 的 A* 採 8 鄰居、cost 10/14、octile heuristic、確定性 tie-break，含起終格的路徑只供未來權威 World 消費。每次搜尋上限預設 4096 expanded cells，超限／無路／端點禁止通行明確回傳失敗**而非順移到終點**。建立 MapNavigator 以地圖為單位重用；`ServerWorld` 已對每次 Tick 處理的路徑要求設上限，並以 MapEpoch 拒絕舊命令。真正 30Hz host、Actor/AI 排程與 MapEpoch+revision 網路確認仍待實作，不能每隻怪每 Tick 無限制重算。目前 A* 還是簡單的 per-query scratch allocation，尚未做高密度 Monster profiler，非最終 AI 選型或 20人/300怪 Gate。
+`World/MapNavigator.cs` 的 A* 採 8 鄰居、cost 10/14、octile heuristic、確定性 tie-break，含起終格的路徑只供未來權威 World 消費。每次搜尋上限預設 4096 expanded cells，超限／無路／端點禁止通行明確回傳失敗**而非順移到終點**。建立 MapNavigator 以地圖為單位重用；`ServerWorld` 已對每次 Tick 處理的路徑要求設上限，並以 MapEpoch 拒絕舊命令。離線 30Hz Host 已可實跑；Actor/AI 決策排程與 MapEpoch+revision 網路確認仍待實作，不能每隻怪每 Tick 無限制重算。目前 A* 還是簡單的 per-query scratch allocation，尚未做高密度 Monster profiler，非最終 AI 選型或 20人/300怪 Gate。
 
 ## 測試（無外部 NuGet 測試套件）
 
@@ -45,4 +45,25 @@ dotnet run --project server/tests/SGTest.Server.Checks/SGTest.Server.Checks.cspr
 
 2026-11-16 .NET 8 Release：**21 組純合成 PASS；額外 3 組真圖相關 Gate，合計 24/24 PASS**。涵蓋 MPSC 256 producer input 的32-entry cap、每Tick 8/6 等不同命令／path quota、wrong owner thread、連線／地圖世代 tombstone、重送／失效／無路／A* budget、正確繞牆、Stop 不移動時的 revision、同一輸入但不同呈現讀取頻率的 StateHash 一致。真原版 Map13/15 驗證包含 20 個**測試用假 Actor** 佇列 burst：一次20條命令在6路徑查詢上限下 6 Accepted／14 明確拒絕；都保持可走位置，**不是20條真 socket、多客戶端 AOI，也沒有300隻怪 AI或Gameplay E2E**。
 
-仍未驗證：原版行走速度與 special terrain、能否穿玩家/NPC、真人點地板 A* 細節、可取消的 async path job、WorldReady／可靠資料通道、30Hz P95/P99、20人/300怪/500掉落真負載、Client FPS 0/30/60／AFK 以及重連後完整狀態回補。下一階段是 Host／身份綁定和 bounded reliable events、固定時鐘與真雙圖 Actor 資產顯示，仍依先前 ALT001 比較 Wire 選型。
+仍未驗證：原版行走速度與 special terrain、能否穿玩家/NPC、真人點地板 A* 細節、可取消的 async path job、WorldReady／可靠資料通道、30Hz P95/P99、20人/300怪/500掉落真負載、Client FPS 0/30/60／AFK 以及重連後完整狀態回補。下一階段是身份／連線綁定、bounded reliable events／AOI 和真雙圖 Actor 資產顯示，仍依先前 ALT001 比較 Wire 選型。
+
+## REB021-HOST-CADENCE — 獨立可執行 30Hz Host（2026-11-16）
+
+`server/host/SGTest.Server.Host` 現在是**真的可啟動／停止的 .NET 8 Console Host**，嚴格從唯一 Converter 的私人 `maps/{13,15}/world.json + blocking.dat` 載入原版資料。啟動後不開任何 port、不提供登入、完全不處理網路；Host 在與 Godot/UI FPS 無關的專屬 Thread 上建立 `ServerWorld`（單寫者 owner 必須同 Thread），使用 Stopwatch 單調時鐘驅動 30Hz。沒有角色時仍進 Tick，固定 30Hz 是**排程候選，不代表原版人物移動速度／正式 10Hz Snapshot**。
+
+```powershell
+# 在專案根目錄；原始資產位於 .gitignore 私有 client/assets
+dotnet run -c Release --project server/host/SGTest.Server.Host/SGTest.Server.Host.csproj -- --content "C:\SGO\SRC\SGTest\client\assets" --seconds 5
+
+# 無原圖也能執行合成 Host／失效保護測試
+dotnet run -c Release --project server/tests/SGTest.Server.Checks/SGTest.Server.Checks.csproj
+
+# 原始雙圖互動狀態額外檢查
+dotnet run -c Release --project server/tests/SGTest.Server.Checks/SGTest.Server.Checks.csproj -- --assets "C:\SGO\SRC\SGTest\client\assets"
+```
+
+`ServerWorldHost.cs` 以 `FixedTickCadence` 計算每輪 deadline；掉隊時**跳過時鐘週期並累積 SkippedDeadlines**，不在一幀無上限補跑造成群體同步或 CPU 尖峰。等待下一輪用 WaitHandle 不 busy-spin；停止立即喚醒、清空／拒絕未處理的可信控制請求。排程中的可信註冊／登出／跨圖指令經有界 Channel 在 World owner Thread 套用；不可信移動需經未來認證 Gateway 綁定 ActorId 才能呼叫 TryPostMove。所有命令的處理與 Tick 回覆與畫面 FPS 無關。
+
+權威 `WorldTickResult` 透過**有界輸出 Channel** 供未來傳輸層讀取，Receipts/Changed 不使用 DropOldest。讀者太慢導致寫滿會觸發 `WorldHostBackpressureException`、Host **fail closed**，而不是無聲丟失事件；上層必須關閉連線、驗證後重新取得 WorldReady snapshot。**目前還沒有正式 Gateway／可靠 ACK／慢連線隔離**，這種 fail-closed 是明確的安全邊界，**不等於玩家斷線恢復已完成**。Stop 之前已提交但尚未處理的 Move 不保證得到回覆，未來傳輸層必須以 disconnect/resync 拒絕沿用該連線的未知結果。可信控制流程只可由已授權伺服器內部使用，不可暴露為 Client RPC。
+
+實測 Windows／.NET 8 Release、RTX3050 同機雙圖私有格網、**沒有玩家／怪物網路負載**：`--seconds 5` wall=5020.14ms、151 Tick、實際30.079Hz、SkippedDeadlines=0、max tick work=1219µs、PublishedResults=0、OutputOverflow=0、activeActors=0；此為**單次 idle smoke，不是 20玩家／300怪的P95/P99**。新增的 cadence/生命周期/慢消費者錯誤/可信控制預算與真圖 Host 測試使新版 Server 統計達合成27/27、加上雙圖原版共31/31 PASS。正式 30Hz Tick/snapshot/AOI 與大量玩家AI負載仍待 ALT001 及 E2E 選型。

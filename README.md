@@ -9,13 +9,13 @@
 - `tools/tests/`：正式 Converter、原始格式及佈署包契約測試（**不是 Client/Server 程式**）；舊獨立轉換器與 Viewer 已從工作樹移除，可從 Git 歷史查閱。
 - `docs/`、`SPEC.md`、`todo.txt`：正式設計與原版研究證據；歷史完成紀錄見 `docs/research/FEATURE_DECISION_HISTORY.md#source-todo-pre-rebuild-20261115-txt`。
 - `client/assets/.gdignore`：**僅保留轉換輸出的定位標記**，不是 Godot Runtime。
-- `client/`：新 Godot 4.7.2 資源模組／測試專案；單一 AssetStore、真地形／景物 Renderer、雙圖檢視用 main scene 與可平移的呈現相機已有原生 GPU／像素驗證；**仍無角色操作、正式 WorldState／網路，也不可當作可玩主程式**。`server/` 已建立 .NET 8 權威 Blocking／A* 基礎與**單寫者手動 World Tick／有界移動命令** Class Library、可重跑原版雙圖檢查，**但尚無可執行 Server Host、實際30Hz排程、Socket、AOI、帳號或真正連線人物**；見 [Server 進度](server/README.md)。
+- `client/`：新 Godot 4.7.2 資源模組／測試專案；單一 AssetStore、真地形／景物 Renderer、雙圖檢視用 main scene 與可平移的呈現相機已有原生 GPU／像素驗證；**仍無角色操作、正式 WorldState／網路，也不可當作可玩主程式**。`server/` 已建立 .NET 8 權威 Blocking／A* 基礎與**單寫者手動 World Tick／有界移動命令** Class Library、可重跑原版雙圖檢查，**目前已有不開放網路 Port 的可執行 30Hz 離線 Host，但尚無 Socket、登入認證、AOI、WorldReady 或真正連線人物**；見 [Server 進度](server/README.md)。
 
 ## 現階段 MVP：Map15 主城 + Map13 尼西亞台地
 
 **兩張原版真地圖 + 大部分完整玩法**，不是單圖 Demo：先確認兩圖資產／Blocking／NPC／傳點；Map15 用於登入、角色、NPC 商店／銀行／倉庫、裝備、交易／玩家商店，Map13 用於 A*／長按、怪物 AI、技能戰鬥、大量掉落和多人 AOI；中間要完成**Map15 ↔ Map13 真實雙向傳點**、MapEpoch/WorldReady、資源釋放及多人重連。
 
-目前 Map13／Map15 原始地形、Blocking、NPC 與兩圖共 82 筆 Enemy Spawn／10 種 SPR-ACT 已完成來源轉換驗證（詳 `todo.txt` 的 MVP001 子項）；完整 7,890 素材 Archive audit 與兩圖 254 個獨立 Atlas／Catalog 定向發布已 PASS；雙圖 Runtime content 與外部 PCK 的空白 Godot ResourceLoader 已 PASS（244 Texture）；可執行 Client/Server 仍未完成。先小型切片逐步做到兩真 Godot Client、Map13 同圖 20 連線／300 Enemy／500 Drop、Map15 多人城市互動及兩圖同時活躍、AFK／多開 Gate。按 todo.txt 的 MVP001～MVP010 進行，**不是只做每種功能一條 happy path**；所有適用原版規則、異常／多人競態及 Server authority 要驗證，好友暫緩。選型多方案先實測 ALT001；MVP 通過後才擴所有地圖／品項及更大負載。
+目前 Map13／Map15 原始地形、Blocking、NPC 與兩圖共 82 筆 Enemy Spawn／10 種 SPR-ACT 已完成來源轉換驗證（詳 `todo.txt` 的 MVP001 子項）；完整 7,890 素材 Archive audit 與兩圖 254 個獨立 Atlas／Catalog 定向發布已 PASS；雙圖 Runtime content 與外部 PCK 的空白 Godot ResourceLoader 已 PASS（244 Texture）；現有可啟動的 Godot 地圖檢視器與無網路 30Hz Server Host；可登入／可玩的 Client/Server 整合仍未完成。先小型切片逐步做到兩真 Godot Client、Map13 同圖 20 連線／300 Enemy／500 Drop、Map15 多人城市互動及兩圖同時活躍、AFK／多開 Gate。按 todo.txt 的 MVP001～MVP010 進行，**不是只做每種功能一條 happy path**；所有適用原版規則、異常／多人競態及 Server authority 要驗證，好友暫緩。選型多方案先實測 ALT001；MVP 通過後才擴所有地圖／品項及更大負載。
 
 ## 從哪份文件開始重建
 
