@@ -210,6 +210,7 @@ static class Checks
             WireCodecChecks.Verify();
             IdentityWireChecks.Verify();
             GatewayConnectionChecks.Verify();
+            WorldResultRouterChecks.Verify(root);
             TlsSocketChecks.Verify();
             IdentityStoreChecks.Verify();
             IdentityTlsAuthorizationChecks.Verify(root);

@@ -30,12 +30,13 @@ internal static class Program
             var created = await store.CreateCharacterAsync(accountId, 0, "FixtureHero", new CharacterSpawn(15, 8, 8));
             long characterId = created.Character?.CharacterId ?? throw new InvalidOperationException("fixture character create failed");
             var authorization = new IdentityTlsAuthorization(store, world);
-            GatewayConnection? authenticatedGateway = null;
+            var resultRouter = new WorldResultRouter();
 
             async ValueTask<GatewayConnection?> AuthorizeAndCaptureAsync(SslStream stream, CancellationToken token)
             {
                 var bound = await authorization.AuthorizeAndBindAsync(stream, token).ConfigureAwait(false);
-                Volatile.Write(ref authenticatedGateway, bound);
+                if (bound is not null && !resultRouter.TryAttach(bound))
+                    throw new InvalidOperationException("trusted Gateway route could not attach");
                 return bound;
             }
             using var certificate = CreateCertificate();
@@ -54,14 +55,11 @@ internal static class Program
                     new TlsWireConnectionOptions(AuthorizationTimeoutMilliseconds: 15000));
 
                 using var receiptCts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
-                var receipt = await WaitForMoveAsync(world, characterId, receiptCts.Token);
+                var receipt = await WaitForMoveAsync(world, resultRouter, characterId, receiptCts.Token);
                 if (receipt.Status != MoveReceiptStatus.Accepted)
                     throw new InvalidOperationException("fixture move rejected: " + receipt.Status);
-                var connection = Volatile.Read(ref authenticatedGateway)
-                    ?? throw new InvalidOperationException("authenticated Gateway binding was not captured");
-                var route = connection.QueueReceipt(receipt);
-                if (route != GatewaySendStatus.Enqueued)
-                    throw new InvalidOperationException("authoritative MoveReceipt routing failed: " + route);
+                if (resultRouter.Statistics.ReceiptsQueued != 1)
+                    throw new InvalidOperationException("World result router did not route exactly one reliable ACK");
                 Console.WriteLine($"LOGIN_FIXTURE_MOVE_PASS actor={receipt.ActorId} map_epoch={receipt.MapEpoch} sequence={receipt.MovementSequence}");
                 Console.WriteLine($"LOGIN_FIXTURE_RECEIPT_ROUTED actor={receipt.ActorId} sequence={receipt.MovementSequence} status={receipt.Status}");
                 Console.Out.Flush();
@@ -90,11 +88,12 @@ internal static class Program
         }
     }
 
-    private static async Task<MoveReceipt> WaitForMoveAsync(ServerWorldHost world, long actorId, CancellationToken cancellationToken)
+    private static async Task<MoveReceipt> WaitForMoveAsync(ServerWorldHost world, WorldResultRouter router, long actorId, CancellationToken cancellationToken)
     {
         while (true)
         {
             var result = await world.Results.ReadAsync(cancellationToken);
+            router.Route(result); // same production routing boundary as live World outputs
             foreach (var receipt in result.Receipts)
                 if (receipt.ActorId == actorId && receipt.MovementSequence == 1)
                     return receipt;
