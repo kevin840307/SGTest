@@ -27,7 +27,11 @@ internal static class TlsHost
             if (options.ContainsKey("--seconds"))
                 stop.CancelAfter(TimeSpan.FromSeconds(Number(options, "--seconds", 1, 1, 86400)));
             using var certificate = new X509Certificate2(certificatePath,
-                Environment.GetEnvironmentVariable("SGTEST_TLS_PASSWORD"), X509KeyStorageFlags.EphemeralKeySet);
+                Environment.GetEnvironmentVariable("SGTEST_TLS_PASSWORD"),
+                // Schannel needs an accessible user-key container. Do not mark
+                // it Exportable/PersistKeySet; disposal releases the temporary
+                // imported key. Linux can use an ephemeral in-memory key.
+                OperatingSystem.IsWindows() ? X509KeyStorageFlags.UserKeySet : X509KeyStorageFlags.EphemeralKeySet);
             var maps = new[] { 13, 15 }.Select(id =>
                 BlockingGrid.Load(Path.Combine(root, "maps", id.ToString()), id)).ToArray();
             var portals = PortalCatalog.LoadNpcDocuments(new[] { 13, 15 }.Select(id =>

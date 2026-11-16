@@ -82,6 +82,18 @@ static class Checks
         Directory.CreateDirectory(root);
         try
         {
+            if (args is ["--identity-admin-only", "--tls"])
+            {
+                IdentityAdminChecks.Verify(root, tlsOnly: true);
+                Console.WriteLine($"IDENTITY_ADMIN_TLS_CHECKS PASS total={_passes}");
+                return 0;
+            }
+            if (args is ["--identity-admin-only"])
+            {
+                IdentityAdminChecks.Verify(root);
+                Console.WriteLine($"IDENTITY_ADMIN_CHECKS PASS total={_passes}");
+                return 0;
+            }
             if (args is ["--listener-only"])
             {
                 TlsGatewayListenerChecks.Verify(root);
@@ -227,6 +239,7 @@ static class Checks
             IdentityTlsAuthorizationChecks.Verify(root);
             IdentityTlsLifecycleChecks.Verify(root);
             TlsGatewayListenerChecks.Verify(root);
+            IdentityAdminChecks.Verify(root);
             WorldSimulationChecks.Verify(root);
             WorldHostChecks.Verify(root);
 

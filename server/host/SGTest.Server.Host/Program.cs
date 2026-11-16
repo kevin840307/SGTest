@@ -9,10 +9,13 @@ internal static class Program
     public static async Task<int> Main(string[] args)
     {
         if (args is ["serve", .. var serveArgs]) return await TlsHost.RunAsync(serveArgs);
+        if (args is ["account-create", .. var accountArgs]) return await IdentityAdmin.RunAsync(true, accountArgs);
+        if (args is ["character-create", .. var characterArgs]) return await IdentityAdmin.RunAsync(false, characterArgs);
         if (args.Length != 4 || args[0] != "--content" || args[2] != "--seconds" ||
             !int.TryParse(args[3], out int seconds) || seconds is < 1 or > 30)
         {
-            Console.Error.WriteLine("Usage: SGTest.Server.Host --content <PRIVATE_MAPS_ROOT> --seconds <1..30>");
+            Console.Error.WriteLine("Usage: SGTest.Server.Host serve|account-create|character-create <options>; " +
+                "offline smoke: --content <PRIVATE_MAPS_ROOT> --seconds <1..30>");
             return 2;
         }
         try

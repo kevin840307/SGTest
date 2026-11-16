@@ -13,11 +13,29 @@ dotnet build server/host/SGTest.Server.Host -c Release
 dotnet run --project server/tests/SGTest.Server.Checks -c Release -- --listener-only
 ```
 
-PFX密碼環境名稱為`SGTEST_TLS_PASSWORD`；未加密PFX可不設定。Host讀取唯一Converter產出的兩圖world／blocking及`npcs.json`，缺失／無效內容拒絕啟動；不讀貼圖。Identity DB初始化不會創建帳號或角色，需由可信管理工具預先建置（現有SqliteIdentityStore API）；公開註冊／創角流程尚未接通。Godot登入面板的host／port／TLS名稱與信任鏈須配合實際憑證。
+PFX密碼環境名稱為`SGTEST_TLS_PASSWORD`；未加密PFX可不設定。Host讀取唯一Converter產出的兩圖world／blocking及`npcs.json`，缺失／無效內容拒絕啟動；不讀貼圖。Identity DB初始化不會自動建帳號或角色，請先執行下節管理命令；公開註冊／創角協定尚未接通。Godot登入面板的host／port／TLS名稱與信任鏈須配合實際憑證。Windows採相容Schannel的UserKeySet匯入（不加Exportable/PersistKeySet）；Linux保留EphemeralKeySet，借用憑證直到所有Socket清理完。
 
 預設只監聽127.0.0.1，Ctrl+C或期限到期停止；總連線上限包含握手、登入與清理中的Socket，每IP另有限額。Socket讀寫與KDF沿用既有有界實作，不在World鎖或Tick內執行。關閉順序為停止接入／排空授權Socket與可信Disconnect→停止World→停止Router/AOI，pump故障不會繼續提供半套服務。`TLS_HOST_READY`／`TLS_HOST_STOPPED`輸出實際endpoint與統計，無帳密。
 
 本機7項targeted checks與受影響Release build PASS；main CI結果見todo。此為持續登入服務切片，不代表公開網際網路安全／壓測／Release完成；時間型登入速率限制、WorldReady ACK/resync與持久座標仍待驗證。下方限時無網路Host命令保留作smoke，並非serve模式。
+
+## 本機帳號／角色建置（MVP003-IDENTITY-ADMIN）
+
+```powershell
+# 由管理者分別完成兩個明確步驟；預設會在終端隱藏輸入密碼。
+dotnet run --project server/host/SGTest.Server.Host -c Release -- account-create --identity C:/private/identity.db --username operator_01
+dotnet run --project server/host/SGTest.Server.Host -c Release -- character-create --identity C:/private/identity.db --username operator_01 --content C:/private/runtime --name Hero --slot 0 --map 15 --x 7872 --y 11296
+
+dotnet build server/host/SGTest.Server.Host -c Release
+dotnet run --project server/tests/SGTest.Server.Checks -c Release -- --identity-admin-only
+# 若只需重驗PFX載入／真Host TLS路徑：同一測試加上 --tls
+```
+
+座標只是管理者明示的範例，必須在待部署Blocking可走範圍內，**不是原版預設出生點**。目前只准備Host已服務的Map13／15，slot0..7；CLI先驗證來源SHA、座標有限／邊界／flag0，再驗證帳密及disabled並呼叫既有Store。兩步各自原子，不是跨步驟交易；帳號建好而角色名稱衝突時，可修正後重跑character-create，不刪除或覆寫帳號。重複帳號不重設密碼，名稱／slot／角色數限制沿用同一SqliteIdentityStore，schema仍v1。
+
+自動化須由祕密來源注入`SGTEST_ACCOUNT_PASSWORD`；命令不接受`--password`，stdout不輸出密碼，CLI結束後應清除呼叫端環境。非互動且未提供環境變數會拒絕；互動隱藏輸入可按Esc取消。本入口只供有本機DB存取權的管理者，不新增網路註冊／GM RPC或預設帳號。
+
+退出碼0=建立成功、2=參數／密碼格式／出生地拒絕、3=重複／帳密或角色政策拒絕、1=來源／DB錯誤、4=互動取消。已驗證DB重開、錯誤／disabled、跨程序slot競態，以及CLI建置DB→實際Host serve→TLS Auth／選角／WorldReady／MoveReceipt與清理。互動ReadKey手動輸入、私有原版地圖與Godot直連此Host的畫面仍NOT VERIFIED。
 
 ## 正式內容契約
 

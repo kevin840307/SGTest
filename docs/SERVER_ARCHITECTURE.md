@@ -152,3 +152,9 @@ This slice alone does **not** introduce an unauthenticated RPC or production NPC
 `TlsGatewayListener`只負責接入與Socket生命週期，借用有效憑證及唯一IdentityTlsAuthorization／WorldResultRouter，不另建Wire／Auth或遊戲狀態。總容量128／每IP8／backlog128為有界預設，含握手與登入中Socket；拒絕不建立TLS任務。IPv4-mapped address先規格化；計數與Task集合的小鎖不執行DB或Send。正常認證／格式拒絕仍可繼續接入；非預期會話故障終止listener並讓supervisor觀測Task fault。取消會等待可信Disconnect及Router detach，並行Dispose共用清理Task，憑證／World／DB須存活至清理完。
 
 Host `serve`明確讀取兩圖world／blocking與已稽核npcs、SQLite identity及PFX，預設loopback而非自動公開監聽；不產生帳密或憑證。World 30Hz owner、Router Results單reader、AOI ChangedBatches單reader與TLS網路相互獨立，任一pipeline停止／fault都停止服務；正常關閉先排空Socket，再停World與pumps。既有限時無網路smoke仍可用。未新增DB／Wire版本；Startup／參數命令見server README。已完成本機7項針對測試與Host建置；私有雙圖、Godot連正式listener、長時間／20人壓測與Release NOT VERIFIED。
+
+## MVP003-IDENTITY-ADMIN（2026-11-16）
+
+Host的本機`account-create`／`character-create`委派同一SqliteIdentityStore API；管理者有本機DB權限，這不是Client網路註冊／GM RPC。密碼從隱藏終端輸入或SGTEST_ACCOUNT_PASSWORD環境來源取得，不接受CLI明碼或輸出明文。建立角色先驗證管理者明示的Map13/15位置通過同一BlockingGrid來源hash／邊界／flag0，之後驗證帳密／disabled與Store的名稱／slot政策，沒有另建SQLite或Game Rule。
+
+兩個步驟各自原子、不是跨命令交易；重複帳號不改密碼，名稱／slot衝突不修改既存角色。schema仍v1，Wire不變，無遷移。實際CLI子程序並行slot競態及CLI產生DB→真正Host serve TLS登入／選角／WorldReady／MoveReceipt已通過；此路徑發現並修正Windows Schannel不能使用該ephemeral PFX私鑰的相容性問題，Windows改UserKeySet且不設Exportable/PersistKeySet，Linux仍EphemeralKeySet。公開創角／外觀、原版預設出生點、持久座標及完整遊戲Gate仍未完成。

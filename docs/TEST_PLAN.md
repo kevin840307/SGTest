@@ -287,3 +287,9 @@ Verified on GitHub `main` commit `116ea15420d04bfd3fa98722f9e5695217cf37f6`: Cli
 先`dotnet build server/host/SGTest.Server.Host -c Release`，再`dotnet run --project server/tests/SGTest.Server.Checks -c Release -- --listener-only`，本機7/7 PASS。涵蓋部署憑證／容量參數、global及per-IP拒絕、慢TLS取消／埠重用、真TLS Auth／Choose／WorldReady／MoveReceipt／重連世代與角色路由清理、錯密碼／明文隔離、內部會話fault停止接入、實際Host process載入合成雙圖與PFX／啟停／錯CLI。Checks預設完整CI也含同組測例；需先建置Host，GitHub server-core既有步驟已滿足。
 
 只驗證bounded listener與服務生命週期；未因此重跑Godot／PCK／來源Archive／Renderer。私有真圖持續服務、真Godot直連Host、時間型login rate limit、ACK/resync、20/300/500與Release仍NOT VERIFIED。正式main CI與SHA見todo。
+
+## MVP003-IDENTITY-ADMIN（Server Tier A，含Windows TLS平台修正）
+
+先建置Host，再跑`dotnet run --project server/tests/SGTest.Server.Checks -c Release -- --identity-admin-only`。本機首輪前4項PASS：真CLI建置／重開DB、明文不保留／重複帳號不重設、缺密碼／錯參數／nonfinite／出界／Blocking hash或阻擋拒絕、錯密碼／disabled／名稱與slot拒絕、兩獨立程序slot恰一成功。第5項CLI建DB→真Host TLS首次在Windows EOF；修正Host私鑰載入旗標後，只重跑同一Gate的`--identity-admin-only --tls`，1/1 PASS（Auth／Choose／WorldReady／MoveReceipt，停止時socket／actor／route全0）。完整5項納入server-core CI，最終SHA／run見todo；不是手動accepted-socket fixture冒充Host。
+
+合成來源、臨時DB／憑證僅在測試自有temp目錄；不執行Godot、PCK或原版素材／效能Gate。schema及Wire未改；互動ReadKey手動輸入、原版出生點規則／真私有地圖／Godot畫面與Release NOT VERIFIED。
