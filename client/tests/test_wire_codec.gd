@@ -3,6 +3,11 @@ extends SceneTree
 const WireCodec = preload("res://network/wire_codec.gd")
 const MOVE_TARGET_HEX := "1C00000001000100090000000000000007000000D819000078120000"
 const MOVE_RECEIPT_HEX := "1E0000000100020009000000000000000700000000002A00000000000000"
+const AUTH_REQUEST_HEX := "2300000001000A0007001000757365725F303150617373776F72642D31323334353621"
+const AUTH_RESULT_HEX := "0900000001000B0000"
+const CHARACTER_LIST_HEX := "2A00000001000C00020B000000000000000004004865726F16000000000000000107004865726F54776F"
+const CHARACTER_CHOOSE_HEX := "1000000001000D001600000000000000"
+const CHARACTER_CHOOSE_RESULT_HEX := "2D00000001000E000016000000000000000F0000000000000000C0BE40000000000010C6400300000000000000"
 
 func _fail(message: String) -> void:
 	push_error("WIRE_CODEC_FAIL " + message)
@@ -13,36 +18,58 @@ func _initialize() -> void:
 	if move.hex_encode().to_upper() != MOVE_TARGET_HEX:
 		_fail("MoveTarget golden " + move.hex_encode())
 		return
-	var decoded := WireCodec.decode_move_target(move)
-	if decoded != {"map_epoch": 9, "movement_sequence": 7, "target_x": 6616, "target_y": 4728}:
-		_fail("MoveTarget roundtrip %s" % decoded)
+	if WireCodec.decode_move_target(move) != {"map_epoch": 9, "movement_sequence": 7, "target_x": 6616, "target_y": 4728}:
+		_fail("MoveTarget roundtrip")
 		return
-
 	var receipt := MOVE_RECEIPT_HEX.hex_decode()
-	var receipt_decoded := WireCodec.decode_move_receipt(receipt)
-	if receipt_decoded != {"map_epoch": 9, "movement_sequence": 7, "status": 0, "server_tick": 42}:
-		_fail("MoveReceipt decode %s" % receipt_decoded)
+	if WireCodec.decode_move_receipt(receipt) != {"map_epoch": 9, "movement_sequence": 7, "status": 0, "server_tick": 42}:
+		_fail("MoveReceipt decode")
 		return
-
-	for bad in [
-		PackedByteArray(),
-		move.slice(0, move.size() - 1),
-		_mutate_u16(move, 4, 2),
-		_mutate_u16(move, 6, 999),
-		_mutate_i64(move, 8, 0),
-		_mutate_u32(move, 16, 0),
-	]:
+	var auth := WireCodec.encode_auth_request("user_01", "Password-123456!")
+	if auth.hex_encode().to_upper() != AUTH_REQUEST_HEX:
+		_fail("AuthRequest golden " + auth.hex_encode())
+		return
+	if WireCodec.decode_auth_result(AUTH_RESULT_HEX.hex_decode()) != {"status": 0}:
+		_fail("AuthResult decode")
+		return
+	var list := WireCodec.decode_character_list(CHARACTER_LIST_HEX.hex_decode())
+	if list != {"characters": [{"character_id": 11, "slot": 0, "name": "Hero"}, {"character_id": 22, "slot": 1, "name": "HeroTwo"}]}:
+		_fail("CharacterList decode %s" % list)
+		return
+	var choose := WireCodec.encode_character_choose(22)
+	if choose.hex_encode().to_upper() != CHARACTER_CHOOSE_HEX:
+		_fail("CharacterChoose golden " + choose.hex_encode())
+		return
+	var chosen := WireCodec.decode_character_choose_result(CHARACTER_CHOOSE_RESULT_HEX.hex_decode())
+	if chosen != {"status": 0, "character_id": 22, "map_id": 15, "x": 7872.0, "y": 11296.0, "map_epoch": 3}:
+		_fail("CharacterChooseResult decode %s" % chosen)
+		return
+	for bad in [PackedByteArray(), move.slice(0, move.size() - 1), _mutate_u16(move, 4, 2), _mutate_u16(move, 6, 999), _mutate_i64(move, 8, 0), _mutate_u32(move, 16, 0)]:
 		if not WireCodec.decode_move_target(bad).is_empty():
 			_fail("malformed MoveTarget accepted")
 			return
-
-	var bad_receipt := _mutate_u16(receipt, 20, 999)
-	if not WireCodec.decode_move_receipt(bad_receipt).is_empty():
+	if not WireCodec.decode_move_receipt(_mutate_u16(receipt, 20, 999)).is_empty():
 		_fail("unknown receipt status accepted")
 		return
-
-	print("WIRE_CODEC_GODOT_PASS move_target_golden=28 move_receipt_golden=30 malformed=PASS identity_fields_absent=true")
+	if not WireCodec.decode_auth_result(_mutate_u8(AUTH_RESULT_HEX.hex_decode(), 8, 9)).is_empty():
+		_fail("unknown auth status accepted")
+		return
+	if not WireCodec.decode_character_list(CHARACTER_LIST_HEX.hex_decode().slice(0, 30)).is_empty():
+		_fail("truncated CharacterList accepted")
+		return
+	if not WireCodec.decode_character_choose_result(_mutate_u8(CHARACTER_CHOOSE_RESULT_HEX.hex_decode(), 8, 9)).is_empty():
+		_fail("unknown choose status accepted")
+		return
+	if WireCodec.frame_length_prefix(PackedByteArray([1, 2, 3])) != -1 or WireCodec.frame_length_prefix(_mutate_u32(move, 0, 70000)) != -1:
+		_fail("invalid frame length accepted")
+		return
+	print("WIRE_CODEC_GODOT_PASS move=28 receipt=30 auth=35 character_list=42 choose=16 choose_result=45 malformed=PASS identity_server_owned=true")
 	quit(0)
+
+func _mutate_u8(source: PackedByteArray, offset: int, value: int) -> PackedByteArray:
+	var copy := source.duplicate()
+	copy[offset] = value & 0xff
+	return copy
 
 func _mutate_u16(source: PackedByteArray, offset: int, value: int) -> PackedByteArray:
 	var copy := source.duplicate()

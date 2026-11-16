@@ -95,3 +95,15 @@ python client/tests/run_world_view.py "C:\SGO\Godot\Godot_v4.7.2-stable_win64_co
 2026-11-16 RTX3050／Godot 4.7.2 原生測試 PASS：Map13/15 × 1280×720、1001×701 × 多個 focus 共12張；獨立 `run_world.validate_capture` 檢查來源 sprite 的 origin／trim、命令排序／UV／像素 sampler envelope，12/12 沒有超容差像素（max outside envelope=1；容許的GPU取樣/rounding 不代表 RGB 0 差異）；38 個獨立 SPR frame 檢查。快速切換／epoch、鍵盤／中鍵／UI消費事件／失焦／camera奇數尺寸及 30/60/120 Hz 相同 pan 距離測例 PASS。AssetStore assets、scopes、jobs、rgba_bytes 清除回0；本測試 PeakRSS 226,193,408 bytes、CPU5.219秒／wall5.75秒（測試程式／非遊戲FPS/多人測試）。
 
 原有 `run_world.py --mode canvas --rounds 1` 亦回歸 PASS，現行 Python suite 81/81 PASS。報告在 `reports/`，原圖、PCK 與 GPU 截圖均不得推送。下階段仍需玩家 actor/Paper-doll、權威 Server A*、網路收包與 Render FPS 解耦、多開及 AFK/Unfocus；Viewer PASS 不能當作可玩 Client 或正式 Release。
+
+## 2026-11-16 threaded TLS login transport
+
+`network/wire_codec.gd` now covers the Client-facing V1 login/character frames in addition to MoveTarget/MoveReceipt. `network/client_transport.gd` owns TCP/TLS on a dedicated Godot `Thread`; networking is therefore not polled by a render `_process()` callback. The worker has bounded outbound/event/receive memory and uses partial send/read calls rather than a blocking full-frame send. Production startup uses certificate validation (`TLSOptions.client()`); the explicitly unsafe helper is debug-build-only.
+
+A real local E2E is available:
+
+```powershell
+python client/tests/run_tls_login.py "C:\SGO\Godot\Godot_v4.7.2-stable_win64_console.exe"
+```
+
+The runner starts `SGTest.Server.LoginFixture`, loads its public test certificate into Godot as the trusted chain, and verifies TLS Auth -> CharacterList -> CharacterChoose -> Move. Both sides must print PASS. This is a transport/login gate only: the application scene/login UI, non-render WorldState reducer, reconnect/WorldReady and render=0/30/60/90 packet-order tests are still NOT VERIFIED.

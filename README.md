@@ -85,3 +85,7 @@ Server identity persistence now includes SQLite Account/Character schema v1 and 
 ### 2026-11-16 TLS login/CharacterChoose server flow
 
 Server-side TLS login can now authenticate the SQLite Account, return only owned characters, validate CharacterChoose, register the persisted character into the authoritative World, and bind gameplay Gateway identity without trusting Client ActorId/ConnectionEpoch. Local Release gate is 51/51 PASS. Production listener/certificate/admission and the Godot TLS/login client are still pending.
+
+### 2026-11-16 Godot secure login transport
+
+The new Godot Client now has a dedicated threaded TCP/TLS transport and V1 identity codec. A real secure local Godot 4.7.2 -> C# fixture test validates the test certificate/hostname, logs in to SQLite/Argon2id, lists the owned character, chooses it, receives authoritative MapEpoch and sends the first accepted World Move. The production listener/login UI/WorldState/AOI/reconnect path is still incomplete.
