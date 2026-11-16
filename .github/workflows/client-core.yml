@@ -50,6 +50,8 @@ jobs:
         run: .cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64 --headless --path client --script res://tests/test_wire_codec.gd
       - name: Godot AOI compact wire and WorldState generation gate
         run: .cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64 --headless --path client --script res://tests/test_aoi_wire.gd
+      - name: Godot audited NPC portal compact wire and reducer gate
+        run: .cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64 --headless --path client --script res://tests/test_npc_portal_wire.gd
       - name: Godot bounded transport compile gate
         run: .cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64 --headless --path client --script res://tests/test_client_transport.gd
       - name: Godot WorldState generation gate
@@ -62,3 +64,5 @@ jobs:
         run: python client/tests/run_tls_login.py "$PWD/.cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64" --multi --timeout 50
       - name: Two Godot Clients trusted Map15 Map13 Map15 AOI transfer E2E
         run: python client/tests/run_tls_login.py "$PWD/.cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64" --crossmap --timeout 70
+      - name: Two Godot Clients audited NPC portal action E2E
+        run: python client/tests/run_tls_login.py "$PWD/.cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64" --portal --timeout 70

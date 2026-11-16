@@ -20,6 +20,14 @@ var x := 0.0
 var y := 0.0
 var map_epoch := 0
 var movement_sequence := 0
+var npc_interaction_sequence := 0
+var pending_npc_sequence := 0
+var pending_npc_epoch := 0
+var last_npc_result_sequence := 0
+var last_npc_result_status := -1
+var last_npc_result_map_epoch := 0
+var stale_npc_results := 0
+var waiting_for_new_map := false
 var last_receipt_sequence := 0
 var last_receipt_status := -1
 var last_server_tick := -1
@@ -46,9 +54,18 @@ func mark_choose_sent(character_id: int) -> bool:
 	return true
 
 func mark_move_sent(sequence: int) -> bool:
-	if state != STATE_IN_WORLD or sequence <= movement_sequence or sequence > 0xffffffff:
+	if state != STATE_IN_WORLD or waiting_for_new_map or sequence <= movement_sequence or sequence > 0xffffffff:
 		return false
 	movement_sequence = sequence
+	return true
+
+func mark_npc_interact_sent(sequence: int) -> bool:
+	if state != STATE_IN_WORLD or not world_ready or waiting_for_new_map or pending_npc_sequence != 0 or sequence <= npc_interaction_sequence or sequence > 0xffffffff:
+		return false
+	npc_interaction_sequence = sequence
+	pending_npc_sequence = sequence
+	pending_npc_epoch = map_epoch
+	last_npc_result_status = -1
 	return true
 
 func apply_frame(frame: PackedByteArray) -> bool:
@@ -62,6 +79,8 @@ func apply_frame(frame: PackedByteArray) -> bool:
 			return _apply_choose(frame)
 		WireCodec.OPCODE_MOVE_RECEIPT:
 			return _apply_receipt(frame)
+		WireCodec.OPCODE_NPC_INTERACT_RESULT:
+			return _apply_npc_result(frame)
 		WireCodec.OPCODE_WORLD_READY:
 			return _apply_world_ready(frame)
 		WireCodec.OPCODE_ENTITY_SPAWN, WireCodec.OPCODE_ENTITY_DELTA:
@@ -88,6 +107,14 @@ func snapshot() -> Dictionary:
 		"y": y,
 		"map_epoch": map_epoch,
 		"movement_sequence": movement_sequence,
+		"npc_interaction_sequence": npc_interaction_sequence,
+		"pending_npc_sequence": pending_npc_sequence,
+		"pending_npc_epoch": pending_npc_epoch,
+		"last_npc_result_sequence": last_npc_result_sequence,
+		"last_npc_result_status": last_npc_result_status,
+		"last_npc_result_map_epoch": last_npc_result_map_epoch,
+		"stale_npc_results": stale_npc_results,
+		"waiting_for_new_map": waiting_for_new_map,
 		"last_receipt_sequence": last_receipt_sequence,
 		"last_receipt_status": last_receipt_status,
 		"last_server_tick": last_server_tick,
@@ -136,6 +163,14 @@ func _apply_choose(frame: PackedByteArray) -> bool:
 		state = STATE_FAILED
 		return true
 	actor_id = int(decoded.character_id)
+	npc_interaction_sequence = 0
+	pending_npc_sequence = 0
+	pending_npc_epoch = 0
+	last_npc_result_sequence = 0
+	last_npc_result_status = -1
+	last_npc_result_map_epoch = 0
+	stale_npc_results = 0
+	waiting_for_new_map = false
 	map_id = int(decoded.map_id)
 	x = float(decoded.x)
 	y = float(decoded.y)
@@ -177,6 +212,40 @@ func _apply_receipt(frame: PackedByteArray) -> bool:
 	last_server_tick = server_tick
 	return true
 
+func _apply_npc_result(frame: PackedByteArray) -> bool:
+	if state != STATE_IN_WORLD:
+		return fail("npc_result_out_of_state")
+	var response := WireCodec.decode_npc_interact_result(frame)
+	if response.is_empty():
+		return fail("invalid_npc_result")
+	var request_epoch := int(response.request_map_epoch)
+	var sequence := int(response.interaction_sequence)
+	var status := int(response.status)
+	var result_epoch := int(response.result_map_epoch)
+	if pending_npc_sequence == 0:
+		stale_npc_results += 1
+		return true
+	if pending_npc_sequence != sequence or pending_npc_epoch != request_epoch:
+		if request_epoch < map_epoch:
+			stale_npc_results += 1
+			return true
+		return fail("npc_result_wrong_request")
+	if request_epoch > map_epoch or result_epoch < map_epoch:
+		return fail("npc_result_invalid_epoch")
+	if status == 0:
+		if map_epoch != request_epoch and map_epoch != result_epoch:
+			return fail("npc_result_future_epoch_mismatch")
+		if map_epoch == request_epoch:
+			waiting_for_new_map = true
+	elif request_epoch != map_epoch:
+		return fail("npc_rejection_after_map_transfer")
+	last_npc_result_sequence = sequence
+	last_npc_result_status = status
+	last_npc_result_map_epoch = result_epoch
+	pending_npc_sequence = 0
+	pending_npc_epoch = 0
+	return true
+
 func _apply_world_ready(frame: PackedByteArray) -> bool:
 	if state != STATE_IN_WORLD:
 		return fail("world_ready_out_of_state")
@@ -195,6 +264,8 @@ func _apply_world_ready(frame: PackedByteArray) -> bool:
 	if next_epoch > map_epoch:
 		map_epoch = next_epoch
 		map_id = int(ready.map_id)
+		waiting_for_new_map = false
+		npc_interaction_sequence = 0
 		movement_sequence = 0
 		last_receipt_sequence = 0
 		last_receipt_status = -1

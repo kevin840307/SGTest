@@ -162,3 +162,17 @@ All frames retain the common little-endian `uint32 frameBytes + uint16 version(1
 ### 2026-11-16 AOI runtime delivery baseline
 
 The existing `WorldAoiPump` now sends the four V1 server-only AOI frames through the same authenticated `GatewayConnection` reliable FIFO as MoveReceipt. World joins/leaves/transfers from the 30Hz owner are preserved as bounded lifecycle batches; the AOI worker scopes entity state to map/viewer and MapEpoch. The sender confirms an event only after Gateway enqueue succeeds. The Godot non-render WorldState reducer receives WorldReady and clears old-map entities before applying Spawn/Delta/Despawn; the one-client true TLS fixture now requires `world_ready=PASS` and `receipt=PASS`. This is **not** a WorldReady ACK protocol or a guaranteed recovery/resync mechanism after lost/overfilled queues. Those remain required before multiplayer release.
+
+
+### 2026-11-16 Authenticated NPC portal command (V1)
+
+The **same** little-endian header `uint32 length + uint16 version=1 + uint16 opcode` adds exactly two frames:
+
+| Opcode | Direction | Bytes | Payload |
+|---|---|---:|---|
+| 3 NpcInteract | Godot→Server TLS only | 24 | `int64 mapEpoch; uint32 interactionSequence; int32 mapScopedNpcSpawnId` |
+| 4 NpcInteractResult | Server→Godot reliable | 29 | `int64 requestMapEpoch; uint32 interactionSequence; uint8 status; int64 resultMapEpoch` |
+
+Status `0=Accepted, 1=StaleGeneration, 2=ReplayedSequence, 3=UnknownNpc, 4=TooFar, 5=DestinationRejected`. An accepted result must have a greater resultMapEpoch than requestMapEpoch; a denial returns the requestMapEpoch unchanged. **Client cannot send destination MapId/XY, ActorId, ConnectionEpoch, or portal permission.** The Gateway binds the request to the authenticated character, and the 30Hz World owner checks current map/position, NPC source index, replay, proximity and destination Blocking against only audited Converter static TS_Common metadata. Unsupported Quest scripts do not become portals. A per-socket bounded 16-request worker serializes slow trusted operations; output uses the existing bounded reliable FIFO and explicitly fails on overflow. `WorldReady` and portal receipt may arrive in either order; Godot tracks one outstanding NPC action, ignores duplicate replies and resets the movement/NPC sequence only on a newer WorldReady.
+
+This is a schema and gameplay slice, **not** an assertion that original NPC click range or private map/visuals have been validated.

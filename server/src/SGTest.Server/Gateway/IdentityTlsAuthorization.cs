@@ -18,11 +18,14 @@ public sealed class IdentityTlsAuthorization
 {
     private readonly SqliteIdentityStore _identity;
     private readonly ServerWorldHost _world;
+    private readonly PortalCatalog? _portals;
 
-    public IdentityTlsAuthorization(SqliteIdentityStore identity, ServerWorldHost world)
+    public IdentityTlsAuthorization(SqliteIdentityStore identity, ServerWorldHost world,
+                                    PortalCatalog? portals = null)
     {
         _identity = identity ?? throw new ArgumentNullException(nameof(identity));
         _world = world ?? throw new ArgumentNullException(nameof(world));
+        _portals = portals; // runtime-owned audited Converter NPC content; null disables portal RPC
     }
 
     /// <summary>
@@ -85,9 +88,21 @@ public sealed class IdentityTlsAuthorization
 
         try
         {
+            Func<TrustedNpcInteraction, Task<NpcPortalOutcome>>? npcHandler =
+                _portals is null ? null : async request =>
+                {
+                    // The Gateway added ActorId/ConnectionEpoch from the
+                    // authenticated connection. Portal destination is never
+                    // supplied by this client request.
+                    return await router.TrustedNpcInteractAsync(
+                        _world, _portals!,
+                        new ConnectionBinding(request.ActorId, request.ConnectionEpoch,
+                            request.RequestMapEpoch),
+                        request.InteractionSequence, request.NpcSpawnId).ConfigureAwait(false);
+                };
             return await TlsWireConnection.RunServerAsync(client, certificate,
-                Authorize, _world.TryPostMove, options, cancellationToken, Release)
-                .ConfigureAwait(false);
+                Authorize, _world.TryPostMove, options, cancellationToken, Release,
+                npcHandler).ConfigureAwait(false);
         }
         finally
         {

@@ -5,6 +5,8 @@ const HEADER_BYTES := 8
 const MAX_FRAME_BYTES := 65536
 const OPCODE_MOVE_TARGET := 1
 const OPCODE_MOVE_RECEIPT := 2
+const OPCODE_NPC_INTERACT := 3
+const OPCODE_NPC_INTERACT_RESULT := 4
 const OPCODE_AUTH_REQUEST := 10
 const OPCODE_AUTH_RESULT := 11
 const OPCODE_CHARACTER_LIST := 12
@@ -16,6 +18,8 @@ const OPCODE_ENTITY_DESPAWN := 22
 const OPCODE_ENTITY_DELTA := 23
 const MOVE_TARGET_FRAME_BYTES := 28
 const MOVE_RECEIPT_FRAME_BYTES := 30
+const NPC_INTERACT_FRAME_BYTES := 24
+const NPC_INTERACT_RESULT_FRAME_BYTES := 29
 const AUTH_RESULT_FRAME_BYTES := 9
 const CHARACTER_CHOOSE_FRAME_BYTES := 16
 const CHARACTER_CHOOSE_RESULT_FRAME_BYTES := 45
@@ -62,6 +66,46 @@ static func decode_move_receipt(frame: PackedByteArray) -> Dictionary:
 	if map_epoch <= 0 or sequence == 0 or status > 10 or server_tick < 0:
 		return {}
 	return {"map_epoch": map_epoch, "movement_sequence": sequence, "status": status, "server_tick": server_tick}
+
+static func encode_npc_interact(map_epoch: int, interaction_sequence: int, npc_spawn_id: int) -> PackedByteArray:
+	if map_epoch <= 0 or interaction_sequence <= 0 or interaction_sequence > 0xffffffff or npc_spawn_id <= 0:
+		return PackedByteArray()
+	var writer := StreamPeerBuffer.new()
+	writer.big_endian = false
+	writer.put_u32(NPC_INTERACT_FRAME_BYTES)
+	writer.put_u16(VERSION)
+	writer.put_u16(OPCODE_NPC_INTERACT)
+	writer.put_64(map_epoch)
+	writer.put_u32(interaction_sequence)
+	writer.put_32(npc_spawn_id)
+	return writer.data_array
+
+static func decode_npc_interact(frame: PackedByteArray) -> Dictionary:
+	if not _valid_header(frame, OPCODE_NPC_INTERACT, NPC_INTERACT_FRAME_BYTES):
+		return {}
+	var reader := _reader(frame, 8)
+	var epoch := reader.get_64()
+	var sequence := reader.get_u32()
+	var spawn_id := reader.get_32()
+	if epoch <= 0 or sequence == 0 or spawn_id <= 0:
+		return {}
+	return {"map_epoch": epoch, "interaction_sequence": sequence, "npc_spawn_id": spawn_id}
+
+static func decode_npc_interact_result(frame: PackedByteArray) -> Dictionary:
+	if not _valid_header(frame, OPCODE_NPC_INTERACT_RESULT, NPC_INTERACT_RESULT_FRAME_BYTES):
+		return {}
+	var reader := _reader(frame, 8)
+	var epoch := reader.get_64()
+	var sequence := reader.get_u32()
+	var status := reader.get_u8()
+	var result_epoch := reader.get_64()
+	if epoch <= 0 or sequence == 0 or status > 5:
+		return {}
+	if status == 0 and result_epoch <= epoch:
+		return {}
+	if status != 0 and result_epoch != epoch:
+		return {}
+	return {"request_map_epoch": epoch, "interaction_sequence": sequence, "status": status, "result_map_epoch": result_epoch}
 
 static func encode_auth_request(username: String, password: String) -> PackedByteArray:
 	var username_bytes := username.to_utf8_buffer()
@@ -207,7 +251,7 @@ static func frame_opcode(frame: PackedByteArray) -> int:
 	if reader.get_u16() != VERSION:
 		return -1
 	var opcode := reader.get_u16()
-	if opcode not in [OPCODE_MOVE_TARGET, OPCODE_MOVE_RECEIPT, OPCODE_AUTH_REQUEST, OPCODE_AUTH_RESULT, OPCODE_CHARACTER_LIST, OPCODE_CHARACTER_CHOOSE, OPCODE_CHARACTER_CHOOSE_RESULT, OPCODE_WORLD_READY, OPCODE_ENTITY_SPAWN, OPCODE_ENTITY_DESPAWN, OPCODE_ENTITY_DELTA]:
+	if opcode not in [OPCODE_MOVE_TARGET, OPCODE_MOVE_RECEIPT, OPCODE_NPC_INTERACT, OPCODE_NPC_INTERACT_RESULT, OPCODE_AUTH_REQUEST, OPCODE_AUTH_RESULT, OPCODE_CHARACTER_LIST, OPCODE_CHARACTER_CHOOSE, OPCODE_CHARACTER_CHOOSE_RESULT, OPCODE_WORLD_READY, OPCODE_ENTITY_SPAWN, OPCODE_ENTITY_DESPAWN, OPCODE_ENTITY_DELTA]:
 		return -1
 	return opcode
 

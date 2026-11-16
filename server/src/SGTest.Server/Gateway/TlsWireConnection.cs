@@ -2,6 +2,7 @@ using System.Buffers;
 using System.Diagnostics;
 using System.Net.Security;
 using System.Net.Sockets;
+using System.Threading.Channels;
 using System.Security.Authentication;
 using System.Security.Cryptography.X509Certificates;
 using SGTest.Server.World;
@@ -54,7 +55,8 @@ public static class TlsWireConnection
         Func<MoveTargetCommand, bool> postMove,
         TlsWireConnectionOptions? options = null,
         CancellationToken cancellationToken = default,
-        Func<ConnectionBinding, Task>? releaseBoundSession = null)
+        Func<ConnectionBinding, Task>? releaseBoundSession = null,
+        Func<TrustedNpcInteraction, Task<NpcPortalOutcome>>? handleNpc = null)
     {
         ArgumentNullException.ThrowIfNull(client);
         ArgumentNullException.ThrowIfNull(serverCertificate);
@@ -149,6 +151,46 @@ public static class TlsWireConnection
                 }
             }
 
+            // NPC requests are separated from the socket read loop, so the
+            // 30Hz World authorization cannot block TCP framing. A bounded
+            // single-reader channel preserves per-connection click order.
+            // Full ingress returns Backpressured and keeps the complete frame
+            // in WireStreamParser until the worker has room.
+            var npcCommands = Channel.CreateBounded<TrustedNpcInteraction>(
+                new BoundedChannelOptions(16)
+                {
+                    SingleReader = true, SingleWriter = true,
+                    FullMode = BoundedChannelFullMode.Wait
+                });
+            Func<TrustedNpcInteraction, bool>? postNpc = handleNpc is null
+                ? null : request => npcCommands.Writer.TryWrite(request);
+            Exception? npcFault = null;
+            Task npcWorker = handleNpc is null ? Task.CompletedTask : ProcessNpcAsync();
+
+            async Task ProcessNpcAsync()
+            {
+                try
+                {
+                    await foreach (var request in npcCommands.Reader
+                        .ReadAllAsync(sessionCts.Token).ConfigureAwait(false))
+                    {
+                        // Auth handler verifies this is STILL the currently
+                        // bound actor; only the World can authorize/map transfer.
+                        NpcPortalOutcome outcome =
+                            await handleNpc!(request).ConfigureAwait(false);
+                        var sent = gateway.QueueNpcResult(request, outcome);
+                        if (sent != GatewaySendStatus.Enqueued)
+                            throw new IOException("Reliable NPC result could not be queued: " + sent);
+                    }
+                }
+                catch (OperationCanceledException) when (sessionCts.IsCancellationRequested) { }
+                catch (Exception error)
+                {
+                    npcFault = error;
+                    sessionCts.Cancel(); // terminal, never drop an NPC result
+                }
+            }
+
             long commandsAccepted = 0;
             var reason = TlsWireEndReason.CleanEof;
             byte[] rented = ArrayPool<byte>.Shared.Rent(configured.ReadBufferBytes);
@@ -166,7 +208,7 @@ public static class TlsWireConnection
                     }
 
                     var status = gateway.FeedClientBytes(
-                        rented.AsSpan(0, count), postMove, out int accepted);
+                        rented.AsSpan(0, count), postMove, out int accepted, postNpc);
                     commandsAccepted += accepted;
 
                     if (status == WireFeedStatus.Backpressured)
@@ -184,7 +226,7 @@ public static class TlsWireConnection
                             await Task.Delay(
                                 configured.BackpressureRetryMilliseconds, sessionCts.Token)
                                 .ConfigureAwait(false);
-                            status = gateway.ResumeClientIngress(postMove, out accepted);
+                            status = gateway.ResumeClientIngress(postMove, out accepted, postNpc);
                             commandsAccepted += accepted;
                         }
                         while (status == WireFeedStatus.Backpressured);
@@ -225,6 +267,13 @@ public static class TlsWireConnection
         finished:
             ArrayPool<byte>.Shared.Return(rented, clearArray: false);
             sessionCts.Cancel();
+            npcCommands.Writer.TryComplete();
+            // An in-flight authorized World transfer may finish even after the
+            // socket is closed. Await that result BEFORE capturing final MapEpoch
+            // for trusted disconnect; never leak the new World generation.
+            await npcWorker.ConfigureAwait(false);
+            if (npcFault is not null)
+                reason = TlsWireEndReason.GatewayClosed;
             var finalBinding = gateway.Binding;
             gateway.Close();
             try { await writer.ConfigureAwait(false); }

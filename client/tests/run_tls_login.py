@@ -19,6 +19,8 @@ def main() -> int:
                         help="run two concurrent real Godot TLS clients against the same 30Hz World")
     parser.add_argument("--crossmap", action="store_true",
                         help="run two-client Map15 -> Map13 -> Map15 trusted transfer TLS E2E")
+    parser.add_argument("--portal", action="store_true",
+                        help="run two-client audited NPC interaction TLS transfer E2E")
     args = parser.parse_args()
     repo = Path(__file__).resolve().parents[2]
     fixture = repo / "server/tests/SGTest.Server.LoginFixture/SGTest.Server.LoginFixture.csproj"
@@ -33,6 +35,8 @@ def main() -> int:
         return 2
     if args.crossmap:
         return run_crossmap(args, repo, fixture, env)
+    if args.portal:
+        return run_multiplayer(args, repo, fixture, env, portal=True)
     if args.multi:
         return run_multiplayer(args, repo, fixture, env)
 
@@ -103,11 +107,13 @@ def main() -> int:
 
 
 
-def run_multiplayer(args, repo: Path, fixture: Path, env: dict[str, str]) -> int:
-    """Real TLS peer-to-peer AOI visibility through one C# authoritative World."""
+def run_multiplayer(args, repo: Path, fixture: Path, env: dict[str, str],
+                    portal: bool = False) -> int:
+    """Real TLS AOI with optional audited NPC action, no test-only teleport RPC."""
+    label = "PORTAL" if portal else "MULTI"
     server = subprocess.Popen(
         ["dotnet", "run", "--project", str(fixture), "-c", "Release",
-         "--no-build", "--", "--multi"],
+         "--no-build", "--", "--portal" if portal else "--multi"],
         cwd=repo, env=env, text=True, stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT, bufsize=1)
     server_lines: list[str] = []
@@ -140,8 +146,8 @@ def run_multiplayer(args, repo: Path, fixture: Path, env: dict[str, str]) -> int
 
     deadline = time.monotonic() + args.timeout
     try:
-        ready = until(server_notices, "MULTI_FIXTURE_READY", deadline, server)
-        match = re.search(r"MULTI_FIXTURE_READY port=(\d+) cert=(.+?) actor_a=(\d+) actor_b=(\d+)", ready)
+        ready = until(server_notices, label + "_FIXTURE_READY", deadline, server)
+        match = re.search(label + r"_FIXTURE_READY port=(\d+) cert=(.+?) actor_a=(\d+) actor_b=(\d+)", ready)
         if match is None:
             raise RuntimeError(f"malformed multiplayer fixture readiness {ready}")
         port, cert = match.group(1), match.group(2)
@@ -149,46 +155,55 @@ def run_multiplayer(args, repo: Path, fixture: Path, env: dict[str, str]) -> int
                 "--script", "res://tests/test_client_multiplayer_tls.gd", "--",
                 port, cert]
 
+        extra = ["portal"] if portal else []
         observer = subprocess.Popen(
-            [*base, "observer"], cwd=repo, text=True, stdout=subprocess.PIPE,
+            [*base, "observer", *extra], cwd=repo, text=True, stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT, bufsize=1)
         threading.Thread(target=capture, args=(observer.stdout, observer_lines,
                                                observer_notices), daemon=True).start()
-        until(observer_notices, "CLIENT_MULTI_READY role=observer", deadline, observer)
+        until(observer_notices, "CLIENT_" + label + "_READY role=observer", deadline, observer)
 
         remaining = max(1.0, deadline - time.monotonic())
-        actor = subprocess.run([*base, "actor"], cwd=repo, text=True,
+        actor = subprocess.run([*base, "actor", *extra], cwd=repo, text=True,
                                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                                timeout=remaining)
-        if actor.returncode != 0 or "CLIENT_MULTI_PASS role=actor" not in actor.stdout:
+        if actor.returncode != 0 or "CLIENT_" + label + "_PASS role=actor" not in actor.stdout:
             raise RuntimeError("active Godot client failed:\n" + actor.stdout)
 
         observer.wait(timeout=max(1.0, deadline - time.monotonic()))
         if observer.returncode != 0 or not any(
-                "CLIENT_MULTI_PASS role=observer" in line for line in observer_lines):
+                "CLIENT_" + label + "_PASS role=observer" in line for line in observer_lines):
             raise RuntimeError("observer Godot client failed:\n" +
                                "\n".join(observer_lines))
 
         server.wait(timeout=max(1.0, deadline - time.monotonic()))
         if server.returncode != 0 or not any(
-                line.startswith("MULTI_FIXTURE_PASS") for line in server_lines):
+                line.startswith(label + "_FIXTURE_PASS") for line in server_lines):
             raise RuntimeError("shared World fixture failed:\n" +
                                "\n".join(server_lines))
 
         print(actor.stdout, end="")
         for line in observer_lines:
-            if line.startswith("CLIENT_MULTI_"):
+            if line.startswith("CLIENT_" + label + "_"):
                 print(line)
         for line in server_lines:
-            if line.startswith("MULTI_FIXTURE_"):
+            if line.startswith(label + "_FIXTURE_"):
                 print(line)
-        print("GODOT_CSHARP_TWO_CLIENT_AOI_E2E_PASS "
-              "tls=true concurrent_clients=2 world_ready=true "
-              "spawn=true authoritative_delta=true despawn=true "
-              "same_30hz_world=true")
+        if portal:
+            print("GODOT_CSHARP_TWO_CLIENT_NPC_PORTAL_E2E_PASS "
+                  "tls=true concurrent_clients=2 audited_clicks=true "
+                  "unknown_npc_denied=true map15_to_map13_to_map15=true "
+                  "world_ready=true delta=true despawn=true return_spawn=true "
+                  "zero_ghost_actors=true")
+        else:
+            print("GODOT_CSHARP_TWO_CLIENT_AOI_E2E_PASS "
+                  "tls=true concurrent_clients=2 world_ready=true "
+                  "spawn=true authoritative_delta=true despawn=true "
+                  "same_30hz_world=true")
         return 0
     except Exception as error:
-        print("TLS_MULTIPLAYER_RUNNER_FAIL", error, file=sys.stderr)
+        print("TLS_NPC_PORTAL_RUNNER_FAIL" if portal else
+              "TLS_MULTIPLAYER_RUNNER_FAIL", error, file=sys.stderr)
         for line in server_lines[-20:]:
             print(line, file=sys.stderr)
         for line in observer_lines[-20:]:

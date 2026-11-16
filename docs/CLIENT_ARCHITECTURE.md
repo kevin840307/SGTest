@@ -260,3 +260,8 @@ The existing `network/wire_codec.gd` now decodes the four production compact-bin
 ### AOI reducer real TLS gate (2026-11-16)
 
 The real Godot↔C# fixture now proves WorldReady reaches the threaded ClientSession/WorldState through TLS and is reduced successfully, together with MoveReceipt. The Client and Server use the same production compact wire; 0/30/60/90 simulated render cadence checks for Auth/Move remain intact. Future AOI visualization must bind only to the WorldState snapshot and never drive packet reception from Render FPS. This fixture runs **one** Godot Client, not two visual clients, and does not verify 20-player movement/AOI rendering.
+
+
+## 2026-11-16 NPC intent in the existing independent reducer
+
+`ClientSession.npc_interact(mapScopedSpawnId)` is a bounded, thread-safe intent. The transport sends only V1 NPCInteract `MapEpoch/Sequence/SpawnId`, never destination coordinates. The existing network-independent WorldState owns an in-flight NPC request, last authoritative status and result MapEpoch; it prevents duplicate in-flight interactions, blocks old-map movement while an accepted transfer is waiting for WorldReady, and handles both legal reply/WorldReady orderings. A rejected interaction leaves map/visible entities unchanged. When the new MapEpoch's WorldReady arrives, it resets the per-map interaction sequence and clears the old AOI. No new Renderer/Client singleton or frame-time polling is created.

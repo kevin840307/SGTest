@@ -55,6 +55,12 @@ func choose_character(character_id: int) -> bool:
 func move_target(target_x: int, target_y: int) -> bool:
 	return _queue_intent({"type": "move", "x": target_x, "y": target_y})
 
+func npc_interact(spawn_id: int) -> bool:
+	# The client names only a map-local NPC; Server provides the destination.
+	if spawn_id <= 0 or spawn_id > 0x7fffffff:
+		return false
+	return _queue_intent({"type": "npc", "spawn_id": spawn_id})
+
 func snapshot() -> Dictionary:
 	_mutex.lock()
 	var result := _published.duplicate(true)
@@ -131,9 +137,18 @@ func _process_first_intent() -> void:
 		if not frame.is_empty() and _transport.send_frame(frame) and _world.mark_choose_sent(character_id):
 			_pop_intent()
 			_publish()
+	elif kind == "npc":
+		var current: Dictionary = _world.snapshot()
+		if int(current.state) != WorldState.STATE_IN_WORLD or not bool(current.world_ready) or bool(current.waiting_for_new_map) or int(current.pending_npc_sequence) != 0:
+			return
+		var sequence := int(current.npc_interaction_sequence) + 1
+		var frame := WireCodec.encode_npc_interact(int(current.map_epoch), sequence, int(intent.spawn_id))
+		if not frame.is_empty() and _transport.send_frame(frame) and _world.mark_npc_interact_sent(sequence):
+			_pop_intent()
+			_publish()
 	elif kind == "move":
 		var current: Dictionary = _world.snapshot()
-		if int(current.state) != WorldState.STATE_IN_WORLD:
+		if int(current.state) != WorldState.STATE_IN_WORLD or bool(current.waiting_for_new_map):
 			return
 		var sequence := int(current.movement_sequence) + 1
 		var frame := WireCodec.encode_move_target(int(current.map_epoch), sequence, int(intent.x), int(intent.y))

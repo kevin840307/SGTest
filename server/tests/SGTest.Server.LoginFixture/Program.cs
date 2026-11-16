@@ -20,6 +20,8 @@ internal static class Program
             return await RunMultiplayerAsync(false).ConfigureAwait(false);
         if (args is ["--crossmap"])
             return await RunMultiplayerAsync(true).ConfigureAwait(false);
+        if (args is ["--portal"])
+            return await RunMultiplayerAsync(false, true).ConfigureAwait(false);
         if (args.Length != 0)
             return 2;
         string root = Path.Combine(Path.GetTempPath(), "sgtest_login_fixture_" + Guid.NewGuid().ToString("N"));
@@ -112,7 +114,7 @@ internal static class Program
         }
     }
 
-    private static async Task<int> RunMultiplayerAsync(bool crossmap)
+    private static async Task<int> RunMultiplayerAsync(bool crossmap, bool portals = false)
     {
         string root = Path.Combine(Path.GetTempPath(),
             "sgtest_multi_login_" + Guid.NewGuid().ToString("N"));
@@ -120,7 +122,7 @@ internal static class Program
         try
         {
             var map = BlockingGrid.Load(CreateMap(root, 15), 15);
-            var maps = crossmap
+            var maps = crossmap || portals
                 ? new[] { map, BlockingGrid.Load(CreateMap(root, 13), 13) }
                 : new[] { map };
             await using var world = new ServerWorldHost(maps);
@@ -140,7 +142,9 @@ internal static class Program
             long bId = bRecord.Character?.CharacterId ??
                 throw new InvalidOperationException("multi fixture second character missing");
             var router = new WorldResultRouter();
-            var authorization = new IdentityTlsAuthorization(store, world);
+            var auditedPortals = portals ? PortalCatalog.LoadNpcDocuments([
+                CreatePortalDocument(root, 15), CreatePortalDocument(root, 13)]) : null;
+            var authorization = new IdentityTlsAuthorization(store, world, auditedPortals);
             var aoiPump = new WorldAoiPump(router);
             var routerTask = router.RunAsync(world.Results);
             using var aoiStop = new CancellationTokenSource();
@@ -153,7 +157,7 @@ internal static class Program
             try
             {
                 int port = ((IPEndPoint)listener.LocalEndpoint).Port;
-                var prefix = crossmap ? "CROSSMAP" : "MULTI";
+                var prefix = portals ? "PORTAL" : crossmap ? "CROSSMAP" : "MULTI";
                 Console.WriteLine($"{prefix}_FIXTURE_READY port={port} cert={certPath} actor_a={aId} actor_b={bId}");
                 Console.Out.Flush();
 
@@ -206,10 +210,10 @@ internal static class Program
                     System.Security.Authentication.SslProtocols.Tls13) ||
                     results[0].Reason != TlsWireEndReason.CleanEof ||
                     results[1].Reason != TlsWireEndReason.CleanEof ||
-                    results[1].CommandsAccepted != (crossmap ? 2 : 1) ||
+                    results[1].CommandsAccepted != (portals ? 4 : crossmap ? 2 : 1) ||
                     router.Statistics.ActiveSessions != 0 ||
-                    router.Statistics.ReceiptsQueued < (crossmap ? 2 : 1) ||
-                    aoiPump.FramesQueued < (crossmap ? 10 : 6))
+                    router.Statistics.ReceiptsQueued < (crossmap || portals ? 2 : 1) ||
+                    aoiPump.FramesQueued < (crossmap || portals ? 10 : 6))
                     throw new InvalidOperationException(
                         $"multiplayer TLS/AOI incomplete a={results[0].Reason} b={results[1].Reason} " +
                         $"moves={results[1].CommandsAccepted} routes={router.Statistics.ActiveSessions} " +
@@ -229,13 +233,49 @@ internal static class Program
         }
         catch (Exception error)
         {
-            Console.Error.WriteLine((crossmap ? "CROSSMAP" : "MULTI") + "_FIXTURE_FAIL " + error);
+            Console.Error.WriteLine((portals ? "PORTAL" : crossmap ? "CROSSMAP" : "MULTI") + "_FIXTURE_FAIL " + error);
             return 1;
         }
         finally
         {
             try { Directory.Delete(root, recursive: true); } catch { }
         }
+    }
+
+    /// <summary>
+    /// Test-only stand-in for converter-produced npc/v1. Uses audited metadata
+    /// shape and ORIGINAL Map IDs / Spawn IDs, but synthetic NPC positions and
+    /// 3x3 test Blocking. Private original files never enter this repository.
+    /// </summary>
+    private static string CreatePortalDocument(string root, int sourceMap)
+    {
+        int target = sourceMap == 15 ? 13 : 15;
+        int spawnId = sourceMap == 15 ? 46 : 1;
+        string file = Path.Combine(root, "npcs_" + sourceMap + ".json");
+        File.WriteAllText(file, JsonSerializer.Serialize(new
+        {
+            schema = "sgtest.npcs/v1",
+            coordinate_space = "world_pixels",
+            map_id = sourceMap,
+            npcs = new[]
+            {
+                new
+                {
+                    spawn_id = spawnId,
+                    p = new[] { 24, 8 },
+                    interaction = new
+                    {
+                        mode = "confirm_transfer",
+                        adapter = "audited_TS_Common_v1",
+                        dependencies_complete = true,
+                        destination_status = "walkable",
+                        choice = 0,
+                        destination = new { map_id = target, p = new[] { 24, 8 } }
+                    }
+                }
+            }
+        }));
+        return file;
     }
 
     private static string CreateMap(string root, int mapId)

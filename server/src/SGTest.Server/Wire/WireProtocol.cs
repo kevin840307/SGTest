@@ -8,6 +8,8 @@ public enum WireOpcode : ushort
 {
     MoveTarget = 1,
     MoveReceipt = 2,
+    NpcInteract = 3,
+    NpcInteractResult = 4,
     AuthRequest = 10,
     AuthResult = 11,
     CharacterList = 12,
@@ -25,6 +27,10 @@ public enum CharacterChooseWireStatus : byte { Success = 0, NotOwned = 1, WorldR
 public readonly record struct WireFrameHeader(int FrameBytes, ushort Version, WireOpcode Opcode);
 public readonly record struct MoveTargetWire(long MapEpoch, uint MovementSequence, int TargetX, int TargetY);
 public readonly record struct MoveReceiptWire(long MapEpoch, uint MovementSequence, MoveReceiptStatus Status, long ServerTick);
+public readonly record struct NpcInteractWire(long MapEpoch, uint InteractionSequence, int NpcSpawnId);
+public readonly record struct NpcInteractResultWire(
+    long RequestMapEpoch, uint InteractionSequence, NpcPortalStatus Status,
+    long ResultMapEpoch);
 public readonly record struct AuthRequestWire(string Username, string Password);
 public readonly record struct AuthResultWire(AuthWireStatus Status);
 public readonly record struct CharacterSummaryWire(long CharacterId, byte Slot, string Name);
@@ -58,6 +64,8 @@ public static class WireProtocol
     public const int MoveTargetFrameBytes = HeaderBytes + MoveTargetPayloadBytes;
     public const int MoveReceiptPayloadBytes = 22;
     public const int MoveReceiptFrameBytes = HeaderBytes + MoveReceiptPayloadBytes;
+    public const int NpcInteractFrameBytes = HeaderBytes + 8 + 4 + 4;
+    public const int NpcInteractResultFrameBytes = HeaderBytes + 8 + 4 + 1 + 8;
     public const int AuthResultFrameBytes = HeaderBytes + 1;
     public const int CharacterChooseFrameBytes = HeaderBytes + 8;
     public const int CharacterChooseResultFrameBytes = HeaderBytes + 37;
@@ -93,6 +101,62 @@ public static class WireProtocol
             BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(20, 4)),
             BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(24, 4)));
         return true;
+    }
+
+    public static byte[] EncodeNpcInteract(NpcInteractWire value)
+    {
+        if (value.MapEpoch <= 0 || value.InteractionSequence == 0 || value.NpcSpawnId <= 0)
+            throw new ArgumentOutOfRangeException(nameof(value));
+        byte[] frame = NewFrame(WireOpcode.NpcInteract, NpcInteractFrameBytes);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(8, 8), value.MapEpoch);
+        BinaryPrimitives.WriteUInt32LittleEndian(frame.AsSpan(16, 4), value.InteractionSequence);
+        BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(20, 4), value.NpcSpawnId);
+        return frame;
+    }
+
+    public static bool TryDecodeNpcInteract(ReadOnlySpan<byte> frame, out NpcInteractWire value)
+    {
+        value = default;
+        if (!TryReadHeader(frame, out var header) || header.Opcode != WireOpcode.NpcInteract)
+            return false;
+        value = new(BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(8, 8)),
+            BinaryPrimitives.ReadUInt32LittleEndian(frame.Slice(16, 4)),
+            BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(20, 4)));
+        return value.MapEpoch > 0 && value.InteractionSequence != 0 && value.NpcSpawnId > 0;
+    }
+
+    public static byte[] EncodeNpcInteractResult(NpcInteractResultWire value)
+    {
+        if (value.RequestMapEpoch <= 0 || value.InteractionSequence == 0 ||
+            (byte)value.Status > (byte)NpcPortalStatus.DestinationRejected ||
+            value.ResultMapEpoch <= 0 ||
+            (value.Status == NpcPortalStatus.Accepted
+                ? value.ResultMapEpoch <= value.RequestMapEpoch
+                : value.ResultMapEpoch != value.RequestMapEpoch))
+            throw new ArgumentOutOfRangeException(nameof(value));
+        byte[] frame = NewFrame(WireOpcode.NpcInteractResult, NpcInteractResultFrameBytes);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(8, 8), value.RequestMapEpoch);
+        BinaryPrimitives.WriteUInt32LittleEndian(frame.AsSpan(16, 4), value.InteractionSequence);
+        frame[20] = (byte)value.Status;
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(21, 8), value.ResultMapEpoch);
+        return frame;
+    }
+
+    public static bool TryDecodeNpcInteractResult(ReadOnlySpan<byte> frame,
+        out NpcInteractResultWire value)
+    {
+        value = default;
+        if (!TryReadHeader(frame, out var header) || header.Opcode != WireOpcode.NpcInteractResult)
+            return false;
+        var status = (NpcPortalStatus)frame[20];
+        value = new(BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(8, 8)),
+            BinaryPrimitives.ReadUInt32LittleEndian(frame.Slice(16, 4)),
+            status, BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(21, 8)));
+        return value.RequestMapEpoch > 0 && value.InteractionSequence != 0 &&
+               (byte)status <= (byte)NpcPortalStatus.DestinationRejected &&
+               (status == NpcPortalStatus.Accepted
+                   ? value.ResultMapEpoch > value.RequestMapEpoch
+                   : value.ResultMapEpoch == value.RequestMapEpoch);
     }
 
     public static byte[] EncodeMoveReceipt(MoveReceiptWire value)
@@ -409,6 +473,7 @@ public static class WireProtocol
         WireOpcode opcode = raw switch
         {
             1 => WireOpcode.MoveTarget, 2 => WireOpcode.MoveReceipt,
+            3 => WireOpcode.NpcInteract, 4 => WireOpcode.NpcInteractResult,
             10 => WireOpcode.AuthRequest, 11 => WireOpcode.AuthResult,
             12 => WireOpcode.CharacterList, 13 => WireOpcode.CharacterChoose,
             14 => WireOpcode.CharacterChooseResult,
@@ -420,6 +485,8 @@ public static class WireProtocol
         {
             WireOpcode.MoveTarget => advertised == MoveTargetFrameBytes,
             WireOpcode.MoveReceipt => advertised == MoveReceiptFrameBytes,
+            WireOpcode.NpcInteract => advertised == NpcInteractFrameBytes,
+            WireOpcode.NpcInteractResult => advertised == NpcInteractResultFrameBytes,
             WireOpcode.AuthRequest => advertised is >= 23 and <= MaxAuthRequestFrameBytes,
             WireOpcode.AuthResult => advertised == AuthResultFrameBytes,
             WireOpcode.CharacterList => advertised is >= 9 and <= MaxCharacterListFrameBytes,

@@ -22,6 +22,10 @@ public readonly record struct ConnectionBinding(
     }
 }
 
+public readonly record struct TrustedNpcInteraction(
+    long ActorId, long ConnectionEpoch, long RequestMapEpoch,
+    uint InteractionSequence, int NpcSpawnId);
+
 public enum GatewaySendStatus
 {
     Enqueued,
@@ -173,7 +177,8 @@ public sealed class GatewayConnection
     /// </summary>
     public WireFeedStatus FeedClientBytes(ReadOnlySpan<byte> bytes,
                                           Func<MoveTargetCommand, bool> postMove,
-                                          out int commandsAccepted)
+                                          out int commandsAccepted,
+                                          Func<TrustedNpcInteraction, bool>? postNpc = null)
     {
         ArgumentNullException.ThrowIfNull(postMove);
         lock (_receiveGate)
@@ -183,13 +188,14 @@ public sealed class GatewayConnection
                 commandsAccepted = 0;
                 return WireFeedStatus.Closed;
             }
-            return _parser.Feed(bytes, frame => HandleClientFrame(frame, postMove),
+            return _parser.Feed(bytes, frame => HandleClientFrame(frame, postMove, postNpc),
                 out commandsAccepted);
         }
     }
 
     public WireFeedStatus ResumeClientIngress(Func<MoveTargetCommand, bool> postMove,
-                                              out int commandsAccepted)
+                                              out int commandsAccepted,
+                                              Func<TrustedNpcInteraction, bool>? postNpc = null)
     {
         ArgumentNullException.ThrowIfNull(postMove);
         lock (_receiveGate)
@@ -199,32 +205,79 @@ public sealed class GatewayConnection
                 commandsAccepted = 0;
                 return WireFeedStatus.Closed;
             }
-            return _parser.Resume(frame => HandleClientFrame(frame, postMove),
+            return _parser.Resume(frame => HandleClientFrame(frame, postMove, postNpc),
                 out commandsAccepted);
         }
     }
 
     private WireFrameDisposition HandleClientFrame(
         ReadOnlySpan<byte> frame,
-        Func<MoveTargetCommand, bool> postMove)
+        Func<MoveTargetCommand, bool> postMove,
+        Func<TrustedNpcInteraction, bool>? postNpc)
     {
-        if (!WireProtocol.TryReadHeader(frame, out var header) ||
-            header.Opcode != WireOpcode.MoveTarget ||
-            !WireProtocol.TryDecodeMoveTarget(frame, out var move))
+        if (!WireProtocol.TryReadHeader(frame, out var header))
             return WireFrameDisposition.ProtocolViolation;
 
-        var bound = Binding;
-        var command = new MoveTargetCommand(
-            bound.ActorId,
-            bound.ConnectionEpoch,
-            move.MapEpoch,
-            move.MovementSequence,
-            move.TargetX,
-            move.TargetY);
+        var bound = Binding; // actor & connection are immutable client-trust boundary
+        if (header.Opcode == WireOpcode.MoveTarget &&
+            WireProtocol.TryDecodeMoveTarget(frame, out var move))
+        {
+            var command = new MoveTargetCommand(
+                bound.ActorId, bound.ConnectionEpoch, move.MapEpoch,
+                move.MovementSequence, move.TargetX, move.TargetY);
+            return postMove(command)
+                ? WireFrameDisposition.Accepted : WireFrameDisposition.Backpressured;
+        }
+        if (header.Opcode == WireOpcode.NpcInteract && postNpc is not null &&
+            WireProtocol.TryDecodeNpcInteract(frame, out var npc))
+        {
+            var request = new TrustedNpcInteraction(
+                bound.ActorId, bound.ConnectionEpoch, npc.MapEpoch,
+                npc.InteractionSequence, npc.NpcSpawnId);
+            return postNpc(request)
+                ? WireFrameDisposition.Accepted : WireFrameDisposition.Backpressured;
+        }
+        return WireFrameDisposition.ProtocolViolation;
+    }
 
-        return postMove(command)
-            ? WireFrameDisposition.Accepted
-            : WireFrameDisposition.Backpressured;
+    /// <summary>
+    /// A portal result is reliable and bound to the same physical session.
+    /// Successful World transfer must already have advanced the trusted Gateway
+    /// MapEpoch; rejection can reference a stale old request and never mutates
+    /// the binding. Only the server issues result MapEpoch and status.
+    /// </summary>
+    public GatewaySendStatus QueueNpcResult(
+        TrustedNpcInteraction request, NpcPortalOutcome outcome)
+    {
+        lock (_bindingGate)
+        {
+            if (_closed) return GatewaySendStatus.Closed;
+            var bound = _binding;
+            if (request.ActorId != bound.ActorId ||
+                request.ConnectionEpoch != bound.ConnectionEpoch ||
+                request.RequestMapEpoch <= 0 ||
+                request.RequestMapEpoch > bound.MapEpoch)
+                return GatewaySendStatus.GenerationMismatch;
+            long next = request.RequestMapEpoch;
+            if (outcome.Status == NpcPortalStatus.Accepted)
+            {
+                if (outcome.TransferredActor is not { } after ||
+                    after.ActorId != bound.ActorId ||
+                    after.ConnectionEpoch != bound.ConnectionEpoch ||
+                    after.MapEpoch != bound.MapEpoch ||
+                    after.MapEpoch <= request.RequestMapEpoch)
+                    return GatewaySendStatus.GenerationMismatch;
+                next = after.MapEpoch;
+            }
+            else if (outcome.TransferredActor is not null)
+                return GatewaySendStatus.GenerationMismatch;
+
+            var frame = WireProtocol.EncodeNpcInteractResult(
+                new NpcInteractResultWire(request.RequestMapEpoch,
+                    request.InteractionSequence, outcome.Status, next));
+            return _reliable.TryEnqueue(frame)
+                ? GatewaySendStatus.Enqueued : GatewaySendStatus.Backpressured;
+        }
     }
 
     /// <summary>
