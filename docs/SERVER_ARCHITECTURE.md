@@ -102,3 +102,9 @@ Identity persistence is a separate non-World service. `PasswordHasher` uses one 
 Security boundary: Account authentication returns server-owned account/character records only. The future TLS authorization flow must select a character owned by that authenticated account and use the persistent `character_id` as the trusted identity when calling `TrustedRegisterAsync`; Client packets must never carry an authoritative ActorId/ConnectionEpoch. DB/KDF calls must never execute on the World single-writer thread.
 
 Current gate: six Identity checks plus existing TLS/Gateway/World checks = **46/46 PASS** locally on Windows; Server/Host Release build 0 warnings/errors. TLS Auth/CharacterChoose wire integration and production listener remain NOT VERIFIED.
+
+## 2026-11-16 REB020-AUTH-CHARACTER-WIRE
+
+The TLS authorization callback now has one production implementation: `IdentityTlsAuthorization`. Its state transition is `TLS established -> AuthRequest -> Account authenticated -> CharacterList -> CharacterChoose ownership check -> TrustedRegisterAsync -> GatewayConnection -> gameplay`. No database operation runs on the World thread. The selected `character_id` is accepted only if it belongs to the authenticated Account; the authoritative spawn and first MapEpoch come from persisted server state and World registration.
+
+This closes the previous identity gap between TLS and World without opening a listener. It does **not** yet solve production socket admission, brute-force/rate limits, account creation, WorldReady/AOI, reconnect or Godot transport. Character selection is allowed a configurable human-scale timeout (120s default); future listener policy must bound simultaneous pre-gameplay sessions.

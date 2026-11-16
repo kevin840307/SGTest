@@ -222,11 +222,11 @@ internal static class TlsSocketChecks
             "backpressure recovery session result");
     }
 
-    private static SslStream CreateClientTls(TcpClient client) =>
+    internal static SslStream CreateClientTls(TcpClient client) =>
         new(client.GetStream(), leaveInnerStreamOpen: false,
             (_, _, _, _) => true); // Self-signed certificate is test-only.
 
-    private static Task AuthenticateClient(SslStream tls) =>
+    internal static Task AuthenticateClient(SslStream tls) =>
         tls.AuthenticateAsClientAsync(new SslClientAuthenticationOptions
         {
             TargetHost = "localhost",
@@ -234,7 +234,7 @@ internal static class TlsSocketChecks
             CertificateRevocationCheckMode = X509RevocationMode.NoCheck
         });
 
-    private static X509Certificate2 CreateCertificate()
+    internal static X509Certificate2 CreateCertificate()
     {
         using var key = RSA.Create(2048);
         var request = new CertificateRequest(

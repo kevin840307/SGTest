@@ -75,3 +75,9 @@ dotnet run -c Release --project server/tests/SGTest.Server.Checks/SGTest.Server.
 `src/SGTest.Server/Identity/` now provides SQLite schema v1 for Account/Character and bounded Argon2id password verification. The DB/KDF path is deliberately outside the authoritative 30Hz World thread. Account names are normalized for identity, character slot/name uniqueness is enforced by SQLite constraints, schema mismatch fails closed, and passwords are never stored plaintext. Character records persist server-authorized map/position and a stable `character_id`; a future TLS `CharacterChoose` layer will convert only a server-owned selected character into `TrustedRegisterAsync`/`GatewayConnection` identity.
 
 This is **not** a public login endpoint yet. Production listener/certificate setup, Auth/CharacterChoose wire messages, session-token/rate-limit policy, selected-character binding, save/reconnect lifecycle and Godot login E2E remain NOT VERIFIED. Current local Release evidence: Server + Host builds 0 warnings/errors; Server checks 46/46 PASS.
+
+## 2026-11-16 TLS Auth/CharacterChoose binding
+
+The server can now perform the complete **server-side** pre-gameplay identity flow over an already accepted TLS socket: AuthRequest, AuthResult, owned CharacterList, CharacterChoose, trusted World registration and Gateway binding. Persistent `character_id` becomes ActorId only after ownership verification; ConnectionEpoch is still never accepted from the Client. Wrong passwords and foreign-character selections never create a World actor.
+
+This is not yet an Internet-facing login server: `SGTest.Server.Host` still does not open a production listener, certificate deployment/admission/rate limiting are pending, and the Godot client does not yet implement these identity frames. Current local Release gate: **51/51 checks PASS**.
