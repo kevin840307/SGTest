@@ -46,8 +46,12 @@ public readonly record struct ActorSnapshot(
     uint LastMovementSequence, uint MovementActionSequence, double X, double Y,
     long EntityRevision, bool IsMoving);
 
+public enum ActorLifecycleKind { Joined, Left }
+public readonly record struct ActorLifecycleEvent(ActorLifecycleKind Kind, ActorSnapshot Actor);
+
 public sealed record WorldTickResult(
-    long Tick, IReadOnlyList<MoveReceipt> Receipts, IReadOnlyList<ActorSnapshot> Changed);
+    long Tick, IReadOnlyList<MoveReceipt> Receipts, IReadOnlyList<ActorSnapshot> Changed,
+    IReadOnlyList<ActorLifecycleEvent>? Lifecycle = null);
 
 /// <summary>
 /// Single-writer authoritative state, with one bounded MPSC command ingress.
@@ -90,6 +94,9 @@ public sealed class ServerWorld
     // Tombstones retained until process restart; bounded to MaxKnownActorIds.
     private readonly Dictionary<long, (long Connection, long Map)> _epochs = new();
     private readonly ConcurrentQueue<MoveTargetCommand> _incoming = new();
+    // Trusted registration, disconnect and transfer are ordered on this writer.
+    // They must reach AOI even when the actor never sends a MoveTarget.
+    private readonly List<ActorLifecycleEvent> _lifecycle = new();
     private int _reserved;
     private long _tick;
 
@@ -152,6 +159,7 @@ public sealed class ServerWorld
         _actors.Add(actorId, actor);
         _epochs[actorId] = (conn, mapEpoch);
         snapshot = actor.Snapshot();
+        _lifecycle.Add(new(ActorLifecycleKind.Joined, snapshot));
         return true;
     }
 
@@ -162,6 +170,7 @@ public sealed class ServerWorld
         if (!_actors.TryGetValue(actorId, out var actor) ||
             actor.ConnectionEpoch != connectionEpoch || actor.MapEpoch != mapEpoch)
             return false;
+        _lifecycle.Add(new(ActorLifecycleKind.Left, actor.Snapshot()));
         return _actors.Remove(actorId);
     }
 
@@ -182,6 +191,7 @@ public sealed class ServerWorld
             !grid.TryWorldCell(x, y, out var cell) || !grid.IsWalkable(cell) ||
             actor.MapEpoch == long.MaxValue || actor.Revision == long.MaxValue)
             return false;
+        _lifecycle.Add(new(ActorLifecycleKind.Left, actor.Snapshot()));
         actor.Map = newMapId;
         actor.MapEpoch++;
         actor.X = x;
@@ -192,6 +202,7 @@ public sealed class ServerWorld
         actor.ClearRoute();
         _epochs[actorId] = (actor.ConnectionEpoch, actor.MapEpoch);
         snapshot = actor.Snapshot();
+        _lifecycle.Add(new(ActorLifecycleKind.Joined, snapshot));
         return true;
     }
 
@@ -223,6 +234,8 @@ public sealed class ServerWorld
     {
         EnsureOwner();
         _tick = checked(_tick + 1);
+        var lifecycle = _lifecycle.ToArray();
+        _lifecycle.Clear();
         var receipts = new List<MoveReceipt>();
         var changed = new List<ActorSnapshot>();
         var changedCommands = new HashSet<long>();
@@ -251,7 +264,7 @@ public sealed class ServerWorld
                 changed.Add(actor.Snapshot());
             }
         }
-        return new WorldTickResult(_tick, receipts.ToArray(), changed.ToArray());
+        return new WorldTickResult(_tick, receipts.ToArray(), changed.ToArray(), lifecycle);
     }
 
     private MoveReceiptStatus ApplyMove(MoveTargetCommand input, ref int routeQueries,

@@ -141,6 +141,18 @@ refused:
             await host.StartAsync();
             var actorMaybe = await host.TrustedRegisterAsync(888, 90, 24, 24);
             var actor = actorMaybe ?? throw new Exception("register returned null");
+            // Lifecycle events now publish even without Move. Consume the initial
+            // trusted Join before intentionally saturating the one-slot queue.
+            using (var joinTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(3)))
+            {
+                while (true)
+                {
+                    var initial = await host.Results.ReadAsync(joinTimeout.Token);
+                    if (initial.Lifecycle?.Any(e => e.Kind == ActorLifecycleKind.Joined &&
+                                                   e.Actor.ActorId == 888) == true)
+                        break;
+                }
+            }
             Require(host.TryPostMove(new MoveTargetCommand(888, actor.ConnectionEpoch,
                 actor.MapEpoch, 1, 168, 24)), "move enqueue");
             bool failedClosed = false;

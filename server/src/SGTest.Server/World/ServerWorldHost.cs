@@ -261,7 +261,8 @@ public sealed class ServerWorldHost : IAsyncDisposable
                 }
 
                 var delta = world.Tick();
-                if (delta.Receipts.Count > 0 || delta.Changed.Count > 0)
+                if (delta.Receipts.Count > 0 || delta.Changed.Count > 0 ||
+                    delta.Lifecycle is { Count: > 0 })
                 {
                     // No "DropOldest": movement receipts/deltas cannot vanish behind a slow reader.
                     if (!_results.Writer.TryWrite(delta))

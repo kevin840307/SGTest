@@ -12,7 +12,9 @@ public sealed record WorldResultRouterOptions(
 /// Each batch retains its server Tick and is delivered exactly once through a
 /// bounded queue; a future AOI/WorldReady consumer MUST drain this queue.
 /// </summary>
-public sealed record WorldChangedBatch(long Tick, IReadOnlyList<ActorSnapshot> Changed);
+public sealed record WorldChangedBatch(
+    long Tick, IReadOnlyList<ActorSnapshot> Changed,
+    IReadOnlyList<ActorLifecycleEvent>? Lifecycle = null);
 
 public sealed record WorldResultRouterStatistics(
     long ReceiptsQueued,
@@ -140,9 +142,9 @@ public sealed class WorldResultRouter
         ArgumentNullException.ThrowIfNull(tick);
         if (tick.Tick < 0) throw new ArgumentOutOfRangeException(nameof(tick));
 
-        if (tick.Changed.Count > 0)
+        if (tick.Changed.Count > 0 || tick.Lifecycle is { Count: > 0 })
         {
-            if (!_changed.Writer.TryWrite(new WorldChangedBatch(tick.Tick, tick.Changed)))
+            if (!_changed.Writer.TryWrite(new WorldChangedBatch(tick.Tick, tick.Changed, tick.Lifecycle)))
                 FailBackpressure("Authoritative Changed output queue full; AOI consumer is too slow");
             Interlocked.Increment(ref _changedQueued);
         }
