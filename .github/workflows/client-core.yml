@@ -81,3 +81,5 @@ jobs:
         run: python client/tests/run_tls_login.py "$PWD/.cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64" --crossmap --timeout 70
       - name: Two Godot Clients audited NPC portal action E2E
         run: python client/tests/run_tls_login.py "$PWD/.cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64" --portal --timeout 70
+      - name: Formal Host plus two actual main-scene Godot clients
+        run: python client/tests/run_online_main_gate.py "$PWD/.cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64" --timeout 70

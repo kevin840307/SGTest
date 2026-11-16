@@ -112,6 +112,10 @@ func submit_move(point: Vector2) -> bool:
 	return active and bool(_latest.get("world_ready",false)) and point.is_finite() and session.move_target(int(floor(point.x)),int(floor(point.y)))
 
 
+func submit_npc_interact(spawn_id: int) -> bool:
+	return active and bool(_latest.get("world_ready",false)) and spawn_id > 0 and session.npc_interact(spawn_id)
+
+
 func disconnect_session() -> void:
 	session.stop()
 	var was_active := active

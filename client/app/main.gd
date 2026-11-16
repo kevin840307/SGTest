@@ -11,6 +11,15 @@ var _status := Label.new()
 var toolbar := PanelContainer.new()
 var session_panel := SessionPanel.new()
 var _map_buttons: Array[Button] = []
+var _last_snapshot: Dictionary = {}
+var _online_gate_role := ""
+var _online_gate_phase := -1
+var _online_gate_deadline := 0
+var _online_gate_not_before := 0
+var _online_gate_remote_id := 0
+var _online_gate_remote_start := Vector2.ZERO
+var _online_gate_finish_code := -1
+var _online_gate_finish_reason := ""
 
 
 func _ready() -> void:
@@ -50,7 +59,7 @@ func _ready() -> void:
 	session_panel.position = Vector2(16,64)
 	session_panel.connection_changed.connect(_connection_changed)
 	session_panel.world_ready.connect(_server_world_ready)
-	session_panel.world_snapshot.connect(world_view.set_player_snapshot)
+	session_panel.world_snapshot.connect(_server_snapshot)
 	var login_toggle := Button.new()
 	login_toggle.text = "登入／連線"
 	login_toggle.focus_mode = Control.FOCUS_NONE
@@ -76,10 +85,14 @@ func _ready() -> void:
 					session_panel.trusted_chain = cert
 				else:
 					session_panel.status.text = "無法讀取指定憑證；未停用 TLS 驗證"
+			elif args[i] == "--e2e-role":
+				_online_gate_role = args[i+1]
 		if world_view.open_pack(pack) == OK:
 			world_view.request_map(15)
 		else:
 			_status.text = "素材包未就緒，請先依 Client README 建置"
+		if not _online_gate_role.is_empty():
+			call_deferred("_start_online_gate")
 
 
 func _resize() -> void:
@@ -122,6 +135,8 @@ func _process(delta: float) -> void:
 		if pending.decode_jobs + pending.texture_jobs == 0:
 			get_tree().quit()
 		return
+	if not _online_gate_role.is_empty():
+		_online_gate_tick()
 	if world_view.phase == "ready" and not session_panel.active:
 		var direction := Vector2(int(_held.has(KEY_RIGHT))-int(_held.has(KEY_LEFT)),int(_held.has(KEY_DOWN))-int(_held.has(KEY_UP)))
 		if direction != Vector2.ZERO:
@@ -163,6 +178,148 @@ func _server_world_ready(snapshot: Dictionary) -> void:
 		world_view.set_player_snapshot(snapshot)
 	else:
 		_status.text = "已連線，地圖素材未就緒"
+
+
+func _server_snapshot(snapshot: Dictionary) -> void:
+	_last_snapshot = snapshot.duplicate(true)
+	world_view.set_player_snapshot(snapshot)
+
+
+func _start_online_gate() -> void:
+	if not _online_gate_role in ["observer","actor"]:
+		_online_gate_fail("invalid_role")
+		return
+	var username := OS.get_environment("SGTEST_E2E_USERNAME")
+	var password := OS.get_environment("SGTEST_E2E_PASSWORD")
+	OS.set_environment("SGTEST_E2E_PASSWORD","")
+	if username.is_empty() or password.is_empty() or world_view.phase == "closed":
+		password = ""
+		_online_gate_fail("missing_credentials_or_pack")
+		return
+	session_panel.username_input.text = username
+	session_panel.password_input.text = password
+	password = ""
+	_online_gate_deadline = Time.get_ticks_msec() + 25000
+	_online_gate_phase = 0
+	print("ONLINE_MAIN_GATE_START role=",_online_gate_role)
+	session_panel.login()
+
+
+func _online_gate_ready(map: int) -> bool:
+	if _last_snapshot.is_empty() or not bool(_last_snapshot.get("world_ready",false)):
+		return false
+	if int(_last_snapshot.get("map_id",0)) != map or world_view.phase != "ready" or world_view.map_id != map:
+		return false
+	var expected := Vector2(float(_last_snapshot.get("x",0.0)),float(_last_snapshot.get("y",0.0)))
+	return world_view.camera.snapshot().focus.distance_to(expected) <= 0.5
+
+
+func _online_gate_tick() -> void:
+	if _online_gate_phase < 0:
+		return
+	if _online_gate_phase == 90:
+		var stats := world_view.store.statistics()
+		if int(stats.scopes) == 0 and int(stats.assets) == 0 and int(stats.decode_jobs) == 0 and int(stats.texture_jobs) == 0:
+			if _online_gate_finish_code == 0:
+				print("ONLINE_MAIN_GATE_PASS role=",_online_gate_role," resources=0")
+			else:
+				push_error("ONLINE_MAIN_GATE_FAIL role=%s reason=%s" % [_online_gate_role,_online_gate_finish_reason])
+			get_tree().quit(_online_gate_finish_code)
+		return
+	if Time.get_ticks_msec() > _online_gate_deadline:
+		_online_gate_fail("timeout_phase_%d" % _online_gate_phase)
+		return
+	if not session_panel.active:
+		return
+	if session_panel.characters.visible and not session_panel.choose_button.disabled and session_panel.characters.item_count > 0:
+		session_panel.characters.select(0)
+		session_panel.choose()
+	if _online_gate_role == "observer":
+		_online_gate_observer()
+	else:
+		_online_gate_actor()
+
+
+func _online_gate_observer() -> void:
+	if _online_gate_phase == 0:
+		if _online_gate_ready(15):
+			print("ONLINE_MAIN_GATE_READY role=observer")
+			_online_gate_phase = 1
+		return
+	var entities: Dictionary = _last_snapshot.get("entities",{})
+	if _online_gate_phase == 1:
+		for raw_id in entities.keys():
+			var id := int(raw_id)
+			if id == int(_last_snapshot.get("actor_id",0)):
+				continue
+			var remote: Dictionary = entities[raw_id]
+			_online_gate_remote_id = id
+			_online_gate_remote_start = Vector2(float(remote.x),float(remote.y))
+			print("ONLINE_MAIN_GATE_SPAWN role=observer actor=",id)
+			_online_gate_phase = 2
+			return
+	elif _online_gate_phase == 2:
+		if entities.has(_online_gate_remote_id):
+			var remote: Dictionary = entities[_online_gate_remote_id]
+			var at := Vector2(float(remote.x),float(remote.y))
+			if at.distance_to(_online_gate_remote_start) >= 8.0:
+				print("ONLINE_MAIN_GATE_DELTA role=observer actor=",_online_gate_remote_id)
+				_online_gate_phase = 3
+	elif _online_gate_phase == 3:
+		if not entities.has(_online_gate_remote_id):
+			print("ONLINE_MAIN_GATE_DESPAWN role=observer actor=",_online_gate_remote_id)
+			_online_gate_phase = 4
+	elif _online_gate_phase == 4 and entities.has(_online_gate_remote_id):
+		print("ONLINE_MAIN_GATE_RETURN_SPAWN role=observer actor=",_online_gate_remote_id)
+		_online_gate_finish(true,"")
+
+
+func _online_gate_actor() -> void:
+	if _online_gate_phase == 0:
+		if _online_gate_ready(15):
+			print("ONLINE_MAIN_GATE_READY role=actor")
+			if not session_panel.submit_move(Vector2(40,24)):
+				_online_gate_fail("move_enqueue")
+				return
+			_online_gate_phase = 1
+		return
+	if _online_gate_phase == 1:
+		var at := Vector2(float(_last_snapshot.get("x",0.0)),float(_last_snapshot.get("y",0.0)))
+		if at.distance_to(Vector2(40,24)) <= 1.0 and _online_gate_ready(15):
+			print("ONLINE_MAIN_GATE_MOVE_CAMERA role=actor")
+			_online_gate_not_before = Time.get_ticks_msec() + 350
+			_online_gate_phase = 2
+	elif _online_gate_phase == 2 and Time.get_ticks_msec() >= _online_gate_not_before:
+		if not session_panel.submit_npc_interact(46):
+			_online_gate_fail("portal_46_enqueue")
+			return
+		_online_gate_phase = 3
+	elif _online_gate_phase == 3 and _online_gate_ready(13):
+		print("ONLINE_MAIN_GATE_MAP13 role=actor")
+		_online_gate_not_before = Time.get_ticks_msec() + 350
+		_online_gate_phase = 4
+	elif _online_gate_phase == 4 and Time.get_ticks_msec() >= _online_gate_not_before:
+		if not session_panel.submit_npc_interact(1):
+			_online_gate_fail("portal_1_enqueue")
+			return
+		_online_gate_phase = 5
+	elif _online_gate_phase == 5 and _online_gate_ready(15):
+		print("ONLINE_MAIN_GATE_RETURN_MAP15 role=actor")
+		_online_gate_finish(true,"")
+
+
+func _online_gate_finish(success: bool, reason: String) -> void:
+	_online_gate_finish_code = 0 if success else 1
+	_online_gate_finish_reason = reason
+	session_panel.disconnect_session()
+	world_view.clear_map()
+	_online_gate_phase = 90
+
+
+func _online_gate_fail(reason: String) -> void:
+	if _online_gate_phase == 90:
+		return
+	_online_gate_finish(false,reason)
 
 
 func _world_status(message: String) -> void:
