@@ -15,6 +15,10 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Run real Godot -> C# TLS login/CharacterChoose/Move E2E")
     parser.add_argument("godot", help="Godot 4.7.2 console executable")
     parser.add_argument("--timeout", type=float, default=30.0)
+    parser.add_argument("--app-ui", action="store_true",
+                        help="exercise real main-scene login/choose/logout UI over TLS (no private textures)")
+    parser.add_argument("--ui-screenshot", type=Path,
+                        help="with --app-ui, render the UI natively and save a private screenshot")
     parser.add_argument("--multi", action="store_true",
                         help="run two concurrent real Godot TLS clients against the same 30Hz World")
     parser.add_argument("--crossmap", action="store_true",
@@ -22,6 +26,10 @@ def main() -> int:
     parser.add_argument("--portal", action="store_true",
                         help="run two-client audited NPC interaction TLS transfer E2E")
     args = parser.parse_args()
+    if args.app_ui and (args.multi or args.crossmap or args.portal):
+        parser.error("--app-ui uses the single-client login fixture")
+    if args.ui_screenshot and not args.app_ui:
+        parser.error("--ui-screenshot requires --app-ui")
     repo = Path(__file__).resolve().parents[2]
     fixture = repo / "server/tests/SGTest.Server.LoginFixture/SGTest.Server.LoginFixture.csproj"
     env = os.environ.copy()
@@ -74,8 +82,9 @@ def main() -> int:
             raise RuntimeError("fixture never became ready")
         port, cert = match.group(1), match.group(2)
         client = subprocess.run(
-            [args.godot, "--headless", "--path", str(repo / "client"),
-             "--script", "res://tests/test_client_transport_tls.gd", "--", port, cert],
+            [args.godot, *([] if args.ui_screenshot else ["--headless"]), "--path", str(repo / "client"),
+             "--script", "res://tests/test_session_ui_tls.gd" if args.app_ui else "res://tests/test_client_transport_tls.gd", "--", port, cert,
+             *([str(args.ui_screenshot.resolve())] if args.ui_screenshot else [])],
             cwd=repo, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
             timeout=args.timeout)
         print(client.stdout, end="")

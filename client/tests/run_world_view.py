@@ -19,6 +19,8 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("godot", type=Path, help="Godot 4.7.2 desktop executable")
     parser.add_argument("--pack", type=Path, default=REPO / ".cache/client-release/assets/assets.pck")
+    parser.add_argument("--assets", type=Path, default=REPO / "client/assets",
+                        help="published manifests/terrain matching --pack (read-only raster reference)")
     parser.add_argument("--source", type=Path, default=REPO / ".cache/asset_converter/source")
     parser.add_argument("--report", type=Path, default=REPO / "reports/world_view_native.json")
     parser.add_argument("--timeout", type=int, default=180)
@@ -76,7 +78,7 @@ def main() -> int:
     if process.returncode == 0 and not engine_errors:
         for index, capture in enumerate(result.get("captures", [])):
             try:
-                checks.append(validate_capture(REPO / "client/assets", source, capture, originals))
+                checks.append(validate_capture(args.assets.resolve(), source, capture, originals))
             except Exception as exc:
                 validation_errors.append({"capture": index, "message": str(exc)})
     final = result.get("final", {})

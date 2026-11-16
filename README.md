@@ -9,7 +9,7 @@
 - `tools/tests/`：正式 Converter、原始格式及佈署包契約測試（**不是 Client/Server 程式**）；舊獨立轉換器與 Viewer 已從工作樹移除，可從 Git 歷史查閱。
 - `docs/`、`SPEC.md`、`todo.txt`：正式設計與原版研究證據；歷史完成紀錄見 `docs/research/FEATURE_DECISION_HISTORY.md#source-todo-pre-rebuild-20261115-txt`。
 - `client/assets/.gdignore`：**僅保留轉換輸出的定位標記**，不是 Godot Runtime。
-- `client/`：新 Godot 4.7.2 資源模組／測試專案；單一 AssetStore、真地形／景物 Renderer、雙圖檢視用 main scene 與可平移的呈現相機已有原生 GPU／像素驗證；WIRE001 已新增正式 compact-binary V1 `network/wire_codec.gd` 第一切片，**仍無 Transport worker、角色操作、正式 WorldState／登入，也不可當作可玩主程式**。`server/` 已建立 .NET 8 權威 Blocking／A*、單寫者 World、30Hz Host、compact-binary Wire、trusted Gateway，以及真 loopback 驗證過的 TLS 1.2/1.3 單連線 session；**Production Host 仍不開 listener，尚無真正 Account Auth/CharacterChoose、AOI、WorldReady 或 Godot 連線人物 E2E**；見 [Server 進度](server/README.md)。
+- `client/`：Godot 4.7.2 單一 AssetStore、真地形／景物 Renderer與雙圖檢視入口；正式ClientSession已獨立執行緒處理TLS／WorldState，main新增登入／選角／登出介面，實測UI→C# TLS→WorldReady／MoveReceipt。Server已有帳號／選角、權威Blocking／A*、30Hz World、AOI與跨圖協定測試；**Production Host listener、創角與玩家動畫／多人遊戲畫面整合仍未完成，不能稱作完整可玩Client**。目前證據以[todo.txt](todo.txt)為準。
 
 ## 現階段 MVP：Map15 主城 + Map13 尼西亞台地
 

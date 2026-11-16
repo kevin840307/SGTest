@@ -1,6 +1,7 @@
 extends Node
-## Thin entry and presentation input. No player commands or network loop.
+## UI composition and presentation input; ClientSession owns networking/reduction.
 const WorldView = preload("res://rendering/world_view.gd")
+const SessionPanel = preload("res://ui/session_panel.gd")
 var auto_start := true
 var world_view := WorldView.new()
 var _held := {}
@@ -8,6 +9,9 @@ var _dragging := false
 var _closing := false
 var _status := Label.new()
 var toolbar := PanelContainer.new()
+var session_panel := SessionPanel.new()
+var _map_buttons: Array[Button] = []
+var _pending_focus := {}
 
 
 func _ready() -> void:
@@ -33,14 +37,25 @@ func _ready() -> void:
 		button.name = "Map" + str(id)
 		button.text = "地圖 " + str(id)
 		button.focus_mode = Control.FOCUS_NONE
-		button.pressed.connect(func(): world_view.request_map(id))
+		button.pressed.connect(func(): _inspect_map(id))
 		row.add_child(button)
+		_map_buttons.append(button)
 	_status.add_theme_color_override("font_color",Color("f2d995"))
 	row.add_child(_status)
 	var help := Label.new()
 	help.text = "方向鍵／中鍵拖曳　Home 置中"
 	row.add_child(help)
-	world_view.status_changed.connect(func(message): _status.text = message)
+	world_view.status_changed.connect(_world_status)
+	layer.add_child(session_panel)
+	session_panel.visible = auto_start
+	session_panel.position = Vector2(16,64)
+	session_panel.connection_changed.connect(_connection_changed)
+	session_panel.world_ready.connect(_server_world_ready)
+	var login_toggle := Button.new()
+	login_toggle.text = "登入／連線"
+	login_toggle.focus_mode = Control.FOCUS_NONE
+	login_toggle.pressed.connect(func(): session_panel.visible = not session_panel.visible)
+	row.add_child(login_toggle)
 	get_viewport().size_changed.connect(_resize)
 	_resize()
 	if auto_start:
@@ -49,6 +64,18 @@ func _ready() -> void:
 		for i in args.size()-1:
 			if args[i] == "--pack":
 				pack = args[i+1]
+			elif args[i] == "--host":
+				session_panel.host_input.text = args[i+1]
+			elif args[i] == "--port" and args[i+1].is_valid_int():
+				session_panel.port_input.value = int(args[i+1])
+			elif args[i] == "--tls-name":
+				session_panel.tls_name = args[i+1]
+			elif args[i] == "--trusted-cert":
+				var cert := X509Certificate.new()
+				if cert.load(args[i+1]) == OK:
+					session_panel.trusted_chain = cert
+				else:
+					session_panel.status.text = "無法讀取指定憑證；未停用 TLS 驗證"
 		if world_view.open_pack(pack) == OK:
 			world_view.request_map(15)
 		else:
@@ -73,6 +100,10 @@ func _unhandled_key_input(event: InputEvent) -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed and session_panel.active and world_view.phase == "ready" and _pending_focus.is_empty():
+		session_panel.submit_move(world_view.camera.screen_to_world(event.position))
+		get_viewport().set_input_as_handled()
+		return
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_MIDDLE:
 		_dragging = event.pressed
 		get_viewport().set_input_as_handled()
@@ -87,6 +118,9 @@ func _process(delta: float) -> void:
 		if pending.decode_jobs + pending.texture_jobs == 0:
 			get_tree().quit()
 		return
+	if not _pending_focus.is_empty() and world_view.phase == "ready" and world_view.epoch == int(_pending_focus.epoch):
+		world_view.camera.set_focus(world_view.epoch,_pending_focus.position)
+		_pending_focus = {}
 	if world_view.phase == "ready":
 		var direction := Vector2(int(_held.has(KEY_RIGHT))-int(_held.has(KEY_LEFT)),int(_held.has(KEY_DOWN))-int(_held.has(KEY_UP)))
 		if direction != Vector2.ZERO:
@@ -101,4 +135,35 @@ func _notification(what: int) -> void:
 		_closing = true
 		_held.clear()
 		_dragging = false
+		session_panel.disconnect_session()
 		world_view.clear_map()
+
+
+func _connection_changed(active: bool) -> void:
+	for button in _map_buttons:
+		button.disabled = active
+	_held.clear()
+	_dragging = false
+	_pending_focus = {}
+	world_view.clear_map()
+	if active:
+		_status.text = "連線中"
+	else:
+		_status.text = "已登出・可切換離線地圖檢視"
+
+
+func _inspect_map(id: int) -> void:
+	if not session_panel.active:
+		world_view.request_map(id)
+
+
+func _server_world_ready(snapshot: Dictionary) -> void:
+	_pending_focus = {}
+	if world_view.request_map(int(snapshot.map_id)) == OK:
+		_pending_focus = {"epoch":world_view.epoch,"position":Vector2(snapshot.x,snapshot.y)}
+	else:
+		_status.text = "已連線，地圖素材未就緒"
+
+
+func _world_status(message: String) -> void:
+	_status.text = "地圖 " + str(world_view.map_id) + "｜已連線" if session_panel.active and world_view.phase == "ready" else message

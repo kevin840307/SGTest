@@ -265,3 +265,9 @@ The real Godot↔C# fixture now proves WorldReady reaches the threaded ClientSes
 ## 2026-11-16 NPC intent in the existing independent reducer
 
 `ClientSession.npc_interact(mapScopedSpawnId)` is a bounded, thread-safe intent. The transport sends only V1 NPCInteract `MapEpoch/Sequence/SpawnId`, never destination coordinates. The existing network-independent WorldState owns an in-flight NPC request, last authoritative status and result MapEpoch; it prevents duplicate in-flight interactions, blocks old-map movement while an accepted transfer is waiting for WorldReady, and handles both legal reply/WorldReady orderings. A rejected interaction leaves map/visible entities unchanged. When the new MapEpoch's WorldReady arrives, it resets the per-map interaction sequence and clears the old AOI. No new Renderer/Client singleton or frame-time polling is created.
+
+### MVP003-LOGIN-UI（2026-11-16）
+
+`ui/session_panel.gd`是現行ClientSession的UI adapter：登入／列表選角／登出；沿用憑證驗證、bounded intents與獨立transport/reducer threads。UI每50ms只讀snapshot，沒有在_process消化封包。main把WorldReady映射到唯一WorldView／AssetStore載入世代，地圖就緒後才定位Server提供的初始座標；連線時停用並守衛本地檢視Map按鈕，左鍵移動交給Server。Server MapEpoch與資源owner epoch保持分開。取消／錯誤／Scene退出停止Session，提交密碼立即從UI清除。
+
+真Godot main UI→正式C# TLS fixture的Auth／選角／WorldReady／MoveReceipt／logout PASS；錯誤返回與UI密碼／輸入鎖定亦驗證，CI加入--app-ui。原版素材回歸12 captures／38來源幀PASS；兩者不是完整網路角色畫面Gate。尚缺：創角、正式Host listener、玩家Paper-doll／位置插值／AOI視覺與NPC點擊；不因本UI切片標MVP完成。

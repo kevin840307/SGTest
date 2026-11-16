@@ -81,6 +81,8 @@ Visibility owner按連續fixed update及同epoch呼叫advance；候選由draw_li
 
 ## 雙圖檢視入口（2026-11-16；MVP002-CAMERA-ENTRY）
 
+以下為離線檢視切片的歷史範圍；目前main另有登入／選角／登出介面，見文末MVP003-LOGIN-UI。
+
 已新增正式的最小 Godot `client/app/main.tscn`（由 `project.godot` 的 main_scene 指向），**僅供原版 Map15／Map13 地圖及景物檢視**。它透過唯一 AssetStore 與已選定的 Terrain/World Canvas 載入私有 `assets.pck`；Map15／Map13 按鈕是本地 Viewer 切換，不是權威 NPC 傳點。方向鍵平移、中鍵拖曳、Home 置中、視窗 resize；UI 可攔截操作，失焦清除按鍵，切圖使用 owner epoch 丟棄過時載入。沒有 Player 控制、帳號、Socket、權威 Blocking、遊戲 AOI、AFK 或正式操作功能。
 
 ```powershell
@@ -132,3 +134,17 @@ The existing `client/tests/run_tls_login.py` supports `--crossmap --timeout 70`,
 ## 2026-11-16 audited NPC click network path
 
 Once WorldReady has arrived, gameplay UI may call `ClientSession.npc_interact(spawn_id)`; do not send destinations or use a test-only transfer RPC. Successful/denied results appear in WorldState `last_npc_result_status`, `last_npc_result_map_epoch`, `pending_npc_sequence` and `waiting_for_new_map`. Server validates the actual NPC from private runtime Converter `npcs.json`. The headless CI gate exercises two real Godot processes and the test-only audited metadata via `client/tests/run_tls_login.py --portal --timeout 70`. This does not itself create a clickable NPC UI, load original private PCK, or confirm legacy NPC distance; those remain NOT VERIFIED.
+
+## MVP003-LOGIN-UI：正式入口接現行Session
+
+main的「登入／連線」面板提供伺服器／埠／帳號／密碼、角色選擇與登出。TLS憑證預設由系統信任鏈驗證；私人測試CA可透過`-- --host 127.0.0.1 --port 7777 --tls-name localhost --trusted-cert C:/private/server-cert.pem --pack C:/private/assets.pck`指定。帳號／密碼不透過命令列傳入，密碼提交後清空。7777只是UI預填值，須配合實際listener；現行Production Host listener尚未接妥。
+
+ClientSession的兩個worker負責收包與Reducer；UI每50ms只讀已發布快照。收到WorldReady後沿唯一AssetStore載入對應map，連線期間本地Map按鈕不可切圖；地圖就緒時左鍵提交Server Move，尚未接玩家紙娃娃／平滑移動顯示。創角與正式NPC互動UI仍未實作。沒有私有素材時能完成登入，但不會假裝地圖已顯示。
+
+```powershell
+python client/tests/run_tls_login.py "C:/SGO/Godot/Godot_v4.7.2-stable_win64.exe" --app-ui --timeout 45
+# 可選原生UI截圖（保留私人本機，非headless）
+python client/tests/run_tls_login.py "C:/SGO/Godot/Godot_v4.7.2-stable_win64.exe" --app-ui --ui-screenshot reports/session_ui_login.png --timeout 45
+```
+
+Windows真TLS UI Gate與雙圖既有12張GPU／38原始幀回歸PASS。地形PCK必須含最新`int16_plus_one_wrap`契約；舊PCK會被拒絕。`run_world_view.py --pack PATH --assets MATCHING_PUBLISHED_ASSETS`可指定對應的只讀Oracle，避免改寫其他Session輸出。這些分別驗證UI網路路徑與Renderer回歸，尚非兩個真Client在原版地圖上的連線視覺E2E。
