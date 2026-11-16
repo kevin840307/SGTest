@@ -21,10 +21,8 @@ def intersects(a,b):
     return a[0] < b[0]+b[2] and a[0]+a[2] > b[0] and a[1] < b[1]+b[3] and a[1]+a[3] > b[1]
 
 
-def expected_commands(assets, capture):
-    world = json.loads((assets/f"maps/{capture['map']}/world.json").read_text(encoding='utf-8'))
-    placements, definitions = world['objects'],world['scenery_definitions']
-    view = [*capture['camera'],*capture['size']]
+def visible_roots(world,view):
+    placements = world['objects']
     visible = set()
     for index,row in enumerate(placements):
         if row['parent_index'] is not None:
@@ -34,12 +32,80 @@ def expected_commands(assets, capture):
         right,bottom = max(b[0]+b[2] for b in boxes),max(b[1]+b[3] for b in boxes)
         if intersects([left,top,right-left,bottom-top],view):
             visible.add(index)
+    return visible
+
+
+def expected_focus(world,capture):
+    main = world['scenery_order']['groups'][1]
+    buildings = {}
+    for i in main:
+        row = world['objects'][i]
+        definition = world['scenery_definitions'][row['definition']]
+        if definition['sorting_mode']==0 and definition['inside_cells'] and definition['outside_cells']:
+            buildings[i] = (row['p'],definition['front'])
+    states = {i:{'inside':False,'counter':0} for i in buildings}
+    selected,last = -1,-1
+    for step in capture['focus_inputs']:
+        if step['update'] != last+1:
+            raise ValueError('focus input trace has a gap')
+        visible = visible_roots(world,[*step['camera'],*capture['size']])
+        candidates = [i for i in main if i in visible]
+        chosen = -1
+        for i in candidates:
+            if i not in buildings:
+                continue
+            (px,py),(lx,ly,rx,ry) = buildings[i]
+            x,y = step['focus'][0]-px,step['focus'][1]-py
+            # Independent isometric rectangle formulation, rather than the
+            # four branch expressions in the production GDScript.
+            u,v = x+2*y,x-2*y
+            inside = abs(x)+abs(y)<=1000 and lx+2*ly<u<=rx+2*ry and lx-2*ly<=v<rx-2*ry
+            states[i]['inside'] = inside
+            if inside:
+                chosen = i
+        if chosen != selected:
+            if chosen >= 0:
+                states[chosen]['counter'] = 256
+            elif selected >= 0:
+                states[selected] = {'inside':False,'counter':256}
+        selected = chosen
+        for i in candidates:
+            if i in states:
+                states[i]['counter'] = max(0,states[i]['counter']-16)
+        last = step['update']
+    return {'active':True,'epoch':1 if capture['map']==15 else 2,'update':last,'selected':selected,
+            'transitions':{str(i):{'inside':s['inside'],'updates':(256-s['counter'])//16} for i,s in states.items()}}
+
+
+def expected_commands(assets, capture):
+    world = json.loads((assets/f"maps/{capture['map']}/world.json").read_text(encoding='utf-8'))
+    placements, definitions = world['objects'],world['scenery_definitions']
+    view = [*capture['camera'],*capture['size']]
+    visible = visible_roots(world,view)
+    focus = None
+    if capture.get('focus_mode'):
+        focus = expected_focus(world,capture)
+        if focus != capture['focus_state']:
+            raise ValueError('focus state differs from projected-coordinate replay')
     groups = [[{'index':i,'p':placements[i]['p'],**definitions[placements[i]['definition']]}
                for i in group if i in visible] for group in world['scenery_order']['groups']]
+    overlay = []
+    if focus is not None and focus['selected'] >= 0:
+        selected = focus['selected']
+        overlay = [{'index':i,'p':placements[i]['p'],**definitions[placements[i]['definition']]}
+                   for i in range(selected+1,selected+1+placements[selected]['child_count']) if intersects(placements[i]['bounds'],view)]
     for actor in capture['actors']:
         record = {**actor,'index':-1,'sorting_mode':1}
-        at = next((i for i,row in enumerate(groups[1]) if swap_required(row,record)),len(groups[1]))
-        groups[1].insert(at,record)
+        inside = False
+        if focus is not None and focus['selected'] >= 0:
+            building = placements[focus['selected']]
+            lx,ly,rx,ry = definitions[building['definition']]['front']
+            x,y = actor['p'][0]-building['p'][0],actor['p'][1]-building['p'][1]
+            u,v = x+2*y,x-2*y
+            inside = abs(x)+abs(y)<=1000 and lx+2*ly<u<=rx+2*ry and lx-2*ly<=v<rx-2*ry
+        target = overlay if inside else groups[1]
+        at = next((i for i,row in enumerate(target) if swap_required(row,record)),len(target))
+        target.insert(at,record)
     output = []
 
     def append(asset_id,clip,frame,p,index,slot,actor_id,alpha=255):
@@ -60,7 +126,7 @@ def expected_commands(assets, capture):
         a = appearances[slot]
         asset_id = a['atlas'].removesuffix('/atlas.json')
         frame = 0
-        if capture.get('timing') and definitions[row['definition']]['sorting_mode'] == 1:
+        if (capture.get('timing') or capture.get('focus_mode')) and definitions[row['definition']]['sorting_mode'] == 1:
             manifest = json.loads((assets/asset_id/'atlas.json').read_text(encoding='utf-8'))
             timeline = manifest.get('act',{}).get(a['clip'])
             if timeline:
@@ -72,9 +138,17 @@ def expected_commands(assets, capture):
                         frame = step['index']
                         break
                     tick -= duration
-        elif capture['inside'] and row['frames'] > 1:
+        elif not capture.get('timing') and not capture.get('focus_mode') and capture['inside'] and row['frames'] > 1:
             frame = 1
         append(asset_id,a['clip'],frame,row['p'],index,slot,'',alpha)
+
+    def append_children(index):
+        for child in range(index+1,index+1+placements[index]['child_count']):
+            definition = definitions[placements[child]['definition']]
+            appearances = definition['appearances']
+            dual = len(appearances)>1 and appearances[1] is not None
+            if definition['sorting_mode'] != 0 or dual:
+                placement(child,1 if dual else 0,255)
 
     for group in groups:
         for row in group:
@@ -88,6 +162,13 @@ def expected_commands(assets, capture):
                 dual = len(appearances)>1 and appearances[1] is not None
                 inside = capture['inside'] and item['child_count']>0
                 primary,alternate,children = (255,0,True) if inside else (0,255,False)
+                if focus is not None:
+                    transition = focus['transitions'].get(str(index),{'inside':False,'updates':16})
+                    remaining = 256-16*min(16,max(0,transition['updates']))
+                    inside = transition['inside']
+                    primary = 255 if inside else min(255,remaining)
+                    alternate = min(255,remaining if inside else 256-remaining)
+                    children = inside or remaining>0
                 if capture.get('timing') and dual and appearances[0]['source'] != appearances[1]['source']:
                     remaining = 256-16*min(16,max(0,capture['fade_updates']))
                     inside = capture['inside']
@@ -96,14 +177,21 @@ def expected_commands(assets, capture):
                     children = inside or remaining>0
                 placement(index,0,primary if definition['sorting_mode']==0 else 255)
                 if children:
-                    for child in range(index+1,index+1+placements[index]['child_count']):
-                        child_definition = definitions[placements[child]['definition']]
-                        child_appearances = child_definition['appearances']
-                        child_dual = len(child_appearances)>1 and child_appearances[1] is not None
-                        if child_definition['sorting_mode'] != 0 or child_dual:
-                            placement(child,1 if child_dual else 0,255)
+                    # The boolean above intentionally remains separate from the
+                    # selected-room overlay after the alternate appearance.
+                    append_children(index)
                 if dual:
                     placement(index,1,alternate)
+                if focus is not None and focus['selected']==index:
+                    for entry in overlay:
+                        if entry['index'] == -1:
+                            append(entry['asset'],entry['clip'],entry['frame'],entry['p'],-1,0,entry['id'])
+                        else:
+                            child_definition = definitions[placements[entry['index']]['definition']]
+                            child_appearances = child_definition['appearances']
+                            child_dual = len(child_appearances)>1 and child_appearances[1] is not None
+                            if child_definition['sorting_mode'] != 0 or child_dual:
+                                placement(entry['index'],1 if child_dual else 0,255)
     return output
 
 
@@ -194,10 +282,13 @@ def main():
     parser.add_argument('--rounds',type=int,default=1)
     parser.add_argument('--mode',choices=['canvas','sprites','all'],default='all')
     parser.add_argument('--timing',action='store_true',help='ACT default clock and intermediate building alpha snapshots')
+    parser.add_argument('--focus',action='store_true',help='Fixed-update building focus state with epoch and replay checks')
     parser.add_argument('--pack',type=Path,default=REPO/'.cache/client-release/assets/assets.pck')
     parser.add_argument('--source',type=Path,default=REPO/'.cache/asset_converter/source')
     parser.add_argument('--report',type=Path,default=REPO/'reports/world_render.json')
     args = parser.parse_args()
+    if args.focus and args.timing:
+        parser.error('choose --focus or --timing')
     if not 1 <= args.rounds <= 5:
         parser.error('rounds must be 1..5')
     godot = args.godot.resolve()
@@ -208,6 +299,7 @@ def main():
     modes = ['canvas','sprites'] if args.mode == 'all' else [args.mode]
     files = [*sorted((REPO/'client/rendering').glob('*.gd')),REPO/'client/tests/test_world.gd',
              REPO/'client/tests/world_sprites_candidate.gd',Path(__file__).resolve(),
+             REPO/'client/tests/building_visibility_fixture.gd',
              REPO/'tools/asset_converter/source/scenery.py',REPO/'tools/asset_converter/content/build_maps.py']
     hashes = {str(p.relative_to(REPO)):hashlib.sha256(p.read_bytes()).hexdigest() for p in files}
     for round_number in range(1,args.rounds+1):
@@ -221,6 +313,8 @@ def main():
                 command = [str(godot),'--path',str(REPO/'client'),'--rendering-method','gl_compatibility','--disable-vsync','--script','res://tests/test_world.gd','--',str(args.pack.resolve()),mode,str(folder.resolve())]
                 if args.timing:
                     command.append('timing')
+                elif args.focus:
+                    command.append('focus')
                 process = subprocess.Popen(command,cwd=REPO,stdout=stream,stderr=subprocess.STDOUT)
                 while process.poll() is None and time.monotonic()-begin < 180:
                     metrics.sample(process)
@@ -239,7 +333,7 @@ def main():
                         checks.append(validate_capture(REPO/'client/assets',args.source,capture,originals))
                     except Exception as error:
                         validation_errors.append(str(error))
-            passed = process.returncode == 0 and not errors and not result.get('failures') and len(checks)==(84 if args.timing else 24) and not validation_errors and all(c['pixels_over_tolerance']==0 for c in checks)
+            passed = process.returncode == 0 and not errors and not result.get('failures') and len(checks)==(84 if args.timing or args.focus else 24) and not validation_errors and all(c['pixels_over_tolerance']==0 for c in checks)
             run = {'round':round_number,'mode':mode,'status':'PASS' if passed else 'FAIL','exit_code':process.returncode,
                    'engine_errors':errors,'validation_errors':validation_errors,'checks':checks,'result':result,
                    'wall_seconds':round(time.monotonic()-begin,3),'cpu_seconds':metrics.cpu_seconds,'peak_rss_bytes':metrics.peak_rss}

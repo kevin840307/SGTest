@@ -108,3 +108,5 @@ Map15／Map13 原始 tile 地形已有唯一正式 Terrain Renderer；三種合�
 2026-11-16 實作狀態：原版root排序離線編譯與靜態景物／Actor前緣插入、原點／trim、兩appearance及室內子物件快照已實作並做原生GPU比較；正式選集中Canvas。這不是依Render FPS推動動畫／世界邏輯，frame與inside由外部明確輸入，目前沒有完整動畫時鐘、入口fade／自身ghost、Server或多人Client。Scenery主Gate維持未完成；證據／取樣限制／選型數據見CLIENT_ARCHITECTURE與TEST_PLAN。
 
 2026-11-16 景物時序切片：8個原版ACT已發布default25／50Hz時間metadata，涵蓋雙圖61個多幀景物實例；呈現以明確elapsed updates取樣，支援非零起始index與長空白幀。建築fade按原版256counter／每Step減16／alpha clamp255及原始疊層順序繪製，不依Render FPS累進。入口／版本狀態、dynamic action speed、NPC／Player完整時序與事件、P0壓縮品質、Server／多人仍未完成；詳CLIENT_ARCHITECTURE／TEST_PLAN。
+
+2026-11-16 建築焦點切片：已接連續fixed-update／epoch保護的inside呈現狀態與快照，保留原版last-wins、ShowInside／SetInOut差異、可見counter及室內Actor／家具額外排序。此為原版reference幾何與顯示規則實作，不是Server入口／碰撞或正式相機／多人Client完成；精度與驗證見CLIENT_ARCHITECTURE／TEST_PLAN。

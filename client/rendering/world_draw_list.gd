@@ -5,11 +5,13 @@ extends RefCounted
 const Order = preload("res://rendering/world_order.gd")
 const Fade = preload("res://rendering/building_fade.gd")
 const Timeline = preload("res://rendering/action_timeline.gd")
+const Visibility = preload("res://rendering/building_visibility.gd")
 var _world: Dictionary = {}
 var _assets: Dictionary = {}
 var _roots: Array = []
 var _timelines: Dictionary = {}
 var _animated: Dictionary = {}
+var _map_epoch := 0
 var error := OK
 
 
@@ -19,11 +21,14 @@ func clear() -> void:
 	_roots.clear()
 	_timelines.clear()
 	_animated.clear()
+	_map_epoch = 0
 	error = OK
 
 
-func configure(world: Dictionary, assets: Dictionary) -> Error:
+func configure(world: Dictionary, assets: Dictionary, map_epoch: int = 0) -> Error:
 	clear()
+	if map_epoch < 0:
+		return ERR_INVALID_PARAMETER
 	if world.get("scenery_schema") != "sgtest.scenery/v1" or world.get("scenery_order", {}).get("version") != 1:
 		return ERR_INVALID_DATA
 	var groups = world.scenery_order.get("groups", [])
@@ -95,6 +100,7 @@ func configure(world: Dictionary, assets: Dictionary) -> Error:
 					return ERR_INVALID_DATA
 			_timelines[key] = timeline
 		_animated[index] = _timelines[key]
+	_map_epoch = map_epoch
 	return OK
 
 
@@ -104,6 +110,37 @@ func frames_at_update(now: int, started_at: Dictionary = {}) -> Dictionary:
 	for index in _animated:
 		frames[index] = _animated[index].frame_at_update(now - int(started_at.get(index,0)))
 	return frames
+
+
+func visible_main_indices(view: Rect2) -> Array:
+	if _world.is_empty():
+		return []
+	var visible := {}
+	for root in _roots:
+		if root.bounds.intersects(view):
+			visible[root.index] = true
+	var indices: Array = []
+	for raw in _world.scenery_order.groups[1]:
+		if visible.has(int(raw)):
+			indices.append(int(raw))
+	return indices
+
+
+func build_focus(view: Rect2, actors: Array, snapshot: Dictionary, expected_update: int, frames: Dictionary = {}) -> Array:
+	if _map_epoch <= 0 or not snapshot.get("active",false) or snapshot.get("epoch") != _map_epoch or snapshot.get("update") != expected_update or expected_update < 0:
+		error = ERR_INVALID_PARAMETER
+		return []
+	var selected := int(snapshot.get("selected",-1))
+	var transitions: Dictionary = snapshot.get("transitions",{})
+	if selected < -1 or (selected >= 0 and (selected >= _world.objects.size() or _world.objects[selected].parent_index != null or not transitions.get(selected,{}).get("inside",false))):
+		error = ERR_INVALID_DATA
+		return []
+	if selected >= 0:
+		var definition: Dictionary = _world.scenery_definitions[_world.objects[selected].definition]
+		if int(definition.sorting_mode) != 0 or definition.get("front",[]).size() != 4 or definition.get("inside_cells",[]).is_empty() or definition.get("outside_cells",[]).is_empty():
+			error = ERR_INVALID_DATA
+			return []
+	return build(view,actors,{},frames,transitions,selected)
 
 
 static func _valid_clip(asset: Dictionary, clip: String) -> bool:
@@ -135,7 +172,7 @@ func _record(index: int) -> Dictionary:
 		"sorting_mode":definition.sorting_mode,"front":definition.get("front", [])}
 
 
-func build(view: Rect2, actors: Array = [], inside: Dictionary = {}, frames: Dictionary = {}, transitions: Dictionary = {}) -> Array:
+func build(view: Rect2, actors: Array = [], inside: Dictionary = {}, frames: Dictionary = {}, transitions: Dictionary = {}, selected_overlay: int = -1) -> Array:
 	error = OK
 	if _world.is_empty():
 		error = ERR_UNCONFIGURED
@@ -149,6 +186,11 @@ func build(view: Rect2, actors: Array = [], inside: Dictionary = {}, frames: Dic
 		for index in _world.scenery_order.groups[group]:
 			if visible.has(int(index)):
 				groups[group].append(_record(int(index)))
+	var overlay: Array = []
+	if selected_overlay >= 0:
+		for child in range(selected_overlay+1,selected_overlay+1+int(_world.objects[selected_overlay].child_count)):
+			if _bounds(_world.objects[child].bounds).intersects(view):
+				overlay.append(_record(child))
 	# Actor order is the caller's stable presentation order, independent of camera.
 	for actor in actors:
 		if not actor.has_all(["id", "p", "asset", "clip"]) or not _assets.has(actor.asset) or not _valid_clip(_assets[actor.asset], actor.clip):
@@ -157,7 +199,12 @@ func build(view: Rect2, actors: Array = [], inside: Dictionary = {}, frames: Dic
 		var record: Dictionary = actor.duplicate()
 		record.sorting_mode = 1
 		record.index = -1
-		Order.insert_record(groups[1], record)
+		var route_inside := false
+		if selected_overlay >= 0:
+			var building: Dictionary = _world.objects[selected_overlay]
+			var definition: Dictionary = _world.scenery_definitions[building.definition]
+			route_inside = Visibility.entrance(Vector2(building.p[0],building.p[1]),definition.front,record.p)
+		Order.insert_record(overlay if route_inside else groups[1], record)
 	var commands: Array = []
 	for group in groups:
 		for record in group:
@@ -177,14 +224,30 @@ func build(view: Rect2, actors: Array = [], inside: Dictionary = {}, frames: Dic
 				var dual: bool = definition.appearances.size() > 1 and definition.appearances[1] != null
 				_placement(commands,index,view,0,frames,int(fade.primary_alpha) if int(definition.sorting_mode) == 0 else 255)
 				if bool(fade.children):
-					for child in range(index + 1, index + int(_world.objects[index].child_count) + 1):
-						var child_definition: Dictionary = _world.scenery_definitions[_world.objects[child].definition]
-						var child_slot := 1 if child_definition.appearances.size() > 1 and child_definition.appearances[1] != null else 0
-						if int(child_definition.sorting_mode) != 0 or child_slot == 1:
-							_placement(commands, child, view, child_slot, frames,255)
+					_children(commands,index,view,frames)
 				if dual:
 					_placement(commands,index,view,1,frames,int(fade.alternate_alpha))
+				if index == selected_overlay:
+					# DIRECT DrawMapList 0x0052A2FF–0x0052A314: selected room's
+					# visible children are drawn again after the building Draw.
+					for inside_record in overlay:
+						if inside_record.index == -1:
+							_append(commands,_assets[inside_record.asset],inside_record.clip,int(inside_record.get("frame",0)),inside_record.p,view,-1,0,inside_record.id)
+						else:
+							_child(commands,int(inside_record.index),view,frames)
 	return commands if error == OK else []
+
+
+func _children(commands: Array, index: int, view: Rect2, frames: Dictionary) -> void:
+	for child in range(index + 1, index + int(_world.objects[index].child_count) + 1):
+		_child(commands,child,view,frames)
+
+
+func _child(commands: Array, child: int, view: Rect2, frames: Dictionary) -> void:
+	var definition: Dictionary = _world.scenery_definitions[_world.objects[child].definition]
+	var slot := 1 if definition.appearances.size() > 1 and definition.appearances[1] != null else 0
+	if int(definition.sorting_mode) != 0 or slot == 1:
+		_placement(commands,child,view,slot,frames,255)
 
 
 func _placement(commands: Array, index: int, view: Rect2, slot: int, frames: Dictionary, alpha: int) -> void:

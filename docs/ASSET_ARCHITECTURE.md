@@ -71,3 +71,5 @@ Map terrain/scenery 和 Enemy 必須分離。Server Population 定義怪物出�
 2026-11-16 靜態World切片：原版三組景物順序由唯一Converter離線編譯為scenery_order，不把非全序predicate交給一般sort；Client在可見root順序中插入Actor，將FrameTable origin/trim、兩appearance與children轉成集中Canvas命令。原生比較後正式選world_canvas，Sprite2D候選僅tests。144 GPU captures／110個原始SPR幀／卸載Texture基線驗證PASS；取樣精度與P0壓縮品質限制見CLIENT_ARCHITECTURE，並非完整原版時序或MVP PASS。下一階段仍須比較全palette預載與逐視野預取，不能把本輪benchmark的全palette前提當成最終資源策略。
 
 2026-11-16 景物時序切片：8個原版ACT已發布default25／50Hz時間metadata，涵蓋雙圖61個多幀景物實例；呈現以明確elapsed updates取樣，支援非零起始index與長空白幀。建築fade按原版256counter／每Step減16／alpha clamp255及原始疊層順序繪製，不依Render FPS累進。入口／版本狀態、dynamic action speed、NPC／Player完整時序與事件、P0壓縮品質、Server／多人仍未完成；詳CLIENT_ARCHITECTURE／TEST_PLAN。
+
+2026-11-16 建築焦點切片：已接連續fixed-update／epoch保護的inside呈現狀態與快照，保留原版last-wins、ShowInside／SetInOut差異、可見counter及室內Actor／家具額外排序。此為原版reference幾何與顯示規則實作，不是Server入口／碰撞或正式相機／多人Client完成；精度與驗證見CLIENT_ARCHITECTURE／TEST_PLAN。

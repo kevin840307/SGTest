@@ -182,3 +182,15 @@ Native fixture包含逐fixed-update counter對照2000步、30/60/120與AFK不取
 兩候選退出Store counts全0、texture counter回13,373,731 bytes、engine error/leak=0；峰值Process RSS約222.35／221.60MiB（包含更多capture／readback，非steady-state改善證據）。`run_world.py --mode canvas --report reports/scenery_time_endpoints_verified.json` 原24端點回歸PASS；`run_asset_store.py --script tests/test_asset_store_epochs.gd --report reports/scenery_time_epochs.json` 三競態情境PASS。PCK SHA與來源profile見ASSET_CONVERTER；此輪不重新選Renderer、不將含PNG的wall time當Frame效能。CI NOT VERIFIED。
 
 尚存：入口與inside事件phase／版本去重、自身ghost、visible-only原版phase政策、ACT token callback／dynamic speed、NPC／Player完整Animator、P0品質／非4倍數壓縮頁面、視野預取／AFK實機、多開／Server／多人E2E。時間取樣是純呈現函式，沒有把render呼叫當權威fixed tick。
+
+### 2026-11-16 建築focus狀態／室內Actor分流
+
+`python client/tests/run_world.py "C:\SGO\Godot\Godot_v4.7.2-stable_win64_console.exe" --focus --report reports/building_focus_release.json`：Canvas與重用Sprite2D各1次Native PASS，兩圖／720p與1080p／3組進出路徑（含Map15 Court root486及child487）／7個fixed時點，總168 captures、105個source SPR幀。每張先用Python獨立u/v投影矩形重播focus trace，核對selected／counter／epoch／update，再比對所有commands及GPU composite。相機中心隨focus走訪、同畫面fixture_actor與outside_actor分走室內額外清單／main；不是兩個真Client或多人網路驗收。source SHA前後不變，engine error/leak=0，Store counts全0，Texture counter均回13,373,731 bytes；同既有sampler envelope＋alpha量化規則，max error=2，不稱原圖RGB零差異。PCK未改，沿用02d05d9a…6cbb9d4。
+
+Native fixture：2501點half-open diamond邊界（61×41）、Manhattan1000/1001、兩組非空門檻（點座標刻意放遠證明未誤用）、同區不重啟counter、A→B、重疊last-wins、不可見exit/resume、Snapshot獨立、失敗configure atomic、clear tombstone／新epoch／duplicate／stale／gap／倒序／未知candidate拒絕；插值Actor±0.25保留連續幾何。build_focus拒絕舊epoch／錯expected update。`test_building_focus.gd` headless另做400次fixed update、30/60/120/0呈現採樣，完整trace一致（Render0仍有assertion用snapshot，不是實機AFK／network測試），source hash紀錄reports/building_focus_sampling.json。
+
+負向controls（reports/building_focus_evidence.json）：錯selected／counter在state replay即拒絕；省略selected room的第二次child draw，35→34 commands而拒絕；Actor移到地板之前的錯誤順序也拒絕。兩候選Peak RSS約225.11／221.61MiB，含capture/readback，不宣稱perf提升或OS dedicated VRAM回基線。正式仍用既有Canvas選型。
+
+`python -m unittest discover -s tools/tests -p "test_*.py" -q` 79 PASS；`run_world.py --mode canvas --report reports/building_focus_legacy.json` 原24端點回歸PASS；AssetStore epochs三情境PASS（reports/building_focus_epochs.json）。初輪focus測試舊手動frame1覆蓋ACT frame輸入，已排除並重跑；只以building_focus_release作完整新狀態／室內分流證據。CI NOT VERIFIED。
+
+未驗證：HK2入口函式逐指令等版／實際舊Client動態畫面、真正相機controller／Player／傳點、odd viewport／zoom、正式Wire版本／Server碰撞與權限／多人E2E；目前重現的是可定位reference的呈現規則。P0／視野預取／完整World lifecycle與實機AFK等Gate不因此完成。

@@ -201,3 +201,21 @@ AssetStore仍是唯一資產入口；測試palette改遍歷所有appearance，Ma
 DIRECT來源同SHA Paradise.exe.lst：CSGOMap::Update 0x004CF1B2透過vtable+0x60（0x005C3958=CSGOMap::UpdateMapObj）到CELMap2D::UpdateMapObj 0x0052A08B；它先InsideBuildObjEdit，再UpdateHandle。CELBldg2D::Update 0x00549AF5經draw-logic vtable+0x18（0x005C5B34）呼叫Step 0x0055050A；SetInOut 0x005504DE將counter設256。Draw 0x005506CE依inside及counter安排primary／children／alternate；CDDxDrawObj::Draw 0x005188BF的0x005188F5–0x00518919截alpha到255並除255。CELStaticObj2D ctor 0x0054A172／InitAction 0x005514C7使用字面action，Step 0x005510FE呼叫DrawObj.Update→CELxnObj::Update 0x005419A7→xnAction.Update 0x005576E0。50Hz呼叫鏈與HK2 timing primitive的舊稽核是AUDIT；本輪重新計算Client.bin／SGOClient.bin SHA仍精確等於9b45569a…dd13147／6e64368a…6cb3be，同版本原始證據未變，未宣稱實際啟動舊Client逐幀觀測。
 
 Native回歸：固定tick逐步counter對照2000步、30/60/120與AFK跳過取樣、每placement起始phase、非loop／0-duration／超長elapsed／錯profile與fractional raw_time、共享Atlas的BLG/static型別隔離、fade0/1/8/15/16與children規則。GPU用兩圖／兩解析度／7組進出fade與ACT時刻，見TEST_PLAN。原版visible-only更新／離開視野後phase由未來owner明確決定；本sampler只消耗elapsed updates，不把展示採樣率當原版時間。ACT events僅保留metadata，不在render取樣觸發聲音／特效，更不當權威戰鬥事件。
+
+## 建築焦點狀態／版本與室內排序（2026-11-16）
+
+`building_visibility.gd`是單一owner的純呈現狀態，不是Server碰撞或進門權限。configure接world、單調presentation MapEpoch及first_update；advance只接受相同epoch、下一個連續fixed update、world pixel focus與按已編譯main順序排列的可見root subset。重複／舊tick、缺tick、舊epoch、重複／倒序／未知candidate一律失敗且不改狀態；缺失trace不能靠最新位置猜中間進出，owner須補播或以新epoch重建。clear保留epoch tombstone且設inactive，舊async configure不能重新接回。資料只存位置／前緣／小型counter，沒有Texture、網路／DB、_process或自行計時；snapshot是新建的獨立資料，可交給呈現端。
+
+原版CheckPointInsideBuilding的四條邊相當於投影矩形：relative `u=x+2y, v=x-2y`，`Lx+2Ly<u<=Rx+2Ry`及`Lx-2Ly<=v<Rx-2Ry`。上下邊有開閉差異，不能用通用contains-polygon的邊界預設。CheckBldgEntrance還要求Manhattan距離<=1000，兩組legacy點資料count皆非零；0x005499E9已無條件跳return，後段逐點比對在這份reference是不可達碼。因而**不拿inside_cells/outside_cells座標當可走格／真正入口點**。Map15有15個可符合門檻的main root、Map13為0；篩選純資料條件，尚未聲稱HK2 executable的整個入口函式逐指令等版。
+
+每次先對可見建築ShowInside（只改bool、不重設counter），最後一個inside root成為selected；selected變成新建築才對新者SetInOut(true)，selected變None才對舊者SetInOut(false)。直接A→B不額外替A重啟退出fade；重疊時其他inside也可立即顯示primary，只有最後者重設。接著只替可見candidate Step counter，故offscreen舊建築可在exit後保留256，恢復可見才繼續。這是reference策略，不用一般「每個bool變化都reset」取代，也不讓Render回呼重設時間。
+
+`world_draw_list.configure(..., map_epoch)`與`build_focus(view, actors, snapshot, expected_update, frames)`連接狀態：epoch／active／expected update不符拒絕，不消耗舊map快照。expected_update須來自owner最新fixed狀態；這不是Renderer維護一份Render FPS clock，也不是正式Wire協定已完成。`visible_main_indices`按目前Renderer的保守root+children bounds產生候選，與原版固定800×600 SIF culling不宣稱逐bit等同。focus本身由caller傳入；legacy是camera top-left+(400,300)，新相機應明確轉換viewport center至world，不能偷偷用畫面座標／解像度改Server權威位置。
+
+完整房間繪製還需要額外清單：selected室內建築自身Draw後，DrawMapList再次畫可見children；OnlineObjectShowHandle把位於該房間幾何內的Actor按同一原版predicate插入該額外清單，其餘Actor留main list。新版build_focus保留這個順序，讓室內角色在地板／屋頂之後與家具排序；不是把所有Actor都拉到最上層。額外清單可使child出現兩次，不能只因看似冗餘而刪除。外部插值Actor保留fractional位置作連續幾何判定，不在入口測試內截斷到int；focus fixed input仍是明確Vector2i。
+
+DIRECT仍為同SHA Paradise.exe.lst：InsideBuildObjEdit 0x0052A3EF–0x0052A59B（0x0052A471–0x0052A490 camera center；ShowInside與last pointer／SetInOut分支），ShowInside 0x0052B2F0只寫23Ch；Bldg ctor 0x0054866D寫RTType=1（GetRTType函式本體於lst折疊，依具名call與欄位串接）。CheckPointInsideBuilding 0x00549879–0x0054994D、CheckBldgEntrance 0x00549950–0x00549A9D。InsideBuildObjEdit 0x0052A4D3取子清單，GetvisibleBldgObjList 0x00529F63先清空額外array；DrawMapList 0x0052A2FF–0x0052A314在selected root後DrawHandle。OnlineObjectShowHandle 0x0052A5D1–0x0052A6C8把室內Actor插入0A4h，外部插入5Ch。這些研究結論沒有複製組語進Git。
+
+原版動態舊Client視覺、真正相機／Player controller、zoom／odd viewport、packet EntityRevision／ConnectionEpoch、Server碰撞／權限、NPC規則與多人E2E仍NOT VERIFIED。MapEpoch目前是呈現owner的generation契約，不把診斷中使用的AssetStore scope序號當成正式Server protocol定版。Render0 numeric trace不等於實際多人AFK驗收。P0壓縮品質／視野預取與完整World記憶體斜率仍待後續Gate。
+
+本切片驗證：building_focus_release的兩候選共168 captures、105 source frames，含同畫面室內／室外Actor、Court子物件兩次draw，Python投影座標重播與GPU合成PASS；400 fixed updates在30/60/120/0呈現採樣下完整trace一致。負向錯selected／counter／少overlay／錯Actor順序全部拒絕，詳細命令與精度見TEST_PLAN。普通build保留手動快照相容；實際focus路徑應使用帶selected與epoch的build_focus，才能包含原版OnlineObjectShowHandle室內分流。

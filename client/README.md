@@ -64,3 +64,12 @@ python client/tests/run_world.py "C:\SGO\Godot\Godot_v4.7.2-stable_win64_console
 ```
 
 `world_draw_list.frames_at_update(fixed_now, started_at)`按8個原版ACT的raw時間回傳景物幀，再傳給build的frames參數；completed fixed updates由owner提供，不累加Render delta。build的transitions參數可提供`{placement_index:{inside:true,updates:8}}`，按原版primary／children／alternate順序及255-clamped alpha繪製中間狀態。沒有ACT的素材不會自訂FPS；BLG不因共享同Atlas而誤啟動static action。這些是呈現函式，不代表入口偵測、WorldState／網路或完整動畫事件已完成。
+
+## 建築焦點走訪
+
+```powershell
+python client/tests/run_world.py "C:\SGO\Godot\Godot_v4.7.2-stable_win64_console.exe" --focus --report reports/building_focus_release.json
+& "C:\SGO\Godot\Godot_v4.7.2-stable_win64.exe" --headless --path client --script res://tests/test_building_focus.gd -- "C:\SGO\SRC\SGTest\reports\building_focus_sampling_result.json"
+```
+
+Visibility owner按連續fixed update及同epoch呼叫advance；候選由draw_list.visible_main_indices(view)取得，snapshot交給build_focus並檢查owner期望update。此為純視覺：相機focus決定屋頂內外，沒有改Server Blocking／碰撞。室內Actor與家具在selected建築後排序，室外Actor留一般main list；角色範例仍是fixture NPC，不是可玩或已連線角色。source與邊界／選擇規則見CLIENT_ARCHITECTURE。

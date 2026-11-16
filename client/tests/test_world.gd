@@ -9,6 +9,8 @@ const TerrainData = preload("res://rendering/terrain_data.gd")
 const Terrain = preload("res://rendering/terrain.gd")
 const Timeline = preload("res://rendering/action_timeline.gd")
 const Fade = preload("res://rendering/building_fade.gd")
+const VisibilityFixture = preload("res://tests/building_visibility_fixture.gd")
+const Visibility = preload("res://rendering/building_visibility.gd")
 var store = Store.new()
 var failures: Array = []
 var captures: Array = []
@@ -33,6 +35,7 @@ func check(condition: bool, message: String) -> void:
 
 
 func fixture() -> void:
+	VisibilityFixture.run(check)
 	for x in range(-40,41):
 		var boundary := -minf(absf(x),20.0)/2.0
 		for y in range(-32,4):
@@ -153,6 +156,15 @@ func render_memory() -> Dictionary:
 		"buffer":RenderingServer.get_rendering_info(RenderingServer.RENDERING_INFO_BUFFER_MEM_USED)}
 
 
+func interior_focus(building: Dictionary) -> Vector2i:
+	var f: Array = building.front
+	var upper := minf(float(f[1])-float(f[0])/2.0,float(f[3])+float(f[2])/2.0)
+	var lower := maxf(float(f[1])+float(f[0])/2.0,float(f[3])-float(f[2])/2.0)
+	var point: Vector2i = building.p + Vector2i(0,int(floor((lower+upper)/2.0)))
+	check(Visibility.entrance(building.p,f,point),"Real building interior sample invalid")
+	return point
+
+
 func _run() -> void:
 	var args := OS.get_cmdline_user_args()
 	if args.size() not in [3,4] or args[1] not in ["canvas","sprites"]:
@@ -160,6 +172,7 @@ func _run() -> void:
 		return
 	output = args[2]
 	var timing := args.size() == 4 and args[3] == "timing"
+	var focus_mode := args.size() == 4 and args[3] == "focus"
 	fixture()
 	check(store.open_pack(args[0]) == OK,"Pack load failed")
 	store.asset_failed.connect(func(_owner,_epoch,id,reason):check(false,id+": "+reason))
@@ -201,7 +214,7 @@ func _run() -> void:
 		invalid.scenery_order.groups[1].append(invalid.scenery_order.groups[1][0])
 		check(list.configure(invalid,assets) == ERR_INVALID_DATA,"Duplicate root order accepted")
 		var configure_begin := Time.get_ticks_usec()
-		check(list.configure(world,assets) == OK,"World configuration failed")
+		check(list.configure(world,assets,epoch) == OK,"World configuration failed")
 		var configure_us := Time.get_ticks_usec()-configure_begin
 		if timing:
 			check(not list._timelines.is_empty(),"No real scenery ACT was loaded")
@@ -229,36 +242,79 @@ func _run() -> void:
 		var jumps: Array = []
 		for size in [Vector2i(1280,720),Vector2i(1920,1080)]:
 			view.size = size
+			var camera_index := 0
 			for camera in cameras:
+				var visibility := Visibility.new()
+				var focus_inputs: Array = []
+				var inside_focus := Vector2i(camera+Vector2(size)/2.0)
+				var outside_focus := inside_focus
+				if focus_mode:
+					check(visibility.configure(world,epoch) == OK,"Focus state configure failed")
+					var eligible: Array = visibility._buildings.keys()
+					if not eligible.is_empty():
+						var chosen: int = eligible[camera_index % eligible.size()]
+						if camera_index == 2:
+							for index in eligible:
+								if int(world.objects[index].child_count) > 0:
+									chosen = index
+									break
+						var building: Dictionary = visibility._buildings[chosen]
+						inside_focus = interior_focus(building)
+						outside_focus = building.p + Vector2i(0,100)
+				camera_index += 1
 				var phases: Array = [{"inside":false,"updates":-1,"elapsed":0},{"inside":true,"updates":-1,"elapsed":0}]
 				if timing:
 					phases = [{"inside":false,"updates":0,"elapsed":0},{"inside":true,"updates":1,"elapsed":8},
 						{"inside":true,"updates":8,"elapsed":9},{"inside":true,"updates":16,"elapsed":81},
 						{"inside":false,"updates":1,"elapsed":560},{"inside":false,"updates":8,"elapsed":561},
 						{"inside":false,"updates":16,"elapsed":1000000}]
+				if focus_mode:
+					phases = [{"inside":false,"elapsed":0,"updates":-1},{"inside":true,"elapsed":1,"updates":-1},
+						{"inside":true,"elapsed":8,"updates":-1},{"inside":true,"elapsed":16,"updates":-1},
+						{"inside":false,"elapsed":17,"updates":-1},{"inside":false,"elapsed":24,"updates":-1},
+						{"inside":false,"elapsed":32,"updates":-1}]
 				for phase in phases:
 					var inside_mode: bool = phase.inside
+					var sample_camera: Vector2 = camera
+					var focus := inside_focus if inside_mode else outside_focus
+					if focus_mode:
+						sample_camera = Vector2(focus) - Vector2(size)/2.0
 					var inside := {}
 					if inside_mode:
 						for index in world.objects.size():
 							if int(world.objects[index].child_count) > 0:
 								inside[index] = true
-					var actors := [{"id":"fixture_actor","p":camera+Vector2(640,420),"asset":"npcs/npc001","clip":"NPC001","frame":0}]
+					var actors := [{"id":"fixture_actor","p":Vector2(focus) if focus_mode else camera+Vector2(640,420),"asset":"npcs/npc001","clip":"NPC001","frame":0}]
+					if focus_mode:
+						actors.append({"id":"outside_actor","p":Vector2(outside_focus)+Vector2(30,0),"asset":"npcs/npc001","clip":"NPC001","frame":0})
 					var frames := {}
-					if timing:
-						frames = list.frames_at_update(int(phase.elapsed))
+					if timing or focus_mode:
+						frames = list.frames_at_update(int(phase.elapsed)+(1 if focus_mode else 0))
 					var transitions := {}
 					for index in world.objects.size():
 						var definition: Dictionary = world.scenery_definitions[world.objects[index].definition]
-						if not timing and inside_mode and int(world.objects[index].frames) > 1:
+						if not timing and not focus_mode and inside_mode and int(world.objects[index].frames) > 1:
 							frames[index] = 1
 						if timing and world.objects[index].parent_index == null and definition.sorting_mode == 0 and definition.appearances.size() > 1 and definition.appearances[1] != null and definition.appearances[0].source != definition.appearances[1].source:
 							transitions[index] = {"inside":inside_mode,"updates":phase.updates}
 					var first_begin := Time.get_ticks_usec()
-					var commands: Array = list.build(Rect2(camera,Vector2(size)),actors,inside,frames,transitions)
+					var focus_snapshot := {}
+					var commands: Array
+					if focus_mode:
+						for tick in range(visibility.snapshot().update+1,int(phase.elapsed)+1):
+							check(visibility.advance(epoch,tick,focus,list.visible_main_indices(Rect2(sample_camera,Vector2(size)))) == OK,"Focus trace step failed")
+							focus_inputs.append({"update":tick,"focus":[focus.x,focus.y],"camera":[sample_camera.x,sample_camera.y]})
+						focus_snapshot = visibility.snapshot()
+						var stale := focus_snapshot.duplicate(true)
+						stale.epoch = epoch-1
+						check(list.build_focus(Rect2(sample_camera,Vector2(size)),actors,stale,int(phase.elapsed),frames).is_empty() and list.error == ERR_INVALID_PARAMETER,"Old map focus snapshot accepted")
+						check(list.build_focus(Rect2(sample_camera,Vector2(size)),actors,focus_snapshot,int(phase.elapsed)+1,frames).is_empty() and list.error == ERR_INVALID_PARAMETER,"Old update focus snapshot accepted")
+						commands = list.build_focus(Rect2(sample_camera,Vector2(size)),actors,focus_snapshot,int(phase.elapsed),frames)
+					else:
+						commands = list.build(Rect2(camera,Vector2(size)),actors,inside,frames,transitions)
 					check(list.error == OK,"Draw list failed")
-					view.canvas_transform = Transform2D(0,-camera)
-					terrain.set_view_rect(Rect2(camera,Vector2(size)))
+					view.canvas_transform = Transform2D(0,-sample_camera)
+					terrain.set_view_rect(Rect2(sample_camera,Vector2(size)))
 					renderer.present(commands)
 					await RenderingServer.frame_post_draw
 					await RenderingServer.frame_post_draw
@@ -266,10 +322,14 @@ func _run() -> void:
 						first_view_us = Time.get_ticks_usec()-first_begin
 					var file := output.path_join("capture_%d.png" % captures.size())
 					view.get_texture().get_image().save_png(file)
-					captures.append({"map":map_id,"camera":[camera.x,camera.y],"size":[size.x,size.y],"inside":inside_mode,
-						"timing":timing,"fade_updates":phase.updates,"elapsed_updates":phase.elapsed,
+					var actor_trace: Array = []
+					for actor in actors:
+						actor_trace.append({"id":actor.id,"p":[actor.p.x,actor.p.y],"asset":actor.asset,"clip":actor.clip,"frame":actor.frame})
+					captures.append({"map":map_id,"camera":[sample_camera.x,sample_camera.y],"size":[size.x,size.y],"inside":inside_mode,
+						"timing":timing,"focus_mode":focus_mode,"focus_state":focus_snapshot,"focus_inputs":focus_inputs.duplicate(true),
+						"fade_updates":phase.updates,"elapsed_updates":int(phase.elapsed)+(1 if focus_mode else 0),
 						"sampled_frames":frames,
-						"actors":[{"id":"fixture_actor","p":[actors[0].p.x,actors[0].p.y],"asset":"npcs/npc001","clip":"NPC001","frame":0}],
+						"actors":actor_trace,
 						"commands":save_commands(commands),"file":file})
 					commands = []
 			# Same camera trace: preparation plus rendering, reused Sprite2D nodes.

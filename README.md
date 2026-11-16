@@ -73,3 +73,5 @@ powershell -ExecutionPolicy Bypass -File tools/asset_converter/verify_converter.
 2026-11-16 景物繪製切片：Converter離線產出原版三組root排序，正式world_canvas＋world_draw_list保留前緣插入、兩欄、子物件及逐幀origin/trim；目前以明確指定的frame／inside狀態驗證，尚無原版動畫時間／fade cadence或可玩main scene。集中Canvas與重用Sprite2D各三輪原生回歸PASS（144 captures／110原始SPR幀），選較簡單Canvas；不是多人／Server／MVP PASS。命令與限制見CLIENT_ARCHITECTURE／TEST_PLAN。
 
 2026-11-16 景物時序切片：8個原版ACT已發布default25／50Hz時間metadata，涵蓋雙圖61個多幀景物實例；呈現以明確elapsed updates取樣，支援非零起始index與長空白幀。建築fade按原版256counter／每Step減16／alpha clamp255及原始疊層順序繪製，不依Render FPS累進。入口／版本狀態、dynamic action speed、NPC／Player完整時序與事件、P0壓縮品質、Server／多人仍未完成；詳CLIENT_ARCHITECTURE／TEST_PLAN。
+
+2026-11-16 建築焦點切片：已接連續fixed-update／epoch保護的inside呈現狀態與快照，保留原版last-wins、ShowInside／SetInOut差異、可見counter及室內Actor／家具額外排序。此為原版reference幾何與顯示規則實作，不是Server入口／碰撞或正式相機／多人Client完成；精度與驗證見CLIENT_ARCHITECTURE／TEST_PLAN。
