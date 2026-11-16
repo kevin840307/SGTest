@@ -18,7 +18,8 @@ public enum WireOpcode : ushort
     WorldReady = 20,
     EntitySpawn = 21,
     EntityDespawn = 22,
-    EntityDelta = 23
+    EntityDelta = 23,
+    SelfState = 24
 }
 
 public enum AuthWireStatus : byte { Success = 0, InvalidCredentials = 1, Disabled = 2 }
@@ -380,7 +381,7 @@ public static class WireProtocol
 
     public static byte[] EncodeEntityState(WireOpcode opcode, EntityStateWire value)
     {
-        if (opcode is not (WireOpcode.EntitySpawn or WireOpcode.EntityDelta) ||
+        if (opcode is not (WireOpcode.EntitySpawn or WireOpcode.EntityDelta or WireOpcode.SelfState) ||
             !ValidMapState(value.ReceiverMapEpoch, value.ServerTick, value.ActorId,
                            value.MapId, value.X, value.Y) ||
             value.ConnectionEpoch <= 0 || value.EntityMapEpoch <= 0 || value.Revision <= 0)
@@ -405,7 +406,7 @@ public static class WireProtocol
     {
         opcode = 0; value = default;
         if (!TryReadHeader(frame, out var header) ||
-            header.Opcode is not (WireOpcode.EntitySpawn or WireOpcode.EntityDelta) ||
+            header.Opcode is not (WireOpcode.EntitySpawn or WireOpcode.EntityDelta or WireOpcode.SelfState) ||
             frame[68] > 1)
             return false;
         opcode = header.Opcode;
@@ -478,7 +479,7 @@ public static class WireProtocol
             12 => WireOpcode.CharacterList, 13 => WireOpcode.CharacterChoose,
             14 => WireOpcode.CharacterChooseResult,
             20 => WireOpcode.WorldReady, 21 => WireOpcode.EntitySpawn,
-            22 => WireOpcode.EntityDespawn, 23 => WireOpcode.EntityDelta, _ => 0
+            22 => WireOpcode.EntityDespawn, 23 => WireOpcode.EntityDelta, 24 => WireOpcode.SelfState, _ => 0
         };
         if (opcode == 0) return false;
         bool sizeOk = opcode switch
@@ -493,7 +494,7 @@ public static class WireProtocol
             WireOpcode.CharacterChoose => advertised == CharacterChooseFrameBytes,
             WireOpcode.CharacterChooseResult => advertised == CharacterChooseResultFrameBytes,
             WireOpcode.WorldReady => advertised == WorldReadyFrameBytes,
-            WireOpcode.EntitySpawn or WireOpcode.EntityDelta => advertised == EntityStateFrameBytes,
+            WireOpcode.EntitySpawn or WireOpcode.EntityDelta or WireOpcode.SelfState => advertised == EntityStateFrameBytes,
             WireOpcode.EntityDespawn => advertised == EntityDespawnFrameBytes,
             _ => false
         };

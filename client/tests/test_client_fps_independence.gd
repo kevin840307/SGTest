@@ -53,7 +53,7 @@ func _run_case(cadence: int) -> Dictionary:
 	var final: Dictionary = session.snapshot()
 	while Time.get_ticks_msec() < deadline:
 		final = session.snapshot()
-		if int(final.state) == WorldState.STATE_IN_WORLD and int(final.last_receipt_sequence) == 1:
+		if int(final.state) == WorldState.STATE_IN_WORLD and int(final.last_receipt_sequence) == 1 and not final.self_state.is_empty():
 			break
 		if int(final.state) == WorldState.STATE_FAILED:
 			break
@@ -63,12 +63,18 @@ func _run_case(cadence: int) -> Dictionary:
 	if int(final.state) != WorldState.STATE_IN_WORLD or int(final.actor_id) != 11 or int(final.map_id) != 15 or int(final.map_epoch) != 1 or int(final.movement_sequence) != 1 or int(final.last_receipt_sequence) != 1 or int(final.last_receipt_status) != 0 or int(final.last_server_tick) != 42:
 		_fail("cadence %d final state invalid polls=%d state=%s" % [cadence, render_polls, final])
 		return {}
+	if final.self_state.is_empty() or float(final.x) != 24.0 or float(final.y) != 8.0 or bool(final.self_state.moving):
+		_fail("cadence %d own authoritative state not reduced %s" % [cadence, final])
+		return {}
 	if wire.size() != 3:
 		_fail("cadence %d wire count %d" % [cadence, wire.size()])
 		return {}
 	return {
 		"state": {
 			"state": final.state,
+			"x": final.x,
+			"y": final.y,
+			"self_state": final.self_state,
 			"actor_id": final.actor_id,
 			"map_id": final.map_id,
 			"map_epoch": final.map_epoch,

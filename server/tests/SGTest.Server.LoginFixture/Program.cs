@@ -70,12 +70,20 @@ internal static class Program
                 Console.WriteLine($"LOGIN_FIXTURE_RECEIPT_ROUTED actor={receipt.ActorId} sequence={receipt.MovementSequence} status={receipt.Status}");
                 Console.Out.Flush();
 
-                var ended = await serverTask.WaitAsync(TimeSpan.FromSeconds(5));
+                // Continue routing every World tick after the first receipt;
+                // owner position/stop updates must reach the real TLS Client too.
+                var routingTask = resultRouter.RunAsync(world.Results);
+                TlsWireConnectionResult ended;
+                try { ended = await serverTask.WaitAsync(TimeSpan.FromSeconds(5)); }
+                finally
+                {
+                    await world.StopAsync();
+                    await routingTask.WaitAsync(TimeSpan.FromSeconds(3));
+                }
                 if (ended.CommandsAccepted != 1 || ended.ReliableFramesSent < 2 ||
                     aoiPump.FramesQueued < 1 || resultRouter.Statistics.ActiveSessions != 0)
                     throw new InvalidOperationException($"fixture disconnect or send mismatch commands={ended.CommandsAccepted} reliable_frames={ended.ReliableFramesSent} aoi={aoiPump.FramesQueued} active_routes={resultRouter.Statistics.ActiveSessions}");
                 Console.WriteLine($"LOGIN_FIXTURE_WORLD_READY_ROUTED aoi_frames={aoiPump.FramesQueued}");
-                await world.StopAsync();
                 Console.WriteLine($"LOGIN_FIXTURE_PASS tls={ended.Protocol} commands={ended.CommandsAccepted}");
                 Console.Out.Flush();
                 return 0;

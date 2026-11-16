@@ -10,6 +10,7 @@ const CHOOSE := "2D00000001000E00000B000000000000000F000000000000000000204000000
 const READY := "2C0000000100140001000000000000002A000000000000000B000000000000000F0000000000C04100000041"
 const SPAWN := "490000000100150001000000000000002B000000000000001600000000000000020000000000000001000000000000000F0000000700000000000000000040420000C0410104000000"
 const DELTA := "490000000100170001000000000000002C000000000000001600000000000000020000000000000001000000000000000F0000000800000000000000000060420000C0410005000000"
+const SELF := "490000000100180001000000000000002C000000000000000B00000000000000020000000000000001000000000000000F0000000800000000000000000060420000C0410005000000"
 const DESPAWN := "280000000100160001000000000000002D0000000000000016000000000000000200000000000000"
 const MAP13_READY := "2C00000001001400020000000000000032000000000000000B000000000000000D000000000020420000A042"
 
@@ -18,6 +19,8 @@ func _fail(message: String) -> void:
 	quit(1)
 
 func _initialize() -> void:
+	if not _verify_self():
+		return
 	var ready := WireCodec.decode_world_ready(READY.hex_decode())
 	if ready.is_empty() or int(ready.actor_id) != 11 or int(ready.map_epoch) != 1 or float(ready.x) != 24.0:
 		_fail("WorldReady C# golden decode")
@@ -93,3 +96,85 @@ func _mutate_u8(bytes: PackedByteArray, offset: int, value: int) -> PackedByteAr
 	var changed := bytes.duplicate()
 	changed[offset] = value
 	return changed
+
+func _ready_world():
+	var world = WorldState.new()
+	world.mark_auth_sent()
+	world.apply_frame(AUTH.hex_decode())
+	world.apply_frame(LIST.hex_decode())
+	world.mark_choose_sent(11)
+	world.apply_frame(CHOOSE.hex_decode())
+	world.apply_frame(READY.hex_decode())
+	return world
+
+func _verify_self() -> bool:
+	var value := WireCodec.decode_entity_state(SELF.hex_decode())
+	if value.is_empty() or int(value.actor_id) != 11 or int(value.revision) != 8 or float(value.x) != 56.0:
+		_fail("SelfState C# golden")
+		return false
+	var world = _ready_world()
+	if not world.apply_frame(SELF.hex_decode()) or float(world.snapshot().x) != 56.0 or bool(world.snapshot().self_state.moving) or not world.snapshot().entities.is_empty():
+		_fail("SelfState did not update own state independently of remote AOI")
+		return false
+	# Duplicate Ready cannot clear own generation/revision or rewind coordinates.
+	var repeat_ready := READY.hex_decode()
+	repeat_ready.encode_s64(16, 45)
+	if not world.apply_frame(repeat_ready) or float(world.snapshot().x) != 56.0:
+		_fail("duplicate Ready rewound own state")
+		return false
+	var stale := SELF.hex_decode()
+	stale.encode_s64(16, 46)
+	stale.encode_s64(52, 7)
+	stale.encode_float(60, 1.0)
+	if not world.apply_frame(stale) or float(world.snapshot().x) != 56.0:
+		_fail("stale own revision rewound XY")
+		return false
+	var bad_cases := []
+	var bad := SELF.hex_decode()
+	bad.encode_s64(24, 22)
+	bad_cases.append(bad)
+	bad = SELF.hex_decode()
+	bad.encode_s64(32, 3)
+	bad_cases.append(bad)
+	bad = SELF.hex_decode()
+	bad.encode_s64(40, 2)
+	bad_cases.append(bad)
+	bad = SELF.hex_decode()
+	bad.encode_s32(48, 13)
+	bad_cases.append(bad)
+	bad = SELF.hex_decode()
+	bad.encode_s64(52, 9)
+	bad.encode_u32(69, 4)
+	bad_cases.append(bad)
+	for frame in bad_cases:
+		var isolated = _ready_world()
+		isolated.apply_frame(SELF.hex_decode())
+		if isolated.apply_frame(frame) or int(isolated.state) != WorldState.STATE_FAILED:
+			_fail("wrong own identity/generation/action accepted")
+			return false
+	var before = WorldState.new()
+	if before.apply_frame(SELF.hex_decode()):
+		_fail("self before Ready accepted")
+		return false
+	var remote_self := SELF.hex_decode()
+	remote_self[6] = WireCodec.OPCODE_ENTITY_SPAWN
+	if _ready_world().apply_frame(remote_self):
+		_fail("self entered remote AOI")
+		return false
+	# Transfer clears self baseline; old map update cannot restore the old position.
+	if not world.apply_frame(MAP13_READY.hex_decode()) or not world.self_state.is_empty() or not world.apply_frame(SELF.hex_decode()) or world.x != 40.0:
+		_fail("old-map SelfState crossed transfer")
+		return false
+	var new_self := SELF.hex_decode()
+	new_self.encode_s64(8, 2)
+	new_self.encode_s64(16, 51)
+	new_self.encode_s64(40, 2)
+	new_self.encode_s32(48, 13)
+	new_self.encode_s64(52, 1)
+	new_self.encode_float(60, 72.0)
+	new_self.encode_u32(69, 0)
+	if not world.apply_frame(new_self) or world.x != 72.0:
+		_fail("new-map self baseline did not reset")
+		return false
+	print("SELF_STATE_GODOT_PASS bytes=73 identity=FAIL_CLOSED stale=IGNORED transfer=PASS ready_replay=IGNORED")
+	return true

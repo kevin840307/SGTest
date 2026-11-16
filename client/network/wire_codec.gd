@@ -16,6 +16,7 @@ const OPCODE_WORLD_READY := 20
 const OPCODE_ENTITY_SPAWN := 21
 const OPCODE_ENTITY_DESPAWN := 22
 const OPCODE_ENTITY_DELTA := 23
+const OPCODE_SELF_STATE := 24
 const MOVE_TARGET_FRAME_BYTES := 28
 const MOVE_RECEIPT_FRAME_BYTES := 30
 const NPC_INTERACT_FRAME_BYTES := 24
@@ -213,7 +214,7 @@ static func decode_world_ready(frame: PackedByteArray) -> Dictionary:
 	return {"map_epoch": epoch, "server_tick": tick, "actor_id": actor_id, "map_id": map_id, "x": x, "y": y}
 
 static func decode_entity_state(frame: PackedByteArray) -> Dictionary:
-	if frame_opcode(frame) not in [OPCODE_ENTITY_SPAWN, OPCODE_ENTITY_DELTA] or frame.size() != ENTITY_STATE_FRAME_BYTES:
+	if frame_opcode(frame) not in [OPCODE_ENTITY_SPAWN, OPCODE_ENTITY_DELTA, OPCODE_SELF_STATE] or frame.size() != ENTITY_STATE_FRAME_BYTES:
 		return {}
 	var reader := _reader(frame, 8)
 	var receiver_epoch := reader.get_64()
@@ -251,7 +252,7 @@ static func frame_opcode(frame: PackedByteArray) -> int:
 	if reader.get_u16() != VERSION:
 		return -1
 	var opcode := reader.get_u16()
-	if opcode not in [OPCODE_MOVE_TARGET, OPCODE_MOVE_RECEIPT, OPCODE_NPC_INTERACT, OPCODE_NPC_INTERACT_RESULT, OPCODE_AUTH_REQUEST, OPCODE_AUTH_RESULT, OPCODE_CHARACTER_LIST, OPCODE_CHARACTER_CHOOSE, OPCODE_CHARACTER_CHOOSE_RESULT, OPCODE_WORLD_READY, OPCODE_ENTITY_SPAWN, OPCODE_ENTITY_DESPAWN, OPCODE_ENTITY_DELTA]:
+	if opcode not in [OPCODE_MOVE_TARGET, OPCODE_MOVE_RECEIPT, OPCODE_NPC_INTERACT, OPCODE_NPC_INTERACT_RESULT, OPCODE_AUTH_REQUEST, OPCODE_AUTH_RESULT, OPCODE_CHARACTER_LIST, OPCODE_CHARACTER_CHOOSE, OPCODE_CHARACTER_CHOOSE_RESULT, OPCODE_WORLD_READY, OPCODE_ENTITY_SPAWN, OPCODE_ENTITY_DESPAWN, OPCODE_ENTITY_DELTA, OPCODE_SELF_STATE]:
 		return -1
 	return opcode
 

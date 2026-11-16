@@ -295,3 +295,11 @@ Verified on GitHub `main` commit `116ea15420d04bfd3fa98722f9e5695217cf37f6`: Cli
 合成來源、臨時DB／憑證僅在測試自有temp目錄；不執行Godot、PCK或原版素材／效能Gate。schema及Wire未改；原版出生點規則／真私有地圖／Godot畫面與Release NOT VERIFIED。
 
 2026-11-17 Windows ConPTY補驗PASS：隱藏密碼建帳號、emoji＋Backspace後正確驗證原密碼並建角色、Esc取消回傳4且未建DB。檢查過長輸入時修正ReadKey即時拋錯的邊界：改為有界儲存並讀至Enter才拒絕，280字元輸入實測不回顯且不建DB，避免殘餘字元交回Shell；另加257-byte環境密碼拒絕測例。未把這些Console測試當Godot／正式遊戲Gate。
+
+### 2026-11-17 MVP003-SELF-STATE targeted checks
+
+- `dotnet run --project server/tests/SGTest.Server.Checks -c Release -- --aoi-only`: **12/12 PASS**. Includes shared C#/Godot 73-byte golden, own binding rejection, changed-only owner delivery, retained pending event on capacity overflow, existing remote hysteresis/map isolation and live 30Hz two-map pump regression.
+- Godot 4.7.2 headless `res://tests/test_aoi_wire.gd`: **PASS** owner XY/stop, self absent from remote entities, before-Ready rejection, stale revision/old-map ignore, wrong actor/map/connection/action fail-closed, duplicate Ready no rewind and new-map baseline reset.
+- Godot headless `res://tests/test_client_fps_independence.gd`: **PASS** owner state/XY and outbound order identical at 0/30/60/90 presentation polls.
+- `python client/tests/run_tls_login.py <Godot-4.7.2-console>`: **PASS** real Godot↔C# TLS, own authoritative movement from (8,8) to (24,8) and stopped state, receipt/WorldReady, clean fixture shutdown. Initial attempt exposed the fixture stopping World result routing after the receipt; fixed it to keep the normal Router running through disconnect. No production tick/transport was replaced by a test override.
+- Final main CI pending at implementation commit. Private original-map rendered two-client movement, smoothing/animation, scale/performance, persistence and release remain **NOT VERIFIED**. No private assets/PCK/Archive or architecture benchmark rerun for this additive protocol slice.

@@ -94,6 +94,14 @@ static class Checks
                 Console.WriteLine($"IDENTITY_ADMIN_CHECKS PASS total={_passes}");
                 return 0;
             }
+            if (args is ["--aoi-only"])
+            {
+                WorldAoiChecks.Verify(root);
+                AoiWireChecks.Verify();
+                WorldAoiPumpChecks.Verify(root);
+                Console.WriteLine($"SERVER_AOI_CHECKS PASS total={_passes}");
+                return 0;
+            }
             if (args is ["--listener-only"])
             {
                 TlsGatewayListenerChecks.Verify(root);

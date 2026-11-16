@@ -35,6 +35,7 @@ var stale_receipts := 0
 var protocol_error := ""
 var world_ready := false
 var entities := {}
+var self_state := {}
 var last_aoi_tick := -1
 var stale_aoi_events := 0
 
@@ -83,6 +84,8 @@ func apply_frame(frame: PackedByteArray) -> bool:
 			return _apply_npc_result(frame)
 		WireCodec.OPCODE_WORLD_READY:
 			return _apply_world_ready(frame)
+		WireCodec.OPCODE_SELF_STATE:
+			return _apply_self_state(frame)
 		WireCodec.OPCODE_ENTITY_SPAWN, WireCodec.OPCODE_ENTITY_DELTA:
 			return _apply_entity_state(frame, opcode)
 		WireCodec.OPCODE_ENTITY_DESPAWN:
@@ -122,6 +125,7 @@ func snapshot() -> Dictionary:
 		"protocol_error": protocol_error,
 		"world_ready": world_ready,
 		"entities": entities.duplicate(true),
+		"self_state": self_state.duplicate(true),
 		"last_aoi_tick": last_aoi_tick,
 		"stale_aoi_events": stale_aoi_events,
 	}
@@ -180,6 +184,7 @@ func _apply_choose(frame: PackedByteArray) -> bool:
 	last_receipt_status = -1
 	last_server_tick = -1
 	world_ready = false
+	self_state.clear()
 	entities.clear()
 	last_aoi_tick = -1
 	stale_aoi_events = 0
@@ -261,6 +266,9 @@ func _apply_world_ready(frame: PackedByteArray) -> bool:
 		return true
 	if next_epoch == map_epoch and int(ready.map_id) != map_id:
 		return fail("world_ready_changed_map_without_epoch")
+	if world_ready and next_epoch == map_epoch:
+		stale_aoi_events += 1
+		return true # No same-epoch resync contract; never rewind accepted self state.
 	if next_epoch > map_epoch:
 		map_epoch = next_epoch
 		map_id = int(ready.map_id)
@@ -270,6 +278,7 @@ func _apply_world_ready(frame: PackedByteArray) -> bool:
 		last_receipt_sequence = 0
 		last_receipt_status = -1
 		last_server_tick = -1
+	self_state.clear()
 	x = float(ready.x)
 	y = float(ready.y)
 	world_ready = true
@@ -336,5 +345,30 @@ func _apply_entity_despawn(frame: PackedByteArray) -> bool:
 	if int(value.connection_epoch) != int(previous.connection_epoch):
 		return fail("despawn_wrong_entity_generation")
 	entities.erase(id)
+	last_aoi_tick = maxi(last_aoi_tick, int(value.server_tick))
+	return true
+
+func _apply_self_state(frame: PackedByteArray) -> bool:
+	var value := WireCodec.decode_entity_state(frame)
+	if value.is_empty():
+		return fail("invalid_self_state")
+	var disposition := _check_aoi_generation(int(value.receiver_map_epoch), int(value.server_tick))
+	if disposition <= 0:
+		return disposition == 0
+	if int(value.actor_id) != actor_id or int(value.map_id) != map_id or int(value.entity_map_epoch) != map_epoch:
+		return fail("self_state_wrong_identity_or_map")
+	# The first update binds its server-only connection generation to the already
+	# authenticated own Actor/MapEpoch. Later updates cannot replace it.
+	if not self_state.is_empty():
+		if int(value.connection_epoch) != int(self_state.connection_epoch):
+			return fail("self_state_wrong_connection")
+		if int(value.revision) <= int(self_state.revision):
+			stale_aoi_events += 1
+			return true
+		if int(value.movement_action_sequence) < int(self_state.movement_action_sequence):
+			return fail("self_state_action_regressed")
+	self_state = value
+	x = float(value.x)
+	y = float(value.y)
 	last_aoi_tick = maxi(last_aoi_tick, int(value.server_tick))
 	return true

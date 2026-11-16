@@ -12,7 +12,7 @@ public sealed record WorldAoiOptions(
     int MaxVisiblePerObserver = 2048,
     int MaxPendingEventsPerObserver = 4096);
 
-public enum AoiEventKind : byte { WorldReady, Spawn, Delta, Despawn }
+public enum AoiEventKind : byte { WorldReady, Spawn, Delta, Despawn, SelfState }
 
 /// <summary>
 /// WorldReady includes the trusted viewer snapshot. Spawn/Delta include the
@@ -199,6 +199,7 @@ public sealed class WorldAoi
         if (_observers.TryGetValue(actor.ActorId, out var moving))
         {
             moving.Self = actor;
+            Enqueue(moving, new(AoiEventKind.SelfState, tick, actor.MapEpoch, actor));
             RefreshObserver(moving, tick);
         }
     }

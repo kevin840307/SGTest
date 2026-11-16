@@ -158,3 +158,7 @@ Host `serve`明確讀取兩圖world／blocking與已稽核npcs、SQLite identity
 Host的本機`account-create`／`character-create`委派同一SqliteIdentityStore API；管理者有本機DB權限，這不是Client網路註冊／GM RPC。密碼從隱藏終端輸入或SGTEST_ACCOUNT_PASSWORD環境來源取得，不接受CLI明碼或輸出明文。建立角色先驗證管理者明示的Map13/15位置通過同一BlockingGrid來源hash／邊界／flag0，之後驗證帳密／disabled與Store的名稱／slot政策，沒有另建SQLite或Game Rule。
 
 兩個步驟各自原子、不是跨命令交易；重複帳號不改密碼，名稱／slot衝突不修改既存角色。schema仍v1，Wire不變，無遷移。實際CLI子程序並行slot競態及CLI產生DB→真正Host serve TLS登入／選角／WorldReady／MoveReceipt已通過；此路徑發現並修正Windows Schannel不能使用該ephemeral PFX私鑰的相容性問題，Windows改UserKeySet且不設Exportable/PersistKeySet，Linux仍EphemeralKeySet。公開創角／外觀、原版預設出生點、持久座標及完整遊戲Gate仍未完成。
+
+### 2026-11-17 Changed-only owner state
+
+WorldAoi now enqueues SelfState on an owner's increasing authoritative revision, separately from the unchanged remote interest filtering. It reuses ActorSnapshot, the existing single AOI consumer, bounded pending FIFO, Gateway reliable FIFO and fail-closed overflow supervisor; no new timer, broadcast, manager or serializer. Gateway requires the owner ActorId/ConnectionEpoch/MapEpoch binding. Idle revisions emit nothing. This is an additive V1 opcode using the existing 73-byte EntityState layout, a correctness fix to the established delivery path rather than a new algorithm selection. A future rate/coalescing change must preserve reliable events and measure the affected workload.

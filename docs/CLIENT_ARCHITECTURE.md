@@ -271,3 +271,7 @@ The real Godot↔C# fixture now proves WorldReady reaches the threaded ClientSes
 `ui/session_panel.gd`是現行ClientSession的UI adapter：登入／列表選角／登出；沿用憑證驗證、bounded intents與獨立transport/reducer threads。UI每50ms只讀snapshot，沒有在_process消化封包。main把WorldReady映射到唯一WorldView／AssetStore載入世代，地圖就緒後才定位Server提供的初始座標；連線時停用並守衛本地檢視Map按鈕，左鍵移動交給Server。Server MapEpoch與資源owner epoch保持分開。取消／錯誤／Scene退出停止Session，提交密碼立即從UI清除。
 
 真Godot main UI→正式C# TLS fixture的Auth／選角／WorldReady／MoveReceipt／logout PASS；錯誤返回與UI密碼／輸入鎖定亦驗證，CI加入--app-ui。原版素材回歸12 captures／38來源幀PASS；兩者不是完整網路角色畫面Gate。尚缺：創角、正式Host listener、玩家Paper-doll／位置插值／AOI視覺與NPC點擊；不因本UI切片標MVP完成。
+
+### 2026-11-17 Owner state delivery
+
+The non-render WorldState reducer accepts the sole V1 SelfState opcode 24 into `self_state` and authoritative `x/y`; remote `entities` remains a separate AOI dictionary and cannot contain self. The trusted first owner update establishes ConnectionEpoch, later updates require the same generation plus increasing revision and nondecreasing action sequence. New-map WorldReady clears the baseline; a duplicate same-map Ready cannot rewind it. Snapshot consumers receive copies; Render FPS/AFK does not control delivery. Local rendering/prediction/camera-follow are still separate unimplemented gates. See RUNTIME_PROTOCOL for validation and exact payload.

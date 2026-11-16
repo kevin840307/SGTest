@@ -33,12 +33,35 @@ internal static class WorldAoiChecks
             () => TrustedLifecycle(root));
         Checks.Run("AOI WorldReady, Spawn/Delta/Despawn, hysteresis and map isolation",
             Interest);
+        Checks.Run("AOI self state is changed-only, generation-safe and retained on bounded overflow", OwnState);
         Checks.Run("AOI transfer clears old map; reconnect resets generation and ignores stale dequeue",
             TransfersAndReconnects);
         Checks.Run("AOI fails closed on stale revision, malformed actor and bounded reliable events",
             InvalidAndBounded);
         Checks.Run("30Hz Host publishes idle join and leave to AOI through WorldResultRouter",
             () => RealHostLifecycle(root).GetAwaiter().GetResult());
+    }
+
+    private static void OwnState()
+    {
+        var aoi = new WorldAoi(new WorldAoiOptions(MaxPendingEventsPerObserver: 1));
+        var a = Actor(71, 15, 24, 8);
+        Life(aoi, 1, Join(a));
+        Drain(aoi, a);
+        Move(aoi, 2, a); // replayed revision creates no extra owner traffic
+        Require(aoi.PendingEvents(a.ActorId) == 0, "idle self generated traffic");
+        var moving = a with { X = 28, EntityRevision = 2, IsMoving = true, MovementActionSequence = 1 };
+        Move(aoi, 3, moving);
+        Require(aoi.TryPeek(a.ActorId, a.ConnectionEpoch, a.MapEpoch, out var retained) &&
+                retained.Kind == AoiEventKind.SelfState && retained.Entity == moving,
+                "own changed revision not retained");
+        bool overflow = false;
+        try { Move(aoi, 4, moving with { X = 32, EntityRevision = 3 }); }
+        catch (AoiBackpressureException) { overflow = true; }
+        Require(overflow && aoi.TryPeek(a.ActorId, a.ConnectionEpoch, a.MapEpoch, out var after) &&
+                after == retained, "self overflow silently discarded reliable event");
+        Require(!aoi.TryConfirmQueued(a.ActorId, a.ConnectionEpoch + 1, a.MapEpoch),
+                "wrong connection consumed own event");
     }
 
     private static void TrustedLifecycle(string root)
@@ -110,7 +133,8 @@ internal static class WorldAoiChecks
         Require(aEvents.Length == 1 && aEvents[0].Kind == AoiEventKind.Delta &&
                 aEvents[0].Entity?.EntityRevision == 2,
                 "hysteresis should retain and delta visible B");
-        Require(Drain(aoi, bEdge).Length == 0, "moving observer received fake delta for old A");
+        Require(Drain(aoi, bEdge) is [var own] && own.Kind == AoiEventKind.SelfState &&
+                own.Entity == bEdge, "moving observer did not receive its own authoritative state");
 
         var bOutside = b with { X = 370, EntityRevision = 3 };
         Move(aoi, 6, bOutside); // diff=270 exits
@@ -118,15 +142,15 @@ internal static class WorldAoiChecks
         bEvents = Drain(aoi, bOutside);
         Require(aEvents.Length == 1 && aEvents[0].Kind == AoiEventKind.Despawn &&
                 aEvents[0].EntityActorId == 2 &&
-                bEvents.Length == 1 && bEvents[0].Kind == AoiEventKind.Despawn &&
-                bEvents[0].EntityActorId == 1,
+                bEvents.Length == 2 && bEvents[0].Kind == AoiEventKind.SelfState &&
+                bEvents[1].Kind == AoiEventKind.Despawn && bEvents[1].EntityActorId == 1,
                 "crossing hysteresis exit should despawn in both directions");
 
         var bNear = b with { X = 250, EntityRevision = 4 };
         Move(aoi, 7, bNear);
         Require(Drain(aoi, a) is [var aSpawn] &&
                 aSpawn.Kind == AoiEventKind.Spawn && aSpawn.Entity?.ActorId == 2 &&
-                Drain(aoi, bNear) is [var bSpawn] &&
+                Drain(aoi, bNear) is [{ Kind: AoiEventKind.SelfState }, var bSpawn] &&
                 bSpawn.Kind == AoiEventKind.Spawn && bSpawn.Entity?.ActorId == 1,
                 "re-entering view should respawn, not delta without an entity");
 

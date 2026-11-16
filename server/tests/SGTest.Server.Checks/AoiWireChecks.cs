@@ -8,6 +8,7 @@ internal static class AoiWireChecks
     private const string Ready = "2C0000000100140001000000000000002A000000000000000B000000000000000F0000000000C04100000041";
     private const string Spawn = "490000000100150001000000000000002B000000000000001600000000000000020000000000000001000000000000000F0000000700000000000000000040420000C0410104000000";
     private const string Delta = "490000000100170001000000000000002C000000000000001600000000000000020000000000000001000000000000000F0000000800000000000000000060420000C0410005000000";
+    private const string Self = "490000000100180001000000000000002C000000000000000B00000000000000020000000000000001000000000000000F0000000800000000000000000060420000C0410005000000";
     private const string Despawn = "280000000100160001000000000000002D0000000000000016000000000000000200000000000000";
 
     public static void Verify()
@@ -41,6 +42,11 @@ internal static class AoiWireChecks
                 WireProtocol.TryDecodeEntityState(delta, out kind, out parsed) &&
                 kind == WireOpcode.EntityDelta && parsed == e,
                 "Delta binary fixture");
+        var self = e with { ActorId = 11 };
+        byte[] ownBytes = WireProtocol.EncodeEntityState(WireOpcode.SelfState, self);
+        Require(Convert.ToHexString(ownBytes) == Self &&
+                WireProtocol.TryDecodeEntityState(ownBytes, out kind, out parsed) &&
+                kind == WireOpcode.SelfState && parsed == self, "SelfState binary fixture");
         byte[] despawn = WireProtocol.EncodeEntityDespawn(new(1, 45, 22, 2));
         Require(Convert.ToHexString(despawn) == Despawn &&
                 WireProtocol.TryDecodeEntityDespawn(despawn, out var left) &&
@@ -91,6 +97,17 @@ internal static class AoiWireChecks
                 WireProtocol.TryDecodeEntityDespawn(third, out _),
                 "reliable FIFO despawn");
 
+        Require(gateway.QueueAoi(new(AoiEventKind.SelfState, 46, 1, other)) ==
+                GatewaySendStatus.GenerationMismatch, "other actor impersonated self state");
+        Require(gateway.QueueAoi(new(AoiEventKind.SelfState, 46, 1,
+                owner with { ConnectionEpoch = 2 })) == GatewaySendStatus.GenerationMismatch,
+                "wrong connection impersonated self state");
+        Require(gateway.QueueAoi(new(AoiEventKind.SelfState, 46, 1, owner)) ==
+                GatewaySendStatus.Enqueued, "own state enqueue");
+        Require(gateway.TryDequeueReliable(out var ownFrame) &&
+                WireProtocol.TryDecodeEntityState(ownFrame, out var ownKind, out var own) &&
+                ownKind == WireOpcode.SelfState && own.ActorId == owner.ActorId,
+                "own state reliable wire");
         Require(gateway.QueueAoi(new(AoiEventKind.WorldReady, 50, 2, owner)) ==
                 GatewaySendStatus.GenerationMismatch, "future map sent without transfer");
         Require(gateway.QueueAoi(new(AoiEventKind.WorldReady, 50, 1, other)) ==

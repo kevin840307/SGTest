@@ -334,6 +334,17 @@ public sealed class GatewayConnection
                         ready.MapId, (float)ready.X, (float)ready.Y));
                     break;
 
+                case AoiEventKind.SelfState when evt.Entity is { } self &&
+                     self.ActorId == bound.ActorId &&
+                     self.ConnectionEpoch == bound.ConnectionEpoch &&
+                     self.MapEpoch == bound.MapEpoch:
+                    frame = WireProtocol.EncodeEntityState(WireOpcode.SelfState,
+                        new(evt.ReceiverMapEpoch, evt.Tick, self.ActorId,
+                            self.ConnectionEpoch, self.MapEpoch, self.MapId,
+                            self.EntityRevision, (float)self.X, (float)self.Y,
+                            self.IsMoving, self.MovementActionSequence));
+                    break;
+
                 case AoiEventKind.Spawn or AoiEventKind.Delta
                     when evt.Entity is { } entity && entity.ActorId != bound.ActorId:
                     frame = WireProtocol.EncodeEntityState(

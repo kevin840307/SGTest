@@ -134,3 +134,7 @@ Client TCP/TLS I/O runs on a dedicated worker thread and is not driven by render
 ### Non-render Client state baseline - 2026-11-16
 
 Transport, protocol/world reduction and rendering are separate clocks. ClientTransport owns socket/TLS on one worker; ClientSession owns bounded intents and WorldState reduction on another non-render worker; render code only reads snapshots. Current Auth/Choose/Move logic is verified to produce the same final state and packet order when presentation polling is 0/30/60/90. Every future authoritative WorldReady/AOI/entity-delta message must pass the same gate before it is considered FPS-independent.
+
+### 2026-11-17 Own authoritative movement delivery
+
+V1 server-only SelfState (opcode 24, 73 bytes, existing EntityState layout) delivers changed authoritative owner XY/moving/action sequence through the bounded reliable AOI path. Client WorldState updates independently of Render FPS, validates identity/generation/revision and preserves remote-AOI self exclusion. Duplicate same-epoch WorldReady cannot rewind accepted owner state. This slice does not complete prediction/interpolation, player rendering, camera follow, movement persistence or ACK/resync; private two-client visual/scale gates remain NOT VERIFIED.
