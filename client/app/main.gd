@@ -118,8 +118,13 @@ func _unhandled_key_input(event: InputEvent) -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed and session_panel.active and world_view.phase == "ready":
 		var point: Vector2 = world_view.camera.screen_to_world(event.position)
-		var monster_id: int = world_view.pick_monster_at(point)
-		if monster_id > 0:
+		var drop_id: int = world_view.pick_ground_drop_at(point)
+		var monster_id: int = world_view.pick_monster_at(point) if drop_id == 0 else 0
+		if drop_id > 0:
+			# Ground pickup takes priority over nearby monsters; failure
+			# never silently falls back to movement or an attack.
+			session_panel.submit_pickup_drop(drop_id)
+		elif monster_id > 0:
 			# A live visible monster takes attack priority over ground movement.
 			# Never fall back to movement when the combat intent is backpressured.
 			session_panel.submit_attack_monster(monster_id)

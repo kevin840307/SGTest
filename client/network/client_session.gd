@@ -87,6 +87,13 @@ func move_target(target_x: int, target_y: int) -> bool:
 		return false
 	return _queue_intent({"type": "move", "x": target_x, "y": target_y})
 
+func pickup_ground_drop(drop_id: int) -> bool:
+	var current := snapshot()
+	if drop_id <= 0 or bool(current.get("player_dead",false)) or not (current.get("ground_drops",{}) as Dictionary).has(drop_id):
+		return false
+	return _queue_intent({"type":"pickup_ground_drop","drop_id":drop_id})
+
+
 func respawn() -> bool:
 	var current := snapshot()
 	if not bool(current.get("combat_available",false)) or not bool(current.get("player_dead",false)):
@@ -320,6 +327,18 @@ func _process_first_intent() -> void:
 		var sequence := int(current.npc_interaction_sequence) + 1
 		var frame := WireCodec.encode_npc_interact(int(current.map_epoch), sequence, int(intent.spawn_id))
 		if not frame.is_empty() and _transport.send_frame(frame) and _world.mark_npc_interact_sent(sequence):
+			_pop_intent()
+			_publish()
+	elif kind == "pickup_ground_drop":
+		var current: Dictionary = _world.snapshot()
+		if int(current.state) != WorldState.STATE_IN_WORLD or bool(current.player_dead) or not bool(current.world_ready) or bool(current.resync_pending) or int(current.pending_world_ready_ack_epoch) != 0 or int(current.last_world_ready_ack_epoch) != int(current.map_epoch) or bool(current.waiting_for_new_map) or int(current.pending_pickup_sequence) != 0:
+			return
+		if not (current.ground_drops as Dictionary).has(int(intent.drop_id)):
+			_pop_intent() # ground item already disappeared before this intent sent
+			return
+		var sequence := int(current.pickup_sequence) + 1
+		var frame := WireCodec.encode_ground_pickup(int(current.map_epoch),sequence,int(intent.drop_id))
+		if not frame.is_empty() and _transport.send_frame(frame) and _world.mark_pickup_sent(sequence,int(intent.drop_id)):
 			_pop_intent()
 			_publish()
 	elif kind == "respawn":

@@ -19,6 +19,7 @@ var logout_button := Button.new()
 var characters := OptionButton.new()
 var choose_button := Button.new()
 var respawn_button := Button.new()
+var pickup_status := Label.new()
 var status := Label.new()
 var _characters: Array = []
 var _chosen := false
@@ -57,7 +58,7 @@ func _ready() -> void:
 	logout_button.text = "登出／取消"
 	choose_button.text = "進入世界"
 	respawn_button.text = "復活"
-	for control in [login_button,characters,choose_button,respawn_button,logout_button,status]:
+	for control in [login_button,characters,choose_button,respawn_button,logout_button,status,pickup_status]:
 		column.add_child(control)
 	login_button.pressed.connect(login)
 	password_input.text_submitted.connect(func(_text): login())
@@ -74,6 +75,7 @@ func _ready() -> void:
 	add_theme_color_override("font_color",Color("f2d995"))
 	_set_controls()
 	status.text = "請登入伺服器"
+	pickup_status.text = ""
 
 
 func login() -> void:
@@ -95,6 +97,7 @@ func login() -> void:
 	_world_epoch = 0
 	_latest = {}
 	_respawn_queued_after = -1
+	pickup_status.text = ""
 	characters.clear()
 	_characters = []
 	_set_controls()
@@ -119,6 +122,10 @@ func submit_move(point: Vector2) -> bool:
 
 func submit_attack_monster(entity_id: int) -> bool:
 	return active and not bool(_latest.get("reconnecting",false)) and bool(_latest.get("world_ready",false)) and not bool(_latest.get("player_dead",false)) and not bool(_latest.get("resync_pending",false)) and entity_id > 0 and session.attack_monster(entity_id)
+
+
+func submit_pickup_drop(drop_id: int) -> bool:
+	return active and not bool(_latest.get("reconnecting",false)) and bool(_latest.get("world_ready",false)) and not bool(_latest.get("player_dead",false)) and not bool(_latest.get("resync_pending",false)) and int(_latest.get("pending_pickup_sequence",0)) == 0 and drop_id > 0 and session.pickup_ground_drop(drop_id)
 
 
 func submit_npc_interact(spawn_id: int) -> bool:
@@ -146,6 +153,7 @@ func disconnect_session() -> void:
 	_world_epoch = 0
 	_latest = {}
 	_respawn_queued_after = -1
+	pickup_status.text = ""
 	_characters = []
 	characters.clear()
 	password_input.clear()
@@ -189,6 +197,12 @@ func _process(delta: float) -> void:
 	_poll_elapsed = 0.0
 	_latest = session.snapshot() # Reads published state; never pumps packets.
 	_set_respawn_controls()
+	var pickup_result: Dictionary = _latest.get("last_pickup_result",{})
+	if not pickup_result.is_empty():
+		if int(pickup_result.status) in [0,1]:
+			pickup_status.text = "本次拾取：道具 %d ×%d（UID %d）" % [int(pickup_result.item_definition_id),int(pickup_result.quantity),int(pickup_result.item_uid)]
+		else:
+			pickup_status.text = "拾取失敗，代碼 %d" % int(pickup_result.status)
 	if bool(_latest.get("reconnecting",false)):
 		status.text = "連線中斷，正在重新連線（%d/%d）…" % [int(_latest.reconnect_attempt),int(_latest.max_reconnect_attempts)]
 		return

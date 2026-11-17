@@ -226,6 +226,22 @@ func set_player_snapshot(snapshot: Dictionary) -> void:
 			camera.set_focus(epoch,focus)
 
 
+func pick_ground_drop_at(point: Vector2, radius: float = 14.0) -> int:
+	if phase != "ready" or not show_players or _player_snapshot.is_empty() or not point.is_finite():
+		return 0
+	var drops: Dictionary = _player_snapshot.get("ground_drops",{})
+	var best := 0
+	var distance := radius*radius
+	for raw_id in drops:
+		var id := int(raw_id)
+		var drop: Dictionary = drops[raw_id]
+		var d := point.distance_squared_to(Vector2(float(drop.x),float(drop.y)))
+		if d < distance or (is_equal_approx(d,distance) and best != 0 and id < best):
+			best = id
+			distance = d
+	return best
+
+
 func ground_drop_count() -> int:
 	if phase != "ready" or not show_players:
 		return 0

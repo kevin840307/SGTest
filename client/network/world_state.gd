@@ -42,6 +42,15 @@ var player_damage_sequence := 0
 var last_player_damage_tick := -1
 var last_player_damage := {}
 var stale_player_damage := 0
+var pickup_sequence := 0
+var pending_pickup_sequence := 0
+var pending_pickup_drop_id := 0
+var last_pickup_result_sequence := 0
+var last_pickup_result_status := -1
+var last_pickup_result := {}
+var stale_pickup_results := 0
+var received_item_grants := {}
+
 var respawn_sequence := 0
 var last_respawn_result_sequence := 0
 var last_respawn_result_status := -1
@@ -97,6 +106,15 @@ func mark_normal_attack_sent(sequence: int) -> bool:
 	attack_sequence = sequence
 	return true
 
+func mark_pickup_sent(sequence: int, drop_id: int) -> bool:
+	if state != STATE_IN_WORLD or player_dead or not world_ready or resync_pending or waiting_for_new_map or pending_world_ready_ack_epoch != 0 or last_world_ready_ack_epoch != map_epoch or pending_pickup_sequence != 0 or sequence <= pickup_sequence or sequence > 0xffffffff or drop_id <= 0 or not ground_drops.has(drop_id):
+		return false
+	pickup_sequence = sequence
+	pending_pickup_sequence = sequence
+	pending_pickup_drop_id = drop_id
+	return true
+
+
 func mark_player_respawn_sent(sequence: int) -> bool:
 	if state != STATE_IN_WORLD or not combat_available or not player_dead or not world_ready or resync_pending or waiting_for_new_map or pending_world_ready_ack_epoch != 0 or last_world_ready_ack_epoch != map_epoch or sequence <= respawn_sequence or sequence > 0xffffffff:
 		return false
@@ -149,6 +167,8 @@ func apply_frame(frame: PackedByteArray) -> bool:
 			return _apply_player_damage(frame)
 		WireCodec.OPCODE_PLAYER_RESPAWN_RESULT:
 			return _apply_player_respawn_result(frame)
+		WireCodec.OPCODE_GROUND_PICKUP_RESULT:
+			return _apply_pickup_result(frame)
 		WireCodec.OPCODE_WORLD_READY:
 			return _apply_world_ready(frame)
 		WireCodec.OPCODE_SELF_STATE:
@@ -207,6 +227,14 @@ func snapshot() -> Dictionary:
 		"last_player_damage_tick": last_player_damage_tick,
 		"last_player_damage": last_player_damage.duplicate(true),
 		"stale_player_damage": stale_player_damage,
+		"pickup_sequence": pickup_sequence,
+		"pending_pickup_sequence": pending_pickup_sequence,
+		"pending_pickup_drop_id": pending_pickup_drop_id,
+		"last_pickup_result_sequence": last_pickup_result_sequence,
+		"last_pickup_result_status": last_pickup_result_status,
+		"last_pickup_result": last_pickup_result.duplicate(true),
+		"stale_pickup_results": stale_pickup_results,
+		"received_item_grants": received_item_grants.duplicate(true),
 		"respawn_sequence": respawn_sequence,
 		"last_respawn_result_sequence": last_respawn_result_sequence,
 		"last_respawn_result_status": last_respawn_result_status,
@@ -294,6 +322,14 @@ func _apply_choose(frame: PackedByteArray) -> bool:
 	last_player_damage_tick = -1
 	last_player_damage.clear()
 	stale_player_damage = 0
+	pickup_sequence = 0
+	pending_pickup_sequence = 0
+	pending_pickup_drop_id = 0
+	last_pickup_result_sequence = 0
+	last_pickup_result_status = -1
+	last_pickup_result.clear()
+	stale_pickup_results = 0
+	received_item_grants.clear()
 	respawn_sequence = 0
 	last_respawn_result_sequence = 0
 	last_respawn_result_status = -1
@@ -529,6 +565,13 @@ func _apply_world_ready(frame: PackedByteArray) -> bool:
 		last_attack_server_tick = -1
 		last_attack_result.clear()
 		stale_attack_results = 0
+		pickup_sequence = 0
+		pending_pickup_sequence = 0
+		pending_pickup_drop_id = 0
+		last_pickup_result_sequence = 0
+		last_pickup_result_status = -1
+		last_pickup_result.clear()
+		stale_pickup_results = 0
 		respawn_sequence = 0
 		last_respawn_result_sequence = 0
 		last_respawn_result_status = -1
@@ -660,6 +703,43 @@ func _apply_monster_state(frame: PackedByteArray, opcode: int) -> bool:
 		monsters[id] = value
 	last_aoi_tick = maxi(last_aoi_tick,int(value.server_tick))
 	return true
+
+func _apply_pickup_result(frame: PackedByteArray) -> bool:
+	if state != STATE_IN_WORLD:
+		return fail("pickup_result_out_of_state")
+	var result := WireCodec.decode_ground_pickup_result(frame)
+	if result.is_empty():
+		return fail("invalid_pickup_result")
+	var epoch := int(result.map_epoch)
+	var sequence := int(result.pickup_sequence)
+	if epoch < map_epoch:
+		stale_pickup_results += 1
+		return true
+	if epoch > map_epoch:
+		return fail("future_pickup_result")
+	if sequence > pickup_sequence:
+		return fail("unsent_pickup_result")
+	if sequence <= last_pickup_result_sequence:
+		stale_pickup_results += 1
+		return true
+	if pending_pickup_sequence != sequence or pending_pickup_drop_id != int(result.drop_id):
+		return fail("pickup_result_wrong_request")
+	last_pickup_result_sequence = sequence
+	last_pickup_result_status = int(result.status)
+	last_pickup_result = result.duplicate(true)
+	pending_pickup_sequence = 0
+	pending_pickup_drop_id = 0
+	# Only acknowledge inventory UIDs from authenticated Server results.
+	# This list is session-local, NOT the full durable inventory baseline.
+	if int(result.status) in [0,1]:
+		var uid := int(result.item_uid)
+		received_item_grants[uid] = {
+			"item_uid":uid,
+			"item_definition_id":int(result.item_definition_id),
+			"quantity":int(result.quantity),
+			"drop_id":int(result.drop_id)}
+	return true
+
 
 func _apply_ground_drop_spawn(frame: PackedByteArray) -> bool:
 	var value := WireCodec.decode_ground_drop_spawn(frame)
