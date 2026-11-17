@@ -6,7 +6,9 @@ signal world_snapshot(snapshot: Dictionary)
 
 const Session = preload("res://network/client_session.gd")
 const State = preload("res://network/world_state.gd")
+const ItemCatalog = preload("res://ui/item_catalog.gd")
 var session = Session.new()
+var item_catalog = ItemCatalog.new()
 var active := false
 var trusted_chain: X509Certificate
 var tls_name := ""
@@ -239,8 +241,9 @@ func _update_inventory_ui() -> void:
 	for index in mini(uids.size(),80):
 		var uid := int(uids[index])
 		var item: Dictionary = items[uids[index]]
-		rows.append("道具 %d ×%d  ·  UID %d" % [
-			int(item.item_definition_id),int(item.quantity),uid])
+		rows.append("%s ×%d  ·  UID %d" % [
+			item_catalog.name_for(int(item.item_definition_id)),
+			int(item.quantity),uid])
 	if uids.size() > 80:
 		rows.append("…另有 %d 件（先顯示前 80 件）" % (uids.size()-80))
 	if rows.is_empty():
