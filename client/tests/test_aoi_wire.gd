@@ -126,7 +126,8 @@ func _initialize() -> void:
 	if int(snapshot.map_epoch) != 2 or int(snapshot.map_id) != 13 or float(snapshot.y) != 80.0 or not snapshot.entities.is_empty():
 		_fail("old AOI not cleared on map transfer %s" % snapshot)
 		return
-	if not world.apply_frame(SPAWN.hex_decode()) or int(world.snapshot().stale_aoi_events) != 2:
+	var stale_before_old_map := int(world.snapshot().stale_aoi_events)
+	if not world.apply_frame(SPAWN.hex_decode()) or int(world.snapshot().stale_aoi_events) != stale_before_old_map + 1 or not world.snapshot().entities.is_empty():
 		_fail("old map Spawn not ignored after transfer")
 		return
 	var future := _mutate_u8(SPAWN.hex_decode(), 8, 3)
