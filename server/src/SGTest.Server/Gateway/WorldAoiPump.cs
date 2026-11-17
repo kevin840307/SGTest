@@ -5,7 +5,8 @@ namespace SGTest.Server.Gateway;
 
 public sealed record WorldAoiPumpOptions(
     int FlushIntervalMilliseconds = 10,
-    int MaxFramesPerObserverPerPoll = 32);
+    int MaxFramesPerObserverPerPoll = 32,
+    int MaxCommittedLootBatchesPerPoll = 8);
 
 /// <summary>
 /// One non-World background AOI consumer. Bounded fanout, a small idle delay,
@@ -40,7 +41,8 @@ public sealed class WorldAoiPump
         if (initialGroundDrops is { Count: > 0 })
             _aoi.SeedGroundDrops(initialGroundDrops);
         if (_options.FlushIntervalMilliseconds is < 1 or > 1000 ||
-            _options.MaxFramesPerObserverPerPoll is < 1 or > 4096)
+            _options.MaxFramesPerObserverPerPoll is < 1 or > 4096 ||
+            _options.MaxCommittedLootBatchesPerPoll is < 1 or > 1024)
             throw new ArgumentOutOfRangeException(nameof(options));
     }
 
@@ -133,8 +135,14 @@ public sealed class WorldAoiPump
                 // The worker only publishes after SQLite commit. Consume on
                 // this same AOI owner thread; never poll SQLite per World tick.
                 if (_loot is not null && _aoi.LastTick > 0)
-                    while (_loot.CommittedDrops.TryRead(out var committed))
+                    for (int batchIndex = 0;
+                         batchIndex < _options.MaxCommittedLootBatchesPerPoll;
+                         batchIndex++)
+                    {
+                        if (!_loot.CommittedDrops.TryRead(out var committed))
+                            break;
                         _aoi.ApplyGroundDrops(_aoi.LastTick,committed);
+                    }
 
                 foreach (var receiver in _router.SnapshotActiveBindings())
                 {
