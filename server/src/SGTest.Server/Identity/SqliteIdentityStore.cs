@@ -60,9 +60,9 @@ public sealed record CharacterCreateResult(CharacterCreateStatus Status, Charact
 /// callers must finish Account/Auth/CharacterChoose before TrustedRegisterAsync.
 /// No network listener or client-controlled ActorId is exposed here.
 /// </summary>
-public sealed class SqliteIdentityStore : IDisposable
+public sealed partial class SqliteIdentityStore : IDisposable
 {
-    public const int SchemaVersion = 2;
+    public const int SchemaVersion = 3;
     private readonly string _connectionString;
     private readonly IdentityStoreOptions _options;
     private readonly PasswordHasher _passwords;
@@ -172,6 +172,54 @@ CREATE TABLE IF NOT EXISTS character_combat_profiles (
     updated_unix_ms INTEGER NOT NULL,
     CHECK(current_hp <= max_hp)
 );", tx);
+
+            // v3: authoritative ground-drop identity and one-time inventory grants.
+            // The unique kill/slot key makes a trusted death retry idempotent.
+            Execute(connection, @"
+CREATE TABLE IF NOT EXISTS ground_drops (
+    drop_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    map_id INTEGER NOT NULL CHECK(map_id BETWEEN 1 AND 65535),
+    x REAL NOT NULL CHECK(x >= 0),
+    y REAL NOT NULL CHECK(y >= 0),
+    monster_entity_id INTEGER NOT NULL CHECK(monster_entity_id > 0),
+    death_revision INTEGER NOT NULL CHECK(death_revision > 0),
+    drop_slot INTEGER NOT NULL CHECK(drop_slot BETWEEN 0 AND 31),
+    item_definition_id INTEGER NOT NULL CHECK(item_definition_id BETWEEN 1 AND 100000000),
+    quantity INTEGER NOT NULL CHECK(quantity BETWEEN 1 AND 1000000),
+    source_trust INTEGER NOT NULL CHECK(source_trust IN (1,2)),
+    source_reference TEXT NOT NULL,
+    picked_by_character_id INTEGER REFERENCES characters(character_id),
+    pickup_connection_epoch INTEGER,
+    pickup_map_epoch INTEGER,
+    pickup_sequence INTEGER,
+    created_unix_ms INTEGER NOT NULL,
+    UNIQUE(map_id, monster_entity_id, death_revision, drop_slot),
+    CHECK(
+      (picked_by_character_id IS NULL AND pickup_connection_epoch IS NULL
+       AND pickup_map_epoch IS NULL AND pickup_sequence IS NULL)
+      OR
+      (picked_by_character_id IS NOT NULL AND pickup_connection_epoch > 0
+       AND pickup_map_epoch > 0 AND pickup_sequence BETWEEN 1 AND 4294967295)
+    )
+);", tx);
+            Execute(connection, @"
+CREATE UNIQUE INDEX IF NOT EXISTS ux_ground_drops_pickup_action
+ON ground_drops(picked_by_character_id, pickup_connection_epoch, pickup_map_epoch, pickup_sequence)
+WHERE picked_by_character_id IS NOT NULL;", tx);
+            Execute(connection, @"
+CREATE INDEX IF NOT EXISTS ix_ground_drops_visible
+ON ground_drops(map_id, drop_id) WHERE picked_by_character_id IS NULL;", tx);
+            Execute(connection, @"
+CREATE TABLE IF NOT EXISTS item_instances (
+    item_uid INTEGER PRIMARY KEY AUTOINCREMENT,
+    character_id INTEGER NOT NULL REFERENCES characters(character_id),
+    item_definition_id INTEGER NOT NULL CHECK(item_definition_id BETWEEN 1 AND 100000000),
+    quantity INTEGER NOT NULL CHECK(quantity BETWEEN 1 AND 1000000),
+    source_drop_id INTEGER NOT NULL UNIQUE REFERENCES ground_drops(drop_id),
+    created_unix_ms INTEGER NOT NULL
+);", tx);
+            Execute(connection, @"
+CREATE INDEX IF NOT EXISTS ix_item_instances_owner ON item_instances(character_id, item_uid);", tx);
             if (schemaVersion < SchemaVersion)
                 Execute(connection,
                     $"UPDATE schema_version SET version={SchemaVersion};", tx);

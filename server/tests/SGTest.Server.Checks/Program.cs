@@ -237,6 +237,7 @@ static class Checks
             WireCodecChecks.Verify();
             CharacterPositionCheckpointChecks.Verify(root);
             CharacterCombatProfileChecks.Verify(root);
+            GroundLootChecks.Verify(root);
             NormalAttackChecks.Verify(root);
             PlayerCombatSettlementChecks.Verify(root);
             CombatDeathGateChecks.Verify(root);
