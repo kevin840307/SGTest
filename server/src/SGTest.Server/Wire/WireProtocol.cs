@@ -30,7 +30,9 @@ public enum WireOpcode : ushort
     MonsterDelta = 28,
     MonsterDespawn = 29,
     PlayerRespawn = 30,
-    PlayerRespawnResult = 31
+    PlayerRespawnResult = 31,
+    GroundDropSpawn = 32,
+    GroundDropDespawn = 33
 }
 
 public enum AuthWireStatus : byte { Success = 0, InvalidCredentials = 1, Disabled = 2 }
@@ -94,6 +96,11 @@ public readonly record struct MonsterStateWire(
     byte Facing, long TargetActorId);
 public readonly record struct MonsterDespawnWire(
     long ReceiverMapEpoch, long ServerTick, long EntityId, long Revision);
+public readonly record struct GroundDropWire(
+    long ReceiverMapEpoch, long ServerTick, long DropId, int MapId,
+    float X, float Y, int ItemDefinitionId, int Quantity);
+public readonly record struct GroundDropDespawnWire(
+    long ReceiverMapEpoch, long ServerTick, long DropId);
 
 /// <summary>
 /// Version 1 complete-frame codec. Transport/TLS/socket buffering is separate.
@@ -132,6 +139,8 @@ public static class WireProtocol
     public const int WorldResyncRequestFrameBytes = HeaderBytes + 8;
     public const int MonsterStateFrameBytes = 78;
     public const int MonsterDespawnFrameBytes = 40;
+    public const int GroundDropSpawnFrameBytes = 52;
+    public const int GroundDropDespawnFrameBytes = 32;
     private static readonly UTF8Encoding StrictUtf8 = new(false, true);
 
     public static byte[] EncodeMoveTarget(MoveTargetWire value)
@@ -739,6 +748,69 @@ public static class WireProtocol
         return ValidMonsterState(value);
     }
 
+    public static byte[] EncodeGroundDropSpawn(GroundDropWire value)
+    {
+        if (!ValidGroundDrop(value)) throw new ArgumentOutOfRangeException(nameof(value));
+        var frame = NewFrame(WireOpcode.GroundDropSpawn,GroundDropSpawnFrameBytes);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(8,8),value.ReceiverMapEpoch);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(16,8),value.ServerTick);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(24,8),value.DropId);
+        BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(32,4),value.MapId);
+        WriteFloat(frame.AsSpan(36,4),value.X);
+        WriteFloat(frame.AsSpan(40,4),value.Y);
+        BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(44,4),value.ItemDefinitionId);
+        BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(48,4),value.Quantity);
+        return frame;
+    }
+
+    public static bool TryDecodeGroundDropSpawn(ReadOnlySpan<byte> frame,out GroundDropWire value)
+    {
+        value=default;
+        if(!TryReadHeader(frame,out var header) ||
+           header.Opcode != WireOpcode.GroundDropSpawn) return false;
+        value=new(
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(8,8)),
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(16,8)),
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(24,8)),
+            BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(32,4)),
+            ReadFloat(frame.Slice(36,4)),ReadFloat(frame.Slice(40,4)),
+            BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(44,4)),
+            BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(48,4)));
+        return ValidGroundDrop(value);
+    }
+
+    public static byte[] EncodeGroundDropDespawn(GroundDropDespawnWire value)
+    {
+        if(value.ReceiverMapEpoch<=0||value.ServerTick<0||value.DropId<=0)
+            throw new ArgumentOutOfRangeException(nameof(value));
+        var frame=NewFrame(WireOpcode.GroundDropDespawn,GroundDropDespawnFrameBytes);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(8,8),value.ReceiverMapEpoch);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(16,8),value.ServerTick);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(24,8),value.DropId);
+        return frame;
+    }
+
+    public static bool TryDecodeGroundDropDespawn(
+        ReadOnlySpan<byte> frame,out GroundDropDespawnWire value)
+    {
+        value=default;
+        if(!TryReadHeader(frame,out var header)||
+           header.Opcode!=WireOpcode.GroundDropDespawn) return false;
+        value=new(
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(8,8)),
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(16,8)),
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(24,8)));
+        return value.ReceiverMapEpoch>0&&value.ServerTick>=0&&value.DropId>0;
+    }
+
+    private static bool ValidGroundDrop(GroundDropWire value) =>
+        value.ReceiverMapEpoch>0 && value.ServerTick>=0 && value.DropId>0 &&
+        value.MapId is >=1 and <=65535 &&
+        float.IsFinite(value.X) && float.IsFinite(value.Y) &&
+        value.X>=0 && value.Y>=0 &&
+        value.ItemDefinitionId is >=1 and <=100_000_000 &&
+        value.Quantity is >=1 and <=1_000_000;
+
     public static byte[] EncodeMonsterDespawn(MonsterDespawnWire value)
     {
         if (value.ReceiverMapEpoch <= 0 || value.ServerTick < 0 ||
@@ -879,7 +951,8 @@ public static class WireProtocol
             24 => WireOpcode.SelfState, 25 => WireOpcode.WorldReadyAck,
             26 => WireOpcode.WorldResyncRequest, 27 => WireOpcode.MonsterSpawn,
             28 => WireOpcode.MonsterDelta, 29 => WireOpcode.MonsterDespawn,
-            30 => WireOpcode.PlayerRespawn, 31 => WireOpcode.PlayerRespawnResult, _ => 0
+            30 => WireOpcode.PlayerRespawn, 31 => WireOpcode.PlayerRespawnResult,
+            32 => WireOpcode.GroundDropSpawn, 33 => WireOpcode.GroundDropDespawn, _ => 0
         };
         if (opcode == 0) return false;
         bool sizeOk = opcode switch
@@ -906,6 +979,8 @@ public static class WireProtocol
             WireOpcode.MonsterDespawn => advertised == MonsterDespawnFrameBytes,
             WireOpcode.PlayerRespawn => advertised == PlayerRespawnFrameBytes,
             WireOpcode.PlayerRespawnResult => advertised == PlayerRespawnResultFrameBytes,
+            WireOpcode.GroundDropSpawn => advertised == GroundDropSpawnFrameBytes,
+            WireOpcode.GroundDropDespawn => advertised == GroundDropDespawnFrameBytes,
             _ => false
         };
         if (!sizeOk) return false;

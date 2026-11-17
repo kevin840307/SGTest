@@ -620,6 +620,16 @@ public sealed class GatewayConnection
                         evt.MonsterRevision));
                     break;
 
+                case AoiEventKind.GroundDropSpawn when evt.GroundDrop is { } drop:
+                    frame=WireProtocol.EncodeGroundDropSpawn(new(
+                        evt.ReceiverMapEpoch,evt.Tick,drop.DropId,
+                        drop.MapId,(float)drop.X,(float)drop.Y,
+                        drop.ItemDefinitionId,drop.Quantity));
+                    break;
+                case AoiEventKind.GroundDropDespawn when evt.GroundDropId>0:
+                    frame=WireProtocol.EncodeGroundDropDespawn(new(
+                        evt.ReceiverMapEpoch,evt.Tick,evt.GroundDropId));
+                    break;
                 default:
                     return GatewaySendStatus.GenerationMismatch;
             }
