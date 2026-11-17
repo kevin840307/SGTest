@@ -1,5 +1,6 @@
 using System.Threading.Channels;
 using SGTest.Server.World;
+using SGTest.Server.Identity;
 
 namespace SGTest.Server.Gateway;
 
