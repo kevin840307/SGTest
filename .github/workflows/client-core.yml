@@ -60,6 +60,8 @@ jobs:
         run: .cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64 --headless --path client --script res://tests/test_ground_pickup_wire.gd
       - name: Godot durable inventory login chunks and pickup UID merge
         run: .cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64 --headless --path client --script res://tests/test_inventory_snapshot.gd
+      - name: Godot verified recovery use wire, HP and one-time quantity reducer
+        run: .cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64 --headless --path client --script res://tests/test_recovery_use_wire.gd
       - name: Godot private item name catalog and fail-closed provenance
         run: .cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64 --headless --path client --script res://tests/test_item_catalog.gd
       - name: Godot audited NPC portal compact wire and reducer gate
