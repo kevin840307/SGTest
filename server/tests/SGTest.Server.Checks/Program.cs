@@ -238,6 +238,7 @@ static class Checks
             CharacterPositionCheckpointChecks.Verify(root);
             CharacterCombatProfileChecks.Verify(root);
             GroundLootChecks.Verify(root);
+            MonsterLootSettlementChecks.Verify(root);
             NormalAttackChecks.Verify(root);
             PlayerCombatSettlementChecks.Verify(root);
             CombatDeathGateChecks.Verify(root);
