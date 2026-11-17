@@ -8,6 +8,9 @@ const MAX_INTENTS := 128
 const LOGIC_SLEEP_MS := 2
 const MAX_RECONNECT_ATTEMPTS := 3
 const RECONNECT_BACKOFF_MS := [100,250,500]
+const NORMAL_ATTACK_OUT_OF_RANGE := 4
+const MOVE_RECEIPT_ACCEPTED := 0
+const MAX_AUTO_APPROACH_CYCLES := 4
 
 var _transport: RefCounted
 var _world: RefCounted = WorldState.new()
@@ -29,6 +32,7 @@ var _reconnecting := false
 var _reconnect_attempt := 0
 var _reconnect_count := 0
 var _last_transport_error := OK
+var _intent_token := 0
 
 func _init(transport_override: RefCounted = null) -> void:
 	_transport = transport_override if transport_override != null else Transport.new()
@@ -56,6 +60,7 @@ func connect_secure(host: String, port: int, username: String, password: String,
 	_reconnect_attempt = 0
 	_reconnect_count = 0
 	_last_transport_error = OK
+	_intent_token = 0
 	_published = _decorate_snapshot(_world.snapshot())
 	_running = true
 	_mutex.unlock()
@@ -151,17 +156,28 @@ func stop() -> void:
 func _queue_intent(intent: Dictionary) -> bool:
 	_mutex.lock()
 	var accepted := _running and not _stop_requested and not _reconnecting and _intents.size() < MAX_INTENTS
-	if accepted and str(intent.get("type","")) == "use_recovery_item":
+	var kind := str(intent.get("type",""))
+	# Direct player navigation always supersedes an outstanding click-to-attack
+	# chase. Clicking another monster also replaces an earlier navigation target.
+	# Any already-sent Server command may still return a reliable receipt, but
+	# its Client-side auto-follow state is no longer retained.
+	if accepted and kind in ["move","attack_monster"]:
+		var kept: Array[Dictionary] = []
+		for queued in _intents:
+			if str(queued.get("type","")) not in ["move","attack_monster"]:
+				kept.append(queued)
+		_intents = kept
+	if accepted and kind == "use_recovery_item":
 		for queued in _intents:
 			if str(queued.get("type","")) in ["use_recovery_item","discard_inventory_item"]:
 				accepted = false
 				break
-	if accepted and str(intent.get("type","")) == "discard_inventory_item":
+	if accepted and kind == "discard_inventory_item":
 		for queued in _intents:
 			if str(queued.get("type","")) in ["discard_inventory_item","use_recovery_item"]:
 				accepted = false
 				break
-	if accepted and str(intent.get("type","")) == "pickup_ground_drop":
+	if accepted and kind == "pickup_ground_drop":
 		# Reject repeated clicks while the first one is still in the intent
 		# queue, before it acquires a pending authoritative sequence.
 		for queued in _intents:
@@ -169,7 +185,10 @@ func _queue_intent(intent: Dictionary) -> bool:
 				accepted = false
 				break
 	if accepted:
-		_intents.append(intent)
+		_intent_token += 1
+		var queued_intent := intent.duplicate(true)
+		queued_intent["_token"] = _intent_token
+		_intents.append(queued_intent)
 	_mutex.unlock()
 	return accepted
 
@@ -411,26 +430,128 @@ func _process_first_intent() -> void:
 			_pop_intent()
 			_publish()
 	elif kind == "attack_monster":
-		var current: Dictionary = _world.snapshot()
-		if int(current.state) != WorldState.STATE_IN_WORLD or bool(current.player_dead) or not bool(current.world_ready) or bool(current.resync_pending) or int(current.pending_world_ready_ack_epoch) != 0 or int(current.last_world_ready_ack_epoch) != int(current.map_epoch) or bool(current.waiting_for_new_map):
-			return
-		var sequence := int(current.attack_sequence) + 1
-		var frame := WireCodec.encode_normal_attack(int(current.map_epoch),sequence,int(intent.entity_id))
-		if not frame.is_empty() and _transport.send_frame(frame) and _world.mark_normal_attack_sent(sequence):
-			_pop_intent()
-			_publish()
+		_process_attack_monster_intent(intent)
 	elif kind == "move":
 		var current: Dictionary = _world.snapshot()
 		if int(current.state) != WorldState.STATE_IN_WORLD or bool(current.player_dead) or not bool(current.world_ready) or bool(current.resync_pending) or int(current.pending_world_ready_ack_epoch) != 0 or int(current.last_world_ready_ack_epoch) != int(current.map_epoch) or bool(current.waiting_for_new_map):
 			return
+		var token := int(intent.get("_token",0))
+		if not _first_intent_matches(token):
+			return
 		var sequence := int(current.movement_sequence) + 1
 		var frame := WireCodec.encode_move_target(int(current.map_epoch), sequence, int(intent.x), int(intent.y))
 		if not frame.is_empty() and _transport.send_frame(frame) and _world.mark_move_sent(sequence):
-			_pop_intent()
+			_pop_intent_token(token)
 			_publish()
 	else:
 		_world.fail("unknown_intent")
 		_publish()
+
+func _process_attack_monster_intent(intent: Dictionary) -> void:
+	var current: Dictionary = _world.snapshot()
+	var token := int(intent.get("_token",0))
+	if token <= 0 or not _first_intent_matches(token):
+		return
+	if int(current.state) != WorldState.STATE_IN_WORLD:
+		return
+	if bool(current.player_dead):
+		_pop_intent_token(token)
+		return
+	if not bool(current.world_ready) or bool(current.resync_pending) or int(current.pending_world_ready_ack_epoch) != 0 or int(current.last_world_ready_ack_epoch) != int(current.map_epoch) or bool(current.waiting_for_new_map):
+		return
+
+	var target_id := int(intent.get("entity_id",0))
+	var monsters: Dictionary = current.monsters
+	if target_id <= 0 or not monsters.has(target_id):
+		_pop_intent_token(token)
+		return
+	var target: Dictionary = monsters[target_id]
+	if int(target.get("current_hp",0)) <= 0 or int(target.get("state",0)) == 4:
+		_pop_intent_token(token)
+		return
+
+	var phase := str(intent.get("phase","send_attack"))
+	if phase == "send_attack":
+		var sequence := int(current.attack_sequence)+1
+		var frame := WireCodec.encode_normal_attack(
+			int(current.map_epoch),sequence,target_id)
+		if not frame.is_empty() and _transport.send_frame(frame) and _world.mark_normal_attack_sent(sequence):
+			var waiting := intent.duplicate(true)
+			waiting["phase"] = "await_attack"
+			waiting["attack_sequence"] = sequence
+			_replace_first_intent(token,waiting)
+			_publish()
+		return
+
+	if phase == "await_attack":
+		var attack_sequence := int(intent.get("attack_sequence",0))
+		var result_sequence := int(current.last_attack_result_sequence)
+		if result_sequence < attack_sequence:
+			return
+		if result_sequence != attack_sequence:
+			_pop_intent_token(token)
+			return
+		var result: Dictionary = current.last_attack_result
+		if int(result.get("target_entity_id",0)) != target_id:
+			_pop_intent_token(token)
+			return
+		if int(current.last_attack_result_status) != NORMAL_ATTACK_OUT_OF_RANGE:
+			_pop_intent_token(token)
+			return
+		var cycles := int(intent.get("approach_cycles",0))
+		if cycles >= MAX_AUTO_APPROACH_CYCLES:
+			_pop_intent_token(token)
+			return
+		# Refresh the latest authoritative monster position before asking the
+		# existing Server A* movement path to approach. No Client attack range
+		# is guessed; the next attack is still accepted/rejected by Server.
+		current = _world.snapshot()
+		monsters = current.monsters
+		if not monsters.has(target_id):
+			_pop_intent_token(token)
+			return
+		target = monsters[target_id]
+		if int(target.get("current_hp",0)) <= 0 or int(target.get("state",0)) == 4:
+			_pop_intent_token(token)
+			return
+		var move_sequence := int(current.movement_sequence)+1
+		var target_x := roundi(float(target.get("x",0.0)))
+		var target_y := roundi(float(target.get("y",0.0)))
+		var move_frame := WireCodec.encode_move_target(
+			int(current.map_epoch),move_sequence,target_x,target_y)
+		if not move_frame.is_empty() and _transport.send_frame(move_frame) and _world.mark_move_sent(move_sequence):
+			var moving := intent.duplicate(true)
+			moving["phase"] = "await_move"
+			moving["move_sequence"] = move_sequence
+			moving["approach_cycles"] = cycles+1
+			_replace_first_intent(token,moving)
+			_publish()
+		return
+
+	if phase == "await_move":
+		var move_sequence := int(intent.get("move_sequence",0))
+		var receipt_sequence := int(current.last_receipt_sequence)
+		if receipt_sequence < move_sequence:
+			return
+		if receipt_sequence != move_sequence or int(current.last_receipt_status) != MOVE_RECEIPT_ACCEPTED:
+			_pop_intent_token(token)
+			return
+		var self_state: Dictionary = current.self_state
+		if self_state.is_empty() or int(self_state.get("movement_action_sequence",0)) < move_sequence:
+			return
+		if bool(self_state.get("moving",false)):
+			return
+		# Route completion does not imply attack range. Retry the authoritative
+		# attack and only re-approach when Server again says OutOfRange.
+		var retry := intent.duplicate(true)
+		retry["phase"] = "send_attack"
+		retry["attack_sequence"] = 0
+		retry["move_sequence"] = 0
+		_replace_first_intent(token,retry)
+		return
+
+	_pop_intent_token(token)
+
 
 func _peek_intent() -> Dictionary:
 	_mutex.lock()
@@ -443,6 +564,30 @@ func _pop_intent() -> void:
 	if not _intents.is_empty():
 		_intents.pop_front()
 	_mutex.unlock()
+
+func _first_intent_matches(token: int) -> bool:
+	_mutex.lock()
+	var matches := token > 0 and not _intents.is_empty() and int(_intents[0].get("_token",0)) == token
+	_mutex.unlock()
+	return matches
+
+func _replace_first_intent(token: int, replacement: Dictionary) -> bool:
+	_mutex.lock()
+	var replaced := token > 0 and not _intents.is_empty() and int(_intents[0].get("_token",0)) == token
+	if replaced:
+		var next := replacement.duplicate(true)
+		next["_token"] = token
+		_intents[0] = next
+	_mutex.unlock()
+	return replaced
+
+func _pop_intent_token(token: int) -> bool:
+	_mutex.lock()
+	var removed := token > 0 and not _intents.is_empty() and int(_intents[0].get("_token",0)) == token
+	if removed:
+		_intents.pop_front()
+	_mutex.unlock()
+	return removed
 
 func _should_stop() -> bool:
 	_mutex.lock()
