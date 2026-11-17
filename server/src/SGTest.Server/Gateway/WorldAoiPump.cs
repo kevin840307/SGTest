@@ -108,6 +108,9 @@ public sealed class WorldAoiPump
                             0, 0, 0, 0)
                         : _monsters.ResolveNormalAttack(attack);
 
+                    if (outcome.Status is NormalAttackStatus.Applied or NormalAttackStatus.Miss)
+                        _aoi.EnqueuePlayerAttackVisual(attack,outcome);
+
                     if (outcome.Status == NormalAttackStatus.Applied &&
                         outcome.Monster is { } changed)
                     {

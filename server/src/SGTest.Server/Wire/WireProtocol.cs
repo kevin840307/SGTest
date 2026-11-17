@@ -40,7 +40,8 @@ public enum WireOpcode : ushort
     RecoveryUse = 37,
     RecoveryUseResult = 38,
     InventoryDiscard = 39,
-    InventoryDiscardResult = 40
+    InventoryDiscardResult = 40,
+    PlayerAttackVisual = 41
 }
 
 public enum AuthWireStatus : byte { Success = 0, InvalidCredentials = 1, Disabled = 2 }
@@ -67,6 +68,10 @@ public readonly record struct NormalAttackResultWire(
     long MapEpoch, uint AttackSequence, NormalAttackStatus Status,
     long ServerTick, long TargetEntityId, int Damage,
     int CurrentHp, int MaxHp, long TargetRevision);
+public readonly record struct PlayerAttackVisualWire(
+    long ReceiverMapEpoch,long ServerTick,long AttackerActorId,
+    long AttackerConnectionEpoch,uint AttackSequence,long TargetEntityId,
+    NormalAttackStatus Status,int Damage,long TargetRevision,byte Facing);
 public readonly record struct PlayerCombatStateWire(
     long MapEpoch, int CurrentHp, int MaxHp);
 public readonly record struct PlayerDamageWire(
@@ -150,6 +155,7 @@ public static class WireProtocol
     public const int NpcInteractResultFrameBytes = HeaderBytes + 8 + 4 + 1 + 8;
     public const int NormalAttackFrameBytes = HeaderBytes + 8 + 4 + 8;
     public const int NormalAttackResultFrameBytes = HeaderBytes + 8 + 4 + 1 + 8 + 8 + 4 + 4 + 4 + 8;
+    public const int PlayerAttackVisualFrameBytes = HeaderBytes + 8 + 8 + 8 + 8 + 4 + 8 + 1 + 4 + 8 + 1;
     public const int PlayerCombatStateFrameBytes = HeaderBytes + 8 + 4 + 4;
     public const int PlayerDamageFrameBytes = HeaderBytes + 8 + 4 + 8 + 8 + 8 + 4 + 4 + 4 + 1;
     public const int PlayerRespawnFrameBytes = HeaderBytes + 8 + 4;
@@ -320,6 +326,44 @@ public static class WireProtocol
             BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(45, 4)),
             BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(49, 8)));
         return ValidNormalAttackResult(value);
+    }
+
+    public static byte[] EncodePlayerAttackVisual(PlayerAttackVisualWire value)
+    {
+        if(!ValidPlayerAttackVisual(value))
+            throw new ArgumentOutOfRangeException(nameof(value));
+        var frame=NewFrame(WireOpcode.PlayerAttackVisual,PlayerAttackVisualFrameBytes);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(8,8),value.ReceiverMapEpoch);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(16,8),value.ServerTick);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(24,8),value.AttackerActorId);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(32,8),value.AttackerConnectionEpoch);
+        BinaryPrimitives.WriteUInt32LittleEndian(frame.AsSpan(40,4),value.AttackSequence);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(44,8),value.TargetEntityId);
+        frame[52]=(byte)value.Status;
+        BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(53,4),value.Damage);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(57,8),value.TargetRevision);
+        frame[65]=value.Facing;
+        return frame;
+    }
+
+    public static bool TryDecodePlayerAttackVisual(
+        ReadOnlySpan<byte> frame,out PlayerAttackVisualWire value)
+    {
+        value=default;
+        if(!TryReadHeader(frame,out var h) || h.Opcode!=WireOpcode.PlayerAttackVisual)
+            return false;
+        value=new(
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(8,8)),
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(16,8)),
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(24,8)),
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(32,8)),
+            BinaryPrimitives.ReadUInt32LittleEndian(frame.Slice(40,4)),
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(44,8)),
+            (NormalAttackStatus)frame[52],
+            BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(53,4)),
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(57,8)),
+            frame[65]);
+        return ValidPlayerAttackVisual(value);
     }
 
     public static byte[] EncodePlayerCombatState(PlayerCombatStateWire value)
@@ -1189,6 +1233,20 @@ public static class WireProtocol
         return true;
     }
 
+    private static bool ValidPlayerAttackVisual(PlayerAttackVisualWire value)
+    {
+        if(value.ReceiverMapEpoch<=0 || value.ServerTick<0 ||
+            value.AttackerActorId<=0 || value.AttackerConnectionEpoch<=0 ||
+            value.AttackSequence==0 || value.TargetEntityId<=0 ||
+            value.TargetRevision<=0 || value.Facing is <1 or >8)
+            return false;
+        if(value.Status==NormalAttackStatus.Applied)
+            return value.Damage>0;
+        if(value.Status==NormalAttackStatus.Miss)
+            return value.Damage==0;
+        return false;
+    }
+
     private static bool ValidPlayerCombatState(PlayerCombatStateWire value) =>
         value.MapEpoch > 0 && value.MaxHp > 0 &&
         value.CurrentHp >= 0 && value.CurrentHp <= value.MaxHp;
@@ -1265,7 +1323,8 @@ public static class WireProtocol
             36 => WireOpcode.InventorySnapshot, 37 => WireOpcode.RecoveryUse,
             38 => WireOpcode.RecoveryUseResult,
             39 => WireOpcode.InventoryDiscard,
-            40 => WireOpcode.InventoryDiscardResult, _ => 0
+            40 => WireOpcode.InventoryDiscardResult,
+            41 => WireOpcode.PlayerAttackVisual, _ => 0
         };
         if (opcode == 0) return false;
         bool sizeOk = opcode switch
@@ -1300,6 +1359,7 @@ public static class WireProtocol
             WireOpcode.RecoveryUseResult => advertised == RecoveryUseResultFrameBytes,
             WireOpcode.InventoryDiscard => advertised == InventoryDiscardFrameBytes,
             WireOpcode.InventoryDiscardResult => advertised == InventoryDiscardResultFrameBytes,
+            WireOpcode.PlayerAttackVisual => advertised == PlayerAttackVisualFrameBytes,
             WireOpcode.InventorySnapshot => advertised >= InventorySnapshotHeaderBytes &&
                 advertised <= InventorySnapshotHeaderBytes +
                     InventorySnapshotMaxItemsPerFrame*InventoryItemBytes &&

@@ -19,6 +19,7 @@ internal static class AoiWireChecks
     private const string MonsterDespawn = "2800000001001D000100000000000000340000000000000021A0AE3B000000000300000000000000";
     private const string GroundSpawn = "340000000100200001000000000000003700000000000000F5010000000000000F000000000040420000C0418D0A000002000000";
     private const string GroundDespawn = "200000000100210001000000000000003800000000000000F501000000000000";
+    private const string PlayerAttack = "4200000001002900010000000000000032000000000000000B0000000000000002000000000000000700000021A0AE3B00000000001E000000030000000000000006";
 
     public static void Verify()
     {
@@ -98,6 +99,13 @@ internal static class AoiWireChecks
         malformedGround[38]=0xC0;malformedGround[39]=0x7F;
         Require(!WireProtocol.TryDecodeGroundDropSpawn(malformedGround,out _),
             "nonfinite ground drop coordinate accepted");
+        var playerAttack=new PlayerAttackVisualWire(
+            1,50,11,2,7,1001300001,NormalAttackStatus.Applied,30,3,6);
+        byte[] playerAttackBytes=WireProtocol.EncodePlayerAttackVisual(playerAttack);
+        Require(Convert.ToHexString(playerAttackBytes)==PlayerAttack &&
+            WireProtocol.TryDecodePlayerAttackVisual(playerAttackBytes,out var parsedAttack) &&
+            parsedAttack==playerAttack,
+            "PlayerAttackVisual C#/Godot golden binary");
         byte[] despawn = WireProtocol.EncodeEntityDespawn(new(1, 45, 22, 2));
         Require(Convert.ToHexString(despawn) == Despawn &&
                 WireProtocol.TryDecodeEntityDespawn(despawn, out var left) &&
@@ -138,6 +146,14 @@ internal static class AoiWireChecks
         BinaryPrimitives.WriteInt32LittleEndian(bad.AsSpan(60,4),101);
         Require(!WireProtocol.TryDecodeMonsterState(bad,out _,out _),
                 "monster HP above MaxHP accepted");
+        bad=Convert.FromHexString(PlayerAttack);
+        bad[52]=(byte)NormalAttackStatus.OutOfRange;
+        Require(!WireProtocol.TryDecodePlayerAttackVisual(bad,out _),
+            "non-visual attack status accepted as presentation event");
+        bad=Convert.FromHexString(PlayerAttack);
+        bad[65]=9;
+        Require(!WireProtocol.TryDecodePlayerAttackVisual(bad,out _),
+            "invalid attack visual facing accepted");
         bad = Convert.FromHexString(Despawn);
         Array.Clear(bad, 8, 8);
         Require(!WireProtocol.TryDecodeEntityDespawn(bad, out _),
@@ -212,6 +228,17 @@ internal static class AoiWireChecks
                 monsterGone.EntityId == monster.EntityId &&
                 monsterGone.Revision == monster.EntityRevision,
                 "monster Despawn did not use shared reliable Gateway FIFO");
+        var visual=new PlayerAttackVisual(
+            owner.ActorId,owner.ConnectionEpoch,7,monster.EntityId,
+            NormalAttackStatus.Applied,30,monster.EntityRevision,6);
+        Require(gateway.QueueAoi(new(AoiEventKind.PlayerAttackVisual,50,1,
+                    PlayerAttack:visual))==GatewaySendStatus.Enqueued &&
+                gateway.TryDequeueReliable(out var visualFrame) &&
+                WireProtocol.TryDecodePlayerAttackVisual(visualFrame,out var visualWire) &&
+                visualWire.AttackerActorId==owner.ActorId &&
+                visualWire.AttackSequence==7 && visualWire.Damage==30 &&
+                visualWire.Facing==6,
+                "player attack visual did not use shared reliable Gateway FIFO");
 
         TrustedWorldResyncRequest requested = default;
         Require(gateway.FeedClientBytes(

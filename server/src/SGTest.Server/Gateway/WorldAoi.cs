@@ -17,7 +17,8 @@ public enum AoiEventKind : byte
 {
     WorldReady, Spawn, Delta, Despawn, SelfState,
     MonsterSpawn, MonsterDelta, MonsterDespawn,
-    GroundDropSpawn, GroundDropDespawn
+    GroundDropSpawn, GroundDropDespawn,
+    PlayerAttackVisual
 }
 
 /// <summary>
@@ -25,11 +26,17 @@ public enum AoiEventKind : byte
 /// authoritative entity snapshot; Despawn identifies the previous entity
 /// generation. ReceiverMapEpoch guards transfer/reconnect before wire encoding.
 /// </summary>
+public readonly record struct PlayerAttackVisual(
+    long AttackerActorId,long AttackerConnectionEpoch,uint AttackSequence,
+    long TargetEntityId,NormalAttackStatus Status,int Damage,
+    long TargetRevision,byte Facing);
+
 public readonly record struct AoiEvent(
     AoiEventKind Kind, long Tick, long ReceiverMapEpoch,
     ActorSnapshot? Entity = null, long EntityActorId = 0, long EntityConnectionEpoch = 0,
     MonsterSnapshot? Monster = null, long MonsterEntityId = 0, long MonsterRevision = 0,
-    GroundDropRecord? GroundDrop = null, long GroundDropId = 0);
+    GroundDropRecord? GroundDrop = null, long GroundDropId = 0,
+    PlayerAttackVisual? PlayerAttack = null);
 
 public sealed class AoiBackpressureException : Exception
 {
@@ -214,6 +221,58 @@ public sealed class WorldAoi
                 "Monster AOI changes must share the current authoritative World Tick");
         foreach (var monster in changed)
             ChangedMonster(monster, tick);
+    }
+
+    /// <summary>
+    /// Enqueue one authoritative normal-attack presentation event only to
+    /// observers that currently see BOTH the attacker and target monster.
+    /// Gameplay HP/damage authority remains in MonsterRuntime/MonsterDelta.
+    /// </summary>
+    public int EnqueuePlayerAttackVisual(
+        TrustedNormalAttack request,NormalAttackOutcome outcome)
+    {
+        if(_lastTick<=0 || outcome.ServerTick!=_lastTick ||
+            request.ActorId<=0 || request.ConnectionEpoch<=0 ||
+            request.RequestMapEpoch<=0 || request.AttackSequence==0 ||
+            outcome.TargetEntityId!=request.TargetEntityId ||
+            outcome.TargetRevision<=0 ||
+            outcome.Status is not (NormalAttackStatus.Applied or NormalAttackStatus.Miss) ||
+            (outcome.Status==NormalAttackStatus.Applied && outcome.Damage<=0) ||
+            (outcome.Status==NormalAttackStatus.Miss && outcome.Damage!=0))
+            throw new InvalidOperationException(
+                "Invalid authoritative player attack visual");
+
+        if(!_entities.TryGetValue(request.ActorId,out var attacker) ||
+            attacker.ConnectionEpoch!=request.ConnectionEpoch ||
+            attacker.MapEpoch!=request.RequestMapEpoch ||
+            !_monsters.TryGetValue(request.TargetEntityId,out var target) ||
+            attacker.MapId!=target.MapId)
+            return 0;
+
+        var visual=new PlayerAttackVisual(
+            attacker.ActorId,attacker.ConnectionEpoch,request.AttackSequence,
+            request.TargetEntityId,outcome.Status,outcome.Damage,
+            outcome.TargetRevision,attacker.Facing);
+        int queued=0;
+        foreach(var observer in _observers.Values)
+        {
+            if(observer.Self.MapId!=attacker.MapId ||
+                !observer.VisibleMonsters.ContainsKey(request.TargetEntityId))
+                continue;
+            bool seesAttacker=
+                observer.Self.ActorId==attacker.ActorId &&
+                observer.Self.ConnectionEpoch==attacker.ConnectionEpoch &&
+                observer.Self.MapEpoch==attacker.MapEpoch;
+            if(!seesAttacker &&
+                observer.Visible.TryGetValue(attacker.ActorId,out var seen))
+                seesAttacker=seen.ConnectionEpoch==attacker.ConnectionEpoch &&
+                    seen.MapEpoch==attacker.MapEpoch;
+            if(!seesAttacker) continue;
+            Enqueue(observer,new(AoiEventKind.PlayerAttackVisual,_lastTick,
+                observer.Self.MapEpoch,PlayerAttack:visual));
+            queued++;
+        }
+        return queued;
     }
 
     /// <summary>Restore committed active drops before the first World batch.

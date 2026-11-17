@@ -743,6 +743,14 @@ public sealed class GatewayConnection
                     frame=WireProtocol.EncodeGroundDropDespawn(new(
                         evt.ReceiverMapEpoch,evt.Tick,evt.GroundDropId));
                     break;
+                case AoiEventKind.PlayerAttackVisual when evt.PlayerAttack is { } attack:
+                    frame=WireProtocol.EncodePlayerAttackVisual(new(
+                        evt.ReceiverMapEpoch,evt.Tick,
+                        attack.AttackerActorId,attack.AttackerConnectionEpoch,
+                        attack.AttackSequence,attack.TargetEntityId,
+                        attack.Status,attack.Damage,attack.TargetRevision,
+                        attack.Facing));
+                    break;
                 default:
                     return GatewaySendStatus.GenerationMismatch;
             }

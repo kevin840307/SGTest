@@ -36,6 +36,8 @@ internal static class WorldAoiChecks
             Interest);
         Checks.Run("same AOI tracks monster Spawn/Delta/Despawn hysteresis and resync baseline",
             MonsterInterest);
+        Checks.Run("player attack visual reaches only viewers seeing attacker and target",
+            PlayerAttackVisualInterest);
         Checks.Run("same map-bucket AOI tracks durable ground drop enter, exit, resync and pickup removal",
             GroundDropInterest);
         Checks.Run("20 observers and 500 ground drops share one bounded AOI with zero idle resends",
@@ -49,6 +51,50 @@ internal static class WorldAoiChecks
             InvalidAndBounded);
         Checks.Run("30Hz Host publishes idle join and leave to AOI through WorldResultRouter",
             () => RealHostLifecycle(root).GetAwaiter().GetResult());
+    }
+
+    private static void PlayerAttackVisualInterest()
+    {
+        var aoi=new WorldAoi(new WorldAoiOptions(
+            EnterHalfWidth:200,EnterHalfHeight:150,ExitMargin:60,BucketSize:64));
+        var attacker=Actor(81,15,24,24,connection:3);
+        var observer=Actor(82,15,48,24,connection:4);
+        var far=Actor(83,15,1200,24,connection:5);
+        var monster=new MonsterSnapshot(
+            1001500001,1,0,15,40,24,40,24,100,100,
+            MonsterAiState.Idle,0,1,2);
+        aoi.Apply(new WorldChangedBatch(1,Array.Empty<ActorSnapshot>(),
+            [Join(attacker),Join(observer),Join(far)]),[monster]);
+        Drain(aoi,attacker);Drain(aoi,observer);Drain(aoi,far);
+        var request=new TrustedNormalAttack(
+            attacker.ActorId,attacker.ConnectionEpoch,attacker.MapEpoch,
+            7,monster.EntityId,null);
+        var changed=monster with {CurrentHp=70,EntityRevision=2};
+        var outcome=new NormalAttackOutcome(
+            NormalAttackStatus.Applied,1,monster.EntityId,30,70,100,2,changed);
+        Require(aoi.EnqueuePlayerAttackVisual(request,outcome)==2,
+            "attack visual fanout included invisible observer or omitted visible owner/peer");
+        var ownerEvents=Drain(aoi,attacker);
+        var peerEvents=Drain(aoi,observer);
+        Require(ownerEvents is [var own] &&
+            own.Kind==AoiEventKind.PlayerAttackVisual &&
+            own.PlayerAttack?.AttackSequence==7 &&
+            own.PlayerAttack?.Facing==attacker.Facing &&
+            peerEvents is [var peer] &&
+            peer.PlayerAttack==own.PlayerAttack &&
+            Drain(aoi,far).Length==0,
+            "attack visual AOI scope/payload mismatch");
+
+        aoi.ApplyMonsters(1,[changed]);
+        Require(Drain(aoi,attacker).Single().Kind==AoiEventKind.MonsterDelta &&
+            Drain(aoi,observer).Single().Kind==AoiEventKind.MonsterDelta,
+            "authoritative monster HP delta lost after visual event");
+        var miss=new NormalAttackOutcome(
+            NormalAttackStatus.Miss,1,monster.EntityId,0,70,100,2,changed);
+        Require(aoi.EnqueuePlayerAttackVisual(
+                request with {AttackSequence=8},miss)==2 &&
+            Drain(aoi,attacker).Single().PlayerAttack?.Status==NormalAttackStatus.Miss,
+            "MISS presentation event not admitted");
     }
 
     private static void GroundDropInterest()
