@@ -63,6 +63,8 @@ func connect_secure(host: String, port: int, username: String, password: String,
 	if error != OK:
 		_mutex.lock()
 		_running = false
+		_clear_credentials_locked()
+		_username = ""
 		_mutex.unlock()
 		return error
 	_thread = Thread.new()
@@ -227,7 +229,7 @@ func _process_reconnect_choose() -> void:
 		_publish()
 
 func _maybe_finish_world_entry() -> void:
-	var current := _world.snapshot()
+	var current: Dictionary = _world.snapshot()
 	if int(current.state) != WorldState.STATE_IN_WORLD or not bool(current.world_ready) or int(current.pending_world_ready_ack_epoch) != 0 or int(current.last_world_ready_ack_epoch) != int(current.map_epoch):
 		return
 	_mutex.lock()
