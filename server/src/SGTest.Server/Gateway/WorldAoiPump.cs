@@ -19,19 +19,22 @@ public sealed class WorldAoiPump
     private readonly WorldAoiPumpOptions _options;
     private readonly MonsterWorldCoordinator? _monsters;
     private readonly PlayerCombatSettlement? _playerCombat;
+    private readonly MonsterLootSettlement? _loot;
     private int _started;
     private long _processedBatches, _framesQueued;
 
     public WorldAoiPump(WorldResultRouter router, WorldAoi? aoi = null,
                         WorldAoiPumpOptions? options = null,
                         MonsterWorldCoordinator? monsters = null,
-                        PlayerCombatSettlement? playerCombat = null)
+                        PlayerCombatSettlement? playerCombat = null,
+                        MonsterLootSettlement? loot = null)
     {
         _router = router ?? throw new ArgumentNullException(nameof(router));
         _aoi = aoi ?? new WorldAoi();
         _options = options ?? new WorldAoiPumpOptions();
         _monsters = monsters;
         _playerCombat = playerCombat;
+        _loot = loot;
         if (_options.FlushIntervalMilliseconds is < 1 or > 1000 ||
             _options.MaxFramesPerObserverPerPoll is < 1 or > 4096)
             throw new ArgumentOutOfRangeException(nameof(options));
@@ -101,7 +104,16 @@ public sealed class WorldAoiPump
 
                     if (outcome.Status == NormalAttackStatus.Applied &&
                         outcome.Monster is { } changed)
+                    {
                         _aoi.ApplyMonsters(_aoi.LastTick, [changed]);
+                        // Only successful Server-computed lethal attacks mint a
+                        // death event, never replay/cooldown/other result status.
+                        if (_loot is not null && changed.CurrentHp == 0 &&
+                            changed.State == MonsterAiState.Dead &&
+                            _loot.TryPostDeath(changed) == MonsterLootPostStatus.Backpressured)
+                            throw new AoiBackpressureException(
+                                "Loot settlement queue full; accepted death must not be dropped");
+                    }
 
                     var sent = _router.QueueNormalAttackResult(attack, outcome);
                     if (sent is GatewaySendStatus.GenerationMismatch or GatewaySendStatus.Closed)

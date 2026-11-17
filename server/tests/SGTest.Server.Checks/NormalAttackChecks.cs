@@ -1,5 +1,6 @@
 using System.Text.Json;
 using SGTest.Server.Gateway;
+using SGTest.Server.Identity;
 using SGTest.Server.Wire;
 using SGTest.Server.World;
 
@@ -104,6 +105,13 @@ internal static class NormalAttackChecks
             new(AiIntervalTicks:1,MaxAiPerStep:4,MaxPathQueriesPerStep:1,
                 MaxPathExpandedCells:128));
         var coordinator=new MonsterWorldCoordinator([runtime]);
+        using var lootStore=new SqliteIdentityStore(Path.Combine(root,
+            "normal-attack-loot-"+Guid.NewGuid().ToString("N")+".db"));
+        await lootStore.InitializeAsync();
+        long generation=await lootStore.AllocateLootWorldGenerationAsync();
+        var loot=new MonsterLootSettlement(lootStore,generation,
+            [new MonsterDropRule(mapId,1,0,2701,2,
+                LootSourceTrust.SyntheticTest,"ci:explicit-synthetic")]);
 
         await using var host=new ServerWorldHost(
             [grid],options:new WorldHostOptions(PublishIdleTicks:true));
@@ -117,10 +125,11 @@ internal static class NormalAttackChecks
         var router=new WorldResultRouter(
             new WorldResultRouterOptions(AttackRequestCapacity:8));
         Require(router.TryAttach(gateway),"combat gateway attach");
-        var pump=new WorldAoiPump(router,monsters:coordinator);
+        var pump=new WorldAoiPump(router,monsters:coordinator,loot:loot);
         using var stop=new CancellationTokenSource();
         var routing=router.RunAsync(host.Results);
         var pumping=pump.RunAsync(stop.Token);
+        var looting=loot.RunAsync();
         try
         {
             await WaitFor(gateway,2);
@@ -194,6 +203,25 @@ internal static class NormalAttackChecks
                     lethal.Monster is { } dead &&
                     dead.CurrentHp==0 && dead.State==MonsterAiState.Dead,
                 "authoritative death did not fan out");
+            // Real authenticated normal attack->WorldAoiPump->bounded
+            // settlement->SQLite; the test never seeds drops directly.
+            using(var timeout=new CancellationTokenSource(TimeSpan.FromSeconds(4)))
+            {
+                while((await lootStore.ListActiveGroundDropsAsync(mapId)).Count!=1)
+                {
+                    timeout.Token.ThrowIfCancellationRequested();
+                    await Task.Delay(10,timeout.Token);
+                }
+            }
+            var drop=(await lootStore.ListActiveGroundDropsAsync(mapId)).Single();
+            Require(drop.MonsterEntityId==initial.EntityId &&
+                drop.DeathRevision==
+                   SqliteIdentityStore.ComposeLootDeathRevision(generation,lr.TargetRevision) &&
+                drop.ItemDefinitionId==2701 && drop.Quantity==2 &&
+                drop.Trust==LootSourceTrust.SyntheticTest &&
+                loot.Statistics.DeathsCommitted==1 &&
+                loot.Statistics.DropsCommitted==1,
+                "lethal attack failed to commit one durable trusted drop");
         }
         finally
         {
@@ -201,6 +229,8 @@ internal static class NormalAttackChecks
             await pumping.WaitAsync(TimeSpan.FromSeconds(3));
             await host.StopAsync();
             await routing.WaitAsync(TimeSpan.FromSeconds(3));
+            loot.Complete();
+            await looting.WaitAsync(TimeSpan.FromSeconds(3));
         }
     }
 

@@ -59,10 +59,18 @@ internal static class TlsHost
             }
             MonsterWorldCoordinator? monsters = monsterRuntimes.Count == 0
                 ? null : new MonsterWorldCoordinator(monsterRuntimes);
+            // No original source-verified manifest means no fabricated drops.
+            string? lootManifest = options.GetValueOrDefault("--loot-rules");
+            IReadOnlyList<MonsterDropRule>? dropRules = lootManifest is null
+                ? null : MonsterDropCatalog.LoadVerified(
+                    Path.GetFullPath(lootManifest),monsterRuntimes);
             var portals = PortalCatalog.LoadNpcDocuments(new[] { 13, 15 }.Select(id =>
                 Path.Combine(root, "maps", id.ToString(), "npcs.json")));
             using var identity = new SqliteIdentityStore(database);
             await identity.InitializeAsync(stop.Token);
+            MonsterLootSettlement? loot = dropRules is null
+                ? null : new MonsterLootSettlement(identity,
+                    await identity.AllocateLootWorldGenerationAsync(stop.Token),dropRules);
             await using var world = new ServerWorldHost(
                 maps,
                 options: monsters is null
@@ -85,7 +93,7 @@ internal static class TlsHost
                             "Committed lethal damage could not stop authoritative World actor");
                 });
             var aoi = new WorldAoiPump(
-                router, monsters: monsters, playerCombat: combat);
+                router, monsters: monsters, playerCombat: combat, loot: loot);
             var authorization = new IdentityTlsAuthorization(
                 identity, world, portals, positions, combat);
             await using var listener = new TlsGatewayListener(address, port, authorization,
@@ -96,6 +104,10 @@ internal static class TlsHost
             var visibility = aoi.RunAsync(pumps.Token);
             var checkpointing = positions.RunAsync(pumps.Token);
             var combatSettlement = combat.RunAsync(pumps.Token);
+            // Unlike other continuously-polled pumps, drain queued loot on
+            // controlled shutdown before releasing the shared SQLite store.
+            var lootSettlement = loot?.RunAsync() ??
+                Task.Delay(Timeout.Infinite,pumps.Token);
             try
             {
                 var accepting = listener.RunAsync(stop.Token);
@@ -106,11 +118,13 @@ internal static class TlsHost
                     maps = maps.Select(m => m.MapId), audited_portals = portals.Count,
                     monster_maps = monsterRuntimes.Select(m => m.MapId),
                     monsters = monsterRuntimes.Sum(m => m.Count),
-                    position_checkpoint_ms = checkpointMs
+                    position_checkpoint_ms = checkpointMs,
+                    loot_rule_count = dropRules?.Count ?? 0
                 }));
                 var stopping = Task.Delay(Timeout.Infinite, stop.Token);
                 var completed = await Task.WhenAny(
-                    accepting, routing, visibility, checkpointing, combatSettlement, stopping);
+                    accepting, routing, visibility, checkpointing, combatSettlement,
+                    lootSettlement, stopping);
                 if (completed != stopping && !stop.IsCancellationRequested)
                 {
                     await completed; // propagate faults; never serve after a result/AOI pump failed
@@ -133,6 +147,11 @@ internal static class TlsHost
                     try { await Task.WhenAll(
                         routing, visibility, checkpointing, combatSettlement); }
                     catch (OperationCanceledException) when (pumps.IsCancellationRequested) { }
+                    finally
+                    {
+                        loot?.Complete();
+                        if (loot is not null) await lootSettlement;
+                    }
                 }
             }
             Console.WriteLine(JsonSerializer.Serialize(new
@@ -141,7 +160,8 @@ internal static class TlsHost
                 world = world.Statistics, router = router.Statistics,
                 monster_coordinator = monsters?.Statistics,
                 positions = positions.Statistics,
-                combat = combat.Statistics
+                combat = combat.Statistics,
+                loot = loot?.Statistics
             }));
             return 0;
         }
@@ -150,7 +170,7 @@ internal static class TlsHost
             Console.Error.WriteLine("TLS_HOST_CONFIGURATION: " + error.Message);
             Console.Error.WriteLine("Usage: serve --content <PRIVATE_ROOT> --identity <DB> --certificate <PFX> " +
                 "[--bind 127.0.0.1] [--port 7777] [--max-connections 128] [--max-per-address 8] " +
-                "[--position-checkpoint-ms 5000] [--seconds N]");
+                "[--position-checkpoint-ms 5000] [--loot-rules <VERIFIED_JSON>] [--seconds N]");
             return 2;
         }
         catch (OperationCanceledException) when (stop.IsCancellationRequested) { return 0; }
@@ -158,7 +178,7 @@ internal static class TlsHost
                                      CryptographicException or System.Net.Sockets.SocketException or
                                      WorldResultRoutingException or AoiBackpressureException or
                                      CharacterPositionCheckpointException or
-                                     PlayerCombatSettlementException)
+                                     PlayerCombatSettlementException or MonsterLootSettlementException or InvalidDataException)
         {
             Console.Error.WriteLine("TLS_HOST_FAIL: " + error.GetType().Name + ": " + error.Message);
             return 1;
@@ -170,7 +190,7 @@ internal static class TlsHost
     {
         string[] known = ["--content", "--identity", "--certificate", "--bind", "--port",
                           "--max-connections", "--max-per-address", "--position-checkpoint-ms",
-                          "--seconds"];
+                          "--loot-rules", "--seconds"];
         var values = new Dictionary<string, string>(StringComparer.Ordinal);
         if (args.Length % 2 != 0) throw new ArgumentException("Every option requires a value");
         for (int i = 0; i < args.Length; i += 2)
