@@ -113,7 +113,14 @@ internal static class MonsterRuntimeChecks
                        "monster death not authoritative");
 
         var target=new MonsterCombatTarget(99,213,200,200,1000);
-        for(long tick=1;tick<=5;tick++) runtime.Tick(tick,[target]);
+        bool respawnObserved=false;
+        for(long tick=1;tick<=5;tick++)
+        {
+            var events=runtime.Tick(tick,[target]);
+            respawnObserved |= events.Any(e=>
+                e.Kind==MonsterWorldEventKind.Respawn &&
+                e.Monster.EntityId==first.EntityId);
+        }
         var stats=runtime.Statistics;
         Checks.Require(stats.AiSteps==5 && stats.MonstersProcessed==300 &&
                        stats.MaxProcessedInStep==64 && stats.PathQueries==0,
@@ -122,12 +129,10 @@ internal static class MonsterRuntimeChecks
             x.EntityId==first.EntityId || x.EntityRevision>1),
             "fair cursor failed to process every live monster");
 
-        var respawnEvents=runtime.Tick(6,[target]);
         var revived=runtime.Find(first.EntityId)!.Value;
-        Checks.Require(revived.State!=MonsterAiState.Dead && revived.CurrentHp==100 &&
-                       respawnEvents.Any(e=>e.Kind==MonsterWorldEventKind.Respawn &&
-                                            e.Monster.EntityId==first.EntityId),
-                       "dead monster did not respawn on authoritative tick");
+        Checks.Require(respawnObserved && revived.State!=MonsterAiState.Dead &&
+                       revived.CurrentHp==100,
+                       "dead monster did not respawn when its bounded AI slot returned");
     }
 
     private static object Document(int mapId,bool verified,
