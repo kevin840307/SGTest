@@ -60,9 +60,7 @@ func _run_case(cadence: int) -> Dictionary:
 			break
 		OS.delay_msec(2)
 	var wire := fake.sent_hex()
-	print("CLIENT_FPS_DIAG cadence=%d before_stop state=%d wire=%d" % [cadence,int(final.state),wire.size()])
 	session.stop()
-	print("CLIENT_FPS_DIAG cadence=%d after_stop" % cadence)
 	if int(final.state) != WorldState.STATE_IN_WORLD or int(final.actor_id) != 11 or int(final.map_id) != 15 or int(final.map_epoch) != 1 or int(final.movement_sequence) != 1 or int(final.last_receipt_sequence) != 1 or int(final.last_receipt_status) != 0 or int(final.last_server_tick) != 42:
 		_fail("cadence %d final state invalid polls=%d state=%s" % [cadence, render_polls, final])
 		return {}
