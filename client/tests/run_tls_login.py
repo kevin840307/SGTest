@@ -353,7 +353,8 @@ def run_combat_observer(args, repo: Path, fixture: Path, env: dict[str, str]) ->
         print("GODOT_CSHARP_TWO_CLIENT_ATTACK_VISUAL_E2E_PASS "
               "tls=true concurrent_clients=2 attacker_visual=true "
               "observer_visual=true damage=60 monster_delta_hp=40 "
-              "same_reliable_aoi=true")
+              "actor_hit_visual=true observer_hit_visual=true monster_damage=18 "
+              "observer_remote_hp_authority=false same_reliable_aoi=true")
         return 0
     except Exception as error:
         print("TLS_COMBAT_OBSERVER_RUNNER_FAIL",error,file=sys.stderr)

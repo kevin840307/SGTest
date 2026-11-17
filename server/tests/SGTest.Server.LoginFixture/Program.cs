@@ -320,10 +320,10 @@ internal static class Program
                         atlas = "Enemy/EN001A/atlas.json",
                         stats = new
                         {
-                            level = 3, max_hp = 100, attack_damage = 1,
-                            move_step = 8.0, aggro_radius = 1.0,
-                            lose_target_radius = 16.0, leash_radius = 16.0,
-                            attack_range = 1.0, attack_cooldown_ticks = 1000,
+                            level = 3, max_hp = 100, attack_damage = 20,
+                            move_step = 8.0, aggro_radius = 100.0,
+                            lose_target_radius = 150.0, leash_radius = 150.0,
+                            attack_range = 20.0, attack_cooldown_ticks = 1000,
                             respawn_ticks = 300, wander_radius = 0.0,
                             wander_interval_ticks = 100
                         }
@@ -371,8 +371,19 @@ internal static class Program
 
             var router = new WorldResultRouter(
                 new WorldResultRouterOptions(AttackRequestCapacity:8));
-            var pump = new WorldAoiPump(router,monsters:coordinator);
-            var authorization = new IdentityTlsAuthorization(store,world);
+            var settlement = new PlayerCombatSettlement(
+                store,new(Capacity:8),router.QueuePlayerDamage,
+                committedLifecycle: result =>
+                {
+                    if (!router.TryPostPlayerDamageVisual(result))
+                        throw new PlayerCombatSettlementException(
+                            "combat observer damage visual queue full");
+                    return Task.CompletedTask;
+                });
+            var pump = new WorldAoiPump(
+                router,monsters:coordinator,playerCombat:settlement);
+            var authorization = new IdentityTlsAuthorization(
+                store,world,combat:settlement);
             using var certificate = CreateCertificate();
             string certPath = Path.Combine(root,"fixture-cert.pem");
             WriteCertificatePem(certPath,certificate);
@@ -381,6 +392,7 @@ internal static class Program
             using var stop = new CancellationTokenSource();
             var routing = router.RunAsync(world.Results);
             var pumping = pump.RunAsync(stop.Token);
+            var settling = settlement.RunAsync(stop.Token);
             try
             {
                 int port=((IPEndPoint)listener.LocalEndpoint).Port;
@@ -403,6 +415,8 @@ internal static class Program
                 var results=await Task.WhenAll(firstTask,secondTask)
                     .WaitAsync(TimeSpan.FromSeconds(20)).ConfigureAwait(false);
                 var monster=runtime.SnapshotAll().Single();
+                var actorProfile=await store.GetCharacterCombatProfileAsync(actorId)
+                    .ConfigureAwait(false);
                 var deadline=DateTime.UtcNow.AddSeconds(3);
                 while(world.Statistics.ActiveActors!=0 ||
                       router.Statistics.ActiveSessions!=0)
@@ -413,19 +427,26 @@ internal static class Program
                     await Task.Delay(5).ConfigureAwait(false);
                 }
                 if(monster.CurrentHp!=40 || monster.MaxHp!=100 ||
+                    actorProfile?.Data.CurrentHp!=82 ||
+                    settlement.Statistics.HitsCommitted!=1 ||
+                    settlement.Statistics.DamageCommitted!=18 ||
                     results[0].Reason!=TlsWireEndReason.CleanEof ||
                     results[1].Reason!=TlsWireEndReason.CleanEof ||
                     results[0].CommandsAccepted!=0 ||
                     results[1].CommandsAccepted!=1 ||
-                    pump.FramesQueued<8)
+                    pump.FramesQueued<10)
                     throw new InvalidOperationException(
                         $"combat observer mismatch hp={monster.CurrentHp}/{monster.MaxHp} " +
+                        $"actor_hp={actorProfile?.Data.CurrentHp} " +
+                        $"hits={settlement.Statistics.HitsCommitted} " +
                         $"observer_cmd={results[0].CommandsAccepted} actor_cmd={results[1].CommandsAccepted} " +
                         $"aoi_frames={pump.FramesQueued}");
 
                 Console.WriteLine(
                     $"COMBAT_OBSERVER_FIXTURE_PASS actor_a={observerId} actor_b={actorId} " +
                     $"monster_hp={monster.CurrentHp}/{monster.MaxHp} " +
+                    $"actor_hp={actorProfile!.Data.CurrentHp}/{actorProfile.Data.MaxHp} " +
+                    $"monster_damage={settlement.Statistics.DamageCommitted} " +
                     $"actor_commands={results[1].CommandsAccepted} aoi_frames={pump.FramesQueued}");
                 Console.Out.Flush();
                 return 0;
@@ -434,7 +455,7 @@ internal static class Program
             {
                 listener.Stop();
                 stop.Cancel();
-                await pumping.ConfigureAwait(false);
+                await Task.WhenAll(pumping,settling).ConfigureAwait(false);
                 await world.StopAsync().ConfigureAwait(false);
                 await routing.WaitAsync(TimeSpan.FromSeconds(3)).ConfigureAwait(false);
             }
