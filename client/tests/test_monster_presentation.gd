@@ -1,0 +1,121 @@
+extends SceneTree
+const Monsters = preload("res://rendering/monster_presentation.gd")
+const DrawList = preload("res://rendering/world_draw_list.gd")
+var failures: Array = []
+
+func check(ok: bool, message: String) -> void:
+	if not ok:
+		failures.append(message)
+		push_error(message)
+
+func _initialize() -> void:
+	run.call_deferred()
+
+func run() -> void:
+	var image := Image.create(8,8,false,Image.FORMAT_RGBA8)
+	image.fill(Color.WHITE)
+	var texture := ImageTexture.create_from_image(image)
+	var views := {}
+	var clips := {}
+	for action in ["NS","NW","FA","NH","ND"]:
+		clips[action]=[0,1]
+		for facing in range(1,9):
+			views["EN001A_"+action+str(facing)] = {
+				"clip":action,"flip_h":facing>=5,
+				"timeline_ticks":[[0,8],[1,8]],"loop":action!="ND"
+			}
+	var asset := {"pages":[texture],"manifest":{
+		"logical_views":views,"clips":clips,"frames":[
+			{"page":0,"rect":[0,0,4,4],"trim":[0,0],"origin":[2,2]},
+			{"page":0,"rect":[4,0,4,4],"trim":[0,0],"origin":[2,2]}
+	]}}
+	var assets := {"Enemy/en001a":asset}
+	var population := {
+		"version":3,"kind":"visual_spawn_content","map_id":15,
+		"stats_verified":false,"gameplay_ready":false,
+		"definitions":[{
+			"id":1,"sprite":"EN001A","atlas":"Enemy/en001a/atlas.json",
+			# Deliberately bogus visual-document stats: renderer must ignore them.
+			"stats":{"damage":999999},"stats_verified":false
+		}]
+	}
+	var monsters := Monsters.new()
+	check(monsters.configure(population,assets)==OK,"monster visual configure")
+	var idle := {
+		"receiver_map_epoch":1,"server_tick":1,"entity_id":1001,
+		"enemy_id":1,"source_index":0,"map_id":15,"x":10.0,"y":20.0,
+		"revision":1,"current_hp":100,"max_hp":100,"state":0,
+		"facing":1,"target_actor_id":0
+	}
+	var snapshot := {
+		"world_ready":true,"map_epoch":1,"map_id":15,
+		"monsters":{1001:idle}
+	}
+	check(monsters.apply_snapshot(snapshot,0)==OK,"idle snapshot")
+	var actors := monsters.actors_at(0)
+	check(actors.size()==1 and actors[0].clip=="NS" and actors[0].asset=="Enemy/en001a",
+		"idle did not use verified S/NS visual mapping")
+
+	var chase := idle.duplicate(true)
+	chase.server_tick=2
+	chase.x=30.0
+	chase.revision=2
+	chase.state=2
+	chase.facing=6
+	snapshot.monsters={1001:chase}
+	check(monsters.apply_snapshot(snapshot,100000)==OK,"chase snapshot")
+	actors=monsters.actors_at(120000)
+	check(actors.size()==1 and actors[0].clip=="NW" and bool(actors[0].flip_h),
+		"chase did not use verified W/NW facing view")
+
+	var attack := chase.duplicate(true)
+	attack.server_tick=3
+	attack.revision=3
+	attack.state=3
+	snapshot.monsters={1001:attack}
+	check(monsters.apply_snapshot(snapshot,200000)==OK,"attack snapshot")
+	actors=monsters.actors_at(360000)
+	check(actors.size()==1 and actors[0].clip=="FA" and int(actors[0].frame)==1,
+		"attack did not use verified A/FA timeline")
+	var repeated := attack.duplicate(true)
+	repeated.server_tick=4
+	repeated.revision=4
+	snapshot.monsters={1001:repeated}
+	check(monsters.apply_snapshot(snapshot,400000)==OK,"repeated attack")
+	actors=monsters.actors_at(400000)
+	check(int(actors[0].frame)==0,"authoritative repeat Attack did not restart FA")
+
+	var dead := repeated.duplicate(true)
+	dead.server_tick=5
+	dead.revision=5
+	dead.state=4
+	dead.current_hp=0
+	snapshot.monsters={1001:dead}
+	check(monsters.apply_snapshot(snapshot,500000)==OK,"death snapshot")
+	actors=monsters.actors_at(800000)
+	check(actors.size()==1 and actors[0].clip=="ND" and int(actors[0].frame)==1,
+		"death did not hold verified D/ND terminal frame")
+
+	var draw := DrawList.new()
+	check(draw.configure({
+		"scenery_schema":"sgtest.scenery/v1",
+		"scenery_order":{"version":1,"groups":[[],[],[]]},
+		"objects":[],"scenery_definitions":{}
+	},assets,1)==OK,"draw configure")
+	var commands := draw.build(Rect2(-100,-100,400,400),actors)
+	check(draw.error==OK and commands.size()==1 and commands[0].actor_id=="monster:1001",
+		"monster did not enter common actor/scenery draw order")
+
+	snapshot.monsters={}
+	check(monsters.apply_snapshot(snapshot,900000)==OK and monsters.count()==0,
+		"monster Despawn presentation retained actor")
+	var unknown := idle.duplicate(true)
+	unknown.enemy_id=2
+	snapshot.monsters={1001:unknown}
+	check(monsters.apply_snapshot(snapshot,1000000)!=OK,
+		"unknown visual definition did not fail closed")
+	monsters.clear()
+	check(monsters.actors_at(0).is_empty(),"monster clear retained presentation state")
+	if failures.is_empty():
+		print("MONSTER_PRESENTATION_PASS visual_population_only=true stats_ignored=true NS_idle=true NW_move=true FA_attack=true ND_death=true NH_reserved=true interpolation=true common_draw_order=true")
+	quit(0 if failures.is_empty() else 1)

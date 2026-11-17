@@ -85,9 +85,42 @@ func build() -> void:
 	if not write_json(catalog.path_join("players.json"),{"assets":catalog_assets}):
 		fail("player catalog")
 		return
+	var monster_id := "Enemy/en001a"
+	var monster_dir := assets_root.path_join(monster_id)
+	DirAccess.make_dir_recursive_absolute(monster_dir)
+	var monster_page := monster_dir.path_join("page.png")
+	if not make_texture(monster_page,8,8,Color(0.80,0.25,0.20),Color(0.95,0.70,0.20)):
+		fail("monster texture")
+		return
+	var monster_views := {}
+	var monster_clips := {}
+	for action in ["NS","NW","FA","NH","ND"]:
+		monster_clips[action] = [0]
+		for facing in range(1,9):
+			monster_views["EN001A_"+action+str(facing)] = {
+				"clip":action,"flip_h":facing>=5,
+				"timeline_ticks":[[0,8]],"loop":action!="ND"
+			}
+	var monster_manifest := {
+		"version":9,"asset_id":monster_id,"pages":["page.png"],"page_sizes":[[8,8]],
+		"page_sha256":{"page.png":FileAccess.get_sha256(monster_page)},
+		"frames":[{"page":0,"rect":[0,0,8,8],"trim":[0,0],"origin":[4,4]}],
+		"clips":monster_clips,"logical_views":monster_views
+	}
+	if not write_json(monster_dir.path_join("atlas.json"),monster_manifest):
+		fail("monster manifest")
+		return
+	if not write_json(catalog.path_join("Enemy.json"),{"assets":{
+		monster_id:{"kind":"sprite_atlas","file":monster_id+"/atlas.json"}
+	}}):
+		fail("monster catalog")
+		return
 	if not write_json(catalog.path_join("assets.json"),{
 		"schema":"sgtest.asset_catalog_root/v1",
-		"categories":{"players":{"index":"catalog/players.json"}}
+		"categories":{
+			"players":{"index":"catalog/players.json"},
+			"Enemy":{"index":"catalog/Enemy.json"}
+		}
 	}):
 		fail("root catalog")
 		return
@@ -125,7 +158,18 @@ func build() -> void:
 				"destination":{"map_id":target,"p":[800,800]}
 			}}]
 		}
-		var population := {"version":3,"map_id":map_id,"definitions":[]}
+		var population := {
+			"version":3,"kind":"visual_spawn_content","map_id":map_id,
+			"stats_verified":false,"gameplay_ready":false,
+			"definitions":[{
+				"id":1,"sprite":"EN001A","atlas":"Enemy/en001a/atlas.json",
+				"stats":null,"stats_verified":false
+			}],
+			"spawns":[{
+				"definition":1,"source_index":0,"source_flags":7,
+				"p":[820,800] if map_id==15 else [800,800]
+			}]
+		}
 		var world := {
 			"version":3,"map_id":map_id,"collision_cell":16,"size":[2048,2048],
 			"collision_sha256":FileAccess.get_sha256(map_assets.path_join("blocking.dat")),

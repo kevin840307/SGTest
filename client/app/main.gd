@@ -219,11 +219,11 @@ func _online_gate_tick() -> void:
 	if _online_gate_phase < 0:
 		return
 	if not _online_gate_monster_seen:
-		var monsters: Dictionary = _last_snapshot.get("monsters",{})
-		if not monsters.is_empty():
+		var monster_state: Dictionary = _last_snapshot.get("monsters",{})
+		if not monster_state.is_empty() and world_view.monster_count() == monster_state.size():
 			_online_gate_monster_seen = true
 			print("ONLINE_MAIN_GATE_MONSTER role=",_online_gate_role,
-				" count=",monsters.size())
+				" count=",monster_state.size()," presented=",world_view.monster_count())
 	if _online_gate_phase == 90:
 		var stats := world_view.store.statistics()
 		if int(stats.scopes) == 0 and int(stats.assets) == 0 and int(stats.decode_jobs) == 0 and int(stats.texture_jobs) == 0:
