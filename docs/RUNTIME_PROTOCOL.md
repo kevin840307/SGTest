@@ -243,3 +243,21 @@ Monster EntityId/EnemyId/HP/state/facing/target are server-owned. The client can
 The same `WorldAoi` tracks player and monster spatial visibility. Monster-enabled hosts preserve every authoritative 30Hz World Tick as the single AI clock, but empty ticks do not themselves create reliable wire frames. On a tick that changes monster state, AOI stages the final coalesced snapshot before applying Player Join/Move visibility and then performs a revision-idempotent final refresh; a joining client receives one current MonsterSpawn rather than stale Spawn + same-tick Delta.
 
 Cross-runtime fixtures validate 78/40-byte C#↔Godot goldens and malformed state rejection. Server CI 44021869726 passes the live shared-AOI/Gateway path; Client CI 44021869721 passes `AOI_WIRE_GODOT_PASS ... monster_gap=RESYNC`, visual presentation, real TLS/reconnect, two-client/cross-map/NPC regressions and the formal Host with two actual main scenes. These frames carry authoritative monster state only; player→monster attack requests, player HP settlement, MISS/skills/rewards/drop durability remain later Combat protocol work.
+
+
+### 2026-11-17 Player normal attack → monster authority
+
+V1 adds two combat frames on the existing TLS connection:
+
+| Opcode | Direction | Bytes | Payload |
+|---|---|---:|---|
+| 5 NormalAttack | Godot→Server | 28 | `int64 MapEpoch; uint32 AttackSequence; int64 TargetMonsterEntityId` |
+| 6 NormalAttackResult | Server→Godot | 57 | MapEpoch, AttackSequence, status, ServerTick, target EntityId, Damage, CurrentHP/MaxHP, target EntityRevision |
+
+The request deliberately carries **no ActorId, ConnectionEpoch, player Attack, damage or attack range**. `GatewayConnection` injects the authenticated actor generation and an optional trusted combat profile loaded during CharacterChoose from SQLite. Missing combat profile does not invent defaults; combat resolves as `CombatUnavailable`. WorldReady must be exact-ACKed before attack ingress, and the bounded Router attack channel applies the same backpressure/fail-closed policy as other authoritative gameplay work.
+
+The single `MonsterWorldCoordinator` resolves request MapEpoch, per-session AttackSequence replay, server-tick cooldown, authoritative player position, trusted AttackRange and original Blocking direct line before calling `MonsterRuntime.ApplyTrustedDamage`. The current first-slice damage settlement is `max(1, trustedProfile.Attack)`; this is an explicit compatibility baseline, **not a claim that the original player-vs-monster DEF/MISS/crit formula has been verified**. `Miss` exists in the result status contract so the eventual verified hit formula can preserve MISS as a reliable event, but this slice does not fabricate random misses.
+
+A successful attack produces two different authoritative outputs with separate responsibilities: `NormalAttackResult` is a requester reliable result for damage/MISS/rejection/UI, while monster HP/state/revision is changed only by the existing shared `MonsterDelta` AOI stream. Godot stores the reliable result but never mutates `WorldState.monsters` from it; duplicate results are idempotently stale, future unsent sequences fail closed, and map transfer resets attack sequence state.
+
+Server core 44038307685 passes 108/108 checks. Client core 44038307692 passes the codec/reducer gate and a real Godot→C# TLS E2E using an explicitly `SyntheticTest` combat profile: the client sends only the target intent, Server applies 60 damage to a 100-HP authoritative monster, reliable result reports 40 HP, and the shared MonsterDelta independently reaches the same HP/revision. Existing TLS reconnect, two-client AOI/cross-map/NPC and formal Host + two real main scenes remain green.
