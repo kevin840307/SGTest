@@ -1,3 +1,4 @@
+using System.Text.Json;
 using SGTest.Server.Gateway;
 using SGTest.Server.Wire;
 using SGTest.Server.World;
@@ -16,6 +17,8 @@ internal static class WorldAoiPumpChecks
             () => TrustedTwoMapTransfer(root).GetAwaiter().GetResult());
         Checks.Run("bounded same-map resync request is rebuilt by the sole AOI pump",
             () => LiveResync(root).GetAwaiter().GetResult());
+        Checks.Run("live Host Router Pump publishes coalesced monster state through shared AOI FIFO",
+            () => LiveMonsterPipeline(root).GetAwaiter().GetResult());
     }
 
     private static async Task LiveTwoPlayers(string root)
@@ -260,6 +263,94 @@ internal static class WorldAoiPumpChecks
             await pumpTask.WaitAsync(TimeSpan.FromSeconds(3));
             await host.StopAsync();
             await routerTask.WaitAsync(TimeSpan.FromSeconds(3));
+        }
+    }
+
+    private static async Task LiveMonsterPipeline(string root)
+    {
+        string folder = Checks.Fixture(root,106,20,20,(_,_)=>0);
+        var grid = BlockingGrid.Load(folder,106);
+        string populationPath = Path.Combine(folder,"population.json");
+        File.WriteAllText(populationPath,JsonSerializer.Serialize(new
+        {
+            version=4,
+            kind="verified_monster_runtime",
+            map_id=106,
+            stats_verified=true,
+            gameplay_ready=true,
+            definitions=new[]
+            {
+                new
+                {
+                    id=1,name="Synthetic",sprite="EN001A",
+                    atlas="Enemy/EN001A/atlas.json",
+                    stats=new
+                    {
+                        level=3,max_hp=100,attack_damage=6,move_step=8.0,
+                        aggro_radius=200.0,lose_target_radius=320.0,
+                        leash_radius=320.0,attack_range=24.0,
+                        attack_cooldown_ticks=1,respawn_ticks=30,
+                        wander_radius=0.0,wander_interval_ticks=100
+                    }
+                }
+            },
+            spawns=new[]
+            {
+                new { source_index=0,source_flags=7,definition=1,p=new[]{40,24} }
+            }
+        }));
+        var population = MonsterPopulationCatalog.LoadVerified(
+            populationPath,106,grid);
+        var runtime = new MonsterRuntime(grid,population,
+            new(AiIntervalTicks:1,MaxAiPerStep:16,MaxPathQueriesPerStep:4,
+                MaxPathExpandedCells:256));
+        var coordinator = new MonsterWorldCoordinator([runtime]);
+
+        await using var host = new ServerWorldHost([grid]);
+        await host.StartAsync();
+        var actor = await host.TrustedRegisterAsync(701,106,24,24)
+            ?? throw new Exception("monster pipeline actor");
+        var gateway = new GatewayConnection(actor);
+        var router = new WorldResultRouter();
+        Require(router.TryAttach(gateway),"monster pipeline Gateway attach");
+        var pump = new WorldAoiPump(router,monsters:coordinator);
+        using var stop = new CancellationTokenSource();
+        var routing = router.RunAsync(host.Results);
+        var pumping = pump.RunAsync(stop.Token);
+        try
+        {
+            await WaitForFrames(gateway,2);
+            Require(gateway.TryDequeueReliable(out var ready) &&
+                    WireProtocol.TryDecodeWorldReady(ready,out var readyValue) &&
+                    readyValue.ActorId==actor.ActorId,
+                    "monster pipeline WorldReady missing");
+            Require(gateway.TryDequeueReliable(out var spawn) &&
+                    WireProtocol.TryDecodeMonsterState(spawn,out var kind,out var monster) &&
+                    kind==WireOpcode.MonsterSpawn &&
+                    monster.EnemyId==1 && monster.MapId==106 &&
+                    monster.TargetActorId==actor.ActorId &&
+                    monster.State==MonsterAiState.Attack,
+                    "monster baseline was not coalesced into authoritative Spawn");
+
+            await WaitForFrames(gateway,1);
+            Require(gateway.TryDequeueReliable(out var delta) &&
+                    WireProtocol.TryDecodeMonsterState(delta,out kind,out var updated) &&
+                    kind==WireOpcode.MonsterDelta &&
+                    updated.EntityId==monster.EntityId &&
+                    updated.Revision>monster.Revision,
+                    "next bounded AI step did not publish MonsterDelta");
+            Require(pump.Aoi.MonsterCount==1 &&
+                    coordinator.Statistics.Maps==1 &&
+                    coordinator.Statistics.Monsters==1 &&
+                    coordinator.Statistics.RuntimeTicks>0,
+                    "monster coordinator/AOI accounting");
+        }
+        finally
+        {
+            stop.Cancel();
+            await pumping.WaitAsync(TimeSpan.FromSeconds(3));
+            await host.StopAsync();
+            await routing.WaitAsync(TimeSpan.FromSeconds(3));
         }
     }
 

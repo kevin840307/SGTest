@@ -15,15 +15,18 @@ public sealed class WorldAoiPump
     private readonly WorldResultRouter _router;
     private readonly WorldAoi _aoi;
     private readonly WorldAoiPumpOptions _options;
+    private readonly MonsterWorldCoordinator? _monsters;
     private int _started;
     private long _processedBatches, _framesQueued;
 
     public WorldAoiPump(WorldResultRouter router, WorldAoi? aoi = null,
-                        WorldAoiPumpOptions? options = null)
+                        WorldAoiPumpOptions? options = null,
+                        MonsterWorldCoordinator? monsters = null)
     {
         _router = router ?? throw new ArgumentNullException(nameof(router));
         _aoi = aoi ?? new WorldAoi();
         _options = options ?? new WorldAoiPumpOptions();
+        _monsters = monsters;
         if (_options.FlushIntervalMilliseconds is < 1 or > 1000 ||
             _options.MaxFramesPerObserverPerPoll is < 1 or > 4096)
             throw new ArgumentOutOfRangeException(nameof(options));
@@ -45,6 +48,12 @@ public sealed class WorldAoiPump
                 while (_router.ChangedBatches.TryRead(out var batch))
                 {
                     _aoi.Apply(batch);
+                    if (_monsters is not null)
+                    {
+                        var monsterBatch = _monsters.Process(batch);
+                        if (monsterBatch.Changed.Count > 0)
+                            _aoi.ApplyMonsters(batch.Tick, monsterBatch.Changed);
+                    }
                     Interlocked.Increment(ref _processedBatches);
                 }
                 while (_router.ResyncRequests.TryRead(out var request))
