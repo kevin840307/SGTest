@@ -24,3 +24,6 @@ server/**/bin/
 server/**/obj/
 tools/tests/**/bin/
 tools/tests/**/obj/
+
+# Source-derived private item catalog. Never commit client item names/artwork.
+client/content/item_catalog.json

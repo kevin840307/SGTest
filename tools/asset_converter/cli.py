@@ -26,6 +26,7 @@ from asset_converter.content.build_maps import server_map_directory, scenery_ass
 from asset_converter.content.build_enemy_map_palette import read_enemy_catalog, read_enemy_dat
 from asset_converter.content.build_population import compile_population, compile_spawn_evidence
 from asset_converter.content.asset_paths import source_sprite_manifest
+from asset_converter.content.build_item_catalog import publish_item_catalog
 
 
 def resolve_source(args) -> Path:
@@ -350,6 +351,16 @@ def main() -> int:
     publication.add_argument('--report',type=Path,default=REPO/'reports/asset_export.json')
     publication.add_argument('--map',type=int,action='append',help='publish only original map visuals, enemies, NPCs and standard player parts')
     publication.add_argument('--server-dat',type=Path,help='original server Dat for map-scoped asset selection')
+    items = sub.add_parser('item-catalog',
+                           help='compile source-derived item names from local converted Items/*.tres')
+    items.add_argument('--items',type=Path,required=True,
+                       help='local reference Items folder (e.g. TestGoGo/client/Items)')
+    items.add_argument('--output',type=Path,
+                       default=REPO/'client/content/item_catalog.json')
+    items.add_argument('--source-reference',default='local-converted-Items',
+                       help='non-private descriptive provenance label')
+    items.add_argument('--item-id',type=int,action='append',
+                       help='optional repeated IDs for a small runtime subset')
     args = ap.parse_args()
     if args.command == 'build' and args.archive_only and args.runtime_only:
         ap.error('archive-only and runtime-only conflict')
@@ -369,6 +380,15 @@ def main() -> int:
 
 
 def _execute(args):
+    if args.command == 'item-catalog':
+        try:
+            result = publish_item_catalog(
+                args.items,args.output,source_reference=args.source_reference,
+                only_ids=set(args.item_id) if args.item_id else None)
+        except (OSError,ValueError,TypeError) as error:
+            result = {'status':'failed','error':str(error)}
+        print(json.dumps(result,ensure_ascii=False,indent=2),flush=True)
+        return 0 if result['status']=='pass' else 1
     if args.command == 'export-assets':
         report = {'status':'failed'}
         started = time.perf_counter()
