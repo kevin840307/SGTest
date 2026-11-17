@@ -19,6 +19,18 @@ PFX密碼環境名稱為`SGTEST_TLS_PASSWORD`；未加密PFX可不設定。Host�
 
 本機7項targeted checks與受影響Release build PASS；main CI結果見todo。此為持續登入服務切片，不代表公開網際網路安全／壓測／Release完成；時間型登入速率限制、WorldReady ACK/resync與持久座標仍待驗證。下方限時無網路Host命令保留作smoke，並非serve模式。
 
+## 怪物死亡後的 SQLite 掉落（MVP006 部分完成）
+
+正式 `serve` 未帶 `--loot-rules` 時不會自行創造物品。只有已明確核對原版表格／規則的操作者，才可指定私人掉落規則文件：
+
+```powershell
+dotnet run --project server/host/SGTest.Server.Host -c Release -- serve --content C:/private/runtime --identity C:/private/identity.db --certificate C:/private/server.pfx --loot-rules C:/private/verified-loot-rules.json
+```
+
+文件格式是 JSON object：`kind="verified_monster_drop_rules"`、`version=1`、`rules_verified=true`、`gameplay_ready=true`、必填 `source_reference`（用於追溯人工核對的原版來源），及 `rules` array。每個 rule 必須提供 `map_id`、`enemy_id`、`slot`（0～31）、`item_definition_id`、`quantity`。規則必須匹配**已載入的 v4 可信怪物清單**，同 map/enemy/slot 不可重複；檔案最多1MiB、1024條規則，違規拒絕。**這一版每個列出的 slot 都是保證掉落，還沒有原版機率／抽樣規則。不要將任意 item ID 或測試規則直接視為原版掉落。** `source_reference` 是操作者自行聲明的來源，不是程式自動驗證原版的真實性。
+
+權威普通攻擊殺怪後，唯一 AOI 消費者將死亡事件加入容量256的非阻塞結算佇列，背景 Worker 對**同次死亡所有 slot** 做一筆原子 SQLite transaction；同死亡 UID 重試不多發，任一 slot 衝突全體回滾。WorldGeneration 由同一 SQLite 每次啟動配置，避免重啟後怪物 revision 重複。容量滿或結算 Worker fault 視為服務異常，不採用 DropOldest；正常停機排空已排隊結算。**硬 kill 發生在入佇列到 DB commit 間的可靠死亡日誌尚未做，不能宣稱掉落完全 crash-safe。** 這是 Server 結算能力，**還沒有**正式 GroundDrop AOI／拾取封包／Godot 地上物與背包 UI。可信 source manifest 請勿提交私人原始遊戲資料到 Git。測試見 `NormalAttackChecks`、`GroundLootChecks`、`MonsterLootSettlementChecks`。
+
 ## 本機帳號／角色建置（MVP003-IDENTITY-ADMIN）
 
 ```powershell
