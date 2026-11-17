@@ -362,7 +362,7 @@ internal static class TlsGatewayListenerChecks
             Path.Combine(content,"identity.db"),"--certificate",pfx,
             "--port","0","--recovery-rules",rules,"--seconds","1");
         Checks.Require(enabled.Exit==0 && enabled.Out.Contains("TLS_HOST_READY") &&
-            enabled.Out.Contains("\\\"verified_recovery_rule_count\\\":1"),
+            enabled.Out.Contains("\"verified_recovery_rule_count\":1"),
             "verified recovery manifest was not admitted by formal Host: "+enabled.Error);
         string unverified=Path.Combine(content,"recovery-unverified.json");
         File.WriteAllText(unverified,JsonSerializer.Serialize(new {
