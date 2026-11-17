@@ -25,7 +25,8 @@ class PopulationEvidenceTests(unittest.TestCase):
         (source/'enemy/en010a.act').write_bytes(b'act fixture')
         (source/'enemy/en010a_ns1.spr').write_bytes(b'spr fixture')
         (server/'Enemy').mkdir(parents=True)
-        (server/'Enemy/Enemy_Data.csv').write_bytes(b'1,,Enemy One,3,,,EN010A\n')
+        (server/'Enemy/Enemy_Data.csv').write_bytes(
+            b'1,,Enemy One,3,,,EN010A,,,120\n')
         (server/'Map/Map13').mkdir(parents=True)
         spawn = (struct.pack('<i', 2) + enemy_row(1,100,200,9)
                  + enemy_row(1,300,400,17))
@@ -52,10 +53,14 @@ class PopulationEvidenceTests(unittest.TestCase):
             definition=result['definitions'][0]
             self.assertEqual(definition['atlas'],'Enemy/en010a/atlas.json')
             self.assertEqual(definition['animation_behaviors'],['FA','ND','NH','NS','NW'])
+            self.assertEqual(definition['source_combat_evidence'], {
+                'level':3, 'max_hp':120,
+                'source_columns':{'level':3,'max_hp':9},
+            })
             self.assertFalse(definition['combat_stats_verified'])
             self.assertFalse(result['stats_verified'])
             self.assertFalse(result['runtime_implemented'])
-            self.assertNotIn('hp',json.dumps(result).lower())
+            self.assertNotIn('stats',definition)
             self.assertEqual(result['sources']['Map/Map13/Enemy.dat'],
                              hashlib.sha256((server/'Map/Map13/Enemy.dat').read_bytes()).hexdigest())
 

@@ -60,7 +60,12 @@ class RuntimeContentTests(unittest.TestCase):
             clips = {f'EN001A_{action}{facing}':[] for action in ('NS','NW','FA','NH','ND') for facing in range(1,9)}
             manifest.write_text(json.dumps({'clips':clips}), encoding='utf-8')
             spawns = [{'enemy_id':1,'x':100,'y':200,'source_index':7,'flags':9}]
-            result = compile_population(spawns, {1:{'sprite':'EN001A','stats':{'hp':999}}}, assets, 13)
+            result = compile_population(
+                spawns,
+                {1:{'sprite':'EN001A','level':7,'max_hp':456,'stats':{'hp':999}}},
+                assets, 13)
+            self.assertEqual(result['definitions'][0]['source_combat_evidence'], {
+                'level':7,'max_hp':456,'source_columns':{'level':3,'max_hp':9}})
             self.assertIsNone(result['definitions'][0]['stats'])
             self.assertFalse(result['definitions'][0]['stats_verified'])
             self.assertEqual(result['spawns'], [{'definition':1,'p':[100,200],'source_index':7,'source_flags':9}])

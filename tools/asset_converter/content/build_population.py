@@ -42,6 +42,13 @@ def compile_spawn_evidence(source: Path, server_dat: Path, map_id: int) -> dict:
             'animation_behaviors': sorted(animation['behaviors']),
             'logical_facings': 8, 'frame_count': len(animation['frames']),
             'source_files_sha256': animation['source_sha256'],
+            # Direct source evidence only. Level and MaxHP have known CSV
+            # columns, but Damage/AI/range/cooldown are still unresolved.
+            'source_combat_evidence': {
+                'level': entry.get('level'),
+                'max_hp': entry.get('max_hp'),
+                'source_columns': {'level': 3, 'max_hp': 9},
+            },
             'combat_stats_verified': False,
         })
     return {
@@ -78,8 +85,14 @@ def compile_population(spawns, catalog, assets, map_id):
                         and clip not in manifest.get('clips',{})
                         and clip not in manifest.get('aliases',{})):
                     raise ValueError(f'missing logical action/direction {clip}')
-        definitions.append({'id':enemy_id,'sprite':sprite,'atlas':relative,
-                            'stats':None,'stats_verified':False})
+        definitions.append({
+            'id':enemy_id,'sprite':sprite,'atlas':relative,
+            'source_combat_evidence': {
+                'level': definition.get('level'),
+                'max_hp': definition.get('max_hp'),
+                'source_columns': {'level': 3, 'max_hp': 9},
+            },
+            'stats':None,'stats_verified':False})
     return {'version':3,'map_id':map_id,'definitions':definitions,
             'kind':'visual_spawn_content','stats_verified':False,'gameplay_ready':False,
             'spawns':[{'definition':r['enemy_id'],'p':[r['x'],r['y']],

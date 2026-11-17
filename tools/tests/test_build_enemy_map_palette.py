@@ -24,8 +24,8 @@ class MapPaletteTests(unittest.TestCase):
             map_dir.mkdir(parents=True)
             with (enemy_dir / "Enemy_Data.csv").open("w", encoding="cp950", newline="") as stream:
                 writer = csv.writer(stream)
-                writer.writerow([1, 1, "A", 5, 0, "", "EN001A"])
-                writer.writerow([2, 2, "B", 6, 0, "", "EN002A"])
+                writer.writerow([1, 1, "A", 5, 0, "", "EN001A", "", "", 120])
+                writer.writerow([2, 2, "B", 6, 0, "", "EN002A", "", "", 240])
             payload = struct.pack("<i", 3) + record(1, 10, 20) + record(1, 30, 40) + record(2, 50, 60)
             (map_dir / "Enemy.dat").write_bytes(payload)
             result = build_palettes(root, {13})
@@ -35,6 +35,9 @@ class MapPaletteTests(unittest.TestCase):
                 {"sprite": "EN001A", "spawn_count": 2},
                 {"sprite": "EN002A", "spawn_count": 1},
             ])
+            self.assertEqual(
+                [(d["enemy_id"], d["level"], d["max_hp"]) for d in row["definitions"]],
+                [(1, 5, 120), (2, 6, 240)])
             self.assertTrue(row["complete"])
 
     def test_rejects_trailing_bytes(self):
