@@ -324,8 +324,10 @@ internal static class WorldAoiPumpChecks
                     WireProtocol.TryDecodeWorldReady(ready,out var readyValue) &&
                     readyValue.ActorId==actor.ActorId,
                     "monster pipeline WorldReady missing");
-            Require(gateway.TryDequeueReliable(out var spawn) &&
-                    WireProtocol.TryDecodeMonsterState(spawn,out var kind,out var monster) &&
+            Require(gateway.TryDequeueReliable(out var spawn),
+                    "monster pipeline Spawn frame missing");
+            Require(WireProtocol.TryDecodeMonsterState(
+                        spawn,out var kind,out var monster) &&
                     kind==WireOpcode.MonsterSpawn &&
                     monster.EnemyId==1 && monster.MapId==106 &&
                     monster.TargetActorId==actor.ActorId &&
@@ -333,8 +335,10 @@ internal static class WorldAoiPumpChecks
                     "monster baseline was not coalesced into authoritative Spawn");
 
             await WaitForFrames(gateway,1);
-            Require(gateway.TryDequeueReliable(out var delta) &&
-                    WireProtocol.TryDecodeMonsterState(delta,out kind,out var updated) &&
+            Require(gateway.TryDequeueReliable(out var delta),
+                    "monster pipeline Delta frame missing");
+            Require(WireProtocol.TryDecodeMonsterState(
+                        delta,out kind,out var updated) &&
                     kind==WireOpcode.MonsterDelta &&
                     updated.EntityId==monster.EntityId &&
                     updated.Revision>monster.Revision,
