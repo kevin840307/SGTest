@@ -203,6 +203,8 @@ internal static class NormalAttackChecks
                     lethal.Monster is { } dead &&
                     dead.CurrentHp==0 && dead.State==MonsterAiState.Dead,
                 "authoritative death did not fan out");
+            long lethalRevision = lethal.Result?.TargetRevision ??
+                throw new Exception("Lethal result missing death revision");
             // Real authenticated normal attack->WorldAoiPump->bounded
             // settlement->SQLite; the test never seeds drops directly.
             using(var timeout=new CancellationTokenSource(TimeSpan.FromSeconds(4)))
@@ -217,7 +219,7 @@ internal static class NormalAttackChecks
             Require(drop.MonsterEntityId==initial.EntityId &&
                 drop.DeathRevision==
                    SqliteIdentityStore.ComposeLootDeathRevision(
-                       generation,lethal.Result.Value.TargetRevision) &&
+                       generation,lethalRevision) &&
                 drop.ItemDefinitionId==2701 && drop.Quantity==2 &&
                 drop.Trust==LootSourceTrust.SyntheticTest &&
                 loot.Statistics.DeathsCommitted==1 &&
