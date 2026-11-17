@@ -281,3 +281,22 @@ The combat state starts suspended when CharacterChoose registers the actor. It b
 Godot treats `PlayerDamage` as the sole own-HP damage authority: exact/current MapEpoch only, strictly contiguous DamageSequence, monotonic per-damage ServerTick, explicit Died↔HP=0 consistency, stale old-map/duplicate events ignored, gaps/future generation fail closed. Client death blocks Move/NPC/NormalAttack before any packet is sent. The current damage compatibility rule is `max(1, MonsterAttackDamage - Defense/5)`, inherited from the public compatibility implementation; it is **not a verified claim about the original legacy DEF/MISS/crit formula**.
 
 Server core 44041147095 passes 114/114 checks; Client core 44041146895 passes reducer and true TLS two-way combat: synthetic player Attack60 reduces Monster 100→40, one synthetic Monster raw20 hit against Defense10 commits 18 damage and Player 100→82, with the durable PlayerDamage event observed only after DB commit. Existing reconnect, cross-map, NPC and formal Host regressions remain green.
+
+### 2026-11-17 Server death gate and authoritative player respawn
+
+Death is now a Server lifecycle state, not only a Client presentation flag. After a lethal durable PlayerDamage commit, the trusted combat lifecycle sets the matching World actor `CombatDead=true` before the reliable death frame is queued. The World immediately clears any active route. A raw/stale client that still sends Move receives `MoveReceiptStatus.CombatDead=11`; NPC interaction returns `NpcPortalStatus.CombatDead=6`; combat resolution also refuses attacks from an actor whose authoritative combat HP is zero. A character reconnecting with persisted HP=0 is restored into the same dead gate before WorldReady.
+
+V1 additionally defines the first player-respawn command/result on the existing TLS/Gateway FIFO:
+
+| Opcode | Direction | Bytes | Payload |
+|---|---|---:|---|
+| 30 PlayerRespawn | Godot→Server | 20 | `int64 MapEpoch; uint32 RespawnSequence` |
+| 31 PlayerRespawnResult | Server→Godot | 29 | `MapEpoch; RespawnSequence; status; CurrentHP; MaxHP` |
+
+The request has no ActorId, ConnectionEpoch, HP, coordinates or resurrection flag. Gateway injects the authenticated identity/generation. The current first-slice location policy is deliberately **in-place at the authoritative death position**; it is provisional and does not claim the original Reborn/SavePoint location rule has been verified.
+
+`PlayerCombatSettlement` remains the HP serialization owner. Respawn first suspends targetability and drains already-reserved damage. SQLite then performs one trusted atomic transition only when the stored profile is dead: `current_hp=0 → max_hp`. Already-alive or absent combat profiles fail closed. After durable restore, the actor remains suspended until the World death gate is cleared and the reliable PlayerRespawnResult has been admitted to the current Gateway FIFO. Only then is Monster targetability resumed, so a post-respawn PlayerDamage cannot overtake the full-HP respawn baseline.
+
+Godot accepts an outgoing respawn only while the current combat baseline is dead. Same-map duplicate/stale result sequences are idempotent; future/unsent sequences fail closed. Successful respawn restores own HP and clears `player_dead`, but **does not reset DamageSequence** inside the same MapEpoch/connection generation, preserving reliable damage causality across death→respawn. Map transfer/reconnect still establishes the generation boundary.
+
+Server core run **44049150018** passes **121/121** plus process-kill checkpoint recovery. Client core **44049150061** passes `PLAYER_DAMAGE_GODOT_PASS ... respawn_reopens_intents=true damage_sequence_continuous=true` and the real Godot↔C# TLS combat E2E reports `death_hp=0 respawn_hp=100 dead=false ... move_after_respawn=true`; reconnect, two-client AOI, Map15↔13, NPC portal and formal Host + two main-scene regressions also remain green.
