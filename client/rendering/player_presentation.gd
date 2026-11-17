@@ -13,12 +13,16 @@ const PARTS := {
 }
 var _views := {}
 var _actors := {}
+var _seen_attack_events := {}
+var _attack_available := false
 var _epoch := 0
 var _map := 0
 
 func clear() -> void:
 	_views.clear()
 	_actors.clear()
+	_seen_attack_events.clear()
+	_attack_available = false
 	_epoch = 0
 	_map = 0
 
@@ -56,6 +60,48 @@ func configure(assets: Dictionary) -> Error:
 						clear()
 						return ERR_INVALID_DATA
 				_views[key] = {"view":value,"timeline":timeline}
+	# Current rebuilt Client has no equipment authority yet. The public recovered
+	# baseline confirms unarmed normal attack uses source action AA. Treat AA as
+	# optional until a full private pack is present; a partially-published AA set
+	# is invalid rather than silently mixing parts/directions.
+	var aa_parts := 0
+	for part in PARTS.values():
+		var manifest: Dictionary = assets[part[0]].manifest
+		if manifest.get("logical_views",{}).has(str(part[1])+"_AA1"):
+			aa_parts += 1
+	if aa_parts != 0 and aa_parts != PARTS.size():
+		clear()
+		return ERR_INVALID_DATA
+	_attack_available = aa_parts == PARTS.size()
+	if _attack_available:
+		for part in PARTS.values():
+			var manifest: Dictionary = assets[part[0]].manifest
+			for facing in range(1,9):
+				var key: String = str(part[1])+"_AA"+str(facing)
+				var value: Dictionary = manifest.get("logical_views",{}).get(key,{})
+				if not value.has_all(["clip","flip_h","timeline_ticks","loop","draw_slots"]) or not value.flip_h is bool or not value.loop is bool or bool(value.loop) or not value.draw_slots is Array or not manifest.clips.has(value.clip):
+					clear()
+					return ERR_INVALID_DATA
+				var present := {}
+				for raw_slot in value.draw_slots:
+					var slot := int(raw_slot)
+					if float(raw_slot) != slot or slot < 0 or slot > 15 or present.has(slot):
+						clear()
+						return ERR_INVALID_DATA
+					present[slot] = true
+				for slot in PARTS:
+					if not present.has(slot):
+						clear()
+						return ERR_INVALID_DATA
+				var timeline := Timeline.new()
+				if timeline.configure_ticks(value.timeline_ticks,false) != OK:
+					clear()
+					return ERR_INVALID_DATA
+				for step in value.timeline_ticks:
+					if int(step[0]) >= manifest.clips[value.clip].size():
+						clear()
+						return ERR_INVALID_DATA
+				_views[key] = {"view":value,"timeline":timeline}
 	return OK
 
 func apply_snapshot(snapshot: Dictionary, now_usec: int) -> void:
@@ -65,6 +111,7 @@ func apply_snapshot(snapshot: Dictionary, now_usec: int) -> void:
 	var map := int(snapshot.map_id)
 	if epoch != _epoch or map != _map:
 		_actors.clear()
+		_seen_attack_events.clear()
 		_epoch = epoch
 		_map = map
 	var own: Dictionary = snapshot.self_state.duplicate()
@@ -80,14 +127,57 @@ func apply_snapshot(snapshot: Dictionary, now_usec: int) -> void:
 	for id in visible:
 		var value: Dictionary = visible[id]
 		var old: Dictionary = _actors.get(id,{})
-		var action := "NR" if bool(value.moving) else "NS"
+		var base_action := "NR" if bool(value.moving) else "NS"
 		var generation_changed: bool = old.is_empty() or int(old.value.connection_epoch) != int(value.connection_epoch) or int(old.value.entity_map_epoch) != int(value.entity_map_epoch)
-		var restarted: bool = generation_changed or old.action != action or int(old.value.movement_action_sequence) != int(value.movement_action_sequence)
+		var action := base_action
+		var action_facing := int(value.facing)
+		var started := now_usec
+		if not generation_changed:
+			started = int(old.started)
+			if _attack_active(old,now_usec):
+				action = "AA"
+				action_facing = int(old.action_facing)
+			elif str(old.action) != base_action or int(old.value.movement_action_sequence) != int(value.movement_action_sequence):
+				started = now_usec
 		var history = PositionHistory.new() if generation_changed else old.history
 		var tick := int(value.get("server_tick",snapshot.get("last_aoi_tick",-1)))
 		if tick < 0 or not history.push(tick,Vector2(float(value.x),float(value.y)),now_usec):
 			continue
-		_actors[id] = {"value":value,"action":action,"started":now_usec if restarted else int(old.started),"history":history}
+		_actors[id] = {"value":value,"action":action,"action_facing":action_facing,
+			"started":started,"history":history}
+
+	var events = snapshot.get("player_attack_events",[])
+	if events is Array:
+		for event in events:
+			if not event is Dictionary:
+				continue
+			var attacker := int(event.get("attacker_actor_id",0))
+			var connection := int(event.get("attacker_connection_epoch",0))
+			var sequence := int(event.get("attack_sequence",0))
+			var key := "%d:%d:%d" % [attacker,connection,sequence]
+			if _seen_attack_events.has(key):
+				continue
+			_seen_attack_events[key] = true
+			if not _attack_available or not _actors.has(attacker):
+				continue
+			var actor: Dictionary = _actors[attacker]
+			if int(actor.value.connection_epoch) != connection:
+				continue
+			actor.action = "AA"
+			actor.action_facing = int(event.get("facing",actor.value.facing))
+			actor.started = now_usec
+			_actors[attacker] = actor
+
+func _attack_active(actor: Dictionary,now_usec: int) -> bool:
+	if not _attack_available or str(actor.get("action","")) != "AA":
+		return false
+	var facing := int(actor.get("action_facing",0))
+	var body: Dictionary = _views.get("B-BODY_AA"+str(facing),{})
+	if body.is_empty():
+		return false
+	var elapsed := maxi(0,now_usec-int(actor.get("started",now_usec)))*50/1000000
+	return not body.timeline.is_complete(elapsed)
+
 
 func actors_at(now_usec: int) -> Array:
 	var result: Array = []
@@ -97,7 +187,16 @@ func actors_at(now_usec: int) -> Array:
 	for id in ids:
 		var actor: Dictionary = _actors[id]
 		var value: Dictionary = actor.value
-		var requested := str(actor.action)+str(value.facing)
+		var action := str(actor.action)
+		var facing := int(actor.action_facing)
+		var elapsed := maxi(0,now_usec-int(actor.started))*50/1000000
+		if action == "AA":
+			var attack_body: Dictionary = _views.get("B-BODY_AA"+str(facing),{})
+			if attack_body.is_empty() or attack_body.timeline.is_complete(elapsed):
+				action = "NR" if bool(value.moving) else "NS"
+				facing = int(value.facing)
+				elapsed = 0
+		var requested := action+str(facing)
 		var body: Dictionary = _views.get("B-BODY_"+requested,{})
 		if body.is_empty():
 			continue
@@ -108,7 +207,7 @@ func actors_at(now_usec: int) -> Array:
 			var part: Array = PARTS[int(slot)]
 			var resolved: Dictionary = _views[str(part[1])+"_"+requested]
 			parts.append({"asset":part[0],"clip":resolved.view.clip,
-				"frame":resolved.timeline.frame_at_update(maxi(0,now_usec-int(actor.started))*50/1000000),
+				"frame":resolved.timeline.frame_at_update(elapsed),
 				"flip_h":resolved.view.flip_h,"part_slot":int(slot)})
 		var sampled: Vector2 = actor.history.sample(now_usec)
 		if not sampled.is_finite():

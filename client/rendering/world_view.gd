@@ -29,6 +29,9 @@ var players := Players.new()
 var monsters := Monsters.new()
 var _player_snapshot := {}
 var _players_dirty := false
+var _combat_seen := {}
+var _combat_overlays: Array[Dictionary] = []
+const COMBAT_OVERLAY_LIFETIME_USEC := 900000
 
 
 func _ready() -> void:
@@ -67,6 +70,8 @@ func clear_map() -> void:
 	monsters.clear()
 	_player_snapshot = {}
 	_players_dirty = true
+	_combat_seen.clear()
+	_combat_overlays.clear()
 	camera.clear()
 	_map = {}
 	_palette = []
@@ -187,7 +192,25 @@ func present() -> void:
 			var p := Vector2(float(drop.x),float(drop.y))
 			if rect.has_point(p):
 				markers.append({"p":p,"drop_id":int(id)})
-	_canvas.present(draw_list.build(rect,actors,{},draw_list.frames_at_update(update)),markers)
+	var combat_labels: Array = []
+	var surviving: Array[Dictionary] = []
+	for overlay in _combat_overlays:
+		var age := now_usec-int(overlay.started_usec)
+		if age < 0 or age > COMBAT_OVERLAY_LIFETIME_USEC:
+			continue
+		surviving.append(overlay)
+		var p := monsters.position_at(int(overlay.target_entity_id),now_usec)
+		if not p.is_finite() or not rect.has_point(p):
+			continue
+		var progress := clampf(float(age)/float(COMBAT_OVERLAY_LIFETIME_USEC),0.0,1.0)
+		combat_labels.append({
+			"p":p+Vector2(0.0,-42.0-20.0*progress),
+			"text":str(overlay.text),
+			"miss":bool(overlay.miss),
+			"alpha":1.0-progress
+		})
+	_combat_overlays = surviving
+	_canvas.present(draw_list.build(rect,actors,{},draw_list.frames_at_update(update)),markers,combat_labels)
 	_players_dirty = false
 	_last_rect = rect
 	_last_update = update
@@ -221,9 +244,40 @@ func set_player_snapshot(snapshot: Dictionary) -> void:
 		if monsters.apply_snapshot(snapshot,now_usec) != OK:
 			_fail("怪物狀態與地圖素材不一致")
 			return
+		_consume_player_attack_events(snapshot,now_usec)
 		var focus := players.position_at(int(snapshot.actor_id),now_usec)
 		if focus.is_finite():
 			camera.set_focus(epoch,focus)
+
+
+func _consume_player_attack_events(snapshot: Dictionary,now_usec: int) -> void:
+	var events = snapshot.get("player_attack_events",[])
+	if not events is Array:
+		return
+	for event in events:
+		if not event is Dictionary:
+			continue
+		var attacker := int(event.get("attacker_actor_id",0))
+		var connection := int(event.get("attacker_connection_epoch",0))
+		var sequence := int(event.get("attack_sequence",0))
+		var target := int(event.get("target_entity_id",0))
+		var status := int(event.get("status",-1))
+		var key := "%d:%d:%d" % [attacker,connection,sequence]
+		if _combat_seen.has(key):
+			continue
+		_combat_seen[key] = true
+		if target <= 0 or status not in [0,1]:
+			continue
+		_combat_overlays.append({
+			"target_entity_id":target,
+			"text":"MISS" if status==1 else str(int(event.get("damage",0))),
+			"miss":status==1,
+			"started_usec":now_usec
+		})
+
+
+func combat_overlay_count() -> int:
+	return _combat_overlays.size()
 
 
 func pick_ground_drop_at(point: Vector2, radius: float = 14.0) -> int:

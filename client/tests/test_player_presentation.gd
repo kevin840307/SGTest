@@ -65,8 +65,20 @@ func run() -> void:
 	view.map_id=13
 	var borrowed: Dictionary=snapshot.duplicate(true)
 	view.set_player_snapshot(borrowed)
+	view._consume_player_attack_events({"player_attack_events":[{
+		"attacker_actor_id":1,"attacker_connection_epoch":1,
+		"attack_sequence":1,"target_entity_id":1001,"status":0,"damage":30}]},500000)
+	view._consume_player_attack_events({"player_attack_events":[{
+		"attacker_actor_id":1,"attacker_connection_epoch":1,
+		"attack_sequence":1,"target_entity_id":1001,"status":0,"damage":30}]},510000)
+	check(view.combat_overlay_count()==1,"damage overlay replay was not deduplicated")
+	view._consume_player_attack_events({"player_attack_events":[{
+		"attacker_actor_id":1,"attacker_connection_epoch":1,
+		"attack_sequence":2,"target_entity_id":1001,"status":1,"damage":0}]},520000)
+	check(view.combat_overlay_count()==2,"MISS overlay was not retained independently")
 	view.clear_map()
 	check(borrowed.has("x") and int(borrowed.map_id)==13,"view clear mutated caller snapshot")
+	check(view.combat_overlay_count()==0,"view clear retained combat overlays")
 	view.free()
 	players.clear()
 	check(players.actors_at(0).is_empty(),"clear retained actors/assets")
