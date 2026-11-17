@@ -323,6 +323,18 @@ public sealed class WorldResultRouter
     public bool TryPostGroundDropClaimed(long dropId) =>
         dropId>0 && _claimedGroundDrops.Writer.TryWrite(dropId);
 
+    public GatewaySendStatus QueueRecoveryUseResult(
+        TrustedRecoveryUse request,RecoveryUseResult result)
+    {
+        lock(_gate)
+        {
+            if(!_connections.TryGetValue(request.ActorId,out var connection) ||
+                connection.IsClosed)
+                return GatewaySendStatus.Closed;
+            return connection.QueueRecoveryUseResult(request,result);
+        }
+    }
+
     public GatewaySendStatus QueueGroundPickupResult(
         TrustedGroundPickup request,PickupResult result)
     {

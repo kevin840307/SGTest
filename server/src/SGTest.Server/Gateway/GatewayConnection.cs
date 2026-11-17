@@ -45,6 +45,9 @@ public readonly record struct TrustedPlayerRespawn(
 public readonly record struct TrustedGroundPickup(
     long ActorId,long ConnectionEpoch,long RequestMapEpoch,
     uint PickupSequence,long DropId);
+public readonly record struct TrustedRecoveryUse(
+    long ActorId,long ConnectionEpoch,long RequestMapEpoch,
+    uint UseSequence,long ItemUid);
 
 public readonly record struct NormalAttackOutcome(
     NormalAttackStatus Status, long ServerTick, long TargetEntityId,
@@ -240,7 +243,8 @@ public sealed class GatewayConnection
                                           Func<TrustedWorldResyncRequest, bool>? postResync = null,
                                           Func<TrustedNormalAttack, bool>? postAttack = null,
                                           Func<TrustedPlayerRespawn, bool>? postRespawn = null,
-                                              Func<TrustedGroundPickup, bool>? postPickup = null)
+                                              Func<TrustedGroundPickup, bool>? postPickup = null,
+                                              Func<TrustedRecoveryUse, bool>? postRecovery = null)
     {
         ArgumentNullException.ThrowIfNull(postMove);
         lock (_receiveGate)
@@ -252,7 +256,7 @@ public sealed class GatewayConnection
             }
             return _parser.Feed(bytes,
                 frame => HandleClientFrame(
-                    frame, postMove, postNpc, postResync, postAttack, postRespawn, postPickup),
+                    frame, postMove, postNpc, postResync, postAttack, postRespawn, postPickup, postRecovery),
                 out commandsAccepted);
         }
     }
@@ -263,7 +267,8 @@ public sealed class GatewayConnection
                                               Func<TrustedWorldResyncRequest, bool>? postResync = null,
                                               Func<TrustedNormalAttack, bool>? postAttack = null,
                                               Func<TrustedPlayerRespawn, bool>? postRespawn = null,
-                                              Func<TrustedGroundPickup, bool>? postPickup = null)
+                                              Func<TrustedGroundPickup, bool>? postPickup = null,
+                                              Func<TrustedRecoveryUse, bool>? postRecovery = null)
     {
         ArgumentNullException.ThrowIfNull(postMove);
         lock (_receiveGate)
@@ -275,7 +280,7 @@ public sealed class GatewayConnection
             }
             return _parser.Resume(
                 frame => HandleClientFrame(
-                    frame, postMove, postNpc, postResync, postAttack, postRespawn, postPickup),
+                    frame, postMove, postNpc, postResync, postAttack, postRespawn, postPickup, postRecovery),
                 out commandsAccepted);
         }
     }
@@ -287,7 +292,8 @@ public sealed class GatewayConnection
         Func<TrustedWorldResyncRequest, bool>? postResync,
         Func<TrustedNormalAttack, bool>? postAttack,
         Func<TrustedPlayerRespawn, bool>? postRespawn,
-        Func<TrustedGroundPickup, bool>? postPickup)
+        Func<TrustedGroundPickup, bool>? postPickup,
+        Func<TrustedRecoveryUse, bool>? postRecovery)
     {
         if (!WireProtocol.TryReadHeader(frame, out var header))
             return WireFrameDisposition.ProtocolViolation;
@@ -313,6 +319,16 @@ public sealed class GatewayConnection
                 return WireFrameDisposition.Backpressured;
             }
             return WireFrameDisposition.AcceptedControl;
+        }
+
+        if (header.Opcode == WireOpcode.RecoveryUse && postRecovery is not null &&
+            WireProtocol.TryDecodeRecoveryUse(frame,out var command))
+        {
+            if(!GameplayReady(bound))return WireFrameDisposition.ProtocolViolation;
+            return postRecovery(new TrustedRecoveryUse(
+                bound.ActorId,bound.ConnectionEpoch,command.MapEpoch,
+                command.UseSequence,command.ItemUid))
+                ? WireFrameDisposition.Accepted : WireFrameDisposition.Backpressured;
         }
 
         if (header.Opcode == WireOpcode.GroundPickup && postPickup is not null &&
@@ -513,6 +529,28 @@ public sealed class GatewayConnection
             var frame = WireProtocol.EncodePlayerRespawnResult(new(
                 request.RequestMapEpoch, request.RespawnSequence,
                 outcome.Status, outcome.CurrentHp, outcome.MaxHp));
+            return _reliable.TryEnqueue(frame)
+                ? GatewaySendStatus.Enqueued : GatewaySendStatus.Backpressured;
+        }
+    }
+
+    public GatewaySendStatus QueueRecoveryUseResult(
+        TrustedRecoveryUse request,RecoveryUseResult result)
+    {
+        lock(_bindingGate)
+        {
+            if(_closed)return GatewaySendStatus.Closed;
+            var bound=_binding;
+            if(request.ActorId!=bound.ActorId ||
+                request.ConnectionEpoch!=bound.ConnectionEpoch ||
+                request.RequestMapEpoch<=0 ||
+                request.RequestMapEpoch>bound.MapEpoch ||
+                request.ItemUid!=result.ItemUid)
+                return GatewaySendStatus.GenerationMismatch;
+            var frame=WireProtocol.EncodeRecoveryUseResult(new(
+                request.RequestMapEpoch,request.UseSequence,result.Status,
+                result.ItemUid,result.ItemDefinitionId,result.RemainingQuantity,
+                result.CurrentHp,result.MaxHp));
             return _reliable.TryEnqueue(frame)
                 ? GatewaySendStatus.Enqueued : GatewaySendStatus.Backpressured;
         }
