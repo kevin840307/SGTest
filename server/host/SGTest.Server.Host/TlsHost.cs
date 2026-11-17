@@ -71,6 +71,22 @@ internal static class TlsHost
             MonsterLootSettlement? loot = dropRules is null
                 ? null : new MonsterLootSettlement(identity,
                     await identity.AllocateLootWorldGenerationAsync(stop.Token),dropRules);
+            // One startup-only SQLite snapshot. Map transfers, reconnect and
+            // WorldReady resync rebuild from the SAME map-bucketed AOI state.
+            var activeDrops = new List<GroundDropRecord>();
+            foreach (var map in maps)
+            {
+                var entries = await identity.ListActiveGroundDropsAsync(
+                    map.MapId,10000,stop.Token);
+                // Saturated snapshot can hide records; reject instead of
+                // silently forgetting items. Production never publishes
+                // manually injected synthetic test merchandise.
+                if (entries.Count >= 10000 ||
+                    entries.Any(x=>x.Trust!=LootSourceTrust.Verified))
+                    throw new InvalidDataException(
+                        "Ground drop startup snapshot saturated or synthetic test loot found");
+                activeDrops.AddRange(entries);
+            }
             await using var world = new ServerWorldHost(
                 maps,
                 options: monsters is null
@@ -93,7 +109,8 @@ internal static class TlsHost
                             "Committed lethal damage could not stop authoritative World actor");
                 });
             var aoi = new WorldAoiPump(
-                router, monsters: monsters, playerCombat: combat, loot: loot);
+                router, monsters: monsters, playerCombat: combat, loot: loot,
+                initialGroundDrops: activeDrops);
             var authorization = new IdentityTlsAuthorization(
                 identity, world, portals, positions, combat);
             await using var listener = new TlsGatewayListener(address, port, authorization,
@@ -119,7 +136,8 @@ internal static class TlsHost
                     monster_maps = monsterRuntimes.Select(m => m.MapId),
                     monsters = monsterRuntimes.Sum(m => m.Count),
                     position_checkpoint_ms = checkpointMs,
-                    loot_rule_count = dropRules?.Count ?? 0
+                    loot_rule_count = dropRules?.Count ?? 0,
+                    unpicked_ground_drops = activeDrops.Count
                 }));
                 var stopping = Task.Delay(Timeout.Infinite, stop.Token);
                 var completed = await Task.WhenAny(

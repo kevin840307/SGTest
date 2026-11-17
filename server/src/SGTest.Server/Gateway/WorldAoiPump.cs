@@ -1,4 +1,5 @@
 using SGTest.Server.World;
+using SGTest.Server.Identity;
 
 namespace SGTest.Server.Gateway;
 
@@ -27,7 +28,8 @@ public sealed class WorldAoiPump
                         WorldAoiPumpOptions? options = null,
                         MonsterWorldCoordinator? monsters = null,
                         PlayerCombatSettlement? playerCombat = null,
-                        MonsterLootSettlement? loot = null)
+                        MonsterLootSettlement? loot = null,
+                        IReadOnlyList<GroundDropRecord>? initialGroundDrops = null)
     {
         _router = router ?? throw new ArgumentNullException(nameof(router));
         _aoi = aoi ?? new WorldAoi();
@@ -35,6 +37,8 @@ public sealed class WorldAoiPump
         _monsters = monsters;
         _playerCombat = playerCombat;
         _loot = loot;
+        if (initialGroundDrops is { Count: > 0 })
+            _aoi.SeedGroundDrops(initialGroundDrops);
         if (_options.FlushIntervalMilliseconds is < 1 or > 1000 ||
             _options.MaxFramesPerObserverPerPoll is < 1 or > 4096)
             throw new ArgumentOutOfRangeException(nameof(options));
@@ -125,6 +129,12 @@ public sealed class WorldAoiPump
                         throw new InvalidOperationException("Combat delivery accounting diverged");
                     Interlocked.Increment(ref _framesQueued);
                 }
+
+                // The worker only publishes after SQLite commit. Consume on
+                // this same AOI owner thread; never poll SQLite per World tick.
+                if (_loot is not null && _aoi.LastTick > 0)
+                    while (_loot.CommittedDrops.TryRead(out var committed))
+                        _aoi.ApplyGroundDrops(_aoi.LastTick,committed);
 
                 foreach (var receiver in _router.SnapshotActiveBindings())
                 {
