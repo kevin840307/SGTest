@@ -45,6 +45,10 @@ func send_frame(frame: PackedByteArray) -> bool:
 		WireCodec.OPCODE_CHARACTER_CHOOSE:
 			_events.append({"type": "frame", "frame": CHOOSE_RESULT.hex_decode(), "bytes": 45})
 			_events.append({"type": "frame", "frame": READY.hex_decode(), "bytes": 45})
+		WireCodec.OPCODE_WORLD_READY_ACK:
+			pass # control frame: no gameplay response; keep transport connected
+		WireCodec.OPCODE_WORLD_RESYNC_REQUEST:
+			pass # not used by this happy-path fixture
 		WireCodec.OPCODE_MOVE_TARGET:
 			_events.append({"type": "frame", "frame": MOVE_RECEIPT.hex_decode(), "bytes": 30})
 			_events.append({"type": "frame", "frame": SELF_STOP.hex_decode(), "bytes": 74})

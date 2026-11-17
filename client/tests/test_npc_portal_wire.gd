@@ -54,6 +54,9 @@ func _initialize() -> void:
 	if not world.apply_frame(MAP13_READY.hex_decode()) or int(world.snapshot().map_epoch) != 2 or int(world.snapshot().map_id) != 13 or bool(world.snapshot().waiting_for_new_map):
 		_fail("new MapEpoch did not restore WorldReady and clear transition")
 		return
+	if not world.mark_world_ready_ack_sent(2,50):
+		_fail("Map13 WorldReady ACK tracking")
+		return
 	if not world.mark_npc_interact_sent(2) or not world.apply_frame(TOO_FAR.hex_decode()) or int(world.snapshot().last_npc_result_status) != 4 or int(world.snapshot().map_id) != 13:
 		_fail("NPC TooFar denial unexpectedly changed world")
 		return
@@ -71,6 +74,9 @@ func _initialize() -> void:
 	if int(ready_first.snapshot().last_npc_result_map_epoch) != 2 or bool(ready_first.snapshot().waiting_for_new_map):
 		_fail("newer WorldReady/older result processing incorrectly reset world")
 		return
+	if not ready_first.mark_world_ready_ack_sent(2,50):
+		_fail("reordered Map13 WorldReady ACK tracking")
+		return
 	if not ready_first.mark_npc_interact_sent(2) or not ready_first.apply_frame(BACK_ACCEPTED.hex_decode()) or not ready_first.apply_frame(MAP15_RETURN.hex_decode()):
 		_fail("Map13 to Map15 portal did not rebuild state")
 		return
@@ -82,6 +88,6 @@ func _initialize() -> void:
 
 func _ready_map15():
 	var world = WorldState.new()
-	if not world.mark_auth_sent() or not world.apply_frame(AUTH.hex_decode()) or not world.apply_frame(LIST.hex_decode()) or not world.mark_choose_sent(11) or not world.apply_frame(CHOOSE.hex_decode()) or not world.apply_frame(MAP15_READY.hex_decode()):
+	if not world.mark_auth_sent() or not world.apply_frame(AUTH.hex_decode()) or not world.apply_frame(LIST.hex_decode()) or not world.mark_choose_sent(11) or not world.apply_frame(CHOOSE.hex_decode()) or not world.apply_frame(MAP15_READY.hex_decode()) or not world.mark_world_ready_ack_sent(1,42):
 		return null
 	return world

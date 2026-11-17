@@ -66,8 +66,12 @@ func _run_case(cadence: int) -> Dictionary:
 	if final.self_state.is_empty() or float(final.x) != 24.0 or float(final.y) != 8.0 or bool(final.self_state.moving):
 		_fail("cadence %d own authoritative state not reduced %s" % [cadence, final])
 		return {}
-	if wire.size() != 3:
+	if wire.size() != 4:
 		_fail("cadence %d wire count %d" % [cadence, wire.size()])
+		return {}
+	var ack_frame := wire[2].hex_decode()
+	if WireCodec.frame_opcode(ack_frame) != WireCodec.OPCODE_WORLD_READY_ACK:
+		_fail("cadence %d missing WorldReady ACK before Move %s" % [cadence, wire])
 		return {}
 	return {
 		"state": {
