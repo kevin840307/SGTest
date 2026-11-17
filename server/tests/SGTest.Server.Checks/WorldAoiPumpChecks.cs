@@ -217,12 +217,13 @@ internal static class WorldAoiPumpChecks
         try
         {
             await WaitForFrames(gateway,2);
-            Require(gateway.TryDequeueReliable(out var ready) &&
-                    WireProtocol.TryDecodeWorldReady(ready,out var readyValue) &&
-                    gateway.TryDequeueReliable(out var spawn) &&
+            Require(gateway.TryDequeueReliable(out var ready), "resync initial Ready frame missing");
+            Require(WireProtocol.TryDecodeWorldReady(ready,out var readyValue),
+                    "resync initial Ready decode");
+            Require(gateway.TryDequeueReliable(out var spawn) &&
                     WireProtocol.TryDecodeEntityState(spawn,out var kind,out var peerValue) &&
                     kind == WireOpcode.EntitySpawn && peerValue.ActorId == peer.ActorId,
-                    "resync initial baseline");
+                    "resync initial peer Spawn");
             Require(gateway.FeedClientBytes(
                     WireProtocol.EncodeWorldReadyAck(new(actor.MapEpoch,readyValue.ServerTick)),
                     _ => true,out var controls) == WireFeedStatus.Accepted &&
@@ -235,16 +236,18 @@ internal static class WorldAoiPumpChecks
                     !gateway.WorldReadyAcknowledged,
                     "resync request ingress");
             await WaitForFrames(gateway,3);
-            Require(gateway.TryDequeueReliable(out var rebuiltReady) &&
-                    WireProtocol.TryDecodeWorldReady(rebuiltReady,out var rebuilt) &&
-                    rebuilt.ReceiverMapEpoch == actor.MapEpoch &&
-                    gateway.TryDequeueReliable(out var self) &&
+            Require(gateway.TryDequeueReliable(out var rebuiltReady),
+                    "resync replacement Ready frame missing");
+            Require(WireProtocol.TryDecodeWorldReady(rebuiltReady,out var rebuilt) &&
+                    rebuilt.ReceiverMapEpoch == actor.MapEpoch,
+                    "resync replacement Ready decode/generation");
+            Require(gateway.TryDequeueReliable(out var self) &&
                     WireProtocol.TryDecodeEntityState(self,out var selfKind,out var own) &&
                     selfKind == WireOpcode.SelfState && own.ActorId == actor.ActorId &&
                     gateway.TryDequeueReliable(out var rebuiltSpawn) &&
                     WireProtocol.TryDecodeEntityState(rebuiltSpawn,out kind,out peerValue) &&
                     kind == WireOpcode.EntitySpawn && peerValue.ActorId == peer.ActorId,
-                    "resync pump did not rebuild ordered baseline");
+                    "resync pump did not rebuild ordered SelfState/Spawn baseline");
             Require(gateway.FeedClientBytes(
                     WireProtocol.EncodeWorldReadyAck(new(actor.MapEpoch,rebuilt.ServerTick)),
                     _ => true,out controls) == WireFeedStatus.Accepted &&

@@ -261,20 +261,14 @@ public sealed class GatewayConnection
             WireProtocol.TryDecodeWorldResyncRequest(frame, out var resync) &&
             postResync is not null)
         {
-            if (!CanRequestResync(bound, resync))
+            if (!TryArmResync(bound, resync))
                 return WireFrameDisposition.ProtocolViolation;
             var request = new TrustedWorldResyncRequest(
                 bound.ActorId, bound.ConnectionEpoch, resync.MapEpoch);
             if (!postResync(request))
-                return WireFrameDisposition.Backpressured;
-            lock (_bindingGate)
             {
-                if (!_closed && _binding == bound)
-                {
-                    _resyncPending = true;
-                    _worldReadyAckedMapEpoch = 0;
-                    _worldReadyAckedTick = -1;
-                }
+                CancelArmedResync(bound);
+                return WireFrameDisposition.Backpressured;
             }
             return WireFrameDisposition.AcceptedControl;
         }
@@ -330,14 +324,38 @@ public sealed class GatewayConnection
         }
     }
 
-    private bool CanRequestResync(ConnectionBinding expected, WorldResyncRequestWire request)
+    private bool TryArmResync(ConnectionBinding expected, WorldResyncRequestWire request)
     {
         lock (_bindingGate)
-            return !_closed && _binding == expected && !_resyncPending &&
-                   request.MapEpoch == expected.MapEpoch &&
-                   _worldReadySentMapEpoch == expected.MapEpoch &&
-                   _worldReadyAckedMapEpoch == expected.MapEpoch &&
-                   _worldReadyAckedTick == _worldReadySentTick;
+        {
+            if (_closed || _binding != expected || _resyncPending ||
+                request.MapEpoch != expected.MapEpoch ||
+                _worldReadySentMapEpoch != expected.MapEpoch ||
+                _worldReadyAckedMapEpoch != expected.MapEpoch ||
+                _worldReadyAckedTick != _worldReadySentTick)
+                return false;
+            // Close the gameplay/ACK gate BEFORE publishing the request to the
+            // AOI owner. Otherwise the pump could rebuild WorldReady first and
+            // this receive thread could overwrite that completion with pending=true.
+            _resyncPending = true;
+            _worldReadyAckedMapEpoch = 0;
+            _worldReadyAckedTick = -1;
+            return true;
+        }
+    }
+
+    private void CancelArmedResync(ConnectionBinding expected)
+    {
+        lock (_bindingGate)
+        {
+            if (_closed || _binding != expected || !_resyncPending)
+                return;
+            _resyncPending = false;
+            // The bounded request was NOT accepted, so no replacement baseline
+            // can exist. Restore the exact ACK that was valid before arming.
+            _worldReadyAckedMapEpoch = _worldReadySentMapEpoch;
+            _worldReadyAckedTick = _worldReadySentTick;
+        }
     }
 
     /// <summary>

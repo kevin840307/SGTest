@@ -170,27 +170,33 @@ func _verify_self() -> bool:
 		return false
 	var bad_cases := []
 	var bad := SELF.hex_decode()
-	bad.encode_s64(24, 22)
+	bad.encode_s64(24, 22) # wrong actor
 	bad_cases.append(bad)
 	bad = SELF.hex_decode()
-	bad.encode_s64(32, 3)
+	bad.encode_s64(32, 3) # same TLS session cannot change ConnectionEpoch
 	bad_cases.append(bad)
 	bad = SELF.hex_decode()
-	bad.encode_s64(40, 2)
+	bad.encode_s64(40, 2) # wrong entity MapEpoch
 	bad_cases.append(bad)
 	bad = SELF.hex_decode()
-	bad.encode_s32(48, 13)
-	bad_cases.append(bad)
-	bad = SELF.hex_decode()
-	bad.encode_s64(52, 9)
-	bad.encode_u32(69, 4)
+	bad.encode_s32(48, 13) # wrong map
 	bad_cases.append(bad)
 	for frame in bad_cases:
 		var isolated = _ready_world()
 		isolated.apply_frame(SELF.hex_decode())
 		if isolated.apply_frame(frame) or int(isolated.state) != WorldState.STATE_FAILED:
-			_fail("wrong own identity/generation/action accepted")
+			_fail("wrong own identity/generation accepted")
 			return false
+	# A sequencing gap can be caused by a missing reliable AOI baseline/delta.
+	# Do not mutate self authority or disconnect; request the bounded snapshot rebuild.
+	var recoverable := SELF.hex_decode()
+	recoverable.encode_s64(52, 9)
+	recoverable.encode_u32(69, 4)
+	var healing = _ready_world()
+	healing.apply_frame(SELF.hex_decode())
+	if not healing.apply_frame(recoverable) or int(healing.state) != WorldState.STATE_IN_WORLD or not bool(healing.snapshot().resync_pending) or float(healing.snapshot().x) != 56.0:
+		_fail("own action/revision gap did not request resync")
+		return false
 	var before = WorldState.new()
 	if before.apply_frame(SELF.hex_decode()):
 		_fail("self before Ready accepted")
@@ -215,5 +221,5 @@ func _verify_self() -> bool:
 	if not world.apply_frame(new_self) or world.x != 72.0:
 		_fail("new-map self baseline did not reset")
 		return false
-	print("SELF_STATE_GODOT_PASS bytes=74 identity=FAIL_CLOSED stale=IGNORED transfer=PASS ready_replay=IGNORED")
+	print("SELF_STATE_GODOT_PASS bytes=74 identity=FAIL_CLOSED sequence_gap=RESYNC stale=IGNORED transfer=PASS ready_replay=IGNORED")
 	return true

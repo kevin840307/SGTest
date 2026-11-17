@@ -427,7 +427,7 @@ func _apply_self_state(frame: PackedByteArray) -> bool:
 	# authenticated own Actor/MapEpoch. Later updates cannot replace it.
 	if not self_state.is_empty():
 		if int(value.connection_epoch) != int(self_state.connection_epoch):
-			return _need_resync("self_state_wrong_connection")
+			return fail("self_state_wrong_connection")
 		if int(value.revision) <= int(self_state.revision):
 			stale_aoi_events += 1
 			return true
