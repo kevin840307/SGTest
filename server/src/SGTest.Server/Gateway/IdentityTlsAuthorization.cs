@@ -22,12 +22,14 @@ public sealed class IdentityTlsAuthorization
     private readonly CharacterPositionCheckpoint? _positions;
     private readonly PlayerCombatSettlement? _combat;
     private readonly long _pickupWorldGeneration;
+    private readonly IReadOnlyDictionary<int,RecoveryItemRule>? _recoveryRules;
 
     public IdentityTlsAuthorization(SqliteIdentityStore identity, ServerWorldHost world,
                                     PortalCatalog? portals = null,
                                     CharacterPositionCheckpoint? positions = null,
                                     PlayerCombatSettlement? combat = null,
-                                     long pickupWorldGeneration = 0)
+                                     long pickupWorldGeneration = 0,
+                                     IReadOnlyDictionary<int,RecoveryItemRule>? recoveryRules = null)
     {
         _identity = identity ?? throw new ArgumentNullException(nameof(identity));
         _world = world ?? throw new ArgumentNullException(nameof(world));
@@ -37,6 +39,7 @@ public sealed class IdentityTlsAuthorization
         if (pickupWorldGeneration is < 0 or > 0x3fffffff)
             throw new ArgumentOutOfRangeException(nameof(pickupWorldGeneration));
         _pickupWorldGeneration = pickupWorldGeneration;
+        _recoveryRules = recoveryRules;
     }
 
     /// <summary>
@@ -175,6 +178,9 @@ public sealed class IdentityTlsAuthorization
                 };
             async Task RespawnHandler(TrustedPlayerRespawn request)
             {
+                await gameplayGate.WaitAsync().ConfigureAwait(false);
+                try
+                {
                 var binding = new ConnectionBinding(
                     request.ActorId, request.ConnectionEpoch, request.RequestMapEpoch);
                 if (!router.IsCurrentBinding(binding))
@@ -216,6 +222,8 @@ public sealed class IdentityTlsAuthorization
                     (_combat is null || !_combat.TryResume(actor)))
                     throw new InvalidOperationException(
                         "Combat generation could not resume after player respawn");
+                }
+                finally { gameplayGate.Release(); }
             }
 
             async Task PickupHandler(TrustedGroundPickup request)
@@ -264,11 +272,79 @@ public sealed class IdentityTlsAuthorization
                 finally { gameplayGate.Release(); }
             }
 
+            async Task RecoveryHandler(TrustedRecoveryUse request)
+            {
+                // The World/AOI owner and existing auth binding supply ALL
+                // identity fields. A client can only choose its inventory UID.
+                var binding=new ConnectionBinding(
+                    request.ActorId,request.ConnectionEpoch,request.RequestMapEpoch);
+                await gameplayGate.WaitAsync().ConfigureAwait(false);
+                try
+                {
+                    if(!router.IsCurrentBinding(binding))return;
+                    var snapshot=await _world.TrustedGetActorAsync(
+                        request.ActorId).ConfigureAwait(false);
+                    RecoveryUseResult result;
+                    ActorSnapshot? suspendedActor=null;
+                    if(snapshot is not { } actor ||
+                        actor.ActorId!=request.ActorId ||
+                        actor.ConnectionEpoch!=request.ConnectionEpoch ||
+                        actor.MapEpoch!=request.RequestMapEpoch)
+                    {
+                        result=new(RecoveryUseStatus.CombatUnavailable,request.ItemUid);
+                    }
+                    else if(_combat is null)
+                        result=new(RecoveryUseStatus.CombatUnavailable,request.ItemUid);
+                    else if(_recoveryRules is null)
+                        result=new(RecoveryUseStatus.NoRule,request.ItemUid);
+                    else
+                    {
+                        // AI reservations must be blocked and all outstanding
+                        // SQLite damage committed before the HP + item TX.
+                        await _combat.SuspendAndDrainAsync(
+                            actor.ActorId,actor.ConnectionEpoch,
+                            actor.MapEpoch).ConfigureAwait(false);
+                        suspendedActor=actor;
+                        if(!_combat.TryGetSuspendedHp(actor,out int hp))
+                            result=new(RecoveryUseStatus.CombatUnavailable,request.ItemUid);
+                        else if(hp<=0)
+                            result=new(RecoveryUseStatus.Dead,request.ItemUid);
+                        else
+                        {
+                            long durableConnection=_pickupWorldGeneration==0
+                                ? actor.ConnectionEpoch // isolated test only
+                                : SqliteIdentityStore.ComposePickupConnectionEpoch(
+                                    _pickupWorldGeneration,actor.ConnectionEpoch);
+                            result=await _identity.UseVerifiedRecoveryItemAsync(
+                                new TrustedRecoveryUseContext(
+                                    actor.ActorId,durableConnection,
+                                    actor.MapEpoch,request.UseSequence,hp),
+                                request.ItemUid,_recoveryRules).ConfigureAwait(false);
+                            if(result.Status==RecoveryUseStatus.Granted &&
+                                !_combat.TryApplyCommittedRecovery(actor,result))
+                                throw new InvalidOperationException(
+                                    "Committed recovery diverged from reserved Combat state");
+                        }
+                    }
+                    var sent=router.QueueRecoveryUseResult(request,result);
+                    if(sent!=GatewaySendStatus.Enqueued)
+                        throw new IOException(
+                            "Reliable recovery receipt could not be queued: "+sent);
+                    // Resume AI only AFTER reliable result is in the same FIFO,
+                    // ensuring later PlayerDamage cannot overtake HP restoration.
+                    if(suspendedActor is { } resumed &&
+                        !_combat!.TryResume(resumed))
+                        throw new InvalidOperationException(
+                            "Recovery Combat generation could not resume");
+                }
+                finally { gameplayGate.Release(); }
+            }
+
             return await TlsWireConnection.RunServerAsync(client, certificate,
                 Authorize, _world.TryPostMove, options, cancellationToken, Release,
                 npcHandler, router.TryRequestResync,
                 router.TryRequestNormalAttack, RespawnHandler,
-                PickupHandler).ConfigureAwait(false);
+                PickupHandler, RecoveryHandler).ConfigureAwait(false);
         }
         finally
         {

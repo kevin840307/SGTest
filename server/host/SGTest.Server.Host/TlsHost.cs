@@ -64,6 +64,12 @@ internal static class TlsHost
             IReadOnlyList<MonsterDropRule>? dropRules = lootManifest is null
                 ? null : MonsterDropCatalog.LoadVerified(
                     Path.GetFullPath(lootManifest),monsterRuntimes);
+            // Explicit audited content only. If omitted, no HP recovery item
+            // can be used; client-side names or .tres never grant authority.
+            string? recoveryManifest=options.GetValueOrDefault("--recovery-rules");
+            IReadOnlyDictionary<int,RecoveryItemRule>? recoveryRules=
+                recoveryManifest is null ? null :
+                RecoveryItemCatalog.LoadVerified(Path.GetFullPath(recoveryManifest));
             var portals = PortalCatalog.LoadNpcDocuments(new[] { 13, 15 }.Select(id =>
                 Path.Combine(root, "maps", id.ToString(), "npcs.json")));
             using var identity = new SqliteIdentityStore(database);
@@ -116,7 +122,8 @@ internal static class TlsHost
                 initialGroundDrops: activeDrops);
             var authorization = new IdentityTlsAuthorization(
                 identity, world, portals, positions, combat,
-                pickupWorldGeneration: lootGeneration);
+                pickupWorldGeneration: lootGeneration,
+                recoveryRules: recoveryRules);
             await using var listener = new TlsGatewayListener(address, port, authorization,
                 certificate, router, new(MaxConnections: maximum, MaxConnectionsPerAddress: perAddress));
             await world.StartAsync();
