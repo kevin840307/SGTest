@@ -483,14 +483,13 @@ public sealed class GatewayConnection
 
                 case AoiEventKind.MonsterSpawn or AoiEventKind.MonsterDelta
                     when evt.Monster is { } monster &&
-                         monster.MapId == bound.MapId &&
                          monster.EntityId != bound.ActorId:
                     frame = WireProtocol.EncodeMonsterState(
                         evt.Kind == AoiEventKind.MonsterSpawn
                             ? WireOpcode.MonsterSpawn : WireOpcode.MonsterDelta,
                         new(evt.ReceiverMapEpoch, evt.Tick, monster.EntityId,
                             monster.EnemyId, monster.SourceIndex, monster.MapId,
-                            (float)monster.X, (float)monster.Y, monster.Revision,
+                            (float)monster.X, (float)monster.Y, monster.EntityRevision,
                             monster.CurrentHp, monster.MaxHp, monster.State,
                             monster.Facing, monster.TargetActorId));
                     break;

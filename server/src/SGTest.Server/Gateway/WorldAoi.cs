@@ -272,9 +272,9 @@ public sealed class WorldAoi
             monster.SpawnY != previous.SpawnY)
             throw new InvalidOperationException(
                 "Monster AOI immutable identity changed without population rebuild");
-        if (monster.Revision < previous.Revision)
+        if (monster.EntityRevision < previous.EntityRevision)
             throw new InvalidOperationException("Monster AOI revision regressed");
-        if (monster.Revision == previous.Revision)
+        if (monster.EntityRevision == previous.EntityRevision)
             return;
 
         RemoveMonsterBucket(previous);
@@ -302,7 +302,7 @@ public sealed class WorldAoi
                 !Within(viewer, monster, true))
             {
                 observer.VisibleMonsters.Remove(entry.Key);
-                long revision = monster.EntityId > 0 ? monster.Revision : entry.Value;
+                long revision = monster.EntityId > 0 ? monster.EntityRevision : entry.Value;
                 Enqueue(observer, new(AoiEventKind.MonsterDespawn, tick,
                     viewer.MapEpoch, MonsterEntityId: entry.Key,
                     MonsterRevision: revision));
@@ -383,7 +383,7 @@ public sealed class WorldAoi
                 observer.VisibleMonsters.Remove(monster.EntityId);
                 Enqueue(observer, new(AoiEventKind.MonsterDespawn, tick,
                     observer.Self.MapEpoch, MonsterEntityId: monster.EntityId,
-                    MonsterRevision: monster.Revision));
+                    MonsterRevision: monster.EntityRevision));
             }
             return;
         }
@@ -392,13 +392,13 @@ public sealed class WorldAoi
             if (observer.Visible.Count + observer.VisibleMonsters.Count >=
                 _limits.MaxVisiblePerObserver)
                 throw new AoiBackpressureException("AOI visible entity cap exceeded");
-            observer.VisibleMonsters.Add(monster.EntityId, monster.Revision);
+            observer.VisibleMonsters.Add(monster.EntityId, monster.EntityRevision);
             Enqueue(observer, new(AoiEventKind.MonsterSpawn, tick,
                 observer.Self.MapEpoch, Monster: monster));
         }
-        else if (monster.Revision > seenRevision)
+        else if (monster.EntityRevision > seenRevision)
         {
-            observer.VisibleMonsters[monster.EntityId] = monster.Revision;
+            observer.VisibleMonsters[monster.EntityId] = monster.EntityRevision;
             Enqueue(observer, new(AoiEventKind.MonsterDelta, tick,
                 observer.Self.MapEpoch, Monster: monster));
         }
@@ -423,7 +423,7 @@ public sealed class WorldAoi
     private static void ValidateMonster(MonsterSnapshot monster)
     {
         if (monster.EntityId <= 0 || monster.EnemyId <= 0 || monster.SourceIndex < 0 ||
-            monster.MapId <= 0 || monster.Revision <= 0 ||
+            monster.MapId <= 0 || monster.EntityRevision <= 0 ||
             monster.CurrentHp < 0 || monster.MaxHp <= 0 ||
             monster.CurrentHp > monster.MaxHp || monster.TargetActorId < 0 ||
             monster.Facing is < 1 or > 8 ||
