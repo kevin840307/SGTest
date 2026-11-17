@@ -54,7 +54,7 @@ func _initialize() -> void:
 		_attack(session,self_id)
 
 func _observe(session, self_id: int) -> void:
-	var first := session.snapshot()
+	var first: Dictionary = session.snapshot()
 	var remote_id := int(first.entities.keys()[0])
 	var monster_id := int(first.monsters.keys()[0])
 	if remote_id==self_id:
@@ -85,7 +85,7 @@ func _observe(session, self_id: int) -> void:
 	quit(0)
 
 func _attack(session, self_id: int) -> void:
-	var ready := session.snapshot()
+	var ready: Dictionary = session.snapshot()
 	var remote_id := int(ready.entities.keys()[0])
 	var monster_id := int(ready.monsters.keys()[0])
 	if remote_id==self_id or not bool(ready.combat_available):
