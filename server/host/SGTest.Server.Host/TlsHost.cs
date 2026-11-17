@@ -148,6 +148,7 @@ internal static class TlsHost
                     monsters = monsterRuntimes.Sum(m => m.Count),
                     position_checkpoint_ms = checkpointMs,
                     loot_rule_count = dropRules?.Count ?? 0,
+                    verified_recovery_rule_count = recoveryRules?.Count ?? 0,
                     unpicked_ground_drops = activeDrops.Count
                 }));
                 var stopping = Task.Delay(Timeout.Infinite, stop.Token);
@@ -190,7 +191,8 @@ internal static class TlsHost
                 monster_coordinator = monsters?.Statistics,
                 positions = positions.Statistics,
                 combat = combat.Statistics,
-                loot = loot?.Statistics
+                loot = loot?.Statistics,
+                verified_recovery_rule_count = recoveryRules?.Count ?? 0
             }));
             return 0;
         }
@@ -199,7 +201,8 @@ internal static class TlsHost
             Console.Error.WriteLine("TLS_HOST_CONFIGURATION: " + error.Message);
             Console.Error.WriteLine("Usage: serve --content <PRIVATE_ROOT> --identity <DB> --certificate <PFX> " +
                 "[--bind 127.0.0.1] [--port 7777] [--max-connections 128] [--max-per-address 8] " +
-                "[--position-checkpoint-ms 5000] [--loot-rules <VERIFIED_JSON>] [--seconds N]");
+                "[--position-checkpoint-ms 5000] [--loot-rules <VERIFIED_JSON>] " +
+                "[--recovery-rules <VERIFIED_JSON>] [--seconds N]");
             return 2;
         }
         catch (OperationCanceledException) when (stop.IsCancellationRequested) { return 0; }
@@ -219,7 +222,7 @@ internal static class TlsHost
     {
         string[] known = ["--content", "--identity", "--certificate", "--bind", "--port",
                           "--max-connections", "--max-per-address", "--position-checkpoint-ms",
-                          "--loot-rules", "--seconds"];
+                          "--loot-rules", "--recovery-rules", "--seconds"];
         var values = new Dictionary<string, string>(StringComparer.Ordinal);
         if (args.Length % 2 != 0) throw new ArgumentException("Every option requires a value");
         for (int i = 0; i < args.Length; i += 2)
