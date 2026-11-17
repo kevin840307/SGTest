@@ -2,7 +2,10 @@ using SGTest.Server.World;
 
 namespace SGTest.Server.Gateway;
 
-public sealed record MonsterStateBatch(long Tick, IReadOnlyList<MonsterSnapshot> Changed);
+public sealed record MonsterStateBatch(
+    long Tick,
+    IReadOnlyList<MonsterSnapshot> Changed,
+    IReadOnlyList<MonsterWorldEvent>? Events = null);
 
 public sealed record MonsterWorldCoordinatorStatistics(
     long ProcessedWorldBatches,
@@ -16,9 +19,9 @@ public sealed record MonsterWorldCoordinatorStatistics(
 /// Single-consumer bridge from authoritative World batches to map-local MonsterRuntime.
 /// It keeps only player position/generation snapshots, performs no DB/socket work,
 /// and coalesces multiple same-tick AI events for one monster to one final snapshot.
-/// Player HP is intentionally not invented here: until the combat health owner is
-/// integrated, a registered actor is treated as targetable/alive. This coordinator
-/// owns movement/AI publication only, not player damage settlement.
+/// Player HP may be supplied by the separate combat-settlement owner; without one,
+/// synthetic/unit callers retain the historical targetable=1 fallback. This coordinator
+/// owns movement/AI event publication only and never performs SQLite settlement.
 /// </summary>
 public sealed class MonsterWorldCoordinator
 {
@@ -59,7 +62,9 @@ public sealed class MonsterWorldCoordinator
             Interlocked.Read(ref _changed), _actors.Count, _runtimes.Count,
             _runtimes.Values.Sum(x => x.Count));
 
-    public MonsterStateBatch Process(WorldChangedBatch batch)
+    public MonsterStateBatch Process(
+        WorldChangedBatch batch,
+        Func<ActorSnapshot, int>? currentHp = null)
     {
         ArgumentNullException.ThrowIfNull(batch);
         if (batch.Tick <= _lastTick)
@@ -84,6 +89,7 @@ public sealed class MonsterWorldCoordinator
             Change(actor);
 
         var latest = new Dictionary<long, MonsterSnapshot>();
+        var combatEvents = new List<MonsterWorldEvent>();
         foreach (var pair in _runtimes)
         {
             var runtime = pair.Value;
@@ -99,7 +105,8 @@ public sealed class MonsterWorldCoordinator
                 .Where(x => x.MapId == pair.Key)
                 .OrderBy(x => x.ActorId)
                 .Select(x => new MonsterCombatTarget(
-                    x.ActorId, x.MapId, x.X, x.Y, CurrentHp: 1))
+                    x.ActorId, x.MapId, x.X, x.Y,
+                    CurrentHp: Math.Max(0, currentHp?.Invoke(x) ?? 1)))
                 .ToArray();
             if (targets.Length == 0)
                 continue;
@@ -107,14 +114,20 @@ public sealed class MonsterWorldCoordinator
             var events = runtime.Tick(batch.Tick, targets);
             Interlocked.Increment(ref _runtimeTicks);
             foreach (var evt in events)
+            {
                 latest[evt.Monster.EntityId] = evt.Monster;
+                combatEvents.Add(evt);
+            }
         }
 
         var changed = latest.Values.OrderBy(x => x.EntityId).ToArray();
         Interlocked.Increment(ref _batches);
         Interlocked.Add(ref _changed, changed.Length);
-        return new MonsterStateBatch(batch.Tick, changed);
+        return new MonsterStateBatch(batch.Tick, changed, combatEvents.ToArray());
     }
+
+    public bool TryGetActor(long actorId, out ActorSnapshot actor) =>
+        _actors.TryGetValue(actorId, out actor);
 
     public NormalAttackOutcome ResolveNormalAttack(TrustedNormalAttack request)
     {

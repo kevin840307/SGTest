@@ -40,6 +40,11 @@ public sealed record CharacterCombatProfile(
     CharacterCombatProfileData Data,
     long UpdatedUnixMilliseconds);
 
+public sealed record CharacterDamageSettlement(
+    CharacterCombatProfile Profile,
+    int DamageApplied,
+    bool Died);
+
 public sealed record AccountRecord(long AccountId, string Username, bool Disabled,
     IReadOnlyList<CharacterRecord> Characters);
 
@@ -361,6 +366,11 @@ ON CONFLICT(character_id) DO UPDATE SET
     /// </summary>
     public async Task<CharacterCombatProfile?> ApplyCharacterDamageAsync(
         long characterId, int damage, CancellationToken cancellationToken = default)
+        => (await ApplyCharacterDamageSettlementAsync(
+            characterId, damage, cancellationToken).ConfigureAwait(false))?.Profile;
+
+    public async Task<CharacterDamageSettlement?> ApplyCharacterDamageSettlementAsync(
+        long characterId, int damage, CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
         if (characterId <= 0 || damage <= 0 || damage > 100_000_000)
@@ -369,8 +379,16 @@ ON CONFLICT(character_id) DO UPDATE SET
         {
             using var connection = Open();
             using var tx = connection.BeginTransaction();
-            using (var command = connection.CreateCommand())
+            var before = ReadCombatProfile(connection, characterId, tx);
+            if (before is null)
             {
+                tx.Rollback();
+                return null;
+            }
+            int hpBefore = before.Data.CurrentHp;
+            if (hpBefore > 0)
+            {
+                using var command = connection.CreateCommand();
                 command.Transaction = tx;
                 command.CommandText = @"
 UPDATE character_combat_profiles
@@ -382,14 +400,16 @@ UPDATE character_combat_profiles
                     DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
                 command.Parameters.AddWithValue("$id", characterId);
                 if (command.ExecuteNonQuery() != 1)
-                {
-                    tx.Rollback();
-                    return null;
-                }
+                    throw new InvalidOperationException(
+                        "Combat profile disappeared during atomic damage settlement");
             }
-            var result = ReadCombatProfile(connection, characterId, tx);
+            var after = ReadCombatProfile(connection, characterId, tx)
+                ?? throw new InvalidOperationException(
+                    "Combat profile disappeared after atomic damage settlement");
             tx.Commit();
-            return result;
+            int applied = hpBefore - after.Data.CurrentHp;
+            return new CharacterDamageSettlement(
+                after, applied, hpBefore > 0 && after.Data.CurrentHp == 0);
         }, cancellationToken).ConfigureAwait(false);
     }
 
