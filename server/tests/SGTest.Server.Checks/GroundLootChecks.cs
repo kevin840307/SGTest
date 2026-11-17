@@ -10,6 +10,8 @@ internal static class GroundLootChecks
             () => PickupGuards(root).GetAwaiter().GetResult());
         Checks.Run("loot simultaneous claimers atomically grant only one item UID across reopen",
             () => ConcurrentClaims(root).GetAwaiter().GetResult());
+        Checks.Run("new Server boot avoids recycled pickup session epochs and action sequences",
+            () => RestartConnectionGeneration(root).GetAwaiter().GetResult());
     }
 
     private static async Task<(SqliteIdentityStore Store,string Database,long A,long B)> Setup(string root, string suffix)
@@ -136,6 +138,45 @@ internal static class GroundLootChecks
                 (await store.ListInventoryItemsAsync(b)).Count==0 &&
                 (await store.ListActiveGroundDropsAsync(13)).Count==0,
                 "grant duplicated inventory or left picked loot on ground");
+        }
+    }
+
+    private static async Task RestartConnectionGeneration(string root)
+    {
+        var (store,_,character,_)=await Setup(root,"restart");
+        using(store)
+        {
+            long generation1=await store.AllocateLootWorldGenerationAsync();
+            var first=await store.CreateTrustedGroundDropAsync(Drop(generation1));
+            var firstSession=Actor(character) with {
+                ConnectionEpoch=SqliteIdentityStore.ComposePickupConnectionEpoch(
+                    generation1,1),MapEpoch=1,ActionSequence=1
+            };
+            var firstGrant=await store.ClaimGroundDropAsync(
+                firstSession,first.DropId);
+            Checks.Require(firstGrant.Status==PickupStatus.Granted &&
+                firstGrant.ItemUid>0,"first World boot pickup failed");
+
+            // Process restart: same character, same in-memory conn epoch 1,
+            // same map epoch 1 and client action 1, but new DB boot generation.
+            long generation2=await store.AllocateLootWorldGenerationAsync();
+            var second=await store.CreateTrustedGroundDropAsync(Drop(generation2));
+            var restarted=firstSession with {
+                ConnectionEpoch=SqliteIdentityStore.ComposePickupConnectionEpoch(
+                    generation2,1)
+            };
+            var nextGrant=await store.ClaimGroundDropAsync(
+                restarted,second.DropId);
+            Checks.Require(generation2>generation1 &&
+                restarted.ConnectionEpoch!=firstSession.ConnectionEpoch &&
+                nextGrant.Status==PickupStatus.Granted &&
+                nextGrant.ItemUid!=firstGrant.ItemUid &&
+                (await store.ListInventoryItemsAsync(character)).Count==2,
+                "restarted session was mistaken for stale pickup sequence");
+            var replay=await store.ClaimGroundDropAsync(firstSession,first.DropId);
+            Checks.Require(replay.Status==PickupStatus.AlreadyGranted &&
+                replay.ItemUid==firstGrant.ItemUid,
+                "earlier committed session replay returned wrong UID");
         }
     }
 
