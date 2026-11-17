@@ -139,7 +139,8 @@ public enum NpcPortalStatus : byte
     ReplayedSequence = 2,
     UnknownNpc = 3,
     TooFar = 4,
-    DestinationRejected = 5
+    DestinationRejected = 5,
+    CombatDead = 6
 }
 
 public readonly record struct NpcPortalOutcome(

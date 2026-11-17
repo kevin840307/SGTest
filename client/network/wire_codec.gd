@@ -81,7 +81,7 @@ static func decode_move_receipt(frame: PackedByteArray) -> Dictionary:
 	var sequence := reader.get_u32()
 	var status := reader.get_u16()
 	var server_tick := reader.get_64()
-	if map_epoch <= 0 or sequence == 0 or status > 10 or server_tick < 0:
+	if map_epoch <= 0 or sequence == 0 or status > 11 or server_tick < 0:
 		return {}
 	return {"map_epoch": map_epoch, "movement_sequence": sequence, "status": status, "server_tick": server_tick}
 
@@ -117,7 +117,7 @@ static func decode_npc_interact_result(frame: PackedByteArray) -> Dictionary:
 	var sequence := reader.get_u32()
 	var status := reader.get_u8()
 	var result_epoch := reader.get_64()
-	if epoch <= 0 or sequence == 0 or status > 5:
+	if epoch <= 0 or sequence == 0 or status > 6:
 		return {}
 	if status == 0 and result_epoch <= epoch:
 		return {}

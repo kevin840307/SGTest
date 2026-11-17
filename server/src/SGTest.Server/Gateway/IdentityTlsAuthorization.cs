@@ -265,6 +265,15 @@ public sealed class IdentityTlsAuthorization
                 if (!combatAttached)
                     throw new InvalidOperationException(
                         "Combat settlement rejected authenticated character generation");
+                if (combat.Data.CurrentHp == 0)
+                {
+                    var dead = await _world.TrustedSetCombatDeadAsync(
+                        snapshot.ActorId, snapshot.ConnectionEpoch, snapshot.MapEpoch, true)
+                        .ConfigureAwait(false);
+                    if (dead is null)
+                        throw new InvalidOperationException(
+                            "Stored dead combat state could not gate authoritative World actor");
+                }
             }
 
             cancellationToken.ThrowIfCancellationRequested();

@@ -82,7 +82,18 @@ func _initialize() -> void:
 		_fail("future-map damage did not fail closed")
 		return
 
-	print("PLAYER_DAMAGE_GODOT_PASS baseline_bytes=24 damage_bytes=57 durable_event=true duplicate_stale=true sequence_gap_fail_closed=true death_gates_intents=true old_map_stale=true")
+
+	var dead_move := _move_receipt(1,1,11,44)
+	var dead_move_parsed := WireCodec.decode_move_receipt(dead_move)
+	if dead_move_parsed.is_empty() or int(dead_move_parsed.status)!=11:
+		_fail("CombatDead move receipt codec")
+		return
+	var dead_npc := _npc_result(1,1,6,1)
+	var dead_npc_parsed := WireCodec.decode_npc_interact_result(dead_npc)
+	if dead_npc_parsed.is_empty() or int(dead_npc_parsed.status)!=6:
+		_fail("CombatDead NPC result codec")
+		return
+	print("PLAYER_DAMAGE_GODOT_PASS baseline_bytes=24 damage_bytes=57 durable_event=true duplicate_stale=true sequence_gap_fail_closed=true death_gates_intents=true combat_dead_statuses=true old_map_stale=true")
 	quit(0)
 
 func _world(epoch: int) -> RefCounted:
@@ -120,4 +131,29 @@ func _damage(epoch: int,sequence: int,tick: int,attacker: int,revision: int,
 	writer.put_32(current_hp)
 	writer.put_32(max_hp)
 	writer.put_u8(1 if died else 0)
+	return writer.data_array
+
+
+func _move_receipt(epoch: int,sequence: int,status: int,tick: int) -> PackedByteArray:
+	var writer := StreamPeerBuffer.new()
+	writer.big_endian=false
+	writer.put_u32(30)
+	writer.put_u16(1)
+	writer.put_u16(WireCodec.OPCODE_MOVE_RECEIPT)
+	writer.put_64(epoch)
+	writer.put_u32(sequence)
+	writer.put_u16(status)
+	writer.put_64(tick)
+	return writer.data_array
+
+func _npc_result(epoch: int,sequence: int,status: int,result_epoch: int) -> PackedByteArray:
+	var writer := StreamPeerBuffer.new()
+	writer.big_endian=false
+	writer.put_u32(29)
+	writer.put_u16(1)
+	writer.put_u16(WireCodec.OPCODE_NPC_INTERACT_RESULT)
+	writer.put_64(epoch)
+	writer.put_u32(sequence)
+	writer.put_u8(status)
+	writer.put_64(result_epoch)
 	return writer.data_array

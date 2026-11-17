@@ -177,7 +177,7 @@ def run_combat(args, repo: Path, fixture: Path, env: dict[str, str]) -> int:
         for line in lines:
             if line.startswith("COMBAT_FIXTURE_"):
                 print(line)
-        print("GODOT_CSHARP_TLS_COMBAT_E2E_PASS secure_tls=true synthetic_profile_explicit=true client_damage_absent=true authoritative_monster_hp=true shared_monster_delta=true monster_hit_committed_before_player_damage=true authoritative_player_hp=true")
+        print("GODOT_CSHARP_TLS_COMBAT_E2E_PASS secure_tls=true synthetic_profile_explicit=true client_damage_absent=true authoritative_monster_hp=true shared_monster_delta=true monster_hit_committed_before_player_damage=true authoritative_player_hp=true lethal_world_stop_before_delivery=true dead_intents_blocked=true")
         return 0
     except Exception as error:
         print("TLS_COMBAT_RUNNER_FAIL", error, file=sys.stderr)

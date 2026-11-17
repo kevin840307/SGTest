@@ -159,7 +159,7 @@ internal static class Program
                         stats = new
                         {
                             level = 3, max_hp = 100, attack_damage = 20, move_step = 8.0,
-                            aggro_radius = 100.0, lose_target_radius = 150.0,
+                            aggro_radius = 1.0, lose_target_radius = 150.0,
                             leash_radius = 150.0, attack_range = 100.0,
                             attack_cooldown_ticks = 1000, respawn_ticks = 300,
                             wander_radius = 0.0, wander_interval_ticks = 100
@@ -196,7 +196,7 @@ internal static class Program
                     "ci:tls-combat-fixture",
                     Race: 0, Career: 0, Strength: 5, Dexterity: 5,
                     Constitution: 5, Wisdom: 5, Level: 1,
-                    CurrentHp: 100, MaxHp: 100,
+                    CurrentHp: 18, MaxHp: 100,
                     Attack: 60, Defense: 10, Hit: 10, Dodge: 3,
                     AttackRange: 48, AttackCooldownTicks: 15))
                 .ConfigureAwait(false);
@@ -204,7 +204,17 @@ internal static class Program
             var router = new WorldResultRouter(
                 new WorldResultRouterOptions(AttackRequestCapacity: 8));
             var settlement = new PlayerCombatSettlement(
-                store, new(Capacity: 8), router.QueuePlayerDamage);
+                store, new(Capacity: 8), router.QueuePlayerDamage,
+                committedLifecycle: async result =>
+                {
+                    if (!result.Died) return;
+                    var stopped = await world.TrustedSetCombatDeadAsync(
+                        result.ActorId, result.ConnectionEpoch, result.MapEpoch, true)
+                        .ConfigureAwait(false);
+                    if (stopped is null)
+                        throw new PlayerCombatSettlementException(
+                            "combat fixture lethal commit did not stop World actor");
+                });
             var pump = new WorldAoiPump(
                 router, monsters: coordinator, playerCombat: settlement);
             var authorization = new IdentityTlsAuthorization(
@@ -236,21 +246,22 @@ internal static class Program
                 var player = await store.GetCharacterCombatProfileAsync(characterId)
                     .ConfigureAwait(false);
                 if (monster.CurrentHp != 40 || monster.MaxHp != 100 ||
-                    player?.Data.CurrentHp != 82 || player.Data.MaxHp != 100 ||
+                    player?.Data.CurrentHp != 0 || player.Data.MaxHp != 100 ||
                     ended.CommandsAccepted != 1 ||
                     settlement.Statistics.HitsCommitted != 1 ||
                     settlement.Statistics.DamageCommitted != 18 ||
+                    settlement.Statistics.DeathsCommitted != 1 ||
                     router.Statistics.ActiveSessions != 0)
                     throw new InvalidOperationException(
                         $"combat E2E mismatch monster={monster.CurrentHp}/{monster.MaxHp} " +
                         $"player={player?.Data.CurrentHp}/{player?.Data.MaxHp} " +
-                        $"hits={settlement.Statistics.HitsCommitted} " +
+                        $"hits={settlement.Statistics.HitsCommitted} deaths={settlement.Statistics.DeathsCommitted} " +
                         $"commands={ended.CommandsAccepted} sessions={router.Statistics.ActiveSessions}");
 
                 Console.WriteLine(
                     $"COMBAT_FIXTURE_PASS tls={ended.Protocol} target={monster.EntityId} " +
                     $"monster_hp={monster.CurrentHp}/{monster.MaxHp} player_hp={player.Data.CurrentHp}/{player.Data.MaxHp} " +
-                    $"monster_damage_committed={settlement.Statistics.DamageCommitted} commands={ended.CommandsAccepted}");
+                    $"monster_damage_committed={settlement.Statistics.DamageCommitted} deaths={settlement.Statistics.DeathsCommitted} commands={ended.CommandsAccepted}");
                 Console.Out.Flush();
                 return 0;
             }

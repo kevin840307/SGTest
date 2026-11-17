@@ -167,7 +167,7 @@ public static class WireProtocol
     public static byte[] EncodeNpcInteractResult(NpcInteractResultWire value)
     {
         if (value.RequestMapEpoch <= 0 || value.InteractionSequence == 0 ||
-            (byte)value.Status > (byte)NpcPortalStatus.DestinationRejected ||
+            (byte)value.Status > (byte)NpcPortalStatus.CombatDead ||
             value.ResultMapEpoch <= 0 ||
             (value.Status == NpcPortalStatus.Accepted
                 ? value.ResultMapEpoch <= value.RequestMapEpoch
@@ -192,7 +192,7 @@ public static class WireProtocol
             BinaryPrimitives.ReadUInt32LittleEndian(frame.Slice(16, 4)),
             status, BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(21, 8)));
         return value.RequestMapEpoch > 0 && value.InteractionSequence != 0 &&
-               (byte)status <= (byte)NpcPortalStatus.DestinationRejected &&
+               (byte)status <= (byte)NpcPortalStatus.CombatDead &&
                (status == NpcPortalStatus.Accepted
                    ? value.ResultMapEpoch > value.RequestMapEpoch
                    : value.ResultMapEpoch == value.RequestMapEpoch);
@@ -845,7 +845,8 @@ public static class WireProtocol
         MoveReceiptStatus.ReplayedSequence => 4, MoveReceiptStatus.InvalidTarget => 5,
         MoveReceiptStatus.TargetBlocked => 6, MoveReceiptStatus.PathBudgetExhausted => 7,
         MoveReceiptStatus.PathNotFound => 8, MoveReceiptStatus.TickRouteBudgetExhausted => 9,
-        MoveReceiptStatus.RouteBecameBlocked => 10, _ => throw new ArgumentOutOfRangeException(nameof(status))
+        MoveReceiptStatus.RouteBecameBlocked => 10, MoveReceiptStatus.CombatDead => 11,
+        _ => throw new ArgumentOutOfRangeException(nameof(status))
     };
 
     private static bool TryDecodeStatus(ushort raw, out MoveReceiptStatus status)
@@ -857,7 +858,8 @@ public static class WireProtocol
             4 => MoveReceiptStatus.ReplayedSequence, 5 => MoveReceiptStatus.InvalidTarget,
             6 => MoveReceiptStatus.TargetBlocked, 7 => MoveReceiptStatus.PathBudgetExhausted,
             8 => MoveReceiptStatus.PathNotFound, 9 => MoveReceiptStatus.TickRouteBudgetExhausted,
-            10 => MoveReceiptStatus.RouteBecameBlocked, _ => (MoveReceiptStatus)(-1)
+            10 => MoveReceiptStatus.RouteBecameBlocked, 11 => MoveReceiptStatus.CombatDead,
+            _ => (MoveReceiptStatus)(-1)
         };
         return raw <= 10;
     }

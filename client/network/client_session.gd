@@ -83,16 +83,18 @@ func choose_character(character_id: int) -> bool:
 	return _queue_intent({"type": "choose", "character_id": character_id})
 
 func move_target(target_x: int, target_y: int) -> bool:
+	if bool(snapshot().get("player_dead",false)):
+		return false
 	return _queue_intent({"type": "move", "x": target_x, "y": target_y})
 
 func attack_monster(entity_id: int) -> bool:
-	if entity_id <= 0:
+	if entity_id <= 0 or bool(snapshot().get("player_dead",false)):
 		return false
 	return _queue_intent({"type":"attack_monster","entity_id":entity_id})
 
 func npc_interact(spawn_id: int) -> bool:
 	# The client names only a map-local NPC; Server provides the destination.
-	if spawn_id <= 0 or spawn_id > 0x7fffffff:
+	if spawn_id <= 0 or spawn_id > 0x7fffffff or bool(snapshot().get("player_dead",false)):
 		return false
 	return _queue_intent({"type": "npc", "spawn_id": spawn_id})
 

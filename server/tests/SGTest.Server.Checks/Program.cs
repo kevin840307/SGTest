@@ -239,6 +239,7 @@ static class Checks
             CharacterCombatProfileChecks.Verify(root);
             NormalAttackChecks.Verify(root);
             PlayerCombatSettlementChecks.Verify(root);
+            CombatDeathGateChecks.Verify(root);
             IdentityWireChecks.Verify();
             GatewayConnectionChecks.Verify();
             WorldResultRouterChecks.Verify(root);

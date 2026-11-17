@@ -34,7 +34,8 @@ public enum MoveReceiptStatus
     PathBudgetExhausted,
     PathNotFound,
     TickRouteBudgetExhausted,
-    RouteBecameBlocked
+    RouteBecameBlocked,
+    CombatDead
 }
 
 public readonly record struct MoveReceipt(
@@ -75,7 +76,8 @@ public sealed class ServerWorld
         public uint LastPortalSequence; // per-MapEpoch authenticated NPC interaction replay guard
         public byte Facing = 1; // Initial spawn policy; movement owns subsequent facing.
         public long Revision = 1;
-        public bool Closing; // trusted persistence barrier; raw client can never set this.
+        public bool Closing;
+        public bool CombatDead; // trusted persistence barrier; raw client can never set this.
         public IReadOnlyList<GridCell> Route = Array.Empty<GridCell>();
         public int RouteIndex;
 
@@ -100,6 +102,7 @@ public sealed class ServerWorld
     // Trusted registration, disconnect and transfer are ordered on this writer.
     // They must reach AOI even when the actor never sends a MoveTarget.
     private readonly List<ActorLifecycleEvent> _lifecycle = new();
+    private readonly List<ActorSnapshot> _trustedChanged = new();
     private int _reserved;
     private long _tick;
 
@@ -231,6 +234,30 @@ public sealed class ServerWorld
         return true;
     }
 
+    public bool TryTrustedSetCombatDead(
+        long actorId, long connectionEpoch, long mapEpoch,
+        bool dead, out ActorSnapshot snapshot)
+    {
+        EnsureOwner();
+        snapshot = default;
+        if (!_actors.TryGetValue(actorId, out var actor) ||
+            actor.ConnectionEpoch != connectionEpoch ||
+            actor.MapEpoch != mapEpoch || actor.Closing)
+            return false;
+        if (actor.CombatDead == dead)
+        {
+            snapshot = actor.Snapshot();
+            return true;
+        }
+
+        actor.CombatDead = dead;
+        if (dead) actor.ClearRoute();
+        actor.Revision = checked(actor.Revision + 1);
+        snapshot = actor.Snapshot();
+        _trustedChanged.Add(snapshot);
+        return true;
+    }
+
     /// <summary>
     /// Trusted authenticated NPC interaction; ALL decisions execute atomically
     /// on the single World writer. The request supplies only a map-scoped NPC
@@ -250,6 +277,8 @@ public sealed class ServerWorld
             actor.MapEpoch != mapEpoch || actor.Closing ||
             actorId <= 0 || interactionSequence == 0)
             return new(NpcPortalStatus.StaleGeneration, null);
+        if (actor.CombatDead)
+            return new(NpcPortalStatus.CombatDead, null);
         if (interactionSequence <= actor.LastPortalSequence)
             return new(NpcPortalStatus.ReplayedSequence, null);
         actor.LastPortalSequence = interactionSequence;
@@ -302,7 +331,8 @@ public sealed class ServerWorld
         var lifecycle = _lifecycle.ToArray();
         _lifecycle.Clear();
         var receipts = new List<MoveReceipt>();
-        var changed = new List<ActorSnapshot>();
+        var changed = new List<ActorSnapshot>(_trustedChanged);
+        _trustedChanged.Clear();
         var changedCommands = new HashSet<long>();
         int routeQueries = 0;
 
@@ -320,7 +350,10 @@ public sealed class ServerWorld
         foreach (var actor in _actors.Values.OrderBy(a => a.Id))
         {
             int priorCount = changed.Count;
-            AdvanceMovement(actor, changed, receipts);
+            if (actor.CombatDead)
+                actor.ClearRoute();
+            else
+                AdvanceMovement(actor, changed, receipts);
             // Accepted Move/Stop with zero displacement still needs an entity
             // revision/delta. Otherwise other clients never observe the Stop.
             if (changed.Count == priorCount && changedCommands.Contains(actor.Id))
@@ -345,6 +378,8 @@ public sealed class ServerWorld
         // final persistence snapshot by refusing commands that were queued before EOF.
         if (actor.Closing)
             return MoveReceiptStatus.UnknownActor;
+        if (actor.CombatDead)
+            return MoveReceiptStatus.CombatDead;
         if (input.MovementSequence == 0 || input.MovementSequence <= actor.LastSequence)
             return MoveReceiptStatus.ReplayedSequence;
 
@@ -446,6 +481,7 @@ public sealed class ServerWorld
                 .Append('/').Append(a.LastSequence)
                 .Append('/').Append(a.MovementActionSequence).Append('/').Append(a.Facing)
                 .Append('/').Append(a.Revision)
+                .Append('/').Append(a.CombatDead ? 1 : 0)
                 .Append('/').Append(BitConverter.DoubleToInt64Bits(a.X))
                 .Append('/').Append(BitConverter.DoubleToInt64Bits(a.Y))
                 .Append('/').Append(a.RouteIndex);

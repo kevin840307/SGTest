@@ -205,6 +205,29 @@ public sealed class ServerWorldHost : IAsyncDisposable
         return tcs.Task;
     }
 
+    public Task<ActorSnapshot?> TrustedSetCombatDeadAsync(
+        long actorId, long connectionEpoch, long mapEpoch, bool dead)
+    {
+        var tcs = new TaskCompletionSource<ActorSnapshot?>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        QueueTrusted(new TrustedControl(
+            world => tcs.TrySetResult(world.TryTrustedSetCombatDead(
+                actorId, connectionEpoch, mapEpoch, dead, out var snapshot)
+                ? snapshot : null),
+            error => tcs.TrySetException(error)));
+        return tcs.Task;
+    }
+
+    public Task<ActorSnapshot?> TrustedGetActorAsync(long actorId)
+    {
+        var tcs = new TaskCompletionSource<ActorSnapshot?>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        QueueTrusted(new TrustedControl(
+            world => tcs.TrySetResult(world.GetActor(actorId)),
+            error => tcs.TrySetException(error)));
+        return tcs.Task;
+    }
+
     public Task<ActorSnapshot?> TrustedPrepareDisconnectAsync(
         long actorId, long connectionEpoch, long mapEpoch)
     {

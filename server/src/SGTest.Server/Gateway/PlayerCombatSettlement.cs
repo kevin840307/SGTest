@@ -72,6 +72,7 @@ public sealed class PlayerCombatSettlement
     private readonly Channel<QueuedHit> _input;
     private readonly Channel<PlayerDamageSettlement> _results;
     private readonly Func<PlayerDamageSettlement, GatewaySendStatus>? _delivery;
+    private readonly Func<PlayerDamageSettlement, Task>? _committedLifecycle;
     private readonly object _gate = new();
     private readonly Dictionary<long, State> _states = [];
     private Exception? _fault;
@@ -81,10 +82,12 @@ public sealed class PlayerCombatSettlement
     public PlayerCombatSettlement(
         SqliteIdentityStore store,
         PlayerCombatSettlementOptions? options = null,
-        Func<PlayerDamageSettlement, GatewaySendStatus>? delivery = null)
+        Func<PlayerDamageSettlement, GatewaySendStatus>? delivery = null,
+        Func<PlayerDamageSettlement, Task>? committedLifecycle = null)
     {
         _store = store ?? throw new ArgumentNullException(nameof(store));
         _delivery = delivery;
+        _committedLifecycle = committedLifecycle;
         var configured = options ?? new();
         if (configured.Capacity is < 1 or > 65536)
             throw new ArgumentOutOfRangeException(nameof(options));
@@ -320,6 +323,9 @@ public sealed class PlayerCombatSettlement
                     hit.AttackerMonsterEntityId, hit.AttackerMonsterRevision,
                     hit.Damage, committed.Profile.Data.CurrentHp,
                     committed.Profile.Data.MaxHp, committed.Died);
+
+                if (_committedLifecycle is not null)
+                    await _committedLifecycle(result).ConfigureAwait(false);
 
                 if (_delivery is null)
                 {

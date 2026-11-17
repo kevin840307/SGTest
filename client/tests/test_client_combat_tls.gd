@@ -68,14 +68,17 @@ func _initialize() -> void:
 			and int(v.monsters[target].revision)==int(v.last_attack_result.target_revision)
 			and int(v.player_damage_sequence)==1
 			and int(v.last_player_damage.damage)==18
-			and int(v.player_current_hp)==82
-			and not bool(v.player_dead)
+			and int(v.player_current_hp)==0
+			and bool(v.player_dead)
 		),7000)
 	if settled.is_empty():
 		_fail("authoritative attack settlement "+str(session.snapshot()),session)
 		return
+	if session.move_target(80,24) or session.attack_monster(target) or session.npc_interact(1):
+		_fail("dead public gameplay APIs accepted intent",session)
+		return
 	session.stop()
-	print("CLIENT_COMBAT_TLS_PASS target=%d player_damage=60 monster_hp=40 monster_damage=18 player_hp=82 request_has_no_damage=true receipt_does_not_mutate_monster=true delta_owns_hp=true damage_after_db_commit=true" % target)
+	print("CLIENT_COMBAT_TLS_PASS target=%d player_damage=60 monster_hp=40 monster_damage=18 player_hp=0 dead=true public_intents_blocked=true request_has_no_damage=true receipt_does_not_mutate_monster=true delta_owns_hp=true damage_after_db_commit=true" % target)
 	quit(0)
 
 func _wait(session, predicate: Callable, timeout_ms: int) -> Dictionary:

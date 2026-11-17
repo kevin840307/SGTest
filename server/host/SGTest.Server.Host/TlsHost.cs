@@ -72,7 +72,18 @@ internal static class TlsHost
                 new(IntervalMilliseconds: checkpointMs));
             var router = new WorldResultRouter(changedObserver: positions.Observe);
             var combat = new PlayerCombatSettlement(
-                identity, delivery: router.QueuePlayerDamage);
+                identity,
+                delivery: router.QueuePlayerDamage,
+                committedLifecycle: async result =>
+                {
+                    if (!result.Died) return;
+                    var stopped = await world.TrustedSetCombatDeadAsync(
+                        result.ActorId, result.ConnectionEpoch, result.MapEpoch, true)
+                        .ConfigureAwait(false);
+                    if (stopped is null)
+                        throw new PlayerCombatSettlementException(
+                            "Committed lethal damage could not stop authoritative World actor");
+                });
             var aoi = new WorldAoiPump(
                 router, monsters: monsters, playerCombat: combat);
             var authorization = new IdentityTlsAuthorization(
