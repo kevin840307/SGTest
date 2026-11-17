@@ -44,6 +44,7 @@ public sealed class WorldResultRouter
     private readonly Channel<WorldChangedBatch> _changed;
     private readonly Channel<TrustedWorldResyncRequest> _resync;
     private readonly Channel<TrustedNormalAttack> _attacks;
+    private readonly Channel<long> _claimedGroundDrops;
     private readonly WorldResultRouterOptions _options;
     private readonly Action<WorldChangedBatch>? _changedObserver;
     private long _queued, _stale, _changedQueued, _backpressure;
@@ -83,11 +84,20 @@ public sealed class WorldResultRouter
                 FullMode = BoundedChannelFullMode.Wait,
                 AllowSynchronousContinuations = false
             });
+        _claimedGroundDrops = Channel.CreateBounded<long>(
+            new BoundedChannelOptions(_options.AttackRequestCapacity)
+            {
+                SingleReader = true,
+                SingleWriter = false,
+                FullMode = BoundedChannelFullMode.Wait,
+                AllowSynchronousContinuations = false
+            });
     }
 
     public ChannelReader<WorldChangedBatch> ChangedBatches => _changed.Reader;
     public ChannelReader<TrustedWorldResyncRequest> ResyncRequests => _resync.Reader;
     public ChannelReader<TrustedNormalAttack> AttackRequests => _attacks.Reader;
+    public ChannelReader<long> ClaimedGroundDrops => _claimedGroundDrops.Reader;
 
     public WorldResultRouterStatistics Statistics
     {
@@ -306,6 +316,21 @@ public sealed class WorldResultRouter
                 connection.IsClosed)
                 return GatewaySendStatus.Closed;
             return connection.QueuePlayerDamage(result);
+        }
+    }
+
+    public bool TryPostGroundDropClaimed(long dropId) =>
+        dropId>0 && _claimedGroundDrops.Writer.TryWrite(dropId);
+
+    public GatewaySendStatus QueueGroundPickupResult(
+        TrustedGroundPickup request,PickupResult result)
+    {
+        lock(_gate)
+        {
+            if (!_connections.TryGetValue(request.ActorId,out var connection) ||
+                connection.IsClosed)
+                return GatewaySendStatus.Closed;
+            return connection.QueueGroundPickupResult(request,result);
         }
     }
 

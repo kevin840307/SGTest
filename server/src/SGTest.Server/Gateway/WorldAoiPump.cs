@@ -144,6 +144,16 @@ public sealed class WorldAoiPump
                         _aoi.ApplyGroundDrops(_aoi.LastTick,committed);
                     }
 
+                // Only successful SQLite commits invalidate shared ground AOI;
+                // never remove a drop based on a client's optimistic intent.
+                if (_aoi.LastTick > 0)
+                    for (int index = 0; index < 32; index++)
+                    {
+                        if (!_router.ClaimedGroundDrops.TryRead(out long dropId))
+                            break;
+                        _aoi.RemoveGroundDrop(_aoi.LastTick,dropId);
+                    }
+
                 foreach (var receiver in _router.SnapshotActiveBindings())
                 {
                     for (int count = 0; count < _options.MaxFramesPerObserverPerPoll; count++)
