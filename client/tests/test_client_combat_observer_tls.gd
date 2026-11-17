@@ -82,8 +82,8 @@ func _observe(session, self_id: int) -> void:
 			and int(event.target_entity_id)==monster_id
 			and int(event.status)==0
 			and int(event.damage)==60
-			and int(event.target_revision)==2
-			and int(v.monsters[monster_id].revision)>=2
+			and int(event.target_revision)>0
+			and int(v.monsters[monster_id].revision)>=int(event.target_revision)
 			and int(v.monsters[monster_id].current_hp)==40
 			and int(hit.victim_actor_id)==remote_id
 			and int(hit.damage)==18
