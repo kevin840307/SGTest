@@ -136,9 +136,15 @@ public sealed class IdentityTlsAuthorization
 
         try
         {
+            // Map transfers and pickup settlement for this authenticated
+            // socket must not race one another across separate async workers.
+            using var gameplayGate = new SemaphoreSlim(1,1);
             Func<TrustedNpcInteraction, Task<NpcPortalOutcome>>? npcHandler =
                 _portals is null ? null : async request =>
                 {
+                    await gameplayGate.WaitAsync().ConfigureAwait(false);
+                    try
+                    {
                     if (_combat is not null)
                         await _combat.SuspendAndDrainAsync(
                             request.ActorId, request.ConnectionEpoch).ConfigureAwait(false);
@@ -159,6 +165,8 @@ public sealed class IdentityTlsAuthorization
                                 "Combat generation could not resume after NPC interaction");
                     }
                     return outcome;
+                    }
+                    finally { gameplayGate.Release(); }
                 };
             async Task RespawnHandler(TrustedPlayerRespawn request)
             {
@@ -205,10 +213,53 @@ public sealed class IdentityTlsAuthorization
                         "Combat generation could not resume after player respawn");
             }
 
+            async Task PickupHandler(TrustedGroundPickup request)
+            {
+                var binding = new ConnectionBinding(
+                    request.ActorId,request.ConnectionEpoch,request.RequestMapEpoch);
+                await gameplayGate.WaitAsync().ConfigureAwait(false);
+                try
+                {
+                    if (!router.IsCurrentBinding(binding))
+                        return;
+                    ActorSnapshot? snapshot = await _world.TrustedGetActorAsync(
+                        request.ActorId).ConfigureAwait(false);
+                    PickupResult result;
+                    if (snapshot is not { } actor ||
+                        actor.ConnectionEpoch != request.ConnectionEpoch ||
+                        actor.MapEpoch != request.RequestMapEpoch ||
+                        actor.ActorId != request.ActorId)
+                        result = new(PickupStatus.StaleGeneration,request.DropId);
+                    else if (_combat is not null && _combat.CurrentHp(actor) <= 0)
+                        result = new(PickupStatus.PlayerDead,request.DropId);
+                    else
+                        result = await _identity.ClaimGroundDropAsync(
+                            new TrustedPickupContext(actor.ActorId,
+                                actor.ConnectionEpoch,actor.MapEpoch,
+                                request.PickupSequence,actor.MapId,actor.X,actor.Y),
+                            request.DropId).ConfigureAwait(false);
+
+                    // SQLite commits first. Never remove on rejection or
+                    // client intent alone. A failed notification is terminal,
+                    // not a fabricated successful response.
+                    if (result.Status == PickupStatus.Granted &&
+                        !router.TryPostGroundDropClaimed(result.DropId))
+                        throw new IOException(
+                            "Committed drop claimed but shared AOI notification was full");
+
+                    var sent = router.QueueGroundPickupResult(request,result);
+                    if (sent != GatewaySendStatus.Enqueued)
+                        throw new IOException(
+                            "Reliable pickup result could not be queued: " + sent);
+                }
+                finally { gameplayGate.Release(); }
+            }
+
             return await TlsWireConnection.RunServerAsync(client, certificate,
                 Authorize, _world.TryPostMove, options, cancellationToken, Release,
                 npcHandler, router.TryRequestResync,
-                router.TryRequestNormalAttack, RespawnHandler).ConfigureAwait(false);
+                router.TryRequestNormalAttack, RespawnHandler,
+                PickupHandler).ConfigureAwait(false);
         }
         finally
         {
