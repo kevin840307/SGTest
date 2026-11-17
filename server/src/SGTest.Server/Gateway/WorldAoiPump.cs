@@ -47,13 +47,16 @@ public sealed class WorldAoiPump
             {
                 while (_router.ChangedBatches.TryRead(out var batch))
                 {
+                    // Compute the map-local monster result from this authoritative
+                    // World batch FIRST, but publish it only after player AOI has
+                    // applied the same batch. A joining observer therefore sees
+                    // exactly one latest MonsterSpawn rather than stale Spawn +
+                    // same-tick Delta, while visibility uses the new player position.
+                    MonsterStateBatch? monsterBatch =
+                        _monsters?.Process(batch);
                     _aoi.Apply(batch);
-                    if (_monsters is not null)
-                    {
-                        var monsterBatch = _monsters.Process(batch);
-                        if (monsterBatch.Changed.Count > 0)
-                            _aoi.ApplyMonsters(batch.Tick, monsterBatch.Changed);
-                    }
+                    if (monsterBatch is { Changed.Count: > 0 })
+                        _aoi.ApplyMonsters(batch.Tick, monsterBatch.Changed);
                     Interlocked.Increment(ref _processedBatches);
                 }
                 while (_router.ResyncRequests.TryRead(out var request))
