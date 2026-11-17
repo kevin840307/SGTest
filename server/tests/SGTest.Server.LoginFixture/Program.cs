@@ -26,6 +26,8 @@ internal static class Program
             return await RunReconnectAsync().ConfigureAwait(false);
         if (args is ["--combat"])
             return await RunCombatAsync().ConfigureAwait(false);
+        if (args is ["--combat-observer"])
+            return await RunCombatObserverAsync().ConfigureAwait(false);
         if (args is ["--auto-attack"])
             return await RunAutoApproachAttackAsync().ConfigureAwait(false);
         if (args is ["--discard"])
@@ -93,9 +95,9 @@ internal static class Program
                     await routingTask.WaitAsync(TimeSpan.FromSeconds(3));
                 }
                 if (ended.CommandsAccepted != 1 || ended.ReliableFramesSent < 2 ||
-                    aoiPump.FramesQueued < 1 || resultRouter.Statistics.ActiveSessions != 0)
-                    throw new InvalidOperationException($"fixture disconnect or send mismatch commands={ended.CommandsAccepted} reliable_frames={ended.ReliableFramesSent} aoi={aoiPump.FramesQueued} active_routes={resultRouter.Statistics.ActiveSessions}");
-                Console.WriteLine($"LOGIN_FIXTURE_WORLD_READY_ROUTED aoi_frames={aoiPump.FramesQueued}");
+                    pump.FramesQueued < 1 || resultRouter.Statistics.ActiveSessions != 0)
+                    throw new InvalidOperationException($"fixture disconnect or send mismatch commands={ended.CommandsAccepted} reliable_frames={ended.ReliableFramesSent} aoi={pump.FramesQueued} active_routes={resultRouter.Statistics.ActiveSessions}");
+                Console.WriteLine($"LOGIN_FIXTURE_WORLD_READY_ROUTED aoi_frames={pump.FramesQueued}");
                 Console.WriteLine($"LOGIN_FIXTURE_PASS tls={ended.Protocol} commands={ended.CommandsAccepted}");
                 Console.Out.Flush();
                 return 0;
@@ -286,6 +288,160 @@ internal static class Program
         finally
         {
             try { Directory.Delete(root, recursive: true); } catch { }
+        }
+    }
+
+    private static async Task<int> RunCombatObserverAsync()
+    {
+        string root = Path.Combine(Path.GetTempPath(),
+            "sgtest_combat_observer_" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var grid = BlockingGrid.Load(CreateMap(root, 15), 15);
+            string populationPath = Path.Combine(root, "combat-observer-population.json");
+            File.WriteAllText(populationPath, JsonSerializer.Serialize(new
+            {
+                version = 4,
+                kind = "verified_monster_runtime",
+                map_id = 15,
+                stats_verified = true,
+                gameplay_ready = true,
+                definitions = new[]
+                {
+                    new
+                    {
+                        id = 1, name = "CombatObserverFixture", sprite = "EN001A",
+                        atlas = "Enemy/EN001A/atlas.json",
+                        stats = new
+                        {
+                            level = 3, max_hp = 100, attack_damage = 1,
+                            move_step = 8.0, aggro_radius = 1.0,
+                            lose_target_radius = 16.0, leash_radius = 16.0,
+                            attack_range = 1.0, attack_cooldown_ticks = 1000,
+                            respawn_ticks = 300, wander_radius = 0.0,
+                            wander_interval_ticks = 100
+                        }
+                    }
+                },
+                spawns = new[]
+                {
+                    new { source_index = 0, source_flags = 7, definition = 1,
+                          p = new[] { 40, 8 } }
+                }
+            }));
+            var population = MonsterPopulationCatalog.LoadVerified(
+                populationPath, 15, grid);
+            var runtime = new MonsterRuntime(grid, population,
+                new(AiIntervalTicks: 1, MaxAiPerStep: 8,
+                    MaxPathQueriesPerStep: 1, MaxPathExpandedCells: 128));
+            var coordinator = new MonsterWorldCoordinator([runtime]);
+
+            await using var world = new ServerWorldHost(
+                [grid], options: new WorldHostOptions(PublishIdleTicks: true));
+            await world.StartAsync().ConfigureAwait(false);
+            using var store = new SqliteIdentityStore(Path.Combine(root, "identity.db"));
+            await store.InitializeAsync().ConfigureAwait(false);
+            long observerAccount = (await store.CreateAccountAsync(
+                "fixture_one", Password)).AccountId;
+            long actorAccount = (await store.CreateAccountAsync(
+                "fixture_two", Password)).AccountId;
+            long observerId = (await store.CreateCharacterAsync(
+                observerAccount,0,"CombatObserver",new CharacterSpawn(15,8,8)))
+                .Character?.CharacterId
+                ?? throw new InvalidOperationException("combat observer missing");
+            long actorId = (await store.CreateCharacterAsync(
+                actorAccount,0,"CombatActor",new CharacterSpawn(15,24,8)))
+                .Character?.CharacterId
+                ?? throw new InvalidOperationException("combat actor missing");
+            await store.SetCharacterCombatProfileAsync(actorId,
+                new CharacterCombatProfileData(
+                    CombatProfileTrust.SyntheticTest,
+                    "ci:two-client-combat-visual",
+                    Race:0,Career:0,Strength:5,Dexterity:5,
+                    Constitution:5,Wisdom:5,Level:1,
+                    CurrentHp:100,MaxHp:100,Attack:60,Defense:10,
+                    Hit:10,Dodge:3,AttackRange:48,AttackCooldownTicks:15))
+                .ConfigureAwait(false);
+
+            var router = new WorldResultRouter(
+                new WorldResultRouterOptions(AttackRequestCapacity:8));
+            var pump = new WorldAoiPump(router,monsters:coordinator);
+            var authorization = new IdentityTlsAuthorization(store,world);
+            using var certificate = CreateCertificate();
+            string certPath = Path.Combine(root,"fixture-cert.pem");
+            WriteCertificatePem(certPath,certificate);
+            var listener = new TcpListener(IPAddress.Loopback,0);
+            listener.Start(2);
+            using var stop = new CancellationTokenSource();
+            var routing = router.RunAsync(world.Results);
+            var pumping = pump.RunAsync(stop.Token);
+            try
+            {
+                int port=((IPEndPoint)listener.LocalEndpoint).Port;
+                Console.WriteLine(
+                    $"COMBAT_OBSERVER_FIXTURE_READY port={port} cert={certPath} " +
+                    $"actor_a={observerId} actor_b={actorId}");
+                Console.Out.Flush();
+
+                using var first=await listener.AcceptTcpClientAsync()
+                    .WaitAsync(TimeSpan.FromSeconds(15)).ConfigureAwait(false);
+                var firstTask=authorization.RunAuthenticatedSocketAsync(
+                    first,certificate,router,
+                    new TlsWireConnectionOptions(AuthorizationTimeoutMilliseconds:15000));
+                using var second=await listener.AcceptTcpClientAsync()
+                    .WaitAsync(TimeSpan.FromSeconds(15)).ConfigureAwait(false);
+                var secondTask=authorization.RunAuthenticatedSocketAsync(
+                    second,certificate,router,
+                    new TlsWireConnectionOptions(AuthorizationTimeoutMilliseconds:15000));
+
+                var results=await Task.WhenAll(firstTask,secondTask)
+                    .WaitAsync(TimeSpan.FromSeconds(20)).ConfigureAwait(false);
+                var monster=runtime.SnapshotAll().Single();
+                var deadline=DateTime.UtcNow.AddSeconds(3);
+                while(world.Statistics.ActiveActors!=0 ||
+                      router.Statistics.ActiveSessions!=0)
+                {
+                    if(DateTime.UtcNow>=deadline)
+                        throw new InvalidOperationException(
+                            "combat observer left active actor/session");
+                    await Task.Delay(5).ConfigureAwait(false);
+                }
+                if(monster.CurrentHp!=40 || monster.MaxHp!=100 ||
+                    results[0].Reason!=TlsWireEndReason.CleanEof ||
+                    results[1].Reason!=TlsWireEndReason.CleanEof ||
+                    results[0].CommandsAccepted!=0 ||
+                    results[1].CommandsAccepted!=1 ||
+                    pump.FramesQueued<8)
+                    throw new InvalidOperationException(
+                        $"combat observer mismatch hp={monster.CurrentHp}/{monster.MaxHp} " +
+                        $"observer_cmd={results[0].CommandsAccepted} actor_cmd={results[1].CommandsAccepted} " +
+                        $"aoi_frames={pump.FramesQueued}");
+
+                Console.WriteLine(
+                    $"COMBAT_OBSERVER_FIXTURE_PASS actor_a={observerId} actor_b={actorId} " +
+                    $"monster_hp={monster.CurrentHp}/{monster.MaxHp} " +
+                    $"actor_commands={results[1].CommandsAccepted} aoi_frames={pump.FramesQueued}");
+                Console.Out.Flush();
+                return 0;
+            }
+            finally
+            {
+                listener.Stop();
+                stop.Cancel();
+                await pumping.ConfigureAwait(false);
+                await world.StopAsync().ConfigureAwait(false);
+                await routing.WaitAsync(TimeSpan.FromSeconds(3)).ConfigureAwait(false);
+            }
+        }
+        catch(Exception error)
+        {
+            Console.Error.WriteLine("COMBAT_OBSERVER_FIXTURE_FAIL "+error);
+            return 1;
+        }
+        finally
+        {
+            try { Directory.Delete(root,recursive:true); } catch { }
         }
     }
 
@@ -840,14 +996,14 @@ internal static class Program
                     results[1].CommandsAccepted != (portals ? 5 : crossmap ? 2 : 1) ||
                     router.Statistics.ActiveSessions != 0 ||
                     router.Statistics.ReceiptsQueued < (crossmap || portals ? 2 : 1) ||
-                    aoiPump.FramesQueued < (crossmap || portals ? 10 : 6))
+                    pump.FramesQueued < (crossmap || portals ? 10 : 6))
                     throw new InvalidOperationException(
                         $"multiplayer TLS/AOI incomplete a={results[0].Reason} b={results[1].Reason} " +
                         $"moves={results[1].CommandsAccepted} routes={router.Statistics.ActiveSessions} " +
-                        $"receipts={router.Statistics.ReceiptsQueued} aoi_frames={aoiPump.FramesQueued}");
+                        $"receipts={router.Statistics.ReceiptsQueued} aoi_frames={pump.FramesQueued}");
                 await world.StopAsync().ConfigureAwait(false);
                 await routerTask.WaitAsync(TimeSpan.FromSeconds(3)).ConfigureAwait(false);
-                Console.WriteLine($"{prefix}_FIXTURE_PASS actor_a={aId} actor_b={bId} moves={results[1].CommandsAccepted} aoi_frames={aoiPump.FramesQueued} active=0");
+                Console.WriteLine($"{prefix}_FIXTURE_PASS actor_a={aId} actor_b={bId} moves={results[1].CommandsAccepted} aoi_frames={pump.FramesQueued} active=0");
                 Console.Out.Flush();
                 return 0;
             }
