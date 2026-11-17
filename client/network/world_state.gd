@@ -28,6 +28,12 @@ var last_npc_result_sequence := 0
 var last_npc_result_status := -1
 var last_npc_result_map_epoch := 0
 var stale_npc_results := 0
+var attack_sequence := 0
+var last_attack_result_sequence := 0
+var last_attack_result_status := -1
+var last_attack_server_tick := -1
+var last_attack_result := {}
+var stale_attack_results := 0
 var waiting_for_new_map := false
 var last_receipt_sequence := 0
 var last_receipt_status := -1
@@ -71,6 +77,12 @@ func mark_move_sent(sequence: int) -> bool:
 	movement_sequence = sequence
 	return true
 
+func mark_normal_attack_sent(sequence: int) -> bool:
+	if state != STATE_IN_WORLD or not world_ready or resync_pending or waiting_for_new_map or pending_world_ready_ack_epoch != 0 or last_world_ready_ack_epoch != map_epoch or sequence <= attack_sequence or sequence > 0xffffffff:
+		return false
+	attack_sequence = sequence
+	return true
+
 func mark_world_ready_ack_sent(epoch: int, tick: int) -> bool:
 	if state != STATE_IN_WORLD or epoch != pending_world_ready_ack_epoch or tick != pending_world_ready_ack_tick:
 		return false
@@ -109,6 +121,8 @@ func apply_frame(frame: PackedByteArray) -> bool:
 			return _apply_receipt(frame)
 		WireCodec.OPCODE_NPC_INTERACT_RESULT:
 			return _apply_npc_result(frame)
+		WireCodec.OPCODE_NORMAL_ATTACK_RESULT:
+			return _apply_normal_attack_result(frame)
 		WireCodec.OPCODE_WORLD_READY:
 			return _apply_world_ready(frame)
 		WireCodec.OPCODE_SELF_STATE:
@@ -149,6 +163,12 @@ func snapshot() -> Dictionary:
 		"last_npc_result_status": last_npc_result_status,
 		"last_npc_result_map_epoch": last_npc_result_map_epoch,
 		"stale_npc_results": stale_npc_results,
+		"attack_sequence": attack_sequence,
+		"last_attack_result_sequence": last_attack_result_sequence,
+		"last_attack_result_status": last_attack_result_status,
+		"last_attack_server_tick": last_attack_server_tick,
+		"last_attack_result": last_attack_result.duplicate(true),
+		"stale_attack_results": stale_attack_results,
 		"waiting_for_new_map": waiting_for_new_map,
 		"last_receipt_sequence": last_receipt_sequence,
 		"last_receipt_status": last_receipt_status,
@@ -216,6 +236,12 @@ func _apply_choose(frame: PackedByteArray) -> bool:
 	last_npc_result_status = -1
 	last_npc_result_map_epoch = 0
 	stale_npc_results = 0
+	attack_sequence = 0
+	last_attack_result_sequence = 0
+	last_attack_result_status = -1
+	last_attack_server_tick = -1
+	last_attack_result.clear()
+	stale_attack_results = 0
 	waiting_for_new_map = false
 	map_id = int(decoded.map_id)
 	x = float(decoded.x)
@@ -267,6 +293,33 @@ func _apply_receipt(frame: PackedByteArray) -> bool:
 	last_receipt_sequence = sequence
 	last_receipt_status = int(decoded.status)
 	last_server_tick = server_tick
+	return true
+
+func _apply_normal_attack_result(frame: PackedByteArray) -> bool:
+	if state != STATE_IN_WORLD:
+		return fail("normal_attack_result_out_of_state")
+	var result := WireCodec.decode_normal_attack_result(frame)
+	if result.is_empty():
+		return fail("invalid_normal_attack_result")
+	var epoch := int(result.map_epoch)
+	var sequence := int(result.attack_sequence)
+	var tick := int(result.server_tick)
+	if epoch < map_epoch:
+		stale_attack_results += 1
+		return true
+	if epoch > map_epoch:
+		return fail("future_normal_attack_result")
+	if sequence > attack_sequence:
+		return fail("normal_attack_result_for_unsent_sequence")
+	if sequence <= last_attack_result_sequence:
+		stale_attack_results += 1
+		return true
+	if last_attack_server_tick >= 0 and tick < last_attack_server_tick:
+		return fail("normal_attack_server_tick_regressed")
+	last_attack_result_sequence = sequence
+	last_attack_result_status = int(result.status)
+	last_attack_server_tick = tick
+	last_attack_result = result.duplicate(true)
 	return true
 
 func _apply_npc_result(frame: PackedByteArray) -> bool:
@@ -330,6 +383,12 @@ func _apply_world_ready(frame: PackedByteArray) -> bool:
 		map_id = int(ready.map_id)
 		waiting_for_new_map = false
 		npc_interaction_sequence = 0
+		attack_sequence = 0
+		last_attack_result_sequence = 0
+		last_attack_result_status = -1
+		last_attack_server_tick = -1
+		last_attack_result.clear()
+		stale_attack_results = 0
 		movement_sequence = 0
 		last_receipt_sequence = 0
 		last_receipt_status = -1

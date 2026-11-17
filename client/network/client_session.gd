@@ -85,6 +85,11 @@ func choose_character(character_id: int) -> bool:
 func move_target(target_x: int, target_y: int) -> bool:
 	return _queue_intent({"type": "move", "x": target_x, "y": target_y})
 
+func attack_monster(entity_id: int) -> bool:
+	if entity_id <= 0:
+		return false
+	return _queue_intent({"type":"attack_monster","entity_id":entity_id})
+
 func npc_interact(spawn_id: int) -> bool:
 	# The client names only a map-local NPC; Server provides the destination.
 	if spawn_id <= 0 or spawn_id > 0x7fffffff:
@@ -307,6 +312,15 @@ func _process_first_intent() -> void:
 		var sequence := int(current.npc_interaction_sequence) + 1
 		var frame := WireCodec.encode_npc_interact(int(current.map_epoch), sequence, int(intent.spawn_id))
 		if not frame.is_empty() and _transport.send_frame(frame) and _world.mark_npc_interact_sent(sequence):
+			_pop_intent()
+			_publish()
+	elif kind == "attack_monster":
+		var current: Dictionary = _world.snapshot()
+		if int(current.state) != WorldState.STATE_IN_WORLD or not bool(current.world_ready) or bool(current.resync_pending) or int(current.pending_world_ready_ack_epoch) != 0 or int(current.last_world_ready_ack_epoch) != int(current.map_epoch) or bool(current.waiting_for_new_map):
+			return
+		var sequence := int(current.attack_sequence) + 1
+		var frame := WireCodec.encode_normal_attack(int(current.map_epoch),sequence,int(intent.entity_id))
+		if not frame.is_empty() and _transport.send_frame(frame) and _world.mark_normal_attack_sent(sequence):
 			_pop_intent()
 			_publish()
 	elif kind == "move":
