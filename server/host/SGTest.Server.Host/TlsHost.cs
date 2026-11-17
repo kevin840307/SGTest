@@ -68,9 +68,12 @@ internal static class TlsHost
                 Path.Combine(root, "maps", id.ToString(), "npcs.json")));
             using var identity = new SqliteIdentityStore(database);
             await identity.InitializeAsync(stop.Token);
+            // Reserve even when no drop rule table is enabled, preventing
+            // pick-up replay-key collisions after a process restart.
+            long lootGeneration = await identity.AllocateLootWorldGenerationAsync(
+                stop.Token);
             MonsterLootSettlement? loot = dropRules is null
-                ? null : new MonsterLootSettlement(identity,
-                    await identity.AllocateLootWorldGenerationAsync(stop.Token),dropRules);
+                ? null : new MonsterLootSettlement(identity,lootGeneration,dropRules);
             // One startup-only SQLite snapshot. Map transfers, reconnect and
             // WorldReady resync rebuild from the SAME map-bucketed AOI state.
             var activeDrops = new List<GroundDropRecord>();
@@ -112,7 +115,8 @@ internal static class TlsHost
                 router, monsters: monsters, playerCombat: combat, loot: loot,
                 initialGroundDrops: activeDrops);
             var authorization = new IdentityTlsAuthorization(
-                identity, world, portals, positions, combat);
+                identity, world, portals, positions, combat,
+                pickupWorldGeneration: lootGeneration);
             await using var listener = new TlsGatewayListener(address, port, authorization,
                 certificate, router, new(MaxConnections: maximum, MaxConnectionsPerAddress: perAddress));
             await world.StartAsync();

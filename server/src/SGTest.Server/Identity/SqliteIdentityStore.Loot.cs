@@ -75,6 +75,17 @@ public sealed partial class SqliteIdentityStore
         return (worldGeneration << 32) | monsterRevision;
     }
 
+    /// <summary>Combines a durable SQLite boot generation and trusted World
+    /// connection epoch. Client request sequences may reset safely on restart.</summary>
+    public static long ComposePickupConnectionEpoch(
+        long worldGeneration,long connectionEpoch)
+    {
+        if (worldGeneration is < 1 or > 0x3fffffff ||
+            connectionEpoch is < 1 or > uint.MaxValue)
+            throw new ArgumentOutOfRangeException(nameof(connectionEpoch));
+        return (worldGeneration << 32) | connectionEpoch;
+    }
+
     // Provisional server-side pickup radius; the original game's rule is not verified.
     public const double PickupRange = 96.0;
 

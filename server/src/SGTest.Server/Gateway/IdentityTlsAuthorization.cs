@@ -21,17 +21,22 @@ public sealed class IdentityTlsAuthorization
     private readonly PortalCatalog? _portals;
     private readonly CharacterPositionCheckpoint? _positions;
     private readonly PlayerCombatSettlement? _combat;
+    private readonly long _pickupWorldGeneration;
 
     public IdentityTlsAuthorization(SqliteIdentityStore identity, ServerWorldHost world,
                                     PortalCatalog? portals = null,
                                     CharacterPositionCheckpoint? positions = null,
-                                    PlayerCombatSettlement? combat = null)
+                                    PlayerCombatSettlement? combat = null,
+                                     long pickupWorldGeneration = 0)
     {
         _identity = identity ?? throw new ArgumentNullException(nameof(identity));
         _world = world ?? throw new ArgumentNullException(nameof(world));
         _portals = portals;
         _positions = positions;
         _combat = combat;
+        if (pickupWorldGeneration is < 0 or > 0x3fffffff)
+            throw new ArgumentOutOfRangeException(nameof(pickupWorldGeneration));
+        _pickupWorldGeneration = pickupWorldGeneration;
     }
 
     /// <summary>
@@ -235,7 +240,11 @@ public sealed class IdentityTlsAuthorization
                     else
                         result = await _identity.ClaimGroundDropAsync(
                             new TrustedPickupContext(actor.ActorId,
-                                actor.ConnectionEpoch,actor.MapEpoch,
+                                _pickupWorldGeneration == 0
+                                    ? actor.ConnectionEpoch // isolated fixture only
+                                    : SqliteIdentityStore.ComposePickupConnectionEpoch(
+                                        _pickupWorldGeneration,actor.ConnectionEpoch),
+                                actor.MapEpoch,
                                 request.PickupSequence,actor.MapId,actor.X,actor.Y),
                             request.DropId).ConfigureAwait(false);
 
