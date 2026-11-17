@@ -2,6 +2,8 @@ extends Node2D
 ## Draw an already ordered presentation snapshot; texture references are shared.
 var _commands: Array = []
 var _ground_markers: Array = []
+const DROP_OUTLINE := Color(0.12,0.08,0.02,0.9)
+const DROP_CORE := Color(1.0,0.82,0.22,0.95)
 
 
 func present(commands: Array, ground_markers: Array = []) -> void:
@@ -35,5 +37,5 @@ func _draw() -> void:
 	# per-drop Sprite2D/Texture/Node resources are allocated.
 	for drop in _ground_markers:
 		var position: Vector2 = drop.p
-		draw_circle(position, 6.0, Color(0.12,0.08,0.02,0.9))
-		draw_circle(position, 4.0, Color(1.0,0.82,0.22,0.95))
+		draw_circle(position, 6.0, DROP_OUTLINE)
+		draw_circle(position, 4.0, DROP_CORE)

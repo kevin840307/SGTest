@@ -673,7 +673,9 @@ func _apply_ground_drop_spawn(frame: PackedByteArray) -> bool:
 	var id := int(value.drop_id)
 	var previous: Dictionary = ground_drops.get(id,{})
 	if not previous.is_empty():
-		if previous != value:
+		# AOI event tick is mutable metadata; the committed drop UID's
+		# immutable item/map/coordinate payload is what must be identical.
+		if int(previous.map_id) != int(value.map_id) or float(previous.x) != float(value.x) or float(previous.y) != float(value.y) or int(previous.item_definition_id) != int(value.item_definition_id) or int(previous.quantity) != int(value.quantity):
 			return _need_resync("ground_drop_uid_conflict")
 		stale_aoi_events += 1
 		return true
