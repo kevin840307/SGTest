@@ -2,6 +2,7 @@ using System.Buffers.Binary;
 using SGTest.Server.Gateway;
 using SGTest.Server.Wire;
 using SGTest.Server.World;
+using SGTest.Server.Identity;
 
 internal static class AoiWireChecks
 {
@@ -16,6 +17,8 @@ internal static class AoiWireChecks
     private const string MonsterSpawn = "4E00000001001B000100000000000000320000000000000021A0AE3B0000000001000000000000000D0000000000F0420000A04202000000000000005A0000006400000002060B00000000000000";
     private const string MonsterDelta = "4E00000001001C000100000000000000330000000000000021A0AE3B0000000001000000000000000D0000000000F8420000A0420300000000000000500000006400000003060B00000000000000";
     private const string MonsterDespawn = "2800000001001D000100000000000000340000000000000021A0AE3B000000000300000000000000";
+    private const string GroundSpawn = "340000000100200001000000000000003700000000000000F5010000000000000F000000000040420000C0418D0A000002000000";
+    private const string GroundDespawn = "200000000100210001000000000000003800000000000000F501000000000000";
 
     public static void Verify()
     {
@@ -82,6 +85,19 @@ internal static class AoiWireChecks
                 WireProtocol.TryDecodeMonsterDespawn(monsterDespawn,out var monsterGone) &&
                 monsterGone.EntityId == 1001300001 && monsterGone.Revision == 3,
                 "MonsterDespawn binary fixture");
+        var ground=new GroundDropWire(1,55,501,15,48,24,2701,2);
+        var groundSpawn=WireProtocol.EncodeGroundDropSpawn(ground);
+        Require(Convert.ToHexString(groundSpawn)==GroundSpawn &&
+            WireProtocol.TryDecodeGroundDropSpawn(groundSpawn,out var groundValue) &&
+            groundValue==ground,"GroundDropSpawn C#/Godot golden binary");
+        var groundDespawn=WireProtocol.EncodeGroundDropDespawn(new(1,56,501));
+        Require(Convert.ToHexString(groundDespawn)==GroundDespawn &&
+            WireProtocol.TryDecodeGroundDropDespawn(groundDespawn,out var goneDrop) &&
+            goneDrop.DropId==501,"GroundDropDespawn C#/Godot golden binary");
+        var malformedGround=(byte[])groundSpawn.Clone();
+        malformedGround[38]=0xC0;malformedGround[39]=0x7F;
+        Require(!WireProtocol.TryDecodeGroundDropSpawn(malformedGround,out _),
+            "nonfinite ground drop coordinate accepted");
         byte[] despawn = WireProtocol.EncodeEntityDespawn(new(1, 45, 22, 2));
         Require(Convert.ToHexString(despawn) == Despawn &&
                 WireProtocol.TryDecodeEntityDespawn(despawn, out var left) &&

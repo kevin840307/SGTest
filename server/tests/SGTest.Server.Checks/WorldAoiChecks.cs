@@ -1,5 +1,6 @@
 using SGTest.Server.Gateway;
 using SGTest.Server.World;
+using SGTest.Server.Identity;
 
 internal static class WorldAoiChecks
 {
@@ -35,6 +36,8 @@ internal static class WorldAoiChecks
             Interest);
         Checks.Run("same AOI tracks monster Spawn/Delta/Despawn hysteresis and resync baseline",
             MonsterInterest);
+        Checks.Run("same map-bucket AOI tracks durable ground drop enter, exit, resync and pickup removal",
+            GroundDropInterest);
         Checks.Run("AOI self state is changed-only, generation-safe and retained on bounded overflow", OwnState);
         Checks.Run("AOI transfer clears old map; reconnect resets generation and ignores stale dequeue",
             TransfersAndReconnects);
@@ -44,6 +47,70 @@ internal static class WorldAoiChecks
             InvalidAndBounded);
         Checks.Run("30Hz Host publishes idle join and leave to AOI through WorldResultRouter",
             () => RealHostLifecycle(root).GetAwaiter().GetResult());
+    }
+
+    private static void GroundDropInterest()
+    {
+        var aoi=new WorldAoi();
+        GroundDropRecord D(long id,int map,double x,double y)=>new(
+            id,map,x,y,1001300001,4294967301,0,2701,2,
+            LootSourceTrust.Verified,"ci:trusted-source",null);
+        var map15=D(501,15,48,24);
+        var map13=D(502,13,64,24);
+        aoi.SeedGroundDrops([map15,map13]);
+        Require(aoi.GroundDropCount==2,"startup drops not indexed");
+        var a=Actor(101,15,24,24);
+        var b=Actor(102,13,24,24);
+        Life(aoi,1,Join(a),Join(b));
+        var joined=Drain(aoi,a);
+        Require(joined.Count(x=>x.Kind==AoiEventKind.GroundDropSpawn)==1 &&
+            joined.Any(x=>x.GroundDrop?.DropId==501) &&
+            !joined.Any(x=>x.GroundDrop?.DropId==502) &&
+            Drain(aoi,b).Single(x=>x.Kind==AoiEventKind.GroundDropSpawn)
+                .GroundDrop?.DropId==502,
+            "ground drop bootstrap leaked cross-map or lost WorldReady baseline");
+
+        var newDrop=D(503,15,56,24);
+        aoi.ApplyGroundDrops(1,[newDrop]);
+        Require(Drain(aoi,a).Single().GroundDrop?.DropId==503 &&
+            Drain(aoi,b).Length==0,
+            "committed drop notification was not AOI scoped");
+        aoi.ApplyGroundDrops(1,[newDrop]);
+        Require(Drain(aoi,a).Length==0,"same committed drop re-emitted");
+        var moved=a with {X=1000,EntityRevision=2,IsMoving=true,MovementActionSequence=1};
+        Move(aoi,2,moved);
+        var outOfRange=Drain(aoi,moved);
+        Require(outOfRange.Count(x=>x.Kind==AoiEventKind.GroundDropDespawn)==2,
+            "leaving visibility retained out-of-range ground drops");
+        var back=moved with {X=24,EntityRevision=3,MovementActionSequence=2};
+        Move(aoi,3,back);
+        Require(Drain(aoi,back).Count(x=>x.Kind==AoiEventKind.GroundDropSpawn)==2,
+            "re-entering visibility failed to restore ground drops");
+
+        aoi.RemoveGroundDrop(3,501);
+        Require(Drain(aoi,back).Single(x=>x.Kind==AoiEventKind.GroundDropDespawn)
+            .GroundDropId==501 && aoi.GroundDropCount==2,
+            "committed pickup did not remove ground UID");
+        Require(aoi.TryResync(new(back.ActorId,back.ConnectionEpoch,back.MapEpoch)),
+            "ground baseline resync rejected valid viewer");
+        var rebuilt=Drain(aoi,back);
+        Require(rebuilt.Any(x=>x.Kind==AoiEventKind.WorldReady) &&
+            rebuilt.Count(x=>x.Kind==AoiEventKind.GroundDropSpawn)==1 &&
+            rebuilt.Single(x=>x.Kind==AoiEventKind.GroundDropSpawn)
+                .GroundDrop?.DropId==503,
+            "resync reintroduced picked UID or omitted active UID");
+        Life(aoi,4,Leave(back));
+        var newMap=back with {MapId=13,MapEpoch=2,EntityRevision=1};
+        Life(aoi,5,Join(newMap));
+        var changedMap=Drain(aoi,newMap);
+        Require(changedMap.Count(x=>x.Kind==AoiEventKind.GroundDropSpawn)==1 &&
+            changedMap.Single(x=>x.Kind==AoiEventKind.GroundDropSpawn)
+                .GroundDrop?.DropId==502,
+            "map transfer retained wrong map ground UID");
+        bool late=false;
+        try{aoi.SeedGroundDrops([D(504,15,56,24)]);}
+        catch(InvalidOperationException){late=true;}
+        Require(late,"late bootstrap mutated live AOI");
     }
 
     private static void OwnState()

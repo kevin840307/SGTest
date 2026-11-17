@@ -215,6 +215,20 @@ internal static class NormalAttackChecks
                     await Task.Delay(10,timeout.Token);
                 }
             }
+            // Ground AOI notification is independent of DB latency. It must
+            // reach this authenticated visible client with the persisted UID.
+            GroundDropWire? groundWire=null;
+            using(var timeout=new CancellationTokenSource(TimeSpan.FromSeconds(4)))
+            {
+                while(groundWire is null)
+                {
+                    timeout.Token.ThrowIfCancellationRequested();
+                    while(gateway.TryDequeueReliable(out var frame))
+                        if(WireProtocol.TryDecodeGroundDropSpawn(frame,out var visible))
+                            groundWire=visible;
+                    if(groundWire is null) await Task.Delay(10,timeout.Token);
+                }
+            }
             var drop=(await lootStore.ListActiveGroundDropsAsync(mapId)).Single();
             Require(drop.MonsterEntityId==initial.EntityId &&
                 drop.DeathRevision==
@@ -223,8 +237,12 @@ internal static class NormalAttackChecks
                 drop.ItemDefinitionId==2701 && drop.Quantity==2 &&
                 drop.Trust==LootSourceTrust.SyntheticTest &&
                 loot.Statistics.DeathsCommitted==1 &&
-                loot.Statistics.DropsCommitted==1,
-                "lethal attack failed to commit one durable trusted drop");
+                loot.Statistics.DropsCommitted==1 &&
+                groundWire is { } seen &&
+                seen.DropId==drop.DropId && seen.MapId==mapId &&
+                seen.ItemDefinitionId==drop.ItemDefinitionId &&
+                seen.Quantity==drop.Quantity,
+                "lethal attack failed to publish durable ground UID to authenticated AOI");
         }
         finally
         {
