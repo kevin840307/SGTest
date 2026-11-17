@@ -158,3 +158,8 @@ Godot 左鍵優先命中 AOI 的可見地上物標記（目前採 14 world px �
 Client WorldState 拒絕不同 UID／未送出的拾取結果、只允許一筆等待中的拾取，對相同操作重送不重發物品；`received_item_grants` **僅供目前登入拾取回饋，並非可跨登入讀取的背包快照**。Godot `SessionPanel` 顯示最新 Server 授權物品 UID、ItemId 和數量，不冒充原版物品名稱。正式全背包需另接 Server InventorySnapshot/增量同步，並載入核實後的原版物品圖與名稱。
 
 仍須驗證：原版 96px 拾取距離、Windows GPU/GUI 真地圖、20玩家搶同一 UID 的 TLS 壓測、硬中斷在 DB commit 與 AOI remove notification 間的 reconciliation；同 session NPC transfer 已序列化，但瞬間怪物攻擊致死與拾取跨 worker 的完全線性化仍需實際設計與回歸。
+
+
+### SQLite 拾取跨重啟冪等世代（2026-11-17）
+
+正式 Host **每次啟動都配置**一個 SQLite 持久 `loot_world_generations.generation_id`，即使沒有 `--loot-rules` 也會配置，以便處理重啟前已持久存在的未拾取物。登入驗證仍使用原 ServerWorld 的 Actor.ConnectionEpoch／MapEpoch；但在 `ClaimGroundDropAsync` 的**資料庫冪等鍵**中，`pickup_connection_epoch` 記錄 `(DurableWorldGeneration << 32) | Actor.ConnectionEpoch`。因此重啟導致 in-memory connection epoch、MapEpoch、Client PickupSequence 均從 1 重新開始，也不會誤判上次登入的 StaleSequence；舊登入 Session 以相同鍵重送仍取回原 item_uid。此 DB generation 僅在可信 Host 建立，**不是 client 可操控的封包欄位**。測試 `GroundLootChecks.RestartConnectionGeneration`。
