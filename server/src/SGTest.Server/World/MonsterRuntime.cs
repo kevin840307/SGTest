@@ -285,7 +285,7 @@ public sealed class MonsterRuntime
         MonsterCombatTarget target = default;
         bool hasTarget = monster.TargetActorId > 0 &&
             targets.TryGetValue(monster.TargetActorId, out target) &&
-            target.CurrentHp > 0;
+            target.CurrentHp > 0 && target.MapId == MapId;
         double leashDistance = Distance(
             monster.Spawn.X, monster.Spawn.Y, monster.X, monster.Y);
 

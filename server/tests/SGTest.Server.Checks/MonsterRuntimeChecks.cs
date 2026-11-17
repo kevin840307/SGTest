@@ -9,6 +9,8 @@ internal static class MonsterRuntimeChecks
             () => PopulationGate(root));
         Checks.Run("monster single-map authority chases around Blocking and attacks on bounded cadence",
             () => ChaseAndAttack(root));
+        Checks.Run("monster loses live target when actor transfers to another map",
+            () => CrossMapTargetLost(root));
         Checks.Run("monster trusted damage owns death/respawn and AI budget is fair across 300 entities",
             () => DamageRespawnAndBudget(root));
     }
@@ -81,6 +83,42 @@ internal static class MonsterRuntimeChecks
                        after.TargetActorId==0 &&
                        after.EntityRevision>before.EntityRevision,
                        "monster did not leave combat when target exceeded lose radius");
+    }
+
+    private static void CrossMapTargetLost(string root)
+    {
+        string dir = Checks.Fixture(root, 214, 12, 12, (_, _) => 0);
+        var grid = BlockingGrid.Load(dir, 214);
+        string path = Path.Combine(dir, "population.json");
+        File.WriteAllText(path, JsonSerializer.Serialize(Document(
+            214, true, [Spawn(0, 1, 24, 24)], [Definition(1,
+                aggro: 200, lose: 250, leash: 250, attackRange: 28,
+                attackCooldown: 1, wanderRadius: 0, wanderInterval: 100)])));
+        var population = MonsterPopulationCatalog.LoadVerified(path, 214, grid);
+        var runtime = new MonsterRuntime(grid, population,
+            new(AiIntervalTicks: 1, MaxAiPerStep: 8, MaxPathQueriesPerStep: 2));
+        var nearbyPlayer = new MonsterCombatTarget(99, 214, 40, 24, 100);
+        var acquired = runtime.Tick(1, [nearbyPlayer]);
+        Checks.Require(acquired.Any(e => e.Kind == MonsterWorldEventKind.TargetAcquired) &&
+                       acquired.Any(e => e.Kind == MonsterWorldEventKind.Attack &&
+                                         e.TargetActorId == nearbyPlayer.ActorId),
+            "same-map live target was not acquired and attacked");
+
+        // Same actor, same coordinates, still alive; only the trusted MapId changes.
+        // The old attack target must be dropped before any cooldown/attack processing.
+        var transferred = runtime.Tick(2, [nearbyPlayer with { MapId = 215 }]);
+        var current = runtime.SnapshotAll()[0];
+        Checks.Require(transferred.Any(e => e.Kind == MonsterWorldEventKind.TargetLost &&
+                                             e.TargetActorId == nearbyPlayer.ActorId) &&
+                       transferred.All(e => e.Kind != MonsterWorldEventKind.Attack) &&
+                       current.TargetActorId == 0 &&
+                       current.State != MonsterAiState.Attack,
+            "monster attacked or retained the player across a map transfer");
+
+        var returned = runtime.Tick(3, [nearbyPlayer]);
+        Checks.Require(returned.Any(e => e.Kind == MonsterWorldEventKind.TargetAcquired) &&
+                       runtime.SnapshotAll()[0].TargetActorId == nearbyPlayer.ActorId,
+            "returning to the same map did not acquire a fresh target");
     }
 
     private static void DamageRespawnAndBudget(string root)
