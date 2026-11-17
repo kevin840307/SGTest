@@ -251,6 +251,7 @@ static class Checks
             TlsGatewayListenerChecks.Verify(root);
             IdentityAdminChecks.Verify(root);
             WorldSimulationChecks.Verify(root);
+            MonsterRuntimeChecks.Verify(root);
             FacingChecks.Verify(root);
             WorldHostChecks.Verify(root);
 
