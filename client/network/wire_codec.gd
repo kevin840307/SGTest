@@ -38,6 +38,8 @@ const OPCODE_RECOVERY_USE_RESULT := 38
 const OPCODE_INVENTORY_DISCARD := 39
 const OPCODE_INVENTORY_DISCARD_RESULT := 40
 const OPCODE_PLAYER_ATTACK_VISUAL := 41
+const OPCODE_PLAYER_DAMAGE_VISUAL := 42
+const OPCODE_PLAYER_RESPAWN_VISUAL := 43
 const MOVE_TARGET_FRAME_BYTES := 28
 const MOVE_RECEIPT_FRAME_BYTES := 30
 const NPC_INTERACT_FRAME_BYTES := 24
@@ -69,6 +71,8 @@ const RECOVERY_USE_RESULT_FRAME_BYTES := 45
 const INVENTORY_DISCARD_FRAME_BYTES := 32
 const INVENTORY_DISCARD_RESULT_FRAME_BYTES := 41
 const PLAYER_ATTACK_VISUAL_FRAME_BYTES := 66
+const PLAYER_DAMAGE_VISUAL_FRAME_BYTES := 66
+const PLAYER_RESPAWN_VISUAL_FRAME_BYTES := 45
 const INVENTORY_SNAPSHOT_HEADER_BYTES := 23
 const INVENTORY_ITEM_BYTES := 24
 const INVENTORY_SNAPSHOT_MAX_PER_FRAME := 128
@@ -227,6 +231,46 @@ static func decode_player_attack_visual(frame: PackedByteArray) -> Dictionary:
 		"attacker_actor_id":attacker,"attacker_connection_epoch":connection,
 		"attack_sequence":sequence,"target_entity_id":target,"status":status,
 		"damage":damage,"target_revision":revision,"facing":attack_facing}
+
+
+static func decode_player_damage_visual(frame: PackedByteArray) -> Dictionary:
+	if not _valid_header(frame,OPCODE_PLAYER_DAMAGE_VISUAL,PLAYER_DAMAGE_VISUAL_FRAME_BYTES):
+		return {}
+	var reader := _reader(frame,8)
+	var epoch := reader.get_64()
+	var tick := reader.get_64()
+	var victim := reader.get_64()
+	var connection := reader.get_64()
+	var sequence := reader.get_u32()
+	var attacker := reader.get_64()
+	var attacker_revision := reader.get_64()
+	var damage := reader.get_32()
+	var died := reader.get_u8()
+	var hit_facing := reader.get_u8()
+	if epoch <= 0 or tick < 0 or victim <= 0 or connection <= 0 or sequence == 0 or attacker <= 0 or attacker_revision <= 0 or damage <= 0 or died > 1 or hit_facing < 1 or hit_facing > 8:
+		return {}
+	return {"receiver_map_epoch":epoch,"server_tick":tick,
+		"victim_actor_id":victim,"victim_connection_epoch":connection,
+		"damage_sequence":sequence,"attacker_monster_entity_id":attacker,
+		"attacker_monster_revision":attacker_revision,"damage":damage,
+		"died":died==1,"facing":hit_facing}
+
+
+static func decode_player_respawn_visual(frame: PackedByteArray) -> Dictionary:
+	if not _valid_header(frame,OPCODE_PLAYER_RESPAWN_VISUAL,PLAYER_RESPAWN_VISUAL_FRAME_BYTES):
+		return {}
+	var reader := _reader(frame,8)
+	var epoch := reader.get_64()
+	var tick := reader.get_64()
+	var actor := reader.get_64()
+	var connection := reader.get_64()
+	var sequence := reader.get_u32()
+	var respawn_facing := reader.get_u8()
+	if epoch <= 0 or tick < 0 or actor <= 0 or connection <= 0 or sequence == 0 or respawn_facing < 1 or respawn_facing > 8:
+		return {}
+	return {"receiver_map_epoch":epoch,"server_tick":tick,
+		"actor_id":actor,"connection_epoch":connection,
+		"respawn_sequence":sequence,"facing":respawn_facing}
 
 
 static func decode_player_combat_state(frame: PackedByteArray) -> Dictionary:
@@ -686,7 +730,7 @@ static func frame_opcode(frame: PackedByteArray) -> int:
 	if reader.get_u16() != VERSION:
 		return -1
 	var opcode := reader.get_u16()
-	if opcode not in [OPCODE_MOVE_TARGET, OPCODE_MOVE_RECEIPT, OPCODE_NPC_INTERACT, OPCODE_NPC_INTERACT_RESULT, OPCODE_NORMAL_ATTACK, OPCODE_NORMAL_ATTACK_RESULT, OPCODE_PLAYER_COMBAT_STATE, OPCODE_PLAYER_DAMAGE, OPCODE_AUTH_REQUEST, OPCODE_AUTH_RESULT, OPCODE_CHARACTER_LIST, OPCODE_CHARACTER_CHOOSE, OPCODE_CHARACTER_CHOOSE_RESULT, OPCODE_WORLD_READY, OPCODE_ENTITY_SPAWN, OPCODE_ENTITY_DESPAWN, OPCODE_ENTITY_DELTA, OPCODE_SELF_STATE, OPCODE_WORLD_READY_ACK, OPCODE_WORLD_RESYNC_REQUEST, OPCODE_MONSTER_SPAWN, OPCODE_MONSTER_DELTA, OPCODE_MONSTER_DESPAWN, OPCODE_PLAYER_RESPAWN, OPCODE_PLAYER_RESPAWN_RESULT, OPCODE_GROUND_DROP_SPAWN, OPCODE_GROUND_DROP_DESPAWN, OPCODE_GROUND_PICKUP, OPCODE_GROUND_PICKUP_RESULT, OPCODE_INVENTORY_SNAPSHOT, OPCODE_RECOVERY_USE, OPCODE_RECOVERY_USE_RESULT, OPCODE_INVENTORY_DISCARD, OPCODE_INVENTORY_DISCARD_RESULT, OPCODE_PLAYER_ATTACK_VISUAL]:
+	if opcode not in [OPCODE_MOVE_TARGET, OPCODE_MOVE_RECEIPT, OPCODE_NPC_INTERACT, OPCODE_NPC_INTERACT_RESULT, OPCODE_NORMAL_ATTACK, OPCODE_NORMAL_ATTACK_RESULT, OPCODE_PLAYER_COMBAT_STATE, OPCODE_PLAYER_DAMAGE, OPCODE_AUTH_REQUEST, OPCODE_AUTH_RESULT, OPCODE_CHARACTER_LIST, OPCODE_CHARACTER_CHOOSE, OPCODE_CHARACTER_CHOOSE_RESULT, OPCODE_WORLD_READY, OPCODE_ENTITY_SPAWN, OPCODE_ENTITY_DESPAWN, OPCODE_ENTITY_DELTA, OPCODE_SELF_STATE, OPCODE_WORLD_READY_ACK, OPCODE_WORLD_RESYNC_REQUEST, OPCODE_MONSTER_SPAWN, OPCODE_MONSTER_DELTA, OPCODE_MONSTER_DESPAWN, OPCODE_PLAYER_RESPAWN, OPCODE_PLAYER_RESPAWN_RESULT, OPCODE_GROUND_DROP_SPAWN, OPCODE_GROUND_DROP_DESPAWN, OPCODE_GROUND_PICKUP, OPCODE_GROUND_PICKUP_RESULT, OPCODE_INVENTORY_SNAPSHOT, OPCODE_RECOVERY_USE, OPCODE_RECOVERY_USE_RESULT, OPCODE_INVENTORY_DISCARD, OPCODE_INVENTORY_DISCARD_RESULT, OPCODE_PLAYER_ATTACK_VISUAL, OPCODE_PLAYER_DAMAGE_VISUAL, OPCODE_PLAYER_RESPAWN_VISUAL]:
 		return -1
 	return opcode
 

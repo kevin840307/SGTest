@@ -751,6 +751,20 @@ public sealed class GatewayConnection
                         attack.Status,attack.Damage,attack.TargetRevision,
                         attack.Facing));
                     break;
+                case AoiEventKind.PlayerDamageVisual when evt.PlayerDamage is { } damage:
+                    frame=WireProtocol.EncodePlayerDamageVisual(new(
+                        evt.ReceiverMapEpoch,evt.Tick,
+                        damage.VictimActorId,damage.VictimConnectionEpoch,
+                        damage.DamageSequence,damage.AttackerMonsterEntityId,
+                        damage.AttackerMonsterRevision,damage.Damage,
+                        damage.Died,damage.Facing));
+                    break;
+                case AoiEventKind.PlayerRespawnVisual when evt.PlayerRespawn is { } respawn:
+                    frame=WireProtocol.EncodePlayerRespawnVisual(new(
+                        evt.ReceiverMapEpoch,evt.Tick,
+                        respawn.ActorId,respawn.ConnectionEpoch,
+                        respawn.RespawnSequence,respawn.Facing));
+                    break;
                 default:
                     return GatewaySendStatus.GenerationMismatch;
             }

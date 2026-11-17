@@ -19,6 +19,9 @@ public sealed record WorldChangedBatch(
     long Tick, IReadOnlyList<ActorSnapshot> Changed,
     IReadOnlyList<ActorLifecycleEvent>? Lifecycle = null);
 
+public readonly record struct PlayerRespawnVisualRequest(
+    ActorSnapshot Actor,uint RespawnSequence);
+
 public sealed record WorldResultRouterStatistics(
     long ReceiptsQueued,
     long StaleReceiptsSkipped,
@@ -46,6 +49,8 @@ public sealed class WorldResultRouter
     private readonly Channel<TrustedWorldResyncRequest> _resync;
     private readonly Channel<TrustedNormalAttack> _attacks;
     private readonly Channel<long> _claimedGroundDrops;
+    private readonly Channel<PlayerDamageSettlement> _playerDamageVisuals;
+    private readonly Channel<PlayerRespawnVisualRequest> _playerRespawnVisuals;
     private readonly WorldResultRouterOptions _options;
     private readonly Action<WorldChangedBatch>? _changedObserver;
     private long _queued, _stale, _changedQueued, _backpressure;
@@ -93,12 +98,32 @@ public sealed class WorldResultRouter
                 FullMode = BoundedChannelFullMode.Wait,
                 AllowSynchronousContinuations = false
             });
+        _playerDamageVisuals = Channel.CreateBounded<PlayerDamageSettlement>(
+            new BoundedChannelOptions(_options.AttackRequestCapacity)
+            {
+                SingleReader = true,
+                SingleWriter = false,
+                FullMode = BoundedChannelFullMode.Wait,
+                AllowSynchronousContinuations = false
+            });
+        _playerRespawnVisuals = Channel.CreateBounded<PlayerRespawnVisualRequest>(
+            new BoundedChannelOptions(_options.AttackRequestCapacity)
+            {
+                SingleReader = true,
+                SingleWriter = false,
+                FullMode = BoundedChannelFullMode.Wait,
+                AllowSynchronousContinuations = false
+            });
     }
 
     public ChannelReader<WorldChangedBatch> ChangedBatches => _changed.Reader;
     public ChannelReader<TrustedWorldResyncRequest> ResyncRequests => _resync.Reader;
     public ChannelReader<TrustedNormalAttack> AttackRequests => _attacks.Reader;
     public ChannelReader<long> ClaimedGroundDrops => _claimedGroundDrops.Reader;
+    public ChannelReader<PlayerDamageSettlement> PlayerDamageVisuals =>
+        _playerDamageVisuals.Reader;
+    public ChannelReader<PlayerRespawnVisualRequest> PlayerRespawnVisuals =>
+        _playerRespawnVisuals.Reader;
 
     public WorldResultRouterStatistics Statistics
     {
@@ -307,6 +332,24 @@ public sealed class WorldResultRouter
                 return false;
         }
         return _attacks.Writer.TryWrite(request);
+    }
+
+    public bool TryPostPlayerDamageVisual(PlayerDamageSettlement result)
+    {
+        if(result.ActorId<=0 || result.ConnectionEpoch<=0 || result.MapEpoch<=0 ||
+            result.DamageSequence==0 || result.Damage<=0)
+            return false;
+        return _playerDamageVisuals.Writer.TryWrite(result);
+    }
+
+    public bool TryPostPlayerRespawnVisual(
+        ActorSnapshot actor,uint respawnSequence)
+    {
+        if(actor.ActorId<=0 || actor.ConnectionEpoch<=0 || actor.MapEpoch<=0 ||
+            respawnSequence==0)
+            return false;
+        return _playerRespawnVisuals.Writer.TryWrite(
+            new(actor,respawnSequence));
     }
 
     public GatewaySendStatus QueuePlayerDamage(PlayerDamageSettlement result)

@@ -37,8 +37,16 @@ var stale_attack_results := 0
 var player_attack_events: Array[Dictionary] = []
 var player_attack_sequences := {}
 var stale_player_attack_visuals := 0
+var player_damage_visual_events: Array[Dictionary] = []
+var player_damage_visual_sequences := {}
+var stale_player_damage_visuals := 0
+var player_respawn_visual_events: Array[Dictionary] = []
+var player_respawn_visual_sequences := {}
+var stale_player_respawn_visuals := 0
 const PLAYER_ATTACK_EVENT_TTL_TICKS := 120
 const PLAYER_ATTACK_EVENT_MAX := 4096
+const PLAYER_COMBAT_VISUAL_EVENT_TTL_TICKS := 120
+const PLAYER_COMBAT_VISUAL_EVENT_MAX := 4096
 var combat_available := false
 var player_current_hp := 0
 var player_max_hp := 0
@@ -206,6 +214,10 @@ func apply_frame(frame: PackedByteArray) -> bool:
 			return _apply_normal_attack_result(frame)
 		WireCodec.OPCODE_PLAYER_ATTACK_VISUAL:
 			return _apply_player_attack_visual(frame)
+		WireCodec.OPCODE_PLAYER_DAMAGE_VISUAL:
+			return _apply_player_damage_visual(frame)
+		WireCodec.OPCODE_PLAYER_RESPAWN_VISUAL:
+			return _apply_player_respawn_visual(frame)
 		WireCodec.OPCODE_PLAYER_COMBAT_STATE:
 			return _apply_player_combat_state(frame)
 		WireCodec.OPCODE_PLAYER_DAMAGE:
@@ -273,6 +285,12 @@ func snapshot() -> Dictionary:
 		"player_attack_events": player_attack_events.duplicate(true),
 		"player_attack_sequences": player_attack_sequences.duplicate(true),
 		"stale_player_attack_visuals": stale_player_attack_visuals,
+		"player_damage_visual_events": player_damage_visual_events.duplicate(true),
+		"player_damage_visual_sequences": player_damage_visual_sequences.duplicate(true),
+		"stale_player_damage_visuals": stale_player_damage_visuals,
+		"player_respawn_visual_events": player_respawn_visual_events.duplicate(true),
+		"player_respawn_visual_sequences": player_respawn_visual_sequences.duplicate(true),
+		"stale_player_respawn_visuals": stale_player_respawn_visuals,
 		"combat_available": combat_available,
 		"player_current_hp": player_current_hp,
 		"player_max_hp": player_max_hp,
@@ -390,6 +408,12 @@ func _apply_choose(frame: PackedByteArray) -> bool:
 	player_attack_events.clear()
 	player_attack_sequences.clear()
 	stale_player_attack_visuals = 0
+	player_damage_visual_events.clear()
+	player_damage_visual_sequences.clear()
+	stale_player_damage_visuals = 0
+	player_respawn_visual_events.clear()
+	player_respawn_visual_sequences.clear()
+	stale_player_respawn_visuals = 0
 	combat_available = false
 	player_current_hp = 0
 	player_max_hp = 0
@@ -483,6 +507,94 @@ func _apply_receipt(frame: PackedByteArray) -> bool:
 	last_receipt_status = int(decoded.status)
 	last_server_tick = server_tick
 	return true
+
+func _apply_player_damage_visual(frame: PackedByteArray) -> bool:
+	if state != STATE_IN_WORLD:
+		return fail("player_damage_visual_out_of_state")
+	var value := WireCodec.decode_player_damage_visual(frame)
+	if value.is_empty():
+		return fail("invalid_player_damage_visual")
+	var disposition := _check_aoi_generation(
+		int(value.receiver_map_epoch),int(value.server_tick))
+	if disposition <= 0:
+		if disposition == 0:
+			stale_player_damage_visuals += 1
+		return disposition == 0
+
+	var victim := int(value.victim_actor_id)
+	var connection := int(value.victim_connection_epoch)
+	if victim == actor_id:
+		if not self_state.is_empty() and int(self_state.get("connection_epoch",0)) != connection:
+			return _need_resync("player_damage_visual_self_generation")
+	else:
+		if not entities.has(victim):
+			return _need_resync("player_damage_visual_victim_without_spawn")
+		var remote: Dictionary = entities[victim]
+		if int(remote.get("connection_epoch",0)) != connection:
+			return _need_resync("player_damage_visual_victim_generation")
+
+	var sequence := int(value.damage_sequence)
+	var prior: Dictionary = player_damage_visual_sequences.get(victim,{})
+	if not prior.is_empty():
+		if int(prior.get("connection_epoch",0)) != connection:
+			return _need_resync("player_damage_visual_sequence_generation")
+		if sequence <= int(prior.get("sequence",0)):
+			stale_player_damage_visuals += 1
+			return true
+	player_damage_visual_sequences[victim] = {
+		"connection_epoch":connection,"sequence":sequence}
+	player_damage_visual_events.append(value.duplicate(true))
+	var cutoff := maxi(int(value.server_tick),last_aoi_tick)-PLAYER_COMBAT_VISUAL_EVENT_TTL_TICKS
+	while not player_damage_visual_events.is_empty() and int(player_damage_visual_events[0].get("server_tick",-1)) < cutoff:
+		player_damage_visual_events.pop_front()
+	while player_damage_visual_events.size() > PLAYER_COMBAT_VISUAL_EVENT_MAX:
+		player_damage_visual_events.pop_front()
+	return true
+
+
+func _apply_player_respawn_visual(frame: PackedByteArray) -> bool:
+	if state != STATE_IN_WORLD:
+		return fail("player_respawn_visual_out_of_state")
+	var value := WireCodec.decode_player_respawn_visual(frame)
+	if value.is_empty():
+		return fail("invalid_player_respawn_visual")
+	var disposition := _check_aoi_generation(
+		int(value.receiver_map_epoch),int(value.server_tick))
+	if disposition <= 0:
+		if disposition == 0:
+			stale_player_respawn_visuals += 1
+		return disposition == 0
+
+	var visual_actor := int(value.actor_id)
+	var connection := int(value.connection_epoch)
+	if visual_actor == actor_id:
+		if not self_state.is_empty() and int(self_state.get("connection_epoch",0)) != connection:
+			return _need_resync("player_respawn_visual_self_generation")
+	else:
+		if not entities.has(visual_actor):
+			return _need_resync("player_respawn_visual_actor_without_spawn")
+		var remote: Dictionary = entities[visual_actor]
+		if int(remote.get("connection_epoch",0)) != connection:
+			return _need_resync("player_respawn_visual_actor_generation")
+
+	var sequence := int(value.respawn_sequence)
+	var prior: Dictionary = player_respawn_visual_sequences.get(visual_actor,{})
+	if not prior.is_empty():
+		if int(prior.get("connection_epoch",0)) != connection:
+			return _need_resync("player_respawn_visual_sequence_generation")
+		if sequence <= int(prior.get("sequence",0)):
+			stale_player_respawn_visuals += 1
+			return true
+	player_respawn_visual_sequences[visual_actor] = {
+		"connection_epoch":connection,"sequence":sequence}
+	player_respawn_visual_events.append(value.duplicate(true))
+	var cutoff := maxi(int(value.server_tick),last_aoi_tick)-PLAYER_COMBAT_VISUAL_EVENT_TTL_TICKS
+	while not player_respawn_visual_events.is_empty() and int(player_respawn_visual_events[0].get("server_tick",-1)) < cutoff:
+		player_respawn_visual_events.pop_front()
+	while player_respawn_visual_events.size() > PLAYER_COMBAT_VISUAL_EVENT_MAX:
+		player_respawn_visual_events.pop_front()
+	return true
+
 
 func _apply_player_combat_state(frame: PackedByteArray) -> bool:
 	if state != STATE_IN_WORLD:
@@ -724,6 +836,12 @@ func _apply_world_ready(frame: PackedByteArray) -> bool:
 		player_attack_events.clear()
 		player_attack_sequences.clear()
 		stale_player_attack_visuals = 0
+		player_damage_visual_events.clear()
+		player_damage_visual_sequences.clear()
+		stale_player_damage_visuals = 0
+		player_respawn_visual_events.clear()
+		player_respawn_visual_sequences.clear()
+		stale_player_respawn_visuals = 0
 		recovery_sequence = 0
 		pending_recovery_sequence = 0
 		pending_recovery_item_uid = 0
@@ -776,6 +894,8 @@ func _apply_world_ready(frame: PackedByteArray) -> bool:
 	# WorldReady baseline. Sequence memory is retained for same-epoch resync so
 	# a delayed pre-resync visual cannot replay.
 	player_attack_events.clear()
+	player_damage_visual_events.clear()
+	player_respawn_visual_events.clear()
 	last_aoi_tick = tick
 	pending_world_ready_ack_epoch = map_epoch
 	pending_world_ready_ack_tick = tick

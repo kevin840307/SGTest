@@ -135,6 +135,16 @@ public sealed class WorldAoiPump
                     Interlocked.Increment(ref _framesQueued);
                 }
 
+                // Player damage/respawn presentation is posted only after
+                // durable settlement / trusted death-gate transition. Fold it
+                // into the SAME AOI owner and reliable FIFO; never mutate AOI
+                // from the SQLite worker or socket threads.
+                while (_router.PlayerDamageVisuals.TryRead(out var damageVisual))
+                    _aoi.EnqueuePlayerDamageVisual(damageVisual);
+                while (_router.PlayerRespawnVisuals.TryRead(out var respawnVisual))
+                    _aoi.EnqueuePlayerRespawnVisual(
+                        respawnVisual.Actor,respawnVisual.RespawnSequence);
+
                 // The worker only publishes after SQLite commit. Consume on
                 // this same AOI owner thread; never poll SQLite per World tick.
                 if (_loot is not null && _aoi.LastTick > 0)

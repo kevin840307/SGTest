@@ -109,13 +109,18 @@ internal static class TlsHost
                 delivery: router.QueuePlayerDamage,
                 committedLifecycle: async result =>
                 {
-                    if (!result.Died) return;
-                    var stopped = await world.TrustedSetCombatDeadAsync(
-                        result.ActorId, result.ConnectionEpoch, result.MapEpoch, true)
-                        .ConfigureAwait(false);
-                    if (stopped is null)
+                    if (result.Died)
+                    {
+                        var stopped = await world.TrustedSetCombatDeadAsync(
+                            result.ActorId, result.ConnectionEpoch, result.MapEpoch, true)
+                            .ConfigureAwait(false);
+                        if (stopped is null)
+                            throw new PlayerCombatSettlementException(
+                                "Committed lethal damage could not stop authoritative World actor");
+                    }
+                    if (!router.TryPostPlayerDamageVisual(result))
                         throw new PlayerCombatSettlementException(
-                            "Committed lethal damage could not stop authoritative World actor");
+                            "Committed player damage visual queue full");
                 });
             var aoi = new WorldAoiPump(
                 router, monsters: monsters, playerCombat: combat, loot: loot,

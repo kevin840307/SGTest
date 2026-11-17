@@ -38,6 +38,8 @@ internal static class WorldAoiChecks
             MonsterInterest);
         Checks.Run("player attack visual reaches only viewers seeing attacker and target",
             PlayerAttackVisualInterest);
+        Checks.Run("durable player damage and respawn visuals reach victim and visible peers only",
+            PlayerDamageVisualInterest);
         Checks.Run("same map-bucket AOI tracks durable ground drop enter, exit, resync and pickup removal",
             GroundDropInterest);
         Checks.Run("20 observers and 500 ground drops share one bounded AOI with zero idle resends",
@@ -95,6 +97,63 @@ internal static class WorldAoiChecks
                 request with {AttackSequence=8},miss)==2 &&
             Drain(aoi,attacker).Single().PlayerAttack?.Status==NormalAttackStatus.Miss,
             "MISS presentation event not admitted");
+    }
+
+    private static void PlayerDamageVisualInterest()
+    {
+        var aoi=new WorldAoi(new WorldAoiOptions(
+            EnterHalfWidth:200,EnterHalfHeight:150,ExitMargin:60,BucketSize:64));
+        var victim=Actor(91,15,24,24,connection:7);
+        var observer=Actor(92,15,48,24,connection:8);
+        var far=Actor(93,15,1200,24,connection:9);
+        aoi.Apply(new WorldChangedBatch(1,Array.Empty<ActorSnapshot>(),
+            [Join(victim),Join(observer),Join(far)]));
+        Drain(aoi,victim);Drain(aoi,observer);Drain(aoi,far);
+
+        var damage=new PlayerDamageSettlement(
+            victim.ActorId,victim.ConnectionEpoch,victim.MapEpoch,
+            1,1,1001500001,3,18,82,100,false);
+        Require(aoi.EnqueuePlayerDamageVisual(damage)==2,
+            "damage visual fanout included invisible observer or omitted victim/peer");
+        var owner=Drain(aoi,victim);
+        var peer=Drain(aoi,observer);
+        Require(owner is [var own] &&
+            own.Kind==AoiEventKind.PlayerDamageVisual &&
+            own.PlayerDamage?.VictimActorId==victim.ActorId &&
+            own.PlayerDamage?.DamageSequence==1 &&
+            own.PlayerDamage?.Damage==18 &&
+            own.PlayerDamage?.Facing==victim.Facing &&
+            peer is [var remote] &&
+            remote.PlayerDamage==own.PlayerDamage &&
+            Drain(aoi,far).Length==0,
+            "damage visual AOI scope/payload mismatch");
+
+        var lethal=damage with {
+            DamageSequence=2,ServerTick=1,
+            AttackerMonsterRevision=4,Damage=82,CurrentHp=0,Died=true
+        };
+        Require(aoi.EnqueuePlayerDamageVisual(lethal)==2 &&
+            Drain(aoi,victim).Single().PlayerDamage?.Died==true &&
+            Drain(aoi,observer).Single().PlayerDamage?.CurrentHp==0,
+            "lethal visual did not reach victim and peer");
+
+        Require(aoi.EnqueuePlayerRespawnVisual(victim,1)==2,
+            "respawn visual fanout omitted visible generation");
+        owner=Drain(aoi,victim);
+        peer=Drain(aoi,observer);
+        Require(owner is [var ownRespawn] &&
+            ownRespawn.Kind==AoiEventKind.PlayerRespawnVisual &&
+            ownRespawn.PlayerRespawn?.ActorId==victim.ActorId &&
+            ownRespawn.PlayerRespawn?.RespawnSequence==1 &&
+            peer is [var peerRespawn] &&
+            peerRespawn.PlayerRespawn==ownRespawn.PlayerRespawn &&
+            Drain(aoi,far).Length==0,
+            "respawn visual AOI scope/payload mismatch");
+
+        var staleGeneration=damage with { ConnectionEpoch=victim.ConnectionEpoch+1 };
+        Require(aoi.EnqueuePlayerDamageVisual(staleGeneration)==0 &&
+            Drain(aoi,victim).Length==0 && Drain(aoi,observer).Length==0,
+            "stale victim generation emitted damage visual");
     }
 
     private static void GroundDropInterest()

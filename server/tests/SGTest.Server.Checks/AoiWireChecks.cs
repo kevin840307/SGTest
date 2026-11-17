@@ -20,6 +20,8 @@ internal static class AoiWireChecks
     private const string GroundSpawn = "340000000100200001000000000000003700000000000000F5010000000000000F000000000040420000C0418D0A000002000000";
     private const string GroundDespawn = "200000000100210001000000000000003800000000000000F501000000000000";
     private const string PlayerAttack = "4200000001002900010000000000000032000000000000000B0000000000000002000000000000000700000021A0AE3B00000000001E000000030000000000000006";
+    private const string PlayerDamageVisual = "4200000001002A0001000000000000003C00000000000000160000000000000003000000000000000400000021A0AE3B000000000700000000000000120000000006";
+    private const string PlayerRespawnVisual = "2D00000001002B0001000000000000003D00000000000000160000000000000003000000000000000200000006";
 
     public static void Verify()
     {
@@ -106,6 +108,22 @@ internal static class AoiWireChecks
             WireProtocol.TryDecodePlayerAttackVisual(playerAttackBytes,out var parsedAttack) &&
             parsedAttack==playerAttack,
             "PlayerAttackVisual C#/Godot golden binary");
+        var playerDamageVisual=new PlayerDamageVisualWire(
+            1,60,22,3,4,1001300001,7,18,false,6);
+        byte[] playerDamageVisualBytes=WireProtocol.EncodePlayerDamageVisual(playerDamageVisual);
+        Require(Convert.ToHexString(playerDamageVisualBytes)==PlayerDamageVisual &&
+            WireProtocol.TryDecodePlayerDamageVisual(
+                playerDamageVisualBytes,out var parsedDamageVisual) &&
+            parsedDamageVisual==playerDamageVisual,
+            "PlayerDamageVisual C#/Godot golden binary");
+        var playerRespawnVisual=new PlayerRespawnVisualWire(1,61,22,3,2,6);
+        byte[] playerRespawnVisualBytes=
+            WireProtocol.EncodePlayerRespawnVisual(playerRespawnVisual);
+        Require(Convert.ToHexString(playerRespawnVisualBytes)==PlayerRespawnVisual &&
+            WireProtocol.TryDecodePlayerRespawnVisual(
+                playerRespawnVisualBytes,out var parsedRespawnVisual) &&
+            parsedRespawnVisual==playerRespawnVisual,
+            "PlayerRespawnVisual C#/Godot golden binary");
         byte[] despawn = WireProtocol.EncodeEntityDespawn(new(1, 45, 22, 2));
         Require(Convert.ToHexString(despawn) == Despawn &&
                 WireProtocol.TryDecodeEntityDespawn(despawn, out var left) &&
@@ -154,6 +172,18 @@ internal static class AoiWireChecks
         bad[65]=9;
         Require(!WireProtocol.TryDecodePlayerAttackVisual(bad,out _),
             "invalid attack visual facing accepted");
+        bad=Convert.FromHexString(PlayerDamageVisual);
+        bad[64]=2;
+        Require(!WireProtocol.TryDecodePlayerDamageVisual(bad,out _),
+            "invalid player damage visual death flag accepted");
+        bad=Convert.FromHexString(PlayerDamageVisual);
+        bad[65]=9;
+        Require(!WireProtocol.TryDecodePlayerDamageVisual(bad,out _),
+            "invalid player damage visual facing accepted");
+        bad=Convert.FromHexString(PlayerRespawnVisual);
+        bad[44]=0;
+        Require(!WireProtocol.TryDecodePlayerRespawnVisual(bad,out _),
+            "invalid player respawn visual facing accepted");
         bad = Convert.FromHexString(Despawn);
         Array.Clear(bad, 8, 8);
         Require(!WireProtocol.TryDecodeEntityDespawn(bad, out _),
@@ -239,6 +269,30 @@ internal static class AoiWireChecks
                 visualWire.AttackSequence==7 && visualWire.Damage==30 &&
                 visualWire.Facing==6,
                 "player attack visual did not use shared reliable Gateway FIFO");
+        var damageVisual=new PlayerDamageVisual(
+            owner.ActorId,owner.ConnectionEpoch,4,monster.EntityId,
+            monster.EntityRevision,18,false,6);
+        Require(gateway.QueueAoi(new(AoiEventKind.PlayerDamageVisual,51,1,
+                    PlayerDamage:damageVisual))==GatewaySendStatus.Enqueued &&
+                gateway.TryDequeueReliable(out visualFrame) &&
+                WireProtocol.TryDecodePlayerDamageVisual(
+                    visualFrame,out var damageVisualWire) &&
+                damageVisualWire.VictimActorId==owner.ActorId &&
+                damageVisualWire.DamageSequence==4 &&
+                damageVisualWire.Damage==18 && !damageVisualWire.Died &&
+                damageVisualWire.Facing==6,
+                "player damage visual did not use shared reliable Gateway FIFO");
+        var respawnVisual=new PlayerRespawnVisual(
+            owner.ActorId,owner.ConnectionEpoch,2,6);
+        Require(gateway.QueueAoi(new(AoiEventKind.PlayerRespawnVisual,52,1,
+                    PlayerRespawn:respawnVisual))==GatewaySendStatus.Enqueued &&
+                gateway.TryDequeueReliable(out visualFrame) &&
+                WireProtocol.TryDecodePlayerRespawnVisual(
+                    visualFrame,out var respawnVisualWire) &&
+                respawnVisualWire.ActorId==owner.ActorId &&
+                respawnVisualWire.RespawnSequence==2 &&
+                respawnVisualWire.Facing==6,
+                "player respawn visual did not use shared reliable Gateway FIFO");
 
         TrustedWorldResyncRequest requested = default;
         Require(gateway.FeedClientBytes(

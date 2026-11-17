@@ -14,7 +14,11 @@ const PARTS := {
 var _views := {}
 var _actors := {}
 var _seen_attack_events := {}
+var _seen_damage_events := {}
+var _seen_respawn_events := {}
 var _attack_available := false
+var _hit_available := false
+var _death_available := false
 var _epoch := 0
 var _map := 0
 
@@ -22,7 +26,11 @@ func clear() -> void:
 	_views.clear()
 	_actors.clear()
 	_seen_attack_events.clear()
+	_seen_damage_events.clear()
+	_seen_respawn_events.clear()
 	_attack_available = false
+	_hit_available = false
+	_death_available = false
 	_epoch = 0
 	_map = 0
 
@@ -102,7 +110,52 @@ func configure(assets: Dictionary) -> Error:
 						clear()
 						return ERR_INVALID_DATA
 				_views[key] = {"view":value,"timeline":timeline}
+	var hit_state := _load_optional_one_shot(assets,"NH")
+	if hit_state < 0:
+		clear()
+		return ERR_INVALID_DATA
+	_hit_available = hit_state == 1
+	var death_state := _load_optional_one_shot(assets,"ND")
+	if death_state < 0:
+		clear()
+		return ERR_INVALID_DATA
+	_death_available = death_state == 1
 	return OK
+
+func _load_optional_one_shot(assets: Dictionary, action: String) -> int:
+	var present_parts := 0
+	for part in PARTS.values():
+		var manifest: Dictionary = assets[part[0]].manifest
+		if manifest.get("logical_views",{}).has(str(part[1])+"_"+action+"1"):
+			present_parts += 1
+	if present_parts == 0:
+		return 0
+	if present_parts != PARTS.size():
+		return -1
+	for part in PARTS.values():
+		var manifest: Dictionary = assets[part[0]].manifest
+		for facing in range(1,9):
+			var key: String = str(part[1])+"_"+action+str(facing)
+			var value: Dictionary = manifest.get("logical_views",{}).get(key,{})
+			if not value.has_all(["clip","flip_h","timeline_ticks","loop","draw_slots"]) or not value.flip_h is bool or not value.loop is bool or bool(value.loop) or not value.draw_slots is Array or not manifest.clips.has(value.clip):
+				return -1
+			var slots := {}
+			for raw_slot in value.draw_slots:
+				var slot := int(raw_slot)
+				if float(raw_slot) != slot or slot < 0 or slot > 15 or slots.has(slot):
+					return -1
+				slots[slot] = true
+			for slot in PARTS:
+				if not slots.has(slot):
+					return -1
+			var timeline := Timeline.new()
+			if timeline.configure_ticks(value.timeline_ticks,false) != OK:
+				return -1
+			for step in value.timeline_ticks:
+				if int(step[0]) >= manifest.clips[value.clip].size():
+					return -1
+			_views[key] = {"view":value,"timeline":timeline}
+	return 1
 
 func apply_snapshot(snapshot: Dictionary, now_usec: int) -> void:
 	if not snapshot.get("world_ready",false) or int(snapshot.get("map_epoch",0)) <= 0 or now_usec < 0:
@@ -112,6 +165,8 @@ func apply_snapshot(snapshot: Dictionary, now_usec: int) -> void:
 	if epoch != _epoch or map != _map:
 		_actors.clear()
 		_seen_attack_events.clear()
+		_seen_damage_events.clear()
+		_seen_respawn_events.clear()
 		_epoch = epoch
 		_map = map
 	var own: Dictionary = snapshot.self_state.duplicate()
@@ -132,9 +187,17 @@ func apply_snapshot(snapshot: Dictionary, now_usec: int) -> void:
 		var action := base_action
 		var action_facing := int(value.facing)
 		var started := now_usec
+		var dead_visual := false
 		if not generation_changed:
 			started = int(old.started)
-			if _attack_active(old,now_usec):
+			dead_visual = bool(old.get("dead_visual",false))
+			if dead_visual and _death_available:
+				action = "ND"
+				action_facing = int(old.action_facing)
+			elif _one_shot_active(old,"NH",_hit_available,now_usec):
+				action = "NH"
+				action_facing = int(old.action_facing)
+			elif _attack_active(old,now_usec):
 				action = "AA"
 				action_facing = int(old.action_facing)
 			elif str(old.action) != base_action or int(old.value.movement_action_sequence) != int(value.movement_action_sequence):
@@ -144,7 +207,7 @@ func apply_snapshot(snapshot: Dictionary, now_usec: int) -> void:
 		if tick < 0 or not history.push(tick,Vector2(float(value.x),float(value.y)),now_usec):
 			continue
 		_actors[id] = {"value":value,"action":action,"action_facing":action_facing,
-			"started":started,"history":history}
+			"started":started,"history":history,"dead_visual":dead_visual}
 
 	var events = snapshot.get("player_attack_events",[])
 	if events is Array:
@@ -170,6 +233,73 @@ func apply_snapshot(snapshot: Dictionary, now_usec: int) -> void:
 			actor.started = now_usec
 			_actors[attacker] = actor
 
+	var damage_events = snapshot.get("player_damage_visual_events",[])
+	if damage_events is Array:
+		for event in damage_events:
+			if not event is Dictionary:
+				continue
+			var victim := int(event.get("victim_actor_id",0))
+			var connection := int(event.get("victim_connection_epoch",0))
+			var sequence := int(event.get("damage_sequence",0))
+			var key := "%d:%d:%d" % [victim,connection,sequence]
+			if _seen_damage_events.has(key):
+				continue
+			_seen_damage_events[key] = true
+			if not _actors.has(victim):
+				continue
+			var actor: Dictionary = _actors[victim]
+			var actor_connection := int(actor.value.connection_epoch)
+			var own_without_self_state := victim == int(snapshot.actor_id) and actor_connection == 0
+			if actor_connection != connection and not own_without_self_state:
+				continue
+			var died := bool(event.get("died",false))
+			if died:
+				actor.dead_visual = true
+				if _death_available:
+					actor.action = "ND"
+					actor.action_facing = int(event.get("facing",actor.value.facing))
+					actor.started = now_usec
+			elif _hit_available and not bool(actor.get("dead_visual",false)):
+				actor.action = "NH"
+				actor.action_facing = int(event.get("facing",actor.value.facing))
+				actor.started = now_usec
+			_actors[victim] = actor
+
+	var respawn_events = snapshot.get("player_respawn_visual_events",[])
+	if respawn_events is Array:
+		for event in respawn_events:
+			if not event is Dictionary:
+				continue
+			var revived := int(event.get("actor_id",0))
+			var connection := int(event.get("connection_epoch",0))
+			var sequence := int(event.get("respawn_sequence",0))
+			var key := "%d:%d:%d" % [revived,connection,sequence]
+			if _seen_respawn_events.has(key):
+				continue
+			_seen_respawn_events[key] = true
+			if not _actors.has(revived):
+				continue
+			var actor: Dictionary = _actors[revived]
+			var actor_connection := int(actor.value.connection_epoch)
+			var own_without_self_state := revived == int(snapshot.actor_id) and actor_connection == 0
+			if actor_connection != connection and not own_without_self_state:
+				continue
+			actor.dead_visual = false
+			actor.action = "NR" if bool(actor.value.moving) else "NS"
+			actor.action_facing = int(event.get("facing",actor.value.facing))
+			actor.started = now_usec
+			_actors[revived] = actor
+
+func _one_shot_active(actor: Dictionary,action: String,available: bool,now_usec: int) -> bool:
+	if not available or str(actor.get("action","")) != action:
+		return false
+	var facing := int(actor.get("action_facing",0))
+	var body: Dictionary = _views.get("B-BODY_"+action+str(facing),{})
+	if body.is_empty():
+		return false
+	var elapsed := maxi(0,now_usec-int(actor.get("started",now_usec)))*50/1000000
+	return not body.timeline.is_complete(elapsed)
+
 func _attack_active(actor: Dictionary,now_usec: int) -> bool:
 	if not _attack_available or str(actor.get("action","")) != "AA":
 		return false
@@ -192,9 +322,9 @@ func actors_at(now_usec: int) -> Array:
 		var action := str(actor.action)
 		var facing := int(actor.action_facing)
 		var elapsed := maxi(0,now_usec-int(actor.started))*50/1000000
-		if action == "AA":
-			var attack_body: Dictionary = _views.get("B-BODY_AA"+str(facing),{})
-			if attack_body.is_empty() or attack_body.timeline.is_complete(elapsed):
+		if action in ["AA","NH"]:
+			var one_shot_body: Dictionary = _views.get("B-BODY_"+action+str(facing),{})
+			if one_shot_body.is_empty() or one_shot_body.timeline.is_complete(elapsed):
 				action = "NR" if bool(value.moving) else "NS"
 				facing = int(value.facing)
 				elapsed = 0

@@ -70,6 +70,11 @@ func _initialize() -> void:
 			and int(v.last_player_damage.damage)==18
 			and int(v.player_current_hp)==0
 			and bool(v.player_dead)
+			and v.player_damage_visual_events.size()>=1
+			and int(v.player_damage_visual_events[-1].victim_actor_id)==character_id
+			and int(v.player_damage_visual_events[-1].damage_sequence)==1
+			and int(v.player_damage_visual_events[-1].damage)==18
+			and bool(v.player_damage_visual_events[-1].died)
 		),7000)
 	if settled.is_empty():
 		_fail("authoritative attack settlement "+str(session.snapshot()),session)
@@ -88,6 +93,9 @@ func _initialize() -> void:
 			and int(v.player_max_hp)==100
 			and not bool(v.player_dead)
 			and int(v.player_damage_sequence)==1
+			and v.player_respawn_visual_events.size()>=1
+			and int(v.player_respawn_visual_events[-1].actor_id)==character_id
+			and int(v.player_respawn_visual_events[-1].respawn_sequence)==1
 		),7000)
 	if revived.is_empty():
 		_fail("authoritative respawn "+str(session.snapshot()),session)
@@ -101,7 +109,7 @@ func _initialize() -> void:
 		_fail("server World remained dead-gated after respawn "+str(session.snapshot()),session)
 		return
 	session.stop()
-	print("CLIENT_COMBAT_TLS_PASS target=%d player_damage=60 monster_hp=40 monster_damage=18 death_hp=0 respawn_hp=100 dead=false public_intents_blocked_while_dead=true move_after_respawn=true damage_sequence_continuous=true request_has_no_damage=true receipt_does_not_mutate_monster=true delta_owns_hp=true damage_after_db_commit=true" % target)
+	print("CLIENT_COMBAT_TLS_PASS target=%d player_damage=60 monster_hp=40 monster_damage=18 death_hp=0 respawn_hp=100 dead=false player_damage_visual=true player_respawn_visual=true visual_after_db_commit=true public_intents_blocked_while_dead=true move_after_respawn=true damage_sequence_continuous=true request_has_no_damage=true receipt_does_not_mutate_monster=true delta_owns_hp=true damage_after_db_commit=true" % target)
 	quit(0)
 
 func _wait(session, predicate: Callable, timeout_ms: int) -> Dictionary:

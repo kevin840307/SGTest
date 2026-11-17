@@ -213,13 +213,18 @@ internal static class Program
                 store, new(Capacity: 8), router.QueuePlayerDamage,
                 committedLifecycle: async result =>
                 {
-                    if (!result.Died) return;
-                    var stopped = await world.TrustedSetCombatDeadAsync(
-                        result.ActorId, result.ConnectionEpoch, result.MapEpoch, true)
-                        .ConfigureAwait(false);
-                    if (stopped is null)
+                    if (result.Died)
+                    {
+                        var stopped = await world.TrustedSetCombatDeadAsync(
+                            result.ActorId, result.ConnectionEpoch, result.MapEpoch, true)
+                            .ConfigureAwait(false);
+                        if (stopped is null)
+                            throw new PlayerCombatSettlementException(
+                                "combat fixture lethal commit did not stop World actor");
+                    }
+                    if (!router.TryPostPlayerDamageVisual(result))
                         throw new PlayerCombatSettlementException(
-                            "combat fixture lethal commit did not stop World actor");
+                            "combat fixture damage visual queue full");
                 });
             var pump = new WorldAoiPump(
                 router, monsters: coordinator, playerCombat: settlement);

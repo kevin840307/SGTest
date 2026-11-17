@@ -18,7 +18,7 @@ public enum AoiEventKind : byte
     WorldReady, Spawn, Delta, Despawn, SelfState,
     MonsterSpawn, MonsterDelta, MonsterDespawn,
     GroundDropSpawn, GroundDropDespawn,
-    PlayerAttackVisual
+    PlayerAttackVisual, PlayerDamageVisual, PlayerRespawnVisual
 }
 
 /// <summary>
@@ -30,13 +30,21 @@ public readonly record struct PlayerAttackVisual(
     long AttackerActorId,long AttackerConnectionEpoch,uint AttackSequence,
     long TargetEntityId,NormalAttackStatus Status,int Damage,
     long TargetRevision,byte Facing);
+public readonly record struct PlayerDamageVisual(
+    long VictimActorId,long VictimConnectionEpoch,uint DamageSequence,
+    long AttackerMonsterEntityId,long AttackerMonsterRevision,
+    int Damage,bool Died,byte Facing);
+public readonly record struct PlayerRespawnVisual(
+    long ActorId,long ConnectionEpoch,uint RespawnSequence,byte Facing);
 
 public readonly record struct AoiEvent(
     AoiEventKind Kind, long Tick, long ReceiverMapEpoch,
     ActorSnapshot? Entity = null, long EntityActorId = 0, long EntityConnectionEpoch = 0,
     MonsterSnapshot? Monster = null, long MonsterEntityId = 0, long MonsterRevision = 0,
     GroundDropRecord? GroundDrop = null, long GroundDropId = 0,
-    PlayerAttackVisual? PlayerAttack = null);
+    PlayerAttackVisual? PlayerAttack = null,
+    PlayerDamageVisual? PlayerDamage = null,
+    PlayerRespawnVisual? PlayerRespawn = null);
 
 public sealed class AoiBackpressureException : Exception
 {
@@ -270,6 +278,93 @@ public sealed class WorldAoi
             if(!seesAttacker) continue;
             Enqueue(observer,new(AoiEventKind.PlayerAttackVisual,_lastTick,
                 observer.Self.MapEpoch,PlayerAttack:visual));
+            queued++;
+        }
+        return queued;
+    }
+
+    /// <summary>
+    /// Publish one already-durable Monster→Player damage event to observers
+    /// that currently see the exact victim generation. HP/death authority stays
+    /// in PlayerCombatSettlement/SQLite; this event is presentation-only.
+    /// </summary>
+    public int EnqueuePlayerDamageVisual(PlayerDamageSettlement result)
+    {
+        if(_lastTick<=0 || result.ActorId<=0 || result.ConnectionEpoch<=0 ||
+            result.MapEpoch<=0 || result.DamageSequence==0 ||
+            result.ServerTick<0 || result.ServerTick>_lastTick ||
+            result.AttackerMonsterEntityId<=0 ||
+            result.AttackerMonsterRevision<=0 || result.Damage<=0 ||
+            result.MaxHp<=0 || result.CurrentHp<0 ||
+            result.CurrentHp>result.MaxHp ||
+            result.Died!=(result.CurrentHp==0))
+            throw new InvalidOperationException(
+                "Invalid authoritative player damage visual");
+
+        if(!_entities.TryGetValue(result.ActorId,out var victim) ||
+            victim.ConnectionEpoch!=result.ConnectionEpoch ||
+            victim.MapEpoch!=result.MapEpoch)
+            return 0;
+
+        var visual=new PlayerDamageVisual(
+            victim.ActorId,victim.ConnectionEpoch,result.DamageSequence,
+            result.AttackerMonsterEntityId,result.AttackerMonsterRevision,
+            result.Damage,result.Died,victim.Facing);
+        int queued=0;
+        foreach(var observer in _observers.Values)
+        {
+            if(observer.Self.MapId!=victim.MapId) continue;
+            bool seesVictim=
+                observer.Self.ActorId==victim.ActorId &&
+                observer.Self.ConnectionEpoch==victim.ConnectionEpoch &&
+                observer.Self.MapEpoch==victim.MapEpoch;
+            if(!seesVictim &&
+                observer.Visible.TryGetValue(victim.ActorId,out var seen))
+                seesVictim=seen.ConnectionEpoch==victim.ConnectionEpoch &&
+                    seen.MapEpoch==victim.MapEpoch;
+            if(!seesVictim) continue;
+            Enqueue(observer,new(AoiEventKind.PlayerDamageVisual,_lastTick,
+                observer.Self.MapEpoch,PlayerDamage:visual));
+            queued++;
+        }
+        return queued;
+    }
+
+    /// <summary>
+    /// Publish an authenticated durable respawn presentation event after the
+    /// World death gate was cleared. It carries no HP authority.
+    /// </summary>
+    public int EnqueuePlayerRespawnVisual(
+        ActorSnapshot actor,uint respawnSequence)
+    {
+        if(_lastTick<=0 || actor.ActorId<=0 || actor.ConnectionEpoch<=0 ||
+            actor.MapEpoch<=0 || actor.MapId<=0 || actor.EntityRevision<=0 ||
+            respawnSequence==0 || actor.Facing is <1 or >8)
+            throw new InvalidOperationException(
+                "Invalid authoritative player respawn visual");
+        if(!_entities.TryGetValue(actor.ActorId,out var current) ||
+            current.ConnectionEpoch!=actor.ConnectionEpoch ||
+            current.MapEpoch!=actor.MapEpoch ||
+            current.MapId!=actor.MapId)
+            return 0;
+
+        var visual=new PlayerRespawnVisual(
+            actor.ActorId,actor.ConnectionEpoch,respawnSequence,actor.Facing);
+        int queued=0;
+        foreach(var observer in _observers.Values)
+        {
+            if(observer.Self.MapId!=actor.MapId) continue;
+            bool seesActor=
+                observer.Self.ActorId==actor.ActorId &&
+                observer.Self.ConnectionEpoch==actor.ConnectionEpoch &&
+                observer.Self.MapEpoch==actor.MapEpoch;
+            if(!seesActor &&
+                observer.Visible.TryGetValue(actor.ActorId,out var seen))
+                seesActor=seen.ConnectionEpoch==actor.ConnectionEpoch &&
+                    seen.MapEpoch==actor.MapEpoch;
+            if(!seesActor) continue;
+            Enqueue(observer,new(AoiEventKind.PlayerRespawnVisual,_lastTick,
+                observer.Self.MapEpoch,PlayerRespawn:visual));
             queued++;
         }
         return queued;

@@ -215,6 +215,13 @@ public sealed class IdentityTlsAuthorization
                     throw new IOException(
                         "Reliable player respawn result could not be queued: " + sent);
 
+                if (outcome.Status == PlayerRespawnStatus.Accepted &&
+                    revived is { } visualActor &&
+                    !router.TryPostPlayerRespawnVisual(
+                        visualActor,request.RespawnSequence))
+                    throw new AoiBackpressureException(
+                        "Committed respawn visual queue full; event cannot be dropped");
+
                 // Queue the authoritative full-HP baseline BEFORE reopening AI
                 // targetability, so later PlayerDamage cannot overtake RespawnResult.
                 if (outcome.Status == PlayerRespawnStatus.Accepted &&
