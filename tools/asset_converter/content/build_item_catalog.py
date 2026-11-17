@@ -119,6 +119,8 @@ def compile_item_catalog(items_root: Path, *, source_reference: str,
                 raise ValueError("catalog exceeds bounded item count")
     entries.sort(key=lambda item: item["item_id"])
     if not entries:
+        if only_ids is not None:
+            raise ValueError("requested item ID has no source definition")
         raise ValueError("source contains no resolvable selected item definitions")
     if only_ids is not None and set(x["item_id"] for x in entries) != only_ids:
         raise ValueError("requested item ID has no source definition")
