@@ -79,7 +79,7 @@ internal static class GroundPickupWireChecks
             "stale socket pickup result escaped its connection generation");
         var hostile=new GatewayConnection(actor);
         Checks.Require(hostile.FeedClientBytes(
-            WireProtocol.EncodeGroundPickupResult(reply),_=>true,out _) ==
+            WireProtocol.EncodeGroundPickupResult(new(9,7,PickupStatus.Granted,501,7001,2701,2)),_=>true,out _) ==
             WireFeedStatus.ProtocolViolation,
             "client forged server-only inventory grant opcode");
     }
