@@ -9,6 +9,14 @@ class RespawnSession extends RefCounted:
 	var requests := 0
 	var attacks := 0
 	var pickups := 0
+	var uses := 0
+	var last_use_uid := 0
+	func use_recovery_item(item_uid: int) -> bool:
+		if item_uid <= 0:
+			return false
+		uses += 1
+		last_use_uid = item_uid
+		return true
 	func pickup_ground_drop(drop_id: int) -> bool:
 		if drop_id <= 0:
 			return false
@@ -222,7 +230,8 @@ func run() -> void:
 		fail("Durable inventory items not reflected in UI")
 		return
 	panel._latest = {"state":State.STATE_IN_WORLD,"world_ready":true,
-		"inventory_ready":true,"actor_id":22,"reconnect_count":2,
+		"inventory_ready":true,"combat_available":true,
+		"actor_id":22,"reconnect_count":2,
 		"inventory_revision":1,"inventory_items":{7002:{
 			"item_uid":7002,"item_definition_id":3701,
 			"quantity":3,"drop_id":502}}}
@@ -266,6 +275,32 @@ func run() -> void:
 	if not panel.inventory_preview.text.contains("測試素材原名") or panel.inventory_preview.text.contains("UID 10080") or not panel.inventory_page_label.text.contains("1 / 1"):
 		fail("Inventory search failed to filter on authoritative item definition")
 		return
+	if panel.recovery_picker.item_count != 1 or panel.recovery_button.disabled:
+		fail("Inventory recovery UID selector did not resolve visible page")
+		return
+	panel.recovery_button.pressed.emit()
+	if stub.uses != 1 or stub.last_use_uid != 10000 or not panel.recovery_button.disabled:
+		fail("Recovery UI did not send one chosen UID or left double-click enabled")
+		return
+	panel._latest.pending_recovery_sequence = 1
+	panel._update_inventory_ui()
+	if not panel.recovery_button.disabled:
+		fail("Pending authoritative recovery result allowed another click")
+		return
+	panel._latest.pending_recovery_sequence = 0
+	panel._latest.last_recovery_result = {
+		"status":0,"current_hp":90,"max_hp":100,"remaining_quantity":1}
+	panel._latest.inventory_revision = 3
+	panel._update_inventory_ui()
+	if not panel.recovery_status.text.contains("90 / 100"):
+		fail("Recovery status did not display authoritative committed HP")
+		return
+	panel._latest.player_dead = true
+	panel._update_inventory_ui()
+	if not panel.recovery_button.disabled or panel.submit_recovery_use(10000):
+		fail("Dead character could submit recovery use")
+		return
+	panel._latest.player_dead = false
 	panel._latest.inventory_ready = false
 	panel._update_inventory_ui()
 	if panel.inventory_preview.visible or not panel.inventory_button.disabled:
@@ -275,5 +310,5 @@ func run() -> void:
 	panel._set_respawn_controls()
 	app.queue_free()
 	await process_frame
-	print("CLIENT_TLS_LOGIN_PASS ui=PASS auth=PASS choose=PASS receipt=PASS world_ready=PASS password_cleared=PASS logout=PASS respawn_ui=PASS click_attack_ui=PASS click_pickup_ui=PASS persistent_inventory_ui=PASS item_metadata=PASS inventory_pagination=PASS")
+	print("CLIENT_TLS_LOGIN_PASS ui=PASS auth=PASS choose=PASS receipt=PASS world_ready=PASS password_cleared=PASS logout=PASS respawn_ui=PASS click_attack_ui=PASS click_pickup_ui=PASS persistent_inventory_ui=PASS item_metadata=PASS inventory_pagination=PASS recovery_item_button=PASS")
 	quit(0)

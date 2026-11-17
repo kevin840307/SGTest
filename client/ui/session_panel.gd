@@ -359,7 +359,7 @@ func _update_inventory_ui() -> void:
 		recovery_picker.set_item_metadata(recovery_picker.item_count-1,uid)
 	if recovery_picker.item_count > 0:
 		recovery_picker.select(0)
-	recovery_button.disabled = recovery_button.disabled or recovery_picker.item_count == 0
+	recovery_button.disabled = not bool(_latest.get("combat_available",false)) or bool(_latest.get("player_dead",false)) or bool(_latest.get("resync_pending",false)) or int(_latest.get("pending_recovery_sequence",0)) != 0 or recovery_picker.item_count == 0
 	if rows.is_empty():
 		rows.append("沒有符合條件的物品" if not query.is_empty() else "背包目前沒有物品")
 	inventory_preview.text = "\n".join(rows)
