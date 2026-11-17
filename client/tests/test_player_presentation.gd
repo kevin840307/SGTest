@@ -22,7 +22,7 @@ func run() -> void:
 		var clips := {"SOURCE":[0,1]}
 		for action in ["NS","NR","AA"]:
 			for facing in range(1,9):
-				var attack := action=="AA"
+				var attack: bool = str(action)=="AA"
 				views[str(part[1])+"_"+action+str(facing)] = {
 					"clip":"SOURCE","flip_h":facing>=5,
 					"timeline_ticks":[[0,4],[1,4]] if attack else [[0,8],[1,8]],
