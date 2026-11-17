@@ -289,11 +289,15 @@ SessionPanel emits its non-authoritative presentation snapshot after WorldReady;
 The session worker reads its own reducer state field for idle failure/choose checks rather than deep-copying the full entity snapshot every 2ms. Cross-thread publication and UI snapshots remain copies; no worker-owned WorldState reference is exposed to rendering. No measured CPU/P95 improvement is claimed by this local removal of redundant copies.
 
 
-## 2026-11-17 Online monster click-to-attack input (MVP006 partial)
+## 2026-11-17 Online monster click-to-attack and authoritative auto-approach (MVP006)
 
 在既有 `app/main.gd` 上線左鍵行為中，以 WorldCamera.screen_to_world 換算游標；`WorldView.pick_monster_at` 委派唯一 `MonsterPresentation.pick_living_at`，只從當前 AOI snapshot 中可見、HP>0 的怪物選離游標最近者，初始保守半徑 32 world pixels、同距 entity_id 穩定排序，不操作 World authority 或資源生命週期。點怪委派既有 `SessionPanel.submit_attack_monster`→`ClientSession.attack_monster`→V1 NormalAttack；未選到怪物才維持原本地板 Move。攻擊佇列滿時**不**退回走路；ClientSession 最終驗證死亡、WorldReady/ACK、MapEpoch 與 resync gate，Server 繼續唯一權威 range／Blocking／CD／damage/HP 管理。
 
-同一 MonsterPresentation headless fixture 驗證存活/死亡/復活與非法點選，TLS UI fixture 驗證入口與死亡／resync gate；[Client CI 44075415919](https://github.com/kevin840307/SGTest/actions/runs/44075415919) 全量 PASS。真正 Windows GUI 點怪精度、大型／trimmed Sprite hitbox、點到怪後有界 A* 接近／移動中攻擊與原版攻擊距離規則仍 NOT VERIFIED；Render FPS 不控制 Network/World Tick。
+現在點怪也具備有界 auto-approach，但**Client 不持有或猜測 AttackRange**。每次點擊先送正常 NormalAttack；只有 Server 回 `OutOfRange`，同一 ClientSession intent 才讀取最新 Monster AOI 座標並送既有 MoveTarget，路徑仍由 Server Blocking/A* 驗證。只有 MoveReceipt=Accepted 且本角色 SelfState 的 movement_action_sequence 已到該 command 並停止後才重試攻擊；若 Server 再回 OutOfRange，重新讀取怪物位置，最多4輪，防止無限追逐。玩家手動點地板或改點其他怪物會替換舊 navigation/combat intent；已經送出的可靠 Server receipt 仍照常由 reducer 消費，不被 UI cancellation 丟棄。
+
+真 TLS E2E 暴露過一個重要邊界：移動時 SelfState revision gap 可觸發既有 same-session AOI resync，replacement WorldReady 清掉舊 monster baseline 後，到新 MonsterSpawn 被 drain 前有極短空窗。ClientSession 因此只對正在追逐的 target-missing 給 500ms 有界 grace；baseline 回補後續追，超過時間或 HP=0/Dead 仍取消。headless fixture 也刻意製造 `WorldResyncRequest → replacement WorldReady → ACK → SelfState/MonsterSpawn` 順序，避免只在理想封包次序下通過。
+
+`e71d473b` 完成狀態機；`9ee57fde` 加入真 Godot→TLS→C# fixture；`fd6021de` 修正 resync baseline race；`626c0ebf` 修正測試 monster revision 單調性。Client core 44118680657 全量 PASS：實際以 SyntheticTest AttackRange=16 從 (8,8) 攻擊 (40,8) 怪物，第一次 Server 回 OutOfRange，正式 A* 到 (40,8)，SelfState stop 後第二次 Applied，且後續 normal combat、reconnect、雙 Client、Map15↔13、NPC、正式 Host+雙 main scene 全回歸。SyntheticTest range 只用於 Gate，**不代表原版武器距離已驗證**。Windows GUI hitbox、私人真 Map13／動態移動怪長時間體感與原版攻擊距離公式仍 NOT VERIFIED；Render FPS 不控制 Network/World Tick。
 
 
 ## 2026-11-17 Ground drop V1 AOI presentation
