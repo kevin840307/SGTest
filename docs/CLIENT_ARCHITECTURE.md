@@ -317,3 +317,9 @@ Godot `WireCodec.decode_inventory_snapshot` validates opcode36, max128 items/fra
 ### 2026-11-17 私有道具來源與背包分頁
 
 ui/item_catalog.gd 僅在 res://content/item_catalog.json 存在、kind/source_reference/item_count/每筆 item_id、name、category、icon_id、source_path、SHA256 全部完整合法時顯示來源衍生名稱；不能證明原版二進位 ITD 或物品效果。未核實的 item 一律保留道具 ID，來源未提供則不新增動作與不建立 Item Texture。SessionPanel 已支援80件每頁和來源名稱、ItemId、類別查詢；相同 ActorId/reconnect_count/inventory_revision/page/query 的 UI 輪詢跳過 Dictionary 全掃描。CI 44099300883 PASS，測試含 85 件列表分頁及真 TLS UI；Private Item 5003筆全量、原版圖示渲染與 Windows Release 仍 NOT VERIFIED。
+
+## 2026-11-17 Inventory recovery item use
+
+SessionPanel inventory page selects an exact ItemUid and submits an authenticated recovery-use intent through the one existing ClientSession TLS thread; raw input cannot supply HP or effect. WorldState requires a single pending uid/sequence/map epoch and only mutates inventory quantity and HP on matching Granted opcode38 reply. AlreadyGranted duplicate/replay never decrements again, empty quantity removes the UID, and maps/reconnects retain correct source-backed state. Dead characters, invalid baseline, pending actions and resync are gated. Synthetic V1 fixed binary golden and Godot real UI tests run in Client CI 44107865203 PASS. Server-only recovery rules must be verified by an operator; the optional client translated item_name metadata cannot grant usage permission.
+
+Original ITD item effects, potions cooldown, animations/icons, real Windows GUI and GPU performance are still NOT VERIFIED.
