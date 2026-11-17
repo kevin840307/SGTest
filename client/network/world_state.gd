@@ -621,8 +621,7 @@ func _apply_player_attack_visual(frame: PackedByteArray) -> bool:
 		return _need_resync("player_attack_visual_target_revision_gap")
 
 	if attacker == actor_id:
-		if self_state.is_empty() or
-			int(self_state.get("connection_epoch",0)) != connection:
+		if self_state.is_empty() or int(self_state.get("connection_epoch",0)) != connection:
 			return _need_resync("player_attack_visual_self_generation")
 	else:
 		if not entities.has(attacker):
@@ -643,8 +642,7 @@ func _apply_player_attack_visual(frame: PackedByteArray) -> bool:
 		"connection_epoch":connection,"sequence":sequence}
 	player_attack_events.append(value.duplicate(true))
 	var cutoff := maxi(int(value.server_tick),last_aoi_tick)-PLAYER_ATTACK_EVENT_TTL_TICKS
-	while not player_attack_events.is_empty() and
-		int(player_attack_events[0].get("server_tick",-1)) < cutoff:
+	while not player_attack_events.is_empty() and int(player_attack_events[0].get("server_tick",-1)) < cutoff:
 		player_attack_events.pop_front()
 	if player_attack_events.size() > PLAYER_ATTACK_EVENT_MAX:
 		return fail("player_attack_visual_backlog_overflow")
