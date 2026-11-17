@@ -86,8 +86,10 @@ func send_frame(frame: PackedByteArray) -> bool:
 					else:
 						_push(_attack_result(int(attack.attack_sequence),4,42,0,100,1))
 				else:
-					_push(_attack_result(int(attack.attack_sequence),0,47,30,70,2))
-					_push(_monster_state(WireCodec.OPCODE_MONSTER_DELTA,47,2,70,0))
+					var revision := 5 if _ready_ack_count > 1 else 2
+					var tick := 51 if _ready_ack_count > 1 else 47
+					_push(_attack_result(int(attack.attack_sequence),0,tick,30,70,revision))
+					_push(_monster_state(WireCodec.OPCODE_MONSTER_DELTA,tick,revision,70,0))
 		WireCodec.OPCODE_MOVE_TARGET:
 			var move := WireCodec.decode_move_target(frame)
 			if move.is_empty():
