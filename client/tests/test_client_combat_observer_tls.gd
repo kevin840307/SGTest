@@ -59,7 +59,14 @@ func _initialize() -> void:
 		_attack(session,self_id)
 
 func _observe(session, self_id: int) -> void:
-	var first: Dictionary = session.snapshot()
+	# The observer deliberately announces readiness before the actor process is
+	# started. Wait for that actor's authoritative AOI Spawn instead of indexing
+	# an empty entities array during the expected startup gap.
+	var first := _wait(session,func(v):
+		return v.entities.size()==1 and v.monsters.size()==1,7000)
+	if first.is_empty():
+		_fail("observer did not receive actor Spawn "+str(session.snapshot()),session)
+		return
 	var remote_id := int(first.entities.keys()[0])
 	var monster_id := int(first.monsters.keys()[0])
 	if remote_id==self_id:
