@@ -13,6 +13,8 @@ const DELTA := "4A0000000100170001000000000000002C000000000000001600000000000000
 const SELF := "4A0000000100180001000000000000002C000000000000000B00000000000000020000000000000001000000000000000F0000000800000000000000000060420000C041000500000006"
 const DESPAWN := "280000000100160001000000000000002D0000000000000016000000000000000200000000000000"
 const MAP13_READY := "2D00000001001400020000000000000032000000000000000B000000000000000D000000000020420000A04201"
+const READY_ACK := "180000000100190001000000000000002A00000000000000"
+const RESYNC := "1000000001001A000100000000000000"
 
 func _fail(message: String) -> void:
 	push_error("AOI_WIRE_FAIL " + message)
@@ -20,6 +22,13 @@ func _fail(message: String) -> void:
 
 func _initialize() -> void:
 	if not _verify_self():
+		return
+	var ack := WireCodec.encode_world_ready_ack(1,42)
+	var ack_value := WireCodec.decode_world_ready_ack(READY_ACK.hex_decode())
+	var resync := WireCodec.encode_world_resync_request(1)
+	var resync_value := WireCodec.decode_world_resync_request(RESYNC.hex_decode())
+	if ack.hex_encode().to_upper() != READY_ACK or int(ack_value.map_epoch) != 1 or int(ack_value.server_tick) != 42 or resync.hex_encode().to_upper() != RESYNC or int(resync_value.map_epoch) != 1:
+		_fail("WorldReady ACK/resync C# golden")
 		return
 	var ready := WireCodec.decode_world_ready(READY.hex_decode())
 	if ready.is_empty() or int(ready.actor_id) != 11 or int(ready.map_epoch) != 1 or float(ready.x) != 24.0:
@@ -80,6 +89,31 @@ func _initialize() -> void:
 	if not world.apply_frame(DESPAWN.hex_decode()) or int(world.snapshot().stale_aoi_events) != 1:
 		_fail("duplicate despawn not ignored")
 		return
+	if not world.apply_frame(DELTA.hex_decode()):
+		_fail("recoverable delta gap became terminal")
+		return
+	snapshot = world.snapshot()
+	if not bool(snapshot.resync_pending) or bool(snapshot.world_ready) or str(snapshot.resync_reason) != "delta_without_spawn":
+		_fail("delta gap did not enter resync %s" % snapshot)
+		return
+	if not world.mark_resync_request_sent(1) or int(world.snapshot().resync_requests) != 1:
+		_fail("resync request tracking")
+		return
+	if not world.apply_frame(SPAWN.hex_decode()) or not world.snapshot().entities.is_empty():
+		_fail("FIFO-old AOI was applied during resync")
+		return
+	var replacement_ready := READY.hex_decode()
+	replacement_ready.encode_s64(16,46)
+	if not world.apply_frame(replacement_ready):
+		_fail("same-map resync WorldReady rejected")
+		return
+	snapshot=world.snapshot()
+	if bool(snapshot.resync_pending) or not bool(snapshot.world_ready) or int(snapshot.resync_completions) != 1 or int(snapshot.pending_world_ready_ack_tick) != 46:
+		_fail("resync baseline did not complete %s" % snapshot)
+		return
+	if not world.mark_world_ready_ack_sent(1,46):
+		_fail("replacement Ready ACK tracking")
+		return
 	if not world.apply_frame(MAP13_READY.hex_decode()):
 		_fail("MapEpoch transfer WorldReady")
 		return
@@ -94,7 +128,7 @@ func _initialize() -> void:
 	if world.apply_frame(future) or int(world.snapshot().state) != WorldState.STATE_FAILED:
 		_fail("future map AOI did not fail closed")
 		return
-	print("AOI_WIRE_GODOT_PASS ready=45 spawn=74 delta=74 despawn=40 worldstate=PASS map_epoch=PASS stale=IGNORED future=FAIL_CLOSED")
+	print("AOI_WIRE_GODOT_PASS ready=45 ack=24 resync=16 spawn=74 delta=74 despawn=40 worldstate=PASS same_epoch_resync=PASS map_epoch=PASS stale=IGNORED future=FAIL_CLOSED")
 	quit(0)
 
 func _mutate_u8(bytes: PackedByteArray, offset: int, value: int) -> PackedByteArray:

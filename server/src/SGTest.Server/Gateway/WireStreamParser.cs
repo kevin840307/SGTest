@@ -6,6 +6,7 @@ namespace SGTest.Server.Gateway;
 public enum WireFrameDisposition
 {
     Accepted,
+    AcceptedControl,
     Backpressured,
     ProtocolViolation
 }
@@ -96,6 +97,9 @@ public sealed class WireStreamParser
                 case WireFrameDisposition.Accepted:
                     Consume(advertised);
                     acceptedFrames++;
+                    break;
+                case WireFrameDisposition.AcceptedControl:
+                    Consume(advertised);
                     break;
                 default:
                     throw new InvalidOperationException("Unknown frame disposition");

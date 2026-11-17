@@ -122,7 +122,7 @@ public sealed class IdentityTlsAuthorization
                 };
             return await TlsWireConnection.RunServerAsync(client, certificate,
                 Authorize, _world.TryPostMove, options, cancellationToken, Release,
-                npcHandler).ConfigureAwait(false);
+                npcHandler, router.TryRequestResync).ConfigureAwait(false);
         }
         finally
         {

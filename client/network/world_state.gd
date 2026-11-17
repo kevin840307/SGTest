@@ -39,6 +39,15 @@ var entities := {}
 var self_state := {}
 var last_aoi_tick := -1
 var stale_aoi_events := 0
+var pending_world_ready_ack_epoch := 0
+var pending_world_ready_ack_tick := -1
+var last_world_ready_ack_epoch := 0
+var last_world_ready_ack_tick := -1
+var resync_pending := false
+var resync_request_sent := false
+var resync_reason := ""
+var resync_requests := 0
+var resync_completions := 0
 
 func mark_auth_sent() -> bool:
 	if state != STATE_NEW:
@@ -56,13 +65,29 @@ func mark_choose_sent(character_id: int) -> bool:
 	return true
 
 func mark_move_sent(sequence: int) -> bool:
-	if state != STATE_IN_WORLD or waiting_for_new_map or sequence <= movement_sequence or sequence > 0xffffffff:
+	if state != STATE_IN_WORLD or not world_ready or resync_pending or waiting_for_new_map or pending_world_ready_ack_epoch != 0 or last_world_ready_ack_epoch != map_epoch or sequence <= movement_sequence or sequence > 0xffffffff:
 		return false
 	movement_sequence = sequence
 	return true
 
+func mark_world_ready_ack_sent(epoch: int, tick: int) -> bool:
+	if state != STATE_IN_WORLD or epoch != pending_world_ready_ack_epoch or tick != pending_world_ready_ack_tick:
+		return false
+	last_world_ready_ack_epoch = epoch
+	last_world_ready_ack_tick = tick
+	pending_world_ready_ack_epoch = 0
+	pending_world_ready_ack_tick = -1
+	return true
+
+func mark_resync_request_sent(epoch: int) -> bool:
+	if state != STATE_IN_WORLD or not resync_pending or resync_request_sent or epoch != map_epoch:
+		return false
+	resync_request_sent = true
+	resync_requests += 1
+	return true
+
 func mark_npc_interact_sent(sequence: int) -> bool:
-	if state != STATE_IN_WORLD or not world_ready or waiting_for_new_map or pending_npc_sequence != 0 or sequence <= npc_interaction_sequence or sequence > 0xffffffff:
+	if state != STATE_IN_WORLD or not world_ready or resync_pending or waiting_for_new_map or pending_world_ready_ack_epoch != 0 or last_world_ready_ack_epoch != map_epoch or pending_npc_sequence != 0 or sequence <= npc_interaction_sequence or sequence > 0xffffffff:
 		return false
 	npc_interaction_sequence = sequence
 	pending_npc_sequence = sequence
@@ -130,6 +155,15 @@ func snapshot() -> Dictionary:
 		"self_state": self_state.duplicate(true),
 		"last_aoi_tick": last_aoi_tick,
 		"stale_aoi_events": stale_aoi_events,
+		"pending_world_ready_ack_epoch": pending_world_ready_ack_epoch,
+		"pending_world_ready_ack_tick": pending_world_ready_ack_tick,
+		"last_world_ready_ack_epoch": last_world_ready_ack_epoch,
+		"last_world_ready_ack_tick": last_world_ready_ack_tick,
+		"resync_pending": resync_pending,
+		"resync_request_sent": resync_request_sent,
+		"resync_reason": resync_reason,
+		"resync_requests": resync_requests,
+		"resync_completions": resync_completions,
 	}
 
 func _apply_auth(frame: PackedByteArray) -> bool:
@@ -190,6 +224,15 @@ func _apply_choose(frame: PackedByteArray) -> bool:
 	entities.clear()
 	last_aoi_tick = -1
 	stale_aoi_events = 0
+	pending_world_ready_ack_epoch = 0
+	pending_world_ready_ack_tick = -1
+	last_world_ready_ack_epoch = 0
+	last_world_ready_ack_tick = -1
+	resync_pending = false
+	resync_request_sent = false
+	resync_reason = ""
+	resync_requests = 0
+	resync_completions = 0
 	state = STATE_IN_WORLD
 	return true
 
@@ -268,9 +311,13 @@ func _apply_world_ready(frame: PackedByteArray) -> bool:
 		return true
 	if next_epoch == map_epoch and int(ready.map_id) != map_id:
 		return fail("world_ready_changed_map_without_epoch")
-	if world_ready and next_epoch == map_epoch:
+	var completing_resync := resync_pending and next_epoch == map_epoch
+	if world_ready and next_epoch == map_epoch and not completing_resync:
 		stale_aoi_events += 1
-		return true # No same-epoch resync contract; never rewind accepted self state.
+		return true
+	if completing_resync and tick < last_aoi_tick:
+		stale_aoi_events += 1
+		return true
 	if next_epoch > map_epoch:
 		map_epoch = next_epoch
 		map_id = int(ready.map_id)
@@ -280,6 +327,15 @@ func _apply_world_ready(frame: PackedByteArray) -> bool:
 		last_receipt_sequence = 0
 		last_receipt_status = -1
 		last_server_tick = -1
+		last_world_ready_ack_epoch = 0
+		last_world_ready_ack_tick = -1
+	if completing_resync:
+		resync_completions += 1
+		last_world_ready_ack_epoch = 0
+		last_world_ready_ack_tick = -1
+	resync_pending = false
+	resync_request_sent = false
+	resync_reason = ""
 	self_state.clear()
 	x = float(ready.x)
 	y = float(ready.y)
@@ -287,9 +343,14 @@ func _apply_world_ready(frame: PackedByteArray) -> bool:
 	world_ready = true
 	entities.clear()
 	last_aoi_tick = tick
+	pending_world_ready_ack_epoch = map_epoch
+	pending_world_ready_ack_tick = tick
 	return true
 
 func _check_aoi_generation(receiver_epoch: int, tick: int) -> int:
+	if resync_pending:
+		stale_aoi_events += 1
+		return 0
 	if not world_ready or state != STATE_IN_WORLD:
 		fail("aoi_before_world_ready")
 		return -1
@@ -315,20 +376,22 @@ func _apply_entity_state(frame: PackedByteArray, opcode: int) -> bool:
 	if opcode == WireCodec.OPCODE_ENTITY_SPAWN:
 		if not previous.is_empty():
 			if int(previous.connection_epoch) != int(value.connection_epoch) or int(previous.entity_map_epoch) != int(value.entity_map_epoch):
-				return fail("entity_spawn_without_despawn")
+				return _need_resync("entity_spawn_generation_conflict")
 			if int(value.revision) > int(previous.revision):
-				return fail("new_spawn_without_despawn")
+				return _need_resync("entity_spawn_without_despawn")
 			stale_aoi_events += 1
 			return true
 		entities[id] = value
 	else:
 		if previous.is_empty():
-			return fail("delta_without_spawn")
+			return _need_resync("delta_without_spawn")
 		if int(previous.connection_epoch) != int(value.connection_epoch) or int(previous.entity_map_epoch) != int(value.entity_map_epoch):
-			return fail("delta_wrong_entity_generation")
+			return _need_resync("delta_wrong_entity_generation")
 		if int(value.revision) <= int(previous.revision):
 			stale_aoi_events += 1
 			return true
+		if int(value.revision) > int(previous.revision) + 1:
+			return _need_resync("entity_revision_gap")
 		entities[id] = value
 	last_aoi_tick = maxi(last_aoi_tick, int(value.server_tick))
 	return true
@@ -346,7 +409,7 @@ func _apply_entity_despawn(frame: PackedByteArray) -> bool:
 		stale_aoi_events += 1
 		return true
 	if int(value.connection_epoch) != int(previous.connection_epoch):
-		return fail("despawn_wrong_entity_generation")
+		return _need_resync("despawn_wrong_entity_generation")
 	entities.erase(id)
 	last_aoi_tick = maxi(last_aoi_tick, int(value.server_tick))
 	return true
@@ -364,15 +427,31 @@ func _apply_self_state(frame: PackedByteArray) -> bool:
 	# authenticated own Actor/MapEpoch. Later updates cannot replace it.
 	if not self_state.is_empty():
 		if int(value.connection_epoch) != int(self_state.connection_epoch):
-			return fail("self_state_wrong_connection")
+			return _need_resync("self_state_wrong_connection")
 		if int(value.revision) <= int(self_state.revision):
 			stale_aoi_events += 1
 			return true
+		if int(value.revision) > int(self_state.revision) + 1:
+			return _need_resync("self_state_revision_gap")
 		if int(value.movement_action_sequence) < int(self_state.movement_action_sequence):
-			return fail("self_state_action_regressed")
+			return _need_resync("self_state_action_regressed")
 	self_state = value
 	x = float(value.x)
 	y = float(value.y)
 	facing = int(value.facing)
 	last_aoi_tick = maxi(last_aoi_tick, int(value.server_tick))
+	return true
+
+func _need_resync(reason: String) -> bool:
+	if state != STATE_IN_WORLD or map_epoch <= 0:
+		return fail(reason)
+	if not resync_pending:
+		resync_pending = true
+		resync_request_sent = false
+		resync_reason = reason
+		world_ready = false
+		pending_world_ready_ack_epoch = 0
+		pending_world_ready_ack_tick = -1
+		last_world_ready_ack_epoch = 0
+		last_world_ready_ack_tick = -1
 	return true

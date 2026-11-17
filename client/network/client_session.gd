@@ -116,13 +116,32 @@ func _logic_loop(username: String, password: String) -> void:
 				_transport.stop()
 				return
 			_publish()
+			_flush_control_frames()
 
+		_flush_control_frames()
 		_process_first_intent()
 		if int(_world.state) == WorldState.STATE_FAILED:
 			_transport.stop()
 			break
 		OS.delay_msec(LOGIC_SLEEP_MS)
 	_publish()
+
+func _flush_control_frames() -> void:
+	var current: Dictionary = _world.snapshot()
+	var ack_epoch := int(current.pending_world_ready_ack_epoch)
+	var ack_tick := int(current.pending_world_ready_ack_tick)
+	if ack_epoch > 0 and ack_tick >= 0:
+		var ack := WireCodec.encode_world_ready_ack(ack_epoch,ack_tick)
+		if not ack.is_empty() and _transport.send_frame(ack):
+			_world.mark_world_ready_ack_sent(ack_epoch,ack_tick)
+			_publish()
+			current = _world.snapshot()
+	if bool(current.resync_pending) and not bool(current.resync_request_sent):
+		var epoch := int(current.map_epoch)
+		var request := WireCodec.encode_world_resync_request(epoch)
+		if not request.is_empty() and _transport.send_frame(request):
+			_world.mark_resync_request_sent(epoch)
+			_publish()
 
 func _process_first_intent() -> void:
 	var intent := _peek_intent()
@@ -139,7 +158,7 @@ func _process_first_intent() -> void:
 			_publish()
 	elif kind == "npc":
 		var current: Dictionary = _world.snapshot()
-		if int(current.state) != WorldState.STATE_IN_WORLD or not bool(current.world_ready) or bool(current.waiting_for_new_map) or int(current.pending_npc_sequence) != 0:
+		if int(current.state) != WorldState.STATE_IN_WORLD or not bool(current.world_ready) or bool(current.resync_pending) or int(current.pending_world_ready_ack_epoch) != 0 or int(current.last_world_ready_ack_epoch) != int(current.map_epoch) or bool(current.waiting_for_new_map) or int(current.pending_npc_sequence) != 0:
 			return
 		var sequence := int(current.npc_interaction_sequence) + 1
 		var frame := WireCodec.encode_npc_interact(int(current.map_epoch), sequence, int(intent.spawn_id))
@@ -148,7 +167,7 @@ func _process_first_intent() -> void:
 			_publish()
 	elif kind == "move":
 		var current: Dictionary = _world.snapshot()
-		if int(current.state) != WorldState.STATE_IN_WORLD or bool(current.waiting_for_new_map):
+		if int(current.state) != WorldState.STATE_IN_WORLD or not bool(current.world_ready) or bool(current.resync_pending) or int(current.pending_world_ready_ack_epoch) != 0 or int(current.last_world_ready_ack_epoch) != int(current.map_epoch) or bool(current.waiting_for_new_map):
 			return
 		var sequence := int(current.movement_sequence) + 1
 		var frame := WireCodec.encode_move_target(int(current.map_epoch), sequence, int(intent.x), int(intent.y))

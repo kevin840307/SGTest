@@ -115,6 +115,24 @@ public sealed class WorldAoi
         return true;
     }
 
+    public bool TryResync(TrustedWorldResyncRequest request)
+    {
+        if (!_observers.TryGetValue(request.ActorId, out var observer) ||
+            !_entities.TryGetValue(request.ActorId, out var current) ||
+            observer.Self.ConnectionEpoch != request.ConnectionEpoch ||
+            observer.Self.MapEpoch != request.MapEpoch ||
+            current.ConnectionEpoch != request.ConnectionEpoch ||
+            current.MapEpoch != request.MapEpoch)
+            return false;
+        observer.Pending.Clear();
+        observer.Visible.Clear();
+        observer.Self = current;
+        Enqueue(observer, new(AoiEventKind.WorldReady, _lastTick, current.MapEpoch, current));
+        Enqueue(observer, new(AoiEventKind.SelfState, _lastTick, current.MapEpoch, current));
+        RefreshObserver(observer, _lastTick);
+        return true;
+    }
+
     public void Apply(WorldChangedBatch batch)
     {
         ArgumentNullException.ThrowIfNull(batch);

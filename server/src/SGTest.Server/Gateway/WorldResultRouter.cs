@@ -5,7 +5,8 @@ namespace SGTest.Server.Gateway;
 
 public sealed record WorldResultRouterOptions(
     int ChangedBatchCapacity = 128,
-    int MaxSessions = 10000);
+    int MaxSessions = 10000,
+    int ResyncRequestCapacity = 256);
 
 /// <summary>
 /// Raw authoritative changed actors, NOT yet filtered by AOI.
@@ -40,6 +41,7 @@ public sealed class WorldResultRouter
     private readonly object _gate = new();
     private readonly Dictionary<long, GatewayConnection> _connections = new();
     private readonly Channel<WorldChangedBatch> _changed;
+    private readonly Channel<TrustedWorldResyncRequest> _resync;
     private readonly WorldResultRouterOptions _options;
     private long _queued, _stale, _changedQueued, _backpressure;
     private int _running;
@@ -48,7 +50,8 @@ public sealed class WorldResultRouter
     {
         _options = options ?? new WorldResultRouterOptions();
         if (_options.ChangedBatchCapacity is < 1 or > 65536 ||
-            _options.MaxSessions is < 1 or > 100000)
+            _options.MaxSessions is < 1 or > 100000 ||
+            _options.ResyncRequestCapacity is < 1 or > 65536)
             throw new ArgumentOutOfRangeException(nameof(options));
         _changed = Channel.CreateBounded<WorldChangedBatch>(
             new BoundedChannelOptions(_options.ChangedBatchCapacity)
@@ -58,9 +61,18 @@ public sealed class WorldResultRouter
                 FullMode = BoundedChannelFullMode.Wait,
                 AllowSynchronousContinuations = false
             });
+        _resync = Channel.CreateBounded<TrustedWorldResyncRequest>(
+            new BoundedChannelOptions(_options.ResyncRequestCapacity)
+            {
+                SingleReader = true,
+                SingleWriter = false,
+                FullMode = BoundedChannelFullMode.Wait,
+                AllowSynchronousContinuations = false
+            });
     }
 
     public ChannelReader<WorldChangedBatch> ChangedBatches => _changed.Reader;
+    public ChannelReader<TrustedWorldResyncRequest> ResyncRequests => _resync.Reader;
 
     public WorldResultRouterStatistics Statistics
     {
@@ -235,6 +247,21 @@ public sealed class WorldResultRouter
         }
     }
 
+    public bool TryRequestResync(TrustedWorldResyncRequest request)
+    {
+        if (request.ActorId <= 0 || request.ConnectionEpoch <= 0 || request.MapEpoch <= 0)
+            return false;
+        lock (_gate)
+        {
+            if (!_connections.TryGetValue(request.ActorId, out var connection) ||
+                connection.IsClosed ||
+                connection.Binding != new ConnectionBinding(
+                    request.ActorId, request.ConnectionEpoch, request.MapEpoch))
+                return false;
+        }
+        return _resync.Writer.TryWrite(request);
+    }
+
     /// <summary>
     /// Synchronous bounded fanout, called by exactly one result-consumer.
     /// Changed batches are retained first: overflow fails before any receipt
@@ -321,6 +348,7 @@ public sealed class WorldResultRouter
         finally
         {
             _changed.Writer.TryComplete(fault);
+            _resync.Writer.TryComplete(fault);
         }
     }
 

@@ -47,6 +47,8 @@ public sealed class WorldAoiPump
                     _aoi.Apply(batch);
                     Interlocked.Increment(ref _processedBatches);
                 }
+                while (_router.ResyncRequests.TryRead(out var request))
+                    _aoi.TryResync(request);
 
                 foreach (var receiver in _router.SnapshotActiveBindings())
                 {

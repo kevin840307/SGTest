@@ -19,7 +19,9 @@ public enum WireOpcode : ushort
     EntitySpawn = 21,
     EntityDespawn = 22,
     EntityDelta = 23,
-    SelfState = 24
+    SelfState = 24,
+    WorldReadyAck = 25,
+    WorldResyncRequest = 26
 }
 
 public enum AuthWireStatus : byte { Success = 0, InvalidCredentials = 1, Disabled = 2 }
@@ -49,6 +51,8 @@ public readonly record struct EntityStateWire(
     long Revision, float X, float Y, bool IsMoving, uint MovementActionSequence, byte Facing = 1);
 public readonly record struct EntityDespawnWire(
     long ReceiverMapEpoch, long ServerTick, long ActorId, long ConnectionEpoch);
+public readonly record struct WorldReadyAckWire(long MapEpoch, long ServerTick);
+public readonly record struct WorldResyncRequestWire(long MapEpoch);
 
 /// <summary>
 /// Version 1 complete-frame codec. Transport/TLS/socket buffering is separate.
@@ -77,6 +81,8 @@ public static class WireProtocol
     public const int WorldReadyFrameBytes = 45;
     public const int EntityStateFrameBytes = 74;
     public const int EntityDespawnFrameBytes = 40;
+    public const int WorldReadyAckFrameBytes = HeaderBytes + 16;
+    public const int WorldResyncRequestFrameBytes = HeaderBytes + 8;
     private static readonly UTF8Encoding StrictUtf8 = new(false, true);
 
     public static byte[] EncodeMoveTarget(MoveTargetWire value)
@@ -349,6 +355,44 @@ public static class WireProtocol
         value = new(status, id, map, x, y, epoch); return true;
     }
 
+    public static byte[] EncodeWorldReadyAck(WorldReadyAckWire value)
+    {
+        if (value.MapEpoch <= 0 || value.ServerTick < 0)
+            throw new ArgumentOutOfRangeException(nameof(value));
+        var frame = NewFrame(WireOpcode.WorldReadyAck, WorldReadyAckFrameBytes);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(8, 8), value.MapEpoch);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(16, 8), value.ServerTick);
+        return frame;
+    }
+
+    public static bool TryDecodeWorldReadyAck(ReadOnlySpan<byte> frame, out WorldReadyAckWire value)
+    {
+        value = default;
+        if (!TryReadHeader(frame, out var h) || h.Opcode != WireOpcode.WorldReadyAck)
+            return false;
+        value = new(BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(8, 8)),
+                    BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(16, 8)));
+        return value.MapEpoch > 0 && value.ServerTick >= 0;
+    }
+
+    public static byte[] EncodeWorldResyncRequest(WorldResyncRequestWire value)
+    {
+        if (value.MapEpoch <= 0)
+            throw new ArgumentOutOfRangeException(nameof(value));
+        var frame = NewFrame(WireOpcode.WorldResyncRequest, WorldResyncRequestFrameBytes);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(8, 8), value.MapEpoch);
+        return frame;
+    }
+
+    public static bool TryDecodeWorldResyncRequest(ReadOnlySpan<byte> frame, out WorldResyncRequestWire value)
+    {
+        value = default;
+        if (!TryReadHeader(frame, out var h) || h.Opcode != WireOpcode.WorldResyncRequest)
+            return false;
+        value = new(BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(8, 8)));
+        return value.MapEpoch > 0;
+    }
+
     public static byte[] EncodeWorldReady(WorldReadyWire value)
     {
         if (!ValidMapState(value.ReceiverMapEpoch, value.ServerTick, value.ActorId,
@@ -482,7 +526,9 @@ public static class WireProtocol
             12 => WireOpcode.CharacterList, 13 => WireOpcode.CharacterChoose,
             14 => WireOpcode.CharacterChooseResult,
             20 => WireOpcode.WorldReady, 21 => WireOpcode.EntitySpawn,
-            22 => WireOpcode.EntityDespawn, 23 => WireOpcode.EntityDelta, 24 => WireOpcode.SelfState, _ => 0
+            22 => WireOpcode.EntityDespawn, 23 => WireOpcode.EntityDelta,
+            24 => WireOpcode.SelfState, 25 => WireOpcode.WorldReadyAck,
+            26 => WireOpcode.WorldResyncRequest, _ => 0
         };
         if (opcode == 0) return false;
         bool sizeOk = opcode switch
@@ -499,6 +545,8 @@ public static class WireProtocol
             WireOpcode.WorldReady => advertised == WorldReadyFrameBytes,
             WireOpcode.EntitySpawn or WireOpcode.EntityDelta or WireOpcode.SelfState => advertised == EntityStateFrameBytes,
             WireOpcode.EntityDespawn => advertised == EntityDespawnFrameBytes,
+            WireOpcode.WorldReadyAck => advertised == WorldReadyAckFrameBytes,
+            WireOpcode.WorldResyncRequest => advertised == WorldResyncRequestFrameBytes,
             _ => false
         };
         if (!sizeOk) return false;

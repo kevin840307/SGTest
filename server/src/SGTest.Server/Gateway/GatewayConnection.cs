@@ -26,6 +26,9 @@ public readonly record struct TrustedNpcInteraction(
     long ActorId, long ConnectionEpoch, long RequestMapEpoch,
     uint InteractionSequence, int NpcSpawnId);
 
+public readonly record struct TrustedWorldResyncRequest(
+    long ActorId, long ConnectionEpoch, long MapEpoch);
+
 public enum GatewaySendStatus
 {
     Enqueued,
@@ -117,6 +120,11 @@ public sealed class GatewayConnection
     private readonly ReliableFrameQueue _reliable;
     private ConnectionBinding _binding;
     private bool _closed;
+    private long _worldReadySentMapEpoch;
+    private long _worldReadySentTick = -1;
+    private long _worldReadyAckedMapEpoch;
+    private long _worldReadyAckedTick = -1;
+    private bool _resyncPending;
 
     public GatewayConnection(ActorSnapshot trustedActor,
                              GatewayConnectionOptions? options = null)
@@ -147,6 +155,17 @@ public sealed class GatewayConnection
     public int BufferedInputBytes => _parser.BufferedBytes;
     public int ReliableFrames => _reliable.Count;
     public int ReliableBytes => _reliable.Bytes;
+    public bool WorldReadyAcknowledged
+    {
+        get
+        {
+            lock (_bindingGate)
+                return !_resyncPending &&
+                    _worldReadySentMapEpoch == _binding.MapEpoch &&
+                    _worldReadyAckedMapEpoch == _binding.MapEpoch &&
+                    _worldReadyAckedTick == _worldReadySentTick;
+        }
+    }
 
     /// <summary>
     /// Same physical/authenticated connection may advance MapEpoch after a trusted
@@ -165,6 +184,14 @@ public sealed class GatewayConnection
                 next.ConnectionEpoch != _binding.ConnectionEpoch ||
                 next.MapEpoch < _binding.MapEpoch)
                 return false;
+            if (next.MapEpoch > _binding.MapEpoch)
+            {
+                _worldReadySentMapEpoch = 0;
+                _worldReadySentTick = -1;
+                _worldReadyAckedMapEpoch = 0;
+                _worldReadyAckedTick = -1;
+                _resyncPending = false;
+            }
             _binding = next;
             return true;
         }
@@ -178,7 +205,8 @@ public sealed class GatewayConnection
     public WireFeedStatus FeedClientBytes(ReadOnlySpan<byte> bytes,
                                           Func<MoveTargetCommand, bool> postMove,
                                           out int commandsAccepted,
-                                          Func<TrustedNpcInteraction, bool>? postNpc = null)
+                                          Func<TrustedNpcInteraction, bool>? postNpc = null,
+                                          Func<TrustedWorldResyncRequest, bool>? postResync = null)
     {
         ArgumentNullException.ThrowIfNull(postMove);
         lock (_receiveGate)
@@ -188,14 +216,16 @@ public sealed class GatewayConnection
                 commandsAccepted = 0;
                 return WireFeedStatus.Closed;
             }
-            return _parser.Feed(bytes, frame => HandleClientFrame(frame, postMove, postNpc),
+            return _parser.Feed(bytes,
+                frame => HandleClientFrame(frame, postMove, postNpc, postResync),
                 out commandsAccepted);
         }
     }
 
     public WireFeedStatus ResumeClientIngress(Func<MoveTargetCommand, bool> postMove,
                                               out int commandsAccepted,
-                                              Func<TrustedNpcInteraction, bool>? postNpc = null)
+                                              Func<TrustedNpcInteraction, bool>? postNpc = null,
+                                              Func<TrustedWorldResyncRequest, bool>? postResync = null)
     {
         ArgumentNullException.ThrowIfNull(postMove);
         lock (_receiveGate)
@@ -205,7 +235,8 @@ public sealed class GatewayConnection
                 commandsAccepted = 0;
                 return WireFeedStatus.Closed;
             }
-            return _parser.Resume(frame => HandleClientFrame(frame, postMove, postNpc),
+            return _parser.Resume(
+                frame => HandleClientFrame(frame, postMove, postNpc, postResync),
                 out commandsAccepted);
         }
     }
@@ -213,15 +244,46 @@ public sealed class GatewayConnection
     private WireFrameDisposition HandleClientFrame(
         ReadOnlySpan<byte> frame,
         Func<MoveTargetCommand, bool> postMove,
-        Func<TrustedNpcInteraction, bool>? postNpc)
+        Func<TrustedNpcInteraction, bool>? postNpc,
+        Func<TrustedWorldResyncRequest, bool>? postResync)
     {
         if (!WireProtocol.TryReadHeader(frame, out var header))
             return WireFrameDisposition.ProtocolViolation;
 
-        var bound = Binding; // actor & connection are immutable client-trust boundary
+        var bound = Binding;
+        if (header.Opcode == WireOpcode.WorldReadyAck &&
+            WireProtocol.TryDecodeWorldReadyAck(frame, out var ack))
+            return TryAcknowledgeWorldReady(bound, ack)
+                ? WireFrameDisposition.AcceptedControl
+                : WireFrameDisposition.ProtocolViolation;
+
+        if (header.Opcode == WireOpcode.WorldResyncRequest &&
+            WireProtocol.TryDecodeWorldResyncRequest(frame, out var resync) &&
+            postResync is not null)
+        {
+            if (!CanRequestResync(bound, resync))
+                return WireFrameDisposition.ProtocolViolation;
+            var request = new TrustedWorldResyncRequest(
+                bound.ActorId, bound.ConnectionEpoch, resync.MapEpoch);
+            if (!postResync(request))
+                return WireFrameDisposition.Backpressured;
+            lock (_bindingGate)
+            {
+                if (!_closed && _binding == bound)
+                {
+                    _resyncPending = true;
+                    _worldReadyAckedMapEpoch = 0;
+                    _worldReadyAckedTick = -1;
+                }
+            }
+            return WireFrameDisposition.AcceptedControl;
+        }
+
         if (header.Opcode == WireOpcode.MoveTarget &&
             WireProtocol.TryDecodeMoveTarget(frame, out var move))
         {
+            if (!GameplayReady(bound))
+                return WireFrameDisposition.ProtocolViolation;
             var command = new MoveTargetCommand(
                 bound.ActorId, bound.ConnectionEpoch, move.MapEpoch,
                 move.MovementSequence, move.TargetX, move.TargetY);
@@ -231,6 +293,8 @@ public sealed class GatewayConnection
         if (header.Opcode == WireOpcode.NpcInteract && postNpc is not null &&
             WireProtocol.TryDecodeNpcInteract(frame, out var npc))
         {
+            if (!GameplayReady(bound))
+                return WireFrameDisposition.ProtocolViolation;
             var request = new TrustedNpcInteraction(
                 bound.ActorId, bound.ConnectionEpoch, npc.MapEpoch,
                 npc.InteractionSequence, npc.NpcSpawnId);
@@ -238,6 +302,42 @@ public sealed class GatewayConnection
                 ? WireFrameDisposition.Accepted : WireFrameDisposition.Backpressured;
         }
         return WireFrameDisposition.ProtocolViolation;
+    }
+
+    private bool GameplayReady(ConnectionBinding expected)
+    {
+        lock (_bindingGate)
+        {
+            if (_closed || _binding != expected || _resyncPending) return false;
+            if (_worldReadySentMapEpoch != expected.MapEpoch) return true;
+            return _worldReadyAckedMapEpoch == expected.MapEpoch &&
+                   _worldReadyAckedTick == _worldReadySentTick;
+        }
+    }
+
+    private bool TryAcknowledgeWorldReady(ConnectionBinding expected, WorldReadyAckWire ack)
+    {
+        lock (_bindingGate)
+        {
+            if (_closed || _binding != expected || _resyncPending ||
+                ack.MapEpoch != expected.MapEpoch ||
+                _worldReadySentMapEpoch != expected.MapEpoch ||
+                ack.ServerTick != _worldReadySentTick)
+                return false;
+            _worldReadyAckedMapEpoch = ack.MapEpoch;
+            _worldReadyAckedTick = ack.ServerTick;
+            return true;
+        }
+    }
+
+    private bool CanRequestResync(ConnectionBinding expected, WorldResyncRequestWire request)
+    {
+        lock (_bindingGate)
+            return !_closed && _binding == expected && !_resyncPending &&
+                   request.MapEpoch == expected.MapEpoch &&
+                   _worldReadySentMapEpoch == expected.MapEpoch &&
+                   _worldReadyAckedMapEpoch == expected.MapEpoch &&
+                   _worldReadyAckedTick == _worldReadySentTick;
     }
 
     /// <summary>
@@ -366,9 +466,17 @@ public sealed class GatewayConnection
                 default:
                     return GatewaySendStatus.GenerationMismatch;
             }
-            return _reliable.TryEnqueue(frame)
-                ? GatewaySendStatus.Enqueued
-                : GatewaySendStatus.Backpressured;
+            if (!_reliable.TryEnqueue(frame))
+                return GatewaySendStatus.Backpressured;
+            if (evt.Kind == AoiEventKind.WorldReady)
+            {
+                _worldReadySentMapEpoch = bound.MapEpoch;
+                _worldReadySentTick = evt.Tick;
+                _worldReadyAckedMapEpoch = 0;
+                _worldReadyAckedTick = -1;
+                _resyncPending = false;
+            }
+            return GatewaySendStatus.Enqueued;
         }
     }
 

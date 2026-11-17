@@ -14,6 +14,8 @@ internal static class WorldAoiPumpChecks
             () => ReliableBackpressure().GetAwaiter().GetResult());
         Checks.Run("trusted two-map transfer preserves Gateway identity and rebuilds AOI both directions",
             () => TrustedTwoMapTransfer(root).GetAwaiter().GetResult());
+        Checks.Run("bounded same-map resync request is rebuilt by the sole AOI pump",
+            () => LiveResync(root).GetAwaiter().GetResult());
     }
 
     private static async Task LiveTwoPlayers(string root)
@@ -192,6 +194,69 @@ internal static class WorldAoiPumpChecks
             await aoiTask.WaitAsync(TimeSpan.FromSeconds(3));
             await host.StopAsync();
             await resultTask.WaitAsync(TimeSpan.FromSeconds(3));
+        }
+    }
+
+    private static async Task LiveResync(string root)
+    {
+        string folder = Checks.Fixture(root, 105, 12, 12, (_, _) => 0);
+        await using var host = new ServerWorldHost([BlockingGrid.Load(folder,105)]);
+        await host.StartAsync();
+        var actor = await host.TrustedRegisterAsync(901,105,24,24)
+            ?? throw new Exception("resync actor");
+        var peer = await host.TrustedRegisterAsync(902,105,40,24)
+            ?? throw new Exception("resync peer");
+        var gateway = new GatewayConnection(actor);
+        var router = new WorldResultRouter(new WorldResultRouterOptions(
+            ChangedBatchCapacity:128, MaxSessions:10000, ResyncRequestCapacity:1));
+        Require(router.TryAttach(gateway),"resync gateway attach");
+        var pump = new WorldAoiPump(router);
+        using var stop = new CancellationTokenSource();
+        var routerTask = router.RunAsync(host.Results);
+        var pumpTask = pump.RunAsync(stop.Token);
+        try
+        {
+            await WaitForFrames(gateway,2);
+            Require(gateway.TryDequeueReliable(out var ready) &&
+                    WireProtocol.TryDecodeWorldReady(ready,out var readyValue) &&
+                    gateway.TryDequeueReliable(out var spawn) &&
+                    WireProtocol.TryDecodeEntityState(spawn,out var kind,out var peerValue) &&
+                    kind == WireOpcode.EntitySpawn && peerValue.ActorId == peer.ActorId,
+                    "resync initial baseline");
+            Require(gateway.FeedClientBytes(
+                    WireProtocol.EncodeWorldReadyAck(new(actor.MapEpoch,readyValue.ServerTick)),
+                    _ => true,out var controls) == WireFeedStatus.Accepted &&
+                    controls == 0 && gateway.WorldReadyAcknowledged,
+                    "resync initial ACK");
+            Require(gateway.FeedClientBytes(
+                    WireProtocol.EncodeWorldResyncRequest(new(actor.MapEpoch)),
+                    _ => true,out controls,null,router.TryRequestResync) ==
+                    WireFeedStatus.Accepted && controls == 0 &&
+                    !gateway.WorldReadyAcknowledged,
+                    "resync request ingress");
+            await WaitForFrames(gateway,3);
+            Require(gateway.TryDequeueReliable(out var rebuiltReady) &&
+                    WireProtocol.TryDecodeWorldReady(rebuiltReady,out var rebuilt) &&
+                    rebuilt.ReceiverMapEpoch == actor.MapEpoch &&
+                    gateway.TryDequeueReliable(out var self) &&
+                    WireProtocol.TryDecodeEntityState(self,out var selfKind,out var own) &&
+                    selfKind == WireOpcode.SelfState && own.ActorId == actor.ActorId &&
+                    gateway.TryDequeueReliable(out var rebuiltSpawn) &&
+                    WireProtocol.TryDecodeEntityState(rebuiltSpawn,out kind,out peerValue) &&
+                    kind == WireOpcode.EntitySpawn && peerValue.ActorId == peer.ActorId,
+                    "resync pump did not rebuild ordered baseline");
+            Require(gateway.FeedClientBytes(
+                    WireProtocol.EncodeWorldReadyAck(new(actor.MapEpoch,rebuilt.ServerTick)),
+                    _ => true,out controls) == WireFeedStatus.Accepted &&
+                    gateway.WorldReadyAcknowledged,
+                    "resync replacement WorldReady ACK");
+        }
+        finally
+        {
+            stop.Cancel();
+            await pumpTask.WaitAsync(TimeSpan.FromSeconds(3));
+            await host.StopAsync();
+            await routerTask.WaitAsync(TimeSpan.FromSeconds(3));
         }
     }
 

@@ -36,6 +36,8 @@ internal static class WorldAoiChecks
         Checks.Run("AOI self state is changed-only, generation-safe and retained on bounded overflow", OwnState);
         Checks.Run("AOI transfer clears old map; reconnect resets generation and ignores stale dequeue",
             TransfersAndReconnects);
+        Checks.Run("AOI same-generation resync rebuilds WorldReady SelfState and visible Spawn baseline",
+            ResyncBaseline);
         Checks.Run("AOI fails closed on stale revision, malformed actor and bounded reliable events",
             InvalidAndBounded);
         Checks.Run("30Hz Host publishes idle join and leave to AOI through WorldResultRouter",
@@ -201,6 +203,35 @@ internal static class WorldAoiChecks
                 reSpawn.Kind == AoiEventKind.Spawn &&
                 reSpawn.Entity?.ConnectionEpoch == 2,
                 "reconnect did not create new entity generation");
+    }
+
+    private static void ResyncBaseline()
+    {
+        var aoi = new WorldAoi(new WorldAoiOptions(
+            EnterHalfWidth: 200, EnterHalfHeight: 150, ExitMargin: 60, BucketSize: 64));
+        var a = Actor(81, 15, 100, 100);
+        var b = Actor(82, 15, 120, 100);
+        Life(aoi, 1, Join(a), Join(b));
+        Drain(aoi,a); Drain(aoi,b);
+        var moved = b with { X = 136, EntityRevision = 2, IsMoving = true,
+                             MovementActionSequence = 1 };
+        Move(aoi,2,moved);
+        Require(aoi.PendingEvents(a.ActorId) == 1, "resync fixture missing stale pending delta");
+        Require(aoi.TryResync(new TrustedWorldResyncRequest(
+                    a.ActorId,a.ConnectionEpoch,a.MapEpoch)),
+                "current observer resync rejected");
+        var rebuilt = Drain(aoi,a);
+        Require(rebuilt.Length == 3 &&
+                rebuilt[0].Kind == AoiEventKind.WorldReady &&
+                rebuilt[1].Kind == AoiEventKind.SelfState &&
+                rebuilt[1].Entity?.ActorId == a.ActorId &&
+                rebuilt[2].Kind == AoiEventKind.Spawn &&
+                rebuilt[2].Entity?.ActorId == b.ActorId &&
+                rebuilt[2].Entity?.EntityRevision == 2,
+                "resync baseline order/content wrong");
+        Require(!aoi.TryResync(new TrustedWorldResyncRequest(
+                    a.ActorId,a.ConnectionEpoch+1,a.MapEpoch)),
+                "stale connection resync accepted");
     }
 
     private static void InvalidAndBounded()

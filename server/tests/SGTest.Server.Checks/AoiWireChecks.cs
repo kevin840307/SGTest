@@ -10,6 +10,8 @@ internal static class AoiWireChecks
     private const string Delta = "4A0000000100170001000000000000002C000000000000001600000000000000020000000000000001000000000000000F0000000800000000000000000060420000C041000500000001";
     private const string Self = "4A0000000100180001000000000000002C000000000000000B00000000000000020000000000000001000000000000000F0000000800000000000000000060420000C041000500000006";
     private const string Despawn = "280000000100160001000000000000002D0000000000000016000000000000000200000000000000";
+    private const string ReadyAck = "180000000100190001000000000000002A00000000000000";
+    private const string Resync = "1000000001001A000100000000000000";
 
     public static void Verify()
     {
@@ -47,6 +49,15 @@ internal static class AoiWireChecks
         Require(Convert.ToHexString(ownBytes) == Self &&
                 WireProtocol.TryDecodeEntityState(ownBytes, out kind, out parsed) &&
                 kind == WireOpcode.SelfState && parsed == self, "SelfState binary fixture");
+        byte[] ack = WireProtocol.EncodeWorldReadyAck(new(1, 42));
+        Require(Convert.ToHexString(ack) == ReadyAck &&
+                WireProtocol.TryDecodeWorldReadyAck(ack, out var ackValue) &&
+                ackValue.MapEpoch == 1 && ackValue.ServerTick == 42,
+                "WorldReady ACK binary fixture");
+        byte[] resync = WireProtocol.EncodeWorldResyncRequest(new(1));
+        Require(Convert.ToHexString(resync) == Resync &&
+                WireProtocol.TryDecodeWorldResyncRequest(resync, out var resyncValue) &&
+                resyncValue.MapEpoch == 1, "WorldResync binary fixture");
         byte[] despawn = WireProtocol.EncodeEntityDespawn(new(1, 45, 22, 2));
         Require(Convert.ToHexString(despawn) == Despawn &&
                 WireProtocol.TryDecodeEntityDespawn(despawn, out var left) &&
@@ -88,7 +99,8 @@ internal static class AoiWireChecks
         var gateway = new GatewayConnection(owner, new GatewayConnectionOptions(
             MaxReliableFrames: 3, MaxReliableBytes: WireProtocol.MaximumFrameBytes));
         Require(gateway.QueueAoi(new(AoiEventKind.WorldReady, 42, 1, owner)) ==
-                GatewaySendStatus.Enqueued, "own Ready enqueue");
+                GatewaySendStatus.Enqueued && !gateway.WorldReadyAcknowledged,
+                "own Ready enqueue");
         Require(gateway.QueueAoi(new(AoiEventKind.Spawn, 43, 1, other)) ==
                 GatewaySendStatus.Enqueued, "other Spawn enqueue");
         Require(gateway.QueueAoi(new(AoiEventKind.Despawn, 45, 1, null, 22, 2)) ==
@@ -97,6 +109,10 @@ internal static class AoiWireChecks
                 GatewaySendStatus.Backpressured, "bounded AOI queue silently overflowed");
         Require(gateway.TryDequeueReliable(out var first) &&
                 WireProtocol.TryDecodeWorldReady(first, out _), "reliable FIFO ready");
+        Require(gateway.FeedClientBytes(
+                WireProtocol.EncodeWorldReadyAck(new(1,42)), _ => true, out var controlCount) ==
+                WireFeedStatus.Accepted && controlCount == 0 && gateway.WorldReadyAcknowledged,
+                "WorldReady ACK did not open gameplay gate");
         Require(gateway.TryDequeueReliable(out var second) &&
                 WireProtocol.TryDecodeEntityState(second, out var op, out _) &&
                 op == WireOpcode.EntitySpawn, "reliable FIFO spawn");
@@ -115,6 +131,14 @@ internal static class AoiWireChecks
                 WireProtocol.TryDecodeEntityState(ownFrame, out var ownKind, out var own) &&
                 ownKind == WireOpcode.SelfState && own.ActorId == owner.ActorId,
                 "own state reliable wire");
+        TrustedWorldResyncRequest requested = default;
+        Require(gateway.FeedClientBytes(
+                WireProtocol.EncodeWorldResyncRequest(new(1)), _ => true, out var resyncCount,
+                null, request => { requested = request; return true; }) ==
+                WireFeedStatus.Accepted && resyncCount == 0 &&
+                requested == new TrustedWorldResyncRequest(11,1,1) &&
+                !gateway.WorldReadyAcknowledged,
+                "same-map resync request did not close ACK gate");
         Require(gateway.QueueAoi(new(AoiEventKind.WorldReady, 50, 2, owner)) ==
                 GatewaySendStatus.GenerationMismatch, "future map sent without transfer");
         Require(gateway.QueueAoi(new(AoiEventKind.WorldReady, 50, 1, other)) ==
@@ -125,6 +149,7 @@ internal static class AoiWireChecks
                 GatewaySendStatus.GenerationMismatch, "old map AOI leaked after transfer");
         Require(gateway.QueueAoi(new(AoiEventKind.WorldReady, 52, 2,
                 owner with { MapId = 13, MapEpoch = 2 })) ==
-                GatewaySendStatus.Enqueued, "new map Ready rejected");
+                GatewaySendStatus.Enqueued && !gateway.WorldReadyAcknowledged,
+                "new map Ready rejected");
     }
 }
