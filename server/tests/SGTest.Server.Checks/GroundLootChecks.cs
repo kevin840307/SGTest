@@ -26,8 +26,10 @@ internal static class GroundLootChecks
         return (store,db,a,b);
     }
 
-    private static TrustedDropSpawn Drop(long death=9, int slot=0) =>
-        new(13,24,24,1001300001,death,slot,2701,2,
+    private static TrustedDropSpawn Drop(long generation, long death=9, int slot=0) =>
+        new(13,24,24,1001300001,
+            SqliteIdentityStore.ComposeLootDeathRevision(generation,death),
+            slot,2701,2,
             LootSourceTrust.SyntheticTest,"ci:synthetic-death");
 
     private static TrustedPickupContext Actor(long id,uint seq=1) =>
@@ -38,25 +40,37 @@ internal static class GroundLootChecks
         var (store,_,a,_)=await Setup(root,"spawn");
         using(store)
         {
-            var first=await store.CreateTrustedGroundDropAsync(Drop());
-            var repeated=await store.CreateTrustedGroundDropAsync(Drop());
+            long generation=await store.AllocateLootWorldGenerationAsync();
+            var first=await store.CreateTrustedGroundDropAsync(Drop(generation));
+            var repeated=await store.CreateTrustedGroundDropAsync(Drop(generation));
             Checks.Require(first.DropId>0 && first==repeated,
                 "identical trusted death retry minted another drop");
-            var second=await store.CreateTrustedGroundDropAsync(Drop(slot:1));
+            var second=await store.CreateTrustedGroundDropAsync(Drop(generation,slot:1));
             Checks.Require(second.DropId!=first.DropId,
                 "different verified slot reused the UID");
             var ground=await store.ListActiveGroundDropsAsync(13);
             Checks.Require(ground.Count==2,"duplicate or missing ground entities");
             bool conflict=false;
-            try { await store.CreateTrustedGroundDropAsync(Drop() with { Quantity=3 }); }
+            try { await store.CreateTrustedGroundDropAsync(Drop(generation) with { Quantity=3 }); }
             catch(InvalidOperationException) { conflict=true; }
             Checks.Require(conflict,"conflicting trusted retry silently changed item amount");
             bool invalid=false;
-            try { await store.CreateTrustedGroundDropAsync(Drop() with { SourceReference="" }); }
+            try { await store.CreateTrustedGroundDropAsync(Drop(generation) with { SourceReference="" }); }
             catch(ArgumentOutOfRangeException) { invalid=true; }
             Checks.Require(invalid,"unverified drop was accepted");
             Checks.Require((await store.ListInventoryItemsAsync(a)).Count==0,
                 "ground spawn invented an inventory item");
+            long nextGeneration=await store.AllocateLootWorldGenerationAsync();
+            Checks.Require(nextGeneration>generation,
+                "new World generation reused an old durable boot identity");
+            var afterRestart=await store.CreateTrustedGroundDropAsync(Drop(nextGeneration));
+            Checks.Require(afterRestart.DropId!=first.DropId &&
+                (await store.ListActiveGroundDropsAsync(13)).Count==3,
+                "post-restart monster local revision collided with an earlier life");
+            invalid=false;
+            try { await store.CreateTrustedGroundDropAsync(Drop(987654321)); }
+            catch(InvalidOperationException) { invalid=true; }
+            Checks.Require(invalid,"unallocated World generation minted a drop");
         }
     }
 
@@ -65,7 +79,8 @@ internal static class GroundLootChecks
         var (store,_,a,b)=await Setup(root,"guards");
         using(store)
         {
-            var d=await store.CreateTrustedGroundDropAsync(Drop());
+            long generation=await store.AllocateLootWorldGenerationAsync();
+            var d=await store.CreateTrustedGroundDropAsync(Drop(generation));
             var c=Actor(a);
             Checks.Require((await store.ClaimGroundDropAsync(c with { MapId=15 },d.DropId)).Status==PickupStatus.WrongMap,
                 "cross-map pickup succeeded");
@@ -80,7 +95,7 @@ internal static class GroundLootChecks
             Checks.Require(won.Status==PickupStatus.Granted && won.ItemUid>0 &&
                 retry.Status==PickupStatus.AlreadyGranted && retry.ItemUid==won.ItemUid,
                 "same authenticated action was not idempotent");
-            var other=await store.CreateTrustedGroundDropAsync(Drop(slot:1));
+            var other=await store.CreateTrustedGroundDropAsync(Drop(generation,slot:1));
             Checks.Require((await store.ClaimGroundDropAsync(c,other.DropId)).Status==PickupStatus.StaleSequence,
                 "same sequence replayed to different UID");
             Checks.Require((await store.ClaimGroundDropAsync(Actor(b),d.DropId)).Status==PickupStatus.AlreadyTaken,
@@ -104,7 +119,8 @@ internal static class GroundLootChecks
         var (store,db,a,b)=await Setup(root,"race");
         using(store)
         {
-            var d=await store.CreateTrustedGroundDropAsync(Drop());
+            long generation=await store.AllocateLootWorldGenerationAsync();
+            var d=await store.CreateTrustedGroundDropAsync(Drop(generation));
             var actions=new[] {
                 store.ClaimGroundDropAsync(Actor(a),d.DropId),
                 store.ClaimGroundDropAsync(Actor(b),d.DropId)

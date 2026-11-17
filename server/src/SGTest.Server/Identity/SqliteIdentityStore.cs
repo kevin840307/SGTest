@@ -173,6 +173,13 @@ CREATE TABLE IF NOT EXISTS character_combat_profiles (
     CHECK(current_hp <= max_hp)
 );", tx);
 
+            // Reserve a durable generation at each new authoritative server boot.
+            Execute(connection, @"
+CREATE TABLE IF NOT EXISTS loot_world_generations (
+    generation_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    started_unix_ms INTEGER NOT NULL
+);", tx);
+
             // v3: authoritative ground-drop identity and one-time inventory grants.
             // The unique kill/slot key makes a trusted death retry idempotent.
             Execute(connection, @"
@@ -198,8 +205,10 @@ CREATE TABLE IF NOT EXISTS ground_drops (
       (picked_by_character_id IS NULL AND pickup_connection_epoch IS NULL
        AND pickup_map_epoch IS NULL AND pickup_sequence IS NULL)
       OR
-      (picked_by_character_id IS NOT NULL AND pickup_connection_epoch > 0
-       AND pickup_map_epoch > 0 AND pickup_sequence BETWEEN 1 AND 4294967295)
+      (picked_by_character_id IS NOT NULL
+       AND pickup_connection_epoch IS NOT NULL AND pickup_connection_epoch > 0
+       AND pickup_map_epoch IS NOT NULL AND pickup_map_epoch > 0
+       AND pickup_sequence IS NOT NULL AND pickup_sequence BETWEEN 1 AND 4294967295)
     )
 );", tx);
             Execute(connection, @"

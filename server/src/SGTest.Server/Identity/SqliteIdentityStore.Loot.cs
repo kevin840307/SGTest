@@ -41,6 +41,40 @@ public sealed record InventoryItem(long ItemUid, long CharacterId,
 /// </summary>
 public sealed partial class SqliteIdentityStore
 {
+    /// <summary>Reserve once per new authoritative Server boot, outside World tick.
+    /// Reboot or parallel processes never reuse committed generation IDs.</summary>
+    public async Task<long> AllocateLootWorldGenerationAsync(
+        CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        return await Task.Run(() =>
+        {
+            using var connection = Open();
+            using var tx = connection.BeginTransaction();
+            using var command = connection.CreateCommand();
+            command.Transaction = tx;
+            command.CommandText = "INSERT INTO loot_world_generations(started_unix_ms) VALUES($now);";
+            command.Parameters.AddWithValue("$now", DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
+            if (command.ExecuteNonQuery() != 1)
+                throw new InvalidOperationException("Failed to reserve durable World generation");
+            long generation = ScalarLong(connection, "SELECT last_insert_rowid();", tx);
+            if (generation is < 1 or > 0x3fffffff)
+                throw new InvalidOperationException("Loot world generation exhausted");
+            tx.Commit();
+            return generation;
+        }, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>Compose a durable death ID from a database-allocated boot
+    /// generation plus the MonsterRuntime's per-boot monotonically increasing revision.</summary>
+    public static long ComposeLootDeathRevision(long worldGeneration, long monsterRevision)
+    {
+        if (worldGeneration is < 1 or > 0x3fffffff ||
+            monsterRevision is < 1 or > uint.MaxValue)
+            throw new ArgumentOutOfRangeException(nameof(monsterRevision));
+        return (worldGeneration << 32) | monsterRevision;
+    }
+
     // Provisional server-side pickup radius; the original game's rule is not verified.
     public const double PickupRange = 96.0;
 
@@ -53,6 +87,11 @@ public sealed partial class SqliteIdentityStore
         {
             using var connection = Open();
             using var tx = connection.BeginTransaction();
+            long generation = drop.DeathRevision >> 32;
+            if (ScalarLong(connection,
+                "SELECT COUNT(*) FROM loot_world_generations WHERE generation_id=$id;", tx,
+                ("$id", generation)) != 1)
+                throw new InvalidOperationException("Drop references unknown trusted World generation");
             using (var command = connection.CreateCommand())
             {
                 command.Transaction = tx;
@@ -237,7 +276,7 @@ WHERE character_id=$id ORDER BY item_uid LIMIT $limit;";
     {
         if (drop.MapId is < 1 or > 65535 || !double.IsFinite(drop.X) ||
             !double.IsFinite(drop.Y) || drop.X < 0 || drop.Y < 0 ||
-            drop.MonsterEntityId <= 0 || drop.DeathRevision <= 0 ||
+            drop.MonsterEntityId <= 0 || drop.DeathRevision < (1L << 32) ||
             drop.DropSlot is < 0 or > 31 ||
             drop.ItemDefinitionId is < 1 or > 100_000_000 ||
             drop.Quantity is < 1 or > 1_000_000 ||
