@@ -141,6 +141,17 @@ func run() -> void:
 	if app.world_view.phase != "closed":
 		fail("Missing private assets must not fake a ready map")
 		return
+	if not bool(entered.get("inventory_ready",false)) or not (entered.get("inventory_items",{}) as Dictionary).is_empty() or not panel.inventory_button.visible:
+		fail("Real TLS login did not supply complete empty durable inventory baseline")
+		return
+	panel.inventory_button.pressed.emit()
+	if not panel.inventory_preview.visible or not panel.inventory_preview.text.contains("沒有物品"):
+		fail("Inventory UI failed to render authoritative zero-item baseline")
+		return
+	panel.inventory_button.pressed.emit()
+	if panel.inventory_preview.visible:
+		fail("Inventory UI did not collapse")
+		return
 	if not panel.submit_move(Vector2(24,8)):
 		fail("UI Move intent rejected")
 		return
@@ -196,9 +207,29 @@ func run() -> void:
 		return
 	panel._latest.player_dead = false
 	check_attack_ui(panel,stub)
+	# Standalone visual binding from an authenticated snapshot: never use
+	# unverified original item names, and refresh on reconnect generation.
+	panel._latest = {"state":State.STATE_IN_WORLD,"world_ready":true,
+		"inventory_ready":true,"actor_id":11,"reconnect_count":1,
+		"inventory_revision":1,"inventory_items":{7001:{
+			"item_uid":7001,"item_definition_id":2701,
+			"quantity":2,"drop_id":501}}}
+	panel._update_inventory_ui()
+	if not panel.inventory_preview.text.contains("2701 ×2") or not panel.inventory_button.text.contains("1 件"):
+		fail("Durable inventory items not reflected in UI")
+		return
+	panel._latest = {"state":State.STATE_IN_WORLD,"world_ready":true,
+		"inventory_ready":true,"actor_id":22,"reconnect_count":2,
+		"inventory_revision":1,"inventory_items":{7002:{
+			"item_uid":7002,"item_definition_id":3701,
+			"quantity":3,"drop_id":502}}}
+	panel._update_inventory_ui()
+	if panel.inventory_preview.text.contains("2701") or not panel.inventory_preview.text.contains("3701 ×3"):
+		fail("Same inventory revision across new character retained stale UI")
+		return
 	panel.active = false
 	panel._set_respawn_controls()
 	app.queue_free()
 	await process_frame
-	print("CLIENT_TLS_LOGIN_PASS ui=PASS auth=PASS choose=PASS receipt=PASS world_ready=PASS password_cleared=PASS logout=PASS respawn_ui=PASS click_attack_ui=PASS click_pickup_ui=PASS")
+	print("CLIENT_TLS_LOGIN_PASS ui=PASS auth=PASS choose=PASS receipt=PASS world_ready=PASS password_cleared=PASS logout=PASS respawn_ui=PASS click_attack_ui=PASS click_pickup_ui=PASS persistent_inventory_ui=PASS")
 	quit(0)

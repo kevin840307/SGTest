@@ -22,7 +22,7 @@ var respawn_button := Button.new()
 var pickup_status := Label.new()
 var inventory_button := Button.new()
 var inventory_preview := TextEdit.new()
-var _inventory_display_revision := -1
+var _inventory_display_key := ""
 var status := Label.new()
 var _characters: Array = []
 var _chosen := false
@@ -109,7 +109,7 @@ func login() -> void:
 	_latest = {}
 	_respawn_queued_after = -1
 	pickup_status.text = ""
-	_inventory_display_revision = -1
+	_inventory_display_key = ""
 	inventory_preview.text = ""
 	inventory_preview.visible = false
 	characters.clear()
@@ -168,7 +168,7 @@ func disconnect_session() -> void:
 	_latest = {}
 	_respawn_queued_after = -1
 	pickup_status.text = ""
-	_inventory_display_revision = -1
+	_inventory_display_key = ""
 	inventory_preview.text = ""
 	inventory_preview.visible = false
 	_characters = []
@@ -209,18 +209,25 @@ func _update_inventory_ui() -> void:
 	var in_world: bool = active and int(_latest.get("state",-1)) == State.STATE_IN_WORLD
 	var loaded: bool = in_world and bool(_latest.get("inventory_ready",false))
 	inventory_button.visible = in_world
-	if not in_world:
+	if not in_world or bool(_latest.get("reconnecting",false)):
 		inventory_preview.visible = false
+		_inventory_display_key = ""
 		return
 	if not loaded:
 		inventory_button.text = "背包（讀取中）"
+		_inventory_display_key = ""
 		return
 	var items: Dictionary = _latest.get("inventory_items",{})
 	inventory_button.text = "背包（%d 件）" % items.size()
 	var revision := int(_latest.get("inventory_revision",0))
-	if revision == _inventory_display_revision:
+	# Revision can reset to 1 on reconnect/new character, so key by
+	# authenticated identity AND the connection's reconnect generation.
+	var display_key := "%d/%d/%d" % [
+		int(_latest.get("actor_id",0)),
+		int(_latest.get("reconnect_count",0)),revision]
+	if display_key == _inventory_display_key:
 		return
-	_inventory_display_revision = revision
+	_inventory_display_key = display_key
 	var uids: Array = items.keys()
 	uids.sort()
 	var rows := PackedStringArray()
