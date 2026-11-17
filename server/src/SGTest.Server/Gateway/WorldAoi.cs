@@ -144,12 +144,29 @@ public sealed class WorldAoi
         return true;
     }
 
-    public void Apply(WorldChangedBatch batch)
+    public void Apply(WorldChangedBatch batch) =>
+        Apply(batch, Array.Empty<MonsterSnapshot>());
+
+    /// <summary>
+    /// Atomically applies one authoritative World Tick plus monster snapshots
+    /// derived from THAT SAME Tick. Monster spatial state is staged first without
+    /// emitting; player Join/Move then refreshes against the latest monster state;
+    /// the final pass notifies observers that player refresh did not already touch.
+    /// </summary>
+    public void Apply(WorldChangedBatch batch,
+                      IReadOnlyList<MonsterSnapshot> monsterChanged)
     {
         ArgumentNullException.ThrowIfNull(batch);
+        ArgumentNullException.ThrowIfNull(monsterChanged);
         if (batch.Tick <= _lastTick)
             throw new InvalidOperationException("AOI batches must be strictly ordered by World Tick");
         _lastTick = batch.Tick;
+
+        var staged = new List<MonsterSnapshot>(monsterChanged.Count);
+        foreach (var monster in monsterChanged.OrderBy(x => x.EntityId))
+            if (StageMonster(monster))
+                staged.Add(monster);
+
         if (batch.Lifecycle is not null)
         {
             // Preserve trusted registration/disconnect/transfer ordering, even
@@ -166,6 +183,13 @@ public sealed class WorldAoi
         }
         foreach (var changed in batch.Changed)
             Changed(changed, batch.Tick);
+
+        // RefreshMonster is idempotent at the observer's seen revision. A viewer
+        // already refreshed by Join/Move will not receive a duplicate Delta.
+        foreach (var monster in staged)
+            foreach (var observer in _observers.Values)
+                if (observer.Self.MapId == monster.MapId)
+                    RefreshMonster(observer, monster, batch.Tick);
     }
 
     /// <summary>
@@ -252,16 +276,21 @@ public sealed class WorldAoi
 
     private void ChangedMonster(MonsterSnapshot monster, long tick)
     {
+        if (!StageMonster(monster)) return;
+        foreach (var observer in _observers.Values)
+            if (observer.Self.MapId == monster.MapId)
+                RefreshMonster(observer, monster, tick);
+    }
+
+    private bool StageMonster(MonsterSnapshot monster)
+    {
         ValidateMonster(monster);
         if (!_monsters.TryGetValue(monster.EntityId, out var previous))
         {
             if (_entities.Count + _monsters.Count >= _limits.MaxEntities)
                 throw new AoiBackpressureException("AOI entity capacity exceeded");
             StoreMonster(monster);
-            foreach (var observer in _observers.Values)
-                if (observer.Self.MapId == monster.MapId)
-                    RefreshMonster(observer, monster, tick);
-            return;
+            return true;
         }
 
         if (monster.EnemyId != previous.EnemyId ||
@@ -275,13 +304,11 @@ public sealed class WorldAoi
         if (monster.EntityRevision < previous.EntityRevision)
             throw new InvalidOperationException("Monster AOI revision regressed");
         if (monster.EntityRevision == previous.EntityRevision)
-            return;
+            return false;
 
         RemoveMonsterBucket(previous);
         StoreMonster(monster);
-        foreach (var observer in _observers.Values)
-            if (observer.Self.MapId == monster.MapId)
-                RefreshMonster(observer, monster, tick);
+        return true;
     }
 
     private void RefreshObserver(Observer observer, long tick)

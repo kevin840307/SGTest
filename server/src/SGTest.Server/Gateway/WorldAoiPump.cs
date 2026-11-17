@@ -54,9 +54,8 @@ public sealed class WorldAoiPump
                     // same-tick Delta, while visibility uses the new player position.
                     MonsterStateBatch? monsterBatch =
                         _monsters?.Process(batch);
-                    _aoi.Apply(batch);
-                    if (monsterBatch is { Changed.Count: > 0 })
-                        _aoi.ApplyMonsters(batch.Tick, monsterBatch.Changed);
+                    _aoi.Apply(batch,
+                        monsterBatch?.Changed ?? Array.Empty<MonsterSnapshot>());
                     Interlocked.Increment(ref _processedBatches);
                 }
                 while (_router.ResyncRequests.TryRead(out var request))
