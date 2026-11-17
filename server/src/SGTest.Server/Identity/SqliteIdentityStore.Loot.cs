@@ -25,7 +25,7 @@ public readonly record struct TrustedPickupContext(
 public enum PickupStatus : byte
 {
     Granted, AlreadyGranted, Missing, AlreadyTaken, WrongMap, TooFar,
-    StaleSequence, UnknownCharacter
+    StaleSequence, UnknownCharacter, StaleGeneration, PlayerDead
 }
 
 public sealed record PickupResult(PickupStatus Status, long DropId,

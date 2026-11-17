@@ -30,6 +30,8 @@ const OPCODE_PLAYER_RESPAWN := 30
 const OPCODE_PLAYER_RESPAWN_RESULT := 31
 const OPCODE_GROUND_DROP_SPAWN := 32
 const OPCODE_GROUND_DROP_DESPAWN := 33
+const OPCODE_GROUND_PICKUP := 34
+const OPCODE_GROUND_PICKUP_RESULT := 35
 const MOVE_TARGET_FRAME_BYTES := 28
 const MOVE_RECEIPT_FRAME_BYTES := 30
 const NPC_INTERACT_FRAME_BYTES := 24
@@ -54,6 +56,8 @@ const MONSTER_STATE_FRAME_BYTES := 78
 const MONSTER_DESPAWN_FRAME_BYTES := 40
 const GROUND_DROP_SPAWN_FRAME_BYTES := 52
 const GROUND_DROP_DESPAWN_FRAME_BYTES := 32
+const GROUND_PICKUP_FRAME_BYTES := 28
+const GROUND_PICKUP_RESULT_FRAME_BYTES := 45
 
 static func encode_move_target(map_epoch: int, movement_sequence: int, target_x: int, target_y: int) -> PackedByteArray:
 	if map_epoch <= 0 or movement_sequence <= 0 or movement_sequence > 0xffffffff:
@@ -440,6 +444,43 @@ static func decode_monster_state(frame: PackedByteArray) -> Dictionary:
 		"revision":revision,"current_hp":current_hp,"max_hp":max_hp,"state":ai_state,
 		"facing":monster_facing,"target_actor_id":target_actor_id}
 
+static func encode_ground_pickup(epoch: int, sequence: int, drop_id: int) -> PackedByteArray:
+	if epoch <= 0 or sequence < 1 or sequence > 0xffffffff or drop_id <= 0:
+		return PackedByteArray()
+	var writer := StreamPeerBuffer.new()
+	writer.big_endian = false
+	writer.put_u32(GROUND_PICKUP_FRAME_BYTES)
+	writer.put_u16(VERSION)
+	writer.put_u16(OPCODE_GROUND_PICKUP)
+	writer.put_64(epoch)
+	writer.put_u32(sequence)
+	writer.put_64(drop_id)
+	return writer.data_array
+
+
+static func decode_ground_pickup_result(frame: PackedByteArray) -> Dictionary:
+	if not _valid_header(frame,OPCODE_GROUND_PICKUP_RESULT,GROUND_PICKUP_RESULT_FRAME_BYTES):
+		return {}
+	var reader := _reader(frame,8)
+	var epoch := reader.get_64()
+	var sequence := reader.get_u32()
+	var status := reader.get_u8()
+	var drop_id := reader.get_64()
+	var uid := reader.get_64()
+	var item_id := reader.get_32()
+	var quantity := reader.get_32()
+	if epoch <= 0 or sequence == 0 or status > 9 or drop_id <= 0 or uid < 0 or item_id < 0 or quantity < 0:
+		return {}
+	if status in [0,1]:
+		if uid <= 0 or item_id < 1 or item_id > 100000000 or quantity < 1 or quantity > 1000000:
+			return {}
+	elif uid != 0 or item_id != 0 or quantity != 0:
+		return {}
+	return {"map_epoch":epoch,"pickup_sequence":sequence,
+		"status":status,"drop_id":drop_id,"item_uid":uid,
+		"item_definition_id":item_id,"quantity":quantity}
+
+
 static func decode_ground_drop_spawn(frame: PackedByteArray) -> Dictionary:
 	if not _valid_header(frame,OPCODE_GROUND_DROP_SPAWN,GROUND_DROP_SPAWN_FRAME_BYTES):
 		return {}
@@ -502,7 +543,7 @@ static func frame_opcode(frame: PackedByteArray) -> int:
 	if reader.get_u16() != VERSION:
 		return -1
 	var opcode := reader.get_u16()
-	if opcode not in [OPCODE_MOVE_TARGET, OPCODE_MOVE_RECEIPT, OPCODE_NPC_INTERACT, OPCODE_NPC_INTERACT_RESULT, OPCODE_NORMAL_ATTACK, OPCODE_NORMAL_ATTACK_RESULT, OPCODE_PLAYER_COMBAT_STATE, OPCODE_PLAYER_DAMAGE, OPCODE_AUTH_REQUEST, OPCODE_AUTH_RESULT, OPCODE_CHARACTER_LIST, OPCODE_CHARACTER_CHOOSE, OPCODE_CHARACTER_CHOOSE_RESULT, OPCODE_WORLD_READY, OPCODE_ENTITY_SPAWN, OPCODE_ENTITY_DESPAWN, OPCODE_ENTITY_DELTA, OPCODE_SELF_STATE, OPCODE_WORLD_READY_ACK, OPCODE_WORLD_RESYNC_REQUEST, OPCODE_MONSTER_SPAWN, OPCODE_MONSTER_DELTA, OPCODE_MONSTER_DESPAWN, OPCODE_PLAYER_RESPAWN, OPCODE_PLAYER_RESPAWN_RESULT, OPCODE_GROUND_DROP_SPAWN, OPCODE_GROUND_DROP_DESPAWN]:
+	if opcode not in [OPCODE_MOVE_TARGET, OPCODE_MOVE_RECEIPT, OPCODE_NPC_INTERACT, OPCODE_NPC_INTERACT_RESULT, OPCODE_NORMAL_ATTACK, OPCODE_NORMAL_ATTACK_RESULT, OPCODE_PLAYER_COMBAT_STATE, OPCODE_PLAYER_DAMAGE, OPCODE_AUTH_REQUEST, OPCODE_AUTH_RESULT, OPCODE_CHARACTER_LIST, OPCODE_CHARACTER_CHOOSE, OPCODE_CHARACTER_CHOOSE_RESULT, OPCODE_WORLD_READY, OPCODE_ENTITY_SPAWN, OPCODE_ENTITY_DESPAWN, OPCODE_ENTITY_DELTA, OPCODE_SELF_STATE, OPCODE_WORLD_READY_ACK, OPCODE_WORLD_RESYNC_REQUEST, OPCODE_MONSTER_SPAWN, OPCODE_MONSTER_DELTA, OPCODE_MONSTER_DESPAWN, OPCODE_PLAYER_RESPAWN, OPCODE_PLAYER_RESPAWN_RESULT, OPCODE_GROUND_DROP_SPAWN, OPCODE_GROUND_DROP_DESPAWN, OPCODE_GROUND_PICKUP, OPCODE_GROUND_PICKUP_RESULT]:
 		return -1
 	return opcode
 

@@ -1,6 +1,7 @@
 using System.Buffers.Binary;
 using System.Text;
 using SGTest.Server.World;
+using SGTest.Server.Identity;
 
 namespace SGTest.Server.Wire;
 
@@ -32,7 +33,9 @@ public enum WireOpcode : ushort
     PlayerRespawn = 30,
     PlayerRespawnResult = 31,
     GroundDropSpawn = 32,
-    GroundDropDespawn = 33
+    GroundDropDespawn = 33,
+    GroundPickup = 34,
+    GroundPickupResult = 35
 }
 
 public enum AuthWireStatus : byte { Success = 0, InvalidCredentials = 1, Disabled = 2 }
@@ -101,6 +104,11 @@ public readonly record struct GroundDropWire(
     float X, float Y, int ItemDefinitionId, int Quantity);
 public readonly record struct GroundDropDespawnWire(
     long ReceiverMapEpoch, long ServerTick, long DropId);
+public readonly record struct GroundPickupWire(
+    long MapEpoch,uint PickupSequence,long DropId);
+public readonly record struct GroundPickupResultWire(
+    long MapEpoch,uint PickupSequence,PickupStatus Status,
+    long DropId,long ItemUid,int ItemDefinitionId,int Quantity);
 
 /// <summary>
 /// Version 1 complete-frame codec. Transport/TLS/socket buffering is separate.
@@ -141,6 +149,8 @@ public static class WireProtocol
     public const int MonsterDespawnFrameBytes = 40;
     public const int GroundDropSpawnFrameBytes = 52;
     public const int GroundDropDespawnFrameBytes = 32;
+    public const int GroundPickupFrameBytes = HeaderBytes + 8 + 4 + 8;
+    public const int GroundPickupResultFrameBytes = HeaderBytes + 8 + 4 + 1 + 8 + 8 + 4 + 4;
     private static readonly UTF8Encoding StrictUtf8 = new(false, true);
 
     public static byte[] EncodeMoveTarget(MoveTargetWire value)
@@ -748,6 +758,68 @@ public static class WireProtocol
         return ValidMonsterState(value);
     }
 
+    public static byte[] EncodeGroundPickup(GroundPickupWire value)
+    {
+        if (value.MapEpoch<=0||value.PickupSequence==0||value.DropId<=0)
+            throw new ArgumentOutOfRangeException(nameof(value));
+        var frame=NewFrame(WireOpcode.GroundPickup,GroundPickupFrameBytes);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(8,8),value.MapEpoch);
+        BinaryPrimitives.WriteUInt32LittleEndian(frame.AsSpan(16,4),value.PickupSequence);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(20,8),value.DropId);
+        return frame;
+    }
+    public static bool TryDecodeGroundPickup(ReadOnlySpan<byte> frame,out GroundPickupWire value)
+    {
+        value=default;
+        if(!TryReadHeader(frame,out var h)||h.Opcode!=WireOpcode.GroundPickup)
+            return false;
+        value=new(
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(8,8)),
+            BinaryPrimitives.ReadUInt32LittleEndian(frame.Slice(16,4)),
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(20,8)));
+        return value.MapEpoch>0&&value.PickupSequence>0&&value.DropId>0;
+    }
+    public static byte[] EncodeGroundPickupResult(GroundPickupResultWire value)
+    {
+        if (!ValidPickupResult(value)) throw new ArgumentOutOfRangeException(nameof(value));
+        var frame=NewFrame(WireOpcode.GroundPickupResult,GroundPickupResultFrameBytes);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(8,8),value.MapEpoch);
+        BinaryPrimitives.WriteUInt32LittleEndian(frame.AsSpan(16,4),value.PickupSequence);
+        frame[20]=(byte)value.Status;
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(21,8),value.DropId);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(29,8),value.ItemUid);
+        BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(37,4),value.ItemDefinitionId);
+        BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(41,4),value.Quantity);
+        return frame;
+    }
+    public static bool TryDecodeGroundPickupResult(
+        ReadOnlySpan<byte> frame,out GroundPickupResultWire value)
+    {
+        value=default;
+        if(!TryReadHeader(frame,out var h)||h.Opcode!=WireOpcode.GroundPickupResult)
+            return false;
+        value=new(
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(8,8)),
+            BinaryPrimitives.ReadUInt32LittleEndian(frame.Slice(16,4)),
+            (PickupStatus)frame[20],
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(21,8)),
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(29,8)),
+            BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(37,4)),
+            BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(41,4)));
+        return ValidPickupResult(value);
+    }
+    private static bool ValidPickupResult(GroundPickupResultWire value)
+    {
+        if (value.MapEpoch<=0 || value.PickupSequence==0 || value.DropId<=0 ||
+            (byte)value.Status>(byte)PickupStatus.PlayerDead ||
+            value.ItemUid<0 || value.ItemDefinitionId<0 || value.Quantity<0)
+            return false;
+        return value.Status is PickupStatus.Granted or PickupStatus.AlreadyGranted
+            ? value.ItemUid>0 && value.ItemDefinitionId is >0 and <=100_000_000 &&
+              value.Quantity is >0 and <=1_000_000
+            : value.ItemUid==0 && value.ItemDefinitionId==0 && value.Quantity==0;
+    }
+
     public static byte[] EncodeGroundDropSpawn(GroundDropWire value)
     {
         if (!ValidGroundDrop(value)) throw new ArgumentOutOfRangeException(nameof(value));
@@ -952,7 +1024,8 @@ public static class WireProtocol
             26 => WireOpcode.WorldResyncRequest, 27 => WireOpcode.MonsterSpawn,
             28 => WireOpcode.MonsterDelta, 29 => WireOpcode.MonsterDespawn,
             30 => WireOpcode.PlayerRespawn, 31 => WireOpcode.PlayerRespawnResult,
-            32 => WireOpcode.GroundDropSpawn, 33 => WireOpcode.GroundDropDespawn, _ => 0
+            32 => WireOpcode.GroundDropSpawn, 33 => WireOpcode.GroundDropDespawn,
+            34 => WireOpcode.GroundPickup, 35 => WireOpcode.GroundPickupResult, _ => 0
         };
         if (opcode == 0) return false;
         bool sizeOk = opcode switch
@@ -981,6 +1054,8 @@ public static class WireProtocol
             WireOpcode.PlayerRespawnResult => advertised == PlayerRespawnResultFrameBytes,
             WireOpcode.GroundDropSpawn => advertised == GroundDropSpawnFrameBytes,
             WireOpcode.GroundDropDespawn => advertised == GroundDropDespawnFrameBytes,
+            WireOpcode.GroundPickup => advertised == GroundPickupFrameBytes,
+            WireOpcode.GroundPickupResult => advertised == GroundPickupResultFrameBytes,
             _ => false
         };
         if (!sizeOk) return false;
