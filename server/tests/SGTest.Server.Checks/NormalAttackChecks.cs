@@ -216,7 +216,8 @@ internal static class NormalAttackChecks
             var drop=(await lootStore.ListActiveGroundDropsAsync(mapId)).Single();
             Require(drop.MonsterEntityId==initial.EntityId &&
                 drop.DeathRevision==
-                   SqliteIdentityStore.ComposeLootDeathRevision(generation,lr.TargetRevision) &&
+                   SqliteIdentityStore.ComposeLootDeathRevision(
+                       generation,lethal.Result.Value.TargetRevision) &&
                 drop.ItemDefinitionId==2701 && drop.Quantity==2 &&
                 drop.Trust==LootSourceTrust.SyntheticTest &&
                 loot.Statistics.DeathsCommitted==1 &&
