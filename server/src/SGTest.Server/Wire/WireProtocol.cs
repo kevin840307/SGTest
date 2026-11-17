@@ -21,7 +21,10 @@ public enum WireOpcode : ushort
     EntityDelta = 23,
     SelfState = 24,
     WorldReadyAck = 25,
-    WorldResyncRequest = 26
+    WorldResyncRequest = 26,
+    MonsterSpawn = 27,
+    MonsterDelta = 28,
+    MonsterDespawn = 29
 }
 
 public enum AuthWireStatus : byte { Success = 0, InvalidCredentials = 1, Disabled = 2 }
@@ -53,6 +56,13 @@ public readonly record struct EntityDespawnWire(
     long ReceiverMapEpoch, long ServerTick, long ActorId, long ConnectionEpoch);
 public readonly record struct WorldReadyAckWire(long MapEpoch, long ServerTick);
 public readonly record struct WorldResyncRequestWire(long MapEpoch);
+public readonly record struct MonsterStateWire(
+    long ReceiverMapEpoch, long ServerTick, long EntityId,
+    int EnemyId, int SourceIndex, int MapId, float X, float Y,
+    long Revision, int CurrentHp, int MaxHp, MonsterAiState State,
+    byte Facing, long TargetActorId);
+public readonly record struct MonsterDespawnWire(
+    long ReceiverMapEpoch, long ServerTick, long EntityId, long Revision);
 
 /// <summary>
 /// Version 1 complete-frame codec. Transport/TLS/socket buffering is separate.
@@ -83,6 +93,8 @@ public static class WireProtocol
     public const int EntityDespawnFrameBytes = 40;
     public const int WorldReadyAckFrameBytes = HeaderBytes + 16;
     public const int WorldResyncRequestFrameBytes = HeaderBytes + 8;
+    public const int MonsterStateFrameBytes = 78;
+    public const int MonsterDespawnFrameBytes = 40;
     private static readonly UTF8Encoding StrictUtf8 = new(false, true);
 
     public static byte[] EncodeMoveTarget(MoveTargetWire value)
@@ -472,6 +484,82 @@ public static class WireProtocol
                value.ConnectionEpoch > 0 && value.EntityMapEpoch > 0 && value.Revision > 0;
     }
 
+    public static byte[] EncodeMonsterState(WireOpcode opcode, MonsterStateWire value)
+    {
+        if (opcode is not (WireOpcode.MonsterSpawn or WireOpcode.MonsterDelta) ||
+            !ValidMonsterState(value))
+            throw new ArgumentOutOfRangeException(nameof(value));
+        var frame = NewFrame(opcode, MonsterStateFrameBytes);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(8, 8), value.ReceiverMapEpoch);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(16, 8), value.ServerTick);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(24, 8), value.EntityId);
+        BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(32, 4), value.EnemyId);
+        BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(36, 4), value.SourceIndex);
+        BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(40, 4), value.MapId);
+        WriteFloat(frame.AsSpan(44, 4), value.X);
+        WriteFloat(frame.AsSpan(48, 4), value.Y);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(52, 8), value.Revision);
+        BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(60, 4), value.CurrentHp);
+        BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(64, 4), value.MaxHp);
+        frame[68] = (byte)value.State;
+        frame[69] = value.Facing;
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(70, 8), value.TargetActorId);
+        return frame;
+    }
+
+    public static bool TryDecodeMonsterState(ReadOnlySpan<byte> frame,
+        out WireOpcode opcode, out MonsterStateWire value)
+    {
+        opcode = 0; value = default;
+        if (!TryReadHeader(frame, out var header) ||
+            header.Opcode is not (WireOpcode.MonsterSpawn or WireOpcode.MonsterDelta))
+            return false;
+        opcode = header.Opcode;
+        value = new(
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(8, 8)),
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(16, 8)),
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(24, 8)),
+            BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(32, 4)),
+            BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(36, 4)),
+            BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(40, 4)),
+            ReadFloat(frame.Slice(44, 4)), ReadFloat(frame.Slice(48, 4)),
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(52, 8)),
+            BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(60, 4)),
+            BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(64, 4)),
+            (MonsterAiState)frame[68], frame[69],
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(70, 8)));
+        return ValidMonsterState(value);
+    }
+
+    public static byte[] EncodeMonsterDespawn(MonsterDespawnWire value)
+    {
+        if (value.ReceiverMapEpoch <= 0 || value.ServerTick < 0 ||
+            value.EntityId <= 0 || value.Revision <= 0)
+            throw new ArgumentOutOfRangeException(nameof(value));
+        var frame = NewFrame(WireOpcode.MonsterDespawn, MonsterDespawnFrameBytes);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(8, 8), value.ReceiverMapEpoch);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(16, 8), value.ServerTick);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(24, 8), value.EntityId);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(32, 8), value.Revision);
+        return frame;
+    }
+
+    public static bool TryDecodeMonsterDespawn(
+        ReadOnlySpan<byte> frame, out MonsterDespawnWire value)
+    {
+        value = default;
+        if (!TryReadHeader(frame, out var header) ||
+            header.Opcode != WireOpcode.MonsterDespawn)
+            return false;
+        value = new(
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(8, 8)),
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(16, 8)),
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(24, 8)),
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(32, 8)));
+        return value.ReceiverMapEpoch > 0 && value.ServerTick >= 0 &&
+               value.EntityId > 0 && value.Revision > 0;
+    }
+
     public static byte[] EncodeEntityDespawn(EntityDespawnWire value)
     {
         if (value.ReceiverMapEpoch <= 0 || value.ServerTick < 0 ||
@@ -498,6 +586,15 @@ public static class WireProtocol
         return value.ReceiverMapEpoch > 0 && value.ServerTick >= 0 &&
                value.ActorId > 0 && value.ConnectionEpoch > 0;
     }
+
+    private static bool ValidMonsterState(MonsterStateWire value) =>
+        value.ReceiverMapEpoch > 0 && value.ServerTick >= 0 &&
+        value.EntityId > 0 && value.EnemyId > 0 && value.SourceIndex >= 0 &&
+        value.MapId > 0 && float.IsFinite(value.X) && float.IsFinite(value.Y) &&
+        value.X >= 0 && value.Y >= 0 && value.Revision > 0 &&
+        value.MaxHp > 0 && value.CurrentHp >= 0 && value.CurrentHp <= value.MaxHp &&
+        (byte)value.State <= (byte)MonsterAiState.Dead &&
+        value.Facing is >= 1 and <= 8 && value.TargetActorId >= 0;
 
     private static bool ValidMapState(long receiverMapEpoch, long tick,
         long actorId, int mapId, float x, float y) =>
@@ -528,7 +625,8 @@ public static class WireProtocol
             20 => WireOpcode.WorldReady, 21 => WireOpcode.EntitySpawn,
             22 => WireOpcode.EntityDespawn, 23 => WireOpcode.EntityDelta,
             24 => WireOpcode.SelfState, 25 => WireOpcode.WorldReadyAck,
-            26 => WireOpcode.WorldResyncRequest, _ => 0
+            26 => WireOpcode.WorldResyncRequest, 27 => WireOpcode.MonsterSpawn,
+            28 => WireOpcode.MonsterDelta, 29 => WireOpcode.MonsterDespawn, _ => 0
         };
         if (opcode == 0) return false;
         bool sizeOk = opcode switch
@@ -547,6 +645,8 @@ public static class WireProtocol
             WireOpcode.EntityDespawn => advertised == EntityDespawnFrameBytes,
             WireOpcode.WorldReadyAck => advertised == WorldReadyAckFrameBytes,
             WireOpcode.WorldResyncRequest => advertised == WorldResyncRequestFrameBytes,
+            WireOpcode.MonsterSpawn or WireOpcode.MonsterDelta => advertised == MonsterStateFrameBytes,
+            WireOpcode.MonsterDespawn => advertised == MonsterDespawnFrameBytes,
             _ => false
         };
         if (!sizeOk) return false;

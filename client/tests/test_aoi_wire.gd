@@ -15,6 +15,9 @@ const DESPAWN := "280000000100160001000000000000002D0000000000000016000000000000
 const MAP13_READY := "2D00000001001400020000000000000032000000000000000B000000000000000D000000000020420000A04201"
 const READY_ACK := "180000000100190001000000000000002A00000000000000"
 const RESYNC := "1000000001001A000100000000000000"
+const MONSTER_SPAWN := "4E00000001001B000100000000000000320000000000000021A0AE3B0000000001000000000000000D0000000000F0420000A04202000000000000005A0000006400000002060B00000000000000"
+const MONSTER_DELTA := "4E00000001001C000100000000000000330000000000000021A0AE3B0000000001000000000000000D0000000000F8420000A0420300000000000000500000006400000003060B00000000000000"
+const MONSTER_DESPAWN := "2800000001001D000100000000000000340000000000000021A0AE3B000000000300000000000000"
 
 func _fail(message: String) -> void:
 	push_error("AOI_WIRE_FAIL " + message)
@@ -29,6 +32,22 @@ func _initialize() -> void:
 	var resync_value := WireCodec.decode_world_resync_request(RESYNC.hex_decode())
 	if ack.hex_encode().to_upper() != READY_ACK or int(ack_value.map_epoch) != 1 or int(ack_value.server_tick) != 42 or resync.hex_encode().to_upper() != RESYNC or int(resync_value.map_epoch) != 1:
 		_fail("WorldReady ACK/resync C# golden")
+		return
+	var monster_spawn := WireCodec.decode_monster_state(MONSTER_SPAWN.hex_decode())
+	var monster_delta := WireCodec.decode_monster_state(MONSTER_DELTA.hex_decode())
+	var monster_despawn := WireCodec.decode_monster_despawn(MONSTER_DESPAWN.hex_decode())
+	if monster_spawn.is_empty() or int(monster_spawn.entity_id) != 1001300001 or int(monster_spawn.enemy_id) != 1 or int(monster_spawn.current_hp) != 90 or int(monster_spawn.state) != 2 or int(monster_spawn.facing) != 6 or monster_delta.is_empty() or int(monster_delta.revision) != 3 or int(monster_delta.current_hp) != 80 or int(monster_delta.state) != 3 or monster_despawn.is_empty() or int(monster_despawn.entity_id) != 1001300001:
+		_fail("Monster C# golden decode")
+		return
+	var malformed_monster := MONSTER_DELTA.hex_decode()
+	malformed_monster[68] = 5
+	if not WireCodec.decode_monster_state(malformed_monster).is_empty():
+		_fail("invalid monster AI state accepted")
+		return
+	malformed_monster = MONSTER_DELTA.hex_decode()
+	malformed_monster.encode_s32(60,101)
+	if not WireCodec.decode_monster_state(malformed_monster).is_empty():
+		_fail("monster HP above MaxHP accepted")
 		return
 	var ready := WireCodec.decode_world_ready(READY.hex_decode())
 	if ready.is_empty() or int(ready.actor_id) != 11 or int(ready.map_epoch) != 1 or float(ready.x) != 24.0:
@@ -65,6 +84,28 @@ func _initialize() -> void:
 		if not WireCodec.decode_entity_state(_mutate_u8(SELF.hex_decode(),73,invalid)).is_empty() or not WireCodec.decode_world_ready(_mutate_u8(READY.hex_decode(),44,invalid)).is_empty():
 			_fail("invalid Facing accepted")
 			return
+
+	var monster_world = _ready_world()
+	if not monster_world.mark_world_ready_ack_sent(1,42):
+		_fail("monster fixture initial Ready ACK")
+		return
+	if not monster_world.apply_frame(MONSTER_SPAWN.hex_decode()) or not monster_world.snapshot().monsters.has(1001300001):
+		_fail("MonsterSpawn reducer")
+		return
+	if not monster_world.apply_frame(MONSTER_DELTA.hex_decode()) or int(monster_world.snapshot().monsters[1001300001].revision) != 3 or int(monster_world.snapshot().monsters[1001300001].current_hp) != 80:
+		_fail("MonsterDelta reducer")
+		return
+	if not monster_world.apply_frame(MONSTER_DESPAWN.hex_decode()) or not monster_world.snapshot().monsters.is_empty():
+		_fail("MonsterDespawn reducer")
+		return
+	if not monster_world.apply_frame(MONSTER_DESPAWN.hex_decode()):
+		_fail("duplicate MonsterDespawn should be stale")
+		return
+	var monster_gap := MONSTER_DELTA.hex_decode()
+	monster_gap.encode_s64(16,53)
+	if not monster_world.apply_frame(monster_gap) or not bool(monster_world.snapshot().resync_pending) or str(monster_world.snapshot().resync_reason) != "monster_delta_without_spawn":
+		_fail("Monster revision/baseline gap did not enter bounded resync")
+		return
 
 	var world = WorldState.new()
 	if not world.mark_auth_sent() or not world.apply_frame(AUTH.hex_decode()) or not world.apply_frame(LIST.hex_decode()) or not world.mark_choose_sent(11) or not world.apply_frame(CHOOSE.hex_decode()):
@@ -134,7 +175,7 @@ func _initialize() -> void:
 	if world.apply_frame(future) or int(world.snapshot().state) != WorldState.STATE_FAILED:
 		_fail("future map AOI did not fail closed")
 		return
-	print("AOI_WIRE_GODOT_PASS ready=45 ack=24 resync=16 spawn=74 delta=74 despawn=40 worldstate=PASS same_epoch_resync=PASS map_epoch=PASS stale=IGNORED future=FAIL_CLOSED")
+	print("AOI_WIRE_GODOT_PASS ready=45 ack=24 resync=16 spawn=74 delta=74 despawn=40 monster_spawn=78 monster_delta=78 monster_despawn=40 worldstate=PASS same_epoch_resync=PASS monster_gap=RESYNC map_epoch=PASS stale=IGNORED future=FAIL_CLOSED")
 	quit(0)
 
 func _mutate_u8(bytes: PackedByteArray, offset: int, value: int) -> PackedByteArray:

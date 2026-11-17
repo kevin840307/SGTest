@@ -19,6 +19,9 @@ const OPCODE_ENTITY_DELTA := 23
 const OPCODE_SELF_STATE := 24
 const OPCODE_WORLD_READY_ACK := 25
 const OPCODE_WORLD_RESYNC_REQUEST := 26
+const OPCODE_MONSTER_SPAWN := 27
+const OPCODE_MONSTER_DELTA := 28
+const OPCODE_MONSTER_DESPAWN := 29
 const MOVE_TARGET_FRAME_BYTES := 28
 const MOVE_RECEIPT_FRAME_BYTES := 30
 const NPC_INTERACT_FRAME_BYTES := 24
@@ -33,6 +36,8 @@ const ENTITY_STATE_FRAME_BYTES := 74
 const ENTITY_DESPAWN_FRAME_BYTES := 40
 const WORLD_READY_ACK_FRAME_BYTES := 24
 const WORLD_RESYNC_REQUEST_FRAME_BYTES := 16
+const MONSTER_STATE_FRAME_BYTES := 78
+const MONSTER_DESPAWN_FRAME_BYTES := 40
 
 static func encode_move_target(map_epoch: int, movement_sequence: int, target_x: int, target_y: int) -> PackedByteArray:
 	if map_epoch <= 0 or movement_sequence <= 0 or movement_sequence > 0xffffffff:
@@ -275,6 +280,44 @@ static func decode_entity_state(frame: PackedByteArray) -> Dictionary:
 		return {}
 	return {"receiver_map_epoch": receiver_epoch, "server_tick": tick, "actor_id": actor_id, "connection_epoch": connection_epoch, "entity_map_epoch": entity_map_epoch, "map_id": map_id, "revision": revision, "x": x, "y": y, "moving": moving == 1, "movement_action_sequence": action_sequence, "facing": facing}
 
+static func decode_monster_state(frame: PackedByteArray) -> Dictionary:
+	var opcode := frame_opcode(frame)
+	if opcode not in [OPCODE_MONSTER_SPAWN, OPCODE_MONSTER_DELTA] or frame.size() != MONSTER_STATE_FRAME_BYTES:
+		return {}
+	var reader := _reader(frame,8)
+	var receiver_epoch := reader.get_64()
+	var tick := reader.get_64()
+	var entity_id := reader.get_64()
+	var enemy_id := reader.get_32()
+	var source_index := reader.get_32()
+	var map_id := reader.get_32()
+	var x := reader.get_float()
+	var y := reader.get_float()
+	var revision := reader.get_64()
+	var current_hp := reader.get_32()
+	var max_hp := reader.get_32()
+	var ai_state := reader.get_u8()
+	var monster_facing := reader.get_u8()
+	var target_actor_id := reader.get_64()
+	if receiver_epoch <= 0 or tick < 0 or entity_id <= 0 or enemy_id <= 0 or source_index < 0 or map_id <= 0 or revision <= 0 or current_hp < 0 or max_hp <= 0 or current_hp > max_hp or ai_state > 4 or monster_facing < 1 or monster_facing > 8 or target_actor_id < 0 or not is_finite(x) or not is_finite(y) or x < 0 or y < 0:
+		return {}
+	return {"receiver_map_epoch":receiver_epoch,"server_tick":tick,"entity_id":entity_id,
+		"enemy_id":enemy_id,"source_index":source_index,"map_id":map_id,"x":x,"y":y,
+		"revision":revision,"current_hp":current_hp,"max_hp":max_hp,"state":ai_state,
+		"facing":monster_facing,"target_actor_id":target_actor_id}
+
+static func decode_monster_despawn(frame: PackedByteArray) -> Dictionary:
+	if not _valid_header(frame,OPCODE_MONSTER_DESPAWN,MONSTER_DESPAWN_FRAME_BYTES):
+		return {}
+	var reader := _reader(frame,8)
+	var epoch := reader.get_64()
+	var tick := reader.get_64()
+	var entity_id := reader.get_64()
+	var revision := reader.get_64()
+	if epoch <= 0 or tick < 0 or entity_id <= 0 or revision <= 0:
+		return {}
+	return {"receiver_map_epoch":epoch,"server_tick":tick,"entity_id":entity_id,"revision":revision}
+
 static func decode_entity_despawn(frame: PackedByteArray) -> Dictionary:
 	if not _valid_header(frame, OPCODE_ENTITY_DESPAWN, ENTITY_DESPAWN_FRAME_BYTES):
 		return {}
@@ -295,7 +338,7 @@ static func frame_opcode(frame: PackedByteArray) -> int:
 	if reader.get_u16() != VERSION:
 		return -1
 	var opcode := reader.get_u16()
-	if opcode not in [OPCODE_MOVE_TARGET, OPCODE_MOVE_RECEIPT, OPCODE_NPC_INTERACT, OPCODE_NPC_INTERACT_RESULT, OPCODE_AUTH_REQUEST, OPCODE_AUTH_RESULT, OPCODE_CHARACTER_LIST, OPCODE_CHARACTER_CHOOSE, OPCODE_CHARACTER_CHOOSE_RESULT, OPCODE_WORLD_READY, OPCODE_ENTITY_SPAWN, OPCODE_ENTITY_DESPAWN, OPCODE_ENTITY_DELTA, OPCODE_SELF_STATE, OPCODE_WORLD_READY_ACK, OPCODE_WORLD_RESYNC_REQUEST]:
+	if opcode not in [OPCODE_MOVE_TARGET, OPCODE_MOVE_RECEIPT, OPCODE_NPC_INTERACT, OPCODE_NPC_INTERACT_RESULT, OPCODE_AUTH_REQUEST, OPCODE_AUTH_RESULT, OPCODE_CHARACTER_LIST, OPCODE_CHARACTER_CHOOSE, OPCODE_CHARACTER_CHOOSE_RESULT, OPCODE_WORLD_READY, OPCODE_ENTITY_SPAWN, OPCODE_ENTITY_DESPAWN, OPCODE_ENTITY_DELTA, OPCODE_SELF_STATE, OPCODE_WORLD_READY_ACK, OPCODE_WORLD_RESYNC_REQUEST, OPCODE_MONSTER_SPAWN, OPCODE_MONSTER_DELTA, OPCODE_MONSTER_DESPAWN]:
 		return -1
 	return opcode
 

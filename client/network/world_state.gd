@@ -36,6 +36,7 @@ var stale_receipts := 0
 var protocol_error := ""
 var world_ready := false
 var entities := {}
+var monsters := {}
 var self_state := {}
 var last_aoi_tick := -1
 var stale_aoi_events := 0
@@ -116,6 +117,10 @@ func apply_frame(frame: PackedByteArray) -> bool:
 			return _apply_entity_state(frame, opcode)
 		WireCodec.OPCODE_ENTITY_DESPAWN:
 			return _apply_entity_despawn(frame)
+		WireCodec.OPCODE_MONSTER_SPAWN, WireCodec.OPCODE_MONSTER_DELTA:
+			return _apply_monster_state(frame,opcode)
+		WireCodec.OPCODE_MONSTER_DESPAWN:
+			return _apply_monster_despawn(frame)
 		_:
 			return fail("unexpected_server_opcode_%d" % opcode)
 
@@ -152,6 +157,7 @@ func snapshot() -> Dictionary:
 		"protocol_error": protocol_error,
 		"world_ready": world_ready,
 		"entities": entities.duplicate(true),
+		"monsters": monsters.duplicate(true),
 		"self_state": self_state.duplicate(true),
 		"last_aoi_tick": last_aoi_tick,
 		"stale_aoi_events": stale_aoi_events,
@@ -222,6 +228,7 @@ func _apply_choose(frame: PackedByteArray) -> bool:
 	world_ready = false
 	self_state.clear()
 	entities.clear()
+	monsters.clear()
 	last_aoi_tick = -1
 	stale_aoi_events = 0
 	pending_world_ready_ack_epoch = 0
@@ -342,6 +349,7 @@ func _apply_world_ready(frame: PackedByteArray) -> bool:
 	facing = int(ready.facing)
 	world_ready = true
 	entities.clear()
+	monsters.clear()
 	last_aoi_tick = tick
 	pending_world_ready_ack_epoch = map_epoch
 	pending_world_ready_ack_tick = tick
@@ -413,6 +421,61 @@ func _apply_entity_despawn(frame: PackedByteArray) -> bool:
 	entities.erase(id)
 	last_aoi_tick = maxi(last_aoi_tick, int(value.server_tick))
 	return true
+
+func _apply_monster_state(frame: PackedByteArray, opcode: int) -> bool:
+	var value := WireCodec.decode_monster_state(frame)
+	if value.is_empty():
+		return fail("invalid_monster_state")
+	var disposition := _check_aoi_generation(int(value.receiver_map_epoch),int(value.server_tick))
+	if disposition <= 0:
+		return disposition == 0
+	if int(value.map_id) != map_id or int(value.entity_id) == actor_id:
+		return fail("monster_wrong_map_or_self")
+	var id := int(value.entity_id)
+	var previous: Dictionary = monsters.get(id,{})
+	if opcode == WireCodec.OPCODE_MONSTER_SPAWN:
+		if not previous.is_empty():
+			if not _same_monster_identity(previous,value):
+				return _need_resync("monster_spawn_identity_conflict")
+			if int(value.revision) > int(previous.revision):
+				return _need_resync("monster_spawn_without_despawn")
+			stale_aoi_events += 1
+			return true
+		monsters[id] = value
+	else:
+		if previous.is_empty():
+			return _need_resync("monster_delta_without_spawn")
+		if not _same_monster_identity(previous,value):
+			return _need_resync("monster_delta_identity_conflict")
+		if int(value.revision) <= int(previous.revision):
+			stale_aoi_events += 1
+			return true
+		if int(value.revision) > int(previous.revision) + 1:
+			return _need_resync("monster_revision_gap")
+		monsters[id] = value
+	last_aoi_tick = maxi(last_aoi_tick,int(value.server_tick))
+	return true
+
+func _apply_monster_despawn(frame: PackedByteArray) -> bool:
+	var value := WireCodec.decode_monster_despawn(frame)
+	if value.is_empty():
+		return fail("invalid_monster_despawn")
+	var disposition := _check_aoi_generation(int(value.receiver_map_epoch),int(value.server_tick))
+	if disposition <= 0:
+		return disposition == 0
+	var id := int(value.entity_id)
+	var previous: Dictionary = monsters.get(id,{})
+	if previous.is_empty() or int(value.revision) < int(previous.revision):
+		stale_aoi_events += 1
+		return true
+	if int(value.revision) > int(previous.revision) + 1:
+		return _need_resync("monster_despawn_revision_gap")
+	monsters.erase(id)
+	last_aoi_tick = maxi(last_aoi_tick,int(value.server_tick))
+	return true
+
+func _same_monster_identity(left: Dictionary, right: Dictionary) -> bool:
+	return int(left.enemy_id) == int(right.enemy_id) and int(left.source_index) == int(right.source_index) and int(left.map_id) == int(right.map_id) and int(left.max_hp) == int(right.max_hp)
 
 func _apply_self_state(frame: PackedByteArray) -> bool:
 	var value := WireCodec.decode_entity_state(frame)

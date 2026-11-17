@@ -1,3 +1,4 @@
+using System.Buffers.Binary;
 using SGTest.Server.Gateway;
 using SGTest.Server.Wire;
 using SGTest.Server.World;
@@ -12,6 +13,9 @@ internal static class AoiWireChecks
     private const string Despawn = "280000000100160001000000000000002D0000000000000016000000000000000200000000000000";
     private const string ReadyAck = "180000000100190001000000000000002A00000000000000";
     private const string Resync = "1000000001001A000100000000000000";
+    private const string MonsterSpawn = "4E00000001001B000100000000000000320000000000000021A0AE3B0000000001000000000000000D0000000000F0420000A04202000000000000005A0000006400000002060B00000000000000";
+    private const string MonsterDelta = "4E00000001001C000100000000000000330000000000000021A0AE3B0000000001000000000000000D0000000000F8420000A0420300000000000000500000006400000003060B00000000000000";
+    private const string MonsterDespawn = "2800000001001D000100000000000000340000000000000021A0AE3B000000000300000000000000";
 
     public static void Verify()
     {
@@ -58,6 +62,26 @@ internal static class AoiWireChecks
         Require(Convert.ToHexString(resync) == Resync &&
                 WireProtocol.TryDecodeWorldResyncRequest(resync, out var resyncValue) &&
                 resyncValue.MapEpoch == 1, "WorldResync binary fixture");
+        var monster = new MonsterStateWire(1,50,1001300001,1,0,13,120,80,2,
+            90,100,MonsterAiState.Chase,6,11);
+        byte[] monsterSpawn = WireProtocol.EncodeMonsterState(WireOpcode.MonsterSpawn,monster);
+        Require(Convert.ToHexString(monsterSpawn) == MonsterSpawn &&
+                WireProtocol.TryDecodeMonsterState(monsterSpawn,out var monsterKind,out var monsterValue) &&
+                monsterKind == WireOpcode.MonsterSpawn && monsterValue == monster,
+                "MonsterSpawn binary fixture");
+        monster = monster with { ServerTick=51, X=124, Revision=3, CurrentHp=80,
+                                 State=MonsterAiState.Attack };
+        byte[] monsterDelta = WireProtocol.EncodeMonsterState(WireOpcode.MonsterDelta,monster);
+        Require(Convert.ToHexString(monsterDelta) == MonsterDelta &&
+                WireProtocol.TryDecodeMonsterState(monsterDelta,out monsterKind,out monsterValue) &&
+                monsterKind == WireOpcode.MonsterDelta && monsterValue == monster,
+                "MonsterDelta binary fixture");
+        byte[] monsterDespawn = WireProtocol.EncodeMonsterDespawn(
+            new(1,52,1001300001,3));
+        Require(Convert.ToHexString(monsterDespawn) == MonsterDespawn &&
+                WireProtocol.TryDecodeMonsterDespawn(monsterDespawn,out var monsterGone) &&
+                monsterGone.EntityId == 1001300001 && monsterGone.Revision == 3,
+                "MonsterDespawn binary fixture");
         byte[] despawn = WireProtocol.EncodeEntityDespawn(new(1, 45, 22, 2));
         Require(Convert.ToHexString(despawn) == Despawn &&
                 WireProtocol.TryDecodeEntityDespawn(despawn, out var left) &&
@@ -86,6 +110,18 @@ internal static class AoiWireChecks
         bad[60] = 0; bad[61] = 0; bad[62] = 0xC0; bad[63] = 0x7F; // quiet NaN float
         Require(!WireProtocol.TryDecodeEntityState(bad, out _, out _),
                 "NaN coordinate accepted");
+        bad = Convert.FromHexString(MonsterSpawn);
+        bad[68] = 5;
+        Require(!WireProtocol.TryDecodeMonsterState(bad,out _,out _),
+                "invalid monster AI state accepted");
+        bad = Convert.FromHexString(MonsterDelta);
+        bad[69] = 9;
+        Require(!WireProtocol.TryDecodeMonsterState(bad,out _,out _),
+                "invalid monster facing accepted");
+        bad = Convert.FromHexString(MonsterDelta);
+        BinaryPrimitives.WriteInt32LittleEndian(bad.AsSpan(60,4),101);
+        Require(!WireProtocol.TryDecodeMonsterState(bad,out _,out _),
+                "monster HP above MaxHP accepted");
         bad = Convert.FromHexString(Despawn);
         Array.Clear(bad, 8, 8);
         Require(!WireProtocol.TryDecodeEntityDespawn(bad, out _),
