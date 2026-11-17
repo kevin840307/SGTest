@@ -19,13 +19,16 @@ public sealed class IdentityTlsAuthorization
     private readonly SqliteIdentityStore _identity;
     private readonly ServerWorldHost _world;
     private readonly PortalCatalog? _portals;
+    private readonly CharacterPositionCheckpoint? _positions;
 
     public IdentityTlsAuthorization(SqliteIdentityStore identity, ServerWorldHost world,
-                                    PortalCatalog? portals = null)
+                                    PortalCatalog? portals = null,
+                                    CharacterPositionCheckpoint? positions = null)
     {
         _identity = identity ?? throw new ArgumentNullException(nameof(identity));
         _world = world ?? throw new ArgumentNullException(nameof(world));
         _portals = portals; // runtime-owned audited Converter NPC content; null disables portal RPC
+        _positions = positions;
     }
 
     /// <summary>
@@ -91,9 +94,14 @@ public sealed class IdentityTlsAuthorization
             try
             {
                 if (final is { } snapshot)
-                    await _identity.UpdateCharacterSpawnAsync(snapshot.ActorId,
-                        new CharacterSpawn(snapshot.MapId, snapshot.X, snapshot.Y))
-                        .ConfigureAwait(false);
+                {
+                    if (_positions is not null)
+                        await _positions.FinalizeAsync(snapshot).ConfigureAwait(false);
+                    else
+                        await _identity.UpdateCharacterSpawnAsync(snapshot.ActorId,
+                            new CharacterSpawn(snapshot.MapId, snapshot.X, snapshot.Y))
+                            .ConfigureAwait(false);
+                }
             }
             finally
             {

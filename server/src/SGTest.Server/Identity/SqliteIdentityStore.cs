@@ -6,6 +6,7 @@ namespace SGTest.Server.Identity;
 
 public sealed record IdentityStoreOptions(int MaxCharactersPerAccount = 8, int BusyTimeoutSeconds = 5);
 public readonly record struct CharacterSpawn(int MapId, double X, double Y);
+public readonly record struct CharacterPositionUpdate(long CharacterId, CharacterSpawn Spawn);
 public sealed record CharacterRecord(long CharacterId, long AccountId, int Slot, string Name,
     int MapId, double X, double Y, long CreatedUnixMilliseconds);
 public sealed record AccountRecord(long AccountId, string Username, bool Disabled,
@@ -183,26 +184,47 @@ VALUES($key,$display,$hash,$created); SELECT last_insert_rowid();";
         return await Task.Run(() => ReadCharacters(accountId), cancellationToken).ConfigureAwait(false);
     }
 
-    public async Task UpdateCharacterSpawnAsync(long characterId, CharacterSpawn spawn,
+    public Task UpdateCharacterSpawnAsync(long characterId, CharacterSpawn spawn,
+        CancellationToken cancellationToken = default) =>
+        UpdateCharacterSpawnsAsync([new CharacterPositionUpdate(characterId, spawn)], cancellationToken);
+
+    public async Task UpdateCharacterSpawnsAsync(
+        IReadOnlyList<CharacterPositionUpdate> updates,
         CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
-        if (characterId <= 0) throw new ArgumentOutOfRangeException(nameof(characterId));
-        ValidateSpawn(spawn);
+        ArgumentNullException.ThrowIfNull(updates);
+        if (updates.Count is < 1 or > 100000)
+            throw new ArgumentOutOfRangeException(nameof(updates));
+        var seen = new HashSet<long>();
+        foreach (var update in updates)
+        {
+            if (update.CharacterId <= 0 || !seen.Add(update.CharacterId))
+                throw new ArgumentException("Character position batch has invalid/duplicate ID", nameof(updates));
+            ValidateSpawn(update.Spawn);
+        }
+
         await Task.Run(() =>
         {
             using var connection = Open();
-            using var command = connection.CreateCommand();
-            command.CommandText = @"UPDATE characters
+            using var tx = connection.BeginTransaction();
+            long now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+            foreach (var update in updates)
+            {
+                using var command = connection.CreateCommand();
+                command.Transaction = tx;
+                command.CommandText = @"UPDATE characters
 SET map_id=$map,x=$x,y=$y,updated_unix_ms=$updated
 WHERE character_id=$id;";
-            command.Parameters.AddWithValue("$map", spawn.MapId);
-            command.Parameters.AddWithValue("$x", spawn.X);
-            command.Parameters.AddWithValue("$y", spawn.Y);
-            command.Parameters.AddWithValue("$updated", DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
-            command.Parameters.AddWithValue("$id", characterId);
-            if (command.ExecuteNonQuery() != 1)
-                throw new KeyNotFoundException("Unknown character");
+                command.Parameters.AddWithValue("$map", update.Spawn.MapId);
+                command.Parameters.AddWithValue("$x", update.Spawn.X);
+                command.Parameters.AddWithValue("$y", update.Spawn.Y);
+                command.Parameters.AddWithValue("$updated", now);
+                command.Parameters.AddWithValue("$id", update.CharacterId);
+                if (command.ExecuteNonQuery() != 1)
+                    throw new KeyNotFoundException("Unknown character");
+            }
+            tx.Commit();
         }, cancellationToken).ConfigureAwait(false);
     }
 

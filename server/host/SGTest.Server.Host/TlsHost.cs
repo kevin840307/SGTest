@@ -24,6 +24,7 @@ internal static class TlsHost
             int port = Number(options, "--port", 7777, 0, 65535);
             int maximum = Number(options, "--max-connections", 128, 1, 4096);
             int perAddress = Number(options, "--max-per-address", Math.Min(8, maximum), 1, maximum);
+            int checkpointMs = Number(options, "--position-checkpoint-ms", 5000, 500, 60000);
             if (options.ContainsKey("--seconds"))
                 stop.CancelAfter(TimeSpan.FromSeconds(Number(options, "--seconds", 1, 1, 86400)));
             using var certificate = new X509Certificate2(certificatePath,
@@ -39,15 +40,18 @@ internal static class TlsHost
             using var identity = new SqliteIdentityStore(database);
             await identity.InitializeAsync(stop.Token);
             await using var world = new ServerWorldHost(maps);
-            var router = new WorldResultRouter();
+            var positions = new CharacterPositionCheckpoint(identity,
+                new(IntervalMilliseconds: checkpointMs));
+            var router = new WorldResultRouter(changedObserver: positions.Observe);
             var aoi = new WorldAoiPump(router);
-            var authorization = new IdentityTlsAuthorization(identity, world, portals);
+            var authorization = new IdentityTlsAuthorization(identity, world, portals, positions);
             await using var listener = new TlsGatewayListener(address, port, authorization,
                 certificate, router, new(MaxConnections: maximum, MaxConnectionsPerAddress: perAddress));
             await world.StartAsync();
             using var pumps = new CancellationTokenSource();
             var routing = router.RunAsync(world.Results, pumps.Token);
             var visibility = aoi.RunAsync(pumps.Token);
+            var checkpointing = positions.RunAsync(pumps.Token);
             try
             {
                 var accepting = listener.RunAsync(stop.Token);
@@ -55,10 +59,11 @@ internal static class TlsHost
                 {
                     result = "TLS_HOST_READY", endpoint = listener.LocalEndpoint.ToString(),
                     max_connections = maximum, max_per_address = perAddress,
-                    maps = maps.Select(m => m.MapId), audited_portals = portals.Count
+                    maps = maps.Select(m => m.MapId), audited_portals = portals.Count,
+                    position_checkpoint_ms = checkpointMs
                 }));
                 var stopping = Task.Delay(Timeout.Infinite, stop.Token);
-                var completed = await Task.WhenAny(accepting, routing, visibility, stopping);
+                var completed = await Task.WhenAny(accepting, routing, visibility, checkpointing, stopping);
                 if (completed != stopping && !stop.IsCancellationRequested)
                 {
                     await completed; // propagate faults; never serve after a result/AOI pump failed
@@ -78,14 +83,15 @@ internal static class TlsHost
                 {
                     await world.StopAsync();
                     pumps.Cancel();
-                    try { await Task.WhenAll(routing, visibility); }
+                    try { await Task.WhenAll(routing, visibility, checkpointing); }
                     catch (OperationCanceledException) when (pumps.IsCancellationRequested) { }
                 }
             }
             Console.WriteLine(JsonSerializer.Serialize(new
             {
                 result = "TLS_HOST_STOPPED", listener = listener.Statistics,
-                world = world.Statistics, router = router.Statistics
+                world = world.Statistics, router = router.Statistics,
+                positions = positions.Statistics
             }));
             return 0;
         }
@@ -93,7 +99,8 @@ internal static class TlsHost
         {
             Console.Error.WriteLine("TLS_HOST_CONFIGURATION: " + error.Message);
             Console.Error.WriteLine("Usage: serve --content <PRIVATE_ROOT> --identity <DB> --certificate <PFX> " +
-                "[--bind 127.0.0.1] [--port 7777] [--max-connections 128] [--max-per-address 8] [--seconds N]");
+                "[--bind 127.0.0.1] [--port 7777] [--max-connections 128] [--max-per-address 8] " +
+                "[--position-checkpoint-ms 5000] [--seconds N]");
             return 2;
         }
         catch (OperationCanceledException) when (stop.IsCancellationRequested) { return 0; }
@@ -110,7 +117,8 @@ internal static class TlsHost
     private static Dictionary<string, string> Parse(string[] args)
     {
         string[] known = ["--content", "--identity", "--certificate", "--bind", "--port",
-                          "--max-connections", "--max-per-address", "--seconds"];
+                          "--max-connections", "--max-per-address", "--position-checkpoint-ms",
+                          "--seconds"];
         var values = new Dictionary<string, string>(StringComparer.Ordinal);
         if (args.Length % 2 != 0) throw new ArgumentException("Every option requires a value");
         for (int i = 0; i < args.Length; i += 2)

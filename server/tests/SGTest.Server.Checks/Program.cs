@@ -235,6 +235,7 @@ static class Checks
             });
 
             WireCodecChecks.Verify();
+            CharacterPositionCheckpointChecks.Verify(root);
             IdentityWireChecks.Verify();
             GatewayConnectionChecks.Verify();
             WorldResultRouterChecks.Verify(root);

@@ -43,12 +43,15 @@ public sealed class WorldResultRouter
     private readonly Channel<WorldChangedBatch> _changed;
     private readonly Channel<TrustedWorldResyncRequest> _resync;
     private readonly WorldResultRouterOptions _options;
+    private readonly Action<WorldChangedBatch>? _changedObserver;
     private long _queued, _stale, _changedQueued, _backpressure;
     private int _running;
 
-    public WorldResultRouter(WorldResultRouterOptions? options = null)
+    public WorldResultRouter(WorldResultRouterOptions? options = null,
+                             Action<WorldChangedBatch>? changedObserver = null)
     {
         _options = options ?? new WorldResultRouterOptions();
+        _changedObserver = changedObserver;
         if (_options.ChangedBatchCapacity is < 1 or > 65536 ||
             _options.MaxSessions is < 1 or > 100000 ||
             _options.ResyncRequestCapacity is < 1 or > 65536)
@@ -276,9 +279,13 @@ public sealed class WorldResultRouter
 
         if (tick.Changed.Count > 0 || tick.Lifecycle is { Count: > 0 })
         {
-            if (!_changed.Writer.TryWrite(new WorldChangedBatch(tick.Tick, tick.Changed, tick.Lifecycle)))
+            var batch = new WorldChangedBatch(tick.Tick, tick.Changed, tick.Lifecycle);
+            if (!_changed.Writer.TryWrite(batch))
                 FailBackpressure("Authoritative Changed output queue full; AOI consumer is too slow");
             Interlocked.Increment(ref _changedQueued);
+            // Observer contract is memory-only/nonblocking. Any exception is
+            // terminal for this one-shot router Tick; never retry a partial Tick.
+            _changedObserver?.Invoke(batch);
         }
 
         lock (_gate)
