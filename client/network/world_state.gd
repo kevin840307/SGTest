@@ -34,6 +34,14 @@ var last_attack_result_status := -1
 var last_attack_server_tick := -1
 var last_attack_result := {}
 var stale_attack_results := 0
+var combat_available := false
+var player_current_hp := 0
+var player_max_hp := 0
+var player_dead := false
+var player_damage_sequence := 0
+var last_player_damage_tick := -1
+var last_player_damage := {}
+var stale_player_damage := 0
 var waiting_for_new_map := false
 var last_receipt_sequence := 0
 var last_receipt_status := -1
@@ -72,13 +80,13 @@ func mark_choose_sent(character_id: int) -> bool:
 	return true
 
 func mark_move_sent(sequence: int) -> bool:
-	if state != STATE_IN_WORLD or not world_ready or resync_pending or waiting_for_new_map or pending_world_ready_ack_epoch != 0 or last_world_ready_ack_epoch != map_epoch or sequence <= movement_sequence or sequence > 0xffffffff:
+	if state != STATE_IN_WORLD or player_dead or not world_ready or resync_pending or waiting_for_new_map or pending_world_ready_ack_epoch != 0 or last_world_ready_ack_epoch != map_epoch or sequence <= movement_sequence or sequence > 0xffffffff:
 		return false
 	movement_sequence = sequence
 	return true
 
 func mark_normal_attack_sent(sequence: int) -> bool:
-	if state != STATE_IN_WORLD or not world_ready or resync_pending or waiting_for_new_map or pending_world_ready_ack_epoch != 0 or last_world_ready_ack_epoch != map_epoch or sequence <= attack_sequence or sequence > 0xffffffff:
+	if state != STATE_IN_WORLD or player_dead or not world_ready or resync_pending or waiting_for_new_map or pending_world_ready_ack_epoch != 0 or last_world_ready_ack_epoch != map_epoch or sequence <= attack_sequence or sequence > 0xffffffff:
 		return false
 	attack_sequence = sequence
 	return true
@@ -100,7 +108,7 @@ func mark_resync_request_sent(epoch: int) -> bool:
 	return true
 
 func mark_npc_interact_sent(sequence: int) -> bool:
-	if state != STATE_IN_WORLD or not world_ready or resync_pending or waiting_for_new_map or pending_world_ready_ack_epoch != 0 or last_world_ready_ack_epoch != map_epoch or pending_npc_sequence != 0 or sequence <= npc_interaction_sequence or sequence > 0xffffffff:
+	if state != STATE_IN_WORLD or player_dead or not world_ready or resync_pending or waiting_for_new_map or pending_world_ready_ack_epoch != 0 or last_world_ready_ack_epoch != map_epoch or pending_npc_sequence != 0 or sequence <= npc_interaction_sequence or sequence > 0xffffffff:
 		return false
 	npc_interaction_sequence = sequence
 	pending_npc_sequence = sequence
@@ -123,6 +131,10 @@ func apply_frame(frame: PackedByteArray) -> bool:
 			return _apply_npc_result(frame)
 		WireCodec.OPCODE_NORMAL_ATTACK_RESULT:
 			return _apply_normal_attack_result(frame)
+		WireCodec.OPCODE_PLAYER_COMBAT_STATE:
+			return _apply_player_combat_state(frame)
+		WireCodec.OPCODE_PLAYER_DAMAGE:
+			return _apply_player_damage(frame)
 		WireCodec.OPCODE_WORLD_READY:
 			return _apply_world_ready(frame)
 		WireCodec.OPCODE_SELF_STATE:
@@ -169,6 +181,14 @@ func snapshot() -> Dictionary:
 		"last_attack_server_tick": last_attack_server_tick,
 		"last_attack_result": last_attack_result.duplicate(true),
 		"stale_attack_results": stale_attack_results,
+		"combat_available": combat_available,
+		"player_current_hp": player_current_hp,
+		"player_max_hp": player_max_hp,
+		"player_dead": player_dead,
+		"player_damage_sequence": player_damage_sequence,
+		"last_player_damage_tick": last_player_damage_tick,
+		"last_player_damage": last_player_damage.duplicate(true),
+		"stale_player_damage": stale_player_damage,
 		"waiting_for_new_map": waiting_for_new_map,
 		"last_receipt_sequence": last_receipt_sequence,
 		"last_receipt_status": last_receipt_status,
@@ -242,6 +262,14 @@ func _apply_choose(frame: PackedByteArray) -> bool:
 	last_attack_server_tick = -1
 	last_attack_result.clear()
 	stale_attack_results = 0
+	combat_available = false
+	player_current_hp = 0
+	player_max_hp = 0
+	player_dead = false
+	player_damage_sequence = 0
+	last_player_damage_tick = -1
+	last_player_damage.clear()
+	stale_player_damage = 0
 	waiting_for_new_map = false
 	map_id = int(decoded.map_id)
 	x = float(decoded.x)
@@ -293,6 +321,59 @@ func _apply_receipt(frame: PackedByteArray) -> bool:
 	last_receipt_sequence = sequence
 	last_receipt_status = int(decoded.status)
 	last_server_tick = server_tick
+	return true
+
+func _apply_player_combat_state(frame: PackedByteArray) -> bool:
+	if state != STATE_IN_WORLD:
+		return fail("player_combat_state_out_of_state")
+	var value := WireCodec.decode_player_combat_state(frame)
+	if value.is_empty():
+		return fail("invalid_player_combat_state")
+	var epoch := int(value.map_epoch)
+	if epoch < map_epoch:
+		stale_player_damage += 1
+		return true
+	if epoch > map_epoch:
+		return fail("future_player_combat_state")
+	combat_available = true
+	player_current_hp = int(value.current_hp)
+	player_max_hp = int(value.max_hp)
+	player_dead = player_current_hp == 0
+	player_damage_sequence = 0
+	last_player_damage_tick = -1
+	last_player_damage.clear()
+	return true
+
+func _apply_player_damage(frame: PackedByteArray) -> bool:
+	if state != STATE_IN_WORLD or not combat_available:
+		return fail("player_damage_out_of_state")
+	var value := WireCodec.decode_player_damage(frame)
+	if value.is_empty():
+		return fail("invalid_player_damage")
+	var epoch := int(value.map_epoch)
+	var sequence := int(value.damage_sequence)
+	var tick := int(value.server_tick)
+	if epoch < map_epoch:
+		stale_player_damage += 1
+		return true
+	if epoch > map_epoch:
+		return fail("future_player_damage")
+	if sequence <= player_damage_sequence:
+		stale_player_damage += 1
+		return true
+	if sequence != player_damage_sequence + 1:
+		return fail("player_damage_sequence_gap")
+	if last_player_damage_tick >= 0 and tick < last_player_damage_tick:
+		return fail("player_damage_tick_regressed")
+	if int(value.max_hp) != player_max_hp:
+		return fail("player_damage_max_hp_changed_without_baseline")
+	if int(value.current_hp) > player_current_hp:
+		return fail("player_damage_healed")
+	player_damage_sequence = sequence
+	last_player_damage_tick = tick
+	player_current_hp = int(value.current_hp)
+	player_dead = bool(value.died)
+	last_player_damage = value.duplicate(true)
 	return true
 
 func _apply_normal_attack_result(frame: PackedByteArray) -> bool:

@@ -39,6 +39,8 @@ func _initialize() -> void:
 			and bool(v.world_ready)
 			and int(v.pending_world_ready_ack_epoch)==0
 			and int(v.last_world_ready_ack_epoch)==int(v.map_epoch)
+			and bool(v.combat_available)
+			and int(v.player_max_hp)==100
 			and v.monsters.size()==1
 		),7000)
 	if ready.is_empty():
@@ -64,12 +66,16 @@ func _initialize() -> void:
 			and v.monsters.has(target)
 			and int(v.monsters[target].current_hp)==40
 			and int(v.monsters[target].revision)==int(v.last_attack_result.target_revision)
+			and int(v.player_damage_sequence)==1
+			and int(v.last_player_damage.damage)==18
+			and int(v.player_current_hp)==82
+			and not bool(v.player_dead)
 		),7000)
 	if settled.is_empty():
 		_fail("authoritative attack settlement "+str(session.snapshot()),session)
 		return
 	session.stop()
-	print("CLIENT_COMBAT_TLS_PASS target=%d damage=60 hp=40 request_has_no_damage=true receipt_does_not_mutate_monster=true delta_owns_hp=true" % target)
+	print("CLIENT_COMBAT_TLS_PASS target=%d player_damage=60 monster_hp=40 monster_damage=18 player_hp=82 request_has_no_damage=true receipt_does_not_mutate_monster=true delta_owns_hp=true damage_after_db_commit=true" % target)
 	quit(0)
 
 func _wait(session, predicate: Callable, timeout_ms: int) -> Dictionary:

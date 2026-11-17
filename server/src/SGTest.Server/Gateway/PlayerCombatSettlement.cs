@@ -139,7 +139,8 @@ public sealed class PlayerCombatSettlement
                 Defense = profile.Defense,
                 MaxHp = profile.MaxHp,
                 CommittedHp = profile.CurrentHp,
-                ProjectedHp = profile.CurrentHp
+                ProjectedHp = profile.CurrentHp,
+                Suspended = true
             });
             return true;
         }
@@ -240,6 +241,26 @@ public sealed class PlayerCombatSettlement
         ValidateActor(actor);
         return TryResumeGeneration(
             actor.ActorId, actor.ConnectionEpoch, actor.MapEpoch);
+    }
+
+    public bool ResumeIfAttached(
+        long actorId, long connectionEpoch, long mapEpoch)
+    {
+        if (actorId <= 0 || connectionEpoch <= 0 || mapEpoch <= 0)
+            return false;
+        lock (_gate)
+        {
+            ThrowIfFaulted();
+            if (!_states.TryGetValue(actorId, out var state))
+                return true;
+            if (state.Closing || state.Pending != 0 ||
+                state.ConnectionEpoch != connectionEpoch ||
+                mapEpoch < state.MapEpoch)
+                return false;
+            state.MapEpoch = mapEpoch;
+            state.Suspended = false;
+            return true;
+        }
     }
 
     public bool TryResumeGeneration(

@@ -64,8 +64,9 @@ internal static class PlayerCombatSettlementChecks
         var gateway=new GatewayConnection(actor);
         var settlement=new PlayerCombatSettlement(
             store,new(Capacity:8),gateway.QueuePlayerDamage);
-        Checks.Require(settlement.TryAttach(actor,created.Profile),
-            "delivery settlement attach");
+        Checks.Require(settlement.TryAttach(actor,created.Profile) &&
+                       settlement.TryResume(actor),
+            "delivery settlement attach/activate");
         Checks.Require(settlement.TryPostMonsterHit(
                 actor,Attack(actor,41,20,2))==CombatPostStatus.Accepted,
             "delivery hit enqueue");
@@ -103,7 +104,8 @@ internal static class PlayerCombatSettlementChecks
         var created=await Create(store,"settle_one","Settle-One-Password-123!",100,10);
         var actor=Actor(created.CharacterId,13,1,1);
         var settlement=new PlayerCombatSettlement(store,new(Capacity:8));
-        Checks.Require(settlement.TryAttach(actor,created.Profile),"settlement attach");
+        Checks.Require(settlement.TryAttach(actor,created.Profile) &&
+                       settlement.TryResume(actor),"settlement attach/activate");
 
         var hit=Attack(actor,10,20,revision:2);
         Checks.Require(settlement.TryPostMonsterHit(actor,hit)==CombatPostStatus.Accepted &&
@@ -140,7 +142,8 @@ internal static class PlayerCombatSettlementChecks
         var created=await Create(store,"settle_lethal","Settle-Lethal-Password-123!",20,0);
         var actor=Actor(created.CharacterId,13,1,1);
         var settlement=new PlayerCombatSettlement(store,new(Capacity:8));
-        Checks.Require(settlement.TryAttach(actor,created.Profile),"lethal attach");
+        Checks.Require(settlement.TryAttach(actor,created.Profile) &&
+                       settlement.TryResume(actor),"lethal attach/activate");
 
         Checks.Require(settlement.TryPostMonsterHit(actor,Attack(actor,20,15,2))==
                        CombatPostStatus.Accepted &&
@@ -180,7 +183,8 @@ internal static class PlayerCombatSettlementChecks
         var created=await Create(store,"settle_transfer","Settle-Transfer-Password-123!",100,10);
         var actor=Actor(created.CharacterId,15,1,1);
         var settlement=new PlayerCombatSettlement(store,new(Capacity:8));
-        Checks.Require(settlement.TryAttach(actor,created.Profile),"transfer attach");
+        Checks.Require(settlement.TryAttach(actor,created.Profile) &&
+                       settlement.TryResume(actor),"transfer attach/activate");
         Checks.Require(settlement.TryPostMonsterHit(actor,Attack(actor,30,20,2))==
                        CombatPostStatus.Accepted,"transfer first hit");
         var drain=settlement.SuspendAndDrainAsync(

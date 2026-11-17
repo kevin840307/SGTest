@@ -65,6 +65,13 @@ public sealed class IdentityTlsAuthorization
                 // socket runner's finally has already released the session.
                 attached = !sessionFinished && !token.IsCancellationRequested &&
                     router.TryAttach(connection);
+                if (attached && _combat is not null &&
+                    !_combat.ResumeIfAttached(
+                        binding.ActorId, binding.ConnectionEpoch, binding.MapEpoch))
+                {
+                    router.TryDetach(connection);
+                    attached = false;
+                }
                 if (attached) boundConnection = connection;
             }
             if (!attached)
@@ -146,7 +153,7 @@ public sealed class IdentityTlsAuthorization
                     {
                         long nextEpoch = outcome.TransferredActor?.MapEpoch
                             ?? request.RequestMapEpoch;
-                        if (!_combat.TryResumeGeneration(
+                        if (!_combat.ResumeIfAttached(
                                 request.ActorId, request.ConnectionEpoch, nextEpoch))
                             throw new InvalidOperationException(
                                 "Combat generation could not resume after NPC interaction");
