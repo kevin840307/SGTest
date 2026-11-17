@@ -9,6 +9,37 @@ public readonly record struct CharacterSpawn(int MapId, double X, double Y);
 public readonly record struct CharacterPositionUpdate(long CharacterId, CharacterSpawn Spawn);
 public sealed record CharacterRecord(long CharacterId, long AccountId, int Slot, string Name,
     int MapId, double X, double Y, long CreatedUnixMilliseconds);
+
+public enum CombatProfileTrust : byte
+{
+    Verified = 1,
+    SyntheticTest = 2
+}
+
+public sealed record CharacterCombatProfileData(
+    CombatProfileTrust Trust,
+    string SourceReference,
+    int Race,
+    int Career,
+    int Strength,
+    int Dexterity,
+    int Constitution,
+    int Wisdom,
+    int Level,
+    int CurrentHp,
+    int MaxHp,
+    int Attack,
+    int Defense,
+    int Hit,
+    int Dodge,
+    double AttackRange,
+    int AttackCooldownTicks);
+
+public sealed record CharacterCombatProfile(
+    long CharacterId,
+    CharacterCombatProfileData Data,
+    long UpdatedUnixMilliseconds);
+
 public sealed record AccountRecord(long AccountId, string Username, bool Disabled,
     IReadOnlyList<CharacterRecord> Characters);
 
@@ -26,7 +57,7 @@ public sealed record CharacterCreateResult(CharacterCreateStatus Status, Charact
 /// </summary>
 public sealed class SqliteIdentityStore : IDisposable
 {
-    public const int SchemaVersion = 1;
+    public const int SchemaVersion = 2;
     private readonly string _connectionString;
     private readonly IdentityStoreOptions _options;
     private readonly PasswordHasher _passwords;
@@ -73,10 +104,21 @@ public sealed class SqliteIdentityStore : IDisposable
             using var tx = connection.BeginTransaction();
             Execute(connection, "CREATE TABLE IF NOT EXISTS schema_version (version INTEGER NOT NULL);", tx);
             long count = ScalarLong(connection, "SELECT COUNT(*) FROM schema_version;", tx);
+            long schemaVersion;
             if (count == 0)
-                Execute(connection, "INSERT INTO schema_version(version) VALUES (1);", tx);
-            else if (count != 1 || ScalarLong(connection, "SELECT version FROM schema_version LIMIT 1;", tx) != SchemaVersion)
-                throw new InvalidDataException("Unsupported identity schema version");
+            {
+                Execute(connection, $"INSERT INTO schema_version(version) VALUES ({SchemaVersion});", tx);
+                schemaVersion = SchemaVersion;
+            }
+            else
+            {
+                if (count != 1)
+                    throw new InvalidDataException("Unsupported identity schema version");
+                schemaVersion = ScalarLong(connection,
+                    "SELECT version FROM schema_version LIMIT 1;", tx);
+                if (schemaVersion is < 1 or > SchemaVersion)
+                    throw new InvalidDataException("Unsupported identity schema version");
+            }
 
             Execute(connection, @"
 CREATE TABLE IF NOT EXISTS accounts (
@@ -102,6 +144,32 @@ CREATE TABLE IF NOT EXISTS characters (
     UNIQUE(account_id, slot)
 );", tx);
             Execute(connection, "CREATE INDEX IF NOT EXISTS ix_characters_account ON characters(account_id, slot);", tx);
+            Execute(connection, @"
+CREATE TABLE IF NOT EXISTS character_combat_profiles (
+    character_id INTEGER PRIMARY KEY REFERENCES characters(character_id) ON DELETE CASCADE,
+    trust INTEGER NOT NULL CHECK(trust IN (1,2)),
+    source_ref TEXT NOT NULL,
+    race INTEGER NOT NULL CHECK(race BETWEEN 0 AND 255),
+    career INTEGER NOT NULL CHECK(career BETWEEN 0 AND 65535),
+    strength INTEGER NOT NULL CHECK(strength BETWEEN 0 AND 1000000),
+    dexterity INTEGER NOT NULL CHECK(dexterity BETWEEN 0 AND 1000000),
+    constitution INTEGER NOT NULL CHECK(constitution BETWEEN 0 AND 1000000),
+    wisdom INTEGER NOT NULL CHECK(wisdom BETWEEN 0 AND 1000000),
+    level INTEGER NOT NULL CHECK(level BETWEEN 1 AND 255),
+    current_hp INTEGER NOT NULL CHECK(current_hp BETWEEN 0 AND 2000000000),
+    max_hp INTEGER NOT NULL CHECK(max_hp BETWEEN 1 AND 2000000000),
+    attack INTEGER NOT NULL CHECK(attack BETWEEN 0 AND 100000000),
+    defense INTEGER NOT NULL CHECK(defense BETWEEN 0 AND 100000000),
+    hit INTEGER NOT NULL CHECK(hit BETWEEN 0 AND 100000000),
+    dodge INTEGER NOT NULL CHECK(dodge BETWEEN 0 AND 100000000),
+    attack_range REAL NOT NULL CHECK(attack_range > 0 AND attack_range <= 4096),
+    attack_cooldown_ticks INTEGER NOT NULL CHECK(attack_cooldown_ticks BETWEEN 1 AND 3600),
+    updated_unix_ms INTEGER NOT NULL,
+    CHECK(current_hp <= max_hp)
+);", tx);
+            if (schemaVersion < SchemaVersion)
+                Execute(connection,
+                    $"UPDATE schema_version SET version={SchemaVersion};", tx);
             tx.Commit();
         }, cancellationToken).ConfigureAwait(false);
     }
@@ -226,6 +294,190 @@ WHERE character_id=$id;";
             }
             tx.Commit();
         }, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<CharacterCombatProfile?> GetCharacterCombatProfileAsync(
+        long characterId, CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        if (characterId <= 0) throw new ArgumentOutOfRangeException(nameof(characterId));
+        return await Task.Run(() =>
+        {
+            using var connection = Open();
+            return ReadCombatProfile(connection, characterId);
+        }, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Trusted-server provisioning only. No network codec maps client fields into
+    /// this method. Normal character creation intentionally leaves this row absent
+    /// until source-verified combat identity/rules are available.
+    /// </summary>
+    public async Task SetCharacterCombatProfileAsync(
+        long characterId,
+        CharacterCombatProfileData profile,
+        CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        if (characterId <= 0) throw new ArgumentOutOfRangeException(nameof(characterId));
+        ValidateCombatProfile(profile);
+        await Task.Run(() =>
+        {
+            using var connection = Open();
+            using var tx = connection.BeginTransaction();
+            if (ScalarLong(connection,
+                    "SELECT COUNT(*) FROM characters WHERE character_id=$id;", tx,
+                    ("$id", characterId)) != 1)
+                throw new KeyNotFoundException("Unknown character");
+            using var command = connection.CreateCommand();
+            command.Transaction = tx;
+            command.CommandText = @"
+INSERT INTO character_combat_profiles(
+    character_id,trust,source_ref,race,career,strength,dexterity,constitution,wisdom,
+    level,current_hp,max_hp,attack,defense,hit,dodge,attack_range,
+    attack_cooldown_ticks,updated_unix_ms)
+VALUES($id,$trust,$source,$race,$career,$str,$dex,$con,$wis,$level,$hp,$maxhp,
+       $attack,$defense,$hit,$dodge,$range,$cooldown,$updated)
+ON CONFLICT(character_id) DO UPDATE SET
+    trust=excluded.trust,source_ref=excluded.source_ref,race=excluded.race,
+    career=excluded.career,strength=excluded.strength,dexterity=excluded.dexterity,
+    constitution=excluded.constitution,wisdom=excluded.wisdom,level=excluded.level,
+    current_hp=excluded.current_hp,max_hp=excluded.max_hp,attack=excluded.attack,
+    defense=excluded.defense,hit=excluded.hit,dodge=excluded.dodge,
+    attack_range=excluded.attack_range,
+    attack_cooldown_ticks=excluded.attack_cooldown_ticks,
+    updated_unix_ms=excluded.updated_unix_ms;";
+            BindCombatProfile(command, characterId, profile,
+                DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
+            command.ExecuteNonQuery();
+            tx.Commit();
+        }, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Atomic HP settlement primitive for the future authoritative combat owner.
+    /// The caller supplies only a server-computed damage value; missing profiles
+    /// fail closed instead of inventing HP for ordinary identity-only characters.
+    /// </summary>
+    public async Task<CharacterCombatProfile?> ApplyCharacterDamageAsync(
+        long characterId, int damage, CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        if (characterId <= 0 || damage <= 0 || damage > 100_000_000)
+            throw new ArgumentOutOfRangeException(nameof(damage));
+        return await Task.Run(() =>
+        {
+            using var connection = Open();
+            using var tx = connection.BeginTransaction();
+            using (var command = connection.CreateCommand())
+            {
+                command.Transaction = tx;
+                command.CommandText = @"
+UPDATE character_combat_profiles
+   SET current_hp=MAX(0,current_hp-$damage),
+       updated_unix_ms=$updated
+ WHERE character_id=$id;";
+                command.Parameters.AddWithValue("$damage", damage);
+                command.Parameters.AddWithValue("$updated",
+                    DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
+                command.Parameters.AddWithValue("$id", characterId);
+                if (command.ExecuteNonQuery() != 1)
+                {
+                    tx.Rollback();
+                    return null;
+                }
+            }
+            var result = ReadCombatProfile(connection, characterId, tx);
+            tx.Commit();
+            return result;
+        }, cancellationToken).ConfigureAwait(false);
+    }
+
+    private static void ValidateCombatProfile(CharacterCombatProfileData profile)
+    {
+        ArgumentNullException.ThrowIfNull(profile);
+        if (profile.Trust is not (CombatProfileTrust.Verified or CombatProfileTrust.SyntheticTest) ||
+            string.IsNullOrWhiteSpace(profile.SourceReference) ||
+            profile.SourceReference.Length > 256 ||
+            profile.SourceReference.Any(char.IsControl) ||
+            profile.Race is < 0 or > 255 ||
+            profile.Career is < 0 or > 65535 ||
+            profile.Strength is < 0 or > 1_000_000 ||
+            profile.Dexterity is < 0 or > 1_000_000 ||
+            profile.Constitution is < 0 or > 1_000_000 ||
+            profile.Wisdom is < 0 or > 1_000_000 ||
+            profile.Level is < 1 or > 255 ||
+            profile.CurrentHp < 0 || profile.MaxHp < 1 ||
+            profile.CurrentHp > profile.MaxHp || profile.MaxHp > 2_000_000_000 ||
+            profile.Attack is < 0 or > 100_000_000 ||
+            profile.Defense is < 0 or > 100_000_000 ||
+            profile.Hit is < 0 or > 100_000_000 ||
+            profile.Dodge is < 0 or > 100_000_000 ||
+            !double.IsFinite(profile.AttackRange) ||
+            profile.AttackRange is <= 0 or > 4096 ||
+            profile.AttackCooldownTicks is < 1 or > 3600)
+            throw new ArgumentOutOfRangeException(nameof(profile));
+    }
+
+    private static void BindCombatProfile(SqliteCommand command, long characterId,
+        CharacterCombatProfileData profile, long updated)
+    {
+        command.Parameters.AddWithValue("$id", characterId);
+        command.Parameters.AddWithValue("$trust", (int)profile.Trust);
+        command.Parameters.AddWithValue("$source", profile.SourceReference);
+        command.Parameters.AddWithValue("$race", profile.Race);
+        command.Parameters.AddWithValue("$career", profile.Career);
+        command.Parameters.AddWithValue("$str", profile.Strength);
+        command.Parameters.AddWithValue("$dex", profile.Dexterity);
+        command.Parameters.AddWithValue("$con", profile.Constitution);
+        command.Parameters.AddWithValue("$wis", profile.Wisdom);
+        command.Parameters.AddWithValue("$level", profile.Level);
+        command.Parameters.AddWithValue("$hp", profile.CurrentHp);
+        command.Parameters.AddWithValue("$maxhp", profile.MaxHp);
+        command.Parameters.AddWithValue("$attack", profile.Attack);
+        command.Parameters.AddWithValue("$defense", profile.Defense);
+        command.Parameters.AddWithValue("$hit", profile.Hit);
+        command.Parameters.AddWithValue("$dodge", profile.Dodge);
+        command.Parameters.AddWithValue("$range", profile.AttackRange);
+        command.Parameters.AddWithValue("$cooldown", profile.AttackCooldownTicks);
+        command.Parameters.AddWithValue("$updated", updated);
+    }
+
+    private static CharacterCombatProfile? ReadCombatProfile(
+        SqliteConnection connection, long characterId, SqliteTransaction? tx = null)
+    {
+        using var command = connection.CreateCommand();
+        command.Transaction = tx;
+        command.CommandText = @"
+SELECT character_id,trust,source_ref,race,career,strength,dexterity,constitution,
+       wisdom,level,current_hp,max_hp,attack,defense,hit,dodge,attack_range,
+       attack_cooldown_ticks,updated_unix_ms
+  FROM character_combat_profiles
+ WHERE character_id=$id
+ LIMIT 1;";
+        command.Parameters.AddWithValue("$id", characterId);
+        using var reader = command.ExecuteReader();
+        if (!reader.Read()) return null;
+        var data = new CharacterCombatProfileData(
+            (CombatProfileTrust)reader.GetInt32(1),
+            reader.GetString(2),
+            reader.GetInt32(3),
+            reader.GetInt32(4),
+            reader.GetInt32(5),
+            reader.GetInt32(6),
+            reader.GetInt32(7),
+            reader.GetInt32(8),
+            reader.GetInt32(9),
+            reader.GetInt32(10),
+            reader.GetInt32(11),
+            reader.GetInt32(12),
+            reader.GetInt32(13),
+            reader.GetInt32(14),
+            reader.GetInt32(15),
+            reader.GetDouble(16),
+            reader.GetInt32(17));
+        return new CharacterCombatProfile(
+            reader.GetInt64(0), data, reader.GetInt64(18));
     }
 
     public async Task SetDisabledAsync(long accountId, bool disabled,
