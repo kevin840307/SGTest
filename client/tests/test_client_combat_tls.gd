@@ -65,7 +65,7 @@ func _initialize() -> void:
 			and int(v.last_attack_result.current_hp)==40
 			and v.monsters.has(target)
 			and int(v.monsters[target].current_hp)==40
-			and int(v.monsters[target].revision)==int(v.last_attack_result.target_revision)
+			and int(v.monsters[target].revision)>=int(v.last_attack_result.target_revision)
 			and int(v.player_damage_sequence)==1
 			and int(v.last_player_damage.damage)==18
 			and int(v.player_current_hp)==0

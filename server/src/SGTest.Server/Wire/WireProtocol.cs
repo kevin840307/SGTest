@@ -861,6 +861,6 @@ public static class WireProtocol
             10 => MoveReceiptStatus.RouteBecameBlocked, 11 => MoveReceiptStatus.CombatDead,
             _ => (MoveReceiptStatus)(-1)
         };
-        return raw <= 10;
+        return raw <= 11;
     }
 }
