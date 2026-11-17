@@ -77,6 +77,9 @@ func _initialize() -> void:
 	if not bool(snapshot.world_ready) or int(snapshot.actor_id) != 11 or int(snapshot.map_id) != 15 or float(snapshot.x) != 24.0 or not snapshot.entities.is_empty():
 		_fail("Ready state mismatch %s" % snapshot)
 		return
+	if not world.mark_world_ready_ack_sent(1,42):
+		_fail("initial WorldReady ACK tracking")
+		return
 	if not world.apply_frame(SPAWN.hex_decode()) or not world.snapshot().entities.has(22):
 		_fail("Spawn not visible")
 		return
@@ -89,7 +92,9 @@ func _initialize() -> void:
 	if not world.apply_frame(DESPAWN.hex_decode()) or int(world.snapshot().stale_aoi_events) != 1:
 		_fail("duplicate despawn not ignored")
 		return
-	if not world.apply_frame(DELTA.hex_decode()):
+	var gap_delta := DELTA.hex_decode()
+	gap_delta.encode_s64(16,46) # newer than the prior Despawn tick=45
+	if not world.apply_frame(gap_delta):
 		_fail("recoverable delta gap became terminal")
 		return
 	snapshot = world.snapshot()
