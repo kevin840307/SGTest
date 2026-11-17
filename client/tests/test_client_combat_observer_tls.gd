@@ -40,17 +40,22 @@ func _initialize() -> void:
 			and bool(v.world_ready)
 			and int(v.pending_world_ready_ack_epoch)==0
 			and int(v.last_world_ready_ack_epoch)==int(v.map_epoch)
-			and not v.self_state.is_empty()
-			and v.entities.size()==1
 			and v.monsters.size()==1
 		),7000)
 	if ready.is_empty():
-		_fail("shared AOI baseline "+str(session.snapshot()),session)
+		_fail("own WorldReady/monster baseline "+str(session.snapshot()),session)
 		return
 	if role=="observer":
+		# The actor process is intentionally started only after this marker.
+		# Do not require its Spawn here or the two processes deadlock.
 		print("CLIENT_COMBAT_OBSERVER_READY role=observer actor=%d" % self_id)
 		_observe(session,self_id)
 	else:
+		var shared := _wait(session,func(v):
+			return v.entities.size()==1 and v.monsters.size()==1,7000)
+		if shared.is_empty():
+			_fail("actor did not receive observer Spawn "+str(session.snapshot()),session)
+			return
 		_attack(session,self_id)
 
 func _observe(session, self_id: int) -> void:

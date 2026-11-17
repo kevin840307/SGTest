@@ -59,6 +59,17 @@ func run() -> void:
 	players.apply_snapshot(snapshot,300000)
 	actors=players.actors_at(300000)
 	check(actors.size()==1 and actors[0].p==Vector2(50,10),"transfer retained old owner")
+	# Initial WorldReady after login/transfer can precede changed-only SelfState.
+	# A server-only own attack visual still carries its authenticated generation.
+	snapshot.player_attack_events=[{
+		"receiver_map_epoch":2,"server_tick":3,
+		"attacker_actor_id":1,"attacker_connection_epoch":9,
+		"attack_sequence":1,"target_entity_id":1001500001,
+		"status":0,"damage":30,"target_revision":2,"facing":3}]
+	players.apply_snapshot(snapshot,320000)
+	actors=players.actors_at(320000)
+	check(actors.size()==1 and not bool(actors[0].parts[0].flip_h),
+		"own AA required changed-only SelfState generation")
 	var view := WorldView.new()
 	root.add_child(view)
 	view.show_players=true

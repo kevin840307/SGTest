@@ -32,6 +32,18 @@ func _initialize() -> void:
 		_fail("invalid visual facing accepted")
 		return
 
+	var stationary := _world_with_monster()
+	stationary.self_state.clear()
+	var first_own_visual := _player_attack_visual(
+		1,41,11,9,1,MONSTER_ID,0,60,2,6)
+	if not stationary.apply_frame(first_own_visual):
+		_fail("stationary own visual could not bind first server-only generation")
+		return
+	var stationary_snapshot: Dictionary = stationary.snapshot()
+	if bool(stationary_snapshot.resync_pending) or stationary_snapshot.player_attack_events.size()!=1 or int(stationary_snapshot.player_attack_sequences[11].connection_epoch)!=9:
+		_fail("stationary own visual incorrectly required changed-only SelfState")
+		return
+
 	var world := _world_with_monster()
 	if not world.mark_normal_attack_sent(1):
 		_fail("attack sequence was not accepted after Ready ACK")
@@ -106,7 +118,7 @@ func _initialize() -> void:
 		_fail("result for unsent attack sequence did not fail closed")
 		return
 
-	print("NORMAL_ATTACK_GODOT_PASS request_bytes=28 result_bytes=57 visual_bytes=66 receipt_does_not_mutate_monster=true visual_does_not_mutate_monster=true delta_owns_hp=true miss_preserved=true visual_replay_stale=true future_sequence_fail_closed=true")
+	print("NORMAL_ATTACK_GODOT_PASS request_bytes=28 result_bytes=57 visual_bytes=66 receipt_does_not_mutate_monster=true visual_does_not_mutate_monster=true stationary_own_generation=true delta_owns_hp=true miss_preserved=true visual_replay_stale=true future_sequence_fail_closed=true")
 	quit(0)
 
 func _world_with_monster() -> RefCounted:

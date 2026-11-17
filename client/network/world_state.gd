@@ -621,7 +621,11 @@ func _apply_player_attack_visual(frame: PackedByteArray) -> bool:
 		return _need_resync("player_attack_visual_target_revision_gap")
 
 	if attacker == actor_id:
-		if self_state.is_empty() or int(self_state.get("connection_epoch",0)) != connection:
+		# Initial WorldReady has no ConnectionEpoch and SelfState is changed-only.
+		# A server-only authenticated combat visual may therefore be the first
+		# own-generation evidence for a stationary attacker. Once SelfState is
+		# present, it must match exactly.
+		if not self_state.is_empty() and int(self_state.get("connection_epoch",0)) != connection:
 			return _need_resync("player_attack_visual_self_generation")
 	else:
 		if not entities.has(attacker):
@@ -1110,8 +1114,13 @@ func _apply_self_state(frame: PackedByteArray) -> bool:
 	if int(value.actor_id) != actor_id or int(value.map_id) != map_id or int(value.entity_map_epoch) != map_epoch:
 		return fail("self_state_wrong_identity_or_map")
 	# The first update binds its server-only connection generation to the already
-	# authenticated own Actor/MapEpoch. Later updates cannot replace it.
-	if not self_state.is_empty():
+	# authenticated own Actor/MapEpoch. If a server-only combat visual arrived
+	# first, its generation must agree. Later updates cannot replace either.
+	if self_state.is_empty():
+		var combat_generation: Dictionary = player_attack_sequences.get(actor_id,{})
+		if not combat_generation.is_empty() and int(combat_generation.get("connection_epoch",0)) != int(value.connection_epoch):
+			return _need_resync("self_state_attack_generation_mismatch")
+	else:
 		if int(value.connection_epoch) != int(self_state.connection_epoch):
 			return fail("self_state_wrong_connection")
 		if int(value.revision) <= int(self_state.revision):

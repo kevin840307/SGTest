@@ -161,7 +161,9 @@ func apply_snapshot(snapshot: Dictionary, now_usec: int) -> void:
 			if not _attack_available or not _actors.has(attacker):
 				continue
 			var actor: Dictionary = _actors[attacker]
-			if int(actor.value.connection_epoch) != connection:
+			var actor_connection := int(actor.value.connection_epoch)
+			var own_without_self_state := attacker == int(snapshot.actor_id) and actor_connection == 0
+			if actor_connection != connection and not own_without_self_state:
 				continue
 			actor.action = "AA"
 			actor.action_facing = int(event.get("facing",actor.value.facing))
