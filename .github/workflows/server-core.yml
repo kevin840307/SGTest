@@ -28,3 +28,5 @@ jobs:
         run: dotnet build server/tests/SGTest.Server.LoginFixture/SGTest.Server.LoginFixture.csproj -c Release --nologo
       - name: Synthetic authoritative world, wire and gateway checks
         run: dotnet run --project server/tests/SGTest.Server.Checks/SGTest.Server.Checks.csproj -c Release
+      - name: Hard-kill process position checkpoint recovery
+        run: python server/tests/run_checkpoint_crash.py

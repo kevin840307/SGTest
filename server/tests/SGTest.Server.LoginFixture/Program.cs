@@ -24,6 +24,10 @@ internal static class Program
             return await RunMultiplayerAsync(false, true).ConfigureAwait(false);
         if (args is ["--reconnect"])
             return await RunReconnectAsync().ConfigureAwait(false);
+        if (args is ["--checkpoint-crash-producer", var producerDb])
+            return await RunCheckpointCrashProducerAsync(producerDb).ConfigureAwait(false);
+        if (args is ["--checkpoint-crash-verify", var verifyDb])
+            return await RunCheckpointCrashVerifyAsync(verifyDb).ConfigureAwait(false);
         if (args.Length != 0)
             return 2;
         string root = Path.Combine(Path.GetTempPath(), "sgtest_login_fixture_" + Guid.NewGuid().ToString("N"));
@@ -124,6 +128,109 @@ internal static class Program
         }
     }
 
+
+
+    private static async Task<int> RunCheckpointCrashProducerAsync(string databasePath)
+    {
+        try
+        {
+            string fullDb = Path.GetFullPath(databasePath);
+            string root = Path.GetDirectoryName(fullDb)
+                ?? throw new ArgumentException("checkpoint DB directory missing");
+            Directory.CreateDirectory(root);
+            var map = BlockingGrid.Load(CreateMap(root, 15), 15);
+            await using var world = new ServerWorldHost([map]);
+            await world.StartAsync().ConfigureAwait(false);
+            using var store = new SqliteIdentityStore(fullDb);
+            await store.InitializeAsync().ConfigureAwait(false);
+            long accountId = (await store.CreateAccountAsync(
+                "crash_checkpoint", "Crash-Checkpoint-Password-123!")).AccountId;
+            long characterId = (await store.CreateCharacterAsync(accountId, 0,
+                "CrashCheckpointHero", new CharacterSpawn(15, 8, 8))).Character?.CharacterId
+                ?? throw new InvalidOperationException("crash checkpoint character missing");
+
+            var positions = new CharacterPositionCheckpoint(store,
+                new(IntervalMilliseconds: 2000, MaxTrackedCharacters: 8));
+            var router = new WorldResultRouter(changedObserver: positions.Observe);
+            using var stop = new CancellationTokenSource();
+            var routing = router.RunAsync(world.Results, stop.Token);
+            var checkpointing = positions.RunAsync(stop.Token);
+
+            var actor = await world.TrustedRegisterAsync(characterId, 15, 8, 8)
+                .ConfigureAwait(false)
+                ?? throw new InvalidOperationException("crash checkpoint register failed");
+            if (!world.TryPostMove(new MoveTargetCommand(
+                    actor.ActorId, actor.ConnectionEpoch, actor.MapEpoch, 1, 40, 8)))
+                throw new InvalidOperationException("crash checkpoint first move refused");
+
+            var durableDeadline = DateTime.UtcNow.AddSeconds(7);
+            while (true)
+            {
+                var rows = await store.ListCharactersAsync(accountId).ConfigureAwait(false);
+                if (rows.Count == 1 && Math.Abs(rows[0].X - 40) < 0.001 &&
+                    Math.Abs(rows[0].Y - 8) < 0.001)
+                    break;
+                if (DateTime.UtcNow >= durableDeadline)
+                    throw new TimeoutException("periodic position 40,8 was not committed");
+                await Task.Delay(25).ConfigureAwait(false);
+            }
+
+            long observedBefore = positions.Statistics.ObservedSnapshots;
+            if (!world.TryPostMove(new MoveTargetCommand(
+                    actor.ActorId, actor.ConnectionEpoch, actor.MapEpoch, 2, 24, 8)))
+                throw new InvalidOperationException("crash checkpoint volatile move refused");
+            var volatileDeadline = DateTime.UtcNow.AddSeconds(1);
+            while (positions.Statistics.ObservedSnapshots < observedBefore + 2)
+            {
+                if (DateTime.UtcNow >= volatileDeadline)
+                    throw new TimeoutException("volatile movement was not observed");
+                await Task.Delay(5).ConfigureAwait(false);
+            }
+
+            // The next periodic flush is still ~2s away. The parent process
+            // SIGKILLs immediately after this marker, so 24,8 is intentionally
+            // volatile while 40,8 is already committed by the real background pump.
+            Console.WriteLine(
+                $"CHECKPOINT_CRASH_READY db={fullDb} durable=40,8 volatile=24,8 " +
+                $"observed={positions.Statistics.ObservedSnapshots} periodic_rows={positions.Statistics.PeriodicRowsWritten}");
+            Console.Out.Flush();
+            await Task.Delay(Timeout.InfiniteTimeSpan).ConfigureAwait(false);
+            return 3; // unreachable unless the parent failed to hard-kill us
+        }
+        catch (Exception error)
+        {
+            Console.Error.WriteLine("CHECKPOINT_CRASH_PRODUCER_FAIL " + error);
+            return 1;
+        }
+    }
+
+    private static async Task<int> RunCheckpointCrashVerifyAsync(string databasePath)
+    {
+        try
+        {
+            using var store = new SqliteIdentityStore(Path.GetFullPath(databasePath));
+            await store.InitializeAsync().ConfigureAwait(false);
+            var auth = await store.AuthenticateAsync(
+                "crash_checkpoint", "Crash-Checkpoint-Password-123!").ConfigureAwait(false);
+            if (auth.Status != AuthenticationStatus.Success || auth.Account is null ||
+                auth.Account.Characters.Count != 1)
+                throw new InvalidOperationException("checkpoint DB did not reopen/authenticate");
+            var character = auth.Account.Characters[0];
+            if (character.MapId != 15 || Math.Abs(character.X - 40) > 0.001 ||
+                Math.Abs(character.Y - 8) > 0.001)
+                throw new InvalidOperationException(
+                    $"hard-kill recovery expected last committed 40,8, got {character.X},{character.Y}");
+            Console.WriteLine(
+                $"CHECKPOINT_CRASH_VERIFY_PASS map={character.MapId} x={character.X:F1} y={character.Y:F1}");
+            Console.Out.Flush();
+            return 0;
+        }
+        catch (Exception error)
+        {
+            Console.Error.WriteLine("CHECKPOINT_CRASH_VERIFY_FAIL " + error);
+            return 1;
+        }
+    }
 
     private static async Task<int> RunReconnectAsync()
     {
