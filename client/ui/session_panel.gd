@@ -24,6 +24,12 @@ var respawn_button := Button.new()
 var pickup_status := Label.new()
 var inventory_button := Button.new()
 var inventory_preview := TextEdit.new()
+var inventory_search := LineEdit.new()
+var inventory_previous := Button.new()
+var inventory_next := Button.new()
+var inventory_page_label := Label.new()
+const INVENTORY_PAGE_SIZE := 80
+var _inventory_page := 0
 var _inventory_display_key := ""
 var status := Label.new()
 var _characters: Array = []
@@ -69,15 +75,26 @@ func _ready() -> void:
 	inventory_preview.visible = false
 	inventory_preview.custom_minimum_size = Vector2(350,160)
 	inventory_preview.wrap_mode = TextEdit.LINE_WRAPPING_BOUNDARY
+	inventory_search.placeholder_text = "搜尋道具名稱／ID／類別"
+	inventory_search.visible = false
+	inventory_search.max_length = 64
+	inventory_previous.text = "上一頁"
+	inventory_next.text = "下一頁"
+	inventory_page_label.text = "第 1 / 1 頁"
+	for control in [inventory_previous, inventory_next, inventory_page_label]:
+		control.visible = false
 	respawn_button.text = "復活"
-	for control in [login_button,characters,choose_button,respawn_button,logout_button,status,pickup_status,inventory_button,inventory_preview]:
+	for control in [login_button,characters,choose_button,respawn_button,logout_button,status,pickup_status,inventory_button,inventory_search,inventory_preview,inventory_previous,inventory_page_label,inventory_next]:
 		column.add_child(control)
 	login_button.pressed.connect(login)
 	password_input.text_submitted.connect(func(_text): login())
 	choose_button.pressed.connect(choose)
 	respawn_button.pressed.connect(request_respawn)
 	logout_button.pressed.connect(disconnect_session)
-	inventory_button.pressed.connect(func(): inventory_preview.visible = not inventory_preview.visible if inventory_button.visible else false)
+	inventory_button.pressed.connect(_toggle_inventory)
+	inventory_search.text_changed.connect(_on_inventory_search_changed)
+	inventory_previous.pressed.connect(func(): _set_inventory_page(_inventory_page-1))
+	inventory_next.pressed.connect(func(): _set_inventory_page(_inventory_page+1))
 	var style := StyleBoxFlat.new()
 	style.bg_color = Color("211c15")
 	style.border_color = Color("c8a452")
@@ -112,8 +129,10 @@ func login() -> void:
 	_respawn_queued_after = -1
 	pickup_status.text = ""
 	_inventory_display_key = ""
+	_inventory_page = 0
+	inventory_search.clear()
 	inventory_preview.text = ""
-	inventory_preview.visible = false
+	_show_inventory_preview(false)
 	characters.clear()
 	_characters = []
 	_set_controls()
@@ -171,8 +190,10 @@ func disconnect_session() -> void:
 	_respawn_queued_after = -1
 	pickup_status.text = ""
 	_inventory_display_key = ""
+	_inventory_page = 0
+	inventory_search.clear()
 	inventory_preview.text = ""
-	inventory_preview.visible = false
+	_show_inventory_preview(false)
 	_characters = []
 	characters.clear()
 	password_input.clear()
@@ -210,44 +231,85 @@ func _set_respawn_controls() -> void:
 	respawn_button.disabled = not dead or bool(_latest.get("reconnecting",false)) or bool(_latest.get("resync_pending",false)) or bool(_latest.get("waiting_for_new_map",false)) or int(_latest.get("pending_world_ready_ack_epoch",0)) != 0 or int(_latest.get("last_world_ready_ack_epoch",0)) != int(_latest.get("map_epoch",0)) or sent_sequence > result_sequence or _respawn_queued_after >= 0
 
 
+func _show_inventory_preview(show: bool) -> void:
+	inventory_preview.visible = show
+	inventory_search.visible = show
+	inventory_previous.visible = show
+	inventory_next.visible = show
+	inventory_page_label.visible = show
+
+
+func _toggle_inventory() -> void:
+	if inventory_button.disabled or not inventory_button.visible:
+		return
+	_show_inventory_preview(not inventory_preview.visible)
+	if inventory_preview.visible:
+		_update_inventory_ui()
+
+
+func _on_inventory_search_changed(_query: String) -> void:
+	_inventory_page = 0
+	_inventory_display_key = ""
+	_update_inventory_ui()
+
+
+func _set_inventory_page(page: int) -> void:
+	_inventory_page = maxi(0,page)
+	_inventory_display_key = ""
+	_update_inventory_ui()
+
+
 func _update_inventory_ui() -> void:
 	var in_world: bool = active and int(_latest.get("state",-1)) == State.STATE_IN_WORLD
 	var loaded: bool = in_world and bool(_latest.get("inventory_ready",false))
 	inventory_button.visible = in_world
 	inventory_button.disabled = not loaded or bool(_latest.get("reconnecting",false))
 	if not in_world or bool(_latest.get("reconnecting",false)):
-		inventory_preview.visible = false
+		_show_inventory_preview(false)
 		_inventory_display_key = ""
 		return
 	if not loaded:
 		inventory_button.text = "背包（讀取中）"
-		inventory_preview.visible = false
+		_show_inventory_preview(false)
 		_inventory_display_key = ""
 		return
 	var items: Dictionary = _latest.get("inventory_items",{})
 	inventory_button.text = "背包（%d 件）" % items.size()
 	var revision := int(_latest.get("inventory_revision",0))
-	# Revision can reset to 1 on reconnect/new character, so key by
-	# authenticated identity AND the connection's reconnect generation.
-	var display_key := "%d/%d/%d" % [
+	var query := inventory_search.text.strip_edges()
+	var uids: Array = items.keys()
+	uids.sort()
+	var filtered: Array = []
+	for raw_uid in uids:
+		var id := int(raw_uid)
+		var item: Dictionary = items[raw_uid]
+		var item_id := int(item.item_definition_id)
+		if query.is_empty() or item_catalog.name_for(item_id).findn(query) >= 0 or str(item_id).findn(query) >= 0 or item_catalog.category_for(item_id).findn(query) >= 0:
+			filtered.append(raw_uid)
+	var pages := maxi(1,ceili(float(filtered.size())/float(INVENTORY_PAGE_SIZE)))
+	_inventory_page = clampi(_inventory_page,0,pages-1)
+	inventory_previous.disabled = _inventory_page == 0
+	inventory_next.disabled = _inventory_page >= pages-1
+	inventory_page_label.text = "第 %d / %d 頁（符合 %d 件）" % [
+		_inventory_page+1,pages,filtered.size()]
+	# Revision can reset to 1 on reconnect/new character. Include all view
+	# dimensions to avoid caching another character's or filter's item list.
+	var display_key := "%d/%d/%d/%d/%s" % [
 		int(_latest.get("actor_id",0)),
-		int(_latest.get("reconnect_count",0)),revision]
+		int(_latest.get("reconnect_count",0)),revision,_inventory_page,query]
 	if display_key == _inventory_display_key:
 		return
 	_inventory_display_key = display_key
-	var uids: Array = items.keys()
-	uids.sort()
 	var rows := PackedStringArray()
-	for index in mini(uids.size(),80):
-		var uid := int(uids[index])
-		var item: Dictionary = items[uids[index]]
+	var start := _inventory_page*INVENTORY_PAGE_SIZE
+	for index in range(start,mini(start+INVENTORY_PAGE_SIZE,filtered.size())):
+		var uid := int(filtered[index])
+		var item: Dictionary = items[filtered[index]]
 		rows.append("%s ×%d  ·  UID %d" % [
 			item_catalog.name_for(int(item.item_definition_id)),
 			int(item.quantity),uid])
-	if uids.size() > 80:
-		rows.append("…另有 %d 件（先顯示前 80 件）" % (uids.size()-80))
 	if rows.is_empty():
-		rows.append("背包目前沒有物品")
+		rows.append("沒有符合條件的物品" if not query.is_empty() else "背包目前沒有物品")
 	inventory_preview.text = "\n".join(rows)
 
 
