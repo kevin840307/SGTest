@@ -19,6 +19,8 @@ internal static class WorldAoiPumpChecks
             () => LiveResync(root).GetAwaiter().GetResult());
         Checks.Run("live Host Router Pump publishes coalesced monster state through shared AOI FIFO",
             () => LiveMonsterPipeline(root).GetAwaiter().GetResult());
+        Checks.Run("20-player 300-monster shared AOI load stays spatially bounded without reliable overflow",
+            () => TwentyPlayersThreeHundredMonsters(root).GetAwaiter().GetResult());
     }
 
     private static async Task LiveTwoPlayers(string root)
@@ -349,6 +351,221 @@ internal static class WorldAoiPumpChecks
                     coordinator.Statistics.Monsters==1 &&
                     coordinator.Statistics.RuntimeTicks>0,
                     "monster coordinator/AOI accounting");
+        }
+        finally
+        {
+            stop.Cancel();
+            await pumping.WaitAsync(TimeSpan.FromSeconds(3));
+            await host.StopAsync();
+            await routing.WaitAsync(TimeSpan.FromSeconds(3));
+        }
+    }
+
+    private static async Task TwentyPlayersThreeHundredMonsters(string root)
+    {
+        const int mapId = 107;
+        const int playerCount = 20;
+        const int monstersPerCluster = 15;
+        const int monsterCount = playerCount * monstersPerCluster;
+        string folder = Checks.Fixture(root, mapId, 420, 240, (_, _) => 0);
+        var grid = BlockingGrid.Load(folder, mapId);
+
+        var spawnRows = new List<object>(monsterCount);
+        var centers = new (int X, int Y)[playerCount];
+        for (int player = 0; player < playerCount; player++)
+        {
+            int column = player % 5;
+            int row = player / 5;
+            int centerX = 400 + column * 1400;
+            int centerY = 400 + row * 900;
+            centers[player] = (centerX, centerY);
+            for (int local = 0; local < monstersPerCluster; local++)
+            {
+                int source = player * monstersPerCluster + local;
+                int x = centerX + ((local % 5) - 2) * 24;
+                int y = centerY + ((local / 5) - 1) * 24;
+                spawnRows.Add(new
+                {
+                    source_index = source,
+                    source_flags = 7,
+                    definition = 1,
+                    p = new[] { x, y }
+                });
+            }
+        }
+
+        string populationPath = Path.Combine(folder, "population-load.json");
+        File.WriteAllText(populationPath, JsonSerializer.Serialize(new
+        {
+            version = 4,
+            kind = "verified_monster_runtime",
+            map_id = mapId,
+            stats_verified = true,
+            gameplay_ready = true,
+            definitions = new[]
+            {
+                new
+                {
+                    id = 1,
+                    name = "SyntheticLoadMonster",
+                    sprite = "EN001A",
+                    atlas = "Enemy/EN001A/atlas.json",
+                    stats = new
+                    {
+                        level = 3,
+                        max_hp = 100,
+                        attack_damage = 6,
+                        move_step = 8.0,
+                        aggro_radius = 160.0,
+                        lose_target_radius = 320.0,
+                        leash_radius = 320.0,
+                        attack_range = 24.0,
+                        attack_cooldown_ticks = 8,
+                        respawn_ticks = 90,
+                        wander_radius = 0.0,
+                        wander_interval_ticks = 100
+                    }
+                }
+            },
+            spawns = spawnRows
+        }));
+
+        var population = MonsterPopulationCatalog.LoadVerified(
+            populationPath, mapId, grid, maxSpawns: monsterCount);
+        var runtime = new MonsterRuntime(grid, population,
+            new MonsterRuntimeOptions(
+                AiIntervalTicks: 4,
+                MaxAiPerStep: 64,
+                MaxPathQueriesPerStep: 16,
+                MaxPathExpandedCells: 256));
+        var coordinator = new MonsterWorldCoordinator([runtime]);
+
+        await using var host = new ServerWorldHost(
+            [grid],
+            options: new WorldHostOptions(
+                ResultCapacity: 256,
+                PublishIdleTicks: true));
+        await host.StartAsync();
+
+        var router = new WorldResultRouter(
+            new WorldResultRouterOptions(
+                ChangedBatchCapacity: 128,
+                MaxSessions: 64,
+                ResyncRequestCapacity: 32));
+        var gateways = new List<GatewayConnection>(playerCount);
+        var actors = new List<ActorSnapshot>(playerCount);
+        for (int i = 0; i < playerCount; i++)
+        {
+            var center = centers[i];
+            var actor = await host.TrustedRegisterAsync(
+                10_000 + i, mapId, center.X, center.Y)
+                ?? throw new Exception($"load actor {i}");
+            actors.Add(actor);
+            var gateway = new GatewayConnection(actor);
+            Require(router.TryAttach(gateway), $"load Gateway attach {i}");
+            gateways.Add(gateway);
+        }
+
+        var aoi = new WorldAoi(new WorldAoiOptions(
+            EnterHalfWidth: 320,
+            EnterHalfHeight: 240,
+            ExitMargin: 64,
+            BucketSize: 128,
+            MaxEntities: 1024,
+            MaxObservers: 64,
+            MaxVisiblePerObserver: 64,
+            MaxPendingEventsPerObserver: 256));
+        var pump = new WorldAoiPump(
+            router, aoi,
+            new WorldAoiPumpOptions(
+                FlushIntervalMilliseconds: 2,
+                MaxFramesPerObserverPerPoll: 64),
+            coordinator);
+        using var stop = new CancellationTokenSource();
+        var routing = router.RunAsync(host.Results);
+        var pumping = pump.RunAsync(stop.Token);
+
+        try
+        {
+            int totalBaselineSpawns = 0;
+            for (int player = 0; player < playerCount; player++)
+            {
+                var gateway = gateways[player];
+                await WaitForFrames(gateway, 1 + monstersPerCluster);
+                var expectedMin = player * monstersPerCluster;
+                var expectedMax = expectedMin + monstersPerCluster - 1;
+                bool ready = false;
+                var spawned = new HashSet<int>();
+                while (gateway.TryDequeueReliable(out var frame))
+                {
+                    if (WireProtocol.TryDecodeWorldReady(frame, out var readyFrame))
+                    {
+                        Require(readyFrame.ActorId == actors[player].ActorId,
+                            $"load Ready actor {player}");
+                        ready = true;
+                        continue;
+                    }
+                    if (WireProtocol.TryDecodeMonsterState(
+                            frame, out var opcode, out var monster))
+                    {
+                        Require(monster.SourceIndex >= expectedMin &&
+                                monster.SourceIndex <= expectedMax,
+                            $"observer {player} received foreign monster source {monster.SourceIndex}");
+                        if (opcode == WireOpcode.MonsterSpawn)
+                            spawned.Add(monster.SourceIndex);
+                        continue;
+                    }
+                    Require(false,
+                        $"observer {player} received unexpected baseline frame");
+                }
+                Require(ready && spawned.Count == monstersPerCluster,
+                    $"observer {player} local monster baseline count");
+                totalBaselineSpawns += spawned.Count;
+            }
+
+            Require(totalBaselineSpawns == monsterCount &&
+                    aoi.MonsterCount == monsterCount &&
+                    aoi.ObserverCount == playerCount &&
+                    coordinator.Statistics.TrackedActors == playerCount &&
+                    coordinator.Statistics.Monsters == monsterCount,
+                "20-player/300-monster shared authority accounting");
+
+            // Allow more than one full 300-monster round-robin pass. Each
+            // observer remains isolated to its 15-monster cluster, so reliable
+            // egress stays well below the 256-frame connection bound.
+            await Task.Delay(900);
+            int totalDeltas = 0;
+            int peakReliableFrames = 0;
+            for (int player = 0; player < playerCount; player++)
+            {
+                var gateway = gateways[player];
+                peakReliableFrames = Math.Max(
+                    peakReliableFrames, gateway.ReliableFrames);
+                Require(gateway.ReliableFrames < 128,
+                    $"observer {player} reliable queue grew beyond spatial bound");
+                int expectedMin = player * monstersPerCluster;
+                int expectedMax = expectedMin + monstersPerCluster - 1;
+                while (gateway.TryDequeueReliable(out var frame))
+                {
+                    if (!WireProtocol.TryDecodeMonsterState(
+                            frame, out var opcode, out var monster))
+                        continue;
+                    Require(monster.SourceIndex >= expectedMin &&
+                            monster.SourceIndex <= expectedMax,
+                        $"observer {player} received foreign AI delta {monster.SourceIndex}");
+                    if (opcode == WireOpcode.MonsterDelta)
+                        totalDeltas++;
+                }
+            }
+
+            var stats = runtime.Statistics;
+            Require(totalDeltas > 0 &&
+                    stats.MonsterCount == monsterCount &&
+                    stats.MaxProcessedInStep <= 64 &&
+                    stats.MonstersProcessed >= monsterCount &&
+                    router.Statistics.BackpressureFailures == 0 &&
+                    peakReliableFrames < 128,
+                "20-player/300-monster bounded load did not make progress safely");
         }
         finally
         {
