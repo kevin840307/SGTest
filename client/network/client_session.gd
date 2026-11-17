@@ -87,6 +87,12 @@ func move_target(target_x: int, target_y: int) -> bool:
 		return false
 	return _queue_intent({"type": "move", "x": target_x, "y": target_y})
 
+func respawn() -> bool:
+	var current := snapshot()
+	if not bool(current.get("combat_available",false)) or not bool(current.get("player_dead",false)):
+		return false
+	return _queue_intent({"type":"respawn"})
+
 func attack_monster(entity_id: int) -> bool:
 	if entity_id <= 0 or bool(snapshot().get("player_dead",false)):
 		return false
@@ -314,6 +320,15 @@ func _process_first_intent() -> void:
 		var sequence := int(current.npc_interaction_sequence) + 1
 		var frame := WireCodec.encode_npc_interact(int(current.map_epoch), sequence, int(intent.spawn_id))
 		if not frame.is_empty() and _transport.send_frame(frame) and _world.mark_npc_interact_sent(sequence):
+			_pop_intent()
+			_publish()
+	elif kind == "respawn":
+		var current: Dictionary = _world.snapshot()
+		if int(current.state) != WorldState.STATE_IN_WORLD or not bool(current.player_dead) or not bool(current.combat_available) or not bool(current.world_ready) or bool(current.resync_pending) or int(current.pending_world_ready_ack_epoch) != 0 or int(current.last_world_ready_ack_epoch) != int(current.map_epoch) or bool(current.waiting_for_new_map):
+			return
+		var sequence := int(current.respawn_sequence) + 1
+		var frame := WireCodec.encode_player_respawn(int(current.map_epoch),sequence)
+		if not frame.is_empty() and _transport.send_frame(frame) and _world.mark_player_respawn_sent(sequence):
 			_pop_intent()
 			_publish()
 	elif kind == "attack_monster":

@@ -28,11 +28,21 @@ public enum WireOpcode : ushort
     WorldResyncRequest = 26,
     MonsterSpawn = 27,
     MonsterDelta = 28,
-    MonsterDespawn = 29
+    MonsterDespawn = 29,
+    PlayerRespawn = 30,
+    PlayerRespawnResult = 31
 }
 
 public enum AuthWireStatus : byte { Success = 0, InvalidCredentials = 1, Disabled = 2 }
 public enum CharacterChooseWireStatus : byte { Success = 0, NotOwned = 1, WorldRejected = 2 }
+public enum PlayerRespawnStatus : byte
+{
+    Accepted = 0,
+    NotDead = 1,
+    CombatUnavailable = 2,
+    StaleGeneration = 3,
+    ReplayedSequence = 4
+}
 
 public readonly record struct WireFrameHeader(int FrameBytes, ushort Version, WireOpcode Opcode);
 public readonly record struct MoveTargetWire(long MapEpoch, uint MovementSequence, int TargetX, int TargetY);
@@ -53,6 +63,11 @@ public readonly record struct PlayerDamageWire(
     long MapEpoch, uint DamageSequence, long ServerTick,
     long AttackerMonsterEntityId, long AttackerMonsterRevision,
     int Damage, int CurrentHp, int MaxHp, bool Died);
+public readonly record struct PlayerRespawnWire(
+    long MapEpoch, uint RespawnSequence);
+public readonly record struct PlayerRespawnResultWire(
+    long MapEpoch, uint RespawnSequence, PlayerRespawnStatus Status,
+    int CurrentHp, int MaxHp);
 public readonly record struct AuthRequestWire(string Username, string Password);
 public readonly record struct AuthResultWire(AuthWireStatus Status);
 public readonly record struct CharacterSummaryWire(long CharacterId, byte Slot, string Name);
@@ -101,6 +116,8 @@ public static class WireProtocol
     public const int NormalAttackResultFrameBytes = HeaderBytes + 8 + 4 + 1 + 8 + 8 + 4 + 4 + 4 + 8;
     public const int PlayerCombatStateFrameBytes = HeaderBytes + 8 + 4 + 4;
     public const int PlayerDamageFrameBytes = HeaderBytes + 8 + 4 + 8 + 8 + 8 + 4 + 4 + 4 + 1;
+    public const int PlayerRespawnFrameBytes = HeaderBytes + 8 + 4;
+    public const int PlayerRespawnResultFrameBytes = HeaderBytes + 8 + 4 + 1 + 4 + 4;
     public const int AuthResultFrameBytes = HeaderBytes + 1;
     public const int CharacterChooseFrameBytes = HeaderBytes + 8;
     public const int CharacterChooseResultFrameBytes = HeaderBytes + 37;
@@ -317,6 +334,56 @@ public static class WireProtocol
             BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(52, 4)),
             died != 0);
         return ValidPlayerDamage(value);
+    }
+
+    public static byte[] EncodePlayerRespawn(PlayerRespawnWire value)
+    {
+        if (value.MapEpoch <= 0 || value.RespawnSequence == 0)
+            throw new ArgumentOutOfRangeException(nameof(value));
+        var frame = NewFrame(WireOpcode.PlayerRespawn, PlayerRespawnFrameBytes);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(8, 8), value.MapEpoch);
+        BinaryPrimitives.WriteUInt32LittleEndian(frame.AsSpan(16, 4), value.RespawnSequence);
+        return frame;
+    }
+
+    public static bool TryDecodePlayerRespawn(
+        ReadOnlySpan<byte> frame, out PlayerRespawnWire value)
+    {
+        value = default;
+        if (!TryReadHeader(frame, out var h) || h.Opcode != WireOpcode.PlayerRespawn)
+            return false;
+        value = new(
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(8, 8)),
+            BinaryPrimitives.ReadUInt32LittleEndian(frame.Slice(16, 4)));
+        return value.MapEpoch > 0 && value.RespawnSequence != 0;
+    }
+
+    public static byte[] EncodePlayerRespawnResult(PlayerRespawnResultWire value)
+    {
+        if (!ValidPlayerRespawnResult(value))
+            throw new ArgumentOutOfRangeException(nameof(value));
+        var frame = NewFrame(WireOpcode.PlayerRespawnResult, PlayerRespawnResultFrameBytes);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(8, 8), value.MapEpoch);
+        BinaryPrimitives.WriteUInt32LittleEndian(frame.AsSpan(16, 4), value.RespawnSequence);
+        frame[20] = (byte)value.Status;
+        BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(21, 4), value.CurrentHp);
+        BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(25, 4), value.MaxHp);
+        return frame;
+    }
+
+    public static bool TryDecodePlayerRespawnResult(
+        ReadOnlySpan<byte> frame, out PlayerRespawnResultWire value)
+    {
+        value = default;
+        if (!TryReadHeader(frame, out var h) || h.Opcode != WireOpcode.PlayerRespawnResult)
+            return false;
+        value = new(
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(8, 8)),
+            BinaryPrimitives.ReadUInt32LittleEndian(frame.Slice(16, 4)),
+            (PlayerRespawnStatus)frame[20],
+            BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(21, 4)),
+            BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(25, 4)));
+        return ValidPlayerRespawnResult(value);
     }
 
     public static byte[] EncodeMoveReceipt(MoveReceiptWire value)
@@ -728,6 +795,20 @@ public static class WireProtocol
                value.ActorId > 0 && value.ConnectionEpoch > 0;
     }
 
+    private static bool ValidPlayerRespawnResult(PlayerRespawnResultWire value)
+    {
+        if (value.MapEpoch <= 0 || value.RespawnSequence == 0 ||
+            (byte)value.Status > (byte)PlayerRespawnStatus.ReplayedSequence ||
+            value.CurrentHp < 0 || value.MaxHp < 0 ||
+            value.CurrentHp > value.MaxHp)
+            return false;
+        if (value.Status == PlayerRespawnStatus.Accepted)
+            return value.MaxHp > 0 && value.CurrentHp == value.MaxHp;
+        if (value.Status == PlayerRespawnStatus.NotDead)
+            return value.MaxHp > 0 && value.CurrentHp > 0;
+        return true;
+    }
+
     private static bool ValidPlayerCombatState(PlayerCombatStateWire value) =>
         value.MapEpoch > 0 && value.MaxHp > 0 &&
         value.CurrentHp >= 0 && value.CurrentHp <= value.MaxHp;
@@ -797,7 +878,8 @@ public static class WireProtocol
             22 => WireOpcode.EntityDespawn, 23 => WireOpcode.EntityDelta,
             24 => WireOpcode.SelfState, 25 => WireOpcode.WorldReadyAck,
             26 => WireOpcode.WorldResyncRequest, 27 => WireOpcode.MonsterSpawn,
-            28 => WireOpcode.MonsterDelta, 29 => WireOpcode.MonsterDespawn, _ => 0
+            28 => WireOpcode.MonsterDelta, 29 => WireOpcode.MonsterDespawn,
+            30 => WireOpcode.PlayerRespawn, 31 => WireOpcode.PlayerRespawnResult, _ => 0
         };
         if (opcode == 0) return false;
         bool sizeOk = opcode switch
@@ -822,6 +904,8 @@ public static class WireProtocol
             WireOpcode.WorldResyncRequest => advertised == WorldResyncRequestFrameBytes,
             WireOpcode.MonsterSpawn or WireOpcode.MonsterDelta => advertised == MonsterStateFrameBytes,
             WireOpcode.MonsterDespawn => advertised == MonsterDespawnFrameBytes,
+            WireOpcode.PlayerRespawn => advertised == PlayerRespawnFrameBytes,
+            WireOpcode.PlayerRespawnResult => advertised == PlayerRespawnResultFrameBytes,
             _ => false
         };
         if (!sizeOk) return false;

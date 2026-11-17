@@ -160,10 +160,55 @@ public sealed class IdentityTlsAuthorization
                     }
                     return outcome;
                 };
+            async Task RespawnHandler(TrustedPlayerRespawn request)
+            {
+                var binding = new ConnectionBinding(
+                    request.ActorId, request.ConnectionEpoch, request.RequestMapEpoch);
+                if (!router.IsCurrentBinding(binding))
+                    return;
+
+                PlayerRespawnOutcome outcome;
+                ActorSnapshot? revived = null;
+                if (_combat is null)
+                {
+                    outcome = new(PlayerRespawnStatus.CombatUnavailable, 0, 0);
+                }
+                else
+                {
+                    outcome = await _combat.RespawnFullAsync(
+                        request.ActorId, request.ConnectionEpoch,
+                        request.RequestMapEpoch, request.RespawnSequence)
+                        .ConfigureAwait(false);
+
+                    if (outcome.Status == PlayerRespawnStatus.Accepted)
+                    {
+                        revived = await _world.TrustedSetCombatDeadAsync(
+                            request.ActorId, request.ConnectionEpoch,
+                            request.RequestMapEpoch, false).ConfigureAwait(false);
+                        if (revived is null)
+                            outcome = new(PlayerRespawnStatus.StaleGeneration,
+                                outcome.CurrentHp, outcome.MaxHp);
+                    }
+                }
+
+                var sent = router.QueuePlayerRespawnResult(request, outcome);
+                if (sent != GatewaySendStatus.Enqueued)
+                    throw new IOException(
+                        "Reliable player respawn result could not be queued: " + sent);
+
+                // Queue the authoritative full-HP baseline BEFORE reopening AI
+                // targetability, so later PlayerDamage cannot overtake RespawnResult.
+                if (outcome.Status == PlayerRespawnStatus.Accepted &&
+                    revived is { } actor &&
+                    (_combat is null || !_combat.TryResume(actor)))
+                    throw new InvalidOperationException(
+                        "Combat generation could not resume after player respawn");
+            }
+
             return await TlsWireConnection.RunServerAsync(client, certificate,
                 Authorize, _world.TryPostMove, options, cancellationToken, Release,
                 npcHandler, router.TryRequestResync,
-                router.TryRequestNormalAttack).ConfigureAwait(false);
+                router.TryRequestNormalAttack, RespawnHandler).ConfigureAwait(false);
         }
         finally
         {

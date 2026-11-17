@@ -26,6 +26,8 @@ const OPCODE_WORLD_RESYNC_REQUEST := 26
 const OPCODE_MONSTER_SPAWN := 27
 const OPCODE_MONSTER_DELTA := 28
 const OPCODE_MONSTER_DESPAWN := 29
+const OPCODE_PLAYER_RESPAWN := 30
+const OPCODE_PLAYER_RESPAWN_RESULT := 31
 const MOVE_TARGET_FRAME_BYTES := 28
 const MOVE_RECEIPT_FRAME_BYTES := 30
 const NPC_INTERACT_FRAME_BYTES := 24
@@ -34,6 +36,8 @@ const NORMAL_ATTACK_FRAME_BYTES := 28
 const NORMAL_ATTACK_RESULT_FRAME_BYTES := 57
 const PLAYER_COMBAT_STATE_FRAME_BYTES := 24
 const PLAYER_DAMAGE_FRAME_BYTES := 57
+const PLAYER_RESPAWN_FRAME_BYTES := 20
+const PLAYER_RESPAWN_RESULT_FRAME_BYTES := 29
 const AUTH_RESULT_FRAME_BYTES := 9
 const CHARACTER_CHOOSE_FRAME_BYTES := 16
 const CHARACTER_CHOOSE_RESULT_FRAME_BYTES := 45
@@ -207,6 +211,41 @@ static func decode_player_damage(frame: PackedByteArray) -> Dictionary:
 	return {"map_epoch":epoch,"damage_sequence":sequence,"server_tick":tick,
 		"attacker_monster_entity_id":attacker,"attacker_monster_revision":attacker_revision,
 		"damage":damage,"current_hp":current_hp,"max_hp":max_hp,"died":died==1}
+
+static func encode_player_respawn(map_epoch: int, respawn_sequence: int) -> PackedByteArray:
+	if map_epoch <= 0 or respawn_sequence <= 0 or respawn_sequence > 0xffffffff:
+		return PackedByteArray()
+	var writer := StreamPeerBuffer.new()
+	writer.big_endian = false
+	writer.put_u32(PLAYER_RESPAWN_FRAME_BYTES)
+	writer.put_u16(VERSION)
+	writer.put_u16(OPCODE_PLAYER_RESPAWN)
+	writer.put_64(map_epoch)
+	writer.put_u32(respawn_sequence)
+	return writer.data_array
+
+static func decode_player_respawn_result(frame: PackedByteArray) -> Dictionary:
+	if not _valid_header(frame, OPCODE_PLAYER_RESPAWN_RESULT, PLAYER_RESPAWN_RESULT_FRAME_BYTES):
+		return {}
+	var reader := _reader(frame, 8)
+	var epoch := reader.get_64()
+	var sequence := reader.get_u32()
+	var status := reader.get_u8()
+	var current_hp := reader.get_32()
+	var max_hp := reader.get_32()
+	if epoch <= 0 or sequence == 0 or status > 4 or current_hp < 0 or max_hp < 0 or current_hp > max_hp:
+		return {}
+	if status == 0 and (max_hp <= 0 or current_hp != max_hp):
+		return {}
+	if status == 1 and (max_hp <= 0 or current_hp <= 0):
+		return {}
+	return {
+		"map_epoch":epoch,
+		"respawn_sequence":sequence,
+		"status":status,
+		"current_hp":current_hp,
+		"max_hp":max_hp
+	}
 
 static func encode_auth_request(username: String, password: String) -> PackedByteArray:
 	var username_bytes := username.to_utf8_buffer()
@@ -429,7 +468,7 @@ static func frame_opcode(frame: PackedByteArray) -> int:
 	if reader.get_u16() != VERSION:
 		return -1
 	var opcode := reader.get_u16()
-	if opcode not in [OPCODE_MOVE_TARGET, OPCODE_MOVE_RECEIPT, OPCODE_NPC_INTERACT, OPCODE_NPC_INTERACT_RESULT, OPCODE_NORMAL_ATTACK, OPCODE_NORMAL_ATTACK_RESULT, OPCODE_PLAYER_COMBAT_STATE, OPCODE_PLAYER_DAMAGE, OPCODE_AUTH_REQUEST, OPCODE_AUTH_RESULT, OPCODE_CHARACTER_LIST, OPCODE_CHARACTER_CHOOSE, OPCODE_CHARACTER_CHOOSE_RESULT, OPCODE_WORLD_READY, OPCODE_ENTITY_SPAWN, OPCODE_ENTITY_DESPAWN, OPCODE_ENTITY_DELTA, OPCODE_SELF_STATE, OPCODE_WORLD_READY_ACK, OPCODE_WORLD_RESYNC_REQUEST, OPCODE_MONSTER_SPAWN, OPCODE_MONSTER_DELTA, OPCODE_MONSTER_DESPAWN]:
+	if opcode not in [OPCODE_MOVE_TARGET, OPCODE_MOVE_RECEIPT, OPCODE_NPC_INTERACT, OPCODE_NPC_INTERACT_RESULT, OPCODE_NORMAL_ATTACK, OPCODE_NORMAL_ATTACK_RESULT, OPCODE_PLAYER_COMBAT_STATE, OPCODE_PLAYER_DAMAGE, OPCODE_AUTH_REQUEST, OPCODE_AUTH_RESULT, OPCODE_CHARACTER_LIST, OPCODE_CHARACTER_CHOOSE, OPCODE_CHARACTER_CHOOSE_RESULT, OPCODE_WORLD_READY, OPCODE_ENTITY_SPAWN, OPCODE_ENTITY_DESPAWN, OPCODE_ENTITY_DELTA, OPCODE_SELF_STATE, OPCODE_WORLD_READY_ACK, OPCODE_WORLD_RESYNC_REQUEST, OPCODE_MONSTER_SPAWN, OPCODE_MONSTER_DELTA, OPCODE_MONSTER_DESPAWN, OPCODE_PLAYER_RESPAWN, OPCODE_PLAYER_RESPAWN_RESULT]:
 		return -1
 	return opcode
 

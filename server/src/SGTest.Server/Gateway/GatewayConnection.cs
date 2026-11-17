@@ -38,6 +38,10 @@ public readonly record struct TrustedNormalAttack(
     uint AttackSequence, long TargetEntityId,
     TrustedCombatProfile? Profile);
 
+public readonly record struct TrustedPlayerRespawn(
+    long ActorId, long ConnectionEpoch, long RequestMapEpoch,
+    uint RespawnSequence);
+
 public readonly record struct NormalAttackOutcome(
     NormalAttackStatus Status, long ServerTick, long TargetEntityId,
     int Damage, int CurrentHp, int MaxHp, long TargetRevision,
@@ -230,7 +234,8 @@ public sealed class GatewayConnection
                                           out int commandsAccepted,
                                           Func<TrustedNpcInteraction, bool>? postNpc = null,
                                           Func<TrustedWorldResyncRequest, bool>? postResync = null,
-                                          Func<TrustedNormalAttack, bool>? postAttack = null)
+                                          Func<TrustedNormalAttack, bool>? postAttack = null,
+                                          Func<TrustedPlayerRespawn, bool>? postRespawn = null)
     {
         ArgumentNullException.ThrowIfNull(postMove);
         lock (_receiveGate)
@@ -241,7 +246,8 @@ public sealed class GatewayConnection
                 return WireFeedStatus.Closed;
             }
             return _parser.Feed(bytes,
-                frame => HandleClientFrame(frame, postMove, postNpc, postResync, postAttack),
+                frame => HandleClientFrame(
+                    frame, postMove, postNpc, postResync, postAttack, postRespawn),
                 out commandsAccepted);
         }
     }
@@ -250,7 +256,8 @@ public sealed class GatewayConnection
                                               out int commandsAccepted,
                                               Func<TrustedNpcInteraction, bool>? postNpc = null,
                                               Func<TrustedWorldResyncRequest, bool>? postResync = null,
-                                              Func<TrustedNormalAttack, bool>? postAttack = null)
+                                              Func<TrustedNormalAttack, bool>? postAttack = null,
+                                              Func<TrustedPlayerRespawn, bool>? postRespawn = null)
     {
         ArgumentNullException.ThrowIfNull(postMove);
         lock (_receiveGate)
@@ -261,7 +268,8 @@ public sealed class GatewayConnection
                 return WireFeedStatus.Closed;
             }
             return _parser.Resume(
-                frame => HandleClientFrame(frame, postMove, postNpc, postResync, postAttack),
+                frame => HandleClientFrame(
+                    frame, postMove, postNpc, postResync, postAttack, postRespawn),
                 out commandsAccepted);
         }
     }
@@ -271,7 +279,8 @@ public sealed class GatewayConnection
         Func<MoveTargetCommand, bool> postMove,
         Func<TrustedNpcInteraction, bool>? postNpc,
         Func<TrustedWorldResyncRequest, bool>? postResync,
-        Func<TrustedNormalAttack, bool>? postAttack)
+        Func<TrustedNormalAttack, bool>? postAttack,
+        Func<TrustedPlayerRespawn, bool>? postRespawn)
     {
         if (!WireProtocol.TryReadHeader(frame, out var header))
             return WireFrameDisposition.ProtocolViolation;
@@ -297,6 +306,18 @@ public sealed class GatewayConnection
                 return WireFrameDisposition.Backpressured;
             }
             return WireFrameDisposition.AcceptedControl;
+        }
+
+        if (header.Opcode == WireOpcode.PlayerRespawn && postRespawn is not null &&
+            WireProtocol.TryDecodePlayerRespawn(frame, out var respawn))
+        {
+            if (!GameplayReady(bound))
+                return WireFrameDisposition.ProtocolViolation;
+            var request = new TrustedPlayerRespawn(
+                bound.ActorId, bound.ConnectionEpoch, respawn.MapEpoch,
+                respawn.RespawnSequence);
+            return postRespawn(request)
+                ? WireFrameDisposition.Accepted : WireFrameDisposition.Backpressured;
         }
 
         if (header.Opcode == WireOpcode.NormalAttack && postAttack is not null &&
@@ -456,6 +477,25 @@ public sealed class GatewayConnection
                 result.MapEpoch, result.DamageSequence, result.ServerTick,
                 result.AttackerMonsterEntityId, result.AttackerMonsterRevision,
                 result.Damage, result.CurrentHp, result.MaxHp, result.Died));
+            return _reliable.TryEnqueue(frame)
+                ? GatewaySendStatus.Enqueued : GatewaySendStatus.Backpressured;
+        }
+    }
+
+    public GatewaySendStatus QueuePlayerRespawnResult(
+        TrustedPlayerRespawn request, PlayerRespawnOutcome outcome)
+    {
+        lock (_bindingGate)
+        {
+            if (_closed) return GatewaySendStatus.Closed;
+            var bound = _binding;
+            if (request.ActorId != bound.ActorId ||
+                request.ConnectionEpoch != bound.ConnectionEpoch ||
+                request.RequestMapEpoch != bound.MapEpoch)
+                return GatewaySendStatus.GenerationMismatch;
+            var frame = WireProtocol.EncodePlayerRespawnResult(new(
+                request.RequestMapEpoch, request.RespawnSequence,
+                outcome.Status, outcome.CurrentHp, outcome.MaxHp));
             return _reliable.TryEnqueue(frame)
                 ? GatewaySendStatus.Enqueued : GatewaySendStatus.Backpressured;
         }

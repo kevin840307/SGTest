@@ -77,8 +77,31 @@ func _initialize() -> void:
 	if session.move_target(80,24) or session.attack_monster(target) or session.npc_interact(1):
 		_fail("dead public gameplay APIs accepted intent",session)
 		return
+	if not session.respawn():
+		_fail("respawn intent refused",session)
+		return
+	var revived := _wait(session,func(v):
+		return (
+			int(v.last_respawn_result_sequence)==1
+			and int(v.last_respawn_result_status)==0
+			and int(v.player_current_hp)==100
+			and int(v.player_max_hp)==100
+			and not bool(v.player_dead)
+			and int(v.player_damage_sequence)==1
+		),7000)
+	if revived.is_empty():
+		_fail("authoritative respawn "+str(session.snapshot()),session)
+		return
+	if not session.move_target(24,24):
+		_fail("move remained client-gated after respawn",session)
+		return
+	var moved := _wait(session,func(v):
+		return int(v.last_receipt_sequence)==1 and int(v.last_receipt_status)==0,5000)
+	if moved.is_empty():
+		_fail("server World remained dead-gated after respawn "+str(session.snapshot()),session)
+		return
 	session.stop()
-	print("CLIENT_COMBAT_TLS_PASS target=%d player_damage=60 monster_hp=40 monster_damage=18 player_hp=0 dead=true public_intents_blocked=true request_has_no_damage=true receipt_does_not_mutate_monster=true delta_owns_hp=true damage_after_db_commit=true" % target)
+	print("CLIENT_COMBAT_TLS_PASS target=%d player_damage=60 monster_hp=40 monster_damage=18 death_hp=0 respawn_hp=100 dead=false public_intents_blocked_while_dead=true move_after_respawn=true damage_sequence_continuous=true request_has_no_damage=true receipt_does_not_mutate_monster=true delta_owns_hp=true damage_after_db_commit=true" % target)
 	quit(0)
 
 func _wait(session, predicate: Callable, timeout_ms: int) -> Dictionary:

@@ -1,5 +1,6 @@
 using System.Threading.Channels;
 using SGTest.Server.Identity;
+using SGTest.Server.Wire;
 using SGTest.Server.World;
 
 namespace SGTest.Server.Gateway;
@@ -10,6 +11,11 @@ public enum CombatPostStatus : byte
     TargetUnavailable,
     Backpressured
 }
+
+public readonly record struct PlayerRespawnOutcome(
+    PlayerRespawnStatus Status,
+    int CurrentHp,
+    int MaxHp);
 
 public readonly record struct PlayerDamageSettlement(
     long ActorId,
@@ -57,6 +63,7 @@ public sealed class PlayerCombatSettlement
         public required int CommittedHp;
         public required int ProjectedHp;
         public uint DamageSequence;
+        public uint LastRespawnSequence;
         public int Pending;
         public bool Suspended;
         public bool Closing;
@@ -283,6 +290,109 @@ public sealed class PlayerCombatSettlement
             state.Suspended = false;
             return true;
         }
+    }
+
+    /// <summary>
+    /// Respawn is serialized against pending damage by the same combat owner.
+    /// This method leaves the actor suspended after a successful durable HP
+    /// restore; the caller must first clear the trusted World death gate, queue
+    /// the reliable RespawnResult, and only then TryResume the generation.
+    /// </summary>
+    public async Task<PlayerRespawnOutcome> RespawnFullAsync(
+        long actorId, long connectionEpoch, long mapEpoch, uint respawnSequence,
+        CancellationToken cancellationToken = default)
+    {
+        if (actorId <= 0 || connectionEpoch <= 0 || mapEpoch <= 0 ||
+            respawnSequence == 0)
+            throw new ArgumentOutOfRangeException(nameof(respawnSequence));
+
+        Task priorDrain;
+        lock (_gate)
+        {
+            ThrowIfFaulted();
+            if (!_states.TryGetValue(actorId, out var state))
+                return new(PlayerRespawnStatus.CombatUnavailable, 0, 0);
+            if (state.ConnectionEpoch != connectionEpoch ||
+                state.MapEpoch != mapEpoch || state.Closing)
+                return new(PlayerRespawnStatus.StaleGeneration,
+                    state.ProjectedHp, state.MaxHp);
+            if (respawnSequence <= state.LastRespawnSequence)
+                return new(PlayerRespawnStatus.ReplayedSequence,
+                    state.ProjectedHp, state.MaxHp);
+            state.LastRespawnSequence = respawnSequence;
+            if (state.ProjectedHp > 0)
+                return new(PlayerRespawnStatus.NotDead,
+                    state.ProjectedHp, state.MaxHp);
+
+            state.Suspended = true;
+            priorDrain = state.Pending == 0
+                ? Task.CompletedTask
+                : state.Drain?.Task ?? throw new InvalidOperationException(
+                    "Pending combat state missing drain completion");
+        }
+
+        await priorDrain.WaitAsync(cancellationToken).ConfigureAwait(false);
+
+        TaskCompletionSource<bool> operationDrain;
+        lock (_gate)
+        {
+            ThrowIfFaulted();
+            if (!_states.TryGetValue(actorId, out var state) ||
+                state.ConnectionEpoch != connectionEpoch ||
+                state.MapEpoch != mapEpoch || state.Closing)
+                return new(PlayerRespawnStatus.StaleGeneration, 0, 0);
+            if (state.ProjectedHp != 0 || state.CommittedHp != 0)
+                throw new PlayerCombatSettlementException(
+                    "Dead respawn timeline diverged before durable restore");
+            if (state.Pending != 0)
+                throw new PlayerCombatSettlementException(
+                    "Respawn acquired combat state with pending damage");
+            operationDrain = new(TaskCreationOptions.RunContinuationsAsynchronously);
+            state.Pending = 1;
+            state.Drain = operationDrain;
+        }
+
+        CharacterCombatProfile restored;
+        try
+        {
+            restored = await _store.RestoreCharacterFullHpAsync(
+                    actorId, cancellationToken).ConfigureAwait(false)
+                ?? throw new PlayerCombatSettlementException(
+                    "Persisted combat profile was not dead during authoritative respawn");
+
+            lock (_gate)
+            {
+                if (!_states.TryGetValue(actorId, out var state) ||
+                    state.ConnectionEpoch != connectionEpoch ||
+                    state.MapEpoch != mapEpoch)
+                    throw new PlayerCombatSettlementException(
+                        "Combat generation disappeared during durable respawn");
+                state.CommittedHp = restored.Data.CurrentHp;
+                state.ProjectedHp = restored.Data.CurrentHp;
+                state.MaxHp = restored.Data.MaxHp;
+                state.Pending = 0;
+                state.Drain?.TrySetResult(true);
+                state.Drain = null;
+            }
+        }
+        catch (Exception error)
+        {
+            lock (_gate)
+            {
+                _fault = error;
+                if (_states.TryGetValue(actorId, out var state) &&
+                    state.ConnectionEpoch == connectionEpoch)
+                {
+                    state.Pending = 0;
+                    state.Drain?.TrySetException(error);
+                    state.Drain = null;
+                }
+            }
+            throw;
+        }
+
+        return new(PlayerRespawnStatus.Accepted,
+            restored.Data.CurrentHp, restored.Data.MaxHp);
     }
 
     public async Task CloseAndDrainAsync(

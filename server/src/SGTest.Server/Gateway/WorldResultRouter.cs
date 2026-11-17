@@ -244,6 +244,25 @@ public sealed class WorldResultRouter
     /// Client-supplied identities. A late disconnect may invalidate a binding
     /// before QueueAoi; that case is rejected without sending stale frames.
     /// </summary>
+    public bool IsCurrentBinding(ConnectionBinding binding)
+    {
+        lock (_gate)
+            return _connections.TryGetValue(binding.ActorId, out var connection) &&
+                !connection.IsClosed && connection.Binding == binding;
+    }
+
+    public GatewaySendStatus QueuePlayerRespawnResult(
+        TrustedPlayerRespawn request, PlayerRespawnOutcome outcome)
+    {
+        lock (_gate)
+        {
+            if (!_connections.TryGetValue(request.ActorId, out var connection) ||
+                connection.IsClosed)
+                return GatewaySendStatus.Closed;
+            return connection.QueuePlayerRespawnResult(request, outcome);
+        }
+    }
+
     public ConnectionBinding[] SnapshotActiveBindings()
     {
         lock (_gate)

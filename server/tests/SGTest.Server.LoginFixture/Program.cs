@@ -246,8 +246,8 @@ internal static class Program
                 var player = await store.GetCharacterCombatProfileAsync(characterId)
                     .ConfigureAwait(false);
                 if (monster.CurrentHp != 40 || monster.MaxHp != 100 ||
-                    player?.Data.CurrentHp != 0 || player.Data.MaxHp != 100 ||
-                    ended.CommandsAccepted != 1 ||
+                    player?.Data.CurrentHp != 100 || player.Data.MaxHp != 100 ||
+                    ended.CommandsAccepted != 3 ||
                     settlement.Statistics.HitsCommitted != 1 ||
                     settlement.Statistics.DamageCommitted != 18 ||
                     settlement.Statistics.DeathsCommitted != 1 ||
@@ -261,7 +261,7 @@ internal static class Program
                 Console.WriteLine(
                     $"COMBAT_FIXTURE_PASS tls={ended.Protocol} target={monster.EntityId} " +
                     $"monster_hp={monster.CurrentHp}/{monster.MaxHp} player_hp={player.Data.CurrentHp}/{player.Data.MaxHp} " +
-                    $"monster_damage_committed={settlement.Statistics.DamageCommitted} deaths={settlement.Statistics.DeathsCommitted} commands={ended.CommandsAccepted}");
+                    $"respawn=true monster_damage_committed={settlement.Statistics.DamageCommitted} deaths={settlement.Statistics.DeathsCommitted} commands={ended.CommandsAccepted}");
                 Console.Out.Flush();
                 return 0;
             }

@@ -42,6 +42,11 @@ var player_damage_sequence := 0
 var last_player_damage_tick := -1
 var last_player_damage := {}
 var stale_player_damage := 0
+var respawn_sequence := 0
+var last_respawn_result_sequence := 0
+var last_respawn_result_status := -1
+var last_respawn_result := {}
+var stale_respawn_results := 0
 var waiting_for_new_map := false
 var last_receipt_sequence := 0
 var last_receipt_status := -1
@@ -91,6 +96,12 @@ func mark_normal_attack_sent(sequence: int) -> bool:
 	attack_sequence = sequence
 	return true
 
+func mark_player_respawn_sent(sequence: int) -> bool:
+	if state != STATE_IN_WORLD or not combat_available or not player_dead or not world_ready or resync_pending or waiting_for_new_map or pending_world_ready_ack_epoch != 0 or last_world_ready_ack_epoch != map_epoch or sequence <= respawn_sequence or sequence > 0xffffffff:
+		return false
+	respawn_sequence = sequence
+	return true
+
 func mark_world_ready_ack_sent(epoch: int, tick: int) -> bool:
 	if state != STATE_IN_WORLD or epoch != pending_world_ready_ack_epoch or tick != pending_world_ready_ack_tick:
 		return false
@@ -135,6 +146,8 @@ func apply_frame(frame: PackedByteArray) -> bool:
 			return _apply_player_combat_state(frame)
 		WireCodec.OPCODE_PLAYER_DAMAGE:
 			return _apply_player_damage(frame)
+		WireCodec.OPCODE_PLAYER_RESPAWN_RESULT:
+			return _apply_player_respawn_result(frame)
 		WireCodec.OPCODE_WORLD_READY:
 			return _apply_world_ready(frame)
 		WireCodec.OPCODE_SELF_STATE:
@@ -189,6 +202,11 @@ func snapshot() -> Dictionary:
 		"last_player_damage_tick": last_player_damage_tick,
 		"last_player_damage": last_player_damage.duplicate(true),
 		"stale_player_damage": stale_player_damage,
+		"respawn_sequence": respawn_sequence,
+		"last_respawn_result_sequence": last_respawn_result_sequence,
+		"last_respawn_result_status": last_respawn_result_status,
+		"last_respawn_result": last_respawn_result.duplicate(true),
+		"stale_respawn_results": stale_respawn_results,
 		"waiting_for_new_map": waiting_for_new_map,
 		"last_receipt_sequence": last_receipt_sequence,
 		"last_receipt_status": last_receipt_status,
@@ -270,6 +288,11 @@ func _apply_choose(frame: PackedByteArray) -> bool:
 	last_player_damage_tick = -1
 	last_player_damage.clear()
 	stale_player_damage = 0
+	respawn_sequence = 0
+	last_respawn_result_sequence = 0
+	last_respawn_result_status = -1
+	last_respawn_result.clear()
+	stale_respawn_results = 0
 	waiting_for_new_map = false
 	map_id = int(decoded.map_id)
 	x = float(decoded.x)
@@ -376,6 +399,35 @@ func _apply_player_damage(frame: PackedByteArray) -> bool:
 	last_player_damage = value.duplicate(true)
 	return true
 
+func _apply_player_respawn_result(frame: PackedByteArray) -> bool:
+	if state != STATE_IN_WORLD or not combat_available:
+		return fail("player_respawn_result_out_of_state")
+	var value := WireCodec.decode_player_respawn_result(frame)
+	if value.is_empty():
+		return fail("invalid_player_respawn_result")
+	var epoch := int(value.map_epoch)
+	var sequence := int(value.respawn_sequence)
+	var status := int(value.status)
+	if epoch < map_epoch:
+		stale_respawn_results += 1
+		return true
+	if epoch > map_epoch:
+		return fail("future_player_respawn_result")
+	if sequence > respawn_sequence:
+		return fail("player_respawn_result_for_unsent_sequence")
+	if sequence <= last_respawn_result_sequence:
+		stale_respawn_results += 1
+		return true
+	last_respawn_result_sequence = sequence
+	last_respawn_result_status = status
+	last_respawn_result = value.duplicate(true)
+	if status == 0 or status == 1:
+		if int(value.max_hp) != player_max_hp:
+			return fail("player_respawn_max_hp_changed")
+		player_current_hp = int(value.current_hp)
+		player_dead = false
+	return true
+
 func _apply_normal_attack_result(frame: PackedByteArray) -> bool:
 	if state != STATE_IN_WORLD:
 		return fail("normal_attack_result_out_of_state")
@@ -470,6 +522,11 @@ func _apply_world_ready(frame: PackedByteArray) -> bool:
 		last_attack_server_tick = -1
 		last_attack_result.clear()
 		stale_attack_results = 0
+		respawn_sequence = 0
+		last_respawn_result_sequence = 0
+		last_respawn_result_status = -1
+		last_respawn_result.clear()
+		stale_respawn_results = 0
 		movement_sequence = 0
 		last_receipt_sequence = 0
 		last_receipt_status = -1

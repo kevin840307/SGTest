@@ -413,6 +413,50 @@ UPDATE character_combat_profiles
         }, cancellationToken).ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// Trusted combat respawn primitive. Only a dead persisted profile may
+    /// transition from HP=0 to its existing MaxHP. No client field can choose
+    /// the restored HP value; missing/already-alive profiles fail closed.
+    /// </summary>
+    public async Task<CharacterCombatProfile?> RestoreCharacterFullHpAsync(
+        long characterId, CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        if (characterId <= 0) throw new ArgumentOutOfRangeException(nameof(characterId));
+        return await Task.Run(() =>
+        {
+            using var connection = Open();
+            using var tx = connection.BeginTransaction();
+            var before = ReadCombatProfile(connection, characterId, tx);
+            if (before is null || before.Data.CurrentHp != 0)
+            {
+                tx.Rollback();
+                return null;
+            }
+            using var command = connection.CreateCommand();
+            command.Transaction = tx;
+            command.CommandText = @"
+UPDATE character_combat_profiles
+   SET current_hp=max_hp,
+       updated_unix_ms=$updated
+ WHERE character_id=$id AND current_hp=0;";
+            command.Parameters.AddWithValue("$updated",
+                DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
+            command.Parameters.AddWithValue("$id", characterId);
+            if (command.ExecuteNonQuery() != 1)
+                throw new InvalidOperationException(
+                    "Dead combat profile disappeared during atomic respawn");
+            var after = ReadCombatProfile(connection, characterId, tx)
+                ?? throw new InvalidOperationException(
+                    "Combat profile disappeared after atomic respawn");
+            if (after.Data.CurrentHp != after.Data.MaxHp || after.Data.CurrentHp <= 0)
+                throw new InvalidOperationException(
+                    "Atomic respawn did not restore authoritative MaxHP");
+            tx.Commit();
+            return after;
+        }, cancellationToken).ConfigureAwait(false);
+    }
+
     private static void ValidateCombatProfile(CharacterCombatProfileData profile)
     {
         ArgumentNullException.ThrowIfNull(profile);

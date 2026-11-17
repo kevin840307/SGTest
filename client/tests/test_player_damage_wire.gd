@@ -55,6 +55,36 @@ func _initialize() -> void:
 		_fail("dead player gameplay intent escaped reducer")
 		return
 
+	var respawn_request := WireCodec.encode_player_respawn(1,1)
+	if respawn_request.size()!=20 or WireCodec.frame_opcode(respawn_request)!=WireCodec.OPCODE_PLAYER_RESPAWN:
+		_fail("respawn request codec")
+		return
+	if not world.mark_player_respawn_sent(1):
+		_fail("dead respawn intent gate")
+		return
+	var respawn := _respawn_result(1,1,0,100,100)
+	var parsed_respawn := WireCodec.decode_player_respawn_result(respawn)
+	if respawn.size()!=29 or parsed_respawn.is_empty() or int(parsed_respawn.current_hp)!=100:
+		_fail("respawn result codec")
+		return
+	if not world.apply_frame(respawn):
+		_fail("respawn result apply")
+		return
+	snap=world.snapshot()
+	if int(snap.player_current_hp)!=100 or bool(snap.player_dead) or int(snap.player_damage_sequence)!=2 or int(snap.last_respawn_result_sequence)!=1:
+		_fail("respawn state or damage sequence continuity")
+		return
+	if not world.mark_move_sent(1):
+		_fail("respawn did not reopen gameplay gate")
+		return
+	var stale_respawn_before := int(world.snapshot().stale_respawn_results)
+	if not world.apply_frame(respawn) or int(world.snapshot().stale_respawn_results)!=stale_respawn_before+1:
+		_fail("duplicate respawn result not idempotent")
+		return
+	if not WireCodec.decode_player_respawn_result(_respawn_result(1,2,0,90,100)).is_empty():
+		_fail("accepted partial-HP respawn decoded")
+		return
+
 	var malformed := _damage(1,3,43,MONSTER_ID,4,1,0,100,false)
 	if not WireCodec.decode_player_damage(malformed).is_empty():
 		_fail("zero HP without death accepted")
@@ -93,7 +123,7 @@ func _initialize() -> void:
 	if dead_npc_parsed.is_empty() or int(dead_npc_parsed.status)!=6:
 		_fail("CombatDead NPC result codec")
 		return
-	print("PLAYER_DAMAGE_GODOT_PASS baseline_bytes=24 damage_bytes=57 durable_event=true duplicate_stale=true sequence_gap_fail_closed=true death_gates_intents=true combat_dead_statuses=true old_map_stale=true")
+	print("PLAYER_DAMAGE_GODOT_PASS baseline_bytes=24 damage_bytes=57 respawn_request_bytes=20 respawn_result_bytes=29 durable_event=true duplicate_stale=true sequence_gap_fail_closed=true death_gates_intents=true respawn_reopens_intents=true damage_sequence_continuous=true combat_dead_statuses=true old_map_stale=true")
 	quit(0)
 
 func _world(epoch: int) -> RefCounted:
@@ -133,6 +163,19 @@ func _damage(epoch: int,sequence: int,tick: int,attacker: int,revision: int,
 	writer.put_u8(1 if died else 0)
 	return writer.data_array
 
+
+func _respawn_result(epoch: int,sequence: int,status: int,current_hp: int,max_hp: int) -> PackedByteArray:
+	var writer := StreamPeerBuffer.new()
+	writer.big_endian=false
+	writer.put_u32(29)
+	writer.put_u16(1)
+	writer.put_u16(WireCodec.OPCODE_PLAYER_RESPAWN_RESULT)
+	writer.put_64(epoch)
+	writer.put_u32(sequence)
+	writer.put_u8(status)
+	writer.put_32(current_hp)
+	writer.put_32(max_hp)
+	return writer.data_array
 
 func _move_receipt(epoch: int,sequence: int,status: int,tick: int) -> PackedByteArray:
 	var writer := StreamPeerBuffer.new()
