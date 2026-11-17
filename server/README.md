@@ -140,3 +140,10 @@ For authenticated TCP clients use `IdentityTlsAuthorization.RunAuthenticatedSock
 ## 2026-11-16 AOI output consumer
 
 Use `WorldResultRouter.RunAsync(WorldHost.Results)` as the sole authoritative World-result reader and `WorldAoiPump.RunAsync()` as its sole ChangedBatch consumer. The pump retains pending AOI events until authenticated Gateway egress accepts them, and fails closed on overflow; don't bypass it with another all-entities broadcast. The test-only login fixture also invokes it and requires the Godot client to receive WorldReady over TLS. Github Server core 68/68 and Client core secure TLS PASS; production admission/supervision, ACK/resync, Enemy/Drop and two visual clients still incomplete.
+
+
+## 2026-11-17 已提交地上物同步（MVP006 Ground AOI）
+
+`WorldAoi` 現在與 Player/Monster 共用唯一 map-local bucket，從同一個觀察者 FIFO 向玩家可靠傳送 `GroundDropSpawn`（opcode 32、52 bytes）／`GroundDropDespawn`（opcode 33、32 bytes）；Client 只接收 Server 已落實 SQLite commit 的 DropId／MapId／ItemId／Quantity／XY。掉落本身位置不可變，所以閒置時不傳每 Tick Delta。Host 每次啟動從 SQLite 於 Tick 之外恢復未撿取記錄（上限及合成來源保護）；WorldReady、跨圖與 resync 重建當下可見列表。背景 Worker 以有界通知將成功提交的掉落送入同一個 AOI consumer，每 poll 最多處理8個已提交批次；此上限只控制背景同步工作，不影響30Hz ServerWorld 固定 Tick。Godot 現以輕量 Canvas 圓點代表掉落 UID，不會新增物品貼圖快取或每件地上物 Sprite Node；原版掉落素材尚待核實後替換呈現。C# / Godot 封包 golden、同圖/跨圖/Resync、20玩家/500掉落的確定性功能回歸已加入。
+
+**玩家目前仍不能點地上物直接拾取。** 雖然 `SqliteIdentityStore.ClaimGroundDropAsync` 已有唯一 UID／原子背包結算／競態保護，Authenticated Gateway Pickup Wire、拾取結果、背景結算與由成功提交產生的 AOI RemoveGroundDrop 尚未串接；本輪 AOI 測試的手動 RemoveGroundDrop 不是正式玩法。重啟前尚未完成 SQLite commit 的死亡事件存在原先已註明的 crash gap。20/500 是功能數量 Gate，不是 CPU/記憶體/P95/P99 壓測。
