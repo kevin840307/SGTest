@@ -198,3 +198,8 @@ python tools/asset_converter/smoke_runtime_pack.py "C:\SGO\Godot\Godot_v4.7.2-st
 ```
 
 比較工具只建私有候選、共用正式Height-Dense geometry與PCK，`--work`須為未用過目錄；不發布第二套Catalog或維護第二個Builder。`--archive`核對原始／已發布Frame幾何一致後，以原始P0頁重播修正前239頁基線；未指定則p0是現有發布頁，不代表修正前結果。正式證據為帶素材／測試程式hash的atlas_block_comparison_final.json。比較PASS只表示完成比較與extent gate，並非全素材codec畫質核准。空白PCK smoke現在對標記block4的頁，同時檢查Texture2D logical和get_image physical extent，並用CompressedTexture2D.load逐一核對封裝內BPTC／ASTC兩個變體的實體尺寸；不直接ResourceLoader.load內部ctex路徑，也不把ASTC metadata載入當Mac GPU測試。
+
+
+### 2026-11-17 本機來源 Item metadata（單一 Converter）
+
+唯一 Converter 新增 item-catalog，唯讀從使用者已合法取得的舊版衍生 Godot Items 子目錄讀取 .tres，輸出名稱、類別與原始 icon_id 及 SHA256 到 Git 忽略的 client/content/item_catalog.json。來源是 TestGoGo/client/Items 的轉換後資料，不是原始 ITD 的逐筆實證；Runtime 不據此推算 Item 使用、攻防、價錢或裝備規則。目錄缺失／無法驗證時 Client 降級顯示數字 ID。見 tools/asset_converter/README.md 指令。轉換器 CI 44098608220 PASS（只有合成測試來源，未跑完整私有5003件或 Windows Release PCK）。

@@ -61,3 +61,15 @@ MVP001 也可透過**同一 CLI** 的 `world-content --include-map --map 13 --ma
 定向發布沿用同一 CLI：`export-assets "原版路徑" --extracted-source .cache/asset_converter/source --server-dat "原版 Server Dat" --map 13 --map 15`。必須有完整已 audit Archive；只輸出兩圖真實地物／NPC／Enemy 參照及目前 B Player 七部位，Catalog 明示 selected_sprite_assets 範圍，各 Asset 的動作／方向不裁切，不額外複製全世界音效或原始 payload。未指定 --map 保持 full export；詳 ASSET_CONVERTER。
 
 真實雙圖資源 smoke：`python tools/asset_converter/smoke_runtime_pack.py "Godot console exe" --assets client/assets --map 13 --map 15 --output .cache/client-release/assets/assets.pck --report reports/real_maps_pck_smoke.json`。驗證 ResourceLoader 與封裝 hash，不代表 Renderer／Y-sort／實機畫質或遊戲 E2E。未提供 --assets 仍測 synthetic Enemy＋UI。
+
+
+## 私有原版衍生道具名稱目錄（2026-11-17）
+
+只在已合法取得的本機 TestGoGo/client/Items 上執行；此處沒有將原版私有 .tres 或圖片加入 Git。正式唯一入口：
+
+~~~powershell
+python tools/asset_converter/cli.py item-catalog --items "C:\\path\\to\\TestGoGo\\client\\Items" --source-reference "TestGoGo/feature/local-server-net8/client/Items"
+# 若只要小型輸出，可加 --item-id 2701 --item-id 15001
+~~~
+
+預設輸出被 Git ignore 的 client/content/item_catalog.json。由各類別資料夾讀取 filename ID、.tres resource 的 id/item_name/icon_id，核對類別、來源 SHA256、檔名與重複 ID，再排序以原子檔案替換方式發布。缺失/非法來源即拒絕，不用猜測原版名稱。Godot UI 只有合法 JSON 目錄才能顯示衍生名稱，沒有則回退『道具 N』。實際 icon atlas、裝備屬性、原始 ITD 對照仍 NOT VERIFIED。測試：python -m unittest discover -s tools/tests -p test_*.py -q；Converter CI 44098608220 PASS。

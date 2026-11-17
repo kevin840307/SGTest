@@ -312,3 +312,8 @@ Godot `WireCodec.decode_inventory_snapshot` validates opcode36, max128 items/fra
 
 
 2026-11-17 additional verified UI guards: `session_panel.gd` suppresses the previous inventory on logout, reconnect or incomplete new baseline, disables its button until the full baseline arrives, and compares (ActorId, reconnect_count, inventory_revision), not revision alone. Tests exercise new and old character UIDs, empty real TLS login, map transfer, and UI clearing; final full Client CI [44089990970](https://github.com/kevin840307/SGTest/actions/runs/44089990970) PASS. Final Server CI [44089791237](https://github.com/kevin840307/SGTest/actions/runs/44089791237) PASS. No Windows GPU measurement or original content claim.
+
+
+### 2026-11-17 私有道具來源與背包分頁
+
+ui/item_catalog.gd 僅在 res://content/item_catalog.json 存在、kind/source_reference/item_count/每筆 item_id、name、category、icon_id、source_path、SHA256 全部完整合法時顯示來源衍生名稱；不能證明原版二進位 ITD 或物品效果。未核實的 item 一律保留道具 ID，來源未提供則不新增動作與不建立 Item Texture。SessionPanel 已支援80件每頁和來源名稱、ItemId、類別查詢；相同 ActorId/reconnect_count/inventory_revision/page/query 的 UI 輪詢跳過 Dictionary 全掃描。CI 44099300883 PASS，測試含 85 件列表分頁及真 TLS UI；Private Item 5003筆全量、原版圖示渲染與 Windows Release 仍 NOT VERIFIED。
