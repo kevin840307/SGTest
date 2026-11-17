@@ -340,11 +340,47 @@ public sealed class IdentityTlsAuthorization
                 finally { gameplayGate.Release(); }
             }
 
+            async Task DiscardHandler(TrustedInventoryDiscard request)
+            {
+                var binding=new ConnectionBinding(
+                    request.ActorId,request.ConnectionEpoch,request.RequestMapEpoch);
+                await gameplayGate.WaitAsync().ConfigureAwait(false);
+                try
+                {
+                    if(!router.IsCurrentBinding(binding))return;
+                    var snapshot=await _world.TrustedGetActorAsync(
+                        request.ActorId).ConfigureAwait(false);
+                    InventoryDiscardResult result;
+                    if(snapshot is not { } actor ||
+                        actor.ActorId!=request.ActorId ||
+                        actor.ConnectionEpoch!=request.ConnectionEpoch ||
+                        actor.MapEpoch!=request.RequestMapEpoch)
+                        result=new(InventoryDiscardStatus.StaleGeneration,request.ItemUid);
+                    else
+                    {
+                        long durableConnection=_pickupWorldGeneration==0
+                            ? actor.ConnectionEpoch
+                            : SqliteIdentityStore.ComposePickupConnectionEpoch(
+                                _pickupWorldGeneration,actor.ConnectionEpoch);
+                        result=await _identity.DiscardInventoryItemAsync(
+                            new TrustedInventoryDiscardContext(
+                                actor.ActorId,durableConnection,actor.MapEpoch,
+                                request.DiscardSequence),
+                            request.ItemUid,request.Quantity).ConfigureAwait(false);
+                    }
+                    var sent=router.QueueInventoryDiscardResult(request,result);
+                    if(sent!=GatewaySendStatus.Enqueued)
+                        throw new IOException(
+                            "Reliable inventory discard receipt could not be queued: "+sent);
+                }
+                finally { gameplayGate.Release(); }
+            }
+
             return await TlsWireConnection.RunServerAsync(client, certificate,
                 Authorize, _world.TryPostMove, options, cancellationToken, Release,
                 npcHandler, router.TryRequestResync,
                 router.TryRequestNormalAttack, RespawnHandler,
-                PickupHandler, RecoveryHandler).ConfigureAwait(false);
+                PickupHandler, RecoveryHandler, DiscardHandler).ConfigureAwait(false);
         }
         finally
         {

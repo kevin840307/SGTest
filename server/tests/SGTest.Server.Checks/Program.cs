@@ -241,6 +241,7 @@ static class Checks
             GroundPickupWireChecks.Verify();
             RecoveryItemChecks.Verify(root);
             RecoveryUseWireChecks.Verify();
+            InventoryDiscardChecks.Verify(root);
             InventorySnapshotChecks.Verify();
             MonsterLootSettlementChecks.Verify(root);
             NormalAttackChecks.Verify(root);

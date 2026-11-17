@@ -61,7 +61,8 @@ public static class TlsWireConnection
         Func<TrustedNormalAttack, bool>? postAttack = null,
         Func<TrustedPlayerRespawn, Task>? handleRespawn = null,
         Func<TrustedGroundPickup, Task>? handlePickup = null,
-        Func<TrustedRecoveryUse, Task>? handleRecovery = null)
+        Func<TrustedRecoveryUse, Task>? handleRecovery = null,
+        Func<TrustedInventoryDiscard, Task>? handleDiscard = null)
     {
         ArgumentNullException.ThrowIfNull(client);
         ArgumentNullException.ThrowIfNull(serverCertificate);
@@ -280,6 +281,34 @@ public static class TlsWireConnection
                 }
             }
 
+            var discardCommands=Channel.CreateBounded<TrustedInventoryDiscard>(
+                new BoundedChannelOptions(16)
+                {
+                    SingleReader=true,SingleWriter=true,
+                    FullMode=BoundedChannelFullMode.Wait
+                });
+            Func<TrustedInventoryDiscard,bool>? postDiscard=handleDiscard is null
+                ? null : request=>discardCommands.Writer.TryWrite(request);
+            Exception? discardFault=null;
+            Task discardWorker=handleDiscard is null
+                ? Task.CompletedTask : ProcessDiscardAsync();
+
+            async Task ProcessDiscardAsync()
+            {
+                try
+                {
+                    await foreach(var request in discardCommands.Reader
+                        .ReadAllAsync(sessionCts.Token).ConfigureAwait(false))
+                        await handleDiscard!(request).ConfigureAwait(false);
+                }
+                catch(OperationCanceledException) when(sessionCts.IsCancellationRequested){}
+                catch(Exception error)
+                {
+                    discardFault=error;
+                    sessionCts.Cancel();
+                }
+            }
+
             long commandsAccepted = 0;
             var reason = TlsWireEndReason.CleanEof;
             byte[] rented = ArrayPool<byte>.Shared.Rent(configured.ReadBufferBytes);
@@ -298,7 +327,7 @@ public static class TlsWireConnection
 
                     var status = gateway.FeedClientBytes(
                         rented.AsSpan(0, count), postMove, out int accepted,
-                        postNpc, postResync, postAttack, postRespawn, postPickup, postRecovery);
+                        postNpc, postResync, postAttack, postRespawn, postPickup, postRecovery, postDiscard);
                     commandsAccepted += accepted;
 
                     if (status == WireFeedStatus.Backpressured)
@@ -318,7 +347,7 @@ public static class TlsWireConnection
                                 .ConfigureAwait(false);
                             status = gateway.ResumeClientIngress(
                                 postMove, out accepted, postNpc, postResync,
-                                postAttack, postRespawn, postPickup, postRecovery);
+                                postAttack, postRespawn, postPickup, postRecovery, postDiscard);
                             commandsAccepted += accepted;
                         }
                         while (status == WireFeedStatus.Backpressured);
@@ -363,6 +392,7 @@ public static class TlsWireConnection
             respawnCommands.Writer.TryComplete();
             pickupCommands.Writer.TryComplete();
             recoveryCommands.Writer.TryComplete();
+            discardCommands.Writer.TryComplete();
             // In-flight authorized NPC/respawn work may finish even after the
             // socket is closed; await both before final trusted release.
             await respawnWorker.ConfigureAwait(false);
@@ -372,8 +402,10 @@ public static class TlsWireConnection
             await npcWorker.ConfigureAwait(false);
             await pickupWorker.ConfigureAwait(false);
             await recoveryWorker.ConfigureAwait(false);
+            await discardWorker.ConfigureAwait(false);
             if (npcFault is not null || respawnFault is not null ||
-                pickupFault is not null || recoveryFault is not null)
+                pickupFault is not null || recoveryFault is not null ||
+                discardFault is not null)
                 reason = TlsWireEndReason.GatewayClosed;
             var finalBinding = gateway.Binding;
             gateway.Close();

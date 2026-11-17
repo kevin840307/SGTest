@@ -335,6 +335,18 @@ public sealed class WorldResultRouter
         }
     }
 
+    public GatewaySendStatus QueueInventoryDiscardResult(
+        TrustedInventoryDiscard request,InventoryDiscardResult result)
+    {
+        lock(_gate)
+        {
+            if(!_connections.TryGetValue(request.ActorId,out var connection) ||
+                connection.IsClosed)
+                return GatewaySendStatus.Closed;
+            return connection.QueueInventoryDiscardResult(request,result);
+        }
+    }
+
     public GatewaySendStatus QueueGroundPickupResult(
         TrustedGroundPickup request,PickupResult result)
     {

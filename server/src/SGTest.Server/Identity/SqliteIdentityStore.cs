@@ -62,7 +62,7 @@ public sealed record CharacterCreateResult(CharacterCreateStatus Status, Charact
 /// </summary>
 public sealed partial class SqliteIdentityStore : IDisposable
 {
-    public const int SchemaVersion = 4;
+    public const int SchemaVersion = 5;
     private readonly string _connectionString;
     private readonly IdentityStoreOptions _options;
     private readonly PasswordHasher _passwords;
@@ -244,6 +244,22 @@ CREATE TABLE IF NOT EXISTS recovery_use_actions (
     previous_hp INTEGER NOT NULL CHECK(previous_hp > 0),
     current_hp INTEGER NOT NULL CHECK(current_hp > 0),
     max_hp INTEGER NOT NULL CHECK(max_hp >= current_hp),
+    created_unix_ms INTEGER NOT NULL,
+    PRIMARY KEY(character_id,connection_generation,map_epoch,action_sequence)
+);", tx);
+            // Schema v5: durable inventory discard receipts remain after the
+            // final stack quantity is deleted, so transport retry cannot
+            // destroy another quantity or apply the same action twice.
+            Execute(connection, @"
+CREATE TABLE IF NOT EXISTS inventory_discard_actions (
+    character_id INTEGER NOT NULL REFERENCES characters(character_id),
+    connection_generation INTEGER NOT NULL CHECK(connection_generation > 0),
+    map_epoch INTEGER NOT NULL CHECK(map_epoch > 0),
+    action_sequence INTEGER NOT NULL CHECK(action_sequence BETWEEN 1 AND 4294967295),
+    item_uid INTEGER NOT NULL CHECK(item_uid > 0),
+    item_definition_id INTEGER NOT NULL CHECK(item_definition_id BETWEEN 1 AND 100000000),
+    discarded_quantity INTEGER NOT NULL CHECK(discarded_quantity BETWEEN 1 AND 1000000),
+    remaining_quantity INTEGER NOT NULL CHECK(remaining_quantity BETWEEN 0 AND 1000000),
     created_unix_ms INTEGER NOT NULL,
     PRIMARY KEY(character_id,connection_generation,map_epoch,action_sequence)
 );", tx);

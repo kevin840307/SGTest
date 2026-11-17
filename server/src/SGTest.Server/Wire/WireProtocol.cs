@@ -38,7 +38,9 @@ public enum WireOpcode : ushort
     GroundPickupResult = 35,
     InventorySnapshot = 36,
     RecoveryUse = 37,
-    RecoveryUseResult = 38
+    RecoveryUseResult = 38,
+    InventoryDiscard = 39,
+    InventoryDiscardResult = 40
 }
 
 public enum AuthWireStatus : byte { Success = 0, InvalidCredentials = 1, Disabled = 2 }
@@ -113,6 +115,11 @@ public readonly record struct RecoveryUseResultWire(
     long MapEpoch,uint UseSequence,RecoveryUseStatus Status,
     long ItemUid,int ItemDefinitionId,int RemainingQuantity,
     int CurrentHp,int MaxHp);
+public readonly record struct InventoryDiscardWire(
+    long MapEpoch,uint DiscardSequence,long ItemUid,int Quantity);
+public readonly record struct InventoryDiscardResultWire(
+    long MapEpoch,uint DiscardSequence,InventoryDiscardStatus Status,
+    long ItemUid,int ItemDefinitionId,int DiscardedQuantity,int RemainingQuantity);
 public readonly record struct GroundPickupWire(
     long MapEpoch,uint PickupSequence,long DropId);
 public readonly record struct GroundPickupResultWire(
@@ -165,6 +172,8 @@ public static class WireProtocol
     public const int GroundDropDespawnFrameBytes = 32;
     public const int RecoveryUseFrameBytes = HeaderBytes + 8 + 4 + 8;
     public const int RecoveryUseResultFrameBytes = HeaderBytes + 8 + 4 + 1 + 8 + 4 + 4 + 4 + 4;
+    public const int InventoryDiscardFrameBytes = HeaderBytes + 8 + 4 + 8 + 4;
+    public const int InventoryDiscardResultFrameBytes = HeaderBytes + 8 + 4 + 1 + 8 + 4 + 4 + 4;
     public const int GroundPickupFrameBytes = HeaderBytes + 8 + 4 + 8;
     public const int GroundPickupResultFrameBytes = HeaderBytes + 8 + 4 + 1 + 8 + 8 + 4 + 4;
     public const int InventorySnapshotHeaderBytes = HeaderBytes + 8 + 4 + 1 + 2;
@@ -912,6 +921,79 @@ public static class WireProtocol
             value.CurrentHp==0 && value.MaxHp==0;
     }
 
+    public static byte[] EncodeInventoryDiscard(InventoryDiscardWire value)
+    {
+        if(value.MapEpoch<=0||value.DiscardSequence==0||value.ItemUid<=0||
+            value.Quantity is <1 or >1_000_000)
+            throw new ArgumentOutOfRangeException(nameof(value));
+        var frame=NewFrame(WireOpcode.InventoryDiscard,InventoryDiscardFrameBytes);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(8,8),value.MapEpoch);
+        BinaryPrimitives.WriteUInt32LittleEndian(frame.AsSpan(16,4),value.DiscardSequence);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(20,8),value.ItemUid);
+        BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(28,4),value.Quantity);
+        return frame;
+    }
+
+    public static bool TryDecodeInventoryDiscard(ReadOnlySpan<byte> frame,
+        out InventoryDiscardWire value)
+    {
+        value=default;
+        if(!TryReadHeader(frame,out var header) ||
+            header.Opcode!=WireOpcode.InventoryDiscard)return false;
+        value=new(BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(8,8)),
+            BinaryPrimitives.ReadUInt32LittleEndian(frame.Slice(16,4)),
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(20,8)),
+            BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(28,4)));
+        return value.MapEpoch>0&&value.DiscardSequence>0&&value.ItemUid>0&&
+            value.Quantity is >0 and <=1_000_000;
+    }
+
+    public static byte[] EncodeInventoryDiscardResult(InventoryDiscardResultWire value)
+    {
+        if(!ValidInventoryDiscardResult(value))
+            throw new ArgumentOutOfRangeException(nameof(value));
+        var frame=NewFrame(WireOpcode.InventoryDiscardResult,
+            InventoryDiscardResultFrameBytes);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(8,8),value.MapEpoch);
+        BinaryPrimitives.WriteUInt32LittleEndian(frame.AsSpan(16,4),value.DiscardSequence);
+        frame[20]=(byte)value.Status;
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(21,8),value.ItemUid);
+        BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(29,4),value.ItemDefinitionId);
+        BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(33,4),value.DiscardedQuantity);
+        BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(37,4),value.RemainingQuantity);
+        return frame;
+    }
+
+    public static bool TryDecodeInventoryDiscardResult(ReadOnlySpan<byte> frame,
+        out InventoryDiscardResultWire value)
+    {
+        value=default;
+        if(!TryReadHeader(frame,out var header) ||
+            header.Opcode!=WireOpcode.InventoryDiscardResult)return false;
+        value=new(BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(8,8)),
+            BinaryPrimitives.ReadUInt32LittleEndian(frame.Slice(16,4)),
+            (InventoryDiscardStatus)frame[20],
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(21,8)),
+            BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(29,4)),
+            BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(33,4)),
+            BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(37,4)));
+        return ValidInventoryDiscardResult(value);
+    }
+
+    private static bool ValidInventoryDiscardResult(InventoryDiscardResultWire value)
+    {
+        if(value.MapEpoch<=0||value.DiscardSequence==0||value.ItemUid<=0||
+            (byte)value.Status>(byte)InventoryDiscardStatus.StaleGeneration)
+            return false;
+        if(value.Status is InventoryDiscardStatus.Applied or
+            InventoryDiscardStatus.AlreadyApplied)
+            return value.ItemDefinitionId is >0 and <=100_000_000 &&
+                value.DiscardedQuantity is >0 and <=1_000_000 &&
+                value.RemainingQuantity is >=0 and <=1_000_000;
+        return value.ItemDefinitionId==0&&value.DiscardedQuantity==0&&
+            value.RemainingQuantity==0;
+    }
+
     public static byte[] EncodeGroundPickup(GroundPickupWire value)
     {
         if (value.MapEpoch<=0||value.PickupSequence==0||value.DropId<=0)
@@ -1181,7 +1263,9 @@ public static class WireProtocol
             32 => WireOpcode.GroundDropSpawn, 33 => WireOpcode.GroundDropDespawn,
             34 => WireOpcode.GroundPickup, 35 => WireOpcode.GroundPickupResult,
             36 => WireOpcode.InventorySnapshot, 37 => WireOpcode.RecoveryUse,
-            38 => WireOpcode.RecoveryUseResult, _ => 0
+            38 => WireOpcode.RecoveryUseResult,
+            39 => WireOpcode.InventoryDiscard,
+            40 => WireOpcode.InventoryDiscardResult, _ => 0
         };
         if (opcode == 0) return false;
         bool sizeOk = opcode switch
@@ -1214,6 +1298,8 @@ public static class WireProtocol
             WireOpcode.GroundPickupResult => advertised == GroundPickupResultFrameBytes,
             WireOpcode.RecoveryUse => advertised == RecoveryUseFrameBytes,
             WireOpcode.RecoveryUseResult => advertised == RecoveryUseResultFrameBytes,
+            WireOpcode.InventoryDiscard => advertised == InventoryDiscardFrameBytes,
+            WireOpcode.InventoryDiscardResult => advertised == InventoryDiscardResultFrameBytes,
             WireOpcode.InventorySnapshot => advertised >= InventorySnapshotHeaderBytes &&
                 advertised <= InventorySnapshotHeaderBytes +
                     InventorySnapshotMaxItemsPerFrame*InventoryItemBytes &&
