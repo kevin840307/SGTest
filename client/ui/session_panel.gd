@@ -18,12 +18,14 @@ var login_button := Button.new()
 var logout_button := Button.new()
 var characters := OptionButton.new()
 var choose_button := Button.new()
+var respawn_button := Button.new()
 var status := Label.new()
 var _characters: Array = []
 var _chosen := false
 var _world_epoch := 0
 var _poll_elapsed := 0.0
 var _latest := {}
+var _respawn_queued_after := -1
 
 
 func _ready() -> void:
@@ -54,11 +56,13 @@ func _ready() -> void:
 	login_button.text = "登入"
 	logout_button.text = "登出／取消"
 	choose_button.text = "進入世界"
-	for control in [login_button,characters,choose_button,logout_button,status]:
+	respawn_button.text = "復活"
+	for control in [login_button,characters,choose_button,respawn_button,logout_button,status]:
 		column.add_child(control)
 	login_button.pressed.connect(login)
 	password_input.text_submitted.connect(func(_text): login())
 	choose_button.pressed.connect(choose)
+	respawn_button.pressed.connect(request_respawn)
 	logout_button.pressed.connect(disconnect_session)
 	var style := StyleBoxFlat.new()
 	style.bg_color = Color("211c15")
@@ -90,6 +94,7 @@ func login() -> void:
 	_chosen = false
 	_world_epoch = 0
 	_latest = {}
+	_respawn_queued_after = -1
 	characters.clear()
 	_characters = []
 	_set_controls()
@@ -116,6 +121,19 @@ func submit_npc_interact(spawn_id: int) -> bool:
 	return active and not bool(_latest.get("reconnecting",false)) and bool(_latest.get("world_ready",false)) and spawn_id > 0 and session.npc_interact(spawn_id)
 
 
+func request_respawn() -> void:
+	if respawn_button.disabled or not respawn_button.visible or not active:
+		return
+	if session.respawn():
+		# The command first enters the bounded ClientSession intent queue.
+		# Guard the UI until WorldState has observed the sent sequence/result.
+		_respawn_queued_after = int(_latest.get("respawn_sequence",0))
+		respawn_button.disabled = true
+		status.text = "復活請求已送出…"
+	else:
+		status.text = "復活請求尚未送出，請重試"
+
+
 func disconnect_session() -> void:
 	session.stop()
 	var was_active := active
@@ -123,6 +141,7 @@ func disconnect_session() -> void:
 	_chosen = false
 	_world_epoch = 0
 	_latest = {}
+	_respawn_queued_after = -1
 	_characters = []
 	characters.clear()
 	password_input.clear()
@@ -142,6 +161,19 @@ func _set_controls() -> void:
 	characters.visible = active and not _characters.is_empty()
 	choose_button.visible = characters.visible
 	choose_button.disabled = _chosen or _characters.is_empty()
+	_set_respawn_controls()
+
+
+func _set_respawn_controls() -> void:
+	var dead: bool = active and int(_latest.get("state",-1)) == State.STATE_IN_WORLD and bool(_latest.get("world_ready",false)) and bool(_latest.get("combat_available",false)) and bool(_latest.get("player_dead",false))
+	if not dead:
+		_respawn_queued_after = -1
+	var sent_sequence := int(_latest.get("respawn_sequence",0))
+	var result_sequence := int(_latest.get("last_respawn_result_sequence",0))
+	if _respawn_queued_after >= 0 and sent_sequence > _respawn_queued_after and result_sequence >= sent_sequence:
+		_respawn_queued_after = -1
+	respawn_button.visible = dead
+	respawn_button.disabled = not dead or bool(_latest.get("reconnecting",false)) or bool(_latest.get("resync_pending",false)) or bool(_latest.get("waiting_for_new_map",false)) or int(_latest.get("pending_world_ready_ack_epoch",0)) != 0 or int(_latest.get("last_world_ready_ack_epoch",0)) != int(_latest.get("map_epoch",0)) or sent_sequence > result_sequence or _respawn_queued_after >= 0
 
 
 func _process(delta: float) -> void:
@@ -152,6 +184,7 @@ func _process(delta: float) -> void:
 		return
 	_poll_elapsed = 0.0
 	_latest = session.snapshot() # Reads published state; never pumps packets.
+	_set_respawn_controls()
 	if bool(_latest.get("reconnecting",false)):
 		status.text = "連線中斷，正在重新連線（%d/%d）…" % [int(_latest.reconnect_attempt),int(_latest.max_reconnect_attempts)]
 		return
@@ -177,6 +210,10 @@ func _process(delta: float) -> void:
 		characters.hide()
 		choose_button.hide()
 		status.text = "已連線・角色 " + str(_latest.actor_id)
+		if bool(_latest.get("combat_available",false)):
+			status.text += "｜HP %d/%d" % [int(_latest.get("player_current_hp",0)),int(_latest.get("player_max_hp",0))]
+			if bool(_latest.get("player_dead",false)):
+				status.text += "｜復活處理中" if respawn_button.disabled else "｜已死亡，請復活"
 		if bool(_latest.world_ready) and int(_latest.map_epoch) != _world_epoch:
 			_world_epoch = int(_latest.map_epoch)
 			world_ready.emit(_latest)

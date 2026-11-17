@@ -5,6 +5,15 @@ const State = preload("res://network/world_state.gd")
 const Session = preload("res://network/client_session.gd")
 var app: Node
 
+class RespawnSession extends RefCounted:
+	var requests := 0
+	func respawn() -> bool:
+		requests += 1
+		return true
+	func stop() -> void:
+		pass
+
+
 class FailedSession extends RefCounted:
 	func connect_secure(_host, _port, _user, _password, _name, _trust):
 		return OK
@@ -100,7 +109,48 @@ func run() -> void:
 	if panel.active or panel.login_button.disabled or app._map_buttons[0].disabled or not panel.characters.item_count == 0:
 		fail("Logout left stale UI or binding")
 		return
+	# Use a stub only for the button's state/intent boundary; the real
+	# authenticated respawn wire and durable HP settlement have separate E2E.
+	var stub := RespawnSession.new()
+	panel.session = stub
+	panel.active = true
+	panel._latest = {"state":State.STATE_IN_WORLD,"world_ready":true,
+		"combat_available":true,"player_dead":true,"map_epoch":3,
+		"last_world_ready_ack_epoch":3,"respawn_sequence":0,
+		"last_respawn_result_sequence":0}
+	panel._set_respawn_controls()
+	if not panel.respawn_button.visible or panel.respawn_button.disabled:
+		fail("Dead player cannot access respawn UI")
+		return
+	panel.respawn_button.pressed.emit()
+	panel.respawn_button.pressed.emit()
+	if stub.requests != 1 or not panel.respawn_button.disabled:
+		fail("Respawn UI emitted duplicate intent")
+		return
+	panel._latest.respawn_sequence = 1
+	panel._set_respawn_controls()
+	if not panel.respawn_button.disabled:
+		fail("Pending authoritative respawn result re-enabled UI")
+		return
+	panel._latest.last_respawn_result_sequence = 1
+	panel._set_respawn_controls()
+	if panel.respawn_button.disabled:
+		fail("Rejected respawn cannot be retried")
+		return
+	panel._latest.resync_pending = true
+	panel._set_respawn_controls()
+	if not panel.respawn_button.disabled:
+		fail("Respawn enabled during AOI resync")
+		return
+	panel._latest.resync_pending = false
+	panel._latest.player_dead = false
+	panel._set_respawn_controls()
+	if panel.respawn_button.visible:
+		fail("Alive player retained respawn button")
+		return
+	panel.active = false
+	panel._set_respawn_controls()
 	app.queue_free()
 	await process_frame
-	print("CLIENT_TLS_LOGIN_PASS ui=PASS auth=PASS choose=PASS receipt=PASS world_ready=PASS password_cleared=PASS logout=PASS")
+	print("CLIENT_TLS_LOGIN_PASS ui=PASS auth=PASS choose=PASS receipt=PASS world_ready=PASS password_cleared=PASS logout=PASS respawn_ui=PASS")
 	quit(0)
