@@ -89,7 +89,7 @@ func move_target(target_x: int, target_y: int) -> bool:
 
 func pickup_ground_drop(drop_id: int) -> bool:
 	var current := snapshot()
-	if drop_id <= 0 or bool(current.get("player_dead",false)) or not (current.get("ground_drops",{}) as Dictionary).has(drop_id):
+	if drop_id <= 0 or bool(current.get("player_dead",false)) or int(current.get("pending_pickup_sequence",0)) != 0 or not (current.get("ground_drops",{}) as Dictionary).has(drop_id):
 		return false
 	return _queue_intent({"type":"pickup_ground_drop","drop_id":drop_id})
 
@@ -136,6 +136,13 @@ func stop() -> void:
 func _queue_intent(intent: Dictionary) -> bool:
 	_mutex.lock()
 	var accepted := _running and not _stop_requested and not _reconnecting and _intents.size() < MAX_INTENTS
+	if accepted and str(intent.get("type","")) == "pickup_ground_drop":
+		# Reject repeated clicks while the first one is still in the intent
+		# queue, before it acquires a pending authoritative sequence.
+		for queued in _intents:
+			if str(queued.get("type","")) == "pickup_ground_drop":
+				accepted = false
+				break
 	if accepted:
 		_intents.append(intent)
 	_mutex.unlock()

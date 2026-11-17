@@ -8,6 +8,12 @@ var app: Node
 class RespawnSession extends RefCounted:
 	var requests := 0
 	var attacks := 0
+	var pickups := 0
+	func pickup_ground_drop(drop_id: int) -> bool:
+		if drop_id <= 0:
+			return false
+		pickups += 1
+		return true
 	func attack_monster(entity_id: int) -> bool:
 		if entity_id <= 0:
 			return false
@@ -54,6 +60,24 @@ func check_attack_ui(panel,stub) -> void:
 		fail("AOI resync allowed a new attack intent")
 		return
 	panel._latest.resync_pending = false
+	if not panel.submit_pickup_drop(501) or stub.pickups != 1:
+		fail("Ground pickup UI did not send existing ClientSession intent")
+		return
+	panel._latest.pending_pickup_sequence = 2
+	if panel.submit_pickup_drop(501) or stub.pickups != 1:
+		fail("Pickup UI accepted a second outstanding request")
+		return
+	panel._latest.pending_pickup_sequence = 0
+	panel._latest.resync_pending = true
+	if panel.submit_pickup_drop(501) or stub.pickups != 1:
+		fail("Pickup UI escaped AOI resync gate")
+		return
+	panel._latest.resync_pending = false
+	panel._latest.player_dead = true
+	if panel.submit_pickup_drop(501) or stub.pickups != 1:
+		fail("Dead player pickup UI bypassed death gate")
+		return
+	panel._latest.player_dead = false
 
 
 func run() -> void:
@@ -176,5 +200,5 @@ func run() -> void:
 	panel._set_respawn_controls()
 	app.queue_free()
 	await process_frame
-	print("CLIENT_TLS_LOGIN_PASS ui=PASS auth=PASS choose=PASS receipt=PASS world_ready=PASS password_cleared=PASS logout=PASS respawn_ui=PASS click_attack_ui=PASS")
+	print("CLIENT_TLS_LOGIN_PASS ui=PASS auth=PASS choose=PASS receipt=PASS world_ready=PASS password_cleared=PASS logout=PASS respawn_ui=PASS click_attack_ui=PASS click_pickup_ui=PASS")
 	quit(0)
