@@ -93,6 +93,12 @@ func move_target(target_x: int, target_y: int) -> bool:
 		return false
 	return _queue_intent({"type": "move", "x": target_x, "y": target_y})
 
+func stop_movement() -> bool:
+	var current := snapshot()
+	if bool(current.get("player_dead",false)) or int(current.get("state",-1)) != WorldState.STATE_IN_WORLD:
+		return false
+	return _queue_intent({"type":"stop_move"})
+
 func use_recovery_item(item_uid: int) -> bool:
 	var current := snapshot()
 	if item_uid <= 0 or not bool(current.get("inventory_ready",false)) or not bool(current.get("combat_available",false)) or bool(current.get("player_dead",false)) or int(current.get("pending_recovery_sequence",0)) != 0 or int(current.get("pending_discard_sequence",0)) != 0 or not (current.get("inventory_items",{}) as Dictionary).has(item_uid):
@@ -162,12 +168,25 @@ func _queue_intent(intent: Dictionary) -> bool:
 	# chase. Clicking another monster also replaces an earlier navigation target.
 	# Any already-sent Server command may still return a reliable receipt, but
 	# its Client-side auto-follow state is no longer retained.
+	if accepted and kind == "stop_move":
+		var kept: Array[Dictionary] = []
+		for queued in _intents:
+			if str(queued.get("type","")) not in ["move","attack_monster","stop_move"]:
+				kept.append(queued)
+		_intents = kept
 	if accepted and kind in ["move","attack_monster"]:
 		var kept: Array[Dictionary] = []
 		for queued in _intents:
+			# A stop intent is a barrier: later interaction/navigation waits
+			# until the Server has acknowledged the stop SelfState.
 			if str(queued.get("type","")) not in ["move","attack_monster"]:
 				kept.append(queued)
 		_intents = kept
+	if accepted and kind == "stop_move":
+		for queued in _intents:
+			if str(queued.get("type","")) == "stop_move":
+				accepted = false
+				break
 	if accepted and kind == "use_recovery_item":
 		for queued in _intents:
 			if str(queued.get("type","")) in ["use_recovery_item","discard_inventory_item"]:
@@ -432,6 +451,8 @@ func _process_first_intent() -> void:
 			_publish()
 	elif kind == "attack_monster":
 		_process_attack_monster_intent(intent)
+	elif kind == "stop_move":
+		_process_stop_movement_intent(intent)
 	elif kind == "move":
 		var current: Dictionary = _world.snapshot()
 		if int(current.state) != WorldState.STATE_IN_WORLD or bool(current.player_dead) or not bool(current.world_ready) or bool(current.resync_pending) or int(current.pending_world_ready_ack_epoch) != 0 or int(current.last_world_ready_ack_epoch) != int(current.map_epoch) or bool(current.waiting_for_new_map):
@@ -447,6 +468,46 @@ func _process_first_intent() -> void:
 	else:
 		_world.fail("unknown_intent")
 		_publish()
+
+func _process_stop_movement_intent(intent: Dictionary) -> void:
+	var current: Dictionary = _world.snapshot()
+	var token := int(intent.get("_token",0))
+	if token <= 0 or not _first_intent_matches(token):
+		return
+	if int(current.state) != WorldState.STATE_IN_WORLD or bool(current.player_dead) or bool(current.waiting_for_new_map):
+		_pop_intent_token(token)
+		return
+	if not bool(current.world_ready) or bool(current.resync_pending) or int(current.pending_world_ready_ack_epoch) != 0 or int(current.last_world_ready_ack_epoch) != int(current.map_epoch):
+		return
+	var phase := str(intent.get("phase","send_stop"))
+	if phase == "send_stop":
+		var sequence := int(current.movement_sequence)+1
+		var frame := WireCodec.encode_move_target(
+			int(current.map_epoch),sequence,
+			roundi(float(current.x)),roundi(float(current.y)))
+		if not frame.is_empty() and _transport.send_frame(frame) and _world.mark_move_sent(sequence):
+			var waiting := intent.duplicate(true)
+			waiting["phase"] = "await_stop"
+			waiting["movement_sequence"] = sequence
+			_replace_first_intent(token,waiting)
+			_publish()
+		return
+	if phase == "await_stop":
+		var sequence := int(intent.get("movement_sequence",0))
+		if int(current.last_receipt_sequence) < sequence:
+			return
+		if int(current.last_receipt_sequence) != sequence or int(current.last_receipt_status) != 0:
+			_pop_intent_token(token)
+			return
+		var own: Dictionary = current.self_state
+		if own.is_empty() or int(own.get("movement_action_sequence",0)) < sequence:
+			return
+		if bool(own.get("moving",false)):
+			return
+		_pop_intent_token(token)
+		return
+	_pop_intent_token(token)
+
 
 func _process_attack_monster_intent(intent: Dictionary) -> void:
 	var current: Dictionary = _world.snapshot()

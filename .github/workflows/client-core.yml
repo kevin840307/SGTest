@@ -72,6 +72,10 @@ jobs:
         run: .cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64 --headless --path client --script res://tests/test_normal_attack_wire.gd
       - name: ClientSession server-authoritative out-of-range auto approach attack
         run: .cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64 --headless --path client --script res://tests/test_client_auto_approach_attack.gd
+      - name: Recovered-compatible 1000ms cursor-follow autorun policy
+        run: .cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64 --headless --path client --script res://tests/test_mouse_autorun_state.gd
+      - name: ClientSession ordered movement stop barrier
+        run: .cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64 --headless --path client --script res://tests/test_client_stop_barrier.gd
       - name: Godot durable player damage wire and death reducer gate
         run: .cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64 --headless --path client --script res://tests/test_player_damage_wire.gd
       - name: Godot bounded transport compile gate

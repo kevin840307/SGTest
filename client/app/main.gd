@@ -2,6 +2,7 @@ extends Node
 ## UI composition and presentation input; ClientSession owns networking/reduction.
 const WorldView = preload("res://rendering/world_view.gd")
 const SessionPanel = preload("res://ui/session_panel.gd")
+const MouseAutorunState = preload("res://app/mouse_autorun_state.gd")
 var auto_start := true
 var world_view := WorldView.new()
 var _held := {}
@@ -12,6 +13,11 @@ var toolbar := PanelContainer.new()
 var session_panel := SessionPanel.new()
 var _map_buttons: Array[Button] = []
 var _last_snapshot: Dictionary = {}
+var _mouse_autorun = MouseAutorunState.new()
+var _autorun_left_press_cancelled := false
+var _autorun_map_epoch := 0
+var _autorun_waiting_sequence_floor := -1
+var _autorun_last_blocked_sequence := 0
 var _online_gate_role := ""
 var _online_gate_phase := -1
 var _online_gate_deadline := 0
@@ -52,7 +58,7 @@ func _ready() -> void:
 	_status.add_theme_color_override("font_color",Color("f2d995"))
 	row.add_child(_status)
 	var help := Label.new()
-	help.text = "方向鍵／中鍵拖曳　Home 置中"
+	help.text = "方向鍵／中鍵拖曳　Home 置中　長按地面 1 秒鎖定走路"
 	row.add_child(help)
 	world_view.status_changed.connect(_world_status)
 	layer.add_child(session_panel)
@@ -115,21 +121,41 @@ func _unhandled_key_input(event: InputEvent) -> void:
 			world_view.camera.set_focus(world_view.epoch,Vector2(world_view.camera.snapshot().world_size)/2.0)
 
 
+func _input(event: InputEvent) -> void:
+	if not event is InputEventMouseButton:
+		return
+	var mouse := event as InputEventMouseButton
+	if mouse.button_index == MOUSE_BUTTON_LEFT:
+		if not mouse.pressed:
+			_autorun_left_press_cancelled = false
+			if _mouse_autorun.holding:
+				_mouse_autorun.terrain_release(Time.get_ticks_msec())
+		elif _mouse_autorun.latched:
+			# Do not consume the event: entity/UI handlers still receive this
+			# click. Only bare terrain suppresses the same-press new route below.
+			_autorun_left_press_cancelled = true
+			_cancel_mouse_autorun(true)
+	elif mouse.button_index == MOUSE_BUTTON_RIGHT and mouse.pressed and _mouse_autorun.active():
+		# Preserve all normal right-click handlers/context menus.
+		_cancel_mouse_autorun(true)
+
+
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed and session_panel.active and world_view.phase == "ready":
 		var point: Vector2 = world_view.camera.screen_to_world(event.position)
 		var drop_id: int = world_view.pick_ground_drop_at(point)
 		var monster_id: int = world_view.pick_monster_at(point) if drop_id == 0 else 0
 		if drop_id > 0:
-			# Ground pickup takes priority over nearby monsters; failure
-			# never silently falls back to movement or an attack.
+			# A latched click already queued an ordered stop barrier in _input;
+			# the item interaction follows it without losing normal click priority.
 			session_panel.submit_pickup_drop(drop_id)
 		elif monster_id > 0:
 			# A live visible monster takes attack priority over ground movement.
 			# Never fall back to movement when the combat intent is backpressured.
 			session_panel.submit_attack_monster(monster_id)
-		else:
-			session_panel.submit_move(point)
+		elif not _autorun_left_press_cancelled:
+			_begin_ground_navigation(point,Time.get_ticks_msec())
+		# First bare-ground click after a latch only stops the old route.
 		get_viewport().set_input_as_handled()
 		return
 	if session_panel.active:
@@ -140,6 +166,50 @@ func _unhandled_input(event: InputEvent) -> void:
 	elif event is InputEventMouseMotion and _dragging:
 		world_view.camera.pan(world_view.epoch,-event.relative)
 		get_viewport().set_input_as_handled()
+
+
+func _physics_process(_delta: float) -> void:
+	if not _mouse_autorun.active():
+		return
+	var now := Time.get_ticks_msec()
+	# _input normally sees release first; this is a fallback for cases where
+	# another interaction consumes the release later in the input pipeline.
+	if _mouse_autorun.holding and not Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
+		_mouse_autorun.terrain_release(now)
+	if not _mouse_autorun.active() or not session_panel.active or _last_snapshot.is_empty():
+		return
+	if bool(_last_snapshot.get("player_dead",false)) or bool(_last_snapshot.get("reconnecting",false)) or bool(_last_snapshot.get("waiting_for_new_map",false)):
+		_cancel_mouse_autorun(false)
+		return
+	var epoch := int(_last_snapshot.get("map_epoch",0))
+	if epoch <= 0 or (_autorun_map_epoch > 0 and epoch != _autorun_map_epoch):
+		_cancel_mouse_autorun(false)
+		return
+	if not bool(_last_snapshot.get("world_ready",false)) or bool(_last_snapshot.get("resync_pending",false)):
+		return
+
+	var movement_sequence := int(_last_snapshot.get("movement_sequence",0))
+	if _autorun_waiting_sequence_floor >= 0:
+		if movement_sequence <= _autorun_waiting_sequence_floor:
+			return
+		_autorun_waiting_sequence_floor = -1
+	var receipt_sequence := int(_last_snapshot.get("last_receipt_sequence",0))
+	if movement_sequence > receipt_sequence:
+		return
+	if receipt_sequence == movement_sequence and movement_sequence > 0 and int(_last_snapshot.get("last_receipt_status",-1)) != 0:
+		if _autorun_last_blocked_sequence != movement_sequence:
+			_autorun_last_blocked_sequence = movement_sequence
+			_mouse_autorun.defer_blocked_retry(now)
+
+	var own: Dictionary = _last_snapshot.get("self_state",{})
+	var moving := bool(own.get("moving",false)) if not own.is_empty() else false
+	var actor_position := Vector2(
+		float(_last_snapshot.get("x",0.0)),float(_last_snapshot.get("y",0.0)))
+	var cursor_position := world_view.camera.screen_to_world(
+		get_viewport().get_mouse_position())
+	if _mouse_autorun.should_request(
+			now,actor_position,cursor_position,moving):
+		_submit_autorun_target(cursor_position,now,not moving)
 
 
 func _process(delta: float) -> void:
@@ -169,6 +239,8 @@ func _notification(what: int) -> void:
 
 
 func _connection_changed(active: bool) -> void:
+	if not active:
+		_cancel_mouse_autorun(false)
 	for button in _map_buttons:
 		button.disabled = active
 	_held.clear()
@@ -194,8 +266,52 @@ func _server_world_ready(snapshot: Dictionary) -> void:
 
 
 func _server_snapshot(snapshot: Dictionary) -> void:
+	var previous := _last_snapshot
+	if _mouse_autorun.active() and not previous.is_empty():
+		var old_epoch := int(previous.get("map_epoch",0))
+		var new_epoch := int(snapshot.get("map_epoch",0))
+		var new_dead := bool(snapshot.get("player_dead",false))
+		var transferred := old_epoch > 0 and new_epoch > 0 and old_epoch != new_epoch
+		var damaged := int(snapshot.get("player_damage_sequence",0)) > int(previous.get("player_damage_sequence",0))
+		var attacked := int(snapshot.get("last_attack_result_sequence",0)) > int(previous.get("last_attack_result_sequence",0))
+		if transferred or new_dead or bool(snapshot.get("waiting_for_new_map",false)) or bool(snapshot.get("reconnecting",false)):
+			_cancel_mouse_autorun(false)
+		elif damaged or attacked:
+			_cancel_mouse_autorun(true)
 	_last_snapshot = snapshot.duplicate(true)
 	world_view.set_player_snapshot(snapshot)
+
+
+func _begin_ground_navigation(point: Vector2,now_msec: int) -> void:
+	if not point.is_finite():
+		return
+	var was_latched := _mouse_autorun.terrain_press(now_msec)
+	if was_latched:
+		return
+	_autorun_map_epoch = int(_last_snapshot.get("map_epoch",0))
+	_autorun_last_blocked_sequence = 0
+	_submit_autorun_target(point,now_msec,false)
+
+
+func _submit_autorun_target(point: Vector2,now_msec: int,was_stopped: bool) -> bool:
+	if not point.is_finite() or not session_panel.active:
+		return false
+	var sequence_floor := int(_last_snapshot.get("movement_sequence",0))
+	if not session_panel.submit_move(point):
+		return false
+	_autorun_waiting_sequence_floor = sequence_floor
+	_mouse_autorun.note_request(point,now_msec,was_stopped)
+	return true
+
+
+func _cancel_mouse_autorun(stop_movement: bool) -> void:
+	var was_active := _mouse_autorun.active()
+	_mouse_autorun.cancel()
+	_autorun_map_epoch = 0
+	_autorun_waiting_sequence_floor = -1
+	_autorun_last_blocked_sequence = 0
+	if stop_movement and was_active and session_panel.active:
+		session_panel.submit_stop_movement()
 
 
 func _start_online_gate() -> void:
