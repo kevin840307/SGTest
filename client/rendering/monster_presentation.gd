@@ -10,7 +10,7 @@ const STATE_WANDER := 1
 const STATE_CHASE := 2
 const STATE_ATTACK := 3
 const STATE_DEAD := 4
-const ACTIONS := ["NS","NW","FA","ND"]
+const ACTIONS := ["NS","NW","FA","NH","ND"]
 
 var _definitions := {}
 var _views := {}
@@ -59,7 +59,7 @@ func configure(population: Dictionary, assets: Dictionary) -> Error:
 					clear()
 					return ERR_INVALID_DATA
 				var timeline := Timeline.new()
-				if timeline.configure_ticks(view.timeline_ticks,view.loop) != OK:
+				if timeline.configure_ticks(view.timeline_ticks,false if action == "NH" else view.loop) != OK:
 					clear()
 					return ERR_INVALID_DATA
 				var clip: Array = manifest.clips[view.clip]
@@ -112,6 +112,15 @@ func apply_snapshot(snapshot: Dictionary, now_usec: int) -> Error:
 		var action: String = _action(state)
 		var generation_changed: bool = old.is_empty()
 		var history = PositionHistory.new() if generation_changed else old.history
+		# Damage is inferred only from a newer authoritative HP revision. Entry
+		# snapshots, duplicate frames and ordinary movement cannot fabricate hits.
+		var took_hit: bool = not generation_changed and revision > int(old.value.revision) and int(value.current_hp) > 0 and int(value.current_hp) < int(old.value.current_hp)
+		var hit_started: int = -1 if generation_changed else int(old.hit_started)
+		if took_hit:
+			hit_started = now_usec
+		elif state == STATE_DEAD or (not generation_changed and state == STATE_ATTACK and revision > int(old.value.revision)):
+			# Death wins over Hit; a fresh authoritative attack interrupts it.
+			hit_started = -1
 		if not history.push(tick,Vector2(float(value.x),float(value.y)),now_usec):
 			continue
 		var restarted: bool = generation_changed or str(old.action) != action
@@ -123,6 +132,7 @@ func apply_snapshot(snapshot: Dictionary, now_usec: int) -> Error:
 			"value":value.duplicate(true),
 			"action":action,
 			"started":now_usec if restarted else int(old.started),
+			"hit_started":hit_started,
 			"history":history
 		}
 	return OK
@@ -135,12 +145,21 @@ func actors_at(now_usec: int) -> Array:
 		var monster: Dictionary = _monsters[id]
 		var value: Dictionary = monster.value
 		var enemy_id := int(value.enemy_id)
-		var requested: String = str(monster.action)+str(int(value.facing))
+		var action: String = str(monster.action)
+		var elapsed: int = maxi(0,now_usec-int(monster.started))*50/1000000
+		if action != "ND" and int(monster.hit_started) >= 0:
+			var hit_view: Dictionary = _views.get(enemy_id,{}).get("NH"+str(int(value.facing)),{})
+			var hit_elapsed: int = maxi(0,now_usec-int(monster.hit_started))*50/1000000
+			# NH plays once using source ACT durations, then sampling falls back
+			# to the current authoritative AI state without mutating any state.
+			if not hit_view.is_empty() and not hit_view.timeline.is_complete(hit_elapsed):
+				action = "NH"
+				elapsed = hit_elapsed
+		var requested: String = action+str(int(value.facing))
 		var resolved: Dictionary = _views.get(enemy_id,{}).get(requested,{})
 		if resolved.is_empty():
 			continue
 		var definition: Dictionary = _definitions[enemy_id]
-		var elapsed := maxi(0,now_usec-int(monster.started))*50/1000000
 		var sampled: Vector2 = monster.history.sample(now_usec)
 		if not sampled.is_finite():
 			sampled = Vector2(float(value.x),float(value.y))

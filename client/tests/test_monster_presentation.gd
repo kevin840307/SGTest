@@ -85,17 +85,61 @@ func run() -> void:
 	actors=monsters.actors_at(400000)
 	check(int(actors[0].frame)==0,"authoritative repeat Attack did not restart FA")
 
-	var dead := repeated.duplicate(true)
-	dead.server_tick=5
-	dead.revision=5
+	# Nonlethal authoritative damage interrupts Attack with one-shot Hit.
+	var damaged := repeated.duplicate(true)
+	damaged.server_tick=5
+	damaged.revision=5
+	damaged.state=2
+	damaged.current_hp=80
+	snapshot.monsters={1001:damaged}
+	check(monsters.apply_snapshot(snapshot,500000)==OK,"nonlethal damage snapshot")
+	actors=monsters.actors_at(500000)
+	check(actors.size()==1 and actors[0].clip=="NH" and int(actors[0].frame)==0,
+		"HP drop did not start one-shot NH")
+	actors=monsters.actors_at(700000)
+	check(actors.size()==1 and actors[0].clip=="NH" and int(actors[0].frame)==1,
+		"NH did not retain original ACT frame durations")
+	# Same revision and ordinary movement must not restart NH.
+	var moved := damaged.duplicate(true)
+	moved.server_tick=6
+	moved.x=31.0
+	snapshot.monsters={1001:moved}
+	check(monsters.apply_snapshot(snapshot,750000)==OK,"same-revision move")
+	actors=monsters.actors_at(850000)
+	check(actors.size()==1 and actors[0].clip=="NW",
+		"completed NH did not return to current authoritative movement")
+	# A second verified HP loss restarts the hit, death preempts it.
+	var damaged_again := moved.duplicate(true)
+	damaged_again.server_tick=7
+	damaged_again.revision=6
+	damaged_again.current_hp=60
+	snapshot.monsters={1001:damaged_again}
+	check(monsters.apply_snapshot(snapshot,1000000)==OK,"second damage")
+	actors=monsters.actors_at(1000000)
+	check(actors.size()==1 and actors[0].clip=="NH" and int(actors[0].frame)==0,
+		"second hit did not restart NH")
+	var dead := damaged_again.duplicate(true)
+	dead.server_tick=8
+	dead.revision=7
 	dead.state=4
 	dead.current_hp=0
 	snapshot.monsters={1001:dead}
-	check(monsters.apply_snapshot(snapshot,500000)==OK,"death snapshot")
-	actors=monsters.actors_at(800000)
+	check(monsters.apply_snapshot(snapshot,1100000)==OK,"death snapshot")
+	actors=monsters.actors_at(1400000)
 	check(actors.size()==1 and actors[0].clip=="ND" and int(actors[0].frame)==1,
 		"death did not hold verified D/ND terminal frame")
 
+	# Respawn begins a clean idle state; past damage animation cannot leak.
+	var revived := dead.duplicate(true)
+	revived.server_tick=9
+	revived.revision=8
+	revived.current_hp=100
+	revived.state=0
+	snapshot.monsters={1001:revived}
+	check(monsters.apply_snapshot(snapshot,1500000)==OK,"respawn snapshot")
+	actors=monsters.actors_at(1500000)
+	check(actors.size()==1 and actors[0].clip=="NS",
+		"respawn replayed old damage animation")
 	var draw := DrawList.new()
 	check(draw.configure({
 		"scenery_schema":"sgtest.scenery/v1",
@@ -117,5 +161,5 @@ func run() -> void:
 	monsters.clear()
 	check(monsters.actors_at(0).is_empty(),"monster clear retained presentation state")
 	if failures.is_empty():
-		print("MONSTER_PRESENTATION_PASS visual_population_only=true stats_ignored=true NS_idle=true NW_move=true FA_attack=true ND_death=true NH_reserved=true interpolation=true common_draw_order=true")
+		print("MONSTER_PRESENTATION_PASS visual_population_only=true stats_ignored=true NS_idle=true NW_move=true FA_attack=true ND_death=true NH_hit_one_shot=true interpolation=true common_draw_order=true")
 	quit(0 if failures.is_empty() else 1)
