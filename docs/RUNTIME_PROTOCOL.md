@@ -300,3 +300,16 @@ The request has no ActorId, ConnectionEpoch, HP, coordinates or resurrection fla
 Godot accepts an outgoing respawn only while the current combat baseline is dead. Same-map duplicate/stale result sequences are idempotent; future/unsent sequences fail closed. Successful respawn restores own HP and clears `player_dead`, but **does not reset DamageSequence** inside the same MapEpoch/connection generation, preserving reliable damage causality across death→respawn. Map transfer/reconnect still establishes the generation boundary.
 
 Server core run **44049150018** passes **121/121** plus process-kill checkpoint recovery. Client core **44049150061** passes `PLAYER_DAMAGE_GODOT_PASS ... respawn_reopens_intents=true damage_sequence_continuous=true` and the real Godot↔C# TLS combat E2E reports `death_hp=0 respawn_hp=100 dead=false ... move_after_respawn=true`; reconnect, two-client AOI, Map15↔13, NPC portal and formal Host + two main-scene regressions also remain green.
+
+### 2026-11-17 Inventory destroy/discard V1 (opcodes 39/40)
+
+The same V1 little-endian header is extended without a second protocol:
+
+| Opcode | Direction | Bytes | Payload |
+|---|---|---:|---|
+| 39 InventoryDiscard | Godot→Server TLS only | 32 | `int64 MapEpoch; uint32 DiscardSequence; int64 ItemUid; int32 Quantity` |
+| 40 InventoryDiscardResult | Server→Godot reliable | 41 | `int64 MapEpoch; uint32 DiscardSequence; uint8 Status; int64 ItemUid; int32 ItemDefinitionId; int32 DiscardedQuantity; int32 RemainingQuantity` |
+
+The Client command cannot supply ActorId, ConnectionEpoch or ItemDefinitionId. Quantity is bounded to 1..1,000,000 and the Server verifies ownership against SQLite. Result status is `0 Applied, 1 AlreadyApplied, 2 Missing, 3 NotOwned, 4 InvalidQuantity, 5 StaleSequence, 6 StaleGeneration`. Applied/AlreadyApplied carry the committed item/result quantities; rejected results carry zero item-definition/discarded/remaining fields. Opcode40 is Server-only and enters the same bounded reliable FIFO as other authoritative outcomes.
+
+Exactly-once gameplay effect is provided by a durable SQLite receipt, not by assuming TCP never retries. Godot tracks one outstanding discard sequence, applies only an `Applied` result to its UID-keyed inventory, does not subtract `AlreadyApplied` again, and resets the sequence on a newer map epoch while ignoring older-map replies. This action destroys inventory and **does not create a GroundDrop**. C#/Godot golden and reducer Client core 44113626146 PASS; real authenticated TLS discard/replay/relogin Server core 44113938394 PASS. Original bind/no-drop/confirmation/ground-drop rules remain NOT VERIFIED.
