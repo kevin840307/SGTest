@@ -89,10 +89,16 @@ func _initialize() -> void:
 	if not monster_world.mark_world_ready_ack_sent(1,42):
 		_fail("monster fixture initial Ready ACK")
 		return
-	if not monster_world.apply_frame(MONSTER_SPAWN.hex_decode()) or not monster_world.snapshot().monsters.has(1001300001):
+	# Golden bytes intentionally describe Map13; reducer fixture runs in the
+	# existing Map15 world and changes only the receiver's current map identity.
+	var local_monster_spawn := MONSTER_SPAWN.hex_decode()
+	local_monster_spawn.encode_s32(40,15)
+	var local_monster_delta := MONSTER_DELTA.hex_decode()
+	local_monster_delta.encode_s32(40,15)
+	if not monster_world.apply_frame(local_monster_spawn) or not monster_world.snapshot().monsters.has(1001300001):
 		_fail("MonsterSpawn reducer")
 		return
-	if not monster_world.apply_frame(MONSTER_DELTA.hex_decode()) or int(monster_world.snapshot().monsters[1001300001].revision) != 3 or int(monster_world.snapshot().monsters[1001300001].current_hp) != 80:
+	if not monster_world.apply_frame(local_monster_delta) or int(monster_world.snapshot().monsters[1001300001].revision) != 3 or int(monster_world.snapshot().monsters[1001300001].current_hp) != 80:
 		_fail("MonsterDelta reducer")
 		return
 	if not monster_world.apply_frame(MONSTER_DESPAWN.hex_decode()) or not monster_world.snapshot().monsters.is_empty():
@@ -101,7 +107,7 @@ func _initialize() -> void:
 	if not monster_world.apply_frame(MONSTER_DESPAWN.hex_decode()):
 		_fail("duplicate MonsterDespawn should be stale")
 		return
-	var monster_gap := MONSTER_DELTA.hex_decode()
+	var monster_gap := local_monster_delta.duplicate()
 	monster_gap.encode_s64(16,53)
 	if not monster_world.apply_frame(monster_gap) or not bool(monster_world.snapshot().resync_pending) or str(monster_world.snapshot().resync_reason) != "monster_delta_without_spawn":
 		_fail("Monster revision/baseline gap did not enter bounded resync")
