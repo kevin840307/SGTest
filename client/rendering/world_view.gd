@@ -175,7 +175,19 @@ func present() -> void:
 		# Same-y insertion stays deterministic across AOI arrival order.
 		actors.sort_custom(func(a: Dictionary,b: Dictionary) -> bool:
 			return str(a.id) < str(b.id))
-	_canvas.present(draw_list.build(rect,actors,{},draw_list.frames_at_update(update)))
+	# Immutable ground drop UIDs are AOI-filtered by Server first. Culling
+	# here is only presentation, never gameplay or interest authority.
+	var markers: Array = []
+	if show_players and not _player_snapshot.is_empty():
+		var ground: Dictionary = _player_snapshot.get("ground_drops",{})
+		var keys: Array = ground.keys()
+		keys.sort()
+		for id in keys:
+			var drop: Dictionary = ground[id]
+			var p := Vector2(float(drop.x),float(drop.y))
+			if rect.has_point(p):
+				markers.append({"p":p,"drop_id":int(id)})
+	_canvas.present(draw_list.build(rect,actors,{},draw_list.frames_at_update(update)),markers)
 	_players_dirty = false
 	_last_rect = rect
 	_last_update = update
@@ -212,6 +224,12 @@ func set_player_snapshot(snapshot: Dictionary) -> void:
 		var focus := players.position_at(int(snapshot.actor_id),now_usec)
 		if focus.is_finite():
 			camera.set_focus(epoch,focus)
+
+
+func ground_drop_count() -> int:
+	if phase != "ready" or not show_players:
+		return 0
+	return (_player_snapshot.get("ground_drops",{}) as Dictionary).size()
 
 
 func monster_count() -> int:

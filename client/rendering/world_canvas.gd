@@ -1,16 +1,19 @@
 extends Node2D
 ## Draw an already ordered presentation snapshot; texture references are shared.
 var _commands: Array = []
+var _ground_markers: Array = []
 
 
-func present(commands: Array) -> void:
+func present(commands: Array, ground_markers: Array = []) -> void:
 	_commands = commands
+	_ground_markers = ground_markers
 	texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	queue_redraw()
 
 
 func clear() -> void:
 	_commands = []
+	_ground_markers = []
 	queue_redraw()
 
 
@@ -26,3 +29,11 @@ func _draw() -> void:
 			draw_set_transform(Vector2.ZERO)
 		else:
 			draw_texture_rect_region(command.texture,destination,command.uv,command.modulate,false,true)
+
+	# Lightweight evidence-only markers until source-verified item atlases
+	# are available. They reuse the existing Canvas draw call; no extra
+	# per-drop Sprite2D/Texture/Node resources are allocated.
+	for drop in _ground_markers:
+		var position: Vector2 = drop.p
+		draw_circle(position, 6.0, Color(0.12,0.08,0.02,0.9))
+		draw_circle(position, 4.0, Color(1.0,0.82,0.22,0.95))

@@ -56,6 +56,7 @@ var protocol_error := ""
 var world_ready := false
 var entities := {}
 var monsters := {}
+var ground_drops := {}
 var self_state := {}
 var last_aoi_tick := -1
 var stale_aoi_events := 0
@@ -160,6 +161,10 @@ func apply_frame(frame: PackedByteArray) -> bool:
 			return _apply_monster_state(frame,opcode)
 		WireCodec.OPCODE_MONSTER_DESPAWN:
 			return _apply_monster_despawn(frame)
+		WireCodec.OPCODE_GROUND_DROP_SPAWN:
+			return _apply_ground_drop_spawn(frame)
+		WireCodec.OPCODE_GROUND_DROP_DESPAWN:
+			return _apply_ground_drop_despawn(frame)
 		_:
 			return fail("unexpected_server_opcode_%d" % opcode)
 
@@ -216,6 +221,7 @@ func snapshot() -> Dictionary:
 		"world_ready": world_ready,
 		"entities": entities.duplicate(true),
 		"monsters": monsters.duplicate(true),
+		"ground_drops": ground_drops.duplicate(true),
 		"self_state": self_state.duplicate(true),
 		"last_aoi_tick": last_aoi_tick,
 		"stale_aoi_events": stale_aoi_events,
@@ -306,6 +312,7 @@ func _apply_choose(frame: PackedByteArray) -> bool:
 	self_state.clear()
 	entities.clear()
 	monsters.clear()
+	ground_drops.clear()
 	last_aoi_tick = -1
 	stale_aoi_events = 0
 	pending_world_ready_ack_epoch = 0
@@ -547,6 +554,7 @@ func _apply_world_ready(frame: PackedByteArray) -> bool:
 	world_ready = true
 	entities.clear()
 	monsters.clear()
+	ground_drops.clear()
 	last_aoi_tick = tick
 	pending_world_ready_ack_epoch = map_epoch
 	pending_world_ready_ack_tick = tick
@@ -652,6 +660,43 @@ func _apply_monster_state(frame: PackedByteArray, opcode: int) -> bool:
 		monsters[id] = value
 	last_aoi_tick = maxi(last_aoi_tick,int(value.server_tick))
 	return true
+
+func _apply_ground_drop_spawn(frame: PackedByteArray) -> bool:
+	var value := WireCodec.decode_ground_drop_spawn(frame)
+	if value.is_empty():
+		return fail("invalid_ground_drop_spawn")
+	var disposition := _check_aoi_generation(int(value.receiver_map_epoch),int(value.server_tick))
+	if disposition <= 0:
+		return disposition == 0
+	if int(value.map_id) != map_id:
+		return fail("ground_drop_wrong_map")
+	var id := int(value.drop_id)
+	var previous: Dictionary = ground_drops.get(id,{})
+	if not previous.is_empty():
+		if previous != value:
+			return _need_resync("ground_drop_uid_conflict")
+		stale_aoi_events += 1
+		return true
+	ground_drops[id] = value
+	last_aoi_tick = maxi(last_aoi_tick,int(value.server_tick))
+	return true
+
+
+func _apply_ground_drop_despawn(frame: PackedByteArray) -> bool:
+	var value := WireCodec.decode_ground_drop_despawn(frame)
+	if value.is_empty():
+		return fail("invalid_ground_drop_despawn")
+	var disposition := _check_aoi_generation(int(value.receiver_map_epoch),int(value.server_tick))
+	if disposition <= 0:
+		return disposition == 0
+	var id := int(value.drop_id)
+	if not ground_drops.has(id):
+		stale_aoi_events += 1
+		return true
+	ground_drops.erase(id)
+	last_aoi_tick = maxi(last_aoi_tick,int(value.server_tick))
+	return true
+
 
 func _apply_monster_despawn(frame: PackedByteArray) -> bool:
 	var value := WireCodec.decode_monster_despawn(frame)
