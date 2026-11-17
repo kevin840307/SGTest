@@ -20,6 +20,9 @@ var characters := OptionButton.new()
 var choose_button := Button.new()
 var respawn_button := Button.new()
 var pickup_status := Label.new()
+var inventory_button := Button.new()
+var inventory_preview := TextEdit.new()
+var _inventory_display_revision := -1
 var status := Label.new()
 var _characters: Array = []
 var _chosen := false
@@ -57,14 +60,22 @@ func _ready() -> void:
 	login_button.text = "登入"
 	logout_button.text = "登出／取消"
 	choose_button.text = "進入世界"
+	inventory_button.text = "背包"
+	inventory_button.visible = false
+	inventory_button.focus_mode = Control.FOCUS_NONE
+	inventory_preview.editable = false
+	inventory_preview.visible = false
+	inventory_preview.custom_minimum_size = Vector2(350,160)
+	inventory_preview.wrap_mode = TextEdit.LINE_WRAPPING_BOUNDARY
 	respawn_button.text = "復活"
-	for control in [login_button,characters,choose_button,respawn_button,logout_button,status,pickup_status]:
+	for control in [login_button,characters,choose_button,respawn_button,logout_button,status,pickup_status,inventory_button,inventory_preview]:
 		column.add_child(control)
 	login_button.pressed.connect(login)
 	password_input.text_submitted.connect(func(_text): login())
 	choose_button.pressed.connect(choose)
 	respawn_button.pressed.connect(request_respawn)
 	logout_button.pressed.connect(disconnect_session)
+	inventory_button.pressed.connect(func(): inventory_preview.visible = not inventory_preview.visible if inventory_button.visible else false)
 	var style := StyleBoxFlat.new()
 	style.bg_color = Color("211c15")
 	style.border_color = Color("c8a452")
@@ -98,6 +109,9 @@ func login() -> void:
 	_latest = {}
 	_respawn_queued_after = -1
 	pickup_status.text = ""
+	_inventory_display_revision = -1
+	inventory_preview.text = ""
+	inventory_preview.visible = false
 	characters.clear()
 	_characters = []
 	_set_controls()
@@ -154,6 +168,9 @@ func disconnect_session() -> void:
 	_latest = {}
 	_respawn_queued_after = -1
 	pickup_status.text = ""
+	_inventory_display_revision = -1
+	inventory_preview.text = ""
+	inventory_preview.visible = false
 	_characters = []
 	characters.clear()
 	password_input.clear()
@@ -188,6 +205,37 @@ func _set_respawn_controls() -> void:
 	respawn_button.disabled = not dead or bool(_latest.get("reconnecting",false)) or bool(_latest.get("resync_pending",false)) or bool(_latest.get("waiting_for_new_map",false)) or int(_latest.get("pending_world_ready_ack_epoch",0)) != 0 or int(_latest.get("last_world_ready_ack_epoch",0)) != int(_latest.get("map_epoch",0)) or sent_sequence > result_sequence or _respawn_queued_after >= 0
 
 
+func _update_inventory_ui() -> void:
+	var in_world: bool = active and int(_latest.get("state",-1)) == State.STATE_IN_WORLD
+	var loaded: bool = in_world and bool(_latest.get("inventory_ready",false))
+	inventory_button.visible = in_world
+	if not in_world:
+		inventory_preview.visible = false
+		return
+	if not loaded:
+		inventory_button.text = "背包（讀取中）"
+		return
+	var items: Dictionary = _latest.get("inventory_items",{})
+	inventory_button.text = "背包（%d 件）" % items.size()
+	var revision := int(_latest.get("inventory_revision",0))
+	if revision == _inventory_display_revision:
+		return
+	_inventory_display_revision = revision
+	var uids: Array = items.keys()
+	uids.sort()
+	var rows := PackedStringArray()
+	for index in mini(uids.size(),80):
+		var uid := int(uids[index])
+		var item: Dictionary = items[uids[index]]
+		rows.append("道具 %d ×%d  ·  UID %d" % [
+			int(item.item_definition_id),int(item.quantity),uid])
+	if uids.size() > 80:
+		rows.append("…另有 %d 件（先顯示前 80 件）" % (uids.size()-80))
+	if rows.is_empty():
+		rows.append("背包目前沒有物品")
+	inventory_preview.text = "\n".join(rows)
+
+
 func _process(delta: float) -> void:
 	if not active:
 		return
@@ -197,6 +245,7 @@ func _process(delta: float) -> void:
 	_poll_elapsed = 0.0
 	_latest = session.snapshot() # Reads published state; never pumps packets.
 	_set_respawn_controls()
+	_update_inventory_ui()
 	var pickup_result: Dictionary = _latest.get("last_pickup_result",{})
 	if not pickup_result.is_empty():
 		if int(pickup_result.status) in [0,1]:
