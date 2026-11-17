@@ -49,6 +49,14 @@ var last_recovery_result_sequence := 0
 var last_recovery_result_status := -1
 var last_recovery_result := {}
 var stale_recovery_results := 0
+var discard_sequence := 0
+var pending_discard_sequence := 0
+var pending_discard_item_uid := 0
+var pending_discard_quantity := 0
+var last_discard_result_sequence := 0
+var last_discard_result_status := -1
+var last_discard_result := {}
+var stale_discard_results := 0
 var pickup_sequence := 0
 var pending_pickup_sequence := 0
 var pending_pickup_drop_id := 0
@@ -118,11 +126,21 @@ func mark_normal_attack_sent(sequence: int) -> bool:
 	return true
 
 func mark_recovery_use_sent(sequence: int,item_uid: int) -> bool:
-	if state != STATE_IN_WORLD or player_dead or not combat_available or not inventory_ready or not world_ready or resync_pending or waiting_for_new_map or pending_world_ready_ack_epoch != 0 or last_world_ready_ack_epoch != map_epoch or pending_recovery_sequence != 0 or sequence <= recovery_sequence or sequence > 0xffffffff or item_uid <= 0 or not inventory_items.has(item_uid):
+	if state != STATE_IN_WORLD or player_dead or not combat_available or not inventory_ready or not world_ready or resync_pending or waiting_for_new_map or pending_world_ready_ack_epoch != 0 or last_world_ready_ack_epoch != map_epoch or pending_recovery_sequence != 0 or pending_discard_sequence != 0 or sequence <= recovery_sequence or sequence > 0xffffffff or item_uid <= 0 or not inventory_items.has(item_uid):
 		return false
 	recovery_sequence = sequence
 	pending_recovery_sequence = sequence
 	pending_recovery_item_uid = item_uid
+	return true
+
+
+func mark_inventory_discard_sent(sequence: int,item_uid: int,quantity: int) -> bool:
+	if state != STATE_IN_WORLD or not inventory_ready or not world_ready or resync_pending or waiting_for_new_map or pending_world_ready_ack_epoch != 0 or last_world_ready_ack_epoch != map_epoch or pending_discard_sequence != 0 or pending_recovery_sequence != 0 or sequence <= discard_sequence or sequence > 0xffffffff or item_uid <= 0 or quantity < 1 or quantity > 1000000 or not inventory_items.has(item_uid) or int((inventory_items[item_uid] as Dictionary).quantity) < quantity:
+		return false
+	discard_sequence = sequence
+	pending_discard_sequence = sequence
+	pending_discard_item_uid = item_uid
+	pending_discard_quantity = quantity
 	return true
 
 
@@ -191,6 +209,8 @@ func apply_frame(frame: PackedByteArray) -> bool:
 			return _apply_pickup_result(frame)
 		WireCodec.OPCODE_RECOVERY_USE_RESULT:
 			return _apply_recovery_use_result(frame)
+		WireCodec.OPCODE_INVENTORY_DISCARD_RESULT:
+			return _apply_inventory_discard_result(frame)
 		WireCodec.OPCODE_INVENTORY_SNAPSHOT:
 			return _apply_inventory_snapshot(frame)
 		WireCodec.OPCODE_WORLD_READY:
@@ -258,6 +278,14 @@ func snapshot() -> Dictionary:
 		"last_recovery_result_status": last_recovery_result_status,
 		"last_recovery_result": last_recovery_result.duplicate(true),
 		"stale_recovery_results": stale_recovery_results,
+		"discard_sequence": discard_sequence,
+		"pending_discard_sequence": pending_discard_sequence,
+		"pending_discard_item_uid": pending_discard_item_uid,
+		"pending_discard_quantity": pending_discard_quantity,
+		"last_discard_result_sequence": last_discard_result_sequence,
+		"last_discard_result_status": last_discard_result_status,
+		"last_discard_result": last_discard_result.duplicate(true),
+		"stale_discard_results": stale_discard_results,
 		"pickup_sequence": pickup_sequence,
 		"pending_pickup_sequence": pending_pickup_sequence,
 		"pending_pickup_drop_id": pending_pickup_drop_id,
@@ -364,6 +392,14 @@ func _apply_choose(frame: PackedByteArray) -> bool:
 	last_recovery_result_status = -1
 	last_recovery_result.clear()
 	stale_recovery_results = 0
+	discard_sequence = 0
+	pending_discard_sequence = 0
+	pending_discard_item_uid = 0
+	pending_discard_quantity = 0
+	last_discard_result_sequence = 0
+	last_discard_result_status = -1
+	last_discard_result.clear()
+	stale_discard_results = 0
 	pickup_sequence = 0
 	pending_pickup_sequence = 0
 	pending_pickup_drop_id = 0
@@ -618,6 +654,14 @@ func _apply_world_ready(frame: PackedByteArray) -> bool:
 		last_recovery_result_status = -1
 		last_recovery_result.clear()
 		stale_recovery_results = 0
+		discard_sequence = 0
+		pending_discard_sequence = 0
+		pending_discard_item_uid = 0
+		pending_discard_quantity = 0
+		last_discard_result_sequence = 0
+		last_discard_result_status = -1
+		last_discard_result.clear()
+		stale_discard_results = 0
 		pickup_sequence = 0
 		pending_pickup_sequence = 0
 		pending_pickup_drop_id = 0
@@ -825,6 +869,53 @@ func _apply_recovery_use_result(frame: PackedByteArray) -> bool:
 	last_recovery_result = result.duplicate(true)
 	pending_recovery_sequence = 0
 	pending_recovery_item_uid = 0
+	return true
+
+
+func _apply_inventory_discard_result(frame: PackedByteArray) -> bool:
+	if state != STATE_IN_WORLD:
+		return fail("discard_result_out_of_state")
+	var result := WireCodec.decode_inventory_discard_result(frame)
+	if result.is_empty():
+		return fail("invalid_discard_result")
+	var epoch := int(result.map_epoch)
+	var sequence := int(result.discard_sequence)
+	var uid := int(result.item_uid)
+	if epoch < map_epoch:
+		stale_discard_results += 1
+		return true
+	if epoch > map_epoch:
+		return fail("future_discard_result")
+	if sequence > discard_sequence:
+		return fail("unsent_discard_result")
+	if sequence <= last_discard_result_sequence:
+		stale_discard_results += 1
+		return true
+	if sequence != pending_discard_sequence or uid != pending_discard_item_uid:
+		return fail("discard_result_wrong_request")
+	if int(result.status) == 0:
+		if not inventory_ready or not inventory_items.has(uid):
+			return fail("discard_applied_without_inventory")
+		var previous: Dictionary = inventory_items[uid]
+		var discarded := int(result.discarded_quantity)
+		var remaining := int(result.remaining_quantity)
+		if int(previous.item_definition_id) != int(result.item_definition_id) or discarded != pending_discard_quantity or int(previous.quantity) != discarded + remaining:
+			return fail("discard_inventory_quantity_mismatch")
+		if remaining == 0:
+			inventory_items.erase(uid)
+		else:
+			var updated := previous.duplicate(true)
+			updated.quantity = remaining
+			inventory_items[uid] = updated
+		inventory_revision += 1
+	# AlreadyApplied is a historical durable receipt. The current session
+	# never subtracts it twice; TCP loss cannot skip bytes without reconnect.
+	last_discard_result_sequence = sequence
+	last_discard_result_status = int(result.status)
+	last_discard_result = result.duplicate(true)
+	pending_discard_sequence = 0
+	pending_discard_item_uid = 0
+	pending_discard_quantity = 0
 	return true
 
 

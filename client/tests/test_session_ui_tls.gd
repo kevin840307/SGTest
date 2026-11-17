@@ -11,11 +11,21 @@ class RespawnSession extends RefCounted:
 	var pickups := 0
 	var uses := 0
 	var last_use_uid := 0
+	var discards := 0
+	var last_discard_uid := 0
+	var last_discard_quantity := 0
 	func use_recovery_item(item_uid: int) -> bool:
 		if item_uid <= 0:
 			return false
 		uses += 1
 		last_use_uid = item_uid
+		return true
+	func discard_inventory_item(item_uid: int, quantity: int = 1) -> bool:
+		if item_uid <= 0 or quantity <= 0:
+			return false
+		discards += 1
+		last_discard_uid = item_uid
+		last_discard_quantity = quantity
 		return true
 	func pickup_ground_drop(drop_id: int) -> bool:
 		if drop_id <= 0:
@@ -295,6 +305,26 @@ func run() -> void:
 	if not panel.recovery_status.text.contains("90 / 100"):
 		fail("Recovery status did not display authoritative committed HP")
 		return
+	if panel.discard_button.disabled:
+		fail("Loaded inventory did not expose server-authoritative discard")
+		return
+	panel.discard_button.pressed.emit()
+	if stub.discards != 1 or stub.last_discard_uid != 10000 or stub.last_discard_quantity != 1 or not panel.discard_button.disabled:
+		fail("Discard UI did not send exactly one selected UID quantity")
+		return
+	panel._latest.pending_discard_sequence = 1
+	panel._update_inventory_ui()
+	if not panel.discard_button.disabled or not panel.recovery_button.disabled:
+		fail("Pending discard allowed another inventory mutation")
+		return
+	panel._latest.pending_discard_sequence = 0
+	panel._latest.last_discard_result = {
+		"status":0,"discarded_quantity":1,"remaining_quantity":0}
+	panel._latest.inventory_revision = 4
+	panel._update_inventory_ui()
+	if not panel.discard_status.text.contains("已移除 1"):
+		fail("Discard status did not display authoritative committed quantity")
+		return
 	panel._latest.player_dead = true
 	panel._update_inventory_ui()
 	if not panel.recovery_button.disabled or panel.submit_recovery_use(10000):
@@ -310,5 +340,5 @@ func run() -> void:
 	panel._set_respawn_controls()
 	app.queue_free()
 	await process_frame
-	print("CLIENT_TLS_LOGIN_PASS ui=PASS auth=PASS choose=PASS receipt=PASS world_ready=PASS password_cleared=PASS logout=PASS respawn_ui=PASS click_attack_ui=PASS click_pickup_ui=PASS persistent_inventory_ui=PASS item_metadata=PASS inventory_pagination=PASS recovery_item_button=PASS")
+	print("CLIENT_TLS_LOGIN_PASS ui=PASS auth=PASS choose=PASS receipt=PASS world_ready=PASS password_cleared=PASS logout=PASS respawn_ui=PASS click_attack_ui=PASS click_pickup_ui=PASS persistent_inventory_ui=PASS item_metadata=PASS inventory_pagination=PASS recovery_item_button=PASS inventory_discard_button=PASS")
 	quit(0)

@@ -35,6 +35,8 @@ const OPCODE_GROUND_PICKUP_RESULT := 35
 const OPCODE_INVENTORY_SNAPSHOT := 36
 const OPCODE_RECOVERY_USE := 37
 const OPCODE_RECOVERY_USE_RESULT := 38
+const OPCODE_INVENTORY_DISCARD := 39
+const OPCODE_INVENTORY_DISCARD_RESULT := 40
 const MOVE_TARGET_FRAME_BYTES := 28
 const MOVE_RECEIPT_FRAME_BYTES := 30
 const NPC_INTERACT_FRAME_BYTES := 24
@@ -63,6 +65,8 @@ const GROUND_PICKUP_FRAME_BYTES := 28
 const GROUND_PICKUP_RESULT_FRAME_BYTES := 45
 const RECOVERY_USE_FRAME_BYTES := 28
 const RECOVERY_USE_RESULT_FRAME_BYTES := 45
+const INVENTORY_DISCARD_FRAME_BYTES := 32
+const INVENTORY_DISCARD_RESULT_FRAME_BYTES := 41
 const INVENTORY_SNAPSHOT_HEADER_BYTES := 23
 const INVENTORY_ITEM_BYTES := 24
 const INVENTORY_SNAPSHOT_MAX_PER_FRAME := 128
@@ -489,6 +493,44 @@ static func decode_recovery_use_result(frame: PackedByteArray) -> Dictionary:
 	return {"map_epoch":epoch,"use_sequence":sequence,"status":status,
 		"item_uid":uid,"item_definition_id":item_id,
 		"remaining_quantity":quantity,"current_hp":hp,"max_hp":max_hp}
+
+
+static func encode_inventory_discard(epoch: int, sequence: int, uid: int, quantity: int) -> PackedByteArray:
+	if epoch <= 0 or sequence < 1 or sequence > 0xffffffff or uid <= 0 or quantity < 1 or quantity > 1000000:
+		return PackedByteArray()
+	var writer := StreamPeerBuffer.new()
+	writer.big_endian = false
+	writer.put_u32(INVENTORY_DISCARD_FRAME_BYTES)
+	writer.put_u16(VERSION)
+	writer.put_u16(OPCODE_INVENTORY_DISCARD)
+	writer.put_64(epoch)
+	writer.put_u32(sequence)
+	writer.put_64(uid)
+	writer.put_32(quantity)
+	return writer.data_array
+
+
+static func decode_inventory_discard_result(frame: PackedByteArray) -> Dictionary:
+	if not _valid_header(frame,OPCODE_INVENTORY_DISCARD_RESULT,INVENTORY_DISCARD_RESULT_FRAME_BYTES):
+		return {}
+	var reader := _reader(frame,8)
+	var epoch := reader.get_64()
+	var sequence := reader.get_u32()
+	var status := reader.get_u8()
+	var uid := reader.get_64()
+	var item_id := reader.get_32()
+	var discarded := reader.get_32()
+	var remaining := reader.get_32()
+	if epoch <= 0 or sequence == 0 or status > 6 or uid <= 0:
+		return {}
+	if status in [0,1]:
+		if item_id < 1 or item_id > 100000000 or discarded < 1 or discarded > 1000000 or remaining < 0 or remaining > 1000000:
+			return {}
+	elif item_id != 0 or discarded != 0 or remaining != 0:
+		return {}
+	return {"map_epoch":epoch,"discard_sequence":sequence,"status":status,
+		"item_uid":uid,"item_definition_id":item_id,
+		"discarded_quantity":discarded,"remaining_quantity":remaining}
 
 
 static func encode_ground_pickup(epoch: int, sequence: int, drop_id: int) -> PackedByteArray:

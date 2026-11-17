@@ -31,6 +31,8 @@ var inventory_page_label := Label.new()
 var recovery_picker := OptionButton.new()
 var recovery_button := Button.new()
 var recovery_status := Label.new()
+var discard_button := Button.new()
+var discard_status := Label.new()
 const INVENTORY_PAGE_SIZE := 80
 var _inventory_page := 0
 var _inventory_display_key := ""
@@ -87,10 +89,13 @@ func _ready() -> void:
 	recovery_button.text = "使用選中道具（Server 核實回復效果）"
 	recovery_button.disabled = true
 	recovery_status.text = ""
-	for control in [inventory_previous, inventory_next, inventory_page_label,recovery_picker,recovery_button,recovery_status]:
+	discard_button.text = "丟棄選中道具 ×1（Server 結算）"
+	discard_button.disabled = true
+	discard_status.text = ""
+	for control in [inventory_previous, inventory_next, inventory_page_label,recovery_picker,recovery_button,recovery_status,discard_button,discard_status]:
 		control.visible = false
 	respawn_button.text = "復活"
-	for control in [login_button,characters,choose_button,respawn_button,logout_button,status,pickup_status,inventory_button,inventory_search,inventory_preview,inventory_previous,inventory_page_label,inventory_next,recovery_picker,recovery_button,recovery_status]:
+	for control in [login_button,characters,choose_button,respawn_button,logout_button,status,pickup_status,inventory_button,inventory_search,inventory_preview,inventory_previous,inventory_page_label,inventory_next,recovery_picker,recovery_button,recovery_status,discard_button,discard_status]:
 		column.add_child(control)
 	login_button.pressed.connect(login)
 	password_input.text_submitted.connect(func(_text): login())
@@ -102,6 +107,7 @@ func _ready() -> void:
 	inventory_previous.pressed.connect(func(): _set_inventory_page(_inventory_page-1))
 	inventory_next.pressed.connect(func(): _set_inventory_page(_inventory_page+1))
 	recovery_button.pressed.connect(_use_selected_recovery)
+	discard_button.pressed.connect(_discard_selected_item)
 	var style := StyleBoxFlat.new()
 	style.bg_color = Color("211c15")
 	style.border_color = Color("c8a452")
@@ -135,6 +141,7 @@ func login() -> void:
 	_latest = {}
 	_respawn_queued_after = -1
 	pickup_status.text = ""
+	discard_status.text = ""
 	_inventory_display_key = ""
 	_inventory_page = 0
 	inventory_search.clear()
@@ -167,7 +174,11 @@ func submit_attack_monster(entity_id: int) -> bool:
 
 
 func submit_recovery_use(item_uid: int) -> bool:
-	return active and not bool(_latest.get("reconnecting",false)) and bool(_latest.get("world_ready",false)) and bool(_latest.get("inventory_ready",false)) and bool(_latest.get("combat_available",false)) and not bool(_latest.get("player_dead",false)) and not bool(_latest.get("resync_pending",false)) and int(_latest.get("pending_recovery_sequence",0)) == 0 and item_uid > 0 and session.use_recovery_item(item_uid)
+	return active and not bool(_latest.get("reconnecting",false)) and bool(_latest.get("world_ready",false)) and bool(_latest.get("inventory_ready",false)) and bool(_latest.get("combat_available",false)) and not bool(_latest.get("player_dead",false)) and not bool(_latest.get("resync_pending",false)) and int(_latest.get("pending_recovery_sequence",0)) == 0 and int(_latest.get("pending_discard_sequence",0)) == 0 and item_uid > 0 and session.use_recovery_item(item_uid)
+
+
+func submit_inventory_discard(item_uid: int, quantity: int = 1) -> bool:
+	return active and not bool(_latest.get("reconnecting",false)) and bool(_latest.get("world_ready",false)) and bool(_latest.get("inventory_ready",false)) and not bool(_latest.get("resync_pending",false)) and int(_latest.get("pending_discard_sequence",0)) == 0 and int(_latest.get("pending_recovery_sequence",0)) == 0 and item_uid > 0 and quantity > 0 and session.discard_inventory_item(item_uid,quantity)
 
 
 func submit_pickup_drop(drop_id: int) -> bool:
@@ -200,6 +211,7 @@ func disconnect_session() -> void:
 	_latest = {}
 	_respawn_queued_after = -1
 	pickup_status.text = ""
+	discard_status.text = ""
 	_inventory_display_key = ""
 	_inventory_page = 0
 	inventory_search.clear()
@@ -247,6 +259,8 @@ func _show_inventory_preview(show: bool) -> void:
 	recovery_picker.visible = show
 	recovery_button.visible = show
 	recovery_status.visible = show
+	discard_button.visible = show
+	discard_status.visible = show
 	inventory_search.visible = show
 	inventory_previous.visible = show
 	inventory_next.visible = show
@@ -281,9 +295,24 @@ func _use_selected_recovery() -> void:
 		return
 	if submit_recovery_use(uid):
 		recovery_button.disabled = true
+		discard_button.disabled = true
 		recovery_status.text = "道具使用請求已送出…"
 	else:
 		recovery_status.text = "目前無法使用該物品"
+
+
+func _discard_selected_item() -> void:
+	if discard_button.disabled or recovery_picker.selected < 0:
+		return
+	var uid := int(recovery_picker.get_item_metadata(recovery_picker.selected))
+	if uid <= 0:
+		return
+	if submit_inventory_discard(uid,1):
+		discard_button.disabled = true
+		recovery_button.disabled = true
+		discard_status.text = "丟棄請求已送出…"
+	else:
+		discard_status.text = "目前無法丟棄該物品"
 
 
 func _update_inventory_ui() -> void:
@@ -302,7 +331,16 @@ func _update_inventory_ui() -> void:
 		return
 	var items: Dictionary = _latest.get("inventory_items",{})
 	inventory_button.text = "背包（%d 件）" % items.size()
-	recovery_button.disabled = not bool(_latest.get("combat_available",false)) or bool(_latest.get("player_dead",false)) or bool(_latest.get("resync_pending",false)) or int(_latest.get("pending_recovery_sequence",0)) != 0 or recovery_picker.item_count == 0
+	recovery_button.disabled = not bool(_latest.get("combat_available",false)) or bool(_latest.get("player_dead",false)) or bool(_latest.get("resync_pending",false)) or int(_latest.get("pending_recovery_sequence",0)) != 0 or int(_latest.get("pending_discard_sequence",0)) != 0 or recovery_picker.item_count == 0
+	discard_button.disabled = bool(_latest.get("resync_pending",false)) or int(_latest.get("pending_discard_sequence",0)) != 0 or int(_latest.get("pending_recovery_sequence",0)) != 0 or recovery_picker.item_count == 0
+	var discard_result: Dictionary = _latest.get("last_discard_result",{})
+	if not discard_result.is_empty():
+		if int(discard_result.status) in [0,1]:
+			discard_status.text = "丟棄結算：已移除 %d；剩餘 %d" % [
+				int(discard_result.discarded_quantity),
+				int(discard_result.remaining_quantity)]
+		else:
+			discard_status.text = "丟棄失敗（伺服器代碼 %d）" % int(discard_result.status)
 	var use_result: Dictionary = _latest.get("last_recovery_result",{})
 	if not use_result.is_empty():
 		if int(use_result.status) in [0,1]:
@@ -359,7 +397,8 @@ func _update_inventory_ui() -> void:
 		recovery_picker.set_item_metadata(recovery_picker.item_count-1,uid)
 	if recovery_picker.item_count > 0:
 		recovery_picker.select(0)
-	recovery_button.disabled = not bool(_latest.get("combat_available",false)) or bool(_latest.get("player_dead",false)) or bool(_latest.get("resync_pending",false)) or int(_latest.get("pending_recovery_sequence",0)) != 0 or recovery_picker.item_count == 0
+	recovery_button.disabled = not bool(_latest.get("combat_available",false)) or bool(_latest.get("player_dead",false)) or bool(_latest.get("resync_pending",false)) or int(_latest.get("pending_recovery_sequence",0)) != 0 or int(_latest.get("pending_discard_sequence",0)) != 0 or recovery_picker.item_count == 0
+	discard_button.disabled = bool(_latest.get("resync_pending",false)) or int(_latest.get("pending_discard_sequence",0)) != 0 or int(_latest.get("pending_recovery_sequence",0)) != 0 or recovery_picker.item_count == 0
 	if rows.is_empty():
 		rows.append("沒有符合條件的物品" if not query.is_empty() else "背包目前沒有物品")
 	inventory_preview.text = "\n".join(rows)

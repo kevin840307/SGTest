@@ -89,9 +89,17 @@ func move_target(target_x: int, target_y: int) -> bool:
 
 func use_recovery_item(item_uid: int) -> bool:
 	var current := snapshot()
-	if item_uid <= 0 or not bool(current.get("inventory_ready",false)) or not bool(current.get("combat_available",false)) or bool(current.get("player_dead",false)) or int(current.get("pending_recovery_sequence",0)) != 0 or not (current.get("inventory_items",{}) as Dictionary).has(item_uid):
+	if item_uid <= 0 or not bool(current.get("inventory_ready",false)) or not bool(current.get("combat_available",false)) or bool(current.get("player_dead",false)) or int(current.get("pending_recovery_sequence",0)) != 0 or int(current.get("pending_discard_sequence",0)) != 0 or not (current.get("inventory_items",{}) as Dictionary).has(item_uid):
 		return false
 	return _queue_intent({"type":"use_recovery_item","item_uid":item_uid})
+
+
+func discard_inventory_item(item_uid: int, quantity: int = 1) -> bool:
+	var current := snapshot()
+	var items: Dictionary = current.get("inventory_items",{})
+	if item_uid <= 0 or quantity < 1 or quantity > 1000000 or not bool(current.get("inventory_ready",false)) or int(current.get("pending_discard_sequence",0)) != 0 or int(current.get("pending_recovery_sequence",0)) != 0 or not items.has(item_uid) or int((items[item_uid] as Dictionary).quantity) < quantity:
+		return false
+	return _queue_intent({"type":"discard_inventory_item","item_uid":item_uid,"quantity":quantity})
 
 
 func pickup_ground_drop(drop_id: int) -> bool:
@@ -145,7 +153,12 @@ func _queue_intent(intent: Dictionary) -> bool:
 	var accepted := _running and not _stop_requested and not _reconnecting and _intents.size() < MAX_INTENTS
 	if accepted and str(intent.get("type","")) == "use_recovery_item":
 		for queued in _intents:
-			if str(queued.get("type","")) == "use_recovery_item":
+			if str(queued.get("type","")) in ["use_recovery_item","discard_inventory_item"]:
+				accepted = false
+				break
+	if accepted and str(intent.get("type","")) == "discard_inventory_item":
+		for queued in _intents:
+			if str(queued.get("type","")) in ["discard_inventory_item","use_recovery_item"]:
 				accepted = false
 				break
 	if accepted and str(intent.get("type","")) == "pickup_ground_drop":
@@ -350,7 +363,7 @@ func _process_first_intent() -> void:
 			_publish()
 	elif kind == "use_recovery_item":
 		var current: Dictionary = _world.snapshot()
-		if int(current.state) != WorldState.STATE_IN_WORLD or not bool(current.combat_available) or bool(current.player_dead) or not bool(current.inventory_ready) or not bool(current.world_ready) or bool(current.resync_pending) or bool(current.waiting_for_new_map) or int(current.pending_world_ready_ack_epoch) != 0 or int(current.last_world_ready_ack_epoch) != int(current.map_epoch) or int(current.pending_recovery_sequence) != 0:
+		if int(current.state) != WorldState.STATE_IN_WORLD or not bool(current.combat_available) or bool(current.player_dead) or not bool(current.inventory_ready) or not bool(current.world_ready) or bool(current.resync_pending) or bool(current.waiting_for_new_map) or int(current.pending_world_ready_ack_epoch) != 0 or int(current.last_world_ready_ack_epoch) != int(current.map_epoch) or int(current.pending_recovery_sequence) != 0 or int(current.pending_discard_sequence) != 0:
 			return
 		var uid := int(intent.item_uid)
 		if not (current.inventory_items as Dictionary).has(uid):
@@ -359,6 +372,21 @@ func _process_first_intent() -> void:
 		var sequence := int(current.recovery_sequence)+1
 		var frame := WireCodec.encode_recovery_use(int(current.map_epoch),sequence,uid)
 		if not frame.is_empty() and _transport.send_frame(frame) and _world.mark_recovery_use_sent(sequence,uid):
+			_pop_intent()
+			_publish()
+	elif kind == "discard_inventory_item":
+		var current: Dictionary = _world.snapshot()
+		if int(current.state) != WorldState.STATE_IN_WORLD or not bool(current.inventory_ready) or not bool(current.world_ready) or bool(current.resync_pending) or bool(current.waiting_for_new_map) or int(current.pending_world_ready_ack_epoch) != 0 or int(current.last_world_ready_ack_epoch) != int(current.map_epoch) or int(current.pending_discard_sequence) != 0 or int(current.pending_recovery_sequence) != 0:
+			return
+		var uid := int(intent.item_uid)
+		var quantity := int(intent.quantity)
+		var items: Dictionary = current.inventory_items
+		if not items.has(uid) or quantity < 1 or int((items[uid] as Dictionary).quantity) < quantity:
+			_pop_intent()
+			return
+		var sequence := int(current.discard_sequence)+1
+		var frame := WireCodec.encode_inventory_discard(int(current.map_epoch),sequence,uid,quantity)
+		if not frame.is_empty() and _transport.send_frame(frame) and _world.mark_inventory_discard_sent(sequence,uid,quantity):
 			_pop_intent()
 			_publish()
 	elif kind == "pickup_ground_drop":
