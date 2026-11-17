@@ -169,6 +169,51 @@ public sealed class PlayerCombatSettlement
         }
     }
 
+    /// <summary>Read the committed HP only while the exact generation is
+    /// suspended and all authoritative damage reservations have drained.</summary>
+    public bool TryGetSuspendedHp(ActorSnapshot actor,out int hp)
+    {
+        hp=0;
+        lock(_gate)
+        {
+            ThrowIfFaulted();
+            if(!_states.TryGetValue(actor.ActorId,out var state) ||
+                state.ConnectionEpoch!=actor.ConnectionEpoch ||
+                state.MapEpoch!=actor.MapEpoch || !state.Suspended ||
+                state.Closing || state.Pending!=0 ||
+                state.ProjectedHp!=state.CommittedHp)
+                return false;
+            hp=state.CommittedHp;
+            return true;
+        }
+    }
+
+    /// <summary>Synchronize the projection after SQLite atomically consumed
+    /// one item and healed the same HP. Must be called before reliable result
+    /// delivery and before resuming Monster AI targetability.</summary>
+    public bool TryApplyCommittedRecovery(ActorSnapshot actor,RecoveryUseResult result)
+    {
+        if(result.Status!=RecoveryUseStatus.Granted ||
+            result.PreviousHp<=0 || result.CurrentHp<result.PreviousHp ||
+            result.MaxHp<result.CurrentHp)
+            return false;
+        lock(_gate)
+        {
+            ThrowIfFaulted();
+            if(!_states.TryGetValue(actor.ActorId,out var state) ||
+                state.ConnectionEpoch!=actor.ConnectionEpoch ||
+                state.MapEpoch!=actor.MapEpoch ||
+                !state.Suspended||state.Closing||state.Pending!=0 ||
+                state.CommittedHp!=result.PreviousHp ||
+                state.ProjectedHp!=result.PreviousHp ||
+                state.MaxHp!=result.MaxHp)
+                return false;
+            state.CommittedHp=result.CurrentHp;
+            state.ProjectedHp=result.CurrentHp;
+            return true;
+        }
+    }
+
     public CombatPostStatus TryPostMonsterHit(
         ActorSnapshot target, MonsterWorldEvent attack)
     {
