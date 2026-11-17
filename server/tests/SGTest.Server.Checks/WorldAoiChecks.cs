@@ -38,6 +38,8 @@ internal static class WorldAoiChecks
             MonsterInterest);
         Checks.Run("same map-bucket AOI tracks durable ground drop enter, exit, resync and pickup removal",
             GroundDropInterest);
+        Checks.Run("20 observers and 500 ground drops share one bounded AOI with zero idle resends",
+            GroundDropDensity);
         Checks.Run("AOI self state is changed-only, generation-safe and retained on bounded overflow", OwnState);
         Checks.Run("AOI transfer clears old map; reconnect resets generation and ignores stale dequeue",
             TransfersAndReconnects);
@@ -111,6 +113,52 @@ internal static class WorldAoiChecks
         try{aoi.SeedGroundDrops([D(504,15,56,24)]);}
         catch(InvalidOperationException){late=true;}
         Require(late,"late bootstrap mutated live AOI");
+    }
+
+    private static void GroundDropDensity()
+    {
+        var aoi=new WorldAoi();
+        var records=Enumerable.Range(0,500).Select(index=>
+            new GroundDropRecord(1000L+index,13,
+                40+(index%25)*16,40+(index/25)*16,
+                1001300001,4294967301,index%32,2701,1,
+                LootSourceTrust.Verified,"ci:500-ground",null)).ToArray();
+        aoi.SeedGroundDrops(records);
+        var viewers=Enumerable.Range(0,20).Select(i=>Actor(
+            10000+i,13,24,24)).ToArray();
+        Life(aoi,1,viewers.Select(Join).ToArray());
+        foreach(var viewer in viewers)
+        {
+            var events=Drain(aoi,viewer);
+            Require(events.Count(x=>x.Kind==AoiEventKind.GroundDropSpawn)==500 &&
+                events.Count(x=>x.Kind==AoiEventKind.WorldReady)==1 &&
+                events.Count(x=>x.Kind==AoiEventKind.GroundDropDespawn)==0,
+                "500-ground initial AOI fanout missed/duplicated items");
+        }
+        Require(aoi.TrackedEntityCount==520 && aoi.GroundDropCount==500,
+            "500-ground shared AOI entity count mismatch");
+        aoi.Apply(new WorldChangedBatch(2,Array.Empty<ActorSnapshot>()));
+        Require(viewers.All(x=>aoi.PendingEvents(x.ActorId)==0),
+            "idle tick needlessly rebroadcast immutable ground objects");
+        aoi.RemoveGroundDrop(2,records[0].DropId);
+        foreach(var viewer in viewers)
+        {
+            var events=Drain(aoi,viewer);
+            Require(events.Length==1 &&
+                events[0].Kind==AoiEventKind.GroundDropDespawn &&
+                events[0].GroundDropId==records[0].DropId,
+                "single committed pickup did not fanout exactly once to all observers");
+        }
+        aoi.Apply(new WorldChangedBatch(3,Array.Empty<ActorSnapshot>()));
+        Require(viewers.All(x=>aoi.PendingEvents(x.ActorId)==0),
+            "idle AOI resent old ground removal");
+        Require(aoi.TryResync(new(viewers[0].ActorId,
+            viewers[0].ConnectionEpoch,viewers[0].MapEpoch)),
+            "500-ground re-sync rejected");
+        var baseline=Drain(aoi,viewers[0]);
+        Require(baseline.Count(x=>x.Kind==AoiEventKind.GroundDropSpawn)==499 &&
+            baseline.Count(x=>x.Kind==AoiEventKind.WorldReady)==1,
+            "resync failed to rebuild all 499 surviving ground UIDs");
     }
 
     private static void OwnState()
