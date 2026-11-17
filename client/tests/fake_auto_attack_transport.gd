@@ -17,13 +17,17 @@ var _events: Array[Dictionary] = []
 var _sent: Array[PackedByteArray] = []
 var _error := OK
 var _hold_first_attack := false
+var _simulate_resync_gap := false
 var _pending_first_attack := {}
 var _monster_seeded := false
+var _resync_requested := false
+var _ready_ack_count := 0
 var _attack_count := 0
 var _move_targets: Array[Vector2i] = []
 
-func _init(hold_first_attack: bool = false) -> void:
+func _init(hold_first_attack: bool = false, simulate_resync_gap: bool = false) -> void:
 	_hold_first_attack = hold_first_attack
+	_simulate_resync_gap = simulate_resync_gap
 
 func start_secure(_host: String, _port: int, _common_name: String = "", _trusted_chain = null) -> Error:
 	_mutex.lock()
@@ -33,6 +37,8 @@ func start_secure(_host: String, _port: int, _common_name: String = "", _trusted
 	_sent.clear()
 	_pending_first_attack.clear()
 	_monster_seeded = false
+	_resync_requested = false
+	_ready_ack_count = 0
 	_attack_count = 0
 	_move_targets.clear()
 	_mutex.unlock()
@@ -55,9 +61,19 @@ func send_frame(frame: PackedByteArray) -> bool:
 			_push(CHOOSE_RESULT.hex_decode())
 			_push(READY.hex_decode())
 		WireCodec.OPCODE_WORLD_READY_ACK:
+			_ready_ack_count += 1
 			if not _monster_seeded:
 				_monster_seeded = true
 				_push(_monster_state(WireCodec.OPCODE_MONSTER_SPAWN,41,1,100,0))
+				if _simulate_resync_gap:
+					_push(_self_state(41,1,Vector2i(8,8),false,0))
+			elif _resync_requested:
+				_resync_requested = false
+				# Queue the replacement baseline only after the ACK. ClientSession
+				# therefore gets one logic-loop gap with WorldReady ACKed but the
+				# visible monster not yet drained.
+				_push(_self_state(50,5,Vector2i(40,8),false,1))
+				_push(_monster_state(WireCodec.OPCODE_MONSTER_SPAWN,50,4,100,3))
 		WireCodec.OPCODE_NORMAL_ATTACK:
 			var attack := WireCodec.decode_normal_attack(frame)
 			if attack.is_empty():
@@ -81,10 +97,17 @@ func send_frame(frame: PackedByteArray) -> bool:
 				var target := Vector2i(int(move.target_x),int(move.target_y))
 				_move_targets.append(target)
 				_push(_move_receipt(seq,43))
-				_push(_self_state(44,2,target,true,seq))
-				_push(_self_state(45,3,target,false,seq))
+				if _simulate_resync_gap:
+					# Revision 1 was seeded. Jumping to 3 forces the real reducer
+					# through its same-connection AOI resync path.
+					_push(_self_state(44,3,target,true,seq))
+				else:
+					_push(_self_state(44,2,target,true,seq))
+					_push(_self_state(45,3,target,false,seq))
 		WireCodec.OPCODE_WORLD_RESYNC_REQUEST:
-			pass
+			if _simulate_resync_gap:
+				_resync_requested = true
+				_push(_world_ready(49))
 		_:
 			_fail_locked()
 	var ok := _state == STATE_CONNECTED
@@ -150,6 +173,18 @@ func _header(writer: StreamPeerBuffer,size: int,opcode: int) -> void:
 	writer.put_u32(size)
 	writer.put_u16(1)
 	writer.put_u16(opcode)
+
+func _world_ready(tick: int) -> PackedByteArray:
+	var writer := StreamPeerBuffer.new()
+	_header(writer,45,WireCodec.OPCODE_WORLD_READY)
+	writer.put_64(1)
+	writer.put_64(tick)
+	writer.put_64(11)
+	writer.put_32(15)
+	writer.put_float(40.0)
+	writer.put_float(8.0)
+	writer.put_u8(6)
+	return writer.data_array
 
 func _monster_state(opcode: int,tick: int,revision: int,hp: int,state: int) -> PackedByteArray:
 	var writer := StreamPeerBuffer.new()

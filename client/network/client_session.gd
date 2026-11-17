@@ -11,6 +11,7 @@ const RECONNECT_BACKOFF_MS := [100,250,500]
 const NORMAL_ATTACK_OUT_OF_RANGE := 4
 const MOVE_RECEIPT_ACCEPTED := 0
 const MAX_AUTO_APPROACH_CYCLES := 4
+const AUTO_TARGET_MISSING_GRACE_MS := 500
 
 var _transport: RefCounted
 var _world: RefCounted = WorldState.new()
@@ -461,10 +462,31 @@ func _process_attack_monster_intent(intent: Dictionary) -> void:
 		return
 
 	var target_id := int(intent.get("entity_id",0))
-	var monsters: Dictionary = current.monsters
-	if target_id <= 0 or not monsters.has(target_id):
+	if target_id <= 0:
 		_pop_intent_token(token)
 		return
+	var monsters: Dictionary = current.monsters
+	if not monsters.has(target_id):
+		# Same-connection AOI resync rebuilds WorldReady before the visible
+		# MonsterSpawn baseline is necessarily drained. Do not interpret that
+		# short baseline gap as a real despawn; keep it bounded so an actually
+		# vanished target still cancels the chase.
+		var missing_since := int(intent.get("target_missing_since_ms",0))
+		if missing_since == 0:
+			var waiting_target := intent.duplicate(true)
+			waiting_target["target_missing_since_ms"] = Time.get_ticks_msec()
+			_replace_first_intent(token,waiting_target)
+			return
+		if Time.get_ticks_msec()-missing_since < AUTO_TARGET_MISSING_GRACE_MS:
+			return
+		_pop_intent_token(token)
+		return
+	if intent.has("target_missing_since_ms"):
+		var restored := intent.duplicate(true)
+		restored.erase("target_missing_since_ms")
+		if not _replace_first_intent(token,restored):
+			return
+		intent = restored
 	var target: Dictionary = monsters[target_id]
 	if int(target.get("current_hp",0)) <= 0 or int(target.get("state",0)) == 4:
 		_pop_intent_token(token)
@@ -502,15 +524,9 @@ func _process_attack_monster_intent(intent: Dictionary) -> void:
 		if cycles >= MAX_AUTO_APPROACH_CYCLES:
 			_pop_intent_token(token)
 			return
-		# Refresh the latest authoritative monster position before asking the
-		# existing Server A* movement path to approach. No Client attack range
-		# is guessed; the next attack is still accepted/rejected by Server.
-		current = _world.snapshot()
-		monsters = current.monsters
-		if not monsters.has(target_id):
-			_pop_intent_token(token)
-			return
-		target = monsters[target_id]
+		# Use the latest authoritative monster position from this reducer
+		# snapshot. No Client attack range is guessed; the next attack is still
+		# accepted/rejected by Server.
 		if int(target.get("current_hp",0)) <= 0 or int(target.get("state",0)) == 4:
 			_pop_intent_token(token)
 			return

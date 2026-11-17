@@ -15,9 +15,11 @@ func _fail(message: String, session = null) -> void:
 func _initialize() -> void:
 	if not _auto_approach_then_attack():
 		return
+	if not _resync_gap_preserves_chase():
+		return
 	if not _manual_move_cancels_chase():
 		return
-	print("CLIENT_AUTO_APPROACH_ATTACK_PASS server_range_authoritative=true out_of_range_triggers_existing_move=true route_stop_retries_attack=true bounded_chase=true manual_move_cancels=true target_switch_replaces_navigation=true")
+	print("CLIENT_AUTO_APPROACH_ATTACK_PASS server_range_authoritative=true out_of_range_triggers_existing_move=true route_stop_retries_attack=true bounded_chase=true resync_baseline_gap=true manual_move_cancels=true target_switch_replaces_navigation=true")
 	quit(0)
 
 func _auto_approach_then_attack() -> bool:
@@ -55,6 +57,37 @@ func _auto_approach_then_attack() -> bool:
 		_fail("unexpected attack/move sequence ops="+str(ops)+" moves="+str(moves))
 		return false
 	return true
+
+func _resync_gap_preserves_chase() -> bool:
+	var fake = FakeAutoAttackTransport.new(false,true)
+	var session = Session.new(fake)
+	if session.connect_secure("fixture",443,"user_01","Password-123456!","fixture",null) != OK:
+		_fail("resync connect",session)
+		return false
+	var ready := _enter_world(session)
+	if ready.is_empty():
+		_fail("resync world/monster baseline "+str(session.snapshot()),session)
+		return false
+	if not session.attack_monster(MONSTER_ID):
+		_fail("resync attack intent refused",session)
+		return false
+	var settled := _wait(session,func(v):
+		return (
+			int(v.resync_requests)==1
+			and int(v.resync_completions)==1
+			and int(v.attack_sequence)==2
+			and int(v.last_attack_result_sequence)==2
+			and int(v.last_attack_result_status)==0
+			and int(v.movement_sequence)==1
+			and v.monsters.has(MONSTER_ID)
+			and int(v.monsters[MONSTER_ID].current_hp)==70
+		),2500)
+	if settled.is_empty():
+		_fail("resync baseline gap cancelled chase "+str(session.snapshot()),session)
+		return false
+	session.stop()
+	return true
+
 
 func _manual_move_cancels_chase() -> bool:
 	var fake = FakeAutoAttackTransport.new(true)
