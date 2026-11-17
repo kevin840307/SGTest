@@ -71,6 +71,7 @@ public sealed class PlayerCombatSettlement
     private readonly SqliteIdentityStore _store;
     private readonly Channel<QueuedHit> _input;
     private readonly Channel<PlayerDamageSettlement> _results;
+    private readonly Func<PlayerDamageSettlement, GatewaySendStatus>? _delivery;
     private readonly object _gate = new();
     private readonly Dictionary<long, State> _states = [];
     private Exception? _fault;
@@ -79,9 +80,11 @@ public sealed class PlayerCombatSettlement
 
     public PlayerCombatSettlement(
         SqliteIdentityStore store,
-        PlayerCombatSettlementOptions? options = null)
+        PlayerCombatSettlementOptions? options = null,
+        Func<PlayerDamageSettlement, GatewaySendStatus>? delivery = null)
     {
         _store = store ?? throw new ArgumentNullException(nameof(store));
+        _delivery = delivery;
         var configured = options ?? new();
         if (configured.Capacity is < 1 or > 65536)
             throw new ArgumentOutOfRangeException(nameof(options));
@@ -216,26 +219,43 @@ public sealed class PlayerCombatSettlement
             ThrowIfFaulted();
             if (!TryState(actorId, connectionEpoch, mapEpoch, out var state))
                 return Task.CompletedTask;
-            state.Suspended = true;
-            return state.Pending == 0
-                ? Task.CompletedTask
-                : state.Drain?.Task ?? throw new InvalidOperationException(
-                    "Pending combat state missing drain completion");
+            return SuspendLocked(state);
+        }
+    }
+
+    public Task SuspendAndDrainAsync(long actorId, long connectionEpoch)
+    {
+        lock (_gate)
+        {
+            ThrowIfFaulted();
+            if (!_states.TryGetValue(actorId, out var state) ||
+                state.ConnectionEpoch != connectionEpoch)
+                return Task.CompletedTask;
+            return SuspendLocked(state);
         }
     }
 
     public bool TryResume(ActorSnapshot actor)
     {
         ValidateActor(actor);
+        return TryResumeGeneration(
+            actor.ActorId, actor.ConnectionEpoch, actor.MapEpoch);
+    }
+
+    public bool TryResumeGeneration(
+        long actorId, long connectionEpoch, long mapEpoch)
+    {
+        if (actorId <= 0 || connectionEpoch <= 0 || mapEpoch <= 0)
+            return false;
         lock (_gate)
         {
             ThrowIfFaulted();
-            if (!_states.TryGetValue(actor.ActorId, out var state) ||
+            if (!_states.TryGetValue(actorId, out var state) ||
                 state.Closing || state.Pending != 0 ||
-                state.ConnectionEpoch != actor.ConnectionEpoch ||
-                actor.MapEpoch < state.MapEpoch)
+                state.ConnectionEpoch != connectionEpoch ||
+                mapEpoch < state.MapEpoch)
                 return false;
-            state.MapEpoch = actor.MapEpoch;
+            state.MapEpoch = mapEpoch;
             state.Suspended = false;
             return true;
         }
@@ -244,27 +264,14 @@ public sealed class PlayerCombatSettlement
     public async Task CloseAndDrainAsync(
         long actorId, long connectionEpoch, long mapEpoch)
     {
-        Task drain;
-        lock (_gate)
-        {
-            ThrowIfFaulted();
-            if (!TryState(actorId, connectionEpoch, mapEpoch, out var state))
-                return;
-            state.Suspended = true;
-            state.Closing = true;
-            drain = state.Pending == 0
-                ? Task.CompletedTask
-                : state.Drain?.Task ?? throw new InvalidOperationException(
-                    "Pending combat state missing drain completion");
-        }
-        await drain.ConfigureAwait(false);
-        lock (_gate)
-        {
-            if (_states.TryGetValue(actorId, out var state) &&
-                state.ConnectionEpoch == connectionEpoch &&
-                state.MapEpoch == mapEpoch && state.Pending == 0)
-                _states.Remove(actorId);
-        }
+        await CloseAndDrainCoreAsync(
+            actorId, connectionEpoch, expectedMapEpoch: mapEpoch).ConfigureAwait(false);
+    }
+
+    public async Task CloseAndDrainAsync(long actorId, long connectionEpoch)
+    {
+        await CloseAndDrainCoreAsync(
+            actorId, connectionEpoch, expectedMapEpoch: null).ConfigureAwait(false);
     }
 
     public async Task RunAsync(CancellationToken cancellationToken = default)
@@ -292,9 +299,20 @@ public sealed class PlayerCombatSettlement
                     hit.AttackerMonsterEntityId, hit.AttackerMonsterRevision,
                     hit.Damage, committed.Profile.Data.CurrentHp,
                     committed.Profile.Data.MaxHp, committed.Died);
-                if (!_results.Writer.TryWrite(result))
-                    throw new PlayerCombatSettlementException(
-                        "Combat result queue full; committed reliable damage cannot be dropped");
+
+                if (_delivery is null)
+                {
+                    if (!_results.Writer.TryWrite(result))
+                        throw new PlayerCombatSettlementException(
+                            "Combat result queue full; committed reliable damage cannot be dropped");
+                }
+                else
+                {
+                    var delivered = _delivery(result);
+                    if (delivered != GatewaySendStatus.Enqueued)
+                        throw new PlayerCombatSettlementException(
+                            $"Committed combat result was not queued reliably: {delivered}");
+                }
 
                 lock (_gate)
                 {
@@ -334,6 +352,44 @@ public sealed class PlayerCombatSettlement
         finally
         {
             _results.Writer.TryComplete(fault);
+        }
+    }
+
+    private Task SuspendLocked(State state)
+    {
+        state.Suspended = true;
+        return state.Pending == 0
+            ? Task.CompletedTask
+            : state.Drain?.Task ?? throw new InvalidOperationException(
+                "Pending combat state missing drain completion");
+    }
+
+    private async Task CloseAndDrainCoreAsync(
+        long actorId, long connectionEpoch, long? expectedMapEpoch)
+    {
+        Task drain;
+        lock (_gate)
+        {
+            ThrowIfFaulted();
+            if (!_states.TryGetValue(actorId, out var state) ||
+                state.ConnectionEpoch != connectionEpoch ||
+                (expectedMapEpoch is { } epoch && state.MapEpoch != epoch))
+                return;
+            state.Suspended = true;
+            state.Closing = true;
+            drain = state.Pending == 0
+                ? Task.CompletedTask
+                : state.Drain?.Task ?? throw new InvalidOperationException(
+                    "Pending combat state missing drain completion");
+        }
+        await drain.ConfigureAwait(false);
+        lock (_gate)
+        {
+            if (_states.TryGetValue(actorId, out var state) &&
+                state.ConnectionEpoch == connectionEpoch &&
+                state.Pending == 0 &&
+                (expectedMapEpoch is null || state.MapEpoch == expectedMapEpoch.Value))
+                _states.Remove(actorId);
         }
     }
 

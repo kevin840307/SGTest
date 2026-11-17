@@ -20,15 +20,18 @@ public sealed class IdentityTlsAuthorization
     private readonly ServerWorldHost _world;
     private readonly PortalCatalog? _portals;
     private readonly CharacterPositionCheckpoint? _positions;
+    private readonly PlayerCombatSettlement? _combat;
 
     public IdentityTlsAuthorization(SqliteIdentityStore identity, ServerWorldHost world,
                                     PortalCatalog? portals = null,
-                                    CharacterPositionCheckpoint? positions = null)
+                                    CharacterPositionCheckpoint? positions = null,
+                                    PlayerCombatSettlement? combat = null)
     {
         _identity = identity ?? throw new ArgumentNullException(nameof(identity));
         _world = world ?? throw new ArgumentNullException(nameof(world));
-        _portals = portals; // runtime-owned audited Converter NPC content; null disables portal RPC
+        _portals = portals;
         _positions = positions;
+        _combat = combat;
     }
 
     /// <summary>
@@ -66,6 +69,9 @@ public sealed class IdentityTlsAuthorization
             }
             if (!attached)
             {
+                if (_combat is not null)
+                    await _combat.CloseAndDrainAsync(
+                        binding.ActorId, binding.ConnectionEpoch).ConfigureAwait(false);
                 connection.Close();
                 await _world.TrustedDisconnectAsync(
                     binding.ActorId, binding.ConnectionEpoch, binding.MapEpoch)
@@ -83,6 +89,13 @@ public sealed class IdentityTlsAuthorization
                 connection = boundConnection;
                 boundConnection = null;
             }
+            // Drain committed combat BEFORE detaching the Gateway. The settlement
+            // worker queues each reliable damage/death frame only after SQLite
+            // commits, so reconnect cannot observe old HP and the live socket
+            // cannot lose a committed result merely because release won a race.
+            if (_combat is not null)
+                await _combat.CloseAndDrainAsync(
+                    binding.ActorId, binding.ConnectionEpoch).ConfigureAwait(false);
             if (connection is not null) router.TryDetach(connection);
 
             // Keep the character registered while its final authoritative
@@ -119,14 +132,26 @@ public sealed class IdentityTlsAuthorization
             Func<TrustedNpcInteraction, Task<NpcPortalOutcome>>? npcHandler =
                 _portals is null ? null : async request =>
                 {
-                    // The Gateway added ActorId/ConnectionEpoch from the
-                    // authenticated connection. Portal destination is never
-                    // supplied by this client request.
-                    return await router.TrustedNpcInteractAsync(
+                    if (_combat is not null)
+                        await _combat.SuspendAndDrainAsync(
+                            request.ActorId, request.ConnectionEpoch).ConfigureAwait(false);
+
+                    var outcome = await router.TrustedNpcInteractAsync(
                         _world, _portals!,
                         new ConnectionBinding(request.ActorId, request.ConnectionEpoch,
                             request.RequestMapEpoch),
                         request.InteractionSequence, request.NpcSpawnId).ConfigureAwait(false);
+
+                    if (_combat is not null)
+                    {
+                        long nextEpoch = outcome.TransferredActor?.MapEpoch
+                            ?? request.RequestMapEpoch;
+                        if (!_combat.TryResumeGeneration(
+                                request.ActorId, request.ConnectionEpoch, nextEpoch))
+                            throw new InvalidOperationException(
+                                "Combat generation could not resume after NPC interaction");
+                    }
+                    return outcome;
                 };
             return await TlsWireConnection.RunServerAsync(client, certificate,
                 Authorize, _world.TryPostMove, options, cancellationToken, Release,
@@ -146,8 +171,11 @@ public sealed class IdentityTlsAuthorization
             }
             if (abandoned is not null)
             {
-                router.TryDetach(abandoned);
                 var binding = abandoned.Binding;
+                if (_combat is not null)
+                    await _combat.CloseAndDrainAsync(
+                        binding.ActorId, binding.ConnectionEpoch).ConfigureAwait(false);
+                router.TryDetach(abandoned);
                 await _world.TrustedDisconnectAsync(
                     binding.ActorId, binding.ConnectionEpoch, binding.MapEpoch)
                     .ConfigureAwait(false);
@@ -220,13 +248,30 @@ public sealed class IdentityTlsAuthorization
         }
 
         var snapshot = actor.Value;
+        bool combatAttached = false;
         bool completed = false;
         try
         {
+            if (combat is not null && _combat is not null)
+            {
+                combatAttached = _combat.TryAttach(snapshot, combat.Data);
+                if (!combatAttached)
+                    throw new InvalidOperationException(
+                        "Combat settlement rejected authenticated character generation");
+            }
+
             cancellationToken.ThrowIfCancellationRequested();
             await WriteFrameAsync(tls, WireProtocol.EncodeCharacterChooseResult(new(
                 CharacterChooseWireStatus.Success, snapshot.ActorId, snapshot.MapId,
                 snapshot.X, snapshot.Y, snapshot.MapEpoch)), cancellationToken).ConfigureAwait(false);
+
+            if (combat is not null)
+            {
+                await WriteFrameAsync(tls, WireProtocol.EncodePlayerCombatState(new(
+                    snapshot.MapEpoch, combat.Data.CurrentHp, combat.Data.MaxHp)),
+                    cancellationToken).ConfigureAwait(false);
+            }
+
             cancellationToken.ThrowIfCancellationRequested();
             var gateway = new GatewayConnection(
                 snapshot, combatProfile: trustedCombat);
@@ -237,8 +282,9 @@ public sealed class IdentityTlsAuthorization
         {
             if (!completed)
             {
-                // Failed/cancelled handshake after TrustedRegister must not leave
-                // a ghost actor that blocks this character's next login.
+                if (combatAttached && _combat is not null)
+                    await _combat.CloseAndDrainAsync(
+                        snapshot.ActorId, snapshot.ConnectionEpoch).ConfigureAwait(false);
                 await _world.TrustedDisconnectAsync(snapshot.ActorId,
                     snapshot.ConnectionEpoch, snapshot.MapEpoch).ConfigureAwait(false);
             }

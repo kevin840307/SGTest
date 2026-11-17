@@ -279,6 +279,17 @@ public sealed class WorldResultRouter
         return _attacks.Writer.TryWrite(request);
     }
 
+    public GatewaySendStatus QueuePlayerDamage(PlayerDamageSettlement result)
+    {
+        lock (_gate)
+        {
+            if (!_connections.TryGetValue(result.ActorId, out var connection) ||
+                connection.IsClosed)
+                return GatewaySendStatus.Closed;
+            return connection.QueuePlayerDamage(result);
+        }
+    }
+
     public GatewaySendStatus QueueNormalAttackResult(
         TrustedNormalAttack request, NormalAttackOutcome outcome)
     {

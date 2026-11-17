@@ -71,8 +71,12 @@ internal static class TlsHost
             var positions = new CharacterPositionCheckpoint(identity,
                 new(IntervalMilliseconds: checkpointMs));
             var router = new WorldResultRouter(changedObserver: positions.Observe);
-            var aoi = new WorldAoiPump(router, monsters: monsters);
-            var authorization = new IdentityTlsAuthorization(identity, world, portals, positions);
+            var combat = new PlayerCombatSettlement(
+                identity, delivery: router.QueuePlayerDamage);
+            var aoi = new WorldAoiPump(
+                router, monsters: monsters, playerCombat: combat);
+            var authorization = new IdentityTlsAuthorization(
+                identity, world, portals, positions, combat);
             await using var listener = new TlsGatewayListener(address, port, authorization,
                 certificate, router, new(MaxConnections: maximum, MaxConnectionsPerAddress: perAddress));
             await world.StartAsync();
@@ -80,6 +84,7 @@ internal static class TlsHost
             var routing = router.RunAsync(world.Results, pumps.Token);
             var visibility = aoi.RunAsync(pumps.Token);
             var checkpointing = positions.RunAsync(pumps.Token);
+            var combatSettlement = combat.RunAsync(pumps.Token);
             try
             {
                 var accepting = listener.RunAsync(stop.Token);
@@ -93,7 +98,8 @@ internal static class TlsHost
                     position_checkpoint_ms = checkpointMs
                 }));
                 var stopping = Task.Delay(Timeout.Infinite, stop.Token);
-                var completed = await Task.WhenAny(accepting, routing, visibility, checkpointing, stopping);
+                var completed = await Task.WhenAny(
+                    accepting, routing, visibility, checkpointing, combatSettlement, stopping);
                 if (completed != stopping && !stop.IsCancellationRequested)
                 {
                     await completed; // propagate faults; never serve after a result/AOI pump failed
@@ -113,7 +119,8 @@ internal static class TlsHost
                 {
                     await world.StopAsync();
                     pumps.Cancel();
-                    try { await Task.WhenAll(routing, visibility, checkpointing); }
+                    try { await Task.WhenAll(
+                        routing, visibility, checkpointing, combatSettlement); }
                     catch (OperationCanceledException) when (pumps.IsCancellationRequested) { }
                 }
             }
@@ -122,7 +129,8 @@ internal static class TlsHost
                 result = "TLS_HOST_STOPPED", listener = listener.Statistics,
                 world = world.Statistics, router = router.Statistics,
                 monster_coordinator = monsters?.Statistics,
-                positions = positions.Statistics
+                positions = positions.Statistics,
+                combat = combat.Statistics
             }));
             return 0;
         }
@@ -138,7 +146,8 @@ internal static class TlsHost
         catch (Exception error) when (error is IOException or InvalidOperationException or
                                      CryptographicException or System.Net.Sockets.SocketException or
                                      WorldResultRoutingException or AoiBackpressureException or
-                                     CharacterPositionCheckpointException)
+                                     CharacterPositionCheckpointException or
+                                     PlayerCombatSettlementException)
         {
             Console.Error.WriteLine("TLS_HOST_FAIL: " + error.GetType().Name + ": " + error.Message);
             return 1;

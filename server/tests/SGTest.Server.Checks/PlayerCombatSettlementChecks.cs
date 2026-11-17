@@ -1,12 +1,17 @@
 using System.Text.Json;
 using SGTest.Server.Gateway;
 using SGTest.Server.Identity;
+using SGTest.Server.Wire;
 using SGTest.Server.World;
 
 internal static class PlayerCombatSettlementChecks
 {
     public static void Verify(string root)
     {
+        Checks.Run("player combat baseline and committed damage wire are exact and generation-safe",
+            WireContract);
+        Checks.Run("committed damage is queued reliably before combat drain completes",
+            () => ReliableDelivery(root).GetAwaiter().GetResult());
         Checks.Run("monster hit reservation is nonblocking and emits only after SQLite commit",
             () => CommitBoundary(root).GetAwaiter().GetResult());
         Checks.Run("projected HP prevents same-tick overkill and death is committed exactly once",
@@ -15,6 +20,79 @@ internal static class PlayerCombatSettlementChecks
             () => SuspendTransfer(root).GetAwaiter().GetResult());
         Checks.Run("monster coordinator consumes external HP owner without inventing alive state",
             () => CoordinatorHpOwner(root));
+    }
+
+
+    private static void WireContract()
+    {
+        var baseline = new PlayerCombatStateWire(3, 82, 100);
+        var baselineBytes = WireProtocol.EncodePlayerCombatState(baseline);
+        Checks.Require(baselineBytes.Length == 24 &&
+                       WireProtocol.TryDecodePlayerCombatState(
+                           baselineBytes, out var parsedBaseline) &&
+                       parsedBaseline == baseline,
+            "player combat baseline wire");
+
+        var damage = new PlayerDamageWire(
+            3, 2, 42, 1_000_000_001, 7,
+            18, 64, 100, false);
+        var damageBytes = WireProtocol.EncodePlayerDamage(damage);
+        Checks.Require(damageBytes.Length == 57 &&
+                       WireProtocol.TryDecodePlayerDamage(
+                           damageBytes, out var parsedDamage) &&
+                       parsedDamage == damage,
+            "player damage wire");
+
+        bool rejected=false;
+        try
+        {
+            WireProtocol.EncodePlayerDamage(
+                damage with { CurrentHp=0, Died=false });
+        }
+        catch(ArgumentOutOfRangeException) { rejected=true; }
+        Checks.Require(rejected,
+            "zero HP without explicit death was accepted");
+    }
+
+    private static async Task ReliableDelivery(string root)
+    {
+        string db=Path.Combine(root,"combat-delivery-"+Guid.NewGuid().ToString("N")+".db");
+        using var store=new SqliteIdentityStore(db);
+        await store.InitializeAsync();
+        var created=await Create(store,"settle_delivery","Settle-Delivery-Password-123!",100,10);
+        var actor=Actor(created.CharacterId,13,1,1);
+        var gateway=new GatewayConnection(actor);
+        var settlement=new PlayerCombatSettlement(
+            store,new(Capacity:8),gateway.QueuePlayerDamage);
+        Checks.Require(settlement.TryAttach(actor,created.Profile),
+            "delivery settlement attach");
+        Checks.Require(settlement.TryPostMonsterHit(
+                actor,Attack(actor,41,20,2))==CombatPostStatus.Accepted,
+            "delivery hit enqueue");
+
+        var drain=settlement.SuspendAndDrainAsync(
+            actor.ActorId,actor.ConnectionEpoch,actor.MapEpoch);
+        Checks.Require(!drain.IsCompleted && gateway.ReliableFrames==0,
+            "delivery became visible before worker/commit");
+
+        using var stop=new CancellationTokenSource();
+        var worker=settlement.RunAsync(stop.Token);
+        await drain.WaitAsync(TimeSpan.FromSeconds(3));
+        Checks.Require(gateway.TryDequeueReliable(out var frame) &&
+                       WireProtocol.TryDecodePlayerDamage(frame,out var delivered) &&
+                       delivered.MapEpoch==actor.MapEpoch &&
+                       delivered.DamageSequence==1 &&
+                       delivered.AttackerMonsterEntityId==41 &&
+                       delivered.Damage==18 &&
+                       delivered.CurrentHp==82 &&
+                       delivered.MaxHp==100 &&
+                       !delivered.Died,
+            "committed player damage was not queued before drain completion");
+        Checks.Require(!settlement.Results.TryRead(out _),
+            "delivery-mode worker duplicated result into unused side channel");
+
+        stop.Cancel();
+        await worker.WaitAsync(TimeSpan.FromSeconds(2));
     }
 
     private static async Task CommitBoundary(string root)

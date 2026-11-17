@@ -442,6 +442,25 @@ public sealed class GatewayConnection
     /// on this connection. Old-map receipts on the SAME connection are allowed so
     /// the client can discard them using the receipt MapEpoch.
     /// </summary>
+    public GatewaySendStatus QueuePlayerDamage(PlayerDamageSettlement result)
+    {
+        lock (_bindingGate)
+        {
+            if (_closed) return GatewaySendStatus.Closed;
+            var bound = _binding;
+            if (result.ActorId != bound.ActorId ||
+                result.ConnectionEpoch != bound.ConnectionEpoch ||
+                result.MapEpoch != bound.MapEpoch)
+                return GatewaySendStatus.GenerationMismatch;
+            var frame = WireProtocol.EncodePlayerDamage(new(
+                result.MapEpoch, result.DamageSequence, result.ServerTick,
+                result.AttackerMonsterEntityId, result.AttackerMonsterRevision,
+                result.Damage, result.CurrentHp, result.MaxHp, result.Died));
+            return _reliable.TryEnqueue(frame)
+                ? GatewaySendStatus.Enqueued : GatewaySendStatus.Backpressured;
+        }
+    }
+
     public GatewaySendStatus QueueNormalAttackResult(
         TrustedNormalAttack request, NormalAttackOutcome outcome)
     {

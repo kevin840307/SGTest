@@ -18,17 +18,20 @@ public sealed class WorldAoiPump
     private readonly WorldAoi _aoi;
     private readonly WorldAoiPumpOptions _options;
     private readonly MonsterWorldCoordinator? _monsters;
+    private readonly PlayerCombatSettlement? _playerCombat;
     private int _started;
     private long _processedBatches, _framesQueued;
 
     public WorldAoiPump(WorldResultRouter router, WorldAoi? aoi = null,
                         WorldAoiPumpOptions? options = null,
-                        MonsterWorldCoordinator? monsters = null)
+                        MonsterWorldCoordinator? monsters = null,
+                        PlayerCombatSettlement? playerCombat = null)
     {
         _router = router ?? throw new ArgumentNullException(nameof(router));
         _aoi = aoi ?? new WorldAoi();
         _options = options ?? new WorldAoiPumpOptions();
         _monsters = monsters;
+        _playerCombat = playerCombat;
         if (_options.FlushIntervalMilliseconds is < 1 or > 1000 ||
             _options.MaxFramesPerObserverPerPoll is < 1 or > 4096)
             throw new ArgumentOutOfRangeException(nameof(options));
@@ -55,7 +58,28 @@ public sealed class WorldAoiPump
                     // exactly one latest MonsterSpawn rather than stale Spawn +
                     // same-tick Delta, while visibility uses the new player position.
                     MonsterStateBatch? monsterBatch =
-                        _monsters?.Process(batch);
+                        _monsters?.Process(batch,
+                            _playerCombat is null
+                                ? null
+                                : actor => _playerCombat.CurrentHp(actor));
+
+                    if (_playerCombat is not null &&
+                        _monsters is not null &&
+                        monsterBatch?.Events is { Count: > 0 } events)
+                    {
+                        foreach (var evt in events)
+                        {
+                            if (evt.Kind != MonsterWorldEventKind.Attack)
+                                continue;
+                            if (!_monsters.TryGetActor(evt.TargetActorId, out var target))
+                                continue;
+                            var posted = _playerCombat.TryPostMonsterHit(target, evt);
+                            if (posted == CombatPostStatus.Backpressured)
+                                throw new AoiBackpressureException(
+                                    "Player combat settlement input full; committed hit cannot be invented or dropped");
+                        }
+                    }
+
                     _aoi.Apply(batch,
                         monsterBatch?.Changed ?? Array.Empty<MonsterSnapshot>());
                     Interlocked.Increment(ref _processedBatches);
@@ -65,7 +89,11 @@ public sealed class WorldAoiPump
 
                 while (_router.AttackRequests.TryRead(out var attack))
                 {
-                    NormalAttackOutcome outcome = _monsters is null
+                    bool attackerDead = _playerCombat is not null &&
+                        _monsters is not null &&
+                        _monsters.TryGetActor(attack.ActorId, out var attackingActor) &&
+                        _playerCombat.CurrentHp(attackingActor) <= 0;
+                    NormalAttackOutcome outcome = _monsters is null || attackerDead
                         ? new(NormalAttackStatus.CombatUnavailable,
                             Math.Max(0, _aoi.LastTick), attack.TargetEntityId,
                             0, 0, 0, 0)
