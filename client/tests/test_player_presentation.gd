@@ -155,6 +155,21 @@ func run() -> void:
 		"attacker_actor_id":1,"attacker_connection_epoch":1,
 		"attack_sequence":2,"target_entity_id":1001,"status":1,"damage":0}]},620000)
 	check(view.combat_overlay_count()==2,"MISS overlay was not retained independently")
+	view._consume_player_damage_visual_events({"player_damage_visual_events":[{
+		"victim_actor_id":1,"victim_connection_epoch":1,
+		"damage_sequence":1,"damage":18,"died":false}]},630000)
+	view._consume_player_damage_visual_events({"player_damage_visual_events":[{
+		"victim_actor_id":1,"victim_connection_epoch":1,
+		"damage_sequence":1,"damage":18,"died":false}]},640000)
+	check(view.combat_overlay_count()==3,
+		"player damage overlay was missing or replayed")
+	# Attack sequence 1 and damage sequence 1 are separate presentation
+	# namespaces and must not suppress each other.
+	view._consume_player_damage_visual_events({"player_damage_visual_events":[{
+		"victim_actor_id":1,"victim_connection_epoch":1,
+		"damage_sequence":2,"damage":82,"died":true}]},650000)
+	check(view.combat_overlay_count()==4,
+		"lethal player damage overlay was not retained independently")
 	view.clear_map()
 	check(borrowed.has("x") and int(borrowed.map_id)==13,"view clear mutated caller snapshot")
 	check(view.combat_overlay_count()==0,"view clear retained combat overlays")
@@ -164,5 +179,5 @@ func run() -> void:
 	assets[Players.PARTS[1][0]].manifest.logical_views={}
 	check(players.configure(assets)!=OK and players.actors_at(0).is_empty(),"missing metadata did not fail closed")
 	if failures.is_empty():
-		print("PLAYER_PRESENTATION_PASS six_parts=true actor_atomic_sort=true logical_flip_pivot=true normalized_ACT=true authoritative_AA=true remote_AA_lock=true authoritative_NH=true persistent_ND=true respawn_clears_death=true own_without_self_state=true combat_overlay=true stop_despawn_transfer=true")
+		print("PLAYER_PRESENTATION_PASS six_parts=true actor_atomic_sort=true logical_flip_pivot=true normalized_ACT=true authoritative_AA=true remote_AA_lock=true authoritative_NH=true persistent_ND=true respawn_clears_death=true own_without_self_state=true combat_overlay=true player_damage_overlay=true no_remote_hp_dependency=true stop_despawn_transfer=true")
 	quit(0 if failures.is_empty() else 1)

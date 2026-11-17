@@ -199,7 +199,11 @@ func present() -> void:
 		if age < 0 or age > COMBAT_OVERLAY_LIFETIME_USEC:
 			continue
 		surviving.append(overlay)
-		var p := monsters.position_at(int(overlay.target_entity_id),now_usec)
+		var p := Vector2(INF,INF)
+		if overlay.has("target_entity_id"):
+			p = monsters.position_at(int(overlay.target_entity_id),now_usec)
+		elif overlay.has("target_actor_id"):
+			p = players.position_at(int(overlay.target_actor_id),now_usec)
 		if not p.is_finite() or not rect.has_point(p):
 			continue
 		var progress := clampf(float(age)/float(COMBAT_OVERLAY_LIFETIME_USEC),0.0,1.0)
@@ -245,6 +249,7 @@ func set_player_snapshot(snapshot: Dictionary) -> void:
 			_fail("怪物狀態與地圖素材不一致")
 			return
 		_consume_player_attack_events(snapshot,now_usec)
+		_consume_player_damage_visual_events(snapshot,now_usec)
 		var focus := players.position_at(int(snapshot.actor_id),now_usec)
 		if focus.is_finite():
 			camera.set_focus(epoch,focus)
@@ -262,7 +267,7 @@ func _consume_player_attack_events(snapshot: Dictionary,now_usec: int) -> void:
 		var sequence := int(event.get("attack_sequence",0))
 		var target := int(event.get("target_entity_id",0))
 		var status := int(event.get("status",-1))
-		var key := "%d:%d:%d" % [attacker,connection,sequence]
+		var key := "attack:%d:%d:%d" % [attacker,connection,sequence]
 		if _combat_seen.has(key):
 			continue
 		_combat_seen[key] = true
@@ -272,6 +277,34 @@ func _consume_player_attack_events(snapshot: Dictionary,now_usec: int) -> void:
 			"target_entity_id":target,
 			"text":"MISS" if status==1 else str(int(event.get("damage",0))),
 			"miss":status==1,
+			"started_usec":now_usec
+		})
+
+
+func _consume_player_damage_visual_events(snapshot: Dictionary,now_usec: int) -> void:
+	var events = snapshot.get("player_damage_visual_events",[])
+	if not events is Array:
+		return
+	for event in events:
+		if not event is Dictionary:
+			continue
+		var victim := int(event.get("victim_actor_id",0))
+		var connection := int(event.get("victim_connection_epoch",0))
+		var sequence := int(event.get("damage_sequence",0))
+		var damage := int(event.get("damage",0))
+		var key := "hit:%d:%d:%d" % [victim,connection,sequence]
+		if _combat_seen.has(key):
+			continue
+		_combat_seen[key] = true
+		if victim <= 0 or connection <= 0 or sequence <= 0 or damage <= 0:
+			continue
+		# Presentation-only: use only the committed damage amount from opcode42.
+		# Do not inspect or infer remote HP; actor position comes from the normal
+		# authoritative player snapshot/interpolation path.
+		_combat_overlays.append({
+			"target_actor_id":victim,
+			"text":str(damage),
+			"miss":false,
 			"started_usec":now_usec
 		})
 
