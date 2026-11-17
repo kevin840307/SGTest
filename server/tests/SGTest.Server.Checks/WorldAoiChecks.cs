@@ -134,7 +134,7 @@ internal static class WorldAoiChecks
         };
         Require(aoi.EnqueuePlayerDamageVisual(lethal)==2 &&
             Drain(aoi,victim).Single().PlayerDamage?.Died==true &&
-            Drain(aoi,observer).Single().PlayerDamage?.CurrentHp==0,
+            Drain(aoi,observer).Single().PlayerDamage is { Died:true, Damage:82 },
             "lethal visual did not reach victim and peer");
 
         Require(aoi.EnqueuePlayerRespawnVisual(victim,1)==2,
