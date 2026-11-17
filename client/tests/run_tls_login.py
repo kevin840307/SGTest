@@ -25,8 +25,10 @@ def main() -> int:
                         help="run two-client Map15 -> Map13 -> Map15 trusted transfer TLS E2E")
     parser.add_argument("--portal", action="store_true",
                         help="run two-client audited NPC interaction TLS transfer E2E")
+    parser.add_argument("--reconnect", action="store_true",
+                        help="force one TLS socket drop and require automatic same-character reconnect")
     args = parser.parse_args()
-    if args.app_ui and (args.multi or args.crossmap or args.portal):
+    if args.app_ui and (args.multi or args.crossmap or args.portal or args.reconnect):
         parser.error("--app-ui uses the single-client login fixture")
     if args.ui_screenshot and not args.app_ui:
         parser.error("--ui-screenshot requires --app-ui")
@@ -41,6 +43,8 @@ def main() -> int:
     if build.returncode != 0:
         print(build.stdout)
         return 2
+    if args.reconnect:
+        return run_reconnect(args, repo, fixture, env)
     if args.crossmap:
         return run_crossmap(args, repo, fixture, env)
     if args.portal:
@@ -114,6 +118,95 @@ def main() -> int:
             except subprocess.TimeoutExpired:
                 server.kill()
 
+
+
+
+def run_reconnect(args, repo: Path, fixture: Path, env: dict[str, str]) -> int:
+    server = subprocess.Popen(
+        ["dotnet", "run", "--project", str(fixture), "-c", "Release",
+         "--no-build", "--", "--reconnect"],
+        cwd=repo, env=env, text=True, stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE, stderr=subprocess.STDOUT, bufsize=1)
+    server_lines: list[str] = []
+    server_events: queue.Queue[str] = queue.Queue()
+    client_lines: list[str] = []
+    client_events: queue.Queue[str] = queue.Queue()
+    client = None
+    deadline = time.monotonic() + args.timeout
+
+    def capture(process, lines: list[str], events: queue.Queue[str]) -> None:
+        assert process.stdout is not None
+        for line in process.stdout:
+            value = line.rstrip()
+            lines.append(value)
+            events.put(value)
+
+    def until(events: queue.Queue[str], token: str, process: subprocess.Popen) -> str:
+        while time.monotonic() < deadline:
+            if process.poll() is not None and events.empty():
+                raise RuntimeError(f"{token}: process exited {process.returncode}")
+            try:
+                line = events.get(timeout=0.15)
+            except queue.Empty:
+                continue
+            if token in line:
+                return line
+        raise TimeoutError(token)
+
+    threading.Thread(target=capture, args=(server, server_lines, server_events),
+                     daemon=True).start()
+    try:
+        ready = until(server_events, "RECONNECT_FIXTURE_READY", server)
+        match = re.search(
+            r"RECONNECT_FIXTURE_READY port=(\d+) cert=(.+?) username=.*? character=(\d+)",
+            ready)
+        if match is None:
+            raise RuntimeError("malformed reconnect readiness: " + ready)
+        port, cert = match.group(1), match.group(2)
+        client = subprocess.Popen(
+            [args.godot, "--headless", "--path", str(repo / "client"),
+             "--script", "res://tests/test_client_reconnect_tls.gd", "--", port, cert],
+            cwd=repo, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            bufsize=1)
+        threading.Thread(target=capture, args=(client, client_lines, client_events),
+                         daemon=True).start()
+
+        until(client_events, "CLIENT_RECONNECT_FIRST_MOVE_DONE", client)
+        assert server.stdin is not None
+        server.stdin.write("DROP\n")
+        server.stdin.flush()
+        until(server_events, "RECONNECT_FIXTURE_DROPPED", server)
+        until(client_events, "CLIENT_RECONNECT_PASS", client)
+
+        client.wait(timeout=max(1.0, deadline - time.monotonic()))
+        server.wait(timeout=max(1.0, deadline - time.monotonic()))
+        if client.returncode != 0 or server.returncode != 0 or not any(
+                line.startswith("RECONNECT_FIXTURE_PASS") for line in server_lines):
+            raise RuntimeError("reconnect fixture/client failed")
+
+        for lines in (client_lines, server_lines):
+            for line in lines:
+                if line.startswith(("CLIENT_RECONNECT_", "RECONNECT_FIXTURE_")):
+                    print(line)
+        print("GODOT_CSHARP_TLS_RECONNECT_E2E_PASS forced_drop=true auto_reauth=true "
+              "same_character=true new_generation=true persisted_position=true "
+              "world_ready_reack=true old_intents_not_replayed=true bounded_attempts=3")
+        return 0
+    except Exception as error:
+        print("TLS_RECONNECT_RUNNER_FAIL", error, file=sys.stderr)
+        for name, lines in (("server", server_lines), ("client", client_lines)):
+            for line in lines[-25:]:
+                print(name, line, file=sys.stderr)
+        return 1
+    finally:
+        for process in (client, server):
+            if process is None or process.poll() is not None:
+                continue
+            process.terminate()
+            try:
+                process.wait(timeout=3)
+            except subprocess.TimeoutExpired:
+                process.kill()
 
 
 def run_multiplayer(args, repo: Path, fixture: Path, env: dict[str, str],

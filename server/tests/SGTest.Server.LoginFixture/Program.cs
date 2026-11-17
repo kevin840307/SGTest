@@ -22,6 +22,8 @@ internal static class Program
             return await RunMultiplayerAsync(true).ConfigureAwait(false);
         if (args is ["--portal"])
             return await RunMultiplayerAsync(false, true).ConfigureAwait(false);
+        if (args is ["--reconnect"])
+            return await RunReconnectAsync().ConfigureAwait(false);
         if (args.Length != 0)
             return 2;
         string root = Path.Combine(Path.GetTempPath(), "sgtest_login_fixture_" + Guid.NewGuid().ToString("N"));
@@ -119,6 +121,127 @@ internal static class Program
             foreach (var receipt in result.Receipts)
                 if (receipt.ActorId == actorId && receipt.MovementSequence == 1)
                     return receipt;
+        }
+    }
+
+
+    private static async Task<int> RunReconnectAsync()
+    {
+        string root = Path.Combine(Path.GetTempPath(),
+            "sgtest_reconnect_login_" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var map = BlockingGrid.Load(CreateMap(root, 15), 15);
+            await using var world = new ServerWorldHost([map]);
+            await world.StartAsync().ConfigureAwait(false);
+            using var store = new SqliteIdentityStore(Path.Combine(root, "identity.db"));
+            await store.InitializeAsync().ConfigureAwait(false);
+            long accountId = (await store.CreateAccountAsync(Username, Password)).AccountId;
+            var created = await store.CreateCharacterAsync(accountId, 0,
+                "ReconnectHero", new CharacterSpawn(15, 8, 8));
+            long characterId = created.Character?.CharacterId ??
+                throw new InvalidOperationException("reconnect character missing");
+
+            var router = new WorldResultRouter();
+            var authorization = new IdentityTlsAuthorization(store, world);
+            var aoiPump = new WorldAoiPump(router);
+            var routerTask = router.RunAsync(world.Results);
+            using var aoiStop = new CancellationTokenSource();
+            var aoiTask = aoiPump.RunAsync(aoiStop.Token);
+
+            using var certificate = CreateCertificate();
+            string certPath = Path.Combine(root, "fixture-cert.pem");
+            WriteCertificatePem(certPath, certificate);
+            var listener = new TcpListener(IPAddress.Loopback, 0);
+            listener.Start(2);
+            try
+            {
+                int port = ((IPEndPoint)listener.LocalEndpoint).Port;
+                Console.WriteLine($"RECONNECT_FIXTURE_READY port={port} cert={certPath} username={Username} character={characterId}");
+                Console.Out.Flush();
+
+                var first = await listener.AcceptTcpClientAsync()
+                    .WaitAsync(TimeSpan.FromSeconds(15)).ConfigureAwait(false);
+                var firstTask = authorization.RunAuthenticatedSocketAsync(
+                    first, certificate, router,
+                    new TlsWireConnectionOptions(AuthorizationTimeoutMilliseconds: 15000));
+
+                string? command = await Console.In.ReadLineAsync()
+                    .WaitAsync(TimeSpan.FromSeconds(20)).ConfigureAwait(false);
+                if (command != "DROP")
+                    throw new InvalidOperationException(
+                        $"Expected DROP after first authoritative move, got {command ?? "<EOF>"}");
+
+                first.Dispose(); // intentional network failure, not graceful Client logout
+                var firstEnded = await firstTask.WaitAsync(TimeSpan.FromSeconds(5))
+                    .ConfigureAwait(false);
+                var releaseDeadline = DateTime.UtcNow.AddSeconds(4);
+                while (world.Statistics.ActiveActors != 0 ||
+                       router.Statistics.ActiveSessions != 0)
+                {
+                    if (DateTime.UtcNow >= releaseDeadline)
+                        throw new InvalidOperationException("first reconnect generation did not release");
+                    await Task.Delay(5).ConfigureAwait(false);
+                }
+                var persisted = await store.ListCharactersAsync(accountId).ConfigureAwait(false);
+                if (persisted.Count != 1 || persisted[0].MapId != 15 ||
+                    Math.Abs(persisted[0].X - 24) > 0.001 ||
+                    Math.Abs(persisted[0].Y - 8) > 0.001)
+                    throw new InvalidOperationException(
+                        $"first disconnect position not persisted x={persisted[0].X} y={persisted[0].Y}");
+                Console.WriteLine(
+                    $"RECONNECT_FIXTURE_DROPPED first_reason={firstEnded.Reason} persisted_x={persisted[0].X:F1} persisted_y={persisted[0].Y:F1}");
+                Console.Out.Flush();
+
+                using var second = await listener.AcceptTcpClientAsync()
+                    .WaitAsync(TimeSpan.FromSeconds(10)).ConfigureAwait(false);
+                var secondTask = authorization.RunAuthenticatedSocketAsync(
+                    second, certificate, router,
+                    new TlsWireConnectionOptions(AuthorizationTimeoutMilliseconds: 15000));
+                var secondEnded = await secondTask.WaitAsync(TimeSpan.FromSeconds(20))
+                    .ConfigureAwait(false);
+
+                releaseDeadline = DateTime.UtcNow.AddSeconds(4);
+                while (world.Statistics.ActiveActors != 0 ||
+                       router.Statistics.ActiveSessions != 0)
+                {
+                    if (DateTime.UtcNow >= releaseDeadline)
+                        throw new InvalidOperationException("second reconnect generation did not release");
+                    await Task.Delay(5).ConfigureAwait(false);
+                }
+
+                var final = await store.ListCharactersAsync(accountId).ConfigureAwait(false);
+                if (final.Count != 1 || final[0].MapId != 15 ||
+                    Math.Abs(final[0].X - 40) > 0.001 ||
+                    Math.Abs(final[0].Y - 8) > 0.001 ||
+                    secondEnded.CommandsAccepted != 1 ||
+                    router.Statistics.ReceiptsQueued < 2)
+                    throw new InvalidOperationException(
+                        $"reconnect completion mismatch second={secondEnded.Reason} moves={secondEnded.CommandsAccepted} receipts={router.Statistics.ReceiptsQueued} x={final[0].X} y={final[0].Y}");
+
+                await world.StopAsync().ConfigureAwait(false);
+                await routerTask.WaitAsync(TimeSpan.FromSeconds(3)).ConfigureAwait(false);
+                Console.WriteLine(
+                    $"RECONNECT_FIXTURE_PASS first_reason={firstEnded.Reason} second_reason={secondEnded.Reason} persisted_first=24,8 persisted_final=40,8 receipts={router.Statistics.ReceiptsQueued} active=0");
+                Console.Out.Flush();
+                return 0;
+            }
+            finally
+            {
+                listener.Stop();
+                aoiStop.Cancel();
+                await aoiTask.ConfigureAwait(false);
+            }
+        }
+        catch (Exception error)
+        {
+            Console.Error.WriteLine("RECONNECT_FIXTURE_FAIL " + error);
+            return 1;
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { }
         }
     }
 

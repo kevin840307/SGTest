@@ -77,6 +77,8 @@ jobs:
           ! grep -E 'ERROR:|SCRIPT ERROR:|leaked|still in use' /tmp/sgtest-player-presentation.log
       - name: Real Godot to CSharp secure TLS login E2E
         run: python client/tests/run_tls_login.py "$PWD/.cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64"
+      - name: Forced TLS disconnect automatic same-character reconnect E2E
+        run: python client/tests/run_tls_login.py "$PWD/.cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64" --reconnect --timeout 55
       - name: Real application login selection and logout UI over TLS
         run: python client/tests/run_tls_login.py "$PWD/.cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64" --app-ui
       - name: Two concurrent Godot Clients TLS player AOI E2E
