@@ -29,6 +29,20 @@ public readonly record struct TrustedNpcInteraction(
 public readonly record struct TrustedWorldResyncRequest(
     long ActorId, long ConnectionEpoch, long MapEpoch);
 
+public readonly record struct TrustedCombatProfile(
+    int Attack, int Defense, int Hit, int Dodge,
+    double AttackRange, int AttackCooldownTicks);
+
+public readonly record struct TrustedNormalAttack(
+    long ActorId, long ConnectionEpoch, long RequestMapEpoch,
+    uint AttackSequence, long TargetEntityId,
+    TrustedCombatProfile? Profile);
+
+public readonly record struct NormalAttackOutcome(
+    NormalAttackStatus Status, long ServerTick, long TargetEntityId,
+    int Damage, int CurrentHp, int MaxHp, long TargetRevision,
+    MonsterSnapshot? Monster = null);
+
 public enum GatewaySendStatus
 {
     Enqueued,
@@ -125,9 +139,11 @@ public sealed class GatewayConnection
     private long _worldReadyAckedMapEpoch;
     private long _worldReadyAckedTick = -1;
     private bool _resyncPending;
+    private readonly TrustedCombatProfile? _combatProfile;
 
     public GatewayConnection(ActorSnapshot trustedActor,
-                             GatewayConnectionOptions? options = null)
+                             GatewayConnectionOptions? options = null,
+                             TrustedCombatProfile? combatProfile = null)
     {
         var configured = options ?? new GatewayConnectionOptions();
         if (configured.MaxBufferedInputBytes < WireProtocol.MaximumFrameBytes ||
@@ -138,6 +154,13 @@ public sealed class GatewayConnection
             throw new ArgumentOutOfRangeException(nameof(options), "Invalid bounded connection limits");
 
         _binding = ConnectionBinding.FromTrustedSnapshot(trustedActor);
+        if (combatProfile is { } profile &&
+            (profile.Attack < 0 || profile.Defense < 0 || profile.Hit < 0 ||
+             profile.Dodge < 0 || !double.IsFinite(profile.AttackRange) ||
+             profile.AttackRange <= 0 || profile.AttackRange > 500 ||
+             profile.AttackCooldownTicks is < 1 or > 3600))
+            throw new ArgumentOutOfRangeException(nameof(combatProfile));
+        _combatProfile = combatProfile;
         _parser = new WireStreamParser(configured.MaxBufferedInputBytes);
         _reliable = new ReliableFrameQueue(configured.MaxReliableFrames, configured.MaxReliableBytes);
     }
@@ -206,7 +229,8 @@ public sealed class GatewayConnection
                                           Func<MoveTargetCommand, bool> postMove,
                                           out int commandsAccepted,
                                           Func<TrustedNpcInteraction, bool>? postNpc = null,
-                                          Func<TrustedWorldResyncRequest, bool>? postResync = null)
+                                          Func<TrustedWorldResyncRequest, bool>? postResync = null,
+                                          Func<TrustedNormalAttack, bool>? postAttack = null)
     {
         ArgumentNullException.ThrowIfNull(postMove);
         lock (_receiveGate)
@@ -217,7 +241,7 @@ public sealed class GatewayConnection
                 return WireFeedStatus.Closed;
             }
             return _parser.Feed(bytes,
-                frame => HandleClientFrame(frame, postMove, postNpc, postResync),
+                frame => HandleClientFrame(frame, postMove, postNpc, postResync, postAttack),
                 out commandsAccepted);
         }
     }
@@ -225,7 +249,8 @@ public sealed class GatewayConnection
     public WireFeedStatus ResumeClientIngress(Func<MoveTargetCommand, bool> postMove,
                                               out int commandsAccepted,
                                               Func<TrustedNpcInteraction, bool>? postNpc = null,
-                                              Func<TrustedWorldResyncRequest, bool>? postResync = null)
+                                              Func<TrustedWorldResyncRequest, bool>? postResync = null,
+                                              Func<TrustedNormalAttack, bool>? postAttack = null)
     {
         ArgumentNullException.ThrowIfNull(postMove);
         lock (_receiveGate)
@@ -236,7 +261,7 @@ public sealed class GatewayConnection
                 return WireFeedStatus.Closed;
             }
             return _parser.Resume(
-                frame => HandleClientFrame(frame, postMove, postNpc, postResync),
+                frame => HandleClientFrame(frame, postMove, postNpc, postResync, postAttack),
                 out commandsAccepted);
         }
     }
@@ -245,7 +270,8 @@ public sealed class GatewayConnection
         ReadOnlySpan<byte> frame,
         Func<MoveTargetCommand, bool> postMove,
         Func<TrustedNpcInteraction, bool>? postNpc,
-        Func<TrustedWorldResyncRequest, bool>? postResync)
+        Func<TrustedWorldResyncRequest, bool>? postResync,
+        Func<TrustedNormalAttack, bool>? postAttack)
     {
         if (!WireProtocol.TryReadHeader(frame, out var header))
             return WireFrameDisposition.ProtocolViolation;
@@ -271,6 +297,18 @@ public sealed class GatewayConnection
                 return WireFrameDisposition.Backpressured;
             }
             return WireFrameDisposition.AcceptedControl;
+        }
+
+        if (header.Opcode == WireOpcode.NormalAttack && postAttack is not null &&
+            WireProtocol.TryDecodeNormalAttack(frame, out var attack))
+        {
+            if (!GameplayReady(bound))
+                return WireFrameDisposition.ProtocolViolation;
+            var request = new TrustedNormalAttack(
+                bound.ActorId, bound.ConnectionEpoch, attack.MapEpoch,
+                attack.AttackSequence, attack.TargetEntityId, _combatProfile);
+            return postAttack(request)
+                ? WireFrameDisposition.Accepted : WireFrameDisposition.Backpressured;
         }
 
         if (header.Opcode == WireOpcode.MoveTarget &&
@@ -404,6 +442,28 @@ public sealed class GatewayConnection
     /// on this connection. Old-map receipts on the SAME connection are allowed so
     /// the client can discard them using the receipt MapEpoch.
     /// </summary>
+    public GatewaySendStatus QueueNormalAttackResult(
+        TrustedNormalAttack request, NormalAttackOutcome outcome)
+    {
+        lock (_bindingGate)
+        {
+            if (_closed) return GatewaySendStatus.Closed;
+            var bound = _binding;
+            if (request.ActorId != bound.ActorId ||
+                request.ConnectionEpoch != bound.ConnectionEpoch ||
+                request.RequestMapEpoch <= 0 ||
+                request.RequestMapEpoch > bound.MapEpoch ||
+                outcome.TargetEntityId != request.TargetEntityId)
+                return GatewaySendStatus.GenerationMismatch;
+            var frame = WireProtocol.EncodeNormalAttackResult(new(
+                request.RequestMapEpoch, request.AttackSequence, outcome.Status,
+                outcome.ServerTick, outcome.TargetEntityId, outcome.Damage,
+                outcome.CurrentHp, outcome.MaxHp, outcome.TargetRevision));
+            return _reliable.TryEnqueue(frame)
+                ? GatewaySendStatus.Enqueued : GatewaySendStatus.Backpressured;
+        }
+    }
+
     public GatewaySendStatus QueueReceipt(MoveReceipt receipt)
     {
         lock (_bindingGate)

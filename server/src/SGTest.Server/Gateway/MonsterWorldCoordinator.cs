@@ -23,7 +23,16 @@ public sealed record MonsterWorldCoordinatorStatistics(
 public sealed class MonsterWorldCoordinator
 {
     private readonly SortedDictionary<int, MonsterRuntime> _runtimes;
+    private sealed class AttackCursor
+    {
+        public long ConnectionEpoch;
+        public long MapEpoch;
+        public uint LastSequence;
+        public long LastAppliedTick = -1;
+    }
+
     private readonly Dictionary<long, ActorSnapshot> _actors = [];
+    private readonly Dictionary<long, AttackCursor> _attack = [];
     private readonly HashSet<int> _seededMaps = [];
     private long _lastTick;
     private long _batches, _runtimeTicks, _changed;
@@ -42,6 +51,8 @@ public sealed class MonsterWorldCoordinator
         if (_runtimes.Count == 0)
             throw new ArgumentException("At least one MonsterRuntime is required", nameof(runtimes));
     }
+
+    public long LastTick => _lastTick;
 
     public MonsterWorldCoordinatorStatistics Statistics =>
         new(Interlocked.Read(ref _batches), Interlocked.Read(ref _runtimeTicks),
@@ -105,6 +116,62 @@ public sealed class MonsterWorldCoordinator
         return new MonsterStateBatch(batch.Tick, changed);
     }
 
+    public NormalAttackOutcome ResolveNormalAttack(TrustedNormalAttack request)
+    {
+        if (_lastTick <= 0 || !_actors.TryGetValue(request.ActorId, out var actor) ||
+            !_attack.TryGetValue(request.ActorId, out var cursor) ||
+            actor.ConnectionEpoch != request.ConnectionEpoch ||
+            cursor.ConnectionEpoch != request.ConnectionEpoch)
+            return Empty(request, NormalAttackStatus.OldMapEpoch);
+
+        if (request.RequestMapEpoch != actor.MapEpoch ||
+            cursor.MapEpoch != actor.MapEpoch)
+            return Empty(request, NormalAttackStatus.OldMapEpoch);
+
+        if (request.AttackSequence <= cursor.LastSequence)
+            return Empty(request, NormalAttackStatus.ReplayedSequence);
+        cursor.LastSequence = request.AttackSequence;
+
+        if (request.Profile is not { } profile ||
+            !_runtimes.TryGetValue(actor.MapId, out var runtime))
+            return Empty(request, NormalAttackStatus.CombatUnavailable);
+
+        if (cursor.LastAppliedTick >= 0 &&
+            _lastTick - cursor.LastAppliedTick < profile.AttackCooldownTicks)
+            return Empty(request, NormalAttackStatus.Cooldown);
+
+        var status = runtime.ValidateNormalAttackTarget(
+            request.TargetEntityId, actor.X, actor.Y, profile.AttackRange,
+            out var target);
+        if (status != NormalAttackStatus.Applied)
+            return FromTarget(request, status, target);
+
+        cursor.LastAppliedTick = _lastTick;
+        int damage = Math.Max(1, profile.Attack);
+        var applied = runtime.ApplyTrustedDamage(
+            request.TargetEntityId, request.ActorId, damage, _lastTick);
+        if (!applied.Applied)
+            return FromTarget(request, NormalAttackStatus.TargetDead, target);
+
+        var changed = applied.Monster;
+        return new(NormalAttackStatus.Applied, _lastTick, request.TargetEntityId,
+            applied.Damage, changed.CurrentHp, changed.MaxHp,
+            changed.EntityRevision, changed);
+    }
+
+    private NormalAttackOutcome Empty(
+        TrustedNormalAttack request, NormalAttackStatus status) =>
+        new(status, Math.Max(0, _lastTick), request.TargetEntityId, 0, 0, 0, 0);
+
+    private NormalAttackOutcome FromTarget(
+        TrustedNormalAttack request, NormalAttackStatus status, MonsterSnapshot target)
+    {
+        if (target.EntityId <= 0)
+            return Empty(request, status);
+        return new(status, Math.Max(0, _lastTick), request.TargetEntityId, 0,
+            target.CurrentHp, target.MaxHp, target.EntityRevision, target);
+    }
+
     private void Join(ActorSnapshot actor)
     {
         ValidateActor(actor);
@@ -112,6 +179,11 @@ public sealed class MonsterWorldCoordinator
             throw new InvalidOperationException(
                 "Monster coordinator received Join without prior Leave");
         _actors.Add(actor.ActorId, actor);
+        _attack.Add(actor.ActorId, new AttackCursor
+        {
+            ConnectionEpoch = actor.ConnectionEpoch,
+            MapEpoch = actor.MapEpoch
+        });
     }
 
     private void Leave(ActorSnapshot actor)
@@ -122,6 +194,7 @@ public sealed class MonsterWorldCoordinator
             current.MapId != actor.MapId)
             throw new InvalidOperationException("Monster coordinator received stale Leave");
         _actors.Remove(actor.ActorId);
+        _attack.Remove(actor.ActorId);
     }
 
     private void Change(ActorSnapshot actor)

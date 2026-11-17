@@ -1,5 +1,19 @@
 namespace SGTest.Server.World;
 
+public enum NormalAttackStatus : byte
+{
+    Applied = 0,
+    Miss = 1,
+    TargetMissing = 2,
+    TargetDead = 3,
+    OutOfRange = 4,
+    Blocked = 5,
+    Cooldown = 6,
+    CombatUnavailable = 7,
+    OldMapEpoch = 8,
+    ReplayedSequence = 9
+}
+
 public enum MonsterAiState : byte
 {
     Idle,
@@ -193,6 +207,29 @@ public sealed class MonsterRuntime
     /// Trusted server settlement only. Raw clients may identify a target, but may
     /// never supply this damage value. Death is authoritative and schedules respawn.
     /// </summary>
+    public NormalAttackStatus ValidateNormalAttackTarget(
+        long entityId, double attackerX, double attackerY, double attackRange,
+        out MonsterSnapshot target)
+    {
+        target = default;
+        if (!double.IsFinite(attackerX) || !double.IsFinite(attackerY) ||
+            !double.IsFinite(attackRange) || attackerX < 0 || attackerY < 0 ||
+            attackRange <= 0 || attackRange > 500)
+            throw new ArgumentOutOfRangeException(nameof(attackRange));
+        if (!_monsters.TryGetValue(entityId, out var monster))
+            return NormalAttackStatus.TargetMissing;
+        target = monster.Snapshot(MapId);
+        if (monster.State == MonsterAiState.Dead || monster.CurrentHp <= 0)
+            return NormalAttackStatus.TargetDead;
+        double dx = attackerX - monster.X;
+        double dy = attackerY - monster.Y;
+        if (dx * dx + dy * dy > attackRange * attackRange)
+            return NormalAttackStatus.OutOfRange;
+        if (!_grid.IsDirectClear(attackerX, attackerY, monster.X, monster.Y))
+            return NormalAttackStatus.Blocked;
+        return NormalAttackStatus.Applied;
+    }
+
     public MonsterDamageResult ApplyTrustedDamage(
         long entityId, long attackerActorId, int damage, long worldTick)
     {

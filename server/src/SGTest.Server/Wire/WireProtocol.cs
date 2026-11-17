@@ -10,6 +10,8 @@ public enum WireOpcode : ushort
     MoveReceipt = 2,
     NpcInteract = 3,
     NpcInteractResult = 4,
+    NormalAttack = 5,
+    NormalAttackResult = 6,
     AuthRequest = 10,
     AuthResult = 11,
     CharacterList = 12,
@@ -37,6 +39,12 @@ public readonly record struct NpcInteractWire(long MapEpoch, uint InteractionSeq
 public readonly record struct NpcInteractResultWire(
     long RequestMapEpoch, uint InteractionSequence, NpcPortalStatus Status,
     long ResultMapEpoch);
+public readonly record struct NormalAttackWire(
+    long MapEpoch, uint AttackSequence, long TargetEntityId);
+public readonly record struct NormalAttackResultWire(
+    long MapEpoch, uint AttackSequence, NormalAttackStatus Status,
+    long ServerTick, long TargetEntityId, int Damage,
+    int CurrentHp, int MaxHp, long TargetRevision);
 public readonly record struct AuthRequestWire(string Username, string Password);
 public readonly record struct AuthResultWire(AuthWireStatus Status);
 public readonly record struct CharacterSummaryWire(long CharacterId, byte Slot, string Name);
@@ -81,6 +89,8 @@ public static class WireProtocol
     public const int MoveReceiptFrameBytes = HeaderBytes + MoveReceiptPayloadBytes;
     public const int NpcInteractFrameBytes = HeaderBytes + 8 + 4 + 4;
     public const int NpcInteractResultFrameBytes = HeaderBytes + 8 + 4 + 1 + 8;
+    public const int NormalAttackFrameBytes = HeaderBytes + 8 + 4 + 8;
+    public const int NormalAttackResultFrameBytes = HeaderBytes + 8 + 4 + 1 + 8 + 8 + 4 + 4 + 4 + 8;
     public const int AuthResultFrameBytes = HeaderBytes + 1;
     public const int CharacterChooseFrameBytes = HeaderBytes + 8;
     public const int CharacterChooseResultFrameBytes = HeaderBytes + 37;
@@ -176,6 +186,65 @@ public static class WireProtocol
                (status == NpcPortalStatus.Accepted
                    ? value.ResultMapEpoch > value.RequestMapEpoch
                    : value.ResultMapEpoch == value.RequestMapEpoch);
+    }
+
+    public static byte[] EncodeNormalAttack(NormalAttackWire value)
+    {
+        if (value.MapEpoch <= 0 || value.AttackSequence == 0 || value.TargetEntityId <= 0)
+            throw new ArgumentOutOfRangeException(nameof(value));
+        var frame = NewFrame(WireOpcode.NormalAttack, NormalAttackFrameBytes);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(8, 8), value.MapEpoch);
+        BinaryPrimitives.WriteUInt32LittleEndian(frame.AsSpan(16, 4), value.AttackSequence);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(20, 8), value.TargetEntityId);
+        return frame;
+    }
+
+    public static bool TryDecodeNormalAttack(ReadOnlySpan<byte> frame, out NormalAttackWire value)
+    {
+        value = default;
+        if (!TryReadHeader(frame, out var h) || h.Opcode != WireOpcode.NormalAttack)
+            return false;
+        value = new(
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(8, 8)),
+            BinaryPrimitives.ReadUInt32LittleEndian(frame.Slice(16, 4)),
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(20, 8)));
+        return value.MapEpoch > 0 && value.AttackSequence != 0 && value.TargetEntityId > 0;
+    }
+
+    public static byte[] EncodeNormalAttackResult(NormalAttackResultWire value)
+    {
+        if (!ValidNormalAttackResult(value))
+            throw new ArgumentOutOfRangeException(nameof(value));
+        var frame = NewFrame(WireOpcode.NormalAttackResult, NormalAttackResultFrameBytes);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(8, 8), value.MapEpoch);
+        BinaryPrimitives.WriteUInt32LittleEndian(frame.AsSpan(16, 4), value.AttackSequence);
+        frame[20] = (byte)value.Status;
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(21, 8), value.ServerTick);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(29, 8), value.TargetEntityId);
+        BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(37, 4), value.Damage);
+        BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(41, 4), value.CurrentHp);
+        BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(45, 4), value.MaxHp);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(49, 8), value.TargetRevision);
+        return frame;
+    }
+
+    public static bool TryDecodeNormalAttackResult(
+        ReadOnlySpan<byte> frame, out NormalAttackResultWire value)
+    {
+        value = default;
+        if (!TryReadHeader(frame, out var h) || h.Opcode != WireOpcode.NormalAttackResult)
+            return false;
+        value = new(
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(8, 8)),
+            BinaryPrimitives.ReadUInt32LittleEndian(frame.Slice(16, 4)),
+            (NormalAttackStatus)frame[20],
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(21, 8)),
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(29, 8)),
+            BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(37, 4)),
+            BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(41, 4)),
+            BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(45, 4)),
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(49, 8)));
+        return ValidNormalAttackResult(value);
     }
 
     public static byte[] EncodeMoveReceipt(MoveReceiptWire value)
@@ -587,6 +656,22 @@ public static class WireProtocol
                value.ActorId > 0 && value.ConnectionEpoch > 0;
     }
 
+    private static bool ValidNormalAttackResult(NormalAttackResultWire value)
+    {
+        if (value.MapEpoch <= 0 || value.AttackSequence == 0 ||
+            (byte)value.Status > (byte)NormalAttackStatus.ReplayedSequence ||
+            value.ServerTick < 0 || value.TargetEntityId <= 0 ||
+            value.Damage < 0 || value.CurrentHp < 0 || value.MaxHp < 0 ||
+            value.TargetRevision < 0)
+            return false;
+        if (value.MaxHp > 0 && value.CurrentHp > value.MaxHp) return false;
+        if (value.Status == NormalAttackStatus.Applied)
+            return value.Damage > 0 && value.MaxHp > 0 && value.TargetRevision > 0;
+        if (value.Status == NormalAttackStatus.Miss)
+            return value.Damage == 0 && value.MaxHp > 0 && value.TargetRevision > 0;
+        return value.Damage == 0;
+    }
+
     private static bool ValidMonsterState(MonsterStateWire value) =>
         value.ReceiverMapEpoch > 0 && value.ServerTick >= 0 &&
         value.EntityId > 0 && value.EnemyId > 0 && value.SourceIndex >= 0 &&
@@ -619,6 +704,7 @@ public static class WireProtocol
         {
             1 => WireOpcode.MoveTarget, 2 => WireOpcode.MoveReceipt,
             3 => WireOpcode.NpcInteract, 4 => WireOpcode.NpcInteractResult,
+            5 => WireOpcode.NormalAttack, 6 => WireOpcode.NormalAttackResult,
             10 => WireOpcode.AuthRequest, 11 => WireOpcode.AuthResult,
             12 => WireOpcode.CharacterList, 13 => WireOpcode.CharacterChoose,
             14 => WireOpcode.CharacterChooseResult,
@@ -635,6 +721,8 @@ public static class WireProtocol
             WireOpcode.MoveReceipt => advertised == MoveReceiptFrameBytes,
             WireOpcode.NpcInteract => advertised == NpcInteractFrameBytes,
             WireOpcode.NpcInteractResult => advertised == NpcInteractResultFrameBytes,
+            WireOpcode.NormalAttack => advertised == NormalAttackFrameBytes,
+            WireOpcode.NormalAttackResult => advertised == NormalAttackResultFrameBytes,
             WireOpcode.AuthRequest => advertised is >= 23 and <= MaxAuthRequestFrameBytes,
             WireOpcode.AuthResult => advertised == AuthResultFrameBytes,
             WireOpcode.CharacterList => advertised is >= 9 and <= MaxCharacterListFrameBytes,

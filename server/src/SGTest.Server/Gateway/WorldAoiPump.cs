@@ -63,6 +63,29 @@ public sealed class WorldAoiPump
                 while (_router.ResyncRequests.TryRead(out var request))
                     _aoi.TryResync(request);
 
+                while (_router.AttackRequests.TryRead(out var attack))
+                {
+                    NormalAttackOutcome outcome = _monsters is null
+                        ? new(NormalAttackStatus.CombatUnavailable,
+                            Math.Max(0, _aoi.LastTick), attack.TargetEntityId,
+                            0, 0, 0, 0)
+                        : _monsters.ResolveNormalAttack(attack);
+
+                    if (outcome.Status == NormalAttackStatus.Applied &&
+                        outcome.Monster is { } changed)
+                        _aoi.ApplyMonsters(_aoi.LastTick, [changed]);
+
+                    var sent = _router.QueueNormalAttackResult(attack, outcome);
+                    if (sent is GatewaySendStatus.GenerationMismatch or GatewaySendStatus.Closed)
+                        continue;
+                    if (sent == GatewaySendStatus.Backpressured)
+                        throw new AoiBackpressureException(
+                            "Authenticated Gateway combat FIFO full; result cannot be dropped");
+                    if (sent != GatewaySendStatus.Enqueued)
+                        throw new InvalidOperationException("Combat delivery accounting diverged");
+                    Interlocked.Increment(ref _framesQueued);
+                }
+
                 foreach (var receiver in _router.SnapshotActiveBindings())
                 {
                     for (int count = 0; count < _options.MaxFramesPerObserverPerPoll; count++)

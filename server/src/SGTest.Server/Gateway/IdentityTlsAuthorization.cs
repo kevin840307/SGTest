@@ -130,7 +130,8 @@ public sealed class IdentityTlsAuthorization
                 };
             return await TlsWireConnection.RunServerAsync(client, certificate,
                 Authorize, _world.TryPostMove, options, cancellationToken, Release,
-                npcHandler, router.TryRequestResync).ConfigureAwait(false);
+                npcHandler, router.TryRequestResync,
+                router.TryRequestNormalAttack).ConfigureAwait(false);
         }
         finally
         {
@@ -192,6 +193,12 @@ public sealed class IdentityTlsAuthorization
             return null;
         }
 
+        CharacterCombatProfile? combat = await _identity.GetCharacterCombatProfileAsync(
+            character.CharacterId, cancellationToken).ConfigureAwait(false);
+        TrustedCombatProfile? trustedCombat = combat is null ? null : new(
+            combat.Data.Attack, combat.Data.Defense, combat.Data.Hit, combat.Data.Dodge,
+            combat.Data.AttackRange, combat.Data.AttackCooldownTicks);
+
         // Do not cancel ONLY the waiter: the trusted World queue may finish
         // registration after the TLS authorization timeout, leaking a character.
         ActorSnapshot? actor;
@@ -221,7 +228,8 @@ public sealed class IdentityTlsAuthorization
                 CharacterChooseWireStatus.Success, snapshot.ActorId, snapshot.MapId,
                 snapshot.X, snapshot.Y, snapshot.MapEpoch)), cancellationToken).ConfigureAwait(false);
             cancellationToken.ThrowIfCancellationRequested();
-            var gateway = new GatewayConnection(snapshot);
+            var gateway = new GatewayConnection(
+                snapshot, combatProfile: trustedCombat);
             completed = true;
             return gateway;
         }

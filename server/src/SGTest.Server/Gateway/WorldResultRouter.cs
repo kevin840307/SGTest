@@ -6,7 +6,8 @@ namespace SGTest.Server.Gateway;
 public sealed record WorldResultRouterOptions(
     int ChangedBatchCapacity = 128,
     int MaxSessions = 10000,
-    int ResyncRequestCapacity = 256);
+    int ResyncRequestCapacity = 256,
+    int AttackRequestCapacity = 256);
 
 /// <summary>
 /// Raw authoritative changed actors, NOT yet filtered by AOI.
@@ -42,6 +43,7 @@ public sealed class WorldResultRouter
     private readonly Dictionary<long, GatewayConnection> _connections = new();
     private readonly Channel<WorldChangedBatch> _changed;
     private readonly Channel<TrustedWorldResyncRequest> _resync;
+    private readonly Channel<TrustedNormalAttack> _attacks;
     private readonly WorldResultRouterOptions _options;
     private readonly Action<WorldChangedBatch>? _changedObserver;
     private long _queued, _stale, _changedQueued, _backpressure;
@@ -54,7 +56,8 @@ public sealed class WorldResultRouter
         _changedObserver = changedObserver;
         if (_options.ChangedBatchCapacity is < 1 or > 65536 ||
             _options.MaxSessions is < 1 or > 100000 ||
-            _options.ResyncRequestCapacity is < 1 or > 65536)
+            _options.ResyncRequestCapacity is < 1 or > 65536 ||
+            _options.AttackRequestCapacity is < 1 or > 65536)
             throw new ArgumentOutOfRangeException(nameof(options));
         _changed = Channel.CreateBounded<WorldChangedBatch>(
             new BoundedChannelOptions(_options.ChangedBatchCapacity)
@@ -72,10 +75,19 @@ public sealed class WorldResultRouter
                 FullMode = BoundedChannelFullMode.Wait,
                 AllowSynchronousContinuations = false
             });
+        _attacks = Channel.CreateBounded<TrustedNormalAttack>(
+            new BoundedChannelOptions(_options.AttackRequestCapacity)
+            {
+                SingleReader = true,
+                SingleWriter = false,
+                FullMode = BoundedChannelFullMode.Wait,
+                AllowSynchronousContinuations = false
+            });
     }
 
     public ChannelReader<WorldChangedBatch> ChangedBatches => _changed.Reader;
     public ChannelReader<TrustedWorldResyncRequest> ResyncRequests => _resync.Reader;
+    public ChannelReader<TrustedNormalAttack> AttackRequests => _attacks.Reader;
 
     public WorldResultRouterStatistics Statistics
     {
@@ -250,6 +262,35 @@ public sealed class WorldResultRouter
         }
     }
 
+    public bool TryRequestNormalAttack(TrustedNormalAttack request)
+    {
+        if (request.ActorId <= 0 || request.ConnectionEpoch <= 0 ||
+            request.RequestMapEpoch <= 0 || request.AttackSequence == 0 ||
+            request.TargetEntityId <= 0)
+            return false;
+        lock (_gate)
+        {
+            if (!_connections.TryGetValue(request.ActorId, out var connection) ||
+                connection.IsClosed ||
+                connection.Binding.ActorId != request.ActorId ||
+                connection.Binding.ConnectionEpoch != request.ConnectionEpoch)
+                return false;
+        }
+        return _attacks.Writer.TryWrite(request);
+    }
+
+    public GatewaySendStatus QueueNormalAttackResult(
+        TrustedNormalAttack request, NormalAttackOutcome outcome)
+    {
+        lock (_gate)
+        {
+            if (!_connections.TryGetValue(request.ActorId, out var connection) ||
+                connection.IsClosed)
+                return GatewaySendStatus.Closed;
+            return connection.QueueNormalAttackResult(request, outcome);
+        }
+    }
+
     public bool TryRequestResync(TrustedWorldResyncRequest request)
     {
         if (request.ActorId <= 0 || request.ConnectionEpoch <= 0 || request.MapEpoch <= 0)
@@ -357,6 +398,7 @@ public sealed class WorldResultRouter
         {
             _changed.Writer.TryComplete(fault);
             _resync.Writer.TryComplete(fault);
+            _attacks.Writer.TryComplete(fault);
         }
     }
 

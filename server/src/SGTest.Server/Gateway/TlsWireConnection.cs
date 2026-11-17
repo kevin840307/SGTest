@@ -57,7 +57,8 @@ public static class TlsWireConnection
         CancellationToken cancellationToken = default,
         Func<ConnectionBinding, Task>? releaseBoundSession = null,
         Func<TrustedNpcInteraction, Task<NpcPortalOutcome>>? handleNpc = null,
-        Func<TrustedWorldResyncRequest, bool>? postResync = null)
+        Func<TrustedWorldResyncRequest, bool>? postResync = null,
+        Func<TrustedNormalAttack, bool>? postAttack = null)
     {
         ArgumentNullException.ThrowIfNull(client);
         ArgumentNullException.ThrowIfNull(serverCertificate);
@@ -209,7 +210,8 @@ public static class TlsWireConnection
                     }
 
                     var status = gateway.FeedClientBytes(
-                        rented.AsSpan(0, count), postMove, out int accepted, postNpc, postResync);
+                        rented.AsSpan(0, count), postMove, out int accepted,
+                        postNpc, postResync, postAttack);
                     commandsAccepted += accepted;
 
                     if (status == WireFeedStatus.Backpressured)
@@ -228,7 +230,7 @@ public static class TlsWireConnection
                                 configured.BackpressureRetryMilliseconds, sessionCts.Token)
                                 .ConfigureAwait(false);
                             status = gateway.ResumeClientIngress(
-                                postMove, out accepted, postNpc, postResync);
+                                postMove, out accepted, postNpc, postResync, postAttack);
                             commandsAccepted += accepted;
                         }
                         while (status == WireFeedStatus.Backpressured);
