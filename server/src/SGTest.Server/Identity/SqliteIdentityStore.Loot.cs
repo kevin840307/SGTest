@@ -202,7 +202,7 @@ VALUES($actor,$item,$quantity,$drop,$now);";
             insert.Parameters.AddWithValue("$now", DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
             if (insert.ExecuteNonQuery() != 1)
                 throw new InvalidOperationException("Inventory grant failed");
-            long itemUid = connection.LastInsertRowId;
+            long itemUid = ScalarLong(connection, "SELECT last_insert_rowid();", tx);
             tx.Commit();
             return new PickupResult(PickupStatus.Granted, dropId, itemUid,
                 drop.ItemDefinitionId, drop.Quantity);

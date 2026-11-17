@@ -12,7 +12,7 @@ internal static class GroundLootChecks
             () => ConcurrentClaims(root).GetAwaiter().GetResult());
     }
 
-    private static async Task<(SqliteIdentityStore Store,long A,long B)> Setup(string root, string suffix)
+    private static async Task<(SqliteIdentityStore Store,string Database,long A,long B)> Setup(string root, string suffix)
     {
         string db=Path.Combine(root,"loot-"+suffix+"-"+Guid.NewGuid().ToString("N")+".db");
         var store=new SqliteIdentityStore(db);
@@ -23,7 +23,7 @@ internal static class GroundLootChecks
             new CharacterSpawn(13,24,24))).Character!.CharacterId;
         long b=(await store.CreateCharacterAsync(account,1,"Loot"+suffix+"B",
             new CharacterSpawn(13,24,24))).Character!.CharacterId;
-        return (store,a,b);
+        return (store,db,a,b);
     }
 
     private static TrustedDropSpawn Drop(long death=9, int slot=0) =>
@@ -35,7 +35,7 @@ internal static class GroundLootChecks
 
     private static async Task IdempotentSpawn(string root)
     {
-        var (store,a,_)=await Setup(root,"spawn");
+        var (store,_,a,_)=await Setup(root,"spawn");
         using(store)
         {
             var first=await store.CreateTrustedGroundDropAsync(Drop());
@@ -62,7 +62,7 @@ internal static class GroundLootChecks
 
     private static async Task PickupGuards(string root)
     {
-        var (store,a,b)=await Setup(root,"guards");
+        var (store,_,a,b)=await Setup(root,"guards");
         using(store)
         {
             var d=await store.CreateTrustedGroundDropAsync(Drop());
@@ -101,7 +101,7 @@ internal static class GroundLootChecks
 
     private static async Task ConcurrentClaims(string root)
     {
-        var (store,a,b)=await Setup(root,"race");
+        var (store,db,a,b)=await Setup(root,"race");
         using(store)
         {
             var d=await store.CreateTrustedGroundDropAsync(Drop());
@@ -121,8 +121,19 @@ internal static class GroundLootChecks
                 "race awarded inventory to incorrect character");
         }
 
-        // A new process reopening this same DB must see the committed result.
-        // The parent store's connection has already been disposed.
-        // Reopen uses the test setup store's path, not a new test database.
+        using var reopened = new SqliteIdentityStore(db);
+        await reopened.InitializeAsync();
+        var winnerAfterRestart = (await reopened.ListInventoryItemsAsync(a))
+            .Concat(await reopened.ListInventoryItemsAsync(b)).ToArray();
+        Checks.Require(winnerAfterRestart.Length==1 &&
+            winnerAfterRestart[0].SourceDropId>0 &&
+            (await reopened.ListActiveGroundDropsAsync(13)).Count==0,
+            "restart lost claim or duplicated inventory");
+        long persistedOwner=winnerAfterRestart[0].CharacterId;
+        var replay = await reopened.ClaimGroundDropAsync(Actor(persistedOwner),
+            winnerAfterRestart[0].SourceDropId);
+        Checks.Require(replay.Status==PickupStatus.AlreadyGranted &&
+            replay.ItemUid==winnerAfterRestart[0].ItemUid,
+            "restart failed to return the same durable inventory UID on replay");
     }
 }
