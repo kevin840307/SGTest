@@ -210,6 +210,11 @@ internal static class IdentityAdminChecks
                 Checks.Require(WireProtocol.TryDecodeCharacterChooseResult(await Read(tls),out var choose) &&
                     choose.Status==CharacterChooseWireStatus.Success && choose.MapId==15 && choose.X==24 && choose.Y==24,
                     "Host did not enter explicit validated spawn");
+                Checks.Require(WireProtocol.TryDecodeInventorySnapshot(await Read(tls),out var inventory) &&
+                    inventory is not null && inventory.CharacterId==choose.CharacterId &&
+                    inventory.StartIndex==0 && inventory.Complete &&
+                    inventory.Items.Count==0,
+                    "fresh CLI character did not receive complete empty inventory baseline");
                 Checks.Require(WireProtocol.TryDecodeWorldReady(await Read(tls),out var world) && world.ReceiverMapEpoch==choose.MapEpoch,
                     "Host did not deliver WorldReady after provisioned login");
                 await tls.WriteAsync(WireProtocol.EncodeWorldReadyAck(
