@@ -267,7 +267,7 @@ public sealed class WorldResultRouter
 
     /// <summary>
     /// Synchronous bounded fanout, called by exactly one result-consumer.
-    /// Changed batches are retained first: overflow fails before any receipt
+    /// Every authoritative World Tick is retained first: overflow fails before any receipt
     /// in this Tick is enqueued. Receipt queue overflow also fails closed.
     /// A failure is terminal for the caller's result pump; never retry a
     /// partially routed Tick (which could duplicate reliable events).
@@ -277,16 +277,17 @@ public sealed class WorldResultRouter
         ArgumentNullException.ThrowIfNull(tick);
         if (tick.Tick < 0) throw new ArgumentOutOfRangeException(nameof(tick));
 
-        if (tick.Changed.Count > 0 || tick.Lifecycle is { Count: > 0 })
-        {
-            var batch = new WorldChangedBatch(tick.Tick, tick.Changed, tick.Lifecycle);
-            if (!_changed.Writer.TryWrite(batch))
-                FailBackpressure("Authoritative Changed output queue full; AOI consumer is too slow");
-            Interlocked.Increment(ref _changedQueued);
-            // Observer contract is memory-only/nonblocking. Any exception is
-            // terminal for this one-shot router Tick; never retry a partial Tick.
-            _changedObserver?.Invoke(batch);
-        }
+        // Preserve EVERY authoritative World Tick on the single AOI/AI timeline.
+        // An empty player Changed/Lifecycle batch is still the clock source for
+        // map-local monster AI. It produces no player AOI traffic by itself.
+        // This avoids introducing a second independent AI timer/scheduler.
+        var batch = new WorldChangedBatch(tick.Tick, tick.Changed, tick.Lifecycle);
+        if (!_changed.Writer.TryWrite(batch))
+            FailBackpressure("Authoritative World Tick output queue full; AOI/AI consumer is too slow");
+        Interlocked.Increment(ref _changedQueued);
+        // Observer contract is memory-only/nonblocking. Position checkpointing
+        // ignores empty actor batches; no SQLite work occurs in this call.
+        _changedObserver?.Invoke(batch);
 
         lock (_gate)
         {
@@ -333,7 +334,7 @@ public sealed class WorldResultRouter
         }
     }
 
-    /// <summary>Consumes host results independently of render/gameplay Tick.</summary>
+    /// <summary>Consumes every host Tick exactly once, independently of render cadence.</summary>
     public async Task RunAsync(ChannelReader<WorldTickResult> source,
                                CancellationToken cancellationToken = default)
     {

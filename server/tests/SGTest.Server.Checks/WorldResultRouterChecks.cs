@@ -23,6 +23,8 @@ internal static class WorldResultRouterChecks
         Checks.Run("router fails closed on bounded delta or reliable output overflow", Backpressure);
         Checks.Run("router consumes a bounded world result channel exactly once",
             () => SourcePump().GetAwaiter().GetResult());
+        Checks.Run("router preserves empty authoritative ticks for shared AOI/AI clock",
+            EmptyTickClock);
         Checks.Run("live 30Hz host routes concurrent player receipts through bounded gateway queues",
             () => LiveTwoActors(root).GetAwaiter().GetResult());
     }
@@ -127,6 +129,23 @@ internal static class WorldResultRouterChecks
                 "reliable queue overflow was hidden or retried with duplication");
         Require(!router.TryAttach(new GatewayConnection(Actor(1))),
             "same generation duplicate login replaced valid session");
+    }
+
+    private static void EmptyTickClock()
+    {
+        var router = new WorldResultRouter(
+            new WorldResultRouterOptions(ChangedBatchCapacity: 2));
+        router.Route(new WorldTickResult(10,
+            Array.Empty<MoveReceipt>(), Array.Empty<ActorSnapshot>()));
+        router.Route(new WorldTickResult(11,
+            Array.Empty<MoveReceipt>(), Array.Empty<ActorSnapshot>()));
+        Require(router.ChangedBatches.TryRead(out var first) &&
+                first.Tick == 10 && first.Changed.Count == 0 &&
+                (first.Lifecycle is null || first.Lifecycle.Count == 0) &&
+                router.ChangedBatches.TryRead(out var second) &&
+                second.Tick == 11 && second.Changed.Count == 0 &&
+                router.Statistics.ChangedBatchesQueued == 2,
+                "empty World ticks were not retained in order");
     }
 
     private static async Task SourcePump()
