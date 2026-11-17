@@ -261,3 +261,23 @@ The single `MonsterWorldCoordinator` resolves request MapEpoch, per-session Atta
 A successful attack produces two different authoritative outputs with separate responsibilities: `NormalAttackResult` is a requester reliable result for damage/MISS/rejection/UI, while monster HP/state/revision is changed only by the existing shared `MonsterDelta` AOI stream. Godot stores the reliable result but never mutates `WorldState.monsters` from it; duplicate results are idempotently stale, future unsent sequences fail closed, and map transfer resets attack sequence state.
 
 Server core 44038307685 passes 108/108 checks. Client core 44038307692 passes the codec/reducer gate and a real Godot→C# TLS E2E using an explicitly `SyntheticTest` combat profile: the client sends only the target intent, Server applies 60 damage to a 100-HP authoritative monster, reliable result reports 40 HP, and the shared MonsterDelta independently reaches the same HP/revision. Existing TLS reconnect, two-client AOI/cross-map/NPC and formal Host + two real main scenes remain green.
+
+
+### 2026-11-17 Durable monster → player damage / death
+
+V1 adds two Server→Godot player-combat frames:
+
+| Opcode | Direction | Bytes | Payload |
+|---|---|---:|---|
+| 7 PlayerCombatState | Server→Godot | 24 | `int64 MapEpoch; int32 CurrentHP; int32 MaxHP` |
+| 8 PlayerDamage | Server→Godot | 57 | MapEpoch, DamageSequence, ServerTick, attacker Monster EntityId/revision, Damage, CurrentHP/MaxHP, Died |
+
+For authenticated characters with a stored combat profile, `PlayerCombatState` is sent after successful CharacterChoose and before WorldReady. A character with no verified/synthetic profile gets no invented HP baseline and is not admitted as a Monster combat target.
+
+`PlayerCombatSettlement` is the only durability owner for Monster→Player HP. The 30Hz World/Monster/AOI path performs no SQLite I/O: it reserves projected HP in bounded memory and posts a trusted hit. Projected HP prevents extra same-tick hits after lethal damage. A single background writer commits SQLite, compares the transaction's actual Damage/HP with the reserved timeline, and only then queues `PlayerDamage` into the authenticated Gateway reliable FIFO. Drain completion occurs after reliable queue admission, so map transfer/disconnect cannot advance generation ahead of a committed old-generation Damage/Death result.
+
+The combat state starts suspended when CharacterChoose registers the actor. It becomes targetable only after the Gateway route itself is attached, closing the race where AI could commit damage before any socket route existed. Portal transfer and socket release suspend/close and drain the combat timeline before changing MapEpoch or detaching. Reconnect therefore obtains the durable current HP baseline instead of an older pre-hit value.
+
+Godot treats `PlayerDamage` as the sole own-HP damage authority: exact/current MapEpoch only, strictly contiguous DamageSequence, monotonic per-damage ServerTick, explicit Died↔HP=0 consistency, stale old-map/duplicate events ignored, gaps/future generation fail closed. Client death blocks Move/NPC/NormalAttack before any packet is sent. The current damage compatibility rule is `max(1, MonsterAttackDamage - Defense/5)`, inherited from the public compatibility implementation; it is **not a verified claim about the original legacy DEF/MISS/crit formula**.
+
+Server core 44041147095 passes 114/114 checks; Client core 44041146895 passes reducer and true TLS two-way combat: synthetic player Attack60 reduces Monster 100→40, one synthetic Monster raw20 hit against Defense10 commits 18 damage and Player 100→82, with the durable PlayerDamage event observed only after DB commit. Existing reconnect, cross-map, NPC and formal Host regressions remain green.
