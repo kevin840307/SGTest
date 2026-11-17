@@ -44,10 +44,13 @@ def main() -> int:
     fixture = repo / "server/tests/SGTest.Server.LoginFixture/SGTest.Server.LoginFixture.csproj"
     env = os.environ.copy()
     env["DOTNET_CLI_UI_LANGUAGE"] = "en-US"
+    # Build time is environment/setup work, not an E2E gameplay deadline.
+    # GitHub-hosted runners can occasionally cross the historical 30s default
+    # on a cold NuGet/MSBuild path; keep gameplay timeouts unchanged.
     build = subprocess.run(
         ["dotnet", "build", str(fixture), "-c", "Release", "--nologo"],
         cwd=repo, env=env, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-        timeout=args.timeout)
+        timeout=max(90.0, args.timeout))
     if build.returncode != 0:
         print(build.stdout)
         return 2
