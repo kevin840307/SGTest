@@ -1,4 +1,5 @@
 using SGTest.Server.World;
+using SGTest.Server.Identity;
 
 namespace SGTest.Server.Gateway;
 
@@ -15,7 +16,8 @@ public sealed record WorldAoiOptions(
 public enum AoiEventKind : byte
 {
     WorldReady, Spawn, Delta, Despawn, SelfState,
-    MonsterSpawn, MonsterDelta, MonsterDespawn
+    MonsterSpawn, MonsterDelta, MonsterDespawn,
+    GroundDropSpawn, GroundDropDespawn
 }
 
 /// <summary>
@@ -26,7 +28,8 @@ public enum AoiEventKind : byte
 public readonly record struct AoiEvent(
     AoiEventKind Kind, long Tick, long ReceiverMapEpoch,
     ActorSnapshot? Entity = null, long EntityActorId = 0, long EntityConnectionEpoch = 0,
-    MonsterSnapshot? Monster = null, long MonsterEntityId = 0, long MonsterRevision = 0);
+    MonsterSnapshot? Monster = null, long MonsterEntityId = 0, long MonsterRevision = 0,
+    GroundDropRecord? GroundDrop = null, long GroundDropId = 0);
 
 public sealed class AoiBackpressureException : Exception
 {
@@ -49,6 +52,8 @@ public sealed class WorldAoi
     private readonly Dictionary<long, ActorSnapshot> _entities = new();
     private readonly Dictionary<(int Map, int X, int Y), HashSet<long>> _buckets = new();
     private readonly Dictionary<long, MonsterSnapshot> _monsters = new();
+    private readonly Dictionary<long, GroundDropRecord> _groundDrops = new();
+    private readonly Dictionary<(int Map, int X, int Y), HashSet<long>> _groundBuckets = new();
     private readonly Dictionary<(int Map, int X, int Y), HashSet<long>> _monsterBuckets = new();
     private readonly Dictionary<long, Observer> _observers = new();
     private long _lastTick;
@@ -60,6 +65,7 @@ public sealed class WorldAoi
         public ActorSnapshot Self;
         public readonly Dictionary<long, Seen> Visible = new();
         public readonly Dictionary<long, long> VisibleMonsters = new();
+        public readonly HashSet<long> VisibleGroundDrops = new();
         public readonly Queue<AoiEvent> Pending = new();
 
         public Observer(ActorSnapshot actor) => Self = actor;
@@ -81,7 +87,8 @@ public sealed class WorldAoi
 
     public int EntityCount => _entities.Count;
     public int MonsterCount => _monsters.Count;
-    public int TrackedEntityCount => _entities.Count + _monsters.Count;
+    public int GroundDropCount => _groundDrops.Count;
+    public int TrackedEntityCount => _entities.Count + _monsters.Count + _groundDrops.Count;
     public int ObserverCount => _observers.Count;
     public long LastTick => _lastTick;
 
@@ -137,6 +144,7 @@ public sealed class WorldAoi
         observer.Pending.Clear();
         observer.Visible.Clear();
         observer.VisibleMonsters.Clear();
+        observer.VisibleGroundDrops.Clear();
         observer.Self = current;
         Enqueue(observer, new(AoiEventKind.WorldReady, _lastTick, current.MapEpoch, current));
         Enqueue(observer, new(AoiEventKind.SelfState, _lastTick, current.MapEpoch, current));
@@ -208,12 +216,111 @@ public sealed class WorldAoi
             ChangedMonster(monster, tick);
     }
 
+    /// <summary>Restore committed active drops before the first World batch.
+    /// No database call runs inside this AOI class or on the World tick.</summary>
+    public void SeedGroundDrops(IReadOnlyList<GroundDropRecord> active)
+    {
+        ArgumentNullException.ThrowIfNull(active);
+        if (_lastTick != 0 || _observers.Count != 0 || _groundDrops.Count != 0)
+            throw new InvalidOperationException(
+                "Ground drop bootstrap must occur before the first AOI World tick");
+        foreach (var drop in active)
+            StageGroundDrop(drop);
+    }
+
+    /// <summary>Apply one committed SQLite batch on the existing AOI owner,
+    /// using the current authoritative World Tick; no extra AOI engine.</summary>
+    public void ApplyGroundDrops(long tick, IReadOnlyList<GroundDropRecord> committed)
+    {
+        ArgumentNullException.ThrowIfNull(committed);
+        if (tick <= 0 || tick != _lastTick)
+            throw new InvalidOperationException("Drops must share an active AOI World tick");
+        foreach (var drop in committed)
+        {
+            if (!StageGroundDrop(drop)) continue;
+            foreach (var observer in _observers.Values)
+                if (observer.Self.MapId == drop.MapId)
+                    RefreshGroundDrop(observer,drop,tick);
+        }
+    }
+
+    /// <summary>Used after a future authoritative pickup commits. A picked
+    /// drop leaves all nearby observers via the same reliable AOI FIFO.</summary>
+    public void RemoveGroundDrop(long tick,long dropId)
+    {
+        if (tick <= 0 || tick != _lastTick || dropId <= 0)
+            throw new ArgumentOutOfRangeException(nameof(dropId));
+        if (!_groundDrops.Remove(dropId,out var drop)) return;
+        RemoveGroundBucket(drop);
+        foreach (var observer in _observers.Values)
+            if (observer.VisibleGroundDrops.Remove(dropId))
+                Enqueue(observer,new(AoiEventKind.GroundDropDespawn,tick,
+                    observer.Self.MapEpoch,GroundDropId:dropId));
+    }
+
+    private bool StageGroundDrop(GroundDropRecord drop)
+    {
+        if (drop.DropId <= 0 || drop.MapId is < 1 or > 65535 ||
+            !double.IsFinite(drop.X) || !double.IsFinite(drop.Y) ||
+            drop.X < 0 || drop.Y < 0 ||
+            drop.ItemDefinitionId is < 1 or > 100_000_000 ||
+            drop.Quantity is < 1 or > 1_000_000 ||
+            drop.PickedByCharacterId is not null)
+            throw new InvalidOperationException("Invalid committed ground drop");
+        if (_groundDrops.TryGetValue(drop.DropId,out var prior))
+        {
+            if (prior != drop)
+                throw new InvalidOperationException("Immutable drop UID content changed");
+            return false;
+        }
+        if (TrackedEntityCount >= _limits.MaxEntities)
+            throw new AoiBackpressureException("Ground drop AOI entity capacity exceeded");
+        _groundDrops.Add(drop.DropId,drop);
+        var key=(drop.MapId,Bucket(drop.X),Bucket(drop.Y));
+        if(!_groundBuckets.TryGetValue(key,out var entries))
+            _groundBuckets.Add(key,entries=new HashSet<long>());
+        entries.Add(drop.DropId);
+        return true;
+    }
+
+    private void RefreshGroundDrop(Observer observer,GroundDropRecord drop,long tick)
+    {
+        bool visible=observer.VisibleGroundDrops.Contains(drop.DropId);
+        if (!Within(observer.Self,drop,visible))
+        {
+            if (visible)
+            {
+                observer.VisibleGroundDrops.Remove(drop.DropId);
+                Enqueue(observer,new(AoiEventKind.GroundDropDespawn,tick,
+                    observer.Self.MapEpoch,GroundDropId:drop.DropId));
+            }
+            return;
+        }
+        if (visible) return; // immutable until picked, never per-tick resend
+        if (observer.Visible.Count + observer.VisibleMonsters.Count +
+            observer.VisibleGroundDrops.Count >= _limits.MaxVisiblePerObserver)
+            throw new AoiBackpressureException("AOI visible ground entity cap exceeded");
+        observer.VisibleGroundDrops.Add(drop.DropId);
+        Enqueue(observer,new(AoiEventKind.GroundDropSpawn,tick,
+            observer.Self.MapEpoch,GroundDrop:drop));
+    }
+
+    private void RemoveGroundBucket(GroundDropRecord drop)
+    {
+        var key=(drop.MapId,Bucket(drop.X),Bucket(drop.Y));
+        if(_groundBuckets.TryGetValue(key,out var entries))
+        {
+            entries.Remove(drop.DropId);
+            if(entries.Count==0) _groundBuckets.Remove(key);
+        }
+    }
+
     private void Joined(ActorSnapshot actor, long tick)
     {
         ValidateActor(actor);
         if (_entities.ContainsKey(actor.ActorId))
             throw new InvalidOperationException("AOI received Join without preceding trusted Leave");
-        if (_entities.Count + _monsters.Count >= _limits.MaxEntities ||
+        if (TrackedEntityCount >= _limits.MaxEntities ||
             _observers.Count >= _limits.MaxObservers)
             throw new AoiBackpressureException("AOI entity/observer capacity exceeded");
 
@@ -287,7 +394,7 @@ public sealed class WorldAoi
         ValidateMonster(monster);
         if (!_monsters.TryGetValue(monster.EntityId, out var previous))
         {
-            if (_entities.Count + _monsters.Count >= _limits.MaxEntities)
+            if (TrackedEntityCount >= _limits.MaxEntities)
                 throw new AoiBackpressureException("AOI entity capacity exceeded");
             StoreMonster(monster);
             return true;
@@ -321,6 +428,16 @@ public sealed class WorldAoi
                 observer.Visible.Remove(entry.Key);
                 Enqueue(observer, new(AoiEventKind.Despawn, tick,
                     viewer.MapEpoch, null, entry.Key, entry.Value.ConnectionEpoch));
+            }
+        }
+        foreach (var entry in observer.VisibleGroundDrops.ToArray())
+        {
+            if (!_groundDrops.TryGetValue(entry,out var drop) ||
+                !Within(viewer,drop,true))
+            {
+                observer.VisibleGroundDrops.Remove(entry);
+                Enqueue(observer,new(AoiEventKind.GroundDropDespawn,tick,
+                    viewer.MapEpoch,GroundDropId:entry));
             }
         }
         foreach (var entry in observer.VisibleMonsters.ToArray())
@@ -359,6 +476,15 @@ public sealed class WorldAoi
         foreach (long id in candidates.OrderBy(id => id))
             if (_monsters.TryGetValue(id, out var monster))
                 RefreshMonster(observer, monster, tick);
+
+        candidates.Clear();
+        for (int bx = minX; bx <= maxX; bx++)
+            for (int by = minY; by <= maxY; by++)
+                if (_groundBuckets.TryGetValue((viewer.MapId,bx,by),out var drops))
+                    candidates.UnionWith(drops);
+        foreach(long id in candidates.OrderBy(id=>id))
+            if(_groundDrops.TryGetValue(id,out var drop))
+                RefreshGroundDrop(observer,drop,tick);
     }
 
     private void RefreshEntity(Observer observer, ActorSnapshot actor, long tick)
@@ -377,7 +503,7 @@ public sealed class WorldAoi
         }
         if (!visible)
         {
-            if (observer.Visible.Count + observer.VisibleMonsters.Count >=
+            if (observer.Visible.Count + observer.VisibleMonsters.Count + observer.VisibleGroundDrops.Count >=
                 _limits.MaxVisiblePerObserver)
                 throw new AoiBackpressureException("AOI visible entity cap exceeded");
             observer.Visible.Add(actor.ActorId,
@@ -416,7 +542,7 @@ public sealed class WorldAoi
         }
         if (!visible)
         {
-            if (observer.Visible.Count + observer.VisibleMonsters.Count >=
+            if (observer.Visible.Count + observer.VisibleMonsters.Count + observer.VisibleGroundDrops.Count >=
                 _limits.MaxVisiblePerObserver)
                 throw new AoiBackpressureException("AOI visible entity cap exceeded");
             observer.VisibleMonsters.Add(monster.EntityId, monster.EntityRevision);
@@ -445,6 +571,14 @@ public sealed class WorldAoi
         int margin = alreadyVisible ? _limits.ExitMargin : 0;
         return Math.Abs(viewer.X - monster.X) <= _limits.EnterHalfWidth + margin &&
                Math.Abs(viewer.Y - monster.Y) <= _limits.EnterHalfHeight + margin;
+    }
+
+    private bool Within(ActorSnapshot viewer, GroundDropRecord drop, bool alreadyVisible)
+    {
+        if (viewer.MapId != drop.MapId) return false;
+        int margin=alreadyVisible?_limits.ExitMargin:0;
+        return Math.Abs(viewer.X-drop.X)<=_limits.EnterHalfWidth+margin &&
+               Math.Abs(viewer.Y-drop.Y)<=_limits.EnterHalfHeight+margin;
     }
 
     private static void ValidateMonster(MonsterSnapshot monster)
