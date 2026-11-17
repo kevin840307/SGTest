@@ -8,7 +8,8 @@ public sealed record WorldHostOptions(
     int TickHz = 30,
     int TrustedControlCapacity = 128,
     int MaxTrustedControlsPerTick = 32,
-    int ResultCapacity = 256);
+    int ResultCapacity = 256,
+    bool PublishIdleTicks = false);
 
 /// <summary>
 /// Monotonic fixed-deadline scheduler. No unbounded catch-up burst:
@@ -294,10 +295,13 @@ public sealed class ServerWorldHost : IAsyncDisposable
                 }
 
                 var delta = world.Tick();
-                if (delta.Receipts.Count > 0 || delta.Changed.Count > 0 ||
+                if (_options.PublishIdleTicks ||
+                    delta.Receipts.Count > 0 || delta.Changed.Count > 0 ||
                     delta.Lifecycle is { Count: > 0 })
                 {
-                    // No "DropOldest": movement receipts/deltas cannot vanish behind a slow reader.
+                    // Monster-enabled hosts preserve every authoritative 30Hz
+                    // Tick as the single AI clock. Plain player-only hosts retain
+                    // the low-volume event-only behavior.
                     if (!_results.Writer.TryWrite(delta))
                     {
                         Interlocked.Increment(ref _overflow);

@@ -63,7 +63,11 @@ internal static class TlsHost
                 Path.Combine(root, "maps", id.ToString(), "npcs.json")));
             using var identity = new SqliteIdentityStore(database);
             await identity.InitializeAsync(stop.Token);
-            await using var world = new ServerWorldHost(maps);
+            await using var world = new ServerWorldHost(
+                maps,
+                options: monsters is null
+                    ? null
+                    : new WorldHostOptions(PublishIdleTicks: true));
             var positions = new CharacterPositionCheckpoint(identity,
                 new(IntervalMilliseconds: checkpointMs));
             var router = new WorldResultRouter(changedObserver: positions.Observe);

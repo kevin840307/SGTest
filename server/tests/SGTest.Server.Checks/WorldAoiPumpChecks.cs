@@ -306,7 +306,8 @@ internal static class WorldAoiPumpChecks
                 MaxPathExpandedCells:256));
         var coordinator = new MonsterWorldCoordinator([runtime]);
 
-        await using var host = new ServerWorldHost([grid]);
+        await using var host = new ServerWorldHost(
+            [grid], options:new WorldHostOptions(PublishIdleTicks:true));
         await host.StartAsync();
         var actor = await host.TrustedRegisterAsync(701,106,24,24)
             ?? throw new Exception("monster pipeline actor");

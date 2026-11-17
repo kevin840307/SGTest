@@ -52,6 +52,8 @@ internal static class WorldHostChecks
 
         Checks.Run("real dedicated 30Hz host: trusted register, Move, output, stop and no restart",
             () => LiveHost([first]).GetAwaiter().GetResult());
+        Checks.Run("monster clock opt-in publishes bounded idle 30Hz ticks without changing default host",
+            () => IdleTickPublication([first]).GetAwaiter().GetResult());
 
         Checks.Run("30Hz host serializes trusted two-map transfer and rejects old movement",
             () => TrustedTransfer([first, second]).GetAwaiter().GetResult());
@@ -105,6 +107,38 @@ refused:
         try { await host.StartAsync(); }
         catch (InvalidOperationException) { return; }
         throw new Exception("already-stopped host started twice");
+    }
+
+    private static async Task IdleTickPublication(BlockingGrid[] maps)
+    {
+        await using var defaultHost = new ServerWorldHost(
+            maps, options:new WorldHostOptions(ResultCapacity:16));
+        await defaultHost.StartAsync();
+        var before = defaultHost.Statistics.Ticks;
+        await WaitForTicks(defaultHost,before+4);
+        Require(!defaultHost.Results.TryRead(out _),
+            "player-only host unexpectedly published empty ticks");
+        await defaultHost.StopAsync();
+
+        await using var monsterHost = new ServerWorldHost(
+            maps, options:new WorldHostOptions(ResultCapacity:16,PublishIdleTicks:true));
+        await monsterHost.StartAsync();
+        before = monsterHost.Statistics.Ticks;
+        await WaitForTicks(monsterHost,before+4);
+        int count=0;
+        long prior=0;
+        while (monsterHost.Results.TryRead(out var tick))
+        {
+            Require(tick.Tick>prior && tick.Receipts.Count==0 &&
+                    tick.Changed.Count==0 &&
+                    (tick.Lifecycle is null || tick.Lifecycle.Count==0),
+                    "idle monster clock tick shape/order");
+            prior=tick.Tick;
+            count++;
+        }
+        Require(count>=4 && monsterHost.Statistics.PublishedResults>=count,
+            "monster clock did not publish bounded idle ticks");
+        await monsterHost.StopAsync();
     }
 
     private static async Task TrustedTransfer(BlockingGrid[] maps)
