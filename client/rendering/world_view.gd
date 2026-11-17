@@ -216,3 +216,9 @@ func set_player_snapshot(snapshot: Dictionary) -> void:
 
 func monster_count() -> int:
 	return monsters.count() if phase == "ready" and show_players else 0
+
+
+func pick_monster_at(world_point: Vector2) -> int:
+	if phase != "ready" or not show_players or _player_snapshot.is_empty():
+		return 0
+	return monsters.pick_living_at(world_point,Time.get_ticks_usec())

@@ -117,7 +117,14 @@ func _unhandled_key_input(event: InputEvent) -> void:
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed and session_panel.active and world_view.phase == "ready":
-		session_panel.submit_move(world_view.camera.screen_to_world(event.position))
+		var point: Vector2 = world_view.camera.screen_to_world(event.position)
+		var monster_id: int = world_view.pick_monster_at(point)
+		if monster_id > 0:
+			# A live visible monster takes attack priority over ground movement.
+			# Never fall back to movement when the combat intent is backpressured.
+			session_panel.submit_attack_monster(monster_id)
+		else:
+			session_panel.submit_move(point)
 		get_viewport().set_input_as_handled()
 		return
 	if session_panel.active:

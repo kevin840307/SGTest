@@ -177,6 +177,30 @@ func actors_at(now_usec: int) -> Array:
 func count() -> int:
 	return _monsters.size()
 
+## Presentation-only click hit-test. The Server still validates attack range,
+## target HP, wall collision, cooldown and all actual combat consequences.
+func pick_living_at(point: Vector2, now_usec: int, radius: float = 32.0) -> int:
+	if not point.is_finite() or now_usec < 0 or not is_finite(radius) or radius <= 0.0 or radius > 256.0:
+		return 0
+	var best_id := 0
+	var best_squared := radius*radius
+	var ids: Array = _monsters.keys()
+	ids.sort()
+	for raw_id in ids:
+		var id := int(raw_id)
+		var state: Dictionary = _monsters[id].value
+		if int(state.get("current_hp",0)) <= 0 or int(state.get("state",-1)) == STATE_DEAD:
+			continue
+		var position := position_at(id,now_usec)
+		if not position.is_finite():
+			continue
+		var squared := point.distance_squared_to(position)
+		if squared < best_squared or (is_equal_approx(squared,best_squared) and best_id != 0 and id < best_id):
+			best_id = id
+			best_squared = squared
+	return best_id
+
+
 func position_at(entity_id: int, now_usec: int) -> Vector2:
 	var monster: Dictionary = _monsters.get(entity_id,{})
 	if monster.is_empty():

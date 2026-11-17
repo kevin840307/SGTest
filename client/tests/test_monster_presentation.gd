@@ -52,6 +52,11 @@ func run() -> void:
 		"monsters":{1001:idle}
 	}
 	check(monsters.apply_snapshot(snapshot,0)==OK,"idle snapshot")
+	check(monsters.pick_living_at(Vector2(10,20),0)==1001,
+		"click at living monster did not choose target")
+	check(monsters.pick_living_at(Vector2(500,500),0)==0 and
+		monsters.pick_living_at(Vector2.INF,0)==0,
+		"off-screen/invalid click selected a target")
 	var actors := monsters.actors_at(0)
 	check(actors.size()==1 and actors[0].clip=="NS" and actors[0].asset=="Enemy/en001a",
 		"idle did not use verified S/NS visual mapping")
@@ -128,6 +133,8 @@ func run() -> void:
 	actors=monsters.actors_at(1400000)
 	check(actors.size()==1 and actors[0].clip=="ND" and int(actors[0].frame)==1,
 		"death did not hold verified D/ND terminal frame")
+	check(monsters.pick_living_at(Vector2(float(dead.x),float(dead.y)),1400000)==0,
+		"dead monster could still be selected for an attack")
 
 	# Respawn begins a clean idle state; past damage animation cannot leak.
 	var revived := dead.duplicate(true)
@@ -140,6 +147,8 @@ func run() -> void:
 	actors=monsters.actors_at(1500000)
 	check(actors.size()==1 and actors[0].clip=="NS",
 		"respawn replayed old damage animation")
+	check(monsters.pick_living_at(Vector2(float(revived.x),float(revived.y)),1500000)==1001,
+		"respawn did not restore click selection")
 	var draw := DrawList.new()
 	check(draw.configure({
 		"scenery_schema":"sgtest.scenery/v1",
@@ -161,5 +170,5 @@ func run() -> void:
 	monsters.clear()
 	check(monsters.actors_at(0).is_empty(),"monster clear retained presentation state")
 	if failures.is_empty():
-		print("MONSTER_PRESENTATION_PASS visual_population_only=true stats_ignored=true NS_idle=true NW_move=true FA_attack=true ND_death=true NH_hit_one_shot=true interpolation=true common_draw_order=true")
+		print("MONSTER_PRESENTATION_PASS visual_population_only=true stats_ignored=true NS_idle=true NW_move=true FA_attack=true ND_death=true NH_hit_one_shot=true click_living_attack=true interpolation=true common_draw_order=true")
 	quit(0 if failures.is_empty() else 1)

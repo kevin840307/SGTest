@@ -7,6 +7,12 @@ var app: Node
 
 class RespawnSession extends RefCounted:
 	var requests := 0
+	var attacks := 0
+	func attack_monster(entity_id: int) -> bool:
+		if entity_id <= 0:
+			return false
+		attacks += 1
+		return true
 	func respawn() -> bool:
 		requests += 1
 		return true
@@ -32,6 +38,22 @@ func fail(message: String) -> void:
 		app.session_panel.disconnect_session()
 	push_error("CLIENT_SESSION_UI_FAIL " + message)
 	quit(1)
+
+
+func check_attack_ui(panel,stub) -> void:
+	if not panel.submit_attack_monster(1001) or stub.attacks != 1:
+		fail("Visible monster attack UI did not forward intent")
+		return
+	panel._latest.player_dead = true
+	if panel.submit_attack_monster(1001) or stub.attacks != 1:
+		fail("Dead character attack UI bypassed death gate")
+		return
+	panel._latest.player_dead = false
+	panel._latest.resync_pending = true
+	if panel.submit_attack_monster(1001) or stub.attacks != 1:
+		fail("AOI resync allowed a new attack intent")
+		return
+	panel._latest.resync_pending = false
 
 
 func run() -> void:
@@ -148,9 +170,11 @@ func run() -> void:
 	if panel.respawn_button.visible:
 		fail("Alive player retained respawn button")
 		return
+	panel._latest.player_dead = false
+	check_attack_ui(panel,stub)
 	panel.active = false
 	panel._set_respawn_controls()
 	app.queue_free()
 	await process_frame
-	print("CLIENT_TLS_LOGIN_PASS ui=PASS auth=PASS choose=PASS receipt=PASS world_ready=PASS password_cleared=PASS logout=PASS respawn_ui=PASS")
+	print("CLIENT_TLS_LOGIN_PASS ui=PASS auth=PASS choose=PASS receipt=PASS world_ready=PASS password_cleared=PASS logout=PASS respawn_ui=PASS click_attack_ui=PASS")
 	quit(0)
