@@ -23,9 +23,13 @@ func _initialize()->void:
 		fail("choose",session)
 		return
 	var ready:=_wait(session,func(v):
-		return int(v.state)==WorldState.STATE_IN_WORLD and bool(v.world_ready) and
-			int(v.pending_world_ready_ack_epoch)==0 and
-			int(v.last_world_ready_ack_epoch)==1 and not v.self_state.is_empty(),1800)
+		return (
+			int(v.state)==WorldState.STATE_IN_WORLD
+			and bool(v.world_ready)
+			and int(v.pending_world_ready_ack_epoch)==0
+			and int(v.last_world_ready_ack_epoch)==1
+			and not v.self_state.is_empty()
+		),1800)
 	if ready.is_empty():
 		fail("world ready "+str(session.snapshot()),session)
 		return
@@ -39,10 +43,15 @@ func _initialize()->void:
 		fail("follow-up move rejected",session)
 		return
 	var settled:=_wait(session,func(v):
-		return int(v.movement_sequence)==2 and int(v.last_receipt_sequence)==2 and
-			int(v.last_receipt_status)==0 and not bool(v.self_state.moving) and
-			int(v.self_state.movement_action_sequence)==2 and
-			abs(float(v.x)-40.0)<0.01 and abs(float(v.y)-8.0)<0.01,2200)
+		return (
+			int(v.movement_sequence)==2
+			and int(v.last_receipt_sequence)==2
+			and int(v.last_receipt_status)==0
+			and not bool(v.self_state.moving)
+			and int(v.self_state.movement_action_sequence)==2
+			and abs(float(v.x)-40.0)<0.01
+			and abs(float(v.y)-8.0)<0.01
+		),2200)
 	if settled.is_empty():
 		fail("ordered stop/move did not settle "+str(session.snapshot()),session)
 		return
