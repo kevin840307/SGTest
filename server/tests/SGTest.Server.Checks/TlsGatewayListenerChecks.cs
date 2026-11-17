@@ -23,6 +23,8 @@ internal static class TlsGatewayListenerChecks
             () => Admission(root, true).GetAwaiter().GetResult());
         Checks.Run("TLS listener authenticates reconnect, WorldReady, MoveReceipt and cleans actors on shutdown",
             () => AuthenticatedReconnect(root).GetAwaiter().GetResult());
+        Checks.Run("verified recovery TLS request atomically changes HP and last stack, then relogin persists",
+            () => AuthenticatedRecovery(root).GetAwaiter().GetResult());
         Checks.Run("Plaintext and invalid credentials close only that client and release admission",
             () => UntrustedClients(root).GetAwaiter().GetResult());
         Checks.Run("TLS session infrastructure failure stops admission and is observable by supervisor",
@@ -139,6 +141,114 @@ internal static class TlsGatewayListenerChecks
             fixture.Host.Statistics.ActiveActors == 0 && fixture.Router.Statistics.ActiveSessions == 0,
             "shutdown left authenticated actor/socket/route or incorrect command accounting");
         await Task.WhenAll(listener.DisposeAsync().AsTask(), listener.DisposeAsync().AsTask());
+    }
+
+    private static async Task AuthenticatedRecovery(string root)
+    {
+        await using var fixture=await Fixture.Create(root,withRecovery:true);
+        await using var listener=fixture.Listener(
+            new(MaxConnections:2,MaxConnectionsPerAddress:2));
+        using var stop=new CancellationTokenSource();
+        var run=listener.RunAsync(stop.Token);
+        long firstUid=fixture.InventoryUids[0];
+        long otherUid=fixture.InventoryUids[1];
+
+        async Task<(SslStream Tls,TcpClient Client,long Epoch)> Login()
+        {
+            var client=new TcpClient();
+            await client.ConnectAsync(listener.LocalEndpoint);
+            var tls=new SslStream(client.GetStream(),false,(_,cert,_,_)=>
+                cert?.GetCertHashString()==fixture.Certificate.GetCertHashString());
+            await TlsSocketChecks.AuthenticateClient(tls);
+            await tls.WriteAsync(WireProtocol.EncodeAuthRequest(
+                new("listener_user","Listener-Password-123!")));
+            Checks.Require(WireProtocol.TryDecodeAuthResult(
+                await Read(tls),out var auth) &&
+                auth.Status==AuthWireStatus.Success,
+                "authenticated recovery login denied");
+            Checks.Require(WireProtocol.TryDecodeCharacterList(
+                await Read(tls),out var characters) &&
+                characters.Characters.Count==1,
+                "recovery login character list missing");
+            await tls.WriteAsync(WireProtocol.EncodeCharacterChoose(new(fixture.CharacterId)));
+            Checks.Require(WireProtocol.TryDecodeCharacterChooseResult(
+                await Read(tls),out var selected) &&
+                selected.Status==CharacterChooseWireStatus.Success,
+                "recovery login failed to choose character");
+            Checks.Require(WireProtocol.TryDecodePlayerCombatState(
+                await Read(tls),out var hp) &&
+                hp.MapEpoch==selected.MapEpoch &&
+                hp.CurrentHp is 60 or 100 && hp.MaxHp==100,
+                "recovery did not fetch durable current HP on login");
+            Checks.Require(WireProtocol.TryDecodeInventorySnapshot(
+                await Read(tls),out var inventory) &&
+                inventory is not null && inventory.Complete,
+                "recovery inventory baseline missing");
+            Checks.Require(WireProtocol.TryDecodeWorldReady(
+                await Read(tls),out var ready) &&
+                ready.ReceiverMapEpoch==selected.MapEpoch,
+                "recovery player WorldReady missing");
+            await tls.WriteAsync(WireProtocol.EncodeWorldReadyAck(
+                new(ready.ReceiverMapEpoch,ready.ServerTick)));
+            return (tls,client,selected.MapEpoch);
+        }
+
+        async Task<RecoveryUseResultWire> ReadRecovery(SslStream tls)
+        {
+            for(int i=0;i<32;i++)
+            {
+                var frame=await Read(tls);
+                if(WireProtocol.TryDecodeRecoveryUseResult(frame,out var result))
+                    return result;
+            }
+            throw new Exception("Recovery use result did not arrive in reliable FIFO");
+        }
+
+        var first=await Login();
+        try
+        {
+            await first.Tls.WriteAsync(WireProtocol.EncodeRecoveryUse(
+                new(first.Epoch,1,firstUid)));
+            var granted=await ReadRecovery(first.Tls);
+            Checks.Require(granted.Status==RecoveryUseStatus.Granted &&
+                granted.ItemUid==firstUid && granted.ItemDefinitionId==1001 &&
+                granted.RemainingQuantity==1 && granted.CurrentHp==90 &&
+                granted.MaxHp==100,
+                "authenticated first potion did not restore one amount");
+            await first.Tls.WriteAsync(WireProtocol.EncodeRecoveryUse(
+                new(first.Epoch,1,firstUid)));
+            var repeated=await ReadRecovery(first.Tls);
+            Checks.Require(repeated.Status==RecoveryUseStatus.AlreadyGranted &&
+                repeated.RemainingQuantity==1 && repeated.CurrentHp==90,
+                "TLS replay duplicated recovery consumption");
+            await first.Tls.WriteAsync(WireProtocol.EncodeRecoveryUse(
+                new(first.Epoch,2,firstUid)));
+            var emptied=await ReadRecovery(first.Tls);
+            Checks.Require(emptied.Status==RecoveryUseStatus.Granted &&
+                emptied.RemainingQuantity==0 && emptied.CurrentHp==100,
+                "TLS second potion did not consume last stack");
+            Checks.Require((await fixture.Store.GetCharacterCombatProfileAsync(
+                fixture.CharacterId))?.Data.CurrentHp==100 &&
+                (await fixture.Store.ListInventoryItemsAsync(
+                    fixture.CharacterId)).Select(x=>x.ItemUid)
+                    .SequenceEqual(new[]{otherUid}),
+                "recovery granted wrong persistent inventory/HP after TLS action");
+        }
+        finally
+        {
+            await first.Tls.DisposeAsync();
+            first.Client.Dispose();
+        }
+        await Until(()=>listener.Statistics.ActiveConnections==0);
+        var second=await Login();
+        await second.Tls.DisposeAsync();
+        second.Client.Dispose();
+        await Until(()=>listener.Statistics.ActiveConnections==0);
+        Checks.Require((await fixture.Store.ListInventoryItemsAsync(
+            fixture.CharacterId)).Count==1,
+            "relogin minted consumed recovery stack");
+        stop.Cancel();
+        await run.WaitAsync(TimeSpan.FromSeconds(5));
     }
 
     private static async Task SessionFailure(string root)
@@ -279,8 +389,10 @@ internal static class TlsGatewayListenerChecks
         public required long[] InventoryUids;
         public required Task Routing;
         public required Task Visibility;
+        public CancellationTokenSource? CombatStop;
+        public Task? CombatWorker;
 
-        public static async Task<Fixture> Create(string root)
+        public static async Task<Fixture> Create(string root,bool withRecovery=false)
         {
             string path = Checks.Fixture(root, 115, 4, 4, (_, _) => 0);
             var host = new ServerWorldHost([BlockingGrid.Load(path, 115)]);
@@ -291,10 +403,19 @@ internal static class TlsGatewayListenerChecks
             var character = await store.CreateCharacterAsync(account, 0, "ListenerHero", new(115, 8, 8));
             long characterId=character.Character!.CharacterId;
             long generation=await store.AllocateLootWorldGenerationAsync();
+            if(withRecovery)
+            {
+                await store.SetCharacterCombatProfileAsync(characterId,
+                    new CharacterCombatProfileData(
+                        CombatProfileTrust.SyntheticTest,"ci:tls-verified-recovery",
+                        Race:0,Career:0,Strength:5,Dexterity:5,Constitution:5,Wisdom:5,
+                        Level:1,CurrentHp:60,MaxHp:100,Attack:20,Defense:5,
+                        Hit:10,Dodge:3,AttackRange:48,AttackCooldownTicks:15));
+            }
             var committed=await store.CreateTrustedGroundDropsAsync([
                 new TrustedDropSpawn(115,8,8,1001150001,
                     SqliteIdentityStore.ComposeLootDeathRevision(generation,7),
-                    0,2701,2,LootSourceTrust.SyntheticTest,"ci:inventory-login"),
+                    0,withRecovery?1001:2701,2,LootSourceTrust.SyntheticTest,"ci:inventory-login"),
                 new TrustedDropSpawn(115,8,8,1001150001,
                     SqliteIdentityStore.ComposeLootDeathRevision(generation,7),
                     1,3701,3,LootSourceTrust.SyntheticTest,"ci:inventory-login")
@@ -308,12 +429,24 @@ internal static class TlsGatewayListenerChecks
                     "seed trusted durable inventory before reconnect");
             }
             var saved=await store.ListInventoryItemsAsync(characterId);
-            var router = new WorldResultRouter();
-            var aoi = new WorldAoiPump(router);
-            return new() { Host = host, Store = store, Certificate = TlsSocketChecks.CreateCertificate(),
-                Router = router, Authorization = new(store, host), CharacterId = characterId,
+            var router=new WorldResultRouter();
+            var aoi=new WorldAoiPump(router);
+            var combat=withRecovery ? new PlayerCombatSettlement(
+                store,delivery:router.QueuePlayerDamage) : null;
+            var combatStop=withRecovery ? new CancellationTokenSource() : null;
+            Task? combatWorker=combat is null ? null : combat.RunAsync(combatStop!.Token);
+            IReadOnlyDictionary<int,RecoveryItemRule>? rules=withRecovery
+                ? new Dictionary<int,RecoveryItemRule>{{1001,new(1001,30,1)}} : null;
+            return new() {
+                Host=host,Store=store,Certificate=TlsSocketChecks.CreateCertificate(),
+                Router=router,
+                Authorization=new(store,host,combat:combat,
+                    pickupWorldGeneration:generation,recoveryRules:rules),
+                CharacterId=characterId,
                 InventoryUids=saved.Select(x=>x.ItemUid).ToArray(),
-                Routing = router.RunAsync(host.Results), Visibility = aoi.RunAsync() };
+                Routing=router.RunAsync(host.Results),Visibility=aoi.RunAsync(),
+                CombatStop=combatStop,CombatWorker=combatWorker
+            };
         }
 
         public TlsGatewayListener Listener(TlsGatewayListenerOptions options) =>
@@ -323,6 +456,10 @@ internal static class TlsGatewayListenerChecks
         {
             await Host.StopAsync();
             await Task.WhenAll(Routing, Visibility).WaitAsync(TimeSpan.FromSeconds(5));
+            CombatStop?.Cancel();
+            if(CombatWorker is not null)
+                await CombatWorker.WaitAsync(TimeSpan.FromSeconds(5));
+            CombatStop?.Dispose();
             await Host.DisposeAsync();
             Certificate.Dispose();
             Store.Dispose();
