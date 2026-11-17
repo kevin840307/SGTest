@@ -93,7 +93,7 @@ public sealed class MonsterLootSettlement
     private readonly Dictionary<(int,int),MonsterDropRule[]> _rules;
     private readonly Channel<(MonsterSnapshot Death,MonsterDropRule[] Rules)> _queue;
     // One bounded result per committed death, not one event per drop slot.
-    private readonly Channel<IReadOnlyList<GroundDropRecord>> _committed;
+    private readonly Channel<IReadOnlyList<GroundDropRecord>> _publishedDrops;
     private long _queued,_committed,_drops,_overflow;
     private int _pending,_started;
     private Exception? _fault;
@@ -129,7 +129,7 @@ public sealed class MonsterLootSettlement
                 SingleReader=true,SingleWriter=true,FullMode=BoundedChannelFullMode.Wait,
                 AllowSynchronousContinuations=false
             });
-        _committed=Channel.CreateBounded<IReadOnlyList<GroundDropRecord>>(
+        _publishedDrops=Channel.CreateBounded<IReadOnlyList<GroundDropRecord>>(
             new BoundedChannelOptions(capacity){
                 SingleReader=true,SingleWriter=true,FullMode=BoundedChannelFullMode.Wait,
                 AllowSynchronousContinuations=false
@@ -162,7 +162,7 @@ public sealed class MonsterLootSettlement
         return MonsterLootPostStatus.Enqueued;
     }
 
-    public ChannelReader<IReadOnlyList<GroundDropRecord>> CommittedDrops=>_committed.Reader;
+    public ChannelReader<IReadOnlyList<GroundDropRecord>> CommittedDrops=>_publishedDrops.Reader;
 
     public void Complete()=>_queue.Writer.TryComplete();
 
@@ -184,7 +184,7 @@ public sealed class MonsterLootSettlement
                 var settled=await _store.CreateTrustedGroundDropsAsync(batch);
                 // DB already committed; fatal overflow triggers supervisor
                 // shutdown/restart and bootstrap reload, never silent loss.
-                if(!_committed.Writer.TryWrite(settled))
+                if(!_publishedDrops.Writer.TryWrite(settled))
                     throw new MonsterLootSettlementException(
                         "Ground-drop AOI committed notification queue overflow");
                 Interlocked.Add(ref _drops,settled.Count);
@@ -193,6 +193,6 @@ public sealed class MonsterLootSettlement
             }
         }
         catch(Exception failure){_fault=failure;throw;}
-        finally{_committed.Writer.TryComplete(_fault);}
+        finally{_publishedDrops.Writer.TryComplete(_fault);}
     }
 }
