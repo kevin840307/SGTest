@@ -43,16 +43,17 @@ func configure(population: Dictionary, assets: Dictionary) -> Error:
 		if id <= 0 or _definitions.has(id) or not _safe_sprite(sprite) or not atlas.ends_with("/atlas.json"):
 			clear()
 			return ERR_INVALID_DATA
-		var asset_id := atlas.trim_suffix("/atlas.json")
+		var asset_id: String = atlas.trim_suffix("/atlas.json")
 		if not _safe_path(asset_id) or not assets.has(asset_id):
 			clear()
 			return ERR_INVALID_DATA
 		var manifest: Dictionary = assets[asset_id].get("manifest",{})
 		var logical: Dictionary = manifest.get("logical_views",{})
-		var per_definition := {}
-		for action in ACTIONS:
-			for facing in range(1,9):
-				var key := sprite+"_"+action+str(facing)
+		var per_definition: Dictionary = {}
+		for raw_action in ACTIONS:
+			var action: String = str(raw_action)
+			for facing: int in range(1,9):
+				var key: String = sprite+"_"+action+str(facing)
 				var view = logical.get(key)
 				if not view is Dictionary or not view.has_all(["clip","flip_h","timeline_ticks","loop"]) or not view.flip_h is bool or not view.loop is bool or not manifest.get("clips",{}).has(view.clip):
 					clear()
@@ -108,12 +109,12 @@ func apply_snapshot(snapshot: Dictionary, now_usec: int) -> Error:
 				return ERR_INVALID_DATA
 			if revision < int(old_value.revision):
 				continue
-		var action := _action(state)
-		var generation_changed := old.is_empty()
+		var action: String = _action(state)
+		var generation_changed: bool = old.is_empty()
 		var history = PositionHistory.new() if generation_changed else old.history
 		if not history.push(tick,Vector2(float(value.x),float(value.y)),now_usec):
 			continue
-		var restarted := generation_changed or str(old.action) != action
+		var restarted: bool = generation_changed or str(old.action) != action
 		# Each stationary Attack event advances the authoritative monster revision;
 		# replay FA from frame zero. Chase/Wander position deltas must NOT restart NW.
 		if not old.is_empty() and state == STATE_ATTACK and revision > int(old.value.revision):
@@ -134,7 +135,7 @@ func actors_at(now_usec: int) -> Array:
 		var monster: Dictionary = _monsters[id]
 		var value: Dictionary = monster.value
 		var enemy_id := int(value.enemy_id)
-		var requested := str(monster.action)+str(int(value.facing))
+		var requested: String = str(monster.action)+str(int(value.facing))
 		var resolved: Dictionary = _views.get(enemy_id,{}).get(requested,{})
 		if resolved.is_empty():
 			continue
