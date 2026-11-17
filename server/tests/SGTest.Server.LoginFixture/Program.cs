@@ -95,9 +95,9 @@ internal static class Program
                     await routingTask.WaitAsync(TimeSpan.FromSeconds(3));
                 }
                 if (ended.CommandsAccepted != 1 || ended.ReliableFramesSent < 2 ||
-                    pump.FramesQueued < 1 || resultRouter.Statistics.ActiveSessions != 0)
-                    throw new InvalidOperationException($"fixture disconnect or send mismatch commands={ended.CommandsAccepted} reliable_frames={ended.ReliableFramesSent} aoi={pump.FramesQueued} active_routes={resultRouter.Statistics.ActiveSessions}");
-                Console.WriteLine($"LOGIN_FIXTURE_WORLD_READY_ROUTED aoi_frames={pump.FramesQueued}");
+                    aoiPump.FramesQueued < 1 || resultRouter.Statistics.ActiveSessions != 0)
+                    throw new InvalidOperationException($"fixture disconnect or send mismatch commands={ended.CommandsAccepted} reliable_frames={ended.ReliableFramesSent} aoi={aoiPump.FramesQueued} active_routes={resultRouter.Statistics.ActiveSessions}");
+                Console.WriteLine($"LOGIN_FIXTURE_WORLD_READY_ROUTED aoi_frames={aoiPump.FramesQueued}");
                 Console.WriteLine($"LOGIN_FIXTURE_PASS tls={ended.Protocol} commands={ended.CommandsAccepted}");
                 Console.Out.Flush();
                 return 0;
@@ -996,14 +996,14 @@ internal static class Program
                     results[1].CommandsAccepted != (portals ? 5 : crossmap ? 2 : 1) ||
                     router.Statistics.ActiveSessions != 0 ||
                     router.Statistics.ReceiptsQueued < (crossmap || portals ? 2 : 1) ||
-                    pump.FramesQueued < (crossmap || portals ? 10 : 6))
+                    aoiPump.FramesQueued < (crossmap || portals ? 10 : 6))
                     throw new InvalidOperationException(
                         $"multiplayer TLS/AOI incomplete a={results[0].Reason} b={results[1].Reason} " +
                         $"moves={results[1].CommandsAccepted} routes={router.Statistics.ActiveSessions} " +
-                        $"receipts={router.Statistics.ReceiptsQueued} aoi_frames={pump.FramesQueued}");
+                        $"receipts={router.Statistics.ReceiptsQueued} aoi_frames={aoiPump.FramesQueued}");
                 await world.StopAsync().ConfigureAwait(false);
                 await routerTask.WaitAsync(TimeSpan.FromSeconds(3)).ConfigureAwait(false);
-                Console.WriteLine($"{prefix}_FIXTURE_PASS actor_a={aId} actor_b={bId} moves={results[1].CommandsAccepted} aoi_frames={pump.FramesQueued} active=0");
+                Console.WriteLine($"{prefix}_FIXTURE_PASS actor_a={aId} actor_b={bId} moves={results[1].CommandsAccepted} aoi_frames={aoiPump.FramesQueued} active=0");
                 Console.Out.Flush();
                 return 0;
             }
