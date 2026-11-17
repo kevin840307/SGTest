@@ -20,6 +20,7 @@ var _online_gate_remote_id := 0
 var _online_gate_remote_start := Vector2.ZERO
 var _online_gate_finish_code := -1
 var _online_gate_finish_reason := ""
+var _online_gate_monster_seen := false
 
 
 func _ready() -> void:
@@ -217,6 +218,12 @@ func _online_gate_ready(map: int) -> bool:
 func _online_gate_tick() -> void:
 	if _online_gate_phase < 0:
 		return
+	if not _online_gate_monster_seen:
+		var monsters: Dictionary = _last_snapshot.get("monsters",{})
+		if not monsters.is_empty():
+			_online_gate_monster_seen = true
+			print("ONLINE_MAIN_GATE_MONSTER role=",_online_gate_role,
+				" count=",monsters.size())
 	if _online_gate_phase == 90:
 		var stats := world_view.store.statistics()
 		if int(stats.scopes) == 0 and int(stats.assets) == 0 and int(stats.decode_jobs) == 0 and int(stats.texture_jobs) == 0:

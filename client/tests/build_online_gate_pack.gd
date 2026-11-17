@@ -139,7 +139,30 @@ func build() -> void:
 		if not write_json(map_assets.path_join("world.json"),world) or not write_json(map_assets.path_join("npcs.json"),npcs) or not write_json(map_assets.path_join("population.json"),population):
 			fail("map metadata")
 			return
-		if not write_bytes(map_server.path_join("blocking.dat"),blocking) or not write_json(map_server.path_join("world.json"),world) or not write_json(map_server.path_join("npcs.json"),npcs):
+		var verified_population := {
+			"version":4,
+			"kind":"verified_monster_runtime",
+			"map_id":map_id,
+			"stats_verified":true,
+			"gameplay_ready":true,
+			"definitions":[{
+				"id":1,"name":"Synthetic Gate Monster","sprite":"EN001A",
+				"atlas":"Enemy/EN001A/atlas.json",
+				"stats":{
+					"level":3,"max_hp":100,"attack_damage":6,"move_step":8.0,
+					"aggro_radius":300.0,"lose_target_radius":500.0,
+					"leash_radius":500.0,"attack_range":48.0,
+					"attack_cooldown_ticks":8,"respawn_ticks":90,
+					"wander_radius":0.0,"wander_interval_ticks":60
+				}
+			}],
+			"spawns":[{
+				"source_index":0,"source_flags":7,"definition":1,
+				"p":[820,800] if map_id == 15 else [800,800]
+			}],
+			"test_only":true
+		}
+		if not write_bytes(map_server.path_join("blocking.dat"),blocking) or not write_json(map_server.path_join("world.json"),world) or not write_json(map_server.path_join("npcs.json"),npcs) or not write_json(map_server.path_join("population.json"),verified_population):
 			fail("server map materialization")
 			return
 

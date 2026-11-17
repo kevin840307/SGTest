@@ -35,6 +35,30 @@ internal static class TlsHost
                 OperatingSystem.IsWindows() ? X509KeyStorageFlags.UserKeySet : X509KeyStorageFlags.EphemeralKeySet);
             var maps = new[] { 13, 15 }.Select(id =>
                 BlockingGrid.Load(Path.Combine(root, "maps", id.ToString()), id)).ToArray();
+            var monsterRuntimes = new List<MonsterRuntime>();
+            foreach (var map in maps)
+            {
+                string populationPath = Path.Combine(
+                    root, "maps", map.MapId.ToString(), "population.json");
+                if (!File.Exists(populationPath))
+                    continue;
+                MonsterPopulation population;
+                try
+                {
+                    population = MonsterPopulationCatalog.LoadVerified(
+                        populationPath, map.MapId, map);
+                }
+                catch (InvalidDataException error)
+                {
+                    throw new ArgumentException(
+                        $"Map {map.MapId} monster population is not verified gameplay content: {error.Message}",
+                        error);
+                }
+                if (population.Spawns.Count > 0)
+                    monsterRuntimes.Add(new MonsterRuntime(map, population));
+            }
+            MonsterWorldCoordinator? monsters = monsterRuntimes.Count == 0
+                ? null : new MonsterWorldCoordinator(monsterRuntimes);
             var portals = PortalCatalog.LoadNpcDocuments(new[] { 13, 15 }.Select(id =>
                 Path.Combine(root, "maps", id.ToString(), "npcs.json")));
             using var identity = new SqliteIdentityStore(database);
@@ -43,7 +67,7 @@ internal static class TlsHost
             var positions = new CharacterPositionCheckpoint(identity,
                 new(IntervalMilliseconds: checkpointMs));
             var router = new WorldResultRouter(changedObserver: positions.Observe);
-            var aoi = new WorldAoiPump(router);
+            var aoi = new WorldAoiPump(router, monsters: monsters);
             var authorization = new IdentityTlsAuthorization(identity, world, portals, positions);
             await using var listener = new TlsGatewayListener(address, port, authorization,
                 certificate, router, new(MaxConnections: maximum, MaxConnectionsPerAddress: perAddress));
@@ -60,6 +84,8 @@ internal static class TlsHost
                     result = "TLS_HOST_READY", endpoint = listener.LocalEndpoint.ToString(),
                     max_connections = maximum, max_per_address = perAddress,
                     maps = maps.Select(m => m.MapId), audited_portals = portals.Count,
+                    monster_maps = monsterRuntimes.Select(m => m.MapId),
+                    monsters = monsterRuntimes.Sum(m => m.Count),
                     position_checkpoint_ms = checkpointMs
                 }));
                 var stopping = Task.Delay(Timeout.Infinite, stop.Token);
@@ -91,6 +117,7 @@ internal static class TlsHost
             {
                 result = "TLS_HOST_STOPPED", listener = listener.Statistics,
                 world = world.Statistics, router = router.Statistics,
+                monster_coordinator = monsters?.Statistics,
                 positions = positions.Statistics
             }));
             return 0;

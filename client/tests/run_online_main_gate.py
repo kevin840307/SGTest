@@ -174,11 +174,13 @@ def main() -> int:
                 raise RuntimeError("formal Host did not stop cleanly")
 
             required_actor = [
+                "ONLINE_MAIN_GATE_MONSTER role=actor",
                 "ONLINE_MAIN_GATE_MOVE_CAMERA role=actor",
                 "ONLINE_MAIN_GATE_MAP13 role=actor",
                 "ONLINE_MAIN_GATE_RETURN_MAP15 role=actor",
             ]
             required_observer = [
+                "ONLINE_MAIN_GATE_MONSTER role=observer",
                 "ONLINE_MAIN_GATE_SPAWN role=observer",
                 "ONLINE_MAIN_GATE_DELTA role=observer",
                 "ONLINE_MAIN_GATE_DESPAWN role=observer",
@@ -198,7 +200,7 @@ def main() -> int:
                     print(line)
             print("ONLINE_MAIN_SCENE_FORMAL_HOST_GATE_PASS "
                   "formal_host=true main_scenes=2 tls=true provision_cli=true "
-                  "move=true aoi=true camera_follow=true map15_map13_return=true "
+                  "move=true aoi=true monster_state=true camera_follow=true map15_map13_return=true "
                   "resource_release=true synthetic_content=true private_original_content=false")
             return 0
     except Exception as error:
