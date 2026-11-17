@@ -240,6 +240,7 @@ static class Checks
             GroundLootChecks.Verify(root);
             GroundPickupWireChecks.Verify();
             RecoveryItemChecks.Verify(root);
+            RecoveryUseWireChecks.Verify();
             InventorySnapshotChecks.Verify();
             MonsterLootSettlementChecks.Verify(root);
             NormalAttackChecks.Verify(root);
