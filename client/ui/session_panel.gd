@@ -175,6 +175,9 @@ func disconnect_session() -> void:
 	characters.clear()
 	password_input.clear()
 	_set_controls()
+	inventory_button.visible = false
+	inventory_button.disabled = true
+	inventory_preview.visible = false
 	status.text = "已登出"
 	if was_active:
 		connection_changed.emit(false)
@@ -209,12 +212,14 @@ func _update_inventory_ui() -> void:
 	var in_world: bool = active and int(_latest.get("state",-1)) == State.STATE_IN_WORLD
 	var loaded: bool = in_world and bool(_latest.get("inventory_ready",false))
 	inventory_button.visible = in_world
+	inventory_button.disabled = not loaded or bool(_latest.get("reconnecting",false))
 	if not in_world or bool(_latest.get("reconnecting",false)):
 		inventory_preview.visible = false
 		_inventory_display_key = ""
 		return
 	if not loaded:
 		inventory_button.text = "背包（讀取中）"
+		inventory_preview.visible = false
 		_inventory_display_key = ""
 		return
 	var items: Dictionary = _latest.get("inventory_items",{})

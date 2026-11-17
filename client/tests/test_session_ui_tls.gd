@@ -163,6 +163,9 @@ func run() -> void:
 		fail("UI path did not receive authoritative receipt")
 		return
 	panel.logout_button.pressed.emit()
+	if panel.inventory_button.visible or panel.inventory_preview.visible:
+		fail("Logout left previous character inventory visible")
+		return
 	if panel.active or panel.login_button.disabled or app._map_buttons[0].disabled or not panel.characters.item_count == 0:
 		fail("Logout left stale UI or binding")
 		return
@@ -226,6 +229,15 @@ func run() -> void:
 	panel._update_inventory_ui()
 	if panel.inventory_preview.text.contains("2701") or not panel.inventory_preview.text.contains("3701 ×3"):
 		fail("Same inventory revision across new character retained stale UI")
+		return
+	panel.inventory_button.pressed.emit()
+	if not panel.inventory_preview.visible:
+		fail("Inventory did not expand while loaded")
+		return
+	panel._latest.inventory_ready = false
+	panel._update_inventory_ui()
+	if panel.inventory_preview.visible or not panel.inventory_button.disabled:
+		fail("Incomplete inventory leaked prior character item list")
 		return
 	panel.active = false
 	panel._set_respawn_controls()
