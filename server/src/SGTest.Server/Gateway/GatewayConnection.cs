@@ -322,12 +322,12 @@ public sealed class GatewayConnection
         }
 
         if (header.Opcode == WireOpcode.RecoveryUse && postRecovery is not null &&
-            WireProtocol.TryDecodeRecoveryUse(frame,out var command))
+            WireProtocol.TryDecodeRecoveryUse(frame,out var recovery))
         {
             if(!GameplayReady(bound))return WireFrameDisposition.ProtocolViolation;
             return postRecovery(new TrustedRecoveryUse(
-                bound.ActorId,bound.ConnectionEpoch,command.MapEpoch,
-                command.UseSequence,command.ItemUid))
+                bound.ActorId,bound.ConnectionEpoch,recovery.MapEpoch,
+                recovery.UseSequence,recovery.ItemUid))
                 ? WireFrameDisposition.Accepted : WireFrameDisposition.Backpressured;
         }
 
