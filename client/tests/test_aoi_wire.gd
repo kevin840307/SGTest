@@ -76,6 +76,11 @@ func _initialize() -> void:
 	if not ground_world.apply_frame(GROUND_SPAWN.hex_decode()) or int(ground_world.snapshot().stale_aoi_events) != 1:
 		_fail("duplicate immutable ground UID did not become stale")
 		return
+	var repeated_tick := GROUND_SPAWN.hex_decode()
+	repeated_tick.encode_s64(16,56)
+	if not ground_world.apply_frame(repeated_tick) or int(ground_world.snapshot().stale_aoi_events) != 2 or bool(ground_world.snapshot().resync_pending):
+		_fail("identical immutable drop resent with new event tick caused false resync")
+		return
 	var wrong_ground := GROUND_SPAWN.hex_decode()
 	wrong_ground.encode_s64(16,56)
 	wrong_ground.encode_s32(44,2702)
