@@ -93,7 +93,7 @@ dotnet run -c Release --project tools/tests/wire_aoi_probe/WireAoiProbe.csproj
 
 - **MAP-DATA002**：ObjectList root name+XY+child_count／children name+XY；count包含children，world v3保留parent_index，z=0。Map15=1833根+15子／5父建築，Map13=367根。舊「15筆缺Z」解讀已撤回，DIRECT位址與遷移見ASSET_CONVERTER。測試負／溢出count、截斷、編碼、尾端垃圾、非BLG父物件與錯誤巢狀count；合成trim/origin bounds及來源順序／絕對XY不變。原版特殊建築遮擋與真Renderer **NOT VERIFIED**。
 - **PATH001**：Map13／台地階梯／障礙角 A*，單擊地板、點擊怪物繞障、追逐目標移動、斷線 correction，Client/Server 都不能穿牆；Blocking.dat 必須以原始資料驗證。
-- **HOLD001**：長按 1 秒後持續導航，左／右鍵停止、右鍵選單正常；UI 操作、移速變更、傳點、受擊、死亡、AFK、切圖都能取消並重新取得正確狀態。
+- **HOLD001**：核心 headless/ClientSession Gate 已驗證 1000ms latch、游標跟隨、24px/80ms repath、400ms blocked retry、權威 stop barrier、受擊/攻擊/死亡/transfer/reconnect 取消，且完整 TLS/formal main scene 回歸 PASS；仍需原版 10-frame autorun cursor runtime asset、UI/技能 cursor precedence、移速變更、AFK/Unfocus 與 Windows GUI 真輸入，故總項未關閉。
 - **FPS001**：完整同一組 packet trace，Render=0／30／60／90、正常／Unfocus／最小化／AFK，Client State hash、Command sequence、可靠事件和 Server Tick 不變。刻意阻塞 Renderer 不得阻塞 Network。
 - **AFK001**：切 AFK 後按資產引用清單驗證非必要世界節點／Texture 釋放，量測與正常模式相比的 Process RSS、Texture/VRAM、CPU/GPU 與恢復延遲（**先定基線，不憑空宣稱 95% 可卸載**）；世界內容繪製趨近 0，網路仍完整；退出 AFK 復原 AOI、動作與 WorldReady，不得有舊圖或事件重播。
 - **MULTI001**：1、2、4、8 個 Client 同機混合正常與 AFK，測各程序 Peak RSS、CPU／GPU、帶寬、queue age、輸入到畫面 P95/P99 和斷線／恢復。比較前須包含同一玩家/怪物密度與圖形品質。
