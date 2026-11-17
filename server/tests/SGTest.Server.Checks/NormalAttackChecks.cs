@@ -108,6 +108,10 @@ internal static class NormalAttackChecks
         using var lootStore=new SqliteIdentityStore(Path.Combine(root,
             "normal-attack-loot-"+Guid.NewGuid().ToString("N")+".db"));
         await lootStore.InitializeAsync();
+        long accountId=(await lootStore.CreateAccountAsync(
+            "loot_pvp_"+Guid.NewGuid().ToString("N")[..12],"Fixture-Password-123!")).AccountId;
+        long characterId=(await lootStore.CreateCharacterAsync(accountId,0,
+            "LootFighter",new CharacterSpawn(mapId,24,24))).Character!.CharacterId;
         long generation=await lootStore.AllocateLootWorldGenerationAsync();
         var loot=new MonsterLootSettlement(lootStore,generation,
             [new MonsterDropRule(mapId,1,0,2701,2,
@@ -116,7 +120,7 @@ internal static class NormalAttackChecks
         await using var host=new ServerWorldHost(
             [grid],options:new WorldHostOptions(PublishIdleTicks:true));
         await host.StartAsync();
-        var actor=await host.TrustedRegisterAsync(901,mapId,24,24)
+        var actor=await host.TrustedRegisterAsync(characterId,mapId,24,24)
             ?? throw new Exception("combat actor register");
         var profile=new TrustedCombatProfile(
             Attack:60,Defense:4,Hit:10,Dodge:3,
@@ -243,6 +247,64 @@ internal static class NormalAttackChecks
                 seen.ItemDefinitionId==drop.ItemDefinitionId &&
                 seen.Quantity==drop.Quantity,
                 "lethal attack failed to publish durable ground UID to authenticated AOI");
+            // Authenticated Client intent carries ONLY epoch/seq/drop UID.
+            // World supplies live position, DB owns the one-time inventory grant,
+            // router removes from AOI only after the committed transaction.
+            TrustedGroundPickup trustedPickup=default;
+            int pickupCommands=0;
+            var pickupRequest=WireProtocol.EncodeGroundPickup(
+                new(actor.MapEpoch,1,drop.DropId));
+            Require(gateway.FeedClientBytes(pickupRequest,_=>true,out var accepted,
+                postPickup:request=>
+                {
+                    trustedPickup=request;
+                    pickupCommands++;
+                    return true;
+                })==WireFeedStatus.Accepted &&
+                accepted==1 && pickupCommands==1,
+                "pickup did not enter trusted Gateway boundary");
+            ActorSnapshot? current=await host.TrustedGetActorAsync(
+                trustedPickup.ActorId);
+            Require(current is { } observer &&
+                observer.ConnectionEpoch==trustedPickup.ConnectionEpoch &&
+                observer.MapEpoch==trustedPickup.RequestMapEpoch,
+                "pickup lost trusted live World actor");
+            var actorNow=current!.Value;
+            var claimed=await lootStore.ClaimGroundDropAsync(new(
+                actorNow.ActorId,actorNow.ConnectionEpoch,actorNow.MapEpoch,
+                trustedPickup.PickupSequence,actorNow.MapId,
+                actorNow.X,actorNow.Y),trustedPickup.DropId);
+            Require(claimed.Status==PickupStatus.Granted && claimed.ItemUid>0 &&
+                router.QueueGroundPickupResult(trustedPickup,claimed)==
+                    GatewaySendStatus.Enqueued &&
+                router.TryPostGroundDropClaimed(claimed.DropId),
+                "committed pickup result was not routed through shared Server AOI");
+            bool gotReceipt=false,gotRemoval=false;
+            using(var timeout=new CancellationTokenSource(TimeSpan.FromSeconds(4)))
+            {
+                while(!gotReceipt||!gotRemoval)
+                {
+                    timeout.Token.ThrowIfCancellationRequested();
+                    while(gateway.TryDequeueReliable(out var pickupFrame))
+                    {
+                        if(WireProtocol.TryDecodeGroundPickupResult(
+                            pickupFrame,out var acceptedPickup))
+                            gotReceipt=acceptedPickup.ItemUid==claimed.ItemUid &&
+                                acceptedPickup.Status==PickupStatus.Granted;
+                        if(WireProtocol.TryDecodeGroundDropDespawn(
+                            pickupFrame,out var removed))
+                            gotRemoval=removed.DropId==drop.DropId;
+                    }
+                    if(!gotReceipt||!gotRemoval)
+                        await Task.Delay(10,timeout.Token);
+                }
+            }
+            var durableItem=(await lootStore.ListInventoryItemsAsync(characterId)).Single();
+            Require(durableItem.ItemUid==claimed.ItemUid &&
+                durableItem.SourceDropId==drop.DropId &&
+                (await lootStore.ListActiveGroundDropsAsync(mapId)).Count==0 &&
+                pump.Aoi.GroundDropCount==0,
+                "ground pickup did not atomically grant inventory and remove shared AOI");
         }
         finally
         {
