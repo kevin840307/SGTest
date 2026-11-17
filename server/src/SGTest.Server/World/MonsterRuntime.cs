@@ -249,11 +249,12 @@ public sealed class MonsterRuntime
         bool hasTarget = monster.TargetActorId > 0 &&
             targets.TryGetValue(monster.TargetActorId, out target) &&
             target.CurrentHp > 0;
+        double leashDistance = Distance(
+            monster.Spawn.X, monster.Spawn.Y, monster.X, monster.Y);
 
         if (hasTarget)
         {
             double targetDistance = Distance(monster.X, monster.Y, target.X, target.Y);
-            double leashDistance = Distance(monster.Spawn.X, monster.Spawn.Y, monster.X, monster.Y);
             if (targetDistance > stats.LoseTargetRadius ||
                 leashDistance > stats.LeashRadius)
             {
@@ -274,6 +275,21 @@ public sealed class MonsterRuntime
             Bump(monster);
             events.Add(new(MonsterWorldEventKind.TargetLost, tick,
                 monster.Snapshot(MapId), old));
+        }
+
+        // Leash is a hard combat boundary. Once outside it, return toward the
+        // original verified spawn before considering another nearby target;
+        // otherwise a player standing beside the monster could re-aggro it in
+        // the same Tick and drag it indefinitely across the map.
+        leashDistance = Distance(
+            monster.Spawn.X, monster.Spawn.Y, monster.X, monster.Y);
+        if (!hasTarget && leashDistance > stats.LeashRadius)
+        {
+            SetState(monster, MonsterAiState.Chase, tick, events);
+            if (TryStep(monster, monster.Spawn.X, monster.Spawn.Y, stats.MoveStep,
+                        ref pathBudget, out var homeX, out var homeY))
+                Move(monster, homeX, homeY, tick, events);
+            return;
         }
 
         if (!hasTarget)

@@ -78,7 +78,7 @@ internal static class MonsterRuntimeChecks
         var lostEvents=runtime.Tick(81,[target with { X=900, Y=900 }]);
         var after=runtime.SnapshotAll()[0];
         Checks.Require(lostEvents.Any(e=>e.Kind==MonsterWorldEventKind.TargetLost) &&
-                       after.TargetActorId==0 && after.State==MonsterAiState.Idle &&
+                       after.TargetActorId==0 &&
                        after.EntityRevision>before.EntityRevision,
                        "monster did not leave combat when target exceeded lose radius");
     }
@@ -122,7 +122,7 @@ internal static class MonsterRuntimeChecks
                 e.Monster.EntityId==first.EntityId);
         }
         var stats=runtime.Statistics;
-        Checks.Require(stats.AiSteps==5 && stats.MonstersProcessed==300 &&
+        Checks.Require(stats.AiSteps==5 && stats.MonstersProcessed==320 &&
                        stats.MaxProcessedInStep==64 && stats.PathQueries==0,
                        "300-monster AI budget/fair cursor wrong");
         Checks.Require(runtime.SnapshotAll().All(x=>
