@@ -239,6 +239,7 @@ static class Checks
             CharacterCombatProfileChecks.Verify(root);
             GroundLootChecks.Verify(root);
             GroundPickupWireChecks.Verify();
+            RecoveryItemChecks.Verify(root);
             InventorySnapshotChecks.Verify();
             MonsterLootSettlementChecks.Verify(root);
             NormalAttackChecks.Verify(root);
