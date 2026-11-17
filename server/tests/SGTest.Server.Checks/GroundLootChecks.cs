@@ -71,6 +71,31 @@ internal static class GroundLootChecks
             try { await store.CreateTrustedGroundDropAsync(Drop(987654321)); }
             catch(InvalidOperationException) { invalid=true; }
             Checks.Require(invalid,"unallocated World generation minted a drop");
+            // A single monster death with two slots commits as ONE transaction.
+            // On conflict with a previously committed slot, even a new slot
+            // early in that batch must be rolled back.
+            var multi=new[]{Drop(generation,death:40,slot:0),
+                            Drop(generation,death:40,slot:1)};
+            var committed=await store.CreateTrustedGroundDropsAsync(multi);
+            var replay=await store.CreateTrustedGroundDropsAsync(multi);
+            Checks.Require(committed.Count==2 &&
+                committed[0].DropId!=committed[1].DropId &&
+                replay[0].DropId==committed[0].DropId &&
+                replay[1].DropId==committed[1].DropId,
+                "multi-slot trusted death replay duplicated ground UIDs");
+            var priorCount=(await store.ListActiveGroundDropsAsync(13)).Count;
+            bool conflictBatch=false;
+            try
+            {
+                await store.CreateTrustedGroundDropsAsync([
+                    Drop(generation,death:40,slot:2),
+                    Drop(generation,death:40,slot:0) with {Quantity=3}
+                ]);
+            }
+            catch(InvalidOperationException) {conflictBatch=true;}
+            Checks.Require(conflictBatch &&
+                (await store.ListActiveGroundDropsAsync(13)).Count==priorCount,
+                "multi-slot conflict leaked a partially committed drop");
         }
     }
 

@@ -167,13 +167,13 @@ public sealed class MonsterLootSettlement
             {
                 long deathId=SqliteIdentityStore.ComposeLootDeathRevision(
                     _generation,monster.EntityRevision);
-                foreach(var rule in rules)
-                {
-                    await _store.CreateTrustedGroundDropAsync(new(
-                        monster.MapId,monster.X,monster.Y,monster.EntityId,
-                        deathId,rule.Slot,rule.ItemId,rule.Quantity,rule.Trust,rule.SourceReference));
-                    Interlocked.Increment(ref _drops);
-                }
+                // Every slot of one lethal death is committed atomically.
+                var batch=rules.Select(rule=>new TrustedDropSpawn(
+                    monster.MapId,monster.X,monster.Y,monster.EntityId,
+                    deathId,rule.Slot,rule.ItemId,rule.Quantity,
+                    rule.Trust,rule.SourceReference)).ToArray();
+                var settled=await _store.CreateTrustedGroundDropsAsync(batch);
+                Interlocked.Add(ref _drops,settled.Count);
                 Interlocked.Increment(ref _committed);
                 Interlocked.Decrement(ref _pending);
             }

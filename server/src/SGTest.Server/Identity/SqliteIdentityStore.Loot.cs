@@ -81,54 +81,93 @@ public sealed partial class SqliteIdentityStore
     public async Task<GroundDropRecord> CreateTrustedGroundDropAsync(
         TrustedDropSpawn drop, CancellationToken cancellationToken = default)
     {
+        var rows = await CreateTrustedGroundDropsAsync([drop], cancellationToken)
+            .ConfigureAwait(false);
+        return rows[0];
+    }
+
+    /// <summary>
+    /// One monster death can create multiple independent drop UIDs. All slots
+    /// are inserted/validated in one SQLite transaction: a duplicate conflicting
+    /// slot rejects the ENTIRE batch, including previously unseen slots.
+    /// Server trust & provenance remain mandatory; never call on the World tick.
+    /// </summary>
+    public async Task<IReadOnlyList<GroundDropRecord>> CreateTrustedGroundDropsAsync(
+        IReadOnlyList<TrustedDropSpawn> drops,
+        CancellationToken cancellationToken = default)
+    {
         ThrowIfDisposed();
-        ValidateDrop(drop);
-        return await Task.Run(() =>
+        ArgumentNullException.ThrowIfNull(drops);
+        if (drops.Count is < 1 or > 32)
+            throw new ArgumentOutOfRangeException(nameof(drops));
+        var first = drops[0];
+        var slots = new HashSet<int>();
+        foreach (var drop in drops)
+        {
+            ValidateDrop(drop);
+            if (drop.MapId != first.MapId ||
+                drop.MonsterEntityId != first.MonsterEntityId ||
+                drop.DeathRevision != first.DeathRevision ||
+                !slots.Add(drop.DropSlot))
+                throw new ArgumentException(
+                    "One atomic drop batch must identify one death and unique slots",
+                    nameof(drops));
+        }
+
+        return await Task.Run<IReadOnlyList<GroundDropRecord>>(() =>
         {
             using var connection = Open();
             using var tx = connection.BeginTransaction();
-            long generation = drop.DeathRevision >> 32;
+            long generation = first.DeathRevision >> 32;
             if (ScalarLong(connection,
                 "SELECT COUNT(*) FROM loot_world_generations WHERE generation_id=$id;", tx,
                 ("$id", generation)) != 1)
-                throw new InvalidOperationException("Drop references unknown trusted World generation");
-            using (var command = connection.CreateCommand())
+                throw new InvalidOperationException(
+                    "Drop batch references unknown trusted World generation");
+            var result = new List<GroundDropRecord>(drops.Count);
+            long now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+            foreach (var drop in drops)
             {
-                command.Transaction = tx;
-                command.CommandText = @"
+                using (var command = connection.CreateCommand())
+                {
+                    command.Transaction = tx;
+                    command.CommandText = @"
 INSERT INTO ground_drops(map_id,x,y,monster_entity_id,death_revision,
     drop_slot,item_definition_id,quantity,source_trust,source_reference,created_unix_ms)
 VALUES($map,$x,$y,$monster,$revision,$slot,$item,$quantity,$trust,$source,$now)
 ON CONFLICT(map_id,monster_entity_id,death_revision,drop_slot) DO NOTHING;";
-                command.Parameters.AddWithValue("$map", drop.MapId);
-                command.Parameters.AddWithValue("$x", drop.X);
-                command.Parameters.AddWithValue("$y", drop.Y);
-                command.Parameters.AddWithValue("$monster", drop.MonsterEntityId);
-                command.Parameters.AddWithValue("$revision", drop.DeathRevision);
-                command.Parameters.AddWithValue("$slot", drop.DropSlot);
-                command.Parameters.AddWithValue("$item", drop.ItemDefinitionId);
-                command.Parameters.AddWithValue("$quantity", drop.Quantity);
-                command.Parameters.AddWithValue("$trust", (int)drop.Trust);
-                command.Parameters.AddWithValue("$source", drop.SourceReference);
-                command.Parameters.AddWithValue("$now", DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
-                command.ExecuteNonQuery();
-            }
-            long id = ScalarLong(connection, @"
+                    command.Parameters.AddWithValue("$map", drop.MapId);
+                    command.Parameters.AddWithValue("$x", drop.X);
+                    command.Parameters.AddWithValue("$y", drop.Y);
+                    command.Parameters.AddWithValue("$monster", drop.MonsterEntityId);
+                    command.Parameters.AddWithValue("$revision", drop.DeathRevision);
+                    command.Parameters.AddWithValue("$slot", drop.DropSlot);
+                    command.Parameters.AddWithValue("$item", drop.ItemDefinitionId);
+                    command.Parameters.AddWithValue("$quantity", drop.Quantity);
+                    command.Parameters.AddWithValue("$trust", (int)drop.Trust);
+                    command.Parameters.AddWithValue("$source", drop.SourceReference);
+                    command.Parameters.AddWithValue("$now", now);
+                    command.ExecuteNonQuery();
+                }
+                long id = ScalarLong(connection, @"
 SELECT drop_id FROM ground_drops
  WHERE map_id=$map AND monster_entity_id=$monster
    AND death_revision=$revision AND drop_slot=$slot;", tx,
-                ("$map", drop.MapId), ("$monster", drop.MonsterEntityId),
-                ("$revision", drop.DeathRevision), ("$slot", drop.DropSlot));
-            var saved = ReadDrop(connection, tx, id)
-                ?? throw new InvalidOperationException("Trusted drop insertion vanished");
-            if (saved.X != drop.X || saved.Y != drop.Y ||
-                saved.ItemDefinitionId != drop.ItemDefinitionId ||
-                saved.Quantity != drop.Quantity || saved.Trust != drop.Trust ||
-                saved.SourceReference != drop.SourceReference)
-                throw new InvalidOperationException(
-                    "Conflicting trusted monster death/slot must not change a durable drop");
+                    ("$map", drop.MapId), ("$monster", drop.MonsterEntityId),
+                    ("$revision", drop.DeathRevision), ("$slot", drop.DropSlot));
+                var saved = ReadDrop(connection, tx, id)
+                    ?? throw new InvalidOperationException(
+                        "Trusted drop batch insertion vanished");
+                if (saved.X != drop.X || saved.Y != drop.Y ||
+                    saved.ItemDefinitionId != drop.ItemDefinitionId ||
+                    saved.Quantity != drop.Quantity || saved.Trust != drop.Trust ||
+                    saved.SourceReference != drop.SourceReference)
+                    throw new InvalidOperationException(
+                        "Conflicting trusted death slot must not alter existing loot");
+                result.Add(saved);
+            }
             tx.Commit();
-            return saved;
+            return result;
         }, cancellationToken).ConfigureAwait(false);
     }
 
