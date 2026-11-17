@@ -186,3 +186,12 @@ Each `MonsterRuntime` is a single-writer map authority with bounded work (`MaxAi
 Players and monsters share one interest manager, hysteresis, visible limit, Gateway reliable FIFO and same-MapEpoch resync. There is no MonsterAoi or second transport. Server CI 44021869726 passes 101/101 checks including a 300-monster bounded AI trace and a live Host→Router→AI→AOI→Gateway path.
 
 Client presentation remains non-authoritative. `WorldState.monsters` is separate from player entities; `MonsterPresentation` resolves only the v3 visual population's sprite/atlas and verified ACT semantics (S→NS idle, W→NW movement, A→FA attack, D→ND death; H→NH reserved for a future hit event). It uses the existing PositionHistory/ActionTimeline and joins players in the same WorldDrawList/scenery order. Client CI 44021869721 proves the presentation gate and two real formal-host main scenes with one presented monster each. Synthetic CI combat numbers are marked test-only and are not original-game claims.
+
+
+## 2026-11-17 Ground loot durability slice (MVP006 partial)
+
+正式資料庫維持一個 SqliteIdentityStore（schema v3），新增 `ground_drops`、`item_instances` 及 `loot_world_generations`；**不是第二套持久化引擎**。背景可信代碼可從 SQLite 分配每次 Server 啟動的 WorldGeneration；由 WorldGeneration + 單一啟動期間單調的 Monster EntityRevision 組成 DeathRevision，避免重啟後同一 monster 的 local revision 從 1 重算而誤與既有掉落事件衝突。分配機制與 `TrustedDropSpawn` 已完成，**正式 Host 尚未掛接啟動時分配**。
+
+同一 death/slot 重複送達只能取得原 drop_id，資料內容衝突不得修改既存掉落。拾取結算以單一 SQLite transaction 同時設定 ground_drops 領取者（含連線／地圖世代與操作序號）及插入唯一 item_instances item_uid；重送已成功的相同請求回原 item_uid，不會重發；兩角色同搶同一 UID 只有一個成功。API 的 `TrustedPickupContext` 必須將來由 authenticated Gateway 以 Server authoritative ActorSnapshot 建立，不能把玩家自報的座標／CharacterId 當可信來源。領取距離暫用 Server 端 96 world pixels 作合成測試 policy，**不是已證實的原版拾取規則**。資料庫 I/O 嚴禁發生於 World 30Hz owner thread。
+
+`GroundLootChecks` 覆蓋建立冪等、內容不一致、無效來源、啟動世代隔離、錯地圖／超距／重送／舊序號、兩角色同搶與 SQLite 關閉再開。2026-11-17 [Server CI 44074950492](https://github.com/kevin840307/SGTest/actions/runs/44074950492) 通過，既有完整 [Client CI 44074950367](https://github.com/kevin840307/SGTest/actions/runs/44074950367) 通過。**尚未實作：原版可信掉落表、MonsterDeath→bounded async drop commit、active drop→WorldAoi 單一 interest、可靠 Spawn/Despawn／PickupResults Wire、WorldReady/resync/reconnect drop 恢復、Godot 地上物／背包 UI、多人實機 E2E。** 這些仍為 MVP006 的下一個完整切片。

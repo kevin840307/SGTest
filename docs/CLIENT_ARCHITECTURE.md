@@ -287,3 +287,10 @@ Online WorldView adds only the existing six B base part assets to its existing m
 SessionPanel emits its non-authoritative presentation snapshot after WorldReady; WorldView caches updates during loading, follows current own XY when ready and renders remote AOI too. main no longer applies a stale one-shot Ready focus over a newer snapshot. Online free camera controls are disabled; map/connection clear drops draw commands, actor/timeline state and snapshot before ending the same AssetStore scope. The B base profile is provisional for every actor; no appearance/equipment protocol is invented. Positions are currently latest authoritative samples: interpolation/prediction, combat locks, actual profile synchronization and AFK resource behavior remain later gates.
 
 The session worker reads its own reducer state field for idle failure/choose checks rather than deep-copying the full entity snapshot every 2ms. Cross-thread publication and UI snapshots remain copies; no worker-owned WorldState reference is exposed to rendering. No measured CPU/P95 improvement is claimed by this local removal of redundant copies.
+
+
+## 2026-11-17 Online monster click-to-attack input (MVP006 partial)
+
+在既有 `app/main.gd` 上線左鍵行為中，以 WorldCamera.screen_to_world 換算游標；`WorldView.pick_monster_at` 委派唯一 `MonsterPresentation.pick_living_at`，只從當前 AOI snapshot 中可見、HP>0 的怪物選離游標最近者，初始保守半徑 32 world pixels、同距 entity_id 穩定排序，不操作 World authority 或資源生命週期。點怪委派既有 `SessionPanel.submit_attack_monster`→`ClientSession.attack_monster`→V1 NormalAttack；未選到怪物才維持原本地板 Move。攻擊佇列滿時**不**退回走路；ClientSession 最終驗證死亡、WorldReady/ACK、MapEpoch 與 resync gate，Server 繼續唯一權威 range／Blocking／CD／damage/HP 管理。
+
+同一 MonsterPresentation headless fixture 驗證存活/死亡/復活與非法點選，TLS UI fixture 驗證入口與死亡／resync gate；[Client CI 44075415919](https://github.com/kevin840307/SGTest/actions/runs/44075415919) 全量 PASS。真正 Windows GUI 點怪精度、大型／trimmed Sprite hitbox、點到怪後有界 A* 接近／移動中攻擊與原版攻擊距離規則仍 NOT VERIFIED；Render FPS 不控制 Network/World Tick。
