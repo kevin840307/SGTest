@@ -234,6 +234,38 @@ func run() -> void:
 	if not panel.inventory_preview.visible:
 		fail("Inventory did not expand while loaded")
 		return
+	var metadata := JSON.stringify({
+		"kind":"source_derived_item_catalog","version":1,
+		"source_reference":"ci:synthetic converted item evidence",
+		"item_count":1,
+		"items":[{"item_id":2701,"name":"測試素材原名",
+			"category":"general","icon_id":421,
+			"source_path":"general/2701.tres",
+			"source_sha256":"0123456789abcdef".repeat(4)}]})
+	if not panel.item_catalog.load_json_text(metadata):
+		fail("Item metadata fixture could not be injected for UI")
+		return
+	var many := {}
+	for index in 85:
+		var uid := 10000+index
+		many[uid] = {"item_uid":uid,
+			"item_definition_id":2701 if index == 0 else 40000+index,
+			"quantity":1,"drop_id":50000+index}
+	panel._latest.inventory_items = many
+	panel._latest.inventory_revision = 2
+	panel._update_inventory_ui()
+	if not panel.inventory_preview.text.contains("測試素材原名") or not panel.inventory_page_label.text.contains("1 / 2") or panel.inventory_preview.text.contains("UID 10080"):
+		fail("Inventory page one did not use source-derived name and 80-row cap")
+		return
+	panel.inventory_next.pressed.emit()
+	if not panel.inventory_preview.text.contains("UID 10080") or panel.inventory_preview.text.contains("UID 10000") or not panel.inventory_page_label.text.contains("2 / 2"):
+		fail("Inventory next page did not display remaining five items")
+		return
+	panel.inventory_search.text = "2701"
+	panel.inventory_search.text_changed.emit("2701")
+	if not panel.inventory_preview.text.contains("測試素材原名") or panel.inventory_preview.text.contains("UID 10080") or not panel.inventory_page_label.text.contains("1 / 1"):
+		fail("Inventory search failed to filter on authoritative item definition")
+		return
 	panel._latest.inventory_ready = false
 	panel._update_inventory_ui()
 	if panel.inventory_preview.visible or not panel.inventory_button.disabled:
@@ -243,5 +275,5 @@ func run() -> void:
 	panel._set_respawn_controls()
 	app.queue_free()
 	await process_frame
-	print("CLIENT_TLS_LOGIN_PASS ui=PASS auth=PASS choose=PASS receipt=PASS world_ready=PASS password_cleared=PASS logout=PASS respawn_ui=PASS click_attack_ui=PASS click_pickup_ui=PASS persistent_inventory_ui=PASS")
+	print("CLIENT_TLS_LOGIN_PASS ui=PASS auth=PASS choose=PASS receipt=PASS world_ready=PASS password_cleared=PASS logout=PASS respawn_ui=PASS click_attack_ui=PASS click_pickup_ui=PASS persistent_inventory_ui=PASS item_metadata=PASS inventory_pagination=PASS")
 	quit(0)
