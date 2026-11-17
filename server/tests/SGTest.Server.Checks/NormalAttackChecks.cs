@@ -124,14 +124,16 @@ internal static class NormalAttackChecks
         try
         {
             await WaitFor(gateway,2);
-            Require(gateway.TryDequeueReliable(out var ready) &&
-                    WireProtocol.TryDecodeWorldReady(ready,out var readyValue),
-                "combat WorldReady");
-            Require(gateway.TryDequeueReliable(out var spawn) &&
-                    WireProtocol.TryDecodeMonsterState(
+            Require(gateway.TryDequeueReliable(out var ready),
+                "combat WorldReady frame");
+            Require(WireProtocol.TryDecodeWorldReady(ready,out var readyValue),
+                "combat WorldReady decode");
+            Require(gateway.TryDequeueReliable(out var spawn),
+                "combat MonsterSpawn frame");
+            Require(WireProtocol.TryDecodeMonsterState(
                         spawn,out var spawnKind,out var initial) &&
                     spawnKind==WireOpcode.MonsterSpawn && initial.CurrentHp==100,
-                "combat MonsterSpawn");
+                "combat MonsterSpawn decode");
             Require(gateway.FeedClientBytes(
                     WireProtocol.EncodeWorldReadyAck(
                         new(actor.MapEpoch,readyValue.ServerTick)),
@@ -144,10 +146,12 @@ internal static class NormalAttackChecks
                     postAttack:router.TryRequestNormalAttack)==WireFeedStatus.Accepted &&
                     count==1,"first attack ingress");
             var firstFrames=await DrainUntilAttack(gateway,1);
-            Require(firstFrames.Result is { } r &&
-                    r.Status==NormalAttackStatus.Applied &&
+            var r=firstFrames.Result ??
+                throw new Exception("first attack result missing");
+            var d=firstFrames.Monster ??
+                throw new Exception("first attack monster delta missing");
+            Require(r.Status==NormalAttackStatus.Applied &&
                     r.Damage==60 && r.CurrentHp==40 && r.MaxHp==100 &&
-                    firstFrames.Monster is { } d &&
                     d.CurrentHp==40 && d.Revision==r.TargetRevision,
                 "first damage/result AOI mismatch");
 
