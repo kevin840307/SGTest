@@ -166,3 +166,12 @@ WorldAoi now enqueues SelfState on an owner's increasing authoritative revision,
 ### 2026-11-17 Authoritative route facing
 
 ActorSnapshot carries Facing (byte 1..8). The single World writer quantizes each successfully traversed path segment using the original world-space convention (E6/SE7/S8/SW1/W2/NW3/N4/NE5); blocked/invalid commands cannot rotate the actor. Stop retains the last direction, and transfer preserves it in WorldReady. Facing participates in the deterministic state hash and in changed authoritative snapshots; no idle direction heartbeat was added. Initial Facing=1 remains a provisional spawn policy until original spawn rules and persistent orientation are implemented. V1 WorldReady/EntityState are now 45/74 bytes; see RUNTIME_PROTOCOL.
+
+
+### 2026-11-17 Position checkpoint boundary
+
+`CharacterPositionCheckpoint` is the single Runtime owner for periodic player-position persistence. It is deliberately outside `ServerWorld`: World remains a single 30Hz in-memory writer, while `WorldResultRouter` makes a memory-only observation of already-published authoritative snapshots. The coordinator coalesces by Actor/ConnectionEpoch/MapEpoch/EntityRevision and performs one SQLite transaction per periodic dirty batch; default cadence is 5 seconds and is bounded/configurable by `--position-checkpoint-ms`.
+
+Graceful disconnect final persistence and periodic writes use the same writer semaphore. A final snapshot marks its generation finalized before waiting on the database and leaves a tombstone after commit, so a delayed older periodic capture cannot overwrite the final Map/X/Y. A newer authenticated connection generation legitimately re-opens tracking. This keeps database latency and locks off the World Tick, avoids a second persistence architecture, and bounds process-crash **position** loss without pretending position snapshots are reliable combat/economy events.
+
+The Host supervises this checkpoint pump exactly like routing/AOI: a checkpoint infrastructure fault is terminal to the service and is reported through `TLS_HOST_FAIL`. Current public CI proves coalescing, background flush and stale-vs-final ordering; true OS hard-kill/WAL reopen remains a separate recovery gate.

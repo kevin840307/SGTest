@@ -106,7 +106,8 @@ internal static class TlsHost
         catch (OperationCanceledException) when (stop.IsCancellationRequested) { return 0; }
         catch (Exception error) when (error is IOException or InvalidOperationException or
                                      CryptographicException or System.Net.Sockets.SocketException or
-                                     WorldResultRoutingException or AoiBackpressureException)
+                                     WorldResultRoutingException or AoiBackpressureException or
+                                     CharacterPositionCheckpointException)
         {
             Console.Error.WriteLine("TLS_HOST_FAIL: " + error.GetType().Name + ": " + error.Message);
             return 1;
