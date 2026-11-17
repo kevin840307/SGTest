@@ -1,5 +1,8 @@
 using System.Text.Json;
 using SGTest.Server.Identity;
+using SGTest.Server.Gateway;
+using SGTest.Server.World;
+using SGTest.Server.Wire;
 
 internal static class RecoveryItemChecks
 {
@@ -11,6 +14,8 @@ internal static class RecoveryItemChecks
             ()=>DurableUse(root).GetAwaiter().GetResult());
         Checks.Run("recovery rejecting full HP, wrong owner, unknown item and fake rule never consumes",
             ()=>Rejections(root).GetAwaiter().GetResult());
+        Checks.Run("recovery queues damage before item heal, then resumes one consistent combat timeline",
+            ()=>DamageDrainRecovery(root).GetAwaiter().GetResult());
     }
 
     private static void Manifest(string root)
@@ -124,6 +129,71 @@ internal static class RecoveryItemChecks
         }
     }
 
+    private static async Task DamageDrainRecovery(string root)
+    {
+        var (store,_,character,_,uid,generation)=await Setup(root,"drain");
+        using(store)
+        {
+            var actor=new ActorSnapshot(character,13,1,1,0,0,24,24,1,false);
+            var profile=(await store.GetCharacterCombatProfileAsync(character))!.Data;
+            var gateway=new GatewayConnection(actor);
+            var settlement=new PlayerCombatSettlement(store,new(Capacity:8));
+            Checks.Require(settlement.TryAttach(actor,profile) &&
+                settlement.TryResume(actor),
+                "combat HP owner did not attach to trusted recovery actor");
+            MonsterWorldEvent Hit(int revision)=>new(
+                MonsterWorldEventKind.Attack,10,
+                new MonsterSnapshot(1001300001,1,0,13,40,24,40,24,
+                    100,100,MonsterAiState.Attack,actor.ActorId,revision,2),
+                actor.ActorId,20);
+            Checks.Require(settlement.TryPostMonsterHit(actor,Hit(2))==
+                CombatPostStatus.Accepted,
+                "first monster hit reservation rejected");
+            var drain=settlement.SuspendAndDrainAsync(
+                actor.ActorId,actor.ConnectionEpoch,actor.MapEpoch);
+            Checks.Require(!drain.IsCompleted,
+                "outstanding damage unexpectedly skipped drain gate");
+            using var stop=new CancellationTokenSource();
+            var worker=settlement.RunAsync(stop.Token);
+            await drain.WaitAsync(TimeSpan.FromSeconds(3));
+            Checks.Require(settlement.TryGetSuspendedHp(actor,out int hp) &&
+                hp==41 && settlement.CurrentHp(actor)==0,
+                "recovery observed reserved rather than committed combat HP");
+            var result=await store.UseVerifiedRecoveryItemAsync(
+                Context(character,generation,1,hp),uid,Rule);
+            Checks.Require(result.Status==RecoveryUseStatus.Granted &&
+                result.PreviousHp==41 && result.CurrentHp==71 &&
+                settlement.TryApplyCommittedRecovery(actor,result),
+                "HP recovery did not update projected and committed combat state");
+            var request=new TrustedRecoveryUse(
+                actor.ActorId,actor.ConnectionEpoch,actor.MapEpoch,1,uid);
+            Checks.Require(gateway.QueueRecoveryUseResult(request,result)==
+                GatewaySendStatus.Enqueued &&
+                gateway.TryDequeueReliable(out var frame) &&
+                WireProtocol.TryDecodeRecoveryUseResult(frame,out var message) &&
+                message.CurrentHp==71 && message.RemainingQuantity==1,
+                "recovery receipt not delivered after DB commit");
+            Checks.Require(settlement.TryResume(actor) &&
+                settlement.CurrentHp(actor)==71,
+                "recovery reactivation still using old projected HP");
+            Checks.Require(settlement.TryPostMonsterHit(actor,Hit(3))==
+                CombatPostStatus.Accepted,
+                "monster damage did not resume after queued recovery receipt");
+            using var wait=new CancellationTokenSource(TimeSpan.FromSeconds(3));
+            var oldHit=await settlement.Results.ReadAsync(wait.Token);
+            var nextHit=await settlement.Results.ReadAsync(wait.Token);
+            await settlement.SuspendAndDrainAsync(
+                actor.ActorId,actor.ConnectionEpoch,actor.MapEpoch);
+            Checks.Require(oldHit.CurrentHp==41 &&
+                nextHit.CurrentHp==52 &&
+                (await store.GetCharacterCombatProfileAsync(character))?.Data.CurrentHp==52 &&
+                settlement.TryGetSuspendedHp(actor,out var lastHp) && lastHp==52,
+                "damage/HP restoration diverged after suspend/resume");
+            stop.Cancel();
+            await worker.WaitAsync(TimeSpan.FromSeconds(2));
+        }
+    }
+
     private static async Task Rejections(string root)
     {
         var (store,_,character,other,uid,generation)=await Setup(root,"reject");
@@ -150,6 +220,14 @@ internal static class RecoveryItemChecks
             Checks.Require(after.Count==1 && after[0].Quantity==2 &&
                 (await store.GetCharacterCombatProfileAsync(character))?.Data.CurrentHp==60,
                 "rejected recovery mutated HP or inventory");
+            var profile=(await store.GetCharacterCombatProfileAsync(character))!.Data;
+            await store.SetCharacterCombatProfileAsync(
+                character,profile with {CurrentHp=profile.MaxHp});
+            var full=await store.UseVerifiedRecoveryItemAsync(
+                Context(character,generation,1,profile.MaxHp),uid,Rule);
+            Checks.Require(full.Status==RecoveryUseStatus.FullHp &&
+                (await store.ListInventoryItemsAsync(character)).Single().Quantity==2,
+                "full HP recovery consumed item even though no heal could apply");
         }
     }
 }
