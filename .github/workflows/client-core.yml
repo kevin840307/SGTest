@@ -63,7 +63,7 @@ jobs:
       - name: Godot WorldState generation gate
         run: .cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64 --headless --path client --script res://tests/test_world_state.gd
       - name: Render-FPS independent reducer gate
-        run: .cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64 --headless --path client --script res://tests/test_client_fps_independence.gd
+        run: timeout 20s .cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64 --headless --path client --script res://tests/test_client_fps_independence.gd
       - name: ClientSession automatic WorldReady ACK and AOI resync recovery
         run: .cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64 --headless --path client --script res://tests/test_client_resync.gd
       - name: Server-tick bounded player interpolation selection
