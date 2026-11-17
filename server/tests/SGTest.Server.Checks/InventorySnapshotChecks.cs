@@ -1,0 +1,90 @@
+using SGTest.Server.Wire;
+
+internal static class InventorySnapshotChecks
+{
+    private static readonly string Golden =
+        "47000000010024000B0000000000000000000000010200591B0000000000008D0A000002000000F5010000000000005A1B000000000000750E000003000000F601000000000000";
+
+    public static void Verify()
+    {
+        Checks.Run("inventory V1 CSharp/Godot golden and bounded chunk validation", WireGolden);
+        Checks.Run("inventory 128-slot chunk ordering and strict maximum", ChunkLimits);
+    }
+    private static void WireGolden()
+    {
+        var expected=new InventorySnapshotWire(11,0,true,[
+            new InventoryItemWire(7001,2701,2,501),
+            new InventoryItemWire(7002,3701,3,502)
+        ]);
+        byte[] payload=WireProtocol.EncodeInventorySnapshot(expected);
+        Checks.Require(Convert.ToHexString(payload)==Golden &&
+            WireProtocol.TryDecodeInventorySnapshot(payload,out var decoded) &&
+            decoded is not null && decoded.CharacterId==11 &&
+            decoded.StartIndex==0 && decoded.Complete &&
+            decoded.Items.SequenceEqual(expected.Items),
+            "cross-language durable item baseline golden mismatch");
+        var empty=WireProtocol.EncodeInventorySnapshot(
+            new(11,0,true,Array.Empty<InventoryItemWire>()));
+        Checks.Require(empty.Length==23 &&
+            WireProtocol.TryDecodeInventorySnapshot(empty,out var decodedEmpty) &&
+            decodedEmpty is not null && decodedEmpty.Complete &&
+            decodedEmpty.Items.Count==0,
+            "zero-item final baseline frame was not emitted");
+
+        byte[] bad=(byte[])payload.Clone();
+        bad[20]=2; // complete flag may only be 0 or 1
+        Checks.Require(!WireProtocol.TryDecodeInventorySnapshot(bad,out _),
+            "invalid inventory finality flag accepted");
+        bad=(byte[])payload.Clone();
+        bad[23]=0;bad[24]=0; // UID must be nonzero
+        bad[25]=0;bad[26]=0;
+        Checks.Require(!WireProtocol.TryDecodeInventorySnapshot(bad,out _),
+            "zero item UID accepted");
+        bad=(byte[])payload.Clone();
+        bad[47]=bad[23];bad[48]=bad[24];bad[49]=bad[25];bad[50]=bad[26];
+        Checks.Require(!WireProtocol.TryDecodeInventorySnapshot(bad,out _),
+            "duplicate item UID accepted");
+        Checks.Require(!WireProtocol.TryDecodeInventorySnapshot(
+                WireProtocol.EncodeGroundPickup(new(9,1,501)),out _),
+            "outbound pickup forged inventory snapshot");
+    }
+    private static void ChunkLimits()
+    {
+        var all=Enumerable.Range(0,4095)
+            .Select(x=>new InventoryItemWire(10000+x,2701,1,40000+x))
+            .ToArray();
+        int start=0,batches=0,frames=0;
+        while(start<all.Length)
+        {
+            var chunk=all.Skip(start).Take(128).ToArray();
+            var frame=WireProtocol.EncodeInventorySnapshot(new(
+                11,start,start+chunk.Length==all.Length,chunk));
+            Checks.Require(frame.Length==23+chunk.Length*24 &&
+                WireProtocol.TryDecodeInventorySnapshot(frame,out var result) &&
+                result is not null && result.StartIndex==start &&
+                result.Items.SequenceEqual(chunk),
+                "bounded inventory chunk changed item UIDs");
+            start+=chunk.Length;
+            batches++;
+            frames+=frame.Length;
+        }
+        Checks.Require(start==4095 && batches==32 && frames<102000,
+            "full inventory chunking unexpectedly exceeds bounds");
+        bool rejected=false;
+        try
+        {
+            WireProtocol.EncodeInventorySnapshot(new(
+                11,0,false,all.Take(129).ToArray()));
+        }
+        catch(ArgumentOutOfRangeException){rejected=true;}
+        Checks.Require(rejected,"129-item inventory chunk accepted");
+        rejected=false;
+        try
+        {
+            WireProtocol.EncodeInventorySnapshot(new(
+                11,4095,false,[new InventoryItemWire(7001,2701,1,501)]));
+        }
+        catch(ArgumentOutOfRangeException){rejected=true;}
+        Checks.Require(rejected,"inventory >4095-item snapshot silently truncated");
+    }
+}

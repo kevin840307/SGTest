@@ -98,6 +98,15 @@ internal static class TlsGatewayListenerChecks
                 choose.Status == CharacterChooseWireStatus.Success && choose.MapEpoch > previousEpoch,
                 "listener reconnect did not advance generation");
             previousEpoch = choose.MapEpoch;
+            // The authoritative DB baseline always precedes WorldReady.
+            var baseline=await Read(tls);
+            Checks.Require(WireProtocol.TryDecodeInventorySnapshot(baseline,out var loaded) &&
+                loaded is not null && loaded.CharacterId==fixture.CharacterId &&
+                loaded.StartIndex==0 && loaded.Complete &&
+                loaded.Items.Count==2 &&
+                loaded.Items.Select(x=>x.ItemUid).OrderBy(x=>x)
+                    .SequenceEqual(fixture.InventoryUids.OrderBy(x=>x)),
+                "TLS reconnect did not reload the same two persistent inventory UIDs");
             Checks.Require(WireProtocol.TryDecodeWorldReady(await Read(tls), out var ready) &&
                 ready.ActorId == fixture.CharacterId && ready.ReceiverMapEpoch == choose.MapEpoch,
                 "listener did not deliver authoritative WorldReady");
@@ -267,6 +276,7 @@ internal static class TlsGatewayListenerChecks
         public required WorldResultRouter Router;
         public required IdentityTlsAuthorization Authorization;
         public long CharacterId;
+        public required long[] InventoryUids;
         public required Task Routing;
         public required Task Visibility;
 
@@ -279,10 +289,30 @@ internal static class TlsGatewayListenerChecks
             await store.InitializeAsync();
             long account = (await store.CreateAccountAsync("listener_user", "Listener-Password-123!")).AccountId;
             var character = await store.CreateCharacterAsync(account, 0, "ListenerHero", new(115, 8, 8));
+            long characterId=character.Character!.CharacterId;
+            long generation=await store.AllocateLootWorldGenerationAsync();
+            var committed=await store.CreateTrustedGroundDropsAsync([
+                new TrustedDropSpawn(115,8,8,1001150001,
+                    SqliteIdentityStore.ComposeLootDeathRevision(generation,7),
+                    0,2701,2,LootSourceTrust.SyntheticTest,"ci:inventory-login"),
+                new TrustedDropSpawn(115,8,8,1001150001,
+                    SqliteIdentityStore.ComposeLootDeathRevision(generation,7),
+                    1,3701,3,LootSourceTrust.SyntheticTest,"ci:inventory-login")
+            ]);
+            for(int i=0;i<committed.Count;i++)
+            {
+                var claim=await store.ClaimGroundDropAsync(
+                    new TrustedPickupContext(characterId,19,1,(uint)(i+1),115,8,8),
+                    committed[i].DropId);
+                Checks.Require(claim.Status==PickupStatus.Granted,
+                    "seed trusted durable inventory before reconnect");
+            }
+            var saved=await store.ListInventoryItemsAsync(characterId);
             var router = new WorldResultRouter();
             var aoi = new WorldAoiPump(router);
             return new() { Host = host, Store = store, Certificate = TlsSocketChecks.CreateCertificate(),
-                Router = router, Authorization = new(store, host), CharacterId = character.Character!.CharacterId,
+                Router = router, Authorization = new(store, host), CharacterId = characterId,
+                InventoryUids=saved.Select(x=>x.ItemUid).ToArray(),
                 Routing = router.RunAsync(host.Results), Visibility = aoi.RunAsync() };
         }
 
