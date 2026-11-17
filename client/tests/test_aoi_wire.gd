@@ -18,6 +18,8 @@ const RESYNC := "1000000001001A000100000000000000"
 const MONSTER_SPAWN := "4E00000001001B000100000000000000320000000000000021A0AE3B0000000001000000000000000D0000000000F0420000A04202000000000000005A0000006400000002060B00000000000000"
 const MONSTER_DELTA := "4E00000001001C000100000000000000330000000000000021A0AE3B0000000001000000000000000D0000000000F8420000A0420300000000000000500000006400000003060B00000000000000"
 const MONSTER_DESPAWN := "2800000001001D000100000000000000340000000000000021A0AE3B000000000300000000000000"
+const GROUND_SPAWN := "340000000100200001000000000000003700000000000000F5010000000000000F000000000040420000C0418D0A000002000000"
+const GROUND_DESPAWN := "200000000100210001000000000000003800000000000000F501000000000000"
 
 func _fail(message: String) -> void:
 	push_error("AOI_WIRE_FAIL " + message)
@@ -48,6 +50,73 @@ func _initialize() -> void:
 	malformed_monster.encode_s32(60,101)
 	if not WireCodec.decode_monster_state(malformed_monster).is_empty():
 		_fail("monster HP above MaxHP accepted")
+		return
+	var ground := WireCodec.decode_ground_drop_spawn(GROUND_SPAWN.hex_decode())
+	var drop_gone := WireCodec.decode_ground_drop_despawn(GROUND_DESPAWN.hex_decode())
+	if ground.is_empty() or int(ground.receiver_map_epoch) != 1 or int(ground.server_tick) != 55 or int(ground.drop_id) != 501 or int(ground.item_definition_id) != 2701 or int(ground.quantity) != 2 or float(ground.x) != 48.0 or drop_gone.is_empty() or int(drop_gone.drop_id) != 501:
+		_fail("GroundDropSpawn/Despawn C# V1 goldens")
+		return
+	var malformed_ground := GROUND_SPAWN.hex_decode()
+	malformed_ground.encode_s32(48,0)
+	if not WireCodec.decode_ground_drop_spawn(malformed_ground).is_empty():
+		_fail("zero ground quantity accepted")
+		return
+	malformed_ground = GROUND_SPAWN.hex_decode()
+	malformed_ground.encode_u32(36,0x7FC00000)
+	if not WireCodec.decode_ground_drop_spawn(malformed_ground).is_empty():
+		_fail("NaN ground position accepted")
+		return
+	var ground_world = _ready_world()
+	if not ground_world.mark_world_ready_ack_sent(1,42):
+		_fail("ground fixture initial WorldReady ACK")
+		return
+	if not ground_world.apply_frame(GROUND_SPAWN.hex_decode()) or not ground_world.snapshot().ground_drops.has(501):
+		_fail("ground baseline spawn not accepted")
+		return
+	if not ground_world.apply_frame(GROUND_SPAWN.hex_decode()) or int(ground_world.snapshot().stale_aoi_events) != 1:
+		_fail("duplicate immutable ground UID did not become stale")
+		return
+	var wrong_ground := GROUND_SPAWN.hex_decode()
+	wrong_ground.encode_s64(16,56)
+	wrong_ground.encode_s32(44,2702)
+	if not ground_world.apply_frame(wrong_ground) or not bool(ground_world.snapshot().resync_pending):
+		_fail("changed item for identical ground UID did not require resync")
+		return
+	var ground_ready := READY.hex_decode()
+	ground_ready.encode_s64(16,57)
+	if not ground_world.apply_frame(ground_ready) or not ground_world.snapshot().ground_drops.is_empty():
+		_fail("ground AOI baseline survived same-map resync")
+		return
+	if not ground_world.mark_world_ready_ack_sent(1,57) or not ground_world.apply_frame(GROUND_SPAWN.hex_decode()):
+		_fail("ground AOI after resync sequence")
+		return
+	# A post-Ready stale tick=55 is ignored; a fresh authoritative event
+	# arrives with later server tick and must again populate the baseline.
+	var fresh_ground := GROUND_SPAWN.hex_decode()
+	fresh_ground.encode_s64(16,58)
+	if not ground_world.apply_frame(fresh_ground) or ground_world.snapshot().ground_drops.size() != 1:
+		_fail("fresh ground AOI after resync missing")
+		return
+	var fresh_despawn := GROUND_DESPAWN.hex_decode()
+	fresh_despawn.encode_s64(16,59)
+	if not ground_world.apply_frame(fresh_despawn) or not ground_world.snapshot().ground_drops.is_empty():
+		_fail("ground UID despawn left a ghost")
+		return
+	if not ground_world.apply_frame(fresh_despawn):
+		_fail("duplicate ground despawn became fatal")
+		return
+	var again := GROUND_SPAWN.hex_decode()
+	again.encode_s64(16,60)
+	if not ground_world.apply_frame(again) or ground_world.snapshot().ground_drops.size() != 1:
+		_fail("ground re-enter Spawn failed")
+		return
+	var to_map13 := MAP13_READY.hex_decode()
+	to_map13.encode_s64(16,61)
+	if not ground_world.apply_frame(to_map13) or not ground_world.snapshot().ground_drops.is_empty() or int(ground_world.snapshot().map_id) != 13:
+		_fail("map transfer did not clear old ground UID")
+		return
+	if not ground_world.apply_frame(again) or not ground_world.snapshot().ground_drops.is_empty():
+		_fail("stale map ground UID crossed transfer")
 		return
 	var ready := WireCodec.decode_world_ready(READY.hex_decode())
 	if ready.is_empty() or int(ready.actor_id) != 11 or int(ready.map_epoch) != 1 or float(ready.x) != 24.0:
@@ -181,7 +250,7 @@ func _initialize() -> void:
 	if world.apply_frame(future) or int(world.snapshot().state) != WorldState.STATE_FAILED:
 		_fail("future map AOI did not fail closed")
 		return
-	print("AOI_WIRE_GODOT_PASS ready=45 ack=24 resync=16 spawn=74 delta=74 despawn=40 monster_spawn=78 monster_delta=78 monster_despawn=40 worldstate=PASS same_epoch_resync=PASS monster_gap=RESYNC map_epoch=PASS stale=IGNORED future=FAIL_CLOSED")
+	print("AOI_WIRE_GODOT_PASS ready=45 ack=24 resync=16 spawn=74 delta=74 despawn=40 monster_spawn=78 monster_delta=78 monster_despawn=40 ground_spawn=52 ground_despawn=32 ground_resync=PASS worldstate=PASS same_epoch_resync=PASS monster_gap=RESYNC map_epoch=PASS stale=IGNORED future=FAIL_CLOSED")
 	quit(0)
 
 func _mutate_u8(bytes: PackedByteArray, offset: int, value: int) -> PackedByteArray:
