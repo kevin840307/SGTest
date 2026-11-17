@@ -147,3 +147,14 @@ Use `WorldResultRouter.RunAsync(WorldHost.Results)` as the sole authoritative Wo
 `WorldAoi` 現在與 Player/Monster 共用唯一 map-local bucket，從同一個觀察者 FIFO 向玩家可靠傳送 `GroundDropSpawn`（opcode 32、52 bytes）／`GroundDropDespawn`（opcode 33、32 bytes）；Client 只接收 Server 已落實 SQLite commit 的 DropId／MapId／ItemId／Quantity／XY。掉落本身位置不可變，所以閒置時不傳每 Tick Delta。Host 每次啟動從 SQLite 於 Tick 之外恢復未撿取記錄（上限及合成來源保護）；WorldReady、跨圖與 resync 重建當下可見列表。背景 Worker 以有界通知將成功提交的掉落送入同一個 AOI consumer，每 poll 最多處理8個已提交批次；此上限只控制背景同步工作，不影響30Hz ServerWorld 固定 Tick。Godot 現以輕量 Canvas 圓點代表掉落 UID，不會新增物品貼圖快取或每件地上物 Sprite Node；原版掉落素材尚待核實後替換呈現。C# / Godot 封包 golden、同圖/跨圖/Resync、20玩家/500掉落的確定性功能回歸已加入。
 
 **玩家目前仍不能點地上物直接拾取。** 雖然 `SqliteIdentityStore.ClaimGroundDropAsync` 已有唯一 UID／原子背包結算／競態保護，Authenticated Gateway Pickup Wire、拾取結果、背景結算與由成功提交產生的 AOI RemoveGroundDrop 尚未串接；本輪 AOI 測試的手動 RemoveGroundDrop 不是正式玩法。重啟前尚未完成 SQLite commit 的死亡事件存在原先已註明的 crash gap。20/500 是功能數量 Gate，不是 CPU/記憶體/P95/P99 壓測。
+
+
+## 2026-11-17 玩家權威拾取（MVP006 Pickup partial）
+
+Godot 左鍵優先命中 AOI 的可見地上物標記（目前採 14 world px 近距點選），ClientSession 只傳 `GroundPickup` V1 **opcode 34／28 bytes**：`MapEpoch:int64, PickupSequence:uint32, DropId:int64`。TLS Server Gateway 依已認證 CharacterId/ConnectionEpoch 建 TrustedGroundPickup，不接受玩家自行指定座標、角色、道具 ID 或物品數。每連線有界 async Worker 會從 ServerWorld 單一 owner 讀取可信位置及 MapEpoch，與 NPC 換圖處理透過 per-session semaphore 序列化；不可用的 World/世代拒絕，死亡角色拒絕。
+
+既有 SQLite `ClaimGroundDropAsync` 檢查同圖與距離（目前 96 world px：**暫定值，原版尚未核實**）、同掉落 UID 只能一角色領取，且背包 `item_instances` 產生持久物品 UID 與 Claim 在**同一 Transaction**。結果經同一可靠 Gateway FIFO 回覆 `GroundPickupResult` V1 **opcode 35／45 bytes**；只有真正 `Granted` 才向既有 AOI pump 發已領取 UID 通知，對可見玩家送 GroundDropDespawn；不在拾取點擊時樂觀刪除。Server Checks 加入 C#/Godot 互通 golden、偽造 Server result opcode 拒絕、真擊殺→DB Drop→Gateway Pickup→SQLite ItemUid→AOI 消失完整合成環境驗收。Server CI 44085408907 PASS。
+
+Client WorldState 拒絕不同 UID／未送出的拾取結果、只允許一筆等待中的拾取，對相同操作重送不重發物品；`received_item_grants` **僅供目前登入拾取回饋，並非可跨登入讀取的背包快照**。Godot `SessionPanel` 顯示最新 Server 授權物品 UID、ItemId 和數量，不冒充原版物品名稱。正式全背包需另接 Server InventorySnapshot/增量同步，並載入核實後的原版物品圖與名稱。
+
+仍須驗證：原版 96px 拾取距離、Windows GPU/GUI 真地圖、20玩家搶同一 UID 的 TLS 壓測、硬中斷在 DB commit 與 AOI remove notification 間的 reconciliation；同 session NPC transfer 已序列化，但瞬間怪物攻擊致死與拾取跨 worker 的完全線性化仍需實際設計與回歸。
