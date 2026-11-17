@@ -32,6 +32,7 @@ const OPCODE_GROUND_DROP_SPAWN := 32
 const OPCODE_GROUND_DROP_DESPAWN := 33
 const OPCODE_GROUND_PICKUP := 34
 const OPCODE_GROUND_PICKUP_RESULT := 35
+const OPCODE_INVENTORY_SNAPSHOT := 36
 const MOVE_TARGET_FRAME_BYTES := 28
 const MOVE_RECEIPT_FRAME_BYTES := 30
 const NPC_INTERACT_FRAME_BYTES := 24
@@ -58,6 +59,10 @@ const GROUND_DROP_SPAWN_FRAME_BYTES := 52
 const GROUND_DROP_DESPAWN_FRAME_BYTES := 32
 const GROUND_PICKUP_FRAME_BYTES := 28
 const GROUND_PICKUP_RESULT_FRAME_BYTES := 45
+const INVENTORY_SNAPSHOT_HEADER_BYTES := 23
+const INVENTORY_ITEM_BYTES := 24
+const INVENTORY_SNAPSHOT_MAX_PER_FRAME := 128
+const INVENTORY_SNAPSHOT_MAX_ITEMS := 4095
 
 static func encode_move_target(map_epoch: int, movement_sequence: int, target_x: int, target_y: int) -> PackedByteArray:
 	if map_epoch <= 0 or movement_sequence <= 0 or movement_sequence > 0xffffffff:
@@ -458,6 +463,32 @@ static func encode_ground_pickup(epoch: int, sequence: int, drop_id: int) -> Pac
 	return writer.data_array
 
 
+static func decode_inventory_snapshot(frame: PackedByteArray) -> Dictionary:
+	if not _valid_variable_header(frame,OPCODE_INVENTORY_SNAPSHOT,INVENTORY_SNAPSHOT_HEADER_BYTES,INVENTORY_SNAPSHOT_HEADER_BYTES+INVENTORY_SNAPSHOT_MAX_PER_FRAME*INVENTORY_ITEM_BYTES):
+		return {}
+	var reader := _reader(frame,8)
+	var character := reader.get_64()
+	var start := reader.get_32()
+	var final_chunk := reader.get_u8()
+	var count := reader.get_u16()
+	if character <= 0 or start < 0 or start > INVENTORY_SNAPSHOT_MAX_ITEMS or final_chunk > 1 or count > INVENTORY_SNAPSHOT_MAX_PER_FRAME or start+count > INVENTORY_SNAPSHOT_MAX_ITEMS or frame.size() != INVENTORY_SNAPSHOT_HEADER_BYTES+count*INVENTORY_ITEM_BYTES:
+		return {}
+	var items: Array[Dictionary] = []
+	var ids := {}
+	for _index in count:
+		var uid := reader.get_64()
+		var item_id := reader.get_32()
+		var quantity := reader.get_32()
+		var drop_id := reader.get_64()
+		if uid <= 0 or item_id < 1 or item_id > 100000000 or quantity < 1 or quantity > 1000000 or drop_id <= 0 or ids.has(uid):
+			return {}
+		ids[uid] = true
+		items.append({"item_uid":uid,"item_definition_id":item_id,
+			"quantity":quantity,"drop_id":drop_id})
+	return {"character_id":character,"start_index":start,
+		"complete":final_chunk==1,"items":items}
+
+
 static func decode_ground_pickup_result(frame: PackedByteArray) -> Dictionary:
 	if not _valid_header(frame,OPCODE_GROUND_PICKUP_RESULT,GROUND_PICKUP_RESULT_FRAME_BYTES):
 		return {}
@@ -543,7 +574,7 @@ static func frame_opcode(frame: PackedByteArray) -> int:
 	if reader.get_u16() != VERSION:
 		return -1
 	var opcode := reader.get_u16()
-	if opcode not in [OPCODE_MOVE_TARGET, OPCODE_MOVE_RECEIPT, OPCODE_NPC_INTERACT, OPCODE_NPC_INTERACT_RESULT, OPCODE_NORMAL_ATTACK, OPCODE_NORMAL_ATTACK_RESULT, OPCODE_PLAYER_COMBAT_STATE, OPCODE_PLAYER_DAMAGE, OPCODE_AUTH_REQUEST, OPCODE_AUTH_RESULT, OPCODE_CHARACTER_LIST, OPCODE_CHARACTER_CHOOSE, OPCODE_CHARACTER_CHOOSE_RESULT, OPCODE_WORLD_READY, OPCODE_ENTITY_SPAWN, OPCODE_ENTITY_DESPAWN, OPCODE_ENTITY_DELTA, OPCODE_SELF_STATE, OPCODE_WORLD_READY_ACK, OPCODE_WORLD_RESYNC_REQUEST, OPCODE_MONSTER_SPAWN, OPCODE_MONSTER_DELTA, OPCODE_MONSTER_DESPAWN, OPCODE_PLAYER_RESPAWN, OPCODE_PLAYER_RESPAWN_RESULT, OPCODE_GROUND_DROP_SPAWN, OPCODE_GROUND_DROP_DESPAWN, OPCODE_GROUND_PICKUP, OPCODE_GROUND_PICKUP_RESULT]:
+	if opcode not in [OPCODE_MOVE_TARGET, OPCODE_MOVE_RECEIPT, OPCODE_NPC_INTERACT, OPCODE_NPC_INTERACT_RESULT, OPCODE_NORMAL_ATTACK, OPCODE_NORMAL_ATTACK_RESULT, OPCODE_PLAYER_COMBAT_STATE, OPCODE_PLAYER_DAMAGE, OPCODE_AUTH_REQUEST, OPCODE_AUTH_RESULT, OPCODE_CHARACTER_LIST, OPCODE_CHARACTER_CHOOSE, OPCODE_CHARACTER_CHOOSE_RESULT, OPCODE_WORLD_READY, OPCODE_ENTITY_SPAWN, OPCODE_ENTITY_DESPAWN, OPCODE_ENTITY_DELTA, OPCODE_SELF_STATE, OPCODE_WORLD_READY_ACK, OPCODE_WORLD_RESYNC_REQUEST, OPCODE_MONSTER_SPAWN, OPCODE_MONSTER_DELTA, OPCODE_MONSTER_DESPAWN, OPCODE_PLAYER_RESPAWN, OPCODE_PLAYER_RESPAWN_RESULT, OPCODE_GROUND_DROP_SPAWN, OPCODE_GROUND_DROP_DESPAWN, OPCODE_GROUND_PICKUP, OPCODE_GROUND_PICKUP_RESULT, OPCODE_INVENTORY_SNAPSHOT]:
 		return -1
 	return opcode
 

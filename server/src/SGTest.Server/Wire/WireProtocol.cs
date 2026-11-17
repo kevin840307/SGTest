@@ -35,7 +35,8 @@ public enum WireOpcode : ushort
     GroundDropSpawn = 32,
     GroundDropDespawn = 33,
     GroundPickup = 34,
-    GroundPickupResult = 35
+    GroundPickupResult = 35,
+    InventorySnapshot = 36
 }
 
 public enum AuthWireStatus : byte { Success = 0, InvalidCredentials = 1, Disabled = 2 }
@@ -109,6 +110,11 @@ public readonly record struct GroundPickupWire(
 public readonly record struct GroundPickupResultWire(
     long MapEpoch,uint PickupSequence,PickupStatus Status,
     long DropId,long ItemUid,int ItemDefinitionId,int Quantity);
+public readonly record struct InventoryItemWire(
+    long ItemUid,int ItemDefinitionId,int Quantity,long SourceDropId);
+public sealed record InventorySnapshotWire(
+    long CharacterId,int StartIndex,bool Complete,
+    IReadOnlyList<InventoryItemWire> Items);
 
 /// <summary>
 /// Version 1 complete-frame codec. Transport/TLS/socket buffering is separate.
@@ -151,6 +157,10 @@ public static class WireProtocol
     public const int GroundDropDespawnFrameBytes = 32;
     public const int GroundPickupFrameBytes = HeaderBytes + 8 + 4 + 8;
     public const int GroundPickupResultFrameBytes = HeaderBytes + 8 + 4 + 1 + 8 + 8 + 4 + 4;
+    public const int InventorySnapshotHeaderBytes = HeaderBytes + 8 + 4 + 1 + 2;
+    public const int InventoryItemBytes = 24;
+    public const int InventorySnapshotMaxItemsPerFrame = 128;
+    public const int InventorySnapshotMaxItems = 4095;
     private static readonly UTF8Encoding StrictUtf8 = new(false, true);
 
     public static byte[] EncodeMoveTarget(MoveTargetWire value)
@@ -758,6 +768,75 @@ public static class WireProtocol
         return ValidMonsterState(value);
     }
 
+    /// <summary>Server-only immutable inventory baseline; chunks must be
+    /// consecutive and a final chunk is mandatory even for zero inventory.</summary>
+    public static byte[] EncodeInventorySnapshot(InventorySnapshotWire value)
+    {
+        ArgumentNullException.ThrowIfNull(value);
+        if(value.CharacterId<=0||value.StartIndex<0||
+            value.StartIndex>InventorySnapshotMaxItems ||
+            value.Items is null || value.Items.Count>InventorySnapshotMaxItemsPerFrame ||
+            value.StartIndex+value.Items.Count>InventorySnapshotMaxItems)
+            throw new ArgumentOutOfRangeException(nameof(value));
+        var ids=new HashSet<long>();
+        foreach(var item in value.Items)
+            if(item.ItemUid<=0||item.ItemDefinitionId is <1 or >100_000_000 ||
+               item.Quantity is <1 or >1_000_000 || item.SourceDropId<=0 ||
+               !ids.Add(item.ItemUid))
+                throw new ArgumentOutOfRangeException(nameof(value));
+        int count=value.Items.Count;
+        var frame=NewFrame(WireOpcode.InventorySnapshot,
+            InventorySnapshotHeaderBytes+count*InventoryItemBytes);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(8,8),value.CharacterId);
+        BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(16,4),value.StartIndex);
+        frame[20]=(byte)(value.Complete?1:0);
+        BinaryPrimitives.WriteUInt16LittleEndian(frame.AsSpan(21,2),checked((ushort)count));
+        for(int i=0;i<count;i++)
+        {
+            var item=value.Items[i];
+            int offset=InventorySnapshotHeaderBytes+i*InventoryItemBytes;
+            BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(offset,8),item.ItemUid);
+            BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(offset+8,4),item.ItemDefinitionId);
+            BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(offset+12,4),item.Quantity);
+            BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(offset+16,8),item.SourceDropId);
+        }
+        return frame;
+    }
+
+    public static bool TryDecodeInventorySnapshot(
+        ReadOnlySpan<byte> frame,out InventorySnapshotWire? value)
+    {
+        value=null;
+        if(!TryReadHeader(frame,out var header)||
+            header.Opcode!=WireOpcode.InventorySnapshot) return false;
+        long character=BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(8,8));
+        int start=BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(16,4));
+        byte complete=frame[20];
+        int count=BinaryPrimitives.ReadUInt16LittleEndian(frame.Slice(21,2));
+        if(character<=0||start<0||complete>1||
+            count>InventorySnapshotMaxItemsPerFrame||
+            start+count>InventorySnapshotMaxItems ||
+            frame.Length!=InventorySnapshotHeaderBytes+count*InventoryItemBytes)
+            return false;
+        var items=new List<InventoryItemWire>(count);
+        var ids=new HashSet<long>();
+        for(int i=0;i<count;i++)
+        {
+            int offset=InventorySnapshotHeaderBytes+i*InventoryItemBytes;
+            var item=new InventoryItemWire(
+                BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(offset,8)),
+                BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(offset+8,4)),
+                BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(offset+12,4)),
+                BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(offset+16,8)));
+            if(item.ItemUid<=0||item.ItemDefinitionId is <1 or >100_000_000 ||
+               item.Quantity is <1 or >1_000_000||item.SourceDropId<=0||
+               !ids.Add(item.ItemUid)) return false;
+            items.Add(item);
+        }
+        value=new(character,start,complete==1,items);
+        return true;
+    }
+
     public static byte[] EncodeGroundPickup(GroundPickupWire value)
     {
         if (value.MapEpoch<=0||value.PickupSequence==0||value.DropId<=0)
@@ -1025,7 +1104,8 @@ public static class WireProtocol
             28 => WireOpcode.MonsterDelta, 29 => WireOpcode.MonsterDespawn,
             30 => WireOpcode.PlayerRespawn, 31 => WireOpcode.PlayerRespawnResult,
             32 => WireOpcode.GroundDropSpawn, 33 => WireOpcode.GroundDropDespawn,
-            34 => WireOpcode.GroundPickup, 35 => WireOpcode.GroundPickupResult, _ => 0
+            34 => WireOpcode.GroundPickup, 35 => WireOpcode.GroundPickupResult,
+            36 => WireOpcode.InventorySnapshot, _ => 0
         };
         if (opcode == 0) return false;
         bool sizeOk = opcode switch
@@ -1056,6 +1136,10 @@ public static class WireProtocol
             WireOpcode.GroundDropDespawn => advertised == GroundDropDespawnFrameBytes,
             WireOpcode.GroundPickup => advertised == GroundPickupFrameBytes,
             WireOpcode.GroundPickupResult => advertised == GroundPickupResultFrameBytes,
+            WireOpcode.InventorySnapshot => advertised >= InventorySnapshotHeaderBytes &&
+                advertised <= InventorySnapshotHeaderBytes +
+                    InventorySnapshotMaxItemsPerFrame*InventoryItemBytes &&
+                (advertised-InventorySnapshotHeaderBytes)%InventoryItemBytes==0,
             _ => false
         };
         if (!sizeOk) return false;
