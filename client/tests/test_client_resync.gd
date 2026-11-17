@@ -25,11 +25,17 @@ func _initialize() -> void:
 		return
 
 	var healed := _wait(session,func(v):
-		return int(v.state)==WorldState.STATE_IN_WORLD and bool(v.world_ready) and
-			int(v.resync_requests)==1 and int(v.resync_completions)==1 and
-			not bool(v.resync_pending) and int(v.last_world_ready_ack_epoch)==1 and
-			int(v.pending_world_ready_ack_epoch)==0 and not v.self_state.is_empty() and
-			v.entities.has(22),2500)
+		return (
+			int(v.state)==WorldState.STATE_IN_WORLD
+			and bool(v.world_ready)
+			and int(v.resync_requests)==1
+			and int(v.resync_completions)==1
+			and not bool(v.resync_pending)
+			and int(v.last_world_ready_ack_epoch)==1
+			and int(v.pending_world_ready_ack_epoch)==0
+			and not v.self_state.is_empty()
+			and v.entities.has(22)
+		),2500)
 	if healed.is_empty():
 		_fail("same-session baseline did not heal "+str(session.snapshot()),session)
 		return
@@ -48,8 +54,12 @@ func _initialize() -> void:
 		_fail("post-resync move intent",session)
 		return
 	var moved := _wait(session,func(v):
-		return int(v.state)==WorldState.STATE_IN_WORLD and int(v.movement_sequence)==1 and
-			int(v.last_receipt_sequence)==1 and int(v.last_receipt_status)==0,1800)
+		return (
+			int(v.state)==WorldState.STATE_IN_WORLD
+			and int(v.movement_sequence)==1
+			and int(v.last_receipt_sequence)==1
+			and int(v.last_receipt_status)==0
+		),1800)
 	if moved.is_empty():
 		_fail("gameplay did not resume "+str(session.snapshot()),session)
 		return
