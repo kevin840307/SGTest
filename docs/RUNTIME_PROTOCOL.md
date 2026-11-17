@@ -282,6 +282,21 @@ Godot treats `PlayerDamage` as the sole own-HP damage authority: exact/current M
 
 Server core 44041147095 passes 114/114 checks; Client core 44041146895 passes reducer and true TLS two-way combat: synthetic player Attack60 reduces Monster 100→40, one synthetic Monster raw20 hit against Defense10 commits 18 damage and Player 100→82, with the durable PlayerDamage event observed only after DB commit. Existing reconnect, cross-map, NPC and formal Host regressions remain green.
 
+### 2026-11-18 Shared player hit/death/respawn presentation
+
+Durable own-HP authority remains opcode7/8 and respawn authority remains opcode30/31. Two additional Server-only AOI frames carry **presentation facts only**:
+
+| Opcode | Direction | Bytes | Payload |
+|---|---|---:|---|
+| 42 PlayerDamageVisual | Server→Godot reliable AOI | 66 | `ReceiverMapEpoch; ServerTick; VictimActorId; VictimConnectionEpoch; DamageSequence; AttackerMonsterEntityId; AttackerMonsterRevision; Damage; Died; Facing` |
+| 43 PlayerRespawnVisual | Server→Godot reliable AOI | 45 | `ReceiverMapEpoch; ServerTick; ActorId; ConnectionEpoch; RespawnSequence; Facing` |
+
+Opcode42 deliberately contains **no CurrentHP/MaxHP**. A remote observer may render the same committed hit/death but cannot obtain a new authoritative remote HP baseline from this frame; the victim's HP is still changed only by its authenticated opcode8 after SQLite commit. The Server posts damage presentation only from `PlayerCombatSettlement`'s post-commit lifecycle. A bounded Router channel transfers it to the single WorldAoiPump owner, which fans out only to observers currently seeing the exact victim Actor/Connection/Map generation, including the victim. Opcode43 is posted only after durable respawn succeeds, the World death gate is cleared and the requester result is admitted.
+
+Godot validates receiver MapEpoch, visible actor generation and monotonic per-generation sequence before retaining presentation events. Duplicate/stale events are ignored, future/generation conflicts use the existing resync/fail-closed boundary, and neither event mutates HP. `PlayerPresentation` uses optional complete NH/ND logical-view sets: NH is a one-shot hit action; ND remains latched until the matching shared respawn event. Missing/incomplete NH or ND assets do not create guessed clips.
+
+Server core 44200133417 PASS includes 66/45-byte C# goldens, malformed-frame rejection and victim/visible-peer-only AOI fanout. Client core 44200393222 PASS includes the matching Godot golden/reducer, presentation NH/ND lifecycle, real lethal TLS + respawn, and two real TLS clients where actor and observer receive the same durable 18-damage presentation while only the actor receives HP authority.
+
 ### 2026-11-17 Server death gate and authoritative player respawn
 
 Death is now a Server lifecycle state, not only a Client presentation flag. After a lethal durable PlayerDamage commit, the trusted combat lifecycle sets the matching World actor `CombatDead=true` before the reliable death frame is queued. The World immediately clears any active route. A raw/stale client that still sends Move receives `MoveReceiptStatus.CombatDead=11`; NPC interaction returns `NpcPortalStatus.CombatDead=6`; combat resolution also refuses attacks from an actor whose authoritative combat HP is zero. A character reconnecting with persisted HP=0 is restored into the same dead gate before WorldReady.
