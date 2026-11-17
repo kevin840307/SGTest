@@ -109,11 +109,11 @@ func choose() -> void:
 
 
 func submit_move(point: Vector2) -> bool:
-	return active and bool(_latest.get("world_ready",false)) and point.is_finite() and session.move_target(int(floor(point.x)),int(floor(point.y)))
+	return active and not bool(_latest.get("reconnecting",false)) and bool(_latest.get("world_ready",false)) and point.is_finite() and session.move_target(int(floor(point.x)),int(floor(point.y)))
 
 
 func submit_npc_interact(spawn_id: int) -> bool:
-	return active and bool(_latest.get("world_ready",false)) and spawn_id > 0 and session.npc_interact(spawn_id)
+	return active and not bool(_latest.get("reconnecting",false)) and bool(_latest.get("world_ready",false)) and spawn_id > 0 and session.npc_interact(spawn_id)
 
 
 func disconnect_session() -> void:
@@ -152,6 +152,9 @@ func _process(delta: float) -> void:
 		return
 	_poll_elapsed = 0.0
 	_latest = session.snapshot() # Reads published state; never pumps packets.
+	if bool(_latest.get("reconnecting",false)):
+		status.text = "連線中斷，正在重新連線（%d/%d）…" % [int(_latest.reconnect_attempt),int(_latest.max_reconnect_attempts)]
+		return
 	var state := int(_latest.state)
 	if state == State.STATE_FAILED:
 		disconnect_session()

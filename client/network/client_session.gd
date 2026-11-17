@@ -6,6 +6,8 @@ const WorldState = preload("res://network/world_state.gd")
 
 const MAX_INTENTS := 128
 const LOGIC_SLEEP_MS := 2
+const MAX_RECONNECT_ATTEMPTS := 3
+const RECONNECT_BACKOFF_MS := [100,250,500]
 
 var _transport: RefCounted
 var _world: RefCounted = WorldState.new()
@@ -15,6 +17,18 @@ var _stop_requested := false
 var _running := false
 var _intents: Array[Dictionary] = []
 var _published: Dictionary = _world.snapshot()
+var _host := ""
+var _port := 0
+var _common_name := ""
+var _trusted_chain = null
+var _username := ""
+var _credential_bytes := PackedByteArray()
+var _selected_character_id := 0
+var _has_entered_world := false
+var _reconnecting := false
+var _reconnect_attempt := 0
+var _reconnect_count := 0
+var _last_transport_error := OK
 
 func _init(transport_override: RefCounted = null) -> void:
 	_transport = transport_override if transport_override != null else Transport.new()
@@ -29,7 +43,20 @@ func connect_secure(host: String, port: int, username: String, password: String,
 	_stop_requested = false
 	_intents.clear()
 	_world = WorldState.new()
-	_published = _world.snapshot()
+	_host = host
+	_port = port
+	_common_name = common_name
+	_trusted_chain = trusted_chain
+	_username = username
+	_clear_credentials_locked()
+	_credential_bytes = password.to_utf8_buffer()
+	_selected_character_id = 0
+	_has_entered_world = false
+	_reconnecting = false
+	_reconnect_attempt = 0
+	_reconnect_count = 0
+	_last_transport_error = OK
+	_published = _decorate_snapshot(_world.snapshot())
 	_running = true
 	_mutex.unlock()
 	var error: int = _transport.start_secure(host, port, common_name, trusted_chain)
@@ -39,11 +66,12 @@ func connect_secure(host: String, port: int, username: String, password: String,
 		_mutex.unlock()
 		return error
 	_thread = Thread.new()
-	error = _thread.start(_logic_loop.bind(username, password))
+	error = _thread.start(_logic_loop)
 	if error != OK:
 		_transport.stop()
 		_mutex.lock()
 		_running = false
+		_clear_credentials_locked()
 		_mutex.unlock()
 	return error
 
@@ -76,35 +104,44 @@ func stop() -> void:
 	_transport.stop()
 	_mutex.lock()
 	_running = false
+	_reconnecting = false
+	_intents.clear()
+	_clear_credentials_locked()
+	_username = ""
+	_selected_character_id = 0
 	_mutex.unlock()
 
 func _queue_intent(intent: Dictionary) -> bool:
 	_mutex.lock()
-	var accepted := _running and not _stop_requested and _intents.size() < MAX_INTENTS
+	var accepted := _running and not _stop_requested and not _reconnecting and _intents.size() < MAX_INTENTS
 	if accepted:
 		_intents.append(intent)
 	_mutex.unlock()
 	return accepted
 
-func _logic_loop(username: String, password: String) -> void:
+func _logic_loop() -> void:
 	var auth_sent := false
-	var local_password := password
 	while not _should_stop():
 		var transport_status: Dictionary = _transport.get_status()
 		var transport_state := int(transport_status.state)
 		if transport_state == Transport.STATE_FAILED:
-			_world.fail("transport_error_%d" % int(transport_status.terminal_error))
+			_last_transport_error = int(transport_status.terminal_error)
+			if _can_auto_reconnect() and _start_reconnect_attempt():
+				auth_sent = false
+				continue
+			_world.fail("transport_error_%d" % _last_transport_error)
 			_publish()
 			break
 		if transport_state == Transport.STATE_CONNECTED and not auth_sent:
-			var auth_frame := WireCodec.encode_auth_request(username, local_password)
+			var local_password := _credential_string()
+			var auth_frame := WireCodec.encode_auth_request(_username, local_password)
+			local_password = ""
 			if auth_frame.is_empty():
 				_world.fail("invalid_auth_input")
 				_publish()
 				break
 			if _transport.send_frame(auth_frame):
 				auth_sent = _world.mark_auth_sent()
-				local_password = ""
 				_publish()
 
 		for event in _transport.drain_events(64):
@@ -114,17 +151,119 @@ func _logic_loop(username: String, password: String) -> void:
 			if not _world.apply_frame(frame):
 				_publish()
 				_transport.stop()
+				_clear_credentials()
 				return
 			_publish()
 			_flush_control_frames()
 
 		_flush_control_frames()
+		_process_reconnect_choose()
 		_process_first_intent()
+		_maybe_finish_world_entry()
 		if int(_world.state) == WorldState.STATE_FAILED:
+			if _can_retry_world_rejected() and _start_reconnect_attempt():
+				auth_sent = false
+				continue
 			_transport.stop()
 			break
 		OS.delay_msec(LOGIC_SLEEP_MS)
 	_publish()
+	if int(_world.state) == WorldState.STATE_FAILED:
+		_clear_credentials()
+
+func _can_auto_reconnect() -> bool:
+	_mutex.lock()
+	var allowed := _has_entered_world and _selected_character_id > 0 and _reconnect_attempt < MAX_RECONNECT_ATTEMPTS and not _stop_requested
+	_mutex.unlock()
+	return allowed
+
+func _can_retry_world_rejected() -> bool:
+	if int(_world.choose_status) != 2:
+		return false
+	_mutex.lock()
+	var allowed := _reconnecting and _reconnect_attempt < MAX_RECONNECT_ATTEMPTS and not _stop_requested
+	_mutex.unlock()
+	return allowed
+
+func _start_reconnect_attempt() -> bool:
+	_transport.stop()
+	_mutex.lock()
+	if _stop_requested or not _has_entered_world or _selected_character_id <= 0 or _reconnect_attempt >= MAX_RECONNECT_ATTEMPTS:
+		_mutex.unlock()
+		return false
+	_reconnecting = true
+	_reconnect_attempt += 1
+	var attempt := _reconnect_attempt
+	_intents.clear() # never replay old gameplay intents across a new connection generation
+	_mutex.unlock()
+	_publish()
+	var delay_ms := int(RECONNECT_BACKOFF_MS[mini(attempt-1,RECONNECT_BACKOFF_MS.size()-1)])
+	var until := Time.get_ticks_msec()+delay_ms
+	while Time.get_ticks_msec()<until:
+		if _should_stop():
+			return false
+		OS.delay_msec(mini(LOGIC_SLEEP_MS,until-Time.get_ticks_msec()))
+	_world = WorldState.new()
+	_publish()
+	var error: int = _transport.start_secure(_host,_port,_common_name,_trusted_chain)
+	if error != OK:
+		_last_transport_error = error
+		return _start_reconnect_attempt() if attempt < MAX_RECONNECT_ATTEMPTS else false
+	return true
+
+func _process_reconnect_choose() -> void:
+	_mutex.lock()
+	var reconnecting := _reconnecting
+	var character_id := _selected_character_id
+	_mutex.unlock()
+	if not reconnecting or character_id <= 0 or int(_world.state) != WorldState.STATE_SELECTING_CHARACTER:
+		return
+	if not _world.characters.any(func(entry: Dictionary) -> bool: return int(entry.character_id)==character_id):
+		_world.fail("reconnect_character_missing")
+		_publish()
+		return
+	var frame := WireCodec.encode_character_choose(character_id)
+	if not frame.is_empty() and _transport.send_frame(frame) and _world.mark_choose_sent(character_id):
+		_publish()
+
+func _maybe_finish_world_entry() -> void:
+	var current := _world.snapshot()
+	if int(current.state) != WorldState.STATE_IN_WORLD or not bool(current.world_ready) or int(current.pending_world_ready_ack_epoch) != 0 or int(current.last_world_ready_ack_epoch) != int(current.map_epoch):
+		return
+	_mutex.lock()
+	_has_entered_world = true
+	if _reconnecting:
+		_reconnecting = false
+		_reconnect_attempt = 0
+		_reconnect_count += 1
+	_mutex.unlock()
+	_publish()
+
+func _credential_string() -> String:
+	_mutex.lock()
+	var copy := _credential_bytes.duplicate()
+	_mutex.unlock()
+	var value := copy.get_string_from_utf8()
+	copy.fill(0)
+	return value
+
+func _clear_credentials() -> void:
+	_mutex.lock()
+	_clear_credentials_locked()
+	_mutex.unlock()
+
+func _clear_credentials_locked() -> void:
+	if not _credential_bytes.is_empty():
+		_credential_bytes.fill(0)
+		_credential_bytes.clear()
+
+func _decorate_snapshot(value: Dictionary) -> Dictionary:
+	value["reconnecting"] = _reconnecting
+	value["reconnect_attempt"] = _reconnect_attempt
+	value["reconnect_count"] = _reconnect_count
+	value["max_reconnect_attempts"] = MAX_RECONNECT_ATTEMPTS
+	value["last_transport_error"] = _last_transport_error
+	return value
 
 func _flush_control_frames() -> void:
 	var current: Dictionary = _world.snapshot()
@@ -154,6 +293,9 @@ func _process_first_intent() -> void:
 		var character_id := int(intent.character_id)
 		var frame := WireCodec.encode_character_choose(character_id)
 		if not frame.is_empty() and _transport.send_frame(frame) and _world.mark_choose_sent(character_id):
+			_mutex.lock()
+			_selected_character_id = character_id
+			_mutex.unlock()
 			_pop_intent()
 			_publish()
 	elif kind == "npc":
@@ -199,5 +341,5 @@ func _should_stop() -> bool:
 func _publish() -> void:
 	var value: Dictionary = _world.snapshot()
 	_mutex.lock()
-	_published = value
+	_published = _decorate_snapshot(value)
 	_mutex.unlock()
