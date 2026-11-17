@@ -101,6 +101,8 @@ internal static class TlsGatewayListenerChecks
             Checks.Require(WireProtocol.TryDecodeWorldReady(await Read(tls), out var ready) &&
                 ready.ActorId == fixture.CharacterId && ready.ReceiverMapEpoch == choose.MapEpoch,
                 "listener did not deliver authoritative WorldReady");
+            await tls.WriteAsync(WireProtocol.EncodeWorldReadyAck(
+                new(ready.ReceiverMapEpoch, ready.ServerTick)));
             await tls.WriteAsync(WireProtocol.EncodeMoveTarget(new(choose.MapEpoch, 1, 24, 8)));
             bool receipt = false;
             for (int frame = 0; frame < 16 && !receipt; frame++)

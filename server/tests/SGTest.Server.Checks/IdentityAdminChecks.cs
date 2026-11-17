@@ -212,6 +212,8 @@ internal static class IdentityAdminChecks
                     "Host did not enter explicit validated spawn");
                 Checks.Require(WireProtocol.TryDecodeWorldReady(await Read(tls),out var world) && world.ReceiverMapEpoch==choose.MapEpoch,
                     "Host did not deliver WorldReady after provisioned login");
+                await tls.WriteAsync(WireProtocol.EncodeWorldReadyAck(
+                    new(world.ReceiverMapEpoch, world.ServerTick)));
                 await tls.WriteAsync(WireProtocol.EncodeMoveTarget(new(choose.MapEpoch,1,40,24)));
                 bool receipt = false;
                 for(int i=0;i<16 && !receipt;i++)
