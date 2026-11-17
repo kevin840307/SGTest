@@ -226,3 +226,20 @@ The official Host now owns one process-local `CharacterPositionCheckpoint`. The 
 Periodic flush and graceful disconnect final persistence share one writer gate. `FinalizeAsync` marks the current generation finalized before waiting for SQLite and retains a generation/revision tombstone afterward. Therefore a periodic batch captured earlier cannot overwrite the final disconnect position; a strictly newer authenticated connection generation is the only event that re-opens tracking for that character. No DB schema migration is required.
 
 The Host supervises the checkpoint task alongside listener/router/AOI and reports checkpoint statistics at shutdown. Server CI 43991017853 passes 94/94 checks, including coalescing latest revisions, stale-after-final rejection and bounded background persistence. Client CI 43991017743 remains fully green including true TLS reconnect, two-client AOI/cross-map/NPC and formal Host + two main scenes. With the default interval, **position** rollback after an abrupt process failure is bounded by the most recent committed checkpoint. Server core 43991613110 performs a real Linux SIGKILL after 40,8 is committed and after a later 24,8 movement remains volatile; a fresh process reopens the DB at 40,8. This is process-kill/reopen coverage for committed position state, not a kill-during-SQLite-transaction fault injection, and combat/items/currency still require their own reliable transactional persistence semantics.
+
+
+### 2026-11-17 Monster state frames and shared resync
+
+V1 adds **Server→Client reliable monster state** on the existing TLS/Gateway FIFO:
+
+| Opcode | Direction | Bytes | Payload |
+|---|---|---:|---|
+| 27 MonsterSpawn | Server→Godot | 78 | receiver MapEpoch, ServerTick, EntityId, EnemyId, SourceIndex, MapId, X/Y, EntityRevision, CurrentHP/MaxHP, AI state, Facing, TargetActorId |
+| 28 MonsterDelta | Server→Godot | 78 | same fixed layout as MonsterSpawn |
+| 29 MonsterDespawn | Server→Godot | 40 | receiver MapEpoch, ServerTick, EntityId, last EntityRevision |
+
+Monster EntityId/EnemyId/HP/state/facing/target are server-owned. The client cannot submit damage through these frames. `WorldState.monsters` has its own identity/revision reducer; duplicate/stale events are ignored, while missing Spawn or forward revision gaps enter the existing bounded `WorldResyncRequest` path. A replacement WorldReady clears both player and monster baselines. Monster state therefore reuses the exact ACK/resync generation contract rather than creating a second recovery protocol.
+
+The same `WorldAoi` tracks player and monster spatial visibility. Monster-enabled hosts preserve every authoritative 30Hz World Tick as the single AI clock, but empty ticks do not themselves create reliable wire frames. On a tick that changes monster state, AOI stages the final coalesced snapshot before applying Player Join/Move visibility and then performs a revision-idempotent final refresh; a joining client receives one current MonsterSpawn rather than stale Spawn + same-tick Delta.
+
+Cross-runtime fixtures validate 78/40-byte C#↔Godot goldens and malformed state rejection. Server CI 44021869726 passes the live shared-AOI/Gateway path; Client CI 44021869721 passes `AOI_WIRE_GODOT_PASS ... monster_gap=RESYNC`, visual presentation, real TLS/reconnect, two-client/cross-map/NPC regressions and the formal Host with two actual main scenes. These frames carry authoritative monster state only; player→monster attack requests, player HP settlement, MISS/skills/rewards/drop durability remain later Combat protocol work.
