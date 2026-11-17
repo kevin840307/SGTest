@@ -25,6 +25,8 @@ internal static class TlsGatewayListenerChecks
             () => AuthenticatedReconnect(root).GetAwaiter().GetResult());
         Checks.Run("verified recovery TLS request atomically changes HP and last stack, then relogin persists",
             () => AuthenticatedRecovery(root).GetAwaiter().GetResult());
+        Checks.Run("inventory discard TLS request atomically removes owned stack and relogin persists",
+            () => AuthenticatedInventoryDiscard(root).GetAwaiter().GetResult());
         Checks.Run("Plaintext and invalid credentials close only that client and release admission",
             () => UntrustedClients(root).GetAwaiter().GetResult());
         Checks.Run("TLS session infrastructure failure stops admission and is observable by supervisor",
@@ -247,6 +249,121 @@ internal static class TlsGatewayListenerChecks
         Checks.Require((await fixture.Store.ListInventoryItemsAsync(
             fixture.CharacterId)).Count==1,
             "relogin minted consumed recovery stack");
+        stop.Cancel();
+        await run.WaitAsync(TimeSpan.FromSeconds(5));
+    }
+
+    private static async Task AuthenticatedInventoryDiscard(string root)
+    {
+        await using var fixture=await Fixture.Create(root);
+        await using var listener=fixture.Listener(
+            new(MaxConnections:2,MaxConnectionsPerAddress:2));
+        using var stop=new CancellationTokenSource();
+        var run=listener.RunAsync(stop.Token);
+        long firstUid=fixture.InventoryUids[0];
+        long otherUid=fixture.InventoryUids[1];
+
+        async Task<(SslStream Tls,TcpClient Client,long Epoch,InventorySnapshotWire Inventory)> Login()
+        {
+            var client=new TcpClient();
+            await client.ConnectAsync(listener.LocalEndpoint);
+            var tls=new SslStream(client.GetStream(),false,(_,cert,_,_)=>
+                cert?.GetCertHashString()==fixture.Certificate.GetCertHashString());
+            await TlsSocketChecks.AuthenticateClient(tls);
+            await tls.WriteAsync(WireProtocol.EncodeAuthRequest(
+                new("listener_user","Listener-Password-123!")));
+            Checks.Require(WireProtocol.TryDecodeAuthResult(
+                await Read(tls),out var auth) &&
+                auth.Status==AuthWireStatus.Success,
+                "authenticated discard login denied");
+            Checks.Require(WireProtocol.TryDecodeCharacterList(
+                await Read(tls),out var characters) &&
+                characters.Characters.Count==1,
+                "discard login character list missing");
+            await tls.WriteAsync(WireProtocol.EncodeCharacterChoose(
+                new(fixture.CharacterId)));
+            Checks.Require(WireProtocol.TryDecodeCharacterChooseResult(
+                await Read(tls),out var selected) &&
+                selected.Status==CharacterChooseWireStatus.Success,
+                "discard login failed to choose character");
+            Checks.Require(WireProtocol.TryDecodeInventorySnapshot(
+                await Read(tls),out var inventory) &&
+                inventory is not null && inventory.Complete,
+                "discard inventory baseline missing");
+            Checks.Require(WireProtocol.TryDecodeWorldReady(
+                await Read(tls),out var ready) &&
+                ready.ReceiverMapEpoch==selected.MapEpoch,
+                "discard player WorldReady missing");
+            await tls.WriteAsync(WireProtocol.EncodeWorldReadyAck(
+                new(ready.ReceiverMapEpoch,ready.ServerTick)));
+            return (tls,client,selected.MapEpoch,inventory!);
+        }
+
+        async Task<InventoryDiscardResultWire> ReadDiscard(SslStream tls)
+        {
+            for(int i=0;i<32;i++)
+            {
+                var frame=await Read(tls);
+                if(WireProtocol.TryDecodeInventoryDiscardResult(frame,out var result))
+                    return result;
+            }
+            throw new Exception(
+                "Inventory discard result did not arrive in reliable FIFO");
+        }
+
+        var first=await Login();
+        try
+        {
+            Checks.Require(first.Inventory.Items.Count==2 &&
+                first.Inventory.Items.Any(x=>x.ItemUid==firstUid&&x.Quantity==2) &&
+                first.Inventory.Items.Any(x=>x.ItemUid==otherUid&&x.Quantity==3),
+                "discard login baseline did not expose durable owned stacks");
+            await first.Tls.WriteAsync(WireProtocol.EncodeInventoryDiscard(
+                new(first.Epoch,1,firstUid,1)));
+            var applied=await ReadDiscard(first.Tls);
+            Checks.Require(applied.Status==InventoryDiscardStatus.Applied &&
+                applied.ItemUid==firstUid && applied.ItemDefinitionId==2701 &&
+                applied.DiscardedQuantity==1 && applied.RemainingQuantity==1,
+                "authenticated discard did not remove exactly one owned unit");
+            await first.Tls.WriteAsync(WireProtocol.EncodeInventoryDiscard(
+                new(first.Epoch,1,firstUid,1)));
+            var replay=await ReadDiscard(first.Tls);
+            Checks.Require(replay.Status==InventoryDiscardStatus.AlreadyApplied &&
+                replay.DiscardedQuantity==1 && replay.RemainingQuantity==1,
+                "TLS discard replay consumed another unit");
+            await first.Tls.WriteAsync(WireProtocol.EncodeInventoryDiscard(
+                new(first.Epoch,2,firstUid,1)));
+            var emptied=await ReadDiscard(first.Tls);
+            Checks.Require(emptied.Status==InventoryDiscardStatus.Applied &&
+                emptied.RemainingQuantity==0,
+                "TLS second discard did not remove final stack unit");
+            var persisted=await fixture.Store.ListInventoryItemsAsync(
+                fixture.CharacterId);
+            Checks.Require(persisted.Count==1 &&
+                persisted[0].ItemUid==otherUid && persisted[0].Quantity==3,
+                "discard mutated wrong persistent inventory UID/quantity");
+        }
+        finally
+        {
+            await first.Tls.DisposeAsync();
+            first.Client.Dispose();
+        }
+
+        await Until(()=>listener.Statistics.ActiveConnections==0);
+        var second=await Login();
+        try
+        {
+            Checks.Require(second.Inventory.Items.Count==1 &&
+                second.Inventory.Items[0].ItemUid==otherUid &&
+                second.Inventory.Items[0].Quantity==3,
+                "relogin inventory baseline resurrected discarded stack");
+        }
+        finally
+        {
+            await second.Tls.DisposeAsync();
+            second.Client.Dispose();
+        }
+        await Until(()=>listener.Statistics.ActiveConnections==0);
         stop.Cancel();
         await run.WaitAsync(TimeSpan.FromSeconds(5));
     }
