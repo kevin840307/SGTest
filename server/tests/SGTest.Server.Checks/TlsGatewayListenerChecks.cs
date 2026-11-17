@@ -349,6 +349,34 @@ internal static class TlsGatewayListenerChecks
         Checks.Require(valid.Exit == 0 && valid.Out.Contains("TLS_HOST_READY") &&
             valid.Out.Contains("TLS_HOST_STOPPED") && valid.Out.Contains("\"ActiveConnections\":0"),
             "serve startup/shutdown failed: " + valid.Error);
+        // Runtime startup must explicitly opt into manually audited recovery
+        // data. A client-derived name or unverified .tres never enables heals.
+        string rules=Path.Combine(content,"recovery-verified.json");
+        File.WriteAllText(rules,JsonSerializer.Serialize(new {
+            kind="verified_recovery_item_rules",version=1,
+            rules_verified=true,gameplay_ready=true,
+            source_reference="ci:synthetic-rule-reviewed",
+            rules=new[]{new{item_definition_id=1001,restore_hp=140,required_level=1}}
+        }));
+        var enabled=await Run("serve","--content",content,"--identity",
+            Path.Combine(content,"identity.db"),"--certificate",pfx,
+            "--port","0","--recovery-rules",rules,"--seconds","1");
+        Checks.Require(enabled.Exit==0 && enabled.Out.Contains("TLS_HOST_READY") &&
+            enabled.Out.Contains("\\\"verified_recovery_rule_count\\\":1"),
+            "verified recovery manifest was not admitted by formal Host: "+enabled.Error);
+        string unverified=Path.Combine(content,"recovery-unverified.json");
+        File.WriteAllText(unverified,JsonSerializer.Serialize(new {
+            kind="verified_recovery_item_rules",version=1,
+            rules_verified=false,gameplay_ready=true,
+            source_reference="ci:unverified",
+            rules=new[]{new{item_definition_id=1001,restore_hp=140,required_level=1}}
+        }));
+        var denied=await Run("serve","--content",content,"--identity",
+            Path.Combine(content,"identity.db"),"--certificate",pfx,
+            "--port","0","--recovery-rules",unverified,"--seconds","1");
+        Checks.Require(denied.Exit==1 && !denied.Out.Contains("TLS_HOST_READY"),
+            "unverified recovery rule file started a production listener");
+
         var invalid = await Run("serve", "--content", content, "--identity", Path.Combine(content, "identity.db"),
             "--certificate", pfx, "--bind", "not-an-ip");
         Checks.Require(invalid.Exit == 2 && !invalid.Out.Contains("TLS_HOST_READY"),
