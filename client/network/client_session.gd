@@ -87,6 +87,13 @@ func move_target(target_x: int, target_y: int) -> bool:
 		return false
 	return _queue_intent({"type": "move", "x": target_x, "y": target_y})
 
+func use_recovery_item(item_uid: int) -> bool:
+	var current := snapshot()
+	if item_uid <= 0 or not bool(current.get("inventory_ready",false)) or not bool(current.get("combat_available",false)) or bool(current.get("player_dead",false)) or int(current.get("pending_recovery_sequence",0)) != 0 or not (current.get("inventory_items",{}) as Dictionary).has(item_uid):
+		return false
+	return _queue_intent({"type":"use_recovery_item","item_uid":item_uid})
+
+
 func pickup_ground_drop(drop_id: int) -> bool:
 	var current := snapshot()
 	if drop_id <= 0 or bool(current.get("player_dead",false)) or int(current.get("pending_pickup_sequence",0)) != 0 or not (current.get("ground_drops",{}) as Dictionary).has(drop_id):
@@ -136,6 +143,11 @@ func stop() -> void:
 func _queue_intent(intent: Dictionary) -> bool:
 	_mutex.lock()
 	var accepted := _running and not _stop_requested and not _reconnecting and _intents.size() < MAX_INTENTS
+	if accepted and str(intent.get("type","")) == "use_recovery_item":
+		for queued in _intents:
+			if str(queued.get("type","")) == "use_recovery_item":
+				accepted = false
+				break
 	if accepted and str(intent.get("type","")) == "pickup_ground_drop":
 		# Reject repeated clicks while the first one is still in the intent
 		# queue, before it acquires a pending authoritative sequence.
@@ -334,6 +346,19 @@ func _process_first_intent() -> void:
 		var sequence := int(current.npc_interaction_sequence) + 1
 		var frame := WireCodec.encode_npc_interact(int(current.map_epoch), sequence, int(intent.spawn_id))
 		if not frame.is_empty() and _transport.send_frame(frame) and _world.mark_npc_interact_sent(sequence):
+			_pop_intent()
+			_publish()
+	elif kind == "use_recovery_item":
+		var current: Dictionary = _world.snapshot()
+		if int(current.state) != WorldState.STATE_IN_WORLD or not bool(current.combat_available) or bool(current.player_dead) or not bool(current.inventory_ready) or not bool(current.world_ready) or bool(current.resync_pending) or bool(current.waiting_for_new_map) or int(current.pending_world_ready_ack_epoch) != 0 or int(current.last_world_ready_ack_epoch) != int(current.map_epoch) or int(current.pending_recovery_sequence) != 0:
+			return
+		var uid := int(intent.item_uid)
+		if not (current.inventory_items as Dictionary).has(uid):
+			_pop_intent()
+			return
+		var sequence := int(current.recovery_sequence)+1
+		var frame := WireCodec.encode_recovery_use(int(current.map_epoch),sequence,uid)
+		if not frame.is_empty() and _transport.send_frame(frame) and _world.mark_recovery_use_sent(sequence,uid):
 			_pop_intent()
 			_publish()
 	elif kind == "pickup_ground_drop":

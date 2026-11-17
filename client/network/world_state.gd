@@ -42,6 +42,13 @@ var player_damage_sequence := 0
 var last_player_damage_tick := -1
 var last_player_damage := {}
 var stale_player_damage := 0
+var recovery_sequence := 0
+var pending_recovery_sequence := 0
+var pending_recovery_item_uid := 0
+var last_recovery_result_sequence := 0
+var last_recovery_result_status := -1
+var last_recovery_result := {}
+var stale_recovery_results := 0
 var pickup_sequence := 0
 var pending_pickup_sequence := 0
 var pending_pickup_drop_id := 0
@@ -110,6 +117,15 @@ func mark_normal_attack_sent(sequence: int) -> bool:
 	attack_sequence = sequence
 	return true
 
+func mark_recovery_use_sent(sequence: int,item_uid: int) -> bool:
+	if state != STATE_IN_WORLD or player_dead or not combat_available or not inventory_ready or not world_ready or resync_pending or waiting_for_new_map or pending_world_ready_ack_epoch != 0 or last_world_ready_ack_epoch != map_epoch or pending_recovery_sequence != 0 or sequence <= recovery_sequence or sequence > 0xffffffff or item_uid <= 0 or not inventory_items.has(item_uid):
+		return false
+	recovery_sequence = sequence
+	pending_recovery_sequence = sequence
+	pending_recovery_item_uid = item_uid
+	return true
+
+
 func mark_pickup_sent(sequence: int, drop_id: int) -> bool:
 	if state != STATE_IN_WORLD or player_dead or not world_ready or resync_pending or waiting_for_new_map or pending_world_ready_ack_epoch != 0 or last_world_ready_ack_epoch != map_epoch or pending_pickup_sequence != 0 or sequence <= pickup_sequence or sequence > 0xffffffff or drop_id <= 0 or not ground_drops.has(drop_id):
 		return false
@@ -173,6 +189,8 @@ func apply_frame(frame: PackedByteArray) -> bool:
 			return _apply_player_respawn_result(frame)
 		WireCodec.OPCODE_GROUND_PICKUP_RESULT:
 			return _apply_pickup_result(frame)
+		WireCodec.OPCODE_RECOVERY_USE_RESULT:
+			return _apply_recovery_use_result(frame)
 		WireCodec.OPCODE_INVENTORY_SNAPSHOT:
 			return _apply_inventory_snapshot(frame)
 		WireCodec.OPCODE_WORLD_READY:
@@ -233,6 +251,13 @@ func snapshot() -> Dictionary:
 		"last_player_damage_tick": last_player_damage_tick,
 		"last_player_damage": last_player_damage.duplicate(true),
 		"stale_player_damage": stale_player_damage,
+		"recovery_sequence": recovery_sequence,
+		"pending_recovery_sequence": pending_recovery_sequence,
+		"pending_recovery_item_uid": pending_recovery_item_uid,
+		"last_recovery_result_sequence": last_recovery_result_sequence,
+		"last_recovery_result_status": last_recovery_result_status,
+		"last_recovery_result": last_recovery_result.duplicate(true),
+		"stale_recovery_results": stale_recovery_results,
 		"pickup_sequence": pickup_sequence,
 		"pending_pickup_sequence": pending_pickup_sequence,
 		"pending_pickup_drop_id": pending_pickup_drop_id,
@@ -332,6 +357,13 @@ func _apply_choose(frame: PackedByteArray) -> bool:
 	last_player_damage_tick = -1
 	last_player_damage.clear()
 	stale_player_damage = 0
+	recovery_sequence = 0
+	pending_recovery_sequence = 0
+	pending_recovery_item_uid = 0
+	last_recovery_result_sequence = 0
+	last_recovery_result_status = -1
+	last_recovery_result.clear()
+	stale_recovery_results = 0
 	pickup_sequence = 0
 	pending_pickup_sequence = 0
 	pending_pickup_drop_id = 0
@@ -579,6 +611,13 @@ func _apply_world_ready(frame: PackedByteArray) -> bool:
 		last_attack_server_tick = -1
 		last_attack_result.clear()
 		stale_attack_results = 0
+		recovery_sequence = 0
+		pending_recovery_sequence = 0
+		pending_recovery_item_uid = 0
+		last_recovery_result_sequence = 0
+		last_recovery_result_status = -1
+		last_recovery_result.clear()
+		stale_recovery_results = 0
 		pickup_sequence = 0
 		pending_pickup_sequence = 0
 		pending_pickup_drop_id = 0
@@ -738,6 +777,54 @@ func _apply_inventory_snapshot(frame: PackedByteArray) -> bool:
 	if bool(value.complete):
 		inventory_ready = true
 		inventory_revision += 1
+	return true
+
+
+func _apply_recovery_use_result(frame: PackedByteArray) -> bool:
+	if state != STATE_IN_WORLD:
+		return fail("recovery_result_out_of_state")
+	var result := WireCodec.decode_recovery_use_result(frame)
+	if result.is_empty():
+		return fail("invalid_recovery_result")
+	var epoch := int(result.map_epoch)
+	var sequence := int(result.use_sequence)
+	var uid := int(result.item_uid)
+	if epoch < map_epoch:
+		stale_recovery_results += 1
+		return true
+	if epoch > map_epoch:
+		return fail("future_recovery_result")
+	if sequence > recovery_sequence:
+		return fail("unsent_recovery_result")
+	if sequence <= last_recovery_result_sequence:
+		stale_recovery_results += 1
+		return true
+	if sequence != pending_recovery_sequence or uid != pending_recovery_item_uid:
+		return fail("recovery_result_wrong_request")
+	if int(result.status) == 0:
+		if not inventory_ready or not inventory_items.has(uid) or not combat_available:
+			return fail("recovery_grant_without_inventory_or_combat")
+		var previous: Dictionary = inventory_items[uid]
+		if int(previous.item_definition_id) != int(result.item_definition_id) or int(previous.quantity) != int(result.remaining_quantity)+1:
+			return fail("recovery_grant_inventory_quantity_mismatch")
+		if int(result.max_hp) != player_max_hp or int(result.current_hp) < player_current_hp or player_dead:
+			return fail("recovery_grant_inconsistent_hp")
+		if int(result.remaining_quantity) == 0:
+			inventory_items.erase(uid)
+		else:
+			var updated := previous.duplicate(true)
+			updated.quantity = int(result.remaining_quantity)
+			inventory_items[uid] = updated
+		inventory_revision += 1
+		player_current_hp = int(result.current_hp)
+		player_dead = false
+	# An AlreadyGranted receipt is a replay of a historical SQLite action:
+	# never apply its old HP or decrement the quantity a second time.
+	last_recovery_result_sequence = sequence
+	last_recovery_result_status = int(result.status)
+	last_recovery_result = result.duplicate(true)
+	pending_recovery_sequence = 0
+	pending_recovery_item_uid = 0
 	return true
 
 
