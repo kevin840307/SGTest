@@ -1,3 +1,5 @@
+using SGTest.Server.World;
+
 namespace SGTest.Server.Gateway;
 
 public sealed record WorldAoiPumpOptions(
