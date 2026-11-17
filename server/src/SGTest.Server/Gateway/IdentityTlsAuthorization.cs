@@ -381,6 +381,17 @@ public sealed class IdentityTlsAuthorization
                 }
             }
 
+            // Bounded durable inventory baseline is read on the TLS async
+            // authorization path, before the Gateway begins AOI egress.
+            // Do not emit a partial/truncated snapshot. Item instances are
+            // owned by the selected authenticated character only.
+            var inventory = await _identity.ListInventoryItemsAsync(
+                snapshot.ActorId,WireProtocol.InventorySnapshotMaxItems+1,
+                cancellationToken).ConfigureAwait(false);
+            if(inventory.Count>WireProtocol.InventorySnapshotMaxItems)
+                throw new InvalidOperationException(
+                    "Character inventory exceeds bounded V1 baseline capacity");
+
             cancellationToken.ThrowIfCancellationRequested();
             await WriteFrameAsync(tls, WireProtocol.EncodeCharacterChooseResult(new(
                 CharacterChooseWireStatus.Success, snapshot.ActorId, snapshot.MapId,
@@ -392,6 +403,25 @@ public sealed class IdentityTlsAuthorization
                     snapshot.MapEpoch, combat.Data.CurrentHp, combat.Data.MaxHp)),
                     cancellationToken).ConfigureAwait(false);
             }
+
+            // Write a final packet even for an empty inventory; client must
+            // never confuse an empty but complete bag with incomplete data.
+            const int chunkSize=WireProtocol.InventorySnapshotMaxItemsPerFrame;
+            for(int start=0; start<inventory.Count; start+=chunkSize)
+            {
+                var group=inventory.Skip(start).Take(chunkSize)
+                    .Select(item=>new InventoryItemWire(item.ItemUid,
+                        item.ItemDefinitionId,item.Quantity,item.SourceDropId))
+                    .ToArray();
+                bool final=start+group.Length==inventory.Count;
+                await WriteFrameAsync(tls,WireProtocol.EncodeInventorySnapshot(
+                    new(snapshot.ActorId,start,final,group)),
+                    cancellationToken).ConfigureAwait(false);
+            }
+            if(inventory.Count==0)
+                await WriteFrameAsync(tls,WireProtocol.EncodeInventorySnapshot(
+                    new(snapshot.ActorId,0,true,Array.Empty<InventoryItemWire>())),
+                    cancellationToken).ConfigureAwait(false);
 
             cancellationToken.ThrowIfCancellationRequested();
             var gateway = new GatewayConnection(

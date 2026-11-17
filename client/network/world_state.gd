@@ -50,6 +50,10 @@ var last_pickup_result_status := -1
 var last_pickup_result := {}
 var stale_pickup_results := 0
 var received_item_grants := {}
+var inventory_items := {}
+var inventory_ready := false
+var inventory_revision := 0
+var inventory_next_index := 0
 
 var respawn_sequence := 0
 var last_respawn_result_sequence := 0
@@ -169,6 +173,8 @@ func apply_frame(frame: PackedByteArray) -> bool:
 			return _apply_player_respawn_result(frame)
 		WireCodec.OPCODE_GROUND_PICKUP_RESULT:
 			return _apply_pickup_result(frame)
+		WireCodec.OPCODE_INVENTORY_SNAPSHOT:
+			return _apply_inventory_snapshot(frame)
 		WireCodec.OPCODE_WORLD_READY:
 			return _apply_world_ready(frame)
 		WireCodec.OPCODE_SELF_STATE:
@@ -235,6 +241,10 @@ func snapshot() -> Dictionary:
 		"last_pickup_result": last_pickup_result.duplicate(true),
 		"stale_pickup_results": stale_pickup_results,
 		"received_item_grants": received_item_grants.duplicate(true),
+		"inventory_items": inventory_items.duplicate(true),
+		"inventory_ready": inventory_ready,
+		"inventory_revision": inventory_revision,
+		"inventory_next_index": inventory_next_index,
 		"respawn_sequence": respawn_sequence,
 		"last_respawn_result_sequence": last_respawn_result_sequence,
 		"last_respawn_result_status": last_respawn_result_status,
@@ -330,6 +340,10 @@ func _apply_choose(frame: PackedByteArray) -> bool:
 	last_pickup_result.clear()
 	stale_pickup_results = 0
 	received_item_grants.clear()
+	inventory_items.clear()
+	inventory_ready = false
+	inventory_revision = 0
+	inventory_next_index = 0
 	respawn_sequence = 0
 	last_respawn_result_sequence = 0
 	last_respawn_result_status = -1
@@ -704,6 +718,29 @@ func _apply_monster_state(frame: PackedByteArray, opcode: int) -> bool:
 	last_aoi_tick = maxi(last_aoi_tick,int(value.server_tick))
 	return true
 
+func _apply_inventory_snapshot(frame: PackedByteArray) -> bool:
+	if state != STATE_IN_WORLD:
+		return fail("inventory_snapshot_out_of_state")
+	var value := WireCodec.decode_inventory_snapshot(frame)
+	if value.is_empty():
+		return fail("invalid_inventory_snapshot")
+	if inventory_ready or int(value.character_id) != actor_id or int(value.start_index) != inventory_next_index:
+		return fail("inventory_snapshot_wrong_character_or_sequence")
+	var items: Array = value.items
+	if items.is_empty() and not bool(value.complete):
+		return fail("inventory_empty_nonfinal_chunk")
+	for item in items:
+		var uid := int(item.item_uid)
+		if inventory_items.has(uid):
+			return fail("inventory_duplicate_item_uid")
+		inventory_items[uid] = item.duplicate(true)
+		inventory_next_index += 1
+	if bool(value.complete):
+		inventory_ready = true
+		inventory_revision += 1
+	return true
+
+
 func _apply_pickup_result(frame: PackedByteArray) -> bool:
 	if state != STATE_IN_WORLD:
 		return fail("pickup_result_out_of_state")
@@ -733,11 +770,18 @@ func _apply_pickup_result(frame: PackedByteArray) -> bool:
 	# This list is session-local, NOT the full durable inventory baseline.
 	if int(result.status) in [0,1]:
 		var uid := int(result.item_uid)
-		received_item_grants[uid] = {
+		var granted := {
 			"item_uid":uid,
 			"item_definition_id":int(result.item_definition_id),
 			"quantity":int(result.quantity),
 			"drop_id":int(result.drop_id)}
+		received_item_grants[uid] = granted
+		if inventory_ready:
+			if inventory_items.has(uid) and inventory_items[uid] != granted:
+				return fail("pickup_uid_conflicts_inventory_baseline")
+			if not inventory_items.has(uid):
+				inventory_items[uid] = granted
+				inventory_revision += 1
 	return true
 
 
