@@ -29,10 +29,12 @@ def main() -> int:
                         help="force one TLS socket drop and require automatic same-character reconnect")
     parser.add_argument("--combat", action="store_true",
                         help="run real TLS ClientSession normal-attack authority E2E")
+    parser.add_argument("--auto-attack", action="store_true",
+                        help="run real TLS out-of-range attack -> Server A* approach -> retry E2E")
     parser.add_argument("--discard", action="store_true",
                         help="run real TLS ClientSession durable inventory discard E2E")
     args = parser.parse_args()
-    if args.app_ui and (args.multi or args.crossmap or args.portal or args.reconnect or args.combat or args.discard):
+    if args.app_ui and (args.multi or args.crossmap or args.portal or args.reconnect or args.combat or args.discard or args.auto_attack):
         parser.error("--app-ui uses the single-client login fixture")
     if args.ui_screenshot and not args.app_ui:
         parser.error("--ui-screenshot requires --app-ui")
@@ -47,6 +49,8 @@ def main() -> int:
     if build.returncode != 0:
         print(build.stdout)
         return 2
+    if args.auto_attack:
+        return run_auto_attack(args, repo, fixture, env)
     if args.discard:
         return run_discard(args, repo, fixture, env)
     if args.combat:
@@ -128,6 +132,73 @@ def main() -> int:
 
 
 
+
+
+def run_auto_attack(args, repo: Path, fixture: Path, env: dict[str, str]) -> int:
+    server = subprocess.Popen(
+        ["dotnet", "run", "--project", str(fixture), "-c", "Release",
+         "--no-build", "--", "--auto-attack"],
+        cwd=repo, env=env, text=True, stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT, bufsize=1)
+    lines: list[str] = []
+    notices: queue.Queue[str] = queue.Queue()
+
+    def capture() -> None:
+        assert server.stdout is not None
+        for line in server.stdout:
+            value = line.rstrip()
+            lines.append(value)
+            notices.put(value)
+
+    threading.Thread(target=capture, daemon=True).start()
+    deadline = time.monotonic() + args.timeout
+    try:
+        ready = None
+        while time.monotonic() < deadline:
+            if server.poll() is not None and notices.empty():
+                break
+            try:
+                line = notices.get(timeout=0.15)
+            except queue.Empty:
+                continue
+            if line.startswith("AUTO_ATTACK_FIXTURE_READY "):
+                ready = line
+                break
+        if ready is None:
+            raise RuntimeError("auto-attack fixture never became ready")
+        match = re.search(r"AUTO_ATTACK_FIXTURE_READY port=(\d+) cert=(.+?) username=", ready)
+        if match is None:
+            raise RuntimeError("malformed auto-attack fixture readiness: " + ready)
+        port, cert = match.group(1), match.group(2)
+        client = subprocess.run(
+            [args.godot, "--headless", "--path", str(repo / "client"),
+             "--script", "res://tests/test_client_auto_approach_tls.gd", "--", port, cert],
+            cwd=repo, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            timeout=max(1.0, deadline - time.monotonic()))
+        print(client.stdout, end="")
+        if client.returncode != 0 or "CLIENT_AUTO_APPROACH_TLS_PASS" not in client.stdout:
+            raise RuntimeError("Godot auto-approach TLS test failed")
+        server.wait(timeout=max(1.0, deadline - time.monotonic()))
+        output = "\n".join(lines)
+        if server.returncode != 0 or "AUTO_ATTACK_FIXTURE_PASS" not in output:
+            raise RuntimeError("C# auto-attack fixture did not confirm A* approach settlement")
+        for line in lines:
+            if line.startswith("AUTO_ATTACK_FIXTURE_"):
+                print(line)
+        print("GODOT_CSHARP_TLS_AUTO_APPROACH_ATTACK_E2E_PASS secure_tls=true first_attack_out_of_range=true server_astar_move=true self_state_stop=true second_attack_applied=true client_range_guess=false")
+        return 0
+    except Exception as error:
+        print("TLS_AUTO_ATTACK_RUNNER_FAIL", error, file=sys.stderr)
+        for line in lines[-30:]:
+            print(line, file=sys.stderr)
+        return 1
+    finally:
+        if server.poll() is None:
+            server.terminate()
+            try:
+                server.wait(timeout=3)
+            except subprocess.TimeoutExpired:
+                server.kill()
 
 
 def run_discard(args, repo: Path, fixture: Path, env: dict[str, str]) -> int:
