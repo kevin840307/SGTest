@@ -277,6 +277,13 @@ func _update_inventory_ui() -> void:
 	inventory_button.text = "背包（%d 件）" % items.size()
 	var revision := int(_latest.get("inventory_revision",0))
 	var query := inventory_search.text.strip_edges()
+	# Most UI polls see an unchanged inventory. Do not allocate/sort/scan
+	# up to 4095 items every 50ms; refresh only on visible state changes.
+	var cached_key := "%d/%d/%d/%d/%s" % [
+		int(_latest.get("actor_id",0)),
+		int(_latest.get("reconnect_count",0)),revision,_inventory_page,query]
+	if cached_key == _inventory_display_key:
+		return
 	var uids: Array = items.keys()
 	uids.sort()
 	var filtered: Array = []
