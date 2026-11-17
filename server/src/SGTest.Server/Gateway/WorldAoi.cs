@@ -12,7 +12,11 @@ public sealed record WorldAoiOptions(
     int MaxVisiblePerObserver = 2048,
     int MaxPendingEventsPerObserver = 4096);
 
-public enum AoiEventKind : byte { WorldReady, Spawn, Delta, Despawn, SelfState }
+public enum AoiEventKind : byte
+{
+    WorldReady, Spawn, Delta, Despawn, SelfState,
+    MonsterSpawn, MonsterDelta, MonsterDespawn
+}
 
 /// <summary>
 /// WorldReady includes the trusted viewer snapshot. Spawn/Delta include the
@@ -21,7 +25,8 @@ public enum AoiEventKind : byte { WorldReady, Spawn, Delta, Despawn, SelfState }
 /// </summary>
 public readonly record struct AoiEvent(
     AoiEventKind Kind, long Tick, long ReceiverMapEpoch,
-    ActorSnapshot? Entity = null, long EntityActorId = 0, long EntityConnectionEpoch = 0);
+    ActorSnapshot? Entity = null, long EntityActorId = 0, long EntityConnectionEpoch = 0,
+    MonsterSnapshot? Monster = null, long MonsterEntityId = 0, long MonsterRevision = 0);
 
 public sealed class AoiBackpressureException : Exception
 {
@@ -29,13 +34,13 @@ public sealed class AoiBackpressureException : Exception
 }
 
 /// <summary>
-/// Single-writer, transport-independent AOI for authoritative player snapshots.
+/// Single-writer, transport-independent AOI for authoritative player and monster snapshots.
 /// Spatial buckets are per-map; only candidate buckets around a moving viewer
 /// are scanned. Each entity update examines observers on its own map, not every
 /// entity in the World. No DB, socket, TLS or renderer runs here.
 ///
 /// Call Apply in WorldResultRouter.ChangedBatches order; DO NOT feed unordered
-/// events or stale generations. WorldReady/Spawn/Delta/Despawn are retained in
+/// events or stale generations. Player and monster Spawn/Delta/Despawn are retained in
 /// bounded per-observer FIFO queues for the next reliable wire delivery slice.
 /// </summary>
 public sealed class WorldAoi
@@ -43,6 +48,8 @@ public sealed class WorldAoi
     private readonly WorldAoiOptions _limits;
     private readonly Dictionary<long, ActorSnapshot> _entities = new();
     private readonly Dictionary<(int Map, int X, int Y), HashSet<long>> _buckets = new();
+    private readonly Dictionary<long, MonsterSnapshot> _monsters = new();
+    private readonly Dictionary<(int Map, int X, int Y), HashSet<long>> _monsterBuckets = new();
     private readonly Dictionary<long, Observer> _observers = new();
     private long _lastTick;
 
@@ -52,6 +59,7 @@ public sealed class WorldAoi
     {
         public ActorSnapshot Self;
         public readonly Dictionary<long, Seen> Visible = new();
+        public readonly Dictionary<long, long> VisibleMonsters = new();
         public readonly Queue<AoiEvent> Pending = new();
 
         public Observer(ActorSnapshot actor) => Self = actor;
@@ -72,6 +80,8 @@ public sealed class WorldAoi
     }
 
     public int EntityCount => _entities.Count;
+    public int MonsterCount => _monsters.Count;
+    public int TrackedEntityCount => _entities.Count + _monsters.Count;
     public int ObserverCount => _observers.Count;
     public long LastTick => _lastTick;
 
@@ -126,6 +136,7 @@ public sealed class WorldAoi
             return false;
         observer.Pending.Clear();
         observer.Visible.Clear();
+        observer.VisibleMonsters.Clear();
         observer.Self = current;
         Enqueue(observer, new(AoiEventKind.WorldReady, _lastTick, current.MapEpoch, current));
         Enqueue(observer, new(AoiEventKind.SelfState, _lastTick, current.MapEpoch, current));
@@ -157,12 +168,29 @@ public sealed class WorldAoi
             Changed(changed, batch.Tick);
     }
 
+    /// <summary>
+    /// Applies authoritative monster changes on the SAME World tick already
+    /// accepted by Apply(). This preserves one ordered AOI timeline and avoids a
+    /// second monster interest manager. The caller may coalesce several AI events
+    /// for one monster to its latest snapshot before calling this method.
+    /// </summary>
+    public void ApplyMonsters(long tick, IReadOnlyList<MonsterSnapshot> changed)
+    {
+        ArgumentNullException.ThrowIfNull(changed);
+        if (tick != _lastTick || tick <= 0)
+            throw new InvalidOperationException(
+                "Monster AOI changes must share the current authoritative World Tick");
+        foreach (var monster in changed)
+            ChangedMonster(monster, tick);
+    }
+
     private void Joined(ActorSnapshot actor, long tick)
     {
         ValidateActor(actor);
         if (_entities.ContainsKey(actor.ActorId))
             throw new InvalidOperationException("AOI received Join without preceding trusted Leave");
-        if (_entities.Count >= _limits.MaxEntities || _observers.Count >= _limits.MaxObservers)
+        if (_entities.Count + _monsters.Count >= _limits.MaxEntities ||
+            _observers.Count >= _limits.MaxObservers)
             throw new AoiBackpressureException("AOI entity/observer capacity exceeded");
 
         Store(actor);
@@ -222,6 +250,40 @@ public sealed class WorldAoi
         }
     }
 
+    private void ChangedMonster(MonsterSnapshot monster, long tick)
+    {
+        ValidateMonster(monster);
+        if (!_monsters.TryGetValue(monster.EntityId, out var previous))
+        {
+            if (_entities.Count + _monsters.Count >= _limits.MaxEntities)
+                throw new AoiBackpressureException("AOI entity capacity exceeded");
+            StoreMonster(monster);
+            foreach (var observer in _observers.Values)
+                if (observer.Self.MapId == monster.MapId)
+                    RefreshMonster(observer, monster, tick);
+            return;
+        }
+
+        if (monster.EnemyId != previous.EnemyId ||
+            monster.SourceIndex != previous.SourceIndex ||
+            monster.MapId != previous.MapId ||
+            monster.MaxHp != previous.MaxHp ||
+            monster.SpawnX != previous.SpawnX ||
+            monster.SpawnY != previous.SpawnY)
+            throw new InvalidOperationException(
+                "Monster AOI immutable identity changed without population rebuild");
+        if (monster.Revision < previous.Revision)
+            throw new InvalidOperationException("Monster AOI revision regressed");
+        if (monster.Revision == previous.Revision)
+            return;
+
+        RemoveMonsterBucket(previous);
+        StoreMonster(monster);
+        foreach (var observer in _observers.Values)
+            if (observer.Self.MapId == monster.MapId)
+                RefreshMonster(observer, monster, tick);
+    }
+
     private void RefreshObserver(Observer observer, long tick)
     {
         var viewer = observer.Self;
@@ -234,9 +296,21 @@ public sealed class WorldAoi
                     viewer.MapEpoch, null, entry.Key, entry.Value.ConnectionEpoch));
             }
         }
+        foreach (var entry in observer.VisibleMonsters.ToArray())
+        {
+            if (!_monsters.TryGetValue(entry.Key, out var monster) ||
+                !Within(viewer, monster, true))
+            {
+                observer.VisibleMonsters.Remove(entry.Key);
+                long revision = monster.EntityId > 0 ? monster.Revision : entry.Value;
+                Enqueue(observer, new(AoiEventKind.MonsterDespawn, tick,
+                    viewer.MapEpoch, MonsterEntityId: entry.Key,
+                    MonsterRevision: revision));
+            }
+        }
 
         // Scan only the bounded map-specific spatial buckets surrounding this
-        // observer, not the entire entity dictionary each movement tick.
+        // observer, not the entire entity dictionaries each movement tick.
         int minX = Bucket(viewer.X - _limits.EnterHalfWidth);
         int maxX = Bucket(viewer.X + _limits.EnterHalfWidth);
         int minY = Bucket(viewer.Y - _limits.EnterHalfHeight);
@@ -249,6 +323,15 @@ public sealed class WorldAoi
         foreach (long id in candidates.OrderBy(id => id))
             if (_entities.TryGetValue(id, out var actor))
                 RefreshEntity(observer, actor, tick);
+
+        candidates.Clear();
+        for (int bx = minX; bx <= maxX; bx++)
+            for (int by = minY; by <= maxY; by++)
+                if (_monsterBuckets.TryGetValue((viewer.MapId, bx, by), out var ids))
+                    candidates.UnionWith(ids);
+        foreach (long id in candidates.OrderBy(id => id))
+            if (_monsters.TryGetValue(id, out var monster))
+                RefreshMonster(observer, monster, tick);
     }
 
     private void RefreshEntity(Observer observer, ActorSnapshot actor, long tick)
@@ -267,7 +350,8 @@ public sealed class WorldAoi
         }
         if (!visible)
         {
-            if (observer.Visible.Count >= _limits.MaxVisiblePerObserver)
+            if (observer.Visible.Count + observer.VisibleMonsters.Count >=
+                _limits.MaxVisiblePerObserver)
                 throw new AoiBackpressureException("AOI visible entity cap exceeded");
             observer.Visible.Add(actor.ActorId,
                 new(actor.ConnectionEpoch, actor.MapEpoch, actor.EntityRevision));
@@ -289,12 +373,64 @@ public sealed class WorldAoi
         }
     }
 
+    private void RefreshMonster(Observer observer, MonsterSnapshot monster, long tick)
+    {
+        bool visible = observer.VisibleMonsters.TryGetValue(monster.EntityId, out var seenRevision);
+        if (!Within(observer.Self, monster, visible))
+        {
+            if (visible)
+            {
+                observer.VisibleMonsters.Remove(monster.EntityId);
+                Enqueue(observer, new(AoiEventKind.MonsterDespawn, tick,
+                    observer.Self.MapEpoch, MonsterEntityId: monster.EntityId,
+                    MonsterRevision: monster.Revision));
+            }
+            return;
+        }
+        if (!visible)
+        {
+            if (observer.Visible.Count + observer.VisibleMonsters.Count >=
+                _limits.MaxVisiblePerObserver)
+                throw new AoiBackpressureException("AOI visible entity cap exceeded");
+            observer.VisibleMonsters.Add(monster.EntityId, monster.Revision);
+            Enqueue(observer, new(AoiEventKind.MonsterSpawn, tick,
+                observer.Self.MapEpoch, Monster: monster));
+        }
+        else if (monster.Revision > seenRevision)
+        {
+            observer.VisibleMonsters[monster.EntityId] = monster.Revision;
+            Enqueue(observer, new(AoiEventKind.MonsterDelta, tick,
+                observer.Self.MapEpoch, Monster: monster));
+        }
+    }
+
     private bool Within(ActorSnapshot viewer, ActorSnapshot actor, bool alreadyVisible)
     {
         if (viewer.MapId != actor.MapId) return false;
         int margin = alreadyVisible ? _limits.ExitMargin : 0;
         return Math.Abs(viewer.X - actor.X) <= _limits.EnterHalfWidth + margin &&
                Math.Abs(viewer.Y - actor.Y) <= _limits.EnterHalfHeight + margin;
+    }
+
+    private bool Within(ActorSnapshot viewer, MonsterSnapshot monster, bool alreadyVisible)
+    {
+        if (viewer.MapId != monster.MapId) return false;
+        int margin = alreadyVisible ? _limits.ExitMargin : 0;
+        return Math.Abs(viewer.X - monster.X) <= _limits.EnterHalfWidth + margin &&
+               Math.Abs(viewer.Y - monster.Y) <= _limits.EnterHalfHeight + margin;
+    }
+
+    private static void ValidateMonster(MonsterSnapshot monster)
+    {
+        if (monster.EntityId <= 0 || monster.EnemyId <= 0 || monster.SourceIndex < 0 ||
+            monster.MapId <= 0 || monster.Revision <= 0 ||
+            monster.CurrentHp < 0 || monster.MaxHp <= 0 ||
+            monster.CurrentHp > monster.MaxHp || monster.TargetActorId < 0 ||
+            monster.Facing is < 1 or > 8 ||
+            !double.IsFinite(monster.X) || !double.IsFinite(monster.Y) ||
+            !double.IsFinite(monster.SpawnX) || !double.IsFinite(monster.SpawnY) ||
+            monster.X < 0 || monster.Y < 0 || monster.SpawnX < 0 || monster.SpawnY < 0)
+            throw new InvalidOperationException("Invalid authoritative AOI monster snapshot");
     }
 
     private static void ValidateActor(ActorSnapshot actor)
@@ -324,6 +460,25 @@ public sealed class WorldAoi
         {
             ids.Remove(actor.ActorId);
             if (ids.Count == 0) _buckets.Remove(key);
+        }
+    }
+
+    private void StoreMonster(MonsterSnapshot monster)
+    {
+        _monsters[monster.EntityId] = monster;
+        var key = (monster.MapId, Bucket(monster.X), Bucket(monster.Y));
+        if (!_monsterBuckets.TryGetValue(key, out var ids))
+            _monsterBuckets.Add(key, ids = new HashSet<long>());
+        ids.Add(monster.EntityId);
+    }
+
+    private void RemoveMonsterBucket(MonsterSnapshot monster)
+    {
+        var key = (monster.MapId, Bucket(monster.X), Bucket(monster.Y));
+        if (_monsterBuckets.TryGetValue(key, out var ids))
+        {
+            ids.Remove(monster.EntityId);
+            if (ids.Count == 0) _monsterBuckets.Remove(key);
         }
     }
 

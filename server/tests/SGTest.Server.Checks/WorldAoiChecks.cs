@@ -33,6 +33,8 @@ internal static class WorldAoiChecks
             () => TrustedLifecycle(root));
         Checks.Run("AOI WorldReady, Spawn/Delta/Despawn, hysteresis and map isolation",
             Interest);
+        Checks.Run("same AOI tracks monster Spawn/Delta/Despawn hysteresis and resync baseline",
+            MonsterInterest);
         Checks.Run("AOI self state is changed-only, generation-safe and retained on bounded overflow", OwnState);
         Checks.Run("AOI transfer clears old map; reconnect resets generation and ignores stale dequeue",
             TransfersAndReconnects);
@@ -158,6 +160,66 @@ internal static class WorldAoiChecks
 
         Require(aoi.EntityCount == 4 && aoi.ObserverCount == 4 &&
                 aoi.LastTick == 7, "AOI world counters");
+    }
+
+    private static MonsterSnapshot Monster(long id, int map, double x, double y,
+        long revision = 1, int hp = 100, MonsterAiState state = MonsterAiState.Idle) =>
+        new(id, 1, 0, map, x, y, 140, 100, hp, 100, state, 0, revision, 1);
+
+    private static void MonsterInterest()
+    {
+        var aoi = new WorldAoi(new WorldAoiOptions(
+            EnterHalfWidth:200, EnterHalfHeight:150, ExitMargin:60, BucketSize:64));
+        var viewer = Actor(51,15,100,100);
+        Life(aoi,1,Join(viewer));
+        Require(Drain(aoi,viewer) is [{ Kind:AoiEventKind.WorldReady }],
+            "monster fixture Ready");
+
+        var monster = Monster(1001500001,15,140,100);
+        aoi.ApplyMonsters(1,[monster]);
+        Require(Drain(aoi,viewer) is [var spawn] &&
+                spawn.Kind == AoiEventKind.MonsterSpawn &&
+                spawn.Monster?.EntityId == monster.EntityId,
+                "near monster did not Spawn through shared AOI");
+
+        aoi.Apply(new WorldChangedBatch(2,Array.Empty<ActorSnapshot>()));
+        var edge = monster with { X=350, EntityRevision=2, State=MonsterAiState.Chase,
+                                  TargetActorId=viewer.ActorId };
+        aoi.ApplyMonsters(2,[edge]);
+        Require(Drain(aoi,viewer) is [var delta] &&
+                delta.Kind == AoiEventKind.MonsterDelta &&
+                delta.Monster?.EntityRevision == 2,
+                "monster exit hysteresis did not retain Delta");
+
+        aoi.Apply(new WorldChangedBatch(3,Array.Empty<ActorSnapshot>()));
+        var outside = edge with { X=370, EntityRevision=3 };
+        aoi.ApplyMonsters(3,[outside]);
+        Require(Drain(aoi,viewer) is [var gone] &&
+                gone.Kind == AoiEventKind.MonsterDespawn &&
+                gone.MonsterEntityId == monster.EntityId &&
+                gone.MonsterRevision == 3,
+                "monster crossing shared AOI exit did not Despawn");
+
+        aoi.Apply(new WorldChangedBatch(4,Array.Empty<ActorSnapshot>()));
+        var near = outside with { X=250, EntityRevision=4, CurrentHp=80 };
+        aoi.ApplyMonsters(4,[near]);
+        Require(Drain(aoi,viewer) is [var reenter] &&
+                reenter.Kind == AoiEventKind.MonsterSpawn &&
+                reenter.Monster?.EntityRevision == 4,
+                "monster re-entry did not rebuild Spawn baseline");
+
+        Require(aoi.TryResync(new TrustedWorldResyncRequest(
+                    viewer.ActorId,viewer.ConnectionEpoch,viewer.MapEpoch)),
+                "monster AOI resync rejected");
+        var rebuilt=Drain(aoi,viewer);
+        Require(rebuilt.Length==3 &&
+                rebuilt[0].Kind==AoiEventKind.WorldReady &&
+                rebuilt[1].Kind==AoiEventKind.SelfState &&
+                rebuilt[2].Kind==AoiEventKind.MonsterSpawn &&
+                rebuilt[2].Monster?.EntityRevision==4,
+                "monster missing from same AOI resync baseline");
+        Require(aoi.MonsterCount==1 && aoi.TrackedEntityCount==2,
+                "shared AOI monster counters");
     }
 
     private static void TransfersAndReconnects()

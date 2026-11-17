@@ -481,6 +481,27 @@ public sealed class GatewayConnection
                         evt.EntityConnectionEpoch));
                     break;
 
+                case AoiEventKind.MonsterSpawn or AoiEventKind.MonsterDelta
+                    when evt.Monster is { } monster &&
+                         monster.MapId == bound.MapId &&
+                         monster.EntityId != bound.ActorId:
+                    frame = WireProtocol.EncodeMonsterState(
+                        evt.Kind == AoiEventKind.MonsterSpawn
+                            ? WireOpcode.MonsterSpawn : WireOpcode.MonsterDelta,
+                        new(evt.ReceiverMapEpoch, evt.Tick, monster.EntityId,
+                            monster.EnemyId, monster.SourceIndex, monster.MapId,
+                            (float)monster.X, (float)monster.Y, monster.Revision,
+                            monster.CurrentHp, monster.MaxHp, monster.State,
+                            monster.Facing, monster.TargetActorId));
+                    break;
+
+                case AoiEventKind.MonsterDespawn
+                    when evt.MonsterEntityId > 0 && evt.MonsterRevision > 0:
+                    frame = WireProtocol.EncodeMonsterDespawn(new(
+                        evt.ReceiverMapEpoch, evt.Tick, evt.MonsterEntityId,
+                        evt.MonsterRevision));
+                    break;
+
                 default:
                     return GatewaySendStatus.GenerationMismatch;
             }

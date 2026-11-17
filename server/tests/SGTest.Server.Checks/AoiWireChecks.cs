@@ -167,6 +167,36 @@ internal static class AoiWireChecks
                 WireProtocol.TryDecodeEntityState(ownFrame, out var ownKind, out var own) &&
                 ownKind == WireOpcode.SelfState && own.ActorId == owner.ActorId,
                 "own state reliable wire");
+
+        var monster = new MonsterSnapshot(
+            1001500001,1,0,15,120,80,120,80,90,100,
+            MonsterAiState.Chase,owner.ActorId,2,6);
+        Require(gateway.QueueAoi(new(AoiEventKind.MonsterSpawn,47,1,
+                    Monster:monster)) == GatewaySendStatus.Enqueued &&
+                gateway.TryDequeueReliable(out var monsterFrame) &&
+                WireProtocol.TryDecodeMonsterState(monsterFrame,out var monsterKind,out var monsterWire) &&
+                monsterKind == WireOpcode.MonsterSpawn &&
+                monsterWire.EntityId == monster.EntityId &&
+                monsterWire.TargetActorId == owner.ActorId,
+                "monster Spawn did not use shared reliable Gateway FIFO");
+        monster = monster with { X=124, CurrentHp=80, EntityRevision=3,
+                                 State=MonsterAiState.Attack };
+        Require(gateway.QueueAoi(new(AoiEventKind.MonsterDelta,48,1,
+                    Monster:monster)) == GatewaySendStatus.Enqueued &&
+                gateway.TryDequeueReliable(out monsterFrame) &&
+                WireProtocol.TryDecodeMonsterState(monsterFrame,out monsterKind,out monsterWire) &&
+                monsterKind == WireOpcode.MonsterDelta &&
+                monsterWire.Revision == 3 && monsterWire.CurrentHp == 80,
+                "monster Delta did not use shared reliable Gateway FIFO");
+        Require(gateway.QueueAoi(new(AoiEventKind.MonsterDespawn,49,1,
+                    MonsterEntityId:monster.EntityId,MonsterRevision:monster.EntityRevision)) ==
+                GatewaySendStatus.Enqueued &&
+                gateway.TryDequeueReliable(out monsterFrame) &&
+                WireProtocol.TryDecodeMonsterDespawn(monsterFrame,out var monsterGone) &&
+                monsterGone.EntityId == monster.EntityId &&
+                monsterGone.Revision == monster.EntityRevision,
+                "monster Despawn did not use shared reliable Gateway FIFO");
+
         TrustedWorldResyncRequest requested = default;
         Require(gateway.FeedClientBytes(
                 WireProtocol.EncodeWorldResyncRequest(new(1)), _ => true, out var resyncCount,
