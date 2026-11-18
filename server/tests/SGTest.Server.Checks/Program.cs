@@ -109,6 +109,13 @@ static class Checks
                 Console.WriteLine($"SERVER_LISTENER_CHECKS PASS total={_passes}");
                 return 0;
             }
+            if (args is ["--load-only"])
+            {
+                WorldAoiPumpChecks.VerifyLoad(root);
+                TlsGatewayListenerChecks.VerifyLoad(root);
+                Console.WriteLine($"SERVER_LOAD_CHECKS PASS total={_passes}");
+                return 0;
+            }
             string opened = Fixture(root, 31, 5, 5, (_, _) => 0);
             var grid = BlockingGrid.Load(opened, 31);
             var navigation = new MapNavigator(grid);
@@ -347,7 +354,8 @@ static class Checks
             }
             else if (args.Length != 0)
             {
-                Console.Error.WriteLine("usage: checks [--assets <PRIVATE_ASSETS_ROOT>]");
+                Console.Error.WriteLine(
+                    "usage: checks [--assets <PRIVATE_ASSETS_ROOT>] | --load-only");
                 return 2;
             }
 

@@ -26,6 +26,10 @@ internal static class WorldAoiPumpChecks
             () => LiveResync(root).GetAwaiter().GetResult());
         Checks.Run("live Host Router Pump publishes coalesced monster state through shared AOI FIFO",
             () => LiveMonsterPipeline(root).GetAwaiter().GetResult());
+    }
+
+    public static void VerifyLoad(string root)
+    {
         Checks.Run("20-player 300-monster 500-drop shared AOI load stays spatially bounded without reliable overflow",
             () => TwentyPlayersThreeHundredMonsters(root).GetAwaiter().GetResult());
     }

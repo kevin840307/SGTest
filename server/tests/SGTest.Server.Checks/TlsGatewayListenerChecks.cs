@@ -33,6 +33,10 @@ internal static class TlsGatewayListenerChecks
             () => SessionFailure(root).GetAwaiter().GetResult());
         Checks.Run("Host serve boots TLS on synthetic maps, stops cleanly and rejects invalid CLI",
             () => HostEntry(root).GetAwaiter().GetResult());
+    }
+
+    public static void VerifyLoad(string root)
+    {
         Checks.Run("20 distinct accounts use real TLS listener auth, choose, AOI and move receipt with cleanup",
             () => AuthenticatedTwentyClients(root).GetAwaiter().GetResult());
         Checks.Run("20 authenticated TLS clients and 300 monsters + 500 drops in one spatial AOI",

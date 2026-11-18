@@ -1,0 +1,21 @@
+name: Server load checks
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  server-load:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+      - name: Build server checks
+        run: dotnet build server/tests/SGTest.Server.Checks/SGTest.Server.Checks.csproj -c Release --nologo
+      - name: Authenticated 20-player AOI and dense sustained load
+        run: dotnet run --project server/tests/SGTest.Server.Checks/SGTest.Server.Checks.csproj -c Release -- --load-only
