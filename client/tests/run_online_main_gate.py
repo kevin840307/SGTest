@@ -2,7 +2,9 @@ from __future__ import annotations
 from pathlib import Path
 import argparse
 import json
+import hashlib
 import os
+import platform
 import queue
 import signal
 import subprocess
@@ -10,6 +12,8 @@ import sys
 import tempfile
 import threading
 import time
+
+from process_telemetry import ProcessTelemetry
 
 PASSWORD = "Online-Gate-Password-123!"
 PFX_PASSWORD = "Online-Gate-PFX-123!"
@@ -47,7 +51,17 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Formal Host + two actual Godot main scenes online gate")
     parser.add_argument("godot")
     parser.add_argument("--timeout", type=float, default=55.0)
+    parser.add_argument("--metrics-report", type=Path,
+                        help="write opt-in headless Host/2-Godot CPU and RSS telemetry JSON")
     args = parser.parse_args()
+    if args.metrics_report and os.name == "nt" and args.godot.lower().endswith("_console.exe"):
+        # Godot console executable launches a sibling real engine on Windows.
+        # Never report the lightweight wrapper as the measured game process.
+        engine = Path(args.godot[:-len("_console.exe")] + ".exe")
+        if not engine.is_file():
+            parser.error("actual Godot engine executable missing beside console wrapper")
+        args.godot = str(engine)
+
     repo = Path(__file__).resolve().parents[2]
     host_project = repo / "server/host/SGTest.Server.Host/SGTest.Server.Host.csproj"
     host_dll = repo / "server/host/SGTest.Server.Host/bin/Release/net8.0/SGTest.Server.Host.dll"
@@ -56,6 +70,10 @@ def main() -> int:
 
     processes: list[subprocess.Popen[str]] = []
     logs: dict[str, list[str]] = {}
+    telemetry = ProcessTelemetry()
+    successful = False
+    all_started = time.monotonic()
+    synthetic_pack_info: dict[str, str | int] = {}
     try:
         with tempfile.TemporaryDirectory(prefix="sgtest-online-main-") as temp_text:
             temp = Path(temp_text)
@@ -81,6 +99,11 @@ def main() -> int:
                 Path(args.godot), source_assets, pack, stage=temp / "pack-stage")
             if not pack.is_file() or pack_report.get("source_files", 0) < 1:
                 raise RuntimeError("formal runtime pack pipeline produced no external PCK")
+            if args.metrics_report:
+                synthetic_pack_info = {
+                    "sha256": hashlib.sha256(pack.read_bytes()).hexdigest(),
+                    "size_bytes": pack.stat().st_size,
+                }
 
             run_checked(["dotnet", "build", str(host_project), "-c", "Release", "--nologo"],
                         repo, base_env, args.timeout)
@@ -125,6 +148,8 @@ def main() -> int:
                 cwd=repo, env=host_env, text=True, stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT, bufsize=1)
             processes.append(host)
+            if args.metrics_report:
+                telemetry.register("host", host)
             logs["host"] = []
             host_events: queue.Queue[str] = queue.Queue()
             threading.Thread(target=capture, args=(host, logs["host"], host_events),
@@ -150,6 +175,8 @@ def main() -> int:
                                            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                                            bufsize=1)
                 processes.append(process)
+                if args.metrics_report:
+                    telemetry.register(role, process)
                 logs[role] = []
                 events: queue.Queue[str] = queue.Queue()
                 threading.Thread(target=capture, args=(process, logs[role], events),
@@ -163,13 +190,19 @@ def main() -> int:
             wait_for(actor_events, MARKER + "actor", actor, deadline)
             wait_for(observer_events, MARKER + "observer", observer, deadline)
             actor.wait(timeout=max(1.0, deadline - time.monotonic()))
+            if args.metrics_report:
+                telemetry.finish("actor")
             observer.wait(timeout=max(1.0, deadline - time.monotonic()))
+            if args.metrics_report:
+                telemetry.finish("observer")
             if actor.returncode != 0 or observer.returncode != 0:
                 raise RuntimeError("main-scene client process returned failure")
 
             if os.name != "nt" and host.poll() is None:
                 host.send_signal(signal.SIGINT)
             host.wait(timeout=max(1.0, deadline - time.monotonic()))
+            if args.metrics_report:
+                telemetry.finish("host")
             if host.returncode != 0 or not any('"TLS_HOST_STOPPED"' in line for line in logs["host"]):
                 raise RuntimeError("formal Host did not stop cleanly")
 
@@ -202,6 +235,7 @@ def main() -> int:
                   "formal_host=true main_scenes=2 tls=true provision_cli=true "
                   "move=true aoi=true monster_state=true camera_follow=true map15_map13_return=true "
                   "resource_release=true synthetic_content=true private_original_content=false")
+            successful = True
             return 0
     except Exception as error:
         print("ONLINE_MAIN_SCENE_FORMAL_HOST_GATE_FAIL", error, file=sys.stderr)
@@ -218,6 +252,49 @@ def main() -> int:
                 process.wait(timeout=3)
             except subprocess.TimeoutExpired:
                 process.kill()
+                process.wait()
+        telemetry.close()
+        if args.metrics_report:
+            # Never include credentials, private content paths or certificate material.
+            report = {
+                "kind": "sgtest_formal_host_main_headless_process_baseline",
+                "version": 1,
+                "status": "PASS" if successful else "FAIL",
+                "platform": platform.platform(),
+                "cpu_count": os.cpu_count(),
+                "sample_interval_ms": int(telemetry.interval_seconds * 1000),
+                "run_wall_seconds": round(time.monotonic() - all_started, 3),
+                "scenario": {
+                    "server": "formal dotnet Host",
+                    "clients": 2,
+                    "client_kind": "actual Godot main-scene processes",
+                    "maps": [15, 13, 15],
+                    "asset_source": "synthetic test-only external PCK",
+                    "headless": True,
+                    "windows_gpu_render": False,
+                    "fps_p95_p99": None,
+                    "gpu_vram_bytes": None,
+                    "server_tick_p95_p99": None,
+                    "network_bytes_per_second": None,
+                },
+                "source_sha256": {
+                    "runner": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+                    "process_telemetry": hashlib.sha256(
+                        Path(__file__).with_name("process_telemetry.py").read_bytes()
+                    ).hexdigest(),
+                },
+                "synthetic_pack": synthetic_pack_info,
+                "processes": telemetry.report(),
+            }
+            args.metrics_report.parent.mkdir(parents=True, exist_ok=True)
+            args.metrics_report.write_text(
+                json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+            )
+            print("ONLINE_MAIN_PROCESS_METRICS " + json.dumps({
+                role: {"peak_rss_bytes": row["peak_process_rss_bytes"],
+                       "cpu_seconds": row["cpu_seconds"], "samples": row["sample_count"]}
+                for role, row in report["processes"].items()
+            }, sort_keys=True), flush=True)
 
 if __name__ == "__main__":
     raise SystemExit(main())

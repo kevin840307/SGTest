@@ -52,6 +52,8 @@ jobs:
           echo "cadd3204e728a35d3f13adb7fd0d7902636b79f6b95c40c265eb73b6c35329e4  /tmp/godot.zip" | sha256sum --check
           unzip -q /tmp/godot.zip -d .cache/godot-4.7.2
           chmod +x .cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64
+      - name: Validate real OS process CPU/RSS telemetry sampler
+        run: python -m unittest client.tests.test_process_telemetry -v
       - name: Godot wire codec
         run: .cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64 --headless --path client --script res://tests/test_wire_codec.gd
       - name: Godot AOI compact wire and WorldState generation gate
@@ -129,4 +131,12 @@ jobs:
       - name: Two Godot Clients audited NPC portal action E2E
         run: python client/tests/run_tls_login.py "$PWD/.cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64" --portal --timeout 70
       - name: Formal Host plus two actual main-scene Godot clients
-        run: python client/tests/run_online_main_gate.py "$PWD/.cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64" --timeout 70
+        run: python client/tests/run_online_main_gate.py "$PWD/.cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64" --timeout 70 --metrics-report "$RUNNER_TEMP/sgtest_online_main_process_metrics.json"
+      - name: Archive headless main-scene resource baseline (not Windows gameplay)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: online-main-process-baseline
+          path: ${{ runner.temp }}/sgtest_online_main_process_metrics.json
+          retention-days: 14
+          if-no-files-found: warn
