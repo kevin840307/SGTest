@@ -20,6 +20,30 @@
 
 **MVP 後的全圖／全種類／更大負載**：其他地圖與完整傳點網絡、所有原版 NPC/Enemy/裝備/技能、100 Player／1000 Enemy／5000 Drop、多開 8、Windows/Mac 完整發行；MVP 不能代替全量驗收。
 
+## MVP008-AUTHENTICATED-MIXED-20P-300M-500D — 真認證 + 混合負載（部分完成）
+
+2026-11-18：擴充已驗證的 `TlsGatewayListenerChecks.AuthenticatedTwentyClients(root)` 為 `mixedLoad: true`，不新增一套正式通訊或 Server 路徑。合成 Map115 420×240 collision cells，20 位玩家在 5×4 遠距分群，每群 **1 名獨立 SQLite Auth/CharacterChoose 真 TLS 玩家、15 隻經 synthetic verified population 載入的權威 Monster、25 個 synthetic AOI boot GroundDrop**，共計 20／300／500。
+
+透過同一個 `ServerWorldHost(PublishIdleTicks=true)`、唯一 `WorldResultRouter` + `MonsterWorldCoordinator` + `WorldAoiPump`、原版相容 binary Wire、正式 `TlsGatewayListener` 的 Auth／角色歸屬／Inventory／WorldReady ACK、MoveTarget/Receipt，測試每位玩家精確收到自己的 15 MonsterSpawn 和 25 GroundDropSpawn，拒絕任何其他分群 EntitySpawn/Delta、MonsterSpawn/Delta、GroundDropSpawn 或重複 UID；20 名登入者都收到移動 ACK，等全部測試 Client 讀取完成後再次確認同時 20 ActiveSessions/ActiveActors/ListenerConnections，最後每個全部回到 0。保留原本 20 同視野純玩家互看 19 peers 的測試，不改其行為。這項合成測試只做分群隔離，**不是同視野全 300 怪／500 Drop 同場顯示**。
+
+驗證：[GitHub Server Core run 44301225147](https://github.com/kevin840307/SGTest/actions/runs/44301225147) **PASS**，全部 C# Release 編譯 0 error，`SERVER_WORLD_CHECKS PASS total=158`（含舊全部回歸），Hard-kill DB checkpoint recovery 也通過。實測輸出 `SERVER_AUTHENTICATED_MIXED_20_TLS_PASS`：
+
+| 指標（Ubuntu CI／.NET 測試 Client／合成內容，單輪） | 實測 |
+|---|---:|
+| 身分認證的獨立帳號與同時 Session | 20／20 |
+| 同場 synthetic authority Monster | 300 |
+| 同場 AOI GroundDrop | 500 |
+| TLS Client 收到本區 MonsterSpawn／GroundDropSpawn | 300／500 |
+| 越區玩家可見／重複或外區 Monster、Drop | 0 |
+| MoveReceipt | 20／20 |
+| Listener Admission rejections／Host missed Tick Deadline | 0／0 |
+| 網路串流還原後累計 binary frame bytes（不含 TLS 傳輸 overhead） | 63,696 B |
+| 登入→收齊各自本區 40 實體 + MoveReceipt，P50 | 402.75 ms |
+| 同項 P95／P99 | 568.99 ms／569.06 ms |
+| World Host 單寫者 max Tick Work | 77 µs |
+
+**邊界**：未啟動 Godot renderer、Windows GPU、私有 Map13/15 原版素材或完整帳號背包大量品項。500 GroundDrop 是 synthetic AOI 預載、**不是 500 次 SQLite 掉落／撿取／結算**；300 Monster AI 接在單一 Server Pump，但未以全員高頻攻擊／掉落瞬變測試長時間穩定性。77µs 的 Host Tick Work 不包含獨立 AOI Pump/MonsterRuntime 的計算時間。P95/P99 含本機 TCP/TLS 握手、SQLite 登入、選角、獨立本地 AOI 快照與 MoveReceipt，不是輸入到渲染延遲；20 客戶端是 .NET TLS 測試程式，不是 20 個 Godot 視窗。分群稀疏負載與前一個 20 人同視野（只有人）的測試相互補充，不能冒稱同視野 20 人＋300 怪＋500 Drop 全密集混合 PASS。完整 MVP008 (1/2/4 Godot、Windows RAM/VRAM/GPU、AFK、真地圖、Server AI/AOI P95/P99/密集高頻戰鬥、資料庫持久化重放及 20 Godot/WAN) **仍 [ ]**。
+
 ## MVP008-AUTHENTICATED-20-TLS — 20 位真正認證的合成多人 Host Listener 測試
 
 2026-11-18：`server/tests/SGTest.Server.Checks/TlsGatewayListenerChecks.cs` 新增完整 20 帳號／20 不同角色透過**正式** `TlsGatewayListener`、`IdentityTlsAuthorization`、SQLite 身分資料庫、World Host、Router、AOI Pump 的 loopback TLS 1.2/1.3 驗證。不同於前次的 pre-bound 20 Test Actor，本項每個 Client 都必須進行真 TLS 握手、帳密驗證、自己角色選角、本人 InventorySnapshot、Server 世代 WorldReady/WorldReadyAck、正常 MoveTarget/MoveReceipt，並收到 **19 名其他角色**的 AOI EntitySpawn；所有 20 位必須同時在線時做檢查，不能靠先離線再陸續上線的偽 20 人。所有 client 最終 clean disconnect，Listener/World/Router 活躍 Actors/Routes/Addresses 全回 0，沒有 admission 拒絕。沒有改 Wire、正式認證與世界模組邏輯，只延伸原先 Server Check。
@@ -38,7 +62,7 @@
 | Listener per-address/capacity 拒絕 | 0 |
 | 斷線後 Listener/World/Router active sessions | 0 |
 
-與上一項 `MVP008-MIXED-TLS-RESYNC` **是兩個獨立負載場景**：本場景沒有 300 怪／500 掉落，是 20 位登入的角色全聚集於同一合成視野；上一場景有 300 怪／500 Drop，但使用預先信任的 Test Actor、不含身分驗證。不能把兩個單獨 PASS 合併宣稱完整已認證的 20P/300M/500D MVP，尚缺同場混合、Godot 真畫面、多開/AFK、真 Windows 原版素材、OS RSS/VRAM/CPU/Frame P95/P99、WAN RTT 與可靠事件風暴長時間驗證。`login_to_full_AOI` 是每 Client 從 TCP connect 開始，直到收完 19 peers + 本人移動回覆，不是操作指令延遲或 Server Tick P99；單次 CI 無硬性效能門檻。
+本段數據仍屬 **20 位正式認證玩家、但沒有怪物及掉落物的同視野場景**；另見上方 `MVP008-AUTHENTICATED-MIXED-20P-300M-500D` 在稀疏 20 分群下完成正式認證與怪／掉落同場測試。兩者不是同一負載 trace，不能混用 P95/P99；密集同視野 20 人＋300 怪＋500 Drop、Godot 真畫面、多開/AFK、Windows 真素材、RSS/VRAM/Frame P95/P99、WAN RTT 與長時間可靠事件風暴仍 NOT VERIFIED。`login_to_full_AOI` 是每 Client 從 TCP connect 開始，直到收完 19 peers + 本人移動回覆，不是操作指令延遲或 Server Tick P99；單次 CI 無硬性效能門檻。
 
 ## MVP008-MIXED-TLS-RESYNC — 20 條真實 TLS 的 300 怪／500 Drop AOI 回補（部分完成）
 
