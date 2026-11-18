@@ -623,8 +623,13 @@ func _update_shop_sell_quantity() -> void:
 	if shop_sell_picker.selected >= 0:
 		uid = int(shop_sell_picker.get_item_metadata(shop_sell_picker.selected))
 	var item: Dictionary = (_latest.get("inventory_items",{}) as Dictionary).get(uid,{})
-	shop_quantity.max_value = maxi(1,mini(1000000,int(item.get("quantity",1))))
-	shop_quantity.value = mini(shop_quantity.value,shop_quantity.max_value)
+	# One shared quantity field serves both buy and sell. Do not cap future
+	# purchases to the currently owned stack; only clamp an already-too-large
+	# sell value when the sell selection changes.
+	var owned := int(item.get("quantity",0))
+	shop_quantity.max_value = 1000000
+	if owned > 0 and shop_quantity.value > owned:
+		shop_quantity.value = owned
 
 
 func _update_shop_ui() -> void:
