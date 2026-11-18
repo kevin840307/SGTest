@@ -279,15 +279,23 @@ public sealed class WorldAoiPump
         if(outcome.Status is SkillUseStatus.Applied or SkillUseStatus.Miss)
             _aoi.EnqueuePlayerSkillVisual(skill,outcome);
 
-        if(outcome.Status==SkillUseStatus.Applied &&
-            outcome.Monster is { } changed)
+        if(outcome.Status==SkillUseStatus.Applied)
         {
-            _aoi.ApplyMonsters(_aoi.LastTick,[changed]);
-            if(_loot is not null && changed.CurrentHp==0 &&
-                changed.State==MonsterAiState.Dead &&
-                _loot.TryPostDeath(changed)==MonsterLootPostStatus.Backpressured)
-                throw new AoiBackpressureException(
-                    "Loot settlement queue full; accepted skill death must not be dropped");
+            MonsterSnapshot[] changed=outcome.Hits is { Count: >0 } hits
+                ? hits.Select(x=>x.Monster).ToArray()
+                : outcome.Monster is { } single
+                    ? [single] : [];
+            if(changed.Length>0)
+            {
+                _aoi.ApplyMonsters(_aoi.LastTick,changed);
+                if(_loot is not null)
+                    foreach(var monster in changed)
+                        if(monster.CurrentHp==0 &&
+                            monster.State==MonsterAiState.Dead &&
+                            _loot.TryPostDeath(monster)==MonsterLootPostStatus.Backpressured)
+                            throw new AoiBackpressureException(
+                                "Loot settlement queue full; accepted skill death must not be dropped");
+            }
         }
 
         var sent=_router.QueueSkillUseResult(skill,outcome);

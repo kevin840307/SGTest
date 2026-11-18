@@ -295,43 +295,76 @@ public sealed class WorldAoi
             request.ActorId<=0 || request.ConnectionEpoch<=0 ||
             request.RequestMapEpoch<=0 || request.SkillSequence==0 ||
             request.SkillId<=0 || outcome.SkillId!=request.SkillId ||
-            outcome.TargetEntityId!=request.TargetEntityId ||
-            outcome.TargetRevision<=0 ||
-            outcome.Status is not (SkillUseStatus.Applied or SkillUseStatus.Miss) ||
-            (outcome.Status==SkillUseStatus.Applied && outcome.Damage<=0) ||
-            (outcome.Status==SkillUseStatus.Miss && outcome.Damage!=0))
+            outcome.Status is not (SkillUseStatus.Applied or SkillUseStatus.Miss))
             throw new InvalidOperationException(
                 "Invalid authoritative player skill visual");
 
         if(!_entities.TryGetValue(request.ActorId,out var attacker) ||
             attacker.ConnectionEpoch!=request.ConnectionEpoch ||
-            attacker.MapEpoch!=request.RequestMapEpoch ||
-            !_monsters.TryGetValue(request.TargetEntityId,out var target) ||
-            attacker.MapId!=target.MapId)
+            attacker.MapEpoch!=request.RequestMapEpoch)
             return 0;
 
-        var visual=new PlayerSkillVisual(
-            attacker.ActorId,attacker.ConnectionEpoch,request.SkillSequence,
-            request.SkillId,request.TargetEntityId,outcome.Status,
-            outcome.Damage,outcome.TargetRevision,attacker.Facing);
-        int queued=0;
-        foreach(var observer in _observers.Values)
+        IReadOnlyList<SkillHitOutcome> hits;
+        if(outcome.Hits is { Count: >0 } areaHits)
         {
-            if(observer.Self.MapId!=attacker.MapId ||
-                !observer.VisibleMonsters.ContainsKey(request.TargetEntityId))
-                continue;
-            bool seesAttacker=
-                observer.Self.ActorId==attacker.ActorId &&
-                observer.Self.ConnectionEpoch==attacker.ConnectionEpoch &&
-                observer.Self.MapEpoch==attacker.MapEpoch;
-            if(!seesAttacker &&
-                observer.Visible.TryGetValue(attacker.ActorId,out var seen))
-                seesAttacker=seen.ConnectionEpoch==attacker.ConnectionEpoch &&
-                    seen.MapEpoch==attacker.MapEpoch;
-            if(!seesAttacker)continue;
-            Enqueue(observer,new(AoiEventKind.PlayerSkillVisual,_lastTick,
-                observer.Self.MapEpoch,PlayerSkill:visual));
-            queued++;
+            if(request.TargetEntityId!=0 || outcome.TargetEntityId!=0 ||
+                outcome.Status!=SkillUseStatus.Applied ||
+                outcome.Damage!=0 || outcome.CurrentHp!=0 ||
+                outcome.MaxHp!=0 || outcome.TargetRevision!=0)
+                throw new InvalidOperationException(
+                    "Area skill summary/hit payload diverged");
+            hits=areaHits;
+        }
+        else if(outcome.Monster is { } monster)
+        {
+            if(request.TargetEntityId<=0 ||
+                outcome.TargetEntityId!=request.TargetEntityId ||
+                monster.EntityId!=request.TargetEntityId ||
+                outcome.TargetRevision<=0 ||
+                (outcome.Status==SkillUseStatus.Applied && outcome.Damage<=0) ||
+                (outcome.Status==SkillUseStatus.Miss && outcome.Damage!=0))
+                throw new InvalidOperationException(
+                    "Single skill visual payload diverged");
+            hits=[new(monster,outcome.Damage)];
+        }
+        else
+        {
+            throw new InvalidOperationException(
+                "Applied/Miss skill has no authoritative hit payload");
+        }
+
+        int queued=0;
+        foreach(var hit in hits)
+        {
+            var monster=hit.Monster;
+            if(monster.EntityId<=0 || monster.MapId!=attacker.MapId ||
+                monster.EntityRevision<=0 || hit.Damage<=0 ||
+                !_monsters.ContainsKey(monster.EntityId))
+                throw new InvalidOperationException(
+                    "Area skill hit is not an authoritative visible monster");
+            var visual=new PlayerSkillVisual(
+                attacker.ActorId,attacker.ConnectionEpoch,request.SkillSequence,
+                request.SkillId,monster.EntityId,SkillUseStatus.Applied,
+                hit.Damage,monster.EntityRevision,attacker.Facing);
+
+            foreach(var observer in _observers.Values)
+            {
+                if(observer.Self.MapId!=attacker.MapId ||
+                    !observer.VisibleMonsters.ContainsKey(monster.EntityId))
+                    continue;
+                bool seesAttacker=
+                    observer.Self.ActorId==attacker.ActorId &&
+                    observer.Self.ConnectionEpoch==attacker.ConnectionEpoch &&
+                    observer.Self.MapEpoch==attacker.MapEpoch;
+                if(!seesAttacker &&
+                    observer.Visible.TryGetValue(attacker.ActorId,out var seen))
+                    seesAttacker=seen.ConnectionEpoch==attacker.ConnectionEpoch &&
+                        seen.MapEpoch==attacker.MapEpoch;
+                if(!seesAttacker)continue;
+                Enqueue(observer,new(AoiEventKind.PlayerSkillVisual,_lastTick,
+                    observer.Self.MapEpoch,PlayerSkill:visual));
+                queued++;
+            }
         }
         return queued;
     }

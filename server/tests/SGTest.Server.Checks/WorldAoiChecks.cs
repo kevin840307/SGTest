@@ -111,8 +111,11 @@ internal static class WorldAoiChecks
         var monster=new MonsterSnapshot(
             1001500001,1,0,15,40,24,40,24,100,100,
             MonsterAiState.Idle,0,1,2);
+        var secondMonster=new MonsterSnapshot(
+            1001500002,1,1,15,64,24,64,24,100,100,
+            MonsterAiState.Idle,0,1,2);
         aoi.Apply(new WorldChangedBatch(1,Array.Empty<ActorSnapshot>(),
-            [Join(attacker),Join(observer),Join(far)]),[monster]);
+            [Join(attacker),Join(observer),Join(far)]),[monster,secondMonster]);
         Drain(aoi,attacker);Drain(aoi,observer);Drain(aoi,far);
         var request=new TrustedSkillUse(
             attacker.ActorId,attacker.ConnectionEpoch,attacker.MapEpoch,
@@ -133,6 +136,25 @@ internal static class WorldAoiChecks
             peer is [var seen] && seen.PlayerSkill==own.PlayerSkill &&
             Drain(aoi,far).Length==0,
             "skill visual AOI scope/payload mismatch");
+
+        var areaRequest=request with {SkillSequence=4,TargetEntityId=0};
+        var changedSecond=secondMonster with {CurrentHp=75,EntityRevision=2};
+        var areaOutcome=new SkillUseOutcome(
+            SkillUseStatus.Applied,1,99001,0,0,0,0,0,null,
+            [new(changed,40),new(changedSecond,25)]);
+        Require(aoi.EnqueuePlayerSkillVisual(areaRequest,areaOutcome)==4,
+            "area skill did not fan out two target hits to owner and peer");
+        owner=Drain(aoi,attacker);
+        peer=Drain(aoi,observer);
+        Require(owner.Length==2 && peer.Length==2 &&
+            owner.Select(x=>x.PlayerSkill?.TargetEntityId).SequenceEqual(
+                new long?[]{monster.EntityId,secondMonster.EntityId}) &&
+            owner.Select(x=>x.PlayerSkill?.Damage).SequenceEqual(
+                new int?[]{40,25}) &&
+            peer.Select(x=>x.PlayerSkill).SequenceEqual(
+                owner.Select(x=>x.PlayerSkill)) &&
+            Drain(aoi,far).Length==0,
+            "area skill per-target visual payload/order mismatch");
     }
 
     private static void PlayerDamageVisualInterest()
