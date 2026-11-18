@@ -20,6 +20,8 @@ public enum WireOpcode : ushort
     CharacterList = 12,
     CharacterChoose = 13,
     CharacterChooseResult = 14,
+    CharacterCreate = 15,
+    CharacterCreateResult = 16,
     WorldReady = 20,
     EntitySpawn = 21,
     EntityDespawn = 22,
@@ -51,6 +53,16 @@ public enum WireOpcode : ushort
 
 public enum AuthWireStatus : byte { Success = 0, InvalidCredentials = 1, Disabled = 2 }
 public enum CharacterChooseWireStatus : byte { Success = 0, NotOwned = 1, WorldRejected = 2 }
+public enum CharacterCreateWireStatus : byte
+{
+    Success = 0,
+    SlotOccupied = 1,
+    NameTaken = 2,
+    LimitReached = 3,
+    InvalidName = 4,
+    InvalidSlot = 5,
+    Unavailable = 6
+}
 public enum PlayerRespawnStatus : byte
 {
     Accepted = 0,
@@ -111,6 +123,9 @@ public readonly record struct AuthRequestWire(string Username, string Password);
 public readonly record struct AuthResultWire(AuthWireStatus Status);
 public readonly record struct CharacterSummaryWire(long CharacterId, byte Slot, string Name);
 public sealed record CharacterListWire(IReadOnlyList<CharacterSummaryWire> Characters);
+public readonly record struct CharacterCreateWire(byte Slot, string Name);
+public readonly record struct CharacterCreateResultWire(
+    CharacterCreateWireStatus Status, long CharacterId, byte Slot, string Name);
 public readonly record struct CharacterChooseWire(long CharacterId);
 public readonly record struct CharacterChooseResultWire(
     CharacterChooseWireStatus Status, long CharacterId, int MapId,
@@ -192,6 +207,8 @@ public static class WireProtocol
     public const int AuthResultFrameBytes = HeaderBytes + 1;
     public const int CharacterChooseFrameBytes = HeaderBytes + 8;
     public const int CharacterChooseResultFrameBytes = HeaderBytes + 37;
+    public const int MaxCharacterCreateFrameBytes = HeaderBytes + 1 + 2 + 96;
+    public const int MaxCharacterCreateResultFrameBytes = HeaderBytes + 1 + 8 + 1 + 2 + 96;
     public const int MaxAuthRequestFrameBytes = HeaderBytes + 4 + 32 + 256;
     public const int MaxCharacterListFrameBytes = 4096;
     // Single-precision coordinates suffice across the original ~15k-pixel maps
@@ -817,6 +834,92 @@ public static class WireProtocol
         if (offset != frame.Length) return false;
         value = new(list);
         return true;
+    }
+
+
+    public static byte[] EncodeCharacterCreate(CharacterCreateWire value)
+    {
+        byte[] name = StrictUtf8.GetBytes(value.Name ?? string.Empty);
+        if (value.Slot > 31 || name.Length is < 1 or > 96)
+            throw new ArgumentOutOfRangeException(nameof(value));
+        int size = HeaderBytes + 3 + name.Length;
+        var frame = NewFrame(WireOpcode.CharacterCreate, size);
+        frame[8] = value.Slot;
+        BinaryPrimitives.WriteUInt16LittleEndian(frame.AsSpan(9, 2), (ushort)name.Length);
+        name.CopyTo(frame.AsSpan(11));
+        return frame;
+    }
+
+    public static bool TryDecodeCharacterCreate(
+        ReadOnlySpan<byte> frame, out CharacterCreateWire value)
+    {
+        value = default;
+        if (!TryReadHeader(frame, out var h) || h.Opcode != WireOpcode.CharacterCreate ||
+            frame.Length < HeaderBytes + 4)
+            return false;
+        byte slot = frame[8];
+        int length = BinaryPrimitives.ReadUInt16LittleEndian(frame.Slice(9, 2));
+        if (slot > 31 || length is < 1 or > 96 || 11 + length != frame.Length)
+            return false;
+        try
+        {
+            value = new(slot, StrictUtf8.GetString(frame.Slice(11, length)));
+            return true;
+        }
+        catch (DecoderFallbackException) { return false; }
+    }
+
+    public static byte[] EncodeCharacterCreateResult(CharacterCreateResultWire value)
+    {
+        if ((byte)value.Status > (byte)CharacterCreateWireStatus.Unavailable)
+            throw new ArgumentOutOfRangeException(nameof(value));
+        byte[] name = StrictUtf8.GetBytes(value.Name ?? string.Empty);
+        if (value.Status == CharacterCreateWireStatus.Success)
+        {
+            if (value.CharacterId <= 0 || value.Slot > 31 || name.Length is < 1 or > 96)
+                throw new ArgumentOutOfRangeException(nameof(value));
+        }
+        else if (value.CharacterId != 0 || value.Slot > 31 || name.Length != 0)
+            throw new ArgumentOutOfRangeException(nameof(value));
+        int size = HeaderBytes + 12 + name.Length;
+        var frame = NewFrame(WireOpcode.CharacterCreateResult, size);
+        frame[8] = (byte)value.Status;
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(9, 8), value.CharacterId);
+        frame[17] = value.Slot;
+        BinaryPrimitives.WriteUInt16LittleEndian(frame.AsSpan(18, 2), (ushort)name.Length);
+        if (name.Length > 0) name.CopyTo(frame.AsSpan(20));
+        return frame;
+    }
+
+    public static bool TryDecodeCharacterCreateResult(
+        ReadOnlySpan<byte> frame, out CharacterCreateResultWire value)
+    {
+        value = default;
+        if (!TryReadHeader(frame, out var h) ||
+            h.Opcode != WireOpcode.CharacterCreateResult ||
+            frame.Length < HeaderBytes + 12)
+            return false;
+        byte raw = frame[8];
+        long characterId = BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(9, 8));
+        byte slot = frame[17];
+        int length = BinaryPrimitives.ReadUInt16LittleEndian(frame.Slice(18, 2));
+        if (raw > (byte)CharacterCreateWireStatus.Unavailable || slot > 31 ||
+            length > 96 || 20 + length != frame.Length)
+            return false;
+        var status = (CharacterCreateWireStatus)raw;
+        try
+        {
+            string name = length == 0
+                ? string.Empty : StrictUtf8.GetString(frame.Slice(20, length));
+            if (status == CharacterCreateWireStatus.Success)
+            {
+                if (characterId <= 0 || length < 1) return false;
+            }
+            else if (characterId != 0 || length != 0) return false;
+            value = new(status, characterId, slot, name);
+            return true;
+        }
+        catch (DecoderFallbackException) { return false; }
     }
 
     public static byte[] EncodeCharacterChoose(CharacterChooseWire value)
@@ -1574,6 +1677,7 @@ public static class WireProtocol
             10 => WireOpcode.AuthRequest, 11 => WireOpcode.AuthResult,
             12 => WireOpcode.CharacterList, 13 => WireOpcode.CharacterChoose,
             14 => WireOpcode.CharacterChooseResult,
+            15 => WireOpcode.CharacterCreate, 16 => WireOpcode.CharacterCreateResult,
             20 => WireOpcode.WorldReady, 21 => WireOpcode.EntitySpawn,
             22 => WireOpcode.EntityDespawn, 23 => WireOpcode.EntityDelta,
             24 => WireOpcode.SelfState, 25 => WireOpcode.WorldReadyAck,
@@ -1608,6 +1712,8 @@ public static class WireProtocol
             WireOpcode.CharacterList => advertised is >= 9 and <= MaxCharacterListFrameBytes,
             WireOpcode.CharacterChoose => advertised == CharacterChooseFrameBytes,
             WireOpcode.CharacterChooseResult => advertised == CharacterChooseResultFrameBytes,
+            WireOpcode.CharacterCreate => advertised is >= 12 and <= MaxCharacterCreateFrameBytes,
+            WireOpcode.CharacterCreateResult => advertised is >= 20 and <= MaxCharacterCreateResultFrameBytes,
             WireOpcode.WorldReady => advertised == WorldReadyFrameBytes,
             WireOpcode.EntitySpawn or WireOpcode.EntityDelta or WireOpcode.SelfState => advertised == EntityStateFrameBytes,
             WireOpcode.EntityDespawn => advertised == EntityDespawnFrameBytes,
