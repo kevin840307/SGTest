@@ -282,12 +282,15 @@ WHERE drop_id=$drop AND picked_by_character_id IS NULL;";
             using var insert = connection.CreateCommand();
             insert.Transaction = tx;
             insert.CommandText = @"
-INSERT INTO item_instances(character_id,item_definition_id,quantity,source_drop_id,created_unix_ms)
-VALUES($actor,$item,$quantity,$drop,$now);";
+INSERT INTO item_instances(
+    character_id,item_definition_id,quantity,source_drop_id,
+    source_kind,source_reference,created_unix_ms)
+VALUES($actor,$item,$quantity,$drop,1,$source,$now);";
             insert.Parameters.AddWithValue("$actor", actor.CharacterId);
             insert.Parameters.AddWithValue("$item", drop.ItemDefinitionId);
             insert.Parameters.AddWithValue("$quantity", drop.Quantity);
             insert.Parameters.AddWithValue("$drop", dropId);
+            insert.Parameters.AddWithValue("$source", "drop:" + dropId);
             insert.Parameters.AddWithValue("$now", DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
             if (insert.ExecuteNonQuery() != 1)
                 throw new InvalidOperationException("Inventory grant failed");
@@ -309,7 +312,7 @@ VALUES($actor,$item,$quantity,$drop,$now);";
             using var connection = Open();
             using var command = connection.CreateCommand();
             command.CommandText = @"SELECT item_uid,character_id,item_definition_id,
-quantity,source_drop_id FROM item_instances
+quantity,COALESCE(source_drop_id,0) FROM item_instances
 WHERE character_id=$id ORDER BY item_uid LIMIT $limit;";
             command.Parameters.AddWithValue("$id", characterId);
             command.Parameters.AddWithValue("$limit", limit);
