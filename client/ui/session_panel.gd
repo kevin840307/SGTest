@@ -20,6 +20,10 @@ var login_button := Button.new()
 var logout_button := Button.new()
 var characters := OptionButton.new()
 var choose_button := Button.new()
+var character_name_input := LineEdit.new()
+var character_slot_input := SpinBox.new()
+var create_character_button := Button.new()
+var character_create_status := Label.new()
 var respawn_button := Button.new()
 var skill_hint := Label.new()
 var skill_id_input := SpinBox.new()
@@ -85,6 +89,15 @@ func _ready() -> void:
 	login_button.text = "登入"
 	logout_button.text = "登出／取消"
 	choose_button.text = "進入世界"
+	character_name_input.placeholder_text = "新角色名稱"
+	character_name_input.max_length = 24
+	character_slot_input.min_value = 0
+	character_slot_input.max_value = 7
+	character_slot_input.step = 1
+	character_slot_input.value = 0
+	create_character_button.text = "建立角色"
+	character_create_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	character_create_status.text = ""
 	inventory_button.text = "背包"
 	inventory_button.visible = false
 	inventory_button.focus_mode = Control.FOCUS_NONE
@@ -126,11 +139,13 @@ func _ready() -> void:
 	skill_area_button.text = "施放自身中心範圍技能"
 	skill_area_button.focus_mode = Control.FOCUS_NONE
 	skill_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	for control in [login_button,characters,choose_button,respawn_button,skill_hint,skill_id_input,skill_target_mode,skill_area_button,skill_status,logout_button,status,pickup_status,inventory_button,inventory_search,inventory_preview,inventory_previous,inventory_page_label,inventory_next,recovery_picker,recovery_button,recovery_status,discard_quantity,discard_all_button,discard_button,discard_status]:
+	for control in [login_button,characters,choose_button,character_name_input,character_slot_input,create_character_button,character_create_status,respawn_button,skill_hint,skill_id_input,skill_target_mode,skill_area_button,skill_status,logout_button,status,pickup_status,inventory_button,inventory_search,inventory_preview,inventory_previous,inventory_page_label,inventory_next,recovery_picker,recovery_button,recovery_status,discard_quantity,discard_all_button,discard_button,discard_status]:
 		column.add_child(control)
 	login_button.pressed.connect(login)
 	password_input.text_submitted.connect(func(_text): login())
 	choose_button.pressed.connect(choose)
+	create_character_button.pressed.connect(create_character)
+	character_name_input.text_submitted.connect(func(_text): create_character())
 	respawn_button.pressed.connect(request_respawn)
 	skill_area_button.pressed.connect(_cast_area_skill)
 	logout_button.pressed.connect(disconnect_session)
@@ -195,6 +210,19 @@ func login() -> void:
 	status.text = "安全連線中…"
 	connection_changed.emit(true)
 
+
+func create_character() -> void:
+	if not active:
+		return
+	var character_name := character_name_input.text.strip_edges()
+	if character_name.is_empty():
+		character_create_status.text = "請輸入角色名稱"
+		return
+	if session.create_character(int(character_slot_input.value),character_name):
+		character_create_status.text = "建立角色中…"
+		_set_controls()
+	else:
+		character_create_status.text = "目前無法建立角色，請稍後重試"
 
 func choose() -> void:
 	if not active or _chosen or characters.selected < 0 or characters.selected >= _characters.size():
@@ -313,6 +341,8 @@ func disconnect_session() -> void:
 	_show_inventory_preview(false)
 	_characters = []
 	characters.clear()
+	character_name_input.clear()
+	character_create_status.text = ""
 	password_input.clear()
 	_set_controls()
 	inventory_button.visible = false
@@ -330,9 +360,17 @@ func _set_controls() -> void:
 	port_input.editable = not active
 	login_button.disabled = active
 	logout_button.disabled = not active
-	characters.visible = active and not _characters.is_empty()
+	var state := int(_latest.get("state",-1))
+	var selecting := active and state == State.STATE_SELECTING_CHARACTER
+	var creating := active and state == State.STATE_CREATING_CHARACTER
+	characters.visible = selecting and not _characters.is_empty()
 	choose_button.visible = characters.visible
-	choose_button.disabled = _chosen or _characters.is_empty()
+	choose_button.disabled = _chosen or not selecting or _characters.is_empty()
+	for control in [character_name_input,character_slot_input,create_character_button,character_create_status]:
+		control.visible = active and state in [State.STATE_SELECTING_CHARACTER,State.STATE_CREATING_CHARACTER]
+	character_name_input.editable = selecting
+	character_slot_input.editable = selecting
+	create_character_button.disabled = not selecting
 	_set_respawn_controls()
 	_set_skill_controls()
 
@@ -622,11 +660,29 @@ func _process(delta: float) -> void:
 		if _latest.characters != _characters:
 			_characters = _latest.characters
 			characters.clear()
+			var created_index := -1
+			var created_id := int(_latest.get("last_created_character_id",0))
+			var used_slots := {}
 			for entry in _characters:
 				characters.add_item(str(entry.name))
+				used_slots[int(entry.slot)] = true
+				if int(entry.character_id) == created_id:
+					created_index = characters.item_count - 1
+			if created_index >= 0:
+				characters.select(created_index)
+				character_name_input.clear()
+			if used_slots.has(int(character_slot_input.value)):
+				for slot in range(8):
+					if not used_slots.has(slot):
+						character_slot_input.value = slot
+						break
 			_set_controls()
+		var create_code := int(_latest.get("character_create_status",-1))
+		if create_code >= 0:
+			character_create_status.text = _character_create_status_text(
+				create_code,str(_latest.get("last_created_name","")))
 		if not _chosen:
-			status.text = "請選擇角色" if not _characters.is_empty() else "帳號尚無角色；創角功能待開放"
+			status.text = "請選擇角色或建立新角色"
 	elif state == State.STATE_IN_WORLD:
 		characters.hide()
 		choose_button.hide()
@@ -641,6 +697,27 @@ func _process(delta: float) -> void:
 		if bool(_latest.world_ready):
 			world_snapshot.emit(_latest)
 
+
+
+
+func _character_create_status_text(code: int, character_name: String) -> String:
+	match code:
+		0:
+			return "角色「%s」建立成功，可直接進入世界" % character_name
+		1:
+			return "這個角色欄位已被使用，請換一個欄位"
+		2:
+			return "角色名稱已被使用"
+		3:
+			return "角色數量已達上限"
+		4:
+			return "角色名稱格式不合法"
+		5:
+			return "角色欄位不合法"
+		6:
+			return "伺服器尚未開放遊戲內創角"
+		_:
+			return ""
 
 func _exit_tree() -> void:
 	session.stop()
