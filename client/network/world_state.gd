@@ -649,11 +649,26 @@ func _apply_player_combat_state(frame: PackedByteArray) -> bool:
 		return true
 	if epoch > map_epoch:
 		return fail("future_player_combat_state")
+
+	var next_hp := int(value.current_hp)
+	var next_max_hp := int(value.max_hp)
+	var next_mp := int(value.current_mp)
+	var next_max_mp := int(value.max_mp)
+	if combat_available:
+		# Mid-session Server resource refresh (for example durable skill MP).
+		# HP authority remains the ordered PlayerDamage/Respawn timeline; a
+		# combat baseline must not silently reset DamageSequence or heal/hurt.
+		if next_hp != player_current_hp or next_max_hp != player_max_hp:
+			return fail("player_combat_refresh_hp_changed")
+		player_current_mp = next_mp
+		player_max_mp = next_max_mp
+		return true
+
 	combat_available = true
-	player_current_hp = int(value.current_hp)
-	player_max_hp = int(value.max_hp)
-	player_current_mp = int(value.current_mp)
-	player_max_mp = int(value.max_mp)
+	player_current_hp = next_hp
+	player_max_hp = next_max_hp
+	player_current_mp = next_mp
+	player_max_mp = next_max_mp
 	player_dead = player_current_hp == 0
 	player_damage_sequence = 0
 	last_player_damage_tick = -1

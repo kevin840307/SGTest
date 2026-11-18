@@ -59,6 +59,16 @@ func _initialize() -> void:
 		_fail("first damage state")
 		return
 
+	# Mid-session authoritative MP refresh must not reset the reliable damage
+	# timeline or mutate HP. This is the path used after durable skill MP debit.
+	if not world.apply_frame(_combat_state(1,82,100,2,5)):
+		_fail("mid-session MP baseline rejected")
+		return
+	snap=world.snapshot()
+	if int(snap.player_current_hp)!=82 or int(snap.player_current_mp)!=2 or int(snap.player_max_mp)!=5 or int(snap.player_damage_sequence)!=1 or int(snap.last_player_damage.damage)!=18:
+		_fail("mid-session MP baseline reset damage authority")
+		return
+
 	if not world.apply_frame(first) or int(world.snapshot().stale_player_damage)!=1:
 		_fail("duplicate damage not idempotent")
 		return
@@ -160,6 +170,15 @@ func _initialize() -> void:
 		_fail("future-map damage did not fail closed")
 		return
 
+	var bad_refresh := _world(1)
+	if not bad_refresh.apply_frame(_combat_state(1,100,100,3,5)):
+		_fail("bad refresh initial baseline")
+		return
+	bad_refresh.world_ready=true
+	bad_refresh.last_world_ready_ack_epoch=1
+	if bad_refresh.apply_frame(_combat_state(1,99,100,2,5)) or int(bad_refresh.state)!=WorldState.STATE_FAILED:
+		_fail("mid-session combat baseline illegally changed HP")
+		return
 
 	var dead_move := _move_receipt(1,1,11,44)
 	var dead_move_parsed := WireCodec.decode_move_receipt(dead_move)
@@ -171,7 +190,7 @@ func _initialize() -> void:
 	if dead_npc_parsed.is_empty() or int(dead_npc_parsed.status)!=6:
 		_fail("CombatDead NPC result codec")
 		return
-	print("PLAYER_DAMAGE_GODOT_PASS baseline_bytes=32 mp_baseline=true damage_bytes=57 damage_visual_bytes=66 respawn_request_bytes=20 respawn_result_bytes=29 respawn_visual_bytes=45 durable_event=true presentation_only=true no_observer_hp_authority=true duplicate_stale=true visual_replay_stale=true sequence_gap_fail_closed=true death_gates_intents=true respawn_reopens_intents=true damage_sequence_continuous=true combat_dead_statuses=true old_map_stale=true")
+	print("PLAYER_DAMAGE_GODOT_PASS baseline_bytes=32 mp_baseline=true mid_session_mp_refresh_preserves_damage_sequence=true damage_bytes=57 damage_visual_bytes=66 respawn_request_bytes=20 respawn_result_bytes=29 respawn_visual_bytes=45 durable_event=true presentation_only=true no_observer_hp_authority=true duplicate_stale=true visual_replay_stale=true sequence_gap_fail_closed=true death_gates_intents=true respawn_reopens_intents=true damage_sequence_continuous=true combat_dead_statuses=true old_map_stale=true")
 	quit(0)
 
 func _world(epoch: int) -> RefCounted:

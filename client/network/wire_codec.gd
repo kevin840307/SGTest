@@ -253,7 +253,7 @@ static func decode_skill_use_result(frame: PackedByteArray) -> Dictionary:
 	var current_hp := reader.get_32()
 	var max_hp := reader.get_32()
 	var revision := reader.get_64()
-	if epoch <= 0 or sequence == 0 or status > 10 or tick < 0 or skill_id <= 0 or skill_id > 100000000 or target <= 0 or damage < 0 or current_hp < 0 or max_hp < 0 or revision < 0:
+	if epoch <= 0 or sequence == 0 or status > 11 or tick < 0 or skill_id <= 0 or skill_id > 100000000 or target <= 0 or damage < 0 or current_hp < 0 or max_hp < 0 or revision < 0:
 		return {}
 	if max_hp > 0 and current_hp > max_hp:
 		return {}
