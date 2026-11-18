@@ -54,9 +54,30 @@ func _initialize() -> void:
 		_fail("duplicate skill result not stale")
 		return
 
-	var malformed := _skill_result(1,2,0,43,99001,MONSTER_ID,0,40,100,2)
+	var area_request := WireCodec.encode_skill_use(1,2,99001,0)
+	var area_decoded := WireCodec.decode_skill_use(area_request)
+	if area_request.size()!=32 or area_decoded.is_empty() or int(area_decoded.target_entity_id)!=0:
+		_fail("self-centered area request target=0")
+		return
+	if not world.mark_skill_sent(2):
+		_fail("area skill send gate")
+		return
+	var area_result := _skill_result(1,2,0,43,99001,0,0,0,0,0)
+	var area_parsed := WireCodec.decode_skill_use_result(area_result)
+	if area_parsed.is_empty() or int(area_parsed.target_entity_id)!=0 or int(area_parsed.damage)!=0:
+		_fail("self-centered area summary codec")
+		return
+	if not world.apply_frame(area_result) or int(world.snapshot().last_skill_result_sequence)!=2:
+		_fail("self-centered area summary reducer")
+		return
+
+	var malformed := _skill_result(1,3,0,44,99001,MONSTER_ID,0,40,100,2)
 	if not WireCodec.decode_skill_use_result(malformed).is_empty():
 		_fail("applied zero-damage result accepted")
+		return
+
+	if not WireCodec.decode_skill_use_result(_skill_result(1,3,0,44,99001,0,1,0,0,0)).is_empty():
+		_fail("area summary carried client-visible aggregate damage")
 		return
 
 	var future := WorldState.new()
@@ -67,11 +88,11 @@ func _initialize() -> void:
 	future.world_ready=true
 	future.last_world_ready_ack_epoch=1
 	future.skill_sequence=1
-	if future.apply_frame(_skill_result(2,1,10,44,99001,MONSTER_ID,0,0,0,0)) or int(future.state)!=WorldState.STATE_FAILED:
+	if future.apply_frame(_skill_result(2,1,10,45,99001,MONSTER_ID,0,0,0,0)) or int(future.state)!=WorldState.STATE_FAILED:
 		_fail("future-map skill result did not fail closed")
 		return
 
-	print("SKILL_COMBAT_GODOT_PASS request_bytes=32 result_bytes=61 visual_bytes=70 client_damage_absent=true receipt_does_not_mutate_monster=true visual_is_presentation_only=true duplicate_stale=true future_map_fail_closed=true")
+	print("SKILL_COMBAT_GODOT_PASS request_bytes=32 result_bytes=61 visual_bytes=70 client_damage_absent=true area_target_zero=true area_summary_no_hp_authority=true receipt_does_not_mutate_monster=true visual_is_presentation_only=true duplicate_stale=true future_map_fail_closed=true")
 	quit(0)
 
 func _skill_result(epoch: int, sequence: int, status: int, tick: int,

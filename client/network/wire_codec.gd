@@ -214,7 +214,7 @@ static func decode_normal_attack_result(frame: PackedByteArray) -> Dictionary:
 		"max_hp":max_hp,"target_revision":revision}
 
 static func encode_skill_use(map_epoch: int, skill_sequence: int, skill_id: int, target_entity_id: int) -> PackedByteArray:
-	if map_epoch <= 0 or skill_sequence <= 0 or skill_sequence > 0xffffffff or skill_id <= 0 or skill_id > 100000000 or target_entity_id <= 0:
+	if map_epoch <= 0 or skill_sequence <= 0 or skill_sequence > 0xffffffff or skill_id <= 0 or skill_id > 100000000 or target_entity_id < 0:
 		return PackedByteArray()
 	var writer := StreamPeerBuffer.new()
 	writer.big_endian = false
@@ -235,7 +235,7 @@ static func decode_skill_use(frame: PackedByteArray) -> Dictionary:
 	var sequence := reader.get_u32()
 	var skill_id := reader.get_32()
 	var target := reader.get_64()
-	if epoch <= 0 or sequence == 0 or skill_id <= 0 or skill_id > 100000000 or target <= 0:
+	if epoch <= 0 or sequence == 0 or skill_id <= 0 or skill_id > 100000000 or target < 0:
 		return {}
 	return {"map_epoch":epoch,"skill_sequence":sequence,"skill_id":skill_id,"target_entity_id":target}
 
@@ -253,15 +253,20 @@ static func decode_skill_use_result(frame: PackedByteArray) -> Dictionary:
 	var current_hp := reader.get_32()
 	var max_hp := reader.get_32()
 	var revision := reader.get_64()
-	if epoch <= 0 or sequence == 0 or status > 11 or tick < 0 or skill_id <= 0 or skill_id > 100000000 or target <= 0 or damage < 0 or current_hp < 0 or max_hp < 0 or revision < 0:
+	if epoch <= 0 or sequence == 0 or status > 12 or tick < 0 or skill_id <= 0 or skill_id > 100000000 or target < 0 or damage < 0 or current_hp < 0 or max_hp < 0 or revision < 0:
 		return {}
 	if max_hp > 0 and current_hp > max_hp:
 		return {}
-	if status == 0 and (damage <= 0 or max_hp <= 0 or revision <= 0):
-		return {}
-	if status == 1 and (damage != 0 or max_hp <= 0 or revision <= 0):
-		return {}
-	if status > 1 and damage != 0:
+	if status == 0:
+		if target == 0:
+			if damage != 0 or current_hp != 0 or max_hp != 0 or revision != 0:
+				return {}
+		elif damage <= 0 or max_hp <= 0 or revision <= 0:
+			return {}
+	elif status == 1:
+		if target <= 0 or damage != 0 or max_hp <= 0 or revision <= 0:
+			return {}
+	elif damage != 0:
 		return {}
 	return {"map_epoch":epoch,"skill_sequence":sequence,"status":status,
 		"server_tick":tick,"skill_id":skill_id,"target_entity_id":target,

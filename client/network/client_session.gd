@@ -132,6 +132,11 @@ func cast_skill(skill_id: int, entity_id: int) -> bool:
 		return false
 	return _queue_intent({"type":"cast_skill","skill_id":skill_id,"entity_id":entity_id})
 
+func cast_area_skill(skill_id: int) -> bool:
+	if skill_id <= 0 or skill_id > 100000000 or bool(snapshot().get("player_dead",false)):
+		return false
+	return _queue_intent({"type":"cast_skill","skill_id":skill_id,"entity_id":0})
+
 func attack_monster(entity_id: int) -> bool:
 	if entity_id <= 0 or bool(snapshot().get("player_dead",false)):
 		return false
@@ -460,7 +465,7 @@ func _process_first_intent() -> void:
 			return
 		var target := int(intent.entity_id)
 		var skill_id := int(intent.skill_id)
-		if target <= 0 or skill_id <= 0:
+		if target < 0 or skill_id <= 0:
 			_pop_intent()
 			return
 		var sequence := int(current.skill_sequence)+1
