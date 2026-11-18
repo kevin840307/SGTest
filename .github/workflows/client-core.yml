@@ -68,6 +68,8 @@ jobs:
         run: .cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64 --headless --path client --script res://tests/test_inventory_discard_wire.gd
       - name: Godot NPC shop wire, money and inventory reducer
         run: .cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64 --headless --path client --script res://tests/test_shop_wire.gd
+      - name: Godot personal storage wire and authoritative UID transfer reducer
+        run: .cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64 --headless --path client --script res://tests/test_storage_wire.gd
       - name: Godot private item name catalog and fail-closed provenance
         run: .cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64 --headless --path client --script res://tests/test_item_catalog.gd
       - name: Godot audited NPC portal compact wire and reducer gate

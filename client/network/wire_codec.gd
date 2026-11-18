@@ -50,6 +50,11 @@ const OPCODE_SHOP_SNAPSHOT := 48
 const OPCODE_SHOP_BUY := 49
 const OPCODE_SHOP_SELL := 50
 const OPCODE_SHOP_TRANSACTION_RESULT := 51
+const OPCODE_STORAGE_OPEN := 52
+const OPCODE_STORAGE_SNAPSHOT := 53
+const OPCODE_STORAGE_DEPOSIT := 54
+const OPCODE_STORAGE_WITHDRAW := 55
+const OPCODE_STORAGE_TRANSFER_RESULT := 56
 const MOVE_TARGET_FRAME_BYTES := 28
 const MOVE_RECEIPT_FRAME_BYTES := 30
 const NPC_INTERACT_FRAME_BYTES := 24
@@ -99,6 +104,13 @@ const SHOP_TRANSACTION_RESULT_FRAME_BYTES := 54
 const SHOP_SNAPSHOT_HEADER_BYTES := 35
 const SHOP_ITEM_BYTES := 20
 const SHOP_SNAPSHOT_MAX_ITEMS := 256
+const STORAGE_OPEN_FRAME_BYTES := 24
+const STORAGE_MOVE_FRAME_BYTES := 32
+const STORAGE_SNAPSHOT_HEADER_BYTES := 32
+const STORAGE_ITEM_BYTES := 24
+const STORAGE_SNAPSHOT_MAX_PER_FRAME := 128
+const STORAGE_SNAPSHOT_MAX_ITEMS := 4095
+const STORAGE_TRANSFER_RESULT_FRAME_BYTES := 50
 
 static func encode_move_target(map_epoch: int, movement_sequence: int, target_x: int, target_y: int) -> PackedByteArray:
 	if map_epoch <= 0 or movement_sequence <= 0 or movement_sequence > 0xffffffff:
@@ -933,6 +945,101 @@ static func decode_shop_transaction_result(frame: PackedByteArray) -> Dictionary
 		"item_definition_id":item_id,"quantity":quantity,"remaining_quantity":remaining}
 
 
+static func encode_storage_open(epoch: int, sequence: int, npc_spawn_id: int) -> PackedByteArray:
+	if epoch <= 0 or sequence < 1 or sequence > 0xffffffff or npc_spawn_id <= 0:
+		return PackedByteArray()
+	var writer := StreamPeerBuffer.new()
+	writer.big_endian = false
+	writer.put_u32(STORAGE_OPEN_FRAME_BYTES)
+	writer.put_u16(VERSION)
+	writer.put_u16(OPCODE_STORAGE_OPEN)
+	writer.put_64(epoch)
+	writer.put_u32(sequence)
+	writer.put_32(npc_spawn_id)
+	return writer.data_array
+
+
+static func encode_storage_deposit(epoch: int, sequence: int, npc_spawn_id: int, item_uid: int) -> PackedByteArray:
+	return _encode_storage_move(OPCODE_STORAGE_DEPOSIT,epoch,sequence,npc_spawn_id,item_uid)
+
+
+static func encode_storage_withdraw(epoch: int, sequence: int, npc_spawn_id: int, item_uid: int) -> PackedByteArray:
+	return _encode_storage_move(OPCODE_STORAGE_WITHDRAW,epoch,sequence,npc_spawn_id,item_uid)
+
+
+static func _encode_storage_move(opcode: int, epoch: int, sequence: int, npc_spawn_id: int, item_uid: int) -> PackedByteArray:
+	if opcode not in [OPCODE_STORAGE_DEPOSIT,OPCODE_STORAGE_WITHDRAW] or epoch <= 0 or sequence < 1 or sequence > 0xffffffff or npc_spawn_id <= 0 or item_uid <= 0:
+		return PackedByteArray()
+	var writer := StreamPeerBuffer.new()
+	writer.big_endian = false
+	writer.put_u32(STORAGE_MOVE_FRAME_BYTES)
+	writer.put_u16(VERSION)
+	writer.put_u16(opcode)
+	writer.put_64(epoch)
+	writer.put_u32(sequence)
+	writer.put_32(npc_spawn_id)
+	writer.put_64(item_uid)
+	return writer.data_array
+
+
+static func decode_storage_snapshot(frame: PackedByteArray) -> Dictionary:
+	if not _valid_variable_header(frame,OPCODE_STORAGE_SNAPSHOT,STORAGE_SNAPSHOT_HEADER_BYTES,STORAGE_SNAPSHOT_HEADER_BYTES+STORAGE_SNAPSHOT_MAX_PER_FRAME*STORAGE_ITEM_BYTES):
+		return {}
+	var reader := _reader(frame,8)
+	var epoch := reader.get_64()
+	var sequence := reader.get_u32()
+	var status := reader.get_u8()
+	var npc_spawn_id := reader.get_32()
+	var start_index := reader.get_32()
+	var complete_raw := reader.get_u8()
+	var count := reader.get_u16()
+	if epoch <= 0 or sequence == 0 or status > 4 or npc_spawn_id <= 0 or start_index < 0 or start_index > STORAGE_SNAPSHOT_MAX_ITEMS or complete_raw > 1 or count > STORAGE_SNAPSHOT_MAX_PER_FRAME or start_index+count > STORAGE_SNAPSHOT_MAX_ITEMS or frame.size() != STORAGE_SNAPSHOT_HEADER_BYTES+count*STORAGE_ITEM_BYTES:
+		return {}
+	if status != 0 and (start_index != 0 or complete_raw != 1 or count != 0):
+		return {}
+	var items: Array[Dictionary] = []
+	var uids := {}
+	for _index in count:
+		var uid := reader.get_64()
+		var item_id := reader.get_32()
+		var quantity := reader.get_32()
+		var source_drop_id := reader.get_64()
+		if uid <= 0 or item_id < 1 or item_id > 100000000 or quantity < 1 or quantity > 1000000 or source_drop_id < 0 or uids.has(uid):
+			return {}
+		uids[uid] = true
+		items.append({"item_uid":uid,"item_definition_id":item_id,
+			"quantity":quantity,"drop_id":source_drop_id})
+	return {"map_epoch":epoch,"storage_sequence":sequence,"status":status,
+		"npc_spawn_id":npc_spawn_id,"start_index":start_index,
+		"complete":complete_raw==1,"items":items}
+
+
+static func decode_storage_transfer_result(frame: PackedByteArray) -> Dictionary:
+	if not _valid_header(frame,OPCODE_STORAGE_TRANSFER_RESULT,STORAGE_TRANSFER_RESULT_FRAME_BYTES):
+		return {}
+	var reader := _reader(frame,8)
+	var epoch := reader.get_64()
+	var sequence := reader.get_u32()
+	var kind := reader.get_u8()
+	var status := reader.get_u8()
+	var npc_spawn_id := reader.get_32()
+	var uid := reader.get_64()
+	var item_id := reader.get_32()
+	var quantity := reader.get_32()
+	var source_drop_id := reader.get_64()
+	if epoch <= 0 or sequence == 0 or kind < 1 or kind > 2 or status > 8 or npc_spawn_id <= 0 or uid <= 0 or item_id < 0 or item_id > 100000000 or quantity < 0 or quantity > 1000000 or source_drop_id < 0:
+		return {}
+	if status in [0,1]:
+		if item_id <= 0 or quantity <= 0:
+			return {}
+	elif item_id != 0 or quantity != 0 or source_drop_id != 0:
+		return {}
+	return {"map_epoch":epoch,"storage_sequence":sequence,"kind":kind,
+		"status":status,"npc_spawn_id":npc_spawn_id,"item_uid":uid,
+		"item_definition_id":item_id,"quantity":quantity,
+		"drop_id":source_drop_id}
+
+
 static func decode_ground_drop_spawn(frame: PackedByteArray) -> Dictionary:
 	if not _valid_header(frame,OPCODE_GROUND_DROP_SPAWN,GROUND_DROP_SPAWN_FRAME_BYTES):
 		return {}
@@ -995,7 +1102,7 @@ static func frame_opcode(frame: PackedByteArray) -> int:
 	if reader.get_u16() != VERSION:
 		return -1
 	var opcode := reader.get_u16()
-	if opcode not in [OPCODE_MOVE_TARGET, OPCODE_MOVE_RECEIPT, OPCODE_NPC_INTERACT, OPCODE_NPC_INTERACT_RESULT, OPCODE_NORMAL_ATTACK, OPCODE_NORMAL_ATTACK_RESULT, OPCODE_PLAYER_COMBAT_STATE, OPCODE_PLAYER_DAMAGE, OPCODE_AUTH_REQUEST, OPCODE_AUTH_RESULT, OPCODE_CHARACTER_LIST, OPCODE_CHARACTER_CHOOSE, OPCODE_CHARACTER_CHOOSE_RESULT, OPCODE_CHARACTER_CREATE, OPCODE_CHARACTER_CREATE_RESULT, OPCODE_WORLD_READY, OPCODE_ENTITY_SPAWN, OPCODE_ENTITY_DESPAWN, OPCODE_ENTITY_DELTA, OPCODE_SELF_STATE, OPCODE_WORLD_READY_ACK, OPCODE_WORLD_RESYNC_REQUEST, OPCODE_MONSTER_SPAWN, OPCODE_MONSTER_DELTA, OPCODE_MONSTER_DESPAWN, OPCODE_PLAYER_RESPAWN, OPCODE_PLAYER_RESPAWN_RESULT, OPCODE_GROUND_DROP_SPAWN, OPCODE_GROUND_DROP_DESPAWN, OPCODE_GROUND_PICKUP, OPCODE_GROUND_PICKUP_RESULT, OPCODE_INVENTORY_SNAPSHOT, OPCODE_RECOVERY_USE, OPCODE_RECOVERY_USE_RESULT, OPCODE_INVENTORY_DISCARD, OPCODE_INVENTORY_DISCARD_RESULT, OPCODE_PLAYER_ATTACK_VISUAL, OPCODE_PLAYER_DAMAGE_VISUAL, OPCODE_PLAYER_RESPAWN_VISUAL, OPCODE_SKILL_USE, OPCODE_SKILL_USE_RESULT, OPCODE_PLAYER_SKILL_VISUAL, OPCODE_SHOP_OPEN, OPCODE_SHOP_SNAPSHOT, OPCODE_SHOP_BUY, OPCODE_SHOP_SELL, OPCODE_SHOP_TRANSACTION_RESULT]:
+	if opcode not in [OPCODE_MOVE_TARGET, OPCODE_MOVE_RECEIPT, OPCODE_NPC_INTERACT, OPCODE_NPC_INTERACT_RESULT, OPCODE_NORMAL_ATTACK, OPCODE_NORMAL_ATTACK_RESULT, OPCODE_PLAYER_COMBAT_STATE, OPCODE_PLAYER_DAMAGE, OPCODE_AUTH_REQUEST, OPCODE_AUTH_RESULT, OPCODE_CHARACTER_LIST, OPCODE_CHARACTER_CHOOSE, OPCODE_CHARACTER_CHOOSE_RESULT, OPCODE_CHARACTER_CREATE, OPCODE_CHARACTER_CREATE_RESULT, OPCODE_WORLD_READY, OPCODE_ENTITY_SPAWN, OPCODE_ENTITY_DESPAWN, OPCODE_ENTITY_DELTA, OPCODE_SELF_STATE, OPCODE_WORLD_READY_ACK, OPCODE_WORLD_RESYNC_REQUEST, OPCODE_MONSTER_SPAWN, OPCODE_MONSTER_DELTA, OPCODE_MONSTER_DESPAWN, OPCODE_PLAYER_RESPAWN, OPCODE_PLAYER_RESPAWN_RESULT, OPCODE_GROUND_DROP_SPAWN, OPCODE_GROUND_DROP_DESPAWN, OPCODE_GROUND_PICKUP, OPCODE_GROUND_PICKUP_RESULT, OPCODE_INVENTORY_SNAPSHOT, OPCODE_RECOVERY_USE, OPCODE_RECOVERY_USE_RESULT, OPCODE_INVENTORY_DISCARD, OPCODE_INVENTORY_DISCARD_RESULT, OPCODE_PLAYER_ATTACK_VISUAL, OPCODE_PLAYER_DAMAGE_VISUAL, OPCODE_PLAYER_RESPAWN_VISUAL, OPCODE_SKILL_USE, OPCODE_SKILL_USE_RESULT, OPCODE_PLAYER_SKILL_VISUAL, OPCODE_SHOP_OPEN, OPCODE_SHOP_SNAPSHOT, OPCODE_SHOP_BUY, OPCODE_SHOP_SELL, OPCODE_SHOP_TRANSACTION_RESULT, OPCODE_STORAGE_OPEN, OPCODE_STORAGE_SNAPSHOT, OPCODE_STORAGE_DEPOSIT, OPCODE_STORAGE_WITHDRAW, OPCODE_STORAGE_TRANSFER_RESULT]:
 		return -1
 	return opcode
 

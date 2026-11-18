@@ -114,6 +114,20 @@ var last_shop_open_status := -1
 var last_shop_response_sequence := 0
 var last_shop_result := {}
 var stale_shop_results := 0
+var storage_sequence := 0
+var pending_storage_sequence := 0
+var pending_storage_kind := 0
+var pending_storage_npc := 0
+var pending_storage_item_uid := 0
+var active_storage_npc := 0
+var storage_items := {}
+var storage_ready := false
+var storage_next_index := 0
+var storage_revision := 0
+var last_storage_open_status := -1
+var last_storage_response_sequence := 0
+var last_storage_result := {}
+var stale_storage_results := 0
 
 var respawn_sequence := 0
 var last_respawn_result_sequence := 0
@@ -188,7 +202,7 @@ func mark_skill_sent(sequence: int) -> bool:
 	return true
 
 func mark_recovery_use_sent(sequence: int,item_uid: int) -> bool:
-	if state != STATE_IN_WORLD or player_dead or not combat_available or not inventory_ready or not world_ready or resync_pending or waiting_for_new_map or pending_world_ready_ack_epoch != 0 or last_world_ready_ack_epoch != map_epoch or pending_recovery_sequence != 0 or pending_discard_sequence != 0 or pending_shop_sequence != 0 or sequence <= recovery_sequence or sequence > 0xffffffff or item_uid <= 0 or not inventory_items.has(item_uid):
+	if state != STATE_IN_WORLD or player_dead or not combat_available or not inventory_ready or not world_ready or resync_pending or waiting_for_new_map or pending_world_ready_ack_epoch != 0 or last_world_ready_ack_epoch != map_epoch or pending_recovery_sequence != 0 or pending_discard_sequence != 0 or pending_shop_sequence != 0 or pending_storage_sequence != 0 or sequence <= recovery_sequence or sequence > 0xffffffff or item_uid <= 0 or not inventory_items.has(item_uid):
 		return false
 	recovery_sequence = sequence
 	pending_recovery_sequence = sequence
@@ -197,7 +211,7 @@ func mark_recovery_use_sent(sequence: int,item_uid: int) -> bool:
 
 
 func mark_inventory_discard_sent(sequence: int,item_uid: int,quantity: int) -> bool:
-	if state != STATE_IN_WORLD or not inventory_ready or not world_ready or resync_pending or waiting_for_new_map or pending_world_ready_ack_epoch != 0 or last_world_ready_ack_epoch != map_epoch or pending_discard_sequence != 0 or pending_recovery_sequence != 0 or pending_shop_sequence != 0 or sequence <= discard_sequence or sequence > 0xffffffff or item_uid <= 0 or quantity < 1 or quantity > 1000000 or not inventory_items.has(item_uid) or int((inventory_items[item_uid] as Dictionary).quantity) < quantity:
+	if state != STATE_IN_WORLD or not inventory_ready or not world_ready or resync_pending or waiting_for_new_map or pending_world_ready_ack_epoch != 0 or last_world_ready_ack_epoch != map_epoch or pending_discard_sequence != 0 or pending_recovery_sequence != 0 or pending_shop_sequence != 0 or pending_storage_sequence != 0 or sequence <= discard_sequence or sequence > 0xffffffff or item_uid <= 0 or quantity < 1 or quantity > 1000000 or not inventory_items.has(item_uid) or int((inventory_items[item_uid] as Dictionary).quantity) < quantity:
 		return false
 	discard_sequence = sequence
 	pending_discard_sequence = sequence
@@ -218,7 +232,7 @@ func mark_pickup_sent(sequence: int, drop_id: int) -> bool:
 
 
 func mark_shop_sent(sequence: int,kind: int,npc_spawn_id: int,item_definition_id: int = 0,item_uid: int = 0,quantity: int = 0) -> bool:
-	if state != STATE_IN_WORLD or player_dead or not world_ready or not inventory_ready or resync_pending or waiting_for_new_map or pending_world_ready_ack_epoch != 0 or last_world_ready_ack_epoch != map_epoch or pending_shop_sequence != 0 or pending_recovery_sequence != 0 or pending_discard_sequence != 0 or sequence <= shop_sequence or sequence > 0xffffffff or kind < 1 or kind > 3 or npc_spawn_id <= 0:
+	if state != STATE_IN_WORLD or player_dead or not world_ready or not inventory_ready or resync_pending or waiting_for_new_map or pending_world_ready_ack_epoch != 0 or last_world_ready_ack_epoch != map_epoch or pending_shop_sequence != 0 or pending_recovery_sequence != 0 or pending_discard_sequence != 0 or pending_storage_sequence != 0 or sequence <= shop_sequence or sequence > 0xffffffff or kind < 1 or kind > 3 or npc_spawn_id <= 0:
 		return false
 	if kind == 1:
 		if item_definition_id != 0 or item_uid != 0 or quantity != 0:
@@ -236,6 +250,32 @@ func mark_shop_sent(sequence: int,kind: int,npc_spawn_id: int,item_definition_id
 	pending_shop_item_definition_id = item_definition_id
 	pending_shop_item_uid = item_uid
 	pending_shop_quantity = quantity
+	return true
+
+
+func mark_storage_sent(sequence: int,kind: int,npc_spawn_id: int,item_uid: int = 0) -> bool:
+	if state != STATE_IN_WORLD or player_dead or not world_ready or not inventory_ready or resync_pending or waiting_for_new_map or pending_world_ready_ack_epoch != 0 or last_world_ready_ack_epoch != map_epoch or pending_storage_sequence != 0 or pending_recovery_sequence != 0 or pending_discard_sequence != 0 or pending_shop_sequence != 0 or sequence <= storage_sequence or sequence > 0xffffffff or kind < 1 or kind > 3 or npc_spawn_id <= 0:
+		return false
+	if kind == 1:
+		if item_uid != 0:
+			return false
+	elif kind == 2:
+		if active_storage_npc != npc_spawn_id or not storage_ready or item_uid <= 0 or not inventory_items.has(item_uid) or storage_items.has(item_uid):
+			return false
+	else:
+		if active_storage_npc != npc_spawn_id or not storage_ready or item_uid <= 0 or not storage_items.has(item_uid) or inventory_items.has(item_uid):
+			return false
+	storage_sequence = sequence
+	pending_storage_sequence = sequence
+	pending_storage_kind = kind
+	pending_storage_npc = npc_spawn_id
+	pending_storage_item_uid = item_uid
+	if kind == 1:
+		active_storage_npc = 0
+		storage_items.clear()
+		storage_ready = false
+		storage_next_index = 0
+		last_storage_open_status = -1
 	return true
 
 
@@ -315,6 +355,10 @@ func apply_frame(frame: PackedByteArray) -> bool:
 			return _apply_shop_snapshot(frame)
 		WireCodec.OPCODE_SHOP_TRANSACTION_RESULT:
 			return _apply_shop_transaction_result(frame)
+		WireCodec.OPCODE_STORAGE_SNAPSHOT:
+			return _apply_storage_snapshot(frame)
+		WireCodec.OPCODE_STORAGE_TRANSFER_RESULT:
+			return _apply_storage_transfer_result(frame)
 		WireCodec.OPCODE_WORLD_READY:
 			return _apply_world_ready(frame)
 		WireCodec.OPCODE_SELF_STATE:
@@ -439,6 +483,20 @@ func snapshot() -> Dictionary:
 		"last_shop_response_sequence": last_shop_response_sequence,
 		"last_shop_result": last_shop_result.duplicate(true),
 		"stale_shop_results": stale_shop_results,
+		"storage_sequence": storage_sequence,
+		"pending_storage_sequence": pending_storage_sequence,
+		"pending_storage_kind": pending_storage_kind,
+		"pending_storage_npc": pending_storage_npc,
+		"pending_storage_item_uid": pending_storage_item_uid,
+		"active_storage_npc": active_storage_npc,
+		"storage_items": storage_items.duplicate(true),
+		"storage_ready": storage_ready,
+		"storage_next_index": storage_next_index,
+		"storage_revision": storage_revision,
+		"last_storage_open_status": last_storage_open_status,
+		"last_storage_response_sequence": last_storage_response_sequence,
+		"last_storage_result": last_storage_result.duplicate(true),
+		"stale_storage_results": stale_storage_results,
 		"respawn_sequence": respawn_sequence,
 		"last_respawn_result_sequence": last_respawn_result_sequence,
 		"last_respawn_result_status": last_respawn_result_status,
@@ -608,6 +666,20 @@ func _apply_choose(frame: PackedByteArray) -> bool:
 	last_shop_response_sequence = 0
 	last_shop_result.clear()
 	stale_shop_results = 0
+	storage_sequence = 0
+	pending_storage_sequence = 0
+	pending_storage_kind = 0
+	pending_storage_npc = 0
+	pending_storage_item_uid = 0
+	active_storage_npc = 0
+	storage_items.clear()
+	storage_ready = false
+	storage_next_index = 0
+	storage_revision = 0
+	last_storage_open_status = -1
+	last_storage_response_sequence = 0
+	last_storage_result.clear()
+	stale_storage_results = 0
 	respawn_sequence = 0
 	last_respawn_result_sequence = 0
 	last_respawn_result_status = -1
@@ -1166,6 +1238,20 @@ func _apply_world_ready(frame: PackedByteArray) -> bool:
 		last_shop_response_sequence = 0
 		last_shop_result.clear()
 		stale_shop_results = 0
+		storage_sequence = 0
+		pending_storage_sequence = 0
+		pending_storage_kind = 0
+		pending_storage_npc = 0
+		pending_storage_item_uid = 0
+		active_storage_npc = 0
+		storage_items.clear()
+		storage_ready = false
+		storage_next_index = 0
+		storage_revision = 0
+		last_storage_open_status = -1
+		last_storage_response_sequence = 0
+		last_storage_result.clear()
+		stale_storage_results = 0
 		respawn_sequence = 0
 		last_respawn_result_sequence = 0
 		last_respawn_result_status = -1
@@ -1581,6 +1667,123 @@ func _apply_shop_transaction_result(frame: PackedByteArray) -> bool:
 	last_shop_response_sequence = sequence
 	last_shop_result = result.duplicate(true)
 	_clear_pending_shop()
+	return true
+
+
+func _clear_pending_storage() -> void:
+	pending_storage_sequence = 0
+	pending_storage_kind = 0
+	pending_storage_npc = 0
+	pending_storage_item_uid = 0
+
+
+func _close_storage() -> void:
+	active_storage_npc = 0
+	storage_items.clear()
+	storage_ready = false
+	storage_next_index = 0
+
+
+func _apply_storage_snapshot(frame: PackedByteArray) -> bool:
+	if state != STATE_IN_WORLD:
+		return fail("storage_snapshot_out_of_state")
+	var value := WireCodec.decode_storage_snapshot(frame)
+	if value.is_empty():
+		return fail("invalid_storage_snapshot")
+	var epoch := int(value.map_epoch)
+	var sequence := int(value.storage_sequence)
+	if epoch < map_epoch:
+		stale_storage_results += 1
+		return true
+	if epoch > map_epoch:
+		return fail("future_storage_snapshot")
+	if sequence > storage_sequence:
+		return fail("unsent_storage_snapshot")
+	if sequence <= last_storage_response_sequence:
+		stale_storage_results += 1
+		return true
+	if sequence != pending_storage_sequence or pending_storage_kind != 1 or int(value.npc_spawn_id) != pending_storage_npc:
+		return fail("storage_snapshot_wrong_request")
+	last_storage_open_status = int(value.status)
+	if int(value.status) != 0:
+		if not bool(value.complete) or int(value.start_index) != 0 or not (value.items as Array).is_empty():
+			return fail("storage_failure_snapshot_has_items")
+		_close_storage()
+		last_storage_response_sequence = sequence
+		_clear_pending_storage()
+		return true
+	if int(value.start_index) != storage_next_index:
+		return fail("storage_snapshot_wrong_chunk")
+	var items: Array = value.items
+	if items.is_empty() and not bool(value.complete):
+		return fail("storage_empty_nonfinal_chunk")
+	for item in items:
+		var uid := int(item.item_uid)
+		if storage_items.has(uid) or inventory_items.has(uid):
+			return fail("storage_uid_location_conflict")
+		storage_items[uid] = item.duplicate(true)
+		storage_next_index += 1
+	if bool(value.complete):
+		active_storage_npc = int(value.npc_spawn_id)
+		storage_ready = true
+		storage_revision += 1
+		last_storage_response_sequence = sequence
+		_clear_pending_storage()
+	return true
+
+
+func _apply_storage_transfer_result(frame: PackedByteArray) -> bool:
+	if state != STATE_IN_WORLD:
+		return fail("storage_result_out_of_state")
+	var result := WireCodec.decode_storage_transfer_result(frame)
+	if result.is_empty():
+		return fail("invalid_storage_result")
+	var epoch := int(result.map_epoch)
+	var sequence := int(result.storage_sequence)
+	if epoch < map_epoch:
+		stale_storage_results += 1
+		return true
+	if epoch > map_epoch:
+		return fail("future_storage_result")
+	if sequence > storage_sequence:
+		return fail("unsent_storage_result")
+	if sequence <= last_storage_response_sequence:
+		stale_storage_results += 1
+		return true
+	if sequence != pending_storage_sequence or pending_storage_kind not in [2,3] or int(result.kind) != pending_storage_kind-1 or int(result.npc_spawn_id) != pending_storage_npc or int(result.item_uid) != pending_storage_item_uid:
+		return fail("storage_result_wrong_request")
+	if int(result.status) in [0,1]:
+		if not inventory_ready or not storage_ready or active_storage_npc != pending_storage_npc:
+			return fail("storage_applied_without_baselines")
+		var uid := int(result.item_uid)
+		var receipt := {
+			"item_uid":uid,
+			"item_definition_id":int(result.item_definition_id),
+			"quantity":int(result.quantity),
+			"drop_id":int(result.drop_id)}
+		if pending_storage_kind == 2:
+			if not inventory_items.has(uid) or storage_items.has(uid):
+				return fail("storage_deposit_location_conflict")
+			var previous: Dictionary = inventory_items[uid]
+			if int(previous.item_definition_id) != int(receipt.item_definition_id) or int(previous.quantity) != int(receipt.quantity) or int(previous.get("drop_id",0)) != int(receipt.drop_id):
+				return fail("storage_deposit_receipt_mismatch")
+			inventory_items.erase(uid)
+			storage_items[uid] = receipt
+		else:
+			if not storage_items.has(uid) or inventory_items.has(uid):
+				return fail("storage_withdraw_location_conflict")
+			var previous: Dictionary = storage_items[uid]
+			if int(previous.item_definition_id) != int(receipt.item_definition_id) or int(previous.quantity) != int(receipt.quantity) or int(previous.get("drop_id",0)) != int(receipt.drop_id):
+				return fail("storage_withdraw_receipt_mismatch")
+			storage_items.erase(uid)
+			inventory_items[uid] = receipt
+		inventory_revision += 1
+		storage_revision += 1
+	elif int(result.status) in [5,6,7,8]:
+		_close_storage()
+	last_storage_response_sequence = sequence
+	last_storage_result = result.duplicate(true)
+	_clear_pending_storage()
 	return true
 
 
