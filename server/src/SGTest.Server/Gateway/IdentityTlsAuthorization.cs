@@ -520,7 +520,9 @@ public sealed class IdentityTlsAuthorization
             if (combat is not null)
             {
                 await WriteFrameAsync(tls, WireProtocol.EncodePlayerCombatState(new(
-                    snapshot.MapEpoch, combat.Data.CurrentHp, combat.Data.MaxHp)),
+                    snapshot.MapEpoch,
+                    combat.Data.CurrentHp, combat.Data.MaxHp,
+                    combat.Data.CurrentMp, combat.Data.MaxMp)),
                     cancellationToken).ConfigureAwait(false);
             }
 

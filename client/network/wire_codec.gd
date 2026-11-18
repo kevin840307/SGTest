@@ -52,7 +52,7 @@ const NORMAL_ATTACK_RESULT_FRAME_BYTES := 57
 const SKILL_USE_FRAME_BYTES := 32
 const SKILL_USE_RESULT_FRAME_BYTES := 61
 const PLAYER_SKILL_VISUAL_FRAME_BYTES := 70
-const PLAYER_COMBAT_STATE_FRAME_BYTES := 24
+const PLAYER_COMBAT_STATE_FRAME_BYTES := 32
 const PLAYER_DAMAGE_FRAME_BYTES := 57
 const PLAYER_RESPAWN_FRAME_BYTES := 20
 const PLAYER_RESPAWN_RESULT_FRAME_BYTES := 29
@@ -370,9 +370,12 @@ static func decode_player_combat_state(frame: PackedByteArray) -> Dictionary:
 	var epoch := reader.get_64()
 	var current_hp := reader.get_32()
 	var max_hp := reader.get_32()
-	if epoch <= 0 or current_hp < 0 or max_hp <= 0 or current_hp > max_hp:
+	var current_mp := reader.get_32()
+	var max_mp := reader.get_32()
+	if epoch <= 0 or current_hp < 0 or max_hp <= 0 or current_hp > max_hp or current_mp < 0 or max_mp < 0 or current_mp > max_mp:
 		return {}
-	return {"map_epoch":epoch,"current_hp":current_hp,"max_hp":max_hp}
+	return {"map_epoch":epoch,"current_hp":current_hp,"max_hp":max_hp,
+		"current_mp":current_mp,"max_mp":max_mp}
 
 static func decode_player_damage(frame: PackedByteArray) -> Dictionary:
 	if not _valid_header(frame, OPCODE_PLAYER_DAMAGE, PLAYER_DAMAGE_FRAME_BYTES):

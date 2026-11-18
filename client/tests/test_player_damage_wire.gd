@@ -11,9 +11,9 @@ func _fail(message: String) -> void:
 	quit(1)
 
 func _initialize() -> void:
-	var baseline := _combat_state(1,100,100)
+	var baseline := _combat_state(1,100,100,3,5)
 	var parsed_baseline := WireCodec.decode_player_combat_state(baseline)
-	if baseline.size()!=24 or parsed_baseline.is_empty() or int(parsed_baseline.current_hp)!=100:
+	if baseline.size()!=32 or parsed_baseline.is_empty() or int(parsed_baseline.current_hp)!=100 or int(parsed_baseline.current_mp)!=3 or int(parsed_baseline.max_mp)!=5:
 		_fail("combat baseline codec")
 		return
 
@@ -22,7 +22,7 @@ func _initialize() -> void:
 		_fail("baseline before WorldReady rejected")
 		return
 	var snap: Dictionary = world.snapshot()
-	if not bool(snap.combat_available) or int(snap.player_current_hp)!=100 or bool(snap.player_dead):
+	if not bool(snap.combat_available) or int(snap.player_current_hp)!=100 or int(snap.player_current_mp)!=3 or int(snap.player_max_mp)!=5 or bool(snap.player_dead):
 		_fail("baseline state")
 		return
 	world.world_ready=true
@@ -171,7 +171,7 @@ func _initialize() -> void:
 	if dead_npc_parsed.is_empty() or int(dead_npc_parsed.status)!=6:
 		_fail("CombatDead NPC result codec")
 		return
-	print("PLAYER_DAMAGE_GODOT_PASS baseline_bytes=24 damage_bytes=57 damage_visual_bytes=66 respawn_request_bytes=20 respawn_result_bytes=29 respawn_visual_bytes=45 durable_event=true presentation_only=true no_observer_hp_authority=true duplicate_stale=true visual_replay_stale=true sequence_gap_fail_closed=true death_gates_intents=true respawn_reopens_intents=true damage_sequence_continuous=true combat_dead_statuses=true old_map_stale=true")
+	print("PLAYER_DAMAGE_GODOT_PASS baseline_bytes=32 mp_baseline=true damage_bytes=57 damage_visual_bytes=66 respawn_request_bytes=20 respawn_result_bytes=29 respawn_visual_bytes=45 durable_event=true presentation_only=true no_observer_hp_authority=true duplicate_stale=true visual_replay_stale=true sequence_gap_fail_closed=true death_gates_intents=true respawn_reopens_intents=true damage_sequence_continuous=true combat_dead_statuses=true old_map_stale=true")
 	quit(0)
 
 func _world(epoch: int) -> RefCounted:
@@ -182,15 +182,17 @@ func _world(epoch: int) -> RefCounted:
 	world.map_epoch=epoch
 	return world
 
-func _combat_state(epoch: int,current_hp: int,max_hp: int) -> PackedByteArray:
+func _combat_state(epoch: int,current_hp: int,max_hp: int,current_mp: int,max_mp: int) -> PackedByteArray:
 	var writer := StreamPeerBuffer.new()
 	writer.big_endian=false
-	writer.put_u32(24)
+	writer.put_u32(32)
 	writer.put_u16(1)
 	writer.put_u16(WireCodec.OPCODE_PLAYER_COMBAT_STATE)
 	writer.put_64(epoch)
 	writer.put_32(current_hp)
 	writer.put_32(max_hp)
+	writer.put_32(current_mp)
+	writer.put_32(max_mp)
 	return writer.data_array
 
 func _damage(epoch: int,sequence: int,tick: int,attacker: int,revision: int,

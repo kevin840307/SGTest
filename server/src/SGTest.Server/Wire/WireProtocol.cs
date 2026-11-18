@@ -97,7 +97,7 @@ public readonly record struct PlayerRespawnVisualWire(
     long ReceiverMapEpoch,long ServerTick,long ActorId,
     long ConnectionEpoch,uint RespawnSequence,byte Facing);
 public readonly record struct PlayerCombatStateWire(
-    long MapEpoch, int CurrentHp, int MaxHp);
+    long MapEpoch, int CurrentHp, int MaxHp, int CurrentMp, int MaxMp);
 public readonly record struct PlayerDamageWire(
     long MapEpoch, uint DamageSequence, long ServerTick,
     long AttackerMonsterEntityId, long AttackerMonsterRevision,
@@ -185,7 +185,7 @@ public static class WireProtocol
     public const int PlayerAttackVisualFrameBytes = HeaderBytes + 8 + 8 + 8 + 8 + 4 + 8 + 1 + 4 + 8 + 1;
     public const int PlayerDamageVisualFrameBytes = HeaderBytes + 8 + 8 + 8 + 8 + 4 + 8 + 8 + 4 + 1 + 1;
     public const int PlayerRespawnVisualFrameBytes = HeaderBytes + 8 + 8 + 8 + 8 + 4 + 1;
-    public const int PlayerCombatStateFrameBytes = HeaderBytes + 8 + 4 + 4;
+    public const int PlayerCombatStateFrameBytes = HeaderBytes + 8 + 4 + 4 + 4 + 4;
     public const int PlayerDamageFrameBytes = HeaderBytes + 8 + 4 + 8 + 8 + 8 + 4 + 4 + 4 + 1;
     public const int PlayerRespawnFrameBytes = HeaderBytes + 8 + 4;
     public const int PlayerRespawnResultFrameBytes = HeaderBytes + 8 + 4 + 1 + 4 + 4;
@@ -577,6 +577,8 @@ public static class WireProtocol
         BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(8, 8), value.MapEpoch);
         BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(16, 4), value.CurrentHp);
         BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(20, 4), value.MaxHp);
+        BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(24, 4), value.CurrentMp);
+        BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(28, 4), value.MaxMp);
         return frame;
     }
 
@@ -589,7 +591,9 @@ public static class WireProtocol
         value = new(
             BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(8, 8)),
             BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(16, 4)),
-            BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(20, 4)));
+            BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(20, 4)),
+            BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(24, 4)),
+            BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(28, 4)));
         return ValidPlayerCombatState(value);
     }
 
@@ -1479,7 +1483,9 @@ public static class WireProtocol
 
     private static bool ValidPlayerCombatState(PlayerCombatStateWire value) =>
         value.MapEpoch > 0 && value.MaxHp > 0 &&
-        value.CurrentHp >= 0 && value.CurrentHp <= value.MaxHp;
+        value.CurrentHp >= 0 && value.CurrentHp <= value.MaxHp &&
+        value.MaxMp >= 0 && value.CurrentMp >= 0 &&
+        value.CurrentMp <= value.MaxMp;
 
     private static bool ValidPlayerDamage(PlayerDamageWire value) =>
         value.MapEpoch > 0 && value.DamageSequence != 0 &&

@@ -11,6 +11,10 @@ internal static class CharacterCombatProfileChecks
             () => TrustBoundary(root).GetAwaiter().GetResult());
         Checks.Run("trusted combat HP settlement is atomic persistent and absent-profile fail-closed",
             () => HpSettlement(root).GetAwaiter().GetResult());
+        Checks.Run("schema v5 combat profiles migrate MP to zero without inventing a pool",
+            () => V5MpMigration(root).GetAwaiter().GetResult());
+        Checks.Run("trusted MP settlement is atomic persistent and fail-closed",
+            () => MpSettlement(root).GetAwaiter().GetResult());
     }
 
     private static async Task Migration(string root)
@@ -148,6 +152,103 @@ SELECT COUNT(*) FROM sqlite_master
                            persisted.Data.SourceReference==
                            "recovered:player-profile-fixture",
                 "combat HP/provenance did not persist");
+        }
+    }
+
+    private static async Task V5MpMigration(string root)
+    {
+        string db=Path.Combine(root,"combat-v5-mp-"+Guid.NewGuid().ToString("N")+".db");
+        string cs=new SqliteConnectionStringBuilder
+        {
+            DataSource=db,Pooling=false,ForeignKeys=true
+        }.ToString();
+        using(var connection=new SqliteConnection(cs))
+        {
+            connection.Open();
+            using var command=connection.CreateCommand();
+            command.CommandText=@"
+CREATE TABLE schema_version(version INTEGER NOT NULL);
+INSERT INTO schema_version(version) VALUES(5);
+CREATE TABLE accounts(
+ account_id INTEGER PRIMARY KEY AUTOINCREMENT,
+ username_key TEXT NOT NULL UNIQUE,username_display TEXT NOT NULL,
+ password_hash TEXT NOT NULL,disabled INTEGER NOT NULL DEFAULT 0,
+ created_unix_ms INTEGER NOT NULL);
+CREATE TABLE characters(
+ character_id INTEGER PRIMARY KEY AUTOINCREMENT,
+ account_id INTEGER NOT NULL REFERENCES accounts(account_id) ON DELETE CASCADE,
+ slot INTEGER NOT NULL,name TEXT NOT NULL,name_key TEXT NOT NULL UNIQUE,
+ map_id INTEGER NOT NULL,x REAL NOT NULL,y REAL NOT NULL,
+ created_unix_ms INTEGER NOT NULL,updated_unix_ms INTEGER NOT NULL,
+ UNIQUE(account_id,slot));
+CREATE TABLE character_combat_profiles(
+ character_id INTEGER PRIMARY KEY REFERENCES characters(character_id) ON DELETE CASCADE,
+ trust INTEGER NOT NULL,source_ref TEXT NOT NULL,race INTEGER NOT NULL,
+ career INTEGER NOT NULL,strength INTEGER NOT NULL,dexterity INTEGER NOT NULL,
+ constitution INTEGER NOT NULL,wisdom INTEGER NOT NULL,level INTEGER NOT NULL,
+ current_hp INTEGER NOT NULL,max_hp INTEGER NOT NULL,attack INTEGER NOT NULL,
+ defense INTEGER NOT NULL,hit INTEGER NOT NULL,dodge INTEGER NOT NULL,
+ attack_range REAL NOT NULL,attack_cooldown_ticks INTEGER NOT NULL,
+ updated_unix_ms INTEGER NOT NULL);
+INSERT INTO accounts VALUES(1,'v5','v5','unused',0,1);
+INSERT INTO characters VALUES(7,1,0,'V5','v5hero',15,24,24,1,1);
+INSERT INTO character_combat_profiles
+VALUES(7,2,'ci:v5',0,0,5,5,5,5,1,80,100,20,4,10,3,48,15,1);";
+            command.ExecuteNonQuery();
+        }
+        using(var store=new SqliteIdentityStore(db))
+        {
+            await store.InitializeAsync();
+            var migrated=await store.GetCharacterCombatProfileAsync(7);
+            Checks.Require(migrated?.Data.CurrentHp==80 &&
+                           migrated.Data.CurrentMp==0 &&
+                           migrated.Data.MaxMp==0 &&
+                           migrated.Data.Attack==20,
+                "v5 profile migration invented MP or changed combat data");
+        }
+    }
+
+    private static async Task MpSettlement(string root)
+    {
+        string db=Path.Combine(root,"combat-mp-"+Guid.NewGuid().ToString("N")+".db");
+        long character;
+        using(var store=new SqliteIdentityStore(db))
+        {
+            await store.InitializeAsync();
+            long account=(await store.CreateAccountAsync(
+                "combat_mp","Combat-MP-Password-123!")).AccountId;
+            character=(await store.CreateCharacterAsync(account,0,"MpHero",
+                new CharacterSpawn(13,24,24))).Character!.CharacterId;
+            var missing=await store.ConsumeCharacterMpAsync(character,1);
+            Checks.Require(missing.Status==CharacterMpConsumeStatus.MissingProfile,
+                "missing combat profile invented MP");
+
+            var mpProfile=Profile(
+                CombatProfileTrust.Verified,"client-skilldata:mp-fixture",
+                hp:100,attack:20) with { CurrentMp=3,MaxMp=5 };
+            await store.SetCharacterCombatProfileAsync(character,mpProfile);
+            var first=await store.ConsumeCharacterMpAsync(character,1);
+            Checks.Require(first.Status==CharacterMpConsumeStatus.Consumed &&
+                           first.MpConsumed==1 &&
+                           first.Profile?.Data.CurrentMp==2 &&
+                           first.Profile.Data.MaxMp==5,
+                "atomic MP consume wrong");
+            var insufficient=await store.ConsumeCharacterMpAsync(character,3);
+            Checks.Require(insufficient.Status==CharacterMpConsumeStatus.InsufficientMp &&
+                           insufficient.Profile?.Data.CurrentMp==2,
+                "insufficient MP mutated profile");
+            await store.ApplyCharacterDamageAsync(character,1000);
+            var dead=await store.ConsumeCharacterMpAsync(character,1);
+            Checks.Require(dead.Status==CharacterMpConsumeStatus.Dead &&
+                           dead.Profile?.Data.CurrentMp==2,
+                "dead character spent MP");
+        }
+        using(var reopened=new SqliteIdentityStore(db))
+        {
+            await reopened.InitializeAsync();
+            var saved=await reopened.GetCharacterCombatProfileAsync(character);
+            Checks.Require(saved?.Data.CurrentMp==2 && saved.Data.MaxMp==5,
+                "MP settlement did not persist");
         }
     }
 

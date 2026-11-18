@@ -25,9 +25,9 @@ internal static class PlayerCombatSettlementChecks
 
     private static void WireContract()
     {
-        var baseline = new PlayerCombatStateWire(3, 82, 100);
+        var baseline = new PlayerCombatStateWire(3, 82, 100, 3, 5);
         var baselineBytes = WireProtocol.EncodePlayerCombatState(baseline);
-        Checks.Require(baselineBytes.Length == 24 &&
+        Checks.Require(baselineBytes.Length == 32 &&
                        WireProtocol.TryDecodePlayerCombatState(
                            baselineBytes, out var parsedBaseline) &&
                        parsedBaseline == baseline,

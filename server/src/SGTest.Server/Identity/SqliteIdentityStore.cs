@@ -33,7 +33,9 @@ public sealed record CharacterCombatProfileData(
     int Hit,
     int Dodge,
     double AttackRange,
-    int AttackCooldownTicks);
+    int AttackCooldownTicks,
+    int CurrentMp = 0,
+    int MaxMp = 0);
 
 public sealed record CharacterCombatProfile(
     long CharacterId,
@@ -44,6 +46,19 @@ public sealed record CharacterDamageSettlement(
     CharacterCombatProfile Profile,
     int DamageApplied,
     bool Died);
+
+public enum CharacterMpConsumeStatus : byte
+{
+    Consumed = 0,
+    MissingProfile = 1,
+    Dead = 2,
+    InsufficientMp = 3
+}
+
+public sealed record CharacterMpConsumeResult(
+    CharacterMpConsumeStatus Status,
+    CharacterCombatProfile? Profile,
+    int MpConsumed);
 
 public sealed record AccountRecord(long AccountId, string Username, bool Disabled,
     IReadOnlyList<CharacterRecord> Characters);
@@ -62,7 +77,7 @@ public sealed record CharacterCreateResult(CharacterCreateStatus Status, Charact
 /// </summary>
 public sealed partial class SqliteIdentityStore : IDisposable
 {
-    public const int SchemaVersion = 5;
+    public const int SchemaVersion = 6;
     private readonly string _connectionString;
     private readonly IdentityStoreOptions _options;
     private readonly PasswordHasher _passwords;
@@ -163,6 +178,8 @@ CREATE TABLE IF NOT EXISTS character_combat_profiles (
     level INTEGER NOT NULL CHECK(level BETWEEN 1 AND 255),
     current_hp INTEGER NOT NULL CHECK(current_hp BETWEEN 0 AND 2000000000),
     max_hp INTEGER NOT NULL CHECK(max_hp BETWEEN 1 AND 2000000000),
+    current_mp INTEGER NOT NULL DEFAULT 0 CHECK(current_mp BETWEEN 0 AND 2000000000),
+    max_mp INTEGER NOT NULL DEFAULT 0 CHECK(max_mp BETWEEN 0 AND 2000000000),
     attack INTEGER NOT NULL CHECK(attack BETWEEN 0 AND 100000000),
     defense INTEGER NOT NULL CHECK(defense BETWEEN 0 AND 100000000),
     hit INTEGER NOT NULL CHECK(hit BETWEEN 0 AND 100000000),
@@ -170,7 +187,8 @@ CREATE TABLE IF NOT EXISTS character_combat_profiles (
     attack_range REAL NOT NULL CHECK(attack_range > 0 AND attack_range <= 4096),
     attack_cooldown_ticks INTEGER NOT NULL CHECK(attack_cooldown_ticks BETWEEN 1 AND 3600),
     updated_unix_ms INTEGER NOT NULL,
-    CHECK(current_hp <= max_hp)
+    CHECK(current_hp <= max_hp),
+    CHECK(current_mp <= max_mp)
 );", tx);
 
             // Reserve a durable generation at each new authoritative server boot.
@@ -263,6 +281,34 @@ CREATE TABLE IF NOT EXISTS inventory_discard_actions (
     created_unix_ms INTEGER NOT NULL,
     PRIMARY KEY(character_id,connection_generation,map_epoch,action_sequence)
 );", tx);
+            // Schema v6: MP joins the trusted combat profile. Existing v1-v5
+            // profiles migrate to 0/0 so MP skills fail closed rather than
+            // inventing a resource pool.
+            if (schemaVersion < 6)
+            {
+                Execute(connection, @"
+ALTER TABLE character_combat_profiles
+ADD COLUMN current_mp INTEGER NOT NULL DEFAULT 0
+CHECK(current_mp BETWEEN 0 AND 2000000000);", tx);
+                Execute(connection, @"
+ALTER TABLE character_combat_profiles
+ADD COLUMN max_mp INTEGER NOT NULL DEFAULT 0
+CHECK(max_mp BETWEEN 0 AND 2000000000);", tx);
+            }
+            Execute(connection, @"
+CREATE TRIGGER IF NOT EXISTS trg_combat_mp_insert
+BEFORE INSERT ON character_combat_profiles
+WHEN NEW.current_mp > NEW.max_mp
+BEGIN
+    SELECT RAISE(ABORT,'current_mp exceeds max_mp');
+END;", tx);
+            Execute(connection, @"
+CREATE TRIGGER IF NOT EXISTS trg_combat_mp_update
+BEFORE UPDATE OF current_mp,max_mp ON character_combat_profiles
+WHEN NEW.current_mp > NEW.max_mp
+BEGIN
+    SELECT RAISE(ABORT,'current_mp exceeds max_mp');
+END;", tx);
             if (schemaVersion < SchemaVersion)
                 Execute(connection,
                     $"UPDATE schema_version SET version={SchemaVersion};", tx);
@@ -430,16 +476,17 @@ WHERE character_id=$id;";
             command.CommandText = @"
 INSERT INTO character_combat_profiles(
     character_id,trust,source_ref,race,career,strength,dexterity,constitution,wisdom,
-    level,current_hp,max_hp,attack,defense,hit,dodge,attack_range,
+    level,current_hp,max_hp,current_mp,max_mp,attack,defense,hit,dodge,attack_range,
     attack_cooldown_ticks,updated_unix_ms)
 VALUES($id,$trust,$source,$race,$career,$str,$dex,$con,$wis,$level,$hp,$maxhp,
-       $attack,$defense,$hit,$dodge,$range,$cooldown,$updated)
+       $mp,$maxmp,$attack,$defense,$hit,$dodge,$range,$cooldown,$updated)
 ON CONFLICT(character_id) DO UPDATE SET
     trust=excluded.trust,source_ref=excluded.source_ref,race=excluded.race,
     career=excluded.career,strength=excluded.strength,dexterity=excluded.dexterity,
     constitution=excluded.constitution,wisdom=excluded.wisdom,level=excluded.level,
-    current_hp=excluded.current_hp,max_hp=excluded.max_hp,attack=excluded.attack,
-    defense=excluded.defense,hit=excluded.hit,dodge=excluded.dodge,
+    current_hp=excluded.current_hp,max_hp=excluded.max_hp,
+    current_mp=excluded.current_mp,max_mp=excluded.max_mp,
+    attack=excluded.attack,defense=excluded.defense,hit=excluded.hit,dodge=excluded.dodge,
     attack_range=excluded.attack_range,
     attack_cooldown_ticks=excluded.attack_cooldown_ticks,
     updated_unix_ms=excluded.updated_unix_ms;";
@@ -505,6 +552,63 @@ UPDATE character_combat_profiles
     }
 
     /// <summary>
+    /// Trusted MP settlement primitive. Only the Server chooses the cost.
+    /// Missing/dead/insufficient profiles fail closed without mutation.
+    /// </summary>
+    public async Task<CharacterMpConsumeResult> ConsumeCharacterMpAsync(
+        long characterId, int cost,
+        CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        if (characterId <= 0 || cost is < 1 or > 100_000_000)
+            throw new ArgumentOutOfRangeException(nameof(cost));
+        return await Task.Run(() =>
+        {
+            using var connection = Open();
+            using var tx = connection.BeginTransaction();
+            var before = ReadCombatProfile(connection, characterId, tx);
+            if (before is null)
+            {
+                tx.Rollback();
+                return new(CharacterMpConsumeStatus.MissingProfile, null, 0);
+            }
+            if (before.Data.CurrentHp <= 0)
+            {
+                tx.Rollback();
+                return new(CharacterMpConsumeStatus.Dead, before, 0);
+            }
+            if (before.Data.CurrentMp < cost)
+            {
+                tx.Rollback();
+                return new(CharacterMpConsumeStatus.InsufficientMp, before, 0);
+            }
+            using var command = connection.CreateCommand();
+            command.Transaction = tx;
+            command.CommandText = @"
+UPDATE character_combat_profiles
+   SET current_mp=current_mp-$cost,
+       updated_unix_ms=$updated
+ WHERE character_id=$id AND current_hp>0 AND current_mp>=$cost;";
+            command.Parameters.AddWithValue("$cost", cost);
+            command.Parameters.AddWithValue("$updated",
+                DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
+            command.Parameters.AddWithValue("$id", characterId);
+            if (command.ExecuteNonQuery() != 1)
+                throw new InvalidOperationException(
+                    "Combat profile diverged during atomic MP settlement");
+            var after = ReadCombatProfile(connection, characterId, tx)
+                ?? throw new InvalidOperationException(
+                    "Combat profile disappeared after atomic MP settlement");
+            if (before.Data.CurrentMp - after.Data.CurrentMp != cost ||
+                after.Data.MaxMp != before.Data.MaxMp)
+                throw new InvalidOperationException(
+                    "Atomic MP settlement changed an unexpected resource value");
+            tx.Commit();
+            return new(CharacterMpConsumeStatus.Consumed, after, cost);
+        }, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
     /// Trusted combat respawn primitive. Only a dead persisted profile may
     /// transition from HP=0 to its existing MaxHP. No client field can choose
     /// the restored HP value; missing/already-alive profiles fail closed.
@@ -564,6 +668,8 @@ UPDATE character_combat_profiles
             profile.Level is < 1 or > 255 ||
             profile.CurrentHp < 0 || profile.MaxHp < 1 ||
             profile.CurrentHp > profile.MaxHp || profile.MaxHp > 2_000_000_000 ||
+            profile.CurrentMp < 0 || profile.MaxMp < 0 ||
+            profile.CurrentMp > profile.MaxMp || profile.MaxMp > 2_000_000_000 ||
             profile.Attack is < 0 or > 100_000_000 ||
             profile.Defense is < 0 or > 100_000_000 ||
             profile.Hit is < 0 or > 100_000_000 ||
@@ -589,6 +695,8 @@ UPDATE character_combat_profiles
         command.Parameters.AddWithValue("$level", profile.Level);
         command.Parameters.AddWithValue("$hp", profile.CurrentHp);
         command.Parameters.AddWithValue("$maxhp", profile.MaxHp);
+        command.Parameters.AddWithValue("$mp", profile.CurrentMp);
+        command.Parameters.AddWithValue("$maxmp", profile.MaxMp);
         command.Parameters.AddWithValue("$attack", profile.Attack);
         command.Parameters.AddWithValue("$defense", profile.Defense);
         command.Parameters.AddWithValue("$hit", profile.Hit);
@@ -605,7 +713,7 @@ UPDATE character_combat_profiles
         command.Transaction = tx;
         command.CommandText = @"
 SELECT character_id,trust,source_ref,race,career,strength,dexterity,constitution,
-       wisdom,level,current_hp,max_hp,attack,defense,hit,dodge,attack_range,
+       wisdom,level,current_hp,max_hp,current_mp,max_mp,attack,defense,hit,dodge,attack_range,
        attack_cooldown_ticks,updated_unix_ms
   FROM character_combat_profiles
  WHERE character_id=$id
@@ -625,14 +733,16 @@ SELECT character_id,trust,source_ref,race,career,strength,dexterity,constitution
             reader.GetInt32(9),
             reader.GetInt32(10),
             reader.GetInt32(11),
-            reader.GetInt32(12),
-            reader.GetInt32(13),
             reader.GetInt32(14),
             reader.GetInt32(15),
-            reader.GetDouble(16),
-            reader.GetInt32(17));
+            reader.GetInt32(16),
+            reader.GetInt32(17),
+            reader.GetDouble(18),
+            reader.GetInt32(19),
+            reader.GetInt32(12),
+            reader.GetInt32(13));
         return new CharacterCombatProfile(
-            reader.GetInt64(0), data, reader.GetInt64(18));
+            reader.GetInt64(0), data, reader.GetInt64(20));
     }
 
     public async Task SetDisabledAsync(long accountId, bool disabled,

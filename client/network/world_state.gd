@@ -59,6 +59,8 @@ const PLAYER_COMBAT_VISUAL_EVENT_MAX := 4096
 var combat_available := false
 var player_current_hp := 0
 var player_max_hp := 0
+var player_current_mp := 0
+var player_max_mp := 0
 var player_dead := false
 var player_damage_sequence := 0
 var last_player_damage_tick := -1
@@ -322,6 +324,8 @@ func snapshot() -> Dictionary:
 		"combat_available": combat_available,
 		"player_current_hp": player_current_hp,
 		"player_max_hp": player_max_hp,
+		"player_current_mp": player_current_mp,
+		"player_max_mp": player_max_mp,
 		"player_dead": player_dead,
 		"player_damage_sequence": player_damage_sequence,
 		"last_player_damage_tick": last_player_damage_tick,
@@ -648,6 +652,8 @@ func _apply_player_combat_state(frame: PackedByteArray) -> bool:
 	combat_available = true
 	player_current_hp = int(value.current_hp)
 	player_max_hp = int(value.max_hp)
+	player_current_mp = int(value.current_mp)
+	player_max_mp = int(value.max_mp)
 	player_dead = player_current_hp == 0
 	player_damage_sequence = 0
 	last_player_damage_tick = -1
