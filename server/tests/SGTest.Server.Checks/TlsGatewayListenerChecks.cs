@@ -35,6 +35,8 @@ internal static class TlsGatewayListenerChecks
             () => HostEntry(root).GetAwaiter().GetResult());
         Checks.Run("20 distinct accounts use real TLS listener auth, choose, AOI and move receipt with cleanup",
             () => AuthenticatedTwentyClients(root).GetAwaiter().GetResult());
+        Checks.Run("20 authenticated TLS clients and 300 monsters + 500 drops in one spatial AOI",
+            () => AuthenticatedTwentyClients(root, mixedLoad: true).GetAwaiter().GetResult());
     }
 
     private static async Task InvalidConfiguration(string root)
@@ -510,11 +512,13 @@ internal static class TlsGatewayListenerChecks
     /// and verify every other actor appears through the shared AOI pipeline.
     /// This is a synthetic 20-client .NET loopback test, not 20 Godot renderers.
     /// </summary>
-    private static async Task AuthenticatedTwentyClients(string root)
+    private static async Task AuthenticatedTwentyClients(string root, bool mixedLoad = false)
     {
         const int players = 20;
+        const int monstersPerViewer = 15;
+        const int dropsPerViewer = 25;
         const string password = "Listener-Password-123!";
-        await using var fixture = await Fixture.Create(root);
+        await using var fixture = await Fixture.Create(root, mixedLoad: mixedLoad);
         var accounts = new (string Username, long CharacterId)[players];
         accounts[0] = ("listener_user", fixture.CharacterId);
         for (int i = 1; i < players; i++)
@@ -522,8 +526,9 @@ internal static class TlsGatewayListenerChecks
             string username = $"load_user_{i:D2}";
             long accountId = (await fixture.Store.CreateAccountAsync(username, password))
                 .AccountId;
+            var center = mixedLoad ? MixedLoadCenter(i) : (X: 8, Y: 8);
             var character = await fixture.Store.CreateCharacterAsync(
-                accountId, 0, $"LoadHero{i:D2}", new CharacterSpawn(115, 8, 8));
+                accountId, 0, $"LoadHero{i:D2}", new CharacterSpawn(115, center.X, center.Y));
             accounts[i] = (username, character.Character?.CharacterId ??
                 throw new Exception("20-client synthetic character creation failed"));
         }
@@ -545,6 +550,8 @@ internal static class TlsGatewayListenerChecks
         int readCount = 0;
         long transferredBytes = 0;
         int receivedSpawns = 0;
+        int receivedMonsters = 0;
+        int receivedDrops = 0;
         int receipts = 0;
         var readyDurations = new double[players];
         try
@@ -609,16 +616,21 @@ internal static class TlsGatewayListenerChecks
                 // Every session receives its own WorldReady generation, then
                 // ACKs on the real parser before posting an ordinary MoveTarget.
                 var seen = new HashSet<long>();
+                var monsters = new HashSet<int>();
+                var drops = new HashSet<long>();
                 bool worldReady = false;
                 bool receiptSeen = false;
                 bool selfStateSeen = false;
                 int frames = 0;
                 while (!worldReady || !receiptSeen || !selfStateSeen ||
-                    seen.Count < players - 1)
+                    (mixedLoad
+                        ? monsters.Count < monstersPerViewer ||
+                            drops.Count < dropsPerViewer
+                        : seen.Count < players - 1))
                 {
                     var frame = await Receive();
                     var valid = WireProtocol.TryReadHeader(frame, out var header);
-                    Checks.Require(valid && ++frames <= 128,
+                    Checks.Require(valid && ++frames <= (mixedLoad ? 192 : 128),
                         $"load client {index} AOI frame limit exceeded");
                     switch (header.Opcode)
                     {
@@ -633,8 +645,9 @@ internal static class TlsGatewayListenerChecks
                             worldReady = true;
                             await tls.WriteAsync(WireProtocol.EncodeWorldReadyAck(
                                 new(choice.MapEpoch, ready.ServerTick)), deadline.Token);
+                            var origin = mixedLoad ? MixedLoadCenter(index) : (X: 8, Y: 8);
                             await tls.WriteAsync(WireProtocol.EncodeMoveTarget(
-                                new(choice.MapEpoch, 1, 24, 8)), deadline.Token);
+                                new(choice.MapEpoch, 1, origin.X + 16, origin.Y)), deadline.Token);
                             break;
                         case WireOpcode.SelfState:
                             Checks.Require(worldReady &&
@@ -646,7 +659,7 @@ internal static class TlsGatewayListenerChecks
                             selfStateSeen = true;
                             break;
                         case WireOpcode.EntitySpawn:
-                            Checks.Require(worldReady &&
+                            Checks.Require(!mixedLoad && worldReady &&
                                 WireProtocol.TryDecodeEntityState(
                                     frame, out _, out var peer) &&
                                 peer.ReceiverMapEpoch == choice.MapEpoch &&
@@ -656,11 +669,39 @@ internal static class TlsGatewayListenerChecks
                                 $"load client {index} saw a foreign or repeated Spawn");
                             break;
                         case WireOpcode.EntityDelta:
-                            Checks.Require(WireProtocol.TryDecodeEntityState(
+                            Checks.Require(!mixedLoad && WireProtocol.TryDecodeEntityState(
                                 frame, out _, out var delta) &&
                                 delta.ActorId != choice.CharacterId &&
                                 accounts.Any(x => x.CharacterId == delta.ActorId),
                                 $"load client {index} foreign AOI Delta");
+                            break;
+                        case WireOpcode.MonsterSpawn:
+                            int minMonster = index * monstersPerViewer;
+                            Checks.Require(mixedLoad && worldReady &&
+                                WireProtocol.TryDecodeMonsterState(
+                                    frame, out _, out var monster) &&
+                                monster.SourceIndex >= minMonster &&
+                                monster.SourceIndex < minMonster + monstersPerViewer &&
+                                monsters.Add(monster.SourceIndex),
+                                $"load client {index} got duplicate or foreign MonsterSpawn");
+                            break;
+                        case WireOpcode.MonsterDelta:
+                            int minChanged = index * monstersPerViewer;
+                            Checks.Require(mixedLoad &&
+                                WireProtocol.TryDecodeMonsterState(
+                                    frame, out _, out var changed) &&
+                                changed.SourceIndex >= minChanged &&
+                                changed.SourceIndex < minChanged + monstersPerViewer,
+                                $"load client {index} got foreign MonsterDelta");
+                            break;
+                        case WireOpcode.GroundDropSpawn:
+                            long firstDrop = 200_000L + index * dropsPerViewer;
+                            Checks.Require(mixedLoad && worldReady &&
+                                WireProtocol.TryDecodeGroundDropSpawn(frame, out var drop) &&
+                                drop.DropId >= firstDrop &&
+                                drop.DropId < firstDrop + dropsPerViewer &&
+                                drops.Add(drop.DropId),
+                                $"load client {index} got duplicate or foreign GroundDropSpawn");
                             break;
                         case WireOpcode.MoveReceipt:
                             Checks.Require(!receiptSeen &&
@@ -680,6 +721,8 @@ internal static class TlsGatewayListenerChecks
                 readyDurations[index] =
                     Stopwatch.GetElapsedTime(started).TotalMilliseconds;
                 Interlocked.Add(ref receivedSpawns, seen.Count);
+                Interlocked.Add(ref receivedMonsters, monsters.Count);
+                Interlocked.Add(ref receivedDrops, drops.Count);
                 Interlocked.Increment(ref receipts);
                 if (Interlocked.Increment(ref readCount) == players)
                     allRead.TrySetResult();
@@ -707,20 +750,37 @@ internal static class TlsGatewayListenerChecks
                 stats.CompletedConnections == players &&
                 stats.CommandsAccepted == players &&
                 stats.RejectedAddress == 0 && stats.RejectedCapacity == 0 &&
-                receivedSpawns == players * (players - 1) && receipts == players,
+                receivedSpawns == (mixedLoad ? 0 : players * (players - 1)) &&
+                receivedMonsters == (mixedLoad ? 300 : 0) &&
+                receivedDrops == (mixedLoad ? 500 : 0) &&
+                receipts == players,
                 "20 authenticated client listener/AOI/Move cleanup or accounting mismatch");
             Array.Sort(readyDurations);
             static double Percentile(double[] times, double fraction) =>
                 times[Math.Clamp((int)Math.Ceiling(times.Length * fraction) - 1,
                     0, times.Length - 1)];
+            if (mixedLoad)
+            {
+                Checks.Require(fixture.Monsters is not null &&
+                    fixture.Monsters.Statistics.Monsters == 300 &&
+                    fixture.Monsters.Statistics.ProcessedWorldBatches > 0 &&
+                    fixture.Host.Statistics.ResultOverflowFailures == 0,
+                    "authenticated mixed load lost Host or Monster authority");
+            }
             Console.WriteLine(
-                $"SERVER_AUTHENTICATED_20_TLS_PASS distinct_accounts={players} " +
-                $"concurrent_sessions={players} peer_spawns={receivedSpawns} " +
-                $"move_receipts={receipts} server_framed_bytes={transferredBytes} " +
+                (mixedLoad
+                    ? "SERVER_AUTHENTICATED_MIXED_20_TLS_PASS "
+                    : "SERVER_AUTHENTICATED_20_TLS_PASS ") +
+                $"distinct_accounts={players} concurrent_sessions={players} " +
+                $"peer_spawns={receivedSpawns} monster_spawns={receivedMonsters} " +
+                $"ground_drop_spawns={receivedDrops} move_receipts={receipts} " +
+                $"server_framed_bytes={transferredBytes} " +
                 $"login_to_full_AOI_p50_ms={Percentile(readyDurations, .50):F2} " +
                 $"login_to_full_AOI_p95_ms={Percentile(readyDurations, .95):F2} " +
                 $"login_to_full_AOI_p99_ms={Percentile(readyDurations, .99):F2} " +
                 $"admission_rejections={stats.RejectedAddress + stats.RejectedCapacity} " +
+                $"world_skipped_deadlines={fixture.Host.Statistics.SkippedDeadlines} " +
+                $"world_max_tick_us={fixture.Host.Statistics.MaxTickWorkMicroseconds} " +
                 "synthetic_map=true godot_clients=0 tls=true");
         }
         finally
