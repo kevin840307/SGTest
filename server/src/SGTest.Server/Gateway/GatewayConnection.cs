@@ -641,6 +641,23 @@ public sealed class GatewayConnection
         }
     }
 
+    public GatewaySendStatus QueuePlayerCombatState(
+        ConnectionBinding generation,int currentHp,int maxHp,
+        int currentMp,int maxMp)
+    {
+        lock(_bindingGate)
+        {
+            if(_closed)return GatewaySendStatus.Closed;
+            var bound=_binding;
+            if(generation!=bound)
+                return GatewaySendStatus.GenerationMismatch;
+            var frame=WireProtocol.EncodePlayerCombatState(new(
+                bound.MapEpoch,currentHp,maxHp,currentMp,maxMp));
+            return _reliable.TryEnqueue(frame)
+                ? GatewaySendStatus.Enqueued : GatewaySendStatus.Backpressured;
+        }
+    }
+
     public GatewaySendStatus QueueNormalAttackResult(
         TrustedNormalAttack request, NormalAttackOutcome outcome)
     {

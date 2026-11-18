@@ -103,30 +103,41 @@ internal static class GatewayConnectionChecks
                 MaxReliableFrames: 2,
                 MaxReliableBytes: WireProtocol.MaximumFrameBytes));
 
+            Require(gateway.QueuePlayerCombatState(
+                    new ConnectionBinding(77,4,9),82,100,3,5) ==
+                    GatewaySendStatus.Enqueued, "combat baseline");
             Require(gateway.QueueReceipt(new MoveReceipt(
                     77, 4, 9, 1, MoveReceiptStatus.Accepted, 42)) ==
                     GatewaySendStatus.Enqueued, "first receipt");
             Require(gateway.QueueReceipt(new MoveReceipt(
                     77, 4, 8, 2, MoveReceiptStatus.OldMapEpoch, 43)) ==
-                    GatewaySendStatus.Enqueued, "same-connection old-map receipt");
+                    GatewaySendStatus.Backpressured,
+                "baseline participates in bounded reliable FIFO");
             Require(gateway.QueueReceipt(new MoveReceipt(
                     77, 4, 9, 3, MoveReceiptStatus.Accepted, 44)) ==
                     GatewaySendStatus.Backpressured,
                 "reliable queue silently exceeded frame cap");
             Require(gateway.ReliableFrames == 2 &&
-                    gateway.ReliableBytes == WireProtocol.MoveReceiptFrameBytes * 2,
+                    gateway.ReliableBytes ==
+                        WireProtocol.PlayerCombatStateFrameBytes +
+                        WireProtocol.MoveReceiptFrameBytes,
                 "reliable queue accounting");
 
+            Require(gateway.TryDequeueReliable(out var baseline) &&
+                    WireProtocol.TryDecodePlayerCombatState(
+                        baseline,out var decodedBaseline) &&
+                    decodedBaseline==new PlayerCombatStateWire(9,82,100,3,5),
+                "combat baseline FIFO/wire corrupt");
             Require(gateway.TryDequeueReliable(out var first) &&
                     WireProtocol.TryDecodeMoveReceipt(first, out var decoded) &&
                     decoded.MapEpoch == 9 && decoded.MovementSequence == 1 &&
                     decoded.ServerTick == 42,
                 "reliable queue order or wire receipt corrupt");
-            Require(gateway.TryDequeueReliable(out var second) &&
-                    WireProtocol.TryDecodeMoveReceipt(second, out var decodedOld) &&
-                    decodedOld.MapEpoch == 8 && decodedOld.MovementSequence == 2,
-                "old-map receipt lost generation");
 
+            Require(gateway.QueuePlayerCombatState(
+                    new ConnectionBinding(77,4,8),82,100,2,5) ==
+                    GatewaySendStatus.GenerationMismatch,
+                "old-map combat baseline routed to current generation");
             Require(gateway.QueueReceipt(new MoveReceipt(
                     77, 5, 9, 4, MoveReceiptStatus.Accepted, 45)) ==
                     GatewaySendStatus.GenerationMismatch,

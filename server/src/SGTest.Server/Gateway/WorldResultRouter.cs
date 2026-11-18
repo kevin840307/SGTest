@@ -429,6 +429,20 @@ public sealed class WorldResultRouter
         }
     }
 
+    public GatewaySendStatus QueuePlayerCombatState(
+        ConnectionBinding generation,int currentHp,int maxHp,
+        int currentMp,int maxMp)
+    {
+        lock(_gate)
+        {
+            if(!_connections.TryGetValue(generation.ActorId,out var connection) ||
+                connection.IsClosed)
+                return GatewaySendStatus.Closed;
+            return connection.QueuePlayerCombatState(
+                generation,currentHp,maxHp,currentMp,maxMp);
+        }
+    }
+
     public GatewaySendStatus QueueSkillUseResult(
         TrustedSkillUse request,SkillUseOutcome outcome)
     {
