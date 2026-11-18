@@ -27,6 +27,7 @@ from asset_converter.content.build_enemy_map_palette import read_enemy_catalog, 
 from asset_converter.content.build_population import compile_population, compile_spawn_evidence
 from asset_converter.content.asset_paths import source_sprite_manifest
 from asset_converter.content.build_item_catalog import publish_item_catalog
+from asset_converter.content.skill_evidence import compile_skill_evidence
 
 
 def resolve_source(args) -> Path:
@@ -351,6 +352,14 @@ def main() -> int:
     publication.add_argument('--report',type=Path,default=REPO/'reports/asset_export.json')
     publication.add_argument('--map',type=int,action='append',help='publish only original map visuals, enemies, NPCs and standard player parts')
     publication.add_argument('--server-dat',type=Path,help='original server Dat for map-scoped asset selection')
+    skills = sub.add_parser('skill-evidence',
+                            help='compile private Old Dat/Skill source evidence without inventing runtime rules')
+    skills.add_argument('--server-dat',type=Path,required=True,
+                        help='original Old server Dat directory containing Skill/')
+    skills.add_argument('--output',type=Path,
+                        default=REPO/'local-assets/asset_converter/skill/skill_evidence.json')
+    skills.add_argument('--skill-id',type=int,action='append',
+                        help='optional repeated SkillId; missing requested IDs make the result partial/fail-closed')
     items = sub.add_parser('item-catalog',
                            help='compile source-derived item names from local converted Items/*.tres')
     items.add_argument('--items',type=Path,required=True,
@@ -380,6 +389,20 @@ def main() -> int:
 
 
 def _execute(args):
+    if args.command == 'skill-evidence':
+        try:
+            server_dat = resolve_server_dat(args.server_dat)
+            output = args.output.resolve()
+            if output == server_dat or output.is_relative_to(server_dat):
+                raise ValueError('skill evidence output must not overwrite original server Dat')
+            result = compile_skill_evidence(
+                server_dat,set(args.skill_id) if args.skill_id else None)
+            write_json(output,result)
+            result['output'] = str(output)
+        except (OSError,ValueError,TypeError) as error:
+            result = {'status':'failed','error':str(error)}
+        print(json.dumps(result,ensure_ascii=False,indent=2),flush=True)
+        return 0 if result['status']=='pass' else 1
     if args.command == 'item-catalog':
         try:
             result = publish_item_catalog(
