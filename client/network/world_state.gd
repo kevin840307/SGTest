@@ -9,10 +9,15 @@ const STATE_SELECTING_CHARACTER := 3
 const STATE_CHOOSING_CHARACTER := 4
 const STATE_IN_WORLD := 5
 const STATE_FAILED := 6
+const STATE_CREATING_CHARACTER := 7
 
 var state := STATE_NEW
 var auth_status := -1
 var choose_status := -1
+var character_create_status := -1
+var last_created_character_id := 0
+var last_created_slot := -1
+var last_created_name := ""
 var characters: Array[Dictionary] = []
 var actor_id := 0
 var map_id := 0
@@ -130,6 +135,16 @@ func mark_auth_sent() -> bool:
 	state = STATE_AUTHENTICATING
 	return true
 
+func mark_character_create_sent(slot: int, character_name: String) -> bool:
+	if state != STATE_SELECTING_CHARACTER or slot < 0 or slot > 31:
+		return false
+	var bytes := character_name.to_utf8_buffer()
+	if bytes.size() < 1 or bytes.size() > 96:
+		return false
+	state = STATE_CREATING_CHARACTER
+	character_create_status = -1
+	return true
+
 func mark_choose_sent(character_id: int) -> bool:
 	if state != STATE_SELECTING_CHARACTER or character_id <= 0:
 		return false
@@ -224,6 +239,8 @@ func apply_frame(frame: PackedByteArray) -> bool:
 			return _apply_auth(frame)
 		WireCodec.OPCODE_CHARACTER_LIST:
 			return _apply_character_list(frame)
+		WireCodec.OPCODE_CHARACTER_CREATE_RESULT:
+			return _apply_character_create_result(frame)
 		WireCodec.OPCODE_CHARACTER_CHOOSE_RESULT:
 			return _apply_choose(frame)
 		WireCodec.OPCODE_MOVE_RECEIPT:
@@ -285,6 +302,10 @@ func snapshot() -> Dictionary:
 		"state": state,
 		"auth_status": auth_status,
 		"choose_status": choose_status,
+		"character_create_status": character_create_status,
+		"last_created_character_id": last_created_character_id,
+		"last_created_slot": last_created_slot,
+		"last_created_name": last_created_name,
 		"characters": characters.duplicate(true),
 		"actor_id": actor_id,
 		"map_id": map_id,
@@ -412,6 +433,28 @@ func _apply_character_list(frame: PackedByteArray) -> bool:
 		return fail("invalid_character_list")
 	characters = decoded.characters.duplicate(true)
 	state = STATE_SELECTING_CHARACTER
+	return true
+
+
+func _apply_character_create_result(frame: PackedByteArray) -> bool:
+	if state != STATE_CREATING_CHARACTER:
+		return fail("character_create_result_out_of_state")
+	var decoded := WireCodec.decode_character_create_result(frame)
+	if decoded.is_empty():
+		return fail("invalid_character_create_result")
+	character_create_status = int(decoded.status)
+	if character_create_status == 0:
+		last_created_character_id = int(decoded.character_id)
+		last_created_slot = int(decoded.slot)
+		last_created_name = str(decoded.name)
+	else:
+		last_created_character_id = 0
+		last_created_slot = int(decoded.slot)
+		last_created_name = ""
+	# Server always follows the result with an authoritative CharacterList,
+	# including conflict failures. Wait for that refresh before allowing
+	# another create/choose intent.
+	state = STATE_WAIT_CHARACTER_LIST
 	return true
 
 func _apply_choose(frame: PackedByteArray) -> bool:
