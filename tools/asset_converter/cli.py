@@ -28,6 +28,7 @@ from asset_converter.content.build_population import compile_population, compile
 from asset_converter.content.asset_paths import source_sprite_manifest
 from asset_converter.content.build_item_catalog import publish_item_catalog
 from asset_converter.content.skill_evidence import compile_skill_evidence
+from asset_converter.content.current_client_skill_evidence import compile_current_client_skill_evidence
 
 
 def resolve_source(args) -> Path:
@@ -360,6 +361,15 @@ def main() -> int:
                         default=REPO/'local-assets/asset_converter/skill/skill_evidence.json')
     skills.add_argument('--skill-id',type=int,action='append',
                         help='optional repeated SkillId; missing requested IDs make the result partial/fail-closed')
+    current_skills = sub.add_parser(
+        'current-skill-evidence',
+        help='compile private current-client Godot Skills/*.tres evidence without inventing runtime rules')
+    current_skills.add_argument('--client-root',type=Path,required=True,
+                        help='local client root containing Skills/ and optional Assets/GameInfo/Skill.csv')
+    current_skills.add_argument('--output',type=Path,
+                        default=REPO/'local-assets/asset_converter/skill/current_skill_evidence.json')
+    current_skills.add_argument('--skill-id',type=int,action='append',
+                        help='optional repeated SkillId; missing requested IDs make the result partial/fail-closed')
     items = sub.add_parser('item-catalog',
                            help='compile source-derived item names from local converted Items/*.tres')
     items.add_argument('--items',type=Path,required=True,
@@ -389,6 +399,22 @@ def main() -> int:
 
 
 def _execute(args):
+    if args.command == 'current-skill-evidence':
+        try:
+            client_root=args.client_root.resolve()
+            output=args.output.resolve()
+            if not client_root.is_dir():
+                raise ValueError('current client root missing')
+            if output==client_root or output.is_relative_to(client_root):
+                raise ValueError('skill evidence output must not overwrite current client source')
+            result=compile_current_client_skill_evidence(
+                client_root,set(args.skill_id) if args.skill_id else None)
+            write_json(output,result)
+            result['output']=str(output)
+        except (OSError,ValueError,TypeError) as error:
+            result={'status':'failed','error':str(error)}
+        print(json.dumps(result,ensure_ascii=False,indent=2),flush=True)
+        return 0 if result['status']=='pass' else 1
     if args.command == 'skill-evidence':
         try:
             server_dat = resolve_server_dat(args.server_dat)
