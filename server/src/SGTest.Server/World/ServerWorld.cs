@@ -14,7 +14,11 @@ public sealed record WorldLimits(
     int MaxKnownActorIds = 4096,
     int MaxPendingCommands = 512,
     int MaxCommandsPerTick = 64,
-    int MaxPathRequestsPerTick = 8,
+    // MVP target is 20 concurrent players. Eight route queries caused
+    // deterministic TickRouteBudgetExhausted receipts when all 20 moved on
+    // the same tick. Keep bounded headroom without coupling this to monster
+    // AI, which has its own independent per-step path budget.
+    int MaxPathRequestsPerTick = 32,
     int MaxPathExpandedCells = 2048,
     double MovementPixelsPerTick = 8.0);
 
