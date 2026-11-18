@@ -33,12 +33,14 @@ def main() -> int:
                         help="run two real TLS clients and verify remote player attack visuals")
     parser.add_argument("--skill-aoe", action="store_true",
                         help="run real TLS self-centered AoE skill against three monsters")
+    parser.add_argument("--skill-aoe-observer", action="store_true",
+                        help="run two real TLS clients and verify multi-target AoE visuals")
     parser.add_argument("--auto-attack", action="store_true",
                         help="run real TLS out-of-range attack -> Server A* approach -> retry E2E")
     parser.add_argument("--discard", action="store_true",
                         help="run real TLS ClientSession durable inventory discard E2E")
     args = parser.parse_args()
-    if args.app_ui and (args.multi or args.crossmap or args.portal or args.reconnect or args.combat or args.combat_observer or args.skill_aoe or args.discard or args.auto_attack):
+    if args.app_ui and (args.multi or args.crossmap or args.portal or args.reconnect or args.combat or args.combat_observer or args.skill_aoe or args.skill_aoe_observer or args.discard or args.auto_attack):
         parser.error("--app-ui uses the single-client login fixture")
     if args.ui_screenshot and not args.app_ui:
         parser.error("--ui-screenshot requires --app-ui")
@@ -58,6 +60,8 @@ def main() -> int:
         return 2
     if args.combat_observer:
         return run_combat_observer(args, repo, fixture, env)
+    if args.skill_aoe_observer:
+        return run_skill_aoe_observer(args, repo, fixture, env)
     if args.skill_aoe:
         return run_skill_aoe(args, repo, fixture, env)
     if args.auto_attack:
@@ -365,6 +369,111 @@ def run_combat_observer(args, repo: Path, fixture: Path, env: dict[str, str]) ->
         return 0
     except Exception as error:
         print("TLS_COMBAT_OBSERVER_RUNNER_FAIL",error,file=sys.stderr)
+        for name,lines in (("server",server_lines),("observer",observer_lines)):
+            for line in lines[-30:]:
+                print(name,line,file=sys.stderr)
+        return 1
+    finally:
+        if observer is not None and observer.poll() is None:
+            observer.terminate()
+            try:
+                observer.wait(timeout=2)
+            except subprocess.TimeoutExpired:
+                observer.kill()
+        if server.poll() is None:
+            server.terminate()
+            try:
+                server.wait(timeout=3)
+            except subprocess.TimeoutExpired:
+                server.kill()
+
+
+
+def run_skill_aoe_observer(args, repo: Path, fixture: Path, env: dict[str, str]) -> int:
+    server=subprocess.Popen(
+        ["dotnet","run","--project",str(fixture),"-c","Release",
+         "--no-build","--","--skill-aoe-observer"],
+        cwd=repo,env=env,text=True,stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,bufsize=1)
+    server_lines: list[str]=[]
+    server_events: queue.Queue[str]=queue.Queue()
+    observer_lines: list[str]=[]
+    observer_events: queue.Queue[str]=queue.Queue()
+    observer=None
+    deadline=time.monotonic()+args.timeout
+
+    def capture(process, lines: list[str], events: queue.Queue[str]) -> None:
+        assert process.stdout is not None
+        for line in process.stdout:
+            value=line.rstrip()
+            lines.append(value)
+            events.put(value)
+
+    def until(events: queue.Queue[str], token: str, process: subprocess.Popen) -> str:
+        while time.monotonic()<deadline:
+            if process.poll() is not None and events.empty():
+                raise RuntimeError(f"{token}: process exited {process.returncode}")
+            try:
+                line=events.get(timeout=0.15)
+            except queue.Empty:
+                continue
+            if token in line:
+                return line
+        raise TimeoutError(token)
+
+    threading.Thread(target=capture,args=(server,server_lines,server_events),
+                     daemon=True).start()
+    try:
+        ready=until(server_events,"SKILL_AOE_OBSERVER_FIXTURE_READY",server)
+        match=re.search(
+            r"SKILL_AOE_OBSERVER_FIXTURE_READY port=(\d+) cert=(.+?) actor_a=(\d+) actor_b=(\d+)",
+            ready)
+        if match is None:
+            raise RuntimeError("malformed skill AoE observer readiness: "+ready)
+        port,cert=match.group(1),match.group(2)
+        base=[args.godot,"--headless","--path",str(repo/"client"),
+              "--script","res://tests/test_client_skill_aoe_observer_tls.gd",
+              "--",port,cert]
+        observer=subprocess.Popen(
+            [*base,"observer"],cwd=repo,text=True,stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,bufsize=1)
+        threading.Thread(target=capture,args=(observer,observer_lines,observer_events),
+                         daemon=True).start()
+        until(observer_events,"CLIENT_SKILL_AOE_OBSERVER_READY role=observer",observer)
+
+        actor=subprocess.run(
+            [*base,"actor"],cwd=repo,text=True,stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            timeout=max(1.0,deadline-time.monotonic()))
+        print(actor.stdout,end="")
+        if actor.returncode!=0 or "CLIENT_SKILL_AOE_OBSERVER_PASS role=actor" not in actor.stdout:
+            raise RuntimeError("skill AoE actor failed")
+
+        observer.wait(timeout=max(1.0,deadline-time.monotonic()))
+        if observer.returncode!=0 or not any(
+            "CLIENT_SKILL_AOE_OBSERVER_PASS role=observer" in line
+            for line in observer_lines):
+            raise RuntimeError("skill AoE observer failed")
+
+        server.wait(timeout=max(1.0,deadline-time.monotonic()))
+        if server.returncode!=0 or not any(
+            line.startswith("SKILL_AOE_OBSERVER_FIXTURE_PASS")
+            for line in server_lines):
+            raise RuntimeError("skill AoE observer server fixture failed")
+
+        for line in observer_lines:
+            if line.startswith("CLIENT_SKILL_AOE_OBSERVER_"):
+                print(line)
+        for line in server_lines:
+            if line.startswith("SKILL_AOE_OBSERVER_FIXTURE_"):
+                print(line)
+        print("GODOT_CSHARP_TWO_CLIENT_SKILL_AOE_E2E_PASS "
+              "tls=true concurrent_clients=2 target_zero=true hits=2 "
+              "same_sequence_multi_target=true observer_target_memory=2 "
+              "mp_owner_actor_only=true monster_delta_authority=true")
+        return 0
+    except Exception as error:
+        print("TLS_SKILL_AOE_OBSERVER_RUNNER_FAIL",error,file=sys.stderr)
         for name,lines in (("server",server_lines),("observer",observer_lines)):
             for line in lines[-30:]:
                 print(name,line,file=sys.stderr)

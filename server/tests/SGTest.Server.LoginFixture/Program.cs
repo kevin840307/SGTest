@@ -30,6 +30,8 @@ internal static class Program
             return await RunCombatObserverAsync().ConfigureAwait(false);
         if (args is ["--skill-aoe"])
             return await RunSkillAoeAsync().ConfigureAwait(false);
+        if (args is ["--skill-aoe-observer"])
+            return await RunSkillAoeObserverAsync().ConfigureAwait(false);
         if (args is ["--auto-attack"])
             return await RunAutoApproachAttackAsync().ConfigureAwait(false);
         if (args is ["--discard"])
@@ -450,6 +452,180 @@ internal static class Program
         catch(Exception error)
         {
             Console.Error.WriteLine("SKILL_AOE_FIXTURE_FAIL "+error);
+            return 1;
+        }
+        finally
+        {
+            try { Directory.Delete(root,recursive:true); } catch { }
+        }
+    }
+
+
+    private static async Task<int> RunSkillAoeObserverAsync()
+    {
+        string root=Path.Combine(Path.GetTempPath(),
+            "sgtest_skill_aoe_observer_"+Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var grid=BlockingGrid.Load(CreateMap(root,15),15);
+            string populationPath=Path.Combine(root,"skill-aoe-observer-population.json");
+            File.WriteAllText(populationPath,JsonSerializer.Serialize(new
+            {
+                version=4,kind="verified_monster_runtime",map_id=15,
+                stats_verified=true,gameplay_ready=true,
+                definitions=new[]
+                {
+                    new
+                    {
+                        id=1,name="SkillAoeObserverFixture",sprite="EN001A",
+                        atlas="Enemy/EN001A/atlas.json",
+                        stats=new
+                        {
+                            level=3,max_hp=100,attack_damage=1,move_step=8.0,
+                            aggro_radius=1.0,lose_target_radius=2.0,
+                            leash_radius=2.0,attack_range=1.0,
+                            attack_cooldown_ticks=1000,respawn_ticks=300,
+                            wander_radius=0.0,wander_interval_ticks=100
+                        }
+                    }
+                },
+                spawns=new[]
+                {
+                    new {source_index=0,source_flags=7,definition=1,p=new[]{24,8}},
+                    new {source_index=1,source_flags=7,definition=1,p=new[]{40,24}},
+                    new {source_index=2,source_flags=7,definition=1,p=new[]{40,8}}
+                }
+            }));
+            var runtime=new MonsterRuntime(
+                grid,MonsterPopulationCatalog.LoadVerified(populationPath,15,grid),
+                new(AiIntervalTicks:1,MaxAiPerStep:8,
+                    MaxPathQueriesPerStep:1,MaxPathExpandedCells:128));
+            var coordinator=new MonsterWorldCoordinator([runtime],
+                new Dictionary<int,VerifiedSkillRule>
+                {
+                    [99001]=new(99001,40,0,0,1,
+                        SkillTargetKind.SelfCenteredArea,18,false)
+                });
+
+            await using var world=new ServerWorldHost(
+                [grid],options:new WorldHostOptions(PublishIdleTicks:true));
+            await world.StartAsync().ConfigureAwait(false);
+            using var store=new SqliteIdentityStore(Path.Combine(root,"identity.db"));
+            await store.InitializeAsync().ConfigureAwait(false);
+            long observerAccount=(await store.CreateAccountAsync(
+                "fixture_one",Password)).AccountId;
+            long actorAccount=(await store.CreateAccountAsync(
+                "fixture_two",Password)).AccountId;
+            long observerId=(await store.CreateCharacterAsync(
+                observerAccount,0,"SkillAoeObserver",new CharacterSpawn(15,8,24)))
+                .Character?.CharacterId
+                ?? throw new InvalidOperationException("skill AoE observer missing");
+            long actorId=(await store.CreateCharacterAsync(
+                actorAccount,0,"SkillAoeActor",new CharacterSpawn(15,24,24)))
+                .Character?.CharacterId
+                ?? throw new InvalidOperationException("skill AoE actor missing");
+            await store.SetCharacterCombatProfileAsync(actorId,
+                new CharacterCombatProfileData(
+                    CombatProfileTrust.SyntheticTest,
+                    "ci:two-client-skill-aoe",
+                    Race:0,Career:0,Strength:5,Dexterity:5,
+                    Constitution:5,Wisdom:5,Level:1,
+                    CurrentHp:100,MaxHp:100,Attack:1,Defense:10,
+                    Hit:10,Dodge:3,AttackRange:48,AttackCooldownTicks:15,
+                    CurrentMp:2,MaxMp:2)).ConfigureAwait(false);
+
+            var router=new WorldResultRouter(
+                new WorldResultRouterOptions(AttackRequestCapacity:8));
+            var settlement=new PlayerCombatSettlement(
+                store,new(Capacity:8),router.QueuePlayerDamage);
+            var pump=new WorldAoiPump(
+                router,monsters:coordinator,playerCombat:settlement);
+            var authorization=new IdentityTlsAuthorization(
+                store,world,combat:settlement);
+            using var certificate=CreateCertificate();
+            string certPath=Path.Combine(root,"fixture-cert.pem");
+            WriteCertificatePem(certPath,certificate);
+            var listener=new TcpListener(IPAddress.Loopback,0);
+            listener.Start(2);
+            using var stop=new CancellationTokenSource();
+            var routing=router.RunAsync(world.Results);
+            var pumping=pump.RunAsync(stop.Token);
+            var settling=settlement.RunAsync(stop.Token);
+            try
+            {
+                int port=((IPEndPoint)listener.LocalEndpoint).Port;
+                Console.WriteLine(
+                    $"SKILL_AOE_OBSERVER_FIXTURE_READY port={port} cert={certPath} " +
+                    $"actor_a={observerId} actor_b={actorId}");
+                Console.Out.Flush();
+
+                using var first=await listener.AcceptTcpClientAsync()
+                    .WaitAsync(TimeSpan.FromSeconds(15)).ConfigureAwait(false);
+                var firstTask=authorization.RunAuthenticatedSocketAsync(
+                    first,certificate,router,
+                    new TlsWireConnectionOptions(
+                        AuthorizationTimeoutMilliseconds:15000));
+                using var second=await listener.AcceptTcpClientAsync()
+                    .WaitAsync(TimeSpan.FromSeconds(15)).ConfigureAwait(false);
+                var secondTask=authorization.RunAuthenticatedSocketAsync(
+                    second,certificate,router,
+                    new TlsWireConnectionOptions(
+                        AuthorizationTimeoutMilliseconds:15000));
+
+                var results=await Task.WhenAll(firstTask,secondTask)
+                    .WaitAsync(TimeSpan.FromSeconds(20)).ConfigureAwait(false);
+                var monsters=runtime.SnapshotAll().OrderBy(x=>x.SourceIndex).ToArray();
+                var actorProfile=await store.GetCharacterCombatProfileAsync(actorId)
+                    .ConfigureAwait(false);
+                var deadline=DateTime.UtcNow.AddSeconds(3);
+                while(world.Statistics.ActiveActors!=0 ||
+                      router.Statistics.ActiveSessions!=0)
+                {
+                    if(DateTime.UtcNow>=deadline)
+                        throw new InvalidOperationException(
+                            "skill AoE observer left active actor/session");
+                    await Task.Delay(5).ConfigureAwait(false);
+                }
+                if(monsters.Length!=3 ||
+                    monsters[0].CurrentHp!=60 ||
+                    monsters[1].CurrentHp!=60 ||
+                    monsters[2].CurrentHp!=100 ||
+                    actorProfile?.Data.CurrentMp!=1 ||
+                    actorProfile.Data.MaxMp!=2 ||
+                    results[0].Reason!=TlsWireEndReason.CleanEof ||
+                    results[1].Reason!=TlsWireEndReason.CleanEof ||
+                    results[0].CommandsAccepted!=0 ||
+                    results[1].CommandsAccepted!=1)
+                    throw new InvalidOperationException(
+                        $"skill AoE observer mismatch hp=" +
+                        $"{string.Join(',',monsters.Select(x=>x.CurrentHp))} " +
+                        $"mp={actorProfile?.Data.CurrentMp}/{actorProfile?.Data.MaxMp} " +
+                        $"observer_cmd={results[0].CommandsAccepted} " +
+                        $"actor_cmd={results[1].CommandsAccepted}");
+
+                Console.WriteLine(
+                    $"SKILL_AOE_OBSERVER_FIXTURE_PASS actor_a={observerId} actor_b={actorId} " +
+                    $"monster_hp={monsters[0].CurrentHp},{monsters[1].CurrentHp},{monsters[2].CurrentHp} " +
+                    $"actor_mp={actorProfile!.Data.CurrentMp}/{actorProfile.Data.MaxMp} " +
+                    $"observer_commands={results[0].CommandsAccepted} " +
+                    $"actor_commands={results[1].CommandsAccepted} aoi_frames={pump.FramesQueued}");
+                Console.Out.Flush();
+                return 0;
+            }
+            finally
+            {
+                listener.Stop();
+                stop.Cancel();
+                await Task.WhenAll(pumping,settling).ConfigureAwait(false);
+                await world.StopAsync().ConfigureAwait(false);
+                await routing.WaitAsync(TimeSpan.FromSeconds(3))
+                    .ConfigureAwait(false);
+            }
+        }
+        catch(Exception error)
+        {
+            Console.Error.WriteLine("SKILL_AOE_OBSERVER_FIXTURE_FAIL "+error);
             return 1;
         }
         finally
