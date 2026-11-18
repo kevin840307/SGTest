@@ -22,7 +22,7 @@ public readonly record struct TrustedStorageContext(
 
 public sealed record StorageTransferResult(
     StorageTransferStatus Status, StorageTransferKind Kind,
-    long ItemUid, int ItemDefinitionId, int Quantity);
+    long ItemUid, int ItemDefinitionId, int Quantity, long SourceDropId);
 
 public sealed record StoredItem(
     long ItemUid, long CharacterId, int ItemDefinitionId,
@@ -82,7 +82,7 @@ WHERE character_id=$actor ORDER BY item_uid LIMIT $limit;";
             {
                 replay.Transaction = tx;
                 replay.CommandText = @"
-SELECT action_kind,item_uid,item_definition_id,quantity
+SELECT action_kind,item_uid,item_definition_id,quantity,COALESCE(source_drop_id,0)
 FROM storage_actions
 WHERE character_id=$actor AND connection_generation=$conn
   AND map_epoch=$epoch AND action_sequence=$seq;";
@@ -97,11 +97,12 @@ WHERE character_id=$actor AND connection_generation=$conn
                     long originalUid = reader.GetInt64(1);
                     int originalItem = reader.GetInt32(2);
                     int originalQuantity = reader.GetInt32(3);
+                    long originalSourceDrop = reader.GetInt64(4);
                     return originalKind == kind && originalUid == itemUid
                         ? new(StorageTransferStatus.AlreadyApplied, kind,
-                            originalUid, originalItem, originalQuantity)
+                            originalUid, originalItem, originalQuantity, originalSourceDrop)
                         : new(StorageTransferStatus.StaleSequence, kind,
-                            itemUid, 0, 0);
+                            itemUid, 0, 0, 0);
                 }
             }
 
@@ -112,7 +113,7 @@ WHERE character_id=$actor AND connection_generation=$conn AND map_epoch=$epoch;"
                 ("$conn", context.ConnectionGeneration),
                 ("$epoch", context.MapEpoch));
             if (last >= context.ActionSequence)
-                return new(StorageTransferStatus.StaleSequence, kind, itemUid, 0, 0);
+                return new(StorageTransferStatus.StaleSequence, kind, itemUid, 0, 0, 0);
 
             string sourceTable = kind == StorageTransferKind.Deposit
                 ? "item_instances" : "storage_items";
@@ -125,7 +126,7 @@ WHERE character_id=$actor AND connection_generation=$conn AND map_epoch=$epoch;"
                     kind == StorageTransferKind.Deposit
                         ? StorageTransferStatus.NotOwned
                         : StorageTransferStatus.NotStored,
-                    kind, itemUid, 0, 0);
+                    kind, itemUid, 0, 0, 0);
 
             using (var delete = connection.CreateCommand())
             {
@@ -165,8 +166,8 @@ VALUES($uid,$actor,$item,$quantity,$drop,$source_kind,$source,$created);";
                 action.CommandText = @"
 INSERT INTO storage_actions(
     character_id,connection_generation,map_epoch,action_sequence,
-    action_kind,item_uid,item_definition_id,quantity,created_unix_ms)
-VALUES($actor,$conn,$epoch,$seq,$kind,$uid,$item,$quantity,$now);";
+    action_kind,item_uid,item_definition_id,quantity,source_drop_id,created_unix_ms)
+VALUES($actor,$conn,$epoch,$seq,$kind,$uid,$item,$quantity,$drop,$now);";
                 action.Parameters.AddWithValue("$actor", context.CharacterId);
                 action.Parameters.AddWithValue("$conn", context.ConnectionGeneration);
                 action.Parameters.AddWithValue("$epoch", context.MapEpoch);
@@ -175,6 +176,7 @@ VALUES($actor,$conn,$epoch,$seq,$kind,$uid,$item,$quantity,$now);";
                 action.Parameters.AddWithValue("$uid", row.ItemUid);
                 action.Parameters.AddWithValue("$item", row.ItemDefinitionId);
                 action.Parameters.AddWithValue("$quantity", row.Quantity);
+                action.Parameters.AddWithValue("$drop", row.SourceDropId is null ? DBNull.Value : row.SourceDropId.Value);
                 action.Parameters.AddWithValue(
                     "$now", DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
                 if (action.ExecuteNonQuery() != 1)
@@ -183,7 +185,7 @@ VALUES($actor,$conn,$epoch,$seq,$kind,$uid,$item,$quantity,$now);";
 
             tx.Commit();
             return new(StorageTransferStatus.Applied, kind,
-                row.ItemUid, row.ItemDefinitionId, row.Quantity);
+                row.ItemUid, row.ItemDefinitionId, row.Quantity, row.SourceDropId ?? 0);
         }, cancellationToken).ConfigureAwait(false);
     }
 

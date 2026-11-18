@@ -77,7 +77,7 @@ public sealed record CharacterCreateResult(CharacterCreateStatus Status, Charact
 /// </summary>
 public sealed partial class SqliteIdentityStore : IDisposable
 {
-    public const int SchemaVersion = 9;
+    public const int SchemaVersion = 10;
     private readonly string _connectionString;
     private readonly IdentityStoreOptions _options;
     private readonly PasswordHasher _passwords;
@@ -416,9 +416,14 @@ CREATE TABLE IF NOT EXISTS storage_actions (
     item_uid INTEGER NOT NULL CHECK(item_uid > 0),
     item_definition_id INTEGER NOT NULL CHECK(item_definition_id BETWEEN 1 AND 100000000),
     quantity INTEGER NOT NULL CHECK(quantity BETWEEN 1 AND 1000000),
+    source_drop_id INTEGER,
     created_unix_ms INTEGER NOT NULL,
     PRIMARY KEY(character_id,connection_generation,map_epoch,action_sequence)
 );", tx);
+            if (schemaVersion == 9 &&
+                !ColumnExists(connection, "storage_actions", "source_drop_id", tx))
+                Execute(connection, @"
+ALTER TABLE storage_actions ADD COLUMN source_drop_id INTEGER;", tx);
             Execute(connection, @"
 CREATE TRIGGER IF NOT EXISTS trg_storage_no_inventory_overlap
 BEFORE INSERT ON storage_items
