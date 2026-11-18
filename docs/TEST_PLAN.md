@@ -20,6 +20,28 @@
 
 **MVP 後的全圖／全種類／更大負載**：其他地圖與完整傳點網絡、所有原版 NPC/Enemy/裝備/技能、100 Player／1000 Enemy／5000 Drop、多開 8、Windows/Mac 完整發行；MVP 不能代替全量驗收。
 
+## MVP008-MIXED-AOI-LOAD — 20 玩家／300 怪／500 掉落同場 Server 管線驗證（部分完成）
+
+2026-11-18：沿用唯一 `server/tests/SGTest.Server.Checks/WorldAoiPumpChecks.cs` 的 20 Player / 300 verified synthetic Monster、30Hz `ServerWorldHost` / `WorldResultRouter` / `MonsterWorldCoordinator` / `WorldAoiPump` 測試，新增同 Map 500 筆 test-only `GroundDropRecord`，在 AOI Owner 啟動前 seed，沒有新 Server 實作或第二套 AOI。20 個 Player 分成 5×4 隔離群，每群 15 Monster + 25 Drop，AOI 可見限制 64、Observer 上限 64、每次每 Observer 最多送64 frame，確保權威單一源與可靠 FIFO。每個 Observer 驗證精確 15 本地 Monster + 25 本地 Drop，跨群的 UID/SourceIndex 不可進入自己的 reliable queue；後續 900ms AI 更新不能重發不變的地面物；統計 World Tick、AI per-step、佇列 frames/bytes、實際 compact binary output bytes。舊 20 viewer × 500 全部可見的獨立 AOI 測試仍保留，這項只驗證新的三種實體**同時存在**於分群負載。
+
+首次 [GitHub Server core run 44295641203](https://github.com/kevin840307/SGTest/actions/runs/44295641203) **PASS**：`SERVER_WORLD_CHECKS PASS total=156`（包括全部原 Server regressions），修正前缺命名空間的第一輪 CI `44295504409` 曾編譯失敗，已以 `249ed773` 修正。當次輸出：
+
+| 指標（單次 Ubuntu Runner、SyntheticTest） | 實測 |
+|---|---:|
+| 玩家／怪物／地上 Drop | 20／300／500 |
+| 初始 AOI MonsterSpawn／GroundDropSpawn | 300／500；外區污染0 |
+| 無更新 Drop 重播 | 0 |
+| 後續約900ms MonsterDelta | 455 |
+| 全部 Receiver 初始 encoded-frame bytes | 59,894 B |
+| 觀測期 encoded-frame bytes | 35,490 B |
+| 同一時刻單 Receiver reliable FIFO 最大 frames／bytes | 30／2,340 B |
+| AI 每步最多處理怪物數 | 64 |
+| Host 當次 ticks／最長 TickWork | 48／271µs |
+| Host SkippedDeadlines／OutputOverflow | 0／0 |
+| 混合觀測窗 wall | 904ms |
+
+**量測邊界**：encoded-frame bytes 是已編碼的 Server FIFO payload，不包括 TLS／TCP、握手與 Godot client；各 Receiver 的 bootstrap bytes 是累積總量。`host_max_tick_us` 是單寫者 `ServerWorld.Tick` 及其輸出發布工作，**不包含**獨立執行的 `WorldAoiPump`／`MonsterRuntime`／SQLite 或 Client 顯示，因此不能當完整 Server Tick+AI 的 P95/P99 或宣布每 Tick 均低於 271µs。`host_ticks` 包含測試建立期間，不應以 48 ticks／904ms 直接推算 Hz。單次 CI 未做多輪統計、混合密集同視野、20 條真 TLS、真 Windows GPU、多開/AFK 或完整 300 怪/500 Drop 戰鬥持久結算。這只是 MVP008 的 **spatial+safety mixed-load slice**，MVP008 / REB030 / RELEASE 仍 [ ]，需依 ALT001 在相同環境補實際 20 TLS client、真 Resource/Frame/Server owner P95/P99、網路 bytes/sec 與多輪負載。
+
 ## MVP008-PROC-BASELINE — 正式 Host + 兩個 Godot 主場景 CPU/RSS 程序基線（部分完成）
 
 2026-11-18：新增 `client/tests/process_telemetry.py`，不用外部 Python 依賴，以 Linux `/proc` 或 Windows Process API 每 50ms 量測真正的 Host/Godot 子程序的 Peak RSS（OS resident high-water）、當前 RSS、user+kernel CPU seconds。正式 `run_online_main_gate.py` 支援 `--metrics-report`，沿用登入、TLS、AOI、怪物、Map15→Map13→Map15、資源釋放的 Host+兩個實際 `app/main` 場景流程。報告包含各程序取樣數、觀測存活時間、合成 PCK/測試來源 SHA、PASS/FAIL，不記錄憑證、密碼或私人檔案路徑。Windows `_console.exe` 必須找到並量測 sibling 真正的 Engine `.exe`，不能拿 wrapper 當遊戲 RSS。CI 每輪保存 14 天 Artifact，沒有任意設置 CI runner RSS 硬門檻。
