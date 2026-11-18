@@ -51,6 +51,7 @@ var shop_money_label := Label.new()
 var shop_item_picker := OptionButton.new()
 var shop_sell_picker := OptionButton.new()
 var shop_quantity := SpinBox.new()
+var shop_sell_quantity := SpinBox.new()
 var shop_buy_button := Button.new()
 var shop_sell_button := Button.new()
 var shop_status := Label.new()
@@ -148,10 +149,14 @@ func _ready() -> void:
 	shop_quantity.max_value = 1000000
 	shop_quantity.value = 1
 	shop_quantity.step = 1
+	shop_sell_quantity.min_value = 1
+	shop_sell_quantity.max_value = 1
+	shop_sell_quantity.value = 1
+	shop_sell_quantity.step = 1
 	shop_buy_button.text = "購買選中商品"
 	shop_sell_button.text = "販售選中背包物品"
 	shop_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	for control in [shop_npc_input,shop_open_button,shop_money_label,shop_item_picker,shop_sell_picker,shop_quantity,shop_buy_button,shop_sell_button,shop_status]:
+	for control in [shop_npc_input,shop_open_button,shop_money_label,shop_item_picker,shop_sell_picker,shop_quantity,shop_sell_quantity,shop_buy_button,shop_sell_button,shop_status]:
 		control.visible = false
 	respawn_button.text = "復活"
 	skill_hint.text = "技能 ID（需伺服器已核准規則）"
@@ -349,7 +354,7 @@ func submit_shop_buy(item_definition_id: int, quantity: int = 1) -> bool:
 
 
 func submit_shop_sell(item_uid: int, quantity: int = 1) -> bool:
-	return active and int(_latest.get("active_shop_npc",0)) > 0 and int(_latest.get("pending_shop_sequence",0)) == 0 and item_uid > 0 and quantity > 0 and session.sell_shop_item(item_uid,quantity)
+	return active and int(_latest.get("active_shop_npc",0)) > 0 and int(_latest.get("pending_shop_sequence",0)) == 0 and item_uid > 0 and quantity > 0 and quantity <= 1000000 and (_latest.get("inventory_items",{}) as Dictionary).has(item_uid) and quantity <= int(((_latest.get("inventory_items",{}) as Dictionary)[item_uid] as Dictionary).get("quantity",0)) and session.sell_shop_item(item_uid,quantity)
 
 
 func request_respawn() -> void:
@@ -609,7 +614,7 @@ func _sell_selected_shop_item() -> void:
 	if shop_sell_button.disabled or shop_sell_picker.selected < 0:
 		return
 	var uid := int(shop_sell_picker.get_item_metadata(shop_sell_picker.selected))
-	var quantity := int(shop_quantity.value)
+	var quantity := int(shop_sell_quantity.value)
 	if submit_shop_sell(uid,quantity):
 		shop_status.text = "販售請求已送出，等待伺服器結算…"
 		shop_buy_button.disabled = true
@@ -623,13 +628,11 @@ func _update_shop_sell_quantity() -> void:
 	if shop_sell_picker.selected >= 0:
 		uid = int(shop_sell_picker.get_item_metadata(shop_sell_picker.selected))
 	var item: Dictionary = (_latest.get("inventory_items",{}) as Dictionary).get(uid,{})
-	# One shared quantity field serves both buy and sell. Do not cap future
-	# purchases to the currently owned stack; only clamp an already-too-large
-	# sell value when the sell selection changes.
-	var owned := int(item.get("quantity",0))
-	shop_quantity.max_value = 1000000
-	if owned > 0 and shop_quantity.value > owned:
-		shop_quantity.value = owned
+	# Buying is independent of owned inventory. Only the sell input is
+	# bounded by the selected authoritative UID stack (and wire limit).
+	var owned := maxi(0,int(item.get("quantity",0)))
+	shop_sell_quantity.max_value = maxi(1,mini(1000000,owned))
+	shop_sell_quantity.value = mini(shop_sell_quantity.value,shop_sell_quantity.max_value)
 
 
 func _update_shop_ui() -> void:
@@ -695,6 +698,7 @@ func _update_shop_ui() -> void:
 	shop_buy_button.disabled = not usable or pending or active_npc <= 0 or shop_item_picker.item_count == 0
 	shop_sell_button.disabled = not usable or pending or active_npc <= 0 or shop_sell_picker.item_count == 0
 	shop_quantity.editable = usable and not pending and active_npc > 0
+	shop_sell_quantity.editable = usable and not pending and active_npc > 0 and shop_sell_picker.item_count > 0
 
 
 func _update_inventory_ui() -> void:
