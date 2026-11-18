@@ -142,6 +142,242 @@ def _hit_formula(common: str) -> dict:
     }
 
 
+def _damage_formula(common: str) -> dict:
+    checks = {
+        "level_difference": bool(re.search(
+            r'DefLv\s*=\s*GetTargetData\(\s*defender\s*,\s*"Level"\s*\)'
+            r'.*?AttLv\s*=\s*GetData\(\s*"Level"\s*\)'
+            r'.*?LvDif\s*=\s*DefLv\s*-\s*AttLv', common, re.DOTALL)),
+        "over_9_levels_forces_min": bool(re.search(
+            r'if\s+LvDif\s*>\s*9\s+then\s*damage\s*=\s*GetMinDamage\(\)',
+            common, re.DOTALL)),
+        "ap_plus_effect": bool(re.search(
+            r'attackerAP\s*=\s*GetData\(\s*APcount\s*\)\s*\+\s*effect',
+            common)),
+        "pre_defense_variance": bool(re.search(
+            r'attackerAP\s*=\s*attackerAP\s*\+\s*attackerAP\s*\*\s*'
+            r'\(\s*varyDelta\s*-\s*random\(\s*varyDelta\s*\*\s*2\s*\)\s*\)'
+            r'\s*/\s*100', common)),
+        "defender_dp": bool(re.search(
+            r'defenderDP\s*=\s*GetTargetData\(\s*defender\s*,\s*DPcount\s*\)',
+            common)),
+        "subtract_dp": bool(re.search(
+            r'damage\s*=\s*attackerAP\s*-\s*defenderDP', common)),
+        "minimum_damage_fallback": bool(re.search(
+            r'if\s+damage\s*<\s*MinHit\s+then\s*damage\s*=\s*GetMinDamage\(\)',
+            common, re.DOTALL)),
+        "positive_level_gap_scale": bool(re.search(
+            r'elseif\s+LvDif\s*>\s*0\s+then\s*'
+            r'damage\s*=\s*damage\s*\*\s*\(\s*10\s*-\s*LvDif\s*\)\s*/\s*10',
+            common, re.DOTALL)),
+        "divide_by_hit_count": bool(re.search(
+            r'damage_perhit\s*=\s*GetTotalDamage\(\s*defender\s*\)'
+            r'.*?damage_perhit\s*=\s*damage_perhit\s*/\s*GetSkillHitCount\(\)',
+            common, re.DOTALL)),
+        "per_hit_hr_check": bool(re.search(
+            r'function\s+DoHit_PerHitCount.*?if\s+checkHR\(\s*defender\s*\)\s*~=\s*0',
+            common, re.DOTALL)),
+        "second_variance_per_hit": bool(re.search(
+            r'totaldamage\s*=\s*totaldamage\s*\+\s*totaldamage\s*\*\s*'
+            r'\(\s*varyDelta\s*-\s*random\(\s*varyDelta\s*\*\s*2\s*\)\s*\)'
+            r'\s*/\s*100', common)),
+        "attack_defender": bool(re.search(
+            r'AttackDefender\(\s*totaldamage\s*,\s*0\s*\)', common)),
+        "miss_path": bool(re.search(r'AttackDefender_Miss\(\s*\)', common)),
+        "lethal_clamps_to_current_hp": bool(re.search(
+            r'if\s+hp\s*<=\s*totaldamage\s+then\s*'
+            r'totaldamage\s*=\s*hp', common, re.DOTALL)),
+    }
+    verified = all(checks.values())
+    return {
+        "verified": verified,
+        "checks": checks,
+        "summary": (
+            "total=(AP+effect) with varyDelta, minus defender DP, level-gap/minimum "
+            "rules, divided by skill hit count; each hit re-applies varyDelta and "
+            "HR/DR hit check; lethal damage clamps to current HP"
+            if verified else None
+        ),
+        "random_calls_per_damage_path": (
+            ["GetMinDamage/random(MinHitDelta) when minimum path is used",
+             "pre-defense random(varyDelta*2)",
+             "per-hit random(varyDelta*2)",
+             "per-hit random(100) for HR/DR"]
+            if verified else None
+        ),
+    }
+
+
+def _range_semantics(common: str) -> dict:
+    body = _function_body(common, "Attack_Range")
+    if body is None:
+        return {"verified": False, "checks": {}}
+    checks = {
+        "resource_guard": bool(re.search(
+            r'GetData\(\s*consume\s*\)\s*>=\s*conTotal', body)),
+        "visible_enemy_first": bool(re.search(
+            r'GetVisEnemyList_First\(\s*AttackRange\s*\)', body)),
+        "consume_only_when_any_target": bool(re.search(
+            r'if\s+hasdefender\s*~=\s*0\s+then\s*'
+            r'ModifyData\(\s*consume\s*,\s*-conTotal\s*\)',
+            body, re.DOTALL)),
+        "iterate_visible_list": bool(re.search(
+            r'while\s+hasdefender\s*~=\s*0\s+do.*?'
+            r'DoHit\(\s*defender\s*\).*?'
+            r'GetVisList_Next\(\s*\)', body, re.DOTALL)),
+    }
+    verified = all(checks.values())
+    return {
+        "verified": verified,
+        "checks": checks,
+        "summary": (
+            "Attack_Range uses the script argument as visible-enemy search range, "
+            "charges the configured resource only when at least one defender exists, "
+            "then applies DoHit to each visible enemy"
+            if verified else None
+        ),
+    }
+
+
+def _read_numeric_csv(path: Path) -> list[list[int]]:
+    rows = []
+    for index, row in enumerate(csv.reader(io.StringIO(_decode(path))), 1):
+        if not row:
+            continue
+        try:
+            rows.append([int(value.strip()) for value in row])
+        except ValueError as error:
+            raise ValueError(
+                f"{path.name} row {index} contains non-integer attribute data"
+            ) from error
+    return rows
+
+
+def _enemy_attribute_structure(server_dat: Path) -> dict:
+    enemy_dir = server_dat / "Enemy"
+    enemy_path = enemy_dir / "Enemy_Data.csv"
+    table_paths = sorted(enemy_dir.glob("EN_Att[0-9][0-9].csv"))
+    if not enemy_path.is_file() or not table_paths:
+        return {
+            "available": False,
+            "status": "not_present",
+            "semantic_names_verified": False,
+            "runtime_ready": False,
+        }
+
+    table_levels = {}
+    table_meta = {}
+    source_hashes = {"Enemy/Enemy_Data.csv": _sha(enemy_path)}
+    for path in table_paths:
+        match = re.fullmatch(r"EN_Att([0-9]{2})\.csv", path.name, re.IGNORECASE)
+        if match is None:
+            continue
+        table_id = int(match.group(1))
+        rows = _read_numeric_csv(path)
+        if not rows:
+            continue
+        widths = sorted({len(row) for row in rows})
+        levels = {row[0] for row in rows if row}
+        table_levels[table_id] = levels
+        table_meta[str(table_id)] = {
+            "rows": len(rows),
+            "widths": widths,
+            "min_level": min(levels),
+            "max_level": max(levels),
+        }
+        source_hashes[f"Enemy/{path.name}"] = _sha(path)
+
+    raw_enemy = list(csv.reader(io.StringIO(_decode(enemy_path))))
+    enemy_rows = [row for row in raw_enemy if row]
+    widths = sorted({len(row) for row in enemy_rows})
+    max_width = max(widths, default=0)
+
+    selector_columns = []
+    for column in range(max_width):
+        values = []
+        valid = True
+        for row in enemy_rows:
+            if column >= len(row) or not row[column].strip():
+                valid = False
+                break
+            try:
+                values.append(int(row[column].strip()))
+            except ValueError:
+                valid = False
+                break
+        unique = sorted(set(values))
+        if (valid and len(unique) >= 2 and
+                all(value in table_levels for value in unique)):
+            selector_columns.append((column, unique))
+
+    candidates = []
+    for selector_column, selector_values in selector_columns:
+        for level_column in range(max_width):
+            if level_column == selector_column:
+                continue
+            matched = 0
+            unmatched = []
+            considered = 0
+            valid_numeric = True
+            for row_index, row in enumerate(enemy_rows, 1):
+                try:
+                    selector = int(row[selector_column].strip())
+                    level = int(row[level_column].strip())
+                except (ValueError, IndexError):
+                    valid_numeric = False
+                    break
+                if selector not in table_levels:
+                    continue
+                considered += 1
+                if level in table_levels[selector]:
+                    matched += 1
+                elif len(unmatched) < 16:
+                    unmatched.append({
+                        "row": row_index,
+                        "enemy_id": row[0] if row else "",
+                        "selector": selector,
+                        "level_candidate": level,
+                    })
+            if not valid_numeric or considered == 0:
+                continue
+            ratio = matched / considered
+            if ratio >= 0.90:
+                candidates.append({
+                    "selector_column": selector_column,
+                    "level_column": level_column,
+                    "selector_values": selector_values,
+                    "matched_rows": matched,
+                    "considered_rows": considered,
+                    "match_ratio": round(ratio, 6),
+                    "unmatched_examples": unmatched,
+                })
+
+    candidates.sort(
+        key=lambda item: (
+            -item["match_ratio"],
+            -len(item["selector_values"]),
+            item["selector_column"],
+            item["level_column"],
+        )
+    )
+    return {
+        "available": True,
+        "status": "candidate_only",
+        "enemy_rows": len(enemy_rows),
+        "enemy_widths": widths,
+        "attribute_tables": table_meta,
+        "candidate_pairs": candidates[:8],
+        "semantic_names_verified": False,
+        "runtime_ready": False,
+        "sources_sha256": dict(sorted(source_hashes.items())),
+        "notes": [
+            "Candidate pairs are structural correlations only; they do not prove column semantics.",
+            "The eight EN_Att payload columns remain unnamed until loader/schema evidence is found.",
+            "Sentinel or unmatched rows are retained as evidence and must not be silently coerced.",
+        ],
+    }
+
+
 def _read_table(path: Path):
     text = _decode(path)
     rows = {}
@@ -221,12 +457,16 @@ def compile_skill_evidence(server_dat: Path, only_ids: set[int] | None = None) -
         "missing_requested_skill_ids": missing,
         "definitions": definitions,
         "hit_formula": _hit_formula(common),
+        "damage_formula": _damage_formula(common),
+        "range_semantics": _range_semantics(common),
+        "enemy_attribute_structure": _enemy_attribute_structure(server_dat),
         "sources_sha256": dict(sorted(source_hashes.items())),
         "runtime_rules_generated": False,
         "combat_ready": False,
         "notes": [
             "SkillId is joined to SKCxxJyyy by xx*1000+yyy only when that source file exists.",
             "Unknown skill.csv columns remain indexed raw evidence; semantics are not guessed.",
-            "DP/DR source mapping and durable MP/Will ownership must be verified before runtime activation.",
+            "DP/DR semantic column mapping and durable MP/Will ownership must be verified before runtime activation.",
+            "Enemy/EN_Att relationships are emitted as structural candidates only and never promoted to runtime rules.",
         ],
     }
