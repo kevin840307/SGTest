@@ -338,6 +338,20 @@ func submit_npc_interact(spawn_id: int) -> bool:
 	return active and not bool(_latest.get("reconnecting",false)) and bool(_latest.get("world_ready",false)) and spawn_id > 0 and session.npc_interact(spawn_id)
 
 
+
+
+func submit_shop_open(npc_spawn_id: int) -> bool:
+	return active and not bool(_latest.get("reconnecting",false)) and bool(_latest.get("world_ready",false)) and bool(_latest.get("inventory_ready",false)) and not bool(_latest.get("player_dead",false)) and not bool(_latest.get("resync_pending",false)) and npc_spawn_id > 0 and session.open_shop(npc_spawn_id)
+
+
+func submit_shop_buy(item_definition_id: int, quantity: int = 1) -> bool:
+	return active and int(_latest.get("active_shop_npc",0)) > 0 and int(_latest.get("pending_shop_sequence",0)) == 0 and item_definition_id > 0 and quantity > 0 and session.buy_shop_item(item_definition_id,quantity)
+
+
+func submit_shop_sell(item_uid: int, quantity: int = 1) -> bool:
+	return active and int(_latest.get("active_shop_npc",0)) > 0 and int(_latest.get("pending_shop_sequence",0)) == 0 and item_uid > 0 and quantity > 0 and session.sell_shop_item(item_uid,quantity)
+
+
 func request_respawn() -> void:
 	if respawn_button.disabled or not respawn_button.visible or not active:
 		return
@@ -568,6 +582,116 @@ func _confirm_inventory_discard() -> void:
 		discard_status.text = "目前無法丟棄該物品"
 
 
+
+
+func _open_shop_from_input() -> void:
+	if submit_shop_open(int(shop_npc_input.value)):
+		shop_status.text = "正在向伺服器確認 NPC 商店…"
+		shop_open_button.disabled = true
+	else:
+		shop_status.text = "目前無法開啟商店"
+
+
+func _buy_selected_shop_item() -> void:
+	if shop_buy_button.disabled or shop_item_picker.selected < 0:
+		return
+	var item_id := int(shop_item_picker.get_item_metadata(shop_item_picker.selected))
+	var quantity := int(shop_quantity.value)
+	if submit_shop_buy(item_id,quantity):
+		shop_status.text = "購買請求已送出，等待伺服器結算…"
+		shop_buy_button.disabled = true
+		shop_sell_button.disabled = true
+	else:
+		shop_status.text = "目前無法購買該商品"
+
+
+func _sell_selected_shop_item() -> void:
+	if shop_sell_button.disabled or shop_sell_picker.selected < 0:
+		return
+	var uid := int(shop_sell_picker.get_item_metadata(shop_sell_picker.selected))
+	var quantity := int(shop_quantity.value)
+	if submit_shop_sell(uid,quantity):
+		shop_status.text = "販售請求已送出，等待伺服器結算…"
+		shop_buy_button.disabled = true
+		shop_sell_button.disabled = true
+	else:
+		shop_status.text = "目前無法販售該物品"
+
+
+func _update_shop_sell_quantity() -> void:
+	var uid := 0
+	if shop_sell_picker.selected >= 0:
+		uid = int(shop_sell_picker.get_item_metadata(shop_sell_picker.selected))
+	var item: Dictionary = (_latest.get("inventory_items",{}) as Dictionary).get(uid,{})
+	shop_quantity.max_value = maxi(1,mini(1000000,int(item.get("quantity",1))))
+	shop_quantity.value = mini(shop_quantity.value,shop_quantity.max_value)
+
+
+func _update_shop_ui() -> void:
+	var in_world := active and int(_latest.get("state",-1)) == State.STATE_IN_WORLD
+	for control in [shop_npc_input,shop_open_button,shop_money_label,shop_item_picker,shop_sell_picker,shop_quantity,shop_buy_button,shop_sell_button,shop_status]:
+		control.visible = in_world
+	if not in_world:
+		_shop_display_key = ""
+		return
+	var pending := int(_latest.get("pending_shop_sequence",0)) != 0
+	var usable := bool(_latest.get("world_ready",false)) and bool(_latest.get("inventory_ready",false)) and not bool(_latest.get("player_dead",false)) and not bool(_latest.get("reconnecting",false)) and not bool(_latest.get("resync_pending",false))
+	shop_npc_input.editable = usable and not pending
+	shop_open_button.disabled = not usable or pending
+	var active_npc := int(_latest.get("active_shop_npc",0))
+	var shop_items: Dictionary = _latest.get("shop_items",{})
+	shop_money_label.text = ("金錢：%d" % int(_latest.get("shop_money",0))) if active_npc > 0 else "金錢：—"
+	var key := "%d/%d/%d/%d/%d" % [
+		active_npc,int(_latest.get("shop_money",0)),
+		int(_latest.get("inventory_revision",0)),
+		int(_latest.get("shop_sequence",0)),shop_items.size()]
+	if key != _shop_display_key:
+		_shop_display_key = key
+		shop_item_picker.clear()
+		var ids: Array = shop_items.keys()
+		ids.sort()
+		for raw_id in ids:
+			var item_id := int(raw_id)
+			var item: Dictionary = shop_items[raw_id]
+			shop_item_picker.add_item("%s｜買 %d｜賣 %d" % [
+				item_catalog.name_for(item_id),
+				int(item.get("buy_price",0)),int(item.get("sell_price",0))])
+			shop_item_picker.set_item_metadata(shop_item_picker.item_count-1,item_id)
+		shop_sell_picker.clear()
+		var inventory: Dictionary = _latest.get("inventory_items",{})
+		var uids: Array = inventory.keys()
+		uids.sort()
+		for raw_uid in uids:
+			var uid := int(raw_uid)
+			var owned: Dictionary = inventory[raw_uid]
+			var item_id := int(owned.get("item_definition_id",0))
+			if not shop_items.has(item_id) or int((shop_items[item_id] as Dictionary).get("sell_price",0)) <= 0:
+				continue
+			shop_sell_picker.add_item("%s ×%d｜UID %d" % [
+				item_catalog.name_for(item_id),int(owned.get("quantity",0)),uid])
+			shop_sell_picker.set_item_metadata(shop_sell_picker.item_count-1,uid)
+		if shop_item_picker.item_count > 0:
+			shop_item_picker.select(0)
+		if shop_sell_picker.item_count > 0:
+			shop_sell_picker.select(0)
+			_update_shop_sell_quantity()
+	var open_status := int(_latest.get("last_shop_open_status",-1))
+	if open_status > 0 and active_npc == 0:
+		shop_status.text = "商店無法開啟（伺服器代碼 %d）" % open_status
+	var result: Dictionary = _latest.get("last_shop_result",{})
+	if not result.is_empty():
+		if int(result.get("status",-1)) in [0,1]:
+			shop_status.text = "%s完成：%s ×%d｜餘額 %d" % [
+				"購買" if int(result.get("kind",0)) == 1 else "販售",
+				item_catalog.name_for(int(result.get("item_definition_id",0))),
+				int(result.get("quantity",0)),int(result.get("money",0))]
+		else:
+			shop_status.text = "交易失敗（伺服器代碼 %d）" % int(result.get("status",-1))
+	shop_buy_button.disabled = not usable or pending or active_npc <= 0 or shop_item_picker.item_count == 0
+	shop_sell_button.disabled = not usable or pending or active_npc <= 0 or shop_sell_picker.item_count == 0
+	shop_quantity.editable = usable and not pending and active_npc > 0
+
+
 func _update_inventory_ui() -> void:
 	var in_world: bool = active and int(_latest.get("state",-1)) == State.STATE_IN_WORLD
 	var loaded: bool = in_world and bool(_latest.get("inventory_ready",false))
@@ -675,6 +799,7 @@ func _process(delta: float) -> void:
 	_set_respawn_controls()
 	_set_skill_controls()
 	_update_inventory_ui()
+	_update_shop_ui()
 	var pickup_result: Dictionary = _latest.get("last_pickup_result",{})
 	if not pickup_result.is_empty():
 		if int(pickup_result.status) in [0,1]:
