@@ -111,6 +111,7 @@ var active_shop_npc := 0
 var shop_items := {}
 var shop_money := 0
 var last_shop_open_status := -1
+var last_shop_response_sequence := 0
 var last_shop_result := {}
 var stale_shop_results := 0
 
@@ -435,6 +436,7 @@ func snapshot() -> Dictionary:
 		"shop_items": shop_items.duplicate(true),
 		"shop_money": shop_money,
 		"last_shop_open_status": last_shop_open_status,
+		"last_shop_response_sequence": last_shop_response_sequence,
 		"last_shop_result": last_shop_result.duplicate(true),
 		"stale_shop_results": stale_shop_results,
 		"respawn_sequence": respawn_sequence,
@@ -603,6 +605,7 @@ func _apply_choose(frame: PackedByteArray) -> bool:
 	shop_items.clear()
 	shop_money = 0
 	last_shop_open_status = -1
+	last_shop_response_sequence = 0
 	last_shop_result.clear()
 	stale_shop_results = 0
 	respawn_sequence = 0
@@ -1160,6 +1163,7 @@ func _apply_world_ready(frame: PackedByteArray) -> bool:
 		shop_items.clear()
 		shop_money = 0
 		last_shop_open_status = -1
+		last_shop_response_sequence = 0
 		last_shop_result.clear()
 		stale_shop_results = 0
 		respawn_sequence = 0
@@ -1489,6 +1493,9 @@ func _apply_shop_snapshot(frame: PackedByteArray) -> bool:
 		return fail("future_shop_snapshot")
 	if sequence > shop_sequence:
 		return fail("unsent_shop_snapshot")
+	if sequence <= last_shop_response_sequence:
+		stale_shop_results += 1
+		return true
 	if sequence != pending_shop_sequence or pending_shop_kind != 1 or int(value.npc_spawn_id) != pending_shop_npc:
 		return fail("shop_snapshot_wrong_request")
 	last_shop_open_status = int(value.status)
@@ -1505,6 +1512,7 @@ func _apply_shop_snapshot(frame: PackedByteArray) -> bool:
 		active_shop_npc = 0
 		shop_items.clear()
 		shop_money = 0
+	last_shop_response_sequence = sequence
 	_clear_pending_shop()
 	return true
 
@@ -1524,6 +1532,9 @@ func _apply_shop_transaction_result(frame: PackedByteArray) -> bool:
 		return fail("future_shop_result")
 	if sequence > shop_sequence:
 		return fail("unsent_shop_result")
+	if sequence <= last_shop_response_sequence:
+		stale_shop_results += 1
+		return true
 	if sequence != pending_shop_sequence or pending_shop_kind not in [2,3] or int(result.kind) != pending_shop_kind-1 or int(result.npc_spawn_id) != pending_shop_npc or int(result.item_definition_id) != pending_shop_item_definition_id or int(result.quantity) != pending_shop_quantity:
 		return fail("shop_result_wrong_request")
 	if pending_shop_kind == 3 and int(result.item_uid) != pending_shop_item_uid:
@@ -1556,6 +1567,7 @@ func _apply_shop_transaction_result(frame: PackedByteArray) -> bool:
 		inventory_revision += 1
 		shop_money = int(result.money)
 	# Durable replay receipts never apply inventory mutations twice.
+	last_shop_response_sequence = sequence
 	last_shop_result = result.duplicate(true)
 	_clear_pending_shop()
 	return true
