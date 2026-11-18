@@ -529,6 +529,13 @@ func run() -> void:
 	if not panel.shop_money_label.text.contains("25") or panel.shop_item_picker.item_count != 1 or panel.shop_sell_picker.item_count != 1 or panel.shop_buy_button.disabled or panel.shop_sell_button.disabled:
 		fail("Server shop snapshot was not rendered as playable controls")
 		return
+	# Switching sell UID or refreshing owned stack must never alter buy quantity.
+	panel.shop_quantity.value = 7
+	panel.shop_sell_quantity.value = 3
+	panel._update_shop_sell_quantity()
+	if int(panel.shop_quantity.value) != 7 or int(panel.shop_sell_quantity.max_value) != 3:
+		fail("Sell stack selection modified independent buy quantity or sell limit")
+		return
 	panel.shop_quantity.value = 2
 	panel.shop_buy_button.pressed.emit()
 	if stub.shop_buys != 1 or stub.last_shop_item != 2701 or stub.last_shop_quantity != 2 or not panel.shop_buy_button.disabled:
@@ -543,10 +550,14 @@ func run() -> void:
 	panel._latest.shop_sequence = 2
 	panel._latest.inventory_revision = 5
 	panel._update_shop_ui()
-	panel.shop_quantity.value = 1
+	panel.shop_quantity.value = 9
+	panel.shop_sell_quantity.value = 1
 	panel.shop_sell_button.pressed.emit()
-	if stub.shop_sells != 1 or stub.last_shop_uid != 10000 or stub.last_shop_quantity != 1:
-		fail("Shop sell UI did not use selected owned Item UID")
+	if stub.shop_sells != 1 or stub.last_shop_uid != 10000 or stub.last_shop_quantity != 1 or int(panel.shop_quantity.value) != 9:
+		fail("Shop sell UI did not use independent sell quantity and owned Item UID")
+		return
+	if panel.submit_shop_sell(10000,4) or stub.shop_sells != 1:
+		fail("Shop UI did not reject sell quantity exceeding authoritative owned stack")
 		return
 
 	panel._latest.player_dead = true
