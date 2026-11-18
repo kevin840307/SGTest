@@ -34,15 +34,38 @@ public sealed class MonsterWorldCoordinator
         public long LastAppliedTick = -1;
     }
 
+    private sealed class SkillCursor
+    {
+        public long ConnectionEpoch;
+        public long MapEpoch;
+        public uint LastSequence;
+        public readonly Dictionary<int,long> LastAppliedTick = [];
+    }
+
+    private readonly IReadOnlyDictionary<int,VerifiedSkillRule> _skillRules;
     private readonly Dictionary<long, ActorSnapshot> _actors = [];
     private readonly Dictionary<long, AttackCursor> _attack = [];
+    private readonly Dictionary<long, SkillCursor> _skill = [];
     private readonly HashSet<int> _seededMaps = [];
     private long _lastTick;
     private long _batches, _runtimeTicks, _changed;
 
-    public MonsterWorldCoordinator(IEnumerable<MonsterRuntime> runtimes)
+    public MonsterWorldCoordinator(
+        IEnumerable<MonsterRuntime> runtimes,
+        IReadOnlyDictionary<int,VerifiedSkillRule>? skillRules = null)
     {
         ArgumentNullException.ThrowIfNull(runtimes);
+        _skillRules=skillRules is null
+            ? new Dictionary<int,VerifiedSkillRule>()
+            : new Dictionary<int,VerifiedSkillRule>(skillRules);
+        if(_skillRules.Count>64 ||
+            _skillRules.Any(pair=>pair.Key!=pair.Value.SkillId ||
+                pair.Key is <1 or >100_000_000 ||
+                pair.Value.FixedDamage is <1 or >100_000_000 ||
+                !double.IsFinite(pair.Value.Range) ||
+                pair.Value.Range is <1 or >500 ||
+                pair.Value.CooldownTicks is <1 or >3600))
+            throw new ArgumentOutOfRangeException(nameof(skillRules));
         _runtimes = new SortedDictionary<int, MonsterRuntime>();
         foreach (var runtime in runtimes)
         {
@@ -172,6 +195,79 @@ public sealed class MonsterWorldCoordinator
             changed.EntityRevision, changed);
     }
 
+    public SkillUseOutcome ResolveSkill(TrustedSkillUse request)
+    {
+        if (_lastTick <= 0 || !_actors.TryGetValue(request.ActorId,out var actor) ||
+            !_skill.TryGetValue(request.ActorId,out var cursor) ||
+            actor.ConnectionEpoch!=request.ConnectionEpoch ||
+            cursor.ConnectionEpoch!=request.ConnectionEpoch)
+            return EmptySkill(request,SkillUseStatus.OldMapEpoch);
+
+        if(request.RequestMapEpoch!=actor.MapEpoch ||
+            cursor.MapEpoch!=actor.MapEpoch)
+            return EmptySkill(request,SkillUseStatus.OldMapEpoch);
+
+        if(request.SkillSequence<=cursor.LastSequence)
+            return EmptySkill(request,SkillUseStatus.ReplayedSequence);
+        cursor.LastSequence=request.SkillSequence;
+
+        if(!_skillRules.TryGetValue(request.SkillId,out var rule))
+            return EmptySkill(request,SkillUseStatus.NoRule);
+        if(request.Profile is null ||
+            !_runtimes.TryGetValue(actor.MapId,out var runtime))
+            return EmptySkill(request,SkillUseStatus.CombatUnavailable);
+
+        if(cursor.LastAppliedTick.TryGetValue(rule.SkillId,out long last) &&
+            _lastTick-last<rule.CooldownTicks)
+            return EmptySkill(request,SkillUseStatus.Cooldown);
+
+        var targetStatus=runtime.ValidateNormalAttackTarget(
+            request.TargetEntityId,actor.X,actor.Y,rule.Range,out var target);
+        if(targetStatus!=NormalAttackStatus.Applied)
+            return FromSkillTarget(request,MapSkillStatus(targetStatus),target);
+
+        cursor.LastAppliedTick[rule.SkillId]=_lastTick;
+        var applied=runtime.ApplyTrustedDamage(
+            request.TargetEntityId,request.ActorId,rule.FixedDamage,_lastTick);
+        if(!applied.Applied)
+            return FromSkillTarget(request,SkillUseStatus.TargetDead,target);
+
+        var changed=applied.Monster;
+        return new(SkillUseStatus.Applied,_lastTick,request.SkillId,
+            request.TargetEntityId,applied.Damage,changed.CurrentHp,
+            changed.MaxHp,changed.EntityRevision,changed);
+    }
+
+    private SkillUseOutcome EmptySkill(
+        TrustedSkillUse request,SkillUseStatus status) =>
+        new(status,Math.Max(0,_lastTick),request.SkillId,
+            request.TargetEntityId,0,0,0,0);
+
+    private SkillUseOutcome FromSkillTarget(
+        TrustedSkillUse request,SkillUseStatus status,MonsterSnapshot target)
+    {
+        if(target.EntityId<=0)return EmptySkill(request,status);
+        return new(status,Math.Max(0,_lastTick),request.SkillId,
+            request.TargetEntityId,0,target.CurrentHp,target.MaxHp,
+            target.EntityRevision,target);
+    }
+
+    private static SkillUseStatus MapSkillStatus(NormalAttackStatus status) =>
+        status switch
+        {
+            NormalAttackStatus.Applied=>SkillUseStatus.Applied,
+            NormalAttackStatus.Miss=>SkillUseStatus.Miss,
+            NormalAttackStatus.TargetMissing=>SkillUseStatus.TargetMissing,
+            NormalAttackStatus.TargetDead=>SkillUseStatus.TargetDead,
+            NormalAttackStatus.OutOfRange=>SkillUseStatus.OutOfRange,
+            NormalAttackStatus.Blocked=>SkillUseStatus.Blocked,
+            NormalAttackStatus.Cooldown=>SkillUseStatus.Cooldown,
+            NormalAttackStatus.CombatUnavailable=>SkillUseStatus.CombatUnavailable,
+            NormalAttackStatus.OldMapEpoch=>SkillUseStatus.OldMapEpoch,
+            NormalAttackStatus.ReplayedSequence=>SkillUseStatus.ReplayedSequence,
+            _=>throw new InvalidOperationException("Unknown target validation status")
+        };
+
     private NormalAttackOutcome Empty(
         TrustedNormalAttack request, NormalAttackStatus status) =>
         new(status, Math.Max(0, _lastTick), request.TargetEntityId, 0, 0, 0, 0);
@@ -197,6 +293,11 @@ public sealed class MonsterWorldCoordinator
             ConnectionEpoch = actor.ConnectionEpoch,
             MapEpoch = actor.MapEpoch
         });
+        _skill.Add(actor.ActorId,new SkillCursor
+        {
+            ConnectionEpoch=actor.ConnectionEpoch,
+            MapEpoch=actor.MapEpoch
+        });
     }
 
     private void Leave(ActorSnapshot actor)
@@ -208,6 +309,7 @@ public sealed class MonsterWorldCoordinator
             throw new InvalidOperationException("Monster coordinator received stale Leave");
         _actors.Remove(actor.ActorId);
         _attack.Remove(actor.ActorId);
+        _skill.Remove(actor.ActorId);
     }
 
     private void Change(ActorSnapshot actor)

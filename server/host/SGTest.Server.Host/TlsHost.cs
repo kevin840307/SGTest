@@ -57,8 +57,12 @@ internal static class TlsHost
                 if (population.Spawns.Count > 0)
                     monsterRuntimes.Add(new MonsterRuntime(map, population));
             }
+            string? skillManifest=options.GetValueOrDefault("--skill-rules");
+            IReadOnlyDictionary<int,VerifiedSkillRule>? skillRules=
+                skillManifest is null ? null :
+                SkillRuleCatalog.LoadVerified(Path.GetFullPath(skillManifest));
             MonsterWorldCoordinator? monsters = monsterRuntimes.Count == 0
-                ? null : new MonsterWorldCoordinator(monsterRuntimes);
+                ? null : new MonsterWorldCoordinator(monsterRuntimes,skillRules);
             // No original source-verified manifest means no fabricated drops.
             string? lootManifest = options.GetValueOrDefault("--loot-rules");
             IReadOnlyList<MonsterDropRule>? dropRules = lootManifest is null
@@ -154,6 +158,7 @@ internal static class TlsHost
                     position_checkpoint_ms = checkpointMs,
                     loot_rule_count = dropRules?.Count ?? 0,
                     verified_recovery_rule_count = recoveryRules?.Count ?? 0,
+                    verified_skill_rule_count = skillRules?.Count ?? 0,
                     unpicked_ground_drops = activeDrops.Count
                 }));
                 var stopping = Task.Delay(Timeout.Infinite, stop.Token);
@@ -197,7 +202,8 @@ internal static class TlsHost
                 positions = positions.Statistics,
                 combat = combat.Statistics,
                 loot = loot?.Statistics,
-                verified_recovery_rule_count = recoveryRules?.Count ?? 0
+                verified_recovery_rule_count = recoveryRules?.Count ?? 0,
+                verified_skill_rule_count = skillRules?.Count ?? 0
             }));
             return 0;
         }
@@ -207,7 +213,7 @@ internal static class TlsHost
             Console.Error.WriteLine("Usage: serve --content <PRIVATE_ROOT> --identity <DB> --certificate <PFX> " +
                 "[--bind 127.0.0.1] [--port 7777] [--max-connections 128] [--max-per-address 8] " +
                 "[--position-checkpoint-ms 5000] [--loot-rules <VERIFIED_JSON>] " +
-                "[--recovery-rules <VERIFIED_JSON>] [--seconds N]");
+                "[--recovery-rules <VERIFIED_JSON>] [--skill-rules <VERIFIED_JSON>] [--seconds N]");
             return 2;
         }
         catch (OperationCanceledException) when (stop.IsCancellationRequested) { return 0; }
@@ -227,7 +233,7 @@ internal static class TlsHost
     {
         string[] known = ["--content", "--identity", "--certificate", "--bind", "--port",
                           "--max-connections", "--max-per-address", "--position-checkpoint-ms",
-                          "--loot-rules", "--recovery-rules", "--seconds"];
+                          "--loot-rules", "--recovery-rules", "--skill-rules", "--seconds"];
         var values = new Dictionary<string, string>(StringComparer.Ordinal);
         if (args.Length % 2 != 0) throw new ArgumentException("Every option requires a value");
         for (int i = 0; i < args.Length; i += 2)

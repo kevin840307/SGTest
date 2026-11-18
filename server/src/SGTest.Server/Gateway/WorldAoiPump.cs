@@ -135,6 +135,41 @@ public sealed class WorldAoiPump
                     Interlocked.Increment(ref _framesQueued);
                 }
 
+                while(_router.SkillRequests.TryRead(out var skill))
+                {
+                    bool attackerDead=_playerCombat is not null &&
+                        _monsters is not null &&
+                        _monsters.TryGetActor(skill.ActorId,out var skillActor) &&
+                        _playerCombat.CurrentHp(skillActor)<=0;
+                    SkillUseOutcome outcome=_monsters is null || attackerDead
+                        ? new(SkillUseStatus.CombatUnavailable,
+                            Math.Max(0,_aoi.LastTick),skill.SkillId,
+                            skill.TargetEntityId,0,0,0,0)
+                        : _monsters.ResolveSkill(skill);
+
+                    if(outcome.Status==SkillUseStatus.Applied &&
+                        outcome.Monster is { } skillChanged)
+                    {
+                        _aoi.ApplyMonsters(_aoi.LastTick,[skillChanged]);
+                        if(_loot is not null && skillChanged.CurrentHp==0 &&
+                            skillChanged.State==MonsterAiState.Dead &&
+                            _loot.TryPostDeath(skillChanged)==MonsterLootPostStatus.Backpressured)
+                            throw new AoiBackpressureException(
+                                "Loot settlement queue full; accepted skill death must not be dropped");
+                    }
+
+                    var skillSent=_router.QueueSkillUseResult(skill,outcome);
+                    if(skillSent is GatewaySendStatus.GenerationMismatch or GatewaySendStatus.Closed)
+                        continue;
+                    if(skillSent==GatewaySendStatus.Backpressured)
+                        throw new AoiBackpressureException(
+                            "Authenticated Gateway skill FIFO full; result cannot be dropped");
+                    if(skillSent!=GatewaySendStatus.Enqueued)
+                        throw new InvalidOperationException(
+                            "Skill delivery accounting diverged");
+                    Interlocked.Increment(ref _framesQueued);
+                }
+
                 // Player damage/respawn presentation is posted only after
                 // durable settlement / trusted death-gate transition. Fold it
                 // into the SAME AOI owner and reliable FIFO; never mutate AOI

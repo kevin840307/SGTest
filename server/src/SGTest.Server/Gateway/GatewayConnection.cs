@@ -39,6 +39,11 @@ public readonly record struct TrustedNormalAttack(
     uint AttackSequence, long TargetEntityId,
     TrustedCombatProfile? Profile);
 
+public readonly record struct TrustedSkillUse(
+    long ActorId,long ConnectionEpoch,long RequestMapEpoch,
+    uint SkillSequence,int SkillId,long TargetEntityId,
+    TrustedCombatProfile? Profile);
+
 public readonly record struct TrustedPlayerRespawn(
     long ActorId, long ConnectionEpoch, long RequestMapEpoch,
     uint RespawnSequence);
@@ -55,6 +60,11 @@ public readonly record struct TrustedInventoryDiscard(
 public readonly record struct NormalAttackOutcome(
     NormalAttackStatus Status, long ServerTick, long TargetEntityId,
     int Damage, int CurrentHp, int MaxHp, long TargetRevision,
+    MonsterSnapshot? Monster = null);
+
+public readonly record struct SkillUseOutcome(
+    SkillUseStatus Status,long ServerTick,int SkillId,long TargetEntityId,
+    int Damage,int CurrentHp,int MaxHp,long TargetRevision,
     MonsterSnapshot? Monster = null);
 
 public enum GatewaySendStatus
@@ -248,7 +258,8 @@ public sealed class GatewayConnection
                                           Func<TrustedPlayerRespawn, bool>? postRespawn = null,
                                               Func<TrustedGroundPickup, bool>? postPickup = null,
                                               Func<TrustedRecoveryUse, bool>? postRecovery = null,
-                                              Func<TrustedInventoryDiscard, bool>? postDiscard = null)
+                                              Func<TrustedInventoryDiscard, bool>? postDiscard = null,
+                                              Func<TrustedSkillUse, bool>? postSkill = null)
     {
         ArgumentNullException.ThrowIfNull(postMove);
         lock (_receiveGate)
@@ -260,7 +271,8 @@ public sealed class GatewayConnection
             }
             return _parser.Feed(bytes,
                 frame => HandleClientFrame(
-                    frame, postMove, postNpc, postResync, postAttack, postRespawn, postPickup, postRecovery, postDiscard),
+                    frame, postMove, postNpc, postResync, postAttack, postRespawn,
+                    postPickup, postRecovery, postDiscard, postSkill),
                 out commandsAccepted);
         }
     }
@@ -273,7 +285,8 @@ public sealed class GatewayConnection
                                               Func<TrustedPlayerRespawn, bool>? postRespawn = null,
                                               Func<TrustedGroundPickup, bool>? postPickup = null,
                                               Func<TrustedRecoveryUse, bool>? postRecovery = null,
-                                              Func<TrustedInventoryDiscard, bool>? postDiscard = null)
+                                              Func<TrustedInventoryDiscard, bool>? postDiscard = null,
+                                              Func<TrustedSkillUse, bool>? postSkill = null)
     {
         ArgumentNullException.ThrowIfNull(postMove);
         lock (_receiveGate)
@@ -285,7 +298,8 @@ public sealed class GatewayConnection
             }
             return _parser.Resume(
                 frame => HandleClientFrame(
-                    frame, postMove, postNpc, postResync, postAttack, postRespawn, postPickup, postRecovery, postDiscard),
+                    frame, postMove, postNpc, postResync, postAttack, postRespawn,
+                    postPickup, postRecovery, postDiscard, postSkill),
                 out commandsAccepted);
         }
     }
@@ -299,7 +313,8 @@ public sealed class GatewayConnection
         Func<TrustedPlayerRespawn, bool>? postRespawn,
         Func<TrustedGroundPickup, bool>? postPickup,
         Func<TrustedRecoveryUse, bool>? postRecovery,
-        Func<TrustedInventoryDiscard, bool>? postDiscard)
+        Func<TrustedInventoryDiscard, bool>? postDiscard,
+        Func<TrustedSkillUse, bool>? postSkill)
     {
         if (!WireProtocol.TryReadHeader(frame, out var header))
             return WireFrameDisposition.ProtocolViolation;
@@ -366,6 +381,18 @@ public sealed class GatewayConnection
                 bound.ActorId, bound.ConnectionEpoch, respawn.MapEpoch,
                 respawn.RespawnSequence);
             return postRespawn(request)
+                ? WireFrameDisposition.Accepted : WireFrameDisposition.Backpressured;
+        }
+
+        if(header.Opcode==WireOpcode.SkillUse && postSkill is not null &&
+            WireProtocol.TryDecodeSkillUse(frame,out var skill))
+        {
+            if(!GameplayReady(bound))
+                return WireFrameDisposition.ProtocolViolation;
+            return postSkill(new TrustedSkillUse(
+                bound.ActorId,bound.ConnectionEpoch,skill.MapEpoch,
+                skill.SkillSequence,skill.SkillId,skill.TargetEntityId,
+                _combatProfile))
                 ? WireFrameDisposition.Accepted : WireFrameDisposition.Backpressured;
         }
 
@@ -631,6 +658,30 @@ public sealed class GatewayConnection
                 request.RequestMapEpoch, request.AttackSequence, outcome.Status,
                 outcome.ServerTick, outcome.TargetEntityId, outcome.Damage,
                 outcome.CurrentHp, outcome.MaxHp, outcome.TargetRevision));
+            return _reliable.TryEnqueue(frame)
+                ? GatewaySendStatus.Enqueued : GatewaySendStatus.Backpressured;
+        }
+    }
+
+    public GatewaySendStatus QueueSkillUseResult(
+        TrustedSkillUse request,SkillUseOutcome outcome)
+    {
+        lock(_bindingGate)
+        {
+            if(_closed)return GatewaySendStatus.Closed;
+            var bound=_binding;
+            if(request.ActorId!=bound.ActorId ||
+                request.ConnectionEpoch!=bound.ConnectionEpoch ||
+                request.RequestMapEpoch<=0 ||
+                request.RequestMapEpoch>bound.MapEpoch ||
+                outcome.SkillId!=request.SkillId ||
+                outcome.TargetEntityId!=request.TargetEntityId)
+                return GatewaySendStatus.GenerationMismatch;
+            var frame=WireProtocol.EncodeSkillUseResult(new(
+                request.RequestMapEpoch,request.SkillSequence,outcome.Status,
+                outcome.ServerTick,outcome.SkillId,outcome.TargetEntityId,
+                outcome.Damage,outcome.CurrentHp,outcome.MaxHp,
+                outcome.TargetRevision));
             return _reliable.TryEnqueue(frame)
                 ? GatewaySendStatus.Enqueued : GatewaySendStatus.Backpressured;
         }

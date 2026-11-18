@@ -62,7 +62,8 @@ public static class TlsWireConnection
         Func<TrustedPlayerRespawn, Task>? handleRespawn = null,
         Func<TrustedGroundPickup, Task>? handlePickup = null,
         Func<TrustedRecoveryUse, Task>? handleRecovery = null,
-        Func<TrustedInventoryDiscard, Task>? handleDiscard = null)
+        Func<TrustedInventoryDiscard, Task>? handleDiscard = null,
+        Func<TrustedSkillUse, bool>? postSkill = null)
     {
         ArgumentNullException.ThrowIfNull(client);
         ArgumentNullException.ThrowIfNull(serverCertificate);
@@ -327,7 +328,8 @@ public static class TlsWireConnection
 
                     var status = gateway.FeedClientBytes(
                         rented.AsSpan(0, count), postMove, out int accepted,
-                        postNpc, postResync, postAttack, postRespawn, postPickup, postRecovery, postDiscard);
+                        postNpc, postResync, postAttack, postRespawn, postPickup,
+                        postRecovery, postDiscard, postSkill);
                     commandsAccepted += accepted;
 
                     if (status == WireFeedStatus.Backpressured)
@@ -347,7 +349,8 @@ public static class TlsWireConnection
                                 .ConfigureAwait(false);
                             status = gateway.ResumeClientIngress(
                                 postMove, out accepted, postNpc, postResync,
-                                postAttack, postRespawn, postPickup, postRecovery, postDiscard);
+                                postAttack, postRespawn, postPickup, postRecovery,
+                                postDiscard, postSkill);
                             commandsAccepted += accepted;
                         }
                         while (status == WireFeedStatus.Backpressured);

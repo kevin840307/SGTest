@@ -48,6 +48,7 @@ public sealed class WorldResultRouter
     private readonly Channel<WorldChangedBatch> _changed;
     private readonly Channel<TrustedWorldResyncRequest> _resync;
     private readonly Channel<TrustedNormalAttack> _attacks;
+    private readonly Channel<TrustedSkillUse> _skills;
     private readonly Channel<long> _claimedGroundDrops;
     private readonly Channel<PlayerDamageSettlement> _playerDamageVisuals;
     private readonly Channel<PlayerRespawnVisualRequest> _playerRespawnVisuals;
@@ -90,6 +91,14 @@ public sealed class WorldResultRouter
                 FullMode = BoundedChannelFullMode.Wait,
                 AllowSynchronousContinuations = false
             });
+        _skills=Channel.CreateBounded<TrustedSkillUse>(
+            new BoundedChannelOptions(_options.AttackRequestCapacity)
+            {
+                SingleReader=true,
+                SingleWriter=false,
+                FullMode=BoundedChannelFullMode.Wait,
+                AllowSynchronousContinuations=false
+            });
         _claimedGroundDrops = Channel.CreateBounded<long>(
             new BoundedChannelOptions(_options.AttackRequestCapacity)
             {
@@ -119,6 +128,7 @@ public sealed class WorldResultRouter
     public ChannelReader<WorldChangedBatch> ChangedBatches => _changed.Reader;
     public ChannelReader<TrustedWorldResyncRequest> ResyncRequests => _resync.Reader;
     public ChannelReader<TrustedNormalAttack> AttackRequests => _attacks.Reader;
+    public ChannelReader<TrustedSkillUse> SkillRequests => _skills.Reader;
     public ChannelReader<long> ClaimedGroundDrops => _claimedGroundDrops.Reader;
     public ChannelReader<PlayerDamageSettlement> PlayerDamageVisuals =>
         _playerDamageVisuals.Reader;
@@ -334,6 +344,23 @@ public sealed class WorldResultRouter
         return _attacks.Writer.TryWrite(request);
     }
 
+    public bool TryRequestSkill(TrustedSkillUse request)
+    {
+        if(request.ActorId<=0 || request.ConnectionEpoch<=0 ||
+            request.RequestMapEpoch<=0 || request.SkillSequence==0 ||
+            request.SkillId<=0 || request.TargetEntityId<=0)
+            return false;
+        lock(_gate)
+        {
+            if(!_connections.TryGetValue(request.ActorId,out var connection) ||
+                connection.IsClosed ||
+                connection.Binding.ActorId!=request.ActorId ||
+                connection.Binding.ConnectionEpoch!=request.ConnectionEpoch)
+                return false;
+        }
+        return _skills.Writer.TryWrite(request);
+    }
+
     public bool TryPostPlayerDamageVisual(PlayerDamageSettlement result)
     {
         if(result.ActorId<=0 || result.ConnectionEpoch<=0 || result.MapEpoch<=0 ||
@@ -399,6 +426,18 @@ public sealed class WorldResultRouter
                 connection.IsClosed)
                 return GatewaySendStatus.Closed;
             return connection.QueueGroundPickupResult(request,result);
+        }
+    }
+
+    public GatewaySendStatus QueueSkillUseResult(
+        TrustedSkillUse request,SkillUseOutcome outcome)
+    {
+        lock(_gate)
+        {
+            if(!_connections.TryGetValue(request.ActorId,out var connection) ||
+                connection.IsClosed)
+                return GatewaySendStatus.Closed;
+            return connection.QueueSkillUseResult(request,outcome);
         }
     }
 

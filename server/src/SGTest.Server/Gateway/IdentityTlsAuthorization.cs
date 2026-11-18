@@ -387,7 +387,8 @@ public sealed class IdentityTlsAuthorization
                 Authorize, _world.TryPostMove, options, cancellationToken, Release,
                 npcHandler, router.TryRequestResync,
                 router.TryRequestNormalAttack, RespawnHandler,
-                PickupHandler, RecoveryHandler, DiscardHandler).ConfigureAwait(false);
+                PickupHandler, RecoveryHandler, DiscardHandler,
+                postSkill:router.TryRequestSkill).ConfigureAwait(false);
         }
         finally
         {

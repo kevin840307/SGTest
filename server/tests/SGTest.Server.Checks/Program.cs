@@ -245,6 +245,7 @@ static class Checks
             InventorySnapshotChecks.Verify();
             MonsterLootSettlementChecks.Verify(root);
             NormalAttackChecks.Verify(root);
+            SkillCombatChecks.Verify(root);
             PlayerCombatSettlementChecks.Verify(root);
             CombatDeathGateChecks.Verify(root);
             PlayerRespawnChecks.Verify(root);

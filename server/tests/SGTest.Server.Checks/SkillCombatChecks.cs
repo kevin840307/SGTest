@@ -1,0 +1,171 @@
+using System.Text.Json;
+using SGTest.Server.Gateway;
+using SGTest.Server.Wire;
+using SGTest.Server.World;
+
+internal static class SkillCombatChecks
+{
+    private static void Require(bool condition,string message) =>
+        Checks.Require(condition,message);
+
+    public static void Verify(string root)
+    {
+        Checks.Run("verified skill manifest rejects MP/AoE and admits bounded fixed single target",
+            ()=>Manifest(root));
+        Checks.Run("skill wire contains only epoch sequence skill and target intent",
+            Wire);
+        Checks.Run("skill gateway injects authenticated actor and combat profile",
+            Gateway);
+        Checks.Run("skill authority owns rule damage range cooldown replay and monster death",
+            ()=>Authority(root));
+    }
+
+    private static void Manifest(string root)
+    {
+        string valid=Path.Combine(root,"verified-skills.json");
+        File.WriteAllText(valid,JsonSerializer.Serialize(new {
+            kind="verified_single_target_skill_rules",version=1,
+            rules_verified=true,gameplay_ready=true,
+            source_reference="ci:explicit-synthetic-skill-rule",
+            rules=new[]{new{skill_id=99001,target_kind="single_monster",
+                damage_kind="fixed",fixed_damage=60,range=48.0,
+                cooldown_ticks=3,mp_cost=0}}
+        }));
+        var rules=SkillRuleCatalog.LoadVerified(valid);
+        Require(rules.Count==1 &&
+            rules[99001]==new VerifiedSkillRule(99001,60,48,3),
+            "verified skill rule rejected");
+
+        string mp=Path.Combine(root,"unowned-mp-skill.json");
+        File.WriteAllText(mp,File.ReadAllText(valid).Replace(
+            "\"mp_cost\":0","\"mp_cost\":1"));
+        bool rejected=false;
+        try{SkillRuleCatalog.LoadVerified(mp);}
+        catch(InvalidDataException){rejected=true;}
+        Require(rejected,"skill manifest invented MP authority");
+    }
+
+    private static void Wire()
+    {
+        var request=new SkillUseWire(3,7,99001,1_021_400_001);
+        byte[] frame=WireProtocol.EncodeSkillUse(request);
+        Require(frame.Length==32 &&
+            WireProtocol.TryDecodeSkillUse(frame,out var parsed) &&
+            parsed==request,"skill request roundtrip/size");
+        var result=new SkillUseResultWire(
+            3,7,SkillUseStatus.Applied,42,99001,
+            request.TargetEntityId,60,40,100,5);
+        byte[] response=WireProtocol.EncodeSkillUseResult(result);
+        Require(response.Length==61 &&
+            WireProtocol.TryDecodeSkillUseResult(response,out var decoded) &&
+            decoded==result,"skill result roundtrip/size");
+    }
+
+    private static void Gateway()
+    {
+        var actor=new ActorSnapshot(11,13,9,3,0,0,24,24,1,false);
+        var profile=new TrustedCombatProfile(
+            Attack:30,Defense:4,Hit:10,Dodge:3,
+            AttackRange:48,AttackCooldownTicks:15);
+        var gateway=new GatewayConnection(actor,combatProfile:profile);
+        Require(gateway.QueueAoi(new(AoiEventKind.WorldReady,10,
+                    actor.MapEpoch,actor))==GatewaySendStatus.Enqueued &&
+            gateway.FeedClientBytes(
+                WireProtocol.EncodeWorldReadyAck(new(actor.MapEpoch,10)),
+                _=>true,out _)==WireFeedStatus.Accepted,
+            "skill Ready ACK");
+        TrustedSkillUse captured=default;
+        byte[] frame=WireProtocol.EncodeSkillUse(
+            new(actor.MapEpoch,1,99001,1_001_300_001));
+        Require(gateway.FeedClientBytes(frame,_=>true,out var accepted,
+                postSkill:value=>{captured=value;return true;})==
+                WireFeedStatus.Accepted &&
+            accepted==1 && captured.ActorId==actor.ActorId &&
+            captured.ConnectionEpoch==actor.ConnectionEpoch &&
+            captured.RequestMapEpoch==actor.MapEpoch &&
+            captured.SkillSequence==1 && captured.SkillId==99001 &&
+            captured.TargetEntityId==1_001_300_001 &&
+            captured.Profile==profile,
+            "Gateway did not inject trusted skill identity/profile");
+    }
+
+    private static void Authority(string root)
+    {
+        const int mapId=315;
+        string folder=Checks.Fixture(root,mapId,12,12,(_,_)=>0);
+        var grid=BlockingGrid.Load(folder,mapId);
+        string populationPath=Path.Combine(folder,"population-skill.json");
+        File.WriteAllText(populationPath,JsonSerializer.Serialize(new {
+            version=4,kind="verified_monster_runtime",map_id=mapId,
+            stats_verified=true,gameplay_ready=true,
+            definitions=new[]{new{
+                id=1,name="SkillFixture",sprite="EN001A",
+                atlas="Enemy/EN001A/atlas.json",
+                stats=new{
+                    level=3,max_hp=100,attack_damage=1,move_step=8.0,
+                    aggro_radius=1.0,lose_target_radius=2.0,
+                    leash_radius=2.0,attack_range=1.0,
+                    attack_cooldown_ticks=300,respawn_ticks=300,
+                    wander_radius=0.0,wander_interval_ticks=100
+                }}},
+            spawns=new[]{new{source_index=0,source_flags=7,
+                definition=1,p=new[]{40,24}}}
+        }));
+        var population=MonsterPopulationCatalog.LoadVerified(
+            populationPath,mapId,grid);
+        var runtime=new MonsterRuntime(grid,population,
+            new(AiIntervalTicks:1,MaxAiPerStep:4,
+                MaxPathQueriesPerStep:1,MaxPathExpandedCells:128));
+        var rules=new Dictionary<int,VerifiedSkillRule>{
+            [99001]=new(99001,60,48,3),
+            [99002]=new(99002,10,8,1)
+        };
+        var coordinator=new MonsterWorldCoordinator([runtime],rules);
+        var actor=new ActorSnapshot(
+            77,mapId,4,5,0,0,24,24,1,false);
+        coordinator.Process(new WorldChangedBatch(1,[],
+            [new(ActorLifecycleKind.Joined,actor)]));
+        var target=runtime.SnapshotAll().Single();
+        var profile=new TrustedCombatProfile(
+            Attack:1,Defense:1,Hit:1,Dodge:1,
+            AttackRange:1,AttackCooldownTicks:100);
+
+        var first=coordinator.ResolveSkill(new(
+            actor.ActorId,actor.ConnectionEpoch,actor.MapEpoch,
+            1,99001,target.EntityId,profile));
+        Require(first.Status==SkillUseStatus.Applied &&
+            first.Damage==60 && first.CurrentHp==40 &&
+            first.Monster?.CurrentHp==40,
+            "verified fixed skill damage not authoritative");
+
+        var replay=coordinator.ResolveSkill(new(
+            actor.ActorId,actor.ConnectionEpoch,actor.MapEpoch,
+            1,99001,target.EntityId,profile));
+        var cooldown=coordinator.ResolveSkill(new(
+            actor.ActorId,actor.ConnectionEpoch,actor.MapEpoch,
+            2,99001,target.EntityId,profile));
+        var outOfRange=coordinator.ResolveSkill(new(
+            actor.ActorId,actor.ConnectionEpoch,actor.MapEpoch,
+            3,99002,target.EntityId,profile));
+        var noRule=coordinator.ResolveSkill(new(
+            actor.ActorId,actor.ConnectionEpoch,actor.MapEpoch,
+            4,12345,target.EntityId,profile));
+        Require(replay.Status==SkillUseStatus.ReplayedSequence &&
+            cooldown.Status==SkillUseStatus.Cooldown &&
+            outOfRange.Status==SkillUseStatus.OutOfRange &&
+            noRule.Status==SkillUseStatus.NoRule,
+            "skill replay/cooldown/range/rule gate");
+
+        coordinator.Process(new WorldChangedBatch(2,[]));
+        coordinator.Process(new WorldChangedBatch(3,[]));
+        coordinator.Process(new WorldChangedBatch(4,[]));
+        var lethal=coordinator.ResolveSkill(new(
+            actor.ActorId,actor.ConnectionEpoch,actor.MapEpoch,
+            5,99001,target.EntityId,profile));
+        Require(lethal.Status==SkillUseStatus.Applied &&
+            lethal.Damage==40 && lethal.CurrentHp==0 &&
+            lethal.Monster is { } dead &&
+            dead.State==MonsterAiState.Dead,
+            "skill death did not reuse Monster authority");
+    }
+}
