@@ -108,8 +108,26 @@ func _initialize() -> void:
 	if moved.is_empty():
 		_fail("server World remained dead-gated after respawn "+str(session.snapshot()),session)
 		return
+	if not session.cast_skill(99001,target):
+		_fail("skill intent refused",session)
+		return
+	var skilled := _wait(session,func(v):
+		return (
+			int(v.last_skill_result_sequence)==1
+			and int(v.last_skill_result_status)==0
+			and int(v.last_skill_result.skill_id)==99001
+			and int(v.last_skill_result.target_entity_id)==target
+			and int(v.last_skill_result.damage)==40
+			and int(v.last_skill_result.current_hp)==0
+			and v.monsters.has(target)
+			and int(v.monsters[target].current_hp)==0
+			and int(v.monsters[target].revision)>=int(v.last_skill_result.target_revision)
+		),7000)
+	if skilled.is_empty():
+		_fail("authoritative skill settlement "+str(session.snapshot()),session)
+		return
 	session.stop()
-	print("CLIENT_COMBAT_TLS_PASS target=%d player_damage=60 monster_hp=40 monster_damage=18 death_hp=0 respawn_hp=100 dead=false player_damage_visual=true player_respawn_visual=true visual_after_db_commit=true public_intents_blocked_while_dead=true move_after_respawn=true damage_sequence_continuous=true request_has_no_damage=true receipt_does_not_mutate_monster=true delta_owns_hp=true damage_after_db_commit=true" % target)
+	print("CLIENT_COMBAT_TLS_PASS target=%d player_damage=60 normal_attack_hp=40 skill_id=99001 skill_damage=40 monster_hp=0 monster_damage=18 death_hp=0 respawn_hp=100 dead=false skill_request_has_no_damage=true skill_receipt_does_not_mutate_monster=true player_damage_visual=true player_respawn_visual=true visual_after_db_commit=true public_intents_blocked_while_dead=true move_after_respawn=true damage_sequence_continuous=true request_has_no_damage=true receipt_does_not_mutate_monster=true delta_owns_hp=true damage_after_db_commit=true" % target)
 	quit(0)
 
 func _wait(session, predicate: Callable, timeout_ms: int) -> Dictionary:

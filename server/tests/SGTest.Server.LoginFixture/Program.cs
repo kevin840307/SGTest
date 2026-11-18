@@ -183,7 +183,11 @@ internal static class Program
             var runtime = new MonsterRuntime(grid, population,
                 new(AiIntervalTicks: 1, MaxAiPerStep: 8,
                     MaxPathQueriesPerStep: 1, MaxPathExpandedCells: 128));
-            var coordinator = new MonsterWorldCoordinator([runtime]);
+            var coordinator = new MonsterWorldCoordinator([runtime],
+                new Dictionary<int,VerifiedSkillRule>
+                {
+                    [99001]=new(99001,40,48,1)
+                });
 
             await using var world = new ServerWorldHost(
                 [grid], options: new WorldHostOptions(PublishIdleTicks: true));
@@ -256,9 +260,9 @@ internal static class Program
                 var monster = runtime.SnapshotAll().Single();
                 var player = await store.GetCharacterCombatProfileAsync(characterId)
                     .ConfigureAwait(false);
-                if (monster.CurrentHp != 40 || monster.MaxHp != 100 ||
+                if (monster.CurrentHp != 0 || monster.MaxHp != 100 ||
                     player?.Data.CurrentHp != 100 || player.Data.MaxHp != 100 ||
-                    ended.CommandsAccepted != 3 ||
+                    ended.CommandsAccepted != 4 ||
                     settlement.Statistics.HitsCommitted != 1 ||
                     settlement.Statistics.DamageCommitted != 18 ||
                     settlement.Statistics.DeathsCommitted != 1 ||
@@ -272,7 +276,7 @@ internal static class Program
                 Console.WriteLine(
                     $"COMBAT_FIXTURE_PASS tls={ended.Protocol} target={monster.EntityId} " +
                     $"monster_hp={monster.CurrentHp}/{monster.MaxHp} player_hp={player.Data.CurrentHp}/{player.Data.MaxHp} " +
-                    $"respawn=true monster_damage_committed={settlement.Statistics.DamageCommitted} deaths={settlement.Statistics.DeathsCommitted} commands={ended.CommandsAccepted}");
+                    $"respawn=true skill_99001=true monster_damage_committed={settlement.Statistics.DamageCommitted} deaths={settlement.Statistics.DeathsCommitted} commands={ended.CommandsAccepted}");
                 Console.Out.Flush();
                 return 0;
             }

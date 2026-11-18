@@ -40,12 +40,16 @@ const OPCODE_INVENTORY_DISCARD_RESULT := 40
 const OPCODE_PLAYER_ATTACK_VISUAL := 41
 const OPCODE_PLAYER_DAMAGE_VISUAL := 42
 const OPCODE_PLAYER_RESPAWN_VISUAL := 43
+const OPCODE_SKILL_USE := 44
+const OPCODE_SKILL_USE_RESULT := 45
 const MOVE_TARGET_FRAME_BYTES := 28
 const MOVE_RECEIPT_FRAME_BYTES := 30
 const NPC_INTERACT_FRAME_BYTES := 24
 const NPC_INTERACT_RESULT_FRAME_BYTES := 29
 const NORMAL_ATTACK_FRAME_BYTES := 28
 const NORMAL_ATTACK_RESULT_FRAME_BYTES := 57
+const SKILL_USE_FRAME_BYTES := 32
+const SKILL_USE_RESULT_FRAME_BYTES := 61
 const PLAYER_COMBAT_STATE_FRAME_BYTES := 24
 const PLAYER_DAMAGE_FRAME_BYTES := 57
 const PLAYER_RESPAWN_FRAME_BYTES := 20
@@ -206,6 +210,61 @@ static func decode_normal_attack_result(frame: PackedByteArray) -> Dictionary:
 	return {"map_epoch":epoch,"attack_sequence":sequence,"status":status,"server_tick":tick,
 		"target_entity_id":target,"damage":damage,"current_hp":current_hp,
 		"max_hp":max_hp,"target_revision":revision}
+
+static func encode_skill_use(map_epoch: int, skill_sequence: int, skill_id: int, target_entity_id: int) -> PackedByteArray:
+	if map_epoch <= 0 or skill_sequence <= 0 or skill_sequence > 0xffffffff or skill_id <= 0 or skill_id > 100000000 or target_entity_id <= 0:
+		return PackedByteArray()
+	var writer := StreamPeerBuffer.new()
+	writer.big_endian = false
+	writer.put_u32(SKILL_USE_FRAME_BYTES)
+	writer.put_u16(VERSION)
+	writer.put_u16(OPCODE_SKILL_USE)
+	writer.put_64(map_epoch)
+	writer.put_u32(skill_sequence)
+	writer.put_32(skill_id)
+	writer.put_64(target_entity_id)
+	return writer.data_array
+
+static func decode_skill_use(frame: PackedByteArray) -> Dictionary:
+	if not _valid_header(frame,OPCODE_SKILL_USE,SKILL_USE_FRAME_BYTES):
+		return {}
+	var reader := _reader(frame,8)
+	var epoch := reader.get_64()
+	var sequence := reader.get_u32()
+	var skill_id := reader.get_32()
+	var target := reader.get_64()
+	if epoch <= 0 or sequence == 0 or skill_id <= 0 or skill_id > 100000000 or target <= 0:
+		return {}
+	return {"map_epoch":epoch,"skill_sequence":sequence,"skill_id":skill_id,"target_entity_id":target}
+
+static func decode_skill_use_result(frame: PackedByteArray) -> Dictionary:
+	if not _valid_header(frame,OPCODE_SKILL_USE_RESULT,SKILL_USE_RESULT_FRAME_BYTES):
+		return {}
+	var reader := _reader(frame,8)
+	var epoch := reader.get_64()
+	var sequence := reader.get_u32()
+	var status := reader.get_u8()
+	var tick := reader.get_64()
+	var skill_id := reader.get_32()
+	var target := reader.get_64()
+	var damage := reader.get_32()
+	var current_hp := reader.get_32()
+	var max_hp := reader.get_32()
+	var revision := reader.get_64()
+	if epoch <= 0 or sequence == 0 or status > 10 or tick < 0 or skill_id <= 0 or skill_id > 100000000 or target <= 0 or damage < 0 or current_hp < 0 or max_hp < 0 or revision < 0:
+		return {}
+	if max_hp > 0 and current_hp > max_hp:
+		return {}
+	if status == 0 and (damage <= 0 or max_hp <= 0 or revision <= 0):
+		return {}
+	if status == 1 and (damage != 0 or max_hp <= 0 or revision <= 0):
+		return {}
+	if status > 1 and damage != 0:
+		return {}
+	return {"map_epoch":epoch,"skill_sequence":sequence,"status":status,
+		"server_tick":tick,"skill_id":skill_id,"target_entity_id":target,
+		"damage":damage,"current_hp":current_hp,"max_hp":max_hp,
+		"target_revision":revision}
 
 static func decode_player_attack_visual(frame: PackedByteArray) -> Dictionary:
 	if not _valid_header(frame,OPCODE_PLAYER_ATTACK_VISUAL,PLAYER_ATTACK_VISUAL_FRAME_BYTES):
@@ -730,7 +789,7 @@ static func frame_opcode(frame: PackedByteArray) -> int:
 	if reader.get_u16() != VERSION:
 		return -1
 	var opcode := reader.get_u16()
-	if opcode not in [OPCODE_MOVE_TARGET, OPCODE_MOVE_RECEIPT, OPCODE_NPC_INTERACT, OPCODE_NPC_INTERACT_RESULT, OPCODE_NORMAL_ATTACK, OPCODE_NORMAL_ATTACK_RESULT, OPCODE_PLAYER_COMBAT_STATE, OPCODE_PLAYER_DAMAGE, OPCODE_AUTH_REQUEST, OPCODE_AUTH_RESULT, OPCODE_CHARACTER_LIST, OPCODE_CHARACTER_CHOOSE, OPCODE_CHARACTER_CHOOSE_RESULT, OPCODE_WORLD_READY, OPCODE_ENTITY_SPAWN, OPCODE_ENTITY_DESPAWN, OPCODE_ENTITY_DELTA, OPCODE_SELF_STATE, OPCODE_WORLD_READY_ACK, OPCODE_WORLD_RESYNC_REQUEST, OPCODE_MONSTER_SPAWN, OPCODE_MONSTER_DELTA, OPCODE_MONSTER_DESPAWN, OPCODE_PLAYER_RESPAWN, OPCODE_PLAYER_RESPAWN_RESULT, OPCODE_GROUND_DROP_SPAWN, OPCODE_GROUND_DROP_DESPAWN, OPCODE_GROUND_PICKUP, OPCODE_GROUND_PICKUP_RESULT, OPCODE_INVENTORY_SNAPSHOT, OPCODE_RECOVERY_USE, OPCODE_RECOVERY_USE_RESULT, OPCODE_INVENTORY_DISCARD, OPCODE_INVENTORY_DISCARD_RESULT, OPCODE_PLAYER_ATTACK_VISUAL, OPCODE_PLAYER_DAMAGE_VISUAL, OPCODE_PLAYER_RESPAWN_VISUAL]:
+	if opcode not in [OPCODE_MOVE_TARGET, OPCODE_MOVE_RECEIPT, OPCODE_NPC_INTERACT, OPCODE_NPC_INTERACT_RESULT, OPCODE_NORMAL_ATTACK, OPCODE_NORMAL_ATTACK_RESULT, OPCODE_PLAYER_COMBAT_STATE, OPCODE_PLAYER_DAMAGE, OPCODE_AUTH_REQUEST, OPCODE_AUTH_RESULT, OPCODE_CHARACTER_LIST, OPCODE_CHARACTER_CHOOSE, OPCODE_CHARACTER_CHOOSE_RESULT, OPCODE_WORLD_READY, OPCODE_ENTITY_SPAWN, OPCODE_ENTITY_DESPAWN, OPCODE_ENTITY_DELTA, OPCODE_SELF_STATE, OPCODE_WORLD_READY_ACK, OPCODE_WORLD_RESYNC_REQUEST, OPCODE_MONSTER_SPAWN, OPCODE_MONSTER_DELTA, OPCODE_MONSTER_DESPAWN, OPCODE_PLAYER_RESPAWN, OPCODE_PLAYER_RESPAWN_RESULT, OPCODE_GROUND_DROP_SPAWN, OPCODE_GROUND_DROP_DESPAWN, OPCODE_GROUND_PICKUP, OPCODE_GROUND_PICKUP_RESULT, OPCODE_INVENTORY_SNAPSHOT, OPCODE_RECOVERY_USE, OPCODE_RECOVERY_USE_RESULT, OPCODE_INVENTORY_DISCARD, OPCODE_INVENTORY_DISCARD_RESULT, OPCODE_PLAYER_ATTACK_VISUAL, OPCODE_PLAYER_DAMAGE_VISUAL, OPCODE_PLAYER_RESPAWN_VISUAL, OPCODE_SKILL_USE, OPCODE_SKILL_USE_RESULT]:
 		return -1
 	return opcode
 

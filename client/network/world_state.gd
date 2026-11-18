@@ -34,6 +34,12 @@ var last_attack_result_status := -1
 var last_attack_server_tick := -1
 var last_attack_result := {}
 var stale_attack_results := 0
+var skill_sequence := 0
+var last_skill_result_sequence := 0
+var last_skill_result_status := -1
+var last_skill_server_tick := -1
+var last_skill_result := {}
+var stale_skill_results := 0
 var player_attack_events: Array[Dictionary] = []
 var player_attack_sequences := {}
 var stale_player_attack_visuals := 0
@@ -138,6 +144,12 @@ func mark_normal_attack_sent(sequence: int) -> bool:
 	attack_sequence = sequence
 	return true
 
+func mark_skill_sent(sequence: int) -> bool:
+	if state != STATE_IN_WORLD or player_dead or not world_ready or resync_pending or waiting_for_new_map or pending_world_ready_ack_epoch != 0 or last_world_ready_ack_epoch != map_epoch or sequence <= skill_sequence or sequence > 0xffffffff:
+		return false
+	skill_sequence = sequence
+	return true
+
 func mark_recovery_use_sent(sequence: int,item_uid: int) -> bool:
 	if state != STATE_IN_WORLD or player_dead or not combat_available or not inventory_ready or not world_ready or resync_pending or waiting_for_new_map or pending_world_ready_ack_epoch != 0 or last_world_ready_ack_epoch != map_epoch or pending_recovery_sequence != 0 or pending_discard_sequence != 0 or sequence <= recovery_sequence or sequence > 0xffffffff or item_uid <= 0 or not inventory_items.has(item_uid):
 		return false
@@ -212,6 +224,8 @@ func apply_frame(frame: PackedByteArray) -> bool:
 			return _apply_npc_result(frame)
 		WireCodec.OPCODE_NORMAL_ATTACK_RESULT:
 			return _apply_normal_attack_result(frame)
+		WireCodec.OPCODE_SKILL_USE_RESULT:
+			return _apply_skill_use_result(frame)
 		WireCodec.OPCODE_PLAYER_ATTACK_VISUAL:
 			return _apply_player_attack_visual(frame)
 		WireCodec.OPCODE_PLAYER_DAMAGE_VISUAL:
@@ -282,6 +296,12 @@ func snapshot() -> Dictionary:
 		"last_attack_server_tick": last_attack_server_tick,
 		"last_attack_result": last_attack_result.duplicate(true),
 		"stale_attack_results": stale_attack_results,
+		"skill_sequence": skill_sequence,
+		"last_skill_result_sequence": last_skill_result_sequence,
+		"last_skill_result_status": last_skill_result_status,
+		"last_skill_server_tick": last_skill_server_tick,
+		"last_skill_result": last_skill_result.duplicate(true),
+		"stale_skill_results": stale_skill_results,
 		"player_attack_events": player_attack_events.duplicate(true),
 		"player_attack_sequences": player_attack_sequences.duplicate(true),
 		"stale_player_attack_visuals": stale_player_attack_visuals,
@@ -405,6 +425,12 @@ func _apply_choose(frame: PackedByteArray) -> bool:
 	last_attack_server_tick = -1
 	last_attack_result.clear()
 	stale_attack_results = 0
+	skill_sequence = 0
+	last_skill_result_sequence = 0
+	last_skill_result_status = -1
+	last_skill_server_tick = -1
+	last_skill_result.clear()
+	stale_skill_results = 0
 	player_attack_events.clear()
 	player_attack_sequences.clear()
 	stale_player_attack_visuals = 0
@@ -705,6 +731,33 @@ func _apply_normal_attack_result(frame: PackedByteArray) -> bool:
 	last_attack_result = result.duplicate(true)
 	return true
 
+func _apply_skill_use_result(frame: PackedByteArray) -> bool:
+	if state != STATE_IN_WORLD:
+		return fail("skill_result_out_of_state")
+	var result := WireCodec.decode_skill_use_result(frame)
+	if result.is_empty():
+		return fail("invalid_skill_result")
+	var epoch := int(result.map_epoch)
+	var sequence := int(result.skill_sequence)
+	var tick := int(result.server_tick)
+	if epoch < map_epoch:
+		stale_skill_results += 1
+		return true
+	if epoch > map_epoch:
+		return fail("future_skill_result")
+	if sequence > skill_sequence:
+		return fail("skill_result_for_unsent_sequence")
+	if sequence <= last_skill_result_sequence:
+		stale_skill_results += 1
+		return true
+	if last_skill_server_tick >= 0 and tick < last_skill_server_tick:
+		return fail("skill_server_tick_regressed")
+	last_skill_result_sequence = sequence
+	last_skill_result_status = int(result.status)
+	last_skill_server_tick = tick
+	last_skill_result = result.duplicate(true)
+	return true
+
 func _apply_player_attack_visual(frame: PackedByteArray) -> bool:
 	if state != STATE_IN_WORLD:
 		return fail("player_attack_visual_out_of_state")
@@ -833,6 +886,12 @@ func _apply_world_ready(frame: PackedByteArray) -> bool:
 		last_attack_server_tick = -1
 		last_attack_result.clear()
 		stale_attack_results = 0
+		skill_sequence = 0
+		last_skill_result_sequence = 0
+		last_skill_result_status = -1
+		last_skill_server_tick = -1
+		last_skill_result.clear()
+		stale_skill_results = 0
 		player_attack_events.clear()
 		player_attack_sequences.clear()
 		stale_player_attack_visuals = 0

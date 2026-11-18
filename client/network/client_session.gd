@@ -127,6 +127,11 @@ func respawn() -> bool:
 		return false
 	return _queue_intent({"type":"respawn"})
 
+func cast_skill(skill_id: int, entity_id: int) -> bool:
+	if skill_id <= 0 or skill_id > 100000000 or entity_id <= 0 or bool(snapshot().get("player_dead",false)):
+		return false
+	return _queue_intent({"type":"cast_skill","skill_id":skill_id,"entity_id":entity_id})
+
 func attack_monster(entity_id: int) -> bool:
 	if entity_id <= 0 or bool(snapshot().get("player_dead",false)):
 		return false
@@ -447,6 +452,20 @@ func _process_first_intent() -> void:
 		var sequence := int(current.respawn_sequence) + 1
 		var frame := WireCodec.encode_player_respawn(int(current.map_epoch),sequence)
 		if not frame.is_empty() and _transport.send_frame(frame) and _world.mark_player_respawn_sent(sequence):
+			_pop_intent()
+			_publish()
+	elif kind == "cast_skill":
+		var current: Dictionary = _world.snapshot()
+		if int(current.state) != WorldState.STATE_IN_WORLD or bool(current.player_dead) or not bool(current.world_ready) or bool(current.resync_pending) or int(current.pending_world_ready_ack_epoch) != 0 or int(current.last_world_ready_ack_epoch) != int(current.map_epoch) or bool(current.waiting_for_new_map):
+			return
+		var target := int(intent.entity_id)
+		var skill_id := int(intent.skill_id)
+		if target <= 0 or skill_id <= 0:
+			_pop_intent()
+			return
+		var sequence := int(current.skill_sequence)+1
+		var frame := WireCodec.encode_skill_use(int(current.map_epoch),sequence,skill_id,target)
+		if not frame.is_empty() and _transport.send_frame(frame) and _world.mark_skill_sent(sequence):
 			_pop_intent()
 			_publish()
 	elif kind == "attack_monster":
