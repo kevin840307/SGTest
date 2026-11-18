@@ -50,6 +50,7 @@ var _latest := {}
 var _respawn_queued_after := -1
 var _skill_queued_after := -1
 var _skill_queued_at_ms := 0
+const SKILL_RESULT_NAMES = ["成功","未命中","目標不存在","目標死亡","超出距離","障礙阻擋","冷卻中","無法戰鬥","地圖已變更","重複序號","伺服器未核准技能","MP 不足","範圍目標數超限"]
 
 
 func _ready() -> void:
@@ -218,7 +219,7 @@ func _skill_queued() -> void:
 
 
 func submit_target_skill(entity_id: int) -> bool:
-	if not _skill_can_submit() or _skill_queued_after >= 0 or entity_id <= 0:
+	if not _skill_can_submit() or _skill_queued_after >= 0 or int(_latest.get("pending_skill_sequence",0)) != 0 or entity_id <= 0:
 		return false
 	if not session.cast_skill(int(skill_id_input.value),entity_id):
 		return false
@@ -227,7 +228,7 @@ func submit_target_skill(entity_id: int) -> bool:
 
 
 func submit_area_skill(skill_id: int) -> bool:
-	if not _skill_can_submit() or _skill_queued_after >= 0 or skill_id <= 0 or skill_id > 100000000:
+	if not _skill_can_submit() or _skill_queued_after >= 0 or int(_latest.get("pending_skill_sequence",0)) != 0 or skill_id <= 0 or skill_id > 100000000:
 		return false
 	if not session.cast_area_skill(skill_id):
 		return false
@@ -330,23 +331,36 @@ func _set_respawn_controls() -> void:
 # Presentation-only pending guard; no gameplay timer or local skill settlement.
 func _set_skill_controls() -> void:
 	var in_world: bool = active and int(_latest.get("state",-1)) == State.STATE_IN_WORLD
-	if not in_world or bool(_latest.get("reconnecting",false)) or bool(_latest.get("resync_pending",false)) or bool(_latest.get("waiting_for_new_map",false)) or bool(_latest.get("player_dead",false)):
+	# Only a new world/connection generation or the matching server result
+	# clears an unsettled skill. Same-epoch resync does not settle MP.
+	if not in_world or bool(_latest.get("reconnecting",false)) or bool(_latest.get("waiting_for_new_map",false)):
 		_skill_queued_after = -1
 	if _skill_queued_after >= 0:
 		var sent := int(_latest.get("skill_sequence",0))
 		var received := int(_latest.get("last_skill_result_sequence",0))
-		if sent > _skill_queued_after and received >= sent:
+		if sent > _skill_queued_after and received >= sent and int(_latest.get("pending_skill_sequence",0)) == 0:
 			_skill_queued_after = -1
-			skill_status.text = "伺服器技能結果：代碼 %d" % int(_latest.get("last_skill_result_status",-1))
+			var code := int(_latest.get("last_skill_result_status",-1))
+			skill_status.text = "伺服器技能結果：%s（代碼 %d）" % [_skill_result_name(code),code]
 		elif Time.get_ticks_msec() - _skill_queued_at_ms >= 10000:
-			_skill_queued_after = -1
-			skill_status.text = "尚未收到技能結果，可手動重試（可能仍在伺服器處理）"
+			skill_status.text = "技能結果尚未確認，請勿重複施放；等待伺服器回覆或重新連線"
 	for control in [skill_hint,skill_id_input,skill_target_mode,skill_area_button,skill_status]:
 		control.visible = in_world
-	var enabled: bool = _skill_can_submit() and _skill_queued_after < 0
+	var enabled: bool = _skill_can_submit() and _skill_queued_after < 0 and int(_latest.get("pending_skill_sequence",0)) == 0
 	skill_id_input.editable = enabled
 	skill_target_mode.disabled = not enabled
 	skill_area_button.disabled = not enabled
+
+
+# Display-only mapping of existing Server SkillUseStatus codes.
+func _skill_result_name(code: int) -> String:
+	return SKILL_RESULT_NAMES[code] if code >= 0 and code < SKILL_RESULT_NAMES.size() else "未知結果"
+
+
+func _combat_status_suffix() -> String:
+	if not bool(_latest.get("combat_available",false)):
+		return ""
+	return "｜HP %d/%d｜MP %d/%d" % [int(_latest.get("player_current_hp",0)),int(_latest.get("player_max_hp",0)),int(_latest.get("player_current_mp",0)),int(_latest.get("player_max_mp",0))]
 
 
 func _show_inventory_preview(show: bool) -> void:
@@ -542,7 +556,7 @@ func _process(delta: float) -> void:
 		choose_button.hide()
 		status.text = "已連線・角色 " + str(_latest.actor_id)
 		if bool(_latest.get("combat_available",false)):
-			status.text += "｜HP %d/%d" % [int(_latest.get("player_current_hp",0)),int(_latest.get("player_max_hp",0))]
+			status.text += _combat_status_suffix()
 			if bool(_latest.get("player_dead",false)):
 				status.text += "｜復活處理中" if respawn_button.disabled else "｜已死亡，請復活"
 		if bool(_latest.world_ready) and int(_latest.map_epoch) != _world_epoch:

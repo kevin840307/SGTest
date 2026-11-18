@@ -24,8 +24,8 @@ func _initialize() -> void:
 	world.last_world_ready_ack_epoch=1
 	world.monsters[MONSTER_ID]={"entity_id":MONSTER_ID,"current_hp":100,"max_hp":100,"revision":1,"state":0}
 	world.monsters[MONSTER_ID_2]={"entity_id":MONSTER_ID_2,"current_hp":100,"max_hp":100,"revision":1,"state":0}
-	if not world.mark_skill_sent(1):
-		_fail("skill send gate")
+	if not world.mark_skill_sent(1) or world.mark_skill_sent(2) or int(world.snapshot().pending_skill_sequence)!=1:
+		_fail("skill single-flight send gate")
 		return
 
 	var result := _skill_result(1,1,0,42,99001,MONSTER_ID,60,40,100,2)
@@ -57,7 +57,7 @@ func _initialize() -> void:
 		_fail("AoE target replay memory mismatch")
 		return
 	var snap: Dictionary=world.snapshot()
-	if int(snap.last_skill_result_sequence)!=1 or int(snap.last_skill_result_status)!=0 or int(snap.last_skill_result.damage)!=60:
+	if int(snap.last_skill_result_sequence)!=1 or int(snap.last_skill_result_status)!=0 or int(snap.last_skill_result.damage)!=60 or int(snap.pending_skill_sequence)!=0:
 		_fail("skill result not retained")
 		return
 	if int((snap.monsters[MONSTER_ID] as Dictionary).current_hp)!=100:
@@ -72,7 +72,7 @@ func _initialize() -> void:
 	if area_request.size()!=32 or area_decoded.is_empty() or int(area_decoded.target_entity_id)!=0:
 		_fail("self-centered area request target=0")
 		return
-	if not world.mark_skill_sent(2):
+	if not world.mark_skill_sent(2) or int(world.snapshot().pending_skill_sequence)!=2:
 		_fail("area skill send gate")
 		return
 	var area_result := _skill_result(1,2,0,43,99001,0,0,0,0,0)
@@ -80,8 +80,21 @@ func _initialize() -> void:
 	if area_parsed.is_empty() or int(area_parsed.target_entity_id)!=0 or int(area_parsed.damage)!=0:
 		_fail("self-centered area summary codec")
 		return
-	if not world.apply_frame(area_result) or int(world.snapshot().last_skill_result_sequence)!=2:
+	if not world.apply_frame(area_result) or int(world.snapshot().last_skill_result_sequence)!=2 or int(world.snapshot().pending_skill_sequence)!=0:
 		_fail("self-centered area summary reducer")
+		return
+
+	# An unsolicited same-epoch receipt cannot satisfy an unsent request.
+	var unsolicited := WorldState.new()
+	unsolicited.state=WorldState.STATE_IN_WORLD
+	unsolicited.actor_id=11
+	unsolicited.map_id=15
+	unsolicited.map_epoch=1
+	unsolicited.world_ready=true
+	unsolicited.last_world_ready_ack_epoch=1
+	unsolicited.skill_sequence=1
+	if unsolicited.apply_frame(_skill_result(1,1,10,44,99001,MONSTER_ID,0,0,0,0)) or int(unsolicited.state)!=WorldState.STATE_FAILED:
+		_fail("unsolicited skill result did not fail closed")
 		return
 
 	var malformed := _skill_result(1,3,0,44,99001,MONSTER_ID,0,40,100,2)
@@ -105,7 +118,7 @@ func _initialize() -> void:
 		_fail("future-map skill result did not fail closed")
 		return
 
-	print("SKILL_COMBAT_GODOT_PASS request_bytes=32 result_bytes=61 visual_bytes=70 client_damage_absent=true area_target_zero=true area_summary_no_hp_authority=true same_sequence_multi_target_visual=true duplicate_target_stale=true receipt_does_not_mutate_monster=true visual_is_presentation_only=true duplicate_stale=true future_map_fail_closed=true")
+	print("SKILL_COMBAT_GODOT_PASS request_bytes=32 result_bytes=61 visual_bytes=70 client_damage_absent=true area_target_zero=true area_summary_no_hp_authority=true same_sequence_multi_target_visual=true duplicate_target_stale=true receipt_does_not_mutate_monster=true visual_is_presentation_only=true duplicate_stale=true pending_singleflight=true unsolicited_receipt_fail_closed=true future_map_fail_closed=true")
 	quit(0)
 
 func _skill_result(epoch: int, sequence: int, status: int, tick: int,

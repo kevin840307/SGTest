@@ -128,14 +128,23 @@ func respawn() -> bool:
 	return _queue_intent({"type":"respawn"})
 
 func cast_skill(skill_id: int, entity_id: int) -> bool:
-	if skill_id <= 0 or skill_id > 100000000 or entity_id <= 0 or bool(snapshot().get("player_dead",false)):
+	if entity_id <= 0:
 		return false
-	return _queue_intent({"type":"cast_skill","skill_id":skill_id,"entity_id":entity_id})
+	return _queue_skill(skill_id,entity_id)
+
 
 func cast_area_skill(skill_id: int) -> bool:
-	if skill_id <= 0 or skill_id > 100000000 or bool(snapshot().get("player_dead",false)):
+	return _queue_skill(skill_id,0)
+
+
+func _queue_skill(skill_id: int, target: int) -> bool:
+	var current := snapshot()
+	if skill_id <= 0 or skill_id > 100000000 or target < 0 or int(current.get("state",-1)) != WorldState.STATE_IN_WORLD or not bool(current.get("combat_available",false)) or bool(current.get("player_dead",false)) or not bool(current.get("world_ready",false)) or bool(current.get("resync_pending",false)) or bool(current.get("waiting_for_new_map",false)) or int(current.get("pending_world_ready_ack_epoch",0)) != 0 or int(current.get("last_world_ready_ack_epoch",0)) != int(current.get("map_epoch",0)) or int(current.get("pending_skill_sequence",0)) != 0:
 		return false
-	return _queue_intent({"type":"cast_skill","skill_id":skill_id,"entity_id":0})
+	# Bind queued skill to the authenticated actor and exact map generation.
+	# Never execute a pre-transfer skill intent on the next map.
+	return _queue_intent({"type":"cast_skill","skill_id":skill_id,"entity_id":target,
+		"actor_id":int(current.get("actor_id",0)),"map_epoch":int(current.get("map_epoch",0))})
 
 func attack_monster(entity_id: int) -> bool:
 	if entity_id <= 0 or bool(snapshot().get("player_dead",false)):
@@ -205,6 +214,15 @@ func _queue_intent(intent: Dictionary) -> bool:
 	if accepted and kind == "discard_inventory_item":
 		for queued in _intents:
 			if str(queued.get("type","")) in ["discard_inventory_item","use_recovery_item"]:
+				accepted = false
+				break
+	if accepted and kind == "cast_skill":
+		# A direct caller must not enqueue a second MP debit while queued or
+		# while the reliable server receipt for the first skill is unresolved.
+		if int(_published.get("pending_skill_sequence",0)) != 0:
+			accepted = false
+		for queued in _intents:
+			if str(queued.get("type","")) == "cast_skill":
 				accepted = false
 				break
 	if accepted and kind == "pickup_ground_drop":
@@ -461,7 +479,12 @@ func _process_first_intent() -> void:
 			_publish()
 	elif kind == "cast_skill":
 		var current: Dictionary = _world.snapshot()
+		if int(intent.get("actor_id",0)) != int(current.get("actor_id",0)) or int(intent.get("map_epoch",0)) != int(current.get("map_epoch",0)):
+			_pop_intent() # stale before send: never retarget a different map/actor
+			return
 		if int(current.state) != WorldState.STATE_IN_WORLD or bool(current.player_dead) or not bool(current.world_ready) or bool(current.resync_pending) or int(current.pending_world_ready_ack_epoch) != 0 or int(current.last_world_ready_ack_epoch) != int(current.map_epoch) or bool(current.waiting_for_new_map):
+			return
+		if int(current.get("pending_skill_sequence",0)) != 0:
 			return
 		var target := int(intent.entity_id)
 		var skill_id := int(intent.skill_id)
@@ -471,8 +494,9 @@ func _process_first_intent() -> void:
 		var sequence := int(current.skill_sequence)+1
 		var frame := WireCodec.encode_skill_use(int(current.map_epoch),sequence,skill_id,target)
 		if not frame.is_empty() and _transport.send_frame(frame) and _world.mark_skill_sent(sequence):
-			_pop_intent()
+			# Publish pending before removing this intent: no duplicate window.
 			_publish()
+			_pop_intent()
 	elif kind == "attack_monster":
 		_process_attack_monster_intent(intent)
 	elif kind == "stop_move":

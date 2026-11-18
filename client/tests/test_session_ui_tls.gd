@@ -128,10 +128,17 @@ func check_skill_ui(panel, stub) -> void:
 		fail("Area skill button did not send exactly one server-authoritative intent")
 		return
 	panel._latest.skill_sequence = 1
+	panel._latest.pending_skill_sequence = 1
+	panel._skill_queued_at_ms = Time.get_ticks_msec()-11000
+	panel._set_skill_controls()
+	if not panel.skill_area_button.disabled or not panel.skill_status.text.contains("請勿重複施放") or stub.area_skills != 1:
+		fail("Unconfirmed skill timeout allowed a second MP debit")
+		return
+	panel._latest.pending_skill_sequence = 0
 	panel._latest.last_skill_result_sequence = 1
 	panel._latest.last_skill_result_status = 0
 	panel._set_skill_controls()
-	if panel.skill_area_button.disabled or not panel.skill_status.text.contains("代碼 0"):
+	if panel.skill_area_button.disabled or not panel.skill_status.text.contains("成功（代碼 0）"):
 		fail("Durable skill receipt did not release the UI gate")
 		return
 	panel.skill_target_mode.button_pressed = true
@@ -148,11 +155,17 @@ func check_skill_ui(panel, stub) -> void:
 		return
 	panel._latest.player_dead = false
 	panel._latest.resync_pending = true
+	panel._latest.pending_skill_sequence = 2
+	panel._skill_queued_at_ms = Time.get_ticks_msec()-11000
 	panel._set_skill_controls()
+	if panel._skill_queued_after < 0 or not panel.skill_area_button.disabled:
+		fail("Same-epoch resync cleared an unsettled skill")
+		return
 	if panel.submit_monster_action(1001) or panel.submit_area_skill(99001):
 		fail("Resync allowed skill intent")
 		return
 	panel._latest.resync_pending = false
+	panel._latest.pending_skill_sequence = 0
 	panel._latest.reconnecting = true
 	panel._set_skill_controls()
 	if panel.submit_area_skill(99001):
@@ -165,6 +178,7 @@ func check_skill_ui(panel, stub) -> void:
 		fail("Unacknowledged WorldReady allowed skill intent")
 		return
 	panel._latest.pending_world_ready_ack_epoch = 0
+	panel._latest.pending_skill_sequence = 0
 	panel.skill_target_mode.button_pressed = false
 	panel._set_skill_controls()
 	if not panel.submit_monster_action(1001) or stub.attacks != 2:
@@ -302,6 +316,10 @@ func run() -> void:
 	panel._latest.player_dead = false
 	check_attack_ui(panel,stub)
 	check_skill_ui(panel,stub)
+	panel._latest = {"combat_available":true,"player_current_hp":88,"player_max_hp":100,"player_current_mp":7,"player_max_mp":20}
+	if panel._combat_status_suffix() != "｜HP 88/100｜MP 7/20":
+		fail("UI failed to display server HP/MP without estimating local skill costs")
+		return
 	# Standalone visual binding from an authenticated snapshot: never use
 	# unverified original item names, and refresh on reconnect generation.
 	panel._latest = {"state":State.STATE_IN_WORLD,"world_ready":true,
@@ -414,5 +432,5 @@ func run() -> void:
 	panel._set_respawn_controls()
 	app.queue_free()
 	await process_frame
-	print("CLIENT_TLS_LOGIN_PASS ui=PASS auth=PASS choose=PASS receipt=PASS world_ready=PASS password_cleared=PASS logout=PASS respawn_ui=PASS click_attack_ui=PASS click_pickup_ui=PASS persistent_inventory_ui=PASS item_metadata=PASS inventory_pagination=PASS recovery_item_button=PASS inventory_discard_button=PASS skill_cast_ui=PASS")
+	print("CLIENT_TLS_LOGIN_PASS ui=PASS auth=PASS choose=PASS receipt=PASS world_ready=PASS password_cleared=PASS logout=PASS respawn_ui=PASS click_attack_ui=PASS click_pickup_ui=PASS persistent_inventory_ui=PASS item_metadata=PASS inventory_pagination=PASS recovery_item_button=PASS inventory_discard_button=PASS skill_cast_ui=PASS skill_singleflight=PASS combat_mp_ui=PASS")
 	quit(0)

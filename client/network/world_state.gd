@@ -35,6 +35,7 @@ var last_attack_server_tick := -1
 var last_attack_result := {}
 var stale_attack_results := 0
 var skill_sequence := 0
+var pending_skill_sequence := 0
 var last_skill_result_sequence := 0
 var last_skill_result_status := -1
 var last_skill_server_tick := -1
@@ -151,9 +152,10 @@ func mark_normal_attack_sent(sequence: int) -> bool:
 	return true
 
 func mark_skill_sent(sequence: int) -> bool:
-	if state != STATE_IN_WORLD or player_dead or not world_ready or resync_pending or waiting_for_new_map or pending_world_ready_ack_epoch != 0 or last_world_ready_ack_epoch != map_epoch or sequence <= skill_sequence or sequence > 0xffffffff:
+	if state != STATE_IN_WORLD or player_dead or not world_ready or resync_pending or waiting_for_new_map or pending_world_ready_ack_epoch != 0 or last_world_ready_ack_epoch != map_epoch or pending_skill_sequence != 0 or sequence <= skill_sequence or sequence > 0xffffffff:
 		return false
 	skill_sequence = sequence
+	pending_skill_sequence = sequence
 	return true
 
 func mark_recovery_use_sent(sequence: int,item_uid: int) -> bool:
@@ -305,6 +307,7 @@ func snapshot() -> Dictionary:
 		"last_attack_result": last_attack_result.duplicate(true),
 		"stale_attack_results": stale_attack_results,
 		"skill_sequence": skill_sequence,
+		"pending_skill_sequence": pending_skill_sequence,
 		"last_skill_result_sequence": last_skill_result_sequence,
 		"last_skill_result_status": last_skill_result_status,
 		"last_skill_server_tick": last_skill_server_tick,
@@ -439,6 +442,7 @@ func _apply_choose(frame: PackedByteArray) -> bool:
 	last_attack_result.clear()
 	stale_attack_results = 0
 	skill_sequence = 0
+	pending_skill_sequence = 0
 	last_skill_result_sequence = 0
 	last_skill_result_status = -1
 	last_skill_server_tick = -1
@@ -783,12 +787,15 @@ func _apply_skill_use_result(frame: PackedByteArray) -> bool:
 	if sequence <= last_skill_result_sequence:
 		stale_skill_results += 1
 		return true
+	if sequence != pending_skill_sequence:
+		return fail("skill_result_without_matching_pending_request")
 	if last_skill_server_tick >= 0 and tick < last_skill_server_tick:
 		return fail("skill_server_tick_regressed")
 	last_skill_result_sequence = sequence
 	last_skill_result_status = int(result.status)
 	last_skill_server_tick = tick
 	last_skill_result = result.duplicate(true)
+	pending_skill_sequence = 0
 	return true
 
 func _apply_player_skill_visual(frame: PackedByteArray) -> bool:
@@ -992,6 +999,7 @@ func _apply_world_ready(frame: PackedByteArray) -> bool:
 		last_attack_result.clear()
 		stale_attack_results = 0
 		skill_sequence = 0
+		pending_skill_sequence = 0
 		last_skill_result_sequence = 0
 		last_skill_result_status = -1
 		last_skill_server_tick = -1
