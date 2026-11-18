@@ -18,6 +18,13 @@ class RespawnSession extends RefCounted:
 	var discards := 0
 	var last_discard_uid := 0
 	var last_discard_quantity := 0
+	var shop_opens := 0
+	var shop_buys := 0
+	var shop_sells := 0
+	var last_shop_npc := 0
+	var last_shop_item := 0
+	var last_shop_uid := 0
+	var last_shop_quantity := 0
 	func use_recovery_item(item_uid: int) -> bool:
 		if item_uid <= 0:
 			return false
@@ -35,6 +42,26 @@ class RespawnSession extends RefCounted:
 		if drop_id <= 0:
 			return false
 		pickups += 1
+		return true
+	func open_shop(npc_spawn_id: int) -> bool:
+		if npc_spawn_id <= 0:
+			return false
+		shop_opens += 1
+		last_shop_npc = npc_spawn_id
+		return true
+	func buy_shop_item(item_definition_id: int, quantity: int = 1) -> bool:
+		if item_definition_id <= 0 or quantity <= 0:
+			return false
+		shop_buys += 1
+		last_shop_item = item_definition_id
+		last_shop_quantity = quantity
+		return true
+	func sell_shop_item(item_uid: int, quantity: int = 1) -> bool:
+		if item_uid <= 0 or quantity <= 0:
+			return false
+		shop_sells += 1
+		last_shop_uid = item_uid
+		last_shop_quantity = quantity
 		return true
 	func attack_monster(entity_id: int) -> bool:
 		if entity_id <= 0:
@@ -479,6 +506,49 @@ func run() -> void:
 	if not panel.discard_status.text.contains("已移除 3"):
 		fail("Discard status did not display authoritative committed quantity")
 		return
+
+	# Shop UI is only an adapter to server-owned catalog/money/inventory.
+	panel._latest = {"state":State.STATE_IN_WORLD,"world_ready":true,
+		"inventory_ready":true,"player_dead":false,"reconnecting":false,
+		"resync_pending":false,"active_shop_npc":0,"pending_shop_sequence":0,
+		"shop_sequence":0,"shop_money":0,"shop_items":{},
+		"inventory_revision":4,"inventory_items":many}
+	panel._update_shop_ui()
+	panel.shop_npc_input.value = 99
+	panel.shop_open_button.pressed.emit()
+	if stub.shop_opens != 1 or stub.last_shop_npc != 99 or not panel.shop_open_button.disabled:
+		fail("Shop open UI did not send exactly one NPC intent")
+		return
+	panel._latest.active_shop_npc = 99
+	panel._latest.shop_sequence = 1
+	panel._latest.shop_money = 25
+	panel._latest.shop_items = {2701:{
+		"item_definition_id":2701,"buy_price":10,"sell_price":5}}
+	panel._latest.pending_shop_sequence = 0
+	panel._update_shop_ui()
+	if not panel.shop_money_label.text.contains("25") or panel.shop_item_picker.item_count != 1 or panel.shop_sell_picker.item_count != 1 or panel.shop_buy_button.disabled or panel.shop_sell_button.disabled:
+		fail("Server shop snapshot was not rendered as playable controls")
+		return
+	panel.shop_quantity.value = 2
+	panel.shop_buy_button.pressed.emit()
+	if stub.shop_buys != 1 or stub.last_shop_item != 2701 or stub.last_shop_quantity != 2 or not panel.shop_buy_button.disabled:
+		fail("Shop buy UI did not send exact authoritative item/quantity once")
+		return
+	panel._latest.pending_shop_sequence = 2
+	panel._update_shop_ui()
+	if not panel.shop_buy_button.disabled or not panel.shop_sell_button.disabled:
+		fail("Pending shop transaction allowed another economy mutation")
+		return
+	panel._latest.pending_shop_sequence = 0
+	panel._latest.shop_sequence = 2
+	panel._latest.inventory_revision = 5
+	panel._update_shop_ui()
+	panel.shop_quantity.value = 1
+	panel.shop_sell_button.pressed.emit()
+	if stub.shop_sells != 1 or stub.last_shop_uid != 10000 or stub.last_shop_quantity != 1:
+		fail("Shop sell UI did not use selected owned Item UID")
+		return
+
 	panel._latest.player_dead = true
 	panel._update_inventory_ui()
 	if not panel.recovery_button.disabled or panel.submit_recovery_use(10000):
@@ -494,5 +564,5 @@ func run() -> void:
 	panel._set_respawn_controls()
 	app.queue_free()
 	await process_frame
-	print("CLIENT_TLS_LOGIN_PASS ui=PASS auth=PASS choose=PASS receipt=PASS world_ready=PASS password_cleared=PASS logout=PASS respawn_ui=PASS click_attack_ui=PASS click_pickup_ui=PASS persistent_inventory_ui=PASS item_metadata=PASS inventory_pagination=PASS recovery_item_button=PASS inventory_discard_button=PASS inventory_discard_quantity_confirm=PASS skill_cast_ui=PASS skill_singleflight=PASS combat_mp_ui=PASS")
+	print("CLIENT_TLS_LOGIN_PASS ui=PASS auth=PASS choose=PASS receipt=PASS world_ready=PASS password_cleared=PASS logout=PASS respawn_ui=PASS click_attack_ui=PASS click_pickup_ui=PASS persistent_inventory_ui=PASS item_metadata=PASS inventory_pagination=PASS recovery_item_button=PASS inventory_discard_button=PASS inventory_discard_quantity_confirm=PASS shop_ui=PASS skill_cast_ui=PASS skill_singleflight=PASS combat_mp_ui=PASS")
 	quit(0)
