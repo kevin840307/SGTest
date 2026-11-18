@@ -8,6 +8,8 @@ using SGTest.Server.World;
 
 namespace SGTest.Server.Gateway;
 
+public sealed record CharacterCreationPolicy(CharacterSpawn Spawn);
+
 /// <summary>
 /// TLS-only login/character selection boundary. It never creates accounts and it
 /// never trusts a client-supplied ActorId: CharacterChoose is matched against the
@@ -23,13 +25,15 @@ public sealed class IdentityTlsAuthorization
     private readonly PlayerCombatSettlement? _combat;
     private readonly long _pickupWorldGeneration;
     private readonly IReadOnlyDictionary<int,RecoveryItemRule>? _recoveryRules;
+    private readonly CharacterCreationPolicy? _characterCreation;
 
     public IdentityTlsAuthorization(SqliteIdentityStore identity, ServerWorldHost world,
                                     PortalCatalog? portals = null,
                                     CharacterPositionCheckpoint? positions = null,
                                     PlayerCombatSettlement? combat = null,
                                      long pickupWorldGeneration = 0,
-                                     IReadOnlyDictionary<int,RecoveryItemRule>? recoveryRules = null)
+                                     IReadOnlyDictionary<int,RecoveryItemRule>? recoveryRules = null,
+                                     CharacterCreationPolicy? characterCreation = null)
     {
         _identity = identity ?? throw new ArgumentNullException(nameof(identity));
         _world = world ?? throw new ArgumentNullException(nameof(world));
@@ -40,6 +44,14 @@ public sealed class IdentityTlsAuthorization
             throw new ArgumentOutOfRangeException(nameof(pickupWorldGeneration));
         _pickupWorldGeneration = pickupWorldGeneration;
         _recoveryRules = recoveryRules;
+        if (characterCreation is not null)
+        {
+            var spawn = characterCreation.Spawn;
+            if (spawn.MapId <= 0 || !double.IsFinite(spawn.X) ||
+                !double.IsFinite(spawn.Y))
+                throw new ArgumentOutOfRangeException(nameof(characterCreation));
+        }
+        _characterCreation = characterCreation;
     }
 
     /// <summary>
@@ -546,21 +558,111 @@ public sealed class IdentityTlsAuthorization
             return null;
 
         var account = authentication.Account;
-        var summaries = account.Characters
-            .Select(c => new CharacterSummaryWire(c.CharacterId, checked((byte)c.Slot), c.Name))
-            .ToArray();
-        await WriteFrameAsync(tls, WireProtocol.EncodeCharacterList(new(summaries)), cancellationToken)
-            .ConfigureAwait(false);
-        if (summaries.Length == 0) return null; // character creation is a later protocol slice.
+        var characters = account.Characters.ToList();
 
-        byte[]? chooseFrame = await ReadFrameAsync(tls, cancellationToken).ConfigureAwait(false);
-        if (chooseFrame is null || !WireProtocol.TryDecodeCharacterChoose(chooseFrame, out var choose)) return null;
-        CharacterRecord? character = account.Characters.FirstOrDefault(c => c.CharacterId == choose.CharacterId);
-        if (character is null)
+        async Task SendCharacterListAsync()
         {
-            await WriteFrameAsync(tls, WireProtocol.EncodeCharacterChooseResult(new(
-                CharacterChooseWireStatus.NotOwned, 0, 0, 0, 0, 0)), cancellationToken).ConfigureAwait(false);
-            return null;
+            var summaries = characters
+                .Select(c => new CharacterSummaryWire(
+                    c.CharacterId, checked((byte)c.Slot), c.Name))
+                .ToArray();
+            await WriteFrameAsync(tls,
+                WireProtocol.EncodeCharacterList(new(summaries)),
+                cancellationToken).ConfigureAwait(false);
+        }
+
+        await SendCharacterListAsync().ConfigureAwait(false);
+
+        CharacterRecord? character = null;
+        while (character is null)
+        {
+            byte[]? selectionFrame = await ReadFrameAsync(
+                tls, cancellationToken).ConfigureAwait(false);
+            if (selectionFrame is null) return null;
+
+            if (WireProtocol.TryDecodeCharacterCreate(
+                    selectionFrame, out var create))
+            {
+                CharacterCreateWireStatus wireStatus;
+                CharacterRecord? createdCharacter = null;
+                if (_characterCreation is null)
+                {
+                    wireStatus = CharacterCreateWireStatus.Unavailable;
+                }
+                else
+                {
+                    try
+                    {
+                        var result = await _identity.CreateCharacterAsync(
+                            account.AccountId, create.Slot, create.Name,
+                            _characterCreation.Spawn, cancellationToken)
+                            .ConfigureAwait(false);
+                        wireStatus = result.Status switch
+                        {
+                            CharacterCreateStatus.Created =>
+                                CharacterCreateWireStatus.Success,
+                            CharacterCreateStatus.SlotOccupied =>
+                                CharacterCreateWireStatus.SlotOccupied,
+                            CharacterCreateStatus.NameTaken =>
+                                CharacterCreateWireStatus.NameTaken,
+                            CharacterCreateStatus.LimitReached =>
+                                CharacterCreateWireStatus.LimitReached,
+                            _ => CharacterCreateWireStatus.Unavailable
+                        };
+                        createdCharacter = result.Character;
+                    }
+                    catch (ArgumentOutOfRangeException)
+                    {
+                        wireStatus = CharacterCreateWireStatus.InvalidSlot;
+                    }
+                    catch (ArgumentException)
+                    {
+                        wireStatus = CharacterCreateWireStatus.InvalidName;
+                    }
+                }
+
+                if (wireStatus == CharacterCreateWireStatus.Success &&
+                    createdCharacter is not null)
+                {
+                    characters = (await _identity.ListCharactersAsync(
+                        account.AccountId, cancellationToken)
+                        .ConfigureAwait(false)).ToList();
+                    await WriteFrameAsync(tls,
+                        WireProtocol.EncodeCharacterCreateResult(new(
+                            wireStatus, createdCharacter.CharacterId,
+                            checked((byte)createdCharacter.Slot),
+                            createdCharacter.Name)),
+                        cancellationToken).ConfigureAwait(false);
+                }
+                else
+                {
+                    await WriteFrameAsync(tls,
+                        WireProtocol.EncodeCharacterCreateResult(new(
+                            wireStatus, 0, create.Slot, string.Empty)),
+                        cancellationToken).ConfigureAwait(false);
+                }
+
+                // Always refresh after a create attempt. This lets the Client
+                // recover from a concurrent slot/name conflict without
+                // reconnecting and keeps the authoritative list server-owned.
+                await SendCharacterListAsync().ConfigureAwait(false);
+                continue;
+            }
+
+            if (!WireProtocol.TryDecodeCharacterChoose(
+                    selectionFrame, out var choose))
+                return null;
+            character = characters.FirstOrDefault(
+                c => c.CharacterId == choose.CharacterId);
+            if (character is null)
+            {
+                await WriteFrameAsync(tls,
+                    WireProtocol.EncodeCharacterChooseResult(new(
+                        CharacterChooseWireStatus.NotOwned,
+                        0, 0, 0, 0, 0)), cancellationToken)
+                    .ConfigureAwait(false);
+                return null;
+            }
         }
 
         CharacterCombatProfile? combat = await _identity.GetCharacterCombatProfileAsync(
