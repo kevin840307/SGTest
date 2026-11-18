@@ -250,6 +250,7 @@ static class Checks
             RecoveryUseWireChecks.Verify();
             InventoryDiscardChecks.Verify(root);
             InventorySnapshotChecks.Verify();
+            StorageChecks.Verify(root);
             MonsterLootSettlementChecks.Verify(root);
             NormalAttackChecks.Verify(root);
             SkillCombatChecks.Verify(root);

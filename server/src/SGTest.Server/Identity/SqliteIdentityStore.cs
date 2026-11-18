@@ -77,7 +77,7 @@ public sealed record CharacterCreateResult(CharacterCreateStatus Status, Charact
 /// </summary>
 public sealed partial class SqliteIdentityStore : IDisposable
 {
-    public const int SchemaVersion = 8;
+    public const int SchemaVersion = 9;
     private readonly string _connectionString;
     private readonly IdentityStoreOptions _options;
     private readonly PasswordHasher _passwords;
@@ -383,6 +383,60 @@ CREATE TABLE IF NOT EXISTS shop_actions (
     created_unix_ms INTEGER NOT NULL,
     PRIMARY KEY(character_id,connection_generation,map_epoch,action_sequence)
 );", tx);
+
+            // Schema v9: personal storage moves whole item stacks without
+            // minting a second UID. Inventory and storage are separate physical
+            // tables for now, guarded by cross-location triggers so one UID (or
+            // one drop provenance row) cannot exist in both locations.
+            Execute(connection, @"
+CREATE TABLE IF NOT EXISTS storage_items (
+    item_uid INTEGER PRIMARY KEY,
+    character_id INTEGER NOT NULL REFERENCES characters(character_id) ON DELETE CASCADE,
+    item_definition_id INTEGER NOT NULL CHECK(item_definition_id BETWEEN 1 AND 100000000),
+    quantity INTEGER NOT NULL CHECK(quantity BETWEEN 1 AND 1000000),
+    source_drop_id INTEGER UNIQUE REFERENCES ground_drops(drop_id),
+    source_kind INTEGER NOT NULL CHECK(source_kind IN (1,2)),
+    source_reference TEXT NOT NULL,
+    created_unix_ms INTEGER NOT NULL,
+    CHECK(
+      (source_kind=1 AND source_drop_id IS NOT NULL)
+      OR (source_kind=2 AND source_drop_id IS NULL)
+    )
+);", tx);
+            Execute(connection, @"
+CREATE INDEX IF NOT EXISTS ix_storage_items_owner
+ON storage_items(character_id,item_uid);", tx);
+            Execute(connection, @"
+CREATE TABLE IF NOT EXISTS storage_actions (
+    character_id INTEGER NOT NULL REFERENCES characters(character_id) ON DELETE CASCADE,
+    connection_generation INTEGER NOT NULL CHECK(connection_generation > 0),
+    map_epoch INTEGER NOT NULL CHECK(map_epoch > 0),
+    action_sequence INTEGER NOT NULL CHECK(action_sequence BETWEEN 1 AND 4294967295),
+    action_kind INTEGER NOT NULL CHECK(action_kind IN (1,2)),
+    item_uid INTEGER NOT NULL CHECK(item_uid > 0),
+    item_definition_id INTEGER NOT NULL CHECK(item_definition_id BETWEEN 1 AND 100000000),
+    quantity INTEGER NOT NULL CHECK(quantity BETWEEN 1 AND 1000000),
+    created_unix_ms INTEGER NOT NULL,
+    PRIMARY KEY(character_id,connection_generation,map_epoch,action_sequence)
+);", tx);
+            Execute(connection, @"
+CREATE TRIGGER IF NOT EXISTS trg_storage_no_inventory_overlap
+BEFORE INSERT ON storage_items
+WHEN EXISTS(SELECT 1 FROM item_instances WHERE item_uid=NEW.item_uid)
+  OR (NEW.source_drop_id IS NOT NULL AND
+      EXISTS(SELECT 1 FROM item_instances WHERE source_drop_id=NEW.source_drop_id))
+BEGIN
+    SELECT RAISE(ABORT,'item already exists in inventory');
+END;", tx);
+            Execute(connection, @"
+CREATE TRIGGER IF NOT EXISTS trg_inventory_no_storage_overlap
+BEFORE INSERT ON item_instances
+WHEN EXISTS(SELECT 1 FROM storage_items WHERE item_uid=NEW.item_uid)
+  OR (NEW.source_drop_id IS NOT NULL AND
+      EXISTS(SELECT 1 FROM storage_items WHERE source_drop_id=NEW.source_drop_id))
+BEGIN
+    SELECT RAISE(ABORT,'item already exists in storage');
+END;", tx);
 
             Execute(connection, @"
 CREATE TRIGGER IF NOT EXISTS trg_combat_mp_insert
