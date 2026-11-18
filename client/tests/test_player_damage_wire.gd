@@ -182,7 +182,7 @@ func _world(epoch: int) -> RefCounted:
 	world.map_epoch=epoch
 	return world
 
-func _combat_state(epoch: int,current_hp: int,max_hp: int,current_mp: int,max_mp: int) -> PackedByteArray:
+func _combat_state(epoch: int,current_hp: int,max_hp: int,current_mp: int = 0,max_mp: int = 0) -> PackedByteArray:
 	var writer := StreamPeerBuffer.new()
 	writer.big_endian=false
 	writer.put_u32(32)
