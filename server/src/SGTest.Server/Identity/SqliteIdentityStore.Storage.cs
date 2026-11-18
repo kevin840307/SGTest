@@ -73,7 +73,7 @@ WHERE character_id=$actor ORDER BY item_uid LIMIT $limit;";
     {
         ThrowIfDisposed();
         ValidateStorageRequest(context, kind, itemUid);
-        return await Task.Run(() =>
+        return await Task.Run<StorageTransferResult>(() =>
         {
             using var connection = Open();
             using var tx = connection.BeginTransaction();
