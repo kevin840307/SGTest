@@ -45,6 +45,11 @@ const OPCODE_PLAYER_RESPAWN_VISUAL := 43
 const OPCODE_SKILL_USE := 44
 const OPCODE_SKILL_USE_RESULT := 45
 const OPCODE_PLAYER_SKILL_VISUAL := 46
+const OPCODE_SHOP_OPEN := 47
+const OPCODE_SHOP_SNAPSHOT := 48
+const OPCODE_SHOP_BUY := 49
+const OPCODE_SHOP_SELL := 50
+const OPCODE_SHOP_TRANSACTION_RESULT := 51
 const MOVE_TARGET_FRAME_BYTES := 28
 const MOVE_RECEIPT_FRAME_BYTES := 30
 const NPC_INTERACT_FRAME_BYTES := 24
@@ -87,6 +92,13 @@ const INVENTORY_SNAPSHOT_HEADER_BYTES := 23
 const INVENTORY_ITEM_BYTES := 24
 const INVENTORY_SNAPSHOT_MAX_PER_FRAME := 128
 const INVENTORY_SNAPSHOT_MAX_ITEMS := 4095
+const SHOP_OPEN_FRAME_BYTES := 24
+const SHOP_BUY_FRAME_BYTES := 32
+const SHOP_SELL_FRAME_BYTES := 40
+const SHOP_TRANSACTION_RESULT_FRAME_BYTES := 54
+const SHOP_SNAPSHOT_HEADER_BYTES := 35
+const SHOP_ITEM_BYTES := 20
+const SHOP_SNAPSHOT_MAX_ITEMS := 256
 
 static func encode_move_target(map_epoch: int, movement_sequence: int, target_x: int, target_y: int) -> PackedByteArray:
 	if map_epoch <= 0 or movement_sequence <= 0 or movement_sequence > 0xffffffff:
@@ -787,7 +799,7 @@ static func decode_inventory_snapshot(frame: PackedByteArray) -> Dictionary:
 		var item_id := reader.get_32()
 		var quantity := reader.get_32()
 		var drop_id := reader.get_64()
-		if uid <= 0 or item_id < 1 or item_id > 100000000 or quantity < 1 or quantity > 1000000 or drop_id <= 0 or ids.has(uid):
+		if uid <= 0 or item_id < 1 or item_id > 100000000 or quantity < 1 or quantity > 1000000 or drop_id < 0 or ids.has(uid):
 			return {}
 		ids[uid] = true
 		items.append({"item_uid":uid,"item_definition_id":item_id,
@@ -817,6 +829,108 @@ static func decode_ground_pickup_result(frame: PackedByteArray) -> Dictionary:
 	return {"map_epoch":epoch,"pickup_sequence":sequence,
 		"status":status,"drop_id":drop_id,"item_uid":uid,
 		"item_definition_id":item_id,"quantity":quantity}
+
+
+
+
+static func encode_shop_open(epoch: int, sequence: int, npc_spawn_id: int) -> PackedByteArray:
+	if epoch <= 0 or sequence < 1 or sequence > 0xffffffff or npc_spawn_id <= 0:
+		return PackedByteArray()
+	var writer := StreamPeerBuffer.new()
+	writer.big_endian = false
+	writer.put_u32(SHOP_OPEN_FRAME_BYTES)
+	writer.put_u16(VERSION)
+	writer.put_u16(OPCODE_SHOP_OPEN)
+	writer.put_64(epoch)
+	writer.put_u32(sequence)
+	writer.put_32(npc_spawn_id)
+	return writer.data_array
+
+
+static func decode_shop_snapshot(frame: PackedByteArray) -> Dictionary:
+	if not _valid_variable_header(frame,OPCODE_SHOP_SNAPSHOT,SHOP_SNAPSHOT_HEADER_BYTES,SHOP_SNAPSHOT_HEADER_BYTES+SHOP_SNAPSHOT_MAX_ITEMS*SHOP_ITEM_BYTES):
+		return {}
+	var reader := _reader(frame,8)
+	var epoch := reader.get_64()
+	var sequence := reader.get_u32()
+	var status := reader.get_u8()
+	var npc_spawn_id := reader.get_32()
+	var money := reader.get_64()
+	var count := reader.get_u16()
+	if epoch <= 0 or sequence == 0 or status > 4 or npc_spawn_id <= 0 or money < 0 or count > SHOP_SNAPSHOT_MAX_ITEMS or frame.size() != SHOP_SNAPSHOT_HEADER_BYTES+count*SHOP_ITEM_BYTES:
+		return {}
+	if status == 0 and count == 0:
+		return {}
+	if status != 0 and (money != 0 or count != 0):
+		return {}
+	var items: Array[Dictionary] = []
+	var ids := {}
+	for _index in count:
+		var item_id := reader.get_32()
+		var buy_price := reader.get_64()
+		var sell_price := reader.get_64()
+		if item_id < 1 or item_id > 100000000 or buy_price < 1 or sell_price < 0 or sell_price > buy_price or ids.has(item_id):
+			return {}
+		ids[item_id] = true
+		items.append({"item_definition_id":item_id,"buy_price":buy_price,"sell_price":sell_price})
+	return {"map_epoch":epoch,"shop_sequence":sequence,"status":status,
+		"npc_spawn_id":npc_spawn_id,"money":money,"items":items}
+
+
+static func encode_shop_buy(epoch: int, sequence: int, npc_spawn_id: int, item_definition_id: int, quantity: int) -> PackedByteArray:
+	if epoch <= 0 or sequence < 1 or sequence > 0xffffffff or npc_spawn_id <= 0 or item_definition_id < 1 or item_definition_id > 100000000 or quantity < 1 or quantity > 1000000:
+		return PackedByteArray()
+	var writer := StreamPeerBuffer.new()
+	writer.big_endian = false
+	writer.put_u32(SHOP_BUY_FRAME_BYTES)
+	writer.put_u16(VERSION)
+	writer.put_u16(OPCODE_SHOP_BUY)
+	writer.put_64(epoch)
+	writer.put_u32(sequence)
+	writer.put_32(npc_spawn_id)
+	writer.put_32(item_definition_id)
+	writer.put_32(quantity)
+	return writer.data_array
+
+
+static func encode_shop_sell(epoch: int, sequence: int, npc_spawn_id: int, item_uid: int, item_definition_id: int, quantity: int) -> PackedByteArray:
+	if epoch <= 0 or sequence < 1 or sequence > 0xffffffff or npc_spawn_id <= 0 or item_uid <= 0 or item_definition_id < 1 or item_definition_id > 100000000 or quantity < 1 or quantity > 1000000:
+		return PackedByteArray()
+	var writer := StreamPeerBuffer.new()
+	writer.big_endian = false
+	writer.put_u32(SHOP_SELL_FRAME_BYTES)
+	writer.put_u16(VERSION)
+	writer.put_u16(OPCODE_SHOP_SELL)
+	writer.put_64(epoch)
+	writer.put_u32(sequence)
+	writer.put_32(npc_spawn_id)
+	writer.put_64(item_uid)
+	writer.put_32(item_definition_id)
+	writer.put_32(quantity)
+	return writer.data_array
+
+
+static func decode_shop_transaction_result(frame: PackedByteArray) -> Dictionary:
+	if not _valid_header(frame,OPCODE_SHOP_TRANSACTION_RESULT,SHOP_TRANSACTION_RESULT_FRAME_BYTES):
+		return {}
+	var reader := _reader(frame,8)
+	var epoch := reader.get_64()
+	var sequence := reader.get_u32()
+	var kind := reader.get_u8()
+	var status := reader.get_u8()
+	var npc_spawn_id := reader.get_32()
+	var money := reader.get_64()
+	var item_uid := reader.get_64()
+	var item_id := reader.get_32()
+	var quantity := reader.get_32()
+	var remaining := reader.get_32()
+	if epoch <= 0 or sequence == 0 or kind < 1 or kind > 2 or status > 11 or npc_spawn_id <= 0 or money < 0 or item_uid < 0 or item_id < 1 or item_id > 100000000 or quantity < 1 or quantity > 1000000 or remaining < 0 or remaining > 1000000:
+		return {}
+	if status in [0,1] and item_uid <= 0:
+		return {}
+	return {"map_epoch":epoch,"shop_sequence":sequence,"kind":kind,"status":status,
+		"npc_spawn_id":npc_spawn_id,"money":money,"item_uid":item_uid,
+		"item_definition_id":item_id,"quantity":quantity,"remaining_quantity":remaining}
 
 
 static func decode_ground_drop_spawn(frame: PackedByteArray) -> Dictionary:
@@ -881,7 +995,7 @@ static func frame_opcode(frame: PackedByteArray) -> int:
 	if reader.get_u16() != VERSION:
 		return -1
 	var opcode := reader.get_u16()
-	if opcode not in [OPCODE_MOVE_TARGET, OPCODE_MOVE_RECEIPT, OPCODE_NPC_INTERACT, OPCODE_NPC_INTERACT_RESULT, OPCODE_NORMAL_ATTACK, OPCODE_NORMAL_ATTACK_RESULT, OPCODE_PLAYER_COMBAT_STATE, OPCODE_PLAYER_DAMAGE, OPCODE_AUTH_REQUEST, OPCODE_AUTH_RESULT, OPCODE_CHARACTER_LIST, OPCODE_CHARACTER_CHOOSE, OPCODE_CHARACTER_CHOOSE_RESULT, OPCODE_CHARACTER_CREATE, OPCODE_CHARACTER_CREATE_RESULT, OPCODE_WORLD_READY, OPCODE_ENTITY_SPAWN, OPCODE_ENTITY_DESPAWN, OPCODE_ENTITY_DELTA, OPCODE_SELF_STATE, OPCODE_WORLD_READY_ACK, OPCODE_WORLD_RESYNC_REQUEST, OPCODE_MONSTER_SPAWN, OPCODE_MONSTER_DELTA, OPCODE_MONSTER_DESPAWN, OPCODE_PLAYER_RESPAWN, OPCODE_PLAYER_RESPAWN_RESULT, OPCODE_GROUND_DROP_SPAWN, OPCODE_GROUND_DROP_DESPAWN, OPCODE_GROUND_PICKUP, OPCODE_GROUND_PICKUP_RESULT, OPCODE_INVENTORY_SNAPSHOT, OPCODE_RECOVERY_USE, OPCODE_RECOVERY_USE_RESULT, OPCODE_INVENTORY_DISCARD, OPCODE_INVENTORY_DISCARD_RESULT, OPCODE_PLAYER_ATTACK_VISUAL, OPCODE_PLAYER_DAMAGE_VISUAL, OPCODE_PLAYER_RESPAWN_VISUAL, OPCODE_SKILL_USE, OPCODE_SKILL_USE_RESULT, OPCODE_PLAYER_SKILL_VISUAL]:
+	if opcode not in [OPCODE_MOVE_TARGET, OPCODE_MOVE_RECEIPT, OPCODE_NPC_INTERACT, OPCODE_NPC_INTERACT_RESULT, OPCODE_NORMAL_ATTACK, OPCODE_NORMAL_ATTACK_RESULT, OPCODE_PLAYER_COMBAT_STATE, OPCODE_PLAYER_DAMAGE, OPCODE_AUTH_REQUEST, OPCODE_AUTH_RESULT, OPCODE_CHARACTER_LIST, OPCODE_CHARACTER_CHOOSE, OPCODE_CHARACTER_CHOOSE_RESULT, OPCODE_CHARACTER_CREATE, OPCODE_CHARACTER_CREATE_RESULT, OPCODE_WORLD_READY, OPCODE_ENTITY_SPAWN, OPCODE_ENTITY_DESPAWN, OPCODE_ENTITY_DELTA, OPCODE_SELF_STATE, OPCODE_WORLD_READY_ACK, OPCODE_WORLD_RESYNC_REQUEST, OPCODE_MONSTER_SPAWN, OPCODE_MONSTER_DELTA, OPCODE_MONSTER_DESPAWN, OPCODE_PLAYER_RESPAWN, OPCODE_PLAYER_RESPAWN_RESULT, OPCODE_GROUND_DROP_SPAWN, OPCODE_GROUND_DROP_DESPAWN, OPCODE_GROUND_PICKUP, OPCODE_GROUND_PICKUP_RESULT, OPCODE_INVENTORY_SNAPSHOT, OPCODE_RECOVERY_USE, OPCODE_RECOVERY_USE_RESULT, OPCODE_INVENTORY_DISCARD, OPCODE_INVENTORY_DISCARD_RESULT, OPCODE_PLAYER_ATTACK_VISUAL, OPCODE_PLAYER_DAMAGE_VISUAL, OPCODE_PLAYER_RESPAWN_VISUAL, OPCODE_SKILL_USE, OPCODE_SKILL_USE_RESULT, OPCODE_PLAYER_SKILL_VISUAL, OPCODE_SHOP_OPEN, OPCODE_SHOP_SNAPSHOT, OPCODE_SHOP_BUY, OPCODE_SHOP_SELL, OPCODE_SHOP_TRANSACTION_RESULT]:
 		return -1
 	return opcode
 
