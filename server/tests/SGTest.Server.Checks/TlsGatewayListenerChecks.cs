@@ -731,6 +731,9 @@ internal static class TlsGatewayListenerChecks
         }
     }
 
+    private static (int X, int Y) MixedLoadCenter(int i) =>
+        (400 + (i % 5) * 1400, 400 + (i / 5) * 900);
+
     private static async Task Until(Func<bool> condition)
     {
         var deadline = Stopwatch.StartNew();
@@ -767,16 +770,24 @@ internal static class TlsGatewayListenerChecks
         public required Task Visibility;
         public CancellationTokenSource? CombatStop;
         public Task? CombatWorker;
+        public MonsterWorldCoordinator? Monsters;
 
-        public static async Task<Fixture> Create(string root,bool withRecovery=false)
+        public static async Task<Fixture> Create(
+            string root, bool withRecovery = false, bool mixedLoad = false)
         {
-            string path = Checks.Fixture(root, 115, 4, 4, (_, _) => 0);
-            var host = new ServerWorldHost([BlockingGrid.Load(path, 115)]);
+            string path = Checks.Fixture(root, 115,
+                mixedLoad ? 420 : 4, mixedLoad ? 240 : 4, (_, _) => 0);
+            var grid = BlockingGrid.Load(path, 115);
+            var host = new ServerWorldHost([grid],
+                options: new WorldHostOptions(PublishIdleTicks: mixedLoad));
             await host.StartAsync();
             var store = new SqliteIdentityStore(Path.Combine(root, "listener-"+Guid.NewGuid().ToString("N")+".db"));
             await store.InitializeAsync();
             long account = (await store.CreateAccountAsync("listener_user", "Listener-Password-123!")).AccountId;
-            var character = await store.CreateCharacterAsync(account, 0, "ListenerHero", new(115, 8, 8));
+            var firstCenter = mixedLoad ? MixedLoadCenter(0) : (X: 8, Y: 8);
+            var character = await store.CreateCharacterAsync(
+                account, 0, "ListenerHero",
+                new CharacterSpawn(115, firstCenter.X, firstCenter.Y));
             long characterId=character.Character!.CharacterId;
             long generation=await store.AllocateLootWorldGenerationAsync();
             if(withRecovery)
@@ -789,24 +800,96 @@ internal static class TlsGatewayListenerChecks
                         Hit:10,Dodge:3,AttackRange:48,AttackCooldownTicks:15));
             }
             var committed=await store.CreateTrustedGroundDropsAsync([
-                new TrustedDropSpawn(115,8,8,1001150001,
+                new TrustedDropSpawn(115,firstCenter.X,firstCenter.Y,1001150001,
                     SqliteIdentityStore.ComposeLootDeathRevision(generation,7),
                     0,withRecovery?1001:2701,2,LootSourceTrust.SyntheticTest,"ci:inventory-login"),
-                new TrustedDropSpawn(115,8,8,1001150001,
+                new TrustedDropSpawn(115,firstCenter.X,firstCenter.Y,1001150001,
                     SqliteIdentityStore.ComposeLootDeathRevision(generation,7),
                     1,3701,3,LootSourceTrust.SyntheticTest,"ci:inventory-login")
             ]);
             for(int i=0;i<committed.Count;i++)
             {
                 var claim=await store.ClaimGroundDropAsync(
-                    new TrustedPickupContext(characterId,19,1,(uint)(i+1),115,8,8),
+                    new TrustedPickupContext(characterId,19,1,(uint)(i+1),115,
+                        firstCenter.X,firstCenter.Y),
                     committed[i].DropId);
                 Checks.Require(claim.Status==PickupStatus.Granted,
                     "seed trusted durable inventory before reconnect");
             }
             var saved=await store.ListInventoryItemsAsync(characterId);
+            MonsterWorldCoordinator? mixedMonsters = null;
+            IReadOnlyList<GroundDropRecord>? mixedDrops = null;
+            if (mixedLoad)
+            {
+                // The exact 20 sparse groups from the prior internal AOI test:
+                // 15 verified synthetic monsters and 25 synthetic drops each.
+                // These 500 test-only AOI UIDs are NOT SQLite loot settlements.
+                var spawnRows = new List<object>(300);
+                var drops = new List<GroundDropRecord>(500);
+                for (int observer = 0; observer < 20; observer++)
+                {
+                    var c = MixedLoadCenter(observer);
+                    for (int n = 0; n < 15; n++)
+                        spawnRows.Add(new {
+                            source_index = observer * 15 + n,
+                            source_flags = 7, definition = 1,
+                            p = new[] {
+                                c.X + ((n % 5) - 2) * 24,
+                                c.Y + ((n / 5) - 1) * 24
+                            }
+                        });
+                    for (int n = 0; n < 25; n++)
+                        drops.Add(new GroundDropRecord(
+                            200_000L + observer * 25 + n, 115,
+                            c.X + ((n % 5) - 2) * 16,
+                            c.Y + ((n / 5) - 2) * 16,
+                            100_115_0001L, 4_294_967_301L + observer,
+                            n, 2701, 1, LootSourceTrust.Verified,
+                            "ci:authenticated-mixed-load", null));
+                }
+                string populationFile = Path.Combine(path, "auth-population.json");
+                File.WriteAllText(populationFile, JsonSerializer.Serialize(new
+                {
+                    version = 4,
+                    kind = "verified_monster_runtime",
+                    map_id = 115,
+                    stats_verified = true, gameplay_ready = true,
+                    definitions = new[] { new {
+                        id = 1, name = "AuthenticatedMixedMonster",
+                        sprite = "EN001A", atlas = "Enemy/EN001A/atlas.json",
+                        stats = new {
+                            level = 3, max_hp = 100, attack_damage = 6,
+                            move_step = 8.0, aggro_radius = 160.0,
+                            lose_target_radius = 320.0, leash_radius = 320.0,
+                            attack_range = 24.0, attack_cooldown_ticks = 8,
+                            respawn_ticks = 90, wander_radius = 0.0,
+                            wander_interval_ticks = 100
+                        }
+                    } },
+                    spawns = spawnRows
+                }));
+                var population = MonsterPopulationCatalog.LoadVerified(
+                    populationFile, 115, grid, maxSpawns: 300);
+                var runtime = new MonsterRuntime(grid, population,
+                    new MonsterRuntimeOptions(
+                        AiIntervalTicks: 4, MaxAiPerStep: 64,
+                        MaxPathQueriesPerStep: 16, MaxPathExpandedCells: 256));
+                mixedMonsters = new MonsterWorldCoordinator([runtime]);
+                mixedDrops = drops;
+            }
             var router=new WorldResultRouter();
-            var aoi=new WorldAoiPump(router);
+            var aoi=new WorldAoiPump(
+                router,
+                mixedLoad ? new WorldAoi(new WorldAoiOptions(
+                    EnterHalfWidth: 320, EnterHalfHeight: 240,
+                    ExitMargin: 64, BucketSize: 128,
+                    MaxEntities: 1024, MaxObservers: 64,
+                    MaxVisiblePerObserver: 64,
+                    MaxPendingEventsPerObserver: 256)) : null,
+                mixedLoad ? new WorldAoiPumpOptions(
+                    FlushIntervalMilliseconds: 2,
+                    MaxFramesPerObserverPerPoll: 64) : null,
+                mixedMonsters, initialGroundDrops: mixedDrops);
             var combat=withRecovery ? new PlayerCombatSettlement(
                 store,delivery:router.QueuePlayerDamage) : null;
             var combatStop=withRecovery ? new CancellationTokenSource() : null;
@@ -821,7 +904,8 @@ internal static class TlsGatewayListenerChecks
                 CharacterId=characterId,
                 InventoryUids=saved.Select(x=>x.ItemUid).ToArray(),
                 Routing=router.RunAsync(host.Results),Visibility=aoi.RunAsync(),
-                CombatStop=combatStop,CombatWorker=combatWorker
+                CombatStop=combatStop,CombatWorker=combatWorker,
+                Monsters=mixedMonsters
             };
         }
 
