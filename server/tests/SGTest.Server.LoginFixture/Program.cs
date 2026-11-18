@@ -167,7 +167,7 @@ internal static class Program
                             level = 3, max_hp = 100, attack_damage = 20, move_step = 8.0,
                             aggro_radius = 1.0, lose_target_radius = 150.0,
                             leash_radius = 150.0, attack_range = 100.0,
-                            attack_cooldown_ticks = 1000, respawn_ticks = 300,
+                            attack_cooldown_ticks = 1000, respawn_ticks = 5,
                             wander_radius = 0.0, wander_interval_ticks = 100
                         }
                     }
@@ -188,7 +188,10 @@ internal static class Program
                 {
                     // Synthetic single-target damage/range fixture; MpCost=1
                     // matches the current-client 99001 source resource cost only.
-                    [99001]=new(99001,40,48,1,MpCost:1)
+                    [99001]=new(99001,40,48,1,MpCost:1),
+                    // Explicit synthetic failure-path rule. It exists only to
+                    // prove insufficient MP cannot mutate the target.
+                    [99002]=new(99002,10,48,1,MpCost:2)
                 });
 
             await using var world = new ServerWorldHost(
@@ -263,10 +266,10 @@ internal static class Program
                 var monster = runtime.SnapshotAll().Single();
                 var player = await store.GetCharacterCombatProfileAsync(characterId)
                     .ConfigureAwait(false);
-                if (monster.CurrentHp != 0 || monster.MaxHp != 100 ||
+                if (monster.CurrentHp != 100 || monster.MaxHp != 100 ||
                     player?.Data.CurrentHp != 100 || player.Data.MaxHp != 100 ||
                     player.Data.CurrentMp != 1 || player.Data.MaxMp != 2 ||
-                    ended.CommandsAccepted != 4 ||
+                    ended.CommandsAccepted != 5 ||
                     settlement.Statistics.HitsCommitted != 1 ||
                     settlement.Statistics.DamageCommitted != 18 ||
                     settlement.Statistics.DeathsCommitted != 1 ||
@@ -280,7 +283,7 @@ internal static class Program
                 Console.WriteLine(
                     $"COMBAT_FIXTURE_PASS tls={ended.Protocol} target={monster.EntityId} " +
                     $"monster_hp={monster.CurrentHp}/{monster.MaxHp} player_hp={player.Data.CurrentHp}/{player.Data.MaxHp} " +
-                    $"player_mp={player.Data.CurrentMp}/{player.Data.MaxMp} respawn=true skill_99001=true skill_mp_cost=1 monster_damage_committed={settlement.Statistics.DamageCommitted} deaths={settlement.Statistics.DeathsCommitted} commands={ended.CommandsAccepted}");
+                    $"player_mp={player.Data.CurrentMp}/{player.Data.MaxMp} respawn=true skill_99001=true skill_mp_cost=1 insufficient_skill_99002=true monster_damage_committed={settlement.Statistics.DamageCommitted} deaths={settlement.Statistics.DeathsCommitted} commands={ended.CommandsAccepted}");
                 Console.Out.Flush();
                 return 0;
             }

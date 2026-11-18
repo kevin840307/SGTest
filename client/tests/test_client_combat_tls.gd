@@ -131,8 +131,41 @@ func _initialize() -> void:
 	if skilled.is_empty():
 		_fail("authoritative skill settlement "+str(session.snapshot()),session)
 		return
+
+	# Wait for the same authoritative monster generation to respawn, then try a
+	# synthetic rule whose MP cost exceeds the remaining durable MP.
+	var respawned_monster := _wait(session,func(v):
+		return (
+			v.monsters.has(target)
+			and int(v.monsters[target].current_hp)==100
+			and int(v.monsters[target].max_hp)==100
+			and int(v.monsters[target].revision)>int(skilled.monsters[target].revision)
+		),7000)
+	if respawned_monster.is_empty():
+		_fail("monster did not respawn for insufficient-MP gate "+str(session.snapshot()),session)
+		return
+	var visual_count := int(respawned_monster.player_skill_events.size())
+	if not session.cast_skill(99002,target):
+		_fail("insufficient-MP skill intent refused before server authority",session)
+		return
+	var insufficient := _wait(session,func(v):
+		return (
+			int(v.last_skill_result_sequence)==2
+			and int(v.last_skill_result_status)==11
+			and int(v.last_skill_result.skill_id)==99002
+			and int(v.player_current_mp)==1
+			and int(v.player_max_mp)==2
+			and v.monsters.has(target)
+			and int(v.monsters[target].current_hp)==100
+		),7000)
+	if insufficient.is_empty():
+		_fail("insufficient-MP result "+str(session.snapshot()),session)
+		return
+	if int(insufficient.player_skill_events.size())!=visual_count:
+		_fail("rejected MP skill emitted presentation damage",session)
+		return
 	session.stop()
-	print("CLIENT_COMBAT_TLS_PASS target=%d player_damage=60 normal_attack_hp=40 skill_id=99001 skill_damage=40 skill_mp=2_to_1 monster_hp=0 monster_damage=18 death_hp=0 respawn_hp=100 dead=false skill_request_has_no_damage=true skill_receipt_does_not_mutate_monster=true player_damage_visual=true player_respawn_visual=true visual_after_db_commit=true public_intents_blocked_while_dead=true move_after_respawn=true damage_sequence_continuous=true request_has_no_damage=true receipt_does_not_mutate_monster=true delta_owns_hp=true damage_after_db_commit=true" % target)
+	print("CLIENT_COMBAT_TLS_PASS target=%d player_damage=60 normal_attack_hp=40 skill_id=99001 skill_damage=40 skill_mp=2_to_1 insufficient_mp_status=11 rejected_skill_no_damage=true monster_respawn_hp=100 monster_damage=18 death_hp=0 respawn_hp=100 dead=false skill_request_has_no_damage=true skill_receipt_does_not_mutate_monster=true player_damage_visual=true player_respawn_visual=true visual_after_db_commit=true public_intents_blocked_while_dead=true move_after_respawn=true damage_sequence_continuous=true request_has_no_damage=true receipt_does_not_mutate_monster=true delta_owns_hp=true damage_after_db_commit=true" % target)
 	quit(0)
 
 func _wait(session, predicate: Callable, timeout_ms: int) -> Dictionary:
