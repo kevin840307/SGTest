@@ -143,6 +143,7 @@ func _ready() -> void:
 	discard_all_button.pressed.connect(func(): discard_quantity.value = discard_quantity.max_value)
 	discard_button.pressed.connect(_discard_selected_item)
 	discard_confirm.confirmed.connect(_confirm_inventory_discard)
+	discard_confirm.canceled.connect(func(): _pending_discard_confirmation.clear())
 	var style := StyleBoxFlat.new()
 	style.bg_color = Color("211c15")
 	style.border_color = Color("c8a452")

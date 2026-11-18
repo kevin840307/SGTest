@@ -411,6 +411,11 @@ func run() -> void:
 	if stub.discards != 0 or not panel.discard_confirm.dialog_text.contains("UID 10000"):
 		fail("Destructive discard bypassed confirmation")
 		return
+	panel.discard_confirm.canceled.emit()
+	if not panel._pending_discard_confirmation.is_empty() or stub.discards != 0:
+		fail("Cancelled permanent discard left a stale confirmation lock")
+		return
+	panel.discard_button.pressed.emit()
 	panel._latest.actor_id = 99
 	panel.discard_confirm.confirmed.emit()
 	if stub.discards != 0:
