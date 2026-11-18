@@ -28,11 +28,14 @@ internal static class NpcShopCatalogChecks
             buy:10, sell:5);
         var catalog = NpcShopCatalog.LoadVerified(valid, [npc]);
         Checks.Require(catalog.Count == 1 &&
-            catalog.TryGet(76, 99, out var shop) &&
-            shop.NpcX == 8 && shop.NpcY == 8 &&
+            catalog.TryGet(76, 99, out _),
+            "verified shop did not join source NPC position");
+        if (!catalog.TryGet(76, 99, out var shop))
+            throw new Exception("verified shop missing after catalog validation");
+        Checks.Require(shop.NpcX == 8 && shop.NpcY == 8 &&
             shop.Items.Count == 1 &&
             shop.Items[1001] == new NpcShopCatalog.Item(1001,10,5),
-            "verified shop did not join source NPC position");
+            "verified shop source position or item mismatch");
 
         var near = new ActorSnapshot(1,76,1,1,0,0,8,8,1,false);
         var far = near with { X = 500, Y = 500 };
