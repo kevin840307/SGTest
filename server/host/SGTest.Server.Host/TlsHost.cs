@@ -99,8 +99,13 @@ internal static class TlsHost
             IReadOnlyDictionary<int,RecoveryItemRule>? recoveryRules=
                 recoveryManifest is null ? null :
                 RecoveryItemCatalog.LoadVerified(Path.GetFullPath(recoveryManifest));
-            var portals = PortalCatalog.LoadNpcDocuments(new[] { 13, 15 }.Select(id =>
-                Path.Combine(root, "maps", id.ToString(), "npcs.json")));
+            var npcDocuments = new[] { 13, 15 }.Select(id =>
+                Path.Combine(root, "maps", id.ToString(), "npcs.json")).ToArray();
+            var portals = PortalCatalog.LoadNpcDocuments(npcDocuments);
+            string? shopManifest=options.GetValueOrDefault("--shop-rules");
+            NpcShopCatalog? shops=shopManifest is null ? null :
+                NpcShopCatalog.LoadVerified(
+                    Path.GetFullPath(shopManifest),npcDocuments);
             using var identity = new SqliteIdentityStore(database);
             await identity.InitializeAsync(stop.Token);
             // Reserve even when no drop rule table is enabled, preventing
@@ -158,7 +163,8 @@ internal static class TlsHost
                 identity, world, portals, positions, combat,
                 pickupWorldGeneration: lootGeneration,
                 recoveryRules: recoveryRules,
-                characterCreation: characterCreation);
+                characterCreation: characterCreation,
+                shops: shops);
             await using var listener = new TlsGatewayListener(address, port, authorization,
                 certificate, router, new(MaxConnections: maximum, MaxConnectionsPerAddress: perAddress));
             await world.StartAsync();
@@ -185,6 +191,7 @@ internal static class TlsHost
                     loot_rule_count = dropRules?.Count ?? 0,
                     verified_recovery_rule_count = recoveryRules?.Count ?? 0,
                     verified_skill_rule_count = skillRules?.Count ?? 0,
+                    verified_shop_count = shops?.Count ?? 0,
                     unpicked_ground_drops = activeDrops.Count,
                     character_creation_enabled = characterCreation is not null,
                     character_creation_map = characterCreation?.Spawn.MapId
@@ -231,7 +238,8 @@ internal static class TlsHost
                 combat = combat.Statistics,
                 loot = loot?.Statistics,
                 verified_recovery_rule_count = recoveryRules?.Count ?? 0,
-                verified_skill_rule_count = skillRules?.Count ?? 0
+                verified_skill_rule_count = skillRules?.Count ?? 0,
+                verified_shop_count = shops?.Count ?? 0
             }));
             return 0;
         }
@@ -242,6 +250,7 @@ internal static class TlsHost
                 "[--bind 127.0.0.1] [--port 7777] [--max-connections 128] [--max-per-address 8] " +
                 "[--position-checkpoint-ms 5000] [--loot-rules <VERIFIED_JSON>] " +
                 "[--recovery-rules <VERIFIED_JSON>] [--skill-rules <VERIFIED_JSON>] " +
+                "[--shop-rules <VERIFIED_JSON>] " +
                 "[--character-spawn-map <13|15> --character-spawn-x <X> --character-spawn-y <Y>] " +
                 "[--seconds N]");
             return 2;
@@ -264,6 +273,7 @@ internal static class TlsHost
         string[] known = ["--content", "--identity", "--certificate", "--bind", "--port",
                           "--max-connections", "--max-per-address", "--position-checkpoint-ms",
                           "--loot-rules", "--recovery-rules", "--skill-rules",
+                          "--shop-rules",
                           "--character-spawn-map", "--character-spawn-x",
                           "--character-spawn-y", "--seconds"];
         var values = new Dictionary<string, string>(StringComparer.Ordinal);

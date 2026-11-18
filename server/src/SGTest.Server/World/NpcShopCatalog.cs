@@ -35,7 +35,7 @@ public sealed class NpcShopCatalog
                !ValidPosition(shop.NpcX,shop.NpcY)||
                string.IsNullOrWhiteSpace(shop.SourceReference)||
                shop.SourceReference.Length>512||
-               shop.Items is null||shop.Items.Count is <1 or >Wire.WireProtocol.ShopSnapshotMaxItems||
+               shop.Items is null||shop.Items.Count is <1 or >SGTest.Server.Wire.WireProtocol.ShopSnapshotMaxItems||
                !_shops.TryAdd((shop.MapId,shop.NpcSpawnId),shop))
                 throw new ArgumentException("Malformed/duplicate NPC shop",nameof(shops));
             foreach(var item in shop.Items.Values)
@@ -102,7 +102,7 @@ public sealed class NpcShopCatalog
                     "Shop references missing/duplicate source NPC");
             if(!row.TryGetProperty("items",out var items)||
                items.ValueKind!=JsonValueKind.Array||
-               items.GetArrayLength() is <1 or >Wire.WireProtocol.ShopSnapshotMaxItems)
+               items.GetArrayLength() is <1 or >SGTest.Server.Wire.WireProtocol.ShopSnapshotMaxItems)
                 throw new InvalidDataException("Invalid shop item list");
             var dictionary=new Dictionary<int,Item>();
             foreach(var entry in items.EnumerateArray())
