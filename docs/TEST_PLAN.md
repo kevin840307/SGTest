@@ -20,6 +20,27 @@
 
 **MVP 後的全圖／全種類／更大負載**：其他地圖與完整傳點網絡、所有原版 NPC/Enemy/裝備/技能、100 Player／1000 Enemy／5000 Drop、多開 8、Windows/Mac 完整發行；MVP 不能代替全量驗收。
 
+## MVP008-PROC-BASELINE — 正式 Host + 兩個 Godot 主場景 CPU/RSS 程序基線（部分完成）
+
+2026-11-18：新增 `client/tests/process_telemetry.py`，不用外部 Python 依賴，以 Linux `/proc` 或 Windows Process API 每 50ms 量測真正的 Host/Godot 子程序的 Peak RSS（OS resident high-water）、當前 RSS、user+kernel CPU seconds。正式 `run_online_main_gate.py` 支援 `--metrics-report`，沿用登入、TLS、AOI、怪物、Map15→Map13→Map15、資源釋放的 Host+兩個實際 `app/main` 場景流程。報告包含各程序取樣數、觀測存活時間、合成 PCK/測試來源 SHA、PASS/FAIL，不記錄憑證、密碼或私人檔案路徑。Windows `_console.exe` 必須找到並量測 sibling 真正的 Engine `.exe`，不能拿 wrapper 當遊戲 RSS。CI 每輪保存 14 天 Artifact，沒有任意設置 CI runner RSS 硬門檻。
+
+可重跑命令（Godot 4.7.2、.NET 8、OpenSSL；不需私有原圖）：
+
+```bash
+python -m unittest client.tests.test_process_telemetry -v
+python client/tests/run_online_main_gate.py /path/to/Godot_v4.7.2-stable_linux.x86_64 --timeout 70 --metrics-report reports/online_main_process_metrics.json
+```
+
+首次 [GitHub Client core run 44294339322](https://github.com/kevin840307/SGTest/actions/runs/44294339322) **PASS**：2 項 sampler unit tests PASS；正式 Host、兩個 Godot 主場景及既有 TLS/AOI/跨圖/技能回歸 PASS；`online-main-process-baseline` Artifact ID=14422168612 已成功上傳。Ubuntu 24.04 / Godot 4.7.2 Linux headless / 合成外部 PCK，觀察到：
+
+| 實際子程序 | Peak RSS（獨立 OS 高水位） | CPU seconds | 成功取樣次數 |
+|---|---:|---:|---:|
+| 正式 .NET 8 Host（合成雙圖） | 92.43 MiB | 1.07 | 69 |
+| Godot actor `app/main` | 129.30 MiB | 0.53 | 43 |
+| Godot observer `app/main` | 129.52 MiB | 0.55 | 57 |
+
+限制：三個 Peak RSS 是**各自不同生命週期的峰值**，不得相加當成同時整機 RSS；CPU seconds 不是 CPU 百分比，50ms 取樣無法保證捕捉每個短暫尖峰。這只是 Linux headless、合成素材、兩個角色的真程序量測基線，**不是 Windows 原版 UI/GPU、20 玩家／300 Enemy／500 Drop、AFK/Unfocus/1-2-4 多開、FPS P95/P99、OS dedicated VRAM、Server Tick P95/P99、網路吞吐或與 Recovered 公平比較**。MVP008 / MVP-RESOURCE-LOAD Gate 仍 [ ]，不能直接將 129 MiB 當成完整 Windows Client RAM。
+
 ## ALT001 — 多方案公平比較／決策 Gate
 
 適用於正式 Wire、AOI、Monster AI／A*、同步補間、Renderer、Atlas/PCK、AssetStore、AFK／多開與持久化等有合理替代方案的重大開發決策。
