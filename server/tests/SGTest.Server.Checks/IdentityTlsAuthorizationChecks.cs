@@ -13,6 +13,8 @@ internal static class IdentityTlsAuthorizationChecks
     {
         Checks.Run("TLS Auth CharacterChoose binds owned persistent character into World",
             () => OwnedCharacterEntersWorld(root).GetAwaiter().GetResult());
+        Checks.Run("TLS empty account creates character, refreshes list and enters World without reconnect",
+            () => CreateCharacterAndEnterWorld(root).GetAwaiter().GetResult());
         Checks.Run("TLS invalid password never reaches CharacterList or World",
             () => InvalidPasswordRejected(root).GetAwaiter().GetResult());
         Checks.Run("TLS authenticated account cannot choose another account character",
@@ -84,6 +86,94 @@ internal static class IdentityTlsAuthorizationChecks
             var ended = await serverTask.WaitAsync(TimeSpan.FromSeconds(2));
             Checks.Require(ended.CommandsAccepted == 1,
                 "TLS authenticated gameplay command count mismatch");
+            await world.StopAsync();
+        }
+        finally { Directory.Delete(identityRoot, true); }
+    }
+
+
+    private static async Task CreateCharacterAndEnterWorld(string root)
+    {
+        string identityRoot = TempRoot();
+        try
+        {
+            string mapDir = Checks.Fixture(root, 74, 5, 5, (_, _) => 0);
+            var grid = BlockingGrid.Load(mapDir, 74);
+            await using var world = new ServerWorldHost([grid]);
+            await world.StartAsync();
+            using var store = new SqliteIdentityStore(
+                Path.Combine(identityRoot, "identity.db"));
+            await store.InitializeAsync();
+            long accountId = (await store.CreateAccountAsync(
+                "new_player", "Create-Password-123!")).AccountId;
+            Checks.Require((await store.ListCharactersAsync(accountId)).Count == 0,
+                "new account unexpectedly has characters");
+
+            var authorization = new IdentityTlsAuthorization(
+                store, world,
+                characterCreation: new CharacterCreationPolicy(
+                    new CharacterSpawn(74, 8, 8)));
+            var (tls, serverTask, client) = await StartSession(authorization, world);
+            await tls.WriteAsync(WireProtocol.EncodeAuthRequest(
+                new("new_player", "Create-Password-123!")));
+            await tls.FlushAsync();
+            Checks.Require(WireProtocol.TryDecodeAuthResult(
+                    await ReadFrameAsync(tls), out var auth) &&
+                auth.Status == AuthWireStatus.Success,
+                "new-player auth failed");
+            Checks.Require(WireProtocol.TryDecodeCharacterList(
+                    await ReadFrameAsync(tls), out var empty) &&
+                empty.Characters.Count == 0,
+                "empty account did not receive empty selectable list");
+
+            await tls.WriteAsync(WireProtocol.EncodeCharacterCreate(
+                new(0, "CreatedHero")));
+            await tls.FlushAsync();
+            Checks.Require(WireProtocol.TryDecodeCharacterCreateResult(
+                    await ReadFrameAsync(tls), out var created) &&
+                created.Status == CharacterCreateWireStatus.Success &&
+                created.CharacterId > 0 && created.Slot == 0 &&
+                created.Name == "CreatedHero",
+                "character create result mismatch");
+            Checks.Require(WireProtocol.TryDecodeCharacterList(
+                    await ReadFrameAsync(tls), out var refreshed) &&
+                refreshed.Characters.Count == 1 &&
+                refreshed.Characters[0].CharacterId == created.CharacterId &&
+                refreshed.Characters[0].Slot == 0 &&
+                refreshed.Characters[0].Name == "CreatedHero",
+                "character list was not refreshed after creation");
+
+            // Same connection may recover from a name conflict without
+            // reconnecting; Server then refreshes the authoritative list again.
+            await tls.WriteAsync(WireProtocol.EncodeCharacterCreate(
+                new(1, "CreatedHero")));
+            await tls.FlushAsync();
+            Checks.Require(WireProtocol.TryDecodeCharacterCreateResult(
+                    await ReadFrameAsync(tls), out var conflict) &&
+                conflict.Status == CharacterCreateWireStatus.NameTaken &&
+                conflict.CharacterId == 0,
+                "duplicate character name did not fail closed");
+            Checks.Require(WireProtocol.TryDecodeCharacterList(
+                    await ReadFrameAsync(tls), out var afterConflict) &&
+                afterConflict.Characters.Count == 1,
+                "failed create changed authoritative character list");
+
+            await tls.WriteAsync(WireProtocol.EncodeCharacterChoose(
+                new(created.CharacterId)));
+            await tls.FlushAsync();
+            Checks.Require(WireProtocol.TryDecodeCharacterChooseResult(
+                    await ReadFrameAsync(tls), out var choose) &&
+                choose.Status == CharacterChooseWireStatus.Success &&
+                choose.CharacterId == created.CharacterId &&
+                choose.MapId == 74 && choose.X == 8 && choose.Y == 8,
+                "freshly created character did not enter configured spawn");
+
+            await tls.DisposeAsync();
+            client.Dispose();
+            var ended = await serverTask.WaitAsync(TimeSpan.FromSeconds(2));
+            Checks.Require(ended.Reason == TlsWireEndReason.CleanEof &&
+                (await store.ListCharactersAsync(accountId)).Count == 1,
+                "created character lifecycle did not persist cleanly");
             await world.StopAsync();
         }
         finally { Directory.Delete(identityRoot, true); }
