@@ -186,7 +186,9 @@ internal static class Program
             var coordinator = new MonsterWorldCoordinator([runtime],
                 new Dictionary<int,VerifiedSkillRule>
                 {
-                    [99001]=new(99001,40,48,1)
+                    // Synthetic single-target damage/range fixture; MpCost=1
+                    // matches the current-client 99001 source resource cost only.
+                    [99001]=new(99001,40,48,1,MpCost:1)
                 });
 
             await using var world = new ServerWorldHost(
@@ -208,7 +210,8 @@ internal static class Program
                     Constitution: 5, Wisdom: 5, Level: 1,
                     CurrentHp: 18, MaxHp: 100,
                     Attack: 60, Defense: 10, Hit: 10, Dodge: 3,
-                    AttackRange: 48, AttackCooldownTicks: 15))
+                    AttackRange: 48, AttackCooldownTicks: 15,
+                    CurrentMp:2, MaxMp:2))
                 .ConfigureAwait(false);
 
             var router = new WorldResultRouter(
@@ -262,6 +265,7 @@ internal static class Program
                     .ConfigureAwait(false);
                 if (monster.CurrentHp != 0 || monster.MaxHp != 100 ||
                     player?.Data.CurrentHp != 100 || player.Data.MaxHp != 100 ||
+                    player.Data.CurrentMp != 1 || player.Data.MaxMp != 2 ||
                     ended.CommandsAccepted != 4 ||
                     settlement.Statistics.HitsCommitted != 1 ||
                     settlement.Statistics.DamageCommitted != 18 ||
@@ -276,7 +280,7 @@ internal static class Program
                 Console.WriteLine(
                     $"COMBAT_FIXTURE_PASS tls={ended.Protocol} target={monster.EntityId} " +
                     $"monster_hp={monster.CurrentHp}/{monster.MaxHp} player_hp={player.Data.CurrentHp}/{player.Data.MaxHp} " +
-                    $"respawn=true skill_99001=true monster_damage_committed={settlement.Statistics.DamageCommitted} deaths={settlement.Statistics.DeathsCommitted} commands={ended.CommandsAccepted}");
+                    $"player_mp={player.Data.CurrentMp}/{player.Data.MaxMp} respawn=true skill_99001=true skill_mp_cost=1 monster_damage_committed={settlement.Statistics.DamageCommitted} deaths={settlement.Statistics.DeathsCommitted} commands={ended.CommandsAccepted}");
                 Console.Out.Flush();
                 return 0;
             }
@@ -347,7 +351,9 @@ internal static class Program
             var coordinator = new MonsterWorldCoordinator([runtime],
                 new Dictionary<int,VerifiedSkillRule>
                 {
-                    [99001]=new(99001,40,48,1)
+                    // Synthetic single-target damage/range fixture; MpCost=1
+                    // matches the current-client 99001 source resource cost only.
+                    [99001]=new(99001,40,48,1,MpCost:1)
                 });
 
             await using var world = new ServerWorldHost(
@@ -374,7 +380,8 @@ internal static class Program
                     Race:0,Career:0,Strength:5,Dexterity:5,
                     Constitution:5,Wisdom:5,Level:1,
                     CurrentHp:100,MaxHp:100,Attack:60,Defense:10,
-                    Hit:10,Dodge:3,AttackRange:48,AttackCooldownTicks:15))
+                    Hit:10,Dodge:3,AttackRange:48,AttackCooldownTicks:15,
+                    CurrentMp:2,MaxMp:2))
                 .ConfigureAwait(false);
 
             var router = new WorldResultRouter(
@@ -436,6 +443,7 @@ internal static class Program
                 }
                 if(monster.CurrentHp!=0 || monster.MaxHp!=100 ||
                     actorProfile?.Data.CurrentHp!=82 ||
+                    actorProfile.Data.CurrentMp!=1 || actorProfile.Data.MaxMp!=2 ||
                     settlement.Statistics.HitsCommitted!=1 ||
                     settlement.Statistics.DamageCommitted!=18 ||
                     results[0].Reason!=TlsWireEndReason.CleanEof ||
@@ -454,6 +462,7 @@ internal static class Program
                     $"COMBAT_OBSERVER_FIXTURE_PASS actor_a={observerId} actor_b={actorId} " +
                     $"monster_hp={monster.CurrentHp}/{monster.MaxHp} " +
                     $"actor_hp={actorProfile!.Data.CurrentHp}/{actorProfile.Data.MaxHp} " +
+                    $"actor_mp={actorProfile.Data.CurrentMp}/{actorProfile.Data.MaxMp} " +
                     $"monster_damage={settlement.Statistics.DamageCommitted} " +
                     $"actor_commands={results[1].CommandsAccepted} skill_99001=true aoi_frames={pump.FramesQueued}");
                 Console.Out.Flush();

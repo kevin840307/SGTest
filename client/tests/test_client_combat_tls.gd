@@ -41,6 +41,8 @@ func _initialize() -> void:
 			and int(v.last_world_ready_ack_epoch)==int(v.map_epoch)
 			and bool(v.combat_available)
 			and int(v.player_max_hp)==100
+			and int(v.player_current_mp)==2
+			and int(v.player_max_mp)==2
 			and v.monsters.size()==1
 		),7000)
 	if ready.is_empty():
@@ -119,6 +121,9 @@ func _initialize() -> void:
 			and int(v.last_skill_result.target_entity_id)==target
 			and int(v.last_skill_result.damage)==40
 			and int(v.last_skill_result.current_hp)==0
+			and int(v.player_current_mp)==1
+			and int(v.player_max_mp)==2
+			and int(v.player_damage_sequence)==1
 			and v.monsters.has(target)
 			and int(v.monsters[target].current_hp)==0
 			and int(v.monsters[target].revision)>=int(v.last_skill_result.target_revision)
@@ -127,7 +132,7 @@ func _initialize() -> void:
 		_fail("authoritative skill settlement "+str(session.snapshot()),session)
 		return
 	session.stop()
-	print("CLIENT_COMBAT_TLS_PASS target=%d player_damage=60 normal_attack_hp=40 skill_id=99001 skill_damage=40 monster_hp=0 monster_damage=18 death_hp=0 respawn_hp=100 dead=false skill_request_has_no_damage=true skill_receipt_does_not_mutate_monster=true player_damage_visual=true player_respawn_visual=true visual_after_db_commit=true public_intents_blocked_while_dead=true move_after_respawn=true damage_sequence_continuous=true request_has_no_damage=true receipt_does_not_mutate_monster=true delta_owns_hp=true damage_after_db_commit=true" % target)
+	print("CLIENT_COMBAT_TLS_PASS target=%d player_damage=60 normal_attack_hp=40 skill_id=99001 skill_damage=40 skill_mp=2_to_1 monster_hp=0 monster_damage=18 death_hp=0 respawn_hp=100 dead=false skill_request_has_no_damage=true skill_receipt_does_not_mutate_monster=true player_damage_visual=true player_respawn_visual=true visual_after_db_commit=true public_intents_blocked_while_dead=true move_after_respawn=true damage_sequence_continuous=true request_has_no_damage=true receipt_does_not_mutate_monster=true delta_owns_hp=true damage_after_db_commit=true" % target)
 	quit(0)
 
 func _wait(session, predicate: Callable, timeout_ms: int) -> Dictionary:

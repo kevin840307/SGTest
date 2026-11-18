@@ -117,6 +117,9 @@ func _observe(session, self_id: int) -> void:
 
 func _attack(session, self_id: int) -> void:
 	var ready: Dictionary = session.snapshot()
+	if int(ready.player_current_mp)!=2 or int(ready.player_max_mp)!=2:
+		_fail("actor MP baseline unavailable "+str(ready),session)
+		return
 	var remote_id := int(ready.entities.keys()[0])
 	var monster_id := int(ready.monsters.keys()[0])
 	if remote_id==self_id or not bool(ready.combat_available):
@@ -159,6 +162,8 @@ func _attack(session, self_id: int) -> void:
 			and int(v.player_skill_events[-1].attacker_actor_id)==self_id
 			and int(v.player_skill_events[-1].skill_id)==99001
 			and int(v.player_skill_events[-1].damage)==40
+			and int(v.player_current_mp)==1
+			and int(v.player_max_mp)==2
 			and int(v.monsters[monster_id].current_hp)==0
 		),10000)
 	if skill_settled.is_empty():
@@ -168,7 +173,7 @@ func _attack(session, self_id: int) -> void:
 	# visual and following MonsterDelta before this actor despawns.
 	OS.delay_msec(350)
 	session.stop()
-	print("CLIENT_COMBAT_OBSERVER_PASS role=actor actor=%d target=%d normal_damage=60 skill_id=99001 skill_damage=40 monster_hp=0 own_visual=true own_skill_visual=true own_hit_visual=true monster_damage=18 player_hp=82" % [self_id,monster_id])
+	print("CLIENT_COMBAT_OBSERVER_PASS role=actor actor=%d target=%d normal_damage=60 skill_id=99001 skill_damage=40 skill_mp=2_to_1 monster_hp=0 own_visual=true own_skill_visual=true own_hit_visual=true monster_damage=18 player_hp=82" % [self_id,monster_id])
 	quit(0)
 
 func _wait(session, predicate: Callable, timeout_ms: int) -> Dictionary:
