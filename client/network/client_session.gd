@@ -133,6 +133,43 @@ func pickup_ground_drop(drop_id: int) -> bool:
 	return _queue_intent({"type":"pickup_ground_drop","drop_id":drop_id})
 
 
+
+
+func open_shop(npc_spawn_id: int) -> bool:
+	var current := snapshot()
+	if npc_spawn_id <= 0 or int(current.get("state",-1)) != WorldState.STATE_IN_WORLD or bool(current.get("player_dead",false)) or not bool(current.get("world_ready",false)) or not bool(current.get("inventory_ready",false)) or int(current.get("pending_shop_sequence",0)) != 0:
+		return false
+	return _queue_intent({"type":"shop_open","npc_spawn_id":npc_spawn_id,
+		"actor_id":int(current.get("actor_id",0)),"map_epoch":int(current.get("map_epoch",0))})
+
+
+func buy_shop_item(item_definition_id: int, quantity: int = 1) -> bool:
+	var current := snapshot()
+	var npc := int(current.get("active_shop_npc",0))
+	var shops: Dictionary = current.get("shop_items",{})
+	if npc <= 0 or item_definition_id <= 0 or quantity < 1 or quantity > 1000000 or not shops.has(item_definition_id) or int(current.get("pending_shop_sequence",0)) != 0:
+		return false
+	return _queue_intent({"type":"shop_buy","npc_spawn_id":npc,
+		"item_definition_id":item_definition_id,"quantity":quantity,
+		"actor_id":int(current.get("actor_id",0)),"map_epoch":int(current.get("map_epoch",0))})
+
+
+func sell_shop_item(item_uid: int, quantity: int = 1) -> bool:
+	var current := snapshot()
+	var npc := int(current.get("active_shop_npc",0))
+	var items: Dictionary = current.get("inventory_items",{})
+	var shop_items: Dictionary = current.get("shop_items",{})
+	if npc <= 0 or item_uid <= 0 or quantity < 1 or quantity > 1000000 or not items.has(item_uid):
+		return false
+	var item: Dictionary = items[item_uid]
+	var item_id := int(item.get("item_definition_id",0))
+	if not shop_items.has(item_id) or int((shop_items[item_id] as Dictionary).get("sell_price",0)) <= 0 or int(item.get("quantity",0)) < quantity or int(current.get("pending_shop_sequence",0)) != 0:
+		return false
+	return _queue_intent({"type":"shop_sell","npc_spawn_id":npc,
+		"item_uid":item_uid,"item_definition_id":item_id,"quantity":quantity,
+		"actor_id":int(current.get("actor_id",0)),"map_epoch":int(current.get("map_epoch",0))})
+
+
 func respawn() -> bool:
 	var current := snapshot()
 	if not bool(current.get("combat_available",false)) or not bool(current.get("player_dead",false)):
@@ -219,13 +256,24 @@ func _queue_intent(intent: Dictionary) -> bool:
 				accepted = false
 				break
 	if accepted and kind == "use_recovery_item":
+		if int(_published.get("pending_shop_sequence",0)) != 0:
+			accepted = false
 		for queued in _intents:
-			if str(queued.get("type","")) in ["use_recovery_item","discard_inventory_item"]:
+			if str(queued.get("type","")) in ["use_recovery_item","discard_inventory_item","shop_buy","shop_sell"]:
 				accepted = false
 				break
 	if accepted and kind == "discard_inventory_item":
+		if int(_published.get("pending_shop_sequence",0)) != 0:
+			accepted = false
 		for queued in _intents:
-			if str(queued.get("type","")) in ["discard_inventory_item","use_recovery_item"]:
+			if str(queued.get("type","")) in ["discard_inventory_item","use_recovery_item","shop_buy","shop_sell"]:
+				accepted = false
+				break
+	if accepted and kind in ["shop_open","shop_buy","shop_sell"]:
+		if int(_published.get("pending_shop_sequence",0)) != 0:
+			accepted = false
+		for queued in _intents:
+			if str(queued.get("type","")) in ["shop_open","shop_buy","shop_sell","use_recovery_item","discard_inventory_item"]:
 				accepted = false
 				break
 	if accepted and kind == "cast_skill":
@@ -447,6 +495,33 @@ func _process_first_intent() -> void:
 		var sequence := int(current.npc_interaction_sequence) + 1
 		var frame := WireCodec.encode_npc_interact(int(current.map_epoch), sequence, int(intent.spawn_id))
 		if not frame.is_empty() and _transport.send_frame(frame) and _world.mark_npc_interact_sent(sequence):
+			_pop_intent()
+			_publish()
+
+	elif kind in ["shop_open","shop_buy","shop_sell"]:
+		var current: Dictionary = _world.snapshot()
+		if int(intent.get("actor_id",0)) != int(current.get("actor_id",0)) or int(intent.get("map_epoch",0)) != int(current.get("map_epoch",0)):
+			_pop_intent()
+			return
+		if int(current.state) != WorldState.STATE_IN_WORLD or bool(current.player_dead) or not bool(current.world_ready) or not bool(current.inventory_ready) or bool(current.resync_pending) or bool(current.waiting_for_new_map) or int(current.pending_world_ready_ack_epoch) != 0 or int(current.last_world_ready_ack_epoch) != int(current.map_epoch) or int(current.get("pending_shop_sequence",0)) != 0 or int(current.get("pending_recovery_sequence",0)) != 0 or int(current.get("pending_discard_sequence",0)) != 0:
+			return
+		var sequence := int(current.get("shop_sequence",0))+1
+		var npc := int(intent.get("npc_spawn_id",0))
+		var frame := PackedByteArray()
+		var shop_kind := 0
+		var item_id := int(intent.get("item_definition_id",0))
+		var uid := int(intent.get("item_uid",0))
+		var quantity := int(intent.get("quantity",0))
+		if kind == "shop_open":
+			shop_kind = 1
+			frame = WireCodec.encode_shop_open(int(current.map_epoch),sequence,npc)
+		elif kind == "shop_buy":
+			shop_kind = 2
+			frame = WireCodec.encode_shop_buy(int(current.map_epoch),sequence,npc,item_id,quantity)
+		else:
+			shop_kind = 3
+			frame = WireCodec.encode_shop_sell(int(current.map_epoch),sequence,npc,uid,item_id,quantity)
+		if not frame.is_empty() and _transport.send_frame(frame) and _world.mark_shop_sent(sequence,shop_kind,npc,item_id,uid,quantity):
 			_pop_intent()
 			_publish()
 	elif kind == "use_recovery_item":
