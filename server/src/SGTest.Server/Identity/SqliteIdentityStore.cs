@@ -286,11 +286,17 @@ CREATE TABLE IF NOT EXISTS inventory_discard_actions (
             // inventing a resource pool.
             if (schemaVersion < 6)
             {
-                Execute(connection, @"
+                // A v1 database reaches this point after the current CREATE TABLE
+                // statement has already materialized both MP columns. A real v5
+                // database has the old table and needs ALTER. Inspect the actual
+                // schema instead of assuming version alone describes table shape.
+                if (!ColumnExists(connection, "character_combat_profiles", "current_mp", tx))
+                    Execute(connection, @"
 ALTER TABLE character_combat_profiles
 ADD COLUMN current_mp INTEGER NOT NULL DEFAULT 0
 CHECK(current_mp BETWEEN 0 AND 2000000000);", tx);
-                Execute(connection, @"
+                if (!ColumnExists(connection, "character_combat_profiles", "max_mp", tx))
+                    Execute(connection, @"
 ALTER TABLE character_combat_profiles
 ADD COLUMN max_mp INTEGER NOT NULL DEFAULT 0
 CHECK(max_mp BETWEEN 0 AND 2000000000);", tx);
@@ -860,6 +866,26 @@ WHERE account_id=$id AND password_hash=$old;";
         command.Transaction = transaction;
         command.CommandText = sql;
         command.ExecuteNonQuery();
+    }
+
+    private static bool ColumnExists(
+        SqliteConnection connection, string table, string column,
+        SqliteTransaction? transaction = null)
+    {
+        // This helper is intentionally limited to the trusted internal schema
+        // identifiers supplied by migrations; no client/user value is interpolated.
+        if (table is not "character_combat_profiles" ||
+            string.IsNullOrWhiteSpace(column))
+            throw new ArgumentOutOfRangeException(nameof(table));
+        using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = $"PRAGMA table_info({table});";
+        using var reader = command.ExecuteReader();
+        while (reader.Read())
+            if (string.Equals(reader.GetString(1), column,
+                    StringComparison.OrdinalIgnoreCase))
+                return true;
+        return false;
     }
 
     private static long ScalarLong(SqliteConnection connection, string sql,
