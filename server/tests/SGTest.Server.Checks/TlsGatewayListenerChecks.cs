@@ -563,6 +563,14 @@ internal static class TlsGatewayListenerChecks
             TaskCreationOptions.RunContinuationsAsynchronously);
         var releaseClients = new TaskCompletionSource(
             TaskCreationOptions.RunContinuationsAsynchronously);
+        var sustainedRoundBarriers = sustainedLoad
+            ? Enumerable.Range(0, sustainedMoveRounds)
+                .Select(_ => new TaskCompletionSource(
+                    TaskCreationOptions.RunContinuationsAsynchronously))
+                .ToArray()
+            : Array.Empty<TaskCompletionSource>();
+        var sustainedRoundCounts = sustainedLoad
+            ? new int[sustainedMoveRounds] : Array.Empty<int>();
         int readCount = 0;
         int baselineCount = 0;
         long transferredBytes = 0;
@@ -840,6 +848,16 @@ internal static class TlsGatewayListenerChecks
                                         $"sustained client {index} unexpected opcode={liveHeader.Opcode}");
                             }
                         }
+                        // Keep all 20 readers close together. Without this
+                        // per-round barrier an early finisher stopped reading
+                        // while slower peers still generated dense AOI deltas,
+                        // legitimately filling that finished client's bounded
+                        // reliable FIFO and making this stress test flaky.
+                        if (Interlocked.Increment(
+                                ref sustainedRoundCounts[round]) == players)
+                            sustainedRoundBarriers[round].TrySetResult();
+                        await sustainedRoundBarriers[round].Task
+                            .WaitAsync(deadline.Token);
                     }
                 }
 
