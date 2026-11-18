@@ -17,6 +17,8 @@ internal static class IdentityTlsAuthorizationChecks
             () => CreateCharacterAndEnterWorld(root).GetAwaiter().GetResult());
         Checks.Run("TLS character creation is unavailable without server-authorized spawn policy",
             () => CharacterCreationRequiresPolicy(root).GetAwaiter().GetResult());
+        Checks.Run("TLS NPC shop sell buy replay and relogin preserve wallet and Item UID",
+            () => ShopSellBuyAndRelogin(root).GetAwaiter().GetResult());
         Checks.Run("TLS invalid password never reaches CharacterList or World",
             () => InvalidPasswordRejected(root).GetAwaiter().GetResult());
         Checks.Run("TLS authenticated account cannot choose another account character",
@@ -236,6 +238,183 @@ internal static class IdentityTlsAuthorizationChecks
         finally { Directory.Delete(identityRoot, true); }
     }
 
+
+
+    private static async Task ShopSellBuyAndRelogin(string root)
+    {
+        string identityRoot = TempRoot();
+        try
+        {
+            string mapDir = Checks.Fixture(root, 76, 5, 5, (_, _) => 0);
+            var grid = BlockingGrid.Load(mapDir, 76);
+            await using var world = new ServerWorldHost([grid]);
+            await world.StartAsync();
+            using var store = new SqliteIdentityStore(
+                Path.Combine(identityRoot, "identity.db"));
+            await store.InitializeAsync();
+            long accountId = (await store.CreateAccountAsync(
+                "shop_user", "Shop-Password-123!")).AccountId;
+            long characterId = (await store.CreateCharacterAsync(
+                accountId, 0, "ShopHero", new CharacterSpawn(76, 8, 8)))
+                .Character?.CharacterId ?? throw new Exception("shop fixture character missing");
+
+            long generation = await store.AllocateLootWorldGenerationAsync();
+            var drop = await store.CreateTrustedGroundDropAsync(new(
+                76, 8, 8, 9001,
+                SqliteIdentityStore.ComposeLootDeathRevision(generation, 1),
+                0, 1001, 2, LootSourceTrust.SyntheticTest, "shop-e2e-seed"));
+            var grant = await store.ClaimGroundDropAsync(new TrustedPickupContext(
+                characterId, 1, 1, 1, 76, 8, 8), drop.DropId);
+            Checks.Require(grant.Status == PickupStatus.Granted &&
+                grant.ItemUid > 0 && grant.Quantity == 2, "shop seed inventory grant failed");
+            long seededUid = grant.ItemUid;
+
+            var shop = new NpcShopCatalog.Shop(
+                76, 99, 8, 8, "synthetic-shop-e2e",
+                new Dictionary<int,NpcShopCatalog.Item>
+                {
+                    [1001] = new(1001, 10, 5)
+                });
+            var catalog = new NpcShopCatalog([shop]);
+            var authorization = new IdentityTlsAuthorization(
+                store, world, pickupWorldGeneration: generation, shops: catalog);
+            var router = new WorldResultRouter();
+
+            var first = await StartRoutedSession(authorization, world, router);
+            await first.Tls.WriteAsync(WireProtocol.EncodeAuthRequest(
+                new("shop_user", "Shop-Password-123!")));
+            await first.Tls.FlushAsync();
+            Checks.Require(WireProtocol.TryDecodeAuthResult(
+                    await ReadFrameAsync(first.Tls), out var auth) &&
+                auth.Status == AuthWireStatus.Success, "shop auth failed");
+            Checks.Require(WireProtocol.TryDecodeCharacterList(
+                    await ReadFrameAsync(first.Tls), out var list) &&
+                list.Characters.Single().CharacterId == characterId,
+                "shop character list mismatch");
+            await first.Tls.WriteAsync(WireProtocol.EncodeCharacterChoose(new(characterId)));
+            await first.Tls.FlushAsync();
+            Checks.Require(WireProtocol.TryDecodeCharacterChooseResult(
+                    await ReadFrameAsync(first.Tls), out var choose) &&
+                choose.Status == CharacterChooseWireStatus.Success,
+                "shop choose failed");
+            Checks.Require(WireProtocol.TryDecodeInventorySnapshot(
+                    await ReadFrameAsync(first.Tls), out var inventory) &&
+                inventory is not null && inventory.Complete &&
+                inventory.Items.Count == 1 &&
+                inventory.Items[0].ItemUid == seededUid &&
+                inventory.Items[0].Quantity == 2,
+                "shop login inventory baseline mismatch");
+
+            await first.Tls.WriteAsync(WireProtocol.EncodeShopOpen(
+                new(choose.MapEpoch, 1, 99)));
+            await first.Tls.FlushAsync();
+            Checks.Require(WireProtocol.TryDecodeShopSnapshot(
+                    await ReadFrameAsync(first.Tls), out var opened) &&
+                opened is not null && opened.Status == ShopOpenStatus.Opened &&
+                opened.Money == 0 && opened.Items.Count == 1 &&
+                opened.Items[0] == new ShopItemWire(1001, 10, 5),
+                "shop open snapshot mismatch");
+
+            await first.Tls.WriteAsync(WireProtocol.EncodeShopSell(
+                new(choose.MapEpoch, 2, 99, seededUid, 1001, 1)));
+            await first.Tls.FlushAsync();
+            Checks.Require(WireProtocol.TryDecodeShopTransactionResult(
+                    await ReadFrameAsync(first.Tls), out var soldOne) &&
+                soldOne.Status == ShopTransactionStatus.Applied &&
+                soldOne.Kind == ShopTransactionKind.Sell &&
+                soldOne.Money == 5 && soldOne.RemainingQuantity == 1,
+                "shop partial sell mismatch");
+
+            await first.Tls.WriteAsync(WireProtocol.EncodeShopBuy(
+                new(choose.MapEpoch, 3, 99, 1001, 1)));
+            await first.Tls.FlushAsync();
+            Checks.Require(WireProtocol.TryDecodeShopTransactionResult(
+                    await ReadFrameAsync(first.Tls), out var insufficient) &&
+                insufficient.Status == ShopTransactionStatus.InsufficientMoney &&
+                insufficient.Money == 5 && insufficient.ItemUid == 0,
+                "shop insufficient money did not fail closed");
+
+            await first.Tls.WriteAsync(WireProtocol.EncodeShopSell(
+                new(choose.MapEpoch, 4, 99, seededUid, 1001, 1)));
+            await first.Tls.FlushAsync();
+            Checks.Require(WireProtocol.TryDecodeShopTransactionResult(
+                    await ReadFrameAsync(first.Tls), out var soldLast) &&
+                soldLast.Status == ShopTransactionStatus.Applied &&
+                soldLast.Money == 10 && soldLast.RemainingQuantity == 0,
+                "shop final sell mismatch");
+
+            var buyFrame = WireProtocol.EncodeShopBuy(
+                new(choose.MapEpoch, 5, 99, 1001, 1));
+            await first.Tls.WriteAsync(buyFrame);
+            await first.Tls.FlushAsync();
+            Checks.Require(WireProtocol.TryDecodeShopTransactionResult(
+                    await ReadFrameAsync(first.Tls), out var bought) &&
+                bought.Status == ShopTransactionStatus.Applied &&
+                bought.Kind == ShopTransactionKind.Buy &&
+                bought.Money == 0 && bought.ItemUid > 0 &&
+                bought.ItemUid != seededUid && bought.RemainingQuantity == 1,
+                "shop purchase mismatch");
+            long boughtUid = bought.ItemUid;
+
+            await first.Tls.WriteAsync(buyFrame); // exact transport retry
+            await first.Tls.FlushAsync();
+            Checks.Require(WireProtocol.TryDecodeShopTransactionResult(
+                    await ReadFrameAsync(first.Tls), out var replay) &&
+                replay.Status == ShopTransactionStatus.AlreadyApplied &&
+                replay.ItemUid == boughtUid && replay.Money == 0,
+                "shop retry was not idempotent");
+
+            await first.Tls.DisposeAsync();
+            first.Client.Dispose();
+            var firstEnded = await first.ServerTask.WaitAsync(TimeSpan.FromSeconds(3));
+            Checks.Require(firstEnded.Reason == TlsWireEndReason.CleanEof,
+                "shop first TLS session did not close cleanly");
+
+            var persisted = await store.ListInventoryItemsAsync(characterId);
+            Checks.Require(persisted.Count == 1 &&
+                persisted[0].ItemUid == boughtUid &&
+                persisted[0].ItemDefinitionId == 1001 &&
+                persisted[0].Quantity == 1 &&
+                persisted[0].SourceDropId == 0 &&
+                await store.GetCharacterMoneyAsync(characterId) == 0,
+                "shop durable inventory/wallet mismatch");
+
+            var second = await StartRoutedSession(authorization, world, router);
+            await second.Tls.WriteAsync(WireProtocol.EncodeAuthRequest(
+                new("shop_user", "Shop-Password-123!")));
+            await second.Tls.FlushAsync();
+            Checks.Require(WireProtocol.TryDecodeAuthResult(
+                    await ReadFrameAsync(second.Tls), out var auth2) &&
+                auth2.Status == AuthWireStatus.Success, "shop relogin auth failed");
+            Checks.Require(WireProtocol.TryDecodeCharacterList(
+                    await ReadFrameAsync(second.Tls), out var list2) &&
+                list2.Characters.Single().CharacterId == characterId,
+                "shop relogin list mismatch");
+            await second.Tls.WriteAsync(WireProtocol.EncodeCharacterChoose(new(characterId)));
+            await second.Tls.FlushAsync();
+            Checks.Require(WireProtocol.TryDecodeCharacterChooseResult(
+                    await ReadFrameAsync(second.Tls), out var choose2) &&
+                choose2.Status == CharacterChooseWireStatus.Success,
+                "shop relogin choose failed");
+            Checks.Require(WireProtocol.TryDecodeInventorySnapshot(
+                    await ReadFrameAsync(second.Tls), out var inventory2) &&
+                inventory2 is not null && inventory2.Complete &&
+                inventory2.Items.Count == 1 &&
+                inventory2.Items[0].ItemUid == boughtUid &&
+                inventory2.Items[0].SourceDropId == 0,
+                "shop-origin Item UID did not survive relogin");
+
+            await second.Tls.DisposeAsync();
+            second.Client.Dispose();
+            var secondEnded = await second.ServerTask.WaitAsync(TimeSpan.FromSeconds(3));
+            Checks.Require(secondEnded.Reason == TlsWireEndReason.CleanEof,
+                "shop relogin session did not close cleanly");
+            await world.StopAsync();
+        }
+        finally { Directory.Delete(identityRoot, true); }
+    }
+
+
     private static async Task InvalidPasswordRejected(string root)
     {
         string identityRoot = TempRoot();
@@ -302,6 +481,34 @@ internal static class IdentityTlsAuthorizationChecks
         }
         finally { Directory.Delete(identityRoot, true); }
     }
+
+
+
+    private static async Task<(SslStream Tls, Task<TlsWireConnectionResult> ServerTask, TcpClient Client)>
+        StartRoutedSession(
+            IdentityTlsAuthorization authorization, ServerWorldHost world,
+            WorldResultRouter router)
+    {
+        var certificate = TlsSocketChecks.CreateCertificate();
+        var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start(1);
+        int port = ((IPEndPoint)listener.LocalEndpoint).Port;
+        var accepted = listener.AcceptTcpClientAsync();
+        var client = new TcpClient(AddressFamily.InterNetwork);
+        await client.ConnectAsync(IPAddress.Loopback, port);
+        var serverClient = await accepted;
+        var serverTask = authorization.RunAuthenticatedSocketAsync(
+            serverClient, certificate, router).ContinueWith(t =>
+            {
+                certificate.Dispose();
+                listener.Stop();
+                return t.GetAwaiter().GetResult();
+            }, TaskScheduler.Default);
+        var tls = TlsSocketChecks.CreateClientTls(client);
+        await TlsSocketChecks.AuthenticateClient(tls);
+        return (tls, serverTask, client);
+    }
+
 
     private static async Task<(SslStream Tls, Task<TlsWireConnectionResult> ServerTask, TcpClient Client)>
         StartSession(IdentityTlsAuthorization authorization, ServerWorldHost world)
