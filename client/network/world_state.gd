@@ -1149,6 +1149,19 @@ func _apply_world_ready(frame: PackedByteArray) -> bool:
 		last_pickup_result_status = -1
 		last_pickup_result.clear()
 		stale_pickup_results = 0
+		shop_sequence = 0
+		pending_shop_sequence = 0
+		pending_shop_kind = 0
+		pending_shop_npc = 0
+		pending_shop_item_uid = 0
+		pending_shop_item_definition_id = 0
+		pending_shop_quantity = 0
+		active_shop_npc = 0
+		shop_items.clear()
+		shop_money = 0
+		last_shop_open_status = -1
+		last_shop_result.clear()
+		stale_shop_results = 0
 		respawn_sequence = 0
 		last_respawn_result_sequence = 0
 		last_respawn_result_status = -1
