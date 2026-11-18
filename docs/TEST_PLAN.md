@@ -20,6 +20,30 @@
 
 **MVP 後的全圖／全種類／更大負載**：其他地圖與完整傳點網絡、所有原版 NPC/Enemy/裝備/技能、100 Player／1000 Enemy／5000 Drop、多開 8、Windows/Mac 完整發行；MVP 不能代替全量驗收。
 
+## MVP008-SUSTAINED-DENSE-MOVE — 20 人持續移動＋300 怪 AI＋500 Drop（部分完成）
+
+2026-11-18：在已通過的 dense 20P/300M/500D 真 TLS Snapshot Gate 上直接延長同一測試生命週期。所有20個獨立 SQLite 帳號完成 Auth/CharacterChoose/Inventory/WorldReady、收齊 19 peers＋300 Monster＋500 Drop 後先同步 barrier，再**每人連續16次**送正式 `MoveTarget`（總計320次），每次必須等自己的 `MoveReceipt` 才送下一次；移動期間持續解碼 `SelfState`、其他玩家 `EntityDelta`、`MonsterDelta`，任何新的 Spawn/Despawn/Drop 重播、錯 Actor/Monster ID、Router backpressure、World result overflow 或漏掉 MoveReceipt 都讓 Gate 失敗。
+
+第一輪 sustained CI 暴露一個真 Server 容量問題：`WorldLimits.MaxPathRequestsPerTick=8`，20 Client 在同 Tick 同時移動時，只有前8個可做 A*，其餘會得到 `TickRouteBudgetExhausted`。這不是 AOI/Gateway 丟包，因此沒有把測試改成接受失敗；正式 World default 改為 **32**（仍 bounded；Monster AI 仍用獨立 `MaxPathQueriesPerStep`），符合 MVP 20 concurrent Player 的明確容量。另修正測試 barrier：任何單一 Client 提前 fault 會立即冒泡，不再被共享 50s timeout 隱藏。修改：`b1c0e5bf`（sustained Gate）、`85f63802`（可觀測 counters）、`57427ae4`（Player A* budget 8→32）、`0bb339ad`（fail-fast test barrier）。
+
+[GitHub Server Core run 44308433676](https://github.com/kevin840307/SGTest/actions/runs/44308433676) **PASS**，`SERVER_WORLD_CHECKS PASS total=160`，Release builds 0 errors。`SERVER_AUTHENTICATED_SUSTAINED_20_TLS_PASS` 單輪輸出：
+
+| 指標（Ubuntu CI / synthetic Map115 / 20 .NET TLS clients） | 實測 |
+|---|---:|
+| 初始 Peer / Monster / GroundDrop Spawn | 380 / 6,000 / 10,000 |
+| 持續 MoveTarget→MoveReceipt | **320 / 320** |
+| 持續階段 MonsterDelta / PlayerDelta | **3,082 / 5,915** |
+| 累計 gameplay framed bytes | **1,822,636 B** |
+| MoveReceipt latency P50 | **33.27 ms** |
+| MoveReceipt latency P95 / P99 | **37.14 / 37.23 ms** |
+| Router backpressure failures | **0** |
+| Host skipped deadlines / result overflow | **0 / 0** |
+| AOI frames queued / Listener reliable frames sent | 26,969 / 27,269 |
+| Monster runtime ticks / changed snapshots | 74 / 850 |
+| Host max TickWork | 4,154 µs |
+
+**邊界**：這是短時間 burst/sustained movement Gate，不是數分鐘 soak；沒有玩家普攻/技能、怪物實際傷害落 DB、死亡/重生、500 次 SQLite Drop spawn/pickup，也沒有 Godot renderer、Windows GPU、WAN。`MoveReceipt` latency 是本機 TLS request→authoritative receipt，不是 Input-to-Render。4.154ms 是單寫者 World Tick 的當次 max，不含 AOI Pump/MonsterRuntime 獨立執行時間。Player path budget 32 是依 MVP 20 concurrent movement 的實測容量修正，不代表100人後仍適用；擴到100 Player 時需重新跑 ALT/負載 Gate。MVP008 整體仍 [ ]。
+
 ## MVP008-AUTHENTICATED-DENSE-20P-300M-500D — 完整認證＋密集同視野可靠 AOI Snapshot Gate（部分完成）
 
 2026-11-18：擴充既有 `server/tests/SGTest.Server.Checks/TlsGatewayListenerChecks.cs` 的 `AuthenticatedTwentyClients`，新增 `mixedLoad:true,denseLoad:true`；原本純20玩家同視野與 20 分群稀疏300怪500Drop 兩種測試仍分別保留。單一 **Map115 synthetic open-grid (420×240 cells)**，20 位各具獨立 SQLite 帳號/角色的 .NET TCP/TLS Client，在同一座標 `(3200,2000)` 附近 Auth→CharacterChoose→InventorySnapshot→WorldReady ACK→MoveTarget/MoveReceipt。真 `TlsGatewayListener` + `IdentityTlsAuthorization` + 30Hz `ServerWorldHost` + `WorldResultRouter` + 單一 `MonsterWorldCoordinator`/`WorldAoiPump` + bounded `WorldAoi` 為唯一 Server 路徑，未修改 production Wire 或 Client、未增加第二套 AOI。

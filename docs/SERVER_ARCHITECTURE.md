@@ -77,7 +77,7 @@ Segment collision 使用完整 cell supercover＋禁止穿格角；8-neighbor A*
 
 ## 2026-11-16 REB021-WORLD-CORE：單寫者手動 Tick（未接正式 Server Host）
 
-實際新增 `server/src/SGTest.Server/World/ServerWorld.cs`，依賴既有 `BlockingGrid` 和 per-map `MapNavigator`，不依賴 Socket／Godot／DB，未引入第二套導航資料源。建構 Thread 是唯一可修改 Actor 的 owner；外部 Producer 只可透過 MPSC `TryPostMove` 非阻塞入列。MaxPendingCommands（預設512）採 CAS 限幅，Tick 每輪至多 MaxCommandsPerTick=64 和 MaxPathRequestsPerTick=8，避免無限路徑搜尋／命令累積；當滿載明確拒絕或產生 `TickRouteBudgetExhausted` receipt，不能誤當成功並讓 Client 順移。Tick 回傳最新 Actor delta 與 Receipt，但是**尚未有權威網路可靠事件佇列／backpressure/per-connection fairness**。
+實際新增 `server/src/SGTest.Server/World/ServerWorld.cs`，依賴既有 `BlockingGrid` 和 per-map `MapNavigator`，不依賴 Socket／Godot／DB，未引入第二套導航資料源。建構 Thread 是唯一可修改 Actor 的 owner；外部 Producer 只可透過 MPSC `TryPostMove` 非阻塞入列。MaxPendingCommands（預設512）採 CAS 限幅，Tick 每輪至多 `MaxCommandsPerTick=64`；`MaxPathRequestsPerTick` 已於 2026-11-18 由 **8 調為32**。原因不是提高無上限吞吐，而是 MVP 明確要求 20 名同圖玩家：真 TLS 20 Client 同 Tick 移動時，8 會穩定使部分合法玩家收到 `TickRouteBudgetExhausted`；32 可讓 20 人同時一次 A* 保有餘裕，同時仍是固定上限。Monster AI 使用自己的 `MaxPathQueriesPerStep`，不與 Player A* 混成無界工作。超過路徑預算仍須明確回覆 `TickRouteBudgetExhausted`，不能丟命令或讓 Client 順移。Tick 回傳最新 Actor delta 與 Receipt，但是**尚未有權威網路可靠事件佇列／backpressure/per-connection fairness**。
 
 每個 Actor 只有已確認的 Server MapId／Position；`ConnectionEpoch` 遞增識別重新登入、`MapEpoch` 遞增識別可信換圖、`LastMovementSequence` 消費輸入、`MovementActionSequence` 標示最後**成功授權**的 Move／Stop、`EntityRevision` 標示可見狀態更新。先驗證世代及序號才以 immutable 原圖 `Blocking.dat` 做 A*，每個固定步進都複核線段碰撞。錯誤命令不終止既有合法路線；Stop 即使不移動亦發修訂，避免其他玩家一直顯示走路。Debug StateHash 可確認相同指令 trace 在不同 Render-read 取樣頻率下仍一致。Session 建立／轉圖／登出是**可信 Server 內部 API**，尚未實作登入、NPC 傳點權限與 WorldReady／AOI，絕不能直接映射到不可信 Client 封包。
 
