@@ -19,6 +19,8 @@ internal static class IdentityTlsAuthorizationChecks
             () => CharacterCreationRequiresPolicy(root).GetAwaiter().GetResult());
         Checks.Run("TLS NPC shop sell buy replay and relogin preserve wallet and Item UID",
             () => ShopSellBuyAndRelogin(root).GetAwaiter().GetResult());
+        Checks.Run("TLS personal storage deposit withdraw replay and relogin preserve Item UID",
+            () => StorageDepositWithdrawAndRelogin(root).GetAwaiter().GetResult());
         Checks.Run("TLS invalid password never reaches CharacterList or World",
             () => InvalidPasswordRejected(root).GetAwaiter().GetResult());
         Checks.Run("TLS authenticated account cannot choose another account character",
@@ -409,6 +411,213 @@ internal static class IdentityTlsAuthorizationChecks
             var secondEnded = await second.ServerTask.WaitAsync(TimeSpan.FromSeconds(3));
             Checks.Require(secondEnded.Reason == TlsWireEndReason.CleanEof,
                 "shop relogin session did not close cleanly");
+            await world.StopAsync();
+        }
+        finally { Directory.Delete(identityRoot, true); }
+    }
+
+
+    private static async Task StorageDepositWithdrawAndRelogin(string root)
+    {
+        string identityRoot = TempRoot();
+        try
+        {
+            string mapDir = Checks.Fixture(root, 77, 5, 5, (_, _) => 0);
+            var grid = BlockingGrid.Load(mapDir, 77);
+            await using var world = new ServerWorldHost([grid]);
+            await world.StartAsync();
+            using var store = new SqliteIdentityStore(
+                Path.Combine(identityRoot, "identity.db"));
+            await store.InitializeAsync();
+            long accountId = (await store.CreateAccountAsync(
+                "storage_tls_user", "Storage-Tls-Password-123!")).AccountId;
+            long characterId = (await store.CreateCharacterAsync(
+                accountId, 0, "StorageTlsHero", new CharacterSpawn(77, 8, 8)))
+                .Character?.CharacterId ?? throw new Exception("storage TLS character missing");
+
+            long generation = await store.AllocateLootWorldGenerationAsync();
+            var drop = await store.CreateTrustedGroundDropAsync(new(
+                77, 8, 8, 9101,
+                SqliteIdentityStore.ComposeLootDeathRevision(generation, 1),
+                0, 2701, 3, LootSourceTrust.SyntheticTest, "storage-tls-seed"));
+            var grant = await store.ClaimGroundDropAsync(new TrustedPickupContext(
+                characterId, 1, 1, 1, 77, 8, 8), drop.DropId);
+            Checks.Require(grant.Status == PickupStatus.Granted &&
+                grant.ItemUid > 0 && grant.Quantity == 3,
+                "storage TLS seed inventory grant failed");
+            long itemUid = grant.ItemUid;
+
+            var storageCatalog = new NpcStorageCatalog([
+                new NpcStorageCatalog.StoragePoint(
+                    77, 88, 8, 8, "synthetic-storage-tls")
+            ]);
+            var authorization = new IdentityTlsAuthorization(
+                store, world, pickupWorldGeneration: generation,
+                storages: storageCatalog);
+            var router = new WorldResultRouter();
+
+            var first = await StartRoutedSession(authorization, world, router);
+            await first.Tls.WriteAsync(WireProtocol.EncodeAuthRequest(
+                new("storage_tls_user", "Storage-Tls-Password-123!")));
+            await first.Tls.FlushAsync();
+            Checks.Require(WireProtocol.TryDecodeAuthResult(
+                    await ReadFrameAsync(first.Tls), out var auth) &&
+                auth.Status == AuthWireStatus.Success,
+                "storage TLS auth failed");
+            Checks.Require(WireProtocol.TryDecodeCharacterList(
+                    await ReadFrameAsync(first.Tls), out var list) &&
+                list.Characters.Single().CharacterId == characterId,
+                "storage TLS character list mismatch");
+            await first.Tls.WriteAsync(WireProtocol.EncodeCharacterChoose(
+                new(characterId)));
+            await first.Tls.FlushAsync();
+            Checks.Require(WireProtocol.TryDecodeCharacterChooseResult(
+                    await ReadFrameAsync(first.Tls), out var choose) &&
+                choose.Status == CharacterChooseWireStatus.Success,
+                "storage TLS choose failed");
+            Checks.Require(WireProtocol.TryDecodeInventorySnapshot(
+                    await ReadFrameAsync(first.Tls), out var inventory) &&
+                inventory is not null && inventory.Complete &&
+                inventory.Items.Count == 1 &&
+                inventory.Items[0].ItemUid == itemUid &&
+                inventory.Items[0].SourceDropId == drop.DropId,
+                "storage TLS login inventory baseline mismatch");
+
+            await first.Tls.WriteAsync(WireProtocol.EncodeStorageOpen(
+                new(choose.MapEpoch, 1, 88)));
+            await first.Tls.FlushAsync();
+            Checks.Require(WireProtocol.TryDecodeStorageSnapshot(
+                    await ReadFrameAsync(first.Tls), out var opened) &&
+                opened is not null && opened.Status == StorageOpenStatus.Opened &&
+                opened.NpcSpawnId == 88 && opened.Complete &&
+                opened.Items.Count == 0,
+                "storage TLS initial empty snapshot mismatch");
+
+            var depositFrame = WireProtocol.EncodeStorageDeposit(
+                new(choose.MapEpoch, 2, 88, itemUid));
+            await first.Tls.WriteAsync(depositFrame);
+            await first.Tls.FlushAsync();
+            Checks.Require(WireProtocol.TryDecodeStorageTransferResult(
+                    await ReadFrameAsync(first.Tls), out var deposited) &&
+                deposited.Status == StorageTransferStatus.Applied &&
+                deposited.Kind == StorageTransferKind.Deposit &&
+                deposited.ItemUid == itemUid &&
+                deposited.ItemDefinitionId == 2701 &&
+                deposited.Quantity == 3 &&
+                deposited.SourceDropId == drop.DropId,
+                "storage TLS deposit receipt mismatch");
+            Checks.Require((await store.ListInventoryItemsAsync(characterId)).Count == 0 &&
+                (await store.ListStorageItemsAsync(characterId)).Single().ItemUid == itemUid,
+                "storage TLS deposit did not move durable UID");
+
+            await first.Tls.WriteAsync(depositFrame);
+            await first.Tls.FlushAsync();
+            Checks.Require(WireProtocol.TryDecodeStorageTransferResult(
+                    await ReadFrameAsync(first.Tls), out var depositReplay) &&
+                depositReplay.Status == StorageTransferStatus.AlreadyApplied &&
+                depositReplay.ItemUid == itemUid &&
+                depositReplay.SourceDropId == drop.DropId,
+                "storage TLS deposit retry was not idempotent");
+
+            await first.Tls.WriteAsync(WireProtocol.EncodeStorageOpen(
+                new(choose.MapEpoch, 3, 88)));
+            await first.Tls.FlushAsync();
+            Checks.Require(WireProtocol.TryDecodeStorageSnapshot(
+                    await ReadFrameAsync(first.Tls), out var stored) &&
+                stored is not null && stored.Complete &&
+                stored.Items.Count == 1 &&
+                stored.Items[0].ItemUid == itemUid &&
+                stored.Items[0].Quantity == 3 &&
+                stored.Items[0].SourceDropId == drop.DropId,
+                "storage TLS stored baseline mismatch");
+
+            var withdrawFrame = WireProtocol.EncodeStorageWithdraw(
+                new(choose.MapEpoch, 4, 88, itemUid));
+            await first.Tls.WriteAsync(withdrawFrame);
+            await first.Tls.FlushAsync();
+            Checks.Require(WireProtocol.TryDecodeStorageTransferResult(
+                    await ReadFrameAsync(first.Tls), out var withdrawn) &&
+                withdrawn.Status == StorageTransferStatus.Applied &&
+                withdrawn.Kind == StorageTransferKind.Withdraw &&
+                withdrawn.ItemUid == itemUid &&
+                withdrawn.SourceDropId == drop.DropId,
+                "storage TLS withdraw receipt mismatch");
+
+            await first.Tls.WriteAsync(withdrawFrame);
+            await first.Tls.FlushAsync();
+            Checks.Require(WireProtocol.TryDecodeStorageTransferResult(
+                    await ReadFrameAsync(first.Tls), out var withdrawReplay) &&
+                withdrawReplay.Status == StorageTransferStatus.AlreadyApplied &&
+                withdrawReplay.ItemUid == itemUid,
+                "storage TLS withdraw retry was not idempotent");
+
+            await first.Tls.WriteAsync(WireProtocol.EncodeStorageOpen(
+                new(choose.MapEpoch, 5, 999)));
+            await first.Tls.FlushAsync();
+            Checks.Require(WireProtocol.TryDecodeStorageSnapshot(
+                    await ReadFrameAsync(first.Tls), out var denied) &&
+                denied is not null &&
+                denied.Status == StorageOpenStatus.UnknownStorage &&
+                denied.Complete && denied.Items.Count == 0,
+                "unverified storage NPC did not fail closed");
+
+            await first.Tls.DisposeAsync();
+            first.Client.Dispose();
+            var ended = await first.ServerTask.WaitAsync(TimeSpan.FromSeconds(3));
+            Checks.Require(ended.Reason == TlsWireEndReason.CleanEof,
+                "storage TLS first session did not close cleanly");
+
+            var persisted = await store.ListInventoryItemsAsync(characterId);
+            Checks.Require(persisted.Count == 1 &&
+                persisted[0].ItemUid == itemUid &&
+                persisted[0].ItemDefinitionId == 2701 &&
+                persisted[0].Quantity == 3 &&
+                persisted[0].SourceDropId == drop.DropId &&
+                (await store.ListStorageItemsAsync(characterId)).Count == 0,
+                "storage TLS durable inventory mismatch after withdraw");
+
+            var second = await StartRoutedSession(authorization, world, router);
+            await second.Tls.WriteAsync(WireProtocol.EncodeAuthRequest(
+                new("storage_tls_user", "Storage-Tls-Password-123!")));
+            await second.Tls.FlushAsync();
+            Checks.Require(WireProtocol.TryDecodeAuthResult(
+                    await ReadFrameAsync(second.Tls), out var auth2) &&
+                auth2.Status == AuthWireStatus.Success,
+                "storage TLS relogin auth failed");
+            Checks.Require(WireProtocol.TryDecodeCharacterList(
+                    await ReadFrameAsync(second.Tls), out var list2) &&
+                list2.Characters.Single().CharacterId == characterId,
+                "storage TLS relogin list mismatch");
+            await second.Tls.WriteAsync(WireProtocol.EncodeCharacterChoose(
+                new(characterId)));
+            await second.Tls.FlushAsync();
+            Checks.Require(WireProtocol.TryDecodeCharacterChooseResult(
+                    await ReadFrameAsync(second.Tls), out var choose2) &&
+                choose2.Status == CharacterChooseWireStatus.Success,
+                "storage TLS relogin choose failed");
+            Checks.Require(WireProtocol.TryDecodeInventorySnapshot(
+                    await ReadFrameAsync(second.Tls), out var inventory2) &&
+                inventory2 is not null && inventory2.Complete &&
+                inventory2.Items.Count == 1 &&
+                inventory2.Items[0].ItemUid == itemUid &&
+                inventory2.Items[0].SourceDropId == drop.DropId,
+                "storage TLS Item UID/provenance did not survive relogin");
+
+            await second.Tls.WriteAsync(WireProtocol.EncodeStorageOpen(
+                new(choose2.MapEpoch, 1, 88)));
+            await second.Tls.FlushAsync();
+            Checks.Require(WireProtocol.TryDecodeStorageSnapshot(
+                    await ReadFrameAsync(second.Tls), out var reopened) &&
+                reopened is not null &&
+                reopened.Status == StorageOpenStatus.Opened &&
+                reopened.Complete && reopened.Items.Count == 0,
+                "storage TLS relogin storage baseline should be empty");
+
+            await second.Tls.DisposeAsync();
+            second.Client.Dispose();
+            var secondEnded = await second.ServerTask.WaitAsync(TimeSpan.FromSeconds(3));
+            Checks.Require(secondEnded.Reason == TlsWireEndReason.CleanEof,
+                "storage TLS relogin session did not close cleanly");
             await world.StopAsync();
         }
         finally { Directory.Delete(identityRoot, true); }
