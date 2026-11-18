@@ -570,17 +570,17 @@ UPDATE character_combat_profiles
             if (before is null)
             {
                 tx.Rollback();
-                return new(CharacterMpConsumeStatus.MissingProfile, null, 0);
+                return new CharacterMpConsumeResult(CharacterMpConsumeStatus.MissingProfile, null, 0);
             }
             if (before.Data.CurrentHp <= 0)
             {
                 tx.Rollback();
-                return new(CharacterMpConsumeStatus.Dead, before, 0);
+                return new CharacterMpConsumeResult(CharacterMpConsumeStatus.Dead, before, 0);
             }
             if (before.Data.CurrentMp < cost)
             {
                 tx.Rollback();
-                return new(CharacterMpConsumeStatus.InsufficientMp, before, 0);
+                return new CharacterMpConsumeResult(CharacterMpConsumeStatus.InsufficientMp, before, 0);
             }
             using var command = connection.CreateCommand();
             command.Transaction = tx;
@@ -604,7 +604,7 @@ UPDATE character_combat_profiles
                 throw new InvalidOperationException(
                     "Atomic MP settlement changed an unexpected resource value");
             tx.Commit();
-            return new(CharacterMpConsumeStatus.Consumed, after, cost);
+            return new CharacterMpConsumeResult(CharacterMpConsumeStatus.Consumed, after, cost);
         }, cancellationToken).ConfigureAwait(false);
     }
 
