@@ -20,6 +20,29 @@
 
 **MVP 後的全圖／全種類／更大負載**：其他地圖與完整傳點網絡、所有原版 NPC/Enemy/裝備/技能、100 Player／1000 Enemy／5000 Drop、多開 8、Windows/Mac 完整發行；MVP 不能代替全量驗收。
 
+## MVP008-AUTHENTICATED-DENSE-20P-300M-500D — 完整認證＋密集同視野可靠 AOI Snapshot Gate（部分完成）
+
+2026-11-18：擴充既有 `server/tests/SGTest.Server.Checks/TlsGatewayListenerChecks.cs` 的 `AuthenticatedTwentyClients`，新增 `mixedLoad:true,denseLoad:true`；原本純20玩家同視野與 20 分群稀疏300怪500Drop 兩種測試仍分別保留。單一 **Map115 synthetic open-grid (420×240 cells)**，20 位各具獨立 SQLite 帳號/角色的 .NET TCP/TLS Client，在同一座標 `(3200,2000)` 附近 Auth→CharacterChoose→InventorySnapshot→WorldReady ACK→MoveTarget/MoveReceipt。真 `TlsGatewayListener` + `IdentityTlsAuthorization` + 30Hz `ServerWorldHost` + `WorldResultRouter` + 單一 `MonsterWorldCoordinator`/`WorldAoiPump` + bounded `WorldAoi` 為唯一 Server 路徑，未修改 production Wire 或 Client、未增加第二套 AOI。
+
+**所有 20 位同時接收相同 dense viewport**：300 筆 MonsterSourceIndex（25列×12行、間距24px）和 500 件 GroundDrop（25列×20行、間距16px），另有其他19位玩家；每個觀察者須解碼到**19 個唯一 EntitySpawn + 300 個唯一 MonsterSpawn + 500 個唯一 GroundDropSpawn**，且所有角色/Monster/Drop ID 必須合法、沒有重複，允許同一時刻的合法 MonsterDelta/PlayerDelta。單個 viewport 最多含819個外部實體，Test AOI `MaxVisiblePerObserver=1024`、`MaxPendingEventsPerObserver=4096`，保持既有有界容器；正式 Gateway 的 256-frame 可靠 queue、單一 Pump 與 TLS writer 不變，要求 20 Actor/Session/ListenerConnections 同時存活，結束後全部釋放，任何封包佇列溢出 fail-closed 使 CI FAIL。
+
+首次 [GitHub Server Core run 44303958406](https://github.com/kevin840307/SGTest/actions/runs/44303958406) **PASS**，Release .NET 8 builds 0 errors，`SERVER_WORLD_CHECKS PASS total=159`（含全部舊回歸及 Hard-kill DB checkpoint）。該次 `SERVER_AUTHENTICATED_DENSE_20_TLS_PASS` 單輪數據：
+
+| 指標（Ubuntu CI／SyntheticTest／20 .NET TLS Clients） | 實測 |
+|---|---:|
+| 同時已登入 TLS/World Actor | 20 / 20 |
+| 每 Client 可見的玩家／Monster／Drop | 19／300／500 |
+| 完成的玩家 EntitySpawn／MonsterSpawn／GroundDropSpawn（20 Client 合計） | **380／6,000／10,000** |
+| PlayerDelta／MonsterDelta frames（讀取完整快照前） | **1,082／1,190** |
+| MoveReceipt | **20／20** |
+| Client 實際解碼 compact-binary gameplay bytes | **1,198,396 B** |
+| 登入至完成密集 AOI/MoveReceipt P50 | 527.93 ms |
+| 同項 P95／P99 | **528.20／562.17 ms** |
+| Listener Admission rejections / Host skipped deadlines | **0／0** |
+| 單寫者 Host Max TickWork | 68 µs |
+
+**嚴格限制**：本次 500 件 Drop 是**合成 AOI 預載，不是 500 次 SQLite 掉落或多人搶撿**；300 隻 AI 參與每 Tick 的 Server 協調及即時狀態更新，但**不代表 20 人同時高頻輸入攻擊／技能、怪物死亡／重生／撿物、連續長時間混合操作**已通過。此測試只需所有 Client 收到完整快照＋一次合法移動回覆，然後清理；P95/P99 是單次環境的「連線→認證→選角→完整快照」耗時，非 Input-to-Render／長時間更新延遲／WAN RTT。Host MaxTickWork **不含**獨立 AOI Pump/MonsterRuntime 的 CPU 時間，Gameplay Frame/VRAM/Windows 真 PCK/RSS 與 1/2/4 開、AFK/Unfocus 仍未驗。密集 AOI 使用 Test AOI 配置上限，若有容量問題正式 Server 應先證明可靠性後再調整，不能透過丟 reliable frame 偽造效能。**僅此 Server dense snapshot Gate [x]；整體 MVP008、MVP009、Release 仍 [ ]。**
+
 ## MVP008-AUTHENTICATED-MIXED-20P-300M-500D — 真認證 + 混合負載（部分完成）
 
 2026-11-18：擴充已驗證的 `TlsGatewayListenerChecks.AuthenticatedTwentyClients(root)` 為 `mixedLoad: true`，不新增一套正式通訊或 Server 路徑。合成 Map115 420×240 collision cells，20 位玩家在 5×4 遠距分群，每群 **1 名獨立 SQLite Auth/CharacterChoose 真 TLS 玩家、15 隻經 synthetic verified population 載入的權威 Monster、25 個 synthetic AOI boot GroundDrop**，共計 20／300／500。
@@ -42,7 +65,7 @@
 | 同項 P95／P99 | 568.99 ms／569.06 ms |
 | World Host 單寫者 max Tick Work | 77 µs |
 
-**邊界**：未啟動 Godot renderer、Windows GPU、私有 Map13/15 原版素材或完整帳號背包大量品項。500 GroundDrop 是 synthetic AOI 預載、**不是 500 次 SQLite 掉落／撿取／結算**；300 Monster AI 接在單一 Server Pump，但未以全員高頻攻擊／掉落瞬變測試長時間穩定性。77µs 的 Host Tick Work 不包含獨立 AOI Pump/MonsterRuntime 的計算時間。P95/P99 含本機 TCP/TLS 握手、SQLite 登入、選角、獨立本地 AOI 快照與 MoveReceipt，不是輸入到渲染延遲；20 客戶端是 .NET TLS 測試程式，不是 20 個 Godot 視窗。分群稀疏負載與前一個 20 人同視野（只有人）的測試相互補充，不能冒稱同視野 20 人＋300 怪＋500 Drop 全密集混合 PASS。完整 MVP008 (1/2/4 Godot、Windows RAM/VRAM/GPU、AFK、真地圖、Server AI/AOI P95/P99/密集高頻戰鬥、資料庫持久化重放及 20 Godot/WAN) **仍 [ ]**。
+**邊界**：未啟動 Godot renderer、Windows GPU、私有 Map13/15 原版素材或完整帳號背包大量品項。500 GroundDrop 是 synthetic AOI 預載、**不是 500 次 SQLite 掉落／撿取／結算**；300 Monster AI 接在單一 Server Pump，但未以全員高頻攻擊／掉落瞬變測試長時間穩定性。77µs 的 Host Tick Work 不包含獨立 AOI Pump/MonsterRuntime 的計算時間。P95/P99 含本機 TCP/TLS 握手、SQLite 登入、選角、獨立本地 AOI 快照與 MoveReceipt，不是輸入到渲染延遲；20 客戶端是 .NET TLS 測試程式，不是 20 個 Godot 視窗。本分群稀疏負載與只有玩家的舊同視野測試是不同 trace；**另見上方 MVP008-AUTHENTICATED-DENSE-20P-300M-500D，現已額外證實密集同視野的真認證及完整 AOI 快照收取 PASS**，但未含長時間高頻戰鬥、資料庫動態掉落或 Godot 畫面。完整 MVP008 (1/2/4 Godot、Windows RAM/VRAM/GPU、AFK、真地圖、Server AI/AOI P95/P99/密集高頻戰鬥、資料庫持久化重放及 20 Godot/WAN) **仍 [ ]**。
 
 ## MVP008-AUTHENTICATED-20-TLS — 20 位真正認證的合成多人 Host Listener 測試
 
@@ -62,7 +85,7 @@
 | Listener per-address/capacity 拒絕 | 0 |
 | 斷線後 Listener/World/Router active sessions | 0 |
 
-本段數據仍屬 **20 位正式認證玩家、但沒有怪物及掉落物的同視野場景**；另見上方 `MVP008-AUTHENTICATED-MIXED-20P-300M-500D` 在稀疏 20 分群下完成正式認證與怪／掉落同場測試。兩者不是同一負載 trace，不能混用 P95/P99；密集同視野 20 人＋300 怪＋500 Drop、Godot 真畫面、多開/AFK、Windows 真素材、RSS/VRAM/Frame P95/P99、WAN RTT 與長時間可靠事件風暴仍 NOT VERIFIED。`login_to_full_AOI` 是每 Client 從 TCP connect 開始，直到收完 19 peers + 本人移動回覆，不是操作指令延遲或 Server Tick P99；單次 CI 無硬性效能門檻。
+本段數據仍屬 **20 位正式認證玩家、但沒有怪物及掉落物的同視野場景**；另見上方 `MVP008-AUTHENTICATED-MIXED-20P-300M-500D` 在稀疏 20 分群下完成正式認證與怪／掉落同場測試。兩者不是同一負載 trace，不能混用 P95/P99；密集同視野 20 人＋300 怪＋500 Drop 的**完整 AOI snapshot 已另由上方新 Gate 驗證**；Godot 真畫面、多開/AFK、Windows 真素材、RSS/VRAM/Frame P95/P99、WAN RTT 與長時間可靠事件風暴仍 NOT VERIFIED。`login_to_full_AOI` 是每 Client 從 TCP connect 開始，直到收完 19 peers + 本人移動回覆，不是操作指令延遲或 Server Tick P99；單次 CI 無硬性效能門檻。
 
 ## MVP008-MIXED-TLS-RESYNC — 20 條真實 TLS 的 300 怪／500 Drop AOI 回補（部分完成）
 
@@ -103,7 +126,7 @@
 | Host SkippedDeadlines／OutputOverflow | 0／0 |
 | 混合觀測窗 wall | 904ms |
 
-**量測邊界**：encoded-frame bytes 是已編碼的 Server FIFO payload，不包括 TLS／TCP、握手與 Godot client；各 Receiver 的 bootstrap bytes 是累積總量。`host_max_tick_us` 是單寫者 `ServerWorld.Tick` 及其輸出發布工作，**不包含**獨立執行的 `WorldAoiPump`／`MonsterRuntime`／SQLite 或 Client 顯示，因此不能當完整 Server Tick+AI 的 P95/P99 或宣布每 Tick 均低於 271µs。`host_ticks` 包含測試建立期間，不應以 48 ticks／904ms 直接推算 Hz。單次 CI 未做多輪統計、混合密集同視野、20 條真 TLS、真 Windows GPU、多開/AFK 或完整 300 怪/500 Drop 戰鬥持久結算。這只是 MVP008 的 **spatial+safety mixed-load slice**，MVP008 / REB030 / RELEASE 仍 [ ]，需依 ALT001 在相同環境補實際 20 TLS client、真 Resource/Frame/Server owner P95/P99、網路 bytes/sec 與多輪負載。
+**量測邊界**：encoded-frame bytes 是已編碼的 Server FIFO payload，不包括 TLS／TCP、握手與 Godot client；各 Receiver 的 bootstrap bytes 是累積總量。`host_max_tick_us` 是單寫者 `ServerWorld.Tick` 及其輸出發布工作，**不包含**獨立執行的 `WorldAoiPump`／`MonsterRuntime`／SQLite 或 Client 顯示，因此不能當完整 Server Tick+AI 的 P95/P99 或宣布每 Tick 均低於 271µs。`host_ticks` 包含測試建立期間，不應以 48 ticks／904ms 直接推算 Hz。此 **2026-11-18 早期 Server AOI 直連測試**本身未做多輪統計、混合密集同視野、20 條真 TLS、真 Windows GPU、多開/AFK 或完整 300 怪/500 Drop 戰鬥持久結算；密集同視野＋真 TLS Snapshot 驗收結果應引用上方更新的獨立 Gate。這只是 MVP008 的 **spatial+safety mixed-load slice**，MVP008 / REB030 / RELEASE 仍 [ ]，需依 ALT001 在相同環境補實際 20 TLS client、真 Resource/Frame/Server owner P95/P99、網路 bytes/sec 與多輪負載。
 
 ## MVP008-PROC-BASELINE — 正式 Host + 兩個 Godot 主場景 CPU/RSS 程序基線（部分完成）
 
