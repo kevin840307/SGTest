@@ -37,6 +37,9 @@ internal static class TlsGatewayListenerChecks
             () => AuthenticatedTwentyClients(root).GetAwaiter().GetResult());
         Checks.Run("20 authenticated TLS clients and 300 monsters + 500 drops in one spatial AOI",
             () => AuthenticatedTwentyClients(root, mixedLoad: true).GetAwaiter().GetResult());
+        Checks.Run("20 authenticated TLS clients share one dense view with 300 monsters and 500 ground drops",
+            () => AuthenticatedTwentyClients(root, mixedLoad: true, denseLoad: true)
+                .GetAwaiter().GetResult());
     }
 
     private static async Task InvalidConfiguration(string root)
@@ -512,13 +515,17 @@ internal static class TlsGatewayListenerChecks
     /// and verify every other actor appears through the shared AOI pipeline.
     /// This is a synthetic 20-client .NET loopback test, not 20 Godot renderers.
     /// </summary>
-    private static async Task AuthenticatedTwentyClients(string root, bool mixedLoad = false)
+    private static async Task AuthenticatedTwentyClients(
+        string root, bool mixedLoad = false, bool denseLoad = false)
     {
+        if (denseLoad && !mixedLoad)
+            throw new ArgumentException("Dense AOI requires mixed load");
         const int players = 20;
-        const int monstersPerViewer = 15;
-        const int dropsPerViewer = 25;
+        int monstersPerViewer = denseLoad ? 300 : 15;
+        int dropsPerViewer = denseLoad ? 500 : 25;
         const string password = "Listener-Password-123!";
-        await using var fixture = await Fixture.Create(root, mixedLoad: mixedLoad);
+        await using var fixture = await Fixture.Create(
+            root, mixedLoad: mixedLoad, denseLoad: denseLoad);
         var accounts = new (string Username, long CharacterId)[players];
         accounts[0] = ("listener_user", fixture.CharacterId);
         for (int i = 1; i < players; i++)
@@ -526,7 +533,7 @@ internal static class TlsGatewayListenerChecks
             string username = $"load_user_{i:D2}";
             long accountId = (await fixture.Store.CreateAccountAsync(username, password))
                 .AccountId;
-            var center = mixedLoad ? MixedLoadCenter(i) : (X: 8, Y: 8);
+            var center = mixedLoad ? MixedLoadCenter(i, denseLoad) : (X: 8, Y: 8);
             var character = await fixture.Store.CreateCharacterAsync(
                 accountId, 0, $"LoadHero{i:D2}", new CharacterSpawn(115, center.X, center.Y));
             accounts[i] = (username, character.Character?.CharacterId ??
@@ -553,6 +560,8 @@ internal static class TlsGatewayListenerChecks
         int receivedMonsters = 0;
         int receivedDrops = 0;
         int receipts = 0;
+        int observedMonsterDeltaFrames = 0;
+        int observedPlayerDeltaFrames = 0;
         var readyDurations = new double[players];
         try
         {
@@ -625,12 +634,16 @@ internal static class TlsGatewayListenerChecks
                 while (!worldReady || !receiptSeen || !selfStateSeen ||
                     (mixedLoad
                         ? monsters.Count < monstersPerViewer ||
-                            drops.Count < dropsPerViewer
+                            drops.Count < dropsPerViewer ||
+                            (denseLoad && seen.Count < players - 1)
                         : seen.Count < players - 1))
                 {
                     var frame = await Receive();
                     var valid = WireProtocol.TryReadHeader(frame, out var header);
-                    Checks.Require(valid && ++frames <= (mixedLoad ? 192 : 128),
+                    // Dense baseline alone has 19+300+500 Spawn frames.
+                    // Leave headroom for live AI and movement Deltas; a
+                    // finite limit detects a stalled/rebroadcasting snapshot.
+                    Checks.Require(valid && ++frames <= (denseLoad ? 4096 : mixedLoad ? 192 : 128),
                         $"load client {index} AOI frame limit exceeded");
                     switch (header.Opcode)
                     {
@@ -645,7 +658,7 @@ internal static class TlsGatewayListenerChecks
                             worldReady = true;
                             await tls.WriteAsync(WireProtocol.EncodeWorldReadyAck(
                                 new(choice.MapEpoch, ready.ServerTick)), deadline.Token);
-                            var origin = mixedLoad ? MixedLoadCenter(index) : (X: 8, Y: 8);
+                            var origin = mixedLoad ? MixedLoadCenter(index, denseLoad) : (X: 8, Y: 8);
                             await tls.WriteAsync(WireProtocol.EncodeMoveTarget(
                                 new(choice.MapEpoch, 1, origin.X + 16, origin.Y)), deadline.Token);
                             break;
@@ -659,7 +672,7 @@ internal static class TlsGatewayListenerChecks
                             selfStateSeen = true;
                             break;
                         case WireOpcode.EntitySpawn:
-                            Checks.Require(!mixedLoad && worldReady &&
+                            Checks.Require((!mixedLoad || denseLoad) && worldReady &&
                                 WireProtocol.TryDecodeEntityState(
                                     frame, out _, out var peer) &&
                                 peer.ReceiverMapEpoch == choice.MapEpoch &&
@@ -669,14 +682,16 @@ internal static class TlsGatewayListenerChecks
                                 $"load client {index} saw a foreign or repeated Spawn");
                             break;
                         case WireOpcode.EntityDelta:
-                            Checks.Require(!mixedLoad && WireProtocol.TryDecodeEntityState(
-                                frame, out _, out var delta) &&
+                            Checks.Require((!mixedLoad || denseLoad) &&
+                                WireProtocol.TryDecodeEntityState(
+                                    frame, out _, out var delta) &&
                                 delta.ActorId != choice.CharacterId &&
                                 accounts.Any(x => x.CharacterId == delta.ActorId),
                                 $"load client {index} foreign AOI Delta");
+                            Interlocked.Increment(ref observedPlayerDeltaFrames);
                             break;
                         case WireOpcode.MonsterSpawn:
-                            int minMonster = index * monstersPerViewer;
+                            int minMonster = denseLoad ? 0 : index * monstersPerViewer;
                             Checks.Require(mixedLoad && worldReady &&
                                 WireProtocol.TryDecodeMonsterState(
                                     frame, out _, out var monster) &&
@@ -686,16 +701,18 @@ internal static class TlsGatewayListenerChecks
                                 $"load client {index} got duplicate or foreign MonsterSpawn");
                             break;
                         case WireOpcode.MonsterDelta:
-                            int minChanged = index * monstersPerViewer;
+                            int minChanged = denseLoad ? 0 : index * monstersPerViewer;
                             Checks.Require(mixedLoad &&
                                 WireProtocol.TryDecodeMonsterState(
                                     frame, out _, out var changed) &&
                                 changed.SourceIndex >= minChanged &&
                                 changed.SourceIndex < minChanged + monstersPerViewer,
                                 $"load client {index} got foreign MonsterDelta");
+                            Interlocked.Increment(ref observedMonsterDeltaFrames);
                             break;
                         case WireOpcode.GroundDropSpawn:
-                            long firstDrop = 200_000L + index * dropsPerViewer;
+                            long firstDrop = 200_000L +
+                                (denseLoad ? 0 : index * dropsPerViewer);
                             Checks.Require(mixedLoad && worldReady &&
                                 WireProtocol.TryDecodeGroundDropSpawn(frame, out var drop) &&
                                 drop.DropId >= firstDrop &&
@@ -750,9 +767,11 @@ internal static class TlsGatewayListenerChecks
                 stats.CompletedConnections == players &&
                 stats.CommandsAccepted == players &&
                 stats.RejectedAddress == 0 && stats.RejectedCapacity == 0 &&
-                receivedSpawns == (mixedLoad ? 0 : players * (players - 1)) &&
-                receivedMonsters == (mixedLoad ? 300 : 0) &&
-                receivedDrops == (mixedLoad ? 500 : 0) &&
+                receivedSpawns == (!mixedLoad || denseLoad ? players * (players - 1) : 0) &&
+                receivedMonsters == (mixedLoad
+                    ? denseLoad ? players * 300 : 300 : 0) &&
+                receivedDrops == (mixedLoad
+                    ? denseLoad ? players * 500 : 500 : 0) &&
                 receipts == players,
                 "20 authenticated client listener/AOI/Move cleanup or accounting mismatch");
             Array.Sort(readyDurations);
@@ -768,12 +787,14 @@ internal static class TlsGatewayListenerChecks
                     "authenticated mixed load lost Host or Monster authority");
             }
             Console.WriteLine(
-                (mixedLoad
-                    ? "SERVER_AUTHENTICATED_MIXED_20_TLS_PASS "
-                    : "SERVER_AUTHENTICATED_20_TLS_PASS ") +
+                (denseLoad ? "SERVER_AUTHENTICATED_DENSE_20_TLS_PASS " :
+                    mixedLoad ? "SERVER_AUTHENTICATED_MIXED_20_TLS_PASS " :
+                    "SERVER_AUTHENTICATED_20_TLS_PASS ") +
                 $"distinct_accounts={players} concurrent_sessions={players} " +
                 $"peer_spawns={receivedSpawns} monster_spawns={receivedMonsters} " +
                 $"ground_drop_spawns={receivedDrops} move_receipts={receipts} " +
+                $"monster_delta_frames={observedMonsterDeltaFrames} " +
+                $"player_delta_frames={observedPlayerDeltaFrames} " +
                 $"server_framed_bytes={transferredBytes} " +
                 $"login_to_full_AOI_p50_ms={Percentile(readyDurations, .50):F2} " +
                 $"login_to_full_AOI_p95_ms={Percentile(readyDurations, .95):F2} " +
@@ -791,7 +812,8 @@ internal static class TlsGatewayListenerChecks
         }
     }
 
-    private static (int X, int Y) MixedLoadCenter(int i) =>
+    private static (int X, int Y) MixedLoadCenter(int i, bool denseLoad = false) =>
+        denseLoad ? (3200, 2000) :
         (400 + (i % 5) * 1400, 400 + (i / 5) * 900);
 
     private static async Task Until(Func<bool> condition)
@@ -833,8 +855,11 @@ internal static class TlsGatewayListenerChecks
         public MonsterWorldCoordinator? Monsters;
 
         public static async Task<Fixture> Create(
-            string root, bool withRecovery = false, bool mixedLoad = false)
+            string root, bool withRecovery = false, bool mixedLoad = false,
+            bool denseLoad = false)
         {
+            if (denseLoad && !mixedLoad)
+                throw new ArgumentException("Dense AOI requires mixed load");
             string path = Checks.Fixture(root, 115,
                 mixedLoad ? 420 : 4, mixedLoad ? 240 : 4, (_, _) => 0);
             var grid = BlockingGrid.Load(path, 115);
@@ -844,7 +869,7 @@ internal static class TlsGatewayListenerChecks
             var store = new SqliteIdentityStore(Path.Combine(root, "listener-"+Guid.NewGuid().ToString("N")+".db"));
             await store.InitializeAsync();
             long account = (await store.CreateAccountAsync("listener_user", "Listener-Password-123!")).AccountId;
-            var firstCenter = mixedLoad ? MixedLoadCenter(0) : (X: 8, Y: 8);
+            var firstCenter = mixedLoad ? MixedLoadCenter(0, denseLoad) : (X: 8, Y: 8);
             var character = await store.CreateCharacterAsync(
                 account, 0, "ListenerHero",
                 new CharacterSpawn(115, firstCenter.X, firstCenter.Y));
@@ -881,31 +906,44 @@ internal static class TlsGatewayListenerChecks
             IReadOnlyList<GroundDropRecord>? mixedDrops = null;
             if (mixedLoad)
             {
-                // The exact 20 sparse groups from the prior internal AOI test:
-                // 15 verified synthetic monsters and 25 synthetic drops each.
-                // These 500 test-only AOI UIDs are NOT SQLite loot settlements.
+                // Same 20 groups as prior sparse load, or one crowded view.
+                // Each record keeps unique SourceIndex/DropId even when dense.
+                // Test-only AOI UIDs are NOT SQLite loot settlements.
                 var spawnRows = new List<object>(300);
                 var drops = new List<GroundDropRecord>(500);
                 for (int observer = 0; observer < 20; observer++)
                 {
-                    var c = MixedLoadCenter(observer);
+                    var c = MixedLoadCenter(observer, denseLoad);
                     for (int n = 0; n < 15; n++)
+                    {
+                        int source = observer * 15 + n;
                         spawnRows.Add(new {
-                            source_index = observer * 15 + n,
+                            source_index = source,
                             source_flags = 7, definition = 1,
-                            p = new[] {
-                                c.X + ((n % 5) - 2) * 24,
-                                c.Y + ((n / 5) - 1) * 24
-                            }
+                            p = denseLoad
+                                ? new[] {
+                                    c.X + ((source % 25) - 12) * 24,
+                                    c.Y + ((source / 25) - 6) * 24
+                                }
+                                : new[] {
+                                    c.X + ((n % 5) - 2) * 24,
+                                    c.Y + ((n / 5) - 1) * 24
+                                }
                         });
+                    }
                     for (int n = 0; n < 25; n++)
+                    {
+                        int source = observer * 25 + n;
                         drops.Add(new GroundDropRecord(
-                            200_000L + observer * 25 + n, 115,
-                            c.X + ((n % 5) - 2) * 16,
-                            c.Y + ((n / 5) - 2) * 16,
+                            200_000L + source, 115,
+                            denseLoad ? c.X + ((source % 25) - 12) * 16 :
+                                c.X + ((n % 5) - 2) * 16,
+                            denseLoad ? c.Y + ((source / 25) - 10) * 16 :
+                                c.Y + ((n / 5) - 2) * 16,
                             100_115_0001L, 4_294_967_301L + observer,
                             n, 2701, 1, LootSourceTrust.Verified,
                             "ci:authenticated-mixed-load", null));
+                    }
                 }
                 string populationFile = Path.Combine(path, "auth-population.json");
                 File.WriteAllText(populationFile, JsonSerializer.Serialize(new
@@ -944,8 +982,8 @@ internal static class TlsGatewayListenerChecks
                     EnterHalfWidth: 320, EnterHalfHeight: 240,
                     ExitMargin: 64, BucketSize: 128,
                     MaxEntities: 1024, MaxObservers: 64,
-                    MaxVisiblePerObserver: 64,
-                    MaxPendingEventsPerObserver: 256)) : null,
+                    MaxVisiblePerObserver: denseLoad ? 1024 : 64,
+                    MaxPendingEventsPerObserver: denseLoad ? 4096 : 256)) : null,
                 mixedLoad ? new WorldAoiPumpOptions(
                     FlushIntervalMilliseconds: 2,
                     MaxFramesPerObserverPerPoll: 64) : null,
