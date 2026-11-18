@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Diagnostics;
 using SGTest.Server.Gateway;
 using SGTest.Server.Wire;
 using SGTest.Server.World;
@@ -19,7 +20,7 @@ internal static class WorldAoiPumpChecks
             () => LiveResync(root).GetAwaiter().GetResult());
         Checks.Run("live Host Router Pump publishes coalesced monster state through shared AOI FIFO",
             () => LiveMonsterPipeline(root).GetAwaiter().GetResult());
-        Checks.Run("20-player 300-monster shared AOI load stays spatially bounded without reliable overflow",
+        Checks.Run("20-player 300-monster 500-drop shared AOI load stays spatially bounded without reliable overflow",
             () => TwentyPlayersThreeHundredMonsters(root).GetAwaiter().GetResult());
     }
 
@@ -367,10 +368,13 @@ internal static class WorldAoiPumpChecks
         const int playerCount = 20;
         const int monstersPerCluster = 15;
         const int monsterCount = playerCount * monstersPerCluster;
+        const int dropsPerCluster = 25;
+        const int dropCount = playerCount * dropsPerCluster;
         string folder = Checks.Fixture(root, mapId, 420, 240, (_, _) => 0);
         var grid = BlockingGrid.Load(folder, mapId);
 
         var spawnRows = new List<object>(monsterCount);
+        var dropRows = new List<GroundDropRecord>(dropCount);
         var centers = new (int X, int Y)[playerCount];
         for (int player = 0; player < playerCount; player++)
         {
@@ -392,7 +396,22 @@ internal static class WorldAoiPumpChecks
                     p = new[] { x, y }
                 });
             }
+            for (int local = 0; local < dropsPerCluster; local++)
+            {
+                // Synthetic committed ground records, isolated from SQLite.
+                // Each nearby observer sees exactly 25; this is NOT a loot
+                // probability, durability or real-item sprite benchmark.
+                int x = centerX + ((local % 5) - 2) * 16;
+                int y = centerY + ((local / 5) - 2) * 16;
+                dropRows.Add(new GroundDropRecord(
+                    200_000L + player * dropsPerCluster + local,
+                    mapId, x, y, 100_107_0001L,
+                    4_294_967_301L + player, local, 2701, 1,
+                    LootSourceTrust.Verified, "ci:synthetic-mixed-aoi-load", null));
+            }
         }
+        Require(spawnRows.Count == monsterCount && dropRows.Count == dropCount,
+            "mixed fixture has exact 20/300/500 accounting");
 
         string populationPath = Path.Combine(folder, "population-load.json");
         File.WriteAllText(populationPath, JsonSerializer.Serialize(new
@@ -475,12 +494,16 @@ internal static class WorldAoiPumpChecks
             MaxObservers: 64,
             MaxVisiblePerObserver: 64,
             MaxPendingEventsPerObserver: 256));
+        // Seed only before the AOI owner starts, as the production pump does
+        // from committed SQLite ground records at Host boot.
         var pump = new WorldAoiPump(
             router, aoi,
             new WorldAoiPumpOptions(
                 FlushIntervalMilliseconds: 2,
                 MaxFramesPerObserverPerPoll: 64),
-            coordinator);
+            coordinator,
+            initialGroundDrops: dropRows);
+        var loadTimer = Stopwatch.StartNew();
         using var stop = new CancellationTokenSource();
         var routing = router.RunAsync(host.Results);
         var pumping = pump.RunAsync(stop.Token);
@@ -488,16 +511,20 @@ internal static class WorldAoiPumpChecks
         try
         {
             int totalBaselineSpawns = 0;
+            int totalBaselineDrops = 0;
+            long baselineBytes = 0;
             for (int player = 0; player < playerCount; player++)
             {
                 var gateway = gateways[player];
-                await WaitForFrames(gateway, 1 + monstersPerCluster);
+                await WaitForFrames(gateway, 1 + monstersPerCluster + dropsPerCluster);
                 var expectedMin = player * monstersPerCluster;
                 var expectedMax = expectedMin + monstersPerCluster - 1;
                 bool ready = false;
                 var spawned = new HashSet<int>();
+                var drops = new HashSet<long>();
                 while (gateway.TryDequeueReliable(out var frame))
                 {
+                    baselineBytes += frame.Length;
                     if (WireProtocol.TryDecodeWorldReady(frame, out var readyFrame))
                     {
                         Require(readyFrame.ActorId == actors[player].ActorId,
@@ -515,38 +542,64 @@ internal static class WorldAoiPumpChecks
                             spawned.Add(monster.SourceIndex);
                         continue;
                     }
+                    if (WireProtocol.TryDecodeGroundDropSpawn(frame, out var drop))
+                    {
+                        long minDrop = 200_000L + player * dropsPerCluster;
+                        Require(drop.DropId >= minDrop &&
+                                drop.DropId < minDrop + dropsPerCluster,
+                            $"observer {player} received foreign ground UID {drop.DropId}");
+                        Require(drops.Add(drop.DropId),
+                            $"observer {player} received repeated ground UID {drop.DropId}");
+                        continue;
+                    }
                     Require(false,
                         $"observer {player} received unexpected baseline frame");
                 }
-                Require(ready && spawned.Count == monstersPerCluster,
-                    $"observer {player} local monster baseline count");
+                Require(ready && spawned.Count == monstersPerCluster &&
+                        drops.Count == dropsPerCluster,
+                    $"observer {player} isolated monster/drop baseline count");
                 totalBaselineSpawns += spawned.Count;
+                totalBaselineDrops += drops.Count;
             }
 
             Require(totalBaselineSpawns == monsterCount &&
+                    totalBaselineDrops == dropCount &&
+                    aoi.GroundDropCount == dropCount &&
                     aoi.MonsterCount == monsterCount &&
                     aoi.ObserverCount == playerCount &&
                     coordinator.Statistics.TrackedActors == playerCount &&
                     coordinator.Statistics.Monsters == monsterCount,
                 "20-player/300-monster shared authority accounting");
 
-            // Allow more than one full 300-monster round-robin pass. Each
-            // observer remains isolated to its 15-monster cluster, so reliable
-            // egress stays well below the 256-frame connection bound.
+            // Allow more than one full 300-monster round-robin pass while
+            // immutable ground drops remain present. An unchanged drop must
+            // never consume another reliable queue slot in an idle/delta tick.
+            // Each observer sees only 15 monsters and 25 drops.
             await Task.Delay(900);
             int totalDeltas = 0;
+            int repeatedDropSpawns = 0;
             int peakReliableFrames = 0;
+            int peakReliableBytes = 0;
+            long deltaBytes = 0;
             for (int player = 0; player < playerCount; player++)
             {
                 var gateway = gateways[player];
                 peakReliableFrames = Math.Max(
                     peakReliableFrames, gateway.ReliableFrames);
+                peakReliableBytes = Math.Max(
+                    peakReliableBytes, gateway.ReliableBytes);
                 Require(gateway.ReliableFrames < 128,
                     $"observer {player} reliable queue grew beyond spatial bound");
                 int expectedMin = player * monstersPerCluster;
                 int expectedMax = expectedMin + monstersPerCluster - 1;
                 while (gateway.TryDequeueReliable(out var frame))
                 {
+                    deltaBytes += frame.Length;
+                    if (WireProtocol.TryDecodeGroundDropSpawn(frame, out _))
+                    {
+                        repeatedDropSpawns++;
+                        continue;
+                    }
                     if (!WireProtocol.TryDecodeMonsterState(
                             frame, out var opcode, out var monster))
                         continue;
@@ -559,13 +612,29 @@ internal static class WorldAoiPumpChecks
             }
 
             var stats = runtime.Statistics;
+            var hostStats = host.Statistics;
             Require(totalDeltas > 0 &&
+                    repeatedDropSpawns == 0 &&
                     stats.MonsterCount == monsterCount &&
                     stats.MaxProcessedInStep <= 64 &&
                     stats.MonstersProcessed >= monsterCount &&
                     router.Statistics.BackpressureFailures == 0 &&
-                    peakReliableFrames < 128,
-                "20-player/300-monster bounded load did not make progress safely");
+                    peakReliableFrames < 128 &&
+                    hostStats.ResultOverflowFailures == 0 &&
+                    pump.ProcessedBatches > 0 &&
+                    aoi.TrackedEntityCount == playerCount + monsterCount + dropCount,
+                "20-player/300-monster/500-drop mixed load violated spatial/reliable bounds");
+            loadTimer.Stop();
+            Console.WriteLine(
+                $"SERVER_MIXED_AOI_LOAD_PASS players={playerCount} monsters={monsterCount} " +
+                $"drops={dropCount} baseline_monster_spawns={totalBaselineSpawns} " +
+                $"baseline_drop_spawns={totalBaselineDrops} repeated_drop_spawns={repeatedDropSpawns} " +
+                $"monster_deltas={totalDeltas} baseline_wire_bytes={baselineBytes} " +
+                $"delta_wire_bytes={deltaBytes} peak_reliable_frames={peakReliableFrames} " +
+                $"peak_reliable_bytes={peakReliableBytes} ai_max_processed={stats.MaxProcessedInStep} " +
+                $"host_ticks={hostStats.Ticks} host_max_tick_us={hostStats.MaxTickWorkMicroseconds} " +
+                $"host_skipped_deadlines={hostStats.SkippedDeadlines} wall_ms={loadTimer.ElapsedMilliseconds} " +
+                $"source=synthetic no_tls_or_gpu=true");
         }
         finally
         {
