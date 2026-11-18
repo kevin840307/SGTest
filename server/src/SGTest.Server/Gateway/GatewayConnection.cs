@@ -61,6 +61,11 @@ public readonly record struct TrustedShopCommand(
     long ActorId,long ConnectionEpoch,long RequestMapEpoch,
     uint ShopSequence,int NpcSpawnId,TrustedShopCommandKind Kind,
     int ItemDefinitionId=0,long ItemUid=0,int Quantity=0);
+public enum TrustedStorageCommandKind : byte { Open=1, Deposit=2, Withdraw=3 }
+public readonly record struct TrustedStorageCommand(
+    long ActorId,long ConnectionEpoch,long RequestMapEpoch,
+    uint StorageSequence,int NpcSpawnId,TrustedStorageCommandKind Kind,
+    long ItemUid=0);
 
 public readonly record struct NormalAttackOutcome(
     NormalAttackStatus Status, long ServerTick, long TargetEntityId,
@@ -269,7 +274,8 @@ public sealed class GatewayConnection
                                               Func<TrustedRecoveryUse, bool>? postRecovery = null,
                                               Func<TrustedInventoryDiscard, bool>? postDiscard = null,
                                               Func<TrustedSkillUse, bool>? postSkill = null,
-                                              Func<TrustedShopCommand, bool>? postShop = null)
+                                              Func<TrustedShopCommand, bool>? postShop = null,
+                                              Func<TrustedStorageCommand, bool>? postStorage = null)
     {
         ArgumentNullException.ThrowIfNull(postMove);
         lock (_receiveGate)
@@ -282,7 +288,7 @@ public sealed class GatewayConnection
             return _parser.Feed(bytes,
                 frame => HandleClientFrame(
                     frame, postMove, postNpc, postResync, postAttack, postRespawn,
-                    postPickup, postRecovery, postDiscard, postSkill, postShop),
+                    postPickup, postRecovery, postDiscard, postSkill, postShop, postStorage),
                 out commandsAccepted);
         }
     }
@@ -297,7 +303,8 @@ public sealed class GatewayConnection
                                               Func<TrustedRecoveryUse, bool>? postRecovery = null,
                                               Func<TrustedInventoryDiscard, bool>? postDiscard = null,
                                               Func<TrustedSkillUse, bool>? postSkill = null,
-                                              Func<TrustedShopCommand, bool>? postShop = null)
+                                              Func<TrustedShopCommand, bool>? postShop = null,
+                                              Func<TrustedStorageCommand, bool>? postStorage = null)
     {
         ArgumentNullException.ThrowIfNull(postMove);
         lock (_receiveGate)
@@ -310,7 +317,7 @@ public sealed class GatewayConnection
             return _parser.Resume(
                 frame => HandleClientFrame(
                     frame, postMove, postNpc, postResync, postAttack, postRespawn,
-                    postPickup, postRecovery, postDiscard, postSkill, postShop),
+                    postPickup, postRecovery, postDiscard, postSkill, postShop, postStorage),
                 out commandsAccepted);
         }
     }
@@ -326,7 +333,8 @@ public sealed class GatewayConnection
         Func<TrustedRecoveryUse, bool>? postRecovery,
         Func<TrustedInventoryDiscard, bool>? postDiscard,
         Func<TrustedSkillUse, bool>? postSkill,
-        Func<TrustedShopCommand, bool>? postShop)
+        Func<TrustedShopCommand, bool>? postShop,
+        Func<TrustedStorageCommand, bool>? postStorage)
     {
         if (!WireProtocol.TryReadHeader(frame, out var header))
             return WireFrameDisposition.ProtocolViolation;
@@ -386,6 +394,37 @@ public sealed class GatewayConnection
                 TrustedShopCommandKind.Sell,shopSell.ItemDefinitionId,
                 shopSell.ItemUid,shopSell.Quantity))
                 ? WireFrameDisposition.Accepted : WireFrameDisposition.Backpressured;
+        }
+
+        if(postStorage is not null && header.Opcode==WireOpcode.StorageOpen &&
+            WireProtocol.TryDecodeStorageOpen(frame,out var storageOpen))
+        {
+            if(!GameplayReady(bound))return WireFrameDisposition.ProtocolViolation;
+            return postStorage(new TrustedStorageCommand(
+                bound.ActorId,bound.ConnectionEpoch,storageOpen.MapEpoch,
+                storageOpen.StorageSequence,storageOpen.NpcSpawnId,
+                TrustedStorageCommandKind.Open))
+                ? WireFrameDisposition.Accepted:WireFrameDisposition.Backpressured;
+        }
+        if(postStorage is not null && header.Opcode==WireOpcode.StorageDeposit &&
+            WireProtocol.TryDecodeStorageDeposit(frame,out var storageDeposit))
+        {
+            if(!GameplayReady(bound))return WireFrameDisposition.ProtocolViolation;
+            return postStorage(new TrustedStorageCommand(
+                bound.ActorId,bound.ConnectionEpoch,storageDeposit.MapEpoch,
+                storageDeposit.StorageSequence,storageDeposit.NpcSpawnId,
+                TrustedStorageCommandKind.Deposit,storageDeposit.ItemUid))
+                ? WireFrameDisposition.Accepted:WireFrameDisposition.Backpressured;
+        }
+        if(postStorage is not null && header.Opcode==WireOpcode.StorageWithdraw &&
+            WireProtocol.TryDecodeStorageWithdraw(frame,out var storageWithdraw))
+        {
+            if(!GameplayReady(bound))return WireFrameDisposition.ProtocolViolation;
+            return postStorage(new TrustedStorageCommand(
+                bound.ActorId,bound.ConnectionEpoch,storageWithdraw.MapEpoch,
+                storageWithdraw.StorageSequence,storageWithdraw.NpcSpawnId,
+                TrustedStorageCommandKind.Withdraw,storageWithdraw.ItemUid))
+                ? WireFrameDisposition.Accepted:WireFrameDisposition.Backpressured;
         }
 
         if (header.Opcode == WireOpcode.RecoveryUse && postRecovery is not null &&
@@ -675,6 +714,77 @@ public sealed class GatewayConnection
                 request.RequestMapEpoch,request.ShopSequence,result.Kind,
                 result.Status,result.NpcSpawnId,result.Money,result.ItemUid,
                 result.ItemDefinitionId,result.Quantity,result.RemainingQuantity));
+            return _reliable.TryEnqueue(frame)
+                ? GatewaySendStatus.Enqueued:GatewaySendStatus.Backpressured;
+        }
+    }
+
+    public GatewaySendStatus QueueStorageSnapshot(
+        TrustedStorageCommand request,StorageOpenStatus status,
+        IReadOnlyList<StoredItem> items)
+    {
+        lock(_bindingGate)
+        {
+            if(_closed)return GatewaySendStatus.Closed;
+            var bound=_binding;
+            if(request.ActorId!=bound.ActorId||
+               request.ConnectionEpoch!=bound.ConnectionEpoch||
+               request.RequestMapEpoch!=bound.MapEpoch||
+               request.Kind!=TrustedStorageCommandKind.Open||
+               items is null||
+               (status!=StorageOpenStatus.Opened&&items.Count!=0)||
+               items.Count>WireProtocol.StorageSnapshotMaxItems)
+                return GatewaySendStatus.GenerationMismatch;
+            var ordered=status==StorageOpenStatus.Opened
+                ? items.OrderBy(item=>item.ItemUid).ToArray()
+                : Array.Empty<StoredItem>();
+            if(ordered.Length==0)
+            {
+                var frame=WireProtocol.EncodeStorageSnapshot(new(
+                    request.RequestMapEpoch,request.StorageSequence,status,
+                    request.NpcSpawnId,0,true,Array.Empty<StorageItemWire>()));
+                return _reliable.TryEnqueue(frame)
+                    ? GatewaySendStatus.Enqueued:GatewaySendStatus.Backpressured;
+            }
+            for(int start=0;start<ordered.Length;
+                start+=WireProtocol.StorageSnapshotMaxItemsPerFrame)
+            {
+                var chunk=ordered.Skip(start)
+                    .Take(WireProtocol.StorageSnapshotMaxItemsPerFrame)
+                    .Select(item=>new StorageItemWire(
+                        item.ItemUid,item.ItemDefinitionId,item.Quantity,item.SourceDropId))
+                    .ToArray();
+                bool complete=start+chunk.Length==ordered.Length;
+                var frame=WireProtocol.EncodeStorageSnapshot(new(
+                    request.RequestMapEpoch,request.StorageSequence,status,
+                    request.NpcSpawnId,start,complete,chunk));
+                if(!_reliable.TryEnqueue(frame))
+                    return GatewaySendStatus.Backpressured;
+            }
+            return GatewaySendStatus.Enqueued;
+        }
+    }
+
+    public GatewaySendStatus QueueStorageTransferResult(
+        TrustedStorageCommand request,StorageTransferResult result)
+    {
+        lock(_bindingGate)
+        {
+            if(_closed)return GatewaySendStatus.Closed;
+            var bound=_binding;
+            if(request.ActorId!=bound.ActorId||
+               request.ConnectionEpoch!=bound.ConnectionEpoch||
+               request.RequestMapEpoch!=bound.MapEpoch||
+               request.Kind==TrustedStorageCommandKind.Open||
+               request.ItemUid!=result.ItemUid)
+                return GatewaySendStatus.GenerationMismatch;
+            var expected=request.Kind==TrustedStorageCommandKind.Deposit
+                ? StorageTransferKind.Deposit:StorageTransferKind.Withdraw;
+            if(result.Kind!=expected)return GatewaySendStatus.GenerationMismatch;
+            var frame=WireProtocol.EncodeStorageTransferResult(new(
+                request.RequestMapEpoch,request.StorageSequence,result.Kind,
+                result.Status,request.NpcSpawnId,result.ItemUid,
+                result.ItemDefinitionId,result.Quantity,result.SourceDropId));
             return _reliable.TryEnqueue(frame)
                 ? GatewaySendStatus.Enqueued:GatewaySendStatus.Backpressured;
         }

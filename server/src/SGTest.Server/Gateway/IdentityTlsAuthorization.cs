@@ -27,6 +27,7 @@ public sealed class IdentityTlsAuthorization
     private readonly IReadOnlyDictionary<int,RecoveryItemRule>? _recoveryRules;
     private readonly CharacterCreationPolicy? _characterCreation;
     private readonly NpcShopCatalog? _shops;
+    private readonly NpcStorageCatalog? _storages;
 
     public IdentityTlsAuthorization(SqliteIdentityStore identity, ServerWorldHost world,
                                     PortalCatalog? portals = null,
@@ -35,7 +36,8 @@ public sealed class IdentityTlsAuthorization
                                      long pickupWorldGeneration = 0,
                                      IReadOnlyDictionary<int,RecoveryItemRule>? recoveryRules = null,
                                      CharacterCreationPolicy? characterCreation = null,
-                                     NpcShopCatalog? shops = null)
+                                     NpcShopCatalog? shops = null,
+                                     NpcStorageCatalog? storages = null)
     {
         _identity = identity ?? throw new ArgumentNullException(nameof(identity));
         _world = world ?? throw new ArgumentNullException(nameof(world));
@@ -55,6 +57,7 @@ public sealed class IdentityTlsAuthorization
         }
         _characterCreation = characterCreation;
         _shops = shops;
+        _storages = storages;
     }
 
     /// <summary>
@@ -586,6 +589,122 @@ public sealed class IdentityTlsAuthorization
                 finally { gameplayGate.Release(); }
             }
 
+            async Task StorageHandler(TrustedStorageCommand request)
+            {
+                var binding=new ConnectionBinding(
+                    request.ActorId,request.ConnectionEpoch,request.RequestMapEpoch);
+                await gameplayGate.WaitAsync().ConfigureAwait(false);
+                try
+                {
+                    if(!router.IsCurrentBinding(binding))return;
+                    var snapshot=await _world.TrustedGetActorAsync(
+                        request.ActorId).ConfigureAwait(false);
+                    if(snapshot is not { } actor||
+                       actor.ActorId!=request.ActorId||
+                       actor.ConnectionEpoch!=request.ConnectionEpoch||
+                       actor.MapEpoch!=request.RequestMapEpoch)
+                    {
+                        if(request.Kind==TrustedStorageCommandKind.Open)
+                        {
+                            var stale=router.QueueStorageSnapshot(
+                                request,StorageOpenStatus.StaleGeneration,
+                                Array.Empty<StoredItem>());
+                            if(stale!=GatewaySendStatus.Enqueued)
+                                throw new IOException(
+                                    "Reliable stale storage snapshot could not be queued: "+stale);
+                        }
+                        else
+                        {
+                            var kind=request.Kind==TrustedStorageCommandKind.Deposit
+                                ? StorageTransferKind.Deposit:StorageTransferKind.Withdraw;
+                            var staleResult=new StorageTransferResult(
+                                StorageTransferStatus.StaleGeneration,kind,
+                                request.ItemUid,0,0,0);
+                            var stale=router.QueueStorageTransferResult(request,staleResult);
+                            if(stale!=GatewaySendStatus.Enqueued)
+                                throw new IOException(
+                                    "Reliable stale storage result could not be queued: "+stale);
+                        }
+                        return;
+                    }
+
+                    bool dead=_combat is not null&&_combat.CurrentHp(actor)<=0;
+                    StorageAccessStatus access=dead
+                        ? StorageAccessStatus.PlayerDead
+                        : _storages is null
+                            ? StorageAccessStatus.UnknownStorage
+                            : _storages.Access(actor,request.NpcSpawnId);
+
+                    if(request.Kind==TrustedStorageCommandKind.Open)
+                    {
+                        StorageOpenStatus status=access switch
+                        {
+                            StorageAccessStatus.Allowed=>StorageOpenStatus.Opened,
+                            StorageAccessStatus.UnknownStorage=>StorageOpenStatus.UnknownStorage,
+                            StorageAccessStatus.TooFar=>StorageOpenStatus.TooFar,
+                            StorageAccessStatus.PlayerDead=>StorageOpenStatus.PlayerDead,
+                            _=>StorageOpenStatus.StaleGeneration
+                        };
+                        IReadOnlyList<StoredItem> items=Array.Empty<StoredItem>();
+                        if(status==StorageOpenStatus.Opened)
+                        {
+                            items=await _identity.ListStorageItemsAsync(
+                                actor.ActorId,WireProtocol.StorageSnapshotMaxItems+1)
+                                .ConfigureAwait(false);
+                            if(items.Count>WireProtocol.StorageSnapshotMaxItems)
+                                throw new InvalidOperationException(
+                                    "Storage exceeds bounded V1 snapshot capacity");
+                        }
+                        var queued=router.QueueStorageSnapshot(request,status,items);
+                        if(queued!=GatewaySendStatus.Enqueued)
+                            throw new IOException(
+                                "Reliable storage snapshot could not be queued: "+queued);
+                        return;
+                    }
+
+                    var transferKind=request.Kind==TrustedStorageCommandKind.Deposit
+                        ? StorageTransferKind.Deposit:StorageTransferKind.Withdraw;
+                    StorageTransferResult result;
+                    if(access!=StorageAccessStatus.Allowed)
+                    {
+                        var rejected=access switch
+                        {
+                            StorageAccessStatus.UnknownStorage=>StorageTransferStatus.UnknownStorage,
+                            StorageAccessStatus.TooFar=>StorageTransferStatus.TooFar,
+                            StorageAccessStatus.PlayerDead=>StorageTransferStatus.PlayerDead,
+                            _=>StorageTransferStatus.StaleGeneration
+                        };
+                        result=new(rejected,transferKind,request.ItemUid,0,0,0);
+                    }
+                    else
+                    {
+                        long durableConnection=_pickupWorldGeneration==0
+                            ? actor.ConnectionEpoch
+                            : SqliteIdentityStore.ComposePickupConnectionEpoch(
+                                _pickupWorldGeneration,actor.ConnectionEpoch);
+                        var context=new TrustedStorageContext(
+                            actor.ActorId,durableConnection,actor.MapEpoch,
+                            request.StorageSequence);
+                        result=request.Kind switch
+                        {
+                            TrustedStorageCommandKind.Deposit=>
+                                await _identity.DepositInventoryItemAsync(
+                                    context,request.ItemUid).ConfigureAwait(false),
+                            TrustedStorageCommandKind.Withdraw=>
+                                await _identity.WithdrawStorageItemAsync(
+                                    context,request.ItemUid).ConfigureAwait(false),
+                            _=>throw new InvalidOperationException(
+                                "Unhandled trusted storage command")
+                        };
+                    }
+                    var sent=router.QueueStorageTransferResult(request,result);
+                    if(sent!=GatewaySendStatus.Enqueued)
+                        throw new IOException(
+                            "Reliable storage transfer result could not be queued: "+sent);
+                }
+                finally { gameplayGate.Release(); }
+            }
+
             async Task DiscardHandler(TrustedInventoryDiscard request)
             {
                 var binding=new ConnectionBinding(
@@ -627,7 +746,8 @@ public sealed class IdentityTlsAuthorization
                 npcHandler, router.TryRequestResync,
                 router.TryRequestNormalAttack, RespawnHandler,
                 PickupHandler, RecoveryHandler, DiscardHandler,
-                handleSkill:SkillHandler,handleShop:ShopHandler).ConfigureAwait(false);
+                handleSkill:SkillHandler,handleShop:ShopHandler,
+                handleStorage:StorageHandler).ConfigureAwait(false);
         }
         finally
         {

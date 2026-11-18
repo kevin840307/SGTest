@@ -492,6 +492,31 @@ public sealed class WorldResultRouter
         }
     }
 
+    public GatewaySendStatus QueueStorageSnapshot(
+        TrustedStorageCommand request,StorageOpenStatus status,
+        IReadOnlyList<StoredItem> items)
+    {
+        lock(_gate)
+        {
+            if(!_connections.TryGetValue(request.ActorId,out var connection)||
+               connection.IsClosed)
+                return GatewaySendStatus.Closed;
+            return connection.QueueStorageSnapshot(request,status,items);
+        }
+    }
+
+    public GatewaySendStatus QueueStorageTransferResult(
+        TrustedStorageCommand request,StorageTransferResult result)
+    {
+        lock(_gate)
+        {
+            if(!_connections.TryGetValue(request.ActorId,out var connection)||
+               connection.IsClosed)
+                return GatewaySendStatus.Closed;
+            return connection.QueueStorageTransferResult(request,result);
+        }
+    }
+
     public GatewaySendStatus QueueRecoveryUseResult(
         TrustedRecoveryUse request,RecoveryUseResult result)
     {
