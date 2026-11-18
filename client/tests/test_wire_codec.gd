@@ -8,6 +8,8 @@ const AUTH_RESULT_HEX := "0900000001000B0000"
 const CHARACTER_LIST_HEX := "2A00000001000C00020B000000000000000004004865726F16000000000000000107004865726F54776F"
 const CHARACTER_CHOOSE_HEX := "1000000001000D001600000000000000"
 const CHARACTER_CHOOSE_RESULT_HEX := "2D00000001000E000016000000000000000F0000000000000000C0BE40000000000010C6400300000000000000"
+const CHARACTER_CREATE_HEX := "1200000001000F000207004E65774865726F"
+const CHARACTER_CREATE_RESULT_HEX := "1B000000010010000021000000000000000207004E65774865726F"
 
 func _fail(message: String) -> void:
 	push_error("WIRE_CODEC_FAIL " + message)
@@ -36,6 +38,15 @@ func _initialize() -> void:
 	if list != {"characters": [{"character_id": 11, "slot": 0, "name": "Hero"}, {"character_id": 22, "slot": 1, "name": "HeroTwo"}]}:
 		_fail("CharacterList decode %s" % list)
 		return
+	var create := WireCodec.encode_character_create(2,"NewHero")
+	if create.hex_encode().to_upper() != CHARACTER_CREATE_HEX:
+		_fail("CharacterCreate golden " + create.hex_encode())
+		return
+	var create_result := WireCodec.decode_character_create_result(
+		CHARACTER_CREATE_RESULT_HEX.hex_decode())
+	if create_result != {"status":0,"character_id":33,"slot":2,"name":"NewHero"}:
+		_fail("CharacterCreateResult decode %s" % create_result)
+		return
 	var choose := WireCodec.encode_character_choose(22)
 	if choose.hex_encode().to_upper() != CHARACTER_CHOOSE_HEX:
 		_fail("CharacterChoose golden " + choose.hex_encode())
@@ -60,10 +71,14 @@ func _initialize() -> void:
 	if not WireCodec.decode_character_choose_result(_mutate_u8(CHARACTER_CHOOSE_RESULT_HEX.hex_decode(), 8, 9)).is_empty():
 		_fail("unknown choose status accepted")
 		return
+	if not WireCodec.decode_character_create_result(
+		_mutate_u8(CHARACTER_CREATE_RESULT_HEX.hex_decode(),8,9)).is_empty():
+		_fail("unknown create status accepted")
+		return
 	if WireCodec.frame_length_prefix(PackedByteArray([1, 2, 3])) != -1 or WireCodec.frame_length_prefix(_mutate_u32(move, 0, 70000)) != -1:
 		_fail("invalid frame length accepted")
 		return
-	print("WIRE_CODEC_GODOT_PASS move=28 receipt=30 auth=35 character_list=42 choose=16 choose_result=45 malformed=PASS identity_server_owned=true")
+	print("WIRE_CODEC_GODOT_PASS move=28 receipt=30 auth=35 character_create=18 create_result=27 character_list=42 choose=16 choose_result=45 malformed=PASS identity_server_owned=true")
 	quit(0)
 
 func _mutate_u8(source: PackedByteArray, offset: int, value: int) -> PackedByteArray:

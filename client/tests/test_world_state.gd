@@ -8,12 +8,30 @@ const CHOOSE := "2D00000001000E00000B000000000000000F000000000000000000204000000
 const RECEIPT := "1E0000000100020001000000000000000100000000002A00000000000000"
 const OLD_MAP_RECEIPT := "1E0000000100020001000000000000000100000000002A00000000000000"
 const READY := "2D0000000100140001000000000000002A000000000000000B000000000000000F0000000000C0410000004101"
+const EMPTY_LIST := "0900000001000C0000"
+const CREATE_RESULT := "1B000000010010000021000000000000000007004E65774865726F"
+const CREATED_LIST := "1B00000001000C000121000000000000000007004E65774865726F"
 
 func _fail(message: String) -> void:
 	push_error("WORLD_STATE_FAIL " + message)
 	quit(1)
 
 func _initialize() -> void:
+	var creation = WorldState.new()
+	if not creation.mark_auth_sent() or not creation.apply_frame(AUTH_OK.hex_decode()) or 		not creation.apply_frame(EMPTY_LIST.hex_decode()):
+		_fail("empty account auth/list transition")
+		return
+	if not creation.mark_character_create_sent(0,"NewHero") or 		not creation.apply_frame(CREATE_RESULT.hex_decode()):
+		_fail("character create transition")
+		return
+	if int(creation.snapshot().state) != WorldState.STATE_WAIT_CHARACTER_LIST or 		not creation.apply_frame(CREATED_LIST.hex_decode()):
+		_fail("character create refreshed list")
+		return
+	var created := creation.snapshot()
+	if int(created.state) != WorldState.STATE_SELECTING_CHARACTER or 		int(created.last_created_character_id) != 33 or 		str(created.last_created_name) != "NewHero" or 		(created.characters as Array).size() != 1:
+		_fail("created character state %s" % created)
+		return
+
 	var world = WorldState.new()
 	if not world.mark_auth_sent() or not world.apply_frame(AUTH_OK.hex_decode()) or not world.apply_frame(LIST.hex_decode()):
 		_fail("auth/list transition")
@@ -48,7 +66,7 @@ func _initialize() -> void:
 	if world.apply_frame(future) or int(world.snapshot().state) != WorldState.STATE_FAILED:
 		_fail("future map receipt did not fail closed")
 		return
-	print("WORLD_STATE_PASS auth_choose_ready_ack_move=PASS duplicate_receipt=IGNORED future_map=FAIL_CLOSED")
+	print("WORLD_STATE_PASS auth_create_refresh_choose_ready_ack_move=PASS duplicate_receipt=IGNORED future_map=FAIL_CLOSED")
 	quit(0)
 
 func _mutate_i64(source: PackedByteArray, offset: int, value: int) -> PackedByteArray:
