@@ -465,6 +465,32 @@ public sealed class WorldResultRouter
     public bool TryPostGroundDropClaimed(long dropId) =>
         dropId>0 && _claimedGroundDrops.Writer.TryWrite(dropId);
 
+
+    public GatewaySendStatus QueueShopSnapshot(
+        TrustedShopCommand request,ShopOpenStatus status,long money,
+        IReadOnlyList<NpcShopCatalog.Item> items)
+    {
+        lock(_gate)
+        {
+            if(!_connections.TryGetValue(request.ActorId,out var connection)||
+               connection.IsClosed)
+                return GatewaySendStatus.Closed;
+            return connection.QueueShopSnapshot(request,status,money,items);
+        }
+    }
+
+    public GatewaySendStatus QueueShopTransactionResult(
+        TrustedShopCommand request,ShopTransactionResult result)
+    {
+        lock(_gate)
+        {
+            if(!_connections.TryGetValue(request.ActorId,out var connection)||
+               connection.IsClosed)
+                return GatewaySendStatus.Closed;
+            return connection.QueueShopTransactionResult(request,result);
+        }
+    }
+
     public GatewaySendStatus QueueRecoveryUseResult(
         TrustedRecoveryUse request,RecoveryUseResult result)
     {

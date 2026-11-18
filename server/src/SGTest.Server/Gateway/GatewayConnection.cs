@@ -56,6 +56,11 @@ public readonly record struct TrustedRecoveryUse(
 public readonly record struct TrustedInventoryDiscard(
     long ActorId,long ConnectionEpoch,long RequestMapEpoch,
     uint DiscardSequence,long ItemUid,int Quantity);
+public enum TrustedShopCommandKind : byte { Open=1, Buy=2, Sell=3 }
+public readonly record struct TrustedShopCommand(
+    long ActorId,long ConnectionEpoch,long RequestMapEpoch,
+    uint ShopSequence,int NpcSpawnId,TrustedShopCommandKind Kind,
+    int ItemDefinitionId=0,long ItemUid=0,int Quantity=0);
 
 public readonly record struct NormalAttackOutcome(
     NormalAttackStatus Status, long ServerTick, long TargetEntityId,
@@ -263,7 +268,8 @@ public sealed class GatewayConnection
                                               Func<TrustedGroundPickup, bool>? postPickup = null,
                                               Func<TrustedRecoveryUse, bool>? postRecovery = null,
                                               Func<TrustedInventoryDiscard, bool>? postDiscard = null,
-                                              Func<TrustedSkillUse, bool>? postSkill = null)
+                                              Func<TrustedSkillUse, bool>? postSkill = null,
+                                              Func<TrustedShopCommand, bool>? postShop = null)
     {
         ArgumentNullException.ThrowIfNull(postMove);
         lock (_receiveGate)
@@ -276,7 +282,7 @@ public sealed class GatewayConnection
             return _parser.Feed(bytes,
                 frame => HandleClientFrame(
                     frame, postMove, postNpc, postResync, postAttack, postRespawn,
-                    postPickup, postRecovery, postDiscard, postSkill),
+                    postPickup, postRecovery, postDiscard, postSkill, postShop),
                 out commandsAccepted);
         }
     }
@@ -290,7 +296,8 @@ public sealed class GatewayConnection
                                               Func<TrustedGroundPickup, bool>? postPickup = null,
                                               Func<TrustedRecoveryUse, bool>? postRecovery = null,
                                               Func<TrustedInventoryDiscard, bool>? postDiscard = null,
-                                              Func<TrustedSkillUse, bool>? postSkill = null)
+                                              Func<TrustedSkillUse, bool>? postSkill = null,
+                                              Func<TrustedShopCommand, bool>? postShop = null)
     {
         ArgumentNullException.ThrowIfNull(postMove);
         lock (_receiveGate)
@@ -303,7 +310,7 @@ public sealed class GatewayConnection
             return _parser.Resume(
                 frame => HandleClientFrame(
                     frame, postMove, postNpc, postResync, postAttack, postRespawn,
-                    postPickup, postRecovery, postDiscard, postSkill),
+                    postPickup, postRecovery, postDiscard, postSkill, postShop),
                 out commandsAccepted);
         }
     }
@@ -318,7 +325,8 @@ public sealed class GatewayConnection
         Func<TrustedGroundPickup, bool>? postPickup,
         Func<TrustedRecoveryUse, bool>? postRecovery,
         Func<TrustedInventoryDiscard, bool>? postDiscard,
-        Func<TrustedSkillUse, bool>? postSkill)
+        Func<TrustedSkillUse, bool>? postSkill,
+        Func<TrustedShopCommand, bool>? postShop)
     {
         if (!WireProtocol.TryReadHeader(frame, out var header))
             return WireFrameDisposition.ProtocolViolation;
@@ -344,6 +352,40 @@ public sealed class GatewayConnection
                 return WireFrameDisposition.Backpressured;
             }
             return WireFrameDisposition.AcceptedControl;
+        }
+
+
+        if(postShop is not null && header.Opcode==WireOpcode.ShopOpen &&
+            WireProtocol.TryDecodeShopOpen(frame,out var shopOpen))
+        {
+            if(!GameplayReady(bound))return WireFrameDisposition.ProtocolViolation;
+            return postShop(new TrustedShopCommand(
+                bound.ActorId,bound.ConnectionEpoch,shopOpen.MapEpoch,
+                shopOpen.ShopSequence,shopOpen.NpcSpawnId,
+                TrustedShopCommandKind.Open))
+                ? WireFrameDisposition.Accepted : WireFrameDisposition.Backpressured;
+        }
+        if(postShop is not null && header.Opcode==WireOpcode.ShopBuy &&
+            WireProtocol.TryDecodeShopBuy(frame,out var shopBuy))
+        {
+            if(!GameplayReady(bound))return WireFrameDisposition.ProtocolViolation;
+            return postShop(new TrustedShopCommand(
+                bound.ActorId,bound.ConnectionEpoch,shopBuy.MapEpoch,
+                shopBuy.ShopSequence,shopBuy.NpcSpawnId,
+                TrustedShopCommandKind.Buy,shopBuy.ItemDefinitionId,0,
+                shopBuy.Quantity))
+                ? WireFrameDisposition.Accepted : WireFrameDisposition.Backpressured;
+        }
+        if(postShop is not null && header.Opcode==WireOpcode.ShopSell &&
+            WireProtocol.TryDecodeShopSell(frame,out var shopSell))
+        {
+            if(!GameplayReady(bound))return WireFrameDisposition.ProtocolViolation;
+            return postShop(new TrustedShopCommand(
+                bound.ActorId,bound.ConnectionEpoch,shopSell.MapEpoch,
+                shopSell.ShopSequence,shopSell.NpcSpawnId,
+                TrustedShopCommandKind.Sell,shopSell.ItemDefinitionId,
+                shopSell.ItemUid,shopSell.Quantity))
+                ? WireFrameDisposition.Accepted : WireFrameDisposition.Backpressured;
         }
 
         if (header.Opcode == WireOpcode.RecoveryUse && postRecovery is not null &&
@@ -578,6 +620,63 @@ public sealed class GatewayConnection
                 outcome.Status, outcome.CurrentHp, outcome.MaxHp));
             return _reliable.TryEnqueue(frame)
                 ? GatewaySendStatus.Enqueued : GatewaySendStatus.Backpressured;
+        }
+    }
+
+
+    public GatewaySendStatus QueueShopSnapshot(
+        TrustedShopCommand request,ShopOpenStatus status,long money,
+        IReadOnlyList<NpcShopCatalog.Item> items)
+    {
+        lock(_bindingGate)
+        {
+            if(_closed)return GatewaySendStatus.Closed;
+            var bound=_binding;
+            if(request.ActorId!=bound.ActorId||
+               request.ConnectionEpoch!=bound.ConnectionEpoch||
+               request.RequestMapEpoch!=bound.MapEpoch||
+               request.Kind!=TrustedShopCommandKind.Open)
+                return GatewaySendStatus.GenerationMismatch;
+            var wireItems=status==ShopOpenStatus.Opened
+                ? items.OrderBy(item=>item.ItemDefinitionId)
+                    .Select(item=>new ShopItemWire(
+                        item.ItemDefinitionId,item.BuyPrice,item.SellPrice)).ToArray()
+                : Array.Empty<ShopItemWire>();
+            var frame=WireProtocol.EncodeShopSnapshot(new(
+                request.RequestMapEpoch,request.ShopSequence,status,
+                request.NpcSpawnId,status==ShopOpenStatus.Opened?money:0,wireItems));
+            return _reliable.TryEnqueue(frame)
+                ? GatewaySendStatus.Enqueued:GatewaySendStatus.Backpressured;
+        }
+    }
+
+    public GatewaySendStatus QueueShopTransactionResult(
+        TrustedShopCommand request,ShopTransactionResult result)
+    {
+        lock(_bindingGate)
+        {
+            if(_closed)return GatewaySendStatus.Closed;
+            var bound=_binding;
+            if(request.ActorId!=bound.ActorId||
+               request.ConnectionEpoch!=bound.ConnectionEpoch||
+               request.RequestMapEpoch!=bound.MapEpoch||
+               request.NpcSpawnId!=result.NpcSpawnId||
+               request.ItemDefinitionId!=result.ItemDefinitionId||
+               request.Quantity!=result.Quantity||
+               (request.Kind==TrustedShopCommandKind.Sell&&
+                request.ItemUid!=result.ItemUid)||
+               request.Kind==TrustedShopCommandKind.Open)
+                return GatewaySendStatus.GenerationMismatch;
+            var expectedKind=request.Kind==TrustedShopCommandKind.Buy
+                ? ShopTransactionKind.Buy:ShopTransactionKind.Sell;
+            if(result.Kind!=expectedKind)
+                return GatewaySendStatus.GenerationMismatch;
+            var frame=WireProtocol.EncodeShopTransactionResult(new(
+                request.RequestMapEpoch,request.ShopSequence,result.Kind,
+                result.Status,result.NpcSpawnId,result.Money,result.ItemUid,
+                result.ItemDefinitionId,result.Quantity,result.RemainingQuantity));
+            return _reliable.TryEnqueue(frame)
+                ? GatewaySendStatus.Enqueued:GatewaySendStatus.Backpressured;
         }
     }
 
