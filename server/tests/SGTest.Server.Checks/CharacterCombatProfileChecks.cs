@@ -15,6 +15,8 @@ internal static class CharacterCombatProfileChecks
             () => V5MpMigration(root).GetAwaiter().GetResult());
         Checks.Run("trusted MP settlement is atomic persistent and fail-closed",
             () => MpSettlement(root).GetAwaiter().GetResult());
+        Checks.Run("durable skill MP settlement is idempotent and sequence-bound",
+            () => DurableSkillMpSettlement(root).GetAwaiter().GetResult());
     }
 
     private static async Task Migration(string root)
@@ -249,6 +251,110 @@ VALUES(7,2,'ci:v5',0,0,5,5,5,5,1,80,100,20,4,10,3,48,15,1);";
             var saved=await reopened.GetCharacterCombatProfileAsync(character);
             Checks.Require(saved?.Data.CurrentMp==2 && saved.Data.MaxMp==5,
                 "MP settlement did not persist");
+        }
+    }
+
+    private static async Task DurableSkillMpSettlement(string root)
+    {
+        string db=Path.Combine(root,"combat-skill-mp-"+Guid.NewGuid().ToString("N")+".db");
+        long character;
+        const long generation=9001;
+        using(var store=new SqliteIdentityStore(db))
+        {
+            await store.InitializeAsync();
+            long account=(await store.CreateAccountAsync(
+                "skill_mp","Skill-MP-Password-123!")).AccountId;
+            character=(await store.CreateCharacterAsync(account,0,"SkillMpHero",
+                new CharacterSpawn(13,24,24))).Character!.CharacterId;
+
+            var missing=await store.ConsumeSkillMpAsync(
+                new(character,generation,1,1,23103),1);
+            Checks.Require(missing.Status==SkillMpConsumeStatus.MissingProfile,
+                "missing profile invented durable skill MP");
+
+            var profile=Profile(
+                CombatProfileTrust.Verified,"current-client:Skills/23103.tres",
+                hp:100,attack:20) with {CurrentMp=3,MaxMp=5};
+            await store.SetCharacterCombatProfileAsync(character,profile);
+
+            var first=await store.ConsumeSkillMpAsync(
+                new(character,generation,1,1,23103),1);
+            Checks.Require(first.Status==SkillMpConsumeStatus.Consumed &&
+                           first.SkillId==23103 && first.MpCost==1 &&
+                           first.PreviousMp==3 && first.CurrentMp==2 &&
+                           first.MaxMp==5,
+                "durable skill MP first consume wrong");
+
+            var replay=await store.ConsumeSkillMpAsync(
+                new(character,generation,1,1,23103),1);
+            Checks.Require(replay.Status==SkillMpConsumeStatus.AlreadyConsumed &&
+                           replay.CurrentMp==2 && replay.PreviousMp==3,
+                "exact skill MP replay spent resource twice");
+
+            var conflictingSkill=await store.ConsumeSkillMpAsync(
+                new(character,generation,1,1,99999),1);
+            var conflictingCost=await store.ConsumeSkillMpAsync(
+                new(character,generation,1,1,23103),2);
+            Checks.Require(conflictingSkill.Status==SkillMpConsumeStatus.StaleSequence &&
+                           conflictingCost.Status==SkillMpConsumeStatus.StaleSequence,
+                "skill MP receipt allowed sequence payload substitution");
+
+            var insufficient=await store.ConsumeSkillMpAsync(
+                new(character,generation,1,2,23103),3);
+            Checks.Require(insufficient.Status==SkillMpConsumeStatus.InsufficientMp &&
+                           insufficient.CurrentMp==2,
+                "insufficient durable skill MP mutated profile");
+
+            var second=await store.ConsumeSkillMpAsync(
+                new(character,generation,1,2,23103),2);
+            Checks.Require(second.Status==SkillMpConsumeStatus.Consumed &&
+                           second.PreviousMp==2 && second.CurrentMp==0,
+                "retry after non-mutating insufficient result did not settle");
+
+            var older=await store.ConsumeSkillMpAsync(
+                new(character,generation,1,1,23103),1);
+            Checks.Require(older.Status==SkillMpConsumeStatus.AlreadyConsumed &&
+                           older.CurrentMp==2,
+                "committed older skill MP receipt disappeared");
+        }
+
+        using(var reopened=new SqliteIdentityStore(db))
+        {
+            await reopened.InitializeAsync();
+            var saved=await reopened.GetCharacterCombatProfileAsync(character);
+            Checks.Require(saved?.Data.CurrentMp==0 && saved.Data.MaxMp==5,
+                "durable skill MP did not persist");
+            var replay=await reopened.ConsumeSkillMpAsync(
+                new(character,generation,1,2,23103),2);
+            Checks.Require(replay.Status==SkillMpConsumeStatus.AlreadyConsumed &&
+                           replay.PreviousMp==2 && replay.CurrentMp==0,
+                "skill MP receipt did not survive DB reopen");
+            var stale=await reopened.ConsumeSkillMpAsync(
+                new(character,generation,1,1,23104),1);
+            Checks.Require(stale.Status==SkillMpConsumeStatus.StaleSequence,
+                "old skill sequence was reusable after DB reopen");
+        }
+
+        string deadDb=Path.Combine(root,
+            "combat-skill-mp-dead-"+Guid.NewGuid().ToString("N")+".db");
+        using(var deadStore=new SqliteIdentityStore(deadDb))
+        {
+            await deadStore.InitializeAsync();
+            long account=(await deadStore.CreateAccountAsync(
+                "skill_mp_dead","Skill-MP-Dead-Password-123!")).AccountId;
+            long deadCharacter=(await deadStore.CreateCharacterAsync(
+                account,0,"SkillMpDeadHero",new CharacterSpawn(13,24,24)))
+                .Character!.CharacterId;
+            await deadStore.SetCharacterCombatProfileAsync(deadCharacter,
+                Profile(CombatProfileTrust.Verified,
+                    "current-client:Skills/23103.tres",hp:100,attack:20)
+                    with {CurrentMp=2,MaxMp=2});
+            await deadStore.ApplyCharacterDamageAsync(deadCharacter,1000);
+            var dead=await deadStore.ConsumeSkillMpAsync(
+                new(deadCharacter,1,1,1,23103),1);
+            Checks.Require(dead.Status==SkillMpConsumeStatus.Dead &&
+                           dead.CurrentMp==2,
+                "dead character spent durable skill MP");
         }
     }
 

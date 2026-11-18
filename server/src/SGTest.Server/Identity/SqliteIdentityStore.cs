@@ -77,7 +77,7 @@ public sealed record CharacterCreateResult(CharacterCreateStatus Status, Charact
 /// </summary>
 public sealed partial class SqliteIdentityStore : IDisposable
 {
-    public const int SchemaVersion = 6;
+    public const int SchemaVersion = 7;
     private readonly string _connectionString;
     private readonly IdentityStoreOptions _options;
     private readonly PasswordHasher _passwords;
@@ -301,6 +301,24 @@ ALTER TABLE character_combat_profiles
 ADD COLUMN max_mp INTEGER NOT NULL DEFAULT 0
 CHECK(max_mp BETWEEN 0 AND 2000000000);", tx);
             }
+            // Schema v7: durable successful skill-MP settlements. A replay of
+            // one authenticated skill generation/sequence returns the original
+            // receipt and must never spend MP twice after retry/reconnect.
+            Execute(connection, @"
+CREATE TABLE IF NOT EXISTS skill_mp_actions (
+    character_id INTEGER NOT NULL REFERENCES characters(character_id),
+    connection_generation INTEGER NOT NULL CHECK(connection_generation > 0),
+    map_epoch INTEGER NOT NULL CHECK(map_epoch > 0),
+    skill_sequence INTEGER NOT NULL CHECK(skill_sequence BETWEEN 1 AND 4294967295),
+    skill_id INTEGER NOT NULL CHECK(skill_id BETWEEN 1 AND 100000000),
+    mp_cost INTEGER NOT NULL CHECK(mp_cost BETWEEN 1 AND 100000000),
+    previous_mp INTEGER NOT NULL CHECK(previous_mp >= 0),
+    current_mp INTEGER NOT NULL CHECK(current_mp >= 0),
+    max_mp INTEGER NOT NULL CHECK(max_mp >= current_mp),
+    created_unix_ms INTEGER NOT NULL,
+    PRIMARY KEY(character_id,connection_generation,map_epoch,skill_sequence),
+    CHECK(previous_mp - current_mp = mp_cost)
+);", tx);
             Execute(connection, @"
 CREATE TRIGGER IF NOT EXISTS trg_combat_mp_insert
 BEFORE INSERT ON character_combat_profiles
