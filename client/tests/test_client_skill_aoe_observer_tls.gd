@@ -50,10 +50,13 @@ func _initialize() -> void:
 		_observe(session,self_id)
 	else:
 		var shared := _wait(session,func(v):
-			return v.entities.size()==1 and v.monsters.size()==3
+			return (
+				v.entities.size()==1
+				and v.monsters.size()==3
 				and bool(v.combat_available)
 				and int(v.player_current_mp)==2
-				and int(v.player_max_mp)==2,7000)
+				and int(v.player_max_mp)==2
+			),7000)
 		if shared.is_empty():
 			_fail("actor did not receive observer/combat baseline "+str(session.snapshot()),session)
 			return
@@ -76,7 +79,8 @@ func _partition(v: Dictionary) -> Dictionary:
 
 func _observe(session, self_id: int) -> void:
 	var shared := _wait(session,func(v):
-		return v.entities.size()==1 and v.monsters.size()==3,7000)
+		return (v.entities.size()==1 and v.monsters.size()==3)
+	,7000)
 	if shared.is_empty():
 		_fail("observer did not receive actor Spawn "+str(session.snapshot()),session)
 		return
