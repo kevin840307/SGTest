@@ -360,7 +360,7 @@ public static class WireProtocol
     public static byte[] EncodeSkillUse(SkillUseWire value)
     {
         if(value.MapEpoch<=0 || value.SkillSequence==0 ||
-            value.SkillId is <1 or >100_000_000 || value.TargetEntityId<=0)
+            value.SkillId is <1 or >100_000_000 || value.TargetEntityId<0)
             throw new ArgumentOutOfRangeException(nameof(value));
         var frame=NewFrame(WireOpcode.SkillUse,SkillUseFrameBytes);
         BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(8,8),value.MapEpoch);
@@ -382,7 +382,7 @@ public static class WireProtocol
             BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(20,4)),
             BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(24,8)));
         return value.MapEpoch>0 && value.SkillSequence>0 &&
-            value.SkillId is >0 and <=100_000_000 && value.TargetEntityId>0;
+            value.SkillId is >0 and <=100_000_000 && value.TargetEntityId>=0;
     }
 
     public static byte[] EncodeSkillUseResult(SkillUseResultWire value)
@@ -1499,16 +1499,25 @@ public static class WireProtocol
     {
         if(value.MapEpoch<=0 || value.SkillSequence==0 ||
             value.SkillId is <1 or >100_000_000 ||
-            (byte)value.Status>(byte)SkillUseStatus.InsufficientMp ||
-            value.ServerTick<0 || value.TargetEntityId<=0 ||
+            (byte)value.Status>(byte)SkillUseStatus.TooManyTargets ||
+            value.ServerTick<0 || value.TargetEntityId<0 ||
             value.Damage<0 || value.CurrentHp<0 || value.MaxHp<0 ||
             value.TargetRevision<0)
             return false;
         if(value.MaxHp>0 && value.CurrentHp>value.MaxHp)return false;
         if(value.Status==SkillUseStatus.Applied)
+        {
+            if(value.TargetEntityId==0)
+                return value.Damage==0 && value.CurrentHp==0 &&
+                    value.MaxHp==0 && value.TargetRevision==0;
             return value.Damage>0 && value.MaxHp>0 && value.TargetRevision>0;
+        }
         if(value.Status==SkillUseStatus.Miss)
-            return value.Damage==0 && value.MaxHp>0 && value.TargetRevision>0;
+            return value.TargetEntityId>0 && value.Damage==0 &&
+                value.MaxHp>0 && value.TargetRevision>0;
+        if(value.TargetEntityId==0)
+            return value.Damage==0 && value.CurrentHp==0 &&
+                value.MaxHp==0 && value.TargetRevision==0;
         return value.Damage==0;
     }
 

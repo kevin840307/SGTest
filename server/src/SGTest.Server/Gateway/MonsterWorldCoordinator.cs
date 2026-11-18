@@ -25,6 +25,7 @@ public sealed record MonsterWorldCoordinatorStatistics(
 /// </summary>
 public sealed class MonsterWorldCoordinator
 {
+    private const int MaxAreaSkillTargets=1024;
     private readonly SortedDictionary<int, MonsterRuntime> _runtimes;
     private sealed class AttackCursor
     {
@@ -72,10 +73,9 @@ public sealed class MonsterWorldCoordinator
             _skillRules.Any(pair=>pair.Key!=pair.Value.SkillId ||
                 pair.Key is <1 or >100_000_000 ||
                 pair.Value.FixedDamage is <1 or >100_000_000 ||
-                !double.IsFinite(pair.Value.Range) ||
-                pair.Value.Range is <1 or >500 ||
-                pair.Value.CooldownTicks is <1 or >3600 ||
-                pair.Value.MpCost is <0 or >100_000_000))
+                pair.Value.CooldownTicks is <0 or >3600 ||
+                pair.Value.MpCost is <0 or >100_000_000 ||
+                !ValidRuleGeometry(pair.Value)))
             throw new ArgumentOutOfRangeException(nameof(skillRules));
         _runtimes = new SortedDictionary<int, MonsterRuntime>();
         foreach (var runtime in runtimes)
@@ -244,11 +244,30 @@ public sealed class MonsterWorldCoordinator
             _lastTick-last<rule.CooldownTicks)
             return new(null,EmptySkill(request,SkillUseStatus.Cooldown));
 
-        var targetStatus=runtime.ValidateNormalAttackTarget(
-            request.TargetEntityId,actor.X,actor.Y,rule.Range,out var target);
-        if(targetStatus!=NormalAttackStatus.Applied)
-            return new(null,FromSkillTarget(
-                request,MapSkillStatus(targetStatus),target));
+        if(rule.TargetKind==SkillTargetKind.SingleMonster)
+        {
+            if(request.TargetEntityId<=0)
+                return new(null,EmptySkill(request,SkillUseStatus.TargetMissing));
+            var targetStatus=runtime.ValidateNormalAttackTarget(
+                request.TargetEntityId,actor.X,actor.Y,rule.Range,out var target);
+            if(targetStatus!=NormalAttackStatus.Applied)
+                return new(null,FromSkillTarget(
+                    request,MapSkillStatus(targetStatus),target));
+        }
+        else
+        {
+            if(request.TargetEntityId!=0)
+                return new(null,EmptySkill(request,SkillUseStatus.TargetMissing));
+            var selection=runtime.SelectAreaSkillTargets(
+                actor.X,actor.Y,rule.AreaRadius,rule.RequireLineOfSight,
+                MaxAreaSkillTargets);
+            if(selection.Overloaded)
+                return new(null,EmptySkill(
+                    request,SkillUseStatus.TooManyTargets));
+            if(selection.Targets.Count==0)
+                return new(null,EmptySkill(
+                    request,SkillUseStatus.TargetMissing));
+        }
 
         cursor.PendingSequence=request.SkillSequence;
         return new(new PreparedSkillUse(request,rule,_lastTick),null);
@@ -289,25 +308,59 @@ public sealed class MonsterWorldCoordinator
             return EmptySkill(request,SkillUseStatus.NoRule);
         }
 
-        var targetStatus=runtime.ValidateNormalAttackTarget(
-            request.TargetEntityId,actor.X,actor.Y,currentRule.Range,out var target);
-        if(targetStatus!=NormalAttackStatus.Applied)
+        if(currentRule.TargetKind==SkillTargetKind.SingleMonster)
+        {
+            var targetStatus=runtime.ValidateNormalAttackTarget(
+                request.TargetEntityId,actor.X,actor.Y,currentRule.Range,out var target);
+            if(targetStatus!=NormalAttackStatus.Applied)
+            {
+                cursor.PendingSequence=0;
+                return FromSkillTarget(request,MapSkillStatus(targetStatus),target);
+            }
+
+            cursor.PendingSequence=0;
+            cursor.LastAppliedTick[currentRule.SkillId]=_lastTick;
+            var applied=runtime.ApplyTrustedDamage(
+                request.TargetEntityId,request.ActorId,currentRule.FixedDamage,_lastTick);
+            if(!applied.Applied)
+                return FromSkillTarget(request,SkillUseStatus.TargetDead,target);
+
+            var changed=applied.Monster;
+            return new(SkillUseStatus.Applied,_lastTick,request.SkillId,
+                request.TargetEntityId,applied.Damage,changed.CurrentHp,
+                changed.MaxHp,changed.EntityRevision,changed);
+        }
+
+        var area=runtime.SelectAreaSkillTargets(
+            actor.X,actor.Y,currentRule.AreaRadius,currentRule.RequireLineOfSight,
+            MaxAreaSkillTargets);
+        if(area.Overloaded)
         {
             cursor.PendingSequence=0;
-            return FromSkillTarget(request,MapSkillStatus(targetStatus),target);
+            return EmptySkill(request,SkillUseStatus.TooManyTargets);
+        }
+        if(area.Targets.Count==0)
+        {
+            cursor.PendingSequence=0;
+            return EmptySkill(request,SkillUseStatus.TargetMissing);
         }
 
         cursor.PendingSequence=0;
         cursor.LastAppliedTick[currentRule.SkillId]=_lastTick;
-        var applied=runtime.ApplyTrustedDamage(
-            request.TargetEntityId,request.ActorId,currentRule.FixedDamage,_lastTick);
-        if(!applied.Applied)
-            return FromSkillTarget(request,SkillUseStatus.TargetDead,target);
-
-        var changed=applied.Monster;
+        var hits=new List<SkillHitOutcome>(area.Targets.Count);
+        foreach(var target in area.Targets)
+        {
+            var applied=runtime.ApplyTrustedDamage(
+                target.EntityId,request.ActorId,currentRule.FixedDamage,_lastTick);
+            if(applied.Applied)
+                hits.Add(new(applied.Monster,applied.Damage));
+        }
+        if(hits.Count==0)
+            return EmptySkill(request,SkillUseStatus.TargetMissing);
+        // Area summary deliberately carries no single-target HP/damage fields.
+        // Per-target actual damage/revision lives in Hits and later op46 events.
         return new(SkillUseStatus.Applied,_lastTick,request.SkillId,
-            request.TargetEntityId,applied.Damage,changed.CurrentHp,
-            changed.MaxHp,changed.EntityRevision,changed);
+            0,0,0,0,0,null,hits);
     }
 
     private SkillUseOutcome EmptySkill(
@@ -323,6 +376,19 @@ public sealed class MonsterWorldCoordinator
             request.TargetEntityId,0,target.CurrentHp,target.MaxHp,
             target.EntityRevision,target);
     }
+
+    private static bool ValidRuleGeometry(VerifiedSkillRule rule) =>
+        rule.TargetKind switch
+        {
+            SkillTargetKind.SingleMonster =>
+                double.IsFinite(rule.Range) && rule.Range is >=1 and <=500 &&
+                Math.Abs(rule.AreaRadius)<=1e-9,
+            SkillTargetKind.SelfCenteredArea =>
+                double.IsFinite(rule.Range) && Math.Abs(rule.Range)<=1e-9 &&
+                double.IsFinite(rule.AreaRadius) &&
+                rule.AreaRadius is >=1 and <=4096,
+            _=>false
+        };
 
     private static SkillUseStatus MapSkillStatus(NormalAttackStatus status) =>
         status switch

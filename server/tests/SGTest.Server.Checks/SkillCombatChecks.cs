@@ -20,6 +20,8 @@ internal static class SkillCombatChecks
             ()=>Authority(root));
         Checks.Run("skill prepare is non-mutating and commit/cancel owns effect boundary",
             ()=>PrepareCommit(root));
+        Checks.Run("self-centered area skill selects all bounded authoritative targets",
+            ()=>AreaAuthority(root));
     }
 
     private static void Manifest(string root)
@@ -45,13 +47,28 @@ internal static class SkillCombatChecks
         Require(mpRules[99001]==new VerifiedSkillRule(99001,60,48,3,1),
             "verified MP cost metadata was not retained");
 
-        string aoe=Path.Combine(root,"unowned-aoe-skill.json");
-        File.WriteAllText(aoe,File.ReadAllText(valid).Replace(
-            "\"single_monster\"","\"self_centered_area\""));
+        string aoe=Path.Combine(root,"verified-area-skill.json");
+        File.WriteAllText(aoe,JsonSerializer.Serialize(new {
+            kind="verified_skill_rules",version=1,
+            rules_verified=true,gameplay_ready=true,
+            source_reference="ci:explicit-synthetic-area-rule",
+            rules=new[]{new{skill_id=99001,target_kind="self_centered_area",
+                damage_kind="fixed",fixed_damage=40,range=0.0,
+                area_radius=900.0,line_of_sight=false,
+                cooldown_ticks=0,mp_cost=1}}
+        }));
+        var areaRules=SkillRuleCatalog.LoadVerified(aoe);
+        Require(areaRules[99001]==new VerifiedSkillRule(
+                99001,40,0,0,1,SkillTargetKind.SelfCenteredArea,900,false),
+            "verified area skill metadata not retained");
+
+        string missingLos=Path.Combine(root,"unowned-area-los.json");
+        File.WriteAllText(missingLos,File.ReadAllText(aoe)
+            .Replace(",\"line_of_sight\":false",""));
         bool rejected=false;
-        try{SkillRuleCatalog.LoadVerified(aoe);}
+        try{SkillRuleCatalog.LoadVerified(missingLos);}
         catch(InvalidDataException){rejected=true;}
-        Require(rejected,"skill manifest invented AoE authority");
+        Require(rejected,"area skill invented line-of-sight semantics");
     }
 
     private static void Wire()
@@ -68,6 +85,19 @@ internal static class SkillCombatChecks
         Require(response.Length==61 &&
             WireProtocol.TryDecodeSkillUseResult(response,out var decoded) &&
             decoded==result,"skill result roundtrip/size");
+
+        var areaRequest=new SkillUseWire(3,8,99001,0);
+        var areaFrame=WireProtocol.EncodeSkillUse(areaRequest);
+        Require(WireProtocol.TryDecodeSkillUse(areaFrame,out var decodedArea) &&
+                decodedArea==areaRequest,
+            "self-centered area target=0 wire rejected");
+        var areaResult=new SkillUseResultWire(
+            3,8,SkillUseStatus.Applied,43,99001,0,0,0,0,0);
+        var areaResponse=WireProtocol.EncodeSkillUseResult(areaResult);
+        Require(WireProtocol.TryDecodeSkillUseResult(
+                    areaResponse,out var decodedAreaResult) &&
+                decodedAreaResult==areaResult,
+            "area skill summary wire rejected");
     }
 
     private static void Gateway()
@@ -164,6 +194,69 @@ internal static class SkillCombatChecks
         Require(duplicateCommit.Status==SkillUseStatus.OldMapEpoch &&
                 runtime.SnapshotAll().Single().CurrentHp==75,
             "prepared skill token committed twice");
+    }
+
+    private static void AreaAuthority(string root)
+    {
+        const int mapId=317;
+        string folder=Checks.Fixture(root,mapId,40,20,(_,_)=>0);
+        var grid=BlockingGrid.Load(folder,mapId);
+        string populationPath=Path.Combine(folder,"population-skill-area.json");
+        File.WriteAllText(populationPath,JsonSerializer.Serialize(new {
+            version=4,kind="verified_monster_runtime",map_id=mapId,
+            stats_verified=true,gameplay_ready=true,
+            definitions=new[]{new{
+                id=1,name="AreaFixture",sprite="EN001A",
+                atlas="Enemy/EN001A/atlas.json",
+                stats=new{
+                    level=3,max_hp=100,attack_damage=1,move_step=8.0,
+                    aggro_radius=1.0,lose_target_radius=2.0,
+                    leash_radius=2.0,attack_range=1.0,
+                    attack_cooldown_ticks=300,respawn_ticks=300,
+                    wander_radius=0.0,wander_interval_ticks=100
+                }}},
+            spawns=new[]{
+                new{source_index=0,source_flags=7,definition=1,p=new[]{32,24}},
+                new{source_index=1,source_flags=7,definition=1,p=new[]{56,24}},
+                new{source_index=2,source_flags=7,definition=1,p=new[]{240,24}}
+            }
+        }));
+        var runtime=new MonsterRuntime(
+            grid,MonsterPopulationCatalog.LoadVerified(populationPath,mapId,grid),
+            new(AiIntervalTicks:1,MaxAiPerStep:8,
+                MaxPathQueriesPerStep:1,MaxPathExpandedCells:128));
+        var rule=new VerifiedSkillRule(
+            99001,40,0,0,1,SkillTargetKind.SelfCenteredArea,64,false);
+        var coordinator=new MonsterWorldCoordinator([runtime],
+            new Dictionary<int,VerifiedSkillRule>{{99001,rule}});
+        var actor=new ActorSnapshot(99,mapId,2,1,0,0,24,24,1,false);
+        coordinator.Process(new WorldChangedBatch(1,[],
+            [new(ActorLifecycleKind.Joined,actor)]));
+        var profile=new TrustedCombatProfile(1,1,1,1,48,15);
+        var request=new TrustedSkillUse(
+            actor.ActorId,actor.ConnectionEpoch,actor.MapEpoch,
+            1,99001,0,profile);
+        var prepared=coordinator.PrepareSkill(request);
+        Require(prepared.Ready &&
+                runtime.SnapshotAll().All(x=>x.CurrentHp==100),
+            "area preflight changed monsters or rejected target=0");
+        var outcome=coordinator.CommitPreparedSkill(prepared.Prepared!.Value);
+        var all=runtime.SnapshotAll().OrderBy(x=>x.SourceIndex).ToArray();
+        Require(outcome.Status==SkillUseStatus.Applied &&
+                outcome.TargetEntityId==0 && outcome.Damage==0 &&
+                outcome.CurrentHp==0 && outcome.MaxHp==0 &&
+                outcome.TargetRevision==0 &&
+                outcome.Hits?.Count==2 &&
+                outcome.Hits.All(x=>x.Damage==40) &&
+                all[0].CurrentHp==60 && all[1].CurrentHp==60 &&
+                all[2].CurrentHp==100,
+            "area skill target selection/damage authority mismatch");
+
+        var badTarget=coordinator.ResolveSkill(request with {
+            SkillSequence=2,TargetEntityId=all[0].EntityId});
+        Require(badTarget.Status==SkillUseStatus.TargetMissing &&
+                all[0].CurrentHp==60,
+            "self-centered area accepted client-selected target");
     }
 
     private static void Authority(string root)

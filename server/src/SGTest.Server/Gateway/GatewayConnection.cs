@@ -62,10 +62,14 @@ public readonly record struct NormalAttackOutcome(
     int Damage, int CurrentHp, int MaxHp, long TargetRevision,
     MonsterSnapshot? Monster = null);
 
+public readonly record struct SkillHitOutcome(
+    MonsterSnapshot Monster,int Damage);
+
 public readonly record struct SkillUseOutcome(
     SkillUseStatus Status,long ServerTick,int SkillId,long TargetEntityId,
     int Damage,int CurrentHp,int MaxHp,long TargetRevision,
-    MonsterSnapshot? Monster = null);
+    MonsterSnapshot? Monster = null,
+    IReadOnlyList<SkillHitOutcome>? Hits = null);
 
 public enum GatewaySendStatus
 {

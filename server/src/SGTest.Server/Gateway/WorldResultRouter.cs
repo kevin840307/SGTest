@@ -379,7 +379,7 @@ public sealed class WorldResultRouter
     {
         if(request.ActorId<=0 || request.ConnectionEpoch<=0 ||
             request.RequestMapEpoch<=0 || request.SkillSequence==0 ||
-            request.SkillId<=0 || request.TargetEntityId<=0)
+            request.SkillId<=0 || request.TargetEntityId<0)
             return false;
         lock(_gate)
         {
@@ -397,7 +397,7 @@ public sealed class WorldResultRouter
     {
         if(request.ActorId<=0 || request.ConnectionEpoch<=0 ||
             request.RequestMapEpoch<=0 || request.SkillSequence==0 ||
-            request.SkillId<=0 || request.TargetEntityId<=0)
+            request.SkillId<=0 || request.TargetEntityId<0)
             throw new ArgumentOutOfRangeException(nameof(request));
 
         lock(_gate)

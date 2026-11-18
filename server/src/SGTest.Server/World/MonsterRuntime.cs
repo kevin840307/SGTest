@@ -70,6 +70,10 @@ public readonly record struct MonsterDamageResult(
     int Damage,
     MonsterSnapshot Monster);
 
+public readonly record struct AreaSkillTargetSelection(
+    bool Overloaded,
+    IReadOnlyList<MonsterSnapshot> Targets);
+
 public sealed record MonsterRuntimeOptions(
     int AiIntervalTicks = 8,
     int MaxAiPerStep = 128,
@@ -228,6 +232,40 @@ public sealed class MonsterRuntime
         if (!_grid.IsDirectClear(attackerX, attackerY, monster.X, monster.Y))
             return NormalAttackStatus.Blocked;
         return NormalAttackStatus.Applied;
+    }
+
+    /// <summary>
+    /// Deterministic same-map area selection from authoritative actor position.
+    /// Overflow rejects the whole selection instead of silently truncating a
+    /// gameplay effect. Optional LOS is an explicit verified rule property.
+    /// </summary>
+    public AreaSkillTargetSelection SelectAreaSkillTargets(
+        double originX,double originY,double radius,bool requireLineOfSight,
+        int maxTargets=1024)
+    {
+        if(!double.IsFinite(originX)||!double.IsFinite(originY)||
+            !double.IsFinite(radius)||originX<0||originY<0||
+            radius is <1 or >4096 || maxTargets is <1 or >4096)
+            throw new ArgumentOutOfRangeException(nameof(radius));
+        double squaredRadius=radius*radius;
+        var targets=new List<MonsterSnapshot>(
+            Math.Min(maxTargets,_monsters.Count));
+        foreach(long id in _order)
+        {
+            var monster=_monsters[id];
+            if(monster.State==MonsterAiState.Dead||monster.CurrentHp<=0)
+                continue;
+            double dx=monster.X-originX;
+            double dy=monster.Y-originY;
+            if(dx*dx+dy*dy>squaredRadius)continue;
+            if(requireLineOfSight &&
+                !_grid.IsDirectClear(originX,originY,monster.X,monster.Y))
+                continue;
+            if(targets.Count==maxTargets)
+                return new(true,Array.Empty<MonsterSnapshot>());
+            targets.Add(monster.Snapshot(MapId));
+        }
+        return new(false,targets);
     }
 
     public MonsterDamageResult ApplyTrustedDamage(
