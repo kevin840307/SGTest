@@ -54,7 +54,7 @@ func _initialize() -> void:
 		var monster: Dictionary = ready.monsters[raw_id]
 		var dx := absf(float(monster.x)-float(ready.x))
 		var dy := absf(float(monster.y)-float(ready.y))
-		if sqrt(dx*dx+dy*dy) <= 64.0:
+		if sqrt(dx*dx+dy*dy) <= 18.0:
 			near_ids.append(entity_id)
 		else:
 			far_id=entity_id

@@ -341,9 +341,9 @@ internal static class Program
                 },
                 spawns=new[]
                 {
-                    new {source_index=0,source_flags=7,definition=1,p=new[]{32,24}},
-                    new {source_index=1,source_flags=7,definition=1,p=new[]{56,24}},
-                    new {source_index=2,source_flags=7,definition=1,p=new[]{120,24}}
+                    new {source_index=0,source_flags=7,definition=1,p=new[]{24,8}},
+                    new {source_index=1,source_flags=7,definition=1,p=new[]{40,24}},
+                    new {source_index=2,source_flags=7,definition=1,p=new[]{40,8}}
                 }
             }));
             var runtime=new MonsterRuntime(
@@ -354,7 +354,7 @@ internal static class Program
                 new Dictionary<int,VerifiedSkillRule>
                 {
                     [99001]=new(99001,40,0,0,1,
-                        SkillTargetKind.SelfCenteredArea,64,false)
+                        SkillTargetKind.SelfCenteredArea,18,false)
                 });
 
             await using var world=new ServerWorldHost(
