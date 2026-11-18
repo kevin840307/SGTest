@@ -18,7 +18,7 @@ public enum AoiEventKind : byte
     WorldReady, Spawn, Delta, Despawn, SelfState,
     MonsterSpawn, MonsterDelta, MonsterDespawn,
     GroundDropSpawn, GroundDropDespawn,
-    PlayerAttackVisual, PlayerDamageVisual, PlayerRespawnVisual
+    PlayerAttackVisual, PlayerSkillVisual, PlayerDamageVisual, PlayerRespawnVisual
 }
 
 /// <summary>
@@ -29,6 +29,10 @@ public enum AoiEventKind : byte
 public readonly record struct PlayerAttackVisual(
     long AttackerActorId,long AttackerConnectionEpoch,uint AttackSequence,
     long TargetEntityId,NormalAttackStatus Status,int Damage,
+    long TargetRevision,byte Facing);
+public readonly record struct PlayerSkillVisual(
+    long AttackerActorId,long AttackerConnectionEpoch,uint SkillSequence,
+    int SkillId,long TargetEntityId,SkillUseStatus Status,int Damage,
     long TargetRevision,byte Facing);
 public readonly record struct PlayerDamageVisual(
     long VictimActorId,long VictimConnectionEpoch,uint DamageSequence,
@@ -43,6 +47,7 @@ public readonly record struct AoiEvent(
     MonsterSnapshot? Monster = null, long MonsterEntityId = 0, long MonsterRevision = 0,
     GroundDropRecord? GroundDrop = null, long GroundDropId = 0,
     PlayerAttackVisual? PlayerAttack = null,
+    PlayerSkillVisual? PlayerSkill = null,
     PlayerDamageVisual? PlayerDamage = null,
     PlayerRespawnVisual? PlayerRespawn = null);
 
@@ -278,6 +283,54 @@ public sealed class WorldAoi
             if(!seesAttacker) continue;
             Enqueue(observer,new(AoiEventKind.PlayerAttackVisual,_lastTick,
                 observer.Self.MapEpoch,PlayerAttack:visual));
+            queued++;
+        }
+        return queued;
+    }
+
+    public int EnqueuePlayerSkillVisual(
+        TrustedSkillUse request,SkillUseOutcome outcome)
+    {
+        if(_lastTick<=0 || outcome.ServerTick!=_lastTick ||
+            request.ActorId<=0 || request.ConnectionEpoch<=0 ||
+            request.RequestMapEpoch<=0 || request.SkillSequence==0 ||
+            request.SkillId<=0 || outcome.SkillId!=request.SkillId ||
+            outcome.TargetEntityId!=request.TargetEntityId ||
+            outcome.TargetRevision<=0 ||
+            outcome.Status is not (SkillUseStatus.Applied or SkillUseStatus.Miss) ||
+            (outcome.Status==SkillUseStatus.Applied && outcome.Damage<=0) ||
+            (outcome.Status==SkillUseStatus.Miss && outcome.Damage!=0))
+            throw new InvalidOperationException(
+                "Invalid authoritative player skill visual");
+
+        if(!_entities.TryGetValue(request.ActorId,out var attacker) ||
+            attacker.ConnectionEpoch!=request.ConnectionEpoch ||
+            attacker.MapEpoch!=request.RequestMapEpoch ||
+            !_monsters.TryGetValue(request.TargetEntityId,out var target) ||
+            attacker.MapId!=target.MapId)
+            return 0;
+
+        var visual=new PlayerSkillVisual(
+            attacker.ActorId,attacker.ConnectionEpoch,request.SkillSequence,
+            request.SkillId,request.TargetEntityId,outcome.Status,
+            outcome.Damage,outcome.TargetRevision,attacker.Facing);
+        int queued=0;
+        foreach(var observer in _observers.Values)
+        {
+            if(observer.Self.MapId!=attacker.MapId ||
+                !observer.VisibleMonsters.ContainsKey(request.TargetEntityId))
+                continue;
+            bool seesAttacker=
+                observer.Self.ActorId==attacker.ActorId &&
+                observer.Self.ConnectionEpoch==attacker.ConnectionEpoch &&
+                observer.Self.MapEpoch==attacker.MapEpoch;
+            if(!seesAttacker &&
+                observer.Visible.TryGetValue(attacker.ActorId,out var seen))
+                seesAttacker=seen.ConnectionEpoch==attacker.ConnectionEpoch &&
+                    seen.MapEpoch==attacker.MapEpoch;
+            if(!seesAttacker)continue;
+            Enqueue(observer,new(AoiEventKind.PlayerSkillVisual,_lastTick,
+                observer.Self.MapEpoch,PlayerSkill:visual));
             queued++;
         }
         return queued;

@@ -344,7 +344,11 @@ internal static class Program
             var runtime = new MonsterRuntime(grid, population,
                 new(AiIntervalTicks: 1, MaxAiPerStep: 8,
                     MaxPathQueriesPerStep: 1, MaxPathExpandedCells: 128));
-            var coordinator = new MonsterWorldCoordinator([runtime]);
+            var coordinator = new MonsterWorldCoordinator([runtime],
+                new Dictionary<int,VerifiedSkillRule>
+                {
+                    [99001]=new(99001,40,48,1)
+                });
 
             await using var world = new ServerWorldHost(
                 [grid], options: new WorldHostOptions(PublishIdleTicks: true));
@@ -430,14 +434,14 @@ internal static class Program
                             "combat observer left active actor/session");
                     await Task.Delay(5).ConfigureAwait(false);
                 }
-                if(monster.CurrentHp!=40 || monster.MaxHp!=100 ||
+                if(monster.CurrentHp!=0 || monster.MaxHp!=100 ||
                     actorProfile?.Data.CurrentHp!=82 ||
                     settlement.Statistics.HitsCommitted!=1 ||
                     settlement.Statistics.DamageCommitted!=18 ||
                     results[0].Reason!=TlsWireEndReason.CleanEof ||
                     results[1].Reason!=TlsWireEndReason.CleanEof ||
                     results[0].CommandsAccepted!=0 ||
-                    results[1].CommandsAccepted!=1 ||
+                    results[1].CommandsAccepted!=2 ||
                     pump.FramesQueued<10)
                     throw new InvalidOperationException(
                         $"combat observer mismatch hp={monster.CurrentHp}/{monster.MaxHp} " +
@@ -451,7 +455,7 @@ internal static class Program
                     $"monster_hp={monster.CurrentHp}/{monster.MaxHp} " +
                     $"actor_hp={actorProfile!.Data.CurrentHp}/{actorProfile.Data.MaxHp} " +
                     $"monster_damage={settlement.Statistics.DamageCommitted} " +
-                    $"actor_commands={results[1].CommandsAccepted} aoi_frames={pump.FramesQueued}");
+                    $"actor_commands={results[1].CommandsAccepted} skill_99001=true aoi_frames={pump.FramesQueued}");
                 Console.Out.Flush();
                 return 0;
             }

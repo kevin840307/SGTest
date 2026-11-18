@@ -40,6 +40,9 @@ var last_skill_result_status := -1
 var last_skill_server_tick := -1
 var last_skill_result := {}
 var stale_skill_results := 0
+var player_skill_events: Array[Dictionary] = []
+var player_skill_sequences := {}
+var stale_player_skill_visuals := 0
 var player_attack_events: Array[Dictionary] = []
 var player_attack_sequences := {}
 var stale_player_attack_visuals := 0
@@ -226,6 +229,8 @@ func apply_frame(frame: PackedByteArray) -> bool:
 			return _apply_normal_attack_result(frame)
 		WireCodec.OPCODE_SKILL_USE_RESULT:
 			return _apply_skill_use_result(frame)
+		WireCodec.OPCODE_PLAYER_SKILL_VISUAL:
+			return _apply_player_skill_visual(frame)
 		WireCodec.OPCODE_PLAYER_ATTACK_VISUAL:
 			return _apply_player_attack_visual(frame)
 		WireCodec.OPCODE_PLAYER_DAMAGE_VISUAL:
@@ -302,6 +307,9 @@ func snapshot() -> Dictionary:
 		"last_skill_server_tick": last_skill_server_tick,
 		"last_skill_result": last_skill_result.duplicate(true),
 		"stale_skill_results": stale_skill_results,
+		"player_skill_events": player_skill_events.duplicate(true),
+		"player_skill_sequences": player_skill_sequences.duplicate(true),
+		"stale_player_skill_visuals": stale_player_skill_visuals,
 		"player_attack_events": player_attack_events.duplicate(true),
 		"player_attack_sequences": player_attack_sequences.duplicate(true),
 		"stale_player_attack_visuals": stale_player_attack_visuals,
@@ -431,6 +439,9 @@ func _apply_choose(frame: PackedByteArray) -> bool:
 	last_skill_server_tick = -1
 	last_skill_result.clear()
 	stale_skill_results = 0
+	player_skill_events.clear()
+	player_skill_sequences.clear()
+	stale_player_skill_visuals = 0
 	player_attack_events.clear()
 	player_attack_sequences.clear()
 	stale_player_attack_visuals = 0
@@ -758,6 +769,58 @@ func _apply_skill_use_result(frame: PackedByteArray) -> bool:
 	last_skill_result = result.duplicate(true)
 	return true
 
+func _apply_player_skill_visual(frame: PackedByteArray) -> bool:
+	if state != STATE_IN_WORLD:
+		return fail("player_skill_visual_out_of_state")
+	var value := WireCodec.decode_player_skill_visual(frame)
+	if value.is_empty():
+		return fail("invalid_player_skill_visual")
+	var disposition := _check_aoi_generation(
+		int(value.receiver_map_epoch),int(value.server_tick))
+	if disposition <= 0:
+		if disposition == 0:
+			stale_player_skill_visuals += 1
+		return disposition == 0
+	var attacker := int(value.attacker_actor_id)
+	var connection := int(value.attacker_connection_epoch)
+	var target := int(value.target_entity_id)
+	var target_revision := int(value.target_revision)
+	if not monsters.has(target):
+		return _need_resync("player_skill_visual_target_without_spawn")
+	var monster: Dictionary=monsters[target]
+	var current_revision := int(monster.get("revision",0))
+	if target_revision < current_revision:
+		stale_player_skill_visuals += 1
+		return true
+	if target_revision > current_revision+1:
+		return _need_resync("player_skill_visual_target_revision_gap")
+	if attacker == actor_id:
+		if not self_state.is_empty() and int(self_state.get("connection_epoch",0)) != connection:
+			return _need_resync("player_skill_visual_self_generation")
+	else:
+		if not entities.has(attacker):
+			return _need_resync("player_skill_visual_attacker_without_spawn")
+		var remote: Dictionary=entities[attacker]
+		if int(remote.get("connection_epoch",0)) != connection:
+			return _need_resync("player_skill_visual_attacker_generation")
+	var sequence := int(value.skill_sequence)
+	var prior: Dictionary=player_skill_sequences.get(attacker,{})
+	if not prior.is_empty():
+		if int(prior.get("connection_epoch",0)) != connection:
+			return _need_resync("player_skill_visual_sequence_generation")
+		if sequence <= int(prior.get("sequence",0)):
+			stale_player_skill_visuals += 1
+			return true
+	player_skill_sequences[attacker]={"connection_epoch":connection,"sequence":sequence}
+	player_skill_events.append(value.duplicate(true))
+	var cutoff := maxi(int(value.server_tick),last_aoi_tick)-PLAYER_ATTACK_EVENT_TTL_TICKS
+	while not player_skill_events.is_empty() and int(player_skill_events[0].get("server_tick",-1)) < cutoff:
+		player_skill_events.pop_front()
+	if player_skill_events.size()>PLAYER_ATTACK_EVENT_MAX:
+		return fail("player_skill_visual_backlog_overflow")
+	last_aoi_tick=maxi(last_aoi_tick,int(value.server_tick))
+	return true
+
 func _apply_player_attack_visual(frame: PackedByteArray) -> bool:
 	if state != STATE_IN_WORLD:
 		return fail("player_attack_visual_out_of_state")
@@ -892,6 +955,9 @@ func _apply_world_ready(frame: PackedByteArray) -> bool:
 		last_skill_server_tick = -1
 		last_skill_result.clear()
 		stale_skill_results = 0
+		player_skill_events.clear()
+		player_skill_sequences.clear()
+		stale_player_skill_visuals = 0
 		player_attack_events.clear()
 		player_attack_sequences.clear()
 		stale_player_attack_visuals = 0
@@ -952,6 +1018,7 @@ func _apply_world_ready(frame: PackedByteArray) -> bool:
 	# One-shot presentation events are never replayed through a replacement
 	# WorldReady baseline. Sequence memory is retained for same-epoch resync so
 	# a delayed pre-resync visual cannot replay.
+	player_skill_events.clear()
 	player_attack_events.clear()
 	player_damage_visual_events.clear()
 	player_respawn_visual_events.clear()

@@ -802,6 +802,14 @@ public sealed class GatewayConnection
                         attack.Status,attack.Damage,attack.TargetRevision,
                         attack.Facing));
                     break;
+                case AoiEventKind.PlayerSkillVisual when evt.PlayerSkill is { } skill:
+                    frame=WireProtocol.EncodePlayerSkillVisual(new(
+                        evt.ReceiverMapEpoch,evt.Tick,
+                        skill.AttackerActorId,skill.AttackerConnectionEpoch,
+                        skill.SkillSequence,skill.SkillId,skill.TargetEntityId,
+                        skill.Status,skill.Damage,skill.TargetRevision,
+                        skill.Facing));
+                    break;
                 case AoiEventKind.PlayerDamageVisual when evt.PlayerDamage is { } damage:
                     frame=WireProtocol.EncodePlayerDamageVisual(new(
                         evt.ReceiverMapEpoch,evt.Tick,

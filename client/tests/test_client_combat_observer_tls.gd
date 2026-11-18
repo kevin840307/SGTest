@@ -73,9 +73,10 @@ func _observe(session, self_id: int) -> void:
 		_fail("observer remote actor identity collision",session)
 		return
 	var settled := _wait(session,func(v):
-		if v.player_attack_events.is_empty() or v.player_damage_visual_events.is_empty() or not v.monsters.has(monster_id):
+		if v.player_attack_events.is_empty() or v.player_skill_events.is_empty() or v.player_damage_visual_events.is_empty() or not v.monsters.has(monster_id):
 			return false
 		var event: Dictionary=v.player_attack_events[-1]
+		var skill: Dictionary=v.player_skill_events[-1]
 		var hit: Dictionary=v.player_damage_visual_events[-1]
 		return (
 			int(event.attacker_actor_id)==remote_id
@@ -84,7 +85,13 @@ func _observe(session, self_id: int) -> void:
 			and int(event.damage)==60
 			and int(event.target_revision)>0
 			and int(v.monsters[monster_id].revision)>=int(event.target_revision)
-			and int(v.monsters[monster_id].current_hp)==40
+			and int(skill.attacker_actor_id)==remote_id
+			and int(skill.skill_id)==99001
+			and int(skill.target_entity_id)==monster_id
+			and int(skill.status)==0
+			and int(skill.damage)==40
+			and int(v.monsters[monster_id].revision)>=int(skill.target_revision)
+			and int(v.monsters[monster_id].current_hp)==0
 			and int(hit.victim_actor_id)==remote_id
 			and int(hit.damage)==18
 			and not bool(hit.died)
@@ -97,7 +104,7 @@ func _observe(session, self_id: int) -> void:
 		_fail("observer attack visual generation mismatch",session)
 		return
 	session.stop()
-	print("CLIENT_COMBAT_OBSERVER_PASS role=observer attacker=%d target=%d damage=60 monster_hp=40 remote_visual=true remote_hit_visual=true monster_damage=18 observer_has_no_remote_hp_authority=true" % [remote_id,monster_id])
+	print("CLIENT_COMBAT_OBSERVER_PASS role=observer attacker=%d target=%d normal_damage=60 skill_id=99001 skill_damage=40 monster_hp=0 remote_visual=true remote_skill_visual=true remote_hit_visual=true monster_damage=18 observer_has_no_remote_hp_authority=true" % [remote_id,monster_id])
 	quit(0)
 
 func _attack(session, self_id: int) -> void:
@@ -135,11 +142,29 @@ func _attack(session, self_id: int) -> void:
 	if settled.is_empty():
 		_fail("actor did not receive own result/visual/delta "+str(session.snapshot()),session)
 		return
+	if not session.cast_skill(99001,monster_id):
+		_fail("actor skill intent refused",session)
+		return
+	var skill_settled := _wait(session,func(v):
+		return (
+			int(v.last_skill_result_sequence)==1
+			and int(v.last_skill_result_status)==0
+			and int(v.last_skill_result.skill_id)==99001
+			and int(v.last_skill_result.damage)==40
+			and v.player_skill_events.size()>=1
+			and int(v.player_skill_events[-1].attacker_actor_id)==self_id
+			and int(v.player_skill_events[-1].skill_id)==99001
+			and int(v.player_skill_events[-1].damage)==40
+			and int(v.monsters[monster_id].current_hp)==0
+		),10000)
+	if skill_settled.is_empty():
+		_fail("actor did not receive own skill result/visual/delta "+str(session.snapshot()),session)
+		return
 	# Keep the connection alive briefly so the observer drains the same reliable
 	# visual and following MonsterDelta before this actor despawns.
 	OS.delay_msec(350)
 	session.stop()
-	print("CLIENT_COMBAT_OBSERVER_PASS role=actor actor=%d target=%d damage=60 monster_hp=40 own_visual=true own_hit_visual=true monster_damage=18 player_hp=82" % [self_id,monster_id])
+	print("CLIENT_COMBAT_OBSERVER_PASS role=actor actor=%d target=%d normal_damage=60 skill_id=99001 skill_damage=40 monster_hp=0 own_visual=true own_skill_visual=true own_hit_visual=true monster_damage=18 player_hp=82" % [self_id,monster_id])
 	quit(0)
 
 func _wait(session, predicate: Callable, timeout_ms: int) -> Dictionary:

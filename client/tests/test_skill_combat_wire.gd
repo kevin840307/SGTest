@@ -34,6 +34,15 @@ func _initialize() -> void:
 	if not world.apply_frame(result):
 		_fail("skill result reducer")
 		return
+	var visual := _skill_visual(1,42,11,9,1,99001,MONSTER_ID,0,60,2,6)
+	var visual_parsed := WireCodec.decode_player_skill_visual(visual)
+	if visual.size()!=70 or visual_parsed.is_empty() or int(visual_parsed.skill_id)!=99001 or int(visual_parsed.damage)!=60:
+		_fail("skill visual codec")
+		return
+	world.self_state={"connection_epoch":9}
+	if not world.apply_frame(visual) or world.snapshot().player_skill_events.size()!=1:
+		_fail("skill visual reducer")
+		return
 	var snap: Dictionary=world.snapshot()
 	if int(snap.last_skill_result_sequence)!=1 or int(snap.last_skill_result_status)!=0 or int(snap.last_skill_result.damage)!=60:
 		_fail("skill result not retained")
@@ -62,7 +71,7 @@ func _initialize() -> void:
 		_fail("future-map skill result did not fail closed")
 		return
 
-	print("SKILL_COMBAT_GODOT_PASS request_bytes=32 result_bytes=61 client_damage_absent=true receipt_does_not_mutate_monster=true duplicate_stale=true future_map_fail_closed=true")
+	print("SKILL_COMBAT_GODOT_PASS request_bytes=32 result_bytes=61 visual_bytes=70 client_damage_absent=true receipt_does_not_mutate_monster=true visual_is_presentation_only=true duplicate_stale=true future_map_fail_closed=true")
 	quit(0)
 
 func _skill_result(epoch: int, sequence: int, status: int, tick: int,
@@ -83,4 +92,25 @@ func _skill_result(epoch: int, sequence: int, status: int, tick: int,
 	writer.put_32(current_hp)
 	writer.put_32(max_hp)
 	writer.put_64(revision)
+	return writer.data_array
+
+func _skill_visual(epoch: int,tick: int,attacker: int,connection: int,
+		sequence: int,skill_id: int,target: int,status: int,damage: int,
+		revision: int,skill_facing: int) -> PackedByteArray:
+	var writer := StreamPeerBuffer.new()
+	writer.big_endian=false
+	writer.put_u32(70)
+	writer.put_u16(1)
+	writer.put_u16(WireCodec.OPCODE_PLAYER_SKILL_VISUAL)
+	writer.put_64(epoch)
+	writer.put_64(tick)
+	writer.put_64(attacker)
+	writer.put_64(connection)
+	writer.put_u32(sequence)
+	writer.put_32(skill_id)
+	writer.put_64(target)
+	writer.put_u8(status)
+	writer.put_32(damage)
+	writer.put_64(revision)
+	writer.put_u8(skill_facing)
 	return writer.data_array

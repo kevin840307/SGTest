@@ -42,6 +42,7 @@ const OPCODE_PLAYER_DAMAGE_VISUAL := 42
 const OPCODE_PLAYER_RESPAWN_VISUAL := 43
 const OPCODE_SKILL_USE := 44
 const OPCODE_SKILL_USE_RESULT := 45
+const OPCODE_PLAYER_SKILL_VISUAL := 46
 const MOVE_TARGET_FRAME_BYTES := 28
 const MOVE_RECEIPT_FRAME_BYTES := 30
 const NPC_INTERACT_FRAME_BYTES := 24
@@ -50,6 +51,7 @@ const NORMAL_ATTACK_FRAME_BYTES := 28
 const NORMAL_ATTACK_RESULT_FRAME_BYTES := 57
 const SKILL_USE_FRAME_BYTES := 32
 const SKILL_USE_RESULT_FRAME_BYTES := 61
+const PLAYER_SKILL_VISUAL_FRAME_BYTES := 70
 const PLAYER_COMBAT_STATE_FRAME_BYTES := 24
 const PLAYER_DAMAGE_FRAME_BYTES := 57
 const PLAYER_RESPAWN_FRAME_BYTES := 20
@@ -265,6 +267,35 @@ static func decode_skill_use_result(frame: PackedByteArray) -> Dictionary:
 		"server_tick":tick,"skill_id":skill_id,"target_entity_id":target,
 		"damage":damage,"current_hp":current_hp,"max_hp":max_hp,
 		"target_revision":revision}
+
+static func decode_player_skill_visual(frame: PackedByteArray) -> Dictionary:
+	if not _valid_header(frame,OPCODE_PLAYER_SKILL_VISUAL,PLAYER_SKILL_VISUAL_FRAME_BYTES):
+		return {}
+	var reader := _reader(frame,8)
+	var epoch := reader.get_64()
+	var tick := reader.get_64()
+	var attacker := reader.get_64()
+	var connection := reader.get_64()
+	var sequence := reader.get_u32()
+	var skill_id := reader.get_32()
+	var target := reader.get_64()
+	var status := reader.get_u8()
+	var damage := reader.get_32()
+	var revision := reader.get_64()
+	var skill_facing := reader.get_u8()
+	if epoch <= 0 or tick < 0 or attacker <= 0 or connection <= 0 or sequence == 0 or skill_id <= 0 or skill_id > 100000000 or target <= 0 or revision <= 0 or skill_facing < 1 or skill_facing > 8:
+		return {}
+	if status == 0 and damage <= 0:
+		return {}
+	if status == 1 and damage != 0:
+		return {}
+	if status > 1:
+		return {}
+	return {"receiver_map_epoch":epoch,"server_tick":tick,
+		"attacker_actor_id":attacker,"attacker_connection_epoch":connection,
+		"skill_sequence":sequence,"skill_id":skill_id,"target_entity_id":target,
+		"status":status,"damage":damage,"target_revision":revision,
+		"facing":skill_facing}
 
 static func decode_player_attack_visual(frame: PackedByteArray) -> Dictionary:
 	if not _valid_header(frame,OPCODE_PLAYER_ATTACK_VISUAL,PLAYER_ATTACK_VISUAL_FRAME_BYTES):
@@ -789,7 +820,7 @@ static func frame_opcode(frame: PackedByteArray) -> int:
 	if reader.get_u16() != VERSION:
 		return -1
 	var opcode := reader.get_u16()
-	if opcode not in [OPCODE_MOVE_TARGET, OPCODE_MOVE_RECEIPT, OPCODE_NPC_INTERACT, OPCODE_NPC_INTERACT_RESULT, OPCODE_NORMAL_ATTACK, OPCODE_NORMAL_ATTACK_RESULT, OPCODE_PLAYER_COMBAT_STATE, OPCODE_PLAYER_DAMAGE, OPCODE_AUTH_REQUEST, OPCODE_AUTH_RESULT, OPCODE_CHARACTER_LIST, OPCODE_CHARACTER_CHOOSE, OPCODE_CHARACTER_CHOOSE_RESULT, OPCODE_WORLD_READY, OPCODE_ENTITY_SPAWN, OPCODE_ENTITY_DESPAWN, OPCODE_ENTITY_DELTA, OPCODE_SELF_STATE, OPCODE_WORLD_READY_ACK, OPCODE_WORLD_RESYNC_REQUEST, OPCODE_MONSTER_SPAWN, OPCODE_MONSTER_DELTA, OPCODE_MONSTER_DESPAWN, OPCODE_PLAYER_RESPAWN, OPCODE_PLAYER_RESPAWN_RESULT, OPCODE_GROUND_DROP_SPAWN, OPCODE_GROUND_DROP_DESPAWN, OPCODE_GROUND_PICKUP, OPCODE_GROUND_PICKUP_RESULT, OPCODE_INVENTORY_SNAPSHOT, OPCODE_RECOVERY_USE, OPCODE_RECOVERY_USE_RESULT, OPCODE_INVENTORY_DISCARD, OPCODE_INVENTORY_DISCARD_RESULT, OPCODE_PLAYER_ATTACK_VISUAL, OPCODE_PLAYER_DAMAGE_VISUAL, OPCODE_PLAYER_RESPAWN_VISUAL, OPCODE_SKILL_USE, OPCODE_SKILL_USE_RESULT]:
+	if opcode not in [OPCODE_MOVE_TARGET, OPCODE_MOVE_RECEIPT, OPCODE_NPC_INTERACT, OPCODE_NPC_INTERACT_RESULT, OPCODE_NORMAL_ATTACK, OPCODE_NORMAL_ATTACK_RESULT, OPCODE_PLAYER_COMBAT_STATE, OPCODE_PLAYER_DAMAGE, OPCODE_AUTH_REQUEST, OPCODE_AUTH_RESULT, OPCODE_CHARACTER_LIST, OPCODE_CHARACTER_CHOOSE, OPCODE_CHARACTER_CHOOSE_RESULT, OPCODE_WORLD_READY, OPCODE_ENTITY_SPAWN, OPCODE_ENTITY_DESPAWN, OPCODE_ENTITY_DELTA, OPCODE_SELF_STATE, OPCODE_WORLD_READY_ACK, OPCODE_WORLD_RESYNC_REQUEST, OPCODE_MONSTER_SPAWN, OPCODE_MONSTER_DELTA, OPCODE_MONSTER_DESPAWN, OPCODE_PLAYER_RESPAWN, OPCODE_PLAYER_RESPAWN_RESULT, OPCODE_GROUND_DROP_SPAWN, OPCODE_GROUND_DROP_DESPAWN, OPCODE_GROUND_PICKUP, OPCODE_GROUND_PICKUP_RESULT, OPCODE_INVENTORY_SNAPSHOT, OPCODE_RECOVERY_USE, OPCODE_RECOVERY_USE_RESULT, OPCODE_INVENTORY_DISCARD, OPCODE_INVENTORY_DISCARD_RESULT, OPCODE_PLAYER_ATTACK_VISUAL, OPCODE_PLAYER_DAMAGE_VISUAL, OPCODE_PLAYER_RESPAWN_VISUAL, OPCODE_SKILL_USE, OPCODE_SKILL_USE_RESULT, OPCODE_PLAYER_SKILL_VISUAL]:
 		return -1
 	return opcode
 

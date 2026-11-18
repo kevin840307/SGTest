@@ -38,6 +38,8 @@ internal static class WorldAoiChecks
             MonsterInterest);
         Checks.Run("player attack visual reaches only viewers seeing attacker and target",
             PlayerAttackVisualInterest);
+        Checks.Run("player skill visual reaches only viewers seeing attacker and target",
+            PlayerSkillVisualInterest);
         Checks.Run("durable player damage and respawn visuals reach victim and visible peers only",
             PlayerDamageVisualInterest);
         Checks.Run("same map-bucket AOI tracks durable ground drop enter, exit, resync and pickup removal",
@@ -97,6 +99,40 @@ internal static class WorldAoiChecks
                 request with {AttackSequence=8},miss)==2 &&
             Drain(aoi,attacker).Single().PlayerAttack?.Status==NormalAttackStatus.Miss,
             "MISS presentation event not admitted");
+    }
+
+    private static void PlayerSkillVisualInterest()
+    {
+        var aoi=new WorldAoi(new WorldAoiOptions(
+            EnterHalfWidth:200,EnterHalfHeight:150,ExitMargin:60,BucketSize:64));
+        var attacker=Actor(91,15,24,24,connection:3);
+        var observer=Actor(92,15,48,24,connection:4);
+        var far=Actor(93,15,1200,24,connection:5);
+        var monster=new MonsterSnapshot(
+            1001500001,1,0,15,40,24,40,24,100,100,
+            MonsterAiState.Idle,0,1,2);
+        aoi.Apply(new WorldChangedBatch(1,Array.Empty<ActorSnapshot>(),
+            [Join(attacker),Join(observer),Join(far)]),[monster]);
+        Drain(aoi,attacker);Drain(aoi,observer);Drain(aoi,far);
+        var request=new TrustedSkillUse(
+            attacker.ActorId,attacker.ConnectionEpoch,attacker.MapEpoch,
+            3,99001,monster.EntityId,null);
+        var changed=monster with {CurrentHp=60,EntityRevision=2};
+        var outcome=new SkillUseOutcome(
+            SkillUseStatus.Applied,1,99001,monster.EntityId,
+            40,60,100,2,changed);
+        Require(aoi.EnqueuePlayerSkillVisual(request,outcome)==2,
+            "skill visual fanout included invisible observer or omitted owner/peer");
+        var owner=Drain(aoi,attacker);
+        var peer=Drain(aoi,observer);
+        Require(owner is [var own] &&
+            own.Kind==AoiEventKind.PlayerSkillVisual &&
+            own.PlayerSkill?.SkillId==99001 &&
+            own.PlayerSkill?.Damage==40 &&
+            own.PlayerSkill?.Facing==attacker.Facing &&
+            peer is [var seen] && seen.PlayerSkill==own.PlayerSkill &&
+            Drain(aoi,far).Length==0,
+            "skill visual AOI scope/payload mismatch");
     }
 
     private static void PlayerDamageVisualInterest()

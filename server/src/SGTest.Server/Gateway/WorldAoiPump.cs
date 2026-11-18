@@ -147,6 +147,9 @@ public sealed class WorldAoiPump
                             skill.TargetEntityId,0,0,0,0)
                         : _monsters.ResolveSkill(skill);
 
+                    if(outcome.Status is SkillUseStatus.Applied or SkillUseStatus.Miss)
+                        _aoi.EnqueuePlayerSkillVisual(skill,outcome);
+
                     if(outcome.Status==SkillUseStatus.Applied &&
                         outcome.Monster is { } skillChanged)
                     {

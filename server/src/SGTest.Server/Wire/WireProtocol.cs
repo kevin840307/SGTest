@@ -45,7 +45,8 @@ public enum WireOpcode : ushort
     PlayerDamageVisual = 42,
     PlayerRespawnVisual = 43,
     SkillUse = 44,
-    SkillUseResult = 45
+    SkillUseResult = 45,
+    PlayerSkillVisual = 46
 }
 
 public enum AuthWireStatus : byte { Success = 0, InvalidCredentials = 1, Disabled = 2 }
@@ -78,6 +79,11 @@ public readonly record struct SkillUseResultWire(
     long MapEpoch,uint SkillSequence,SkillUseStatus Status,long ServerTick,
     int SkillId,long TargetEntityId,int Damage,int CurrentHp,int MaxHp,
     long TargetRevision);
+public readonly record struct PlayerSkillVisualWire(
+    long ReceiverMapEpoch,long ServerTick,long AttackerActorId,
+    long AttackerConnectionEpoch,uint SkillSequence,int SkillId,
+    long TargetEntityId,SkillUseStatus Status,int Damage,
+    long TargetRevision,byte Facing);
 public readonly record struct PlayerAttackVisualWire(
     long ReceiverMapEpoch,long ServerTick,long AttackerActorId,
     long AttackerConnectionEpoch,uint AttackSequence,long TargetEntityId,
@@ -175,6 +181,7 @@ public static class WireProtocol
     public const int NormalAttackResultFrameBytes = HeaderBytes + 8 + 4 + 1 + 8 + 8 + 4 + 4 + 4 + 8;
     public const int SkillUseFrameBytes = HeaderBytes + 8 + 4 + 4 + 8;
     public const int SkillUseResultFrameBytes = HeaderBytes + 8 + 4 + 1 + 8 + 4 + 8 + 4 + 4 + 4 + 8;
+    public const int PlayerSkillVisualFrameBytes = HeaderBytes + 8 + 8 + 8 + 8 + 4 + 4 + 8 + 1 + 4 + 8 + 1;
     public const int PlayerAttackVisualFrameBytes = HeaderBytes + 8 + 8 + 8 + 8 + 4 + 8 + 1 + 4 + 8 + 1;
     public const int PlayerDamageVisualFrameBytes = HeaderBytes + 8 + 8 + 8 + 8 + 4 + 8 + 8 + 4 + 1 + 1;
     public const int PlayerRespawnVisualFrameBytes = HeaderBytes + 8 + 8 + 8 + 8 + 4 + 1;
@@ -414,6 +421,46 @@ public static class WireProtocol
             BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(49,4)),
             BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(53,8)));
         return ValidSkillUseResult(value);
+    }
+
+    public static byte[] EncodePlayerSkillVisual(PlayerSkillVisualWire value)
+    {
+        if(!ValidPlayerSkillVisual(value))
+            throw new ArgumentOutOfRangeException(nameof(value));
+        var frame=NewFrame(WireOpcode.PlayerSkillVisual,PlayerSkillVisualFrameBytes);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(8,8),value.ReceiverMapEpoch);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(16,8),value.ServerTick);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(24,8),value.AttackerActorId);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(32,8),value.AttackerConnectionEpoch);
+        BinaryPrimitives.WriteUInt32LittleEndian(frame.AsSpan(40,4),value.SkillSequence);
+        BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(44,4),value.SkillId);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(48,8),value.TargetEntityId);
+        frame[56]=(byte)value.Status;
+        BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(57,4),value.Damage);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(61,8),value.TargetRevision);
+        frame[69]=value.Facing;
+        return frame;
+    }
+
+    public static bool TryDecodePlayerSkillVisual(
+        ReadOnlySpan<byte> frame,out PlayerSkillVisualWire value)
+    {
+        value=default;
+        if(!TryReadHeader(frame,out var h) || h.Opcode!=WireOpcode.PlayerSkillVisual)
+            return false;
+        value=new(
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(8,8)),
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(16,8)),
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(24,8)),
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(32,8)),
+            BinaryPrimitives.ReadUInt32LittleEndian(frame.Slice(40,4)),
+            BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(44,4)),
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(48,8)),
+            (SkillUseStatus)frame[56],
+            BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(57,4)),
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(61,8)),
+            frame[69]);
+        return ValidPlayerSkillVisual(value);
     }
 
     public static byte[] EncodePlayerAttackVisual(PlayerAttackVisualWire value)
@@ -1389,6 +1436,21 @@ public static class WireProtocol
         return true;
     }
 
+    private static bool ValidPlayerSkillVisual(PlayerSkillVisualWire value)
+    {
+        if(value.ReceiverMapEpoch<=0 || value.ServerTick<0 ||
+            value.AttackerActorId<=0 || value.AttackerConnectionEpoch<=0 ||
+            value.SkillSequence==0 || value.SkillId is <1 or >100_000_000 ||
+            value.TargetEntityId<=0 || value.TargetRevision<=0 ||
+            value.Facing is <1 or >8)
+            return false;
+        if(value.Status==SkillUseStatus.Applied)
+            return value.Damage>0;
+        if(value.Status==SkillUseStatus.Miss)
+            return value.Damage==0;
+        return false;
+    }
+
     private static bool ValidPlayerAttackVisual(PlayerAttackVisualWire value)
     {
         if(value.ReceiverMapEpoch<=0 || value.ServerTick<0 ||
@@ -1512,7 +1574,8 @@ public static class WireProtocol
             41 => WireOpcode.PlayerAttackVisual,
             42 => WireOpcode.PlayerDamageVisual,
             43 => WireOpcode.PlayerRespawnVisual,
-            44 => WireOpcode.SkillUse, 45 => WireOpcode.SkillUseResult, _ => 0
+            44 => WireOpcode.SkillUse, 45 => WireOpcode.SkillUseResult,
+            46 => WireOpcode.PlayerSkillVisual, _ => 0
         };
         if (opcode == 0) return false;
         bool sizeOk = opcode switch
@@ -1552,6 +1615,7 @@ public static class WireProtocol
             WireOpcode.PlayerRespawnVisual => advertised == PlayerRespawnVisualFrameBytes,
             WireOpcode.SkillUse => advertised == SkillUseFrameBytes,
             WireOpcode.SkillUseResult => advertised == SkillUseResultFrameBytes,
+            WireOpcode.PlayerSkillVisual => advertised == PlayerSkillVisualFrameBytes,
             WireOpcode.InventorySnapshot => advertised >= InventorySnapshotHeaderBytes &&
                 advertised <= InventorySnapshotHeaderBytes +
                     InventorySnapshotMaxItemsPerFrame*InventoryItemBytes &&
