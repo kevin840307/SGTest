@@ -16,6 +16,8 @@ const OPCODE_AUTH_RESULT := 11
 const OPCODE_CHARACTER_LIST := 12
 const OPCODE_CHARACTER_CHOOSE := 13
 const OPCODE_CHARACTER_CHOOSE_RESULT := 14
+const OPCODE_CHARACTER_CREATE := 15
+const OPCODE_CHARACTER_CREATE_RESULT := 16
 const OPCODE_WORLD_READY := 20
 const OPCODE_ENTITY_SPAWN := 21
 const OPCODE_ENTITY_DESPAWN := 22
@@ -59,6 +61,8 @@ const PLAYER_RESPAWN_RESULT_FRAME_BYTES := 29
 const AUTH_RESULT_FRAME_BYTES := 9
 const CHARACTER_CHOOSE_FRAME_BYTES := 16
 const CHARACTER_CHOOSE_RESULT_FRAME_BYTES := 45
+const MAX_CHARACTER_CREATE_FRAME_BYTES := 107
+const MAX_CHARACTER_CREATE_RESULT_FRAME_BYTES := 116
 const MAX_AUTH_REQUEST_FRAME_BYTES := 300
 const MAX_CHARACTER_LIST_FRAME_BYTES := 4096
 const WORLD_READY_FRAME_BYTES := 45
@@ -498,6 +502,55 @@ static func decode_character_list(frame: PackedByteArray) -> Dictionary:
 	if reader.get_available_bytes() != 0:
 		return {}
 	return {"characters": characters}
+
+
+static func encode_character_create(slot: int, character_name: String) -> PackedByteArray:
+	var name_bytes := character_name.to_utf8_buffer()
+	if slot < 0 or slot > 31 or name_bytes.size() < 1 or name_bytes.size() > 96:
+		return PackedByteArray()
+	var frame_bytes := HEADER_BYTES + 3 + name_bytes.size()
+	var writer := StreamPeerBuffer.new()
+	writer.big_endian = false
+	writer.put_u32(frame_bytes)
+	writer.put_u16(VERSION)
+	writer.put_u16(OPCODE_CHARACTER_CREATE)
+	writer.put_u8(slot)
+	writer.put_u16(name_bytes.size())
+	writer.put_data(name_bytes)
+	return writer.data_array
+
+static func decode_character_create_result(frame: PackedByteArray) -> Dictionary:
+	if not _valid_variable_header(
+		frame, OPCODE_CHARACTER_CREATE_RESULT, 20, MAX_CHARACTER_CREATE_RESULT_FRAME_BYTES
+	):
+		return {}
+	var reader := _reader(frame, 8)
+	var status := reader.get_u8()
+	var character_id := reader.get_64()
+	var slot := reader.get_u8()
+	var name_bytes_count := reader.get_u16()
+	if status > 6 or slot > 31 or name_bytes_count > 96 or reader.get_available_bytes() != name_bytes_count:
+		return {}
+	var character_name := ""
+	if name_bytes_count > 0:
+		var result := reader.get_data(name_bytes_count)
+		if result[0] != OK:
+			return {}
+		var name_bytes: PackedByteArray = result[1]
+		character_name = name_bytes.get_string_from_utf8()
+		if character_name.to_utf8_buffer() != name_bytes:
+			return {}
+	if status == 0:
+		if character_id <= 0 or name_bytes_count < 1:
+			return {}
+	elif character_id != 0 or name_bytes_count != 0:
+		return {}
+	return {
+		"status": status,
+		"character_id": character_id,
+		"slot": slot,
+		"name": character_name,
+	}
 
 static func encode_character_choose(character_id: int) -> PackedByteArray:
 	if character_id <= 0:
