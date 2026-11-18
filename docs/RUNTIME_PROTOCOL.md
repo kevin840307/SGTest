@@ -328,3 +328,23 @@ The same V1 little-endian header is extended without a second protocol:
 The Client command cannot supply ActorId, ConnectionEpoch or ItemDefinitionId. Quantity is bounded to 1..1,000,000 and the Server verifies ownership against SQLite. Result status is `0 Applied, 1 AlreadyApplied, 2 Missing, 3 NotOwned, 4 InvalidQuantity, 5 StaleSequence, 6 StaleGeneration`. Applied/AlreadyApplied carry the committed item/result quantities; rejected results carry zero item-definition/discarded/remaining fields. Opcode40 is Server-only and enters the same bounded reliable FIFO as other authoritative outcomes.
 
 Exactly-once gameplay effect is provided by a durable SQLite receipt, not by assuming TCP never retries. Godot tracks one outstanding discard sequence, applies only an `Applied` result to its UID-keyed inventory, does not subtract `AlreadyApplied` again, and resets the sequence on a newer map epoch while ignoring older-map replies. This action destroys inventory and **does not create a GroundDrop**. C#/Godot golden and reducer Client core 44113626146 PASS; real authenticated TLS discard/replay/relogin Server core 44113938394 PASS. Commit `2b5af066` additionally proves the actual Godot ClientSession emits opcode39 to the C# LoginFixture over TLS and applies opcode40 before local quantity mutation; Client core 44114783838 PASS, with Server core 44114783786 PASS. Original bind/no-drop/confirmation/ground-drop rules remain NOT VERIFIED.
+
+### 2026-11-18 Verified single-target skill authority (opcodes 44/45/46)
+
+V1 extends the same TLS compact-binary combat path with one deliberately narrow skill slice:
+
+| Opcode | Direction | Bytes | Payload |
+|---|---|---:|---|
+| 44 SkillUse | Godot→Server | 32 | `MapEpoch; SkillSequence; SkillId; TargetMonsterEntityId` |
+| 45 SkillUseResult | Server→Godot reliable | 61 | `MapEpoch; SkillSequence; status; ServerTick; SkillId; TargetEntityId; Damage; CurrentHP; MaxHP; TargetRevision` |
+| 46 PlayerSkillVisual | Server→Godot reliable AOI | 70 | `ReceiverMapEpoch; ServerTick; AttackerActorId; AttackerConnectionEpoch; SkillSequence; SkillId; TargetEntityId; status; Damage; TargetRevision; Facing` |
+
+The Client command carries no actor identity, connection generation, damage, range or cooldown. Gateway injects authenticated identity and the trusted combat profile. `SkillRuleCatalog` is an explicit operator-admitted rule source and currently accepts at most 64 rules only when the manifest says `verified_single_target_skill_rules`, version 1, `rules_verified=true`, `gameplay_ready=true`. This first slice intentionally admits only `single_monster`, fixed positive damage, bounded range/cooldown and `mp_cost=0`. Nonzero MP, AoE, buffs and formula-derived damage are rejected until those authoritative state owners and original rules are verified.
+
+`MonsterWorldCoordinator` is still the single combat writer. It consumes a monotonically increasing per-generation SkillSequence, enforces a per-skill Server-tick cooldown, resolves the current authoritative actor position, range and Blocking direct-clear, and calls the existing `MonsterRuntime.ApplyTrustedDamage`. Therefore HP/Death/respawn and lethal Drop flow are unchanged. `SkillUseResult` is a reliable requester result and does not mutate Godot monster HP; only the shared MonsterDelta does.
+
+`PlayerSkillVisual` is presentation-only. WorldAoi emits it only for Applied/Miss outcomes and only to viewers currently seeing both the exact attacker generation and target monster. It carries no player HP authority. Godot validates MapEpoch, target revision and attacker generation, keeps a bounded transient event list plus per-generation SkillSequence memory, and clears transient visual events on a replacement WorldReady while retaining sequence memory for same-epoch replay protection. Exact original skill ACT/effect rendering is intentionally not guessed by this slice.
+
+Server core **44216490279** passes **151/151**, including verified-manifest rejection of MP/AoE, 32/61-byte wire, trusted Gateway identity injection and rule-owned damage/range/cooldown/replay/death. Client core **44216804891** passes 32/61/70-byte Godot codec/reducer, true TLS 99001 (`fixed_damage=40`) killing the remaining 40 HP only through MonsterDelta, and two real Godot clients where actor and observer both receive the authoritative Skill visual while neither uses it as monster HP authority. Existing reconnect, Map15↔13, NPC portal and formal Host + two main-scene gates remain green.
+
+Remaining skill work: source-verified original skill definitions/formulas, MP/SP durability, AoE target selection/budgeting, Buff/Debuff lifecycle, MISS/Hit/Dodge rules, cooldown/resource UI, and source-verified visual/effect mapping.
