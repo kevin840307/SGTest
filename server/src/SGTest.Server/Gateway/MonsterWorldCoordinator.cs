@@ -39,7 +39,17 @@ public sealed class MonsterWorldCoordinator
         public long ConnectionEpoch;
         public long MapEpoch;
         public uint LastSequence;
+        public uint PendingSequence;
         public readonly Dictionary<int,long> LastAppliedTick = [];
+    }
+
+    public readonly record struct PreparedSkillUse(
+        TrustedSkillUse Request,VerifiedSkillRule Rule,long PreparedTick);
+
+    public readonly record struct SkillPrepareResult(
+        PreparedSkillUse? Prepared,SkillUseOutcome? Rejected)
+    {
+        public bool Ready => Prepared.HasValue && !Rejected.HasValue;
     }
 
     private readonly IReadOnlyDictionary<int,VerifiedSkillRule> _skillRules;
@@ -64,7 +74,8 @@ public sealed class MonsterWorldCoordinator
                 pair.Value.FixedDamage is <1 or >100_000_000 ||
                 !double.IsFinite(pair.Value.Range) ||
                 pair.Value.Range is <1 or >500 ||
-                pair.Value.CooldownTicks is <1 or >3600))
+                pair.Value.CooldownTicks is <1 or >3600 ||
+                pair.Value.MpCost is <0 or >100_000_000))
             throw new ArgumentOutOfRangeException(nameof(skillRules));
         _runtimes = new SortedDictionary<int, MonsterRuntime>();
         foreach (var runtime in runtimes)
@@ -197,38 +208,99 @@ public sealed class MonsterWorldCoordinator
 
     public SkillUseOutcome ResolveSkill(TrustedSkillUse request)
     {
+        var prepared=PrepareSkill(request);
+        if(!prepared.Ready)
+            return prepared.Rejected ??
+                throw new InvalidOperationException("Skill prepare result missing rejection");
+        return CommitPreparedSkill(prepared.Prepared!.Value);
+    }
+
+    public SkillPrepareResult PrepareSkill(TrustedSkillUse request)
+    {
         if (_lastTick <= 0 || !_actors.TryGetValue(request.ActorId,out var actor) ||
             !_skill.TryGetValue(request.ActorId,out var cursor) ||
             actor.ConnectionEpoch!=request.ConnectionEpoch ||
             cursor.ConnectionEpoch!=request.ConnectionEpoch)
-            return EmptySkill(request,SkillUseStatus.OldMapEpoch);
+            return new(null,EmptySkill(request,SkillUseStatus.OldMapEpoch));
 
         if(request.RequestMapEpoch!=actor.MapEpoch ||
             cursor.MapEpoch!=actor.MapEpoch)
-            return EmptySkill(request,SkillUseStatus.OldMapEpoch);
+            return new(null,EmptySkill(request,SkillUseStatus.OldMapEpoch));
 
         if(request.SkillSequence<=cursor.LastSequence)
-            return EmptySkill(request,SkillUseStatus.ReplayedSequence);
+            return new(null,EmptySkill(request,SkillUseStatus.ReplayedSequence));
         cursor.LastSequence=request.SkillSequence;
 
+        if(cursor.PendingSequence!=0)
+            return new(null,EmptySkill(request,SkillUseStatus.CombatUnavailable));
+
         if(!_skillRules.TryGetValue(request.SkillId,out var rule))
-            return EmptySkill(request,SkillUseStatus.NoRule);
+            return new(null,EmptySkill(request,SkillUseStatus.NoRule));
         if(request.Profile is null ||
             !_runtimes.TryGetValue(actor.MapId,out var runtime))
-            return EmptySkill(request,SkillUseStatus.CombatUnavailable);
+            return new(null,EmptySkill(request,SkillUseStatus.CombatUnavailable));
 
         if(cursor.LastAppliedTick.TryGetValue(rule.SkillId,out long last) &&
             _lastTick-last<rule.CooldownTicks)
-            return EmptySkill(request,SkillUseStatus.Cooldown);
+            return new(null,EmptySkill(request,SkillUseStatus.Cooldown));
 
         var targetStatus=runtime.ValidateNormalAttackTarget(
             request.TargetEntityId,actor.X,actor.Y,rule.Range,out var target);
         if(targetStatus!=NormalAttackStatus.Applied)
-            return FromSkillTarget(request,MapSkillStatus(targetStatus),target);
+            return new(null,FromSkillTarget(
+                request,MapSkillStatus(targetStatus),target));
 
-        cursor.LastAppliedTick[rule.SkillId]=_lastTick;
+        cursor.PendingSequence=request.SkillSequence;
+        return new(new PreparedSkillUse(request,rule,_lastTick),null);
+    }
+
+    public SkillUseOutcome CancelPreparedSkill(
+        PreparedSkillUse prepared,SkillUseStatus status)
+    {
+        var request=prepared.Request;
+        if(status is SkillUseStatus.Applied or SkillUseStatus.Miss)
+            throw new ArgumentOutOfRangeException(nameof(status));
+        if(!_skill.TryGetValue(request.ActorId,out var cursor) ||
+            cursor.ConnectionEpoch!=request.ConnectionEpoch ||
+            cursor.MapEpoch!=request.RequestMapEpoch ||
+            cursor.PendingSequence!=request.SkillSequence)
+            return EmptySkill(request,SkillUseStatus.OldMapEpoch);
+        cursor.PendingSequence=0;
+        return EmptySkill(request,status);
+    }
+
+    public SkillUseOutcome CommitPreparedSkill(PreparedSkillUse prepared)
+    {
+        var request=prepared.Request;
+        if(_lastTick<=0 || !_actors.TryGetValue(request.ActorId,out var actor) ||
+            !_skill.TryGetValue(request.ActorId,out var cursor) ||
+            actor.ConnectionEpoch!=request.ConnectionEpoch ||
+            actor.MapEpoch!=request.RequestMapEpoch ||
+            cursor.ConnectionEpoch!=request.ConnectionEpoch ||
+            cursor.MapEpoch!=request.RequestMapEpoch ||
+            cursor.PendingSequence!=request.SkillSequence ||
+            !_runtimes.TryGetValue(actor.MapId,out var runtime))
+            return EmptySkill(request,SkillUseStatus.OldMapEpoch);
+
+        if(!_skillRules.TryGetValue(request.SkillId,out var currentRule) ||
+            currentRule!=prepared.Rule)
+        {
+            cursor.PendingSequence=0;
+            return EmptySkill(request,SkillUseStatus.NoRule);
+        }
+
+        var targetStatus=runtime.ValidateNormalAttackTarget(
+            request.TargetEntityId,actor.X,actor.Y,currentRule.Range,out var target);
+        if(targetStatus!=NormalAttackStatus.Applied)
+        {
+            cursor.PendingSequence=0;
+            return FromSkillTarget(request,MapSkillStatus(targetStatus),target);
+        }
+
+        cursor.PendingSequence=0;
+        cursor.LastAppliedTick[currentRule.SkillId]=_lastTick;
         var applied=runtime.ApplyTrustedDamage(
-            request.TargetEntityId,request.ActorId,rule.FixedDamage,_lastTick);
+            request.TargetEntityId,request.ActorId,currentRule.FixedDamage,_lastTick);
         if(!applied.Applied)
             return FromSkillTarget(request,SkillUseStatus.TargetDead,target);
 

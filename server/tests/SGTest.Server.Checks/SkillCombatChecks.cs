@@ -10,7 +10,7 @@ internal static class SkillCombatChecks
 
     public static void Verify(string root)
     {
-        Checks.Run("verified skill manifest rejects MP/AoE and admits bounded fixed single target",
+        Checks.Run("verified skill manifest admits bounded MP metadata but rejects AoE",
             ()=>Manifest(root));
         Checks.Run("skill wire contains only epoch sequence skill and target intent",
             Wire);
@@ -18,6 +18,8 @@ internal static class SkillCombatChecks
             Gateway);
         Checks.Run("skill authority owns rule damage range cooldown replay and monster death",
             ()=>Authority(root));
+        Checks.Run("skill prepare is non-mutating and commit/cancel owns effect boundary",
+            ()=>PrepareCommit(root));
     }
 
     private static void Manifest(string root)
@@ -36,13 +38,20 @@ internal static class SkillCombatChecks
             rules[99001]==new VerifiedSkillRule(99001,60,48,3),
             "verified skill rule rejected");
 
-        string mp=Path.Combine(root,"unowned-mp-skill.json");
+        string mp=Path.Combine(root,"verified-mp-skill.json");
         File.WriteAllText(mp,File.ReadAllText(valid).Replace(
             "\"mp_cost\":0","\"mp_cost\":1"));
+        var mpRules=SkillRuleCatalog.LoadVerified(mp);
+        Require(mpRules[99001]==new VerifiedSkillRule(99001,60,48,3,1),
+            "verified MP cost metadata was not retained");
+
+        string aoe=Path.Combine(root,"unowned-aoe-skill.json");
+        File.WriteAllText(aoe,File.ReadAllText(valid).Replace(
+            "\"single_monster\"","\"self_centered_area\""));
         bool rejected=false;
-        try{SkillRuleCatalog.LoadVerified(mp);}
+        try{SkillRuleCatalog.LoadVerified(aoe);}
         catch(InvalidDataException){rejected=true;}
-        Require(rejected,"skill manifest invented MP authority");
+        Require(rejected,"skill manifest invented AoE authority");
     }
 
     private static void Wire()
@@ -87,6 +96,74 @@ internal static class SkillCombatChecks
             captured.TargetEntityId==1_001_300_001 &&
             captured.Profile==profile,
             "Gateway did not inject trusted skill identity/profile");
+    }
+
+    private static void PrepareCommit(string root)
+    {
+        const int mapId=316;
+        string folder=Checks.Fixture(root,mapId,12,12,(_,_)=>0);
+        var grid=BlockingGrid.Load(folder,mapId);
+        string populationPath=Path.Combine(folder,"population-skill-prepare.json");
+        File.WriteAllText(populationPath,JsonSerializer.Serialize(new {
+            version=4,kind="verified_monster_runtime",map_id=mapId,
+            stats_verified=true,gameplay_ready=true,
+            definitions=new[]{new{
+                id=1,name="SkillPrepareFixture",sprite="EN001A",
+                atlas="Enemy/EN001A/atlas.json",
+                stats=new{
+                    level=3,max_hp=100,attack_damage=1,move_step=8.0,
+                    aggro_radius=1.0,lose_target_radius=2.0,
+                    leash_radius=2.0,attack_range=1.0,
+                    attack_cooldown_ticks=300,respawn_ticks=300,
+                    wander_radius=0.0,wander_interval_ticks=100
+                }}},
+            spawns=new[]{new{source_index=0,source_flags=7,
+                definition=1,p=new[]{40,24}}}
+        }));
+        var runtime=new MonsterRuntime(
+            grid,MonsterPopulationCatalog.LoadVerified(populationPath,mapId,grid),
+            new(AiIntervalTicks:1,MaxAiPerStep:4,
+                MaxPathQueriesPerStep:1,MaxPathExpandedCells:128));
+        var coordinator=new MonsterWorldCoordinator([runtime],
+            new Dictionary<int,VerifiedSkillRule>{
+                [23103]=new(23103,25,48,3,1)
+            });
+        var actor=new ActorSnapshot(
+            88,mapId,2,1,0,0,24,24,1,false);
+        coordinator.Process(new WorldChangedBatch(1,[],
+            [new(ActorLifecycleKind.Joined,actor)]));
+        var target=runtime.SnapshotAll().Single();
+        var request=new TrustedSkillUse(
+            actor.ActorId,actor.ConnectionEpoch,actor.MapEpoch,
+            1,23103,target.EntityId,
+            new(1,1,1,1,48,15));
+
+        var prepared=coordinator.PrepareSkill(request);
+        Require(prepared.Ready &&
+                prepared.Prepared?.Rule.MpCost==1 &&
+                prepared.Prepared?.Rule.FixedDamage==25 &&
+                runtime.SnapshotAll().Single().CurrentHp==100,
+            "skill prepare mutated monster or lost MP metadata");
+        var cancelled=coordinator.CancelPreparedSkill(
+            prepared.Prepared!.Value,SkillUseStatus.CombatUnavailable);
+        Require(cancelled.Status==SkillUseStatus.CombatUnavailable &&
+                runtime.SnapshotAll().Single().CurrentHp==100,
+            "cancelled prepared skill changed monster");
+
+        var second=coordinator.PrepareSkill(request with {SkillSequence=2});
+        Require(second.Ready &&
+                runtime.SnapshotAll().Single().CurrentHp==100,
+            "second skill prepare mutated monster");
+        var applied=coordinator.CommitPreparedSkill(second.Prepared!.Value);
+        Require(applied.Status==SkillUseStatus.Applied &&
+                applied.Damage==25 && applied.CurrentHp==75 &&
+                runtime.SnapshotAll().Single().CurrentHp==75,
+            "prepared skill commit did not own exact effect boundary");
+
+        var duplicateCommit=coordinator.CommitPreparedSkill(second.Prepared.Value);
+        Require(duplicateCommit.Status==SkillUseStatus.OldMapEpoch &&
+                runtime.SnapshotAll().Single().CurrentHp==75,
+            "prepared skill token committed twice");
     }
 
     private static void Authority(string root)

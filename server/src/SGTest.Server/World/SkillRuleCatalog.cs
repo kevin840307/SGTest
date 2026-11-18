@@ -18,13 +18,16 @@ public enum SkillUseStatus : byte
 }
 
 public readonly record struct VerifiedSkillRule(
-    int SkillId, int FixedDamage, double Range, int CooldownTicks);
+    int SkillId, int FixedDamage, double Range, int CooldownTicks,
+    int MpCost = 0);
 
 /// <summary>
 /// Explicit operator-admitted first-slice skill rules. This intentionally
-/// supports only single-monster fixed damage with zero MP cost. MP/SP, AoE,
-/// buffs and formula-derived damage are rejected until their authoritative
-/// state owners and original rules are verified.
+/// supports only single-monster fixed damage. A bounded MP cost may be
+/// admitted now that durable MP ownership exists, but this catalog itself does
+/// not debit MP; callers must settle that cost between skill Prepare and Commit.
+/// SP/HP costs, AoE, buffs and formula-derived damage remain rejected until
+/// their authoritative owners and original rules are verified.
 /// </summary>
 public static class SkillRuleCatalog
 {
@@ -53,19 +56,20 @@ public static class SkillRuleCatalog
         {
             if(entry.ValueKind!=JsonValueKind.Object ||
                 Text(entry,"target_kind")!="single_monster" ||
-                Text(entry,"damage_kind")!="fixed" ||
-                Number(entry,"mp_cost")!=0)
+                Text(entry,"damage_kind")!="fixed")
                 throw new InvalidDataException(
-                    "Only verified single_monster fixed_damage zero-MP skills are admitted");
+                    "Only verified single_monster fixed_damage skills are admitted");
             int skill=Number(entry,"skill_id");
             int damage=Number(entry,"fixed_damage");
             int cooldown=Number(entry,"cooldown_ticks");
+            int mpCost=Number(entry,"mp_cost");
             double range=Real(entry,"range");
-            var rule=new VerifiedSkillRule(skill,damage,range,cooldown);
+            var rule=new VerifiedSkillRule(skill,damage,range,cooldown,mpCost);
             if(skill is <1 or >100_000_000 ||
                 damage is <1 or >100_000_000 ||
                 !double.IsFinite(range) || range is <1 or >500 ||
                 cooldown is <1 or >3600 ||
+                mpCost is <0 or >100_000_000 ||
                 !result.TryAdd(skill,rule))
                 throw new InvalidDataException("Skill rules contain invalid or duplicate definitions");
         }
