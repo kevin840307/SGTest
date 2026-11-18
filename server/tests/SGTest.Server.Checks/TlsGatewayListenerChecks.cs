@@ -924,6 +924,11 @@ internal static class TlsGatewayListenerChecks
                 $"admission_rejections={stats.RejectedAddress + stats.RejectedCapacity} " +
                 $"world_skipped_deadlines={fixture.Host.Statistics.SkippedDeadlines} " +
                 $"world_max_tick_us={fixture.Host.Statistics.MaxTickWorkMicroseconds} " +
+                $"router_backpressure={fixture.Router.Statistics.BackpressureFailures} " +
+                $"aoi_frames_queued={fixture.AoiPump?.FramesQueued ?? 0} " +
+                $"listener_reliable_frames={stats.ReliableFramesSent} " +
+                $"monster_runtime_ticks={fixture.Monsters?.Statistics.RuntimeTicks ?? 0} " +
+                $"monster_changed_snapshots={fixture.Monsters?.Statistics.ChangedSnapshots ?? 0} " +
                 "synthetic_map=true godot_clients=0 tls=true");
         }
         finally
