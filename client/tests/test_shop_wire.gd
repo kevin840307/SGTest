@@ -105,6 +105,35 @@ func _initialize() -> void:
 		fail("transfer did not close shop")
 		return
 
+	# Simulate a durable buy whose first Applied response was lost. The retry
+	# returns AlreadyApplied with the original authoritative UID/money receipt;
+	# Client must converge without requiring relogin and must not apply it twice.
+	world = new_world()
+	if world == null or not world.mark_shop_sent(1,1,99) or not world.apply_frame(opened) or not world.mark_shop_sent(2,2,99,1001,0,1):
+		fail("replay recovery fixture")
+		return
+	var recovered := RESULT.hex_decode()
+	recovered.encode_s64(8,1)
+	recovered.encode_u32(16,2)
+	recovered[20] = 1
+	recovered[21] = 1
+	recovered.encode_s64(26,0)
+	recovered.encode_s64(34,8101)
+	recovered.encode_s32(46,1)
+	recovered.encode_s32(50,1)
+	if not world.apply_frame(recovered):
+		fail("AlreadyApplied receipt did not recover committed buy")
+		return
+	var recovered_state: Dictionary = world.snapshot()
+	if not (recovered_state.inventory_items as Dictionary).has(8101) or int(recovered_state.inventory_items[8101].quantity) != 1 or int(recovered_state.shop_money) != 0 or int((recovered_state.last_shop_result as Dictionary).status) != 1:
+		fail("AlreadyApplied receipt did not converge inventory and money")
+		return
+	var recovered_revision := int(recovered_state.inventory_revision)
+	var recovered_stale := int(recovered_state.stale_shop_results)
+	if not world.apply_frame(recovered) or int(world.snapshot().inventory_revision) != recovered_revision or int(world.snapshot().stale_shop_results) != recovered_stale+1:
+		fail("AlreadyApplied duplicate mutated inventory twice")
+		return
+
 	world = new_world()
 	if world == null or not world.mark_shop_sent(1,1,99) or not world.apply_frame(opened) or not world.mark_shop_sent(2,3,99,1001,7001,1):
 		fail("spoof fixture")
@@ -116,5 +145,5 @@ func _initialize() -> void:
 	if world.apply_frame(wrong) or int(world.state) != World.STATE_FAILED:
 		fail("wrong sell UID accepted")
 		return
-	print("SHOP_WIRE_PASS open=24 snapshot=55 buy=32 sell=40 result=54 source_drop_zero=PASS money=SERVER_AUTH uid=SERVER_AUTH replay=STALE transfer=CLOSES spoof=FAIL_CLOSED")
+	print("SHOP_WIRE_PASS open=24 snapshot=55 buy=32 sell=40 result=54 source_drop_zero=PASS money=SERVER_AUTH uid=SERVER_AUTH replay=STALE replay_recovery=ALREADY_APPLIED_CONVERGES transfer=CLOSES spoof=FAIL_CLOSED")
 	quit(0)

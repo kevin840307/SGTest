@@ -1539,7 +1539,11 @@ func _apply_shop_transaction_result(frame: PackedByteArray) -> bool:
 		return fail("shop_result_wrong_request")
 	if pending_shop_kind == 3 and int(result.item_uid) != pending_shop_item_uid:
 		return fail("shop_sell_uid_mismatch")
-	if int(result.status) == 0:
+	# Applied and AlreadyApplied carry the same authoritative durable receipt.
+	# AlreadyApplied is required to recover when the original success response was
+	# lost after the SQLite commit. Sequence replay protection below still makes
+	# an already-consumed receipt stale, so this cannot mutate inventory twice.
+	if int(result.status) in [0,1]:
 		if not inventory_ready:
 			return fail("shop_applied_without_inventory")
 		var uid := int(result.item_uid)
