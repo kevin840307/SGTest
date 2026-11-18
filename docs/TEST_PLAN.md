@@ -1,5 +1,15 @@
 # SGTest — Clean-slate 測試與完工標準
 
+## MVP003-IN-GAME-CHARACTER-CREATE — 登入後創角／刷新列表／直接選角（完成切片）
+
+2026-11-18：compact-binary V1 新增 TLS pre-gameplay `CharacterCreate(15)`／`CharacterCreateResult(16)`。Client 只提交 **slot + UTF-8 name**；不得提交 ActorId、ConnectionEpoch、MapId、X/Y、屬性或戰鬥數值。`IdentityTlsAuthorization` 在 Auth 成功後維持同一 TLS Session，允許空 CharacterList 進入 create/choose loop；成功使用唯一 `SqliteIdentityStore.CreateCharacterAsync` 持久化，再回 CreateResult + **重新查 DB 後的 authoritative CharacterList**。名稱／slot 衝突也刷新列表而不要求重新登入。新角色只有在 Host 顯式設定 `--character-spawn-map/x/y` 且 authoritative Blocking 驗證可走時才允許建立；未設定回 `Unavailable` 且 DB 0 mutation。
+
+Godot `WireCodec → WorldState.STATE_CREATING_CHARACTER → ClientSession → SessionPanel` 已接通：選角頁可輸入名稱與0..7 slot，送出期間鎖定避免重複 create，成功列表刷新後自動選中新角色，可立即按「進入世界」。Server 真 loopback TLS E2E 驗證 **空帳號→建立 CreatedHero→重名衝突→列表仍唯一→同 socket 選新角色進 World**，另驗證無 server spawn policy 必須拒絕。Client Core [44318844930](https://github.com/kevin840307/SGTest/actions/runs/44318844930) PASS；Server 功能 Core [44320038624](https://github.com/kevin840307/SGTest/actions/runs/44320038624) **PASS total=157**，三個 Release build 0 error、checkpoint hard-kill recovery PASS。
+
+**尚未完成**：網路公開帳號註冊、原版 Race/Career/外觀／能力值創角選項、原版確切出生點／出生規則與刪角。現有 `character-create` 管理 CLI 保留；遊戲內創角不取代部署 provision。MVP003 主項仍需其餘原版功能／私有真圖驗收後才能整體 [x]。
+
+**CI 開發節奏**：一般 `Server core checks` 不再每次功能修改重跑 20P/300M/500D 密集／持續負載；重型場景保留在 `SGTest.Server.Checks --load-only` 與手動 `Server load checks` workflow。功能 Core 仍跑 Wire/TLS/Auth/SQLite/World/AOI/Combat、安全 fail-closed 及 hard-kill checkpoint。分離是為了避免無關壓測抖動阻擋功能開發，並未把可靠性錯誤改成忽略。
+
 **狀態：測試規格。舊 Client/Server 的 PASS 不能沿用。**
 
 ## MVP001 — 雙地圖 Map15 + Map13、完整功能與多人壓測（來源資料部分完成，E2E 未完成）

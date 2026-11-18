@@ -13,7 +13,7 @@
 - **設計方式：功能導向 modular monolith**，高聚力、低耦合；不要預先建立重複的 Manager／Engine／Cache、不同素材類型專用 Loader，或空白多層分組。Client、Server 透過明確封包／資料契約整合，不共享可變狀態。
 - **Server single-writer world authority**：同張地圖的可變 State 有明確單寫者；DB I/O、Socket Send、慢路徑查詢不能阻塞固定 Tick。
 - **有界佇列與恢復**：所有網路／World 命令／視覺事件佇列都要有容量、延遲指標與過載政策；可合併過時的非可靠移動快照，**不得默默丟失金錢、物品、交易、角色狀態、權威戰鬥結果等可靠結果**。無法保證連續性時須觸發重同步或安全斷線，不能無限堆積記憶體。
-- **Wire 已依 WIRE001 選定單一 compact-binary V1**：MoveTarget/MoveReceipt、trusted connection→Actor/ConnectionEpoch binding、bounded parser/reliable queue，以及強制 TLS 1.2/1.3 的單連線 TCP session 已有 CI Gate。Client 不能提供 ActorId/ConnectionEpoch，plaintext 不降級。真正 Account Auth/CharacterChoose、production listener/certificate、Godot TLS Client、ACK/WorldReady/reconnect 仍未完成。詳 `docs/RUNTIME_PROTOCOL.md`。
+- **Wire 已依 WIRE001 選定單一 compact-binary V1**：MoveTarget/MoveReceipt、trusted connection→Actor/ConnectionEpoch binding、bounded parser/reliable queue、TLS 1.2/1.3、Account Auth、CharacterList／CharacterCreate／CharacterChoose、production listener、Godot TLS Client、WorldReady ACK/resync/reconnect 均已有可重跑 Gate。Client 不能提供 ActorId/ConnectionEpoch 或新角色出生座標，plaintext 不降級。尚缺公開帳號註冊、登入節流、原版創角外觀／職業／出生規則與完整 Release security。詳 `docs/RUNTIME_PROTOCOL.md`。
 
 ## 1.0 MVP：Map15 主城 + Map13 台地，功能完整且真實跨圖
 
@@ -121,11 +121,11 @@ Map15／Map13 原始 tile 地形已有唯一正式 Terrain Renderer；三種合�
 
 ### Identity persistence baseline - 2026-11-16
 
-Account/Character persistence baseline is SQLite schema v1. Passwords use Argon2id with bounded concurrent work; DB/KDF operations are outside World Tick. Character identity is server-owned and persistent; future CharacterChoose must prove authenticated ownership before `character_id` becomes trusted ActorId. Client-supplied ActorId/ConnectionEpoch is forbidden. Current core tests PASS, but wire login/CharacterChoose, production listener, save/reconnect lifecycle and Godot E2E are still incomplete.
+Account/Character persistence is SQLite-backed with bounded Argon2id work outside World Tick. Character identity is server-owned and persistent. Mandatory TLS now supports Auth → CharacterList → optional CharacterCreate retry loop → CharacterChoose; ownership is proven before `character_id` becomes trusted ActorId. CharacterCreate only accepts slot/name; spawn map/X/Y come from an operator-configured server policy validated against authoritative Blocking. Client-supplied ActorId/ConnectionEpoch/spawn is forbidden. Public account registration、原版外觀／職業創角資料、登入 rate limit 與 migration/backup policy remain incomplete.
 
 ### TLS identity binding baseline - 2026-11-16
 
-Inside mandatory TLS, V1 identity flow is AuthRequest -> AuthResult -> CharacterList -> CharacterChoose -> CharacterChooseResult. Character ownership is checked server-side; successful selection uses persistent character_id and stored spawn to perform trusted World registration. Only that World result creates Gateway identity. Client never supplies ConnectionEpoch or authoritative ActorId. Godot identity transport, production listener/admission/rate limits and WorldReady/reconnect remain later gates.
+Inside mandatory TLS, V1 identity flow is `AuthRequest → AuthResult → CharacterList → (CharacterCreate → CharacterCreateResult → refreshed CharacterList)* → CharacterChoose → CharacterChooseResult`. Character ownership is checked server-side; successful selection uses persistent `character_id` and stored spawn to perform trusted World registration. New-character spawn is never accepted from the Client. Godot codec/reducer/UI and real TLS Server checks cover empty-account creation、name conflict retry、refreshed list、selection and World entry without reconnect. Production admission exists; time-based login throttling/public account registration remain later gates.
 
 ### Client transport baseline - 2026-11-16
 

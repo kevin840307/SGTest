@@ -1,6 +1,6 @@
 # SGTest Server — 重建設計
 
-**狀態：已建立 .NET 8 Blocking/A*、單寫者 30Hz World、compact-binary V1、TLS listener／帳號選角與本機 provision、generation-safe AOI／跨圖及自身權威位置／方向。座標持久化、登入節流、ACK/resync、主要玩法與規模／Release Gate 仍未完成。** 目標為單體功能模組，固定世界模擬與獨立 Transport/Persistence。
+**狀態：已建立 .NET 8 Blocking/A*、單寫者 30Hz World、compact-binary V1、TLS listener／帳號認證／遊戲內創角／選角與本機 provision、generation-safe AOI／跨圖及自身權威位置／方向。創角出生點由 Host policy 指定並以 Blocking 驗證，Client 只提交 slot/name。登入節流、原版創角外觀／職業／出生規則、主要玩法與 Release Gate 仍未完成。** 目標為單體功能模組，固定世界模擬與獨立 Transport/Persistence。
 
 ## 核心邊界
 
@@ -105,7 +105,7 @@ Current gate: six Identity checks plus existing TLS/Gateway/World checks = **46/
 
 ## 2026-11-16 REB020-AUTH-CHARACTER-WIRE
 
-The TLS authorization callback now has one production implementation: `IdentityTlsAuthorization`. Its state transition is `TLS established -> AuthRequest -> Account authenticated -> CharacterList -> CharacterChoose ownership check -> TrustedRegisterAsync -> GatewayConnection -> gameplay`. No database operation runs on the World thread. The selected `character_id` is accepted only if it belongs to the authenticated Account; the authoritative spawn and first MapEpoch come from persisted server state and World registration.
+The TLS authorization callback has one production implementation: `IdentityTlsAuthorization`. Its pre-gameplay transition is `TLS established → AuthRequest → Account authenticated → CharacterList → optional CharacterCreate/result/list refresh loop → CharacterChoose ownership check → TrustedRegisterAsync → GatewayConnection → gameplay`. Character creation calls the same SQLite store outside the World thread; only slot/name arrive from Client. Spawn map/position come from `CharacterCreationPolicy`, which production Host enables only through explicit operator flags after validating the point against the served authoritative Blocking grid. The selected `character_id` is accepted only if owned by the authenticated Account.
 
 This closes the previous identity gap between TLS and World without opening a listener. It does **not** yet solve production socket admission, brute-force/rate limits, account creation, WorldReady/AOI, reconnect or Godot transport. Character selection is allowed a configurable human-scale timeout (120s default); future listener policy must bound simultaneous pre-gameplay sessions.
 
@@ -157,7 +157,7 @@ Host `serve`明確讀取兩圖world／blocking與已稽核npcs、SQLite identity
 
 Host的本機`account-create`／`character-create`委派同一SqliteIdentityStore API；管理者有本機DB權限，這不是Client網路註冊／GM RPC。密碼從隱藏終端輸入或SGTEST_ACCOUNT_PASSWORD環境來源取得，不接受CLI明碼或輸出明文。建立角色先驗證管理者明示的Map13/15位置通過同一BlockingGrid來源hash／邊界／flag0，之後驗證帳密／disabled與Store的名稱／slot政策，沒有另建SQLite或Game Rule。
 
-兩個步驟各自原子、不是跨命令交易；重複帳號不改密碼，名稱／slot衝突不修改既存角色。schema仍v1，Wire不變，無遷移。實際CLI子程序並行slot競態及CLI產生DB→真正Host serve TLS登入／選角／WorldReady／MoveReceipt已通過；此路徑發現並修正Windows Schannel不能使用該ephemeral PFX私鑰的相容性問題，Windows改UserKeySet且不設Exportable/PersistKeySet，Linux仍EphemeralKeySet。公開創角／外觀、原版預設出生點、持久座標及完整遊戲Gate仍未完成。
+兩個管理命令各自原子、不是跨命令交易；重複帳號不改密碼，名稱／slot衝突不修改既存角色。管理 CLI 與遊戲內 CharacterCreate 共用同一 `SqliteIdentityStore` 名稱／slot／角色數政策。遊戲內創角已能在既有 TLS Session 對空帳號建立角色、刷新列表並直接選角；若 Host 未設定 server-owned spawn policy 則明確回 `Unavailable` 且 DB 不變。**網路公開帳號註冊、角色外觀／種族／職業選擇、原版預設出生點與完整遊戲 Gate**仍未完成。
 
 ### 2026-11-17 Changed-only owner state
 

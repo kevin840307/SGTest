@@ -249,7 +249,7 @@ Observed E2E on Godot 4.7.2 Windows: Auth succeeds, one owned character is liste
 
 Network logic is now split into three one-way layers: `ClientTransport` owns TCP/TLS bytes, `ClientSession` owns protocol intents and a dedicated reducer thread, and `WorldState` owns presentation-free session/world state. Render/UI code has no socket polling and does not call reducer transitions; it may only queue bounded intents and read copied snapshots. This is the required boundary for AFK/unfocus modes where rendering may stop while network/world logic continues.
 
-WorldState currently enforces login/character/move-receipt generations: server-only opcodes are required in the expected state; successful CharacterChoose establishes actor/map/MapEpoch; MoveReceipt with a future MapEpoch or unsent sequence fails closed; duplicate/older sequence is ignored and counted; server tick may not regress. It deliberately has no interpolation or scene resources.
+WorldState enforces login/character/move-receipt generations and now includes an explicit `STATE_CREATING_CHARACTER`: CharacterCreateResult is legal only after a locally sent create intent, then the reducer waits for the Server's refreshed CharacterList before another create/choose. Successful CharacterChoose establishes actor/map/MapEpoch; MoveReceipt with a future MapEpoch or unsent sequence fails closed; duplicate/older sequence is ignored and counted. ClientSession queues bounded slot/name creation intents on its non-render thread; SessionPanel disables duplicate submission while awaiting Server result.
 
 The deterministic cadence gate uses a thread-safe scripted fake transport. With the same Auth -> CharacterList -> Choose -> MoveReceipt trace and identical queued intents, simulated render polling at 0/30/60/90 produces the same final reducer snapshot and byte-for-byte outbound frame order. At 0 FPS the test does not poll snapshots during the 220 ms work window; Session still completes in the background. The real secure Godot<->C# TLS fixture also passes through ClientSession. This does not yet cover future WorldReady/AOI/entity deltas; those messages must be added to this reducer and rerun through the same cadence gate before claiming complete gameplay FPS independence.
 
@@ -270,7 +270,7 @@ The real Godot↔C# fixture now proves WorldReady reaches the threaded ClientSes
 
 `ui/session_panel.gd`是現行ClientSession的UI adapter：登入／列表選角／登出；沿用憑證驗證、bounded intents與獨立transport/reducer threads。UI每50ms只讀snapshot，沒有在_process消化封包。main把WorldReady映射到唯一WorldView／AssetStore載入世代，地圖就緒後才定位Server提供的初始座標；連線時停用並守衛本地檢視Map按鈕，左鍵移動交給Server。Server MapEpoch與資源owner epoch保持分開。取消／錯誤／Scene退出停止Session，提交密碼立即從UI清除。
 
-真Godot main UI→正式C# TLS fixture的Auth／選角／WorldReady／MoveReceipt／logout PASS；錯誤返回與UI密碼／輸入鎖定亦驗證，CI加入--app-ui。原版素材回歸12 captures／38來源幀PASS；兩者不是完整網路角色畫面Gate。尚缺：創角、正式Host listener、玩家Paper-doll／位置插值／AOI視覺與NPC點擊；不因本UI切片標MVP完成。
+真Godot main UI→正式C# TLS fixture的 Auth／選角／WorldReady／MoveReceipt／logout PASS；登入面板現亦提供遊戲內創角 slot/name 控制，送出後鎖定直到 Server result/list refresh。CharacterCreate codec/reducer/UI boundary 與 Server 真 TLS empty-account create→conflict→refresh→choose Gate 均已通過。尚缺原版創角 Race/Career／外觀／能力值與預設出生規則、玩家完整 Paper-doll／真私有地圖多人視覺等，不因此切片標 MVP 完成。
 
 ### 2026-11-17 Owner state delivery
 
