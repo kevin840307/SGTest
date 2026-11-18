@@ -15,6 +15,8 @@ internal static class IdentityTlsAuthorizationChecks
             () => OwnedCharacterEntersWorld(root).GetAwaiter().GetResult());
         Checks.Run("TLS empty account creates character, refreshes list and enters World without reconnect",
             () => CreateCharacterAndEnterWorld(root).GetAwaiter().GetResult());
+        Checks.Run("TLS character creation is unavailable without server-authorized spawn policy",
+            () => CharacterCreationRequiresPolicy(root).GetAwaiter().GetResult());
         Checks.Run("TLS invalid password never reaches CharacterList or World",
             () => InvalidPasswordRejected(root).GetAwaiter().GetResult());
         Checks.Run("TLS authenticated account cannot choose another account character",
@@ -174,6 +176,61 @@ internal static class IdentityTlsAuthorizationChecks
             Checks.Require(ended.Reason == TlsWireEndReason.CleanEof &&
                 (await store.ListCharactersAsync(accountId)).Count == 1,
                 "created character lifecycle did not persist cleanly");
+            await world.StopAsync();
+        }
+        finally { Directory.Delete(identityRoot, true); }
+    }
+
+
+    private static async Task CharacterCreationRequiresPolicy(string root)
+    {
+        string identityRoot = TempRoot();
+        try
+        {
+            string mapDir = Checks.Fixture(root, 75, 3, 3, (_, _) => 0);
+            var grid = BlockingGrid.Load(mapDir, 75);
+            await using var world = new ServerWorldHost([grid]);
+            await world.StartAsync();
+            using var store = new SqliteIdentityStore(
+                Path.Combine(identityRoot, "identity.db"));
+            await store.InitializeAsync();
+            long accountId = (await store.CreateAccountAsync(
+                "no_spawn", "No-Spawn-Password-123!")).AccountId;
+            var authorization = new IdentityTlsAuthorization(store, world);
+            var (tls, serverTask, client) = await StartSession(authorization, world);
+
+            await tls.WriteAsync(WireProtocol.EncodeAuthRequest(
+                new("no_spawn", "No-Spawn-Password-123!")));
+            await tls.FlushAsync();
+            Checks.Require(WireProtocol.TryDecodeAuthResult(
+                    await ReadFrameAsync(tls), out var auth) &&
+                auth.Status == AuthWireStatus.Success,
+                "no-policy account auth failed");
+            Checks.Require(WireProtocol.TryDecodeCharacterList(
+                    await ReadFrameAsync(tls), out var empty) &&
+                empty.Characters.Count == 0,
+                "no-policy empty account list mismatch");
+
+            await tls.WriteAsync(WireProtocol.EncodeCharacterCreate(
+                new(0, "CannotSpawn")));
+            await tls.FlushAsync();
+            Checks.Require(WireProtocol.TryDecodeCharacterCreateResult(
+                    await ReadFrameAsync(tls), out var denied) &&
+                denied.Status == CharacterCreateWireStatus.Unavailable &&
+                denied.CharacterId == 0,
+                "creation without server spawn policy was not refused");
+            Checks.Require(WireProtocol.TryDecodeCharacterList(
+                    await ReadFrameAsync(tls), out var refreshed) &&
+                refreshed.Characters.Count == 0 &&
+                (await store.ListCharactersAsync(accountId)).Count == 0,
+                "refused character creation mutated persistent account");
+
+            await tls.DisposeAsync();
+            client.Dispose();
+            var ended = await serverTask.WaitAsync(TimeSpan.FromSeconds(2));
+            Checks.Require(ended.Reason == TlsWireEndReason.AuthorizationRejected &&
+                world.Statistics.ActiveActors == 0,
+                "no-policy creation entered World");
             await world.StopAsync();
         }
         finally { Directory.Delete(identityRoot, true); }
