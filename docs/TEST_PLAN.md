@@ -20,6 +20,25 @@
 
 **MVP 後的全圖／全種類／更大負載**：其他地圖與完整傳點網絡、所有原版 NPC/Enemy/裝備/技能、100 Player／1000 Enemy／5000 Drop、多開 8、Windows/Mac 完整發行；MVP 不能代替全量驗收。
 
+## MVP008-MIXED-TLS-RESYNC — 20 條真實 TLS 的 300 怪／500 Drop AOI 回補（部分完成）
+
+2026-11-18：正式 `WorldAoiPumpChecks.TwentyPlayersThreeHundredMonsters` 在原有 20 Actor/300 Monster/500 GroundDrop 分區權威壓測全部通過後，啟動**20 條真正 loopback TCP/TLS 1.2/1.3 socket**，透過相同的 `TlsWireConnection.RunServerAsync`、`GatewayConnection`、`WorldResultRouter`、`WorldAoiPump` 與單一 30Hz `ServerWorldHost`。Fixture 內直接綁定既有 trusted Test Actor，故**不是 20 組帳密、完整登入／Host listener 壓測，也沒有 20 個 Godot 進程**。Client 在每條 TLS stream 發送真 `WorldReadyAck`（之前觀測到的 WorldReady tick），等待全部 ACK Gate 打開，再送 `WorldResyncRequest`；Server AOI 唯一 owner 重建 WorldReady/SelfState/本區 Spawn，Client 以 `SslStream.ReadExactlyAsync` 逐一解碼 compact-binary 封包，嚴格驗證每角色恰好 15 筆本地 MonsterSpawn 和 25 筆本地 GroundDropSpawn、無外區 UID、重複/錯包拒絕、20 個 socket 未中途退出、終止均為 TLS 1.2/1.3 的正常結束。
+
+這條測試不另外提供第二套 gameplay/authority，也不修改正式 Wire。於一次新的 ubuntu-24.04 / .NET 8 Release GitHub [Server core run 44297192595](https://github.com/kevin840307/SGTest/actions/runs/44297192595) **PASS**（正式 Server Core + Host + LoginFixture Release build 0 warning/0 error；156/156 Server Checks；原有 checkpoint crash 測試 PASS）。本次輸出：
+
+| 指標 | 單次 CI 實測 |
+|---|---:|
+| 同張 synthetic Map 玩家／怪／掉落 | 20／300／500 |
+| 同時 TLS connection | 20 |
+| 透過 TLS Client 實際解碼 frame 數 | 1,032 |
+| 解碼 compact-binary payload，含各種 AOI Delta | 66,756 bytes |
+| 每條 resync 至收到完整本地 baseline P50 | 38.16ms |
+| 每條 resync 至收到完整本地 baseline P95 | 38.62ms |
+| 每條 resync 至收到完整本地 baseline P99 | 38.88ms |
+| 外區污染／重播 baseline UID | 0 |
+
+延遲是從各 TLS Client 發出請求開始至讀完本區 AOI baseline 結束的同機時間，20 個請求按順序寫入但接收是並行。數值含 TCP/TLS、AOI 排程、發送及 client 接收，沒有 WAN 延遲、Godot 渲染／GPU／input-to-render、角色物件轉場、完整 `IdentityTlsAuthorization` 帳密／ServerListener Admission。Client stream 中允許同時混入已驗證的 MonsterDelta，不把它當成怪物 Spawn 重複。此次資源與時序為單次 CI，不能設為效能硬門檻，也無法推論 20 人密集同視野／300 怪攻擊／500 件 DB 持久結算時 P99。**MVP008 仍 [ ]**；下一階段需完全認證 20 真連線、混合密集負載、Windows 真 Godot/PCK GPU、多開及完整 CPU/RSS/VRAM＋Tick/Pump/Frame P95/P99。
+
 ## MVP008-MIXED-AOI-LOAD — 20 玩家／300 怪／500 掉落同場 Server 管線驗證（部分完成）
 
 2026-11-18：沿用唯一 `server/tests/SGTest.Server.Checks/WorldAoiPumpChecks.cs` 的 20 Player / 300 verified synthetic Monster、30Hz `ServerWorldHost` / `WorldResultRouter` / `MonsterWorldCoordinator` / `WorldAoiPump` 測試，新增同 Map 500 筆 test-only `GroundDropRecord`，在 AOI Owner 啟動前 seed，沒有新 Server 實作或第二套 AOI。20 個 Player 分成 5×4 隔離群，每群 15 Monster + 25 Drop，AOI 可見限制 64、Observer 上限 64、每次每 Observer 最多送64 frame，確保權威單一源與可靠 FIFO。每個 Observer 驗證精確 15 本地 Monster + 25 本地 Drop，跨群的 UID/SourceIndex 不可進入自己的 reliable queue；後續 900ms AI 更新不能重發不變的地面物；統計 World Tick、AI per-step、佇列 frames/bytes、實際 compact binary output bytes。舊 20 viewer × 500 全部可見的獨立 AOI 測試仍保留，這項只驗證新的三種實體**同時存在**於分群負載。
