@@ -1,4 +1,5 @@
 using System.Net;
+using System.Globalization;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
@@ -35,6 +36,30 @@ internal static class TlsHost
                 OperatingSystem.IsWindows() ? X509KeyStorageFlags.UserKeySet : X509KeyStorageFlags.EphemeralKeySet);
             var maps = new[] { 13, 15 }.Select(id =>
                 BlockingGrid.Load(Path.Combine(root, "maps", id.ToString()), id)).ToArray();
+
+            string[] characterSpawnKeys =
+                ["--character-spawn-map", "--character-spawn-x", "--character-spawn-y"];
+            bool anyCharacterSpawn =
+                characterSpawnKeys.Any(options.ContainsKey);
+            if (anyCharacterSpawn &&
+                characterSpawnKeys.Any(key => !options.ContainsKey(key)))
+                throw new ArgumentException(
+                    "Character creation spawn requires map, x and y together");
+            CharacterCreationPolicy? characterCreation = null;
+            if (anyCharacterSpawn)
+            {
+                int mapId = Number(options, "--character-spawn-map", 0, 1, 65535);
+                double x = Real(options, "--character-spawn-x");
+                double y = Real(options, "--character-spawn-y");
+                var map = maps.SingleOrDefault(candidate => candidate.MapId == mapId)
+                    ?? throw new ArgumentException(
+                        "--character-spawn-map must be one of the served maps");
+                if (!map.TryWorldCell(x, y, out var cell) || !map.IsWalkable(cell))
+                    throw new ArgumentException(
+                        "Character creation spawn must be inside a walkable Blocking cell");
+                characterCreation = new(new CharacterSpawn(mapId, x, y));
+            }
+
             var monsterRuntimes = new List<MonsterRuntime>();
             foreach (var map in maps)
             {
@@ -132,7 +157,8 @@ internal static class TlsHost
             var authorization = new IdentityTlsAuthorization(
                 identity, world, portals, positions, combat,
                 pickupWorldGeneration: lootGeneration,
-                recoveryRules: recoveryRules);
+                recoveryRules: recoveryRules,
+                characterCreation: characterCreation);
             await using var listener = new TlsGatewayListener(address, port, authorization,
                 certificate, router, new(MaxConnections: maximum, MaxConnectionsPerAddress: perAddress));
             await world.StartAsync();
@@ -159,7 +185,9 @@ internal static class TlsHost
                     loot_rule_count = dropRules?.Count ?? 0,
                     verified_recovery_rule_count = recoveryRules?.Count ?? 0,
                     verified_skill_rule_count = skillRules?.Count ?? 0,
-                    unpicked_ground_drops = activeDrops.Count
+                    unpicked_ground_drops = activeDrops.Count,
+                    character_creation_enabled = characterCreation is not null,
+                    character_creation_map = characterCreation?.Spawn.MapId
                 }));
                 var stopping = Task.Delay(Timeout.Infinite, stop.Token);
                 var completed = await Task.WhenAny(
@@ -213,7 +241,9 @@ internal static class TlsHost
             Console.Error.WriteLine("Usage: serve --content <PRIVATE_ROOT> --identity <DB> --certificate <PFX> " +
                 "[--bind 127.0.0.1] [--port 7777] [--max-connections 128] [--max-per-address 8] " +
                 "[--position-checkpoint-ms 5000] [--loot-rules <VERIFIED_JSON>] " +
-                "[--recovery-rules <VERIFIED_JSON>] [--skill-rules <VERIFIED_JSON>] [--seconds N]");
+                "[--recovery-rules <VERIFIED_JSON>] [--skill-rules <VERIFIED_JSON>] " +
+                "[--character-spawn-map <13|15> --character-spawn-x <X> --character-spawn-y <Y>] " +
+                "[--seconds N]");
             return 2;
         }
         catch (OperationCanceledException) when (stop.IsCancellationRequested) { return 0; }
@@ -233,7 +263,9 @@ internal static class TlsHost
     {
         string[] known = ["--content", "--identity", "--certificate", "--bind", "--port",
                           "--max-connections", "--max-per-address", "--position-checkpoint-ms",
-                          "--loot-rules", "--recovery-rules", "--skill-rules", "--seconds"];
+                          "--loot-rules", "--recovery-rules", "--skill-rules",
+                          "--character-spawn-map", "--character-spawn-x",
+                          "--character-spawn-y", "--seconds"];
         var values = new Dictionary<string, string>(StringComparer.Ordinal);
         if (args.Length % 2 != 0) throw new ArgumentException("Every option requires a value");
         for (int i = 0; i < args.Length; i += 2)
@@ -249,7 +281,16 @@ internal static class TlsHost
     private static int Number(Dictionary<string, string> options, string name, int fallback, int min, int max)
     {
         if (!options.TryGetValue(name, out var value)) return fallback;
-        return int.TryParse(value, out int number) && number >= min && number <= max
+        return int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out int number) &&
+               number >= min && number <= max
+            ? number : throw new ArgumentException("Invalid " + name);
+    }
+
+    private static double Real(Dictionary<string, string> options, string name)
+    {
+        string value = Required(options, name);
+        return double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture,
+                out double number) && double.IsFinite(number)
             ? number : throw new ArgumentException("Invalid " + name);
     }
 }
