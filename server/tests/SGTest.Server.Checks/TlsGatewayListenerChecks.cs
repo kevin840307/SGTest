@@ -33,6 +33,8 @@ internal static class TlsGatewayListenerChecks
             () => SessionFailure(root).GetAwaiter().GetResult());
         Checks.Run("Host serve boots TLS on synthetic maps, stops cleanly and rejects invalid CLI",
             () => HostEntry(root).GetAwaiter().GetResult());
+        Checks.Run("20 distinct accounts use real TLS listener auth, choose, AOI and move receipt with cleanup",
+            () => AuthenticatedTwentyClients(root).GetAwaiter().GetResult());
     }
 
     private static async Task InvalidConfiguration(string root)
@@ -498,6 +500,224 @@ internal static class TlsGatewayListenerChecks
             "--certificate", pfx, "--bind", "not-an-ip");
         Checks.Require(invalid.Exit == 2 && !invalid.Out.Contains("TLS_HOST_READY"),
             "invalid host configuration opened a listener");
+    }
+
+
+    /// <summary>
+    /// End-to-end admission through the real listener and SQLite identity.
+    /// Unlike the earlier pre-bound 20-TLS AOI resync test, each independent
+    /// client must authenticate its own account, select its own character,
+    /// and verify every other actor appears through the shared AOI pipeline.
+    /// This is a synthetic 20-client .NET loopback test, not 20 Godot renderers.
+    /// </summary>
+    private static async Task AuthenticatedTwentyClients(string root)
+    {
+        const int players = 20;
+        const string password = "Listener-Password-123!";
+        await using var fixture = await Fixture.Create(root);
+        var accounts = new (string Username, long CharacterId)[players];
+        accounts[0] = ("listener_user", fixture.CharacterId);
+        for (int i = 1; i < players; i++)
+        {
+            string username = $"load_user_{i:D2}";
+            long accountId = (await fixture.Store.CreateAccountAsync(username, password))
+                .AccountId;
+            var character = await fixture.Store.CreateCharacterAsync(
+                accountId, 0, $"LoadHero{i:D2}", new CharacterSpawn(115, 8, 8));
+            accounts[i] = (username, character.Character?.CharacterId ??
+                throw new Exception("20-client synthetic character creation failed"));
+        }
+        Checks.Require(accounts.Select(x => x.CharacterId).Distinct().Count() == players,
+            "load accounts share a CharacterId");
+
+        await using var listener = fixture.Listener(new(
+            MaxConnections: players, MaxConnectionsPerAddress: players, Backlog: 32,
+            Connection: new TlsWireConnectionOptions(
+                HandshakeTimeoutMilliseconds: 10000,
+                AuthorizationTimeoutMilliseconds: 30000)));
+        using var stop = new CancellationTokenSource();
+        using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(50));
+        var run = listener.RunAsync(stop.Token);
+        var allRead = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        int readCount = 0;
+        long transferredBytes = 0;
+        int receivedSpawns = 0;
+        int receipts = 0;
+        var readyDurations = new double[players];
+        try
+        {
+            async Task RunPlayer(int index)
+            {
+                long started = Stopwatch.GetTimestamp();
+                using var client = new TcpClient(AddressFamily.InterNetwork);
+                await client.ConnectAsync(listener.LocalEndpoint, deadline.Token);
+                // Pin the fixture's ephemeral self-signed certificate instead
+                // of disabling certificate validation for this E2E login.
+                using var tls = new SslStream(client.GetStream(), false,
+                    (_, certificate, _, _) =>
+                        certificate?.GetCertHashString() ==
+                        fixture.Certificate.GetCertHashString());
+                await TlsSocketChecks.AuthenticateClient(tls)
+                    .WaitAsync(deadline.Token);
+                async Task<byte[]> Receive()
+                {
+                    var header = new byte[WireProtocol.HeaderBytes];
+                    await tls.ReadExactlyAsync(header, deadline.Token);
+                    int length = BinaryPrimitives.ReadInt32LittleEndian(header);
+                    Checks.Require(length >= WireProtocol.HeaderBytes &&
+                        length <= WireProtocol.MaximumFrameBytes,
+                        $"authenticated client {index} invalid TLS frame length");
+                    var frame = new byte[length];
+                    header.CopyTo(frame, 0);
+                    await tls.ReadExactlyAsync(frame.AsMemory(header.Length), deadline.Token);
+                    Checks.Require(WireProtocol.TryReadHeader(frame, out _),
+                        $"authenticated client {index} invalid compact header");
+                    Interlocked.Add(ref transferredBytes, length);
+                    return frame;
+                }
+
+                await tls.WriteAsync(WireProtocol.EncodeAuthRequest(
+                    new(accounts[index].Username, password)), deadline.Token);
+                Checks.Require(WireProtocol.TryDecodeAuthResult(
+                    await Receive(), out var auth) && auth.Status == AuthWireStatus.Success,
+                    $"load authentication failed for account {index}");
+                Checks.Require(WireProtocol.TryDecodeCharacterList(
+                    await Receive(), out var list) &&
+                    list.Characters.Count == 1 &&
+                    list.Characters[0].CharacterId == accounts[index].CharacterId,
+                    $"load account {index} character ownership leaked");
+                await tls.WriteAsync(WireProtocol.EncodeCharacterChoose(
+                    new(accounts[index].CharacterId)), deadline.Token);
+                Checks.Require(WireProtocol.TryDecodeCharacterChooseResult(
+                    await Receive(), out var choice) &&
+                    choice.Status == CharacterChooseWireStatus.Success &&
+                    choice.CharacterId == accounts[index].CharacterId &&
+                    choice.MapId == 115, $"load character {index} choose failed");
+                Checks.Require(WireProtocol.TryDecodeInventorySnapshot(
+                    await Receive(), out var inventory) &&
+                    inventory.CharacterId == accounts[index].CharacterId &&
+                    inventory.Complete &&
+                    inventory.Items.Count == (index == 0 ? 2 : 0),
+                    $"load inventory {index} was not owned by the selected actor");
+
+                // Every session receives its own WorldReady generation, then
+                // ACKs on the real parser before posting an ordinary MoveTarget.
+                var seen = new HashSet<long>();
+                bool worldReady = false;
+                bool receiptSeen = false;
+                bool selfStateSeen = false;
+                int frames = 0;
+                while (!worldReady || !receiptSeen || !selfStateSeen ||
+                    seen.Count < players - 1)
+                {
+                    var frame = await Receive();
+                    var valid = WireProtocol.TryReadHeader(frame, out var header);
+                    Checks.Require(valid && ++frames <= 128,
+                        $"load client {index} AOI frame limit exceeded");
+                    switch (header.Opcode)
+                    {
+                        case WireOpcode.WorldReady:
+                            Checks.Require(!worldReady &&
+                                WireProtocol.TryDecodeWorldReady(frame, out var ready) &&
+                                ready.ActorId == choice.CharacterId &&
+                                ready.ReceiverMapEpoch == choice.MapEpoch,
+                                $"load client {index} received an invalid WorldReady");
+                            worldReady = true;
+                            await tls.WriteAsync(WireProtocol.EncodeWorldReadyAck(
+                                new(choice.MapEpoch, ready.ServerTick)), deadline.Token);
+                            await tls.WriteAsync(WireProtocol.EncodeMoveTarget(
+                                new(choice.MapEpoch, 1, 24, 8)), deadline.Token);
+                            break;
+                        case WireOpcode.SelfState:
+                            Checks.Require(worldReady &&
+                                WireProtocol.TryDecodeEntityState(
+                                    frame, out _, out var self) &&
+                                self.ActorId == choice.CharacterId &&
+                                self.ReceiverMapEpoch == choice.MapEpoch,
+                                $"load client {index} received foreign self state");
+                            selfStateSeen = true;
+                            break;
+                        case WireOpcode.EntitySpawn:
+                            Checks.Require(worldReady &&
+                                WireProtocol.TryDecodeEntityState(
+                                    frame, out _, out var peer) &&
+                                peer.ReceiverMapEpoch == choice.MapEpoch &&
+                                peer.ActorId != choice.CharacterId &&
+                                accounts.Any(x => x.CharacterId == peer.ActorId) &&
+                                seen.Add(peer.ActorId),
+                                $"load client {index} saw a foreign or repeated Spawn");
+                            break;
+                        case WireOpcode.EntityDelta:
+                            Checks.Require(WireProtocol.TryDecodeEntityState(
+                                frame, out _, out var delta) &&
+                                delta.ActorId != choice.CharacterId &&
+                                accounts.Any(x => x.CharacterId == delta.ActorId),
+                                $"load client {index} foreign AOI Delta");
+                            break;
+                        case WireOpcode.MoveReceipt:
+                            Checks.Require(!receiptSeen &&
+                                WireProtocol.TryDecodeMoveReceipt(
+                                    frame, out var move) &&
+                                move.MapEpoch == choice.MapEpoch &&
+                                move.MovementSequence == 1 &&
+                                move.Status == MoveReceiptStatus.Accepted,
+                                $"load client {index} move did not ACK");
+                            receiptSeen = true;
+                            break;
+                        default:
+                            throw new Exception(
+                                $"load client {index} unexpected wire opcode {header.Opcode}");
+                    }
+                }
+                readyDurations[index] =
+                    Stopwatch.GetElapsedTime(started).TotalMilliseconds;
+                Interlocked.Add(ref receivedSpawns, seen.Count);
+                Interlocked.Increment(ref receipts);
+                if (Interlocked.Increment(ref readCount) == players)
+                    allRead.TrySetResult();
+                // Do not let early clients disconnect before slower peers
+                // have observed their complete 19-player presence baseline.
+                await allRead.Task.WaitAsync(deadline.Token);
+            }
+
+            await Task.WhenAll(Enumerable.Range(0, players)
+                .Select(RunPlayer)).WaitAsync(deadline.Token);
+            Checks.Require(fixture.Host.Statistics.ActiveActors == players &&
+                fixture.Router.Statistics.ActiveSessions == players &&
+                listener.Statistics.ActiveConnections == players,
+                "not all 20 separately authenticated sessions were simultaneously alive");
+            // The above scopes dispose when the workers complete. World cleanup
+            // may run asynchronously after TCP EOF; the listener must settle it.
+            await Until(() => fixture.Host.Statistics.ActiveActors == 0 &&
+                fixture.Router.Statistics.ActiveSessions == 0 &&
+                listener.Statistics.ActiveConnections == 0);
+            var stats = listener.Statistics;
+            Checks.Require(stats.AcceptedConnections == players &&
+                stats.CompletedConnections == players &&
+                stats.CommandsAccepted == players &&
+                stats.RejectedAddress == 0 && stats.RejectedCapacity == 0 &&
+                receivedSpawns == players * (players - 1) && receipts == players,
+                "20 authenticated client listener/AOI/Move cleanup or accounting mismatch");
+            Array.Sort(readyDurations);
+            static double Percentile(double[] times, double fraction) =>
+                times[Math.Clamp((int)Math.Ceiling(times.Length * fraction) - 1,
+                    0, times.Length - 1)];
+            Console.WriteLine(
+                $"SERVER_AUTHENTICATED_20_TLS_PASS distinct_accounts={players} " +
+                $"concurrent_sessions={players} peer_spawns={receivedSpawns} " +
+                $"move_receipts={receipts} server_framed_bytes={transferredBytes} " +
+                $"login_to_full_AOI_p50_ms={Percentile(readyDurations, .50):F2} " +
+                $"login_to_full_AOI_p95_ms={Percentile(readyDurations, .95):F2} " +
+                $"login_to_full_AOI_p99_ms={Percentile(readyDurations, .99):F2} " +
+                $"admission_rejections={stats.RejectedAddress + stats.RejectedCapacity} " +
+                "synthetic_map=true godot_clients=0 tls=true");
+        }
+        finally
+        {
+            stop.Cancel();
+            await run.WaitAsync(TimeSpan.FromSeconds(10));
+        }
     }
 
     private static async Task Until(Func<bool> condition)
