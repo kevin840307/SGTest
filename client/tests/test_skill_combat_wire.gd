@@ -2,6 +2,7 @@ extends SceneTree
 const WireCodec = preload("res://network/wire_codec.gd")
 const WorldState = preload("res://network/world_state.gd")
 const MONSTER_ID := 1001500001
+const MONSTER_ID_2 := 1001500002
 
 func _fail(message: String) -> void:
 	push_error("SKILL_COMBAT_GODOT_FAIL "+message)
@@ -22,6 +23,7 @@ func _initialize() -> void:
 	world.world_ready=true
 	world.last_world_ready_ack_epoch=1
 	world.monsters[MONSTER_ID]={"entity_id":MONSTER_ID,"current_hp":100,"max_hp":100,"revision":1,"state":0}
+	world.monsters[MONSTER_ID_2]={"entity_id":MONSTER_ID_2,"current_hp":100,"max_hp":100,"revision":1,"state":0}
 	if not world.mark_skill_sent(1):
 		_fail("skill send gate")
 		return
@@ -42,6 +44,17 @@ func _initialize() -> void:
 	world.self_state={"connection_epoch":9}
 	if not world.apply_frame(visual) or world.snapshot().player_skill_events.size()!=1:
 		_fail("skill visual reducer")
+		return
+	var second_visual := _skill_visual(1,42,11,9,1,99001,MONSTER_ID_2,0,60,2,6)
+	if not world.apply_frame(second_visual) or world.snapshot().player_skill_events.size()!=2:
+		_fail("same skill sequence second AoE target visual rejected")
+		return
+	if not world.apply_frame(visual) or int(world.snapshot().stale_player_skill_visuals)!=1:
+		_fail("same skill sequence duplicate target visual not stale")
+		return
+	var skill_memory: Dictionary = world.snapshot().player_skill_sequences[11]
+	if int(skill_memory.sequence)!=1 or (skill_memory.targets as Dictionary).size()!=2:
+		_fail("AoE target replay memory mismatch")
 		return
 	var snap: Dictionary=world.snapshot()
 	if int(snap.last_skill_result_sequence)!=1 or int(snap.last_skill_result_status)!=0 or int(snap.last_skill_result.damage)!=60:
@@ -92,7 +105,7 @@ func _initialize() -> void:
 		_fail("future-map skill result did not fail closed")
 		return
 
-	print("SKILL_COMBAT_GODOT_PASS request_bytes=32 result_bytes=61 visual_bytes=70 client_damage_absent=true area_target_zero=true area_summary_no_hp_authority=true receipt_does_not_mutate_monster=true visual_is_presentation_only=true duplicate_stale=true future_map_fail_closed=true")
+	print("SKILL_COMBAT_GODOT_PASS request_bytes=32 result_bytes=61 visual_bytes=70 client_damage_absent=true area_target_zero=true area_summary_no_hp_authority=true same_sequence_multi_target_visual=true duplicate_target_stale=true receipt_does_not_mutate_monster=true visual_is_presentation_only=true duplicate_stale=true future_map_fail_closed=true")
 	quit(0)
 
 func _skill_result(epoch: int, sequence: int, status: int, tick: int,

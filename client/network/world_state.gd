@@ -54,6 +54,7 @@ var player_respawn_visual_sequences := {}
 var stale_player_respawn_visuals := 0
 const PLAYER_ATTACK_EVENT_TTL_TICKS := 120
 const PLAYER_ATTACK_EVENT_MAX := 4096
+const PLAYER_SKILL_TARGETS_PER_SEQUENCE_MAX := 1024
 const PLAYER_COMBAT_VISUAL_EVENT_TTL_TICKS := 120
 const PLAYER_COMBAT_VISUAL_EVENT_MAX := 4096
 var combat_available := false
@@ -829,10 +830,30 @@ func _apply_player_skill_visual(frame: PackedByteArray) -> bool:
 	if not prior.is_empty():
 		if int(prior.get("connection_epoch",0)) != connection:
 			return _need_resync("player_skill_visual_sequence_generation")
-		if sequence <= int(prior.get("sequence",0)):
+		var prior_sequence := int(prior.get("sequence",0))
+		if sequence < prior_sequence:
 			stale_player_skill_visuals += 1
 			return true
-	player_skill_sequences[attacker]={"connection_epoch":connection,"sequence":sequence}
+		if sequence == prior_sequence:
+			var targets: Dictionary = prior.get("targets",{})
+			if targets.has(target):
+				stale_player_skill_visuals += 1
+				return true
+			if targets.size() >= PLAYER_SKILL_TARGETS_PER_SEQUENCE_MAX:
+				return fail("player_skill_visual_target_set_overflow")
+			targets = targets.duplicate(true)
+			targets[target] = true
+			prior = prior.duplicate(true)
+			prior["targets"] = targets
+			player_skill_sequences[attacker] = prior
+		else:
+			player_skill_sequences[attacker]={
+				"connection_epoch":connection,"sequence":sequence,
+				"targets":{target:true}}
+	else:
+		player_skill_sequences[attacker]={
+			"connection_epoch":connection,"sequence":sequence,
+			"targets":{target:true}}
 	player_skill_events.append(value.duplicate(true))
 	var cutoff := maxi(int(value.server_tick),last_aoi_tick)-PLAYER_ATTACK_EVENT_TTL_TICKS
 	while not player_skill_events.is_empty() and int(player_skill_events[0].get("server_tick",-1)) < cutoff:
