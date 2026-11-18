@@ -53,7 +53,12 @@ public enum WireOpcode : ushort
     ShopSnapshot = 48,
     ShopBuy = 49,
     ShopSell = 50,
-    ShopTransactionResult = 51
+    ShopTransactionResult = 51,
+    StorageOpen = 52,
+    StorageSnapshot = 53,
+    StorageDeposit = 54,
+    StorageWithdraw = 55,
+    StorageTransferResult = 56
 }
 
 public enum AuthWireStatus : byte { Success = 0, InvalidCredentials = 1, Disabled = 2 }
@@ -82,6 +87,15 @@ public enum ShopOpenStatus : byte
     Opened = 0,
     StaleGeneration = 1,
     UnknownShop = 2,
+    TooFar = 3,
+    PlayerDead = 4
+}
+
+public enum StorageOpenStatus : byte
+{
+    Opened = 0,
+    StaleGeneration = 1,
+    UnknownStorage = 2,
     TooFar = 3,
     PlayerDead = 4
 }
@@ -206,6 +220,21 @@ public readonly record struct ShopTransactionResultWire(
     ShopTransactionStatus Status,int NpcSpawnId,long Money,
     long ItemUid,int ItemDefinitionId,int Quantity,int RemainingQuantity);
 
+public readonly record struct StorageOpenWire(
+    long MapEpoch,uint StorageSequence,int NpcSpawnId);
+public readonly record struct StorageItemWire(
+    long ItemUid,int ItemDefinitionId,int Quantity,long SourceDropId);
+public sealed record StorageSnapshotWire(
+    long MapEpoch,uint StorageSequence,StorageOpenStatus Status,
+    int NpcSpawnId,int StartIndex,bool Complete,
+    IReadOnlyList<StorageItemWire> Items);
+public readonly record struct StorageMoveWire(
+    long MapEpoch,uint StorageSequence,int NpcSpawnId,long ItemUid);
+public readonly record struct StorageTransferResultWire(
+    long MapEpoch,uint StorageSequence,StorageTransferKind Kind,
+    StorageTransferStatus Status,int NpcSpawnId,long ItemUid,
+    int ItemDefinitionId,int Quantity,long SourceDropId);
+
 /// <summary>
 /// Version 1 complete-frame codec. Transport/TLS/socket buffering is separate.
 /// Header = uint32 frameBytes + uint16 version + uint16 opcode, little-endian.
@@ -272,6 +301,15 @@ public static class WireProtocol
         HeaderBytes + 8 + 4 + 1 + 4 + 8 + 2;
     public const int ShopItemBytes = 20;
     public const int ShopSnapshotMaxItems = 256;
+    public const int StorageOpenFrameBytes = HeaderBytes + 8 + 4 + 4;
+    public const int StorageMoveFrameBytes = HeaderBytes + 8 + 4 + 4 + 8;
+    public const int StorageSnapshotHeaderBytes =
+        HeaderBytes + 8 + 4 + 1 + 4 + 4 + 1 + 2;
+    public const int StorageItemBytes = 24;
+    public const int StorageSnapshotMaxItemsPerFrame = 128;
+    public const int StorageSnapshotMaxItems = 4095;
+    public const int StorageTransferResultFrameBytes =
+        HeaderBytes + 8 + 4 + 1 + 1 + 4 + 8 + 4 + 4 + 8;
     private static readonly UTF8Encoding StrictUtf8 = new(false, true);
 
     public static byte[] EncodeMoveTarget(MoveTargetWire value)
@@ -1923,6 +1961,206 @@ public static class WireProtocol
     private static void WriteFloat(Span<byte> target, float value) =>
         BinaryPrimitives.WriteInt32LittleEndian(target, BitConverter.SingleToInt32Bits(value));
 
+    public static byte[] EncodeStorageOpen(StorageOpenWire value)
+    {
+        if(value.MapEpoch<=0||value.StorageSequence==0||value.NpcSpawnId<=0)
+            throw new ArgumentOutOfRangeException(nameof(value));
+        var frame=NewFrame(WireOpcode.StorageOpen,StorageOpenFrameBytes);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(8,8),value.MapEpoch);
+        BinaryPrimitives.WriteUInt32LittleEndian(frame.AsSpan(16,4),value.StorageSequence);
+        BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(20,4),value.NpcSpawnId);
+        return frame;
+    }
+
+    public static bool TryDecodeStorageOpen(
+        ReadOnlySpan<byte> frame,out StorageOpenWire value)
+    {
+        value=default;
+        if(!TryReadHeader(frame,out var h)||h.Opcode!=WireOpcode.StorageOpen)
+            return false;
+        value=new(
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(8,8)),
+            BinaryPrimitives.ReadUInt32LittleEndian(frame.Slice(16,4)),
+            BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(20,4)));
+        return value.MapEpoch>0&&value.StorageSequence>0&&value.NpcSpawnId>0;
+    }
+
+    public static byte[] EncodeStorageSnapshot(StorageSnapshotWire value)
+    {
+        ArgumentNullException.ThrowIfNull(value);
+        if(value.MapEpoch<=0||value.StorageSequence==0||value.NpcSpawnId<=0||
+           value.StartIndex<0||value.StartIndex>StorageSnapshotMaxItems||
+           value.Items is null||value.Items.Count>StorageSnapshotMaxItemsPerFrame||
+           value.StartIndex+value.Items.Count>StorageSnapshotMaxItems||
+           (byte)value.Status>(byte)StorageOpenStatus.PlayerDead)
+            throw new ArgumentOutOfRangeException(nameof(value));
+        if(value.Status!=StorageOpenStatus.Opened &&
+           (value.StartIndex!=0||!value.Complete||value.Items.Count!=0))
+            throw new ArgumentOutOfRangeException(nameof(value));
+        var seen=new HashSet<long>();
+        foreach(var item in value.Items)
+            if(item.ItemUid<=0||item.ItemDefinitionId is <1 or >100_000_000||
+               item.Quantity is <1 or >1_000_000||item.SourceDropId<0||
+               !seen.Add(item.ItemUid))
+                throw new ArgumentOutOfRangeException(nameof(value));
+        var frame=NewFrame(WireOpcode.StorageSnapshot,
+            StorageSnapshotHeaderBytes+value.Items.Count*StorageItemBytes);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(8,8),value.MapEpoch);
+        BinaryPrimitives.WriteUInt32LittleEndian(frame.AsSpan(16,4),value.StorageSequence);
+        frame[20]=(byte)value.Status;
+        BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(21,4),value.NpcSpawnId);
+        BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(25,4),value.StartIndex);
+        frame[29]=value.Complete?(byte)1:(byte)0;
+        BinaryPrimitives.WriteUInt16LittleEndian(frame.AsSpan(30,2),
+            checked((ushort)value.Items.Count));
+        for(int i=0;i<value.Items.Count;i++)
+        {
+            int offset=StorageSnapshotHeaderBytes+i*StorageItemBytes;
+            var item=value.Items[i];
+            BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(offset,8),item.ItemUid);
+            BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(offset+8,4),item.ItemDefinitionId);
+            BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(offset+12,4),item.Quantity);
+            BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(offset+16,8),item.SourceDropId);
+        }
+        return frame;
+    }
+
+    public static bool TryDecodeStorageSnapshot(
+        ReadOnlySpan<byte> frame,out StorageSnapshotWire? value)
+    {
+        value=null;
+        if(!TryReadHeader(frame,out var h)||h.Opcode!=WireOpcode.StorageSnapshot||
+           frame.Length<StorageSnapshotHeaderBytes)return false;
+        long epoch=BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(8,8));
+        uint seq=BinaryPrimitives.ReadUInt32LittleEndian(frame.Slice(16,4));
+        byte raw=frame[20];
+        int npc=BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(21,4));
+        int start=BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(25,4));
+        byte completeRaw=frame[29];
+        int count=BinaryPrimitives.ReadUInt16LittleEndian(frame.Slice(30,2));
+        if(epoch<=0||seq==0||npc<=0||raw>(byte)StorageOpenStatus.PlayerDead||
+           start<0||start>StorageSnapshotMaxItems||completeRaw>1||
+           count>StorageSnapshotMaxItemsPerFrame||
+           start+count>StorageSnapshotMaxItems||
+           frame.Length!=StorageSnapshotHeaderBytes+count*StorageItemBytes)
+            return false;
+        var status=(StorageOpenStatus)raw;
+        bool complete=completeRaw==1;
+        if(status!=StorageOpenStatus.Opened &&
+           (start!=0||!complete||count!=0))return false;
+        var items=new List<StorageItemWire>(count);
+        var seen=new HashSet<long>();
+        for(int i=0;i<count;i++)
+        {
+            int offset=StorageSnapshotHeaderBytes+i*StorageItemBytes;
+            var item=new StorageItemWire(
+                BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(offset,8)),
+                BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(offset+8,4)),
+                BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(offset+12,4)),
+                BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(offset+16,8)));
+            if(item.ItemUid<=0||item.ItemDefinitionId is <1 or >100_000_000||
+               item.Quantity is <1 or >1_000_000||item.SourceDropId<0||
+               !seen.Add(item.ItemUid))return false;
+            items.Add(item);
+        }
+        value=new(epoch,seq,status,npc,start,complete,items);
+        return true;
+    }
+
+    private static byte[] EncodeStorageMove(
+        WireOpcode opcode,StorageMoveWire value)
+    {
+        if(opcode is not (WireOpcode.StorageDeposit or WireOpcode.StorageWithdraw)||
+           value.MapEpoch<=0||value.StorageSequence==0||
+           value.NpcSpawnId<=0||value.ItemUid<=0)
+            throw new ArgumentOutOfRangeException(nameof(value));
+        var frame=NewFrame(opcode,StorageMoveFrameBytes);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(8,8),value.MapEpoch);
+        BinaryPrimitives.WriteUInt32LittleEndian(frame.AsSpan(16,4),value.StorageSequence);
+        BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(20,4),value.NpcSpawnId);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(24,8),value.ItemUid);
+        return frame;
+    }
+
+    public static byte[] EncodeStorageDeposit(StorageMoveWire value)=>
+        EncodeStorageMove(WireOpcode.StorageDeposit,value);
+    public static byte[] EncodeStorageWithdraw(StorageMoveWire value)=>
+        EncodeStorageMove(WireOpcode.StorageWithdraw,value);
+
+    private static bool TryDecodeStorageMove(
+        ReadOnlySpan<byte> frame,WireOpcode opcode,out StorageMoveWire value)
+    {
+        value=default;
+        if(!TryReadHeader(frame,out var h)||h.Opcode!=opcode)return false;
+        value=new(
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(8,8)),
+            BinaryPrimitives.ReadUInt32LittleEndian(frame.Slice(16,4)),
+            BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(20,4)),
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(24,8)));
+        return value.MapEpoch>0&&value.StorageSequence>0&&
+            value.NpcSpawnId>0&&value.ItemUid>0;
+    }
+
+    public static bool TryDecodeStorageDeposit(
+        ReadOnlySpan<byte> frame,out StorageMoveWire value)=>
+        TryDecodeStorageMove(frame,WireOpcode.StorageDeposit,out value);
+    public static bool TryDecodeStorageWithdraw(
+        ReadOnlySpan<byte> frame,out StorageMoveWire value)=>
+        TryDecodeStorageMove(frame,WireOpcode.StorageWithdraw,out value);
+
+    public static byte[] EncodeStorageTransferResult(
+        StorageTransferResultWire value)
+    {
+        if(!ValidStorageTransferResult(value))
+            throw new ArgumentOutOfRangeException(nameof(value));
+        var frame=NewFrame(WireOpcode.StorageTransferResult,
+            StorageTransferResultFrameBytes);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(8,8),value.MapEpoch);
+        BinaryPrimitives.WriteUInt32LittleEndian(frame.AsSpan(16,4),value.StorageSequence);
+        frame[20]=(byte)value.Kind;
+        frame[21]=(byte)value.Status;
+        BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(22,4),value.NpcSpawnId);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(26,8),value.ItemUid);
+        BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(34,4),value.ItemDefinitionId);
+        BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(38,4),value.Quantity);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(42,8),value.SourceDropId);
+        return frame;
+    }
+
+    public static bool TryDecodeStorageTransferResult(
+        ReadOnlySpan<byte> frame,out StorageTransferResultWire value)
+    {
+        value=default;
+        if(!TryReadHeader(frame,out var h)||
+           h.Opcode!=WireOpcode.StorageTransferResult)return false;
+        value=new(
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(8,8)),
+            BinaryPrimitives.ReadUInt32LittleEndian(frame.Slice(16,4)),
+            (StorageTransferKind)frame[20],
+            (StorageTransferStatus)frame[21],
+            BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(22,4)),
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(26,8)),
+            BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(34,4)),
+            BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(38,4)),
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(42,8)));
+        return ValidStorageTransferResult(value);
+    }
+
+    private static bool ValidStorageTransferResult(StorageTransferResultWire value)
+    {
+        if(value.MapEpoch<=0||value.StorageSequence==0||
+           value.Kind is not (StorageTransferKind.Deposit or StorageTransferKind.Withdraw)||
+           (byte)value.Status>(byte)StorageTransferStatus.PlayerDead||
+           value.NpcSpawnId<=0||value.ItemUid<=0||
+           value.ItemDefinitionId<0||value.ItemDefinitionId>100_000_000||
+           value.Quantity<0||value.Quantity>1_000_000||value.SourceDropId<0)
+            return false;
+        if(value.Status is StorageTransferStatus.Applied or
+            StorageTransferStatus.AlreadyApplied)
+            return value.ItemDefinitionId>0&&value.Quantity>0;
+        return value.ItemDefinitionId==0&&value.Quantity==0&&value.SourceDropId==0;
+    }
+
     private static float ReadFloat(ReadOnlySpan<byte> source) =>
         BitConverter.Int32BitsToSingle(BinaryPrimitives.ReadInt32LittleEndian(source));
 
@@ -1963,7 +2201,10 @@ public static class WireProtocol
             46 => WireOpcode.PlayerSkillVisual,
             47 => WireOpcode.ShopOpen, 48 => WireOpcode.ShopSnapshot,
             49 => WireOpcode.ShopBuy, 50 => WireOpcode.ShopSell,
-            51 => WireOpcode.ShopTransactionResult, _ => 0
+            51 => WireOpcode.ShopTransactionResult,
+            52 => WireOpcode.StorageOpen, 53 => WireOpcode.StorageSnapshot,
+            54 => WireOpcode.StorageDeposit, 55 => WireOpcode.StorageWithdraw,
+            56 => WireOpcode.StorageTransferResult, _ => 0
         };
         if (opcode == 0) return false;
         bool sizeOk = opcode switch
@@ -2013,6 +2254,15 @@ public static class WireProtocol
             WireOpcode.ShopBuy => advertised == ShopBuyFrameBytes,
             WireOpcode.ShopSell => advertised == ShopSellFrameBytes,
             WireOpcode.ShopTransactionResult => advertised == ShopTransactionResultFrameBytes,
+            WireOpcode.StorageOpen => advertised == StorageOpenFrameBytes,
+            WireOpcode.StorageSnapshot => advertised >= StorageSnapshotHeaderBytes &&
+                advertised <= StorageSnapshotHeaderBytes +
+                    StorageSnapshotMaxItemsPerFrame*StorageItemBytes &&
+                (advertised-StorageSnapshotHeaderBytes)%StorageItemBytes==0,
+            WireOpcode.StorageDeposit or WireOpcode.StorageWithdraw =>
+                advertised == StorageMoveFrameBytes,
+            WireOpcode.StorageTransferResult =>
+                advertised == StorageTransferResultFrameBytes,
             WireOpcode.InventorySnapshot => advertised >= InventorySnapshotHeaderBytes &&
                 advertised <= InventorySnapshotHeaderBytes +
                     InventorySnapshotMaxItemsPerFrame*InventoryItemBytes &&

@@ -129,7 +129,7 @@ public sealed class NpcShopCatalog
             item.BuyPrice,item.SellPrice,shop.SourceReference);
     }
 
-    private static Dictionary<(int,int),(double X,double Y)> LoadNpcPositions(
+    internal static Dictionary<(int,int),(double X,double Y)> LoadNpcPositions(
         IEnumerable<string> paths)
     {
         ArgumentNullException.ThrowIfNull(paths);

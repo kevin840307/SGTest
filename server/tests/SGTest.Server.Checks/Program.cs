@@ -265,7 +265,9 @@ static class Checks
             WorldAoiPumpChecks.Verify(root);
             NpcPortalChecks.Verify(root);
             NpcShopCatalogChecks.Verify(root);
+            NpcStorageCatalogChecks.Verify(root);
             NpcPortalWireChecks.Verify();
+            StorageWireChecks.Verify();
             TlsSocketChecks.Verify();
             IdentityStoreChecks.Verify();
             IdentityTlsAuthorizationChecks.Verify(root);

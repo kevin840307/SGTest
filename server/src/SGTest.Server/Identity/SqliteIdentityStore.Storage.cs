@@ -10,7 +10,11 @@ public enum StorageTransferStatus : byte
     AlreadyApplied = 1,
     NotOwned = 2,
     NotStored = 3,
-    StaleSequence = 4
+    StaleSequence = 4,
+    UnknownStorage = 5,
+    TooFar = 6,
+    StaleGeneration = 7,
+    PlayerDead = 8
 }
 
 /// <summary>
