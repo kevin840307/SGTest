@@ -167,15 +167,30 @@ class SkillSourceEvidenceTests(unittest.TestCase):
         enemy_rows = [
             '1,1,EnemyA,1,1,X',
             '2,2,EnemyB,2,1,X',
-            '3,3,EnemyC,1,2,X',
-            '4,4,EnemyD,65535,2,X',
+            '3,3,EnemyC,3,1,X',
+            '4,4,EnemyD,4,1,X',
+            '5,5,EnemyE,5,1,X',
+            '6,6,EnemyF,1,2,X',
+            '7,7,EnemyG,2,2,X',
+            '8,8,EnemyH,3,2,X',
+            '9,9,EnemyI,4,2,X',
+            '10,10,EnemyJ,5,2,X',
+            '11,11,EnemySentinel,65535,2,X',
         ]
         (enemy/'Enemy_Data.csv').write_text('\n'.join(enemy_rows)+'\n',encoding='ascii')
         (enemy/'EN_Att01.csv').write_text(
-            '1,51,5,0,5,0,22,6,8\n2,136,9,0,9,0,29,12,32\n',
+            '1,51,5,0,5,0,22,6,8\n'
+            '2,136,9,0,9,0,29,12,32\n'
+            '3,222,13,0,13,0,36,18,41\n'
+            '4,310,18,0,18,0,43,24,64\n'
+            '5,420,29,1,29,1,50,30,79\n',
             encoding='ascii')
         (enemy/'EN_Att02.csv').write_text(
-            '1,77,5,0,5,0,22,6,10\n2,204,9,0,9,0,29,12,39\n',
+            '1,77,5,0,5,0,22,6,10\n'
+            '2,204,9,0,9,0,29,12,39\n'
+            '3,333,13,0,13,0,36,18,50\n'
+            '4,465,18,0,18,0,43,24,77\n'
+            '5,630,29,1,29,1,50,30,95\n',
             encoding='ascii')
         return dat
 
@@ -198,8 +213,10 @@ class SkillSourceEvidenceTests(unittest.TestCase):
             self.assertEqual(best['selector_column'],4)
             self.assertEqual(best['level_column'],3)
             self.assertEqual(best['selector_values'],[1,2])
-            self.assertEqual(best['matched_rows'],3)
-            self.assertEqual(best['considered_rows'],4)
+            self.assertEqual(best['matched_rows'],10)
+            self.assertEqual(best['considered_rows'],11)
+            self.assertGreaterEqual(best['match_ratio'],0.90)
+            self.assertEqual(best['unmatched_examples'][0]['level_candidate'],65535)
             self.assertEqual(
                 result['hit_formula']['formula'],
                 'HRFinal=max(30,attacker.HR-defender.DR+'
