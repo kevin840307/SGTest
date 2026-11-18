@@ -229,8 +229,12 @@ func login() -> void:
 	pickup_status.text = ""
 	discard_status.text = ""
 	_inventory_display_key = ""
+	_shop_display_key = ""
 	_inventory_page = 0
 	inventory_search.clear()
+	shop_status.text = ""
+	shop_item_picker.clear()
+	shop_sell_picker.clear()
 	inventory_preview.text = ""
 	_show_inventory_preview(false)
 	characters.clear()
@@ -364,8 +368,12 @@ func disconnect_session() -> void:
 	pickup_status.text = ""
 	discard_status.text = ""
 	_inventory_display_key = ""
+	_shop_display_key = ""
 	_inventory_page = 0
 	inventory_search.clear()
+	shop_status.text = ""
+	shop_item_picker.clear()
+	shop_sell_picker.clear()
 	inventory_preview.text = ""
 	_show_inventory_preview(false)
 	_characters = []
