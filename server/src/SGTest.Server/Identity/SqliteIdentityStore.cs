@@ -77,7 +77,7 @@ public sealed record CharacterCreateResult(CharacterCreateStatus Status, Charact
 /// </summary>
 public sealed partial class SqliteIdentityStore : IDisposable
 {
-    public const int SchemaVersion = 7;
+    public const int SchemaVersion = 8;
     private readonly string _connectionString;
     private readonly IdentityStoreOptions _options;
     private readonly PasswordHasher _passwords;
@@ -242,11 +242,15 @@ CREATE TABLE IF NOT EXISTS item_instances (
     character_id INTEGER NOT NULL REFERENCES characters(character_id),
     item_definition_id INTEGER NOT NULL CHECK(item_definition_id BETWEEN 1 AND 100000000),
     quantity INTEGER NOT NULL CHECK(quantity BETWEEN 1 AND 1000000),
-    source_drop_id INTEGER NOT NULL UNIQUE REFERENCES ground_drops(drop_id),
-    created_unix_ms INTEGER NOT NULL
+    source_drop_id INTEGER UNIQUE REFERENCES ground_drops(drop_id),
+    source_kind INTEGER NOT NULL DEFAULT 1 CHECK(source_kind IN (1,2)),
+    source_reference TEXT NOT NULL DEFAULT '',
+    created_unix_ms INTEGER NOT NULL,
+    CHECK(
+      (source_kind=1 AND source_drop_id IS NOT NULL)
+      OR (source_kind=2 AND source_drop_id IS NULL)
+    )
 );", tx);
-            Execute(connection, @"
-CREATE INDEX IF NOT EXISTS ix_item_instances_owner ON item_instances(character_id, item_uid);", tx);
             // Schema v4: replay receipts survive consumption of the last
             // quantity, while any inventory decrement and combat HP restore
             // share one SQLite transaction.
@@ -319,6 +323,67 @@ CREATE TABLE IF NOT EXISTS skill_mp_actions (
     PRIMARY KEY(character_id,connection_generation,map_epoch,skill_sequence),
     CHECK(previous_mp - current_mp = mp_cost)
 );", tx);
+            // Schema v8: one durable inventory table now supports both
+            // monster-drop grants and direct shop purchases. Older rows retain
+            // their exact item_uid and source_drop_id; shop rows have a null
+            // source_drop_id plus explicit trusted provenance.
+            if (schemaVersion < 8)
+            {
+                Execute(connection, "ALTER TABLE item_instances RENAME TO item_instances_v7;", tx);
+                Execute(connection, @"
+CREATE TABLE item_instances (
+    item_uid INTEGER PRIMARY KEY AUTOINCREMENT,
+    character_id INTEGER NOT NULL REFERENCES characters(character_id),
+    item_definition_id INTEGER NOT NULL CHECK(item_definition_id BETWEEN 1 AND 100000000),
+    quantity INTEGER NOT NULL CHECK(quantity BETWEEN 1 AND 1000000),
+    source_drop_id INTEGER UNIQUE REFERENCES ground_drops(drop_id),
+    source_kind INTEGER NOT NULL CHECK(source_kind IN (1,2)),
+    source_reference TEXT NOT NULL,
+    created_unix_ms INTEGER NOT NULL,
+    CHECK(
+      (source_kind=1 AND source_drop_id IS NOT NULL)
+      OR (source_kind=2 AND source_drop_id IS NULL)
+    )
+);", tx);
+                Execute(connection, @"
+INSERT INTO item_instances(
+    item_uid,character_id,item_definition_id,quantity,source_drop_id,
+    source_kind,source_reference,created_unix_ms)
+SELECT item_uid,character_id,item_definition_id,quantity,source_drop_id,
+       1,'drop:' || source_drop_id,created_unix_ms
+FROM item_instances_v7;", tx);
+                Execute(connection, "DROP TABLE item_instances_v7;", tx);
+            }
+            Execute(connection, @"
+CREATE INDEX IF NOT EXISTS ix_item_instances_owner
+ON item_instances(character_id, item_uid);", tx);
+            Execute(connection, @"
+CREATE TABLE IF NOT EXISTS character_wallets (
+    character_id INTEGER PRIMARY KEY REFERENCES characters(character_id) ON DELETE CASCADE,
+    money INTEGER NOT NULL DEFAULT 0 CHECK(money BETWEEN 0 AND 9000000000000000)
+);", tx);
+            Execute(connection, @"
+INSERT OR IGNORE INTO character_wallets(character_id,money)
+SELECT character_id,0 FROM characters;", tx);
+            Execute(connection, @"
+CREATE TABLE IF NOT EXISTS shop_actions (
+    character_id INTEGER NOT NULL REFERENCES characters(character_id) ON DELETE CASCADE,
+    connection_generation INTEGER NOT NULL CHECK(connection_generation > 0),
+    map_epoch INTEGER NOT NULL CHECK(map_epoch > 0),
+    action_sequence INTEGER NOT NULL CHECK(action_sequence BETWEEN 1 AND 4294967295),
+    action_kind INTEGER NOT NULL CHECK(action_kind IN (1,2)),
+    npc_spawn_id INTEGER NOT NULL CHECK(npc_spawn_id > 0),
+    item_uid INTEGER NOT NULL CHECK(item_uid > 0),
+    item_definition_id INTEGER NOT NULL CHECK(item_definition_id BETWEEN 1 AND 100000000),
+    quantity INTEGER NOT NULL CHECK(quantity BETWEEN 1 AND 1000000),
+    unit_price INTEGER NOT NULL CHECK(unit_price BETWEEN 1 AND 1000000000000),
+    remaining_quantity INTEGER NOT NULL CHECK(remaining_quantity BETWEEN 0 AND 1000000),
+    money_after INTEGER NOT NULL CHECK(money_after BETWEEN 0 AND 9000000000000000),
+    source_reference TEXT NOT NULL,
+    created_unix_ms INTEGER NOT NULL,
+    PRIMARY KEY(character_id,connection_generation,map_epoch,action_sequence)
+);", tx);
+
             Execute(connection, @"
 CREATE TRIGGER IF NOT EXISTS trg_combat_mp_insert
 BEFORE INSERT ON character_combat_profiles
@@ -814,6 +879,15 @@ VALUES($account,$slot,$name,$key,$map,$x,$y,$created,$updated); SELECT last_inse
         try
         {
             long characterId = Convert.ToInt64(command.ExecuteScalar(), CultureInfo.InvariantCulture);
+            using (var wallet = connection.CreateCommand())
+            {
+                wallet.Transaction = tx;
+                wallet.CommandText = @"INSERT INTO character_wallets(character_id,money)
+VALUES($character,0);";
+                wallet.Parameters.AddWithValue("$character", characterId);
+                if (wallet.ExecuteNonQuery() != 1)
+                    throw new InvalidOperationException("Character wallet creation failed");
+            }
             tx.Commit();
             return new CharacterCreateResult(CharacterCreateStatus.Created,
                 new CharacterRecord(characterId, accountId, slot, name.Display,
