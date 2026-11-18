@@ -134,6 +134,35 @@ func _initialize() -> void:
 		fail("AlreadyApplied duplicate mutated inventory twice")
 		return
 
+	# Access-invalidating failures close the authoritative shop session, while
+	# ordinary economic failures keep it open so the player can adjust quantity.
+	world = new_world()
+	if world == null or not world.mark_shop_sent(1,1,99) or not world.apply_frame(opened) or not world.mark_shop_sent(2,2,99,1001,0,1):
+		fail("shop access failure fixture")
+		return
+	var too_far := RESULT.hex_decode()
+	too_far.encode_s64(8,1)
+	too_far.encode_u32(16,2)
+	too_far[20] = 1
+	too_far[21] = 3
+	too_far.encode_s64(26,0)
+	too_far.encode_s64(34,0)
+	too_far.encode_s32(46,1)
+	too_far.encode_s32(50,0)
+	if not world.apply_frame(too_far) or int(world.snapshot().active_shop_npc) != 0 or not (world.snapshot().shop_items as Dictionary).is_empty() or int(world.snapshot().shop_money) != 0:
+		fail("TooFar result did not close stale shop session")
+		return
+
+	world = new_world()
+	if world == null or not world.mark_shop_sent(1,1,99) or not world.apply_frame(opened) or not world.mark_shop_sent(2,2,99,1001,0,1):
+		fail("shop economic failure fixture")
+		return
+	var no_money := too_far.duplicate()
+	no_money[21] = 5
+	if not world.apply_frame(no_money) or int(world.snapshot().active_shop_npc) != 99 or (world.snapshot().shop_items as Dictionary).is_empty():
+		fail("InsufficientMoney incorrectly closed valid shop session")
+		return
+
 	world = new_world()
 	if world == null or not world.mark_shop_sent(1,1,99) or not world.apply_frame(opened) or not world.mark_shop_sent(2,3,99,1001,7001,1):
 		fail("spoof fixture")
@@ -145,5 +174,5 @@ func _initialize() -> void:
 	if world.apply_frame(wrong) or int(world.state) != World.STATE_FAILED:
 		fail("wrong sell UID accepted")
 		return
-	print("SHOP_WIRE_PASS open=24 snapshot=55 buy=32 sell=40 result=54 source_drop_zero=PASS money=SERVER_AUTH uid=SERVER_AUTH replay=STALE replay_recovery=ALREADY_APPLIED_CONVERGES transfer=CLOSES spoof=FAIL_CLOSED")
+	print("SHOP_WIRE_PASS open=24 snapshot=55 buy=32 sell=40 result=54 source_drop_zero=PASS money=SERVER_AUTH uid=SERVER_AUTH replay=STALE replay_recovery=ALREADY_APPLIED_CONVERGES access_failure=CLOSES economic_failure=KEEPS_OPEN transfer=CLOSES spoof=FAIL_CLOSED")
 	quit(0)

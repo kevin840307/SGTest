@@ -1570,6 +1570,13 @@ func _apply_shop_transaction_result(frame: PackedByteArray) -> bool:
 				inventory_items[uid] = updated
 		inventory_revision += 1
 		shop_money = int(result.money)
+	# Access failures are authoritative evidence that this shop session is no
+	# longer usable. Close stale UI/catalog state immediately; economic failures
+	# such as insufficient money/quantity keep the still-valid shop open.
+	elif int(result.status) in [2,3,9,10]:
+		active_shop_npc = 0
+		shop_items.clear()
+		shop_money = 0
 	# Durable replay receipts never apply inventory mutations twice.
 	last_shop_response_sequence = sequence
 	last_shop_result = result.duplicate(true)
