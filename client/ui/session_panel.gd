@@ -21,6 +21,11 @@ var logout_button := Button.new()
 var characters := OptionButton.new()
 var choose_button := Button.new()
 var respawn_button := Button.new()
+var skill_hint := Label.new()
+var skill_id_input := SpinBox.new()
+var skill_target_mode := CheckButton.new()
+var skill_area_button := Button.new()
+var skill_status := Label.new()
 var pickup_status := Label.new()
 var inventory_button := Button.new()
 var inventory_preview := TextEdit.new()
@@ -43,6 +48,8 @@ var _world_epoch := 0
 var _poll_elapsed := 0.0
 var _latest := {}
 var _respawn_queued_after := -1
+var _skill_queued_after := -1
+var _skill_queued_at_ms := 0
 
 
 func _ready() -> void:
@@ -95,12 +102,23 @@ func _ready() -> void:
 	for control in [inventory_previous, inventory_next, inventory_page_label,recovery_picker,recovery_button,recovery_status,discard_button,discard_status]:
 		control.visible = false
 	respawn_button.text = "復活"
-	for control in [login_button,characters,choose_button,respawn_button,logout_button,status,pickup_status,inventory_button,inventory_search,inventory_preview,inventory_previous,inventory_page_label,inventory_next,recovery_picker,recovery_button,recovery_status,discard_button,discard_status]:
+	skill_hint.text = "技能 ID（需伺服器已核准規則）"
+	skill_id_input.min_value = 1
+	skill_id_input.max_value = 100000000
+	skill_id_input.step = 1
+	skill_id_input.value = 99001
+	skill_target_mode.text = "點怪施放單體技能（關閉則普攻）"
+	skill_target_mode.focus_mode = Control.FOCUS_NONE
+	skill_area_button.text = "施放自身中心範圍技能"
+	skill_area_button.focus_mode = Control.FOCUS_NONE
+	skill_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	for control in [login_button,characters,choose_button,respawn_button,skill_hint,skill_id_input,skill_target_mode,skill_area_button,skill_status,logout_button,status,pickup_status,inventory_button,inventory_search,inventory_preview,inventory_previous,inventory_page_label,inventory_next,recovery_picker,recovery_button,recovery_status,discard_button,discard_status]:
 		column.add_child(control)
 	login_button.pressed.connect(login)
 	password_input.text_submitted.connect(func(_text): login())
 	choose_button.pressed.connect(choose)
 	respawn_button.pressed.connect(request_respawn)
+	skill_area_button.pressed.connect(_cast_area_skill)
 	logout_button.pressed.connect(disconnect_session)
 	inventory_button.pressed.connect(_toggle_inventory)
 	inventory_search.text_changed.connect(_on_inventory_search_changed)
@@ -140,6 +158,10 @@ func login() -> void:
 	_world_epoch = 0
 	_latest = {}
 	_respawn_queued_after = -1
+	_skill_queued_after = -1
+	_skill_queued_at_ms = 0
+	skill_target_mode.button_pressed = false
+	skill_status.text = ""
 	pickup_status.text = ""
 	discard_status.text = ""
 	_inventory_display_key = ""
@@ -175,6 +197,48 @@ func submit_stop_movement() -> bool:
 
 func submit_attack_monster(entity_id: int) -> bool:
 	return active and not bool(_latest.get("reconnecting",false)) and bool(_latest.get("world_ready",false)) and not bool(_latest.get("player_dead",false)) and not bool(_latest.get("resync_pending",false)) and entity_id > 0 and session.attack_monster(entity_id)
+
+
+# Client chooses only skill identity and target; the server owns rules, cost and damage.
+func submit_monster_action(entity_id: int) -> bool:
+	if skill_target_mode.button_pressed:
+		return submit_target_skill(entity_id)
+	return submit_attack_monster(entity_id)
+
+
+func _skill_can_submit() -> bool:
+	return active and int(_latest.get("state",-1)) == State.STATE_IN_WORLD and bool(_latest.get("world_ready",false)) and bool(_latest.get("combat_available",false)) and not bool(_latest.get("player_dead",false)) and not bool(_latest.get("reconnecting",false)) and not bool(_latest.get("resync_pending",false)) and not bool(_latest.get("waiting_for_new_map",false)) and int(_latest.get("pending_world_ready_ack_epoch",0)) == 0 and int(_latest.get("last_world_ready_ack_epoch",0)) == int(_latest.get("map_epoch",0))
+
+
+func _skill_queued() -> void:
+	_skill_queued_after = int(_latest.get("skill_sequence",0))
+	_skill_queued_at_ms = Time.get_ticks_msec()
+	skill_status.text = "技能請求已排入佇列，等待伺服器結果"
+	_set_skill_controls()
+
+
+func submit_target_skill(entity_id: int) -> bool:
+	if not _skill_can_submit() or _skill_queued_after >= 0 or entity_id <= 0:
+		return false
+	if not session.cast_skill(int(skill_id_input.value),entity_id):
+		return false
+	_skill_queued()
+	return true
+
+
+func submit_area_skill(skill_id: int) -> bool:
+	if not _skill_can_submit() or _skill_queued_after >= 0 or skill_id <= 0 or skill_id > 100000000:
+		return false
+	if not session.cast_area_skill(skill_id):
+		return false
+	_skill_queued()
+	return true
+
+
+func _cast_area_skill() -> void:
+	if not skill_area_button.disabled:
+		if not submit_area_skill(int(skill_id_input.value)):
+			skill_status.text = "技能未送出；請檢查角色狀態或佇列"
 
 
 func submit_recovery_use(item_uid: int) -> bool:
@@ -214,6 +278,10 @@ func disconnect_session() -> void:
 	_world_epoch = 0
 	_latest = {}
 	_respawn_queued_after = -1
+	_skill_queued_after = -1
+	_skill_queued_at_ms = 0
+	skill_target_mode.button_pressed = false
+	skill_status.text = ""
 	pickup_status.text = ""
 	discard_status.text = ""
 	_inventory_display_key = ""
@@ -244,6 +312,7 @@ func _set_controls() -> void:
 	choose_button.visible = characters.visible
 	choose_button.disabled = _chosen or _characters.is_empty()
 	_set_respawn_controls()
+	_set_skill_controls()
 
 
 func _set_respawn_controls() -> void:
@@ -256,6 +325,28 @@ func _set_respawn_controls() -> void:
 		_respawn_queued_after = -1
 	respawn_button.visible = dead
 	respawn_button.disabled = not dead or bool(_latest.get("reconnecting",false)) or bool(_latest.get("resync_pending",false)) or bool(_latest.get("waiting_for_new_map",false)) or int(_latest.get("pending_world_ready_ack_epoch",0)) != 0 or int(_latest.get("last_world_ready_ack_epoch",0)) != int(_latest.get("map_epoch",0)) or sent_sequence > result_sequence or _respawn_queued_after >= 0
+
+
+# Presentation-only pending guard; no gameplay timer or local skill settlement.
+func _set_skill_controls() -> void:
+	var in_world: bool = active and int(_latest.get("state",-1)) == State.STATE_IN_WORLD
+	if not in_world or bool(_latest.get("reconnecting",false)) or bool(_latest.get("resync_pending",false)) or bool(_latest.get("waiting_for_new_map",false)) or bool(_latest.get("player_dead",false)):
+		_skill_queued_after = -1
+	if _skill_queued_after >= 0:
+		var sent := int(_latest.get("skill_sequence",0))
+		var received := int(_latest.get("last_skill_result_sequence",0))
+		if sent > _skill_queued_after and received >= sent:
+			_skill_queued_after = -1
+			skill_status.text = "伺服器技能結果：代碼 %d" % int(_latest.get("last_skill_result_status",-1))
+		elif Time.get_ticks_msec() - _skill_queued_at_ms >= 10000:
+			_skill_queued_after = -1
+			skill_status.text = "尚未收到技能結果，可手動重試（可能仍在伺服器處理）"
+	for control in [skill_hint,skill_id_input,skill_target_mode,skill_area_button,skill_status]:
+		control.visible = in_world
+	var enabled: bool = _skill_can_submit() and _skill_queued_after < 0
+	skill_id_input.editable = enabled
+	skill_target_mode.disabled = not enabled
+	skill_area_button.disabled = not enabled
 
 
 func _show_inventory_preview(show: bool) -> void:
@@ -417,6 +508,7 @@ func _process(delta: float) -> void:
 	_poll_elapsed = 0.0
 	_latest = session.snapshot() # Reads published state; never pumps packets.
 	_set_respawn_controls()
+	_set_skill_controls()
 	_update_inventory_ui()
 	var pickup_result: Dictionary = _latest.get("last_pickup_result",{})
 	if not pickup_result.is_empty():

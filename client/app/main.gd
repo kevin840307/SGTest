@@ -150,9 +150,9 @@ func _unhandled_input(event: InputEvent) -> void:
 			# the item interaction follows it without losing normal click priority.
 			session_panel.submit_pickup_drop(drop_id)
 		elif monster_id > 0:
-			# A live visible monster takes attack priority over ground movement.
+			# A live visible monster takes combat priority over ground movement.
 			# Never fall back to movement when the combat intent is backpressured.
-			session_panel.submit_attack_monster(monster_id)
+			session_panel.submit_monster_action(monster_id)
 		elif not _autorun_left_press_cancelled:
 			_begin_ground_navigation(point,Time.get_ticks_msec())
 		# First bare-ground click after a latch only stops the old route.
