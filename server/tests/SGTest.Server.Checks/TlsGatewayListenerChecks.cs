@@ -856,7 +856,18 @@ internal static class TlsGatewayListenerChecks
 
             var clients = Enumerable.Range(0, players)
                 .Select(RunPlayer).ToArray();
-            await allRead.Task.WaitAsync(deadline.Token);
+            var clientsComplete = Task.WhenAll(clients);
+            var first = await Task.WhenAny(
+                allRead.Task, clientsComplete).WaitAsync(deadline.Token);
+            if (ReferenceEquals(first, clientsComplete))
+            {
+                // If any Client faults before the completion barrier, surface
+                // that exact wire/status error instead of masking it behind the
+                // shared 50s deadline and a later World result overflow.
+                await clientsComplete;
+                throw new Exception(
+                    "all clients exited before the authenticated load barrier");
+            }
             Checks.Require(fixture.Host.Statistics.ActiveActors == players &&
                 fixture.Router.Statistics.ActiveSessions == players &&
                 listener.Statistics.ActiveConnections == players,
