@@ -37,10 +37,14 @@ var recovery_picker := OptionButton.new()
 var recovery_button := Button.new()
 var recovery_status := Label.new()
 var discard_button := Button.new()
+var discard_quantity := SpinBox.new()
+var discard_all_button := Button.new()
+var discard_confirm := ConfirmationDialog.new()
 var discard_status := Label.new()
 const INVENTORY_PAGE_SIZE := 80
 var _inventory_page := 0
 var _inventory_display_key := ""
+var _pending_discard_confirmation := {}
 var status := Label.new()
 var _characters: Array = []
 var _chosen := false
@@ -97,10 +101,19 @@ func _ready() -> void:
 	recovery_button.text = "使用選中道具（Server 核實回復效果）"
 	recovery_button.disabled = true
 	recovery_status.text = ""
-	discard_button.text = "丟棄選中道具 ×1（Server 結算）"
+	discard_button.text = "丟棄選中數量（永久銷毀）"
 	discard_button.disabled = true
+	discard_quantity.min_value = 1
+	discard_quantity.max_value = 1
+	discard_quantity.value = 1
+	discard_quantity.step = 1
+	discard_all_button.text = "全部數量"
+	discard_all_button.disabled = true
+	discard_confirm.title = "確認銷毀背包物品"
+	discard_confirm.ok_button_text = "確認銷毀"
+	add_child(discard_confirm)
 	discard_status.text = ""
-	for control in [inventory_previous, inventory_next, inventory_page_label,recovery_picker,recovery_button,recovery_status,discard_button,discard_status]:
+	for control in [inventory_previous, inventory_next, inventory_page_label,recovery_picker,recovery_button,recovery_status,discard_quantity,discard_all_button,discard_button,discard_status]:
 		control.visible = false
 	respawn_button.text = "復活"
 	skill_hint.text = "技能 ID（需伺服器已核准規則）"
@@ -113,7 +126,7 @@ func _ready() -> void:
 	skill_area_button.text = "施放自身中心範圍技能"
 	skill_area_button.focus_mode = Control.FOCUS_NONE
 	skill_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	for control in [login_button,characters,choose_button,respawn_button,skill_hint,skill_id_input,skill_target_mode,skill_area_button,skill_status,logout_button,status,pickup_status,inventory_button,inventory_search,inventory_preview,inventory_previous,inventory_page_label,inventory_next,recovery_picker,recovery_button,recovery_status,discard_button,discard_status]:
+	for control in [login_button,characters,choose_button,respawn_button,skill_hint,skill_id_input,skill_target_mode,skill_area_button,skill_status,logout_button,status,pickup_status,inventory_button,inventory_search,inventory_preview,inventory_previous,inventory_page_label,inventory_next,recovery_picker,recovery_button,recovery_status,discard_quantity,discard_all_button,discard_button,discard_status]:
 		column.add_child(control)
 	login_button.pressed.connect(login)
 	password_input.text_submitted.connect(func(_text): login())
@@ -126,7 +139,10 @@ func _ready() -> void:
 	inventory_previous.pressed.connect(func(): _set_inventory_page(_inventory_page-1))
 	inventory_next.pressed.connect(func(): _set_inventory_page(_inventory_page+1))
 	recovery_button.pressed.connect(_use_selected_recovery)
+	recovery_picker.item_selected.connect(func(_index): _update_discard_selection())
+	discard_all_button.pressed.connect(func(): discard_quantity.value = discard_quantity.max_value)
 	discard_button.pressed.connect(_discard_selected_item)
+	discard_confirm.confirmed.connect(_confirm_inventory_discard)
 	var style := StyleBoxFlat.new()
 	style.bg_color = Color("211c15")
 	style.border_color = Color("c8a452")
@@ -163,6 +179,8 @@ func login() -> void:
 	_skill_queued_at_ms = 0
 	skill_target_mode.button_pressed = false
 	skill_status.text = ""
+	_pending_discard_confirmation.clear()
+	discard_confirm.hide()
 	pickup_status.text = ""
 	discard_status.text = ""
 	_inventory_display_key = ""
@@ -247,7 +265,7 @@ func submit_recovery_use(item_uid: int) -> bool:
 
 
 func submit_inventory_discard(item_uid: int, quantity: int = 1) -> bool:
-	return active and not bool(_latest.get("reconnecting",false)) and bool(_latest.get("world_ready",false)) and bool(_latest.get("inventory_ready",false)) and not bool(_latest.get("resync_pending",false)) and int(_latest.get("pending_discard_sequence",0)) == 0 and int(_latest.get("pending_recovery_sequence",0)) == 0 and item_uid > 0 and quantity > 0 and session.discard_inventory_item(item_uid,quantity)
+	return active and not bool(_latest.get("reconnecting",false)) and bool(_latest.get("world_ready",false)) and bool(_latest.get("inventory_ready",false)) and not bool(_latest.get("resync_pending",false)) and int(_latest.get("pending_discard_sequence",0)) == 0 and int(_latest.get("pending_recovery_sequence",0)) == 0 and item_uid > 0 and quantity > 0 and quantity <= 1000000 and (_latest.get("inventory_items",{}) as Dictionary).has(item_uid) and quantity <= int(((_latest.get("inventory_items",{}) as Dictionary)[item_uid] as Dictionary).get("quantity",0)) and session.discard_inventory_item(item_uid,quantity)
 
 
 func submit_pickup_drop(drop_id: int) -> bool:
@@ -283,6 +301,8 @@ func disconnect_session() -> void:
 	_skill_queued_at_ms = 0
 	skill_target_mode.button_pressed = false
 	skill_status.text = ""
+	_pending_discard_confirmation.clear()
+	discard_confirm.hide()
 	pickup_status.text = ""
 	discard_status.text = ""
 	_inventory_display_key = ""
@@ -368,6 +388,8 @@ func _show_inventory_preview(show: bool) -> void:
 	recovery_picker.visible = show
 	recovery_button.visible = show
 	recovery_status.visible = show
+	discard_quantity.visible = show
+	discard_all_button.visible = show
 	discard_button.visible = show
 	discard_status.visible = show
 	inventory_search.visible = show
@@ -410,16 +432,62 @@ func _use_selected_recovery() -> void:
 		recovery_status.text = "目前無法使用該物品"
 
 
+func _update_discard_selection() -> void:
+	var items: Dictionary = _latest.get("inventory_items",{})
+	var uid := 0
+	if recovery_picker.selected >= 0:
+		uid = int(recovery_picker.get_item_metadata(recovery_picker.selected))
+	var count := int((items.get(uid,{}) as Dictionary).get("quantity",0))
+	discard_quantity.max_value = maxi(1,mini(1000000,count))
+	discard_quantity.value = 1
+	_update_discard_controls()
+
+
+func _update_discard_controls() -> void:
+	var enabled: bool = not discard_button.disabled and recovery_picker.selected >= 0
+	discard_quantity.editable = enabled
+	discard_all_button.disabled = not enabled
+
+
 func _discard_selected_item() -> void:
-	if discard_button.disabled or recovery_picker.selected < 0:
+	if discard_button.disabled or recovery_picker.selected < 0 or not _pending_discard_confirmation.is_empty():
 		return
 	var uid := int(recovery_picker.get_item_metadata(recovery_picker.selected))
-	if uid <= 0:
+	var quantity := int(discard_quantity.value)
+	var items: Dictionary = _latest.get("inventory_items",{})
+	if uid <= 0 or not items.has(uid) or quantity < 1 or quantity > mini(1000000,int((items[uid] as Dictionary).get("quantity",0))):
+		discard_status.text = "數量或選取物品已失效"
 		return
-	if submit_inventory_discard(uid,1):
+	_pending_discard_confirmation = {
+		"actor_id":int(_latest.get("actor_id",0)),
+		"reconnect_count":int(_latest.get("reconnect_count",0)),
+		"map_epoch":int(_latest.get("map_epoch",0)),
+		"inventory_revision":int(_latest.get("inventory_revision",0)),
+		"uid":uid,"quantity":quantity,
+	}
+	discard_confirm.dialog_text = "確定永久銷毀 %s ×%d（UID %d）？\n這不是丟到地上，無法復原。" % [
+		item_catalog.name_for(int((items[uid] as Dictionary).item_definition_id)),quantity,uid]
+	discard_confirm.popup_centered()
+
+
+func _confirm_inventory_discard() -> void:
+	if _pending_discard_confirmation.is_empty():
+		return
+	var requested: Dictionary = _pending_discard_confirmation.duplicate()
+	_pending_discard_confirmation.clear()
+	# Confirmation is not authorization. Re-check the exact actor, epoch,
+	# inventory revision, selected UID and stack size before queuing.
+	var uid := int(requested.uid)
+	var quantity := int(requested.quantity)
+	var items: Dictionary = _latest.get("inventory_items",{})
+	if discard_button.disabled or int(_latest.get("actor_id",0)) != int(requested.actor_id) or int(_latest.get("reconnect_count",0)) != int(requested.reconnect_count) or int(_latest.get("map_epoch",0)) != int(requested.map_epoch) or int(_latest.get("inventory_revision",0)) != int(requested.inventory_revision) or recovery_picker.selected < 0 or int(recovery_picker.get_item_metadata(recovery_picker.selected)) != uid or int(discard_quantity.value) != quantity or not items.has(uid) or quantity < 1 or quantity > int((items.get(uid,{}) as Dictionary).get("quantity",0)):
+		discard_status.text = "背包或角色狀態已變更，請重新選取並確認"
+		return
+	if submit_inventory_discard(uid,quantity):
 		discard_button.disabled = true
 		recovery_button.disabled = true
-		discard_status.text = "丟棄請求已送出…"
+		_update_discard_controls()
+		discard_status.text = "丟棄 ×%d 請求已送出，等待伺服器結算…" % quantity
 	else:
 		discard_status.text = "目前無法丟棄該物品"
 
@@ -430,10 +498,14 @@ func _update_inventory_ui() -> void:
 	inventory_button.visible = in_world
 	inventory_button.disabled = not loaded or bool(_latest.get("reconnecting",false))
 	if not in_world or bool(_latest.get("reconnecting",false)):
+		_pending_discard_confirmation.clear()
+		discard_confirm.hide()
 		_show_inventory_preview(false)
 		_inventory_display_key = ""
 		return
 	if not loaded:
+		_pending_discard_confirmation.clear()
+		discard_confirm.hide()
 		inventory_button.text = "背包（讀取中）"
 		_show_inventory_preview(false)
 		_inventory_display_key = ""
@@ -442,6 +514,7 @@ func _update_inventory_ui() -> void:
 	inventory_button.text = "背包（%d 件）" % items.size()
 	recovery_button.disabled = not bool(_latest.get("combat_available",false)) or bool(_latest.get("player_dead",false)) or bool(_latest.get("resync_pending",false)) or int(_latest.get("pending_recovery_sequence",0)) != 0 or int(_latest.get("pending_discard_sequence",0)) != 0 or recovery_picker.item_count == 0
 	discard_button.disabled = bool(_latest.get("resync_pending",false)) or int(_latest.get("pending_discard_sequence",0)) != 0 or int(_latest.get("pending_recovery_sequence",0)) != 0 or recovery_picker.item_count == 0
+	_update_discard_controls()
 	var discard_result: Dictionary = _latest.get("last_discard_result",{})
 	if not discard_result.is_empty():
 		if int(discard_result.status) in [0,1]:
@@ -506,8 +579,10 @@ func _update_inventory_ui() -> void:
 		recovery_picker.set_item_metadata(recovery_picker.item_count-1,uid)
 	if recovery_picker.item_count > 0:
 		recovery_picker.select(0)
+	_update_discard_selection()
 	recovery_button.disabled = not bool(_latest.get("combat_available",false)) or bool(_latest.get("player_dead",false)) or bool(_latest.get("resync_pending",false)) or int(_latest.get("pending_recovery_sequence",0)) != 0 or int(_latest.get("pending_discard_sequence",0)) != 0 or recovery_picker.item_count == 0
 	discard_button.disabled = bool(_latest.get("resync_pending",false)) or int(_latest.get("pending_discard_sequence",0)) != 0 or int(_latest.get("pending_recovery_sequence",0)) != 0 or recovery_picker.item_count == 0
+	_update_discard_controls()
 	if rows.is_empty():
 		rows.append("沒有符合條件的物品" if not query.is_empty() else "背包目前沒有物品")
 	inventory_preview.text = "\n".join(rows)

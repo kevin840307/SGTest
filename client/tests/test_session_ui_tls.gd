@@ -361,7 +361,7 @@ func run() -> void:
 		var uid := 10000+index
 		many[uid] = {"item_uid":uid,
 			"item_definition_id":2701 if index == 0 else 40000+index,
-			"quantity":1,"drop_id":50000+index}
+			"quantity":3 if index == 0 else 1,"drop_id":50000+index}
 	panel._latest.inventory_items = many
 	panel._latest.inventory_revision = 2
 	panel._update_inventory_ui()
@@ -400,9 +400,27 @@ func run() -> void:
 	if panel.discard_button.disabled:
 		fail("Loaded inventory did not expose server-authoritative discard")
 		return
+	if int(panel.discard_quantity.max_value) != 3 or int(panel.discard_quantity.value) != 1:
+		fail("Discard quantity did not bind to selected authoritative stack")
+		return
+	panel.discard_all_button.pressed.emit()
+	if int(panel.discard_quantity.value) != 3:
+		fail("Discard-all did not select full stack")
+		return
 	panel.discard_button.pressed.emit()
-	if stub.discards != 1 or stub.last_discard_uid != 10000 or stub.last_discard_quantity != 1 or not panel.discard_button.disabled:
-		fail("Discard UI did not send exactly one selected UID quantity")
+	if stub.discards != 0 or not panel.discard_confirm.dialog_text.contains("UID 10000"):
+		fail("Destructive discard bypassed confirmation")
+		return
+	panel._latest.actor_id = 99
+	panel.discard_confirm.confirmed.emit()
+	if stub.discards != 0:
+		fail("Confirmed discard crossed character identity")
+		return
+	panel._latest.actor_id = 22
+	panel.discard_button.pressed.emit()
+	panel.discard_confirm.confirmed.emit()
+	if stub.discards != 1 or stub.last_discard_uid != 10000 or stub.last_discard_quantity != 3 or not panel.discard_button.disabled:
+		fail("Confirmed full-stack discard did not send exact UID and quantity once")
 		return
 	panel._latest.pending_discard_sequence = 1
 	panel._update_inventory_ui()
@@ -411,10 +429,10 @@ func run() -> void:
 		return
 	panel._latest.pending_discard_sequence = 0
 	panel._latest.last_discard_result = {
-		"status":0,"discarded_quantity":1,"remaining_quantity":0}
+		"status":0,"discarded_quantity":3,"remaining_quantity":0}
 	panel._latest.inventory_revision = 4
 	panel._update_inventory_ui()
-	if not panel.discard_status.text.contains("已移除 1"):
+	if not panel.discard_status.text.contains("已移除 3"):
 		fail("Discard status did not display authoritative committed quantity")
 		return
 	panel._latest.player_dead = true
@@ -432,5 +450,5 @@ func run() -> void:
 	panel._set_respawn_controls()
 	app.queue_free()
 	await process_frame
-	print("CLIENT_TLS_LOGIN_PASS ui=PASS auth=PASS choose=PASS receipt=PASS world_ready=PASS password_cleared=PASS logout=PASS respawn_ui=PASS click_attack_ui=PASS click_pickup_ui=PASS persistent_inventory_ui=PASS item_metadata=PASS inventory_pagination=PASS recovery_item_button=PASS inventory_discard_button=PASS skill_cast_ui=PASS skill_singleflight=PASS combat_mp_ui=PASS")
+	print("CLIENT_TLS_LOGIN_PASS ui=PASS auth=PASS choose=PASS receipt=PASS world_ready=PASS password_cleared=PASS logout=PASS respawn_ui=PASS click_attack_ui=PASS click_pickup_ui=PASS persistent_inventory_ui=PASS item_metadata=PASS inventory_pagination=PASS recovery_item_button=PASS inventory_discard_button=PASS inventory_discard_quantity_confirm=PASS skill_cast_ui=PASS skill_singleflight=PASS combat_mp_ui=PASS")
 	quit(0)
