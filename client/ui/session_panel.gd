@@ -56,6 +56,14 @@ var shop_buy_button := Button.new()
 var shop_sell_button := Button.new()
 var shop_status := Label.new()
 var _shop_display_key := ""
+var storage_npc_input := SpinBox.new()
+var storage_open_button := Button.new()
+var storage_deposit_picker := OptionButton.new()
+var storage_withdraw_picker := OptionButton.new()
+var storage_deposit_button := Button.new()
+var storage_withdraw_button := Button.new()
+var storage_status := Label.new()
+var _storage_display_key := ""
 const INVENTORY_PAGE_SIZE := 80
 var _inventory_page := 0
 var _inventory_display_key := ""
@@ -158,6 +166,16 @@ func _ready() -> void:
 	shop_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	for control in [shop_npc_input,shop_open_button,shop_money_label,shop_item_picker,shop_sell_picker,shop_quantity,shop_sell_quantity,shop_buy_button,shop_sell_button,shop_status]:
 		control.visible = false
+	storage_npc_input.min_value = 1
+	storage_npc_input.max_value = 2147483647
+	storage_npc_input.step = 1
+	storage_npc_input.value = 1
+	storage_open_button.text = "開啟附近 NPC 倉庫"
+	storage_deposit_button.text = "存入選中背包物品（整組）"
+	storage_withdraw_button.text = "取出選中倉庫物品（整組）"
+	storage_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	for control in [storage_npc_input,storage_open_button,storage_deposit_picker,storage_withdraw_picker,storage_deposit_button,storage_withdraw_button,storage_status]:
+		control.visible = false
 	respawn_button.text = "復活"
 	skill_hint.text = "技能 ID（需伺服器已核准規則）"
 	skill_id_input.min_value = 1
@@ -169,7 +187,7 @@ func _ready() -> void:
 	skill_area_button.text = "施放自身中心範圍技能"
 	skill_area_button.focus_mode = Control.FOCUS_NONE
 	skill_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	for control in [login_button,characters,choose_button,character_name_input,character_slot_input,create_character_button,character_create_status,respawn_button,skill_hint,skill_id_input,skill_target_mode,skill_area_button,skill_status,logout_button,status,pickup_status,inventory_button,inventory_search,inventory_preview,inventory_previous,inventory_page_label,inventory_next,recovery_picker,recovery_button,recovery_status,discard_quantity,discard_all_button,discard_button,discard_status,shop_npc_input,shop_open_button,shop_money_label,shop_item_picker,shop_sell_picker,shop_quantity,shop_buy_button,shop_sell_button,shop_status]:
+	for control in [login_button,characters,choose_button,character_name_input,character_slot_input,create_character_button,character_create_status,respawn_button,skill_hint,skill_id_input,skill_target_mode,skill_area_button,skill_status,logout_button,status,pickup_status,inventory_button,inventory_search,inventory_preview,inventory_previous,inventory_page_label,inventory_next,recovery_picker,recovery_button,recovery_status,discard_quantity,discard_all_button,discard_button,discard_status,shop_npc_input,shop_open_button,shop_money_label,shop_item_picker,shop_sell_picker,shop_quantity,shop_sell_quantity,shop_buy_button,shop_sell_button,shop_status,storage_npc_input,storage_open_button,storage_deposit_picker,storage_withdraw_picker,storage_deposit_button,storage_withdraw_button,storage_status]:
 		column.add_child(control)
 	login_button.pressed.connect(login)
 	password_input.text_submitted.connect(func(_text): login())
@@ -193,6 +211,9 @@ func _ready() -> void:
 	shop_buy_button.pressed.connect(_buy_selected_shop_item)
 	shop_sell_button.pressed.connect(_sell_selected_shop_item)
 	shop_sell_picker.item_selected.connect(func(_index): _update_shop_sell_quantity())
+	storage_open_button.pressed.connect(_open_storage_from_input)
+	storage_deposit_button.pressed.connect(_deposit_selected_storage_item)
+	storage_withdraw_button.pressed.connect(_withdraw_selected_storage_item)
 	var style := StyleBoxFlat.new()
 	style.bg_color = Color("211c15")
 	style.border_color = Color("c8a452")
@@ -235,11 +256,15 @@ func login() -> void:
 	discard_status.text = ""
 	_inventory_display_key = ""
 	_shop_display_key = ""
+	_storage_display_key = ""
 	_inventory_page = 0
 	inventory_search.clear()
 	shop_status.text = ""
 	shop_item_picker.clear()
 	shop_sell_picker.clear()
+	storage_status.text = ""
+	storage_deposit_picker.clear()
+	storage_withdraw_picker.clear()
 	inventory_preview.text = ""
 	_show_inventory_preview(false)
 	characters.clear()
@@ -357,6 +382,18 @@ func submit_shop_sell(item_uid: int, quantity: int = 1) -> bool:
 	return active and int(_latest.get("active_shop_npc",0)) > 0 and int(_latest.get("pending_shop_sequence",0)) == 0 and item_uid > 0 and quantity > 0 and quantity <= 1000000 and (_latest.get("inventory_items",{}) as Dictionary).has(item_uid) and quantity <= int(((_latest.get("inventory_items",{}) as Dictionary)[item_uid] as Dictionary).get("quantity",0)) and session.sell_shop_item(item_uid,quantity)
 
 
+func submit_storage_open(npc_spawn_id: int) -> bool:
+	return active and not bool(_latest.get("reconnecting",false)) and bool(_latest.get("world_ready",false)) and bool(_latest.get("inventory_ready",false)) and not bool(_latest.get("player_dead",false)) and not bool(_latest.get("resync_pending",false)) and npc_spawn_id > 0 and int(_latest.get("pending_storage_sequence",0)) == 0 and session.open_storage(npc_spawn_id)
+
+
+func submit_storage_deposit(item_uid: int) -> bool:
+	return active and bool(_latest.get("storage_ready",false)) and int(_latest.get("active_storage_npc",0)) > 0 and int(_latest.get("pending_storage_sequence",0)) == 0 and item_uid > 0 and (_latest.get("inventory_items",{}) as Dictionary).has(item_uid) and session.deposit_storage_item(item_uid)
+
+
+func submit_storage_withdraw(item_uid: int) -> bool:
+	return active and bool(_latest.get("storage_ready",false)) and int(_latest.get("active_storage_npc",0)) > 0 and int(_latest.get("pending_storage_sequence",0)) == 0 and item_uid > 0 and (_latest.get("storage_items",{}) as Dictionary).has(item_uid) and session.withdraw_storage_item(item_uid)
+
+
 func request_respawn() -> void:
 	if respawn_button.disabled or not respawn_button.visible or not active:
 		return
@@ -388,11 +425,15 @@ func disconnect_session() -> void:
 	discard_status.text = ""
 	_inventory_display_key = ""
 	_shop_display_key = ""
+	_storage_display_key = ""
 	_inventory_page = 0
 	inventory_search.clear()
 	shop_status.text = ""
 	shop_item_picker.clear()
 	shop_sell_picker.clear()
+	storage_status.text = ""
+	storage_deposit_picker.clear()
+	storage_withdraw_picker.clear()
 	inventory_preview.text = ""
 	_show_inventory_preview(false)
 	_characters = []
@@ -637,7 +678,7 @@ func _update_shop_sell_quantity() -> void:
 
 func _update_shop_ui() -> void:
 	var in_world := active and int(_latest.get("state",-1)) == State.STATE_IN_WORLD
-	for control in [shop_npc_input,shop_open_button,shop_money_label,shop_item_picker,shop_sell_picker,shop_quantity,shop_buy_button,shop_sell_button,shop_status]:
+	for control in [shop_npc_input,shop_open_button,shop_money_label,shop_item_picker,shop_sell_picker,shop_quantity,shop_sell_quantity,shop_buy_button,shop_sell_button,shop_status]:
 		control.visible = in_world
 	if not in_world:
 		_shop_display_key = ""
@@ -699,6 +740,101 @@ func _update_shop_ui() -> void:
 	shop_sell_button.disabled = not usable or pending or active_npc <= 0 or shop_sell_picker.item_count == 0
 	shop_quantity.editable = usable and not pending and active_npc > 0
 	shop_sell_quantity.editable = usable and not pending and active_npc > 0 and shop_sell_picker.item_count > 0
+
+
+func _open_storage_from_input() -> void:
+	if submit_storage_open(int(storage_npc_input.value)):
+		storage_status.text = "正在向伺服器確認 NPC 倉庫…"
+		storage_open_button.disabled = true
+	else:
+		storage_status.text = "目前無法開啟倉庫"
+
+
+func _deposit_selected_storage_item() -> void:
+	if storage_deposit_button.disabled or storage_deposit_picker.selected < 0:
+		return
+	var uid := int(storage_deposit_picker.get_item_metadata(storage_deposit_picker.selected))
+	if submit_storage_deposit(uid):
+		storage_status.text = "整組存入請求已送出，等待伺服器結算…"
+		storage_deposit_button.disabled = true
+		storage_withdraw_button.disabled = true
+	else:
+		storage_status.text = "目前無法存入該物品"
+
+
+func _withdraw_selected_storage_item() -> void:
+	if storage_withdraw_button.disabled or storage_withdraw_picker.selected < 0:
+		return
+	var uid := int(storage_withdraw_picker.get_item_metadata(storage_withdraw_picker.selected))
+	if submit_storage_withdraw(uid):
+		storage_status.text = "整組取出請求已送出，等待伺服器結算…"
+		storage_deposit_button.disabled = true
+		storage_withdraw_button.disabled = true
+	else:
+		storage_status.text = "目前無法取出該物品"
+
+
+func _update_storage_ui() -> void:
+	var in_world := active and int(_latest.get("state",-1)) == State.STATE_IN_WORLD
+	for control in [storage_npc_input,storage_open_button,storage_deposit_picker,storage_withdraw_picker,storage_deposit_button,storage_withdraw_button,storage_status]:
+		control.visible = in_world
+	if not in_world:
+		_storage_display_key = ""
+		return
+	var pending := int(_latest.get("pending_storage_sequence",0)) != 0
+	var usable := bool(_latest.get("world_ready",false)) and bool(_latest.get("inventory_ready",false)) and not bool(_latest.get("player_dead",false)) and not bool(_latest.get("reconnecting",false)) and not bool(_latest.get("resync_pending",false)) and not bool(_latest.get("waiting_for_new_map",false))
+	storage_npc_input.editable = usable and not pending
+	storage_open_button.disabled = not usable or pending
+	var active_npc := int(_latest.get("active_storage_npc",0))
+	var ready := bool(_latest.get("storage_ready",false))
+	var storage: Dictionary = _latest.get("storage_items",{})
+	var inventory: Dictionary = _latest.get("inventory_items",{})
+	var key := "%d/%d/%d/%d/%d/%d" % [
+		active_npc,int(_latest.get("inventory_revision",0)),
+		int(_latest.get("storage_revision",0)),
+		int(_latest.get("storage_sequence",0)),
+		inventory.size(),storage.size()]
+	if key != _storage_display_key:
+		_storage_display_key = key
+		storage_deposit_picker.clear()
+		storage_withdraw_picker.clear()
+		if ready and active_npc > 0:
+			var inventory_uids: Array = inventory.keys()
+			inventory_uids.sort()
+			for raw_uid in inventory_uids:
+				var uid := int(raw_uid)
+				var item: Dictionary = inventory[raw_uid]
+				var item_id := int(item.get("item_definition_id",0))
+				storage_deposit_picker.add_item("%s ×%d｜UID %d" % [
+					item_catalog.name_for(item_id),int(item.get("quantity",0)),uid])
+				storage_deposit_picker.set_item_metadata(storage_deposit_picker.item_count-1,uid)
+			var stored_uids: Array = storage.keys()
+			stored_uids.sort()
+			for raw_uid in stored_uids:
+				var uid := int(raw_uid)
+				var item: Dictionary = storage[raw_uid]
+				var item_id := int(item.get("item_definition_id",0))
+				storage_withdraw_picker.add_item("%s ×%d｜UID %d" % [
+					item_catalog.name_for(item_id),int(item.get("quantity",0)),uid])
+				storage_withdraw_picker.set_item_metadata(storage_withdraw_picker.item_count-1,uid)
+			if storage_deposit_picker.item_count > 0:
+				storage_deposit_picker.select(0)
+			if storage_withdraw_picker.item_count > 0:
+				storage_withdraw_picker.select(0)
+	var open_status := int(_latest.get("last_storage_open_status",-1))
+	if open_status > 0 and not ready:
+		storage_status.text = "倉庫無法開啟（伺服器代碼 %d）" % open_status
+	var result: Dictionary = _latest.get("last_storage_result",{})
+	if not result.is_empty():
+		if int(result.get("status",-1)) in [0,1]:
+			storage_status.text = "%s完成：%s ×%d｜UID %d" % [
+				"存入" if int(result.get("kind",0)) == 1 else "取出",
+				item_catalog.name_for(int(result.get("item_definition_id",0))),
+				int(result.get("quantity",0)),int(result.get("item_uid",0))]
+		else:
+			storage_status.text = "倉庫操作失敗（伺服器代碼 %d）" % int(result.get("status",-1))
+	storage_deposit_button.disabled = not usable or pending or not ready or active_npc <= 0 or storage_deposit_picker.item_count == 0
+	storage_withdraw_button.disabled = not usable or pending or not ready or active_npc <= 0 or storage_withdraw_picker.item_count == 0
 
 
 func _update_inventory_ui() -> void:
@@ -809,6 +945,7 @@ func _process(delta: float) -> void:
 	_set_skill_controls()
 	_update_inventory_ui()
 	_update_shop_ui()
+	_update_storage_ui()
 	var pickup_result: Dictionary = _latest.get("last_pickup_result",{})
 	if not pickup_result.is_empty():
 		if int(pickup_result.status) in [0,1]:

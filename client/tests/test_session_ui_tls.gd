@@ -25,6 +25,11 @@ class RespawnSession extends RefCounted:
 	var last_shop_item := 0
 	var last_shop_uid := 0
 	var last_shop_quantity := 0
+	var storage_opens := 0
+	var storage_deposits := 0
+	var storage_withdrawals := 0
+	var last_storage_npc := 0
+	var last_storage_uid := 0
 	func use_recovery_item(item_uid: int) -> bool:
 		if item_uid <= 0:
 			return false
@@ -62,6 +67,24 @@ class RespawnSession extends RefCounted:
 		shop_sells += 1
 		last_shop_uid = item_uid
 		last_shop_quantity = quantity
+		return true
+	func open_storage(npc_spawn_id: int) -> bool:
+		if npc_spawn_id <= 0:
+			return false
+		storage_opens += 1
+		last_storage_npc = npc_spawn_id
+		return true
+	func deposit_storage_item(item_uid: int) -> bool:
+		if item_uid <= 0:
+			return false
+		storage_deposits += 1
+		last_storage_uid = item_uid
+		return true
+	func withdraw_storage_item(item_uid: int) -> bool:
+		if item_uid <= 0:
+			return false
+		storage_withdrawals += 1
+		last_storage_uid = item_uid
 		return true
 	func attack_monster(entity_id: int) -> bool:
 		if entity_id <= 0:
@@ -560,6 +583,47 @@ func run() -> void:
 		fail("Shop UI did not reject sell quantity exceeding authoritative owned stack")
 		return
 
+	# Personal storage UI only selects exact Item UIDs; no client quantity or
+	# fee is invented. Whole-stack policy remains server-authoritative.
+	panel._latest.active_storage_npc = 0
+	panel._latest.pending_storage_sequence = 0
+	panel._latest.storage_sequence = 0
+	panel._latest.storage_ready = false
+	panel._latest.storage_revision = 0
+	panel._latest.storage_items = {}
+	panel._latest.last_storage_open_status = -1
+	panel._latest.last_storage_result = {}
+	panel._update_storage_ui()
+	panel.storage_npc_input.value = 88
+	panel.storage_open_button.pressed.emit()
+	if stub.storage_opens != 1 or stub.last_storage_npc != 88 or not panel.storage_open_button.disabled:
+		fail("Storage open UI did not send exactly one NPC intent")
+		return
+	panel._latest.active_storage_npc = 88
+	panel._latest.storage_ready = true
+	panel._latest.storage_sequence = 1
+	panel._latest.storage_revision = 1
+	panel._latest.storage_items = {20000:{
+		"item_uid":20000,"item_definition_id":4001,"quantity":2,"drop_id":0}}
+	panel._update_storage_ui()
+	if panel.storage_deposit_picker.item_count == 0 or panel.storage_withdraw_picker.item_count != 1 or panel.storage_deposit_button.disabled or panel.storage_withdraw_button.disabled:
+		fail("Authoritative storage baseline was not rendered as playable controls")
+		return
+	panel.storage_deposit_button.pressed.emit()
+	if stub.storage_deposits != 1 or stub.last_storage_uid != 10000:
+		fail("Storage deposit UI did not use selected owned Item UID")
+		return
+	panel._update_storage_ui()
+	panel.storage_withdraw_button.pressed.emit()
+	if stub.storage_withdrawals != 1 or stub.last_storage_uid != 20000:
+		fail("Storage withdraw UI did not use selected stored Item UID")
+		return
+	panel._latest.pending_storage_sequence = 2
+	panel._update_storage_ui()
+	if not panel.storage_deposit_button.disabled or not panel.storage_withdraw_button.disabled:
+		fail("Pending storage mutation allowed another item move")
+		return
+
 	panel._latest.player_dead = true
 	panel._update_inventory_ui()
 	if not panel.recovery_button.disabled or panel.submit_recovery_use(10000):
@@ -575,5 +639,5 @@ func run() -> void:
 	panel._set_respawn_controls()
 	app.queue_free()
 	await process_frame
-	print("CLIENT_TLS_LOGIN_PASS ui=PASS auth=PASS choose=PASS receipt=PASS world_ready=PASS password_cleared=PASS logout=PASS respawn_ui=PASS click_attack_ui=PASS click_pickup_ui=PASS persistent_inventory_ui=PASS item_metadata=PASS inventory_pagination=PASS recovery_item_button=PASS inventory_discard_button=PASS inventory_discard_quantity_confirm=PASS shop_ui=PASS skill_cast_ui=PASS skill_singleflight=PASS combat_mp_ui=PASS")
+	print("CLIENT_TLS_LOGIN_PASS ui=PASS auth=PASS choose=PASS receipt=PASS world_ready=PASS password_cleared=PASS logout=PASS respawn_ui=PASS click_attack_ui=PASS click_pickup_ui=PASS persistent_inventory_ui=PASS item_metadata=PASS inventory_pagination=PASS recovery_item_button=PASS inventory_discard_button=PASS inventory_discard_quantity_confirm=PASS shop_ui=PASS storage_ui=PASS skill_cast_ui=PASS skill_singleflight=PASS combat_mp_ui=PASS")
 	quit(0)
