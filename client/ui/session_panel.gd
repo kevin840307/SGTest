@@ -45,6 +45,16 @@ var discard_quantity := SpinBox.new()
 var discard_all_button := Button.new()
 var discard_confirm := ConfirmationDialog.new()
 var discard_status := Label.new()
+var shop_npc_input := SpinBox.new()
+var shop_open_button := Button.new()
+var shop_money_label := Label.new()
+var shop_item_picker := OptionButton.new()
+var shop_sell_picker := OptionButton.new()
+var shop_quantity := SpinBox.new()
+var shop_buy_button := Button.new()
+var shop_sell_button := Button.new()
+var shop_status := Label.new()
+var _shop_display_key := ""
 const INVENTORY_PAGE_SIZE := 80
 var _inventory_page := 0
 var _inventory_display_key := ""
@@ -128,6 +138,21 @@ func _ready() -> void:
 	discard_status.text = ""
 	for control in [inventory_previous, inventory_next, inventory_page_label,recovery_picker,recovery_button,recovery_status,discard_quantity,discard_all_button,discard_button,discard_status]:
 		control.visible = false
+	shop_npc_input.min_value = 1
+	shop_npc_input.max_value = 2147483647
+	shop_npc_input.step = 1
+	shop_npc_input.value = 1
+	shop_open_button.text = "開啟附近 NPC 商店"
+	shop_money_label.text = "金錢：—"
+	shop_quantity.min_value = 1
+	shop_quantity.max_value = 1000000
+	shop_quantity.value = 1
+	shop_quantity.step = 1
+	shop_buy_button.text = "購買選中商品"
+	shop_sell_button.text = "販售選中背包物品"
+	shop_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	for control in [shop_npc_input,shop_open_button,shop_money_label,shop_item_picker,shop_sell_picker,shop_quantity,shop_buy_button,shop_sell_button,shop_status]:
+		control.visible = false
 	respawn_button.text = "復活"
 	skill_hint.text = "技能 ID（需伺服器已核准規則）"
 	skill_id_input.min_value = 1
@@ -139,7 +164,7 @@ func _ready() -> void:
 	skill_area_button.text = "施放自身中心範圍技能"
 	skill_area_button.focus_mode = Control.FOCUS_NONE
 	skill_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	for control in [login_button,characters,choose_button,character_name_input,character_slot_input,create_character_button,character_create_status,respawn_button,skill_hint,skill_id_input,skill_target_mode,skill_area_button,skill_status,logout_button,status,pickup_status,inventory_button,inventory_search,inventory_preview,inventory_previous,inventory_page_label,inventory_next,recovery_picker,recovery_button,recovery_status,discard_quantity,discard_all_button,discard_button,discard_status]:
+	for control in [login_button,characters,choose_button,character_name_input,character_slot_input,create_character_button,character_create_status,respawn_button,skill_hint,skill_id_input,skill_target_mode,skill_area_button,skill_status,logout_button,status,pickup_status,inventory_button,inventory_search,inventory_preview,inventory_previous,inventory_page_label,inventory_next,recovery_picker,recovery_button,recovery_status,discard_quantity,discard_all_button,discard_button,discard_status,shop_npc_input,shop_open_button,shop_money_label,shop_item_picker,shop_sell_picker,shop_quantity,shop_buy_button,shop_sell_button,shop_status]:
 		column.add_child(control)
 	login_button.pressed.connect(login)
 	password_input.text_submitted.connect(func(_text): login())
@@ -159,6 +184,10 @@ func _ready() -> void:
 	discard_button.pressed.connect(_discard_selected_item)
 	discard_confirm.confirmed.connect(_confirm_inventory_discard)
 	discard_confirm.canceled.connect(func(): _pending_discard_confirmation.clear())
+	shop_open_button.pressed.connect(_open_shop_from_input)
+	shop_buy_button.pressed.connect(_buy_selected_shop_item)
+	shop_sell_button.pressed.connect(_sell_selected_shop_item)
+	shop_sell_picker.item_selected.connect(func(_index): _update_shop_sell_quantity())
 	var style := StyleBoxFlat.new()
 	style.bg_color = Color("211c15")
 	style.border_color = Color("c8a452")
