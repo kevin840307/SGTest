@@ -62,6 +62,21 @@ class RespawnSession extends RefCounted:
 		pass
 
 
+
+class CharacterCreateSession extends RefCounted:
+	var creates := 0
+	var last_slot := -1
+	var last_name := ""
+	func create_character(slot: int, character_name: String) -> bool:
+		if slot < 0 or character_name.is_empty():
+			return false
+		creates += 1
+		last_slot = slot
+		last_name = character_name
+		return true
+	func stop() -> void:
+		pass
+
 class FailedSession extends RefCounted:
 	func connect_secure(_host, _port, _user, _password, _name, _trust):
 		return OK
@@ -274,6 +289,30 @@ func run() -> void:
 	if panel.active or panel.login_button.disabled or app._map_buttons[0].disabled or not panel.characters.item_count == 0:
 		fail("Logout left stale UI or binding")
 		return
+	# Character creation controls must expose exactly the authoritative Session
+	# intent while selecting; the real TLS creation/store lifecycle is covered
+	# by the C# authenticated E2E.
+	var create_stub := CharacterCreateSession.new()
+	panel.session = create_stub
+	panel.active = true
+	panel._latest = {"state":State.STATE_SELECTING_CHARACTER,
+		"characters":[],"character_create_status":-1}
+	panel._set_controls()
+	if not panel.create_character_button.visible or panel.create_character_button.disabled:
+		fail("Character creation controls unavailable while selecting")
+		return
+	panel.character_slot_input.value = 2
+	panel.character_name_input.text = "UiCreatedHero"
+	panel.create_character_button.pressed.emit()
+	if create_stub.creates != 1 or create_stub.last_slot != 2 or 		create_stub.last_name != "UiCreatedHero":
+		fail("Character creation UI did not send exact slot/name once")
+		return
+	panel._latest.state = State.STATE_CREATING_CHARACTER
+	panel._set_controls()
+	if not panel.create_character_button.disabled or panel.character_name_input.editable:
+		fail("Character creation UI allowed duplicate while awaiting Server")
+		return
+
 	# Use a stub only for the button's state/intent boundary; the real
 	# authenticated respawn wire and durable HP settlement have separate E2E.
 	var stub := RespawnSession.new()
