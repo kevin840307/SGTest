@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Diagnostics;
 using SGTest.Server.Gateway;
+using SGTest.Server.Identity;
 using SGTest.Server.Wire;
 using SGTest.Server.World;
 
