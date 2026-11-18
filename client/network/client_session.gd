@@ -83,6 +83,18 @@ func connect_secure(host: String, port: int, username: String, password: String,
 		_mutex.unlock()
 	return error
 
+func create_character(slot: int, character_name: String) -> bool:
+	var current := snapshot()
+	var trimmed := character_name.strip_edges()
+	var bytes := trimmed.to_utf8_buffer()
+	if int(current.get("state",-1)) != WorldState.STATE_SELECTING_CHARACTER or 		slot < 0 or slot > 31 or bytes.size() < 1 or bytes.size() > 96:
+		return false
+	return _queue_intent({
+		"type": "create_character",
+		"slot": slot,
+		"name": trimmed,
+	})
+
 func choose_character(character_id: int) -> bool:
 	if character_id <= 0:
 		return false
@@ -408,7 +420,16 @@ func _process_first_intent() -> void:
 	if intent.is_empty():
 		return
 	var kind := str(intent.get("type", ""))
-	if kind == "choose":
+	if kind == "create_character":
+		if int(_world.state) != WorldState.STATE_SELECTING_CHARACTER:
+			return
+		var slot := int(intent.get("slot",-1))
+		var character_name := str(intent.get("name",""))
+		var frame := WireCodec.encode_character_create(slot,character_name)
+		if not frame.is_empty() and _transport.send_frame(frame) and 			_world.mark_character_create_sent(slot,character_name):
+			_pop_intent()
+			_publish()
+	elif kind == "choose":
 		if int(_world.state) != WorldState.STATE_SELECTING_CHARACTER:
 			return
 		var character_id := int(intent.character_id)
