@@ -101,6 +101,7 @@ func _initialize() -> void:
 	var first := SNAPSHOT.hex_decode()
 	first.encode_s64(8,1)
 	first.encode_u32(16,4)
+	first.encode_s64(32,8001)
 	first[29] = 0
 	if not world.apply_frame(first) or bool(world.snapshot().storage_ready) or int(world.snapshot().storage_next_index) != 1:
 		fail("partial storage snapshot published early")
@@ -109,7 +110,7 @@ func _initialize() -> void:
 	final_chunk.encode_s64(8,1)
 	final_chunk.encode_u32(16,4)
 	final_chunk.encode_s32(25,1)
-	final_chunk.encode_s64(32,7002)
+	final_chunk.encode_s64(32,8002)
 	final_chunk.encode_s32(40,2702)
 	final_chunk.encode_s32(44,1)
 	final_chunk.encode_s64(48,0)
