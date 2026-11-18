@@ -100,6 +100,19 @@ var inventory_items := {}
 var inventory_ready := false
 var inventory_revision := 0
 var inventory_next_index := 0
+var shop_sequence := 0
+var pending_shop_sequence := 0
+var pending_shop_kind := 0
+var pending_shop_npc := 0
+var pending_shop_item_uid := 0
+var pending_shop_item_definition_id := 0
+var pending_shop_quantity := 0
+var active_shop_npc := 0
+var shop_items := {}
+var shop_money := 0
+var last_shop_open_status := -1
+var last_shop_result := {}
+var stale_shop_results := 0
 
 var respawn_sequence := 0
 var last_respawn_result_sequence := 0
@@ -174,7 +187,7 @@ func mark_skill_sent(sequence: int) -> bool:
 	return true
 
 func mark_recovery_use_sent(sequence: int,item_uid: int) -> bool:
-	if state != STATE_IN_WORLD or player_dead or not combat_available or not inventory_ready or not world_ready or resync_pending or waiting_for_new_map or pending_world_ready_ack_epoch != 0 or last_world_ready_ack_epoch != map_epoch or pending_recovery_sequence != 0 or pending_discard_sequence != 0 or sequence <= recovery_sequence or sequence > 0xffffffff or item_uid <= 0 or not inventory_items.has(item_uid):
+	if state != STATE_IN_WORLD or player_dead or not combat_available or not inventory_ready or not world_ready or resync_pending or waiting_for_new_map or pending_world_ready_ack_epoch != 0 or last_world_ready_ack_epoch != map_epoch or pending_recovery_sequence != 0 or pending_discard_sequence != 0 or pending_shop_sequence != 0 or sequence <= recovery_sequence or sequence > 0xffffffff or item_uid <= 0 or not inventory_items.has(item_uid):
 		return false
 	recovery_sequence = sequence
 	pending_recovery_sequence = sequence
@@ -183,7 +196,7 @@ func mark_recovery_use_sent(sequence: int,item_uid: int) -> bool:
 
 
 func mark_inventory_discard_sent(sequence: int,item_uid: int,quantity: int) -> bool:
-	if state != STATE_IN_WORLD or not inventory_ready or not world_ready or resync_pending or waiting_for_new_map or pending_world_ready_ack_epoch != 0 or last_world_ready_ack_epoch != map_epoch or pending_discard_sequence != 0 or pending_recovery_sequence != 0 or sequence <= discard_sequence or sequence > 0xffffffff or item_uid <= 0 or quantity < 1 or quantity > 1000000 or not inventory_items.has(item_uid) or int((inventory_items[item_uid] as Dictionary).quantity) < quantity:
+	if state != STATE_IN_WORLD or not inventory_ready or not world_ready or resync_pending or waiting_for_new_map or pending_world_ready_ack_epoch != 0 or last_world_ready_ack_epoch != map_epoch or pending_discard_sequence != 0 or pending_recovery_sequence != 0 or pending_shop_sequence != 0 or sequence <= discard_sequence or sequence > 0xffffffff or item_uid <= 0 or quantity < 1 or quantity > 1000000 or not inventory_items.has(item_uid) or int((inventory_items[item_uid] as Dictionary).quantity) < quantity:
 		return false
 	discard_sequence = sequence
 	pending_discard_sequence = sequence
@@ -198,6 +211,30 @@ func mark_pickup_sent(sequence: int, drop_id: int) -> bool:
 	pickup_sequence = sequence
 	pending_pickup_sequence = sequence
 	pending_pickup_drop_id = drop_id
+	return true
+
+
+
+
+func mark_shop_sent(sequence: int,kind: int,npc_spawn_id: int,item_definition_id: int = 0,item_uid: int = 0,quantity: int = 0) -> bool:
+	if state != STATE_IN_WORLD or player_dead or not world_ready or not inventory_ready or resync_pending or waiting_for_new_map or pending_world_ready_ack_epoch != 0 or last_world_ready_ack_epoch != map_epoch or pending_shop_sequence != 0 or pending_recovery_sequence != 0 or pending_discard_sequence != 0 or sequence <= shop_sequence or sequence > 0xffffffff or kind < 1 or kind > 3 or npc_spawn_id <= 0:
+		return false
+	if kind == 1:
+		if item_definition_id != 0 or item_uid != 0 or quantity != 0:
+			return false
+	elif kind == 2:
+		if active_shop_npc != npc_spawn_id or not shop_items.has(item_definition_id) or item_uid != 0 or quantity < 1 or quantity > 1000000:
+			return false
+	else:
+		if active_shop_npc != npc_spawn_id or not shop_items.has(item_definition_id) or item_uid <= 0 or quantity < 1 or quantity > 1000000 or not inventory_items.has(item_uid) or int((inventory_items[item_uid] as Dictionary).item_definition_id) != item_definition_id or int((inventory_items[item_uid] as Dictionary).quantity) < quantity:
+			return false
+	shop_sequence = sequence
+	pending_shop_sequence = sequence
+	pending_shop_kind = kind
+	pending_shop_npc = npc_spawn_id
+	pending_shop_item_definition_id = item_definition_id
+	pending_shop_item_uid = item_uid
+	pending_shop_quantity = quantity
 	return true
 
 
@@ -273,6 +310,10 @@ func apply_frame(frame: PackedByteArray) -> bool:
 			return _apply_inventory_discard_result(frame)
 		WireCodec.OPCODE_INVENTORY_SNAPSHOT:
 			return _apply_inventory_snapshot(frame)
+		WireCodec.OPCODE_SHOP_SNAPSHOT:
+			return _apply_shop_snapshot(frame)
+		WireCodec.OPCODE_SHOP_TRANSACTION_RESULT:
+			return _apply_shop_transaction_result(frame)
 		WireCodec.OPCODE_WORLD_READY:
 			return _apply_world_ready(frame)
 		WireCodec.OPCODE_SELF_STATE:
@@ -383,6 +424,19 @@ func snapshot() -> Dictionary:
 		"inventory_ready": inventory_ready,
 		"inventory_revision": inventory_revision,
 		"inventory_next_index": inventory_next_index,
+		"shop_sequence": shop_sequence,
+		"pending_shop_sequence": pending_shop_sequence,
+		"pending_shop_kind": pending_shop_kind,
+		"pending_shop_npc": pending_shop_npc,
+		"pending_shop_item_uid": pending_shop_item_uid,
+		"pending_shop_item_definition_id": pending_shop_item_definition_id,
+		"pending_shop_quantity": pending_shop_quantity,
+		"active_shop_npc": active_shop_npc,
+		"shop_items": shop_items.duplicate(true),
+		"shop_money": shop_money,
+		"last_shop_open_status": last_shop_open_status,
+		"last_shop_result": last_shop_result.duplicate(true),
+		"stale_shop_results": stale_shop_results,
 		"respawn_sequence": respawn_sequence,
 		"last_respawn_result_sequence": last_respawn_result_sequence,
 		"last_respawn_result_status": last_respawn_result_status,
@@ -538,6 +592,19 @@ func _apply_choose(frame: PackedByteArray) -> bool:
 	inventory_ready = false
 	inventory_revision = 0
 	inventory_next_index = 0
+	shop_sequence = 0
+	pending_shop_sequence = 0
+	pending_shop_kind = 0
+	pending_shop_npc = 0
+	pending_shop_item_uid = 0
+	pending_shop_item_definition_id = 0
+	pending_shop_quantity = 0
+	active_shop_npc = 0
+	shop_items.clear()
+	shop_money = 0
+	last_shop_open_status = -1
+	last_shop_result.clear()
+	stale_shop_results = 0
 	respawn_sequence = 0
 	last_respawn_result_sequence = 0
 	last_respawn_result_status = -1
@@ -1380,6 +1447,104 @@ func _apply_pickup_result(frame: PackedByteArray) -> bool:
 			if not inventory_items.has(uid):
 				inventory_items[uid] = granted
 				inventory_revision += 1
+	return true
+
+
+
+
+func _clear_pending_shop() -> void:
+	pending_shop_sequence = 0
+	pending_shop_kind = 0
+	pending_shop_npc = 0
+	pending_shop_item_uid = 0
+	pending_shop_item_definition_id = 0
+	pending_shop_quantity = 0
+
+
+func _apply_shop_snapshot(frame: PackedByteArray) -> bool:
+	if state != STATE_IN_WORLD:
+		return fail("shop_snapshot_out_of_state")
+	var value := WireCodec.decode_shop_snapshot(frame)
+	if value.is_empty():
+		return fail("invalid_shop_snapshot")
+	var epoch := int(value.map_epoch)
+	var sequence := int(value.shop_sequence)
+	if epoch < map_epoch:
+		stale_shop_results += 1
+		return true
+	if epoch > map_epoch:
+		return fail("future_shop_snapshot")
+	if sequence > shop_sequence:
+		return fail("unsent_shop_snapshot")
+	if sequence != pending_shop_sequence or pending_shop_kind != 1 or int(value.npc_spawn_id) != pending_shop_npc:
+		return fail("shop_snapshot_wrong_request")
+	last_shop_open_status = int(value.status)
+	if int(value.status) == 0:
+		active_shop_npc = int(value.npc_spawn_id)
+		shop_money = int(value.money)
+		shop_items.clear()
+		for item in value.items:
+			var item_id := int(item.item_definition_id)
+			if shop_items.has(item_id):
+				return fail("shop_snapshot_duplicate_item")
+			shop_items[item_id] = item.duplicate(true)
+	else:
+		active_shop_npc = 0
+		shop_items.clear()
+		shop_money = 0
+	_clear_pending_shop()
+	return true
+
+
+func _apply_shop_transaction_result(frame: PackedByteArray) -> bool:
+	if state != STATE_IN_WORLD:
+		return fail("shop_result_out_of_state")
+	var result := WireCodec.decode_shop_transaction_result(frame)
+	if result.is_empty():
+		return fail("invalid_shop_result")
+	var epoch := int(result.map_epoch)
+	var sequence := int(result.shop_sequence)
+	if epoch < map_epoch:
+		stale_shop_results += 1
+		return true
+	if epoch > map_epoch:
+		return fail("future_shop_result")
+	if sequence > shop_sequence:
+		return fail("unsent_shop_result")
+	if sequence != pending_shop_sequence or pending_shop_kind not in [2,3] or int(result.kind) != pending_shop_kind-1 or int(result.npc_spawn_id) != pending_shop_npc or int(result.item_definition_id) != pending_shop_item_definition_id or int(result.quantity) != pending_shop_quantity:
+		return fail("shop_result_wrong_request")
+	if pending_shop_kind == 3 and int(result.item_uid) != pending_shop_item_uid:
+		return fail("shop_sell_uid_mismatch")
+	if int(result.status) == 0:
+		if not inventory_ready:
+			return fail("shop_applied_without_inventory")
+		var uid := int(result.item_uid)
+		var item_id := int(result.item_definition_id)
+		var quantity := int(result.quantity)
+		var remaining := int(result.remaining_quantity)
+		if pending_shop_kind == 2:
+			if uid <= 0 or inventory_items.has(uid) or remaining != quantity:
+				return fail("shop_buy_inventory_conflict")
+			inventory_items[uid] = {
+				"item_uid":uid,"item_definition_id":item_id,
+				"quantity":quantity,"drop_id":0}
+		else:
+			if not inventory_items.has(uid):
+				return fail("shop_sell_missing_inventory")
+			var previous: Dictionary = inventory_items[uid]
+			if int(previous.item_definition_id) != item_id or int(previous.quantity) != quantity+remaining:
+				return fail("shop_sell_inventory_quantity_mismatch")
+			if remaining == 0:
+				inventory_items.erase(uid)
+			else:
+				var updated := previous.duplicate(true)
+				updated.quantity = remaining
+				inventory_items[uid] = updated
+		inventory_revision += 1
+		shop_money = int(result.money)
+	# Durable replay receipts never apply inventory mutations twice.
+	last_shop_result = result.duplicate(true)
+	_clear_pending_shop()
 	return true
 
 
