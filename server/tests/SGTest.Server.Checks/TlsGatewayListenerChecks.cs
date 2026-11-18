@@ -540,6 +540,8 @@ internal static class TlsGatewayListenerChecks
         var run = listener.RunAsync(stop.Token);
         var allRead = new TaskCompletionSource(
             TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseClients = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
         int readCount = 0;
         long transferredBytes = 0;
         int receivedSpawns = 0;
@@ -589,13 +591,16 @@ internal static class TlsGatewayListenerChecks
                     $"load account {index} character ownership leaked");
                 await tls.WriteAsync(WireProtocol.EncodeCharacterChoose(
                     new(accounts[index].CharacterId)), deadline.Token);
+                var chooseFrame = await Receive();
                 Checks.Require(WireProtocol.TryDecodeCharacterChooseResult(
-                    await Receive(), out var choice) &&
-                    choice.Status == CharacterChooseWireStatus.Success &&
+                    chooseFrame, out _), $"load character {index} malformed choose result");
+                WireProtocol.TryDecodeCharacterChooseResult(chooseFrame, out var choice);
+                Checks.Require(choice.Status == CharacterChooseWireStatus.Success &&
                     choice.CharacterId == accounts[index].CharacterId &&
                     choice.MapId == 115, $"load character {index} choose failed");
                 Checks.Require(WireProtocol.TryDecodeInventorySnapshot(
                     await Receive(), out var inventory) &&
+                    inventory is not null &&
                     inventory.CharacterId == accounts[index].CharacterId &&
                     inventory.Complete &&
                     inventory.Items.Count == (index == 0 ? 2 : 0),
@@ -618,8 +623,10 @@ internal static class TlsGatewayListenerChecks
                     switch (header.Opcode)
                     {
                         case WireOpcode.WorldReady:
+                            Checks.Require(WireProtocol.TryDecodeWorldReady(frame, out _),
+                                $"load client {index} malformed WorldReady");
+                            WireProtocol.TryDecodeWorldReady(frame, out var ready);
                             Checks.Require(!worldReady &&
-                                WireProtocol.TryDecodeWorldReady(frame, out var ready) &&
                                 ready.ActorId == choice.CharacterId &&
                                 ready.ReceiverMapEpoch == choice.MapEpoch,
                                 $"load client {index} received an invalid WorldReady");
@@ -676,19 +683,22 @@ internal static class TlsGatewayListenerChecks
                 Interlocked.Increment(ref receipts);
                 if (Interlocked.Increment(ref readCount) == players)
                     allRead.TrySetResult();
-                // Do not let early clients disconnect before slower peers
-                // have observed their complete 19-player presence baseline.
-                await allRead.Task.WaitAsync(deadline.Token);
+                // Hold all 20 live sessions open until the test has verified
+                // listener/World concurrent capacity, then close them together.
+                await releaseClients.Task.WaitAsync(deadline.Token);
             }
 
-            await Task.WhenAll(Enumerable.Range(0, players)
-                .Select(RunPlayer)).WaitAsync(deadline.Token);
+            var clients = Enumerable.Range(0, players)
+                .Select(RunPlayer).ToArray();
+            await allRead.Task.WaitAsync(deadline.Token);
             Checks.Require(fixture.Host.Statistics.ActiveActors == players &&
                 fixture.Router.Statistics.ActiveSessions == players &&
                 listener.Statistics.ActiveConnections == players,
                 "not all 20 separately authenticated sessions were simultaneously alive");
-            // The above scopes dispose when the workers complete. World cleanup
-            // may run asynchronously after TCP EOF; the listener must settle it.
+            releaseClients.TrySetResult();
+            await Task.WhenAll(clients).WaitAsync(deadline.Token);
+            // All scopes have now disposed their sockets; World cleanup
+            // runs asynchronously after TCP EOF and must settle completely.
             await Until(() => fixture.Host.Statistics.ActiveActors == 0 &&
                 fixture.Router.Statistics.ActiveSessions == 0 &&
                 listener.Statistics.ActiveConnections == 0);
@@ -715,6 +725,7 @@ internal static class TlsGatewayListenerChecks
         }
         finally
         {
+            releaseClients.TrySetResult();
             stop.Cancel();
             await run.WaitAsync(TimeSpan.FromSeconds(10));
         }
