@@ -40,6 +40,9 @@ internal static class TlsGatewayListenerChecks
         Checks.Run("20 authenticated TLS clients share one dense view with 300 monsters and 500 ground drops",
             () => AuthenticatedTwentyClients(root, mixedLoad: true, denseLoad: true)
                 .GetAwaiter().GetResult());
+        Checks.Run("20 authenticated dense clients sustain movement while 300-monster AI and 500 drops stay live",
+            () => AuthenticatedTwentyClients(root, mixedLoad: true, denseLoad: true,
+                sustainedLoad: true).GetAwaiter().GetResult());
     }
 
     private static async Task InvalidConfiguration(string root)
@@ -516,11 +519,15 @@ internal static class TlsGatewayListenerChecks
     /// This is a synthetic 20-client .NET loopback test, not 20 Godot renderers.
     /// </summary>
     private static async Task AuthenticatedTwentyClients(
-        string root, bool mixedLoad = false, bool denseLoad = false)
+        string root, bool mixedLoad = false, bool denseLoad = false,
+        bool sustainedLoad = false)
     {
         if (denseLoad && !mixedLoad)
             throw new ArgumentException("Dense AOI requires mixed load");
+        if (sustainedLoad && !denseLoad)
+            throw new ArgumentException("Sustained load requires dense AOI");
         const int players = 20;
+        const int sustainedMoveRounds = 16;
         int monstersPerViewer = denseLoad ? 300 : 15;
         int dropsPerViewer = denseLoad ? 500 : 25;
         const string password = "Listener-Password-123!";
@@ -552,9 +559,12 @@ internal static class TlsGatewayListenerChecks
         var run = listener.RunAsync(stop.Token);
         var allRead = new TaskCompletionSource(
             TaskCreationOptions.RunContinuationsAsynchronously);
+        var allBaseline = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
         var releaseClients = new TaskCompletionSource(
             TaskCreationOptions.RunContinuationsAsynchronously);
         int readCount = 0;
+        int baselineCount = 0;
         long transferredBytes = 0;
         int receivedSpawns = 0;
         int receivedMonsters = 0;
@@ -562,7 +572,13 @@ internal static class TlsGatewayListenerChecks
         int receipts = 0;
         int observedMonsterDeltaFrames = 0;
         int observedPlayerDeltaFrames = 0;
+        int sustainedReceipts = 0;
+        int sustainedMonsterDeltaFrames = 0;
+        int sustainedPlayerDeltaFrames = 0;
         var readyDurations = new double[players];
+        var sustainedReceiptMs = sustainedLoad
+            ? new double[players * sustainedMoveRounds]
+            : Array.Empty<double>();
         try
         {
             async Task RunPlayer(int index)
@@ -737,6 +753,96 @@ internal static class TlsGatewayListenerChecks
                 }
                 readyDurations[index] =
                     Stopwatch.GetElapsedTime(started).TotalMilliseconds;
+
+                if (sustainedLoad)
+                {
+                    if (Interlocked.Increment(ref baselineCount) == players)
+                        allBaseline.TrySetResult();
+                    await allBaseline.Task.WaitAsync(deadline.Token);
+
+                    var origin = MixedLoadCenter(index, denseLoad: true);
+                    for (int round = 0; round < sustainedMoveRounds; round++)
+                    {
+                        uint sequence = checked((uint)(round + 2));
+                        (int X, int Y) offset = (round & 3) switch
+                        {
+                            0 => (32, 0),
+                            1 => (0, 32),
+                            2 => (-32, 0),
+                            _ => (0, -32)
+                        };
+                        long sentAt = Stopwatch.GetTimestamp();
+                        await tls.WriteAsync(WireProtocol.EncodeMoveTarget(new(
+                            choice.MapEpoch, sequence,
+                            origin.X + offset.X, origin.Y + offset.Y)), deadline.Token);
+                        await tls.FlushAsync(deadline.Token);
+
+                        bool gotReceipt = false;
+                        int framesThisMove = 0;
+                        while (!gotReceipt)
+                        {
+                            var liveFrame = await Receive();
+                            Checks.Require(
+                                WireProtocol.TryReadHeader(liveFrame, out var liveHeader) &&
+                                ++framesThisMove <= 4096,
+                                $"sustained client {index} move {sequence} stalled");
+                            switch (liveHeader.Opcode)
+                            {
+                                case WireOpcode.MoveReceipt:
+                                    Checks.Require(
+                                        WireProtocol.TryDecodeMoveReceipt(
+                                            liveFrame, out var liveReceipt) &&
+                                        liveReceipt.MapEpoch == choice.MapEpoch &&
+                                        liveReceipt.MovementSequence == sequence &&
+                                        liveReceipt.Status == MoveReceiptStatus.Accepted,
+                                        $"sustained client {index} bad receipt {sequence}");
+                                    sustainedReceiptMs[index * sustainedMoveRounds + round] =
+                                        Stopwatch.GetElapsedTime(sentAt).TotalMilliseconds;
+                                    Interlocked.Increment(ref sustainedReceipts);
+                                    gotReceipt = true;
+                                    break;
+                                case WireOpcode.SelfState:
+                                    Checks.Require(
+                                        WireProtocol.TryDecodeEntityState(
+                                            liveFrame, out var selfKind, out var self) &&
+                                        selfKind == WireOpcode.SelfState &&
+                                        self.ActorId == choice.CharacterId &&
+                                        self.ReceiverMapEpoch == choice.MapEpoch,
+                                        $"sustained client {index} foreign SelfState");
+                                    break;
+                                case WireOpcode.EntityDelta:
+                                    Checks.Require(
+                                        WireProtocol.TryDecodeEntityState(
+                                            liveFrame, out _, out var playerDelta) &&
+                                        playerDelta.ActorId != choice.CharacterId &&
+                                        accounts.Any(a => a.CharacterId == playerDelta.ActorId),
+                                        $"sustained client {index} foreign player Delta");
+                                    Interlocked.Increment(ref sustainedPlayerDeltaFrames);
+                                    break;
+                                case WireOpcode.MonsterDelta:
+                                    Checks.Require(
+                                        WireProtocol.TryDecodeMonsterState(
+                                            liveFrame, out _, out var monsterDelta) &&
+                                        monsterDelta.SourceIndex is >= 0 and < 300,
+                                        $"sustained client {index} foreign monster Delta");
+                                    Interlocked.Increment(ref sustainedMonsterDeltaFrames);
+                                    break;
+                                case WireOpcode.EntitySpawn:
+                                case WireOpcode.EntityDespawn:
+                                case WireOpcode.MonsterSpawn:
+                                case WireOpcode.MonsterDespawn:
+                                case WireOpcode.GroundDropSpawn:
+                                case WireOpcode.GroundDropDespawn:
+                                    throw new Exception(
+                                        $"sustained client {index} visibility churn opcode={liveHeader.Opcode}");
+                                default:
+                                    throw new Exception(
+                                        $"sustained client {index} unexpected opcode={liveHeader.Opcode}");
+                            }
+                        }
+                    }
+                }
+
                 Interlocked.Add(ref receivedSpawns, seen.Count);
                 Interlocked.Add(ref receivedMonsters, monsters.Count);
                 Interlocked.Add(ref receivedDrops, drops.Count);
@@ -765,16 +871,21 @@ internal static class TlsGatewayListenerChecks
             var stats = listener.Statistics;
             Checks.Require(stats.AcceptedConnections == players &&
                 stats.CompletedConnections == players &&
-                stats.CommandsAccepted == players &&
+                stats.CommandsAccepted == players *
+                    (sustainedLoad ? 1 + sustainedMoveRounds : 1) &&
                 stats.RejectedAddress == 0 && stats.RejectedCapacity == 0 &&
                 receivedSpawns == (!mixedLoad || denseLoad ? players * (players - 1) : 0) &&
                 receivedMonsters == (mixedLoad
                     ? denseLoad ? players * 300 : 300 : 0) &&
                 receivedDrops == (mixedLoad
                     ? denseLoad ? players * 500 : 500 : 0) &&
-                receipts == players,
+                receipts == players &&
+                sustainedReceipts == (sustainedLoad
+                    ? players * sustainedMoveRounds : 0),
                 "20 authenticated client listener/AOI/Move cleanup or accounting mismatch");
             Array.Sort(readyDurations);
+            if (sustainedLoad)
+                Array.Sort(sustainedReceiptMs);
             static double Percentile(double[] times, double fraction) =>
                 times[Math.Clamp((int)Math.Ceiling(times.Length * fraction) - 1,
                     0, times.Length - 1)];
@@ -783,11 +894,14 @@ internal static class TlsGatewayListenerChecks
                 Checks.Require(fixture.Monsters is not null &&
                     fixture.Monsters.Statistics.Monsters == 300 &&
                     fixture.Monsters.Statistics.ProcessedWorldBatches > 0 &&
-                    fixture.Host.Statistics.ResultOverflowFailures == 0,
-                    "authenticated mixed load lost Host or Monster authority");
+                    fixture.Host.Statistics.ResultOverflowFailures == 0 &&
+                    fixture.Router.Statistics.BackpressureFailures == 0 &&
+                    (!sustainedLoad || fixture.Host.Statistics.PendingMoves == 0),
+                    "authenticated mixed load lost Host, Router or Monster authority");
             }
             Console.WriteLine(
-                (denseLoad ? "SERVER_AUTHENTICATED_DENSE_20_TLS_PASS " :
+                (sustainedLoad ? "SERVER_AUTHENTICATED_SUSTAINED_20_TLS_PASS " :
+                    denseLoad ? "SERVER_AUTHENTICATED_DENSE_20_TLS_PASS " :
                     mixedLoad ? "SERVER_AUTHENTICATED_MIXED_20_TLS_PASS " :
                     "SERVER_AUTHENTICATED_20_TLS_PASS ") +
                 $"distinct_accounts={players} concurrent_sessions={players} " +
@@ -795,10 +909,18 @@ internal static class TlsGatewayListenerChecks
                 $"ground_drop_spawns={receivedDrops} move_receipts={receipts} " +
                 $"monster_delta_frames={observedMonsterDeltaFrames} " +
                 $"player_delta_frames={observedPlayerDeltaFrames} " +
+                $"sustained_move_receipts={sustainedReceipts} " +
+                $"sustained_monster_deltas={sustainedMonsterDeltaFrames} " +
+                $"sustained_player_deltas={sustainedPlayerDeltaFrames} " +
                 $"server_framed_bytes={transferredBytes} " +
                 $"login_to_full_AOI_p50_ms={Percentile(readyDurations, .50):F2} " +
                 $"login_to_full_AOI_p95_ms={Percentile(readyDurations, .95):F2} " +
                 $"login_to_full_AOI_p99_ms={Percentile(readyDurations, .99):F2} " +
+                (sustainedLoad
+                    ? $"move_receipt_p50_ms={Percentile(sustainedReceiptMs, .50):F2} " +
+                      $"move_receipt_p95_ms={Percentile(sustainedReceiptMs, .95):F2} " +
+                      $"move_receipt_p99_ms={Percentile(sustainedReceiptMs, .99):F2} "
+                    : "") +
                 $"admission_rejections={stats.RejectedAddress + stats.RejectedCapacity} " +
                 $"world_skipped_deadlines={fixture.Host.Statistics.SkippedDeadlines} " +
                 $"world_max_tick_us={fixture.Host.Statistics.MaxTickWorkMicroseconds} " +
@@ -853,6 +975,7 @@ internal static class TlsGatewayListenerChecks
         public CancellationTokenSource? CombatStop;
         public Task? CombatWorker;
         public MonsterWorldCoordinator? Monsters;
+        public WorldAoiPump? AoiPump;
 
         public static async Task<Fixture> Create(
             string root, bool withRecovery = false, bool mixedLoad = false,
@@ -1003,7 +1126,7 @@ internal static class TlsGatewayListenerChecks
                 InventoryUids=saved.Select(x=>x.ItemUid).ToArray(),
                 Routing=router.RunAsync(host.Results),Visibility=aoi.RunAsync(),
                 CombatStop=combatStop,CombatWorker=combatWorker,
-                Monsters=mixedMonsters
+                Monsters=mixedMonsters,AoiPump=aoi
             };
         }
 
