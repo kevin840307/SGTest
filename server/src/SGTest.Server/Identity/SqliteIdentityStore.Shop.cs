@@ -112,7 +112,7 @@ WHERE character_id=$actor AND connection_generation=$conn
                     int originalItem = reader.GetInt32(3);
                     int originalQuantity = reader.GetInt32(4);
                     long originalPrice = reader.GetInt64(5);
-                    int remaining = reader.GetInt32(6);
+                    int originalRemaining = reader.GetInt32(6);
                     long money = reader.GetInt64(7);
                     string source = reader.GetString(8);
                     bool exact = originalKind == kind &&
@@ -126,7 +126,7 @@ WHERE character_id=$actor AND connection_generation=$conn
                     return exact
                         ? new(ShopTransactionStatus.AlreadyApplied, kind,
                             originalNpc, originalUid, originalItem,
-                            originalQuantity, remaining, money)
+                            originalQuantity, originalRemaining, money)
                         : Reject(ShopTransactionStatus.StaleSequence, kind,
                             rule.NpcSpawnId, requestedItemUid,
                             rule.ItemDefinitionId, quantity,
