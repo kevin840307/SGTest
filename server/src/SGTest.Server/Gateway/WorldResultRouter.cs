@@ -22,6 +22,15 @@ public sealed record WorldChangedBatch(
 public readonly record struct PlayerRespawnVisualRequest(
     ActorSnapshot Actor,uint RespawnSequence);
 
+public sealed record SkillPreflightRequest(
+    TrustedSkillUse Request,
+    TaskCompletionSource<MonsterWorldCoordinator.SkillPrepareResult> Completion);
+
+public sealed record PreparedSkillAction(
+    MonsterWorldCoordinator.PreparedSkillUse Prepared,
+    SkillUseStatus? CancelStatus,
+    TaskCompletionSource<SkillUseOutcome> Completion);
+
 public sealed record WorldResultRouterStatistics(
     long ReceiptsQueued,
     long StaleReceiptsSkipped,
@@ -49,6 +58,8 @@ public sealed class WorldResultRouter
     private readonly Channel<TrustedWorldResyncRequest> _resync;
     private readonly Channel<TrustedNormalAttack> _attacks;
     private readonly Channel<TrustedSkillUse> _skills;
+    private readonly Channel<SkillPreflightRequest> _skillPreflights;
+    private readonly Channel<PreparedSkillAction> _preparedSkills;
     private readonly Channel<long> _claimedGroundDrops;
     private readonly Channel<PlayerDamageSettlement> _playerDamageVisuals;
     private readonly Channel<PlayerRespawnVisualRequest> _playerRespawnVisuals;
@@ -99,6 +110,22 @@ public sealed class WorldResultRouter
                 FullMode=BoundedChannelFullMode.Wait,
                 AllowSynchronousContinuations=false
             });
+        _skillPreflights=Channel.CreateBounded<SkillPreflightRequest>(
+            new BoundedChannelOptions(_options.AttackRequestCapacity)
+            {
+                SingleReader=true,
+                SingleWriter=false,
+                FullMode=BoundedChannelFullMode.Wait,
+                AllowSynchronousContinuations=false
+            });
+        _preparedSkills=Channel.CreateBounded<PreparedSkillAction>(
+            new BoundedChannelOptions(_options.AttackRequestCapacity)
+            {
+                SingleReader=true,
+                SingleWriter=false,
+                FullMode=BoundedChannelFullMode.Wait,
+                AllowSynchronousContinuations=false
+            });
         _claimedGroundDrops = Channel.CreateBounded<long>(
             new BoundedChannelOptions(_options.AttackRequestCapacity)
             {
@@ -129,6 +156,10 @@ public sealed class WorldResultRouter
     public ChannelReader<TrustedWorldResyncRequest> ResyncRequests => _resync.Reader;
     public ChannelReader<TrustedNormalAttack> AttackRequests => _attacks.Reader;
     public ChannelReader<TrustedSkillUse> SkillRequests => _skills.Reader;
+    public ChannelReader<SkillPreflightRequest> SkillPreflightRequests =>
+        _skillPreflights.Reader;
+    public ChannelReader<PreparedSkillAction> PreparedSkillActions =>
+        _preparedSkills.Reader;
     public ChannelReader<long> ClaimedGroundDrops => _claimedGroundDrops.Reader;
     public ChannelReader<PlayerDamageSettlement> PlayerDamageVisuals =>
         _playerDamageVisuals.Reader;
@@ -361,6 +392,47 @@ public sealed class WorldResultRouter
         return _skills.Writer.TryWrite(request);
     }
 
+    public async Task<MonsterWorldCoordinator.SkillPrepareResult> PrepareSkillAsync(
+        TrustedSkillUse request,CancellationToken cancellationToken=default)
+    {
+        if(request.ActorId<=0 || request.ConnectionEpoch<=0 ||
+            request.RequestMapEpoch<=0 || request.SkillSequence==0 ||
+            request.SkillId<=0 || request.TargetEntityId<=0)
+            throw new ArgumentOutOfRangeException(nameof(request));
+
+        lock(_gate)
+        {
+            if(!_connections.TryGetValue(request.ActorId,out var connection) ||
+                connection.IsClosed ||
+                connection.Binding!=new ConnectionBinding(
+                    request.ActorId,request.ConnectionEpoch,request.RequestMapEpoch))
+                return new(null,new SkillUseOutcome(
+                    SkillUseStatus.OldMapEpoch,0,request.SkillId,
+                    request.TargetEntityId,0,0,0,0));
+        }
+
+        var completion=new TaskCompletionSource<MonsterWorldCoordinator.SkillPrepareResult>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        await _skillPreflights.Writer.WriteAsync(
+            new(request,completion),cancellationToken).ConfigureAwait(false);
+        return await completion.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<SkillUseOutcome> FinishPreparedSkillAsync(
+        MonsterWorldCoordinator.PreparedSkillUse prepared,
+        SkillUseStatus? cancelStatus=null,
+        CancellationToken cancellationToken=default)
+    {
+        if(cancelStatus is SkillUseStatus.Applied or SkillUseStatus.Miss)
+            throw new ArgumentOutOfRangeException(nameof(cancelStatus));
+        var completion=new TaskCompletionSource<SkillUseOutcome>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        await _preparedSkills.Writer.WriteAsync(
+            new(prepared,cancelStatus,completion),cancellationToken)
+            .ConfigureAwait(false);
+        return await completion.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
+    }
+
     public bool TryPostPlayerDamageVisual(PlayerDamageSettlement result)
     {
         if(result.ActorId<=0 || result.ConnectionEpoch<=0 || result.MapEpoch<=0 ||
@@ -575,6 +647,12 @@ public sealed class WorldResultRouter
             _changed.Writer.TryComplete(fault);
             _resync.Writer.TryComplete(fault);
             _attacks.Writer.TryComplete(fault);
+            _skills.Writer.TryComplete(fault);
+            _skillPreflights.Writer.TryComplete(fault);
+            _preparedSkills.Writer.TryComplete(fault);
+            _claimedGroundDrops.Writer.TryComplete(fault);
+            _playerDamageVisuals.Writer.TryComplete(fault);
+            _playerRespawnVisuals.Writer.TryComplete(fault);
         }
     }
 

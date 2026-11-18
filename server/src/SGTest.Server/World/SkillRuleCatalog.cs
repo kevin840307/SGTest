@@ -14,7 +14,8 @@ public enum SkillUseStatus : byte
     CombatUnavailable = 7,
     OldMapEpoch = 8,
     ReplayedSequence = 9,
-    NoRule = 10
+    NoRule = 10,
+    InsufficientMp = 11
 }
 
 public readonly record struct VerifiedSkillRule(

@@ -1499,7 +1499,7 @@ public static class WireProtocol
     {
         if(value.MapEpoch<=0 || value.SkillSequence==0 ||
             value.SkillId is <1 or >100_000_000 ||
-            (byte)value.Status>(byte)SkillUseStatus.NoRule ||
+            (byte)value.Status>(byte)SkillUseStatus.InsufficientMp ||
             value.ServerTick<0 || value.TargetEntityId<=0 ||
             value.Damage<0 || value.CurrentHp<0 || value.MaxHp<0 ||
             value.TargetRevision<0)

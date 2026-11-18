@@ -169,11 +169,14 @@ public sealed class PlayerCombatSettlement
         }
     }
 
-    /// <summary>Read the committed HP only while the exact generation is
-    /// suspended and all authoritative damage reservations have drained.</summary>
-    public bool TryGetSuspendedHp(ActorSnapshot actor,out int hp)
+    /// <summary>Read committed HP/MaxHP only while the exact generation is
+    /// suspended and every authoritative damage reservation has drained.
+    /// Resource settlement uses this immutable HP baseline while SQLite owns MP.</summary>
+    public bool TryGetSuspendedCombatState(
+        ActorSnapshot actor,out int hp,out int maxHp)
     {
         hp=0;
+        maxHp=0;
         lock(_gate)
         {
             ThrowIfFaulted();
@@ -184,8 +187,14 @@ public sealed class PlayerCombatSettlement
                 state.ProjectedHp!=state.CommittedHp)
                 return false;
             hp=state.CommittedHp;
+            maxHp=state.MaxHp;
             return true;
         }
+    }
+
+    public bool TryGetSuspendedHp(ActorSnapshot actor,out int hp)
+    {
+        return TryGetSuspendedCombatState(actor,out hp,out _);
     }
 
     /// <summary>Synchronize the projection after SQLite atomically consumed

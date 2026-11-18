@@ -135,6 +135,51 @@ public sealed class WorldAoiPump
                     Interlocked.Increment(ref _framesQueued);
                 }
 
+                while(_router.SkillPreflightRequests.TryRead(out var preflight))
+                {
+                    MonsterWorldCoordinator.SkillPrepareResult result;
+                    bool attackerDead=_playerCombat is not null &&
+                        _monsters is not null &&
+                        _monsters.TryGetActor(
+                            preflight.Request.ActorId,out var preflightActor) &&
+                        _playerCombat.CurrentHp(preflightActor)<=0;
+                    if(_monsters is null || attackerDead)
+                        result=new(null,new SkillUseOutcome(
+                            SkillUseStatus.CombatUnavailable,
+                            Math.Max(0,_aoi.LastTick),
+                            preflight.Request.SkillId,
+                            preflight.Request.TargetEntityId,0,0,0,0));
+                    else
+                        result=_monsters.PrepareSkill(preflight.Request);
+                    preflight.Completion.TrySetResult(result);
+                }
+
+                while(_router.PreparedSkillActions.TryRead(out var action))
+                {
+                    try
+                    {
+                        SkillUseOutcome outcome=_monsters is null
+                            ? new(SkillUseStatus.CombatUnavailable,
+                                Math.Max(0,_aoi.LastTick),
+                                action.Prepared.Request.SkillId,
+                                action.Prepared.Request.TargetEntityId,0,0,0,0)
+                            : action.CancelStatus is { } cancelled
+                                ? _monsters.CancelPreparedSkill(
+                                    action.Prepared,cancelled)
+                                : _monsters.CommitPreparedSkill(action.Prepared);
+                        DeliverSkill(action.Prepared.Request,outcome);
+                        action.Completion.TrySetResult(outcome);
+                    }
+                    catch(Exception error)
+                    {
+                        action.Completion.TrySetException(error);
+                        throw;
+                    }
+                }
+
+                // Kept for transport-independent unit callers. Production TLS
+                // uses PrepareSkillAsync -> durable resource settlement ->
+                // FinishPreparedSkillAsync instead of this immediate path.
                 while(_router.SkillRequests.TryRead(out var skill))
                 {
                     bool attackerDead=_playerCombat is not null &&
@@ -146,31 +191,7 @@ public sealed class WorldAoiPump
                             Math.Max(0,_aoi.LastTick),skill.SkillId,
                             skill.TargetEntityId,0,0,0,0)
                         : _monsters.ResolveSkill(skill);
-
-                    if(outcome.Status is SkillUseStatus.Applied or SkillUseStatus.Miss)
-                        _aoi.EnqueuePlayerSkillVisual(skill,outcome);
-
-                    if(outcome.Status==SkillUseStatus.Applied &&
-                        outcome.Monster is { } skillChanged)
-                    {
-                        _aoi.ApplyMonsters(_aoi.LastTick,[skillChanged]);
-                        if(_loot is not null && skillChanged.CurrentHp==0 &&
-                            skillChanged.State==MonsterAiState.Dead &&
-                            _loot.TryPostDeath(skillChanged)==MonsterLootPostStatus.Backpressured)
-                            throw new AoiBackpressureException(
-                                "Loot settlement queue full; accepted skill death must not be dropped");
-                    }
-
-                    var skillSent=_router.QueueSkillUseResult(skill,outcome);
-                    if(skillSent is GatewaySendStatus.GenerationMismatch or GatewaySendStatus.Closed)
-                        continue;
-                    if(skillSent==GatewaySendStatus.Backpressured)
-                        throw new AoiBackpressureException(
-                            "Authenticated Gateway skill FIFO full; result cannot be dropped");
-                    if(skillSent!=GatewaySendStatus.Enqueued)
-                        throw new InvalidOperationException(
-                            "Skill delivery accounting diverged");
-                    Interlocked.Increment(ref _framesQueued);
+                    DeliverSkill(skill,outcome);
                 }
 
                 // Player damage/respawn presentation is posted only after
@@ -242,5 +263,41 @@ public sealed class WorldAoiPump
             }
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { }
+        finally
+        {
+            var stopped=new OperationCanceledException(
+                "AOI skill owner stopped before prepared skill completed");
+            while(_router.SkillPreflightRequests.TryRead(out var preflight))
+                preflight.Completion.TrySetException(stopped);
+            while(_router.PreparedSkillActions.TryRead(out var action))
+                action.Completion.TrySetException(stopped);
+        }
+    }
+
+    private void DeliverSkill(TrustedSkillUse skill,SkillUseOutcome outcome)
+    {
+        if(outcome.Status is SkillUseStatus.Applied or SkillUseStatus.Miss)
+            _aoi.EnqueuePlayerSkillVisual(skill,outcome);
+
+        if(outcome.Status==SkillUseStatus.Applied &&
+            outcome.Monster is { } changed)
+        {
+            _aoi.ApplyMonsters(_aoi.LastTick,[changed]);
+            if(_loot is not null && changed.CurrentHp==0 &&
+                changed.State==MonsterAiState.Dead &&
+                _loot.TryPostDeath(changed)==MonsterLootPostStatus.Backpressured)
+                throw new AoiBackpressureException(
+                    "Loot settlement queue full; accepted skill death must not be dropped");
+        }
+
+        var sent=_router.QueueSkillUseResult(skill,outcome);
+        if(sent is GatewaySendStatus.GenerationMismatch or GatewaySendStatus.Closed)
+            return;
+        if(sent==GatewaySendStatus.Backpressured)
+            throw new AoiBackpressureException(
+                "Authenticated Gateway skill FIFO full; result cannot be dropped");
+        if(sent!=GatewaySendStatus.Enqueued)
+            throw new InvalidOperationException("Skill delivery accounting diverged");
+        Interlocked.Increment(ref _framesQueued);
     }
 }

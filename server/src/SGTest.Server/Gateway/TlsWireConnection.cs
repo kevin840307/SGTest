@@ -63,7 +63,7 @@ public static class TlsWireConnection
         Func<TrustedGroundPickup, Task>? handlePickup = null,
         Func<TrustedRecoveryUse, Task>? handleRecovery = null,
         Func<TrustedInventoryDiscard, Task>? handleDiscard = null,
-        Func<TrustedSkillUse, bool>? postSkill = null)
+        Func<TrustedSkillUse, Task>? handleSkill = null)
     {
         ArgumentNullException.ThrowIfNull(client);
         ArgumentNullException.ThrowIfNull(serverCertificate);
@@ -310,6 +310,34 @@ public static class TlsWireConnection
                 }
             }
 
+            var skillCommands=Channel.CreateBounded<TrustedSkillUse>(
+                new BoundedChannelOptions(16)
+                {
+                    SingleReader=true,SingleWriter=true,
+                    FullMode=BoundedChannelFullMode.Wait
+                });
+            Func<TrustedSkillUse,bool>? postSkill=handleSkill is null
+                ? null : request=>skillCommands.Writer.TryWrite(request);
+            Exception? skillFault=null;
+            Task skillWorker=handleSkill is null
+                ? Task.CompletedTask : ProcessSkillAsync();
+
+            async Task ProcessSkillAsync()
+            {
+                try
+                {
+                    // Accepted mutations drain on clean socket shutdown. Host
+                    // lifecycle keeps AOI/World alive until sessions finish.
+                    await foreach(var request in skillCommands.Reader.ReadAllAsync())
+                        await handleSkill!(request).ConfigureAwait(false);
+                }
+                catch(Exception error)
+                {
+                    skillFault=error;
+                    sessionCts.Cancel();
+                }
+            }
+
             long commandsAccepted = 0;
             var reason = TlsWireEndReason.CleanEof;
             byte[] rented = ArrayPool<byte>.Shared.Rent(configured.ReadBufferBytes);
@@ -396,7 +424,8 @@ public static class TlsWireConnection
             pickupCommands.Writer.TryComplete();
             recoveryCommands.Writer.TryComplete();
             discardCommands.Writer.TryComplete();
-            // In-flight authorized NPC/respawn work may finish even after the
+            skillCommands.Writer.TryComplete();
+            // In-flight authorized NPC/respawn/skill work may finish even after the
             // socket is closed; await both before final trusted release.
             await respawnWorker.ConfigureAwait(false);
             // An in-flight authorized World transfer may finish even after the
@@ -406,9 +435,10 @@ public static class TlsWireConnection
             await pickupWorker.ConfigureAwait(false);
             await recoveryWorker.ConfigureAwait(false);
             await discardWorker.ConfigureAwait(false);
+            await skillWorker.ConfigureAwait(false);
             if (npcFault is not null || respawnFault is not null ||
                 pickupFault is not null || recoveryFault is not null ||
-                discardFault is not null)
+                discardFault is not null || skillFault is not null)
                 reason = TlsWireEndReason.GatewayClosed;
             var finalBinding = gateway.Binding;
             gateway.Close();
