@@ -26,6 +26,7 @@ public sealed class IdentityTlsAuthorization
     private readonly long _pickupWorldGeneration;
     private readonly IReadOnlyDictionary<int,RecoveryItemRule>? _recoveryRules;
     private readonly CharacterCreationPolicy? _characterCreation;
+    private readonly NpcShopCatalog? _shops;
 
     public IdentityTlsAuthorization(SqliteIdentityStore identity, ServerWorldHost world,
                                     PortalCatalog? portals = null,
@@ -33,7 +34,8 @@ public sealed class IdentityTlsAuthorization
                                     PlayerCombatSettlement? combat = null,
                                      long pickupWorldGeneration = 0,
                                      IReadOnlyDictionary<int,RecoveryItemRule>? recoveryRules = null,
-                                     CharacterCreationPolicy? characterCreation = null)
+                                     CharacterCreationPolicy? characterCreation = null,
+                                     NpcShopCatalog? shops = null)
     {
         _identity = identity ?? throw new ArgumentNullException(nameof(identity));
         _world = world ?? throw new ArgumentNullException(nameof(world));
@@ -52,6 +54,7 @@ public sealed class IdentityTlsAuthorization
                 throw new ArgumentOutOfRangeException(nameof(characterCreation));
         }
         _characterCreation = characterCreation;
+        _shops = shops;
     }
 
     /// <summary>
@@ -469,6 +472,120 @@ public sealed class IdentityTlsAuthorization
                 }
             }
 
+
+            async Task ShopHandler(TrustedShopCommand request)
+            {
+                var binding=new ConnectionBinding(
+                    request.ActorId,request.ConnectionEpoch,request.RequestMapEpoch);
+                await gameplayGate.WaitAsync().ConfigureAwait(false);
+                try
+                {
+                    if(!router.IsCurrentBinding(binding))return;
+                    var snapshot=await _world.TrustedGetActorAsync(
+                        request.ActorId).ConfigureAwait(false);
+                    if(snapshot is not { } actor||
+                       actor.ActorId!=request.ActorId||
+                       actor.ConnectionEpoch!=request.ConnectionEpoch||
+                       actor.MapEpoch!=request.RequestMapEpoch)
+                    {
+                        if(request.Kind==TrustedShopCommandKind.Open)
+                        {
+                            var stale=router.QueueShopSnapshot(
+                                request,ShopOpenStatus.StaleGeneration,0,
+                                Array.Empty<NpcShopCatalog.Item>());
+                            if(stale!=GatewaySendStatus.Enqueued)
+                                throw new IOException(
+                                    "Reliable stale shop snapshot could not be queued: "+stale);
+                        }
+                        else
+                        {
+                            var kind=request.Kind==TrustedShopCommandKind.Buy
+                                ? ShopTransactionKind.Buy:ShopTransactionKind.Sell;
+                            var staleResult=new ShopTransactionResult(
+                                ShopTransactionStatus.StaleGeneration,kind,
+                                request.NpcSpawnId,Math.Max(0,request.ItemUid),
+                                request.ItemDefinitionId,request.Quantity,0,0);
+                            var stale=router.QueueShopTransactionResult(request,staleResult);
+                            if(stale!=GatewaySendStatus.Enqueued)
+                                throw new IOException(
+                                    "Reliable stale shop result could not be queued: "+stale);
+                        }
+                        return;
+                    }
+
+                    bool dead=_combat is not null&&_combat.CurrentHp(actor)<=0;
+                    NpcShopCatalog.Shop? shop=null;
+                    ShopAccessStatus access;
+                    if(dead)access=ShopAccessStatus.PlayerDead;
+                    else if(_shops is null)
+                        access=ShopAccessStatus.UnknownShop;
+                    else
+                    {
+                        access=_shops.Access(actor,request.NpcSpawnId);
+                        if(access==ShopAccessStatus.Allowed)
+                            _shops.TryGet(actor.MapId,request.NpcSpawnId,out shop!);
+                    }
+
+                    if(request.Kind==TrustedShopCommandKind.Open)
+                    {
+                        ShopOpenStatus status=access switch
+                        {
+                            ShopAccessStatus.Allowed=>ShopOpenStatus.Opened,
+                            ShopAccessStatus.UnknownShop=>ShopOpenStatus.UnknownShop,
+                            ShopAccessStatus.TooFar=>ShopOpenStatus.TooFar,
+                            ShopAccessStatus.PlayerDead=>ShopOpenStatus.PlayerDead,
+                            _=>ShopOpenStatus.StaleGeneration
+                        };
+                        long money=status==ShopOpenStatus.Opened
+                            ? await _identity.GetCharacterMoneyAsync(actor.ActorId)
+                                .ConfigureAwait(false):0;
+                        var items=status==ShopOpenStatus.Opened
+                            ? shop!.Items.Values.ToArray()
+                            : Array.Empty<NpcShopCatalog.Item>();
+                        var sent=router.QueueShopSnapshot(request,status,money,items);
+                        if(sent!=GatewaySendStatus.Enqueued)
+                            throw new IOException(
+                                "Reliable shop snapshot could not be queued: "+sent);
+                        return;
+                    }
+
+                    int itemDefinitionId=request.ItemDefinitionId;
+                    TrustedShopPrice price;
+                    if(shop is not null&&_shops is not null)
+                        price=_shops.Price(shop,itemDefinitionId);
+                    else
+                        price=new TrustedShopPrice(
+                            request.NpcSpawnId,itemDefinitionId,0,0,
+                            "shop-unavailable");
+
+                    long durableConnection=_pickupWorldGeneration==0
+                        ? actor.ConnectionEpoch
+                        : SqliteIdentityStore.ComposePickupConnectionEpoch(
+                            _pickupWorldGeneration,actor.ConnectionEpoch);
+                    var context=new TrustedShopContext(
+                        actor.ActorId,durableConnection,actor.MapEpoch,
+                        request.ShopSequence);
+                    ShopTransactionResult result=request.Kind switch
+                    {
+                        TrustedShopCommandKind.Buy=>
+                            await _identity.BuyFromShopAsync(
+                                context,access,price,request.Quantity)
+                                .ConfigureAwait(false),
+                        TrustedShopCommandKind.Sell=>
+                            await _identity.SellToShopAsync(
+                                context,access,price,request.ItemUid,
+                                request.Quantity).ConfigureAwait(false),
+                        _=>throw new InvalidOperationException(
+                            "Unhandled trusted shop command")
+                    };
+                    var queued=router.QueueShopTransactionResult(request,result);
+                    if(queued!=GatewaySendStatus.Enqueued)
+                        throw new IOException(
+                            "Reliable shop transaction result could not be queued: "+queued);
+                }
+                finally { gameplayGate.Release(); }
+            }
+
             async Task DiscardHandler(TrustedInventoryDiscard request)
             {
                 var binding=new ConnectionBinding(
@@ -510,7 +627,7 @@ public sealed class IdentityTlsAuthorization
                 npcHandler, router.TryRequestResync,
                 router.TryRequestNormalAttack, RespawnHandler,
                 PickupHandler, RecoveryHandler, DiscardHandler,
-                handleSkill:SkillHandler).ConfigureAwait(false);
+                handleSkill:SkillHandler,handleShop:ShopHandler).ConfigureAwait(false);
         }
         finally
         {
