@@ -81,6 +81,9 @@ const OPCODE_PVP_COMBAT_VISUAL := 82
 const OPCODE_PVP_SKILL := 83
 const OPCODE_PVP_SKILL_RESULT := 84
 const OPCODE_PVP_SKILL_VISUAL := 85
+const OPCODE_GM_CAPABILITY := 86
+const OPCODE_GM_PVP_NAME_COMMAND := 87
+const OPCODE_GM_PVP_NAME_RESULT := 88
 const MOVE_TARGET_FRAME_BYTES := 28
 const MOVE_RECEIPT_FRAME_BYTES := 30
 const NPC_INTERACT_FRAME_BYTES := 24
@@ -171,6 +174,9 @@ const PVP_COMBAT_VISUAL_FRAME_BYTES := 71
 const PVP_SKILL_FRAME_BYTES := 32
 const PVP_SKILL_RESULT_FRAME_BYTES := 46
 const PVP_SKILL_VISUAL_FRAME_BYTES := 75
+const GM_CAPABILITY_FRAME_BYTES := 9
+const GM_PVP_NAME_COMMAND_FRAME_BYTES := 29
+const GM_PVP_NAME_RESULT_FRAME_BYTES := 30
 const MAX_MONEY := 9000000000000000
 
 static func encode_move_target(map_epoch: int, movement_sequence: int, target_x: int, target_y: int) -> PackedByteArray:
@@ -1650,6 +1656,46 @@ static func decode_pvp_skill_visual(frame:PackedByteArray)->Dictionary:
 		"victim_actor_id":victim,"victim_connection_epoch":victim_connection,
 		"damage_sequence":damage_sequence,"damage":damage,"died":died==1,
 		"attacker_facing":attacker_facing,"victim_facing":victim_facing}
+
+
+static func decode_gm_capability(frame:PackedByteArray)->Dictionary:
+	if not _valid_header(frame,OPCODE_GM_CAPABILITY,GM_CAPABILITY_FRAME_BYTES):
+		return {}
+	var authorized:=int(frame[8])
+	if authorized not in [0,1]:
+		return {}
+	return {"authorized":authorized==1}
+
+
+static func encode_gm_pvp_name_command(
+		epoch:int,sequence:int,target_actor_id:int,state:int)->PackedByteArray:
+	if epoch<=0 or sequence<=0 or sequence>0xffffffff or target_actor_id<=0 or state<0 or state>4:
+		return PackedByteArray()
+	var writer:=StreamPeerBuffer.new()
+	writer.big_endian=false
+	writer.put_u32(GM_PVP_NAME_COMMAND_FRAME_BYTES)
+	writer.put_u16(VERSION)
+	writer.put_u16(OPCODE_GM_PVP_NAME_COMMAND)
+	writer.put_64(epoch)
+	writer.put_u32(sequence)
+	writer.put_64(target_actor_id)
+	writer.put_u8(state)
+	return writer.data_array
+
+
+static func decode_gm_pvp_name_result(frame:PackedByteArray)->Dictionary:
+	if not _valid_header(frame,OPCODE_GM_PVP_NAME_RESULT,GM_PVP_NAME_RESULT_FRAME_BYTES):
+		return {}
+	var reader:=_reader(frame,8)
+	var epoch:=reader.get_64()
+	var sequence:=reader.get_u32()
+	var status:=reader.get_u8()
+	var target:=reader.get_64()
+	var state:=reader.get_u8()
+	if epoch<=0 or sequence==0 or status>5 or target<=0 or state>4:
+		return {}
+	return {"map_epoch":epoch,"gm_sequence":sequence,"status":status,
+		"target_actor_id":target,"name_state":state}
 
 
 static func decode_player_identity(frame: PackedByteArray) -> Dictionary:

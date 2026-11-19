@@ -361,6 +361,26 @@ func cast_player_skill(skill_id: int,target_actor_id: int) -> bool:
 		"map_epoch":int(current.get("map_epoch",0))})
 
 
+func gm_set_pvp_name(target_actor_id:int,name_state:int)->bool:
+	var current:=snapshot()
+	var entities:Dictionary=current.get("entities",{})
+	if not bool(current.get("gm_authorized",false)) or
+			target_actor_id<=0 or target_actor_id==int(current.get("actor_id",0)) or
+			not entities.has(target_actor_id) or name_state<0 or name_state>4 or
+			int(current.get("state",-1))!=WorldState.STATE_IN_WORLD or
+			not bool(current.get("world_ready",false)) or
+			bool(current.get("resync_pending",false)) or
+			bool(current.get("waiting_for_new_map",false)) or
+			int(current.get("pending_world_ready_ack_epoch",0))!=0 or
+			int(current.get("last_world_ready_ack_epoch",0))!=int(current.get("map_epoch",0)) or
+			int(current.get("pending_gm_sequence",0))!=0:
+		return false
+	return _queue_intent({"type":"gm_pvp_name",
+		"target_actor_id":target_actor_id,"name_state":name_state,
+		"actor_id":int(current.get("actor_id",0)),
+		"map_epoch":int(current.get("map_epoch",0))})
+
+
 func respawn() -> bool:
 	var current := snapshot()
 	if not bool(current.get("combat_available",false)) or not bool(current.get("player_dead",false)):
@@ -501,6 +521,14 @@ func _queue_intent(intent: Dictionary) -> bool:
 		for queued in _intents:
 			if str(queued.get("type","")) == "pvp_mode":
 				accepted = false
+				break
+	if accepted and kind == "gm_pvp_name":
+		if not bool(_published.get("gm_authorized",false)) or
+				int(_published.get("pending_gm_sequence",0))!=0:
+			accepted=false
+		for queued in _intents:
+			if str(queued.get("type",""))=="gm_pvp_name":
+				accepted=false
 				break
 	if accepted and kind == "pvp_attack":
 		if int(_published.get("pending_pvp_attack_sequence",0)) != 0:
@@ -744,6 +772,39 @@ func _process_first_intent() -> void:
 		var sequence := int(current.npc_interaction_sequence) + 1
 		var frame := WireCodec.encode_npc_interact(int(current.map_epoch), sequence, int(intent.spawn_id))
 		if not frame.is_empty() and _transport.send_frame(frame) and _world.mark_npc_interact_sent(sequence):
+			_pop_intent()
+			_publish()
+
+	elif kind == "gm_pvp_name":
+		var current:Dictionary=_world.snapshot()
+		if int(intent.get("actor_id",0))!=int(current.get("actor_id",0)) or
+				int(intent.get("map_epoch",0))!=int(current.get("map_epoch",0)):
+			_pop_intent()
+			return
+		var target:=int(intent.get("target_actor_id",0))
+		var name_state:=int(intent.get("name_state",-1))
+		var entities:Dictionary=current.get("entities",{})
+		if not bool(current.get("gm_authorized",false)) or
+				target<=0 or target==int(current.get("actor_id",0)) or
+				not entities.has(target) or name_state<0 or name_state>4:
+			_pop_intent()
+			return
+		if int(current.get("state",-1))!=WorldState.STATE_IN_WORLD or
+				not bool(current.get("world_ready",false)) or
+				bool(current.get("resync_pending",false)) or
+				bool(current.get("waiting_for_new_map",false)) or
+				int(current.get("pending_world_ready_ack_epoch",0))!=0 or
+				int(current.get("last_world_ready_ack_epoch",0))!=int(current.get("map_epoch",0)) or
+				int(current.get("pending_gm_sequence",0))!=0:
+			return
+		var sequence:=int(current.get("gm_sequence",0))+1
+		var frame:=WireCodec.encode_gm_pvp_name_command(
+			int(current.get("map_epoch",0)),sequence,target,name_state)
+		if frame.is_empty():
+			_pop_intent()
+			return
+		if _transport.send_frame(frame) and
+				_world.mark_gm_pvp_name_sent(sequence,target,name_state):
 			_pop_intent()
 			_publish()
 

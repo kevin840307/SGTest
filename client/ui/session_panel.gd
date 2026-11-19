@@ -114,6 +114,9 @@ var pvp_attack_button := Button.new()
 var pvp_skill_button := Button.new()
 var pvp_attack_status := Label.new()
 var pvp_skill_status := Label.new()
+var gm_pvp_state_picker := OptionButton.new()
+var gm_pvp_apply_button := Button.new()
+var gm_pvp_status := Label.new()
 var _pvp_target_display_key := ""
 const PVP_ATTACK_STATUS_NAMES = [
 	"攻擊成功","地圖／連線世代已變更","重複／過期攻擊序號","不可攻擊自己",
@@ -360,10 +363,16 @@ func _ready() -> void:
 	pvp_white_button.text = "設為白名（允許 PvP 地圖）"
 	pvp_attack_button.text = "攻擊選中玩家（Server 權威）"
 	pvp_skill_button.text = "技能攻擊選中玩家（使用上方技能 ID）"
+	gm_pvp_state_picker.add_item("GM：設為藍名",0)
+	gm_pvp_state_picker.add_item("GM：設為白名",1)
+	gm_pvp_state_picker.add_item("GM：設為紅名",2)
+	gm_pvp_state_picker.add_item("GM：設為粉紅名",3)
+	gm_pvp_state_picker.add_item("GM：設為閃爍粉紅名",4)
+	gm_pvp_apply_button.text = "GM 套用選中玩家名稱狀態"
 	pvp_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	pvp_attack_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	pvp_skill_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	for control in [pvp_query_button,pvp_blue_button,pvp_white_button,pvp_status,pvp_target_picker,pvp_attack_button,pvp_skill_button,pvp_attack_status,pvp_skill_status]:
+	for control in [pvp_query_button,pvp_blue_button,pvp_white_button,pvp_status,pvp_target_picker,pvp_attack_button,pvp_skill_button,pvp_attack_status,pvp_skill_status,gm_pvp_state_picker,gm_pvp_apply_button,gm_pvp_status]:
 		control.visible = false
 		column.add_child(control)
 	pvp_query_button.pressed.connect(func(): _request_pvp_mode(0))
@@ -371,6 +380,7 @@ func _ready() -> void:
 	pvp_white_button.pressed.connect(func(): _request_pvp_mode(2))
 	pvp_attack_button.pressed.connect(_attack_selected_player)
 	pvp_skill_button.pressed.connect(_skill_attack_selected_player)
+	gm_pvp_apply_button.pressed.connect(_gm_apply_selected_player)
 	var style := StyleBoxFlat.new()
 	style.bg_color = Color("211c15")
 	style.border_color = Color("c8a452")
@@ -1316,6 +1326,35 @@ func _skill_attack_selected_player() -> void:
 		pvp_skill_status.text="目前無法對該玩家施放技能"
 
 
+func _gm_apply_selected_player()->void:
+	if gm_pvp_apply_button.disabled or pvp_target_picker.selected<0 or
+			gm_pvp_state_picker.selected<0:
+		return
+	var target:=int(pvp_target_picker.get_item_metadata(pvp_target_picker.selected))
+	var state:=int(gm_pvp_state_picker.get_item_id(gm_pvp_state_picker.selected))
+	if submit_gm_pvp_name(target,state):
+		gm_pvp_status.text="GM 指令已送出；等待伺服器 audit commit 與 AOI 名稱更新…"
+		gm_pvp_apply_button.disabled=true
+	else:
+		gm_pvp_status.text="GM 指令未送出；權限、目標或連線狀態無效"
+
+
+func submit_gm_pvp_name(target_actor_id:int,name_state:int)->bool:
+	if not active or not bool(_latest.get("gm_authorized",false)) or
+			int(_latest.get("state",-1))!=State.STATE_IN_WORLD or
+			not bool(_latest.get("world_ready",false)) or
+			bool(_latest.get("reconnecting",false)) or
+			bool(_latest.get("resync_pending",false)) or
+			bool(_latest.get("waiting_for_new_map",false)) or
+			int(_latest.get("pending_gm_sequence",0))!=0:
+		return false
+	var entities:Dictionary=_latest.get("entities",{})
+	if target_actor_id<=0 or target_actor_id==int(_latest.get("actor_id",0)) or
+			not entities.has(target_actor_id) or name_state<0 or name_state>4:
+		return false
+	return session.gm_set_pvp_name(target_actor_id,name_state)
+
+
 func _pvp_attack_status_text(code: int) -> String:
 	return PVP_ATTACK_STATUS_NAMES[code] if code >= 0 and code < PVP_ATTACK_STATUS_NAMES.size() else "未知 PvP 結果"
 
@@ -1324,6 +1363,9 @@ func _update_pvp_ui() -> void:
 	var in_world := active and int(_latest.get("state",-1)) == State.STATE_IN_WORLD
 	for control in [pvp_query_button,pvp_blue_button,pvp_white_button,pvp_status,pvp_target_picker,pvp_attack_button,pvp_skill_button,pvp_attack_status,pvp_skill_status]:
 		control.visible = in_world
+	var gm_visible:=in_world and bool(_latest.get("gm_authorized",false))
+	for control in [gm_pvp_state_picker,gm_pvp_apply_button,gm_pvp_status]:
+		control.visible=gm_visible
 	if not in_world:
 		_pvp_target_display_key = ""
 		return
@@ -1370,6 +1412,20 @@ func _update_pvp_ui() -> void:
 			pvp_target_picker.set_item_metadata(pvp_target_picker.item_count-1,target_id)
 		if pvp_target_picker.item_count > 0:
 			pvp_target_picker.select(0)
+
+	var gm_pending:=int(_latest.get("pending_gm_sequence",0))!=0
+	gm_pvp_apply_button.disabled=not gm_visible or not ready or gm_pending or pvp_target_picker.item_count==0
+	if gm_visible:
+		if gm_pending:
+			gm_pvp_status.text="等待伺服器 GM audit commit；不可重複送出"
+		else:
+			var gm_result:Dictionary=_latest.get("last_gm_result",{})
+			if gm_result.is_empty():
+				gm_pvp_status.text="GM 權限由伺服器簽發；選擇 AOI 玩家與名稱狀態"
+			else:
+				var gm_code:=int(gm_result.get("status",-1))
+				var gm_text:=["已套用","重播：未重複修改","無權限","世代已變更","過期序號","目標已離線"][gm_code] if gm_code>=0 and gm_code<=5 else "未知結果"
+				gm_pvp_status.text="%s（代碼 %d）；名稱顯示仍以 Server AOI identity 為準" % [gm_text,gm_code]
 
 	var attack_pending := int(_latest.get("pending_pvp_attack_sequence",0)) != 0
 	pvp_attack_button.disabled = not ready or not known or not map_allows or dead or not bool(_latest.get("combat_available",false)) or attack_pending or pvp_target_picker.item_count == 0

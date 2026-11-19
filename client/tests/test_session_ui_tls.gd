@@ -58,6 +58,16 @@ class RespawnSession extends RefCounted:
 	var last_pvp_action := -1
 	var pvp_attacks := 0
 	var last_pvp_target := 0
+	var gm_commands := 0
+	var last_gm_target := 0
+	var last_gm_state := -1
+	func gm_set_pvp_name(target_actor_id:int,name_state:int)->bool:
+		if target_actor_id<=0 or name_state<0 or name_state>4:
+			return false
+		gm_commands+=1
+		last_gm_target=target_actor_id
+		last_gm_state=name_state
+		return true
 	func attack_player(target_actor_id: int) -> bool:
 		if target_actor_id <= 0:
 			return false
@@ -1027,7 +1037,16 @@ func run() -> void:
 	panel._latest.entities = {77:{"actor_id":77}}
 	panel._latest.pending_pvp_attack_sequence = 0
 	panel._latest.last_pvp_attack_result = {}
+	panel._latest.gm_authorized = false
+	panel._latest.gm_sequence = 0
+	panel._latest.pending_gm_sequence = 0
+	panel._latest.pending_gm_target_actor_id = 0
+	panel._latest.pending_gm_name_state = -1
+	panel._latest.last_gm_result = {}
 	panel._update_pvp_ui()
+	if panel.gm_pvp_apply_button.visible or panel.gm_pvp_state_picker.visible:
+		fail("Ordinary player UI inferred GM capability without Server frame")
+		return
 	if panel.pvp_white_button.disabled:
 		fail("Verified PvP map did not expose white mode")
 		return
@@ -1049,6 +1068,35 @@ func run() -> void:
 	if not panel.pvp_attack_status.text.contains("距離過遠") or panel.pvp_attack_button.disabled:
 		fail("PvP attack did not display authoritative rejected result")
 		return
+
+	panel._latest.gm_authorized = true
+	panel._update_pvp_ui()
+	if not panel.gm_pvp_apply_button.visible or panel.gm_pvp_apply_button.disabled or
+			not panel.gm_pvp_state_picker.visible:
+		fail("Server-issued GM capability did not expose bounded PvP-name controls")
+		return
+	panel.gm_pvp_state_picker.select(2)
+	panel.gm_pvp_apply_button.pressed.emit()
+	if stub.gm_commands!=1 or stub.last_gm_target!=77 or stub.last_gm_state!=2:
+		fail("GM PvP-name UI did not send exact visible target/state")
+		return
+	panel._latest.pending_gm_sequence=1
+	panel._update_pvp_ui()
+	if not panel.gm_pvp_apply_button.disabled:
+		fail("Pending GM audit command re-enabled duplicate submit")
+		return
+	panel._latest.pending_gm_sequence=0
+	panel._latest.last_gm_result={"status":0,"target_actor_id":77,"name_state":2}
+	panel._update_pvp_ui()
+	if not panel.gm_pvp_status.text.contains("已套用"):
+		fail("GM authoritative result not displayed")
+		return
+	panel._latest.gm_authorized=false
+	panel._update_pvp_ui()
+	if panel.gm_pvp_apply_button.visible or panel.gm_pvp_state_picker.visible:
+		fail("Revoked GM capability left privileged controls visible")
+		return
+
 	panel.pvp_white_button.pressed.emit()
 	if stub.pvp_requests != 2 or stub.last_pvp_action != 2:
 		fail("White PvP command did not use ClientSession")
@@ -1072,5 +1120,5 @@ func run() -> void:
 	panel._set_respawn_controls()
 	app.queue_free()
 	await process_frame
-	print("CLIENT_TLS_LOGIN_PASS ui=PASS auth=PASS choose=PASS receipt=PASS world_ready=PASS password_cleared=PASS logout=PASS respawn_ui=PASS click_attack_ui=PASS click_pickup_ui=PASS persistent_inventory_ui=PASS item_metadata=PASS inventory_pagination=PASS recovery_item_button=PASS inventory_discard_button=PASS inventory_discard_quantity_confirm=PASS shop_ui=PASS storage_ui=PASS equipment_ui=PASS bank_ui=PASS repair_ui=PASS trade_ui=PASS trade_ui_parenting=PASS pvp_ui=PASS pvp_attack_ui=PASS pvp_tls_auto_query=PASS skill_cast_ui=PASS skill_singleflight=PASS combat_mp_ui=PASS")
+	print("CLIENT_TLS_LOGIN_PASS ui=PASS auth=PASS choose=PASS receipt=PASS world_ready=PASS password_cleared=PASS logout=PASS respawn_ui=PASS click_attack_ui=PASS click_pickup_ui=PASS persistent_inventory_ui=PASS item_metadata=PASS inventory_pagination=PASS recovery_item_button=PASS inventory_discard_button=PASS inventory_discard_quantity_confirm=PASS shop_ui=PASS storage_ui=PASS equipment_ui=PASS bank_ui=PASS repair_ui=PASS trade_ui=PASS trade_ui_parenting=PASS pvp_ui=PASS pvp_attack_ui=PASS gm_pvp_ui=PASS pvp_tls_auto_query=PASS skill_cast_ui=PASS skill_singleflight=PASS combat_mp_ui=PASS")
 	quit(0)

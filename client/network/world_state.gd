@@ -208,6 +208,15 @@ var pvp_skill_visual_events: Array[Dictionary] = []
 var pvp_skill_visual_sequences := {}
 var pvp_skill_damage_sequences := {}
 var stale_pvp_skill_visuals := 0
+var gm_authorized := false
+var gm_sequence := 0
+var pending_gm_sequence := 0
+var pending_gm_target_actor_id := 0
+var pending_gm_name_state := -1
+var last_gm_result_sequence := 0
+var last_gm_result_status := -1
+var last_gm_result := {}
+var stale_gm_results := 0
 
 var respawn_sequence := 0
 var last_respawn_result_sequence := 0
@@ -472,6 +481,22 @@ func mark_pvp_attack_sent(sequence: int,target_actor_id: int) -> bool:
 	return true
 
 
+func mark_gm_pvp_name_sent(
+		sequence:int,target_actor_id:int,name_state:int)->bool:
+	if state!=STATE_IN_WORLD or not gm_authorized or not world_ready or
+			resync_pending or waiting_for_new_map or
+			pending_world_ready_ack_epoch!=0 or last_world_ready_ack_epoch!=map_epoch or
+			pending_gm_sequence!=0 or sequence<=gm_sequence or sequence>0xffffffff or
+			target_actor_id<=0 or target_actor_id==actor_id or
+			name_state<0 or name_state>4 or not entities.has(target_actor_id):
+		return false
+	gm_sequence=sequence
+	pending_gm_sequence=sequence
+	pending_gm_target_actor_id=target_actor_id
+	pending_gm_name_state=name_state
+	return true
+
+
 func mark_player_respawn_sent(sequence: int) -> bool:
 	if state != STATE_IN_WORLD or not combat_available or not player_dead or not world_ready or resync_pending or waiting_for_new_map or pending_world_ready_ack_epoch != 0 or last_world_ready_ack_epoch != map_epoch or sequence <= respawn_sequence or sequence > 0xffffffff:
 		return false
@@ -582,6 +607,10 @@ func apply_frame(frame: PackedByteArray) -> bool:
 			return _apply_pvp_skill_result(frame)
 		WireCodec.OPCODE_PVP_SKILL_VISUAL:
 			return _apply_pvp_skill_visual(frame)
+		WireCodec.OPCODE_GM_CAPABILITY:
+			return _apply_gm_capability(frame)
+		WireCodec.OPCODE_GM_PVP_NAME_RESULT:
+			return _apply_gm_pvp_name_result(frame)
 		WireCodec.OPCODE_WORLD_READY:
 			return _apply_world_ready(frame)
 		WireCodec.OPCODE_SELF_STATE:
@@ -800,6 +829,15 @@ func snapshot() -> Dictionary:
 		"pvp_skill_visual_sequences": pvp_skill_visual_sequences.duplicate(true),
 		"pvp_skill_damage_sequences": pvp_skill_damage_sequences.duplicate(true),
 		"stale_pvp_skill_visuals": stale_pvp_skill_visuals,
+		"gm_authorized": gm_authorized,
+		"gm_sequence": gm_sequence,
+		"pending_gm_sequence": pending_gm_sequence,
+		"pending_gm_target_actor_id": pending_gm_target_actor_id,
+		"pending_gm_name_state": pending_gm_name_state,
+		"last_gm_result_sequence": last_gm_result_sequence,
+		"last_gm_result_status": last_gm_result_status,
+		"last_gm_result": last_gm_result.duplicate(true),
+		"stale_gm_results": stale_gm_results,
 		"respawn_sequence": respawn_sequence,
 		"last_respawn_result_sequence": last_respawn_result_sequence,
 		"last_respawn_result_status": last_respawn_result_status,
@@ -2581,6 +2619,14 @@ func _apply_repair_result(frame: PackedByteArray) -> bool:
 
 
 func _clear_pvp_map() -> void:
+	gm_sequence = 0
+	pending_gm_sequence = 0
+	pending_gm_target_actor_id = 0
+	pending_gm_name_state = -1
+	last_gm_result_sequence = 0
+	last_gm_result_status = -1
+	last_gm_result.clear()
+	stale_gm_results = 0
 	pvp_sequence = 0
 	pending_pvp_sequence = 0
 	pvp_mode = -1
@@ -2604,6 +2650,58 @@ func _clear_pvp_map() -> void:
 	pvp_skill_visual_sequences.clear()
 	pvp_skill_damage_sequences.clear()
 	stale_pvp_skill_visuals = 0
+
+
+func _apply_gm_capability(frame:PackedByteArray)->bool:
+	if state!=STATE_IN_WORLD:
+		return fail("gm_capability_out_of_state")
+	var value:=WireCodec.decode_gm_capability(frame)
+	if value.is_empty():
+		return fail("invalid_gm_capability")
+	# Capability is exclusively server-issued after authenticated character bind.
+	# It survives trusted map transfers on the same connection, but a reconnect
+	# creates a new WorldState and must receive a fresh capability.
+	gm_authorized=bool(value.authorized)
+	if not gm_authorized:
+		pending_gm_sequence=0
+		pending_gm_target_actor_id=0
+		pending_gm_name_state=-1
+	return true
+
+
+func _apply_gm_pvp_name_result(frame:PackedByteArray)->bool:
+	if state!=STATE_IN_WORLD:
+		return fail("gm_pvp_name_result_out_of_state")
+	var value:=WireCodec.decode_gm_pvp_name_result(frame)
+	if value.is_empty():
+		return fail("invalid_gm_pvp_name_result")
+	var epoch:=int(value.map_epoch)
+	var sequence:=int(value.gm_sequence)
+	if epoch<map_epoch:
+		stale_gm_results+=1
+		return true
+	if epoch>map_epoch:
+		return fail("future_gm_pvp_name_result")
+	if sequence<=last_gm_result_sequence:
+		stale_gm_results+=1
+		return true
+	if sequence!=pending_gm_sequence or sequence>gm_sequence or
+			int(value.target_actor_id)!=pending_gm_target_actor_id or
+			int(value.name_state)!=pending_gm_name_state:
+		return fail("gm_pvp_name_result_without_matching_request")
+	if int(value.status)==3:
+		return fail("gm_pvp_name_result_stale_generation")
+	last_gm_result_sequence=sequence
+	last_gm_result_status=int(value.status)
+	last_gm_result=value.duplicate(true)
+	pending_gm_sequence=0
+	pending_gm_target_actor_id=0
+	pending_gm_name_state=-1
+	if int(value.status)==2:
+		# A server denial revokes local usability until a fresh connection gets
+		# another server-issued capability; never infer privilege from username.
+		gm_authorized=false
+	return true
 
 
 func _apply_pvp_mode_result(frame: PackedByteArray) -> bool:
