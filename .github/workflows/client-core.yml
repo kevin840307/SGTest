@@ -80,6 +80,8 @@ jobs:
         run: .cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64 --headless --path client --script res://tests/test_trade_wire.gd
       - name: Godot authenticated PvP mode query, replay and map generation reducer
         run: .cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64 --headless --path client --script res://tests/test_pvp_mode_wire.gd
+      - name: Godot authoritative player PvP attack and shared damage reducer
+        run: .cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64 --headless --path client --script res://tests/test_pvp_attack_wire.gd
       - name: Godot private item name catalog and fail-closed provenance
         run: .cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64 --headless --path client --script res://tests/test_item_catalog.gd
       - name: Godot audited NPC portal compact wire and reducer gate

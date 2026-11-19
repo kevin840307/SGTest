@@ -1,0 +1,158 @@
+extends SceneTree
+
+const WireCodec = preload("res://network/wire_codec.gd")
+const WorldState = preload("res://network/world_state.gd")
+
+func _fail(reason: String) -> void:
+	push_error("PVP_ATTACK_WIRE_FAIL "+reason)
+	quit(1)
+
+func _initialize() -> void:
+	var request := WireCodec.encode_pvp_attack(1,7,99)
+	if request.size()!=28 or WireCodec.frame_opcode(request)!=WireCodec.OPCODE_PVP_ATTACK:
+		_fail("request codec")
+		return
+	var result := _attack_result(1,7,0,100,99,28,false)
+	var parsed := WireCodec.decode_pvp_attack_result(result)
+	if result.size()!=42 or parsed.is_empty() or int(parsed.damage)!=28 or int(parsed.target_actor_id)!=99:
+		_fail("attack result codec")
+		return
+	var victim := _pvp_damage(1,1,100,99,4,7,28,72,100,false)
+	var parsed_damage := WireCodec.decode_pvp_damage(victim)
+	if victim.size()!=61 or parsed_damage.is_empty() or int(parsed_damage.attacker_actor_id)!=99 or int(parsed_damage.current_hp)!=72:
+		_fail("victim damage codec")
+		return
+
+	var world := WorldState.new()
+	world.state=WorldState.STATE_IN_WORLD
+	world.actor_id=11
+	world.map_id=13
+	world.map_epoch=1
+	world.world_ready=true
+	world.last_world_ready_ack_epoch=1
+	world.pvp_known=true
+	world.pvp_map_allows=true
+	if not world.apply_frame(_combat_state(1,100,100)):
+		_fail("combat baseline")
+		return
+	if not world.mark_pvp_attack_sent(1,99):
+		_fail("attack intent gate")
+		return
+	if world.mark_pvp_attack_sent(2,99):
+		_fail("single flight")
+		return
+	if not world.apply_frame(_attack_result(1,1,10,100,99,28,false)):
+		_fail("attack result apply")
+		return
+	var snap: Dictionary=world.snapshot()
+	if int(snap.last_pvp_attack_result_sequence)!=1 or int(snap.last_pvp_attack_result_status)!=10 or int(snap.pending_pvp_attack_sequence)!=0:
+		_fail("rejected attack result state")
+		return
+	if not world.mark_pvp_attack_sent(2,99) or not world.apply_frame(_attack_result(1,2,0,115,99,28,false)):
+		_fail("applied attack result")
+		return
+	snap=world.snapshot()
+	if int(snap.last_pvp_attack_result.damage)!=28 or bool(snap.last_pvp_attack_result.died):
+		_fail("applied attack receipt state")
+		return
+	if not world.apply_frame(victim):
+		_fail("PvP victim damage apply")
+		return
+	snap=world.snapshot()
+	if int(snap.player_current_hp)!=72 or int(snap.player_damage_sequence)!=1 or str(snap.last_player_damage.get("source_kind",""))!="pvp" or bool(snap.player_dead):
+		_fail("shared HP timeline")
+		return
+	if not world.apply_frame(victim) or int(world.snapshot().stale_player_damage)!=1:
+		_fail("duplicate PvP damage not stale")
+		return
+	if not world.apply_frame(_pvp_damage(1,2,116,99,4,8,72,0,100,true)):
+		_fail("lethal PvP damage")
+		return
+	snap=world.snapshot()
+	if int(snap.player_current_hp)!=0 or not bool(snap.player_dead) or int(snap.player_damage_sequence)!=2:
+		_fail("PvP death state")
+		return
+	if world.mark_pvp_attack_sent(3,99):
+		_fail("dead attacker intent escaped reducer")
+		return
+
+	var stale_result_before:=int(snap.stale_pvp_attack_results)
+	if not world.apply_frame(_attack_result(1,2,0,115,99,28,false)) or int(world.snapshot().stale_pvp_attack_results)!=stale_result_before+1:
+		_fail("attack result replay not stale")
+		return
+
+	var unsolicited := WorldState.new()
+	unsolicited.state=WorldState.STATE_IN_WORLD
+	unsolicited.actor_id=11
+	unsolicited.map_id=13
+	unsolicited.map_epoch=1
+	unsolicited.world_ready=true
+	unsolicited.last_world_ready_ack_epoch=1
+	if unsolicited.apply_frame(_attack_result(1,1,0,100,99,28,false)) or int(unsolicited.state)!=WorldState.STATE_FAILED:
+		_fail("unsolicited result did not fail closed")
+		return
+
+	var gap := WorldState.new()
+	gap.state=WorldState.STATE_IN_WORLD
+	gap.actor_id=11
+	gap.map_id=13
+	gap.map_epoch=1
+	gap.world_ready=true
+	gap.last_world_ready_ack_epoch=1
+	if not gap.apply_frame(_combat_state(1,100,100)):
+		_fail("gap baseline")
+		return
+	if gap.apply_frame(_pvp_damage(1,2,100,99,4,7,10,90,100,false)) or int(gap.state)!=WorldState.STATE_FAILED:
+		_fail("shared damage sequence gap did not fail closed")
+		return
+
+	print("PVP_ATTACK_WIRE_PASS request=28 result=42 damage=61 singleflight=true server_status=true shared_damage_sequence=true lethal=true replay_stale=true unsolicited_failclosed=true")
+	quit(0)
+
+func _combat_state(epoch: int,current_hp: int,max_hp: int) -> PackedByteArray:
+	var writer:=StreamPeerBuffer.new()
+	writer.big_endian=false
+	writer.put_u32(32)
+	writer.put_u16(1)
+	writer.put_u16(WireCodec.OPCODE_PLAYER_COMBAT_STATE)
+	writer.put_64(epoch)
+	writer.put_32(current_hp)
+	writer.put_32(max_hp)
+	writer.put_32(0)
+	writer.put_32(0)
+	return writer.data_array
+
+func _attack_result(epoch: int,sequence: int,status: int,tick: int,target: int,
+		damage: int,died: bool) -> PackedByteArray:
+	var writer:=StreamPeerBuffer.new()
+	writer.big_endian=false
+	writer.put_u32(42)
+	writer.put_u16(1)
+	writer.put_u16(WireCodec.OPCODE_PVP_ATTACK_RESULT)
+	writer.put_64(epoch)
+	writer.put_u32(sequence)
+	writer.put_u8(status)
+	writer.put_64(tick)
+	writer.put_64(target)
+	writer.put_32(damage)
+	writer.put_u8(1 if died else 0)
+	return writer.data_array
+
+func _pvp_damage(epoch: int,sequence: int,tick: int,attacker: int,connection: int,
+		attack_sequence: int,damage: int,current_hp: int,max_hp: int,died: bool) -> PackedByteArray:
+	var writer:=StreamPeerBuffer.new()
+	writer.big_endian=false
+	writer.put_u32(61)
+	writer.put_u16(1)
+	writer.put_u16(WireCodec.OPCODE_PVP_DAMAGE)
+	writer.put_64(epoch)
+	writer.put_u32(sequence)
+	writer.put_64(tick)
+	writer.put_64(attacker)
+	writer.put_64(connection)
+	writer.put_u32(attack_sequence)
+	writer.put_32(damage)
+	writer.put_32(current_hp)
+	writer.put_32(max_hp)
+	writer.put_u8(1 if died else 0)
+	return writer.data_array

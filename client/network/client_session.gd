@@ -340,6 +340,16 @@ func request_pvp_mode(action: int) -> bool:
 		"map_epoch":int(current.get("map_epoch",0))})
 
 
+func attack_player(target_actor_id: int) -> bool:
+	var current := snapshot()
+	var entities: Dictionary = current.get("entities",{})
+	if target_actor_id <= 0 or target_actor_id == int(current.get("actor_id",0)) or not entities.has(target_actor_id) or int(current.get("state",-1)) != WorldState.STATE_IN_WORLD or not bool(current.get("combat_available",false)) or bool(current.get("player_dead",false)) or not bool(current.get("world_ready",false)) or bool(current.get("resync_pending",false)) or bool(current.get("waiting_for_new_map",false)) or int(current.get("pending_world_ready_ack_epoch",0)) != 0 or int(current.get("last_world_ready_ack_epoch",0)) != int(current.get("map_epoch",0)) or not bool(current.get("pvp_known",false)) or not bool(current.get("pvp_map_allows",false)) or int(current.get("pending_pvp_attack_sequence",0)) != 0:
+		return false
+	return _queue_intent({"type":"pvp_attack","target_actor_id":target_actor_id,
+		"actor_id":int(current.get("actor_id",0)),
+		"map_epoch":int(current.get("map_epoch",0))})
+
+
 func respawn() -> bool:
 	var current := snapshot()
 	if not bool(current.get("combat_available",false)) or not bool(current.get("player_dead",false)):
@@ -479,6 +489,13 @@ func _queue_intent(intent: Dictionary) -> bool:
 			accepted = false
 		for queued in _intents:
 			if str(queued.get("type","")) == "pvp_mode":
+				accepted = false
+				break
+	if accepted and kind == "pvp_attack":
+		if int(_published.get("pending_pvp_attack_sequence",0)) != 0:
+			accepted = false
+		for queued in _intents:
+			if str(queued.get("type","")) == "pvp_attack":
 				accepted = false
 				break
 	if accepted and kind == "cast_skill":
@@ -736,6 +753,27 @@ func _process_first_intent() -> void:
 			_pop_intent()
 			return
 		if _transport.send_frame(frame) and _world.mark_pvp_sent(sequence,action):
+			_pop_intent()
+			_publish()
+
+	elif kind == "pvp_attack":
+		var current: Dictionary = _world.snapshot()
+		if int(intent.get("actor_id",0)) != int(current.get("actor_id",0)) or int(intent.get("map_epoch",0)) != int(current.get("map_epoch",0)):
+			_pop_intent()
+			return
+		var target := int(intent.get("target_actor_id",0))
+		var entities: Dictionary = current.get("entities",{})
+		if target <= 0 or target == int(current.get("actor_id",0)) or not entities.has(target):
+			_pop_intent()
+			return
+		if int(current.get("state",-1)) != WorldState.STATE_IN_WORLD or not bool(current.get("combat_available",false)) or bool(current.get("player_dead",false)) or not bool(current.get("world_ready",false)) or bool(current.get("resync_pending",false)) or bool(current.get("waiting_for_new_map",false)) or int(current.get("pending_world_ready_ack_epoch",0)) != 0 or int(current.get("last_world_ready_ack_epoch",0)) != int(current.get("map_epoch",0)) or not bool(current.get("pvp_known",false)) or not bool(current.get("pvp_map_allows",false)) or int(current.get("pending_pvp_attack_sequence",0)) != 0:
+			return
+		var sequence := int(current.get("pvp_attack_sequence",0))+1
+		var frame := WireCodec.encode_pvp_attack(int(current.get("map_epoch",0)),sequence,target)
+		if frame.is_empty():
+			_pop_intent()
+			return
+		if _transport.send_frame(frame) and _world.mark_pvp_attack_sent(sequence,target):
 			_pop_intent()
 			_publish()
 

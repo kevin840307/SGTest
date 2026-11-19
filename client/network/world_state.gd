@@ -191,6 +191,13 @@ var pvp_map_allows := false
 var last_pvp_result_sequence := 0
 var last_pvp_result := {}
 var stale_pvp_results := 0
+var pvp_attack_sequence := 0
+var pending_pvp_attack_sequence := 0
+var pending_pvp_target_actor_id := 0
+var last_pvp_attack_result_sequence := 0
+var last_pvp_attack_result_status := -1
+var last_pvp_attack_result := {}
+var stale_pvp_attack_results := 0
 
 var respawn_sequence := 0
 var last_respawn_result_sequence := 0
@@ -442,6 +449,15 @@ func mark_pvp_sent(sequence: int,action: int) -> bool:
 	return true
 
 
+func mark_pvp_attack_sent(sequence: int,target_actor_id: int) -> bool:
+	if state != STATE_IN_WORLD or player_dead or not combat_available or not world_ready or resync_pending or waiting_for_new_map or pending_world_ready_ack_epoch != 0 or last_world_ready_ack_epoch != map_epoch or not pvp_known or not pvp_map_allows or pending_pvp_attack_sequence != 0 or sequence <= pvp_attack_sequence or sequence > 0xffffffff or target_actor_id <= 0 or target_actor_id == actor_id:
+		return false
+	pvp_attack_sequence = sequence
+	pending_pvp_attack_sequence = sequence
+	pending_pvp_target_actor_id = target_actor_id
+	return true
+
+
 func mark_player_respawn_sent(sequence: int) -> bool:
 	if state != STATE_IN_WORLD or not combat_available or not player_dead or not world_ready or resync_pending or waiting_for_new_map or pending_world_ready_ack_epoch != 0 or last_world_ready_ack_epoch != map_epoch or sequence <= respawn_sequence or sequence > 0xffffffff:
 		return false
@@ -540,6 +556,10 @@ func apply_frame(frame: PackedByteArray) -> bool:
 			return _apply_trade_terminal(frame)
 		WireCodec.OPCODE_PVP_MODE_RESULT:
 			return _apply_pvp_mode_result(frame)
+		WireCodec.OPCODE_PVP_ATTACK_RESULT:
+			return _apply_pvp_attack_result(frame)
+		WireCodec.OPCODE_PVP_DAMAGE:
+			return _apply_pvp_damage(frame)
 		WireCodec.OPCODE_WORLD_READY:
 			return _apply_world_ready(frame)
 		WireCodec.OPCODE_SELF_STATE:
@@ -741,6 +761,13 @@ func snapshot() -> Dictionary:
 		"last_pvp_result_sequence": last_pvp_result_sequence,
 		"last_pvp_result": last_pvp_result.duplicate(true),
 		"stale_pvp_results": stale_pvp_results,
+		"pvp_attack_sequence": pvp_attack_sequence,
+		"pending_pvp_attack_sequence": pending_pvp_attack_sequence,
+		"pending_pvp_target_actor_id": pending_pvp_target_actor_id,
+		"last_pvp_attack_result_sequence": last_pvp_attack_result_sequence,
+		"last_pvp_attack_result_status": last_pvp_attack_result_status,
+		"last_pvp_attack_result": last_pvp_attack_result.duplicate(true),
+		"stale_pvp_attack_results": stale_pvp_attack_results,
 		"respawn_sequence": respawn_sequence,
 		"last_respawn_result_sequence": last_respawn_result_sequence,
 		"last_respawn_result_status": last_respawn_result_status,
@@ -2434,6 +2461,13 @@ func _clear_pvp_map() -> void:
 	last_pvp_result_sequence = 0
 	last_pvp_result.clear()
 	stale_pvp_results = 0
+	pvp_attack_sequence = 0
+	pending_pvp_attack_sequence = 0
+	pending_pvp_target_actor_id = 0
+	last_pvp_attack_result_sequence = 0
+	last_pvp_attack_result_status = -1
+	last_pvp_attack_result.clear()
+	stale_pvp_attack_results = 0
 
 
 func _apply_pvp_mode_result(frame: PackedByteArray) -> bool:
@@ -2464,6 +2498,68 @@ func _apply_pvp_mode_result(frame: PackedByteArray) -> bool:
 	last_pvp_result_sequence = sequence
 	last_pvp_result = value.duplicate(true)
 	pending_pvp_sequence = 0
+	return true
+
+
+func _apply_pvp_attack_result(frame: PackedByteArray) -> bool:
+	if state != STATE_IN_WORLD:
+		return fail("pvp_attack_result_out_of_state")
+	var value := WireCodec.decode_pvp_attack_result(frame)
+	if value.is_empty():
+		return fail("invalid_pvp_attack_result")
+	var epoch := int(value.map_epoch)
+	var sequence := int(value.attack_sequence)
+	if epoch < map_epoch:
+		stale_pvp_attack_results += 1
+		return true
+	if epoch > map_epoch:
+		return fail("future_pvp_attack_result")
+	if sequence <= last_pvp_attack_result_sequence:
+		stale_pvp_attack_results += 1
+		return true
+	if sequence != pending_pvp_attack_sequence or sequence > pvp_attack_sequence or int(value.target_actor_id) != pending_pvp_target_actor_id:
+		return fail("pvp_attack_result_without_matching_request")
+	if int(value.status) == 1:
+		return fail("pvp_attack_result_stale_generation")
+	last_pvp_attack_result_sequence = sequence
+	last_pvp_attack_result_status = int(value.status)
+	last_pvp_attack_result = value.duplicate(true)
+	pending_pvp_attack_sequence = 0
+	pending_pvp_target_actor_id = 0
+	return true
+
+
+func _apply_pvp_damage(frame: PackedByteArray) -> bool:
+	if state != STATE_IN_WORLD or not combat_available:
+		return fail("pvp_damage_out_of_state")
+	var value := WireCodec.decode_pvp_damage(frame)
+	if value.is_empty():
+		return fail("invalid_pvp_damage")
+	var epoch := int(value.map_epoch)
+	var sequence := int(value.damage_sequence)
+	var tick := int(value.server_tick)
+	if epoch < map_epoch:
+		stale_player_damage += 1
+		return true
+	if epoch > map_epoch:
+		return fail("future_pvp_damage")
+	if sequence <= player_damage_sequence:
+		stale_player_damage += 1
+		return true
+	if sequence != player_damage_sequence + 1:
+		return fail("pvp_damage_sequence_gap")
+	if last_player_damage_tick >= 0 and tick < last_player_damage_tick:
+		return fail("pvp_damage_tick_regressed")
+	if int(value.max_hp) != player_max_hp:
+		return fail("pvp_damage_max_hp_changed_without_baseline")
+	if int(value.current_hp) > player_current_hp:
+		return fail("pvp_damage_healed")
+	player_damage_sequence = sequence
+	last_player_damage_tick = tick
+	player_current_hp = int(value.current_hp)
+	player_dead = bool(value.died)
+	last_player_damage = value.duplicate(true)
+	last_player_damage["source_kind"] = "pvp"
 	return true
 
 
