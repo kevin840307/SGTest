@@ -36,6 +36,8 @@ internal static class Program
             return await RunAutoApproachAttackAsync().ConfigureAwait(false);
         if (args is ["--discard"])
             return await RunDiscardAsync().ConfigureAwait(false);
+        if (args is ["--storage"])
+            return await RunStorageAsync().ConfigureAwait(false);
         if (args is ["--checkpoint-crash-producer", var producerDb])
             return await RunCheckpointCrashProducerAsync(producerDb).ConfigureAwait(false);
         if (args is ["--checkpoint-crash-verify", var verifyDb])
@@ -1040,6 +1042,118 @@ internal static class Program
         catch (Exception error)
         {
             Console.Error.WriteLine("DISCARD_FIXTURE_FAIL " + error);
+            return 1;
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { }
+        }
+    }
+
+    private static async Task<int> RunStorageAsync()
+    {
+        string root = Path.Combine(Path.GetTempPath(),
+            "sgtest_storage_login_" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var grid = BlockingGrid.Load(CreateMap(root, 15), 15);
+            await using var world = new ServerWorldHost(
+                [grid], options: new WorldHostOptions(PublishIdleTicks: true));
+            await world.StartAsync().ConfigureAwait(false);
+            using var store = new SqliteIdentityStore(Path.Combine(root, "identity.db"));
+            await store.InitializeAsync().ConfigureAwait(false);
+            long accountId = (await store.CreateAccountAsync(Username, Password))
+                .AccountId;
+            long characterId = (await store.CreateCharacterAsync(
+                accountId, 0, "StorageHero", new CharacterSpawn(15, 24, 24)))
+                .Character?.CharacterId
+                ?? throw new InvalidOperationException("storage character create failed");
+
+            long generation = await store.AllocateLootWorldGenerationAsync()
+                .ConfigureAwait(false);
+            var drops = await store.CreateTrustedGroundDropsAsync([
+                new TrustedDropSpawn(
+                    15,24,24,1001600001,
+                    SqliteIdentityStore.ComposeLootDeathRevision(generation,1),
+                    0,2701,2,LootSourceTrust.SyntheticTest,
+                    "ci:godot-tls-storage")
+            ]).ConfigureAwait(false);
+            var grant = await store.ClaimGroundDropAsync(
+                new TrustedPickupContext(characterId,19,1,1,15,24,24),
+                drops.Single().DropId).ConfigureAwait(false);
+            if (grant.Status != PickupStatus.Granted || grant.ItemUid <= 0 ||
+                grant.Quantity != 2)
+                throw new InvalidOperationException(
+                    "storage fixture could not seed durable inventory");
+
+            var storageCatalog = new NpcStorageCatalog([
+                new NpcStorageCatalog.StoragePoint(
+                    15,88,24,24,"ci:godot-tls-storage")
+            ]);
+            var router = new WorldResultRouter();
+            var pump = new WorldAoiPump(router);
+            var authorization = new IdentityTlsAuthorization(
+                store, world, pickupWorldGeneration:generation,
+                storages:storageCatalog);
+            using var certificate = CreateCertificate();
+            string certPath = Path.Combine(root, "fixture-cert.pem");
+            WriteCertificatePem(certPath, certificate);
+            var listener = new TcpListener(IPAddress.Loopback, 0);
+            listener.Start(1);
+            using var stop = new CancellationTokenSource();
+            var routing = router.RunAsync(world.Results);
+            var pumping = pump.RunAsync(stop.Token);
+            try
+            {
+                int port = ((IPEndPoint)listener.LocalEndpoint).Port;
+                Console.WriteLine(
+                    $"STORAGE_FIXTURE_READY port={port} cert={certPath} username={Username} " +
+                    $"character={characterId} item_uid={grant.ItemUid} npc=88");
+                Console.Out.Flush();
+
+                using var client = await listener.AcceptTcpClientAsync()
+                    .WaitAsync(TimeSpan.FromSeconds(15)).ConfigureAwait(false);
+                var ended = await authorization.RunAuthenticatedSocketAsync(
+                    client, certificate, router,
+                    new TlsWireConnectionOptions(AuthorizationTimeoutMilliseconds: 15000))
+                    .WaitAsync(TimeSpan.FromSeconds(25)).ConfigureAwait(false);
+
+                var inventory = await store.ListInventoryItemsAsync(characterId)
+                    .ConfigureAwait(false);
+                var storage = await store.ListStorageItemsAsync(characterId)
+                    .ConfigureAwait(false);
+                if (inventory.Count != 1 ||
+                    inventory[0].ItemUid != grant.ItemUid ||
+                    inventory[0].ItemDefinitionId != 2701 ||
+                    inventory[0].Quantity != 2 ||
+                    inventory[0].SourceDropId != drops.Single().DropId ||
+                    storage.Count != 0 ||
+                    ended.CommandsAccepted != 3 ||
+                    router.Statistics.ActiveSessions != 0)
+                    throw new InvalidOperationException(
+                        $"storage E2E mismatch inventory={inventory.Count} storage={storage.Count} " +
+                        $"commands={ended.CommandsAccepted} sessions={router.Statistics.ActiveSessions}");
+
+                Console.WriteLine(
+                    $"STORAGE_FIXTURE_PASS tls={ended.Protocol} item_uid={grant.ItemUid} " +
+                    $"quantity=2 source_drop={drops.Single().DropId} storage=0 " +
+                    $"commands={ended.CommandsAccepted}");
+                Console.Out.Flush();
+                return 0;
+            }
+            finally
+            {
+                listener.Stop();
+                stop.Cancel();
+                await pumping.ConfigureAwait(false);
+                await world.StopAsync().ConfigureAwait(false);
+                await routing.WaitAsync(TimeSpan.FromSeconds(3)).ConfigureAwait(false);
+            }
+        }
+        catch (Exception error)
+        {
+            Console.Error.WriteLine("STORAGE_FIXTURE_FAIL " + error);
             return 1;
         }
         finally
