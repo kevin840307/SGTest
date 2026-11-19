@@ -30,6 +30,9 @@ class RespawnSession extends RefCounted:
 	var storage_withdrawals := 0
 	var last_storage_npc := 0
 	var last_storage_uid := 0
+	var equipment_equips := 0
+	var equipment_unequips := 0
+	var last_equipment_uid := 0
 	func use_recovery_item(item_uid: int) -> bool:
 		if item_uid <= 0:
 			return false
@@ -85,6 +88,18 @@ class RespawnSession extends RefCounted:
 			return false
 		storage_withdrawals += 1
 		last_storage_uid = item_uid
+		return true
+	func equip_inventory_item(item_uid: int) -> bool:
+		if item_uid <= 0:
+			return false
+		equipment_equips += 1
+		last_equipment_uid = item_uid
+		return true
+	func unequip_item(item_uid: int) -> bool:
+		if item_uid <= 0:
+			return false
+		equipment_unequips += 1
+		last_equipment_uid = item_uid
 		return true
 	func attack_monster(entity_id: int) -> bool:
 		if entity_id <= 0:
@@ -624,6 +639,44 @@ func run() -> void:
 		fail("Pending storage mutation allowed another item move")
 		return
 
+	# Equipment UI must render only the opaque slot id supplied by Server.
+	# It may choose an exact UID, but it must not invent slot semantics or stats.
+	panel._latest.pending_storage_sequence = 0
+	panel._latest.pending_equipment_sequence = 0
+	panel._latest.equipment_sequence = 0
+	panel._latest.equipment_revision = 0
+	panel._latest.equipment_ready = false
+	panel._latest.equipment_items = {}
+	panel._latest.last_equipment_result = {}
+	panel._update_equipment_ui()
+	if not panel.equipment_equip_button.disabled or not panel.equipment_unequip_button.disabled or not panel.equipment_status.text.contains("尚未由伺服器啟用"):
+		fail("Equipment UI was usable without authoritative baseline")
+		return
+	panel._latest.equipment_ready = true
+	panel._latest.equipment_revision = 1
+	panel._latest.equipment_items = {30000:{
+		"item_uid":30000,"slot_id":4,"item_definition_id":4001,"drop_id":0}}
+	panel._update_equipment_ui()
+	if panel.equipment_inventory_picker.item_count == 0 or panel.equipment_equipped_picker.item_count != 1 or panel.equipment_equip_button.disabled or panel.equipment_unequip_button.disabled:
+		fail("Authoritative equipment baseline was not rendered as playable controls")
+		return
+	if not panel.equipment_equipped_picker.get_item_text(0).contains("裝備欄位 4"):
+		fail("Equipment UI guessed or hid opaque server slot id")
+		return
+	panel.equipment_equip_button.pressed.emit()
+	if stub.equipment_equips != 1 or stub.last_equipment_uid != 10000:
+		fail("Equipment equip UI did not use selected inventory UID")
+		return
+	panel._update_equipment_ui()
+	panel.equipment_unequip_button.pressed.emit()
+	if stub.equipment_unequips != 1 or stub.last_equipment_uid != 30000:
+		fail("Equipment unequip UI did not use selected equipped UID")
+		return
+	panel._latest.pending_equipment_sequence = 1
+	panel._update_equipment_ui()
+	if not panel.equipment_equip_button.disabled or not panel.equipment_unequip_button.disabled:
+		fail("Pending equipment mutation allowed another item move")
+		return
 	panel._latest.player_dead = true
 	panel._update_inventory_ui()
 	if not panel.recovery_button.disabled or panel.submit_recovery_use(10000):
@@ -639,5 +692,5 @@ func run() -> void:
 	panel._set_respawn_controls()
 	app.queue_free()
 	await process_frame
-	print("CLIENT_TLS_LOGIN_PASS ui=PASS auth=PASS choose=PASS receipt=PASS world_ready=PASS password_cleared=PASS logout=PASS respawn_ui=PASS click_attack_ui=PASS click_pickup_ui=PASS persistent_inventory_ui=PASS item_metadata=PASS inventory_pagination=PASS recovery_item_button=PASS inventory_discard_button=PASS inventory_discard_quantity_confirm=PASS shop_ui=PASS storage_ui=PASS skill_cast_ui=PASS skill_singleflight=PASS combat_mp_ui=PASS")
+	print("CLIENT_TLS_LOGIN_PASS ui=PASS auth=PASS choose=PASS receipt=PASS world_ready=PASS password_cleared=PASS logout=PASS respawn_ui=PASS click_attack_ui=PASS click_pickup_ui=PASS persistent_inventory_ui=PASS item_metadata=PASS inventory_pagination=PASS recovery_item_button=PASS inventory_discard_button=PASS inventory_discard_quantity_confirm=PASS shop_ui=PASS storage_ui=PASS equipment_ui=PASS skill_cast_ui=PASS skill_singleflight=PASS combat_mp_ui=PASS")
 	quit(0)
