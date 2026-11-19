@@ -915,7 +915,23 @@ func run() -> void:
 		fail("Trade item offer did not use exact ItemUid")
 		return
 
-	# TRADE_UI_CONTINUE_2
+	panel._latest.trade_revision = 3
+	panel._latest.trade_my_items = {10000:{"item_uid":10000,"item_definition_id":4001,"quantity":3,"drop_id":501}}
+	panel._latest.trade_other_items = {20000:{"item_uid":20000,"item_definition_id":4002,"quantity":1,"drop_id":502}}
+	panel._latest.trade_other_money = 50
+	panel._update_trade_ui()
+	if panel.trade_my_offer_picker.item_count != 1 or not panel.trade_other_offer_label.text.contains("UID 20000"):
+		fail("Trade UI did not render authoritative offers")
+		return
+	panel.trade_money_input.value = 200
+	panel.trade_set_money_button.pressed.emit()
+	panel.trade_offer_remove_button.pressed.emit()
+	panel.trade_lock_button.pressed.emit()
+	if stub.trade_money_sets != 1 or stub.last_trade_money != 200 or stub.trade_removes != 1 or stub.trade_locks != 1:
+		fail("Trade mutation controls did not use ClientSession")
+		return
+
+	# TRADE_UI_CONTINUE_3
 
 	panel._latest.player_dead = true
 	panel._update_inventory_ui()
