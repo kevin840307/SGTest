@@ -46,6 +46,12 @@ func _initialize() -> void:
 	if ready.is_empty():
 		_fail("world/PvP ready "+str(session.snapshot()),session)
 		return
+	if role=="actor" and not bool(ready.get("gm_authorized",false)):
+		_fail("allowlisted actor did not receive server GM capability "+str(ready),session)
+		return
+	if role=="victim" and bool(ready.get("gm_authorized",false)):
+		_fail("non-allowlisted victim received GM capability",session)
+		return
 
 	if role=="victim":
 		print("CLIENT_PVP_READY role=victim actor=%d" % self_id)
@@ -124,8 +130,19 @@ func _run_victim(session,self_id:int,peer_id:int)->void:
 	if red.is_empty():
 		_fail("attacker did not become red on observer "+str(session.snapshot()),session)
 		return
+	var gm_blue:=_wait(session,func(v):
+		var identities:Dictionary=v.get("player_identities",{})
+		if not identities.has(self_id):
+			return false
+		var identity:Dictionary=identities[self_id]
+		return int(identity.get("mode",-1))==0 and
+			not bool(identity.get("red_man",true)) and
+			int(identity.get("pvp_updated_unix_ms",0))>0,7000)
+	if gm_blue.is_empty():
+		_fail("victim did not receive audited GM blue identity "+str(session.snapshot()),session)
+		return
 	session.stop()
-	print("CLIENT_PVP_PASS role=victim actor=%d hp=0 sequence=2 death=true name=Pink->Red attack_visual=true skill_visual=true" % self_id)
+	print("CLIENT_PVP_PASS role=victim actor=%d hp=0 sequence=2 death=true name=Pink->Red gm_target_blue=true attack_visual=true skill_visual=true" % self_id)
 	quit(0)
 
 func _run_actor(session,self_id:int,peer_id:int)->void:
@@ -190,8 +207,27 @@ func _run_actor(session,self_id:int,peer_id:int)->void:
 	if skill_visual.is_empty():
 		_fail("actor missing PvP skill visual "+str(session.snapshot()),session)
 		return
+	if not session.gm_set_pvp_name(peer_id,0):
+		_fail("audited GM blue command submit "+str(session.snapshot()),session)
+		return
+	var gm_result:=_wait(session,func(v):
+		return int(v.get("last_gm_result_sequence",0))>=1,7000)
+	if gm_result.is_empty() or int(gm_result.get("last_gm_result_status",-1))!=0:
+		_fail("audited GM result "+str(gm_result),session)
+		return
+	var peer_blue:=_wait(session,func(v):
+		var identities:Dictionary=v.get("player_identities",{})
+		if not identities.has(peer_id):
+			return false
+		var identity:Dictionary=identities[peer_id]
+		return int(identity.get("mode",-1))==0 and
+			not bool(identity.get("red_man",true)) and
+			int(identity.get("pvp_updated_unix_ms",0))>0,7000)
+	if peer_blue.is_empty():
+		_fail("actor did not receive GM target blue identity "+str(session.snapshot()),session)
+		return
 	session.stop()
-	print("CLIENT_PVP_PASS role=actor actor=%d attack_damage=58 skill_damage=42 target_dead=true mp=2->1 attack_visual=true skill_visual=true" % self_id)
+	print("CLIENT_PVP_PASS role=actor actor=%d attack_damage=58 skill_damage=42 target_dead=true mp=2->1 gm_capability=true gm_target_blue=true attack_visual=true skill_visual=true" % self_id)
 	quit(0)
 
 func _wait(session,predicate:Callable,timeout_ms:int)->Dictionary:

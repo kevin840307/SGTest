@@ -668,6 +668,7 @@ def run_pvp(args, repo: Path, fixture: Path, env: dict[str, str]) -> int:
               "server_range=true server_damage=true shared_hp_sequence=true "
               "normal_hit=58 player_skill_fixed_hit=42 skill_id=99003 "
               "skill_mp=2_to_1 victim_dead=true attacker_red=true "
+              "gm_capability=true gm_audit=true victim_gm_blue=true "
               "client_damage_estimate=false")
         return 0
     except Exception as error:

@@ -114,7 +114,9 @@ internal static class PvpLoginFixture
             var pump=new WorldAoiPump(
                 router,monsters:coordinator,playerCombat:settlement);
             var authorization=new IdentityTlsAuthorization(
-                store,world,combat:settlement);
+                store,world,combat:settlement,
+                gmAccounts:new HashSet<string>(
+                    ["pvp_one"],StringComparer.OrdinalIgnoreCase));
             using var certificate=Program.CreateCertificate();
             string certPath=Path.Combine(root,"fixture-cert.pem");
             Program.WriteCertificatePem(certPath,certificate);
@@ -169,7 +171,7 @@ internal static class PvpLoginFixture
                 if(ended[0].Reason!=TlsWireEndReason.CleanEof||
                    ended[1].Reason!=TlsWireEndReason.CleanEof||
                    ended[0].CommandsAccepted!=1||
-                   ended[1].CommandsAccepted!=3||
+                   ended[1].CommandsAccepted!=4||
                    attackerProfile?.Data.CurrentHp!=100||
                    attackerProfile?.Data.CurrentMp!=1||
                    victimProfile?.Data.CurrentHp!=0||
@@ -178,7 +180,7 @@ internal static class PvpLoginFixture
                    settlement.Statistics.DeathsCommitted!=1||
                    PvpCrimePolicy.NameState(
                        attackerPvp,DateTimeOffset.UtcNow)!=PvpNameState.Red||
-                   victimPvp.Mode!=PvpMode.EnabledWhite||
+                   victimPvp.Mode!=PvpMode.ProtectedBlue||
                    victimPvp.RedMan)
                     throw new InvalidOperationException(
                         $"PvP E2E mismatch victim_hp={victimProfile?.Data.CurrentHp} " +
@@ -198,7 +200,8 @@ internal static class PvpLoginFixture
                     $"damage={settlement.Statistics.DamageCommitted} " +
                     $"deaths={settlement.Statistics.DeathsCommitted} " +
                     $"attacker_name=Red attacker_mp={attackerProfile!.Data.CurrentMp}/" +
-                    $"{attackerProfile.Data.MaxMp} commands={ended[0].CommandsAccepted}/{ended[1].CommandsAccepted}");
+                    $"{attackerProfile.Data.MaxMp} victim_name=Blue " +
+                    $"gm_audit=true commands={ended[0].CommandsAccepted}/{ended[1].CommandsAccepted}");
                 Console.Out.Flush();
                 return 0;
             }
