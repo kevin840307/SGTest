@@ -82,6 +82,11 @@ public readonly record struct TrustedTradeCommand(
     long ActorId,long ConnectionEpoch,long RequestMapEpoch,
     uint TradeSequence,TradeCommandAction Action,long TradeId,
     long TargetActorId,long ItemUid,long Money);
+public enum TrustedQuestCommandKind : byte { Open=1, Choose=2 }
+public readonly record struct TrustedQuestCommand(
+    long ActorId,long ConnectionEpoch,long RequestMapEpoch,
+    uint QuestSequence,int NpcSpawnId,TrustedQuestCommandKind Kind,
+    int QuestId=0,int ChoiceId=0);
 
 public readonly record struct NormalAttackOutcome(
     NormalAttackStatus Status, long ServerTick, long TargetEntityId,
@@ -295,7 +300,8 @@ public sealed class GatewayConnection
                                               Func<TrustedEquipmentCommand, bool>? postEquipment = null,
                                               Func<TrustedBankCommand, bool>? postBank = null,
                                               Func<TrustedRepairCommand, bool>? postRepair = null,
-                                              Func<TrustedTradeCommand, bool>? postTrade = null)
+                                              Func<TrustedTradeCommand, bool>? postTrade = null,
+                                              Func<TrustedQuestCommand, bool>? postQuest = null)
     {
         ArgumentNullException.ThrowIfNull(postMove);
         lock (_receiveGate)
@@ -308,7 +314,7 @@ public sealed class GatewayConnection
             return _parser.Feed(bytes,
                 frame => HandleClientFrame(
                     frame, postMove, postNpc, postResync, postAttack, postRespawn,
-                    postPickup, postRecovery, postDiscard, postSkill, postShop, postStorage, postEquipment, postBank, postRepair, postTrade),
+                    postPickup, postRecovery, postDiscard, postSkill, postShop, postStorage, postEquipment, postBank, postRepair, postTrade, postQuest),
                 out commandsAccepted);
         }
     }
@@ -328,7 +334,8 @@ public sealed class GatewayConnection
                                               Func<TrustedEquipmentCommand, bool>? postEquipment = null,
                                               Func<TrustedBankCommand, bool>? postBank = null,
                                               Func<TrustedRepairCommand, bool>? postRepair = null,
-                                              Func<TrustedTradeCommand, bool>? postTrade = null)
+                                              Func<TrustedTradeCommand, bool>? postTrade = null,
+                                              Func<TrustedQuestCommand, bool>? postQuest = null)
     {
         ArgumentNullException.ThrowIfNull(postMove);
         lock (_receiveGate)
@@ -341,7 +348,7 @@ public sealed class GatewayConnection
             return _parser.Resume(
                 frame => HandleClientFrame(
                     frame, postMove, postNpc, postResync, postAttack, postRespawn,
-                    postPickup, postRecovery, postDiscard, postSkill, postShop, postStorage, postEquipment, postBank, postRepair, postTrade),
+                    postPickup, postRecovery, postDiscard, postSkill, postShop, postStorage, postEquipment, postBank, postRepair, postTrade, postQuest),
                 out commandsAccepted);
         }
     }
@@ -362,7 +369,8 @@ public sealed class GatewayConnection
         Func<TrustedEquipmentCommand, bool>? postEquipment,
         Func<TrustedBankCommand, bool>? postBank,
         Func<TrustedRepairCommand, bool>? postRepair,
-        Func<TrustedTradeCommand, bool>? postTrade)
+        Func<TrustedTradeCommand, bool>? postTrade,
+        Func<TrustedQuestCommand, bool>? postQuest)
     {
         if (!WireProtocol.TryReadHeader(frame, out var header))
             return WireFrameDisposition.ProtocolViolation;
@@ -579,6 +587,30 @@ public sealed class GatewayConnection
                 skill.SkillSequence,skill.SkillId,skill.TargetEntityId,
                 _combatProfile))
                 ? WireFrameDisposition.Accepted : WireFrameDisposition.Backpressured;
+        }
+
+        if(header.Opcode==WireOpcode.QuestOpen && postQuest is not null &&
+            WireProtocol.TryDecodeQuestOpen(frame,out var questOpen))
+        {
+            if(!GameplayReady(bound))
+                return WireFrameDisposition.ProtocolViolation;
+            return postQuest(new TrustedQuestCommand(
+                bound.ActorId,bound.ConnectionEpoch,questOpen.MapEpoch,
+                questOpen.QuestSequence,questOpen.NpcSpawnId,
+                TrustedQuestCommandKind.Open))
+                ? WireFrameDisposition.Accepted:WireFrameDisposition.Backpressured;
+        }
+        if(header.Opcode==WireOpcode.QuestChoose && postQuest is not null &&
+            WireProtocol.TryDecodeQuestChoose(frame,out var questChoose))
+        {
+            if(!GameplayReady(bound))
+                return WireFrameDisposition.ProtocolViolation;
+            return postQuest(new TrustedQuestCommand(
+                bound.ActorId,bound.ConnectionEpoch,questChoose.MapEpoch,
+                questChoose.QuestSequence,questChoose.NpcSpawnId,
+                TrustedQuestCommandKind.Choose,
+                questChoose.QuestId,questChoose.ChoiceId))
+                ? WireFrameDisposition.Accepted:WireFrameDisposition.Backpressured;
         }
 
         if(header.Opcode==WireOpcode.TradeCommand && postTrade is not null &&
@@ -967,6 +999,34 @@ public sealed class GatewayConnection
                 request.RequestMapEpoch,request.BankSequence,result.Kind,result.Status,
                 request.NpcSpawnId,result.Scope,result.Amount,
                 result.WalletMoney,result.BankMoney));
+            return _reliable.TryEnqueue(frame)
+                ? GatewaySendStatus.Enqueued:GatewaySendStatus.Backpressured;
+        }
+    }
+
+    public GatewaySendStatus QueueQuestView(
+        TrustedQuestCommand request,QuestViewWireStatus status,QuestView? view)
+    {
+        lock(_bindingGate)
+        {
+            if(_closed)return GatewaySendStatus.Closed;
+            var bound=_binding;
+            if(request.ActorId!=bound.ActorId||
+               request.ConnectionEpoch!=bound.ConnectionEpoch||
+               request.RequestMapEpoch!=bound.MapEpoch)
+                return GatewaySendStatus.GenerationMismatch;
+            if(view is not null&&request.Kind==TrustedQuestCommandKind.Choose&&
+               request.QuestId!=view.QuestId)
+                return GatewaySendStatus.GenerationMismatch;
+            var choices=view?.Choices.Select(
+                x=>new QuestViewChoiceWire(x.ChoiceId,x.Label)).ToArray()
+                ??Array.Empty<QuestViewChoiceWire>();
+            var frame=WireProtocol.EncodeQuestView(new(
+                request.RequestMapEpoch,request.QuestSequence,status,
+                request.NpcSpawnId,view?.QuestId??0,view?.RuleRevision??0,
+                view?.State??QuestProgressState.NotStarted,view?.Stage??0,
+                view?.ProgressRevision??0,view?.Title??string.Empty,
+                view?.Text??string.Empty,choices));
             return _reliable.TryEnqueue(frame)
                 ? GatewaySendStatus.Enqueued:GatewaySendStatus.Backpressured;
         }
