@@ -74,7 +74,10 @@ public enum WireOpcode : ushort
     RepairResult = 69,
     TradeCommand = 70,
     TradeSnapshot = 71,
-    TradeTerminal = 72
+    TradeTerminal = 72,
+    QuestOpen = 73,
+    QuestView = 74,
+    QuestChoose = 75
 }
 
 public enum TradeCommandAction : byte
@@ -146,6 +149,21 @@ public enum RepairOpenStatus : byte
     UnknownRepair = 2,
     TooFar = 3,
     PlayerDead = 4
+}
+
+public enum QuestViewWireStatus : byte
+{
+    Ready = 0,
+    Applied = 1,
+    AlreadyApplied = 2,
+    StaleGeneration = 3,
+    UnknownQuest = 4,
+    TooFar = 5,
+    InvalidChoice = 6,
+    AlreadyCompleted = 7,
+    StaleSequence = 8,
+    PlayerDead = 9,
+    RuleRevisionMismatch = 10
 }
 
 public readonly record struct WireFrameHeader(int FrameBytes, ushort Version, WireOpcode Opcode);
@@ -338,6 +356,17 @@ public readonly record struct TradeTerminalWire(
     long MapEpoch,long TradeId,uint Revision,TradeTerminalStatus Status,
     long WalletMoney);
 
+public readonly record struct QuestOpenWire(
+    long MapEpoch,uint QuestSequence,int NpcSpawnId);
+public readonly record struct QuestChooseWire(
+    long MapEpoch,uint QuestSequence,int NpcSpawnId,int QuestId,int ChoiceId);
+public readonly record struct QuestViewChoiceWire(int ChoiceId,string Label);
+public sealed record QuestViewWire(
+    long MapEpoch,uint QuestSequence,QuestViewWireStatus Status,int NpcSpawnId,
+    int QuestId,int RuleRevision,QuestProgressState State,int Stage,
+    int ProgressRevision,string Title,string Text,
+    IReadOnlyList<QuestViewChoiceWire> Choices);
+
 /// <summary>
 /// Version 1 complete-frame codec. Transport/TLS/socket buffering is separate.
 /// Header = uint32 frameBytes + uint16 version + uint16 opcode, little-endian.
@@ -435,6 +464,17 @@ public static class WireProtocol
     public const int RepairItemFrameBytes = HeaderBytes + 8 + 4 + 4 + 8;
     public const int RepairResultFrameBytes =
         HeaderBytes + 8 + 4 + 1 + 4 + 8 + 4 + 1 + 4 + 4 + 8 + 8;
+    public const int QuestOpenFrameBytes = HeaderBytes + 8 + 4 + 4;
+    public const int QuestChooseFrameBytes = HeaderBytes + 8 + 4 + 4 + 4 + 4;
+    public const int QuestViewHeaderBytes =
+        HeaderBytes + 8 + 4 + 1 + 4 + 4 + 4 + 1 + 4 + 4 + 2 + 2 + 1;
+    public const int QuestViewMaxTitleBytes = 256;
+    public const int QuestViewMaxTextBytes = 4096;
+    public const int QuestViewMaxLabelBytes = 512;
+    public const int QuestViewMaxChoices = 16;
+    public const int QuestViewMaximumFrameBytes =
+        QuestViewHeaderBytes + QuestViewMaxTitleBytes + QuestViewMaxTextBytes +
+        QuestViewMaxChoices*(4+2+QuestViewMaxLabelBytes);
     public const int TradeCommandFrameBytes = HeaderBytes + 8 + 4 + 1 + 8 + 8 + 8 + 8;
     public const int TradeSnapshotHeaderBytes = 59;
     public const int TradeOfferItemBytes = 24;
