@@ -18,7 +18,8 @@ public enum AoiEventKind : byte
     WorldReady, Spawn, Delta, Despawn, SelfState, PlayerIdentity,
     MonsterSpawn, MonsterDelta, MonsterDespawn,
     GroundDropSpawn, GroundDropDespawn,
-    PlayerAttackVisual, PlayerSkillVisual, PlayerDamageVisual, PlayerRespawnVisual
+    PlayerAttackVisual, PlayerSkillVisual, PlayerDamageVisual, PlayerRespawnVisual,
+    PvpCombatVisual
 }
 
 /// <summary>
@@ -44,6 +45,10 @@ public readonly record struct PlayerIdentityPresentation(
     long ActorId,long ConnectionEpoch,long EntityMapEpoch,string DisplayName,
     PvpMode Mode,bool RedMan,long ServerUnixMilliseconds,
     long PinkUntilUnixMilliseconds,long PvpUpdatedUnixMilliseconds);
+public readonly record struct PlayerPvpCombatVisual(
+    long AttackerActorId,long AttackerConnectionEpoch,uint AttackSequence,
+    long VictimActorId,long VictimConnectionEpoch,uint DamageSequence,
+    int Damage,bool Died,byte AttackerFacing,byte VictimFacing);
 
 public readonly record struct AoiEvent(
     AoiEventKind Kind, long Tick, long ReceiverMapEpoch,
@@ -54,7 +59,8 @@ public readonly record struct AoiEvent(
     PlayerSkillVisual? PlayerSkill = null,
     PlayerDamageVisual? PlayerDamage = null,
     PlayerRespawnVisual? PlayerRespawn = null,
-    PlayerIdentityPresentation? PlayerIdentity = null);
+    PlayerIdentityPresentation? PlayerIdentity = null,
+    PlayerPvpCombatVisual? PvpCombat = null);
 
 public sealed class AoiBackpressureException : Exception
 {
@@ -414,6 +420,65 @@ public sealed class WorldAoi
     /// that currently see the exact victim generation. HP/death authority stays
     /// in PlayerCombatSettlement/SQLite; this event is presentation-only.
     /// </summary>
+    public int EnqueuePlayerPvpCombatVisual(PlayerDamageSettlement result)
+    {
+        if(_lastTick<=0||result.SourceKind!=PlayerDamageSourceKind.PlayerPvp||
+           result.ActorId<=0||result.ConnectionEpoch<=0||result.MapEpoch<=0||
+           result.DamageSequence==0||result.ServerTick<0||
+           result.ServerTick>_lastTick||result.AttackerActorId<=0||
+           result.AttackerConnectionEpoch<=0||result.AttackerAttackSequence==0||
+           result.Damage<=0||result.AttackerActorId==result.ActorId||
+           result.AttackerFacing is <1 or >8||result.VictimFacing is <1 or >8)
+            throw new InvalidOperationException(
+                "Invalid authoritative PvP combat visual");
+
+        if(!_entities.TryGetValue(result.AttackerActorId,out var attacker)||
+           attacker.ConnectionEpoch!=result.AttackerConnectionEpoch||
+           attacker.MapEpoch!=result.MapEpoch||
+           !_entities.TryGetValue(result.ActorId,out var victim)||
+           victim.ConnectionEpoch!=result.ConnectionEpoch||
+           victim.MapEpoch!=result.MapEpoch||
+           attacker.MapId!=victim.MapId)
+            return 0;
+
+        var visual=new PlayerPvpCombatVisual(
+            attacker.ActorId,attacker.ConnectionEpoch,
+            result.AttackerAttackSequence,
+            victim.ActorId,victim.ConnectionEpoch,result.DamageSequence,
+            result.Damage,result.Died,result.AttackerFacing,result.VictimFacing);
+        int queued=0;
+        foreach(var observer in _observers.Values)
+        {
+            if(observer.Self.MapId!=attacker.MapId)continue;
+            bool seesAttacker=
+                observer.Self.ActorId==attacker.ActorId&&
+                observer.Self.ConnectionEpoch==attacker.ConnectionEpoch&&
+                observer.Self.MapEpoch==attacker.MapEpoch;
+            if(!seesAttacker&&observer.Visible.TryGetValue(
+                attacker.ActorId,out var seenAttacker))
+                seesAttacker=
+                    seenAttacker.ConnectionEpoch==attacker.ConnectionEpoch&&
+                    seenAttacker.MapEpoch==attacker.MapEpoch;
+            if(!seesAttacker)continue;
+
+            bool seesVictim=
+                observer.Self.ActorId==victim.ActorId&&
+                observer.Self.ConnectionEpoch==victim.ConnectionEpoch&&
+                observer.Self.MapEpoch==victim.MapEpoch;
+            if(!seesVictim&&observer.Visible.TryGetValue(
+                victim.ActorId,out var seenVictim))
+                seesVictim=
+                    seenVictim.ConnectionEpoch==victim.ConnectionEpoch&&
+                    seenVictim.MapEpoch==victim.MapEpoch;
+            if(!seesVictim)continue;
+
+            Enqueue(observer,new(AoiEventKind.PvpCombatVisual,_lastTick,
+                observer.Self.MapEpoch,PvpCombat:visual));
+            queued++;
+        }
+        return queued;
+    }
+
     public int EnqueuePlayerDamageVisual(PlayerDamageSettlement result)
     {
         if(_lastTick<=0 || result.ActorId<=0 || result.ConnectionEpoch<=0 ||

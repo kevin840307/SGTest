@@ -72,6 +72,9 @@ internal static class PvpLoginFixture
                             throw new PlayerCombatSettlementException(
                                 "PvP lethal commit did not stop World victim");
                     }
+                    if(!router.TryPostPlayerPvpCombatVisual(result))
+                        throw new PlayerCombatSettlementException(
+                            "PvP fixture committed visual queue full");
                 });
             var pump=new WorldAoiPump(router,playerCombat:settlement);
             var authorization=new IdentityTlsAuthorization(

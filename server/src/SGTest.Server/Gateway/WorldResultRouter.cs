@@ -67,6 +67,7 @@ public sealed class WorldResultRouter
     private readonly Channel<PlayerDamageSettlement> _playerDamageVisuals;
     private readonly Channel<PlayerRespawnVisualRequest> _playerRespawnVisuals;
     private readonly Channel<PlayerIdentityUpdate> _playerIdentityUpdates;
+    private readonly Channel<PlayerDamageSettlement> _playerPvpCombatVisuals;
     private readonly WorldResultRouterOptions _options;
     private readonly Action<WorldChangedBatch>? _changedObserver;
     private long _queued, _stale, _changedQueued, _backpressure;
@@ -162,6 +163,14 @@ public sealed class WorldResultRouter
                 FullMode = BoundedChannelFullMode.Wait,
                 AllowSynchronousContinuations = false
             });
+        _playerPvpCombatVisuals = Channel.CreateBounded<PlayerDamageSettlement>(
+            new BoundedChannelOptions(_options.AttackRequestCapacity)
+            {
+                SingleReader=true,
+                SingleWriter=false,
+                FullMode=BoundedChannelFullMode.Wait,
+                AllowSynchronousContinuations=false
+            });
     }
 
     public ChannelReader<WorldChangedBatch> ChangedBatches => _changed.Reader;
@@ -179,6 +188,8 @@ public sealed class WorldResultRouter
         _playerRespawnVisuals.Reader;
     public ChannelReader<PlayerIdentityUpdate> PlayerIdentityUpdates =>
         _playerIdentityUpdates.Reader;
+    public ChannelReader<PlayerDamageSettlement> PlayerPvpCombatVisuals =>
+        _playerPvpCombatVisuals.Reader;
 
     public WorldResultRouterStatistics Statistics
     {
@@ -496,6 +507,18 @@ public sealed class WorldResultRouter
             result.DamageSequence==0 || result.Damage<=0)
             return false;
         return _playerDamageVisuals.Writer.TryWrite(result);
+    }
+
+    public bool TryPostPlayerPvpCombatVisual(PlayerDamageSettlement result)
+    {
+        if(result.SourceKind!=PlayerDamageSourceKind.PlayerPvp||
+           result.ActorId<=0||result.ConnectionEpoch<=0||result.MapEpoch<=0||
+           result.DamageSequence==0||result.AttackerActorId<=0||
+           result.AttackerConnectionEpoch<=0||result.AttackerAttackSequence==0||
+           result.Damage<=0||result.AttackerFacing is <1 or >8||
+           result.VictimFacing is <1 or >8)
+            return false;
+        return _playerPvpCombatVisuals.Writer.TryWrite(result);
     }
 
     public bool TryPostPlayerRespawnVisual(

@@ -83,7 +83,8 @@ public enum WireOpcode : ushort
     PvpAttack = 78,
     PvpAttackResult = 79,
     PvpDamage = 80,
-    PlayerIdentity = 81
+    PlayerIdentity = 81,
+    PvpCombatVisual = 82
 }
 
 public enum TradeCommandAction : byte
@@ -386,6 +387,11 @@ public readonly record struct PlayerIdentityWire(
     long ReceiverMapEpoch,long ActorId,long ConnectionEpoch,long EntityMapEpoch,
     PvpMode Mode,bool RedMan,long ServerUnixMilliseconds,
     long PinkUntilUnixMilliseconds,long PvpUpdatedUnixMilliseconds,string Name);
+public readonly record struct PvpCombatVisualWire(
+    long ReceiverMapEpoch,long ServerTick,
+    long AttackerActorId,long AttackerConnectionEpoch,uint AttackSequence,
+    long VictimActorId,long VictimConnectionEpoch,uint DamageSequence,
+    int Damage,bool Died,byte AttackerFacing,byte VictimFacing);
 
 public readonly record struct QuestOpenWire(
     long MapEpoch,uint QuestSequence,int NpcSpawnId);
@@ -505,6 +511,8 @@ public static class WireProtocol
     public const int PlayerIdentityMaxNameBytes = 96;
     public const int PlayerIdentityMaximumFrameBytes =
         PlayerIdentityHeaderBytes + PlayerIdentityMaxNameBytes;
+    public const int PvpCombatVisualFrameBytes =
+        HeaderBytes + 8 + 8 + 8 + 8 + 4 + 8 + 8 + 4 + 4 + 1 + 1 + 1;
     public const int QuestOpenFrameBytes = HeaderBytes + 8 + 4 + 4;
     public const int QuestChooseFrameBytes = HeaderBytes + 8 + 4 + 4 + 4 + 4;
     public const int QuestViewHeaderBytes =
@@ -3213,6 +3221,57 @@ public static class WireProtocol
             (value.Died?value.CurrentHp==0:value.CurrentHp>0);
     }
 
+    public static byte[] EncodePvpCombatVisual(PvpCombatVisualWire value)
+    {
+        if(value.ReceiverMapEpoch<=0||value.ServerTick<0||
+           value.AttackerActorId<=0||value.AttackerConnectionEpoch<=0||
+           value.AttackSequence==0||value.VictimActorId<=0||
+           value.VictimConnectionEpoch<=0||value.DamageSequence==0||
+           value.Damage<=0||value.AttackerActorId==value.VictimActorId||
+           value.AttackerFacing is <1 or >8||value.VictimFacing is <1 or >8)
+            throw new ArgumentOutOfRangeException(nameof(value));
+        var frame=NewFrame(WireOpcode.PvpCombatVisual,PvpCombatVisualFrameBytes);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(8,8),value.ReceiverMapEpoch);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(16,8),value.ServerTick);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(24,8),value.AttackerActorId);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(32,8),value.AttackerConnectionEpoch);
+        BinaryPrimitives.WriteUInt32LittleEndian(frame.AsSpan(40,4),value.AttackSequence);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(44,8),value.VictimActorId);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(52,8),value.VictimConnectionEpoch);
+        BinaryPrimitives.WriteUInt32LittleEndian(frame.AsSpan(60,4),value.DamageSequence);
+        BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(64,4),value.Damage);
+        frame[68]=value.Died?(byte)1:(byte)0;
+        frame[69]=value.AttackerFacing;
+        frame[70]=value.VictimFacing;
+        return frame;
+    }
+
+    public static bool TryDecodePvpCombatVisual(
+        ReadOnlySpan<byte> frame,out PvpCombatVisualWire value)
+    {
+        value=default;
+        if(!TryReadHeader(frame,out var h)||h.Opcode!=WireOpcode.PvpCombatVisual)
+            return false;
+        byte died=frame[68];
+        value=new(
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(8,8)),
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(16,8)),
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(24,8)),
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(32,8)),
+            BinaryPrimitives.ReadUInt32LittleEndian(frame.Slice(40,4)),
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(44,8)),
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(52,8)),
+            BinaryPrimitives.ReadUInt32LittleEndian(frame.Slice(60,4)),
+            BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(64,4)),
+            died==1,frame[69],frame[70]);
+        return died<=1&&value.ReceiverMapEpoch>0&&value.ServerTick>=0&&
+            value.AttackerActorId>0&&value.AttackerConnectionEpoch>0&&
+            value.AttackSequence>0&&value.VictimActorId>0&&
+            value.VictimConnectionEpoch>0&&value.DamageSequence>0&&
+            value.Damage>0&&value.AttackerActorId!=value.VictimActorId&&
+            value.AttackerFacing is >=1 and <=8&&value.VictimFacing is >=1 and <=8;
+    }
+
     public static byte[] EncodePlayerIdentity(PlayerIdentityWire value)
     {
         byte[] name;
@@ -3556,6 +3615,7 @@ public static class WireProtocol
             76 => WireOpcode.PvpModeCommand, 77 => WireOpcode.PvpModeResult,
             78 => WireOpcode.PvpAttack, 79 => WireOpcode.PvpAttackResult,
             80 => WireOpcode.PvpDamage, 81 => WireOpcode.PlayerIdentity,
+            82 => WireOpcode.PvpCombatVisual,
             _ => 0
         };
         if (opcode == 0) return false;
@@ -3654,6 +3714,7 @@ public static class WireProtocol
             WireOpcode.PlayerIdentity =>
                 advertised > PlayerIdentityHeaderBytes &&
                 advertised <= PlayerIdentityMaximumFrameBytes,
+            WireOpcode.PvpCombatVisual => advertised == PvpCombatVisualFrameBytes,
             WireOpcode.InventorySnapshot => advertised >= InventorySnapshotHeaderBytes &&
                 advertised <= InventorySnapshotHeaderBytes +
                     InventorySnapshotMaxItemsPerFrame*InventoryItemBytes &&

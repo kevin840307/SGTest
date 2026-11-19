@@ -33,7 +33,8 @@ public readonly record struct PlayerDamageSettlement(
     bool Died,
     PlayerDamageSourceKind SourceKind = PlayerDamageSourceKind.Monster,
     long AttackerActorId = 0,long AttackerConnectionEpoch = 0,
-    uint AttackerAttackSequence = 0,bool VictimWasNormalWhite = false);
+    uint AttackerAttackSequence = 0,bool VictimWasNormalWhite = false,
+    byte AttackerFacing = 0,byte VictimFacing = 0);
 
 public sealed record PlayerCombatSettlementOptions(int Capacity = 256);
 
@@ -82,6 +83,7 @@ public sealed class PlayerCombatSettlement
         PlayerDamageSourceKind SourceKind = PlayerDamageSourceKind.Monster,
         long AttackerActorId = 0,long AttackerConnectionEpoch = 0,
         uint AttackerAttackSequence = 0,bool VictimWasNormalWhite = false,
+        byte AttackerFacing = 0,byte VictimFacing = 0,
         TaskCompletionSource<PlayerDamageSettlement>? Completion = null);
 
     private readonly SqliteIdentityStore _store;
@@ -308,7 +310,8 @@ public sealed class PlayerCombatSettlement
             state.DamageSequence=sequence; state.ProjectedHp=hpAfter; state.Pending++;
             var queued=new QueuedHit(target.ActorId,target.ConnectionEpoch,target.MapEpoch,
                 sequence,serverTick,0,0,applied,hpAfter,PlayerDamageSourceKind.PlayerPvp,
-                attacker.ActorId,attacker.ConnectionEpoch,attackSequence,victimWasNormalWhite,tcs);
+                attacker.ActorId,attacker.ConnectionEpoch,attackSequence,victimWasNormalWhite,
+                attacker.Facing,target.Facing,tcs);
             if(!_input.Writer.TryWrite(queued))
             {
                 state.Pending--; state.ProjectedHp+=applied; state.DamageSequence--;
@@ -533,7 +536,8 @@ public sealed class PlayerCombatSettlement
                     hit.Damage, committed.Profile.Data.CurrentHp,
                     committed.Profile.Data.MaxHp, committed.Died,
                     hit.SourceKind,hit.AttackerActorId,hit.AttackerConnectionEpoch,
-                    hit.AttackerAttackSequence,hit.VictimWasNormalWhite);
+                    hit.AttackerAttackSequence,hit.VictimWasNormalWhite,
+                    hit.AttackerFacing,hit.VictimFacing);
 
                 if (_committedLifecycle is not null)
                     await _committedLifecycle(result).ConfigureAwait(false);

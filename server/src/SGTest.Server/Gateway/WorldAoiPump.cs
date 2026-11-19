@@ -210,6 +210,8 @@ public sealed class WorldAoiPump
                 // from the SQLite worker or socket threads.
                 while (_router.PlayerDamageVisuals.TryRead(out var damageVisual))
                     _aoi.EnqueuePlayerDamageVisual(damageVisual);
+                while(_router.PlayerPvpCombatVisuals.TryRead(out var pvpVisual))
+                    _aoi.EnqueuePlayerPvpCombatVisual(pvpVisual);
                 while (_router.PlayerRespawnVisuals.TryRead(out var respawnVisual))
                     _aoi.EnqueuePlayerRespawnVisual(
                         respawnVisual.Actor,respawnVisual.RespawnSequence);

@@ -203,6 +203,10 @@ internal static class TlsHost
                        !router.TryPostPlayerDamageVisual(result))
                         throw new PlayerCombatSettlementException(
                             "Committed player damage visual queue full");
+                    if(result.SourceKind==PlayerDamageSourceKind.PlayerPvp&&
+                       !router.TryPostPlayerPvpCombatVisual(result))
+                        throw new PlayerCombatSettlementException(
+                            "Committed PvP combat visual queue full");
                 });
             PlayerTradeCoordinator? trades=tradeItemRules is null
                 ? null:new PlayerTradeCoordinator(identity,world,tradeItemRules,combat);

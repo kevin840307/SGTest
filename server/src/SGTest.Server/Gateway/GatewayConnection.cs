@@ -1525,6 +1525,14 @@ public sealed class GatewayConnection
                         identity.PvpUpdatedUnixMilliseconds,
                         identity.DisplayName));
                     break;
+                case AoiEventKind.PvpCombatVisual when evt.PvpCombat is { } pvp:
+                    frame=WireProtocol.EncodePvpCombatVisual(new(
+                        evt.ReceiverMapEpoch,evt.Tick,
+                        pvp.AttackerActorId,pvp.AttackerConnectionEpoch,
+                        pvp.AttackSequence,pvp.VictimActorId,
+                        pvp.VictimConnectionEpoch,pvp.DamageSequence,
+                        pvp.Damage,pvp.Died,pvp.AttackerFacing,pvp.VictimFacing));
+                    break;
                 default:
                     return GatewaySendStatus.GenerationMismatch;
             }
