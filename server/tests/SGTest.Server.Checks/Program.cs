@@ -257,6 +257,7 @@ static class Checks
             RepairChecks.Verify(root);
             QuestChecks.Verify(root);
             TradeChecks.Verify(root);
+            TradeCoordinatorChecks.Verify(root);
             MonsterLootSettlementChecks.Verify(root);
             NormalAttackChecks.Verify(root);
             SkillCombatChecks.Verify(root);
@@ -280,6 +281,7 @@ static class Checks
             BankWireChecks.Verify();
             RepairWireChecks.Verify();
             TradeWireChecks.Verify();
+            TradeGatewayChecks.Verify();
             QuestWireChecks.Verify();
             EquipmentGatewayChecks.Verify();
             BankGatewayChecks.Verify();
