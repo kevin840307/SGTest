@@ -200,6 +200,32 @@ func withdraw_storage_item(item_uid: int) -> bool:
 		"map_epoch":int(current.get("map_epoch",0))})
 
 
+func open_bank(npc_spawn_id: int) -> bool:
+	var current := snapshot()
+	if npc_spawn_id <= 0 or int(current.get("state",-1)) != WorldState.STATE_IN_WORLD or bool(current.get("player_dead",false)) or not bool(current.get("world_ready",false)) or bool(current.get("resync_pending",false)) or bool(current.get("waiting_for_new_map",false)) or int(current.get("pending_bank_sequence",0)) != 0:
+		return false
+	return _queue_intent({"type":"bank_open","npc_spawn_id":npc_spawn_id,
+		"actor_id":int(current.get("actor_id",0)),"map_epoch":int(current.get("map_epoch",0))})
+
+
+func deposit_bank_money(amount: int) -> bool:
+	var current := snapshot()
+	var npc := int(current.get("active_bank_npc",0))
+	if npc <= 0 or amount <= 0 or amount > WireCodec.MAX_MONEY or int(current.get("bank_scope",0)) not in [1,2] or int(current.get("pending_bank_sequence",0)) != 0:
+		return false
+	return _queue_intent({"type":"bank_deposit","npc_spawn_id":npc,"amount":amount,
+		"actor_id":int(current.get("actor_id",0)),"map_epoch":int(current.get("map_epoch",0))})
+
+
+func withdraw_bank_money(amount: int) -> bool:
+	var current := snapshot()
+	var npc := int(current.get("active_bank_npc",0))
+	if npc <= 0 or amount <= 0 or amount > WireCodec.MAX_MONEY or int(current.get("bank_scope",0)) not in [1,2] or int(current.get("pending_bank_sequence",0)) != 0:
+		return false
+	return _queue_intent({"type":"bank_withdraw","npc_spawn_id":npc,"amount":amount,
+		"actor_id":int(current.get("actor_id",0)),"map_epoch":int(current.get("map_epoch",0))})
+
+
 func equip_inventory_item(item_uid: int) -> bool:
 	var current := snapshot()
 	var inventory: Dictionary = current.get("inventory_items",{})
