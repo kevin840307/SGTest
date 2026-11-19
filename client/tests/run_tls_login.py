@@ -49,8 +49,10 @@ def main() -> int:
                         help="run real TLS ClientSession server-authoritative repair E2E")
     parser.add_argument("--trade", action="store_true",
                         help="run two real TLS clients through durable player trade E2E")
+    parser.add_argument("--pvp", action="store_true",
+                        help="run two real TLS clients through authoritative player PvP E2E")
     args = parser.parse_args()
-    if args.app_ui and (args.multi or args.crossmap or args.portal or args.reconnect or args.combat or args.combat_observer or args.skill_aoe or args.skill_aoe_observer or args.discard or args.storage or args.equipment or args.bank or args.repair or args.trade or args.auto_attack):
+    if args.app_ui and (args.multi or args.crossmap or args.portal or args.reconnect or args.combat or args.combat_observer or args.skill_aoe or args.skill_aoe_observer or args.discard or args.storage or args.equipment or args.bank or args.repair or args.trade or args.pvp or args.auto_attack):
         parser.error("--app-ui uses the single-client login fixture")
     if args.ui_screenshot and not args.app_ui:
         parser.error("--ui-screenshot requires --app-ui")
@@ -88,6 +90,8 @@ def main() -> int:
         return run_repair(args, repo, fixture, env)
     if args.trade:
         return run_trade(args, repo, fixture, env)
+    if args.pvp:
+        return run_pvp(args, repo, fixture, env)
     if args.combat:
         return run_combat(args, repo, fixture, env)
     if args.reconnect:
@@ -578,6 +582,113 @@ def run_repair(args, repo: Path, fixture: Path, env: dict[str, str]) -> int:
                 server.wait(timeout=3)
             except subprocess.TimeoutExpired:
                 server.kill()
+
+
+def run_pvp(args, repo: Path, fixture: Path, env: dict[str, str]) -> int:
+    server = subprocess.Popen(
+        ["dotnet", "run", "--project", str(fixture), "-c", "Release",
+         "--no-build", "--", "--pvp"],
+        cwd=repo, env=env, text=True, stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT, bufsize=1)
+    server_lines: list[str] = []
+    server_events: queue.Queue[str] = queue.Queue()
+    victim_lines: list[str] = []
+    victim_events: queue.Queue[str] = queue.Queue()
+    victim = None
+    deadline = time.monotonic() + args.timeout
+
+    def capture(process, lines: list[str], events: queue.Queue[str]) -> None:
+        assert process.stdout is not None
+        for line in process.stdout:
+            value = line.rstrip()
+            lines.append(value)
+            events.put(value)
+
+    def until(events: queue.Queue[str], token: str, process: subprocess.Popen) -> str:
+        while time.monotonic() < deadline:
+            if process.poll() is not None and events.empty():
+                raise RuntimeError(f"{token}: process exited {process.returncode}")
+            try:
+                line = events.get(timeout=0.15)
+            except queue.Empty:
+                continue
+            if token in line:
+                return line
+        raise TimeoutError(token)
+
+    threading.Thread(
+        target=capture, args=(server, server_lines, server_events), daemon=True).start()
+    try:
+        ready = until(server_events, "PVP_FIXTURE_READY", server)
+        match = re.search(
+            r"PVP_FIXTURE_READY port=(\d+) cert=(.+?) actor_a=(\d+) actor_b=(\d+)",
+            ready)
+        if match is None:
+            raise RuntimeError("malformed PvP fixture readiness: " + ready)
+        port, cert, actor_a, actor_b = match.groups()
+        base = [args.godot, "--headless", "--path", str(repo / "client"),
+                "--script", "res://tests/test_client_pvp_tls.gd", "--",
+                port, cert]
+
+        victim = subprocess.Popen(
+            [*base, "victim", actor_a, actor_b],
+            cwd=repo, text=True, stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT, bufsize=1)
+        threading.Thread(
+            target=capture, args=(victim, victim_lines, victim_events), daemon=True).start()
+        until(victim_events, "CLIENT_PVP_READY role=victim", victim)
+
+        actor = subprocess.run(
+            [*base, "actor", actor_a, actor_b],
+            cwd=repo, text=True, stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            timeout=max(1.0, deadline - time.monotonic()))
+        print(actor.stdout, end="")
+        if actor.returncode != 0 or "CLIENT_PVP_PASS role=actor" not in actor.stdout:
+            raise RuntimeError("PvP actor failed")
+
+        victim.wait(timeout=max(1.0, deadline - time.monotonic()))
+        if victim.returncode != 0 or not any(
+                "CLIENT_PVP_PASS role=victim" in line for line in victim_lines):
+            raise RuntimeError("PvP victim failed")
+
+        server.wait(timeout=max(1.0, deadline - time.monotonic()))
+        if server.returncode != 0 or not any(
+                line.startswith("PVP_FIXTURE_PASS") for line in server_lines):
+            raise RuntimeError("PvP server fixture failed")
+
+        for line in victim_lines:
+            if line.startswith("CLIENT_PVP_"):
+                print(line)
+        for line in server_lines:
+            if line.startswith("PVP_FIXTURE_"):
+                print(line)
+        print("GODOT_CSHARP_TWO_CLIENT_PVP_E2E_PASS "
+              "tls=true concurrent_clients=2 map13=true white_opt_in=true "
+              "server_range=true server_damage=true shared_hp_sequence=true "
+              "first_hit=58 lethal_hit=42 victim_dead=true attacker_red=true "
+              "client_damage_estimate=false")
+        return 0
+    except Exception as error:
+        print("TLS_PVP_RUNNER_FAIL", error, file=sys.stderr)
+        for name, lines in (("server", server_lines), ("victim", victim_lines)):
+            for line in lines[-30:]:
+                print(name, line, file=sys.stderr)
+        return 1
+    finally:
+        if victim is not None and victim.poll() is None:
+            victim.terminate()
+            try:
+                victim.wait(timeout=2)
+            except subprocess.TimeoutExpired:
+                victim.kill()
+        if server.poll() is None:
+            server.terminate()
+            try:
+                server.wait(timeout=3)
+            except subprocess.TimeoutExpired:
+                server.kill()
+
 
 def run_combat_observer(args, repo: Path, fixture: Path, env: dict[str, str]) -> int:
     server = subprocess.Popen(
