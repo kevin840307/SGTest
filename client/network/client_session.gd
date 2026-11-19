@@ -546,6 +546,7 @@ func _logic_loop() -> void:
 		_process_reconnect_choose()
 		_process_first_intent()
 		_maybe_finish_world_entry()
+		_maybe_query_pvp_mode()
 		if int(_world.state) == WorldState.STATE_FAILED:
 			if _can_retry_world_rejected() and _start_reconnect_attempt():
 				auth_sent = false
@@ -611,6 +612,21 @@ func _process_reconnect_choose() -> void:
 	var frame := WireCodec.encode_character_choose(character_id)
 	if not frame.is_empty() and _transport.send_frame(frame) and _world.mark_choose_sent(character_id):
 		_publish()
+
+func _maybe_query_pvp_mode() -> void:
+	# The networking/reducer thread owns automatic mode discovery. This
+	# deliberately does not depend on SessionPanel visibility or Render FPS.
+	# A trusted WorldReady ACK is required before a query is sent, and each
+	# new MapEpoch gets exactly one query unless the connection restarts.
+	var current: Dictionary = _world.snapshot()
+	if int(current.get("state",-1)) != WorldState.STATE_IN_WORLD or not bool(current.get("world_ready",false)) or bool(current.get("resync_pending",false)) or bool(current.get("waiting_for_new_map",false)) or int(current.get("pending_world_ready_ack_epoch",0)) != 0 or int(current.get("last_world_ready_ack_epoch",0)) != int(current.get("map_epoch",0)):
+		return
+	if bool(current.get("pvp_known",false)) or int(current.get("pvp_sequence",0)) != 0 or int(current.get("pending_pvp_sequence",0)) != 0:
+		return
+	var frame := WireCodec.encode_pvp_mode_command(int(current.get("map_epoch",0)),1,0)
+	if not frame.is_empty() and _transport.send_frame(frame) and _world.mark_pvp_sent(1,0):
+		_publish()
+
 
 func _maybe_finish_world_entry() -> void:
 	var current: Dictionary = _world.snapshot()

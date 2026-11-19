@@ -74,6 +74,8 @@ func send_frame(frame: PackedByteArray) -> bool:
 				# visible monster not yet drained.
 				_push(_self_state(50,5,Vector2i(40,8),false,1))
 				_push(_monster_state(WireCodec.OPCODE_MONSTER_SPAWN,50,4,100,3))
+		WireCodec.OPCODE_PVP_MODE_COMMAND:
+			pass # independent query does not alter monster combat
 		WireCodec.OPCODE_NORMAL_ATTACK:
 			var attack := WireCodec.decode_normal_attack(frame)
 			if attack.is_empty():

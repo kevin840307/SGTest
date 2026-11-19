@@ -54,7 +54,7 @@ func _run_case(cadence: int) -> Dictionary:
 	var final: Dictionary = session.snapshot()
 	while Time.get_ticks_msec() < deadline:
 		final = session.snapshot()
-		if int(final.state) == WorldState.STATE_IN_WORLD and int(final.last_receipt_sequence) == 1 and not final.self_state.is_empty():
+		if int(final.state) == WorldState.STATE_IN_WORLD and int(final.last_receipt_sequence) == 1 and not final.self_state.is_empty() and int(final.get("pvp_sequence",0))==1:
 			break
 		if int(final.state) == WorldState.STATE_FAILED:
 			break
@@ -67,11 +67,11 @@ func _run_case(cadence: int) -> Dictionary:
 	if final.self_state.is_empty() or float(final.x) != 24.0 or float(final.y) != 8.0 or bool(final.self_state.moving):
 		_fail("cadence %d own authoritative state not reduced %s" % [cadence, final])
 		return {}
-	if wire.size() != 4:
+	if wire.size() != 5:
 		_fail("cadence %d wire count %d" % [cadence, wire.size()])
 		return {}
 	var ack_frame := wire[2].hex_decode()
-	if WireCodec.frame_opcode(ack_frame) != WireCodec.OPCODE_WORLD_READY_ACK:
+	if WireCodec.frame_opcode(ack_frame) != WireCodec.OPCODE_WORLD_READY_ACK or not wire.any(func(frame: String): return WireCodec.frame_opcode(frame.hex_decode()) == WireCodec.OPCODE_PVP_MODE_COMMAND):
 		_fail("cadence %d missing WorldReady ACK before Move %s" % [cadence, wire])
 		return {}
 	return {

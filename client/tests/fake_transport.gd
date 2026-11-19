@@ -49,6 +49,8 @@ func send_frame(frame: PackedByteArray) -> bool:
 			pass # control frame: no gameplay response; keep transport connected
 		WireCodec.OPCODE_WORLD_RESYNC_REQUEST:
 			pass # not used by this happy-path fixture
+		WireCodec.OPCODE_PVP_MODE_COMMAND:
+			pass # independent auto-query; fixture checks WorldReady and movement
 		WireCodec.OPCODE_MOVE_TARGET:
 			_events.append({"type": "frame", "frame": MOVE_RECEIPT.hex_decode(), "bytes": 30})
 			_events.append({"type": "frame", "frame": SELF_STOP.hex_decode(), "bytes": 74})

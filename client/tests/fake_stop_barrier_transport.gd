@@ -43,6 +43,8 @@ func send_frame(frame:PackedByteArray)->bool:
 			_push(READY.hex_decode())
 		WireCodec.OPCODE_WORLD_READY_ACK:
 			_push(_self_state(41,24,24,false,0))
+		WireCodec.OPCODE_PVP_MODE_COMMAND:
+			pass # unrelated to ordered movement
 		WireCodec.OPCODE_MOVE_TARGET:
 			var move:=WireCodec.decode_move_target(frame)
 			if move.is_empty():

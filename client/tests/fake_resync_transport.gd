@@ -61,6 +61,8 @@ func send_frame(frame: PackedByteArray) -> bool:
 			peer.encode_u16(6,WireCodec.OPCODE_ENTITY_SPAWN)
 			peer.encode_s64(16,47)
 			_push(peer)
+		WireCodec.OPCODE_PVP_MODE_COMMAND:
+			pass # automatic query does not affect AOI recovery
 		WireCodec.OPCODE_MOVE_TARGET:
 			var receipt := MOVE_RECEIPT.hex_decode()
 			receipt.encode_s64(22,48)

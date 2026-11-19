@@ -33,6 +33,7 @@ func _initialize() -> void:
 			and not bool(v.resync_pending)
 			and int(v.last_world_ready_ack_epoch)==1
 			and int(v.pending_world_ready_ack_epoch)==0
+			and int(v.pvp_sequence)==1
 			and not v.self_state.is_empty()
 			and v.entities.has(22)
 		),2500)
@@ -45,6 +46,7 @@ func _initialize() -> void:
 		WireCodec.OPCODE_WORLD_READY_ACK,
 		WireCodec.OPCODE_WORLD_RESYNC_REQUEST,
 		WireCodec.OPCODE_WORLD_READY_ACK,
+		WireCodec.OPCODE_PVP_MODE_COMMAND,
 	]
 	var before_move := fake.sent_opcodes()
 	if before_move != expected:
@@ -65,10 +67,10 @@ func _initialize() -> void:
 		return
 	var final_ops := fake.sent_opcodes()
 	session.stop()
-	if final_ops.size()!=6 or int(final_ops[5])!=WireCodec.OPCODE_MOVE_TARGET:
+	if final_ops.size()!=7 or int(final_ops[6])!=WireCodec.OPCODE_MOVE_TARGET:
 		_fail("Move was not gated after replacement ACK "+str(final_ops))
 		return
-	print("CLIENT_RESYNC_PASS ready_ack=true gap=delta_without_spawn resync_request=true replacement_ready_self_spawn=true reack=true gameplay_resumed=true render_loop_dependency=false")
+	print("CLIENT_RESYNC_PASS ready_ack=true gap=delta_without_spawn resync_request=true replacement_ready_self_spawn=true reack=true gameplay_resumed=true pvp_query_post_ack=true render_loop_dependency=false")
 	quit(0)
 
 func _wait(session, predicate: Callable, timeout_ms: int) -> Dictionary:
