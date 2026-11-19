@@ -1,5 +1,15 @@
 # SGTest — Clean-slate 測試與完工標準
 
+## MVP007-PVP-AUTHORITATIVE-COMBAT-CRIME-NAME-AOI — 玩家互打／罪名／名稱顏色（完成垂直切片）
+
+2026-11-19：已完成 Map13 玩家普通攻擊的 authenticated Server authority 閉環。Client 僅送 TargetActorId；Server 綁定 Actor/Connection/Profile，核對 MapEpoch、PK map、存活、距離、Blocking 直線與 cooldown，傷害採來源驗證的 `max(1, Attack - Defense/5)`，並透過唯一 `PlayerCombatSettlement` 寫入 durable HP。受害者 `PvpDamage(80)` 與 Monster damage 共用 damage sequence，攻擊者 `PvpAttackResult(79)` 只接受 committed receipt，重送不得造成第二次傷害。
+
+犯罪狀態依 Recovered 證據實作：普通白名被攻擊後攻擊者 Pink 30 秒，最後 3 秒閃爍；殺死普通白名後 Red；攻擊 Pink/Red 不額外升罪名。SQLite v17 保存 base Blue/White、Red 與 Pink deadline。可靠 `PlayerIdentity(81)` 在 WorldReady/Spawn 後傳送 character name、authenticated generation 與 PvP presentation state；Godot 對未 Spawn identity、generation conflict、same-revision conflict fail-closed/resync，Despawn/換圖清除。名稱由共用 WorldCanvas 批次繪製，不配置每玩家 Label Node；Pink 閃爍只屬 presentation，不回寫 gameplay。
+
+真雙 Godot Client TLS Gate：Map13 兩位白名玩家，攻擊者 ATK60、受害者 DEF10/HP100；第一次 committed damage=58，受害者 HP42，觀察端收到 Pink identity；第二次 committed damage=42，受害者死亡，觀察端收到 Red identity；C# fixture 最終核對 SQLite HP0、2 hits/100 damage/1 death、攻擊者 Red、clean EOF 與無殘留 Actor/Session。Server Core [44538435399](https://github.com/kevin840307/SGTest/actions/runs/44538435399) PASS；Client Core [44539729904](https://github.com/kevin840307/SGTest/actions/runs/44539729904) **61/61 PASS**。
+
+**未驗收/不得宣稱完成**：第三方旁觀者的 PvP attack/hit/death presentation、玩家目標技能、原版 Red redemption/罪名解除算法、GM 網路管理指令、Party/Guild/Faction/PvP map 完整例外、Windows 私有素材畫面與真機互動。這些仍屬 MVP007 後續工作。
+
 ## MVP003-IN-GAME-CHARACTER-CREATE — 登入後創角／刷新列表／直接選角（完成切片）
 
 2026-11-18：compact-binary V1 新增 TLS pre-gameplay `CharacterCreate(15)`／`CharacterCreateResult(16)`。Client 只提交 **slot + UTF-8 name**；不得提交 ActorId、ConnectionEpoch、MapId、X/Y、屬性或戰鬥數值。`IdentityTlsAuthorization` 在 Auth 成功後維持同一 TLS Session，允許空 CharacterList 進入 create/choose loop；成功使用唯一 `SqliteIdentityStore.CreateCharacterAsync` 持久化，再回 CreateResult + **重新查 DB 後的 authoritative CharacterList**。名稱／slot 衝突也刷新列表而不要求重新登入。新角色只有在 Host 顯式設定 `--character-spawn-map/x/y` 且 authoritative Blocking 驗證可走時才允許建立；未設定回 `Unavailable` 且 DB 0 mutation。
