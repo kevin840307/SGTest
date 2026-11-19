@@ -610,6 +610,18 @@ public sealed class WorldResultRouter
         }
     }
 
+    public GatewaySendStatus QueueGmPvpNameResult(
+        TrustedGmPvpNameCommand request,GmPvpNameResultWire result)
+    {
+        lock(_gate)
+        {
+            if(!_connections.TryGetValue(request.ActorId,out var connection)||
+               connection.IsClosed)
+                return GatewaySendStatus.Closed;
+            return connection.QueueGmPvpNameResult(request,result);
+        }
+    }
+
     public GatewaySendStatus QueueShopSnapshot(
         TrustedShopCommand request,ShopOpenStatus status,long money,
         IReadOnlyList<NpcShopCatalog.Item> items)

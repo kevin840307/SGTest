@@ -133,6 +133,8 @@ internal static class TlsHost
             NpcQuestCatalog? quests=questManifest is null ? null :
                 NpcQuestCatalog.LoadVerified(
                     Path.GetFullPath(questManifest),npcDocuments);
+            var gmAccounts=ParseGmAccounts(
+                options.GetValueOrDefault("--gm-accounts"));
             string? tradeItemManifest=options.GetValueOrDefault("--trade-item-rules");
             IReadOnlyDictionary<int,TradeItemRule>? tradeItemRules=
                 tradeItemManifest is null ? null :
@@ -230,7 +232,8 @@ internal static class TlsHost
                 repairs: repairs,
                 repairItemRules: repairItemRules,
                 quests: quests,
-                trades: trades);
+                trades: trades,
+                gmAccounts: gmAccounts);
             await using var listener = new TlsGatewayListener(address, port, authorization,
                 certificate, router, new(MaxConnections: maximum, MaxConnectionsPerAddress: perAddress));
             await world.StartAsync();
@@ -265,6 +268,7 @@ internal static class TlsHost
                     verified_repair_item_rule_count = repairItemRules?.Count ?? 0,
                     verified_quest_count = quests?.Count ?? 0,
                     verified_trade_item_rule_count = tradeItemRules?.Count ?? 0,
+                    gm_account_count = gmAccounts.Count,
                     unpicked_ground_drops = activeDrops.Count,
                     character_creation_enabled = characterCreation is not null,
                     character_creation_map = characterCreation?.Spawn.MapId
@@ -334,6 +338,7 @@ internal static class TlsHost
                 "[--equipment-rules <VERIFIED_JSON>] [--bank-rules <VERIFIED_JSON>] " +
                 "[--repair-rules <VERIFIED_JSON> --repair-item-rules <VERIFIED_JSON>] " +
                 "[--quest-rules <VERIFIED_JSON>] [--trade-item-rules <VERIFIED_JSON>] " +
+                "[--gm-accounts <user1,user2>] " +
                 "[--character-spawn-map <13|15> --character-spawn-x <X> --character-spawn-y <Y>] " +
                 "[--seconds N]");
             return 2;
@@ -358,7 +363,7 @@ internal static class TlsHost
                           "--loot-rules", "--recovery-rules", "--skill-rules",
                           "--shop-rules", "--storage-rules", "--equipment-rules", "--bank-rules",
                           "--repair-rules", "--repair-item-rules", "--quest-rules",
-                          "--trade-item-rules",
+                          "--trade-item-rules", "--gm-accounts",
                           "--character-spawn-map", "--character-spawn-x",
                           "--character-spawn-y", "--seconds"];
         var values = new Dictionary<string, string>(StringComparer.Ordinal);
@@ -368,6 +373,24 @@ internal static class TlsHost
                 !values.TryAdd(args[i], args[i + 1]))
                 throw new ArgumentException("Unknown, duplicate or empty option: " + args[i]);
         return values;
+    }
+
+    private static HashSet<string> ParseGmAccounts(string? raw)
+    {
+        var result=new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if(raw is null)return result;
+        foreach(string part in raw.Split(',',StringSplitOptions.TrimEntries))
+        {
+            if(part.Length is <3 or >32||
+               part.Any(c=>!(c is >= 'a' and <= 'z' or >= 'A' and <= 'Z' or
+                   >= '0' and <= '9' or '_'))||
+               !result.Add(part))
+                throw new ArgumentException(
+                    "--gm-accounts must contain unique valid account usernames");
+        }
+        if(result.Count>32)
+            throw new ArgumentException("--gm-accounts supports at most 32 accounts");
+        return result;
     }
 
     private static string Required(Dictionary<string, string> options, string name) =>

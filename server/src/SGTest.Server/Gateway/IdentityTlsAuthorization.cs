@@ -1,7 +1,9 @@
 using System.Buffers.Binary;
 using System.Net.Security;
 using System.Net.Sockets;
+using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
+using System.Text;
 using SGTest.Server.Identity;
 using SGTest.Server.Wire;
 using SGTest.Server.World;
@@ -34,6 +36,7 @@ public sealed class IdentityTlsAuthorization
     private readonly IReadOnlyDictionary<int,RepairItemRule>? _repairItemRules;
     private readonly NpcQuestCatalog? _quests;
     private readonly PlayerTradeCoordinator? _trades;
+    private readonly HashSet<string> _gmAccounts;
 
     public IdentityTlsAuthorization(SqliteIdentityStore identity, ServerWorldHost world,
                                     PortalCatalog? portals = null,
@@ -49,7 +52,8 @@ public sealed class IdentityTlsAuthorization
                                      NpcRepairCatalog? repairs = null,
                                      IReadOnlyDictionary<int,RepairItemRule>? repairItemRules = null,
                                      NpcQuestCatalog? quests = null,
-                                     PlayerTradeCoordinator? trades = null)
+                                     PlayerTradeCoordinator? trades = null,
+                                     IReadOnlySet<string>? gmAccounts = null)
     {
         _identity = identity ?? throw new ArgumentNullException(nameof(identity));
         _world = world ?? throw new ArgumentNullException(nameof(world));
@@ -76,6 +80,16 @@ public sealed class IdentityTlsAuthorization
         _repairItemRules = repairItemRules;
         _quests = quests;
         _trades = trades;
+        _gmAccounts=new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if(gmAccounts is not null)
+            foreach(string account in gmAccounts)
+            {
+                if(!ValidGmAccountName(account))
+                    throw new ArgumentException(
+                        "GM account allowlist entries must be valid account usernames",
+                        nameof(gmAccounts));
+                _gmAccounts.Add(account);
+            }
     }
 
     /// <summary>
@@ -97,6 +111,7 @@ public sealed class IdentityTlsAuthorization
         GatewayConnection? boundConnection = null;
         using var gameplayGate = new SemaphoreSlim(1,1);
         using var tradeIngressGate = new SemaphoreSlim(1,1);
+        var gmPvpNameGate=new GmPvpNameSequenceGate();
 
         async ValueTask<GatewayConnection?> Authorize(SslStream stream, CancellationToken token)
         {
@@ -1631,6 +1646,83 @@ public sealed class IdentityTlsAuthorization
                 }
             }
 
+            async Task GmPvpNameHandler(TrustedGmPvpNameCommand request)
+            {
+                var binding=new ConnectionBinding(
+                    request.ActorId,request.ConnectionEpoch,request.RequestMapEpoch);
+                await gameplayGate.WaitAsync().ConfigureAwait(false);
+                try
+                {
+                    if(!router.IsCurrentBinding(binding))return;
+                    var decision=gmPvpNameGate.Inspect(request);
+                    if(decision==GmPvpNameSequenceDecision.ExactReplay)
+                    {
+                        var replay=router.QueueGmPvpNameResult(
+                            request,gmPvpNameGate.LastReceipt);
+                        if(replay!=GatewaySendStatus.Enqueued)
+                            throw new IOException(
+                                "Reliable GM PvP-name replay could not be queued: "+replay);
+                        return;
+                    }
+                    if(decision==GmPvpNameSequenceDecision.Stale)
+                    {
+                        var stale=new GmPvpNameResultWire(
+                            request.RequestMapEpoch,request.GmSequence,
+                            GmPvpNameResultStatus.StaleSequence,
+                            request.TargetActorId,request.State);
+                        var sent=router.QueueGmPvpNameResult(request,stale);
+                        if(sent!=GatewaySendStatus.Enqueued)
+                            throw new IOException(
+                                "Reliable stale GM PvP-name result could not be queued: "+sent);
+                        return;
+                    }
+
+                    GmPvpNameResultWire result;
+                    if(request.OperatorId is null)
+                        result=new(
+                            request.RequestMapEpoch,request.GmSequence,
+                            GmPvpNameResultStatus.Unauthorized,
+                            request.TargetActorId,request.State);
+                    else
+                    {
+                        var target=router.SnapshotActiveBindings()
+                            .FirstOrDefault(x=>x.ActorId==request.TargetActorId);
+                        if(target.ActorId<=0)
+                            result=new(
+                                request.RequestMapEpoch,request.GmSequence,
+                                GmPvpNameResultStatus.TargetOffline,
+                                request.TargetActorId,request.State);
+                        else
+                        {
+                            string eventId=OnlineGmEventId(request);
+                            var changed=await _identity.ApplyPvpNameAdminAsync(
+                                request.TargetActorId,request.State,
+                                request.OperatorId,
+                                "online authenticated GM PvP-name command",
+                                eventId,DateTimeOffset.UtcNow).ConfigureAwait(false);
+                            var published=router.PublishPlayerPvpState(
+                                request.TargetActorId,target.ConnectionEpoch,
+                                changed.State);
+                            if(published==GatewaySendStatus.Backpressured)
+                                throw new IOException(
+                                    "Committed GM PvP-name identity update queue full");
+                            result=new(
+                                request.RequestMapEpoch,request.GmSequence,
+                                changed.Replayed
+                                    ? GmPvpNameResultStatus.Replayed
+                                    : GmPvpNameResultStatus.Applied,
+                                request.TargetActorId,request.State);
+                        }
+                    }
+                    gmPvpNameGate.Record(request,result);
+                    var queued=router.QueueGmPvpNameResult(request,result);
+                    if(queued!=GatewaySendStatus.Enqueued)
+                        throw new IOException(
+                            "Reliable GM PvP-name result could not be queued: "+queued);
+                }
+                finally { gameplayGate.Release(); }
+            }
+
             async Task TradeHandler(TrustedTradeCommand request)
             {
                 if(_trades is null)return;
@@ -1700,7 +1792,8 @@ public sealed class IdentityTlsAuthorization
                 handleQuest:QuestHandler,
                 handlePvp:PvpModeHandler,
                 handlePvpAttack:PvpAttackHandler,
-                handlePvpSkill:PvpSkillHandler).ConfigureAwait(false);
+                handlePvpSkill:PvpSkillHandler,
+                handleGmPvpName:GmPvpNameHandler).ConfigureAwait(false);
         }
         finally
         {
@@ -1758,6 +1851,10 @@ public sealed class IdentityTlsAuthorization
             return null;
 
         var account = authentication.Account;
+        string? gmOperatorId=_gmAccounts.Contains(account.Username)
+            ? "account:"+account.AccountId.ToString(
+                System.Globalization.CultureInfo.InvariantCulture)
+            : null;
         var characters = account.Characters.ToList();
 
         async Task SendCharacterListAsync()
@@ -1938,6 +2035,11 @@ public sealed class IdentityTlsAuthorization
                 CharacterChooseWireStatus.Success, snapshot.ActorId, snapshot.MapId,
                 snapshot.X, snapshot.Y, snapshot.MapEpoch)), cancellationToken).ConfigureAwait(false);
 
+            if(gmOperatorId is not null)
+                await WriteFrameAsync(tls,
+                    WireProtocol.EncodeGmCapability(new(true)),
+                    cancellationToken).ConfigureAwait(false);
+
             if (combat is not null)
             {
                 await WriteFrameAsync(tls, WireProtocol.EncodePlayerCombatState(new(
@@ -1991,7 +2093,8 @@ public sealed class IdentityTlsAuthorization
             cancellationToken.ThrowIfCancellationRequested();
             var gateway = new GatewayConnection(
                 snapshot,combatProfile:trustedCombat,
-                displayName:character.Name,pvpState:pvpPresentation);
+                displayName:character.Name,pvpState:pvpPresentation,
+                gmOperatorId:gmOperatorId);
             completed = true;
             return gateway;
         }
@@ -2006,6 +2109,24 @@ public sealed class IdentityTlsAuthorization
                     snapshot.ConnectionEpoch, snapshot.MapEpoch).ConfigureAwait(false);
             }
         }
+    }
+
+    private static string OnlineGmEventId(TrustedGmPvpNameCommand request)
+    {
+        string raw=$"{request.OperatorId}|{request.ActorId}|{request.ConnectionEpoch}|" +
+            $"{request.RequestMapEpoch}|{request.GmSequence}";
+        return "online-"+Convert.ToHexString(
+            SHA256.HashData(Encoding.UTF8.GetBytes(raw))).Substring(0,32);
+    }
+
+    private static bool ValidGmAccountName(string value)
+    {
+        if(value.Length is <3 or >32)return false;
+        foreach(char c in value)
+            if(!(c is >= 'a' and <= 'z' or >= 'A' and <= 'Z' or
+                >= '0' and <= '9' or '_'))
+                return false;
+        return true;
     }
 
     private static async Task<byte[]?> ReadFrameAsync(SslStream tls, CancellationToken cancellationToken)

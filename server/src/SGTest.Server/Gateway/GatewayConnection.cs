@@ -94,6 +94,10 @@ public readonly record struct TrustedPvpSkill(
     long ActorId,long ConnectionEpoch,long RequestMapEpoch,
     uint SkillSequence,int SkillId,long TargetActorId,
     TrustedCombatProfile? Profile);
+public readonly record struct TrustedGmPvpNameCommand(
+    long ActorId,long ConnectionEpoch,long RequestMapEpoch,
+    uint GmSequence,long TargetActorId,PvpNameState State,
+    string? OperatorId);
 public enum TrustedQuestCommandKind : byte { Open=1, Choose=2 }
 public readonly record struct TrustedQuestCommand(
     long ActorId,long ConnectionEpoch,long RequestMapEpoch,
@@ -213,12 +217,14 @@ public sealed class GatewayConnection
     private readonly TrustedCombatProfile? _combatProfile;
     private readonly string? _displayName;
     private CharacterPvpState? _pvpState;
+    private readonly string? _gmOperatorId;
 
     public GatewayConnection(ActorSnapshot trustedActor,
                              GatewayConnectionOptions? options = null,
                              TrustedCombatProfile? combatProfile = null,
                              string? displayName = null,
-                             CharacterPvpState? pvpState = null)
+                             CharacterPvpState? pvpState = null,
+                             string? gmOperatorId = null)
     {
         var configured = options ?? new GatewayConnectionOptions();
         if (configured.MaxBufferedInputBytes < WireProtocol.MaximumFrameBytes ||
@@ -249,6 +255,11 @@ public sealed class GatewayConnection
         }
         _displayName=displayName;
         _pvpState=pvpState;
+        if(gmOperatorId is not null&&
+           (string.IsNullOrWhiteSpace(gmOperatorId)||gmOperatorId.Length>64||
+            gmOperatorId.Any(char.IsControl)))
+            throw new ArgumentOutOfRangeException(nameof(gmOperatorId));
+        _gmOperatorId=gmOperatorId;
         _parser = new WireStreamParser(configured.MaxBufferedInputBytes);
         _reliable = new ReliableFrameQueue(configured.MaxReliableFrames, configured.MaxReliableBytes);
     }
@@ -298,6 +309,7 @@ public sealed class GatewayConnection
     public int BufferedInputBytes => _parser.BufferedBytes;
     public int ReliableFrames => _reliable.Count;
     public int ReliableBytes => _reliable.Bytes;
+    public bool GmAuthorized => _gmOperatorId is not null;
     public bool WorldReadyAcknowledged
     {
         get
@@ -365,7 +377,8 @@ public sealed class GatewayConnection
                                               Func<TrustedQuestCommand, bool>? postQuest = null,
                                               Func<TrustedPvpModeCommand, bool>? postPvp = null,
                                               Func<TrustedPvpAttack, bool>? postPvpAttack = null,
-                                              Func<TrustedPvpSkill, bool>? postPvpSkill = null)
+                                              Func<TrustedPvpSkill, bool>? postPvpSkill = null,
+                                              Func<TrustedGmPvpNameCommand, bool>? postGmPvpName = null)
     {
         ArgumentNullException.ThrowIfNull(postMove);
         lock (_receiveGate)
@@ -378,7 +391,7 @@ public sealed class GatewayConnection
             return _parser.Feed(bytes,
                 frame => HandleClientFrame(
                     frame, postMove, postNpc, postResync, postAttack, postRespawn,
-                    postPickup, postRecovery, postDiscard, postSkill, postShop, postStorage, postEquipment, postBank, postRepair, postTrade, postQuest, postPvp, postPvpAttack, postPvpSkill),
+                    postPickup, postRecovery, postDiscard, postSkill, postShop, postStorage, postEquipment, postBank, postRepair, postTrade, postQuest, postPvp, postPvpAttack, postPvpSkill, postGmPvpName),
                 out commandsAccepted);
         }
     }
@@ -402,7 +415,8 @@ public sealed class GatewayConnection
                                               Func<TrustedQuestCommand, bool>? postQuest = null,
                                               Func<TrustedPvpModeCommand, bool>? postPvp = null,
                                               Func<TrustedPvpAttack, bool>? postPvpAttack = null,
-                                              Func<TrustedPvpSkill, bool>? postPvpSkill = null)
+                                              Func<TrustedPvpSkill, bool>? postPvpSkill = null,
+                                              Func<TrustedGmPvpNameCommand, bool>? postGmPvpName = null)
     {
         ArgumentNullException.ThrowIfNull(postMove);
         lock (_receiveGate)
@@ -415,7 +429,7 @@ public sealed class GatewayConnection
             return _parser.Resume(
                 frame => HandleClientFrame(
                     frame, postMove, postNpc, postResync, postAttack, postRespawn,
-                    postPickup, postRecovery, postDiscard, postSkill, postShop, postStorage, postEquipment, postBank, postRepair, postTrade, postQuest, postPvp, postPvpAttack, postPvpSkill),
+                    postPickup, postRecovery, postDiscard, postSkill, postShop, postStorage, postEquipment, postBank, postRepair, postTrade, postQuest, postPvp, postPvpAttack, postPvpSkill, postGmPvpName),
                 out commandsAccepted);
         }
     }
@@ -440,7 +454,8 @@ public sealed class GatewayConnection
         Func<TrustedQuestCommand, bool>? postQuest,
         Func<TrustedPvpModeCommand, bool>? postPvp,
         Func<TrustedPvpAttack, bool>? postPvpAttack,
-        Func<TrustedPvpSkill, bool>? postPvpSkill)
+        Func<TrustedPvpSkill, bool>? postPvpSkill,
+        Func<TrustedGmPvpNameCommand, bool>? postGmPvpName)
     {
         if (!WireProtocol.TryReadHeader(frame, out var header))
             return WireFrameDisposition.ProtocolViolation;
@@ -690,6 +705,19 @@ public sealed class GatewayConnection
             return postPvp(new TrustedPvpModeCommand(
                 bound.ActorId,bound.ConnectionEpoch,pvp.MapEpoch,
                 pvp.PvpSequence,pvp.Action))
+                ? WireFrameDisposition.Accepted:WireFrameDisposition.Backpressured;
+        }
+
+        if(header.Opcode==WireOpcode.GmPvpNameCommand &&
+            postGmPvpName is not null &&
+            WireProtocol.TryDecodeGmPvpNameCommand(frame,out var gmPvp))
+        {
+            if(!GameplayReady(bound))
+                return WireFrameDisposition.ProtocolViolation;
+            return postGmPvpName(new TrustedGmPvpNameCommand(
+                bound.ActorId,bound.ConnectionEpoch,gmPvp.MapEpoch,
+                gmPvp.GmSequence,gmPvp.TargetActorId,gmPvp.State,
+                _gmOperatorId))
                 ? WireFrameDisposition.Accepted:WireFrameDisposition.Backpressured;
         }
 
@@ -1166,6 +1194,26 @@ public sealed class GatewayConnection
                result.TargetActorId!=request.TargetActorId)
                 return GatewaySendStatus.GenerationMismatch;
             return _reliable.TryEnqueue(WireProtocol.EncodePvpSkillResult(result))
+                ? GatewaySendStatus.Enqueued:GatewaySendStatus.Backpressured;
+        }
+    }
+
+    public GatewaySendStatus QueueGmPvpNameResult(
+        TrustedGmPvpNameCommand request,GmPvpNameResultWire result)
+    {
+        lock(_bindingGate)
+        {
+            if(_closed)return GatewaySendStatus.Closed;
+            var bound=_binding;
+            if(request.ActorId!=bound.ActorId||
+               request.ConnectionEpoch!=bound.ConnectionEpoch||
+               request.RequestMapEpoch!=bound.MapEpoch||
+               result.MapEpoch!=request.RequestMapEpoch||
+               result.GmSequence!=request.GmSequence||
+               result.TargetActorId!=request.TargetActorId||
+               result.State!=request.State)
+                return GatewaySendStatus.GenerationMismatch;
+            return _reliable.TryEnqueue(WireProtocol.EncodeGmPvpNameResult(result))
                 ? GatewaySendStatus.Enqueued:GatewaySendStatus.Backpressured;
         }
     }

@@ -87,7 +87,10 @@ public enum WireOpcode : ushort
     PvpCombatVisual = 82,
     PvpSkill = 83,
     PvpSkillResult = 84,
-    PvpSkillVisual = 85
+    PvpSkillVisual = 85,
+    GmCapability = 86,
+    GmPvpNameCommand = 87,
+    GmPvpNameResult = 88
 }
 
 public enum TradeCommandAction : byte
@@ -169,6 +172,16 @@ public enum PvpAttackStatus : byte
     NonPvpMap = 4, AttackerProtected = 5, TargetProtected = 6,
     TargetMissing = 7, AttackerDead = 8, TargetDead = 9, TooFar = 10,
     Blocked = 11, Cooldown = 12, CombatUnavailable = 13, Backpressured = 14
+}
+
+public enum GmPvpNameResultStatus : byte
+{
+    Applied = 0,
+    Replayed = 1,
+    Unauthorized = 2,
+    StaleGeneration = 3,
+    StaleSequence = 4,
+    TargetOffline = 5
 }
 
 public enum QuestViewWireStatus : byte
@@ -406,6 +419,12 @@ public readonly record struct PvpSkillVisualWire(
     int SkillId,long VictimActorId,long VictimConnectionEpoch,
     uint DamageSequence,int Damage,bool Died,
     byte AttackerFacing,byte VictimFacing);
+public readonly record struct GmCapabilityWire(bool Authorized);
+public readonly record struct GmPvpNameCommandWire(
+    long MapEpoch,uint GmSequence,long TargetActorId,PvpNameState State);
+public readonly record struct GmPvpNameResultWire(
+    long MapEpoch,uint GmSequence,GmPvpNameResultStatus Status,
+    long TargetActorId,PvpNameState State);
 
 public readonly record struct QuestOpenWire(
     long MapEpoch,uint QuestSequence,int NpcSpawnId);
@@ -532,6 +551,9 @@ public static class WireProtocol
         HeaderBytes + 8 + 4 + 1 + 8 + 4 + 8 + 4 + 1;
     public const int PvpSkillVisualFrameBytes =
         HeaderBytes + 8 + 8 + 8 + 8 + 4 + 4 + 8 + 8 + 4 + 4 + 1 + 1 + 1;
+    public const int GmCapabilityFrameBytes = HeaderBytes + 1;
+    public const int GmPvpNameCommandFrameBytes = HeaderBytes + 8 + 4 + 8 + 1;
+    public const int GmPvpNameResultFrameBytes = HeaderBytes + 8 + 4 + 1 + 8 + 1;
     public const int QuestOpenFrameBytes = HeaderBytes + 8 + 4 + 4;
     public const int QuestChooseFrameBytes = HeaderBytes + 8 + 4 + 4 + 4 + 4;
     public const int QuestViewHeaderBytes =
@@ -3418,6 +3440,82 @@ public static class WireProtocol
             value.AttackerFacing is >=1 and <=8&&value.VictimFacing is >=1 and <=8;
     }
 
+    public static byte[] EncodeGmCapability(GmCapabilityWire value)
+    {
+        var frame=NewFrame(WireOpcode.GmCapability,GmCapabilityFrameBytes);
+        frame[8]=value.Authorized?(byte)1:(byte)0;
+        return frame;
+    }
+
+    public static bool TryDecodeGmCapability(
+        ReadOnlySpan<byte> frame,out GmCapabilityWire value)
+    {
+        value=default;
+        if(!TryReadHeader(frame,out var h)||h.Opcode!=WireOpcode.GmCapability||
+           frame[8]>1)
+            return false;
+        value=new(frame[8]==1);
+        return true;
+    }
+
+    public static byte[] EncodeGmPvpNameCommand(GmPvpNameCommandWire value)
+    {
+        if(value.MapEpoch<=0||value.GmSequence==0||value.TargetActorId<=0||
+           (byte)value.State>4)
+            throw new ArgumentOutOfRangeException(nameof(value));
+        var frame=NewFrame(WireOpcode.GmPvpNameCommand,GmPvpNameCommandFrameBytes);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(8,8),value.MapEpoch);
+        BinaryPrimitives.WriteUInt32LittleEndian(frame.AsSpan(16,4),value.GmSequence);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(20,8),value.TargetActorId);
+        frame[28]=(byte)value.State;
+        return frame;
+    }
+
+    public static bool TryDecodeGmPvpNameCommand(
+        ReadOnlySpan<byte> frame,out GmPvpNameCommandWire value)
+    {
+        value=default;
+        if(!TryReadHeader(frame,out var h)||h.Opcode!=WireOpcode.GmPvpNameCommand)
+            return false;
+        value=new(
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(8,8)),
+            BinaryPrimitives.ReadUInt32LittleEndian(frame.Slice(16,4)),
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(20,8)),
+            (PvpNameState)frame[28]);
+        return value.MapEpoch>0&&value.GmSequence>0&&
+            value.TargetActorId>0&&(byte)value.State<=4;
+    }
+
+    public static byte[] EncodeGmPvpNameResult(GmPvpNameResultWire value)
+    {
+        if(value.MapEpoch<=0||value.GmSequence==0||
+           (byte)value.Status>5||value.TargetActorId<=0||(byte)value.State>4)
+            throw new ArgumentOutOfRangeException(nameof(value));
+        var frame=NewFrame(WireOpcode.GmPvpNameResult,GmPvpNameResultFrameBytes);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(8,8),value.MapEpoch);
+        BinaryPrimitives.WriteUInt32LittleEndian(frame.AsSpan(16,4),value.GmSequence);
+        frame[20]=(byte)value.Status;
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(21,8),value.TargetActorId);
+        frame[29]=(byte)value.State;
+        return frame;
+    }
+
+    public static bool TryDecodeGmPvpNameResult(
+        ReadOnlySpan<byte> frame,out GmPvpNameResultWire value)
+    {
+        value=default;
+        if(!TryReadHeader(frame,out var h)||h.Opcode!=WireOpcode.GmPvpNameResult)
+            return false;
+        value=new(
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(8,8)),
+            BinaryPrimitives.ReadUInt32LittleEndian(frame.Slice(16,4)),
+            (GmPvpNameResultStatus)frame[20],
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(21,8)),
+            (PvpNameState)frame[29]);
+        return value.MapEpoch>0&&value.GmSequence>0&&
+            (byte)value.Status<=5&&value.TargetActorId>0&&(byte)value.State<=4;
+    }
+
     public static byte[] EncodePlayerIdentity(PlayerIdentityWire value)
     {
         byte[] name;
@@ -3763,6 +3861,8 @@ public static class WireProtocol
             80 => WireOpcode.PvpDamage, 81 => WireOpcode.PlayerIdentity,
             82 => WireOpcode.PvpCombatVisual, 83 => WireOpcode.PvpSkill,
             84 => WireOpcode.PvpSkillResult, 85 => WireOpcode.PvpSkillVisual,
+            86 => WireOpcode.GmCapability, 87 => WireOpcode.GmPvpNameCommand,
+            88 => WireOpcode.GmPvpNameResult,
             _ => 0
         };
         if (opcode == 0) return false;
@@ -3865,6 +3965,9 @@ public static class WireProtocol
             WireOpcode.PvpSkill => advertised == PvpSkillFrameBytes,
             WireOpcode.PvpSkillResult => advertised == PvpSkillResultFrameBytes,
             WireOpcode.PvpSkillVisual => advertised == PvpSkillVisualFrameBytes,
+            WireOpcode.GmCapability => advertised == GmCapabilityFrameBytes,
+            WireOpcode.GmPvpNameCommand => advertised == GmPvpNameCommandFrameBytes,
+            WireOpcode.GmPvpNameResult => advertised == GmPvpNameResultFrameBytes,
             WireOpcode.InventorySnapshot => advertised >= InventorySnapshotHeaderBytes &&
                 advertised <= InventorySnapshotHeaderBytes +
                     InventorySnapshotMaxItemsPerFrame*InventoryItemBytes &&
