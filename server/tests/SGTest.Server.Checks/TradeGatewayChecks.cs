@@ -36,7 +36,7 @@ internal static class TradeGatewayChecks
             forged.FeedClientBytes(forgedSnapshot,_=>true,out _)==
                 WireFeedStatus.ProtocolViolation&&
             forged.FeedClientBytes(forgedTerminal,_=>true,out _)==
-                WireFeedStatus.Closed,
+                WireFeedStatus.ProtocolViolation,
             "client forged server-only trade state");
 
         var stale=new ConnectionBinding(11,20,9);
