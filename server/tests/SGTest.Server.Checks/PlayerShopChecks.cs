@@ -67,7 +67,7 @@ internal static class PlayerShopChecks
                 "active player-shop listing lookup mismatch");
 
             var applied=await store.BuyPlayerShopListingAsync(
-                buyer,listing.ListingId,rules);
+                buyer,staleListing.ListingId,rules);
             Checks.Require(applied.Status==PlayerShopBuyStatus.Applied&&
                 applied.Listing is not null&&
                 applied.Listing.State==PlayerShopListingState.Sold&&
@@ -140,6 +140,8 @@ internal static class PlayerShopChecks
                 seller,item.ItemUid,200,rules);
             Checks.Require(created.Status==PlayerShopCreateStatus.Created&&
                 created.Listing is not null,"stale listing setup failed");
+            var staleListing=created.Listing
+                ??throw new InvalidOperationException("stale listing missing");
 
             var moved=await store.CommitInventoryTradeAsync(
                 new(92001,seller,movedTo,0,0,[item.ItemUid],[]),rules);
