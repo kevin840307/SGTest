@@ -43,6 +43,12 @@ internal static class PlayerShopWireChecks
             WireProtocol.TryDecodePlayerShopResult(resultFrame,out var decodedResult)&&
             decodedResult==result,"player-shop result wire mismatch");
 
+        var sold=new PlayerShopSoldWire(3,91,77,7001,1250);
+        var soldFrame=WireProtocol.EncodePlayerShopSold(sold);
+        Checks.Require(soldFrame.Length==WireProtocol.PlayerShopSoldFrameBytes&&
+            WireProtocol.TryDecodePlayerShopSold(soldFrame,out var decodedSold)&&
+            decodedSold==sold,"player-shop seller notice wire mismatch");
+
         var actor=new ActorSnapshot(11,15,5,3,0,0,8,8,1,false);
         var gateway=new GatewayConnection(actor);
         TrustedPlayerShopCommand trusted=default;

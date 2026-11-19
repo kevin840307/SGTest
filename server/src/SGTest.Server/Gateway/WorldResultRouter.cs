@@ -382,6 +382,33 @@ public sealed class WorldResultRouter
                 connection.IsVisibleActor(targetActorId);
     }
 
+    public bool TryGetCurrentBinding(long actorId,out ConnectionBinding binding)
+    {
+        lock(_gate)
+        {
+            if(!_connections.TryGetValue(actorId,out var connection)||
+               connection.IsClosed)
+            {
+                binding=default;
+                return false;
+            }
+            binding=connection.Binding;
+            return true;
+        }
+    }
+
+    public bool CloseCurrentBinding(ConnectionBinding expected)
+    {
+        lock(_gate)
+        {
+            if(!_connections.TryGetValue(expected.ActorId,out var connection)||
+               connection.IsClosed||connection.Binding!=expected)
+                return false;
+            connection.Close();
+            return true;
+        }
+    }
+
     public bool TryGetPlayerIdentity(
         long actorId,long connectionEpoch,out PlayerIdentityPresentation identity)
     {
@@ -640,6 +667,18 @@ public sealed class WorldResultRouter
                connection.IsClosed)
                 return GatewaySendStatus.Closed;
             return connection.QueuePlayerShopResult(request,result);
+        }
+    }
+
+    public GatewaySendStatus QueuePlayerShopSold(
+        ConnectionBinding seller,PlayerShopSoldWire sold)
+    {
+        lock(_gate)
+        {
+            if(!_connections.TryGetValue(seller.ActorId,out var connection)||
+               connection.IsClosed||connection.Binding!=seller)
+                return GatewaySendStatus.Closed;
+            return connection.QueuePlayerShopSold(seller,sold);
         }
     }
 

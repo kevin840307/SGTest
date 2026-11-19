@@ -1266,6 +1266,19 @@ public sealed class GatewayConnection
         }
     }
 
+    public GatewaySendStatus QueuePlayerShopSold(
+        ConnectionBinding expected,PlayerShopSoldWire sold)
+    {
+        lock(_bindingGate)
+        {
+            if(_closed)return GatewaySendStatus.Closed;
+            if(_binding!=expected||sold.ReceiverMapEpoch!=expected.MapEpoch)
+                return GatewaySendStatus.GenerationMismatch;
+            return _reliable.TryEnqueue(WireProtocol.EncodePlayerShopSold(sold))
+                ?GatewaySendStatus.Enqueued:GatewaySendStatus.Backpressured;
+        }
+    }
+
     public GatewaySendStatus QueueQuestView(
         TrustedQuestCommand request,QuestViewWireStatus status,QuestView? view)
     {

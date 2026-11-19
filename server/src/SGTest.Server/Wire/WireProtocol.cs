@@ -92,7 +92,8 @@ public enum WireOpcode : ushort
     GmPvpNameCommand = 87,
     GmPvpNameResult = 88,
     PlayerShopCommand = 89,
-    PlayerShopResult = 90
+    PlayerShopResult = 90,
+    PlayerShopSold = 91
 }
 
 public enum TradeCommandAction : byte
@@ -463,6 +464,9 @@ public readonly record struct PlayerShopResultWire(
     PlayerShopResultStatus Status,long SellerActorId,long ListingId,
     long ItemUid,int ItemDefinitionId,int Quantity,long SourceDropId,
     long Price,long SellerWallet,long BuyerWallet);
+public readonly record struct PlayerShopSoldWire(
+    long ReceiverMapEpoch,long ListingId,long BuyerActorId,long ItemUid,
+    long SellerWallet);
 
 public readonly record struct QuestOpenWire(
     long MapEpoch,uint QuestSequence,int NpcSpawnId);
@@ -596,6 +600,7 @@ public static class WireProtocol
         HeaderBytes + 8 + 4 + 1 + 8 + 8 + 8 + 8;
     public const int PlayerShopResultFrameBytes =
         HeaderBytes + 8 + 4 + 1 + 1 + 8 + 8 + 8 + 4 + 4 + 8 + 8 + 8 + 8;
+    public const int PlayerShopSoldFrameBytes = HeaderBytes + 8 + 8 + 8 + 8 + 8;
     public const int QuestOpenFrameBytes = HeaderBytes + 8 + 4 + 4;
     public const int QuestChooseFrameBytes = HeaderBytes + 8 + 4 + 4 + 4 + 4;
     public const int QuestViewHeaderBytes =
@@ -3670,6 +3675,38 @@ public static class WireProtocol
         value.SellerWallet>=0&&value.SellerWallet<=SqliteIdentityStore.MaximumMoney&&
         value.BuyerWallet>=0&&value.BuyerWallet<=SqliteIdentityStore.MaximumMoney;
 
+    public static byte[] EncodePlayerShopSold(PlayerShopSoldWire value)
+    {
+        if(value.ReceiverMapEpoch<=0||value.ListingId<=0||
+           value.BuyerActorId<=0||value.ItemUid<=0||
+           value.SellerWallet<0||value.SellerWallet>SqliteIdentityStore.MaximumMoney)
+            throw new ArgumentOutOfRangeException(nameof(value));
+        var frame=NewFrame(WireOpcode.PlayerShopSold,PlayerShopSoldFrameBytes);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(8,8),value.ReceiverMapEpoch);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(16,8),value.ListingId);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(24,8),value.BuyerActorId);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(32,8),value.ItemUid);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(40,8),value.SellerWallet);
+        return frame;
+    }
+
+    public static bool TryDecodePlayerShopSold(
+        ReadOnlySpan<byte> frame,out PlayerShopSoldWire value)
+    {
+        value=default;
+        if(!TryReadHeader(frame,out var h)||h.Opcode!=WireOpcode.PlayerShopSold)
+            return false;
+        value=new(
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(8,8)),
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(16,8)),
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(24,8)),
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(32,8)),
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(40,8)));
+        return value.ReceiverMapEpoch>0&&value.ListingId>0&&
+            value.BuyerActorId>0&&value.ItemUid>0&&
+            value.SellerWallet>=0&&value.SellerWallet<=SqliteIdentityStore.MaximumMoney;
+    }
+
     public static byte[] EncodePlayerIdentity(PlayerIdentityWire value)
     {
         byte[] name;
@@ -4018,6 +4055,7 @@ public static class WireProtocol
             86 => WireOpcode.GmCapability, 87 => WireOpcode.GmPvpNameCommand,
             88 => WireOpcode.GmPvpNameResult,
             89 => WireOpcode.PlayerShopCommand, 90 => WireOpcode.PlayerShopResult,
+            91 => WireOpcode.PlayerShopSold,
             _ => 0
         };
         if (opcode == 0) return false;
@@ -4125,6 +4163,7 @@ public static class WireProtocol
             WireOpcode.GmPvpNameResult => advertised == GmPvpNameResultFrameBytes,
             WireOpcode.PlayerShopCommand => advertised == PlayerShopCommandFrameBytes,
             WireOpcode.PlayerShopResult => advertised == PlayerShopResultFrameBytes,
+            WireOpcode.PlayerShopSold => advertised == PlayerShopSoldFrameBytes,
             WireOpcode.InventorySnapshot => advertised >= InventorySnapshotHeaderBytes &&
                 advertised <= InventorySnapshotHeaderBytes +
                     InventorySnapshotMaxItemsPerFrame*InventoryItemBytes &&

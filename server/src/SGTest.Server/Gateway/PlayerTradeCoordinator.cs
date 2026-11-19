@@ -110,6 +110,43 @@ public sealed class PlayerTradeCoordinator
         }
     }
 
+    public bool TryResolveGameplayGate(
+        ConnectionBinding binding,out SemaphoreSlim? gate)
+    {
+        lock(_gate)
+        {
+            if(_sessionGates.TryGetValue(binding.ActorId,out var current)&&
+               current.Binding==binding)
+            {
+                gate=current.Gate;
+                return true;
+            }
+            gate=null;
+            return false;
+        }
+    }
+
+    public bool TryResolveGameplayGates(
+        ConnectionBinding first,ConnectionBinding second,
+        out SemaphoreSlim? firstGate,out SemaphoreSlim? secondGate)
+    {
+        lock(_gate)
+        {
+            if(_sessionGates.TryGetValue(first.ActorId,out var a)&&
+               _sessionGates.TryGetValue(second.ActorId,out var b)&&
+               a.Binding==first&&b.Binding==second&&
+               !ReferenceEquals(a.Gate,b.Gate))
+            {
+                firstGate=a.Gate;
+                secondGate=b.Gate;
+                return true;
+            }
+            firstGate=null;
+            secondGate=null;
+            return false;
+        }
+    }
+
     public bool IsTrading(long actorId)
     {
         lock(_gate)return _byActor.ContainsKey(actorId);

@@ -264,6 +264,7 @@ static class Checks
             GmOnlineChecks.Verify(root);
             TradeChecks.Verify(root);
             PlayerShopChecks.Verify(root);
+            PlayerShopCoordinatorChecks.Verify(root);
             TradeCoordinatorChecks.Verify(root);
             MonsterLootSettlementChecks.Verify(root);
             NormalAttackChecks.Verify(root);
