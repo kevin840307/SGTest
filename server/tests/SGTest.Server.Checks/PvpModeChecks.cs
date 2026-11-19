@@ -1,3 +1,5 @@
+using SGTest.Server.Gateway;
+using SGTest.Server.Wire;
 using SGTest.Server.Identity;
 using SGTest.Server.World;
 
@@ -7,6 +9,47 @@ internal static class PvpModeChecks
     {
         Checks.Run("verified NonPK maps and durable blue-white PvP mode",
             ()=>VerifyAsync(root).GetAwaiter().GetResult());
+        Checks.Run("authenticated PvP mode request replay and map epoch admission",
+            VerifySequenceGate);
+    }
+
+    private static void VerifySequenceGate()
+    {
+        var gate = new PvpModeSequenceGate();
+        var first = new TrustedPvpModeCommand(11,7,1,1,PvpModeCommandAction.SetWhite);
+        Checks.Require(gate.Inspect(first)==PvpModeSequenceDecision.New,
+            "first PvP mutation rejected");
+        gate.Record(first,PvpModeResultStatus.Applied,PvpMode.EnabledWhite,true);
+        Checks.Require(gate.Inspect(first)==PvpModeSequenceDecision.ExactReplay &&
+            gate.LastReceipt==new PvpModeResultWire(
+                1,1,PvpModeResultStatus.Applied,PvpMode.EnabledWhite,true),
+            "exact retry failed to preserve original durable receipt");
+        var forged=first with { Action=PvpModeCommandAction.SetBlue };
+        Checks.Require(gate.Inspect(forged)==PvpModeSequenceDecision.Stale,
+            "same-sequence conflicting PvP action accepted");
+        bool zeroRejected=false;
+        try { gate.Inspect(first with { PvpSequence=0 }); }
+        catch(ArgumentOutOfRangeException) { zeroRejected=true; }
+        Checks.Require(zeroRejected,"zero sequence passed PvP ingress guard");
+        Checks.Require(gate.Inspect(first with { PvpSequence=2 })==
+            PvpModeSequenceDecision.New,"increasing sequence rejected");
+        var rejected=first with { PvpSequence=2,Action=PvpModeCommandAction.SetBlue };
+        gate.Record(rejected,PvpModeResultStatus.PlayerDead,PvpMode.EnabledWhite,true);
+        Checks.Require(gate.Inspect(rejected)==PvpModeSequenceDecision.ExactReplay &&
+            gate.LastReceipt.Status==PvpModeResultStatus.PlayerDead,
+            "denied command replay was incorrectly re-authorized");
+        var transfer=rejected with { RequestMapEpoch=2,PvpSequence=1 };
+        Checks.Require(gate.Inspect(transfer)==PvpModeSequenceDecision.New,
+            "new trusted map generation did not reset sequence");
+        gate.Record(transfer,PvpModeResultStatus.Ready,PvpMode.EnabledWhite,false);
+        Checks.Require(gate.Inspect(rejected)==PvpModeSequenceDecision.Stale &&
+            gate.LastReceipt.MapEpoch==2,
+            "late old-map command rewound PvP sequence");
+        var wire=WireProtocol.EncodePvpModeResult(new PvpModeResultWire(
+            2,2,PvpModeResultStatus.StaleSequence,PvpMode.EnabledWhite,false));
+        Checks.Require(WireProtocol.TryDecodePvpModeResult(wire,out var decoded) &&
+            decoded.Status==PvpModeResultStatus.StaleSequence,
+            "PvP stale-sequence result does not roundtrip");
     }
 
     private static async Task VerifyAsync(string root)

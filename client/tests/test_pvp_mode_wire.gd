@@ -78,8 +78,14 @@ func _initialize() -> void:
 	if not world.apply_frame(blue) or int(world.snapshot().get("stale_pvp_results",-1)) != 1:
 		_fail("stale old-map PvP reply not rejected")
 		return
-	if world.apply_frame(_make_result(2,2,1,0,true)) or int(world.snapshot().get("state",-1)) != WorldState.STATE_FAILED:
+	if not world.mark_pvp_sent(2,1) or not world.apply_frame(_make_result(2,2,6,1,true)):
+		_fail("stale-sequence authoritative server rejection")
+		return
+	if int(world.snapshot().get("pvp_mode",-1)) != 1 or int(world.snapshot().get("last_pvp_result",{}).get("status",-1)) != 6:
+		_fail("stale-sequence reply corrupted existing authoritative PvP mode")
+		return
+	if world.apply_frame(_make_result(2,3,1,0,true)) or int(world.snapshot().get("state",-1)) != WorldState.STATE_FAILED:
 		_fail("unsolicited PvP mutation did not fail closed")
 		return
-	print("PVP_MODE_WIRE_PASS query_blue=true no_nonpk_white=true singleflight=true replay_stale=true crossmap_clear=true white_authority=true unsolicited_failclosed=true")
+	print("PVP_MODE_WIRE_PASS query_blue=true no_nonpk_white=true singleflight=true replay_stale=true crossmap_clear=true white_authority=true stale_sequence=true unsolicited_failclosed=true")
 	quit(0)

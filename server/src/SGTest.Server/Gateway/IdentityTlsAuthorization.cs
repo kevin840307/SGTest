@@ -1145,6 +1145,8 @@ public sealed class IdentityTlsAuthorization
                 finally { gameplayGate.Release(); }
             }
 
+            var pvpSequenceGate = new PvpModeSequenceGate();
+
             async Task PvpModeHandler(TrustedPvpModeCommand request)
             {
                 var binding=new ConnectionBinding(
@@ -1169,29 +1171,48 @@ public sealed class IdentityTlsAuthorization
                     }
                     else
                     {
-                        var current=await _identity.GetCharacterPvpModeAsync(
-                            actor.ActorId).ConfigureAwait(false);
-                        mode=current.Mode;
+                        var decision=pvpSequenceGate.Inspect(request);
                         mapAllows=PvpMapPolicy.AllowsPlayerPvp(actor.MapId);
-                        bool dead=_combat is not null&&_combat.CurrentHp(actor)<=0;
-                        if(request.Action==PvpModeCommandAction.Query)
-                            status=PvpModeResultStatus.Ready;
-                        else if(dead)
-                            status=PvpModeResultStatus.PlayerDead;
-                        else if(request.Action==PvpModeCommandAction.SetWhite&&!mapAllows)
-                            status=PvpModeResultStatus.NonPvpMap;
+                        if(decision==PvpModeSequenceDecision.ExactReplay)
+                        {
+                            // A lost receipt is replayed without a second DB write.
+                            var prior=pvpSequenceGate.LastReceipt;
+                            status=prior.Status;
+                            mode=prior.Mode;
+                            mapAllows=prior.MapAllowsPlayerPvp;
+                        }
                         else
                         {
-                            var desired=request.Action==PvpModeCommandAction.SetWhite
-                                ? PvpMode.EnabledWhite:PvpMode.ProtectedBlue;
-                            if(mode==desired)
-                                status=PvpModeResultStatus.Unchanged;
+                            var current=await _identity.GetCharacterPvpModeAsync(
+                                actor.ActorId).ConfigureAwait(false);
+                            mode=current.Mode;
+                            if(decision==PvpModeSequenceDecision.Stale)
+                                status=PvpModeResultStatus.StaleSequence;
                             else
                             {
-                                var persisted=await _identity.SetCharacterPvpModeAsync(
-                                    actor.ActorId,desired).ConfigureAwait(false);
-                                mode=persisted.Mode;
-                                status=PvpModeResultStatus.Applied;
+                                bool dead=_combat is not null&&_combat.CurrentHp(actor)<=0;
+                                if(request.Action==PvpModeCommandAction.Query)
+                                    status=PvpModeResultStatus.Ready;
+                                else if(dead)
+                                    status=PvpModeResultStatus.PlayerDead;
+                                else if(request.Action==PvpModeCommandAction.SetWhite&&!mapAllows)
+                                    status=PvpModeResultStatus.NonPvpMap;
+                                else
+                                {
+                                    var desired=request.Action==PvpModeCommandAction.SetWhite
+                                        ? PvpMode.EnabledWhite:PvpMode.ProtectedBlue;
+                                    if(mode==desired)
+                                        status=PvpModeResultStatus.Unchanged;
+                                    else
+                                    {
+                                        var persisted=await _identity.SetCharacterPvpModeAsync(
+                                            actor.ActorId,desired).ConfigureAwait(false);
+                                        mode=persisted.Mode;
+                                        status=PvpModeResultStatus.Applied;
+                                    }
+                                }
+                                // Even a denied mutation must not turn valid on retry.
+                                pvpSequenceGate.Record(request,status,mode,mapAllows);
                             }
                         }
                     }

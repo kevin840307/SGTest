@@ -1476,7 +1476,7 @@ static func decode_pvp_mode_result(frame: PackedByteArray) -> Dictionary:
 	var status := reader.get_u8()
 	var mode := reader.get_u8()
 	var allowed := reader.get_u8()
-	if epoch <= 0 or sequence == 0 or status > 5 or mode > 1 or allowed > 1:
+	if epoch <= 0 or sequence == 0 or status > 6 or mode > 1 or allowed > 1:
 		return {}
 	return {"map_epoch":epoch,"pvp_sequence":sequence,"status":status,
 		"mode":mode,"map_allows_pvp":allowed==1}

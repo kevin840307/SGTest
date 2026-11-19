@@ -154,7 +154,7 @@ public enum RepairOpenStatus : byte
 }
 
 public enum PvpModeCommandAction : byte { Query = 0, SetBlue = 1, SetWhite = 2 }
-public enum PvpModeResultStatus : byte { Ready = 0, Applied = 1, Unchanged = 2, NonPvpMap = 3, StaleGeneration = 4, PlayerDead = 5 }
+public enum PvpModeResultStatus : byte { Ready = 0, Applied = 1, Unchanged = 2, NonPvpMap = 3, StaleGeneration = 4, PlayerDead = 5, StaleSequence = 6 }
 
 public enum QuestViewWireStatus : byte
 {
@@ -3061,7 +3061,7 @@ public static class WireProtocol
 
     public static byte[] EncodePvpModeResult(PvpModeResultWire value)
     {
-        if(value.MapEpoch<=0||value.PvpSequence==0||(byte)value.Status>5||
+        if(value.MapEpoch<=0||value.PvpSequence==0||(byte)value.Status>6||
            (byte)value.Mode>1)
             throw new ArgumentOutOfRangeException(nameof(value));
         var frame=NewFrame(WireOpcode.PvpModeResult,PvpModeResultFrameBytes);
@@ -3081,7 +3081,7 @@ public static class WireProtocol
             BinaryPrimitives.ReadUInt32LittleEndian(frame.Slice(16,4)),
             (PvpModeResultStatus)frame[20],(PvpMode)frame[21],allowed==1);
         return value.MapEpoch>0&&value.PvpSequence>0&&allowed<=1&&
-            (byte)value.Status<=5&&(byte)value.Mode<=1;
+            (byte)value.Status<=6&&(byte)value.Mode<=1;
     }
 
     public static byte[] EncodeQuestOpen(QuestOpenWire value)
