@@ -7,7 +7,7 @@ public enum RepairAccessStatus : byte
     Allowed=0, StaleGeneration=1, UnknownRepair=2, TooFar=3, PlayerDead=4
 }
 
-public enum RepairItemLocation : byte { Inventory=1, Equipped=2 }
+public enum RepairItemLocation : byte { None=0, Inventory=1, Equipped=2 }
 
 public enum RepairStatus : byte
 {
