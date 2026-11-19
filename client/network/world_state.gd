@@ -128,6 +128,18 @@ var last_storage_open_status := -1
 var last_storage_response_sequence := 0
 var last_storage_result := {}
 var stale_storage_results := 0
+var equipment_sequence := 0
+var pending_equipment_sequence := 0
+var pending_equipment_kind := 0
+var pending_equipment_item_uid := 0
+var equipment_items := {}
+var equipment_slots := {}
+var equipment_ready := false
+var equipment_next_index := 0
+var equipment_revision := 0
+var last_equipment_response_sequence := 0
+var last_equipment_result := {}
+var stale_equipment_results := 0
 
 var respawn_sequence := 0
 var last_respawn_result_sequence := 0
@@ -279,6 +291,21 @@ func mark_storage_sent(sequence: int,kind: int,npc_spawn_id: int,item_uid: int =
 	return true
 
 
+func mark_equipment_sent(sequence: int,kind: int,item_uid: int) -> bool:
+	if state != STATE_IN_WORLD or not world_ready or not inventory_ready or not equipment_ready or resync_pending or waiting_for_new_map or pending_world_ready_ack_epoch != 0 or last_world_ready_ack_epoch != map_epoch or pending_equipment_sequence != 0 or pending_recovery_sequence != 0 or pending_discard_sequence != 0 or pending_shop_sequence != 0 or pending_storage_sequence != 0 or sequence <= equipment_sequence or sequence > 0xffffffff or kind not in [1,2] or item_uid <= 0:
+		return false
+	if kind == 1:
+		if not inventory_items.has(item_uid) or equipment_items.has(item_uid) or storage_items.has(item_uid):
+			return false
+	else:
+		if not equipment_items.has(item_uid) or inventory_items.has(item_uid) or storage_items.has(item_uid):
+			return false
+	equipment_sequence = sequence
+	pending_equipment_sequence = sequence
+	pending_equipment_kind = kind
+	pending_equipment_item_uid = item_uid
+	return true
+
 func mark_player_respawn_sent(sequence: int) -> bool:
 	if state != STATE_IN_WORLD or not combat_available or not player_dead or not world_ready or resync_pending or waiting_for_new_map or pending_world_ready_ack_epoch != 0 or last_world_ready_ack_epoch != map_epoch or sequence <= respawn_sequence or sequence > 0xffffffff:
 		return false
@@ -359,6 +386,10 @@ func apply_frame(frame: PackedByteArray) -> bool:
 			return _apply_storage_snapshot(frame)
 		WireCodec.OPCODE_STORAGE_TRANSFER_RESULT:
 			return _apply_storage_transfer_result(frame)
+		WireCodec.OPCODE_EQUIPMENT_SNAPSHOT:
+			return _apply_equipment_snapshot(frame)
+		WireCodec.OPCODE_EQUIPMENT_TRANSFER_RESULT:
+			return _apply_equipment_transfer_result(frame)
 		WireCodec.OPCODE_WORLD_READY:
 			return _apply_world_ready(frame)
 		WireCodec.OPCODE_SELF_STATE:
@@ -497,6 +528,18 @@ func snapshot() -> Dictionary:
 		"last_storage_response_sequence": last_storage_response_sequence,
 		"last_storage_result": last_storage_result.duplicate(true),
 		"stale_storage_results": stale_storage_results,
+		"equipment_sequence": equipment_sequence,
+		"pending_equipment_sequence": pending_equipment_sequence,
+		"pending_equipment_kind": pending_equipment_kind,
+		"pending_equipment_item_uid": pending_equipment_item_uid,
+		"equipment_items": equipment_items.duplicate(true),
+		"equipment_slots": equipment_slots.duplicate(true),
+		"equipment_ready": equipment_ready,
+		"equipment_next_index": equipment_next_index,
+		"equipment_revision": equipment_revision,
+		"last_equipment_response_sequence": last_equipment_response_sequence,
+		"last_equipment_result": last_equipment_result.duplicate(true),
+		"stale_equipment_results": stale_equipment_results,
 		"respawn_sequence": respawn_sequence,
 		"last_respawn_result_sequence": last_respawn_result_sequence,
 		"last_respawn_result_status": last_respawn_result_status,
