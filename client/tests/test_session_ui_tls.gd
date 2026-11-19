@@ -1069,8 +1069,10 @@ func run() -> void:
 		fail("PvP attack did not display authoritative rejected result")
 		return
 
+	print("CLIENT_TLS_UI_CHECKPOINT gm_begin")
 	panel._latest.gm_authorized = true
 	panel._update_pvp_ui()
+	print("CLIENT_TLS_UI_CHECKPOINT gm_visible_updated")
 	if (
 		not panel.gm_pvp_apply_button.visible or panel.gm_pvp_apply_button.disabled or
 		not panel.gm_pvp_state_picker.visible
@@ -1078,7 +1080,9 @@ func run() -> void:
 		fail("Server-issued GM capability did not expose bounded PvP-name controls")
 		return
 	panel.gm_pvp_state_picker.select(2)
+	print("CLIENT_TLS_UI_CHECKPOINT gm_before_emit")
 	panel.gm_pvp_apply_button.pressed.emit()
+	print("CLIENT_TLS_UI_CHECKPOINT gm_after_emit")
 	if stub.gm_commands!=1 or stub.last_gm_target!=77 or stub.last_gm_state!=2:
 		fail("GM PvP-name UI did not send exact visible target/state")
 		return
@@ -1095,6 +1099,7 @@ func run() -> void:
 		return
 	panel._latest.gm_authorized=false
 	panel._update_pvp_ui()
+	print("CLIENT_TLS_UI_CHECKPOINT gm_revoked")
 	if panel.gm_pvp_apply_button.visible or panel.gm_pvp_state_picker.visible:
 		fail("Revoked GM capability left privileged controls visible")
 		return

@@ -156,6 +156,18 @@ def main() -> int:
                 print(line)
         print("GODOT_CSHARP_TLS_LOGIN_E2E_PASS secure_tls=true authenticated_move=true authoritative_receipt_returned=true world_ready_delivered=true transport_thread=true reducer_thread=true")
         return 0
+    except subprocess.TimeoutExpired as error:
+        print("TLS_LOGIN_RUNNER_FAIL", error, file=sys.stderr)
+        partial = error.stdout or ""
+        if isinstance(partial, bytes):
+            partial = partial.decode("utf-8", errors="replace")
+        if partial:
+            print("TLS_LOGIN_GODOT_PARTIAL_BEGIN", file=sys.stderr)
+            print(partial, file=sys.stderr, end="" if partial.endswith("\n") else "\n")
+            print("TLS_LOGIN_GODOT_PARTIAL_END", file=sys.stderr)
+        for line in lines[-30:]:
+            print(line, file=sys.stderr)
+        return 1
     except Exception as error:
         print("TLS_LOGIN_RUNNER_FAIL", error, file=sys.stderr)
         for line in lines[-30:]:
