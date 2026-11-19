@@ -194,9 +194,11 @@ func _initialize()->void:
 	if not future.mark_player_shop_sent(1,1,0,0,8001,50):
 		_fail("future fixture admission")
 		return
-	if future.apply_frame(
-		_result(4,1,1,0,31,100,8001,6201,1,0,-1,50,50,50)) or
-		int(future.state)!=WorldState.STATE_FAILED:
+	if (
+		future.apply_frame(
+			_result(4,1,1,0,31,100,8001,6201,1,0,-1,50,50,50)) or
+		int(future.state)!=WorldState.STATE_FAILED
+	):
 		_fail("future map player-shop result did not fail closed")
 		return
 
