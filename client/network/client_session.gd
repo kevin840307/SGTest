@@ -683,6 +683,30 @@ func _process_first_intent() -> void:
 			_pop_intent()
 			_publish()
 
+	elif kind == "trade":
+		var current: Dictionary = _world.snapshot()
+		if int(intent.get("actor_id",0)) != int(current.get("actor_id",0)) or int(intent.get("map_epoch",0)) != int(current.get("map_epoch",0)):
+			_pop_intent()
+			return
+		if int(current.get("state",-1)) != WorldState.STATE_IN_WORLD or bool(current.get("player_dead",false)) or not bool(current.get("world_ready",false)) or not bool(current.get("inventory_ready",false)) or bool(current.get("resync_pending",false)) or bool(current.get("waiting_for_new_map",false)) or int(current.get("pending_world_ready_ack_epoch",0)) != 0 or int(current.get("last_world_ready_ack_epoch",0)) != int(current.get("map_epoch",0)):
+			return
+		var sequence := int(current.get("trade_sequence",0))+1
+		var action := int(intent.get("action",0))
+		var trade_id := int(intent.get("trade_id",0))
+		var target := int(intent.get("target_actor_id",0))
+		var uid := int(intent.get("item_uid",0))
+		var money := int(intent.get("money",0))
+		var frame := WireCodec.encode_trade_command(
+			int(current.get("map_epoch",0)),sequence,action,
+			trade_id,target,uid,money)
+		if frame.is_empty():
+			_pop_intent()
+			return
+		if _transport.send_frame(frame) and _world.mark_trade_sent(
+				sequence,action,trade_id,target,uid,money):
+			_pop_intent()
+			_publish()
+
 	elif kind in ["repair_open","repair_item"]:
 		var current: Dictionary = _world.snapshot()
 		if int(intent.get("actor_id",0)) != int(current.get("actor_id",0)) or int(intent.get("map_epoch",0)) != int(current.get("map_epoch",0)):
