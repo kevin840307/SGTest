@@ -1307,6 +1307,15 @@ func _apply_world_ready(frame: PackedByteArray) -> bool:
 		last_storage_response_sequence = 0
 		last_storage_result.clear()
 		stale_storage_results = 0
+		# Equipment location persists across maps, but map-scoped request
+		# sequences and any unresolved old-map mutation must not.
+		equipment_sequence = 0
+		pending_equipment_sequence = 0
+		pending_equipment_kind = 0
+		pending_equipment_item_uid = 0
+		last_equipment_response_sequence = 0
+		last_equipment_result.clear()
+		stale_equipment_results = 0
 		respawn_sequence = 0
 		last_respawn_result_sequence = 0
 		last_respawn_result_status = -1
