@@ -133,6 +133,10 @@ internal static class TlsHost
             NpcQuestCatalog? quests=questManifest is null ? null :
                 NpcQuestCatalog.LoadVerified(
                     Path.GetFullPath(questManifest),npcDocuments);
+            string? tradeItemManifest=options.GetValueOrDefault("--trade-item-rules");
+            IReadOnlyDictionary<int,TradeItemRule>? tradeItemRules=
+                tradeItemManifest is null ? null :
+                TradeItemCatalog.LoadVerified(Path.GetFullPath(tradeItemManifest));
             using var identity = new SqliteIdentityStore(database);
             await identity.InitializeAsync(stop.Token);
             // Reserve even when no drop rule table is enabled, preventing
@@ -165,6 +169,8 @@ internal static class TlsHost
             var positions = new CharacterPositionCheckpoint(identity,
                 new(IntervalMilliseconds: checkpointMs));
             var router = new WorldResultRouter(changedObserver: positions.Observe);
+            PlayerTradeCoordinator? trades=tradeItemRules is null
+                ? null:new PlayerTradeCoordinator(identity,world,tradeItemRules);
             var combat = new PlayerCombatSettlement(
                 identity,
                 delivery: router.QueuePlayerDamage,
@@ -197,7 +203,8 @@ internal static class TlsHost
                 banks: banks,
                 repairs: repairs,
                 repairItemRules: repairItemRules,
-                quests: quests);
+                quests: quests,
+                trades: trades);
             await using var listener = new TlsGatewayListener(address, port, authorization,
                 certificate, router, new(MaxConnections: maximum, MaxConnectionsPerAddress: perAddress));
             await world.StartAsync();
@@ -231,6 +238,7 @@ internal static class TlsHost
                     verified_repair_count = repairs?.Count ?? 0,
                     verified_repair_item_rule_count = repairItemRules?.Count ?? 0,
                     verified_quest_count = quests?.Count ?? 0,
+                    verified_trade_item_rule_count = tradeItemRules?.Count ?? 0,
                     unpicked_ground_drops = activeDrops.Count,
                     character_creation_enabled = characterCreation is not null,
                     character_creation_map = characterCreation?.Spawn.MapId
@@ -284,7 +292,8 @@ internal static class TlsHost
                 verified_bank_count = banks?.Count ?? 0,
                 verified_repair_count = repairs?.Count ?? 0,
                 verified_repair_item_rule_count = repairItemRules?.Count ?? 0,
-                verified_quest_count = quests?.Count ?? 0
+                verified_quest_count = quests?.Count ?? 0,
+                verified_trade_item_rule_count = tradeItemRules?.Count ?? 0
             }));
             return 0;
         }
@@ -298,7 +307,7 @@ internal static class TlsHost
                 "[--shop-rules <VERIFIED_JSON>] [--storage-rules <VERIFIED_JSON>] " +
                 "[--equipment-rules <VERIFIED_JSON>] [--bank-rules <VERIFIED_JSON>] " +
                 "[--repair-rules <VERIFIED_JSON> --repair-item-rules <VERIFIED_JSON>] " +
-                "[--quest-rules <VERIFIED_JSON>] " +
+                "[--quest-rules <VERIFIED_JSON>] [--trade-item-rules <VERIFIED_JSON>] " +
                 "[--character-spawn-map <13|15> --character-spawn-x <X> --character-spawn-y <Y>] " +
                 "[--seconds N]");
             return 2;
@@ -323,6 +332,7 @@ internal static class TlsHost
                           "--loot-rules", "--recovery-rules", "--skill-rules",
                           "--shop-rules", "--storage-rules", "--equipment-rules", "--bank-rules",
                           "--repair-rules", "--repair-item-rules", "--quest-rules",
+                          "--trade-item-rules",
                           "--character-spawn-map", "--character-spawn-x",
                           "--character-spawn-y", "--seconds"];
         var values = new Dictionary<string, string>(StringComparer.Ordinal);
