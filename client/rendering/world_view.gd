@@ -268,6 +268,7 @@ func set_player_snapshot(snapshot: Dictionary) -> void:
 			return
 		_consume_player_attack_events(snapshot,now_usec)
 		_consume_player_damage_visual_events(snapshot,now_usec)
+		_consume_pvp_combat_visual_events(snapshot,now_usec)
 		var focus := players.position_at(int(snapshot.actor_id),now_usec)
 		if focus.is_finite():
 			camera.set_focus(epoch,focus)
@@ -319,6 +320,36 @@ func _consume_player_damage_visual_events(snapshot: Dictionary,now_usec: int) ->
 		# Presentation-only: use only the committed damage amount from opcode42.
 		# Do not inspect or infer remote HP; actor position comes from the normal
 		# authoritative player snapshot/interpolation path.
+		_combat_overlays.append({
+			"target_actor_id":victim,
+			"text":str(damage),
+			"miss":false,
+			"started_usec":now_usec
+		})
+
+
+func _consume_pvp_combat_visual_events(snapshot: Dictionary,now_usec: int) -> void:
+	var events=snapshot.get("pvp_combat_visual_events",[])
+	if not events is Array:
+		return
+	for event in events:
+		if not event is Dictionary:
+			continue
+		var attacker:=int(event.get("attacker_actor_id",0))
+		var attacker_connection:=int(event.get("attacker_connection_epoch",0))
+		var attack_sequence:=int(event.get("attack_sequence",0))
+		var victim:=int(event.get("victim_actor_id",0))
+		var victim_connection:=int(event.get("victim_connection_epoch",0))
+		var damage_sequence:=int(event.get("damage_sequence",0))
+		var damage:=int(event.get("damage",0))
+		var key:="pvphit:%d:%d:%d:%d:%d:%d" % [
+			attacker,attacker_connection,attack_sequence,
+			victim,victim_connection,damage_sequence]
+		if _combat_seen.has(key):
+			continue
+		_combat_seen[key]=true
+		if attacker<=0 or attacker_connection<=0 or attack_sequence<=0 or victim<=0 or victim_connection<=0 or damage_sequence<=0 or damage<=0:
+			continue
 		_combat_overlays.append({
 			"target_actor_id":victim,
 			"text":str(damage),

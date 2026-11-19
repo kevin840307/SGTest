@@ -198,6 +198,10 @@ var last_pvp_attack_result_sequence := 0
 var last_pvp_attack_result_status := -1
 var last_pvp_attack_result := {}
 var stale_pvp_attack_results := 0
+var pvp_combat_visual_events: Array[Dictionary] = []
+var pvp_combat_attack_sequences := {}
+var pvp_combat_damage_sequences := {}
+var stale_pvp_combat_visuals := 0
 
 var respawn_sequence := 0
 var last_respawn_result_sequence := 0
@@ -564,6 +568,8 @@ func apply_frame(frame: PackedByteArray) -> bool:
 			return _apply_pvp_damage(frame)
 		WireCodec.OPCODE_PLAYER_IDENTITY:
 			return _apply_player_identity(frame)
+		WireCodec.OPCODE_PVP_COMBAT_VISUAL:
+			return _apply_pvp_combat_visual(frame)
 		WireCodec.OPCODE_WORLD_READY:
 			return _apply_world_ready(frame)
 		WireCodec.OPCODE_SELF_STATE:
@@ -772,6 +778,10 @@ func snapshot() -> Dictionary:
 		"last_pvp_attack_result_status": last_pvp_attack_result_status,
 		"last_pvp_attack_result": last_pvp_attack_result.duplicate(true),
 		"stale_pvp_attack_results": stale_pvp_attack_results,
+		"pvp_combat_visual_events": pvp_combat_visual_events.duplicate(true),
+		"pvp_combat_attack_sequences": pvp_combat_attack_sequences.duplicate(true),
+		"pvp_combat_damage_sequences": pvp_combat_damage_sequences.duplicate(true),
+		"stale_pvp_combat_visuals": stale_pvp_combat_visuals,
 		"respawn_sequence": respawn_sequence,
 		"last_respawn_result_sequence": last_respawn_result_sequence,
 		"last_respawn_result_status": last_respawn_result_status,
@@ -1650,6 +1660,7 @@ func _apply_world_ready(frame: PackedByteArray) -> bool:
 	player_attack_events.clear()
 	player_damage_visual_events.clear()
 	player_respawn_visual_events.clear()
+	pvp_combat_visual_events.clear()
 	last_aoi_tick = tick
 	pending_world_ready_ack_epoch = map_epoch
 	pending_world_ready_ack_tick = tick
@@ -2527,6 +2538,10 @@ func _clear_pvp_map() -> void:
 	last_pvp_attack_result_status = -1
 	last_pvp_attack_result.clear()
 	stale_pvp_attack_results = 0
+	pvp_combat_visual_events.clear()
+	pvp_combat_attack_sequences.clear()
+	pvp_combat_damage_sequences.clear()
+	stale_pvp_combat_visuals = 0
 
 
 func _apply_pvp_mode_result(frame: PackedByteArray) -> bool:
@@ -2619,6 +2634,81 @@ func _apply_pvp_damage(frame: PackedByteArray) -> bool:
 	player_dead = bool(value.died)
 	last_player_damage = value.duplicate(true)
 	last_player_damage["source_kind"] = "pvp"
+	return true
+
+
+func _apply_pvp_combat_visual(frame: PackedByteArray) -> bool:
+	if state != STATE_IN_WORLD:
+		return fail("pvp_combat_visual_out_of_state")
+	var value:=WireCodec.decode_pvp_combat_visual(frame)
+	if value.is_empty():
+		return fail("invalid_pvp_combat_visual")
+	var disposition:=_check_aoi_generation(
+		int(value.receiver_map_epoch),int(value.server_tick))
+	if disposition<=0:
+		if disposition==0:
+			stale_pvp_combat_visuals+=1
+		return disposition==0
+
+	var attacker:=int(value.attacker_actor_id)
+	var attacker_connection:=int(value.attacker_connection_epoch)
+	var victim:=int(value.victim_actor_id)
+	var victim_connection:=int(value.victim_connection_epoch)
+
+	if attacker==actor_id:
+		if not self_state.is_empty() and int(self_state.get("connection_epoch",0))!=attacker_connection:
+			return _need_resync("pvp_combat_visual_attacker_self_generation")
+		var own_identity:Dictionary=player_identities.get(actor_id,{})
+		if self_state.is_empty() and not own_identity.is_empty() and int(own_identity.get("connection_epoch",0))!=attacker_connection:
+			return _need_resync("pvp_combat_visual_attacker_identity_generation")
+	else:
+		if not entities.has(attacker):
+			return _need_resync("pvp_combat_visual_attacker_without_spawn")
+		if int((entities[attacker] as Dictionary).get("connection_epoch",0))!=attacker_connection:
+			return _need_resync("pvp_combat_visual_attacker_generation")
+
+	if victim==actor_id:
+		if not self_state.is_empty() and int(self_state.get("connection_epoch",0))!=victim_connection:
+			return _need_resync("pvp_combat_visual_victim_self_generation")
+		var own_identity:Dictionary=player_identities.get(actor_id,{})
+		if self_state.is_empty() and not own_identity.is_empty() and int(own_identity.get("connection_epoch",0))!=victim_connection:
+			return _need_resync("pvp_combat_visual_victim_identity_generation")
+	else:
+		if not entities.has(victim):
+			return _need_resync("pvp_combat_visual_victim_without_spawn")
+		if int((entities[victim] as Dictionary).get("connection_epoch",0))!=victim_connection:
+			return _need_resync("pvp_combat_visual_victim_generation")
+
+	var attack_sequence:=int(value.attack_sequence)
+	var damage_sequence:=int(value.damage_sequence)
+	var attack_prior:Dictionary=pvp_combat_attack_sequences.get(attacker,{})
+	var damage_prior:Dictionary=pvp_combat_damage_sequences.get(victim,{})
+	var attack_stale:=false
+	var damage_stale:=false
+	if not attack_prior.is_empty():
+		if int(attack_prior.get("connection_epoch",0))!=attacker_connection:
+			return _need_resync("pvp_combat_visual_attack_sequence_generation")
+		attack_stale=attack_sequence<=int(attack_prior.get("sequence",0))
+	if not damage_prior.is_empty():
+		if int(damage_prior.get("connection_epoch",0))!=victim_connection:
+			return _need_resync("pvp_combat_visual_damage_sequence_generation")
+		damage_stale=damage_sequence<=int(damage_prior.get("sequence",0))
+	if attack_stale or damage_stale:
+		if attack_stale and damage_stale:
+			stale_pvp_combat_visuals+=1
+			return true
+		return _need_resync("pvp_combat_visual_sequence_conflict")
+
+	pvp_combat_attack_sequences[attacker]={
+		"connection_epoch":attacker_connection,"sequence":attack_sequence}
+	pvp_combat_damage_sequences[victim]={
+		"connection_epoch":victim_connection,"sequence":damage_sequence}
+	pvp_combat_visual_events.append(value.duplicate(true))
+	var cutoff:=maxi(int(value.server_tick),last_aoi_tick)-PLAYER_COMBAT_VISUAL_EVENT_TTL_TICKS
+	while not pvp_combat_visual_events.is_empty() and int(pvp_combat_visual_events[0].get("server_tick",-1))<cutoff:
+		pvp_combat_visual_events.pop_front()
+	while pvp_combat_visual_events.size()>PLAYER_COMBAT_VISUAL_EVENT_MAX:
+		pvp_combat_visual_events.pop_front()
 	return true
 
 

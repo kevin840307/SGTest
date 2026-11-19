@@ -170,6 +170,51 @@ func run() -> void:
 		"damage_sequence":2,"damage":82,"died":true}]},650000)
 	check(view.combat_overlay_count()==4,
 		"lethal player damage overlay was not retained independently")
+	var pvp_overlay={"pvp_combat_visual_events":[{
+		"attacker_actor_id":1,"attacker_connection_epoch":1,"attack_sequence":1,
+		"victim_actor_id":2,"victim_connection_epoch":1,"damage_sequence":1,
+		"damage":58,"died":false,"attacker_facing":3,"victim_facing":3}]}
+	view._consume_pvp_combat_visual_events(pvp_overlay,660000)
+	view._consume_pvp_combat_visual_events(pvp_overlay,670000)
+	check(view.combat_overlay_count()==5,
+		"PvP combat overlay was missing or replayed")
+	var pvp_players:=Players.new()
+	check(pvp_players.configure(assets)==OK,"PvP presentation configure")
+	var pvp_snapshot:Dictionary=snapshot.duplicate(true)
+	pvp_snapshot.map_epoch=3
+	pvp_snapshot.map_id=13
+	pvp_snapshot.actor_id=1
+	pvp_snapshot.x=10.0
+	pvp_snapshot.y=10.0
+	pvp_snapshot.facing=6
+	pvp_snapshot.self_state={
+		"actor_id":1,"connection_epoch":1,"entity_map_epoch":3,
+		"x":10.0,"y":10.0,"facing":6,"moving":false,
+		"movement_action_sequence":0,"server_tick":10}
+	var pvp_remote={
+		"actor_id":2,"connection_epoch":2,"entity_map_epoch":3,
+		"x":20.0,"y":10.0,"facing":6,"moving":false,
+		"movement_action_sequence":0,"server_tick":10}
+	pvp_snapshot.entities={2:pvp_remote}
+	pvp_snapshot.player_attack_events=[]
+	pvp_snapshot.player_damage_visual_events=[]
+	pvp_snapshot.player_respawn_visual_events=[]
+	pvp_snapshot.pvp_combat_visual_events=[]
+	pvp_players.apply_snapshot(pvp_snapshot,3000000)
+	pvp_snapshot.pvp_combat_visual_events=[{
+		"receiver_map_epoch":3,"server_tick":11,
+		"attacker_actor_id":1,"attacker_connection_epoch":1,"attack_sequence":1,
+		"victim_actor_id":2,"victim_connection_epoch":2,"damage_sequence":1,
+		"damage":58,"died":false,"attacker_facing":3,"victim_facing":3}]
+	pvp_players.apply_snapshot(pvp_snapshot,3010000)
+	var pvp_actors:=pvp_players.actors_at(3010000)
+	var pvp_attacker:Dictionary=pvp_actors.filter(func(v): return str(v.id)=="1")[0]
+	var pvp_victim:Dictionary=pvp_actors.filter(func(v): return str(v.id)=="2")[0]
+	check(not bool(pvp_attacker.parts[0].flip_h),
+		"PvP attacker AA ignored authoritative facing")
+	check(not bool(pvp_victim.parts[0].flip_h),
+		"PvP victim NH ignored authoritative facing")
+	pvp_players.clear()
 	view.clear_map()
 	check(borrowed.has("x") and int(borrowed.map_id)==13,"view clear mutated caller snapshot")
 	check(view.combat_overlay_count()==0,"view clear retained combat overlays")
@@ -179,5 +224,5 @@ func run() -> void:
 	assets[Players.PARTS[1][0]].manifest.logical_views={}
 	check(players.configure(assets)!=OK and players.actors_at(0).is_empty(),"missing metadata did not fail closed")
 	if failures.is_empty():
-		print("PLAYER_PRESENTATION_PASS six_parts=true actor_atomic_sort=true logical_flip_pivot=true normalized_ACT=true authoritative_AA=true remote_AA_lock=true authoritative_NH=true persistent_ND=true respawn_clears_death=true own_without_self_state=true combat_overlay=true player_damage_overlay=true no_remote_hp_dependency=true stop_despawn_transfer=true")
+		print("PLAYER_PRESENTATION_PASS six_parts=true actor_atomic_sort=true logical_flip_pivot=true normalized_ACT=true authoritative_AA=true remote_AA_lock=true authoritative_NH=true persistent_ND=true respawn_clears_death=true own_without_self_state=true combat_overlay=true player_damage_overlay=true pvp_attack_hit_visual=true pvp_damage_overlay=true no_remote_hp_dependency=true stop_despawn_transfer=true")
 	quit(0 if failures.is_empty() else 1)

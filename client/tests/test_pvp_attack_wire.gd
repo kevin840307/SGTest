@@ -22,6 +22,11 @@ func _initialize() -> void:
 	if victim.size()!=61 or parsed_damage.is_empty() or int(parsed_damage.attacker_actor_id)!=99 or int(parsed_damage.current_hp)!=72:
 		_fail("victim damage codec")
 		return
+	var visual:=_pvp_visual(1,100,99,4,7,11,5,1,28,false,3,6)
+	var parsed_visual:=WireCodec.decode_pvp_combat_visual(visual)
+	if visual.size()!=71 or WireCodec.frame_opcode(visual)!=WireCodec.OPCODE_PVP_COMBAT_VISUAL or parsed_visual.is_empty() or int(parsed_visual.attacker_actor_id)!=99 or int(parsed_visual.victim_actor_id)!=11 or int(parsed_visual.damage)!=28:
+		_fail("PvP combat visual codec")
+		return
 
 	var world := WorldState.new()
 	world.state=WorldState.STATE_IN_WORLD
@@ -32,6 +37,7 @@ func _initialize() -> void:
 	world.last_world_ready_ack_epoch=1
 	world.pvp_known=true
 	world.pvp_map_allows=true
+	world.entities[99]={"actor_id":99,"connection_epoch":4,"entity_map_epoch":1}
 	if not world.apply_frame(_combat_state(1,100,100)):
 		_fail("combat baseline")
 		return
@@ -54,6 +60,17 @@ func _initialize() -> void:
 	snap=world.snapshot()
 	if int(snap.last_pvp_attack_result.damage)!=28 or bool(snap.last_pvp_attack_result.died):
 		_fail("applied attack receipt state")
+		return
+	var hp_before_visual:=int(snap.player_current_hp)
+	if not world.apply_frame(visual):
+		_fail("PvP visual apply")
+		return
+	snap=world.snapshot()
+	if snap.pvp_combat_visual_events.size()!=1 or int(snap.pvp_combat_visual_events[0].attack_sequence)!=7 or int(snap.pvp_combat_visual_events[0].damage_sequence)!=1 or int(snap.player_current_hp)!=hp_before_visual:
+		_fail("PvP visual mutated HP or was not retained")
+		return
+	if not world.apply_frame(visual) or int(world.snapshot().stale_pvp_combat_visuals)!=1:
+		_fail("PvP visual replay not stale")
 		return
 	if not world.apply_frame(victim):
 		_fail("PvP victim damage apply")
@@ -106,7 +123,7 @@ func _initialize() -> void:
 		_fail("shared damage sequence gap did not fail closed")
 		return
 
-	print("PVP_ATTACK_WIRE_PASS request=28 result=42 damage=61 singleflight=true server_status=true shared_damage_sequence=true lethal=true replay_stale=true unsolicited_failclosed=true")
+	print("PVP_ATTACK_WIRE_PASS request=28 result=42 damage=61 visual=71 singleflight=true server_status=true shared_damage_sequence=true visual_presentation_only=true visual_replay_stale=true lethal=true replay_stale=true unsolicited_failclosed=true")
 	quit(0)
 
 func _combat_state(epoch: int,current_hp: int,max_hp: int) -> PackedByteArray:
@@ -155,4 +172,27 @@ func _pvp_damage(epoch: int,sequence: int,tick: int,attacker: int,connection: in
 	writer.put_32(current_hp)
 	writer.put_32(max_hp)
 	writer.put_u8(1 if died else 0)
+	return writer.data_array
+
+
+func _pvp_visual(receiver_epoch:int,tick:int,attacker:int,attacker_connection:int,
+		attack_sequence:int,victim:int,victim_connection:int,damage_sequence:int,
+		damage:int,died:bool,attacker_facing:int,victim_facing:int)->PackedByteArray:
+	var writer:=StreamPeerBuffer.new()
+	writer.big_endian=false
+	writer.put_u32(71)
+	writer.put_u16(1)
+	writer.put_u16(WireCodec.OPCODE_PVP_COMBAT_VISUAL)
+	writer.put_64(receiver_epoch)
+	writer.put_64(tick)
+	writer.put_64(attacker)
+	writer.put_64(attacker_connection)
+	writer.put_u32(attack_sequence)
+	writer.put_64(victim)
+	writer.put_64(victim_connection)
+	writer.put_u32(damage_sequence)
+	writer.put_32(damage)
+	writer.put_u8(1 if died else 0)
+	writer.put_u8(attacker_facing)
+	writer.put_u8(victim_facing)
 	return writer.data_array
