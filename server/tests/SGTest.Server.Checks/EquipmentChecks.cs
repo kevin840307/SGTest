@@ -121,7 +121,7 @@ internal static class EquipmentChecks
             var equipped=await store.EquipInventoryItemAsync(
                 equipContext,swordUid,sameSlotRules);
             var replay=await store.EquipInventoryItemAsync(
-                equipContext,swordUid,3701,4);
+                equipContext,swordUid,sameSlotRules);
             var equippedRows=await store.ListEquippedItemsAsync(characterA);
             var inventory=await store.ListInventoryItemsAsync(characterA);
             Checks.Require(
