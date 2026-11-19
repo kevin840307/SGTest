@@ -2366,7 +2366,10 @@ public static class WireProtocol
             51 => WireOpcode.ShopTransactionResult,
             52 => WireOpcode.StorageOpen, 53 => WireOpcode.StorageSnapshot,
             54 => WireOpcode.StorageDeposit, 55 => WireOpcode.StorageWithdraw,
-            56 => WireOpcode.StorageTransferResult, _ => 0
+            56 => WireOpcode.StorageTransferResult,
+            57 => WireOpcode.EquipmentSnapshot, 58 => WireOpcode.EquipmentEquip,
+            59 => WireOpcode.EquipmentUnequip, 60 => WireOpcode.EquipmentTransferResult,
+            _ => 0
         };
         if (opcode == 0) return false;
         bool sizeOk = opcode switch
@@ -2425,6 +2428,14 @@ public static class WireProtocol
                 advertised == StorageMoveFrameBytes,
             WireOpcode.StorageTransferResult =>
                 advertised == StorageTransferResultFrameBytes,
+            WireOpcode.EquipmentSnapshot => advertised >= EquipmentSnapshotHeaderBytes &&
+                advertised <= EquipmentSnapshotHeaderBytes +
+                    EquipmentSnapshotMaxItemsPerFrame*EquipmentItemBytes &&
+                (advertised-EquipmentSnapshotHeaderBytes)%EquipmentItemBytes==0,
+            WireOpcode.EquipmentEquip or WireOpcode.EquipmentUnequip =>
+                advertised == EquipmentMoveFrameBytes,
+            WireOpcode.EquipmentTransferResult =>
+                advertised == EquipmentTransferResultFrameBytes,
             WireOpcode.InventorySnapshot => advertised >= InventorySnapshotHeaderBytes &&
                 advertised <= InventorySnapshotHeaderBytes +
                     InventorySnapshotMaxItemsPerFrame*InventoryItemBytes &&
