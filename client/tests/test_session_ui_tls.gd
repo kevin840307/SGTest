@@ -891,7 +891,31 @@ func run() -> void:
 		fail("Trade invite UI did not send selected ActorId")
 		return
 
-	# TRADE_UI_CONTINUE
+	panel._latest.trade_id = 7001
+	panel._latest.trade_revision = 1
+	panel._latest.trade_state = 1
+	panel._latest.trade_peer_actor_id = 22
+	panel._update_trade_ui()
+	if not panel.trade_accept_button.visible or panel.trade_accept_button.disabled:
+		fail("Trade invite did not expose accept")
+		return
+	panel.trade_accept_button.pressed.emit()
+	if stub.trade_accepts != 1:
+		fail("Trade accept UI did not use ClientSession")
+		return
+
+	panel._latest.trade_revision = 2
+	panel._latest.trade_state = 3
+	panel._update_trade_ui()
+	if panel.trade_inventory_picker.item_count == 0 or panel.trade_offer_add_button.disabled:
+		fail("Active trade did not expose offer controls")
+		return
+	panel.trade_offer_add_button.pressed.emit()
+	if stub.trade_adds != 1 or stub.last_trade_uid != 10000:
+		fail("Trade item offer did not use exact ItemUid")
+		return
+
+	# TRADE_UI_CONTINUE_2
 
 	panel._latest.player_dead = true
 	panel._update_inventory_ui()
