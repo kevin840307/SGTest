@@ -308,7 +308,8 @@ public sealed class GatewayConnection
                                               Func<TrustedRepairCommand, bool>? postRepair = null,
                                               Func<TrustedTradeCommand, bool>? postTrade = null,
                                               Func<TrustedQuestCommand, bool>? postQuest = null,
-                                              Func<TrustedPvpModeCommand, bool>? postPvp = null)
+                                              Func<TrustedPvpModeCommand, bool>? postPvp = null,
+                                              Func<TrustedPvpAttack, bool>? postPvpAttack = null)
     {
         ArgumentNullException.ThrowIfNull(postMove);
         lock (_receiveGate)
@@ -321,7 +322,7 @@ public sealed class GatewayConnection
             return _parser.Feed(bytes,
                 frame => HandleClientFrame(
                     frame, postMove, postNpc, postResync, postAttack, postRespawn,
-                    postPickup, postRecovery, postDiscard, postSkill, postShop, postStorage, postEquipment, postBank, postRepair, postTrade, postQuest, postPvp),
+                    postPickup, postRecovery, postDiscard, postSkill, postShop, postStorage, postEquipment, postBank, postRepair, postTrade, postQuest, postPvp, postPvpAttack),
                 out commandsAccepted);
         }
     }
@@ -343,7 +344,8 @@ public sealed class GatewayConnection
                                               Func<TrustedRepairCommand, bool>? postRepair = null,
                                               Func<TrustedTradeCommand, bool>? postTrade = null,
                                               Func<TrustedQuestCommand, bool>? postQuest = null,
-                                              Func<TrustedPvpModeCommand, bool>? postPvp = null)
+                                              Func<TrustedPvpModeCommand, bool>? postPvp = null,
+                                              Func<TrustedPvpAttack, bool>? postPvpAttack = null)
     {
         ArgumentNullException.ThrowIfNull(postMove);
         lock (_receiveGate)
@@ -356,7 +358,7 @@ public sealed class GatewayConnection
             return _parser.Resume(
                 frame => HandleClientFrame(
                     frame, postMove, postNpc, postResync, postAttack, postRespawn,
-                    postPickup, postRecovery, postDiscard, postSkill, postShop, postStorage, postEquipment, postBank, postRepair, postTrade, postQuest, postPvp),
+                    postPickup, postRecovery, postDiscard, postSkill, postShop, postStorage, postEquipment, postBank, postRepair, postTrade, postQuest, postPvp, postPvpAttack),
                 out commandsAccepted);
         }
     }
@@ -379,7 +381,8 @@ public sealed class GatewayConnection
         Func<TrustedRepairCommand, bool>? postRepair,
         Func<TrustedTradeCommand, bool>? postTrade,
         Func<TrustedQuestCommand, bool>? postQuest,
-        Func<TrustedPvpModeCommand, bool>? postPvp)
+        Func<TrustedPvpModeCommand, bool>? postPvp,
+        Func<TrustedPvpAttack, bool>? postPvpAttack)
     {
         if (!WireProtocol.TryReadHeader(frame, out var header))
             return WireFrameDisposition.ProtocolViolation;
@@ -629,6 +632,17 @@ public sealed class GatewayConnection
             return postPvp(new TrustedPvpModeCommand(
                 bound.ActorId,bound.ConnectionEpoch,pvp.MapEpoch,
                 pvp.PvpSequence,pvp.Action))
+                ? WireFrameDisposition.Accepted:WireFrameDisposition.Backpressured;
+        }
+
+        if(header.Opcode==WireOpcode.PvpAttack && postPvpAttack is not null &&
+            WireProtocol.TryDecodePvpAttack(frame,out var pvpAttack))
+        {
+            if(!GameplayReady(bound))
+                return WireFrameDisposition.ProtocolViolation;
+            return postPvpAttack(new TrustedPvpAttack(
+                bound.ActorId,bound.ConnectionEpoch,pvpAttack.MapEpoch,
+                pvpAttack.AttackSequence,pvpAttack.TargetActorId,_combatProfile))
                 ? WireFrameDisposition.Accepted:WireFrameDisposition.Backpressured;
         }
 

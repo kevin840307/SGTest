@@ -31,8 +31,16 @@ internal static class PvpAttackChecks
             "PvP victim damage wire mismatch");
 
         var actor=new ActorSnapshot(88,13,5,3,0,0,8,8,1,false);
-        var gateway=new GatewayConnection(actor);
-        var trusted=new TrustedPvpAttack(88,5,3,7,99,null);
+        var profile=new TrustedCombatProfile(30,10,10,3,48,15);
+        var gateway=new GatewayConnection(actor,combatProfile:profile);
+        TrustedPvpAttack captured=default;
+        Checks.Require(gateway.FeedClientBytes(
+            bytes,_=>true,out int accepted,
+            postPvpAttack:value=>{captured=value;return true;})==WireFeedStatus.Accepted&&
+            accepted==1&&captured.ActorId==88&&captured.ConnectionEpoch==5&&
+            captured.TargetActorId==99&&captured.Profile==profile,
+            "Gateway did not inject authenticated PvP identity/profile");
+        var trusted=captured;
         Checks.Require(gateway.QueuePvpAttackResult(trusted,result)==GatewaySendStatus.Enqueued&&
             gateway.TryDequeueReliable(out var q)&&WireProtocol.TryDecodePvpAttackResult(q,out var qr)&&qr==result,
             "reliable PvP attacker receipt missing");

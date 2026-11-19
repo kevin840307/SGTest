@@ -1251,6 +1251,127 @@ public sealed class IdentityTlsAuthorization
                 finally { gameplayGate.Release(); }
             }
 
+            var pvpAttackGate=new PvpAttackSequenceGate();
+
+            async Task PvpAttackHandler(TrustedPvpAttack request)
+            {
+                var binding=new ConnectionBinding(
+                    request.ActorId,request.ConnectionEpoch,request.RequestMapEpoch);
+                await gameplayGate.WaitAsync().ConfigureAwait(false);
+                try
+                {
+                    if(!router.IsCurrentBinding(binding))return;
+                    var decision=pvpAttackGate.Inspect(request);
+                    if(decision==PvpAttackSequenceDecision.ExactReplay)
+                    {
+                        var replay=router.QueuePvpAttackResult(request,pvpAttackGate.LastReceipt);
+                        if(replay!=GatewaySendStatus.Enqueued)
+                            throw new IOException("Reliable PvP attack replay could not be queued: "+replay);
+                        return;
+                    }
+                    if(decision==PvpAttackSequenceDecision.Stale)
+                    {
+                        var stale=new PvpAttackResultWire(
+                            request.RequestMapEpoch,request.AttackSequence,
+                            PvpAttackStatus.StaleSequence,0,request.TargetActorId,0,false);
+                        var sent=router.QueuePvpAttackResult(request,stale);
+                        if(sent!=GatewaySendStatus.Enqueued)
+                            throw new IOException("Reliable stale PvP attack result could not be queued: "+sent);
+                        return;
+                    }
+
+                    PvpAttackResultWire result;
+                    if(request.Profile is not { } profile||_combat is null)
+                    {
+                        result=new(request.RequestMapEpoch,request.AttackSequence,
+                            PvpAttackStatus.CombatUnavailable,0,request.TargetActorId,0,false);
+                    }
+                    else
+                    {
+                        var geometry=await _world.TrustedGetPvpAttackGeometryAsync(
+                            request.ActorId,request.ConnectionEpoch,request.RequestMapEpoch,
+                            request.TargetActorId,profile.AttackRange).ConfigureAwait(false);
+                        PvpAttackStatus? rejected=geometry.Status switch
+                        {
+                            PvpAttackGeometryStatus.Ready=>null,
+                            PvpAttackGeometryStatus.StaleGeneration=>PvpAttackStatus.StaleGeneration,
+                            PvpAttackGeometryStatus.SelfTarget=>PvpAttackStatus.SelfTarget,
+                            PvpAttackGeometryStatus.NonPvpMap=>PvpAttackStatus.NonPvpMap,
+                            PvpAttackGeometryStatus.AttackerDead=>PvpAttackStatus.AttackerDead,
+                            PvpAttackGeometryStatus.TargetDead=>PvpAttackStatus.TargetDead,
+                            PvpAttackGeometryStatus.TooFar=>PvpAttackStatus.TooFar,
+                            PvpAttackGeometryStatus.Blocked=>PvpAttackStatus.Blocked,
+                            _=>PvpAttackStatus.TargetMissing
+                        };
+                        if(rejected is not null)
+                            result=new(request.RequestMapEpoch,request.AttackSequence,
+                                rejected.Value,geometry.ServerTick,request.TargetActorId,0,false);
+                        else
+                        {
+                            var now=DateTimeOffset.UtcNow;
+                            var attackerState=await _identity.GetCharacterPvpStateAsync(
+                                request.ActorId).ConfigureAwait(false);
+                            var targetState=await _identity.GetCharacterPvpStateAsync(
+                                request.TargetActorId).ConfigureAwait(false);
+                            if(!PvpCrimePolicy.IsCombatEligible(attackerState,now))
+                                result=new(request.RequestMapEpoch,request.AttackSequence,
+                                    PvpAttackStatus.AttackerProtected,geometry.ServerTick,
+                                    request.TargetActorId,0,false);
+                            else if(!PvpCrimePolicy.IsCombatEligible(targetState,now))
+                                result=new(request.RequestMapEpoch,request.AttackSequence,
+                                    PvpAttackStatus.TargetProtected,geometry.ServerTick,
+                                    request.TargetActorId,0,false);
+                            else if(_combat.CurrentHp(geometry.Attacker)<=0)
+                                result=new(request.RequestMapEpoch,request.AttackSequence,
+                                    PvpAttackStatus.AttackerDead,geometry.ServerTick,
+                                    request.TargetActorId,0,false);
+                            else if(_combat.CurrentHp(geometry.Target)<=0)
+                                result=new(request.RequestMapEpoch,request.AttackSequence,
+                                    PvpAttackStatus.TargetDead,geometry.ServerTick,
+                                    request.TargetActorId,0,false);
+                            else if(!pvpAttackGate.CanApplyAt(
+                                geometry.ServerTick,profile.AttackCooldownTicks))
+                                result=new(request.RequestMapEpoch,request.AttackSequence,
+                                    PvpAttackStatus.Cooldown,geometry.ServerTick,
+                                    request.TargetActorId,0,false);
+                            else
+                            {
+                                bool normalWhite=PvpCrimePolicy.IsNormalWhite(targetState,now);
+                                var posted=_combat.TryPostPvpHit(
+                                    geometry.Target,geometry.Attacker,request.AttackSequence,
+                                    profile.Attack,geometry.ServerTick,normalWhite,out var completion);
+                                if(posted==CombatPostStatus.Backpressured)
+                                    result=new(request.RequestMapEpoch,request.AttackSequence,
+                                        PvpAttackStatus.Backpressured,geometry.ServerTick,
+                                        request.TargetActorId,0,false);
+                                else if(posted!=CombatPostStatus.Accepted||completion is null)
+                                    result=new(request.RequestMapEpoch,request.AttackSequence,
+                                        PvpAttackStatus.CombatUnavailable,geometry.ServerTick,
+                                        request.TargetActorId,0,false);
+                                else
+                                {
+                                    var settled=await completion.WaitAsync(
+                                        TimeSpan.FromSeconds(10)).ConfigureAwait(false);
+                                    result=new(request.RequestMapEpoch,request.AttackSequence,
+                                        PvpAttackStatus.Applied,settled.ServerTick,
+                                        request.TargetActorId,settled.Damage,settled.Died);
+                                    pvpAttackGate.Record(request,result,true);
+                                    var sent=router.QueuePvpAttackResult(request,result);
+                                    if(sent!=GatewaySendStatus.Enqueued)
+                                        throw new IOException("Reliable applied PvP attack result could not be queued: "+sent);
+                                    return;
+                                }
+                            }
+                        }
+                    }
+                    pvpAttackGate.Record(request,result,false);
+                    var queued=router.QueuePvpAttackResult(request,result);
+                    if(queued!=GatewaySendStatus.Enqueued)
+                        throw new IOException("Reliable PvP attack result could not be queued: "+queued);
+                }
+                finally { gameplayGate.Release(); }
+            }
+
             async Task TradeHandler(TrustedTradeCommand request)
             {
                 if(_trades is null)return;
@@ -1318,7 +1439,8 @@ public sealed class IdentityTlsAuthorization
                 handleRepair:RepairHandler,
                 handleTrade:tradeHandler,
                 handleQuest:QuestHandler,
-                handlePvp:PvpModeHandler).ConfigureAwait(false);
+                handlePvp:PvpModeHandler,
+                handlePvpAttack:PvpAttackHandler).ConfigureAwait(false);
         }
         finally
         {
