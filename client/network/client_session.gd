@@ -202,7 +202,7 @@ func withdraw_storage_item(item_uid: int) -> bool:
 
 func open_bank(npc_spawn_id: int) -> bool:
 	var current := snapshot()
-	if npc_spawn_id <= 0 or int(current.get("state",-1)) != WorldState.STATE_IN_WORLD or bool(current.get("player_dead",false)) or not bool(current.get("world_ready",false)) or bool(current.get("resync_pending",false)) or bool(current.get("waiting_for_new_map",false)) or int(current.get("pending_bank_sequence",0)) != 0:
+	if npc_spawn_id <= 0 or int(current.get("state",-1)) != WorldState.STATE_IN_WORLD or bool(current.get("player_dead",false)) or not bool(current.get("world_ready",false)) or bool(current.get("resync_pending",false)) or bool(current.get("waiting_for_new_map",false)) or int(current.get("pending_bank_sequence",0)) != 0 or int(current.get("pending_repair_sequence",0)) != 0:
 		return false
 	return _queue_intent({"type":"bank_open","npc_spawn_id":npc_spawn_id,
 		"actor_id":int(current.get("actor_id",0)),"map_epoch":int(current.get("map_epoch",0))})
@@ -211,7 +211,7 @@ func open_bank(npc_spawn_id: int) -> bool:
 func deposit_bank_money(amount: int) -> bool:
 	var current := snapshot()
 	var npc := int(current.get("active_bank_npc",0))
-	if npc <= 0 or amount <= 0 or amount > WireCodec.MAX_MONEY or int(current.get("bank_scope",0)) not in [1,2] or int(current.get("pending_bank_sequence",0)) != 0:
+	if npc <= 0 or amount <= 0 or amount > WireCodec.MAX_MONEY or int(current.get("bank_scope",0)) not in [1,2] or int(current.get("pending_bank_sequence",0)) != 0 or int(current.get("pending_repair_sequence",0)) != 0:
 		return false
 	return _queue_intent({"type":"bank_deposit","npc_spawn_id":npc,"amount":amount,
 		"actor_id":int(current.get("actor_id",0)),"map_epoch":int(current.get("map_epoch",0))})
@@ -220,9 +220,27 @@ func deposit_bank_money(amount: int) -> bool:
 func withdraw_bank_money(amount: int) -> bool:
 	var current := snapshot()
 	var npc := int(current.get("active_bank_npc",0))
-	if npc <= 0 or amount <= 0 or amount > WireCodec.MAX_MONEY or int(current.get("bank_scope",0)) not in [1,2] or int(current.get("pending_bank_sequence",0)) != 0:
+	if npc <= 0 or amount <= 0 or amount > WireCodec.MAX_MONEY or int(current.get("bank_scope",0)) not in [1,2] or int(current.get("pending_bank_sequence",0)) != 0 or int(current.get("pending_repair_sequence",0)) != 0:
 		return false
 	return _queue_intent({"type":"bank_withdraw","npc_spawn_id":npc,"amount":amount,
+		"actor_id":int(current.get("actor_id",0)),"map_epoch":int(current.get("map_epoch",0))})
+
+
+func open_repair(npc_spawn_id: int) -> bool:
+	var current := snapshot()
+	if npc_spawn_id <= 0 or int(current.get("state",-1)) != WorldState.STATE_IN_WORLD or bool(current.get("player_dead",false)) or not bool(current.get("world_ready",false)) or not bool(current.get("inventory_ready",false)) or bool(current.get("resync_pending",false)) or bool(current.get("waiting_for_new_map",false)) or int(current.get("pending_repair_sequence",0)) != 0:
+		return false
+	return _queue_intent({"type":"repair_open","npc_spawn_id":npc_spawn_id,
+		"actor_id":int(current.get("actor_id",0)),"map_epoch":int(current.get("map_epoch",0))})
+
+
+func repair_item(item_uid: int) -> bool:
+	var current := snapshot()
+	var npc := int(current.get("active_repair_npc",0))
+	var items: Dictionary = current.get("repair_items",{})
+	if npc <= 0 or item_uid <= 0 or not bool(current.get("repair_ready",false)) or not items.has(item_uid) or int(current.get("pending_repair_sequence",0)) != 0:
+		return false
+	return _queue_intent({"type":"repair_item","npc_spawn_id":npc,"item_uid":item_uid,
 		"actor_id":int(current.get("actor_id",0)),"map_epoch":int(current.get("map_epoch",0))})
 
 
@@ -329,45 +347,52 @@ func _queue_intent(intent: Dictionary) -> bool:
 				accepted = false
 				break
 	if accepted and kind == "use_recovery_item":
-		if int(_published.get("pending_shop_sequence",0)) != 0 or int(_published.get("pending_storage_sequence",0)) != 0 or int(_published.get("pending_equipment_sequence",0)) != 0 or int(_published.get("pending_bank_sequence",0)) != 0:
+		if int(_published.get("pending_shop_sequence",0)) != 0 or int(_published.get("pending_storage_sequence",0)) != 0 or int(_published.get("pending_equipment_sequence",0)) != 0 or int(_published.get("pending_bank_sequence",0)) != 0 or int(_published.get("pending_repair_sequence",0)) != 0:
 			accepted = false
 		for queued in _intents:
-			if str(queued.get("type","")) in ["use_recovery_item","discard_inventory_item","shop_buy","shop_sell","storage_deposit","storage_withdraw","equipment_equip","equipment_unequip","bank_deposit","bank_withdraw"]:
+			if str(queued.get("type","")) in ["use_recovery_item","discard_inventory_item","shop_buy","shop_sell","storage_deposit","storage_withdraw","equipment_equip","equipment_unequip","bank_deposit","bank_withdraw","repair_open","repair_item"]:
 				accepted = false
 				break
 	if accepted and kind == "discard_inventory_item":
-		if int(_published.get("pending_shop_sequence",0)) != 0 or int(_published.get("pending_storage_sequence",0)) != 0 or int(_published.get("pending_equipment_sequence",0)) != 0 or int(_published.get("pending_bank_sequence",0)) != 0:
+		if int(_published.get("pending_shop_sequence",0)) != 0 or int(_published.get("pending_storage_sequence",0)) != 0 or int(_published.get("pending_equipment_sequence",0)) != 0 or int(_published.get("pending_bank_sequence",0)) != 0 or int(_published.get("pending_repair_sequence",0)) != 0:
 			accepted = false
 		for queued in _intents:
-			if str(queued.get("type","")) in ["discard_inventory_item","use_recovery_item","shop_buy","shop_sell","storage_deposit","storage_withdraw","equipment_equip","equipment_unequip","bank_deposit","bank_withdraw"]:
+			if str(queued.get("type","")) in ["discard_inventory_item","use_recovery_item","shop_buy","shop_sell","storage_deposit","storage_withdraw","equipment_equip","equipment_unequip","bank_deposit","bank_withdraw","repair_open","repair_item"]:
 				accepted = false
 				break
 	if accepted and kind in ["shop_open","shop_buy","shop_sell"]:
-		if int(_published.get("pending_shop_sequence",0)) != 0 or int(_published.get("pending_storage_sequence",0)) != 0 or int(_published.get("pending_equipment_sequence",0)) != 0 or int(_published.get("pending_bank_sequence",0)) != 0:
+		if int(_published.get("pending_shop_sequence",0)) != 0 or int(_published.get("pending_storage_sequence",0)) != 0 or int(_published.get("pending_equipment_sequence",0)) != 0 or int(_published.get("pending_bank_sequence",0)) != 0 or int(_published.get("pending_repair_sequence",0)) != 0:
 			accepted = false
 		for queued in _intents:
-			if str(queued.get("type","")) in ["shop_open","shop_buy","shop_sell","use_recovery_item","discard_inventory_item","storage_open","storage_deposit","storage_withdraw","equipment_equip","equipment_unequip","bank_open","bank_deposit","bank_withdraw"]:
+			if str(queued.get("type","")) in ["shop_open","shop_buy","shop_sell","use_recovery_item","discard_inventory_item","storage_open","storage_deposit","storage_withdraw","equipment_equip","equipment_unequip","bank_open","bank_deposit","bank_withdraw","repair_open","repair_item"]:
 				accepted = false
 				break
 	if accepted and kind in ["storage_open","storage_deposit","storage_withdraw"]:
-		if int(_published.get("pending_storage_sequence",0)) != 0 or int(_published.get("pending_shop_sequence",0)) != 0 or int(_published.get("pending_bank_sequence",0)) != 0:
+		if int(_published.get("pending_storage_sequence",0)) != 0 or int(_published.get("pending_shop_sequence",0)) != 0 or int(_published.get("pending_bank_sequence",0)) != 0 or int(_published.get("pending_repair_sequence",0)) != 0:
 			accepted = false
 		for queued in _intents:
-			if str(queued.get("type","")) in ["storage_open","storage_deposit","storage_withdraw","shop_open","shop_buy","shop_sell","use_recovery_item","discard_inventory_item","equipment_equip","equipment_unequip","bank_open","bank_deposit","bank_withdraw"]:
+			if str(queued.get("type","")) in ["storage_open","storage_deposit","storage_withdraw","shop_open","shop_buy","shop_sell","use_recovery_item","discard_inventory_item","equipment_equip","equipment_unequip","bank_open","bank_deposit","bank_withdraw","repair_open","repair_item"]:
 				accepted = false
 				break
 	if accepted and kind in ["equipment_equip","equipment_unequip"]:
-		if int(_published.get("pending_equipment_sequence",0)) != 0 or int(_published.get("pending_shop_sequence",0)) != 0 or int(_published.get("pending_storage_sequence",0)) != 0 or int(_published.get("pending_bank_sequence",0)) != 0 or int(_published.get("pending_recovery_sequence",0)) != 0 or int(_published.get("pending_discard_sequence",0)) != 0:
+		if int(_published.get("pending_equipment_sequence",0)) != 0 or int(_published.get("pending_shop_sequence",0)) != 0 or int(_published.get("pending_storage_sequence",0)) != 0 or int(_published.get("pending_bank_sequence",0)) != 0 or int(_published.get("pending_repair_sequence",0)) != 0 or int(_published.get("pending_recovery_sequence",0)) != 0 or int(_published.get("pending_discard_sequence",0)) != 0:
 			accepted = false
 		for queued in _intents:
-			if str(queued.get("type","")) in ["equipment_equip","equipment_unequip","shop_open","shop_buy","shop_sell","storage_open","storage_deposit","storage_withdraw","use_recovery_item","discard_inventory_item","bank_open","bank_deposit","bank_withdraw"]:
+			if str(queued.get("type","")) in ["equipment_equip","equipment_unequip","shop_open","shop_buy","shop_sell","storage_open","storage_deposit","storage_withdraw","use_recovery_item","discard_inventory_item","bank_open","bank_deposit","bank_withdraw","repair_open","repair_item"]:
 				accepted = false
 				break
 	if accepted and kind in ["bank_open","bank_deposit","bank_withdraw"]:
-		if int(_published.get("pending_bank_sequence",0)) != 0 or int(_published.get("pending_shop_sequence",0)) != 0 or int(_published.get("pending_storage_sequence",0)) != 0 or int(_published.get("pending_equipment_sequence",0)) != 0 or int(_published.get("pending_recovery_sequence",0)) != 0 or int(_published.get("pending_discard_sequence",0)) != 0:
+		if int(_published.get("pending_bank_sequence",0)) != 0 or int(_published.get("pending_repair_sequence",0)) != 0 or int(_published.get("pending_shop_sequence",0)) != 0 or int(_published.get("pending_storage_sequence",0)) != 0 or int(_published.get("pending_equipment_sequence",0)) != 0 or int(_published.get("pending_recovery_sequence",0)) != 0 or int(_published.get("pending_discard_sequence",0)) != 0:
 			accepted = false
 		for queued in _intents:
-			if str(queued.get("type","")) in ["bank_open","bank_deposit","bank_withdraw","shop_open","shop_buy","shop_sell","storage_open","storage_deposit","storage_withdraw","equipment_equip","equipment_unequip","use_recovery_item","discard_inventory_item"]:
+			if str(queued.get("type","")) in ["bank_open","bank_deposit","bank_withdraw","shop_open","shop_buy","shop_sell","storage_open","storage_deposit","storage_withdraw","equipment_equip","equipment_unequip","use_recovery_item","discard_inventory_item","repair_open","repair_item"]:
+				accepted = false
+				break
+	if accepted and kind in ["repair_open","repair_item"]:
+		if int(_published.get("pending_repair_sequence",0)) != 0 or int(_published.get("pending_bank_sequence",0)) != 0 or int(_published.get("pending_shop_sequence",0)) != 0 or int(_published.get("pending_storage_sequence",0)) != 0 or int(_published.get("pending_equipment_sequence",0)) != 0 or int(_published.get("pending_recovery_sequence",0)) != 0 or int(_published.get("pending_discard_sequence",0)) != 0:
+			accepted = false
+		for queued in _intents:
+			if str(queued.get("type","")) in ["repair_open","repair_item","bank_open","bank_deposit","bank_withdraw","shop_open","shop_buy","shop_sell","storage_open","storage_deposit","storage_withdraw","equipment_equip","equipment_unequip","use_recovery_item","discard_inventory_item"]:
 				accepted = false
 				break
 	if accepted and kind == "cast_skill":
@@ -592,12 +617,36 @@ func _process_first_intent() -> void:
 			_pop_intent()
 			_publish()
 
+	elif kind in ["repair_open","repair_item"]:
+		var current: Dictionary = _world.snapshot()
+		if int(intent.get("actor_id",0)) != int(current.get("actor_id",0)) or int(intent.get("map_epoch",0)) != int(current.get("map_epoch",0)):
+			_pop_intent()
+			return
+		if int(current.state) != WorldState.STATE_IN_WORLD or bool(current.get("player_dead",false)) or not bool(current.get("world_ready",false)) or not bool(current.get("inventory_ready",false)) or bool(current.get("resync_pending",false)) or bool(current.get("waiting_for_new_map",false)) or int(current.get("pending_world_ready_ack_epoch",0)) != 0 or int(current.get("last_world_ready_ack_epoch",0)) != int(current.get("map_epoch",0)) or int(current.get("pending_repair_sequence",0)) != 0 or int(current.get("pending_bank_sequence",0)) != 0 or int(current.get("pending_shop_sequence",0)) != 0 or int(current.get("pending_storage_sequence",0)) != 0 or int(current.get("pending_equipment_sequence",0)) != 0 or int(current.get("pending_recovery_sequence",0)) != 0 or int(current.get("pending_discard_sequence",0)) != 0:
+			return
+		var sequence := int(current.get("repair_sequence",0))+1
+		var npc := int(intent.get("npc_spawn_id",0))
+		var uid := int(intent.get("item_uid",0))
+		var frame := PackedByteArray()
+		var repair_kind := 0
+		if kind == "repair_open":
+			repair_kind = 1
+			frame = WireCodec.encode_repair_open(int(current.map_epoch),sequence,npc)
+		else:
+			repair_kind = 2
+			if not bool(current.get("repair_ready",false)) or int(current.get("active_repair_npc",0)) != npc or not (current.get("repair_items",{}) as Dictionary).has(uid):
+				_pop_intent()
+				return
+			frame = WireCodec.encode_repair_item(int(current.map_epoch),sequence,npc,uid)
+		if not frame.is_empty() and _transport.send_frame(frame) and _world.mark_repair_sent(sequence,repair_kind,npc,uid):
+			_pop_intent()
+			_publish()
 	elif kind in ["bank_open","bank_deposit","bank_withdraw"]:
 		var current: Dictionary = _world.snapshot()
 		if int(intent.get("actor_id",0)) != int(current.get("actor_id",0)) or int(intent.get("map_epoch",0)) != int(current.get("map_epoch",0)):
 			_pop_intent()
 			return
-		if int(current.state) != WorldState.STATE_IN_WORLD or bool(current.get("player_dead",false)) or not bool(current.get("world_ready",false)) or bool(current.get("resync_pending",false)) or bool(current.get("waiting_for_new_map",false)) or int(current.get("pending_world_ready_ack_epoch",0)) != 0 or int(current.get("last_world_ready_ack_epoch",0)) != int(current.get("map_epoch",0)) or int(current.get("pending_bank_sequence",0)) != 0 or int(current.get("pending_shop_sequence",0)) != 0 or int(current.get("pending_storage_sequence",0)) != 0 or int(current.get("pending_equipment_sequence",0)) != 0 or int(current.get("pending_recovery_sequence",0)) != 0 or int(current.get("pending_discard_sequence",0)) != 0:
+		if int(current.state) != WorldState.STATE_IN_WORLD or bool(current.get("player_dead",false)) or not bool(current.get("world_ready",false)) or bool(current.get("resync_pending",false)) or bool(current.get("waiting_for_new_map",false)) or int(current.get("pending_world_ready_ack_epoch",0)) != 0 or int(current.get("last_world_ready_ack_epoch",0)) != int(current.get("map_epoch",0)) or int(current.get("pending_bank_sequence",0)) != 0 or int(current.get("pending_repair_sequence",0)) != 0 or int(current.get("pending_shop_sequence",0)) != 0 or int(current.get("pending_storage_sequence",0)) != 0 or int(current.get("pending_equipment_sequence",0)) != 0 or int(current.get("pending_recovery_sequence",0)) != 0 or int(current.get("pending_discard_sequence",0)) != 0:
 			return
 		var sequence := int(current.get("bank_sequence",0))+1
 		var npc := int(intent.get("npc_spawn_id",0))
@@ -682,7 +731,7 @@ func _process_first_intent() -> void:
 			_publish()
 	elif kind == "use_recovery_item":
 		var current: Dictionary = _world.snapshot()
-		if int(current.state) != WorldState.STATE_IN_WORLD or not bool(current.combat_available) or bool(current.player_dead) or not bool(current.inventory_ready) or not bool(current.world_ready) or bool(current.resync_pending) or bool(current.waiting_for_new_map) or int(current.pending_world_ready_ack_epoch) != 0 or int(current.last_world_ready_ack_epoch) != int(current.map_epoch) or int(current.pending_recovery_sequence) != 0 or int(current.pending_discard_sequence) != 0 or int(current.get("pending_shop_sequence",0)) != 0 or int(current.get("pending_storage_sequence",0)) != 0 or int(current.get("pending_equipment_sequence",0)) != 0 or int(current.get("pending_bank_sequence",0)) != 0:
+		if int(current.state) != WorldState.STATE_IN_WORLD or not bool(current.combat_available) or bool(current.player_dead) or not bool(current.inventory_ready) or not bool(current.world_ready) or bool(current.resync_pending) or bool(current.waiting_for_new_map) or int(current.pending_world_ready_ack_epoch) != 0 or int(current.last_world_ready_ack_epoch) != int(current.map_epoch) or int(current.pending_recovery_sequence) != 0 or int(current.pending_discard_sequence) != 0 or int(current.get("pending_shop_sequence",0)) != 0 or int(current.get("pending_storage_sequence",0)) != 0 or int(current.get("pending_equipment_sequence",0)) != 0 or int(current.get("pending_bank_sequence",0)) != 0 or int(current.get("pending_repair_sequence",0)) != 0:
 			return
 		var uid := int(intent.item_uid)
 		if not (current.inventory_items as Dictionary).has(uid):
@@ -695,7 +744,7 @@ func _process_first_intent() -> void:
 			_publish()
 	elif kind == "discard_inventory_item":
 		var current: Dictionary = _world.snapshot()
-		if int(current.state) != WorldState.STATE_IN_WORLD or not bool(current.inventory_ready) or not bool(current.world_ready) or bool(current.resync_pending) or bool(current.waiting_for_new_map) or int(current.pending_world_ready_ack_epoch) != 0 or int(current.last_world_ready_ack_epoch) != int(current.map_epoch) or int(current.pending_discard_sequence) != 0 or int(current.pending_recovery_sequence) != 0 or int(current.get("pending_shop_sequence",0)) != 0 or int(current.get("pending_storage_sequence",0)) != 0 or int(current.get("pending_equipment_sequence",0)) != 0 or int(current.get("pending_bank_sequence",0)) != 0:
+		if int(current.state) != WorldState.STATE_IN_WORLD or not bool(current.inventory_ready) or not bool(current.world_ready) or bool(current.resync_pending) or bool(current.waiting_for_new_map) or int(current.pending_world_ready_ack_epoch) != 0 or int(current.last_world_ready_ack_epoch) != int(current.map_epoch) or int(current.pending_discard_sequence) != 0 or int(current.pending_recovery_sequence) != 0 or int(current.get("pending_shop_sequence",0)) != 0 or int(current.get("pending_storage_sequence",0)) != 0 or int(current.get("pending_equipment_sequence",0)) != 0 or int(current.get("pending_bank_sequence",0)) != 0 or int(current.get("pending_repair_sequence",0)) != 0:
 			return
 		var uid := int(intent.item_uid)
 		var quantity := int(intent.quantity)
