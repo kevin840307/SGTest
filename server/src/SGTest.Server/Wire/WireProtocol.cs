@@ -3039,6 +3039,8 @@ public static class WireProtocol
             65 => WireOpcode.BankTransactionResult,
             66 => WireOpcode.RepairOpen, 67 => WireOpcode.RepairSnapshot,
             68 => WireOpcode.RepairItem, 69 => WireOpcode.RepairResult,
+            70 => WireOpcode.TradeCommand, 71 => WireOpcode.TradeSnapshot,
+            72 => WireOpcode.TradeTerminal,
             _ => 0
         };
         if (opcode == 0) return false;
@@ -3119,6 +3121,12 @@ public static class WireProtocol
                 (advertised-RepairSnapshotHeaderBytes)%RepairPreviewItemBytes==0,
             WireOpcode.RepairItem => advertised == RepairItemFrameBytes,
             WireOpcode.RepairResult => advertised == RepairResultFrameBytes,
+            WireOpcode.TradeCommand => advertised == TradeCommandFrameBytes,
+            WireOpcode.TradeSnapshot => advertised >= TradeSnapshotHeaderBytes &&
+                advertised <= TradeSnapshotHeaderBytes +
+                    2*TradeMaxItemsPerSide*TradeOfferItemBytes &&
+                (advertised-TradeSnapshotHeaderBytes)%TradeOfferItemBytes==0,
+            WireOpcode.TradeTerminal => advertised == TradeTerminalFrameBytes,
             WireOpcode.InventorySnapshot => advertised >= InventorySnapshotHeaderBytes &&
                 advertised <= InventorySnapshotHeaderBytes +
                     InventorySnapshotMaxItemsPerFrame*InventoryItemBytes &&
