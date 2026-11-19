@@ -77,7 +77,9 @@ public enum WireOpcode : ushort
     TradeTerminal = 72,
     QuestOpen = 73,
     QuestView = 74,
-    QuestChoose = 75
+    QuestChoose = 75,
+    PvpModeCommand = 76,
+    PvpModeResult = 77
 }
 
 public enum TradeCommandAction : byte
@@ -150,6 +152,9 @@ public enum RepairOpenStatus : byte
     TooFar = 3,
     PlayerDead = 4
 }
+
+public enum PvpModeCommandAction : byte { Query = 0, SetBlue = 1, SetWhite = 2 }
+public enum PvpModeResultStatus : byte { Ready = 0, Applied = 1, Unchanged = 2, NonPvpMap = 3, StaleGeneration = 4, PlayerDead = 5 }
 
 public enum QuestViewWireStatus : byte
 {
@@ -356,6 +361,9 @@ public readonly record struct TradeTerminalWire(
     long MapEpoch,long TradeId,uint Revision,TradeTerminalStatus Status,
     long WalletMoney);
 
+public readonly record struct PvpModeCommandWire(long MapEpoch,uint PvpSequence,PvpModeCommandAction Action);
+public readonly record struct PvpModeResultWire(long MapEpoch,uint PvpSequence,PvpModeResultStatus Status,PvpMode Mode,bool MapAllowsPlayerPvp);
+
 public readonly record struct QuestOpenWire(
     long MapEpoch,uint QuestSequence,int NpcSpawnId);
 public readonly record struct QuestChooseWire(
@@ -464,6 +472,8 @@ public static class WireProtocol
     public const int RepairItemFrameBytes = HeaderBytes + 8 + 4 + 4 + 8;
     public const int RepairResultFrameBytes =
         HeaderBytes + 8 + 4 + 1 + 4 + 8 + 4 + 1 + 4 + 4 + 8 + 8;
+    public const int PvpModeCommandFrameBytes = HeaderBytes + 8 + 4 + 1;
+    public const int PvpModeResultFrameBytes = HeaderBytes + 8 + 4 + 1 + 1 + 1;
     public const int QuestOpenFrameBytes = HeaderBytes + 8 + 4 + 4;
     public const int QuestChooseFrameBytes = HeaderBytes + 8 + 4 + 4 + 4 + 4;
     public const int QuestViewHeaderBytes =
