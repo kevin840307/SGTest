@@ -11,8 +11,8 @@ using SGTest.Server.World;
 
 internal static class Program
 {
-    private const string Username = "fixture_user";
-    private const string Password = "Fixture-Password-123!";
+    internal const string Username = "fixture_user";
+    internal const string Password = "Fixture-Password-123!";
 
     public static async Task<int> Main(string[] args)
     {
@@ -38,6 +38,8 @@ internal static class Program
             return await RunDiscardAsync().ConfigureAwait(false);
         if (args is ["--storage"])
             return await RunStorageAsync().ConfigureAwait(false);
+        if (args is ["--equipment"])
+            return await EquipmentLoginFixture.RunAsync().ConfigureAwait(false);
         if (args is ["--checkpoint-crash-producer", var producerDb])
             return await RunCheckpointCrashProducerAsync(producerDb).ConfigureAwait(false);
         if (args is ["--checkpoint-crash-verify", var verifyDb])
@@ -1548,7 +1550,7 @@ internal static class Program
         return file;
     }
 
-    private static string CreateMap(string root, int mapId)
+    internal static string CreateMap(string root, int mapId)
     {
         string directory = Path.Combine(root, "map_" + mapId);
         Directory.CreateDirectory(directory);
@@ -1569,13 +1571,13 @@ internal static class Program
         return directory;
     }
 
-    private static void WriteCertificatePem(string path, X509Certificate2 certificate)
+    internal static void WriteCertificatePem(string path, X509Certificate2 certificate)
     {
         string b64 = Convert.ToBase64String(certificate.RawData, Base64FormattingOptions.InsertLineBreaks);
         File.WriteAllText(path, "-----BEGIN CERTIFICATE-----\n" + b64 + "\n-----END CERTIFICATE-----\n");
     }
 
-    private static X509Certificate2 CreateCertificate()
+    internal static X509Certificate2 CreateCertificate()
     {
         using var key = RSA.Create(2048);
         var request = new CertificateRequest("CN=localhost", key, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
