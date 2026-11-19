@@ -77,7 +77,7 @@ public sealed record CharacterCreateResult(CharacterCreateStatus Status, Charact
 /// </summary>
 public sealed partial class SqliteIdentityStore : IDisposable
 {
-    public const int SchemaVersion = 15;
+    public const int SchemaVersion = 16;
     private readonly string _connectionString;
     private readonly IdentityStoreOptions _options;
     private readonly PasswordHasher _passwords;
@@ -646,6 +646,15 @@ CREATE TABLE IF NOT EXISTS quest_actions (
             Execute(connection, @"
 CREATE INDEX IF NOT EXISTS ix_quest_progress_character
 ON quest_progress(character_id,quest_id);", tx);
+            // Schema v16: persistent player PvP opt-in mode. This stores only
+            // protected-blue vs enabled-white preference. Pink/red crime timing
+            // is deliberately not invented until the original rule is verified.
+            Execute(connection, @"
+CREATE TABLE IF NOT EXISTS character_pvp_modes (
+    character_id INTEGER PRIMARY KEY REFERENCES characters(character_id) ON DELETE CASCADE,
+    mode INTEGER NOT NULL DEFAULT 0 CHECK(mode IN (0,1)),
+    updated_unix_ms INTEGER NOT NULL
+);", tx);
             Execute(connection, @"
 CREATE TRIGGER IF NOT EXISTS trg_combat_mp_insert
 BEFORE INSERT ON character_combat_profiles
