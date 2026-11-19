@@ -226,6 +226,72 @@ func withdraw_bank_money(amount: int) -> bool:
 		"actor_id":int(current.get("actor_id",0)),"map_epoch":int(current.get("map_epoch",0))})
 
 
+func request_trade(target_actor_id: int) -> bool:
+	var current := snapshot()
+	if target_actor_id <= 0 or target_actor_id == int(current.get("actor_id",0)) or int(current.get("trade_id",0)) != 0:
+		return false
+	return _queue_trade_intent(1,0,target_actor_id,0,0,current)
+
+
+func accept_trade() -> bool:
+	return _queue_current_trade_action(2)
+
+
+func reject_trade() -> bool:
+	return _queue_current_trade_action(3)
+
+
+func trade_add_item(item_uid: int) -> bool:
+	var current := snapshot()
+	var inventory: Dictionary = current.get("inventory_items",{})
+	if item_uid <= 0 or not inventory.has(item_uid):
+		return false
+	return _queue_trade_intent(4,int(current.get("trade_id",0)),0,item_uid,0,current)
+
+
+func trade_remove_item(item_uid: int) -> bool:
+	var current := snapshot()
+	var offered: Dictionary = current.get("trade_my_items",{})
+	if item_uid <= 0 or not offered.has(item_uid):
+		return false
+	return _queue_trade_intent(5,int(current.get("trade_id",0)),0,item_uid,0,current)
+
+
+func trade_set_money(money: int) -> bool:
+	var current := snapshot()
+	if money < 0 or money > WireCodec.MAX_MONEY:
+		return false
+	return _queue_trade_intent(6,int(current.get("trade_id",0)),0,0,money,current)
+
+
+func trade_lock() -> bool:
+	return _queue_current_trade_action(7)
+
+
+func trade_final_confirm() -> bool:
+	return _queue_current_trade_action(8)
+
+
+func cancel_trade() -> bool:
+	return _queue_current_trade_action(9)
+
+
+func _queue_current_trade_action(action: int) -> bool:
+	var current := snapshot()
+	return _queue_trade_intent(action,int(current.get("trade_id",0)),0,0,0,current)
+
+
+func _queue_trade_intent(action: int, trade_id: int,target_actor_id: int,
+		item_uid: int,money: int,current: Dictionary) -> bool:
+	if int(current.get("state",-1)) != WorldState.STATE_IN_WORLD or bool(current.get("player_dead",false)) or not bool(current.get("world_ready",false)) or not bool(current.get("inventory_ready",false)) or bool(current.get("resync_pending",false)) or bool(current.get("waiting_for_new_map",false)) or int(current.get("pending_world_ready_ack_epoch",0)) != 0 or int(current.get("last_world_ready_ack_epoch",0)) != int(current.get("map_epoch",0)):
+		return false
+	return _queue_intent({"type":"trade","action":action,
+		"trade_id":trade_id,"target_actor_id":target_actor_id,
+		"item_uid":item_uid,"money":money,
+		"actor_id":int(current.get("actor_id",0)),
+		"map_epoch":int(current.get("map_epoch",0))})
+
+
 func open_repair(npc_spawn_id: int) -> bool:
 	var current := snapshot()
 	if npc_spawn_id <= 0 or int(current.get("state",-1)) != WorldState.STATE_IN_WORLD or bool(current.get("player_dead",false)) or not bool(current.get("world_ready",false)) or not bool(current.get("inventory_ready",false)) or bool(current.get("resync_pending",false)) or bool(current.get("waiting_for_new_map",false)) or int(current.get("pending_repair_sequence",0)) != 0:
