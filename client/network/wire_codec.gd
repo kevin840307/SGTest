@@ -1050,6 +1050,49 @@ static func decode_storage_transfer_result(frame: PackedByteArray) -> Dictionary
 		"drop_id":source_drop_id}
 
 
+static func encode_equipment_equip(epoch: int, sequence: int, item_uid: int) -> PackedByteArray:
+	return _encode_equipment_move(OPCODE_EQUIPMENT_EQUIP,epoch,sequence,item_uid)
+
+
+static func encode_equipment_unequip(epoch: int, sequence: int, item_uid: int) -> PackedByteArray:
+	return _encode_equipment_move(OPCODE_EQUIPMENT_UNEQUIP,epoch,sequence,item_uid)
+
+
+static func _encode_equipment_move(opcode: int, epoch: int, sequence: int, item_uid: int) -> PackedByteArray:
+	if opcode not in [OPCODE_EQUIPMENT_EQUIP,OPCODE_EQUIPMENT_UNEQUIP] or epoch <= 0 or sequence < 1 or sequence > 0xffffffff or item_uid <= 0:
+		return PackedByteArray()
+	var writer := StreamPeerBuffer.new()
+	writer.big_endian = false
+	writer.put_u32(EQUIPMENT_MOVE_FRAME_BYTES)
+	writer.put_u16(VERSION)
+	writer.put_u16(opcode)
+	writer.put_64(epoch)
+	writer.put_u32(sequence)
+	writer.put_64(item_uid)
+	return writer.data_array
+
+
+static func decode_equipment_transfer_result(frame: PackedByteArray) -> Dictionary:
+	if not _valid_header(frame,OPCODE_EQUIPMENT_TRANSFER_RESULT,EQUIPMENT_TRANSFER_RESULT_FRAME_BYTES):
+		return {}
+	var reader := _reader(frame,8)
+	var epoch := reader.get_64()
+	var sequence := reader.get_u32()
+	var kind := reader.get_u8()
+	var status := reader.get_u8()
+	var uid := reader.get_64()
+	var item_id := reader.get_32()
+	var slot_id := reader.get_32()
+	var source_drop_id := reader.get_64()
+	if epoch <= 0 or sequence == 0 or kind < 1 or kind > 2 or status > 8 or uid <= 0 or item_id < 0 or item_id > 100000000 or slot_id < 0 or slot_id > 255 or source_drop_id < 0:
+		return {}
+	if status in [0,1]:
+		if item_id <= 0 or slot_id <= 0:
+			return {}
+	elif item_id != 0 or slot_id != 0 or source_drop_id != 0:
+		return {}
+	return {"map_epoch":epoch,"equipment_sequence":sequence,"kind":kind,"status":status,"item_uid":uid,"item_definition_id":item_id,"slot_id":slot_id,"drop_id":source_drop_id}
+
 static func decode_equipment_snapshot(frame: PackedByteArray) -> Dictionary:
 	if not _valid_variable_header(frame,OPCODE_EQUIPMENT_SNAPSHOT,EQUIPMENT_SNAPSHOT_HEADER_BYTES,EQUIPMENT_SNAPSHOT_HEADER_BYTES+EQUIPMENT_SNAPSHOT_MAX_PER_FRAME*EQUIPMENT_ITEM_BYTES):
 		return {}
