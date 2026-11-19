@@ -1430,7 +1430,7 @@ func _update_pvp_ui() -> void:
 				gm_pvp_status.text="GM 權限由伺服器簽發；選擇 AOI 玩家與名稱狀態"
 			else:
 				var gm_code:=int(gm_result.get("status",-1))
-				var gm_text:=["已套用","重播：未重複修改","無權限","世代已變更","過期序號","目標已離線"][gm_code] if gm_code>=0 and gm_code<=5 else "未知結果"
+				var gm_text: String = (["已套用","重播：未重複修改","無權限","世代已變更","過期序號","目標已離線"][gm_code] as String) if gm_code>=0 and gm_code<=5 else "未知結果"
 				gm_pvp_status.text="%s（代碼 %d）；名稱顯示仍以 Server AOI identity 為準" % [gm_text,gm_code]
 
 	var attack_pending := int(_latest.get("pending_pvp_attack_sequence",0)) != 0
