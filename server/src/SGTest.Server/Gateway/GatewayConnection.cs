@@ -82,6 +82,9 @@ public readonly record struct TrustedTradeCommand(
     long ActorId,long ConnectionEpoch,long RequestMapEpoch,
     uint TradeSequence,TradeCommandAction Action,long TradeId,
     long TargetActorId,long ItemUid,long Money);
+public readonly record struct TrustedPvpModeCommand(
+    long ActorId,long ConnectionEpoch,long RequestMapEpoch,
+    uint PvpSequence,PvpModeCommandAction Action);
 public enum TrustedQuestCommandKind : byte { Open=1, Choose=2 }
 public readonly record struct TrustedQuestCommand(
     long ActorId,long ConnectionEpoch,long RequestMapEpoch,
@@ -314,7 +317,7 @@ public sealed class GatewayConnection
             return _parser.Feed(bytes,
                 frame => HandleClientFrame(
                     frame, postMove, postNpc, postResync, postAttack, postRespawn,
-                    postPickup, postRecovery, postDiscard, postSkill, postShop, postStorage, postEquipment, postBank, postRepair, postTrade, postQuest),
+                    postPickup, postRecovery, postDiscard, postSkill, postShop, postStorage, postEquipment, postBank, postRepair, postTrade, postQuest, postPvp),
                 out commandsAccepted);
         }
     }
@@ -348,7 +351,7 @@ public sealed class GatewayConnection
             return _parser.Resume(
                 frame => HandleClientFrame(
                     frame, postMove, postNpc, postResync, postAttack, postRespawn,
-                    postPickup, postRecovery, postDiscard, postSkill, postShop, postStorage, postEquipment, postBank, postRepair, postTrade, postQuest),
+                    postPickup, postRecovery, postDiscard, postSkill, postShop, postStorage, postEquipment, postBank, postRepair, postTrade, postQuest, postPvp),
                 out commandsAccepted);
         }
     }
@@ -370,7 +373,8 @@ public sealed class GatewayConnection
         Func<TrustedBankCommand, bool>? postBank,
         Func<TrustedRepairCommand, bool>? postRepair,
         Func<TrustedTradeCommand, bool>? postTrade,
-        Func<TrustedQuestCommand, bool>? postQuest)
+        Func<TrustedQuestCommand, bool>? postQuest,
+        Func<TrustedPvpModeCommand, bool>? postPvp)
     {
         if (!WireProtocol.TryReadHeader(frame, out var header))
             return WireFrameDisposition.ProtocolViolation;
@@ -610,6 +614,16 @@ public sealed class GatewayConnection
                 questChoose.QuestSequence,questChoose.NpcSpawnId,
                 TrustedQuestCommandKind.Choose,
                 questChoose.QuestId,questChoose.ChoiceId))
+                ? WireFrameDisposition.Accepted:WireFrameDisposition.Backpressured;
+        }
+        if(header.Opcode==WireOpcode.PvpModeCommand && postPvp is not null &&
+            WireProtocol.TryDecodePvpModeCommand(frame,out var pvp))
+        {
+            if(!GameplayReady(bound))
+                return WireFrameDisposition.ProtocolViolation;
+            return postPvp(new TrustedPvpModeCommand(
+                bound.ActorId,bound.ConnectionEpoch,pvp.MapEpoch,
+                pvp.PvpSequence,pvp.Action))
                 ? WireFrameDisposition.Accepted:WireFrameDisposition.Backpressured;
         }
 
@@ -999,6 +1013,26 @@ public sealed class GatewayConnection
                 request.RequestMapEpoch,request.BankSequence,result.Kind,result.Status,
                 request.NpcSpawnId,result.Scope,result.Amount,
                 result.WalletMoney,result.BankMoney));
+            return _reliable.TryEnqueue(frame)
+                ? GatewaySendStatus.Enqueued:GatewaySendStatus.Backpressured;
+        }
+    }
+
+    public GatewaySendStatus QueuePvpModeResult(
+        TrustedPvpModeCommand request,PvpModeResultStatus status,
+        PvpMode mode,bool mapAllowsPlayerPvp)
+    {
+        lock(_bindingGate)
+        {
+            if(_closed)return GatewaySendStatus.Closed;
+            var bound=_binding;
+            if(request.ActorId!=bound.ActorId||
+               request.ConnectionEpoch!=bound.ConnectionEpoch||
+               request.RequestMapEpoch!=bound.MapEpoch)
+                return GatewaySendStatus.GenerationMismatch;
+            var frame=WireProtocol.EncodePvpModeResult(new(
+                request.RequestMapEpoch,request.PvpSequence,status,
+                mode,mapAllowsPlayerPvp));
             return _reliable.TryEnqueue(frame)
                 ? GatewaySendStatus.Enqueued:GatewaySendStatus.Backpressured;
         }
