@@ -33,6 +33,7 @@ public sealed class IdentityTlsAuthorization
     private readonly NpcRepairCatalog? _repairs;
     private readonly IReadOnlyDictionary<int,RepairItemRule>? _repairItemRules;
     private readonly NpcQuestCatalog? _quests;
+    private readonly PlayerTradeCoordinator? _trades;
 
     public IdentityTlsAuthorization(SqliteIdentityStore identity, ServerWorldHost world,
                                     PortalCatalog? portals = null,
@@ -47,7 +48,8 @@ public sealed class IdentityTlsAuthorization
                                      NpcBankCatalog? banks = null,
                                      NpcRepairCatalog? repairs = null,
                                      IReadOnlyDictionary<int,RepairItemRule>? repairItemRules = null,
-                                     NpcQuestCatalog? quests = null)
+                                     NpcQuestCatalog? quests = null,
+                                     PlayerTradeCoordinator? trades = null)
     {
         _identity = identity ?? throw new ArgumentNullException(nameof(identity));
         _world = world ?? throw new ArgumentNullException(nameof(world));
@@ -73,6 +75,7 @@ public sealed class IdentityTlsAuthorization
         _repairs = repairs;
         _repairItemRules = repairItemRules;
         _quests = quests;
+        _trades = trades;
     }
 
     /// <summary>
