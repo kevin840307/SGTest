@@ -3351,6 +3351,7 @@ public static class WireProtocol
             72 => WireOpcode.TradeTerminal,
             73 => WireOpcode.QuestOpen, 74 => WireOpcode.QuestView,
             75 => WireOpcode.QuestChoose,
+            76 => WireOpcode.PvpModeCommand, 77 => WireOpcode.PvpModeResult,
             _ => 0
         };
         if (opcode == 0) return false;
@@ -3441,6 +3442,8 @@ public static class WireProtocol
             WireOpcode.QuestView => advertised >= QuestViewHeaderBytes &&
                 advertised <= QuestViewMaximumFrameBytes,
             WireOpcode.QuestChoose => advertised == QuestChooseFrameBytes,
+            WireOpcode.PvpModeCommand => advertised == PvpModeCommandFrameBytes,
+            WireOpcode.PvpModeResult => advertised == PvpModeResultFrameBytes,
             WireOpcode.InventorySnapshot => advertised >= InventorySnapshotHeaderBytes &&
                 advertised <= InventorySnapshotHeaderBytes +
                     InventorySnapshotMaxItemsPerFrame*InventoryItemBytes &&
