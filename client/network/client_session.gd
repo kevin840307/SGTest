@@ -327,6 +327,19 @@ func unequip_item(item_uid: int) -> bool:
 	return _queue_intent({"type":"equipment_unequip","item_uid":item_uid,
 		"actor_id":int(current.get("actor_id",0)),"map_epoch":int(current.get("map_epoch",0))})
 
+func request_pvp_mode(action: int) -> bool:
+	var current := snapshot()
+	if action not in [0,1,2] or int(current.get("state",-1)) != WorldState.STATE_IN_WORLD or not bool(current.get("world_ready",false)) or bool(current.get("resync_pending",false)) or bool(current.get("waiting_for_new_map",false)) or int(current.get("pending_world_ready_ack_epoch",0)) != 0 or int(current.get("last_world_ready_ack_epoch",0)) != int(current.get("map_epoch",0)) or int(current.get("pending_pvp_sequence",0)) != 0:
+		return false
+	if action != 0 and bool(current.get("player_dead",false)):
+		return false
+	if action == 2 and bool(current.get("pvp_known",false)) and not bool(current.get("pvp_map_allows",false)):
+		return false
+	return _queue_intent({"type":"pvp_mode","action":action,
+		"actor_id":int(current.get("actor_id",0)),
+		"map_epoch":int(current.get("map_epoch",0))})
+
+
 func respawn() -> bool:
 	var current := snapshot()
 	if not bool(current.get("combat_available",false)) or not bool(current.get("player_dead",false)):
@@ -459,6 +472,13 @@ func _queue_intent(intent: Dictionary) -> bool:
 			accepted = false
 		for queued in _intents:
 			if str(queued.get("type","")) in ["repair_open","repair_item","bank_open","bank_deposit","bank_withdraw","shop_open","shop_buy","shop_sell","storage_open","storage_deposit","storage_withdraw","equipment_equip","equipment_unequip","use_recovery_item","discard_inventory_item"]:
+				accepted = false
+				break
+	if accepted and kind == "pvp_mode":
+		if int(_published.get("pending_pvp_sequence",0)) != 0:
+			accepted = false
+		for queued in _intents:
+			if str(queued.get("type","")) == "pvp_mode":
 				accepted = false
 				break
 	if accepted and kind == "cast_skill":
@@ -680,6 +700,26 @@ func _process_first_intent() -> void:
 		var sequence := int(current.npc_interaction_sequence) + 1
 		var frame := WireCodec.encode_npc_interact(int(current.map_epoch), sequence, int(intent.spawn_id))
 		if not frame.is_empty() and _transport.send_frame(frame) and _world.mark_npc_interact_sent(sequence):
+			_pop_intent()
+			_publish()
+
+	elif kind == "pvp_mode":
+		var current: Dictionary = _world.snapshot()
+		if int(intent.get("actor_id",0)) != int(current.get("actor_id",0)) or int(intent.get("map_epoch",0)) != int(current.get("map_epoch",0)):
+			_pop_intent()
+			return
+		var action := int(intent.get("action",-1))
+		if action not in [0,1,2] or (action != 0 and bool(current.get("player_dead",false))) or (action == 2 and bool(current.get("pvp_known",false)) and not bool(current.get("pvp_map_allows",false))):
+			_pop_intent()
+			return
+		if int(current.get("state",-1)) != WorldState.STATE_IN_WORLD or not bool(current.get("world_ready",false)) or bool(current.get("resync_pending",false)) or bool(current.get("waiting_for_new_map",false)) or int(current.get("pending_world_ready_ack_epoch",0)) != 0 or int(current.get("last_world_ready_ack_epoch",0)) != int(current.get("map_epoch",0)) or int(current.get("pending_pvp_sequence",0)) != 0:
+			return
+		var sequence := int(current.get("pvp_sequence",0))+1
+		var frame := WireCodec.encode_pvp_mode_command(int(current.get("map_epoch",0)),sequence,action)
+		if frame.is_empty():
+			_pop_intent()
+			return
+		if _transport.send_frame(frame) and _world.mark_pvp_sent(sequence,action):
 			_pop_intent()
 			_publish()
 

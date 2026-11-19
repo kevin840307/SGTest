@@ -183,6 +183,14 @@ var trade_my_items := {}
 var trade_other_items := {}
 var last_trade_terminal := {}
 var stale_trade_frames := 0
+var pvp_sequence := 0
+var pending_pvp_sequence := 0
+var pvp_mode := -1
+var pvp_known := false
+var pvp_map_allows := false
+var last_pvp_result_sequence := 0
+var last_pvp_result := {}
+var stale_pvp_results := 0
 
 var respawn_sequence := 0
 var last_respawn_result_sequence := 0
@@ -424,6 +432,16 @@ func mark_trade_sent(sequence: int,action: int,command_trade_id: int = 0,
 	return true
 
 
+func mark_pvp_sent(sequence: int,action: int) -> bool:
+	if state != STATE_IN_WORLD or not world_ready or resync_pending or waiting_for_new_map or pending_world_ready_ack_epoch != 0 or last_world_ready_ack_epoch != map_epoch or pending_pvp_sequence != 0 or sequence <= pvp_sequence or sequence > 0xffffffff or action not in [0,1,2] or (player_dead and action != 0):
+		return false
+	if action == 2 and pvp_known and not pvp_map_allows:
+		return false
+	pvp_sequence = sequence
+	pending_pvp_sequence = sequence
+	return true
+
+
 func mark_player_respawn_sent(sequence: int) -> bool:
 	if state != STATE_IN_WORLD or not combat_available or not player_dead or not world_ready or resync_pending or waiting_for_new_map or pending_world_ready_ack_epoch != 0 or last_world_ready_ack_epoch != map_epoch or sequence <= respawn_sequence or sequence > 0xffffffff:
 		return false
@@ -520,6 +538,8 @@ func apply_frame(frame: PackedByteArray) -> bool:
 			return _apply_trade_snapshot(frame)
 		WireCodec.OPCODE_TRADE_TERMINAL:
 			return _apply_trade_terminal(frame)
+		WireCodec.OPCODE_PVP_MODE_RESULT:
+			return _apply_pvp_mode_result(frame)
 		WireCodec.OPCODE_WORLD_READY:
 			return _apply_world_ready(frame)
 		WireCodec.OPCODE_SELF_STATE:
@@ -713,6 +733,14 @@ func snapshot() -> Dictionary:
 		"trade_other_items": trade_other_items.duplicate(true),
 		"last_trade_terminal": last_trade_terminal.duplicate(true),
 		"stale_trade_frames": stale_trade_frames,
+		"pvp_sequence": pvp_sequence,
+		"pending_pvp_sequence": pending_pvp_sequence,
+		"pvp_mode": pvp_mode,
+		"pvp_known": pvp_known,
+		"pvp_map_allows": pvp_map_allows,
+		"last_pvp_result_sequence": last_pvp_result_sequence,
+		"last_pvp_result": last_pvp_result.duplicate(true),
+		"stale_pvp_results": stale_pvp_results,
 		"respawn_sequence": respawn_sequence,
 		"last_respawn_result_sequence": last_respawn_result_sequence,
 		"last_respawn_result_status": last_respawn_result_status,
@@ -937,6 +965,7 @@ func _apply_choose(frame: PackedByteArray) -> bool:
 	last_repair_result.clear()
 	stale_repair_results = 0
 	_clear_trade_state(true)
+	_clear_pvp_map()
 	last_trade_terminal.clear()
 	stale_trade_frames = 0
 	respawn_sequence = 0
@@ -1549,6 +1578,7 @@ func _apply_world_ready(frame: PackedByteArray) -> bool:
 		last_repair_result.clear()
 		stale_repair_results = 0
 		_clear_trade_state(true)
+		_clear_pvp_map()
 		last_trade_terminal.clear()
 		stale_trade_frames = 0
 		respawn_sequence = 0
@@ -2392,6 +2422,48 @@ func _apply_repair_result(frame: PackedByteArray) -> bool:
 	last_repair_response_sequence = sequence
 	last_repair_result = result.duplicate(true)
 	_clear_pending_repair()
+	return true
+
+
+func _clear_pvp_map() -> void:
+	pvp_sequence = 0
+	pending_pvp_sequence = 0
+	pvp_mode = -1
+	pvp_known = false
+	pvp_map_allows = false
+	last_pvp_result_sequence = 0
+	last_pvp_result.clear()
+	stale_pvp_results = 0
+
+
+func _apply_pvp_mode_result(frame: PackedByteArray) -> bool:
+	if state != STATE_IN_WORLD:
+		return fail("pvp_result_out_of_state")
+	var value := WireCodec.decode_pvp_mode_result(frame)
+	if value.is_empty():
+		return fail("invalid_pvp_result")
+	var epoch := int(value.map_epoch)
+	var sequence := int(value.pvp_sequence)
+	if epoch < map_epoch:
+		stale_pvp_results += 1
+		return true
+	if epoch > map_epoch:
+		return fail("future_pvp_result")
+	if sequence <= last_pvp_result_sequence:
+		stale_pvp_results += 1
+		return true
+	if sequence != pending_pvp_sequence or sequence > pvp_sequence:
+		return fail("pvp_result_without_matching_request")
+	if int(value.status) == 4:
+		return fail("pvp_result_stale_generation")
+	# Never optimistically change PvP state; only the matching authoritative
+	# response may reveal the durable character mode and current map policy.
+	pvp_mode = int(value.mode)
+	pvp_map_allows = bool(value.map_allows_pvp)
+	pvp_known = true
+	last_pvp_result_sequence = sequence
+	last_pvp_result = value.duplicate(true)
+	pending_pvp_sequence = 0
 	return true
 
 

@@ -105,6 +105,10 @@ var trade_confirm_button := Button.new()
 var trade_cancel_button := Button.new()
 var trade_status := Label.new()
 var _trade_display_key := ""
+var pvp_query_button := Button.new()
+var pvp_blue_button := Button.new()
+var pvp_white_button := Button.new()
+var pvp_status := Label.new()
 const INVENTORY_PAGE_SIZE := 80
 var _inventory_page := 0
 var _inventory_display_key := ""
@@ -324,6 +328,19 @@ func _ready() -> void:
 	trade_lock_button.pressed.connect(_lock_trade)
 	trade_confirm_button.pressed.connect(_confirm_trade)
 	trade_cancel_button.pressed.connect(_cancel_trade)
+	# Trade controls must actually be parented, not only instantiated/connected.
+	for control in [trade_target_picker,trade_request_button,trade_peer_label,trade_accept_button,trade_reject_button,trade_inventory_picker,trade_my_offer_picker,trade_offer_add_button,trade_offer_remove_button,trade_other_offer_label,trade_money_input,trade_set_money_button,trade_money_label,trade_lock_button,trade_confirm_button,trade_cancel_button,trade_status]:
+		column.add_child(control)
+	pvp_query_button.text = "查詢 PvP 名稱模式"
+	pvp_blue_button.text = "設為藍名（保護）"
+	pvp_white_button.text = "設為白名（允許 PvP 地圖）"
+	pvp_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	for control in [pvp_query_button,pvp_blue_button,pvp_white_button,pvp_status]:
+		control.visible = false
+		column.add_child(control)
+	pvp_query_button.pressed.connect(func(): _request_pvp_mode(0))
+	pvp_blue_button.pressed.connect(func(): _request_pvp_mode(1))
+	pvp_white_button.pressed.connect(func(): _request_pvp_mode(2))
 	var style := StyleBoxFlat.new()
 	style.bg_color = Color("211c15")
 	style.border_color = Color("c8a452")
@@ -1221,6 +1238,37 @@ func _trade_item_text(item: Dictionary) -> String:
 	return "%s ×%d｜UID %d" % [item_catalog.name_for(int(item.get("item_definition_id",0))),int(item.get("quantity",0)),int(item.get("item_uid",0))]
 
 
+func _request_pvp_mode(action: int) -> void:
+	if session.request_pvp_mode(action):
+		pvp_status.text = "PvP 模式請求已送出，等待伺服器權威回覆…"
+	else:
+		pvp_status.text = "無法送出：請確認角色、地圖及其他 PvP 請求"
+
+
+func _update_pvp_ui() -> void:
+	var in_world := active and int(_latest.get("state",-1)) == State.STATE_IN_WORLD
+	for control in [pvp_query_button,pvp_blue_button,pvp_white_button,pvp_status]:
+		control.visible = in_world
+	if not in_world:
+		return
+	var ready := bool(_latest.get("world_ready",false)) and not bool(_latest.get("reconnecting",false)) and not bool(_latest.get("resync_pending",false)) and not bool(_latest.get("waiting_for_new_map",false)) and int(_latest.get("pending_world_ready_ack_epoch",0)) == 0 and int(_latest.get("last_world_ready_ack_epoch",0)) == int(_latest.get("map_epoch",0))
+	var pending := int(_latest.get("pending_pvp_sequence",0)) != 0
+	var known := bool(_latest.get("pvp_known",false))
+	var dead := bool(_latest.get("player_dead",false))
+	pvp_query_button.disabled = not ready or pending
+	pvp_blue_button.disabled = not ready or pending or not known or dead or int(_latest.get("pvp_mode",-1)) == 0
+	pvp_white_button.disabled = not ready or pending or not known or dead or not bool(_latest.get("pvp_map_allows",false)) or int(_latest.get("pvp_mode",-1)) == 1
+	if pending:
+		pvp_status.text = "等待伺服器 PvP 模式確認；不可重複送出"
+	elif known:
+		var mode := "白名（PvP 開啟）" if int(_latest.get("pvp_mode",-1)) == 1 else "藍名（保護）"
+		var map_text := "此圖允許玩家 PvP" if bool(_latest.get("pvp_map_allows",false)) else "此圖禁止玩家 PvP"
+		var result: Dictionary = _latest.get("last_pvp_result",{})
+		pvp_status.text = "%s｜%s｜伺服器結果 %d" % [mode,map_text,int(result.get("status",-1))]
+	else:
+		pvp_status.text = "PvP 模式尚未查詢；名稱顏色由伺服器判定"
+
+
 func _update_trade_ui() -> void:
 	var in_world := active and int(_latest.get("state",-1)) == State.STATE_IN_WORLD
 	for control in [trade_target_picker,trade_request_button,trade_peer_label,trade_accept_button,trade_reject_button,trade_inventory_picker,trade_my_offer_picker,trade_offer_add_button,trade_offer_remove_button,trade_other_offer_label,trade_money_input,trade_set_money_button,trade_money_label,trade_lock_button,trade_confirm_button,trade_cancel_button,trade_status]:
@@ -1592,6 +1640,7 @@ func _process(delta: float) -> void:
 	_update_bank_ui()
 	_update_repair_ui()
 	_update_trade_ui()
+	_update_pvp_ui()
 	var pickup_result: Dictionary = _latest.get("last_pickup_result",{})
 	if not pickup_result.is_empty():
 		if int(pickup_result.status) in [0,1]:
