@@ -700,6 +700,56 @@ func run() -> void:
 	if not panel.equipment_equip_button.disabled or not panel.equipment_unequip_button.disabled:
 		fail("Pending equipment mutation allowed another item move")
 		return
+	panel._latest.pending_equipment_sequence = 0
+	# Bank scope and balances are display-only values supplied by Server.
+	panel._latest.pending_bank_sequence = 0
+	panel._latest.bank_sequence = 0
+	panel._latest.active_bank_npc = 0
+	panel._latest.bank_scope = 0
+	panel._latest.bank_wallet_money = 0
+	panel._latest.bank_money = 0
+	panel._latest.last_bank_open_status = -1
+	panel._latest.last_bank_result = {}
+	panel._update_bank_ui()
+	if panel.bank_open_button.get_parent() == null or panel.equipment_equip_button.get_parent() == null:
+		fail("Equipment/bank controls were not attached to the visible SessionPanel")
+		return
+	panel.bank_npc_input.value = 77
+	panel.bank_open_button.pressed.emit()
+	if stub.bank_opens != 1 or stub.last_bank_npc != 77 or not panel.bank_open_button.disabled:
+		fail("Bank open UI did not send exactly one NPC intent")
+		return
+	panel._latest.active_bank_npc = 77
+	panel._latest.bank_scope = 2
+	panel._latest.bank_wallet_money = 1000
+	panel._latest.bank_money = 400
+	panel._latest.bank_sequence = 1
+	panel.bank_amount_input.value = 300
+	panel._update_bank_ui()
+	if not panel.bank_scope_label.text.contains("帳號共用") or not panel.bank_wallet_label.text.contains("1000") or not panel.bank_balance_label.text.contains("400") or panel.bank_deposit_button.disabled or panel.bank_withdraw_button.disabled:
+		fail("Authoritative bank scope/balances were not rendered as playable controls")
+		return
+	panel.bank_deposit_button.pressed.emit()
+	if stub.bank_deposits != 1 or stub.last_bank_amount != 300:
+		fail("Bank deposit UI did not send selected amount")
+		return
+	panel._update_bank_ui()
+	panel.bank_withdraw_button.pressed.emit()
+	if stub.bank_withdrawals != 1 or stub.last_bank_amount != 300:
+		fail("Bank withdraw UI did not send selected amount")
+		return
+	panel.bank_amount_input.value = 500
+	panel._update_bank_ui()
+	if panel.bank_withdraw_button.disabled != true or panel.bank_deposit_button.disabled:
+		fail("Bank UI did not apply current authoritative balance bounds")
+		return
+	panel._latest.pending_bank_sequence = 2
+	panel.bank_amount_input.value = 100
+	panel._update_bank_ui()
+	if not panel.bank_deposit_button.disabled or not panel.bank_withdraw_button.disabled:
+		fail("Pending bank mutation allowed another money move")
+		return
+
 	panel._latest.player_dead = true
 	panel._update_inventory_ui()
 	if not panel.recovery_button.disabled or panel.submit_recovery_use(10000):
@@ -715,5 +765,5 @@ func run() -> void:
 	panel._set_respawn_controls()
 	app.queue_free()
 	await process_frame
-	print("CLIENT_TLS_LOGIN_PASS ui=PASS auth=PASS choose=PASS receipt=PASS world_ready=PASS password_cleared=PASS logout=PASS respawn_ui=PASS click_attack_ui=PASS click_pickup_ui=PASS persistent_inventory_ui=PASS item_metadata=PASS inventory_pagination=PASS recovery_item_button=PASS inventory_discard_button=PASS inventory_discard_quantity_confirm=PASS shop_ui=PASS storage_ui=PASS equipment_ui=PASS skill_cast_ui=PASS skill_singleflight=PASS combat_mp_ui=PASS")
+	print("CLIENT_TLS_LOGIN_PASS ui=PASS auth=PASS choose=PASS receipt=PASS world_ready=PASS password_cleared=PASS logout=PASS respawn_ui=PASS click_attack_ui=PASS click_pickup_ui=PASS persistent_inventory_ui=PASS item_metadata=PASS inventory_pagination=PASS recovery_item_button=PASS inventory_discard_button=PASS inventory_discard_quantity_confirm=PASS shop_ui=PASS storage_ui=PASS equipment_ui=PASS bank_ui=PASS skill_cast_ui=PASS skill_singleflight=PASS combat_mp_ui=PASS")
 	quit(0)
