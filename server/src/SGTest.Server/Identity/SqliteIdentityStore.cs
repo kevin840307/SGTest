@@ -77,7 +77,7 @@ public sealed record CharacterCreateResult(CharacterCreateStatus Status, Charact
 /// </summary>
 public sealed partial class SqliteIdentityStore : IDisposable
 {
-    public const int SchemaVersion = 11;
+    public const int SchemaVersion = 12;
     private readonly string _connectionString;
     private readonly IdentityStoreOptions _options;
     private readonly PasswordHasher _passwords;
@@ -511,6 +511,34 @@ BEGIN
     SELECT RAISE(ABORT,'item already exists equipped');
 END;", tx);
 
+            // Schema v12: personal-bank balances support an explicitly verified
+            // character or account scope. The client never chooses that scope.
+            Execute(connection, @"
+CREATE TABLE IF NOT EXISTS character_bank_balances (
+    character_id INTEGER PRIMARY KEY REFERENCES characters(character_id) ON DELETE CASCADE,
+    money INTEGER NOT NULL DEFAULT 0 CHECK(money BETWEEN 0 AND 9000000000000000)
+);", tx);
+            Execute(connection, @"
+CREATE TABLE IF NOT EXISTS account_bank_balances (
+    account_id INTEGER PRIMARY KEY REFERENCES accounts(account_id) ON DELETE CASCADE,
+    money INTEGER NOT NULL DEFAULT 0 CHECK(money BETWEEN 0 AND 9000000000000000)
+);", tx);
+            Execute(connection, @"
+CREATE TABLE IF NOT EXISTS bank_actions (
+    character_id INTEGER NOT NULL REFERENCES characters(character_id) ON DELETE CASCADE,
+    connection_generation INTEGER NOT NULL CHECK(connection_generation > 0),
+    map_epoch INTEGER NOT NULL CHECK(map_epoch > 0),
+    action_sequence INTEGER NOT NULL CHECK(action_sequence BETWEEN 1 AND 4294967295),
+    action_kind INTEGER NOT NULL CHECK(action_kind IN (1,2)),
+    npc_spawn_id INTEGER NOT NULL CHECK(npc_spawn_id > 0),
+    balance_scope INTEGER NOT NULL CHECK(balance_scope IN (1,2)),
+    amount INTEGER NOT NULL CHECK(amount BETWEEN 1 AND 9000000000000000),
+    wallet_after INTEGER NOT NULL CHECK(wallet_after BETWEEN 0 AND 9000000000000000),
+    bank_after INTEGER NOT NULL CHECK(bank_after BETWEEN 0 AND 9000000000000000),
+    source_reference TEXT NOT NULL,
+    created_unix_ms INTEGER NOT NULL,
+    PRIMARY KEY(character_id,connection_generation,map_epoch,action_sequence)
+);", tx);
             Execute(connection, @"
 CREATE TRIGGER IF NOT EXISTS trg_combat_mp_insert
 BEFORE INSERT ON character_combat_profiles
