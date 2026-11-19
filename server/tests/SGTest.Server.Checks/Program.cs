@@ -255,6 +255,7 @@ static class Checks
             BankChecks.Verify(root);
             RepairCatalogChecks.Verify(root);
             RepairChecks.Verify(root);
+            TradeChecks.Verify(root);
             MonsterLootSettlementChecks.Verify(root);
             NormalAttackChecks.Verify(root);
             SkillCombatChecks.Verify(root);
