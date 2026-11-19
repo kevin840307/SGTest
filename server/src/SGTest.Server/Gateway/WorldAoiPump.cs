@@ -177,7 +177,8 @@ public sealed class WorldAoiPump
                                 ? _monsters.CancelPreparedSkill(
                                     action.Prepared,cancelled)
                                 : _monsters.CommitPreparedSkill(action.Prepared);
-                        DeliverSkill(action.Prepared.Request,outcome);
+                        if(action.DeliverMonsterResult)
+                            DeliverSkill(action.Prepared.Request,outcome);
                         action.Completion.TrySetResult(outcome);
                     }
                     catch(Exception error)
@@ -212,6 +213,8 @@ public sealed class WorldAoiPump
                     _aoi.EnqueuePlayerDamageVisual(damageVisual);
                 while(_router.PlayerPvpCombatVisuals.TryRead(out var pvpVisual))
                     _aoi.EnqueuePlayerPvpCombatVisual(pvpVisual);
+                while(_router.PlayerPvpSkillVisuals.TryRead(out var pvpSkillVisual))
+                    _aoi.EnqueuePlayerPvpSkillVisual(pvpSkillVisual);
                 while (_router.PlayerRespawnVisuals.TryRead(out var respawnVisual))
                     _aoi.EnqueuePlayerRespawnVisual(
                         respawnVisual.Actor,respawnVisual.RespawnSequence);

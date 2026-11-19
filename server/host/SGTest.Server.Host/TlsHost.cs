@@ -174,7 +174,8 @@ internal static class TlsHost
                 delivery: router.QueuePlayerDamage,
                 committedLifecycle: async result =>
                 {
-                    if(result.SourceKind==PlayerDamageSourceKind.PlayerPvp)
+                    if(result.SourceKind is PlayerDamageSourceKind.PlayerPvp or
+                        PlayerDamageSourceKind.PlayerSkill)
                     {
                         var now=DateTimeOffset.UtcNow;
                         CharacterPvpState pvp=result.Died
@@ -207,6 +208,10 @@ internal static class TlsHost
                        !router.TryPostPlayerPvpCombatVisual(result))
                         throw new PlayerCombatSettlementException(
                             "Committed PvP combat visual queue full");
+                    if(result.SourceKind==PlayerDamageSourceKind.PlayerSkill&&
+                       !router.TryPostPlayerPvpSkillVisual(result))
+                        throw new PlayerCombatSettlementException(
+                            "Committed PvP skill visual queue full");
                 });
             PlayerTradeCoordinator? trades=tradeItemRules is null
                 ? null:new PlayerTradeCoordinator(identity,world,tradeItemRules,combat);

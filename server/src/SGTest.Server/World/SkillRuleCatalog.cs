@@ -16,13 +16,19 @@ public enum SkillUseStatus : byte
     ReplayedSequence = 9,
     NoRule = 10,
     InsufficientMp = 11,
-    TooManyTargets = 12
+    TooManyTargets = 12,
+    NonPvpMap = 13,
+    AttackerProtected = 14,
+    TargetProtected = 15,
+    SelfTarget = 16,
+    Backpressured = 17
 }
 
 public enum SkillTargetKind : byte
 {
     SingleMonster = 0,
-    SelfCenteredArea = 1
+    SelfCenteredArea = 1,
+    SinglePlayer = 2
 }
 
 public readonly record struct VerifiedSkillRule(
@@ -78,6 +84,7 @@ public static class SkillRuleCatalog
             {
                 "single_monster"=>SkillTargetKind.SingleMonster,
                 "self_centered_area" when general=>SkillTargetKind.SelfCenteredArea,
+                "single_player" when general=>SkillTargetKind.SinglePlayer,
                 _=>throw new InvalidDataException(
                     "Skill target_kind is not admitted by this manifest")
             };
@@ -89,20 +96,26 @@ public static class SkillRuleCatalog
             double areaRadius=targetKind==SkillTargetKind.SelfCenteredArea
                 ? Real(entry,"area_radius") : 0;
             bool requireLos=true;
-            if(targetKind==SkillTargetKind.SelfCenteredArea)
+            if(targetKind is SkillTargetKind.SelfCenteredArea or
+                SkillTargetKind.SinglePlayer)
             {
                 var los=OptionalBool(entry,"line_of_sight");
                 if(los is null)
                     throw new InvalidDataException(
-                        "Area skill requires explicit line_of_sight policy");
+                        "Area/player skill requires explicit line_of_sight policy");
                 requireLos=los.Value;
+                if(targetKind==SkillTargetKind.SinglePlayer&&!requireLos)
+                    throw new InvalidDataException(
+                        "Player PvP skill currently requires authoritative line_of_sight");
             }
 
             var rule=new VerifiedSkillRule(
                 skill,damage,range,cooldown,mpCost,targetKind,
                 areaRadius,requireLos);
-            bool rangeValid=targetKind==SkillTargetKind.SingleMonster
-                ? double.IsFinite(range) && range is >=1 and <=500
+            bool rangeValid=targetKind is SkillTargetKind.SingleMonster or
+                    SkillTargetKind.SinglePlayer
+                ? double.IsFinite(range) && range is >=1 and <=500 &&
+                  Math.Abs(areaRadius)<=1e-9
                 : double.IsFinite(range) && Math.Abs(range)<=1e-9 &&
                   double.IsFinite(areaRadius) && areaRadius is >=1 and <=4096;
             if(skill is <1 or >100_000_000 ||

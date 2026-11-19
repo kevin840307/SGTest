@@ -32,6 +32,7 @@ public sealed record SkillPreflightRequest(
 public sealed record PreparedSkillAction(
     MonsterWorldCoordinator.PreparedSkillUse Prepared,
     SkillUseStatus? CancelStatus,
+    bool DeliverMonsterResult,
     TaskCompletionSource<SkillUseOutcome> Completion);
 
 public sealed record WorldResultRouterStatistics(
@@ -68,6 +69,7 @@ public sealed class WorldResultRouter
     private readonly Channel<PlayerRespawnVisualRequest> _playerRespawnVisuals;
     private readonly Channel<PlayerIdentityUpdate> _playerIdentityUpdates;
     private readonly Channel<PlayerDamageSettlement> _playerPvpCombatVisuals;
+    private readonly Channel<PlayerDamageSettlement> _playerPvpSkillVisuals;
     private readonly WorldResultRouterOptions _options;
     private readonly Action<WorldChangedBatch>? _changedObserver;
     private long _queued, _stale, _changedQueued, _backpressure;
@@ -171,6 +173,14 @@ public sealed class WorldResultRouter
                 FullMode=BoundedChannelFullMode.Wait,
                 AllowSynchronousContinuations=false
             });
+        _playerPvpSkillVisuals = Channel.CreateBounded<PlayerDamageSettlement>(
+            new BoundedChannelOptions(_options.AttackRequestCapacity)
+            {
+                SingleReader=true,
+                SingleWriter=false,
+                FullMode=BoundedChannelFullMode.Wait,
+                AllowSynchronousContinuations=false
+            });
     }
 
     public ChannelReader<WorldChangedBatch> ChangedBatches => _changed.Reader;
@@ -190,6 +200,8 @@ public sealed class WorldResultRouter
         _playerIdentityUpdates.Reader;
     public ChannelReader<PlayerDamageSettlement> PlayerPvpCombatVisuals =>
         _playerPvpCombatVisuals.Reader;
+    public ChannelReader<PlayerDamageSettlement> PlayerPvpSkillVisuals =>
+        _playerPvpSkillVisuals.Reader;
 
     public WorldResultRouterStatistics Statistics
     {
@@ -496,7 +508,22 @@ public sealed class WorldResultRouter
         var completion=new TaskCompletionSource<SkillUseOutcome>(
             TaskCreationOptions.RunContinuationsAsynchronously);
         await _preparedSkills.Writer.WriteAsync(
-            new(prepared,cancelStatus,completion),cancellationToken)
+            new(prepared,cancelStatus,true,completion),cancellationToken)
+            .ConfigureAwait(false);
+        return await completion.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<SkillUseOutcome> FinishPreparedPlayerSkillAsync(
+        MonsterWorldCoordinator.PreparedSkillUse prepared,
+        SkillUseStatus? cancelStatus=null,
+        CancellationToken cancellationToken=default)
+    {
+        if(cancelStatus is SkillUseStatus.Applied or SkillUseStatus.Miss)
+            throw new ArgumentOutOfRangeException(nameof(cancelStatus));
+        var completion=new TaskCompletionSource<SkillUseOutcome>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        await _preparedSkills.Writer.WriteAsync(
+            new(prepared,cancelStatus,false,completion),cancellationToken)
             .ConfigureAwait(false);
         return await completion.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
     }
@@ -519,6 +546,19 @@ public sealed class WorldResultRouter
            result.VictimFacing is <1 or >8)
             return false;
         return _playerPvpCombatVisuals.Writer.TryWrite(result);
+    }
+
+    public bool TryPostPlayerPvpSkillVisual(PlayerDamageSettlement result)
+    {
+        if(result.SourceKind!=PlayerDamageSourceKind.PlayerSkill||
+           result.ActorId<=0||result.ConnectionEpoch<=0||result.MapEpoch<=0||
+           result.DamageSequence==0||result.AttackerActorId<=0||
+           result.AttackerConnectionEpoch<=0||result.AttackerSkillSequence==0||
+           result.AttackerSkillId is <1 or >100_000_000||
+           result.Damage<=0||result.AttackerFacing is <1 or >8||
+           result.VictimFacing is <1 or >8)
+            return false;
+        return _playerPvpSkillVisuals.Writer.TryWrite(result);
     }
 
     public bool TryPostPlayerRespawnVisual(
@@ -555,6 +595,18 @@ public sealed class WorldResultRouter
                connection.IsClosed)
                 return GatewaySendStatus.Closed;
             return connection.QueuePvpAttackResult(request,result);
+        }
+    }
+
+    public GatewaySendStatus QueuePvpSkillResult(
+        TrustedPvpSkill request,PvpSkillResultWire result)
+    {
+        lock(_gate)
+        {
+            if(!_connections.TryGetValue(request.ActorId,out var connection)||
+               connection.IsClosed)
+                return GatewaySendStatus.Closed;
+            return connection.QueuePvpSkillResult(request,result);
         }
     }
 

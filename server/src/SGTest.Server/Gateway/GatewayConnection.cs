@@ -43,7 +43,8 @@ public readonly record struct TrustedNormalAttack(
 public readonly record struct TrustedSkillUse(
     long ActorId,long ConnectionEpoch,long RequestMapEpoch,
     uint SkillSequence,int SkillId,long TargetEntityId,
-    TrustedCombatProfile? Profile);
+    TrustedCombatProfile? Profile,
+    SkillTargetKind? ExpectedTargetKind = null);
 
 public readonly record struct TrustedPlayerRespawn(
     long ActorId, long ConnectionEpoch, long RequestMapEpoch,
@@ -89,6 +90,10 @@ public readonly record struct TrustedPvpModeCommand(
 public readonly record struct TrustedPvpAttack(
     long ActorId,long ConnectionEpoch,long RequestMapEpoch,
     uint AttackSequence,long TargetActorId,TrustedCombatProfile? Profile);
+public readonly record struct TrustedPvpSkill(
+    long ActorId,long ConnectionEpoch,long RequestMapEpoch,
+    uint SkillSequence,int SkillId,long TargetActorId,
+    TrustedCombatProfile? Profile);
 public enum TrustedQuestCommandKind : byte { Open=1, Choose=2 }
 public readonly record struct TrustedQuestCommand(
     long ActorId,long ConnectionEpoch,long RequestMapEpoch,
@@ -359,7 +364,8 @@ public sealed class GatewayConnection
                                               Func<TrustedTradeCommand, bool>? postTrade = null,
                                               Func<TrustedQuestCommand, bool>? postQuest = null,
                                               Func<TrustedPvpModeCommand, bool>? postPvp = null,
-                                              Func<TrustedPvpAttack, bool>? postPvpAttack = null)
+                                              Func<TrustedPvpAttack, bool>? postPvpAttack = null,
+                                              Func<TrustedPvpSkill, bool>? postPvpSkill = null)
     {
         ArgumentNullException.ThrowIfNull(postMove);
         lock (_receiveGate)
@@ -372,7 +378,7 @@ public sealed class GatewayConnection
             return _parser.Feed(bytes,
                 frame => HandleClientFrame(
                     frame, postMove, postNpc, postResync, postAttack, postRespawn,
-                    postPickup, postRecovery, postDiscard, postSkill, postShop, postStorage, postEquipment, postBank, postRepair, postTrade, postQuest, postPvp, postPvpAttack),
+                    postPickup, postRecovery, postDiscard, postSkill, postShop, postStorage, postEquipment, postBank, postRepair, postTrade, postQuest, postPvp, postPvpAttack, postPvpSkill),
                 out commandsAccepted);
         }
     }
@@ -395,7 +401,8 @@ public sealed class GatewayConnection
                                               Func<TrustedTradeCommand, bool>? postTrade = null,
                                               Func<TrustedQuestCommand, bool>? postQuest = null,
                                               Func<TrustedPvpModeCommand, bool>? postPvp = null,
-                                              Func<TrustedPvpAttack, bool>? postPvpAttack = null)
+                                              Func<TrustedPvpAttack, bool>? postPvpAttack = null,
+                                              Func<TrustedPvpSkill, bool>? postPvpSkill = null)
     {
         ArgumentNullException.ThrowIfNull(postMove);
         lock (_receiveGate)
@@ -408,7 +415,7 @@ public sealed class GatewayConnection
             return _parser.Resume(
                 frame => HandleClientFrame(
                     frame, postMove, postNpc, postResync, postAttack, postRespawn,
-                    postPickup, postRecovery, postDiscard, postSkill, postShop, postStorage, postEquipment, postBank, postRepair, postTrade, postQuest, postPvp, postPvpAttack),
+                    postPickup, postRecovery, postDiscard, postSkill, postShop, postStorage, postEquipment, postBank, postRepair, postTrade, postQuest, postPvp, postPvpAttack, postPvpSkill),
                 out commandsAccepted);
         }
     }
@@ -432,7 +439,8 @@ public sealed class GatewayConnection
         Func<TrustedTradeCommand, bool>? postTrade,
         Func<TrustedQuestCommand, bool>? postQuest,
         Func<TrustedPvpModeCommand, bool>? postPvp,
-        Func<TrustedPvpAttack, bool>? postPvpAttack)
+        Func<TrustedPvpAttack, bool>? postPvpAttack,
+        Func<TrustedPvpSkill, bool>? postPvpSkill)
     {
         if (!WireProtocol.TryReadHeader(frame, out var header))
             return WireFrameDisposition.ProtocolViolation;
@@ -685,6 +693,18 @@ public sealed class GatewayConnection
                 ? WireFrameDisposition.Accepted:WireFrameDisposition.Backpressured;
         }
 
+        if(header.Opcode==WireOpcode.PvpSkill && postPvpSkill is not null &&
+            WireProtocol.TryDecodePvpSkill(frame,out var pvpSkill))
+        {
+            if(!GameplayReady(bound))
+                return WireFrameDisposition.ProtocolViolation;
+            return postPvpSkill(new TrustedPvpSkill(
+                bound.ActorId,bound.ConnectionEpoch,pvpSkill.MapEpoch,
+                pvpSkill.SkillSequence,pvpSkill.SkillId,pvpSkill.TargetActorId,
+                _combatProfile))
+                ? WireFrameDisposition.Accepted:WireFrameDisposition.Backpressured;
+        }
+
         if(header.Opcode==WireOpcode.PvpAttack && postPvpAttack is not null &&
             WireProtocol.TryDecodePvpAttack(frame,out var pvpAttack))
         {
@@ -861,11 +881,14 @@ public sealed class GatewayConnection
                 result.ConnectionEpoch != bound.ConnectionEpoch ||
                 result.MapEpoch != bound.MapEpoch)
                 return GatewaySendStatus.GenerationMismatch;
-            var frame = result.SourceKind==PlayerDamageSourceKind.PlayerPvp
+            var frame = result.SourceKind!=PlayerDamageSourceKind.Monster
                 ? WireProtocol.EncodePvpDamage(new(
                     result.MapEpoch,result.DamageSequence,result.ServerTick,
                     result.AttackerActorId,result.AttackerConnectionEpoch,
-                    result.AttackerAttackSequence,result.Damage,result.CurrentHp,result.MaxHp,result.Died))
+                    result.SourceKind==PlayerDamageSourceKind.PlayerSkill
+                        ? result.AttackerSkillSequence
+                        : result.AttackerAttackSequence,
+                    result.Damage,result.CurrentHp,result.MaxHp,result.Died))
                 : WireProtocol.EncodePlayerDamage(new(
                     result.MapEpoch,result.DamageSequence,result.ServerTick,
                     result.AttackerMonsterEntityId,result.AttackerMonsterRevision,
@@ -1123,6 +1146,26 @@ public sealed class GatewayConnection
                result.AttackSequence!=request.AttackSequence||result.TargetActorId!=request.TargetActorId)
                 return GatewaySendStatus.GenerationMismatch;
             return _reliable.TryEnqueue(WireProtocol.EncodePvpAttackResult(result))
+                ? GatewaySendStatus.Enqueued:GatewaySendStatus.Backpressured;
+        }
+    }
+
+    public GatewaySendStatus QueuePvpSkillResult(
+        TrustedPvpSkill request,PvpSkillResultWire result)
+    {
+        lock(_bindingGate)
+        {
+            if(_closed)return GatewaySendStatus.Closed;
+            var bound=_binding;
+            if(request.ActorId!=bound.ActorId||
+               request.ConnectionEpoch!=bound.ConnectionEpoch||
+               request.RequestMapEpoch!=bound.MapEpoch||
+               result.MapEpoch!=request.RequestMapEpoch||
+               result.SkillSequence!=request.SkillSequence||
+               result.SkillId!=request.SkillId||
+               result.TargetActorId!=request.TargetActorId)
+                return GatewaySendStatus.GenerationMismatch;
+            return _reliable.TryEnqueue(WireProtocol.EncodePvpSkillResult(result))
                 ? GatewaySendStatus.Enqueued:GatewaySendStatus.Backpressured;
         }
     }
@@ -1532,6 +1575,15 @@ public sealed class GatewayConnection
                         pvp.AttackSequence,pvp.VictimActorId,
                         pvp.VictimConnectionEpoch,pvp.DamageSequence,
                         pvp.Damage,pvp.Died,pvp.AttackerFacing,pvp.VictimFacing));
+                    break;
+                case AoiEventKind.PvpSkillVisual when evt.PvpSkill is { } skill:
+                    frame=WireProtocol.EncodePvpSkillVisual(new(
+                        evt.ReceiverMapEpoch,evt.Tick,
+                        skill.AttackerActorId,skill.AttackerConnectionEpoch,
+                        skill.SkillSequence,skill.SkillId,skill.VictimActorId,
+                        skill.VictimConnectionEpoch,skill.DamageSequence,
+                        skill.Damage,skill.Died,
+                        skill.AttackerFacing,skill.VictimFacing));
                     break;
                 default:
                     return GatewaySendStatus.GenerationMismatch;

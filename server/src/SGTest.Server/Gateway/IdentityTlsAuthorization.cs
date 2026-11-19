@@ -1379,6 +1379,258 @@ public sealed class IdentityTlsAuthorization
                 finally { gameplayGate.Release(); }
             }
 
+            async Task PvpSkillHandler(TrustedPvpSkill request)
+            {
+                var binding=new ConnectionBinding(
+                    request.ActorId,request.ConnectionEpoch,request.RequestMapEpoch);
+                await gameplayGate.WaitAsync().ConfigureAwait(false);
+                ActorSnapshot? suspended=null;
+                try
+                {
+                    if(!router.IsCurrentBinding(binding))return;
+
+                    var skillRequest=new TrustedSkillUse(
+                        request.ActorId,request.ConnectionEpoch,request.RequestMapEpoch,
+                        request.SkillSequence,request.SkillId,request.TargetActorId,
+                        request.Profile,SkillTargetKind.SinglePlayer);
+                    var preflight=await router.PrepareSkillAsync(skillRequest)
+                        .ConfigureAwait(false);
+                    if(!preflight.Ready)
+                    {
+                        var rejected=preflight.Rejected ??
+                            throw new InvalidOperationException(
+                                "PvP skill preflight rejection missing outcome");
+                        var frame=new PvpSkillResultWire(
+                            request.RequestMapEpoch,request.SkillSequence,
+                            rejected.Status,rejected.ServerTick,request.SkillId,
+                            request.TargetActorId,0,false);
+                        var sent=router.QueuePvpSkillResult(request,frame);
+                        if(sent!=GatewaySendStatus.Enqueued)
+                            throw new IOException(
+                                "Reliable PvP skill rejection could not be queued: "+sent);
+                        return;
+                    }
+
+                    if(_combat is null)
+                    {
+                        var preparedMissing=preflight.Prepared!.Value;
+                        var cancelled=await router.FinishPreparedPlayerSkillAsync(
+                            preparedMissing,SkillUseStatus.CombatUnavailable)
+                            .ConfigureAwait(false);
+                        var sent=router.QueuePvpSkillResult(request,new(
+                            request.RequestMapEpoch,request.SkillSequence,
+                            cancelled.Status,cancelled.ServerTick,request.SkillId,
+                            request.TargetActorId,0,false));
+                        if(sent!=GatewaySendStatus.Enqueued)
+                            throw new IOException(
+                                "Reliable unavailable PvP skill result could not be queued: "+sent);
+                        return;
+                    }
+
+                    var prepared=preflight.Prepared!.Value;
+
+                    async Task<(SkillUseStatus? Status,PvpAttackGeometry Geometry,
+                        CharacterPvpState? TargetState)> ValidateTarget()
+                    {
+                        var geometry=await _world.TrustedGetPvpAttackGeometryAsync(
+                            request.ActorId,request.ConnectionEpoch,
+                            request.RequestMapEpoch,request.TargetActorId,
+                            prepared.Rule.Range).ConfigureAwait(false);
+                        SkillUseStatus? status=geometry.Status switch
+                        {
+                            PvpAttackGeometryStatus.Ready=>null,
+                            PvpAttackGeometryStatus.StaleGeneration=>SkillUseStatus.OldMapEpoch,
+                            PvpAttackGeometryStatus.SelfTarget=>SkillUseStatus.SelfTarget,
+                            PvpAttackGeometryStatus.NonPvpMap=>SkillUseStatus.NonPvpMap,
+                            PvpAttackGeometryStatus.AttackerDead=>SkillUseStatus.CombatUnavailable,
+                            PvpAttackGeometryStatus.TargetDead=>SkillUseStatus.TargetDead,
+                            PvpAttackGeometryStatus.TooFar=>SkillUseStatus.OutOfRange,
+                            PvpAttackGeometryStatus.Blocked=>SkillUseStatus.Blocked,
+                            _=>SkillUseStatus.TargetMissing
+                        };
+                        if(status is not null)return(status,geometry,null);
+
+                        var now=DateTimeOffset.UtcNow;
+                        var attackerState=await _identity.GetCharacterPvpStateAsync(
+                            request.ActorId).ConfigureAwait(false);
+                        var targetState=await _identity.GetCharacterPvpStateAsync(
+                            request.TargetActorId).ConfigureAwait(false);
+                        if(!PvpCrimePolicy.IsCombatEligible(attackerState,now))
+                            return(SkillUseStatus.AttackerProtected,geometry,targetState);
+                        if(!PvpCrimePolicy.IsCombatEligible(targetState,now))
+                            return(SkillUseStatus.TargetProtected,geometry,targetState);
+                        if(_combat.CurrentHp(geometry.Target)<=0)
+                            return(SkillUseStatus.TargetDead,geometry,targetState);
+                        return(null,geometry,targetState);
+                    }
+
+                    var validation=await ValidateTarget().ConfigureAwait(false);
+                    if(validation.Status is { } initialReject)
+                    {
+                        var cancelled=await router.FinishPreparedPlayerSkillAsync(
+                            prepared,initialReject).ConfigureAwait(false);
+                        var sent=router.QueuePvpSkillResult(request,new(
+                            request.RequestMapEpoch,request.SkillSequence,
+                            cancelled.Status,validation.Geometry.ServerTick,
+                            request.SkillId,request.TargetActorId,0,false));
+                        if(sent!=GatewaySendStatus.Enqueued)
+                            throw new IOException(
+                                "Reliable PvP skill validation rejection could not be queued: "+sent);
+                        return;
+                    }
+
+                    int suspendedHp=0;
+                    if(prepared.Rule.MpCost>0)
+                    {
+                        var snapshot=await _world.TrustedGetActorAsync(request.ActorId)
+                            .ConfigureAwait(false);
+                        if(snapshot is not { } actor||
+                           actor.ActorId!=request.ActorId||
+                           actor.ConnectionEpoch!=request.ConnectionEpoch||
+                           actor.MapEpoch!=request.RequestMapEpoch)
+                        {
+                            var cancelled=await router.FinishPreparedPlayerSkillAsync(
+                                prepared,SkillUseStatus.OldMapEpoch).ConfigureAwait(false);
+                            var sent=router.QueuePvpSkillResult(request,new(
+                                request.RequestMapEpoch,request.SkillSequence,
+                                cancelled.Status,cancelled.ServerTick,
+                                request.SkillId,request.TargetActorId,0,false));
+                            if(sent!=GatewaySendStatus.Enqueued)
+                                throw new IOException(
+                                    "Reliable stale PvP skill result could not be queued: "+sent);
+                            return;
+                        }
+
+                        await _combat.SuspendAndDrainAsync(
+                            actor.ActorId,actor.ConnectionEpoch,actor.MapEpoch)
+                            .ConfigureAwait(false);
+                        suspended=actor;
+                        if(!_combat.TryGetSuspendedCombatState(
+                            actor,out suspendedHp,out int maxHp)||suspendedHp<=0)
+                        {
+                            var cancelled=await router.FinishPreparedPlayerSkillAsync(
+                                prepared,SkillUseStatus.CombatUnavailable)
+                                .ConfigureAwait(false);
+                            var sent=router.QueuePvpSkillResult(request,new(
+                                request.RequestMapEpoch,request.SkillSequence,
+                                cancelled.Status,cancelled.ServerTick,
+                                request.SkillId,request.TargetActorId,0,false));
+                            if(sent!=GatewaySendStatus.Enqueued)
+                                throw new IOException(
+                                    "Reliable dead PvP skill result could not be queued: "+sent);
+                            return;
+                        }
+
+                        long durableConnection=_pickupWorldGeneration==0
+                            ? actor.ConnectionEpoch
+                            : SqliteIdentityStore.ComposePickupConnectionEpoch(
+                                _pickupWorldGeneration,actor.ConnectionEpoch);
+                        var mp=await _identity.ConsumeSkillMpAsync(
+                            new TrustedSkillMpContext(
+                                actor.ActorId,durableConnection,actor.MapEpoch,
+                                request.SkillSequence,request.SkillId),
+                            prepared.Rule.MpCost).ConfigureAwait(false);
+                        SkillUseStatus? mpReject=mp.Status switch
+                        {
+                            SkillMpConsumeStatus.Consumed or
+                            SkillMpConsumeStatus.AlreadyConsumed=>null,
+                            SkillMpConsumeStatus.InsufficientMp=>
+                                SkillUseStatus.InsufficientMp,
+                            SkillMpConsumeStatus.StaleSequence=>
+                                SkillUseStatus.ReplayedSequence,
+                            _=>SkillUseStatus.CombatUnavailable
+                        };
+                        if(mpReject is { } rejected)
+                        {
+                            var cancelled=await router.FinishPreparedPlayerSkillAsync(
+                                prepared,rejected).ConfigureAwait(false);
+                            var sent=router.QueuePvpSkillResult(request,new(
+                                request.RequestMapEpoch,request.SkillSequence,
+                                cancelled.Status,cancelled.ServerTick,
+                                request.SkillId,request.TargetActorId,0,false));
+                            if(sent!=GatewaySendStatus.Enqueued)
+                                throw new IOException(
+                                    "Reliable MP-rejected PvP skill result could not be queued: "+sent);
+                            return;
+                        }
+                        var baseline=router.QueuePlayerCombatState(
+                            binding,suspendedHp,maxHp,mp.CurrentMp,mp.MaxMp);
+                        if(baseline!=GatewaySendStatus.Enqueued)
+                            throw new IOException(
+                                "Committed PvP skill MP baseline could not be queued: "+baseline);
+
+                        // Target may move or change PvP state while SQLite MP is
+                        // settling. Revalidate before reserving durable damage.
+                        validation=await ValidateTarget().ConfigureAwait(false);
+                        if(validation.Status is { } afterMpReject)
+                        {
+                            var cancelled=await router.FinishPreparedPlayerSkillAsync(
+                                prepared,afterMpReject).ConfigureAwait(false);
+                            var sent=router.QueuePvpSkillResult(request,new(
+                                request.RequestMapEpoch,request.SkillSequence,
+                                cancelled.Status,validation.Geometry.ServerTick,
+                                request.SkillId,request.TargetActorId,0,false));
+                            if(sent!=GatewaySendStatus.Enqueued)
+                                throw new IOException(
+                                    "Reliable post-MP PvP skill rejection could not be queued: "+sent);
+                            return;
+                        }
+                    }
+
+                    var geometryReady=validation.Geometry;
+                    var targetStateReady=validation.TargetState ??
+                        throw new InvalidOperationException(
+                            "PvP skill ready target state missing");
+                    bool normalWhite=PvpCrimePolicy.IsNormalWhite(
+                        targetStateReady,DateTimeOffset.UtcNow);
+                    var posted=_combat.TryPostPvpSkillHit(
+                        geometryReady.Target,geometryReady.Attacker,
+                        request.SkillSequence,request.SkillId,
+                        prepared.Rule.FixedDamage,geometryReady.ServerTick,
+                        normalWhite,out var completion);
+                    if(posted!=CombatPostStatus.Accepted||completion is null)
+                    {
+                        var status=posted==CombatPostStatus.Backpressured
+                            ? SkillUseStatus.Backpressured:SkillUseStatus.TargetDead;
+                        var cancelled=await router.FinishPreparedPlayerSkillAsync(
+                            prepared,status).ConfigureAwait(false);
+                        var sent=router.QueuePvpSkillResult(request,new(
+                            request.RequestMapEpoch,request.SkillSequence,
+                            cancelled.Status,geometryReady.ServerTick,
+                            request.SkillId,request.TargetActorId,0,false));
+                        if(sent!=GatewaySendStatus.Enqueued)
+                            throw new IOException(
+                                "Reliable PvP skill combat rejection could not be queued: "+sent);
+                        return;
+                    }
+
+                    var finalized=await router.FinishPreparedPlayerSkillAsync(prepared)
+                        .ConfigureAwait(false);
+                    if(finalized.Status!=SkillUseStatus.Applied)
+                        throw new InvalidOperationException(
+                            "Accepted PvP skill damage lost shared skill commit token");
+                    var settled=await completion.WaitAsync(TimeSpan.FromSeconds(10))
+                        .ConfigureAwait(false);
+                    var applied=router.QueuePvpSkillResult(request,new(
+                        request.RequestMapEpoch,request.SkillSequence,
+                        SkillUseStatus.Applied,settled.ServerTick,
+                        request.SkillId,request.TargetActorId,
+                        settled.Damage,settled.Died));
+                    if(applied!=GatewaySendStatus.Enqueued)
+                        throw new IOException(
+                            "Reliable applied PvP skill result could not be queued: "+applied);
+                }
+                finally
+                {
+                    if(suspended is { } actor&&
+                       router.IsCurrentBinding(binding)&&
+                       !_combat!.TryResume(actor))
+                        throw new InvalidOperationException(
+                            "PvP skill Combat generation could not resume");
+                    gameplayGate.Release();
+                }
+            }
+
             async Task TradeHandler(TrustedTradeCommand request)
             {
                 if(_trades is null)return;
@@ -1447,7 +1699,8 @@ public sealed class IdentityTlsAuthorization
                 handleTrade:tradeHandler,
                 handleQuest:QuestHandler,
                 handlePvp:PvpModeHandler,
-                handlePvpAttack:PvpAttackHandler).ConfigureAwait(false);
+                handlePvpAttack:PvpAttackHandler,
+                handlePvpSkill:PvpSkillHandler).ConfigureAwait(false);
         }
         finally
         {

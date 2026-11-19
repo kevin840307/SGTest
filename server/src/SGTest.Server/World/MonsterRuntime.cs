@@ -132,6 +132,15 @@ public sealed class MonsterRuntime
     public int MapId => _grid.MapId;
     public int Count => _order.Length;
 
+    public bool IsDirectClear(double fromX,double fromY,double toX,double toY)
+    {
+        if(!double.IsFinite(fromX)||!double.IsFinite(fromY)||
+           !double.IsFinite(toX)||!double.IsFinite(toY)||
+           fromX<0||fromY<0||toX<0||toY<0)
+            return false;
+        return _grid.IsDirectClear(fromX,fromY,toX,toY);
+    }
+
     public MonsterRuntimeStatistics Statistics =>
         new(_aiSteps, _processed, _pathQueries, _attacks, _maxProcessed, Count);
 

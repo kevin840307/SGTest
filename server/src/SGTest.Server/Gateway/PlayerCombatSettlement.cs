@@ -17,7 +17,12 @@ public readonly record struct PlayerRespawnOutcome(
     int CurrentHp,
     int MaxHp);
 
-public enum PlayerDamageSourceKind : byte { Monster = 0, PlayerPvp = 1 }
+public enum PlayerDamageSourceKind : byte
+{
+    Monster = 0,
+    PlayerPvp = 1,
+    PlayerSkill = 2
+}
 
 public readonly record struct PlayerDamageSettlement(
     long ActorId,
@@ -34,7 +39,8 @@ public readonly record struct PlayerDamageSettlement(
     PlayerDamageSourceKind SourceKind = PlayerDamageSourceKind.Monster,
     long AttackerActorId = 0,long AttackerConnectionEpoch = 0,
     uint AttackerAttackSequence = 0,bool VictimWasNormalWhite = false,
-    byte AttackerFacing = 0,byte VictimFacing = 0);
+    byte AttackerFacing = 0,byte VictimFacing = 0,
+    int AttackerSkillId = 0,uint AttackerSkillSequence = 0);
 
 public sealed record PlayerCombatSettlementOptions(int Capacity = 256);
 
@@ -84,6 +90,7 @@ public sealed class PlayerCombatSettlement
         long AttackerActorId = 0,long AttackerConnectionEpoch = 0,
         uint AttackerAttackSequence = 0,bool VictimWasNormalWhite = false,
         byte AttackerFacing = 0,byte VictimFacing = 0,
+        int AttackerSkillId = 0,uint AttackerSkillSequence = 0,
         TaskCompletionSource<PlayerDamageSettlement>? Completion = null);
 
     private readonly SqliteIdentityStore _store;
@@ -311,7 +318,7 @@ public sealed class PlayerCombatSettlement
             var queued=new QueuedHit(target.ActorId,target.ConnectionEpoch,target.MapEpoch,
                 sequence,serverTick,0,0,applied,hpAfter,PlayerDamageSourceKind.PlayerPvp,
                 attacker.ActorId,attacker.ConnectionEpoch,attackSequence,victimWasNormalWhite,
-                attacker.Facing,target.Facing,tcs);
+                attacker.Facing,target.Facing,0,0,tcs);
             if(!_input.Writer.TryWrite(queued))
             {
                 state.Pending--; state.ProjectedHp+=applied; state.DamageSequence--;
@@ -319,6 +326,63 @@ public sealed class PlayerCombatSettlement
                 Interlocked.Increment(ref _backpressure); return CombatPostStatus.Backpressured;
             }
             completion=tcs.Task; Interlocked.Increment(ref _accepted); return CombatPostStatus.Accepted;
+        }
+    }
+
+    public CombatPostStatus TryPostPvpSkillHit(
+        ActorSnapshot target,ActorSnapshot attacker,uint skillSequence,int skillId,
+        int fixedDamage,long serverTick,bool victimWasNormalWhite,
+        out Task<PlayerDamageSettlement>? completion)
+    {
+        ValidateActor(target);
+        ValidateActor(attacker);
+        completion=null;
+        if(attacker.ActorId==target.ActorId||attacker.MapId!=target.MapId||
+           skillSequence==0||skillId is <1 or >100_000_000||
+           fixedDamage is <1 or >100_000_000||serverTick<0)
+            throw new ArgumentOutOfRangeException(nameof(attacker));
+        lock(_gate)
+        {
+            ThrowIfFaulted();
+            if(!_states.TryGetValue(target.ActorId,out var state)||
+               state.ConnectionEpoch!=target.ConnectionEpoch||
+               state.MapEpoch!=target.MapEpoch||state.Suspended||state.Closing||
+               state.ProjectedHp<=0)
+                return CombatPostStatus.TargetUnavailable;
+            int applied=Math.Min(fixedDamage,state.ProjectedHp);
+            if(state.DamageSequence==uint.MaxValue)
+                throw new InvalidOperationException("Player damage sequence exhausted");
+            uint sequence=state.DamageSequence+1;
+            int hpAfter=state.ProjectedHp-applied;
+            if(state.Pending==0)
+                state.Drain=new(TaskCreationOptions.RunContinuationsAsynchronously);
+            var tcs=new TaskCompletionSource<PlayerDamageSettlement>(
+                TaskCreationOptions.RunContinuationsAsynchronously);
+            state.DamageSequence=sequence;
+            state.ProjectedHp=hpAfter;
+            state.Pending++;
+            var queued=new QueuedHit(
+                target.ActorId,target.ConnectionEpoch,target.MapEpoch,
+                sequence,serverTick,0,0,applied,hpAfter,
+                PlayerDamageSourceKind.PlayerSkill,
+                attacker.ActorId,attacker.ConnectionEpoch,0,victimWasNormalWhite,
+                attacker.Facing,target.Facing,skillId,skillSequence,tcs);
+            if(!_input.Writer.TryWrite(queued))
+            {
+                state.Pending--;
+                state.ProjectedHp+=applied;
+                state.DamageSequence--;
+                if(state.Pending==0)
+                {
+                    state.Drain?.TrySetResult(true);
+                    state.Drain=null;
+                }
+                Interlocked.Increment(ref _backpressure);
+                return CombatPostStatus.Backpressured;
+            }
+            completion=tcs.Task;
+            Interlocked.Increment(ref _accepted);
+            return CombatPostStatus.Accepted;
         }
     }
 
@@ -537,7 +601,8 @@ public sealed class PlayerCombatSettlement
                     committed.Profile.Data.MaxHp, committed.Died,
                     hit.SourceKind,hit.AttackerActorId,hit.AttackerConnectionEpoch,
                     hit.AttackerAttackSequence,hit.VictimWasNormalWhite,
-                    hit.AttackerFacing,hit.VictimFacing);
+                    hit.AttackerFacing,hit.VictimFacing,
+                    hit.AttackerSkillId,hit.AttackerSkillSequence);
 
                 if (_committedLifecycle is not null)
                     await _committedLifecycle(result).ConfigureAwait(false);

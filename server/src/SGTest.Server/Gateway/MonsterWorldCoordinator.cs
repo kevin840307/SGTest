@@ -236,6 +236,8 @@ public sealed class MonsterWorldCoordinator
 
         if(!_skillRules.TryGetValue(request.SkillId,out var rule))
             return new(null,EmptySkill(request,SkillUseStatus.NoRule));
+        if(request.ExpectedTargetKind is { } expected&&rule.TargetKind!=expected)
+            return new(null,EmptySkill(request,SkillUseStatus.NoRule));
         if(request.Profile is null ||
             !_runtimes.TryGetValue(actor.MapId,out var runtime))
             return new(null,EmptySkill(request,SkillUseStatus.CombatUnavailable));
@@ -253,6 +255,13 @@ public sealed class MonsterWorldCoordinator
             if(targetStatus!=NormalAttackStatus.Applied)
                 return new(null,FromSkillTarget(
                     request,MapSkillStatus(targetStatus),target));
+        }
+        else if(rule.TargetKind==SkillTargetKind.SinglePlayer)
+        {
+            var status=ValidatePlayerSkillTarget(
+                actor,request.TargetEntityId,rule,runtime,out _);
+            if(status!=SkillUseStatus.Applied)
+                return new(null,EmptySkill(request,status));
         }
         else
         {
@@ -306,6 +315,20 @@ public sealed class MonsterWorldCoordinator
         {
             cursor.PendingSequence=0;
             return EmptySkill(request,SkillUseStatus.NoRule);
+        }
+
+        if(currentRule.TargetKind==SkillTargetKind.SinglePlayer)
+        {
+            var status=ValidatePlayerSkillTarget(
+                actor,request.TargetEntityId,currentRule,runtime,out _);
+            cursor.PendingSequence=0;
+            if(status!=SkillUseStatus.Applied)
+                return EmptySkill(request,status);
+            cursor.LastAppliedTick[currentRule.SkillId]=_lastTick;
+            // Player HP is owned by PlayerCombatSettlement, not MonsterRuntime.
+            // This commit only finalizes the shared skill sequence/cooldown token.
+            return new(SkillUseStatus.Applied,_lastTick,request.SkillId,
+                request.TargetEntityId,0,0,0,0);
         }
 
         if(currentRule.TargetKind==SkillTargetKind.SingleMonster)
@@ -363,6 +386,30 @@ public sealed class MonsterWorldCoordinator
             0,0,0,0,0,null,hits);
     }
 
+    private SkillUseStatus ValidatePlayerSkillTarget(
+        ActorSnapshot attacker,long targetActorId,VerifiedSkillRule rule,
+        MonsterRuntime runtime,out ActorSnapshot target)
+    {
+        target=default;
+        if(targetActorId<=0)return SkillUseStatus.TargetMissing;
+        if(targetActorId==attacker.ActorId)return SkillUseStatus.SelfTarget;
+        if(!PvpMapPolicy.AllowsPlayerPvp(attacker.MapId))
+            return SkillUseStatus.NonPvpMap;
+        if(attacker.CombatDead)return SkillUseStatus.CombatUnavailable;
+        if(!_actors.TryGetValue(targetActorId,out target)||
+           target.MapId!=attacker.MapId||
+           target.MapEpoch!=attacker.MapEpoch)
+            return SkillUseStatus.TargetMissing;
+        if(target.CombatDead)return SkillUseStatus.TargetDead;
+        double dx=target.X-attacker.X,dy=target.Y-attacker.Y;
+        if(dx*dx+dy*dy>rule.Range*rule.Range)
+            return SkillUseStatus.OutOfRange;
+        if(rule.RequireLineOfSight&&
+           !runtime.IsDirectClear(attacker.X,attacker.Y,target.X,target.Y))
+            return SkillUseStatus.Blocked;
+        return SkillUseStatus.Applied;
+    }
+
     private SkillUseOutcome EmptySkill(
         TrustedSkillUse request,SkillUseStatus status) =>
         new(status,Math.Max(0,_lastTick),request.SkillId,
@@ -380,7 +427,7 @@ public sealed class MonsterWorldCoordinator
     private static bool ValidRuleGeometry(VerifiedSkillRule rule) =>
         rule.TargetKind switch
         {
-            SkillTargetKind.SingleMonster =>
+            SkillTargetKind.SingleMonster or SkillTargetKind.SinglePlayer =>
                 double.IsFinite(rule.Range) && rule.Range is >=1 and <=500 &&
                 Math.Abs(rule.AreaRadius)<=1e-9,
             SkillTargetKind.SelfCenteredArea =>
