@@ -373,6 +373,10 @@ func run() -> void:
 	root.add_child(app)
 	var panel = app.session_panel
 	panel.show()
+	var scroll = panel.get_node_or_null("SessionOptionsScroll")
+	if scroll == null or not scroll is ScrollContainer or not scroll.clip_contents:
+		fail("Long SessionPanel must clip gameplay controls in a scrollable form")
+		return
 	panel.username_input.text = "fixture_user"
 	panel.password_input.text = "bad"
 	panel.login_button.pressed.emit()

@@ -127,8 +127,21 @@ const SKILL_RESULT_NAMES = ["成功","未命中","目標不存在","目標死亡
 
 func _ready() -> void:
 	custom_minimum_size.x = 360
+	# The authenticated gameplay controls exceed the viewport height.
+	# Clip and scroll the ONE existing form rather than letting trade/PvP
+	# actions extend off-screen or constructing a parallel UI.
+	var scroll := ScrollContainer.new()
+	scroll.name = "SessionOptionsScroll"
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	scroll.follow_focus = true
+	scroll.custom_minimum_size.y = maxf(220.0, get_viewport_rect().size.y - 96.0)
+	add_child(scroll)
+	get_viewport().size_changed.connect(func():
+		scroll.custom_minimum_size.y = maxf(220.0, get_viewport_rect().size.y - 96.0))
 	var column := VBoxContainer.new()
-	add_child(column)
+	column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.add_child(column)
 	var title := Label.new()
 	title.text = "星夢 Online — 登入"
 	column.add_child(title)
