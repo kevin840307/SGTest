@@ -109,6 +109,15 @@ var pvp_query_button := Button.new()
 var pvp_blue_button := Button.new()
 var pvp_white_button := Button.new()
 var pvp_status := Label.new()
+var pvp_target_picker := OptionButton.new()
+var pvp_attack_button := Button.new()
+var pvp_attack_status := Label.new()
+var _pvp_target_display_key := ""
+const PVP_ATTACK_STATUS_NAMES = [
+	"攻擊成功","地圖／連線世代已變更","重複／過期攻擊序號","不可攻擊自己",
+	"此地圖禁止玩家 PvP","攻擊者為受保護藍名","目標為受保護藍名","目標不存在",
+	"攻擊者已死亡","目標已死亡","距離過遠","障礙物阻擋","攻擊冷卻中",
+	"戰鬥狀態不可用","伺服器忙碌，請稍後重試"]
 const INVENTORY_PAGE_SIZE := 80
 var _inventory_page := 0
 var _inventory_display_key := ""
@@ -347,13 +356,16 @@ func _ready() -> void:
 	pvp_query_button.text = "查詢 PvP 名稱模式"
 	pvp_blue_button.text = "設為藍名（保護）"
 	pvp_white_button.text = "設為白名（允許 PvP 地圖）"
+	pvp_attack_button.text = "攻擊選中玩家（Server 權威）"
 	pvp_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	for control in [pvp_query_button,pvp_blue_button,pvp_white_button,pvp_status]:
+	pvp_attack_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	for control in [pvp_query_button,pvp_blue_button,pvp_white_button,pvp_status,pvp_target_picker,pvp_attack_button,pvp_attack_status]:
 		control.visible = false
 		column.add_child(control)
 	pvp_query_button.pressed.connect(func(): _request_pvp_mode(0))
 	pvp_blue_button.pressed.connect(func(): _request_pvp_mode(1))
 	pvp_white_button.pressed.connect(func(): _request_pvp_mode(2))
+	pvp_attack_button.pressed.connect(_attack_selected_player)
 	var style := StyleBoxFlat.new()
 	style.bg_color = Color("211c15")
 	style.border_color = Color("c8a452")
@@ -578,6 +590,15 @@ func submit_equipment_equip(item_uid: int) -> bool:
 
 func submit_equipment_unequip(item_uid: int) -> bool:
 	return active and not bool(_latest.get("reconnecting",false)) and bool(_latest.get("world_ready",false)) and bool(_latest.get("inventory_ready",false)) and bool(_latest.get("equipment_ready",false)) and not bool(_latest.get("resync_pending",false)) and not bool(_latest.get("waiting_for_new_map",false)) and int(_latest.get("pending_equipment_sequence",0)) == 0 and item_uid > 0 and (_latest.get("equipment_items",{}) as Dictionary).has(item_uid) and session.unequip_item(item_uid)
+
+func submit_pvp_attack(target_actor_id: int) -> bool:
+	if not active or int(_latest.get("state",-1)) != State.STATE_IN_WORLD or not bool(_latest.get("world_ready",false)) or not bool(_latest.get("combat_available",false)) or bool(_latest.get("player_dead",false)) or bool(_latest.get("reconnecting",false)) or bool(_latest.get("resync_pending",false)) or bool(_latest.get("waiting_for_new_map",false)) or not bool(_latest.get("pvp_known",false)) or not bool(_latest.get("pvp_map_allows",false)) or int(_latest.get("pending_pvp_attack_sequence",0)) != 0:
+		return false
+	var entities: Dictionary = _latest.get("entities",{})
+	if target_actor_id <= 0 or target_actor_id == int(_latest.get("actor_id",0)) or not entities.has(target_actor_id):
+		return false
+	return session.attack_player(target_actor_id)
+
 
 func submit_trade_request(target_actor_id: int) -> bool:
 	if not active or int(_latest.get("state",-1)) != State.STATE_IN_WORLD or not bool(_latest.get("world_ready",false)) or not bool(_latest.get("inventory_ready",false)) or bool(_latest.get("player_dead",false)) or bool(_latest.get("reconnecting",false)) or bool(_latest.get("resync_pending",false)) or int(_latest.get("trade_id",0)) != 0:
@@ -1258,28 +1279,78 @@ func _request_pvp_mode(action: int) -> void:
 		pvp_status.text = "無法送出：請確認角色、地圖及其他 PvP 請求"
 
 
+func _attack_selected_player() -> void:
+	if pvp_attack_button.disabled or pvp_target_picker.selected < 0:
+		return
+	var target := int(pvp_target_picker.get_item_metadata(pvp_target_picker.selected))
+	if submit_pvp_attack(target):
+		pvp_attack_status.text = "PvP 攻擊已送出，等待伺服器判定距離、保護狀態與傷害…"
+		pvp_attack_button.disabled = true
+	else:
+		pvp_attack_status.text = "目前無法攻擊該玩家"
+
+
+func _pvp_attack_status_text(code: int) -> String:
+	return PVP_ATTACK_STATUS_NAMES[code] if code >= 0 and code < PVP_ATTACK_STATUS_NAMES.size() else "未知 PvP 結果"
+
+
 func _update_pvp_ui() -> void:
 	var in_world := active and int(_latest.get("state",-1)) == State.STATE_IN_WORLD
-	for control in [pvp_query_button,pvp_blue_button,pvp_white_button,pvp_status]:
+	for control in [pvp_query_button,pvp_blue_button,pvp_white_button,pvp_status,pvp_target_picker,pvp_attack_button,pvp_attack_status]:
 		control.visible = in_world
 	if not in_world:
+		_pvp_target_display_key = ""
 		return
 	var ready := bool(_latest.get("world_ready",false)) and not bool(_latest.get("reconnecting",false)) and not bool(_latest.get("resync_pending",false)) and not bool(_latest.get("waiting_for_new_map",false)) and int(_latest.get("pending_world_ready_ack_epoch",0)) == 0 and int(_latest.get("last_world_ready_ack_epoch",0)) == int(_latest.get("map_epoch",0))
 	var pending := int(_latest.get("pending_pvp_sequence",0)) != 0
 	var known := bool(_latest.get("pvp_known",false))
 	var dead := bool(_latest.get("player_dead",false))
+	var map_allows := bool(_latest.get("pvp_map_allows",false))
 	pvp_query_button.disabled = not ready or pending
 	pvp_blue_button.disabled = not ready or pending or not known or dead or int(_latest.get("pvp_mode",-1)) == 0
-	pvp_white_button.disabled = not ready or pending or not known or dead or not bool(_latest.get("pvp_map_allows",false)) or int(_latest.get("pvp_mode",-1)) == 1
+	pvp_white_button.disabled = not ready or pending or not known or dead or not map_allows or int(_latest.get("pvp_mode",-1)) == 1
 	if pending:
 		pvp_status.text = "等待伺服器 PvP 模式確認；不可重複送出"
 	elif known:
 		var mode := "白名（PvP 開啟）" if int(_latest.get("pvp_mode",-1)) == 1 else "藍名（保護）"
-		var map_text := "此圖允許玩家 PvP" if bool(_latest.get("pvp_map_allows",false)) else "此圖禁止玩家 PvP"
+		var map_text := "此圖允許玩家 PvP" if map_allows else "此圖禁止玩家 PvP"
 		var result: Dictionary = _latest.get("last_pvp_result",{})
 		pvp_status.text = "%s｜%s｜伺服器結果 %d" % [mode,map_text,int(result.get("status",-1))]
 	else:
 		pvp_status.text = "PvP 模式尚未查詢；名稱顏色由伺服器判定"
+
+	var entity_ids: Array = (_latest.get("entities",{}) as Dictionary).keys()
+	entity_ids.sort()
+	var target_key := "%d/%d/%d" % [int(_latest.get("actor_id",0)),int(_latest.get("map_epoch",0)),entity_ids.size()]
+	for raw_actor in entity_ids:
+		target_key += ","+str(int(raw_actor))
+	if target_key != _pvp_target_display_key:
+		_pvp_target_display_key = target_key
+		pvp_target_picker.clear()
+		for raw_actor in entity_ids:
+			var target_id := int(raw_actor)
+			if target_id <= 0 or target_id == int(_latest.get("actor_id",0)):
+				continue
+			pvp_target_picker.add_item("可見玩家 %d" % target_id)
+			pvp_target_picker.set_item_metadata(pvp_target_picker.item_count-1,target_id)
+		if pvp_target_picker.item_count > 0:
+			pvp_target_picker.select(0)
+
+	var attack_pending := int(_latest.get("pending_pvp_attack_sequence",0)) != 0
+	pvp_attack_button.disabled = not ready or not known or not map_allows or dead or not bool(_latest.get("combat_available",false)) or attack_pending or pvp_target_picker.item_count == 0
+	var attack_result: Dictionary = _latest.get("last_pvp_attack_result",{})
+	if attack_pending:
+		pvp_attack_status.text = "等待伺服器 PvP 攻擊結算；不可重複攻擊"
+	elif not attack_result.is_empty():
+		var code := int(attack_result.get("status",-1))
+		if code == 0:
+			pvp_attack_status.text = "%s｜傷害 %d%s" % [_pvp_attack_status_text(code),int(attack_result.get("damage",0)),"｜目標死亡" if bool(attack_result.get("died",false)) else ""]
+		else:
+			pvp_attack_status.text = "%s（代碼 %d）" % [_pvp_attack_status_text(code),code]
+	elif not map_allows:
+		pvp_attack_status.text = "此地圖禁止玩家 PvP"
+	else:
+		pvp_attack_status.text = "選擇 AOI 內玩家後可送出攻擊；傷害與罪名由伺服器判定"
 
 
 func _update_trade_ui() -> void:

@@ -56,6 +56,14 @@ class RespawnSession extends RefCounted:
 	var last_trade_money := 0
 	var pvp_requests := 0
 	var last_pvp_action := -1
+	var pvp_attacks := 0
+	var last_pvp_target := 0
+	func attack_player(target_actor_id: int) -> bool:
+		if target_actor_id <= 0:
+			return false
+		pvp_attacks += 1
+		last_pvp_target = target_actor_id
+		return true
 	func request_pvp_mode(action: int) -> bool:
 		if action not in [0,1,2]:
 			return false
@@ -1015,9 +1023,31 @@ func run() -> void:
 		fail("NonPK map allowed white PvP mode UI")
 		return
 	panel._latest.pvp_map_allows = true
+	panel._latest.combat_available = true
+	panel._latest.entities = {77:{"actor_id":77}}
+	panel._latest.pending_pvp_attack_sequence = 0
+	panel._latest.last_pvp_attack_result = {}
 	panel._update_pvp_ui()
 	if panel.pvp_white_button.disabled:
 		fail("Verified PvP map did not expose white mode")
+		return
+	if panel.pvp_target_picker.get_parent() == null or panel.pvp_target_picker.item_count != 1 or panel.pvp_attack_button.disabled:
+		fail("PvP attack target controls did not bind visible AOI player")
+		return
+	panel.pvp_attack_button.pressed.emit()
+	if stub.pvp_attacks != 1 or stub.last_pvp_target != 77 or not panel.pvp_attack_button.disabled:
+		fail("PvP attack button did not send exactly one visible target")
+		return
+	panel._latest.pending_pvp_attack_sequence = 1
+	panel._update_pvp_ui()
+	if not panel.pvp_attack_button.disabled or stub.pvp_attacks != 1:
+		fail("Pending PvP attack re-enabled duplicate submit")
+		return
+	panel._latest.pending_pvp_attack_sequence = 0
+	panel._latest.last_pvp_attack_result = {"status":10,"target_actor_id":77,"damage":0,"died":false}
+	panel._update_pvp_ui()
+	if not panel.pvp_attack_status.text.contains("距離過遠") or panel.pvp_attack_button.disabled:
+		fail("PvP attack did not display authoritative rejected result")
 		return
 	panel.pvp_white_button.pressed.emit()
 	if stub.pvp_requests != 2 or stub.last_pvp_action != 2:
@@ -1025,8 +1055,8 @@ func run() -> void:
 		return
 	panel._latest.player_dead = true
 	panel._update_pvp_ui()
-	if not panel.pvp_white_button.disabled or not panel.pvp_blue_button.disabled:
-		fail("Dead player could mutate PvP mode")
+	if not panel.pvp_white_button.disabled or not panel.pvp_blue_button.disabled or not panel.pvp_attack_button.disabled:
+		fail("Dead player could mutate PvP mode or attack")
 		return
 	panel._update_inventory_ui()
 	if not panel.recovery_button.disabled or panel.submit_recovery_use(10000):
@@ -1042,5 +1072,5 @@ func run() -> void:
 	panel._set_respawn_controls()
 	app.queue_free()
 	await process_frame
-	print("CLIENT_TLS_LOGIN_PASS ui=PASS auth=PASS choose=PASS receipt=PASS world_ready=PASS password_cleared=PASS logout=PASS respawn_ui=PASS click_attack_ui=PASS click_pickup_ui=PASS persistent_inventory_ui=PASS item_metadata=PASS inventory_pagination=PASS recovery_item_button=PASS inventory_discard_button=PASS inventory_discard_quantity_confirm=PASS shop_ui=PASS storage_ui=PASS equipment_ui=PASS bank_ui=PASS repair_ui=PASS trade_ui=PASS trade_ui_parenting=PASS pvp_ui=PASS pvp_tls_auto_query=PASS skill_cast_ui=PASS skill_singleflight=PASS combat_mp_ui=PASS")
+	print("CLIENT_TLS_LOGIN_PASS ui=PASS auth=PASS choose=PASS receipt=PASS world_ready=PASS password_cleared=PASS logout=PASS respawn_ui=PASS click_attack_ui=PASS click_pickup_ui=PASS persistent_inventory_ui=PASS item_metadata=PASS inventory_pagination=PASS recovery_item_button=PASS inventory_discard_button=PASS inventory_discard_quantity_confirm=PASS shop_ui=PASS storage_ui=PASS equipment_ui=PASS bank_ui=PASS repair_ui=PASS trade_ui=PASS trade_ui_parenting=PASS pvp_ui=PASS pvp_attack_ui=PASS pvp_tls_auto_query=PASS skill_cast_ui=PASS skill_singleflight=PASS combat_mp_ui=PASS")
 	quit(0)
