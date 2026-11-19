@@ -2247,6 +2247,82 @@ public static class WireProtocol
         value=new(characterId,start,completeRaw==1,items);
         return true;
     }
+    private static byte[] EncodeEquipmentMove(WireOpcode opcode,EquipmentMoveWire value)
+    {
+        if(opcode is not (WireOpcode.EquipmentEquip or WireOpcode.EquipmentUnequip)||
+           value.MapEpoch<=0||value.EquipmentSequence==0||value.ItemUid<=0)
+            throw new ArgumentOutOfRangeException(nameof(value));
+        var frame=NewFrame(opcode,EquipmentMoveFrameBytes);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(8,8),value.MapEpoch);
+        BinaryPrimitives.WriteUInt32LittleEndian(frame.AsSpan(16,4),value.EquipmentSequence);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(20,8),value.ItemUid);
+        return frame;
+    }
+
+    public static byte[] EncodeEquipmentEquip(EquipmentMoveWire value)=>
+        EncodeEquipmentMove(WireOpcode.EquipmentEquip,value);
+    public static byte[] EncodeEquipmentUnequip(EquipmentMoveWire value)=>
+        EncodeEquipmentMove(WireOpcode.EquipmentUnequip,value);
+
+    private static bool TryDecodeEquipmentMove(ReadOnlySpan<byte> frame,WireOpcode opcode,out EquipmentMoveWire value)
+    {
+        value=default;
+        if(!TryReadHeader(frame,out var h)||h.Opcode!=opcode)return false;
+        value=new(
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(8,8)),
+            BinaryPrimitives.ReadUInt32LittleEndian(frame.Slice(16,4)),
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(20,8)));
+        return value.MapEpoch>0&&value.EquipmentSequence>0&&value.ItemUid>0;
+    }
+
+    public static bool TryDecodeEquipmentEquip(ReadOnlySpan<byte> frame,out EquipmentMoveWire value)=>
+        TryDecodeEquipmentMove(frame,WireOpcode.EquipmentEquip,out value);
+    public static bool TryDecodeEquipmentUnequip(ReadOnlySpan<byte> frame,out EquipmentMoveWire value)=>
+        TryDecodeEquipmentMove(frame,WireOpcode.EquipmentUnequip,out value);
+
+    public static byte[] EncodeEquipmentTransferResult(EquipmentTransferResultWire value)
+    {
+        if(!ValidEquipmentTransferResult(value))
+            throw new ArgumentOutOfRangeException(nameof(value));
+        var frame=NewFrame(WireOpcode.EquipmentTransferResult,EquipmentTransferResultFrameBytes);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(8,8),value.MapEpoch);
+        BinaryPrimitives.WriteUInt32LittleEndian(frame.AsSpan(16,4),value.EquipmentSequence);
+        frame[20]=(byte)value.Kind;
+        frame[21]=(byte)value.Status;
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(22,8),value.ItemUid);
+        BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(30,4),value.ItemDefinitionId);
+        BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(34,4),value.SlotId);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(38,8),value.SourceDropId);
+        return frame;
+    }
+
+    public static bool TryDecodeEquipmentTransferResult(ReadOnlySpan<byte> frame,out EquipmentTransferResultWire value)
+    {
+        value=default;
+        if(!TryReadHeader(frame,out var h)||h.Opcode!=WireOpcode.EquipmentTransferResult)return false;
+        value=new(
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(8,8)),
+            BinaryPrimitives.ReadUInt32LittleEndian(frame.Slice(16,4)),
+            (EquipmentTransferKind)frame[20],
+            (EquipmentTransferStatus)frame[21],
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(22,8)),
+            BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(30,4)),
+            BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(34,4)),
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(38,8)));
+        return ValidEquipmentTransferResult(value);
+    }
+
+    private static bool ValidEquipmentTransferResult(EquipmentTransferResultWire value)
+    {
+        if(value.MapEpoch<=0||value.EquipmentSequence==0||
+           value.Kind is not (EquipmentTransferKind.Equip or EquipmentTransferKind.Unequip)||
+           (byte)value.Status>(byte)EquipmentTransferStatus.StaleGeneration||
+           value.ItemUid<=0||value.ItemDefinitionId<0||value.ItemDefinitionId>100_000_000||
+           value.SlotId<0||value.SlotId>255||value.SourceDropId<0)return false;
+        if(value.Status is EquipmentTransferStatus.Applied or EquipmentTransferStatus.AlreadyApplied)
+            return value.ItemDefinitionId>0&&value.SlotId>0;
+        return value.ItemDefinitionId==0&&value.SlotId==0&&value.SourceDropId==0;
+    }
     private static float ReadFloat(ReadOnlySpan<byte> source) =>
         BitConverter.Int32BitsToSingle(BinaryPrimitives.ReadInt32LittleEndian(source));
 
