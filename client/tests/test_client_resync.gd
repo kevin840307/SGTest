@@ -40,17 +40,22 @@ func _initialize() -> void:
 	if healed.is_empty():
 		_fail("same-session baseline did not heal "+str(session.snapshot()),session)
 		return
-	var expected := [
+	var expected_control := [
 		WireCodec.OPCODE_AUTH_REQUEST,
 		WireCodec.OPCODE_CHARACTER_CHOOSE,
 		WireCodec.OPCODE_WORLD_READY_ACK,
 		WireCodec.OPCODE_WORLD_RESYNC_REQUEST,
 		WireCodec.OPCODE_WORLD_READY_ACK,
-		WireCodec.OPCODE_PVP_MODE_COMMAND,
 	]
 	var before_move := fake.sent_opcodes()
-	if before_move != expected:
-		_fail("control order "+str(before_move),session)
+	var without_query := before_move.filter(func(op): return int(op) != WireCodec.OPCODE_PVP_MODE_COMMAND)
+	var query_index := before_move.find(WireCodec.OPCODE_PVP_MODE_COMMAND)
+	var first_ack_index := before_move.find(WireCodec.OPCODE_WORLD_READY_ACK)
+	# The first ACK may start an automatic PvP query just before the
+	# synthetic AOI gap requests resync. This is legal: the same MapEpoch
+	# must not re-query on replacement WorldReady, and movement stays gated.
+	if without_query != expected_control or before_move.size() != 6 or query_index <= first_ack_index or before_move.count(WireCodec.OPCODE_PVP_MODE_COMMAND) != 1:
+		_fail("control order or duplicate PvP query "+str(before_move),session)
 		return
 	if not session.move_target(40,8):
 		_fail("post-resync move intent",session)
