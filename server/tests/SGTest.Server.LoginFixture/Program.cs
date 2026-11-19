@@ -108,7 +108,8 @@ internal static class Program
                     await world.StopAsync();
                     await routingTask.WaitAsync(TimeSpan.FromSeconds(3));
                 }
-                if (ended.CommandsAccepted != 1 || ended.ReliableFramesSent < 2 ||
+                // WorldReady triggers one PvP mode query in addition to the Move.
+                if (ended.CommandsAccepted != 2 || ended.ReliableFramesSent < 2 ||
                     aoiPump.FramesQueued < 1 || resultRouter.Statistics.ActiveSessions != 0)
                     throw new InvalidOperationException($"fixture disconnect or send mismatch commands={ended.CommandsAccepted} reliable_frames={ended.ReliableFramesSent} aoi={aoiPump.FramesQueued} active_routes={resultRouter.Statistics.ActiveSessions}");
                 Console.WriteLine($"LOGIN_FIXTURE_WORLD_READY_ROUTED aoi_frames={aoiPump.FramesQueued}");
