@@ -1040,6 +1040,34 @@ public sealed class GatewayConnection
         }
     }
 
+    public GatewaySendStatus QueueTradeSnapshot(
+        ConnectionBinding expected,TradeSnapshotWire snapshot)
+    {
+        lock(_bindingGate)
+        {
+            if(_closed)return GatewaySendStatus.Closed;
+            if(_binding!=expected||snapshot.MapEpoch!=expected.MapEpoch)
+                return GatewaySendStatus.GenerationMismatch;
+            var frame=WireProtocol.EncodeTradeSnapshot(snapshot);
+            return _reliable.TryEnqueue(frame)
+                ? GatewaySendStatus.Enqueued:GatewaySendStatus.Backpressured;
+        }
+    }
+
+    public GatewaySendStatus QueueTradeTerminal(
+        ConnectionBinding expected,TradeTerminalWire terminal)
+    {
+        lock(_bindingGate)
+        {
+            if(_closed)return GatewaySendStatus.Closed;
+            if(_binding!=expected||terminal.MapEpoch!=expected.MapEpoch)
+                return GatewaySendStatus.GenerationMismatch;
+            var frame=WireProtocol.EncodeTradeTerminal(terminal);
+            return _reliable.TryEnqueue(frame)
+                ? GatewaySendStatus.Enqueued:GatewaySendStatus.Backpressured;
+        }
+    }
+
     public GatewaySendStatus QueueRecoveryUseResult(
         TrustedRecoveryUse request,RecoveryUseResult result)
     {
