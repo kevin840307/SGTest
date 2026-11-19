@@ -1071,8 +1071,10 @@ func run() -> void:
 
 	panel._latest.gm_authorized = true
 	panel._update_pvp_ui()
-	if not panel.gm_pvp_apply_button.visible or panel.gm_pvp_apply_button.disabled or
-			not panel.gm_pvp_state_picker.visible:
+	if (
+		not panel.gm_pvp_apply_button.visible or panel.gm_pvp_apply_button.disabled or
+		not panel.gm_pvp_state_picker.visible
+	):
 		fail("Server-issued GM capability did not expose bounded PvP-name controls")
 		return
 	panel.gm_pvp_state_picker.select(2)

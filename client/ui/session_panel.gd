@@ -1327,8 +1327,10 @@ func _skill_attack_selected_player() -> void:
 
 
 func _gm_apply_selected_player()->void:
-	if gm_pvp_apply_button.disabled or pvp_target_picker.selected<0 or
-			gm_pvp_state_picker.selected<0:
+	if (
+		gm_pvp_apply_button.disabled or pvp_target_picker.selected<0 or
+		gm_pvp_state_picker.selected<0
+	):
 		return
 	var target:=int(pvp_target_picker.get_item_metadata(pvp_target_picker.selected))
 	var state:=int(gm_pvp_state_picker.get_item_id(gm_pvp_state_picker.selected))
@@ -1340,17 +1342,21 @@ func _gm_apply_selected_player()->void:
 
 
 func submit_gm_pvp_name(target_actor_id:int,name_state:int)->bool:
-	if not active or not bool(_latest.get("gm_authorized",false)) or
-			int(_latest.get("state",-1))!=State.STATE_IN_WORLD or
-			not bool(_latest.get("world_ready",false)) or
-			bool(_latest.get("reconnecting",false)) or
-			bool(_latest.get("resync_pending",false)) or
-			bool(_latest.get("waiting_for_new_map",false)) or
-			int(_latest.get("pending_gm_sequence",0))!=0:
+	if (
+		not active or not bool(_latest.get("gm_authorized",false)) or
+		int(_latest.get("state",-1))!=State.STATE_IN_WORLD or
+		not bool(_latest.get("world_ready",false)) or
+		bool(_latest.get("reconnecting",false)) or
+		bool(_latest.get("resync_pending",false)) or
+		bool(_latest.get("waiting_for_new_map",false)) or
+		int(_latest.get("pending_gm_sequence",0))!=0
+	):
 		return false
 	var entities:Dictionary=_latest.get("entities",{})
-	if target_actor_id<=0 or target_actor_id==int(_latest.get("actor_id",0)) or
-			not entities.has(target_actor_id) or name_state<0 or name_state>4:
+	if (
+		target_actor_id<=0 or target_actor_id==int(_latest.get("actor_id",0)) or
+		not entities.has(target_actor_id) or name_state<0 or name_state>4
+	):
 		return false
 	return session.gm_set_pvp_name(target_actor_id,name_state)
 

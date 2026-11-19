@@ -483,12 +483,14 @@ func mark_pvp_attack_sent(sequence: int,target_actor_id: int) -> bool:
 
 func mark_gm_pvp_name_sent(
 		sequence:int,target_actor_id:int,name_state:int)->bool:
-	if state!=STATE_IN_WORLD or not gm_authorized or not world_ready or
-			resync_pending or waiting_for_new_map or
-			pending_world_ready_ack_epoch!=0 or last_world_ready_ack_epoch!=map_epoch or
-			pending_gm_sequence!=0 or sequence<=gm_sequence or sequence>0xffffffff or
-			target_actor_id<=0 or target_actor_id==actor_id or
-			name_state<0 or name_state>4 or not entities.has(target_actor_id):
+	if (
+		state!=STATE_IN_WORLD or not gm_authorized or not world_ready or
+		resync_pending or waiting_for_new_map or
+		pending_world_ready_ack_epoch!=0 or last_world_ready_ack_epoch!=map_epoch or
+		pending_gm_sequence!=0 or sequence<=gm_sequence or sequence>0xffffffff or
+		target_actor_id<=0 or target_actor_id==actor_id or
+		name_state<0 or name_state>4 or not entities.has(target_actor_id)
+	):
 		return false
 	gm_sequence=sequence
 	pending_gm_sequence=sequence
@@ -2685,9 +2687,11 @@ func _apply_gm_pvp_name_result(frame:PackedByteArray)->bool:
 	if sequence<=last_gm_result_sequence:
 		stale_gm_results+=1
 		return true
-	if sequence!=pending_gm_sequence or sequence>gm_sequence or
-			int(value.target_actor_id)!=pending_gm_target_actor_id or
-			int(value.name_state)!=pending_gm_name_state:
+	if (
+		sequence!=pending_gm_sequence or sequence>gm_sequence or
+		int(value.target_actor_id)!=pending_gm_target_actor_id or
+		int(value.name_state)!=pending_gm_name_state
+	):
 		return fail("gm_pvp_name_result_without_matching_request")
 	if int(value.status)==3:
 		return fail("gm_pvp_name_result_stale_generation")
