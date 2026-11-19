@@ -463,7 +463,7 @@ public readonly record struct PlayerShopResultWire(
     long MapEpoch,uint ShopSequence,PlayerShopCommandAction Action,
     PlayerShopResultStatus Status,long SellerActorId,long ListingId,
     long ItemUid,int ItemDefinitionId,int Quantity,long SourceDropId,
-    long Price,long SellerWallet,long BuyerWallet);
+    int DurabilityRaw,long Price,long SellerWallet,long BuyerWallet);
 public readonly record struct PlayerShopSoldWire(
     long ReceiverMapEpoch,long ListingId,long BuyerActorId,long ItemUid,
     long SellerWallet);
@@ -599,7 +599,7 @@ public static class WireProtocol
     public const int PlayerShopCommandFrameBytes =
         HeaderBytes + 8 + 4 + 1 + 8 + 8 + 8 + 8;
     public const int PlayerShopResultFrameBytes =
-        HeaderBytes + 8 + 4 + 1 + 1 + 8 + 8 + 8 + 4 + 4 + 8 + 8 + 8 + 8;
+        HeaderBytes + 8 + 4 + 1 + 1 + 8 + 8 + 8 + 4 + 4 + 8 + 4 + 8 + 8 + 8;
     public const int PlayerShopSoldFrameBytes = HeaderBytes + 8 + 8 + 8 + 8 + 8;
     public const int QuestOpenFrameBytes = HeaderBytes + 8 + 4 + 4;
     public const int QuestChooseFrameBytes = HeaderBytes + 8 + 4 + 4 + 4 + 4;
@@ -3610,9 +3610,10 @@ public static class WireProtocol
         BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(46,4),value.ItemDefinitionId);
         BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(50,4),value.Quantity);
         BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(54,8),value.SourceDropId);
-        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(62,8),value.Price);
-        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(70,8),value.SellerWallet);
-        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(78,8),value.BuyerWallet);
+        BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(62,4),value.DurabilityRaw);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(66,8),value.Price);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(74,8),value.SellerWallet);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(82,8),value.BuyerWallet);
         return frame;
     }
 
@@ -3633,9 +3634,10 @@ public static class WireProtocol
             BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(46,4)),
             BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(50,4)),
             BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(54,8)),
-            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(62,8)),
-            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(70,8)),
-            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(78,8)));
+            BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(62,4)),
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(66,8)),
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(74,8)),
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(82,8)));
         return ValidPlayerShopResult(value);
     }
 
@@ -3671,6 +3673,7 @@ public static class WireProtocol
         value.SellerActorId>=0&&value.ListingId>=0&&value.ItemUid>=0&&
         value.ItemDefinitionId is >=0 and <=100_000_000&&
         value.Quantity is >=0 and <=1_000_000&&value.SourceDropId>=0&&
+        value.DurabilityRaw>=-1&&
         value.Price>=0&&value.Price<=SqliteIdentityStore.MaximumMoney&&
         value.SellerWallet>=0&&value.SellerWallet<=SqliteIdentityStore.MaximumMoney&&
         value.BuyerWallet>=0&&value.BuyerWallet<=SqliteIdentityStore.MaximumMoney;

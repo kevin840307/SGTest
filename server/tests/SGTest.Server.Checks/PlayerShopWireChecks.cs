@@ -37,7 +37,7 @@ internal static class PlayerShopWireChecks
 
         var result=new PlayerShopResultWire(
             3,4,PlayerShopCommandAction.Buy,PlayerShopResultStatus.Applied,
-            77,91,7001,5101,2,501,250,1250,750);
+            77,91,7001,5101,2,501,80,250,1250,750);
         byte[] resultFrame=WireProtocol.EncodePlayerShopResult(result);
         Checks.Require(resultFrame.Length==WireProtocol.PlayerShopResultFrameBytes&&
             WireProtocol.TryDecodePlayerShopResult(resultFrame,out var decodedResult)&&
@@ -65,7 +65,7 @@ internal static class PlayerShopWireChecks
 
         var receipt=new PlayerShopResultWire(
             3,9,PlayerShopCommandAction.Buy,PlayerShopResultStatus.Applied,
-            77,91,7001,5101,2,501,250,1250,750);
+            77,91,7001,5101,2,501,80,250,1250,750);
         Checks.Require(gateway.QueuePlayerShopResult(trusted,receipt)==
                 GatewaySendStatus.Enqueued&&
             gateway.TryDequeueReliable(out var queued)&&

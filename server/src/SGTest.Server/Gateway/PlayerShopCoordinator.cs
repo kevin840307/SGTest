@@ -317,6 +317,7 @@ public sealed class PlayerShopCoordinator
             listing?.ListingId??command.ListingId,
             listing?.ItemUid??0,listing?.ItemDefinitionId??0,
             listing?.Quantity??0,listing?.SourceDropId??0,
+            listing?.DurabilityRaw??-1,
             listing?.Price??0,sellerWallet,buyerWallet);
 
     private static PlayerShopResultWire Queue(

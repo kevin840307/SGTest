@@ -1776,7 +1776,7 @@ public sealed class IdentityTlsAuthorization
                     var stale=new PlayerShopResultWire(
                         request.RequestMapEpoch,request.ShopSequence,request.Action,
                         PlayerShopResultStatus.StaleSequence,
-                        request.SellerActorId,request.ListingId,0,0,0,0,0,0,0);
+                        request.SellerActorId,request.ListingId,0,0,0,0,-1,0,0,0);
                     var sent=router.QueuePlayerShopResult(request,stale);
                     if(sent!=GatewaySendStatus.Enqueued)
                         throw new IOException(

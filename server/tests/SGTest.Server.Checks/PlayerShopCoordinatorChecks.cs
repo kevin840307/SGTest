@@ -25,7 +25,7 @@ internal static class PlayerShopCoordinatorChecks
             "first player-shop command rejected");
         var receipt=new PlayerShopResultWire(
             3,1,PlayerShopCommandAction.Inspect,PlayerShopResultStatus.NoShop,
-            77,0,0,0,0,0,0,0,500);
+            77,0,0,0,0,0,-1,0,0,500);
         gate.Record(first,receipt);
         Checks.Require(gate.Inspect(first)==PlayerShopSequenceDecision.ExactReplay&&
             gate.LastReceipt==receipt,
