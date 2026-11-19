@@ -255,6 +255,7 @@ static class Checks
             BankChecks.Verify(root);
             RepairCatalogChecks.Verify(root);
             RepairChecks.Verify(root);
+            QuestChecks.Verify(root);
             TradeChecks.Verify(root);
             MonsterLootSettlementChecks.Verify(root);
             NormalAttackChecks.Verify(root);
@@ -272,6 +273,7 @@ static class Checks
             NpcShopCatalogChecks.Verify(root);
             NpcStorageCatalogChecks.Verify(root);
             NpcBankCatalogChecks.Verify(root);
+            QuestCatalogChecks.Verify(root);
             NpcPortalWireChecks.Verify();
             StorageWireChecks.Verify();
             EquipmentWireChecks.Verify();
