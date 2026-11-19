@@ -3293,6 +3293,8 @@ public static class WireProtocol
             68 => WireOpcode.RepairItem, 69 => WireOpcode.RepairResult,
             70 => WireOpcode.TradeCommand, 71 => WireOpcode.TradeSnapshot,
             72 => WireOpcode.TradeTerminal,
+            73 => WireOpcode.QuestOpen, 74 => WireOpcode.QuestView,
+            75 => WireOpcode.QuestChoose,
             _ => 0
         };
         if (opcode == 0) return false;
@@ -3379,6 +3381,10 @@ public static class WireProtocol
                     2*TradeMaxItemsPerSide*TradeOfferItemBytes &&
                 (advertised-TradeSnapshotHeaderBytes)%TradeOfferItemBytes==0,
             WireOpcode.TradeTerminal => advertised == TradeTerminalFrameBytes,
+            WireOpcode.QuestOpen => advertised == QuestOpenFrameBytes,
+            WireOpcode.QuestView => advertised >= QuestViewHeaderBytes &&
+                advertised <= QuestViewMaximumFrameBytes,
+            WireOpcode.QuestChoose => advertised == QuestChooseFrameBytes,
             WireOpcode.InventorySnapshot => advertised >= InventorySnapshotHeaderBytes &&
                 advertised <= InventorySnapshotHeaderBytes +
                     InventorySnapshotMaxItemsPerFrame*InventoryItemBytes &&
