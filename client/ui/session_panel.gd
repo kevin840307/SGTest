@@ -270,6 +270,7 @@ func login() -> void:
 	_inventory_display_key = ""
 	_shop_display_key = ""
 	_storage_display_key = ""
+	_equipment_display_key = ""
 	_inventory_page = 0
 	inventory_search.clear()
 	shop_status.text = ""
@@ -278,6 +279,9 @@ func login() -> void:
 	storage_status.text = ""
 	storage_deposit_picker.clear()
 	storage_withdraw_picker.clear()
+	equipment_status.text = ""
+	equipment_inventory_picker.clear()
+	equipment_equipped_picker.clear()
 	inventory_preview.text = ""
 	_show_inventory_preview(false)
 	characters.clear()
@@ -439,6 +443,7 @@ func disconnect_session() -> void:
 	_inventory_display_key = ""
 	_shop_display_key = ""
 	_storage_display_key = ""
+	_equipment_display_key = ""
 	_inventory_page = 0
 	inventory_search.clear()
 	shop_status.text = ""
@@ -447,6 +452,9 @@ func disconnect_session() -> void:
 	storage_status.text = ""
 	storage_deposit_picker.clear()
 	storage_withdraw_picker.clear()
+	equipment_status.text = ""
+	equipment_inventory_picker.clear()
+	equipment_equipped_picker.clear()
 	inventory_preview.text = ""
 	_show_inventory_preview(false)
 	_characters = []
