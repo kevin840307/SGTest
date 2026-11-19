@@ -153,6 +153,21 @@ var last_bank_open_status := -1
 var last_bank_response_sequence := 0
 var last_bank_result := {}
 var stale_bank_results := 0
+var repair_sequence := 0
+var pending_repair_sequence := 0
+var pending_repair_kind := 0
+var pending_repair_npc := 0
+var pending_repair_item_uid := 0
+var active_repair_npc := 0
+var repair_items := {}
+var repair_ready := false
+var repair_next_index := 0
+var repair_revision := 0
+var repair_wallet_money := 0
+var last_repair_open_status := -1
+var last_repair_response_sequence := 0
+var last_repair_result := {}
+var stale_repair_results := 0
 
 var respawn_sequence := 0
 var last_respawn_result_sequence := 0
@@ -227,7 +242,7 @@ func mark_skill_sent(sequence: int) -> bool:
 	return true
 
 func mark_recovery_use_sent(sequence: int,item_uid: int) -> bool:
-	if state != STATE_IN_WORLD or player_dead or not combat_available or not inventory_ready or not world_ready or resync_pending or waiting_for_new_map or pending_world_ready_ack_epoch != 0 or last_world_ready_ack_epoch != map_epoch or pending_recovery_sequence != 0 or pending_discard_sequence != 0 or pending_shop_sequence != 0 or pending_storage_sequence != 0 or pending_equipment_sequence != 0 or pending_bank_sequence != 0 or sequence <= recovery_sequence or sequence > 0xffffffff or item_uid <= 0 or not inventory_items.has(item_uid):
+	if state != STATE_IN_WORLD or player_dead or not combat_available or not inventory_ready or not world_ready or resync_pending or waiting_for_new_map or pending_world_ready_ack_epoch != 0 or last_world_ready_ack_epoch != map_epoch or pending_recovery_sequence != 0 or pending_discard_sequence != 0 or pending_shop_sequence != 0 or pending_storage_sequence != 0 or pending_equipment_sequence != 0 or pending_bank_sequence != 0 or pending_repair_sequence != 0 or sequence <= recovery_sequence or sequence > 0xffffffff or item_uid <= 0 or not inventory_items.has(item_uid):
 		return false
 	recovery_sequence = sequence
 	pending_recovery_sequence = sequence
@@ -236,7 +251,7 @@ func mark_recovery_use_sent(sequence: int,item_uid: int) -> bool:
 
 
 func mark_inventory_discard_sent(sequence: int,item_uid: int,quantity: int) -> bool:
-	if state != STATE_IN_WORLD or not inventory_ready or not world_ready or resync_pending or waiting_for_new_map or pending_world_ready_ack_epoch != 0 or last_world_ready_ack_epoch != map_epoch or pending_discard_sequence != 0 or pending_recovery_sequence != 0 or pending_shop_sequence != 0 or pending_storage_sequence != 0 or pending_equipment_sequence != 0 or pending_bank_sequence != 0 or sequence <= discard_sequence or sequence > 0xffffffff or item_uid <= 0 or quantity < 1 or quantity > 1000000 or not inventory_items.has(item_uid) or int((inventory_items[item_uid] as Dictionary).quantity) < quantity:
+	if state != STATE_IN_WORLD or not inventory_ready or not world_ready or resync_pending or waiting_for_new_map or pending_world_ready_ack_epoch != 0 or last_world_ready_ack_epoch != map_epoch or pending_discard_sequence != 0 or pending_recovery_sequence != 0 or pending_shop_sequence != 0 or pending_storage_sequence != 0 or pending_equipment_sequence != 0 or pending_bank_sequence != 0 or pending_repair_sequence != 0 or sequence <= discard_sequence or sequence > 0xffffffff or item_uid <= 0 or quantity < 1 or quantity > 1000000 or not inventory_items.has(item_uid) or int((inventory_items[item_uid] as Dictionary).quantity) < quantity:
 		return false
 	discard_sequence = sequence
 	pending_discard_sequence = sequence
@@ -257,7 +272,7 @@ func mark_pickup_sent(sequence: int, drop_id: int) -> bool:
 
 
 func mark_shop_sent(sequence: int,kind: int,npc_spawn_id: int,item_definition_id: int = 0,item_uid: int = 0,quantity: int = 0) -> bool:
-	if state != STATE_IN_WORLD or player_dead or not world_ready or not inventory_ready or resync_pending or waiting_for_new_map or pending_world_ready_ack_epoch != 0 or last_world_ready_ack_epoch != map_epoch or pending_shop_sequence != 0 or pending_recovery_sequence != 0 or pending_discard_sequence != 0 or pending_storage_sequence != 0 or pending_equipment_sequence != 0 or pending_bank_sequence != 0 or sequence <= shop_sequence or sequence > 0xffffffff or kind < 1 or kind > 3 or npc_spawn_id <= 0:
+	if state != STATE_IN_WORLD or player_dead or not world_ready or not inventory_ready or resync_pending or waiting_for_new_map or pending_world_ready_ack_epoch != 0 or last_world_ready_ack_epoch != map_epoch or pending_shop_sequence != 0 or pending_recovery_sequence != 0 or pending_discard_sequence != 0 or pending_storage_sequence != 0 or pending_equipment_sequence != 0 or pending_bank_sequence != 0 or pending_repair_sequence != 0 or sequence <= shop_sequence or sequence > 0xffffffff or kind < 1 or kind > 3 or npc_spawn_id <= 0:
 		return false
 	if kind == 1:
 		if item_definition_id != 0 or item_uid != 0 or quantity != 0:
@@ -279,7 +294,7 @@ func mark_shop_sent(sequence: int,kind: int,npc_spawn_id: int,item_definition_id
 
 
 func mark_storage_sent(sequence: int,kind: int,npc_spawn_id: int,item_uid: int = 0) -> bool:
-	if state != STATE_IN_WORLD or player_dead or not world_ready or not inventory_ready or resync_pending or waiting_for_new_map or pending_world_ready_ack_epoch != 0 or last_world_ready_ack_epoch != map_epoch or pending_storage_sequence != 0 or pending_recovery_sequence != 0 or pending_discard_sequence != 0 or pending_shop_sequence != 0 or pending_equipment_sequence != 0 or pending_bank_sequence != 0 or sequence <= storage_sequence or sequence > 0xffffffff or kind < 1 or kind > 3 or npc_spawn_id <= 0:
+	if state != STATE_IN_WORLD or player_dead or not world_ready or not inventory_ready or resync_pending or waiting_for_new_map or pending_world_ready_ack_epoch != 0 or last_world_ready_ack_epoch != map_epoch or pending_storage_sequence != 0 or pending_recovery_sequence != 0 or pending_discard_sequence != 0 or pending_shop_sequence != 0 or pending_equipment_sequence != 0 or pending_bank_sequence != 0 or pending_repair_sequence != 0 or sequence <= storage_sequence or sequence > 0xffffffff or kind < 1 or kind > 3 or npc_spawn_id <= 0:
 		return false
 	if kind == 1:
 		if item_uid != 0:
@@ -305,7 +320,7 @@ func mark_storage_sent(sequence: int,kind: int,npc_spawn_id: int,item_uid: int =
 
 
 func mark_equipment_sent(sequence: int,kind: int,item_uid: int) -> bool:
-	if state != STATE_IN_WORLD or not world_ready or not inventory_ready or not equipment_ready or resync_pending or waiting_for_new_map or pending_world_ready_ack_epoch != 0 or last_world_ready_ack_epoch != map_epoch or pending_equipment_sequence != 0 or pending_recovery_sequence != 0 or pending_discard_sequence != 0 or pending_shop_sequence != 0 or pending_storage_sequence != 0 or pending_bank_sequence != 0 or sequence <= equipment_sequence or sequence > 0xffffffff or kind not in [1,2] or item_uid <= 0:
+	if state != STATE_IN_WORLD or not world_ready or not inventory_ready or not equipment_ready or resync_pending or waiting_for_new_map or pending_world_ready_ack_epoch != 0 or last_world_ready_ack_epoch != map_epoch or pending_equipment_sequence != 0 or pending_recovery_sequence != 0 or pending_discard_sequence != 0 or pending_shop_sequence != 0 or pending_storage_sequence != 0 or pending_bank_sequence != 0 or pending_repair_sequence != 0 or sequence <= equipment_sequence or sequence > 0xffffffff or kind not in [1,2] or item_uid <= 0:
 		return false
 	if kind == 1:
 		if not inventory_items.has(item_uid) or equipment_items.has(item_uid) or storage_items.has(item_uid):
@@ -320,7 +335,7 @@ func mark_equipment_sent(sequence: int,kind: int,item_uid: int) -> bool:
 	return true
 
 func mark_bank_sent(sequence: int,kind: int,npc_spawn_id: int,amount: int = 0) -> bool:
-	if state != STATE_IN_WORLD or player_dead or not world_ready or resync_pending or waiting_for_new_map or pending_world_ready_ack_epoch != 0 or last_world_ready_ack_epoch != map_epoch or pending_bank_sequence != 0 or pending_shop_sequence != 0 or pending_storage_sequence != 0 or pending_equipment_sequence != 0 or pending_recovery_sequence != 0 or pending_discard_sequence != 0 or sequence <= bank_sequence or sequence > 0xffffffff or kind < 1 or kind > 3 or npc_spawn_id <= 0:
+	if state != STATE_IN_WORLD or player_dead or not world_ready or resync_pending or waiting_for_new_map or pending_world_ready_ack_epoch != 0 or last_world_ready_ack_epoch != map_epoch or pending_bank_sequence != 0 or pending_shop_sequence != 0 or pending_storage_sequence != 0 or pending_equipment_sequence != 0 or pending_recovery_sequence != 0 or pending_discard_sequence != 0 or pending_repair_sequence != 0 or sequence <= bank_sequence or sequence > 0xffffffff or kind < 1 or kind > 3 or npc_spawn_id <= 0:
 		return false
 	if kind == 1:
 		if amount != 0:
@@ -339,6 +354,30 @@ func mark_bank_sent(sequence: int,kind: int,npc_spawn_id: int,amount: int = 0) -
 		bank_wallet_money = 0
 		bank_money = 0
 		last_bank_open_status = -1
+	return true
+
+
+func mark_repair_sent(sequence: int,kind: int,npc_spawn_id: int,item_uid: int = 0) -> bool:
+	if state != STATE_IN_WORLD or player_dead or not world_ready or not inventory_ready or resync_pending or waiting_for_new_map or pending_world_ready_ack_epoch != 0 or last_world_ready_ack_epoch != map_epoch or pending_repair_sequence != 0 or pending_shop_sequence != 0 or pending_storage_sequence != 0 or pending_equipment_sequence != 0 or pending_bank_sequence != 0 or pending_recovery_sequence != 0 or pending_discard_sequence != 0 or sequence <= repair_sequence or sequence > 0xffffffff or kind not in [1,2] or npc_spawn_id <= 0:
+		return false
+	if kind == 1:
+		if item_uid != 0:
+			return false
+	else:
+		if active_repair_npc != npc_spawn_id or not repair_ready or item_uid <= 0 or not repair_items.has(item_uid):
+			return false
+	repair_sequence = sequence
+	pending_repair_sequence = sequence
+	pending_repair_kind = kind
+	pending_repair_npc = npc_spawn_id
+	pending_repair_item_uid = item_uid
+	if kind == 1:
+		active_repair_npc = 0
+		repair_items.clear()
+		repair_ready = false
+		repair_next_index = 0
+		repair_wallet_money = 0
+		last_repair_open_status = -1
 	return true
 
 
@@ -430,6 +469,10 @@ func apply_frame(frame: PackedByteArray) -> bool:
 			return _apply_bank_snapshot(frame)
 		WireCodec.OPCODE_BANK_TRANSACTION_RESULT:
 			return _apply_bank_transaction_result(frame)
+		WireCodec.OPCODE_REPAIR_SNAPSHOT:
+			return _apply_repair_snapshot(frame)
+		WireCodec.OPCODE_REPAIR_RESULT:
+			return _apply_repair_result(frame)
 		WireCodec.OPCODE_WORLD_READY:
 			return _apply_world_ready(frame)
 		WireCodec.OPCODE_SELF_STATE:
@@ -593,6 +636,21 @@ func snapshot() -> Dictionary:
 		"last_bank_response_sequence": last_bank_response_sequence,
 		"last_bank_result": last_bank_result.duplicate(true),
 		"stale_bank_results": stale_bank_results,
+		"repair_sequence": repair_sequence,
+		"pending_repair_sequence": pending_repair_sequence,
+		"pending_repair_kind": pending_repair_kind,
+		"pending_repair_npc": pending_repair_npc,
+		"pending_repair_item_uid": pending_repair_item_uid,
+		"active_repair_npc": active_repair_npc,
+		"repair_items": repair_items.duplicate(true),
+		"repair_ready": repair_ready,
+		"repair_next_index": repair_next_index,
+		"repair_revision": repair_revision,
+		"repair_wallet_money": repair_wallet_money,
+		"last_repair_open_status": last_repair_open_status,
+		"last_repair_response_sequence": last_repair_response_sequence,
+		"last_repair_result": last_repair_result.duplicate(true),
+		"stale_repair_results": stale_repair_results,
 		"respawn_sequence": respawn_sequence,
 		"last_respawn_result_sequence": last_respawn_result_sequence,
 		"last_respawn_result_status": last_respawn_result_status,
@@ -801,6 +859,21 @@ func _apply_choose(frame: PackedByteArray) -> bool:
 	last_bank_response_sequence = 0
 	last_bank_result.clear()
 	stale_bank_results = 0
+	repair_sequence = 0
+	pending_repair_sequence = 0
+	pending_repair_kind = 0
+	pending_repair_npc = 0
+	pending_repair_item_uid = 0
+	active_repair_npc = 0
+	repair_items.clear()
+	repair_ready = false
+	repair_next_index = 0
+	repair_revision = 0
+	repair_wallet_money = 0
+	last_repair_open_status = -1
+	last_repair_response_sequence = 0
+	last_repair_result.clear()
+	stale_repair_results = 0
 	respawn_sequence = 0
 	last_respawn_result_sequence = 0
 	last_respawn_result_status = -1
@@ -1395,6 +1468,21 @@ func _apply_world_ready(frame: PackedByteArray) -> bool:
 		last_bank_response_sequence = 0
 		last_bank_result.clear()
 		stale_bank_results = 0
+		repair_sequence = 0
+		pending_repair_sequence = 0
+		pending_repair_kind = 0
+		pending_repair_npc = 0
+		pending_repair_item_uid = 0
+		active_repair_npc = 0
+		repair_items.clear()
+		repair_ready = false
+		repair_next_index = 0
+		repair_revision = 0
+		repair_wallet_money = 0
+		last_repair_open_status = -1
+		last_repair_response_sequence = 0
+		last_repair_result.clear()
+		stale_repair_results = 0
 		respawn_sequence = 0
 		last_respawn_result_sequence = 0
 		last_respawn_result_status = -1
@@ -2104,6 +2192,138 @@ func _apply_bank_transaction_result(frame: PackedByteArray) -> bool:
 	last_bank_response_sequence = sequence
 	last_bank_result = result.duplicate(true)
 	_clear_pending_bank()
+	return true
+
+
+func _clear_pending_repair() -> void:
+	pending_repair_sequence = 0
+	pending_repair_kind = 0
+	pending_repair_npc = 0
+	pending_repair_item_uid = 0
+
+
+func _close_repair() -> void:
+	active_repair_npc = 0
+	repair_items.clear()
+	repair_ready = false
+	repair_next_index = 0
+	repair_wallet_money = 0
+
+
+func _repair_item_matches_location(item: Dictionary) -> bool:
+	var uid := int(item.item_uid)
+	var item_id := int(item.item_definition_id)
+	var location := int(item.location)
+	if location == 1:
+		return inventory_items.has(uid) and int((inventory_items[uid] as Dictionary).item_definition_id) == item_id
+	if location == 2:
+		return equipment_ready and equipment_items.has(uid) and int((equipment_items[uid] as Dictionary).item_definition_id) == item_id
+	return false
+
+
+func _apply_repair_snapshot(frame: PackedByteArray) -> bool:
+	if state != STATE_IN_WORLD:
+		return fail("repair_snapshot_out_of_state")
+	var value := WireCodec.decode_repair_snapshot(frame)
+	if value.is_empty():
+		return fail("invalid_repair_snapshot")
+	var epoch := int(value.map_epoch)
+	var sequence := int(value.repair_sequence)
+	if epoch < map_epoch:
+		stale_repair_results += 1
+		return true
+	if epoch > map_epoch:
+		return fail("future_repair_snapshot")
+	if sequence > repair_sequence:
+		return fail("unsent_repair_snapshot")
+	if sequence <= last_repair_response_sequence:
+		stale_repair_results += 1
+		return true
+	if sequence != pending_repair_sequence or pending_repair_kind != 1 or int(value.npc_spawn_id) != pending_repair_npc:
+		return fail("repair_snapshot_wrong_request")
+	last_repair_open_status = int(value.status)
+	if int(value.status) != 0:
+		_close_repair()
+		last_repair_response_sequence = sequence
+		_clear_pending_repair()
+		return true
+	if int(value.start_index) != repair_next_index:
+		return fail("repair_snapshot_wrong_chunk")
+	if repair_next_index == 0:
+		repair_wallet_money = int(value.wallet_money)
+	elif repair_wallet_money != int(value.wallet_money):
+		return fail("repair_snapshot_wallet_changed_midstream")
+	var items: Array = value.items
+	if items.is_empty() and not bool(value.complete):
+		return fail("repair_empty_nonfinal_chunk")
+	for item in items:
+		var uid := int(item.item_uid)
+		if repair_items.has(uid) or not _repair_item_matches_location(item):
+			return fail("repair_preview_uid_or_location_conflict")
+		repair_items[uid] = item.duplicate(true)
+		repair_next_index += 1
+	if bool(value.complete):
+		active_repair_npc = int(value.npc_spawn_id)
+		repair_ready = true
+		repair_revision += 1
+		last_repair_response_sequence = sequence
+		if active_shop_npc != 0:
+			shop_money = repair_wallet_money
+		if active_bank_npc != 0:
+			bank_wallet_money = repair_wallet_money
+		_clear_pending_repair()
+	return true
+
+
+func _apply_repair_result(frame: PackedByteArray) -> bool:
+	if state != STATE_IN_WORLD:
+		return fail("repair_result_out_of_state")
+	var result := WireCodec.decode_repair_result(frame)
+	if result.is_empty():
+		return fail("invalid_repair_result")
+	var epoch := int(result.map_epoch)
+	var sequence := int(result.repair_sequence)
+	if epoch < map_epoch:
+		stale_repair_results += 1
+		return true
+	if epoch > map_epoch:
+		return fail("future_repair_result")
+	if sequence > repair_sequence:
+		return fail("unsent_repair_result")
+	if sequence <= last_repair_response_sequence:
+		stale_repair_results += 1
+		return true
+	if sequence != pending_repair_sequence or pending_repair_kind != 2 or int(result.npc_spawn_id) != pending_repair_npc or int(result.item_uid) != pending_repair_item_uid:
+		return fail("repair_result_wrong_request")
+	var status := int(result.status)
+	if status in [0,1,6,7]:
+		if not repair_ready or active_repair_npc != pending_repair_npc or not repair_items.has(pending_repair_item_uid):
+			return fail("repair_result_without_preview")
+		var previous: Dictionary = repair_items[pending_repair_item_uid]
+		if int(previous.item_definition_id) != int(result.item_definition_id) or int(previous.location) != int(result.location) or int(previous.max_durability) != int(result.max_durability):
+			return fail("repair_result_metadata_mismatch")
+		if status in [0,1,6]:
+			if int(result.current_durability) != int(result.max_durability):
+				return fail("repair_result_not_full")
+			previous.current_durability = int(result.current_durability)
+			previous.cost = 0
+		else:
+			previous.current_durability = int(result.current_durability)
+			previous.cost = int(result.cost)
+		repair_items[pending_repair_item_uid] = previous
+		repair_wallet_money = int(result.wallet_money)
+		if active_shop_npc != 0:
+			shop_money = repair_wallet_money
+		if active_bank_npc != 0:
+			bank_wallet_money = repair_wallet_money
+		repair_revision += 1
+	elif status in [2,3,4,5,8,9,10,11]:
+		_close_repair()
+	else:
+		return fail("repair_result_unhandled_status")
+	last_repair_response_sequence = sequence
+	last_repair_result = result.duplicate(true)
+	_clear_pending_repair()
 	return true
 
 
