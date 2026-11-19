@@ -1135,10 +1135,11 @@ static func decode_bank_transaction_result(frame: PackedByteArray) -> Dictionary
 	var bank_money := reader.get_64()
 	if epoch <= 0 or sequence == 0 or kind < 1 or kind > 2 or status > 10 or npc_spawn_id <= 0 or amount <= 0 or amount > MAX_MONEY or wallet_money < 0 or wallet_money > MAX_MONEY or bank_money < 0 or bank_money > MAX_MONEY:
 		return {}
-	if scope == 0:
-		if wallet_money != 0 or bank_money != 0:
+	var scoped := scope in [1,2]
+	if status in [0,1,4,5,6,7,8]:
+		if not scoped:
 			return {}
-	elif scope not in [1,2]:
+	elif scope != 0 or wallet_money != 0 or bank_money != 0:
 		return {}
 	return {"map_epoch":epoch,"bank_sequence":sequence,"kind":kind,
 		"status":status,"npc_spawn_id":npc_spawn_id,"scope":scope,
