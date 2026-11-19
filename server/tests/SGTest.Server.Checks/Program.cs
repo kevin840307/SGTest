@@ -279,6 +279,7 @@ static class Checks
             EquipmentWireChecks.Verify();
             BankWireChecks.Verify();
             RepairWireChecks.Verify();
+            TradeWireChecks.Verify();
             EquipmentGatewayChecks.Verify();
             BankGatewayChecks.Verify();
             RepairGatewayChecks.Verify();
