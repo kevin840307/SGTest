@@ -66,6 +66,10 @@ public readonly record struct TrustedStorageCommand(
     long ActorId,long ConnectionEpoch,long RequestMapEpoch,
     uint StorageSequence,int NpcSpawnId,TrustedStorageCommandKind Kind,
     long ItemUid=0);
+public enum TrustedEquipmentCommandKind : byte { Equip=1, Unequip=2 }
+public readonly record struct TrustedEquipmentCommand(
+    long ActorId,long ConnectionEpoch,long RequestMapEpoch,
+    uint EquipmentSequence,TrustedEquipmentCommandKind Kind,long ItemUid);
 
 public readonly record struct NormalAttackOutcome(
     NormalAttackStatus Status, long ServerTick, long TargetEntityId,
@@ -275,7 +279,8 @@ public sealed class GatewayConnection
                                               Func<TrustedInventoryDiscard, bool>? postDiscard = null,
                                               Func<TrustedSkillUse, bool>? postSkill = null,
                                               Func<TrustedShopCommand, bool>? postShop = null,
-                                              Func<TrustedStorageCommand, bool>? postStorage = null)
+                                              Func<TrustedStorageCommand, bool>? postStorage = null,
+                                              Func<TrustedEquipmentCommand, bool>? postEquipment = null)
     {
         ArgumentNullException.ThrowIfNull(postMove);
         lock (_receiveGate)
@@ -288,7 +293,7 @@ public sealed class GatewayConnection
             return _parser.Feed(bytes,
                 frame => HandleClientFrame(
                     frame, postMove, postNpc, postResync, postAttack, postRespawn,
-                    postPickup, postRecovery, postDiscard, postSkill, postShop, postStorage),
+                    postPickup, postRecovery, postDiscard, postSkill, postShop, postStorage, postEquipment),
                 out commandsAccepted);
         }
     }
@@ -304,7 +309,8 @@ public sealed class GatewayConnection
                                               Func<TrustedInventoryDiscard, bool>? postDiscard = null,
                                               Func<TrustedSkillUse, bool>? postSkill = null,
                                               Func<TrustedShopCommand, bool>? postShop = null,
-                                              Func<TrustedStorageCommand, bool>? postStorage = null)
+                                              Func<TrustedStorageCommand, bool>? postStorage = null,
+                                              Func<TrustedEquipmentCommand, bool>? postEquipment = null)
     {
         ArgumentNullException.ThrowIfNull(postMove);
         lock (_receiveGate)
@@ -317,7 +323,7 @@ public sealed class GatewayConnection
             return _parser.Resume(
                 frame => HandleClientFrame(
                     frame, postMove, postNpc, postResync, postAttack, postRespawn,
-                    postPickup, postRecovery, postDiscard, postSkill, postShop, postStorage),
+                    postPickup, postRecovery, postDiscard, postSkill, postShop, postStorage, postEquipment),
                 out commandsAccepted);
         }
     }
@@ -334,7 +340,8 @@ public sealed class GatewayConnection
         Func<TrustedInventoryDiscard, bool>? postDiscard,
         Func<TrustedSkillUse, bool>? postSkill,
         Func<TrustedShopCommand, bool>? postShop,
-        Func<TrustedStorageCommand, bool>? postStorage)
+        Func<TrustedStorageCommand, bool>? postStorage,
+        Func<TrustedEquipmentCommand, bool>? postEquipment)
     {
         if (!WireProtocol.TryReadHeader(frame, out var header))
             return WireFrameDisposition.ProtocolViolation;
@@ -424,6 +431,27 @@ public sealed class GatewayConnection
                 bound.ActorId,bound.ConnectionEpoch,storageWithdraw.MapEpoch,
                 storageWithdraw.StorageSequence,storageWithdraw.NpcSpawnId,
                 TrustedStorageCommandKind.Withdraw,storageWithdraw.ItemUid))
+                ? WireFrameDisposition.Accepted:WireFrameDisposition.Backpressured;
+        }
+
+        if(postEquipment is not null && header.Opcode==WireOpcode.EquipmentEquip &&
+            WireProtocol.TryDecodeEquipmentEquip(frame,out var equipmentEquip))
+        {
+            if(!GameplayReady(bound))return WireFrameDisposition.ProtocolViolation;
+            return postEquipment(new TrustedEquipmentCommand(
+                bound.ActorId,bound.ConnectionEpoch,equipmentEquip.MapEpoch,
+                equipmentEquip.EquipmentSequence,TrustedEquipmentCommandKind.Equip,
+                equipmentEquip.ItemUid))
+                ? WireFrameDisposition.Accepted:WireFrameDisposition.Backpressured;
+        }
+        if(postEquipment is not null && header.Opcode==WireOpcode.EquipmentUnequip &&
+            WireProtocol.TryDecodeEquipmentUnequip(frame,out var equipmentUnequip))
+        {
+            if(!GameplayReady(bound))return WireFrameDisposition.ProtocolViolation;
+            return postEquipment(new TrustedEquipmentCommand(
+                bound.ActorId,bound.ConnectionEpoch,equipmentUnequip.MapEpoch,
+                equipmentUnequip.EquipmentSequence,TrustedEquipmentCommandKind.Unequip,
+                equipmentUnequip.ItemUid))
                 ? WireFrameDisposition.Accepted:WireFrameDisposition.Backpressured;
         }
 
@@ -785,6 +813,30 @@ public sealed class GatewayConnection
                 request.RequestMapEpoch,request.StorageSequence,result.Kind,
                 result.Status,request.NpcSpawnId,result.ItemUid,
                 result.ItemDefinitionId,result.Quantity,result.SourceDropId));
+            return _reliable.TryEnqueue(frame)
+                ? GatewaySendStatus.Enqueued:GatewaySendStatus.Backpressured;
+        }
+    }
+
+    public GatewaySendStatus QueueEquipmentTransferResult(
+        TrustedEquipmentCommand request,EquipmentTransferResult result)
+    {
+        lock(_bindingGate)
+        {
+            if(_closed)return GatewaySendStatus.Closed;
+            var bound=_binding;
+            if(request.ActorId!=bound.ActorId||
+               request.ConnectionEpoch!=bound.ConnectionEpoch||
+               request.RequestMapEpoch!=bound.MapEpoch||
+               request.ItemUid!=result.ItemUid)
+                return GatewaySendStatus.GenerationMismatch;
+            var expected=request.Kind==TrustedEquipmentCommandKind.Equip
+                ? EquipmentTransferKind.Equip:EquipmentTransferKind.Unequip;
+            if(result.Kind!=expected)return GatewaySendStatus.GenerationMismatch;
+            var frame=WireProtocol.EncodeEquipmentTransferResult(new(
+                request.RequestMapEpoch,request.EquipmentSequence,result.Kind,
+                result.Status,result.ItemUid,result.ItemDefinitionId,
+                result.SlotId,result.SourceDropId));
             return _reliable.TryEnqueue(frame)
                 ? GatewaySendStatus.Enqueued:GatewaySendStatus.Backpressured;
         }
