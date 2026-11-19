@@ -140,6 +140,19 @@ var equipment_revision := 0
 var last_equipment_response_sequence := 0
 var last_equipment_result := {}
 var stale_equipment_results := 0
+var bank_sequence := 0
+var pending_bank_sequence := 0
+var pending_bank_kind := 0
+var pending_bank_npc := 0
+var pending_bank_amount := 0
+var active_bank_npc := 0
+var bank_scope := 0
+var bank_wallet_money := 0
+var bank_money := 0
+var last_bank_open_status := -1
+var last_bank_response_sequence := 0
+var last_bank_result := {}
+var stale_bank_results := 0
 
 var respawn_sequence := 0
 var last_respawn_result_sequence := 0
@@ -306,6 +319,29 @@ func mark_equipment_sent(sequence: int,kind: int,item_uid: int) -> bool:
 	pending_equipment_item_uid = item_uid
 	return true
 
+func mark_bank_sent(sequence: int,kind: int,npc_spawn_id: int,amount: int = 0) -> bool:
+	if state != STATE_IN_WORLD or player_dead or not world_ready or resync_pending or waiting_for_new_map or pending_world_ready_ack_epoch != 0 or last_world_ready_ack_epoch != map_epoch or pending_bank_sequence != 0 or pending_shop_sequence != 0 or pending_storage_sequence != 0 or pending_equipment_sequence != 0 or pending_recovery_sequence != 0 or pending_discard_sequence != 0 or sequence <= bank_sequence or sequence > 0xffffffff or kind < 1 or kind > 3 or npc_spawn_id <= 0:
+		return false
+	if kind == 1:
+		if amount != 0:
+			return false
+	else:
+		if active_bank_npc != npc_spawn_id or bank_scope not in [1,2] or amount <= 0 or amount > WireCodec.MAX_MONEY:
+			return false
+	bank_sequence = sequence
+	pending_bank_sequence = sequence
+	pending_bank_kind = kind
+	pending_bank_npc = npc_spawn_id
+	pending_bank_amount = amount
+	if kind == 1:
+		active_bank_npc = 0
+		bank_scope = 0
+		bank_wallet_money = 0
+		bank_money = 0
+		last_bank_open_status = -1
+	return true
+
+
 func mark_player_respawn_sent(sequence: int) -> bool:
 	if state != STATE_IN_WORLD or not combat_available or not player_dead or not world_ready or resync_pending or waiting_for_new_map or pending_world_ready_ack_epoch != 0 or last_world_ready_ack_epoch != map_epoch or sequence <= respawn_sequence or sequence > 0xffffffff:
 		return false
@@ -390,6 +426,10 @@ func apply_frame(frame: PackedByteArray) -> bool:
 			return _apply_equipment_snapshot(frame)
 		WireCodec.OPCODE_EQUIPMENT_TRANSFER_RESULT:
 			return _apply_equipment_transfer_result(frame)
+		WireCodec.OPCODE_BANK_SNAPSHOT:
+			return _apply_bank_snapshot(frame)
+		WireCodec.OPCODE_BANK_TRANSACTION_RESULT:
+			return _apply_bank_transaction_result(frame)
 		WireCodec.OPCODE_WORLD_READY:
 			return _apply_world_ready(frame)
 		WireCodec.OPCODE_SELF_STATE:
@@ -540,6 +580,19 @@ func snapshot() -> Dictionary:
 		"last_equipment_response_sequence": last_equipment_response_sequence,
 		"last_equipment_result": last_equipment_result.duplicate(true),
 		"stale_equipment_results": stale_equipment_results,
+		"bank_sequence": bank_sequence,
+		"pending_bank_sequence": pending_bank_sequence,
+		"pending_bank_kind": pending_bank_kind,
+		"pending_bank_npc": pending_bank_npc,
+		"pending_bank_amount": pending_bank_amount,
+		"active_bank_npc": active_bank_npc,
+		"bank_scope": bank_scope,
+		"bank_wallet_money": bank_wallet_money,
+		"bank_money": bank_money,
+		"last_bank_open_status": last_bank_open_status,
+		"last_bank_response_sequence": last_bank_response_sequence,
+		"last_bank_result": last_bank_result.duplicate(true),
+		"stale_bank_results": stale_bank_results,
 		"respawn_sequence": respawn_sequence,
 		"last_respawn_result_sequence": last_respawn_result_sequence,
 		"last_respawn_result_status": last_respawn_result_status,
@@ -735,6 +788,19 @@ func _apply_choose(frame: PackedByteArray) -> bool:
 	last_equipment_response_sequence = 0
 	last_equipment_result.clear()
 	stale_equipment_results = 0
+	bank_sequence = 0
+	pending_bank_sequence = 0
+	pending_bank_kind = 0
+	pending_bank_npc = 0
+	pending_bank_amount = 0
+	active_bank_npc = 0
+	bank_scope = 0
+	bank_wallet_money = 0
+	bank_money = 0
+	last_bank_open_status = -1
+	last_bank_response_sequence = 0
+	last_bank_result.clear()
+	stale_bank_results = 0
 	respawn_sequence = 0
 	last_respawn_result_sequence = 0
 	last_respawn_result_status = -1
@@ -1316,6 +1382,19 @@ func _apply_world_ready(frame: PackedByteArray) -> bool:
 		last_equipment_response_sequence = 0
 		last_equipment_result.clear()
 		stale_equipment_results = 0
+		bank_sequence = 0
+		pending_bank_sequence = 0
+		pending_bank_kind = 0
+		pending_bank_npc = 0
+		pending_bank_amount = 0
+		active_bank_npc = 0
+		bank_scope = 0
+		bank_wallet_money = 0
+		bank_money = 0
+		last_bank_open_status = -1
+		last_bank_response_sequence = 0
+		last_bank_result.clear()
+		stale_bank_results = 0
 		respawn_sequence = 0
 		last_respawn_result_sequence = 0
 		last_respawn_result_status = -1
