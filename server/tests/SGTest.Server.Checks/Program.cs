@@ -269,6 +269,7 @@ static class Checks
             NpcStorageCatalogChecks.Verify(root);
             NpcPortalWireChecks.Verify();
             StorageWireChecks.Verify();
+            EquipmentWireChecks.Verify();
             StorageGatewayChecks.Verify();
             TlsSocketChecks.Verify();
             IdentityStoreChecks.Verify();
