@@ -553,6 +553,18 @@ public sealed class WorldResultRouter
         }
     }
 
+    public GatewaySendStatus QueueQuestView(
+        TrustedQuestCommand request,QuestViewWireStatus status,QuestView? view)
+    {
+        lock(_gate)
+        {
+            if(!_connections.TryGetValue(request.ActorId,out var connection)||
+               connection.IsClosed)
+                return GatewaySendStatus.Closed;
+            return connection.QueueQuestView(request,status,view);
+        }
+    }
+
     public GatewaySendStatus QueueRepairSnapshot(
         TrustedRepairCommand request,RepairOpenStatus status,RepairPreview? preview)
     {
