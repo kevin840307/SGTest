@@ -98,15 +98,15 @@ WHERE character_id=$actor AND connection_generation=$conn
                     int originalNpc=reader.GetInt32(1);
                     var originalScope=(BankBalanceScope)reader.GetInt32(2);
                     long originalAmount=reader.GetInt64(3);
-                    long walletAfter=reader.GetInt64(4);
-                    long bankAfter=reader.GetInt64(5);
+                    long replayWalletAfter=reader.GetInt64(4);
+                    long replayBankAfter=reader.GetInt64(5);
                     string source=reader.GetString(6);
                     bool exact=originalKind==kind&&originalNpc==rule.NpcSpawnId&&
                         originalScope==rule.Scope&&originalAmount==amount&&
                         source==rule.SourceReference;
                     return exact
                         ? new(BankTransactionStatus.AlreadyApplied,kind,rule.NpcSpawnId,
-                            rule.Scope,amount,walletAfter,bankAfter)
+                            rule.Scope,amount,replayWalletAfter,replayBankAfter)
                         : RejectBank(BankTransactionStatus.StaleSequence,kind,rule,amount,
                             connection,tx,context.CharacterId,ownerId);
                 }
