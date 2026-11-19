@@ -71,9 +71,26 @@ public enum WireOpcode : ushort
     RepairOpen = 66,
     RepairSnapshot = 67,
     RepairItem = 68,
-    RepairResult = 69
+    RepairResult = 69,
+    TradeCommand = 70,
+    TradeSnapshot = 71,
+    TradeTerminal = 72
 }
 
+public enum TradeCommandAction : byte
+{
+    Request = 1, Accept = 2, Reject = 3, AddItem = 4, RemoveItem = 5,
+    SetMoney = 6, Lock = 7, FinalConfirm = 8, Cancel = 9
+}
+public enum TradeSessionWireState : byte
+{
+    InviteReceived = 1, InviteSent = 2, Active = 3, AwaitingFinalConfirm = 4
+}
+public enum TradeTerminalStatus : byte
+{
+    Success = 0, Rejected = 1, Cancelled = 2, Expired = 3,
+    PeerDisconnected = 4, CommitFailed = 5, StaleGeneration = 6
+}
 public enum AuthWireStatus : byte { Success = 0, InvalidCredentials = 1, Disabled = 2 }
 public enum CharacterChooseWireStatus : byte { Success = 0, NotOwned = 1, WorldRejected = 2 }
 public enum CharacterCreateWireStatus : byte
@@ -306,6 +323,21 @@ public readonly record struct RepairResultWire(
     long ItemUid,int ItemDefinitionId,RepairItemLocation Location,
     int CurrentDurability,int MaxDurability,long Cost,long WalletMoney);
 
+public readonly record struct TradeCommandWire(
+    long MapEpoch,uint TradeSequence,TradeCommandAction Action,
+    long TradeId,long TargetActorId,long ItemUid,long Money);
+public readonly record struct TradeOfferItemWire(
+    long ItemUid,int ItemDefinitionId,int Quantity,long SourceDropId);
+public sealed record TradeSnapshotWire(
+    long MapEpoch,long TradeId,uint Revision,TradeSessionWireState State,
+    long PeerActorId,long MyMoney,long OtherMoney,
+    bool MyLocked,bool OtherLocked,bool MyConfirmed,bool OtherConfirmed,
+    IReadOnlyList<TradeOfferItemWire> MyItems,
+    IReadOnlyList<TradeOfferItemWire> OtherItems);
+public readonly record struct TradeTerminalWire(
+    long MapEpoch,long TradeId,uint Revision,TradeTerminalStatus Status,
+    long WalletMoney);
+
 /// <summary>
 /// Version 1 complete-frame codec. Transport/TLS/socket buffering is separate.
 /// Header = uint32 frameBytes + uint16 version + uint16 opcode, little-endian.
@@ -403,6 +435,11 @@ public static class WireProtocol
     public const int RepairItemFrameBytes = HeaderBytes + 8 + 4 + 4 + 8;
     public const int RepairResultFrameBytes =
         HeaderBytes + 8 + 4 + 1 + 4 + 8 + 4 + 1 + 4 + 4 + 8 + 8;
+    public const int TradeCommandFrameBytes = HeaderBytes + 8 + 4 + 1 + 8 + 8 + 8 + 8;
+    public const int TradeSnapshotHeaderBytes = 59;
+    public const int TradeOfferItemBytes = 24;
+    public const int TradeMaxItemsPerSide = 32;
+    public const int TradeTerminalFrameBytes = HeaderBytes + 8 + 8 + 4 + 1 + 8;
     private static readonly UTF8Encoding StrictUtf8 = new(false, true);
 
     public static byte[] EncodeMoveTarget(MoveTargetWire value)
