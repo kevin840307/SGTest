@@ -108,7 +108,7 @@ internal static class RepairLoginFixture
                    preview.Items[0].MaxDurability!=100||
                    preview.Items[0].Cost!=0||
                    equipment.Count!=1||equipment[0].ItemUid!=itemUid||
-                   ended.CommandsAccepted!=2||
+                   ended.CommandsAccepted!=3||
                    router.Statistics.ActiveSessions!=0)
                     throw new InvalidOperationException(
                         $"repair E2E mismatch wallet={preview.WalletMoney} items={preview.Items.Count} " +

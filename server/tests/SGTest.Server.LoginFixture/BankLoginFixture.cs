@@ -66,7 +66,7 @@ internal static class BankLoginFixture
                 var balance=await store.GetBankBalanceAsync(
                     characterId,BankBalanceScope.Account).ConfigureAwait(false);
                 if(balance.WalletMoney!=1000||balance.BankMoney!=0||
-                   ended.CommandsAccepted!=3||
+                   ended.CommandsAccepted!=4||
                    router.Statistics.ActiveSessions!=0)
                     throw new InvalidOperationException(
                         $"bank E2E mismatch wallet={balance.WalletMoney} bank={balance.BankMoney} " +

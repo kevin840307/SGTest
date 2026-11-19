@@ -96,7 +96,7 @@ internal static class TradeLoginFixture
                    inventoryB[0].ItemDefinitionId!=4103||inventoryB[0].Quantity!=2||
                    inventoryB[0].SourceDropId!=itemA.DropId||
                    walletA!=850||walletB!=650||
-                   ended.Any(x=>x.CommandsAccepted!=5)||
+                   ended.Any(x=>x.CommandsAccepted!=6)||
                    router.Statistics.ActiveSessions!=0)
                     throw new InvalidOperationException(
                         $"trade E2E mismatch walletA={walletA} walletB={walletB} " +
@@ -107,7 +107,7 @@ internal static class TradeLoginFixture
                 Console.WriteLine(
                     $"TRADE_FIXTURE_PASS actor_a={charA} actor_b={charB} " +
                     $"wallet_a={walletA} wallet_b={walletB} " +
-                    $"item_a_owner={charB} item_b_owner={charA} commands=5/5");
+                    $"item_a_owner={charB} item_b_owner={charA} commands=6/6");
                 Console.Out.Flush();
                 return 0;
             }

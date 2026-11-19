@@ -284,7 +284,7 @@ internal static class Program
                 if (monster.CurrentHp != 100 || monster.MaxHp != 100 ||
                     player?.Data.CurrentHp != 100 || player.Data.MaxHp != 100 ||
                     player.Data.CurrentMp != 1 || player.Data.MaxMp != 2 ||
-                    ended.CommandsAccepted != 5 ||
+                    ended.CommandsAccepted != 6 ||
                     settlement.Statistics.HitsCommitted != 1 ||
                     settlement.Statistics.DamageCommitted != 18 ||
                     settlement.Statistics.DeathsCommitted != 1 ||
@@ -433,7 +433,7 @@ internal static class Program
                     monsters[1].CurrentHp!=60 ||
                     monsters[2].CurrentHp!=100 ||
                     player?.Data.CurrentMp!=1 || player.Data.MaxMp!=2 ||
-                    ended.CommandsAccepted!=1 ||
+                    ended.CommandsAccepted!=2 ||
                     router.Statistics.ActiveSessions!=0)
                     throw new InvalidOperationException(
                         $"skill AoE E2E mismatch hp=" +
@@ -606,8 +606,8 @@ internal static class Program
                     actorProfile.Data.MaxMp!=2 ||
                     results[0].Reason!=TlsWireEndReason.CleanEof ||
                     results[1].Reason!=TlsWireEndReason.CleanEof ||
-                    results[0].CommandsAccepted!=0 ||
-                    results[1].CommandsAccepted!=1)
+                    results[0].CommandsAccepted!=1 ||
+                    results[1].CommandsAccepted!=2)
                     throw new InvalidOperationException(
                         $"skill AoE observer mismatch hp=" +
                         $"{string.Join(',',monsters.Select(x=>x.CurrentHp))} " +
@@ -789,8 +789,8 @@ internal static class Program
                     settlement.Statistics.DamageCommitted!=18 ||
                     results[0].Reason!=TlsWireEndReason.CleanEof ||
                     results[1].Reason!=TlsWireEndReason.CleanEof ||
-                    results[0].CommandsAccepted!=0 ||
-                    results[1].CommandsAccepted!=2 ||
+                    results[0].CommandsAccepted!=1 ||
+                    results[1].CommandsAccepted!=3 ||
                     pump.FramesQueued<10)
                     throw new InvalidOperationException(
                         $"combat observer mismatch hp={monster.CurrentHp}/{monster.MaxHp} " +
@@ -928,7 +928,7 @@ internal static class Program
                     .ConfigureAwait(false)).Single();
                 if (monster.CurrentHp != 40 || monster.MaxHp != 100 ||
                     Math.Abs(character.X-40) > 0.001 || Math.Abs(character.Y-8) > 0.001 ||
-                    ended.CommandsAccepted != 3 || router.Statistics.ActiveSessions != 0)
+                    ended.CommandsAccepted != 4 || router.Statistics.ActiveSessions != 0)
                     throw new InvalidOperationException(
                         $"auto approach E2E mismatch monster={monster.CurrentHp}/{monster.MaxHp} " +
                         $"position={character.X:F1},{character.Y:F1} " +
@@ -1027,7 +1027,7 @@ internal static class Program
 
                 var remaining = await store.ListInventoryItemsAsync(characterId)
                     .ConfigureAwait(false);
-                if (remaining.Count != 0 || ended.CommandsAccepted != 2 ||
+                if (remaining.Count != 0 || ended.CommandsAccepted != 3 ||
                     router.Statistics.ActiveSessions != 0)
                     throw new InvalidOperationException(
                         $"discard E2E mismatch items={remaining.Count} " +
@@ -1138,7 +1138,7 @@ internal static class Program
                     inventory[0].Quantity != 2 ||
                     inventory[0].SourceDropId != drops.Single().DropId ||
                     storage.Count != 0 ||
-                    ended.CommandsAccepted != 3 ||
+                    ended.CommandsAccepted != 4 ||
                     router.Statistics.ActiveSessions != 0)
                     throw new InvalidOperationException(
                         $"storage E2E mismatch inventory={inventory.Count} storage={storage.Count} " +
@@ -1363,7 +1363,7 @@ internal static class Program
                 if (final.Count != 1 || final[0].MapId != 15 ||
                     Math.Abs(final[0].X - 40) > 0.001 ||
                     Math.Abs(final[0].Y - 8) > 0.001 ||
-                    secondEnded.CommandsAccepted != 1 ||
+                    secondEnded.CommandsAccepted != 2 ||
                     router.Statistics.ReceiptsQueued < 2)
                     throw new InvalidOperationException(
                         $"reconnect completion mismatch second={secondEnded.Reason} moves={secondEnded.CommandsAccepted} receipts={router.Statistics.ReceiptsQueued} x={final[0].X} y={final[0].Y}");
@@ -1489,7 +1489,7 @@ internal static class Program
                     System.Security.Authentication.SslProtocols.Tls13) ||
                     results[0].Reason != TlsWireEndReason.CleanEof ||
                     results[1].Reason != TlsWireEndReason.CleanEof ||
-                    results[1].CommandsAccepted != (portals ? 5 : crossmap ? 2 : 1) ||
+                    results[1].CommandsAccepted != (portals ? 8 : crossmap ? 5 : 2) ||
                     router.Statistics.ActiveSessions != 0 ||
                     router.Statistics.ReceiptsQueued < (crossmap || portals ? 2 : 1) ||
                     aoiPump.FramesQueued < (crossmap || portals ? 10 : 6))

@@ -80,7 +80,7 @@ internal static class EquipmentLoginFixture
                    inventory[0].ItemDefinitionId!=3701||
                    inventory[0].Quantity!=1||
                    inventory[0].SourceDropId!=drops.Single().DropId||
-                   equipment.Count!=0||ended.CommandsAccepted!=2||
+                   equipment.Count!=0||ended.CommandsAccepted!=3||
                    router.Statistics.ActiveSessions!=0)
                     throw new InvalidOperationException(
                         $"equipment E2E mismatch inventory={inventory.Count} equipment={equipment.Count} " +
