@@ -36,6 +36,7 @@ public sealed class IdentityTlsAuthorization
     private readonly IReadOnlyDictionary<int,RepairItemRule>? _repairItemRules;
     private readonly NpcQuestCatalog? _quests;
     private readonly PlayerTradeCoordinator? _trades;
+    private readonly PlayerShopCoordinator? _playerShops;
     private readonly HashSet<string> _gmAccounts;
 
     public IdentityTlsAuthorization(SqliteIdentityStore identity, ServerWorldHost world,
@@ -53,6 +54,7 @@ public sealed class IdentityTlsAuthorization
                                      IReadOnlyDictionary<int,RepairItemRule>? repairItemRules = null,
                                      NpcQuestCatalog? quests = null,
                                      PlayerTradeCoordinator? trades = null,
+                                     PlayerShopCoordinator? playerShops = null,
                                      IReadOnlySet<string>? gmAccounts = null)
     {
         _identity = identity ?? throw new ArgumentNullException(nameof(identity));
@@ -80,6 +82,11 @@ public sealed class IdentityTlsAuthorization
         _repairItemRules = repairItemRules;
         _quests = quests;
         _trades = trades;
+        _playerShops=playerShops;
+        if(_playerShops is not null&&_trades is null)
+            throw new ArgumentException(
+                "Player shop requires the authenticated gameplay-gate registry",
+                nameof(playerShops));
         _gmAccounts=new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         if(gmAccounts is not null)
             foreach(string account in gmAccounts)
@@ -112,6 +119,7 @@ public sealed class IdentityTlsAuthorization
         using var gameplayGate = new SemaphoreSlim(1,1);
         using var tradeIngressGate = new SemaphoreSlim(1,1);
         var gmPvpNameGate=new GmPvpNameSequenceGate();
+        var playerShopGate=new PlayerShopSequenceGate();
 
         async ValueTask<GatewayConnection?> Authorize(SslStream stream, CancellationToken token)
         {
@@ -140,6 +148,24 @@ public sealed class IdentityTlsAuthorization
                     attached = false;
                 }
                 if (attached) boundConnection = connection;
+            }
+            if(attached&&_playerShops is not null)
+            {
+                try
+                {
+                    await _playerShops.AttachAsync(binding).ConfigureAwait(false);
+                }
+                catch
+                {
+                    lock(bindingGate)
+                    {
+                        if(ReferenceEquals(boundConnection,connection))
+                            boundConnection=null;
+                    }
+                    router.TryDetach(connection);
+                    _trades?.UnregisterGameplayGate(binding,gameplayGate);
+                    attached=false;
+                }
             }
             if (!attached)
             {
@@ -175,6 +201,11 @@ public sealed class IdentityTlsAuthorization
             if (_combat is not null)
                 await _combat.CloseAndDrainAsync(
                     binding.ActorId, binding.ConnectionEpoch).ConfigureAwait(false);
+            // Online player shops cannot outlive the authenticated session.
+            // The same gameplay gate excludes a concurrent buyer commit here.
+            if(_playerShops is not null)
+                await _playerShops.CloseForBindingAsync(binding,router)
+                    .ConfigureAwait(false);
             // A pending trade is session-scoped. Disconnect before detaching the
             // route so the peer can receive one authoritative terminal event.
             _trades?.Disconnect(binding,router);
@@ -240,6 +271,10 @@ public sealed class IdentityTlsAuthorization
                     // pre-transfer session after a successful authoritative portal.
                     if(outcome.Status==NpcPortalStatus.Accepted)
                     {
+                        if(_playerShops is not null&&outcome.TransferredActor is { } shopAfter)
+                            await _playerShops.CloseForBindingAsync(
+                                ConnectionBinding.FromTrustedSnapshot(shopAfter),router)
+                                .ConfigureAwait(false);
                         _trades?.Disconnect(oldBinding,router);
                         if(_trades is not null&&
                            (outcome.TransferredActor is not { } after||
@@ -1723,6 +1758,36 @@ public sealed class IdentityTlsAuthorization
                 finally { gameplayGate.Release(); }
             }
 
+            async Task PlayerShopHandler(TrustedPlayerShopCommand request)
+            {
+                if(_playerShops is null)return;
+                var decision=playerShopGate.Inspect(request);
+                if(decision==PlayerShopSequenceDecision.ExactReplay)
+                {
+                    var replay=router.QueuePlayerShopResult(
+                        request,playerShopGate.LastReceipt);
+                    if(replay!=GatewaySendStatus.Enqueued)
+                        throw new IOException(
+                            "Reliable player-shop replay could not be queued: "+replay);
+                    return;
+                }
+                if(decision==PlayerShopSequenceDecision.Stale)
+                {
+                    var stale=new PlayerShopResultWire(
+                        request.RequestMapEpoch,request.ShopSequence,request.Action,
+                        PlayerShopResultStatus.StaleSequence,
+                        request.SellerActorId,request.ListingId,0,0,0,0,0,0,0);
+                    var sent=router.QueuePlayerShopResult(request,stale);
+                    if(sent!=GatewaySendStatus.Enqueued)
+                        throw new IOException(
+                            "Reliable stale player-shop result could not be queued: "+sent);
+                    return;
+                }
+                var receipt=await _playerShops.HandleNewAsync(request,router)
+                    .ConfigureAwait(false);
+                playerShopGate.Record(request,receipt);
+            }
+
             async Task TradeHandler(TrustedTradeCommand request)
             {
                 if(_trades is null)return;
@@ -1793,7 +1858,9 @@ public sealed class IdentityTlsAuthorization
                 handlePvp:PvpModeHandler,
                 handlePvpAttack:PvpAttackHandler,
                 handlePvpSkill:PvpSkillHandler,
-                handleGmPvpName:GmPvpNameHandler).ConfigureAwait(false);
+                handleGmPvpName:GmPvpNameHandler,
+                handlePlayerShop:_playerShops is null?null:PlayerShopHandler)
+                .ConfigureAwait(false);
         }
         finally
         {
@@ -1815,6 +1882,9 @@ public sealed class IdentityTlsAuthorization
                 if (_combat is not null)
                     await _combat.CloseAndDrainAsync(
                         binding.ActorId, binding.ConnectionEpoch).ConfigureAwait(false);
+                if(_playerShops is not null)
+                    await _playerShops.CloseForBindingAsync(binding,router)
+                        .ConfigureAwait(false);
                 _trades?.Disconnect(binding,router);
                 router.TryDetach(abandoned);
                 await _world.TrustedDisconnectAsync(

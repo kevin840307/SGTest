@@ -217,6 +217,9 @@ internal static class TlsHost
                 });
             PlayerTradeCoordinator? trades=tradeItemRules is null
                 ? null:new PlayerTradeCoordinator(identity,world,tradeItemRules,combat);
+            PlayerShopCoordinator? playerShops=trades is null
+                ? null:new PlayerShopCoordinator(
+                    identity,world,tradeItemRules!,trades,combat);
             var aoi = new WorldAoiPump(
                 router, monsters: monsters, playerCombat: combat, loot: loot,
                 initialGroundDrops: activeDrops);
@@ -233,6 +236,7 @@ internal static class TlsHost
                 repairItemRules: repairItemRules,
                 quests: quests,
                 trades: trades,
+                playerShops: playerShops,
                 gmAccounts: gmAccounts);
             await using var listener = new TlsGatewayListener(address, port, authorization,
                 certificate, router, new(MaxConnections: maximum, MaxConnectionsPerAddress: perAddress));
@@ -268,6 +272,7 @@ internal static class TlsHost
                     verified_repair_item_rule_count = repairItemRules?.Count ?? 0,
                     verified_quest_count = quests?.Count ?? 0,
                     verified_trade_item_rule_count = tradeItemRules?.Count ?? 0,
+                    player_shop_enabled = playerShops is not null,
                     gm_account_count = gmAccounts.Count,
                     unpicked_ground_drops = activeDrops.Count,
                     character_creation_enabled = characterCreation is not null,
@@ -323,7 +328,8 @@ internal static class TlsHost
                 verified_repair_count = repairs?.Count ?? 0,
                 verified_repair_item_rule_count = repairItemRules?.Count ?? 0,
                 verified_quest_count = quests?.Count ?? 0,
-                verified_trade_item_rule_count = tradeItemRules?.Count ?? 0
+                verified_trade_item_rule_count = tradeItemRules?.Count ?? 0,
+                player_shop_enabled = playerShops is not null
             }));
             return 0;
         }
