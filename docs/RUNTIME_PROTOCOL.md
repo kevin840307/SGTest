@@ -376,3 +376,23 @@ The real TLS gate uses a SyntheticTest rule `skill=99001, fixed_damage=40, radiu
 Client core run **44277982674** is PASS. Relevant gates: `SKILL_COMBAT_GODOT_PASS ... area_target_zero=true area_summary_no_hp_authority=true same_sequence_multi_target_visual=true duplicate_target_stale=true`; `CLIENT_SKILL_AOE_TLS_PASS ... hits=2 near_hp=60,60 far_hp=100 mp=2_to_1 summary_damage=0 per_hit_visuals=2 monster_delta_authority=true`; C# fixture `SKILL_AOE_FIXTURE_PASS ... monster_hp=60,60,100 player_mp=1/2 commands=1`; runner `GODOT_CSHARP_TLS_SKILL_AOE_E2E_PASS ...`; reconnect, cross-map, NPC and formal Host/main-scene gates remain green.
 
 Remaining source work: original AP/DP/HR/DR stat semantics are still not runtime-ready. The converter currently labels EN_Att correlations as `candidate_only`, `semantic_names_verified=false`, `runtime_ready=false`; therefore the verified Old hit/damage formulas must not yet be activated with guessed enemy columns.
+
+### 2026-11-19 Personal storage authority (opcodes 52–56)
+
+Personal storage uses the same authenticated TLS compact-binary path and reliable FIFO as inventory/economy. V1 deliberately moves only a whole Item UID stack; original capacity, fees, partial-stack behavior, and account-wide versus character-scoped storage are not inferred.
+
+| Opcode | Direction | Bytes | Payload |
+|---|---|---:|---|
+| 52 StorageOpen | Godot→Server | 24 | MapEpoch; StorageSequence; NpcSpawnId |
+| 53 StorageSnapshot | Server→Godot reliable | 32 + 24*N | MapEpoch; StorageSequence; status; NpcSpawnId; StartIndex; Complete; Items[] |
+| 54 StorageDeposit | Godot→Server | 32 | MapEpoch; StorageSequence; NpcSpawnId; ItemUid |
+| 55 StorageWithdraw | Godot→Server | 32 | MapEpoch; StorageSequence; NpcSpawnId; ItemUid |
+| 56 StorageTransferResult | Server→Godot reliable | 50 | MapEpoch; StorageSequence; kind; status; NpcSpawnId; ItemUid; ItemDefinitionId; Quantity; SourceDropId |
+
+Client commands never supply ActorId, ConnectionEpoch, ItemDefinitionId, quantity, fee, or storage coordinates. The Gateway rebuilds identity from the TLS binding and rechecks Actor/MapEpoch/death/storage-NPC proximity for every command. One bounded 16-command worker per connection shares the existing gameplayGate, keeping SQLite work outside the World/AOI tick.
+
+The formal Host enables storage only with --storage-rules and a verified_npc_storage_rules v1 manifest declaring rules_verified=true and gameplay_ready=true. The manifest identifies map/NPC spawn IDs only; coordinates are joined from audited NPC converter output. Missing/unverified rules create no usable storage NPC.
+
+SQLite schema v10 preserves exact ItemUid and provenance while moving a whole stack between item_instances and storage_items in one transaction. Cross-location triggers reject duplicate ItemUid or non-null SourceDropId across both locations. storage_actions records SourceDropId so exact retry after a lost success response returns AlreadyApplied with enough authority to reconstruct the same item without minting or moving it twice. Godot accepts ordered snapshot chunks (max 128 items/frame, 4095 total), exposes storage_ready only after the final chunk, and fails closed on UID overlap, wrong request/generation, future reply, or provenance mismatch.
+
+Verification: Client Core 44425019503 PASS covers Godot codec/reducer, whole-stack SessionPanel controls, and existing real TLS/reconnect/two-client/cross-map/formal-Host regression. Server Core 44425185533 PASS adds an authenticated loopback SslStream lifecycle: login → inventory baseline → open → deposit → exact retry → stored snapshot → withdraw → exact retry → unknown-NPC rejection → disconnect/relogin with unchanged ItemUid and SourceDropId. A storage-specific Godot→C# socket E2E and Windows/private-asset GUI verification remain NOT VERIFIED.
