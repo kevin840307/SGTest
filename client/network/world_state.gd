@@ -936,6 +936,9 @@ func _apply_choose(frame: PackedByteArray) -> bool:
 	last_repair_response_sequence = 0
 	last_repair_result.clear()
 	stale_repair_results = 0
+	_clear_trade_state(true)
+	last_trade_terminal.clear()
+	stale_trade_frames = 0
 	respawn_sequence = 0
 	last_respawn_result_sequence = 0
 	last_respawn_result_status = -1
@@ -1545,6 +1548,9 @@ func _apply_world_ready(frame: PackedByteArray) -> bool:
 		last_repair_response_sequence = 0
 		last_repair_result.clear()
 		stale_repair_results = 0
+		_clear_trade_state(true)
+		last_trade_terminal.clear()
+		stale_trade_frames = 0
 		respawn_sequence = 0
 		last_respawn_result_sequence = 0
 		last_respawn_result_status = -1
