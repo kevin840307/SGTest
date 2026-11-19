@@ -865,6 +865,77 @@ func _update_storage_ui() -> void:
 	storage_withdraw_button.disabled = not usable or pending or not ready or active_npc <= 0 or storage_withdraw_picker.item_count == 0
 
 
+func _equip_selected_inventory_item() -> void:
+	if equipment_equip_button.disabled or equipment_inventory_picker.selected < 0:
+		return
+	var uid := int(equipment_inventory_picker.get_item_metadata(equipment_inventory_picker.selected))
+	if submit_equipment_equip(uid):
+		equipment_status.text = "裝備請求已送出，等待伺服器核准欄位…"
+		equipment_equip_button.disabled = true
+		equipment_unequip_button.disabled = true
+	else:
+		equipment_status.text = "目前無法裝上該物品"
+
+
+func _unequip_selected_item() -> void:
+	if equipment_unequip_button.disabled or equipment_equipped_picker.selected < 0:
+		return
+	var uid := int(equipment_equipped_picker.get_item_metadata(equipment_equipped_picker.selected))
+	if submit_equipment_unequip(uid):
+		equipment_status.text = "卸下請求已送出，等待伺服器結算…"
+		equipment_equip_button.disabled = true
+		equipment_unequip_button.disabled = true
+	else:
+		equipment_status.text = "目前無法卸下該裝備"
+
+
+func _update_equipment_ui() -> void:
+	var in_world := active and int(_latest.get("state",-1)) == State.STATE_IN_WORLD
+	for control in [equipment_inventory_picker,equipment_equipped_picker,equipment_equip_button,equipment_unequip_button,equipment_status]:
+		control.visible = in_world
+	if not in_world:
+		_equipment_display_key = ""
+		return
+	var ready := bool(_latest.get("equipment_ready",false))
+	var pending := int(_latest.get("pending_equipment_sequence",0)) != 0
+	var usable := ready and bool(_latest.get("world_ready",false)) and bool(_latest.get("inventory_ready",false)) and not bool(_latest.get("reconnecting",false)) and not bool(_latest.get("resync_pending",false)) and not bool(_latest.get("waiting_for_new_map",false))
+	var inventory: Dictionary = _latest.get("inventory_items",{})
+	var equipment: Dictionary = _latest.get("equipment_items",{})
+	var key := "%d/%d/%d/%d/%d" % [int(_latest.get("inventory_revision",0)),int(_latest.get("equipment_revision",0)),int(_latest.get("equipment_sequence",0)),inventory.size(),equipment.size()]
+	if key != _equipment_display_key:
+		_equipment_display_key = key
+		equipment_inventory_picker.clear()
+		equipment_equipped_picker.clear()
+		if ready:
+			var inventory_uids: Array = inventory.keys()
+			inventory_uids.sort()
+			for raw_uid in inventory_uids:
+				var uid := int(raw_uid)
+				var item: Dictionary = inventory[raw_uid]
+				equipment_inventory_picker.add_item("%s｜UID %d" % [item_catalog.name_for(int(item.get("item_definition_id",0))),uid])
+				equipment_inventory_picker.set_item_metadata(equipment_inventory_picker.item_count-1,uid)
+			var equipped_uids: Array = equipment.keys()
+			equipped_uids.sort()
+			for raw_uid in equipped_uids:
+				var uid := int(raw_uid)
+				var item: Dictionary = equipment[raw_uid]
+				equipment_equipped_picker.add_item("裝備欄位 %d｜%s｜UID %d" % [int(item.get("slot_id",0)),item_catalog.name_for(int(item.get("item_definition_id",0))),uid])
+				equipment_equipped_picker.set_item_metadata(equipment_equipped_picker.item_count-1,uid)
+			if equipment_inventory_picker.item_count > 0:
+				equipment_inventory_picker.select(0)
+			if equipment_equipped_picker.item_count > 0:
+				equipment_equipped_picker.select(0)
+	if not ready:
+		equipment_status.text = "裝備規則尚未由伺服器啟用"
+	var result: Dictionary = _latest.get("last_equipment_result",{})
+	if not result.is_empty():
+		if int(result.get("status",-1)) in [0,1]:
+			equipment_status.text = "%s完成：裝備欄位 %d｜%s｜UID %d" % ["裝上" if int(result.get("kind",0)) == 1 else "卸下",int(result.get("slot_id",0)),item_catalog.name_for(int(result.get("item_definition_id",0))),int(result.get("item_uid",0))]
+		else:
+			equipment_status.text = "裝備操作失敗（伺服器代碼 %d）" % int(result.get("status",-1))
+	equipment_equip_button.disabled = not usable or pending or equipment_inventory_picker.item_count == 0
+	equipment_unequip_button.disabled = not usable or pending or equipment_equipped_picker.item_count == 0
+
 func _update_inventory_ui() -> void:
 	var in_world: bool = active and int(_latest.get("state",-1)) == State.STATE_IN_WORLD
 	var loaded: bool = in_world and bool(_latest.get("inventory_ready",false))
@@ -974,6 +1045,7 @@ func _process(delta: float) -> void:
 	_update_inventory_ui()
 	_update_shop_ui()
 	_update_storage_ui()
+	_update_equipment_ui()
 	var pickup_result: Dictionary = _latest.get("last_pickup_result",{})
 	if not pickup_result.is_empty():
 		if int(pickup_result.status) in [0,1]:
