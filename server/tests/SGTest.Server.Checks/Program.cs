@@ -268,6 +268,7 @@ static class Checks
             NpcPortalChecks.Verify(root);
             NpcShopCatalogChecks.Verify(root);
             NpcStorageCatalogChecks.Verify(root);
+            NpcBankCatalogChecks.Verify(root);
             NpcPortalWireChecks.Verify();
             StorageWireChecks.Verify();
             EquipmentWireChecks.Verify();
