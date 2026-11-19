@@ -214,7 +214,7 @@ func mark_skill_sent(sequence: int) -> bool:
 	return true
 
 func mark_recovery_use_sent(sequence: int,item_uid: int) -> bool:
-	if state != STATE_IN_WORLD or player_dead or not combat_available or not inventory_ready or not world_ready or resync_pending or waiting_for_new_map or pending_world_ready_ack_epoch != 0 or last_world_ready_ack_epoch != map_epoch or pending_recovery_sequence != 0 or pending_discard_sequence != 0 or pending_shop_sequence != 0 or pending_storage_sequence != 0 or sequence <= recovery_sequence or sequence > 0xffffffff or item_uid <= 0 or not inventory_items.has(item_uid):
+	if state != STATE_IN_WORLD or player_dead or not combat_available or not inventory_ready or not world_ready or resync_pending or waiting_for_new_map or pending_world_ready_ack_epoch != 0 or last_world_ready_ack_epoch != map_epoch or pending_recovery_sequence != 0 or pending_discard_sequence != 0 or pending_shop_sequence != 0 or pending_storage_sequence != 0 or pending_equipment_sequence != 0 or sequence <= recovery_sequence or sequence > 0xffffffff or item_uid <= 0 or not inventory_items.has(item_uid):
 		return false
 	recovery_sequence = sequence
 	pending_recovery_sequence = sequence
@@ -223,7 +223,7 @@ func mark_recovery_use_sent(sequence: int,item_uid: int) -> bool:
 
 
 func mark_inventory_discard_sent(sequence: int,item_uid: int,quantity: int) -> bool:
-	if state != STATE_IN_WORLD or not inventory_ready or not world_ready or resync_pending or waiting_for_new_map or pending_world_ready_ack_epoch != 0 or last_world_ready_ack_epoch != map_epoch or pending_discard_sequence != 0 or pending_recovery_sequence != 0 or pending_shop_sequence != 0 or pending_storage_sequence != 0 or sequence <= discard_sequence or sequence > 0xffffffff or item_uid <= 0 or quantity < 1 or quantity > 1000000 or not inventory_items.has(item_uid) or int((inventory_items[item_uid] as Dictionary).quantity) < quantity:
+	if state != STATE_IN_WORLD or not inventory_ready or not world_ready or resync_pending or waiting_for_new_map or pending_world_ready_ack_epoch != 0 or last_world_ready_ack_epoch != map_epoch or pending_discard_sequence != 0 or pending_recovery_sequence != 0 or pending_shop_sequence != 0 or pending_storage_sequence != 0 or pending_equipment_sequence != 0 or sequence <= discard_sequence or sequence > 0xffffffff or item_uid <= 0 or quantity < 1 or quantity > 1000000 or not inventory_items.has(item_uid) or int((inventory_items[item_uid] as Dictionary).quantity) < quantity:
 		return false
 	discard_sequence = sequence
 	pending_discard_sequence = sequence
@@ -244,7 +244,7 @@ func mark_pickup_sent(sequence: int, drop_id: int) -> bool:
 
 
 func mark_shop_sent(sequence: int,kind: int,npc_spawn_id: int,item_definition_id: int = 0,item_uid: int = 0,quantity: int = 0) -> bool:
-	if state != STATE_IN_WORLD or player_dead or not world_ready or not inventory_ready or resync_pending or waiting_for_new_map or pending_world_ready_ack_epoch != 0 or last_world_ready_ack_epoch != map_epoch or pending_shop_sequence != 0 or pending_recovery_sequence != 0 or pending_discard_sequence != 0 or pending_storage_sequence != 0 or sequence <= shop_sequence or sequence > 0xffffffff or kind < 1 or kind > 3 or npc_spawn_id <= 0:
+	if state != STATE_IN_WORLD or player_dead or not world_ready or not inventory_ready or resync_pending or waiting_for_new_map or pending_world_ready_ack_epoch != 0 or last_world_ready_ack_epoch != map_epoch or pending_shop_sequence != 0 or pending_recovery_sequence != 0 or pending_discard_sequence != 0 or pending_storage_sequence != 0 or pending_equipment_sequence != 0 or sequence <= shop_sequence or sequence > 0xffffffff or kind < 1 or kind > 3 or npc_spawn_id <= 0:
 		return false
 	if kind == 1:
 		if item_definition_id != 0 or item_uid != 0 or quantity != 0:
@@ -266,7 +266,7 @@ func mark_shop_sent(sequence: int,kind: int,npc_spawn_id: int,item_definition_id
 
 
 func mark_storage_sent(sequence: int,kind: int,npc_spawn_id: int,item_uid: int = 0) -> bool:
-	if state != STATE_IN_WORLD or player_dead or not world_ready or not inventory_ready or resync_pending or waiting_for_new_map or pending_world_ready_ack_epoch != 0 or last_world_ready_ack_epoch != map_epoch or pending_storage_sequence != 0 or pending_recovery_sequence != 0 or pending_discard_sequence != 0 or pending_shop_sequence != 0 or sequence <= storage_sequence or sequence > 0xffffffff or kind < 1 or kind > 3 or npc_spawn_id <= 0:
+	if state != STATE_IN_WORLD or player_dead or not world_ready or not inventory_ready or resync_pending or waiting_for_new_map or pending_world_ready_ack_epoch != 0 or last_world_ready_ack_epoch != map_epoch or pending_storage_sequence != 0 or pending_recovery_sequence != 0 or pending_discard_sequence != 0 or pending_shop_sequence != 0 or pending_equipment_sequence != 0 or sequence <= storage_sequence or sequence > 0xffffffff or kind < 1 or kind > 3 or npc_spawn_id <= 0:
 		return false
 	if kind == 1:
 		if item_uid != 0:
@@ -723,6 +723,18 @@ func _apply_choose(frame: PackedByteArray) -> bool:
 	last_storage_response_sequence = 0
 	last_storage_result.clear()
 	stale_storage_results = 0
+	equipment_sequence = 0
+	pending_equipment_sequence = 0
+	pending_equipment_kind = 0
+	pending_equipment_item_uid = 0
+	equipment_items.clear()
+	equipment_slots.clear()
+	equipment_ready = false
+	equipment_next_index = 0
+	equipment_revision = 0
+	last_equipment_response_sequence = 0
+	last_equipment_result.clear()
+	stale_equipment_results = 0
 	respawn_sequence = 0
 	last_respawn_result_sequence = 0
 	last_respawn_result_status = -1
@@ -1449,6 +1461,8 @@ func _apply_inventory_snapshot(frame: PackedByteArray) -> bool:
 		var uid := int(item.item_uid)
 		if inventory_items.has(uid):
 			return fail("inventory_duplicate_item_uid")
+		if equipment_items.has(uid) or storage_items.has(uid):
+			return fail("inventory_item_uid_location_conflict")
 		inventory_items[uid] = item.duplicate(true)
 		inventory_next_index += 1
 	if bool(value.complete):
