@@ -417,3 +417,27 @@ Equipment work is drained by a per-connection bounded 16-command worker and seri
 Verification: Server Core **44439539491 PASS** covers schema v11, verified-rule rejection, atomic UID transfer/replay, gateway binding, forged server-result rejection, TLS login/relogin persistence, and hard-kill regression. Client Core **44439678502 PASS** covers C#/Godot wire golden, equipment reducer, opaque-slot SessionPanel UI, and a real Godot ClientSession → TLS → C# Auth/Gateway → SQLite → reliable result → Godot reducer Equip/Unequip lifecycle; reconnect, two-client AOI, Map15↔Map13, audited portal, and formal Host/main-scene regressions remain green.
 
 Not verified: original ItemDefinition→named body slot semantics, AP/DP/HR/DR/stat application, class/level/sex restrictions, auto-swap behavior, weapon/paper-doll visuals, durability/repair/enhancement, or Windows/private-asset GUI.
+
+### 2026-11-19 Scoped bank authority (opcodes 61–65)
+
+Bank V1 reuses the existing character wallet and adds a durable bank balance whose owner is **not inferred by the Client**. Every verified bank NPC rule must explicitly declare either character-scoped or account-scoped balance ownership.
+
+| Opcode | Direction | Bytes | Payload |
+|---|---|---:|---|
+| 61 BankOpen | Godot→Server | 24 | `MapEpoch; BankSequence; NpcSpawnId` |
+| 62 BankSnapshot | Server→Godot reliable | 42 | `MapEpoch; BankSequence; Status; NpcSpawnId; Scope; WalletMoney; BankMoney` |
+| 63 BankDeposit | Godot→Server | 32 | `MapEpoch; BankSequence; NpcSpawnId; Amount` |
+| 64 BankWithdraw | Godot→Server | 32 | `MapEpoch; BankSequence; NpcSpawnId; Amount` |
+| 65 BankTransactionResult | Server→Godot reliable | 51 | `MapEpoch; BankSequence; Kind; Status; NpcSpawnId; Scope; Amount; WalletMoney; BankMoney` |
+
+The Client never supplies ActorId, ConnectionEpoch, balance scope, wallet balance, or bank balance. Gateway injects authenticated identity. Auth rechecks exact actor generation, MapEpoch, death state, verified bank NPC identity, and proximity for every Open/Deposit/Withdraw request. The formal Host only enables bank NPCs through `--bank-rules` with a `verified_npc_bank_rules` v1 manifest declaring `rules_verified=true`, `gameplay_ready=true`, audited NPC provenance, and explicit `balance_scope=character|account`.
+
+SQLite schema v12 keeps character wallets as the only spendable on-character money source and adds separate character/account bank balances plus `bank_actions` durable receipts. A Deposit or Withdraw updates wallet and the selected Server-owned bank scope in one transaction. Exact replay returns `AlreadyApplied` with original committed balances; conflicting sequence reuse is stale. Account scope is shared only by characters under the same account; character scope is isolated by character.
+
+Bank work runs in its own bounded 16-command connection worker and shares the existing gameplayGate, keeping SQLite outside the 30Hz World/AOI owner. Godot never predicts bank arithmetic: it replaces wallet/bank values only from Server snapshots/results. If a shop is open, the same authoritative wallet value also updates `shop_money`, preventing a second client-side wallet truth. Map transfer and access-invalidating failures close the bank session.
+
+Result validation is fail-closed: Applied/AlreadyApplied and economic failures that expose balances must carry an explicit Character or Account scope; only access failures such as UnknownBank/TooFar/StaleGeneration/PlayerDead may use no-scope with zero balances.
+
+Verification: Server Core **44454312829 PASS** covers character/account scope isolation/sharing, atomic deposit/withdraw, exact replay, stale sequence, insufficient funds, DB reopen, verified NPC scope, Gateway anti-forgery, and authenticated TLS bank lifecycle. Client Core **44454334513 PASS** covers codec/reducer/UI strict scope validation. The real Godot ClientSession → TLS → C# Auth/Gateway → SQLite → reliable result → Godot reducer lifecycle passed in **44454151798**, including open, deposit 400, withdraw 400, final durable wallet=1000/bank=0, and the remainder of reconnect, two-client, Map15↔Map13, portal, and formal Host/main-scene regression gates.
+
+Not verified: the original Map13/15 bank NPC set, whether the original game uses character or account ownership at each bank, fees, interest, transfer limits, cross-character transfer semantics, or Windows/private-asset visual parity.
