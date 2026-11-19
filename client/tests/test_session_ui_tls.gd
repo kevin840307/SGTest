@@ -866,6 +866,33 @@ func run() -> void:
 		fail("Repair UI locally recomputed or failed to apply server settlement")
 		return
 
+	# Trade UI consumes authoritative peer/session state and exact ItemUid offers.
+	panel._latest.entities = {22:{"actor_id":22}}
+	panel._latest.trade_id = 0
+	panel._latest.trade_revision = 0
+	panel._latest.trade_state = 0
+	panel._latest.trade_peer_actor_id = 0
+	panel._latest.trade_my_money = 0
+	panel._latest.trade_other_money = 0
+	panel._latest.trade_my_locked = false
+	panel._latest.trade_other_locked = false
+	panel._latest.trade_my_confirmed = false
+	panel._latest.trade_other_confirmed = false
+	panel._latest.trade_my_items = {}
+	panel._latest.trade_other_items = {}
+	panel._latest.trade_sequence = 0
+	panel._latest.last_trade_terminal = {}
+	panel._update_trade_ui()
+	if panel.trade_target_picker.item_count != 1 or panel.trade_request_button.disabled:
+		fail("Trade UI did not expose visible peer invite")
+		return
+	panel.trade_request_button.pressed.emit()
+	if stub.trade_requests != 1 or stub.last_trade_target != 22:
+		fail("Trade invite UI did not send selected ActorId")
+		return
+
+	# TRADE_UI_CONTINUE
+
 	panel._latest.player_dead = true
 	panel._update_inventory_ui()
 	if not panel.recovery_button.disabled or panel.submit_recovery_use(10000):
