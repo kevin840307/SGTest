@@ -39,8 +39,10 @@ def main() -> int:
                         help="run real TLS out-of-range attack -> Server A* approach -> retry E2E")
     parser.add_argument("--discard", action="store_true",
                         help="run real TLS ClientSession durable inventory discard E2E")
+    parser.add_argument("--storage", action="store_true",
+                        help="run real TLS ClientSession personal storage deposit/withdraw E2E")
     args = parser.parse_args()
-    if args.app_ui and (args.multi or args.crossmap or args.portal or args.reconnect or args.combat or args.combat_observer or args.skill_aoe or args.skill_aoe_observer or args.discard or args.auto_attack):
+    if args.app_ui and (args.multi or args.crossmap or args.portal or args.reconnect or args.combat or args.combat_observer or args.skill_aoe or args.skill_aoe_observer or args.discard or args.storage or args.auto_attack):
         parser.error("--app-ui uses the single-client login fixture")
     if args.ui_screenshot and not args.app_ui:
         parser.error("--ui-screenshot requires --app-ui")
@@ -68,6 +70,8 @@ def main() -> int:
         return run_auto_attack(args, repo, fixture, env)
     if args.discard:
         return run_discard(args, repo, fixture, env)
+    if args.storage:
+        return run_storage(args, repo, fixture, env)
     if args.combat:
         return run_combat(args, repo, fixture, env)
     if args.reconnect:
@@ -271,6 +275,75 @@ def run_discard(args, repo: Path, fixture: Path, env: dict[str, str]) -> int:
         return 0
     except Exception as error:
         print("TLS_DISCARD_RUNNER_FAIL", error, file=sys.stderr)
+        for line in lines[-30:]:
+            print(line, file=sys.stderr)
+        return 1
+    finally:
+        if server.poll() is None:
+            server.terminate()
+            try:
+                server.wait(timeout=3)
+            except subprocess.TimeoutExpired:
+                server.kill()
+
+
+def run_storage(args, repo: Path, fixture: Path, env: dict[str, str]) -> int:
+    server = subprocess.Popen(
+        ["dotnet", "run", "--project", str(fixture), "-c", "Release",
+         "--no-build", "--", "--storage"],
+        cwd=repo, env=env, text=True, stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT, bufsize=1)
+    lines: list[str] = []
+    notices: queue.Queue[str] = queue.Queue()
+
+    def capture() -> None:
+        assert server.stdout is not None
+        for line in server.stdout:
+            value = line.rstrip()
+            lines.append(value)
+            notices.put(value)
+
+    threading.Thread(target=capture, daemon=True).start()
+    deadline = time.monotonic() + args.timeout
+    try:
+        ready = None
+        while time.monotonic() < deadline:
+            if server.poll() is not None and notices.empty():
+                break
+            try:
+                line = notices.get(timeout=0.15)
+            except queue.Empty:
+                continue
+            if line.startswith("STORAGE_FIXTURE_READY "):
+                ready = line
+                break
+        if ready is None:
+            raise RuntimeError("storage fixture never became ready")
+        match = re.search(r"STORAGE_FIXTURE_READY port=(\d+) cert=(.+?) username=", ready)
+        if match is None:
+            raise RuntimeError("malformed storage fixture readiness: " + ready)
+        port, cert = match.group(1), match.group(2)
+        client = subprocess.run(
+            [args.godot, "--headless", "--path", str(repo / "client"),
+             "--script", "res://tests/test_client_storage_tls.gd", "--", port, cert],
+            cwd=repo, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            timeout=max(1.0, deadline - time.monotonic()))
+        print(client.stdout, end="")
+        if client.returncode != 0 or "CLIENT_STORAGE_TLS_PASS" not in client.stdout:
+            raise RuntimeError("Godot storage TLS test failed")
+        server.wait(timeout=max(1.0, deadline - time.monotonic()))
+        output = "\n".join(lines)
+        if server.returncode != 0 or "STORAGE_FIXTURE_PASS" not in output:
+            raise RuntimeError("C# storage fixture did not confirm persistent settlement")
+        for line in lines:
+            if line.startswith("STORAGE_FIXTURE_"):
+                print(line)
+        print("GODOT_CSHARP_TLS_STORAGE_E2E_PASS secure_tls=true "
+              "identity_server_bound=true whole_uid_stack=true "
+              "deposit=true withdraw=true durable_uid_and_provenance=true")
+        return 0
+    except Exception as error:
+        print("TLS_STORAGE_RUNNER_FAIL", error, file=sys.stderr)
         for line in lines[-30:]:
             print(line, file=sys.stderr)
         return 1
