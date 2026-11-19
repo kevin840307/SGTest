@@ -29,6 +29,7 @@ public sealed class IdentityTlsAuthorization
     private readonly NpcShopCatalog? _shops;
     private readonly NpcStorageCatalog? _storages;
     private readonly IReadOnlyDictionary<int,EquipmentRule>? _equipmentRules;
+    private readonly NpcBankCatalog? _banks;
 
     public IdentityTlsAuthorization(SqliteIdentityStore identity, ServerWorldHost world,
                                     PortalCatalog? portals = null,
@@ -39,7 +40,8 @@ public sealed class IdentityTlsAuthorization
                                      CharacterCreationPolicy? characterCreation = null,
                                      NpcShopCatalog? shops = null,
                                      NpcStorageCatalog? storages = null,
-                                     IReadOnlyDictionary<int,EquipmentRule>? equipmentRules = null)
+                                     IReadOnlyDictionary<int,EquipmentRule>? equipmentRules = null,
+                                     NpcBankCatalog? banks = null)
     {
         _identity = identity ?? throw new ArgumentNullException(nameof(identity));
         _world = world ?? throw new ArgumentNullException(nameof(world));
@@ -61,6 +63,7 @@ public sealed class IdentityTlsAuthorization
         _shops = shops;
         _storages = storages;
         _equipmentRules = equipmentRules;
+        _banks = banks;
     }
 
     /// <summary>
@@ -761,6 +764,133 @@ public sealed class IdentityTlsAuthorization
                 finally { gameplayGate.Release(); }
             }
 
+            async Task BankHandler(TrustedBankCommand request)
+            {
+                var binding=new ConnectionBinding(
+                    request.ActorId,request.ConnectionEpoch,request.RequestMapEpoch);
+                await gameplayGate.WaitAsync().ConfigureAwait(false);
+                try
+                {
+                    if(!router.IsCurrentBinding(binding))return;
+                    var snapshot=await _world.TrustedGetActorAsync(
+                        request.ActorId).ConfigureAwait(false);
+                    if(snapshot is not { } actor||
+                       actor.ActorId!=request.ActorId||
+                       actor.ConnectionEpoch!=request.ConnectionEpoch||
+                       actor.MapEpoch!=request.RequestMapEpoch)
+                    {
+                        if(request.Kind==TrustedBankCommandKind.Open)
+                        {
+                            var stale=router.QueueBankSnapshot(
+                                request,BankOpenStatus.StaleGeneration,null);
+                            if(stale!=GatewaySendStatus.Enqueued)
+                                throw new IOException(
+                                    "Reliable stale bank snapshot could not be queued: "+stale);
+                        }
+                        else
+                        {
+                            var kind=request.Kind==TrustedBankCommandKind.Deposit
+                                ? BankTransactionKind.Deposit:BankTransactionKind.Withdraw;
+                            var staleResult=new BankTransactionResult(
+                                BankTransactionStatus.StaleGeneration,kind,
+                                request.NpcSpawnId,BankBalanceScope.None,
+                                request.Amount,0,0);
+                            var stale=router.QueueBankTransactionResult(request,staleResult);
+                            if(stale!=GatewaySendStatus.Enqueued)
+                                throw new IOException(
+                                    "Reliable stale bank result could not be queued: "+stale);
+                        }
+                        return;
+                    }
+
+                    bool dead=_combat is not null&&_combat.CurrentHp(actor)<=0;
+                    BankNpcAccessStatus access=dead
+                        ? BankNpcAccessStatus.PlayerDead
+                        : _banks is null
+                            ? BankNpcAccessStatus.UnknownBank
+                            : _banks.Access(actor,request.NpcSpawnId);
+
+                    if(request.Kind==TrustedBankCommandKind.Open)
+                    {
+                        BankOpenStatus status=access switch
+                        {
+                            BankNpcAccessStatus.Allowed=>BankOpenStatus.Opened,
+                            BankNpcAccessStatus.UnknownBank=>BankOpenStatus.UnknownBank,
+                            BankNpcAccessStatus.TooFar=>BankOpenStatus.TooFar,
+                            BankNpcAccessStatus.PlayerDead=>BankOpenStatus.PlayerDead,
+                            _=>BankOpenStatus.StaleGeneration
+                        };
+                        BankBalanceSnapshot? balance=null;
+                        if(status==BankOpenStatus.Opened)
+                        {
+                            if(_banks is null||
+                               !_banks.TryGet(actor.MapId,request.NpcSpawnId,out var point))
+                                throw new InvalidOperationException("Bank rule vanished after access check");
+                            var scope=point.Scope==BankScopePolicy.Account
+                                ? BankBalanceScope.Account:BankBalanceScope.Character;
+                            balance=await _identity.GetBankBalanceAsync(
+                                actor.ActorId,scope).ConfigureAwait(false);
+                        }
+                        var queued=router.QueueBankSnapshot(request,status,balance);
+                        if(queued!=GatewaySendStatus.Enqueued)
+                            throw new IOException(
+                                "Reliable bank snapshot could not be queued: "+queued);
+                        return;
+                    }
+
+                    var transferKind=request.Kind==TrustedBankCommandKind.Deposit
+                        ? BankTransactionKind.Deposit:BankTransactionKind.Withdraw;
+                    BankTransactionResult result;
+                    if(access!=BankNpcAccessStatus.Allowed)
+                    {
+                        var rejected=access switch
+                        {
+                            BankNpcAccessStatus.UnknownBank=>BankTransactionStatus.UnknownBank,
+                            BankNpcAccessStatus.TooFar=>BankTransactionStatus.TooFar,
+                            BankNpcAccessStatus.PlayerDead=>BankTransactionStatus.PlayerDead,
+                            _=>BankTransactionStatus.StaleGeneration
+                        };
+                        result=new(rejected,transferKind,request.NpcSpawnId,
+                            BankBalanceScope.None,request.Amount,0,0);
+                    }
+                    else
+                    {
+                        if(_banks is null||
+                           !_banks.TryGet(actor.MapId,request.NpcSpawnId,out var point))
+                            throw new InvalidOperationException("Bank rule vanished after access check");
+                        var scope=point.Scope==BankScopePolicy.Account
+                            ? BankBalanceScope.Account:BankBalanceScope.Character;
+                        long durableConnection=_pickupWorldGeneration==0
+                            ? actor.ConnectionEpoch
+                            : SqliteIdentityStore.ComposePickupConnectionEpoch(
+                                _pickupWorldGeneration,actor.ConnectionEpoch);
+                        var context=new TrustedBankContext(
+                            actor.ActorId,durableConnection,actor.MapEpoch,
+                            request.BankSequence);
+                        var rule=new TrustedBankRule(
+                            point.NpcSpawnId,scope,point.SourceReference);
+                        result=request.Kind switch
+                        {
+                            TrustedBankCommandKind.Deposit=>
+                                await _identity.DepositBankAsync(
+                                    context,BankAccessStatus.Allowed,rule,
+                                    request.Amount).ConfigureAwait(false),
+                            TrustedBankCommandKind.Withdraw=>
+                                await _identity.WithdrawBankAsync(
+                                    context,BankAccessStatus.Allowed,rule,
+                                    request.Amount).ConfigureAwait(false),
+                            _=>throw new InvalidOperationException(
+                                "Unhandled trusted bank command")
+                        };
+                    }
+                    var sent=router.QueueBankTransactionResult(request,result);
+                    if(sent!=GatewaySendStatus.Enqueued)
+                        throw new IOException(
+                            "Reliable bank transaction result could not be queued: "+sent);
+                }
+                finally { gameplayGate.Release(); }
+            }
+
             async Task DiscardHandler(TrustedInventoryDiscard request)
             {
                 var binding=new ConnectionBinding(
@@ -804,7 +934,8 @@ public sealed class IdentityTlsAuthorization
                 PickupHandler, RecoveryHandler, DiscardHandler,
                 handleSkill:SkillHandler,handleShop:ShopHandler,
                 handleStorage:StorageHandler,
-                handleEquipment:EquipmentHandler).ConfigureAwait(false);
+                handleEquipment:EquipmentHandler,
+                handleBank:BankHandler).ConfigureAwait(false);
         }
         finally
         {
