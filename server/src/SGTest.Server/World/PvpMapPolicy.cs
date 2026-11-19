@@ -1,3 +1,5 @@
+using SGTest.Server.Identity;
+
 namespace SGTest.Server.World;
 
 public enum PvpMode : byte
