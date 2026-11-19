@@ -1057,22 +1057,27 @@ public sealed class IdentityTlsAuthorization
                     new(snapshot.ActorId,0,true,Array.Empty<InventoryItemWire>())),
                     cancellationToken).ConfigureAwait(false);
 
-            const int equipmentChunk=WireProtocol.EquipmentSnapshotMaxItemsPerFrame;
-            for(int start=0;start<equipment.Count;start+=equipmentChunk)
+            // Preserve the legacy login frame sequence if equipment is entirely disabled.
+            // Persisted equipped rows still force a baseline so a character can recover.
+            if(_equipmentRules is not null || equipment.Count>0)
             {
-                var group=equipment.Skip(start).Take(equipmentChunk)
-                    .Select(item=>new EquipmentItemWire(
-                        item.ItemUid,item.SlotId,item.ItemDefinitionId,item.SourceDropId))
-                    .ToArray();
-                bool final=start+group.Length==equipment.Count;
-                await WriteFrameAsync(tls,WireProtocol.EncodeEquipmentSnapshot(
-                    new(snapshot.ActorId,start,final,group)),
-                    cancellationToken).ConfigureAwait(false);
+                const int equipmentChunk=WireProtocol.EquipmentSnapshotMaxItemsPerFrame;
+                for(int start=0;start<equipment.Count;start+=equipmentChunk)
+                {
+                    var group=equipment.Skip(start).Take(equipmentChunk)
+                        .Select(item=>new EquipmentItemWire(
+                            item.ItemUid,item.SlotId,item.ItemDefinitionId,item.SourceDropId))
+                        .ToArray();
+                    bool final=start+group.Length==equipment.Count;
+                    await WriteFrameAsync(tls,WireProtocol.EncodeEquipmentSnapshot(
+                        new(snapshot.ActorId,start,final,group)),
+                        cancellationToken).ConfigureAwait(false);
+                }
+                if(equipment.Count==0)
+                    await WriteFrameAsync(tls,WireProtocol.EncodeEquipmentSnapshot(
+                        new(snapshot.ActorId,0,true,Array.Empty<EquipmentItemWire>())),
+                        cancellationToken).ConfigureAwait(false);
             }
-            if(equipment.Count==0)
-                await WriteFrameAsync(tls,WireProtocol.EncodeEquipmentSnapshot(
-                    new(snapshot.ActorId,0,true,Array.Empty<EquipmentItemWire>())),
-                    cancellationToken).ConfigureAwait(false);
 
             cancellationToken.ThrowIfCancellationRequested();
             var gateway = new GatewayConnection(
