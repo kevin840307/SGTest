@@ -32,6 +32,13 @@ func _initialize() -> void:
 	if snap.is_empty() or int(snap.scope)!=2 or int(snap.wallet_money)!=1000 or int(snap.bank_money)!=0 or result.is_empty() or int(result.amount)!=400 or int(result.wallet_money)!=600 or int(result.bank_money)!=400:
 		fail("CSharp bank golden mismatch")
 		return
+	var no_scope_success := DEPOSIT.hex_decode()
+	no_scope_success[26] = 0
+	no_scope_success.encode_s64(35,0)
+	no_scope_success.encode_s64(43,0)
+	if not Wire.decode_bank_transaction_result(no_scope_success).is_empty():
+		fail("successful bank result without server owner scope was admitted")
+		return
 
 	var world = new_world()
 	if world == null or not world.mark_bank_sent(1,1,88,0) or not world.apply_frame(SNAPSHOT.hex_decode()):
