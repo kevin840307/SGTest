@@ -54,6 +54,14 @@ class RespawnSession extends RefCounted:
 	var last_trade_target := 0
 	var last_trade_uid := 0
 	var last_trade_money := 0
+	var pvp_requests := 0
+	var last_pvp_action := -1
+	func request_pvp_mode(action: int) -> bool:
+		if action not in [0,1,2]:
+			return false
+		pvp_requests += 1
+		last_pvp_action = action
+		return true
 	func use_recovery_item(item_uid: int) -> bool:
 		if item_uid <= 0:
 			return false
@@ -883,6 +891,10 @@ func run() -> void:
 	panel._latest.trade_sequence = 0
 	panel._latest.last_trade_terminal = {}
 	panel._update_trade_ui()
+	for control in [panel.trade_target_picker,panel.trade_request_button,panel.trade_accept_button,panel.trade_offer_add_button,panel.trade_set_money_button,panel.trade_confirm_button,panel.trade_status]:
+		if control.get_parent() == null or not panel.is_ancestor_of(control) or not control.visible:
+			fail("Trade controls exist but are not visible descendants of SessionPanel")
+			return
 	if panel.trade_target_picker.item_count != 1 or panel.trade_request_button.disabled:
 		fail("Trade UI did not expose visible peer invite")
 		return
@@ -957,7 +969,50 @@ func run() -> void:
 		fail("Trade terminal UI did not show server outcome")
 		return
 
+	# PvP mode UI reads only authoritative server results. Query is
+	# allowed first; white/blue mutations stay locked until a server reply.
+	panel._latest.pvp_known = false
+	panel._latest.pvp_sequence = 0
+	panel._latest.pending_pvp_sequence = 0
+	panel._latest.pvp_mode = -1
+	panel._latest.pvp_map_allows = false
+	panel._latest.last_pvp_result = {}
+	panel._update_pvp_ui()
+	if panel.pvp_query_button.get_parent() == null or not panel.pvp_query_button.visible or panel.pvp_query_button.disabled or not panel.pvp_white_button.disabled or not panel.pvp_blue_button.disabled:
+		fail("PvP query and locked mutation controls missing from SessionPanel")
+		return
+	panel.pvp_query_button.pressed.emit()
+	if stub.pvp_requests != 1 or stub.last_pvp_action != 0:
+		fail("PvP query did not use ClientSession")
+		return
+	panel._latest.pending_pvp_sequence = 1
+	panel._update_pvp_ui()
+	if not panel.pvp_query_button.disabled or not panel.pvp_white_button.disabled or not panel.pvp_blue_button.disabled:
+		fail("Pending authoritative PvP response re-enabled controls")
+		return
+	panel._latest.pending_pvp_sequence = 0
+	panel._latest.pvp_known = true
+	panel._latest.pvp_mode = 0
+	panel._latest.pvp_map_allows = false
+	panel._latest.last_pvp_result = {"status":0}
+	panel._update_pvp_ui()
+	if not panel.pvp_status.text.contains("藍名") or not panel.pvp_white_button.disabled:
+		fail("NonPK map allowed white PvP mode UI")
+		return
+	panel._latest.pvp_map_allows = true
+	panel._update_pvp_ui()
+	if panel.pvp_white_button.disabled:
+		fail("Verified PvP map did not expose white mode")
+		return
+	panel.pvp_white_button.pressed.emit()
+	if stub.pvp_requests != 2 or stub.last_pvp_action != 2:
+		fail("White PvP command did not use ClientSession")
+		return
 	panel._latest.player_dead = true
+	panel._update_pvp_ui()
+	if not panel.pvp_white_button.disabled or not panel.pvp_blue_button.disabled:
+		fail("Dead player could mutate PvP mode")
+		return
 	panel._update_inventory_ui()
 	if not panel.recovery_button.disabled or panel.submit_recovery_use(10000):
 		fail("Dead character could submit recovery use")
@@ -972,5 +1027,5 @@ func run() -> void:
 	panel._set_respawn_controls()
 	app.queue_free()
 	await process_frame
-	print("CLIENT_TLS_LOGIN_PASS ui=PASS auth=PASS choose=PASS receipt=PASS world_ready=PASS password_cleared=PASS logout=PASS respawn_ui=PASS click_attack_ui=PASS click_pickup_ui=PASS persistent_inventory_ui=PASS item_metadata=PASS inventory_pagination=PASS recovery_item_button=PASS inventory_discard_button=PASS inventory_discard_quantity_confirm=PASS shop_ui=PASS storage_ui=PASS equipment_ui=PASS bank_ui=PASS repair_ui=PASS trade_ui=PASS skill_cast_ui=PASS skill_singleflight=PASS combat_mp_ui=PASS")
+	print("CLIENT_TLS_LOGIN_PASS ui=PASS auth=PASS choose=PASS receipt=PASS world_ready=PASS password_cleared=PASS logout=PASS respawn_ui=PASS click_attack_ui=PASS click_pickup_ui=PASS persistent_inventory_ui=PASS item_metadata=PASS inventory_pagination=PASS recovery_item_button=PASS inventory_discard_button=PASS inventory_discard_quantity_confirm=PASS shop_ui=PASS storage_ui=PASS equipment_ui=PASS bank_ui=PASS repair_ui=PASS trade_ui=PASS trade_ui_parenting=PASS pvp_ui=PASS skill_cast_ui=PASS skill_singleflight=PASS combat_mp_ui=PASS")
 	quit(0)
