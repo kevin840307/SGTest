@@ -390,7 +390,8 @@ public sealed class GatewayConnection
                                               Func<TrustedPvpModeCommand, bool>? postPvp = null,
                                               Func<TrustedPvpAttack, bool>? postPvpAttack = null,
                                               Func<TrustedPvpSkill, bool>? postPvpSkill = null,
-                                              Func<TrustedGmPvpNameCommand, bool>? postGmPvpName = null)
+                                              Func<TrustedGmPvpNameCommand, bool>? postGmPvpName = null,
+                                              Func<TrustedPlayerShopCommand, bool>? postPlayerShop = null)
     {
         ArgumentNullException.ThrowIfNull(postMove);
         lock (_receiveGate)
@@ -428,7 +429,8 @@ public sealed class GatewayConnection
                                               Func<TrustedPvpModeCommand, bool>? postPvp = null,
                                               Func<TrustedPvpAttack, bool>? postPvpAttack = null,
                                               Func<TrustedPvpSkill, bool>? postPvpSkill = null,
-                                              Func<TrustedGmPvpNameCommand, bool>? postGmPvpName = null)
+                                              Func<TrustedGmPvpNameCommand, bool>? postGmPvpName = null,
+                                              Func<TrustedPlayerShopCommand, bool>? postPlayerShop = null)
     {
         ArgumentNullException.ThrowIfNull(postMove);
         lock (_receiveGate)
