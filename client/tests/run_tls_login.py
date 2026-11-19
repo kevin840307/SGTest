@@ -1011,6 +1011,108 @@ def run_reconnect(args, repo: Path, fixture: Path, env: dict[str, str]) -> int:
                 process.kill()
 
 
+def run_trade(args, repo: Path, fixture: Path, env: dict[str, str]) -> int:
+    server = subprocess.Popen(
+        ["dotnet", "run", "--project", str(fixture), "-c", "Release",
+         "--no-build", "--", "--trade"],
+        cwd=repo, env=env, text=True, stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT, bufsize=1)
+    server_lines: list[str] = []
+    server_notices: queue.Queue[str] = queue.Queue()
+    observer_lines: list[str] = []
+    observer_notices: queue.Queue[str] = queue.Queue()
+    observer = None
+
+    def capture(pipe, storage: list[str], notices: queue.Queue[str]) -> None:
+        for line in pipe:
+            cleaned = line.rstrip()
+            storage.append(cleaned)
+            notices.put(cleaned)
+
+    threading.Thread(target=capture, args=(server.stdout, server_lines,
+                                           server_notices), daemon=True).start()
+
+    def until(notices: queue.Queue[str], expected: str, deadline: float,
+              process: subprocess.Popen) -> str:
+        while time.monotonic() < deadline:
+            if process.poll() is not None and notices.empty():
+                raise RuntimeError(f"process exited before {expected} (code={process.returncode})")
+            try:
+                line = notices.get(timeout=0.15)
+            except queue.Empty:
+                continue
+            if expected in line:
+                return line
+        raise TimeoutError(f"timeout waiting for {expected}")
+
+    deadline = time.monotonic() + args.timeout
+    try:
+        ready = until(server_notices, "TRADE_FIXTURE_READY", deadline, server)
+        match = re.search(
+            r"TRADE_FIXTURE_READY port=(\d+) cert=(.+?) actor_a=(\d+) actor_b=(\d+) item_a=(\d+) item_b=(\d+)",
+            ready)
+        if match is None:
+            raise RuntimeError("malformed trade fixture readiness: " + ready)
+        port, cert, actor_a, actor_b, item_a, item_b = match.groups()
+        base = [args.godot, "--headless", "--path", str(repo / "client"),
+                "--script", "res://tests/test_client_trade_tls.gd", "--",
+                port, cert]
+        tail = [actor_a, actor_b, item_a, item_b]
+        observer = subprocess.Popen(
+            [*base, "observer", *tail], cwd=repo, text=True,
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, bufsize=1)
+        threading.Thread(target=capture, args=(observer.stdout, observer_lines,
+                                               observer_notices), daemon=True).start()
+        until(observer_notices, "CLIENT_TRADE_READY role=observer", deadline, observer)
+
+        actor = subprocess.run(
+            [*base, "actor", *tail], cwd=repo, text=True,
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            timeout=max(1.0, deadline-time.monotonic()))
+        if actor.returncode != 0 or "CLIENT_TRADE_PASS role=actor" not in actor.stdout:
+            raise RuntimeError("active trade client failed:\n" + actor.stdout)
+        observer.wait(timeout=max(1.0, deadline-time.monotonic()))
+        if observer.returncode != 0 or not any(
+                "CLIENT_TRADE_PASS role=observer" in line for line in observer_lines):
+            raise RuntimeError("observer trade client failed:\n" + "\n".join(observer_lines))
+        server.wait(timeout=max(1.0, deadline-time.monotonic()))
+        if server.returncode != 0 or not any(
+                line.startswith("TRADE_FIXTURE_PASS") for line in server_lines):
+            raise RuntimeError("trade fixture failed:\n" + "\n".join(server_lines))
+
+        print(actor.stdout, end="")
+        for line in observer_lines:
+            if line.startswith("CLIENT_TRADE_"):
+                print(line)
+        for line in server_lines:
+            if line.startswith("TRADE_FIXTURE_"):
+                print(line)
+        print("GODOT_CSHARP_TWO_CLIENT_TRADE_E2E_PASS tls=true concurrent_clients=2 "
+              "invite=true offers=true money=true dual_lock=true dual_confirm=true "
+              "sqlite_atomic_swap=true uid_provenance=true")
+        return 0
+    except Exception as error:
+        print("TLS_TRADE_RUNNER_FAIL", error, file=sys.stderr)
+        for line in server_lines[-25:]:
+            print(line, file=sys.stderr)
+        for line in observer_lines[-25:]:
+            print(line, file=sys.stderr)
+        return 1
+    finally:
+        if observer is not None and observer.poll() is None:
+            observer.terminate()
+            try:
+                observer.wait(timeout=2)
+            except subprocess.TimeoutExpired:
+                observer.kill()
+        if server.poll() is None:
+            server.terminate()
+            try:
+                server.wait(timeout=3)
+            except subprocess.TimeoutExpired:
+                server.kill()
+
+
 def run_multiplayer(args, repo: Path, fixture: Path, env: dict[str, str],
                     portal: bool = False) -> int:
     """Real TLS AOI with optional audited NPC action, no test-only teleport RPC."""
