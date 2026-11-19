@@ -280,9 +280,11 @@ static class Checks
             BankWireChecks.Verify();
             RepairWireChecks.Verify();
             TradeWireChecks.Verify();
+            QuestWireChecks.Verify();
             EquipmentGatewayChecks.Verify();
             BankGatewayChecks.Verify();
             RepairGatewayChecks.Verify();
+            QuestGatewayChecks.Verify();
             BankTlsChecks.Verify(root);
             RepairTlsChecks.Verify(root);
             EquipmentTlsChecks.Verify(root);
