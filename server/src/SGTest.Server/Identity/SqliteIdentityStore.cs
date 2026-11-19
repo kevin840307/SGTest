@@ -77,7 +77,7 @@ public sealed record CharacterCreateResult(CharacterCreateStatus Status, Charact
 /// </summary>
 public sealed partial class SqliteIdentityStore : IDisposable
 {
-    public const int SchemaVersion = 10;
+    public const int SchemaVersion = 11;
     private readonly string _connectionString;
     private readonly IdentityStoreOptions _options;
     private readonly PasswordHasher _passwords;
@@ -441,6 +441,74 @@ WHEN EXISTS(SELECT 1 FROM storage_items WHERE item_uid=NEW.item_uid)
       EXISTS(SELECT 1 FROM storage_items WHERE source_drop_id=NEW.source_drop_id))
 BEGIN
     SELECT RAISE(ABORT,'item already exists in storage');
+END;", tx);
+
+            // Schema v11: equipment is another physical Item UID location.
+            // V1 intentionally stores only quantity=1 items. Slot semantics are
+            // supplied by a trusted verified item rule; the client never writes
+            // slot or stats directly.
+            Execute(connection, @"
+CREATE TABLE IF NOT EXISTS equipped_items (
+    item_uid INTEGER PRIMARY KEY,
+    character_id INTEGER NOT NULL REFERENCES characters(character_id) ON DELETE CASCADE,
+    slot_id INTEGER NOT NULL CHECK(slot_id BETWEEN 1 AND 255),
+    item_definition_id INTEGER NOT NULL CHECK(item_definition_id BETWEEN 1 AND 100000000),
+    quantity INTEGER NOT NULL CHECK(quantity = 1),
+    source_drop_id INTEGER UNIQUE REFERENCES ground_drops(drop_id),
+    source_kind INTEGER NOT NULL CHECK(source_kind IN (1,2)),
+    source_reference TEXT NOT NULL,
+    created_unix_ms INTEGER NOT NULL,
+    UNIQUE(character_id,slot_id),
+    CHECK(
+      (source_kind=1 AND source_drop_id IS NOT NULL)
+      OR (source_kind=2 AND source_drop_id IS NULL)
+    )
+);", tx);
+            Execute(connection, @"
+CREATE INDEX IF NOT EXISTS ix_equipped_items_owner
+ON equipped_items(character_id,item_uid);", tx);
+            Execute(connection, @"
+CREATE TABLE IF NOT EXISTS equipment_actions (
+    character_id INTEGER NOT NULL REFERENCES characters(character_id) ON DELETE CASCADE,
+    connection_generation INTEGER NOT NULL CHECK(connection_generation > 0),
+    map_epoch INTEGER NOT NULL CHECK(map_epoch > 0),
+    action_sequence INTEGER NOT NULL CHECK(action_sequence BETWEEN 1 AND 4294967295),
+    action_kind INTEGER NOT NULL CHECK(action_kind IN (1,2)),
+    item_uid INTEGER NOT NULL CHECK(item_uid > 0),
+    item_definition_id INTEGER NOT NULL CHECK(item_definition_id BETWEEN 1 AND 100000000),
+    slot_id INTEGER NOT NULL CHECK(slot_id BETWEEN 1 AND 255),
+    source_drop_id INTEGER,
+    created_unix_ms INTEGER NOT NULL,
+    PRIMARY KEY(character_id,connection_generation,map_epoch,action_sequence)
+);", tx);
+            Execute(connection, @"
+CREATE TRIGGER IF NOT EXISTS trg_equipped_no_inventory_storage_overlap
+BEFORE INSERT ON equipped_items
+WHEN EXISTS(SELECT 1 FROM item_instances WHERE item_uid=NEW.item_uid)
+  OR EXISTS(SELECT 1 FROM storage_items WHERE item_uid=NEW.item_uid)
+  OR (NEW.source_drop_id IS NOT NULL AND
+      (EXISTS(SELECT 1 FROM item_instances WHERE source_drop_id=NEW.source_drop_id)
+       OR EXISTS(SELECT 1 FROM storage_items WHERE source_drop_id=NEW.source_drop_id)))
+BEGIN
+    SELECT RAISE(ABORT,'item already exists outside equipment');
+END;", tx);
+            Execute(connection, @"
+CREATE TRIGGER IF NOT EXISTS trg_inventory_no_equipped_overlap
+BEFORE INSERT ON item_instances
+WHEN EXISTS(SELECT 1 FROM equipped_items WHERE item_uid=NEW.item_uid)
+  OR (NEW.source_drop_id IS NOT NULL AND
+      EXISTS(SELECT 1 FROM equipped_items WHERE source_drop_id=NEW.source_drop_id))
+BEGIN
+    SELECT RAISE(ABORT,'item already exists equipped');
+END;", tx);
+            Execute(connection, @"
+CREATE TRIGGER IF NOT EXISTS trg_storage_no_equipped_overlap
+BEFORE INSERT ON storage_items
+WHEN EXISTS(SELECT 1 FROM equipped_items WHERE item_uid=NEW.item_uid)
+  OR (NEW.source_drop_id IS NOT NULL AND
+      EXISTS(SELECT 1 FROM equipped_items WHERE source_drop_id=NEW.source_drop_id))
+BEGIN
+    SELECT RAISE(ABORT,'item already exists equipped');
 END;", tx);
 
             Execute(connection, @"

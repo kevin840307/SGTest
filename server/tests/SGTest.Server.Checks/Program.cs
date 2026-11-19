@@ -251,6 +251,7 @@ static class Checks
             InventoryDiscardChecks.Verify(root);
             InventorySnapshotChecks.Verify();
             StorageChecks.Verify(root);
+            EquipmentChecks.Verify(root);
             MonsterLootSettlementChecks.Verify(root);
             NormalAttackChecks.Verify(root);
             SkillCombatChecks.Verify(root);
