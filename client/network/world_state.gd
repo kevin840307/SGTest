@@ -2389,6 +2389,147 @@ func _apply_repair_result(frame: PackedByteArray) -> bool:
 	return true
 
 
+func _clear_trade_state(reset_sequence: bool = false) -> void:
+	if reset_sequence:
+		trade_sequence = 0
+	trade_id = 0
+	trade_revision = 0
+	trade_state = 0
+	trade_peer_actor_id = 0
+	trade_my_money = 0
+	trade_other_money = 0
+	trade_my_locked = false
+	trade_other_locked = false
+	trade_my_confirmed = false
+	trade_other_confirmed = false
+	trade_my_items.clear()
+	trade_other_items.clear()
+
+
+func _trade_item_matches_inventory(item: Dictionary) -> bool:
+	var uid := int(item.item_uid)
+	if not inventory_items.has(uid):
+		return false
+	var owned: Dictionary = inventory_items[uid]
+	return int(owned.get("item_definition_id",0)) == int(item.item_definition_id) and int(owned.get("quantity",0)) == int(item.quantity) and int(owned.get("drop_id",0)) == int(item.drop_id)
+
+
+func _apply_trade_snapshot(frame: PackedByteArray) -> bool:
+	if state != STATE_IN_WORLD:
+		return fail("trade_snapshot_out_of_state")
+	var value := WireCodec.decode_trade_snapshot(frame)
+	if value.is_empty():
+		return fail("invalid_trade_snapshot")
+	var epoch := int(value.map_epoch)
+	if epoch < map_epoch:
+		stale_trade_frames += 1
+		return true
+	if epoch > map_epoch:
+		return fail("future_trade_snapshot")
+	var incoming_id := int(value.trade_id)
+	var revision := int(value.revision)
+	if trade_id == 0:
+		if int(value.state) not in [1,2]:
+			return fail("trade_snapshot_started_without_invite")
+	elif incoming_id != trade_id:
+		return fail("trade_snapshot_wrong_session")
+	elif revision <= trade_revision:
+		stale_trade_frames += 1
+		return true
+	if int(value.peer_actor_id) <= 0 or int(value.peer_actor_id) == actor_id:
+		return fail("trade_snapshot_invalid_peer")
+	if trade_id != 0 and trade_peer_actor_id != int(value.peer_actor_id):
+		return fail("trade_snapshot_peer_changed")
+	var my_next := {}
+	var other_next := {}
+	for raw in value.my_items:
+		var item: Dictionary = raw
+		var uid := int(item.item_uid)
+		if not _trade_item_matches_inventory(item):
+			return fail("trade_snapshot_my_item_mismatch")
+		my_next[uid] = item.duplicate(true)
+	for raw in value.other_items:
+		var item: Dictionary = raw
+		var uid := int(item.item_uid)
+		if inventory_items.has(uid) or storage_items.has(uid) or equipment_items.has(uid):
+			return fail("trade_snapshot_other_uid_location_conflict")
+		other_next[uid] = item.duplicate(true)
+	trade_id = incoming_id
+	trade_revision = revision
+	trade_state = int(value.state)
+	trade_peer_actor_id = int(value.peer_actor_id)
+	trade_my_money = int(value.my_money)
+	trade_other_money = int(value.other_money)
+	trade_my_locked = bool(value.my_locked)
+	trade_other_locked = bool(value.other_locked)
+	trade_my_confirmed = bool(value.my_confirmed)
+	trade_other_confirmed = bool(value.other_confirmed)
+	trade_my_items = my_next
+	trade_other_items = other_next
+	last_trade_terminal.clear()
+	return true
+
+
+func _apply_trade_terminal(frame: PackedByteArray) -> bool:
+	if state != STATE_IN_WORLD:
+		return fail("trade_terminal_out_of_state")
+	var terminal := WireCodec.decode_trade_terminal(frame)
+	if terminal.is_empty():
+		return fail("invalid_trade_terminal")
+	var epoch := int(terminal.map_epoch)
+	if epoch < map_epoch:
+		stale_trade_frames += 1
+		return true
+	if epoch > map_epoch:
+		return fail("future_trade_terminal")
+	if trade_id == 0:
+		stale_trade_frames += 1
+		return true
+	if int(terminal.trade_id) != trade_id:
+		return fail("trade_terminal_wrong_session")
+	var revision := int(terminal.revision)
+	if revision < trade_revision:
+		stale_trade_frames += 1
+		return true
+	var status := int(terminal.status)
+	if status == 0:
+		if revision != trade_revision or trade_state != 4 or not trade_my_locked or not trade_other_locked or not trade_my_confirmed or not trade_other_confirmed:
+			return fail("trade_success_without_dual_confirmation")
+		for raw_uid in trade_my_items.keys():
+			var uid := int(raw_uid)
+			var item: Dictionary = trade_my_items[raw_uid]
+			if not _trade_item_matches_inventory(item):
+				return fail("trade_success_my_item_changed")
+		for raw_uid in trade_other_items.keys():
+			var uid := int(raw_uid)
+			if inventory_items.has(uid) or storage_items.has(uid) or equipment_items.has(uid):
+				return fail("trade_success_other_uid_conflict")
+		for raw_uid in trade_my_items.keys():
+			inventory_items.erase(int(raw_uid))
+		for raw_uid in trade_other_items.keys():
+			var item: Dictionary = trade_other_items[raw_uid]
+			var uid := int(raw_uid)
+			inventory_items[uid] = {
+				"item_uid":uid,
+				"item_definition_id":int(item.item_definition_id),
+				"quantity":int(item.quantity),
+				"drop_id":int(item.drop_id)
+			}
+		inventory_revision += 1
+		var wallet := int(terminal.wallet_money)
+		if active_shop_npc != 0:
+			shop_money = wallet
+		if active_bank_npc != 0:
+			bank_wallet_money = wallet
+		if active_repair_npc != 0:
+			repair_wallet_money = wallet
+	elif revision < trade_revision:
+		return fail("trade_terminal_revision_regressed")
+	last_trade_terminal = terminal.duplicate(true)
+	_clear_trade_state(false)
+	return true
+
+
 func _apply_ground_drop_spawn(frame: PackedByteArray) -> bool:
 	var value := WireCodec.decode_ground_drop_spawn(frame)
 	if value.is_empty():
