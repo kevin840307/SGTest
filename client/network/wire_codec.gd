@@ -1707,9 +1707,11 @@ static func decode_gm_pvp_name_result(frame:PackedByteArray)->Dictionary:
 static func encode_player_shop_command(
 		epoch:int,sequence:int,action:int,seller_actor_id:int,
 		listing_id:int,item_uid:int,price:int)->PackedByteArray:
-	if epoch<=0 or sequence<=0 or sequence>0xffffffff or action<1 or action>4 or
-			seller_actor_id<0 or listing_id<0 or item_uid<0 or
-			price<0 or price>MAX_MONEY:
+	if (
+		epoch<=0 or sequence<=0 or sequence>0xffffffff or action<1 or action>4 or
+		seller_actor_id<0 or listing_id<0 or item_uid<0 or
+		price<0 or price>MAX_MONEY
+	):
 		return PackedByteArray()
 	var valid:=false
 	match action:
@@ -1756,11 +1758,13 @@ static func decode_player_shop_result(frame:PackedByteArray)->Dictionary:
 	var price:=reader.get_64()
 	var seller_wallet:=reader.get_64()
 	var buyer_wallet:=reader.get_64()
-	if epoch<=0 or sequence==0 or action<1 or action>4 or status>15 or
-			seller<0 or listing<0 or uid<0 or item_id<0 or item_id>100000000 or
-			quantity<0 or quantity>1000000 or source_drop<0 or durability_raw<-1 or
-			price<0 or price>MAX_MONEY or seller_wallet<0 or seller_wallet>MAX_MONEY or
-			buyer_wallet<0 or buyer_wallet>MAX_MONEY:
+	if (
+		epoch<=0 or sequence==0 or action<1 or action>4 or status>15 or
+		seller<0 or listing<0 or uid<0 or item_id<0 or item_id>100000000 or
+		quantity<0 or quantity>1000000 or source_drop<0 or durability_raw<-1 or
+		price<0 or price>MAX_MONEY or seller_wallet<0 or seller_wallet>MAX_MONEY or
+		buyer_wallet<0 or buyer_wallet>MAX_MONEY
+	):
 		return {}
 	return {
 		"map_epoch":epoch,"shop_sequence":sequence,"action":action,"status":status,
