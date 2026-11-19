@@ -931,7 +931,31 @@ func run() -> void:
 		fail("Trade mutation controls did not use ClientSession")
 		return
 
-	# TRADE_UI_CONTINUE_3
+	panel._latest.trade_revision = 4
+	panel._latest.trade_state = 4
+	panel._latest.trade_my_locked = true
+	panel._latest.trade_other_locked = true
+	panel._latest.trade_my_confirmed = false
+	panel._latest.trade_other_confirmed = false
+	panel._update_trade_ui()
+	if not panel.trade_confirm_button.visible or panel.trade_confirm_button.disabled:
+		fail("Dual lock did not expose final confirm")
+		return
+	panel.trade_confirm_button.pressed.emit()
+	if stub.trade_confirms != 1:
+		fail("Trade final confirm UI did not use ClientSession")
+		return
+
+	panel._latest.trade_id = 0
+	panel._latest.trade_state = 0
+	panel._latest.trade_peer_actor_id = 0
+	panel._latest.trade_my_items = {}
+	panel._latest.trade_other_items = {}
+	panel._latest.last_trade_terminal = {"status":0,"wallet_money":850}
+	panel._update_trade_ui()
+	if not panel.trade_status.text.contains("交易成功") or panel.trade_cancel_button.visible:
+		fail("Trade terminal UI did not show server outcome")
+		return
 
 	panel._latest.player_dead = true
 	panel._update_inventory_ui()
@@ -948,5 +972,5 @@ func run() -> void:
 	panel._set_respawn_controls()
 	app.queue_free()
 	await process_frame
-	print("CLIENT_TLS_LOGIN_PASS ui=PASS auth=PASS choose=PASS receipt=PASS world_ready=PASS password_cleared=PASS logout=PASS respawn_ui=PASS click_attack_ui=PASS click_pickup_ui=PASS persistent_inventory_ui=PASS item_metadata=PASS inventory_pagination=PASS recovery_item_button=PASS inventory_discard_button=PASS inventory_discard_quantity_confirm=PASS shop_ui=PASS storage_ui=PASS equipment_ui=PASS bank_ui=PASS repair_ui=PASS skill_cast_ui=PASS skill_singleflight=PASS combat_mp_ui=PASS")
+	print("CLIENT_TLS_LOGIN_PASS ui=PASS auth=PASS choose=PASS receipt=PASS world_ready=PASS password_cleared=PASS logout=PASS respawn_ui=PASS click_attack_ui=PASS click_pickup_ui=PASS persistent_inventory_ui=PASS item_metadata=PASS inventory_pagination=PASS recovery_item_button=PASS inventory_discard_button=PASS inventory_discard_quantity_confirm=PASS shop_ui=PASS storage_ui=PASS equipment_ui=PASS bank_ui=PASS repair_ui=PASS trade_ui=PASS skill_cast_ui=PASS skill_singleflight=PASS combat_mp_ui=PASS")
 	quit(0)
