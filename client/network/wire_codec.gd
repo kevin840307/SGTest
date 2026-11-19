@@ -1165,6 +1165,114 @@ static func decode_bank_transaction_result(frame: PackedByteArray) -> Dictionary
 		"amount":amount,"wallet_money":wallet_money,"bank_money":bank_money}
 
 
+static func encode_trade_command(epoch: int, sequence: int, action: int,
+		trade_id: int = 0, target_actor_id: int = 0,
+		item_uid: int = 0, money: int = 0) -> PackedByteArray:
+	if epoch <= 0 or sequence < 1 or sequence > 0xffffffff or action < 1 or action > 9 or trade_id < 0 or target_actor_id < 0 or item_uid < 0 or money < 0 or money > MAX_MONEY:
+		return PackedByteArray()
+	var valid := false
+	match action:
+		1:
+			valid = trade_id == 0 and target_actor_id > 0 and item_uid == 0 and money == 0
+		2,3:
+			valid = trade_id > 0 and target_actor_id == 0 and item_uid == 0 and money == 0
+		4,5:
+			valid = trade_id > 0 and target_actor_id == 0 and item_uid > 0 and money == 0
+		6:
+			valid = trade_id > 0 and target_actor_id == 0 and item_uid == 0
+		7,8,9:
+			valid = trade_id > 0 and target_actor_id == 0 and item_uid == 0 and money == 0
+	if not valid:
+		return PackedByteArray()
+	var writer := StreamPeerBuffer.new()
+	writer.big_endian = false
+	writer.put_u32(TRADE_COMMAND_FRAME_BYTES)
+	writer.put_u16(VERSION)
+	writer.put_u16(OPCODE_TRADE_COMMAND)
+	writer.put_64(epoch)
+	writer.put_u32(sequence)
+	writer.put_u8(action)
+	writer.put_64(trade_id)
+	writer.put_64(target_actor_id)
+	writer.put_64(item_uid)
+	writer.put_64(money)
+	return writer.data_array
+
+
+static func decode_trade_snapshot(frame: PackedByteArray) -> Dictionary:
+	if not _valid_variable_header(frame,OPCODE_TRADE_SNAPSHOT,
+			TRADE_SNAPSHOT_HEADER_BYTES,
+			TRADE_SNAPSHOT_HEADER_BYTES+2*TRADE_MAX_ITEMS_PER_SIDE*TRADE_OFFER_ITEM_BYTES):
+		return {}
+	var reader := _reader(frame,8)
+	var epoch := reader.get_64()
+	var trade_id := reader.get_64()
+	var revision := reader.get_u32()
+	var state := reader.get_u8()
+	var peer_actor_id := reader.get_64()
+	var my_money := reader.get_64()
+	var other_money := reader.get_64()
+	var my_locked_raw := reader.get_u8()
+	var other_locked_raw := reader.get_u8()
+	var my_confirmed_raw := reader.get_u8()
+	var other_confirmed_raw := reader.get_u8()
+	var my_count := reader.get_u8()
+	var other_count := reader.get_u8()
+	if epoch <= 0 or trade_id <= 0 or revision == 0 or state < 1 or state > 4 or peer_actor_id <= 0 or my_money < 0 or my_money > MAX_MONEY or other_money < 0 or other_money > MAX_MONEY or my_locked_raw > 1 or other_locked_raw > 1 or my_confirmed_raw > 1 or other_confirmed_raw > 1 or my_count > TRADE_MAX_ITEMS_PER_SIDE or other_count > TRADE_MAX_ITEMS_PER_SIDE or frame.size() != TRADE_SNAPSHOT_HEADER_BYTES+(my_count+other_count)*TRADE_OFFER_ITEM_BYTES:
+		return {}
+	var my_locked := my_locked_raw == 1
+	var other_locked := other_locked_raw == 1
+	var my_confirmed := my_confirmed_raw == 1
+	var other_confirmed := other_confirmed_raw == 1
+	if (my_confirmed and not my_locked) or (other_confirmed and not other_locked):
+		return {}
+	var my_items: Array[Dictionary] = []
+	var other_items: Array[Dictionary] = []
+	var seen := {}
+	for index in my_count+other_count:
+		var uid := reader.get_64()
+		var definition := reader.get_32()
+		var quantity := reader.get_32()
+		var source_drop_id := reader.get_64()
+		if uid <= 0 or definition < 1 or definition > 100000000 or quantity < 1 or quantity > 1000000 or source_drop_id < 0 or seen.has(uid):
+			return {}
+		seen[uid] = true
+		var item := {"item_uid":uid,"item_definition_id":definition,
+			"quantity":quantity,"drop_id":source_drop_id}
+		if index < my_count:
+			my_items.append(item)
+		else:
+			other_items.append(item)
+	var invite := state in [1,2]
+	if invite and (my_money != 0 or other_money != 0 or my_locked or other_locked or my_confirmed or other_confirmed or not my_items.is_empty() or not other_items.is_empty()):
+		return {}
+	if state == 4 and (not my_locked or not other_locked):
+		return {}
+	return {"map_epoch":epoch,"trade_id":trade_id,"revision":revision,
+		"state":state,"peer_actor_id":peer_actor_id,
+		"my_money":my_money,"other_money":other_money,
+		"my_locked":my_locked,"other_locked":other_locked,
+		"my_confirmed":my_confirmed,"other_confirmed":other_confirmed,
+		"my_items":my_items,"other_items":other_items}
+
+
+static func decode_trade_terminal(frame: PackedByteArray) -> Dictionary:
+	if not _valid_header(frame,OPCODE_TRADE_TERMINAL,TRADE_TERMINAL_FRAME_BYTES):
+		return {}
+	var reader := _reader(frame,8)
+	var epoch := reader.get_64()
+	var trade_id := reader.get_64()
+	var revision := reader.get_u32()
+	var status := reader.get_u8()
+	var wallet_money := reader.get_64()
+	if epoch <= 0 or trade_id <= 0 or revision == 0 or status > 6 or wallet_money < 0 or wallet_money > MAX_MONEY:
+		return {}
+	if status != 0 and wallet_money != 0:
+		return {}
+	return {"map_epoch":epoch,"trade_id":trade_id,"revision":revision,
+		"status":status,"wallet_money":wallet_money}
+
+
 static func encode_repair_open(epoch: int, sequence: int, npc_spawn_id: int) -> PackedByteArray:
 	if epoch <= 0 or sequence < 1 or sequence > 0xffffffff or npc_spawn_id <= 0:
 		return PackedByteArray()
