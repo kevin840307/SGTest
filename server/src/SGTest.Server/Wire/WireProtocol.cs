@@ -2550,6 +2550,230 @@ public static class WireProtocol
         return value.Scope==BankBalanceScope.None&&
             value.WalletMoney==0&&value.BankMoney==0;
     }
+    public static byte[] EncodeRepairOpen(RepairOpenWire value)
+    {
+        if(value.MapEpoch<=0||value.RepairSequence==0||value.NpcSpawnId<=0)
+            throw new ArgumentOutOfRangeException(nameof(value));
+        var frame=NewFrame(WireOpcode.RepairOpen,RepairOpenFrameBytes);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(8,8),value.MapEpoch);
+        BinaryPrimitives.WriteUInt32LittleEndian(frame.AsSpan(16,4),value.RepairSequence);
+        BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(20,4),value.NpcSpawnId);
+        return frame;
+    }
+
+    public static bool TryDecodeRepairOpen(
+        ReadOnlySpan<byte> frame,out RepairOpenWire value)
+    {
+        value=default;
+        if(!TryReadHeader(frame,out var h)||h.Opcode!=WireOpcode.RepairOpen)
+            return false;
+        value=new(
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(8,8)),
+            BinaryPrimitives.ReadUInt32LittleEndian(frame.Slice(16,4)),
+            BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(20,4)));
+        return value.MapEpoch>0&&value.RepairSequence>0&&value.NpcSpawnId>0;
+    }
+
+    public static byte[] EncodeRepairSnapshot(RepairSnapshotWire value)
+    {
+        ArgumentNullException.ThrowIfNull(value);
+        if(!ValidRepairSnapshot(value))
+            throw new ArgumentOutOfRangeException(nameof(value));
+        var frame=NewFrame(WireOpcode.RepairSnapshot,
+            RepairSnapshotHeaderBytes+value.Items.Count*RepairPreviewItemBytes);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(8,8),value.MapEpoch);
+        BinaryPrimitives.WriteUInt32LittleEndian(frame.AsSpan(16,4),value.RepairSequence);
+        frame[20]=(byte)value.Status;
+        BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(21,4),value.NpcSpawnId);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(25,8),value.WalletMoney);
+        BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(33,4),value.StartIndex);
+        frame[37]=value.Complete?(byte)1:(byte)0;
+        BinaryPrimitives.WriteUInt16LittleEndian(frame.AsSpan(38,2),
+            checked((ushort)value.Items.Count));
+        for(int i=0;i<value.Items.Count;i++)
+        {
+            int offset=RepairSnapshotHeaderBytes+i*RepairPreviewItemBytes;
+            var item=value.Items[i];
+            BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(offset,8),item.ItemUid);
+            BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(offset+8,4),item.ItemDefinitionId);
+            frame[offset+12]=(byte)item.Location;
+            BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(offset+13,4),item.CurrentDurability);
+            BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(offset+17,4),item.MaxDurability);
+            BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(offset+21,8),item.Cost);
+        }
+        return frame;
+    }
+
+    public static bool TryDecodeRepairSnapshot(
+        ReadOnlySpan<byte> frame,out RepairSnapshotWire? value)
+    {
+        value=null;
+        if(!TryReadHeader(frame,out var h)||h.Opcode!=WireOpcode.RepairSnapshot||
+           frame.Length<RepairSnapshotHeaderBytes)return false;
+        long epoch=BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(8,8));
+        uint sequence=BinaryPrimitives.ReadUInt32LittleEndian(frame.Slice(16,4));
+        var status=(RepairOpenStatus)frame[20];
+        int npc=BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(21,4));
+        long wallet=BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(25,8));
+        int start=BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(33,4));
+        byte completeRaw=frame[37];
+        int count=BinaryPrimitives.ReadUInt16LittleEndian(frame.Slice(38,2));
+        if(epoch<=0||sequence==0||npc<=0||
+           (byte)status>(byte)RepairOpenStatus.PlayerDead||
+           wallet<0||wallet>SqliteIdentityStore.MaximumMoney||
+           start<0||start>RepairSnapshotMaxItems||completeRaw>1||
+           count>RepairSnapshotMaxItemsPerFrame||
+           start+count>RepairSnapshotMaxItems||
+           frame.Length!=RepairSnapshotHeaderBytes+count*RepairPreviewItemBytes)
+            return false;
+        var items=new List<RepairPreviewItemWire>(count);
+        var uids=new HashSet<long>();
+        for(int i=0;i<count;i++)
+        {
+            int offset=RepairSnapshotHeaderBytes+i*RepairPreviewItemBytes;
+            var item=new RepairPreviewItemWire(
+                BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(offset,8)),
+                BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(offset+8,4)),
+                (RepairItemLocation)frame[offset+12],
+                BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(offset+13,4)),
+                BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(offset+17,4)),
+                BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(offset+21,8)));
+            if(!ValidRepairPreviewItem(item)||!uids.Add(item.ItemUid))
+                return false;
+            items.Add(item);
+        }
+        value=new(epoch,sequence,status,npc,wallet,start,completeRaw==1,items);
+        return ValidRepairSnapshot(value);
+    }
+
+    private static bool ValidRepairSnapshot(RepairSnapshotWire value)
+    {
+        if(value.MapEpoch<=0||value.RepairSequence==0||value.NpcSpawnId<=0||
+           (byte)value.Status>(byte)RepairOpenStatus.PlayerDead||
+           value.WalletMoney<0||value.WalletMoney>SqliteIdentityStore.MaximumMoney||
+           value.StartIndex<0||value.StartIndex>RepairSnapshotMaxItems||
+           value.Items is null||
+           value.Items.Count>RepairSnapshotMaxItemsPerFrame||
+           value.StartIndex+value.Items.Count>RepairSnapshotMaxItems)
+            return false;
+        if(value.Status!=RepairOpenStatus.Opened)
+            return value.WalletMoney==0&&value.StartIndex==0&&value.Complete&&
+                value.Items.Count==0;
+        var uids=new HashSet<long>();
+        return value.Items.All(item=>ValidRepairPreviewItem(item)&&uids.Add(item.ItemUid));
+    }
+
+    private static bool ValidRepairPreviewItem(RepairPreviewItemWire item)=>
+        item.ItemUid>0&&
+        item.ItemDefinitionId is >=1 and <=100_000_000&&
+        item.Location is RepairItemLocation.Inventory or RepairItemLocation.Equipped&&
+        item.MaxDurability>0&&item.CurrentDurability>=0&&
+        item.CurrentDurability<=item.MaxDurability&&
+        item.Cost>=0&&item.Cost<=SqliteIdentityStore.MaximumMoney;
+
+    public static byte[] EncodeRepairItem(RepairItemWire value)
+    {
+        if(value.MapEpoch<=0||value.RepairSequence==0||
+           value.NpcSpawnId<=0||value.ItemUid<=0)
+            throw new ArgumentOutOfRangeException(nameof(value));
+        var frame=NewFrame(WireOpcode.RepairItem,RepairItemFrameBytes);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(8,8),value.MapEpoch);
+        BinaryPrimitives.WriteUInt32LittleEndian(frame.AsSpan(16,4),value.RepairSequence);
+        BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(20,4),value.NpcSpawnId);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(24,8),value.ItemUid);
+        return frame;
+    }
+
+    public static bool TryDecodeRepairItem(
+        ReadOnlySpan<byte> frame,out RepairItemWire value)
+    {
+        value=default;
+        if(!TryReadHeader(frame,out var h)||h.Opcode!=WireOpcode.RepairItem)
+            return false;
+        value=new(
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(8,8)),
+            BinaryPrimitives.ReadUInt32LittleEndian(frame.Slice(16,4)),
+            BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(20,4)),
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(24,8)));
+        return value.MapEpoch>0&&value.RepairSequence>0&&
+            value.NpcSpawnId>0&&value.ItemUid>0;
+    }
+
+    public static byte[] EncodeRepairResult(RepairResultWire value)
+    {
+        if(!ValidRepairResult(value))
+            throw new ArgumentOutOfRangeException(nameof(value));
+        var frame=NewFrame(WireOpcode.RepairResult,RepairResultFrameBytes);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(8,8),value.MapEpoch);
+        BinaryPrimitives.WriteUInt32LittleEndian(frame.AsSpan(16,4),value.RepairSequence);
+        frame[20]=(byte)value.Status;
+        BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(21,4),value.NpcSpawnId);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(25,8),value.ItemUid);
+        BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(33,4),value.ItemDefinitionId);
+        frame[37]=(byte)value.Location;
+        BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(38,4),value.CurrentDurability);
+        BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(42,4),value.MaxDurability);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(46,8),value.Cost);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(54,8),value.WalletMoney);
+        return frame;
+    }
+
+    public static bool TryDecodeRepairResult(
+        ReadOnlySpan<byte> frame,out RepairResultWire value)
+    {
+        value=default;
+        if(!TryReadHeader(frame,out var h)||h.Opcode!=WireOpcode.RepairResult)
+            return false;
+        value=new(
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(8,8)),
+            BinaryPrimitives.ReadUInt32LittleEndian(frame.Slice(16,4)),
+            (RepairStatus)frame[20],
+            BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(21,4)),
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(25,8)),
+            BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(33,4)),
+            (RepairItemLocation)frame[37],
+            BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(38,4)),
+            BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(42,4)),
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(46,8)),
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(54,8)));
+        return ValidRepairResult(value);
+    }
+
+    private static bool ValidRepairResult(RepairResultWire value)
+    {
+        if(value.MapEpoch<=0||value.RepairSequence==0||
+           (byte)value.Status>(byte)RepairStatus.InvalidDurability||
+           value.NpcSpawnId<=0||value.ItemUid<=0||
+           value.ItemDefinitionId<0||value.ItemDefinitionId>100_000_000||
+           value.CurrentDurability<0||value.MaxDurability<0||
+           value.Cost<0||value.Cost>SqliteIdentityStore.MaximumMoney||
+           value.WalletMoney<0||value.WalletMoney>SqliteIdentityStore.MaximumMoney)
+            return false;
+        bool knownItem=value.ItemDefinitionId>0&&
+            value.Location is RepairItemLocation.Inventory or RepairItemLocation.Equipped;
+        return value.Status switch
+        {
+            RepairStatus.Applied or RepairStatus.AlreadyApplied =>
+                knownItem&&value.MaxDurability>0&&
+                value.CurrentDurability==value.MaxDurability&&value.Cost>0,
+            RepairStatus.AlreadyFull =>
+                knownItem&&value.MaxDurability>0&&
+                value.CurrentDurability==value.MaxDurability&&value.Cost==0,
+            RepairStatus.InsufficientMoney =>
+                knownItem&&value.MaxDurability>0&&
+                value.CurrentDurability<=value.MaxDurability&&value.Cost>0,
+            RepairStatus.UnknownItem =>
+                knownItem&&value.CurrentDurability==0&&
+                value.MaxDurability==0&&value.Cost==0,
+            RepairStatus.InvalidDurability =>
+                knownItem&&value.CurrentDurability==0&&
+                value.MaxDurability>0&&value.Cost==0,
+            _ =>
+                value.ItemDefinitionId==0&&value.Location==RepairItemLocation.None&&
+                value.CurrentDurability==0&&value.MaxDurability==0&&value.Cost==0
+        };
+    }
+
     private static float ReadFloat(ReadOnlySpan<byte> source) =>
         BitConverter.Int32BitsToSingle(BinaryPrimitives.ReadInt32LittleEndian(source));
 
