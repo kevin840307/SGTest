@@ -197,6 +197,23 @@ func _ready() -> void:
 	equipment_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	for control in [equipment_inventory_picker,equipment_equipped_picker,equipment_equip_button,equipment_unequip_button,equipment_status]:
 		control.visible = false
+	bank_npc_input.min_value = 1
+	bank_npc_input.max_value = 2147483647
+	bank_npc_input.step = 1
+	bank_npc_input.value = 1
+	bank_open_button.text = "開啟附近 NPC 銀行"
+	bank_scope_label.text = "銀行範圍：—"
+	bank_wallet_label.text = "角色錢包：—"
+	bank_balance_label.text = "銀行餘額：—"
+	bank_amount_input.min_value = 1
+	bank_amount_input.max_value = 9000000000000000
+	bank_amount_input.step = 1
+	bank_amount_input.value = 1
+	bank_deposit_button.text = "存入金錢"
+	bank_withdraw_button.text = "領出金錢"
+	bank_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	for control in [bank_npc_input,bank_open_button,bank_scope_label,bank_wallet_label,bank_balance_label,bank_amount_input,bank_deposit_button,bank_withdraw_button,bank_status]:
+		control.visible = false
 	respawn_button.text = "復活"
 	skill_hint.text = "技能 ID（需伺服器已核准規則）"
 	skill_id_input.min_value = 1
@@ -208,7 +225,7 @@ func _ready() -> void:
 	skill_area_button.text = "施放自身中心範圍技能"
 	skill_area_button.focus_mode = Control.FOCUS_NONE
 	skill_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	for control in [login_button,characters,choose_button,character_name_input,character_slot_input,create_character_button,character_create_status,respawn_button,skill_hint,skill_id_input,skill_target_mode,skill_area_button,skill_status,logout_button,status,pickup_status,inventory_button,inventory_search,inventory_preview,inventory_previous,inventory_page_label,inventory_next,recovery_picker,recovery_button,recovery_status,discard_quantity,discard_all_button,discard_button,discard_status,shop_npc_input,shop_open_button,shop_money_label,shop_item_picker,shop_sell_picker,shop_quantity,shop_sell_quantity,shop_buy_button,shop_sell_button,shop_status,storage_npc_input,storage_open_button,storage_deposit_picker,storage_withdraw_picker,storage_deposit_button,storage_withdraw_button,storage_status]:
+	for control in [login_button,characters,choose_button,character_name_input,character_slot_input,create_character_button,character_create_status,respawn_button,skill_hint,skill_id_input,skill_target_mode,skill_area_button,skill_status,logout_button,status,pickup_status,inventory_button,inventory_search,inventory_preview,inventory_previous,inventory_page_label,inventory_next,recovery_picker,recovery_button,recovery_status,discard_quantity,discard_all_button,discard_button,discard_status,shop_npc_input,shop_open_button,shop_money_label,shop_item_picker,shop_sell_picker,shop_quantity,shop_sell_quantity,shop_buy_button,shop_sell_button,shop_status,storage_npc_input,storage_open_button,storage_deposit_picker,storage_withdraw_picker,storage_deposit_button,storage_withdraw_button,storage_status,equipment_inventory_picker,equipment_equipped_picker,equipment_equip_button,equipment_unequip_button,equipment_status,bank_npc_input,bank_open_button,bank_scope_label,bank_wallet_label,bank_balance_label,bank_amount_input,bank_deposit_button,bank_withdraw_button,bank_status]:
 		column.add_child(control)
 	login_button.pressed.connect(login)
 	password_input.text_submitted.connect(func(_text): login())
@@ -237,6 +254,9 @@ func _ready() -> void:
 	storage_withdraw_button.pressed.connect(_withdraw_selected_storage_item)
 	equipment_equip_button.pressed.connect(_equip_selected_inventory_item)
 	equipment_unequip_button.pressed.connect(_unequip_selected_item)
+	bank_open_button.pressed.connect(_open_bank_from_input)
+	bank_deposit_button.pressed.connect(_deposit_bank_amount)
+	bank_withdraw_button.pressed.connect(_withdraw_bank_amount)
 	var style := StyleBoxFlat.new()
 	style.bg_color = Color("211c15")
 	style.border_color = Color("c8a452")
