@@ -1159,7 +1159,8 @@ WHERE account_id=$id AND password_hash=$old;";
     {
         // This helper is intentionally limited to the trusted internal schema
         // identifiers supplied by migrations; no client/user value is interpolated.
-        if (table is not "character_combat_profiles" ||
+        if (table is not ("character_combat_profiles" or
+                "item_instances" or "storage_items" or "equipped_items") ||
             string.IsNullOrWhiteSpace(column))
             throw new ArgumentOutOfRangeException(nameof(table));
         using var command = connection.CreateCommand();
