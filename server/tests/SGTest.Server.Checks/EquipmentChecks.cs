@@ -5,8 +5,57 @@ internal static class EquipmentChecks
 {
     public static void Verify(string root)
     {
+        Checks.Run("equipment verified rule catalog fails closed",
+            () => VerifiedCatalog(root));
         Checks.Run("equipment UID location is atomic slot-bound durable and replay-safe",
             () => WholeUidLifecycle(root).GetAwaiter().GetResult());
+    }
+
+    private static void VerifiedCatalog(string root)
+    {
+        string path=Path.Combine(root,"verified-equipment.json");
+        File.WriteAllText(path,System.Text.Json.JsonSerializer.Serialize(new
+        {
+            kind="verified_equipment_item_rules",version=1,
+            rules_verified=true,gameplay_ready=true,
+            source_reference="ci:explicit-equipment-rule",
+            rules=new[]
+            {
+                new{item_definition_id=3701,slot_id=4},
+                new{item_definition_id=3702,slot_id=5}
+            }
+        }));
+        var rules=EquipmentItemCatalog.LoadVerified(path);
+        Checks.Require(rules.Count==2&&rules[3701].SlotId==4&&rules[3702].SlotId==5,
+            "verified equipment catalog mismatch");
+
+        File.WriteAllText(path,System.Text.Json.JsonSerializer.Serialize(new
+        {
+            kind="verified_equipment_item_rules",version=1,
+            rules_verified=false,gameplay_ready=true,
+            source_reference="ci:unverified",
+            rules=new[]{new{item_definition_id=3701,slot_id=4}}
+        }));
+        bool rejected=false;
+        try{EquipmentItemCatalog.LoadVerified(path);}
+        catch(InvalidDataException){rejected=true;}
+        Checks.Require(rejected,"unverified equipment rules were admitted");
+
+        File.WriteAllText(path,System.Text.Json.JsonSerializer.Serialize(new
+        {
+            kind="verified_equipment_item_rules",version=1,
+            rules_verified=true,gameplay_ready=true,
+            source_reference="ci:duplicate",
+            rules=new[]
+            {
+                new{item_definition_id=3701,slot_id=4},
+                new{item_definition_id=3701,slot_id=5}
+            }
+        }));
+        rejected=false;
+        try{EquipmentItemCatalog.LoadVerified(path);}
+        catch(InvalidDataException){rejected=true;}
+        Checks.Require(rejected,"duplicate equipment definition rule was admitted");
     }
 
     private static async Task WholeUidLifecycle(string root)
@@ -56,9 +105,21 @@ internal static class EquipmentChecks
                 shieldGrant.Quantity==1,"equipment shield seed failed");
             shieldUid=shieldGrant.ItemUid;
 
+            IReadOnlyDictionary<int,EquipmentRule> sameSlotRules=
+                new Dictionary<int,EquipmentRule>
+                {
+                    [3701]=new(3701,4),
+                    [3702]=new(3702,4)
+                };
+            IReadOnlyDictionary<int,EquipmentRule> swordOnlyRules=
+                new Dictionary<int,EquipmentRule>
+                {
+                    [3701]=new(3701,4)
+                };
+
             var equipContext=new TrustedEquipmentContext(characterA,301,1,1);
             var equipped=await store.EquipInventoryItemAsync(
-                equipContext,swordUid,3701,4);
+                equipContext,swordUid,sameSlotRules);
             var replay=await store.EquipInventoryItemAsync(
                 equipContext,swordUid,3701,4);
             var equippedRows=await store.ListEquippedItemsAsync(characterA);
@@ -75,7 +136,7 @@ internal static class EquipmentChecks
 
             var occupied=await store.EquipInventoryItemAsync(
                 new TrustedEquipmentContext(characterA,301,1,2),
-                shieldUid,3702,4);
+                shieldUid,sameSlotRules);
             Checks.Require(
                 occupied.Status==EquipmentTransferStatus.SlotOccupied&&
                 (await store.ListEquippedItemsAsync(characterA)).Single().ItemUid==swordUid&&
@@ -84,7 +145,7 @@ internal static class EquipmentChecks
 
             var invalidRule=await store.EquipInventoryItemAsync(
                 new TrustedEquipmentContext(characterA,301,1,3),
-                shieldUid,9999,5);
+                shieldUid,swordOnlyRules);
             Checks.Require(
                 invalidRule.Status==EquipmentTransferStatus.InvalidRule&&
                 (await store.ListInventoryItemsAsync(characterA)).Single().ItemUid==shieldUid,

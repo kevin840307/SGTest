@@ -1,6 +1,56 @@
 using Microsoft.Data.Sqlite;
+using System.Text.Json;
 
 namespace SGTest.Server.Identity;
+
+public readonly record struct EquipmentRule(int ItemDefinitionId,int SlotId);
+
+public static class EquipmentItemCatalog
+{
+    public static IReadOnlyDictionary<int,EquipmentRule> LoadVerified(string path)
+    {
+        if(string.IsNullOrWhiteSpace(path))
+            throw new ArgumentException("Verified equipment rule manifest path required",nameof(path));
+        var content=File.ReadAllBytes(path);
+        if(content.Length is <1 or >1_048_576)
+            throw new InvalidDataException("Equipment manifest size out of range");
+        using var parsed=JsonDocument.Parse(content);
+        var root=parsed.RootElement;
+        if(root.ValueKind!=JsonValueKind.Object||
+           !root.TryGetProperty("kind",out var kind)||
+           kind.GetString()!="verified_equipment_item_rules"||
+           !root.TryGetProperty("version",out var version)||
+           version.GetInt32()!=1||
+           !root.TryGetProperty("rules_verified",out var verified)||
+           verified.ValueKind!=JsonValueKind.True||
+           !root.TryGetProperty("gameplay_ready",out var ready)||
+           ready.ValueKind!=JsonValueKind.True||
+           !root.TryGetProperty("source_reference",out var source)||
+           source.ValueKind!=JsonValueKind.String||
+           string.IsNullOrWhiteSpace(source.GetString())||
+           source.GetString()!.Length>256||
+           !root.TryGetProperty("rules",out var rules)||
+           rules.ValueKind!=JsonValueKind.Array||
+           rules.GetArrayLength() is <1 or >4096)
+            throw new InvalidDataException(
+                "Equipment rules require operator-verified provenance");
+        var result=new Dictionary<int,EquipmentRule>();
+        foreach(var rule in rules.EnumerateArray())
+        {
+            if(rule.ValueKind!=JsonValueKind.Object||
+               !rule.TryGetProperty("item_definition_id",out var item)||
+               !rule.TryGetProperty("slot_id",out var slot)||
+               !item.TryGetInt32(out int definition)||
+               !slot.TryGetInt32(out int slotId)||
+               definition is <1 or >100_000_000||
+               slotId is <1 or >255||
+               !result.TryAdd(definition,new(definition,slotId)))
+                throw new InvalidDataException(
+                    "Equipment rules contain invalid or duplicate item definitions");
+        }
+        return result;
+    }
+}
 
 public enum EquipmentTransferKind : byte { Equip = 1, Unequip = 2 }
 
@@ -33,17 +83,16 @@ public sealed partial class SqliteIdentityStore
 {
     public Task<EquipmentTransferResult> EquipInventoryItemAsync(
         TrustedEquipmentContext context,long itemUid,
-        int trustedItemDefinitionId,int trustedSlotId,
+        IReadOnlyDictionary<int,EquipmentRule> rules,
         CancellationToken cancellationToken=default) =>
         ExecuteEquipmentTransferAsync(
-            context,EquipmentTransferKind.Equip,itemUid,
-            trustedItemDefinitionId,trustedSlotId,cancellationToken);
+            context,EquipmentTransferKind.Equip,itemUid,rules,cancellationToken);
 
     public Task<EquipmentTransferResult> UnequipItemAsync(
         TrustedEquipmentContext context,long itemUid,
         CancellationToken cancellationToken=default) =>
         ExecuteEquipmentTransferAsync(
-            context,EquipmentTransferKind.Unequip,itemUid,0,0,cancellationToken);
+            context,EquipmentTransferKind.Unequip,itemUid,null,cancellationToken);
 
     public async Task<IReadOnlyList<EquippedItem>> ListEquippedItemsAsync(
         long characterId,CancellationToken cancellationToken=default)
@@ -69,12 +118,13 @@ FROM equipped_items WHERE character_id=$actor ORDER BY slot_id,item_uid;";
 
     private async Task<EquipmentTransferResult> ExecuteEquipmentTransferAsync(
         TrustedEquipmentContext context,EquipmentTransferKind kind,long itemUid,
-        int trustedItemDefinitionId,int trustedSlotId,
+        IReadOnlyDictionary<int,EquipmentRule>? rules,
         CancellationToken cancellationToken)
     {
         ThrowIfDisposed();
-        ValidateEquipmentRequest(
-            context,kind,itemUid,trustedItemDefinitionId,trustedSlotId);
+        ValidateEquipmentRequest(context,kind,itemUid);
+        if(kind==EquipmentTransferKind.Equip)
+            ArgumentNullException.ThrowIfNull(rules);
         return await Task.Run<EquipmentTransferResult>(() =>
         {
             using var connection=Open();
@@ -102,9 +152,6 @@ WHERE character_id=$actor AND connection_generation=$conn
                     int originalSlot=reader.GetInt32(3);
                     long originalDrop=reader.GetInt64(4);
                     bool exact=originalKind==kind&&originalUid==itemUid;
-                    if(kind==EquipmentTransferKind.Equip)
-                        exact=exact&&originalDefinition==trustedItemDefinitionId&&
-                            originalSlot==trustedSlotId;
                     return exact
                         ? new(EquipmentTransferStatus.AlreadyApplied,kind,
                             originalUid,originalDefinition,originalSlot,originalDrop)
@@ -128,9 +175,10 @@ WHERE character_id=$actor AND connection_generation=$conn AND map_epoch=$epoch;"
                     connection,tx,"item_instances",context.CharacterId,itemUid);
                 if(row is null)
                     return new(EquipmentTransferStatus.NotOwned,kind,itemUid,0,0,0);
-                if(row.ItemDefinitionId!=trustedItemDefinitionId||
-                   row.Quantity!=1)
+                if(row.Quantity!=1||
+                   !rules!.TryGetValue(row.ItemDefinitionId,out var rule))
                     return new(EquipmentTransferStatus.InvalidRule,kind,itemUid,0,0,0);
+                int trustedSlotId=rule.SlotId;
                 if(ScalarLong(connection,@"
 SELECT COUNT(*) FROM equipped_items
 WHERE character_id=$actor AND slot_id=$slot;",tx,
@@ -266,21 +314,12 @@ VALUES($actor,$conn,$epoch,$seq,$kind,$uid,$item,$slot,$drop,$now);";
     }
 
     private static void ValidateEquipmentRequest(
-        TrustedEquipmentContext context,EquipmentTransferKind kind,long itemUid,
-        int trustedItemDefinitionId,int trustedSlotId)
+        TrustedEquipmentContext context,EquipmentTransferKind kind,long itemUid)
     {
         if(context.CharacterId<=0||context.ConnectionGeneration<=0||
            context.MapEpoch<=0||context.ActionSequence==0||itemUid<=0||
            kind is not (EquipmentTransferKind.Equip or EquipmentTransferKind.Unequip))
             throw new ArgumentOutOfRangeException(nameof(context));
-        if(kind==EquipmentTransferKind.Equip)
-        {
-            if(trustedItemDefinitionId is <1 or >100_000_000||
-               trustedSlotId is <1 or >255)
-                throw new ArgumentOutOfRangeException(nameof(trustedItemDefinitionId));
-        }
-        else if(trustedItemDefinitionId!=0||trustedSlotId!=0)
-            throw new ArgumentOutOfRangeException(nameof(trustedItemDefinitionId));
     }
 
     private sealed record EquipmentMoveItem(
