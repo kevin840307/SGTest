@@ -274,6 +274,7 @@ static class Checks
             EquipmentWireChecks.Verify();
             BankWireChecks.Verify();
             EquipmentGatewayChecks.Verify();
+            BankGatewayChecks.Verify();
             EquipmentTlsChecks.Verify(root);
             StorageGatewayChecks.Verify();
             TlsSocketChecks.Verify();
