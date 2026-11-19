@@ -62,7 +62,9 @@ public enum EquipmentTransferStatus : byte
     NotEquipped = 3,
     SlotOccupied = 4,
     InvalidRule = 5,
-    StaleSequence = 6
+    StaleSequence = 6,
+    NoRules = 7,
+    StaleGeneration = 8
 }
 
 /// <summary>
