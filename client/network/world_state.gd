@@ -212,6 +212,8 @@ var stale_receipts := 0
 var protocol_error := ""
 var world_ready := false
 var entities := {}
+var player_identities := {}
+var stale_player_identities := 0
 var monsters := {}
 var ground_drops := {}
 var self_state := {}
@@ -560,6 +562,8 @@ func apply_frame(frame: PackedByteArray) -> bool:
 			return _apply_pvp_attack_result(frame)
 		WireCodec.OPCODE_PVP_DAMAGE:
 			return _apply_pvp_damage(frame)
+		WireCodec.OPCODE_PLAYER_IDENTITY:
+			return _apply_player_identity(frame)
 		WireCodec.OPCODE_WORLD_READY:
 			return _apply_world_ready(frame)
 		WireCodec.OPCODE_SELF_STATE:
@@ -781,6 +785,8 @@ func snapshot() -> Dictionary:
 		"protocol_error": protocol_error,
 		"world_ready": world_ready,
 		"entities": entities.duplicate(true),
+		"player_identities": player_identities.duplicate(true),
+		"stale_player_identities": stale_player_identities,
 		"monsters": monsters.duplicate(true),
 		"ground_drops": ground_drops.duplicate(true),
 		"self_state": self_state.duplicate(true),
@@ -1012,6 +1018,8 @@ func _apply_choose(frame: PackedByteArray) -> bool:
 	world_ready = false
 	self_state.clear()
 	entities.clear()
+	player_identities.clear()
+	stale_player_identities = 0
 	monsters.clear()
 	ground_drops.clear()
 	last_aoi_tick = -1
@@ -1632,6 +1640,7 @@ func _apply_world_ready(frame: PackedByteArray) -> bool:
 	facing = int(ready.facing)
 	world_ready = true
 	entities.clear()
+	player_identities.clear()
 	monsters.clear()
 	ground_drops.clear()
 	# One-shot presentation events are never replayed through a replacement
@@ -1660,6 +1669,55 @@ func _check_aoi_generation(receiver_epoch: int, tick: int) -> int:
 		stale_aoi_events += 1
 		return 0
 	return 1
+
+func _apply_player_identity(frame:PackedByteArray)->bool:
+	if state!=STATE_IN_WORLD:
+		return fail("player_identity_out_of_state")
+	var value:=WireCodec.decode_player_identity(frame)
+	if value.is_empty():
+		return fail("invalid_player_identity")
+	var receiver_epoch:=int(value.receiver_map_epoch)
+	if resync_pending:
+		stale_player_identities+=1
+		return true
+	if not world_ready:
+		return fail("player_identity_before_world_ready")
+	if receiver_epoch<map_epoch:
+		stale_player_identities+=1
+		return true
+	if receiver_epoch>map_epoch:
+		return fail("future_player_identity_map_epoch")
+
+	var id:=int(value.actor_id)
+	var connection:=int(value.connection_epoch)
+	var entity_epoch:=int(value.entity_map_epoch)
+	if id==actor_id:
+		if entity_epoch!=map_epoch:
+			return _need_resync("self_identity_wrong_map_generation")
+		if not self_state.is_empty() and int(self_state.get("connection_epoch",0))!=connection:
+			return _need_resync("self_identity_wrong_connection")
+	else:
+		if not entities.has(id):
+			return _need_resync("player_identity_without_spawn")
+		var entity:Dictionary=entities[id]
+		if int(entity.get("connection_epoch",0))!=connection or int(entity.get("entity_map_epoch",0))!=entity_epoch:
+			return _need_resync("player_identity_wrong_entity_generation")
+
+	var previous:Dictionary=player_identities.get(id,{})
+	if not previous.is_empty():
+		if int(previous.get("connection_epoch",0))!=connection or int(previous.get("entity_map_epoch",0))!=entity_epoch:
+			return _need_resync("player_identity_generation_conflict")
+		var updated:=int(value.pvp_updated_unix_ms)
+		var prior_updated:=int(previous.get("pvp_updated_unix_ms",0))
+		if updated<prior_updated:
+			stale_player_identities+=1
+			return true
+		if updated==prior_updated:
+			if str(previous.get("display_name",""))!=str(value.display_name) or int(previous.get("mode",-1))!=int(value.mode) or bool(previous.get("red_man",false))!=bool(value.red_man) or int(previous.get("pink_until_unix_ms",0))!=int(value.pink_until_unix_ms):
+				return _need_resync("player_identity_same_revision_conflict")
+	player_identities[id]=value.duplicate(true)
+	return true
+
 
 func _apply_entity_state(frame: PackedByteArray, opcode: int) -> bool:
 	var value := WireCodec.decode_entity_state(frame)
@@ -1710,6 +1768,7 @@ func _apply_entity_despawn(frame: PackedByteArray) -> bool:
 	if int(value.connection_epoch) != int(previous.connection_epoch):
 		return _need_resync("despawn_wrong_entity_generation")
 	entities.erase(id)
+	player_identities.erase(id)
 	last_aoi_tick = maxi(last_aoi_tick, int(value.server_tick))
 	return true
 
@@ -2777,6 +2836,9 @@ func _apply_self_state(frame: PackedByteArray) -> bool:
 	# authenticated own Actor/MapEpoch. If a server-only combat visual arrived
 	# first, its generation must agree. Later updates cannot replace either.
 	if self_state.is_empty():
+		var identity_generation:Dictionary=player_identities.get(actor_id,{})
+		if not identity_generation.is_empty() and int(identity_generation.get("connection_epoch",0))!=int(value.connection_epoch):
+			return _need_resync("self_state_identity_generation_mismatch")
 		var combat_generation: Dictionary = player_attack_sequences.get(actor_id,{})
 		if not combat_generation.is_empty() and int(combat_generation.get("connection_epoch",0)) != int(value.connection_epoch):
 			return _need_resync("self_state_attack_generation_mismatch")
