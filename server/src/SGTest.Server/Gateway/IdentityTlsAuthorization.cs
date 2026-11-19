@@ -1145,6 +1145,22 @@ public sealed class IdentityTlsAuthorization
                 finally { gameplayGate.Release(); }
             }
 
+            async Task TradeHandler(TrustedTradeCommand request)
+            {
+                if(_trades is null)return;
+                var binding=new ConnectionBinding(
+                    request.ActorId,request.ConnectionEpoch,request.RequestMapEpoch);
+                await gameplayGate.WaitAsync().ConfigureAwait(false);
+                try
+                {
+                    if(!router.IsCurrentBinding(binding))return;
+                    await _trades.HandleAsync(request,router).ConfigureAwait(false);
+                }
+                finally { gameplayGate.Release(); }
+            }
+            Func<TrustedTradeCommand,Task>? tradeHandler=
+                _trades is null ? null : TradeHandler;
+
             async Task DiscardHandler(TrustedInventoryDiscard request)
             {
                 var binding=new ConnectionBinding(
@@ -1191,6 +1207,7 @@ public sealed class IdentityTlsAuthorization
                 handleEquipment:EquipmentHandler,
                 handleBank:BankHandler,
                 handleRepair:RepairHandler,
+                handleTrade:tradeHandler,
                 handleQuest:QuestHandler).ConfigureAwait(false);
         }
         finally
