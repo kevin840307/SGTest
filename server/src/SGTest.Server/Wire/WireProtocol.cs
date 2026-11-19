@@ -2184,6 +2184,69 @@ public static class WireProtocol
         return value.ItemDefinitionId==0&&value.Quantity==0&&value.SourceDropId==0;
     }
 
+    public static byte[] EncodeEquipmentSnapshot(EquipmentSnapshotWire value)
+    {
+        ArgumentNullException.ThrowIfNull(value);
+        if(value.CharacterId<=0||value.StartIndex<0||value.StartIndex>EquipmentSnapshotMaxItems||
+           value.Items is null||value.Items.Count>EquipmentSnapshotMaxItemsPerFrame||
+           value.StartIndex+value.Items.Count>EquipmentSnapshotMaxItems)
+            throw new ArgumentOutOfRangeException(nameof(value));
+        var uids=new HashSet<long>();
+        var slots=new HashSet<int>();
+        foreach(var item in value.Items)
+            if(item.ItemUid<=0||item.SlotId is <1 or >255||
+               item.ItemDefinitionId is <1 or >100_000_000||item.SourceDropId<0||
+               !uids.Add(item.ItemUid)||!slots.Add(item.SlotId))
+                throw new ArgumentOutOfRangeException(nameof(value));
+        var frame=NewFrame(WireOpcode.EquipmentSnapshot,
+            EquipmentSnapshotHeaderBytes+value.Items.Count*EquipmentItemBytes);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(8,8),value.CharacterId);
+        BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(16,4),value.StartIndex);
+        frame[20]=value.Complete?(byte)1:(byte)0;
+        BinaryPrimitives.WriteUInt16LittleEndian(frame.AsSpan(21,2),checked((ushort)value.Items.Count));
+        for(int i=0;i<value.Items.Count;i++)
+        {
+            int offset=EquipmentSnapshotHeaderBytes+i*EquipmentItemBytes;
+            var item=value.Items[i];
+            BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(offset,8),item.ItemUid);
+            BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(offset+8,4),item.SlotId);
+            BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(offset+12,4),item.ItemDefinitionId);
+            BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(offset+16,8),item.SourceDropId);
+        }
+        return frame;
+    }
+
+    public static bool TryDecodeEquipmentSnapshot(ReadOnlySpan<byte> frame,out EquipmentSnapshotWire? value)
+    {
+        value=null;
+        if(!TryReadHeader(frame,out var h)||h.Opcode!=WireOpcode.EquipmentSnapshot||
+           frame.Length<EquipmentSnapshotHeaderBytes)return false;
+        long characterId=BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(8,8));
+        int start=BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(16,4));
+        byte completeRaw=frame[20];
+        int count=BinaryPrimitives.ReadUInt16LittleEndian(frame.Slice(21,2));
+        if(characterId<=0||start<0||start>EquipmentSnapshotMaxItems||completeRaw>1||
+           count>EquipmentSnapshotMaxItemsPerFrame||start+count>EquipmentSnapshotMaxItems||
+           frame.Length!=EquipmentSnapshotHeaderBytes+count*EquipmentItemBytes)return false;
+        var items=new List<EquipmentItemWire>(count);
+        var uids=new HashSet<long>();
+        var slots=new HashSet<int>();
+        for(int i=0;i<count;i++)
+        {
+            int offset=EquipmentSnapshotHeaderBytes+i*EquipmentItemBytes;
+            var item=new EquipmentItemWire(
+                BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(offset,8)),
+                BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(offset+8,4)),
+                BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(offset+12,4)),
+                BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(offset+16,8)));
+            if(item.ItemUid<=0||item.SlotId is <1 or >255||
+               item.ItemDefinitionId is <1 or >100_000_000||item.SourceDropId<0||
+               !uids.Add(item.ItemUid)||!slots.Add(item.SlotId))return false;
+            items.Add(item);
+        }
+        value=new(characterId,start,completeRaw==1,items);
+        return true;
+    }
     private static float ReadFloat(ReadOnlySpan<byte> source) =>
         BitConverter.Int32BitsToSingle(BinaryPrimitives.ReadInt32LittleEndian(source));
 
