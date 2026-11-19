@@ -203,7 +203,6 @@ internal static class TlsHost
                     verified_skill_rule_count = skillRules?.Count ?? 0,
                     verified_shop_count = shops?.Count ?? 0,
                     verified_storage_count = storages?.Count ?? 0,
-                verified_equipment_rule_count = equipmentRules?.Count ?? 0,
                     verified_equipment_rule_count = equipmentRules?.Count ?? 0,
                     unpicked_ground_drops = activeDrops.Count,
                     character_creation_enabled = characterCreation is not null,
