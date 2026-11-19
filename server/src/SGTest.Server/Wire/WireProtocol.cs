@@ -2823,6 +2823,8 @@ public static class WireProtocol
             61 => WireOpcode.BankOpen, 62 => WireOpcode.BankSnapshot,
             63 => WireOpcode.BankDeposit, 64 => WireOpcode.BankWithdraw,
             65 => WireOpcode.BankTransactionResult,
+            66 => WireOpcode.RepairOpen, 67 => WireOpcode.RepairSnapshot,
+            68 => WireOpcode.RepairItem, 69 => WireOpcode.RepairResult,
             _ => 0
         };
         if (opcode == 0) return false;
@@ -2896,6 +2898,13 @@ public static class WireProtocol
                 advertised == BankMoveFrameBytes,
             WireOpcode.BankTransactionResult =>
                 advertised == BankTransactionResultFrameBytes,
+            WireOpcode.RepairOpen => advertised == RepairOpenFrameBytes,
+            WireOpcode.RepairSnapshot => advertised >= RepairSnapshotHeaderBytes &&
+                advertised <= RepairSnapshotHeaderBytes +
+                    RepairSnapshotMaxItemsPerFrame*RepairPreviewItemBytes &&
+                (advertised-RepairSnapshotHeaderBytes)%RepairPreviewItemBytes==0,
+            WireOpcode.RepairItem => advertised == RepairItemFrameBytes,
+            WireOpcode.RepairResult => advertised == RepairResultFrameBytes,
             WireOpcode.InventorySnapshot => advertised >= InventorySnapshotHeaderBytes &&
                 advertised <= InventorySnapshotHeaderBytes +
                     InventorySnapshotMaxItemsPerFrame*InventoryItemBytes &&
