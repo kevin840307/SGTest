@@ -38,6 +38,10 @@ class RespawnSession extends RefCounted:
 	var bank_withdrawals := 0
 	var last_bank_npc := 0
 	var last_bank_amount := 0
+	var repair_opens := 0
+	var repairs := 0
+	var last_repair_npc := 0
+	var last_repair_uid := 0
 	func use_recovery_item(item_uid: int) -> bool:
 		if item_uid <= 0:
 			return false
@@ -123,6 +127,18 @@ class RespawnSession extends RefCounted:
 			return false
 		bank_withdrawals += 1
 		last_bank_amount = amount
+		return true
+	func open_repair(npc_spawn_id: int) -> bool:
+		if npc_spawn_id <= 0:
+			return false
+		repair_opens += 1
+		last_repair_npc = npc_spawn_id
+		return true
+	func repair_item(item_uid: int) -> bool:
+		if item_uid <= 0:
+			return false
+		repairs += 1
+		last_repair_uid = item_uid
 		return true
 	func attack_monster(entity_id: int) -> bool:
 		if entity_id <= 0:
@@ -750,6 +766,55 @@ func run() -> void:
 		fail("Pending bank mutation allowed another money move")
 		return
 
+	panel._latest.pending_bank_sequence = 0
+	# Repair UI must display the exact Server preview and send only the chosen UID.
+	panel._latest.pending_repair_sequence = 0
+	panel._latest.repair_sequence = 0
+	panel._latest.active_repair_npc = 0
+	panel._latest.repair_ready = false
+	panel._latest.repair_revision = 0
+	panel._latest.repair_wallet_money = 0
+	panel._latest.repair_items = {}
+	panel._latest.last_repair_open_status = -1
+	panel._latest.last_repair_result = {}
+	panel._update_repair_ui()
+	if panel.repair_open_button.get_parent() == null or not panel.repair_button.disabled:
+		fail("Repair controls were not attached or were usable before server preview")
+		return
+	panel.repair_npc_input.value = 66
+	panel.repair_open_button.pressed.emit()
+	if stub.repair_opens != 1 or stub.last_repair_npc != 66 or not panel.repair_open_button.disabled:
+		fail("Repair open UI did not send exactly one NPC intent")
+		return
+	panel._latest.active_repair_npc = 66
+	panel._latest.repair_ready = true
+	panel._latest.repair_sequence = 1
+	panel._latest.repair_revision = 1
+	panel._latest.repair_wallet_money = 100
+	panel._latest.repair_items = {10000:{
+		"item_uid":10000,"item_definition_id":4001,"location":1,
+		"current_durability":80,"max_durability":100,"cost":37}}
+	panel._update_repair_ui()
+	if panel.repair_item_picker.item_count != 1 or not panel.repair_item_picker.get_item_text(0).contains("耐久 80/100") or not panel.repair_item_picker.get_item_text(0).contains("費用 37") or not panel.repair_wallet_label.text.contains("100") or panel.repair_button.disabled:
+		fail("Repair UI did not render exact authoritative preview")
+		return
+	panel.repair_button.pressed.emit()
+	if stub.repairs != 1 or stub.last_repair_uid != 10000:
+		fail("Repair UI did not send selected UID only")
+		return
+	panel._latest.repair_revision = 2
+	panel._latest.repair_wallet_money = 63
+	panel._latest.repair_items[10000].current_durability = 100
+	panel._latest.repair_items[10000].cost = 0
+	panel._latest.last_repair_result = {
+		"status":0,"item_uid":10000,"item_definition_id":4001,
+		"location":1,"current_durability":100,"max_durability":100,
+		"cost":37,"wallet_money":63}
+	panel._update_repair_ui()
+	if not panel.repair_item_picker.get_item_text(0).contains("耐久 100/100") or not panel.repair_item_picker.get_item_text(0).contains("費用 0") or not panel.repair_wallet_label.text.contains("63") or not panel.repair_button.disabled:
+		fail("Repair UI locally recomputed or failed to apply server settlement")
+		return
+
 	panel._latest.player_dead = true
 	panel._update_inventory_ui()
 	if not panel.recovery_button.disabled or panel.submit_recovery_use(10000):
@@ -765,5 +830,5 @@ func run() -> void:
 	panel._set_respawn_controls()
 	app.queue_free()
 	await process_frame
-	print("CLIENT_TLS_LOGIN_PASS ui=PASS auth=PASS choose=PASS receipt=PASS world_ready=PASS password_cleared=PASS logout=PASS respawn_ui=PASS click_attack_ui=PASS click_pickup_ui=PASS persistent_inventory_ui=PASS item_metadata=PASS inventory_pagination=PASS recovery_item_button=PASS inventory_discard_button=PASS inventory_discard_quantity_confirm=PASS shop_ui=PASS storage_ui=PASS equipment_ui=PASS bank_ui=PASS skill_cast_ui=PASS skill_singleflight=PASS combat_mp_ui=PASS")
+	print("CLIENT_TLS_LOGIN_PASS ui=PASS auth=PASS choose=PASS receipt=PASS world_ready=PASS password_cleared=PASS logout=PASS respawn_ui=PASS click_attack_ui=PASS click_pickup_ui=PASS persistent_inventory_ui=PASS item_metadata=PASS inventory_pagination=PASS recovery_item_button=PASS inventory_discard_button=PASS inventory_discard_quantity_confirm=PASS shop_ui=PASS storage_ui=PASS equipment_ui=PASS bank_ui=PASS repair_ui=PASS skill_cast_ui=PASS skill_singleflight=PASS combat_mp_ui=PASS")
 	quit(0)
