@@ -13,7 +13,7 @@ public sealed partial class SqliteIdentityStore
     {
         ThrowIfDisposed();
         if(characterId<=0)throw new ArgumentOutOfRangeException(nameof(characterId));
-        return await Task.Run(()=>
+        return await Task.Run<CharacterPvpMode>(()=>
         {
             using var connection=Open();
             using var exists=connection.CreateCommand();
@@ -40,7 +40,7 @@ WHERE character_id=$id;";
         ThrowIfDisposed();
         if(characterId<=0||mode is not (PvpMode.ProtectedBlue or PvpMode.EnabledWhite))
             throw new ArgumentOutOfRangeException(nameof(characterId));
-        return await Task.Run(()=>
+        return await Task.Run<CharacterPvpMode>(()=>
         {
             using var connection=Open();
             long now=DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
