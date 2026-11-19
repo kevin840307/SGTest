@@ -47,8 +47,10 @@ def main() -> int:
                         help="run real TLS ClientSession scoped bank deposit/withdraw E2E")
     parser.add_argument("--repair", action="store_true",
                         help="run real TLS ClientSession server-authoritative repair E2E")
+    parser.add_argument("--trade", action="store_true",
+                        help="run two real TLS clients through durable player trade E2E")
     args = parser.parse_args()
-    if args.app_ui and (args.multi or args.crossmap or args.portal or args.reconnect or args.combat or args.combat_observer or args.skill_aoe or args.skill_aoe_observer or args.discard or args.storage or args.equipment or args.bank or args.repair or args.auto_attack):
+    if args.app_ui and (args.multi or args.crossmap or args.portal or args.reconnect or args.combat or args.combat_observer or args.skill_aoe or args.skill_aoe_observer or args.discard or args.storage or args.equipment or args.bank or args.repair or args.trade or args.auto_attack):
         parser.error("--app-ui uses the single-client login fixture")
     if args.ui_screenshot and not args.app_ui:
         parser.error("--ui-screenshot requires --app-ui")
@@ -84,6 +86,8 @@ def main() -> int:
         return run_bank(args, repo, fixture, env)
     if args.repair:
         return run_repair(args, repo, fixture, env)
+    if args.trade:
+        return run_trade(args, repo, fixture, env)
     if args.combat:
         return run_combat(args, repo, fixture, env)
     if args.reconnect:
