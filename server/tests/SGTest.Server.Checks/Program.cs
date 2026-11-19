@@ -287,6 +287,7 @@ static class Checks
             QuestGatewayChecks.Verify();
             BankTlsChecks.Verify(root);
             RepairTlsChecks.Verify(root);
+            QuestTlsChecks.Verify(root);
             EquipmentTlsChecks.Verify(root);
             StorageGatewayChecks.Verify();
             TlsSocketChecks.Verify();
