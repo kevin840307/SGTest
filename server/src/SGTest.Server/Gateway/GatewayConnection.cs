@@ -78,6 +78,10 @@ public enum TrustedRepairCommandKind : byte { Open=1, Repair=2 }
 public readonly record struct TrustedRepairCommand(
     long ActorId,long ConnectionEpoch,long RequestMapEpoch,
     uint RepairSequence,int NpcSpawnId,TrustedRepairCommandKind Kind,long ItemUid=0);
+public readonly record struct TrustedTradeCommand(
+    long ActorId,long ConnectionEpoch,long RequestMapEpoch,
+    uint TradeSequence,TradeCommandAction Action,long TradeId,
+    long TargetActorId,long ItemUid,long Money);
 
 public readonly record struct NormalAttackOutcome(
     NormalAttackStatus Status, long ServerTick, long TargetEntityId,
@@ -290,7 +294,8 @@ public sealed class GatewayConnection
                                               Func<TrustedStorageCommand, bool>? postStorage = null,
                                               Func<TrustedEquipmentCommand, bool>? postEquipment = null,
                                               Func<TrustedBankCommand, bool>? postBank = null,
-                                              Func<TrustedRepairCommand, bool>? postRepair = null)
+                                              Func<TrustedRepairCommand, bool>? postRepair = null,
+                                              Func<TrustedTradeCommand, bool>? postTrade = null)
     {
         ArgumentNullException.ThrowIfNull(postMove);
         lock (_receiveGate)
@@ -303,7 +308,7 @@ public sealed class GatewayConnection
             return _parser.Feed(bytes,
                 frame => HandleClientFrame(
                     frame, postMove, postNpc, postResync, postAttack, postRespawn,
-                    postPickup, postRecovery, postDiscard, postSkill, postShop, postStorage, postEquipment, postBank, postRepair),
+                    postPickup, postRecovery, postDiscard, postSkill, postShop, postStorage, postEquipment, postBank, postRepair, postTrade),
                 out commandsAccepted);
         }
     }
@@ -322,7 +327,8 @@ public sealed class GatewayConnection
                                               Func<TrustedStorageCommand, bool>? postStorage = null,
                                               Func<TrustedEquipmentCommand, bool>? postEquipment = null,
                                               Func<TrustedBankCommand, bool>? postBank = null,
-                                              Func<TrustedRepairCommand, bool>? postRepair = null)
+                                              Func<TrustedRepairCommand, bool>? postRepair = null,
+                                              Func<TrustedTradeCommand, bool>? postTrade = null)
     {
         ArgumentNullException.ThrowIfNull(postMove);
         lock (_receiveGate)
@@ -335,7 +341,7 @@ public sealed class GatewayConnection
             return _parser.Resume(
                 frame => HandleClientFrame(
                     frame, postMove, postNpc, postResync, postAttack, postRespawn,
-                    postPickup, postRecovery, postDiscard, postSkill, postShop, postStorage, postEquipment, postBank, postRepair),
+                    postPickup, postRecovery, postDiscard, postSkill, postShop, postStorage, postEquipment, postBank, postRepair, postTrade),
                 out commandsAccepted);
         }
     }
@@ -355,7 +361,8 @@ public sealed class GatewayConnection
         Func<TrustedStorageCommand, bool>? postStorage,
         Func<TrustedEquipmentCommand, bool>? postEquipment,
         Func<TrustedBankCommand, bool>? postBank,
-        Func<TrustedRepairCommand, bool>? postRepair)
+        Func<TrustedRepairCommand, bool>? postRepair,
+        Func<TrustedTradeCommand, bool>? postTrade)
     {
         if (!WireProtocol.TryReadHeader(frame, out var header))
             return WireFrameDisposition.ProtocolViolation;
@@ -572,6 +579,18 @@ public sealed class GatewayConnection
                 skill.SkillSequence,skill.SkillId,skill.TargetEntityId,
                 _combatProfile))
                 ? WireFrameDisposition.Accepted : WireFrameDisposition.Backpressured;
+        }
+
+        if(header.Opcode==WireOpcode.TradeCommand && postTrade is not null &&
+            WireProtocol.TryDecodeTradeCommand(frame,out var trade))
+        {
+            if(!GameplayReady(bound))
+                return WireFrameDisposition.ProtocolViolation;
+            return postTrade(new TrustedTradeCommand(
+                bound.ActorId,bound.ConnectionEpoch,trade.MapEpoch,
+                trade.TradeSequence,trade.Action,trade.TradeId,
+                trade.TargetActorId,trade.ItemUid,trade.Money))
+                ? WireFrameDisposition.Accepted:WireFrameDisposition.Backpressured;
         }
 
         if (header.Opcode == WireOpcode.NormalAttack && postAttack is not null &&
