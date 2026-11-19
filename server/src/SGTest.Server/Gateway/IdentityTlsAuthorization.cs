@@ -1145,6 +1145,65 @@ public sealed class IdentityTlsAuthorization
                 finally { gameplayGate.Release(); }
             }
 
+            async Task PvpModeHandler(TrustedPvpModeCommand request)
+            {
+                var binding=new ConnectionBinding(
+                    request.ActorId,request.ConnectionEpoch,request.RequestMapEpoch);
+                await gameplayGate.WaitAsync().ConfigureAwait(false);
+                try
+                {
+                    if(!router.IsCurrentBinding(binding))return;
+                    var snapshot=await _world.TrustedGetActorAsync(
+                        request.ActorId).ConfigureAwait(false);
+                    PvpModeResultStatus status;
+                    PvpMode mode;
+                    bool mapAllows=PvpMapPolicy.AllowsPlayerPvp(request.RequestMapEpoch>0
+                        && snapshot is { } a ? a.MapId : 0);
+                    if(snapshot is not { } actor||
+                       actor.ActorId!=request.ActorId||
+                       actor.ConnectionEpoch!=request.ConnectionEpoch||
+                       actor.MapEpoch!=request.RequestMapEpoch)
+                    {
+                        mode=PvpMode.ProtectedBlue;
+                        status=PvpModeResultStatus.StaleGeneration;
+                    }
+                    else
+                    {
+                        var current=await _identity.GetCharacterPvpModeAsync(
+                            actor.ActorId).ConfigureAwait(false);
+                        mode=current.Mode;
+                        mapAllows=PvpMapPolicy.AllowsPlayerPvp(actor.MapId);
+                        bool dead=_combat is not null&&_combat.CurrentHp(actor)<=0;
+                        if(request.Action==PvpModeCommandAction.Query)
+                            status=PvpModeResultStatus.Ready;
+                        else if(dead)
+                            status=PvpModeResultStatus.PlayerDead;
+                        else if(request.Action==PvpModeCommandAction.SetWhite&&!mapAllows)
+                            status=PvpModeResultStatus.NonPvpMap;
+                        else
+                        {
+                            var desired=request.Action==PvpModeCommandAction.SetWhite
+                                ? PvpMode.EnabledWhite:PvpMode.ProtectedBlue;
+                            if(mode==desired)
+                                status=PvpModeResultStatus.Unchanged;
+                            else
+                            {
+                                var persisted=await _identity.SetCharacterPvpModeAsync(
+                                    actor.ActorId,desired).ConfigureAwait(false);
+                                mode=persisted.Mode;
+                                status=PvpModeResultStatus.Applied;
+                            }
+                        }
+                    }
+                    var sent=router.QueuePvpModeResult(
+                        request,status,mode,mapAllows);
+                    if(sent!=GatewaySendStatus.Enqueued)
+                        throw new IOException(
+                            "Reliable PvP mode result could not be queued: "+sent);
+                }
+                finally { gameplayGate.Release(); }
+            }
+
             async Task TradeHandler(TrustedTradeCommand request)
             {
                 if(_trades is null)return;
@@ -1208,7 +1267,8 @@ public sealed class IdentityTlsAuthorization
                 handleBank:BankHandler,
                 handleRepair:RepairHandler,
                 handleTrade:tradeHandler,
-                handleQuest:QuestHandler).ConfigureAwait(false);
+                handleQuest:QuestHandler,
+                handlePvp:PvpModeHandler).ConfigureAwait(false);
         }
         finally
         {
