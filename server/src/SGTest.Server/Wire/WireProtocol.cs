@@ -82,7 +82,8 @@ public enum WireOpcode : ushort
     PvpModeResult = 77,
     PvpAttack = 78,
     PvpAttackResult = 79,
-    PvpDamage = 80
+    PvpDamage = 80,
+    PlayerIdentity = 81
 }
 
 public enum TradeCommandAction : byte
@@ -381,6 +382,10 @@ public readonly record struct PvpDamageWire(
     long MapEpoch,uint DamageSequence,long ServerTick,
     long AttackerActorId,long AttackerConnectionEpoch,uint AttackerAttackSequence,
     int Damage,int CurrentHp,int MaxHp,bool Died);
+public readonly record struct PlayerIdentityWire(
+    long ReceiverMapEpoch,long ActorId,long ConnectionEpoch,long EntityMapEpoch,
+    PvpMode Mode,bool RedMan,long ServerUnixMilliseconds,
+    long PinkUntilUnixMilliseconds,long PvpUpdatedUnixMilliseconds,string Name);
 
 public readonly record struct QuestOpenWire(
     long MapEpoch,uint QuestSequence,int NpcSpawnId);
@@ -495,6 +500,11 @@ public static class WireProtocol
     public const int PvpAttackFrameBytes = HeaderBytes + 8 + 4 + 8;
     public const int PvpAttackResultFrameBytes = HeaderBytes + 8 + 4 + 1 + 8 + 8 + 4 + 1;
     public const int PvpDamageFrameBytes = HeaderBytes + 8 + 4 + 8 + 8 + 8 + 4 + 4 + 4 + 4 + 1;
+    public const int PlayerIdentityHeaderBytes =
+        HeaderBytes + 8 + 8 + 8 + 8 + 1 + 1 + 8 + 8 + 8 + 2;
+    public const int PlayerIdentityMaxNameBytes = 96;
+    public const int PlayerIdentityMaximumFrameBytes =
+        PlayerIdentityHeaderBytes + PlayerIdentityMaxNameBytes;
     public const int QuestOpenFrameBytes = HeaderBytes + 8 + 4 + 4;
     public const int QuestChooseFrameBytes = HeaderBytes + 8 + 4 + 4 + 4 + 4;
     public const int QuestViewHeaderBytes =
@@ -3203,6 +3213,79 @@ public static class WireProtocol
             (value.Died?value.CurrentHp==0:value.CurrentHp>0);
     }
 
+    public static byte[] EncodePlayerIdentity(PlayerIdentityWire value)
+    {
+        byte[] name;
+        try { name=StrictUtf8.GetBytes(value.Name??string.Empty); }
+        catch(EncoderFallbackException)
+        {
+            throw new ArgumentOutOfRangeException(nameof(value));
+        }
+        if(value.ReceiverMapEpoch<=0||value.ActorId<=0||
+           value.ConnectionEpoch<=0||value.EntityMapEpoch<=0||
+           value.Mode is not (PvpMode.ProtectedBlue or PvpMode.EnabledWhite)||
+           value.ServerUnixMilliseconds<=0||value.PinkUntilUnixMilliseconds<0||
+           value.PvpUpdatedUnixMilliseconds<0||
+           name.Length is <1 or >PlayerIdentityMaxNameBytes||
+           string.IsNullOrWhiteSpace(value.Name))
+            throw new ArgumentOutOfRangeException(nameof(value));
+        int bytes=PlayerIdentityHeaderBytes+name.Length;
+        var frame=NewFrame(WireOpcode.PlayerIdentity,bytes);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(8,8),value.ReceiverMapEpoch);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(16,8),value.ActorId);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(24,8),value.ConnectionEpoch);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(32,8),value.EntityMapEpoch);
+        frame[40]=(byte)value.Mode;
+        frame[41]=value.RedMan?(byte)1:(byte)0;
+        BinaryPrimitives.WriteInt64LittleEndian(
+            frame.AsSpan(42,8),value.ServerUnixMilliseconds);
+        BinaryPrimitives.WriteInt64LittleEndian(
+            frame.AsSpan(50,8),value.PinkUntilUnixMilliseconds);
+        BinaryPrimitives.WriteInt64LittleEndian(
+            frame.AsSpan(58,8),value.PvpUpdatedUnixMilliseconds);
+        BinaryPrimitives.WriteUInt16LittleEndian(frame.AsSpan(66,2),(ushort)name.Length);
+        name.AsSpan().CopyTo(frame.AsSpan(PlayerIdentityHeaderBytes));
+        return frame;
+    }
+
+    public static bool TryDecodePlayerIdentity(
+        ReadOnlySpan<byte> frame,out PlayerIdentityWire value)
+    {
+        value=default;
+        if(!TryReadHeader(frame,out var h)||h.Opcode!=WireOpcode.PlayerIdentity||
+           frame.Length<PlayerIdentityHeaderBytes+1)
+            return false;
+        long receiver=BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(8,8));
+        long actor=BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(16,8));
+        long connection=BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(24,8));
+        long entityMap=BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(32,8));
+        var mode=(PvpMode)frame[40];
+        byte red=frame[41];
+        long serverUnix=BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(42,8));
+        long pinkUntil=BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(50,8));
+        long updated=BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(58,8));
+        int nameLength=BinaryPrimitives.ReadUInt16LittleEndian(frame.Slice(66,2));
+        if(receiver<=0||actor<=0||connection<=0||entityMap<=0||
+           mode is not (PvpMode.ProtectedBlue or PvpMode.EnabledWhite)||
+           red>1||serverUnix<=0||pinkUntil<0||updated<0||
+           nameLength is <1 or >PlayerIdentityMaxNameBytes||
+           frame.Length!=PlayerIdentityHeaderBytes+nameLength)
+            return false;
+        try
+        {
+            string name=StrictUtf8.GetString(
+                frame.Slice(PlayerIdentityHeaderBytes,nameLength));
+            if(string.IsNullOrWhiteSpace(name))return false;
+            value=new(receiver,actor,connection,entityMap,mode,red==1,
+                serverUnix,pinkUntil,updated,name);
+            return true;
+        }
+        catch(DecoderFallbackException)
+        {
+            return false;
+        }
+    }
+
     public static byte[] EncodeQuestOpen(QuestOpenWire value)
     {
         if(value.MapEpoch<=0||value.QuestSequence==0||value.NpcSpawnId<=0)
@@ -3472,7 +3555,7 @@ public static class WireProtocol
             75 => WireOpcode.QuestChoose,
             76 => WireOpcode.PvpModeCommand, 77 => WireOpcode.PvpModeResult,
             78 => WireOpcode.PvpAttack, 79 => WireOpcode.PvpAttackResult,
-            80 => WireOpcode.PvpDamage,
+            80 => WireOpcode.PvpDamage, 81 => WireOpcode.PlayerIdentity,
             _ => 0
         };
         if (opcode == 0) return false;
@@ -3568,6 +3651,9 @@ public static class WireProtocol
             WireOpcode.PvpAttack => advertised == PvpAttackFrameBytes,
             WireOpcode.PvpAttackResult => advertised == PvpAttackResultFrameBytes,
             WireOpcode.PvpDamage => advertised == PvpDamageFrameBytes,
+            WireOpcode.PlayerIdentity =>
+                advertised > PlayerIdentityHeaderBytes &&
+                advertised <= PlayerIdentityMaximumFrameBytes,
             WireOpcode.InventorySnapshot => advertised >= InventorySnapshotHeaderBytes &&
                 advertised <= InventorySnapshotHeaderBytes +
                     InventorySnapshotMaxItemsPerFrame*InventoryItemBytes &&

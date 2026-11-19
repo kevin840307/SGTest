@@ -15,7 +15,7 @@ public sealed record WorldAoiOptions(
 
 public enum AoiEventKind : byte
 {
-    WorldReady, Spawn, Delta, Despawn, SelfState,
+    WorldReady, Spawn, Delta, Despawn, SelfState, PlayerIdentity,
     MonsterSpawn, MonsterDelta, MonsterDespawn,
     GroundDropSpawn, GroundDropDespawn,
     PlayerAttackVisual, PlayerSkillVisual, PlayerDamageVisual, PlayerRespawnVisual
@@ -40,6 +40,10 @@ public readonly record struct PlayerDamageVisual(
     int Damage,bool Died,byte Facing);
 public readonly record struct PlayerRespawnVisual(
     long ActorId,long ConnectionEpoch,uint RespawnSequence,byte Facing);
+public readonly record struct PlayerIdentityPresentation(
+    long ActorId,long ConnectionEpoch,long EntityMapEpoch,string DisplayName,
+    PvpMode Mode,bool RedMan,long ServerUnixMilliseconds,
+    long PinkUntilUnixMilliseconds,long PvpUpdatedUnixMilliseconds);
 
 public readonly record struct AoiEvent(
     AoiEventKind Kind, long Tick, long ReceiverMapEpoch,
@@ -49,7 +53,8 @@ public readonly record struct AoiEvent(
     PlayerAttackVisual? PlayerAttack = null,
     PlayerSkillVisual? PlayerSkill = null,
     PlayerDamageVisual? PlayerDamage = null,
-    PlayerRespawnVisual? PlayerRespawn = null);
+    PlayerRespawnVisual? PlayerRespawn = null,
+    PlayerIdentityPresentation? PlayerIdentity = null);
 
 public sealed class AoiBackpressureException : Exception
 {
@@ -234,6 +239,41 @@ public sealed class WorldAoi
                 "Monster AOI changes must share the current authoritative World Tick");
         foreach (var monster in changed)
             ChangedMonster(monster, tick);
+    }
+
+    public int EnqueuePlayerIdentity(PlayerIdentityPresentation identity)
+    {
+        if(_lastTick<=0||identity.ActorId<=0||identity.ConnectionEpoch<=0||
+           identity.EntityMapEpoch<=0||string.IsNullOrWhiteSpace(identity.DisplayName)||
+           identity.Mode is not (PvpMode.ProtectedBlue or PvpMode.EnabledWhite)||
+           identity.ServerUnixMilliseconds<=0||
+           identity.PinkUntilUnixMilliseconds<0||
+           identity.PvpUpdatedUnixMilliseconds<0)
+            throw new InvalidOperationException(
+                "Invalid authoritative player identity");
+        if(!_entities.TryGetValue(identity.ActorId,out var actor)||
+           actor.ConnectionEpoch!=identity.ConnectionEpoch||
+           actor.MapEpoch!=identity.EntityMapEpoch)
+            return 0;
+
+        int queued=0;
+        foreach(var observer in _observers.Values)
+        {
+            if(observer.Self.MapId!=actor.MapId)continue;
+            bool sees=
+                observer.Self.ActorId==actor.ActorId&&
+                observer.Self.ConnectionEpoch==actor.ConnectionEpoch&&
+                observer.Self.MapEpoch==actor.MapEpoch;
+            if(!sees&&observer.Visible.TryGetValue(actor.ActorId,out var seen))
+                sees=seen.ConnectionEpoch==actor.ConnectionEpoch&&
+                    seen.MapEpoch==actor.MapEpoch;
+            if(!sees)continue;
+            Enqueue(observer,new(
+                AoiEventKind.PlayerIdentity,_lastTick,observer.Self.MapEpoch,
+                PlayerIdentity:identity));
+            queued++;
+        }
+        return queued;
     }
 
     /// <summary>

@@ -258,6 +258,7 @@ static class Checks
             QuestChecks.Verify(root);
             PvpModeChecks.Verify(root);
             PvpAttackChecks.Verify(root);
+            PvpIdentityChecks.Verify(root);
             TradeChecks.Verify(root);
             TradeCoordinatorChecks.Verify(root);
             MonsterLootSettlementChecks.Verify(root);

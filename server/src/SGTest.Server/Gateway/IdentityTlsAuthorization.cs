@@ -1235,6 +1235,13 @@ public sealed class IdentityTlsAuthorization
                                             actor.ActorId,desired).ConfigureAwait(false);
                                         mode=persisted.Mode;
                                         status=PvpModeResultStatus.Applied;
+                                        var fullState=await _identity.GetCharacterPvpStateAsync(
+                                            actor.ActorId).ConfigureAwait(false);
+                                        var published=router.PublishPlayerPvpState(
+                                            actor.ActorId,actor.ConnectionEpoch,fullState);
+                                        if(published==GatewaySendStatus.Backpressured)
+                                            throw new AoiBackpressureException(
+                                                "PvP identity update queue full; committed mode cannot be hidden");
                                     }
                                 }
                                 // Even a denied mutation must not turn valid on retry.
@@ -1610,6 +1617,9 @@ public sealed class IdentityTlsAuthorization
         TrustedCombatProfile? trustedCombat = combat is null ? null : new(
             combat.Data.Attack, combat.Data.Defense, combat.Data.Hit, combat.Data.Dodge,
             combat.Data.AttackRange, combat.Data.AttackCooldownTicks);
+        CharacterPvpState pvpPresentation =
+            await _identity.GetCharacterPvpStateAsync(
+                character.CharacterId,cancellationToken).ConfigureAwait(false);
 
         // Do not cancel ONLY the waiter: the trusted World queue may finish
         // registration after the TLS authorization timeout, leaking a character.
@@ -1727,7 +1737,8 @@ public sealed class IdentityTlsAuthorization
 
             cancellationToken.ThrowIfCancellationRequested();
             var gateway = new GatewayConnection(
-                snapshot, combatProfile: trustedCombat);
+                snapshot,combatProfile:trustedCombat,
+                displayName:character.Name,pvpState:pvpPresentation);
             completed = true;
             return gateway;
         }

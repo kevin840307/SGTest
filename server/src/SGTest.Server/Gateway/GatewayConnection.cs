@@ -1,3 +1,4 @@
+using System.Text;
 using SGTest.Server.Wire;
 using SGTest.Server.World;
 using SGTest.Server.Identity;
@@ -205,10 +206,14 @@ public sealed class GatewayConnection
     private long _worldReadyAckedTick = -1;
     private bool _resyncPending;
     private readonly TrustedCombatProfile? _combatProfile;
+    private readonly string? _displayName;
+    private CharacterPvpState? _pvpState;
 
     public GatewayConnection(ActorSnapshot trustedActor,
                              GatewayConnectionOptions? options = null,
-                             TrustedCombatProfile? combatProfile = null)
+                             TrustedCombatProfile? combatProfile = null,
+                             string? displayName = null,
+                             CharacterPvpState? pvpState = null)
     {
         var configured = options ?? new GatewayConnectionOptions();
         if (configured.MaxBufferedInputBytes < WireProtocol.MaximumFrameBytes ||
@@ -226,6 +231,19 @@ public sealed class GatewayConnection
              profile.AttackCooldownTicks is < 1 or > 3600))
             throw new ArgumentOutOfRangeException(nameof(combatProfile));
         _combatProfile = combatProfile;
+        if((displayName is null)!=(pvpState is null)||
+           (pvpState is not null&&pvpState.CharacterId!=trustedActor.ActorId))
+            throw new ArgumentException(
+                "Display name and PvP state must match the trusted actor");
+        if(displayName is not null)
+        {
+            int nameBytes=Encoding.UTF8.GetByteCount(displayName);
+            if(string.IsNullOrWhiteSpace(displayName)||
+               nameBytes is <1 or >WireProtocol.PlayerIdentityMaxNameBytes)
+                throw new ArgumentOutOfRangeException(nameof(displayName));
+        }
+        _displayName=displayName;
+        _pvpState=pvpState;
         _parser = new WireStreamParser(configured.MaxBufferedInputBytes);
         _reliable = new ReliableFrameQueue(configured.MaxReliableFrames, configured.MaxReliableBytes);
     }
@@ -233,6 +251,38 @@ public sealed class GatewayConnection
     public ConnectionBinding Binding
     {
         get { lock (_bindingGate) return _binding; }
+    }
+
+    public bool TryGetPlayerIdentity(out PlayerIdentityPresentation identity)
+    {
+        lock(_bindingGate)
+        {
+            if(_closed||_displayName is null||_pvpState is null)
+            {
+                identity=default;
+                return false;
+            }
+            identity=new(
+                _binding.ActorId,_binding.ConnectionEpoch,_binding.MapEpoch,
+                _displayName,_pvpState.Mode,_pvpState.RedMan,
+                DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+                _pvpState.PinkUntilUnixMilliseconds,
+                _pvpState.UpdatedUnixMilliseconds);
+            return true;
+        }
+    }
+
+    public bool TryUpdatePlayerPvpState(CharacterPvpState state)
+    {
+        ArgumentNullException.ThrowIfNull(state);
+        lock(_bindingGate)
+        {
+            if(_closed||_displayName is null||
+               state.CharacterId!=_binding.ActorId)
+                return false;
+            _pvpState=state;
+            return true;
+        }
     }
 
     public bool IsClosed
@@ -1464,6 +1514,16 @@ public sealed class GatewayConnection
                         evt.ReceiverMapEpoch,evt.Tick,
                         respawn.ActorId,respawn.ConnectionEpoch,
                         respawn.RespawnSequence,respawn.Facing));
+                    break;
+                case AoiEventKind.PlayerIdentity when evt.PlayerIdentity is { } identity:
+                    frame=WireProtocol.EncodePlayerIdentity(new(
+                        evt.ReceiverMapEpoch,identity.ActorId,
+                        identity.ConnectionEpoch,identity.EntityMapEpoch,
+                        identity.Mode,identity.RedMan,
+                        identity.ServerUnixMilliseconds,
+                        identity.PinkUntilUnixMilliseconds,
+                        identity.PvpUpdatedUnixMilliseconds,
+                        identity.DisplayName));
                     break;
                 default:
                     return GatewaySendStatus.GenerationMismatch;

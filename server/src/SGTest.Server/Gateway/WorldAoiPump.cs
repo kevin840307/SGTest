@@ -96,6 +96,16 @@ public sealed class WorldAoiPump
                 while (_router.ResyncRequests.TryRead(out var request))
                     _aoi.TryResync(request);
 
+                // Auth/session and PvP mutation threads publish only a tiny
+                // identity invalidation. The single AOI owner resolves the
+                // current trusted Gateway snapshot and appends it AFTER any
+                // already-pending Spawn for that target generation.
+                while(_router.PlayerIdentityUpdates.TryRead(out var identityUpdate))
+                    if(_router.TryGetPlayerIdentity(
+                        identityUpdate.ActorId,identityUpdate.ConnectionEpoch,
+                        out var identity))
+                        _aoi.EnqueuePlayerIdentity(identity);
+
                 while (_router.AttackRequests.TryRead(out var attack))
                 {
                     bool attackerDead = _playerCombat is not null &&
@@ -239,10 +249,44 @@ public sealed class WorldAoiPump
                         if (result == GatewaySendStatus.Backpressured)
                             throw new AoiBackpressureException(
                                 "Authenticated Gateway AOI FIFO full; no reliable event was discarded");
-                        if (result != GatewaySendStatus.Enqueued ||
-                            !_aoi.TryConfirmQueued(receiver.ActorId, receiver.ConnectionEpoch,
-                                                   receiver.MapEpoch))
+                        if(result!=GatewaySendStatus.Enqueued)
                             throw new InvalidOperationException("AOI delivery accounting diverged");
+
+                        // The entity generation must enter the same reliable FIFO
+                        // before its display identity. This also heals the race
+                        // where World Join became visible just before Gateway attach.
+                        long identityActor=0,identityConnection=0;
+                        if(evt.Kind==AoiEventKind.WorldReady&&evt.Entity is { } self)
+                        {
+                            identityActor=self.ActorId;
+                            identityConnection=self.ConnectionEpoch;
+                        }
+                        else if(evt.Kind==AoiEventKind.Spawn&&evt.Entity is { } spawned)
+                        {
+                            identityActor=spawned.ActorId;
+                            identityConnection=spawned.ConnectionEpoch;
+                        }
+                        if(identityActor>0&&_router.TryGetPlayerIdentity(
+                            identityActor,identityConnection,out var identity))
+                        {
+                            var identityResult=_router.QueueAoi(
+                                receiver,new(AoiEventKind.PlayerIdentity,evt.Tick,
+                                    receiver.MapEpoch,PlayerIdentity:identity));
+                            if(identityResult is GatewaySendStatus.GenerationMismatch or
+                                GatewaySendStatus.Closed)
+                                break;
+                            if(identityResult==GatewaySendStatus.Backpressured)
+                                throw new AoiBackpressureException(
+                                    "Authenticated Gateway identity FIFO full; reliable identity cannot be dropped");
+                            if(identityResult!=GatewaySendStatus.Enqueued)
+                                throw new InvalidOperationException(
+                                    "Player identity delivery accounting diverged");
+                            Interlocked.Increment(ref _framesQueued);
+                        }
+
+                        if(!_aoi.TryConfirmQueued(
+                            receiver.ActorId,receiver.ConnectionEpoch,receiver.MapEpoch))
+                            throw new InvalidOperationException("AOI confirmation accounting diverged");
                         Interlocked.Increment(ref _framesQueued);
                     }
                 }

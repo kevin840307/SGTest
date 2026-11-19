@@ -51,14 +51,18 @@ internal static class PvpLoginFixture
                         throw new PlayerCombatSettlementException(
                             "PvP fixture received non-PvP committed damage");
                     var now=DateTimeOffset.UtcNow;
-                    if(result.Died)
-                        await store.MarkPvpWhiteKillAsync(
+                    CharacterPvpState pvp=result.Died
+                        ? await store.MarkPvpWhiteKillAsync(
+                            result.AttackerActorId,result.VictimWasNormalWhite,now)
+                            .ConfigureAwait(false)
+                        : await store.MarkPvpHostileAttackAsync(
                             result.AttackerActorId,result.VictimWasNormalWhite,now)
                             .ConfigureAwait(false);
-                    else
-                        await store.MarkPvpHostileAttackAsync(
-                            result.AttackerActorId,result.VictimWasNormalWhite,now)
-                            .ConfigureAwait(false);
+                    var published=router.PublishPlayerPvpState(
+                        result.AttackerActorId,result.AttackerConnectionEpoch,pvp);
+                    if(published==GatewaySendStatus.Backpressured)
+                        throw new PlayerCombatSettlementException(
+                            "PvP fixture identity publication backpressured");
                     if(result.Died)
                     {
                         var stopped=await world.TrustedSetCombatDeadAsync(

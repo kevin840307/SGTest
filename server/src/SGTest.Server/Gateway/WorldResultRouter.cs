@@ -22,6 +22,8 @@ public sealed record WorldChangedBatch(
 
 public readonly record struct PlayerRespawnVisualRequest(
     ActorSnapshot Actor,uint RespawnSequence);
+public readonly record struct PlayerIdentityUpdate(
+    long ActorId,long ConnectionEpoch);
 
 public sealed record SkillPreflightRequest(
     TrustedSkillUse Request,
@@ -64,6 +66,7 @@ public sealed class WorldResultRouter
     private readonly Channel<long> _claimedGroundDrops;
     private readonly Channel<PlayerDamageSettlement> _playerDamageVisuals;
     private readonly Channel<PlayerRespawnVisualRequest> _playerRespawnVisuals;
+    private readonly Channel<PlayerIdentityUpdate> _playerIdentityUpdates;
     private readonly WorldResultRouterOptions _options;
     private readonly Action<WorldChangedBatch>? _changedObserver;
     private long _queued, _stale, _changedQueued, _backpressure;
@@ -151,6 +154,14 @@ public sealed class WorldResultRouter
                 FullMode = BoundedChannelFullMode.Wait,
                 AllowSynchronousContinuations = false
             });
+        _playerIdentityUpdates = Channel.CreateBounded<PlayerIdentityUpdate>(
+            new BoundedChannelOptions(_options.MaxSessions)
+            {
+                SingleReader = true,
+                SingleWriter = false,
+                FullMode = BoundedChannelFullMode.Wait,
+                AllowSynchronousContinuations = false
+            });
     }
 
     public ChannelReader<WorldChangedBatch> ChangedBatches => _changed.Reader;
@@ -166,6 +177,8 @@ public sealed class WorldResultRouter
         _playerDamageVisuals.Reader;
     public ChannelReader<PlayerRespawnVisualRequest> PlayerRespawnVisuals =>
         _playerRespawnVisuals.Reader;
+    public ChannelReader<PlayerIdentityUpdate> PlayerIdentityUpdates =>
+        _playerIdentityUpdates.Reader;
 
     public WorldResultRouterStatistics Statistics
     {
@@ -199,6 +212,14 @@ public sealed class WorldResultRouter
             else if (_connections.Count >= _options.MaxSessions)
                 return false;
             _connections[next.ActorId] = connection;
+            if(connection.TryGetPlayerIdentity(out _) &&
+               !_playerIdentityUpdates.Writer.TryWrite(
+                   new(next.ActorId,next.ConnectionEpoch)))
+            {
+                _connections.Remove(next.ActorId);
+                connection.Close();
+                return false;
+            }
             return true;
         }
     }
@@ -327,6 +348,41 @@ public sealed class WorldResultRouter
         lock (_gate)
             return _connections.TryGetValue(binding.ActorId, out var connection) &&
                 !connection.IsClosed && connection.Binding == binding;
+    }
+
+    public bool TryGetPlayerIdentity(
+        long actorId,long connectionEpoch,out PlayerIdentityPresentation identity)
+    {
+        lock(_gate)
+        {
+            if(!_connections.TryGetValue(actorId,out var connection)||
+               connection.IsClosed||
+               connection.Binding.ConnectionEpoch!=connectionEpoch)
+            {
+                identity=default;
+                return false;
+            }
+            return connection.TryGetPlayerIdentity(out identity);
+        }
+    }
+
+    public GatewaySendStatus PublishPlayerPvpState(
+        long actorId,long connectionEpoch,CharacterPvpState state)
+    {
+        ArgumentNullException.ThrowIfNull(state);
+        lock(_gate)
+        {
+            if(!_connections.TryGetValue(actorId,out var connection)||
+               connection.IsClosed)
+                return GatewaySendStatus.Closed;
+            if(connection.Binding.ConnectionEpoch!=connectionEpoch||
+               !connection.TryUpdatePlayerPvpState(state))
+                return GatewaySendStatus.GenerationMismatch;
+            return _playerIdentityUpdates.Writer.TryWrite(
+                new(actorId,connectionEpoch))
+                ? GatewaySendStatus.Enqueued
+                : GatewaySendStatus.Backpressured;
+        }
     }
 
     public GatewaySendStatus QueuePlayerRespawnResult(

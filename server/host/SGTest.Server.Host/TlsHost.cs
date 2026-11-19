@@ -177,14 +177,18 @@ internal static class TlsHost
                     if(result.SourceKind==PlayerDamageSourceKind.PlayerPvp)
                     {
                         var now=DateTimeOffset.UtcNow;
-                        if(result.Died)
-                            await identity.MarkPvpWhiteKillAsync(
+                        CharacterPvpState pvp=result.Died
+                            ? await identity.MarkPvpWhiteKillAsync(
+                                result.AttackerActorId,result.VictimWasNormalWhite,now)
+                                .ConfigureAwait(false)
+                            : await identity.MarkPvpHostileAttackAsync(
                                 result.AttackerActorId,result.VictimWasNormalWhite,now)
                                 .ConfigureAwait(false);
-                        else
-                            await identity.MarkPvpHostileAttackAsync(
-                                result.AttackerActorId,result.VictimWasNormalWhite,now)
-                                .ConfigureAwait(false);
+                        var published=router.PublishPlayerPvpState(
+                            result.AttackerActorId,result.AttackerConnectionEpoch,pvp);
+                        if(published==GatewaySendStatus.Backpressured)
+                            throw new PlayerCombatSettlementException(
+                                "Committed PvP crime identity update queue full");
                     }
                     if (result.Died)
                     {
