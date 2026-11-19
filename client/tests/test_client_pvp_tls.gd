@@ -40,9 +40,9 @@ func _initialize() -> void:
 		_fail("choose",session)
 		return
 	var ready:=_wait(session,func(v):
-		return int(v.state)==WorldState.STATE_IN_WORLD and bool(v.world_ready) and
+		return (int(v.state)==WorldState.STATE_IN_WORLD and bool(v.world_ready) and
 			bool(v.combat_available) and bool(v.pvp_known) and
-			bool(v.pvp_map_allows) and int(v.pvp_mode)==1,7000)
+			bool(v.pvp_map_allows) and int(v.pvp_mode)==1),7000)
 	if ready.is_empty():
 		_fail("world/PvP ready "+str(session.snapshot()),session)
 		return
@@ -61,20 +61,20 @@ func _run_victim(session,self_id:int,peer_id:int)->void:
 		return
 	var first:=_wait(session,func(v):
 		return int(v.player_damage_sequence)>=1,7000)
-	if first.is_empty() or int(first.player_damage_sequence)!=1 or
+	if (first.is_empty() or int(first.player_damage_sequence)!=1 or
 		int(first.player_current_hp)!=42 or bool(first.player_dead) or
 		int(first.last_player_damage.get("attacker_actor_id",0))!=peer_id or
 		int(first.last_player_damage.get("damage",0))!=58 or
-		str(first.last_player_damage.get("source_kind",""))!="pvp":
+		str(first.last_player_damage.get("source_kind",""))!="pvp"):
 		_fail("first PvP damage "+str(first),session)
 		return
 	print("CLIENT_PVP_FIRST_HIT role=victim hp=42 damage=58")
 	var dead:=_wait(session,func(v):
 		return int(v.player_damage_sequence)>=2 and bool(v.player_dead),7000)
-	if dead.is_empty() or int(dead.player_damage_sequence)!=2 or
+	if (dead.is_empty() or int(dead.player_damage_sequence)!=2 or
 		int(dead.player_current_hp)!=0 or
 		int(dead.last_player_damage.get("damage",0))!=42 or
-		int(dead.last_player_damage.get("attacker_actor_id",0))!=peer_id:
+		int(dead.last_player_damage.get("attacker_actor_id",0))!=peer_id):
 		_fail("lethal PvP damage "+str(dead),session)
 		return
 	session.stop()
@@ -92,10 +92,10 @@ func _run_actor(session,self_id:int,peer_id:int)->void:
 		return
 	var first:=_wait(session,func(v):
 		return int(v.last_pvp_attack_result_sequence)>=1,7000)
-	if first.is_empty() or int(first.last_pvp_attack_result_status)!=0 or
+	if (first.is_empty() or int(first.last_pvp_attack_result_status)!=0 or
 		int(first.last_pvp_attack_result.get("target_actor_id",0))!=peer_id or
 		int(first.last_pvp_attack_result.get("damage",0))!=58 or
-		bool(first.last_pvp_attack_result.get("died",true)):
+		bool(first.last_pvp_attack_result.get("died",true))):
 		_fail("first attack result "+str(first),session)
 		return
 	OS.delay_msec(650)
@@ -104,11 +104,11 @@ func _run_actor(session,self_id:int,peer_id:int)->void:
 		return
 	var second:=_wait(session,func(v):
 		return int(v.last_pvp_attack_result_sequence)>=2,7000)
-	if second.is_empty() or int(second.last_pvp_attack_result_status)!=0 or
+	if (second.is_empty() or int(second.last_pvp_attack_result_status)!=0 or
 		int(second.last_pvp_attack_result.get("target_actor_id",0))!=peer_id or
 		int(second.last_pvp_attack_result.get("damage",0))!=42 or
 		not bool(second.last_pvp_attack_result.get("died",false)) or
-		int(second.player_current_hp)!=100:
+		int(second.player_current_hp)!=100):
 		_fail("second attack result "+str(second),session)
 		return
 	session.stop()
