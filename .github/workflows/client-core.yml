@@ -74,6 +74,8 @@ jobs:
         run: .cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64 --headless --path client --script res://tests/test_equipment_wire.gd
       - name: Godot scoped bank authoritative balance reducer
         run: .cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64 --headless --path client --script res://tests/test_bank_wire.gd
+      - name: Godot server-authoritative repair durability reducer
+        run: .cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64 --headless --path client --script res://tests/test_repair_wire.gd
       - name: Godot private item name catalog and fail-closed provenance
         run: .cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64 --headless --path client --script res://tests/test_item_catalog.gd
       - name: Godot audited NPC portal compact wire and reducer gate
