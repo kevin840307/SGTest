@@ -2550,6 +2550,9 @@ public static class WireProtocol
             56 => WireOpcode.StorageTransferResult,
             57 => WireOpcode.EquipmentSnapshot, 58 => WireOpcode.EquipmentEquip,
             59 => WireOpcode.EquipmentUnequip, 60 => WireOpcode.EquipmentTransferResult,
+            61 => WireOpcode.BankOpen, 62 => WireOpcode.BankSnapshot,
+            63 => WireOpcode.BankDeposit, 64 => WireOpcode.BankWithdraw,
+            65 => WireOpcode.BankTransactionResult,
             _ => 0
         };
         if (opcode == 0) return false;
@@ -2617,6 +2620,12 @@ public static class WireProtocol
                 advertised == EquipmentMoveFrameBytes,
             WireOpcode.EquipmentTransferResult =>
                 advertised == EquipmentTransferResultFrameBytes,
+            WireOpcode.BankOpen => advertised == BankOpenFrameBytes,
+            WireOpcode.BankSnapshot => advertised == BankSnapshotFrameBytes,
+            WireOpcode.BankDeposit or WireOpcode.BankWithdraw =>
+                advertised == BankMoveFrameBytes,
+            WireOpcode.BankTransactionResult =>
+                advertised == BankTransactionResultFrameBytes,
             WireOpcode.InventorySnapshot => advertised >= InventorySnapshotHeaderBytes &&
                 advertised <= InventorySnapshotHeaderBytes +
                     InventorySnapshotMaxItemsPerFrame*InventoryItemBytes &&
