@@ -428,6 +428,14 @@ func run() -> void:
 	if app.world_view.phase != "closed":
 		fail("Missing private assets must not fake a ready map")
 		return
+	# Real authenticated TLS must automatically query the durable PvP mode
+	# after WorldReady ACK. No click, Render FPS, or fake server result.
+	while not bool(panel._latest.get("pvp_known",false)) and Time.get_ticks_msec()<deadline and panel.active:
+		await process_frame
+	var pvp: Dictionary = panel._latest
+	if not bool(pvp.get("pvp_known",false)) or int(pvp.get("pvp_mode",-1)) != 0 or bool(pvp.get("pvp_map_allows",true)) or int(pvp.get("pvp_sequence",0)) != 1 or int(pvp.get("pending_pvp_sequence",-1)) != 0 or int(pvp.get("last_pvp_result",{}).get("status",-1)) != 0:
+		fail("Real TLS PvP query missing or Map15 NonPK authority incorrect: %s" % pvp)
+		return
 	if not bool(entered.get("inventory_ready",false)) or not (entered.get("inventory_items",{}) as Dictionary).is_empty() or not panel.inventory_button.visible:
 		fail("Real TLS login did not supply complete empty durable inventory baseline")
 		return
@@ -1034,5 +1042,5 @@ func run() -> void:
 	panel._set_respawn_controls()
 	app.queue_free()
 	await process_frame
-	print("CLIENT_TLS_LOGIN_PASS ui=PASS auth=PASS choose=PASS receipt=PASS world_ready=PASS password_cleared=PASS logout=PASS respawn_ui=PASS click_attack_ui=PASS click_pickup_ui=PASS persistent_inventory_ui=PASS item_metadata=PASS inventory_pagination=PASS recovery_item_button=PASS inventory_discard_button=PASS inventory_discard_quantity_confirm=PASS shop_ui=PASS storage_ui=PASS equipment_ui=PASS bank_ui=PASS repair_ui=PASS trade_ui=PASS trade_ui_parenting=PASS pvp_ui=PASS skill_cast_ui=PASS skill_singleflight=PASS combat_mp_ui=PASS")
+	print("CLIENT_TLS_LOGIN_PASS ui=PASS auth=PASS choose=PASS receipt=PASS world_ready=PASS password_cleared=PASS logout=PASS respawn_ui=PASS click_attack_ui=PASS click_pickup_ui=PASS persistent_inventory_ui=PASS item_metadata=PASS inventory_pagination=PASS recovery_item_button=PASS inventory_discard_button=PASS inventory_discard_quantity_confirm=PASS shop_ui=PASS storage_ui=PASS equipment_ui=PASS bank_ui=PASS repair_ui=PASS trade_ui=PASS trade_ui_parenting=PASS pvp_ui=PASS pvp_tls_auto_query=PASS skill_cast_ui=PASS skill_singleflight=PASS combat_mp_ui=PASS")
 	quit(0)
