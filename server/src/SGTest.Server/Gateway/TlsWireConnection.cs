@@ -69,7 +69,8 @@ public static class TlsWireConnection
         Func<TrustedEquipmentCommand, Task>? handleEquipment = null,
         Func<TrustedBankCommand, Task>? handleBank = null,
         Func<TrustedRepairCommand, Task>? handleRepair = null,
-        Func<TrustedTradeCommand, Task>? handleTrade = null)
+        Func<TrustedTradeCommand, Task>? handleTrade = null,
+        Func<TrustedQuestCommand, Task>? handleQuest = null)
     {
         ArgumentNullException.ThrowIfNull(client);
         ArgumentNullException.ThrowIfNull(serverCertificate);
@@ -485,6 +486,34 @@ public static class TlsWireConnection
                 }
             }
 
+            var questCommands=Channel.CreateBounded<TrustedQuestCommand>(
+                new BoundedChannelOptions(16)
+                {
+                    SingleReader=true,SingleWriter=true,
+                    FullMode=BoundedChannelFullMode.Wait
+                });
+            Func<TrustedQuestCommand,bool>? postQuest=handleQuest is null
+                ? null:request=>questCommands.Writer.TryWrite(request);
+            Exception? questFault=null;
+            Task questWorker=handleQuest is null
+                ? Task.CompletedTask:ProcessQuestAsync();
+
+            async Task ProcessQuestAsync()
+            {
+                try
+                {
+                    await foreach(var request in questCommands.Reader
+                        .ReadAllAsync(sessionCts.Token).ConfigureAwait(false))
+                        await handleQuest!(request).ConfigureAwait(false);
+                }
+                catch(OperationCanceledException) when(sessionCts.IsCancellationRequested){}
+                catch(Exception error)
+                {
+                    questFault=error;
+                    sessionCts.Cancel();
+                }
+            }
+
             var skillCommands=Channel.CreateBounded<TrustedSkillUse>(
                 new BoundedChannelOptions(16)
                 {
@@ -532,7 +561,7 @@ public static class TlsWireConnection
                     var status = gateway.FeedClientBytes(
                         rented.AsSpan(0, count), postMove, out int accepted,
                         postNpc, postResync, postAttack, postRespawn, postPickup,
-                        postRecovery, postDiscard, postSkill, postShop, postStorage, postEquipment, postBank, postRepair, postTrade);
+                        postRecovery, postDiscard, postSkill, postShop, postStorage, postEquipment, postBank, postRepair, postTrade, postQuest);
                     commandsAccepted += accepted;
 
                     if (status == WireFeedStatus.Backpressured)
@@ -553,7 +582,7 @@ public static class TlsWireConnection
                             status = gateway.ResumeClientIngress(
                                 postMove, out accepted, postNpc, postResync,
                                 postAttack, postRespawn, postPickup, postRecovery,
-                                postDiscard, postSkill, postShop, postStorage, postEquipment, postBank, postRepair, postTrade);
+                                postDiscard, postSkill, postShop, postStorage, postEquipment, postBank, postRepair, postTrade, postQuest);
                             commandsAccepted += accepted;
                         }
                         while (status == WireFeedStatus.Backpressured);
@@ -606,6 +635,7 @@ public static class TlsWireConnection
             bankCommands.Writer.TryComplete();
             repairCommands.Writer.TryComplete();
             tradeCommands.Writer.TryComplete();
+            questCommands.Writer.TryComplete();
             // In-flight authorized NPC/respawn/skill work may finish even after the
             // socket is closed; await both before final trusted release.
             await respawnWorker.ConfigureAwait(false);
@@ -623,12 +653,14 @@ public static class TlsWireConnection
             await bankWorker.ConfigureAwait(false);
             await repairWorker.ConfigureAwait(false);
             await tradeWorker.ConfigureAwait(false);
+            await questWorker.ConfigureAwait(false);
             if (npcFault is not null || respawnFault is not null ||
                 pickupFault is not null || recoveryFault is not null ||
                 discardFault is not null || skillFault is not null ||
                 shopFault is not null || storageFault is not null ||
                 equipmentFault is not null || bankFault is not null ||
-                repairFault is not null || tradeFault is not null)
+                repairFault is not null || tradeFault is not null ||
+                questFault is not null)
                 reason = TlsWireEndReason.GatewayClosed;
             var finalBinding = gateway.Binding;
             gateway.Close();
