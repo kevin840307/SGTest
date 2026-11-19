@@ -1844,6 +1844,88 @@ func _apply_storage_transfer_result(frame: PackedByteArray) -> bool:
 	return true
 
 
+func _clear_pending_equipment() -> void:
+	pending_equipment_sequence = 0
+	pending_equipment_kind = 0
+	pending_equipment_item_uid = 0
+
+
+func _apply_equipment_snapshot(frame: PackedByteArray) -> bool:
+	if state != STATE_IN_WORLD:
+		return fail("equipment_snapshot_out_of_state")
+	var value := WireCodec.decode_equipment_snapshot(frame)
+	if value.is_empty():
+		return fail("invalid_equipment_snapshot")
+	if equipment_ready or int(value.character_id) != actor_id or int(value.start_index) != equipment_next_index:
+		return fail("equipment_snapshot_wrong_character_or_sequence")
+	var items: Array = value.items
+	if items.is_empty() and not bool(value.complete):
+		return fail("equipment_empty_nonfinal_chunk")
+	for item in items:
+		var uid := int(item.item_uid)
+		var slot_id := int(item.slot_id)
+		if equipment_items.has(uid) or equipment_slots.has(slot_id) or inventory_items.has(uid) or storage_items.has(uid):
+			return fail("equipment_uid_or_slot_location_conflict")
+		equipment_items[uid] = item.duplicate(true)
+		equipment_slots[slot_id] = uid
+		equipment_next_index += 1
+	if bool(value.complete):
+		equipment_ready = true
+		equipment_revision += 1
+	return true
+
+
+func _apply_equipment_transfer_result(frame: PackedByteArray) -> bool:
+	if state != STATE_IN_WORLD:
+		return fail("equipment_result_out_of_state")
+	var result := WireCodec.decode_equipment_transfer_result(frame)
+	if result.is_empty():
+		return fail("invalid_equipment_result")
+	var epoch := int(result.map_epoch)
+	var sequence := int(result.equipment_sequence)
+	if epoch < map_epoch:
+		stale_equipment_results += 1
+		return true
+	if epoch > map_epoch:
+		return fail("future_equipment_result")
+	if sequence > equipment_sequence:
+		return fail("unsent_equipment_result")
+	if sequence <= last_equipment_response_sequence:
+		stale_equipment_results += 1
+		return true
+	if sequence != pending_equipment_sequence or pending_equipment_kind not in [1,2] or int(result.kind) != pending_equipment_kind or int(result.item_uid) != pending_equipment_item_uid:
+		return fail("equipment_result_wrong_request")
+	if int(result.status) in [0,1]:
+		if not inventory_ready or not equipment_ready:
+			return fail("equipment_applied_without_baselines")
+		var uid := int(result.item_uid)
+		var slot_id := int(result.slot_id)
+		var receipt := {"item_uid":uid,"slot_id":slot_id,"item_definition_id":int(result.item_definition_id),"drop_id":int(result.drop_id)}
+		if pending_equipment_kind == 1:
+			if not inventory_items.has(uid) or equipment_items.has(uid) or storage_items.has(uid) or equipment_slots.has(slot_id):
+				return fail("equipment_equip_location_conflict")
+			var previous: Dictionary = inventory_items[uid]
+			if int(previous.item_definition_id) != int(receipt.item_definition_id) or int(previous.quantity) != 1 or int(previous.get("drop_id",0)) != int(receipt.drop_id):
+				return fail("equipment_equip_receipt_mismatch")
+			inventory_items.erase(uid)
+			equipment_items[uid] = receipt
+			equipment_slots[slot_id] = uid
+		else:
+			if not equipment_items.has(uid) or inventory_items.has(uid) or storage_items.has(uid):
+				return fail("equipment_unequip_location_conflict")
+			var previous: Dictionary = equipment_items[uid]
+			if int(previous.item_definition_id) != int(receipt.item_definition_id) or int(previous.slot_id) != slot_id or int(previous.get("drop_id",0)) != int(receipt.drop_id) or int(equipment_slots.get(slot_id,0)) != uid:
+				return fail("equipment_unequip_receipt_mismatch")
+			equipment_items.erase(uid)
+			equipment_slots.erase(slot_id)
+			inventory_items[uid] = {"item_uid":uid,"item_definition_id":int(receipt.item_definition_id),"quantity":1,"drop_id":int(receipt.drop_id)}
+		inventory_revision += 1
+		equipment_revision += 1
+	last_equipment_response_sequence = sequence
+	last_equipment_result = result.duplicate(true)
+	_clear_pending_equipment()
+	return true
+
 func _apply_ground_drop_spawn(frame: PackedByteArray) -> bool:
 	var value := WireCodec.decode_ground_drop_spawn(frame)
 	if value.is_empty():
