@@ -65,7 +65,8 @@ public static class TlsWireConnection
         Func<TrustedInventoryDiscard, Task>? handleDiscard = null,
         Func<TrustedSkillUse, Task>? handleSkill = null,
         Func<TrustedShopCommand, Task>? handleShop = null,
-        Func<TrustedStorageCommand, Task>? handleStorage = null)
+        Func<TrustedStorageCommand, Task>? handleStorage = null,
+        Func<TrustedEquipmentCommand, Task>? handleEquipment = null)
     {
         ArgumentNullException.ThrowIfNull(client);
         ArgumentNullException.ThrowIfNull(serverCertificate);
@@ -369,6 +370,34 @@ public static class TlsWireConnection
                 }
             }
 
+            var equipmentCommands=Channel.CreateBounded<TrustedEquipmentCommand>(
+                new BoundedChannelOptions(16)
+                {
+                    SingleReader=true,SingleWriter=true,
+                    FullMode=BoundedChannelFullMode.Wait
+                });
+            Func<TrustedEquipmentCommand,bool>? postEquipment=handleEquipment is null
+                ? null:request=>equipmentCommands.Writer.TryWrite(request);
+            Exception? equipmentFault=null;
+            Task equipmentWorker=handleEquipment is null
+                ? Task.CompletedTask:ProcessEquipmentAsync();
+
+            async Task ProcessEquipmentAsync()
+            {
+                try
+                {
+                    await foreach(var request in equipmentCommands.Reader
+                        .ReadAllAsync(sessionCts.Token).ConfigureAwait(false))
+                        await handleEquipment!(request).ConfigureAwait(false);
+                }
+                catch(OperationCanceledException) when(sessionCts.IsCancellationRequested){}
+                catch(Exception error)
+                {
+                    equipmentFault=error;
+                    sessionCts.Cancel();
+                }
+            }
+
             var skillCommands=Channel.CreateBounded<TrustedSkillUse>(
                 new BoundedChannelOptions(16)
                 {
@@ -416,7 +445,7 @@ public static class TlsWireConnection
                     var status = gateway.FeedClientBytes(
                         rented.AsSpan(0, count), postMove, out int accepted,
                         postNpc, postResync, postAttack, postRespawn, postPickup,
-                        postRecovery, postDiscard, postSkill, postShop, postStorage);
+                        postRecovery, postDiscard, postSkill, postShop, postStorage, postEquipment);
                     commandsAccepted += accepted;
 
                     if (status == WireFeedStatus.Backpressured)
@@ -437,7 +466,7 @@ public static class TlsWireConnection
                             status = gateway.ResumeClientIngress(
                                 postMove, out accepted, postNpc, postResync,
                                 postAttack, postRespawn, postPickup, postRecovery,
-                                postDiscard, postSkill, postShop, postStorage);
+                                postDiscard, postSkill, postShop, postStorage, postEquipment);
                             commandsAccepted += accepted;
                         }
                         while (status == WireFeedStatus.Backpressured);
@@ -486,6 +515,7 @@ public static class TlsWireConnection
             skillCommands.Writer.TryComplete();
             shopCommands.Writer.TryComplete();
             storageCommands.Writer.TryComplete();
+            equipmentCommands.Writer.TryComplete();
             // In-flight authorized NPC/respawn/skill work may finish even after the
             // socket is closed; await both before final trusted release.
             await respawnWorker.ConfigureAwait(false);
@@ -499,10 +529,12 @@ public static class TlsWireConnection
             await skillWorker.ConfigureAwait(false);
             await shopWorker.ConfigureAwait(false);
             await storageWorker.ConfigureAwait(false);
+            await equipmentWorker.ConfigureAwait(false);
             if (npcFault is not null || respawnFault is not null ||
                 pickupFault is not null || recoveryFault is not null ||
                 discardFault is not null || skillFault is not null ||
-                shopFault is not null || storageFault is not null)
+                shopFault is not null || storageFault is not null ||
+                equipmentFault is not null)
                 reason = TlsWireEndReason.GatewayClosed;
             var finalBinding = gateway.Binding;
             gateway.Close();
