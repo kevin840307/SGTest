@@ -62,7 +62,12 @@ public enum WireOpcode : ushort
     EquipmentSnapshot = 57,
     EquipmentEquip = 58,
     EquipmentUnequip = 59,
-    EquipmentTransferResult = 60
+    EquipmentTransferResult = 60,
+    BankOpen = 61,
+    BankSnapshot = 62,
+    BankDeposit = 63,
+    BankWithdraw = 64,
+    BankTransactionResult = 65
 }
 
 public enum AuthWireStatus : byte { Success = 0, InvalidCredentials = 1, Disabled = 2 }
@@ -100,6 +105,15 @@ public enum StorageOpenStatus : byte
     Opened = 0,
     StaleGeneration = 1,
     UnknownStorage = 2,
+    TooFar = 3,
+    PlayerDead = 4
+}
+
+public enum BankOpenStatus : byte
+{
+    Opened = 0,
+    StaleGeneration = 1,
+    UnknownBank = 2,
     TooFar = 3,
     PlayerDead = 4
 }
@@ -251,6 +265,18 @@ public readonly record struct EquipmentTransferResultWire(
     EquipmentTransferStatus Status,long ItemUid,
     int ItemDefinitionId,int SlotId,long SourceDropId);
 
+public readonly record struct BankOpenWire(
+    long MapEpoch,uint BankSequence,int NpcSpawnId);
+public readonly record struct BankSnapshotWire(
+    long MapEpoch,uint BankSequence,BankOpenStatus Status,int NpcSpawnId,
+    BankBalanceScope Scope,long WalletMoney,long BankMoney);
+public readonly record struct BankMoveWire(
+    long MapEpoch,uint BankSequence,int NpcSpawnId,long Amount);
+public readonly record struct BankTransactionResultWire(
+    long MapEpoch,uint BankSequence,BankTransactionKind Kind,
+    BankTransactionStatus Status,int NpcSpawnId,BankBalanceScope Scope,
+    long Amount,long WalletMoney,long BankMoney);
+
 /// <summary>
 /// Version 1 complete-frame codec. Transport/TLS/socket buffering is separate.
 /// Header = uint32 frameBytes + uint16 version + uint16 opcode, little-endian.
@@ -333,6 +359,12 @@ public static class WireProtocol
     public const int EquipmentMoveFrameBytes = HeaderBytes + 8 + 4 + 8;
     public const int EquipmentTransferResultFrameBytes =
         HeaderBytes + 8 + 4 + 1 + 1 + 8 + 4 + 4 + 8;
+    public const int BankOpenFrameBytes = HeaderBytes + 8 + 4 + 4;
+    public const int BankSnapshotFrameBytes =
+        HeaderBytes + 8 + 4 + 1 + 4 + 1 + 8 + 8;
+    public const int BankMoveFrameBytes = HeaderBytes + 8 + 4 + 4 + 8;
+    public const int BankTransactionResultFrameBytes =
+        HeaderBytes + 8 + 4 + 1 + 1 + 4 + 1 + 8 + 8 + 8;
     private static readonly UTF8Encoding StrictUtf8 = new(false, true);
 
     public static byte[] EncodeMoveTarget(MoveTargetWire value)
