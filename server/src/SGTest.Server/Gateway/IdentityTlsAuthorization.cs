@@ -28,6 +28,7 @@ public sealed class IdentityTlsAuthorization
     private readonly CharacterCreationPolicy? _characterCreation;
     private readonly NpcShopCatalog? _shops;
     private readonly NpcStorageCatalog? _storages;
+    private readonly IReadOnlyDictionary<int,EquipmentRule>? _equipmentRules;
 
     public IdentityTlsAuthorization(SqliteIdentityStore identity, ServerWorldHost world,
                                     PortalCatalog? portals = null,
@@ -37,7 +38,8 @@ public sealed class IdentityTlsAuthorization
                                      IReadOnlyDictionary<int,RecoveryItemRule>? recoveryRules = null,
                                      CharacterCreationPolicy? characterCreation = null,
                                      NpcShopCatalog? shops = null,
-                                     NpcStorageCatalog? storages = null)
+                                     NpcStorageCatalog? storages = null,
+                                     IReadOnlyDictionary<int,EquipmentRule>? equipmentRules = null)
     {
         _identity = identity ?? throw new ArgumentNullException(nameof(identity));
         _world = world ?? throw new ArgumentNullException(nameof(world));
@@ -58,6 +60,7 @@ public sealed class IdentityTlsAuthorization
         _characterCreation = characterCreation;
         _shops = shops;
         _storages = storages;
+        _equipmentRules = equipmentRules;
     }
 
     /// <summary>
@@ -705,6 +708,59 @@ public sealed class IdentityTlsAuthorization
                 finally { gameplayGate.Release(); }
             }
 
+            async Task EquipmentHandler(TrustedEquipmentCommand request)
+            {
+                var binding=new ConnectionBinding(
+                    request.ActorId,request.ConnectionEpoch,request.RequestMapEpoch);
+                await gameplayGate.WaitAsync().ConfigureAwait(false);
+                try
+                {
+                    if(!router.IsCurrentBinding(binding))return;
+                    var snapshot=await _world.TrustedGetActorAsync(
+                        request.ActorId).ConfigureAwait(false);
+                    var transferKind=request.Kind==TrustedEquipmentCommandKind.Equip
+                        ? EquipmentTransferKind.Equip:EquipmentTransferKind.Unequip;
+                    EquipmentTransferResult result;
+                    if(snapshot is not { } actor||
+                       actor.ActorId!=request.ActorId||
+                       actor.ConnectionEpoch!=request.ConnectionEpoch||
+                       actor.MapEpoch!=request.RequestMapEpoch)
+                    {
+                        result=new(EquipmentTransferStatus.StaleGeneration,
+                            transferKind,request.ItemUid,0,0,0);
+                    }
+                    else
+                    {
+                        long durableConnection=_pickupWorldGeneration==0
+                            ? actor.ConnectionEpoch
+                            : SqliteIdentityStore.ComposePickupConnectionEpoch(
+                                _pickupWorldGeneration,actor.ConnectionEpoch);
+                        var context=new TrustedEquipmentContext(
+                            actor.ActorId,durableConnection,actor.MapEpoch,
+                            request.EquipmentSequence);
+                        if(request.Kind==TrustedEquipmentCommandKind.Equip)
+                        {
+                            result=_equipmentRules is null
+                                ? new(EquipmentTransferStatus.NoRules,
+                                    EquipmentTransferKind.Equip,request.ItemUid,0,0,0)
+                                : await _identity.EquipInventoryItemAsync(
+                                    context,request.ItemUid,_equipmentRules)
+                                    .ConfigureAwait(false);
+                        }
+                        else
+                        {
+                            result=await _identity.UnequipItemAsync(
+                                context,request.ItemUid).ConfigureAwait(false);
+                        }
+                    }
+                    var sent=router.QueueEquipmentTransferResult(request,result);
+                    if(sent!=GatewaySendStatus.Enqueued)
+                        throw new IOException(
+                            "Reliable equipment transfer result could not be queued: "+sent);
+                }
+                finally { gameplayGate.Release(); }
+            }
+
             async Task DiscardHandler(TrustedInventoryDiscard request)
             {
                 var binding=new ConnectionBinding(
@@ -747,7 +803,8 @@ public sealed class IdentityTlsAuthorization
                 router.TryRequestNormalAttack, RespawnHandler,
                 PickupHandler, RecoveryHandler, DiscardHandler,
                 handleSkill:SkillHandler,handleShop:ShopHandler,
-                handleStorage:StorageHandler).ConfigureAwait(false);
+                handleStorage:StorageHandler,
+                handleEquipment:EquipmentHandler).ConfigureAwait(false);
         }
         finally
         {
@@ -961,6 +1018,12 @@ public sealed class IdentityTlsAuthorization
                 throw new InvalidOperationException(
                     "Character inventory exceeds bounded V1 baseline capacity");
 
+            var equipment = await _identity.ListEquippedItemsAsync(
+                snapshot.ActorId,cancellationToken).ConfigureAwait(false);
+            if(equipment.Count>WireProtocol.EquipmentSnapshotMaxItems)
+                throw new InvalidOperationException(
+                    "Character equipment exceeds bounded V1 baseline capacity");
+
             cancellationToken.ThrowIfCancellationRequested();
             await WriteFrameAsync(tls, WireProtocol.EncodeCharacterChooseResult(new(
                 CharacterChooseWireStatus.Success, snapshot.ActorId, snapshot.MapId,
@@ -992,6 +1055,23 @@ public sealed class IdentityTlsAuthorization
             if(inventory.Count==0)
                 await WriteFrameAsync(tls,WireProtocol.EncodeInventorySnapshot(
                     new(snapshot.ActorId,0,true,Array.Empty<InventoryItemWire>())),
+                    cancellationToken).ConfigureAwait(false);
+
+            const int equipmentChunk=WireProtocol.EquipmentSnapshotMaxItemsPerFrame;
+            for(int start=0;start<equipment.Count;start+=equipmentChunk)
+            {
+                var group=equipment.Skip(start).Take(equipmentChunk)
+                    .Select(item=>new EquipmentItemWire(
+                        item.ItemUid,item.SlotId,item.ItemDefinitionId,item.SourceDropId))
+                    .ToArray();
+                bool final=start+group.Length==equipment.Count;
+                await WriteFrameAsync(tls,WireProtocol.EncodeEquipmentSnapshot(
+                    new(snapshot.ActorId,start,final,group)),
+                    cancellationToken).ConfigureAwait(false);
+            }
+            if(equipment.Count==0)
+                await WriteFrameAsync(tls,WireProtocol.EncodeEquipmentSnapshot(
+                    new(snapshot.ActorId,0,true,Array.Empty<EquipmentItemWire>())),
                     cancellationToken).ConfigureAwait(false);
 
             cancellationToken.ThrowIfCancellationRequested();
