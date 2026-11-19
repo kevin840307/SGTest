@@ -917,6 +917,81 @@ func _update_storage_ui() -> void:
 	storage_withdraw_button.disabled = not usable or pending or not ready or active_npc <= 0 or storage_withdraw_picker.item_count == 0
 
 
+func _open_bank_from_input() -> void:
+	if bank_open_button.disabled:
+		return
+	if submit_bank_open(int(bank_npc_input.value)):
+		bank_status.text = "銀行請求已送出，等待伺服器核准範圍與餘額…"
+		bank_open_button.disabled = true
+	else:
+		bank_status.text = "目前無法開啟該銀行"
+
+
+func _deposit_bank_amount() -> void:
+	if bank_deposit_button.disabled:
+		return
+	var amount := int(bank_amount_input.value)
+	if submit_bank_deposit(amount):
+		bank_status.text = "存入請求已送出，等待伺服器結算…"
+		bank_deposit_button.disabled = true
+		bank_withdraw_button.disabled = true
+	else:
+		bank_status.text = "目前無法存入該金額"
+
+
+func _withdraw_bank_amount() -> void:
+	if bank_withdraw_button.disabled:
+		return
+	var amount := int(bank_amount_input.value)
+	if submit_bank_withdraw(amount):
+		bank_status.text = "領出請求已送出，等待伺服器結算…"
+		bank_deposit_button.disabled = true
+		bank_withdraw_button.disabled = true
+	else:
+		bank_status.text = "目前無法領出該金額"
+
+
+func _bank_scope_text(scope: int) -> String:
+	match scope:
+		1:
+			return "角色專屬（伺服器規則）"
+		2:
+			return "帳號共用（伺服器規則）"
+		_:
+			return "—"
+
+
+func _update_bank_ui() -> void:
+	var in_world := active and int(_latest.get("state",-1)) == State.STATE_IN_WORLD
+	for control in [bank_npc_input,bank_open_button,bank_scope_label,bank_wallet_label,bank_balance_label,bank_amount_input,bank_deposit_button,bank_withdraw_button,bank_status]:
+		control.visible = in_world
+	if not in_world:
+		_bank_display_key = ""
+		return
+	var active_npc := int(_latest.get("active_bank_npc",0))
+	var scope := int(_latest.get("bank_scope",0))
+	var wallet := int(_latest.get("bank_wallet_money",0))
+	var balance := int(_latest.get("bank_money",0))
+	var pending := int(_latest.get("pending_bank_sequence",0)) != 0
+	var usable := bool(_latest.get("world_ready",false)) and not bool(_latest.get("player_dead",false)) and not bool(_latest.get("reconnecting",false)) and not bool(_latest.get("resync_pending",false)) and not bool(_latest.get("waiting_for_new_map",false)) and int(_latest.get("pending_world_ready_ack_epoch",0)) == 0 and int(_latest.get("last_world_ready_ack_epoch",0)) == int(_latest.get("map_epoch",0))
+	bank_open_button.disabled = not usable or pending
+	bank_scope_label.text = "銀行範圍：%s" % _bank_scope_text(scope)
+	bank_wallet_label.text = "角色錢包：%d" % wallet if active_npc > 0 else "角色錢包：—"
+	bank_balance_label.text = "銀行餘額：%d" % balance if active_npc > 0 else "銀行餘額：—"
+	var amount := int(bank_amount_input.value)
+	bank_deposit_button.disabled = not usable or pending or active_npc <= 0 or scope not in [1,2] or amount <= 0 or amount > wallet
+	bank_withdraw_button.disabled = not usable or pending or active_npc <= 0 or scope not in [1,2] or amount <= 0 or amount > balance
+	var open_status := int(_latest.get("last_bank_open_status",-1))
+	if open_status > 0 and active_npc == 0:
+		bank_status.text = "銀行無法開啟（伺服器代碼 %d）" % open_status
+	var result: Dictionary = _latest.get("last_bank_result",{})
+	if not result.is_empty():
+		if int(result.get("status",-1)) in [0,1]:
+			bank_status.text = "%s完成：%d｜錢包 %d｜銀行 %d" % ["存入" if int(result.get("kind",0)) == 1 else "領出",int(result.get("amount",0)),int(result.get("wallet_money",0)),int(result.get("bank_money",0))]
+		else:
+			bank_status.text = "銀行操作失敗（伺服器代碼 %d）" % int(result.get("status",-1))
+
+
 func _equip_selected_inventory_item() -> void:
 	if equipment_equip_button.disabled or equipment_inventory_picker.selected < 0:
 		return
@@ -1098,6 +1173,7 @@ func _process(delta: float) -> void:
 	_update_shop_ui()
 	_update_storage_ui()
 	_update_equipment_ui()
+	_update_bank_ui()
 	var pickup_result: Dictionary = _latest.get("last_pickup_result",{})
 	if not pickup_result.is_empty():
 		if int(pickup_result.status) in [0,1]:
