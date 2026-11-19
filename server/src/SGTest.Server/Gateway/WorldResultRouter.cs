@@ -467,6 +467,18 @@ public sealed class WorldResultRouter
         dropId>0 && _claimedGroundDrops.Writer.TryWrite(dropId);
 
 
+    public GatewaySendStatus QueuePvpAttackResult(
+        TrustedPvpAttack request,PvpAttackResultWire result)
+    {
+        lock(_gate)
+        {
+            if(!_connections.TryGetValue(request.ActorId,out var connection)||
+               connection.IsClosed)
+                return GatewaySendStatus.Closed;
+            return connection.QueuePvpAttackResult(request,result);
+        }
+    }
+
     public GatewaySendStatus QueueShopSnapshot(
         TrustedShopCommand request,ShopOpenStatus status,long money,
         IReadOnlyList<NpcShopCatalog.Item> items)

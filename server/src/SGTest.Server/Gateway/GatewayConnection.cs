@@ -85,6 +85,9 @@ public readonly record struct TrustedTradeCommand(
 public readonly record struct TrustedPvpModeCommand(
     long ActorId,long ConnectionEpoch,long RequestMapEpoch,
     uint PvpSequence,PvpModeCommandAction Action);
+public readonly record struct TrustedPvpAttack(
+    long ActorId,long ConnectionEpoch,long RequestMapEpoch,
+    uint AttackSequence,long TargetActorId,TrustedCombatProfile? Profile);
 public enum TrustedQuestCommandKind : byte { Open=1, Choose=2 }
 public readonly record struct TrustedQuestCommand(
     long ActorId,long ConnectionEpoch,long RequestMapEpoch,
@@ -794,10 +797,15 @@ public sealed class GatewayConnection
                 result.ConnectionEpoch != bound.ConnectionEpoch ||
                 result.MapEpoch != bound.MapEpoch)
                 return GatewaySendStatus.GenerationMismatch;
-            var frame = WireProtocol.EncodePlayerDamage(new(
-                result.MapEpoch, result.DamageSequence, result.ServerTick,
-                result.AttackerMonsterEntityId, result.AttackerMonsterRevision,
-                result.Damage, result.CurrentHp, result.MaxHp, result.Died));
+            var frame = result.SourceKind==PlayerDamageSourceKind.PlayerPvp
+                ? WireProtocol.EncodePvpDamage(new(
+                    result.MapEpoch,result.DamageSequence,result.ServerTick,
+                    result.AttackerActorId,result.AttackerConnectionEpoch,
+                    result.AttackerAttackSequence,result.Damage,result.CurrentHp,result.MaxHp,result.Died))
+                : WireProtocol.EncodePlayerDamage(new(
+                    result.MapEpoch,result.DamageSequence,result.ServerTick,
+                    result.AttackerMonsterEntityId,result.AttackerMonsterRevision,
+                    result.Damage,result.CurrentHp,result.MaxHp,result.Died));
             return _reliable.TryEnqueue(frame)
                 ? GatewaySendStatus.Enqueued : GatewaySendStatus.Backpressured;
         }
@@ -1036,6 +1044,21 @@ public sealed class GatewayConnection
                 request.RequestMapEpoch,request.PvpSequence,status,
                 mode,mapAllowsPlayerPvp));
             return _reliable.TryEnqueue(frame)
+                ? GatewaySendStatus.Enqueued:GatewaySendStatus.Backpressured;
+        }
+    }
+
+    public GatewaySendStatus QueuePvpAttackResult(TrustedPvpAttack request,PvpAttackResultWire result)
+    {
+        lock(_bindingGate)
+        {
+            if(_closed)return GatewaySendStatus.Closed;
+            var bound=_binding;
+            if(request.ActorId!=bound.ActorId||request.ConnectionEpoch!=bound.ConnectionEpoch||
+               request.RequestMapEpoch!=bound.MapEpoch||result.MapEpoch!=request.RequestMapEpoch||
+               result.AttackSequence!=request.AttackSequence||result.TargetActorId!=request.TargetActorId)
+                return GatewaySendStatus.GenerationMismatch;
+            return _reliable.TryEnqueue(WireProtocol.EncodePvpAttackResult(result))
                 ? GatewaySendStatus.Enqueued:GatewaySendStatus.Backpressured;
         }
     }

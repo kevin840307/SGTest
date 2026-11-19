@@ -79,7 +79,10 @@ public enum WireOpcode : ushort
     QuestView = 74,
     QuestChoose = 75,
     PvpModeCommand = 76,
-    PvpModeResult = 77
+    PvpModeResult = 77,
+    PvpAttack = 78,
+    PvpAttackResult = 79,
+    PvpDamage = 80
 }
 
 public enum TradeCommandAction : byte
@@ -155,6 +158,13 @@ public enum RepairOpenStatus : byte
 
 public enum PvpModeCommandAction : byte { Query = 0, SetBlue = 1, SetWhite = 2 }
 public enum PvpModeResultStatus : byte { Ready = 0, Applied = 1, Unchanged = 2, NonPvpMap = 3, StaleGeneration = 4, PlayerDead = 5, StaleSequence = 6 }
+public enum PvpAttackStatus : byte
+{
+    Applied = 0, StaleGeneration = 1, StaleSequence = 2, SelfTarget = 3,
+    NonPvpMap = 4, AttackerProtected = 5, TargetProtected = 6,
+    TargetMissing = 7, AttackerDead = 8, TargetDead = 9, TooFar = 10,
+    Blocked = 11, Cooldown = 12, CombatUnavailable = 13, Backpressured = 14
+}
 
 public enum QuestViewWireStatus : byte
 {
@@ -363,6 +373,14 @@ public readonly record struct TradeTerminalWire(
 
 public readonly record struct PvpModeCommandWire(long MapEpoch,uint PvpSequence,PvpModeCommandAction Action);
 public readonly record struct PvpModeResultWire(long MapEpoch,uint PvpSequence,PvpModeResultStatus Status,PvpMode Mode,bool MapAllowsPlayerPvp);
+public readonly record struct PvpAttackWire(long MapEpoch,uint AttackSequence,long TargetActorId);
+public readonly record struct PvpAttackResultWire(
+    long MapEpoch,uint AttackSequence,PvpAttackStatus Status,long ServerTick,
+    long TargetActorId,int Damage,bool Died);
+public readonly record struct PvpDamageWire(
+    long MapEpoch,uint DamageSequence,long ServerTick,
+    long AttackerActorId,long AttackerConnectionEpoch,uint AttackerAttackSequence,
+    int Damage,int CurrentHp,int MaxHp,bool Died);
 
 public readonly record struct QuestOpenWire(
     long MapEpoch,uint QuestSequence,int NpcSpawnId);
@@ -474,6 +492,9 @@ public static class WireProtocol
         HeaderBytes + 8 + 4 + 1 + 4 + 8 + 4 + 1 + 4 + 4 + 8 + 8;
     public const int PvpModeCommandFrameBytes = HeaderBytes + 8 + 4 + 1;
     public const int PvpModeResultFrameBytes = HeaderBytes + 8 + 4 + 1 + 1 + 1;
+    public const int PvpAttackFrameBytes = HeaderBytes + 8 + 4 + 8;
+    public const int PvpAttackResultFrameBytes = HeaderBytes + 8 + 4 + 1 + 8 + 8 + 4 + 1;
+    public const int PvpDamageFrameBytes = HeaderBytes + 8 + 4 + 8 + 8 + 8 + 4 + 4 + 4 + 4 + 1;
     public const int QuestOpenFrameBytes = HeaderBytes + 8 + 4 + 4;
     public const int QuestChooseFrameBytes = HeaderBytes + 8 + 4 + 4 + 4 + 4;
     public const int QuestViewHeaderBytes =
@@ -3082,6 +3103,104 @@ public static class WireProtocol
             (PvpModeResultStatus)frame[20],(PvpMode)frame[21],allowed==1);
         return value.MapEpoch>0&&value.PvpSequence>0&&allowed<=1&&
             (byte)value.Status<=6&&(byte)value.Mode<=1;
+    }
+
+    public static byte[] EncodePvpAttack(PvpAttackWire value)
+    {
+        if(value.MapEpoch<=0||value.AttackSequence==0||value.TargetActorId<=0)
+            throw new ArgumentOutOfRangeException(nameof(value));
+        var frame=NewFrame(WireOpcode.PvpAttack,PvpAttackFrameBytes);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(8,8),value.MapEpoch);
+        BinaryPrimitives.WriteUInt32LittleEndian(frame.AsSpan(16,4),value.AttackSequence);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(20,8),value.TargetActorId);
+        return frame;
+    }
+
+    public static bool TryDecodePvpAttack(ReadOnlySpan<byte> frame,out PvpAttackWire value)
+    {
+        value=default;
+        if(!TryReadHeader(frame,out var h)||h.Opcode!=WireOpcode.PvpAttack)return false;
+        value=new(BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(8,8)),
+            BinaryPrimitives.ReadUInt32LittleEndian(frame.Slice(16,4)),
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(20,8)));
+        return value.MapEpoch>0&&value.AttackSequence>0&&value.TargetActorId>0;
+    }
+
+    public static byte[] EncodePvpAttackResult(PvpAttackResultWire value)
+    {
+        if(value.MapEpoch<=0||value.AttackSequence==0||(byte)value.Status>14||
+           value.ServerTick<0||value.TargetActorId<=0||value.Damage<0||
+           (value.Status==PvpAttackStatus.Applied?value.Damage<=0:value.Damage!=0||value.Died))
+            throw new ArgumentOutOfRangeException(nameof(value));
+        var frame=NewFrame(WireOpcode.PvpAttackResult,PvpAttackResultFrameBytes);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(8,8),value.MapEpoch);
+        BinaryPrimitives.WriteUInt32LittleEndian(frame.AsSpan(16,4),value.AttackSequence);
+        frame[20]=(byte)value.Status;
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(21,8),value.ServerTick);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(29,8),value.TargetActorId);
+        BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(37,4),value.Damage);
+        frame[41]=value.Died?(byte)1:(byte)0;
+        return frame;
+    }
+
+    public static bool TryDecodePvpAttackResult(ReadOnlySpan<byte> frame,out PvpAttackResultWire value)
+    {
+        value=default;
+        if(!TryReadHeader(frame,out var h)||h.Opcode!=WireOpcode.PvpAttackResult)return false;
+        byte died=frame[41];
+        if(died>1)return false;
+        value=new(BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(8,8)),
+            BinaryPrimitives.ReadUInt32LittleEndian(frame.Slice(16,4)),
+            (PvpAttackStatus)frame[20],BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(21,8)),
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(29,8)),
+            BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(37,4)),died==1);
+        return value.MapEpoch>0&&value.AttackSequence>0&&(byte)value.Status<=14&&
+            value.ServerTick>=0&&value.TargetActorId>0&&value.Damage>=0&&
+            (value.Status==PvpAttackStatus.Applied?value.Damage>0:value.Damage==0&&!value.Died);
+    }
+
+    public static byte[] EncodePvpDamage(PvpDamageWire value)
+    {
+        if(value.MapEpoch<=0||value.DamageSequence==0||value.ServerTick<0||
+           value.AttackerActorId<=0||value.AttackerConnectionEpoch<=0||
+           value.AttackerAttackSequence==0||value.Damage<=0||
+           value.CurrentHp<0||value.MaxHp<=0||value.CurrentHp>value.MaxHp||
+           (value.Died?value.CurrentHp!=0:value.CurrentHp<=0))
+            throw new ArgumentOutOfRangeException(nameof(value));
+        var frame=NewFrame(WireOpcode.PvpDamage,PvpDamageFrameBytes);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(8,8),value.MapEpoch);
+        BinaryPrimitives.WriteUInt32LittleEndian(frame.AsSpan(16,4),value.DamageSequence);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(20,8),value.ServerTick);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(28,8),value.AttackerActorId);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(36,8),value.AttackerConnectionEpoch);
+        BinaryPrimitives.WriteUInt32LittleEndian(frame.AsSpan(44,4),value.AttackerAttackSequence);
+        BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(48,4),value.Damage);
+        BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(52,4),value.CurrentHp);
+        BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(56,4),value.MaxHp);
+        frame[60]=value.Died?(byte)1:(byte)0;
+        return frame;
+    }
+
+    public static bool TryDecodePvpDamage(ReadOnlySpan<byte> frame,out PvpDamageWire value)
+    {
+        value=default;
+        if(!TryReadHeader(frame,out var h)||h.Opcode!=WireOpcode.PvpDamage)return false;
+        byte died=frame[60];
+        if(died>1)return false;
+        value=new(BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(8,8)),
+            BinaryPrimitives.ReadUInt32LittleEndian(frame.Slice(16,4)),
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(20,8)),
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(28,8)),
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(36,8)),
+            BinaryPrimitives.ReadUInt32LittleEndian(frame.Slice(44,4)),
+            BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(48,4)),
+            BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(52,4)),
+            BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(56,4)),died==1);
+        return value.MapEpoch>0&&value.DamageSequence>0&&value.ServerTick>=0&&
+            value.AttackerActorId>0&&value.AttackerConnectionEpoch>0&&
+            value.AttackerAttackSequence>0&&value.Damage>0&&
+            value.CurrentHp>=0&&value.MaxHp>0&&value.CurrentHp<=value.MaxHp&&
+            (value.Died?value.CurrentHp==0:value.CurrentHp>0);
     }
 
     public static byte[] EncodeQuestOpen(QuestOpenWire value)

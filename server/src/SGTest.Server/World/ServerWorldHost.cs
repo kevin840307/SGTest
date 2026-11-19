@@ -218,6 +218,17 @@ public sealed class ServerWorldHost : IAsyncDisposable
         return tcs.Task;
     }
 
+    public Task<PvpAttackGeometry> TrustedGetPvpAttackGeometryAsync(
+        long actorId,long connectionEpoch,long mapEpoch,long targetActorId,double attackRange)
+    {
+        var tcs=new TaskCompletionSource<PvpAttackGeometry>(TaskCreationOptions.RunContinuationsAsynchronously);
+        QueueTrusted(new TrustedControl(
+            world=>tcs.TrySetResult(world.GetPvpAttackGeometry(
+                actorId,connectionEpoch,mapEpoch,targetActorId,attackRange)),
+            error=>tcs.TrySetException(error)));
+        return tcs.Task;
+    }
+
     public Task<ActorSnapshot?> TrustedGetActorAsync(long actorId)
     {
         var tcs = new TaskCompletionSource<ActorSnapshot?>(

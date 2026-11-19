@@ -17,6 +17,8 @@ public readonly record struct PlayerRespawnOutcome(
     int CurrentHp,
     int MaxHp);
 
+public enum PlayerDamageSourceKind : byte { Monster = 0, PlayerPvp = 1 }
+
 public readonly record struct PlayerDamageSettlement(
     long ActorId,
     long ConnectionEpoch,
@@ -28,7 +30,10 @@ public readonly record struct PlayerDamageSettlement(
     int Damage,
     int CurrentHp,
     int MaxHp,
-    bool Died);
+    bool Died,
+    PlayerDamageSourceKind SourceKind = PlayerDamageSourceKind.Monster,
+    long AttackerActorId = 0,long AttackerConnectionEpoch = 0,
+    uint AttackerAttackSequence = 0,bool VictimWasNormalWhite = false);
 
 public sealed record PlayerCombatSettlementOptions(int Capacity = 256);
 
@@ -73,7 +78,11 @@ public sealed class PlayerCombatSettlement
     private readonly record struct QueuedHit(
         long ActorId, long ConnectionEpoch, long MapEpoch, uint DamageSequence,
         long ServerTick, long AttackerMonsterEntityId, long AttackerMonsterRevision,
-        int Damage, int ExpectedHpAfter);
+        int Damage, int ExpectedHpAfter,
+        PlayerDamageSourceKind SourceKind = PlayerDamageSourceKind.Monster,
+        long AttackerActorId = 0,long AttackerConnectionEpoch = 0,
+        uint AttackerAttackSequence = 0,bool VictimWasNormalWhite = false,
+        TaskCompletionSource<PlayerDamageSettlement>? Completion = null);
 
     private readonly SqliteIdentityStore _store;
     private readonly Channel<QueuedHit> _input;
@@ -276,6 +285,40 @@ public sealed class PlayerCombatSettlement
         }
     }
 
+    public CombatPostStatus TryPostPvpHit(
+        ActorSnapshot target,ActorSnapshot attacker,uint attackSequence,int rawAttack,long serverTick,
+        bool victimWasNormalWhite,out Task<PlayerDamageSettlement>? completion)
+    {
+        ValidateActor(target); ValidateActor(attacker); completion=null;
+        if(attacker.ActorId==target.ActorId||attacker.MapId!=target.MapId||
+           attackSequence==0||rawAttack<0||rawAttack>100_000_000||serverTick<0)
+            throw new ArgumentOutOfRangeException(nameof(attacker));
+        lock(_gate)
+        {
+            ThrowIfFaulted();
+            if(!_states.TryGetValue(target.ActorId,out var state)||
+               state.ConnectionEpoch!=target.ConnectionEpoch||state.MapEpoch!=target.MapEpoch||
+               state.Suspended||state.Closing||state.ProjectedHp<=0)
+                return CombatPostStatus.TargetUnavailable;
+            int applied=Math.Min(Math.Max(1,rawAttack-state.Defense/5),state.ProjectedHp);
+            if(state.DamageSequence==uint.MaxValue)throw new InvalidOperationException("Player damage sequence exhausted");
+            uint sequence=state.DamageSequence+1; int hpAfter=state.ProjectedHp-applied;
+            if(state.Pending==0)state.Drain=new(TaskCreationOptions.RunContinuationsAsynchronously);
+            var tcs=new TaskCompletionSource<PlayerDamageSettlement>(TaskCreationOptions.RunContinuationsAsynchronously);
+            state.DamageSequence=sequence; state.ProjectedHp=hpAfter; state.Pending++;
+            var queued=new QueuedHit(target.ActorId,target.ConnectionEpoch,target.MapEpoch,
+                sequence,serverTick,0,0,applied,hpAfter,PlayerDamageSourceKind.PlayerPvp,
+                attacker.ActorId,attacker.ConnectionEpoch,attackSequence,victimWasNormalWhite,tcs);
+            if(!_input.Writer.TryWrite(queued))
+            {
+                state.Pending--; state.ProjectedHp+=applied; state.DamageSequence--;
+                if(state.Pending==0){state.Drain?.TrySetResult(true);state.Drain=null;}
+                Interlocked.Increment(ref _backpressure); return CombatPostStatus.Backpressured;
+            }
+            completion=tcs.Task; Interlocked.Increment(ref _accepted); return CombatPostStatus.Accepted;
+        }
+    }
+
     public Task SuspendAndDrainAsync(
         long actorId, long connectionEpoch, long mapEpoch)
     {
@@ -473,6 +516,8 @@ public sealed class PlayerCombatSettlement
             await foreach (var hit in _input.Reader.ReadAllAsync(cancellationToken)
                                .ConfigureAwait(false))
             {
+                try
+                {
                 var committed = await _store.ApplyCharacterDamageSettlementAsync(
                     hit.ActorId, hit.Damage, cancellationToken).ConfigureAwait(false);
                 if (committed is null ||
@@ -486,7 +531,9 @@ public sealed class PlayerCombatSettlement
                     hit.DamageSequence, hit.ServerTick,
                     hit.AttackerMonsterEntityId, hit.AttackerMonsterRevision,
                     hit.Damage, committed.Profile.Data.CurrentHp,
-                    committed.Profile.Data.MaxHp, committed.Died);
+                    committed.Profile.Data.MaxHp, committed.Died,
+                    hit.SourceKind,hit.AttackerActorId,hit.AttackerConnectionEpoch,
+                    hit.AttackerAttackSequence,hit.VictimWasNormalWhite);
 
                 if (_committedLifecycle is not null)
                     await _committedLifecycle(result).ConfigureAwait(false);
@@ -526,6 +573,13 @@ public sealed class PlayerCombatSettlement
                 Interlocked.Increment(ref _committed);
                 Interlocked.Add(ref _damage, result.Damage);
                 if (result.Died) Interlocked.Increment(ref _deaths);
+                hit.Completion?.TrySetResult(result);
+                }
+                catch(Exception error)
+                {
+                    hit.Completion?.TrySetException(error);
+                    throw;
+                }
             }
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { }

@@ -174,6 +174,18 @@ internal static class TlsHost
                 delivery: router.QueuePlayerDamage,
                 committedLifecycle: async result =>
                 {
+                    if(result.SourceKind==PlayerDamageSourceKind.PlayerPvp)
+                    {
+                        var now=DateTimeOffset.UtcNow;
+                        if(result.Died)
+                            await identity.MarkPvpWhiteKillAsync(
+                                result.AttackerActorId,result.VictimWasNormalWhite,now)
+                                .ConfigureAwait(false);
+                        else
+                            await identity.MarkPvpHostileAttackAsync(
+                                result.AttackerActorId,result.VictimWasNormalWhite,now)
+                                .ConfigureAwait(false);
+                    }
                     if (result.Died)
                     {
                         var stopped = await world.TrustedSetCombatDeadAsync(
@@ -183,7 +195,8 @@ internal static class TlsHost
                             throw new PlayerCombatSettlementException(
                                 "Committed lethal damage could not stop authoritative World actor");
                     }
-                    if (!router.TryPostPlayerDamageVisual(result))
+                    if(result.SourceKind==PlayerDamageSourceKind.Monster&&
+                       !router.TryPostPlayerDamageVisual(result))
                         throw new PlayerCombatSettlementException(
                             "Committed player damage visual queue full");
                 });

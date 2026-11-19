@@ -51,6 +51,14 @@ public readonly record struct ActorSnapshot(
     uint LastMovementSequence, uint MovementActionSequence, double X, double Y,
     long EntityRevision, bool IsMoving, byte Facing = 1, bool CombatDead = false);
 
+public enum PvpAttackGeometryStatus : byte
+{
+    Ready, StaleGeneration, SelfTarget, TargetMissing, DifferentMap,
+    NonPvpMap, AttackerDead, TargetDead, TooFar, Blocked
+}
+public readonly record struct PvpAttackGeometry(
+    PvpAttackGeometryStatus Status,long ServerTick,ActorSnapshot Attacker,ActorSnapshot Target);
+
 public enum ActorLifecycleKind { Joined, Left }
 public readonly record struct ActorLifecycleEvent(ActorLifecycleKind Kind, ActorSnapshot Actor);
 
@@ -302,6 +310,33 @@ public sealed class ServerWorld
 
         actor.LastPortalSequence = 0; // new MapEpoch starts new client sequence
         return new(NpcPortalStatus.Accepted, transferred);
+    }
+
+    public PvpAttackGeometry GetPvpAttackGeometry(
+        long actorId,long connectionEpoch,long mapEpoch,long targetActorId,double attackRange)
+    {
+        EnsureOwner();
+        if(actorId<=0||connectionEpoch<=0||mapEpoch<=0||targetActorId<=0||
+           !double.IsFinite(attackRange)||attackRange<=0||attackRange>500)
+            throw new ArgumentOutOfRangeException(nameof(attackRange));
+        if(!_actors.TryGetValue(actorId,out var attacker)||attacker.ConnectionEpoch!=connectionEpoch||
+           attacker.MapEpoch!=mapEpoch||attacker.Closing)
+            return new(PvpAttackGeometryStatus.StaleGeneration,_tick,default,default);
+        var a=attacker.Snapshot();
+        if(targetActorId==actorId)return new(PvpAttackGeometryStatus.SelfTarget,_tick,a,default);
+        if(!_actors.TryGetValue(targetActorId,out var target)||target.Closing)
+            return new(PvpAttackGeometryStatus.TargetMissing,_tick,a,default);
+        var t=target.Snapshot();
+        if(target.Map!=attacker.Map)return new(PvpAttackGeometryStatus.DifferentMap,_tick,a,t);
+        if(!PvpMapPolicy.AllowsPlayerPvp(attacker.Map))return new(PvpAttackGeometryStatus.NonPvpMap,_tick,a,t);
+        if(attacker.CombatDead)return new(PvpAttackGeometryStatus.AttackerDead,_tick,a,t);
+        if(target.CombatDead)return new(PvpAttackGeometryStatus.TargetDead,_tick,a,t);
+        const double tolerance=24.0;
+        double allowed=attackRange+tolerance,dx=attacker.X-target.X,dy=attacker.Y-target.Y;
+        if(dx*dx+dy*dy>allowed*allowed)return new(PvpAttackGeometryStatus.TooFar,_tick,a,t);
+        if(!_maps[attacker.Map].IsDirectClear(attacker.X,attacker.Y,target.X,target.Y))
+            return new(PvpAttackGeometryStatus.Blocked,_tick,a,t);
+        return new(PvpAttackGeometryStatus.Ready,_tick,a,t);
     }
 
     public ActorSnapshot? GetActor(long actorId)
