@@ -46,7 +46,7 @@ internal static class BankWireChecks
 
         Checks.Run("bank wire rejects client scope and malformed server balances", () =>
         {
-            bool badOpen=false,badSnapshot=false,badResult=false;
+            bool badOpen=false,badSnapshot=false,badResult=false,badSettledNoScope=false;
             try{WireProtocol.EncodeBankOpen(new(0,1,88));}
             catch(ArgumentOutOfRangeException){badOpen=true;}
             try
@@ -62,7 +62,14 @@ internal static class BankWireChecks
                     88,BankBalanceScope.None,1,1,1));
             }
             catch(ArgumentOutOfRangeException){badResult=true;}
-            Checks.Require(badOpen&&badSnapshot&&badResult,
+            try
+            {
+                WireProtocol.EncodeBankTransactionResult(new(
+                    9,2,BankTransactionKind.Deposit,BankTransactionStatus.Applied,
+                    88,BankBalanceScope.None,1,0,0));
+            }
+            catch(ArgumentOutOfRangeException){badSettledNoScope=true;}
+            Checks.Require(badOpen&&badSnapshot&&badResult&&badSettledNoScope,
                 "malformed bank authority payload was admitted");
         });
     }
