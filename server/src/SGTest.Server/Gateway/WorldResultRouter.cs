@@ -553,6 +553,20 @@ public sealed class WorldResultRouter
         }
     }
 
+    public GatewaySendStatus QueuePvpModeResult(
+        TrustedPvpModeCommand request,PvpModeResultStatus status,
+        PvpMode mode,bool mapAllowsPlayerPvp)
+    {
+        lock(_gate)
+        {
+            if(!_connections.TryGetValue(request.ActorId,out var connection)||
+               connection.IsClosed)
+                return GatewaySendStatus.Closed;
+            return connection.QueuePvpModeResult(
+                request,status,mode,mapAllowsPlayerPvp);
+        }
+    }
+
     public GatewaySendStatus QueueQuestView(
         TrustedQuestCommand request,QuestViewWireStatus status,QuestView? view)
     {
