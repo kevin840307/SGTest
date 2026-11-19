@@ -517,6 +517,18 @@ public sealed class WorldResultRouter
         }
     }
 
+    public GatewaySendStatus QueueEquipmentTransferResult(
+        TrustedEquipmentCommand request,EquipmentTransferResult result)
+    {
+        lock(_gate)
+        {
+            if(!_connections.TryGetValue(request.ActorId,out var connection)||
+               connection.IsClosed)
+                return GatewaySendStatus.Closed;
+            return connection.QueueEquipmentTransferResult(request,result);
+        }
+    }
+
     public GatewaySendStatus QueueRecoveryUseResult(
         TrustedRecoveryUse request,RecoveryUseResult result)
     {
