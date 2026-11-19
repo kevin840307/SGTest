@@ -147,6 +147,9 @@ public sealed class IdentityTlsAuthorization
             if (_combat is not null)
                 await _combat.CloseAndDrainAsync(
                     binding.ActorId, binding.ConnectionEpoch).ConfigureAwait(false);
+            // A pending trade is session-scoped. Disconnect before detaching the
+            // route so the peer can receive one authoritative terminal event.
+            _trades?.Disconnect(binding,router);
             if (connection is not null) router.TryDetach(connection);
 
             // Keep the character registered while its final authoritative
@@ -193,11 +196,17 @@ public sealed class IdentityTlsAuthorization
                         await _combat.SuspendAndDrainAsync(
                             request.ActorId, request.ConnectionEpoch).ConfigureAwait(false);
 
+                    var oldBinding=new ConnectionBinding(
+                        request.ActorId,request.ConnectionEpoch,request.RequestMapEpoch);
                     var outcome = await router.TrustedNpcInteractAsync(
-                        _world, _portals!,
-                        new ConnectionBinding(request.ActorId, request.ConnectionEpoch,
-                            request.RequestMapEpoch),
+                        _world, _portals!,oldBinding,
                         request.InteractionSequence, request.NpcSpawnId).ConfigureAwait(false);
+
+                    // Trade cannot span a MapEpoch. The old binding stored by the
+                    // trade coordinator is intentionally used to cancel the
+                    // pre-transfer session after a successful authoritative portal.
+                    if(outcome.Status==NpcPortalStatus.Accepted)
+                        _trades?.Disconnect(oldBinding,router);
 
                     if (_combat is not null)
                     {
@@ -1201,6 +1210,7 @@ public sealed class IdentityTlsAuthorization
                 if (_combat is not null)
                     await _combat.CloseAndDrainAsync(
                         binding.ActorId, binding.ConnectionEpoch).ConfigureAwait(false);
+                _trades?.Disconnect(binding,router);
                 router.TryDetach(abandoned);
                 await _world.TrustedDisconnectAsync(
                     binding.ActorId, binding.ConnectionEpoch, binding.MapEpoch)
