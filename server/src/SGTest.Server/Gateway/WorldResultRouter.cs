@@ -553,6 +553,30 @@ public sealed class WorldResultRouter
         }
     }
 
+    public GatewaySendStatus QueueRepairSnapshot(
+        TrustedRepairCommand request,RepairOpenStatus status,RepairPreview? preview)
+    {
+        lock(_gate)
+        {
+            if(!_connections.TryGetValue(request.ActorId,out var connection)||
+               connection.IsClosed)
+                return GatewaySendStatus.Closed;
+            return connection.QueueRepairSnapshot(request,status,preview);
+        }
+    }
+
+    public GatewaySendStatus QueueRepairResult(
+        TrustedRepairCommand request,RepairResult result)
+    {
+        lock(_gate)
+        {
+            if(!_connections.TryGetValue(request.ActorId,out var connection)||
+               connection.IsClosed)
+                return GatewaySendStatus.Closed;
+            return connection.QueueRepairResult(request,result);
+        }
+    }
+
     public GatewaySendStatus QueueRecoveryUseResult(
         TrustedRecoveryUse request,RecoveryUseResult result)
     {
