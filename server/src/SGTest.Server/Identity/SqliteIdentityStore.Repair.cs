@@ -112,8 +112,8 @@ WHERE character_id=$actor AND connection_generation=$conn
                     int max=reader.GetInt32(4);
                     int rawBefore=reader.GetInt32(5);
                     int rawAfter=reader.GetInt32(6);
-                    long cost=reader.GetInt64(7);
-                    long money=reader.GetInt64(8);
+                    long replayCost=reader.GetInt64(7);
+                    long replayMoney=reader.GetInt64(8);
                     string source=reader.GetString(9);
                     bool exact=originalNpc==npcRule.NpcSpawnId&&
                         originalUid==itemUid&&originalRate==npcRule.RepairRate&&
@@ -124,7 +124,7 @@ WHERE character_id=$actor AND connection_generation=$conn
                     var location=FindLocation(connection,tx,context.CharacterId,itemUid);
                     return new(RepairStatus.AlreadyApplied,originalNpc,originalUid,
                         originalItem,location,DisplayDurability(rawAfter),max,
-                        cost,money);
+                        replayCost,replayMoney);
                 }
             }
 
