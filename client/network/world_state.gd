@@ -1367,6 +1367,8 @@ func _apply_pvp_skill_result(frame: PackedByteArray) -> bool:
 	last_skill_result=result.duplicate(true)
 	last_skill_result["target_kind"]="player"
 	pending_skill_sequence=0
+	pending_skill_target_kind=0
+	pending_skill_target_id=0
 	return true
 
 func _apply_player_skill_visual(frame: PackedByteArray) -> bool:
@@ -1571,8 +1573,8 @@ func _apply_world_ready(frame: PackedByteArray) -> bool:
 		stale_attack_results = 0
 		skill_sequence = 0
 		pending_skill_sequence = 0
-	pending_skill_target_kind = 0
-	pending_skill_target_id = 0
+		pending_skill_target_kind = 0
+		pending_skill_target_id = 0
 		last_skill_result_sequence = 0
 		last_skill_result_status = -1
 		last_skill_server_tick = -1
