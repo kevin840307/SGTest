@@ -9,6 +9,7 @@ const Terrain = preload("res://rendering/terrain.gd")
 const DrawList = preload("res://rendering/world_draw_list.gd")
 const Players = preload("res://rendering/player_presentation.gd")
 const Monsters = preload("res://rendering/monster_presentation.gd")
+const PvpNames = preload("res://rendering/pvp_name_presentation.gd")
 const Canvas = preload("res://rendering/world_canvas.gd")
 var store := Store.new()
 var camera := Camera.new()
@@ -27,6 +28,7 @@ var _last_rect := Rect2()
 var show_players := false
 var players := Players.new()
 var monsters := Monsters.new()
+var pvp_names := PvpNames.new()
 var _player_snapshot := {}
 var _players_dirty := false
 var _combat_seen := {}
@@ -68,6 +70,7 @@ func clear_map() -> void:
 	draw_list.clear()
 	players.clear()
 	monsters.clear()
+	pvp_names.clear()
 	_player_snapshot = {}
 	_players_dirty = true
 	_combat_seen.clear()
@@ -140,8 +143,10 @@ func _process(_delta: float) -> void:
 				_fail("怪物素材資料無法顯示")
 				return
 			if not _player_snapshot.is_empty():
-				players.apply_snapshot(_player_snapshot,Time.get_ticks_usec())
-				if monsters.apply_snapshot(_player_snapshot,Time.get_ticks_usec()) != OK:
+				var presentation_now:=Time.get_ticks_usec()
+				players.apply_snapshot(_player_snapshot,presentation_now)
+				pvp_names.apply_snapshot(_player_snapshot,presentation_now)
+				if monsters.apply_snapshot(_player_snapshot,presentation_now) != OK:
 					_fail("怪物狀態與地圖素材不一致")
 					return
 		var world_size := Vector2i(_map.manifest.size[0],_map.manifest.size[1])
@@ -214,7 +219,19 @@ func present() -> void:
 			"alpha":1.0-progress
 		})
 	_combat_overlays = surviving
-	_canvas.present(draw_list.build(rect,actors,{},draw_list.frames_at_update(update)),markers,combat_labels)
+	var player_labels:Array=[]
+	if show_players:
+		for raw_label in pvp_names.labels_at(now_usec):
+			var label:Dictionary=raw_label
+			var actor_position:=players.position_at(int(label.actor_id),now_usec)
+			if not actor_position.is_finite() or not rect.has_point(actor_position):
+				continue
+			var rendered:=label.duplicate(true)
+			rendered["p"]=actor_position+Vector2(0.0,-54.0)
+			player_labels.append(rendered)
+	_canvas.present(
+		draw_list.build(rect,actors,{},draw_list.frames_at_update(update)),
+		markers,combat_labels,player_labels)
 	_players_dirty = false
 	_last_rect = rect
 	_last_update = update
@@ -245,6 +262,7 @@ func set_player_snapshot(snapshot: Dictionary) -> void:
 	if phase == "ready":
 		var now_usec := Time.get_ticks_usec()
 		players.apply_snapshot(snapshot,now_usec)
+		pvp_names.apply_snapshot(snapshot,now_usec)
 		if monsters.apply_snapshot(snapshot,now_usec) != OK:
 			_fail("怪物狀態與地圖素材不一致")
 			return

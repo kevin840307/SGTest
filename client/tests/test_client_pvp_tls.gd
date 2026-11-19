@@ -59,6 +59,12 @@ func _run_victim(session,self_id:int,peer_id:int)->void:
 	if visible.is_empty():
 		_fail("victim never saw attacker "+str(session.snapshot()),session)
 		return
+	var named:=_wait(session,func(v):
+		var identities:Dictionary=v.get("player_identities",{})
+		return identities.has(peer_id) and str((identities[peer_id] as Dictionary).get("display_name",""))=="PvpTlsAttacker",7000)
+	if named.is_empty():
+		_fail("victim never received attacker identity "+str(session.snapshot()),session)
+		return
 	var first:=_wait(session,func(v):
 		return int(v.player_damage_sequence)>=1,7000)
 	if (first.is_empty() or int(first.player_damage_sequence)!=1 or
@@ -68,7 +74,16 @@ func _run_victim(session,self_id:int,peer_id:int)->void:
 		str(first.last_player_damage.get("source_kind",""))!="pvp"):
 		_fail("first PvP damage "+str(first),session)
 		return
-	print("CLIENT_PVP_FIRST_HIT role=victim hp=42 damage=58")
+	var pink:=_wait(session,func(v):
+		var identities:Dictionary=v.get("player_identities",{})
+		if not identities.has(peer_id):
+			return false
+		var identity:Dictionary=identities[peer_id]
+		return not bool(identity.get("red_man",false)) and int(identity.get("pink_until_unix_ms",0))>int(identity.get("server_unix_ms",0)) and int(identity.get("pvp_updated_unix_ms",0))>0,7000)
+	if pink.is_empty():
+		_fail("attacker did not become pink on observer "+str(session.snapshot()),session)
+		return
+	print("CLIENT_PVP_FIRST_HIT role=victim hp=42 damage=58 name=Pink")
 	var dead:=_wait(session,func(v):
 		return int(v.player_damage_sequence)>=2 and bool(v.player_dead),7000)
 	if (dead.is_empty() or int(dead.player_damage_sequence)!=2 or
@@ -77,8 +92,14 @@ func _run_victim(session,self_id:int,peer_id:int)->void:
 		int(dead.last_player_damage.get("attacker_actor_id",0))!=peer_id):
 		_fail("lethal PvP damage "+str(dead),session)
 		return
+	var red:=_wait(session,func(v):
+		var identities:Dictionary=v.get("player_identities",{})
+		return identities.has(peer_id) and bool((identities[peer_id] as Dictionary).get("red_man",false)),7000)
+	if red.is_empty():
+		_fail("attacker did not become red on observer "+str(session.snapshot()),session)
+		return
 	session.stop()
-	print("CLIENT_PVP_PASS role=victim actor=%d hp=0 sequence=2 death=true" % self_id)
+	print("CLIENT_PVP_PASS role=victim actor=%d hp=0 sequence=2 death=true name=Pink->Red" % self_id)
 	quit(0)
 
 func _run_actor(session,self_id:int,peer_id:int)->void:
@@ -86,6 +107,12 @@ func _run_actor(session,self_id:int,peer_id:int)->void:
 		return (v.entities as Dictionary).has(peer_id),7000)
 	if visible.is_empty():
 		_fail("actor never saw victim "+str(session.snapshot()),session)
+		return
+	var named:=_wait(session,func(v):
+		var identities:Dictionary=v.get("player_identities",{})
+		return identities.has(peer_id) and str((identities[peer_id] as Dictionary).get("display_name",""))=="PvpTlsVictim",7000)
+	if named.is_empty():
+		_fail("actor never received victim identity "+str(session.snapshot()),session)
 		return
 	if not session.attack_player(peer_id):
 		_fail("first attack submit",session)

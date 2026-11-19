@@ -3,14 +3,16 @@ extends Node2D
 var _commands: Array = []
 var _ground_markers: Array = []
 var _combat_labels: Array = []
+var _player_labels: Array = []
 const DROP_OUTLINE := Color(0.12,0.08,0.02,0.9)
 const DROP_CORE := Color(1.0,0.82,0.22,0.95)
 
 
-func present(commands: Array, ground_markers: Array = [], combat_labels: Array = []) -> void:
+func present(commands: Array, ground_markers: Array = [], combat_labels: Array = [], player_labels: Array = []) -> void:
 	_commands = commands
 	_ground_markers = ground_markers
 	_combat_labels = combat_labels
+	_player_labels = player_labels
 	texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	queue_redraw()
 
@@ -19,6 +21,7 @@ func clear() -> void:
 	_commands = []
 	_ground_markers = []
 	_combat_labels = []
+	_player_labels = []
 	queue_redraw()
 
 
@@ -43,10 +46,20 @@ func _draw() -> void:
 		draw_circle(position, 6.0, DROP_OUTLINE)
 		draw_circle(position, 4.0, DROP_CORE)
 
+	# Names are one batched Canvas pass, not one Label Node per player.
+	var font := ThemeDB.fallback_font
+	for label in _player_labels:
+		var name_position:Vector2=label.p
+		var name_text:=str(label.text)
+		var name_color:Color=label.color
+		draw_string(font,name_position+Vector2(1,1),name_text,
+			HORIZONTAL_ALIGNMENT_CENTER,-1,16,Color(0.0,0.0,0.0,0.92))
+		draw_string(font,name_position,name_text,
+			HORIZONTAL_ALIGNMENT_CENTER,-1,16,name_color)
+
 	# Reliable combat presentation is still rendered by this shared Canvas.
 	# No Label/Sprite Node is allocated per attack, so dense fights do not
 	# multiply scene-tree resources.
-	var font := ThemeDB.fallback_font
 	for label in _combat_labels:
 		var position: Vector2 = label.p
 		var alpha := clampf(float(label.alpha),0.0,1.0)

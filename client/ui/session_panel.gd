@@ -1321,9 +1321,14 @@ func _update_pvp_ui() -> void:
 
 	var entity_ids: Array = (_latest.get("entities",{}) as Dictionary).keys()
 	entity_ids.sort()
+	var identities:Dictionary=_latest.get("player_identities",{})
 	var target_key := "%d/%d/%d" % [int(_latest.get("actor_id",0)),int(_latest.get("map_epoch",0)),entity_ids.size()]
 	for raw_actor in entity_ids:
-		target_key += ","+str(int(raw_actor))
+		var target_id:=int(raw_actor)
+		var identity:Dictionary=identities.get(target_id,{})
+		target_key += ",%d:%d:%s" % [
+			target_id,int(identity.get("pvp_updated_unix_ms",0)),
+			str(identity.get("display_name",""))]
 	if target_key != _pvp_target_display_key:
 		_pvp_target_display_key = target_key
 		pvp_target_picker.clear()
@@ -1331,7 +1336,11 @@ func _update_pvp_ui() -> void:
 			var target_id := int(raw_actor)
 			if target_id <= 0 or target_id == int(_latest.get("actor_id",0)):
 				continue
-			pvp_target_picker.add_item("可見玩家 %d" % target_id)
+			var target_identity:Dictionary=identities.get(target_id,{})
+			var target_name:=str(target_identity.get("display_name","")).strip_edges()
+			pvp_target_picker.add_item(
+				("%s（%d）" % [target_name,target_id])
+				if not target_name.is_empty() else "可見玩家 %d" % target_id)
 			pvp_target_picker.set_item_metadata(pvp_target_picker.item_count-1,target_id)
 		if pvp_target_picker.item_count > 0:
 			pvp_target_picker.select(0)
