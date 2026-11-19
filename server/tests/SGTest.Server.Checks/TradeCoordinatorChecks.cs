@@ -72,21 +72,29 @@ internal static class TradeCoordinatorChecks
             TradeCommandAction.Accept,tradeId,0,0,0),router);
         RequireState(gatewayA,gatewayB,TradeSessionWireState.Active);
 
-        await coordinator.HandleAsync(new(
-            charA,actorA.ConnectionEpoch,actorA.MapEpoch,2,
-            TradeCommandAction.AddItem,tradeId,0,seededA.ItemUid,0),router);
-        var offerA=DrainSnapshot(gatewayA);
-        var offerB=DrainSnapshot(gatewayB);
-        Checks.Require(offerA.MyItems.Single().ItemUid==seededA.ItemUid&&
-            offerB.OtherItems.Single().ItemUid==seededA.ItemUid&&
-            offerA.MyItems.Single().SourceDropId==seededA.DropId,
-            "trade A offer metadata mismatch");
-
-        await coordinator.HandleAsync(new(
-            charB,actorB.ConnectionEpoch,actorB.MapEpoch,2,
-            TradeCommandAction.AddItem,tradeId,0,seededB.ItemUid,0),router);
+        // Both authenticated sockets have independent bounded workers, so
+        // legitimate peer offer mutations can overlap while each awaits SQLite.
+        // One peer advancing the session revision must not silently discard the
+        // other peer's already-admitted mutation.
+        await Task.WhenAll(
+            coordinator.HandleAsync(new(
+                charA,actorA.ConnectionEpoch,actorA.MapEpoch,2,
+                TradeCommandAction.AddItem,tradeId,0,seededA.ItemUid,0),router),
+            coordinator.HandleAsync(new(
+                charB,actorB.ConnectionEpoch,actorB.MapEpoch,2,
+                TradeCommandAction.AddItem,tradeId,0,seededB.ItemUid,0),router));
         DrainSnapshot(gatewayA);
+        var offerA=DrainSnapshot(gatewayA);
         DrainSnapshot(gatewayB);
+        var offerB=DrainSnapshot(gatewayB);
+        Checks.Require(
+            offerA.MyItems.Single().ItemUid==seededA.ItemUid&&
+            offerA.OtherItems.Single().ItemUid==seededB.ItemUid&&
+            offerB.MyItems.Single().ItemUid==seededB.ItemUid&&
+            offerB.OtherItems.Single().ItemUid==seededA.ItemUid&&
+            offerA.MyItems.Single().SourceDropId==seededA.DropId&&
+            offerB.MyItems.Single().SourceDropId==seededB.DropId,
+            "concurrent peer item offers were lost or misoriented");
         await coordinator.HandleAsync(new(
             charA,actorA.ConnectionEpoch,actorA.MapEpoch,3,
             TradeCommandAction.SetMoney,tradeId,0,0,200),router);
