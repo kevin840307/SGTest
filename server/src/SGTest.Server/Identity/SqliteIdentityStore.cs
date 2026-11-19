@@ -77,7 +77,7 @@ public sealed record CharacterCreateResult(CharacterCreateStatus Status, Charact
 /// </summary>
 public sealed partial class SqliteIdentityStore : IDisposable
 {
-    public const int SchemaVersion = 13;
+    public const int SchemaVersion = 14;
     private readonly string _connectionString;
     private readonly IdentityStoreOptions _options;
     private readonly PasswordHasher _passwords;
