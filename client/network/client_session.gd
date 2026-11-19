@@ -581,8 +581,10 @@ func _queue_intent(intent: Dictionary) -> bool:
 				accepted = false
 				break
 	if accepted and kind=="player_shop":
-		if int(_published.get("pending_player_shop_sequence",0))!=0 or
-				int(_published.get("trade_id",0))!=0:
+		if (
+			int(_published.get("pending_player_shop_sequence",0))!=0 or
+			int(_published.get("trade_id",0))!=0
+		):
 			accepted=false
 		for queued in _intents:
 			if str(queued.get("type",""))=="player_shop":
