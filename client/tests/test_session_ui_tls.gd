@@ -33,6 +33,11 @@ class RespawnSession extends RefCounted:
 	var equipment_equips := 0
 	var equipment_unequips := 0
 	var last_equipment_uid := 0
+	var bank_opens := 0
+	var bank_deposits := 0
+	var bank_withdrawals := 0
+	var last_bank_npc := 0
+	var last_bank_amount := 0
 	func use_recovery_item(item_uid: int) -> bool:
 		if item_uid <= 0:
 			return false
@@ -100,6 +105,24 @@ class RespawnSession extends RefCounted:
 			return false
 		equipment_unequips += 1
 		last_equipment_uid = item_uid
+		return true
+	func open_bank(npc_spawn_id: int) -> bool:
+		if npc_spawn_id <= 0:
+			return false
+		bank_opens += 1
+		last_bank_npc = npc_spawn_id
+		return true
+	func deposit_bank_money(amount: int) -> bool:
+		if amount <= 0:
+			return false
+		bank_deposits += 1
+		last_bank_amount = amount
+		return true
+	func withdraw_bank_money(amount: int) -> bool:
+		if amount <= 0:
+			return false
+		bank_withdrawals += 1
+		last_bank_amount = amount
 		return true
 	func attack_monster(entity_id: int) -> bool:
 		if entity_id <= 0:
