@@ -450,15 +450,17 @@ public sealed class PlayerTradeCoordinator
 
     private void QueueBoth(Session session,WorldResultRouter router)
     {
-        TradeSnapshotWire first;
-        TradeSnapshotWire second;
         lock(_gate)
         {
-            first=BuildSnapshot(session.First,session);
-            second=BuildSnapshot(session.Second,session);
+            // Serialize state mutation and reliable FIFO admission together.
+            // Otherwise a concurrent cancel/disconnect can enqueue a terminal
+            // after the state change but before this older snapshot reaches
+            // the per-connection FIFO, producing terminal -> stale snapshot.
+            var first=BuildSnapshot(session.First,session);
+            var second=BuildSnapshot(session.Second,session);
+            router.QueueTradeSnapshot(session.First.Binding,first);
+            router.QueueTradeSnapshot(session.Second.Binding,second);
         }
-        router.QueueTradeSnapshot(session.First.Binding,first);
-        router.QueueTradeSnapshot(session.Second.Binding,second);
     }
 
     private static TradeSnapshotWire BuildSnapshot(
