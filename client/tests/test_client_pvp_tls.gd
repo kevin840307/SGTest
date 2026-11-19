@@ -135,9 +135,11 @@ func _run_victim(session,self_id:int,peer_id:int)->void:
 		if not identities.has(self_id):
 			return false
 		var identity:Dictionary=identities[self_id]
-		return int(identity.get("mode",-1))==0 and
+		return (
+			int(identity.get("mode",-1))==0 and
 			not bool(identity.get("red_man",true)) and
-			int(identity.get("pvp_updated_unix_ms",0))>0,7000)
+			int(identity.get("pvp_updated_unix_ms",0))>0
+		),7000)
 	if gm_blue.is_empty():
 		_fail("victim did not receive audited GM blue identity "+str(session.snapshot()),session)
 		return
@@ -220,9 +222,11 @@ func _run_actor(session,self_id:int,peer_id:int)->void:
 		if not identities.has(peer_id):
 			return false
 		var identity:Dictionary=identities[peer_id]
-		return int(identity.get("mode",-1))==0 and
+		return (
+			int(identity.get("mode",-1))==0 and
 			not bool(identity.get("red_man",true)) and
-			int(identity.get("pvp_updated_unix_ms",0))>0,7000)
+			int(identity.get("pvp_updated_unix_ms",0))>0
+		),7000)
 	if peer_blue.is_empty():
 		_fail("actor did not receive GM target blue identity "+str(session.snapshot()),session)
 		return
