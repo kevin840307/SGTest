@@ -200,6 +200,23 @@ func withdraw_storage_item(item_uid: int) -> bool:
 		"map_epoch":int(current.get("map_epoch",0))})
 
 
+func equip_inventory_item(item_uid: int) -> bool:
+	var current := snapshot()
+	var inventory: Dictionary = current.get("inventory_items",{})
+	if item_uid <= 0 or int(current.get("state",-1)) != WorldState.STATE_IN_WORLD or not bool(current.get("world_ready",false)) or not bool(current.get("inventory_ready",false)) or not bool(current.get("equipment_ready",false)) or bool(current.get("resync_pending",false)) or bool(current.get("waiting_for_new_map",false)) or int(current.get("pending_equipment_sequence",0)) != 0 or not inventory.has(item_uid):
+		return false
+	return _queue_intent({"type":"equipment_equip","item_uid":item_uid,
+		"actor_id":int(current.get("actor_id",0)),"map_epoch":int(current.get("map_epoch",0))})
+
+
+func unequip_item(item_uid: int) -> bool:
+	var current := snapshot()
+	var equipment: Dictionary = current.get("equipment_items",{})
+	if item_uid <= 0 or int(current.get("state",-1)) != WorldState.STATE_IN_WORLD or not bool(current.get("world_ready",false)) or not bool(current.get("inventory_ready",false)) or not bool(current.get("equipment_ready",false)) or bool(current.get("resync_pending",false)) or bool(current.get("waiting_for_new_map",false)) or int(current.get("pending_equipment_sequence",0)) != 0 or not equipment.has(item_uid):
+		return false
+	return _queue_intent({"type":"equipment_unequip","item_uid":item_uid,
+		"actor_id":int(current.get("actor_id",0)),"map_epoch":int(current.get("map_epoch",0))})
+
 func respawn() -> bool:
 	var current := snapshot()
 	if not bool(current.get("combat_available",false)) or not bool(current.get("player_dead",false)):
