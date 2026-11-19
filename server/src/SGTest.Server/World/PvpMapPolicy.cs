@@ -21,3 +21,44 @@ public static class PvpMapPolicy
 
     public static IReadOnlyCollection<int> VerifiedNonPvpMaps => NonPvpMaps;
 }
+
+
+public enum PvpNameState : byte
+{
+    ProtectedBlue = 0,
+    EnabledWhite = 1,
+    Red = 2,
+    Pink = 3,
+    PinkFlashing = 4
+}
+
+/// <summary>
+/// Crime/name-color timing recovered from the private reference implementation:
+/// hostile attack against a normal white player => pink for 30s; final 3s flash;
+/// killing a normal white player => red. Pink/red targets do not escalate crime.
+/// </summary>
+public static class PvpCrimePolicy
+{
+    public const int PinkDurationSeconds = 30;
+    public const int PinkFlashSeconds = 3;
+
+    public static bool IsPink(CharacterPvpState state, DateTimeOffset now) =>
+        state.PinkUntilUnixMilliseconds > now.ToUnixTimeMilliseconds();
+
+    public static bool IsNormalWhite(CharacterPvpState state, DateTimeOffset now) =>
+        state.Mode == PvpMode.EnabledWhite && !state.RedMan && !IsPink(state,now);
+
+    public static bool IsCombatEligible(CharacterPvpState state, DateTimeOffset now) =>
+        state.Mode == PvpMode.EnabledWhite || state.RedMan || IsPink(state,now);
+
+    public static PvpNameState NameState(CharacterPvpState state, DateTimeOffset now)
+    {
+        if(state.RedMan) return PvpNameState.Red;
+        long remaining=state.PinkUntilUnixMilliseconds-now.ToUnixTimeMilliseconds();
+        if(remaining>0)
+            return remaining<=PinkFlashSeconds*1000L
+                ? PvpNameState.PinkFlashing:PvpNameState.Pink;
+        return state.Mode==PvpMode.ProtectedBlue
+            ? PvpNameState.ProtectedBlue:PvpNameState.EnabledWhite;
+    }
+}

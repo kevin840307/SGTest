@@ -77,7 +77,7 @@ public sealed record CharacterCreateResult(CharacterCreateStatus Status, Charact
 /// </summary>
 public sealed partial class SqliteIdentityStore : IDisposable
 {
-    public const int SchemaVersion = 16;
+    public const int SchemaVersion = 17;
     private readonly string _connectionString;
     private readonly IdentityStoreOptions _options;
     private readonly PasswordHasher _passwords;
@@ -646,15 +646,32 @@ CREATE TABLE IF NOT EXISTS quest_actions (
             Execute(connection, @"
 CREATE INDEX IF NOT EXISTS ix_quest_progress_character
 ON quest_progress(character_id,quest_id);", tx);
-            // Schema v16: persistent player PvP opt-in mode. This stores only
-            // protected-blue vs enabled-white preference. Pink/red crime timing
-            // is deliberately not invented until the original rule is verified.
+            // Schema v16: persistent player PvP opt-in mode.
+            // Schema v17: source-recovered red/pink crime state. The normal
+            // player's blue/white preference remains a separate field.
             Execute(connection, @"
 CREATE TABLE IF NOT EXISTS character_pvp_modes (
     character_id INTEGER PRIMARY KEY REFERENCES characters(character_id) ON DELETE CASCADE,
     mode INTEGER NOT NULL DEFAULT 0 CHECK(mode IN (0,1)),
+    red_man INTEGER NOT NULL DEFAULT 0 CHECK(red_man IN (0,1)),
+    red_man_kill_left INTEGER NOT NULL DEFAULT 0 CHECK(red_man_kill_left BETWEEN 0 AND 2147483647),
+    pink_until_unix_ms INTEGER NOT NULL DEFAULT 0 CHECK(pink_until_unix_ms >= 0),
     updated_unix_ms INTEGER NOT NULL
 );", tx);
+            if(schemaVersion < 17)
+            {
+                if(!ColumnExists(connection,"character_pvp_modes","red_man",tx))
+                    Execute(connection,@"ALTER TABLE character_pvp_modes
+ADD COLUMN red_man INTEGER NOT NULL DEFAULT 0 CHECK(red_man IN (0,1));",tx);
+                if(!ColumnExists(connection,"character_pvp_modes","red_man_kill_left",tx))
+                    Execute(connection,@"ALTER TABLE character_pvp_modes
+ADD COLUMN red_man_kill_left INTEGER NOT NULL DEFAULT 0
+CHECK(red_man_kill_left BETWEEN 0 AND 2147483647);",tx);
+                if(!ColumnExists(connection,"character_pvp_modes","pink_until_unix_ms",tx))
+                    Execute(connection,@"ALTER TABLE character_pvp_modes
+ADD COLUMN pink_until_unix_ms INTEGER NOT NULL DEFAULT 0
+CHECK(pink_until_unix_ms >= 0);",tx);
+            }
             Execute(connection, @"
 CREATE TRIGGER IF NOT EXISTS trg_combat_mp_insert
 BEFORE INSERT ON character_combat_profiles
@@ -1238,7 +1255,8 @@ WHERE account_id=$id AND password_hash=$old;";
         // This helper is intentionally limited to the trusted internal schema
         // identifiers supplied by migrations; no client/user value is interpolated.
         if (table is not ("character_combat_profiles" or
-                "item_instances" or "storage_items" or "equipped_items") ||
+                "item_instances" or "storage_items" or "equipped_items" or
+                "character_pvp_modes") ||
             string.IsNullOrWhiteSpace(column))
             throw new ArgumentOutOfRangeException(nameof(table));
         using var command = connection.CreateCommand();
