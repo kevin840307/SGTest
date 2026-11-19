@@ -304,7 +304,8 @@ public sealed class GatewayConnection
                                               Func<TrustedBankCommand, bool>? postBank = null,
                                               Func<TrustedRepairCommand, bool>? postRepair = null,
                                               Func<TrustedTradeCommand, bool>? postTrade = null,
-                                              Func<TrustedQuestCommand, bool>? postQuest = null)
+                                              Func<TrustedQuestCommand, bool>? postQuest = null,
+                                              Func<TrustedPvpModeCommand, bool>? postPvp = null)
     {
         ArgumentNullException.ThrowIfNull(postMove);
         lock (_receiveGate)
@@ -338,7 +339,8 @@ public sealed class GatewayConnection
                                               Func<TrustedBankCommand, bool>? postBank = null,
                                               Func<TrustedRepairCommand, bool>? postRepair = null,
                                               Func<TrustedTradeCommand, bool>? postTrade = null,
-                                              Func<TrustedQuestCommand, bool>? postQuest = null)
+                                              Func<TrustedQuestCommand, bool>? postQuest = null,
+                                              Func<TrustedPvpModeCommand, bool>? postPvp = null)
     {
         ArgumentNullException.ThrowIfNull(postMove);
         lock (_receiveGate)
