@@ -373,6 +373,15 @@ public sealed class WorldResultRouter
                 !connection.IsClosed && connection.Binding == binding;
     }
 
+    public bool IsVisibleActor(ConnectionBinding viewer,long targetActorId)
+    {
+        if(targetActorId<=0||targetActorId==viewer.ActorId)return false;
+        lock(_gate)
+            return _connections.TryGetValue(viewer.ActorId,out var connection)&&
+                !connection.IsClosed&&connection.Binding==viewer&&
+                connection.IsVisibleActor(targetActorId);
+    }
+
     public bool TryGetPlayerIdentity(
         long actorId,long connectionEpoch,out PlayerIdentityPresentation identity)
     {
@@ -619,6 +628,18 @@ public sealed class WorldResultRouter
                connection.IsClosed)
                 return GatewaySendStatus.Closed;
             return connection.QueueGmPvpNameResult(request,result);
+        }
+    }
+
+    public GatewaySendStatus QueuePlayerShopResult(
+        TrustedPlayerShopCommand request,PlayerShopResultWire result)
+    {
+        lock(_gate)
+        {
+            if(!_connections.TryGetValue(request.ActorId,out var connection)||
+               connection.IsClosed)
+                return GatewaySendStatus.Closed;
+            return connection.QueuePlayerShopResult(request,result);
         }
     }
 

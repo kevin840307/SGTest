@@ -98,6 +98,10 @@ public readonly record struct TrustedGmPvpNameCommand(
     long ActorId,long ConnectionEpoch,long RequestMapEpoch,
     uint GmSequence,long TargetActorId,PvpNameState State,
     string? OperatorId);
+public readonly record struct TrustedPlayerShopCommand(
+    long ActorId,long ConnectionEpoch,long RequestMapEpoch,
+    uint ShopSequence,PlayerShopCommandAction Action,
+    long SellerActorId,long ListingId,long ItemUid,long Price);
 public enum TrustedQuestCommandKind : byte { Open=1, Choose=2 }
 public readonly record struct TrustedQuestCommand(
     long ActorId,long ConnectionEpoch,long RequestMapEpoch,
@@ -218,6 +222,7 @@ public sealed class GatewayConnection
     private readonly string? _displayName;
     private CharacterPvpState? _pvpState;
     private readonly string? _gmOperatorId;
+    private readonly Dictionary<long,long> _visibleActors = new();
 
     public GatewayConnection(ActorSnapshot trustedActor,
                              GatewayConnectionOptions? options = null,
@@ -310,6 +315,12 @@ public sealed class GatewayConnection
     public int ReliableFrames => _reliable.Count;
     public int ReliableBytes => _reliable.Bytes;
     public bool GmAuthorized => _gmOperatorId is not null;
+    public bool IsVisibleActor(long actorId)
+    {
+        lock(_bindingGate)
+            return !_closed&&actorId>0&&actorId!=_binding.ActorId&&
+                _visibleActors.ContainsKey(actorId);
+    }
     public bool WorldReadyAcknowledged
     {
         get
@@ -346,6 +357,7 @@ public sealed class GatewayConnection
                 _worldReadyAckedMapEpoch = 0;
                 _worldReadyAckedTick = -1;
                 _resyncPending = false;
+                _visibleActors.Clear();
             }
             _binding = next;
             return true;
@@ -455,7 +467,8 @@ public sealed class GatewayConnection
         Func<TrustedPvpModeCommand, bool>? postPvp,
         Func<TrustedPvpAttack, bool>? postPvpAttack,
         Func<TrustedPvpSkill, bool>? postPvpSkill,
-        Func<TrustedGmPvpNameCommand, bool>? postGmPvpName)
+        Func<TrustedGmPvpNameCommand, bool>? postGmPvpName,
+        Func<TrustedPlayerShopCommand, bool>? postPlayerShop)
     {
         if (!WireProtocol.TryReadHeader(frame, out var header))
             return WireFrameDisposition.ProtocolViolation;
@@ -705,6 +718,20 @@ public sealed class GatewayConnection
             return postPvp(new TrustedPvpModeCommand(
                 bound.ActorId,bound.ConnectionEpoch,pvp.MapEpoch,
                 pvp.PvpSequence,pvp.Action))
+                ? WireFrameDisposition.Accepted:WireFrameDisposition.Backpressured;
+        }
+
+        if(header.Opcode==WireOpcode.PlayerShopCommand &&
+            postPlayerShop is not null &&
+            WireProtocol.TryDecodePlayerShopCommand(frame,out var playerShop))
+        {
+            if(!GameplayReady(bound))
+                return WireFrameDisposition.ProtocolViolation;
+            return postPlayerShop(new TrustedPlayerShopCommand(
+                bound.ActorId,bound.ConnectionEpoch,playerShop.MapEpoch,
+                playerShop.ShopSequence,playerShop.Action,
+                playerShop.SellerActorId,playerShop.ListingId,
+                playerShop.ItemUid,playerShop.Price))
                 ? WireFrameDisposition.Accepted:WireFrameDisposition.Backpressured;
         }
 
@@ -1218,6 +1245,25 @@ public sealed class GatewayConnection
         }
     }
 
+    public GatewaySendStatus QueuePlayerShopResult(
+        TrustedPlayerShopCommand request,PlayerShopResultWire result)
+    {
+        lock(_bindingGate)
+        {
+            if(_closed)return GatewaySendStatus.Closed;
+            var bound=_binding;
+            if(request.ActorId!=bound.ActorId||
+               request.ConnectionEpoch!=bound.ConnectionEpoch||
+               request.RequestMapEpoch!=bound.MapEpoch||
+               result.MapEpoch!=request.RequestMapEpoch||
+               result.ShopSequence!=request.ShopSequence||
+               result.Action!=request.Action)
+                return GatewaySendStatus.GenerationMismatch;
+            return _reliable.TryEnqueue(WireProtocol.EncodePlayerShopResult(result))
+                ?GatewaySendStatus.Enqueued:GatewaySendStatus.Backpressured;
+        }
+    }
+
     public GatewaySendStatus QueueQuestView(
         TrustedQuestCommand request,QuestViewWireStatus status,QuestView? view)
     {
@@ -1645,7 +1691,14 @@ public sealed class GatewayConnection
                 _worldReadyAckedMapEpoch = 0;
                 _worldReadyAckedTick = -1;
                 _resyncPending = false;
+                _visibleActors.Clear();
             }
+            else if(evt.Kind==AoiEventKind.Spawn&&evt.Entity is { } spawned)
+                _visibleActors[spawned.ActorId]=spawned.ConnectionEpoch;
+            else if(evt.Kind==AoiEventKind.Despawn&&
+                    _visibleActors.TryGetValue(evt.EntityActorId,out var seen)&&
+                    seen==evt.EntityConnectionEpoch)
+                _visibleActors.Remove(evt.EntityActorId);
             return GatewaySendStatus.Enqueued;
         }
     }
@@ -1672,6 +1725,7 @@ public sealed class GatewayConnection
         {
             if (_closed) return;
             _closed = true;
+            _visibleActors.Clear();
         }
         _reliable.Clear();
     }

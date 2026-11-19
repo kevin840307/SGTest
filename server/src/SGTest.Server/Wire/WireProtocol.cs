@@ -90,7 +90,9 @@ public enum WireOpcode : ushort
     PvpSkillVisual = 85,
     GmCapability = 86,
     GmPvpNameCommand = 87,
-    GmPvpNameResult = 88
+    GmPvpNameResult = 88,
+    PlayerShopCommand = 89,
+    PlayerShopResult = 90
 }
 
 public enum TradeCommandAction : byte
@@ -182,6 +184,34 @@ public enum GmPvpNameResultStatus : byte
     StaleGeneration = 3,
     StaleSequence = 4,
     TargetOffline = 5
+}
+
+public enum PlayerShopCommandAction : byte
+{
+    Open = 1,
+    Close = 2,
+    Inspect = 3,
+    Buy = 4
+}
+
+public enum PlayerShopResultStatus : byte
+{
+    Applied = 0,
+    AlreadyApplied = 1,
+    NoShop = 2,
+    NotVisible = 3,
+    StaleGeneration = 4,
+    PlayerDead = 5,
+    AlreadyOpen = 6,
+    NotOwned = 7,
+    NotTradeable = 8,
+    SelfPurchase = 9,
+    InsufficientMoney = 10,
+    WalletLimit = 11,
+    Sold = 12,
+    Closed = 13,
+    StaleListing = 14,
+    StaleSequence = 15
 }
 
 public enum QuestViewWireStatus : byte
@@ -425,6 +455,14 @@ public readonly record struct GmPvpNameCommandWire(
 public readonly record struct GmPvpNameResultWire(
     long MapEpoch,uint GmSequence,GmPvpNameResultStatus Status,
     long TargetActorId,PvpNameState State);
+public readonly record struct PlayerShopCommandWire(
+    long MapEpoch,uint ShopSequence,PlayerShopCommandAction Action,
+    long SellerActorId,long ListingId,long ItemUid,long Price);
+public readonly record struct PlayerShopResultWire(
+    long MapEpoch,uint ShopSequence,PlayerShopCommandAction Action,
+    PlayerShopResultStatus Status,long SellerActorId,long ListingId,
+    long ItemUid,int ItemDefinitionId,int Quantity,long SourceDropId,
+    long Price,long SellerWallet,long BuyerWallet);
 
 public readonly record struct QuestOpenWire(
     long MapEpoch,uint QuestSequence,int NpcSpawnId);
@@ -554,6 +592,10 @@ public static class WireProtocol
     public const int GmCapabilityFrameBytes = HeaderBytes + 1;
     public const int GmPvpNameCommandFrameBytes = HeaderBytes + 8 + 4 + 8 + 1;
     public const int GmPvpNameResultFrameBytes = HeaderBytes + 8 + 4 + 1 + 8 + 1;
+    public const int PlayerShopCommandFrameBytes =
+        HeaderBytes + 8 + 4 + 1 + 8 + 8 + 8 + 8;
+    public const int PlayerShopResultFrameBytes =
+        HeaderBytes + 8 + 4 + 1 + 1 + 8 + 8 + 8 + 4 + 4 + 8 + 8 + 8 + 8;
     public const int QuestOpenFrameBytes = HeaderBytes + 8 + 4 + 4;
     public const int QuestChooseFrameBytes = HeaderBytes + 8 + 4 + 4 + 4 + 4;
     public const int QuestViewHeaderBytes =
@@ -3516,6 +3558,118 @@ public static class WireProtocol
             (byte)value.Status<=5&&value.TargetActorId>0&&(byte)value.State<=4;
     }
 
+    public static byte[] EncodePlayerShopCommand(PlayerShopCommandWire value)
+    {
+        if(!ValidPlayerShopCommand(value))
+            throw new ArgumentOutOfRangeException(nameof(value));
+        var frame=NewFrame(WireOpcode.PlayerShopCommand,PlayerShopCommandFrameBytes);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(8,8),value.MapEpoch);
+        BinaryPrimitives.WriteUInt32LittleEndian(frame.AsSpan(16,4),value.ShopSequence);
+        frame[20]=(byte)value.Action;
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(21,8),value.SellerActorId);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(29,8),value.ListingId);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(37,8),value.ItemUid);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(45,8),value.Price);
+        return frame;
+    }
+
+    public static bool TryDecodePlayerShopCommand(
+        ReadOnlySpan<byte> frame,out PlayerShopCommandWire value)
+    {
+        value=default;
+        if(!TryReadHeader(frame,out var h)||h.Opcode!=WireOpcode.PlayerShopCommand)
+            return false;
+        value=new(
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(8,8)),
+            BinaryPrimitives.ReadUInt32LittleEndian(frame.Slice(16,4)),
+            (PlayerShopCommandAction)frame[20],
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(21,8)),
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(29,8)),
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(37,8)),
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(45,8)));
+        return ValidPlayerShopCommand(value);
+    }
+
+    public static byte[] EncodePlayerShopResult(PlayerShopResultWire value)
+    {
+        if(!ValidPlayerShopResult(value))
+            throw new ArgumentOutOfRangeException(nameof(value));
+        var frame=NewFrame(WireOpcode.PlayerShopResult,PlayerShopResultFrameBytes);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(8,8),value.MapEpoch);
+        BinaryPrimitives.WriteUInt32LittleEndian(frame.AsSpan(16,4),value.ShopSequence);
+        frame[20]=(byte)value.Action;
+        frame[21]=(byte)value.Status;
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(22,8),value.SellerActorId);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(30,8),value.ListingId);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(38,8),value.ItemUid);
+        BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(46,4),value.ItemDefinitionId);
+        BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(50,4),value.Quantity);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(54,8),value.SourceDropId);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(62,8),value.Price);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(70,8),value.SellerWallet);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(78,8),value.BuyerWallet);
+        return frame;
+    }
+
+    public static bool TryDecodePlayerShopResult(
+        ReadOnlySpan<byte> frame,out PlayerShopResultWire value)
+    {
+        value=default;
+        if(!TryReadHeader(frame,out var h)||h.Opcode!=WireOpcode.PlayerShopResult)
+            return false;
+        value=new(
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(8,8)),
+            BinaryPrimitives.ReadUInt32LittleEndian(frame.Slice(16,4)),
+            (PlayerShopCommandAction)frame[20],
+            (PlayerShopResultStatus)frame[21],
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(22,8)),
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(30,8)),
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(38,8)),
+            BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(46,4)),
+            BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(50,4)),
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(54,8)),
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(62,8)),
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(70,8)),
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(78,8)));
+        return ValidPlayerShopResult(value);
+    }
+
+    private static bool ValidPlayerShopCommand(PlayerShopCommandWire value)
+    {
+        if(value.MapEpoch<=0||value.ShopSequence==0||
+           value.Action is <PlayerShopCommandAction.Open or >PlayerShopCommandAction.Buy||
+           value.SellerActorId<0||value.ListingId<0||value.ItemUid<0||
+           value.Price<0||value.Price>SqliteIdentityStore.MaximumMoney)
+            return false;
+        return value.Action switch
+        {
+            PlayerShopCommandAction.Open =>
+                value.SellerActorId==0&&value.ListingId==0&&
+                value.ItemUid>0&&value.Price>0,
+            PlayerShopCommandAction.Close =>
+                value.SellerActorId==0&&value.ListingId>0&&
+                value.ItemUid==0&&value.Price==0,
+            PlayerShopCommandAction.Inspect =>
+                value.SellerActorId>0&&value.ListingId==0&&
+                value.ItemUid==0&&value.Price==0,
+            PlayerShopCommandAction.Buy =>
+                value.SellerActorId>0&&value.ListingId>0&&
+                value.ItemUid==0&&value.Price==0,
+            _=>false
+        };
+    }
+
+    private static bool ValidPlayerShopResult(PlayerShopResultWire value)=>
+        value.MapEpoch>0&&value.ShopSequence>0&&
+        value.Action is >=PlayerShopCommandAction.Open and <=PlayerShopCommandAction.Buy&&
+        (byte)value.Status<=15&&
+        value.SellerActorId>=0&&value.ListingId>=0&&value.ItemUid>=0&&
+        value.ItemDefinitionId is >=0 and <=100_000_000&&
+        value.Quantity is >=0 and <=1_000_000&&value.SourceDropId>=0&&
+        value.Price>=0&&value.Price<=SqliteIdentityStore.MaximumMoney&&
+        value.SellerWallet>=0&&value.SellerWallet<=SqliteIdentityStore.MaximumMoney&&
+        value.BuyerWallet>=0&&value.BuyerWallet<=SqliteIdentityStore.MaximumMoney;
+
     public static byte[] EncodePlayerIdentity(PlayerIdentityWire value)
     {
         byte[] name;
@@ -3863,6 +4017,7 @@ public static class WireProtocol
             84 => WireOpcode.PvpSkillResult, 85 => WireOpcode.PvpSkillVisual,
             86 => WireOpcode.GmCapability, 87 => WireOpcode.GmPvpNameCommand,
             88 => WireOpcode.GmPvpNameResult,
+            89 => WireOpcode.PlayerShopCommand, 90 => WireOpcode.PlayerShopResult,
             _ => 0
         };
         if (opcode == 0) return false;
@@ -3968,6 +4123,8 @@ public static class WireProtocol
             WireOpcode.GmCapability => advertised == GmCapabilityFrameBytes,
             WireOpcode.GmPvpNameCommand => advertised == GmPvpNameCommandFrameBytes,
             WireOpcode.GmPvpNameResult => advertised == GmPvpNameResultFrameBytes,
+            WireOpcode.PlayerShopCommand => advertised == PlayerShopCommandFrameBytes,
+            WireOpcode.PlayerShopResult => advertised == PlayerShopResultFrameBytes,
             WireOpcode.InventorySnapshot => advertised >= InventorySnapshotHeaderBytes &&
                 advertised <= InventorySnapshotHeaderBytes +
                     InventorySnapshotMaxItemsPerFrame*InventoryItemBytes &&
