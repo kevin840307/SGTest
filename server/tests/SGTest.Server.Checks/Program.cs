@@ -280,6 +280,7 @@ static class Checks
             BankGatewayChecks.Verify();
             RepairGatewayChecks.Verify();
             BankTlsChecks.Verify(root);
+            RepairTlsChecks.Verify(root);
             EquipmentTlsChecks.Verify(root);
             StorageGatewayChecks.Verify();
             TlsSocketChecks.Verify();
