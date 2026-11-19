@@ -308,6 +308,49 @@ func apply_snapshot(snapshot: Dictionary, now_usec: int) -> void:
 							victim_actor.started=now_usec
 						_actors[victim]=victim_actor
 
+	var pvp_skill_events=snapshot.get("pvp_skill_visual_events",[])
+	if pvp_skill_events is Array:
+		for event in pvp_skill_events:
+			if not event is Dictionary:
+				continue
+			var attacker:=int(event.get("attacker_actor_id",0))
+			var ac:=int(event.get("attacker_connection_epoch",0))
+			var skill_sequence:=int(event.get("skill_sequence",0))
+			var victim:=int(event.get("victim_actor_id",0))
+			var vc:=int(event.get("victim_connection_epoch",0))
+			var damage_sequence:=int(event.get("damage_sequence",0))
+			var attack_key:="pvpskill:%d:%d:%d" % [attacker,ac,skill_sequence]
+			if not _seen_attack_events.has(attack_key):
+				_seen_attack_events[attack_key]=true
+				if _attack_available and _actors.has(attacker):
+					var actor:Dictionary=_actors[attacker]
+					var current_connection:=int(actor.value.connection_epoch)
+					var own_without_self_state:=attacker==int(snapshot.actor_id) and current_connection==0
+					if current_connection==ac or own_without_self_state:
+						actor.action="AA"
+						actor.action_facing=int(event.get("attacker_facing",actor.value.facing))
+						actor.started=now_usec
+						_actors[attacker]=actor
+			var damage_key:="pvpskill:%d:%d:%d" % [victim,vc,damage_sequence]
+			if not _seen_damage_events.has(damage_key):
+				_seen_damage_events[damage_key]=true
+				if _actors.has(victim):
+					var actor:Dictionary=_actors[victim]
+					var current_connection:=int(actor.value.connection_epoch)
+					var own_without_self_state:=victim==int(snapshot.actor_id) and current_connection==0
+					if current_connection==vc or own_without_self_state:
+						if bool(event.get("died",false)):
+							actor.dead_visual=true
+							if _death_available:
+								actor.action="ND"
+								actor.action_facing=int(event.get("victim_facing",actor.value.facing))
+								actor.started=now_usec
+						elif _hit_available and not bool(actor.get("dead_visual",false)):
+							actor.action="NH"
+							actor.action_facing=int(event.get("victim_facing",actor.value.facing))
+							actor.started=now_usec
+						_actors[victim]=actor
+
 	var respawn_events = snapshot.get("player_respawn_visual_events",[])
 	if respawn_events is Array:
 		for event in respawn_events:

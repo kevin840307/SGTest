@@ -350,6 +350,17 @@ func attack_player(target_actor_id: int) -> bool:
 		"map_epoch":int(current.get("map_epoch",0))})
 
 
+func cast_player_skill(skill_id: int,target_actor_id: int) -> bool:
+	var current:=snapshot()
+	var entities:Dictionary=current.get("entities",{})
+	if skill_id<=0 or skill_id>100000000 or target_actor_id<=0 or target_actor_id==int(current.get("actor_id",0)) or not entities.has(target_actor_id) or int(current.get("state",-1))!=WorldState.STATE_IN_WORLD or not bool(current.get("combat_available",false)) or bool(current.get("player_dead",false)) or not bool(current.get("world_ready",false)) or bool(current.get("resync_pending",false)) or bool(current.get("waiting_for_new_map",false)) or int(current.get("pending_world_ready_ack_epoch",0))!=0 or int(current.get("last_world_ready_ack_epoch",0))!=int(current.get("map_epoch",0)) or not bool(current.get("pvp_known",false)) or not bool(current.get("pvp_map_allows",false)) or int(current.get("pending_skill_sequence",0))!=0:
+		return false
+	return _queue_intent({"type":"cast_player_skill","skill_id":skill_id,
+		"target_actor_id":target_actor_id,
+		"actor_id":int(current.get("actor_id",0)),
+		"map_epoch":int(current.get("map_epoch",0))})
+
+
 func respawn() -> bool:
 	var current := snapshot()
 	if not bool(current.get("combat_available",false)) or not bool(current.get("player_dead",false)):
@@ -774,6 +785,29 @@ func _process_first_intent() -> void:
 			_pop_intent()
 			return
 		if _transport.send_frame(frame) and _world.mark_pvp_attack_sent(sequence,target):
+			_pop_intent()
+			_publish()
+
+	elif kind == "cast_player_skill":
+		var current:Dictionary=_world.snapshot()
+		if int(intent.get("actor_id",0))!=int(current.get("actor_id",0)) or int(intent.get("map_epoch",0))!=int(current.get("map_epoch",0)):
+			_pop_intent()
+			return
+		var target:=int(intent.get("target_actor_id",0))
+		var skill_id:=int(intent.get("skill_id",0))
+		var entities:Dictionary=current.get("entities",{})
+		if target<=0 or target==int(current.get("actor_id",0)) or not entities.has(target) or skill_id<=0 or skill_id>100000000:
+			_pop_intent()
+			return
+		if int(current.get("state",-1))!=WorldState.STATE_IN_WORLD or not bool(current.get("combat_available",false)) or bool(current.get("player_dead",false)) or not bool(current.get("world_ready",false)) or bool(current.get("resync_pending",false)) or bool(current.get("waiting_for_new_map",false)) or int(current.get("pending_world_ready_ack_epoch",0))!=0 or int(current.get("last_world_ready_ack_epoch",0))!=int(current.get("map_epoch",0)) or not bool(current.get("pvp_known",false)) or not bool(current.get("pvp_map_allows",false)) or int(current.get("pending_skill_sequence",0))!=0:
+			return
+		var sequence:=int(current.get("skill_sequence",0))+1
+		var frame:=WireCodec.encode_pvp_skill(
+			int(current.get("map_epoch",0)),sequence,skill_id,target)
+		if frame.is_empty():
+			_pop_intent()
+			return
+		if _transport.send_frame(frame) and _world.mark_skill_sent(sequence,1,target):
 			_pop_intent()
 			_publish()
 

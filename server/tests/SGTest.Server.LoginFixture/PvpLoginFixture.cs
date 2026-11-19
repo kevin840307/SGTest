@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Sockets;
+using System.Text.Json;
 using SGTest.Server.Gateway;
 using SGTest.Server.Identity;
 using SGTest.Server.World;
@@ -13,7 +14,33 @@ internal static class PvpLoginFixture
         Directory.CreateDirectory(root);
         try
         {
-            var grid=BlockingGrid.Load(Program.CreateMap(root,13),13);
+            string mapDir=Program.CreateMap(root,13);
+            var grid=BlockingGrid.Load(mapDir,13);
+            string populationPath=Path.Combine(mapDir,"population-pvp-skill.json");
+            File.WriteAllText(populationPath,JsonSerializer.Serialize(new {
+                version=4,kind="verified_monster_runtime",map_id=13,
+                stats_verified=true,gameplay_ready=true,
+                definitions=new[]{new {
+                    id=1,name="PvpSkillLosOnly",sprite="EN001A",
+                    atlas="Enemy/EN001A/atlas.json",
+                    stats=new {
+                        level=1,max_hp=100,attack_damage=1,move_step=1.0,
+                        aggro_radius=1.0,lose_target_radius=2.0,leash_radius=2.0,
+                        attack_range=1.0,attack_cooldown_ticks=300,
+                        respawn_ticks=300,wander_radius=0.0,wander_interval_ticks=300
+                    }}},
+                spawns=new[]{new {
+                    source_index=0,source_flags=7,definition=1,p=new[]{40,40}}}
+            }));
+            var runtime=new MonsterRuntime(
+                grid,MonsterPopulationCatalog.LoadVerified(populationPath,13,grid),
+                new(AiIntervalTicks:30,MaxAiPerStep:1,MaxPathQueriesPerStep:1,
+                    MaxPathExpandedCells:64));
+            var coordinator=new MonsterWorldCoordinator([runtime],
+                new Dictionary<int,VerifiedSkillRule>{
+                    [99003]=new(99003,60,48,1,1,
+                        SkillTargetKind.SinglePlayer,0,true)
+                });
             await using var world=new ServerWorldHost(
                 [grid],options:new WorldHostOptions(PublishIdleTicks:true));
             await world.StartAsync().ConfigureAwait(false);
@@ -34,7 +61,7 @@ internal static class PvpLoginFixture
                 ??throw new InvalidOperationException("PvP victim missing");
 
             await store.SetCharacterCombatProfileAsync(actorA,
-                Profile(100,60,0)).ConfigureAwait(false);
+                Profile(100,60,0,2)).ConfigureAwait(false);
             await store.SetCharacterCombatProfileAsync(actorB,
                 Profile(100,1,10)).ConfigureAwait(false);
             await store.SetCharacterPvpModeAsync(
@@ -47,7 +74,9 @@ internal static class PvpLoginFixture
                 store,new(Capacity:8),router.QueuePlayerDamage,
                 committedLifecycle:async result=>
                 {
-                    if(result.SourceKind!=PlayerDamageSourceKind.PlayerPvp)
+                    if(result.SourceKind is not (
+                        PlayerDamageSourceKind.PlayerPvp or
+                        PlayerDamageSourceKind.PlayerSkill))
                         throw new PlayerCombatSettlementException(
                             "PvP fixture received non-PvP committed damage");
                     var now=DateTimeOffset.UtcNow;
@@ -72,11 +101,18 @@ internal static class PvpLoginFixture
                             throw new PlayerCombatSettlementException(
                                 "PvP lethal commit did not stop World victim");
                     }
-                    if(!router.TryPostPlayerPvpCombatVisual(result))
+                    if(result.SourceKind==PlayerDamageSourceKind.PlayerPvp)
+                    {
+                        if(!router.TryPostPlayerPvpCombatVisual(result))
+                            throw new PlayerCombatSettlementException(
+                                "PvP fixture committed visual queue full");
+                    }
+                    else if(!router.TryPostPlayerPvpSkillVisual(result))
                         throw new PlayerCombatSettlementException(
-                            "PvP fixture committed visual queue full");
+                            "PvP fixture committed skill visual queue full");
                 });
-            var pump=new WorldAoiPump(router,playerCombat:settlement);
+            var pump=new WorldAoiPump(
+                router,monsters:coordinator,playerCombat:settlement);
             var authorization=new IdentityTlsAuthorization(
                 store,world,combat:settlement);
             using var certificate=Program.CreateCertificate();
@@ -135,6 +171,7 @@ internal static class PvpLoginFixture
                    ended[0].CommandsAccepted!=1||
                    ended[1].CommandsAccepted!=3||
                    attackerProfile?.Data.CurrentHp!=100||
+                   attackerProfile?.Data.CurrentMp!=1||
                    victimProfile?.Data.CurrentHp!=0||
                    settlement.Statistics.HitsCommitted!=2||
                    settlement.Statistics.DamageCommitted!=100||
@@ -146,6 +183,7 @@ internal static class PvpLoginFixture
                     throw new InvalidOperationException(
                         $"PvP E2E mismatch victim_hp={victimProfile?.Data.CurrentHp} " +
                         $"attacker_hp={attackerProfile?.Data.CurrentHp} " +
+                        $"attacker_mp={attackerProfile?.Data.CurrentMp} " +
                         $"hits={settlement.Statistics.HitsCommitted} " +
                         $"damage={settlement.Statistics.DamageCommitted} " +
                         $"deaths={settlement.Statistics.DeathsCommitted} " +
@@ -159,7 +197,8 @@ internal static class PvpLoginFixture
                     $"hits={settlement.Statistics.HitsCommitted} " +
                     $"damage={settlement.Statistics.DamageCommitted} " +
                     $"deaths={settlement.Statistics.DeathsCommitted} " +
-                    $"attacker_name=Red commands={ended[0].CommandsAccepted}/{ended[1].CommandsAccepted}");
+                    $"attacker_name=Red attacker_mp={attackerProfile!.Data.CurrentMp}/" +
+                    $"{attackerProfile.Data.MaxMp} commands={ended[0].CommandsAccepted}/{ended[1].CommandsAccepted}");
                 Console.Out.Flush();
                 return 0;
             }
@@ -185,9 +224,10 @@ internal static class PvpLoginFixture
     }
 
     private static CharacterCombatProfileData Profile(
-        int hp,int attack,int defense)=>
+        int hp,int attack,int defense,int mp=0)=>
         new(CombatProfileTrust.SyntheticTest,"ci:two-client-pvp",
             Race:0,Career:0,Strength:5,Dexterity:5,Constitution:5,Wisdom:5,
             Level:1,CurrentHp:hp,MaxHp:100,Attack:attack,Defense:defense,
-            Hit:10,Dodge:3,AttackRange:48,AttackCooldownTicks:15);
+            Hit:10,Dodge:3,AttackRange:48,AttackCooldownTicks:15,
+            CurrentMp:mp,MaxMp:mp);
 }

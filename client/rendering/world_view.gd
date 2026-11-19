@@ -269,6 +269,7 @@ func set_player_snapshot(snapshot: Dictionary) -> void:
 		_consume_player_attack_events(snapshot,now_usec)
 		_consume_player_damage_visual_events(snapshot,now_usec)
 		_consume_pvp_combat_visual_events(snapshot,now_usec)
+		_consume_pvp_skill_visual_events(snapshot,now_usec)
 		var focus := players.position_at(int(snapshot.actor_id),now_usec)
 		if focus.is_finite():
 			camera.set_focus(epoch,focus)
@@ -349,6 +350,36 @@ func _consume_pvp_combat_visual_events(snapshot: Dictionary,now_usec: int) -> vo
 			continue
 		_combat_seen[key]=true
 		if attacker<=0 or attacker_connection<=0 or attack_sequence<=0 or victim<=0 or victim_connection<=0 or damage_sequence<=0 or damage<=0:
+			continue
+		_combat_overlays.append({
+			"target_actor_id":victim,
+			"text":str(damage),
+			"miss":false,
+			"started_usec":now_usec
+		})
+
+
+func _consume_pvp_skill_visual_events(snapshot:Dictionary,now_usec:int)->void:
+	var events=snapshot.get("pvp_skill_visual_events",[])
+	if not events is Array:
+		return
+	for event in events:
+		if not event is Dictionary:
+			continue
+		var attacker:=int(event.get("attacker_actor_id",0))
+		var ac:=int(event.get("attacker_connection_epoch",0))
+		var sequence:=int(event.get("skill_sequence",0))
+		var skill_id:=int(event.get("skill_id",0))
+		var victim:=int(event.get("victim_actor_id",0))
+		var vc:=int(event.get("victim_connection_epoch",0))
+		var damage_sequence:=int(event.get("damage_sequence",0))
+		var damage:=int(event.get("damage",0))
+		var key:="pvpskillhit:%d:%d:%d:%d:%d:%d:%d" % [
+			attacker,ac,sequence,skill_id,victim,vc,damage_sequence]
+		if _combat_seen.has(key):
+			continue
+		_combat_seen[key]=true
+		if attacker<=0 or ac<=0 or sequence<=0 or skill_id<=0 or victim<=0 or vc<=0 or damage_sequence<=0 or damage<=0:
 			continue
 		_combat_overlays.append({
 			"target_actor_id":victim,

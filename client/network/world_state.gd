@@ -41,6 +41,8 @@ var last_attack_result := {}
 var stale_attack_results := 0
 var skill_sequence := 0
 var pending_skill_sequence := 0
+var pending_skill_target_kind := 0
+var pending_skill_target_id := 0
 var last_skill_result_sequence := 0
 var last_skill_result_status := -1
 var last_skill_server_tick := -1
@@ -202,6 +204,10 @@ var pvp_combat_visual_events: Array[Dictionary] = []
 var pvp_combat_attack_sequences := {}
 var pvp_combat_damage_sequences := {}
 var stale_pvp_combat_visuals := 0
+var pvp_skill_visual_events: Array[Dictionary] = []
+var pvp_skill_visual_sequences := {}
+var pvp_skill_damage_sequences := {}
+var stale_pvp_skill_visuals := 0
 
 var respawn_sequence := 0
 var last_respawn_result_sequence := 0
@@ -270,11 +276,13 @@ func mark_normal_attack_sent(sequence: int) -> bool:
 	attack_sequence = sequence
 	return true
 
-func mark_skill_sent(sequence: int) -> bool:
-	if state != STATE_IN_WORLD or player_dead or not world_ready or resync_pending or waiting_for_new_map or pending_world_ready_ack_epoch != 0 or last_world_ready_ack_epoch != map_epoch or pending_skill_sequence != 0 or sequence <= skill_sequence or sequence > 0xffffffff:
+func mark_skill_sent(sequence: int,target_kind: int = 0,target_id: int = 0) -> bool:
+	if state != STATE_IN_WORLD or player_dead or not world_ready or resync_pending or waiting_for_new_map or pending_world_ready_ack_epoch != 0 or last_world_ready_ack_epoch != map_epoch or pending_skill_sequence != 0 or sequence <= skill_sequence or sequence > 0xffffffff or target_kind not in [0,1] or (target_kind == 1 and target_id <= 0):
 		return false
 	skill_sequence = sequence
 	pending_skill_sequence = sequence
+	pending_skill_target_kind = target_kind
+	pending_skill_target_id = target_id if target_kind == 1 else 0
 	return true
 
 func mark_recovery_use_sent(sequence: int,item_uid: int) -> bool:
@@ -570,6 +578,10 @@ func apply_frame(frame: PackedByteArray) -> bool:
 			return _apply_player_identity(frame)
 		WireCodec.OPCODE_PVP_COMBAT_VISUAL:
 			return _apply_pvp_combat_visual(frame)
+		WireCodec.OPCODE_PVP_SKILL_RESULT:
+			return _apply_pvp_skill_result(frame)
+		WireCodec.OPCODE_PVP_SKILL_VISUAL:
+			return _apply_pvp_skill_visual(frame)
 		WireCodec.OPCODE_WORLD_READY:
 			return _apply_world_ready(frame)
 		WireCodec.OPCODE_SELF_STATE:
@@ -626,6 +638,8 @@ func snapshot() -> Dictionary:
 		"stale_attack_results": stale_attack_results,
 		"skill_sequence": skill_sequence,
 		"pending_skill_sequence": pending_skill_sequence,
+		"pending_skill_target_kind": pending_skill_target_kind,
+		"pending_skill_target_id": pending_skill_target_id,
 		"last_skill_result_sequence": last_skill_result_sequence,
 		"last_skill_result_status": last_skill_result_status,
 		"last_skill_server_tick": last_skill_server_tick,
@@ -782,6 +796,10 @@ func snapshot() -> Dictionary:
 		"pvp_combat_attack_sequences": pvp_combat_attack_sequences.duplicate(true),
 		"pvp_combat_damage_sequences": pvp_combat_damage_sequences.duplicate(true),
 		"stale_pvp_combat_visuals": stale_pvp_combat_visuals,
+		"pvp_skill_visual_events": pvp_skill_visual_events.duplicate(true),
+		"pvp_skill_visual_sequences": pvp_skill_visual_sequences.duplicate(true),
+		"pvp_skill_damage_sequences": pvp_skill_damage_sequences.duplicate(true),
+		"stale_pvp_skill_visuals": stale_pvp_skill_visuals,
 		"respawn_sequence": respawn_sequence,
 		"last_respawn_result_sequence": last_respawn_result_sequence,
 		"last_respawn_result_status": last_respawn_result_status,
@@ -887,6 +905,8 @@ func _apply_choose(frame: PackedByteArray) -> bool:
 	stale_attack_results = 0
 	skill_sequence = 0
 	pending_skill_sequence = 0
+	pending_skill_target_kind = 0
+	pending_skill_target_id = 0
 	last_skill_result_sequence = 0
 	last_skill_result_status = -1
 	last_skill_server_tick = -1
@@ -1305,7 +1325,7 @@ func _apply_skill_use_result(frame: PackedByteArray) -> bool:
 	if sequence <= last_skill_result_sequence:
 		stale_skill_results += 1
 		return true
-	if sequence != pending_skill_sequence:
+	if sequence != pending_skill_sequence or pending_skill_target_kind != 0:
 		return fail("skill_result_without_matching_pending_request")
 	if last_skill_server_tick >= 0 and tick < last_skill_server_tick:
 		return fail("skill_server_tick_regressed")
@@ -1314,6 +1334,39 @@ func _apply_skill_use_result(frame: PackedByteArray) -> bool:
 	last_skill_server_tick = tick
 	last_skill_result = result.duplicate(true)
 	pending_skill_sequence = 0
+	pending_skill_target_kind = 0
+	pending_skill_target_id = 0
+	return true
+
+func _apply_pvp_skill_result(frame: PackedByteArray) -> bool:
+	if state != STATE_IN_WORLD:
+		return fail("pvp_skill_result_out_of_state")
+	var result:=WireCodec.decode_pvp_skill_result(frame)
+	if result.is_empty():
+		return fail("invalid_pvp_skill_result")
+	var epoch:=int(result.map_epoch)
+	var sequence:=int(result.skill_sequence)
+	var tick:=int(result.server_tick)
+	if epoch<map_epoch:
+		stale_skill_results+=1
+		return true
+	if epoch>map_epoch:
+		return fail("future_pvp_skill_result")
+	if sequence>skill_sequence:
+		return fail("pvp_skill_result_for_unsent_sequence")
+	if sequence<=last_skill_result_sequence:
+		stale_skill_results+=1
+		return true
+	if sequence!=pending_skill_sequence or pending_skill_target_kind!=1 or int(result.target_actor_id)!=pending_skill_target_id:
+		return fail("pvp_skill_result_without_matching_pending_request")
+	if last_skill_server_tick>=0 and tick<last_skill_server_tick:
+		return fail("pvp_skill_server_tick_regressed")
+	last_skill_result_sequence=sequence
+	last_skill_result_status=int(result.status)
+	last_skill_server_tick=tick
+	last_skill_result=result.duplicate(true)
+	last_skill_result["target_kind"]="player"
+	pending_skill_sequence=0
 	return true
 
 func _apply_player_skill_visual(frame: PackedByteArray) -> bool:
@@ -1518,6 +1571,8 @@ func _apply_world_ready(frame: PackedByteArray) -> bool:
 		stale_attack_results = 0
 		skill_sequence = 0
 		pending_skill_sequence = 0
+	pending_skill_target_kind = 0
+	pending_skill_target_id = 0
 		last_skill_result_sequence = 0
 		last_skill_result_status = -1
 		last_skill_server_tick = -1
@@ -1661,6 +1716,7 @@ func _apply_world_ready(frame: PackedByteArray) -> bool:
 	player_damage_visual_events.clear()
 	player_respawn_visual_events.clear()
 	pvp_combat_visual_events.clear()
+	pvp_skill_visual_events.clear()
 	last_aoi_tick = tick
 	pending_world_ready_ack_epoch = map_epoch
 	pending_world_ready_ack_tick = tick
@@ -2542,6 +2598,10 @@ func _clear_pvp_map() -> void:
 	pvp_combat_attack_sequences.clear()
 	pvp_combat_damage_sequences.clear()
 	stale_pvp_combat_visuals = 0
+	pvp_skill_visual_events.clear()
+	pvp_skill_visual_sequences.clear()
+	pvp_skill_damage_sequences.clear()
+	stale_pvp_skill_visuals = 0
 
 
 func _apply_pvp_mode_result(frame: PackedByteArray) -> bool:
@@ -2709,6 +2769,59 @@ func _apply_pvp_combat_visual(frame: PackedByteArray) -> bool:
 		pvp_combat_visual_events.pop_front()
 	while pvp_combat_visual_events.size()>PLAYER_COMBAT_VISUAL_EVENT_MAX:
 		pvp_combat_visual_events.pop_front()
+	return true
+
+
+func _apply_pvp_skill_visual(frame:PackedByteArray)->bool:
+	if state!=STATE_IN_WORLD:
+		return fail("pvp_skill_visual_out_of_state")
+	var value:=WireCodec.decode_pvp_skill_visual(frame)
+	if value.is_empty():
+		return fail("invalid_pvp_skill_visual")
+	var disposition:=_check_aoi_generation(
+		int(value.receiver_map_epoch),int(value.server_tick))
+	if disposition<=0:
+		if disposition==0:
+			stale_pvp_skill_visuals+=1
+		return disposition==0
+	var attacker:=int(value.attacker_actor_id)
+	var ac:=int(value.attacker_connection_epoch)
+	var victim:=int(value.victim_actor_id)
+	var vc:=int(value.victim_connection_epoch)
+	if attacker==actor_id:
+		if not self_state.is_empty() and int(self_state.get("connection_epoch",0))!=ac:
+			return _need_resync("pvp_skill_visual_attacker_self_generation")
+	else:
+		if not entities.has(attacker) or int((entities[attacker] as Dictionary).get("connection_epoch",0))!=ac:
+			return _need_resync("pvp_skill_visual_attacker_generation")
+	if victim==actor_id:
+		if not self_state.is_empty() and int(self_state.get("connection_epoch",0))!=vc:
+			return _need_resync("pvp_skill_visual_victim_self_generation")
+	else:
+		if not entities.has(victim) or int((entities[victim] as Dictionary).get("connection_epoch",0))!=vc:
+			return _need_resync("pvp_skill_visual_victim_generation")
+	var seq:=int(value.skill_sequence)
+	var dmgseq:=int(value.damage_sequence)
+	var prior:Dictionary=pvp_skill_visual_sequences.get(attacker,{})
+	var dprior:Dictionary=pvp_skill_damage_sequences.get(victim,{})
+	var stale1:=not prior.is_empty() and seq<=int(prior.get("sequence",0))
+	var stale2:=not dprior.is_empty() and dmgseq<=int(dprior.get("sequence",0))
+	if (not prior.is_empty() and int(prior.get("connection_epoch",0))!=ac) or (not dprior.is_empty() and int(dprior.get("connection_epoch",0))!=vc):
+		return _need_resync("pvp_skill_visual_generation")
+	if stale1 or stale2:
+		if stale1 and stale2:
+			stale_pvp_skill_visuals+=1
+			return true
+		return _need_resync("pvp_skill_visual_sequence_conflict")
+	pvp_skill_visual_sequences[attacker]={"connection_epoch":ac,"sequence":seq}
+	pvp_skill_damage_sequences[victim]={"connection_epoch":vc,"sequence":dmgseq}
+	pvp_skill_visual_events.append(value.duplicate(true))
+	var cutoff:=maxi(int(value.server_tick),last_aoi_tick)-PLAYER_COMBAT_VISUAL_EVENT_TTL_TICKS
+	while not pvp_skill_visual_events.is_empty() and int(pvp_skill_visual_events[0].get("server_tick",-1))<cutoff:
+		pvp_skill_visual_events.pop_front()
+	while pvp_skill_visual_events.size()>PLAYER_COMBAT_VISUAL_EVENT_MAX:
+		pvp_skill_visual_events.pop_front()
+	last_aoi_tick=maxi(last_aoi_tick,int(value.server_tick))
 	return true
 
 

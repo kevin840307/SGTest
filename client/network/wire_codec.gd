@@ -78,6 +78,9 @@ const OPCODE_PVP_ATTACK_RESULT := 79
 const OPCODE_PVP_DAMAGE := 80
 const OPCODE_PLAYER_IDENTITY := 81
 const OPCODE_PVP_COMBAT_VISUAL := 82
+const OPCODE_PVP_SKILL := 83
+const OPCODE_PVP_SKILL_RESULT := 84
+const OPCODE_PVP_SKILL_VISUAL := 85
 const MOVE_TARGET_FRAME_BYTES := 28
 const MOVE_RECEIPT_FRAME_BYTES := 30
 const NPC_INTERACT_FRAME_BYTES := 24
@@ -165,6 +168,9 @@ const PLAYER_IDENTITY_HEADER_BYTES := 68
 const PLAYER_IDENTITY_MAX_NAME_BYTES := 96
 const PLAYER_IDENTITY_MAX_FRAME_BYTES := PLAYER_IDENTITY_HEADER_BYTES + PLAYER_IDENTITY_MAX_NAME_BYTES
 const PVP_COMBAT_VISUAL_FRAME_BYTES := 71
+const PVP_SKILL_FRAME_BYTES := 32
+const PVP_SKILL_RESULT_FRAME_BYTES := 46
+const PVP_SKILL_VISUAL_FRAME_BYTES := 75
 const MAX_MONEY := 9000000000000000
 
 static func encode_move_target(map_epoch: int, movement_sequence: int, target_x: int, target_y: int) -> PackedByteArray:
@@ -1580,6 +1586,72 @@ static func decode_pvp_combat_visual(frame: PackedByteArray) -> Dictionary:
 		"attacker_facing":attacker_facing,"victim_facing":victim_facing}
 
 
+static func encode_pvp_skill(epoch:int,sequence:int,skill_id:int,target_actor_id:int)->PackedByteArray:
+	if epoch<=0 or sequence<=0 or sequence>0xffffffff or skill_id<=0 or skill_id>100000000 or target_actor_id<=0:
+		return PackedByteArray()
+	var writer:=StreamPeerBuffer.new()
+	writer.big_endian=false
+	writer.put_u32(PVP_SKILL_FRAME_BYTES)
+	writer.put_u16(VERSION)
+	writer.put_u16(OPCODE_PVP_SKILL)
+	writer.put_64(epoch)
+	writer.put_u32(sequence)
+	writer.put_32(skill_id)
+	writer.put_64(target_actor_id)
+	return writer.data_array
+
+
+static func decode_pvp_skill_result(frame:PackedByteArray)->Dictionary:
+	if not _valid_header(frame,OPCODE_PVP_SKILL_RESULT,PVP_SKILL_RESULT_FRAME_BYTES):
+		return {}
+	var reader:=_reader(frame,8)
+	var epoch:=reader.get_64()
+	var sequence:=reader.get_u32()
+	var status:=reader.get_u8()
+	var tick:=reader.get_64()
+	var skill_id:=reader.get_32()
+	var target:=reader.get_64()
+	var damage:=reader.get_32()
+	var died:=reader.get_u8()
+	if epoch<=0 or sequence==0 or status>17 or tick<0 or skill_id<=0 or skill_id>100000000 or target<=0 or damage<0 or died>1:
+		return {}
+	if status==0:
+		if damage<=0:
+			return {}
+	elif damage!=0 or died!=0:
+		return {}
+	return {"map_epoch":epoch,"skill_sequence":sequence,"status":status,
+		"server_tick":tick,"skill_id":skill_id,"target_actor_id":target,
+		"damage":damage,"died":died==1}
+
+
+static func decode_pvp_skill_visual(frame:PackedByteArray)->Dictionary:
+	if not _valid_header(frame,OPCODE_PVP_SKILL_VISUAL,PVP_SKILL_VISUAL_FRAME_BYTES):
+		return {}
+	var reader:=_reader(frame,8)
+	var receiver_epoch:=reader.get_64()
+	var tick:=reader.get_64()
+	var attacker:=reader.get_64()
+	var attacker_connection:=reader.get_64()
+	var skill_sequence:=reader.get_u32()
+	var skill_id:=reader.get_32()
+	var victim:=reader.get_64()
+	var victim_connection:=reader.get_64()
+	var damage_sequence:=reader.get_u32()
+	var damage:=reader.get_32()
+	var died:=reader.get_u8()
+	var attacker_facing:=reader.get_u8()
+	var victim_facing:=reader.get_u8()
+	if receiver_epoch<=0 or tick<0 or attacker<=0 or attacker_connection<=0 or skill_sequence==0 or skill_id<=0 or skill_id>100000000 or victim<=0 or victim_connection<=0 or damage_sequence==0 or damage<=0 or died>1 or attacker==victim or attacker_facing<1 or attacker_facing>8 or victim_facing<1 or victim_facing>8:
+		return {}
+	return {"receiver_map_epoch":receiver_epoch,"server_tick":tick,
+		"attacker_actor_id":attacker,"attacker_connection_epoch":attacker_connection,
+		"skill_sequence":skill_sequence,"skill_id":skill_id,
+		"victim_actor_id":victim,"victim_connection_epoch":victim_connection,
+		"damage_sequence":damage_sequence,"damage":damage,"died":died==1,
+		"attacker_facing":attacker_facing,"victim_facing":victim_facing}
+
+
 static func decode_player_identity(frame: PackedByteArray) -> Dictionary:
 	if not _valid_variable_header(
 		frame,OPCODE_PLAYER_IDENTITY,PLAYER_IDENTITY_HEADER_BYTES+1,
@@ -1682,7 +1754,7 @@ static func frame_opcode(frame: PackedByteArray) -> int:
 	if reader.get_u16() != VERSION:
 		return -1
 	var opcode := reader.get_u16()
-	if opcode not in [OPCODE_MOVE_TARGET, OPCODE_MOVE_RECEIPT, OPCODE_NPC_INTERACT, OPCODE_NPC_INTERACT_RESULT, OPCODE_NORMAL_ATTACK, OPCODE_NORMAL_ATTACK_RESULT, OPCODE_PLAYER_COMBAT_STATE, OPCODE_PLAYER_DAMAGE, OPCODE_AUTH_REQUEST, OPCODE_AUTH_RESULT, OPCODE_CHARACTER_LIST, OPCODE_CHARACTER_CHOOSE, OPCODE_CHARACTER_CHOOSE_RESULT, OPCODE_CHARACTER_CREATE, OPCODE_CHARACTER_CREATE_RESULT, OPCODE_WORLD_READY, OPCODE_ENTITY_SPAWN, OPCODE_ENTITY_DESPAWN, OPCODE_ENTITY_DELTA, OPCODE_SELF_STATE, OPCODE_WORLD_READY_ACK, OPCODE_WORLD_RESYNC_REQUEST, OPCODE_MONSTER_SPAWN, OPCODE_MONSTER_DELTA, OPCODE_MONSTER_DESPAWN, OPCODE_PLAYER_RESPAWN, OPCODE_PLAYER_RESPAWN_RESULT, OPCODE_GROUND_DROP_SPAWN, OPCODE_GROUND_DROP_DESPAWN, OPCODE_GROUND_PICKUP, OPCODE_GROUND_PICKUP_RESULT, OPCODE_INVENTORY_SNAPSHOT, OPCODE_RECOVERY_USE, OPCODE_RECOVERY_USE_RESULT, OPCODE_INVENTORY_DISCARD, OPCODE_INVENTORY_DISCARD_RESULT, OPCODE_PLAYER_ATTACK_VISUAL, OPCODE_PLAYER_DAMAGE_VISUAL, OPCODE_PLAYER_RESPAWN_VISUAL, OPCODE_SKILL_USE, OPCODE_SKILL_USE_RESULT, OPCODE_PLAYER_SKILL_VISUAL, OPCODE_SHOP_OPEN, OPCODE_SHOP_SNAPSHOT, OPCODE_SHOP_BUY, OPCODE_SHOP_SELL, OPCODE_SHOP_TRANSACTION_RESULT, OPCODE_STORAGE_OPEN, OPCODE_STORAGE_SNAPSHOT, OPCODE_STORAGE_DEPOSIT, OPCODE_STORAGE_WITHDRAW, OPCODE_STORAGE_TRANSFER_RESULT, OPCODE_EQUIPMENT_SNAPSHOT, OPCODE_EQUIPMENT_EQUIP, OPCODE_EQUIPMENT_UNEQUIP, OPCODE_EQUIPMENT_TRANSFER_RESULT, OPCODE_BANK_OPEN, OPCODE_BANK_SNAPSHOT, OPCODE_BANK_DEPOSIT, OPCODE_BANK_WITHDRAW, OPCODE_BANK_TRANSACTION_RESULT, OPCODE_REPAIR_OPEN, OPCODE_REPAIR_SNAPSHOT, OPCODE_REPAIR_ITEM, OPCODE_REPAIR_RESULT, OPCODE_TRADE_COMMAND, OPCODE_TRADE_SNAPSHOT, OPCODE_TRADE_TERMINAL, OPCODE_PVP_MODE_COMMAND, OPCODE_PVP_MODE_RESULT, OPCODE_PVP_ATTACK, OPCODE_PVP_ATTACK_RESULT, OPCODE_PVP_DAMAGE, OPCODE_PLAYER_IDENTITY, OPCODE_PVP_COMBAT_VISUAL]:
+	if opcode not in [OPCODE_MOVE_TARGET, OPCODE_MOVE_RECEIPT, OPCODE_NPC_INTERACT, OPCODE_NPC_INTERACT_RESULT, OPCODE_NORMAL_ATTACK, OPCODE_NORMAL_ATTACK_RESULT, OPCODE_PLAYER_COMBAT_STATE, OPCODE_PLAYER_DAMAGE, OPCODE_AUTH_REQUEST, OPCODE_AUTH_RESULT, OPCODE_CHARACTER_LIST, OPCODE_CHARACTER_CHOOSE, OPCODE_CHARACTER_CHOOSE_RESULT, OPCODE_CHARACTER_CREATE, OPCODE_CHARACTER_CREATE_RESULT, OPCODE_WORLD_READY, OPCODE_ENTITY_SPAWN, OPCODE_ENTITY_DESPAWN, OPCODE_ENTITY_DELTA, OPCODE_SELF_STATE, OPCODE_WORLD_READY_ACK, OPCODE_WORLD_RESYNC_REQUEST, OPCODE_MONSTER_SPAWN, OPCODE_MONSTER_DELTA, OPCODE_MONSTER_DESPAWN, OPCODE_PLAYER_RESPAWN, OPCODE_PLAYER_RESPAWN_RESULT, OPCODE_GROUND_DROP_SPAWN, OPCODE_GROUND_DROP_DESPAWN, OPCODE_GROUND_PICKUP, OPCODE_GROUND_PICKUP_RESULT, OPCODE_INVENTORY_SNAPSHOT, OPCODE_RECOVERY_USE, OPCODE_RECOVERY_USE_RESULT, OPCODE_INVENTORY_DISCARD, OPCODE_INVENTORY_DISCARD_RESULT, OPCODE_PLAYER_ATTACK_VISUAL, OPCODE_PLAYER_DAMAGE_VISUAL, OPCODE_PLAYER_RESPAWN_VISUAL, OPCODE_SKILL_USE, OPCODE_SKILL_USE_RESULT, OPCODE_PLAYER_SKILL_VISUAL, OPCODE_SHOP_OPEN, OPCODE_SHOP_SNAPSHOT, OPCODE_SHOP_BUY, OPCODE_SHOP_SELL, OPCODE_SHOP_TRANSACTION_RESULT, OPCODE_STORAGE_OPEN, OPCODE_STORAGE_SNAPSHOT, OPCODE_STORAGE_DEPOSIT, OPCODE_STORAGE_WITHDRAW, OPCODE_STORAGE_TRANSFER_RESULT, OPCODE_EQUIPMENT_SNAPSHOT, OPCODE_EQUIPMENT_EQUIP, OPCODE_EQUIPMENT_UNEQUIP, OPCODE_EQUIPMENT_TRANSFER_RESULT, OPCODE_BANK_OPEN, OPCODE_BANK_SNAPSHOT, OPCODE_BANK_DEPOSIT, OPCODE_BANK_WITHDRAW, OPCODE_BANK_TRANSACTION_RESULT, OPCODE_REPAIR_OPEN, OPCODE_REPAIR_SNAPSHOT, OPCODE_REPAIR_ITEM, OPCODE_REPAIR_RESULT, OPCODE_TRADE_COMMAND, OPCODE_TRADE_SNAPSHOT, OPCODE_TRADE_TERMINAL, OPCODE_PVP_MODE_COMMAND, OPCODE_PVP_MODE_RESULT, OPCODE_PVP_ATTACK, OPCODE_PVP_ATTACK_RESULT, OPCODE_PVP_DAMAGE, OPCODE_PLAYER_IDENTITY, OPCODE_PVP_COMBAT_VISUAL, OPCODE_PVP_SKILL, OPCODE_PVP_SKILL_RESULT, OPCODE_PVP_SKILL_VISUAL]:
 		return -1
 	return opcode
 

@@ -102,7 +102,21 @@ func _run_victim(session,self_id:int,peer_id:int)->void:
 		int(dead.player_current_hp)!=0 or
 		int(dead.last_player_damage.get("damage",0))!=42 or
 		int(dead.last_player_damage.get("attacker_actor_id",0))!=peer_id):
-		_fail("lethal PvP damage "+str(dead),session)
+		_fail("lethal PvP skill damage "+str(dead),session)
+		return
+	var skill_visual:=_wait(session,func(v):
+		for event in v.get("pvp_skill_visual_events",[]):
+			if (int(event.get("attacker_actor_id",0))==peer_id and
+				int(event.get("victim_actor_id",0))==self_id and
+				int(event.get("skill_sequence",0))==1 and
+				int(event.get("skill_id",0))==99003 and
+				int(event.get("damage_sequence",0))==2 and
+				int(event.get("damage",0))==42 and
+				bool(event.get("died",false))):
+				return true
+		return false,7000)
+	if skill_visual.is_empty():
+		_fail("victim missing lethal PvP skill visual "+str(session.snapshot()),session)
 		return
 	var red:=_wait(session,func(v):
 		var identities:Dictionary=v.get("player_identities",{})
@@ -111,7 +125,7 @@ func _run_victim(session,self_id:int,peer_id:int)->void:
 		_fail("attacker did not become red on observer "+str(session.snapshot()),session)
 		return
 	session.stop()
-	print("CLIENT_PVP_PASS role=victim actor=%d hp=0 sequence=2 death=true name=Pink->Red visual=true" % self_id)
+	print("CLIENT_PVP_PASS role=victim actor=%d hp=0 sequence=2 death=true name=Pink->Red attack_visual=true skill_visual=true" % self_id)
 	quit(0)
 
 func _run_actor(session,self_id:int,peer_id:int)->void:
@@ -148,21 +162,36 @@ func _run_actor(session,self_id:int,peer_id:int)->void:
 	if first_visual.is_empty():
 		_fail("actor missing first PvP combat visual "+str(session.snapshot()),session)
 		return
-	OS.delay_msec(650)
-	if not session.attack_player(peer_id):
-		_fail("second attack submit",session)
+	OS.delay_msec(120)
+	if not session.cast_player_skill(99003,peer_id):
+		_fail("player skill submit",session)
 		return
 	var second:=_wait(session,func(v):
-		return int(v.last_pvp_attack_result_sequence)>=2,7000)
-	if (second.is_empty() or int(second.last_pvp_attack_result_status)!=0 or
-		int(second.last_pvp_attack_result.get("target_actor_id",0))!=peer_id or
-		int(second.last_pvp_attack_result.get("damage",0))!=42 or
-		not bool(second.last_pvp_attack_result.get("died",false)) or
-		int(second.player_current_hp)!=100):
-		_fail("second attack result "+str(second),session)
+		return int(v.last_skill_result_sequence)>=1,7000)
+	if (second.is_empty() or int(second.last_skill_result_status)!=0 or
+		int(second.last_skill_result.get("target_actor_id",0))!=peer_id or
+		int(second.last_skill_result.get("skill_id",0))!=99003 or
+		str(second.last_skill_result.get("target_kind",""))!="player" or
+		int(second.last_skill_result.get("damage",0))!=42 or
+		not bool(second.last_skill_result.get("died",false)) or
+		int(second.player_current_hp)!=100 or int(second.player_current_mp)!=1):
+		_fail("player skill result "+str(second),session)
+		return
+	var skill_visual:=_wait(session,func(v):
+		for event in v.get("pvp_skill_visual_events",[]):
+			if (int(event.get("attacker_actor_id",0))==self_id and
+				int(event.get("victim_actor_id",0))==peer_id and
+				int(event.get("skill_sequence",0))==1 and
+				int(event.get("skill_id",0))==99003 and
+				int(event.get("damage",0))==42 and
+				bool(event.get("died",false))):
+				return true
+		return false,7000)
+	if skill_visual.is_empty():
+		_fail("actor missing PvP skill visual "+str(session.snapshot()),session)
 		return
 	session.stop()
-	print("CLIENT_PVP_PASS role=actor actor=%d damage=58,42 target_dead=true visual=true" % self_id)
+	print("CLIENT_PVP_PASS role=actor actor=%d attack_damage=58 skill_damage=42 target_dead=true mp=2->1 attack_visual=true skill_visual=true" % self_id)
 	quit(0)
 
 func _wait(session,predicate:Callable,timeout_ms:int)->Dictionary:

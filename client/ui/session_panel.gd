@@ -111,7 +111,9 @@ var pvp_white_button := Button.new()
 var pvp_status := Label.new()
 var pvp_target_picker := OptionButton.new()
 var pvp_attack_button := Button.new()
+var pvp_skill_button := Button.new()
 var pvp_attack_status := Label.new()
+var pvp_skill_status := Label.new()
 var _pvp_target_display_key := ""
 const PVP_ATTACK_STATUS_NAMES = [
 	"攻擊成功","地圖／連線世代已變更","重複／過期攻擊序號","不可攻擊自己",
@@ -131,7 +133,7 @@ var _latest := {}
 var _respawn_queued_after := -1
 var _skill_queued_after := -1
 var _skill_queued_at_ms := 0
-const SKILL_RESULT_NAMES = ["成功","未命中","目標不存在","目標死亡","超出距離","障礙阻擋","冷卻中","無法戰鬥","地圖已變更","重複序號","伺服器未核准技能","MP 不足","範圍目標數超限"]
+const SKILL_RESULT_NAMES = ["成功","未命中","目標不存在","目標死亡","超出距離","障礙阻擋","冷卻中","無法戰鬥","地圖已變更","重複序號","伺服器未核准技能","MP 不足","範圍目標數超限","此地圖禁止玩家 PvP","攻擊者為受保護藍名","目標為受保護藍名","不可對自己施放","伺服器忙碌，請稍後重試"]
 
 
 func _ready() -> void:
@@ -357,15 +359,18 @@ func _ready() -> void:
 	pvp_blue_button.text = "設為藍名（保護）"
 	pvp_white_button.text = "設為白名（允許 PvP 地圖）"
 	pvp_attack_button.text = "攻擊選中玩家（Server 權威）"
+	pvp_skill_button.text = "技能攻擊選中玩家（使用上方技能 ID）"
 	pvp_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	pvp_attack_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	for control in [pvp_query_button,pvp_blue_button,pvp_white_button,pvp_status,pvp_target_picker,pvp_attack_button,pvp_attack_status]:
+	pvp_skill_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	for control in [pvp_query_button,pvp_blue_button,pvp_white_button,pvp_status,pvp_target_picker,pvp_attack_button,pvp_skill_button,pvp_attack_status,pvp_skill_status]:
 		control.visible = false
 		column.add_child(control)
 	pvp_query_button.pressed.connect(func(): _request_pvp_mode(0))
 	pvp_blue_button.pressed.connect(func(): _request_pvp_mode(1))
 	pvp_white_button.pressed.connect(func(): _request_pvp_mode(2))
 	pvp_attack_button.pressed.connect(_attack_selected_player)
+	pvp_skill_button.pressed.connect(_skill_attack_selected_player)
 	var style := StyleBoxFlat.new()
 	style.bg_color = Color("211c15")
 	style.border_color = Color("c8a452")
@@ -598,6 +603,15 @@ func submit_pvp_attack(target_actor_id: int) -> bool:
 	if target_actor_id <= 0 or target_actor_id == int(_latest.get("actor_id",0)) or not entities.has(target_actor_id):
 		return false
 	return session.attack_player(target_actor_id)
+
+
+func submit_pvp_skill(target_actor_id:int,skill_id:int)->bool:
+	if not active or skill_id<=0 or skill_id>100000000 or int(_latest.get("state",-1))!=State.STATE_IN_WORLD or not bool(_latest.get("world_ready",false)) or not bool(_latest.get("combat_available",false)) or bool(_latest.get("player_dead",false)) or bool(_latest.get("reconnecting",false)) or bool(_latest.get("resync_pending",false)) or bool(_latest.get("waiting_for_new_map",false)) or not bool(_latest.get("pvp_known",false)) or not bool(_latest.get("pvp_map_allows",false)) or int(_latest.get("pending_skill_sequence",0))!=0:
+		return false
+	var entities:Dictionary=_latest.get("entities",{})
+	if target_actor_id<=0 or target_actor_id==int(_latest.get("actor_id",0)) or not entities.has(target_actor_id):
+		return false
+	return session.cast_player_skill(skill_id,target_actor_id)
 
 
 func submit_trade_request(target_actor_id: int) -> bool:
@@ -1290,13 +1304,25 @@ func _attack_selected_player() -> void:
 		pvp_attack_status.text = "目前無法攻擊該玩家"
 
 
+func _skill_attack_selected_player() -> void:
+	if pvp_skill_button.disabled or pvp_target_picker.selected<0:
+		return
+	var target:=int(pvp_target_picker.get_item_metadata(pvp_target_picker.selected))
+	var skill_id:=int(skill_id_input.value)
+	if submit_pvp_skill(target,skill_id):
+		pvp_skill_status.text="玩家技能已送出，等待伺服器判定規則、MP、距離與傷害…"
+		pvp_skill_button.disabled=true
+	else:
+		pvp_skill_status.text="目前無法對該玩家施放技能"
+
+
 func _pvp_attack_status_text(code: int) -> String:
 	return PVP_ATTACK_STATUS_NAMES[code] if code >= 0 and code < PVP_ATTACK_STATUS_NAMES.size() else "未知 PvP 結果"
 
 
 func _update_pvp_ui() -> void:
 	var in_world := active and int(_latest.get("state",-1)) == State.STATE_IN_WORLD
-	for control in [pvp_query_button,pvp_blue_button,pvp_white_button,pvp_status,pvp_target_picker,pvp_attack_button,pvp_attack_status]:
+	for control in [pvp_query_button,pvp_blue_button,pvp_white_button,pvp_status,pvp_target_picker,pvp_attack_button,pvp_skill_button,pvp_attack_status,pvp_skill_status]:
 		control.visible = in_world
 	if not in_world:
 		_pvp_target_display_key = ""
@@ -1347,6 +1373,8 @@ func _update_pvp_ui() -> void:
 
 	var attack_pending := int(_latest.get("pending_pvp_attack_sequence",0)) != 0
 	pvp_attack_button.disabled = not ready or not known or not map_allows or dead or not bool(_latest.get("combat_available",false)) or attack_pending or pvp_target_picker.item_count == 0
+	var skill_pending:=int(_latest.get("pending_skill_sequence",0))!=0
+	pvp_skill_button.disabled=not ready or not known or not map_allows or dead or not bool(_latest.get("combat_available",false)) or skill_pending or pvp_target_picker.item_count==0 or int(skill_id_input.value)<=0
 	var attack_result: Dictionary = _latest.get("last_pvp_attack_result",{})
 	if attack_pending:
 		pvp_attack_status.text = "等待伺服器 PvP 攻擊結算；不可重複攻擊"
@@ -1360,6 +1388,20 @@ func _update_pvp_ui() -> void:
 		pvp_attack_status.text = "此地圖禁止玩家 PvP"
 	else:
 		pvp_attack_status.text = "選擇 AOI 內玩家後可送出攻擊；傷害與罪名由伺服器判定"
+
+	var skill_result:Dictionary=_latest.get("last_skill_result",{})
+	if skill_pending and int(_latest.get("pending_skill_target_kind",0))==1:
+		pvp_skill_status.text="等待伺服器玩家技能結算；不可重複施放"
+	elif str(skill_result.get("target_kind",""))=="player":
+		var code:=int(_latest.get("last_skill_result_status",-1))
+		pvp_skill_status.text=("%s｜傷害 %d%s" % [
+			SKILL_RESULT_NAMES[code] if code>=0 and code<SKILL_RESULT_NAMES.size() else "玩家技能結果",
+			int(skill_result.get("damage",0)),
+			"｜目標死亡" if bool(skill_result.get("died",false)) else ""]) if code==0 else "玩家技能結果（代碼 %d）" % code
+	elif not map_allows:
+		pvp_skill_status.text="此地圖禁止玩家 PvP"
+	else:
+		pvp_skill_status.text="使用既有技能 ID 對 AOI 玩家送出；MP／傷害／罪名全由伺服器判定"
 
 
 func _update_trade_ui() -> void:
