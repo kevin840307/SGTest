@@ -326,6 +326,13 @@ public static class WireProtocol
     public const int StorageSnapshotMaxItems = 4095;
     public const int StorageTransferResultFrameBytes =
         HeaderBytes + 8 + 4 + 1 + 1 + 4 + 8 + 4 + 4 + 8;
+    public const int EquipmentSnapshotHeaderBytes = HeaderBytes + 8 + 4 + 1 + 2;
+    public const int EquipmentItemBytes = 24;
+    public const int EquipmentSnapshotMaxItemsPerFrame = 128;
+    public const int EquipmentSnapshotMaxItems = 255;
+    public const int EquipmentMoveFrameBytes = HeaderBytes + 8 + 4 + 8;
+    public const int EquipmentTransferResultFrameBytes =
+        HeaderBytes + 8 + 4 + 1 + 1 + 8 + 4 + 4 + 8;
     private static readonly UTF8Encoding StrictUtf8 = new(false, true);
 
     public static byte[] EncodeMoveTarget(MoveTargetWire value)
