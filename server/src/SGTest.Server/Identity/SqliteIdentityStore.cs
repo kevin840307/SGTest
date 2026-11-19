@@ -77,7 +77,7 @@ public sealed record CharacterCreateResult(CharacterCreateStatus Status, Charact
 /// </summary>
 public sealed partial class SqliteIdentityStore : IDisposable
 {
-    public const int SchemaVersion = 17;
+    public const int SchemaVersion = 18;
     private readonly string _connectionString;
     private readonly IdentityStoreOptions _options;
     private readonly PasswordHasher _passwords;
@@ -672,6 +672,24 @@ CHECK(red_man_kill_left BETWEEN 0 AND 2147483647);",tx);
 ADD COLUMN pink_until_unix_ms INTEGER NOT NULL DEFAULT 0
 CHECK(pink_until_unix_ms >= 0);",tx);
             }
+            // Schema v18: local operator PvP-name mutations are durable,
+            // idempotent and auditable. No game-socket opcode writes this table.
+            Execute(connection,@"
+CREATE TABLE IF NOT EXISTS pvp_name_admin_events (
+    event_id TEXT PRIMARY KEY,
+    operator_id TEXT NOT NULL CHECK(length(operator_id) BETWEEN 1 AND 64),
+    character_id INTEGER NOT NULL REFERENCES characters(character_id) ON DELETE RESTRICT,
+    requested_state INTEGER NOT NULL CHECK(requested_state BETWEEN 0 AND 4),
+    reason TEXT NOT NULL CHECK(length(reason) BETWEEN 1 AND 256),
+    result_mode INTEGER NOT NULL CHECK(result_mode IN (0,1)),
+    result_red_man INTEGER NOT NULL CHECK(result_red_man IN (0,1)),
+    result_red_man_kill_left INTEGER NOT NULL CHECK(result_red_man_kill_left BETWEEN 0 AND 2147483647),
+    result_pink_until_unix_ms INTEGER NOT NULL CHECK(result_pink_until_unix_ms >= 0),
+    result_updated_unix_ms INTEGER NOT NULL,
+    created_unix_ms INTEGER NOT NULL
+);",tx);
+            Execute(connection,@"CREATE INDEX IF NOT EXISTS ix_pvp_name_admin_character
+ON pvp_name_admin_events(character_id,created_unix_ms);",tx);
             Execute(connection, @"
 CREATE TRIGGER IF NOT EXISTS trg_combat_mp_insert
 BEFORE INSERT ON character_combat_profiles

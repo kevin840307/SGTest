@@ -30,6 +30,8 @@ internal static class IdentityAdminChecks
                 () => Ownership(root).GetAwaiter().GetResult());
             Checks.Run("Independent admin processes serialize duplicate slots with exactly one created character",
                 () => ConcurrentSlot(root).GetAwaiter().GetResult());
+            Checks.Run("Local operator PvP name command is audited idempotent and not a game RPC",
+                () => PvpNameAdmin(root).GetAwaiter().GetResult());
         }
         Checks.Run("CLI-provisioned database logs in through real Host serve TLS WorldReady and MoveReceipt",
             () => BootstrapTls(root).GetAwaiter().GetResult());
@@ -176,6 +178,67 @@ internal static class IdentityAdminChecks
         using var store = new SqliteIdentityStore(c.Database);
         Checks.Require((await store.AuthenticateAsync("admin_user",Password)).Account!.Characters.Count == 1,
             "slot race created duplicate/missing persistent character");
+    }
+
+    private static string[] PvpName(Context c,long characterId,string state,string eventId,
+        string reason="manual moderation",string operatorId="ci-operator") =>
+        ["pvp-name-set","--identity",c.Database,
+         "--character-id",characterId.ToString(),
+         "--state",state,"--operator",operatorId,"--reason",reason,"--event-id",eventId];
+
+    private static async Task PvpNameAdmin(string root)
+    {
+        var c=Create(root);
+        Checks.Require((await Run(Password,Account(c))).Exit==0,
+            "PvP admin fixture account failed");
+        var created=await Run(Password,Character(c,name:"PvpAdminHero"));
+        Checks.Require(created.Exit==0,"PvP admin fixture character failed");
+        using var document=JsonDocument.Parse(created.Out);
+        long character=document.RootElement.GetProperty("character_id").GetInt64();
+
+        var red=await Run(null,PvpName(c,character,"red","evt-red-001"));
+        Checks.Require(red.Exit==0&&red.Out.Contains("PVP_NAME_SET")&&
+            red.Out.Contains("\"replayed\":false"),
+            "local PvP name red command failed: "+red.Error);
+        using(var store=new SqliteIdentityStore(c.Database))
+        {
+            await store.InitializeAsync();
+            var state=await store.GetCharacterPvpStateAsync(character);
+            Checks.Require(state.RedMan&&PvpCrimePolicy.NameState(
+                state,DateTimeOffset.UtcNow)==PvpNameState.Red,
+                "admin red command did not persist authoritative state");
+        }
+
+        var replay=await Run(null,PvpName(c,character,"red","evt-red-001"));
+        Checks.Require(replay.Exit==0&&replay.Out.Contains("\"replayed\":true"),
+            "exact admin event replay was not idempotent");
+        var conflict=await Run(null,PvpName(c,character,"blue","evt-red-001"));
+        Checks.Require(conflict.Exit==3&&conflict.Error.Contains("event ID"),
+            "conflicting reuse of admin event ID was accepted");
+        var pink=await Run(null,PvpName(c,character,"閃粉","evt-flash-002",
+            reason:"incident review",operatorId:"gm-local-1"));
+        Checks.Require(pink.Exit==0&&pink.Out.Contains("PinkFlashing"),
+            "Recovered-compatible flash alias failed");
+
+        using(var connection=new Microsoft.Data.Sqlite.SqliteConnection(
+            new Microsoft.Data.Sqlite.SqliteConnectionStringBuilder
+            {DataSource=c.Database,Mode=Microsoft.Data.Sqlite.SqliteOpenMode.ReadWrite,Pooling=false}.ToString()))
+        {
+            connection.Open();
+            using var command=connection.CreateCommand();
+            command.CommandText=@"SELECT COUNT(*),MIN(operator_id),MAX(reason)
+FROM pvp_name_admin_events WHERE character_id=$id;";
+            command.Parameters.AddWithValue("$id",character);
+            using var reader=command.ExecuteReader();
+            Checks.Require(reader.Read()&&reader.GetInt64(0)==2,
+                "admin replay/conflict created duplicate audit rows");
+        }
+        Checks.Require((await Run(null,PvpName(c,character,"purple","evt-bad"))).Exit==2,
+            "invalid PvP admin state accepted");
+        Checks.Require((await Run(null,PvpName(c,character,"blue","evt-empty",reason:" "))).Exit==2,
+            "empty PvP admin reason accepted");
+        Checks.Require((await Run(null,PvpName(c,character+9999,"white","evt-missing"))).Exit==3,
+            "unknown PvP admin character accepted");
     }
 
     private static async Task BootstrapTls(string root)
