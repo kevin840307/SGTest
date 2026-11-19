@@ -2355,6 +2355,155 @@ public static class WireProtocol
             return value.ItemDefinitionId>0&&value.SlotId>0;
         return value.ItemDefinitionId==0&&value.SlotId==0&&value.SourceDropId==0;
     }
+    public static byte[] EncodeBankOpen(BankOpenWire value)
+    {
+        if(value.MapEpoch<=0||value.BankSequence==0||value.NpcSpawnId<=0)
+            throw new ArgumentOutOfRangeException(nameof(value));
+        var frame=NewFrame(WireOpcode.BankOpen,BankOpenFrameBytes);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(8,8),value.MapEpoch);
+        BinaryPrimitives.WriteUInt32LittleEndian(frame.AsSpan(16,4),value.BankSequence);
+        BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(20,4),value.NpcSpawnId);
+        return frame;
+    }
+
+    public static bool TryDecodeBankOpen(ReadOnlySpan<byte> frame,out BankOpenWire value)
+    {
+        value=default;
+        if(!TryReadHeader(frame,out var h)||h.Opcode!=WireOpcode.BankOpen)return false;
+        value=new(
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(8,8)),
+            BinaryPrimitives.ReadUInt32LittleEndian(frame.Slice(16,4)),
+            BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(20,4)));
+        return value.MapEpoch>0&&value.BankSequence>0&&value.NpcSpawnId>0;
+    }
+
+    public static byte[] EncodeBankSnapshot(BankSnapshotWire value)
+    {
+        if(!ValidBankSnapshot(value))throw new ArgumentOutOfRangeException(nameof(value));
+        var frame=NewFrame(WireOpcode.BankSnapshot,BankSnapshotFrameBytes);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(8,8),value.MapEpoch);
+        BinaryPrimitives.WriteUInt32LittleEndian(frame.AsSpan(16,4),value.BankSequence);
+        frame[20]=(byte)value.Status;
+        BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(21,4),value.NpcSpawnId);
+        frame[25]=(byte)value.Scope;
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(26,8),value.WalletMoney);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(34,8),value.BankMoney);
+        return frame;
+    }
+
+    public static bool TryDecodeBankSnapshot(ReadOnlySpan<byte> frame,out BankSnapshotWire value)
+    {
+        value=default;
+        if(!TryReadHeader(frame,out var h)||h.Opcode!=WireOpcode.BankSnapshot)return false;
+        value=new(
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(8,8)),
+            BinaryPrimitives.ReadUInt32LittleEndian(frame.Slice(16,4)),
+            (BankOpenStatus)frame[20],
+            BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(21,4)),
+            (BankBalanceScope)frame[25],
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(26,8)),
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(34,8)));
+        return ValidBankSnapshot(value);
+    }
+
+    private static bool ValidBankSnapshot(BankSnapshotWire value)
+    {
+        if(value.MapEpoch<=0||value.BankSequence==0||value.NpcSpawnId<=0||
+           (byte)value.Status>(byte)BankOpenStatus.PlayerDead||
+           value.WalletMoney<0||value.BankMoney<0||
+           value.WalletMoney>SqliteIdentityStore.MaximumMoney||
+           value.BankMoney>SqliteIdentityStore.MaximumMoney)return false;
+        if(value.Status==BankOpenStatus.Opened)
+            return value.Scope is BankBalanceScope.Character or BankBalanceScope.Account;
+        return value.Scope==BankBalanceScope.None&&value.WalletMoney==0&&value.BankMoney==0;
+    }
+
+    private static byte[] EncodeBankMove(WireOpcode opcode,BankMoveWire value)
+    {
+        if(opcode is not (WireOpcode.BankDeposit or WireOpcode.BankWithdraw)||
+           value.MapEpoch<=0||value.BankSequence==0||value.NpcSpawnId<=0||
+           value.Amount<=0||value.Amount>SqliteIdentityStore.MaximumMoney)
+            throw new ArgumentOutOfRangeException(nameof(value));
+        var frame=NewFrame(opcode,BankMoveFrameBytes);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(8,8),value.MapEpoch);
+        BinaryPrimitives.WriteUInt32LittleEndian(frame.AsSpan(16,4),value.BankSequence);
+        BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(20,4),value.NpcSpawnId);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(24,8),value.Amount);
+        return frame;
+    }
+
+    public static byte[] EncodeBankDeposit(BankMoveWire value)=>
+        EncodeBankMove(WireOpcode.BankDeposit,value);
+    public static byte[] EncodeBankWithdraw(BankMoveWire value)=>
+        EncodeBankMove(WireOpcode.BankWithdraw,value);
+
+    private static bool TryDecodeBankMove(
+        ReadOnlySpan<byte> frame,WireOpcode opcode,out BankMoveWire value)
+    {
+        value=default;
+        if(!TryReadHeader(frame,out var h)||h.Opcode!=opcode)return false;
+        value=new(
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(8,8)),
+            BinaryPrimitives.ReadUInt32LittleEndian(frame.Slice(16,4)),
+            BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(20,4)),
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(24,8)));
+        return value.MapEpoch>0&&value.BankSequence>0&&value.NpcSpawnId>0&&
+            value.Amount>0&&value.Amount<=SqliteIdentityStore.MaximumMoney;
+    }
+
+    public static bool TryDecodeBankDeposit(ReadOnlySpan<byte> frame,out BankMoveWire value)=>
+        TryDecodeBankMove(frame,WireOpcode.BankDeposit,out value);
+    public static bool TryDecodeBankWithdraw(ReadOnlySpan<byte> frame,out BankMoveWire value)=>
+        TryDecodeBankMove(frame,WireOpcode.BankWithdraw,out value);
+
+    public static byte[] EncodeBankTransactionResult(BankTransactionResultWire value)
+    {
+        if(!ValidBankTransactionResult(value))
+            throw new ArgumentOutOfRangeException(nameof(value));
+        var frame=NewFrame(WireOpcode.BankTransactionResult,BankTransactionResultFrameBytes);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(8,8),value.MapEpoch);
+        BinaryPrimitives.WriteUInt32LittleEndian(frame.AsSpan(16,4),value.BankSequence);
+        frame[20]=(byte)value.Kind;
+        frame[21]=(byte)value.Status;
+        BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(22,4),value.NpcSpawnId);
+        frame[26]=(byte)value.Scope;
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(27,8),value.Amount);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(35,8),value.WalletMoney);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(43,8),value.BankMoney);
+        return frame;
+    }
+
+    public static bool TryDecodeBankTransactionResult(
+        ReadOnlySpan<byte> frame,out BankTransactionResultWire value)
+    {
+        value=default;
+        if(!TryReadHeader(frame,out var h)||h.Opcode!=WireOpcode.BankTransactionResult)return false;
+        value=new(
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(8,8)),
+            BinaryPrimitives.ReadUInt32LittleEndian(frame.Slice(16,4)),
+            (BankTransactionKind)frame[20],
+            (BankTransactionStatus)frame[21],
+            BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(22,4)),
+            (BankBalanceScope)frame[26],
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(27,8)),
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(35,8)),
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(43,8)));
+        return ValidBankTransactionResult(value);
+    }
+
+    private static bool ValidBankTransactionResult(BankTransactionResultWire value)
+    {
+        if(value.MapEpoch<=0||value.BankSequence==0||
+           value.Kind is not (BankTransactionKind.Deposit or BankTransactionKind.Withdraw)||
+           (byte)value.Status>(byte)BankTransactionStatus.PlayerDead||value.NpcSpawnId<=0||
+           value.Amount<=0||value.Amount>SqliteIdentityStore.MaximumMoney||
+           value.WalletMoney<0||value.BankMoney<0||
+           value.WalletMoney>SqliteIdentityStore.MaximumMoney||
+           value.BankMoney>SqliteIdentityStore.MaximumMoney)return false;
+        if(value.Scope==BankBalanceScope.None)
+            return value.WalletMoney==0&&value.BankMoney==0;
+        return value.Scope is BankBalanceScope.Character or BankBalanceScope.Account;
+    }
     private static float ReadFloat(ReadOnlySpan<byte> source) =>
         BitConverter.Int32BitsToSingle(BinaryPrimitives.ReadInt32LittleEndian(source));
 
