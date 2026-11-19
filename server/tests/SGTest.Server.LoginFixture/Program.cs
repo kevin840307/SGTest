@@ -46,6 +46,8 @@ internal static class Program
             return await RepairLoginFixture.RunAsync().ConfigureAwait(false);
         if (args is ["--trade"])
             return await TradeLoginFixture.RunAsync().ConfigureAwait(false);
+        if (args is ["--player-shop"])
+            return await PlayerShopLoginFixture.RunAsync().ConfigureAwait(false);
         if (args is ["--pvp"])
             return await PvpLoginFixture.RunAsync().ConfigureAwait(false);
         if (args is ["--checkpoint-crash-producer", var producerDb])

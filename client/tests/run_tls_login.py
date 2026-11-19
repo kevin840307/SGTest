@@ -49,10 +49,12 @@ def main() -> int:
                         help="run real TLS ClientSession server-authoritative repair E2E")
     parser.add_argument("--trade", action="store_true",
                         help="run two real TLS clients through durable player trade E2E")
+    parser.add_argument("--player-shop", action="store_true",
+                        help="run two real TLS clients through authoritative player-shop E2E")
     parser.add_argument("--pvp", action="store_true",
                         help="run two real TLS clients through authoritative player PvP E2E")
     args = parser.parse_args()
-    if args.app_ui and (args.multi or args.crossmap or args.portal or args.reconnect or args.combat or args.combat_observer or args.skill_aoe or args.skill_aoe_observer or args.discard or args.storage or args.equipment or args.bank or args.repair or args.trade or args.pvp or args.auto_attack):
+    if args.app_ui and (args.multi or args.crossmap or args.portal or args.reconnect or args.combat or args.combat_observer or args.skill_aoe or args.skill_aoe_observer or args.discard or args.storage or args.equipment or args.bank or args.repair or args.trade or args.player_shop or args.pvp or args.auto_attack):
         parser.error("--app-ui uses the single-client login fixture")
     if args.ui_screenshot and not args.app_ui:
         parser.error("--ui-screenshot requires --app-ui")
@@ -90,6 +92,8 @@ def main() -> int:
         return run_repair(args, repo, fixture, env)
     if args.trade:
         return run_trade(args, repo, fixture, env)
+    if args.player_shop:
+        return run_player_shop(args, repo, fixture, env)
     if args.pvp:
         return run_pvp(args, repo, fixture, env)
     if args.combat:
@@ -588,6 +592,123 @@ def run_repair(args, repo: Path, fixture: Path, env: dict[str, str]) -> int:
             print(line, file=sys.stderr)
         return 1
     finally:
+        if server.poll() is None:
+            server.terminate()
+            try:
+                server.wait(timeout=3)
+            except subprocess.TimeoutExpired:
+                server.kill()
+
+
+
+def run_player_shop(args, repo: Path, fixture: Path, env: dict[str, str]) -> int:
+    server = subprocess.Popen(
+        ["dotnet", "run", "--project", str(fixture), "-c", "Release",
+         "--no-build", "--", "--player-shop"],
+        cwd=repo, env=env, text=True, stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT, bufsize=1)
+    server_lines: list[str] = []
+    server_notices: queue.Queue[str] = queue.Queue()
+    seller_lines: list[str] = []
+    seller_notices: queue.Queue[str] = queue.Queue()
+    seller = None
+
+    def capture(pipe, storage: list[str], notices: queue.Queue[str]) -> None:
+        for line in pipe:
+            cleaned = line.rstrip()
+            storage.append(cleaned)
+            notices.put(cleaned)
+
+    assert server.stdout is not None
+    threading.Thread(
+        target=capture,args=(server.stdout,server_lines,server_notices),
+        daemon=True).start()
+
+    def until(notices: queue.Queue[str], expected: str, deadline: float,
+              process: subprocess.Popen) -> str:
+        while time.monotonic() < deadline:
+            if process.poll() is not None and notices.empty():
+                raise RuntimeError(
+                    f"process exited before {expected} (code={process.returncode})")
+            try:
+                line=notices.get(timeout=0.15)
+            except queue.Empty:
+                continue
+            if expected in line:
+                return line
+        raise TimeoutError(f"timeout waiting for {expected}")
+
+    deadline=time.monotonic()+args.timeout
+    try:
+        ready=until(server_notices,"PLAYER_SHOP_FIXTURE_READY",deadline,server)
+        match=re.search(
+            r"PLAYER_SHOP_FIXTURE_READY port=(\d+) cert=(.+?) seller=(\d+) "
+            r"buyer=(\d+) item_uid=(\d+) drop_id=(\d+)",ready)
+        if match is None:
+            raise RuntimeError("malformed player-shop fixture readiness: "+ready)
+        port,cert,seller_id,buyer_id,item_uid,drop_id=match.groups()
+        base=[args.godot,"--headless","--path",str(repo/"client"),
+              "--script","res://tests/test_client_player_shop_tls.gd","--",
+              port,cert]
+        tail=[seller_id,buyer_id,item_uid,drop_id]
+
+        seller=subprocess.Popen(
+            [*base,"seller",*tail],cwd=repo,text=True,
+            stdout=subprocess.PIPE,stderr=subprocess.STDOUT,bufsize=1)
+        assert seller.stdout is not None
+        threading.Thread(
+            target=capture,args=(seller.stdout,seller_lines,seller_notices),
+            daemon=True).start()
+        until(seller_notices,"CLIENT_PLAYER_SHOP_READY role=seller",deadline,seller)
+
+        buyer=subprocess.run(
+            [*base,"buyer",*tail],cwd=repo,text=True,
+            stdout=subprocess.PIPE,stderr=subprocess.STDOUT,
+            timeout=max(1.0,deadline-time.monotonic()))
+        if buyer.returncode!=0 or "CLIENT_PLAYER_SHOP_PASS role=buyer" not in buyer.stdout:
+            raise RuntimeError("player-shop buyer failed:\n"+buyer.stdout)
+
+        seller.wait(timeout=max(1.0,deadline-time.monotonic()))
+        if seller.returncode!=0 or not any(
+                "CLIENT_PLAYER_SHOP_PASS role=seller" in line
+                for line in seller_lines):
+            raise RuntimeError(
+                "player-shop seller failed:\n"+"\n".join(seller_lines))
+
+        server.wait(timeout=max(1.0,deadline-time.monotonic()))
+        if server.returncode!=0 or not any(
+                line.startswith("PLAYER_SHOP_FIXTURE_PASS")
+                for line in server_lines):
+            raise RuntimeError(
+                "player-shop fixture failed:\n"+"\n".join(server_lines))
+
+        print(buyer.stdout,end="")
+        for line in seller_lines:
+            if line.startswith("CLIENT_PLAYER_SHOP_"):
+                print(line)
+        for line in server_lines:
+            if line.startswith("PLAYER_SHOP_FIXTURE_"):
+                print(line)
+        print("GODOT_CSHARP_TWO_CLIENT_PLAYER_SHOP_E2E_PASS "
+              "tls=true concurrent_clients=2 online_only=true "
+              "aoi_seller=true inspect=true atomic_uid=true "
+              "quantity=2 source_drop=true durability=80 "
+              "seller_wallet=100_to_400 buyer_wallet=1000_to_700 "
+              "seller_sold_push=true client_price_math=false")
+        return 0
+    except Exception as error:
+        print("TLS_PLAYER_SHOP_RUNNER_FAIL",error,file=sys.stderr)
+        for name,lines in (("server",server_lines),("seller",seller_lines)):
+            for line in lines[-30:]:
+                print(name,line,file=sys.stderr)
+        return 1
+    finally:
+        if seller is not None and seller.poll() is None:
+            seller.terminate()
+            try:
+                seller.wait(timeout=2)
+            except subprocess.TimeoutExpired:
+                seller.kill()
         if server.poll() is None:
             server.terminate()
             try:
