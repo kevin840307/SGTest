@@ -74,6 +74,8 @@ def main() -> int:
         return run_discard(args, repo, fixture, env)
     if args.storage:
         return run_storage(args, repo, fixture, env)
+    if args.equipment:
+        return run_equipment(args, repo, fixture, env)
     if args.combat:
         return run_combat(args, repo, fixture, env)
     if args.reconnect:
