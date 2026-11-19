@@ -74,6 +74,10 @@ public enum TrustedBankCommandKind : byte { Open=1, Deposit=2, Withdraw=3 }
 public readonly record struct TrustedBankCommand(
     long ActorId,long ConnectionEpoch,long RequestMapEpoch,
     uint BankSequence,int NpcSpawnId,TrustedBankCommandKind Kind,long Amount=0);
+public enum TrustedRepairCommandKind : byte { Open=1, Repair=2 }
+public readonly record struct TrustedRepairCommand(
+    long ActorId,long ConnectionEpoch,long RequestMapEpoch,
+    uint RepairSequence,int NpcSpawnId,TrustedRepairCommandKind Kind,long ItemUid=0);
 
 public readonly record struct NormalAttackOutcome(
     NormalAttackStatus Status, long ServerTick, long TargetEntityId,
@@ -285,7 +289,8 @@ public sealed class GatewayConnection
                                               Func<TrustedShopCommand, bool>? postShop = null,
                                               Func<TrustedStorageCommand, bool>? postStorage = null,
                                               Func<TrustedEquipmentCommand, bool>? postEquipment = null,
-                                              Func<TrustedBankCommand, bool>? postBank = null)
+                                              Func<TrustedBankCommand, bool>? postBank = null,
+                                              Func<TrustedRepairCommand, bool>? postRepair = null)
     {
         ArgumentNullException.ThrowIfNull(postMove);
         lock (_receiveGate)
@@ -298,7 +303,7 @@ public sealed class GatewayConnection
             return _parser.Feed(bytes,
                 frame => HandleClientFrame(
                     frame, postMove, postNpc, postResync, postAttack, postRespawn,
-                    postPickup, postRecovery, postDiscard, postSkill, postShop, postStorage, postEquipment, postBank),
+                    postPickup, postRecovery, postDiscard, postSkill, postShop, postStorage, postEquipment, postBank, postRepair),
                 out commandsAccepted);
         }
     }
@@ -316,7 +321,8 @@ public sealed class GatewayConnection
                                               Func<TrustedShopCommand, bool>? postShop = null,
                                               Func<TrustedStorageCommand, bool>? postStorage = null,
                                               Func<TrustedEquipmentCommand, bool>? postEquipment = null,
-                                              Func<TrustedBankCommand, bool>? postBank = null)
+                                              Func<TrustedBankCommand, bool>? postBank = null,
+                                              Func<TrustedRepairCommand, bool>? postRepair = null)
     {
         ArgumentNullException.ThrowIfNull(postMove);
         lock (_receiveGate)
@@ -329,7 +335,7 @@ public sealed class GatewayConnection
             return _parser.Resume(
                 frame => HandleClientFrame(
                     frame, postMove, postNpc, postResync, postAttack, postRespawn,
-                    postPickup, postRecovery, postDiscard, postSkill, postShop, postStorage, postEquipment, postBank),
+                    postPickup, postRecovery, postDiscard, postSkill, postShop, postStorage, postEquipment, postBank, postRepair),
                 out commandsAccepted);
         }
     }
@@ -348,7 +354,8 @@ public sealed class GatewayConnection
         Func<TrustedShopCommand, bool>? postShop,
         Func<TrustedStorageCommand, bool>? postStorage,
         Func<TrustedEquipmentCommand, bool>? postEquipment,
-        Func<TrustedBankCommand, bool>? postBank)
+        Func<TrustedBankCommand, bool>? postBank,
+        Func<TrustedRepairCommand, bool>? postRepair)
     {
         if (!WireProtocol.TryReadHeader(frame, out var header))
             return WireFrameDisposition.ProtocolViolation;
@@ -489,6 +496,27 @@ public sealed class GatewayConnection
                 bound.ActorId,bound.ConnectionEpoch,bankWithdraw.MapEpoch,
                 bankWithdraw.BankSequence,bankWithdraw.NpcSpawnId,
                 TrustedBankCommandKind.Withdraw,bankWithdraw.Amount))
+                ? WireFrameDisposition.Accepted:WireFrameDisposition.Backpressured;
+        }
+
+        if(postRepair is not null && header.Opcode==WireOpcode.RepairOpen &&
+            WireProtocol.TryDecodeRepairOpen(frame,out var repairOpen))
+        {
+            if(!GameplayReady(bound))return WireFrameDisposition.ProtocolViolation;
+            return postRepair(new TrustedRepairCommand(
+                bound.ActorId,bound.ConnectionEpoch,repairOpen.MapEpoch,
+                repairOpen.RepairSequence,repairOpen.NpcSpawnId,
+                TrustedRepairCommandKind.Open))
+                ? WireFrameDisposition.Accepted:WireFrameDisposition.Backpressured;
+        }
+        if(postRepair is not null && header.Opcode==WireOpcode.RepairItem &&
+            WireProtocol.TryDecodeRepairItem(frame,out var repairItem))
+        {
+            if(!GameplayReady(bound))return WireFrameDisposition.ProtocolViolation;
+            return postRepair(new TrustedRepairCommand(
+                bound.ActorId,bound.ConnectionEpoch,repairItem.MapEpoch,
+                repairItem.RepairSequence,repairItem.NpcSpawnId,
+                TrustedRepairCommandKind.Repair,repairItem.ItemUid))
                 ? WireFrameDisposition.Accepted:WireFrameDisposition.Backpressured;
         }
 
@@ -920,6 +948,74 @@ public sealed class GatewayConnection
                 request.RequestMapEpoch,request.BankSequence,result.Kind,result.Status,
                 request.NpcSpawnId,result.Scope,result.Amount,
                 result.WalletMoney,result.BankMoney));
+            return _reliable.TryEnqueue(frame)
+                ? GatewaySendStatus.Enqueued:GatewaySendStatus.Backpressured;
+        }
+    }
+
+    public GatewaySendStatus QueueRepairSnapshot(
+        TrustedRepairCommand request,RepairOpenStatus status,RepairPreview? preview)
+    {
+        lock(_bindingGate)
+        {
+            if(_closed)return GatewaySendStatus.Closed;
+            var bound=_binding;
+            if(request.ActorId!=bound.ActorId||
+               request.ConnectionEpoch!=bound.ConnectionEpoch||
+               request.RequestMapEpoch!=bound.MapEpoch||
+               request.Kind!=TrustedRepairCommandKind.Open)
+                return GatewaySendStatus.GenerationMismatch;
+            var items=preview?.Items??Array.Empty<RepairPreviewItem>();
+            const int page=WireProtocol.RepairSnapshotMaxItemsPerFrame;
+            if(items.Count==0)
+            {
+                var empty=WireProtocol.EncodeRepairSnapshot(new(
+                    request.RequestMapEpoch,request.RepairSequence,status,
+                    request.NpcSpawnId,preview?.WalletMoney??0,0,true,
+                    Array.Empty<RepairPreviewItemWire>()));
+                return _reliable.TryEnqueue(empty)
+                    ? GatewaySendStatus.Enqueued:GatewaySendStatus.Backpressured;
+            }
+            for(int start=0;start<items.Count;start+=page)
+            {
+                int count=Math.Min(page,items.Count-start);
+                var rows=new RepairPreviewItemWire[count];
+                for(int i=0;i<count;i++)
+                {
+                    var item=items[start+i];
+                    rows[i]=new(item.ItemUid,item.ItemDefinitionId,item.Location,
+                        item.CurrentDurability,item.MaxDurability,item.Cost);
+                }
+                var frame=WireProtocol.EncodeRepairSnapshot(new(
+                    request.RequestMapEpoch,request.RepairSequence,status,
+                    request.NpcSpawnId,preview!.WalletMoney,start,
+                    start+count==items.Count,rows));
+                if(!_reliable.TryEnqueue(frame))
+                    return GatewaySendStatus.Backpressured;
+            }
+            return GatewaySendStatus.Enqueued;
+        }
+    }
+
+    public GatewaySendStatus QueueRepairResult(
+        TrustedRepairCommand request,RepairResult result)
+    {
+        lock(_bindingGate)
+        {
+            if(_closed)return GatewaySendStatus.Closed;
+            var bound=_binding;
+            if(request.ActorId!=bound.ActorId||
+               request.ConnectionEpoch!=bound.ConnectionEpoch||
+               request.RequestMapEpoch!=bound.MapEpoch||
+               request.Kind!=TrustedRepairCommandKind.Repair||
+               request.ItemUid!=result.ItemUid||
+               request.NpcSpawnId!=result.NpcSpawnId)
+                return GatewaySendStatus.GenerationMismatch;
+            var frame=WireProtocol.EncodeRepairResult(new(
+                request.RequestMapEpoch,request.RepairSequence,result.Status,
+                result.NpcSpawnId,result.ItemUid,result.ItemDefinitionId,
+                result.Location,result.CurrentDurability,result.MaxDurability,
+                result.Cost,result.WalletMoney));
             return _reliable.TryEnqueue(frame)
                 ? GatewaySendStatus.Enqueued:GatewaySendStatus.Backpressured;
         }
