@@ -80,6 +80,13 @@ var bank_deposit_button := Button.new()
 var bank_withdraw_button := Button.new()
 var bank_status := Label.new()
 var _bank_display_key := ""
+var repair_npc_input := SpinBox.new()
+var repair_open_button := Button.new()
+var repair_wallet_label := Label.new()
+var repair_item_picker := OptionButton.new()
+var repair_button := Button.new()
+var repair_status := Label.new()
+var _repair_display_key := ""
 const INVENTORY_PAGE_SIZE := 80
 var _inventory_page := 0
 var _inventory_display_key := ""
@@ -212,7 +219,17 @@ func _ready() -> void:
 	bank_deposit_button.text = "存入金錢"
 	bank_withdraw_button.text = "領出金錢"
 	bank_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	for control in [bank_npc_input,bank_open_button,bank_scope_label,bank_wallet_label,bank_balance_label,bank_amount_input,bank_deposit_button,bank_withdraw_button,bank_status]:
+	for control in [bank_npc_input,bank_open_button,bank_scope_label,bank_wallet_label,bank_balance_label,bank_amount_input,bank_deposit_button,bank_withdraw_button,bank_status,repair_npc_input,repair_open_button,repair_wallet_label,repair_item_picker,repair_button,repair_status]:
+		control.visible = false
+	repair_npc_input.min_value = 1
+	repair_npc_input.max_value = 2147483647
+	repair_npc_input.step = 1
+	repair_npc_input.value = 1
+	repair_open_button.text = "開啟附近 NPC 修理"
+	repair_wallet_label.text = "角色錢包：—"
+	repair_button.text = "修理選中物品"
+	repair_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	for control in [repair_npc_input,repair_open_button,repair_wallet_label,repair_item_picker,repair_button,repair_status]:
 		control.visible = false
 	respawn_button.text = "復活"
 	skill_hint.text = "技能 ID（需伺服器已核准規則）"
@@ -257,6 +274,9 @@ func _ready() -> void:
 	bank_open_button.pressed.connect(_open_bank_from_input)
 	bank_deposit_button.pressed.connect(_deposit_bank_amount)
 	bank_withdraw_button.pressed.connect(_withdraw_bank_amount)
+	repair_open_button.pressed.connect(_open_repair_from_input)
+	repair_button.pressed.connect(_repair_selected_item)
+	repair_item_picker.item_selected.connect(func(_index): _update_repair_buttons())
 	var style := StyleBoxFlat.new()
 	style.bg_color = Color("211c15")
 	style.border_color = Color("c8a452")
@@ -302,6 +322,7 @@ func login() -> void:
 	_storage_display_key = ""
 	_equipment_display_key = ""
 	_bank_display_key = ""
+	_repair_display_key = ""
 	_inventory_page = 0
 	inventory_search.clear()
 	shop_status.text = ""
@@ -317,6 +338,9 @@ func login() -> void:
 	bank_scope_label.text = "銀行範圍：—"
 	bank_wallet_label.text = "角色錢包：—"
 	bank_balance_label.text = "銀行餘額：—"
+	repair_status.text = ""
+	repair_wallet_label.text = "角色錢包：—"
+	repair_item_picker.clear()
 	inventory_preview.text = ""
 	_show_inventory_preview(false)
 	characters.clear()
@@ -458,6 +482,14 @@ func submit_bank_withdraw(amount: int) -> bool:
 	return active and int(_latest.get("active_bank_npc",0)) > 0 and int(_latest.get("bank_scope",0)) in [1,2] and int(_latest.get("pending_bank_sequence",0)) == 0 and amount > 0 and amount <= int(_latest.get("bank_money",0)) and session.withdraw_bank_money(amount)
 
 
+func submit_repair_open(npc_spawn_id: int) -> bool:
+	return active and not bool(_latest.get("reconnecting",false)) and bool(_latest.get("world_ready",false)) and bool(_latest.get("inventory_ready",false)) and not bool(_latest.get("player_dead",false)) and not bool(_latest.get("resync_pending",false)) and not bool(_latest.get("waiting_for_new_map",false)) and int(_latest.get("pending_repair_sequence",0)) == 0 and npc_spawn_id > 0 and session.open_repair(npc_spawn_id)
+
+
+func submit_repair_item(item_uid: int) -> bool:
+	return active and bool(_latest.get("repair_ready",false)) and int(_latest.get("active_repair_npc",0)) > 0 and int(_latest.get("pending_repair_sequence",0)) == 0 and item_uid > 0 and (_latest.get("repair_items",{}) as Dictionary).has(item_uid) and session.repair_item(item_uid)
+
+
 func submit_equipment_equip(item_uid: int) -> bool:
 	return active and not bool(_latest.get("reconnecting",false)) and bool(_latest.get("world_ready",false)) and bool(_latest.get("inventory_ready",false)) and bool(_latest.get("equipment_ready",false)) and not bool(_latest.get("resync_pending",false)) and not bool(_latest.get("waiting_for_new_map",false)) and int(_latest.get("pending_equipment_sequence",0)) == 0 and item_uid > 0 and (_latest.get("inventory_items",{}) as Dictionary).has(item_uid) and session.equip_inventory_item(item_uid)
 
@@ -499,6 +531,7 @@ func disconnect_session() -> void:
 	_storage_display_key = ""
 	_equipment_display_key = ""
 	_bank_display_key = ""
+	_repair_display_key = ""
 	_inventory_page = 0
 	inventory_search.clear()
 	shop_status.text = ""
@@ -514,6 +547,9 @@ func disconnect_session() -> void:
 	bank_scope_label.text = "銀行範圍：—"
 	bank_wallet_label.text = "角色錢包：—"
 	bank_balance_label.text = "銀行餘額：—"
+	repair_status.text = ""
+	repair_wallet_label.text = "角色錢包：—"
+	repair_item_picker.clear()
 	inventory_preview.text = ""
 	_show_inventory_preview(false)
 	_characters = []
@@ -992,6 +1028,102 @@ func _update_bank_ui() -> void:
 			bank_status.text = "銀行操作失敗（伺服器代碼 %d）" % int(result.get("status",-1))
 
 
+func _open_repair_from_input() -> void:
+	if repair_open_button.disabled:
+		return
+	if submit_repair_open(int(repair_npc_input.value)):
+		repair_status.text = "修理清單請求已送出，等待伺服器核准耐久與費用…"
+		repair_open_button.disabled = true
+	else:
+		repair_status.text = "目前無法開啟該修理 NPC"
+
+
+func _repair_selected_item() -> void:
+	if repair_button.disabled or repair_item_picker.selected < 0:
+		return
+	var uid := int(repair_item_picker.get_item_metadata(repair_item_picker.selected))
+	if submit_repair_item(uid):
+		repair_status.text = "修理請求已送出，等待伺服器扣款與耐久結算…"
+		repair_button.disabled = true
+	else:
+		repair_status.text = "目前無法修理該物品"
+
+
+func _repair_location_text(location: int) -> String:
+	return "背包" if location == 1 else "裝備" if location == 2 else "未知"
+
+
+func _update_repair_buttons() -> void:
+	var pending := int(_latest.get("pending_repair_sequence",0)) != 0
+	var usable := active and int(_latest.get("state",-1)) == State.STATE_IN_WORLD and bool(_latest.get("world_ready",false)) and bool(_latest.get("inventory_ready",false)) and not bool(_latest.get("player_dead",false)) and not bool(_latest.get("reconnecting",false)) and not bool(_latest.get("resync_pending",false)) and not bool(_latest.get("waiting_for_new_map",false))
+	repair_open_button.disabled = not usable or pending
+	var can_repair := false
+	if usable and not pending and bool(_latest.get("repair_ready",false)) and int(_latest.get("active_repair_npc",0)) > 0 and repair_item_picker.selected >= 0:
+		var uid := int(repair_item_picker.get_item_metadata(repair_item_picker.selected))
+		var items: Dictionary = _latest.get("repair_items",{})
+		if items.has(uid):
+			var item: Dictionary = items[uid]
+			var cost := int(item.get("cost",0))
+			can_repair = cost > 0 and cost <= int(_latest.get("repair_wallet_money",0)) and int(item.get("current_durability",0)) < int(item.get("max_durability",0))
+	repair_button.disabled = not can_repair
+
+
+func _update_repair_ui() -> void:
+	var in_world := active and int(_latest.get("state",-1)) == State.STATE_IN_WORLD
+	for control in [repair_npc_input,repair_open_button,repair_wallet_label,repair_item_picker,repair_button,repair_status]:
+		control.visible = in_world
+	if not in_world:
+		_repair_display_key = ""
+		return
+	var active_npc := int(_latest.get("active_repair_npc",0))
+	var ready := bool(_latest.get("repair_ready",false))
+	var items: Dictionary = _latest.get("repair_items",{})
+	var wallet := int(_latest.get("repair_wallet_money",0))
+	repair_wallet_label.text = "角色錢包：%d" % wallet if active_npc > 0 else "角色錢包：—"
+	var key := "%d/%d/%d/%d/%d" % [
+		active_npc,int(_latest.get("repair_revision",0)),
+		int(_latest.get("repair_sequence",0)),wallet,items.size()]
+	if key != _repair_display_key:
+		_repair_display_key = key
+		repair_item_picker.clear()
+		if ready and active_npc > 0:
+			var uids: Array = items.keys()
+			uids.sort()
+			for raw_uid in uids:
+				var uid := int(raw_uid)
+				var item: Dictionary = items[raw_uid]
+				var item_id := int(item.get("item_definition_id",0))
+				repair_item_picker.add_item("%s｜%s｜耐久 %d/%d｜費用 %d｜UID %d" % [
+					item_catalog.name_for(item_id),
+					_repair_location_text(int(item.get("location",0))),
+					int(item.get("current_durability",0)),
+					int(item.get("max_durability",0)),
+					int(item.get("cost",0)),uid])
+				repair_item_picker.set_item_metadata(repair_item_picker.item_count-1,uid)
+			if repair_item_picker.item_count > 0:
+				repair_item_picker.select(0)
+	var open_status := int(_latest.get("last_repair_open_status",-1))
+	if open_status > 0 and not ready:
+		repair_status.text = "修理 NPC 無法開啟（伺服器代碼 %d）" % open_status
+	var result: Dictionary = _latest.get("last_repair_result",{})
+	if not result.is_empty():
+		var result_status := int(result.get("status",-1))
+		if result_status in [0,1]:
+			repair_status.text = "修理完成：%s｜耐久 %d/%d｜費用 %d｜錢包 %d" % [
+				item_catalog.name_for(int(result.get("item_definition_id",0))),
+				int(result.get("current_durability",0)),
+				int(result.get("max_durability",0)),
+				int(result.get("cost",0)),int(result.get("wallet_money",0))]
+		elif result_status == 6:
+			repair_status.text = "物品耐久已滿，不需修理"
+		elif result_status == 7:
+			repair_status.text = "金錢不足：需要 %d，錢包 %d" % [
+				int(result.get("cost",0)),int(result.get("wallet_money",0))]
+		else:
+			repair_status.text = "修理失敗（伺服器代碼 %d）" % result_status
+	_update_repair_buttons()
+
+
 func _equip_selected_inventory_item() -> void:
 	if equipment_equip_button.disabled or equipment_inventory_picker.selected < 0:
 		return
@@ -1174,6 +1306,7 @@ func _process(delta: float) -> void:
 	_update_storage_ui()
 	_update_equipment_ui()
 	_update_bank_ui()
+	_update_repair_ui()
 	var pickup_result: Dictionary = _latest.get("last_pickup_result",{})
 	if not pickup_result.is_empty():
 		if int(pickup_result.status) in [0,1]:
