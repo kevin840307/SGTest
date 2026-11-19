@@ -54,6 +54,8 @@ internal static class PlayerShopChecks
                 created.Listing.Price==300&&
                 created.Listing.State==PlayerShopListingState.Active,
                 "player-shop listing snapshot mismatch");
+            var listing=created.Listing
+                ??throw new InvalidOperationException("player-shop listing missing");
 
             var duplicate=await store.CreatePlayerShopListingAsync(
                 seller,second.ItemUid,1,rules);
@@ -61,11 +63,11 @@ internal static class PlayerShopChecks
                 "seller opened two simultaneous player-shop listings");
 
             var active=await store.GetActivePlayerShopListingAsync(seller);
-            Checks.Require(active?.ListingId==created.Listing.ListingId,
+            Checks.Require(active?.ListingId==listing.ListingId,
                 "active player-shop listing lookup mismatch");
 
             var applied=await store.BuyPlayerShopListingAsync(
-                buyer,created.Listing.ListingId,rules);
+                buyer,listing.ListingId,rules);
             Checks.Require(applied.Status==PlayerShopBuyStatus.Applied&&
                 applied.Listing is not null&&
                 applied.Listing.State==PlayerShopListingState.Sold&&
@@ -82,20 +84,20 @@ internal static class PlayerShopChecks
                 "sold player-shop UID remained with seller");
 
             var replay=await store.BuyPlayerShopListingAsync(
-                buyer,created.Listing.ListingId,rules);
+                buyer,listing.ListingId,rules);
             Checks.Require(replay.Status==PlayerShopBuyStatus.AlreadyApplied&&
                 replay.Listing?.BuyerCharacterId==buyer&&
                 await store.GetCharacterMoneyAsync(seller)==400&&
                 await store.GetCharacterMoneyAsync(buyer)==700,
                 "exact player-shop replay changed committed money");
             var lost=await store.BuyPlayerShopListingAsync(
-                other,created.Listing.ListingId,rules);
+                other,listing.ListingId,rules);
             Checks.Require(lost.Status==PlayerShopBuyStatus.Sold&&
                 await store.GetCharacterMoneyAsync(other)==1000,
                 "second buyer changed already-sold player-shop listing");
 
             var closedSold=await store.ClosePlayerShopListingAsync(
-                seller,created.Listing.ListingId);
+                seller,listing.ListingId);
             Checks.Require(closedSold.Status==PlayerShopCloseStatus.AlreadyClosed,
                 "sold player-shop listing was closed as active");
 
@@ -145,7 +147,7 @@ internal static class PlayerShopChecks
                 "stale listing setup could not move UID");
 
             var rejected=await store.BuyPlayerShopListingAsync(
-                buyer,created.Listing.ListingId,rules);
+                buyer,listing.ListingId,rules);
             Checks.Require(rejected.Status==PlayerShopBuyStatus.StaleListing&&
                 rejected.Listing?.State==PlayerShopListingState.Stale&&
                 await store.GetCharacterMoneyAsync(seller)==50&&
@@ -160,10 +162,12 @@ internal static class PlayerShopChecks
                 seller,freshItem.ItemUid,100,rules);
             Checks.Require(fresh.Status==PlayerShopCreateStatus.Created&&
                 fresh.Listing is not null,"fresh listing after stale failed");
+            var freshListing=fresh.Listing
+                ??throw new InvalidOperationException("fresh listing missing");
             var closed=await store.ClosePlayerShopListingAsync(
-                seller,fresh.Listing.ListingId);
+                seller,freshListing.ListingId);
             var afterClose=await store.BuyPlayerShopListingAsync(
-                buyer,fresh.Listing.ListingId,rules);
+                buyer,freshListing.ListingId,rules);
             Checks.Require(closed.Status==PlayerShopCloseStatus.Closed&&
                 afterClose.Status==PlayerShopBuyStatus.Closed,
                 "closed player-shop listing remained purchasable");
@@ -201,10 +205,12 @@ internal static class PlayerShopChecks
                 seller,item.ItemUid,100,rules);
             Checks.Require(created.Listing is not null,
                 "concurrent player-shop listing setup failed");
+            var raceListing=created.Listing
+                ??throw new InvalidOperationException("race listing missing");
 
             var results=await Task.WhenAll(buyers.Select(
                 buyer=>store.BuyPlayerShopListingAsync(
-                    buyer,created.Listing.ListingId,rules)));
+                    buyer,raceListing.ListingId,rules)));
             Checks.Require(results.Count(x=>x.Status==PlayerShopBuyStatus.Applied)==1&&
                 results.Count(x=>x.Status==PlayerShopBuyStatus.Sold)==9,
                 "concurrent player-shop buyers did not yield exactly one winner");
