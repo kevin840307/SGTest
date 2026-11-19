@@ -77,7 +77,7 @@ public sealed record CharacterCreateResult(CharacterCreateStatus Status, Charact
 /// </summary>
 public sealed partial class SqliteIdentityStore : IDisposable
 {
-    public const int SchemaVersion = 14;
+    public const int SchemaVersion = 15;
     private readonly string _connectionString;
     private readonly IdentityStoreOptions _options;
     private readonly PasswordHasher _passwords;
@@ -607,6 +607,45 @@ CREATE TABLE IF NOT EXISTS trade_commit_items (
             Execute(connection, @"
 CREATE INDEX IF NOT EXISTS ix_trade_commit_items_from
 ON trade_commit_items(trade_id,from_character_id,item_uid);", tx);
+            // Schema v15: verified Quest V1 persists only the stage/state
+            // chosen through an admitted rule. No row means NotStarted.
+            // rule_revision prevents an edited manifest from silently reinterpreting
+            // an existing character's progress.
+            Execute(connection, @"
+CREATE TABLE IF NOT EXISTS quest_progress (
+    character_id INTEGER NOT NULL REFERENCES characters(character_id) ON DELETE CASCADE,
+    quest_id INTEGER NOT NULL CHECK(quest_id BETWEEN 1 AND 100000000),
+    rule_revision INTEGER NOT NULL CHECK(rule_revision BETWEEN 1 AND 2147483647),
+    stage INTEGER NOT NULL CHECK(stage BETWEEN 0 AND 1000000),
+    state INTEGER NOT NULL CHECK(state IN (1,2)),
+    progress_revision INTEGER NOT NULL CHECK(progress_revision BETWEEN 1 AND 2147483647),
+    source_reference TEXT NOT NULL,
+    created_unix_ms INTEGER NOT NULL,
+    updated_unix_ms INTEGER NOT NULL,
+    PRIMARY KEY(character_id,quest_id)
+);", tx);
+            Execute(connection, @"
+CREATE TABLE IF NOT EXISTS quest_actions (
+    character_id INTEGER NOT NULL REFERENCES characters(character_id) ON DELETE CASCADE,
+    connection_generation INTEGER NOT NULL CHECK(connection_generation > 0),
+    map_epoch INTEGER NOT NULL CHECK(map_epoch > 0),
+    action_sequence INTEGER NOT NULL CHECK(action_sequence BETWEEN 1 AND 4294967295),
+    npc_spawn_id INTEGER NOT NULL CHECK(npc_spawn_id > 0),
+    quest_id INTEGER NOT NULL CHECK(quest_id BETWEEN 1 AND 100000000),
+    rule_revision INTEGER NOT NULL CHECK(rule_revision BETWEEN 1 AND 2147483647),
+    choice_id INTEGER NOT NULL CHECK(choice_id BETWEEN 1 AND 100000000),
+    state_before INTEGER NOT NULL CHECK(state_before BETWEEN 0 AND 2),
+    stage_before INTEGER NOT NULL CHECK(stage_before BETWEEN 0 AND 1000000),
+    state_after INTEGER NOT NULL CHECK(state_after IN (1,2)),
+    stage_after INTEGER NOT NULL CHECK(stage_after BETWEEN 0 AND 1000000),
+    progress_revision_after INTEGER NOT NULL CHECK(progress_revision_after BETWEEN 1 AND 2147483647),
+    source_reference TEXT NOT NULL,
+    created_unix_ms INTEGER NOT NULL,
+    PRIMARY KEY(character_id,connection_generation,map_epoch,action_sequence)
+);", tx);
+            Execute(connection, @"
+CREATE INDEX IF NOT EXISTS ix_quest_progress_character
+ON quest_progress(character_id,quest_id);", tx);
             Execute(connection, @"
 CREATE TRIGGER IF NOT EXISTS trg_combat_mp_insert
 BEFORE INSERT ON character_combat_profiles
