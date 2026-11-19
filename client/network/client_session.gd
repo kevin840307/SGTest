@@ -226,6 +226,69 @@ func withdraw_bank_money(amount: int) -> bool:
 		"actor_id":int(current.get("actor_id",0)),"map_epoch":int(current.get("map_epoch",0))})
 
 
+func open_player_shop(item_uid:int,price:int)->bool:
+	var current:=snapshot()
+	var inventory:Dictionary=current.get("inventory_items",{})
+	if item_uid<=0 or price<=0 or price>WireCodec.MAX_MONEY or not inventory.has(item_uid):
+		return false
+	return _queue_player_shop_intent(1,0,0,item_uid,price,current)
+
+
+func close_player_shop(listing_id:int)->bool:
+	if listing_id<=0:
+		return false
+	var current:=snapshot()
+	return _queue_player_shop_intent(2,0,listing_id,0,0,current)
+
+
+func inspect_player_shop(seller_actor_id:int)->bool:
+	var current:=snapshot()
+	var entities:Dictionary=current.get("entities",{})
+	if (
+		seller_actor_id<=0 or seller_actor_id==int(current.get("actor_id",0)) or
+		not entities.has(seller_actor_id)
+	):
+		return false
+	return _queue_player_shop_intent(3,seller_actor_id,0,0,0,current)
+
+
+func buy_player_shop(seller_actor_id:int,listing_id:int)->bool:
+	var current:=snapshot()
+	var entities:Dictionary=current.get("entities",{})
+	if (
+		seller_actor_id<=0 or seller_actor_id==int(current.get("actor_id",0)) or
+		listing_id<=0 or not entities.has(seller_actor_id)
+	):
+		return false
+	return _queue_player_shop_intent(
+		4,seller_actor_id,listing_id,0,0,current)
+
+
+func _queue_player_shop_intent(
+		action:int,seller_actor_id:int,listing_id:int,item_uid:int,
+		price:int,current:Dictionary)->bool:
+	if (
+		int(current.get("state",-1))!=WorldState.STATE_IN_WORLD or
+		bool(current.get("player_dead",false)) or
+		not bool(current.get("world_ready",false)) or
+		not bool(current.get("inventory_ready",false)) or
+		bool(current.get("resync_pending",false)) or
+		bool(current.get("waiting_for_new_map",false)) or
+		int(current.get("pending_world_ready_ack_epoch",0))!=0 or
+		int(current.get("last_world_ready_ack_epoch",0))!=int(current.get("map_epoch",0)) or
+		int(current.get("pending_player_shop_sequence",0))!=0 or
+		int(current.get("trade_id",0))!=0
+	):
+		return false
+	return _queue_intent({
+		"type":"player_shop","action":action,
+		"seller_actor_id":seller_actor_id,"listing_id":listing_id,
+		"item_uid":item_uid,"price":price,
+		"actor_id":int(current.get("actor_id",0)),
+		"map_epoch":int(current.get("map_epoch",0))
+	})
+
+
 func request_trade(target_actor_id: int) -> bool:
 	var current := snapshot()
 	if target_actor_id <= 0 or target_actor_id == int(current.get("actor_id",0)) or int(current.get("trade_id",0)) != 0:
@@ -517,6 +580,14 @@ func _queue_intent(intent: Dictionary) -> bool:
 			if str(queued.get("type","")) in ["repair_open","repair_item","bank_open","bank_deposit","bank_withdraw","shop_open","shop_buy","shop_sell","storage_open","storage_deposit","storage_withdraw","equipment_equip","equipment_unequip","use_recovery_item","discard_inventory_item"]:
 				accepted = false
 				break
+	if accepted and kind=="player_shop":
+		if int(_published.get("pending_player_shop_sequence",0))!=0 or
+				int(_published.get("trade_id",0))!=0:
+			accepted=false
+		for queued in _intents:
+			if str(queued.get("type",""))=="player_shop":
+				accepted=false
+				break
 	if accepted and kind == "pvp_mode":
 		if int(_published.get("pending_pvp_sequence",0)) != 0:
 			accepted = false
@@ -776,6 +847,71 @@ func _process_first_intent() -> void:
 		var sequence := int(current.npc_interaction_sequence) + 1
 		var frame := WireCodec.encode_npc_interact(int(current.map_epoch), sequence, int(intent.spawn_id))
 		if not frame.is_empty() and _transport.send_frame(frame) and _world.mark_npc_interact_sent(sequence):
+			_pop_intent()
+			_publish()
+
+	elif kind=="player_shop":
+		var current:Dictionary=_world.snapshot()
+		if (
+			int(intent.get("actor_id",0))!=int(current.get("actor_id",0)) or
+			int(intent.get("map_epoch",0))!=int(current.get("map_epoch",0))
+		):
+			_pop_intent()
+			return
+		var action:=int(intent.get("action",0))
+		var seller:=int(intent.get("seller_actor_id",0))
+		var listing:=int(intent.get("listing_id",0))
+		var uid:=int(intent.get("item_uid",0))
+		var price:=int(intent.get("price",0))
+		var entities:Dictionary=current.get("entities",{})
+		if (
+			int(current.get("state",-1))!=WorldState.STATE_IN_WORLD or
+			bool(current.get("player_dead",false)) or
+			not bool(current.get("world_ready",false)) or
+			not bool(current.get("inventory_ready",false)) or
+			bool(current.get("resync_pending",false)) or
+			bool(current.get("waiting_for_new_map",false)) or
+			int(current.get("pending_world_ready_ack_epoch",0))!=0 or
+			int(current.get("last_world_ready_ack_epoch",0))!=int(current.get("map_epoch",0)) or
+			int(current.get("pending_player_shop_sequence",0))!=0 or
+			int(current.get("trade_id",0))!=0
+		):
+			return
+		var valid:=false
+		match action:
+			1:
+				valid=(
+					seller==0 and listing==0 and uid>0 and price>0 and
+					price<=WireCodec.MAX_MONEY and
+					(current.get("inventory_items",{}) as Dictionary).has(uid)
+				)
+			2:
+				valid=seller==0 and listing>0 and uid==0 and price==0
+			3:
+				valid=(
+					seller>0 and seller!=int(current.get("actor_id",0)) and
+					entities.has(seller) and listing==0 and uid==0 and price==0
+				)
+			4:
+				valid=(
+					seller>0 and seller!=int(current.get("actor_id",0)) and
+					entities.has(seller) and listing>0 and uid==0 and price==0
+				)
+		if not valid:
+			_pop_intent()
+			return
+		var sequence:=int(current.get("player_shop_sequence",0))+1
+		var frame:=WireCodec.encode_player_shop_command(
+			int(current.get("map_epoch",0)),sequence,action,
+			seller,listing,uid,price)
+		if frame.is_empty():
+			_pop_intent()
+			return
+		if (
+			_transport.send_frame(frame) and
+			_world.mark_player_shop_sent(
+				sequence,action,seller,listing,uid,price)
+		):
 			_pop_intent()
 			_publish()
 

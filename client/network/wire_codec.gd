@@ -84,6 +84,9 @@ const OPCODE_PVP_SKILL_VISUAL := 85
 const OPCODE_GM_CAPABILITY := 86
 const OPCODE_GM_PVP_NAME_COMMAND := 87
 const OPCODE_GM_PVP_NAME_RESULT := 88
+const OPCODE_PLAYER_SHOP_COMMAND := 89
+const OPCODE_PLAYER_SHOP_RESULT := 90
+const OPCODE_PLAYER_SHOP_SOLD := 91
 const MOVE_TARGET_FRAME_BYTES := 28
 const MOVE_RECEIPT_FRAME_BYTES := 30
 const NPC_INTERACT_FRAME_BYTES := 24
@@ -177,6 +180,9 @@ const PVP_SKILL_VISUAL_FRAME_BYTES := 75
 const GM_CAPABILITY_FRAME_BYTES := 9
 const GM_PVP_NAME_COMMAND_FRAME_BYTES := 29
 const GM_PVP_NAME_RESULT_FRAME_BYTES := 30
+const PLAYER_SHOP_COMMAND_FRAME_BYTES := 53
+const PLAYER_SHOP_RESULT_FRAME_BYTES := 90
+const PLAYER_SHOP_SOLD_FRAME_BYTES := 48
 const MAX_MONEY := 9000000000000000
 
 static func encode_move_target(map_epoch: int, movement_sequence: int, target_x: int, target_y: int) -> PackedByteArray:
@@ -1698,6 +1704,87 @@ static func decode_gm_pvp_name_result(frame:PackedByteArray)->Dictionary:
 		"target_actor_id":target,"name_state":state}
 
 
+static func encode_player_shop_command(
+		epoch:int,sequence:int,action:int,seller_actor_id:int,
+		listing_id:int,item_uid:int,price:int)->PackedByteArray:
+	if epoch<=0 or sequence<=0 or sequence>0xffffffff or action<1 or action>4 or
+			seller_actor_id<0 or listing_id<0 or item_uid<0 or
+			price<0 or price>MAX_MONEY:
+		return PackedByteArray()
+	var valid:=false
+	match action:
+		1:
+			valid=seller_actor_id==0 and listing_id==0 and item_uid>0 and price>0
+		2:
+			valid=seller_actor_id==0 and listing_id>0 and item_uid==0 and price==0
+		3:
+			valid=seller_actor_id>0 and listing_id==0 and item_uid==0 and price==0
+		4:
+			valid=seller_actor_id>0 and listing_id>0 and item_uid==0 and price==0
+	if not valid:
+		return PackedByteArray()
+	var writer:=StreamPeerBuffer.new()
+	writer.big_endian=false
+	writer.put_u32(PLAYER_SHOP_COMMAND_FRAME_BYTES)
+	writer.put_u16(VERSION)
+	writer.put_u16(OPCODE_PLAYER_SHOP_COMMAND)
+	writer.put_64(epoch)
+	writer.put_u32(sequence)
+	writer.put_u8(action)
+	writer.put_64(seller_actor_id)
+	writer.put_64(listing_id)
+	writer.put_64(item_uid)
+	writer.put_64(price)
+	return writer.data_array
+
+
+static func decode_player_shop_result(frame:PackedByteArray)->Dictionary:
+	if not _valid_header(frame,OPCODE_PLAYER_SHOP_RESULT,PLAYER_SHOP_RESULT_FRAME_BYTES):
+		return {}
+	var reader:=_reader(frame,8)
+	var epoch:=reader.get_64()
+	var sequence:=reader.get_u32()
+	var action:=reader.get_u8()
+	var status:=reader.get_u8()
+	var seller:=reader.get_64()
+	var listing:=reader.get_64()
+	var uid:=reader.get_64()
+	var item_id:=reader.get_32()
+	var quantity:=reader.get_32()
+	var source_drop:=reader.get_64()
+	var durability_raw:=reader.get_32()
+	var price:=reader.get_64()
+	var seller_wallet:=reader.get_64()
+	var buyer_wallet:=reader.get_64()
+	if epoch<=0 or sequence==0 or action<1 or action>4 or status>15 or
+			seller<0 or listing<0 or uid<0 or item_id<0 or item_id>100000000 or
+			quantity<0 or quantity>1000000 or source_drop<0 or durability_raw<-1 or
+			price<0 or price>MAX_MONEY or seller_wallet<0 or seller_wallet>MAX_MONEY or
+			buyer_wallet<0 or buyer_wallet>MAX_MONEY:
+		return {}
+	return {
+		"map_epoch":epoch,"shop_sequence":sequence,"action":action,"status":status,
+		"seller_actor_id":seller,"listing_id":listing,"item_uid":uid,
+		"item_definition_id":item_id,"quantity":quantity,
+		"source_drop_id":source_drop,"durability_raw":durability_raw,
+		"price":price,"seller_wallet":seller_wallet,"buyer_wallet":buyer_wallet}
+
+
+static func decode_player_shop_sold(frame:PackedByteArray)->Dictionary:
+	if not _valid_header(frame,OPCODE_PLAYER_SHOP_SOLD,PLAYER_SHOP_SOLD_FRAME_BYTES):
+		return {}
+	var reader:=_reader(frame,8)
+	var epoch:=reader.get_64()
+	var listing:=reader.get_64()
+	var buyer:=reader.get_64()
+	var uid:=reader.get_64()
+	var wallet:=reader.get_64()
+	if epoch<=0 or listing<=0 or buyer<=0 or uid<=0 or wallet<0 or wallet>MAX_MONEY:
+		return {}
+	return {"receiver_map_epoch":epoch,"listing_id":listing,
+		"buyer_actor_id":buyer,"item_uid":uid,"seller_wallet":wallet}
+
+
 static func decode_player_identity(frame: PackedByteArray) -> Dictionary:
 	if not _valid_variable_header(
 		frame,OPCODE_PLAYER_IDENTITY,PLAYER_IDENTITY_HEADER_BYTES+1,
@@ -1800,7 +1887,7 @@ static func frame_opcode(frame: PackedByteArray) -> int:
 	if reader.get_u16() != VERSION:
 		return -1
 	var opcode := reader.get_u16()
-	if opcode not in [OPCODE_MOVE_TARGET, OPCODE_MOVE_RECEIPT, OPCODE_NPC_INTERACT, OPCODE_NPC_INTERACT_RESULT, OPCODE_NORMAL_ATTACK, OPCODE_NORMAL_ATTACK_RESULT, OPCODE_PLAYER_COMBAT_STATE, OPCODE_PLAYER_DAMAGE, OPCODE_AUTH_REQUEST, OPCODE_AUTH_RESULT, OPCODE_CHARACTER_LIST, OPCODE_CHARACTER_CHOOSE, OPCODE_CHARACTER_CHOOSE_RESULT, OPCODE_CHARACTER_CREATE, OPCODE_CHARACTER_CREATE_RESULT, OPCODE_WORLD_READY, OPCODE_ENTITY_SPAWN, OPCODE_ENTITY_DESPAWN, OPCODE_ENTITY_DELTA, OPCODE_SELF_STATE, OPCODE_WORLD_READY_ACK, OPCODE_WORLD_RESYNC_REQUEST, OPCODE_MONSTER_SPAWN, OPCODE_MONSTER_DELTA, OPCODE_MONSTER_DESPAWN, OPCODE_PLAYER_RESPAWN, OPCODE_PLAYER_RESPAWN_RESULT, OPCODE_GROUND_DROP_SPAWN, OPCODE_GROUND_DROP_DESPAWN, OPCODE_GROUND_PICKUP, OPCODE_GROUND_PICKUP_RESULT, OPCODE_INVENTORY_SNAPSHOT, OPCODE_RECOVERY_USE, OPCODE_RECOVERY_USE_RESULT, OPCODE_INVENTORY_DISCARD, OPCODE_INVENTORY_DISCARD_RESULT, OPCODE_PLAYER_ATTACK_VISUAL, OPCODE_PLAYER_DAMAGE_VISUAL, OPCODE_PLAYER_RESPAWN_VISUAL, OPCODE_SKILL_USE, OPCODE_SKILL_USE_RESULT, OPCODE_PLAYER_SKILL_VISUAL, OPCODE_SHOP_OPEN, OPCODE_SHOP_SNAPSHOT, OPCODE_SHOP_BUY, OPCODE_SHOP_SELL, OPCODE_SHOP_TRANSACTION_RESULT, OPCODE_STORAGE_OPEN, OPCODE_STORAGE_SNAPSHOT, OPCODE_STORAGE_DEPOSIT, OPCODE_STORAGE_WITHDRAW, OPCODE_STORAGE_TRANSFER_RESULT, OPCODE_EQUIPMENT_SNAPSHOT, OPCODE_EQUIPMENT_EQUIP, OPCODE_EQUIPMENT_UNEQUIP, OPCODE_EQUIPMENT_TRANSFER_RESULT, OPCODE_BANK_OPEN, OPCODE_BANK_SNAPSHOT, OPCODE_BANK_DEPOSIT, OPCODE_BANK_WITHDRAW, OPCODE_BANK_TRANSACTION_RESULT, OPCODE_REPAIR_OPEN, OPCODE_REPAIR_SNAPSHOT, OPCODE_REPAIR_ITEM, OPCODE_REPAIR_RESULT, OPCODE_TRADE_COMMAND, OPCODE_TRADE_SNAPSHOT, OPCODE_TRADE_TERMINAL, OPCODE_PVP_MODE_COMMAND, OPCODE_PVP_MODE_RESULT, OPCODE_PVP_ATTACK, OPCODE_PVP_ATTACK_RESULT, OPCODE_PVP_DAMAGE, OPCODE_PLAYER_IDENTITY, OPCODE_PVP_COMBAT_VISUAL, OPCODE_PVP_SKILL, OPCODE_PVP_SKILL_RESULT, OPCODE_PVP_SKILL_VISUAL, OPCODE_GM_CAPABILITY, OPCODE_GM_PVP_NAME_COMMAND, OPCODE_GM_PVP_NAME_RESULT]:
+	if opcode not in [OPCODE_MOVE_TARGET, OPCODE_MOVE_RECEIPT, OPCODE_NPC_INTERACT, OPCODE_NPC_INTERACT_RESULT, OPCODE_NORMAL_ATTACK, OPCODE_NORMAL_ATTACK_RESULT, OPCODE_PLAYER_COMBAT_STATE, OPCODE_PLAYER_DAMAGE, OPCODE_AUTH_REQUEST, OPCODE_AUTH_RESULT, OPCODE_CHARACTER_LIST, OPCODE_CHARACTER_CHOOSE, OPCODE_CHARACTER_CHOOSE_RESULT, OPCODE_CHARACTER_CREATE, OPCODE_CHARACTER_CREATE_RESULT, OPCODE_WORLD_READY, OPCODE_ENTITY_SPAWN, OPCODE_ENTITY_DESPAWN, OPCODE_ENTITY_DELTA, OPCODE_SELF_STATE, OPCODE_WORLD_READY_ACK, OPCODE_WORLD_RESYNC_REQUEST, OPCODE_MONSTER_SPAWN, OPCODE_MONSTER_DELTA, OPCODE_MONSTER_DESPAWN, OPCODE_PLAYER_RESPAWN, OPCODE_PLAYER_RESPAWN_RESULT, OPCODE_GROUND_DROP_SPAWN, OPCODE_GROUND_DROP_DESPAWN, OPCODE_GROUND_PICKUP, OPCODE_GROUND_PICKUP_RESULT, OPCODE_INVENTORY_SNAPSHOT, OPCODE_RECOVERY_USE, OPCODE_RECOVERY_USE_RESULT, OPCODE_INVENTORY_DISCARD, OPCODE_INVENTORY_DISCARD_RESULT, OPCODE_PLAYER_ATTACK_VISUAL, OPCODE_PLAYER_DAMAGE_VISUAL, OPCODE_PLAYER_RESPAWN_VISUAL, OPCODE_SKILL_USE, OPCODE_SKILL_USE_RESULT, OPCODE_PLAYER_SKILL_VISUAL, OPCODE_SHOP_OPEN, OPCODE_SHOP_SNAPSHOT, OPCODE_SHOP_BUY, OPCODE_SHOP_SELL, OPCODE_SHOP_TRANSACTION_RESULT, OPCODE_STORAGE_OPEN, OPCODE_STORAGE_SNAPSHOT, OPCODE_STORAGE_DEPOSIT, OPCODE_STORAGE_WITHDRAW, OPCODE_STORAGE_TRANSFER_RESULT, OPCODE_EQUIPMENT_SNAPSHOT, OPCODE_EQUIPMENT_EQUIP, OPCODE_EQUIPMENT_UNEQUIP, OPCODE_EQUIPMENT_TRANSFER_RESULT, OPCODE_BANK_OPEN, OPCODE_BANK_SNAPSHOT, OPCODE_BANK_DEPOSIT, OPCODE_BANK_WITHDRAW, OPCODE_BANK_TRANSACTION_RESULT, OPCODE_REPAIR_OPEN, OPCODE_REPAIR_SNAPSHOT, OPCODE_REPAIR_ITEM, OPCODE_REPAIR_RESULT, OPCODE_TRADE_COMMAND, OPCODE_TRADE_SNAPSHOT, OPCODE_TRADE_TERMINAL, OPCODE_PVP_MODE_COMMAND, OPCODE_PVP_MODE_RESULT, OPCODE_PVP_ATTACK, OPCODE_PVP_ATTACK_RESULT, OPCODE_PVP_DAMAGE, OPCODE_PLAYER_IDENTITY, OPCODE_PVP_COMBAT_VISUAL, OPCODE_PVP_SKILL, OPCODE_PVP_SKILL_RESULT, OPCODE_PVP_SKILL_VISUAL, OPCODE_GM_CAPABILITY, OPCODE_GM_PVP_NAME_COMMAND, OPCODE_GM_PVP_NAME_RESULT, OPCODE_PLAYER_SHOP_COMMAND, OPCODE_PLAYER_SHOP_RESULT, OPCODE_PLAYER_SHOP_SOLD]:
 		return -1
 	return opcode
 

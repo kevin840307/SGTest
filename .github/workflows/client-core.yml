@@ -78,6 +78,8 @@ jobs:
         run: .cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64 --headless --path client --script res://tests/test_repair_wire.gd
       - name: Godot player trade wire and authoritative settlement reducer
         run: .cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64 --headless --path client --script res://tests/test_trade_wire.gd
+      - name: Godot player shop wire and authoritative UID wallet reducer
+        run: .cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64 --headless --path client --script res://tests/test_player_shop_wire.gd
       - name: Godot authenticated PvP mode query, replay and map generation reducer
         run: .cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64 --headless --path client --script res://tests/test_pvp_mode_wire.gd
       - name: Godot authenticated online GM PvP-name capability and reducer
