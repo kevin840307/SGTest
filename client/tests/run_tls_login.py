@@ -43,6 +43,8 @@ def main() -> int:
                         help="run real TLS ClientSession personal storage deposit/withdraw E2E")
     parser.add_argument("--equipment", action="store_true",
                         help="run real TLS ClientSession durable equipment equip/unequip E2E")
+    parser.add_argument("--bank", action="store_true",
+                        help="run real TLS ClientSession scoped bank deposit/withdraw E2E")
     args = parser.parse_args()
     if args.app_ui and (args.multi or args.crossmap or args.portal or args.reconnect or args.combat or args.combat_observer or args.skill_aoe or args.skill_aoe_observer or args.discard or args.storage or args.equipment or args.auto_attack):
         parser.error("--app-ui uses the single-client login fixture")
