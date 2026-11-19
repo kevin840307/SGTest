@@ -2811,6 +2811,183 @@ public static class WireProtocol
         };
     }
 
+    public static byte[] EncodeTradeCommand(TradeCommandWire value)
+    {
+        if(!ValidTradeCommand(value))throw new ArgumentOutOfRangeException(nameof(value));
+        var frame=NewFrame(WireOpcode.TradeCommand,TradeCommandFrameBytes);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(8,8),value.MapEpoch);
+        BinaryPrimitives.WriteUInt32LittleEndian(frame.AsSpan(16,4),value.TradeSequence);
+        frame[20]=(byte)value.Action;
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(21,8),value.TradeId);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(29,8),value.TargetActorId);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(37,8),value.ItemUid);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(45,8),value.Money);
+        return frame;
+    }
+
+    public static bool TryDecodeTradeCommand(ReadOnlySpan<byte> frame,out TradeCommandWire value)
+    {
+        value=default;
+        if(!TryReadHeader(frame,out var h)||h.Opcode!=WireOpcode.TradeCommand)return false;
+        value=new(
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(8,8)),
+            BinaryPrimitives.ReadUInt32LittleEndian(frame.Slice(16,4)),
+            (TradeCommandAction)frame[20],
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(21,8)),
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(29,8)),
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(37,8)),
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(45,8)));
+        return ValidTradeCommand(value);
+    }
+
+    private static bool ValidTradeCommand(TradeCommandWire value)
+    {
+        if(value.MapEpoch<=0||value.TradeSequence==0||
+           value.Action is < TradeCommandAction.Request or > TradeCommandAction.Cancel||
+           value.TradeId<0||value.TargetActorId<0||value.ItemUid<0||
+           value.Money<0||value.Money>SqliteIdentityStore.MaximumMoney)return false;
+        return value.Action switch
+        {
+            TradeCommandAction.Request => value.TradeId==0&&value.TargetActorId>0&&
+                value.ItemUid==0&&value.Money==0,
+            TradeCommandAction.Accept or TradeCommandAction.Reject =>
+                value.TradeId>0&&value.TargetActorId==0&&value.ItemUid==0&&value.Money==0,
+            TradeCommandAction.AddItem or TradeCommandAction.RemoveItem =>
+                value.TradeId>0&&value.TargetActorId==0&&value.ItemUid>0&&value.Money==0,
+            TradeCommandAction.SetMoney =>
+                value.TradeId>0&&value.TargetActorId==0&&value.ItemUid==0,
+            TradeCommandAction.Lock or TradeCommandAction.FinalConfirm or TradeCommandAction.Cancel =>
+                value.TradeId>0&&value.TargetActorId==0&&value.ItemUid==0&&value.Money==0,
+            _ => false
+        };
+    }
+
+    public static byte[] EncodeTradeSnapshot(TradeSnapshotWire value)
+    {
+        ArgumentNullException.ThrowIfNull(value);
+        if(!ValidTradeSnapshot(value))throw new ArgumentOutOfRangeException(nameof(value));
+        int count=value.MyItems.Count+value.OtherItems.Count;
+        var frame=NewFrame(WireOpcode.TradeSnapshot,
+            TradeSnapshotHeaderBytes+count*TradeOfferItemBytes);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(8,8),value.MapEpoch);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(16,8),value.TradeId);
+        BinaryPrimitives.WriteUInt32LittleEndian(frame.AsSpan(24,4),value.Revision);
+        frame[28]=(byte)value.State;
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(29,8),value.PeerActorId);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(37,8),value.MyMoney);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(45,8),value.OtherMoney);
+        frame[53]=value.MyLocked?(byte)1:(byte)0;
+        frame[54]=value.OtherLocked?(byte)1:(byte)0;
+        frame[55]=value.MyConfirmed?(byte)1:(byte)0;
+        frame[56]=value.OtherConfirmed?(byte)1:(byte)0;
+        frame[57]=checked((byte)value.MyItems.Count);
+        frame[58]=checked((byte)value.OtherItems.Count);
+        int offset=TradeSnapshotHeaderBytes;
+        foreach(var item in value.MyItems.Concat(value.OtherItems))
+        {
+            BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(offset,8),item.ItemUid);
+            BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(offset+8,4),item.ItemDefinitionId);
+            BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(offset+12,4),item.Quantity);
+            BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(offset+16,8),item.SourceDropId);
+            offset+=TradeOfferItemBytes;
+        }
+        return frame;
+    }
+
+    public static bool TryDecodeTradeSnapshot(ReadOnlySpan<byte> frame,out TradeSnapshotWire? value)
+    {
+        value=null;
+        if(!TryReadHeader(frame,out var h)||h.Opcode!=WireOpcode.TradeSnapshot||
+           frame.Length<TradeSnapshotHeaderBytes)return false;
+        int myCount=frame[57],otherCount=frame[58];
+        if(myCount>TradeMaxItemsPerSide||otherCount>TradeMaxItemsPerSide||
+           frame.Length!=TradeSnapshotHeaderBytes+(myCount+otherCount)*TradeOfferItemBytes)
+            return false;
+        var my=new List<TradeOfferItemWire>(myCount);
+        var other=new List<TradeOfferItemWire>(otherCount);
+        int offset=TradeSnapshotHeaderBytes;
+        for(int i=0;i<myCount+otherCount;i++)
+        {
+            var item=new TradeOfferItemWire(
+                BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(offset,8)),
+                BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(offset+8,4)),
+                BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(offset+12,4)),
+                BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(offset+16,8)));
+            (i<myCount?my:other).Add(item);
+            offset+=TradeOfferItemBytes;
+        }
+        var decoded=new TradeSnapshotWire(
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(8,8)),
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(16,8)),
+            BinaryPrimitives.ReadUInt32LittleEndian(frame.Slice(24,4)),
+            (TradeSessionWireState)frame[28],
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(29,8)),
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(37,8)),
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(45,8)),
+            frame[53]==1,frame[54]==1,frame[55]==1,frame[56]==1,my,other);
+        if(frame[53]>1||frame[54]>1||frame[55]>1||frame[56]>1||
+           !ValidTradeSnapshot(decoded))return false;
+        value=decoded;
+        return true;
+    }
+
+    private static bool ValidTradeSnapshot(TradeSnapshotWire value)
+    {
+        if(value.MapEpoch<=0||value.TradeId<=0||value.Revision==0||value.PeerActorId<=0||
+           value.State is < TradeSessionWireState.InviteReceived or > TradeSessionWireState.AwaitingFinalConfirm||
+           value.MyMoney<0||value.OtherMoney<0||
+           value.MyMoney>SqliteIdentityStore.MaximumMoney||value.OtherMoney>SqliteIdentityStore.MaximumMoney||
+           value.MyItems is null||value.OtherItems is null||
+           value.MyItems.Count>TradeMaxItemsPerSide||value.OtherItems.Count>TradeMaxItemsPerSide||
+           (value.MyConfirmed&&!value.MyLocked)||(value.OtherConfirmed&&!value.OtherLocked))
+            return false;
+        var seen=new HashSet<long>();
+        foreach(var item in value.MyItems.Concat(value.OtherItems))
+            if(item.ItemUid<=0||item.ItemDefinitionId is <1 or >100_000_000||
+               item.Quantity is <1 or >1_000_000||item.SourceDropId<0||!seen.Add(item.ItemUid))
+                return false;
+        bool invite=value.State is TradeSessionWireState.InviteReceived or TradeSessionWireState.InviteSent;
+        if(invite)
+            return value.MyMoney==0&&value.OtherMoney==0&&
+                !value.MyLocked&&!value.OtherLocked&&!value.MyConfirmed&&!value.OtherConfirmed&&
+                value.MyItems.Count==0&&value.OtherItems.Count==0;
+        if(value.State==TradeSessionWireState.AwaitingFinalConfirm)
+            return value.MyLocked&&value.OtherLocked;
+        return true;
+    }
+
+    public static byte[] EncodeTradeTerminal(TradeTerminalWire value)
+    {
+        if(!ValidTradeTerminal(value))throw new ArgumentOutOfRangeException(nameof(value));
+        var frame=NewFrame(WireOpcode.TradeTerminal,TradeTerminalFrameBytes);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(8,8),value.MapEpoch);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(16,8),value.TradeId);
+        BinaryPrimitives.WriteUInt32LittleEndian(frame.AsSpan(24,4),value.Revision);
+        frame[28]=(byte)value.Status;
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(29,8),value.WalletMoney);
+        return frame;
+    }
+
+    public static bool TryDecodeTradeTerminal(ReadOnlySpan<byte> frame,out TradeTerminalWire value)
+    {
+        value=default;
+        if(!TryReadHeader(frame,out var h)||h.Opcode!=WireOpcode.TradeTerminal)return false;
+        value=new(
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(8,8)),
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(16,8)),
+            BinaryPrimitives.ReadUInt32LittleEndian(frame.Slice(24,4)),
+            (TradeTerminalStatus)frame[28],
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(29,8)));
+        return ValidTradeTerminal(value);
+    }
+
+    private static bool ValidTradeTerminal(TradeTerminalWire value)
+    {
+        if(value.MapEpoch<=0||value.TradeId<=0||value.Revision==0||
+           value.Status is < TradeTerminalStatus.Success or > TradeTerminalStatus.StaleGeneration||
+           value.WalletMoney<0||value.WalletMoney>SqliteIdentityStore.MaximumMoney)return false;
+        return value.Status==TradeTerminalStatus.Success||value.WalletMoney==0;
+    }
     private static float ReadFloat(ReadOnlySpan<byte> source) =>
         BitConverter.Int32BitsToSingle(BinaryPrimitives.ReadInt32LittleEndian(source));
 
