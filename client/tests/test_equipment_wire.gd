@@ -65,8 +65,8 @@ func _initialize() -> void:
 		fail("duplicate equip mutated twice")
 		return
 
-	if not world.apply_frame(MAP13_READY.hex_decode()):
-		fail("map transfer rejected")
+	if not world.apply_frame(MAP13_READY.hex_decode()) or not world.mark_world_ready_ack_sent(2,50):
+		fail("map transfer/ack rejected")
 		return
 	state = world.snapshot()
 	if not bool(state.equipment_ready) or not (state.equipment_items as Dictionary).has(7001) or int(state.equipment_sequence) != 0 or int(state.pending_equipment_sequence) != 0:
