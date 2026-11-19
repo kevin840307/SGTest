@@ -224,7 +224,15 @@ public sealed class IdentityTlsAuthorization
                     // trade coordinator is intentionally used to cancel the
                     // pre-transfer session after a successful authoritative portal.
                     if(outcome.Status==NpcPortalStatus.Accepted)
+                    {
                         _trades?.Disconnect(oldBinding,router);
+                        if(_trades is not null&&
+                           (outcome.TransferredActor is not { } after||
+                            !_trades.TryAdvanceGameplayGate(
+                                oldBinding,after,gameplayGate)))
+                            throw new InvalidOperationException(
+                                "Trade gameplay lock did not advance with trusted NPC map generation");
+                    }
 
                     if (_combat is not null)
                     {

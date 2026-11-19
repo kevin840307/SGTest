@@ -78,6 +78,26 @@ public sealed class PlayerTradeCoordinator
         }
     }
 
+    /// <summary>Move an authenticated session's registered gameplay gate to
+    /// the new trusted map generation while the portal handler owns that gate.
+    /// Never accept a stale or cross-connection rebinding.</summary>
+    public bool TryAdvanceGameplayGate(
+        ConnectionBinding before,ActorSnapshot after,SemaphoreSlim gate)
+    {
+        var next=ConnectionBinding.FromTrustedSnapshot(after);
+        if(before.ActorId<=0||before.ConnectionEpoch<=0||
+           before.ActorId!=next.ActorId||
+           before.ConnectionEpoch!=next.ConnectionEpoch||
+           next.MapEpoch<=before.MapEpoch)return false;
+        lock(_gate)
+        {
+            if(!_sessionGates.TryGetValue(before.ActorId,out var old)||
+               old.Binding!=before||!ReferenceEquals(old.Gate,gate))return false;
+            _sessionGates[before.ActorId]=(next,gate);
+            return true;
+        }
+    }
+
     public void UnregisterGameplayGate(ConnectionBinding binding,SemaphoreSlim gate)
     {
         lock(_gate)
@@ -433,25 +453,34 @@ public sealed class PlayerTradeCoordinator
         }
         finally
         {
-            // Inverse order: resume combat while the gameplay locks still
-            // exclude cross-map/disconnect, then release both socket gates.
-            if(_combat is not null)
+            // Resume while the trusted gameplay locks still exclude transfers.
+            // Even a failed combat-generation resume must NEVER leak a semaphore
+            // and strand both authenticated clients.
+            bool resumed=true;
+            try
             {
-                if(suspendedSecond&&!_combat.TryResumeGeneration(
-                    session.Second.Binding.ActorId,
-                    session.Second.Binding.ConnectionEpoch,
-                    session.Second.Binding.MapEpoch))
-                    throw new PlayerCombatSettlementException(
-                        "Second trade participant combat generation could not resume");
-                if(suspendedFirst&&!_combat.TryResumeGeneration(
-                    session.First.Binding.ActorId,
-                    session.First.Binding.ConnectionEpoch,
-                    session.First.Binding.MapEpoch))
-                    throw new PlayerCombatSettlementException(
-                        "First trade participant combat generation could not resume");
+                if(_combat is not null)
+                {
+                    if(suspendedSecond)
+                        resumed=_combat.TryResumeGeneration(
+                            session.Second.Binding.ActorId,
+                            session.Second.Binding.ConnectionEpoch,
+                            session.Second.Binding.MapEpoch)&&resumed;
+                    if(suspendedFirst)
+                        resumed=_combat.TryResumeGeneration(
+                            session.First.Binding.ActorId,
+                            session.First.Binding.ConnectionEpoch,
+                            session.First.Binding.MapEpoch)&&resumed;
+                }
             }
-            if(heldSecond)secondGate.Release();
-            if(heldFirst)firstGate.Release();
+            finally
+            {
+                if(heldSecond)secondGate.Release();
+                if(heldFirst)firstGate.Release();
+            }
+            if(!resumed)
+                throw new PlayerCombatSettlementException(
+                    "Trade participant combat generation could not resume");
         }
     }
 

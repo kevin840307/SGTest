@@ -302,11 +302,14 @@ internal static class TradeCoordinatorChecks
         // at its old epoch. Advance the trusted Gateway just as a real NPC
         // portal does, then register the new session gate for another trade.
         var actorB2=transferred!.Value;
-        coordinator.UnregisterGameplayGate(gatewayB.Binding,gateB);
+        Checks.Require(coordinator.TryAdvanceGameplayGate(
+            gatewayB.Binding,actorB2,gateB),
+            "trade gameplay gate did not advance with trusted MapEpoch");
+        Checks.Require(!coordinator.TryAdvanceGameplayGate(
+            gatewayB.Binding,actorB2,gateB),
+            "stale map gate update rewound or replayed a generation");
         Checks.Require(router.TryAdvanceTrustedMap(gatewayB,actorB2),
             "test trusted Gateway binding did not advance MapEpoch");
-        Checks.Require(coordinator.TryRegisterGameplayGate(gatewayB.Binding,gateB),
-            "renewed trade gameplay gate missing");
         await coordinator.HandleAsync(new(
             charA,actorA.ConnectionEpoch,actorA.MapEpoch,16,
             TradeCommandAction.Request,0,charB,0,0),router);
@@ -329,6 +332,7 @@ internal static class TradeCoordinatorChecks
             TradeCommandAction.FinalConfirm,gatedTrade.TradeId,0,0,0),router);
         RequireState(gatewayA,gatewayB,TradeSessionWireState.AwaitingFinalConfirm);
         await gateB.WaitAsync();
+        bool gateStillHeld=true;
         try
         {
             var pending=coordinator.HandleAsync(new(
@@ -347,11 +351,12 @@ internal static class TradeCoordinatorChecks
             Checks.Require(later is { } changed&&changed.MapEpoch>actorB2.MapEpoch,
                 "concurrent trusted portal did not advance World MapEpoch");
             gateB.Release();
+            gateStillHeld=false;
             await pending.WaitAsync(TimeSpan.FromSeconds(5));
         }
         finally
         {
-            if(gateB.CurrentCount==0)gateB.Release();
+            if(gateStillHeld)gateB.Release();
         }
         Checks.Require(DrainTerminal(gatewayA).Status==TradeTerminalStatus.StaleGeneration&&
             DrainTerminal(gatewayB).Status==TradeTerminalStatus.StaleGeneration&&
