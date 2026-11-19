@@ -196,13 +196,11 @@ public sealed class PlayerTradeCoordinator
     {
         Session? before;
         Participant? self;
-        uint revision;
         lock(_gate)
         {
             if(!TryMutable(command,out before,out self)||
                self!.Items.ContainsKey(command.ItemUid)||
                self.Items.Count>=WireProtocol.TradeMaxItemsPerSide)return;
-            revision=before!.Revision;
         }
         var items=await _store.ListInventoryItemsAsync(command.ActorId,4096)
             .ConfigureAwait(false);
@@ -213,7 +211,7 @@ public sealed class PlayerTradeCoordinator
         lock(_gate)
         {
             if(!_sessions.TryGetValue(command.TradeId,out var current)||
-               !ReferenceEquals(current,before)||current.Revision!=revision||
+               !ReferenceEquals(current,before)||
                !TryMutable(command,out _,out self)||
                self!.Items.ContainsKey(command.ItemUid)||
                self.Items.Count>=WireProtocol.TradeMaxItemsPerSide)return;
@@ -245,18 +243,16 @@ public sealed class PlayerTradeCoordinator
     {
         Session? before;
         Participant? self;
-        uint revision;
         lock(_gate)
         {
             if(!TryMutable(command,out before,out self))return;
-            revision=before!.Revision;
         }
         long wallet=await _store.GetCharacterMoneyAsync(command.ActorId).ConfigureAwait(false);
         if(command.Money>wallet)return;
         lock(_gate)
         {
             if(!_sessions.TryGetValue(command.TradeId,out var current)||
-               !ReferenceEquals(current,before)||current.Revision!=revision||
+               !ReferenceEquals(current,before)||
                !TryMutable(command,out _,out self))return;
             self!.Money=command.Money;
             self.LastSequence=command.TradeSequence;
