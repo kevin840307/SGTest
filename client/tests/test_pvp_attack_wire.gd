@@ -41,7 +41,7 @@ func _initialize() -> void:
 	if world.mark_pvp_attack_sent(2,99):
 		_fail("single flight")
 		return
-	if not world.apply_frame(_attack_result(1,1,10,100,99,28,false)):
+	if not world.apply_frame(_attack_result(1,1,10,100,99,0,false)):
 		_fail("attack result apply")
 		return
 	var snap: Dictionary=world.snapshot()
