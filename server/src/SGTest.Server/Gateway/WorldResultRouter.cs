@@ -577,6 +577,30 @@ public sealed class WorldResultRouter
         }
     }
 
+    public GatewaySendStatus QueueTradeSnapshot(
+        ConnectionBinding expected,TradeSnapshotWire snapshot)
+    {
+        lock(_gate)
+        {
+            if(!_connections.TryGetValue(expected.ActorId,out var connection)||
+               connection.IsClosed)
+                return GatewaySendStatus.Closed;
+            return connection.QueueTradeSnapshot(expected,snapshot);
+        }
+    }
+
+    public GatewaySendStatus QueueTradeTerminal(
+        ConnectionBinding expected,TradeTerminalWire terminal)
+    {
+        lock(_gate)
+        {
+            if(!_connections.TryGetValue(expected.ActorId,out var connection)||
+               connection.IsClosed)
+                return GatewaySendStatus.Closed;
+            return connection.QueueTradeTerminal(expected,terminal);
+        }
+    }
+
     public GatewaySendStatus QueueRecoveryUseResult(
         TrustedRecoveryUse request,RecoveryUseResult result)
     {
