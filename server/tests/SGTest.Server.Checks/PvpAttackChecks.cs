@@ -54,7 +54,7 @@ internal static class PvpAttackChecks
                 PvpAttackGeometryStatus.TooFar,"PvP range ignored");
             await world.StopAsync();
         }
-        string blocked=Checks.Fixture(root,13,8,8,(x,y)=>x==2&&y==0?7:0);
+        string blocked=Checks.Fixture(root,13,8,8,(x,y)=>(byte)(x==2&&y==0?7:0));
         await using(var world=new ServerWorldHost([BlockingGrid.Load(blocked,13)]))
         {
             await world.StartAsync();
