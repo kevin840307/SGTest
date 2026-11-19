@@ -152,6 +152,45 @@ class RespawnSession extends RefCounted:
 		repairs += 1
 		last_repair_uid = item_uid
 		return true
+	func request_trade(target_actor_id: int) -> bool:
+		if target_actor_id <= 0:
+			return false
+		trade_requests += 1
+		last_trade_target = target_actor_id
+		return true
+	func accept_trade() -> bool:
+		trade_accepts += 1
+		return true
+	func reject_trade() -> bool:
+		trade_rejects += 1
+		return true
+	func trade_add_item(item_uid: int) -> bool:
+		if item_uid <= 0:
+			return false
+		trade_adds += 1
+		last_trade_uid = item_uid
+		return true
+	func trade_remove_item(item_uid: int) -> bool:
+		if item_uid <= 0:
+			return false
+		trade_removes += 1
+		last_trade_uid = item_uid
+		return true
+	func trade_set_money(money: int) -> bool:
+		if money < 0:
+			return false
+		trade_money_sets += 1
+		last_trade_money = money
+		return true
+	func trade_lock() -> bool:
+		trade_locks += 1
+		return true
+	func trade_final_confirm() -> bool:
+		trade_confirms += 1
+		return true
+	func cancel_trade() -> bool:
+		trade_cancels += 1
+		return true
 	func attack_monster(entity_id: int) -> bool:
 		if entity_id <= 0:
 			return false
