@@ -42,6 +42,8 @@ internal static class Program
             return await EquipmentLoginFixture.RunAsync().ConfigureAwait(false);
         if (args is ["--bank"])
             return await BankLoginFixture.RunAsync().ConfigureAwait(false);
+        if (args is ["--repair"])
+            return await RepairLoginFixture.RunAsync().ConfigureAwait(false);
         if (args is ["--checkpoint-crash-producer", var producerDb])
             return await RunCheckpointCrashProducerAsync(producerDb).ConfigureAwait(false);
         if (args is ["--checkpoint-crash-verify", var verifyDb])
