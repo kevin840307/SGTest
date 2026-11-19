@@ -2500,9 +2500,17 @@ public static class WireProtocol
            value.WalletMoney<0||value.BankMoney<0||
            value.WalletMoney>SqliteIdentityStore.MaximumMoney||
            value.BankMoney>SqliteIdentityStore.MaximumMoney)return false;
-        if(value.Scope==BankBalanceScope.None)
-            return value.WalletMoney==0&&value.BankMoney==0;
-        return value.Scope is BankBalanceScope.Character or BankBalanceScope.Account;
+        bool scoped=value.Scope is BankBalanceScope.Character or BankBalanceScope.Account;
+        if(value.Status is BankTransactionStatus.Applied or
+            BankTransactionStatus.AlreadyApplied or
+            BankTransactionStatus.InsufficientWallet or
+            BankTransactionStatus.InsufficientBank or
+            BankTransactionStatus.WalletLimit or
+            BankTransactionStatus.BankLimit or
+            BankTransactionStatus.StaleSequence)
+            return scoped;
+        return value.Scope==BankBalanceScope.None&&
+            value.WalletMoney==0&&value.BankMoney==0;
     }
     private static float ReadFloat(ReadOnlySpan<byte> source) =>
         BitConverter.Int32BitsToSingle(BinaryPrimitives.ReadInt32LittleEndian(source));
