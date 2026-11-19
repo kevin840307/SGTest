@@ -77,7 +77,7 @@ public sealed record CharacterCreateResult(CharacterCreateStatus Status, Charact
 /// </summary>
 public sealed partial class SqliteIdentityStore : IDisposable
 {
-    public const int SchemaVersion = 18;
+    public const int SchemaVersion = 19;
     private readonly string _connectionString;
     private readonly IdentityStoreOptions _options;
     private readonly PasswordHasher _passwords;
@@ -690,6 +690,35 @@ CREATE TABLE IF NOT EXISTS pvp_name_admin_events (
 );",tx);
             Execute(connection,@"CREATE INDEX IF NOT EXISTS ix_pvp_name_admin_character
 ON pvp_name_admin_events(character_id,created_unix_ms);",tx);
+            // Schema v19: durable single-listing player-shop settlement core.
+            // Listing presence is gameplay/session-owned; SQLite owns item/wallet
+            // settlement and exact sold-listing replay.
+            Execute(connection,@"
+CREATE TABLE IF NOT EXISTS player_shop_listings (
+    listing_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    seller_character_id INTEGER NOT NULL REFERENCES characters(character_id) ON DELETE RESTRICT,
+    item_uid INTEGER NOT NULL,
+    item_definition_id INTEGER NOT NULL CHECK(item_definition_id BETWEEN 1 AND 100000000),
+    quantity INTEGER NOT NULL CHECK(quantity BETWEEN 1 AND 1000000),
+    source_drop_id INTEGER NULL,
+    durability_raw INTEGER NULL,
+    price INTEGER NOT NULL CHECK(price BETWEEN 1 AND 9000000000000000),
+    state INTEGER NOT NULL CHECK(state BETWEEN 0 AND 3),
+    buyer_character_id INTEGER NULL REFERENCES characters(character_id) ON DELETE RESTRICT,
+    seller_wallet_after INTEGER NULL,
+    buyer_wallet_after INTEGER NULL,
+    created_unix_ms INTEGER NOT NULL,
+    updated_unix_ms INTEGER NOT NULL
+);",tx);
+            Execute(connection,@"
+CREATE UNIQUE INDEX IF NOT EXISTS ux_player_shop_active_seller
+ON player_shop_listings(seller_character_id) WHERE state=0;",tx);
+            Execute(connection,@"
+CREATE UNIQUE INDEX IF NOT EXISTS ux_player_shop_active_item
+ON player_shop_listings(item_uid) WHERE state=0;",tx);
+            Execute(connection,@"
+CREATE INDEX IF NOT EXISTS ix_player_shop_seller_history
+ON player_shop_listings(seller_character_id,listing_id);",tx);
             Execute(connection, @"
 CREATE TRIGGER IF NOT EXISTS trg_combat_mp_insert
 BEFORE INSERT ON character_combat_profiles
