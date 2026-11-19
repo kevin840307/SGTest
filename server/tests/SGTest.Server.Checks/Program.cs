@@ -271,6 +271,7 @@ static class Checks
             StorageWireChecks.Verify();
             EquipmentWireChecks.Verify();
             EquipmentGatewayChecks.Verify();
+            EquipmentTlsChecks.Verify(root);
             StorageGatewayChecks.Verify();
             TlsSocketChecks.Verify();
             IdentityStoreChecks.Verify();
