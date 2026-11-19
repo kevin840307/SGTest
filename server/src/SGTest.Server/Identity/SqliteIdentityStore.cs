@@ -577,6 +577,36 @@ CREATE TABLE IF NOT EXISTS repair_actions (
     PRIMARY KEY(character_id,connection_generation,map_epoch,action_sequence)
 );", tx);
 
+            // Schema v14: pending trade negotiation is ephemeral. Only the
+            // final two-party ownership/money settlement is durable and replayable.
+            Execute(connection, @"
+CREATE TABLE IF NOT EXISTS trade_commits (
+    trade_id INTEGER PRIMARY KEY CHECK(trade_id > 0),
+    first_character_id INTEGER NOT NULL REFERENCES characters(character_id),
+    second_character_id INTEGER NOT NULL REFERENCES characters(character_id),
+    first_money_offer INTEGER NOT NULL CHECK(first_money_offer BETWEEN 0 AND 9000000000000000),
+    second_money_offer INTEGER NOT NULL CHECK(second_money_offer BETWEEN 0 AND 9000000000000000),
+    first_wallet_after INTEGER NOT NULL CHECK(first_wallet_after BETWEEN 0 AND 9000000000000000),
+    second_wallet_after INTEGER NOT NULL CHECK(second_wallet_after BETWEEN 0 AND 9000000000000000),
+    created_unix_ms INTEGER NOT NULL,
+    CHECK(first_character_id <> second_character_id)
+);", tx);
+            Execute(connection, @"
+CREATE TABLE IF NOT EXISTS trade_commit_items (
+    trade_id INTEGER NOT NULL REFERENCES trade_commits(trade_id) ON DELETE CASCADE,
+    item_uid INTEGER NOT NULL CHECK(item_uid > 0),
+    from_character_id INTEGER NOT NULL REFERENCES characters(character_id),
+    to_character_id INTEGER NOT NULL REFERENCES characters(character_id),
+    item_definition_id INTEGER NOT NULL CHECK(item_definition_id BETWEEN 1 AND 100000000),
+    quantity INTEGER NOT NULL CHECK(quantity BETWEEN 1 AND 1000000),
+    source_drop_id INTEGER,
+    durability_raw INTEGER CHECK(durability_raw IS NULL OR durability_raw BETWEEN 0 AND 2147483647),
+    PRIMARY KEY(trade_id,item_uid),
+    CHECK(from_character_id <> to_character_id)
+);", tx);
+            Execute(connection, @"
+CREATE INDEX IF NOT EXISTS ix_trade_commit_items_from
+ON trade_commit_items(trade_id,from_character_id,item_uid);", tx);
             Execute(connection, @"
 CREATE TRIGGER IF NOT EXISTS trg_combat_mp_insert
 BEFORE INSERT ON character_combat_profiles
