@@ -301,6 +301,7 @@ func login() -> void:
 	_shop_display_key = ""
 	_storage_display_key = ""
 	_equipment_display_key = ""
+	_bank_display_key = ""
 	_inventory_page = 0
 	inventory_search.clear()
 	shop_status.text = ""
@@ -312,6 +313,10 @@ func login() -> void:
 	equipment_status.text = ""
 	equipment_inventory_picker.clear()
 	equipment_equipped_picker.clear()
+	bank_status.text = ""
+	bank_scope_label.text = "銀行範圍：—"
+	bank_wallet_label.text = "角色錢包：—"
+	bank_balance_label.text = "銀行餘額：—"
 	inventory_preview.text = ""
 	_show_inventory_preview(false)
 	characters.clear()
@@ -481,6 +486,7 @@ func disconnect_session() -> void:
 	_shop_display_key = ""
 	_storage_display_key = ""
 	_equipment_display_key = ""
+	_bank_display_key = ""
 	_inventory_page = 0
 	inventory_search.clear()
 	shop_status.text = ""
@@ -492,6 +498,10 @@ func disconnect_session() -> void:
 	equipment_status.text = ""
 	equipment_inventory_picker.clear()
 	equipment_equipped_picker.clear()
+	bank_status.text = ""
+	bank_scope_label.text = "銀行範圍：—"
+	bank_wallet_label.text = "角色錢包：—"
+	bank_balance_label.text = "銀行餘額：—"
 	inventory_preview.text = ""
 	_show_inventory_preview(false)
 	_characters = []
