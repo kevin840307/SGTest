@@ -198,17 +198,18 @@ internal static class TradeCoordinatorChecks
 
     private static TradeSnapshotWire DrainSnapshot(GatewayConnection gateway)
     {
-        Checks.Require(gateway.TryDequeueReliable(out var frame)&&
-            WireProtocol.TryDecodeTradeSnapshot(frame,out var value)&&value is not null,
-            "trade snapshot missing");
-        return value!;
+        if(!gateway.TryDequeueReliable(out var frame)||
+           !WireProtocol.TryDecodeTradeSnapshot(frame,out var value)||
+           value is null)
+            throw new Exception("trade snapshot missing");
+        return value;
     }
 
     private static TradeTerminalWire DrainTerminal(GatewayConnection gateway)
     {
-        Checks.Require(gateway.TryDequeueReliable(out var frame)&&
-            WireProtocol.TryDecodeTradeTerminal(frame,out var value),
-            "trade terminal missing");
+        if(!gateway.TryDequeueReliable(out var frame)||
+           !WireProtocol.TryDecodeTradeTerminal(frame,out var value))
+            throw new Exception("trade terminal missing");
         return value;
     }
 
