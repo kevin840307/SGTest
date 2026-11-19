@@ -259,8 +259,9 @@ internal static class PlayerShopCoordinatorChecks
 
     private static PlayerShopResultWire DrainResult(GatewayConnection gateway)
     {
+        PlayerShopResultWire result=default;
         Checks.Require(gateway.TryDequeueReliable(out var frame)&&
-            WireProtocol.TryDecodePlayerShopResult(frame,out var result),
+            WireProtocol.TryDecodePlayerShopResult(frame,out result),
             "missing player-shop result");
         return result;
     }
