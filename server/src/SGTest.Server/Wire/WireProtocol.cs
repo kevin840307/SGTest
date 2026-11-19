@@ -3038,6 +3038,52 @@ public static class WireProtocol
            value.WalletMoney<0||value.WalletMoney>SqliteIdentityStore.MaximumMoney)return false;
         return value.Status==TradeTerminalStatus.Success||value.WalletMoney==0;
     }
+    public static byte[] EncodePvpModeCommand(PvpModeCommandWire value)
+    {
+        if(value.MapEpoch<=0||value.PvpSequence==0||(byte)value.Action>2)
+            throw new ArgumentOutOfRangeException(nameof(value));
+        var frame=NewFrame(WireOpcode.PvpModeCommand,PvpModeCommandFrameBytes);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(8,8),value.MapEpoch);
+        BinaryPrimitives.WriteUInt32LittleEndian(frame.AsSpan(16,4),value.PvpSequence);
+        frame[20]=(byte)value.Action;
+        return frame;
+    }
+
+    public static bool TryDecodePvpModeCommand(ReadOnlySpan<byte> frame,out PvpModeCommandWire value)
+    {
+        value=default;
+        if(!TryReadHeader(frame,out var h)||h.Opcode!=WireOpcode.PvpModeCommand)return false;
+        value=new(BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(8,8)),
+            BinaryPrimitives.ReadUInt32LittleEndian(frame.Slice(16,4)),
+            (PvpModeCommandAction)frame[20]);
+        return value.MapEpoch>0&&value.PvpSequence>0&&(byte)value.Action<=2;
+    }
+
+    public static byte[] EncodePvpModeResult(PvpModeResultWire value)
+    {
+        if(value.MapEpoch<=0||value.PvpSequence==0||(byte)value.Status>5||
+           (byte)value.Mode>1)
+            throw new ArgumentOutOfRangeException(nameof(value));
+        var frame=NewFrame(WireOpcode.PvpModeResult,PvpModeResultFrameBytes);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(8,8),value.MapEpoch);
+        BinaryPrimitives.WriteUInt32LittleEndian(frame.AsSpan(16,4),value.PvpSequence);
+        frame[20]=(byte)value.Status; frame[21]=(byte)value.Mode;
+        frame[22]=value.MapAllowsPlayerPvp?(byte)1:(byte)0;
+        return frame;
+    }
+
+    public static bool TryDecodePvpModeResult(ReadOnlySpan<byte> frame,out PvpModeResultWire value)
+    {
+        value=default;
+        if(!TryReadHeader(frame,out var h)||h.Opcode!=WireOpcode.PvpModeResult)return false;
+        byte allowed=frame[22];
+        value=new(BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(8,8)),
+            BinaryPrimitives.ReadUInt32LittleEndian(frame.Slice(16,4)),
+            (PvpModeResultStatus)frame[20],(PvpMode)frame[21],allowed==1);
+        return value.MapEpoch>0&&value.PvpSequence>0&&allowed<=1&&
+            (byte)value.Status<=5&&(byte)value.Mode<=1;
+    }
+
     public static byte[] EncodeQuestOpen(QuestOpenWire value)
     {
         if(value.MapEpoch<=0||value.QuestSequence==0||value.NpcSpawnId<=0)
