@@ -30,6 +30,8 @@ public sealed class IdentityTlsAuthorization
     private readonly NpcStorageCatalog? _storages;
     private readonly IReadOnlyDictionary<int,EquipmentRule>? _equipmentRules;
     private readonly NpcBankCatalog? _banks;
+    private readonly NpcRepairCatalog? _repairs;
+    private readonly IReadOnlyDictionary<int,RepairItemRule>? _repairItemRules;
 
     public IdentityTlsAuthorization(SqliteIdentityStore identity, ServerWorldHost world,
                                     PortalCatalog? portals = null,
@@ -41,7 +43,9 @@ public sealed class IdentityTlsAuthorization
                                      NpcShopCatalog? shops = null,
                                      NpcStorageCatalog? storages = null,
                                      IReadOnlyDictionary<int,EquipmentRule>? equipmentRules = null,
-                                     NpcBankCatalog? banks = null)
+                                     NpcBankCatalog? banks = null,
+                                     NpcRepairCatalog? repairs = null,
+                                     IReadOnlyDictionary<int,RepairItemRule>? repairItemRules = null)
     {
         _identity = identity ?? throw new ArgumentNullException(nameof(identity));
         _world = world ?? throw new ArgumentNullException(nameof(world));
@@ -64,6 +68,8 @@ public sealed class IdentityTlsAuthorization
         _storages = storages;
         _equipmentRules = equipmentRules;
         _banks = banks;
+        _repairs = repairs;
+        _repairItemRules = repairItemRules;
     }
 
     /// <summary>
@@ -891,6 +897,118 @@ public sealed class IdentityTlsAuthorization
                 finally { gameplayGate.Release(); }
             }
 
+            async Task RepairHandler(TrustedRepairCommand request)
+            {
+                var binding=new ConnectionBinding(
+                    request.ActorId,request.ConnectionEpoch,request.RequestMapEpoch);
+                await gameplayGate.WaitAsync().ConfigureAwait(false);
+                try
+                {
+                    if(!router.IsCurrentBinding(binding))return;
+                    var snapshot=await _world.TrustedGetActorAsync(
+                        request.ActorId).ConfigureAwait(false);
+                    if(snapshot is not { } actor||
+                       actor.ActorId!=request.ActorId||
+                       actor.ConnectionEpoch!=request.ConnectionEpoch||
+                       actor.MapEpoch!=request.RequestMapEpoch)
+                    {
+                        if(request.Kind==TrustedRepairCommandKind.Open)
+                        {
+                            var stale=router.QueueRepairSnapshot(
+                                request,RepairOpenStatus.StaleGeneration,null);
+                            if(stale!=GatewaySendStatus.Enqueued)
+                                throw new IOException(
+                                    "Reliable stale repair snapshot could not be queued: "+stale);
+                        }
+                        else
+                        {
+                            var staleResult=new RepairResult(
+                                RepairStatus.StaleGeneration,request.NpcSpawnId,
+                                request.ItemUid,0,RepairItemLocation.None,0,0,0,0);
+                            var stale=router.QueueRepairResult(request,staleResult);
+                            if(stale!=GatewaySendStatus.Enqueued)
+                                throw new IOException(
+                                    "Reliable stale repair result could not be queued: "+stale);
+                        }
+                        return;
+                    }
+
+                    bool dead=_combat is not null&&_combat.CurrentHp(actor)<=0;
+                    RepairNpcAccessStatus access=dead
+                        ? RepairNpcAccessStatus.PlayerDead
+                        : _repairs is null||_repairItemRules is null
+                            ? RepairNpcAccessStatus.UnknownRepair
+                            : _repairs.Access(actor,request.NpcSpawnId);
+
+                    if(request.Kind==TrustedRepairCommandKind.Open)
+                    {
+                        RepairOpenStatus status=access switch
+                        {
+                            RepairNpcAccessStatus.Allowed=>RepairOpenStatus.Opened,
+                            RepairNpcAccessStatus.UnknownRepair=>RepairOpenStatus.UnknownRepair,
+                            RepairNpcAccessStatus.TooFar=>RepairOpenStatus.TooFar,
+                            RepairNpcAccessStatus.PlayerDead=>RepairOpenStatus.PlayerDead,
+                            _=>RepairOpenStatus.StaleGeneration
+                        };
+                        RepairPreview? preview=null;
+                        if(status==RepairOpenStatus.Opened)
+                        {
+                            if(_repairs is null||_repairItemRules is null||
+                               !_repairs.TryGet(actor.MapId,request.NpcSpawnId,out var point))
+                                throw new InvalidOperationException(
+                                    "Repair rule vanished after access check");
+                            var rule=new TrustedRepairNpcRule(
+                                point.NpcSpawnId,point.RepairRate,point.SourceReference);
+                            preview=await _identity.ListRepairPreviewAsync(
+                                actor.ActorId,rule,_repairItemRules).ConfigureAwait(false);
+                        }
+                        var queued=router.QueueRepairSnapshot(request,status,preview);
+                        if(queued!=GatewaySendStatus.Enqueued)
+                            throw new IOException(
+                                "Reliable repair snapshot could not be queued: "+queued);
+                        return;
+                    }
+
+                    RepairResult result;
+                    if(access!=RepairNpcAccessStatus.Allowed)
+                    {
+                        var rejected=access switch
+                        {
+                            RepairNpcAccessStatus.UnknownRepair=>RepairStatus.UnknownRepair,
+                            RepairNpcAccessStatus.TooFar=>RepairStatus.TooFar,
+                            RepairNpcAccessStatus.PlayerDead=>RepairStatus.PlayerDead,
+                            _=>RepairStatus.StaleGeneration
+                        };
+                        result=new(rejected,request.NpcSpawnId,request.ItemUid,
+                            0,RepairItemLocation.None,0,0,0,0);
+                    }
+                    else
+                    {
+                        if(_repairs is null||_repairItemRules is null||
+                           !_repairs.TryGet(actor.MapId,request.NpcSpawnId,out var point))
+                            throw new InvalidOperationException(
+                                "Repair rule vanished after access check");
+                        long durableConnection=_pickupWorldGeneration==0
+                            ? actor.ConnectionEpoch
+                            : SqliteIdentityStore.ComposePickupConnectionEpoch(
+                                _pickupWorldGeneration,actor.ConnectionEpoch);
+                        var context=new TrustedRepairContext(
+                            actor.ActorId,durableConnection,actor.MapEpoch,
+                            request.RepairSequence);
+                        var rule=new TrustedRepairNpcRule(
+                            point.NpcSpawnId,point.RepairRate,point.SourceReference);
+                        result=await _identity.RepairItemAsync(
+                            context,RepairAccessStatus.Allowed,rule,
+                            _repairItemRules,request.ItemUid).ConfigureAwait(false);
+                    }
+                    var sent=router.QueueRepairResult(request,result);
+                    if(sent!=GatewaySendStatus.Enqueued)
+                        throw new IOException(
+                            "Reliable repair result could not be queued: "+sent);
+                }
+                finally { gameplayGate.Release(); }
+            }
+
             async Task DiscardHandler(TrustedInventoryDiscard request)
             {
                 var binding=new ConnectionBinding(
@@ -935,7 +1053,8 @@ public sealed class IdentityTlsAuthorization
                 handleSkill:SkillHandler,handleShop:ShopHandler,
                 handleStorage:StorageHandler,
                 handleEquipment:EquipmentHandler,
-                handleBank:BankHandler).ConfigureAwait(false);
+                handleBank:BankHandler,
+                handleRepair:RepairHandler).ConfigureAwait(false);
         }
         finally
         {
