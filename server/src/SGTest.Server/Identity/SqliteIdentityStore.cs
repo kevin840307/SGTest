@@ -77,7 +77,7 @@ public sealed record CharacterCreateResult(CharacterCreateStatus Status, Charact
 /// </summary>
 public sealed partial class SqliteIdentityStore : IDisposable
 {
-    public const int SchemaVersion = 12;
+    public const int SchemaVersion = 13;
     private readonly string _connectionString;
     private readonly IdentityStoreOptions _options;
     private readonly PasswordHasher _passwords;
@@ -243,6 +243,7 @@ CREATE TABLE IF NOT EXISTS item_instances (
     item_definition_id INTEGER NOT NULL CHECK(item_definition_id BETWEEN 1 AND 100000000),
     quantity INTEGER NOT NULL CHECK(quantity BETWEEN 1 AND 1000000),
     source_drop_id INTEGER UNIQUE REFERENCES ground_drops(drop_id),
+    durability_raw INTEGER CHECK(durability_raw IS NULL OR durability_raw BETWEEN 0 AND 2147483647),
     source_kind INTEGER NOT NULL DEFAULT 1 CHECK(source_kind IN (1,2)),
     source_reference TEXT NOT NULL DEFAULT '',
     created_unix_ms INTEGER NOT NULL,
@@ -337,6 +338,7 @@ CREATE TABLE item_instances (
     item_definition_id INTEGER NOT NULL CHECK(item_definition_id BETWEEN 1 AND 100000000),
     quantity INTEGER NOT NULL CHECK(quantity BETWEEN 1 AND 1000000),
     source_drop_id INTEGER UNIQUE REFERENCES ground_drops(drop_id),
+    durability_raw INTEGER CHECK(durability_raw IS NULL OR durability_raw BETWEEN 0 AND 2147483647),
     source_kind INTEGER NOT NULL CHECK(source_kind IN (1,2)),
     source_reference TEXT NOT NULL,
     created_unix_ms INTEGER NOT NULL,
@@ -395,6 +397,7 @@ CREATE TABLE IF NOT EXISTS storage_items (
     item_definition_id INTEGER NOT NULL CHECK(item_definition_id BETWEEN 1 AND 100000000),
     quantity INTEGER NOT NULL CHECK(quantity BETWEEN 1 AND 1000000),
     source_drop_id INTEGER UNIQUE REFERENCES ground_drops(drop_id),
+    durability_raw INTEGER CHECK(durability_raw IS NULL OR durability_raw BETWEEN 0 AND 2147483647),
     source_kind INTEGER NOT NULL CHECK(source_kind IN (1,2)),
     source_reference TEXT NOT NULL,
     created_unix_ms INTEGER NOT NULL,
@@ -455,6 +458,7 @@ CREATE TABLE IF NOT EXISTS equipped_items (
     item_definition_id INTEGER NOT NULL CHECK(item_definition_id BETWEEN 1 AND 100000000),
     quantity INTEGER NOT NULL CHECK(quantity = 1),
     source_drop_id INTEGER UNIQUE REFERENCES ground_drops(drop_id),
+    durability_raw INTEGER CHECK(durability_raw IS NULL OR durability_raw BETWEEN 0 AND 2147483647),
     source_kind INTEGER NOT NULL CHECK(source_kind IN (1,2)),
     source_reference TEXT NOT NULL,
     created_unix_ms INTEGER NOT NULL,
@@ -539,6 +543,40 @@ CREATE TABLE IF NOT EXISTS bank_actions (
     created_unix_ms INTEGER NOT NULL,
     PRIMARY KEY(character_id,connection_generation,map_epoch,action_sequence)
 );", tx);
+            // Schema v13: Old Server stores repairable equipment durability in
+            // raw 1/50 display-point ticks. Durability follows the physical Item UID
+            // across inventory/storage/equipment; NULL means no verified durability
+            // rule has initialized that item yet.
+            if (schemaVersion < 13)
+            {
+                foreach (string table in new[] { "item_instances", "storage_items", "equipped_items" })
+                    if (!ColumnExists(connection, table, "durability_raw", tx))
+                        Execute(connection,
+                            $"ALTER TABLE {table} ADD COLUMN durability_raw INTEGER " +
+                            "CHECK(durability_raw IS NULL OR durability_raw BETWEEN 0 AND 2147483647);",
+                            tx);
+            }
+            Execute(connection, @"
+CREATE TABLE IF NOT EXISTS repair_actions (
+    character_id INTEGER NOT NULL REFERENCES characters(character_id) ON DELETE CASCADE,
+    connection_generation INTEGER NOT NULL CHECK(connection_generation > 0),
+    map_epoch INTEGER NOT NULL CHECK(map_epoch > 0),
+    action_sequence INTEGER NOT NULL CHECK(action_sequence BETWEEN 1 AND 4294967295),
+    npc_spawn_id INTEGER NOT NULL CHECK(npc_spawn_id > 0),
+    item_uid INTEGER NOT NULL CHECK(item_uid > 0),
+    item_definition_id INTEGER NOT NULL CHECK(item_definition_id BETWEEN 1 AND 100000000),
+    repair_rate INTEGER NOT NULL CHECK(repair_rate BETWEEN 1 AND 255),
+    base_price INTEGER NOT NULL CHECK(base_price BETWEEN 1 AND 1000000000000),
+    max_durability INTEGER NOT NULL CHECK(max_durability BETWEEN 1 AND 42949672),
+    raw_before INTEGER NOT NULL CHECK(raw_before BETWEEN 0 AND 2147483647),
+    raw_after INTEGER NOT NULL CHECK(raw_after BETWEEN 1 AND 2147483647),
+    cost INTEGER NOT NULL CHECK(cost BETWEEN 1 AND 9000000000000000),
+    money_after INTEGER NOT NULL CHECK(money_after BETWEEN 0 AND 9000000000000000),
+    source_reference TEXT NOT NULL,
+    created_unix_ms INTEGER NOT NULL,
+    PRIMARY KEY(character_id,connection_generation,map_epoch,action_sequence)
+);", tx);
+
             Execute(connection, @"
 CREATE TRIGGER IF NOT EXISTS trg_combat_mp_insert
 BEFORE INSERT ON character_combat_profiles
