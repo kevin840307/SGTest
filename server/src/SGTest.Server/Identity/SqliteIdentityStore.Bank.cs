@@ -2,7 +2,7 @@ using Microsoft.Data.Sqlite;
 
 namespace SGTest.Server.Identity;
 
-public enum BankBalanceScope : byte { Character = 1, Account = 2 }
+public enum BankBalanceScope : byte { None = 0, Character = 1, Account = 2 }
 public enum BankAccessStatus : byte
 {
     Allowed = 0, StaleGeneration = 1, UnknownBank = 2, TooFar = 3, PlayerDead = 4
