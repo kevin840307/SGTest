@@ -1060,6 +1060,91 @@ static func decode_storage_transfer_result(frame: PackedByteArray) -> Dictionary
 		"drop_id":source_drop_id}
 
 
+static func encode_bank_open(epoch: int, sequence: int, npc_spawn_id: int) -> PackedByteArray:
+	if epoch <= 0 or sequence < 1 or sequence > 0xffffffff or npc_spawn_id <= 0:
+		return PackedByteArray()
+	var writer := StreamPeerBuffer.new()
+	writer.big_endian = false
+	writer.put_u32(BANK_OPEN_FRAME_BYTES)
+	writer.put_u16(VERSION)
+	writer.put_u16(OPCODE_BANK_OPEN)
+	writer.put_64(epoch)
+	writer.put_u32(sequence)
+	writer.put_32(npc_spawn_id)
+	return writer.data_array
+
+
+static func decode_bank_snapshot(frame: PackedByteArray) -> Dictionary:
+	if not _valid_header(frame,OPCODE_BANK_SNAPSHOT,BANK_SNAPSHOT_FRAME_BYTES):
+		return {}
+	var reader := _reader(frame,8)
+	var epoch := reader.get_64()
+	var sequence := reader.get_u32()
+	var status := reader.get_u8()
+	var npc_spawn_id := reader.get_32()
+	var scope := reader.get_u8()
+	var wallet_money := reader.get_64()
+	var bank_money := reader.get_64()
+	if epoch <= 0 or sequence == 0 or status > 4 or npc_spawn_id <= 0 or wallet_money < 0 or wallet_money > MAX_MONEY or bank_money < 0 or bank_money > MAX_MONEY:
+		return {}
+	if status == 0:
+		if scope not in [1,2]:
+			return {}
+	elif scope != 0 or wallet_money != 0 or bank_money != 0:
+		return {}
+	return {"map_epoch":epoch,"bank_sequence":sequence,"status":status,
+		"npc_spawn_id":npc_spawn_id,"scope":scope,
+		"wallet_money":wallet_money,"bank_money":bank_money}
+
+
+static func encode_bank_deposit(epoch: int, sequence: int, npc_spawn_id: int, amount: int) -> PackedByteArray:
+	return _encode_bank_move(OPCODE_BANK_DEPOSIT,epoch,sequence,npc_spawn_id,amount)
+
+
+static func encode_bank_withdraw(epoch: int, sequence: int, npc_spawn_id: int, amount: int) -> PackedByteArray:
+	return _encode_bank_move(OPCODE_BANK_WITHDRAW,epoch,sequence,npc_spawn_id,amount)
+
+
+static func _encode_bank_move(opcode: int, epoch: int, sequence: int, npc_spawn_id: int, amount: int) -> PackedByteArray:
+	if opcode not in [OPCODE_BANK_DEPOSIT,OPCODE_BANK_WITHDRAW] or epoch <= 0 or sequence < 1 or sequence > 0xffffffff or npc_spawn_id <= 0 or amount <= 0 or amount > MAX_MONEY:
+		return PackedByteArray()
+	var writer := StreamPeerBuffer.new()
+	writer.big_endian = false
+	writer.put_u32(BANK_MOVE_FRAME_BYTES)
+	writer.put_u16(VERSION)
+	writer.put_u16(opcode)
+	writer.put_64(epoch)
+	writer.put_u32(sequence)
+	writer.put_32(npc_spawn_id)
+	writer.put_64(amount)
+	return writer.data_array
+
+
+static func decode_bank_transaction_result(frame: PackedByteArray) -> Dictionary:
+	if not _valid_header(frame,OPCODE_BANK_TRANSACTION_RESULT,BANK_TRANSACTION_RESULT_FRAME_BYTES):
+		return {}
+	var reader := _reader(frame,8)
+	var epoch := reader.get_64()
+	var sequence := reader.get_u32()
+	var kind := reader.get_u8()
+	var status := reader.get_u8()
+	var npc_spawn_id := reader.get_32()
+	var scope := reader.get_u8()
+	var amount := reader.get_64()
+	var wallet_money := reader.get_64()
+	var bank_money := reader.get_64()
+	if epoch <= 0 or sequence == 0 or kind < 1 or kind > 2 or status > 10 or npc_spawn_id <= 0 or amount <= 0 or amount > MAX_MONEY or wallet_money < 0 or wallet_money > MAX_MONEY or bank_money < 0 or bank_money > MAX_MONEY:
+		return {}
+	if scope == 0:
+		if wallet_money != 0 or bank_money != 0:
+			return {}
+	elif scope not in [1,2]:
+		return {}
+	return {"map_epoch":epoch,"bank_sequence":sequence,"kind":kind,
+		"status":status,"npc_spawn_id":npc_spawn_id,"scope":scope,
+		"amount":amount,"wallet_money":wallet_money,"bank_money":bank_money}
+
+
 static func encode_equipment_equip(epoch: int, sequence: int, item_uid: int) -> PackedByteArray:
 	return _encode_equipment_move(OPCODE_EQUIPMENT_EQUIP,epoch,sequence,item_uid)
 
