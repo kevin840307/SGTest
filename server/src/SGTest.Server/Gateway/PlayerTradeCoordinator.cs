@@ -450,12 +450,19 @@ public sealed class PlayerTradeCoordinator
 
     private void QueueBoth(Session session,WorldResultRouter router)
     {
-        QueueSnapshot(session.First,session,router);
-        QueueSnapshot(session.Second,session,router);
+        TradeSnapshotWire first;
+        TradeSnapshotWire second;
+        lock(_gate)
+        {
+            first=BuildSnapshot(session.First,session);
+            second=BuildSnapshot(session.Second,session);
+        }
+        router.QueueTradeSnapshot(session.First.Binding,first);
+        router.QueueTradeSnapshot(session.Second.Binding,second);
     }
 
-    private void QueueSnapshot(
-        Participant self,Session session,WorldResultRouter router)
+    private static TradeSnapshotWire BuildSnapshot(
+        Participant self,Session session)
     {
         var other=session.Other(self.Binding.ActorId);
         TradeSessionWireState state;
@@ -465,12 +472,12 @@ public sealed class PlayerTradeCoordinator
         else
             state=session.First.Locked&&session.Second.Locked
                 ? TradeSessionWireState.AwaitingFinalConfirm:TradeSessionWireState.Active;
-        router.QueueTradeSnapshot(self.Binding,new(
+        return new(
             self.Binding.MapEpoch,session.TradeId,session.Revision,state,
             other.Binding.ActorId,self.Money,other.Money,
             self.Locked,other.Locked,self.Confirmed,other.Confirmed,
             self.Items.Values.OrderBy(x=>x.ItemUid).ToArray(),
-            other.Items.Values.OrderBy(x=>x.ItemUid).ToArray()));
+            other.Items.Values.OrderBy(x=>x.ItemUid).ToArray());
     }
 
     private void QueueTerminalBoth(
