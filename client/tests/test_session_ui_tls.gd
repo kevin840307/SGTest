@@ -42,6 +42,18 @@ class RespawnSession extends RefCounted:
 	var repairs := 0
 	var last_repair_npc := 0
 	var last_repair_uid := 0
+	var trade_requests := 0
+	var trade_accepts := 0
+	var trade_rejects := 0
+	var trade_adds := 0
+	var trade_removes := 0
+	var trade_money_sets := 0
+	var trade_locks := 0
+	var trade_confirms := 0
+	var trade_cancels := 0
+	var last_trade_target := 0
+	var last_trade_uid := 0
+	var last_trade_money := 0
 	func use_recovery_item(item_uid: int) -> bool:
 		if item_uid <= 0:
 			return false
