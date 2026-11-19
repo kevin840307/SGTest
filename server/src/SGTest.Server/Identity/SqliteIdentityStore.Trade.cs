@@ -28,6 +28,8 @@ public sealed record TradeCommitRequest(
 
 public sealed record TradeCommitResult(
     TradeCommitStatus Status,long TradeId,
+    long FirstCharacterId,long SecondCharacterId,
+    long FirstMoneyOffer,long SecondMoneyOffer,
     long FirstWalletMoney,long SecondWalletMoney,
     IReadOnlyList<TradeCommittedItem> FirstSentItems,
     IReadOnlyList<TradeCommittedItem> SecondSentItems);
@@ -54,7 +56,8 @@ public sealed partial class SqliteIdentityStore
                 return exact
                     ? replay with {Status=TradeCommitStatus.AlreadyApplied}
                     : new TradeCommitResult(
-                        TradeCommitStatus.StaleTrade,request.TradeId,0,0,[],[]);
+                        TradeCommitStatus.StaleTrade,request.TradeId,
+                        0,0,0,0,0,0,[],[]);
             }
 
             if(!CharacterExists(connection,tx,request.FirstCharacterId)||
@@ -130,8 +133,10 @@ VALUES($trade,$first,$second,$firstMoney,$secondMoney,$firstAfter,$secondAfter,$
 
             tx.Commit();
             return new TradeCommitResult(
-                TradeCommitStatus.Applied,request.TradeId,firstAfter,secondAfter,
-                firstItems,secondItems);
+                TradeCommitStatus.Applied,request.TradeId,
+                request.FirstCharacterId,request.SecondCharacterId,
+                request.FirstMoneyOffer,request.SecondMoneyOffer,
+                firstAfter,secondAfter,firstItems,secondItems);
         },cancellationToken).ConfigureAwait(false);
     }
 
@@ -156,7 +161,7 @@ VALUES($trade,$first,$second,$firstMoney,$secondMoney,$firstAfter,$secondAfter,$
     }
 
     private static TradeCommitResult Failed(TradeCommitStatus status,long tradeId)=>
-        new(status,tradeId,0,0,[],[]);
+        new(status,tradeId,0,0,0,0,0,0,[],[]);
 
     private static bool CharacterExists(
         SqliteConnection connection,SqliteTransaction tx,long characterId)
@@ -310,30 +315,22 @@ FROM trade_commit_items WHERE trade_id=$trade ORDER BY item_uid;";
             }
         }
         return new TradeCommitResult(
-            TradeCommitStatus.Applied,tradeId,firstAfter,secondAfter,
-            firstItems,secondItems);
+            TradeCommitStatus.Applied,tradeId,
+            first,second,firstMoney,secondMoney,
+            firstAfter,secondAfter,firstItems,secondItems);
     }
 
     private static bool ReplayMatches(TradeCommitResult receipt,TradeCommitRequest request)
     {
-        if(receipt.TradeId!=request.TradeId)return false;
-        var first=receipt.FirstSentItems;
-        var second=receipt.SecondSentItems;
-        if(first.Any()&&first[0].FromCharacterId!=request.FirstCharacterId)return false;
-        if(second.Any()&&second[0].FromCharacterId!=request.SecondCharacterId)return false;
-        // Money and participant identity are read from trade_commits below.
-        // Item sets are order-independent because the runtime snapshot is canonicalized.
-        return first.Select(x=>x.ItemUid).OrderBy(x=>x).SequenceEqual(
+        if(receipt.TradeId!=request.TradeId||
+           receipt.FirstCharacterId!=request.FirstCharacterId||
+           receipt.SecondCharacterId!=request.SecondCharacterId||
+           receipt.FirstMoneyOffer!=request.FirstMoneyOffer||
+           receipt.SecondMoneyOffer!=request.SecondMoneyOffer)
+            return false;
+        return receipt.FirstSentItems.Select(x=>x.ItemUid).OrderBy(x=>x).SequenceEqual(
                    request.FirstItemUids.OrderBy(x=>x))&&
-               second.Select(x=>x.ItemUid).OrderBy(x=>x).SequenceEqual(
-                   request.SecondItemUids.OrderBy(x=>x))&&
-               ReceiptHeaderMatches(request);
-    }
-
-    private static bool ReceiptHeaderMatches(TradeCommitRequest request)
-    {
-        // The caller already loaded by TradeId; header equality is validated in
-        // a dedicated query to avoid encoding request details in mutable runtime state.
-        return true;
+               receipt.SecondSentItems.Select(x=>x.ItemUid).OrderBy(x=>x).SequenceEqual(
+                   request.SecondItemUids.OrderBy(x=>x));
     }
 }
