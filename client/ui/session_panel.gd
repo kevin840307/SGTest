@@ -64,6 +64,12 @@ var storage_deposit_button := Button.new()
 var storage_withdraw_button := Button.new()
 var storage_status := Label.new()
 var _storage_display_key := ""
+var equipment_inventory_picker := OptionButton.new()
+var equipment_equipped_picker := OptionButton.new()
+var equipment_equip_button := Button.new()
+var equipment_unequip_button := Button.new()
+var equipment_status := Label.new()
+var _equipment_display_key := ""
 const INVENTORY_PAGE_SIZE := 80
 var _inventory_page := 0
 var _inventory_display_key := ""
@@ -174,7 +180,12 @@ func _ready() -> void:
 	storage_deposit_button.text = "存入選中背包物品（整組）"
 	storage_withdraw_button.text = "取出選中倉庫物品（整組）"
 	storage_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	for control in [storage_npc_input,storage_open_button,storage_deposit_picker,storage_withdraw_picker,storage_deposit_button,storage_withdraw_button,storage_status]:
+	for control in [storage_npc_input,storage_open_button,storage_deposit_picker,storage_withdraw_picker,storage_deposit_button,storage_withdraw_button,storage_status,equipment_inventory_picker,equipment_equipped_picker,equipment_equip_button,equipment_unequip_button,equipment_status]:
+		control.visible = false
+	equipment_equip_button.text = "裝上選中背包物品"
+	equipment_unequip_button.text = "卸下選中裝備"
+	equipment_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	for control in [equipment_inventory_picker,equipment_equipped_picker,equipment_equip_button,equipment_unequip_button,equipment_status]:
 		control.visible = false
 	respawn_button.text = "復活"
 	skill_hint.text = "技能 ID（需伺服器已核准規則）"
@@ -214,6 +225,8 @@ func _ready() -> void:
 	storage_open_button.pressed.connect(_open_storage_from_input)
 	storage_deposit_button.pressed.connect(_deposit_selected_storage_item)
 	storage_withdraw_button.pressed.connect(_withdraw_selected_storage_item)
+	equipment_equip_button.pressed.connect(_equip_selected_inventory_item)
+	equipment_unequip_button.pressed.connect(_unequip_selected_item)
 	var style := StyleBoxFlat.new()
 	style.bg_color = Color("211c15")
 	style.border_color = Color("c8a452")
