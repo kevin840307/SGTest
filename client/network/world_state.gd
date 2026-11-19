@@ -396,6 +396,34 @@ func mark_repair_sent(sequence: int,kind: int,npc_spawn_id: int,item_uid: int = 
 	return true
 
 
+func mark_trade_sent(sequence: int,action: int,command_trade_id: int = 0,
+		target_actor_id: int = 0,item_uid: int = 0,money: int = 0) -> bool:
+	if state != STATE_IN_WORLD or player_dead or not world_ready or not inventory_ready or resync_pending or waiting_for_new_map or pending_world_ready_ack_epoch != 0 or last_world_ready_ack_epoch != map_epoch or sequence <= trade_sequence or sequence > 0xffffffff or action < 1 or action > 9:
+		return false
+	var valid := false
+	match action:
+		1:
+			valid = trade_id == 0 and command_trade_id == 0 and target_actor_id > 0 and target_actor_id != actor_id and item_uid == 0 and money == 0
+		2,3:
+			valid = trade_state == 1 and command_trade_id == trade_id and target_actor_id == 0 and item_uid == 0 and money == 0
+		4:
+			valid = trade_state == 3 and command_trade_id == trade_id and not trade_my_locked and item_uid > 0 and inventory_items.has(item_uid) and not trade_my_items.has(item_uid) and money == 0
+		5:
+			valid = trade_state == 3 and command_trade_id == trade_id and not trade_my_locked and item_uid > 0 and trade_my_items.has(item_uid) and money == 0
+		6:
+			valid = trade_state == 3 and command_trade_id == trade_id and not trade_my_locked and item_uid == 0 and money >= 0 and money <= WireCodec.MAX_MONEY
+		7:
+			valid = trade_state == 3 and command_trade_id == trade_id and not trade_my_locked and item_uid == 0 and money == 0
+		8:
+			valid = trade_state == 4 and command_trade_id == trade_id and trade_my_locked and trade_other_locked and not trade_my_confirmed and item_uid == 0 and money == 0
+		9:
+			valid = trade_id > 0 and command_trade_id == trade_id and target_actor_id == 0 and item_uid == 0 and money == 0
+	if not valid:
+		return false
+	trade_sequence = sequence
+	return true
+
+
 func mark_player_respawn_sent(sequence: int) -> bool:
 	if state != STATE_IN_WORLD or not combat_available or not player_dead or not world_ready or resync_pending or waiting_for_new_map or pending_world_ready_ack_epoch != 0 or last_world_ready_ack_epoch != map_epoch or sequence <= respawn_sequence or sequence > 0xffffffff:
 		return false
@@ -488,6 +516,10 @@ func apply_frame(frame: PackedByteArray) -> bool:
 			return _apply_repair_snapshot(frame)
 		WireCodec.OPCODE_REPAIR_RESULT:
 			return _apply_repair_result(frame)
+		WireCodec.OPCODE_TRADE_SNAPSHOT:
+			return _apply_trade_snapshot(frame)
+		WireCodec.OPCODE_TRADE_TERMINAL:
+			return _apply_trade_terminal(frame)
 		WireCodec.OPCODE_WORLD_READY:
 			return _apply_world_ready(frame)
 		WireCodec.OPCODE_SELF_STATE:
@@ -666,6 +698,21 @@ func snapshot() -> Dictionary:
 		"last_repair_response_sequence": last_repair_response_sequence,
 		"last_repair_result": last_repair_result.duplicate(true),
 		"stale_repair_results": stale_repair_results,
+		"trade_sequence": trade_sequence,
+		"trade_id": trade_id,
+		"trade_revision": trade_revision,
+		"trade_state": trade_state,
+		"trade_peer_actor_id": trade_peer_actor_id,
+		"trade_my_money": trade_my_money,
+		"trade_other_money": trade_other_money,
+		"trade_my_locked": trade_my_locked,
+		"trade_other_locked": trade_other_locked,
+		"trade_my_confirmed": trade_my_confirmed,
+		"trade_other_confirmed": trade_other_confirmed,
+		"trade_my_items": trade_my_items.duplicate(true),
+		"trade_other_items": trade_other_items.duplicate(true),
+		"last_trade_terminal": last_trade_terminal.duplicate(true),
+		"stale_trade_frames": stale_trade_frames,
 		"respawn_sequence": respawn_sequence,
 		"last_respawn_result_sequence": last_respawn_result_sequence,
 		"last_respawn_result_status": last_respawn_result_status,
