@@ -58,7 +58,11 @@ public enum WireOpcode : ushort
     StorageSnapshot = 53,
     StorageDeposit = 54,
     StorageWithdraw = 55,
-    StorageTransferResult = 56
+    StorageTransferResult = 56,
+    EquipmentSnapshot = 57,
+    EquipmentEquip = 58,
+    EquipmentUnequip = 59,
+    EquipmentTransferResult = 60
 }
 
 public enum AuthWireStatus : byte { Success = 0, InvalidCredentials = 1, Disabled = 2 }
@@ -234,6 +238,18 @@ public readonly record struct StorageTransferResultWire(
     long MapEpoch,uint StorageSequence,StorageTransferKind Kind,
     StorageTransferStatus Status,int NpcSpawnId,long ItemUid,
     int ItemDefinitionId,int Quantity,long SourceDropId);
+
+public readonly record struct EquipmentItemWire(
+    long ItemUid,int SlotId,int ItemDefinitionId,long SourceDropId);
+public sealed record EquipmentSnapshotWire(
+    long CharacterId,int StartIndex,bool Complete,
+    IReadOnlyList<EquipmentItemWire> Items);
+public readonly record struct EquipmentMoveWire(
+    long MapEpoch,uint EquipmentSequence,long ItemUid);
+public readonly record struct EquipmentTransferResultWire(
+    long MapEpoch,uint EquipmentSequence,EquipmentTransferKind Kind,
+    EquipmentTransferStatus Status,long ItemUid,
+    int ItemDefinitionId,int SlotId,long SourceDropId);
 
 /// <summary>
 /// Version 1 complete-frame codec. Transport/TLS/socket buffering is separate.
