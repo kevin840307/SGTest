@@ -432,6 +432,75 @@ def run_equipment(args, repo: Path, fixture: Path, env: dict[str, str]) -> int:
             except subprocess.TimeoutExpired:
                 server.kill()
 
+def run_bank(args, repo: Path, fixture: Path, env: dict[str, str]) -> int:
+    server = subprocess.Popen(
+        ["dotnet", "run", "--project", str(fixture), "-c", "Release",
+         "--no-build", "--", "--bank"],
+        cwd=repo, env=env, text=True, stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT, bufsize=1)
+    lines: list[str] = []
+    notices: queue.Queue[str] = queue.Queue()
+
+    def capture() -> None:
+        assert server.stdout is not None
+        for line in server.stdout:
+            value = line.rstrip()
+            lines.append(value)
+            notices.put(value)
+
+    threading.Thread(target=capture, daemon=True).start()
+    deadline = time.monotonic() + args.timeout
+    try:
+        ready = None
+        while time.monotonic() < deadline:
+            if server.poll() is not None and notices.empty():
+                break
+            try:
+                line = notices.get(timeout=0.15)
+            except queue.Empty:
+                continue
+            if line.startswith("BANK_FIXTURE_READY "):
+                ready = line
+                break
+        if ready is None:
+            raise RuntimeError("bank fixture never became ready")
+        match = re.search(r"BANK_FIXTURE_READY port=(\d+) cert=(.+?) username=", ready)
+        if match is None:
+            raise RuntimeError("malformed bank fixture readiness: " + ready)
+        port, cert = match.group(1), match.group(2)
+        client = subprocess.run(
+            [args.godot, "--headless", "--path", str(repo / "client"),
+             "--script", "res://tests/test_client_bank_tls.gd", "--", port, cert],
+            cwd=repo, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            timeout=max(1.0, deadline - time.monotonic()))
+        print(client.stdout, end="")
+        if client.returncode != 0 or "CLIENT_BANK_TLS_PASS" not in client.stdout:
+            raise RuntimeError("Godot bank TLS test failed")
+        server.wait(timeout=max(1.0, deadline - time.monotonic()))
+        output = "\n".join(lines)
+        if server.returncode != 0 or "BANK_FIXTURE_PASS" not in output:
+            raise RuntimeError("C# bank fixture did not confirm persistent settlement")
+        for line in lines:
+            if line.startswith("BANK_FIXTURE_"):
+                print(line)
+        print("GODOT_CSHARP_TLS_BANK_E2E_PASS secure_tls=true "
+              "identity_server_bound=true scope_server_rule=true "
+              "deposit=true withdraw=true durable_balances=true")
+        return 0
+    except Exception as error:
+        print("TLS_BANK_RUNNER_FAIL", error, file=sys.stderr)
+        for line in lines[-30:]:
+            print(line, file=sys.stderr)
+        return 1
+    finally:
+        if server.poll() is None:
+            server.terminate()
+            try:
+                server.wait(timeout=3)
+            except subprocess.TimeoutExpired:
+                server.kill()
+
+
 def run_combat_observer(args, repo: Path, fixture: Path, env: dict[str, str]) -> int:
     server = subprocess.Popen(
         ["dotnet", "run", "--project", str(fixture), "-c", "Release",
