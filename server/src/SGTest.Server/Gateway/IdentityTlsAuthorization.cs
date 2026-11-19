@@ -95,6 +95,8 @@ public sealed class IdentityTlsAuthorization
         var bindingGate = new object();
         bool sessionFinished = false;
         GatewayConnection? boundConnection = null;
+        using var gameplayGate = new SemaphoreSlim(1,1);
+        using var tradeIngressGate = new SemaphoreSlim(1,1);
 
         async ValueTask<GatewayConnection?> Authorize(SslStream stream, CancellationToken token)
         {
@@ -112,6 +114,12 @@ public sealed class IdentityTlsAuthorization
                 if (attached && _combat is not null &&
                     !_combat.ResumeIfAttached(
                         binding.ActorId, binding.ConnectionEpoch, binding.MapEpoch))
+                {
+                    router.TryDetach(connection);
+                    attached = false;
+                }
+                if (attached && _trades is not null &&
+                    !_trades.TryRegisterGameplayGate(binding,gameplayGate))
                 {
                     router.TryDetach(connection);
                     attached = false;
@@ -134,6 +142,11 @@ public sealed class IdentityTlsAuthorization
 
         async Task Release(ConnectionBinding binding)
         {
+            // No socket release may detach/advance a participant while its
+            // confirmed SQLite trade is inside the two-party commit barrier.
+            await gameplayGate.WaitAsync().ConfigureAwait(false);
+            try
+            {
             GatewayConnection? connection;
             lock (bindingGate)
             {
@@ -179,13 +192,18 @@ public sealed class IdentityTlsAuthorization
                     release.ActorId, release.ConnectionEpoch, release.MapEpoch)
                     .ConfigureAwait(false);
             }
+            }
+            finally
+            {
+                _trades?.UnregisterGameplayGate(binding,gameplayGate);
+                gameplayGate.Release();
+            }
         }
 
         try
         {
             // Map transfers and pickup settlement for this authenticated
             // socket must not race one another across separate async workers.
-            using var gameplayGate = new SemaphoreSlim(1,1);
             Func<TrustedNpcInteraction, Task<NpcPortalOutcome>>? npcHandler =
                 _portals is null ? null : async request =>
                 {
@@ -1230,13 +1248,16 @@ public sealed class IdentityTlsAuthorization
                 if(_trades is null)return;
                 var binding=new ConnectionBinding(
                     request.ActorId,request.ConnectionEpoch,request.RequestMapEpoch);
-                await gameplayGate.WaitAsync().ConfigureAwait(false);
+                // Trade ingress has its OWN per-socket order. In particular,
+                // FinalConfirm cannot hold this socket's gameplay gate while
+                // trying to acquire the other participant's gameplay gate.
+                await tradeIngressGate.WaitAsync().ConfigureAwait(false);
                 try
                 {
                     if(!router.IsCurrentBinding(binding))return;
                     await _trades.HandleAsync(request,router).ConfigureAwait(false);
                 }
-                finally { gameplayGate.Release(); }
+                finally { tradeIngressGate.Release(); }
             }
             Func<TrustedTradeCommand,Task>? tradeHandler=
                 _trades is null ? null : TradeHandler;
@@ -1304,6 +1325,9 @@ public sealed class IdentityTlsAuthorization
             }
             if (abandoned is not null)
             {
+                await gameplayGate.WaitAsync().ConfigureAwait(false);
+                try
+                {
                 var binding = abandoned.Binding;
                 if (_combat is not null)
                     await _combat.CloseAndDrainAsync(
@@ -1313,6 +1337,12 @@ public sealed class IdentityTlsAuthorization
                 await _world.TrustedDisconnectAsync(
                     binding.ActorId, binding.ConnectionEpoch, binding.MapEpoch)
                     .ConfigureAwait(false);
+                }
+                finally
+                {
+                    _trades?.UnregisterGameplayGate(abandoned.Binding,gameplayGate);
+                    gameplayGate.Release();
+                }
             }
         }
     }

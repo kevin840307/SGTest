@@ -169,8 +169,6 @@ internal static class TlsHost
             var positions = new CharacterPositionCheckpoint(identity,
                 new(IntervalMilliseconds: checkpointMs));
             var router = new WorldResultRouter(changedObserver: positions.Observe);
-            PlayerTradeCoordinator? trades=tradeItemRules is null
-                ? null:new PlayerTradeCoordinator(identity,world,tradeItemRules);
             var combat = new PlayerCombatSettlement(
                 identity,
                 delivery: router.QueuePlayerDamage,
@@ -189,6 +187,8 @@ internal static class TlsHost
                         throw new PlayerCombatSettlementException(
                             "Committed player damage visual queue full");
                 });
+            PlayerTradeCoordinator? trades=tradeItemRules is null
+                ? null:new PlayerTradeCoordinator(identity,world,tradeItemRules,combat);
             var aoi = new WorldAoiPump(
                 router, monsters: monsters, playerCombat: combat, loot: loot,
                 initialGroundDrops: activeDrops);

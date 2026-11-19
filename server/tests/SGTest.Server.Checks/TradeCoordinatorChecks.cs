@@ -54,6 +54,11 @@ internal static class TradeCoordinatorChecks
             [4104]=new(4104,true,"synthetic:trade-coord-4104")
         };
         var coordinator=new PlayerTradeCoordinator(store,world,rules);
+        using var gateA=new SemaphoreSlim(1,1);
+        using var gateB=new SemaphoreSlim(1,1);
+        Checks.Require(coordinator.TryRegisterGameplayGate(gatewayA.Binding,gateA)&&
+            coordinator.TryRegisterGameplayGate(gatewayB.Binding,gateB),
+            "trade gate registration failed");
 
         await coordinator.HandleAsync(new(
             charA,actorA.ConnectionEpoch,actorA.MapEpoch,1,
@@ -292,9 +297,92 @@ internal static class TradeCoordinatorChecks
         await AssertOwnership(store,charA,seededB.ItemUid,4104,1,seededB.DropId);
         await AssertOwnership(store,charB,seededA.ItemUid,4103,2,seededA.DropId);
 
+
+        // The preceding raw World transfer intentionally left the test Gateway
+        // at its old epoch. Advance the trusted Gateway just as a real NPC
+        // portal does, then register the new session gate for another trade.
+        var actorB2=transferred!.Value;
+        coordinator.UnregisterGameplayGate(gatewayB.Binding,gateB);
+        Checks.Require(router.TryAdvanceTrustedMap(gatewayB,actorB2),
+            "test trusted Gateway binding did not advance MapEpoch");
+        Checks.Require(coordinator.TryRegisterGameplayGate(gatewayB.Binding,gateB),
+            "renewed trade gameplay gate missing");
+        await coordinator.HandleAsync(new(
+            charA,actorA.ConnectionEpoch,actorA.MapEpoch,16,
+            TradeCommandAction.Request,0,charB,0,0),router);
+        var gatedTrade=DrainSnapshot(gatewayA);
+        DrainSnapshot(gatewayB);
+        await coordinator.HandleAsync(new(
+            charB,actorB2.ConnectionEpoch,actorB2.MapEpoch,1,
+            TradeCommandAction.Accept,gatedTrade.TradeId,0,0,0),router);
+        RequireState(gatewayA,gatewayB,TradeSessionWireState.Active);
+        await coordinator.HandleAsync(new(
+            charA,actorA.ConnectionEpoch,actorA.MapEpoch,17,
+            TradeCommandAction.Lock,gatedTrade.TradeId,0,0,0),router);
+        RequireState(gatewayA,gatewayB,TradeSessionWireState.Active);
+        await coordinator.HandleAsync(new(
+            charB,actorB2.ConnectionEpoch,actorB2.MapEpoch,2,
+            TradeCommandAction.Lock,gatedTrade.TradeId,0,0,0),router);
+        RequireState(gatewayA,gatewayB,TradeSessionWireState.AwaitingFinalConfirm);
+        await coordinator.HandleAsync(new(
+            charB,actorB2.ConnectionEpoch,actorB2.MapEpoch,3,
+            TradeCommandAction.FinalConfirm,gatedTrade.TradeId,0,0,0),router);
+        RequireState(gatewayA,gatewayB,TradeSessionWireState.AwaitingFinalConfirm);
+        await gateB.WaitAsync();
+        try
+        {
+            var pending=coordinator.HandleAsync(new(
+                charA,actorA.ConnectionEpoch,actorA.MapEpoch,18,
+                TradeCommandAction.FinalConfirm,gatedTrade.TradeId,0,0,0),router);
+            // The confirmed snapshot is enqueued BEFORE the acquisition of
+            // the peer gameplay gate. Ensure the commit has reached that
+            // barrier, not merely the initial trusted World lookup.
+            TradeSnapshotWire pendingSnapshot=await WaitSnapshotAsync(gatewayA);
+            Checks.Require(pendingSnapshot.MyConfirmed&&pendingSnapshot.OtherConfirmed&&
+                !pending.IsCompleted,
+                "test did not hold the peer's trade commit barrier");
+            DrainSnapshot(gatewayB);
+            var later=await world.TrustedTransferAsync(
+                charB,actorB2.ConnectionEpoch,actorB2.MapEpoch,97,28,24);
+            Checks.Require(later is { } changed&&changed.MapEpoch>actorB2.MapEpoch,
+                "concurrent trusted portal did not advance World MapEpoch");
+            gateB.Release();
+            await pending.WaitAsync(TimeSpan.FromSeconds(5));
+        }
+        finally
+        {
+            if(gateB.CurrentCount==0)gateB.Release();
+        }
+        Checks.Require(DrainTerminal(gatewayA).Status==TradeTerminalStatus.StaleGeneration&&
+            DrainTerminal(gatewayB).Status==TradeTerminalStatus.StaleGeneration&&
+            !coordinator.IsTrading(charA)&&!coordinator.IsTrading(charB),
+            "race: trade committed after a concurrent authoritative MapEpoch advance");
+        Checks.Require(await store.GetCharacterMoneyAsync(charA)==850&&
+            await store.GetCharacterMoneyAsync(charB)==650,
+            "race: stale-map trade unexpectedly changed wallet");
+        await AssertOwnership(store,charA,seededB.ItemUid,4104,1,seededB.DropId);
+        await AssertOwnership(store,charB,seededA.ItemUid,4103,2,seededA.DropId);
+
         router.TryDetach(gatewayA);
         router.TryDetach(gatewayB);
         await world.StopAsync();
+    }
+
+    private static async Task<TradeSnapshotWire> WaitSnapshotAsync(
+        GatewayConnection gateway)
+    {
+        for(int i=0;i<300;i++)
+        {
+            if(gateway.TryDequeueReliable(out var frame))
+            {
+                if(!WireProtocol.TryDecodeTradeSnapshot(frame,out var value)||
+                   value is null)
+                    throw new Exception("unexpected frame during trade barrier wait");
+                return value;
+            }
+            await Task.Delay(10).ConfigureAwait(false);
+        }
+        throw new TimeoutException("trade final-confirm snapshot did not arrive");
     }
 
     private static void RequireState(

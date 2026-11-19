@@ -16,6 +16,10 @@ public sealed class PlayerTradeCoordinator
     private readonly SqliteIdentityStore _store;
     private readonly ServerWorldHost _world;
     private readonly IReadOnlyDictionary<int,TradeItemRule> _itemRules;
+    private readonly PlayerCombatSettlement? _combat;
+    // Bind each authenticated actor to the SAME gameplay semaphore used for
+    // portal, item and socket release. A trade needs both actors' gates.
+    private readonly Dictionary<long,(ConnectionBinding Binding,SemaphoreSlim Gate)> _sessionGates=new();
     private readonly Dictionary<long,Session> _sessions=new();
     private readonly Dictionary<long,long> _byActor=new();
     private long _nextTradeId=DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()*1000;
@@ -49,12 +53,41 @@ public sealed class PlayerTradeCoordinator
 
     public PlayerTradeCoordinator(
         SqliteIdentityStore store,ServerWorldHost world,
-        IReadOnlyDictionary<int,TradeItemRule> itemRules)
+        IReadOnlyDictionary<int,TradeItemRule> itemRules,
+        PlayerCombatSettlement? combat=null)
     {
         _store=store??throw new ArgumentNullException(nameof(store));
         _world=world??throw new ArgumentNullException(nameof(world));
         _itemRules=itemRules??throw new ArgumentNullException(nameof(itemRules));
+        _combat=combat;
         if(itemRules.Count>100000)throw new ArgumentOutOfRangeException(nameof(itemRules));
+    }
+
+    /// <summary>Called only after an authenticated Gateway binding is attached.
+    /// A stale TLS session must never replace a newer actor's semaphore.</summary>
+    public bool TryRegisterGameplayGate(ConnectionBinding binding,SemaphoreSlim gate)
+    {
+        ArgumentNullException.ThrowIfNull(gate);
+        if(binding.ActorId<=0||binding.ConnectionEpoch<=0||binding.MapEpoch<=0)
+            return false;
+        lock(_gate)
+        {
+            if(_sessionGates.ContainsKey(binding.ActorId))return false;
+            _sessionGates.Add(binding.ActorId,(binding,gate));
+            return true;
+        }
+    }
+
+    public void UnregisterGameplayGate(ConnectionBinding binding,SemaphoreSlim gate)
+    {
+        lock(_gate)
+        {
+            if(_sessionGates.TryGetValue(binding.ActorId,out var prior)&&
+               prior.Binding.ActorId==binding.ActorId&&
+               prior.Binding.ConnectionEpoch==binding.ConnectionEpoch&&
+               ReferenceEquals(prior.Gate,gate))
+                _sessionGates.Remove(binding.ActorId);
+        }
     }
 
     public bool IsTrading(long actorId)
@@ -304,47 +337,134 @@ public sealed class PlayerTradeCoordinator
         QueueBoth(session!,router);
         if(commit is null)return;
 
-        // Accept-time binding checks are insufficient: either participant may
-        // die, transfer maps or reconnect while offers and locks are pending.
-        // Fail closed BEFORE entering the durable SQLite trade commit.
-        if(!await BindingsStillCurrentAsync(session!,router).ConfigureAwait(false))
+        // Serialize final settlement with BOTH authenticated socket gameplay
+        // gates. FinalConfirm ingress must not hold its own gameplay gate, or
+        // the two peers could deadlock while acquiring one another's gates.
+        SemaphoreSlim? firstGate=null,secondGate=null;
+        lock(_gate)
         {
-            lock(_gate)
+            if(_sessionGates.TryGetValue(session!.First.Binding.ActorId,out var first)&&
+               _sessionGates.TryGetValue(session.Second.Binding.ActorId,out var second)&&
+               first.Binding==session.First.Binding&&
+               second.Binding==session.Second.Binding)
             {
-                if(!_sessions.TryGetValue(session!.TradeId,out var active)||
-                   !ReferenceEquals(active,session))return;
-                session.Revision++;
-                RemoveLocked(session);
+                firstGate=first.Gate;
+                secondGate=second.Gate;
             }
-            QueueTerminalBoth(session!,router,TradeTerminalStatus.StaleGeneration);
+        }
+        if(firstGate is null||secondGate is null||ReferenceEquals(firstGate,secondGate))
+        {
+            AbortStaleCommit(session!,router);
             return;
         }
 
-        var result=await _store.CommitInventoryTradeAsync(commit,_itemRules)
-            .ConfigureAwait(false);
-        if(result.Status is TradeCommitStatus.Applied or TradeCommitStatus.AlreadyApplied)
+        // Stable actor-id order prevents opposite-direction dual-trade deadlock.
+        if(session!.First.Binding.ActorId>session.Second.Binding.ActorId)
+            (firstGate,secondGate)=(secondGate,firstGate);
+        bool heldFirst=false,heldSecond=false;
+        bool suspendedFirst=false,suspendedSecond=false;
+        try
         {
-            lock(_gate)
+            heldFirst=await firstGate.WaitAsync(TimeSpan.FromSeconds(10))
+                .ConfigureAwait(false);
+            if(!heldFirst)
             {
-                if(_sessions.TryGetValue(session!.TradeId,out var active)&&
-                   ReferenceEquals(active,session))RemoveLocked(session);
+                AbortStaleCommit(session,router);
+                return;
             }
-            QueueTerminal(
-                session!.First,session,router,TradeTerminalStatus.Success,
-                result.FirstWalletMoney);
-            QueueTerminal(
-                session.Second,session,router,TradeTerminalStatus.Success,
-                result.SecondWalletMoney);
+            heldSecond=await secondGate.WaitAsync(TimeSpan.FromSeconds(10))
+                .ConfigureAwait(false);
+            if(!heldSecond)
+            {
+                AbortStaleCommit(session,router);
+                return;
+            }
+
+            // The combat owner has a projected HP reservation timeline.
+            // Drain every earlier hit and suspend NEW hits before authorizing
+            // this SQLite commit, so lethal damage cannot overtake its guard.
+            if(_combat is not null)
+            {
+                await _combat.SuspendAndDrainAsync(
+                    session.First.Binding.ActorId,
+                    session.First.Binding.ConnectionEpoch,
+                    session.First.Binding.MapEpoch).ConfigureAwait(false);
+                suspendedFirst=true;
+                await _combat.SuspendAndDrainAsync(
+                    session.Second.Binding.ActorId,
+                    session.Second.Binding.ConnectionEpoch,
+                    session.Second.Binding.MapEpoch).ConfigureAwait(false);
+                suspendedSecond=true;
+            }
+
+            if(!await BindingsStillCurrentAsync(
+                    session,router,requireSuspendedCombat:_combat is not null)
+                .ConfigureAwait(false))
+            {
+                AbortStaleCommit(session,router);
+                return;
+            }
+
+            var result=await _store.CommitInventoryTradeAsync(commit,_itemRules)
+                .ConfigureAwait(false);
+            if(result.Status is TradeCommitStatus.Applied or TradeCommitStatus.AlreadyApplied)
+            {
+                lock(_gate)
+                {
+                    if(_sessions.TryGetValue(session.TradeId,out var active)&&
+                       ReferenceEquals(active,session))RemoveLocked(session);
+                }
+                QueueTerminal(
+                    session.First,session,router,TradeTerminalStatus.Success,
+                    result.FirstWalletMoney);
+                QueueTerminal(
+                    session.Second,session,router,TradeTerminalStatus.Success,
+                    result.SecondWalletMoney);
+            }
+            else
+            {
+                lock(_gate)
+                {
+                    if(_sessions.TryGetValue(session.TradeId,out var active)&&
+                       ReferenceEquals(active,session))RemoveLocked(session);
+                }
+                QueueTerminalBoth(session,router,TradeTerminalStatus.CommitFailed);
+            }
         }
-        else
+        finally
         {
-            lock(_gate)
+            // Inverse order: resume combat while the gameplay locks still
+            // exclude cross-map/disconnect, then release both socket gates.
+            if(_combat is not null)
             {
-                if(_sessions.TryGetValue(session!.TradeId,out var active)&&
-                   ReferenceEquals(active,session))RemoveLocked(session);
+                if(suspendedSecond&&!_combat.TryResumeGeneration(
+                    session.Second.Binding.ActorId,
+                    session.Second.Binding.ConnectionEpoch,
+                    session.Second.Binding.MapEpoch))
+                    throw new PlayerCombatSettlementException(
+                        "Second trade participant combat generation could not resume");
+                if(suspendedFirst&&!_combat.TryResumeGeneration(
+                    session.First.Binding.ActorId,
+                    session.First.Binding.ConnectionEpoch,
+                    session.First.Binding.MapEpoch))
+                    throw new PlayerCombatSettlementException(
+                        "First trade participant combat generation could not resume");
             }
-            QueueTerminalBoth(session!,router,TradeTerminalStatus.CommitFailed);
+            if(heldSecond)secondGate.Release();
+            if(heldFirst)firstGate.Release();
         }
+    }
+
+    private void AbortStaleCommit(Session session,WorldResultRouter router)
+    {
+        lock(_gate)
+        {
+            if(!_sessions.TryGetValue(session.TradeId,out var active)||
+               !ReferenceEquals(active,session))return;
+            session.Revision++;
+            RemoveLocked(session);
+        }
+        QueueTerminalBoth(session,router,TradeTerminalStatus.StaleGeneration);
     }
 
     private void CancelCommand(TrustedTradeCommand command,WorldResultRouter router)
@@ -391,7 +511,7 @@ public sealed class PlayerTradeCoordinator
     }
 
     private async Task<bool> BindingsStillCurrentAsync(
-        Session session,WorldResultRouter router)
+        Session session,WorldResultRouter router,bool requireSuspendedCombat=false)
     {
         var first=await _world.TrustedGetActorAsync(session.First.Binding.ActorId)
             .ConfigureAwait(false);
@@ -401,6 +521,9 @@ public sealed class PlayerTradeCoordinator
             ConnectionBinding.FromTrustedSnapshot(a)==session.First.Binding&&
             ConnectionBinding.FromTrustedSnapshot(b)==session.Second.Binding&&
             a.MapId==b.MapId&&!a.CombatDead&&!b.CombatDead&&
+            (!requireSuspendedCombat||(_combat is not null&&
+                _combat.TryGetSuspendedCombatState(a,out int hpA,out _)&&hpA>0&&
+                _combat.TryGetSuspendedCombatState(b,out int hpB,out _)&&hpB>0))&&
             router.IsCurrentBinding(session.First.Binding)&&
             router.IsCurrentBinding(session.Second.Binding);
     }
