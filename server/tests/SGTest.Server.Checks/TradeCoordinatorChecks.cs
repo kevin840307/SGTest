@@ -192,6 +192,106 @@ internal static class TradeCoordinatorChecks
             !coordinator.IsTrading(charA)&&!coordinator.IsTrading(charB),
             "trade disconnect did not terminate pending session");
 
+
+        // A dead peer is not a valid trade target, even though the socket and
+        // MapEpoch are still authenticated and connected.
+        var dead=await world.TrustedSetCombatDeadAsync(
+            charB,actorB.ConnectionEpoch,actorB.MapEpoch,true);
+        Checks.Require(dead is { CombatDead:true },
+            "test failed to mark the trade peer dead in authoritative World");
+        await coordinator.HandleAsync(new(
+            charA,actorA.ConnectionEpoch,actorA.MapEpoch,9,
+            TradeCommandAction.Request,0,charB,0,0),router);
+        Checks.Require(!coordinator.IsTrading(charA)&&
+            !gatewayA.TryDequeueReliable(out _)&&!gatewayB.TryDequeueReliable(out _),
+            "dead peer received a trade invitation");
+        Checks.Require((await world.TrustedSetCombatDeadAsync(
+            charB,actorB.ConnectionEpoch,actorB.MapEpoch,false)) is { CombatDead:false },
+            "test failed to restore live World state");
+
+        // Both parties can lock and one can confirm, but an authoritative
+        // combat death BEFORE the second final confirm must never commit
+        // money or item ownership. Both peers receive a terminal receipt.
+        await coordinator.HandleAsync(new(
+            charA,actorA.ConnectionEpoch,actorA.MapEpoch,10,
+            TradeCommandAction.Request,0,charB,0,0),router);
+        var deathTrade=DrainSnapshot(gatewayA);
+        DrainSnapshot(gatewayB);
+        await coordinator.HandleAsync(new(
+            charB,actorB.ConnectionEpoch,actorB.MapEpoch,7,
+            TradeCommandAction.Accept,deathTrade.TradeId,0,0,0),router);
+        RequireState(gatewayA,gatewayB,TradeSessionWireState.Active);
+        await coordinator.HandleAsync(new(
+            charA,actorA.ConnectionEpoch,actorA.MapEpoch,11,
+            TradeCommandAction.Lock,deathTrade.TradeId,0,0,0),router);
+        RequireState(gatewayA,gatewayB,TradeSessionWireState.Active);
+        await coordinator.HandleAsync(new(
+            charB,actorB.ConnectionEpoch,actorB.MapEpoch,8,
+            TradeCommandAction.Lock,deathTrade.TradeId,0,0,0),router);
+        RequireState(gatewayA,gatewayB,TradeSessionWireState.AwaitingFinalConfirm);
+        await coordinator.HandleAsync(new(
+            charB,actorB.ConnectionEpoch,actorB.MapEpoch,9,
+            TradeCommandAction.FinalConfirm,deathTrade.TradeId,0,0,0),router);
+        RequireState(gatewayA,gatewayB,TradeSessionWireState.AwaitingFinalConfirm);
+        await world.TrustedSetCombatDeadAsync(
+            charB,actorB.ConnectionEpoch,actorB.MapEpoch,true);
+        await coordinator.HandleAsync(new(
+            charA,actorA.ConnectionEpoch,actorA.MapEpoch,12,
+            TradeCommandAction.FinalConfirm,deathTrade.TradeId,0,0,0),router);
+        RequireState(gatewayA,gatewayB,TradeSessionWireState.AwaitingFinalConfirm);
+        Checks.Require(DrainTerminal(gatewayA).Status==TradeTerminalStatus.StaleGeneration&&
+            DrainTerminal(gatewayB).Status==TradeTerminalStatus.StaleGeneration&&
+            !coordinator.IsTrading(charA)&&!coordinator.IsTrading(charB),
+            "death between final confirmations did not abort trade");
+        Checks.Require(await store.GetCharacterMoneyAsync(charA)==850&&
+            await store.GetCharacterMoneyAsync(charB)==650,
+            "dead peer still changed durable wallet balance");
+        await AssertOwnership(store,charA,seededB.ItemUid,4104,1,seededB.DropId);
+        await AssertOwnership(store,charB,seededA.ItemUid,4103,2,seededA.DropId);
+
+        // Same-map trusted teleport increments MapEpoch. A pending trade
+        // cannot settle against the stale peer generation at final commit.
+        await world.TrustedSetCombatDeadAsync(
+            charB,actorB.ConnectionEpoch,actorB.MapEpoch,false);
+        await coordinator.HandleAsync(new(
+            charA,actorA.ConnectionEpoch,actorA.MapEpoch,13,
+            TradeCommandAction.Request,0,charB,0,0),router);
+        var transferTrade=DrainSnapshot(gatewayA);
+        DrainSnapshot(gatewayB);
+        await coordinator.HandleAsync(new(
+            charB,actorB.ConnectionEpoch,actorB.MapEpoch,10,
+            TradeCommandAction.Accept,transferTrade.TradeId,0,0,0),router);
+        RequireState(gatewayA,gatewayB,TradeSessionWireState.Active);
+        await coordinator.HandleAsync(new(
+            charA,actorA.ConnectionEpoch,actorA.MapEpoch,14,
+            TradeCommandAction.Lock,transferTrade.TradeId,0,0,0),router);
+        RequireState(gatewayA,gatewayB,TradeSessionWireState.Active);
+        await coordinator.HandleAsync(new(
+            charB,actorB.ConnectionEpoch,actorB.MapEpoch,11,
+            TradeCommandAction.Lock,transferTrade.TradeId,0,0,0),router);
+        RequireState(gatewayA,gatewayB,TradeSessionWireState.AwaitingFinalConfirm);
+        await coordinator.HandleAsync(new(
+            charB,actorB.ConnectionEpoch,actorB.MapEpoch,12,
+            TradeCommandAction.FinalConfirm,transferTrade.TradeId,0,0,0),router);
+        RequireState(gatewayA,gatewayB,TradeSessionWireState.AwaitingFinalConfirm);
+        var transferred=await world.TrustedTransferAsync(
+            charB,actorB.ConnectionEpoch,actorB.MapEpoch,97,28,24);
+        Checks.Require(transferred is { } moved&&moved.MapEpoch>actorB.MapEpoch,
+            "test trusted transfer failed to advance MapEpoch");
+        await coordinator.HandleAsync(new(
+            charA,actorA.ConnectionEpoch,actorA.MapEpoch,15,
+            TradeCommandAction.FinalConfirm,transferTrade.TradeId,0,0,0),router);
+        RequireState(gatewayA,gatewayB,TradeSessionWireState.AwaitingFinalConfirm);
+        Checks.Require(DrainTerminal(gatewayA).Status==TradeTerminalStatus.StaleGeneration&&
+            DrainTerminal(gatewayB).Status==TradeTerminalStatus.StaleGeneration&&
+            !coordinator.IsTrading(charA)&&!coordinator.IsTrading(charB),
+            "peer MapEpoch transfer did not abort stale trade commit");
+        Checks.Require(await store.GetCharacterMoneyAsync(charA)==850&&
+            await store.GetCharacterMoneyAsync(charB)==650,
+            "stale peer generation still changed durable wallet balance");
+        await AssertOwnership(store,charA,seededB.ItemUid,4104,1,seededB.DropId);
+        await AssertOwnership(store,charB,seededA.ItemUid,4103,2,seededA.DropId);
+
         router.TryDetach(gatewayA);
         router.TryDetach(gatewayB);
         await world.StopAsync();

@@ -117,7 +117,10 @@ public sealed class PlayerTradeCoordinator
     {
         if(command.TargetActorId==command.ActorId)return;
         var target=await _world.TrustedGetActorAsync(command.TargetActorId).ConfigureAwait(false);
-        if(target is not { } peer||peer.MapId!=requester.MapId)return;
+        // A dead character cannot initiate or receive a trade invitation.
+        // This is the trusted World combat-death barrier, not a Client flag.
+        if(requester.CombatDead||target is not { } peer||peer.CombatDead||
+           peer.MapId!=requester.MapId)return;
         var firstBinding=ConnectionBinding.FromTrustedSnapshot(requester);
         var secondBinding=ConnectionBinding.FromTrustedSnapshot(peer);
         if(!router.IsCurrentBinding(firstBinding)||!router.IsCurrentBinding(secondBinding))return;
@@ -301,6 +304,22 @@ public sealed class PlayerTradeCoordinator
         QueueBoth(session!,router);
         if(commit is null)return;
 
+        // Accept-time binding checks are insufficient: either participant may
+        // die, transfer maps or reconnect while offers and locks are pending.
+        // Fail closed BEFORE entering the durable SQLite trade commit.
+        if(!await BindingsStillCurrentAsync(session!,router).ConfigureAwait(false))
+        {
+            lock(_gate)
+            {
+                if(!_sessions.TryGetValue(session!.TradeId,out var active)||
+                   !ReferenceEquals(active,session))return;
+                session.Revision++;
+                RemoveLocked(session);
+            }
+            QueueTerminalBoth(session!,router,TradeTerminalStatus.StaleGeneration);
+            return;
+        }
+
         var result=await _store.CommitInventoryTradeAsync(commit,_itemRules)
             .ConfigureAwait(false);
         if(result.Status is TradeCommitStatus.Applied or TradeCommitStatus.AlreadyApplied)
@@ -381,7 +400,8 @@ public sealed class PlayerTradeCoordinator
         return first is { } a&&second is { } b&&
             ConnectionBinding.FromTrustedSnapshot(a)==session.First.Binding&&
             ConnectionBinding.FromTrustedSnapshot(b)==session.Second.Binding&&
-            a.MapId==b.MapId&&router.IsCurrentBinding(session.First.Binding)&&
+            a.MapId==b.MapId&&!a.CombatDead&&!b.CombatDead&&
+            router.IsCurrentBinding(session.First.Binding)&&
             router.IsCurrentBinding(session.Second.Binding);
     }
 

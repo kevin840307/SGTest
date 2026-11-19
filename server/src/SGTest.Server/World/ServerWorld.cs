@@ -49,7 +49,7 @@ public readonly record struct MoveReceipt(
 public readonly record struct ActorSnapshot(
     long ActorId, int MapId, long ConnectionEpoch, long MapEpoch,
     uint LastMovementSequence, uint MovementActionSequence, double X, double Y,
-    long EntityRevision, bool IsMoving, byte Facing = 1);
+    long EntityRevision, bool IsMoving, byte Facing = 1, bool CombatDead = false);
 
 public enum ActorLifecycleKind { Joined, Left }
 public readonly record struct ActorLifecycleEvent(ActorLifecycleKind Kind, ActorSnapshot Actor);
@@ -86,7 +86,7 @@ public sealed class ServerWorld
         public int RouteIndex;
 
         public ActorSnapshot Snapshot() => new(Id, Map, ConnectionEpoch, MapEpoch,
-            LastSequence, MovementActionSequence, X, Y, Revision, RouteIndex < Route.Count, Facing);
+            LastSequence, MovementActionSequence, X, Y, Revision, RouteIndex < Route.Count, Facing, CombatDead);
 
         public void ClearRoute()
         {
