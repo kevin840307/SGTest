@@ -287,7 +287,6 @@ WHERE item_uid=$uid AND character_id=$actor;";
            maxDurability<=0||currentDurability<0||
            currentDurability>maxDurability||repairRate is <1 or >255)
             throw new ArgumentOutOfRangeException(nameof(basePrice));
-        if(currentDurability==maxDurability)return 0;
         decimal numerator=(decimal)basePrice*
             (maxDurability-currentDurability)*repairRate;
         decimal denominator=(decimal)maxDurability*100m;
