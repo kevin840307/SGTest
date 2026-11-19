@@ -64,6 +64,10 @@ const OPCODE_BANK_SNAPSHOT := 62
 const OPCODE_BANK_DEPOSIT := 63
 const OPCODE_BANK_WITHDRAW := 64
 const OPCODE_BANK_TRANSACTION_RESULT := 65
+const OPCODE_REPAIR_OPEN := 66
+const OPCODE_REPAIR_SNAPSHOT := 67
+const OPCODE_REPAIR_ITEM := 68
+const OPCODE_REPAIR_RESULT := 69
 const MOVE_TARGET_FRAME_BYTES := 28
 const MOVE_RECEIPT_FRAME_BYTES := 30
 const NPC_INTERACT_FRAME_BYTES := 24
@@ -130,6 +134,13 @@ const BANK_OPEN_FRAME_BYTES := 24
 const BANK_SNAPSHOT_FRAME_BYTES := 42
 const BANK_MOVE_FRAME_BYTES := 32
 const BANK_TRANSACTION_RESULT_FRAME_BYTES := 51
+const REPAIR_OPEN_FRAME_BYTES := 24
+const REPAIR_SNAPSHOT_HEADER_BYTES := 40
+const REPAIR_PREVIEW_ITEM_BYTES := 29
+const REPAIR_SNAPSHOT_MAX_PER_FRAME := 128
+const REPAIR_SNAPSHOT_MAX_ITEMS := 4095
+const REPAIR_ITEM_FRAME_BYTES := 32
+const REPAIR_RESULT_FRAME_BYTES := 62
 const MAX_MONEY := 9000000000000000
 
 static func encode_move_target(map_epoch: int, movement_sequence: int, target_x: int, target_y: int) -> PackedByteArray:
@@ -1146,6 +1157,114 @@ static func decode_bank_transaction_result(frame: PackedByteArray) -> Dictionary
 		"amount":amount,"wallet_money":wallet_money,"bank_money":bank_money}
 
 
+static func encode_repair_open(epoch: int, sequence: int, npc_spawn_id: int) -> PackedByteArray:
+	if epoch <= 0 or sequence < 1 or sequence > 0xffffffff or npc_spawn_id <= 0:
+		return PackedByteArray()
+	var writer := StreamPeerBuffer.new()
+	writer.big_endian = false
+	writer.put_u32(REPAIR_OPEN_FRAME_BYTES)
+	writer.put_u16(VERSION)
+	writer.put_u16(OPCODE_REPAIR_OPEN)
+	writer.put_64(epoch)
+	writer.put_u32(sequence)
+	writer.put_32(npc_spawn_id)
+	return writer.data_array
+
+
+static func decode_repair_snapshot(frame: PackedByteArray) -> Dictionary:
+	if not _valid_variable_header(frame,OPCODE_REPAIR_SNAPSHOT,REPAIR_SNAPSHOT_HEADER_BYTES,REPAIR_SNAPSHOT_HEADER_BYTES+REPAIR_SNAPSHOT_MAX_PER_FRAME*REPAIR_PREVIEW_ITEM_BYTES):
+		return {}
+	var reader := _reader(frame,8)
+	var epoch := reader.get_64()
+	var sequence := reader.get_u32()
+	var status := reader.get_u8()
+	var npc_spawn_id := reader.get_32()
+	var wallet_money := reader.get_64()
+	var start_index := reader.get_32()
+	var complete_raw := reader.get_u8()
+	var count := reader.get_u16()
+	if epoch <= 0 or sequence == 0 or status > 4 or npc_spawn_id <= 0 or wallet_money < 0 or wallet_money > MAX_MONEY or start_index < 0 or start_index > REPAIR_SNAPSHOT_MAX_ITEMS or complete_raw > 1 or count > REPAIR_SNAPSHOT_MAX_PER_FRAME or start_index+count > REPAIR_SNAPSHOT_MAX_ITEMS or frame.size() != REPAIR_SNAPSHOT_HEADER_BYTES+count*REPAIR_PREVIEW_ITEM_BYTES:
+		return {}
+	var items: Array[Dictionary] = []
+	var uids := {}
+	for _index in count:
+		var uid := reader.get_64()
+		var item_id := reader.get_32()
+		var location := reader.get_u8()
+		var current := reader.get_32()
+		var maximum := reader.get_32()
+		var cost := reader.get_64()
+		if uid <= 0 or item_id < 1 or item_id > 100000000 or location not in [1,2] or current < 0 or maximum <= 0 or current > maximum or cost < 0 or cost > MAX_MONEY or uids.has(uid):
+			return {}
+		uids[uid] = true
+		items.append({"item_uid":uid,"item_definition_id":item_id,
+			"location":location,"current_durability":current,
+			"max_durability":maximum,"cost":cost})
+	if status != 0:
+		if wallet_money != 0 or start_index != 0 or complete_raw != 1 or not items.is_empty():
+			return {}
+	return {"map_epoch":epoch,"repair_sequence":sequence,"status":status,
+		"npc_spawn_id":npc_spawn_id,"wallet_money":wallet_money,
+		"start_index":start_index,"complete":complete_raw==1,"items":items}
+
+
+static func encode_repair_item(epoch: int, sequence: int, npc_spawn_id: int, item_uid: int) -> PackedByteArray:
+	if epoch <= 0 or sequence < 1 or sequence > 0xffffffff or npc_spawn_id <= 0 or item_uid <= 0:
+		return PackedByteArray()
+	var writer := StreamPeerBuffer.new()
+	writer.big_endian = false
+	writer.put_u32(REPAIR_ITEM_FRAME_BYTES)
+	writer.put_u16(VERSION)
+	writer.put_u16(OPCODE_REPAIR_ITEM)
+	writer.put_64(epoch)
+	writer.put_u32(sequence)
+	writer.put_32(npc_spawn_id)
+	writer.put_64(item_uid)
+	return writer.data_array
+
+
+static func decode_repair_result(frame: PackedByteArray) -> Dictionary:
+	if not _valid_header(frame,OPCODE_REPAIR_RESULT,REPAIR_RESULT_FRAME_BYTES):
+		return {}
+	var reader := _reader(frame,8)
+	var epoch := reader.get_64()
+	var sequence := reader.get_u32()
+	var status := reader.get_u8()
+	var npc_spawn_id := reader.get_32()
+	var uid := reader.get_64()
+	var item_id := reader.get_32()
+	var location := reader.get_u8()
+	var current := reader.get_32()
+	var maximum := reader.get_32()
+	var cost := reader.get_64()
+	var wallet_money := reader.get_64()
+	if epoch <= 0 or sequence == 0 or status > 11 or npc_spawn_id <= 0 or uid <= 0 or item_id < 0 or item_id > 100000000 or current < 0 or maximum < 0 or cost < 0 or cost > MAX_MONEY or wallet_money < 0 or wallet_money > MAX_MONEY:
+		return {}
+	var known := item_id > 0 and location in [1,2]
+	if status in [0,1]:
+		if not known or maximum <= 0 or current != maximum or cost <= 0:
+			return {}
+	elif status == 6:
+		if not known or maximum <= 0 or current != maximum or cost != 0:
+			return {}
+	elif status == 7:
+		if not known or maximum <= 0 or current > maximum or cost <= 0:
+			return {}
+	elif status == 5:
+		if not known or current != 0 or maximum != 0 or cost != 0:
+			return {}
+	elif status == 11:
+		if not known or current != 0 or maximum <= 0 or cost != 0:
+			return {}
+	elif item_id != 0 or location != 0 or current != 0 or maximum != 0 or cost != 0:
+		return {}
+	return {"map_epoch":epoch,"repair_sequence":sequence,"status":status,
+		"npc_spawn_id":npc_spawn_id,"item_uid":uid,
+		"item_definition_id":item_id,"location":location,
+		"current_durability":current,"max_durability":maximum,
+		"cost":cost,"wallet_money":wallet_money}
+
+
 static func encode_equipment_equip(epoch: int, sequence: int, item_uid: int) -> PackedByteArray:
 	return _encode_equipment_move(OPCODE_EQUIPMENT_EQUIP,epoch,sequence,item_uid)
 
@@ -1276,7 +1395,7 @@ static func frame_opcode(frame: PackedByteArray) -> int:
 	if reader.get_u16() != VERSION:
 		return -1
 	var opcode := reader.get_u16()
-	if opcode not in [OPCODE_MOVE_TARGET, OPCODE_MOVE_RECEIPT, OPCODE_NPC_INTERACT, OPCODE_NPC_INTERACT_RESULT, OPCODE_NORMAL_ATTACK, OPCODE_NORMAL_ATTACK_RESULT, OPCODE_PLAYER_COMBAT_STATE, OPCODE_PLAYER_DAMAGE, OPCODE_AUTH_REQUEST, OPCODE_AUTH_RESULT, OPCODE_CHARACTER_LIST, OPCODE_CHARACTER_CHOOSE, OPCODE_CHARACTER_CHOOSE_RESULT, OPCODE_CHARACTER_CREATE, OPCODE_CHARACTER_CREATE_RESULT, OPCODE_WORLD_READY, OPCODE_ENTITY_SPAWN, OPCODE_ENTITY_DESPAWN, OPCODE_ENTITY_DELTA, OPCODE_SELF_STATE, OPCODE_WORLD_READY_ACK, OPCODE_WORLD_RESYNC_REQUEST, OPCODE_MONSTER_SPAWN, OPCODE_MONSTER_DELTA, OPCODE_MONSTER_DESPAWN, OPCODE_PLAYER_RESPAWN, OPCODE_PLAYER_RESPAWN_RESULT, OPCODE_GROUND_DROP_SPAWN, OPCODE_GROUND_DROP_DESPAWN, OPCODE_GROUND_PICKUP, OPCODE_GROUND_PICKUP_RESULT, OPCODE_INVENTORY_SNAPSHOT, OPCODE_RECOVERY_USE, OPCODE_RECOVERY_USE_RESULT, OPCODE_INVENTORY_DISCARD, OPCODE_INVENTORY_DISCARD_RESULT, OPCODE_PLAYER_ATTACK_VISUAL, OPCODE_PLAYER_DAMAGE_VISUAL, OPCODE_PLAYER_RESPAWN_VISUAL, OPCODE_SKILL_USE, OPCODE_SKILL_USE_RESULT, OPCODE_PLAYER_SKILL_VISUAL, OPCODE_SHOP_OPEN, OPCODE_SHOP_SNAPSHOT, OPCODE_SHOP_BUY, OPCODE_SHOP_SELL, OPCODE_SHOP_TRANSACTION_RESULT, OPCODE_STORAGE_OPEN, OPCODE_STORAGE_SNAPSHOT, OPCODE_STORAGE_DEPOSIT, OPCODE_STORAGE_WITHDRAW, OPCODE_STORAGE_TRANSFER_RESULT, OPCODE_EQUIPMENT_SNAPSHOT, OPCODE_EQUIPMENT_EQUIP, OPCODE_EQUIPMENT_UNEQUIP, OPCODE_EQUIPMENT_TRANSFER_RESULT, OPCODE_BANK_OPEN, OPCODE_BANK_SNAPSHOT, OPCODE_BANK_DEPOSIT, OPCODE_BANK_WITHDRAW, OPCODE_BANK_TRANSACTION_RESULT]:
+	if opcode not in [OPCODE_MOVE_TARGET, OPCODE_MOVE_RECEIPT, OPCODE_NPC_INTERACT, OPCODE_NPC_INTERACT_RESULT, OPCODE_NORMAL_ATTACK, OPCODE_NORMAL_ATTACK_RESULT, OPCODE_PLAYER_COMBAT_STATE, OPCODE_PLAYER_DAMAGE, OPCODE_AUTH_REQUEST, OPCODE_AUTH_RESULT, OPCODE_CHARACTER_LIST, OPCODE_CHARACTER_CHOOSE, OPCODE_CHARACTER_CHOOSE_RESULT, OPCODE_CHARACTER_CREATE, OPCODE_CHARACTER_CREATE_RESULT, OPCODE_WORLD_READY, OPCODE_ENTITY_SPAWN, OPCODE_ENTITY_DESPAWN, OPCODE_ENTITY_DELTA, OPCODE_SELF_STATE, OPCODE_WORLD_READY_ACK, OPCODE_WORLD_RESYNC_REQUEST, OPCODE_MONSTER_SPAWN, OPCODE_MONSTER_DELTA, OPCODE_MONSTER_DESPAWN, OPCODE_PLAYER_RESPAWN, OPCODE_PLAYER_RESPAWN_RESULT, OPCODE_GROUND_DROP_SPAWN, OPCODE_GROUND_DROP_DESPAWN, OPCODE_GROUND_PICKUP, OPCODE_GROUND_PICKUP_RESULT, OPCODE_INVENTORY_SNAPSHOT, OPCODE_RECOVERY_USE, OPCODE_RECOVERY_USE_RESULT, OPCODE_INVENTORY_DISCARD, OPCODE_INVENTORY_DISCARD_RESULT, OPCODE_PLAYER_ATTACK_VISUAL, OPCODE_PLAYER_DAMAGE_VISUAL, OPCODE_PLAYER_RESPAWN_VISUAL, OPCODE_SKILL_USE, OPCODE_SKILL_USE_RESULT, OPCODE_PLAYER_SKILL_VISUAL, OPCODE_SHOP_OPEN, OPCODE_SHOP_SNAPSHOT, OPCODE_SHOP_BUY, OPCODE_SHOP_SELL, OPCODE_SHOP_TRANSACTION_RESULT, OPCODE_STORAGE_OPEN, OPCODE_STORAGE_SNAPSHOT, OPCODE_STORAGE_DEPOSIT, OPCODE_STORAGE_WITHDRAW, OPCODE_STORAGE_TRANSFER_RESULT, OPCODE_EQUIPMENT_SNAPSHOT, OPCODE_EQUIPMENT_EQUIP, OPCODE_EQUIPMENT_UNEQUIP, OPCODE_EQUIPMENT_TRANSFER_RESULT, OPCODE_BANK_OPEN, OPCODE_BANK_SNAPSHOT, OPCODE_BANK_DEPOSIT, OPCODE_BANK_WITHDRAW, OPCODE_BANK_TRANSACTION_RESULT, OPCODE_REPAIR_OPEN, OPCODE_REPAIR_SNAPSHOT, OPCODE_REPAIR_ITEM, OPCODE_REPAIR_RESULT]:
 		return -1
 	return opcode
 
