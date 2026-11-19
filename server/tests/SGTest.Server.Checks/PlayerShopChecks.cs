@@ -67,7 +67,7 @@ internal static class PlayerShopChecks
                 "active player-shop listing lookup mismatch");
 
             var applied=await store.BuyPlayerShopListingAsync(
-                buyer,staleListing.ListingId,rules);
+                buyer,listing.ListingId,rules);
             Checks.Require(applied.Status==PlayerShopBuyStatus.Applied&&
                 applied.Listing is not null&&
                 applied.Listing.State==PlayerShopListingState.Sold&&
@@ -149,7 +149,7 @@ internal static class PlayerShopChecks
                 "stale listing setup could not move UID");
 
             var rejected=await store.BuyPlayerShopListingAsync(
-                buyer,listing.ListingId,rules);
+                buyer,staleListing.ListingId,rules);
             Checks.Require(rejected.Status==PlayerShopBuyStatus.StaleListing&&
                 rejected.Listing?.State==PlayerShopListingState.Stale&&
                 await store.GetCharacterMoneyAsync(seller)==50&&
