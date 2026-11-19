@@ -67,7 +67,11 @@ public enum WireOpcode : ushort
     BankSnapshot = 62,
     BankDeposit = 63,
     BankWithdraw = 64,
-    BankTransactionResult = 65
+    BankTransactionResult = 65,
+    RepairOpen = 66,
+    RepairSnapshot = 67,
+    RepairItem = 68,
+    RepairResult = 69
 }
 
 public enum AuthWireStatus : byte { Success = 0, InvalidCredentials = 1, Disabled = 2 }
@@ -114,6 +118,15 @@ public enum BankOpenStatus : byte
     Opened = 0,
     StaleGeneration = 1,
     UnknownBank = 2,
+    TooFar = 3,
+    PlayerDead = 4
+}
+
+public enum RepairOpenStatus : byte
+{
+    Opened = 0,
+    StaleGeneration = 1,
+    UnknownRepair = 2,
     TooFar = 3,
     PlayerDead = 4
 }
@@ -277,6 +290,22 @@ public readonly record struct BankTransactionResultWire(
     BankTransactionStatus Status,int NpcSpawnId,BankBalanceScope Scope,
     long Amount,long WalletMoney,long BankMoney);
 
+public readonly record struct RepairOpenWire(
+    long MapEpoch,uint RepairSequence,int NpcSpawnId);
+public readonly record struct RepairPreviewItemWire(
+    long ItemUid,int ItemDefinitionId,RepairItemLocation Location,
+    int CurrentDurability,int MaxDurability,long Cost);
+public sealed record RepairSnapshotWire(
+    long MapEpoch,uint RepairSequence,RepairOpenStatus Status,int NpcSpawnId,
+    long WalletMoney,int StartIndex,bool Complete,
+    IReadOnlyList<RepairPreviewItemWire> Items);
+public readonly record struct RepairItemWire(
+    long MapEpoch,uint RepairSequence,int NpcSpawnId,long ItemUid);
+public readonly record struct RepairResultWire(
+    long MapEpoch,uint RepairSequence,RepairStatus Status,int NpcSpawnId,
+    long ItemUid,int ItemDefinitionId,RepairItemLocation Location,
+    int CurrentDurability,int MaxDurability,long Cost,long WalletMoney);
+
 /// <summary>
 /// Version 1 complete-frame codec. Transport/TLS/socket buffering is separate.
 /// Header = uint32 frameBytes + uint16 version + uint16 opcode, little-endian.
@@ -365,6 +394,15 @@ public static class WireProtocol
     public const int BankMoveFrameBytes = HeaderBytes + 8 + 4 + 4 + 8;
     public const int BankTransactionResultFrameBytes =
         HeaderBytes + 8 + 4 + 1 + 1 + 4 + 1 + 8 + 8 + 8;
+    public const int RepairOpenFrameBytes = HeaderBytes + 8 + 4 + 4;
+    public const int RepairSnapshotHeaderBytes =
+        HeaderBytes + 8 + 4 + 1 + 4 + 8 + 4 + 1 + 2;
+    public const int RepairPreviewItemBytes = 29;
+    public const int RepairSnapshotMaxItemsPerFrame = 128;
+    public const int RepairSnapshotMaxItems = 4095;
+    public const int RepairItemFrameBytes = HeaderBytes + 8 + 4 + 4 + 8;
+    public const int RepairResultFrameBytes =
+        HeaderBytes + 8 + 4 + 1 + 4 + 8 + 4 + 1 + 4 + 4 + 8 + 8;
     private static readonly UTF8Encoding StrictUtf8 = new(false, true);
 
     public static byte[] EncodeMoveTarget(MoveTargetWire value)
