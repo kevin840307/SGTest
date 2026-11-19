@@ -70,6 +70,10 @@ public enum TrustedEquipmentCommandKind : byte { Equip=1, Unequip=2 }
 public readonly record struct TrustedEquipmentCommand(
     long ActorId,long ConnectionEpoch,long RequestMapEpoch,
     uint EquipmentSequence,TrustedEquipmentCommandKind Kind,long ItemUid);
+public enum TrustedBankCommandKind : byte { Open=1, Deposit=2, Withdraw=3 }
+public readonly record struct TrustedBankCommand(
+    long ActorId,long ConnectionEpoch,long RequestMapEpoch,
+    uint BankSequence,int NpcSpawnId,TrustedBankCommandKind Kind,long Amount=0);
 
 public readonly record struct NormalAttackOutcome(
     NormalAttackStatus Status, long ServerTick, long TargetEntityId,
@@ -280,7 +284,8 @@ public sealed class GatewayConnection
                                               Func<TrustedSkillUse, bool>? postSkill = null,
                                               Func<TrustedShopCommand, bool>? postShop = null,
                                               Func<TrustedStorageCommand, bool>? postStorage = null,
-                                              Func<TrustedEquipmentCommand, bool>? postEquipment = null)
+                                              Func<TrustedEquipmentCommand, bool>? postEquipment = null,
+                                              Func<TrustedBankCommand, bool>? postBank = null)
     {
         ArgumentNullException.ThrowIfNull(postMove);
         lock (_receiveGate)
@@ -293,7 +298,7 @@ public sealed class GatewayConnection
             return _parser.Feed(bytes,
                 frame => HandleClientFrame(
                     frame, postMove, postNpc, postResync, postAttack, postRespawn,
-                    postPickup, postRecovery, postDiscard, postSkill, postShop, postStorage, postEquipment),
+                    postPickup, postRecovery, postDiscard, postSkill, postShop, postStorage, postEquipment, postBank),
                 out commandsAccepted);
         }
     }
@@ -310,7 +315,8 @@ public sealed class GatewayConnection
                                               Func<TrustedSkillUse, bool>? postSkill = null,
                                               Func<TrustedShopCommand, bool>? postShop = null,
                                               Func<TrustedStorageCommand, bool>? postStorage = null,
-                                              Func<TrustedEquipmentCommand, bool>? postEquipment = null)
+                                              Func<TrustedEquipmentCommand, bool>? postEquipment = null,
+                                              Func<TrustedBankCommand, bool>? postBank = null)
     {
         ArgumentNullException.ThrowIfNull(postMove);
         lock (_receiveGate)
@@ -323,7 +329,7 @@ public sealed class GatewayConnection
             return _parser.Resume(
                 frame => HandleClientFrame(
                     frame, postMove, postNpc, postResync, postAttack, postRespawn,
-                    postPickup, postRecovery, postDiscard, postSkill, postShop, postStorage, postEquipment),
+                    postPickup, postRecovery, postDiscard, postSkill, postShop, postStorage, postEquipment, postBank),
                 out commandsAccepted);
         }
     }
@@ -341,7 +347,8 @@ public sealed class GatewayConnection
         Func<TrustedSkillUse, bool>? postSkill,
         Func<TrustedShopCommand, bool>? postShop,
         Func<TrustedStorageCommand, bool>? postStorage,
-        Func<TrustedEquipmentCommand, bool>? postEquipment)
+        Func<TrustedEquipmentCommand, bool>? postEquipment,
+        Func<TrustedBankCommand, bool>? postBank)
     {
         if (!WireProtocol.TryReadHeader(frame, out var header))
             return WireFrameDisposition.ProtocolViolation;
@@ -452,6 +459,36 @@ public sealed class GatewayConnection
                 bound.ActorId,bound.ConnectionEpoch,equipmentUnequip.MapEpoch,
                 equipmentUnequip.EquipmentSequence,TrustedEquipmentCommandKind.Unequip,
                 equipmentUnequip.ItemUid))
+                ? WireFrameDisposition.Accepted:WireFrameDisposition.Backpressured;
+        }
+
+        if(postBank is not null && header.Opcode==WireOpcode.BankOpen &&
+            WireProtocol.TryDecodeBankOpen(frame,out var bankOpen))
+        {
+            if(!GameplayReady(bound))return WireFrameDisposition.ProtocolViolation;
+            return postBank(new TrustedBankCommand(
+                bound.ActorId,bound.ConnectionEpoch,bankOpen.MapEpoch,
+                bankOpen.BankSequence,bankOpen.NpcSpawnId,TrustedBankCommandKind.Open))
+                ? WireFrameDisposition.Accepted:WireFrameDisposition.Backpressured;
+        }
+        if(postBank is not null && header.Opcode==WireOpcode.BankDeposit &&
+            WireProtocol.TryDecodeBankDeposit(frame,out var bankDeposit))
+        {
+            if(!GameplayReady(bound))return WireFrameDisposition.ProtocolViolation;
+            return postBank(new TrustedBankCommand(
+                bound.ActorId,bound.ConnectionEpoch,bankDeposit.MapEpoch,
+                bankDeposit.BankSequence,bankDeposit.NpcSpawnId,
+                TrustedBankCommandKind.Deposit,bankDeposit.Amount))
+                ? WireFrameDisposition.Accepted:WireFrameDisposition.Backpressured;
+        }
+        if(postBank is not null && header.Opcode==WireOpcode.BankWithdraw &&
+            WireProtocol.TryDecodeBankWithdraw(frame,out var bankWithdraw))
+        {
+            if(!GameplayReady(bound))return WireFrameDisposition.ProtocolViolation;
+            return postBank(new TrustedBankCommand(
+                bound.ActorId,bound.ConnectionEpoch,bankWithdraw.MapEpoch,
+                bankWithdraw.BankSequence,bankWithdraw.NpcSpawnId,
+                TrustedBankCommandKind.Withdraw,bankWithdraw.Amount))
                 ? WireFrameDisposition.Accepted:WireFrameDisposition.Backpressured;
         }
 
@@ -837,6 +874,52 @@ public sealed class GatewayConnection
                 request.RequestMapEpoch,request.EquipmentSequence,result.Kind,
                 result.Status,result.ItemUid,result.ItemDefinitionId,
                 result.SlotId,result.SourceDropId));
+            return _reliable.TryEnqueue(frame)
+                ? GatewaySendStatus.Enqueued:GatewaySendStatus.Backpressured;
+        }
+    }
+
+    public GatewaySendStatus QueueBankSnapshot(
+        TrustedBankCommand request,BankOpenStatus status,BankBalanceSnapshot? snapshot)
+    {
+        lock(_bindingGate)
+        {
+            if(_closed)return GatewaySendStatus.Closed;
+            var bound=_binding;
+            if(request.ActorId!=bound.ActorId||
+               request.ConnectionEpoch!=bound.ConnectionEpoch||
+               request.RequestMapEpoch!=bound.MapEpoch||
+               request.Kind!=TrustedBankCommandKind.Open)
+                return GatewaySendStatus.GenerationMismatch;
+            var frame=WireProtocol.EncodeBankSnapshot(new(
+                request.RequestMapEpoch,request.BankSequence,status,request.NpcSpawnId,
+                snapshot?.Scope??BankBalanceScope.None,
+                snapshot?.WalletMoney??0,snapshot?.BankMoney??0));
+            return _reliable.TryEnqueue(frame)
+                ? GatewaySendStatus.Enqueued:GatewaySendStatus.Backpressured;
+        }
+    }
+
+    public GatewaySendStatus QueueBankTransactionResult(
+        TrustedBankCommand request,BankTransactionResult result)
+    {
+        lock(_bindingGate)
+        {
+            if(_closed)return GatewaySendStatus.Closed;
+            var bound=_binding;
+            if(request.ActorId!=bound.ActorId||
+               request.ConnectionEpoch!=bound.ConnectionEpoch||
+               request.RequestMapEpoch!=bound.MapEpoch||
+               request.Kind==TrustedBankCommandKind.Open||
+               request.Amount!=result.Amount)
+                return GatewaySendStatus.GenerationMismatch;
+            var expected=request.Kind==TrustedBankCommandKind.Deposit
+                ? BankTransactionKind.Deposit:BankTransactionKind.Withdraw;
+            if(result.Kind!=expected)return GatewaySendStatus.GenerationMismatch;
+            var frame=WireProtocol.EncodeBankTransactionResult(new(
+                request.RequestMapEpoch,request.BankSequence,result.Kind,result.Status,
+                request.NpcSpawnId,result.Scope,result.Amount,
+                result.WalletMoney,result.BankMoney));
             return _reliable.TryEnqueue(frame)
                 ? GatewaySendStatus.Enqueued:GatewaySendStatus.Backpressured;
         }
