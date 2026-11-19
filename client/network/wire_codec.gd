@@ -1050,6 +1050,31 @@ static func decode_storage_transfer_result(frame: PackedByteArray) -> Dictionary
 		"drop_id":source_drop_id}
 
 
+static func decode_equipment_snapshot(frame: PackedByteArray) -> Dictionary:
+	if not _valid_variable_header(frame,OPCODE_EQUIPMENT_SNAPSHOT,EQUIPMENT_SNAPSHOT_HEADER_BYTES,EQUIPMENT_SNAPSHOT_HEADER_BYTES+EQUIPMENT_SNAPSHOT_MAX_PER_FRAME*EQUIPMENT_ITEM_BYTES):
+		return {}
+	var reader := _reader(frame,8)
+	var character_id := reader.get_64()
+	var start_index := reader.get_32()
+	var complete_raw := reader.get_u8()
+	var count := reader.get_u16()
+	if character_id <= 0 or start_index < 0 or start_index > EQUIPMENT_SNAPSHOT_MAX_ITEMS or complete_raw > 1 or count > EQUIPMENT_SNAPSHOT_MAX_PER_FRAME or start_index+count > EQUIPMENT_SNAPSHOT_MAX_ITEMS or frame.size() != EQUIPMENT_SNAPSHOT_HEADER_BYTES+count*EQUIPMENT_ITEM_BYTES:
+		return {}
+	var items: Array[Dictionary] = []
+	var uids := {}
+	var slots := {}
+	for _index in count:
+		var uid := reader.get_64()
+		var slot_id := reader.get_32()
+		var item_id := reader.get_32()
+		var source_drop_id := reader.get_64()
+		if uid <= 0 or slot_id < 1 or slot_id > 255 or item_id < 1 or item_id > 100000000 or source_drop_id < 0 or uids.has(uid) or slots.has(slot_id):
+			return {}
+		uids[uid] = true
+		slots[slot_id] = true
+		items.append({"item_uid":uid,"slot_id":slot_id,"item_definition_id":item_id,"drop_id":source_drop_id})
+	return {"character_id":character_id,"start_index":start_index,"complete":complete_raw==1,"items":items}
+
 static func decode_ground_drop_spawn(frame: PackedByteArray) -> Dictionary:
 	if not _valid_header(frame,OPCODE_GROUND_DROP_SPAWN,GROUND_DROP_SPAWN_FRAME_BYTES):
 		return {}
