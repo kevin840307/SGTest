@@ -1733,6 +1733,8 @@ func _apply_shop_snapshot(frame: PackedByteArray) -> bool:
 	if int(value.status) == 0:
 		active_shop_npc = int(value.npc_spawn_id)
 		shop_money = int(value.money)
+		if active_bank_npc != 0:
+			bank_wallet_money = shop_money
 		shop_items.clear()
 		for item in value.items:
 			var item_id := int(item.item_definition_id)
@@ -1801,6 +1803,8 @@ func _apply_shop_transaction_result(frame: PackedByteArray) -> bool:
 				inventory_items[uid] = updated
 		inventory_revision += 1
 		shop_money = int(result.money)
+		if active_bank_npc != 0:
+			bank_wallet_money = shop_money
 	# Access failures are authoritative evidence that this shop session is no
 	# longer usable. Close stale UI/catalog state immediately; economic failures
 	# such as insufficient money/quantity keep the still-valid shop open.
@@ -2013,6 +2017,95 @@ func _apply_equipment_transfer_result(frame: PackedByteArray) -> bool:
 	last_equipment_result = result.duplicate(true)
 	_clear_pending_equipment()
 	return true
+
+func _clear_pending_bank() -> void:
+	pending_bank_sequence = 0
+	pending_bank_kind = 0
+	pending_bank_npc = 0
+	pending_bank_amount = 0
+
+
+func _close_bank() -> void:
+	active_bank_npc = 0
+	bank_scope = 0
+	bank_wallet_money = 0
+	bank_money = 0
+
+
+func _apply_bank_snapshot(frame: PackedByteArray) -> bool:
+	if state != STATE_IN_WORLD:
+		return fail("bank_snapshot_out_of_state")
+	var value := WireCodec.decode_bank_snapshot(frame)
+	if value.is_empty():
+		return fail("invalid_bank_snapshot")
+	var epoch := int(value.map_epoch)
+	var sequence := int(value.bank_sequence)
+	if epoch < map_epoch:
+		stale_bank_results += 1
+		return true
+	if epoch > map_epoch:
+		return fail("future_bank_snapshot")
+	if sequence > bank_sequence:
+		return fail("unsent_bank_snapshot")
+	if sequence <= last_bank_response_sequence:
+		stale_bank_results += 1
+		return true
+	if sequence != pending_bank_sequence or pending_bank_kind != 1 or int(value.npc_spawn_id) != pending_bank_npc:
+		return fail("bank_snapshot_wrong_request")
+	last_bank_open_status = int(value.status)
+	if int(value.status) == 0:
+		if int(value.scope) not in [1,2]:
+			return fail("bank_snapshot_missing_scope")
+		active_bank_npc = int(value.npc_spawn_id)
+		bank_scope = int(value.scope)
+		bank_wallet_money = int(value.wallet_money)
+		bank_money = int(value.bank_money)
+		if active_shop_npc != 0:
+			shop_money = bank_wallet_money
+	else:
+		_close_bank()
+	last_bank_response_sequence = sequence
+	_clear_pending_bank()
+	return true
+
+
+func _apply_bank_transaction_result(frame: PackedByteArray) -> bool:
+	if state != STATE_IN_WORLD:
+		return fail("bank_result_out_of_state")
+	var result := WireCodec.decode_bank_transaction_result(frame)
+	if result.is_empty():
+		return fail("invalid_bank_result")
+	var epoch := int(result.map_epoch)
+	var sequence := int(result.bank_sequence)
+	if epoch < map_epoch:
+		stale_bank_results += 1
+		return true
+	if epoch > map_epoch:
+		return fail("future_bank_result")
+	if sequence > bank_sequence:
+		return fail("unsent_bank_result")
+	if sequence <= last_bank_response_sequence:
+		stale_bank_results += 1
+		return true
+	if sequence != pending_bank_sequence or pending_bank_kind not in [2,3] or int(result.kind) != pending_bank_kind-1 or int(result.npc_spawn_id) != pending_bank_npc or int(result.amount) != pending_bank_amount:
+		return fail("bank_result_wrong_request")
+	var status := int(result.status)
+	if int(result.scope) in [1,2]:
+		if active_bank_npc != pending_bank_npc or bank_scope != int(result.scope):
+			return fail("bank_result_scope_or_session_mismatch")
+		bank_wallet_money = int(result.wallet_money)
+		bank_money = int(result.bank_money)
+		if active_shop_npc != 0:
+			shop_money = bank_wallet_money
+	elif status in [2,3,9,10]:
+		_close_bank()
+	else:
+		return fail("bank_result_missing_scope")
+	last_bank_response_sequence = sequence
+	last_bank_result = result.duplicate(true)
+	_clear_pending_bank()
+	return true
+
 
 func _apply_ground_drop_spawn(frame: PackedByteArray) -> bool:
 	var value := WireCodec.decode_ground_drop_spawn(frame)
