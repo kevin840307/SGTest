@@ -529,6 +529,30 @@ public sealed class WorldResultRouter
         }
     }
 
+    public GatewaySendStatus QueueBankSnapshot(
+        TrustedBankCommand request,BankOpenStatus status,BankBalanceSnapshot? snapshot)
+    {
+        lock(_gate)
+        {
+            if(!_connections.TryGetValue(request.ActorId,out var connection)||
+               connection.IsClosed)
+                return GatewaySendStatus.Closed;
+            return connection.QueueBankSnapshot(request,status,snapshot);
+        }
+    }
+
+    public GatewaySendStatus QueueBankTransactionResult(
+        TrustedBankCommand request,BankTransactionResult result)
+    {
+        lock(_gate)
+        {
+            if(!_connections.TryGetValue(request.ActorId,out var connection)||
+               connection.IsClosed)
+                return GatewaySendStatus.Closed;
+            return connection.QueueBankTransactionResult(request,result);
+        }
+    }
+
     public GatewaySendStatus QueueRecoveryUseResult(
         TrustedRecoveryUse request,RecoveryUseResult result)
     {
