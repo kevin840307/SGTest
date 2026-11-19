@@ -275,8 +275,10 @@ static class Checks
             StorageWireChecks.Verify();
             EquipmentWireChecks.Verify();
             BankWireChecks.Verify();
+            RepairWireChecks.Verify();
             EquipmentGatewayChecks.Verify();
             BankGatewayChecks.Verify();
+            RepairGatewayChecks.Verify();
             BankTlsChecks.Verify(root);
             EquipmentTlsChecks.Verify(root);
             StorageGatewayChecks.Verify();
