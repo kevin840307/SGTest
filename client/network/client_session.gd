@@ -559,6 +559,20 @@ func _process_first_intent() -> void:
 			_pop_intent()
 			_publish()
 
+	elif kind in ["equipment_equip","equipment_unequip"]:
+		var current: Dictionary = _world.snapshot()
+		if int(intent.get("actor_id",0)) != int(current.get("actor_id",0)) or int(intent.get("map_epoch",0)) != int(current.get("map_epoch",0)):
+			_pop_intent()
+			return
+		if int(current.state) != WorldState.STATE_IN_WORLD or not bool(current.world_ready) or not bool(current.inventory_ready) or not bool(current.get("equipment_ready",false)) or bool(current.resync_pending) or bool(current.waiting_for_new_map) or int(current.pending_world_ready_ack_epoch) != 0 or int(current.last_world_ready_ack_epoch) != int(current.map_epoch) or int(current.get("pending_equipment_sequence",0)) != 0 or int(current.get("pending_shop_sequence",0)) != 0 or int(current.get("pending_storage_sequence",0)) != 0 or int(current.get("pending_recovery_sequence",0)) != 0 or int(current.get("pending_discard_sequence",0)) != 0:
+			return
+		var uid := int(intent.get("item_uid",0))
+		var sequence := int(current.get("equipment_sequence",0))+1
+		var equipment_kind := 1 if kind == "equipment_equip" else 2
+		var frame := WireCodec.encode_equipment_equip(int(current.map_epoch),sequence,uid) if equipment_kind == 1 else WireCodec.encode_equipment_unequip(int(current.map_epoch),sequence,uid)
+		if not frame.is_empty() and _transport.send_frame(frame) and _world.mark_equipment_sent(sequence,equipment_kind,uid):
+			_pop_intent()
+			_publish()
 	elif kind in ["storage_open","storage_deposit","storage_withdraw"]:
 		var current: Dictionary = _world.snapshot()
 		if int(intent.get("actor_id",0)) != int(current.get("actor_id",0)) or int(intent.get("map_epoch",0)) != int(current.get("map_epoch",0)):
