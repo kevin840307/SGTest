@@ -10,6 +10,8 @@ internal static class TradeCoordinatorChecks
     {
         Checks.Run("trade coordinator requires accept lock relock and dual final confirm",
             () => Lifecycle(root).GetAwaiter().GetResult());
+        Checks.Run("two simultaneous trade confirms serialize combat suspension and resume",
+            () => CombatGate(root).GetAwaiter().GetResult());
     }
 
     private static async Task Lifecycle(string root)
@@ -412,6 +414,104 @@ internal static class TradeCoordinatorChecks
            !WireProtocol.TryDecodeTradeTerminal(frame,out var value))
             throw new Exception("trade terminal missing");
         return value;
+    }
+
+
+    private static async Task CombatGate(string root)
+    {
+        // This covers the SAME combat owner used by the production Host,
+        // not only gate-less synthetic trade coordinator behavior.
+        string dir=Path.Combine(root,"trade_combat_"+Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+        string db=Path.Combine(dir,"identity.db");
+        string mapDir=Checks.Fixture(root,98,5,5,(_,_)=>0);
+        await using var world=new ServerWorldHost([BlockingGrid.Load(mapDir,98)]);
+        await world.StartAsync();
+        using var store=new SqliteIdentityStore(db);
+        await store.InitializeAsync();
+        long accountA=(await store.CreateAccountAsync(
+            "trade_combat_a","Trade-Combat-A-Password-123!")).AccountId;
+        long accountB=(await store.CreateAccountAsync(
+            "trade_combat_b","Trade-Combat-B-Password-123!")).AccountId;
+        long charA=(await store.CreateCharacterAsync(
+            accountA,0,"TradeCombatA",new CharacterSpawn(98,24,24)))
+            .Character?.CharacterId??throw new Exception("combat trade A missing");
+        long charB=(await store.CreateCharacterAsync(
+            accountB,0,"TradeCombatB",new CharacterSpawn(98,28,24)))
+            .Character?.CharacterId??throw new Exception("combat trade B missing");
+        var profile=new CharacterCombatProfileData(
+            CombatProfileTrust.SyntheticTest,"ci:trade-combat",
+            Race:0,Career:0,Strength:5,Dexterity:5,Constitution:5,
+            Wisdom:5,Level:1,CurrentHp:100,MaxHp:100,
+            Attack:20,Defense:10,Hit:10,Dodge:3,
+            AttackRange:48,AttackCooldownTicks:15);
+        await store.SetCharacterCombatProfileAsync(charA,profile);
+        await store.SetCharacterCombatProfileAsync(charB,profile);
+        var actorA=await world.TrustedRegisterAsync(charA,98,24,24)
+            ??throw new Exception("combat A world registration missing");
+        var actorB=await world.TrustedRegisterAsync(charB,98,28,24)
+            ??throw new Exception("combat B world registration missing");
+        var combat=new PlayerCombatSettlement(store);
+        Checks.Require(combat.TryAttach(actorA,profile)&&combat.TryAttach(actorB,profile)&&
+            combat.TryResume(actorA)&&combat.TryResume(actorB),
+            "live combat profiles were not attached or resumed");
+        var gatewayA=new GatewayConnection(actorA);
+        var gatewayB=new GatewayConnection(actorB);
+        var router=new WorldResultRouter();
+        Checks.Require(router.TryAttach(gatewayA)&&router.TryAttach(gatewayB),
+            "combat trade sockets not bound");
+        var coordinator=new PlayerTradeCoordinator(
+            store,world,new Dictionary<int,TradeItemRule>(),combat);
+        using var gateA=new SemaphoreSlim(1,1);
+        using var gateB=new SemaphoreSlim(1,1);
+        Checks.Require(coordinator.TryRegisterGameplayGate(gatewayA.Binding,gateA)&&
+            coordinator.TryRegisterGameplayGate(gatewayB.Binding,gateB),
+            "combat trade gates could not register");
+
+        await coordinator.HandleAsync(new(
+            charA,actorA.ConnectionEpoch,actorA.MapEpoch,1,
+            TradeCommandAction.Request,0,charB,0,0),router);
+        var invited=DrainSnapshot(gatewayA);
+        DrainSnapshot(gatewayB);
+        await coordinator.HandleAsync(new(
+            charB,actorB.ConnectionEpoch,actorB.MapEpoch,1,
+            TradeCommandAction.Accept,invited.TradeId,0,0,0),router);
+        RequireState(gatewayA,gatewayB,TradeSessionWireState.Active);
+        await coordinator.HandleAsync(new(
+            charA,actorA.ConnectionEpoch,actorA.MapEpoch,2,
+            TradeCommandAction.Lock,invited.TradeId,0,0,0),router);
+        RequireState(gatewayA,gatewayB,TradeSessionWireState.Active);
+        await coordinator.HandleAsync(new(
+            charB,actorB.ConnectionEpoch,actorB.MapEpoch,2,
+            TradeCommandAction.Lock,invited.TradeId,0,0,0),router);
+        RequireState(gatewayA,gatewayB,TradeSessionWireState.AwaitingFinalConfirm);
+
+        // Both peers confirm concurrently: no circular lock ordering, one
+        // durable receipt, and BOTH combat states regain their targetability.
+        await Task.WhenAll(
+            coordinator.HandleAsync(new(
+                charA,actorA.ConnectionEpoch,actorA.MapEpoch,3,
+                TradeCommandAction.FinalConfirm,invited.TradeId,0,0,0),router),
+            coordinator.HandleAsync(new(
+                charB,actorB.ConnectionEpoch,actorB.MapEpoch,3,
+                TradeCommandAction.FinalConfirm,invited.TradeId,0,0,0),router))
+            .WaitAsync(TimeSpan.FromSeconds(5));
+        DrainSnapshot(gatewayA);
+        DrainSnapshot(gatewayB);
+        DrainSnapshot(gatewayA);
+        DrainSnapshot(gatewayB);
+        Checks.Require(DrainTerminal(gatewayA).Status==TradeTerminalStatus.Success&&
+            DrainTerminal(gatewayB).Status==TradeTerminalStatus.Success&&
+            !coordinator.IsTrading(charA)&&!coordinator.IsTrading(charB),
+            "simultaneous combat-backed final confirmation did not settle once");
+        Checks.Require(combat.CurrentHp(actorA)==100&&combat.CurrentHp(actorB)==100,
+            "trade leaked combat suspension or changed HP");
+        Checks.Require(await store.GetCharacterMoneyAsync(charA)==0&&
+            await store.GetCharacterMoneyAsync(charB)==0,
+            "empty trade altered wallet balances");
+        router.TryDetach(gatewayA);
+        router.TryDetach(gatewayB);
+        await world.StopAsync();
     }
 
     private static async Task<(long ItemUid,long DropId)> SeedItem(
