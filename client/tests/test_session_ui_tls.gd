@@ -892,9 +892,12 @@ func run() -> void:
 	panel._latest.last_trade_terminal = {}
 	panel._update_trade_ui()
 	for control in [panel.trade_target_picker,panel.trade_request_button,panel.trade_accept_button,panel.trade_offer_add_button,panel.trade_set_money_button,panel.trade_confirm_button,panel.trade_status]:
-		if control.get_parent() == null or not panel.is_ancestor_of(control) or not control.visible:
-			fail("Trade controls exist but are not visible descendants of SessionPanel")
+		if control.get_parent() == null or not panel.is_ancestor_of(control):
+			fail("Trade controls are not descendants of SessionPanel")
 			return
+	if not panel.trade_target_picker.visible or not panel.trade_request_button.visible or not panel.trade_status.visible:
+		fail("Trade invite controls are not visible when idle")
+		return
 	if panel.trade_target_picker.item_count != 1 or panel.trade_request_button.disabled:
 		fail("Trade UI did not expose visible peer invite")
 		return
