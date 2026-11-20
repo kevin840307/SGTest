@@ -161,6 +161,14 @@ Host的本機`account-create`／`character-create`委派同一SqliteIdentityStor
 
 兩個管理命令各自原子、不是跨命令交易；重複帳號不改密碼，名稱／slot衝突不修改既存角色。管理 CLI 與遊戲內 CharacterCreate 共用同一 `SqliteIdentityStore` 名稱／slot／角色數政策。遊戲內創角已能在既有 TLS Session 對空帳號建立角色、刷新列表並直接選角；若 Host 未設定 server-owned spawn policy 則明確回 `Unavailable` 且 DB 不變。**網路公開帳號註冊、角色外觀／種族／職業選擇、原版預設出生點與完整遊戲 Gate**仍未完成。
 
+### 2026-11-20 Identity migration / backup boundary
+
+Identity persistence remains one `SqliteIdentityStore` outside the 30Hz World owner. Schema migration is a startup/operator concern, never a gameplay Policy or Client RPC. Before `InitializeAsync()` mutates any recognized older schema, the Store first creates a transactionally consistent SQLite Backup API snapshot in the same directory; only after that snapshot passes schema equality and `PRAGMA integrity_check` does normal migration proceed. Current schema remains v21.
+
+The local `identity-backup --identity <DB> --output <NEW_DB>` adapter uses the same backup primitive but deliberately does **not** initialize or migrate the source, so an operator can preserve the exact pre-upgrade schema. Destination creation is fail-closed: source==destination is invalid, existing files are never replaced, and a successful result reports schema version, byte length and SHA-256. This is an operator/persistence boundary only; no game socket can invoke it, and it does not add a background DB worker to World.
+
+Server Core **44766021159 PASS** verifies a live WAL point-in-time snapshot, a pre-v20→v21 migration backup that preserves the old version/data, CLI reopen/authentication and no-overwrite behavior; the complete Server suite reports **252/252 PASS**. This safety barrier is not an off-host backup service: retention, remote replication, encryption/key lifecycle and disaster-recovery rehearsal remain deployment work.
+
 ### 2026-11-17 Changed-only owner state
 
 WorldAoi now enqueues SelfState on an owner's increasing authoritative revision, separately from the unchanged remote interest filtering. It reuses ActorSnapshot, the existing single AOI consumer, bounded pending FIFO, Gateway reliable FIFO and fail-closed overflow supervisor; no new timer, broadcast, manager or serializer. Gateway requires the owner ActorId/ConnectionEpoch/MapEpoch binding. Idle revisions emit nothing. This is an additive V1 opcode using the existing 73-byte EntityState layout, a correctness fix to the established delivery path rather than a new algorithm selection. A future rate/coalescing change must preserve reliable events and measure the affected workload.

@@ -41,14 +41,19 @@ dotnet run --project server/host/SGTest.Server.Host -c Release -- serve --conten
 dotnet run --project server/host/SGTest.Server.Host -c Release -- account-create --identity C:/private/identity.db --username operator_01
 dotnet run --project server/host/SGTest.Server.Host -c Release -- character-create --identity C:/private/identity.db --username operator_01 --content C:/private/runtime --name Hero --slot 0 --map 15 --x 7872 --y 11296
 
+# 停服後建立不覆寫的一致 SQLite 快照；輸出含 schema／bytes／SHA-256。
+dotnet run --project server/host/SGTest.Server.Host -c Release -- identity-backup --identity C:/private/identity.db --output C:/private/backups/identity-20261120.db
+
 dotnet build server/host/SGTest.Server.Host -c Release
 dotnet run --project server/tests/SGTest.Server.Checks -c Release -- --identity-admin-only
 # 若只需重驗PFX載入／真Host TLS路徑：同一測試加上 --tls
 ```
 
-座標只是管理者明示的範例，必須在待部署Blocking可走範圍內，**不是原版預設出生點**。目前只准備Host已服務的Map13／15，slot0..7；CLI先驗證來源SHA、座標有限／邊界／flag0，再驗證帳密及disabled並呼叫既有Store。兩步各自原子，不是跨步驟交易；帳號建好而角色名稱衝突時，可修正後重跑character-create，不刪除或覆寫帳號。重複帳號不重設密碼，名稱／slot／角色數限制沿用同一SqliteIdentityStore，schema仍v1。
+座標只是管理者明示的範例，必須在待部署Blocking可走範圍內，**不是原版預設出生點**。目前只准備Host已服務的Map13／15，slot0..7；CLI先驗證來源SHA、座標有限／邊界／flag0，再驗證帳密及disabled並呼叫既有Store。兩步各自原子，不是跨步驟交易；帳號建好而角色名稱衝突時，可修正後重跑character-create，不刪除或覆寫帳號。重複帳號不重設密碼，名稱／slot／角色數限制沿用同一 SqliteIdentityStore；目前正式 schema 為 v21。已存在的已知舊 schema 在 `InitializeAsync()` 真正 migration 前會先以 SQLite Backup API 建立 `identity.db.pre-v<old>-to-v21.<UTC>.<GUID>.bak`，備份成功並通過 schema／integrity 驗證後才繼續升級。
 
 自動化須由祕密來源注入`SGTEST_ACCOUNT_PASSWORD`；命令不接受`--password`，stdout不輸出密碼，CLI結束後應清除呼叫端環境。非互動且未提供環境變數會拒絕；互動隱藏輸入可按Esc取消。本入口只供有本機DB存取權的管理者，不新增網路註冊／GM RPC或預設帳號。
+
+`identity-backup` 是同一信任邊界下的本機 operator 工具，建議在正式 Host 停止後執行。它不呼叫 `InitializeAsync()`，因此不會先把舊 schema 升級再備份；destination 必須是新檔且不可與來源相同。SQLite backup 完成後會要求 `PRAGMA integrity_check=ok`、來源/目的 schema version 相同，再輸出檔案大小與 SHA-256。這提供 migration 前的可回復點與人工快照，**不代表已完成異機備份、保留週期、加密金鑰管理或災難復原演練**。Server Core `44766021159` 已驗證 WAL point-in-time snapshot、v20→v21 pre-migration snapshot 與 CLI no-overwrite。
 
 ### 本機 PvP 名稱狀態管理
 

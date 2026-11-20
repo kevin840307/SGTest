@@ -232,7 +232,9 @@
   - REB021-HOST-NEXT [ ] connection→Actor/ConnectionEpoch binding、bounded parser/reliable queue 與單連線 TLS 1.2/1.3 TCP session 已完成；Production Host 仍不開 listener。下一步實作真正 Account Auth/CharacterChoose + production listener/certificate lifecycle，再接 ACK/WorldReady/reconnect/resync；不能直接開放 Trusted Control API，也不能讓 Client 自帶 ActorId/ConnectionEpoch。20真連線與AOI/Map13 Map15雙向 NPC 授權、10Hz候選 snapshot 與分圖 fair load、AI/怪物/掉落/AFK時鐘分離皆 NOT VERIFIED。REB021、MVP003 仍 [ ]。
 
 - REB022 [ ] Combat、AI、damage/MISS/Death、Drop/Pickup/Respawn；World Tick 不可等待資料庫或 socket send。
-- REB023 [ ] SQLite Account/Character persistence: schema/auth/character core、server-side TLS Auth/CharacterCreate/CharacterChoose ownership binding、管理 CLI、遊戲內 slot/name 創角與 reconnect position lifecycle 均已有測試；仍需 migration/backup policy、公開帳號註冊、原版創角外觀/職業/出生規則及 production admission/rate-limit 完整政策。
+- REB023-IDENTITY-MIGRATION-BACKUP [x] 2026-11-20：完成 **SQLite identity schema migration／backup safety policy**，不改目前 schema v21、不新增第二套 DB。任何已存在且可辨識的舊 schema 在 `InitializeAsync()` 真正修改前，先透過 SQLite Backup API 產生同目錄 `identity.db.pre-v<old>-to-v21.<UTC>.<GUID>.bak` 一致快照；手動本機 `identity-backup --identity <DB> --output <NEW_DB>` 則明確**不初始化／不升級來源**，適合停服後做 operator 備份。備份 destination 不可等於來源、既有檔不覆寫；完成後執行 `PRAGMA integrity_check`、比對來源/備份 schema version，並回傳 bytes＋SHA-256。回歸驗證 live WAL source 在 account A 後備份、再建立 account B，snapshot 僅含 A 而 source 含 A+B；另 stage v20→v21 驗證升級前留下獨立可開啟、schema=20、資料完整的 pre-migration backup，來源才升為 v21；CLI 備份可重新開啟並驗證帳密，重複目的地與 source==destination 均拒絕。主要 Commit `ac47e479`；Server Core **44766021159 PASS，252/252**，包含三個新增 backup/migration Gate 與既有 hard-kill checkpoint regression。**此項是單機 DB migration safety，不等於 off-host rotation／retention／encryption／災難復原演練。**
+
+- REB023 [ ] SQLite Account/Character persistence: schema/auth/character core、server-side TLS Auth/CharacterCreate/CharacterChoose ownership binding、管理 CLI、遊戲內 slot/name 創角、reconnect position lifecycle 與 migration/backup safety 均已有測試；仍需公開帳號註冊、原版創角外觀/職業/出生規則及 production admission/rate-limit 完整政策。
 
 ## 第二階段遊戲功能（均未實作；不得因第一階段 E2E PASS 就勾選）
 
