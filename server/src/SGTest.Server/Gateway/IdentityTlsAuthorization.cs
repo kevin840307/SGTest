@@ -40,6 +40,7 @@ public sealed class IdentityTlsAuthorization
     private readonly NpcQuestCatalog? _quests;
     private readonly PlayerTradeCoordinator? _trades;
     private readonly PlayerShopCoordinator? _playerShops;
+    private readonly PartyCoordinator? _parties;
     private readonly HashSet<string> _gmAccounts;
 
     public IdentityTlsAuthorization(SqliteIdentityStore identity, ServerWorldHost world,
@@ -61,6 +62,7 @@ public sealed class IdentityTlsAuthorization
                                      NpcQuestCatalog? quests = null,
                                      PlayerTradeCoordinator? trades = null,
                                      PlayerShopCoordinator? playerShops = null,
+                                     PartyCoordinator? parties = null,
                                      IReadOnlySet<string>? gmAccounts = null)
     {
         _identity = identity ?? throw new ArgumentNullException(nameof(identity));
@@ -91,6 +93,7 @@ public sealed class IdentityTlsAuthorization
         _quests = quests;
         _trades = trades;
         _playerShops=playerShops;
+        _parties=parties;
         if(_playerShops is not null&&_trades is null)
             throw new ArgumentException(
                 "Player shop requires the authenticated gameplay-gate registry",
@@ -217,6 +220,7 @@ public sealed class IdentityTlsAuthorization
             // A pending trade is session-scoped. Disconnect before detaching the
             // route so the peer can receive one authoritative terminal event.
             _trades?.Disconnect(binding,router);
+            _parties?.Disconnect(binding,router);
             if (connection is not null) router.TryDetach(connection);
 
             // Keep the character registered while its final authoritative
@@ -1954,6 +1958,27 @@ public sealed class IdentityTlsAuthorization
                     return Task.CompletedTask;
                 }
 
+                if(request.Channel==ChatChannel.Party)
+                {
+                    if(_parties is null)return Task.CompletedTask;
+                    if(!_parties.TryGetRecipients(sender,router,out var recipients))
+                        return Task.CompletedTask;
+                    foreach(var recipient in recipients)
+                    {
+                        var delivery=new ChatDeliveryWire(
+                            recipient.MapEpoch,request.ActorId,request.ConnectionEpoch,
+                            request.ChatSequence,ChatChannel.Party,request.BubbleType,
+                            identity.DisplayName,request.Message);
+                        var queued=router.QueueChatDelivery(recipient,delivery);
+                        bool self=recipient.ActorId==request.ActorId&&
+                            recipient.ConnectionEpoch==request.ConnectionEpoch;
+                        if(self&&queued!=GatewaySendStatus.Enqueued)
+                            throw new IOException(
+                                "Reliable self party-chat delivery could not be queued: "+queued);
+                    }
+                    return Task.CompletedTask;
+                }
+
                 if(request.Channel!=ChatChannel.Whisper||request.TargetActorId<=0)
                     throw new InvalidOperationException(
                         "Unsupported trusted chat channel reached authorization");
@@ -2000,6 +2025,12 @@ public sealed class IdentityTlsAuthorization
                         "Reliable whisper sender result could not be queued: "+
                         resultQueued);
                 return Task.CompletedTask;
+            }
+
+            Task PartyHandler(TrustedPartyCommand request)
+            {
+                if(_parties is null)return Task.CompletedTask;
+                return _parties.HandleAsync(request,router);
             }
 
             async Task TradeHandler(TrustedTradeCommand request)
@@ -2075,7 +2106,8 @@ public sealed class IdentityTlsAuthorization
                 handlePvpSkill:PvpSkillHandler,
                 handleGmPvpName:GmPvpNameHandler,
                 handlePlayerShop:_playerShops is null?null:PlayerShopHandler,
-                handleChat:ChatHandler)
+                handleChat:ChatHandler,
+                handleParty:_parties is null?null:PartyHandler)
                 .ConfigureAwait(false);
         }
         finally
@@ -2102,6 +2134,7 @@ public sealed class IdentityTlsAuthorization
                     await _playerShops.CloseForBindingAsync(binding,router)
                         .ConfigureAwait(false);
                 _trades?.Disconnect(binding,router);
+                _parties?.Disconnect(binding,router);
                 router.TryDetach(abandoned);
                 await _world.TrustedDisconnectAsync(
                     binding.ActorId, binding.ConnectionEpoch, binding.MapEpoch)
