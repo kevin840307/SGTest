@@ -531,6 +531,10 @@ func run() -> void:
 	# by the C# authenticated E2E.
 	var create_stub := CharacterCreateSession.new()
 	panel.session = create_stub
+	# The remaining checks intentionally use narrow command stubs and call each
+	# UI reducer directly. Stop the real SessionPanel poll loop here so these
+	# stubs are not required to impersonate the full ClientSession snapshot API.
+	panel.set_process(false)
 	panel.active = true
 	panel._latest = {"state":State.STATE_SELECTING_CHARACTER,
 		"characters":[],"character_create_status":-1}
