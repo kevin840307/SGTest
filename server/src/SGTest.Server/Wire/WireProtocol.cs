@@ -448,7 +448,8 @@ public readonly record struct TradeCommandWire(
     long MapEpoch,uint TradeSequence,TradeCommandAction Action,
     long TradeId,long TargetActorId,long ItemUid,long Money);
 public readonly record struct TradeOfferItemWire(
-    long ItemUid,int ItemDefinitionId,int Quantity,long SourceDropId);
+    long ItemUid,int ItemDefinitionId,int Quantity,long SourceDropId,
+    int EnhancementLevel = 0);
 public sealed record TradeSnapshotWire(
     long MapEpoch,long TradeId,uint Revision,TradeSessionWireState State,
     long PeerActorId,long MyMoney,long OtherMoney,
@@ -502,7 +503,8 @@ public readonly record struct PlayerShopResultWire(
     long MapEpoch,uint ShopSequence,PlayerShopCommandAction Action,
     PlayerShopResultStatus Status,long SellerActorId,long ListingId,
     long ItemUid,int ItemDefinitionId,int Quantity,long SourceDropId,
-    int DurabilityRaw,long Price,long SellerWallet,long BuyerWallet);
+    int DurabilityRaw,long Price,long SellerWallet,long BuyerWallet,
+    int EnhancementLevel = 0);
 public readonly record struct PlayerShopSoldWire(
     long ReceiverMapEpoch,long ListingId,long BuyerActorId,long ItemUid,
     long SellerWallet);
@@ -652,7 +654,7 @@ public static class WireProtocol
     public const int PlayerShopCommandFrameBytes =
         HeaderBytes + 8 + 4 + 1 + 8 + 8 + 8 + 8;
     public const int PlayerShopResultFrameBytes =
-        HeaderBytes + 8 + 4 + 1 + 1 + 8 + 8 + 8 + 4 + 4 + 8 + 4 + 8 + 8 + 8;
+        HeaderBytes + 8 + 4 + 1 + 1 + 8 + 8 + 8 + 4 + 4 + 8 + 4 + 8 + 8 + 8 + 1;
     public const int PlayerShopSoldFrameBytes = HeaderBytes + 8 + 8 + 8 + 8 + 8;
     public const int ChatCommandHeaderBytes = HeaderBytes + 8 + 4 + 1 + 1 + 2;
     public const int ChatDeliveryHeaderBytes = HeaderBytes + 8 + 8 + 8 + 4 + 1 + 1 + 2 + 2;
@@ -674,7 +676,7 @@ public static class WireProtocol
         QuestViewMaxChoices*(4+2+QuestViewMaxLabelBytes);
     public const int TradeCommandFrameBytes = HeaderBytes + 8 + 4 + 1 + 8 + 8 + 8 + 8;
     public const int TradeSnapshotHeaderBytes = 59;
-    public const int TradeOfferItemBytes = 24;
+    public const int TradeOfferItemBytes = 25;
     public const int TradeMaxItemsPerSide = 32;
     public const int TradeTerminalFrameBytes = HeaderBytes + 8 + 8 + 4 + 1 + 8;
     private static readonly UTF8Encoding StrictUtf8 = new(false, true);
@@ -3410,6 +3412,7 @@ public static class WireProtocol
             BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(offset+8,4),item.ItemDefinitionId);
             BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(offset+12,4),item.Quantity);
             BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(offset+16,8),item.SourceDropId);
+            frame[offset+24]=checked((byte)item.EnhancementLevel);
             offset+=TradeOfferItemBytes;
         }
         return frame;
@@ -3433,7 +3436,8 @@ public static class WireProtocol
                 BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(offset,8)),
                 BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(offset+8,4)),
                 BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(offset+12,4)),
-                BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(offset+16,8)));
+                BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(offset+16,8)),
+                frame[offset+24]);
             (i<myCount?my:other).Add(item);
             offset+=TradeOfferItemBytes;
         }
@@ -3465,7 +3469,8 @@ public static class WireProtocol
         var seen=new HashSet<long>();
         foreach(var item in value.MyItems.Concat(value.OtherItems))
             if(item.ItemUid<=0||item.ItemDefinitionId is <1 or >100_000_000||
-               item.Quantity is <1 or >1_000_000||item.SourceDropId<0||!seen.Add(item.ItemUid))
+               item.Quantity is <1 or >1_000_000||item.SourceDropId<0||
+               item.EnhancementLevel is <0 or >255||!seen.Add(item.ItemUid))
                 return false;
         bool invite=value.State is TradeSessionWireState.InviteReceived or TradeSessionWireState.InviteSent;
         if(invite)
@@ -3958,6 +3963,7 @@ public static class WireProtocol
         BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(66,8),value.Price);
         BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(74,8),value.SellerWallet);
         BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(82,8),value.BuyerWallet);
+        frame[90]=checked((byte)value.EnhancementLevel);
         return frame;
     }
 
@@ -3981,7 +3987,8 @@ public static class WireProtocol
             BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(62,4)),
             BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(66,8)),
             BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(74,8)),
-            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(82,8)));
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(82,8)),
+            frame[90]);
         return ValidPlayerShopResult(value);
     }
 
@@ -4017,7 +4024,7 @@ public static class WireProtocol
         value.SellerActorId>=0&&value.ListingId>=0&&value.ItemUid>=0&&
         value.ItemDefinitionId is >=0 and <=100_000_000&&
         value.Quantity is >=0 and <=1_000_000&&value.SourceDropId>=0&&
-        value.DurabilityRaw>=-1&&
+        value.DurabilityRaw>=-1&&value.EnhancementLevel is >=0 and <=255&&
         value.Price>=0&&value.Price<=SqliteIdentityStore.MaximumMoney&&
         value.SellerWallet>=0&&value.SellerWallet<=SqliteIdentityStore.MaximumMoney&&
         value.BuyerWallet>=0&&value.BuyerWallet<=SqliteIdentityStore.MaximumMoney;
