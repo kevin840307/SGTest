@@ -44,6 +44,8 @@ internal static class TradeLoginFixture
                 .ConfigureAwait(false);
             SeedEnhancementLevel(db,itemA.ItemUid,5);
             SeedEnhancementLevel(db,itemB.ItemUid,7);
+            SeedDurability(db,itemA.ItemUid,80);
+            SeedDurability(db,itemB.ItemUid,60);
             var rules=new Dictionary<int,TradeItemRule>
             {
                 [4103]=new(4103,true,"ci:godot-trade-4103"),
@@ -68,7 +70,7 @@ internal static class TradeLoginFixture
                 Console.WriteLine(
                     $"TRADE_FIXTURE_READY port={port} cert={certPath} " +
                     $"actor_a={charA} actor_b={charB} item_a={itemA.ItemUid} item_b={itemB.ItemUid} " +
-                    "level_a=5 level_b=7");
+                    "level_a=5 level_b=7 durability_a=80 durability_b=60");
                 Console.Out.Flush();
 
                 using var first=await listener.AcceptTcpClientAsync()
@@ -96,10 +98,12 @@ internal static class TradeLoginFixture
                    inventoryA[0].ItemDefinitionId!=4104||inventoryA[0].Quantity!=1||
                    inventoryA[0].SourceDropId!=itemB.DropId||
                    inventoryA[0].EnhancementLevel!=7||
+                   inventoryA[0].DurabilityRaw!=60||
                    inventoryB.Count!=1||inventoryB[0].ItemUid!=itemA.ItemUid||
                    inventoryB[0].ItemDefinitionId!=4103||inventoryB[0].Quantity!=2||
                    inventoryB[0].SourceDropId!=itemA.DropId||
                    inventoryB[0].EnhancementLevel!=5||
+                   inventoryB[0].DurabilityRaw!=80||
                    walletA!=850||walletB!=650||
                    ended.Any(x=>x.CommandsAccepted!=6)||
                    router.Statistics.ActiveSessions!=0)
@@ -113,7 +117,7 @@ internal static class TradeLoginFixture
                     $"TRADE_FIXTURE_PASS actor_a={charA} actor_b={charB} " +
                     $"wallet_a={walletA} wallet_b={walletB} " +
                     $"item_a_owner={charB} item_b_owner={charA} " +
-                    "level_a=5 level_b=7 commands=6/6");
+                    "level_a=5 level_b=7 durability_a=80 durability_b=60 commands=6/6");
                 Console.Out.Flush();
                 return 0;
             }
@@ -170,6 +174,24 @@ internal static class TradeLoginFixture
         if(command.ExecuteNonQuery()!=1)
             throw new InvalidOperationException(
                 "trade fixture enhancement seed failed");
+    }
+
+    private static void SeedDurability(string db,long itemUid,int durabilityRaw)
+    {
+        using var connection=new SqliteConnection(
+            new SqliteConnectionStringBuilder
+            {
+                DataSource=db,Mode=SqliteOpenMode.ReadWrite,Pooling=false
+            }.ToString());
+        connection.Open();
+        using var command=connection.CreateCommand();
+        command.CommandText=
+            "UPDATE item_instances SET durability_raw=$value WHERE item_uid=$uid;";
+        command.Parameters.AddWithValue("$value",durabilityRaw);
+        command.Parameters.AddWithValue("$uid",itemUid);
+        if(command.ExecuteNonQuery()!=1)
+            throw new InvalidOperationException(
+                "trade fixture durability seed failed");
     }
 
     private static void SeedWallet(string db,long characterId,long money)
