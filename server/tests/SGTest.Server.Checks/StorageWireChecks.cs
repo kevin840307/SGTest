@@ -26,8 +26,8 @@ internal static class StorageWireChecks
 
             var snapshot=new StorageSnapshotWire(9,7,StorageOpenStatus.Opened,
                 99,0,true,[
-                    new StorageItemWire(7001,2701,2,501),
-                    new StorageItemWire(7002,2702,1,0)]);
+                    new StorageItemWire(7001,2701,2,501,5),
+                    new StorageItemWire(7002,2702,1,0,7)]);
             var snapshotFrame=WireProtocol.EncodeStorageSnapshot(snapshot);
             Checks.Require(
                 WireProtocol.TryDecodeStorageSnapshot(snapshotFrame,out var snapshotBack) &&
