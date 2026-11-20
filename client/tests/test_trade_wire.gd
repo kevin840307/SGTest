@@ -39,6 +39,12 @@ func _initialize() -> void:
 		fail("server golden decode mismatch")
 		return
 
+	var bad_durability := BOTH_CONF.hex_decode()
+	bad_durability.encode_s32(84,-2)
+	if not Wire.decode_trade_snapshot(bad_durability).is_empty():
+		fail("trade snapshot admitted durability below -1")
+		return
+
 	var world = new_world()
 	if world == null or not world.mark_trade_sent(1,1,0,22,0,0) or not world.apply_frame(INVITE.hex_decode()):
 		fail("trade invite reducer")
