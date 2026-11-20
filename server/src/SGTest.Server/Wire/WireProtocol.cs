@@ -3460,7 +3460,8 @@ public static class WireProtocol
                 BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(offset+8,4)),
                 BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(offset+12,4)),
                 BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(offset+16,8)),
-                frame[offset+24]);
+                frame[offset+24],
+                BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(offset+25,4)));
             (i<myCount?my:other).Add(item);
             offset+=TradeOfferItemBytes;
         }
@@ -3493,7 +3494,8 @@ public static class WireProtocol
         foreach(var item in value.MyItems.Concat(value.OtherItems))
             if(item.ItemUid<=0||item.ItemDefinitionId is <1 or >100_000_000||
                item.Quantity is <1 or >1_000_000||item.SourceDropId<0||
-               item.EnhancementLevel is <0 or >255||!seen.Add(item.ItemUid))
+               item.EnhancementLevel is <0 or >255||item.DurabilityRaw< -1||
+               !seen.Add(item.ItemUid))
                 return false;
         bool invite=value.State is TradeSessionWireState.InviteReceived or TradeSessionWireState.InviteSent;
         if(invite)
