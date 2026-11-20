@@ -10,7 +10,7 @@ const INVENTORY := "49000000010024000B0000000000000000000000010200591B0000000000
 const OPEN := "180000000100340009000000000000000700000063000000"
 const DEPOSIT := "200000000100360009000000000000000800000063000000591B000000000000"
 const WITHDRAW := "200000000100370009000000000000000900000063000000591B000000000000"
-const SNAPSHOT := "3800000001003500090000000000000007000000006300000000000000010100591B0000000000008D0A000002000000F501000000000000"
+const SNAPSHOT := "3900000001003500090000000000000007000000006300000000000000010100591B0000000000008D0A000002000000F50100000000000005"
 const RESULT := "3200000001003800090000000000000008000000010063000000591B0000000000008D0A000002000000F501000000000000"
 
 func fail(message: String) -> void:
@@ -28,6 +28,7 @@ func new_world():
 	bag.encode_s32(31,2701)
 	bag.encode_s32(35,2)
 	bag.encode_s64(39,501)
+	bag[47] = 5
 	bag[20] = 1
 	if not world.apply_frame(bag):
 		return null
@@ -39,7 +40,7 @@ func _initialize() -> void:
 		return
 	var snapshot := Wire.decode_storage_snapshot(SNAPSHOT.hex_decode())
 	var result := Wire.decode_storage_transfer_result(RESULT.hex_decode())
-	if snapshot.is_empty() or int(snapshot.items[0].item_uid) != 7001 or int(snapshot.items[0].drop_id) != 501 or result.is_empty() or int(result.item_uid) != 7001 or int(result.drop_id) != 501:
+	if snapshot.is_empty() or int(snapshot.items[0].item_uid) != 7001 or int(snapshot.items[0].drop_id) != 501 or int(snapshot.items[0].enhancement_level) != 5 or result.is_empty() or int(result.item_uid) != 7001 or int(result.drop_id) != 501:
 		fail("server storage golden mismatch")
 		return
 
@@ -71,7 +72,7 @@ func _initialize() -> void:
 		fail("deposit settlement")
 		return
 	state = world.snapshot()
-	if (state.inventory_items as Dictionary).has(7001) or not (state.storage_items as Dictionary).has(7001) or int(state.storage_items[7001].drop_id) != 501:
+	if (state.inventory_items as Dictionary).has(7001) or not (state.storage_items as Dictionary).has(7001) or int(state.storage_items[7001].drop_id) != 501 or int(state.storage_items[7001].enhancement_level) != 5:
 		fail("deposit did not move exact UID/provenance")
 		return
 	var revision := int(state.storage_revision)
@@ -91,7 +92,7 @@ func _initialize() -> void:
 		fail("withdraw settlement")
 		return
 	state = world.snapshot()
-	if not (state.inventory_items as Dictionary).has(7001) or (state.storage_items as Dictionary).has(7001) or int(state.inventory_items[7001].quantity) != 2 or int(state.inventory_items[7001].drop_id) != 501:
+	if not (state.inventory_items as Dictionary).has(7001) or (state.storage_items as Dictionary).has(7001) or int(state.inventory_items[7001].quantity) != 2 or int(state.inventory_items[7001].drop_id) != 501 or int(state.inventory_items[7001].enhancement_level) != 5:
 		fail("withdraw did not restore exact inventory UID")
 		return
 
@@ -114,6 +115,7 @@ func _initialize() -> void:
 	final_chunk.encode_s32(40,2702)
 	final_chunk.encode_s32(44,1)
 	final_chunk.encode_s64(48,0)
+	final_chunk[56] = 7
 	if not world.apply_frame(final_chunk):
 		fail("final storage chunk rejected")
 		return
@@ -157,5 +159,5 @@ func _initialize() -> void:
 		fail("wrong storage UID accepted")
 		return
 
-	print("STORAGE_WIRE_PASS open=24 snapshot=CHUNKED deposit=32 withdraw=32 result=50 uid=SERVER_AUTH provenance=PRESERVED duplicate=STALE transfer=CLOSES access_failure=CLOSES spoof=FAIL_CLOSED")
+	print("STORAGE_WIRE_PASS open=24 snapshot=CHUNKED level=PRESERVED deposit=32 withdraw=32 result=50 uid=SERVER_AUTH provenance=PRESERVED duplicate=STALE transfer=CLOSES access_failure=CLOSES spoof=FAIL_CLOSED")
 	quit(0)
