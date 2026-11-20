@@ -318,7 +318,8 @@ public sealed class PlayerShopCoordinator
             listing?.ItemUid??0,listing?.ItemDefinitionId??0,
             listing?.Quantity??0,listing?.SourceDropId??0,
             listing?.DurabilityRaw??-1,
-            listing?.Price??0,sellerWallet,buyerWallet);
+            listing?.Price??0,sellerWallet,buyerWallet,
+            listing?.EnhancementLevel??0);
 
     private static PlayerShopResultWire Queue(
         TrustedPlayerShopCommand command,WorldResultRouter router,
