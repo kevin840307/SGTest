@@ -1015,8 +1015,12 @@ func _process_first_intent() -> void:
 		var quest_id:=int(intent.get("quest_id",0))
 		var choice_id:=int(intent.get("choice_id",0))
 		var quest_kind:=1 if kind=="quest_open" else 2
-		var frame:=WireCodec.encode_quest_open(
-			int(current.get("map_epoch",0)),sequence,npc) if quest_kind==1 else 			WireCodec.encode_quest_choose(
+		var frame:=PackedByteArray()
+		if quest_kind==1:
+			frame=WireCodec.encode_quest_open(
+				int(current.get("map_epoch",0)),sequence,npc)
+		else:
+			frame=WireCodec.encode_quest_choose(
 				int(current.get("map_epoch",0)),sequence,npc,quest_id,choice_id)
 		if frame.is_empty():
 			_pop_intent()
