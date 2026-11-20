@@ -258,8 +258,8 @@ internal static class EnhancementChecks
             throw new ArgumentOutOfRangeException(nameof(table));
         using var connection=Open(db);
         using var command=connection.CreateCommand();
-        command.CommandText=$
-            "SELECT enhancement_level FROM {table} WHERE item_uid=$uid;";
+        command.CommandText=
+            $"SELECT enhancement_level FROM {table} WHERE item_uid=$uid;";
         command.Parameters.AddWithValue("$uid",uid);
         return Convert.ToInt32(command.ExecuteScalar());
     }
