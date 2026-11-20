@@ -36,6 +36,8 @@ internal static class TradeChecks
             long generation=await store.AllocateLootWorldGenerationAsync();
             (itemA,dropA)=await SeedItem(store,generation,first,4103,2,1);
             (itemB,dropB)=await SeedItem(store,generation,second,4104,1,2);
+            SeedEnhancementLevel(db,itemA,5);
+            SeedEnhancementLevel(db,itemB,7);
 
             var request=new TradeCommitRequest(
                 9001,first,second,200,50,[itemA],[itemB]);
@@ -44,17 +46,21 @@ internal static class TradeChecks
                 applied.FirstWalletMoney==850&&applied.SecondWalletMoney==650&&
                 applied.FirstSentItems.Single().ItemUid==itemA&&
                 applied.FirstSentItems.Single().SourceDropId==dropA&&
+                applied.FirstSentItems.Single().EnhancementLevel==5&&
                 applied.SecondSentItems.Single().ItemUid==itemB&&
-                applied.SecondSentItems.Single().SourceDropId==dropB,
+                applied.SecondSentItems.Single().SourceDropId==dropB&&
+                applied.SecondSentItems.Single().EnhancementLevel==7,
                 "trade atomic settlement receipt mismatch");
-            await AssertOwnership(store,first,itemB,4104,1,dropB);
-            await AssertOwnership(store,second,itemA,4103,2,dropA);
+            await AssertOwnership(store,first,itemB,4104,1,dropB,7);
+            await AssertOwnership(store,second,itemA,4103,2,dropA,5);
 
             var replay=await store.CommitInventoryTradeAsync(request,rules);
             Checks.Require(replay.Status==TradeCommitStatus.AlreadyApplied&&
                 replay.FirstWalletMoney==850&&replay.SecondWalletMoney==650&&
                 replay.FirstSentItems.Single().ItemUid==itemA&&
-                replay.SecondSentItems.Single().ItemUid==itemB,
+                replay.FirstSentItems.Single().EnhancementLevel==5&&
+                replay.SecondSentItems.Single().ItemUid==itemB&&
+                replay.SecondSentItems.Single().EnhancementLevel==7,
                 "trade exact replay was not idempotent");
 
             var conflict=await store.CommitInventoryTradeAsync(
@@ -94,8 +100,12 @@ internal static class TradeChecks
             Checks.Require(replay.Status==TradeCommitStatus.AlreadyApplied&&
                 replay.FirstWalletMoney==850&&replay.SecondWalletMoney==650,
                 "trade receipt did not survive database reopen");
-            await AssertOwnership(reopened,first,itemB,4104,1,dropB);
-            await AssertOwnership(reopened,second,itemA,4103,2,dropA);
+            Checks.Require(
+                replay.FirstSentItems.Single().EnhancementLevel==5&&
+                replay.SecondSentItems.Single().EnhancementLevel==7,
+                "trade durable replay lost enhancement level");
+            await AssertOwnership(reopened,first,itemB,4104,1,dropB,7);
+            await AssertOwnership(reopened,second,itemA,4103,2,dropA,5);
         }
     }
 
@@ -150,11 +160,28 @@ internal static class TradeChecks
     }
 
     private static async Task AssertOwnership(
-        SqliteIdentityStore store,long owner,long uid,int definition,int quantity,long dropId)
+        SqliteIdentityStore store,long owner,long uid,int definition,int quantity,long dropId,
+        int enhancementLevel=0)
     {
         var item=(await store.ListInventoryItemsAsync(owner)).Single(x=>x.ItemUid==uid);
         Checks.Require(item.ItemDefinitionId==definition&&item.Quantity==quantity&&
-            item.SourceDropId==dropId,"trade did not preserve UID/provenance");
+            item.SourceDropId==dropId&&item.EnhancementLevel==enhancementLevel,
+            "trade did not preserve UID/provenance/enhancement level");
+    }
+
+    private static void SeedEnhancementLevel(string db,long itemUid,int level)
+    {
+        using var connection=new SqliteConnection(
+            new SqliteConnectionStringBuilder
+            {DataSource=db,Mode=SqliteOpenMode.ReadWrite,Pooling=false}.ToString());
+        connection.Open();
+        using var command=connection.CreateCommand();
+        command.CommandText=
+            "UPDATE item_instances SET enhancement_level=$level WHERE item_uid=$uid;";
+        command.Parameters.AddWithValue("$level",level);
+        command.Parameters.AddWithValue("$uid",itemUid);
+        Checks.Require(command.ExecuteNonQuery()==1,
+            "trade enhancement-level seed failed");
     }
 
     private static void SeedWallet(string db,long characterId,long money)
