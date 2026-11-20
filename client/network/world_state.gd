@@ -220,6 +220,14 @@ var chat_sequence := 0
 var chat_messages: Array[Dictionary] = []
 var chat_sender_sequences := {}
 var stale_chat_deliveries := 0
+var pending_whisper_sequence := 0
+var pending_whisper_target_actor_id := 0
+var pending_whisper_bubble_type := 0
+var pending_whisper_message := ""
+var last_whisper_result_sequence := 0
+var last_whisper_result_status := -1
+var last_whisper_result := {}
+var stale_whisper_results := 0
 const CHAT_BACKLOG_MAX := 100
 var quest_sequence := 0
 var pending_quest_sequence := 0
@@ -585,6 +593,7 @@ func mark_chat_sent(sequence:int,channel:int,bubble_type:int,message:String)->bo
 	if (
 		state!=STATE_IN_WORLD or not world_ready or resync_pending or waiting_for_new_map or
 		pending_world_ready_ack_epoch!=0 or last_world_ready_ack_epoch!=map_epoch or
+		pending_whisper_sequence!=0 or
 		sequence<=chat_sequence or sequence>0xffffffff or channel!=0 or
 		bubble_type<0 or bubble_type>5 or bytes.size()<1 or
 		bytes.size()>WireCodec.CHAT_MAX_MESSAGE_BYTES or message.strip_edges().is_empty()
@@ -592,6 +601,34 @@ func mark_chat_sent(sequence:int,channel:int,bubble_type:int,message:String)->bo
 		return false
 	chat_sequence=sequence
 	return true
+
+func mark_whisper_sent(
+		sequence:int,target_actor_id:int,bubble_type:int,message:String)->bool:
+	var bytes:=message.to_utf8_buffer()
+	if (
+		state!=STATE_IN_WORLD or not world_ready or resync_pending or
+		waiting_for_new_map or pending_world_ready_ack_epoch!=0 or
+		last_world_ready_ack_epoch!=map_epoch or pending_whisper_sequence!=0 or
+		sequence<=chat_sequence or sequence>0xffffffff or target_actor_id<=0 or
+		target_actor_id==actor_id or bubble_type<0 or bubble_type>5 or
+		bytes.size()<1 or bytes.size()>WireCodec.CHAT_MAX_MESSAGE_BYTES or
+		message.strip_edges().is_empty()
+	):
+		return false
+	chat_sequence=sequence
+	pending_whisper_sequence=sequence
+	pending_whisper_target_actor_id=target_actor_id
+	pending_whisper_bubble_type=bubble_type
+	pending_whisper_message=message
+	return true
+
+
+func _clear_pending_whisper()->void:
+	pending_whisper_sequence=0
+	pending_whisper_target_actor_id=0
+	pending_whisper_bubble_type=0
+	pending_whisper_message=""
+
 
 func mark_quest_sent(
 		sequence:int,kind:int,npc_spawn_id:int,quest_id:int=0,
@@ -787,6 +824,8 @@ func apply_frame(frame: PackedByteArray) -> bool:
 			return _apply_player_shop_sold(frame)
 		WireCodec.OPCODE_CHAT_DELIVERY:
 			return _apply_chat_delivery(frame)
+		WireCodec.OPCODE_WHISPER_RESULT:
+			return _apply_whisper_result(frame)
 		WireCodec.OPCODE_QUEST_VIEW:
 			return _apply_quest_view(frame)
 		WireCodec.OPCODE_WORLD_READY:
@@ -1018,6 +1057,12 @@ func snapshot() -> Dictionary:
 		"chat_sequence": chat_sequence,
 		"chat_messages": chat_messages.duplicate(true),
 		"stale_chat_deliveries": stale_chat_deliveries,
+		"pending_whisper_sequence": pending_whisper_sequence,
+		"pending_whisper_target_actor_id": pending_whisper_target_actor_id,
+		"last_whisper_result_sequence": last_whisper_result_sequence,
+		"last_whisper_result_status": last_whisper_result_status,
+		"last_whisper_result": last_whisper_result.duplicate(true),
+		"stale_whisper_results": stale_whisper_results,
 		"quest_sequence": quest_sequence,
 		"pending_quest_sequence": pending_quest_sequence,
 		"pending_quest_kind": pending_quest_kind,
@@ -1982,6 +2027,7 @@ func _apply_world_ready(frame: PackedByteArray) -> bool:
 		last_respawn_result_status = -1
 		last_respawn_result.clear()
 		stale_respawn_results = 0
+		_clear_pending_whisper()
 		movement_sequence = 0
 		last_receipt_sequence = 0
 		last_receipt_status = -1
@@ -3232,31 +3278,97 @@ func _apply_chat_delivery(frame:PackedByteArray)->bool:
 		return true
 	if epoch>map_epoch:
 		return fail("future_chat_delivery")
-	if int(value.channel)!=0:
+	var channel:=int(value.channel)
+	if channel not in [0,4]:
 		return fail("unsupported_chat_delivery_channel")
 	var sender:=int(value.sender_actor_id)
 	var connection:=int(value.sender_connection_epoch)
 	var sequence:=int(value.chat_sequence)
-	if sender==actor_id:
-		if sequence>chat_sequence:
-			return fail("chat_self_delivery_without_send")
+	if channel==0:
+		if sender==actor_id:
+			if sequence>chat_sequence:
+				return fail("chat_self_delivery_without_send")
+		else:
+			if not entities.has(sender):
+				stale_chat_deliveries+=1
+				return true
+			var entity:Dictionary=entities[sender]
+			if int(entity.get("connection_epoch",0))!=connection:
+				stale_chat_deliveries+=1
+				return true
 	else:
-		if not entities.has(sender):
-			stale_chat_deliveries+=1
-			return true
-		var entity:Dictionary=entities[sender]
-		if int(entity.get("connection_epoch",0))!=connection:
-			stale_chat_deliveries+=1
-			return true
+		# Whisper is a direct online route and intentionally does not require
+		# the sender to be inside AOI or on the same map. The Server-authenticated
+		# sender generation in this reliable delivery is the authority.
+		if sender==actor_id:
+			return fail("whisper_delivery_from_self")
 	var key:="%d/%d" % [sender,connection]
 	var previous:=int(chat_sender_sequences.get(key,0))
 	if sequence<=previous:
 		stale_chat_deliveries+=1
 		return true
 	chat_sender_sequences[key]=sequence
-	chat_messages.append(value.duplicate(true))
+	var row:Dictionary=value.duplicate(true)
+	if channel==4:
+		row["direction"]="incoming"
+	chat_messages.append(row)
 	while chat_messages.size()>CHAT_BACKLOG_MAX:
 		chat_messages.pop_front()
+	return true
+
+
+func _apply_whisper_result(frame:PackedByteArray)->bool:
+	if state!=STATE_IN_WORLD:
+		return fail("whisper_result_out_of_state")
+	var value:=WireCodec.decode_whisper_result(frame)
+	if value.is_empty():
+		return fail("invalid_whisper_result")
+	var epoch:=int(value.map_epoch)
+	var sequence:=int(value.chat_sequence)
+	if epoch<map_epoch:
+		stale_whisper_results+=1
+		return true
+	if epoch>map_epoch:
+		return fail("future_whisper_result")
+	if sequence<=last_whisper_result_sequence:
+		stale_whisper_results+=1
+		return true
+	if sequence>chat_sequence:
+		return fail("unsent_whisper_result")
+	if (
+		sequence!=pending_whisper_sequence or
+		int(value.target_actor_id)!=pending_whisper_target_actor_id
+	):
+		return fail("whisper_result_wrong_request")
+	var status:=int(value.status)
+	if status==0:
+		if (
+			int(value.target_connection_epoch)<=0 or
+			str(value.target_name).strip_edges().is_empty()
+		):
+			return fail("whisper_delivered_without_target_identity")
+		chat_messages.append({
+			"receiver_map_epoch":map_epoch,
+			"sender_actor_id":actor_id,
+			"sender_connection_epoch":0,
+			"chat_sequence":sequence,
+			"channel":4,
+			"bubble_type":pending_whisper_bubble_type,
+			"sender_name":"",
+			"message":pending_whisper_message,
+			"direction":"outgoing",
+			"target_actor_id":pending_whisper_target_actor_id,
+			"target_connection_epoch":int(value.target_connection_epoch),
+			"target_name":str(value.target_name)
+		})
+		while chat_messages.size()>CHAT_BACKLOG_MAX:
+			chat_messages.pop_front()
+	elif status not in [1,2]:
+		return fail("whisper_result_unknown_status")
+	last_whisper_result_sequence=sequence
+	last_whisper_result_status=status
+	last_whisper_result=value.duplicate(true)
+	_clear_pending_whisper()
 	return true
 
 func _clear_pending_quest()->void:
