@@ -12,6 +12,8 @@ internal static class TradeCoordinatorChecks
             () => Lifecycle(root).GetAwaiter().GetResult());
         Checks.Run("two simultaneous trade confirms serialize combat suspension and resume",
             () => CombatGate(root).GetAwaiter().GetResult());
+        Checks.Run("trade final commit rejects enhancement changed after reviewed offer",
+            () => EnhancementOfferMutationGate(root).GetAwaiter().GetResult());
     }
 
     private static async Task Lifecycle(string root)
@@ -375,6 +377,116 @@ internal static class TradeCoordinatorChecks
         await world.StopAsync();
     }
 
+    private static async Task EnhancementOfferMutationGate(string root)
+    {
+        string dir=Path.Combine(root,"trade_enhance_gate_"+Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+        string db=Path.Combine(dir,"identity.db");
+        string mapDir=Checks.Fixture(root,99,5,5,(_,_)=>0);
+        await using var world=new ServerWorldHost([BlockingGrid.Load(mapDir,99)]);
+        await world.StartAsync();
+        using var store=new SqliteIdentityStore(db);
+        await store.InitializeAsync();
+        long accountA=(await store.CreateAccountAsync(
+            "trade_enhance_a","Trade-Enhance-A-123!")).AccountId;
+        long accountB=(await store.CreateAccountAsync(
+            "trade_enhance_b","Trade-Enhance-B-123!")).AccountId;
+        long charA=(await store.CreateCharacterAsync(
+            accountA,0,"TradeEnhanceA",new CharacterSpawn(99,24,24)))
+            .Character!.CharacterId;
+        long charB=(await store.CreateCharacterAsync(
+            accountB,0,"TradeEnhanceB",new CharacterSpawn(99,28,24)))
+            .Character!.CharacterId;
+        SeedWallet(db,charA,100);
+        SeedWallet(db,charB,100);
+        long generation=await store.AllocateLootWorldGenerationAsync();
+        var seeded=await SeedItem(store,generation,charA,4103,1,9,99,24,24);
+        SeedEnhancementLevel(db,seeded.ItemUid,2);
+
+        var actorA=await world.TrustedRegisterAsync(charA,99,24,24)
+            ??throw new Exception("enhancement trade A registration missing");
+        var actorB=await world.TrustedRegisterAsync(charB,99,28,24)
+            ??throw new Exception("enhancement trade B registration missing");
+        var gatewayA=new GatewayConnection(actorA);
+        var gatewayB=new GatewayConnection(actorB);
+        var router=new WorldResultRouter();
+        Checks.Require(router.TryAttach(gatewayA)&&router.TryAttach(gatewayB),
+            "enhancement trade gateways attach failed");
+        var coordinator=new PlayerTradeCoordinator(
+            store,world,new Dictionary<int,TradeItemRule>
+            {
+                [4103]=new(4103,true,"synthetic:trade-enhancement-gate")
+            });
+        using var gateA=new SemaphoreSlim(1,1);
+        using var gateB=new SemaphoreSlim(1,1);
+        Checks.Require(
+            coordinator.TryRegisterGameplayGate(gatewayA.Binding,gateA)&&
+            coordinator.TryRegisterGameplayGate(gatewayB.Binding,gateB),
+            "enhancement trade gameplay gates missing");
+
+        await coordinator.HandleAsync(new(
+            charA,actorA.ConnectionEpoch,actorA.MapEpoch,1,
+            TradeCommandAction.Request,0,charB,0,0),router);
+        long tradeId=DrainSnapshot(gatewayA).TradeId;
+        DrainSnapshot(gatewayB);
+        await coordinator.HandleAsync(new(
+            charB,actorB.ConnectionEpoch,actorB.MapEpoch,1,
+            TradeCommandAction.Accept,tradeId,0,0,0),router);
+        RequireState(gatewayA,gatewayB,TradeSessionWireState.Active);
+        await coordinator.HandleAsync(new(
+            charA,actorA.ConnectionEpoch,actorA.MapEpoch,2,
+            TradeCommandAction.AddItem,tradeId,0,seeded.ItemUid,0),router);
+        var offeredA=DrainSnapshot(gatewayA);
+        var offeredB=DrainSnapshot(gatewayB);
+        Checks.Require(
+            offeredA.MyItems.Single().EnhancementLevel==2&&
+            offeredB.OtherItems.Single().EnhancementLevel==2,
+            "trade offer did not freeze reviewed +2 level");
+
+        await coordinator.HandleAsync(new(
+            charA,actorA.ConnectionEpoch,actorA.MapEpoch,3,
+            TradeCommandAction.Lock,tradeId,0,0,0),router);
+        RequireState(gatewayA,gatewayB,TradeSessionWireState.Active);
+        await coordinator.HandleAsync(new(
+            charB,actorB.ConnectionEpoch,actorB.MapEpoch,2,
+            TradeCommandAction.Lock,tradeId,0,0,0),router);
+        RequireState(gatewayA,gatewayB,TradeSessionWireState.AwaitingFinalConfirm);
+        await coordinator.HandleAsync(new(
+            charA,actorA.ConnectionEpoch,actorA.MapEpoch,4,
+            TradeCommandAction.FinalConfirm,tradeId,0,0,0),router);
+        RequireState(gatewayA,gatewayB,TradeSessionWireState.AwaitingFinalConfirm);
+
+        // Simulate a malicious/parallel item mutation after both peers reviewed
+        // +2 but before the second final confirm. The formal Client normally
+        // cannot do this, so this check attacks the Server trust boundary.
+        SeedEnhancementLevel(db,seeded.ItemUid,3);
+        await coordinator.HandleAsync(new(
+            charB,actorB.ConnectionEpoch,actorB.MapEpoch,3,
+            TradeCommandAction.FinalConfirm,tradeId,0,0,0),router);
+        var confirmedA=DrainSnapshot(gatewayA);
+        var confirmedB=DrainSnapshot(gatewayB);
+        Checks.Require(confirmedA.MyConfirmed&&confirmedA.OtherConfirmed&&
+            confirmedB.MyConfirmed&&confirmedB.OtherConfirmed,
+            "enhancement mutation fixture never reached final commit barrier");
+        Checks.Require(
+            DrainTerminal(gatewayA).Status==TradeTerminalStatus.CommitFailed&&
+            DrainTerminal(gatewayB).Status==TradeTerminalStatus.CommitFailed&&
+            !coordinator.IsTrading(charA)&&!coordinator.IsTrading(charB),
+            "trade committed after enhancement changed from reviewed +2 to +3");
+        var owner=(await store.ListInventoryItemsAsync(charA))
+            .Single(x=>x.ItemUid==seeded.ItemUid);
+        Checks.Require(owner.EnhancementLevel==3&&
+            !(await store.ListInventoryItemsAsync(charB))
+                .Any(x=>x.ItemUid==seeded.ItemUid)&&
+            await store.GetCharacterMoneyAsync(charA)==100&&
+            await store.GetCharacterMoneyAsync(charB)==100,
+            "rejected changed-offer trade mutated owner or wallets");
+
+        router.TryDetach(gatewayA);
+        router.TryDetach(gatewayB);
+        await world.StopAsync();
+    }
+
     private static async Task<TradeSnapshotWire> WaitSnapshotAsync(
         GatewayConnection gateway)
     {
@@ -536,6 +648,21 @@ internal static class TradeCoordinatorChecks
         var item=(await store.ListInventoryItemsAsync(owner)).Single(x=>x.ItemUid==uid);
         Checks.Require(item.ItemDefinitionId==definition&&item.Quantity==quantity&&
             item.SourceDropId==dropId,"trade coordinator lost UID/provenance");
+    }
+
+    private static void SeedEnhancementLevel(string db,long itemUid,int level)
+    {
+        using var connection=new SqliteConnection(
+            new SqliteConnectionStringBuilder
+            {DataSource=db,Mode=SqliteOpenMode.ReadWrite,Pooling=false}.ToString());
+        connection.Open();
+        using var command=connection.CreateCommand();
+        command.CommandText=
+            "UPDATE item_instances SET enhancement_level=$level WHERE item_uid=$uid;";
+        command.Parameters.AddWithValue("$level",level);
+        command.Parameters.AddWithValue("$uid",itemUid);
+        Checks.Require(command.ExecuteNonQuery()==1,
+            "trade coordinator enhancement-level seed failed");
     }
 
     private static void SeedWallet(string db,long characterId,long money)
