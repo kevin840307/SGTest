@@ -127,6 +127,24 @@ internal static class EnhancementTlsChecks
                 actor,new TrustedEnhancementNpcRule(99,"ci:enhancer-npc"),rules);
             Checks.Require(durable.WalletMoney==100&&durable.Items.Count==0,
                 "enhancement durable final state mismatch");
+
+            var relogin=await StartSession(authorization,router);
+            await LoginAndChoose(relogin.Tls,actor,
+                "enhance_tls_user","Enhance-Tls-Password-123!");
+            Checks.Require(WireProtocol.TryDecodeInventorySnapshot(
+                await ReadFrame(relogin.Tls),out var reloginInventory)&&
+                reloginInventory is not null&&reloginInventory.Complete&&
+                reloginInventory.Items.Count==1&&
+                reloginInventory.Items[0].ItemUid==uid&&
+                reloginInventory.Items[0].EnhancementLevel==1,
+                "relogin inventory baseline lost durable enhancement level");
+            await relogin.Tls.DisposeAsync();
+            relogin.Client.Dispose();
+            var reloginEnded=await relogin.ServerTask.WaitAsync(
+                TimeSpan.FromSeconds(3));
+            Checks.Require(reloginEnded.Reason==TlsWireEndReason.CleanEof,
+                "enhancement relogin TLS session did not close cleanly");
+
             await world.StopAsync();
         }
         finally
