@@ -27,8 +27,8 @@ internal static class TradeWireChecks
             var snapshot=new TradeSnapshotWire(
                 9,7001,4,TradeSessionWireState.AwaitingFinalConfirm,22,500,100,
                 true,true,false,false,
-                [new TradeOfferItemWire(8001,4103,2,501)],
-                [new TradeOfferItemWire(9001,4104,1,502)]);
+                [new TradeOfferItemWire(8001,4103,2,501,5)],
+                [new TradeOfferItemWire(9001,4104,1,502,7)]);
             var snapshotFrame=WireProtocol.EncodeTradeSnapshot(snapshot);
             Checks.Require(
                 snapshotFrame.Length==WireProtocol.TradeSnapshotHeaderBytes+
@@ -68,8 +68,8 @@ internal static class TradeWireChecks
             {
                 WireProtocol.EncodeTradeSnapshot(new(
                     9,7001,1,TradeSessionWireState.Active,22,0,0,false,false,false,false,
-                    [new TradeOfferItemWire(8001,4103,1,501)],
-                    [new TradeOfferItemWire(8001,4103,1,501)]));
+                    [new TradeOfferItemWire(8001,4103,1,501,5)],
+                    [new TradeOfferItemWire(8001,4103,1,501,5)]));
             }
             catch(ArgumentOutOfRangeException){badSnapshot=true;}
             try
