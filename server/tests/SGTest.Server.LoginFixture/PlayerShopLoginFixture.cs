@@ -42,6 +42,7 @@ internal static class PlayerShopLoginFixture
             var seeded=await SeedItem(
                 store,generation,seller,6401,2,1,8,8).ConfigureAwait(false);
             SetDurability(db,seeded.ItemUid,80);
+            SetEnhancementLevel(db,seeded.ItemUid,6);
             var rules=new Dictionary<int,TradeItemRule>
             {
                 [6401]=new(6401,true,"ci:godot-player-shop-6401")
@@ -68,7 +69,7 @@ internal static class PlayerShopLoginFixture
                 Console.WriteLine(
                     $"PLAYER_SHOP_FIXTURE_READY port={port} cert={certPath} " +
                     $"seller={seller} buyer={buyer} item_uid={seeded.ItemUid} " +
-                    $"drop_id={seeded.DropId}");
+                    $"drop_id={seeded.DropId} enhancement=6");
                 Console.Out.Flush();
 
                 using var sellerSocket=await listener.AcceptTcpClientAsync()
@@ -127,7 +128,10 @@ internal static class PlayerShopLoginFixture
                        .Quantity!=2||
                    buyerInventory.Single(x=>x.ItemUid==seeded.ItemUid)
                        .SourceDropId!=seeded.DropId||
+                   buyerInventory.Single(x=>x.ItemUid==seeded.ItemUid)
+                       .EnhancementLevel!=6||
                    raw.Owner!=buyer||raw.DurabilityRaw!=80||
+                   raw.EnhancementLevel!=6||
                    active is not null||
                    ended[0].CommandsAccepted!=2||
                    ended[1].CommandsAccepted!=3||
@@ -136,7 +140,7 @@ internal static class PlayerShopLoginFixture
                         $"player-shop E2E mismatch seller_wallet={sellerWallet} " +
                         $"buyer_wallet={buyerWallet} seller_inv={sellerInventory.Count} " +
                         $"buyer_inv={buyerInventory.Count} owner={raw.Owner} " +
-                        $"durability={raw.DurabilityRaw} " +
+                        $"durability={raw.DurabilityRaw} enhancement={raw.EnhancementLevel} " +
                         $"commands={ended[0].CommandsAccepted}/{ended[1].CommandsAccepted} " +
                         $"active_shop={active is not null} " +
                         $"sessions={router.Statistics.ActiveSessions}");
@@ -144,7 +148,7 @@ internal static class PlayerShopLoginFixture
                 Console.WriteLine(
                     $"PLAYER_SHOP_FIXTURE_PASS seller={seller} buyer={buyer} " +
                     $"item_uid={seeded.ItemUid} drop_id={seeded.DropId} " +
-                    $"quantity=2 durability=80 seller_wallet={sellerWallet} " +
+                    $"quantity=2 durability=80 enhancement=6 seller_wallet={sellerWallet} " +
                     $"buyer_wallet={buyerWallet} commands=2/3");
                 Console.Out.Flush();
                 return 0;
@@ -211,18 +215,31 @@ internal static class PlayerShopLoginFixture
             throw new InvalidOperationException("player-shop durability seed failed");
     }
 
-    private static (long Owner,int? DurabilityRaw) ReadItem(string db,long itemUid)
+    private static void SetEnhancementLevel(string db,long itemUid,int level)
     {
         using var connection=Open(db);
         using var command=connection.CreateCommand();
         command.CommandText=
-            "SELECT character_id,durability_raw FROM item_instances WHERE item_uid=$uid;";
+            "UPDATE item_instances SET enhancement_level=$value WHERE item_uid=$uid;";
+        command.Parameters.AddWithValue("$value",level);
+        command.Parameters.AddWithValue("$uid",itemUid);
+        if(command.ExecuteNonQuery()!=1)
+            throw new InvalidOperationException(
+                "player-shop enhancement seed failed");
+    }
+
+    private static (long Owner,int? DurabilityRaw,int EnhancementLevel) ReadItem(string db,long itemUid)
+    {
+        using var connection=Open(db);
+        using var command=connection.CreateCommand();
+        command.CommandText=
+            "SELECT character_id,durability_raw,enhancement_level FROM item_instances WHERE item_uid=$uid;";
         command.Parameters.AddWithValue("$uid",itemUid);
         using var reader=command.ExecuteReader();
         if(!reader.Read())
             throw new InvalidOperationException("player-shop item disappeared");
         return(reader.GetInt64(0),
-            reader.IsDBNull(1)?null:reader.GetInt32(1));
+            reader.IsDBNull(1)?null:reader.GetInt32(1),reader.GetInt32(2));
     }
 
     private static SqliteConnection Open(string db)
