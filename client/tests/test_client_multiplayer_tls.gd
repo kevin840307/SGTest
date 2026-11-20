@@ -267,6 +267,29 @@ func _move(session, self_id: int, crossmap: bool = false, portal: bool = false) 
 				_fail("authoritative whisper result did not publish outgoing history",session)
 				return
 			print("CLIENT_CROSSMAP_WHISPER_SENT role=actor sequence=3 target=%d" % remote_id)
+			if session.send_whisper(self_id,"不能私訊自己",0):
+				_fail("client admitted self whisper",session)
+				return
+			var history_before:=(session.snapshot().get("chat_messages",[]) as Array).size()
+			const OFFLINE_ACTOR := 999999999
+			if not session.send_whisper(OFFLINE_ACTOR,"不存在玩家私訊",0):
+				_fail("offline-target whisper intent was rejected locally",session)
+				return
+			var unavailable:=_wait_whisper_result(
+				session,4,OFFLINE_ACTOR,7000)
+			if (
+				unavailable.is_empty() or
+				int(unavailable.get("status",-1))!=1 or
+				int(unavailable.get("target_connection_epoch",-1))!=0 or
+				not str(unavailable.get("target_name","")).is_empty()
+			):
+				_fail("offline-target whisper result mismatch %s" %
+					session.snapshot(),session)
+				return
+			if (session.snapshot().get("chat_messages",[]) as Array).size()!=history_before:
+				_fail("failed whisper created optimistic chat history",session)
+				return
+			print("CLIENT_CROSSMAP_WHISPER_UNAVAILABLE role=actor sequence=4 target=%d" % OFFLINE_ACTOR)
 		if portal:
 			var portal_result := _await_npc_result(session, 0, 2, 7000)
 			if portal_result.is_empty() or int(portal_result.last_npc_result_map_epoch) != int(in_map13.map_epoch):
@@ -315,7 +338,7 @@ func _move(session, self_id: int, crossmap: bool = false, portal: bool = false) 
 		# The spectator must see re-entry before this actor logs out.
 		OS.delay_msec(700)
 		session.stop()
-		print("CLIENT_%s_PASS role=actor map15_map13_map15=PASS new_epochs=PASS world_ready=PASS old_aoi_clear=PASS npc_authority=%s nearby_chat_isolation=%s whisper_crossmap=%s" % ["PORTAL" if portal else "CROSSMAP","PASS" if portal else "NOT_TESTED","NOT_TESTED" if portal else "PASS","NOT_TESTED" if portal else "PASS"])
+		print("CLIENT_%s_PASS role=actor map15_map13_map15=PASS new_epochs=PASS world_ready=PASS old_aoi_clear=PASS npc_authority=%s nearby_chat_isolation=%s whisper_crossmap=%s whisper_unavailable=%s" % ["PORTAL" if portal else "CROSSMAP","PASS" if portal else "NOT_TESTED","NOT_TESTED" if portal else "PASS","NOT_TESTED" if portal else "PASS","NOT_TESTED" if portal else "PASS"])
 		quit(0)
 		return
 	# Allow a couple of 30Hz World ticks for authoritative movement,
