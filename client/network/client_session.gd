@@ -301,7 +301,8 @@ func send_nearby_chat(message:String,bubble_type:int=0)->bool:
 		bool(current.get("resync_pending",false)) or
 		bool(current.get("waiting_for_new_map",false)) or
 		int(current.get("pending_world_ready_ack_epoch",0))!=0 or
-		int(current.get("last_world_ready_ack_epoch",0))!=int(current.get("map_epoch",0))
+		int(current.get("last_world_ready_ack_epoch",0))!=int(current.get("map_epoch",0)) or
+		int(current.get("pending_whisper_sequence",0))!=0
 	):
 		return false
 	return _queue_intent({
@@ -309,6 +310,32 @@ func send_nearby_chat(message:String,bubble_type:int=0)->bool:
 		"actor_id":int(current.get("actor_id",0)),
 		"map_epoch":int(current.get("map_epoch",0))
 	})
+
+func send_whisper(
+		target_actor_id:int,message:String,bubble_type:int=0)->bool:
+	var clean:=message.strip_edges()
+	var bytes:=clean.to_utf8_buffer()
+	var current:=snapshot()
+	if (
+		target_actor_id<=0 or target_actor_id==int(current.get("actor_id",0)) or
+		clean.is_empty() or bytes.size()>WireCodec.CHAT_MAX_MESSAGE_BYTES or
+		bubble_type<0 or bubble_type>5 or
+		int(current.get("state",-1))!=WorldState.STATE_IN_WORLD or
+		not bool(current.get("world_ready",false)) or
+		bool(current.get("resync_pending",false)) or
+		bool(current.get("waiting_for_new_map",false)) or
+		int(current.get("pending_world_ready_ack_epoch",0))!=0 or
+		int(current.get("last_world_ready_ack_epoch",0))!=int(current.get("map_epoch",0)) or
+		int(current.get("pending_whisper_sequence",0))!=0
+	):
+		return false
+	return _queue_intent({
+		"type":"whisper","target_actor_id":target_actor_id,
+		"message":clean,"bubble_type":bubble_type,
+		"actor_id":int(current.get("actor_id",0)),
+		"map_epoch":int(current.get("map_epoch",0))
+	})
+
 
 func open_quest(npc_spawn_id:int)->bool:
 	var current:=snapshot()
@@ -1052,7 +1079,7 @@ func _process_first_intent() -> void:
 			_pop_intent()
 			_publish()
 
-	elif kind=="nearby_chat":
+	elif kind in ["nearby_chat","whisper"]:
 		var current:Dictionary=_world.snapshot()
 		if (
 			int(intent.get("actor_id",0))!=int(current.get("actor_id",0)) or
@@ -1066,19 +1093,38 @@ func _process_first_intent() -> void:
 			bool(current.get("resync_pending",false)) or
 			bool(current.get("waiting_for_new_map",false)) or
 			int(current.get("pending_world_ready_ack_epoch",0))!=0 or
-			int(current.get("last_world_ready_ack_epoch",0))!=int(current.get("map_epoch",0))
+			int(current.get("last_world_ready_ack_epoch",0))!=int(current.get("map_epoch",0)) or
+			int(current.get("pending_whisper_sequence",0))!=0
 		):
 			return
 		var message:=str(intent.get("message",""))
 		var bubble:=int(intent.get("bubble_type",0))
 		var sequence:=int(current.get("chat_sequence",0))+1
-		var frame:=WireCodec.encode_chat_command(
-			int(current.get("map_epoch",0)),sequence,0,bubble,message)
+		var frame:=PackedByteArray()
+		if kind=="nearby_chat":
+			frame=WireCodec.encode_chat_command(
+				int(current.get("map_epoch",0)),sequence,0,bubble,message)
+			if frame.is_empty():
+				_pop_intent()
+				return
+			if _transport.send_frame(frame) and _world.mark_chat_sent(
+				sequence,0,bubble,message):
+				_pop_intent()
+				_publish()
+			return
+		var target:=int(intent.get("target_actor_id",0))
+		if target<=0 or target==int(current.get("actor_id",0)):
+			_pop_intent()
+			return
+		frame=WireCodec.encode_whisper_command(
+			int(current.get("map_epoch",0)),sequence,target,bubble,message)
 		if frame.is_empty():
 			_pop_intent()
 			return
-		if _transport.send_frame(frame) and _world.mark_chat_sent(
-			sequence,0,bubble,message):
+		if (
+			_transport.send_frame(frame) and
+			_world.mark_whisper_sent(sequence,target,bubble,message)
+		):
 			_pop_intent()
 			_publish()
 	elif kind == "gm_pvp_name":
