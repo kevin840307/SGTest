@@ -57,11 +57,11 @@ func _party_invite(
 
 func _party_snapshot(
 		epoch:int,party_id:int,revision:int,leader:int,
-		members:Array[Dictionary])->PackedByteArray:
-	var encoded:Array[PackedByteArray]=[]
+		members:Array)->PackedByteArray:
+	var encoded:=[]
 	var total:=WireCodec.PARTY_SNAPSHOT_HEADER_BYTES
 	for member in members:
-		var bytes:=str(member.name).to_utf8_buffer()
+		var bytes:=str((member as Dictionary).get("name","")).to_utf8_buffer()
 		encoded.append(bytes)
 		total+=WireCodec.PARTY_MEMBER_HEADER_BYTES+bytes.size()
 	var w:=StreamPeerBuffer.new()
@@ -77,8 +77,8 @@ func _party_snapshot(
 	for i in range(members.size()):
 		var member:Dictionary=members[i]
 		var bytes:PackedByteArray=encoded[i]
-		w.put_64(int(member.actor_id))
-		w.put_64(int(member.connection_epoch))
+		w.put_64(int(member.get("actor_id",0)))
+		w.put_64(int(member.get("connection_epoch",0)))
 		w.put_u16(bytes.size())
 		w.put_data(bytes)
 	return w.data_array
@@ -111,12 +111,7 @@ func _initialize()->void:
 	if command.size()!=WireCodec.PARTY_COMMAND_FRAME_BYTES:
 		_fail("invite command encoding")
 		return
-	if (
-		not WireCodec.encode_party_command(3,1,1,0,11).is_empty() and false
-	):
-		_fail("unreachable")
-		return
-	if not WireCodec.encode_party_command(3,1,4,0,0).is_empty():
+ 	if not WireCodec.encode_party_command(3,1,4,0,0).is_empty():
 		_fail("leave without party admitted")
 		return
 
