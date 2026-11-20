@@ -200,8 +200,7 @@ func _initialize()->void:
 		return
 	if (
 		int(leader.snapshot().party_leader_actor_id)!=22 or
-		int(member.snapshot().party_leader_actor_id)!=22 or
-		leader.party_kick if false else false
+		int(member.snapshot().party_leader_actor_id)!=22
 	):
 		_fail("promoted leader state")
 		return
