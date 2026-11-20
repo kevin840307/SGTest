@@ -3727,6 +3727,103 @@ public static class WireProtocol
             value.SellerWallet>=0&&value.SellerWallet<=SqliteIdentityStore.MaximumMoney;
     }
 
+    public static byte[] EncodeChatCommand(ChatCommandWire value)
+    {
+        byte[] message;
+        try { message=StrictUtf8.GetBytes(value.Message??string.Empty); }
+        catch(EncoderFallbackException) { throw new ArgumentOutOfRangeException(nameof(value)); }
+        if(value.MapEpoch<=0||value.ChatSequence==0||(byte)value.Channel>4||
+           value.BubbleType>5||message.Length is <1 or >ChatMaxMessageBytes||
+           string.IsNullOrWhiteSpace(value.Message))
+            throw new ArgumentOutOfRangeException(nameof(value));
+        var frame=NewFrame(WireOpcode.ChatCommand,ChatCommandHeaderBytes+message.Length);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(8,8),value.MapEpoch);
+        BinaryPrimitives.WriteUInt32LittleEndian(frame.AsSpan(16,4),value.ChatSequence);
+        frame[20]=(byte)value.Channel; frame[21]=value.BubbleType;
+        BinaryPrimitives.WriteUInt16LittleEndian(frame.AsSpan(22,2),(ushort)message.Length);
+        message.AsSpan().CopyTo(frame.AsSpan(ChatCommandHeaderBytes));
+        return frame;
+    }
+
+    public static bool TryDecodeChatCommand(ReadOnlySpan<byte> frame,out ChatCommandWire value)
+    {
+        value=default;
+        if(!TryReadHeader(frame,out var h)||h.Opcode!=WireOpcode.ChatCommand||
+           frame.Length<ChatCommandHeaderBytes+1)return false;
+        long epoch=BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(8,8));
+        uint sequence=BinaryPrimitives.ReadUInt32LittleEndian(frame.Slice(16,4));
+        var channel=(ChatChannel)frame[20]; byte bubble=frame[21];
+        int length=BinaryPrimitives.ReadUInt16LittleEndian(frame.Slice(22,2));
+        if(epoch<=0||sequence==0||(byte)channel>4||bubble>5||
+           length is <1 or >ChatMaxMessageBytes||frame.Length!=ChatCommandHeaderBytes+length)
+            return false;
+        try
+        {
+            string message=StrictUtf8.GetString(frame.Slice(ChatCommandHeaderBytes,length));
+            if(string.IsNullOrWhiteSpace(message))return false;
+            value=new(epoch,sequence,channel,bubble,message);
+            return true;
+        }
+        catch(DecoderFallbackException){return false;}
+    }
+
+    public static byte[] EncodeChatDelivery(ChatDeliveryWire value)
+    {
+        byte[] name,message;
+        try
+        {
+            name=StrictUtf8.GetBytes(value.SenderName??string.Empty);
+            message=StrictUtf8.GetBytes(value.Message??string.Empty);
+        }
+        catch(EncoderFallbackException){throw new ArgumentOutOfRangeException(nameof(value));}
+        if(value.ReceiverMapEpoch<=0||value.SenderActorId<=0||
+           value.SenderConnectionEpoch<=0||value.ChatSequence==0||
+           (byte)value.Channel>4||value.BubbleType>5||
+           name.Length is <1 or >ChatMaxSenderNameBytes||
+           message.Length is <1 or >ChatMaxMessageBytes||
+           string.IsNullOrWhiteSpace(value.SenderName)||string.IsNullOrWhiteSpace(value.Message))
+            throw new ArgumentOutOfRangeException(nameof(value));
+        var frame=NewFrame(WireOpcode.ChatDelivery,
+            ChatDeliveryHeaderBytes+name.Length+message.Length);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(8,8),value.ReceiverMapEpoch);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(16,8),value.SenderActorId);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(24,8),value.SenderConnectionEpoch);
+        BinaryPrimitives.WriteUInt32LittleEndian(frame.AsSpan(32,4),value.ChatSequence);
+        frame[36]=(byte)value.Channel; frame[37]=value.BubbleType;
+        BinaryPrimitives.WriteUInt16LittleEndian(frame.AsSpan(38,2),(ushort)name.Length);
+        BinaryPrimitives.WriteUInt16LittleEndian(frame.AsSpan(40,2),(ushort)message.Length);
+        name.AsSpan().CopyTo(frame.AsSpan(ChatDeliveryHeaderBytes));
+        message.AsSpan().CopyTo(frame.AsSpan(ChatDeliveryHeaderBytes+name.Length));
+        return frame;
+    }
+
+    public static bool TryDecodeChatDelivery(ReadOnlySpan<byte> frame,out ChatDeliveryWire value)
+    {
+        value=default;
+        if(!TryReadHeader(frame,out var h)||h.Opcode!=WireOpcode.ChatDelivery||
+           frame.Length<ChatDeliveryHeaderBytes+2)return false;
+        long receiver=BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(8,8));
+        long actor=BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(16,8));
+        long connection=BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(24,8));
+        uint sequence=BinaryPrimitives.ReadUInt32LittleEndian(frame.Slice(32,4));
+        var channel=(ChatChannel)frame[36]; byte bubble=frame[37];
+        int nameLength=BinaryPrimitives.ReadUInt16LittleEndian(frame.Slice(38,2));
+        int messageLength=BinaryPrimitives.ReadUInt16LittleEndian(frame.Slice(40,2));
+        if(receiver<=0||actor<=0||connection<=0||sequence==0||
+           (byte)channel>4||bubble>5||nameLength is <1 or >ChatMaxSenderNameBytes||
+           messageLength is <1 or >ChatMaxMessageBytes||
+           frame.Length!=ChatDeliveryHeaderBytes+nameLength+messageLength)return false;
+        try
+        {
+            string name=StrictUtf8.GetString(frame.Slice(ChatDeliveryHeaderBytes,nameLength));
+            string message=StrictUtf8.GetString(frame.Slice(ChatDeliveryHeaderBytes+nameLength,messageLength));
+            if(string.IsNullOrWhiteSpace(name)||string.IsNullOrWhiteSpace(message))return false;
+            value=new(receiver,actor,connection,sequence,channel,bubble,name,message);
+            return true;
+        }
+        catch(DecoderFallbackException){return false;}
+    }
+
     public static byte[] EncodePlayerIdentity(PlayerIdentityWire value)
     {
         byte[] name;
