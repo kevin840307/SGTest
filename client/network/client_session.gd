@@ -310,6 +310,52 @@ func send_nearby_chat(message:String,bubble_type:int=0)->bool:
 		"map_epoch":int(current.get("map_epoch",0))
 	})
 
+func open_quest(npc_spawn_id:int)->bool:
+	var current:=snapshot()
+	if (
+		npc_spawn_id<=0 or
+		int(current.get("state",-1))!=WorldState.STATE_IN_WORLD or
+		bool(current.get("player_dead",false)) or
+		not bool(current.get("world_ready",false)) or
+		bool(current.get("resync_pending",false)) or
+		bool(current.get("waiting_for_new_map",false)) or
+		int(current.get("pending_world_ready_ack_epoch",0))!=0 or
+		int(current.get("last_world_ready_ack_epoch",0))!=int(current.get("map_epoch",0)) or
+		int(current.get("pending_quest_sequence",0))!=0
+	):
+		return false
+	return _queue_intent({
+		"type":"quest_open","npc_spawn_id":npc_spawn_id,
+		"actor_id":int(current.get("actor_id",0)),
+		"map_epoch":int(current.get("map_epoch",0))
+	})
+
+
+func choose_quest_choice(choice_id:int)->bool:
+	var current:=snapshot()
+	var view:Dictionary=current.get("quest_view",{})
+	if (
+		choice_id<=0 or view.is_empty() or
+		int(current.get("pending_quest_sequence",0))!=0
+	):
+		return false
+	var npc:=int(view.get("npc_spawn_id",0))
+	var quest:=int(view.get("quest_id",0))
+	var found:=false
+	for raw in view.get("choices",[]):
+		if int((raw as Dictionary).get("choice_id",0))==choice_id:
+			found=true
+			break
+	if not found or npc<=0 or quest<=0:
+		return false
+	return _queue_intent({
+		"type":"quest_choose","npc_spawn_id":npc,"quest_id":quest,
+		"choice_id":choice_id,
+		"actor_id":int(current.get("actor_id",0)),
+		"map_epoch":int(current.get("map_epoch",0))
+	})
+
+
 func request_trade(target_actor_id: int) -> bool:
 	var current := snapshot()
 	if target_actor_id <= 0 or target_actor_id == int(current.get("actor_id",0)) or int(current.get("trade_id",0)) != 0:
@@ -609,6 +655,13 @@ func _queue_intent(intent: Dictionary) -> bool:
 			accepted=false
 		for queued in _intents:
 			if str(queued.get("type",""))=="player_shop":
+				accepted=false
+				break
+	if accepted and kind in ["quest_open","quest_choose"]:
+		if int(_published.get("pending_quest_sequence",0))!=0:
+			accepted=false
+		for queued in _intents:
+			if str(queued.get("type","")) in ["quest_open","quest_choose"]:
 				accepted=false
 				break
 	if accepted and kind == "pvp_mode":
@@ -934,6 +987,44 @@ func _process_first_intent() -> void:
 			_transport.send_frame(frame) and
 			_world.mark_player_shop_sent(
 				sequence,action,seller,listing,uid,price)
+		):
+			_pop_intent()
+			_publish()
+
+	elif kind in ["quest_open","quest_choose"]:
+		var current:Dictionary=_world.snapshot()
+		if (
+			int(intent.get("actor_id",0))!=int(current.get("actor_id",0)) or
+			int(intent.get("map_epoch",0))!=int(current.get("map_epoch",0))
+		):
+			_pop_intent()
+			return
+		if (
+			int(current.get("state",-1))!=WorldState.STATE_IN_WORLD or
+			bool(current.get("player_dead",false)) or
+			not bool(current.get("world_ready",false)) or
+			bool(current.get("resync_pending",false)) or
+			bool(current.get("waiting_for_new_map",false)) or
+			int(current.get("pending_world_ready_ack_epoch",0))!=0 or
+			int(current.get("last_world_ready_ack_epoch",0))!=int(current.get("map_epoch",0)) or
+			int(current.get("pending_quest_sequence",0))!=0
+		):
+			return
+		var sequence:=int(current.get("quest_sequence",0))+1
+		var npc:=int(intent.get("npc_spawn_id",0))
+		var quest_id:=int(intent.get("quest_id",0))
+		var choice_id:=int(intent.get("choice_id",0))
+		var quest_kind:=1 if kind=="quest_open" else 2
+		var frame:=WireCodec.encode_quest_open(
+			int(current.get("map_epoch",0)),sequence,npc) if quest_kind==1 else 			WireCodec.encode_quest_choose(
+				int(current.get("map_epoch",0)),sequence,npc,quest_id,choice_id)
+		if frame.is_empty():
+			_pop_intent()
+			return
+		if (
+			_transport.send_frame(frame) and
+			_world.mark_quest_sent(
+				sequence,quest_kind,npc,quest_id,choice_id)
 		):
 			_pop_intent()
 			_publish()
