@@ -14,6 +14,8 @@ internal static class TradeCoordinatorChecks
             () => CombatGate(root).GetAwaiter().GetResult());
         Checks.Run("trade final commit rejects enhancement changed after reviewed offer",
             () => EnhancementOfferMutationGate(root).GetAwaiter().GetResult());
+        Checks.Run("trade final commit rejects durability changed after reviewed offer",
+            () => DurabilityOfferMutationGate(root).GetAwaiter().GetResult());
     }
 
     private static async Task Lifecycle(string root)
@@ -487,6 +489,115 @@ internal static class TradeCoordinatorChecks
         await world.StopAsync();
     }
 
+    private static async Task DurabilityOfferMutationGate(string root)
+    {
+        string dir=Path.Combine(root,"trade_durability_gate_"+Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+        string db=Path.Combine(dir,"identity.db");
+        string mapDir=Checks.Fixture(root,100,5,5,(_,_)=>0);
+        await using var world=new ServerWorldHost([BlockingGrid.Load(mapDir,100)]);
+        await world.StartAsync();
+        using var store=new SqliteIdentityStore(db);
+        await store.InitializeAsync();
+        long accountA=(await store.CreateAccountAsync(
+            "trade_durability_a","Trade-Durability-A-123!")).AccountId;
+        long accountB=(await store.CreateAccountAsync(
+            "trade_durability_b","Trade-Durability-B-123!")).AccountId;
+        long charA=(await store.CreateCharacterAsync(
+            accountA,0,"TradeDurabilityA",new CharacterSpawn(100,24,24)))
+            .Character!.CharacterId;
+        long charB=(await store.CreateCharacterAsync(
+            accountB,0,"TradeDurabilityB",new CharacterSpawn(100,28,24)))
+            .Character!.CharacterId;
+        SeedWallet(db,charA,100);
+        SeedWallet(db,charB,100);
+        long generation=await store.AllocateLootWorldGenerationAsync();
+        var seeded=await SeedItem(store,generation,charA,4103,1,10,100,24,24);
+        SeedDurability(db,seeded.ItemUid,80);
+
+        var actorA=await world.TrustedRegisterAsync(charA,100,24,24)
+            ??throw new Exception("durability trade A registration missing");
+        var actorB=await world.TrustedRegisterAsync(charB,100,28,24)
+            ??throw new Exception("durability trade B registration missing");
+        var gatewayA=new GatewayConnection(actorA);
+        var gatewayB=new GatewayConnection(actorB);
+        var router=new WorldResultRouter();
+        Checks.Require(router.TryAttach(gatewayA)&&router.TryAttach(gatewayB),
+            "durability trade gateways attach failed");
+        var coordinator=new PlayerTradeCoordinator(
+            store,world,new Dictionary<int,TradeItemRule>
+            {
+                [4103]=new(4103,true,"synthetic:trade-durability-gate")
+            });
+        using var gateA=new SemaphoreSlim(1,1);
+        using var gateB=new SemaphoreSlim(1,1);
+        Checks.Require(
+            coordinator.TryRegisterGameplayGate(gatewayA.Binding,gateA)&&
+            coordinator.TryRegisterGameplayGate(gatewayB.Binding,gateB),
+            "durability trade gameplay gates missing");
+
+        await coordinator.HandleAsync(new(
+            charA,actorA.ConnectionEpoch,actorA.MapEpoch,1,
+            TradeCommandAction.Request,0,charB,0,0),router);
+        long tradeId=DrainSnapshot(gatewayA).TradeId;
+        DrainSnapshot(gatewayB);
+        await coordinator.HandleAsync(new(
+            charB,actorB.ConnectionEpoch,actorB.MapEpoch,1,
+            TradeCommandAction.Accept,tradeId,0,0,0),router);
+        RequireState(gatewayA,gatewayB,TradeSessionWireState.Active);
+        await coordinator.HandleAsync(new(
+            charA,actorA.ConnectionEpoch,actorA.MapEpoch,2,
+            TradeCommandAction.AddItem,tradeId,0,seeded.ItemUid,0),router);
+        var offeredA=DrainSnapshot(gatewayA);
+        var offeredB=DrainSnapshot(gatewayB);
+        Checks.Require(
+            offeredA.MyItems.Single().DurabilityRaw==80&&
+            offeredB.OtherItems.Single().DurabilityRaw==80,
+            "trade offer did not freeze reviewed durability 80");
+
+        await coordinator.HandleAsync(new(
+            charA,actorA.ConnectionEpoch,actorA.MapEpoch,3,
+            TradeCommandAction.Lock,tradeId,0,0,0),router);
+        RequireState(gatewayA,gatewayB,TradeSessionWireState.Active);
+        await coordinator.HandleAsync(new(
+            charB,actorB.ConnectionEpoch,actorB.MapEpoch,2,
+            TradeCommandAction.Lock,tradeId,0,0,0),router);
+        RequireState(gatewayA,gatewayB,TradeSessionWireState.AwaitingFinalConfirm);
+        await coordinator.HandleAsync(new(
+            charA,actorA.ConnectionEpoch,actorA.MapEpoch,4,
+            TradeCommandAction.FinalConfirm,tradeId,0,0,0),router);
+        RequireState(gatewayA,gatewayB,TradeSessionWireState.AwaitingFinalConfirm);
+
+        // Attack the Server trust boundary directly: change the durable row
+        // after both peers reviewed raw durability 80 but before commit.
+        SeedDurability(db,seeded.ItemUid,70);
+        await coordinator.HandleAsync(new(
+            charB,actorB.ConnectionEpoch,actorB.MapEpoch,3,
+            TradeCommandAction.FinalConfirm,tradeId,0,0,0),router);
+        var confirmedA=DrainSnapshot(gatewayA);
+        var confirmedB=DrainSnapshot(gatewayB);
+        Checks.Require(confirmedA.MyConfirmed&&confirmedA.OtherConfirmed&&
+            confirmedB.MyConfirmed&&confirmedB.OtherConfirmed,
+            "durability mutation fixture never reached final commit barrier");
+        Checks.Require(
+            DrainTerminal(gatewayA).Status==TradeTerminalStatus.CommitFailed&&
+            DrainTerminal(gatewayB).Status==TradeTerminalStatus.CommitFailed&&
+            !coordinator.IsTrading(charA)&&!coordinator.IsTrading(charB),
+            "trade committed after durability changed from reviewed 80 to 70");
+        var owner=(await store.ListInventoryItemsAsync(charA))
+            .Single(x=>x.ItemUid==seeded.ItemUid);
+        Checks.Require(owner.DurabilityRaw==70&&
+            !(await store.ListInventoryItemsAsync(charB))
+                .Any(x=>x.ItemUid==seeded.ItemUid)&&
+            await store.GetCharacterMoneyAsync(charA)==100&&
+            await store.GetCharacterMoneyAsync(charB)==100,
+            "rejected durability-changed trade mutated owner or wallets");
+
+        router.TryDetach(gatewayA);
+        router.TryDetach(gatewayB);
+        await world.StopAsync();
+    }
+
     private static async Task<TradeSnapshotWire> WaitSnapshotAsync(
         GatewayConnection gateway)
     {
@@ -663,6 +774,21 @@ internal static class TradeCoordinatorChecks
         command.Parameters.AddWithValue("$uid",itemUid);
         Checks.Require(command.ExecuteNonQuery()==1,
             "trade coordinator enhancement-level seed failed");
+    }
+
+    private static void SeedDurability(string db,long itemUid,int durabilityRaw)
+    {
+        using var connection=new SqliteConnection(
+            new SqliteConnectionStringBuilder
+            {DataSource=db,Mode=SqliteOpenMode.ReadWrite,Pooling=false}.ToString());
+        connection.Open();
+        using var command=connection.CreateCommand();
+        command.CommandText=
+            "UPDATE item_instances SET durability_raw=$value WHERE item_uid=$uid;";
+        command.Parameters.AddWithValue("$value",durabilityRaw);
+        command.Parameters.AddWithValue("$uid",itemUid);
+        Checks.Require(command.ExecuteNonQuery()==1,
+            "trade coordinator durability seed failed");
     }
 
     private static void SeedWallet(string db,long characterId,long money)
