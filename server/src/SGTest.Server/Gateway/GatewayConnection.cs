@@ -109,7 +109,8 @@ public readonly record struct TrustedPlayerShopCommand(
     long SellerActorId,long ListingId,long ItemUid,long Price);
 public readonly record struct TrustedChatCommand(
     long ActorId,long ConnectionEpoch,long RequestMapEpoch,
-    uint ChatSequence,ChatChannel Channel,byte BubbleType,string Message);
+    uint ChatSequence,ChatChannel Channel,byte BubbleType,string Message,
+    long TargetActorId=0);
 public enum TrustedQuestCommandKind : byte { Open=1, Choose=2 }
 public readonly record struct TrustedQuestCommand(
     long ActorId,long ConnectionEpoch,long RequestMapEpoch,
@@ -792,6 +793,23 @@ public sealed class GatewayConnection
             return WireFrameDisposition.Accepted;
         }
 
+        if(header.Opcode==WireOpcode.WhisperCommand &&
+            postChat is not null &&
+            WireProtocol.TryDecodeWhisperCommand(frame,out var whisper))
+        {
+            if(!GameplayReady(bound)||whisper.MapEpoch!=bound.MapEpoch||
+               whisper.ChatSequence<=_lastChatSequence)
+                return WireFrameDisposition.ProtocolViolation;
+            var request=new TrustedChatCommand(
+                bound.ActorId,bound.ConnectionEpoch,whisper.MapEpoch,
+                whisper.ChatSequence,ChatChannel.Whisper,
+                whisper.BubbleType,whisper.Message,whisper.TargetActorId);
+            if(!postChat(request))
+                return WireFrameDisposition.Backpressured;
+            _lastChatSequence=whisper.ChatSequence;
+            return WireFrameDisposition.Accepted;
+        }
+
         if(header.Opcode==WireOpcode.GmPvpNameCommand &&
             postGmPvpName is not null &&
             WireProtocol.TryDecodeGmPvpNameCommand(frame,out var gmPvp))
@@ -1344,6 +1362,26 @@ public sealed class GatewayConnection
             if(_binding!=expected||delivery.ReceiverMapEpoch!=expected.MapEpoch)
                 return GatewaySendStatus.GenerationMismatch;
             return _reliable.TryEnqueue(WireProtocol.EncodeChatDelivery(delivery))
+                ?GatewaySendStatus.Enqueued:GatewaySendStatus.Backpressured;
+        }
+    }
+
+    public GatewaySendStatus QueueWhisperResult(
+        TrustedChatCommand request,WhisperResultWire result)
+    {
+        lock(_bindingGate)
+        {
+            if(_closed)return GatewaySendStatus.Closed;
+            var bound=_binding;
+            if(request.Channel!=ChatChannel.Whisper||
+               request.ActorId!=bound.ActorId||
+               request.ConnectionEpoch!=bound.ConnectionEpoch||
+               request.RequestMapEpoch!=bound.MapEpoch||
+               request.ChatSequence!=result.ChatSequence||
+               request.RequestMapEpoch!=result.MapEpoch||
+               request.TargetActorId!=result.TargetActorId)
+                return GatewaySendStatus.GenerationMismatch;
+            return _reliable.TryEnqueue(WireProtocol.EncodeWhisperResult(result))
                 ?GatewaySendStatus.Enqueued:GatewaySendStatus.Backpressured;
         }
     }
