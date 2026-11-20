@@ -90,7 +90,7 @@ func _initialize()->void:
 	quit(0)
 
 func _reducer_gate(applied_view:PackedByteArray)->bool:
-	var world:=_ready_world()
+	var world:RefCounted=_ready_world()
 	world.quest_sequence=7
 	world.quest_view={
 		"map_epoch":9,"quest_sequence":7,"status":0,"npc_spawn_id":88,
@@ -100,7 +100,7 @@ func _reducer_gate(applied_view:PackedByteArray)->bool:
 	if not world.mark_quest_sent(8,2,88,91001,2):
 		_fail("choice mark rejected")
 		return false
-	var pending:=world.snapshot()
+	var pending:Dictionary=world.snapshot()
 	if (
 		int(pending.pending_quest_sequence)!=8 or
 		int(pending.pending_quest_id)!=91001 or
@@ -111,7 +111,7 @@ func _reducer_gate(applied_view:PackedByteArray)->bool:
 	if not world.apply_frame(applied_view):
 		_fail("applied view reducer failed "+str(world.snapshot()))
 		return false
-	var applied:=world.snapshot()
+	var applied:Dictionary=world.snapshot()
 	if (
 		int(applied.pending_quest_sequence)!=0 or
 		int(applied.last_quest_response_sequence)!=8 or
@@ -129,7 +129,7 @@ func _reducer_gate(applied_view:PackedByteArray)->bool:
 	if not world.apply_frame(rejected_frame):
 		_fail("TooFar reducer failed")
 		return false
-	var rejected:=world.snapshot()
+	var rejected:Dictionary=world.snapshot()
 	if (
 		not (rejected.quest_view as Dictionary).is_empty() or
 		int(rejected.last_quest_status)!=5 or
@@ -146,7 +146,7 @@ func _reducer_gate(applied_view:PackedByteArray)->bool:
 		_fail("old quest replay was not counted stale")
 		return false
 
-	var forged:=_ready_world()
+	var forged:RefCounted=_ready_world()
 	forged.quest_sequence=1
 	var unsent:=_rejection_view(9,1,5,88)
 	if forged.apply_frame(unsent) or int(forged.state)!=World.STATE_FAILED:
@@ -163,7 +163,7 @@ func _reducer_gate(applied_view:PackedByteArray)->bool:
 	world.last_quest_result={"quest_id":91001}
 	world.stale_quest_results=3
 	world._clear_quest_map()
-	var cleared:=world.snapshot()
+	var cleared:Dictionary=world.snapshot()
 	if (
 		int(cleared.quest_sequence)!=0 or int(cleared.pending_quest_sequence)!=0 or
 		not (cleared.quest_view as Dictionary).is_empty() or
@@ -175,7 +175,7 @@ func _reducer_gate(applied_view:PackedByteArray)->bool:
 	return true
 
 
-func _ready_world():
+func _ready_world()->RefCounted:
 	var world:=World.new()
 	world.state=World.STATE_IN_WORLD
 	world.actor_id=1
