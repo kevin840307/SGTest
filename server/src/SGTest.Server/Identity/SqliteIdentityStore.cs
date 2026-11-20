@@ -735,6 +735,29 @@ ON player_shop_listings(seller_character_id,listing_id);",tx);
 ADD COLUMN enhancement_level INTEGER NOT NULL DEFAULT 0
 CHECK(enhancement_level BETWEEN 0 AND 255);",tx);
             }
+            Execute(connection,@"
+CREATE TABLE IF NOT EXISTS enhancement_actions (
+    character_id INTEGER NOT NULL REFERENCES characters(character_id) ON DELETE CASCADE,
+    connection_generation INTEGER NOT NULL CHECK(connection_generation > 0),
+    map_epoch INTEGER NOT NULL CHECK(map_epoch > 0),
+    action_sequence INTEGER NOT NULL CHECK(action_sequence BETWEEN 1 AND 4294967295),
+    npc_spawn_id INTEGER NOT NULL CHECK(npc_spawn_id > 0),
+    item_uid INTEGER NOT NULL CHECK(item_uid > 0),
+    item_definition_id INTEGER NOT NULL CHECK(item_definition_id BETWEEN 1 AND 100000000),
+    item_location INTEGER NOT NULL CHECK(item_location IN (1,2)),
+    level_before INTEGER NOT NULL CHECK(level_before BETWEEN 0 AND 255),
+    target_level INTEGER NOT NULL CHECK(target_level BETWEEN 1 AND 255),
+    level_after INTEGER NOT NULL CHECK(level_after BETWEEN 0 AND 255),
+    success_ppm INTEGER NOT NULL CHECK(success_ppm BETWEEN 0 AND 1000000),
+    roll_ppm INTEGER NOT NULL CHECK(roll_ppm BETWEEN 0 AND 999999),
+    succeeded INTEGER NOT NULL CHECK(succeeded IN (0,1)),
+    money_cost INTEGER NOT NULL CHECK(money_cost BETWEEN 0 AND 9000000000000000),
+    money_charged INTEGER NOT NULL CHECK(money_charged BETWEEN 0 AND 9000000000000000),
+    wallet_after INTEGER NOT NULL CHECK(wallet_after BETWEEN 0 AND 9000000000000000),
+    source_reference TEXT NOT NULL,
+    created_unix_ms INTEGER NOT NULL,
+    PRIMARY KEY(character_id,connection_generation,map_epoch,action_sequence)
+);",tx);
             Execute(connection, @"
 CREATE TRIGGER IF NOT EXISTS trg_combat_mp_insert
 BEFORE INSERT ON character_combat_profiles
