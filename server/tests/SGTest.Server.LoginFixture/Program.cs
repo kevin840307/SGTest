@@ -44,6 +44,8 @@ internal static class Program
             return await BankLoginFixture.RunAsync().ConfigureAwait(false);
         if (args is ["--repair"])
             return await RepairLoginFixture.RunAsync().ConfigureAwait(false);
+        if (args is ["--quest"])
+            return await QuestLoginFixture.RunAsync().ConfigureAwait(false);
         if (args is ["--trade"])
             return await TradeLoginFixture.RunAsync().ConfigureAwait(false);
         if (args is ["--player-shop"])
