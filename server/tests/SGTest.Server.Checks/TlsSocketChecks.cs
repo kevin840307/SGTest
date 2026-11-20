@@ -25,6 +25,8 @@ internal static class TlsSocketChecks
             () => PlaintextRejected().GetAwaiter().GetResult());
         Checks.Run("TLS socket retries retained Move under bounded World ingress backpressure",
             () => BackpressureRetry().GetAwaiter().GetResult());
+        Checks.Run("TLS socket forwards authenticated player-shop callback",
+            () => PlayerShopCallbackForwarding().GetAwaiter().GetResult());
     }
 
     private static async Task AuthorizationGateAndReceipt()
@@ -100,6 +102,66 @@ internal static class TlsSocketChecks
                 result.Protocol is SslProtocols.Tls12 or SslProtocols.Tls13 &&
                 result.CommandsAccepted == 1 && result.ReliableFramesSent == 1,
             "TLS session result mismatch");
+    }
+
+    private static async Task PlayerShopCallbackForwarding()
+    {
+        using var certificate = CreateCertificate();
+        using var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start(1);
+        int port = ((IPEndPoint)listener.LocalEndpoint).Port;
+
+        var accepting = listener.AcceptTcpClientAsync();
+        using var client = new TcpClient(AddressFamily.InterNetwork);
+        await client.ConnectAsync(IPAddress.Loopback, port);
+        var serverClient = await accepting;
+        var seen = new TaskCompletionSource<TrustedPlayerShopCommand>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+
+        ValueTask<GatewayConnection?> Authorize(SslStream _, CancellationToken __)
+        {
+            var gateway = new GatewayConnection(Actor());
+            Require(gateway.QueueAoi(new(
+                    AoiEventKind.WorldReady, 42, 9, Entity: Actor())) ==
+                    GatewaySendStatus.Enqueued,
+                "player-shop TLS fixture WorldReady enqueue");
+            return ValueTask.FromResult<GatewayConnection?>(gateway);
+        }
+
+        var serverTask = TlsWireConnection.RunServerAsync(
+            serverClient, certificate, Authorize, _ => true,
+            handlePlayerShop: request =>
+            {
+                seen.TrySetResult(request);
+                return Task.CompletedTask;
+            });
+
+        var clientTls = CreateClientTls(client);
+        await AuthenticateClient(clientTls);
+
+        byte[] ready = new byte[WireProtocol.WorldReadyFrameBytes];
+        await clientTls.ReadExactlyAsync(ready);
+        Require(WireProtocol.TryDecodeWorldReady(ready, out var worldReady) &&
+                worldReady.MapEpoch == 9 && worldReady.ServerTick == 42,
+            "player-shop TLS fixture WorldReady decode");
+        await clientTls.WriteAsync(WireProtocol.EncodeWorldReadyAck(new(9, 42)));
+        await clientTls.WriteAsync(WireProtocol.EncodePlayerShopCommand(new(
+            9, 1, PlayerShopCommandAction.Open, 0, 0, 7001, 300)));
+        await clientTls.FlushAsync();
+
+        var command = await seen.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        Require(command.ActorId == 77 && command.ConnectionEpoch == 4 &&
+                command.RequestMapEpoch == 9 && command.ShopSequence == 1 &&
+                command.Action == PlayerShopCommandAction.Open &&
+                command.ItemUid == 7001 && command.Price == 300,
+            "player-shop callback was not forwarded through trusted TLS ingress");
+
+        await clientTls.DisposeAsync();
+        client.Close();
+        var result = await serverTask.WaitAsync(TimeSpan.FromSeconds(2));
+        Require(result.Reason == TlsWireEndReason.CleanEof &&
+                result.Fault is null,
+            "player-shop callback forwarding closed TLS session");
     }
 
     private static async Task AuthorizationRejected()
