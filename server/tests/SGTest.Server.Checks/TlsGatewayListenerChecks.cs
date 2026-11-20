@@ -476,10 +476,20 @@ internal static class TlsGatewayListenerChecks
             return (process.ExitCode, await output, await errors);
         }
         var valid = await Run("serve", "--content", content, "--identity", Path.Combine(content, "identity.db"),
-            "--certificate", pfx, "--port", "0", "--seconds", "1");
+            "--certificate", pfx, "--port", "0",
+            "--auth-failures-per-address", "3",
+            "--auth-failures-per-account", "2",
+            "--auth-failure-window-seconds", "17",
+            "--auth-lockout-seconds", "19",
+            "--seconds", "1");
         Checks.Require(valid.Exit == 0 && valid.Out.Contains("TLS_HOST_READY") &&
-            valid.Out.Contains("TLS_HOST_STOPPED") && valid.Out.Contains("\"ActiveConnections\":0"),
-            "serve startup/shutdown failed: " + valid.Error);
+            valid.Out.Contains("TLS_HOST_STOPPED") &&
+            valid.Out.Contains("\"auth_failures_per_address\":3") &&
+            valid.Out.Contains("\"auth_failures_per_account\":2") &&
+            valid.Out.Contains("\"auth_failure_window_seconds\":17") &&
+            valid.Out.Contains("\"auth_lockout_seconds\":19") &&
+            valid.Out.Contains("\"ActiveConnections\":0"),
+            "serve startup/configurable auth policy failed: " + valid.Error);
         // Runtime startup must explicitly opt into manually audited recovery
         // data. A client-derived name or unverified .tres never enables heals.
         string rules=Path.Combine(content,"recovery-verified.json");
@@ -512,6 +522,12 @@ internal static class TlsGatewayListenerChecks
             "--certificate", pfx, "--bind", "not-an-ip");
         Checks.Require(invalid.Exit == 2 && !invalid.Out.Contains("TLS_HOST_READY"),
             "invalid host configuration opened a listener");
+        var invalidAuthPolicy = await Run("serve", "--content", content,
+            "--identity", Path.Combine(content, "identity.db"),
+            "--certificate", pfx, "--auth-lockout-seconds", "0");
+        Checks.Require(invalidAuthPolicy.Exit == 2 &&
+            !invalidAuthPolicy.Out.Contains("TLS_HOST_READY"),
+            "invalid authentication lockout policy opened a listener");
     }
 
 

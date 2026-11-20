@@ -25,14 +25,21 @@ internal static class TlsHost
             int port = Number(options, "--port", 7777, 0, 65535);
             int maximum = Number(options, "--max-connections", 128, 1, 4096);
             int perAddress = Number(options, "--max-per-address", Math.Min(8, maximum), 1, maximum);
+            var authDefaults=new AuthenticationRateLimitOptions();
             int authAddressFailures=Number(
-                options,"--auth-failures-per-address",12,1,10000);
+                options,"--auth-failures-per-address",
+                authDefaults.MaxFailuresPerAddress,1,10000);
             int authAccountFailures=Number(
-                options,"--auth-failures-per-account",6,1,10000);
+                options,"--auth-failures-per-account",
+                authDefaults.MaxFailuresPerAccount,1,10000);
             int authWindowSeconds=Number(
-                options,"--auth-failure-window-seconds",60,1,86400);
+                options,"--auth-failure-window-seconds",
+                checked((int)authDefaults.EffectiveFailureWindow.TotalSeconds),
+                1,86400);
             int authLockoutSeconds=Number(
-                options,"--auth-lockout-seconds",30,1,86400);
+                options,"--auth-lockout-seconds",
+                checked((int)authDefaults.EffectiveLockout.TotalSeconds),
+                1,86400);
             int checkpointMs = Number(options, "--position-checkpoint-ms", 5000, 500, 60000);
             if (options.ContainsKey("--seconds"))
                 stop.CancelAfter(TimeSpan.FromSeconds(Number(options, "--seconds", 1, 1, 86400)));
@@ -380,6 +387,8 @@ internal static class TlsHost
             Console.Error.WriteLine("TLS_HOST_CONFIGURATION: " + error.Message);
             Console.Error.WriteLine("Usage: serve --content <PRIVATE_ROOT> --identity <DB> --certificate <PFX> " +
                 "[--bind 127.0.0.1] [--port 7777] [--max-connections 128] [--max-per-address 8] " +
+                "[--auth-failures-per-address 12] [--auth-failures-per-account 6] " +
+                "[--auth-failure-window-seconds 60] [--auth-lockout-seconds 30] " +
                 "[--position-checkpoint-ms 5000] [--loot-rules <VERIFIED_JSON>] " +
                 "[--recovery-rules <VERIFIED_JSON>] [--skill-rules <VERIFIED_JSON>] " +
                 "[--shop-rules <VERIFIED_JSON>] [--storage-rules <VERIFIED_JSON>] " +
@@ -407,7 +416,10 @@ internal static class TlsHost
     private static Dictionary<string, string> Parse(string[] args)
     {
         string[] known = ["--content", "--identity", "--certificate", "--bind", "--port",
-                          "--max-connections", "--max-per-address", "--position-checkpoint-ms",
+                          "--max-connections", "--max-per-address",
+                          "--auth-failures-per-address", "--auth-failures-per-account",
+                          "--auth-failure-window-seconds", "--auth-lockout-seconds",
+                          "--position-checkpoint-ms",
                           "--loot-rules", "--recovery-rules", "--skill-rules",
                           "--shop-rules", "--storage-rules", "--equipment-rules", "--bank-rules",
                           "--repair-rules", "--repair-item-rules", "--quest-rules",

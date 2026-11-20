@@ -16,7 +16,8 @@ public sealed record AuthenticationRateLimitOptions(
 
 public readonly record struct AuthenticationRateLimitStatistics(
     int TrackedAddresses,int TrackedAccounts,long AllowedChecks,long BlockedChecks,
-    long RecordedFailures,long AccountSuccessResets,long Evictions);
+    long RecordedFailures,long AccountSuccessResets,long Evictions,
+    long CapacitySaturationBlocks);
 
 /// <summary>
 /// In-memory brute-force limiter for the pre-gameplay TLS authorization boundary.
@@ -40,7 +41,10 @@ public sealed class AuthenticationRateLimiter
     private readonly Dictionary<IPAddress,Bucket> _addresses=[];
     private readonly Dictionary<string,Bucket> _accounts=
         new(StringComparer.Ordinal);
-    private long _allowed,_blocked,_failures,_successResets,_evictions;
+    private DateTimeOffset _addressCapacityBlockedUntil=DateTimeOffset.MinValue;
+    private DateTimeOffset _accountCapacityBlockedUntil=DateTimeOffset.MinValue;
+    private long _allowed,_blocked,_failures,_successResets,_evictions,
+        _capacitySaturationBlocks;
 
     public AuthenticationRateLimiter(
         AuthenticationRateLimitOptions? options=null,
@@ -65,7 +69,7 @@ public sealed class AuthenticationRateLimiter
         {
             lock(_gate)return new(
                 _addresses.Count,_accounts.Count,_allowed,_blocked,
-                _failures,_successResets,_evictions);
+                _failures,_successResets,_evictions,_capacitySaturationBlocks);
         }
     }
 
@@ -78,7 +82,9 @@ public sealed class AuthenticationRateLimiter
         lock(_gate)
         {
             PruneExpiredLocked(now);
-            bool blocked=IsBlockedLocked(_addresses,address,now)||
+            bool blocked=_addressCapacityBlockedUntil>now||
+                _accountCapacityBlockedUntil>now||
+                IsBlockedLocked(_addresses,address,now)||
                 IsBlockedLocked(_accounts,account,now);
             if(blocked)_blocked++; else _allowed++;
             return !blocked;
@@ -94,12 +100,24 @@ public sealed class AuthenticationRateLimiter
         lock(_gate)
         {
             PruneExpiredLocked(now);
-            RecordFailureLocked(
+            if(!RecordFailureLocked(
                 _addresses,address,now,_options.MaxFailuresPerAddress,
-                _options.MaxTrackedAddresses);
-            RecordFailureLocked(
+                _options.MaxTrackedAddresses))
+            {
+                _addressCapacityBlockedUntil=Max(
+                    _addressCapacityBlockedUntil,
+                    now+_options.EffectiveLockout);
+                _capacitySaturationBlocks++;
+            }
+            if(!RecordFailureLocked(
                 _accounts,account,now,_options.MaxFailuresPerAccount,
-                _options.MaxTrackedAccounts);
+                _options.MaxTrackedAccounts))
+            {
+                _accountCapacityBlockedUntil=Max(
+                    _accountCapacityBlockedUntil,
+                    now+_options.EffectiveLockout);
+                _capacitySaturationBlocks++;
+            }
             _failures++;
         }
     }
@@ -139,13 +157,14 @@ public sealed class AuthenticationRateLimiter
         return bucket.BlockedUntil>now;
     }
 
-    private void RecordFailureLocked<TKey>(
+    private bool RecordFailureLocked<TKey>(
         Dictionary<TKey,Bucket> buckets,TKey key,DateTimeOffset now,
         int threshold,int capacity) where TKey:notnull
     {
         if(!buckets.TryGetValue(key,out var bucket))
         {
-            EnsureCapacityLocked(buckets,capacity,now);
+            if(!EnsureCapacityLocked(buckets,capacity,now))
+                return false;
             bucket=new Bucket
             {
                 WindowStart=now,LastSeen=now,BlockedUntil=DateTimeOffset.MinValue
@@ -158,6 +177,7 @@ public sealed class AuthenticationRateLimiter
         if(bucket.Failures>=threshold)
             bucket.BlockedUntil=Max(bucket.BlockedUntil,
                 now+_options.EffectiveLockout);
+        return true;
     }
 
     private void ResetWindowIfExpired(Bucket bucket,DateTimeOffset now)
@@ -182,21 +202,28 @@ public sealed class AuthenticationRateLimiter
             _accounts.Remove(key);
     }
 
-    private void EnsureCapacityLocked<TKey>(
+    private bool EnsureCapacityLocked<TKey>(
         Dictionary<TKey,Bucket> buckets,int capacity,DateTimeOffset now)
         where TKey:notnull
     {
-        if(buckets.Count<capacity)return;
+        if(buckets.Count<capacity)return true;
         var candidate=buckets
             .Where(x=>x.Value.BlockedUntil<=now)
             .OrderBy(x=>x.Value.LastSeen)
             .Select(x=>x.Key)
             .Take(1)
             .ToArray();
-        if(candidate.Length==0)
-            candidate=buckets.OrderBy(x=>x.Value.LastSeen)
-                .Select(x=>x.Key).Take(1).ToArray();
-        if(candidate.Length!=0&&buckets.Remove(candidate[0]))_evictions++;
+        // Never evict an active lockout merely to admit a new hostile key.
+        // If every bounded slot is protected, the caller activates a short
+        // scope-wide fail-closed gate instead of turning capacity pressure
+        // into a lockout-bypass primitive.
+        if(candidate.Length==0)return false;
+        if(buckets.Remove(candidate[0]))
+        {
+            _evictions++;
+            return true;
+        }
+        return false;
     }
 
     private static IPAddress Canonical(IPAddress address)=>
