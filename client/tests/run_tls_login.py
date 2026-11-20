@@ -1238,7 +1238,8 @@ def run_reconnect(args, repo: Path, fixture: Path, env: dict[str, str]) -> int:
                     print(line)
         print("GODOT_CSHARP_TLS_RECONNECT_E2E_PASS forced_drop=true auto_reauth=true "
               "same_character=true new_generation=true persisted_position=true "
-              "world_ready_reack=true old_intents_not_replayed=true bounded_attempts=3")
+              "world_ready_reack=true old_intents_not_replayed=true "
+              "chat_generation_reset=true bounded_attempts=3")
         return 0
     except Exception as error:
         print("TLS_RECONNECT_RUNNER_FAIL", error, file=sys.stderr)
