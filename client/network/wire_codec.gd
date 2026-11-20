@@ -92,6 +92,10 @@ const OPCODE_PLAYER_SHOP_RESULT := 90
 const OPCODE_PLAYER_SHOP_SOLD := 91
 const OPCODE_CHAT_COMMAND := 92
 const OPCODE_CHAT_DELIVERY := 93
+const OPCODE_ENHANCEMENT_OPEN := 94
+const OPCODE_ENHANCEMENT_SNAPSHOT := 95
+const OPCODE_ENHANCEMENT_ITEM := 96
+const OPCODE_ENHANCEMENT_RESULT := 97
 const MOVE_TARGET_FRAME_BYTES := 28
 const MOVE_RECEIPT_FRAME_BYTES := 30
 const NPC_INTERACT_FRAME_BYTES := 24
@@ -165,6 +169,13 @@ const REPAIR_SNAPSHOT_MAX_PER_FRAME := 128
 const REPAIR_SNAPSHOT_MAX_ITEMS := 4095
 const REPAIR_ITEM_FRAME_BYTES := 32
 const REPAIR_RESULT_FRAME_BYTES := 62
+const ENHANCEMENT_OPEN_FRAME_BYTES := 24
+const ENHANCEMENT_SNAPSHOT_HEADER_BYTES := 40
+const ENHANCEMENT_PREVIEW_ITEM_BYTES := 28
+const ENHANCEMENT_SNAPSHOT_MAX_PER_FRAME := 128
+const ENHANCEMENT_SNAPSHOT_MAX_ITEMS := 4095
+const ENHANCEMENT_ITEM_FRAME_BYTES := 32
+const ENHANCEMENT_RESULT_FRAME_BYTES := 70
 const TRADE_COMMAND_FRAME_BYTES := 53
 const TRADE_SNAPSHOT_HEADER_BYTES := 59
 const TRADE_OFFER_ITEM_BYTES := 24
@@ -1434,6 +1445,127 @@ static func decode_repair_result(frame: PackedByteArray) -> Dictionary:
 		"cost":cost,"wallet_money":wallet_money}
 
 
+static func encode_enhancement_open(epoch: int, sequence: int, npc_spawn_id: int) -> PackedByteArray:
+	if epoch <= 0 or sequence < 1 or sequence > 0xffffffff or npc_spawn_id <= 0:
+		return PackedByteArray()
+	var writer := StreamPeerBuffer.new()
+	writer.big_endian = false
+	writer.put_u32(ENHANCEMENT_OPEN_FRAME_BYTES)
+	writer.put_u16(VERSION)
+	writer.put_u16(OPCODE_ENHANCEMENT_OPEN)
+	writer.put_64(epoch)
+	writer.put_u32(sequence)
+	writer.put_32(npc_spawn_id)
+	return writer.data_array
+
+
+static func decode_enhancement_snapshot(frame: PackedByteArray) -> Dictionary:
+	if not _valid_variable_header(frame,OPCODE_ENHANCEMENT_SNAPSHOT,
+		ENHANCEMENT_SNAPSHOT_HEADER_BYTES,
+		ENHANCEMENT_SNAPSHOT_HEADER_BYTES+
+			ENHANCEMENT_SNAPSHOT_MAX_PER_FRAME*ENHANCEMENT_PREVIEW_ITEM_BYTES):
+		return {}
+	var reader := _reader(frame,8)
+	var epoch := reader.get_64()
+	var sequence := reader.get_u32()
+	var status := reader.get_u8()
+	var npc_spawn_id := reader.get_32()
+	var wallet_money := reader.get_64()
+	var start_index := reader.get_32()
+	var complete_raw := reader.get_u8()
+	var count := reader.get_u16()
+	if epoch <= 0 or sequence == 0 or status > 4 or npc_spawn_id <= 0 or wallet_money < 0 or wallet_money > MAX_MONEY or start_index < 0 or start_index > ENHANCEMENT_SNAPSHOT_MAX_ITEMS or complete_raw > 1 or count > ENHANCEMENT_SNAPSHOT_MAX_PER_FRAME or start_index+count > ENHANCEMENT_SNAPSHOT_MAX_ITEMS or frame.size() != ENHANCEMENT_SNAPSHOT_HEADER_BYTES+count*ENHANCEMENT_PREVIEW_ITEM_BYTES:
+		return {}
+	var items: Array[Dictionary] = []
+	var uids := {}
+	for _index in count:
+		var uid := reader.get_64()
+		var item_id := reader.get_32()
+		var location := reader.get_u8()
+		var current_level := reader.get_u8()
+		var target_level := reader.get_u8()
+		var success_ppm := reader.get_32()
+		var money_cost := reader.get_64()
+		var consume_raw := reader.get_u8()
+		if uid <= 0 or item_id < 1 or item_id > 100000000 or location not in [1,2] or current_level < 0 or current_level > 254 or target_level < 1 or target_level > 255 or target_level <= current_level or success_ppm < 0 or success_ppm > 1000000 or money_cost < 0 or money_cost > MAX_MONEY or consume_raw > 1 or uids.has(uid):
+			return {}
+		uids[uid] = true
+		items.append({"item_uid":uid,"item_definition_id":item_id,
+			"location":location,"current_level":current_level,
+			"target_level":target_level,"success_ppm":success_ppm,
+			"money_cost":money_cost,
+			"consume_money_on_failure":consume_raw==1})
+	if status != 0:
+		if wallet_money != 0 or start_index != 0 or complete_raw != 1 or not items.is_empty():
+			return {}
+	return {"map_epoch":epoch,"enhancement_sequence":sequence,"status":status,
+		"npc_spawn_id":npc_spawn_id,"wallet_money":wallet_money,
+		"start_index":start_index,"complete":complete_raw==1,"items":items}
+
+
+static func encode_enhancement_item(epoch: int, sequence: int, npc_spawn_id: int, item_uid: int) -> PackedByteArray:
+	if epoch <= 0 or sequence < 1 or sequence > 0xffffffff or npc_spawn_id <= 0 or item_uid <= 0:
+		return PackedByteArray()
+	var writer := StreamPeerBuffer.new()
+	writer.big_endian = false
+	writer.put_u32(ENHANCEMENT_ITEM_FRAME_BYTES)
+	writer.put_u16(VERSION)
+	writer.put_u16(OPCODE_ENHANCEMENT_ITEM)
+	writer.put_64(epoch)
+	writer.put_u32(sequence)
+	writer.put_32(npc_spawn_id)
+	writer.put_64(item_uid)
+	return writer.data_array
+
+
+static func decode_enhancement_result(frame: PackedByteArray) -> Dictionary:
+	if not _valid_header(frame,OPCODE_ENHANCEMENT_RESULT,ENHANCEMENT_RESULT_FRAME_BYTES):
+		return {}
+	var reader := _reader(frame,8)
+	var epoch := reader.get_64()
+	var sequence := reader.get_u32()
+	var status := reader.get_u8()
+	var npc_spawn_id := reader.get_32()
+	var uid := reader.get_64()
+	var item_id := reader.get_32()
+	var location := reader.get_u8()
+	var previous_level := reader.get_u8()
+	var target_level := reader.get_u8()
+	var current_level := reader.get_u8()
+	var succeeded_raw := reader.get_u8()
+	var money_cost := reader.get_64()
+	var money_charged := reader.get_64()
+	var wallet_money := reader.get_64()
+	var roll_ppm := reader.get_32()
+	if epoch <= 0 or sequence == 0 or status > 10 or npc_spawn_id <= 0 or uid <= 0 or item_id < 0 or item_id > 100000000 or previous_level < 0 or previous_level > 255 or target_level < 0 or target_level > 255 or current_level < 0 or current_level > 255 or succeeded_raw > 1 or money_cost < 0 or money_cost > MAX_MONEY or money_charged < 0 or money_charged > money_cost or wallet_money < 0 or wallet_money > MAX_MONEY or roll_ppm < 0 or roll_ppm >= 1000000:
+		return {}
+	var succeeded := succeeded_raw == 1
+	var known := item_id > 0 and location in [1,2]
+	if status in [0,1]:
+		if not known or target_level <= previous_level:
+			return {}
+		if succeeded:
+			if current_level != target_level or money_charged != money_cost:
+				return {}
+		elif current_level != previous_level:
+			return {}
+	elif status == 7:
+		if not known or succeeded or target_level <= previous_level or current_level != previous_level or money_cost <= 0 or money_charged != 0 or roll_ppm != 0:
+			return {}
+	elif status in [5,6]:
+		if not known or succeeded or target_level != 0 or current_level != previous_level or money_cost != 0 or money_charged != 0 or roll_ppm != 0:
+			return {}
+	elif item_id != 0 or location != 0 or previous_level != 0 or target_level != 0 or current_level != 0 or succeeded or money_cost != 0 or money_charged != 0 or roll_ppm != 0:
+		return {}
+	return {"map_epoch":epoch,"enhancement_sequence":sequence,"status":status,
+		"npc_spawn_id":npc_spawn_id,"item_uid":uid,
+		"item_definition_id":item_id,"location":location,
+		"previous_level":previous_level,"target_level":target_level,
+		"current_level":current_level,"succeeded":succeeded,
+		"money_cost":money_cost,"money_charged":money_charged,
+		"wallet_money":wallet_money,"roll_ppm":roll_ppm}
+
+
 static func encode_equipment_equip(epoch: int, sequence: int, item_uid: int) -> PackedByteArray:
 	return _encode_equipment_move(OPCODE_EQUIPMENT_EQUIP,epoch,sequence,item_uid)
 
@@ -2081,7 +2213,7 @@ static func frame_opcode(frame: PackedByteArray) -> int:
 	if reader.get_u16() != VERSION:
 		return -1
 	var opcode := reader.get_u16()
-	if opcode not in [OPCODE_MOVE_TARGET, OPCODE_MOVE_RECEIPT, OPCODE_NPC_INTERACT, OPCODE_NPC_INTERACT_RESULT, OPCODE_NORMAL_ATTACK, OPCODE_NORMAL_ATTACK_RESULT, OPCODE_PLAYER_COMBAT_STATE, OPCODE_PLAYER_DAMAGE, OPCODE_AUTH_REQUEST, OPCODE_AUTH_RESULT, OPCODE_CHARACTER_LIST, OPCODE_CHARACTER_CHOOSE, OPCODE_CHARACTER_CHOOSE_RESULT, OPCODE_CHARACTER_CREATE, OPCODE_CHARACTER_CREATE_RESULT, OPCODE_WORLD_READY, OPCODE_ENTITY_SPAWN, OPCODE_ENTITY_DESPAWN, OPCODE_ENTITY_DELTA, OPCODE_SELF_STATE, OPCODE_WORLD_READY_ACK, OPCODE_WORLD_RESYNC_REQUEST, OPCODE_MONSTER_SPAWN, OPCODE_MONSTER_DELTA, OPCODE_MONSTER_DESPAWN, OPCODE_PLAYER_RESPAWN, OPCODE_PLAYER_RESPAWN_RESULT, OPCODE_GROUND_DROP_SPAWN, OPCODE_GROUND_DROP_DESPAWN, OPCODE_GROUND_PICKUP, OPCODE_GROUND_PICKUP_RESULT, OPCODE_INVENTORY_SNAPSHOT, OPCODE_RECOVERY_USE, OPCODE_RECOVERY_USE_RESULT, OPCODE_INVENTORY_DISCARD, OPCODE_INVENTORY_DISCARD_RESULT, OPCODE_PLAYER_ATTACK_VISUAL, OPCODE_PLAYER_DAMAGE_VISUAL, OPCODE_PLAYER_RESPAWN_VISUAL, OPCODE_SKILL_USE, OPCODE_SKILL_USE_RESULT, OPCODE_PLAYER_SKILL_VISUAL, OPCODE_SHOP_OPEN, OPCODE_SHOP_SNAPSHOT, OPCODE_SHOP_BUY, OPCODE_SHOP_SELL, OPCODE_SHOP_TRANSACTION_RESULT, OPCODE_STORAGE_OPEN, OPCODE_STORAGE_SNAPSHOT, OPCODE_STORAGE_DEPOSIT, OPCODE_STORAGE_WITHDRAW, OPCODE_STORAGE_TRANSFER_RESULT, OPCODE_EQUIPMENT_SNAPSHOT, OPCODE_EQUIPMENT_EQUIP, OPCODE_EQUIPMENT_UNEQUIP, OPCODE_EQUIPMENT_TRANSFER_RESULT, OPCODE_BANK_OPEN, OPCODE_BANK_SNAPSHOT, OPCODE_BANK_DEPOSIT, OPCODE_BANK_WITHDRAW, OPCODE_BANK_TRANSACTION_RESULT, OPCODE_REPAIR_OPEN, OPCODE_REPAIR_SNAPSHOT, OPCODE_REPAIR_ITEM, OPCODE_REPAIR_RESULT, OPCODE_TRADE_COMMAND, OPCODE_TRADE_SNAPSHOT, OPCODE_TRADE_TERMINAL, OPCODE_PVP_MODE_COMMAND, OPCODE_PVP_MODE_RESULT, OPCODE_PVP_ATTACK, OPCODE_PVP_ATTACK_RESULT, OPCODE_PVP_DAMAGE, OPCODE_PLAYER_IDENTITY, OPCODE_PVP_COMBAT_VISUAL, OPCODE_PVP_SKILL, OPCODE_PVP_SKILL_RESULT, OPCODE_PVP_SKILL_VISUAL, OPCODE_GM_CAPABILITY, OPCODE_GM_PVP_NAME_COMMAND, OPCODE_GM_PVP_NAME_RESULT, OPCODE_PLAYER_SHOP_COMMAND, OPCODE_PLAYER_SHOP_RESULT, OPCODE_PLAYER_SHOP_SOLD, OPCODE_CHAT_COMMAND, OPCODE_CHAT_DELIVERY, OPCODE_QUEST_OPEN, OPCODE_QUEST_VIEW, OPCODE_QUEST_CHOOSE]:
+	if opcode not in [OPCODE_MOVE_TARGET, OPCODE_MOVE_RECEIPT, OPCODE_NPC_INTERACT, OPCODE_NPC_INTERACT_RESULT, OPCODE_NORMAL_ATTACK, OPCODE_NORMAL_ATTACK_RESULT, OPCODE_PLAYER_COMBAT_STATE, OPCODE_PLAYER_DAMAGE, OPCODE_AUTH_REQUEST, OPCODE_AUTH_RESULT, OPCODE_CHARACTER_LIST, OPCODE_CHARACTER_CHOOSE, OPCODE_CHARACTER_CHOOSE_RESULT, OPCODE_CHARACTER_CREATE, OPCODE_CHARACTER_CREATE_RESULT, OPCODE_WORLD_READY, OPCODE_ENTITY_SPAWN, OPCODE_ENTITY_DESPAWN, OPCODE_ENTITY_DELTA, OPCODE_SELF_STATE, OPCODE_WORLD_READY_ACK, OPCODE_WORLD_RESYNC_REQUEST, OPCODE_MONSTER_SPAWN, OPCODE_MONSTER_DELTA, OPCODE_MONSTER_DESPAWN, OPCODE_PLAYER_RESPAWN, OPCODE_PLAYER_RESPAWN_RESULT, OPCODE_GROUND_DROP_SPAWN, OPCODE_GROUND_DROP_DESPAWN, OPCODE_GROUND_PICKUP, OPCODE_GROUND_PICKUP_RESULT, OPCODE_INVENTORY_SNAPSHOT, OPCODE_RECOVERY_USE, OPCODE_RECOVERY_USE_RESULT, OPCODE_INVENTORY_DISCARD, OPCODE_INVENTORY_DISCARD_RESULT, OPCODE_PLAYER_ATTACK_VISUAL, OPCODE_PLAYER_DAMAGE_VISUAL, OPCODE_PLAYER_RESPAWN_VISUAL, OPCODE_SKILL_USE, OPCODE_SKILL_USE_RESULT, OPCODE_PLAYER_SKILL_VISUAL, OPCODE_SHOP_OPEN, OPCODE_SHOP_SNAPSHOT, OPCODE_SHOP_BUY, OPCODE_SHOP_SELL, OPCODE_SHOP_TRANSACTION_RESULT, OPCODE_STORAGE_OPEN, OPCODE_STORAGE_SNAPSHOT, OPCODE_STORAGE_DEPOSIT, OPCODE_STORAGE_WITHDRAW, OPCODE_STORAGE_TRANSFER_RESULT, OPCODE_EQUIPMENT_SNAPSHOT, OPCODE_EQUIPMENT_EQUIP, OPCODE_EQUIPMENT_UNEQUIP, OPCODE_EQUIPMENT_TRANSFER_RESULT, OPCODE_BANK_OPEN, OPCODE_BANK_SNAPSHOT, OPCODE_BANK_DEPOSIT, OPCODE_BANK_WITHDRAW, OPCODE_BANK_TRANSACTION_RESULT, OPCODE_REPAIR_OPEN, OPCODE_REPAIR_SNAPSHOT, OPCODE_REPAIR_ITEM, OPCODE_REPAIR_RESULT, OPCODE_TRADE_COMMAND, OPCODE_TRADE_SNAPSHOT, OPCODE_TRADE_TERMINAL, OPCODE_PVP_MODE_COMMAND, OPCODE_PVP_MODE_RESULT, OPCODE_PVP_ATTACK, OPCODE_PVP_ATTACK_RESULT, OPCODE_PVP_DAMAGE, OPCODE_PLAYER_IDENTITY, OPCODE_PVP_COMBAT_VISUAL, OPCODE_PVP_SKILL, OPCODE_PVP_SKILL_RESULT, OPCODE_PVP_SKILL_VISUAL, OPCODE_GM_CAPABILITY, OPCODE_GM_PVP_NAME_COMMAND, OPCODE_GM_PVP_NAME_RESULT, OPCODE_PLAYER_SHOP_COMMAND, OPCODE_PLAYER_SHOP_RESULT, OPCODE_PLAYER_SHOP_SOLD, OPCODE_CHAT_COMMAND, OPCODE_CHAT_DELIVERY, OPCODE_QUEST_OPEN, OPCODE_QUEST_VIEW, OPCODE_QUEST_CHOOSE, OPCODE_ENHANCEMENT_OPEN, OPCODE_ENHANCEMENT_SNAPSHOT, OPCODE_ENHANCEMENT_ITEM, OPCODE_ENHANCEMENT_RESULT]:
 		return -1
 	return opcode
 
