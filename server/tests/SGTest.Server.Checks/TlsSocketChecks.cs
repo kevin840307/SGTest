@@ -142,7 +142,7 @@ internal static class TlsSocketChecks
         byte[] ready = new byte[WireProtocol.WorldReadyFrameBytes];
         await clientTls.ReadExactlyAsync(ready);
         Require(WireProtocol.TryDecodeWorldReady(ready, out var worldReady) &&
-                worldReady.MapEpoch == 9 && worldReady.ServerTick == 42,
+                worldReady.ReceiverMapEpoch == 9 && worldReady.ServerTick == 42,
             "player-shop TLS fixture WorldReady decode");
         await clientTls.WriteAsync(WireProtocol.EncodeWorldReadyAck(new(9, 42)));
         await clientTls.WriteAsync(WireProtocol.EncodePlayerShopCommand(new(
