@@ -98,6 +98,10 @@ const OPCODE_ENHANCEMENT_ITEM := 96
 const OPCODE_ENHANCEMENT_RESULT := 97
 const OPCODE_WHISPER_COMMAND := 98
 const OPCODE_WHISPER_RESULT := 99
+const OPCODE_PARTY_COMMAND := 100
+const OPCODE_PARTY_RESULT := 101
+const OPCODE_PARTY_INVITE := 102
+const OPCODE_PARTY_SNAPSHOT := 103
 const MOVE_TARGET_FRAME_BYTES := 28
 const MOVE_RECEIPT_FRAME_BYTES := 30
 const NPC_INTERACT_FRAME_BYTES := 24
@@ -219,6 +223,14 @@ const WHISPER_COMMAND_HEADER_BYTES := 31
 const WHISPER_COMMAND_MAX_FRAME_BYTES := WHISPER_COMMAND_HEADER_BYTES + CHAT_MAX_MESSAGE_BYTES
 const WHISPER_RESULT_HEADER_BYTES := 39
 const WHISPER_RESULT_MAX_FRAME_BYTES := WHISPER_RESULT_HEADER_BYTES + CHAT_MAX_SENDER_NAME_BYTES
+const PARTY_COMMAND_FRAME_BYTES := 37
+const PARTY_RESULT_FRAME_BYTES := 38
+const PARTY_INVITE_HEADER_BYTES := 46
+const PARTY_INVITE_MAX_FRAME_BYTES := PARTY_INVITE_HEADER_BYTES + CHAT_MAX_SENDER_NAME_BYTES
+const PARTY_SNAPSHOT_HEADER_BYTES := 37
+const PARTY_MEMBER_HEADER_BYTES := 18
+const PARTY_MAX_MEMBERS := 8
+const PARTY_SNAPSHOT_MAX_FRAME_BYTES := PARTY_SNAPSHOT_HEADER_BYTES + PARTY_MAX_MEMBERS * (PARTY_MEMBER_HEADER_BYTES + CHAT_MAX_SENDER_NAME_BYTES)
 const MAX_MONEY := 9000000000000000
 
 static func encode_move_target(map_epoch: int, movement_sequence: int, target_x: int, target_y: int) -> PackedByteArray:
@@ -2174,6 +2186,148 @@ static func decode_whisper_result(frame:PackedByteArray)->Dictionary:
 	}
 
 
+static func encode_party_command(
+		epoch:int,sequence:int,action:int,party_id:int,target_actor_id:int
+	)->PackedByteArray:
+	if (
+		epoch<=0 or sequence<=0 or sequence>0xffffffff or action<1 or action>6 or
+		party_id<0 or target_actor_id<0
+	):
+		return PackedByteArray()
+	var target_action:=action in [1,5,6]
+	var invite_response:=action in [2,3]
+	if target_action:
+		if target_actor_id<=0 or (action in [5,6] and party_id<=0):
+			return PackedByteArray()
+	elif invite_response:
+		if party_id<=0 or target_actor_id<=0:
+			return PackedByteArray()
+	elif action==4:
+		if party_id<=0 or target_actor_id!=0:
+			return PackedByteArray()
+	else:
+		return PackedByteArray()
+	var writer:=StreamPeerBuffer.new()
+	writer.big_endian=false
+	writer.put_u32(PARTY_COMMAND_FRAME_BYTES)
+	writer.put_u16(VERSION)
+	writer.put_u16(OPCODE_PARTY_COMMAND)
+	writer.put_64(epoch)
+	writer.put_u32(sequence)
+	writer.put_u8(action)
+	writer.put_64(party_id)
+	writer.put_64(target_actor_id)
+	return writer.data_array
+
+
+static func decode_party_result(frame:PackedByteArray)->Dictionary:
+	if not _valid_header(frame,OPCODE_PARTY_RESULT,PARTY_RESULT_FRAME_BYTES):
+		return {}
+	var reader:=_reader(frame,8)
+	var epoch:=reader.get_64()
+	var sequence:=reader.get_u32()
+	var action:=reader.get_u8()
+	var status:=reader.get_u8()
+	var party_id:=reader.get_64()
+	var target:=reader.get_64()
+	if (
+		epoch<=0 or sequence==0 or action<1 or action>6 or
+		status<0 or status>10 or party_id<0 or target<0
+	):
+		return {}
+	return {
+		"map_epoch":epoch,"party_sequence":sequence,"action":action,
+		"status":status,"party_id":party_id,"target_actor_id":target
+	}
+
+
+static func decode_party_invite(frame:PackedByteArray)->Dictionary:
+	if not _valid_variable_header(
+		frame,OPCODE_PARTY_INVITE,PARTY_INVITE_HEADER_BYTES+1,
+		PARTY_INVITE_MAX_FRAME_BYTES
+	):
+		return {}
+	var reader:=_reader(frame,8)
+	var epoch:=reader.get_64()
+	var party_id:=reader.get_64()
+	var revision:=reader.get_u32()
+	var inviter:=reader.get_64()
+	var inviter_connection:=reader.get_64()
+	var name_count:=reader.get_u16()
+	if (
+		epoch<=0 or party_id<=0 or revision==0 or inviter<=0 or
+		inviter_connection<=0 or name_count<1 or
+		name_count>CHAT_MAX_SENDER_NAME_BYTES or
+		reader.get_available_bytes()!=name_count
+	):
+		return {}
+	var result:=reader.get_data(name_count)
+	if result[0]!=OK:
+		return {}
+	var bytes:PackedByteArray=result[1]
+	var name:=bytes.get_string_from_utf8()
+	if name.to_utf8_buffer()!=bytes or name.strip_edges().is_empty():
+		return {}
+	return {
+		"receiver_map_epoch":epoch,"party_id":party_id,"revision":revision,
+		"inviter_actor_id":inviter,
+		"inviter_connection_epoch":inviter_connection,
+		"inviter_name":name
+	}
+
+
+static func decode_party_snapshot(frame:PackedByteArray)->Dictionary:
+	if not _valid_variable_header(
+		frame,OPCODE_PARTY_SNAPSHOT,PARTY_SNAPSHOT_HEADER_BYTES,
+		PARTY_SNAPSHOT_MAX_FRAME_BYTES
+	):
+		return {}
+	var reader:=_reader(frame,8)
+	var epoch:=reader.get_64()
+	var party_id:=reader.get_64()
+	var revision:=reader.get_u32()
+	var leader:=reader.get_64()
+	var count:=reader.get_u8()
+	if (
+		epoch<=0 or party_id<=0 or revision==0 or count<0 or
+		count>PARTY_MAX_MEMBERS or ((count==0)!=(leader==0))
+	):
+		return {}
+	var members:Array[Dictionary]=[]
+	var seen:={}
+	for _i in range(count):
+		if reader.get_available_bytes()<PARTY_MEMBER_HEADER_BYTES:
+			return {}
+		var actor:=reader.get_64()
+		var connection:=reader.get_64()
+		var name_count:=reader.get_u16()
+		if (
+			actor<=0 or connection<=0 or name_count<1 or
+			name_count>CHAT_MAX_SENDER_NAME_BYTES or
+			reader.get_available_bytes()<name_count or seen.has(actor)
+		):
+			return {}
+		var result:=reader.get_data(name_count)
+		if result[0]!=OK:
+			return {}
+		var bytes:PackedByteArray=result[1]
+		var name:=bytes.get_string_from_utf8()
+		if name.to_utf8_buffer()!=bytes or name.strip_edges().is_empty():
+			return {}
+		seen[actor]=true
+		members.append({
+			"actor_id":actor,"connection_epoch":connection,"name":name
+		})
+	if reader.get_available_bytes()!=0:
+		return {}
+	if count>0 and not seen.has(leader):
+		return {}
+	return {
+		"receiver_map_epoch":epoch,"party_id":party_id,"revision":revision,
+		"leader_actor_id":leader,"members":members
+	}
+
+
 static func decode_chat_delivery(frame:PackedByteArray)->Dictionary:
 	if not _valid_variable_header(frame,OPCODE_CHAT_DELIVERY,CHAT_DELIVERY_HEADER_BYTES+2,CHAT_DELIVERY_MAX_FRAME_BYTES):
 		return {}
@@ -2302,7 +2456,7 @@ static func frame_opcode(frame: PackedByteArray) -> int:
 	if reader.get_u16() != VERSION:
 		return -1
 	var opcode := reader.get_u16()
-	if opcode not in [OPCODE_MOVE_TARGET, OPCODE_MOVE_RECEIPT, OPCODE_NPC_INTERACT, OPCODE_NPC_INTERACT_RESULT, OPCODE_NORMAL_ATTACK, OPCODE_NORMAL_ATTACK_RESULT, OPCODE_PLAYER_COMBAT_STATE, OPCODE_PLAYER_DAMAGE, OPCODE_AUTH_REQUEST, OPCODE_AUTH_RESULT, OPCODE_CHARACTER_LIST, OPCODE_CHARACTER_CHOOSE, OPCODE_CHARACTER_CHOOSE_RESULT, OPCODE_CHARACTER_CREATE, OPCODE_CHARACTER_CREATE_RESULT, OPCODE_WORLD_READY, OPCODE_ENTITY_SPAWN, OPCODE_ENTITY_DESPAWN, OPCODE_ENTITY_DELTA, OPCODE_SELF_STATE, OPCODE_WORLD_READY_ACK, OPCODE_WORLD_RESYNC_REQUEST, OPCODE_MONSTER_SPAWN, OPCODE_MONSTER_DELTA, OPCODE_MONSTER_DESPAWN, OPCODE_PLAYER_RESPAWN, OPCODE_PLAYER_RESPAWN_RESULT, OPCODE_GROUND_DROP_SPAWN, OPCODE_GROUND_DROP_DESPAWN, OPCODE_GROUND_PICKUP, OPCODE_GROUND_PICKUP_RESULT, OPCODE_INVENTORY_SNAPSHOT, OPCODE_RECOVERY_USE, OPCODE_RECOVERY_USE_RESULT, OPCODE_INVENTORY_DISCARD, OPCODE_INVENTORY_DISCARD_RESULT, OPCODE_PLAYER_ATTACK_VISUAL, OPCODE_PLAYER_DAMAGE_VISUAL, OPCODE_PLAYER_RESPAWN_VISUAL, OPCODE_SKILL_USE, OPCODE_SKILL_USE_RESULT, OPCODE_PLAYER_SKILL_VISUAL, OPCODE_SHOP_OPEN, OPCODE_SHOP_SNAPSHOT, OPCODE_SHOP_BUY, OPCODE_SHOP_SELL, OPCODE_SHOP_TRANSACTION_RESULT, OPCODE_STORAGE_OPEN, OPCODE_STORAGE_SNAPSHOT, OPCODE_STORAGE_DEPOSIT, OPCODE_STORAGE_WITHDRAW, OPCODE_STORAGE_TRANSFER_RESULT, OPCODE_EQUIPMENT_SNAPSHOT, OPCODE_EQUIPMENT_EQUIP, OPCODE_EQUIPMENT_UNEQUIP, OPCODE_EQUIPMENT_TRANSFER_RESULT, OPCODE_BANK_OPEN, OPCODE_BANK_SNAPSHOT, OPCODE_BANK_DEPOSIT, OPCODE_BANK_WITHDRAW, OPCODE_BANK_TRANSACTION_RESULT, OPCODE_REPAIR_OPEN, OPCODE_REPAIR_SNAPSHOT, OPCODE_REPAIR_ITEM, OPCODE_REPAIR_RESULT, OPCODE_TRADE_COMMAND, OPCODE_TRADE_SNAPSHOT, OPCODE_TRADE_TERMINAL, OPCODE_PVP_MODE_COMMAND, OPCODE_PVP_MODE_RESULT, OPCODE_PVP_ATTACK, OPCODE_PVP_ATTACK_RESULT, OPCODE_PVP_DAMAGE, OPCODE_PLAYER_IDENTITY, OPCODE_PVP_COMBAT_VISUAL, OPCODE_PVP_SKILL, OPCODE_PVP_SKILL_RESULT, OPCODE_PVP_SKILL_VISUAL, OPCODE_GM_CAPABILITY, OPCODE_GM_PVP_NAME_COMMAND, OPCODE_GM_PVP_NAME_RESULT, OPCODE_PLAYER_SHOP_COMMAND, OPCODE_PLAYER_SHOP_RESULT, OPCODE_PLAYER_SHOP_SOLD, OPCODE_CHAT_COMMAND, OPCODE_CHAT_DELIVERY, OPCODE_QUEST_OPEN, OPCODE_QUEST_VIEW, OPCODE_QUEST_CHOOSE, OPCODE_ENHANCEMENT_OPEN, OPCODE_ENHANCEMENT_SNAPSHOT, OPCODE_ENHANCEMENT_ITEM, OPCODE_ENHANCEMENT_RESULT, OPCODE_WHISPER_COMMAND, OPCODE_WHISPER_RESULT]:
+	if opcode not in [OPCODE_MOVE_TARGET, OPCODE_MOVE_RECEIPT, OPCODE_NPC_INTERACT, OPCODE_NPC_INTERACT_RESULT, OPCODE_NORMAL_ATTACK, OPCODE_NORMAL_ATTACK_RESULT, OPCODE_PLAYER_COMBAT_STATE, OPCODE_PLAYER_DAMAGE, OPCODE_AUTH_REQUEST, OPCODE_AUTH_RESULT, OPCODE_CHARACTER_LIST, OPCODE_CHARACTER_CHOOSE, OPCODE_CHARACTER_CHOOSE_RESULT, OPCODE_CHARACTER_CREATE, OPCODE_CHARACTER_CREATE_RESULT, OPCODE_WORLD_READY, OPCODE_ENTITY_SPAWN, OPCODE_ENTITY_DESPAWN, OPCODE_ENTITY_DELTA, OPCODE_SELF_STATE, OPCODE_WORLD_READY_ACK, OPCODE_WORLD_RESYNC_REQUEST, OPCODE_MONSTER_SPAWN, OPCODE_MONSTER_DELTA, OPCODE_MONSTER_DESPAWN, OPCODE_PLAYER_RESPAWN, OPCODE_PLAYER_RESPAWN_RESULT, OPCODE_GROUND_DROP_SPAWN, OPCODE_GROUND_DROP_DESPAWN, OPCODE_GROUND_PICKUP, OPCODE_GROUND_PICKUP_RESULT, OPCODE_INVENTORY_SNAPSHOT, OPCODE_RECOVERY_USE, OPCODE_RECOVERY_USE_RESULT, OPCODE_INVENTORY_DISCARD, OPCODE_INVENTORY_DISCARD_RESULT, OPCODE_PLAYER_ATTACK_VISUAL, OPCODE_PLAYER_DAMAGE_VISUAL, OPCODE_PLAYER_RESPAWN_VISUAL, OPCODE_SKILL_USE, OPCODE_SKILL_USE_RESULT, OPCODE_PLAYER_SKILL_VISUAL, OPCODE_SHOP_OPEN, OPCODE_SHOP_SNAPSHOT, OPCODE_SHOP_BUY, OPCODE_SHOP_SELL, OPCODE_SHOP_TRANSACTION_RESULT, OPCODE_STORAGE_OPEN, OPCODE_STORAGE_SNAPSHOT, OPCODE_STORAGE_DEPOSIT, OPCODE_STORAGE_WITHDRAW, OPCODE_STORAGE_TRANSFER_RESULT, OPCODE_EQUIPMENT_SNAPSHOT, OPCODE_EQUIPMENT_EQUIP, OPCODE_EQUIPMENT_UNEQUIP, OPCODE_EQUIPMENT_TRANSFER_RESULT, OPCODE_BANK_OPEN, OPCODE_BANK_SNAPSHOT, OPCODE_BANK_DEPOSIT, OPCODE_BANK_WITHDRAW, OPCODE_BANK_TRANSACTION_RESULT, OPCODE_REPAIR_OPEN, OPCODE_REPAIR_SNAPSHOT, OPCODE_REPAIR_ITEM, OPCODE_REPAIR_RESULT, OPCODE_TRADE_COMMAND, OPCODE_TRADE_SNAPSHOT, OPCODE_TRADE_TERMINAL, OPCODE_PVP_MODE_COMMAND, OPCODE_PVP_MODE_RESULT, OPCODE_PVP_ATTACK, OPCODE_PVP_ATTACK_RESULT, OPCODE_PVP_DAMAGE, OPCODE_PLAYER_IDENTITY, OPCODE_PVP_COMBAT_VISUAL, OPCODE_PVP_SKILL, OPCODE_PVP_SKILL_RESULT, OPCODE_PVP_SKILL_VISUAL, OPCODE_GM_CAPABILITY, OPCODE_GM_PVP_NAME_COMMAND, OPCODE_GM_PVP_NAME_RESULT, OPCODE_PLAYER_SHOP_COMMAND, OPCODE_PLAYER_SHOP_RESULT, OPCODE_PLAYER_SHOP_SOLD, OPCODE_CHAT_COMMAND, OPCODE_CHAT_DELIVERY, OPCODE_QUEST_OPEN, OPCODE_QUEST_VIEW, OPCODE_QUEST_CHOOSE, OPCODE_ENHANCEMENT_OPEN, OPCODE_ENHANCEMENT_SNAPSHOT, OPCODE_ENHANCEMENT_ITEM, OPCODE_ENHANCEMENT_RESULT, OPCODE_WHISPER_COMMAND, OPCODE_WHISPER_RESULT, OPCODE_PARTY_COMMAND, OPCODE_PARTY_RESULT, OPCODE_PARTY_INVITE, OPCODE_PARTY_SNAPSHOT]:
 		return -1
 	return opcode
 
