@@ -178,7 +178,7 @@ const ENHANCEMENT_ITEM_FRAME_BYTES := 32
 const ENHANCEMENT_RESULT_FRAME_BYTES := 70
 const TRADE_COMMAND_FRAME_BYTES := 53
 const TRADE_SNAPSHOT_HEADER_BYTES := 59
-const TRADE_OFFER_ITEM_BYTES := 24
+const TRADE_OFFER_ITEM_BYTES := 25
 const TRADE_MAX_ITEMS_PER_SIDE := 32
 const TRADE_TERMINAL_FRAME_BYTES := 37
 const QUEST_OPEN_FRAME_BYTES := 24
@@ -205,7 +205,7 @@ const GM_CAPABILITY_FRAME_BYTES := 9
 const GM_PVP_NAME_COMMAND_FRAME_BYTES := 29
 const GM_PVP_NAME_RESULT_FRAME_BYTES := 30
 const PLAYER_SHOP_COMMAND_FRAME_BYTES := 53
-const PLAYER_SHOP_RESULT_FRAME_BYTES := 90
+const PLAYER_SHOP_RESULT_FRAME_BYTES := 91
 const PLAYER_SHOP_SOLD_FRAME_BYTES := 48
 const CHAT_COMMAND_HEADER_BYTES := 24
 const CHAT_DELIVERY_HEADER_BYTES := 42
@@ -1302,11 +1302,13 @@ static func decode_trade_snapshot(frame: PackedByteArray) -> Dictionary:
 		var definition := reader.get_32()
 		var quantity := reader.get_32()
 		var source_drop_id := reader.get_64()
-		if uid <= 0 or definition < 1 or definition > 100000000 or quantity < 1 or quantity > 1000000 or source_drop_id < 0 or seen.has(uid):
+		var enhancement_level := reader.get_u8()
+		if uid <= 0 or definition < 1 or definition > 100000000 or quantity < 1 or quantity > 1000000 or source_drop_id < 0 or enhancement_level < 0 or enhancement_level > 255 or seen.has(uid):
 			return {}
 		seen[uid] = true
 		var item := {"item_uid":uid,"item_definition_id":definition,
-			"quantity":quantity,"drop_id":source_drop_id}
+			"quantity":quantity,"drop_id":source_drop_id,
+			"enhancement_level":enhancement_level}
 		if index < my_count:
 			my_items.append(item)
 		else:
@@ -1916,10 +1918,12 @@ static func decode_player_shop_result(frame:PackedByteArray)->Dictionary:
 	var price:=reader.get_64()
 	var seller_wallet:=reader.get_64()
 	var buyer_wallet:=reader.get_64()
+	var enhancement_level:=reader.get_u8()
 	if (
 		epoch<=0 or sequence==0 or action<1 or action>4 or status>15 or
 		seller<0 or listing<0 or uid<0 or item_id<0 or item_id>100000000 or
 		quantity<0 or quantity>1000000 or source_drop<0 or durability_raw<-1 or
+		enhancement_level<0 or enhancement_level>255 or
 		price<0 or price>MAX_MONEY or seller_wallet<0 or seller_wallet>MAX_MONEY or
 		buyer_wallet<0 or buyer_wallet>MAX_MONEY
 	):
@@ -1929,7 +1933,8 @@ static func decode_player_shop_result(frame:PackedByteArray)->Dictionary:
 		"seller_actor_id":seller,"listing_id":listing,"item_uid":uid,
 		"item_definition_id":item_id,"quantity":quantity,
 		"source_drop_id":source_drop,"durability_raw":durability_raw,
-		"price":price,"seller_wallet":seller_wallet,"buyer_wallet":buyer_wallet}
+		"price":price,"seller_wallet":seller_wallet,"buyer_wallet":buyer_wallet,
+		"enhancement_level":enhancement_level}
 
 
 static func decode_player_shop_sold(frame:PackedByteArray)->Dictionary:
