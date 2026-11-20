@@ -1972,9 +1972,13 @@ public sealed class IdentityTlsAuthorization
                         var queued=router.QueueChatDelivery(recipient,delivery);
                         bool self=recipient.ActorId==request.ActorId&&
                             recipient.ConnectionEpoch==request.ConnectionEpoch;
-                        if(self&&queued!=GatewaySendStatus.Enqueued)
-                            throw new IOException(
-                                "Reliable self party-chat delivery could not be queued: "+queued);
+                        if(queued!=GatewaySendStatus.Enqueued)
+                        {
+                            if(self)
+                                throw new IOException(
+                                    "Reliable self party-chat delivery could not be queued: "+queued);
+                            router.CloseCurrentBinding(recipient);
+                        }
                     }
                     return Task.CompletedTask;
                 }
