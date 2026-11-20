@@ -43,6 +43,10 @@ func _initialize() -> void:
 	if ready.is_empty():
 		_fail("world/inventory ready "+str(session.snapshot()),session)
 		return
+	var expected_own_level := 7 if role == "observer" else 5
+	if int((ready.inventory_items[own_item] as Dictionary).get("enhancement_level",-1)) != expected_own_level:
+		_fail("owned enhancement baseline "+str(ready.inventory_items[own_item]),session)
+		return
 	if role == "observer":
 		print("CLIENT_TRADE_READY role=observer actor=%d item=%d" % [self_id,own_item])
 		_run_observer(session,self_id,peer_id,own_item,peer_item)
@@ -69,7 +73,7 @@ func _run_observer(session, self_id: int, peer_id: int, own_item: int, peer_item
 	if locked.is_empty() or not session.trade_final_confirm():
 		_fail("observer dual lock/confirm "+str(session.snapshot()),session)
 		return
-	_finish(session,"observer",self_id,own_item,peer_item,4103,2)
+	_finish(session,"observer",self_id,own_item,peer_item,4103,2,5)
 
 func _run_actor(session, self_id: int, peer_id: int, own_item: int, peer_item: int) -> void:
 	if not session.request_trade(peer_id):
@@ -90,19 +94,19 @@ func _run_actor(session, self_id: int, peer_id: int, own_item: int, peer_item: i
 	if locked.is_empty() or not session.trade_final_confirm():
 		_fail("actor dual lock/confirm "+str(session.snapshot()),session)
 		return
-	_finish(session,"actor",self_id,own_item,peer_item,4104,1)
+	_finish(session,"actor",self_id,own_item,peer_item,4104,1,7)
 
-func _finish(session, role: String, self_id: int, own_item: int, peer_item: int, peer_definition: int, peer_quantity: int) -> void:
+func _finish(session, role: String, self_id: int, own_item: int, peer_item: int, peer_definition: int, peer_quantity: int, peer_level: int) -> void:
 	var final := _wait(session,func(v): return int(v.trade_id)==0 and not v.last_trade_terminal.is_empty() and int(v.last_trade_terminal.status)==0 and v.inventory_items.has(peer_item) and not v.inventory_items.has(own_item),9000)
 	if final.is_empty():
 		_fail(role+" terminal/inventory "+str(session.snapshot()),session)
 		return
 	var item: Dictionary = final.inventory_items[peer_item]
-	if int(item.item_definition_id)!=peer_definition or int(item.quantity)!=peer_quantity or int(item.get("drop_id",0))<=0:
-		_fail(role+" received item metadata "+str(item),session)
+	if int(item.item_definition_id)!=peer_definition or int(item.quantity)!=peer_quantity or int(item.get("drop_id",0))<=0 or int(item.get("enhancement_level",-1))!=peer_level:
+		_fail(role+" received item metadata/enhancement "+str(item),session)
 		return
 	session.stop()
-	print("CLIENT_TRADE_PASS role=%s actor=%d received_uid=%d wallet=%d dual_lock=true dual_confirm=true" % [role,self_id,peer_item,int(final.last_trade_terminal.wallet_money)])
+	print("CLIENT_TRADE_PASS role=%s actor=%d received_uid=%d enhancement=%d wallet=%d dual_lock=true dual_confirm=true" % [role,self_id,peer_item,peer_level,int(final.last_trade_terminal.wallet_money)])
 	quit(0)
 
 func _wait(session, predicate: Callable, timeout_ms: int) -> Dictionary:
