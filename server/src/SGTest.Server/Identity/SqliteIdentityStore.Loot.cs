@@ -33,7 +33,7 @@ public sealed record PickupResult(PickupStatus Status, long DropId,
 
 public sealed record InventoryItem(long ItemUid, long CharacterId,
     int ItemDefinitionId, int Quantity, long SourceDropId,
-    int EnhancementLevel = 0);
+    int EnhancementLevel = 0, int? DurabilityRaw = null);
 
 /// <summary>
 /// Durable loot primitives owned by the existing identity SQLite DB, not a
@@ -313,7 +313,7 @@ VALUES($actor,$item,$quantity,$drop,1,$source,$now);";
             using var connection = Open();
             using var command = connection.CreateCommand();
             command.CommandText = @"SELECT item_uid,character_id,item_definition_id,
-quantity,COALESCE(source_drop_id,0),enhancement_level FROM item_instances
+quantity,COALESCE(source_drop_id,0),enhancement_level,durability_raw FROM item_instances
 WHERE character_id=$id ORDER BY item_uid LIMIT $limit;";
             command.Parameters.AddWithValue("$id", characterId);
             command.Parameters.AddWithValue("$limit", limit);
@@ -322,7 +322,8 @@ WHERE character_id=$id ORDER BY item_uid LIMIT $limit;";
             while (reader.Read())
                 result.Add(new(reader.GetInt64(0),reader.GetInt64(1),
                     reader.GetInt32(2),reader.GetInt32(3),reader.GetInt64(4),
-                    reader.GetInt32(5)));
+                    reader.GetInt32(5),
+                    reader.IsDBNull(6)?null:reader.GetInt32(6)));
             return result;
         }, cancellationToken).ConfigureAwait(false);
     }
