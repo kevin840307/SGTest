@@ -20,8 +20,8 @@ internal static class QuestChecks
         using(var store=new SqliteIdentityStore(db))
         {
             await store.InitializeAsync();
-            Checks.Require(SqliteIdentityStore.SchemaVersion==20,
-                "identity schema version is not v20");
+            Checks.Require(SqliteIdentityStore.SchemaVersion==21,
+                "identity schema version is not v21");
             long account=(await store.CreateAccountAsync(
                 "quest_user","Quest-Password-123!")).AccountId;
             firstCharacter=(await store.CreateCharacterAsync(
