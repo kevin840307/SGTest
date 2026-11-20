@@ -70,6 +70,7 @@ public static class TlsWireConnection
         Func<TrustedEquipmentCommand, Task>? handleEquipment = null,
         Func<TrustedBankCommand, Task>? handleBank = null,
         Func<TrustedRepairCommand, Task>? handleRepair = null,
+        Func<TrustedEnhancementCommand, Task>? handleEnhancement = null,
         Func<TrustedTradeCommand, Task>? handleTrade = null,
         Func<TrustedQuestCommand, Task>? handleQuest = null,
         Func<TrustedPvpModeCommand, Task>? handlePvp = null,
@@ -465,6 +466,35 @@ public static class TlsWireConnection
                 }
             }
 
+            var enhancementCommands=Channel.CreateBounded<TrustedEnhancementCommand>(
+                new BoundedChannelOptions(16)
+                {
+                    SingleReader=true,SingleWriter=true,
+                    FullMode=BoundedChannelFullMode.Wait
+                });
+            Func<TrustedEnhancementCommand,bool>? postEnhancement=
+                handleEnhancement is null
+                    ? null:request=>enhancementCommands.Writer.TryWrite(request);
+            Exception? enhancementFault=null;
+            Task enhancementWorker=handleEnhancement is null
+                ? Task.CompletedTask:ProcessEnhancementAsync();
+
+            async Task ProcessEnhancementAsync()
+            {
+                try
+                {
+                    await foreach(var request in enhancementCommands.Reader
+                        .ReadAllAsync(sessionCts.Token).ConfigureAwait(false))
+                        await handleEnhancement!(request).ConfigureAwait(false);
+                }
+                catch(OperationCanceledException) when(sessionCts.IsCancellationRequested){}
+                catch(Exception error)
+                {
+                    enhancementFault=error;
+                    sessionCts.Cancel();
+                }
+            }
+
             var tradeCommands=Channel.CreateBounded<TrustedTradeCommand>(
                 new BoundedChannelOptions(16)
                 {
@@ -737,7 +767,7 @@ public static class TlsWireConnection
                     var status = gateway.FeedClientBytes(
                         rented.AsSpan(0, count), postMove, out int accepted,
                         postNpc, postResync, postAttack, postRespawn, postPickup,
-                        postRecovery, postDiscard, postSkill, postShop, postStorage, postEquipment, postBank, postRepair, postTrade, postQuest, postPvp, postPvpAttack, postPvpSkill, postGmPvpName, postPlayerShop, postChat);
+                        postRecovery, postDiscard, postSkill, postShop, postStorage, postEquipment, postBank, postRepair, postEnhancement, postTrade, postQuest, postPvp, postPvpAttack, postPvpSkill, postGmPvpName, postPlayerShop, postChat);
                     commandsAccepted += accepted;
 
                     if (status == WireFeedStatus.Backpressured)
@@ -758,7 +788,7 @@ public static class TlsWireConnection
                             status = gateway.ResumeClientIngress(
                                 postMove, out accepted, postNpc, postResync,
                                 postAttack, postRespawn, postPickup, postRecovery,
-                                postDiscard, postSkill, postShop, postStorage, postEquipment, postBank, postRepair, postTrade, postQuest, postPvp, postPvpAttack, postPvpSkill, postGmPvpName, postPlayerShop, postChat);
+                                postDiscard, postSkill, postShop, postStorage, postEquipment, postBank, postRepair, postEnhancement, postTrade, postQuest, postPvp, postPvpAttack, postPvpSkill, postGmPvpName, postPlayerShop, postChat);
                             commandsAccepted += accepted;
                         }
                         while (status == WireFeedStatus.Backpressured);
@@ -810,6 +840,7 @@ public static class TlsWireConnection
             equipmentCommands.Writer.TryComplete();
             bankCommands.Writer.TryComplete();
             repairCommands.Writer.TryComplete();
+            enhancementCommands.Writer.TryComplete();
             tradeCommands.Writer.TryComplete();
             questCommands.Writer.TryComplete();
             pvpCommands.Writer.TryComplete();
@@ -834,6 +865,7 @@ public static class TlsWireConnection
             await equipmentWorker.ConfigureAwait(false);
             await bankWorker.ConfigureAwait(false);
             await repairWorker.ConfigureAwait(false);
+            await enhancementWorker.ConfigureAwait(false);
             await tradeWorker.ConfigureAwait(false);
             await questWorker.ConfigureAwait(false);
             await pvpWorker.ConfigureAwait(false);
@@ -845,7 +877,8 @@ public static class TlsWireConnection
             Exception? workerFault =
                 npcFault ?? respawnFault ?? pickupFault ?? recoveryFault ??
                 discardFault ?? skillFault ?? shopFault ?? storageFault ??
-                equipmentFault ?? bankFault ?? repairFault ?? tradeFault ??
+                equipmentFault ?? bankFault ?? repairFault ?? enhancementFault ??
+                tradeFault ??
                 questFault ?? pvpFault ?? pvpAttackFault ?? pvpSkillFault ??
                 gmPvpNameFault ?? playerShopFault ?? chatFault;
             if (workerFault is not null)
