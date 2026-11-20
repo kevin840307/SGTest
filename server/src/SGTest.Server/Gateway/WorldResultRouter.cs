@@ -658,6 +658,18 @@ public sealed class WorldResultRouter
         }
     }
 
+    public GatewaySendStatus QueueChatDelivery(
+        ConnectionBinding recipient,ChatDeliveryWire delivery)
+    {
+        lock(_gate)
+        {
+            if(!_connections.TryGetValue(recipient.ActorId,out var connection)||
+               connection.IsClosed||connection.Binding!=recipient)
+                return GatewaySendStatus.Closed;
+            return connection.QueueChatDelivery(recipient,delivery);
+        }
+    }
+
     public GatewaySendStatus QueuePlayerShopResult(
         TrustedPlayerShopCommand request,PlayerShopResultWire result)
     {
