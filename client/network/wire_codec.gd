@@ -71,6 +71,9 @@ const OPCODE_REPAIR_RESULT := 69
 const OPCODE_TRADE_COMMAND := 70
 const OPCODE_TRADE_SNAPSHOT := 71
 const OPCODE_TRADE_TERMINAL := 72
+const OPCODE_QUEST_OPEN := 73
+const OPCODE_QUEST_VIEW := 74
+const OPCODE_QUEST_CHOOSE := 75
 const OPCODE_PVP_MODE_COMMAND := 76
 const OPCODE_PVP_MODE_RESULT := 77
 const OPCODE_PVP_ATTACK := 78
@@ -167,6 +170,14 @@ const TRADE_SNAPSHOT_HEADER_BYTES := 59
 const TRADE_OFFER_ITEM_BYTES := 24
 const TRADE_MAX_ITEMS_PER_SIDE := 32
 const TRADE_TERMINAL_FRAME_BYTES := 37
+const QUEST_OPEN_FRAME_BYTES := 24
+const QUEST_CHOOSE_FRAME_BYTES := 32
+const QUEST_VIEW_HEADER_BYTES := 47
+const QUEST_VIEW_MAX_TITLE_BYTES := 256
+const QUEST_VIEW_MAX_TEXT_BYTES := 4096
+const QUEST_VIEW_MAX_LABEL_BYTES := 512
+const QUEST_VIEW_MAX_CHOICES := 16
+const QUEST_VIEW_MAX_FRAME_BYTES := QUEST_VIEW_HEADER_BYTES + QUEST_VIEW_MAX_TITLE_BYTES + QUEST_VIEW_MAX_TEXT_BYTES + QUEST_VIEW_MAX_CHOICES * (6 + QUEST_VIEW_MAX_LABEL_BYTES)
 const PVP_MODE_COMMAND_FRAME_BYTES := 21
 const PVP_MODE_RESULT_FRAME_BYTES := 23
 const PVP_ATTACK_FRAME_BYTES := 28
@@ -1797,6 +1808,133 @@ static func decode_player_shop_sold(frame:PackedByteArray)->Dictionary:
 		"buyer_actor_id":buyer,"item_uid":uid,"seller_wallet":wallet}
 
 
+static func encode_quest_open(
+		epoch:int,sequence:int,npc_spawn_id:int)->PackedByteArray:
+	if epoch<=0 or sequence<=0 or sequence>0xffffffff or npc_spawn_id<=0:
+		return PackedByteArray()
+	var writer:=StreamPeerBuffer.new()
+	writer.big_endian=false
+	writer.put_u32(QUEST_OPEN_FRAME_BYTES)
+	writer.put_u16(VERSION)
+	writer.put_u16(OPCODE_QUEST_OPEN)
+	writer.put_64(epoch)
+	writer.put_u32(sequence)
+	writer.put_32(npc_spawn_id)
+	return writer.data_array
+
+
+static func encode_quest_choose(
+		epoch:int,sequence:int,npc_spawn_id:int,quest_id:int,
+		choice_id:int)->PackedByteArray:
+	if (
+		epoch<=0 or sequence<=0 or sequence>0xffffffff or npc_spawn_id<=0 or
+		quest_id<=0 or quest_id>100000000 or choice_id<=0 or
+		choice_id>100000000
+	):
+		return PackedByteArray()
+	var writer:=StreamPeerBuffer.new()
+	writer.big_endian=false
+	writer.put_u32(QUEST_CHOOSE_FRAME_BYTES)
+	writer.put_u16(VERSION)
+	writer.put_u16(OPCODE_QUEST_CHOOSE)
+	writer.put_64(epoch)
+	writer.put_u32(sequence)
+	writer.put_32(npc_spawn_id)
+	writer.put_32(quest_id)
+	writer.put_32(choice_id)
+	return writer.data_array
+
+
+static func decode_quest_view(frame:PackedByteArray)->Dictionary:
+	if not _valid_variable_header(
+			frame,OPCODE_QUEST_VIEW,QUEST_VIEW_HEADER_BYTES,
+			QUEST_VIEW_MAX_FRAME_BYTES):
+		return {}
+	var reader:=_reader(frame,8)
+	var epoch:=reader.get_64()
+	var sequence:=reader.get_u32()
+	var status:=reader.get_u8()
+	var npc:=reader.get_32()
+	var quest:=reader.get_32()
+	var rule_revision:=reader.get_32()
+	var state:=reader.get_u8()
+	var stage:=reader.get_32()
+	var progress_revision:=reader.get_32()
+	var title_count:=reader.get_u16()
+	var text_count:=reader.get_u16()
+	var choice_count:=reader.get_u8()
+	if (
+		epoch<=0 or sequence==0 or status>10 or npc<=0 or
+		title_count>QUEST_VIEW_MAX_TITLE_BYTES or
+		text_count>QUEST_VIEW_MAX_TEXT_BYTES or
+		choice_count>QUEST_VIEW_MAX_CHOICES or
+		reader.get_available_bytes()<title_count+text_count
+	):
+		return {}
+	var title_result:=reader.get_data(title_count)
+	var text_result:=reader.get_data(text_count)
+	if title_result[0]!=OK or text_result[0]!=OK:
+		return {}
+	var title_bytes:PackedByteArray=title_result[1]
+	var text_bytes:PackedByteArray=text_result[1]
+	var title:=title_bytes.get_string_from_utf8()
+	var body:=text_bytes.get_string_from_utf8()
+	if title.to_utf8_buffer()!=title_bytes or body.to_utf8_buffer()!=text_bytes:
+		return {}
+	var choices:Array[Dictionary]=[]
+	var seen:={}
+	for _index in choice_count:
+		if reader.get_available_bytes()<6:
+			return {}
+		var choice_id:=reader.get_32()
+		var label_count:=reader.get_u16()
+		if (
+			choice_id<=0 or choice_id>100000000 or label_count<1 or
+			label_count>QUEST_VIEW_MAX_LABEL_BYTES or seen.has(choice_id) or
+			reader.get_available_bytes()<label_count
+		):
+			return {}
+		var label_result:=reader.get_data(label_count)
+		if label_result[0]!=OK:
+			return {}
+		var label_bytes:PackedByteArray=label_result[1]
+		var label:=label_bytes.get_string_from_utf8()
+		if label.to_utf8_buffer()!=label_bytes or label.strip_edges().is_empty():
+			return {}
+		seen[choice_id]=true
+		choices.append({"choice_id":choice_id,"label":label})
+	if reader.get_available_bytes()!=0:
+		return {}
+	var has_view:=status in [0,1,2,6,7]
+	if not has_view:
+		if (
+			quest!=0 or rule_revision!=0 or state!=0 or stage!=0 or
+			progress_revision!=0 or not title.is_empty() or not body.is_empty() or
+			not choices.is_empty()
+		):
+			return {}
+	else:
+		if (
+			quest<=0 or quest>100000000 or rule_revision<=0 or state>2 or
+			stage<0 or stage>1000000 or progress_revision<0 or
+			title_bytes.size()<1 or body.to_utf8_buffer().size()<1 or
+			title.strip_edges().is_empty()
+		):
+			return {}
+		if state==0 and progress_revision!=0:
+			return {}
+		if state!=0 and progress_revision<=0:
+			return {}
+		if state==2 and not choices.is_empty():
+			return {}
+	return {
+		"map_epoch":epoch,"quest_sequence":sequence,"status":status,
+		"npc_spawn_id":npc,"quest_id":quest,"rule_revision":rule_revision,
+		"state":state,"stage":stage,"progress_revision":progress_revision,
+		"title":title,"text":body,"choices":choices
+	}
+
+
 static func encode_chat_command(epoch:int,sequence:int,channel:int,bubble_type:int,message:String)->PackedByteArray:
 	var bytes:=message.to_utf8_buffer()
 	if epoch<=0 or sequence<=0 or sequence>0xffffffff or channel<0 or channel>4 or bubble_type<0 or bubble_type>5 or bytes.size()<1 or bytes.size()>CHAT_MAX_MESSAGE_BYTES or message.strip_edges().is_empty():
@@ -1943,7 +2081,7 @@ static func frame_opcode(frame: PackedByteArray) -> int:
 	if reader.get_u16() != VERSION:
 		return -1
 	var opcode := reader.get_u16()
-	if opcode not in [OPCODE_MOVE_TARGET, OPCODE_MOVE_RECEIPT, OPCODE_NPC_INTERACT, OPCODE_NPC_INTERACT_RESULT, OPCODE_NORMAL_ATTACK, OPCODE_NORMAL_ATTACK_RESULT, OPCODE_PLAYER_COMBAT_STATE, OPCODE_PLAYER_DAMAGE, OPCODE_AUTH_REQUEST, OPCODE_AUTH_RESULT, OPCODE_CHARACTER_LIST, OPCODE_CHARACTER_CHOOSE, OPCODE_CHARACTER_CHOOSE_RESULT, OPCODE_CHARACTER_CREATE, OPCODE_CHARACTER_CREATE_RESULT, OPCODE_WORLD_READY, OPCODE_ENTITY_SPAWN, OPCODE_ENTITY_DESPAWN, OPCODE_ENTITY_DELTA, OPCODE_SELF_STATE, OPCODE_WORLD_READY_ACK, OPCODE_WORLD_RESYNC_REQUEST, OPCODE_MONSTER_SPAWN, OPCODE_MONSTER_DELTA, OPCODE_MONSTER_DESPAWN, OPCODE_PLAYER_RESPAWN, OPCODE_PLAYER_RESPAWN_RESULT, OPCODE_GROUND_DROP_SPAWN, OPCODE_GROUND_DROP_DESPAWN, OPCODE_GROUND_PICKUP, OPCODE_GROUND_PICKUP_RESULT, OPCODE_INVENTORY_SNAPSHOT, OPCODE_RECOVERY_USE, OPCODE_RECOVERY_USE_RESULT, OPCODE_INVENTORY_DISCARD, OPCODE_INVENTORY_DISCARD_RESULT, OPCODE_PLAYER_ATTACK_VISUAL, OPCODE_PLAYER_DAMAGE_VISUAL, OPCODE_PLAYER_RESPAWN_VISUAL, OPCODE_SKILL_USE, OPCODE_SKILL_USE_RESULT, OPCODE_PLAYER_SKILL_VISUAL, OPCODE_SHOP_OPEN, OPCODE_SHOP_SNAPSHOT, OPCODE_SHOP_BUY, OPCODE_SHOP_SELL, OPCODE_SHOP_TRANSACTION_RESULT, OPCODE_STORAGE_OPEN, OPCODE_STORAGE_SNAPSHOT, OPCODE_STORAGE_DEPOSIT, OPCODE_STORAGE_WITHDRAW, OPCODE_STORAGE_TRANSFER_RESULT, OPCODE_EQUIPMENT_SNAPSHOT, OPCODE_EQUIPMENT_EQUIP, OPCODE_EQUIPMENT_UNEQUIP, OPCODE_EQUIPMENT_TRANSFER_RESULT, OPCODE_BANK_OPEN, OPCODE_BANK_SNAPSHOT, OPCODE_BANK_DEPOSIT, OPCODE_BANK_WITHDRAW, OPCODE_BANK_TRANSACTION_RESULT, OPCODE_REPAIR_OPEN, OPCODE_REPAIR_SNAPSHOT, OPCODE_REPAIR_ITEM, OPCODE_REPAIR_RESULT, OPCODE_TRADE_COMMAND, OPCODE_TRADE_SNAPSHOT, OPCODE_TRADE_TERMINAL, OPCODE_PVP_MODE_COMMAND, OPCODE_PVP_MODE_RESULT, OPCODE_PVP_ATTACK, OPCODE_PVP_ATTACK_RESULT, OPCODE_PVP_DAMAGE, OPCODE_PLAYER_IDENTITY, OPCODE_PVP_COMBAT_VISUAL, OPCODE_PVP_SKILL, OPCODE_PVP_SKILL_RESULT, OPCODE_PVP_SKILL_VISUAL, OPCODE_GM_CAPABILITY, OPCODE_GM_PVP_NAME_COMMAND, OPCODE_GM_PVP_NAME_RESULT, OPCODE_PLAYER_SHOP_COMMAND, OPCODE_PLAYER_SHOP_RESULT, OPCODE_PLAYER_SHOP_SOLD, OPCODE_CHAT_COMMAND, OPCODE_CHAT_DELIVERY]:
+	if opcode not in [OPCODE_MOVE_TARGET, OPCODE_MOVE_RECEIPT, OPCODE_NPC_INTERACT, OPCODE_NPC_INTERACT_RESULT, OPCODE_NORMAL_ATTACK, OPCODE_NORMAL_ATTACK_RESULT, OPCODE_PLAYER_COMBAT_STATE, OPCODE_PLAYER_DAMAGE, OPCODE_AUTH_REQUEST, OPCODE_AUTH_RESULT, OPCODE_CHARACTER_LIST, OPCODE_CHARACTER_CHOOSE, OPCODE_CHARACTER_CHOOSE_RESULT, OPCODE_CHARACTER_CREATE, OPCODE_CHARACTER_CREATE_RESULT, OPCODE_WORLD_READY, OPCODE_ENTITY_SPAWN, OPCODE_ENTITY_DESPAWN, OPCODE_ENTITY_DELTA, OPCODE_SELF_STATE, OPCODE_WORLD_READY_ACK, OPCODE_WORLD_RESYNC_REQUEST, OPCODE_MONSTER_SPAWN, OPCODE_MONSTER_DELTA, OPCODE_MONSTER_DESPAWN, OPCODE_PLAYER_RESPAWN, OPCODE_PLAYER_RESPAWN_RESULT, OPCODE_GROUND_DROP_SPAWN, OPCODE_GROUND_DROP_DESPAWN, OPCODE_GROUND_PICKUP, OPCODE_GROUND_PICKUP_RESULT, OPCODE_INVENTORY_SNAPSHOT, OPCODE_RECOVERY_USE, OPCODE_RECOVERY_USE_RESULT, OPCODE_INVENTORY_DISCARD, OPCODE_INVENTORY_DISCARD_RESULT, OPCODE_PLAYER_ATTACK_VISUAL, OPCODE_PLAYER_DAMAGE_VISUAL, OPCODE_PLAYER_RESPAWN_VISUAL, OPCODE_SKILL_USE, OPCODE_SKILL_USE_RESULT, OPCODE_PLAYER_SKILL_VISUAL, OPCODE_SHOP_OPEN, OPCODE_SHOP_SNAPSHOT, OPCODE_SHOP_BUY, OPCODE_SHOP_SELL, OPCODE_SHOP_TRANSACTION_RESULT, OPCODE_STORAGE_OPEN, OPCODE_STORAGE_SNAPSHOT, OPCODE_STORAGE_DEPOSIT, OPCODE_STORAGE_WITHDRAW, OPCODE_STORAGE_TRANSFER_RESULT, OPCODE_EQUIPMENT_SNAPSHOT, OPCODE_EQUIPMENT_EQUIP, OPCODE_EQUIPMENT_UNEQUIP, OPCODE_EQUIPMENT_TRANSFER_RESULT, OPCODE_BANK_OPEN, OPCODE_BANK_SNAPSHOT, OPCODE_BANK_DEPOSIT, OPCODE_BANK_WITHDRAW, OPCODE_BANK_TRANSACTION_RESULT, OPCODE_REPAIR_OPEN, OPCODE_REPAIR_SNAPSHOT, OPCODE_REPAIR_ITEM, OPCODE_REPAIR_RESULT, OPCODE_TRADE_COMMAND, OPCODE_TRADE_SNAPSHOT, OPCODE_TRADE_TERMINAL, OPCODE_PVP_MODE_COMMAND, OPCODE_PVP_MODE_RESULT, OPCODE_PVP_ATTACK, OPCODE_PVP_ATTACK_RESULT, OPCODE_PVP_DAMAGE, OPCODE_PLAYER_IDENTITY, OPCODE_PVP_COMBAT_VISUAL, OPCODE_PVP_SKILL, OPCODE_PVP_SKILL_RESULT, OPCODE_PVP_SKILL_VISUAL, OPCODE_GM_CAPABILITY, OPCODE_GM_PVP_NAME_COMMAND, OPCODE_GM_PVP_NAME_RESULT, OPCODE_PLAYER_SHOP_COMMAND, OPCODE_PLAYER_SHOP_RESULT, OPCODE_PLAYER_SHOP_SOLD, OPCODE_CHAT_COMMAND, OPCODE_CHAT_DELIVERY, OPCODE_QUEST_OPEN, OPCODE_QUEST_VIEW, OPCODE_QUEST_CHOOSE]:
 		return -1
 	return opcode
 
