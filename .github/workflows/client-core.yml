@@ -76,6 +76,8 @@ jobs:
         run: .cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64 --headless --path client --script res://tests/test_bank_wire.gd
       - name: Godot server-authoritative repair durability reducer
         run: .cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64 --headless --path client --script res://tests/test_repair_wire.gd
+      - name: Godot server-authoritative equipment enhancement reducer
+        run: .cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64 --headless --path client --script res://tests/test_enhancement_wire.gd
       - name: Godot player trade wire and authoritative settlement reducer
         run: .cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64 --headless --path client --script res://tests/test_trade_wire.gd
       - name: Godot player shop wire and authoritative UID wallet reducer
