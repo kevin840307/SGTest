@@ -77,7 +77,7 @@ public sealed record CharacterCreateResult(CharacterCreateStatus Status, Charact
 /// </summary>
 public sealed partial class SqliteIdentityStore : IDisposable
 {
-    public const int SchemaVersion = 20;
+    public const int SchemaVersion = 21;
     private readonly string _connectionString;
     private readonly IdentityStoreOptions _options;
     private readonly PasswordHasher _passwords;
@@ -605,6 +605,7 @@ CREATE TABLE IF NOT EXISTS trade_commit_items (
     quantity INTEGER NOT NULL CHECK(quantity BETWEEN 1 AND 1000000),
     source_drop_id INTEGER,
     durability_raw INTEGER CHECK(durability_raw IS NULL OR durability_raw BETWEEN 0 AND 2147483647),
+    enhancement_level INTEGER NOT NULL DEFAULT 0 CHECK(enhancement_level BETWEEN 0 AND 255),
     PRIMARY KEY(trade_id,item_uid),
     CHECK(from_character_id <> to_character_id)
 );", tx);
@@ -706,6 +707,7 @@ CREATE TABLE IF NOT EXISTS player_shop_listings (
     quantity INTEGER NOT NULL CHECK(quantity BETWEEN 1 AND 1000000),
     source_drop_id INTEGER NULL,
     durability_raw INTEGER NULL,
+    enhancement_level INTEGER NOT NULL DEFAULT 0 CHECK(enhancement_level BETWEEN 0 AND 255),
     price INTEGER NOT NULL CHECK(price BETWEEN 1 AND 9000000000000000),
     state INTEGER NOT NULL CHECK(state BETWEEN 0 AND 3),
     buyer_character_id INTEGER NULL REFERENCES characters(character_id) ON DELETE RESTRICT,
@@ -732,6 +734,21 @@ ON player_shop_listings(seller_character_id,listing_id);",tx);
                 foreach(string table in new[]{"item_instances","storage_items","equipped_items"})
                     if(!ColumnExists(connection,table,"enhancement_level",tx))
                         Execute(connection,$@"ALTER TABLE {table}
+ADD COLUMN enhancement_level INTEGER NOT NULL DEFAULT 0
+CHECK(enhancement_level BETWEEN 0 AND 255);",tx);
+            }
+            // Schema v21: trade/player-shop durable receipts must freeze +N
+            // together with UID/definition/provenance. Otherwise an exact trade
+            // replay or a player-shop listing could describe a different item
+            // state from the one actually committed.
+            if(schemaVersion<21)
+            {
+                if(!ColumnExists(connection,"trade_commit_items","enhancement_level",tx))
+                    Execute(connection,@"ALTER TABLE trade_commit_items
+ADD COLUMN enhancement_level INTEGER NOT NULL DEFAULT 0
+CHECK(enhancement_level BETWEEN 0 AND 255);",tx);
+                if(!ColumnExists(connection,"player_shop_listings","enhancement_level",tx))
+                    Execute(connection,@"ALTER TABLE player_shop_listings
 ADD COLUMN enhancement_level INTEGER NOT NULL DEFAULT 0
 CHECK(enhancement_level BETWEEN 0 AND 255);",tx);
             }
