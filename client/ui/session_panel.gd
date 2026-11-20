@@ -105,6 +105,17 @@ var trade_confirm_button := Button.new()
 var trade_cancel_button := Button.new()
 var trade_status := Label.new()
 var _trade_display_key := ""
+var player_shop_inventory_picker := OptionButton.new()
+var player_shop_price_input := SpinBox.new()
+var player_shop_open_button := Button.new()
+var player_shop_own_label := Label.new()
+var player_shop_close_button := Button.new()
+var player_shop_seller_picker := OptionButton.new()
+var player_shop_inspect_button := Button.new()
+var player_shop_inspected_label := Label.new()
+var player_shop_buy_button := Button.new()
+var player_shop_status := Label.new()
+var _player_shop_display_key := ""
 var pvp_query_button := Button.new()
 var pvp_blue_button := Button.new()
 var pvp_white_button := Button.new()
@@ -300,6 +311,20 @@ func _ready() -> void:
 	trade_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	for control in [trade_target_picker,trade_request_button,trade_peer_label,trade_accept_button,trade_reject_button,trade_inventory_picker,trade_my_offer_picker,trade_offer_add_button,trade_offer_remove_button,trade_other_offer_label,trade_money_input,trade_set_money_button,trade_money_label,trade_lock_button,trade_confirm_button,trade_cancel_button,trade_status]:
 		control.visible = false
+	player_shop_price_input.min_value = 1
+	player_shop_price_input.max_value = 9000000000000000
+	player_shop_price_input.step = 1
+	player_shop_price_input.value = 1
+	player_shop_open_button.text = "以上架價格開啟玩家商店"
+	player_shop_own_label.text = "我的商店：—"
+	player_shop_close_button.text = "關閉我的玩家商店"
+	player_shop_inspect_button.text = "查看選中玩家商店"
+	player_shop_inspected_label.text = "查看中的商店：—"
+	player_shop_inspected_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	player_shop_buy_button.text = "購買查看中的整組物品"
+	player_shop_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	for control in [player_shop_inventory_picker,player_shop_price_input,player_shop_open_button,player_shop_own_label,player_shop_close_button,player_shop_seller_picker,player_shop_inspect_button,player_shop_inspected_label,player_shop_buy_button,player_shop_status]:
+		control.visible = false
 	respawn_button.text = "復活"
 	skill_hint.text = "技能 ID（需伺服器已核准規則）"
 	skill_id_input.min_value = 1
@@ -355,8 +380,14 @@ func _ready() -> void:
 	trade_lock_button.pressed.connect(_lock_trade)
 	trade_confirm_button.pressed.connect(_confirm_trade)
 	trade_cancel_button.pressed.connect(_cancel_trade)
+	player_shop_open_button.pressed.connect(_open_selected_player_shop)
+	player_shop_close_button.pressed.connect(_close_player_shop)
+	player_shop_inspect_button.pressed.connect(_inspect_selected_player_shop)
+	player_shop_buy_button.pressed.connect(_buy_inspected_player_shop)
 	# Trade controls must actually be parented, not only instantiated/connected.
 	for control in [trade_target_picker,trade_request_button,trade_peer_label,trade_accept_button,trade_reject_button,trade_inventory_picker,trade_my_offer_picker,trade_offer_add_button,trade_offer_remove_button,trade_other_offer_label,trade_money_input,trade_set_money_button,trade_money_label,trade_lock_button,trade_confirm_button,trade_cancel_button,trade_status]:
+		column.add_child(control)
+	for control in [player_shop_inventory_picker,player_shop_price_input,player_shop_open_button,player_shop_own_label,player_shop_close_button,player_shop_seller_picker,player_shop_inspect_button,player_shop_inspected_label,player_shop_buy_button,player_shop_status]:
 		column.add_child(control)
 	pvp_query_button.text = "查詢 PvP 名稱模式"
 	pvp_blue_button.text = "設為藍名（保護）"
@@ -428,6 +459,7 @@ func login() -> void:
 	_bank_display_key = ""
 	_repair_display_key = ""
 	_trade_display_key = ""
+	_player_shop_display_key = ""
 	_inventory_page = 0
 	inventory_search.clear()
 	shop_status.text = ""
@@ -450,6 +482,9 @@ func login() -> void:
 	trade_target_picker.clear()
 	trade_inventory_picker.clear()
 	trade_my_offer_picker.clear()
+	player_shop_status.text = ""
+	player_shop_inventory_picker.clear()
+	player_shop_seller_picker.clear()
 	inventory_preview.text = ""
 	_show_inventory_preview(false)
 	characters.clear()
@@ -701,6 +736,7 @@ func disconnect_session() -> void:
 	_bank_display_key = ""
 	_repair_display_key = ""
 	_trade_display_key = ""
+	_player_shop_display_key = ""
 	_inventory_page = 0
 	inventory_search.clear()
 	shop_status.text = ""
@@ -723,6 +759,9 @@ func disconnect_session() -> void:
 	trade_target_picker.clear()
 	trade_inventory_picker.clear()
 	trade_my_offer_picker.clear()
+	player_shop_status.text = ""
+	player_shop_inventory_picker.clear()
+	player_shop_seller_picker.clear()
 	inventory_preview.text = ""
 	_show_inventory_preview(false)
 	_characters = []
