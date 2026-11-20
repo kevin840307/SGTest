@@ -58,6 +58,9 @@ func _initialize()->void:
 		if not ready.inventory_items.has(item_uid):
 			_fail("seller missing seed UID "+str(ready.inventory_items),session)
 			return
+		if int((ready.inventory_items[item_uid] as Dictionary).get("enhancement_level",-1))!=6:
+			_fail("seller enhancement baseline "+str(ready.inventory_items[item_uid]),session)
+			return
 		_run_seller(session,seller_id,buyer_id,item_uid)
 	else:
 		_run_buyer(session,seller_id,buyer_id,item_uid,drop_id)
@@ -84,11 +87,12 @@ func _run_seller(session,seller_id:int,buyer_id:int,item_uid:int)->void:
 	var listing:=int(opened.player_shop_own_listing.listing_id)
 	if (
 		listing<=0 or int(opened.player_shop_wallet)!=100 or
+		int(opened.player_shop_own_listing.get("enhancement_level",-1))!=6 or
 		not opened.inventory_items.has(item_uid)
 	):
 		_fail("seller open state "+str(opened),session)
 		return
-	print("CLIENT_PLAYER_SHOP_READY role=seller actor=%d listing=%d item=%d" %
+	print("CLIENT_PLAYER_SHOP_READY role=seller actor=%d listing=%d item=%d enhancement=6" %
 		[seller_id,listing,item_uid])
 	var sold:=_wait(session,func(v):
 		return (
@@ -130,6 +134,7 @@ func _run_buyer(
 		listing<=0 or int(inspected.player_shop_inspected.price)!=300 or
 		int(inspected.player_shop_inspected.quantity)!=2 or
 		int(inspected.player_shop_inspected.durability_raw)!=80 or
+		int(inspected.player_shop_inspected.enhancement_level)!=6 or
 		int(inspected.player_shop_wallet)!=1000 or
 		inspected.inventory_items.has(item_uid)
 	):
@@ -152,12 +157,13 @@ func _run_buyer(
 	if (
 		int(item.item_definition_id)!=6401 or int(item.quantity)!=2 or
 		int(item.drop_id)!=drop_id or int(item.durability_raw)!=80 or
+		int(item.get("enhancement_level",-1))!=6 or
 		not (purchased.player_shop_inspected as Dictionary).is_empty()
 	):
-		_fail("buyer UID provenance/durability "+str(item),session)
+		_fail("buyer UID provenance/durability/enhancement "+str(item),session)
 		return
 	session.stop()
-	print("CLIENT_PLAYER_SHOP_PASS role=buyer actor=%d listing=%d uid=%d quantity=2 drop=%d durability=80 wallet=700" %
+	print("CLIENT_PLAYER_SHOP_PASS role=buyer actor=%d listing=%d uid=%d quantity=2 drop=%d durability=80 enhancement=6 wallet=700" %
 		[buyer_id,listing,item_uid,drop_id])
 	quit(0)
 
