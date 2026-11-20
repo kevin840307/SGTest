@@ -45,6 +45,22 @@ internal static class StorageChecks
                 grant.ItemUid > 0 && grant.Quantity == 3,
                 "storage seed inventory grant failed");
             itemUid = grant.ItemUid;
+            using (var connection = new SqliteConnection(
+                new SqliteConnectionStringBuilder
+                {
+                    DataSource = db,
+                    Mode = SqliteOpenMode.ReadWrite,
+                    Pooling = false
+                }.ToString()))
+            {
+                connection.Open();
+                using var command = connection.CreateCommand();
+                command.CommandText =
+                    "UPDATE item_instances SET enhancement_level=5 WHERE item_uid=$uid;";
+                command.Parameters.AddWithValue("$uid", itemUid);
+                Checks.Require(command.ExecuteNonQuery() == 1,
+                    "storage enhancement-level seed failed");
+            }
 
             var depositContext = new TrustedStorageContext(characterA, 101, 1, 1);
             var deposited = await store.DepositInventoryItemAsync(
@@ -63,7 +79,8 @@ internal static class StorageChecks
                 stored.Count == 1 &&
                 stored[0].ItemUid == itemUid &&
                 stored[0].Quantity == 3 &&
-                stored[0].SourceDropId == sourceDropId,
+                stored[0].SourceDropId == sourceDropId &&
+                stored[0].EnhancementLevel == 5,
                 "storage deposit/replay did not preserve exact UID stack");
 
             var foreign = await store.WithdrawStorageItemAsync(
@@ -95,7 +112,8 @@ internal static class StorageChecks
                 restored[0].ItemUid == itemUid &&
                 restored[0].ItemDefinitionId == 2701 &&
                 restored[0].Quantity == 3 &&
-                restored[0].SourceDropId == sourceDropId,
+                restored[0].SourceDropId == sourceDropId &&
+                restored[0].EnhancementLevel == 5,
                 "storage withdraw/replay did not restore exact inventory UID");
 
             bool overlapRejected = false;
@@ -136,6 +154,7 @@ FROM item_instances WHERE item_uid=$uid;";
                 inventory.Count == 1 &&
                 inventory[0].ItemUid == itemUid &&
                 inventory[0].Quantity == 3 &&
+                inventory[0].EnhancementLevel == 5 &&
                 (await reopened.ListStorageItemsAsync(characterA)).Count == 0,
                 "storage transfer did not survive database reopen");
         }
