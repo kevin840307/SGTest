@@ -311,6 +311,7 @@ static class Checks
             StorageGatewayChecks.Verify();
             TlsSocketChecks.Verify();
             IdentityStoreChecks.Verify();
+            AuthenticationRateLimiterChecks.Verify();
             IdentityTlsAuthorizationChecks.Verify(root);
             IdentityTlsLifecycleChecks.Verify(root);
             TlsGatewayListenerChecks.Verify(root);
