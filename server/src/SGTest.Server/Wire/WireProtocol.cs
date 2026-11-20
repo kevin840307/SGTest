@@ -371,7 +371,8 @@ public readonly record struct ShopTransactionResultWire(
 public readonly record struct StorageOpenWire(
     long MapEpoch,uint StorageSequence,int NpcSpawnId);
 public readonly record struct StorageItemWire(
-    long ItemUid,int ItemDefinitionId,int Quantity,long SourceDropId);
+    long ItemUid,int ItemDefinitionId,int Quantity,long SourceDropId,
+    int EnhancementLevel = 0);
 public sealed record StorageSnapshotWire(
     long MapEpoch,uint StorageSequence,StorageOpenStatus Status,
     int NpcSpawnId,int StartIndex,bool Complete,
@@ -593,7 +594,7 @@ public static class WireProtocol
     public const int StorageMoveFrameBytes = HeaderBytes + 8 + 4 + 4 + 8;
     public const int StorageSnapshotHeaderBytes =
         HeaderBytes + 8 + 4 + 1 + 4 + 4 + 1 + 2;
-    public const int StorageItemBytes = 24;
+    public const int StorageItemBytes = 25;
     public const int StorageSnapshotMaxItemsPerFrame = 128;
     public const int StorageSnapshotMaxItems = 4095;
     public const int StorageTransferResultFrameBytes =
@@ -2369,7 +2370,7 @@ public static class WireProtocol
         foreach(var item in value.Items)
             if(item.ItemUid<=0||item.ItemDefinitionId is <1 or >100_000_000||
                item.Quantity is <1 or >1_000_000||item.SourceDropId<0||
-               !seen.Add(item.ItemUid))
+               item.EnhancementLevel is <0 or >255||!seen.Add(item.ItemUid))
                 throw new ArgumentOutOfRangeException(nameof(value));
         var frame=NewFrame(WireOpcode.StorageSnapshot,
             StorageSnapshotHeaderBytes+value.Items.Count*StorageItemBytes);
@@ -2389,6 +2390,7 @@ public static class WireProtocol
             BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(offset+8,4),item.ItemDefinitionId);
             BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(offset+12,4),item.Quantity);
             BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(offset+16,8),item.SourceDropId);
+            frame[offset+24]=checked((byte)item.EnhancementLevel);
         }
         return frame;
     }
@@ -2425,9 +2427,11 @@ public static class WireProtocol
                 BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(offset,8)),
                 BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(offset+8,4)),
                 BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(offset+12,4)),
-                BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(offset+16,8)));
+                BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(offset+16,8)),
+                frame[offset+24]);
             if(item.ItemUid<=0||item.ItemDefinitionId is <1 or >100_000_000||
                item.Quantity is <1 or >1_000_000||item.SourceDropId<0||
+               item.EnhancementLevel is <0 or >255||
                !seen.Add(item.ItemUid))return false;
             items.Add(item);
         }
