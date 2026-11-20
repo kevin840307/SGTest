@@ -457,7 +457,7 @@ public readonly record struct TradeCommandWire(
     long TradeId,long TargetActorId,long ItemUid,long Money);
 public readonly record struct TradeOfferItemWire(
     long ItemUid,int ItemDefinitionId,int Quantity,long SourceDropId,
-    int EnhancementLevel = 0);
+    int EnhancementLevel = 0,int DurabilityRaw = -1);
 public sealed record TradeSnapshotWire(
     long MapEpoch,long TradeId,uint Revision,TradeSessionWireState State,
     long PeerActorId,long MyMoney,long OtherMoney,
@@ -696,7 +696,7 @@ public static class WireProtocol
         QuestViewMaxChoices*(4+2+QuestViewMaxLabelBytes);
     public const int TradeCommandFrameBytes = HeaderBytes + 8 + 4 + 1 + 8 + 8 + 8 + 8;
     public const int TradeSnapshotHeaderBytes = 59;
-    public const int TradeOfferItemBytes = 25;
+    public const int TradeOfferItemBytes = 29;
     public const int TradeMaxItemsPerSide = 32;
     public const int TradeTerminalFrameBytes = HeaderBytes + 8 + 8 + 4 + 1 + 8;
     private static readonly UTF8Encoding StrictUtf8 = new(false, true);
@@ -1669,7 +1669,8 @@ public static class WireProtocol
                 BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(offset+8,4)),
                 BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(offset+12,4)),
                 BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(offset+16,8)),
-                frame[offset+24]);
+                frame[offset+24],
+                BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(offset+25,4)));
             if(item.ItemUid<=0||item.ItemDefinitionId is <1 or >100_000_000 ||
                item.Quantity is <1 or >1_000_000||item.SourceDropId<0||
                item.EnhancementLevel is <0 or >255||!ids.Add(item.ItemUid)) return false;
@@ -2392,7 +2393,8 @@ public static class WireProtocol
         foreach(var item in value.Items)
             if(item.ItemUid<=0||item.ItemDefinitionId is <1 or >100_000_000||
                item.Quantity is <1 or >1_000_000||item.SourceDropId<0||
-               item.EnhancementLevel is <0 or >255||!seen.Add(item.ItemUid))
+               item.EnhancementLevel is <0 or >255||item.DurabilityRaw< -1||
+               !seen.Add(item.ItemUid))
                 throw new ArgumentOutOfRangeException(nameof(value));
         var frame=NewFrame(WireOpcode.StorageSnapshot,
             StorageSnapshotHeaderBytes+value.Items.Count*StorageItemBytes);
@@ -3433,6 +3435,8 @@ public static class WireProtocol
             BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(offset+12,4),item.Quantity);
             BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(offset+16,8),item.SourceDropId);
             frame[offset+24]=checked((byte)item.EnhancementLevel);
+            BinaryPrimitives.WriteInt32LittleEndian(
+                frame.AsSpan(offset+25,4),item.DurabilityRaw);
             offset+=TradeOfferItemBytes;
         }
         return frame;
