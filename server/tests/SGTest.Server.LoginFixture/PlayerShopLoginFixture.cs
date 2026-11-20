@@ -77,6 +77,24 @@ internal static class PlayerShopLoginFixture
                     sellerSocket,certificate,router,
                     new TlsWireConnectionOptions(
                         AuthorizationTimeoutMilliseconds:15000));
+                _=sellerTask.ContinueWith(task=>
+                {
+                    if(task.IsCompletedSuccessfully)
+                    {
+                        var result=task.Result;
+                        Console.WriteLine(
+                            $"PLAYER_SHOP_FIXTURE_SELLER_END reason={result.Reason} " +
+                            $"commands={result.CommandsAccepted} reliable={result.ReliableFramesSent} " +
+                            $"fault={result.Fault??"-"}");
+                    }
+                    else
+                    {
+                        Console.WriteLine(
+                            "PLAYER_SHOP_FIXTURE_SELLER_END faulted="+
+                            task.Exception?.GetBaseException().Message);
+                    }
+                    Console.Out.Flush();
+                },TaskScheduler.Default);
 
                 using var buyerSocket=await listener.AcceptTcpClientAsync()
                     .WaitAsync(TimeSpan.FromSeconds(15)).ConfigureAwait(false);
