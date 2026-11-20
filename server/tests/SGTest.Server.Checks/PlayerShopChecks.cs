@@ -37,6 +37,7 @@ internal static class PlayerShopChecks
             long generation=await store.AllocateLootWorldGenerationAsync();
             var first=await SeedItem(store,generation,seller,5101,2,1);
             var second=await SeedItem(store,generation,seller,5102,1,2);
+            SeedEnhancementLevel(db,first.ItemUid,5);
             var rules=new Dictionary<int,TradeItemRule>
             {
                 [5101]=new(5101,true,"synthetic:player-shop-5101"),
@@ -51,6 +52,7 @@ internal static class PlayerShopChecks
                 created.Listing.ItemDefinitionId==5101&&
                 created.Listing.Quantity==2&&
                 created.Listing.SourceDropId==first.DropId&&
+                created.Listing.EnhancementLevel==5&&
                 created.Listing.Price==300&&
                 created.Listing.State==PlayerShopListingState.Active,
                 "player-shop listing snapshot mismatch");
@@ -72,13 +74,14 @@ internal static class PlayerShopChecks
                 applied.Listing is not null&&
                 applied.Listing.State==PlayerShopListingState.Sold&&
                 applied.Listing.BuyerCharacterId==buyer&&
+                applied.Listing.EnhancementLevel==5&&
                 applied.Listing.SellerWalletAfter==400&&
                 applied.Listing.BuyerWalletAfter==700,
                 "player-shop sale receipt mismatch");
             Checks.Require(await store.GetCharacterMoneyAsync(seller)==400&&
                 await store.GetCharacterMoneyAsync(buyer)==700,
                 "player-shop sale money mismatch");
-            await AssertOwnership(store,buyer,first.ItemUid,5101,2,first.DropId);
+            await AssertOwnership(store,buyer,first.ItemUid,5101,2,first.DropId,5);
             Checks.Require((await store.ListInventoryItemsAsync(seller))
                 .All(x=>x.ItemUid!=first.ItemUid),
                 "sold player-shop UID remained with seller");
@@ -87,6 +90,7 @@ internal static class PlayerShopChecks
                 buyer,listing.ListingId,rules);
             Checks.Require(replay.Status==PlayerShopBuyStatus.AlreadyApplied&&
                 replay.Listing?.BuyerCharacterId==buyer&&
+                replay.Listing?.EnhancementLevel==5&&
                 await store.GetCharacterMoneyAsync(seller)==400&&
                 await store.GetCharacterMoneyAsync(buyer)==700,
                 "exact player-shop replay changed committed money");
@@ -159,9 +163,31 @@ internal static class PlayerShopChecks
             Checks.Require(await store.GetActivePlayerShopListingAsync(seller) is null,
                 "stale player-shop listing remained active");
 
-            var freshItem=await SeedItem(store,generation,seller,5201,1,2);
+            var levelItem=await SeedItem(store,generation,seller,5201,1,2);
+            SeedEnhancementLevel(db,levelItem.ItemUid,2);
+            var levelListingResult=await store.CreatePlayerShopListingAsync(
+                seller,levelItem.ItemUid,100,rules);
+            Checks.Require(levelListingResult.Status==PlayerShopCreateStatus.Created&&
+                levelListingResult.Listing?.EnhancementLevel==2,
+                "enhancement-level listing setup failed");
+            var levelListing=levelListingResult.Listing
+                ??throw new InvalidOperationException("enhancement listing missing");
+            SeedEnhancementLevel(db,levelItem.ItemUid,3);
+            var changedLevel=await store.BuyPlayerShopListingAsync(
+                buyer,levelListing.ListingId,rules);
+            Checks.Require(changedLevel.Status==PlayerShopBuyStatus.StaleListing&&
+                changedLevel.Listing?.State==PlayerShopListingState.Stale&&
+                changedLevel.Listing?.EnhancementLevel==2&&
+                await store.GetCharacterMoneyAsync(seller)==50&&
+                await store.GetCharacterMoneyAsync(buyer)==500,
+                "player-shop sold an item whose enhancement changed after listing");
+            await AssertOwnership(store,seller,levelItem.ItemUid,5201,1,levelItem.DropId,3);
+            Checks.Require(await store.GetActivePlayerShopListingAsync(seller) is null,
+                "enhancement-stale player-shop listing remained active");
+
+            var closeItem=await SeedItem(store,generation,seller,5201,1,3);
             var fresh=await store.CreatePlayerShopListingAsync(
-                seller,freshItem.ItemUid,100,rules);
+                seller,closeItem.ItemUid,100,rules);
             Checks.Require(fresh.Status==PlayerShopCreateStatus.Created&&
                 fresh.Listing is not null,"fresh listing after stale failed");
             var freshListing=fresh.Listing
@@ -253,13 +279,30 @@ internal static class PlayerShopChecks
     }
 
     private static async Task AssertOwnership(
-        SqliteIdentityStore store,long owner,long uid,int definition,int quantity,long dropId)
+        SqliteIdentityStore store,long owner,long uid,int definition,int quantity,long dropId,
+        int enhancementLevel=0)
     {
         var item=(await store.ListInventoryItemsAsync(owner))
             .Single(x=>x.ItemUid==uid);
         Checks.Require(item.ItemDefinitionId==definition&&
-            item.Quantity==quantity&&item.SourceDropId==dropId,
-            "player-shop settlement lost UID/quantity/provenance");
+            item.Quantity==quantity&&item.SourceDropId==dropId&&
+            item.EnhancementLevel==enhancementLevel,
+            "player-shop settlement lost UID/quantity/provenance/enhancement");
+    }
+
+    private static void SeedEnhancementLevel(string db,long itemUid,int level)
+    {
+        using var connection=new SqliteConnection(
+            new SqliteConnectionStringBuilder
+            {DataSource=db,Mode=SqliteOpenMode.ReadWrite,Pooling=false}.ToString());
+        connection.Open();
+        using var command=connection.CreateCommand();
+        command.CommandText=
+            "UPDATE item_instances SET enhancement_level=$level WHERE item_uid=$uid;";
+        command.Parameters.AddWithValue("$level",level);
+        command.Parameters.AddWithValue("$uid",itemUid);
+        Checks.Require(command.ExecuteNonQuery()==1,
+            "player-shop enhancement-level seed failed");
     }
 
     private static void SeedWallet(string db,long characterId,long money)
