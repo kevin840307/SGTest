@@ -8,6 +8,8 @@ internal static class AuthenticationRateLimiterChecks
         Checks.Run("authentication limiter scopes address account lockout and success reset",Scope);
         Checks.Run("authentication limiter bounds hostile address and username tracking",Bounded);
         Checks.Run("authentication limiter never evicts active lockouts under capacity pressure",SaturationFailClosed);
+        Checks.Run("public account registration limiter bounds successful and failed creation attempts",
+            RegistrationQuota);
     }
 
     private static void Scope()
@@ -89,6 +91,33 @@ internal static class AuthenticationRateLimiterChecks
         Checks.Require(limiter.IsAllowed(
                 IPAddress.Parse("198.51.100.200"),"fresh_account"),
             "scope-wide capacity gate did not expire with configured lockout");
+    }
+
+
+    private static void RegistrationQuota()
+    {
+        var now=new DateTimeOffset(2026,11,20,0,0,0,TimeSpan.Zero);
+        var limiter=new AccountRegistrationRateLimiter(new(
+            MaxAttemptsPerAddress:2,
+            Window:TimeSpan.FromSeconds(30),
+            MaxTrackedAddresses:16),()=>now);
+        var source=IPAddress.Parse("203.0.113.40");
+        Checks.Require(limiter.TryAcquire(source)&&limiter.TryAcquire(source)&&
+            !limiter.TryAcquire(source),
+            "registration quota did not cap attempts in one window");
+        var blocked=limiter.Statistics;
+        Checks.Require(blocked.AllowedAttempts==2&&blocked.BlockedAttempts==1&&
+            blocked.TrackedAddresses==1,
+            "registration quota statistics mismatch");
+        now+=TimeSpan.FromSeconds(31);
+        Checks.Require(limiter.TryAcquire(source),
+            "registration quota did not reopen after window");
+
+        for(int i=0;i<16;i++)
+            _=limiter.TryAcquire(IPAddress.Parse($"198.51.100.{i+1}"));
+        Checks.Require(!limiter.TryAcquire(IPAddress.Parse("192.0.2.200"))&&
+            limiter.Statistics.CapacityBlocks>0,
+            "registration bounded table saturation did not fail closed");
     }
 
     private static void Bounded()

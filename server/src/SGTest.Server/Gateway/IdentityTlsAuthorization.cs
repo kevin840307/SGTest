@@ -14,10 +14,11 @@ namespace SGTest.Server.Gateway;
 public sealed record CharacterCreationPolicy(CharacterSpawn Spawn);
 
 /// <summary>
-/// TLS-only login/character selection boundary. It never creates accounts and it
-/// never trusts a client-supplied ActorId: CharacterChoose is matched against the
-/// authenticated account, then the persistent character_id is passed to the
-/// trusted World lifecycle API.
+/// TLS-only registration/login/character-selection boundary. Public account
+/// registration is opt-in and rate-limited; even a newly created account must
+/// still pass the ordinary AuthRequest before receiving CharacterList. It never
+/// trusts a client-supplied ActorId: CharacterChoose is matched against the
+/// authenticated account, then persistent character_id enters trusted World lifecycle.
 /// </summary>
 public sealed class IdentityTlsAuthorization
 {
@@ -43,6 +44,7 @@ public sealed class IdentityTlsAuthorization
     private readonly PlayerShopCoordinator? _playerShops;
     private readonly PartyCoordinator? _parties;
     private readonly AuthenticationRateLimiter? _rateLimiter;
+    private readonly AccountRegistrationRateLimiter? _registrationRateLimiter;
     private readonly HashSet<string> _gmAccounts;
 
     public IdentityTlsAuthorization(SqliteIdentityStore identity, ServerWorldHost world,
@@ -66,6 +68,7 @@ public sealed class IdentityTlsAuthorization
                                      PlayerShopCoordinator? playerShops = null,
                                      PartyCoordinator? parties = null,
                                      AuthenticationRateLimiter? rateLimiter = null,
+                                     AccountRegistrationRateLimiter? registrationRateLimiter = null,
                                      IReadOnlySet<string>? gmAccounts = null)
     {
         _identity = identity ?? throw new ArgumentNullException(nameof(identity));
@@ -98,6 +101,7 @@ public sealed class IdentityTlsAuthorization
         _playerShops=playerShops;
         _parties=parties;
         _rateLimiter=rateLimiter;
+        _registrationRateLimiter=registrationRateLimiter;
         if(_playerShops is not null&&_trades is null)
             throw new ArgumentException(
                 "Player shop requires the authenticated gameplay-gate registry",
@@ -2176,11 +2180,61 @@ public sealed class IdentityTlsAuthorization
         IPAddress? remoteAddress = null)
     {
         ArgumentNullException.ThrowIfNull(tls);
-        byte[]? authFrame = await ReadFrameAsync(tls, cancellationToken).ConfigureAwait(false);
-        if (authFrame is null || !WireProtocol.TryDecodeAuthRequest(authFrame, out var request)) return null;
-
         IPAddress source=remoteAddress??IPAddress.None;
         if(source.IsIPv4MappedToIPv6)source=source.MapToIPv4();
+
+        byte[]? authFrame=await ReadFrameAsync(
+            tls,cancellationToken).ConfigureAwait(false);
+        if(authFrame is null)return null;
+
+        if(WireProtocol.TryDecodeAccountRegisterRequest(
+               authFrame,out var registrationRequest))
+        {
+            AccountRegisterWireStatus registrationStatus;
+            if(_registrationRateLimiter is null)
+                registrationStatus=AccountRegisterWireStatus.Unavailable;
+            else if(!_registrationRateLimiter.TryAcquire(source))
+                registrationStatus=AccountRegisterWireStatus.RateLimited;
+            else
+            {
+                try
+                {
+                    var created=await _identity.CreateAccountAsync(
+                        registrationRequest.Username,registrationRequest.Password,
+                        cancellationToken).ConfigureAwait(false);
+                    registrationStatus=created.Status switch
+                    {
+                        AccountCreateStatus.Created =>
+                            AccountRegisterWireStatus.Created,
+                        AccountCreateStatus.DuplicateUsername =>
+                            AccountRegisterWireStatus.UsernameTaken,
+                        _ => throw new InvalidOperationException(
+                            "Unsupported account-create status")
+                    };
+                }
+                catch(ArgumentException)
+                {
+                    registrationStatus=AccountRegisterWireStatus.InvalidInput;
+                }
+            }
+            await WriteFrameAsync(tls,
+                WireProtocol.EncodeAccountRegisterResult(
+                    new(registrationStatus)),cancellationToken)
+                .ConfigureAwait(false);
+            if(registrationStatus!=AccountRegisterWireStatus.Created)
+                return null;
+
+            // Registration only creates durable credentials. Authentication is
+            // deliberately a second explicit step on the SAME mandatory TLS
+            // connection so account creation never grants gameplay authority.
+            authFrame=await ReadFrameAsync(
+                tls,cancellationToken).ConfigureAwait(false);
+            if(authFrame is null)return null;
+        }
+
+        if(!WireProtocol.TryDecodeAuthRequest(authFrame,out var request))
+            return null;
+
         if(_rateLimiter is not null&&
            !_rateLimiter.IsAllowed(source,request.Username))
         {

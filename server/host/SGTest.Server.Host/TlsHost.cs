@@ -40,6 +40,23 @@ internal static class TlsHost
                 options,"--auth-lockout-seconds",
                 checked((int)authDefaults.EffectiveLockout.TotalSeconds),
                 1,86400);
+            string registrationMode=options.GetValueOrDefault(
+                "--account-registration","disabled");
+            bool registrationEnabled=registrationMode switch
+            {
+                "enabled"=>true,
+                "disabled"=>false,
+                _=>throw new ArgumentException(
+                    "--account-registration must be enabled or disabled")
+            };
+            var registrationDefaults=new AccountRegistrationRateLimitOptions();
+            int registrationAttempts=Number(
+                options,"--registration-attempts-per-address",
+                registrationDefaults.MaxAttemptsPerAddress,1,100);
+            int registrationWindowSeconds=Number(
+                options,"--registration-window-seconds",
+                checked((int)registrationDefaults.EffectiveWindow.TotalSeconds),
+                1,86400);
             int checkpointMs = Number(options, "--position-checkpoint-ms", 5000, 500, 60000);
             if (options.ContainsKey("--seconds"))
                 stop.CancelAfter(TimeSpan.FromSeconds(Number(options, "--seconds", 1, 1, 86400)));
@@ -256,6 +273,12 @@ internal static class TlsHost
                 MaxFailuresPerAccount:authAccountFailures,
                 FailureWindow:TimeSpan.FromSeconds(authWindowSeconds),
                 Lockout:TimeSpan.FromSeconds(authLockoutSeconds)));
+            AccountRegistrationRateLimiter? registrationRateLimiter=
+                registrationEnabled
+                    ?new AccountRegistrationRateLimiter(new(
+                        MaxAttemptsPerAddress:registrationAttempts,
+                        Window:TimeSpan.FromSeconds(registrationWindowSeconds)))
+                    :null;
             var aoi = new WorldAoiPump(
                 router, monsters: monsters, playerCombat: combat, loot: loot,
                 initialGroundDrops: activeDrops);
@@ -277,6 +300,7 @@ internal static class TlsHost
                 playerShops: playerShops,
                 parties: parties,
                 rateLimiter: authRateLimiter,
+                registrationRateLimiter: registrationRateLimiter,
                 gmAccounts: gmAccounts);
             await using var listener = new TlsGatewayListener(address, port, authorization,
                 certificate, router, new(MaxConnections: maximum, MaxConnectionsPerAddress: perAddress));
@@ -301,6 +325,9 @@ internal static class TlsHost
                     auth_failures_per_account = authAccountFailures,
                     auth_failure_window_seconds = authWindowSeconds,
                     auth_lockout_seconds = authLockoutSeconds,
+                    account_registration_enabled = registrationEnabled,
+                    registration_attempts_per_address = registrationAttempts,
+                    registration_window_seconds = registrationWindowSeconds,
                     maps = maps.Select(m => m.MapId), audited_portals = portals.Count,
                     monster_maps = monsterRuntimes.Select(m => m.MapId),
                     monsters = monsterRuntimes.Sum(m => m.Count),
@@ -363,6 +390,7 @@ internal static class TlsHost
             {
                 result = "TLS_HOST_STOPPED", listener = listener.Statistics,
                 authentication_rate_limit = authRateLimiter.Statistics,
+                account_registration_rate_limit = registrationRateLimiter?.Statistics,
                 world = world.Statistics, router = router.Statistics,
                 monster_coordinator = monsters?.Statistics,
                 positions = positions.Statistics,
@@ -389,6 +417,8 @@ internal static class TlsHost
                 "[--bind 127.0.0.1] [--port 7777] [--max-connections 128] [--max-per-address 8] " +
                 "[--auth-failures-per-address 12] [--auth-failures-per-account 6] " +
                 "[--auth-failure-window-seconds 60] [--auth-lockout-seconds 30] " +
+                "[--account-registration disabled|enabled] " +
+                "[--registration-attempts-per-address 3] [--registration-window-seconds 600] " +
                 "[--position-checkpoint-ms 5000] [--loot-rules <VERIFIED_JSON>] " +
                 "[--recovery-rules <VERIFIED_JSON>] [--skill-rules <VERIFIED_JSON>] " +
                 "[--shop-rules <VERIFIED_JSON>] [--storage-rules <VERIFIED_JSON>] " +
@@ -419,6 +449,9 @@ internal static class TlsHost
                           "--max-connections", "--max-per-address",
                           "--auth-failures-per-address", "--auth-failures-per-account",
                           "--auth-failure-window-seconds", "--auth-lockout-seconds",
+                          "--account-registration",
+                          "--registration-attempts-per-address",
+                          "--registration-window-seconds",
                           "--position-checkpoint-ms",
                           "--loot-rules", "--recovery-rules", "--skill-rules",
                           "--shop-rules", "--storage-rules", "--equipment-rules", "--bank-rules",

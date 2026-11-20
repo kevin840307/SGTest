@@ -21,6 +21,8 @@ internal static class IdentityTlsAuthorizationChecks
             () => ShopSellBuyAndRelogin(root).GetAwaiter().GetResult());
         Checks.Run("TLS personal storage deposit withdraw replay and relogin preserve Item UID",
             () => StorageDepositWithdrawAndRelogin(root).GetAwaiter().GetResult());
+        Checks.Run("TLS public account registration is opt-in rate-limited and still requires Auth",
+            () => PublicAccountRegistration(root).GetAwaiter().GetResult());
         Checks.Run("TLS invalid password never reaches CharacterList or World",
             () => InvalidPasswordRejected(root).GetAwaiter().GetResult());
         Checks.Run("TLS authenticated account cannot choose another account character",
@@ -623,6 +625,114 @@ internal static class IdentityTlsAuthorizationChecks
         finally { Directory.Delete(identityRoot, true); }
     }
 
+
+
+    private static async Task PublicAccountRegistration(string root)
+    {
+        string identityRoot=TempRoot();
+        try
+        {
+            string mapDir=Checks.Fixture(root,78,3,3,(_,_)=>0);
+            var grid=BlockingGrid.Load(mapDir,78);
+            await using var world=new ServerWorldHost([grid]);
+            await world.StartAsync();
+            using var store=new SqliteIdentityStore(
+                Path.Combine(identityRoot,"identity.db"));
+            await store.InitializeAsync();
+            const string username="public_user";
+            const string password="Public-Registration-Password-123!";
+
+            // Default authorization is closed to public account creation.
+            var disabled=new IdentityTlsAuthorization(store,world);
+            var first=await StartSession(disabled,world);
+            await first.Tls.WriteAsync(
+                WireProtocol.EncodeAccountRegisterRequest(new(username,password)));
+            await first.Tls.FlushAsync();
+            Checks.Require(WireProtocol.TryDecodeAccountRegisterResult(
+                    await ReadFrameAsync(first.Tls),out var disabledResult)&&
+                disabledResult.Status==AccountRegisterWireStatus.Unavailable,
+                "default-disabled registration did not fail closed");
+            var firstEnded=await first.ServerTask.WaitAsync(TimeSpan.FromSeconds(2));
+            Checks.Require(firstEnded.Reason==TlsWireEndReason.AuthorizationRejected&&
+                (await store.AuthenticateAsync(username,password)).Status==
+                    AuthenticationStatus.InvalidCredentials,
+                "disabled registration mutated identity DB or entered World");
+            await first.Tls.DisposeAsync();
+            first.Client.Dispose();
+
+            var quota=new AccountRegistrationRateLimiter(new(
+                MaxAttemptsPerAddress:2,
+                Window:TimeSpan.FromMinutes(1),
+                MaxTrackedAddresses:16));
+            var enabled=new IdentityTlsAuthorization(
+                store,world,registrationRateLimiter:quota);
+
+            // Created credentials do not authenticate implicitly. The same TLS
+            // connection must issue the ordinary AuthRequest and receive the
+            // authoritative CharacterList.
+            var second=await StartSession(enabled,world);
+            await second.Tls.WriteAsync(
+                WireProtocol.EncodeAccountRegisterRequest(new(username,password)));
+            await second.Tls.FlushAsync();
+            Checks.Require(WireProtocol.TryDecodeAccountRegisterResult(
+                    await ReadFrameAsync(second.Tls),out var created)&&
+                created.Status==AccountRegisterWireStatus.Created,
+                "enabled registration did not create account");
+            await second.Tls.WriteAsync(
+                WireProtocol.EncodeAuthRequest(new(username,password)));
+            await second.Tls.FlushAsync();
+            Checks.Require(WireProtocol.TryDecodeAuthResult(
+                    await ReadFrameAsync(second.Tls),out var auth)&&
+                auth.Status==AuthWireStatus.Success,
+                "new account did not pass ordinary AuthRequest");
+            Checks.Require(WireProtocol.TryDecodeCharacterList(
+                    await ReadFrameAsync(second.Tls),out var list)&&
+                list.Characters.Count==0,
+                "new account did not receive authoritative empty CharacterList");
+            await second.Tls.DisposeAsync();
+            second.Client.Dispose();
+            var secondEnded=await second.ServerTask.WaitAsync(TimeSpan.FromSeconds(2));
+            Checks.Require(secondEnded.Reason==TlsWireEndReason.AuthorizationRejected&&
+                (await store.AuthenticateAsync(username,password)).Status==
+                    AuthenticationStatus.Success,
+                "registered account was not durable after normal Auth path");
+
+            // Duplicate is explicit but consumes the same per-source quota.
+            var third=await StartSession(enabled,world);
+            await third.Tls.WriteAsync(
+                WireProtocol.EncodeAccountRegisterRequest(new(username,password)));
+            await third.Tls.FlushAsync();
+            Checks.Require(WireProtocol.TryDecodeAccountRegisterResult(
+                    await ReadFrameAsync(third.Tls),out var duplicate)&&
+                duplicate.Status==AccountRegisterWireStatus.UsernameTaken,
+                "duplicate public username status mismatch");
+            await third.ServerTask.WaitAsync(TimeSpan.FromSeconds(2));
+            await third.Tls.DisposeAsync();
+            third.Client.Dispose();
+
+            // A third attempt in the same window is rejected BEFORE CreateAccount.
+            const string blockedUsername="quota_blocked_user";
+            var fourth=await StartSession(enabled,world);
+            await fourth.Tls.WriteAsync(
+                WireProtocol.EncodeAccountRegisterRequest(
+                    new(blockedUsername,"Quota-Blocked-Password-123!")));
+            await fourth.Tls.FlushAsync();
+            Checks.Require(WireProtocol.TryDecodeAccountRegisterResult(
+                    await ReadFrameAsync(fourth.Tls),out var limited)&&
+                limited.Status==AccountRegisterWireStatus.RateLimited,
+                "registration quota did not reject the third source attempt");
+            await fourth.ServerTask.WaitAsync(TimeSpan.FromSeconds(2));
+            Checks.Require((await store.AuthenticateAsync(
+                    blockedUsername,"Quota-Blocked-Password-123!")).Status==
+                    AuthenticationStatus.InvalidCredentials&&
+                world.Statistics.ActiveActors==0,
+                "rate-limited registration mutated identity DB or entered World");
+            await fourth.Tls.DisposeAsync();
+            fourth.Client.Dispose();
+            await world.StopAsync();
+        }
+        finally{Directory.Delete(identityRoot,true);}
+    }
 
     private static async Task InvalidPasswordRejected(string root)
     {

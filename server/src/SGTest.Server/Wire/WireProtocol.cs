@@ -22,6 +22,8 @@ public enum WireOpcode : ushort
     CharacterChooseResult = 14,
     CharacterCreate = 15,
     CharacterCreateResult = 16,
+    AccountRegisterRequest = 17,
+    AccountRegisterResult = 18,
     WorldReady = 20,
     EntitySpawn = 21,
     EntityDespawn = 22,
@@ -142,6 +144,14 @@ public enum TradeTerminalStatus : byte
     PeerDisconnected = 4, CommitFailed = 5, StaleGeneration = 6
 }
 public enum AuthWireStatus : byte { Success = 0, InvalidCredentials = 1, Disabled = 2 }
+public enum AccountRegisterWireStatus : byte
+{
+    Created = 0,
+    Unavailable = 1,
+    UsernameTaken = 2,
+    InvalidInput = 3,
+    RateLimited = 4
+}
 public enum CharacterChooseWireStatus : byte { Success = 0, NotOwned = 1, WorldRejected = 2 }
 public enum CharacterCreateWireStatus : byte
 {
@@ -319,6 +329,8 @@ public readonly record struct PlayerRespawnResultWire(
     int CurrentHp, int MaxHp);
 public readonly record struct AuthRequestWire(string Username, string Password);
 public readonly record struct AuthResultWire(AuthWireStatus Status);
+public readonly record struct AccountRegisterRequestWire(string Username, string Password);
+public readonly record struct AccountRegisterResultWire(AccountRegisterWireStatus Status);
 public readonly record struct CharacterSummaryWire(long CharacterId, byte Slot, string Name);
 public sealed record CharacterListWire(IReadOnlyList<CharacterSummaryWire> Characters);
 public readonly record struct CharacterCreateWire(byte Slot, string Name);
@@ -599,11 +611,14 @@ public static class WireProtocol
     public const int PlayerRespawnFrameBytes = HeaderBytes + 8 + 4;
     public const int PlayerRespawnResultFrameBytes = HeaderBytes + 8 + 4 + 1 + 4 + 4;
     public const int AuthResultFrameBytes = HeaderBytes + 1;
+    public const int AccountRegisterResultFrameBytes = HeaderBytes + 1;
     public const int CharacterChooseFrameBytes = HeaderBytes + 8;
     public const int CharacterChooseResultFrameBytes = HeaderBytes + 37;
     public const int MaxCharacterCreateFrameBytes = HeaderBytes + 1 + 2 + 96;
     public const int MaxCharacterCreateResultFrameBytes = HeaderBytes + 1 + 8 + 1 + 2 + 96;
     public const int MaxAuthRequestFrameBytes = HeaderBytes + 4 + 32 + 256;
+    public const int MaxAccountRegisterRequestFrameBytes =
+        HeaderBytes + 4 + 32 + 256;
     public const int MaxCharacterListFrameBytes = 4096;
     // Single-precision coordinates suffice across the original ~15k-pixel maps
     // (sub-0.002px resolution), saving bandwidth vs storing double on wire.
@@ -1280,6 +1295,66 @@ public static class WireProtocol
         value = default;
         if (!TryReadHeader(frame, out var h) || h.Opcode != WireOpcode.AuthResult || frame[8] > 2) return false;
         value = new((AuthWireStatus)frame[8]);
+        return true;
+    }
+
+    public static byte[] EncodeAccountRegisterRequest(AccountRegisterRequestWire value)
+    {
+        byte[] username = StrictUtf8.GetBytes(value.Username ?? string.Empty);
+        byte[] password = StrictUtf8.GetBytes(value.Password ?? string.Empty);
+        if (username.Length is < 3 or > 32 || password.Length is < 8 or > 256)
+            throw new ArgumentOutOfRangeException(nameof(value));
+        int size = HeaderBytes + 4 + username.Length + password.Length;
+        var frame = NewFrame(WireOpcode.AccountRegisterRequest, size);
+        BinaryPrimitives.WriteUInt16LittleEndian(frame.AsSpan(8, 2), (ushort)username.Length);
+        BinaryPrimitives.WriteUInt16LittleEndian(frame.AsSpan(10, 2), (ushort)password.Length);
+        username.CopyTo(frame.AsSpan(12));
+        password.CopyTo(frame.AsSpan(12 + username.Length));
+        return frame;
+    }
+
+    public static bool TryDecodeAccountRegisterRequest(
+        ReadOnlySpan<byte> frame,out AccountRegisterRequestWire value)
+    {
+        value=default;
+        if(!TryReadHeader(frame,out var h)||
+           h.Opcode!=WireOpcode.AccountRegisterRequest||
+           frame.Length<23)
+            return false;
+        int usernameLength=BinaryPrimitives.ReadUInt16LittleEndian(frame.Slice(8,2));
+        int passwordLength=BinaryPrimitives.ReadUInt16LittleEndian(frame.Slice(10,2));
+        if(usernameLength is <3 or >32||passwordLength is <8 or >256||
+           12+usernameLength+passwordLength!=frame.Length)
+            return false;
+        try
+        {
+            value=new(
+                StrictUtf8.GetString(frame.Slice(12,usernameLength)),
+                StrictUtf8.GetString(frame.Slice(12+usernameLength,passwordLength)));
+            return true;
+        }
+        catch(DecoderFallbackException){return false;}
+    }
+
+    public static byte[] EncodeAccountRegisterResult(AccountRegisterResultWire value)
+    {
+        if((byte)value.Status>(byte)AccountRegisterWireStatus.RateLimited)
+            throw new ArgumentOutOfRangeException(nameof(value));
+        var frame=NewFrame(
+            WireOpcode.AccountRegisterResult,AccountRegisterResultFrameBytes);
+        frame[8]=(byte)value.Status;
+        return frame;
+    }
+
+    public static bool TryDecodeAccountRegisterResult(
+        ReadOnlySpan<byte> frame,out AccountRegisterResultWire value)
+    {
+        value=default;
+        if(!TryReadHeader(frame,out var h)||
+           h.Opcode!=WireOpcode.AccountRegisterResult||
+           frame[8]>(byte)AccountRegisterWireStatus.RateLimited)
+            return false;
+        value=new((AccountRegisterWireStatus)frame[8]);
         return true;
     }
 
@@ -4938,6 +5013,8 @@ public static class WireProtocol
             12 => WireOpcode.CharacterList, 13 => WireOpcode.CharacterChoose,
             14 => WireOpcode.CharacterChooseResult,
             15 => WireOpcode.CharacterCreate, 16 => WireOpcode.CharacterCreateResult,
+            17 => WireOpcode.AccountRegisterRequest,
+            18 => WireOpcode.AccountRegisterResult,
             20 => WireOpcode.WorldReady, 21 => WireOpcode.EntitySpawn,
             22 => WireOpcode.EntityDespawn, 23 => WireOpcode.EntityDelta,
             24 => WireOpcode.SelfState, 25 => WireOpcode.WorldReadyAck,
@@ -5007,6 +5084,10 @@ public static class WireProtocol
             WireOpcode.PlayerDamage => advertised == PlayerDamageFrameBytes,
             WireOpcode.AuthRequest => advertised is >= 23 and <= MaxAuthRequestFrameBytes,
             WireOpcode.AuthResult => advertised == AuthResultFrameBytes,
+            WireOpcode.AccountRegisterRequest =>
+                advertised is >= 23 and <= MaxAccountRegisterRequestFrameBytes,
+            WireOpcode.AccountRegisterResult =>
+                advertised == AccountRegisterResultFrameBytes,
             WireOpcode.CharacterList => advertised is >= 9 and <= MaxCharacterListFrameBytes,
             WireOpcode.CharacterChoose => advertised == CharacterChooseFrameBytes,
             WireOpcode.CharacterChooseResult => advertised == CharacterChooseResultFrameBytes,

@@ -5,6 +5,8 @@ internal static class IdentityWireChecks
     public static void Verify()
     {
         Checks.Run("identity wire AuthRequest strict UTF8 length and roundtrip", AuthRequest);
+        Checks.Run("identity wire AccountRegister strict UTF8 length status and roundtrip",
+            AccountRegister);
         Checks.Run("identity wire CharacterList Choose and result roundtrip", Characters);
     }
 
@@ -22,6 +24,37 @@ internal static class IdentityWireChecks
         badLength[8] = 33; badLength[9] = 0;
         Checks.Require(!WireProtocol.TryDecodeAuthRequest(badLength, out _),
             "auth username length mismatch accepted");
+    }
+
+
+    private static void AccountRegister()
+    {
+        var request=new AccountRegisterRequestWire(
+            "new_user","Registration-Password-123!");
+        var frame=WireProtocol.EncodeAccountRegisterRequest(request);
+        Checks.Require(
+            WireProtocol.TryDecodeAccountRegisterRequest(frame,out var decoded)&&
+            decoded==request,
+            "account register request roundtrip");
+        var invalidUtf8=(byte[])frame.Clone();
+        invalidUtf8[12]=0xff;
+        Checks.Require(
+            !WireProtocol.TryDecodeAccountRegisterRequest(invalidUtf8,out _),
+            "account register invalid UTF8 accepted");
+        foreach(AccountRegisterWireStatus status in Enum.GetValues<AccountRegisterWireStatus>())
+        {
+            var result=WireProtocol.EncodeAccountRegisterResult(new(status));
+            Checks.Require(
+                WireProtocol.TryDecodeAccountRegisterResult(result,out var back)&&
+                back.Status==status,
+                "account register result status roundtrip");
+        }
+        var invalidStatus=WireProtocol.EncodeAccountRegisterResult(
+            new(AccountRegisterWireStatus.Created));
+        invalidStatus[8]=255;
+        Checks.Require(
+            !WireProtocol.TryDecodeAccountRegisterResult(invalidStatus,out _),
+            "unknown account register status accepted");
     }
 
     private static void Characters()
