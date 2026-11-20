@@ -1,6 +1,7 @@
 extends SceneTree
 
 const Wire = preload("res://network/wire_codec.gd")
+const World = preload("res://network/world_state.gd")
 
 func _fail(message:String)->void:
 	push_error("QUEST_WIRE_FAIL "+message)
@@ -82,8 +83,109 @@ func _initialize()->void:
 		_fail("invalid command admitted")
 		return
 
-	print("QUEST_WIRE_PASS open=24 choose=32 view=110 utf8=true choices=2 malformed=FAIL_CLOSED")
+	if not _reducer_gate(view_fixture):
+		return
+
+	print("QUEST_WIRE_PASS open=24 choose=32 view=110 utf8=true choices=2 reducer=true malformed=FAIL_CLOSED")
 	quit(0)
+
+func _reducer_gate(applied_view:PackedByteArray)->bool:
+	var world:=_ready_world()
+	world.quest_sequence=7
+	world.quest_view={
+		"map_epoch":9,"quest_sequence":7,"status":0,"npc_spawn_id":88,
+		"quest_id":91001,"rule_revision":3,"state":0,"stage":0,
+		"progress_revision":0,"title":"任務標題","text":"起始",
+		"choices":[{"choice_id":2,"label":"完成"}]}
+	if not world.mark_quest_sent(8,2,88,91001,2):
+		_fail("choice mark rejected")
+		return false
+	var pending:=world.snapshot()
+	if (
+		int(pending.pending_quest_sequence)!=8 or
+		int(pending.pending_quest_id)!=91001 or
+		int(pending.pending_quest_choice_id)!=2
+	):
+		_fail("choice pending binding mismatch")
+		return false
+	if not world.apply_frame(applied_view):
+		_fail("applied view reducer failed "+str(world.snapshot()))
+		return false
+	var applied:=world.snapshot()
+	if (
+		int(applied.pending_quest_sequence)!=0 or
+		int(applied.last_quest_response_sequence)!=8 or
+		int(applied.last_quest_status)!=1 or
+		int(applied.quest_view.stage)!=1 or
+		int(applied.quest_view.progress_revision)!=4
+	):
+		_fail("applied view state mismatch "+str(applied))
+		return false
+
+	if not world.mark_quest_sent(9,1,88):
+		_fail("open mark rejected after applied choice")
+		return false
+	var rejected_frame:=_rejection_view(9,9,5,88)
+	if not world.apply_frame(rejected_frame):
+		_fail("TooFar reducer failed")
+		return false
+	var rejected:=world.snapshot()
+	if (
+		not (rejected.quest_view as Dictionary).is_empty() or
+		int(rejected.last_quest_status)!=5 or
+		int(rejected.pending_quest_sequence)!=0
+	):
+		_fail("no-view rejection retained actionable quest")
+		return false
+
+	var stale_before:=int(rejected.stale_quest_results)
+	if not world.apply_frame(applied_view):
+		_fail("old quest view should be stale, not fatal")
+		return false
+	if int(world.snapshot().stale_quest_results)!=stale_before+1:
+		_fail("old quest replay was not counted stale")
+		return false
+
+	var forged:=_ready_world()
+	forged.quest_sequence=1
+	var unsent:=_rejection_view(9,1,5,88)
+	if forged.apply_frame(unsent) or int(forged.state)!=World.STATE_FAILED:
+		_fail("unsent quest view did not fail closed")
+		return false
+
+	world.quest_sequence=5
+	world.pending_quest_sequence=5
+	world.pending_quest_kind=1
+	world.pending_quest_npc=88
+	world.quest_view={"quest_id":91001}
+	world.last_quest_response_sequence=4
+	world.last_quest_status=0
+	world.last_quest_result={"quest_id":91001}
+	world.stale_quest_results=3
+	world._clear_quest_map()
+	var cleared:=world.snapshot()
+	if (
+		int(cleared.quest_sequence)!=0 or int(cleared.pending_quest_sequence)!=0 or
+		not (cleared.quest_view as Dictionary).is_empty() or
+		int(cleared.last_quest_response_sequence)!=0 or
+		int(cleared.last_quest_status)!=-1 or int(cleared.stale_quest_results)!=0
+	):
+		_fail("map-scoped quest state did not reset")
+		return false
+	return true
+
+
+func _ready_world():
+	var world:=World.new()
+	world.state=World.STATE_IN_WORLD
+	world.actor_id=1
+	world.map_id=15
+	world.map_epoch=9
+	world.world_ready=true
+	world.pending_world_ready_ack_epoch=0
+	world.last_world_ready_ack_epoch=9
+	return world
+
 
 func _rejection_view(epoch:int,sequence:int,status:int,npc:int)->PackedByteArray:
 	var writer:=StreamPeerBuffer.new()
