@@ -1359,6 +1359,7 @@ WHERE account_id=$id AND password_hash=$old;";
         // identifiers supplied by migrations; no client/user value is interpolated.
         if (table is not ("character_combat_profiles" or
                 "item_instances" or "storage_items" or "equipped_items" or
+                "trade_commit_items" or "player_shop_listings" or
                 "character_pvp_modes") ||
             string.IsNullOrWhiteSpace(column))
             throw new ArgumentOutOfRangeException(nameof(table));
