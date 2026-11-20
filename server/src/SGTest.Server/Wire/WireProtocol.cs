@@ -4173,6 +4173,7 @@ public static class WireProtocol
             88 => WireOpcode.GmPvpNameResult,
             89 => WireOpcode.PlayerShopCommand, 90 => WireOpcode.PlayerShopResult,
             91 => WireOpcode.PlayerShopSold,
+            92 => WireOpcode.ChatCommand, 93 => WireOpcode.ChatDelivery,
             _ => 0
         };
         if (opcode == 0) return false;
@@ -4281,6 +4282,8 @@ public static class WireProtocol
             WireOpcode.PlayerShopCommand => advertised == PlayerShopCommandFrameBytes,
             WireOpcode.PlayerShopResult => advertised == PlayerShopResultFrameBytes,
             WireOpcode.PlayerShopSold => advertised == PlayerShopSoldFrameBytes,
+            WireOpcode.ChatCommand => advertised >= ChatCommandHeaderBytes + 1 && advertised <= ChatCommandMaximumFrameBytes,
+            WireOpcode.ChatDelivery => advertised >= ChatDeliveryHeaderBytes + 2 && advertised <= ChatDeliveryMaximumFrameBytes,
             WireOpcode.InventorySnapshot => advertised >= InventorySnapshotHeaderBytes &&
                 advertised <= InventorySnapshotHeaderBytes +
                     InventorySnapshotMaxItemsPerFrame*InventoryItemBytes &&
