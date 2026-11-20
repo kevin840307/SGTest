@@ -1036,6 +1036,91 @@ func run() -> void:
 		fail("Trade terminal UI did not show server outcome")
 		return
 
+	# Player-shop UI must route exact authoritative identifiers through ClientSession.
+	panel._latest.trade_id = 0
+	panel._latest.entities = {22:{"actor_id":22}}
+	panel._latest.player_shop_sequence = 0
+	panel._latest.pending_player_shop_sequence = 0
+	panel._latest.player_shop_own_listing = {}
+	panel._latest.player_shop_inspected = {}
+	panel._latest.player_shop_wallet = 100
+	panel._latest.last_player_shop_result_sequence = 0
+	panel._latest.last_player_shop_result_status = -1
+	panel._latest.last_player_shop_result = {}
+	panel._latest.last_player_shop_sold = {}
+	panel._latest.last_player_shop_sold_listing_id = 0
+	panel._update_player_shop_ui()
+	for control in [panel.player_shop_inventory_picker,panel.player_shop_open_button,panel.player_shop_seller_picker,panel.player_shop_inspect_button,panel.player_shop_status]:
+		if control.get_parent() == null or not panel.is_ancestor_of(control):
+			fail("Player-shop controls are not descendants of SessionPanel")
+			return
+	if panel.player_shop_inventory_picker.item_count == 0 or panel.player_shop_open_button.disabled or panel.player_shop_seller_picker.item_count != 1 or panel.player_shop_inspect_button.disabled:
+		fail("Idle player-shop UI did not expose inventory and AOI seller")
+		return
+	panel.player_shop_price_input.value = 300
+	panel.player_shop_open_button.pressed.emit()
+	if stub.player_shop_opens != 1 or stub.last_player_shop_uid != 10000 or stub.last_player_shop_price != 300:
+		fail("Player-shop open UI did not send exact UID and price")
+		return
+	if not (panel._latest.inventory_items as Dictionary).has(10000):
+		fail("Player-shop open UI optimistically removed inventory UID")
+		return
+
+	panel._latest.player_shop_sequence = 1
+	panel._latest.last_player_shop_result_sequence = 1
+	panel._latest.last_player_shop_result_status = 0
+	panel._latest.player_shop_own_listing = {
+		"seller_actor_id":int(panel._latest.actor_id),"listing_id":91,
+		"item_uid":10000,"item_definition_id":4001,"quantity":3,
+		"source_drop_id":501,"durability_raw":80,"price":300}
+	panel._latest.player_shop_wallet = 100
+	panel._latest.last_player_shop_result = {"action":1,"status":0}
+	panel._update_player_shop_ui()
+	if panel.player_shop_close_button.disabled or not panel.player_shop_own_label.text.contains("UID 10000") or not panel.player_shop_open_button.disabled:
+		fail("Authoritative own player-shop listing was not rendered")
+		return
+	panel.player_shop_close_button.pressed.emit()
+	if stub.player_shop_closes != 1 or stub.last_player_shop_listing != 91:
+		fail("Player-shop close UI did not send exact listing ID")
+		return
+
+	panel._latest.player_shop_own_listing = {}
+	panel._latest.player_shop_sequence = 2
+	panel._latest.last_player_shop_result_sequence = 2
+	panel._latest.last_player_shop_result = {"action":2,"status":0}
+	panel._update_player_shop_ui()
+	panel.player_shop_inspect_button.pressed.emit()
+	if stub.player_shop_inspects != 1 or stub.last_player_shop_seller != 22:
+		fail("Player-shop inspect UI did not send selected AOI ActorId")
+		return
+
+	panel._latest.player_shop_sequence = 3
+	panel._latest.last_player_shop_result_sequence = 3
+	panel._latest.player_shop_inspected = {
+		"seller_actor_id":22,"listing_id":92,"item_uid":20000,
+		"item_definition_id":4002,"quantity":1,"source_drop_id":502,
+		"durability_raw":70,"price":300}
+	panel._latest.player_shop_wallet = 700
+	panel._latest.last_player_shop_result = {"action":3,"status":0}
+	panel._update_player_shop_ui()
+	if panel.player_shop_buy_button.disabled or not panel.player_shop_inspected_label.text.contains("UID 20000") or not panel.player_shop_inspected_label.text.contains("300"):
+		fail("Authoritative inspected player-shop listing was not rendered")
+		return
+	panel.player_shop_buy_button.pressed.emit()
+	if stub.player_shop_buys != 1 or stub.last_player_shop_seller != 22 or stub.last_player_shop_listing != 92:
+		fail("Player-shop buy UI did not send exact seller/listing IDs")
+		return
+
+	panel._latest.player_shop_inspected = {}
+	panel._latest.player_shop_own_listing = {}
+	panel._latest.inventory_items.erase(10000)
+	panel._latest.player_shop_wallet = 400
+	panel._latest.last_player_shop_sold_listing_id = 91
+	panel._latest.last_player_shop_sold = {"buyer_actor_id":22,"item_uid":10000,"seller_wallet":400}
+	panel._update_player_shop_ui()
+	if not panel.player_shop_status.text.contains("已由伺服器售出") or not panel.player_shop_own_label.text.ends_with("—") or int(panel._latest.player_shop_wallet) != 400:
+		fail("Player-shop sold push did not converge UI to authoritative wallet/listing")
+		return
 	# PvP mode UI reads only authoritative server results. Query is
 	# allowed first; white/blue mutations stay locked until a server reply.
 	panel._latest.pvp_known = false
@@ -1161,5 +1246,5 @@ func run() -> void:
 	panel._set_respawn_controls()
 	app.queue_free()
 	await process_frame
-	print("CLIENT_TLS_LOGIN_PASS ui=PASS auth=PASS choose=PASS receipt=PASS world_ready=PASS password_cleared=PASS logout=PASS respawn_ui=PASS click_attack_ui=PASS click_pickup_ui=PASS persistent_inventory_ui=PASS item_metadata=PASS inventory_pagination=PASS recovery_item_button=PASS inventory_discard_button=PASS inventory_discard_quantity_confirm=PASS shop_ui=PASS storage_ui=PASS equipment_ui=PASS bank_ui=PASS repair_ui=PASS trade_ui=PASS trade_ui_parenting=PASS pvp_ui=PASS pvp_attack_ui=PASS gm_pvp_ui=PASS pvp_tls_auto_query=PASS skill_cast_ui=PASS skill_singleflight=PASS combat_mp_ui=PASS")
+	print("CLIENT_TLS_LOGIN_PASS ui=PASS auth=PASS choose=PASS receipt=PASS world_ready=PASS password_cleared=PASS logout=PASS respawn_ui=PASS click_attack_ui=PASS click_pickup_ui=PASS persistent_inventory_ui=PASS item_metadata=PASS inventory_pagination=PASS recovery_item_button=PASS inventory_discard_button=PASS inventory_discard_quantity_confirm=PASS shop_ui=PASS storage_ui=PASS equipment_ui=PASS bank_ui=PASS repair_ui=PASS trade_ui=PASS trade_ui_parenting=PASS player_shop_ui=PASS pvp_ui=PASS pvp_attack_ui=PASS gm_pvp_ui=PASS pvp_tls_auto_query=PASS skill_cast_ui=PASS skill_singleflight=PASS combat_mp_ui=PASS")
 	quit(0)
