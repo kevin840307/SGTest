@@ -180,7 +180,7 @@ const ENHANCEMENT_ITEM_FRAME_BYTES := 32
 const ENHANCEMENT_RESULT_FRAME_BYTES := 70
 const TRADE_COMMAND_FRAME_BYTES := 53
 const TRADE_SNAPSHOT_HEADER_BYTES := 59
-const TRADE_OFFER_ITEM_BYTES := 25
+const TRADE_OFFER_ITEM_BYTES := 29
 const TRADE_MAX_ITEMS_PER_SIDE := 32
 const TRADE_TERMINAL_FRAME_BYTES := 37
 const QUEST_OPEN_FRAME_BYTES := 24
@@ -1309,12 +1309,14 @@ static func decode_trade_snapshot(frame: PackedByteArray) -> Dictionary:
 		var quantity := reader.get_32()
 		var source_drop_id := reader.get_64()
 		var enhancement_level := reader.get_u8()
-		if uid <= 0 or definition < 1 or definition > 100000000 or quantity < 1 or quantity > 1000000 or source_drop_id < 0 or enhancement_level < 0 or enhancement_level > 255 or seen.has(uid):
+		var durability_raw := reader.get_32()
+		if uid <= 0 or definition < 1 or definition > 100000000 or quantity < 1 or quantity > 1000000 or source_drop_id < 0 or enhancement_level < 0 or enhancement_level > 255 or durability_raw < -1 or seen.has(uid):
 			return {}
 		seen[uid] = true
 		var item := {"item_uid":uid,"item_definition_id":definition,
 			"quantity":quantity,"drop_id":source_drop_id,
-			"enhancement_level":enhancement_level}
+			"enhancement_level":enhancement_level,
+			"durability_raw":durability_raw}
 		if index < my_count:
 			my_items.append(item)
 		else:
