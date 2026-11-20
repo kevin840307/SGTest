@@ -74,7 +74,8 @@ public static class TradeItemCatalog
 
 public sealed record TradeCommittedItem(
     long ItemUid,long FromCharacterId,long ToCharacterId,
-    int ItemDefinitionId,int Quantity,long SourceDropId,int? DurabilityRaw);
+    int ItemDefinitionId,int Quantity,long SourceDropId,int? DurabilityRaw,
+    int EnhancementLevel = 0);
 
 public sealed record TradeCommitRequest(
     long TradeId,long FirstCharacterId,long SecondCharacterId,
@@ -264,7 +265,8 @@ VALUES($trade,$first,$second,$firstMoney,$secondMoney,$firstAfter,$secondAfter,$
             using var command=connection.CreateCommand();
             command.Transaction=tx;
             command.CommandText=@"
-SELECT item_uid,item_definition_id,quantity,COALESCE(source_drop_id,0),durability_raw
+SELECT item_uid,item_definition_id,quantity,COALESCE(source_drop_id,0),
+       durability_raw,enhancement_level
 FROM item_instances WHERE item_uid=$uid AND character_id=$owner;";
             command.Parameters.AddWithValue("$uid",uid);
             command.Parameters.AddWithValue("$owner",fromCharacterId);
@@ -283,7 +285,8 @@ FROM item_instances WHERE item_uid=$uid AND character_id=$owner;";
             int? durability=reader.IsDBNull(4)?null:reader.GetInt32(4);
             result.Add(new(
                 reader.GetInt64(0),fromCharacterId,toCharacterId,definition,
-                reader.GetInt32(2),reader.GetInt64(3),durability));
+                reader.GetInt32(2),reader.GetInt64(3),durability,
+                reader.GetInt32(5)));
         }
         return result;
     }
@@ -311,8 +314,9 @@ WHERE item_uid=$uid AND character_id=$from;";
         command.Transaction=tx;
         command.CommandText=@"
 INSERT INTO trade_commit_items(
- trade_id,item_uid,from_character_id,to_character_id,item_definition_id,quantity,source_drop_id,durability_raw)
-VALUES($trade,$uid,$from,$to,$definition,$quantity,$drop,$durability);";
+ trade_id,item_uid,from_character_id,to_character_id,item_definition_id,quantity,
+ source_drop_id,durability_raw,enhancement_level)
+VALUES($trade,$uid,$from,$to,$definition,$quantity,$drop,$durability,$enhancement);";
         command.Parameters.AddWithValue("$trade",tradeId);
         command.Parameters.AddWithValue("$uid",item.ItemUid);
         command.Parameters.AddWithValue("$from",item.FromCharacterId);
@@ -322,6 +326,7 @@ VALUES($trade,$uid,$from,$to,$definition,$quantity,$drop,$durability);";
         command.Parameters.AddWithValue("$drop",item.SourceDropId==0?DBNull.Value:item.SourceDropId);
         command.Parameters.AddWithValue("$durability",
             item.DurabilityRaw.HasValue?item.DurabilityRaw.Value:DBNull.Value);
+        command.Parameters.AddWithValue("$enhancement",item.EnhancementLevel);
         if(command.ExecuteNonQuery()!=1)
             throw new InvalidDataException("Trade item receipt was not inserted");
     }
@@ -354,7 +359,7 @@ FROM trade_commits WHERE trade_id=$trade;";
             command.Transaction=tx;
             command.CommandText=@"
 SELECT item_uid,from_character_id,to_character_id,item_definition_id,quantity,
-       COALESCE(source_drop_id,0),durability_raw
+       COALESCE(source_drop_id,0),durability_raw,enhancement_level
 FROM trade_commit_items WHERE trade_id=$trade ORDER BY item_uid;";
             command.Parameters.AddWithValue("$trade",tradeId);
             using var reader=command.ExecuteReader();
@@ -363,7 +368,7 @@ FROM trade_commit_items WHERE trade_id=$trade ORDER BY item_uid;";
                 var item=new TradeCommittedItem(
                     reader.GetInt64(0),reader.GetInt64(1),reader.GetInt64(2),
                     reader.GetInt32(3),reader.GetInt32(4),reader.GetInt64(5),
-                    reader.IsDBNull(6)?null:reader.GetInt32(6));
+                    reader.IsDBNull(6)?null:reader.GetInt32(6),reader.GetInt32(7));
                 if(item.FromCharacterId==first)firstItems.Add(item);
                 else if(item.FromCharacterId==second)secondItems.Add(item);
                 else throw new InvalidDataException("Trade receipt participant mismatch");
