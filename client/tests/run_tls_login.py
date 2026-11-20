@@ -1757,6 +1757,7 @@ def run_crossmap(args, repo: Path, fixture: Path, env: dict[str, str]) -> int:
               "world_ready=true old_map_clear=true "
               "despawn=true return_spawn=true "
               "nearby_chat_isolation=true "
+              "whisper_crossmap=true target_identity_server_auth=true "
               "same_authoritative_30hz_world=true")
         return 0
     except Exception as error:
