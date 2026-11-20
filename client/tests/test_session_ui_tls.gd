@@ -42,6 +42,10 @@ class RespawnSession extends RefCounted:
 	var repairs := 0
 	var last_repair_npc := 0
 	var last_repair_uid := 0
+	var enhancement_opens := 0
+	var enhancements := 0
+	var last_enhancement_npc := 0
+	var last_enhancement_uid := 0
 	var trade_requests := 0
 	var trade_accepts := 0
 	var trade_rejects := 0
@@ -192,6 +196,18 @@ class RespawnSession extends RefCounted:
 			return false
 		repairs += 1
 		last_repair_uid = item_uid
+		return true
+	func open_enhancement(npc_spawn_id: int) -> bool:
+		if npc_spawn_id <= 0:
+			return false
+		enhancement_opens += 1
+		last_enhancement_npc = npc_spawn_id
+		return true
+	func enhance_item(item_uid: int) -> bool:
+		if item_uid <= 0:
+			return false
+		enhancements += 1
+		last_enhancement_uid = item_uid
 		return true
 	func request_trade(target_actor_id: int) -> bool:
 		if target_actor_id <= 0:
@@ -966,6 +982,56 @@ func run() -> void:
 	panel._update_repair_ui()
 	if not panel.repair_item_picker.get_item_text(0).contains("耐久 100/100") or not panel.repair_item_picker.get_item_text(0).contains("費用 0") or not panel.repair_wallet_label.text.contains("63") or not panel.repair_button.disabled:
 		fail("Repair UI locally recomputed or failed to apply server settlement")
+		return
+
+	# Enhancement UI must display only the Server preview and submit the UID.
+	panel._latest.pending_enhancement_sequence = 0
+	panel._latest.enhancement_sequence = 0
+	panel._latest.active_enhancement_npc = 0
+	panel._latest.enhancement_ready = false
+	panel._latest.enhancement_revision = 0
+	panel._latest.enhancement_wallet_money = 0
+	panel._latest.enhancement_items = {}
+	panel._latest.last_enhancement_open_status = -1
+	panel._latest.last_enhancement_result = {}
+	panel._update_enhancement_ui()
+	if panel.enhancement_open_button.get_parent() == null or not panel.enhancement_button.disabled:
+		fail("Enhancement controls were not attached or were usable before server preview")
+		return
+	panel.enhancement_npc_input.value = 77
+	panel.enhancement_open_button.pressed.emit()
+	if stub.enhancement_opens != 1 or stub.last_enhancement_npc != 77 or not panel.enhancement_open_button.disabled:
+		fail("Enhancement open UI did not send exactly one NPC intent")
+		return
+	panel._latest.active_enhancement_npc = 77
+	panel._latest.enhancement_ready = true
+	panel._latest.enhancement_sequence = 1
+	panel._latest.enhancement_revision = 1
+	panel._latest.enhancement_wallet_money = 100
+	panel._latest.enhancement_items = {10001:{
+		"item_uid":10001,"item_definition_id":4001,"location":2,
+		"current_level":2,"target_level":3,"success_ppm":725000,
+		"money_cost":37,"consume_money_on_failure":true}}
+	panel._update_enhancement_ui()
+	var enhancement_text := panel.enhancement_item_picker.get_item_text(0)
+	if panel.enhancement_item_picker.item_count != 1 or not enhancement_text.contains("+2 → +3") or not enhancement_text.contains("72.50%") or not enhancement_text.contains("費用 37") or not enhancement_text.contains("失敗扣款") or not panel.enhancement_wallet_label.text.contains("100") or panel.enhancement_button.disabled:
+		fail("Enhancement UI did not render exact authoritative preview")
+		return
+	panel.enhancement_button.pressed.emit()
+	if stub.enhancements != 1 or stub.last_enhancement_uid != 10001:
+		fail("Enhancement UI did not send selected UID only")
+		return
+	panel._latest.enhancement_revision = 2
+	panel._latest.enhancement_wallet_money = 63
+	panel._latest.enhancement_items.erase(10001)
+	panel._latest.last_enhancement_result = {
+		"status":0,"item_uid":10001,"item_definition_id":4001,
+		"location":2,"previous_level":2,"target_level":3,
+		"current_level":3,"succeeded":true,"money_cost":37,
+		"money_charged":37,"wallet_money":63}
+	panel._update_enhancement_ui()
+	if panel.enhancement_item_picker.item_count != 0 or not panel.enhancement_wallet_label.text.contains("63") or not panel.enhancement_status.text.contains("+2 → +3") or not panel.enhancement_status.text.contains("實扣 37") or not panel.enhancement_button.disabled:
+		fail("Enhancement UI locally recomputed or failed to apply server settlement")
 		return
 
 	# Trade UI consumes authoritative peer/session state and exact ItemUid offers.
