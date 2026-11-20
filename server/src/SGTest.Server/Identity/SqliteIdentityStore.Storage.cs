@@ -30,7 +30,7 @@ public sealed record StorageTransferResult(
 
 public sealed record StoredItem(
     long ItemUid, long CharacterId, int ItemDefinitionId,
-    int Quantity, long SourceDropId);
+    int Quantity, long SourceDropId, int EnhancementLevel = 0);
 
 public sealed partial class SqliteIdentityStore
 {
@@ -58,7 +58,7 @@ public sealed partial class SqliteIdentityStore
             using var connection = Open();
             using var command = connection.CreateCommand();
             command.CommandText = @"SELECT item_uid,character_id,item_definition_id,
-quantity,COALESCE(source_drop_id,0) FROM storage_items
+quantity,COALESCE(source_drop_id,0),enhancement_level FROM storage_items
 WHERE character_id=$actor ORDER BY item_uid LIMIT $limit;";
             command.Parameters.AddWithValue("$actor", characterId);
             command.Parameters.AddWithValue("$limit", limit);
@@ -66,7 +66,8 @@ WHERE character_id=$actor ORDER BY item_uid LIMIT $limit;";
             var result = new List<StoredItem>();
             while (reader.Read())
                 result.Add(new(reader.GetInt64(0), reader.GetInt64(1),
-                    reader.GetInt32(2), reader.GetInt32(3), reader.GetInt64(4)));
+                    reader.GetInt32(2), reader.GetInt32(3), reader.GetInt64(4),
+                    reader.GetInt32(5)));
             return result;
         }, cancellationToken).ConfigureAwait(false);
     }
