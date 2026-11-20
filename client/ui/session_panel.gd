@@ -127,6 +127,10 @@ var nearby_chat_history := TextEdit.new()
 var nearby_chat_input := LineEdit.new()
 var nearby_chat_send_button := Button.new()
 var nearby_chat_status := Label.new()
+var whisper_target_input := LineEdit.new()
+var whisper_input := LineEdit.new()
+var whisper_send_button := Button.new()
+var whisper_status := Label.new()
 var _nearby_chat_display_key := ""
 var quest_npc_input := SpinBox.new()
 var quest_open_button := Button.new()
@@ -363,7 +367,12 @@ func _ready() -> void:
 	nearby_chat_input.max_length = 256
 	nearby_chat_send_button.text = "附近送出"
 	nearby_chat_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	for control in [nearby_chat_history,nearby_chat_input,nearby_chat_send_button,nearby_chat_status]:
+	whisper_target_input.placeholder_text = "私訊目標 ActorId（線上玩家，可跨地圖）"
+	whisper_input.placeholder_text = "私訊內容"
+	whisper_input.max_length = 256
+	whisper_send_button.text = "私訊送出"
+	whisper_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	for control in [nearby_chat_history,nearby_chat_input,nearby_chat_send_button,nearby_chat_status,whisper_target_input,whisper_input,whisper_send_button,whisper_status]:
 		control.visible = false
 	quest_npc_input.min_value = 1
 	quest_npc_input.max_value = 2147483647
@@ -444,6 +453,8 @@ func _ready() -> void:
 	player_shop_buy_button.pressed.connect(_buy_inspected_player_shop)
 	nearby_chat_send_button.pressed.connect(_send_nearby_chat)
 	nearby_chat_input.text_submitted.connect(func(_text): _send_nearby_chat())
+	whisper_send_button.pressed.connect(_send_whisper)
+	whisper_input.text_submitted.connect(func(_text): _send_whisper())
 	quest_open_button.pressed.connect(_open_quest_from_input)
 	quest_choose_button.pressed.connect(_choose_selected_quest_option)
 	# Trade controls must actually be parented, not only instantiated/connected.
@@ -451,7 +462,7 @@ func _ready() -> void:
 		column.add_child(control)
 	for control in [player_shop_inventory_picker,player_shop_price_input,player_shop_open_button,player_shop_own_label,player_shop_close_button,player_shop_seller_picker,player_shop_inspect_button,player_shop_inspected_label,player_shop_buy_button,player_shop_status]:
 		column.add_child(control)
-	for control in [nearby_chat_history,nearby_chat_input,nearby_chat_send_button,nearby_chat_status]:
+	for control in [nearby_chat_history,nearby_chat_input,nearby_chat_send_button,nearby_chat_status,whisper_target_input,whisper_input,whisper_send_button,whisper_status]:
 		column.add_child(control)
 	for control in [quest_npc_input,quest_open_button,quest_title_label,quest_text_display,quest_progress_label,quest_choice_picker,quest_choose_button,quest_status]:
 		column.add_child(control)
@@ -531,6 +542,9 @@ func login() -> void:
 	nearby_chat_history.text = ""
 	nearby_chat_input.clear()
 	nearby_chat_status.text = ""
+	whisper_target_input.clear()
+	whisper_input.clear()
+	whisper_status.text = ""
 	_quest_display_key = ""
 	quest_title_label.text = "任務：—"
 	quest_text_display.text = ""
@@ -1380,29 +1394,81 @@ func _send_nearby_chat() -> void:
 		nearby_chat_status.text = "目前無法送出附近聊天"
 
 
+func _send_whisper() -> void:
+	if whisper_send_button.disabled:
+		return
+	var target_text:=whisper_target_input.text.strip_edges()
+	var message:=whisper_input.text.strip_edges()
+	if not target_text.is_valid_int() or message.is_empty():
+		whisper_status.text = "請輸入有效的線上玩家 ActorId 與私訊內容"
+		return
+	var target:=int(target_text)
+	if session.send_whisper(target,message,0):
+		whisper_input.clear()
+		whisper_status.text = "私訊已送出，等待伺服器確認目標仍在線…"
+		whisper_send_button.disabled = true
+	else:
+		whisper_status.text = "目前無法送出私訊"
+
+
 func _update_nearby_chat_ui() -> void:
 	var in_world:=active and int(_latest.get("state",-1))==State.STATE_IN_WORLD
-	for control in [nearby_chat_history,nearby_chat_input,nearby_chat_send_button,nearby_chat_status]:
+	for control in [nearby_chat_history,nearby_chat_input,nearby_chat_send_button,nearby_chat_status,whisper_target_input,whisper_input,whisper_send_button,whisper_status]:
 		control.visible=in_world
 	if not in_world:
 		_nearby_chat_display_key=""
 		return
 	var usable:=bool(_latest.get("world_ready",false)) and not bool(_latest.get("reconnecting",false)) and not bool(_latest.get("resync_pending",false)) and not bool(_latest.get("waiting_for_new_map",false)) and int(_latest.get("pending_world_ready_ack_epoch",0))==0 and int(_latest.get("last_world_ready_ack_epoch",0))==int(_latest.get("map_epoch",0))
-	nearby_chat_input.editable=usable
-	nearby_chat_send_button.disabled=not usable
+	var whisper_pending:=int(_latest.get("pending_whisper_sequence",0))!=0
+	nearby_chat_input.editable=usable and not whisper_pending
+	nearby_chat_send_button.disabled=not usable or whisper_pending
+	whisper_target_input.editable=usable and not whisper_pending
+	whisper_input.editable=usable and not whisper_pending
+	whisper_send_button.disabled=not usable or whisper_pending
 	var messages:Array=_latest.get("chat_messages",[])
 	var tail:Dictionary={} if messages.is_empty() else messages[messages.size()-1]
-	var key:="%d/%d/%d/%d/%s" % [messages.size(),int(tail.get("sender_actor_id",0)),int(tail.get("sender_connection_epoch",0)),int(tail.get("chat_sequence",0)),str(tail.get("message",""))]
+	var key:="%d/%d/%d/%d/%s/%s/%d/%d" % [
+		messages.size(),int(tail.get("sender_actor_id",0)),
+		int(tail.get("sender_connection_epoch",0)),
+		int(tail.get("chat_sequence",0)),str(tail.get("message","")),
+		str(tail.get("direction","")),
+		int(_latest.get("last_whisper_result_sequence",0)),
+		int(_latest.get("last_whisper_result_status",-1))]
 	if key!=_nearby_chat_display_key:
 		_nearby_chat_display_key=key
 		var rows:=PackedStringArray()
 		for value in messages:
 			var entry:Dictionary=value
-			rows.append("[附近] %s：%s" % [str(entry.get("sender_name","玩家 %d" % int(entry.get("sender_actor_id",0)))),str(entry.get("message",""))])
+			var channel:=int(entry.get("channel",-1))
+			if channel==0:
+				rows.append("[附近] %s：%s" % [
+					str(entry.get("sender_name","玩家 %d" % int(entry.get("sender_actor_id",0)))),
+					str(entry.get("message",""))])
+			elif channel==4 and str(entry.get("direction",""))=="outgoing":
+				rows.append("[私訊] 你 → %s：%s" % [
+					str(entry.get("target_name","玩家 %d" % int(entry.get("target_actor_id",0)))),
+					str(entry.get("message",""))])
+			elif channel==4:
+				rows.append("[私訊] %s → 你：%s" % [
+					str(entry.get("sender_name","玩家 %d" % int(entry.get("sender_actor_id",0)))),
+					str(entry.get("message",""))])
 		nearby_chat_history.text="\n".join(rows)
 		if not messages.is_empty():
 			nearby_chat_history.set_v_scroll(nearby_chat_history.get_line_count())
-		nearby_chat_status.text="附近聊天由伺服器依雙向 AOI 投遞｜已顯示 %d 則" % messages.size()
+		nearby_chat_status.text="聊天訊息均由伺服器可靠投遞｜已顯示 %d 則" % messages.size()
+		var whisper_result:Dictionary=_latest.get("last_whisper_result",{})
+		if not whisper_result.is_empty():
+			match int(whisper_result.get("status",-1)):
+				0:
+					whisper_status.text="私訊已送達 %s（Actor %d）" % [
+						str(whisper_result.get("target_name","")),
+						int(whisper_result.get("target_actor_id",0))]
+				1:
+					whisper_status.text="私訊失敗：目標目前不在線或連線已變更"
+				2:
+					whisper_status.text="私訊失敗：不能私訊自己"
+				_:
+					whisper_status.text="私訊結果未知"
 
 func _open_quest_from_input()->void:
 	if quest_open_button.disabled:
