@@ -96,6 +96,8 @@ const OPCODE_ENHANCEMENT_OPEN := 94
 const OPCODE_ENHANCEMENT_SNAPSHOT := 95
 const OPCODE_ENHANCEMENT_ITEM := 96
 const OPCODE_ENHANCEMENT_RESULT := 97
+const OPCODE_WHISPER_COMMAND := 98
+const OPCODE_WHISPER_RESULT := 99
 const MOVE_TARGET_FRAME_BYTES := 28
 const MOVE_RECEIPT_FRAME_BYTES := 30
 const NPC_INTERACT_FRAME_BYTES := 24
@@ -213,6 +215,10 @@ const CHAT_MAX_MESSAGE_BYTES := 256
 const CHAT_MAX_SENDER_NAME_BYTES := 96
 const CHAT_COMMAND_MAX_FRAME_BYTES := CHAT_COMMAND_HEADER_BYTES + CHAT_MAX_MESSAGE_BYTES
 const CHAT_DELIVERY_MAX_FRAME_BYTES := CHAT_DELIVERY_HEADER_BYTES + CHAT_MAX_SENDER_NAME_BYTES + CHAT_MAX_MESSAGE_BYTES
+const WHISPER_COMMAND_HEADER_BYTES := 31
+const WHISPER_COMMAND_MAX_FRAME_BYTES := WHISPER_COMMAND_HEADER_BYTES + CHAT_MAX_MESSAGE_BYTES
+const WHISPER_RESULT_HEADER_BYTES := 39
+const WHISPER_RESULT_MAX_FRAME_BYTES := WHISPER_RESULT_HEADER_BYTES + CHAT_MAX_SENDER_NAME_BYTES
 const MAX_MONEY := 9000000000000000
 
 static func encode_move_target(map_epoch: int, movement_sequence: int, target_x: int, target_y: int) -> PackedByteArray:
@@ -2095,6 +2101,75 @@ static func encode_chat_command(epoch:int,sequence:int,channel:int,bubble_type:i
 	writer.put_u16(bytes.size())
 	writer.put_data(bytes)
 	return writer.data_array
+
+
+static func encode_whisper_command(
+		epoch:int,sequence:int,target_actor_id:int,bubble_type:int,
+		message:String)->PackedByteArray:
+	var bytes:=message.to_utf8_buffer()
+	if (
+		epoch<=0 or sequence<=0 or sequence>0xffffffff or
+		target_actor_id<=0 or bubble_type<0 or bubble_type>5 or
+		bytes.size()<1 or bytes.size()>CHAT_MAX_MESSAGE_BYTES or
+		message.strip_edges().is_empty()
+	):
+		return PackedByteArray()
+	var writer:=StreamPeerBuffer.new()
+	writer.big_endian=false
+	writer.put_u32(WHISPER_COMMAND_HEADER_BYTES+bytes.size())
+	writer.put_u16(VERSION)
+	writer.put_u16(OPCODE_WHISPER_COMMAND)
+	writer.put_64(epoch)
+	writer.put_u32(sequence)
+	writer.put_64(target_actor_id)
+	writer.put_u8(bubble_type)
+	writer.put_u16(bytes.size())
+	writer.put_data(bytes)
+	return writer.data_array
+
+
+static func decode_whisper_result(frame:PackedByteArray)->Dictionary:
+	if not _valid_variable_header(
+		frame,OPCODE_WHISPER_RESULT,WHISPER_RESULT_HEADER_BYTES,
+		WHISPER_RESULT_MAX_FRAME_BYTES
+	):
+		return {}
+	var reader:=_reader(frame,8)
+	var epoch:=reader.get_64()
+	var sequence:=reader.get_u32()
+	var status:=reader.get_u8()
+	var target:=reader.get_64()
+	var target_connection:=reader.get_64()
+	var name_count:=reader.get_u16()
+	if (
+		epoch<=0 or sequence==0 or status>2 or target<=0 or
+		name_count>CHAT_MAX_SENDER_NAME_BYTES or
+		reader.get_available_bytes()!=name_count
+	):
+		return {}
+	var target_name:=""
+	if name_count>0:
+		var result:=reader.get_data(name_count)
+		if result[0]!=OK:
+			return {}
+		var bytes:PackedByteArray=result[1]
+		target_name=bytes.get_string_from_utf8()
+		if (
+			target_name.to_utf8_buffer()!=bytes or
+			target_name.strip_edges().is_empty()
+		):
+			return {}
+	if status==0:
+		if target_connection<=0 or name_count==0:
+			return {}
+	elif target_connection!=0 or name_count!=0:
+		return {}
+	return {
+		"map_epoch":epoch,"chat_sequence":sequence,"status":status,
+		"target_actor_id":target,
+		"target_connection_epoch":target_connection,
+		"target_name":target_name
+	}
 
 
 static func decode_chat_delivery(frame:PackedByteArray)->Dictionary:
