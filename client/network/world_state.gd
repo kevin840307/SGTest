@@ -2327,7 +2327,8 @@ func _apply_pickup_result(frame: PackedByteArray) -> bool:
 			"item_uid":uid,
 			"item_definition_id":int(result.item_definition_id),
 			"quantity":int(result.quantity),
-			"drop_id":int(result.drop_id)}
+			"drop_id":int(result.drop_id),
+			"enhancement_level":0}
 		received_item_grants[uid] = granted
 		if inventory_ready:
 			if inventory_items.has(uid) and inventory_items[uid] != granted:
@@ -2639,6 +2640,7 @@ func _apply_equipment_transfer_result(frame: PackedByteArray) -> bool:
 			var previous: Dictionary = inventory_items[uid]
 			if int(previous.item_definition_id) != int(receipt.item_definition_id) or int(previous.quantity) != 1 or int(previous.get("drop_id",0)) != int(receipt.drop_id):
 				return fail("equipment_equip_receipt_mismatch")
+			receipt["enhancement_level"] = int(previous.get("enhancement_level",0))
 			inventory_items.erase(uid)
 			equipment_items[uid] = receipt
 			equipment_slots[slot_id] = uid
@@ -2648,9 +2650,13 @@ func _apply_equipment_transfer_result(frame: PackedByteArray) -> bool:
 			var previous: Dictionary = equipment_items[uid]
 			if int(previous.item_definition_id) != int(receipt.item_definition_id) or int(previous.slot_id) != slot_id or int(previous.get("drop_id",0)) != int(receipt.drop_id) or int(equipment_slots.get(slot_id,0)) != uid:
 				return fail("equipment_unequip_receipt_mismatch")
+			var level := int(previous.get("enhancement_level",0))
 			equipment_items.erase(uid)
 			equipment_slots.erase(slot_id)
-			inventory_items[uid] = {"item_uid":uid,"item_definition_id":int(receipt.item_definition_id),"quantity":1,"drop_id":int(receipt.drop_id)}
+			inventory_items[uid] = {"item_uid":uid,
+				"item_definition_id":int(receipt.item_definition_id),
+				"quantity":1,"drop_id":int(receipt.drop_id),
+				"enhancement_level":level}
 		inventory_revision += 1
 		equipment_revision += 1
 	last_equipment_response_sequence = sequence
