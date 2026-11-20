@@ -830,6 +830,31 @@ public sealed class WorldResultRouter
         }
     }
 
+    public GatewaySendStatus QueueEnhancementSnapshot(
+        TrustedEnhancementCommand request,EnhancementOpenStatus status,
+        EnhancementPreview? preview)
+    {
+        lock(_gate)
+        {
+            if(!_connections.TryGetValue(request.ActorId,out var connection)||
+               connection.IsClosed)
+                return GatewaySendStatus.Closed;
+            return connection.QueueEnhancementSnapshot(request,status,preview);
+        }
+    }
+
+    public GatewaySendStatus QueueEnhancementResult(
+        TrustedEnhancementCommand request,EnhancementResult result)
+    {
+        lock(_gate)
+        {
+            if(!_connections.TryGetValue(request.ActorId,out var connection)||
+               connection.IsClosed)
+                return GatewaySendStatus.Closed;
+            return connection.QueueEnhancementResult(request,result);
+        }
+    }
+
     public GatewaySendStatus QueueTradeSnapshot(
         ConnectionBinding expected,TradeSnapshotWire snapshot)
     {
