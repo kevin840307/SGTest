@@ -201,6 +201,11 @@ var last_player_shop_result := {}
 var last_player_shop_sold := {}
 var last_player_shop_sold_listing_id := 0
 var stale_player_shop_frames := 0
+var chat_sequence := 0
+var chat_messages: Array[Dictionary] = []
+var chat_sender_sequences := {}
+var stale_chat_deliveries := 0
+const CHAT_BACKLOG_MAX := 100
 var pvp_sequence := 0
 var pending_pvp_sequence := 0
 var pvp_mode := -1
@@ -525,6 +530,19 @@ func mark_player_shop_sent(
 	return true
 
 
+func mark_chat_sent(sequence:int,channel:int,bubble_type:int,message:String)->bool:
+	var bytes:=message.to_utf8_buffer()
+	if (
+		state!=STATE_IN_WORLD or not world_ready or resync_pending or waiting_for_new_map or
+		pending_world_ready_ack_epoch!=0 or last_world_ready_ack_epoch!=map_epoch or
+		sequence<=chat_sequence or sequence>0xffffffff or channel!=0 or
+		bubble_type<0 or bubble_type>5 or bytes.size()<1 or
+		bytes.size()>WireCodec.CHAT_MAX_MESSAGE_BYTES or message.strip_edges().is_empty()
+	):
+		return false
+	chat_sequence=sequence
+	return true
+
 func mark_pvp_sent(sequence: int,action: int) -> bool:
 	if state != STATE_IN_WORLD or not world_ready or resync_pending or waiting_for_new_map or pending_world_ready_ack_epoch != 0 or last_world_ready_ack_epoch != map_epoch or pending_pvp_sequence != 0 or sequence <= pvp_sequence or sequence > 0xffffffff or action not in [0,1,2] or (player_dead and action != 0):
 		return false
@@ -680,6 +698,8 @@ func apply_frame(frame: PackedByteArray) -> bool:
 			return _apply_player_shop_result(frame)
 		WireCodec.OPCODE_PLAYER_SHOP_SOLD:
 			return _apply_player_shop_sold(frame)
+		WireCodec.OPCODE_CHAT_DELIVERY:
+			return _apply_chat_delivery(frame)
 		WireCodec.OPCODE_WORLD_READY:
 			return _apply_world_ready(frame)
 		WireCodec.OPCODE_SELF_STATE:
@@ -891,6 +911,9 @@ func snapshot() -> Dictionary:
 		"last_player_shop_sold": last_player_shop_sold.duplicate(true),
 		"last_player_shop_sold_listing_id": last_player_shop_sold_listing_id,
 		"stale_player_shop_frames": stale_player_shop_frames,
+		"chat_sequence": chat_sequence,
+		"chat_messages": chat_messages.duplicate(true),
+		"stale_chat_deliveries": stale_chat_deliveries,
 		"pvp_sequence": pvp_sequence,
 		"pending_pvp_sequence": pending_pvp_sequence,
 		"pvp_mode": pvp_mode,
@@ -2884,6 +2907,45 @@ func _apply_player_shop_sold(frame:PackedByteArray)->bool:
 	player_shop_own_listing.clear()
 	return true
 
+
+func _apply_chat_delivery(frame:PackedByteArray)->bool:
+	if state!=STATE_IN_WORLD:
+		return fail("chat_delivery_out_of_state")
+	var value:=WireCodec.decode_chat_delivery(frame)
+	if value.is_empty():
+		return fail("invalid_chat_delivery")
+	var epoch:=int(value.receiver_map_epoch)
+	if epoch<map_epoch:
+		stale_chat_deliveries+=1
+		return true
+	if epoch>map_epoch:
+		return fail("future_chat_delivery")
+	if int(value.channel)!=0:
+		return fail("unsupported_chat_delivery_channel")
+	var sender:=int(value.sender_actor_id)
+	var connection:=int(value.sender_connection_epoch)
+	var sequence:=int(value.chat_sequence)
+	if sender==actor_id:
+		if sequence>chat_sequence:
+			return fail("chat_self_delivery_without_send")
+	else:
+		if not entities.has(sender):
+			stale_chat_deliveries+=1
+			return true
+		var entity:Dictionary=entities[sender]
+		if int(entity.get("connection_epoch",0))!=connection:
+			stale_chat_deliveries+=1
+			return true
+	var key:="%d/%d" % [sender,connection]
+	var previous:=int(chat_sender_sequences.get(key,0))
+	if sequence<=previous:
+		stale_chat_deliveries+=1
+		return true
+	chat_sender_sequences[key]=sequence
+	chat_messages.append(value.duplicate(true))
+	while chat_messages.size()>CHAT_BACKLOG_MAX:
+		chat_messages.pop_front()
+	return true
 
 func _clear_pvp_map() -> void:
 	gm_sequence = 0
