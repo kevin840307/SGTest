@@ -403,7 +403,7 @@ Equipment V1 introduces a third physical Item UID location beside inventory and 
 
 | Opcode | Direction | Bytes | Payload |
 |---|---|---:|---|
-| 57 EquipmentSnapshot | Server→Godot reliable login baseline | `23 + 24*N` | `CharacterId; StartIndex; Complete; Items[ItemUid, SlotId, ItemDefinitionId, SourceDropId]` |
+| 57 EquipmentSnapshot | Server→Godot reliable login baseline | `23 + 25*N` | `CharacterId; StartIndex; Complete; Items[ItemUid, SlotId, ItemDefinitionId, SourceDropId, EnhancementLevel(u8)]` |
 | 58 EquipmentEquip | Godot→Server | 28 | `MapEpoch; EquipmentSequence; ItemUid` |
 | 59 EquipmentUnequip | Godot→Server | 28 | `MapEpoch; EquipmentSequence; ItemUid` |
 | 60 EquipmentTransferResult | Server→Godot reliable | 46 | `MapEpoch; EquipmentSequence; kind; status; ItemUid; ItemDefinitionId; SlotId; SourceDropId` |
@@ -474,3 +474,23 @@ ItemDefinitionId, Quantity and SourceDropId come only from Server-owned inventor
 Concurrent peer mutations are supported: AddItem and SetMoney revalidate the same live session, issuing participant sequence/lock and current ownership after SQLite awaits, without rejecting a valid mutation merely because the peer advanced the shared session revision. State mutation, immutable snapshot capture and reliable FIFO admission are serialized by the coordinator so cancel/disconnect cannot place a terminal before an older snapshot.
 
 Verification: initial two-client TLS E2E run 44477108026 FAIL exposed the lost-peer-mutation race. After the concurrency and snapshot-ordering fixes, Server Core 44478021176 PASS and Client Core 44478021268 PASS. The Client run executes two actual Godot ClientSessions through TLS invite/accept, independent item and money offers, dual lock, dual confirm and SQLite settlement, then verifies exact swapped UIDs/provenance plus reconnect, AOI, cross-map and formal-Host regressions. Player shops, chat/social, PvP/name-color/GM, full original trade rules and Windows/private-asset UI remain incomplete.
+
+
+### 2026-11-20 Server-authoritative equipment enhancement (opcodes 94–97)
+
+Equipment enhancement reuses the one durable Item UID and SQLite schema v20 `enhancement_level` field; +1/+2/... are instance state, never replacement ItemDefinition IDs. Production rules remain source-gated. `verified_equipment_enhancement_rules/v1` supplies the admitted current→target step, success probability in ppm, money cost and whether failure consumes that money. The current V1 deliberately admits only the verified `no_change` failure behavior; downgrade, item destruction, materials, stat formulas and original content are not invented. A separate `verified_npc_enhancement_rules/v1` identifies audited enhancer NPC spawns. Formal Host enhancement is enabled only when both verified manifests are supplied.
+
+| Opcode | Direction | Bytes | Payload |
+|---|---|---:|---|
+| 94 EnhancementOpen | Godot→Server | 24 | `MapEpoch; EnhancementSequence; NpcSpawnId` |
+| 95 EnhancementSnapshot | Server→Godot reliable | `40 + 28*N` | `MapEpoch; EnhancementSequence; Status; NpcSpawnId; WalletMoney; StartIndex; Complete; Items[ItemUid, ItemDefinitionId, Location, CurrentLevel, TargetLevel, SuccessPpm, MoneyCost, ConsumeMoneyOnFailure]` |
+| 96 EnhancementItem | Godot→Server | 32 | `MapEpoch; EnhancementSequence; NpcSpawnId; ItemUid` |
+| 97 EnhancementResult | Server→Godot reliable | 70 | `MapEpoch; EnhancementSequence; Status; NpcSpawnId; ItemUid; ItemDefinitionId; Location; PreviousLevel; TargetLevel; CurrentLevel; Succeeded; MoneyCost; MoneyCharged; WalletMoney; RollPpm` |
+
+The Client does not send ActorId, ConnectionEpoch, ItemDefinitionId, location, enhancement levels, probability, cost, wallet balance or random roll. Gateway binds authenticated identity. A per-connection bounded-16 worker stays outside the 30Hz World owner; authorization rechecks current actor generation, MapEpoch, death state and verified NPC proximity on every open/attempt. SQLite owns the random outcome, money debit and level mutation in one transaction and persists an idempotent receipt; an exact retry returns the committed result without charging or enhancing twice.
+
+Godot keeps an exact pending MapEpoch/sequence/NPC/UID gate, renders only the Server preview, and mutates local level/wallet state only after a matching Server result. Enhancement is serialized against the other inventory/economic mutations on the same session. Map transfer clears the map-scoped enhancement session; duplicate committed replies are stale rather than reapplied.
+
+Because enhancement level is durable owned-item state, the existing login baselines were extended rather than adding a second state channel: opcode 36 InventorySnapshot item rows are now 25 bytes and opcode 57 EquipmentSnapshot item rows are now 25 bytes, each ending with one `EnhancementLevel(u8)`. A true second TLS login is covered by the Server enhancement lifecycle check and must reconstruct the committed +N directly from that baseline.
+
+Verification: Server Core runs 44720352423 and 44722946220 PASS the wire/Gateway/catalog/authenticated TLS/atomic replay/relogin coverage. The real Godot ClientSession enhancement gate has also passed the full Godot→TLS→C#→SQLite→reliable result path with a deterministic synthetic verified rule (0→1, 100% admitted probability, 100 money cost) and confirms the same ItemUid, Server-owned probability/cost, one debit and durable +1. Original Map15/Map13 enhancer mappings, original non-`no_change` failure rules, materials/stat effects, equipment visual changes and Windows/private-asset GUI parity remain NOT VERIFIED.
