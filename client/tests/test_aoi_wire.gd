@@ -175,16 +175,29 @@ func _initialize() -> void:
 	if not monster_world.apply_frame(local_monster_delta) or int(monster_world.snapshot().monsters[1001300001].revision) != 3 or int(monster_world.snapshot().monsters[1001300001].current_hp) != 80:
 		_fail("MonsterDelta reducer")
 		return
-	if not monster_world.apply_frame(MONSTER_DESPAWN.hex_decode()) or not monster_world.snapshot().monsters.is_empty():
+	var coalesced_monster_delta := local_monster_delta.duplicate()
+	coalesced_monster_delta.encode_s64(16,52)
+	coalesced_monster_delta.encode_s64(52,7)
+	if (
+		not monster_world.apply_frame(coalesced_monster_delta) or
+		bool(monster_world.snapshot().resync_pending) or
+		int(monster_world.snapshot().monsters[1001300001].revision)!=7
+	):
+		_fail("coalesced MonsterDelta revision jump was not accepted")
+		return
+	var current_monster_despawn := MONSTER_DESPAWN.hex_decode()
+	current_monster_despawn.encode_s64(16,53)
+	current_monster_despawn.encode_s64(32,7)
+	if not monster_world.apply_frame(current_monster_despawn) or not monster_world.snapshot().monsters.is_empty():
 		_fail("MonsterDespawn reducer")
 		return
-	if not monster_world.apply_frame(MONSTER_DESPAWN.hex_decode()):
+	if not monster_world.apply_frame(current_monster_despawn):
 		_fail("duplicate MonsterDespawn should be stale")
 		return
-	var monster_gap := local_monster_delta.duplicate()
-	monster_gap.encode_s64(16,53)
-	if not monster_world.apply_frame(monster_gap) or not bool(monster_world.snapshot().resync_pending) or str(monster_world.snapshot().resync_reason) != "monster_delta_without_spawn":
-		_fail("Monster revision/baseline gap did not enter bounded resync")
+	var monster_missing_spawn := local_monster_delta.duplicate()
+	monster_missing_spawn.encode_s64(16,54)
+	if not monster_world.apply_frame(monster_missing_spawn) or not bool(monster_world.snapshot().resync_pending) or str(monster_world.snapshot().resync_reason) != "monster_delta_without_spawn":
+		_fail("Monster missing baseline did not enter bounded resync")
 		return
 
 	var world = WorldState.new()
@@ -255,7 +268,7 @@ func _initialize() -> void:
 	if world.apply_frame(future) or int(world.snapshot().state) != WorldState.STATE_FAILED:
 		_fail("future map AOI did not fail closed")
 		return
-	print("AOI_WIRE_GODOT_PASS ready=45 ack=24 resync=16 spawn=74 delta=74 despawn=40 monster_spawn=78 monster_delta=78 monster_despawn=40 ground_spawn=52 ground_despawn=32 ground_resync=PASS worldstate=PASS same_epoch_resync=PASS monster_gap=RESYNC map_epoch=PASS stale=IGNORED future=FAIL_CLOSED")
+	print("AOI_WIRE_GODOT_PASS ready=45 ack=24 resync=16 spawn=74 delta=74 despawn=40 monster_spawn=78 monster_delta=78 monster_despawn=40 ground_spawn=52 ground_despawn=32 ground_resync=PASS worldstate=PASS same_epoch_resync=PASS monster_coalesced_revision=PASS monster_missing_spawn=RESYNC map_epoch=PASS stale=IGNORED future=FAIL_CLOSED")
 	quit(0)
 
 func _mutate_u8(bytes: PackedByteArray, offset: int, value: int) -> PackedByteArray:

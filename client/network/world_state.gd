@@ -1817,8 +1817,8 @@ func _apply_player_skill_visual(frame: PackedByteArray) -> bool:
 	if target_revision < current_revision:
 		stale_player_skill_visuals += 1
 		return true
-	if target_revision > current_revision+1:
-		return _need_resync("player_skill_visual_target_revision_gap")
+	# Presentation may legitimately reference the latest coalesced monster
+	# revision before its full MonsterDelta is reduced. It never mutates HP/state.
 	if attacker == actor_id:
 		if not self_state.is_empty() and int(self_state.get("connection_epoch",0)) != connection:
 			return _need_resync("player_skill_visual_self_generation")
@@ -1890,9 +1890,8 @@ func _apply_player_attack_visual(frame: PackedByteArray) -> bool:
 	if target_revision < current_revision:
 		stale_player_attack_visuals += 1
 		return true
-	if target_revision > current_revision + 1:
-		return _need_resync("player_attack_visual_target_revision_gap")
-
+	# Presentation may lead the full coalesced MonsterDelta in the reliable FIFO.
+	# The visual is non-authoritative and must not invent a resync requirement.
 	if attacker == actor_id:
 		# Initial WorldReady has no ConnectionEpoch and SelfState is changed-only.
 		# A server-only authenticated combat visual may therefore be the first
@@ -2316,8 +2315,10 @@ func _apply_monster_state(frame: PackedByteArray, opcode: int) -> bool:
 		if int(value.revision) <= int(previous.revision):
 			stale_aoi_events += 1
 			return true
-		if int(value.revision) > int(previous.revision) + 1:
-			return _need_resync("monster_revision_gap")
+		# MonsterRuntime may make several authoritative AI transitions inside one
+		# server tick and WorldAoi intentionally coalesces them to the latest
+		# complete snapshot. Reliable FIFO + ServerTick + full identity therefore
+		# require only a strictly newer revision here, not contiguous +1.
 		monsters[id] = value
 	last_aoi_tick = maxi(last_aoi_tick,int(value.server_tick))
 	return true

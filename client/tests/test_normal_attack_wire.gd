@@ -44,6 +44,18 @@ func _initialize() -> void:
 		_fail("stationary own visual incorrectly required changed-only SelfState")
 		return
 
+	var coalesced_visual_world := _world_with_monster()
+	var coalesced_visual := _player_attack_visual(
+		1,41,11,1,1,MONSTER_ID,0,60,5,6)
+	if (
+		not coalesced_visual_world.apply_frame(coalesced_visual) or
+		bool(coalesced_visual_world.snapshot().resync_pending) or
+		not coalesced_visual_world.snapshot().player_attack_sequences.has(11) or
+		int(coalesced_visual_world.snapshot().monsters[MONSTER_ID].revision)!=1
+	):
+		_fail("presentation visual incorrectly required contiguous monster revision")
+		return
+
 	var world := _world_with_monster()
 	if not world.mark_normal_attack_sent(1):
 		_fail("attack sequence was not accepted after Ready ACK")
@@ -118,7 +130,7 @@ func _initialize() -> void:
 		_fail("result for unsent attack sequence did not fail closed")
 		return
 
-	print("NORMAL_ATTACK_GODOT_PASS request_bytes=28 result_bytes=57 visual_bytes=66 receipt_does_not_mutate_monster=true visual_does_not_mutate_monster=true stationary_own_generation=true delta_owns_hp=true miss_preserved=true visual_replay_stale=true future_sequence_fail_closed=true")
+	print("NORMAL_ATTACK_GODOT_PASS request_bytes=28 result_bytes=57 visual_bytes=66 receipt_does_not_mutate_monster=true visual_does_not_mutate_monster=true coalesced_revision_visual=true stationary_own_generation=true delta_owns_hp=true miss_preserved=true visual_replay_stale=true future_sequence_fail_closed=true")
 	quit(0)
 
 func _world_with_monster() -> RefCounted:

@@ -289,6 +289,10 @@ SessionPanel emits its non-authoritative presentation snapshot after WorldReady;
 The session worker reads its own reducer state field for idle failure/choose checks rather than deep-copying the full entity snapshot every 2ms. Cross-thread publication and UI snapshots remain copies; no worker-owned WorldState reference is exposed to rendering. No measured CPU/P95 improvement is claimed by this local removal of redundant copies.
 
 
+### Monster coalesced revision contract
+
+Monster `EntityRevision` is a monotonic **state version**, not a contiguous event counter. The Server may perform multiple AI transitions inside one authoritative tick and publish only the final full Monster snapshot. Therefore the Client reducer accepts any strictly newer revision for the same Spawn identity and rejects/ignores stale revisions; missing Spawn, identity mismatch, future MapEpoch, malformed payload, or impossible generation still fail closed/resync. PlayerAttack/PlayerSkill visual frames are presentation events and may reference the newer target revision before the matching full MonsterDelta; they never mutate HP/state and must not create a false resync solely because intermediate Monster revisions were intentionally coalesced.
+
 ## 2026-11-17 Online monster click-to-attack and authoritative auto-approach (MVP006)
 
 在既有 `app/main.gd` 上線左鍵行為中，以 WorldCamera.screen_to_world 換算游標；`WorldView.pick_monster_at` 委派唯一 `MonsterPresentation.pick_living_at`，只從當前 AOI snapshot 中可見、HP>0 的怪物選離游標最近者，初始保守半徑 32 world pixels、同距 entity_id 穩定排序，不操作 World authority 或資源生命週期。點怪委派既有 `SessionPanel.submit_attack_monster`→`ClientSession.attack_monster`→V1 NormalAttack；未選到怪物才維持原本地板 Move。攻擊佇列滿時**不**退回走路；ClientSession 最終驗證死亡、WorldReady/ACK、MapEpoch 與 resync gate，Server 繼續唯一權威 range／Blocking／CD／damage/HP 管理。
