@@ -268,6 +268,7 @@ static class Checks
             PvpCombatVisualChecks.Verify(root);
             PvpSkillChecks.Verify(root);
             GmOnlineChecks.Verify(root);
+            PartyChecks.Verify(root);
             TradeChecks.Verify(root);
             PlayerShopChecks.Verify(root);
             PlayerShopCoordinatorChecks.Verify(root);
