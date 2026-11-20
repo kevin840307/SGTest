@@ -463,6 +463,22 @@ public sealed class PlayerTradeCoordinator
                 return;
             }
 
+            // Final confirmation must settle exactly the item metadata both
+            // peers last reviewed. Normal Clients already serialize enhancement
+            // against an active trade, but the Server cannot trust that UI gate.
+            // Both authenticated gameplay semaphores are held here, so no formal
+            // item mutation can race this revalidation before the SQLite commit.
+            if(!await OffersStillMatchInventoryAsync(session).ConfigureAwait(false))
+            {
+                lock(_gate)
+                {
+                    if(_sessions.TryGetValue(session.TradeId,out var active)&&
+                       ReferenceEquals(active,session))RemoveLocked(session);
+                }
+                QueueTerminalBoth(session,router,TradeTerminalStatus.CommitFailed);
+                return;
+            }
+
             var result=await _store.CommitInventoryTradeAsync(commit,_itemRules)
                 .ConfigureAwait(false);
             if(result.Status is TradeCommitStatus.Applied or TradeCommitStatus.AlreadyApplied)
@@ -520,6 +536,32 @@ public sealed class PlayerTradeCoordinator
                 throw new PlayerCombatSettlementException(
                     "Trade participant combat generation could not resume");
         }
+    }
+
+    private async Task<bool> OffersStillMatchInventoryAsync(Session session)
+    {
+        var first=await _store.ListInventoryItemsAsync(
+            session.First.Binding.ActorId,4096).ConfigureAwait(false);
+        var second=await _store.ListInventoryItemsAsync(
+            session.Second.Binding.ActorId,4096).ConfigureAwait(false);
+        return OffersMatch(session.First,first)&&OffersMatch(session.Second,second);
+    }
+
+    private static bool OffersMatch(
+        Participant participant,IReadOnlyList<InventoryItem> inventory)
+    {
+        if(participant.Items.Count==0)return true;
+        var byUid=inventory.ToDictionary(item=>item.ItemUid);
+        foreach(var offer in participant.Items.Values)
+        {
+            if(!byUid.TryGetValue(offer.ItemUid,out var owned)||
+               owned.ItemDefinitionId!=offer.ItemDefinitionId||
+               owned.Quantity!=offer.Quantity||
+               owned.SourceDropId!=offer.SourceDropId||
+               owned.EnhancementLevel!=offer.EnhancementLevel)
+                return false;
+        }
+        return true;
     }
 
     private void AbortStaleCommit(Session session,WorldResultRouter router)
