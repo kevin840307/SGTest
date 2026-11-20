@@ -3,7 +3,7 @@ using SGTest.Server.Wire;
 internal static class InventorySnapshotChecks
 {
     private static readonly string Golden =
-        "47000000010024000B0000000000000000000000010200591B0000000000008D0A000002000000F5010000000000005A1B000000000000750E000003000000F601000000000000";
+        "49000000010024000B0000000000000000000000010200591B0000000000008D0A000002000000F501000000000000025A1B000000000000750E000003000000F60100000000000007";
 
     public static void Verify()
     {
@@ -13,8 +13,8 @@ internal static class InventorySnapshotChecks
     private static void WireGolden()
     {
         var expected=new InventorySnapshotWire(11,0,true,[
-            new InventoryItemWire(7001,2701,2,501),
-            new InventoryItemWire(7002,3701,3,502)
+            new InventoryItemWire(7001,2701,2,501,2),
+            new InventoryItemWire(7002,3701,3,502,7)
         ]);
         byte[] payload=WireProtocol.EncodeInventorySnapshot(expected);
         Checks.Require(Convert.ToHexString(payload)==Golden &&
@@ -41,7 +41,7 @@ internal static class InventorySnapshotChecks
         Checks.Require(!WireProtocol.TryDecodeInventorySnapshot(bad,out _),
             "zero item UID accepted");
         bad=(byte[])payload.Clone();
-        bad[47]=bad[23];bad[48]=bad[24];bad[49]=bad[25];bad[50]=bad[26];
+        bad[48]=bad[23];bad[49]=bad[24];bad[50]=bad[25];bad[51]=bad[26];
         Checks.Require(!WireProtocol.TryDecodeInventorySnapshot(bad,out _),
             "duplicate item UID accepted");
         Checks.Require(!WireProtocol.TryDecodeInventorySnapshot(
@@ -59,7 +59,7 @@ internal static class InventorySnapshotChecks
             var chunk=all.Skip(start).Take(128).ToArray();
             var frame=WireProtocol.EncodeInventorySnapshot(new(
                 11,start,start+chunk.Length==all.Length,chunk));
-            Checks.Require(frame.Length==23+chunk.Length*24 &&
+            Checks.Require(frame.Length==23+chunk.Length*25 &&
                 WireProtocol.TryDecodeInventorySnapshot(frame,out var result) &&
                 result is not null && result.StartIndex==start &&
                 result.Items.SequenceEqual(chunk),
@@ -68,7 +68,7 @@ internal static class InventorySnapshotChecks
             batches++;
             frames+=frame.Length;
         }
-        Checks.Require(start==4095 && batches==32 && frames<102000,
+        Checks.Require(start==4095 && batches==32 && frames<106000,
             "full inventory chunking unexpectedly exceeds bounds");
         bool rejected=false;
         try
