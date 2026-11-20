@@ -1013,7 +1013,7 @@ func run() -> void:
 		"current_level":2,"target_level":3,"success_ppm":725000,
 		"money_cost":37,"consume_money_on_failure":true}}
 	panel._update_enhancement_ui()
-	var enhancement_text := panel.enhancement_item_picker.get_item_text(0)
+	var enhancement_text: String = panel.enhancement_item_picker.get_item_text(0)
 	if panel.enhancement_item_picker.item_count != 1 or not enhancement_text.contains("+2 → +3") or not enhancement_text.contains("72.50%") or not enhancement_text.contains("費用 37") or not enhancement_text.contains("失敗扣款") or not panel.enhancement_wallet_label.text.contains("100") or panel.enhancement_button.disabled:
 		fail("Enhancement UI did not render exact authoritative preview")
 		return
