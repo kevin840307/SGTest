@@ -148,7 +148,7 @@ const SHOP_SNAPSHOT_MAX_ITEMS := 256
 const STORAGE_OPEN_FRAME_BYTES := 24
 const STORAGE_MOVE_FRAME_BYTES := 32
 const STORAGE_SNAPSHOT_HEADER_BYTES := 32
-const STORAGE_ITEM_BYTES := 24
+const STORAGE_ITEM_BYTES := 25
 const STORAGE_SNAPSHOT_MAX_PER_FRAME := 128
 const STORAGE_SNAPSHOT_MAX_ITEMS := 4095
 const STORAGE_TRANSFER_RESULT_FRAME_BYTES := 50
@@ -1109,11 +1109,13 @@ static func decode_storage_snapshot(frame: PackedByteArray) -> Dictionary:
 		var item_id := reader.get_32()
 		var quantity := reader.get_32()
 		var source_drop_id := reader.get_64()
-		if uid <= 0 or item_id < 1 or item_id > 100000000 or quantity < 1 or quantity > 1000000 or source_drop_id < 0 or uids.has(uid):
+		var enhancement_level := reader.get_u8()
+		if uid <= 0 or item_id < 1 or item_id > 100000000 or quantity < 1 or quantity > 1000000 or source_drop_id < 0 or enhancement_level < 0 or enhancement_level > 255 or uids.has(uid):
 			return {}
 		uids[uid] = true
 		items.append({"item_uid":uid,"item_definition_id":item_id,
-			"quantity":quantity,"drop_id":source_drop_id})
+			"quantity":quantity,"drop_id":source_drop_id,
+			"enhancement_level":enhancement_level})
 	return {"map_epoch":epoch,"storage_sequence":sequence,"status":status,
 		"npc_spawn_id":npc_spawn_id,"start_index":start_index,
 		"complete":complete_raw==1,"items":items}
