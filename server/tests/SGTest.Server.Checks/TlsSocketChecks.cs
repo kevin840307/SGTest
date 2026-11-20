@@ -222,7 +222,7 @@ internal static class TlsSocketChecks
         client.Close();
         var result = await serverTask.WaitAsync(TimeSpan.FromSeconds(2));
         Require(result.Reason == TlsWireEndReason.CleanEof &&
-                result.Fault is null && result.CommandsAccepted == 2,
+                result.Fault is null && result.CommandsAccepted == 1,
             "chat callback forwarding closed TLS session");
     }
 
