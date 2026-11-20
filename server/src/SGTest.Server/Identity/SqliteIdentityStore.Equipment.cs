@@ -223,10 +223,10 @@ WHERE character_id=$actor AND slot_id=$slot;",tx,
         command.Transaction=tx;
         command.CommandText=table=="equipped_items"
             ? @"SELECT item_uid,character_id,item_definition_id,quantity,
-source_drop_id,durability_raw,source_kind,source_reference,created_unix_ms,slot_id
+source_drop_id,durability_raw,enhancement_level,source_kind,source_reference,created_unix_ms,slot_id
 FROM equipped_items WHERE item_uid=$uid AND character_id=$actor;"
             : @"SELECT item_uid,character_id,item_definition_id,quantity,
-source_drop_id,durability_raw,source_kind,source_reference,created_unix_ms,0
+source_drop_id,durability_raw,enhancement_level,source_kind,source_reference,created_unix_ms,0
 FROM item_instances WHERE item_uid=$uid AND character_id=$actor;";
         command.Parameters.AddWithValue("$uid",itemUid);
         command.Parameters.AddWithValue("$actor",characterId);
@@ -236,8 +236,8 @@ FROM item_instances WHERE item_uid=$uid AND character_id=$actor;";
             reader.GetInt64(0),reader.GetInt64(1),reader.GetInt32(2),
             reader.GetInt32(3),reader.IsDBNull(4)?null:reader.GetInt64(4),
             reader.IsDBNull(5)?null:reader.GetInt32(5),
-            reader.GetInt32(6),reader.GetString(7),reader.GetInt64(8),
-            reader.GetInt32(9));
+            reader.GetInt32(6),reader.GetInt32(7),reader.GetString(8),
+            reader.GetInt64(9),reader.GetInt32(10));
     }
 
     private static void MoveEquipmentRow(
@@ -261,8 +261,8 @@ FROM item_instances WHERE item_uid=$uid AND character_id=$actor;";
                 insert.CommandText=@"
 INSERT INTO equipped_items(
     item_uid,character_id,slot_id,item_definition_id,quantity,source_drop_id,durability_raw,
-    source_kind,source_reference,created_unix_ms)
-VALUES($uid,$actor,$slot,$item,$quantity,$drop,$durability,$source_kind,$source,$created);";
+    enhancement_level,source_kind,source_reference,created_unix_ms)
+VALUES($uid,$actor,$slot,$item,$quantity,$drop,$durability,$enhancement,$source_kind,$source,$created);";
                 insert.Parameters.AddWithValue("$slot",destinationSlot);
             }
             else if(destinationTable=="item_instances")
@@ -270,8 +270,8 @@ VALUES($uid,$actor,$slot,$item,$quantity,$drop,$durability,$source_kind,$source,
                 insert.CommandText=@"
 INSERT INTO item_instances(
     item_uid,character_id,item_definition_id,quantity,source_drop_id,durability_raw,
-    source_kind,source_reference,created_unix_ms)
-VALUES($uid,$actor,$item,$quantity,$drop,$durability,$source_kind,$source,$created);";
+    enhancement_level,source_kind,source_reference,created_unix_ms)
+VALUES($uid,$actor,$item,$quantity,$drop,$durability,$enhancement,$source_kind,$source,$created);";
             }
             else throw new ArgumentOutOfRangeException(nameof(destinationTable));
 
@@ -283,6 +283,7 @@ VALUES($uid,$actor,$item,$quantity,$drop,$durability,$source_kind,$source,$creat
                 "$drop",row.SourceDropId is null?DBNull.Value:row.SourceDropId.Value);
             insert.Parameters.AddWithValue(
                 "$durability",row.DurabilityRaw is null?DBNull.Value:row.DurabilityRaw.Value);
+            insert.Parameters.AddWithValue("$enhancement",row.EnhancementLevel);
             insert.Parameters.AddWithValue("$source_kind",row.SourceKind);
             insert.Parameters.AddWithValue("$source",row.SourceReference);
             insert.Parameters.AddWithValue("$created",row.CreatedUnixMilliseconds);
@@ -329,6 +330,6 @@ VALUES($actor,$conn,$epoch,$seq,$kind,$uid,$item,$slot,$drop,$now);";
 
     private sealed record EquipmentMoveItem(
         long ItemUid,long CharacterId,int ItemDefinitionId,int Quantity,
-        long? SourceDropId,int? DurabilityRaw,int SourceKind,string SourceReference,
-        long CreatedUnixMilliseconds,int SlotId);
+        long? SourceDropId,int? DurabilityRaw,int EnhancementLevel,int SourceKind,
+        string SourceReference,long CreatedUnixMilliseconds,int SlotId);
 }
