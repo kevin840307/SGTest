@@ -449,7 +449,8 @@ public sealed class GatewayConnection
                                               Func<TrustedPvpSkill, bool>? postPvpSkill = null,
                                               Func<TrustedGmPvpNameCommand, bool>? postGmPvpName = null,
                                               Func<TrustedPlayerShopCommand, bool>? postPlayerShop = null,
-                                              Func<TrustedChatCommand, bool>? postChat = null)
+                                              Func<TrustedChatCommand, bool>? postChat = null,
+                                              Func<TrustedPartyCommand, bool>? postParty = null)
     {
         ArgumentNullException.ThrowIfNull(postMove);
         lock (_receiveGate)
@@ -462,7 +463,7 @@ public sealed class GatewayConnection
             return _parser.Resume(
                 frame => HandleClientFrame(
                     frame, postMove, postNpc, postResync, postAttack, postRespawn,
-                    postPickup, postRecovery, postDiscard, postSkill, postShop, postStorage, postEquipment, postBank, postRepair, postEnhancement, postTrade, postQuest, postPvp, postPvpAttack, postPvpSkill, postGmPvpName, postPlayerShop, postChat),
+                    postPickup, postRecovery, postDiscard, postSkill, postShop, postStorage, postEquipment, postBank, postRepair, postEnhancement, postTrade, postQuest, postPvp, postPvpAttack, postPvpSkill, postGmPvpName, postPlayerShop, postChat, postParty),
                 out commandsAccepted);
         }
     }
