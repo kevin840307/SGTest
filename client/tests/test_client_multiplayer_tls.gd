@@ -68,6 +68,16 @@ func _observe(session, self_id: int, crossmap: bool = false, portal: bool = fals
 			_fail("observer did not receive authenticated nearby chat %s" %
 				session.snapshot(),session)
 			return
+	var crossmap_chat_stale_before := -1
+	if crossmap and not portal:
+		var map15_chat := _wait_nearby_chat(
+			session,remote_id,"MultiHeroTwo","跨圖前附近訊息",7000)
+		if map15_chat.is_empty() or int(map15_chat.get("chat_sequence",0))!=1:
+			_fail("observer did not receive pre-transfer nearby chat %s" %
+				session.snapshot(),session)
+			return
+		crossmap_chat_stale_before = int(
+			session.snapshot().get("stale_chat_deliveries",0))
 	var initial_revision := int(first.entities[remote_id].revision)
 	var initial_x := float(first.entities[remote_id].x)
 	var moved := {}
@@ -113,11 +123,21 @@ func _observe(session, self_id: int, crossmap: bool = false, portal: bool = fals
 		if returned.is_empty() or int(returned.map_id) != 15 or int(returned.map_epoch) != int(first.map_epoch):
 			_fail("returning Map15 player did not respawn with a new generation %s" % session.snapshot(), session)
 			return
+		if not portal:
+			var after_isolation:Dictionary=session.snapshot()
+			if (
+				_has_nearby_chat(after_isolation,"Map13 隔離訊息") or
+				int(after_isolation.get("stale_chat_deliveries",0))!=
+					crossmap_chat_stale_before
+			):
+				_fail("Map13 nearby chat leaked into Map15 route %s" %
+					after_isolation,session)
+				return
 		# Keep the observer alive briefly so the returning actor can
 		# also reduce its authoritative peer Spawn, not only WorldReady.
 		OS.delay_msec(650)
 		session.stop()
-		print("CLIENT_%s_PASS role=observer map15=PASS delta=PASS despawn=PASS respawn=PASS remote=%d" % ["PORTAL" if portal else "CROSSMAP", remote_id])
+		print("CLIENT_%s_PASS role=observer map15=PASS delta=PASS despawn=PASS respawn=PASS nearby_chat_isolation=%s remote=%d" % ["PORTAL" if portal else "CROSSMAP","NOT_TESTED" if portal else "PASS",remote_id])
 		quit(0)
 		return
 	session.stop()
@@ -144,6 +164,17 @@ func _move(session, self_id: int, crossmap: bool = false, portal: bool = false) 
 		if echoed.is_empty() or int(echoed.get("chat_sequence",0))!=1 or \
 				int(echoed.get("channel",-1))!=0 or int(echoed.get("bubble_type",-1))!=2:
 			_fail("actor did not receive authoritative nearby chat echo %s" %
+				session.snapshot(),session)
+			return
+	elif not portal:
+		if not session.send_nearby_chat("跨圖前附近訊息",1):
+			_fail("crossmap Map15 nearby chat intent rejected",session)
+			return
+		var pre_transfer_echo:=_wait_nearby_chat(
+			session,self_id,"MultiHeroTwo","跨圖前附近訊息",7000)
+		if pre_transfer_echo.is_empty() or \
+				int(pre_transfer_echo.get("chat_sequence",0))!=1:
+			_fail("crossmap actor missing Map15 authoritative chat echo %s" %
 				session.snapshot(),session)
 			return
 	if not session.move_target(40, 8):
@@ -193,6 +224,18 @@ func _move(session, self_id: int, crossmap: bool = false, portal: bool = false) 
 		if in_map13.is_empty():
 			_fail("Map13 WorldReady/old AOI clear not observed %s" % session.snapshot(), session)
 			return
+		if not portal:
+			if not session.send_nearby_chat("Map13 隔離訊息",2):
+				_fail("Map13 nearby chat intent rejected",session)
+				return
+			var isolated_echo:=_wait_nearby_chat(
+				session,self_id,"MultiHeroTwo","Map13 隔離訊息",7000)
+			if isolated_echo.is_empty() or \
+					int(isolated_echo.get("chat_sequence",0))!=2:
+				_fail("Map13 authoritative self chat echo missing %s" %
+					session.snapshot(),session)
+				return
+			print("CLIENT_CROSSMAP_MAP13_CHAT_SELF role=actor sequence=2")
 		if portal:
 			var portal_result := _await_npc_result(session, 0, 2, 7000)
 			if portal_result.is_empty() or int(portal_result.last_npc_result_map_epoch) != int(in_map13.map_epoch):
@@ -241,7 +284,7 @@ func _move(session, self_id: int, crossmap: bool = false, portal: bool = false) 
 		# The spectator must see re-entry before this actor logs out.
 		OS.delay_msec(700)
 		session.stop()
-		print("CLIENT_%s_PASS role=actor map15_map13_map15=PASS new_epochs=PASS world_ready=PASS old_aoi_clear=PASS npc_authority=%s" % ["PORTAL" if portal else "CROSSMAP", "PASS" if portal else "NOT_TESTED"])
+		print("CLIENT_%s_PASS role=actor map15_map13_map15=PASS new_epochs=PASS world_ready=PASS old_aoi_clear=PASS npc_authority=%s nearby_chat_isolation=%s" % ["PORTAL" if portal else "CROSSMAP","PASS" if portal else "NOT_TESTED","NOT_TESTED" if portal else "PASS"])
 		quit(0)
 		return
 	# Allow a couple of 30Hz World ticks for authoritative movement,
@@ -269,6 +312,13 @@ func _wait_nearby_chat(
 				return row
 		OS.delay_msec(2)
 	return {}
+
+
+func _has_nearby_chat(snapshot:Dictionary,message:String)->bool:
+	for raw in snapshot.get("chat_messages",[]):
+		if str((raw as Dictionary).get("message",""))==message:
+			return true
+	return false
 
 
 func _await_npc_result(session, wanted_status: int, wanted_sequence: int, timeout_ms: int) -> Dictionary:
