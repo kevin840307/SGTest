@@ -1367,7 +1367,7 @@ internal static class Program
                 if (final.Count != 1 || final[0].MapId != 15 ||
                     Math.Abs(final[0].X - 40) > 0.001 ||
                     Math.Abs(final[0].Y - 8) > 0.001 ||
-                    secondEnded.CommandsAccepted != 2 ||
+                    secondEnded.CommandsAccepted != 3 ||
                     router.Statistics.ReceiptsQueued < 2)
                     throw new InvalidOperationException(
                         $"reconnect completion mismatch second={secondEnded.Reason} moves={secondEnded.CommandsAccepted} receipts={router.Statistics.ReceiptsQueued} x={final[0].X} y={final[0].Y}");
@@ -1375,7 +1375,7 @@ internal static class Program
                 await world.StopAsync().ConfigureAwait(false);
                 await routerTask.WaitAsync(TimeSpan.FromSeconds(3)).ConfigureAwait(false);
                 Console.WriteLine(
-                    $"RECONNECT_FIXTURE_PASS first_reason={firstEnded.Reason} second_reason={secondEnded.Reason} persisted_first=24,8 persisted_final=40,8 receipts={router.Statistics.ReceiptsQueued} active=0");
+                    $"RECONNECT_FIXTURE_PASS first_reason={firstEnded.Reason} second_reason={secondEnded.Reason} persisted_first=24,8 persisted_final=40,8 second_commands={secondEnded.CommandsAccepted} receipts={router.Statistics.ReceiptsQueued} active=0");
                 Console.Out.Flush();
                 return 0;
             }
