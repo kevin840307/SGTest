@@ -4,6 +4,9 @@ const WireCodec=preload("res://network/wire_codec.gd")
 const WorldState=preload("res://network/world_state.gd")
 const COMMAND_HEX:="2400000001005C0003000000000000000900000000020C00E99984E8BF91E6B8ACE8A9A6"
 const DELIVERY_HEX:="3A00000001005D0003000000000000000B00000000000000050000000000000009000000000204000C004865726FE99984E8BF91E6B8ACE8A9A6"
+const WHISPER_COMMAND_HEX:="2B0000000100620003000000000000000A0000001600000000000000030C00E8B7A8E59C96E7A781E8A88A"
+const WHISPER_RESULT_HEX:="330000000100630003000000000000000A00000000160000000000000007000000000000000C004D756C74694865726F4F6E65"
+const WHISPER_DELIVERY_HEX:="3A00000001005D0003000000000000000B0000000000000005000000000000000A000000040304000C004865726FE8B7A8E59C96E7A781E8A88A"
 
 func _fail(reason:String)->void:
 	push_error("CHAT_WIRE_FAIL "+reason)
@@ -97,5 +100,70 @@ func _initialize()->void:
 		_fail("unsolicited self echo was accepted")
 		return
 
-	print("CHAT_WIRE_PASS command=92 delivery=93 utf8=true trusted_echo=true visible_only=true replay=STALE unsolicited_self=FAIL_CLOSED")
+	var whisper_command:=WireCodec.encode_whisper_command(
+		3,10,22,3,"跨圖私訊")
+	if whisper_command.hex_encode().to_upper()!=WHISPER_COMMAND_HEX:
+		_fail("whisper command cross-runtime golden")
+		return
+	var whisper_result:=WireCodec.decode_whisper_result(
+		WHISPER_RESULT_HEX.hex_decode())
+	if (
+		whisper_result.is_empty() or int(whisper_result.chat_sequence)!=10 or
+		int(whisper_result.status)!=0 or
+		int(whisper_result.target_actor_id)!=22 or
+		int(whisper_result.target_connection_epoch)!=7 or
+		str(whisper_result.target_name)!="MultiHeroOne"
+	):
+		_fail("whisper result cross-runtime golden")
+		return
+
+	# Direct whisper must not depend on AOI visibility. The observer has no
+	# sender entity but still accepts a Server-authenticated channel=Whisper
+	# delivery and generation-scoped replay remains stale.
+	var whisper_observer:=_base_world(22)
+	var whisper_delivery:=WHISPER_DELIVERY_HEX.hex_decode()
+	if not whisper_observer.apply_frame(whisper_delivery):
+		_fail("cross-map whisper delivery "+whisper_observer.protocol_error)
+		return
+	var whisper_observer_snapshot:=whisper_observer.snapshot()
+	if (
+		(whisper_observer_snapshot.chat_messages as Array).size()!=1 or
+		int(whisper_observer_snapshot.chat_messages[0].channel)!=4 or
+		str(whisper_observer_snapshot.chat_messages[0].direction)!="incoming" or
+		str(whisper_observer_snapshot.chat_messages[0].message)!="跨圖私訊"
+	):
+		_fail("cross-map whisper backlog")
+		return
+	if not whisper_observer.apply_frame(whisper_delivery) or 			int(whisper_observer.snapshot().stale_chat_deliveries)!=1:
+		_fail("duplicate whisper delivery replay")
+		return
+
+	# Sender history is published only after the authoritative Delivered result,
+	# not when the command is queued locally.
+	var whisper_sender:=_base_world(11)
+	if not whisper_sender.mark_whisper_sent(10,22,3,"跨圖私訊"):
+		_fail("whisper send admission")
+		return
+	if whisper_sender.mark_chat_sent(11,0,0,"不可越過 pending 私訊"):
+		_fail("nearby bypassed pending whisper result")
+		return
+	if not (whisper_sender.snapshot().chat_messages as Array).is_empty():
+		_fail("whisper was locally echoed before server result")
+		return
+	if not whisper_sender.apply_frame(WHISPER_RESULT_HEX.hex_decode()):
+		_fail("whisper delivered result "+whisper_sender.protocol_error)
+		return
+	var sender_snapshot:=whisper_sender.snapshot()
+	if (
+		int(sender_snapshot.pending_whisper_sequence)!=0 or
+		int(sender_snapshot.last_whisper_result_status)!=0 or
+		(sender_snapshot.chat_messages as Array).size()!=1 or
+		str(sender_snapshot.chat_messages[0].direction)!="outgoing" or
+		str(sender_snapshot.chat_messages[0].target_name)!="MultiHeroOne" or
+		str(sender_snapshot.chat_messages[0].message)!="跨圖私訊"
+	):
+		_fail("authoritative whisper sender history")
+		return
+
+	print("CHAT_WIRE_PASS command=92 delivery=93 whisper_command=98 whisper_result=99 utf8=true trusted_echo=true visible_only_nearby=true whisper_crossmap=true replay=STALE unsolicited_self=FAIL_CLOSED")
 	quit(0)
