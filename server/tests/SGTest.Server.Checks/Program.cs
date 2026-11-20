@@ -257,6 +257,7 @@ static class Checks
             EnhancementCatalogChecks.Verify(root);
             EnhancementWireChecks.Verify();
             EnhancementGatewayChecks.Verify();
+            EnhancementTlsChecks.Verify(root);
             BankChecks.Verify(root);
             RepairCatalogChecks.Verify(root);
             RepairChecks.Verify(root);
