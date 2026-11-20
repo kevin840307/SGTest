@@ -7,6 +7,7 @@ internal static class ChatWireChecks
     public static void Verify()
     {
         Checks.Run("nearby chat wire binds sender identity only at Gateway", Wire);
+        Checks.Run("whisper wire binds sender and target in shared chat sequence", Whisper);
         Checks.Run("nearby chat gateway rejects unsupported channel and replay", Gate);
     }
 
@@ -48,6 +49,72 @@ internal static class ChatWireChecks
             3,10,ChatChannel.Nearby,0,tooLong)); }
         catch(ArgumentOutOfRangeException){ rejected=true; }
         Checks.Require(rejected,"chat transport admitted over-limit UTF8 payload");
+    }
+
+    private static void Whisper()
+    {
+        var command=new WhisperCommandWire(3,10,22,3,"跨圖私訊");
+        var frame=WireProtocol.EncodeWhisperCommand(command);
+        Checks.Require(
+            frame.Length>=WireProtocol.WhisperCommandHeaderBytes+1&&
+            frame.Length<=WireProtocol.WhisperCommandMaximumFrameBytes&&
+            WireProtocol.TryDecodeWhisperCommand(frame,out var decoded)&&
+            decoded==command,
+            "whisper command wire mismatch");
+
+        var actor=new ActorSnapshot(11,15,5,3,0,0,8,8,1,false);
+        var gateway=new GatewayConnection(actor);
+        TrustedChatCommand trusted=default;
+        Checks.Require(gateway.FeedClientBytes(
+                frame,_=>true,out int accepted,
+                postChat:request=>{trusted=request;return true;})==
+                WireFeedStatus.Accepted&&accepted==1&&
+            trusted.ActorId==11&&trusted.ConnectionEpoch==5&&
+            trusted.RequestMapEpoch==3&&trusted.ChatSequence==10&&
+            trusted.Channel==ChatChannel.Whisper&&trusted.BubbleType==3&&
+            trusted.TargetActorId==22&&trusted.Message=="跨圖私訊",
+            "whisper Gateway did not bind authenticated sender/target");
+
+        var result=new WhisperResultWire(
+            3,10,WhisperResultStatus.Delivered,22,7,"TargetHero");
+        Checks.Require(gateway.QueueWhisperResult(trusted,result)==
+                GatewaySendStatus.Enqueued&&
+            gateway.TryDequeueReliable(out var queued)&&
+            WireProtocol.TryDecodeWhisperResult(queued,out var decodedResult)&&
+            decodedResult==result,
+            "whisper sender result reliable roundtrip mismatch");
+
+        var unavailable=new WhisperResultWire(
+            3,10,WhisperResultStatus.TargetUnavailable,22,0,string.Empty);
+        Checks.Require(
+            WireProtocol.TryDecodeWhisperResult(
+                WireProtocol.EncodeWhisperResult(unavailable),out var unavailableBack)&&
+            unavailableBack==unavailable,
+            "whisper unavailable result mismatch");
+
+        bool malformed=false;
+        try
+        {
+            _=WireProtocol.EncodeWhisperResult(new(
+                3,10,WhisperResultStatus.Delivered,22,0,string.Empty));
+        }
+        catch(ArgumentOutOfRangeException){malformed=true;}
+        Checks.Require(malformed,
+            "whisper delivered result admitted without target identity");
+
+        var shared=new GatewayConnection(actor);
+        var nearby=WireProtocol.EncodeChatCommand(new(
+            3,4,ChatChannel.Nearby,0,"nearby"));
+        Checks.Require(shared.FeedClientBytes(
+                nearby,_=>true,out var nearAccepted,postChat:_=>true)==
+                WireFeedStatus.Accepted&&nearAccepted==1,
+            "shared chat sequence nearby fixture rejected");
+        var staleWhisper=WireProtocol.EncodeWhisperCommand(new(
+            3,4,22,0,"same sequence"));
+        Checks.Require(shared.FeedClientBytes(
+                staleWhisper,_=>true,out var staleAccepted,postChat:_=>true)==
+                WireFeedStatus.ProtocolViolation&&staleAccepted==0,
+            "whisper bypassed shared chat replay sequence");
     }
 
     private static void Gate()
