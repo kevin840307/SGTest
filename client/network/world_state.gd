@@ -2557,6 +2557,7 @@ func _apply_storage_transfer_result(frame: PackedByteArray) -> bool:
 			var previous: Dictionary = inventory_items[uid]
 			if int(previous.item_definition_id) != int(receipt.item_definition_id) or int(previous.quantity) != int(receipt.quantity) or int(previous.get("drop_id",0)) != int(receipt.drop_id):
 				return fail("storage_deposit_receipt_mismatch")
+			receipt["enhancement_level"] = int(previous.get("enhancement_level",0))
 			inventory_items.erase(uid)
 			storage_items[uid] = receipt
 		else:
@@ -2565,6 +2566,7 @@ func _apply_storage_transfer_result(frame: PackedByteArray) -> bool:
 			var previous: Dictionary = storage_items[uid]
 			if int(previous.item_definition_id) != int(receipt.item_definition_id) or int(previous.quantity) != int(receipt.quantity) or int(previous.get("drop_id",0)) != int(receipt.drop_id):
 				return fail("storage_withdraw_receipt_mismatch")
+			receipt["enhancement_level"] = int(previous.get("enhancement_level",0))
 			storage_items.erase(uid)
 			inventory_items[uid] = receipt
 		inventory_revision += 1
