@@ -235,6 +235,7 @@ internal static class TlsHost
             PlayerShopCoordinator? playerShops=trades is null
                 ? null:new PlayerShopCoordinator(
                     identity,world,tradeItemRules!,trades,combat);
+            var parties=new PartyCoordinator();
             var aoi = new WorldAoiPump(
                 router, monsters: monsters, playerCombat: combat, loot: loot,
                 initialGroundDrops: activeDrops);
@@ -254,6 +255,7 @@ internal static class TlsHost
                 quests: quests,
                 trades: trades,
                 playerShops: playerShops,
+                parties: parties,
                 gmAccounts: gmAccounts);
             await using var listener = new TlsGatewayListener(address, port, authorization,
                 certificate, router, new(MaxConnections: maximum, MaxConnectionsPerAddress: perAddress));
@@ -293,6 +295,7 @@ internal static class TlsHost
                     verified_quest_count = quests?.Count ?? 0,
                     verified_trade_item_rule_count = tradeItemRules?.Count ?? 0,
                     player_shop_enabled = playerShops is not null,
+                    online_party_enabled = true,
                     gm_account_count = gmAccounts.Count,
                     unpicked_ground_drops = activeDrops.Count,
                     character_creation_enabled = characterCreation is not null,
