@@ -206,6 +206,17 @@ var chat_messages: Array[Dictionary] = []
 var chat_sender_sequences := {}
 var stale_chat_deliveries := 0
 const CHAT_BACKLOG_MAX := 100
+var quest_sequence := 0
+var pending_quest_sequence := 0
+var pending_quest_kind := 0
+var pending_quest_npc := 0
+var pending_quest_id := 0
+var pending_quest_choice_id := 0
+var quest_view := {}
+var last_quest_response_sequence := 0
+var last_quest_status := -1
+var last_quest_result := {}
+var stale_quest_results := 0
 var pvp_sequence := 0
 var pending_pvp_sequence := 0
 var pvp_mode := -1
@@ -543,6 +554,39 @@ func mark_chat_sent(sequence:int,channel:int,bubble_type:int,message:String)->bo
 	chat_sequence=sequence
 	return true
 
+func mark_quest_sent(
+		sequence:int,kind:int,npc_spawn_id:int,quest_id:int=0,
+		choice_id:int=0)->bool:
+	if (
+		state!=STATE_IN_WORLD or player_dead or not world_ready or
+		resync_pending or waiting_for_new_map or
+		pending_world_ready_ack_epoch!=0 or last_world_ready_ack_epoch!=map_epoch or
+		pending_quest_sequence!=0 or sequence<=quest_sequence or
+		sequence>0xffffffff or kind not in [1,2] or npc_spawn_id<=0
+	):
+		return false
+	if kind==1:
+		if quest_id!=0 or choice_id!=0:
+			return false
+	else:
+		if (
+			quest_id<=0 or choice_id<=0 or quest_view.is_empty() or
+			int(quest_view.get("npc_spawn_id",0))!=npc_spawn_id or
+			int(quest_view.get("quest_id",0))!=quest_id or
+			not (quest_view.get("choices",[]) as Array).any(
+				func(row:Dictionary)->bool:
+					return int(row.get("choice_id",0))==choice_id)
+		):
+			return false
+	quest_sequence=sequence
+	pending_quest_sequence=sequence
+	pending_quest_kind=kind
+	pending_quest_npc=npc_spawn_id
+	pending_quest_id=quest_id
+	pending_quest_choice_id=choice_id
+	return true
+
+
 func mark_pvp_sent(sequence: int,action: int) -> bool:
 	if state != STATE_IN_WORLD or not world_ready or resync_pending or waiting_for_new_map or pending_world_ready_ack_epoch != 0 or last_world_ready_ack_epoch != map_epoch or pending_pvp_sequence != 0 or sequence <= pvp_sequence or sequence > 0xffffffff or action not in [0,1,2] or (player_dead and action != 0):
 		return false
@@ -700,6 +744,8 @@ func apply_frame(frame: PackedByteArray) -> bool:
 			return _apply_player_shop_sold(frame)
 		WireCodec.OPCODE_CHAT_DELIVERY:
 			return _apply_chat_delivery(frame)
+		WireCodec.OPCODE_QUEST_VIEW:
+			return _apply_quest_view(frame)
 		WireCodec.OPCODE_WORLD_READY:
 			return _apply_world_ready(frame)
 		WireCodec.OPCODE_SELF_STATE:
@@ -914,6 +960,17 @@ func snapshot() -> Dictionary:
 		"chat_sequence": chat_sequence,
 		"chat_messages": chat_messages.duplicate(true),
 		"stale_chat_deliveries": stale_chat_deliveries,
+		"quest_sequence": quest_sequence,
+		"pending_quest_sequence": pending_quest_sequence,
+		"pending_quest_kind": pending_quest_kind,
+		"pending_quest_npc": pending_quest_npc,
+		"pending_quest_id": pending_quest_id,
+		"pending_quest_choice_id": pending_quest_choice_id,
+		"quest_view": quest_view.duplicate(true),
+		"last_quest_response_sequence": last_quest_response_sequence,
+		"last_quest_status": last_quest_status,
+		"last_quest_result": last_quest_result.duplicate(true),
+		"stale_quest_results": stale_quest_results,
 		"pvp_sequence": pvp_sequence,
 		"pending_pvp_sequence": pending_pvp_sequence,
 		"pvp_mode": pvp_mode,
@@ -1828,6 +1885,7 @@ func _apply_world_ready(frame: PackedByteArray) -> bool:
 		stale_repair_results = 0
 		_clear_trade_state(true)
 		_clear_player_shop_map()
+		_clear_quest_map()
 		_clear_pvp_map()
 		last_trade_terminal.clear()
 		stale_trade_frames = 0
@@ -2946,6 +3004,66 @@ func _apply_chat_delivery(frame:PackedByteArray)->bool:
 	while chat_messages.size()>CHAT_BACKLOG_MAX:
 		chat_messages.pop_front()
 	return true
+
+func _clear_pending_quest()->void:
+	pending_quest_sequence=0
+	pending_quest_kind=0
+	pending_quest_npc=0
+	pending_quest_id=0
+	pending_quest_choice_id=0
+
+
+func _clear_quest_map()->void:
+	quest_sequence=0
+	_clear_pending_quest()
+	quest_view.clear()
+	last_quest_response_sequence=0
+	last_quest_status=-1
+	last_quest_result.clear()
+	stale_quest_results=0
+
+
+func _apply_quest_view(frame:PackedByteArray)->bool:
+	if state!=STATE_IN_WORLD:
+		return fail("quest_view_out_of_state")
+	var value:=WireCodec.decode_quest_view(frame)
+	if value.is_empty():
+		return fail("invalid_quest_view")
+	var epoch:=int(value.map_epoch)
+	var sequence:=int(value.quest_sequence)
+	var npc:=int(value.npc_spawn_id)
+	var status:=int(value.status)
+	if epoch<map_epoch:
+		stale_quest_results+=1
+		return true
+	if epoch>map_epoch:
+		return fail("future_quest_view")
+	if sequence<=last_quest_response_sequence:
+		stale_quest_results+=1
+		return true
+	if (
+		sequence>quest_sequence or sequence!=pending_quest_sequence or
+		npc!=pending_quest_npc or pending_quest_kind not in [1,2]
+	):
+		return fail("quest_view_without_matching_request")
+	var has_view:=status in [0,1,2,6,7]
+	if pending_quest_kind==2 and has_view:
+		if int(value.quest_id)!=pending_quest_id:
+			return fail("quest_view_wrong_quest")
+		if status in [0,1,2] and pending_quest_choice_id<=0:
+			return fail("quest_view_missing_choice_request")
+	if has_view:
+		quest_view=value.duplicate(true)
+	else:
+		# A no-view rejection is authoritative evidence that the previous
+		# interaction view is no longer actionable for this request/generation.
+		quest_view.clear()
+	last_quest_response_sequence=sequence
+	last_quest_status=status
+	last_quest_result=value.duplicate(true)
+	_clear_pending_quest()
+	return true
+
 
 func _clear_pvp_map() -> void:
 	gm_sequence = 0
