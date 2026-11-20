@@ -73,6 +73,15 @@ class RespawnSession extends RefCounted:
 	var last_whisper_target := 0
 	var last_whisper_message := ""
 	var last_whisper_bubble := -1
+	var party_invites := 0
+	var party_accepts := 0
+	var party_rejects := 0
+	var party_leaves := 0
+	var party_kicks := 0
+	var party_promotes := 0
+	var party_chats := 0
+	var last_party_target := 0
+	var last_party_message := ""
 	var quest_opens := 0
 	var quest_choices := 0
 	var last_quest_npc := 0
@@ -292,6 +301,39 @@ class RespawnSession extends RefCounted:
 		last_whisper_target=target_actor_id
 		last_whisper_message=message
 		last_whisper_bubble=bubble_type
+		return true
+	func party_invite(target_actor_id:int)->bool:
+		if target_actor_id<=0:
+			return false
+		party_invites+=1
+		last_party_target=target_actor_id
+		return true
+	func party_accept()->bool:
+		party_accepts+=1
+		return true
+	func party_reject()->bool:
+		party_rejects+=1
+		return true
+	func party_leave()->bool:
+		party_leaves+=1
+		return true
+	func party_kick(target_actor_id:int)->bool:
+		if target_actor_id<=0:
+			return false
+		party_kicks+=1
+		last_party_target=target_actor_id
+		return true
+	func party_promote(target_actor_id:int)->bool:
+		if target_actor_id<=0:
+			return false
+		party_promotes+=1
+		last_party_target=target_actor_id
+		return true
+	func send_party_chat(message:String,bubble_type:int=0)->bool:
+		if message.strip_edges().is_empty() or bubble_type<0 or bubble_type>5:
+			return false
+		party_chats+=1
+		last_party_message=message
 		return true
 	func open_quest(npc_spawn_id:int)->bool:
 		if npc_spawn_id<=0:
@@ -1246,15 +1288,29 @@ func run() -> void:
 	panel._latest.last_whisper_result_status = -1
 	panel._latest.last_whisper_result = {}
 	panel._latest.stale_whisper_results = 0
+	panel._latest.party_sequence = 0
+	panel._latest.pending_party_sequence = 0
+	panel._latest.pending_party_action = 0
+	panel._latest.pending_party_party_id = 0
+	panel._latest.pending_party_target_actor_id = 0
+	panel._latest.party_id = 0
+	panel._latest.party_revision = 0
+	panel._latest.party_leader_actor_id = 0
+	panel._latest.party_members = {}
+	panel._latest.pending_party_invite = {}
+	panel._latest.last_party_result_sequence = 0
+	panel._latest.last_party_result_status = -1
+	panel._latest.last_party_result = {}
+	panel._latest.stale_party_frames = 0
 	panel._latest.reconnecting = false
 	panel._latest.resync_pending = false
 	panel._latest.waiting_for_new_map = false
 	panel._latest.pending_world_ready_ack_epoch = 0
 	panel._latest.last_world_ready_ack_epoch = panel._latest.map_epoch
 	panel._update_nearby_chat_ui()
-	for control in [panel.nearby_chat_history,panel.nearby_chat_input,panel.nearby_chat_send_button,panel.nearby_chat_status,panel.whisper_target_input,panel.whisper_input,panel.whisper_send_button,panel.whisper_status]:
+	for control in [panel.nearby_chat_history,panel.nearby_chat_input,panel.nearby_chat_send_button,panel.nearby_chat_status,panel.whisper_target_input,panel.whisper_input,panel.whisper_send_button,panel.whisper_status,panel.party_target_input,panel.party_invite_button,panel.party_invite_label,panel.party_accept_button,panel.party_reject_button,panel.party_members_label,panel.party_leave_button,panel.party_kick_button,panel.party_promote_button,panel.party_chat_input,panel.party_chat_send_button,panel.party_status]:
 		if control.get_parent() == null or not panel.is_ancestor_of(control):
-			fail("Chat/whisper controls are not descendants of SessionPanel")
+			fail("Chat/whisper/party controls are not descendants of SessionPanel")
 			return
 	if panel.nearby_chat_send_button.disabled or not panel.nearby_chat_history.text.is_empty():
 		fail("Nearby chat idle controls/history incorrect")
@@ -1319,6 +1375,82 @@ func run() -> void:
 		fail("Pending whisper did not serialize chat send controls")
 		return
 	panel._latest.pending_whisper_sequence=0
+
+	# Party controls send only intents; membership and leader state render from
+	# authoritative PartySnapshot/PartyResult fields.
+	panel.party_target_input.text="22"
+	panel.party_invite_button.pressed.emit()
+	if stub.party_invites!=1 or stub.last_party_target!=22:
+		fail("Party invite UI did not send exact target ActorId")
+		return
+	panel._latest.pending_party_invite={
+		"receiver_map_epoch":3,"party_id":9001,"revision":1,
+		"inviter_actor_id":22,"inviter_connection_epoch":8,
+		"inviter_name":"PartyLeader"}
+	panel._update_nearby_chat_ui()
+	if (
+		not panel.party_invite_label.text.contains("PartyLeader") or
+		panel.party_accept_button.disabled or panel.party_reject_button.disabled
+	):
+		fail("Party invite UI did not render authoritative invite")
+		return
+	panel.party_accept_button.pressed.emit()
+	if stub.party_accepts!=1:
+		fail("Party accept UI did not use ClientSession")
+		return
+
+	var self_actor:=int(panel._latest.actor_id)
+	panel._latest.pending_party_invite={}
+	panel._latest.party_id=9001
+	panel._latest.party_revision=2
+	panel._latest.party_leader_actor_id=self_actor
+	panel._latest.party_members={
+		self_actor:{"actor_id":self_actor,"connection_epoch":1,"name":"SelfHero"},
+		22:{"actor_id":22,"connection_epoch":8,"name":"PartyMate"}}
+	panel._latest.last_party_result_sequence=1
+	panel._latest.last_party_result_status=0
+	panel._latest.last_party_result={
+		"map_epoch":3,"party_sequence":1,"action":2,"status":0,
+		"party_id":9001,"target_actor_id":22}
+	panel._latest.chat_messages.append({
+		"receiver_map_epoch":3,"sender_actor_id":22,
+		"sender_connection_epoch":8,"chat_sequence":4,"channel":3,
+		"bubble_type":0,"sender_name":"PartyMate","message":"隊伍測試"})
+	panel._update_nearby_chat_ui()
+	if (
+		not panel.party_members_label.text.contains("PartyMate") or
+		not panel.party_members_label.text.contains("★ SelfHero") or
+		not panel.nearby_chat_history.text.contains("[隊伍] PartyMate：隊伍測試") or
+		panel.party_leave_button.disabled or panel.party_kick_button.disabled or
+		panel.party_promote_button.disabled or panel.party_chat_send_button.disabled
+	):
+		fail("Party UI did not render authoritative membership/leader/chat")
+		return
+	panel.party_chat_input.text="  隊伍送出測試  "
+	panel.party_chat_send_button.pressed.emit()
+	if stub.party_chats!=1 or stub.last_party_message!="隊伍送出測試":
+		fail("Party chat UI did not route sanitized message")
+		return
+	panel.party_target_input.text="22"
+	panel.party_kick_button.pressed.emit()
+	panel.party_promote_button.pressed.emit()
+	if stub.party_kicks!=1 or stub.party_promotes!=1 or stub.last_party_target!=22:
+		fail("Party leader controls did not route target actions")
+		return
+	panel.party_leave_button.pressed.emit()
+	if stub.party_leaves!=1:
+		fail("Party leave UI did not use ClientSession")
+		return
+	panel._latest.pending_party_sequence=2
+	panel._update_nearby_chat_ui()
+	if (
+		not panel.party_invite_button.disabled or
+		not panel.party_leave_button.disabled or
+		not panel.party_kick_button.disabled
+	):
+		fail("Pending Party command did not serialize membership controls")
+		return
+	panel._latest.pending_party_sequence=0
 	# Quest UI displays and submits only the authoritative Server View.
 	panel._latest.quest_sequence = 0
 	panel._latest.pending_quest_sequence = 0
