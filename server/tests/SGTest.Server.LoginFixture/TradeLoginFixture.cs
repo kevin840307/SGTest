@@ -42,6 +42,8 @@ internal static class TradeLoginFixture
                 .ConfigureAwait(false);
             var itemB=await SeedItem(store,generation,charB,4104,1,2,24,8)
                 .ConfigureAwait(false);
+            SeedEnhancementLevel(db,itemA.ItemUid,5);
+            SeedEnhancementLevel(db,itemB.ItemUid,7);
             var rules=new Dictionary<int,TradeItemRule>
             {
                 [4103]=new(4103,true,"ci:godot-trade-4103"),
@@ -65,7 +67,8 @@ internal static class TradeLoginFixture
                 int port=((IPEndPoint)listener.LocalEndpoint).Port;
                 Console.WriteLine(
                     $"TRADE_FIXTURE_READY port={port} cert={certPath} " +
-                    $"actor_a={charA} actor_b={charB} item_a={itemA.ItemUid} item_b={itemB.ItemUid}");
+                    $"actor_a={charA} actor_b={charB} item_a={itemA.ItemUid} item_b={itemB.ItemUid} " +
+                    "level_a=5 level_b=7");
                 Console.Out.Flush();
 
                 using var first=await listener.AcceptTcpClientAsync()
@@ -92,9 +95,11 @@ internal static class TradeLoginFixture
                 if(inventoryA.Count!=1||inventoryA[0].ItemUid!=itemB.ItemUid||
                    inventoryA[0].ItemDefinitionId!=4104||inventoryA[0].Quantity!=1||
                    inventoryA[0].SourceDropId!=itemB.DropId||
+                   inventoryA[0].EnhancementLevel!=7||
                    inventoryB.Count!=1||inventoryB[0].ItemUid!=itemA.ItemUid||
                    inventoryB[0].ItemDefinitionId!=4103||inventoryB[0].Quantity!=2||
                    inventoryB[0].SourceDropId!=itemA.DropId||
+                   inventoryB[0].EnhancementLevel!=5||
                    walletA!=850||walletB!=650||
                    ended.Any(x=>x.CommandsAccepted!=6)||
                    router.Statistics.ActiveSessions!=0)
@@ -107,7 +112,8 @@ internal static class TradeLoginFixture
                 Console.WriteLine(
                     $"TRADE_FIXTURE_PASS actor_a={charA} actor_b={charB} " +
                     $"wallet_a={walletA} wallet_b={walletB} " +
-                    $"item_a_owner={charB} item_b_owner={charA} commands=6/6");
+                    $"item_a_owner={charB} item_b_owner={charA} " +
+                    "level_a=5 level_b=7 commands=6/6");
                 Console.Out.Flush();
                 return 0;
             }
@@ -146,6 +152,24 @@ internal static class TradeLoginFixture
         if(grant.Status!=PickupStatus.Granted||grant.ItemUid<=0)
             throw new InvalidOperationException("trade seed pickup failed");
         return(grant.ItemUid,drop.DropId);
+    }
+
+    private static void SeedEnhancementLevel(string db,long itemUid,int level)
+    {
+        using var connection=new SqliteConnection(
+            new SqliteConnectionStringBuilder
+            {
+                DataSource=db,Mode=SqliteOpenMode.ReadWrite,Pooling=false
+            }.ToString());
+        connection.Open();
+        using var command=connection.CreateCommand();
+        command.CommandText=
+            "UPDATE item_instances SET enhancement_level=$level WHERE item_uid=$uid;";
+        command.Parameters.AddWithValue("$level",level);
+        command.Parameters.AddWithValue("$uid",itemUid);
+        if(command.ExecuteNonQuery()!=1)
+            throw new InvalidOperationException(
+                "trade fixture enhancement seed failed");
     }
 
     private static void SeedWallet(string db,long characterId,long money)
