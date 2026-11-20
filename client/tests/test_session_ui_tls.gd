@@ -69,6 +69,10 @@ class RespawnSession extends RefCounted:
 	var nearby_chats := 0
 	var last_nearby_message := ""
 	var last_nearby_bubble := -1
+	var whispers := 0
+	var last_whisper_target := 0
+	var last_whisper_message := ""
+	var last_whisper_bubble := -1
 	var quest_opens := 0
 	var quest_choices := 0
 	var last_quest_npc := 0
@@ -280,6 +284,14 @@ class RespawnSession extends RefCounted:
 		nearby_chats += 1
 		last_nearby_message = message
 		last_nearby_bubble = bubble_type
+		return true
+	func send_whisper(target_actor_id:int,message:String,bubble_type:int=0)->bool:
+		if target_actor_id<=0 or message.strip_edges().is_empty() or bubble_type<0 or bubble_type>5:
+			return false
+		whispers+=1
+		last_whisper_target=target_actor_id
+		last_whisper_message=message
+		last_whisper_bubble=bubble_type
 		return true
 	func open_quest(npc_spawn_id:int)->bool:
 		if npc_spawn_id<=0:
@@ -1229,15 +1241,20 @@ func run() -> void:
 	panel._latest.chat_sequence = 0
 	panel._latest.chat_messages = []
 	panel._latest.stale_chat_deliveries = 0
+	panel._latest.pending_whisper_sequence = 0
+	panel._latest.last_whisper_result_sequence = 0
+	panel._latest.last_whisper_result_status = -1
+	panel._latest.last_whisper_result = {}
+	panel._latest.stale_whisper_results = 0
 	panel._latest.reconnecting = false
 	panel._latest.resync_pending = false
 	panel._latest.waiting_for_new_map = false
 	panel._latest.pending_world_ready_ack_epoch = 0
 	panel._latest.last_world_ready_ack_epoch = panel._latest.map_epoch
 	panel._update_nearby_chat_ui()
-	for control in [panel.nearby_chat_history,panel.nearby_chat_input,panel.nearby_chat_send_button,panel.nearby_chat_status]:
+	for control in [panel.nearby_chat_history,panel.nearby_chat_input,panel.nearby_chat_send_button,panel.nearby_chat_status,panel.whisper_target_input,panel.whisper_input,panel.whisper_send_button,panel.whisper_status]:
 		if control.get_parent() == null or not panel.is_ancestor_of(control):
-			fail("Nearby chat controls are not descendants of SessionPanel")
+			fail("Chat/whisper controls are not descendants of SessionPanel")
 			return
 	if panel.nearby_chat_send_button.disabled or not panel.nearby_chat_history.text.is_empty():
 		fail("Nearby chat idle controls/history incorrect")
@@ -1259,6 +1276,49 @@ func run() -> void:
 	if not panel.nearby_chat_history.text.contains("[附近] NearbyHero：附近測試"):
 		fail("Nearby chat UI did not render authoritative Server delivery")
 		return
+	panel.whisper_target_input.text = "22"
+	panel.whisper_input.text = "  私訊測試  "
+	panel.whisper_send_button.pressed.emit()
+	if (
+		stub.whispers!=1 or stub.last_whisper_target!=22 or
+		stub.last_whisper_message!="私訊測試" or stub.last_whisper_bubble!=0
+	):
+		fail("Whisper UI did not route sanitized target/message through ClientSession")
+		return
+	if not panel.whisper_input.text.is_empty() or panel.nearby_chat_history.text.contains("私訊測試"):
+		fail("Whisper UI locally echoed before Server result")
+		return
+	panel._latest.chat_messages.append({
+		"receiver_map_epoch":3,"sender_actor_id":int(panel._latest.actor_id),
+		"sender_connection_epoch":0,"chat_sequence":2,"channel":4,
+		"bubble_type":0,"sender_name":"","message":"私訊測試",
+		"direction":"outgoing","target_actor_id":22,
+		"target_connection_epoch":8,"target_name":"WhisperTarget"})
+	panel._latest.chat_messages.append({
+		"receiver_map_epoch":3,"sender_actor_id":22,
+		"sender_connection_epoch":8,"chat_sequence":3,"channel":4,
+		"bubble_type":2,"sender_name":"WhisperTarget","message":"收到",
+		"direction":"incoming"})
+	panel._latest.last_whisper_result_sequence=2
+	panel._latest.last_whisper_result_status=0
+	panel._latest.last_whisper_result={
+		"map_epoch":3,"chat_sequence":2,"status":0,
+		"target_actor_id":22,"target_connection_epoch":8,
+		"target_name":"WhisperTarget"}
+	panel._update_nearby_chat_ui()
+	if (
+		not panel.nearby_chat_history.text.contains("[私訊] 你 → WhisperTarget：私訊測試") or
+		not panel.nearby_chat_history.text.contains("[私訊] WhisperTarget → 你：收到") or
+		not panel.whisper_status.text.contains("已送達 WhisperTarget")
+	):
+		fail("Whisper UI did not render authoritative result/delivery")
+		return
+	panel._latest.pending_whisper_sequence=4
+	panel._update_nearby_chat_ui()
+	if not panel.whisper_send_button.disabled or not panel.nearby_chat_send_button.disabled:
+		fail("Pending whisper did not serialize chat send controls")
+		return
+	panel._latest.pending_whisper_sequence=0
 	# Quest UI displays and submits only the authoritative Server View.
 	panel._latest.quest_sequence = 0
 	panel._latest.pending_quest_sequence = 0
