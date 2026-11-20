@@ -1546,10 +1546,12 @@ func _player_shop_listing_text(prefix: String, listing: Dictionary) -> String:
 	var item_name := item_catalog.name_for(int(listing.get("item_definition_id",0)))
 	var durability := int(listing.get("durability_raw",-1))
 	var durability_text := "" if durability < 0 else "｜耐久 raw %d" % durability
-	return "%s玩家 %d｜%s ×%d｜UID %d｜售價 %d%s" % [
+	var level := int(listing.get("enhancement_level",0))
+	var enhancement_text := "" if level <= 0 else "｜+%d" % level
+	return "%s玩家 %d｜%s ×%d%s｜UID %d｜售價 %d%s" % [
 		prefix,int(listing.get("seller_actor_id",0)),item_name,
-		int(listing.get("quantity",0)),int(listing.get("item_uid",0)),
-		int(listing.get("price",0)),durability_text]
+		int(listing.get("quantity",0)),enhancement_text,
+		int(listing.get("item_uid",0)),int(listing.get("price",0)),durability_text]
 
 func _request_selected_trade() -> void:
 	if trade_request_button.disabled or trade_target_picker.selected < 0:
@@ -1643,7 +1645,9 @@ func _trade_state_text(value: int) -> String:
 
 
 func _trade_item_text(item: Dictionary) -> String:
-	return "%s ×%d｜UID %d" % [item_catalog.name_for(int(item.get("item_definition_id",0))),int(item.get("quantity",0)),int(item.get("item_uid",0))]
+	var level := int(item.get("enhancement_level",0))
+	var enhancement := "" if level <= 0 else "｜+%d" % level
+	return "%s ×%d%s｜UID %d" % [item_catalog.name_for(int(item.get("item_definition_id",0))),int(item.get("quantity",0)),enhancement,int(item.get("item_uid",0))]
 
 
 func _request_pvp_mode(action: int) -> void:
