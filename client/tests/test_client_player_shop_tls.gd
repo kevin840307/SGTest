@@ -12,8 +12,11 @@ func _fail(message:String,session=null)->void:
 
 func _initialize()->void:
 	var args:=OS.get_cmdline_user_args()
-	if args.size()!=7 or not str(args[0]).is_valid_int() or
-			str(args[2]) not in ["seller","buyer"]:
+	if (
+		args.size()!=7 or
+		not str(args[0]).is_valid_int() or
+		str(args[2]) not in ["seller","buyer"]
+	):
 		_fail("expected port cert role seller buyer item_uid drop_id")
 		return
 	var role:=str(args[2])
