@@ -32,7 +32,8 @@ public sealed record PickupResult(PickupStatus Status, long DropId,
     long ItemUid = 0, int ItemDefinitionId = 0, int Quantity = 0);
 
 public sealed record InventoryItem(long ItemUid, long CharacterId,
-    int ItemDefinitionId, int Quantity, long SourceDropId);
+    int ItemDefinitionId, int Quantity, long SourceDropId,
+    int EnhancementLevel = 0);
 
 /// <summary>
 /// Durable loot primitives owned by the existing identity SQLite DB, not a
@@ -312,7 +313,7 @@ VALUES($actor,$item,$quantity,$drop,1,$source,$now);";
             using var connection = Open();
             using var command = connection.CreateCommand();
             command.CommandText = @"SELECT item_uid,character_id,item_definition_id,
-quantity,COALESCE(source_drop_id,0) FROM item_instances
+quantity,COALESCE(source_drop_id,0),enhancement_level FROM item_instances
 WHERE character_id=$id ORDER BY item_uid LIMIT $limit;";
             command.Parameters.AddWithValue("$id", characterId);
             command.Parameters.AddWithValue("$limit", limit);
@@ -320,7 +321,8 @@ WHERE character_id=$id ORDER BY item_uid LIMIT $limit;";
             var result = new List<InventoryItem>();
             while (reader.Read())
                 result.Add(new(reader.GetInt64(0),reader.GetInt64(1),
-                    reader.GetInt32(2),reader.GetInt32(3),reader.GetInt64(4)));
+                    reader.GetInt32(2),reader.GetInt32(3),reader.GetInt64(4),
+                    reader.GetInt32(5)));
             return result;
         }, cancellationToken).ConfigureAwait(false);
     }
