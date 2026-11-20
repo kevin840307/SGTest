@@ -345,7 +345,8 @@ public readonly record struct GroundPickupResultWire(
     long MapEpoch,uint PickupSequence,PickupStatus Status,
     long DropId,long ItemUid,int ItemDefinitionId,int Quantity);
 public readonly record struct InventoryItemWire(
-    long ItemUid,int ItemDefinitionId,int Quantity,long SourceDropId);
+    long ItemUid,int ItemDefinitionId,int Quantity,long SourceDropId,
+    int EnhancementLevel = 0);
 public sealed record InventorySnapshotWire(
     long CharacterId,int StartIndex,bool Complete,
     IReadOnlyList<InventoryItemWire> Items);
@@ -383,7 +384,8 @@ public readonly record struct StorageTransferResultWire(
     int ItemDefinitionId,int Quantity,long SourceDropId);
 
 public readonly record struct EquipmentItemWire(
-    long ItemUid,int SlotId,int ItemDefinitionId,long SourceDropId);
+    long ItemUid,int SlotId,int ItemDefinitionId,long SourceDropId,
+    int EnhancementLevel = 0);
 public sealed record EquipmentSnapshotWire(
     long CharacterId,int StartIndex,bool Complete,
     IReadOnlyList<EquipmentItemWire> Items);
@@ -575,7 +577,7 @@ public static class WireProtocol
     public const int GroundPickupFrameBytes = HeaderBytes + 8 + 4 + 8;
     public const int GroundPickupResultFrameBytes = HeaderBytes + 8 + 4 + 1 + 8 + 8 + 4 + 4;
     public const int InventorySnapshotHeaderBytes = HeaderBytes + 8 + 4 + 1 + 2;
-    public const int InventoryItemBytes = 24;
+    public const int InventoryItemBytes = 25;
     public const int InventorySnapshotMaxItemsPerFrame = 128;
     public const int InventorySnapshotMaxItems = 4095;
     public const int ShopOpenFrameBytes = HeaderBytes + 8 + 4 + 4;
@@ -597,7 +599,7 @@ public static class WireProtocol
     public const int StorageTransferResultFrameBytes =
         HeaderBytes + 8 + 4 + 1 + 1 + 4 + 8 + 4 + 4 + 8;
     public const int EquipmentSnapshotHeaderBytes = HeaderBytes + 8 + 4 + 1 + 2;
-    public const int EquipmentItemBytes = 24;
+    public const int EquipmentItemBytes = 25;
     public const int EquipmentSnapshotMaxItemsPerFrame = 128;
     public const int EquipmentSnapshotMaxItems = 255;
     public const int EquipmentMoveFrameBytes = HeaderBytes + 8 + 4 + 8;
@@ -1597,7 +1599,7 @@ public static class WireProtocol
         foreach(var item in value.Items)
             if(item.ItemUid<=0||item.ItemDefinitionId is <1 or >100_000_000 ||
                item.Quantity is <1 or >1_000_000 || item.SourceDropId<0 ||
-               !ids.Add(item.ItemUid))
+               item.EnhancementLevel is <0 or >255 || !ids.Add(item.ItemUid))
                 throw new ArgumentOutOfRangeException(nameof(value));
         int count=value.Items.Count;
         var frame=NewFrame(WireOpcode.InventorySnapshot,
@@ -1614,6 +1616,7 @@ public static class WireProtocol
             BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(offset+8,4),item.ItemDefinitionId);
             BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(offset+12,4),item.Quantity);
             BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(offset+16,8),item.SourceDropId);
+            frame[offset+24]=checked((byte)item.EnhancementLevel);
         }
         return frame;
     }
@@ -1642,10 +1645,11 @@ public static class WireProtocol
                 BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(offset,8)),
                 BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(offset+8,4)),
                 BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(offset+12,4)),
-                BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(offset+16,8)));
+                BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(offset+16,8)),
+                frame[offset+24]);
             if(item.ItemUid<=0||item.ItemDefinitionId is <1 or >100_000_000 ||
                item.Quantity is <1 or >1_000_000||item.SourceDropId<0||
-               !ids.Add(item.ItemUid)) return false;
+               item.EnhancementLevel is <0 or >255||!ids.Add(item.ItemUid)) return false;
             items.Add(item);
         }
         value=new(character,start,complete==1,items);
@@ -2537,6 +2541,7 @@ public static class WireProtocol
         foreach(var item in value.Items)
             if(item.ItemUid<=0||item.SlotId is <1 or >255||
                item.ItemDefinitionId is <1 or >100_000_000||item.SourceDropId<0||
+               item.EnhancementLevel is <0 or >255||
                !uids.Add(item.ItemUid)||!slots.Add(item.SlotId))
                 throw new ArgumentOutOfRangeException(nameof(value));
         var frame=NewFrame(WireOpcode.EquipmentSnapshot,
@@ -2553,6 +2558,7 @@ public static class WireProtocol
             BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(offset+8,4),item.SlotId);
             BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(offset+12,4),item.ItemDefinitionId);
             BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(offset+16,8),item.SourceDropId);
+            frame[offset+24]=checked((byte)item.EnhancementLevel);
         }
         return frame;
     }
@@ -2579,9 +2585,11 @@ public static class WireProtocol
                 BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(offset,8)),
                 BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(offset+8,4)),
                 BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(offset+12,4)),
-                BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(offset+16,8)));
+                BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(offset+16,8)),
+                frame[offset+24]);
             if(item.ItemUid<=0||item.SlotId is <1 or >255||
                item.ItemDefinitionId is <1 or >100_000_000||item.SourceDropId<0||
+               item.EnhancementLevel is <0 or >255||
                !uids.Add(item.ItemUid)||!slots.Add(item.SlotId))return false;
             items.Add(item);
         }
