@@ -9,6 +9,8 @@ internal static class EnhancementMetadataChecks
             () => Lifecycle(root).GetAwaiter().GetResult());
         Checks.Run("schema v19 item locations migrate to enhancement level zero",
             () => MigrateV19(root).GetAwaiter().GetResult());
+        Checks.Run("schema v20 trade and player-shop receipts migrate enhancement metadata",
+            () => MigrateV20Receipts(root).GetAwaiter().GetResult());
     }
 
     private static async Task Lifecycle(string root)
@@ -22,8 +24,8 @@ internal static class EnhancementMetadataChecks
         using(var store=new SqliteIdentityStore(db))
         {
             await store.InitializeAsync();
-            Checks.Require(SqliteIdentityStore.SchemaVersion==20,
-                "enhancement metadata requires schema v20");
+            Checks.Require(SqliteIdentityStore.SchemaVersion==21,
+                "enhancement metadata requires schema v21");
             long account=(await store.CreateAccountAsync(
                 "enhance_user","Enhance-Password-123!")).AccountId;
             actor=(await store.CreateCharacterAsync(
@@ -153,7 +155,7 @@ internal static class EnhancementMetadataChecks
         {
             await migrated.InitializeAsync();
             Checks.Require(
-                SqliteIdentityStore.SchemaVersion==20&&
+                SqliteIdentityStore.SchemaVersion==21&&
                 ReadLevel(db,"item_instances",inventoryUid)==0&&
                 ReadLevel(db,"storage_items",storageUid)==0&&
                 ReadLevel(db,"equipped_items",equippedUid)==0&&
@@ -162,6 +164,59 @@ internal static class EnhancementMetadataChecks
                 (await migrated.ListEquippedItemsAsync(actor)).Single().ItemUid==equippedUid,
                 "v19 enhancement migration changed UID/location or nonzero default");
         }
+    }
+
+    private static async Task MigrateV20Receipts(string root)
+    {
+        string dir=Path.Combine(root,"enhancement_receipt_migrate_"+
+            Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+        string db=Path.Combine(dir,"identity.db");
+        using(var store=new SqliteIdentityStore(db))
+            await store.InitializeAsync();
+
+        using(var connection=Open(db))
+        {
+            using(var version=connection.CreateCommand())
+            {
+                version.CommandText="UPDATE schema_version SET version=20;";
+                version.ExecuteNonQuery();
+            }
+            foreach(string table in new[]{"trade_commit_items","player_shop_listings"})
+            {
+                using var drop=connection.CreateCommand();
+                drop.CommandText=$"ALTER TABLE {table} DROP COLUMN enhancement_level;";
+                drop.ExecuteNonQuery();
+                Checks.Require(!HasColumn(connection,table,"enhancement_level"),
+                    "v20 receipt fixture still had enhancement_level");
+            }
+        }
+
+        using(var migrated=new SqliteIdentityStore(db))
+        {
+            await migrated.InitializeAsync();
+            using var connection=Open(db);
+            Checks.Require(
+                SqliteIdentityStore.SchemaVersion==21&&
+                HasColumn(connection,"trade_commit_items","enhancement_level")&&
+                HasColumn(connection,"player_shop_listings","enhancement_level"),
+                "v20 receipt migration did not restore enhancement metadata");
+        }
+    }
+
+    private static bool HasColumn(
+        SqliteConnection connection,string table,string column)
+    {
+        if(table is not ("trade_commit_items" or "player_shop_listings"))
+            throw new ArgumentOutOfRangeException(nameof(table));
+        using var command=connection.CreateCommand();
+        command.CommandText=$"PRAGMA table_info({table});";
+        using var reader=command.ExecuteReader();
+        while(reader.Read())
+            if(string.Equals(reader.GetString(1),column,
+                    StringComparison.OrdinalIgnoreCase))
+                return true;
+        return false;
     }
 
     private static async Task<long> SeedOne(
