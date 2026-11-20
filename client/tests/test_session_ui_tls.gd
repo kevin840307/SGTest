@@ -1139,6 +1139,9 @@ func run() -> void:
 		return
 	# Nearby chat UI never locally echoes; only authoritative Server delivery
 	# populates the visible history.
+	panel._latest.state = State.STATE_IN_WORLD
+	panel._latest.world_ready = true
+	panel._latest.map_epoch = 3
 	panel._latest.chat_sequence = 0
 	panel._latest.chat_messages = []
 	panel._latest.stale_chat_deliveries = 0
