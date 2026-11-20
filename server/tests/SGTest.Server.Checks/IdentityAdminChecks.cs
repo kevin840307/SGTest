@@ -30,6 +30,8 @@ internal static class IdentityAdminChecks
                 () => Ownership(root).GetAwaiter().GetResult());
             Checks.Run("Independent admin processes serialize duplicate slots with exactly one created character",
                 () => ConcurrentSlot(root).GetAwaiter().GetResult());
+            Checks.Run("Local identity-backup CLI creates verified non-overwriting snapshot",
+                () => IdentityBackup(root).GetAwaiter().GetResult());
             Checks.Run("Local operator PvP name command is audited idempotent and not a game RPC",
                 () => PvpNameAdmin(root).GetAwaiter().GetResult());
         }
@@ -178,6 +180,41 @@ internal static class IdentityAdminChecks
         using var store = new SqliteIdentityStore(c.Database);
         Checks.Require((await store.AuthenticateAsync("admin_user",Password)).Account!.Characters.Count == 1,
             "slot race created duplicate/missing persistent character");
+    }
+
+
+    private static async Task IdentityBackup(string root)
+    {
+        var c = Create(root);
+        Checks.Require((await Run(Password, Account(c))).Exit == 0,
+            "backup CLI fixture account failed");
+        string backup = Path.Combine(c.Root, "operator-backup.db");
+        var result = await Run(null, "identity-backup",
+            "--identity", c.Database, "--output", backup);
+        Checks.Require(result.Exit == 0 && result.Out.Contains("IDENTITY_BACKUP_CREATED") &&
+            File.Exists(backup), "identity-backup CLI failed: " + result.Error);
+        using (var document = JsonDocument.Parse(result.Out))
+        {
+            var rootElement = document.RootElement;
+            Checks.Require(rootElement.GetProperty("schema_version").GetInt32() ==
+                    SqliteIdentityStore.SchemaVersion &&
+                rootElement.GetProperty("bytes").GetInt64() > 0 &&
+                rootElement.GetProperty("sha256").GetString()?.Length == 64,
+                "identity-backup CLI metadata invalid");
+        }
+        using (var snapshot = new SqliteIdentityStore(backup))
+        {
+            await snapshot.InitializeAsync();
+            Checks.Require((await snapshot.AuthenticateAsync(
+                "admin_user", Password)).Status == AuthenticationStatus.Success,
+                "CLI backup did not preserve account authentication");
+        }
+        Checks.Require((await Run(null, "identity-backup",
+            "--identity", c.Database, "--output", backup)).Exit == 1,
+            "identity-backup CLI overwrote existing destination");
+        Checks.Require((await Run(null, "identity-backup",
+            "--identity", c.Database, "--output", c.Database)).Exit == 2,
+            "identity-backup CLI accepted source as destination");
     }
 
     private static string[] PvpName(Context c,long characterId,string state,string eventId,

@@ -1,4 +1,5 @@
-﻿using System.Text;
+﻿using System.Security.Cryptography;
+using System.Text;
 using Microsoft.Data.Sqlite;
 using SGTest.Server.Identity;
 
@@ -18,6 +19,10 @@ internal static class IdentityStoreChecks
             () => DisabledAccount().GetAwaiter().GetResult());
         Checks.Run("identity schema version mismatch fails closed",
             () => SchemaMismatch().GetAwaiter().GetResult());
+        Checks.Run("identity backup captures one consistent WAL-aware snapshot without overwrite",
+            () => BackupConsistency().GetAwaiter().GetResult());
+        Checks.Run("identity migration creates a verified pre-upgrade backup before schema version changes",
+            () => MigrationBackup().GetAwaiter().GetResult());
     }
 
     private static async Task PasswordRoundTrip()
@@ -187,6 +192,143 @@ internal static class IdentityStoreChecks
             Checks.Require(rejected, "unknown identity schema accepted");
         }
         finally { Directory.Delete(root, true); }
+    }
+
+
+    private static async Task BackupConsistency()
+    {
+        string root = TempRoot();
+        string db = Path.Combine(root, "identity.db");
+        string backup = Path.Combine(root, "manual-backup.db");
+        try
+        {
+            using var store = new SqliteIdentityStore(db);
+            await store.InitializeAsync();
+            Checks.Require((await store.CreateAccountAsync(
+                "backup_one", "Backup-Password-123!")).Status ==
+                AccountCreateStatus.Created, "backup fixture account failed");
+
+            var result = await store.BackupAsync(backup);
+            Checks.Require(result.SchemaVersion == SqliteIdentityStore.SchemaVersion &&
+                result.ByteLength > 0 && File.Exists(result.DestinationPath) &&
+                string.Equals(Path.GetFullPath(backup), result.DestinationPath,
+                    OperatingSystem.IsWindows()
+                        ? StringComparison.OrdinalIgnoreCase
+                        : StringComparison.Ordinal),
+                "backup metadata/path invalid");
+            string hash = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(backup)));
+            Checks.Require(string.Equals(hash, result.Sha256, StringComparison.Ordinal),
+                "backup SHA-256 metadata does not match bytes");
+
+            Checks.Require((await store.CreateAccountAsync(
+                "backup_two", "Backup-Password-456!")).Status ==
+                AccountCreateStatus.Created, "post-backup source write failed");
+
+            using (var snapshot = OpenReadOnly(backup))
+            {
+                Checks.Require(ReadSchemaVersion(snapshot) == SqliteIdentityStore.SchemaVersion,
+                    "manual backup schema version mismatch");
+                Checks.Require(Scalar(snapshot, "SELECT COUNT(*) FROM accounts;") == 1,
+                    "manual backup was not a point-in-time snapshot");
+                Checks.Require(string.Equals(
+                    Convert.ToString(ScalarObject(snapshot, "PRAGMA integrity_check;")),
+                    "ok", StringComparison.OrdinalIgnoreCase),
+                    "manual backup integrity_check failed");
+            }
+            using (var source = OpenReadOnly(db))
+                Checks.Require(Scalar(source, "SELECT COUNT(*) FROM accounts;") == 2,
+                    "backup operation mutated or lost later source state");
+
+            bool overwriteRejected = false;
+            try { await store.BackupAsync(backup); }
+            catch (IOException) { overwriteRejected = true; }
+            Checks.Require(overwriteRejected,
+                "manual backup silently overwrote an existing destination");
+        }
+        finally { Directory.Delete(root, true); }
+    }
+
+    private static async Task MigrationBackup()
+    {
+        string root = TempRoot();
+        string db = Path.Combine(root, "identity.db");
+        const string password = "Migration-Backup-Password-123!";
+        try
+        {
+            using (var store = new SqliteIdentityStore(db))
+            {
+                await store.InitializeAsync();
+                Checks.Require((await store.CreateAccountAsync("migration_user", password)).Status ==
+                    AccountCreateStatus.Created, "migration backup fixture account failed");
+            }
+
+            using (var connection = new SqliteConnection(
+                new SqliteConnectionStringBuilder
+                {
+                    DataSource = db, Mode = SqliteOpenMode.ReadWrite,
+                    Cache = SqliteCacheMode.Private, Pooling = false
+                }.ToString()))
+            {
+                connection.Open();
+                using var command = connection.CreateCommand();
+                command.CommandText = "UPDATE schema_version SET version=20;";
+                Checks.Require(command.ExecuteNonQuery() == 1,
+                    "could not stage prior-schema migration fixture");
+            }
+
+            using (var migrated = new SqliteIdentityStore(db))
+            {
+                await migrated.InitializeAsync();
+                var auth = await migrated.AuthenticateAsync("migration_user", password);
+                Checks.Require(auth.Status == AuthenticationStatus.Success,
+                    "migration changed persisted account data");
+            }
+
+            string[] backups = Directory.GetFiles(root,
+                "identity.db.pre-v20-to-v21.*.bak", SearchOption.TopDirectoryOnly);
+            Checks.Require(backups.Length == 1,
+                "migration did not create exactly one pre-upgrade backup");
+            using (var snapshot = OpenReadOnly(backups[0]))
+            {
+                Checks.Require(ReadSchemaVersion(snapshot) == 20,
+                    "pre-migration backup did not preserve source schema version");
+                Checks.Require(Scalar(snapshot, "SELECT COUNT(*) FROM accounts;") == 1,
+                    "pre-migration backup lost persisted account rows");
+                Checks.Require(string.Equals(
+                    Convert.ToString(ScalarObject(snapshot, "PRAGMA integrity_check;")),
+                    "ok", StringComparison.OrdinalIgnoreCase),
+                    "pre-migration backup integrity_check failed");
+            }
+            using (var source = OpenReadOnly(db))
+                Checks.Require(ReadSchemaVersion(source) == SqliteIdentityStore.SchemaVersion,
+                    "source schema did not complete migration after backup");
+        }
+        finally { Directory.Delete(root, true); }
+    }
+
+    private static SqliteConnection OpenReadOnly(string path)
+    {
+        var connection = new SqliteConnection(new SqliteConnectionStringBuilder
+        {
+            DataSource = path, Mode = SqliteOpenMode.ReadOnly,
+            Cache = SqliteCacheMode.Private, Pooling = false
+        }.ToString());
+        connection.Open();
+        return connection;
+    }
+
+    private static long ReadSchemaVersion(SqliteConnection connection) =>
+        Scalar(connection, "SELECT version FROM schema_version LIMIT 1;");
+
+    private static long Scalar(SqliteConnection connection, string sql) =>
+        Convert.ToInt64(ScalarObject(connection, sql));
+
+    private static object ScalarObject(SqliteConnection connection, string sql)
+    {
+        using var command = connection.CreateCommand();
+        command.CommandText = sql;
+        return command.ExecuteScalar() ?? throw new InvalidDataException(
+            "SQLite scalar query returned null");
     }
 
     private static string TempRoot()

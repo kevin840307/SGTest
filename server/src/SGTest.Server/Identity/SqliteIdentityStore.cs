@@ -78,6 +78,7 @@ public sealed record CharacterCreateResult(CharacterCreateStatus Status, Charact
 public sealed partial class SqliteIdentityStore : IDisposable
 {
     public const int SchemaVersion = 21;
+    private readonly string _databasePath;
     private readonly string _connectionString;
     private readonly IdentityStoreOptions _options;
     private readonly PasswordHasher _passwords;
@@ -98,6 +99,7 @@ public sealed partial class SqliteIdentityStore : IDisposable
         _dummyHash = _passwords.CreateDeterministicDummyHash();
         string full = Path.GetFullPath(databasePath);
         Directory.CreateDirectory(Path.GetDirectoryName(full) ?? ".");
+        _databasePath = full;
         var builder = new SqliteConnectionStringBuilder
         {
             DataSource = full,
@@ -121,6 +123,9 @@ public sealed partial class SqliteIdentityStore : IDisposable
             Execute(connection, "PRAGMA journal_mode=WAL;");
             Execute(connection, "PRAGMA synchronous=NORMAL;");
             Execute(connection, $"PRAGMA busy_timeout={_options.BusyTimeoutSeconds * 1000};");
+            int? existingSchemaVersion = TryReadExistingSchemaVersion(connection);
+            if (existingSchemaVersion is int version && version < SchemaVersion)
+                CreateMigrationBackup(version);
             using var tx = connection.BeginTransaction();
             Execute(connection, "CREATE TABLE IF NOT EXISTS schema_version (version INTEGER NOT NULL);", tx);
             long count = ScalarLong(connection, "SELECT COUNT(*) FROM schema_version;", tx);
