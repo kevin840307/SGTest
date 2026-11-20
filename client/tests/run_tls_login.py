@@ -9,6 +9,7 @@ import threading
 import time
 
 READY = re.compile(r"LOGIN_FIXTURE_READY port=(\d+) cert=(.+?) username=")
+REGISTER_READY = re.compile(r"REGISTER_FIXTURE_READY port=(\d+) cert=(.+?) username=")
 
 
 def main() -> int:
@@ -57,8 +58,10 @@ def main() -> int:
                         help="run two real TLS clients through authoritative player-shop E2E")
     parser.add_argument("--pvp", action="store_true",
                         help="run two real TLS clients through authoritative player PvP E2E")
+    parser.add_argument("--register", action="store_true",
+                        help="create a public account then authenticate on the same TLS connection")
     args = parser.parse_args()
-    if args.app_ui and (args.multi or args.crossmap or args.portal or args.reconnect or args.combat or args.combat_observer or args.skill_aoe or args.skill_aoe_observer or args.discard or args.storage or args.equipment or args.bank or args.repair or args.enhancement or args.quest or args.trade or args.player_shop or args.pvp or args.auto_attack):
+    if args.app_ui and (args.multi or args.crossmap or args.portal or args.reconnect or args.combat or args.combat_observer or args.skill_aoe or args.skill_aoe_observer or args.discard or args.storage or args.equipment or args.bank or args.repair or args.enhancement or args.quest or args.trade or args.player_shop or args.pvp or args.auto_attack or args.register):
         parser.error("--app-ui uses the single-client login fixture")
     if args.ui_screenshot and not args.app_ui:
         parser.error("--ui-screenshot requires --app-ui")
@@ -104,6 +107,8 @@ def main() -> int:
         return run_player_shop(args, repo, fixture, env)
     if args.pvp:
         return run_pvp(args, repo, fixture, env)
+    if args.register:
+        return run_registration(args, repo, fixture, env)
     if args.combat:
         return run_combat(args, repo, fixture, env)
     if args.reconnect:
@@ -194,6 +199,74 @@ def main() -> int:
                 server.kill()
 
 
+
+
+
+def run_registration(args, repo: Path, fixture: Path, env: dict[str, str]) -> int:
+    server = subprocess.Popen(
+        ["dotnet", "run", "--project", str(fixture), "-c", "Release",
+         "--no-build", "--", "--register"],
+        cwd=repo, env=env, text=True, stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT, bufsize=1)
+    lines: list[str] = []
+    notices: queue.Queue[str] = queue.Queue()
+
+    def capture() -> None:
+        assert server.stdout is not None
+        for line in server.stdout:
+            value = line.rstrip()
+            lines.append(value)
+            notices.put(value)
+
+    threading.Thread(target=capture, daemon=True).start()
+    deadline = time.monotonic() + args.timeout
+    try:
+        ready = None
+        while time.monotonic() < deadline:
+            if server.poll() is not None and notices.empty():
+                break
+            try:
+                line = notices.get(timeout=0.2)
+            except queue.Empty:
+                continue
+            match = REGISTER_READY.search(line)
+            if match:
+                ready = match
+                break
+        if ready is None:
+            raise RuntimeError("registration fixture never became ready")
+        port, cert = ready.group(1), ready.group(2)
+        client = subprocess.run(
+            [args.godot, "--headless", "--path", str(repo / "client"),
+             "--script", "res://tests/test_client_registration_tls.gd",
+             "--", port, cert],
+            cwd=repo, text=True, stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT, timeout=args.timeout)
+        print(client.stdout, end="")
+        if client.returncode != 0 or "CLIENT_REGISTRATION_TLS_PASS" not in client.stdout:
+            raise RuntimeError("Godot registration ClientSession failed")
+        remaining = max(1.0, deadline - time.monotonic())
+        server.wait(timeout=remaining)
+        output = "\n".join(lines)
+        if server.returncode != 0 or "REGISTER_FIXTURE_PASS" not in output:
+            raise RuntimeError("C# registration fixture did not confirm durable account")
+        for line in lines:
+            if line.startswith("REGISTER_FIXTURE_"):
+                print(line)
+        print("GODOT_CSHARP_TLS_REGISTRATION_E2E_PASS created=true explicit_auth=true same_tls=true character_list_empty=true gameplay_authority=false")
+        return 0
+    except Exception as error:
+        print("TLS_REGISTRATION_RUNNER_FAIL", error, file=sys.stderr)
+        for line in lines[-30:]:
+            print(line, file=sys.stderr)
+        return 1
+    finally:
+        if server.poll() is None:
+            server.terminate()
+            try:
+                server.wait(timeout=3)
+            except subprocess.TimeoutExpired:
+                server.kill()
 
 
 

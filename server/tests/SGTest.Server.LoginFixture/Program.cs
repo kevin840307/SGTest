@@ -55,6 +55,8 @@ internal static class Program
             return await PlayerShopLoginFixture.RunAsync().ConfigureAwait(false);
         if (args is ["--pvp"])
             return await PvpLoginFixture.RunAsync().ConfigureAwait(false);
+        if (args is ["--register"])
+            return await RunRegistrationAsync().ConfigureAwait(false);
         if (args is ["--checkpoint-crash-producer", var producerDb])
             return await RunCheckpointCrashProducerAsync(producerDb).ConfigureAwait(false);
         if (args is ["--checkpoint-crash-verify", var verifyDb])
@@ -147,6 +149,71 @@ internal static class Program
             try { Directory.Delete(root, recursive: true); } catch { }
         }
     }
+
+
+    private static async Task<int> RunRegistrationAsync()
+    {
+        string root=Path.Combine(Path.GetTempPath(),
+            "sgtest_registration_login_"+Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var map=BlockingGrid.Load(CreateMap(root,15),15);
+            await using var world=new ServerWorldHost([map]);
+            await world.StartAsync().ConfigureAwait(false);
+            using var store=new SqliteIdentityStore(Path.Combine(root,"identity.db"));
+            await store.InitializeAsync().ConfigureAwait(false);
+            var authorization=new IdentityTlsAuthorization(
+                store,world,
+                registrationRateLimiter:new AccountRegistrationRateLimiter());
+            var router=new WorldResultRouter();
+
+            using var certificate=CreateCertificate();
+            string certPath=Path.Combine(root,"fixture-cert.pem");
+            WriteCertificatePem(certPath,certificate);
+            var listener=new TcpListener(IPAddress.Loopback,0);
+            listener.Start(1);
+            try
+            {
+                int port=((IPEndPoint)listener.LocalEndpoint).Port;
+                Console.WriteLine(
+                    $"REGISTER_FIXTURE_READY port={port} cert={certPath} username={Username}");
+                Console.Out.Flush();
+                using var client=await listener.AcceptTcpClientAsync()
+                    .WaitAsync(TimeSpan.FromSeconds(15)).ConfigureAwait(false);
+                var serverTask=authorization.RunAuthenticatedSocketAsync(
+                    client,certificate,router,
+                    new TlsWireConnectionOptions(
+                        AuthorizationTimeoutMilliseconds:15000));
+                var ended=await serverTask.WaitAsync(TimeSpan.FromSeconds(15))
+                    .ConfigureAwait(false);
+                var auth=await store.AuthenticateAsync(
+                    Username,Password).ConfigureAwait(false);
+                if(auth.Status!=AuthenticationStatus.Success||
+                   auth.Account is null||auth.Account.Characters.Count!=0||
+                   world.Statistics.ActiveActors!=0||
+                   router.Statistics.ActiveSessions!=0)
+                    throw new InvalidOperationException(
+                        "registration fixture durable/auth/world boundary mismatch");
+                await world.StopAsync().ConfigureAwait(false);
+                Console.WriteLine(
+                    $"REGISTER_FIXTURE_PASS reason={ended.Reason} account={auth.Account.AccountId} characters=0 active=0");
+                Console.Out.Flush();
+                return 0;
+            }
+            finally{listener.Stop();}
+        }
+        catch(Exception error)
+        {
+            Console.Error.WriteLine("REGISTER_FIXTURE_FAIL "+error);
+            return 1;
+        }
+        finally
+        {
+            try{Directory.Delete(root,recursive:true);}catch{}
+        }
+    }
+
 
     private static async Task<MoveReceipt> WaitForMoveAsync(ServerWorldHost world, WorldResultRouter router, long actorId, CancellationToken cancellationToken)
     {
