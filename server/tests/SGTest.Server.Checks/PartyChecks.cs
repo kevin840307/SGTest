@@ -43,7 +43,7 @@ internal static class PartyChecks
             snapshotBack.Members.SequenceEqual(snapshot.Members),
             "party snapshot roundtrip mismatch");
 
-        var actor=Actor(11,9,5);
+        var actor=Actor(11,9,3);
         var gateway=Gateway(actor,"LeaderHero");
         TrustedPartyCommand trusted=default;
         Checks.Require(gateway.FeedClientBytes(
