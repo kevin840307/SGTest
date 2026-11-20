@@ -62,6 +62,23 @@ internal static class ChatWireChecks
             decoded==command,
             "whisper command wire mismatch");
 
+        var byName=new WhisperCommandWire(
+            3,11,0,2,"按名私訊","TargetHero");
+        var byNameFrame=WireProtocol.EncodeWhisperCommand(byName);
+        Checks.Require(
+            Convert.ToHexString(byNameFrame)==
+                "370000000100620003000000000000000B0000000000000000000000020C00E68C89E5908DE7A781E8A88A0A005461726765744865726F"&&
+            WireProtocol.TryDecodeWhisperCommand(byNameFrame,out var byNameDecoded)&&
+            byNameDecoded==byName,
+            "whisper character-name wire mismatch");
+
+        bool dualSelectorRejected=false;
+        try { _=WireProtocol.EncodeWhisperCommand(new(
+            3,12,22,0,"invalid","TargetHero")); }
+        catch(ArgumentOutOfRangeException){dualSelectorRejected=true;}
+        Checks.Require(dualSelectorRejected,
+            "whisper admitted both ActorId and character-name selectors");
+
         var actor=new ActorSnapshot(11,15,5,3,0,0,8,8,1,false);
         var gateway=new GatewayConnection(actor);
         TrustedChatCommand trusted=default;
@@ -101,6 +118,23 @@ internal static class ChatWireChecks
         catch(ArgumentOutOfRangeException){malformed=true;}
         Checks.Require(malformed,
             "whisper delivered result admitted without target identity");
+
+        var unresolvedName=new WhisperResultWire(
+            3,11,WhisperResultStatus.TargetUnavailable,0,0,string.Empty);
+        Checks.Require(
+            WireProtocol.TryDecodeWhisperResult(
+                WireProtocol.EncodeWhisperResult(unresolvedName),out var unresolvedBack)&&
+            unresolvedBack==unresolvedName,
+            "whisper unresolved character-name result mismatch");
+
+        TrustedChatCommand trustedByName=default;
+        var byNameGateway=new GatewayConnection(actor);
+        Checks.Require(byNameGateway.FeedClientBytes(
+                byNameFrame,_=>true,out int byNameAccepted,
+                postChat:request=>{trustedByName=request;return true;})==
+                WireFeedStatus.Accepted&&byNameAccepted==1&&
+            trustedByName.TargetActorId==0&&trustedByName.TargetName=="TargetHero",
+            "whisper Gateway did not preserve untrusted name selector");
 
         var shared=new GatewayConnection(actor);
         var nearby=WireProtocol.EncodeChatCommand(new(

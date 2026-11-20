@@ -110,7 +110,7 @@ public readonly record struct TrustedPlayerShopCommand(
 public readonly record struct TrustedChatCommand(
     long ActorId,long ConnectionEpoch,long RequestMapEpoch,
     uint ChatSequence,ChatChannel Channel,byte BubbleType,string Message,
-    long TargetActorId=0);
+    long TargetActorId=0,string TargetName="");
 public readonly record struct TrustedPartyCommand(
     long ActorId,long ConnectionEpoch,long RequestMapEpoch,
     uint PartySequence,PartyCommandAction Action,long PartyId,long TargetActorId,
@@ -811,7 +811,8 @@ public sealed class GatewayConnection
             var request=new TrustedChatCommand(
                 bound.ActorId,bound.ConnectionEpoch,whisper.MapEpoch,
                 whisper.ChatSequence,ChatChannel.Whisper,
-                whisper.BubbleType,whisper.Message,whisper.TargetActorId);
+                whisper.BubbleType,whisper.Message,whisper.TargetActorId,
+                whisper.TargetName);
             if(!postChat(request))
                 return WireFrameDisposition.Backpressured;
             _lastChatSequence=whisper.ChatSequence;

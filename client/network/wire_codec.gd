@@ -220,7 +220,7 @@ const CHAT_MAX_SENDER_NAME_BYTES := 96
 const CHAT_COMMAND_MAX_FRAME_BYTES := CHAT_COMMAND_HEADER_BYTES + CHAT_MAX_MESSAGE_BYTES
 const CHAT_DELIVERY_MAX_FRAME_BYTES := CHAT_DELIVERY_HEADER_BYTES + CHAT_MAX_SENDER_NAME_BYTES + CHAT_MAX_MESSAGE_BYTES
 const WHISPER_COMMAND_HEADER_BYTES := 31
-const WHISPER_COMMAND_MAX_FRAME_BYTES := WHISPER_COMMAND_HEADER_BYTES + CHAT_MAX_MESSAGE_BYTES
+const WHISPER_COMMAND_MAX_FRAME_BYTES := WHISPER_COMMAND_HEADER_BYTES + CHAT_MAX_MESSAGE_BYTES + 2 + CHAT_MAX_SENDER_NAME_BYTES
 const WHISPER_RESULT_HEADER_BYTES := 39
 const WHISPER_RESULT_MAX_FRAME_BYTES := WHISPER_RESULT_HEADER_BYTES + CHAT_MAX_SENDER_NAME_BYTES
 const PARTY_COMMAND_FRAME_BYTES := 37
@@ -2120,18 +2120,26 @@ static func encode_chat_command(epoch:int,sequence:int,channel:int,bubble_type:i
 
 static func encode_whisper_command(
 		epoch:int,sequence:int,target_actor_id:int,bubble_type:int,
-		message:String)->PackedByteArray:
+		message:String,target_name:String="")->PackedByteArray:
 	var bytes:=message.to_utf8_buffer()
+	var name_bytes:=target_name.to_utf8_buffer()
+	var by_name:=not target_name.is_empty()
 	if (
-		epoch<=0 or sequence<=0 or sequence>0xffffffff or
-		target_actor_id<=0 or bubble_type<0 or bubble_type>5 or
+		epoch<=0 or sequence<=0 or sequence>0xffffffff or target_actor_id<0 or
+		(target_actor_id>0)==by_name or bubble_type<0 or bubble_type>5 or
 		bytes.size()<1 or bytes.size()>CHAT_MAX_MESSAGE_BYTES or
-		message.strip_edges().is_empty()
+		message.strip_edges().is_empty() or
+		name_bytes.size()>CHAT_MAX_SENDER_NAME_BYTES or
+		(by_name and (
+			target_name!=target_name.strip_edges() or
+			target_name.strip_edges().is_empty()
+		))
 	):
 		return PackedByteArray()
+	var extra:=2+name_bytes.size() if by_name else 0
 	var writer:=StreamPeerBuffer.new()
 	writer.big_endian=false
-	writer.put_u32(WHISPER_COMMAND_HEADER_BYTES+bytes.size())
+	writer.put_u32(WHISPER_COMMAND_HEADER_BYTES+bytes.size()+extra)
 	writer.put_u16(VERSION)
 	writer.put_u16(OPCODE_WHISPER_COMMAND)
 	writer.put_64(epoch)
@@ -2140,6 +2148,9 @@ static func encode_whisper_command(
 	writer.put_u8(bubble_type)
 	writer.put_u16(bytes.size())
 	writer.put_data(bytes)
+	if by_name:
+		writer.put_u16(name_bytes.size())
+		writer.put_data(name_bytes)
 	return writer.data_array
 
 
@@ -2157,7 +2168,7 @@ static func decode_whisper_result(frame:PackedByteArray)->Dictionary:
 	var target_connection:=reader.get_64()
 	var name_count:=reader.get_u16()
 	if (
-		epoch<=0 or sequence==0 or status>2 or target<=0 or
+		epoch<=0 or sequence==0 or status>2 or target<0 or
 		name_count>CHAT_MAX_SENDER_NAME_BYTES or
 		reader.get_available_bytes()!=name_count
 	):
@@ -2175,7 +2186,10 @@ static func decode_whisper_result(frame:PackedByteArray)->Dictionary:
 		):
 			return {}
 	if status==0:
-		if target_connection<=0 or name_count==0:
+		if target<=0 or target_connection<=0 or name_count==0:
+			return {}
+	elif status==2:
+		if target<=0 or target_connection!=0 or name_count!=0:
 			return {}
 	elif target_connection!=0 or name_count!=0:
 		return {}

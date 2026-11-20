@@ -1992,22 +1992,31 @@ public sealed class IdentityTlsAuthorization
                     return Task.CompletedTask;
                 }
 
-                if(request.Channel!=ChatChannel.Whisper||request.TargetActorId<=0)
+                bool whisperByName=!string.IsNullOrEmpty(request.TargetName);
+                if(request.Channel!=ChatChannel.Whisper||
+                   (request.TargetActorId>0)==whisperByName||
+                   request.TargetActorId<0)
                     throw new InvalidOperationException(
-                        "Unsupported trusted chat channel reached authorization");
+                        "Unsupported trusted chat target selector reached authorization");
+
+                ConnectionBinding target=default;
+                PlayerIdentityPresentation targetIdentity=default;
+                bool targetFound=whisperByName
+                    ?router.TryResolveOnlinePlayerByName(
+                        request.TargetName,out target,out targetIdentity)
+                    :router.TryGetCurrentBinding(request.TargetActorId,out target)&&
+                     router.TryGetPlayerIdentity(
+                        target.ActorId,target.ConnectionEpoch,out targetIdentity);
 
                 WhisperResultWire result;
-                if(request.TargetActorId==request.ActorId)
+                if(targetFound&&target.ActorId==request.ActorId)
                 {
                     result=new(
                         request.RequestMapEpoch,request.ChatSequence,
-                        WhisperResultStatus.SelfTarget,request.TargetActorId,
+                        WhisperResultStatus.SelfTarget,target.ActorId,
                         0,string.Empty);
                 }
-                else if(!router.TryGetCurrentBinding(
-                            request.TargetActorId,out var target)||
-                        !router.TryGetPlayerIdentity(
-                            target.ActorId,target.ConnectionEpoch,out var targetIdentity))
+                else if(!targetFound)
                 {
                     result=new(
                         request.RequestMapEpoch,request.ChatSequence,
@@ -2029,7 +2038,7 @@ public sealed class IdentityTlsAuthorization
                         :new WhisperResultWire(
                             request.RequestMapEpoch,request.ChatSequence,
                             WhisperResultStatus.TargetUnavailable,
-                            request.TargetActorId,0,string.Empty);
+                            target.ActorId,0,string.Empty);
                 }
 
                 var resultQueued=router.QueueWhisperResult(request,result);

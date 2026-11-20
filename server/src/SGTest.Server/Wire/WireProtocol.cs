@@ -539,7 +539,7 @@ public readonly record struct ChatDeliveryWire(
     string SenderName,string Message);
 public readonly record struct WhisperCommandWire(
     long MapEpoch,uint ChatSequence,long TargetActorId,byte BubbleType,
-    string Message);
+    string Message,string TargetName = "");
 public readonly record struct WhisperResultWire(
     long MapEpoch,uint ChatSequence,WhisperResultStatus Status,
     long TargetActorId,long TargetConnectionEpoch,string TargetName);
@@ -708,7 +708,7 @@ public static class WireProtocol
         ChatDeliveryHeaderBytes + ChatMaxSenderNameBytes + ChatMaxMessageBytes;
     public const int WhisperCommandHeaderBytes = HeaderBytes + 8 + 4 + 8 + 1 + 2;
     public const int WhisperCommandMaximumFrameBytes =
-        WhisperCommandHeaderBytes + ChatMaxMessageBytes;
+        WhisperCommandHeaderBytes + ChatMaxMessageBytes + 2 + ChatMaxSenderNameBytes;
     public const int WhisperResultHeaderBytes = HeaderBytes + 8 + 4 + 1 + 8 + 8 + 2;
     public const int WhisperResultMaximumFrameBytes =
         WhisperResultHeaderBytes + ChatMaxSenderNameBytes;
@@ -4170,18 +4170,29 @@ public static class WireProtocol
 
     public static byte[] EncodeWhisperCommand(WhisperCommandWire value)
     {
-        byte[] message;
-        try { message=StrictUtf8.GetBytes(value.Message??string.Empty); }
+        string targetNameText=value.TargetName??string.Empty;
+        byte[] message,targetName;
+        try
+        {
+            message=StrictUtf8.GetBytes(value.Message??string.Empty);
+            targetName=StrictUtf8.GetBytes(targetNameText);
+        }
         catch(EncoderFallbackException)
         {
             throw new ArgumentOutOfRangeException(nameof(value));
         }
-        if(value.MapEpoch<=0||value.ChatSequence==0||value.TargetActorId<=0||
+        bool byName=targetName.Length>0;
+        if(value.MapEpoch<=0||value.ChatSequence==0||
+           (value.TargetActorId>0)==byName||value.TargetActorId<0||
            value.BubbleType>5||message.Length is <1 or >ChatMaxMessageBytes||
-           string.IsNullOrWhiteSpace(value.Message))
+           string.IsNullOrWhiteSpace(value.Message)||
+           targetName.Length>ChatMaxSenderNameBytes||
+           (byName&&(string.IsNullOrWhiteSpace(targetNameText)||
+                     targetNameText!=targetNameText.Trim())))
             throw new ArgumentOutOfRangeException(nameof(value));
-        var frame=NewFrame(WireOpcode.WhisperCommand,
-            WhisperCommandHeaderBytes+message.Length);
+        int frameBytes=WhisperCommandHeaderBytes+message.Length+
+            (byName?2+targetName.Length:0);
+        var frame=NewFrame(WireOpcode.WhisperCommand,frameBytes);
         BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(8,8),value.MapEpoch);
         BinaryPrimitives.WriteUInt32LittleEndian(
             frame.AsSpan(16,4),value.ChatSequence);
@@ -4191,6 +4202,13 @@ public static class WireProtocol
         BinaryPrimitives.WriteUInt16LittleEndian(
             frame.AsSpan(29,2),(ushort)message.Length);
         message.AsSpan().CopyTo(frame.AsSpan(WhisperCommandHeaderBytes));
+        if(byName)
+        {
+            int offset=WhisperCommandHeaderBytes+message.Length;
+            BinaryPrimitives.WriteUInt16LittleEndian(
+                frame.AsSpan(offset,2),(ushort)targetName.Length);
+            targetName.AsSpan().CopyTo(frame.AsSpan(offset+2));
+        }
         return frame;
     }
 
@@ -4206,17 +4224,32 @@ public static class WireProtocol
         uint sequence=BinaryPrimitives.ReadUInt32LittleEndian(frame.Slice(16,4));
         long target=BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(20,8));
         byte bubble=frame[28];
-        int length=BinaryPrimitives.ReadUInt16LittleEndian(frame.Slice(29,2));
-        if(epoch<=0||sequence==0||target<=0||bubble>5||
-           length is <1 or >ChatMaxMessageBytes||
-           frame.Length!=WhisperCommandHeaderBytes+length)
+        int messageLength=BinaryPrimitives.ReadUInt16LittleEndian(frame.Slice(29,2));
+        if(epoch<=0||sequence==0||target<0||bubble>5||
+           messageLength is <1 or >ChatMaxMessageBytes||
+           frame.Length<WhisperCommandHeaderBytes+messageLength)
             return false;
         try
         {
             string message=StrictUtf8.GetString(
-                frame.Slice(WhisperCommandHeaderBytes,length));
+                frame.Slice(WhisperCommandHeaderBytes,messageLength));
             if(string.IsNullOrWhiteSpace(message))return false;
-            value=new(epoch,sequence,target,bubble,message);
+            int offset=WhisperCommandHeaderBytes+messageLength;
+            if(target>0)
+            {
+                if(frame.Length!=offset)return false;
+                value=new(epoch,sequence,target,bubble,message,string.Empty);
+                return true;
+            }
+            if(frame.Length<offset+2)return false;
+            int nameLength=BinaryPrimitives.ReadUInt16LittleEndian(frame.Slice(offset,2));
+            if(nameLength is <1 or >ChatMaxSenderNameBytes||
+               frame.Length!=offset+2+nameLength)
+                return false;
+            string targetName=StrictUtf8.GetString(frame.Slice(offset+2,nameLength));
+            if(string.IsNullOrWhiteSpace(targetName)||targetName!=targetName.Trim())
+                return false;
+            value=new(epoch,sequence,0,bubble,message,targetName);
             return true;
         }
         catch(DecoderFallbackException){return false;}
@@ -4283,12 +4316,15 @@ public static class WireProtocol
     {
         if(value.MapEpoch<=0||value.ChatSequence==0||
            (byte)value.Status>(byte)WhisperResultStatus.SelfTarget||
-           value.TargetActorId<=0||
+           value.TargetActorId<0||
            targetName.Length>ChatMaxSenderNameBytes)
             return false;
         if(value.Status==WhisperResultStatus.Delivered)
-            return value.TargetConnectionEpoch>0&&targetName.Length>0&&
-                !string.IsNullOrWhiteSpace(value.TargetName);
+            return value.TargetActorId>0&&value.TargetConnectionEpoch>0&&
+                targetName.Length>0&&!string.IsNullOrWhiteSpace(value.TargetName);
+        if(value.Status==WhisperResultStatus.SelfTarget)
+            return value.TargetActorId>0&&value.TargetConnectionEpoch==0&&
+                targetName.Length==0&&string.IsNullOrEmpty(value.TargetName);
         return value.TargetConnectionEpoch==0&&targetName.Length==0&&
             string.IsNullOrEmpty(value.TargetName);
     }

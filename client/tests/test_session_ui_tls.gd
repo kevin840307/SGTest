@@ -70,7 +70,9 @@ class RespawnSession extends RefCounted:
 	var last_nearby_message := ""
 	var last_nearby_bubble := -1
 	var whispers := 0
+	var whisper_name_targets := 0
 	var last_whisper_target := 0
+	var last_whisper_target_name := ""
 	var last_whisper_message := ""
 	var last_whisper_bubble := -1
 	var party_invites := 0
@@ -301,6 +303,15 @@ class RespawnSession extends RefCounted:
 			return false
 		whispers+=1
 		last_whisper_target=target_actor_id
+		last_whisper_message=message
+		last_whisper_bubble=bubble_type
+		return true
+	func send_whisper_name(target_name:String,message:String,bubble_type:int=0)->bool:
+		var clean:=target_name.strip_edges()
+		if clean.is_empty() or message.strip_edges().is_empty() or bubble_type<0 or bubble_type>5:
+			return false
+		whisper_name_targets+=1
+		last_whisper_target_name=clean
 		last_whisper_message=message
 		last_whisper_bubble=bubble_type
 		return true
@@ -1352,6 +1363,17 @@ func run() -> void:
 		return
 	if not panel.whisper_input.text.is_empty() or panel.nearby_chat_history.text.contains("私訊測試"):
 		fail("Whisper UI locally echoed before Server result")
+		return
+	panel.whisper_target_input.text = "WhisperByName"
+	panel.whisper_input.text = "  名稱私訊測試  "
+	panel.whisper_send_button.disabled = false
+	panel.whisper_send_button.pressed.emit()
+	if (
+		stub.whisper_name_targets!=1 or
+		stub.last_whisper_target_name!="WhisperByName" or
+		stub.last_whisper_message!="名稱私訊測試"
+	):
+		fail("Whisper UI did not route character name through ClientSession")
 		return
 	panel._latest.chat_messages.append({
 		"receiver_map_epoch":3,"sender_actor_id":int(panel._latest.actor_id),

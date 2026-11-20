@@ -312,8 +312,8 @@ func _move(session, self_id: int, crossmap: bool = false, portal: bool = false) 
 					session.snapshot(),session)
 				return
 			print("CLIENT_CROSSMAP_PARTY_CHAT_SELF role=actor sequence=3")
-			if not session.send_whisper(remote_id,"Map13 跨圖私訊",3):
-				_fail("Map13 cross-map whisper intent rejected",session)
+			if not session.send_whisper_name("MultiHeroOne","Map13 跨圖私訊",3):
+				_fail("Map13 cross-map whisper-by-name intent rejected",session)
 				return
 			var whisper_result:=_wait_whisper_result(session,4,remote_id,7000)
 			if (

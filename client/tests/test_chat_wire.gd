@@ -5,6 +5,7 @@ const WorldState=preload("res://network/world_state.gd")
 const COMMAND_HEX:="2400000001005C0003000000000000000900000000020C00E99984E8BF91E6B8ACE8A9A6"
 const DELIVERY_HEX:="3A00000001005D0003000000000000000B00000000000000050000000000000009000000000204000C004865726FE99984E8BF91E6B8ACE8A9A6"
 const WHISPER_COMMAND_HEX:="2B0000000100620003000000000000000A0000001600000000000000030C00E8B7A8E59C96E7A781E8A88A"
+const WHISPER_NAME_COMMAND_HEX:="370000000100620003000000000000000B0000000000000000000000020C00E68C89E5908DE7A781E8A88A0A005461726765744865726F"
 const WHISPER_RESULT_HEX:="330000000100630003000000000000000A00000000160000000000000007000000000000000C004D756C74694865726F4F6E65"
 const WHISPER_DELIVERY_HEX:="3A00000001005D0003000000000000000B0000000000000005000000000000000A000000040304000C004865726FE8B7A8E59C96E7A781E8A88A"
 
@@ -105,6 +106,15 @@ func _initialize()->void:
 	if whisper_command.hex_encode().to_upper()!=WHISPER_COMMAND_HEX:
 		_fail("whisper command cross-runtime golden")
 		return
+	var whisper_name_command:=WireCodec.encode_whisper_command(
+		3,11,0,2,"按名私訊","TargetHero")
+	if whisper_name_command.hex_encode().to_upper()!=WHISPER_NAME_COMMAND_HEX:
+		_fail("whisper name command cross-runtime golden")
+		return
+	if not WireCodec.encode_whisper_command(
+			3,12,22,0,"invalid","TargetHero").is_empty():
+		_fail("whisper dual target selector admitted")
+		return
 	var whisper_result:=WireCodec.decode_whisper_result(
 		WHISPER_RESULT_HEX.hex_decode())
 	if (
@@ -163,6 +173,26 @@ func _initialize()->void:
 		str(sender_snapshot.chat_messages[0].message)!="跨圖私訊"
 	):
 		_fail("authoritative whisper sender history")
+		return
+
+	var name_sender:=_base_world(11)
+	if not name_sender.mark_whisper_sent(11,0,2,"按名私訊","TargetHero"):
+		_fail("whisper name send admission")
+		return
+	var unresolved_frame:="270000000100630003000000000000000B00000001000000000000000000000000000000000000".hex_decode()
+	if WireCodec.decode_whisper_result(unresolved_frame).is_empty():
+		_fail("unresolved name result codec")
+		return
+	if not name_sender.apply_frame(unresolved_frame):
+		_fail("unresolved name result reducer "+name_sender.protocol_error)
+		return
+	var name_snapshot:=name_sender.snapshot()
+	if (
+		int(name_snapshot.pending_whisper_sequence)!=0 or
+		int(name_snapshot.last_whisper_result_status)!=1 or
+		not (name_snapshot.chat_messages as Array).is_empty()
+	):
+		_fail("unresolved name whisper created optimistic history")
 		return
 
 	print("CHAT_WIRE_PASS command=92 delivery=93 whisper_command=98 whisper_result=99 utf8=true trusted_echo=true visible_only_nearby=true whisper_crossmap=true replay=STALE unsolicited_self=FAIL_CLOSED")

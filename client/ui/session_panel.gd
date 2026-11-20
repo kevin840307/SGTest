@@ -379,7 +379,7 @@ func _ready() -> void:
 	nearby_chat_input.max_length = 256
 	nearby_chat_send_button.text = "附近送出"
 	nearby_chat_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	whisper_target_input.placeholder_text = "私訊目標 ActorId（線上玩家，可跨地圖）"
+	whisper_target_input.placeholder_text = "私訊目標角色名稱或 ActorId（線上玩家，可跨地圖）"
 	whisper_input.placeholder_text = "私訊內容"
 	whisper_input.max_length = 256
 	whisper_send_button.text = "私訊送出"
@@ -1439,13 +1439,13 @@ func _send_whisper() -> void:
 		return
 	var target_text:=whisper_target_input.text.strip_edges()
 	var message:=whisper_input.text.strip_edges()
-	if not target_text.is_valid_int() or message.is_empty():
-		whisper_status.text = "請輸入有效的線上玩家 ActorId 與私訊內容"
+	if target_text.is_empty() or message.is_empty():
+		whisper_status.text = "請輸入線上角色名稱或 ActorId 與私訊內容"
 		return
-	var target:=int(target_text)
-	if session.send_whisper(target,message,0):
+	var sent:=session.send_whisper(int(target_text),message,0) if target_text.is_valid_int() else session.send_whisper_name(target_text,message,0)
+	if sent:
 		whisper_input.clear()
-		whisper_status.text = "私訊已送出，等待伺服器確認目標仍在線…"
+		whisper_status.text = "私訊已送出，等待伺服器解析目前在線角色…"
 		whisper_send_button.disabled = true
 	else:
 		whisper_status.text = "目前無法送出私訊"

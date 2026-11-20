@@ -313,11 +313,26 @@ func send_nearby_chat(message:String,bubble_type:int=0)->bool:
 
 func send_whisper(
 		target_actor_id:int,message:String,bubble_type:int=0)->bool:
+	return _queue_whisper_intent(target_actor_id,"",message,bubble_type)
+
+
+func send_whisper_name(
+		target_name:String,message:String,bubble_type:int=0)->bool:
+	return _queue_whisper_intent(0,target_name,message,bubble_type)
+
+
+func _queue_whisper_intent(
+		target_actor_id:int,target_name:String,message:String,bubble_type:int)->bool:
 	var clean:=message.strip_edges()
 	var bytes:=clean.to_utf8_buffer()
+	var clean_name:=target_name.strip_edges()
+	var name_bytes:=clean_name.to_utf8_buffer()
 	var current:=snapshot()
+	var by_name:=not clean_name.is_empty()
 	if (
-		target_actor_id<=0 or target_actor_id==int(current.get("actor_id",0)) or
+		target_actor_id<0 or (target_actor_id>0)==by_name or
+		(target_actor_id>0 and target_actor_id==int(current.get("actor_id",0))) or
+		clean_name!=target_name or name_bytes.size()>WireCodec.CHAT_MAX_SENDER_NAME_BYTES or
 		clean.is_empty() or bytes.size()>WireCodec.CHAT_MAX_MESSAGE_BYTES or
 		bubble_type<0 or bubble_type>5 or
 		int(current.get("state",-1))!=WorldState.STATE_IN_WORLD or
@@ -331,7 +346,7 @@ func send_whisper(
 		return false
 	return _queue_intent({
 		"type":"whisper","target_actor_id":target_actor_id,
-		"message":clean,"bubble_type":bubble_type,
+		"target_name":clean_name,"message":clean,"bubble_type":bubble_type,
 		"actor_id":int(current.get("actor_id",0)),
 		"map_epoch":int(current.get("map_epoch",0))
 	})
@@ -1253,17 +1268,22 @@ func _process_first_intent() -> void:
 				_publish()
 			return
 		var target:=int(intent.get("target_actor_id",0))
-		if target<=0 or target==int(current.get("actor_id",0)):
+		var target_name:=str(intent.get("target_name",""))
+		var by_name:=not target_name.is_empty()
+		if (
+			target<0 or (target>0)==by_name or
+			(target>0 and target==int(current.get("actor_id",0)))
+		):
 			_pop_intent()
 			return
 		frame=WireCodec.encode_whisper_command(
-			int(current.get("map_epoch",0)),sequence,target,bubble,message)
+			int(current.get("map_epoch",0)),sequence,target,bubble,message,target_name)
 		if frame.is_empty():
 			_pop_intent()
 			return
 		if (
 			_transport.send_frame(frame) and
-			_world.mark_whisper_sent(sequence,target,bubble,message)
+			_world.mark_whisper_sent(sequence,target,bubble,message,target_name)
 		):
 			_pop_intent()
 			_publish()
