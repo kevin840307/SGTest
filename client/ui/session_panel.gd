@@ -121,6 +121,15 @@ var nearby_chat_input := LineEdit.new()
 var nearby_chat_send_button := Button.new()
 var nearby_chat_status := Label.new()
 var _nearby_chat_display_key := ""
+var quest_npc_input := SpinBox.new()
+var quest_open_button := Button.new()
+var quest_title_label := Label.new()
+var quest_text_display := TextEdit.new()
+var quest_progress_label := Label.new()
+var quest_choice_picker := OptionButton.new()
+var quest_choose_button := Button.new()
+var quest_status := Label.new()
+var _quest_display_key := ""
 var pvp_query_button := Button.new()
 var pvp_blue_button := Button.new()
 var pvp_white_button := Button.new()
@@ -339,6 +348,21 @@ func _ready() -> void:
 	nearby_chat_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	for control in [nearby_chat_history,nearby_chat_input,nearby_chat_send_button,nearby_chat_status]:
 		control.visible = false
+	quest_npc_input.min_value = 1
+	quest_npc_input.max_value = 2147483647
+	quest_npc_input.step = 1
+	quest_npc_input.value = 1
+	quest_open_button.text = "開啟附近 NPC 任務"
+	quest_title_label.text = "任務：—"
+	quest_title_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	quest_text_display.editable = false
+	quest_text_display.custom_minimum_size = Vector2(350,100)
+	quest_text_display.wrap_mode = TextEdit.LINE_WRAPPING_BOUNDARY
+	quest_progress_label.text = "進度：—"
+	quest_choose_button.text = "選擇伺服器提供的選項"
+	quest_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	for control in [quest_npc_input,quest_open_button,quest_title_label,quest_text_display,quest_progress_label,quest_choice_picker,quest_choose_button,quest_status]:
+		control.visible = false
 	respawn_button.text = "復活"
 	skill_hint.text = "技能 ID（需伺服器已核准規則）"
 	skill_id_input.min_value = 1
@@ -400,12 +424,16 @@ func _ready() -> void:
 	player_shop_buy_button.pressed.connect(_buy_inspected_player_shop)
 	nearby_chat_send_button.pressed.connect(_send_nearby_chat)
 	nearby_chat_input.text_submitted.connect(func(_text): _send_nearby_chat())
+	quest_open_button.pressed.connect(_open_quest_from_input)
+	quest_choose_button.pressed.connect(_choose_selected_quest_option)
 	# Trade controls must actually be parented, not only instantiated/connected.
 	for control in [trade_target_picker,trade_request_button,trade_peer_label,trade_accept_button,trade_reject_button,trade_inventory_picker,trade_my_offer_picker,trade_offer_add_button,trade_offer_remove_button,trade_other_offer_label,trade_money_input,trade_set_money_button,trade_money_label,trade_lock_button,trade_confirm_button,trade_cancel_button,trade_status]:
 		column.add_child(control)
 	for control in [player_shop_inventory_picker,player_shop_price_input,player_shop_open_button,player_shop_own_label,player_shop_close_button,player_shop_seller_picker,player_shop_inspect_button,player_shop_inspected_label,player_shop_buy_button,player_shop_status]:
 		column.add_child(control)
 	for control in [nearby_chat_history,nearby_chat_input,nearby_chat_send_button,nearby_chat_status]:
+		column.add_child(control)
+	for control in [quest_npc_input,quest_open_button,quest_title_label,quest_text_display,quest_progress_label,quest_choice_picker,quest_choose_button,quest_status]:
 		column.add_child(control)
 	pvp_query_button.text = "查詢 PvP 名稱模式"
 	pvp_blue_button.text = "設為藍名（保護）"
@@ -482,6 +510,12 @@ func login() -> void:
 	nearby_chat_history.text = ""
 	nearby_chat_input.clear()
 	nearby_chat_status.text = ""
+	_quest_display_key = ""
+	quest_title_label.text = "任務：—"
+	quest_text_display.text = ""
+	quest_progress_label.text = "進度：—"
+	quest_choice_picker.clear()
+	quest_status.text = ""
 	_inventory_page = 0
 	inventory_search.clear()
 	shop_status.text = ""
@@ -722,6 +756,37 @@ func submit_trade_confirm() -> bool:
 func submit_trade_cancel() -> bool:
 	return active and int(_latest.get("trade_id",0)) > 0 and session.cancel_trade()
 
+func submit_quest_open(npc_spawn_id:int)->bool:
+	return (
+		active and npc_spawn_id>0 and
+		int(_latest.get("state",-1))==State.STATE_IN_WORLD and
+		bool(_latest.get("world_ready",false)) and
+		not bool(_latest.get("player_dead",false)) and
+		not bool(_latest.get("reconnecting",false)) and
+		not bool(_latest.get("resync_pending",false)) and
+		not bool(_latest.get("waiting_for_new_map",false)) and
+		int(_latest.get("pending_quest_sequence",0))==0 and
+		session.open_quest(npc_spawn_id)
+	)
+
+
+func submit_quest_choice(choice_id:int)->bool:
+	var view:Dictionary=_latest.get("quest_view",{})
+	if (
+		not active or choice_id<=0 or view.is_empty() or
+		int(_latest.get("pending_quest_sequence",0))!=0 or
+		bool(_latest.get("reconnecting",false)) or
+		bool(_latest.get("resync_pending",false)) or
+		bool(_latest.get("waiting_for_new_map",false)) or
+		bool(_latest.get("player_dead",false))
+	):
+		return false
+	for raw in view.get("choices",[]):
+		if int((raw as Dictionary).get("choice_id",0))==choice_id:
+			return session.choose_quest_choice(choice_id)
+	return false
+
+
 func request_respawn() -> void:
 	if respawn_button.disabled or not respawn_button.visible or not active:
 		return
@@ -763,6 +828,12 @@ func disconnect_session() -> void:
 	nearby_chat_history.text = ""
 	nearby_chat_input.clear()
 	nearby_chat_status.text = ""
+	_quest_display_key = ""
+	quest_title_label.text = "任務：—"
+	quest_text_display.text = ""
+	quest_progress_label.text = "進度：—"
+	quest_choice_picker.clear()
+	quest_status.text = ""
 	_inventory_page = 0
 	inventory_search.clear()
 	shop_status.text = ""
@@ -1302,6 +1373,107 @@ func _update_nearby_chat_ui() -> void:
 		if not messages.is_empty():
 			nearby_chat_history.set_v_scroll(nearby_chat_history.get_line_count())
 		nearby_chat_status.text="附近聊天由伺服器依雙向 AOI 投遞｜已顯示 %d 則" % messages.size()
+
+func _open_quest_from_input()->void:
+	if quest_open_button.disabled:
+		return
+	if submit_quest_open(int(quest_npc_input.value)):
+		quest_status.text = "任務開啟請求已送出，等待伺服器 View…"
+	else:
+		quest_status.text = "目前無法開啟該 NPC 任務"
+
+
+func _choose_selected_quest_option()->void:
+	if quest_choose_button.disabled or quest_choice_picker.selected<0:
+		return
+	var choice_id:=int(
+		quest_choice_picker.get_item_metadata(quest_choice_picker.selected))
+	if submit_quest_choice(choice_id):
+		quest_status.text = "任務選項已送出；進度只接受伺服器結果"
+	else:
+		quest_status.text = "目前無法送出該任務選項"
+
+
+func _quest_state_text(value:int)->String:
+	match value:
+		0:
+			return "未開始"
+		1:
+			return "進行中"
+		2:
+			return "已完成"
+		_:
+			return "未知"
+
+
+func _quest_status_text(value:int)->String:
+	var names:=PackedStringArray([
+		"就緒","已套用","重播已套用","地圖／連線世代已變更",
+		"找不到任務","距離過遠","無效選項","任務已完成",
+		"重複／過期序號","角色已死亡","任務規則版本不符"])
+	return names[value] if value>=0 and value<names.size() else "未知結果"
+
+
+func _update_quest_ui()->void:
+	var in_world:=active and int(_latest.get("state",-1))==State.STATE_IN_WORLD
+	for control in [quest_npc_input,quest_open_button,quest_title_label,quest_text_display,quest_progress_label,quest_choice_picker,quest_choose_button,quest_status]:
+		control.visible=in_world
+	if not in_world:
+		_quest_display_key=""
+		return
+	var pending:=int(_latest.get("pending_quest_sequence",0))!=0
+	var usable:=(
+		bool(_latest.get("world_ready",false)) and
+		not bool(_latest.get("player_dead",false)) and
+		not bool(_latest.get("reconnecting",false)) and
+		not bool(_latest.get("resync_pending",false)) and
+		not bool(_latest.get("waiting_for_new_map",false)) and
+		int(_latest.get("pending_world_ready_ack_epoch",0))==0 and
+		int(_latest.get("last_world_ready_ack_epoch",0))==
+			int(_latest.get("map_epoch",0))
+	)
+	quest_npc_input.editable=usable and not pending
+	quest_open_button.disabled=not usable or pending
+	var view:Dictionary=_latest.get("quest_view",{})
+	var key:="%d/%d/%d/%d/%d/%d" % [
+		int(_latest.get("map_epoch",0)),
+		int(_latest.get("last_quest_response_sequence",0)),
+		int(_latest.get("last_quest_status",-1)),
+		int(view.get("quest_id",0)),int(view.get("progress_revision",0)),
+		(view.get("choices",[]) as Array).size()]
+	if key!=_quest_display_key:
+		_quest_display_key=key
+		quest_choice_picker.clear()
+		if view.is_empty():
+			quest_title_label.text="任務：—"
+			quest_text_display.text=""
+			quest_progress_label.text="進度：—"
+		else:
+			quest_title_label.text="任務：%s（ID %d）" % [
+				str(view.get("title","")),int(view.get("quest_id",0))]
+			quest_text_display.text=str(view.get("text",""))
+			quest_progress_label.text="進度：%s｜階段 %d｜Revision %d" % [
+				_quest_state_text(int(view.get("state",-1))),
+				int(view.get("stage",0)),int(view.get("progress_revision",0))]
+			for raw in view.get("choices",[]):
+				var choice:Dictionary=raw
+				quest_choice_picker.add_item(str(choice.get("label","")))
+				quest_choice_picker.set_item_metadata(
+					quest_choice_picker.item_count-1,
+					int(choice.get("choice_id",0)))
+			if quest_choice_picker.item_count>0:
+				quest_choice_picker.select(0)
+	var result:Dictionary=_latest.get("last_quest_result",{})
+	if not result.is_empty():
+		quest_status.text="伺服器任務結果：%s（代碼 %d）" % [
+			_quest_status_text(int(result.get("status",-1))),
+			int(result.get("status",-1))]
+	quest_choice_picker.disabled=(
+		not usable or pending or view.is_empty() or
+		quest_choice_picker.item_count==0
+	)
+	quest_choose_button.disabled=quest_choice_picker.disabled
+
 
 func _open_selected_player_shop() -> void:
 	if player_shop_open_button.disabled or player_shop_inventory_picker.selected < 0:
@@ -2053,6 +2225,7 @@ func _process(delta: float) -> void:
 	_update_trade_ui()
 	_update_player_shop_ui()
 	_update_nearby_chat_ui()
+	_update_quest_ui()
 	_update_pvp_ui()
 	var pickup_result: Dictionary = _latest.get("last_pickup_result",{})
 	if not pickup_result.is_empty():
