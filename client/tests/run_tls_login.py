@@ -47,6 +47,8 @@ def main() -> int:
                         help="run real TLS ClientSession scoped bank deposit/withdraw E2E")
     parser.add_argument("--repair", action="store_true",
                         help="run real TLS ClientSession server-authoritative repair E2E")
+    parser.add_argument("--quest", action="store_true",
+                        help="run real TLS verified quest progression and relogin E2E")
     parser.add_argument("--trade", action="store_true",
                         help="run two real TLS clients through durable player trade E2E")
     parser.add_argument("--player-shop", action="store_true",
@@ -54,7 +56,7 @@ def main() -> int:
     parser.add_argument("--pvp", action="store_true",
                         help="run two real TLS clients through authoritative player PvP E2E")
     args = parser.parse_args()
-    if args.app_ui and (args.multi or args.crossmap or args.portal or args.reconnect or args.combat or args.combat_observer or args.skill_aoe or args.skill_aoe_observer or args.discard or args.storage or args.equipment or args.bank or args.repair or args.trade or args.player_shop or args.pvp or args.auto_attack):
+    if args.app_ui and (args.multi or args.crossmap or args.portal or args.reconnect or args.combat or args.combat_observer or args.skill_aoe or args.skill_aoe_observer or args.discard or args.storage or args.equipment or args.bank or args.repair or args.quest or args.trade or args.player_shop or args.pvp or args.auto_attack):
         parser.error("--app-ui uses the single-client login fixture")
     if args.ui_screenshot and not args.app_ui:
         parser.error("--ui-screenshot requires --app-ui")
@@ -90,6 +92,8 @@ def main() -> int:
         return run_bank(args, repo, fixture, env)
     if args.repair:
         return run_repair(args, repo, fixture, env)
+    if args.quest:
+        return run_quest(args, repo, fixture, env)
     if args.trade:
         return run_trade(args, repo, fixture, env)
     if args.player_shop:
@@ -1476,6 +1480,98 @@ def run_multiplayer(args, repo: Path, fixture: Path, env: dict[str, str],
             except subprocess.TimeoutExpired:
                 server.kill()
 
+
+
+def run_quest(args, repo: Path, fixture: Path, env: dict[str, str]) -> int:
+    server = subprocess.Popen(
+        ["dotnet", "run", "--project", str(fixture), "-c", "Release",
+         "--no-build", "--", "--quest"],
+        cwd=repo, env=env, text=True, stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT, bufsize=1)
+    lines: list[str] = []
+    notices: queue.Queue[str] = queue.Queue()
+
+    def capture() -> None:
+        assert server.stdout is not None
+        for line in server.stdout:
+            value = line.rstrip()
+            lines.append(value)
+            notices.put(value)
+
+    threading.Thread(target=capture, daemon=True).start()
+    deadline = time.monotonic() + args.timeout
+    try:
+        ready = None
+        while time.monotonic() < deadline:
+            if server.poll() is not None and notices.empty():
+                break
+            try:
+                value = notices.get(timeout=0.15)
+            except queue.Empty:
+                continue
+            if value.startswith("QUEST_FIXTURE_READY "):
+                ready = value
+                break
+        if ready is None:
+            raise RuntimeError("quest fixture never became ready")
+        match = re.search(
+            r"QUEST_FIXTURE_READY port=(\d+) cert=(.+?) username=.*? "
+            r"character=(\d+) npc=(\d+) quest=(\d+)", ready)
+        if match is None:
+            raise RuntimeError("malformed quest readiness: " + ready)
+        port, cert, character, npc, quest = match.groups()
+        base = [
+            args.godot, "--headless", "--path", str(repo / "client"),
+            "--script", "res://tests/test_client_quest_tls.gd", "--",
+            port, cert]
+        tail = [character, npc, quest]
+
+        mutate = subprocess.run(
+            [*base, "mutate", *tail], cwd=repo, text=True,
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            timeout=max(1.0, deadline-time.monotonic()))
+        print(mutate.stdout, end="")
+        if mutate.returncode != 0 or "CLIENT_QUEST_TLS_PASS role=mutate" not in mutate.stdout:
+            raise RuntimeError("quest mutate Godot client failed")
+
+        relogin = subprocess.run(
+            [*base, "relogin", *tail], cwd=repo, text=True,
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            timeout=max(1.0, deadline-time.monotonic()))
+        print(relogin.stdout, end="")
+        if relogin.returncode != 0 or "CLIENT_QUEST_TLS_PASS role=relogin" not in relogin.stdout:
+            raise RuntimeError("quest relogin Godot client failed")
+
+        server.wait(timeout=max(1.0, deadline-time.monotonic()))
+        output = "\n".join(lines)
+        if (
+            server.returncode != 0 or
+            "QUEST_FIXTURE_MUTATE_PASS" not in output or
+            "QUEST_FIXTURE_RELOGIN_PASS" not in output or
+            "QUEST_FIXTURE_PASS" not in output
+        ):
+            raise RuntimeError("quest C# fixture did not confirm durable progression")
+        for line in lines:
+            if line.startswith("QUEST_FIXTURE_"):
+                print(line)
+        print(
+            "GODOT_CSHARP_TLS_QUEST_E2E_PASS secure_tls=true "
+            "verified_rule=true npc_distance_server_auth=true "
+            "choice_ids_server_view=true durable_progress=true "
+            "relogin_completed=true client_stage_math=false")
+        return 0
+    except Exception as error:
+        print("TLS_QUEST_RUNNER_FAIL", error, file=sys.stderr)
+        for line in lines[-30:]:
+            print(line, file=sys.stderr)
+        return 1
+    finally:
+        if server.poll() is None:
+            server.terminate()
+            try:
+                server.wait(timeout=3)
+            except subprocess.TimeoutExpired:
+                server.kill()
 
 
 def run_crossmap(args, repo: Path, fixture: Path, env: dict[str, str]) -> int:
