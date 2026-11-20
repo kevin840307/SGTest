@@ -682,6 +682,42 @@ public sealed class WorldResultRouter
         }
     }
 
+    public GatewaySendStatus QueuePartyResult(
+        TrustedPartyCommand request,PartyResultWire result)
+    {
+        lock(_gate)
+        {
+            if(!_connections.TryGetValue(request.ActorId,out var connection)||
+               connection.IsClosed)
+                return GatewaySendStatus.Closed;
+            return connection.QueuePartyResult(request,result);
+        }
+    }
+
+    public GatewaySendStatus QueuePartyInvite(
+        ConnectionBinding recipient,PartyInviteWire invite)
+    {
+        lock(_gate)
+        {
+            if(!_connections.TryGetValue(recipient.ActorId,out var connection)||
+               connection.IsClosed||connection.Binding!=recipient)
+                return GatewaySendStatus.Closed;
+            return connection.QueuePartyInvite(recipient,invite);
+        }
+    }
+
+    public GatewaySendStatus QueuePartySnapshot(
+        ConnectionBinding recipient,PartySnapshotWire snapshot)
+    {
+        lock(_gate)
+        {
+            if(!_connections.TryGetValue(recipient.ActorId,out var connection)||
+               connection.IsClosed||connection.Binding!=recipient)
+                return GatewaySendStatus.Closed;
+            return connection.QueuePartySnapshot(recipient,snapshot);
+        }
+    }
+
     public GatewaySendStatus QueuePlayerShopResult(
         TrustedPlayerShopCommand request,PlayerShopResultWire result)
     {
