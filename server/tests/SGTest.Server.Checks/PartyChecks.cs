@@ -10,6 +10,7 @@ internal static class PartyChecks
     {
         Checks.Run("party wire binds compact command result invite and snapshot",Wire);
         Checks.Run("party coordinator owns invite leader kick disconnect and recipients",Lifecycle);
+        Checks.Run("party invite resolves exact authenticated online character name",InviteByName);
         Checks.Run("party invite cannot cross target reconnect or stale old cleanup",InviteGeneration);
         Checks.Run("party pending invite expires on monotonic clock",InviteTimeout);
     }
@@ -22,6 +23,24 @@ internal static class PartyChecks
         Checks.Require(bytes.Length==WireProtocol.PartyCommandFrameBytes&&
             WireProtocol.TryDecodePartyCommand(bytes,out var back)&&back==command,
             "party command roundtrip mismatch");
+        var byName=new PartyCommandWire(
+            3,8,PartyCommandAction.Invite,0,0,"MemberHero");
+        var byNameBytes=WireProtocol.EncodePartyCommand(byName);
+        Checks.Require(
+            byNameBytes.Length==WireProtocol.PartyCommandFrameBytes+
+                System.Text.Encoding.UTF8.GetByteCount("MemberHero")&&
+            WireProtocol.TryDecodePartyCommand(byNameBytes,out var byNameBack)&&
+            byNameBack==byName,
+            "party by-name command roundtrip mismatch");
+        bool dualSelectorRejected=false;
+        try
+        {
+            _=WireProtocol.EncodePartyCommand(new(
+                3,9,PartyCommandAction.Invite,0,22,"MemberHero"));
+        }
+        catch(ArgumentOutOfRangeException){dualSelectorRejected=true;}
+        Checks.Require(dualSelectorRejected,
+            "party command admitted ActorId plus name");
 
         var result=new PartyResultWire(
             3,7,PartyCommandAction.Invite,PartyResultStatus.Success,9001,22);
@@ -163,6 +182,69 @@ internal static class PartyChecks
         router.TryDetach(c);
     }
 
+
+    private static void InviteByName()
+    {
+        var router=new WorldResultRouter();
+        var a=Gateway(Actor(11,1,1),"PartyA");
+        var b=Gateway(Actor(22,2,4),"PartyB");
+        Checks.Require(router.TryAttach(a)&&router.TryAttach(b),
+            "by-name party gateways attach failed");
+        var party=new PartyCoordinator();
+
+        var unknown=new TrustedPartyCommand(
+            11,1,1,1,PartyCommandAction.Invite,0,0,"MissingHero");
+        party.HandleAsync(unknown,router).GetAwaiter().GetResult();
+        var unknownResult=DrainResult(a);
+        Checks.Require(
+            unknownResult.Status==PartyResultStatus.TargetUnavailable&&
+            unknownResult.TargetActorId==0&&party.PartyCount==0,
+            "unknown by-name invite mutated party state");
+
+        var wrongCase=new TrustedPartyCommand(
+            11,1,1,2,PartyCommandAction.Invite,0,0,"partyb");
+        party.HandleAsync(wrongCase,router).GetAwaiter().GetResult();
+        var wrongCaseResult=DrainResult(a);
+        Checks.Require(
+            wrongCaseResult.Status==PartyResultStatus.TargetUnavailable&&
+            wrongCaseResult.TargetActorId==0&&party.PartyCount==0,
+            "by-name resolution did not preserve character-name semantics");
+
+        var self=new TrustedPartyCommand(
+            11,1,1,3,PartyCommandAction.Invite,0,0,"PartyA");
+        party.HandleAsync(self,router).GetAwaiter().GetResult();
+        var selfResult=DrainResult(a);
+        Checks.Require(
+            selfResult.Status==PartyResultStatus.CannotTargetSelf&&
+            selfResult.TargetActorId==11&&party.PartyCount==0,
+            "self by-name invite was not rejected before party creation");
+
+        var invite=new TrustedPartyCommand(
+            11,1,1,4,PartyCommandAction.Invite,0,0,"PartyB");
+        party.HandleAsync(invite,router).GetAwaiter().GetResult();
+        var result=DrainResult(a);
+        var received=DrainInvite(b);
+        var solo=DrainSnapshot(a);
+        Checks.Require(
+            result.Status==PartyResultStatus.Success&&result.TargetActorId==22&&
+            result.PartyId>0&&received.PartyId==result.PartyId&&
+            received.InviterActorId==11&&solo.PartyId==result.PartyId&&
+            solo.Members.Count==1&&solo.Members[0].ActorId==11,
+            "by-name invite did not resolve to current authenticated target");
+
+        var accept=new TrustedPartyCommand(
+            22,2,4,1,PartyCommandAction.Accept,result.PartyId,11);
+        party.HandleAsync(accept,router).GetAwaiter().GetResult();
+        Checks.Require(DrainResult(b).Status==PartyResultStatus.Success,
+            "resolved by-name invite could not be accepted");
+        _=DrainSnapshot(a);
+        _=DrainSnapshot(b);
+        party.Disconnect(a.Binding,router);
+        _=DrainSnapshot(b);
+        party.Disconnect(b.Binding,router);
+        Checks.Require(party.PartyCount==0,
+            "by-name party did not clean up");
+    }
 
     private static void InviteGeneration()
     {

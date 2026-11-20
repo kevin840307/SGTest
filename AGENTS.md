@@ -52,6 +52,8 @@
 - **AOI 優先**：Server 先以權威 map/position + 受限 viewport/interest 過濾玩家、怪物、掉落物，先訂閱再發 Delta；可靠 Spawn/Despawn、戰鬥、物品、交易事件不得被合併快照吞掉。避免全圖廣播、群體同步怪物動作及每 Tick 無意義的重複狀態。
 - **動畫**：不因 Move 事件不當覆蓋 Attack/Hit/Death；保留方向、ACT timing、trim/origin、flip、紙娃娃 draw order、地圖物件與所有角色共同 Y-sort。
 - **Server**：authority 管理位置、Blocking.dat 碰撞、戰鬥、物品、金錢、交易；World 單寫者設計，外部 DB I/O 不能卡住 Tick；網路與遊戲規則分離。
+- **Server 規則／命名契約**：Domain、Wire、Persistence、Host CLI/config 的識別字、enum、token、key 一律使用英文 semantic naming；中文／其他語系只存在 Client/UI/localization 或人類文件，不可作為 Server gameplay 判斷條件。像 PvP 的 Pink/Red 是 semantic enum state，不直接 hardcode 顯示色/RGB。玩法時間、距離、倍率、上限、cooldown、狀態轉換等不可散落 magic number，必須集中在對應 subsystem 的 `Policy`／`Options`／`static readonly`／`const`，測試亦引用同一公開契約或用明確 fixture 參數，不複製規則常數。
+- **Server 分層契約**：`Host` 只做 composition/config/CLI adapter；`Gateway/Connection` 做 authenticated binding、rate/backpressure/dispatch；`Wire` 只做 versioned DTO/codec；`World/Coordinator` 執行 authoritative domain state transition；`Policy` 保持可測的純規則；`Identity/Persistence` 負責 durable transaction，不反向決定 gameplay；Client reducer/presentation 不回滲 Server。這是本專案採用的常見 modular-monolith game-server 寫法，除非有實測瓶頸，不為「像大型遊戲」而拆微服務/ECS/事件總線。
 - **維護性**：以少數功能模組構成 modular monolith；不要過度抽象、重複 Manager/Loader/Cache 或為分類而分類。
 - **證據**：Recovered 與新 Client 比較時同工作負載、同素材、同 GPU 設定，報告 Process RSS、Texture metric、載入、P95/P99、Draw Calls、畫面與同步正確性。未完成發行測試一律不得稱 PASS。
 - **移動／AFK**：Server Blocking.dat 權威 A*；長按 1 秒鎖定移動，左／右鍵停止且右鍵選單不能失效；參考 Recovered/Old 行為。AFK 基本 Render 0／釋放 GPU，網路／WorldReducer 與 FPS 獨立；同機多開需量測 CPU／RSS／GPU。

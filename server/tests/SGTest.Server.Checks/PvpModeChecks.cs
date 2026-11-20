@@ -87,12 +87,16 @@ internal static class PvpModeChecks
 
             var pink=await store.MarkPvpHostileAttackAsync(character,true,now);
             Checks.Require(PvpCrimePolicy.NameState(pink,now)==PvpNameState.Pink&&
-                pink.PinkUntilUnixMilliseconds==now.AddSeconds(30).ToUnixTimeMilliseconds()&&
+                pink.PinkUntilUnixMilliseconds==
+                    now.Add(PvpCrimePolicy.HostileMarkDuration).ToUnixTimeMilliseconds()&&
                 !PvpCrimePolicy.IsNormalWhite(pink,now),
-                "hostile attack did not create 30-second pink state");
+                "hostile attack did not use the configured hostile-mark duration");
+            var flashingStart=now.Add(
+                PvpCrimePolicy.HostileMarkDuration-
+                PvpCrimePolicy.HostileMarkFlashingWindow);
             Checks.Require(PvpCrimePolicy.NameState(
-                pink,now.AddSeconds(27))==PvpNameState.PinkFlashing,
-                "last three pink seconds are not flashing");
+                pink,flashingStart)==PvpNameState.PinkFlashing,
+                "configured hostile-mark flashing window was not applied");
 
             // Ordinary player mode selection cannot launder an active crime state.
             await store.SetCharacterPvpModeAsync(character,PvpMode.ProtectedBlue);
@@ -131,7 +135,8 @@ internal static class PvpModeChecks
             await reopened.InitializeAsync();
             var persisted=await reopened.GetCharacterPvpStateAsync(character);
             Checks.Require(persisted.PinkUntilUnixMilliseconds==
-                now.AddSeconds(7).ToUnixTimeMilliseconds()&&
+                now.AddSeconds(4).Add(PvpCrimePolicy.HostileMarkFlashingWindow)
+                    .ToUnixTimeMilliseconds()&&
                 PvpCrimePolicy.NameState(persisted,now.AddSeconds(4))==
                     PvpNameState.PinkFlashing,
                 "PvP crime state did not survive SQLite reopen");

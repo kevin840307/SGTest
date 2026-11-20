@@ -74,6 +74,7 @@ class RespawnSession extends RefCounted:
 	var last_whisper_message := ""
 	var last_whisper_bubble := -1
 	var party_invites := 0
+	var party_name_invites := 0
 	var party_accepts := 0
 	var party_rejects := 0
 	var party_leaves := 0
@@ -81,6 +82,7 @@ class RespawnSession extends RefCounted:
 	var party_promotes := 0
 	var party_chats := 0
 	var last_party_target := 0
+	var last_party_target_name := ""
 	var last_party_message := ""
 	var quest_opens := 0
 	var quest_choices := 0
@@ -307,6 +309,13 @@ class RespawnSession extends RefCounted:
 			return false
 		party_invites+=1
 		last_party_target=target_actor_id
+		return true
+	func party_invite_name(target_name:String)->bool:
+		var clean:=target_name.strip_edges()
+		if clean.is_empty():
+			return false
+		party_name_invites+=1
+		last_party_target_name=clean
 		return true
 	func party_accept()->bool:
 		party_accepts+=1
@@ -1382,6 +1391,11 @@ func run() -> void:
 	panel.party_invite_button.pressed.emit()
 	if stub.party_invites!=1 or stub.last_party_target!=22:
 		fail("Party invite UI did not send exact target ActorId")
+		return
+	panel.party_target_input.text="PartyByName"
+	panel.party_invite_button.pressed.emit()
+	if stub.party_name_invites!=1 or stub.last_party_target_name!="PartyByName":
+		fail("Party invite UI did not route character name")
 		return
 	panel._latest.pending_party_invite={
 		"receiver_map_epoch":3,"party_id":9001,"revision":1,

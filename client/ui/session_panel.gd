@@ -384,7 +384,7 @@ func _ready() -> void:
 	whisper_input.max_length = 256
 	whisper_send_button.text = "私訊送出"
 	whisper_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	party_target_input.placeholder_text = "隊伍目標 ActorId"
+	party_target_input.placeholder_text = "隊伍目標角色名或 ActorId（線上玩家）"
 	party_invite_button.text = "邀請加入隊伍"
 	party_invite_label.text = "待處理邀請：—"
 	party_invite_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -1457,11 +1457,17 @@ func _party_target_actor()->int:
 
 
 func _party_invite_target()->void:
-	var target:=_party_target_actor()
-	if target<=0:
-		party_status.text="請輸入有效的線上玩家 ActorId"
-	elif session.party_invite(target):
-		party_status.text="隊伍邀請已送出，等待伺服器結果…"
+	var raw:=party_target_input.text.strip_edges()
+	if raw.is_empty():
+		party_status.text="請輸入線上角色名稱或 ActorId"
+		return
+	var sent:=false
+	if raw.is_valid_int():
+		sent=session.party_invite(int(raw))
+	else:
+		sent=session.party_invite_name(raw)
+	if sent:
+		party_status.text="隊伍邀請已送出，等待伺服器解析目前在線角色…"
 	else:
 		party_status.text="目前無法送出隊伍邀請"
 

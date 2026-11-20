@@ -174,11 +174,11 @@ VALUES($event,$operator,$character,$state,$reason,$mode,$red,$kills,$pink,$updat
                     red=true;
                     break;
                 case PvpNameState.Pink:
-                    pink=now.AddSeconds(PvpCrimePolicy.PinkDurationSeconds)
+                    pink=now.Add(PvpCrimePolicy.HostileMarkDuration)
                         .ToUnixTimeMilliseconds();
                     break;
                 case PvpNameState.PinkFlashing:
-                    pink=now.AddSeconds(PvpCrimePolicy.PinkFlashSeconds)
+                    pink=now.Add(PvpCrimePolicy.HostileMarkFlashingWindow)
                         .ToUnixTimeMilliseconds();
                     break;
                 default:
@@ -216,7 +216,7 @@ VALUES($event,$operator,$character,$state,$reason,$mode,$red,$kills,$pink,$updat
             else if(!current.RedMan)
             {
                 long pink=Math.Max(current.PinkUntilUnixMilliseconds,
-                    now.AddSeconds(PvpCrimePolicy.PinkDurationSeconds)
+                    now.Add(PvpCrimePolicy.HostileMarkDuration)
                         .ToUnixTimeMilliseconds());
                 UpsertPvpState(connection,tx,characterId,PvpMode.EnabledWhite,
                     false,current.RedManKillLeft,pink,now.ToUnixTimeMilliseconds());
@@ -235,9 +235,9 @@ VALUES($event,$operator,$character,$state,$reason,$mode,$red,$kills,$pink,$updat
             PvpNameState.EnabledWhite=>new(0,PvpMode.EnabledWhite,false,0,0,0),
             PvpNameState.Red=>new(0,PvpMode.EnabledWhite,true,0,0,0),
             PvpNameState.Pink=>new(0,PvpMode.EnabledWhite,false,0,
-                now.AddSeconds(PvpCrimePolicy.PinkDurationSeconds).ToUnixTimeMilliseconds(),0),
+                now.Add(PvpCrimePolicy.HostileMarkDuration).ToUnixTimeMilliseconds(),0),
             PvpNameState.PinkFlashing=>new(0,PvpMode.EnabledWhite,false,0,
-                now.AddSeconds(PvpCrimePolicy.PinkFlashSeconds).ToUnixTimeMilliseconds(),0),
+                now.Add(PvpCrimePolicy.HostileMarkFlashingWindow).ToUnixTimeMilliseconds(),0),
             _=>throw new ArgumentOutOfRangeException(nameof(state))
         };
     }

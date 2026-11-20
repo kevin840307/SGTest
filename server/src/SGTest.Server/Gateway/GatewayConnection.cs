@@ -113,7 +113,8 @@ public readonly record struct TrustedChatCommand(
     long TargetActorId=0);
 public readonly record struct TrustedPartyCommand(
     long ActorId,long ConnectionEpoch,long RequestMapEpoch,
-    uint PartySequence,PartyCommandAction Action,long PartyId,long TargetActorId);
+    uint PartySequence,PartyCommandAction Action,long PartyId,long TargetActorId,
+    string TargetName = "");
 public enum TrustedQuestCommandKind : byte { Open=1, Choose=2 }
 public readonly record struct TrustedQuestCommand(
     long ActorId,long ConnectionEpoch,long RequestMapEpoch,
@@ -826,7 +827,8 @@ public sealed class GatewayConnection
                 return WireFrameDisposition.ProtocolViolation;
             var request=new TrustedPartyCommand(
                 bound.ActorId,bound.ConnectionEpoch,party.MapEpoch,
-                party.PartySequence,party.Action,party.PartyId,party.TargetActorId);
+                party.PartySequence,party.Action,party.PartyId,party.TargetActorId,
+                party.TargetName);
             if(!postParty(request))
                 return WireFrameDisposition.Backpressured;
             _lastPartySequence=party.PartySequence;

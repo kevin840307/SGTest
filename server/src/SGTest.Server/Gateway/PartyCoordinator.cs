@@ -146,35 +146,58 @@ public sealed class PartyCoordinator
     private void HandleInviteLocked(
         TrustedPartyCommand request,ConnectionBinding sender,WorldResultRouter router)
     {
-        if(request.TargetActorId==request.ActorId)
-        {
-            QueueResultLocked(request,PartyResultStatus.CannotTargetSelf,
-                request.PartyId,request.TargetActorId,router);
-            return;
-        }
-        if(!router.TryGetCurrentBinding(request.TargetActorId,out var target)||
-           !router.TryGetPlayerIdentity(
-               target.ActorId,target.ConnectionEpoch,out var targetIdentity))
+        bool byName=!string.IsNullOrEmpty(request.TargetName);
+        if((request.TargetActorId>0)==byName)
         {
             QueueResultLocked(request,PartyResultStatus.TargetUnavailable,
-                request.PartyId,request.TargetActorId,router);
+                request.PartyId,0,router);
             return;
         }
-        if(_partyByActor.ContainsKey(target.ActorId))
+
+        ConnectionBinding target;
+        PlayerIdentityPresentation targetIdentity;
+        long targetActorId=request.TargetActorId;
+        if(byName)
+        {
+            if(!router.TryResolveOnlinePlayerByName(
+                    request.TargetName,out target,out targetIdentity))
+            {
+                QueueResultLocked(request,PartyResultStatus.TargetUnavailable,
+                    request.PartyId,0,router);
+                return;
+            }
+            targetActorId=target.ActorId;
+        }
+        else if(!router.TryGetCurrentBinding(targetActorId,out target)||
+                !router.TryGetPlayerIdentity(
+                    target.ActorId,target.ConnectionEpoch,out targetIdentity))
+        {
+            QueueResultLocked(request,PartyResultStatus.TargetUnavailable,
+                request.PartyId,targetActorId,router);
+            return;
+        }
+
+        if(targetActorId==request.ActorId)
+        {
+            QueueResultLocked(request,PartyResultStatus.CannotTargetSelf,
+                request.PartyId,targetActorId,router);
+            return;
+        }
+        if(_partyByActor.ContainsKey(targetActorId))
         {
             QueueResultLocked(request,PartyResultStatus.AlreadyInParty,
-                request.PartyId,request.TargetActorId,router);
+                request.PartyId,targetActorId,router);
             return;
         }
-        if(_invitesByTarget.TryGetValue(target.ActorId,out var prior))
+        if(_invitesByTarget.TryGetValue(targetActorId,out var prior))
         {
-            if(prior.TargetConnectionEpoch!=target.ConnectionEpoch ||
+            if(prior.TargetConnectionEpoch!=target.ConnectionEpoch||
                InviteExpired(prior))
-                _invitesByTarget.Remove(target.ActorId);
+                _invitesByTarget.Remove(targetActorId);
             else
             {
                 QueueResultLocked(request,PartyResultStatus.TargetHasPendingInvite,
-                    request.PartyId,request.TargetActorId,router);
+                    request.PartyId,targetActorId,router);
                 return;
             }
         }
@@ -188,13 +211,13 @@ public sealed class PartyCoordinator
             if(request.PartyId!=party.PartyId)
             {
                 QueueResultLocked(request,PartyResultStatus.InviteStale,
-                    party.PartyId,request.TargetActorId,router);
+                    party.PartyId,targetActorId,router);
                 return;
             }
             if(party.LeaderActorId!=request.ActorId)
             {
                 QueueResultLocked(request,PartyResultStatus.NotLeader,
-                    party.PartyId,request.TargetActorId,router);
+                    party.PartyId,targetActorId,router);
                 return;
             }
         }
@@ -203,7 +226,7 @@ public sealed class PartyCoordinator
             if(request.PartyId!=0)
             {
                 QueueResultLocked(request,PartyResultStatus.NotInParty,
-                    0,request.TargetActorId,router);
+                    0,targetActorId,router);
                 return;
             }
             long id=checked(_nextPartyId++);
@@ -218,15 +241,15 @@ public sealed class PartyCoordinator
         if(party.Members.Count>=WireProtocol.PartyMaxMembers)
         {
             QueueResultLocked(request,PartyResultStatus.PartyFull,
-                party.PartyId,request.TargetActorId,router);
+                party.PartyId,targetActorId,router);
             return;
         }
 
-        _invitesByTarget.Add(target.ActorId,
+        _invitesByTarget.Add(targetActorId,
             new(party.PartyId,request.ActorId,request.ConnectionEpoch,
                 target.ConnectionEpoch,_timestamp()));
         QueueResultLocked(request,PartyResultStatus.Success,
-            party.PartyId,target.ActorId,router);
+            party.PartyId,targetActorId,router);
         QueueInviteLocked(target,party,request.ActorId,
             request.ConnectionEpoch,targetIdentity.DisplayName,router);
         if(created)BroadcastSnapshotLocked(party,router);

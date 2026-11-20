@@ -233,6 +233,7 @@ var pending_party_sequence := 0
 var pending_party_action := 0
 var pending_party_party_id := 0
 var pending_party_target_actor_id := 0
+var pending_party_target_name := ""
 var party_id := 0
 var party_revision := 0
 var party_leader_actor_id := 0
@@ -646,7 +647,8 @@ func _clear_pending_whisper()->void:
 
 
 func mark_party_sent(
-		sequence:int,action:int,request_party_id:int,target_actor_id:int)->bool:
+		sequence:int,action:int,request_party_id:int,target_actor_id:int,
+		target_name:String="")->bool:
 	if (
 		state!=STATE_IN_WORLD or not world_ready or resync_pending or
 		waiting_for_new_map or pending_world_ready_ack_epoch!=0 or
@@ -655,9 +657,13 @@ func mark_party_sent(
 		action<1 or action>6 or request_party_id<0 or target_actor_id<0
 	):
 		return false
+	var clean_name:=target_name.strip_edges()
+	if clean_name!=target_name or clean_name.to_utf8_buffer().size()>WireCodec.CHAT_MAX_SENDER_NAME_BYTES:
+		return false
 	match action:
 		1:
-			if target_actor_id<=0 or target_actor_id==actor_id:
+			var name_target:=not clean_name.is_empty()
+			if (target_actor_id>0)==name_target or target_actor_id==actor_id:
 				return false
 			if party_id>0:
 				if request_party_id!=party_id or party_leader_actor_id!=actor_id:
@@ -665,6 +671,8 @@ func mark_party_sent(
 			elif request_party_id!=0:
 				return false
 		2,3:
+			if not clean_name.is_empty():
+				return false
 			if (
 				party_id!=0 or pending_party_invite.is_empty() or
 				int(pending_party_invite.get("party_id",0))!=request_party_id or
@@ -672,9 +680,11 @@ func mark_party_sent(
 			):
 				return false
 		4:
-			if party_id<=0 or request_party_id!=party_id or target_actor_id!=0:
+			if not clean_name.is_empty() or party_id<=0 or request_party_id!=party_id or target_actor_id!=0:
 				return false
 		5,6:
+			if not clean_name.is_empty():
+				return false
 			if (
 				party_id<=0 or request_party_id!=party_id or
 				party_leader_actor_id!=actor_id or target_actor_id<=0 or
@@ -688,6 +698,7 @@ func mark_party_sent(
 	pending_party_action=action
 	pending_party_party_id=request_party_id
 	pending_party_target_actor_id=target_actor_id
+	pending_party_target_name=clean_name
 	return true
 
 
@@ -696,6 +707,7 @@ func _clear_pending_party()->void:
 	pending_party_action=0
 	pending_party_party_id=0
 	pending_party_target_actor_id=0
+	pending_party_target_name=""
 
 
 func mark_quest_sent(
@@ -1142,6 +1154,7 @@ func snapshot() -> Dictionary:
 		"pending_party_action": pending_party_action,
 		"pending_party_party_id": pending_party_party_id,
 		"pending_party_target_actor_id": pending_party_target_actor_id,
+		"pending_party_target_name": pending_party_target_name,
 		"party_id": party_id,
 		"party_revision": party_revision,
 		"party_leader_actor_id": party_leader_actor_id,
@@ -3491,20 +3504,25 @@ func _apply_party_result(frame:PackedByteArray)->bool:
 	if sequence<=last_party_result_sequence:
 		stale_party_frames+=1
 		return true
-	if (
-		sequence>party_sequence or sequence!=pending_party_sequence or
-		int(value.action)!=pending_party_action or
-		int(value.target_actor_id)!=pending_party_target_actor_id
-	):
-		return fail("party_result_without_matching_request")
 	var action:=int(value.action)
 	var status:=int(value.status)
+	var response_target:=int(value.target_actor_id)
+	var target_matches:=response_target==pending_party_target_actor_id
+	if pending_party_action==1 and not pending_party_target_name.is_empty():
+		target_matches=response_target>=0
+	if (
+		sequence>party_sequence or sequence!=pending_party_sequence or
+		action!=pending_party_action or not target_matches
+	):
+		return fail("party_result_without_matching_request")
 	var response_party:=int(value.party_id)
 	if status==0:
 		if action in [2,3]:
 			pending_party_invite.clear()
 		if action==1 and response_party<=0:
 			return fail("party_invite_success_without_party")
+		if action==1 and not pending_party_target_name.is_empty() and response_target<=0:
+			return fail("party_name_invite_success_without_resolved_target")
 	elif status<1 or status>10:
 		return fail("party_result_unknown_status")
 	if action in [2,3] and status in [7,8]:
@@ -3512,6 +3530,8 @@ func _apply_party_result(frame:PackedByteArray)->bool:
 	last_party_result_sequence=sequence
 	last_party_result_status=status
 	last_party_result=value.duplicate(true)
+	if not pending_party_target_name.is_empty():
+		last_party_result["requested_target_name"]=pending_party_target_name
 	_clear_pending_party()
 	return true
 

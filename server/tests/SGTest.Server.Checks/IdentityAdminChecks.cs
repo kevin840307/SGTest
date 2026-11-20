@@ -215,10 +215,15 @@ internal static class IdentityAdminChecks
         var conflict=await Run(null,PvpName(c,character,"blue","evt-red-001"));
         Checks.Require(conflict.Exit==3&&conflict.Error.Contains("event ID"),
             "conflicting reuse of admin event ID was accepted");
-        var pink=await Run(null,PvpName(c,character,"閃粉","evt-flash-002",
+        var pink=await Run(null,PvpName(c,character,"flash","evt-flash-002",
             reason:"incident review",operatorId:"gm-local-1"));
         Checks.Require(pink.Exit==0&&pink.Out.Contains("PinkFlashing"),
-            "Recovered-compatible flash alias failed");
+            "English flash token failed");
+        var localizedToken=string.Concat((char)0x9583,(char)0x7c89);
+        Checks.Require(
+            (await Run(null,PvpName(
+                c,character,localizedToken,"evt-localized-rejected"))).Exit==2,
+            "localized PvP state token leaked into Server admin contract");
 
         using(var connection=new Microsoft.Data.Sqlite.SqliteConnection(
             new Microsoft.Data.Sqlite.SqliteConnectionStringBuilder

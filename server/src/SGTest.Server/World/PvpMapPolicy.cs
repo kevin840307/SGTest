@@ -35,14 +35,15 @@ public enum PvpNameState : byte
 }
 
 /// <summary>
-/// Crime/name-color timing recovered from the private reference implementation:
-/// hostile attack against a normal white player => pink for 30s; final 3s flash;
-/// killing a normal white player => red. Pink/red targets do not escalate crime.
+/// Server gameplay semantics recovered from the private reference implementation.
+/// Presentation colors are Client concerns; Server code uses English semantic enum
+/// values and centralized policy durations rather than localized strings or magic
+/// numbers in handlers.
 /// </summary>
 public static class PvpCrimePolicy
 {
-    public const int PinkDurationSeconds = 30;
-    public const int PinkFlashSeconds = 3;
+    public static readonly TimeSpan HostileMarkDuration = TimeSpan.FromSeconds(30);
+    public static readonly TimeSpan HostileMarkFlashingWindow = TimeSpan.FromSeconds(3);
 
     public static bool IsPink(CharacterPvpState state, DateTimeOffset now) =>
         state.PinkUntilUnixMilliseconds > now.ToUnixTimeMilliseconds();
@@ -58,7 +59,7 @@ public static class PvpCrimePolicy
         if(state.RedMan) return PvpNameState.Red;
         long remaining=state.PinkUntilUnixMilliseconds-now.ToUnixTimeMilliseconds();
         if(remaining>0)
-            return remaining<=PinkFlashSeconds*1000L
+            return remaining<=HostileMarkFlashingWindow.TotalMilliseconds
                 ? PvpNameState.PinkFlashing:PvpNameState.Pink;
         return state.Mode==PvpMode.ProtectedBlue
             ? PvpNameState.ProtectedBlue:PvpNameState.EnabledWhite;

@@ -339,7 +339,18 @@ func send_whisper(
 
 func party_invite(target_actor_id:int)->bool:
 	var current:=snapshot()
-	return _queue_party_intent(1,int(current.get("party_id",0)),target_actor_id,current)
+	return _queue_party_intent(
+		1,int(current.get("party_id",0)),target_actor_id,current)
+
+
+func party_invite_name(target_name:String)->bool:
+	var clean:=target_name.strip_edges()
+	var bytes:=clean.to_utf8_buffer()
+	if clean.is_empty() or bytes.size()>WireCodec.CHAT_MAX_SENDER_NAME_BYTES:
+		return false
+	var current:=snapshot()
+	return _queue_party_intent(
+		1,int(current.get("party_id",0)),0,current,clean)
 
 
 func party_accept()->bool:
@@ -376,7 +387,8 @@ func party_promote(target_actor_id:int)->bool:
 
 
 func _queue_party_intent(
-		action:int,party_id:int,target_actor_id:int,current:Dictionary)->bool:
+		action:int,party_id:int,target_actor_id:int,current:Dictionary,
+		target_name:String="")->bool:
 	if (
 		int(current.get("state",-1))!=WorldState.STATE_IN_WORLD or
 		not bool(current.get("world_ready",false)) or
@@ -387,8 +399,14 @@ func _queue_party_intent(
 		int(current.get("pending_party_sequence",0))!=0
 	):
 		return false
+	var clean_name:=target_name.strip_edges()
+	if clean_name!=target_name or clean_name.to_utf8_buffer().size()>WireCodec.CHAT_MAX_SENDER_NAME_BYTES:
+		return false
 	if action==1:
-		if target_actor_id<=0 or target_actor_id==int(current.get("actor_id",0)):
+		var name_target:=not clean_name.is_empty()
+		if (target_actor_id>0)==name_target:
+			return false
+		if target_actor_id==int(current.get("actor_id",0)):
 			return false
 		if int(current.get("party_id",0))>0 and (
 			party_id!=int(current.get("party_id",0)) or
@@ -396,6 +414,8 @@ func _queue_party_intent(
 		):
 			return false
 	elif action in [2,3]:
+		if not clean_name.is_empty():
+			return false
 		var invite:Dictionary=current.get("pending_party_invite",{})
 		if (
 			not int(current.get("party_id",0))==0 or invite.is_empty() or
@@ -404,9 +424,13 @@ func _queue_party_intent(
 		):
 			return false
 	elif action==4:
+		if not clean_name.is_empty():
+			return false
 		if party_id<=0 or party_id!=int(current.get("party_id",0)) or target_actor_id!=0:
 			return false
 	elif action in [5,6]:
+		if not clean_name.is_empty():
+			return false
 		var members:Dictionary=current.get("party_members",{})
 		if (
 			party_id<=0 or party_id!=int(current.get("party_id",0)) or
@@ -419,7 +443,7 @@ func _queue_party_intent(
 		return false
 	return _queue_intent({
 		"type":"party","action":action,"party_id":party_id,
-		"target_actor_id":target_actor_id,
+		"target_actor_id":target_actor_id,"target_name":clean_name,
 		"actor_id":int(current.get("actor_id",0)),
 		"map_epoch":int(current.get("map_epoch",0))
 	})
@@ -1264,16 +1288,18 @@ func _process_first_intent() -> void:
 		var action:=int(intent.get("action",0))
 		var request_party_id:=int(intent.get("party_id",0))
 		var target:=int(intent.get("target_actor_id",0))
+		var target_name:=str(intent.get("target_name",""))
 		var sequence:=int(current.get("party_sequence",0))+1
 		var frame:=WireCodec.encode_party_command(
-			int(current.get("map_epoch",0)),sequence,action,request_party_id,target)
+			int(current.get("map_epoch",0)),sequence,action,request_party_id,
+			target,target_name)
 		if frame.is_empty():
 			_pop_intent()
 			return
 		if (
 			_transport.send_frame(frame) and
 			_world.mark_party_sent(
-				sequence,action,request_party_id,target)
+				sequence,action,request_party_id,target,target_name)
 		):
 			_pop_intent()
 			_publish()

@@ -425,6 +425,41 @@ public sealed class WorldResultRouter
         }
     }
 
+    public bool TryResolveOnlinePlayerByName(
+        string? displayName,out ConnectionBinding binding,
+        out PlayerIdentityPresentation identity)
+    {
+        binding=default;
+        identity=default;
+        if(string.IsNullOrWhiteSpace(displayName))return false;
+        string normalized=displayName.Normalize(
+            System.Text.NormalizationForm.FormC).Trim();
+        if(normalized.Length is <1 or >24||normalized.Any(char.IsControl))
+            return false;
+        lock(_gate)
+        {
+            bool found=false;
+            foreach(var connection in _connections.Values)
+            {
+                if(connection.IsClosed||
+                   !connection.TryGetPlayerIdentity(out var candidate)||
+                   !string.Equals(candidate.DisplayName,normalized,
+                       StringComparison.Ordinal))
+                    continue;
+                if(found)
+                {
+                    binding=default;
+                    identity=default;
+                    return false;
+                }
+                binding=connection.Binding;
+                identity=candidate;
+                found=true;
+            }
+            return found;
+        }
+    }
+
     public GatewaySendStatus PublishPlayerPvpState(
         long actorId,long connectionEpoch,CharacterPvpState state)
     {

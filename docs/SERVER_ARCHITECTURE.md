@@ -6,14 +6,16 @@
 
 | 責任 | 內容 | 禁止 |
 |---|---|---|
-| Gateway/Connection | trusted Actor binding、ConnectionEpoch、bounded parser/reliable queue、TLS 1.2/1.3 per-connection session；後續 Auth/listener | 讓 Client 宣稱 ActorId/ConnectionEpoch、plaintext fallback、直接計算傷害／操作 DB 於 Tick |
-| Wire | 實測選型的 binary/framed codec、版本、長度限制、重播保護 | 綁死 JSON／MessagePack、隱式依賴 Godot 角色類別 |
-| Map World | 單寫者 authoritative positions、collision、AI、combat、drop | 在 Tick 同步等磁碟／Send |
+| Host / Adapter | process composition、config、CLI、TLS listener 啟停；外部 token 使用英文 stable contract | 在 Host 寫 gameplay rule、localized Server command alias、直接改 World state |
+| Gateway/Connection | trusted Actor binding、ConnectionEpoch、bounded parser/reliable queue、TLS 1.2/1.3 per-connection session；Auth/listener dispatch | 讓 Client 宣稱 ActorId/ConnectionEpoch、plaintext fallback、直接計算傷害／操作 DB 於 Tick |
+| Wire | 實測選型的 binary/framed codec、版本、長度限制、重播保護；傳 semantic enum/state，不傳 UI 顏色 | 綁死 JSON／MessagePack、隱式依賴 Godot 角色類別、把 localized text 當規則 |
+| Gameplay Policy | 純規則與 bounded parameters；英文 enum + 集中 `const/static readonly/Options` | handler 內散落 magic number、RGB/中文字串驅動 gameplay |
+| Map World / Coordinator | 單寫者 authoritative positions、collision、AI、combat、drop、social state transitions | 在 Tick 同步等磁碟／Send；讓 presentation 決定規則 |
 | AOI & Snapshot | per-player visibility、Spawn/Despawn、entity revisions、有限頻率更新 | 把看不到當死亡，或跨 map 沿用 epoch |
 | Accounts | Account、Character、Session 安全與授權 | 將 ConnectionEpoch 當永久角色身份 |
-| Persistence | SQLite WAL／migration／UID／交易原子性 | 用 DB 查詢驅動每隻怪 AI |
+| Persistence | SQLite WAL／migration／UID／交易原子性 | 用 DB 查詢驅動每隻怪 AI；在 repository layer 重算 gameplay rule |
 
-暫不建立多個空 project、抽象 Service 層、事件總線和微服務。當 Combat/Items/Social 複雜到需要獨立測試才拆成模組。
+暫不建立多個空 project、抽象 Service 層、事件總線和微服務。當 Combat/Items/Social 複雜到需要獨立測試才拆成模組。這個 modular-monolith + authoritative simulation + adapter/persistence boundary 是常見且適合目前規模的 game-server 架構；不是因為大型遊戲常見某技術就先導入 ECS、Actor framework 或 microservice。
 
 ## 時鐘與事件
 
@@ -276,7 +278,7 @@ Nearby remains dual-AOI fanout. Whisper is deliberately a direct online route an
 
 Party state is owned by one in-memory `PartyCoordinator` attached to the formal TLS Host. It is intentionally **online and ephemeral**: PartyId, invitations, membership, leader and revision are not SQLite records. This keeps a reconnect/restart from accidentally resurrecting stale connection generations while still allowing a party to survive Map15↔Map13 transfer on the same authenticated socket.
 
-The trust path is `Godot ClientSession -> opcode100 PartyCommand -> Gateway authenticated Actor/Connection/Map binding -> bounded 16-command party worker -> PartyCoordinator -> reliable opcode101/102/103`. Client commands carry only PartySequence/action/PartyId/target. Server resolves target online state and names through `WorldResultRouter`. Membership stores exact ConnectionEpoch per Actor; stale old-socket disconnect cleanup therefore cannot evict a newer generation. Leader-only invite/kick/promote is checked Server-side. Leader leave/disconnect transfers leadership deterministically to the first remaining member; final departure dissolves the Party. Outstanding invitations are invalidated on leader changes.
+The trust path is `Godot ClientSession -> opcode100 PartyCommand -> Gateway authenticated Actor/Connection/Map binding -> bounded 16-command party worker -> PartyCoordinator -> reliable opcode101/102/103`. Client commands carry only PartySequence/action/PartyId plus an invite target selector. ActorId-targeted invites retain the fixed 37-byte form; invite-by-name appends a bounded UTF-8 character name. `WorldResultRouter` resolves that name only against current authenticated PlayerIdentity using Form-C/trimmed ordinal semantics and feeds the resolved current ActorId/ConnectionEpoch into the same PartyCoordinator generation/TTL path. Client never chooses the target generation. Membership stores exact ConnectionEpoch per Actor; stale old-socket disconnect cleanup therefore cannot evict a newer generation. Leader-only invite/kick/promote is checked Server-side. Leader leave/disconnect transfers leadership deterministically to the first remaining member; final departure dissolves the Party. Outstanding invitations are invalidated on leader changes.
 
 Pending online invitations are scoped to the **recipient connection generation** as well as the inviter connection generation; they expire after **60 seconds of Stopwatch monotonic elapsed time**. Accept/reject of an outdated invite returns `InviteStale`; a new invitation to the same ActorId can replace an expired or previous-generation record. An old socket's late Disconnect callback removes a pending invitation only if its **recipient ConnectionEpoch matches**, so new connections cannot have their invitations erased by stale cleanup. Expiry is lazy on relevant Party commands rather than a new background worker. CI [44742204787](https://github.com/kevin840307/SGTest/actions/runs/44742204787) **PASS** includes exact reconnect-invite and simulated 61-second timeout tests without wall-clock sleeping. The 60-second lifetime is a V1 anti-stale policy, not a recovered original-game rule.
 
@@ -286,4 +288,4 @@ Godot keeps authoritative Party membership through map transfer, clears only pen
 
 Verification: Server Core 44739756995 PASS; Client Core 44739756959 PASS on functional HEAD `efcc52c6`. The two-real-Client Map15→Map13→Map15 Gate creates the Party before transfer, retains membership after AOI separation, delivers Party Chat cross-map, and ends with `party_count=0` after clean socket teardown. Formal Host advertises `online_party_enabled=true`.
 
-Still outside this boundary: verified original party-size cap, invite-by-name/distance behavior, EXP/drop sharing, party buff/assist gameplay rules, persistent/offline parties, and private Windows party visuals. Guild/Faction/Warband remain future systems.
+Still outside this boundary: verified original party-size/distance behavior, EXP/drop sharing, party buff/assist gameplay rules, persistent/offline parties, and private Windows party visuals. Authenticated online invite-by-name is implemented, but does not claim the original game's distance/UI rules. Guild/Faction/Warband remain future systems.

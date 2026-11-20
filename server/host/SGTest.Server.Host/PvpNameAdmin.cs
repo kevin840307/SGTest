@@ -81,15 +81,31 @@ internal static class PvpNameAdmin
         return values;
     }
 
-    private static PvpNameState ParseState(string value) =>
-        value.Trim().ToLowerInvariant() switch
-        {
-            "blue" or "藍" or "藍名"=>PvpNameState.ProtectedBlue,
-            "white" or "白" or "白名"=>PvpNameState.EnabledWhite,
-            "pink" or "粉紅" or "粉红" or "粉紅名" or "粉红名"=>PvpNameState.Pink,
-            "flash" or "閃粉" or "闪粉"=>PvpNameState.PinkFlashing,
-            "red" or "紅" or "红" or "紅名" or "红名"=>PvpNameState.Red,
-            _=>throw new ArgumentException(
-                "State must be blue, white, pink, flash or red")
-        };
+    private static class StateToken
+    {
+        public const string ProtectedBlue = "blue";
+        public const string EnabledWhite = "white";
+        public const string HostilePink = "pink";
+        public const string HostilePinkFlashing = "flash";
+        public const string CriminalRed = "red";
+
+        public static readonly IReadOnlyDictionary<string,PvpNameState> Values =
+            new Dictionary<string,PvpNameState>(StringComparer.Ordinal)
+            {
+                [ProtectedBlue]=PvpNameState.ProtectedBlue,
+                [EnabledWhite]=PvpNameState.EnabledWhite,
+                [HostilePink]=PvpNameState.Pink,
+                [HostilePinkFlashing]=PvpNameState.PinkFlashing,
+                [CriminalRed]=PvpNameState.Red
+            };
+    }
+
+    private static PvpNameState ParseState(string value)
+    {
+        string token=value.Trim().ToLowerInvariant();
+        if(StateToken.Values.TryGetValue(token,out var state))
+            return state;
+        throw new ArgumentException(
+            "State must be blue, white, pink, flash or red");
+    }
 }

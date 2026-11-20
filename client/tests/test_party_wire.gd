@@ -111,8 +111,31 @@ func _initialize()->void:
 	if command.size()!=WireCodec.PARTY_COMMAND_FRAME_BYTES:
 		_fail("invite command encoding")
 		return
+	var name_command:=WireCodec.encode_party_command(3,2,1,0,0,"PartyB")
+	if name_command.size()!=WireCodec.PARTY_COMMAND_FRAME_BYTES+"PartyB".to_utf8_buffer().size():
+		_fail("name invite command encoding")
+		return
+	if not WireCodec.encode_party_command(3,3,1,0,22,"PartyB").is_empty():
+		_fail("invite admitted ActorId plus name")
+		return
 	if not WireCodec.encode_party_command(3,1,4,0,0).is_empty():
 		_fail("leave without party admitted")
+		return
+
+	var by_name:=_base_world(44,4,9)
+	if not by_name.mark_party_sent(1,1,0,0,"PartyB"):
+		_fail("name invite reducer admission")
+		return
+	if not by_name.apply_frame(_party_result(9,1,1,0,9100,22)):
+		_fail("name invite authoritative target resolution "+by_name.protocol_error)
+		return
+	var by_name_snap:=by_name.snapshot()
+	if (
+		int(by_name_snap.pending_party_sequence)!=0 or
+		int(by_name_snap.last_party_result.target_actor_id)!=22 or
+		str(by_name_snap.last_party_result.get("requested_target_name",""))!="PartyB"
+	):
+		_fail("name invite result did not preserve request/resolved target")
 		return
 
 	var leader:=_base_world(11,1,3)

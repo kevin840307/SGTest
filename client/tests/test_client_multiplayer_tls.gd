@@ -70,8 +70,8 @@ func _observe(session, self_id: int, crossmap: bool = false, portal: bool = fals
 			return
 	var crossmap_chat_stale_before := -1
 	if crossmap and not portal:
-		if not session.party_invite(remote_id):
-			_fail("observer party invite intent rejected",session)
+		if not session.party_invite_name("MultiHeroTwo"):
+			_fail("observer party name invite intent rejected",session)
 			return
 		var invite_result:=_wait_party_result(session,1,1,remote_id,7000)
 		if invite_result.is_empty() or int(invite_result.get("status",-1))!=0:

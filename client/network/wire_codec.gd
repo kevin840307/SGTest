@@ -224,6 +224,7 @@ const WHISPER_COMMAND_MAX_FRAME_BYTES := WHISPER_COMMAND_HEADER_BYTES + CHAT_MAX
 const WHISPER_RESULT_HEADER_BYTES := 39
 const WHISPER_RESULT_MAX_FRAME_BYTES := WHISPER_RESULT_HEADER_BYTES + CHAT_MAX_SENDER_NAME_BYTES
 const PARTY_COMMAND_FRAME_BYTES := 37
+const PARTY_COMMAND_MAX_FRAME_BYTES := PARTY_COMMAND_FRAME_BYTES + CHAT_MAX_SENDER_NAME_BYTES
 const PARTY_RESULT_FRAME_BYTES := 38
 const PARTY_INVITE_HEADER_BYTES := 46
 const PARTY_INVITE_MAX_FRAME_BYTES := PARTY_INVITE_HEADER_BYTES + CHAT_MAX_SENDER_NAME_BYTES
@@ -2187,29 +2188,39 @@ static func decode_whisper_result(frame:PackedByteArray)->Dictionary:
 
 
 static func encode_party_command(
-		epoch:int,sequence:int,action:int,party_id:int,target_actor_id:int
+		epoch:int,sequence:int,action:int,party_id:int,target_actor_id:int,
+		target_name:String=""
 	)->PackedByteArray:
+	var name_bytes:=target_name.to_utf8_buffer()
 	if (
 		epoch<=0 or sequence<=0 or sequence>0xffffffff or action<1 or action>6 or
-		party_id<0 or target_actor_id<0
+		party_id<0 or target_actor_id<0 or
+		name_bytes.size()>CHAT_MAX_SENDER_NAME_BYTES
 	):
 		return PackedByteArray()
-	var target_action:=action in [1,5,6]
-	var invite_response:=action in [2,3]
-	if target_action:
-		if target_actor_id<=0 or (action in [5,6] and party_id<=0):
+	var name_target:=not target_name.is_empty()
+	if name_target and (
+		target_name!=target_name.strip_edges() or
+		target_name.strip_edges().is_empty()
+	):
+		return PackedByteArray()
+	if action==1:
+		if (target_actor_id>0)==name_target:
 			return PackedByteArray()
-	elif invite_response:
-		if party_id<=0 or target_actor_id<=0:
+	elif action in [5,6]:
+		if name_target or target_actor_id<=0 or party_id<=0:
+			return PackedByteArray()
+	elif action in [2,3]:
+		if name_target or party_id<=0 or target_actor_id<=0:
 			return PackedByteArray()
 	elif action==4:
-		if party_id<=0 or target_actor_id!=0:
+		if name_target or party_id<=0 or target_actor_id!=0:
 			return PackedByteArray()
 	else:
 		return PackedByteArray()
 	var writer:=StreamPeerBuffer.new()
 	writer.big_endian=false
-	writer.put_u32(PARTY_COMMAND_FRAME_BYTES)
+	writer.put_u32(PARTY_COMMAND_FRAME_BYTES+name_bytes.size())
 	writer.put_u16(VERSION)
 	writer.put_u16(OPCODE_PARTY_COMMAND)
 	writer.put_64(epoch)
@@ -2217,6 +2228,8 @@ static func encode_party_command(
 	writer.put_u8(action)
 	writer.put_64(party_id)
 	writer.put_64(target_actor_id)
+	if not name_bytes.is_empty():
+		writer.put_data(name_bytes)
 	return writer.data_array
 
 
