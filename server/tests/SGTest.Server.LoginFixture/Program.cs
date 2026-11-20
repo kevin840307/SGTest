@@ -5,6 +5,7 @@ using System.Net.Sockets;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
+using Microsoft.Data.Sqlite;
 using SGTest.Server.Gateway;
 using SGTest.Server.Identity;
 using SGTest.Server.World;
@@ -1103,6 +1104,23 @@ internal static class Program
                 grant.Quantity != 2)
                 throw new InvalidOperationException(
                     "storage fixture could not seed durable inventory");
+            using (var connection = new SqliteConnection(
+                new SqliteConnectionStringBuilder
+                {
+                    DataSource = Path.Combine(root, "identity.db"),
+                    Mode = SqliteOpenMode.ReadWrite,
+                    Pooling = false
+                }.ToString()))
+            {
+                connection.Open();
+                using var command = connection.CreateCommand();
+                command.CommandText =
+                    "UPDATE item_instances SET enhancement_level=5 WHERE item_uid=$uid;";
+                command.Parameters.AddWithValue("$uid", grant.ItemUid);
+                if (command.ExecuteNonQuery() != 1)
+                    throw new InvalidOperationException(
+                        "storage fixture enhancement seed failed");
+            }
 
             var storageCatalog = new NpcStorageCatalog([
                 new NpcStorageCatalog.StoragePoint(
@@ -1126,7 +1144,7 @@ internal static class Program
                 int port = ((IPEndPoint)listener.LocalEndpoint).Port;
                 Console.WriteLine(
                     $"STORAGE_FIXTURE_READY port={port} cert={certPath} username={Username} " +
-                    $"character={characterId} item_uid={grant.ItemUid} npc=88");
+                    $"character={characterId} item_uid={grant.ItemUid} npc=88 enhancement=5");
                 Console.Out.Flush();
 
                 using var client = await listener.AcceptTcpClientAsync()
@@ -1145,6 +1163,7 @@ internal static class Program
                     inventory[0].ItemDefinitionId != 2701 ||
                     inventory[0].Quantity != 2 ||
                     inventory[0].SourceDropId != drops.Single().DropId ||
+                    inventory[0].EnhancementLevel != 5 ||
                     storage.Count != 0 ||
                     ended.CommandsAccepted != 4 ||
                     router.Statistics.ActiveSessions != 0)
@@ -1154,7 +1173,7 @@ internal static class Program
 
                 Console.WriteLine(
                     $"STORAGE_FIXTURE_PASS tls={ended.Protocol} item_uid={grant.ItemUid} " +
-                    $"quantity=2 source_drop={drops.Single().DropId} storage=0 " +
+                    $"quantity=2 source_drop={drops.Single().DropId} enhancement=5 storage=0 " +
                     $"commands={ended.CommandsAccepted}");
                 Console.Out.Flush();
                 return 0;
