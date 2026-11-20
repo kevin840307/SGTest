@@ -80,6 +80,11 @@ public enum TrustedRepairCommandKind : byte { Open=1, Repair=2 }
 public readonly record struct TrustedRepairCommand(
     long ActorId,long ConnectionEpoch,long RequestMapEpoch,
     uint RepairSequence,int NpcSpawnId,TrustedRepairCommandKind Kind,long ItemUid=0);
+public enum TrustedEnhancementCommandKind : byte { Open=1, Enhance=2 }
+public readonly record struct TrustedEnhancementCommand(
+    long ActorId,long ConnectionEpoch,long RequestMapEpoch,
+    uint EnhancementSequence,int NpcSpawnId,
+    TrustedEnhancementCommandKind Kind,long ItemUid=0);
 public readonly record struct TrustedTradeCommand(
     long ActorId,long ConnectionEpoch,long RequestMapEpoch,
     uint TradeSequence,TradeCommandAction Action,long TradeId,
@@ -389,6 +394,7 @@ public sealed class GatewayConnection
                                               Func<TrustedEquipmentCommand, bool>? postEquipment = null,
                                               Func<TrustedBankCommand, bool>? postBank = null,
                                               Func<TrustedRepairCommand, bool>? postRepair = null,
+                                              Func<TrustedEnhancementCommand, bool>? postEnhancement = null,
                                               Func<TrustedTradeCommand, bool>? postTrade = null,
                                               Func<TrustedQuestCommand, bool>? postQuest = null,
                                               Func<TrustedPvpModeCommand, bool>? postPvp = null,
@@ -409,7 +415,7 @@ public sealed class GatewayConnection
             return _parser.Feed(bytes,
                 frame => HandleClientFrame(
                     frame, postMove, postNpc, postResync, postAttack, postRespawn,
-                    postPickup, postRecovery, postDiscard, postSkill, postShop, postStorage, postEquipment, postBank, postRepair, postTrade, postQuest, postPvp, postPvpAttack, postPvpSkill, postGmPvpName, postPlayerShop, postChat),
+                    postPickup, postRecovery, postDiscard, postSkill, postShop, postStorage, postEquipment, postBank, postRepair, postEnhancement, postTrade, postQuest, postPvp, postPvpAttack, postPvpSkill, postGmPvpName, postPlayerShop, postChat),
                 out commandsAccepted);
         }
     }
@@ -429,6 +435,7 @@ public sealed class GatewayConnection
                                               Func<TrustedEquipmentCommand, bool>? postEquipment = null,
                                               Func<TrustedBankCommand, bool>? postBank = null,
                                               Func<TrustedRepairCommand, bool>? postRepair = null,
+                                              Func<TrustedEnhancementCommand, bool>? postEnhancement = null,
                                               Func<TrustedTradeCommand, bool>? postTrade = null,
                                               Func<TrustedQuestCommand, bool>? postQuest = null,
                                               Func<TrustedPvpModeCommand, bool>? postPvp = null,
@@ -449,7 +456,7 @@ public sealed class GatewayConnection
             return _parser.Resume(
                 frame => HandleClientFrame(
                     frame, postMove, postNpc, postResync, postAttack, postRespawn,
-                    postPickup, postRecovery, postDiscard, postSkill, postShop, postStorage, postEquipment, postBank, postRepair, postTrade, postQuest, postPvp, postPvpAttack, postPvpSkill, postGmPvpName, postPlayerShop, postChat),
+                    postPickup, postRecovery, postDiscard, postSkill, postShop, postStorage, postEquipment, postBank, postRepair, postEnhancement, postTrade, postQuest, postPvp, postPvpAttack, postPvpSkill, postGmPvpName, postPlayerShop, postChat),
                 out commandsAccepted);
         }
     }
@@ -470,6 +477,7 @@ public sealed class GatewayConnection
         Func<TrustedEquipmentCommand, bool>? postEquipment,
         Func<TrustedBankCommand, bool>? postBank,
         Func<TrustedRepairCommand, bool>? postRepair,
+        Func<TrustedEnhancementCommand, bool>? postEnhancement,
         Func<TrustedTradeCommand, bool>? postTrade,
         Func<TrustedQuestCommand, bool>? postQuest,
         Func<TrustedPvpModeCommand, bool>? postPvp,
@@ -639,6 +647,29 @@ public sealed class GatewayConnection
                 bound.ActorId,bound.ConnectionEpoch,repairItem.MapEpoch,
                 repairItem.RepairSequence,repairItem.NpcSpawnId,
                 TrustedRepairCommandKind.Repair,repairItem.ItemUid))
+                ? WireFrameDisposition.Accepted:WireFrameDisposition.Backpressured;
+        }
+
+        if(postEnhancement is not null &&
+           header.Opcode==WireOpcode.EnhancementOpen &&
+           WireProtocol.TryDecodeEnhancementOpen(frame,out var enhancementOpen))
+        {
+            if(!GameplayReady(bound))return WireFrameDisposition.ProtocolViolation;
+            return postEnhancement(new TrustedEnhancementCommand(
+                bound.ActorId,bound.ConnectionEpoch,enhancementOpen.MapEpoch,
+                enhancementOpen.EnhancementSequence,enhancementOpen.NpcSpawnId,
+                TrustedEnhancementCommandKind.Open))
+                ? WireFrameDisposition.Accepted:WireFrameDisposition.Backpressured;
+        }
+        if(postEnhancement is not null &&
+           header.Opcode==WireOpcode.EnhancementItem &&
+           WireProtocol.TryDecodeEnhancementItem(frame,out var enhancementItem))
+        {
+            if(!GameplayReady(bound))return WireFrameDisposition.ProtocolViolation;
+            return postEnhancement(new TrustedEnhancementCommand(
+                bound.ActorId,bound.ConnectionEpoch,enhancementItem.MapEpoch,
+                enhancementItem.EnhancementSequence,enhancementItem.NpcSpawnId,
+                TrustedEnhancementCommandKind.Enhance,enhancementItem.ItemUid))
                 ? WireFrameDisposition.Accepted:WireFrameDisposition.Backpressured;
         }
 
@@ -1407,6 +1438,77 @@ public sealed class GatewayConnection
                 result.NpcSpawnId,result.ItemUid,result.ItemDefinitionId,
                 result.Location,result.CurrentDurability,result.MaxDurability,
                 result.Cost,result.WalletMoney));
+            return _reliable.TryEnqueue(frame)
+                ? GatewaySendStatus.Enqueued:GatewaySendStatus.Backpressured;
+        }
+    }
+
+    public GatewaySendStatus QueueEnhancementSnapshot(
+        TrustedEnhancementCommand request,EnhancementOpenStatus status,
+        EnhancementPreview? preview)
+    {
+        lock(_bindingGate)
+        {
+            if(_closed)return GatewaySendStatus.Closed;
+            var bound=_binding;
+            if(request.ActorId!=bound.ActorId||
+               request.ConnectionEpoch!=bound.ConnectionEpoch||
+               request.RequestMapEpoch!=bound.MapEpoch||
+               request.Kind!=TrustedEnhancementCommandKind.Open)
+                return GatewaySendStatus.GenerationMismatch;
+            var items=preview?.Items??Array.Empty<EnhancementPreviewItem>();
+            const int page=WireProtocol.EnhancementSnapshotMaxItemsPerFrame;
+            if(items.Count==0)
+            {
+                var empty=WireProtocol.EncodeEnhancementSnapshot(new(
+                    request.RequestMapEpoch,request.EnhancementSequence,status,
+                    request.NpcSpawnId,preview?.WalletMoney??0,0,true,
+                    Array.Empty<EnhancementPreviewItemWire>()));
+                return _reliable.TryEnqueue(empty)
+                    ? GatewaySendStatus.Enqueued:GatewaySendStatus.Backpressured;
+            }
+            for(int start=0;start<items.Count;start+=page)
+            {
+                int count=Math.Min(page,items.Count-start);
+                var rows=new EnhancementPreviewItemWire[count];
+                for(int i=0;i<count;i++)
+                {
+                    var item=items[start+i];
+                    rows[i]=new(item.ItemUid,item.ItemDefinitionId,item.Location,
+                        item.CurrentLevel,item.TargetLevel,item.SuccessPpm,
+                        item.MoneyCost,item.ConsumeMoneyOnFailure);
+                }
+                var frame=WireProtocol.EncodeEnhancementSnapshot(new(
+                    request.RequestMapEpoch,request.EnhancementSequence,status,
+                    request.NpcSpawnId,preview!.WalletMoney,start,
+                    start+count==items.Count,rows));
+                if(!_reliable.TryEnqueue(frame))
+                    return GatewaySendStatus.Backpressured;
+            }
+            return GatewaySendStatus.Enqueued;
+        }
+    }
+
+    public GatewaySendStatus QueueEnhancementResult(
+        TrustedEnhancementCommand request,EnhancementResult result)
+    {
+        lock(_bindingGate)
+        {
+            if(_closed)return GatewaySendStatus.Closed;
+            var bound=_binding;
+            if(request.ActorId!=bound.ActorId||
+               request.ConnectionEpoch!=bound.ConnectionEpoch||
+               request.RequestMapEpoch!=bound.MapEpoch||
+               request.Kind!=TrustedEnhancementCommandKind.Enhance||
+               request.ItemUid!=result.ItemUid||
+               request.NpcSpawnId!=result.NpcSpawnId)
+                return GatewaySendStatus.GenerationMismatch;
+            var frame=WireProtocol.EncodeEnhancementResult(new(
+                request.RequestMapEpoch,request.EnhancementSequence,result.Status,
+                result.NpcSpawnId,result.ItemUid,result.ItemDefinitionId,
+                result.Location,result.PreviousLevel,result.TargetLevel,
+                result.CurrentLevel,result.Succeeded,result.MoneyCost,
+                result.MoneyCharged,result.WalletMoney,result.RollPpm));
             return _reliable.TryEnqueue(frame)
                 ? GatewaySendStatus.Enqueued:GatewaySendStatus.Backpressured;
         }
