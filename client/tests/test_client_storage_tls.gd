@@ -48,7 +48,7 @@ func _initialize() -> void:
 	var uids: Array = ready.inventory_items.keys()
 	var uid := int(uids[0])
 	var initial: Dictionary = ready.inventory_items[uid]
-	if uid <= 0 or int(initial.item_definition_id)!=2701 or int(initial.quantity)!=2 or int(initial.get("drop_id",0))<=0:
+	if uid <= 0 or int(initial.item_definition_id)!=2701 or int(initial.quantity)!=2 or int(initial.get("drop_id",0))<=0 or int(initial.get("enhancement_level",-1))!=5:
 		_fail("unexpected initial inventory "+str(ready.inventory_items),session)
 		return
 	var source_drop := int(initial.drop_id)
@@ -81,7 +81,7 @@ func _initialize() -> void:
 		_fail("deposit settlement "+str(session.snapshot()),session)
 		return
 	var stored: Dictionary = deposited.storage_items[uid]
-	if int(stored.item_definition_id)!=2701 or int(stored.quantity)!=2 or int(stored.get("drop_id",0))!=source_drop or int(deposited.last_storage_result.status)!=0 or int(deposited.last_storage_result.kind)!=1:
+	if int(stored.item_definition_id)!=2701 or int(stored.quantity)!=2 or int(stored.get("drop_id",0))!=source_drop or int(stored.get("enhancement_level",-1))!=5 or int(deposited.last_storage_result.status)!=0 or int(deposited.last_storage_result.kind)!=1:
 		_fail("deposit receipt/provenance "+str(deposited.last_storage_result),session)
 		return
 
@@ -99,12 +99,12 @@ func _initialize() -> void:
 		_fail("withdraw settlement "+str(session.snapshot()),session)
 		return
 	var restored: Dictionary = withdrawn.inventory_items[uid]
-	if int(restored.item_definition_id)!=2701 or int(restored.quantity)!=2 or int(restored.get("drop_id",0))!=source_drop or int(withdrawn.last_storage_result.status)!=0 or int(withdrawn.last_storage_result.kind)!=2:
+	if int(restored.item_definition_id)!=2701 or int(restored.quantity)!=2 or int(restored.get("drop_id",0))!=source_drop or int(restored.get("enhancement_level",-1))!=5 or int(withdrawn.last_storage_result.status)!=0 or int(withdrawn.last_storage_result.kind)!=2:
 		_fail("withdraw receipt/provenance "+str(withdrawn.last_storage_result),session)
 		return
 
 	session.stop()
-	print("CLIENT_STORAGE_TLS_PASS item_uid=%d quantity=2 source_drop=%d open=true deposit=true withdraw=true local_update_after_receipt=true request_has_no_actor_or_item_definition_or_quantity=true" % [uid,source_drop])
+	print("CLIENT_STORAGE_TLS_PASS item_uid=%d quantity=2 source_drop=%d enhancement=5 open=true deposit=true withdraw=true local_update_after_receipt=true request_has_no_actor_or_item_definition_or_quantity=true" % [uid,source_drop])
 	quit(0)
 
 func _wait(session, predicate: Callable, timeout_ms: int) -> Dictionary:
