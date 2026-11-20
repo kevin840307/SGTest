@@ -60,6 +60,14 @@ func _observe(session, self_id: int, crossmap: bool = false, portal: bool = fals
 	if remote_id == self_id:
 		_fail("observer received itself as remote entity", session)
 		return
+	if not crossmap:
+		var chat := _wait_nearby_chat(
+			session,remote_id,"MultiHeroTwo","附近 E2E 測試",7000)
+		if chat.is_empty() or int(chat.get("chat_sequence",0))!=1 or \
+				int(chat.get("channel",-1))!=0 or int(chat.get("bubble_type",-1))!=2:
+			_fail("observer did not receive authenticated nearby chat %s" %
+				session.snapshot(),session)
+			return
 	var initial_revision := int(first.entities[remote_id].revision)
 	var initial_x := float(first.entities[remote_id].x)
 	var moved := {}
@@ -113,7 +121,7 @@ func _observe(session, self_id: int, crossmap: bool = false, portal: bool = fals
 		quit(0)
 		return
 	session.stop()
-	print("CLIENT_MULTI_PASS role=observer world_ready=PASS spawn=PASS delta=PASS despawn=PASS other_actor=%d" % remote_id)
+	print("CLIENT_MULTI_PASS role=observer world_ready=PASS spawn=PASS nearby_chat=PASS delta=PASS despawn=PASS other_actor=%d" % remote_id)
 	quit(0)
 
 func _move(session, self_id: int, crossmap: bool = false, portal: bool = false) -> void:
@@ -124,6 +132,20 @@ func _move(session, self_id: int, crossmap: bool = false, portal: bool = false) 
 	if int(seen.entities.keys()[0]) == self_id:
 		_fail("actor received itself as remote entity", session)
 		return
+	if not crossmap:
+		if not (seen.get("chat_messages",[]) as Array).is_empty():
+			_fail("actor had unexpected chat before sending",session)
+			return
+		if not session.send_nearby_chat("附近 E2E 測試",2):
+			_fail("actor nearby chat intent rejected",session)
+			return
+		var echoed := _wait_nearby_chat(
+			session,self_id,"MultiHeroTwo","附近 E2E 測試",7000)
+		if echoed.is_empty() or int(echoed.get("chat_sequence",0))!=1 or \
+				int(echoed.get("channel",-1))!=0 or int(echoed.get("bubble_type",-1))!=2:
+			_fail("actor did not receive authoritative nearby chat echo %s" %
+				session.snapshot(),session)
+			return
 	if not session.move_target(40, 8):
 		_fail("actor MoveTarget intent rejected", session)
 		return
@@ -226,8 +248,28 @@ func _move(session, self_id: int, crossmap: bool = false, portal: bool = false) 
 	# independent of the headless test's render cadence.
 	OS.delay_msec(180)
 	session.stop()
-	print("CLIENT_MULTI_PASS role=actor world_ready=PASS spawn=PASS move_ack=PASS")
+	print("CLIENT_MULTI_PASS role=actor world_ready=PASS spawn=PASS nearby_chat=PASS move_ack=PASS")
 	quit(0)
+
+func _wait_nearby_chat(
+		session,sender_id:int,sender_name:String,message:String,
+		timeout_ms:int)->Dictionary:
+	var deadline:=Time.get_ticks_msec()+timeout_ms
+	while Time.get_ticks_msec()<deadline:
+		var value:Dictionary=session.snapshot()
+		if int(value.state)==WorldState.STATE_FAILED:
+			break
+		for raw in value.get("chat_messages",[]):
+			var row:Dictionary=raw
+			if (
+				int(row.get("sender_actor_id",0))==sender_id and
+				str(row.get("sender_name",""))==sender_name and
+				str(row.get("message",""))==message
+			):
+				return row
+		OS.delay_msec(2)
+	return {}
+
 
 func _await_npc_result(session, wanted_status: int, wanted_sequence: int, timeout_ms: int) -> Dictionary:
 	var deadline := Time.get_ticks_msec() + timeout_ms
