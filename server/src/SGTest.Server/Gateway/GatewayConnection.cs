@@ -1399,13 +1399,19 @@ public sealed class GatewayConnection
         {
             if(_closed)return GatewaySendStatus.Closed;
             var bound=_binding;
+            bool nameTarget=!string.IsNullOrEmpty(request.TargetName);
+            bool validSelector=request.TargetActorId>=0&&
+                ((request.TargetActorId>0)!=nameTarget);
+            bool targetMatches=nameTarget
+                ? result.TargetActorId>=0
+                : request.TargetActorId==result.TargetActorId;
             if(request.Channel!=ChatChannel.Whisper||
                request.ActorId!=bound.ActorId||
                request.ConnectionEpoch!=bound.ConnectionEpoch||
                request.RequestMapEpoch!=bound.MapEpoch||
                request.ChatSequence!=result.ChatSequence||
                request.RequestMapEpoch!=result.MapEpoch||
-               request.TargetActorId!=result.TargetActorId)
+               !validSelector||!targetMatches)
                 return GatewaySendStatus.GenerationMismatch;
             return _reliable.TryEnqueue(WireProtocol.EncodeWhisperResult(result))
                 ?GatewaySendStatus.Enqueued:GatewaySendStatus.Backpressured;

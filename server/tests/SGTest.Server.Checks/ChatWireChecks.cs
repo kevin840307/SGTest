@@ -136,6 +136,22 @@ internal static class ChatWireChecks
             trustedByName.TargetActorId==0&&trustedByName.TargetName=="TargetHero",
             "whisper Gateway did not preserve untrusted name selector");
 
+        var resolvedByName=new WhisperResultWire(
+            3,11,WhisperResultStatus.Delivered,22,7,"TargetHero");
+        Checks.Require(
+            byNameGateway.QueueWhisperResult(trustedByName,resolvedByName)==
+                GatewaySendStatus.Enqueued&&
+            byNameGateway.TryDequeueReliable(out var byNameQueued)&&
+            WireProtocol.TryDecodeWhisperResult(byNameQueued,out var byNameResultBack)&&
+            byNameResultBack==resolvedByName,
+            "whisper by-name resolved ActorId result was rejected by Gateway correlation");
+        Checks.Require(
+            gateway.QueueWhisperResult(
+                trusted,new WhisperResultWire(
+                    3,10,WhisperResultStatus.Delivered,23,7,"WrongTarget"))==
+                GatewaySendStatus.GenerationMismatch,
+            "legacy ActorId whisper result admitted a mismatched target");
+
         var shared=new GatewayConnection(actor);
         var nearby=WireProtocol.EncodeChatCommand(new(
             3,4,ChatChannel.Nearby,0,"nearby"));
