@@ -1288,6 +1288,21 @@ func _apply_choose(frame: PackedByteArray) -> bool:
 	last_repair_response_sequence = 0
 	last_repair_result.clear()
 	stale_repair_results = 0
+	enhancement_sequence = 0
+	pending_enhancement_sequence = 0
+	pending_enhancement_kind = 0
+	pending_enhancement_npc = 0
+	pending_enhancement_item_uid = 0
+	active_enhancement_npc = 0
+	enhancement_items.clear()
+	enhancement_ready = false
+	enhancement_next_index = 0
+	enhancement_revision = 0
+	enhancement_wallet_money = 0
+	last_enhancement_open_status = -1
+	last_enhancement_response_sequence = 0
+	last_enhancement_result.clear()
+	stale_enhancement_results = 0
 	_clear_trade_state(true)
 	_clear_player_shop_map()
 	_clear_pvp_map()
@@ -1941,6 +1956,21 @@ func _apply_world_ready(frame: PackedByteArray) -> bool:
 		last_repair_response_sequence = 0
 		last_repair_result.clear()
 		stale_repair_results = 0
+		enhancement_sequence = 0
+		pending_enhancement_sequence = 0
+		pending_enhancement_kind = 0
+		pending_enhancement_npc = 0
+		pending_enhancement_item_uid = 0
+		active_enhancement_npc = 0
+		enhancement_items.clear()
+		enhancement_ready = false
+		enhancement_next_index = 0
+		enhancement_revision = 0
+		enhancement_wallet_money = 0
+		last_enhancement_open_status = -1
+		last_enhancement_response_sequence = 0
+		last_enhancement_result.clear()
+		stale_enhancement_results = 0
 		_clear_trade_state(true)
 		_clear_player_shop_map()
 		_clear_quest_map()
@@ -2846,6 +2876,154 @@ func _apply_repair_result(frame: PackedByteArray) -> bool:
 	last_repair_response_sequence = sequence
 	last_repair_result = result.duplicate(true)
 	_clear_pending_repair()
+	return true
+
+
+func _clear_pending_enhancement() -> void:
+	pending_enhancement_sequence = 0
+	pending_enhancement_kind = 0
+	pending_enhancement_npc = 0
+	pending_enhancement_item_uid = 0
+
+
+func _close_enhancement() -> void:
+	active_enhancement_npc = 0
+	enhancement_items.clear()
+	enhancement_ready = false
+	enhancement_next_index = 0
+	enhancement_wallet_money = 0
+
+
+func _enhancement_item_matches_location(item: Dictionary) -> bool:
+	var uid := int(item.item_uid)
+	var item_id := int(item.item_definition_id)
+	var location := int(item.location)
+	if location == 1:
+		return inventory_items.has(uid) and int((inventory_items[uid] as Dictionary).item_definition_id) == item_id
+	if location == 2:
+		return equipment_ready and equipment_items.has(uid) and int((equipment_items[uid] as Dictionary).item_definition_id) == item_id
+	return false
+
+
+func _apply_enhancement_snapshot(frame: PackedByteArray) -> bool:
+	if state != STATE_IN_WORLD:
+		return fail("enhancement_snapshot_out_of_state")
+	var value := WireCodec.decode_enhancement_snapshot(frame)
+	if value.is_empty():
+		return fail("invalid_enhancement_snapshot")
+	var epoch := int(value.map_epoch)
+	var sequence := int(value.enhancement_sequence)
+	if epoch < map_epoch:
+		stale_enhancement_results += 1
+		return true
+	if epoch > map_epoch:
+		return fail("future_enhancement_snapshot")
+	if sequence > enhancement_sequence:
+		return fail("unsent_enhancement_snapshot")
+	if sequence <= last_enhancement_response_sequence:
+		stale_enhancement_results += 1
+		return true
+	if sequence != pending_enhancement_sequence or pending_enhancement_kind != 1 or int(value.npc_spawn_id) != pending_enhancement_npc:
+		return fail("enhancement_snapshot_wrong_request")
+	last_enhancement_open_status = int(value.status)
+	if int(value.status) != 0:
+		_close_enhancement()
+		last_enhancement_response_sequence = sequence
+		_clear_pending_enhancement()
+		return true
+	if int(value.start_index) != enhancement_next_index:
+		return fail("enhancement_snapshot_wrong_chunk")
+	if enhancement_next_index == 0:
+		enhancement_wallet_money = int(value.wallet_money)
+	elif enhancement_wallet_money != int(value.wallet_money):
+		return fail("enhancement_snapshot_wallet_changed_midstream")
+	var items: Array = value.items
+	if items.is_empty() and not bool(value.complete):
+		return fail("enhancement_empty_nonfinal_chunk")
+	for item in items:
+		var uid := int(item.item_uid)
+		if enhancement_items.has(uid) or not _enhancement_item_matches_location(item):
+			return fail("enhancement_preview_uid_or_location_conflict")
+		enhancement_items[uid] = item.duplicate(true)
+		enhancement_next_index += 1
+	if bool(value.complete):
+		active_enhancement_npc = int(value.npc_spawn_id)
+		enhancement_ready = true
+		enhancement_revision += 1
+		last_enhancement_response_sequence = sequence
+		if active_shop_npc != 0:
+			shop_money = enhancement_wallet_money
+		if active_bank_npc != 0:
+			bank_wallet_money = enhancement_wallet_money
+		if active_repair_npc != 0:
+			repair_wallet_money = enhancement_wallet_money
+		_clear_pending_enhancement()
+	return true
+
+
+func _apply_enhancement_result(frame: PackedByteArray) -> bool:
+	if state != STATE_IN_WORLD:
+		return fail("enhancement_result_out_of_state")
+	var result := WireCodec.decode_enhancement_result(frame)
+	if result.is_empty():
+		return fail("invalid_enhancement_result")
+	var epoch := int(result.map_epoch)
+	var sequence := int(result.enhancement_sequence)
+	if epoch < map_epoch:
+		stale_enhancement_results += 1
+		return true
+	if epoch > map_epoch:
+		return fail("future_enhancement_result")
+	if sequence > enhancement_sequence:
+		return fail("unsent_enhancement_result")
+	if sequence <= last_enhancement_response_sequence:
+		stale_enhancement_results += 1
+		return true
+	if sequence != pending_enhancement_sequence or pending_enhancement_kind != 2 or int(result.npc_spawn_id) != pending_enhancement_npc or int(result.item_uid) != pending_enhancement_item_uid:
+		return fail("enhancement_result_wrong_request")
+	var status := int(result.status)
+	if status in [0,1,7]:
+		if not enhancement_ready or active_enhancement_npc != pending_enhancement_npc or not enhancement_items.has(pending_enhancement_item_uid):
+			return fail("enhancement_result_without_preview")
+		var previous: Dictionary = enhancement_items[pending_enhancement_item_uid]
+		if int(previous.item_definition_id) != int(result.item_definition_id) or int(previous.location) != int(result.location) or int(previous.current_level) != int(result.previous_level) or int(previous.target_level) != int(result.target_level) or int(previous.money_cost) != int(result.money_cost):
+			return fail("enhancement_result_metadata_mismatch")
+		enhancement_wallet_money = int(result.wallet_money)
+		if status in [0,1]:
+			if bool(result.succeeded):
+				var location := int(result.location)
+				var owned: Dictionary = {}
+				if location == 1:
+					owned = (inventory_items[pending_enhancement_item_uid] as Dictionary).duplicate(true)
+					owned["enhancement_level"] = int(result.current_level)
+					inventory_items[pending_enhancement_item_uid] = owned
+					inventory_revision += 1
+				elif location == 2:
+					owned = (equipment_items[pending_enhancement_item_uid] as Dictionary).duplicate(true)
+					owned["enhancement_level"] = int(result.current_level)
+					equipment_items[pending_enhancement_item_uid] = owned
+					equipment_revision += 1
+				enhancement_items.erase(pending_enhancement_item_uid)
+			elif int(result.current_level) != int(previous.current_level):
+				return fail("enhancement_failed_level_changed")
+		if active_shop_npc != 0:
+			shop_money = enhancement_wallet_money
+		if active_bank_npc != 0:
+			bank_wallet_money = enhancement_wallet_money
+		if active_repair_npc != 0:
+			repair_wallet_money = enhancement_wallet_money
+		enhancement_revision += 1
+	elif status in [5,6]:
+		enhancement_items.erase(pending_enhancement_item_uid)
+		enhancement_wallet_money = int(result.wallet_money)
+		enhancement_revision += 1
+	elif status in [2,3,4,8,9,10]:
+		_close_enhancement()
+	else:
+		return fail("enhancement_result_unhandled_status")
+	last_enhancement_response_sequence = sequence
+	last_enhancement_result = result.duplicate(true)
+	_clear_pending_enhancement()
 	return true
 
 
