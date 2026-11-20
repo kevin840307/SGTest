@@ -135,7 +135,7 @@ const PLAYER_ATTACK_VISUAL_FRAME_BYTES := 66
 const PLAYER_DAMAGE_VISUAL_FRAME_BYTES := 66
 const PLAYER_RESPAWN_VISUAL_FRAME_BYTES := 45
 const INVENTORY_SNAPSHOT_HEADER_BYTES := 23
-const INVENTORY_ITEM_BYTES := 24
+const INVENTORY_ITEM_BYTES := 25
 const INVENTORY_SNAPSHOT_MAX_PER_FRAME := 128
 const INVENTORY_SNAPSHOT_MAX_ITEMS := 4095
 const SHOP_OPEN_FRAME_BYTES := 24
@@ -153,7 +153,7 @@ const STORAGE_SNAPSHOT_MAX_PER_FRAME := 128
 const STORAGE_SNAPSHOT_MAX_ITEMS := 4095
 const STORAGE_TRANSFER_RESULT_FRAME_BYTES := 50
 const EQUIPMENT_SNAPSHOT_HEADER_BYTES := 23
-const EQUIPMENT_ITEM_BYTES := 24
+const EQUIPMENT_ITEM_BYTES := 25
 const EQUIPMENT_SNAPSHOT_MAX_PER_FRAME := 128
 const EQUIPMENT_SNAPSHOT_MAX_ITEMS := 255
 const EQUIPMENT_MOVE_FRAME_BYTES := 28
@@ -914,11 +914,13 @@ static func decode_inventory_snapshot(frame: PackedByteArray) -> Dictionary:
 		var item_id := reader.get_32()
 		var quantity := reader.get_32()
 		var drop_id := reader.get_64()
-		if uid <= 0 or item_id < 1 or item_id > 100000000 or quantity < 1 or quantity > 1000000 or drop_id < 0 or ids.has(uid):
+		var enhancement_level := reader.get_u8()
+		if uid <= 0 or item_id < 1 or item_id > 100000000 or quantity < 1 or quantity > 1000000 or drop_id < 0 or enhancement_level < 0 or enhancement_level > 255 or ids.has(uid):
 			return {}
 		ids[uid] = true
 		items.append({"item_uid":uid,"item_definition_id":item_id,
-			"quantity":quantity,"drop_id":drop_id})
+			"quantity":quantity,"drop_id":drop_id,
+			"enhancement_level":enhancement_level})
 	return {"character_id":character,"start_index":start,
 		"complete":final_chunk==1,"items":items}
 
@@ -1627,11 +1629,14 @@ static func decode_equipment_snapshot(frame: PackedByteArray) -> Dictionary:
 		var slot_id := reader.get_32()
 		var item_id := reader.get_32()
 		var source_drop_id := reader.get_64()
-		if uid <= 0 or slot_id < 1 or slot_id > 255 or item_id < 1 or item_id > 100000000 or source_drop_id < 0 or uids.has(uid) or slots.has(slot_id):
+		var enhancement_level := reader.get_u8()
+		if uid <= 0 or slot_id < 1 or slot_id > 255 or item_id < 1 or item_id > 100000000 or source_drop_id < 0 or enhancement_level < 0 or enhancement_level > 255 or uids.has(uid) or slots.has(slot_id):
 			return {}
 		uids[uid] = true
 		slots[slot_id] = true
-		items.append({"item_uid":uid,"slot_id":slot_id,"item_definition_id":item_id,"drop_id":source_drop_id})
+		items.append({"item_uid":uid,"slot_id":slot_id,
+			"item_definition_id":item_id,"drop_id":source_drop_id,
+			"enhancement_level":enhancement_level})
 	return {"character_id":character_id,"start_index":start_index,"complete":complete_raw==1,"items":items}
 
 static func encode_pvp_mode_command(epoch: int, sequence: int, action: int) -> PackedByteArray:
