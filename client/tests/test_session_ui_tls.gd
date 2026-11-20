@@ -1104,12 +1104,12 @@ func run() -> void:
 		return
 
 	panel._latest.trade_revision = 3
-	panel._latest.trade_my_items = {10000:{"item_uid":10000,"item_definition_id":4001,"quantity":3,"drop_id":501,"enhancement_level":5}}
-	panel._latest.trade_other_items = {20000:{"item_uid":20000,"item_definition_id":4002,"quantity":1,"drop_id":502,"enhancement_level":7}}
+	panel._latest.trade_my_items = {10000:{"item_uid":10000,"item_definition_id":4001,"quantity":3,"drop_id":501,"enhancement_level":5,"durability_raw":80}}
+	panel._latest.trade_other_items = {20000:{"item_uid":20000,"item_definition_id":4002,"quantity":1,"drop_id":502,"enhancement_level":7,"durability_raw":60}}
 	panel._latest.trade_other_money = 50
 	panel._update_trade_ui()
-	if panel.trade_my_offer_picker.item_count != 1 or not panel.trade_my_offer_picker.get_item_text(0).contains("+5") or not panel.trade_other_offer_label.text.contains("UID 20000") or not panel.trade_other_offer_label.text.contains("+7"):
-		fail("Trade UI did not render authoritative offers/enhancement levels")
+	if panel.trade_my_offer_picker.item_count != 1 or not panel.trade_my_offer_picker.get_item_text(0).contains("+5") or not panel.trade_my_offer_picker.get_item_text(0).contains("耐久 raw 80") or not panel.trade_other_offer_label.text.contains("UID 20000") or not panel.trade_other_offer_label.text.contains("+7") or not panel.trade_other_offer_label.text.contains("耐久 raw 60"):
+		fail("Trade UI did not render authoritative offers/enhancement/durability")
 		return
 	panel.trade_money_input.value = 200
 	panel.trade_set_money_button.pressed.emit()
