@@ -1788,6 +1788,35 @@ public sealed class IdentityTlsAuthorization
                 playerShopGate.Record(request,receipt);
             }
 
+            Task ChatHandler(TrustedChatCommand request)
+            {
+                var sender=new ConnectionBinding(
+                    request.ActorId,request.ConnectionEpoch,request.RequestMapEpoch);
+                if(!router.IsCurrentBinding(sender)||
+                   !router.TryGetPlayerIdentity(
+                       request.ActorId,request.ConnectionEpoch,out var identity))
+                    return Task.CompletedTask;
+
+                foreach(var recipient in router.SnapshotActiveBindings())
+                {
+                    bool self=recipient.ActorId==request.ActorId&&
+                        recipient.ConnectionEpoch==request.ConnectionEpoch;
+                    if(!self&&
+                       (!router.IsVisibleActor(sender,recipient.ActorId)||
+                        !router.IsVisibleActor(recipient,request.ActorId)))
+                        continue;
+                    var delivery=new ChatDeliveryWire(
+                        recipient.MapEpoch,request.ActorId,request.ConnectionEpoch,
+                        request.ChatSequence,request.Channel,request.BubbleType,
+                        identity.DisplayName,request.Message);
+                    var queued=router.QueueChatDelivery(recipient,delivery);
+                    if(self&&queued!=GatewaySendStatus.Enqueued)
+                        throw new IOException(
+                            "Reliable self nearby-chat delivery could not be queued: "+queued);
+                }
+                return Task.CompletedTask;
+            }
+
             async Task TradeHandler(TrustedTradeCommand request)
             {
                 if(_trades is null)return;
@@ -1859,7 +1888,8 @@ public sealed class IdentityTlsAuthorization
                 handlePvpAttack:PvpAttackHandler,
                 handlePvpSkill:PvpSkillHandler,
                 handleGmPvpName:GmPvpNameHandler,
-                handlePlayerShop:_playerShops is null?null:PlayerShopHandler)
+                handlePlayerShop:_playerShops is null?null:PlayerShopHandler,
+                handleChat:ChatHandler)
                 .ConfigureAwait(false);
         }
         finally
