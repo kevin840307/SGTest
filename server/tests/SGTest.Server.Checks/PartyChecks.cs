@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using SGTest.Server.Gateway;
 using SGTest.Server.Identity;
 using SGTest.Server.Wire;
@@ -9,6 +10,8 @@ internal static class PartyChecks
     {
         Checks.Run("party wire binds compact command result invite and snapshot",Wire);
         Checks.Run("party coordinator owns invite leader kick disconnect and recipients",Lifecycle);
+        Checks.Run("party invite cannot cross target reconnect or stale old cleanup",InviteGeneration);
+        Checks.Run("party pending invite expires on monotonic clock",InviteTimeout);
     }
 
     private static void Wire()
@@ -158,6 +161,107 @@ internal static class PartyChecks
         router.TryDetach(a);
         router.TryDetach(b);
         router.TryDetach(c);
+    }
+
+
+    private static void InviteGeneration()
+    {
+        var router=new WorldResultRouter();
+        var a=Gateway(Actor(101,10,3),"InviteLeader");
+        var oldB=Gateway(Actor(102,20,4),"OldTarget");
+        Checks.Require(router.TryAttach(a)&&router.TryAttach(oldB),
+            "party generation gateways attach");
+        var coordinator=new PartyCoordinator();
+        var initial=new TrustedPartyCommand(
+            101,10,3,1,PartyCommandAction.Invite,0,102);
+        coordinator.HandleAsync(initial,router).GetAwaiter().GetResult();
+        long id=DrainResult(a).PartyId;
+        Checks.Require(id>0&&DrainInvite(oldB).PartyId==id&&
+            DrainSnapshot(a).Members.Count==1,
+            "old-generation invite missing");
+
+        // A replacement TLS binding has the same character ActorId but a new
+        // ConnectionEpoch. Possessing old PartyId/InviterId must not grant access.
+        var newB=Gateway(Actor(102,21,5),"NewTarget");
+        Checks.Require(router.TryAttach(newB),
+            "party reconnect binding did not replace older socket");
+        coordinator.HandleAsync(new TrustedPartyCommand(
+            102,21,5,1,PartyCommandAction.Accept,id,101),router)
+            .GetAwaiter().GetResult();
+        Checks.Require(DrainResult(newB).Status==PartyResultStatus.InviteStale&&
+            !coordinator.TryGetRecipients(newB.Binding,router,out _),
+            "reconnected target accepted an invite addressed to old socket");
+
+        coordinator.HandleAsync(new TrustedPartyCommand(
+            101,10,3,2,PartyCommandAction.Invite,id,102),router)
+            .GetAwaiter().GetResult();
+        Checks.Require(DrainResult(a).Status==PartyResultStatus.Success&&
+            DrainInvite(newB).PartyId==id,
+            "new-generation invite did not deliver");
+        // The previous socket can finish teardown AFTER a replacement invite
+        // was queued. Its stale Disconnect may not erase the new invitation.
+        coordinator.Disconnect(oldB.Binding,router);
+        coordinator.HandleAsync(new TrustedPartyCommand(
+            102,21,5,2,PartyCommandAction.Accept,id,101),router)
+            .GetAwaiter().GetResult();
+        Checks.Require(DrainResult(newB).Status==PartyResultStatus.Success&&
+            DrainSnapshot(a).Members.Count==2&&
+            DrainSnapshot(newB).Members.Count==2&&
+            coordinator.TryGetRecipients(newB.Binding,router,out var peers)&&
+            peers.Length==2,
+            "old socket cleanup erased new-generation pending invitation");
+        coordinator.Disconnect(newB.Binding,router);
+        DrainSnapshot(a);
+        coordinator.Disconnect(a.Binding,router);
+        Checks.Require(coordinator.PartyCount==0,
+            "generation test failed to dissolve its party");
+        router.TryDetach(a);
+        router.TryDetach(newB);
+    }
+
+    private static void InviteTimeout()
+    {
+        long now=Stopwatch.GetTimestamp();
+        var coordinator=new PartyCoordinator(()=>now);
+        var router=new WorldResultRouter();
+        var leader=Gateway(Actor(201,30,3),"ClockLeader");
+        var target=Gateway(Actor(202,31,4),"ClockTarget");
+        Checks.Require(router.TryAttach(leader)&&router.TryAttach(target),
+            "invite timeout gateways attach");
+
+        coordinator.HandleAsync(new TrustedPartyCommand(
+            201,30,3,1,PartyCommandAction.Invite,0,202),router)
+            .GetAwaiter().GetResult();
+        long id=DrainResult(leader).PartyId;
+        Checks.Require(DrainInvite(target).PartyId==id&&
+            DrainSnapshot(leader).Members.Count==1,
+            "clock invite missing");
+        now=checked(now+Stopwatch.Frequency*
+            (PartyCoordinator.InvitationLifetimeSeconds+1L));
+
+        coordinator.HandleAsync(new TrustedPartyCommand(
+            202,31,4,1,PartyCommandAction.Accept,id,201),router)
+            .GetAwaiter().GetResult();
+        Checks.Require(DrainResult(target).Status==PartyResultStatus.InviteStale&&
+            !coordinator.TryGetRecipients(target.Binding,router,out _),
+            "expired invite accepted after lifetime");
+        coordinator.HandleAsync(new TrustedPartyCommand(
+            201,30,3,2,PartyCommandAction.Invite,id,202),router)
+            .GetAwaiter().GetResult();
+        Checks.Require(DrainResult(leader).Status==PartyResultStatus.Success&&
+            DrainInvite(target).PartyId==id,
+            "expired invite blocked a new invitation");
+
+        coordinator.HandleAsync(new TrustedPartyCommand(
+            202,31,4,2,PartyCommandAction.Reject,id,201),router)
+            .GetAwaiter().GetResult();
+        Checks.Require(DrainResult(target).Status==PartyResultStatus.Success,
+            "fresh invite reject failed after stale expiry");
+        coordinator.Disconnect(leader.Binding,router);
+        Checks.Require(coordinator.PartyCount==0,
+            "expiry test left abandoned singleton party");
+        router.TryDetach(leader);
+        router.TryDetach(target);
     }
 
     private static GatewayConnection Gateway(ActorSnapshot actor,string name)
