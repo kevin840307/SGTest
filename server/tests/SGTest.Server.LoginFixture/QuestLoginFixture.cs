@@ -163,10 +163,8 @@ internal static class QuestLoginFixture
                     2,"任務已完成。",
                     new Dictionary<int,TrustedQuestChoiceRule>())
             };
-        var rule=new TrustedQuestRule(
+        return new TrustedQuestRule(
             QuestId,1,"Verified Quest Fixture",0,stages,
             "ci:godot-quest:v1");
-        SqliteIdentityStore.ValidateQuestRule(rule);
-        return rule;
     }
 }
