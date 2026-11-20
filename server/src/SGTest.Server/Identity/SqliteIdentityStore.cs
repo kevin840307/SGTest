@@ -400,6 +400,7 @@ CREATE TABLE IF NOT EXISTS storage_items (
     quantity INTEGER NOT NULL CHECK(quantity BETWEEN 1 AND 1000000),
     source_drop_id INTEGER UNIQUE REFERENCES ground_drops(drop_id),
     durability_raw INTEGER CHECK(durability_raw IS NULL OR durability_raw BETWEEN 0 AND 2147483647),
+    enhancement_level INTEGER NOT NULL DEFAULT 0 CHECK(enhancement_level BETWEEN 0 AND 255),
     source_kind INTEGER NOT NULL CHECK(source_kind IN (1,2)),
     source_reference TEXT NOT NULL,
     created_unix_ms INTEGER NOT NULL,
