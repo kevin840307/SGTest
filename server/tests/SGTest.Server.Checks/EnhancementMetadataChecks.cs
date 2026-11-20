@@ -7,6 +7,8 @@ internal static class EnhancementMetadataChecks
     {
         Checks.Run("item enhancement metadata survives storage and equipment locations",
             () => Lifecycle(root).GetAwaiter().GetResult());
+        Checks.Run("schema v19 item locations migrate to enhancement level zero",
+            () => MigrateV19(root).GetAwaiter().GetResult());
     }
 
     private static async Task Lifecycle(string root)
@@ -94,6 +96,88 @@ internal static class EnhancementMetadataChecks
                 (await reopened.ListInventoryItemsAsync(actor)).Single().ItemUid==uid,
                 "enhancement metadata did not survive database reopen");
         }
+    }
+
+    private static async Task MigrateV19(string root)
+    {
+        string dir=Path.Combine(root,"enhancement_migrate_"+Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+        string db=Path.Combine(dir,"identity.db");
+        long actor;
+        long inventoryUid;
+        long storageUid;
+        long equippedUid;
+
+        using(var store=new SqliteIdentityStore(db))
+        {
+            await store.InitializeAsync();
+            long account=(await store.CreateAccountAsync(
+                "enhance_migrate","Enhance-Migrate-123!")).AccountId;
+            actor=(await store.CreateCharacterAsync(
+                account,0,"EnhanceMigrate",new CharacterSpawn(15,8,8)))
+                .Character?.CharacterId
+                ??throw new Exception("enhancement migration character missing");
+            long generation=await store.AllocateLootWorldGenerationAsync();
+
+            inventoryUid=await SeedOne(store,actor,generation,1,4801);
+            storageUid=await SeedOne(store,actor,generation,2,4802);
+            equippedUid=await SeedOne(store,actor,generation,3,4803);
+
+            var stored=await store.DepositInventoryItemAsync(
+                new TrustedStorageContext(actor,701,1,1),storageUid);
+            Checks.Require(stored.Status==StorageTransferStatus.Applied,
+                "enhancement migration storage seed failed");
+            var equipped=await store.EquipInventoryItemAsync(
+                new TrustedEquipmentContext(actor,702,1,1),equippedUid,
+                new Dictionary<int,EquipmentRule>{[4803]=new(4803,4)});
+            Checks.Require(equipped.Status==EquipmentTransferStatus.Applied,
+                "enhancement migration equipment seed failed");
+        }
+
+        using(var connection=Open(db))
+        {
+            using(var command=connection.CreateCommand())
+            {
+                command.CommandText="UPDATE schema_version SET version=19;";
+                command.ExecuteNonQuery();
+            }
+            foreach(string table in new[]{"item_instances","storage_items","equipped_items"})
+            {
+                using var drop=connection.CreateCommand();
+                drop.CommandText=$"ALTER TABLE {table} DROP COLUMN enhancement_level;";
+                drop.ExecuteNonQuery();
+            }
+        }
+
+        using(var migrated=new SqliteIdentityStore(db))
+        {
+            await migrated.InitializeAsync();
+            Checks.Require(
+                SqliteIdentityStore.SchemaVersion==20&&
+                ReadLevel(db,"item_instances",inventoryUid)==0&&
+                ReadLevel(db,"storage_items",storageUid)==0&&
+                ReadLevel(db,"equipped_items",equippedUid)==0&&
+                (await migrated.ListInventoryItemsAsync(actor)).Any(x=>x.ItemUid==inventoryUid)&&
+                (await migrated.ListStorageItemsAsync(actor)).Single().ItemUid==storageUid&&
+                (await migrated.ListEquippedItemsAsync(actor)).Single().ItemUid==equippedUid,
+                "v19 enhancement migration changed UID/location or nonzero default");
+        }
+    }
+
+    private static async Task<long> SeedOne(
+        SqliteIdentityStore store,long actor,long generation,int slot,int definition)
+    {
+        var drop=await store.CreateTrustedGroundDropAsync(new(
+            15,8,8,991000+slot,
+            SqliteIdentityStore.ComposeLootDeathRevision(generation,slot),
+            0,definition,1,LootSourceTrust.SyntheticTest,
+            "ci:enhancement-migration-seed-"+slot));
+        var grant=await store.ClaimGroundDropAsync(new TrustedPickupContext(
+            actor,SqliteIdentityStore.ComposePickupConnectionEpoch(generation,slot),
+            1,(uint)slot,15,8,8),drop.DropId);
+        if(grant.Status!=PickupStatus.Granted||grant.ItemUid<=0)
+            throw new InvalidOperationException("enhancement migration item seed failed");
+        return grant.ItemUid;
     }
 
     private static bool ConstraintRejects(string db,long uid,int level)
