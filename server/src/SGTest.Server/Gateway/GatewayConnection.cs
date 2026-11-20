@@ -102,6 +102,9 @@ public readonly record struct TrustedPlayerShopCommand(
     long ActorId,long ConnectionEpoch,long RequestMapEpoch,
     uint ShopSequence,PlayerShopCommandAction Action,
     long SellerActorId,long ListingId,long ItemUid,long Price);
+public readonly record struct TrustedChatCommand(
+    long ActorId,long ConnectionEpoch,long RequestMapEpoch,
+    uint ChatSequence,ChatChannel Channel,byte BubbleType,string Message);
 public enum TrustedQuestCommandKind : byte { Open=1, Choose=2 }
 public readonly record struct TrustedQuestCommand(
     long ActorId,long ConnectionEpoch,long RequestMapEpoch,
@@ -404,7 +407,7 @@ public sealed class GatewayConnection
             return _parser.Feed(bytes,
                 frame => HandleClientFrame(
                     frame, postMove, postNpc, postResync, postAttack, postRespawn,
-                    postPickup, postRecovery, postDiscard, postSkill, postShop, postStorage, postEquipment, postBank, postRepair, postTrade, postQuest, postPvp, postPvpAttack, postPvpSkill, postGmPvpName, postPlayerShop),
+                    postPickup, postRecovery, postDiscard, postSkill, postShop, postStorage, postEquipment, postBank, postRepair, postTrade, postQuest, postPvp, postPvpAttack, postPvpSkill, postGmPvpName, postPlayerShop, postChat),
                 out commandsAccepted);
         }
     }
@@ -443,7 +446,7 @@ public sealed class GatewayConnection
             return _parser.Resume(
                 frame => HandleClientFrame(
                     frame, postMove, postNpc, postResync, postAttack, postRespawn,
-                    postPickup, postRecovery, postDiscard, postSkill, postShop, postStorage, postEquipment, postBank, postRepair, postTrade, postQuest, postPvp, postPvpAttack, postPvpSkill, postGmPvpName, postPlayerShop),
+                    postPickup, postRecovery, postDiscard, postSkill, postShop, postStorage, postEquipment, postBank, postRepair, postTrade, postQuest, postPvp, postPvpAttack, postPvpSkill, postGmPvpName, postPlayerShop, postChat),
                 out commandsAccepted);
         }
     }
@@ -470,7 +473,8 @@ public sealed class GatewayConnection
         Func<TrustedPvpAttack, bool>? postPvpAttack,
         Func<TrustedPvpSkill, bool>? postPvpSkill,
         Func<TrustedGmPvpNameCommand, bool>? postGmPvpName,
-        Func<TrustedPlayerShopCommand, bool>? postPlayerShop)
+        Func<TrustedPlayerShopCommand, bool>? postPlayerShop,
+        Func<TrustedChatCommand, bool>? postChat)
     {
         if (!WireProtocol.TryReadHeader(frame, out var header))
             return WireFrameDisposition.ProtocolViolation;
@@ -734,6 +738,18 @@ public sealed class GatewayConnection
                 playerShop.ShopSequence,playerShop.Action,
                 playerShop.SellerActorId,playerShop.ListingId,
                 playerShop.ItemUid,playerShop.Price))
+                ? WireFrameDisposition.Accepted:WireFrameDisposition.Backpressured;
+        }
+
+        if(header.Opcode==WireOpcode.ChatCommand &&
+            postChat is not null &&
+            WireProtocol.TryDecodeChatCommand(frame,out var chat))
+        {
+            if(!GameplayReady(bound))
+                return WireFrameDisposition.ProtocolViolation;
+            return postChat(new TrustedChatCommand(
+                bound.ActorId,bound.ConnectionEpoch,chat.MapEpoch,
+                chat.ChatSequence,chat.Channel,chat.BubbleType,chat.Message))
                 ? WireFrameDisposition.Accepted:WireFrameDisposition.Backpressured;
         }
 
@@ -1275,6 +1291,19 @@ public sealed class GatewayConnection
             if(_binding!=expected||sold.ReceiverMapEpoch!=expected.MapEpoch)
                 return GatewaySendStatus.GenerationMismatch;
             return _reliable.TryEnqueue(WireProtocol.EncodePlayerShopSold(sold))
+                ?GatewaySendStatus.Enqueued:GatewaySendStatus.Backpressured;
+        }
+    }
+
+    public GatewaySendStatus QueueChatDelivery(
+        ConnectionBinding expected,ChatDeliveryWire delivery)
+    {
+        lock(_bindingGate)
+        {
+            if(_closed)return GatewaySendStatus.Closed;
+            if(_binding!=expected||delivery.ReceiverMapEpoch!=expected.MapEpoch)
+                return GatewaySendStatus.GenerationMismatch;
+            return _reliable.TryEnqueue(WireProtocol.EncodeChatDelivery(delivery))
                 ?GatewaySendStatus.Enqueued:GatewaySendStatus.Backpressured;
         }
     }
