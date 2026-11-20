@@ -111,7 +111,7 @@ func _initialize()->void:
 	if command.size()!=WireCodec.PARTY_COMMAND_FRAME_BYTES:
 		_fail("invite command encoding")
 		return
- 	if not WireCodec.encode_party_command(3,1,4,0,0).is_empty():
+	if not WireCodec.encode_party_command(3,1,4,0,0).is_empty():
 		_fail("leave without party admitted")
 		return
 
