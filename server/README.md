@@ -1,6 +1,6 @@
 # SGTest Server — .NET 8 重建（權威 World／TLS Host）
 
-新版 Server 是**從零重建**，不還原舊 SGO 原型。現有權威 Blocking/A*、30Hz World、SQLite帳號／遊戲內創角／選角、compact-binary V1、TLS授權、WorldReady／AOI及NPC轉圖。Host `serve` 透過有界 TLS listener 接入同一組正式授權／Router／AOI；無內建帳密、明文或自動測試憑證。公開帳號註冊、原版創角外觀／職業／預設出生規則及完整 Release 仍未完成。
+新版 Server 是**從零重建**，不還原舊 SGO 原型。現有權威 Blocking/A*、30Hz World、SQLite帳號／遊戲內創角／選角、compact-binary V1、TLS授權、WorldReady／AOI及NPC轉圖。Host `serve` 透過有界 TLS listener 接入同一組正式授權／Router／AOI；無內建帳密、明文或自動測試憑證。公開帳號註冊已完成為預設關閉的 opt-in TLS 功能；原版創角外觀／職業／預設出生規則及完整 Release 仍未完成。
 
 ## 持續運行的TLS Host（MVP003-TLS-LISTENER）
 
@@ -145,7 +145,24 @@ This paragraph records the original 2026-11-16 identity-core baseline. The curre
 
 The server performs the complete **server-side** pre-gameplay identity flow over TLS: AuthRequest, AuthResult, owned CharacterList, optional CharacterCreate/CharacterCreateResult plus authoritative list refresh, CharacterChoose, trusted World registration and Gateway binding. Persistent `character_id` becomes ActorId only after ownership verification; ConnectionEpoch and creation spawn are never accepted from the Client. Wrong passwords, foreign-character selections, missing creation policy, invalid names/slots and SQLite conflicts fail closed.
 
-This paragraph records the first Auth/CharacterChoose slice. Formal `SGTest.Server.Host serve` now opens the configured TLS listener, applies global/per-address concurrent admission and an address+account authentication failure limiter, and the Godot client implements these identity frames. Internet-facing firewall/DDoS controls and public account registration remain deployment/product concerns rather than this protocol slice.
+This paragraph records the first Auth/CharacterChoose slice. Formal `SGTest.Server.Host serve` now opens the configured TLS listener, applies global/per-address concurrent admission and an address+account authentication failure limiter, and the Godot client implements these identity frames. Public account registration is now implemented by the later opt-in registration slice below; Internet-facing firewall/DDoS controls remain deployment concerns.
+
+## 2026-11-20 Opt-in public account registration
+
+Formal Host keeps public registration **disabled by default**. To expose explicit TLS account creation:
+
+```powershell
+dotnet run --project server/host/SGTest.Server.Host -c Release -- serve ... \
+  --account-registration enabled \
+  --registration-attempts-per-address 3 \
+  --registration-window-seconds 600
+```
+
+The Client’s “建立帳號並登入” action sends opcode17 AccountRegisterRequest. Result opcode18 is one of Created / Unavailable / UsernameTaken / InvalidInput / RateLimited. Every registration attempt consumes the separate canonical-IP quota; bounded-table exhaustion is fail-closed. Ordinary Login never creates an account implicitly.
+
+**Created is not authentication.** The same TLS connection must immediately complete the normal AuthRequest/AuthResult flow before CharacterList is sent. Only a later CharacterChoose can register a trusted World actor. This preserves the same ownership/Gateway authority path for operator-provisioned and public-created accounts, and reconnect uses only normal Auth rather than re-registering. Server Core **44769015052 PASS (256/256)** and Client Core **44770285345 PASS** include real TLS/Godot registration→Auth with an empty character list and zero gameplay authority.
+
+This feature does not provide email verification, CAPTCHA, account recovery, cross-node quota persistence or Internet WAF/DDoS controls.
 
 ## 2026-11-20 Formal authentication admission / rate policy
 

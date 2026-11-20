@@ -13,7 +13,7 @@
 - **設計方式：功能導向 modular monolith**，高聚力、低耦合；不要預先建立重複的 Manager／Engine／Cache、不同素材類型專用 Loader，或空白多層分組。Client、Server 透過明確封包／資料契約整合，不共享可變狀態。
 - **Server single-writer world authority**：同張地圖的可變 State 有明確單寫者；DB I/O、Socket Send、慢路徑查詢不能阻塞固定 Tick。
 - **有界佇列與恢復**：所有網路／World 命令／視覺事件佇列都要有容量、延遲指標與過載政策；可合併過時的非可靠移動快照，**不得默默丟失金錢、物品、交易、角色狀態、權威戰鬥結果等可靠結果**。無法保證連續性時須觸發重同步或安全斷線，不能無限堆積記憶體。
-- **Wire 已依 WIRE001 選定單一 compact-binary V1**：MoveTarget/MoveReceipt、trusted connection→Actor/ConnectionEpoch binding、bounded parser/reliable queue、TLS 1.2/1.3、Account Auth、CharacterList／CharacterCreate／CharacterChoose、production listener、Godot TLS Client、WorldReady ACK/resync/reconnect 均已有可重跑 Gate。Client 不能提供 ActorId/ConnectionEpoch 或新角色出生座標，plaintext 不降級。尚缺公開帳號註冊、登入節流、原版創角外觀／職業／出生規則與完整 Release security。詳 `docs/RUNTIME_PROTOCOL.md`。
+- **Wire 已依 WIRE001 選定單一 compact-binary V1**：MoveTarget/MoveReceipt、trusted connection→Actor/ConnectionEpoch binding、bounded parser/reliable queue、TLS 1.2/1.3、Account Auth、CharacterList／CharacterCreate／CharacterChoose、production listener、Godot TLS Client、WorldReady ACK/resync/reconnect 均已有可重跑 Gate。Client 不能提供 ActorId/ConnectionEpoch 或新角色出生座標，plaintext 不降級。公開帳號註冊與登入節流已完成；尚缺需原版證據的創角外觀／職業／出生規則與完整 Release security。詳 `docs/RUNTIME_PROTOCOL.md`。
 
 ## 1.0 MVP：Map15 主城 + Map13 台地，功能完整且真實跨圖
 
@@ -121,7 +121,7 @@ Map15／Map13 原始 tile 地形已有唯一正式 Terrain Renderer；三種合�
 
 ### Identity persistence baseline - 2026-11-16
 
-Account/Character persistence is SQLite-backed with bounded Argon2id work outside World Tick. Character identity is server-owned and persistent. Mandatory TLS now supports Auth → CharacterList → optional CharacterCreate retry loop → CharacterChoose; ownership is proven before `character_id` becomes trusted ActorId. CharacterCreate only accepts slot/name; spawn map/X/Y come from an operator-configured server policy validated against authoritative Blocking. Client-supplied ActorId/ConnectionEpoch/spawn is forbidden. Migration/backup safety and formal Host bounded admission/login rate policy are now implemented and CI-gated; public account registration and source-verified original appearance/career/spawn creation rules remain incomplete.
+Account/Character persistence is SQLite-backed with bounded Argon2id work outside World Tick. Character identity is server-owned and persistent. Mandatory TLS now supports Auth → CharacterList → optional CharacterCreate retry loop → CharacterChoose; ownership is proven before `character_id` becomes trusted ActorId. CharacterCreate only accepts slot/name; spawn map/X/Y come from an operator-configured server policy validated against authoritative Blocking. Client-supplied ActorId/ConnectionEpoch/spawn is forbidden. Migration/backup safety, formal Host bounded admission/login rate policy and explicit opt-in public account registration are implemented and CI-gated. Public registration is disabled by default; a successful AccountRegister still requires ordinary AuthRequest on the same TLS connection before CharacterList/game authority. Source-verified original appearance/career/spawn creation rules remain incomplete.
 
 ### TLS identity binding baseline - 2026-11-16
 
