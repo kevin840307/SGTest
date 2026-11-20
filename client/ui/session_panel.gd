@@ -1240,6 +1240,52 @@ func _update_bank_ui() -> void:
 			bank_status.text = "銀行操作失敗（伺服器代碼 %d）" % int(result.get("status",-1))
 
 
+func _open_selected_player_shop() -> void:
+	if player_shop_open_button.disabled or player_shop_inventory_picker.selected < 0:
+		return
+	var uid := int(player_shop_inventory_picker.get_item_metadata(player_shop_inventory_picker.selected))
+	var price := int(player_shop_price_input.value)
+	if session.open_player_shop(uid,price):
+		player_shop_status.text = "開店請求已送出；物品仍由伺服器保有權威，售出前不會從背包移除"
+
+
+func _close_player_shop() -> void:
+	if player_shop_close_button.disabled:
+		return
+	var listing: Dictionary = _latest.get("player_shop_own_listing",{})
+	if session.close_player_shop(int(listing.get("listing_id",0))):
+		player_shop_status.text = "關店請求已送出，等待伺服器確認…"
+
+
+func _inspect_selected_player_shop() -> void:
+	if player_shop_inspect_button.disabled or player_shop_seller_picker.selected < 0:
+		return
+	var seller := int(player_shop_seller_picker.get_item_metadata(player_shop_seller_picker.selected))
+	if session.inspect_player_shop(seller):
+		player_shop_status.text = "正在向伺服器查詢玩家 %d 的商店…" % seller
+
+
+func _buy_inspected_player_shop() -> void:
+	if player_shop_buy_button.disabled:
+		return
+	var listing: Dictionary = _latest.get("player_shop_inspected",{})
+	var seller := int(listing.get("seller_actor_id",0))
+	var listing_id := int(listing.get("listing_id",0))
+	if session.buy_player_shop(seller,listing_id):
+		player_shop_status.text = "購買請求已送出；UID、價格與雙方錢包只接受伺服器原子結算結果"
+
+
+func _player_shop_listing_text(prefix: String, listing: Dictionary) -> String:
+	if listing.is_empty():
+		return prefix + "—"
+	var item_name := item_catalog.name_for(int(listing.get("item_definition_id",0)))
+	var durability := int(listing.get("durability_raw",-1))
+	var durability_text := "" if durability < 0 else "｜耐久 raw %d" % durability
+	return "%s玩家 %d｜%s ×%d｜UID %d｜售價 %d%s" % [
+		prefix,int(listing.get("seller_actor_id",0)),item_name,
+		int(listing.get("quantity",0)),int(listing.get("item_uid",0)),
+		int(listing.get("price",0)),durability_text]
+
 func _request_selected_trade() -> void:
 	if trade_request_button.disabled or trade_target_picker.selected < 0:
 		return
@@ -1504,6 +1550,72 @@ func _update_pvp_ui() -> void:
 	else:
 		pvp_skill_status.text="使用既有技能 ID 對 AOI 玩家送出；MP／傷害／罪名全由伺服器判定"
 
+
+func _update_player_shop_ui() -> void:
+	var in_world := active and int(_latest.get("state",-1)) == State.STATE_IN_WORLD
+	for control in [player_shop_inventory_picker,player_shop_price_input,player_shop_open_button,player_shop_own_label,player_shop_close_button,player_shop_seller_picker,player_shop_inspect_button,player_shop_inspected_label,player_shop_buy_button,player_shop_status]:
+		control.visible = in_world
+	if not in_world:
+		_player_shop_display_key = ""
+		return
+	var usable := bool(_latest.get("world_ready",false)) and bool(_latest.get("inventory_ready",false)) and not bool(_latest.get("player_dead",false)) and not bool(_latest.get("reconnecting",false)) and not bool(_latest.get("resync_pending",false)) and not bool(_latest.get("waiting_for_new_map",false)) and int(_latest.get("pending_world_ready_ack_epoch",0)) == 0 and int(_latest.get("last_world_ready_ack_epoch",0)) == int(_latest.get("map_epoch",0)) and int(_latest.get("pending_player_shop_sequence",0)) == 0 and int(_latest.get("trade_id",0)) == 0
+	var own: Dictionary = _latest.get("player_shop_own_listing",{})
+	var inspected: Dictionary = _latest.get("player_shop_inspected",{})
+	var entities: Dictionary = _latest.get("entities",{})
+	var entity_ids: Array = entities.keys()
+	entity_ids.sort()
+	var entity_key := ""
+	for raw_actor in entity_ids:
+		entity_key += "," + str(int(raw_actor))
+	var key := "%d/%d/%d/%d/%d/%d/%s" % [
+		int(_latest.get("inventory_revision",0)),int(_latest.get("player_shop_sequence",0)),
+		int(_latest.get("last_player_shop_result_sequence",0)),
+		int(_latest.get("last_player_shop_sold_listing_id",0)),
+		int(own.get("listing_id",0)),int(inspected.get("listing_id",0)),entity_key]
+	if key != _player_shop_display_key:
+		_player_shop_display_key = key
+		player_shop_inventory_picker.clear()
+		var inventory: Dictionary = _latest.get("inventory_items",{})
+		var uids: Array = inventory.keys()
+		uids.sort()
+		for raw_uid in uids:
+			var uid := int(raw_uid)
+			var item: Dictionary = inventory[raw_uid]
+			player_shop_inventory_picker.add_item(_trade_item_text(item))
+			player_shop_inventory_picker.set_item_metadata(player_shop_inventory_picker.item_count-1,uid)
+		if player_shop_inventory_picker.item_count > 0:
+			player_shop_inventory_picker.select(0)
+		player_shop_seller_picker.clear()
+		for raw_actor in entity_ids:
+			var actor_id := int(raw_actor)
+			if actor_id <= 0 or actor_id == int(_latest.get("actor_id",0)):
+				continue
+			player_shop_seller_picker.add_item("玩家 %d" % actor_id)
+			player_shop_seller_picker.set_item_metadata(player_shop_seller_picker.item_count-1,actor_id)
+		if player_shop_seller_picker.item_count > 0:
+			player_shop_seller_picker.select(0)
+	player_shop_own_label.text = _player_shop_listing_text("我的商店：",own)
+	player_shop_inspected_label.text = _player_shop_listing_text("查看中的商店：",inspected)
+	player_shop_open_button.disabled = not usable or not own.is_empty() or player_shop_inventory_picker.item_count == 0
+	player_shop_price_input.editable = usable and own.is_empty()
+	player_shop_close_button.disabled = not usable or own.is_empty()
+	player_shop_inspect_button.disabled = not usable or player_shop_seller_picker.item_count == 0
+	var inspected_seller := int(inspected.get("seller_actor_id",0))
+	player_shop_buy_button.disabled = not usable or inspected.is_empty() or inspected_seller <= 0 or not entities.has(inspected_seller)
+	if int(_latest.get("pending_player_shop_sequence",0)) > 0:
+		player_shop_status.text = "等待伺服器玩家商店結果…"
+	else:
+		var result: Dictionary = _latest.get("last_player_shop_result",{})
+		if not result.is_empty():
+			var code := int(result.get("status",-1))
+			var action := int(result.get("action",0))
+			if code in [0,1]:
+				player_shop_status.text = "玩家商店操作完成｜動作 %d｜伺服器代碼 %d｜錢包 %d" % [action,code,int(_latest.get("player_shop_wallet",0))]
+			else:
+				player_shop_status.text = "玩家商店操作未完成（伺服器代碼 %d）" % code
+	var sold: Dictionary = _latest.get("last_player_shop_sold",{})
+	if not sold.is_empty() and int(_latest.get("last_player_shop_sold_listing_id",0)) > 0:
+		player_shop_status.text = "商店物品已由伺服器售出｜買家 %d｜UID %d｜錢包 %d" % [int(sold.get("buyer_actor_id",0)),int(sold.get("item_uid",0)),int(_latest.get("player_shop_wallet",0))]
 
 func _update_trade_ui() -> void:
 	var in_world := active and int(_latest.get("state",-1)) == State.STATE_IN_WORLD
@@ -1876,6 +1988,7 @@ func _process(delta: float) -> void:
 	_update_bank_ui()
 	_update_repair_ui()
 	_update_trade_ui()
+	_update_player_shop_ui()
 	_update_pvp_ui()
 	var pickup_result: Dictionary = _latest.get("last_pickup_result",{})
 	if not pickup_result.is_empty():
