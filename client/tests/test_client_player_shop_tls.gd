@@ -68,10 +68,16 @@ func _run_seller(session,seller_id:int,buyer_id:int,item_uid:int)->void:
 		return
 	var opened:=_wait(session,func(v):
 		return (
-			int(v.last_player_shop_result_sequence)>=1 and
-			int(v.last_player_shop_result_status)==0 and
-			int(v.player_shop_own_listing.get("item_uid",0))==item_uid
+			int(v.get("reconnect_count",0))>0 or
+			(
+				int(v.last_player_shop_result_sequence)>=1 and
+				int(v.last_player_shop_result_status)==0 and
+				int(v.player_shop_own_listing.get("item_uid",0))==item_uid
+			)
 		),7000)
+	if not opened.is_empty() and int(opened.get("reconnect_count",0))>0:
+		_fail("seller connection restarted before open receipt "+str(opened),session)
+		return
 	if opened.is_empty():
 		_fail("seller open receipt "+str(session.snapshot()),session)
 		return
