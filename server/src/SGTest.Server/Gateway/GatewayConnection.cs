@@ -222,6 +222,7 @@ public sealed class GatewayConnection
     private long _worldReadyAckedTick = -1;
     private bool _resyncPending;
     private readonly TrustedCombatProfile? _combatProfile;
+    private uint _lastChatSequence;
     private readonly string? _displayName;
     private CharacterPvpState? _pvpState;
     private readonly string? _gmOperatorId;
@@ -745,12 +746,17 @@ public sealed class GatewayConnection
             postChat is not null &&
             WireProtocol.TryDecodeChatCommand(frame,out var chat))
         {
-            if(!GameplayReady(bound))
+            if(!GameplayReady(bound)||chat.MapEpoch!=bound.MapEpoch||
+               chat.Channel!=ChatChannel.Nearby||
+               chat.ChatSequence<=_lastChatSequence)
                 return WireFrameDisposition.ProtocolViolation;
-            return postChat(new TrustedChatCommand(
+            var request=new TrustedChatCommand(
                 bound.ActorId,bound.ConnectionEpoch,chat.MapEpoch,
-                chat.ChatSequence,chat.Channel,chat.BubbleType,chat.Message))
-                ? WireFrameDisposition.Accepted:WireFrameDisposition.Backpressured;
+                chat.ChatSequence,chat.Channel,chat.BubbleType,chat.Message);
+            if(!postChat(request))
+                return WireFrameDisposition.Backpressured;
+            _lastChatSequence=chat.ChatSequence;
+            return WireFrameDisposition.Accepted;
         }
 
         if(header.Opcode==WireOpcode.GmPvpNameCommand &&
