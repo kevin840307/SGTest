@@ -131,6 +131,18 @@ var whisper_target_input := LineEdit.new()
 var whisper_input := LineEdit.new()
 var whisper_send_button := Button.new()
 var whisper_status := Label.new()
+var party_target_input := LineEdit.new()
+var party_invite_button := Button.new()
+var party_invite_label := Label.new()
+var party_accept_button := Button.new()
+var party_reject_button := Button.new()
+var party_members_label := Label.new()
+var party_leave_button := Button.new()
+var party_kick_button := Button.new()
+var party_promote_button := Button.new()
+var party_chat_input := LineEdit.new()
+var party_chat_send_button := Button.new()
+var party_status := Label.new()
 var _nearby_chat_display_key := ""
 var quest_npc_input := SpinBox.new()
 var quest_open_button := Button.new()
@@ -372,7 +384,22 @@ func _ready() -> void:
 	whisper_input.max_length = 256
 	whisper_send_button.text = "私訊送出"
 	whisper_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	for control in [nearby_chat_history,nearby_chat_input,nearby_chat_send_button,nearby_chat_status,whisper_target_input,whisper_input,whisper_send_button,whisper_status]:
+	party_target_input.placeholder_text = "隊伍目標 ActorId"
+	party_invite_button.text = "邀請加入隊伍"
+	party_invite_label.text = "待處理邀請：—"
+	party_invite_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	party_accept_button.text = "接受隊伍邀請"
+	party_reject_button.text = "拒絕隊伍邀請"
+	party_members_label.text = "隊伍：—"
+	party_members_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	party_leave_button.text = "離開隊伍"
+	party_kick_button.text = "踢除目標"
+	party_promote_button.text = "移交隊長給目標"
+	party_chat_input.placeholder_text = "隊伍聊天（可跨地圖）"
+	party_chat_input.max_length = 256
+	party_chat_send_button.text = "隊伍送出"
+	party_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	for control in [nearby_chat_history,nearby_chat_input,nearby_chat_send_button,nearby_chat_status,whisper_target_input,whisper_input,whisper_send_button,whisper_status,party_target_input,party_invite_button,party_invite_label,party_accept_button,party_reject_button,party_members_label,party_leave_button,party_kick_button,party_promote_button,party_chat_input,party_chat_send_button,party_status]:
 		control.visible = false
 	quest_npc_input.min_value = 1
 	quest_npc_input.max_value = 2147483647
@@ -455,6 +482,14 @@ func _ready() -> void:
 	nearby_chat_input.text_submitted.connect(func(_text): _send_nearby_chat())
 	whisper_send_button.pressed.connect(_send_whisper)
 	whisper_input.text_submitted.connect(func(_text): _send_whisper())
+	party_invite_button.pressed.connect(_party_invite_target)
+	party_accept_button.pressed.connect(_party_accept_invite)
+	party_reject_button.pressed.connect(_party_reject_invite)
+	party_leave_button.pressed.connect(_party_leave)
+	party_kick_button.pressed.connect(_party_kick_target)
+	party_promote_button.pressed.connect(_party_promote_target)
+	party_chat_send_button.pressed.connect(_send_party_chat)
+	party_chat_input.text_submitted.connect(func(_text): _send_party_chat())
 	quest_open_button.pressed.connect(_open_quest_from_input)
 	quest_choose_button.pressed.connect(_choose_selected_quest_option)
 	# Trade controls must actually be parented, not only instantiated/connected.
@@ -462,7 +497,7 @@ func _ready() -> void:
 		column.add_child(control)
 	for control in [player_shop_inventory_picker,player_shop_price_input,player_shop_open_button,player_shop_own_label,player_shop_close_button,player_shop_seller_picker,player_shop_inspect_button,player_shop_inspected_label,player_shop_buy_button,player_shop_status]:
 		column.add_child(control)
-	for control in [nearby_chat_history,nearby_chat_input,nearby_chat_send_button,nearby_chat_status,whisper_target_input,whisper_input,whisper_send_button,whisper_status]:
+	for control in [nearby_chat_history,nearby_chat_input,nearby_chat_send_button,nearby_chat_status,whisper_target_input,whisper_input,whisper_send_button,whisper_status,party_target_input,party_invite_button,party_invite_label,party_accept_button,party_reject_button,party_members_label,party_leave_button,party_kick_button,party_promote_button,party_chat_input,party_chat_send_button,party_status]:
 		column.add_child(control)
 	for control in [quest_npc_input,quest_open_button,quest_title_label,quest_text_display,quest_progress_label,quest_choice_picker,quest_choose_button,quest_status]:
 		column.add_child(control)
@@ -545,6 +580,11 @@ func login() -> void:
 	whisper_target_input.clear()
 	whisper_input.clear()
 	whisper_status.text = ""
+	party_target_input.clear()
+	party_invite_label.text = "待處理邀請：—"
+	party_members_label.text = "隊伍：—"
+	party_chat_input.clear()
+	party_status.text = ""
 	_quest_display_key = ""
 	quest_title_label.text = "任務：—"
 	quest_text_display.text = ""
@@ -1411,29 +1451,143 @@ func _send_whisper() -> void:
 		whisper_status.text = "目前無法送出私訊"
 
 
+func _party_target_actor()->int:
+	var raw:=party_target_input.text.strip_edges()
+	return int(raw) if raw.is_valid_int() else 0
+
+
+func _party_invite_target()->void:
+	var target:=_party_target_actor()
+	if target<=0:
+		party_status.text="請輸入有效的線上玩家 ActorId"
+	elif session.party_invite(target):
+		party_status.text="隊伍邀請已送出，等待伺服器結果…"
+	else:
+		party_status.text="目前無法送出隊伍邀請"
+
+
+func _party_accept_invite()->void:
+	if session.party_accept():
+		party_status.text="已送出接受邀請；等待伺服器 PartySnapshot"
+	else:
+		party_status.text="目前沒有可接受的隊伍邀請"
+
+
+func _party_reject_invite()->void:
+	if session.party_reject():
+		party_status.text="已送出拒絕邀請"
+	else:
+		party_status.text="目前沒有可拒絕的隊伍邀請"
+
+
+func _party_leave()->void:
+	if session.party_leave():
+		party_status.text="離隊請求已送出"
+	else:
+		party_status.text="目前不在隊伍內"
+
+
+func _party_kick_target()->void:
+	var target:=_party_target_actor()
+	if target>0 and session.party_kick(target):
+		party_status.text="踢除請求已送出"
+	else:
+		party_status.text="只有隊長可踢除目前隊員"
+
+
+func _party_promote_target()->void:
+	var target:=_party_target_actor()
+	if target>0 and session.party_promote(target):
+		party_status.text="隊長移交請求已送出"
+	else:
+		party_status.text="只有隊長可將隊長移交給目前隊員"
+
+
+func _send_party_chat()->void:
+	if party_chat_send_button.disabled:
+		return
+	var message:=party_chat_input.text.strip_edges()
+	if message.is_empty():
+		return
+	if session.send_party_chat(message,0):
+		party_chat_input.clear()
+		party_status.text="隊伍訊息已送出，等待伺服器可靠 echo…"
+	else:
+		party_status.text="目前無法送出隊伍聊天"
+
+
+func _party_result_text(status_code:int)->String:
+	var names:=PackedStringArray([
+		"成功","目標不在線","不能選自己","目標已在隊伍","目前不在隊伍",
+		"只有隊長可操作","隊伍已滿","找不到邀請","邀請已失效",
+		"目標不是隊員","目標已有待處理邀請"])
+	return names[status_code] if status_code>=0 and status_code<names.size() else "未知結果"
+
+
 func _update_nearby_chat_ui() -> void:
 	var in_world:=active and int(_latest.get("state",-1))==State.STATE_IN_WORLD
-	for control in [nearby_chat_history,nearby_chat_input,nearby_chat_send_button,nearby_chat_status,whisper_target_input,whisper_input,whisper_send_button,whisper_status]:
+	for control in [nearby_chat_history,nearby_chat_input,nearby_chat_send_button,nearby_chat_status,whisper_target_input,whisper_input,whisper_send_button,whisper_status,party_target_input,party_invite_button,party_invite_label,party_accept_button,party_reject_button,party_members_label,party_leave_button,party_kick_button,party_promote_button,party_chat_input,party_chat_send_button,party_status]:
 		control.visible=in_world
 	if not in_world:
 		_nearby_chat_display_key=""
 		return
 	var usable:=bool(_latest.get("world_ready",false)) and not bool(_latest.get("reconnecting",false)) and not bool(_latest.get("resync_pending",false)) and not bool(_latest.get("waiting_for_new_map",false)) and int(_latest.get("pending_world_ready_ack_epoch",0))==0 and int(_latest.get("last_world_ready_ack_epoch",0))==int(_latest.get("map_epoch",0))
 	var whisper_pending:=int(_latest.get("pending_whisper_sequence",0))!=0
+	var party_pending:=int(_latest.get("pending_party_sequence",0))!=0
+	var current_party:=int(_latest.get("party_id",0))
+	var is_party_leader:=current_party>0 and int(_latest.get("party_leader_actor_id",0))==int(_latest.get("actor_id",0))
 	nearby_chat_input.editable=usable and not whisper_pending
 	nearby_chat_send_button.disabled=not usable or whisper_pending
 	whisper_target_input.editable=usable and not whisper_pending
 	whisper_input.editable=usable and not whisper_pending
 	whisper_send_button.disabled=not usable or whisper_pending
+	party_target_input.editable=usable and not party_pending
+	party_invite_button.disabled=not usable or party_pending or (current_party>0 and not is_party_leader)
+	var invite:Dictionary=_latest.get("pending_party_invite",{})
+	party_accept_button.disabled=not usable or party_pending or invite.is_empty() or current_party>0
+	party_reject_button.disabled=not usable or party_pending or invite.is_empty() or current_party>0
+	party_leave_button.disabled=not usable or party_pending or current_party<=0
+	party_kick_button.disabled=not usable or party_pending or not is_party_leader
+	party_promote_button.disabled=not usable or party_pending or not is_party_leader
+	party_chat_input.editable=usable and not whisper_pending and current_party>0
+	party_chat_send_button.disabled=not usable or whisper_pending or current_party<=0
+	if invite.is_empty():
+		party_invite_label.text="待處理邀請：—"
+	else:
+		party_invite_label.text="待處理邀請：%s（Actor %d｜Party %d）" % [
+			str(invite.get("inviter_name","")),
+			int(invite.get("inviter_actor_id",0)),
+			int(invite.get("party_id",0))]
+	var party_members:Dictionary=_latest.get("party_members",{})
+	if current_party<=0:
+		party_members_label.text="隊伍：—"
+	else:
+		var ids:=party_members.keys()
+		ids.sort()
+		var member_rows:=PackedStringArray()
+		for id in ids:
+			var member:Dictionary=party_members[id]
+			var prefix:="★ " if int(id)==int(_latest.get("party_leader_actor_id",0)) else "・ "
+			member_rows.append("%s%s（Actor %d）" % [
+				prefix,str(member.get("name","玩家")),int(id)])
+		party_members_label.text="隊伍 %d｜Rev %d\n%s" % [
+			current_party,int(_latest.get("party_revision",0)),
+			"\n".join(member_rows)]
+	var party_result:Dictionary=_latest.get("last_party_result",{})
+	if not party_result.is_empty() and not party_pending:
+		party_status.text="隊伍操作：%s" % _party_result_text(
+			int(party_result.get("status",-1)))
 	var messages:Array=_latest.get("chat_messages",[])
 	var tail:Dictionary={} if messages.is_empty() else messages[messages.size()-1]
-	var key:="%d/%d/%d/%d/%s/%s/%d/%d" % [
+	var key:="%d/%d/%d/%d/%s/%s/%d/%d/%d/%d/%d" % [
 		messages.size(),int(tail.get("sender_actor_id",0)),
 		int(tail.get("sender_connection_epoch",0)),
 		int(tail.get("chat_sequence",0)),str(tail.get("message","")),
 		str(tail.get("direction","")),
 		int(_latest.get("last_whisper_result_sequence",0)),
-		int(_latest.get("last_whisper_result_status",-1))]
+		int(_latest.get("last_whisper_result_status",-1)),
+		int(_latest.get("party_id",0)),int(_latest.get("party_revision",0)),
+		int(_latest.get("last_party_result_sequence",0))]
 	if key!=_nearby_chat_display_key:
 		_nearby_chat_display_key=key
 		var rows:=PackedStringArray()
@@ -1442,6 +1596,10 @@ func _update_nearby_chat_ui() -> void:
 			var channel:=int(entry.get("channel",-1))
 			if channel==0:
 				rows.append("[附近] %s：%s" % [
+					str(entry.get("sender_name","玩家 %d" % int(entry.get("sender_actor_id",0)))),
+					str(entry.get("message",""))])
+			elif channel==3:
+				rows.append("[隊伍] %s：%s" % [
 					str(entry.get("sender_name","玩家 %d" % int(entry.get("sender_actor_id",0)))),
 					str(entry.get("message",""))])
 			elif channel==4 and str(entry.get("direction",""))=="outgoing":
