@@ -77,7 +77,7 @@ public sealed record CharacterCreateResult(CharacterCreateStatus Status, Charact
 /// </summary>
 public sealed partial class SqliteIdentityStore : IDisposable
 {
-    public const int SchemaVersion = 19;
+    public const int SchemaVersion = 20;
     private readonly string _connectionString;
     private readonly IdentityStoreOptions _options;
     private readonly PasswordHasher _passwords;
@@ -244,6 +244,7 @@ CREATE TABLE IF NOT EXISTS item_instances (
     quantity INTEGER NOT NULL CHECK(quantity BETWEEN 1 AND 1000000),
     source_drop_id INTEGER UNIQUE REFERENCES ground_drops(drop_id),
     durability_raw INTEGER CHECK(durability_raw IS NULL OR durability_raw BETWEEN 0 AND 2147483647),
+    enhancement_level INTEGER NOT NULL DEFAULT 0 CHECK(enhancement_level BETWEEN 0 AND 255),
     source_kind INTEGER NOT NULL DEFAULT 1 CHECK(source_kind IN (1,2)),
     source_reference TEXT NOT NULL DEFAULT '',
     created_unix_ms INTEGER NOT NULL,
@@ -339,6 +340,7 @@ CREATE TABLE item_instances (
     quantity INTEGER NOT NULL CHECK(quantity BETWEEN 1 AND 1000000),
     source_drop_id INTEGER UNIQUE REFERENCES ground_drops(drop_id),
     durability_raw INTEGER CHECK(durability_raw IS NULL OR durability_raw BETWEEN 0 AND 2147483647),
+    enhancement_level INTEGER NOT NULL DEFAULT 0 CHECK(enhancement_level BETWEEN 0 AND 255),
     source_kind INTEGER NOT NULL CHECK(source_kind IN (1,2)),
     source_reference TEXT NOT NULL,
     created_unix_ms INTEGER NOT NULL,
@@ -459,6 +461,7 @@ CREATE TABLE IF NOT EXISTS equipped_items (
     quantity INTEGER NOT NULL CHECK(quantity = 1),
     source_drop_id INTEGER UNIQUE REFERENCES ground_drops(drop_id),
     durability_raw INTEGER CHECK(durability_raw IS NULL OR durability_raw BETWEEN 0 AND 2147483647),
+    enhancement_level INTEGER NOT NULL DEFAULT 0 CHECK(enhancement_level BETWEEN 0 AND 255),
     source_kind INTEGER NOT NULL CHECK(source_kind IN (1,2)),
     source_reference TEXT NOT NULL,
     created_unix_ms INTEGER NOT NULL,
@@ -719,6 +722,18 @@ ON player_shop_listings(item_uid) WHERE state=0;",tx);
             Execute(connection,@"
 CREATE INDEX IF NOT EXISTS ix_player_shop_seller_history
 ON player_shop_listings(seller_character_id,listing_id);",tx);
+            // Schema v20: +N is ItemInstance state, never a separate
+            // ItemDefinition. This migration only establishes durable metadata;
+            // it does not claim an original max level, cost, material or success
+            // formula. Production mutation stays disabled until verified rules exist.
+            if(schemaVersion<20)
+            {
+                foreach(string table in new[]{"item_instances","storage_items","equipped_items"})
+                    if(!ColumnExists(connection,table,"enhancement_level",tx))
+                        Execute(connection,$@"ALTER TABLE {table}
+ADD COLUMN enhancement_level INTEGER NOT NULL DEFAULT 0
+CHECK(enhancement_level BETWEEN 0 AND 255);",tx);
+            }
             Execute(connection, @"
 CREATE TRIGGER IF NOT EXISTS trg_combat_mp_insert
 BEFORE INSERT ON character_combat_profiles
