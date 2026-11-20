@@ -1450,7 +1450,9 @@ internal static class Program
             var router = new WorldResultRouter();
             var auditedPortals = portals ? PortalCatalog.LoadNpcDocuments([
                 CreatePortalDocument(root, 15), CreatePortalDocument(root, 13)]) : null;
-            var authorization = new IdentityTlsAuthorization(store, world, auditedPortals);
+            var parties=new PartyCoordinator();
+            var authorization = new IdentityTlsAuthorization(
+                store, world, auditedPortals, parties:parties);
             var aoiPump = new WorldAoiPump(router);
             var routerTask = router.RunAsync(world.Results);
             using var aoiStop = new CancellationTokenSource();
@@ -1516,17 +1518,18 @@ internal static class Program
                     System.Security.Authentication.SslProtocols.Tls13) ||
                     results[0].Reason != TlsWireEndReason.CleanEof ||
                     results[1].Reason != TlsWireEndReason.CleanEof ||
-                    results[1].CommandsAccepted != (portals ? 8 : crossmap ? 9 : 3) ||
+                    results[1].CommandsAccepted != (portals ? 8 : crossmap ? 11 : 3) ||
+                    parties.PartyCount != 0 ||
                     router.Statistics.ActiveSessions != 0 ||
                     router.Statistics.ReceiptsQueued < (crossmap || portals ? 2 : 1) ||
                     aoiPump.FramesQueued < (crossmap || portals ? 10 : 6))
                     throw new InvalidOperationException(
                         $"multiplayer TLS/AOI incomplete a={results[0].Reason} b={results[1].Reason} " +
-                        $"moves={results[1].CommandsAccepted} routes={router.Statistics.ActiveSessions} " +
+                        $"moves={results[1].CommandsAccepted} parties={parties.PartyCount} routes={router.Statistics.ActiveSessions} " +
                         $"receipts={router.Statistics.ReceiptsQueued} aoi_frames={aoiPump.FramesQueued}");
                 await world.StopAsync().ConfigureAwait(false);
                 await routerTask.WaitAsync(TimeSpan.FromSeconds(3)).ConfigureAwait(false);
-                Console.WriteLine($"{prefix}_FIXTURE_PASS actor_a={aId} actor_b={bId} moves={results[1].CommandsAccepted} aoi_frames={aoiPump.FramesQueued} active=0");
+                Console.WriteLine($"{prefix}_FIXTURE_PASS actor_a={aId} actor_b={bId} moves={results[1].CommandsAccepted} party_count={parties.PartyCount} aoi_frames={aoiPump.FramesQueued} active=0");
                 Console.Out.Flush();
                 return 0;
             }
