@@ -1119,7 +1119,8 @@ public sealed class GatewayConnection
                 var chunk=ordered.Skip(start)
                     .Take(WireProtocol.StorageSnapshotMaxItemsPerFrame)
                     .Select(item=>new StorageItemWire(
-                        item.ItemUid,item.ItemDefinitionId,item.Quantity,item.SourceDropId))
+                        item.ItemUid,item.ItemDefinitionId,item.Quantity,item.SourceDropId,
+                        item.EnhancementLevel))
                     .ToArray();
                 bool complete=start+chunk.Length==ordered.Length;
                 var frame=WireProtocol.EncodeStorageSnapshot(new(
