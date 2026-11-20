@@ -51,8 +51,10 @@ internal static class PartyChecks
                 postParty:value=>{trusted=value;return true;})==
                 WireFeedStatus.Accepted&&accepted==1&&
             trusted.ActorId==11&&trusted.ConnectionEpoch==9&&
-            trusted.RequestMapEpoch==3?false:true,
-            "unreachable");
+            trusted.RequestMapEpoch==3&&trusted.PartySequence==7&&
+            trusted.Action==PartyCommandAction.Invite&&
+            trusted.PartyId==0&&trusted.TargetActorId==22,
+            "party Gateway did not bind authenticated sender/sequence");
     }
 
     private static void Lifecycle()
@@ -166,7 +168,7 @@ internal static class PartyChecks
     }
 
     private static ActorSnapshot Actor(long id,long connection,long mapEpoch)=>
-        new(id,15,connection,mapEpoch,0,8,8,0,0,false);
+        new(id,15,connection,mapEpoch,0,0,8,8,1,false,1,false);
 
     private static PartyResultWire DrainResult(GatewayConnection gateway)
     {
