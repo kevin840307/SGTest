@@ -54,6 +54,14 @@ class RespawnSession extends RefCounted:
 	var last_trade_target := 0
 	var last_trade_uid := 0
 	var last_trade_money := 0
+	var player_shop_opens := 0
+	var player_shop_closes := 0
+	var player_shop_inspects := 0
+	var player_shop_buys := 0
+	var last_player_shop_uid := 0
+	var last_player_shop_price := 0
+	var last_player_shop_seller := 0
+	var last_player_shop_listing := 0
 	var pvp_requests := 0
 	var last_pvp_action := -1
 	var pvp_attacks := 0
@@ -216,6 +224,32 @@ class RespawnSession extends RefCounted:
 		return true
 	func cancel_trade() -> bool:
 		trade_cancels += 1
+		return true
+	func open_player_shop(item_uid: int,price: int) -> bool:
+		if item_uid <= 0 or price <= 0:
+			return false
+		player_shop_opens += 1
+		last_player_shop_uid = item_uid
+		last_player_shop_price = price
+		return true
+	func close_player_shop(listing_id: int) -> bool:
+		if listing_id <= 0:
+			return false
+		player_shop_closes += 1
+		last_player_shop_listing = listing_id
+		return true
+	func inspect_player_shop(seller_actor_id: int) -> bool:
+		if seller_actor_id <= 0:
+			return false
+		player_shop_inspects += 1
+		last_player_shop_seller = seller_actor_id
+		return true
+	func buy_player_shop(seller_actor_id: int,listing_id: int) -> bool:
+		if seller_actor_id <= 0 or listing_id <= 0:
+			return false
+		player_shop_buys += 1
+		last_player_shop_seller = seller_actor_id
+		last_player_shop_listing = listing_id
 		return true
 	func attack_monster(entity_id: int) -> bool:
 		if entity_id <= 0:
