@@ -3865,7 +3865,8 @@ func _apply_trade_terminal(frame: PackedByteArray) -> bool:
 				"item_definition_id":int(item.item_definition_id),
 				"quantity":int(item.quantity),
 				"drop_id":int(item.drop_id),
-				"enhancement_level":int(item.get("enhancement_level",0))
+				"enhancement_level":int(item.get("enhancement_level",0)),
+				"durability_raw":int(item.get("durability_raw",-1))
 			}
 		inventory_revision += 1
 		var wallet := int(terminal.wallet_money)
