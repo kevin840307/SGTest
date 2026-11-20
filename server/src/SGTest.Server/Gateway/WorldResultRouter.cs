@@ -670,6 +670,18 @@ public sealed class WorldResultRouter
         }
     }
 
+    public GatewaySendStatus QueueWhisperResult(
+        TrustedChatCommand request,WhisperResultWire result)
+    {
+        lock(_gate)
+        {
+            if(!_connections.TryGetValue(request.ActorId,out var connection)||
+               connection.IsClosed)
+                return GatewaySendStatus.Closed;
+            return connection.QueueWhisperResult(request,result);
+        }
+    }
+
     public GatewaySendStatus QueuePlayerShopResult(
         TrustedPlayerShopCommand request,PlayerShopResultWire result)
     {
