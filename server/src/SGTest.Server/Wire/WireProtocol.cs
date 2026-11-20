@@ -101,7 +101,11 @@ public enum WireOpcode : ushort
     EnhancementItem = 96,
     EnhancementResult = 97,
     WhisperCommand = 98,
-    WhisperResult = 99
+    WhisperResult = 99,
+    PartyCommand = 100,
+    PartyResult = 101,
+    PartyInvite = 102,
+    PartySnapshot = 103
 }
 
 public enum ChatChannel : byte { Nearby = 0, Faction = 1, Warband = 2, Party = 3, Whisper = 4 }
@@ -110,6 +114,17 @@ public enum WhisperResultStatus : byte
     Delivered = 0,
     TargetUnavailable = 1,
     SelfTarget = 2
+}
+public enum PartyCommandAction : byte
+{
+    Invite = 1, Accept = 2, Reject = 3, Leave = 4, Kick = 5, Promote = 6
+}
+public enum PartyResultStatus : byte
+{
+    Success = 0, TargetUnavailable = 1, CannotTargetSelf = 2,
+    AlreadyInParty = 3, NotInParty = 4, NotLeader = 5, PartyFull = 6,
+    InviteMissing = 7, InviteStale = 8, TargetNotMember = 9,
+    TargetHasPendingInvite = 10
 }
 
 public enum TradeCommandAction : byte
@@ -528,6 +543,20 @@ public readonly record struct WhisperCommandWire(
 public readonly record struct WhisperResultWire(
     long MapEpoch,uint ChatSequence,WhisperResultStatus Status,
     long TargetActorId,long TargetConnectionEpoch,string TargetName);
+public readonly record struct PartyCommandWire(
+    long MapEpoch,uint PartySequence,PartyCommandAction Action,
+    long PartyId,long TargetActorId);
+public readonly record struct PartyResultWire(
+    long MapEpoch,uint PartySequence,PartyCommandAction Action,
+    PartyResultStatus Status,long PartyId,long TargetActorId);
+public readonly record struct PartyInviteWire(
+    long ReceiverMapEpoch,long PartyId,uint Revision,long InviterActorId,
+    long InviterConnectionEpoch,string InviterName);
+public readonly record struct PartyMemberWire(
+    long ActorId,long ConnectionEpoch,string Name);
+public sealed record PartySnapshotWire(
+    long ReceiverMapEpoch,long PartyId,uint Revision,long LeaderActorId,
+    IReadOnlyList<PartyMemberWire> Members);
 
 public readonly record struct QuestOpenWire(
     long MapEpoch,uint QuestSequence,int NpcSpawnId);
@@ -683,6 +712,17 @@ public static class WireProtocol
     public const int WhisperResultHeaderBytes = HeaderBytes + 8 + 4 + 1 + 8 + 8 + 2;
     public const int WhisperResultMaximumFrameBytes =
         WhisperResultHeaderBytes + ChatMaxSenderNameBytes;
+    public const int PartyCommandFrameBytes = HeaderBytes + 8 + 4 + 1 + 8 + 8;
+    public const int PartyResultFrameBytes = HeaderBytes + 8 + 4 + 1 + 1 + 8 + 8;
+    public const int PartyInviteHeaderBytes = HeaderBytes + 8 + 8 + 4 + 8 + 8 + 2;
+    public const int PartyInviteMaximumFrameBytes =
+        PartyInviteHeaderBytes + PlayerIdentityMaxNameBytes;
+    public const int PartySnapshotHeaderBytes = HeaderBytes + 8 + 8 + 4 + 8 + 1;
+    public const int PartyMemberHeaderBytes = 8 + 8 + 2;
+    public const int PartyMaxMembers = 8;
+    public const int PartySnapshotMaximumFrameBytes =
+        PartySnapshotHeaderBytes + PartyMaxMembers *
+            (PartyMemberHeaderBytes + PlayerIdentityMaxNameBytes);
     public const int QuestOpenFrameBytes = HeaderBytes + 8 + 4 + 4;
     public const int QuestChooseFrameBytes = HeaderBytes + 8 + 4 + 4 + 4 + 4;
     public const int QuestViewHeaderBytes =
@@ -4251,6 +4291,229 @@ public static class WireProtocol
             string.IsNullOrEmpty(value.TargetName);
     }
 
+    public static byte[] EncodePartyCommand(PartyCommandWire value)
+    {
+        if(value.MapEpoch<=0||value.PartySequence==0||
+           value.Action is < PartyCommandAction.Invite or > PartyCommandAction.Promote||
+           value.PartyId<0||value.TargetActorId<0)
+            throw new ArgumentOutOfRangeException(nameof(value));
+        bool targetAction=value.Action is PartyCommandAction.Invite or
+            PartyCommandAction.Kick or PartyCommandAction.Promote;
+        bool inviteResponse=value.Action is PartyCommandAction.Accept or
+            PartyCommandAction.Reject;
+        if((targetAction&&value.TargetActorId<=0)||
+           (inviteResponse&&(value.PartyId<=0||value.TargetActorId<=0))||
+           (value.Action==PartyCommandAction.Leave&&
+                (value.PartyId<=0||value.TargetActorId!=0))||
+           (!targetAction&&!inviteResponse&&value.Action!=PartyCommandAction.Leave))
+            throw new ArgumentOutOfRangeException(nameof(value));
+        if(targetAction&&value.PartyId<0)
+            throw new ArgumentOutOfRangeException(nameof(value));
+        var frame=NewFrame(WireOpcode.PartyCommand,PartyCommandFrameBytes);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(8,8),value.MapEpoch);
+        BinaryPrimitives.WriteUInt32LittleEndian(frame.AsSpan(16,4),value.PartySequence);
+        frame[20]=(byte)value.Action;
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(21,8),value.PartyId);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(29,8),value.TargetActorId);
+        return frame;
+    }
+
+    public static bool TryDecodePartyCommand(
+        ReadOnlySpan<byte> frame,out PartyCommandWire value)
+    {
+        value=default;
+        if(!TryReadHeader(frame,out var h)||h.Opcode!=WireOpcode.PartyCommand||
+           frame.Length!=PartyCommandFrameBytes)return false;
+        value=new(
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(8,8)),
+            BinaryPrimitives.ReadUInt32LittleEndian(frame.Slice(16,4)),
+            (PartyCommandAction)frame[20],
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(21,8)),
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(29,8)));
+        try
+        {
+            _=EncodePartyCommand(value);
+            return true;
+        }
+        catch(ArgumentOutOfRangeException){value=default;return false;}
+    }
+
+    public static byte[] EncodePartyResult(PartyResultWire value)
+    {
+        if(value.MapEpoch<=0||value.PartySequence==0||
+           value.Action is < PartyCommandAction.Invite or > PartyCommandAction.Promote||
+           value.Status is < PartyResultStatus.Success or >
+                PartyResultStatus.TargetHasPendingInvite||
+           value.PartyId<0||value.TargetActorId<0)
+            throw new ArgumentOutOfRangeException(nameof(value));
+        var frame=NewFrame(WireOpcode.PartyResult,PartyResultFrameBytes);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(8,8),value.MapEpoch);
+        BinaryPrimitives.WriteUInt32LittleEndian(frame.AsSpan(16,4),value.PartySequence);
+        frame[20]=(byte)value.Action;
+        frame[21]=(byte)value.Status;
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(22,8),value.PartyId);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(30,8),value.TargetActorId);
+        return frame;
+    }
+
+    public static bool TryDecodePartyResult(
+        ReadOnlySpan<byte> frame,out PartyResultWire value)
+    {
+        value=default;
+        if(!TryReadHeader(frame,out var h)||h.Opcode!=WireOpcode.PartyResult||
+           frame.Length!=PartyResultFrameBytes)return false;
+        value=new(
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(8,8)),
+            BinaryPrimitives.ReadUInt32LittleEndian(frame.Slice(16,4)),
+            (PartyCommandAction)frame[20],(PartyResultStatus)frame[21],
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(22,8)),
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(30,8)));
+        if(value.MapEpoch<=0||value.PartySequence==0||
+           value.Action is < PartyCommandAction.Invite or > PartyCommandAction.Promote||
+           value.Status is < PartyResultStatus.Success or >
+                PartyResultStatus.TargetHasPendingInvite||
+           value.PartyId<0||value.TargetActorId<0)
+        { value=default; return false; }
+        return true;
+    }
+
+    public static byte[] EncodePartyInvite(PartyInviteWire value)
+    {
+        byte[] name;
+        try{name=StrictUtf8.GetBytes(value.InviterName??string.Empty);}
+        catch(EncoderFallbackException)
+        { throw new ArgumentOutOfRangeException(nameof(value)); }
+        if(value.ReceiverMapEpoch<=0||value.PartyId<=0||value.Revision==0||
+           value.InviterActorId<=0||value.InviterConnectionEpoch<=0||
+           name.Length is <1 or >PlayerIdentityMaxNameBytes||
+           string.IsNullOrWhiteSpace(value.InviterName))
+            throw new ArgumentOutOfRangeException(nameof(value));
+        var frame=NewFrame(WireOpcode.PartyInvite,
+            PartyInviteHeaderBytes+name.Length);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(8,8),value.ReceiverMapEpoch);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(16,8),value.PartyId);
+        BinaryPrimitives.WriteUInt32LittleEndian(frame.AsSpan(24,4),value.Revision);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(28,8),value.InviterActorId);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(36,8),value.InviterConnectionEpoch);
+        BinaryPrimitives.WriteUInt16LittleEndian(frame.AsSpan(44,2),(ushort)name.Length);
+        name.AsSpan().CopyTo(frame.AsSpan(PartyInviteHeaderBytes));
+        return frame;
+    }
+
+    public static bool TryDecodePartyInvite(
+        ReadOnlySpan<byte> frame,out PartyInviteWire value)
+    {
+        value=default;
+        if(!TryReadHeader(frame,out var h)||h.Opcode!=WireOpcode.PartyInvite||
+           frame.Length<PartyInviteHeaderBytes+1)return false;
+        int count=BinaryPrimitives.ReadUInt16LittleEndian(frame.Slice(44,2));
+        if(count is <1 or >PlayerIdentityMaxNameBytes||
+           frame.Length!=PartyInviteHeaderBytes+count)return false;
+        try
+        {
+            string name=StrictUtf8.GetString(frame.Slice(PartyInviteHeaderBytes,count));
+            value=new(
+                BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(8,8)),
+                BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(16,8)),
+                BinaryPrimitives.ReadUInt32LittleEndian(frame.Slice(24,4)),
+                BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(28,8)),
+                BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(36,8)),name);
+            if(value.ReceiverMapEpoch<=0||value.PartyId<=0||value.Revision==0||
+               value.InviterActorId<=0||value.InviterConnectionEpoch<=0||
+               string.IsNullOrWhiteSpace(name))
+            { value=default; return false; }
+            return true;
+        }
+        catch(DecoderFallbackException){return false;}
+    }
+
+    public static byte[] EncodePartySnapshot(PartySnapshotWire value)
+    {
+        ArgumentNullException.ThrowIfNull(value);
+        if(value.ReceiverMapEpoch<=0||value.PartyId<=0||value.Revision==0||
+           value.Members is null||value.Members.Count>PartyMaxMembers)
+            throw new ArgumentOutOfRangeException(nameof(value));
+        bool cleared=value.Members.Count==0;
+        if(cleared!=(value.LeaderActorId==0))
+            throw new ArgumentOutOfRangeException(nameof(value));
+        var seen=new HashSet<long>();
+        var encoded=new List<(PartyMemberWire Member,byte[] Name)>();
+        foreach(var member in value.Members)
+        {
+            byte[] name;
+            try{name=StrictUtf8.GetBytes(member.Name??string.Empty);}
+            catch(EncoderFallbackException)
+            { throw new ArgumentOutOfRangeException(nameof(value)); }
+            if(member.ActorId<=0||member.ConnectionEpoch<=0||
+               name.Length is <1 or >PlayerIdentityMaxNameBytes||
+               string.IsNullOrWhiteSpace(member.Name)||!seen.Add(member.ActorId))
+                throw new ArgumentOutOfRangeException(nameof(value));
+            encoded.Add((member,name));
+        }
+        if(!cleared&&!seen.Contains(value.LeaderActorId))
+            throw new ArgumentOutOfRangeException(nameof(value));
+        int bytes=PartySnapshotHeaderBytes+
+            encoded.Sum(x=>PartyMemberHeaderBytes+x.Name.Length);
+        var frame=NewFrame(WireOpcode.PartySnapshot,bytes);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(8,8),value.ReceiverMapEpoch);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(16,8),value.PartyId);
+        BinaryPrimitives.WriteUInt32LittleEndian(frame.AsSpan(24,4),value.Revision);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(28,8),value.LeaderActorId);
+        frame[36]=checked((byte)encoded.Count);
+        int offset=PartySnapshotHeaderBytes;
+        foreach(var item in encoded)
+        {
+            BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(offset,8),item.Member.ActorId);
+            BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(offset+8,8),item.Member.ConnectionEpoch);
+            BinaryPrimitives.WriteUInt16LittleEndian(frame.AsSpan(offset+16,2),
+                checked((ushort)item.Name.Length));
+            item.Name.AsSpan().CopyTo(frame.AsSpan(offset+PartyMemberHeaderBytes));
+            offset+=PartyMemberHeaderBytes+item.Name.Length;
+        }
+        return frame;
+    }
+
+    public static bool TryDecodePartySnapshot(
+        ReadOnlySpan<byte> frame,out PartySnapshotWire? value)
+    {
+        value=null;
+        if(!TryReadHeader(frame,out var h)||h.Opcode!=WireOpcode.PartySnapshot||
+           frame.Length<PartySnapshotHeaderBytes)return false;
+        long epoch=BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(8,8));
+        long partyId=BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(16,8));
+        uint revision=BinaryPrimitives.ReadUInt32LittleEndian(frame.Slice(24,4));
+        long leader=BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(28,8));
+        int count=frame[36];
+        if(epoch<=0||partyId<=0||revision==0||count>PartyMaxMembers)
+            return false;
+        int offset=PartySnapshotHeaderBytes;
+        var members=new List<PartyMemberWire>(count);
+        var seen=new HashSet<long>();
+        try
+        {
+            for(int i=0;i<count;i++)
+            {
+                if(offset+PartyMemberHeaderBytes>frame.Length)return false;
+                long actor=BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(offset,8));
+                long connection=BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(offset+8,8));
+                int nameCount=BinaryPrimitives.ReadUInt16LittleEndian(frame.Slice(offset+16,2));
+                if(actor<=0||connection<=0||nameCount is <1 or >PlayerIdentityMaxNameBytes||
+                   offset+PartyMemberHeaderBytes+nameCount>frame.Length||!seen.Add(actor))
+                    return false;
+                string name=StrictUtf8.GetString(
+                    frame.Slice(offset+PartyMemberHeaderBytes,nameCount));
+                if(string.IsNullOrWhiteSpace(name))return false;
+                members.Add(new(actor,connection,name));
+                offset+=PartyMemberHeaderBytes+nameCount;
+            }
+        }
+        catch(DecoderFallbackException){return false;}
+        if(offset!=frame.Length)return false;
+        if((count==0)!=(leader==0)||count>0&&!seen.Contains(leader))return false;
+        value=new(epoch,partyId,revision,leader,members);
+        return true;
+    }
+
     public static byte[] EncodeChatDelivery(ChatDeliveryWire value)
     {
         byte[] name,message;
@@ -4664,6 +4927,10 @@ public static class WireProtocol
             97 => WireOpcode.EnhancementResult,
             98 => WireOpcode.WhisperCommand,
             99 => WireOpcode.WhisperResult,
+            100 => WireOpcode.PartyCommand,
+            101 => WireOpcode.PartyResult,
+            102 => WireOpcode.PartyInvite,
+            103 => WireOpcode.PartySnapshot,
             _ => 0
         };
         if (opcode == 0) return false;
@@ -4789,6 +5056,14 @@ public static class WireProtocol
             WireOpcode.WhisperResult =>
                 advertised >= WhisperResultHeaderBytes &&
                 advertised <= WhisperResultMaximumFrameBytes,
+            WireOpcode.PartyCommand => advertised == PartyCommandFrameBytes,
+            WireOpcode.PartyResult => advertised == PartyResultFrameBytes,
+            WireOpcode.PartyInvite =>
+                advertised >= PartyInviteHeaderBytes+1 &&
+                advertised <= PartyInviteMaximumFrameBytes,
+            WireOpcode.PartySnapshot =>
+                advertised >= PartySnapshotHeaderBytes &&
+                advertised <= PartySnapshotMaximumFrameBytes,
             WireOpcode.InventorySnapshot => advertised >= InventorySnapshotHeaderBytes &&
                 advertised <= InventorySnapshotHeaderBytes +
                     InventorySnapshotMaxItemsPerFrame*InventoryItemBytes &&
