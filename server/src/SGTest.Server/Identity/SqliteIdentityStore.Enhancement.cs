@@ -34,6 +34,14 @@ public readonly record struct TrustedEnhancementContext(
 public readonly record struct TrustedEnhancementNpcRule(
     int NpcSpawnId,string SourceReference);
 
+public sealed record EnhancementPreviewItem(
+    long ItemUid,int ItemDefinitionId,EnhancementItemLocation Location,
+    int CurrentLevel,int TargetLevel,int SuccessPpm,long MoneyCost,
+    bool ConsumeMoneyOnFailure);
+
+public sealed record EnhancementPreview(
+    long WalletMoney,IReadOnlyList<EnhancementPreviewItem> Items);
+
 public sealed record EnhancementResult(
     EnhancementStatus Status,int NpcSpawnId,long ItemUid,int ItemDefinitionId,
     EnhancementItemLocation Location,int PreviousLevel,int TargetLevel,
@@ -42,6 +50,35 @@ public sealed record EnhancementResult(
 
 public sealed partial class SqliteIdentityStore
 {
+    public async Task<EnhancementPreview> ListEnhancementPreviewAsync(
+        long characterId,TrustedEnhancementNpcRule npcRule,
+        IReadOnlyDictionary<int,EquipmentEnhancementItemRule> itemRules,
+        CancellationToken cancellationToken=default)
+    {
+        ThrowIfDisposed();
+        ValidateEnhancementNpcRule(npcRule);
+        ArgumentNullException.ThrowIfNull(itemRules);
+        if(characterId<=0)throw new ArgumentOutOfRangeException(nameof(characterId));
+        return await Task.Run(() =>
+        {
+            using var connection=Open();
+            using var tx=connection.BeginTransaction();
+            EnsureWallet(connection,tx,characterId);
+            long wallet=ReadMoney(connection,tx,characterId);
+            var result=new List<EnhancementPreviewItem>();
+            ReadEnhancementPreviewTable(connection,tx,"item_instances",
+                EnhancementItemLocation.Inventory,characterId,itemRules,result);
+            ReadEnhancementPreviewTable(connection,tx,"equipped_items",
+                EnhancementItemLocation.Equipped,characterId,itemRules,result);
+            result.Sort((a,b)=>a.ItemUid.CompareTo(b.ItemUid));
+            if(result.Count>4095)
+                throw new InvalidDataException(
+                    "Enhancement preview exceeds bounded item count");
+            tx.Commit();
+            return new EnhancementPreview(wallet,result);
+        },cancellationToken).ConfigureAwait(false);
+    }
+
     public async Task<EnhancementResult> EnhanceItemAsync(
         TrustedEnhancementContext context,EnhancementAccessStatus access,
         TrustedEnhancementNpcRule npcRule,
@@ -212,6 +249,33 @@ VALUES($actor,$conn,$epoch,$seq,$npc,$uid,$item,$location,$before,$target,$after
         },cancellationToken).ConfigureAwait(false);
     }
 
+    private static void ReadEnhancementPreviewTable(
+        SqliteConnection connection,SqliteTransaction tx,string table,
+        EnhancementItemLocation location,long characterId,
+        IReadOnlyDictionary<int,EquipmentEnhancementItemRule> itemRules,
+        List<EnhancementPreviewItem> result)
+    {
+        using var command=connection.CreateCommand();
+        command.Transaction=tx;
+        command.CommandText=$@"SELECT item_uid,item_definition_id,quantity,enhancement_level
+FROM {table} WHERE character_id=$actor ORDER BY item_uid;";
+        command.Parameters.AddWithValue("$actor",characterId);
+        using var reader=command.ExecuteReader();
+        while(reader.Read())
+        {
+            long uid=reader.GetInt64(0);
+            int definition=reader.GetInt32(1);
+            int quantity=reader.GetInt32(2);
+            int level=reader.GetInt32(3);
+            if(quantity!=1||uid<=0||
+               !itemRules.TryGetValue(definition,out var itemRule)||
+               !itemRule.Steps.TryGetValue(level,out var step))
+                continue;
+            result.Add(new(uid,definition,location,level,step.ToLevel,
+                step.SuccessPpm,step.MoneyCost,step.ConsumeMoneyOnFailure));
+        }
+    }
+
     private static EnhancementOwnedItem? ReadEnhancementItem(
         SqliteConnection connection,SqliteTransaction tx,long characterId,long itemUid)
     {
@@ -257,16 +321,23 @@ FROM {table} WHERE item_uid=$uid AND character_id=$actor;";
             _=>EnhancementStatus.StaleGeneration
         };
 
+    private static void ValidateEnhancementNpcRule(
+        TrustedEnhancementNpcRule npcRule)
+    {
+        if(npcRule.NpcSpawnId<=0||
+           string.IsNullOrWhiteSpace(npcRule.SourceReference)||
+           npcRule.SourceReference.Length>512)
+            throw new ArgumentOutOfRangeException(nameof(npcRule));
+    }
+
     private static void ValidateEnhancementRequest(
         TrustedEnhancementContext context,TrustedEnhancementNpcRule npcRule,
         IReadOnlyDictionary<int,EquipmentEnhancementItemRule> itemRules,long itemUid)
     {
         ArgumentNullException.ThrowIfNull(itemRules);
+        ValidateEnhancementNpcRule(npcRule);
         if(context.CharacterId<=0||context.ConnectionGeneration<=0||
-           context.MapEpoch<=0||context.ActionSequence==0||itemUid<=0||
-           npcRule.NpcSpawnId<=0||
-           string.IsNullOrWhiteSpace(npcRule.SourceReference)||
-           npcRule.SourceReference.Length>512)
+           context.MapEpoch<=0||context.ActionSequence==0||itemUid<=0)
             throw new ArgumentOutOfRangeException(nameof(context));
     }
 
