@@ -43,7 +43,8 @@ public sealed record PlayerShopListing(
     long ListingId,long SellerCharacterId,long ItemUid,int ItemDefinitionId,
     int Quantity,long SourceDropId,int? DurabilityRaw,long Price,
     PlayerShopListingState State,long BuyerCharacterId=0,
-    long SellerWalletAfter=0,long BuyerWalletAfter=0);
+    long SellerWalletAfter=0,long BuyerWalletAfter=0,
+    int EnhancementLevel=0);
 
 public sealed record PlayerShopCreateResult(
     PlayerShopCreateStatus Status,PlayerShopListing? Listing=null);
@@ -109,8 +110,8 @@ public sealed partial class SqliteIdentityStore
             insert.CommandText=@"
 INSERT INTO player_shop_listings(
  seller_character_id,item_uid,item_definition_id,quantity,source_drop_id,
- durability_raw,price,state,created_unix_ms,updated_unix_ms)
-VALUES($seller,$uid,$definition,$quantity,$drop,$durability,$price,0,$now,$now);
+ durability_raw,enhancement_level,price,state,created_unix_ms,updated_unix_ms)
+VALUES($seller,$uid,$definition,$quantity,$drop,$durability,$enhancement,$price,0,$now,$now);
 SELECT last_insert_rowid();";
             insert.Parameters.AddWithValue("$seller",sellerCharacterId);
             insert.Parameters.AddWithValue("$uid",item.Value.ItemUid);
@@ -121,6 +122,7 @@ SELECT last_insert_rowid();";
             insert.Parameters.AddWithValue("$durability",
                 item.Value.DurabilityRaw.HasValue
                     ?item.Value.DurabilityRaw.Value:DBNull.Value);
+            insert.Parameters.AddWithValue("$enhancement",item.Value.EnhancementLevel);
             insert.Parameters.AddWithValue("$price",price);
             insert.Parameters.AddWithValue("$now",now);
             long listingId=Convert.ToInt64(insert.ExecuteScalar());
@@ -128,7 +130,8 @@ SELECT last_insert_rowid();";
                 listingId,sellerCharacterId,item.Value.ItemUid,
                 item.Value.ItemDefinitionId,item.Value.Quantity,
                 item.Value.SourceDropId,item.Value.DurabilityRaw,price,
-                PlayerShopListingState.Active);
+                PlayerShopListingState.Active,
+                EnhancementLevel:item.Value.EnhancementLevel);
             tx.Commit();
             return new PlayerShopCreateResult(PlayerShopCreateStatus.Created,listing);
         },cancellationToken).ConfigureAwait(false);
@@ -345,7 +348,8 @@ WHERE listing_id=$listing AND state=0;";
         listing.ItemDefinitionId==item.ItemDefinitionId&&
         listing.Quantity==item.Quantity&&
         listing.SourceDropId==item.SourceDropId&&
-        listing.DurabilityRaw==item.DurabilityRaw;
+        listing.DurabilityRaw==item.DurabilityRaw&&
+        listing.EnhancementLevel==item.EnhancementLevel;
 
     private static void MarkPlayerShopStale(
         SqliteConnection connection,SqliteTransaction tx,long listingId)
@@ -370,7 +374,7 @@ WHERE listing_id=$listing AND state=0;";
 SELECT listing_id,seller_character_id,item_uid,item_definition_id,quantity,
        COALESCE(source_drop_id,0),durability_raw,price,state,
        COALESCE(buyer_character_id,0),COALESCE(seller_wallet_after,0),
-       COALESCE(buyer_wallet_after,0)
+       COALESCE(buyer_wallet_after,0),enhancement_level
 FROM player_shop_listings
 WHERE seller_character_id=$seller AND state=0
 ORDER BY listing_id DESC LIMIT 1;";
@@ -388,7 +392,7 @@ ORDER BY listing_id DESC LIMIT 1;";
 SELECT listing_id,seller_character_id,item_uid,item_definition_id,quantity,
        COALESCE(source_drop_id,0),durability_raw,price,state,
        COALESCE(buyer_character_id,0),COALESCE(seller_wallet_after,0),
-       COALESCE(buyer_wallet_after,0)
+       COALESCE(buyer_wallet_after,0),enhancement_level
 FROM player_shop_listings WHERE listing_id=$listing;";
         command.Parameters.AddWithValue("$listing",listingId);
         using var reader=command.ExecuteReader();
@@ -401,7 +405,8 @@ FROM player_shop_listings WHERE listing_id=$listing;";
             reader.GetInt32(3),reader.GetInt32(4),reader.GetInt64(5),
             reader.IsDBNull(6)?null:reader.GetInt32(6),
             reader.GetInt64(7),(PlayerShopListingState)reader.GetInt32(8),
-            reader.GetInt64(9),reader.GetInt64(10),reader.GetInt64(11));
+            reader.GetInt64(9),reader.GetInt64(10),reader.GetInt64(11),
+            reader.GetInt32(12));
 
     private static PlayerShopOwnedItem? ReadPlayerShopOwnedItem(
         SqliteConnection connection,SqliteTransaction tx,long owner,long itemUid)
@@ -409,7 +414,8 @@ FROM player_shop_listings WHERE listing_id=$listing;";
         using var command=connection.CreateCommand();
         command.Transaction=tx;
         command.CommandText=@"
-SELECT item_uid,item_definition_id,quantity,COALESCE(source_drop_id,0),durability_raw
+SELECT item_uid,item_definition_id,quantity,COALESCE(source_drop_id,0),
+       durability_raw,enhancement_level
 FROM item_instances WHERE item_uid=$uid AND character_id=$owner;";
         command.Parameters.AddWithValue("$uid",itemUid);
         command.Parameters.AddWithValue("$owner",owner);
@@ -417,11 +423,12 @@ FROM item_instances WHERE item_uid=$uid AND character_id=$owner;";
         return reader.Read()
             ?new PlayerShopOwnedItem(
                 reader.GetInt64(0),reader.GetInt32(1),reader.GetInt32(2),
-                reader.GetInt64(3),reader.IsDBNull(4)?null:reader.GetInt32(4))
+                reader.GetInt64(3),reader.IsDBNull(4)?null:reader.GetInt32(4),
+                reader.GetInt32(5))
             :null;
     }
 
     private readonly record struct PlayerShopOwnedItem(
         long ItemUid,int ItemDefinitionId,int Quantity,long SourceDropId,
-        int? DurabilityRaw);
+        int? DurabilityRaw,int EnhancementLevel);
 }
