@@ -93,8 +93,12 @@ public enum WireOpcode : ushort
     GmPvpNameResult = 88,
     PlayerShopCommand = 89,
     PlayerShopResult = 90,
-    PlayerShopSold = 91
+    PlayerShopSold = 91,
+    ChatCommand = 92,
+    ChatDelivery = 93
 }
+
+public enum ChatChannel : byte { Nearby = 0, Faction = 1, Warband = 2, Party = 3, Whisper = 4 }
 
 public enum TradeCommandAction : byte
 {
@@ -467,6 +471,12 @@ public readonly record struct PlayerShopResultWire(
 public readonly record struct PlayerShopSoldWire(
     long ReceiverMapEpoch,long ListingId,long BuyerActorId,long ItemUid,
     long SellerWallet);
+public readonly record struct ChatCommandWire(
+    long MapEpoch,uint ChatSequence,ChatChannel Channel,byte BubbleType,string Message);
+public readonly record struct ChatDeliveryWire(
+    long ReceiverMapEpoch,long SenderActorId,long SenderConnectionEpoch,
+    uint ChatSequence,ChatChannel Channel,byte BubbleType,
+    string SenderName,string Message);
 
 public readonly record struct QuestOpenWire(
     long MapEpoch,uint QuestSequence,int NpcSpawnId);
@@ -601,6 +611,13 @@ public static class WireProtocol
     public const int PlayerShopResultFrameBytes =
         HeaderBytes + 8 + 4 + 1 + 1 + 8 + 8 + 8 + 4 + 4 + 8 + 4 + 8 + 8 + 8;
     public const int PlayerShopSoldFrameBytes = HeaderBytes + 8 + 8 + 8 + 8 + 8;
+    public const int ChatCommandHeaderBytes = HeaderBytes + 8 + 4 + 1 + 1 + 2;
+    public const int ChatDeliveryHeaderBytes = HeaderBytes + 8 + 8 + 8 + 4 + 1 + 1 + 2 + 2;
+    public const int ChatMaxMessageBytes = 256;
+    public const int ChatMaxSenderNameBytes = PlayerIdentityMaxNameBytes;
+    public const int ChatCommandMaximumFrameBytes = ChatCommandHeaderBytes + ChatMaxMessageBytes;
+    public const int ChatDeliveryMaximumFrameBytes =
+        ChatDeliveryHeaderBytes + ChatMaxSenderNameBytes + ChatMaxMessageBytes;
     public const int QuestOpenFrameBytes = HeaderBytes + 8 + 4 + 4;
     public const int QuestChooseFrameBytes = HeaderBytes + 8 + 4 + 4 + 4 + 4;
     public const int QuestViewHeaderBytes =
