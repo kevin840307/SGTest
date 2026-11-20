@@ -4489,6 +4489,10 @@ public static class WireProtocol
             89 => WireOpcode.PlayerShopCommand, 90 => WireOpcode.PlayerShopResult,
             91 => WireOpcode.PlayerShopSold,
             92 => WireOpcode.ChatCommand, 93 => WireOpcode.ChatDelivery,
+            94 => WireOpcode.EnhancementOpen,
+            95 => WireOpcode.EnhancementSnapshot,
+            96 => WireOpcode.EnhancementItem,
+            97 => WireOpcode.EnhancementResult,
             _ => 0
         };
         if (opcode == 0) return false;
