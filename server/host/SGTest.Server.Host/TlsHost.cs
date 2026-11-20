@@ -129,6 +129,21 @@ internal static class TlsHost
             IReadOnlyDictionary<int,RepairItemRule>? repairItemRules=
                 repairItemManifest is null ? null :
                 RepairItemCatalog.LoadVerified(Path.GetFullPath(repairItemManifest));
+            string? enhancementNpcManifest=
+                options.GetValueOrDefault("--enhancement-npc-rules");
+            string? enhancementItemManifest=
+                options.GetValueOrDefault("--enhancement-item-rules");
+            if((enhancementNpcManifest is null)!=(enhancementItemManifest is null))
+                throw new ArgumentException(
+                    "--enhancement-npc-rules and --enhancement-item-rules "+
+                    "must be supplied together");
+            NpcEnhancementCatalog? enhancers=enhancementNpcManifest is null
+                ? null:NpcEnhancementCatalog.LoadVerified(
+                    Path.GetFullPath(enhancementNpcManifest),npcDocuments);
+            IReadOnlyDictionary<int,EquipmentEnhancementItemRule>?
+                enhancementItemRules=enhancementItemManifest is null
+                    ? null:EquipmentEnhancementCatalog.LoadVerified(
+                        Path.GetFullPath(enhancementItemManifest));
             string? questManifest=options.GetValueOrDefault("--quest-rules");
             NpcQuestCatalog? quests=questManifest is null ? null :
                 NpcQuestCatalog.LoadVerified(
@@ -234,6 +249,8 @@ internal static class TlsHost
                 banks: banks,
                 repairs: repairs,
                 repairItemRules: repairItemRules,
+                enhancers: enhancers,
+                enhancementItemRules: enhancementItemRules,
                 quests: quests,
                 trades: trades,
                 playerShops: playerShops,
@@ -270,6 +287,9 @@ internal static class TlsHost
                     verified_bank_count = banks?.Count ?? 0,
                     verified_repair_count = repairs?.Count ?? 0,
                     verified_repair_item_rule_count = repairItemRules?.Count ?? 0,
+                    verified_enhancement_npc_count = enhancers?.Count ?? 0,
+                    verified_enhancement_item_rule_count =
+                        enhancementItemRules?.Count ?? 0,
                     verified_quest_count = quests?.Count ?? 0,
                     verified_trade_item_rule_count = tradeItemRules?.Count ?? 0,
                     player_shop_enabled = playerShops is not null,
