@@ -52,7 +52,7 @@ internal static class IdentityTlsAuthorizationChecks
             await client.ConnectAsync(IPAddress.Loopback, port);
             var serverClient = await accepted;
             var serverTask = TlsWireConnection.RunServerAsync(serverClient, certificate,
-                authorization.AuthorizeAndBindAsync, world.TryPostMove);
+                (tls,token) => authorization.AuthorizeAndBindAsync(tls,token), world.TryPostMove);
 
             var tls = TlsSocketChecks.CreateClientTls(client);
             await TlsSocketChecks.AuthenticateClient(tls);
@@ -731,7 +731,7 @@ internal static class IdentityTlsAuthorizationChecks
         await client.ConnectAsync(IPAddress.Loopback, port);
         var serverClient = await accepted;
         var serverTask = TlsWireConnection.RunServerAsync(serverClient, certificate,
-            authorization.AuthorizeAndBindAsync, world.TryPostMove).ContinueWith(t =>
+            (tls,token) => authorization.AuthorizeAndBindAsync(tls,token), world.TryPostMove).ContinueWith(t =>
             {
                 certificate.Dispose(); listener.Stop(); return t.GetAwaiter().GetResult();
             }, TaskScheduler.Default);
