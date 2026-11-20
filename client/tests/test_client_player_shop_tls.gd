@@ -76,8 +76,10 @@ func _run_seller(session,seller_id:int,buyer_id:int,item_uid:int)->void:
 		_fail("seller open receipt "+str(session.snapshot()),session)
 		return
 	var listing:=int(opened.player_shop_own_listing.listing_id)
-	if listing<=0 or int(opened.player_shop_wallet)!=100 or
-			not opened.inventory_items.has(item_uid):
+	if (
+		listing<=0 or int(opened.player_shop_wallet)!=100 or
+		not opened.inventory_items.has(item_uid)
+	):
 		_fail("seller open state "+str(opened),session)
 		return
 	print("CLIENT_PLAYER_SHOP_READY role=seller actor=%d listing=%d item=%d" %
