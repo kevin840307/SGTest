@@ -290,6 +290,7 @@ static class Checks
             RepairWireChecks.Verify();
             TradeWireChecks.Verify();
             PlayerShopWireChecks.Verify();
+            ChatWireChecks.Verify();
             TradeGatewayChecks.Verify();
             QuestWireChecks.Verify();
             EquipmentGatewayChecks.Verify();
