@@ -78,7 +78,8 @@ public static class TlsWireConnection
         Func<TrustedPvpSkill, Task>? handlePvpSkill = null,
         Func<TrustedGmPvpNameCommand, Task>? handleGmPvpName = null,
         Func<TrustedPlayerShopCommand, Task>? handlePlayerShop = null,
-        Func<TrustedChatCommand, Task>? handleChat = null)
+        Func<TrustedChatCommand, Task>? handleChat = null,
+        Func<TrustedPartyCommand, Task>? handleParty = null)
     {
         ArgumentNullException.ThrowIfNull(client);
         ArgumentNullException.ThrowIfNull(serverCertificate);
@@ -720,6 +721,34 @@ public static class TlsWireConnection
                 }
             }
 
+            var partyCommands=Channel.CreateBounded<TrustedPartyCommand>(
+                new BoundedChannelOptions(16)
+                {
+                    SingleReader=true,SingleWriter=true,
+                    FullMode=BoundedChannelFullMode.Wait
+                });
+            Func<TrustedPartyCommand,bool>? postParty=handleParty is null
+                ? null:request=>partyCommands.Writer.TryWrite(request);
+            Exception? partyFault=null;
+            Task partyWorker=handleParty is null
+                ? Task.CompletedTask:ProcessPartyAsync();
+
+            async Task ProcessPartyAsync()
+            {
+                try
+                {
+                    await foreach(var request in partyCommands.Reader
+                        .ReadAllAsync(sessionCts.Token).ConfigureAwait(false))
+                        await handleParty!(request).ConfigureAwait(false);
+                }
+                catch(OperationCanceledException) when(sessionCts.IsCancellationRequested){}
+                catch(Exception error)
+                {
+                    partyFault=error;
+                    sessionCts.Cancel();
+                }
+            }
+
             var skillCommands=Channel.CreateBounded<TrustedSkillUse>(
                 new BoundedChannelOptions(16)
                 {
@@ -767,7 +796,7 @@ public static class TlsWireConnection
                     var status = gateway.FeedClientBytes(
                         rented.AsSpan(0, count), postMove, out int accepted,
                         postNpc, postResync, postAttack, postRespawn, postPickup,
-                        postRecovery, postDiscard, postSkill, postShop, postStorage, postEquipment, postBank, postRepair, postEnhancement, postTrade, postQuest, postPvp, postPvpAttack, postPvpSkill, postGmPvpName, postPlayerShop, postChat);
+                        postRecovery, postDiscard, postSkill, postShop, postStorage, postEquipment, postBank, postRepair, postEnhancement, postTrade, postQuest, postPvp, postPvpAttack, postPvpSkill, postGmPvpName, postPlayerShop, postChat, postParty);
                     commandsAccepted += accepted;
 
                     if (status == WireFeedStatus.Backpressured)
@@ -788,7 +817,7 @@ public static class TlsWireConnection
                             status = gateway.ResumeClientIngress(
                                 postMove, out accepted, postNpc, postResync,
                                 postAttack, postRespawn, postPickup, postRecovery,
-                                postDiscard, postSkill, postShop, postStorage, postEquipment, postBank, postRepair, postEnhancement, postTrade, postQuest, postPvp, postPvpAttack, postPvpSkill, postGmPvpName, postPlayerShop, postChat);
+                                postDiscard, postSkill, postShop, postStorage, postEquipment, postBank, postRepair, postEnhancement, postTrade, postQuest, postPvp, postPvpAttack, postPvpSkill, postGmPvpName, postPlayerShop, postChat, postParty);
                             commandsAccepted += accepted;
                         }
                         while (status == WireFeedStatus.Backpressured);
@@ -849,6 +878,7 @@ public static class TlsWireConnection
             gmPvpNameCommands.Writer.TryComplete();
             playerShopCommands.Writer.TryComplete();
             chatCommands.Writer.TryComplete();
+            partyCommands.Writer.TryComplete();
             // In-flight authorized NPC/respawn/skill work may finish even after the
             // socket is closed; await both before final trusted release.
             await respawnWorker.ConfigureAwait(false);
@@ -874,13 +904,14 @@ public static class TlsWireConnection
             await gmPvpNameWorker.ConfigureAwait(false);
             await playerShopWorker.ConfigureAwait(false);
             await chatWorker.ConfigureAwait(false);
+            await partyWorker.ConfigureAwait(false);
             Exception? workerFault =
                 npcFault ?? respawnFault ?? pickupFault ?? recoveryFault ??
                 discardFault ?? skillFault ?? shopFault ?? storageFault ??
                 equipmentFault ?? bankFault ?? repairFault ?? enhancementFault ??
                 tradeFault ??
                 questFault ?? pvpFault ?? pvpAttackFault ?? pvpSkillFault ??
-                gmPvpNameFault ?? playerShopFault ?? chatFault;
+                gmPvpNameFault ?? playerShopFault ?? chatFault ?? partyFault;
             if (workerFault is not null)
                 reason = TlsWireEndReason.GatewayClosed;
             var finalBinding = gateway.Binding;
