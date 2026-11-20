@@ -3064,7 +3064,8 @@ func _player_shop_item_from_result(value:Dictionary)->Dictionary:
 		"item_definition_id":int(value.item_definition_id),
 		"quantity":int(value.quantity),
 		"drop_id":int(value.source_drop_id),
-		"durability_raw":int(value.durability_raw)
+		"durability_raw":int(value.durability_raw),
+		"enhancement_level":int(value.enhancement_level)
 	}
 
 
@@ -3114,6 +3115,14 @@ func _apply_player_shop_result(frame:PackedByteArray)->bool:
 				not inventory_items.has(int(value.item_uid))
 			):
 				return fail("player_shop_open_receipt_mismatch")
+			var owned:Dictionary=inventory_items[int(value.item_uid)]
+			if (
+				int(owned.get("item_definition_id",0))!=int(value.item_definition_id) or
+				int(owned.get("quantity",0))!=int(value.quantity) or
+				int(owned.get("drop_id",0))!=int(value.source_drop_id) or
+				int(owned.get("enhancement_level",0))!=int(value.enhancement_level)
+			):
+				return fail("player_shop_open_item_snapshot_mismatch")
 			player_shop_own_listing=value.duplicate(true)
 			player_shop_wallet=int(value.seller_wallet)
 		elif status not in [6,7,8]:
@@ -3156,7 +3165,8 @@ func _apply_player_shop_result(frame:PackedByteArray)->bool:
 				if (
 					int(existing.get("item_definition_id",0))!=int(purchased.item_definition_id) or
 					int(existing.get("quantity",0))!=int(purchased.quantity) or
-					int(existing.get("drop_id",0))!=int(purchased.drop_id)
+					int(existing.get("drop_id",0))!=int(purchased.drop_id) or
+					int(existing.get("enhancement_level",0))!=int(purchased.enhancement_level)
 				):
 					return fail("player_shop_buy_replay_uid_conflict")
 			player_shop_wallet=int(value.buyer_wallet)
@@ -3640,7 +3650,7 @@ func _trade_item_matches_inventory(item: Dictionary) -> bool:
 	if not inventory_items.has(uid):
 		return false
 	var owned: Dictionary = inventory_items[uid]
-	return int(owned.get("item_definition_id",0)) == int(item.item_definition_id) and int(owned.get("quantity",0)) == int(item.quantity) and int(owned.get("drop_id",0)) == int(item.drop_id)
+	return int(owned.get("item_definition_id",0)) == int(item.item_definition_id) and int(owned.get("quantity",0)) == int(item.quantity) and int(owned.get("drop_id",0)) == int(item.drop_id) and int(owned.get("enhancement_level",0)) == int(item.get("enhancement_level",0))
 
 
 func _apply_trade_snapshot(frame: PackedByteArray) -> bool:
@@ -3742,7 +3752,8 @@ func _apply_trade_terminal(frame: PackedByteArray) -> bool:
 				"item_uid":uid,
 				"item_definition_id":int(item.item_definition_id),
 				"quantity":int(item.quantity),
-				"drop_id":int(item.drop_id)
+				"drop_id":int(item.drop_id),
+				"enhancement_level":int(item.get("enhancement_level",0))
 			}
 		inventory_revision += 1
 		var wallet := int(terminal.wallet_money)
