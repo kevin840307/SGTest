@@ -10,7 +10,7 @@ func _fail(reason:String)->void:
 func _result(
 		epoch:int,sequence:int,action:int,status:int,seller:int,listing:int,
 		uid:int,item_id:int,quantity:int,source_drop:int,durability:int,
-		price:int,seller_wallet:int,buyer_wallet:int)->PackedByteArray:
+		price:int,seller_wallet:int,buyer_wallet:int,enhancement:int=0)->PackedByteArray:
 	var writer:=StreamPeerBuffer.new()
 	writer.big_endian=false
 	writer.put_u32(WireCodec.PLAYER_SHOP_RESULT_FRAME_BYTES)
@@ -30,6 +30,7 @@ func _result(
 	writer.put_64(price)
 	writer.put_64(seller_wallet)
 	writer.put_64(buyer_wallet)
+	writer.put_u8(enhancement)
 	return writer.data_array
 
 func _sold(epoch:int,listing:int,buyer:int,uid:int,wallet:int)->PackedByteArray:
@@ -78,10 +79,11 @@ func _initialize()->void:
 		_fail("action-specific command authority validation")
 		return
 	var decoded:=WireCodec.decode_player_shop_result(
-		_result(3,4,4,0,22,91,7001,6101,2,5001,80,300,400,700))
+		_result(3,4,4,0,22,91,7001,6101,2,5001,80,300,400,700,5))
 	if (
 		decoded.is_empty() or int(decoded.item_uid)!=7001 or
-		int(decoded.durability_raw)!=80 or int(decoded.buyer_wallet)!=700
+		int(decoded.durability_raw)!=80 or int(decoded.buyer_wallet)!=700 or
+		int(decoded.enhancement_level)!=5
 	):
 		_fail("result codec durability/provenance")
 		return
@@ -95,7 +97,8 @@ func _initialize()->void:
 	var seller:=_base_world(22,11)
 	seller.inventory_items[7001]={
 		"item_uid":7001,"item_definition_id":6101,
-		"quantity":2,"drop_id":5001,"durability_raw":80}
+		"quantity":2,"drop_id":5001,"durability_raw":80,
+		"enhancement_level":5}
 	if not seller.mark_player_shop_sent(1,1,0,0,7001,300):
 		_fail("seller open admission")
 		return
@@ -103,7 +106,7 @@ func _initialize()->void:
 		_fail("open optimistically removed seller UID")
 		return
 	if not seller.apply_frame(
-		_result(3,1,1,0,22,91,7001,6101,2,5001,80,300,100,100)):
+		_result(3,1,1,0,22,91,7001,6101,2,5001,80,300,100,100,5)):
 		_fail("seller open receipt "+seller.protocol_error)
 		return
 	var seller_snap:=seller.snapshot()
@@ -140,13 +143,14 @@ func _initialize()->void:
 		_fail("buyer inspect admission")
 		return
 	if not buyer_world.apply_frame(
-		_result(3,1,3,0,22,91,7001,6101,2,5001,80,300,0,1000)):
+		_result(3,1,3,0,22,91,7001,6101,2,5001,80,300,0,1000,5)):
 		_fail("inspect reducer "+buyer_world.protocol_error)
 		return
 	var buyer_snap:=buyer_world.snapshot()
 	if (
 		int(buyer_snap.player_shop_inspected.get("listing_id",0))!=91 or
 		int(buyer_snap.player_shop_wallet)!=1000 or
+		int(buyer_snap.player_shop_inspected.get("enhancement_level",-1))!=5 or
 		(buyer_snap.inventory_items as Dictionary).has(7001)
 	):
 		_fail("inspect mutated inventory or lost listing")
@@ -158,7 +162,7 @@ func _initialize()->void:
 		_fail("buy optimistically created UID")
 		return
 	if not buyer_world.apply_frame(
-		_result(3,2,4,0,22,91,7001,6101,2,5001,80,300,400,700)):
+		_result(3,2,4,0,22,91,7001,6101,2,5001,80,300,400,700,5)):
 		_fail("buy reducer "+buyer_world.protocol_error)
 		return
 	buyer_snap=buyer_world.snapshot()
@@ -166,7 +170,7 @@ func _initialize()->void:
 	if (
 		purchased.is_empty() or int(purchased.item_definition_id)!=6101 or
 		int(purchased.quantity)!=2 or int(purchased.drop_id)!=5001 or
-		int(purchased.durability_raw)!=80 or
+		int(purchased.durability_raw)!=80 or int(purchased.enhancement_level)!=5 or
 		int(buyer_snap.player_shop_wallet)!=700 or
 		not (buyer_snap.player_shop_inspected as Dictionary).is_empty()
 	):
@@ -174,7 +178,7 @@ func _initialize()->void:
 		return
 	if (
 		not buyer_world.apply_frame(
-			_result(3,2,4,0,22,91,7001,6101,2,5001,80,300,400,700)) or
+			_result(3,2,4,0,22,91,7001,6101,2,5001,80,300,400,700,5)) or
 		int(buyer_world.snapshot().stale_player_shop_frames)!=1
 	):
 		_fail("duplicate buyer receipt not stale")
@@ -202,5 +206,5 @@ func _initialize()->void:
 		_fail("future map player-shop result did not fail closed")
 		return
 
-	print("PLAYER_SHOP_WIRE_PASS command=53 result=90 sold=48 action_shape=true server_auth_uid=true inspect_no_inventory_mutation=true buy_uid_provenance=true durability=80 seller_sold_push=true duplicate_stale=true future_failclosed=true")
+	print("PLAYER_SHOP_WIRE_PASS command=53 result=91 sold=48 action_shape=true server_auth_uid=true inspect_no_inventory_mutation=true buy_uid_provenance=true durability=80 enhancement=5 seller_sold_push=true duplicate_stale=true future_failclosed=true")
 	quit(0)
