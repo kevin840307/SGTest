@@ -25,6 +25,14 @@ internal static class TlsHost
             int port = Number(options, "--port", 7777, 0, 65535);
             int maximum = Number(options, "--max-connections", 128, 1, 4096);
             int perAddress = Number(options, "--max-per-address", Math.Min(8, maximum), 1, maximum);
+            int authAddressFailures=Number(
+                options,"--auth-failures-per-address",12,1,10000);
+            int authAccountFailures=Number(
+                options,"--auth-failures-per-account",6,1,10000);
+            int authWindowSeconds=Number(
+                options,"--auth-failure-window-seconds",60,1,86400);
+            int authLockoutSeconds=Number(
+                options,"--auth-lockout-seconds",30,1,86400);
             int checkpointMs = Number(options, "--position-checkpoint-ms", 5000, 500, 60000);
             if (options.ContainsKey("--seconds"))
                 stop.CancelAfter(TimeSpan.FromSeconds(Number(options, "--seconds", 1, 1, 86400)));
@@ -236,6 +244,11 @@ internal static class TlsHost
                 ? null:new PlayerShopCoordinator(
                     identity,world,tradeItemRules!,trades,combat);
             var parties=new PartyCoordinator();
+            var authRateLimiter=new AuthenticationRateLimiter(new(
+                MaxFailuresPerAddress:authAddressFailures,
+                MaxFailuresPerAccount:authAccountFailures,
+                FailureWindow:TimeSpan.FromSeconds(authWindowSeconds),
+                Lockout:TimeSpan.FromSeconds(authLockoutSeconds)));
             var aoi = new WorldAoiPump(
                 router, monsters: monsters, playerCombat: combat, loot: loot,
                 initialGroundDrops: activeDrops);
@@ -256,6 +269,7 @@ internal static class TlsHost
                 trades: trades,
                 playerShops: playerShops,
                 parties: parties,
+                rateLimiter: authRateLimiter,
                 gmAccounts: gmAccounts);
             await using var listener = new TlsGatewayListener(address, port, authorization,
                 certificate, router, new(MaxConnections: maximum, MaxConnectionsPerAddress: perAddress));
@@ -276,6 +290,10 @@ internal static class TlsHost
                 {
                     result = "TLS_HOST_READY", endpoint = listener.LocalEndpoint.ToString(),
                     max_connections = maximum, max_per_address = perAddress,
+                    auth_failures_per_address = authAddressFailures,
+                    auth_failures_per_account = authAccountFailures,
+                    auth_failure_window_seconds = authWindowSeconds,
+                    auth_lockout_seconds = authLockoutSeconds,
                     maps = maps.Select(m => m.MapId), audited_portals = portals.Count,
                     monster_maps = monsterRuntimes.Select(m => m.MapId),
                     monsters = monsterRuntimes.Sum(m => m.Count),
@@ -337,6 +355,7 @@ internal static class TlsHost
             Console.WriteLine(JsonSerializer.Serialize(new
             {
                 result = "TLS_HOST_STOPPED", listener = listener.Statistics,
+                authentication_rate_limit = authRateLimiter.Statistics,
                 world = world.Statistics, router = router.Statistics,
                 monster_coordinator = monsters?.Statistics,
                 positions = positions.Statistics,
