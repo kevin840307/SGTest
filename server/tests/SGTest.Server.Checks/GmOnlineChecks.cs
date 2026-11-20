@@ -133,7 +133,7 @@ internal static class GmOnlineChecks
             ((IPEndPoint)listener.LocalEndpoint).Port);
         var serverClient=await accepting;
         var serverTask=TlsWireConnection.RunServerAsync(
-            serverClient,certificate,authorization.AuthorizeAndBindAsync,
+            serverClient,certificate,(tls,token) => authorization.AuthorizeAndBindAsync(tls,token),
             world.TryPostMove);
 
         var tls=TlsSocketChecks.CreateClientTls(client);
