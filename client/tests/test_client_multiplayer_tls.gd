@@ -70,6 +70,21 @@ func _observe(session, self_id: int, crossmap: bool = false, portal: bool = fals
 			return
 	var crossmap_chat_stale_before := -1
 	if crossmap and not portal:
+		if not session.party_invite(remote_id):
+			_fail("observer party invite intent rejected",session)
+			return
+		var invite_result:=_wait_party_result(session,1,1,remote_id,7000)
+		if invite_result.is_empty() or int(invite_result.get("status",-1))!=0:
+			_fail("observer party invite result missing %s" % session.snapshot(),session)
+			return
+		var party_id:=int(invite_result.get("party_id",0))
+		var joined:=_wait_party_members(session,party_id,2,7000)
+		if joined.is_empty() or int(joined.get("party_leader_actor_id",0))!=self_id:
+			_fail("observer did not receive two-member party snapshot %s" %
+				session.snapshot(),session)
+			return
+		print("CLIENT_CROSSMAP_PARTY_READY role=observer party=%d leader=%d" %
+			[party_id,self_id])
 		var map15_chat := _wait_nearby_chat(
 			session,remote_id,"MultiHeroTwo","跨圖前附近訊息",7000)
 		if map15_chat.is_empty() or int(map15_chat.get("chat_sequence",0))!=1:
@@ -111,17 +126,27 @@ func _observe(session, self_id: int, crossmap: bool = false, portal: bool = fals
 	if crossmap:
 		print("CLIENT_%s_DESPAWN_SEEN role=observer remote=%d" % ["PORTAL" if portal else "CROSSMAP", remote_id])
 		if not portal:
+			var party_chat:=_wait_party_chat(
+				session,remote_id,"MultiHeroTwo","Map13 跨圖隊伍聊天",7000)
+			if (
+				party_chat.is_empty() or int(party_chat.get("chat_sequence",0))!=3 or
+				int(party_chat.get("channel",-1))!=3
+			):
+				_fail("Map13 cross-map party chat was not delivered to Map15 observer %s" %
+					session.snapshot(),session)
+				return
+			print("CLIENT_CROSSMAP_PARTY_CHAT_RECEIVED role=observer sequence=3 remote=%d" % remote_id)
 			var whisper:=_wait_whisper(
 				session,remote_id,"MultiHeroTwo","Map13 跨圖私訊",7000)
 			if (
-				whisper.is_empty() or int(whisper.get("chat_sequence",0))!=3 or
+				whisper.is_empty() or int(whisper.get("chat_sequence",0))!=4 or
 				int(whisper.get("channel",-1))!=4 or
 				str(whisper.get("direction",""))!="incoming"
 			):
 				_fail("Map13 cross-map whisper was not delivered to Map15 observer %s" %
 					session.snapshot(),session)
 				return
-			print("CLIENT_CROSSMAP_WHISPER_RECEIVED role=observer sequence=3 remote=%d" % remote_id)
+			print("CLIENT_CROSSMAP_WHISPER_RECEIVED role=observer sequence=4 remote=%d" % remote_id)
 		var returned := {}
 		deadline = Time.get_ticks_msec() + 7000
 		while Time.get_ticks_msec() < deadline:
@@ -148,8 +173,11 @@ func _observe(session, self_id: int, crossmap: bool = false, portal: bool = fals
 		# Keep the observer alive briefly so the returning actor can
 		# also reduce its authoritative peer Spawn, not only WorldReady.
 		OS.delay_msec(650)
+		if not portal and int(session.snapshot().get("party_id",0))<=0:
+			_fail("observer party membership did not survive actor map transfer",session)
+			return
 		session.stop()
-		print("CLIENT_%s_PASS role=observer map15=PASS delta=PASS despawn=PASS respawn=PASS nearby_chat_isolation=%s whisper_crossmap=%s remote=%d" % ["PORTAL" if portal else "CROSSMAP","NOT_TESTED" if portal else "PASS","NOT_TESTED" if portal else "PASS",remote_id])
+		print("CLIENT_%s_PASS role=observer map15=PASS delta=PASS despawn=PASS respawn=PASS nearby_chat_isolation=%s party_crossmap=%s whisper_crossmap=%s remote=%d" % ["PORTAL" if portal else "CROSSMAP","NOT_TESTED" if portal else "PASS","NOT_TESTED" if portal else "PASS","NOT_TESTED" if portal else "PASS",remote_id])
 		quit(0)
 		return
 	session.stop()
@@ -180,6 +208,28 @@ func _move(session, self_id: int, crossmap: bool = false, portal: bool = false) 
 				session.snapshot(),session)
 			return
 	elif not portal:
+		var invite:=_wait_party_invite(session,7000)
+		if invite.is_empty() or int(invite.get("inviter_actor_id",0))!=remote_id:
+			_fail("actor did not receive crossmap party invite %s" % session.snapshot(),session)
+			return
+		var party_id:=int(invite.get("party_id",0))
+		if not session.party_accept():
+			_fail("actor party accept intent rejected",session)
+			return
+		var accept_result:=_wait_party_result(session,1,2,remote_id,7000)
+		if (
+			accept_result.is_empty() or int(accept_result.get("status",-1))!=0 or
+			int(accept_result.get("party_id",0))!=party_id
+		):
+			_fail("actor party accept result missing %s" % session.snapshot(),session)
+			return
+		var joined:=_wait_party_members(session,party_id,2,7000)
+		if joined.is_empty():
+			_fail("actor did not receive two-member party snapshot %s" %
+				session.snapshot(),session)
+			return
+		print("CLIENT_CROSSMAP_PARTY_READY role=actor party=%d leader=%d" %
+			[party_id,int(joined.get("party_leader_actor_id",0))])
 		if not session.send_nearby_chat("跨圖前附近訊息",1):
 			_fail("crossmap Map15 nearby chat intent rejected",session)
 			return
@@ -249,10 +299,23 @@ func _move(session, self_id: int, crossmap: bool = false, portal: bool = false) 
 					session.snapshot(),session)
 				return
 			print("CLIENT_CROSSMAP_MAP13_CHAT_SELF role=actor sequence=2")
+			if int(session.snapshot().get("party_id",0))<=0:
+				_fail("actor party membership lost on Map13 transfer",session)
+				return
+			if not session.send_party_chat("Map13 跨圖隊伍聊天",2):
+				_fail("Map13 cross-map party chat intent rejected",session)
+				return
+			var party_echo:=_wait_party_chat(
+				session,self_id,"MultiHeroTwo","Map13 跨圖隊伍聊天",7000)
+			if party_echo.is_empty() or int(party_echo.get("chat_sequence",0))!=3:
+				_fail("Map13 authoritative party self echo missing %s" %
+					session.snapshot(),session)
+				return
+			print("CLIENT_CROSSMAP_PARTY_CHAT_SELF role=actor sequence=3")
 			if not session.send_whisper(remote_id,"Map13 跨圖私訊",3):
 				_fail("Map13 cross-map whisper intent rejected",session)
 				return
-			var whisper_result:=_wait_whisper_result(session,3,remote_id,7000)
+			var whisper_result:=_wait_whisper_result(session,4,remote_id,7000)
 			if (
 				whisper_result.is_empty() or
 				int(whisper_result.get("status",-1))!=0 or
@@ -266,7 +329,7 @@ func _move(session, self_id: int, crossmap: bool = false, portal: bool = false) 
 			if outgoing.is_empty():
 				_fail("authoritative whisper result did not publish outgoing history",session)
 				return
-			print("CLIENT_CROSSMAP_WHISPER_SENT role=actor sequence=3 target=%d" % remote_id)
+			print("CLIENT_CROSSMAP_WHISPER_SENT role=actor sequence=4 target=%d" % remote_id)
 			if session.send_whisper(self_id,"不能私訊自己",0):
 				_fail("client admitted self whisper",session)
 				return
@@ -276,7 +339,7 @@ func _move(session, self_id: int, crossmap: bool = false, portal: bool = false) 
 				_fail("offline-target whisper intent was rejected locally",session)
 				return
 			var unavailable:=_wait_whisper_result(
-				session,4,OFFLINE_ACTOR,7000)
+				session,5,OFFLINE_ACTOR,7000)
 			if (
 				unavailable.is_empty() or
 				int(unavailable.get("status",-1))!=1 or
@@ -289,7 +352,7 @@ func _move(session, self_id: int, crossmap: bool = false, portal: bool = false) 
 			if (session.snapshot().get("chat_messages",[]) as Array).size()!=history_before:
 				_fail("failed whisper created optimistic chat history",session)
 				return
-			print("CLIENT_CROSSMAP_WHISPER_UNAVAILABLE role=actor sequence=4 target=%d" % OFFLINE_ACTOR)
+			print("CLIENT_CROSSMAP_WHISPER_UNAVAILABLE role=actor sequence=5 target=%d" % OFFLINE_ACTOR)
 		if portal:
 			var portal_result := _await_npc_result(session, 0, 2, 7000)
 			if portal_result.is_empty() or int(portal_result.last_npc_result_map_epoch) != int(in_map13.map_epoch):
@@ -338,7 +401,7 @@ func _move(session, self_id: int, crossmap: bool = false, portal: bool = false) 
 		# The spectator must see re-entry before this actor logs out.
 		OS.delay_msec(700)
 		session.stop()
-		print("CLIENT_%s_PASS role=actor map15_map13_map15=PASS new_epochs=PASS world_ready=PASS old_aoi_clear=PASS npc_authority=%s nearby_chat_isolation=%s whisper_crossmap=%s whisper_unavailable=%s" % ["PORTAL" if portal else "CROSSMAP","PASS" if portal else "NOT_TESTED","NOT_TESTED" if portal else "PASS","NOT_TESTED" if portal else "PASS","NOT_TESTED" if portal else "PASS"])
+		print("CLIENT_%s_PASS role=actor map15_map13_map15=PASS new_epochs=PASS world_ready=PASS old_aoi_clear=PASS npc_authority=%s nearby_chat_isolation=%s party_crossmap=%s whisper_crossmap=%s whisper_unavailable=%s" % ["PORTAL" if portal else "CROSSMAP","PASS" if portal else "NOT_TESTED","NOT_TESTED" if portal else "PASS","NOT_TESTED" if portal else "PASS","NOT_TESTED" if portal else "PASS","NOT_TESTED" if portal else "PASS"])
 		quit(0)
 		return
 	# Allow a couple of 30Hz World ticks for authoritative movement,
@@ -359,6 +422,78 @@ func _wait_nearby_chat(
 		for raw in value.get("chat_messages",[]):
 			var row:Dictionary=raw
 			if (
+				int(row.get("sender_actor_id",0))==sender_id and
+				str(row.get("sender_name",""))==sender_name and
+				str(row.get("message",""))==message
+			):
+				return row
+		OS.delay_msec(2)
+	return {}
+
+
+func _wait_party_invite(session,timeout_ms:int)->Dictionary:
+	var deadline:=Time.get_ticks_msec()+timeout_ms
+	while Time.get_ticks_msec()<deadline:
+		var value:Dictionary=session.snapshot()
+		if int(value.state)==WorldState.STATE_FAILED:
+			break
+		var invite:Dictionary=value.get("pending_party_invite",{})
+		if not invite.is_empty():
+			return invite
+		OS.delay_msec(2)
+	return {}
+
+
+func _wait_party_result(
+		session,sequence:int,action:int,target_actor_id:int,
+		timeout_ms:int)->Dictionary:
+	var deadline:=Time.get_ticks_msec()+timeout_ms
+	while Time.get_ticks_msec()<deadline:
+		var value:Dictionary=session.snapshot()
+		if int(value.state)==WorldState.STATE_FAILED:
+			break
+		if (
+			int(value.get("last_party_result_sequence",0))==sequence and
+			int(value.get("pending_party_sequence",0))==0
+		):
+			var result:Dictionary=value.get("last_party_result",{})
+			if (
+				int(result.get("action",0))==action and
+				int(result.get("target_actor_id",0))==target_actor_id
+			):
+				return result
+		OS.delay_msec(2)
+	return {}
+
+
+func _wait_party_members(
+		session,party_id:int,count:int,timeout_ms:int)->Dictionary:
+	var deadline:=Time.get_ticks_msec()+timeout_ms
+	while Time.get_ticks_msec()<deadline:
+		var value:Dictionary=session.snapshot()
+		if int(value.state)==WorldState.STATE_FAILED:
+			break
+		if (
+			int(value.get("party_id",0))==party_id and
+			(value.get("party_members",{}) as Dictionary).size()==count
+		):
+			return value
+		OS.delay_msec(2)
+	return {}
+
+
+func _wait_party_chat(
+		session,sender_id:int,sender_name:String,message:String,
+		timeout_ms:int)->Dictionary:
+	var deadline:=Time.get_ticks_msec()+timeout_ms
+	while Time.get_ticks_msec()<deadline:
+		var value:Dictionary=session.snapshot()
+		if int(value.state)==WorldState.STATE_FAILED:
+			break
+		for raw in value.get("chat_messages",[]):
+			var row:Dictionary=raw
+			if (
+				int(row.get("channel",-1))==3 and
 				int(row.get("sender_actor_id",0))==sender_id and
 				str(row.get("sender_name",""))==sender_name and
 				str(row.get("message",""))==message
