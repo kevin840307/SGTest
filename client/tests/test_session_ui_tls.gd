@@ -673,7 +673,8 @@ func run() -> void:
 		var uid := 10000+index
 		many[uid] = {"item_uid":uid,
 			"item_definition_id":2701 if index == 0 else 40000+index,
-			"quantity":3 if index == 0 else 1,"drop_id":50000+index}
+			"quantity":3 if index == 0 else 1,"drop_id":50000+index,
+			"enhancement_level":5 if index == 0 else 0}
 	panel._latest.inventory_items = many
 	panel._latest.inventory_revision = 2
 	panel._update_inventory_ui()
@@ -1091,12 +1092,12 @@ func run() -> void:
 		return
 
 	panel._latest.trade_revision = 3
-	panel._latest.trade_my_items = {10000:{"item_uid":10000,"item_definition_id":4001,"quantity":3,"drop_id":501}}
-	panel._latest.trade_other_items = {20000:{"item_uid":20000,"item_definition_id":4002,"quantity":1,"drop_id":502}}
+	panel._latest.trade_my_items = {10000:{"item_uid":10000,"item_definition_id":4001,"quantity":3,"drop_id":501,"enhancement_level":5}}
+	panel._latest.trade_other_items = {20000:{"item_uid":20000,"item_definition_id":4002,"quantity":1,"drop_id":502,"enhancement_level":7}}
 	panel._latest.trade_other_money = 50
 	panel._update_trade_ui()
-	if panel.trade_my_offer_picker.item_count != 1 or not panel.trade_other_offer_label.text.contains("UID 20000"):
-		fail("Trade UI did not render authoritative offers")
+	if panel.trade_my_offer_picker.item_count != 1 or not panel.trade_my_offer_picker.get_item_text(0).contains("+5") or not panel.trade_other_offer_label.text.contains("UID 20000") or not panel.trade_other_offer_label.text.contains("+7"):
+		fail("Trade UI did not render authoritative offers/enhancement levels")
 		return
 	panel.trade_money_input.value = 200
 	panel.trade_set_money_button.pressed.emit()
@@ -1170,12 +1171,13 @@ func run() -> void:
 	panel._latest.player_shop_own_listing = {
 		"seller_actor_id":int(panel._latest.actor_id),"listing_id":91,
 		"item_uid":10000,"item_definition_id":4001,"quantity":3,
-		"source_drop_id":501,"durability_raw":80,"price":300}
+		"source_drop_id":501,"durability_raw":80,"price":300,
+		"enhancement_level":5}
 	panel._latest.player_shop_wallet = 100
 	panel._latest.last_player_shop_result = {"action":1,"status":0}
 	panel._update_player_shop_ui()
-	if panel.player_shop_close_button.disabled or not panel.player_shop_own_label.text.contains("UID 10000") or not panel.player_shop_open_button.disabled:
-		fail("Authoritative own player-shop listing was not rendered")
+	if panel.player_shop_close_button.disabled or not panel.player_shop_own_label.text.contains("UID 10000") or not panel.player_shop_own_label.text.contains("+5") or not panel.player_shop_open_button.disabled:
+		fail("Authoritative own player-shop listing/enhancement was not rendered")
 		return
 	panel.player_shop_close_button.pressed.emit()
 	if stub.player_shop_closes != 1 or stub.last_player_shop_listing != 91:
@@ -1197,12 +1199,12 @@ func run() -> void:
 	panel._latest.player_shop_inspected = {
 		"seller_actor_id":22,"listing_id":92,"item_uid":20000,
 		"item_definition_id":4002,"quantity":1,"source_drop_id":502,
-		"durability_raw":70,"price":300}
+		"durability_raw":70,"price":300,"enhancement_level":7}
 	panel._latest.player_shop_wallet = 700
 	panel._latest.last_player_shop_result = {"action":3,"status":0}
 	panel._update_player_shop_ui()
-	if panel.player_shop_buy_button.disabled or not panel.player_shop_inspected_label.text.contains("UID 20000") or not panel.player_shop_inspected_label.text.contains("300"):
-		fail("Authoritative inspected player-shop listing was not rendered")
+	if panel.player_shop_buy_button.disabled or not panel.player_shop_inspected_label.text.contains("UID 20000") or not panel.player_shop_inspected_label.text.contains("300") or not panel.player_shop_inspected_label.text.contains("+7"):
+		fail("Authoritative inspected player-shop listing/enhancement was not rendered")
 		return
 	panel.player_shop_buy_button.pressed.emit()
 	if stub.player_shop_buys != 1 or stub.last_player_shop_seller != 22 or stub.last_player_shop_listing != 92:
