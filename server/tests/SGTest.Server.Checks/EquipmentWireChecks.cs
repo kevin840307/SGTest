@@ -17,7 +17,7 @@ internal static class EquipmentWireChecks
                 "equipment UID-only move golden/roundtrip");
 
             var snapshot=new EquipmentSnapshotWire(11,0,true,[
-                new EquipmentItemWire(7001,4,3701,501)
+                new EquipmentItemWire(7001,4,3701,501,5)
             ]);
             var snapshotFrame=WireProtocol.EncodeEquipmentSnapshot(snapshot);
             Checks.Require(
@@ -43,8 +43,8 @@ internal static class EquipmentWireChecks
             try
             {
                 WireProtocol.EncodeEquipmentSnapshot(new(11,0,true,[
-                    new EquipmentItemWire(7001,4,3701,501),
-                    new EquipmentItemWire(7002,4,3702,502)
+                    new EquipmentItemWire(7001,4,3701,501,5),
+                    new EquipmentItemWire(7002,4,3702,502,6)
                 ]));
             }
             catch(ArgumentOutOfRangeException){duplicate=true;}
