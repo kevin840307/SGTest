@@ -1713,7 +1713,12 @@ func _trade_state_text(value: int) -> String:
 func _trade_item_text(item: Dictionary) -> String:
 	var level := int(item.get("enhancement_level",0))
 	var enhancement := "" if level <= 0 else "｜+%d" % level
-	return "%s ×%d%s｜UID %d" % [item_catalog.name_for(int(item.get("item_definition_id",0))),int(item.get("quantity",0)),enhancement,int(item.get("item_uid",0))]
+	var durability := int(item.get("durability_raw",-1))
+	var durability_text := "" if durability < 0 else "｜耐久 raw %d" % durability
+	return "%s ×%d%s%s｜UID %d" % [
+		item_catalog.name_for(int(item.get("item_definition_id",0))),
+		int(item.get("quantity",0)),enhancement,durability_text,
+		int(item.get("item_uid",0))]
 
 
 func _request_pvp_mode(action: int) -> void:
