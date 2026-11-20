@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using System.Net;
 using System.Net.Security;
 using System.Net.Sockets;
 using System.Security.Cryptography;
@@ -41,6 +42,7 @@ public sealed class IdentityTlsAuthorization
     private readonly PlayerTradeCoordinator? _trades;
     private readonly PlayerShopCoordinator? _playerShops;
     private readonly PartyCoordinator? _parties;
+    private readonly AuthenticationRateLimiter? _rateLimiter;
     private readonly HashSet<string> _gmAccounts;
 
     public IdentityTlsAuthorization(SqliteIdentityStore identity, ServerWorldHost world,
@@ -63,6 +65,7 @@ public sealed class IdentityTlsAuthorization
                                      PlayerTradeCoordinator? trades = null,
                                      PlayerShopCoordinator? playerShops = null,
                                      PartyCoordinator? parties = null,
+                                     AuthenticationRateLimiter? rateLimiter = null,
                                      IReadOnlySet<string>? gmAccounts = null)
     {
         _identity = identity ?? throw new ArgumentNullException(nameof(identity));
@@ -94,6 +97,7 @@ public sealed class IdentityTlsAuthorization
         _trades = trades;
         _playerShops=playerShops;
         _parties=parties;
+        _rateLimiter=rateLimiter;
         if(_playerShops is not null&&_trades is null)
             throw new ArgumentException(
                 "Player shop requires the authenticated gameplay-gate registry",
@@ -132,9 +136,14 @@ public sealed class IdentityTlsAuthorization
         var gmPvpNameGate=new GmPvpNameSequenceGate();
         var playerShopGate=new PlayerShopSequenceGate();
 
+        IPAddress remoteAddress=((IPEndPoint?)client.Client.RemoteEndPoint)?.Address
+            ??IPAddress.None;
+        if(remoteAddress.IsIPv4MappedToIPv6)remoteAddress=remoteAddress.MapToIPv4();
+
         async ValueTask<GatewayConnection?> Authorize(SslStream stream, CancellationToken token)
         {
-            var connection = await AuthorizeAndBindAsync(stream, token).ConfigureAwait(false);
+            var connection = await AuthorizeAndBindAsync(
+                stream, token, remoteAddress).ConfigureAwait(false);
             if (connection is null) return null;
             var binding = connection.Binding;
             bool attached;
@@ -2154,14 +2163,33 @@ public sealed class IdentityTlsAuthorization
     }
 
     public async ValueTask<GatewayConnection?> AuthorizeAndBindAsync(
-        SslStream tls, CancellationToken cancellationToken)
+        SslStream tls, CancellationToken cancellationToken,
+        IPAddress? remoteAddress = null)
     {
         ArgumentNullException.ThrowIfNull(tls);
         byte[]? authFrame = await ReadFrameAsync(tls, cancellationToken).ConfigureAwait(false);
         if (authFrame is null || !WireProtocol.TryDecodeAuthRequest(authFrame, out var request)) return null;
 
+        IPAddress source=remoteAddress??IPAddress.None;
+        if(source.IsIPv4MappedToIPv6)source=source.MapToIPv4();
+        if(_rateLimiter is not null&&
+           !_rateLimiter.IsAllowed(source,request.Username))
+        {
+            await WriteFrameAsync(tls,
+                WireProtocol.EncodeAuthResult(new(AuthWireStatus.InvalidCredentials)),
+                cancellationToken).ConfigureAwait(false);
+            return null;
+        }
+
         var authentication = await _identity.AuthenticateAsync(
             request.Username, request.Password, cancellationToken).ConfigureAwait(false);
+        if(_rateLimiter is not null)
+        {
+            if(authentication.Status==AuthenticationStatus.InvalidCredentials)
+                _rateLimiter.RecordFailure(source,request.Username);
+            else
+                _rateLimiter.RecordCredentialSuccess(request.Username);
+        }
         AuthWireStatus authStatus = authentication.Status switch
         {
             AuthenticationStatus.Success => AuthWireStatus.Success,
