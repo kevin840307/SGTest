@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using SGTest.Server.Wire;
 
 namespace SGTest.Server.Gateway;
@@ -18,8 +19,29 @@ public sealed class PartyCoordinator
         public readonly Dictionary<long,long> Connections = [];
     }
 
+    // A pending invite is valid only for the authenticated target socket that
+    // received it; ActorId alone is not a session identity across reconnects.
     private readonly record struct Invitation(
-        long PartyId,long InviterActorId,long InviterConnectionEpoch);
+        long PartyId,long InviterActorId,long InviterConnectionEpoch,
+        long TargetConnectionEpoch,long CreatedTimestamp);
+
+    // A bounded online invite, not a persistent mailbox. Clock is monotonic;
+    // tests can inject a deterministic timestamp without sleeping.
+    public const int InvitationLifetimeSeconds = 60;
+    private readonly Func<long> _timestamp;
+
+    public PartyCoordinator(Func<long>? timestamp = null)
+    {
+        _timestamp=timestamp ?? Stopwatch.GetTimestamp;
+    }
+
+    private bool InviteExpired(Invitation invite)
+    {
+        long current=_timestamp();
+        return current<invite.CreatedTimestamp ||
+            Stopwatch.GetElapsedTime(invite.CreatedTimestamp,current)
+                >=TimeSpan.FromSeconds(InvitationLifetimeSeconds);
+    }
 
     private readonly object _gate = new();
     private readonly Dictionary<long,Party> _parties = [];
@@ -105,7 +127,10 @@ public sealed class PartyCoordinator
         ArgumentNullException.ThrowIfNull(router);
         lock(_gate)
         {
-            if(_invitesByTarget.TryGetValue(binding.ActorId,out _))
+            // Old socket teardown must not erase a different generation's
+            // freshly delivered invite (reconnect/replace is asynchronous).
+            if(_invitesByTarget.TryGetValue(binding.ActorId,out var pending) &&
+               pending.TargetConnectionEpoch==binding.ConnectionEpoch)
                 _invitesByTarget.Remove(binding.ActorId);
 
             if(!_partyByActor.TryGetValue(binding.ActorId,out long partyId)||
@@ -141,11 +166,17 @@ public sealed class PartyCoordinator
                 request.PartyId,request.TargetActorId,router);
             return;
         }
-        if(_invitesByTarget.ContainsKey(target.ActorId))
+        if(_invitesByTarget.TryGetValue(target.ActorId,out var prior))
         {
-            QueueResultLocked(request,PartyResultStatus.TargetHasPendingInvite,
-                request.PartyId,request.TargetActorId,router);
-            return;
+            if(prior.TargetConnectionEpoch!=target.ConnectionEpoch ||
+               InviteExpired(prior))
+                _invitesByTarget.Remove(target.ActorId);
+            else
+            {
+                QueueResultLocked(request,PartyResultStatus.TargetHasPendingInvite,
+                    request.PartyId,request.TargetActorId,router);
+                return;
+            }
         }
 
         Party party;
@@ -192,7 +223,8 @@ public sealed class PartyCoordinator
         }
 
         _invitesByTarget.Add(target.ActorId,
-            new(party.PartyId,request.ActorId,request.ConnectionEpoch));
+            new(party.PartyId,request.ActorId,request.ConnectionEpoch,
+                target.ConnectionEpoch,_timestamp()));
         QueueResultLocked(request,PartyResultStatus.Success,
             party.PartyId,target.ActorId,router);
         QueueInviteLocked(target,party,request.ActorId,
@@ -215,7 +247,9 @@ public sealed class PartyCoordinator
                 request.PartyId,request.TargetActorId,router);
             return;
         }
-        if(invite.PartyId!=request.PartyId||
+        if(invite.TargetConnectionEpoch!=request.ConnectionEpoch||
+           InviteExpired(invite)||
+           invite.PartyId!=request.PartyId||
            invite.InviterActorId!=request.TargetActorId||
            !_parties.TryGetValue(invite.PartyId,out var party)||
            party.LeaderActorId!=invite.InviterActorId||
@@ -257,9 +291,12 @@ public sealed class PartyCoordinator
                 request.PartyId,request.TargetActorId,router);
             return;
         }
-        if(invite.PartyId!=request.PartyId||
+        if(invite.TargetConnectionEpoch!=request.ConnectionEpoch||
+           InviteExpired(invite)||
+           invite.PartyId!=request.PartyId||
            invite.InviterActorId!=request.TargetActorId)
         {
+            _invitesByTarget.Remove(request.ActorId);
             QueueResultLocked(request,PartyResultStatus.InviteStale,
                 request.PartyId,request.TargetActorId,router);
             return;
