@@ -65,6 +65,10 @@ class RespawnSession extends RefCounted:
 	var nearby_chats := 0
 	var last_nearby_message := ""
 	var last_nearby_bubble := -1
+	var quest_opens := 0
+	var quest_choices := 0
+	var last_quest_npc := 0
+	var last_quest_choice := 0
 	var pvp_requests := 0
 	var last_pvp_action := -1
 	var pvp_attacks := 0
@@ -260,6 +264,18 @@ class RespawnSession extends RefCounted:
 		nearby_chats += 1
 		last_nearby_message = message
 		last_nearby_bubble = bubble_type
+		return true
+	func open_quest(npc_spawn_id:int)->bool:
+		if npc_spawn_id<=0:
+			return false
+		quest_opens+=1
+		last_quest_npc=npc_spawn_id
+		return true
+	func choose_quest_choice(choice_id:int)->bool:
+		if choice_id<=0:
+			return false
+		quest_choices+=1
+		last_quest_choice=choice_id
 		return true
 	func attack_monster(entity_id: int) -> bool:
 		if entity_id <= 0:
@@ -1175,6 +1191,108 @@ func run() -> void:
 	if not panel.nearby_chat_history.text.contains("[附近] NearbyHero：附近測試"):
 		fail("Nearby chat UI did not render authoritative Server delivery")
 		return
+	# Quest UI displays and submits only the authoritative Server View.
+	panel._latest.quest_sequence = 0
+	panel._latest.pending_quest_sequence = 0
+	panel._latest.pending_quest_kind = 0
+	panel._latest.pending_quest_npc = 0
+	panel._latest.pending_quest_id = 0
+	panel._latest.pending_quest_choice_id = 0
+	panel._latest.quest_view = {}
+	panel._latest.last_quest_response_sequence = 0
+	panel._latest.last_quest_status = -1
+	panel._latest.last_quest_result = {}
+	panel._latest.stale_quest_results = 0
+	panel._latest.player_dead = false
+	panel._update_quest_ui()
+	for control in [panel.quest_npc_input,panel.quest_open_button,panel.quest_title_label,panel.quest_text_display,panel.quest_progress_label,panel.quest_choice_picker,panel.quest_choose_button,panel.quest_status]:
+		if control.get_parent() == null or not panel.is_ancestor_of(control):
+			fail("Quest controls are not descendants of SessionPanel")
+			return
+	if panel.quest_open_button.disabled or not panel.quest_choose_button.disabled:
+		fail("Quest idle controls did not expose only Server-validated open")
+		return
+	panel.quest_npc_input.value = 88
+	panel.quest_open_button.pressed.emit()
+	if stub.quest_opens != 1 or stub.last_quest_npc != 88:
+		fail("Quest open UI did not send exact NPC SpawnId")
+		return
+
+	panel._latest.quest_sequence = 1
+	panel._latest.pending_quest_sequence = 0
+	panel._latest.last_quest_response_sequence = 1
+	panel._latest.last_quest_status = 0
+	panel._latest.quest_view = {
+		"map_epoch":int(panel._latest.map_epoch),"quest_sequence":1,
+		"status":0,"npc_spawn_id":88,"quest_id":91001,"rule_revision":1,
+		"state":0,"stage":0,"progress_revision":0,
+		"title":"Verified Quest Fixture","text":"這是一個合成的 verified Quest 測試。",
+		"choices":[
+			{"choice_id":1,"label":"接受"},
+			{"choice_id":3,"label":"另一個合法起始選項"}]}
+	panel._latest.last_quest_result = panel._latest.quest_view.duplicate(true)
+	panel._update_quest_ui()
+	if (
+		not panel.quest_title_label.text.contains("Verified Quest Fixture") or
+		not panel.quest_text_display.text.contains("verified Quest") or
+		not panel.quest_progress_label.text.contains("未開始") or
+		panel.quest_choice_picker.item_count != 2 or
+		panel.quest_choose_button.disabled
+	):
+		fail("Quest UI did not render authoritative initial View")
+		return
+	var stage_before:=int((panel._latest.quest_view as Dictionary).stage)
+	var revision_before:=int((panel._latest.quest_view as Dictionary).progress_revision)
+	panel.quest_choice_picker.select(0)
+	panel.quest_choose_button.pressed.emit()
+	if stub.quest_choices != 1 or stub.last_quest_choice != 1:
+		fail("Quest choice UI did not send exact Server ChoiceId")
+		return
+	if (
+		int((panel._latest.quest_view as Dictionary).stage)!=stage_before or
+		int((panel._latest.quest_view as Dictionary).progress_revision)!=revision_before
+	):
+		fail("Quest UI optimistically advanced progress before Server View")
+		return
+
+	panel._latest.quest_sequence = 2
+	panel._latest.last_quest_response_sequence = 2
+	panel._latest.last_quest_status = 1
+	panel._latest.quest_view = {
+		"map_epoch":int(panel._latest.map_epoch),"quest_sequence":2,
+		"status":1,"npc_spawn_id":88,"quest_id":91001,"rule_revision":1,
+		"state":1,"stage":1,"progress_revision":1,
+		"title":"Verified Quest Fixture","text":"是否完成這個已驗證步驟？",
+		"choices":[{"choice_id":2,"label":"完成"}]}
+	panel._latest.last_quest_result = panel._latest.quest_view.duplicate(true)
+	panel._update_quest_ui()
+	if (
+		not panel.quest_progress_label.text.contains("進行中") or
+		not panel.quest_progress_label.text.contains("階段 1") or
+		panel.quest_choice_picker.item_count != 1 or
+		int(panel.quest_choice_picker.get_item_metadata(0)) != 2
+	):
+		fail("Quest UI did not converge to authoritative active stage")
+		return
+
+	panel._latest.quest_sequence = 3
+	panel._latest.last_quest_response_sequence = 3
+	panel._latest.quest_view = {
+		"map_epoch":int(panel._latest.map_epoch),"quest_sequence":3,
+		"status":1,"npc_spawn_id":88,"quest_id":91001,"rule_revision":1,
+		"state":2,"stage":2,"progress_revision":2,
+		"title":"Verified Quest Fixture","text":"任務已完成。","choices":[]}
+	panel._latest.last_quest_result = panel._latest.quest_view.duplicate(true)
+	panel._update_quest_ui()
+	if (
+		not panel.quest_progress_label.text.contains("已完成") or
+		not panel.quest_text_display.text.contains("任務已完成") or
+		panel.quest_choice_picker.item_count != 0 or
+		not panel.quest_choose_button.disabled
+	):
+		fail("Completed Quest View still exposed a Client-side choice")
+		return
+
 	# PvP mode UI reads only authoritative server results. Query is
 	# allowed first; white/blue mutations stay locked until a server reply.
 	panel._latest.pvp_known = false
@@ -1300,5 +1418,5 @@ func run() -> void:
 	panel._set_respawn_controls()
 	app.queue_free()
 	await process_frame
-	print("CLIENT_TLS_LOGIN_PASS ui=PASS auth=PASS choose=PASS receipt=PASS world_ready=PASS password_cleared=PASS logout=PASS respawn_ui=PASS click_attack_ui=PASS click_pickup_ui=PASS persistent_inventory_ui=PASS item_metadata=PASS inventory_pagination=PASS recovery_item_button=PASS inventory_discard_button=PASS inventory_discard_quantity_confirm=PASS shop_ui=PASS storage_ui=PASS equipment_ui=PASS bank_ui=PASS repair_ui=PASS trade_ui=PASS trade_ui_parenting=PASS player_shop_ui=PASS nearby_chat_ui=PASS pvp_ui=PASS pvp_attack_ui=PASS gm_pvp_ui=PASS pvp_tls_auto_query=PASS skill_cast_ui=PASS skill_singleflight=PASS combat_mp_ui=PASS")
+	print("CLIENT_TLS_LOGIN_PASS ui=PASS auth=PASS choose=PASS receipt=PASS world_ready=PASS password_cleared=PASS logout=PASS respawn_ui=PASS click_attack_ui=PASS click_pickup_ui=PASS persistent_inventory_ui=PASS item_metadata=PASS inventory_pagination=PASS recovery_item_button=PASS inventory_discard_button=PASS inventory_discard_quantity_confirm=PASS shop_ui=PASS storage_ui=PASS equipment_ui=PASS bank_ui=PASS repair_ui=PASS trade_ui=PASS trade_ui_parenting=PASS player_shop_ui=PASS nearby_chat_ui=PASS quest_ui=PASS pvp_ui=PASS pvp_attack_ui=PASS gm_pvp_ui=PASS pvp_tls_auto_query=PASS skill_cast_ui=PASS skill_singleflight=PASS combat_mp_ui=PASS")
 	quit(0)
