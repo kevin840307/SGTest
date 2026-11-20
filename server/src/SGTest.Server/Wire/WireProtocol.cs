@@ -4295,8 +4295,9 @@ public static class WireProtocol
 
     public static byte[] EncodePartyCommand(PartyCommandWire value)
     {
+        string targetNameText=value.TargetName??string.Empty;
         byte[] targetName;
-        try{targetName=StrictUtf8.GetBytes(value.TargetName??string.Empty);}
+        try{targetName=StrictUtf8.GetBytes(targetNameText);}
         catch(EncoderFallbackException)
         { throw new ArgumentOutOfRangeException(nameof(value)); }
         if(value.MapEpoch<=0||value.PartySequence==0||
@@ -4306,9 +4307,9 @@ public static class WireProtocol
             throw new ArgumentOutOfRangeException(nameof(value));
         bool nameTarget=targetName.Length>0;
         if(nameTarget&&
-           (value.TargetName!=value.TargetName.Normalize(NormalizationForm.FormC).Trim()||
-            string.IsNullOrWhiteSpace(value.TargetName)||
-            value.TargetName.Any(char.IsControl)))
+           (targetNameText!=targetNameText.Normalize(NormalizationForm.FormC).Trim()||
+            string.IsNullOrWhiteSpace(targetNameText)||
+            targetNameText.Any(char.IsControl)))
             throw new ArgumentOutOfRangeException(nameof(value));
         bool invite=value.Action==PartyCommandAction.Invite;
         bool memberTarget=value.Action is PartyCommandAction.Kick or PartyCommandAction.Promote;
