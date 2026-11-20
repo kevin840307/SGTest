@@ -310,7 +310,7 @@ public sealed class PlayerTradeCoordinator
                self.Items.Count>=WireProtocol.TradeMaxItemsPerSide)return;
             self.Items.Add(command.ItemUid,new(
                 item.ItemUid,item.ItemDefinitionId,item.Quantity,item.SourceDropId,
-                item.EnhancementLevel));
+                item.EnhancementLevel,item.DurabilityRaw??-1));
             self.LastSequence=command.TradeSequence;
             ResetLocks(current);
             current.Revision++;
@@ -558,7 +558,8 @@ public sealed class PlayerTradeCoordinator
                owned.ItemDefinitionId!=offer.ItemDefinitionId||
                owned.Quantity!=offer.Quantity||
                owned.SourceDropId!=offer.SourceDropId||
-               owned.EnhancementLevel!=offer.EnhancementLevel)
+               owned.EnhancementLevel!=offer.EnhancementLevel||
+               (owned.DurabilityRaw??-1)!=offer.DurabilityRaw)
                 return false;
         }
         return true;
