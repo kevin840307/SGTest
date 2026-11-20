@@ -35,7 +35,8 @@ public sealed record TlsWireConnectionResult(
     TlsWireEndReason Reason,
     SslProtocols Protocol,
     long CommandsAccepted,
-    long ReliableFramesSent);
+    long ReliableFramesSent,
+    string? Fault = null);
 
 /// <summary>
 /// Owns one accepted TCP client. TLS is mandatory; there is no plaintext fallback.
@@ -810,15 +811,13 @@ public static class TlsWireConnection
             await pvpSkillWorker.ConfigureAwait(false);
             await gmPvpNameWorker.ConfigureAwait(false);
             await playerShopWorker.ConfigureAwait(false);
-            if (npcFault is not null || respawnFault is not null ||
-                pickupFault is not null || recoveryFault is not null ||
-                discardFault is not null || skillFault is not null ||
-                shopFault is not null || storageFault is not null ||
-                equipmentFault is not null || bankFault is not null ||
-                repairFault is not null || tradeFault is not null ||
-                questFault is not null || pvpFault is not null ||
-                pvpAttackFault is not null || pvpSkillFault is not null ||
-                gmPvpNameFault is not null || playerShopFault is not null)
+            Exception? workerFault =
+                npcFault ?? respawnFault ?? pickupFault ?? recoveryFault ??
+                discardFault ?? skillFault ?? shopFault ?? storageFault ??
+                equipmentFault ?? bankFault ?? repairFault ?? tradeFault ??
+                questFault ?? pvpFault ?? pvpAttackFault ?? pvpSkillFault ??
+                gmPvpNameFault ?? playerShopFault;
+            if (workerFault is not null)
                 reason = TlsWireEndReason.GatewayClosed;
             var finalBinding = gateway.Binding;
             gateway.Close();
@@ -835,7 +834,9 @@ public static class TlsWireConnection
             }
 
             return new(reason, tls.SslProtocol,
-                commandsAccepted, Interlocked.Read(ref reliableSent));
+                commandsAccepted, Interlocked.Read(ref reliableSent),
+                workerFault is null ? null :
+                    workerFault.GetType().Name + ": " + workerFault.Message);
         }
     }
 
