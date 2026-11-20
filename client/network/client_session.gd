@@ -337,6 +337,118 @@ func send_whisper(
 	})
 
 
+func party_invite(target_actor_id:int)->bool:
+	var current:=snapshot()
+	return _queue_party_intent(1,int(current.get("party_id",0)),target_actor_id,current)
+
+
+func party_accept()->bool:
+	var current:=snapshot()
+	var invite:Dictionary=current.get("pending_party_invite",{})
+	if invite.is_empty():
+		return false
+	return _queue_party_intent(
+		2,int(invite.get("party_id",0)),int(invite.get("inviter_actor_id",0)),current)
+
+
+func party_reject()->bool:
+	var current:=snapshot()
+	var invite:Dictionary=current.get("pending_party_invite",{})
+	if invite.is_empty():
+		return false
+	return _queue_party_intent(
+		3,int(invite.get("party_id",0)),int(invite.get("inviter_actor_id",0)),current)
+
+
+func party_leave()->bool:
+	var current:=snapshot()
+	return _queue_party_intent(4,int(current.get("party_id",0)),0,current)
+
+
+func party_kick(target_actor_id:int)->bool:
+	var current:=snapshot()
+	return _queue_party_intent(5,int(current.get("party_id",0)),target_actor_id,current)
+
+
+func party_promote(target_actor_id:int)->bool:
+	var current:=snapshot()
+	return _queue_party_intent(6,int(current.get("party_id",0)),target_actor_id,current)
+
+
+func _queue_party_intent(
+		action:int,party_id:int,target_actor_id:int,current:Dictionary)->bool:
+	if (
+		int(current.get("state",-1))!=WorldState.STATE_IN_WORLD or
+		not bool(current.get("world_ready",false)) or
+		bool(current.get("resync_pending",false)) or
+		bool(current.get("waiting_for_new_map",false)) or
+		int(current.get("pending_world_ready_ack_epoch",0))!=0 or
+		int(current.get("last_world_ready_ack_epoch",0))!=int(current.get("map_epoch",0)) or
+		int(current.get("pending_party_sequence",0))!=0
+	):
+		return false
+	if action==1:
+		if target_actor_id<=0 or target_actor_id==int(current.get("actor_id",0)):
+			return false
+		if int(current.get("party_id",0))>0 and (
+			party_id!=int(current.get("party_id",0)) or
+			int(current.get("party_leader_actor_id",0))!=int(current.get("actor_id",0))
+		):
+			return false
+	elif action in [2,3]:
+		var invite:Dictionary=current.get("pending_party_invite",{})
+		if (
+			not int(current.get("party_id",0))==0 or invite.is_empty() or
+			int(invite.get("party_id",0))!=party_id or
+			int(invite.get("inviter_actor_id",0))!=target_actor_id
+		):
+			return false
+	elif action==4:
+		if party_id<=0 or party_id!=int(current.get("party_id",0)) or target_actor_id!=0:
+			return false
+	elif action in [5,6]:
+		var members:Dictionary=current.get("party_members",{})
+		if (
+			party_id<=0 or party_id!=int(current.get("party_id",0)) or
+			int(current.get("party_leader_actor_id",0))!=int(current.get("actor_id",0)) or
+			target_actor_id<=0 or target_actor_id==int(current.get("actor_id",0)) or
+			not members.has(target_actor_id)
+		):
+			return false
+	else:
+		return false
+	return _queue_intent({
+		"type":"party","action":action,"party_id":party_id,
+		"target_actor_id":target_actor_id,
+		"actor_id":int(current.get("actor_id",0)),
+		"map_epoch":int(current.get("map_epoch",0))
+	})
+
+
+func send_party_chat(message:String,bubble_type:int=0)->bool:
+	var clean:=message.strip_edges()
+	var bytes:=clean.to_utf8_buffer()
+	var current:=snapshot()
+	if (
+		int(current.get("party_id",0))<=0 or clean.is_empty() or
+		bytes.size()>WireCodec.CHAT_MAX_MESSAGE_BYTES or
+		bubble_type<0 or bubble_type>5 or
+		int(current.get("state",-1))!=WorldState.STATE_IN_WORLD or
+		not bool(current.get("world_ready",false)) or
+		bool(current.get("resync_pending",false)) or
+		bool(current.get("waiting_for_new_map",false)) or
+		int(current.get("pending_world_ready_ack_epoch",0))!=0 or
+		int(current.get("last_world_ready_ack_epoch",0))!=int(current.get("map_epoch",0)) or
+		int(current.get("pending_whisper_sequence",0))!=0
+	):
+		return false
+	return _queue_intent({
+		"type":"party_chat","message":clean,"bubble_type":bubble_type,
+		"actor_id":int(current.get("actor_id",0)),
+		"map_epoch":int(current.get("map_epoch",0))
+	})
+
+
 func open_quest(npc_spawn_id:int)->bool:
 	var current:=snapshot()
 	if (
@@ -1079,7 +1191,7 @@ func _process_first_intent() -> void:
 			_pop_intent()
 			_publish()
 
-	elif kind in ["nearby_chat","whisper"]:
+	elif kind in ["nearby_chat","party_chat","whisper"]:
 		var current:Dictionary=_world.snapshot()
 		if (
 			int(intent.get("actor_id",0))!=int(current.get("actor_id",0)) or
@@ -1101,14 +1213,18 @@ func _process_first_intent() -> void:
 		var bubble:=int(intent.get("bubble_type",0))
 		var sequence:=int(current.get("chat_sequence",0))+1
 		var frame:=PackedByteArray()
-		if kind=="nearby_chat":
+		if kind in ["nearby_chat","party_chat"]:
+			var channel:=0 if kind=="nearby_chat" else 3
+			if channel==3 and int(current.get("party_id",0))<=0:
+				_pop_intent()
+				return
 			frame=WireCodec.encode_chat_command(
-				int(current.get("map_epoch",0)),sequence,0,bubble,message)
+				int(current.get("map_epoch",0)),sequence,channel,bubble,message)
 			if frame.is_empty():
 				_pop_intent()
 				return
 			if _transport.send_frame(frame) and _world.mark_chat_sent(
-				sequence,0,bubble,message):
+				sequence,channel,bubble,message):
 				_pop_intent()
 				_publish()
 			return
@@ -1127,6 +1243,41 @@ func _process_first_intent() -> void:
 		):
 			_pop_intent()
 			_publish()
+	elif kind=="party":
+		var current:Dictionary=_world.snapshot()
+		if (
+			int(intent.get("actor_id",0))!=int(current.get("actor_id",0)) or
+			int(intent.get("map_epoch",0))!=int(current.get("map_epoch",0))
+		):
+			_pop_intent()
+			return
+		if (
+			int(current.get("state",-1))!=WorldState.STATE_IN_WORLD or
+			not bool(current.get("world_ready",false)) or
+			bool(current.get("resync_pending",false)) or
+			bool(current.get("waiting_for_new_map",false)) or
+			int(current.get("pending_world_ready_ack_epoch",0))!=0 or
+			int(current.get("last_world_ready_ack_epoch",0))!=int(current.get("map_epoch",0)) or
+			int(current.get("pending_party_sequence",0))!=0
+		):
+			return
+		var action:=int(intent.get("action",0))
+		var request_party_id:=int(intent.get("party_id",0))
+		var target:=int(intent.get("target_actor_id",0))
+		var sequence:=int(current.get("party_sequence",0))+1
+		var frame:=WireCodec.encode_party_command(
+			int(current.get("map_epoch",0)),sequence,action,request_party_id,target)
+		if frame.is_empty():
+			_pop_intent()
+			return
+		if (
+			_transport.send_frame(frame) and
+			_world.mark_party_sent(
+				sequence,action,request_party_id,target)
+		):
+			_pop_intent()
+			_publish()
+
 	elif kind == "gm_pvp_name":
 		var current:Dictionary=_world.snapshot()
 		if (
