@@ -62,6 +62,9 @@ class RespawnSession extends RefCounted:
 	var last_player_shop_price := 0
 	var last_player_shop_seller := 0
 	var last_player_shop_listing := 0
+	var nearby_chats := 0
+	var last_nearby_message := ""
+	var last_nearby_bubble := -1
 	var pvp_requests := 0
 	var last_pvp_action := -1
 	var pvp_attacks := 0
@@ -250,6 +253,13 @@ class RespawnSession extends RefCounted:
 		player_shop_buys += 1
 		last_player_shop_seller = seller_actor_id
 		last_player_shop_listing = listing_id
+		return true
+	func send_nearby_chat(message:String,bubble_type:int=0)->bool:
+		if message.strip_edges().is_empty() or bubble_type<0 or bubble_type>5:
+			return false
+		nearby_chats += 1
+		last_nearby_message = message
+		last_nearby_bubble = bubble_type
 		return true
 	func attack_monster(entity_id: int) -> bool:
 		if entity_id <= 0:
@@ -1123,6 +1133,41 @@ func run() -> void:
 	if not panel.player_shop_status.text.contains("已由伺服器售出") or not panel.player_shop_own_label.text.ends_with("—") or int(panel._latest.player_shop_wallet) != 400:
 		fail("Player-shop sold push did not converge UI to authoritative wallet/listing")
 		return
+	# Nearby chat UI never locally echoes; only authoritative Server delivery
+	# populates the visible history.
+	panel._latest.chat_sequence = 0
+	panel._latest.chat_messages = []
+	panel._latest.stale_chat_deliveries = 0
+	panel._latest.reconnecting = false
+	panel._latest.resync_pending = false
+	panel._latest.waiting_for_new_map = false
+	panel._latest.pending_world_ready_ack_epoch = 0
+	panel._latest.last_world_ready_ack_epoch = panel._latest.map_epoch
+	panel._update_nearby_chat_ui()
+	for control in [panel.nearby_chat_history,panel.nearby_chat_input,panel.nearby_chat_send_button,panel.nearby_chat_status]:
+		if control.get_parent() == null or not panel.is_ancestor_of(control):
+			fail("Nearby chat controls are not descendants of SessionPanel")
+			return
+	if panel.nearby_chat_send_button.disabled or not panel.nearby_chat_history.text.is_empty():
+		fail("Nearby chat idle controls/history incorrect")
+		return
+	panel.nearby_chat_input.text = "  附近測試  "
+	panel.nearby_chat_send_button.pressed.emit()
+	if stub.nearby_chats != 1 or stub.last_nearby_message != "附近測試" or stub.last_nearby_bubble != 0:
+		fail("Nearby chat UI did not route sanitized message through ClientSession")
+		return
+	if not panel.nearby_chat_input.text.is_empty() or not panel.nearby_chat_history.text.is_empty():
+		fail("Nearby chat UI locally echoed before Server delivery")
+		return
+	panel._latest.chat_messages = [{
+		"receiver_map_epoch":int(panel._latest.map_epoch),
+		"sender_actor_id":22,"sender_connection_epoch":8,"chat_sequence":1,
+		"channel":0,"bubble_type":0,"sender_name":"NearbyHero",
+		"message":"附近測試"}]
+	panel._update_nearby_chat_ui()
+	if not panel.nearby_chat_history.text.contains("[附近] NearbyHero：附近測試"):
+		fail("Nearby chat UI did not render authoritative Server delivery")
+		return
 	# PvP mode UI reads only authoritative server results. Query is
 	# allowed first; white/blue mutations stay locked until a server reply.
 	panel._latest.pvp_known = false
@@ -1248,5 +1293,5 @@ func run() -> void:
 	panel._set_respawn_controls()
 	app.queue_free()
 	await process_frame
-	print("CLIENT_TLS_LOGIN_PASS ui=PASS auth=PASS choose=PASS receipt=PASS world_ready=PASS password_cleared=PASS logout=PASS respawn_ui=PASS click_attack_ui=PASS click_pickup_ui=PASS persistent_inventory_ui=PASS item_metadata=PASS inventory_pagination=PASS recovery_item_button=PASS inventory_discard_button=PASS inventory_discard_quantity_confirm=PASS shop_ui=PASS storage_ui=PASS equipment_ui=PASS bank_ui=PASS repair_ui=PASS trade_ui=PASS trade_ui_parenting=PASS player_shop_ui=PASS pvp_ui=PASS pvp_attack_ui=PASS gm_pvp_ui=PASS pvp_tls_auto_query=PASS skill_cast_ui=PASS skill_singleflight=PASS combat_mp_ui=PASS")
+	print("CLIENT_TLS_LOGIN_PASS ui=PASS auth=PASS choose=PASS receipt=PASS world_ready=PASS password_cleared=PASS logout=PASS respawn_ui=PASS click_attack_ui=PASS click_pickup_ui=PASS persistent_inventory_ui=PASS item_metadata=PASS inventory_pagination=PASS recovery_item_button=PASS inventory_discard_button=PASS inventory_discard_quantity_confirm=PASS shop_ui=PASS storage_ui=PASS equipment_ui=PASS bank_ui=PASS repair_ui=PASS trade_ui=PASS trade_ui_parenting=PASS player_shop_ui=PASS nearby_chat_ui=PASS pvp_ui=PASS pvp_attack_ui=PASS gm_pvp_ui=PASS pvp_tls_auto_query=PASS skill_cast_ui=PASS skill_singleflight=PASS combat_mp_ui=PASS")
 	quit(0)
