@@ -27,6 +27,7 @@ var _common_name := ""
 var _trusted_chain = null
 var _username := ""
 var _credential_bytes := PackedByteArray()
+var _register_first := false
 var _selected_character_id := 0
 var _has_entered_world := false
 var _reconnecting := false
@@ -38,7 +39,23 @@ var _intent_token := 0
 func _init(transport_override: RefCounted = null) -> void:
 	_transport = transport_override if transport_override != null else Transport.new()
 
-func connect_secure(host: String, port: int, username: String, password: String, common_name: String = "", trusted_chain = null) -> Error:
+func connect_secure(
+		host:String,port:int,username:String,password:String,
+		common_name:String="",trusted_chain=null)->Error:
+	return _connect_secure(
+		host,port,username,password,common_name,trusted_chain,false)
+
+
+func register_secure(
+		host:String,port:int,username:String,password:String,
+		common_name:String="",trusted_chain=null)->Error:
+	return _connect_secure(
+		host,port,username,password,common_name,trusted_chain,true)
+
+
+func _connect_secure(
+		host:String,port:int,username:String,password:String,
+		common_name:String,trusted_chain,register_first:bool)->Error:
 	if username.is_empty() or password.is_empty():
 		return ERR_INVALID_PARAMETER
 	_mutex.lock()
@@ -55,6 +72,7 @@ func connect_secure(host: String, port: int, username: String, password: String,
 	_username = username
 	_clear_credentials_locked()
 	_credential_bytes = password.to_utf8_buffer()
+	_register_first = register_first
 	_selected_character_id = 0
 	_has_entered_world = false
 	_reconnecting = false
@@ -910,39 +928,72 @@ func _queue_intent(intent: Dictionary) -> bool:
 	return accepted
 
 func _logic_loop() -> void:
-	var auth_sent := false
+	var auth_sent:=false
+	var registration_sent:=false
+	_mutex.lock()
+	var registration_complete:=not _register_first
+	_mutex.unlock()
 	while not _should_stop():
 		var transport_status: Dictionary = _transport.get_status()
 		var transport_state := int(transport_status.state)
 		if transport_state == Transport.STATE_FAILED:
 			_last_transport_error = int(transport_status.terminal_error)
 			if _can_auto_reconnect() and _start_reconnect_attempt():
-				auth_sent = false
+				auth_sent=false
+				registration_sent=false
+				registration_complete=true
 				continue
 			_world.fail("transport_error_%d" % _last_transport_error)
 			_publish()
 			break
-		if transport_state == Transport.STATE_CONNECTED and not auth_sent:
-			var local_password := _credential_string()
-			var auth_frame := WireCodec.encode_auth_request(_username, local_password)
-			local_password = ""
+		if (
+			transport_state==Transport.STATE_CONNECTED and
+			not registration_complete and not registration_sent
+		):
+			var local_password:=_credential_string()
+			var registration_frame:=WireCodec.encode_account_register_request(
+				_username,local_password)
+			local_password=""
+			if registration_frame.is_empty():
+				_world.fail("invalid_account_registration_input")
+				_publish()
+				break
+			if _transport.send_frame(registration_frame):
+				registration_sent=_world.mark_registration_sent()
+				_publish()
+		elif (
+			transport_state==Transport.STATE_CONNECTED and
+			registration_complete and not auth_sent
+		):
+			var local_password:=_credential_string()
+			var auth_frame:=WireCodec.encode_auth_request(_username,local_password)
+			local_password=""
 			if auth_frame.is_empty():
 				_world.fail("invalid_auth_input")
 				_publish()
 				break
 			if _transport.send_frame(auth_frame):
-				auth_sent = _world.mark_auth_sent()
+				auth_sent=_world.mark_auth_sent()
 				_publish()
 
 		for event in _transport.drain_events(64):
 			if str(event.get("type", "")) != "frame":
 				continue
-			var frame: PackedByteArray = event.get("frame", PackedByteArray())
+			var frame:PackedByteArray=event.get("frame",PackedByteArray())
+			var opcode:=WireCodec.frame_opcode(frame)
 			if not _world.apply_frame(frame):
 				_publish()
 				_transport.stop()
 				_clear_credentials()
 				return
+			if (
+				opcode==WireCodec.OPCODE_ACCOUNT_REGISTER_RESULT and
+				int(_world.registration_status)==0
+			):
+				registration_complete=true
+				_mutex.lock()
+				_register_first=false
+				_mutex.unlock()
 			_publish()
 			_flush_control_frames()
 
@@ -953,7 +1004,9 @@ func _logic_loop() -> void:
 		_maybe_query_pvp_mode()
 		if int(_world.state) == WorldState.STATE_FAILED:
 			if _can_retry_world_rejected() and _start_reconnect_attempt():
-				auth_sent = false
+				auth_sent=false
+				registration_sent=false
+				registration_complete=true
 				continue
 			_transport.stop()
 			break

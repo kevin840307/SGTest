@@ -10,8 +10,10 @@ const STATE_CHOOSING_CHARACTER := 4
 const STATE_IN_WORLD := 5
 const STATE_FAILED := 6
 const STATE_CREATING_CHARACTER := 7
+const STATE_REGISTERING := 8
 
 var state := STATE_NEW
+var registration_status := -1
 var auth_status := -1
 var choose_status := -1
 var character_create_status := -1
@@ -318,6 +320,14 @@ var resync_request_sent := false
 var resync_reason := ""
 var resync_requests := 0
 var resync_completions := 0
+
+func mark_registration_sent()->bool:
+	if state!=STATE_NEW:
+		return false
+	registration_status=-1
+	state=STATE_REGISTERING
+	return true
+
 
 func mark_auth_sent() -> bool:
 	if state != STATE_NEW:
@@ -823,6 +833,8 @@ func mark_npc_interact_sent(sequence: int) -> bool:
 func apply_frame(frame: PackedByteArray) -> bool:
 	var opcode := WireCodec.frame_opcode(frame)
 	match opcode:
+		WireCodec.OPCODE_ACCOUNT_REGISTER_RESULT:
+			return _apply_registration(frame)
 		WireCodec.OPCODE_AUTH_RESULT:
 			return _apply_auth(frame)
 		WireCodec.OPCODE_CHARACTER_LIST:
@@ -950,6 +962,7 @@ func fail(reason: String) -> bool:
 func snapshot() -> Dictionary:
 	return {
 		"state": state,
+		"registration_status": registration_status,
 		"auth_status": auth_status,
 		"choose_status": choose_status,
 		"character_create_status": character_create_status,
@@ -1247,6 +1260,20 @@ func snapshot() -> Dictionary:
 		"resync_requests": resync_requests,
 		"resync_completions": resync_completions,
 	}
+
+func _apply_registration(frame:PackedByteArray)->bool:
+	if state!=STATE_REGISTERING:
+		return fail("account_registration_result_out_of_state")
+	var decoded:=WireCodec.decode_account_register_result(frame)
+	if decoded.is_empty():
+		return fail("invalid_account_registration_result")
+	registration_status=int(decoded.status)
+	if registration_status==0:
+		state=STATE_NEW
+		return true
+	state=STATE_FAILED
+	return true
+
 
 func _apply_auth(frame: PackedByteArray) -> bool:
 	if state != STATE_AUTHENTICATING:

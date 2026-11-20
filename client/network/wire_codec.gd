@@ -18,6 +18,8 @@ const OPCODE_CHARACTER_CHOOSE := 13
 const OPCODE_CHARACTER_CHOOSE_RESULT := 14
 const OPCODE_CHARACTER_CREATE := 15
 const OPCODE_CHARACTER_CREATE_RESULT := 16
+const OPCODE_ACCOUNT_REGISTER_REQUEST := 17
+const OPCODE_ACCOUNT_REGISTER_RESULT := 18
 const OPCODE_WORLD_READY := 20
 const OPCODE_ENTITY_SPAWN := 21
 const OPCODE_ENTITY_DESPAWN := 22
@@ -116,11 +118,13 @@ const PLAYER_DAMAGE_FRAME_BYTES := 57
 const PLAYER_RESPAWN_FRAME_BYTES := 20
 const PLAYER_RESPAWN_RESULT_FRAME_BYTES := 29
 const AUTH_RESULT_FRAME_BYTES := 9
+const ACCOUNT_REGISTER_RESULT_FRAME_BYTES := 9
 const CHARACTER_CHOOSE_FRAME_BYTES := 16
 const CHARACTER_CHOOSE_RESULT_FRAME_BYTES := 45
 const MAX_CHARACTER_CREATE_FRAME_BYTES := 107
 const MAX_CHARACTER_CREATE_RESULT_FRAME_BYTES := 116
 const MAX_AUTH_REQUEST_FRAME_BYTES := 300
+const MAX_ACCOUNT_REGISTER_REQUEST_FRAME_BYTES := 300
 const MAX_CHARACTER_LIST_FRAME_BYTES := 4096
 const WORLD_READY_FRAME_BYTES := 45
 const ENTITY_STATE_FRAME_BYTES := 74
@@ -614,6 +618,42 @@ static func decode_auth_result(frame: PackedByteArray) -> Dictionary:
 	if status > 2:
 		return {}
 	return {"status": status}
+
+
+static func encode_account_register_request(
+		username:String,password:String)->PackedByteArray:
+	var username_bytes:=username.to_utf8_buffer()
+	var password_bytes:=password.to_utf8_buffer()
+	if (
+		username_bytes.size()<3 or username_bytes.size()>32 or
+		password_bytes.size()<8 or password_bytes.size()>256
+	):
+		return PackedByteArray()
+	var frame_bytes:=HEADER_BYTES+4+username_bytes.size()+password_bytes.size()
+	if frame_bytes>MAX_ACCOUNT_REGISTER_REQUEST_FRAME_BYTES:
+		return PackedByteArray()
+	var writer:=StreamPeerBuffer.new()
+	writer.big_endian=false
+	writer.put_u32(frame_bytes)
+	writer.put_u16(VERSION)
+	writer.put_u16(OPCODE_ACCOUNT_REGISTER_REQUEST)
+	writer.put_u16(username_bytes.size())
+	writer.put_u16(password_bytes.size())
+	writer.put_data(username_bytes)
+	writer.put_data(password_bytes)
+	return writer.data_array
+
+
+static func decode_account_register_result(frame:PackedByteArray)->Dictionary:
+	if not _valid_header(
+		frame,OPCODE_ACCOUNT_REGISTER_RESULT,ACCOUNT_REGISTER_RESULT_FRAME_BYTES
+	):
+		return {}
+	var status:=frame[8]
+	if status>4:
+		return {}
+	return {"status":status}
+
 
 static func decode_character_list(frame: PackedByteArray) -> Dictionary:
 	if not _valid_variable_header(frame, OPCODE_CHARACTER_LIST, 9, MAX_CHARACTER_LIST_FRAME_BYTES):

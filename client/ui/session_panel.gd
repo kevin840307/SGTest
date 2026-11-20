@@ -17,6 +17,7 @@ var port_input := SpinBox.new()
 var username_input := LineEdit.new()
 var password_input := LineEdit.new()
 var login_button := Button.new()
+var register_button := Button.new()
 var logout_button := Button.new()
 var characters := OptionButton.new()
 var choose_button := Button.new()
@@ -226,6 +227,7 @@ func _ready() -> void:
 		grid.add_child(label)
 		grid.add_child(pair[1])
 	login_button.text = "登入"
+	register_button.text = "建立帳號並登入"
 	logout_button.text = "登出／取消"
 	choose_button.text = "進入世界"
 	character_name_input.placeholder_text = "新角色名稱"
@@ -427,9 +429,10 @@ func _ready() -> void:
 	skill_area_button.text = "施放自身中心範圍技能"
 	skill_area_button.focus_mode = Control.FOCUS_NONE
 	skill_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	for control in [login_button,characters,choose_button,character_name_input,character_slot_input,create_character_button,character_create_status,respawn_button,skill_hint,skill_id_input,skill_target_mode,skill_area_button,skill_status,logout_button,status,pickup_status,inventory_button,inventory_search,inventory_preview,inventory_previous,inventory_page_label,inventory_next,recovery_picker,recovery_button,recovery_status,discard_quantity,discard_all_button,discard_button,discard_status,shop_npc_input,shop_open_button,shop_money_label,shop_item_picker,shop_sell_picker,shop_quantity,shop_sell_quantity,shop_buy_button,shop_sell_button,shop_status,storage_npc_input,storage_open_button,storage_deposit_picker,storage_withdraw_picker,storage_deposit_button,storage_withdraw_button,storage_status,equipment_inventory_picker,equipment_equipped_picker,equipment_equip_button,equipment_unequip_button,equipment_status,bank_npc_input,bank_open_button,bank_scope_label,bank_wallet_label,bank_balance_label,bank_amount_input,bank_deposit_button,bank_withdraw_button,bank_status,repair_npc_input,repair_open_button,repair_wallet_label,repair_item_picker,repair_button,repair_status,enhancement_npc_input,enhancement_open_button,enhancement_wallet_label,enhancement_item_picker,enhancement_button,enhancement_status]:
+	for control in [login_button,register_button,characters,choose_button,character_name_input,character_slot_input,create_character_button,character_create_status,respawn_button,skill_hint,skill_id_input,skill_target_mode,skill_area_button,skill_status,logout_button,status,pickup_status,inventory_button,inventory_search,inventory_preview,inventory_previous,inventory_page_label,inventory_next,recovery_picker,recovery_button,recovery_status,discard_quantity,discard_all_button,discard_button,discard_status,shop_npc_input,shop_open_button,shop_money_label,shop_item_picker,shop_sell_picker,shop_quantity,shop_sell_quantity,shop_buy_button,shop_sell_button,shop_status,storage_npc_input,storage_open_button,storage_deposit_picker,storage_withdraw_picker,storage_deposit_button,storage_withdraw_button,storage_status,equipment_inventory_picker,equipment_equipped_picker,equipment_equip_button,equipment_unequip_button,equipment_status,bank_npc_input,bank_open_button,bank_scope_label,bank_wallet_label,bank_balance_label,bank_amount_input,bank_deposit_button,bank_withdraw_button,bank_status,repair_npc_input,repair_open_button,repair_wallet_label,repair_item_picker,repair_button,repair_status,enhancement_npc_input,enhancement_open_button,enhancement_wallet_label,enhancement_item_picker,enhancement_button,enhancement_status]:
 		column.add_child(control)
 	login_button.pressed.connect(login)
+	register_button.pressed.connect(register_account)
 	password_input.text_submitted.connect(func(_text): login())
 	choose_button.pressed.connect(choose)
 	create_character_button.pressed.connect(create_character)
@@ -537,17 +540,35 @@ func _ready() -> void:
 	pickup_status.text = ""
 
 
-func login() -> void:
+func login()->void:
+	_begin_connection(false)
+
+
+func register_account()->void:
+	_begin_connection(true)
+
+
+func _begin_connection(register_first:bool)->void:
 	if active:
 		return
-	var username := username_input.text.strip_edges()
-	var password := password_input.text
+	var username:=username_input.text.strip_edges()
+	var password:=password_input.text
 	password_input.clear()
-	if username.to_utf8_buffer().size() < 3 or username.to_utf8_buffer().size() > 32 or password.to_utf8_buffer().size() < 8 or password.to_utf8_buffer().size() > 256 or host_input.text.strip_edges().is_empty():
-		status.text = "帳號需 3–32 bytes，密碼需 8–256 bytes"
+	if (
+		username.to_utf8_buffer().size()<3 or
+		username.to_utf8_buffer().size()>32 or
+		password.to_utf8_buffer().size()<8 or
+		password.to_utf8_buffer().size()>256 or
+		host_input.text.strip_edges().is_empty()
+	):
+		status.text="帳號需 3–32 bytes，密碼需 8–256 bytes"
 		return
-	var error: int = session.connect_secure(host_input.text.strip_edges(),int(port_input.value),username,password,tls_name,trusted_chain)
-	password = ""
+	var error:int=session.register_secure(
+		host_input.text.strip_edges(),int(port_input.value),username,password,
+		tls_name,trusted_chain) if register_first else session.connect_secure(
+			host_input.text.strip_edges(),int(port_input.value),username,password,
+			tls_name,trusted_chain)
+	password=""
 	if error != OK:
 		status.text = "無法開始連線（"+str(error)+"）"
 		return
@@ -621,7 +642,7 @@ func login() -> void:
 	characters.clear()
 	_characters = []
 	_set_controls()
-	status.text = "安全連線中…"
+	status.text = "建立帳號並驗證中…" if register_first else "安全連線中…"
 	connection_changed.emit(true)
 
 
@@ -965,6 +986,7 @@ func _set_controls() -> void:
 	password_input.editable = not active
 	port_input.editable = not active
 	login_button.disabled = active
+	register_button.disabled = active
 	logout_button.disabled = not active
 	var state := int(_latest.get("state",-1))
 	var selecting := active and state == State.STATE_SELECTING_CHARACTER
@@ -2619,8 +2641,9 @@ func _process(delta: float) -> void:
 		return
 	var state := int(_latest.state)
 	if state == State.STATE_FAILED:
+		var registration_code:=int(_latest.get("registration_status",-1))
 		disconnect_session()
-		status.text = "連線或登入失敗，請確認帳號與伺服器憑證後重試"
+		status.text=_registration_status_text(registration_code) if registration_code>0 else "連線或登入失敗，請確認帳號與伺服器憑證後重試"
 		return
 	if state == State.STATE_SELECTING_CHARACTER:
 		if _chosen and int(_latest.choose_status) >= 0:
@@ -2668,6 +2691,20 @@ func _process(delta: float) -> void:
 			world_snapshot.emit(_latest)
 
 
+
+
+func _registration_status_text(code:int)->String:
+	match code:
+		1:
+			return "伺服器未開放公開帳號註冊"
+		2:
+			return "帳號名稱已被使用"
+		3:
+			return "帳號或密碼不符合伺服器規則"
+		4:
+			return "建立帳號請求過於頻繁，請稍後重試"
+		_:
+			return "建立帳號失敗"
 
 
 func _character_create_status_text(code: int, character_name: String) -> String:

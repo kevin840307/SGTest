@@ -408,6 +408,21 @@ class CharacterCreateSession extends RefCounted:
 	func stop() -> void:
 		pass
 
+class RegistrationSession extends RefCounted:
+	var registrations:=0
+	var last_username:=""
+	func register_secure(
+			_host:String,_port:int,username:String,password:String,
+			_common_name:String="",_trusted_chain=null)->Error:
+		if username.is_empty() or password.is_empty():
+			return ERR_INVALID_PARAMETER
+		registrations+=1
+		last_username=username
+		return OK
+	func stop()->void:
+		pass
+
+
 class FailedSession extends RefCounted:
 	func connect_secure(_host, _port, _user, _password, _name, _trust):
 		return OK
@@ -632,6 +647,26 @@ func run() -> void:
 	if panel.active or panel.login_button.disabled or app._map_buttons[0].disabled or not panel.characters.item_count == 0:
 		fail("Logout left stale UI or binding")
 		return
+
+	var registration_stub:=RegistrationSession.new()
+	panel.session=registration_stub
+	panel.set_process(false)
+	panel.username_input.text="ui_register"
+	panel.password_input.text="Ui-Registration-Password-123!"
+	panel.register_button.pressed.emit()
+	if (
+		registration_stub.registrations!=1 or
+		registration_stub.last_username!="ui_register" or
+		not panel.password_input.text.is_empty() or
+		not panel.active
+	):
+		fail("Registration UI did not route explicit register_secure intent")
+		return
+	panel.disconnect_session()
+	if panel.active or panel.register_button.disabled:
+		fail("Registration UI did not return to reusable login state")
+		return
+
 	# Character creation controls must expose exactly the authoritative Session
 	# intent while selecting; the real TLS creation/store lifecycle is covered
 	# by the C# authenticated E2E.

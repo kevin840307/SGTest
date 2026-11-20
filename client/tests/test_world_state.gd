@@ -3,6 +3,8 @@ extends SceneTree
 const WireCodec = preload("res://network/wire_codec.gd")
 const WorldState = preload("res://network/world_state.gd")
 const AUTH_OK := "0900000001000B0000"
+const REGISTER_CREATED := "090000000100120000"
+const REGISTER_RATE_LIMITED := "090000000100120004"
 const LIST := "1800000001000C00010B000000000000000004004865726F"
 const CHOOSE := "2D00000001000E00000B000000000000000F000000000000000000204000000000000020400100000000000000"
 const RECEIPT := "1E0000000100020001000000000000000100000000002A00000000000000"
@@ -17,6 +19,26 @@ func _fail(message: String) -> void:
 	quit(1)
 
 func _initialize() -> void:
+	var registration:=WorldState.new()
+	if (
+		not registration.mark_registration_sent() or
+		not registration.apply_frame(REGISTER_CREATED.hex_decode()) or
+		int(registration.snapshot().state)!=WorldState.STATE_NEW or
+		int(registration.snapshot().registration_status)!=0 or
+		not registration.mark_auth_sent()
+	):
+		_fail("registration created did not require ordinary auth")
+		return
+	var limited:=WorldState.new()
+	if (
+		not limited.mark_registration_sent() or
+		not limited.apply_frame(REGISTER_RATE_LIMITED.hex_decode()) or
+		int(limited.snapshot().state)!=WorldState.STATE_FAILED or
+		int(limited.snapshot().registration_status)!=4
+	):
+		_fail("registration rate limit did not fail closed")
+		return
+
 	var creation = WorldState.new()
 	if not creation.mark_auth_sent() or not creation.apply_frame(AUTH_OK.hex_decode()) or 		not creation.apply_frame(EMPTY_LIST.hex_decode()):
 		_fail("empty account auth/list transition")
@@ -66,7 +88,7 @@ func _initialize() -> void:
 	if world.apply_frame(future) or int(world.snapshot().state) != WorldState.STATE_FAILED:
 		_fail("future map receipt did not fail closed")
 		return
-	print("WORLD_STATE_PASS auth_create_refresh_choose_ready_ack_move=PASS duplicate_receipt=IGNORED future_map=FAIL_CLOSED")
+	print("WORLD_STATE_PASS registration_then_auth=PASS registration_rate_limit=FAIL_CLOSED auth_create_refresh_choose_ready_ack_move=PASS duplicate_receipt=IGNORED future_map=FAIL_CLOSED")
 	quit(0)
 
 func _mutate_i64(source: PackedByteArray, offset: int, value: int) -> PackedByteArray:

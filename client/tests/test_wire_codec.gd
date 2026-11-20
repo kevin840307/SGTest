@@ -5,6 +5,8 @@ const MOVE_TARGET_HEX := "1C00000001000100090000000000000007000000D8190000781200
 const MOVE_RECEIPT_HEX := "1E0000000100020009000000000000000700000000002A00000000000000"
 const AUTH_REQUEST_HEX := "2300000001000A0007001000757365725F303150617373776F72642D31323334353621"
 const AUTH_RESULT_HEX := "0900000001000B0000"
+const ACCOUNT_REGISTER_REQUEST_HEX := "230000000100110007001000757365725F303150617373776F72642D31323334353621"
+const ACCOUNT_REGISTER_RESULT_HEX := "090000000100120000"
 const CHARACTER_LIST_HEX := "2A00000001000C00020B000000000000000004004865726F16000000000000000107004865726F54776F"
 const CHARACTER_CHOOSE_HEX := "1000000001000D001600000000000000"
 const CHARACTER_CHOOSE_RESULT_HEX := "2D00000001000E000016000000000000000F0000000000000000C0BE40000000000010C6400300000000000000"
@@ -33,6 +35,20 @@ func _initialize() -> void:
 		return
 	if WireCodec.decode_auth_result(AUTH_RESULT_HEX.hex_decode()) != {"status": 0}:
 		_fail("AuthResult decode")
+		return
+	var registration:=WireCodec.encode_account_register_request(
+		"user_01","Password-123456!")
+	if registration.hex_encode().to_upper()!=ACCOUNT_REGISTER_REQUEST_HEX:
+		_fail("AccountRegisterRequest golden "+registration.hex_encode())
+		return
+	if WireCodec.decode_account_register_result(
+		ACCOUNT_REGISTER_RESULT_HEX.hex_decode())!={"status":0}:
+		_fail("AccountRegisterResult decode")
+		return
+	var invalid_registration:=ACCOUNT_REGISTER_RESULT_HEX.hex_decode()
+	invalid_registration[8]=9
+	if not WireCodec.decode_account_register_result(invalid_registration).is_empty():
+		_fail("unknown AccountRegisterResult status accepted")
 		return
 	var list := WireCodec.decode_character_list(CHARACTER_LIST_HEX.hex_decode())
 	if list != {"characters": [{"character_id": 11, "slot": 0, "name": "Hero"}, {"character_id": 22, "slot": 1, "name": "HeroTwo"}]}:
@@ -78,7 +94,7 @@ func _initialize() -> void:
 	if WireCodec.frame_length_prefix(PackedByteArray([1, 2, 3])) != -1 or WireCodec.frame_length_prefix(_mutate_u32(move, 0, 70000)) != -1:
 		_fail("invalid frame length accepted")
 		return
-	print("WIRE_CODEC_GODOT_PASS move=28 receipt=30 auth=35 character_create=18 create_result=27 character_list=42 choose=16 choose_result=45 malformed=PASS identity_server_owned=true")
+	print("WIRE_CODEC_GODOT_PASS move=28 receipt=30 auth=35 register=35 register_result=9 character_create=18 create_result=27 character_list=42 choose=16 choose_result=45 malformed=PASS identity_server_owned=true")
 	quit(0)
 
 func _mutate_u8(source: PackedByteArray, offset: int, value: int) -> PackedByteArray:
