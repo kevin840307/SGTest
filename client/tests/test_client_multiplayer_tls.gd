@@ -110,6 +110,18 @@ func _observe(session, self_id: int, crossmap: bool = false, portal: bool = fals
 		return
 	if crossmap:
 		print("CLIENT_%s_DESPAWN_SEEN role=observer remote=%d" % ["PORTAL" if portal else "CROSSMAP", remote_id])
+		if not portal:
+			var whisper:=_wait_whisper(
+				session,remote_id,"MultiHeroTwo","Map13 跨圖私訊",7000)
+			if (
+				whisper.is_empty() or int(whisper.get("chat_sequence",0))!=3 or
+				int(whisper.get("channel",-1))!=4 or
+				str(whisper.get("direction",""))!="incoming"
+			):
+				_fail("Map13 cross-map whisper was not delivered to Map15 observer %s" %
+					session.snapshot(),session)
+				return
+			print("CLIENT_CROSSMAP_WHISPER_RECEIVED role=observer sequence=3 remote=%d" % remote_id)
 		var returned := {}
 		deadline = Time.get_ticks_msec() + 7000
 		while Time.get_ticks_msec() < deadline:
@@ -137,7 +149,7 @@ func _observe(session, self_id: int, crossmap: bool = false, portal: bool = fals
 		# also reduce its authoritative peer Spawn, not only WorldReady.
 		OS.delay_msec(650)
 		session.stop()
-		print("CLIENT_%s_PASS role=observer map15=PASS delta=PASS despawn=PASS respawn=PASS nearby_chat_isolation=%s remote=%d" % ["PORTAL" if portal else "CROSSMAP","NOT_TESTED" if portal else "PASS",remote_id])
+		print("CLIENT_%s_PASS role=observer map15=PASS delta=PASS despawn=PASS respawn=PASS nearby_chat_isolation=%s whisper_crossmap=%s remote=%d" % ["PORTAL" if portal else "CROSSMAP","NOT_TESTED" if portal else "PASS","NOT_TESTED" if portal else "PASS",remote_id])
 		quit(0)
 		return
 	session.stop()
@@ -149,7 +161,8 @@ func _move(session, self_id: int, crossmap: bool = false, portal: bool = false) 
 	if seen.is_empty():
 		_fail("actor never received observer's Spawn %s" % session.snapshot(), session)
 		return
-	if int(seen.entities.keys()[0]) == self_id:
+	var remote_id:=int(seen.entities.keys()[0])
+	if remote_id == self_id:
 		_fail("actor received itself as remote entity", session)
 		return
 	if not crossmap:
@@ -236,6 +249,24 @@ func _move(session, self_id: int, crossmap: bool = false, portal: bool = false) 
 					session.snapshot(),session)
 				return
 			print("CLIENT_CROSSMAP_MAP13_CHAT_SELF role=actor sequence=2")
+			if not session.send_whisper(remote_id,"Map13 跨圖私訊",3):
+				_fail("Map13 cross-map whisper intent rejected",session)
+				return
+			var whisper_result:=_wait_whisper_result(session,3,remote_id,7000)
+			if (
+				whisper_result.is_empty() or
+				int(whisper_result.get("status",-1))!=0 or
+				str(whisper_result.get("target_name",""))!="MultiHeroOne"
+			):
+				_fail("Map13 whisper sender result missing %s" %
+					session.snapshot(),session)
+				return
+			var outgoing:=_wait_outgoing_whisper(
+				session,remote_id,"MultiHeroOne","Map13 跨圖私訊",7000)
+			if outgoing.is_empty():
+				_fail("authoritative whisper result did not publish outgoing history",session)
+				return
+			print("CLIENT_CROSSMAP_WHISPER_SENT role=actor sequence=3 target=%d" % remote_id)
 		if portal:
 			var portal_result := _await_npc_result(session, 0, 2, 7000)
 			if portal_result.is_empty() or int(portal_result.last_npc_result_map_epoch) != int(in_map13.map_epoch):
@@ -284,7 +315,7 @@ func _move(session, self_id: int, crossmap: bool = false, portal: bool = false) 
 		# The spectator must see re-entry before this actor logs out.
 		OS.delay_msec(700)
 		session.stop()
-		print("CLIENT_%s_PASS role=actor map15_map13_map15=PASS new_epochs=PASS world_ready=PASS old_aoi_clear=PASS npc_authority=%s nearby_chat_isolation=%s" % ["PORTAL" if portal else "CROSSMAP","PASS" if portal else "NOT_TESTED","NOT_TESTED" if portal else "PASS"])
+		print("CLIENT_%s_PASS role=actor map15_map13_map15=PASS new_epochs=PASS world_ready=PASS old_aoi_clear=PASS npc_authority=%s nearby_chat_isolation=%s whisper_crossmap=%s" % ["PORTAL" if portal else "CROSSMAP","PASS" if portal else "NOT_TESTED","NOT_TESTED" if portal else "PASS","NOT_TESTED" if portal else "PASS"])
 		quit(0)
 		return
 	# Allow a couple of 30Hz World ticks for authoritative movement,
@@ -307,6 +338,68 @@ func _wait_nearby_chat(
 			if (
 				int(row.get("sender_actor_id",0))==sender_id and
 				str(row.get("sender_name",""))==sender_name and
+				str(row.get("message",""))==message
+			):
+				return row
+		OS.delay_msec(2)
+	return {}
+
+
+func _wait_whisper(
+		session,sender_id:int,sender_name:String,message:String,
+		timeout_ms:int)->Dictionary:
+	var deadline:=Time.get_ticks_msec()+timeout_ms
+	while Time.get_ticks_msec()<deadline:
+		var value:Dictionary=session.snapshot()
+		if int(value.state)==WorldState.STATE_FAILED:
+			break
+		for raw in value.get("chat_messages",[]):
+			var row:Dictionary=raw
+			if (
+				int(row.get("channel",-1))==4 and
+				str(row.get("direction",""))=="incoming" and
+				int(row.get("sender_actor_id",0))==sender_id and
+				str(row.get("sender_name",""))==sender_name and
+				str(row.get("message",""))==message
+			):
+				return row
+		OS.delay_msec(2)
+	return {}
+
+
+func _wait_whisper_result(
+		session,sequence:int,target_actor_id:int,timeout_ms:int)->Dictionary:
+	var deadline:=Time.get_ticks_msec()+timeout_ms
+	while Time.get_ticks_msec()<deadline:
+		var value:Dictionary=session.snapshot()
+		if int(value.state)==WorldState.STATE_FAILED:
+			break
+		if (
+			int(value.get("last_whisper_result_sequence",0))==sequence and
+			int(value.get("pending_whisper_sequence",0))==0
+		):
+			var result:Dictionary=value.get("last_whisper_result",{})
+			if int(result.get("target_actor_id",0))==target_actor_id:
+				return result
+		OS.delay_msec(2)
+	return {}
+
+
+func _wait_outgoing_whisper(
+		session,target_actor_id:int,target_name:String,message:String,
+		timeout_ms:int)->Dictionary:
+	var deadline:=Time.get_ticks_msec()+timeout_ms
+	while Time.get_ticks_msec()<deadline:
+		var value:Dictionary=session.snapshot()
+		if int(value.state)==WorldState.STATE_FAILED:
+			break
+		for raw in value.get("chat_messages",[]):
+			var row:Dictionary=raw
+			if (
+				int(row.get("channel",-1))==4 and
+				str(row.get("direction",""))=="outgoing" and
+				int(row.get("target_actor_id",0))==target_actor_id and
+				str(row.get("target_name",""))==target_name and
 				str(row.get("message",""))==message
 			):
 				return row
