@@ -1037,6 +1037,8 @@ func run() -> void:
 		return
 
 	# Player-shop UI must route exact authoritative identifiers through ClientSession.
+	# Pin the authenticated self identity explicitly for this synthetic state.
+	panel._latest.actor_id = 1
 	panel._latest.trade_id = 0
 	panel._latest.entities = {22:{"actor_id":22}}
 	panel._latest.player_shop_sequence = 0
