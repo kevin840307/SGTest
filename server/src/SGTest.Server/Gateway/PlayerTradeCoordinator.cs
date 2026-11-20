@@ -309,7 +309,8 @@ public sealed class PlayerTradeCoordinator
                self!.Items.ContainsKey(command.ItemUid)||
                self.Items.Count>=WireProtocol.TradeMaxItemsPerSide)return;
             self.Items.Add(command.ItemUid,new(
-                item.ItemUid,item.ItemDefinitionId,item.Quantity,item.SourceDropId));
+                item.ItemUid,item.ItemDefinitionId,item.Quantity,item.SourceDropId,
+                item.EnhancementLevel));
             self.LastSequence=command.TradeSequence;
             ResetLocks(current);
             current.Revision++;
