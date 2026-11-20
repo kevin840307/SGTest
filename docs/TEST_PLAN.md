@@ -8,7 +8,7 @@
 
 真雙 Godot Client TLS Gate：Map13 兩位白名玩家，攻擊者 ATK60、受害者 DEF10/HP100；第一次 committed damage=58，受害者 HP42，觀察端收到 Pink identity；第二次 committed damage=42，受害者死亡，觀察端收到 Red identity；C# fixture 最終核對 SQLite HP0、2 hits/100 damage/1 death、攻擊者 Red、clean EOF 與無殘留 Actor/Session。Server Core [44538435399](https://github.com/kevin840307/SGTest/actions/runs/44538435399) PASS；Client Core [44539729904](https://github.com/kevin840307/SGTest/actions/runs/44539729904) **61/61 PASS**。
 
-**未驗收/不得宣稱完成**：第三方旁觀者的 PvP attack/hit/death presentation、玩家目標技能、原版 Red redemption/罪名解除算法、GM 網路管理指令、Party/Guild/Faction/PvP map 完整例外、Windows 私有素材畫面與真機互動。這些仍屬 MVP007 後續工作。
+**未驗收/不得宣稱完成**：第三方旁觀者的 PvP attack/hit/death presentation、玩家目標技能、原版 Red redemption/罪名解除算法、完整持久 RBAC/離線管理、Party 原版 EXP/掉落/距離/人數/輔助規則、Guild/Faction/PvP map 完整例外、Windows 私有素材畫面與真機互動。Party 的 online membership/leader/disconnect/跨圖 Party Chat 已由 2026-11-20 authenticated Party slice 驗證，不屬此未驗收清單。
 
 ## MVP003-IN-GAME-CHARACTER-CREATE — 登入後創角／刷新列表／直接選角（完成切片）
 
