@@ -139,13 +139,27 @@ dotnet run -c Release --project server/tests/SGTest.Server.Checks/SGTest.Server.
 
 `src/SGTest.Server/Identity/` now provides SQLite schema v1 for Account/Character and bounded Argon2id password verification. The DB/KDF path is deliberately outside the authoritative 30Hz World thread. Account names are normalized for identity, character slot/name uniqueness is enforced by SQLite constraints, schema mismatch fails closed, and passwords are never stored plaintext. Character records persist server-authorized map/position and a stable `character_id`; a future TLS `CharacterChoose` layer will convert only a server-owned selected character into `TrustedRegisterAsync`/`GatewayConnection` identity.
 
-This is **not** a public login endpoint yet. Production listener/certificate setup, Auth/CharacterChoose wire messages, session-token/rate-limit policy, selected-character binding, save/reconnect lifecycle and Godot login E2E remain NOT VERIFIED. Current local Release evidence: Server + Host builds 0 warnings/errors; Server checks 46/46 PASS.
+This paragraph records the original 2026-11-16 identity-core baseline. The current Server has mandatory TLS Auth/CharacterChoose, formal listener/certificate admission, bounded login rate policy, selected-character binding, reconnect position persistence and Godot TLS E2E. Public self-service account registration and original source-verified character creation appearance/career/spawn rules remain separate work.
 
 ## 2026-11-16 TLS Auth/CharacterChoose binding
 
 The server performs the complete **server-side** pre-gameplay identity flow over TLS: AuthRequest, AuthResult, owned CharacterList, optional CharacterCreate/CharacterCreateResult plus authoritative list refresh, CharacterChoose, trusted World registration and Gateway binding. Persistent `character_id` becomes ActorId only after ownership verification; ConnectionEpoch and creation spawn are never accepted from the Client. Wrong passwords, foreign-character selections, missing creation policy, invalid names/slots and SQLite conflicts fail closed.
 
-This is not yet an Internet-facing login server: `SGTest.Server.Host` still does not open a production listener, certificate deployment/admission/rate limiting are pending, and the Godot client does not yet implement these identity frames. Current local Release gate: **51/51 checks PASS**.
+This paragraph records the first Auth/CharacterChoose slice. Formal `SGTest.Server.Host serve` now opens the configured TLS listener, applies global/per-address concurrent admission and an address+account authentication failure limiter, and the Godot client implements these identity frames. Internet-facing firewall/DDoS controls and public account registration remain deployment/product concerns rather than this protocol slice.
+
+## 2026-11-20 Formal authentication admission / rate policy
+
+`serve` applies two bounded layers before gameplay: `TlsGatewayListener` caps global and canonical-IP concurrent sockets, while `AuthenticationRateLimiter` gates AuthRequest failures by both source address and normalized account. Defaults are 12 failures/address, 6 failures/account, a 60-second failure window and 30-second lockout. Operator overrides are:
+
+```powershell
+dotnet run --project server/host/SGTest.Server.Host -c Release -- serve ... \
+  --auth-failures-per-address 12 --auth-failures-per-account 6 \
+  --auth-failure-window-seconds 60 --auth-lockout-seconds 30
+```
+
+All values are bounded and printed in `TLS_HOST_READY`; invalid values fail before listener startup. The limiter tables remain bounded (default 4096 addresses / 16384 accounts). Nonblocked least-recently-seen buckets may be evicted, but an **active lockout is never evicted to admit a new key**. If every slot in a scope is currently protected, admission temporarily fails closed for the configured lockout window instead of turning table pressure into a lockout bypass. Blocked attempts deliberately return the same `InvalidCredentials` status. Successful credential verification clears that account bucket but does not launder source-IP failures.
+
+This is an in-process game-server safety boundary. Restart resets limiter memory, and it is not a replacement for network firewall, anti-DDoS, cross-node shared bans or abuse analytics. Server Core **44767204976 PASS (253/253)** includes capacity-saturation bypass regression and real Host non-default CLI policy startup; Client Core **44767205009 PASS**.
 
 ## 2026-11-16 World results → authenticated Gateway
 

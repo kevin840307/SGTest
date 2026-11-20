@@ -461,7 +461,11 @@ Verified on GitHub `main` commit `116ea15420d04bfd3fa98722f9e5695217cf37f6`: Cli
 
 先`dotnet build server/host/SGTest.Server.Host -c Release`，再`dotnet run --project server/tests/SGTest.Server.Checks -c Release -- --listener-only`，本機7/7 PASS。涵蓋部署憑證／容量參數、global及per-IP拒絕、慢TLS取消／埠重用、真TLS Auth／Choose／WorldReady／MoveReceipt／重連世代與角色路由清理、錯密碼／明文隔離、內部會話fault停止接入、實際Host process載入合成雙圖與PFX／啟停／錯CLI。Checks預設完整CI也含同組測例；需先建置Host，GitHub server-core既有步驟已滿足。
 
-只驗證bounded listener與服務生命週期；未因此重跑Godot／PCK／來源Archive／Renderer。私有真圖持續服務、真Godot直連Host、時間型login rate limit、ACK/resync、20/300/500與Release仍NOT VERIFIED。正式main CI與SHA見todo。
+此歷史 listener slice 當時只驗證 bounded listener 與生命週期；後續 WorldReady ACK/resync、真 Godot Host 路徑、20-client synthetic load 與時間型 login limiter 都已有獨立 Gate。2026-11-20 的正式 admission/rate policy 見下方 MVP003-AUTH-ADMISSION-RATE001；私有原版素材 Windows Release／實際 Internet 防火牆與反 DDoS 仍不由此 Gate 代表。
+
+### MVP003-AUTH-ADMISSION-RATE001（2026-11-20，Server CI PASS）
+
+Formal Host 的 listener global/per-IP admission、TLS/auth timeout 與 authentication failure limiter 已形成可部署 V1 policy。Host process Gate 以非預設值 `--auth-failures-per-address 3 --auth-failures-per-account 2 --auth-failure-window-seconds 17 --auth-lockout-seconds 19` 真正啟動並從 `TLS_HOST_READY` 核對四項生效；非法 lockout=0 必須在 bind/listen 前以 exit2 拒絕。純 limiter regression 驗證 address/account case-normalized lockout、成功帳密只清 account bucket 不清 hostile source-IP bucket、bounded tracking/LRU；新增 saturation Gate 先讓16 address＋16 account slots 全部處於 active lockout，再加入第17 key，要求 tracked count 不變、**0 active-lockout eviction**、`CapacitySaturationBlocks=2` 且 fresh key 暫時 fail-closed，31秒後依 policy 恢復。GitHub Server Core **44767204976 PASS，253/253**；Client Core **44767205009 PASS**。這不是跨程序持久 ban、WAF/firewall 或 volumetric DDoS 壓測。
 
 ## MVP003-IDENTITY-ADMIN（Server Tier A，含Windows TLS平台修正）
 
