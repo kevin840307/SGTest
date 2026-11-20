@@ -6,7 +6,7 @@ const LIST := "1800000001000C00010B000000000000000004004865726F"
 const CHOOSE := "2D00000001000E00000B000000000000000F000000000000000000204000000000000020400100000000000000"
 const READY := "2D0000000100140001000000000000002A000000000000000B000000000000000F0000000000C0410000004101"
 const MAP13_READY := "2D00000001001400020000000000000032000000000000000B000000000000000D000000000020420000A04201"
-const INVENTORY := "47000000010024000B0000000000000000000000010200591B0000000000008D0A000002000000F5010000000000005A1B000000000000750E000003000000F601000000000000"
+const INVENTORY := "49000000010024000B0000000000000000000000010200591B0000000000008D0A000002000000F501000000000000025A1B000000000000750E000003000000F60100000000000007"
 const PICKUP_RESULT := "2D0000000100230009000000000000000700000000F501000000000000591B0000000000008D0A000002000000"
 const DROP := "340000000100200001000000000000003700000000000000F5010000000000000F000000000040420000C0418D0A000002000000"
 
@@ -22,8 +22,8 @@ func new_world():
 
 func _initialize() -> void:
 	var decoded := WireCodec.decode_inventory_snapshot(INVENTORY.hex_decode())
-	if decoded.is_empty() or int(decoded.character_id) != 11 or not bool(decoded.complete) or int(decoded.start_index) != 0 or decoded.items.size() != 2 or int(decoded.items[0].item_uid) != 7001 or int(decoded.items[1].item_uid) != 7002 or int(decoded.items[1].quantity) != 3:
-		fail("C# to Godot inventory 71-byte golden mismatch")
+	if decoded.is_empty() or int(decoded.character_id) != 11 or not bool(decoded.complete) or int(decoded.start_index) != 0 or decoded.items.size() != 2 or int(decoded.items[0].item_uid) != 7001 or int(decoded.items[1].item_uid) != 7002 or int(decoded.items[1].quantity) != 3 or int(decoded.items[0].enhancement_level) != 2 or int(decoded.items[1].enhancement_level) != 7:
+		fail("C# to Godot inventory 73-byte level golden mismatch")
 		return
 	var empty := INVENTORY.hex_decode()
 	empty.resize(23)
@@ -43,7 +43,7 @@ func _initialize() -> void:
 		fail("inventory zero UID was accepted")
 		return
 	bad = INVENTORY.hex_decode()
-	bad.encode_s64(47,7001)
+	bad.encode_s64(48,7001)
 	if not WireCodec.decode_inventory_snapshot(bad).is_empty():
 		fail("duplicate inventory item UID was accepted")
 		return
@@ -52,14 +52,14 @@ func _initialize() -> void:
 		fail("authenticated inventory fixture failed")
 		return
 	var first := INVENTORY.hex_decode()
-	first.resize(47)
-	first.encode_s32(0,47)
+	first.resize(48)
+	first.encode_s32(0,48)
 	first[20] = 0
 	first.encode_u16(21,1)
 	var second := first.slice(0,23)
 	second.encode_s32(16,1)
 	second[20] = 1
-	second.append_array(INVENTORY.hex_decode().slice(47,71))
+	second.append_array(INVENTORY.hex_decode().slice(48,73))
 	if world.apply_frame(second):
 		fail("out-of-order chunk accepted")
 		return
@@ -104,5 +104,5 @@ func _initialize() -> void:
 	if not world.apply_frame(MAP13_READY.hex_decode()) or world.snapshot().inventory_items.size() != 3 or not bool(world.snapshot().inventory_ready) or int(world.snapshot().inventory_revision) != 2:
 		fail("map transfer accidentally discarded durable inventory")
 		return
-	print("INVENTORY_SNAPSHOT_PASS golden=71 chunk=128/4095 reorder=FAIL_CLOSED login=PASS pickup_delta=PASS duplicate=PASS")
+	print("INVENTORY_SNAPSHOT_PASS golden=73 level=PERSISTS chunk=128/4095 reorder=FAIL_CLOSED login=PASS pickup_delta=PASS duplicate=PASS")
 	quit(0)
