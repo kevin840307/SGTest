@@ -252,6 +252,7 @@ static class Checks
             InventorySnapshotChecks.Verify();
             StorageChecks.Verify(root);
             EquipmentChecks.Verify(root);
+            EnhancementMetadataChecks.Verify(root);
             BankChecks.Verify(root);
             RepairCatalogChecks.Verify(root);
             RepairChecks.Verify(root);
