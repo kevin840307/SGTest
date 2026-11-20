@@ -146,6 +146,8 @@ jobs:
         run: python client/tests/run_tls_login.py "$PWD/.cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64" --bank --timeout 45
       - name: Real Godot ClientSession server-authoritative repair over TLS
         run: python client/tests/run_tls_login.py "$PWD/.cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64" --repair --timeout 45
+      - name: Real Godot verified Quest progression and relogin over TLS
+        run: python client/tests/run_tls_login.py "$PWD/.cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64" --quest --timeout 55
       - name: Two real Godot ClientSessions durable player trade over TLS
         run: python client/tests/run_tls_login.py "$PWD/.cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64" --trade --timeout 55
       - name: Two real Godot ClientSessions authoritative player shop over TLS
