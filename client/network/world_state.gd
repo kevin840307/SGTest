@@ -228,6 +228,20 @@ var last_whisper_result_sequence := 0
 var last_whisper_result_status := -1
 var last_whisper_result := {}
 var stale_whisper_results := 0
+var party_sequence := 0
+var pending_party_sequence := 0
+var pending_party_action := 0
+var pending_party_party_id := 0
+var pending_party_target_actor_id := 0
+var party_id := 0
+var party_revision := 0
+var party_leader_actor_id := 0
+var party_members := {}
+var pending_party_invite := {}
+var last_party_result_sequence := 0
+var last_party_result_status := -1
+var last_party_result := {}
+var stale_party_frames := 0
 const CHAT_BACKLOG_MAX := 100
 var quest_sequence := 0
 var pending_quest_sequence := 0
@@ -594,7 +608,8 @@ func mark_chat_sent(sequence:int,channel:int,bubble_type:int,message:String)->bo
 		state!=STATE_IN_WORLD or not world_ready or resync_pending or waiting_for_new_map or
 		pending_world_ready_ack_epoch!=0 or last_world_ready_ack_epoch!=map_epoch or
 		pending_whisper_sequence!=0 or
-		sequence<=chat_sequence or sequence>0xffffffff or channel!=0 or
+		sequence<=chat_sequence or sequence>0xffffffff or channel not in [0,3] or
+		(channel==3 and party_id<=0) or
 		bubble_type<0 or bubble_type>5 or bytes.size()<1 or
 		bytes.size()>WireCodec.CHAT_MAX_MESSAGE_BYTES or message.strip_edges().is_empty()
 	):
@@ -628,6 +643,59 @@ func _clear_pending_whisper()->void:
 	pending_whisper_target_actor_id=0
 	pending_whisper_bubble_type=0
 	pending_whisper_message=""
+
+
+func mark_party_sent(
+		sequence:int,action:int,request_party_id:int,target_actor_id:int)->bool:
+	if (
+		state!=STATE_IN_WORLD or not world_ready or resync_pending or
+		waiting_for_new_map or pending_world_ready_ack_epoch!=0 or
+		last_world_ready_ack_epoch!=map_epoch or pending_party_sequence!=0 or
+		sequence<=party_sequence or sequence>0xffffffff or
+		action<1 or action>6 or request_party_id<0 or target_actor_id<0
+	):
+		return false
+	match action:
+		1:
+			if target_actor_id<=0 or target_actor_id==actor_id:
+				return false
+			if party_id>0:
+				if request_party_id!=party_id or party_leader_actor_id!=actor_id:
+					return false
+			elif request_party_id!=0:
+				return false
+		2,3:
+			if (
+				party_id!=0 or pending_party_invite.is_empty() or
+				int(pending_party_invite.get("party_id",0))!=request_party_id or
+				int(pending_party_invite.get("inviter_actor_id",0))!=target_actor_id
+			):
+				return false
+		4:
+			if party_id<=0 or request_party_id!=party_id or target_actor_id!=0:
+				return false
+		5,6:
+			if (
+				party_id<=0 or request_party_id!=party_id or
+				party_leader_actor_id!=actor_id or target_actor_id<=0 or
+				target_actor_id==actor_id or not party_members.has(target_actor_id)
+			):
+				return false
+		_:
+			return false
+	party_sequence=sequence
+	pending_party_sequence=sequence
+	pending_party_action=action
+	pending_party_party_id=request_party_id
+	pending_party_target_actor_id=target_actor_id
+	return true
+
+
+func _clear_pending_party()->void:
+	pending_party_sequence=0
+	pending_party_action=0
+	pending_party_party_id=0
+	pending_party_target_actor_id=0
 
 
 func mark_quest_sent(
@@ -826,6 +894,12 @@ func apply_frame(frame: PackedByteArray) -> bool:
 			return _apply_chat_delivery(frame)
 		WireCodec.OPCODE_WHISPER_RESULT:
 			return _apply_whisper_result(frame)
+		WireCodec.OPCODE_PARTY_RESULT:
+			return _apply_party_result(frame)
+		WireCodec.OPCODE_PARTY_INVITE:
+			return _apply_party_invite(frame)
+		WireCodec.OPCODE_PARTY_SNAPSHOT:
+			return _apply_party_snapshot(frame)
 		WireCodec.OPCODE_QUEST_VIEW:
 			return _apply_quest_view(frame)
 		WireCodec.OPCODE_WORLD_READY:
@@ -1063,6 +1137,20 @@ func snapshot() -> Dictionary:
 		"last_whisper_result_status": last_whisper_result_status,
 		"last_whisper_result": last_whisper_result.duplicate(true),
 		"stale_whisper_results": stale_whisper_results,
+		"party_sequence": party_sequence,
+		"pending_party_sequence": pending_party_sequence,
+		"pending_party_action": pending_party_action,
+		"pending_party_party_id": pending_party_party_id,
+		"pending_party_target_actor_id": pending_party_target_actor_id,
+		"party_id": party_id,
+		"party_revision": party_revision,
+		"party_leader_actor_id": party_leader_actor_id,
+		"party_members": party_members.duplicate(true),
+		"pending_party_invite": pending_party_invite.duplicate(true),
+		"last_party_result_sequence": last_party_result_sequence,
+		"last_party_result_status": last_party_result_status,
+		"last_party_result": last_party_result.duplicate(true),
+		"stale_party_frames": stale_party_frames,
 		"quest_sequence": quest_sequence,
 		"pending_quest_sequence": pending_quest_sequence,
 		"pending_quest_kind": pending_quest_kind,
@@ -2028,6 +2116,7 @@ func _apply_world_ready(frame: PackedByteArray) -> bool:
 		last_respawn_result.clear()
 		stale_respawn_results = 0
 		_clear_pending_whisper()
+		_clear_pending_party()
 		movement_sequence = 0
 		last_receipt_sequence = 0
 		last_receipt_status = -1
@@ -3279,7 +3368,7 @@ func _apply_chat_delivery(frame:PackedByteArray)->bool:
 	if epoch>map_epoch:
 		return fail("future_chat_delivery")
 	var channel:=int(value.channel)
-	if channel not in [0,4]:
+	if channel not in [0,3,4]:
 		return fail("unsupported_chat_delivery_channel")
 	var sender:=int(value.sender_actor_id)
 	var connection:=int(value.sender_connection_epoch)
@@ -3294,6 +3383,21 @@ func _apply_chat_delivery(frame:PackedByteArray)->bool:
 				return true
 			var entity:Dictionary=entities[sender]
 			if int(entity.get("connection_epoch",0))!=connection:
+				stale_chat_deliveries+=1
+				return true
+	elif channel==3:
+		if party_id<=0:
+			stale_chat_deliveries+=1
+			return true
+		if sender==actor_id:
+			if sequence>chat_sequence:
+				return fail("party_chat_self_delivery_without_send")
+		else:
+			if not party_members.has(sender):
+				stale_chat_deliveries+=1
+				return true
+			var member:Dictionary=party_members[sender]
+			if int(member.get("connection_epoch",0))!=connection:
 				stale_chat_deliveries+=1
 				return true
 	else:
@@ -3370,6 +3474,135 @@ func _apply_whisper_result(frame:PackedByteArray)->bool:
 	last_whisper_result=value.duplicate(true)
 	_clear_pending_whisper()
 	return true
+
+func _apply_party_result(frame:PackedByteArray)->bool:
+	if state!=STATE_IN_WORLD:
+		return fail("party_result_out_of_state")
+	var value:=WireCodec.decode_party_result(frame)
+	if value.is_empty():
+		return fail("invalid_party_result")
+	var epoch:=int(value.map_epoch)
+	var sequence:=int(value.party_sequence)
+	if epoch<map_epoch:
+		stale_party_frames+=1
+		return true
+	if epoch>map_epoch:
+		return fail("future_party_result")
+	if sequence<=last_party_result_sequence:
+		stale_party_frames+=1
+		return true
+	if (
+		sequence>party_sequence or sequence!=pending_party_sequence or
+		int(value.action)!=pending_party_action or
+		int(value.target_actor_id)!=pending_party_target_actor_id
+	):
+		return fail("party_result_without_matching_request")
+	var action:=int(value.action)
+	var status:=int(value.status)
+	var response_party:=int(value.party_id)
+	if status==0:
+		if action in [2,3]:
+			pending_party_invite.clear()
+		if action==1 and response_party<=0:
+			return fail("party_invite_success_without_party")
+	elif status<1 or status>10:
+		return fail("party_result_unknown_status")
+	if action in [2,3] and status in [7,8]:
+		pending_party_invite.clear()
+	last_party_result_sequence=sequence
+	last_party_result_status=status
+	last_party_result=value.duplicate(true)
+	_clear_pending_party()
+	return true
+
+
+func _apply_party_invite(frame:PackedByteArray)->bool:
+	if state!=STATE_IN_WORLD:
+		return fail("party_invite_out_of_state")
+	var value:=WireCodec.decode_party_invite(frame)
+	if value.is_empty():
+		return fail("invalid_party_invite")
+	var epoch:=int(value.receiver_map_epoch)
+	if epoch<map_epoch:
+		stale_party_frames+=1
+		return true
+	if epoch>map_epoch:
+		return fail("future_party_invite")
+	if party_id!=0:
+		stale_party_frames+=1
+		return true
+	if int(value.inviter_actor_id)==actor_id:
+		return fail("party_invite_from_self")
+	if not pending_party_invite.is_empty():
+		if (
+			int(pending_party_invite.get("party_id",0))==int(value.party_id) and
+			int(pending_party_invite.get("revision",0))>=int(value.revision) and
+			int(pending_party_invite.get("inviter_actor_id",0))==int(value.inviter_actor_id)
+		):
+			stale_party_frames+=1
+			return true
+		return fail("multiple_pending_party_invites")
+	pending_party_invite=value.duplicate(true)
+	return true
+
+
+func _apply_party_snapshot(frame:PackedByteArray)->bool:
+	if state!=STATE_IN_WORLD:
+		return fail("party_snapshot_out_of_state")
+	var value:=WireCodec.decode_party_snapshot(frame)
+	if value.is_empty():
+		return fail("invalid_party_snapshot")
+	var epoch:=int(value.receiver_map_epoch)
+	var incoming_party:=int(value.party_id)
+	var revision:=int(value.revision)
+	if epoch<map_epoch:
+		stale_party_frames+=1
+		return true
+	if epoch>map_epoch:
+		return fail("future_party_snapshot")
+	var members:Array=value.members
+	if members.is_empty():
+		if party_id==0 or incoming_party!=party_id or revision<=party_revision:
+			stale_party_frames+=1
+			return true
+		party_id=0
+		party_revision=revision
+		party_leader_actor_id=0
+		party_members.clear()
+		return true
+	if party_id!=0 and incoming_party!=party_id:
+		return fail("party_snapshot_conflicts_with_current_party")
+	if party_id==incoming_party and revision<=party_revision:
+		stale_party_frames+=1
+		return true
+	var next_members:={}
+	for raw in members:
+		var member:Dictionary=raw
+		var member_actor:=int(member.actor_id)
+		next_members[member_actor]=member.duplicate(true)
+	if not next_members.has(actor_id):
+		return fail("party_snapshot_missing_self")
+	if not self_state.is_empty():
+		var own_connection:=int(self_state.get("connection_epoch",0))
+		if (
+			own_connection>0 and
+			int((next_members[actor_id] as Dictionary).connection_epoch)!=own_connection
+		):
+			return fail("party_snapshot_wrong_self_generation")
+	var leader:=int(value.leader_actor_id)
+	if not next_members.has(leader):
+		return fail("party_snapshot_missing_leader")
+	party_id=incoming_party
+	party_revision=revision
+	party_leader_actor_id=leader
+	party_members=next_members
+	if (
+		not pending_party_invite.is_empty() and
+		int(pending_party_invite.get("party_id",0))==incoming_party
+	):
+		pending_party_invite.clear()
+	return true
+
 
 func _clear_pending_quest()->void:
 	pending_quest_sequence=0
