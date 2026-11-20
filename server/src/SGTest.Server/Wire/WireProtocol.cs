@@ -4569,6 +4569,15 @@ public static class WireProtocol
                 (advertised-RepairSnapshotHeaderBytes)%RepairPreviewItemBytes==0,
             WireOpcode.RepairItem => advertised == RepairItemFrameBytes,
             WireOpcode.RepairResult => advertised == RepairResultFrameBytes,
+            WireOpcode.EnhancementOpen => advertised == EnhancementOpenFrameBytes,
+            WireOpcode.EnhancementSnapshot =>
+                advertised >= EnhancementSnapshotHeaderBytes &&
+                advertised <= EnhancementSnapshotHeaderBytes +
+                    EnhancementSnapshotMaxItemsPerFrame*EnhancementPreviewItemBytes &&
+                (advertised-EnhancementSnapshotHeaderBytes)%
+                    EnhancementPreviewItemBytes==0,
+            WireOpcode.EnhancementItem => advertised == EnhancementItemFrameBytes,
+            WireOpcode.EnhancementResult => advertised == EnhancementResultFrameBytes,
             WireOpcode.TradeCommand => advertised == TradeCommandFrameBytes,
             WireOpcode.TradeSnapshot => advertised >= TradeSnapshotHeaderBytes &&
                 advertised <= TradeSnapshotHeaderBytes +
