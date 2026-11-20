@@ -95,7 +95,11 @@ public enum WireOpcode : ushort
     PlayerShopResult = 90,
     PlayerShopSold = 91,
     ChatCommand = 92,
-    ChatDelivery = 93
+    ChatDelivery = 93,
+    EnhancementOpen = 94,
+    EnhancementSnapshot = 95,
+    EnhancementItem = 96,
+    EnhancementResult = 97
 }
 
 public enum ChatChannel : byte { Nearby = 0, Faction = 1, Warband = 2, Party = 3, Whisper = 4 }
@@ -167,6 +171,15 @@ public enum RepairOpenStatus : byte
     Opened = 0,
     StaleGeneration = 1,
     UnknownRepair = 2,
+    TooFar = 3,
+    PlayerDead = 4
+}
+
+public enum EnhancementOpenStatus : byte
+{
+    Opened = 0,
+    StaleGeneration = 1,
+    UnknownEnhancer = 2,
     TooFar = 3,
     PlayerDead = 4
 }
@@ -409,6 +422,25 @@ public readonly record struct RepairResultWire(
     long ItemUid,int ItemDefinitionId,RepairItemLocation Location,
     int CurrentDurability,int MaxDurability,long Cost,long WalletMoney);
 
+public readonly record struct EnhancementOpenWire(
+    long MapEpoch,uint EnhancementSequence,int NpcSpawnId);
+public readonly record struct EnhancementPreviewItemWire(
+    long ItemUid,int ItemDefinitionId,EnhancementItemLocation Location,
+    int CurrentLevel,int TargetLevel,int SuccessPpm,long MoneyCost,
+    bool ConsumeMoneyOnFailure);
+public sealed record EnhancementSnapshotWire(
+    long MapEpoch,uint EnhancementSequence,EnhancementOpenStatus Status,
+    int NpcSpawnId,long WalletMoney,int StartIndex,bool Complete,
+    IReadOnlyList<EnhancementPreviewItemWire> Items);
+public readonly record struct EnhancementItemWire(
+    long MapEpoch,uint EnhancementSequence,int NpcSpawnId,long ItemUid);
+public readonly record struct EnhancementResultWire(
+    long MapEpoch,uint EnhancementSequence,EnhancementStatus Status,
+    int NpcSpawnId,long ItemUid,int ItemDefinitionId,
+    EnhancementItemLocation Location,int PreviousLevel,int TargetLevel,
+    int CurrentLevel,bool Succeeded,long MoneyCost,long MoneyCharged,
+    long WalletMoney,int RollPpm);
+
 public readonly record struct TradeCommandWire(
     long MapEpoch,uint TradeSequence,TradeCommandAction Action,
     long TradeId,long TargetActorId,long ItemUid,long Money);
@@ -586,6 +618,14 @@ public static class WireProtocol
     public const int RepairItemFrameBytes = HeaderBytes + 8 + 4 + 4 + 8;
     public const int RepairResultFrameBytes =
         HeaderBytes + 8 + 4 + 1 + 4 + 8 + 4 + 1 + 4 + 4 + 8 + 8;
+    public const int EnhancementOpenFrameBytes = HeaderBytes + 8 + 4 + 4;
+    public const int EnhancementSnapshotHeaderBytes =
+        HeaderBytes + 8 + 4 + 1 + 4 + 8 + 4 + 1 + 2;
+    public const int EnhancementPreviewItemBytes = 28;
+    public const int EnhancementSnapshotMaxItemsPerFrame = 128;
+    public const int EnhancementSnapshotMaxItems = 4095;
+    public const int EnhancementItemFrameBytes = HeaderBytes + 8 + 4 + 4 + 8;
+    public const int EnhancementResultFrameBytes = 70;
     public const int PvpModeCommandFrameBytes = HeaderBytes + 8 + 4 + 1;
     public const int PvpModeResultFrameBytes = HeaderBytes + 8 + 4 + 1 + 1 + 1;
     public const int PvpAttackFrameBytes = HeaderBytes + 8 + 4 + 8;
@@ -3003,6 +3043,281 @@ public static class WireProtocol
                 value.ItemDefinitionId==0&&value.Location==RepairItemLocation.None&&
                 value.CurrentDurability==0&&value.MaxDurability==0&&value.Cost==0
         };
+    }
+
+    public static byte[] EncodeEnhancementOpen(EnhancementOpenWire value)
+    {
+        if(value.MapEpoch<=0||value.EnhancementSequence==0||value.NpcSpawnId<=0)
+            throw new ArgumentOutOfRangeException(nameof(value));
+        var frame=NewFrame(WireOpcode.EnhancementOpen,EnhancementOpenFrameBytes);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(8,8),value.MapEpoch);
+        BinaryPrimitives.WriteUInt32LittleEndian(
+            frame.AsSpan(16,4),value.EnhancementSequence);
+        BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(20,4),value.NpcSpawnId);
+        return frame;
+    }
+
+    public static bool TryDecodeEnhancementOpen(
+        ReadOnlySpan<byte> frame,out EnhancementOpenWire value)
+    {
+        value=default;
+        if(!TryReadHeader(frame,out var h)||
+           h.Opcode!=WireOpcode.EnhancementOpen||
+           frame.Length!=EnhancementOpenFrameBytes)
+            return false;
+        value=new(
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(8,8)),
+            BinaryPrimitives.ReadUInt32LittleEndian(frame.Slice(16,4)),
+            BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(20,4)));
+        return value.MapEpoch>0&&value.EnhancementSequence>0&&value.NpcSpawnId>0;
+    }
+
+    public static byte[] EncodeEnhancementSnapshot(EnhancementSnapshotWire value)
+    {
+        ArgumentNullException.ThrowIfNull(value);
+        if(!ValidEnhancementSnapshot(value))
+            throw new ArgumentOutOfRangeException(nameof(value));
+        var frame=NewFrame(WireOpcode.EnhancementSnapshot,
+            EnhancementSnapshotHeaderBytes+
+            value.Items.Count*EnhancementPreviewItemBytes);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(8,8),value.MapEpoch);
+        BinaryPrimitives.WriteUInt32LittleEndian(
+            frame.AsSpan(16,4),value.EnhancementSequence);
+        frame[20]=(byte)value.Status;
+        BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(21,4),value.NpcSpawnId);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(25,8),value.WalletMoney);
+        BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(33,4),value.StartIndex);
+        frame[37]=value.Complete?(byte)1:(byte)0;
+        BinaryPrimitives.WriteUInt16LittleEndian(frame.AsSpan(38,2),
+            checked((ushort)value.Items.Count));
+        for(int i=0;i<value.Items.Count;i++)
+        {
+            int offset=EnhancementSnapshotHeaderBytes+
+                i*EnhancementPreviewItemBytes;
+            var item=value.Items[i];
+            BinaryPrimitives.WriteInt64LittleEndian(
+                frame.AsSpan(offset,8),item.ItemUid);
+            BinaryPrimitives.WriteInt32LittleEndian(
+                frame.AsSpan(offset+8,4),item.ItemDefinitionId);
+            frame[offset+12]=(byte)item.Location;
+            frame[offset+13]=checked((byte)item.CurrentLevel);
+            frame[offset+14]=checked((byte)item.TargetLevel);
+            BinaryPrimitives.WriteInt32LittleEndian(
+                frame.AsSpan(offset+15,4),item.SuccessPpm);
+            BinaryPrimitives.WriteInt64LittleEndian(
+                frame.AsSpan(offset+19,8),item.MoneyCost);
+            frame[offset+27]=item.ConsumeMoneyOnFailure?(byte)1:(byte)0;
+        }
+        return frame;
+    }
+
+    public static bool TryDecodeEnhancementSnapshot(
+        ReadOnlySpan<byte> frame,out EnhancementSnapshotWire? value)
+    {
+        value=null;
+        if(!TryReadHeader(frame,out var h)||
+           h.Opcode!=WireOpcode.EnhancementSnapshot||
+           frame.Length<EnhancementSnapshotHeaderBytes)
+            return false;
+        long epoch=BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(8,8));
+        uint sequence=BinaryPrimitives.ReadUInt32LittleEndian(frame.Slice(16,4));
+        var status=(EnhancementOpenStatus)frame[20];
+        int npc=BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(21,4));
+        long wallet=BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(25,8));
+        int start=BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(33,4));
+        byte completeRaw=frame[37];
+        int count=BinaryPrimitives.ReadUInt16LittleEndian(frame.Slice(38,2));
+        if(epoch<=0||sequence==0||npc<=0||
+           (byte)status>(byte)EnhancementOpenStatus.PlayerDead||
+           wallet<0||wallet>SqliteIdentityStore.MaximumMoney||
+           start<0||start>EnhancementSnapshotMaxItems||completeRaw>1||
+           count>EnhancementSnapshotMaxItemsPerFrame||
+           start+count>EnhancementSnapshotMaxItems||
+           frame.Length!=EnhancementSnapshotHeaderBytes+
+               count*EnhancementPreviewItemBytes)
+            return false;
+        var items=new List<EnhancementPreviewItemWire>(count);
+        var uids=new HashSet<long>();
+        for(int i=0;i<count;i++)
+        {
+            int offset=EnhancementSnapshotHeaderBytes+
+                i*EnhancementPreviewItemBytes;
+            byte consumeRaw=frame[offset+27];
+            if(consumeRaw>1)return false;
+            var item=new EnhancementPreviewItemWire(
+                BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(offset,8)),
+                BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(offset+8,4)),
+                (EnhancementItemLocation)frame[offset+12],
+                frame[offset+13],frame[offset+14],
+                BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(offset+15,4)),
+                BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(offset+19,8)),
+                consumeRaw==1);
+            if(!ValidEnhancementPreviewItem(item)||!uids.Add(item.ItemUid))
+                return false;
+            items.Add(item);
+        }
+        value=new(epoch,sequence,status,npc,wallet,start,completeRaw==1,items);
+        return ValidEnhancementSnapshot(value);
+    }
+
+    private static bool ValidEnhancementSnapshot(EnhancementSnapshotWire value)
+    {
+        if(value.MapEpoch<=0||value.EnhancementSequence==0||
+           value.NpcSpawnId<=0||
+           (byte)value.Status>(byte)EnhancementOpenStatus.PlayerDead||
+           value.WalletMoney<0||
+           value.WalletMoney>SqliteIdentityStore.MaximumMoney||
+           value.StartIndex<0||
+           value.StartIndex>EnhancementSnapshotMaxItems||
+           value.Items is null||
+           value.Items.Count>EnhancementSnapshotMaxItemsPerFrame||
+           value.StartIndex+value.Items.Count>EnhancementSnapshotMaxItems)
+            return false;
+        if(value.Status!=EnhancementOpenStatus.Opened)
+            return value.WalletMoney==0&&value.StartIndex==0&&
+                value.Complete&&value.Items.Count==0;
+        var uids=new HashSet<long>();
+        return value.Items.All(
+            item=>ValidEnhancementPreviewItem(item)&&uids.Add(item.ItemUid));
+    }
+
+    private static bool ValidEnhancementPreviewItem(
+        EnhancementPreviewItemWire item)=>
+        item.ItemUid>0&&
+        item.ItemDefinitionId is >=1 and <=100_000_000&&
+        item.Location is EnhancementItemLocation.Inventory or
+            EnhancementItemLocation.Equipped&&
+        item.CurrentLevel is >=0 and <=254&&
+        item.TargetLevel is >=1 and <=255&&
+        item.TargetLevel>item.CurrentLevel&&
+        item.SuccessPpm is >=0 and <=EquipmentEnhancementCatalog.ProbabilityScale&&
+        item.MoneyCost>=0&&item.MoneyCost<=SqliteIdentityStore.MaximumMoney;
+
+    public static byte[] EncodeEnhancementItem(EnhancementItemWire value)
+    {
+        if(value.MapEpoch<=0||value.EnhancementSequence==0||
+           value.NpcSpawnId<=0||value.ItemUid<=0)
+            throw new ArgumentOutOfRangeException(nameof(value));
+        var frame=NewFrame(WireOpcode.EnhancementItem,EnhancementItemFrameBytes);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(8,8),value.MapEpoch);
+        BinaryPrimitives.WriteUInt32LittleEndian(
+            frame.AsSpan(16,4),value.EnhancementSequence);
+        BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(20,4),value.NpcSpawnId);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(24,8),value.ItemUid);
+        return frame;
+    }
+
+    public static bool TryDecodeEnhancementItem(
+        ReadOnlySpan<byte> frame,out EnhancementItemWire value)
+    {
+        value=default;
+        if(!TryReadHeader(frame,out var h)||
+           h.Opcode!=WireOpcode.EnhancementItem||
+           frame.Length!=EnhancementItemFrameBytes)
+            return false;
+        value=new(
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(8,8)),
+            BinaryPrimitives.ReadUInt32LittleEndian(frame.Slice(16,4)),
+            BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(20,4)),
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(24,8)));
+        return value.MapEpoch>0&&value.EnhancementSequence>0&&
+            value.NpcSpawnId>0&&value.ItemUid>0;
+    }
+
+    public static byte[] EncodeEnhancementResult(EnhancementResultWire value)
+    {
+        if(!ValidEnhancementResult(value))
+            throw new ArgumentOutOfRangeException(nameof(value));
+        var frame=NewFrame(WireOpcode.EnhancementResult,EnhancementResultFrameBytes);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(8,8),value.MapEpoch);
+        BinaryPrimitives.WriteUInt32LittleEndian(
+            frame.AsSpan(16,4),value.EnhancementSequence);
+        frame[20]=(byte)value.Status;
+        BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(21,4),value.NpcSpawnId);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(25,8),value.ItemUid);
+        BinaryPrimitives.WriteInt32LittleEndian(
+            frame.AsSpan(33,4),value.ItemDefinitionId);
+        frame[37]=(byte)value.Location;
+        frame[38]=checked((byte)value.PreviousLevel);
+        frame[39]=checked((byte)value.TargetLevel);
+        frame[40]=checked((byte)value.CurrentLevel);
+        frame[41]=value.Succeeded?(byte)1:(byte)0;
+        BinaryPrimitives.WriteInt64LittleEndian(
+            frame.AsSpan(42,8),value.MoneyCost);
+        BinaryPrimitives.WriteInt64LittleEndian(
+            frame.AsSpan(50,8),value.MoneyCharged);
+        BinaryPrimitives.WriteInt64LittleEndian(
+            frame.AsSpan(58,8),value.WalletMoney);
+        BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(66,4),value.RollPpm);
+        return frame;
+    }
+
+    public static bool TryDecodeEnhancementResult(
+        ReadOnlySpan<byte> frame,out EnhancementResultWire value)
+    {
+        value=default;
+        if(!TryReadHeader(frame,out var h)||
+           h.Opcode!=WireOpcode.EnhancementResult||
+           frame.Length!=EnhancementResultFrameBytes)
+            return false;
+        byte succeededRaw=frame[41];
+        if(succeededRaw>1)return false;
+        value=new(
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(8,8)),
+            BinaryPrimitives.ReadUInt32LittleEndian(frame.Slice(16,4)),
+            (EnhancementStatus)frame[20],
+            BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(21,4)),
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(25,8)),
+            BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(33,4)),
+            (EnhancementItemLocation)frame[37],
+            frame[38],frame[39],frame[40],succeededRaw==1,
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(42,8)),
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(50,8)),
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(58,8)),
+            BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(66,4)));
+        return ValidEnhancementResult(value);
+    }
+
+    private static bool ValidEnhancementResult(EnhancementResultWire value)
+    {
+        if(value.MapEpoch<=0||value.EnhancementSequence==0||
+           (byte)value.Status>(byte)EnhancementStatus.PlayerDead||
+           value.NpcSpawnId<=0||value.ItemUid<=0||
+           value.ItemDefinitionId<0||value.ItemDefinitionId>100_000_000||
+           value.PreviousLevel is <0 or >255||
+           value.TargetLevel is <0 or >255||
+           value.CurrentLevel is <0 or >255||
+           value.MoneyCost<0||value.MoneyCost>SqliteIdentityStore.MaximumMoney||
+           value.MoneyCharged<0||value.MoneyCharged>value.MoneyCost||
+           value.WalletMoney<0||value.WalletMoney>SqliteIdentityStore.MaximumMoney||
+           value.RollPpm<0||
+           value.RollPpm>=EquipmentEnhancementCatalog.ProbabilityScale)
+            return false;
+        bool known=value.ItemDefinitionId>0&&
+            value.Location is EnhancementItemLocation.Inventory or
+                EnhancementItemLocation.Equipped;
+        if(value.Status is EnhancementStatus.Applied or
+            EnhancementStatus.AlreadyApplied)
+            return known&&value.TargetLevel>value.PreviousLevel&&
+                (value.Succeeded
+                    ? value.CurrentLevel==value.TargetLevel&&
+                      value.MoneyCharged==value.MoneyCost
+                    : value.CurrentLevel==value.PreviousLevel);
+        if(value.Status==EnhancementStatus.InsufficientMoney)
+            return known&&!value.Succeeded&&
+                value.TargetLevel>value.PreviousLevel&&
+                value.CurrentLevel==value.PreviousLevel&&
+                value.MoneyCost>0&&value.MoneyCharged==0&&value.RollPpm==0;
+        if(value.Status==EnhancementStatus.NoRule||
+           value.Status==EnhancementStatus.MaxLevel)
+            return known&&!value.Succeeded&&value.TargetLevel==0&&
+                value.CurrentLevel==value.PreviousLevel&&
+                value.MoneyCost==0&&value.MoneyCharged==0&&value.RollPpm==0;
+        return value.ItemDefinitionId==0&&
+            value.Location==EnhancementItemLocation.None&&
+            value.PreviousLevel==0&&value.TargetLevel==0&&
+            value.CurrentLevel==0&&!value.Succeeded&&value.MoneyCost==0&&
+            value.MoneyCharged==0&&value.RollPpm==0;
     }
 
     public static byte[] EncodeTradeCommand(TradeCommandWire value)
