@@ -116,6 +116,11 @@ var player_shop_inspected_label := Label.new()
 var player_shop_buy_button := Button.new()
 var player_shop_status := Label.new()
 var _player_shop_display_key := ""
+var nearby_chat_history := TextEdit.new()
+var nearby_chat_input := LineEdit.new()
+var nearby_chat_send_button := Button.new()
+var nearby_chat_status := Label.new()
+var _nearby_chat_display_key := ""
 var pvp_query_button := Button.new()
 var pvp_blue_button := Button.new()
 var pvp_white_button := Button.new()
@@ -325,6 +330,15 @@ func _ready() -> void:
 	player_shop_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	for control in [player_shop_inventory_picker,player_shop_price_input,player_shop_open_button,player_shop_own_label,player_shop_close_button,player_shop_seller_picker,player_shop_inspect_button,player_shop_inspected_label,player_shop_buy_button,player_shop_status]:
 		control.visible = false
+	nearby_chat_history.editable = false
+	nearby_chat_history.custom_minimum_size = Vector2(350,120)
+	nearby_chat_history.wrap_mode = TextEdit.LINE_WRAPPING_BOUNDARY
+	nearby_chat_input.placeholder_text = "附近聊天（Server AOI 可見玩家）"
+	nearby_chat_input.max_length = 256
+	nearby_chat_send_button.text = "附近送出"
+	nearby_chat_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	for control in [nearby_chat_history,nearby_chat_input,nearby_chat_send_button,nearby_chat_status]:
+		control.visible = false
 	respawn_button.text = "復活"
 	skill_hint.text = "技能 ID（需伺服器已核准規則）"
 	skill_id_input.min_value = 1
@@ -384,10 +398,14 @@ func _ready() -> void:
 	player_shop_close_button.pressed.connect(_close_player_shop)
 	player_shop_inspect_button.pressed.connect(_inspect_selected_player_shop)
 	player_shop_buy_button.pressed.connect(_buy_inspected_player_shop)
+	nearby_chat_send_button.pressed.connect(_send_nearby_chat)
+	nearby_chat_input.text_submitted.connect(func(_text): _send_nearby_chat())
 	# Trade controls must actually be parented, not only instantiated/connected.
 	for control in [trade_target_picker,trade_request_button,trade_peer_label,trade_accept_button,trade_reject_button,trade_inventory_picker,trade_my_offer_picker,trade_offer_add_button,trade_offer_remove_button,trade_other_offer_label,trade_money_input,trade_set_money_button,trade_money_label,trade_lock_button,trade_confirm_button,trade_cancel_button,trade_status]:
 		column.add_child(control)
 	for control in [player_shop_inventory_picker,player_shop_price_input,player_shop_open_button,player_shop_own_label,player_shop_close_button,player_shop_seller_picker,player_shop_inspect_button,player_shop_inspected_label,player_shop_buy_button,player_shop_status]:
+		column.add_child(control)
+	for control in [nearby_chat_history,nearby_chat_input,nearby_chat_send_button,nearby_chat_status]:
 		column.add_child(control)
 	pvp_query_button.text = "查詢 PvP 名稱模式"
 	pvp_blue_button.text = "設為藍名（保護）"
@@ -460,6 +478,10 @@ func login() -> void:
 	_repair_display_key = ""
 	_trade_display_key = ""
 	_player_shop_display_key = ""
+	_nearby_chat_display_key = ""
+	nearby_chat_history.text = ""
+	nearby_chat_input.clear()
+	nearby_chat_status.text = ""
 	_inventory_page = 0
 	inventory_search.clear()
 	shop_status.text = ""
@@ -737,6 +759,10 @@ func disconnect_session() -> void:
 	_repair_display_key = ""
 	_trade_display_key = ""
 	_player_shop_display_key = ""
+	_nearby_chat_display_key = ""
+	nearby_chat_history.text = ""
+	nearby_chat_input.clear()
+	nearby_chat_status.text = ""
 	_inventory_page = 0
 	inventory_search.clear()
 	shop_status.text = ""
@@ -1239,6 +1265,43 @@ func _update_bank_ui() -> void:
 		else:
 			bank_status.text = "銀行操作失敗（伺服器代碼 %d）" % int(result.get("status",-1))
 
+
+func _send_nearby_chat() -> void:
+	if nearby_chat_send_button.disabled:
+		return
+	var message:=nearby_chat_input.text.strip_edges()
+	if message.is_empty():
+		return
+	if session.send_nearby_chat(message,0):
+		nearby_chat_input.clear()
+		nearby_chat_status.text = "已送出，等待伺服器 nearby echo…"
+	else:
+		nearby_chat_status.text = "目前無法送出附近聊天"
+
+
+func _update_nearby_chat_ui() -> void:
+	var in_world:=active and int(_latest.get("state",-1))==State.STATE_IN_WORLD
+	for control in [nearby_chat_history,nearby_chat_input,nearby_chat_send_button,nearby_chat_status]:
+		control.visible=in_world
+	if not in_world:
+		_nearby_chat_display_key=""
+		return
+	var usable:=bool(_latest.get("world_ready",false)) and not bool(_latest.get("reconnecting",false)) and not bool(_latest.get("resync_pending",false)) and not bool(_latest.get("waiting_for_new_map",false)) and int(_latest.get("pending_world_ready_ack_epoch",0))==0 and int(_latest.get("last_world_ready_ack_epoch",0))==int(_latest.get("map_epoch",0))
+	nearby_chat_input.editable=usable
+	nearby_chat_send_button.disabled=not usable
+	var messages:Array=_latest.get("chat_messages",[])
+	var tail:Dictionary={} if messages.is_empty() else messages[messages.size()-1]
+	var key:="%d/%d/%d/%d/%s" % [messages.size(),int(tail.get("sender_actor_id",0)),int(tail.get("sender_connection_epoch",0)),int(tail.get("chat_sequence",0)),str(tail.get("message",""))]
+	if key!=_nearby_chat_display_key:
+		_nearby_chat_display_key=key
+		var rows:=PackedStringArray()
+		for value in messages:
+			var entry:Dictionary=value
+			rows.append("[附近] %s：%s" % [str(entry.get("sender_name","玩家 %d" % int(entry.get("sender_actor_id",0)))),str(entry.get("message",""))])
+		nearby_chat_history.text="\n".join(rows)
+		if not messages.is_empty():
+			nearby_chat_history.set_v_scroll(nearby_chat_history.get_line_count())
+		nearby_chat_status.text="附近聊天由伺服器依雙向 AOI 投遞｜已顯示 %d 則" % messages.size()
 
 func _open_selected_player_shop() -> void:
 	if player_shop_open_button.disabled or player_shop_inventory_picker.selected < 0:
@@ -1989,6 +2052,7 @@ func _process(delta: float) -> void:
 	_update_repair_ui()
 	_update_trade_ui()
 	_update_player_shop_ui()
+	_update_nearby_chat_ui()
 	_update_pvp_ui()
 	var pickup_result: Dictionary = _latest.get("last_pickup_result",{})
 	if not pickup_result.is_empty():
