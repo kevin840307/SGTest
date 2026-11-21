@@ -598,6 +598,10 @@ func _process(delta: float) -> void:
 	# published a new state. WorldView animation continues on its own clock.
 	var update: Dictionary = session.snapshot_since(_last_publication_revision)
 	if update.is_empty():
+		# Skill pending has a local 10-second status reminder even without
+		# network changes; keep this cheap UI timer independent of snapshots.
+		if _skill_queued_after >= 0:
+			_set_skill_controls()
 		return
 	_last_publication_revision = int(update.revision)
 	_latest = update.snapshot
