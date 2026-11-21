@@ -77,14 +77,14 @@ AND map_epoch=$epoch AND skill_sequence=$seq;";
                 if(reader.Read())
                 {
                     int skill=reader.GetInt32(0),level=reader.GetInt32(1);
-                    long target=reader.GetInt64(2);
+                    long replayTarget=reader.GetInt64(2);
                     int cost=reader.GetInt32(3),requested=reader.GetInt32(4);
                     if(skill!=actor.SkillId||level!=actor.SkillLevel||
-                       target!=actor.TargetCharacterId||cost!=actor.MpCost||
+                       replayTarget!=actor.TargetCharacterId||cost!=actor.MpCost||
                        requested!=actor.HealAmount)
                         return new(SkillHealStatus.StaleSequence,
                             actor.SkillId,actor.SkillLevel,actor.TargetCharacterId);
-                    return new(SkillHealStatus.AlreadyApplied,skill,level,target,
+                    return new(SkillHealStatus.AlreadyApplied,skill,level,replayTarget,
                         cost,requested,reader.GetInt32(5),
                         reader.GetInt32(6),reader.GetInt32(7),reader.GetInt32(8),
                         reader.GetInt32(9),reader.GetInt32(10),reader.GetInt32(11));
