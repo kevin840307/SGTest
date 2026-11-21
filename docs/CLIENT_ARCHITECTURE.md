@@ -8,9 +8,9 @@
 
 - `tools/ui_art/sync_recovered2_auth.py` 只在使用者 Windows 電腦把需用的圖片／影片／Theme 複製到 `client/ui/private_recovered2/`，由根 `.gitignore` 排除；不帶入 Recovered2 的 Gameplay Script／NetworkManager／密碼持久化程式。
 - `client/ui/skins/recovered2_local.json` 是可抽換皮膚宣告，原始資產未安裝時不會出現在可選清單；`client/ui/recovered2_auth_shell.gd` 在可用時按照 Recovered2 的 1200×900 版型呈現登入、三欄選角、創角背景與其 Theme、登入影片。按鈕與輸入只委派給**同一個 SGTest SessionPanel 的登入／創角／選角指令**，不得建立第二份 Session／網路協定／WorldState。
-- `client/app/main.gd` 僅在 `recovered2_local` 且登入前啟用外部呈現層；SGTest 原 SessionPanel 在畫面外保持活著；切換其他皮膚或進入世界即恢復原本 UI。三個畫面右上角可切換皮膚，無須重新登入。
+- `client/app/main.gd` 僅在 `recovered2_local` 且登入前啟用外部呈現層；SGTest 原 SessionPanel 在畫面外保持活著；切換其他皮膚或進入世界即恢復原本 UI。三個畫面右上角可切換皮膚，無須重新登入。**所有風格的玩家登入畫面不顯示 Host／IP／Port，只有帳號／密碼；正式端點由部署或 `--host`／`--port` 參數帶入，視覺層不可覆蓋端點。**
 - 已知功能差異：SGTest Server 僅支援角色名稱、欄位等已實作欄位。Recovered2 的三角色外觀紙娃娃、髮型／種族／能力點／角色密碼／刪除角色尚**未連接權威玩法**，UI 要標示不可用，不能製作假按鈕。
-- 驗收：`client/tests/test_recovered2_local_ui.gd` 使用 Godot GPU 實際擷取三張 1280×900 畫面，測試使用原始 Theme／影片／PNG、登入委派、選角委派、創角委派、切換皮膚不重建 Session。無私有素材的 GitHub CI 會跳過本機視覺測試；可另由正式 Host TLS 整合測試覆蓋玩法流程。
+- 驗收：`client/tests/test_recovered2_local_ui.gd` 在 Windows Godot 原生 GPU 以 **1152×620** 擷取三張畫面（適配 1280×720 桌面，無裁切）；正式 Client 初次開啟時僅在一般視窗模式中自動縮小超出可用桌面的視窗，不固定世界解析度；測試原始 Theme／影片／PNG、只顯示帳密、部署端點保留、登入／選角／創角操作委派、切換皮膚不重建 Session。Headless CI 不等待 GPU 繪製訊號，只執行功能測試；沒有私有素材時可安全跳過本機視覺測試。正式 Host TLS 的雙 Client 整合另由既有 CI 驗證。
 
 ## 職責分離（不要為了分層先建立空檔案）
 

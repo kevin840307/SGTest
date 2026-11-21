@@ -74,6 +74,10 @@ func _run() -> void:
 	if not layout.login_page.visible or layout.select_page.visible or layout.create_page.visible or layout.world_page.visible:
 		_fail(app,"initial login screen not isolated")
 		return
+	var credentials_grid: Node = panel.username_input.get_parent()
+	if credentials_grid == null or panel.password_input.get_parent() != credentials_grid or credentials_grid.get_child_count() != 4:
+		_fail(app,"host/port deployment config exposed in regular login screen")
+		return
 	panel.active = true
 	panel._characters = [{"character_id":3,"name":"Hero","slot":0}]
 	panel._latest = {"state": State.STATE_SELECTING_CHARACTER}

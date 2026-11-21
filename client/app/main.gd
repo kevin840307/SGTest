@@ -40,8 +40,28 @@ var _autorun_waiting_sequence_floor := -1
 var _autorun_last_blocked_sequence := 0
 
 
+## Fit an oversized initial window into the available desktop area without
+## changing the game viewport contract or forcing a fixed game resolution.
+func _fit_initial_window_to_desktop() -> void:
+	if DisplayServer.get_name() == "headless":
+		return
+	var window := get_window()
+	if window == null or window.mode != Window.MODE_WINDOWED:
+		return
+	var usable := DisplayServer.screen_get_usable_rect()
+	if usable.size.x < 800 or usable.size.y < 550:
+		return
+	var limit := Vector2i(usable.size.x - 40,usable.size.y - 60)
+	if window.size.x <= limit.x and window.size.y <= limit.y:
+		return
+	window.size = Vector2i(mini(window.size.x,limit.x),mini(window.size.y,limit.y))
+	window.position = usable.position + (usable.size - window.size) / 2
+
+
 func _ready() -> void:
 	get_tree().auto_accept_quit = false
+	if auto_start:
+		_fit_initial_window_to_desktop()
 	add_child(world_view)
 	var layer := CanvasLayer.new()
 	add_child(layer)
@@ -109,9 +129,9 @@ func _ready() -> void:
 			if args[i] == "--pack":
 				pack = args[i+1]
 			elif args[i] == "--host":
-				session_panel.host_input.text = args[i+1]
+				session_panel.server_host = args[i+1]
 			elif args[i] == "--port" and args[i+1].is_valid_int():
-				session_panel.port_input.value = int(args[i+1])
+				session_panel.server_port = int(args[i+1])
 			elif args[i] == "--tls-name":
 				session_panel.tls_name = args[i+1]
 			elif args[i] == "--trusted-cert":
@@ -120,7 +140,6 @@ func _ready() -> void:
 					session_panel.trusted_chain = cert
 				else:
 					session_panel.status.text = "無法讀取指定憑證；未停用 TLS 驗證"
-		recovered2_auth.refresh_connection_defaults()
 		if world_view.open_pack(pack) == OK:
 			world_view.request_map(15)
 		else:

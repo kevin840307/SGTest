@@ -22,8 +22,6 @@ var _video := VideoStreamPlayer.new()
 var _theme: Theme
 var _account := LineEdit.new()
 var _secret := LineEdit.new()
-var _address := LineEdit.new()
-var _port := SpinBox.new()
 var _login_button := Button.new()
 var _register_button := Button.new()
 var _login_status := Label.new()
@@ -98,8 +96,6 @@ func enable_for_page(page: int, active: bool) -> void:
 			_video.stop()
 		if page == SessionLayout.Page.LOGIN and _panel != null:
 			_account.text = _panel.username_input.text
-			_address.text = _panel.host_input.text
-			_port.value = _panel.port_input.value
 		if page == SessionLayout.Page.CHARACTER_CREATE:
 			_name_edit.text = _panel.character_name_input.text
 			_slot_edit.value = _panel.character_slot_input.value
@@ -180,7 +176,7 @@ func _build_login() -> void:
 	_put(_login,shade,0,0,SIZE.x,SIZE.y)
 	var panel := Panel.new()
 	panel.theme_type_variation = &"ParadiseWindowPanel"
-	_put(_login,panel,405,205,390,490)
+	_put(_login,panel,405,255,390,390)
 	_label(panel,"星夢 Online  |  帳號登入",20,14,350,40,21).theme_type_variation = &"ParadiseWindowTitle"
 	var separator := HSeparator.new()
 	separator.theme_type_variation = &"ParadiseHeaderSeparator"
@@ -199,28 +195,14 @@ func _build_login() -> void:
 	_login_button.pressed.connect(_submit_login.bind(false))
 	_register_button = _button(panel,"建立帳號並登入",48,255,294,37)
 	_register_button.pressed.connect(_submit_login.bind(true))
-	_label(panel,"伺服器 / PORT",48,310,294,20,13)
-	_address = LineEdit.new()
-	_address.theme_type_variation = &"ParadiseLineEdit"
-	_address.text = "127.0.0.1"
-	_put(panel,_address,48,335,194,30)
-	_port.min_value = 1
-	_port.max_value = 65535
-	_port.value = 7778
-	_put(panel,_port,254,335,88,30)
-	_login_status = _label(panel,"請輸入帳號與密碼",30,386,330,63,13)
+	# Address/port are intentionally not rendered. Deployment configures
+	# them through Main's --host/--port arguments, independent of UI skins.
+	_login_status = _label(panel,"請輸入帳號與密碼",30,308,330,49,13)
 	_login_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-
-func refresh_connection_defaults() -> void:
-	if _panel != null and not _panel.active:
-		_address.text = _panel.host_input.text
-		_port.value = _panel.port_input.value
 
 func _submit_login(create_first: bool) -> void:
 	if _panel.active:
 		return
-	_panel.host_input.text = _address.text
-	_panel.port_input.value = _port.value
 	_panel.username_input.text = _account.text
 	_panel.password_input.text = _secret.text
 	_secret.clear()

@@ -46,8 +46,9 @@ var pvp_panel := PvpPanel.new()
 var active := false
 var trusted_chain: X509Certificate
 var tls_name := ""
-var host_input := LineEdit.new()
-var port_input := SpinBox.new()
+## Deployment-only connection parameters; never Godot GUI widgets.
+var server_host := "localhost"
+var server_port := 7777
 var username_input := LineEdit.new()
 var password_input := LineEdit.new()
 var login_button := Button.new()
@@ -101,17 +102,15 @@ func _ready() -> void:
 	var grid := GridContainer.new()
 	grid.columns = 2
 	_layout.login_page.add_child(grid)
-	host_input.text = "localhost"
-	port_input.min_value = 1
-	port_input.max_value = 65535
-	port_input.value = 7777
 	username_input.max_length = 32
 	password_input.secret = true
 	password_input.max_length = 256
-	for input in [host_input,port_input,username_input,password_input]:
+	for input in [username_input,password_input]:
 		input.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	for pair in [["伺服器",host_input],["連接埠",port_input],["帳號",username_input],["密碼",password_input]]:
+	# Server endpoint is launch/deployment configuration. Only account
+	# credentials appear in this presentation layer.
+	for pair in [["帳號",username_input],["密碼",password_input]]:
 		var label := Label.new()
 		label.text = pair[0]
 		grid.add_child(label)
@@ -238,15 +237,17 @@ func _begin_connection(register_first:bool)->void:
 		username.to_utf8_buffer().size()<3 or
 		username.to_utf8_buffer().size()>32 or
 		password.to_utf8_buffer().size()<8 or
-		password.to_utf8_buffer().size()>256 or
-		host_input.text.strip_edges().is_empty()
+		password.to_utf8_buffer().size()>256
 	):
 		status.text="帳號需 3–32 bytes，密碼需 8–256 bytes"
 		return
+	if server_host.strip_edges().is_empty() or server_port < 1 or server_port > 65535:
+		status.text = "連線設定無效，請聯絡管理員"
+		return
 	var error:int=session.register_secure(
-		host_input.text.strip_edges(),int(port_input.value),username,password,
+		server_host.strip_edges(),server_port,username,password,
 		tls_name,trusted_chain) if register_first else session.connect_secure(
-			host_input.text.strip_edges(),int(port_input.value),username,password,
+			server_host.strip_edges(),server_port,username,password,
 			tls_name,trusted_chain)
 	password=""
 	if error != OK:
@@ -526,10 +527,8 @@ func disconnect_session() -> void:
 
 
 func _set_controls() -> void:
-	host_input.editable = not active
 	username_input.editable = not active
 	password_input.editable = not active
-	port_input.editable = not active
 	login_button.disabled = active
 	register_button.disabled = active
 	logout_button.disabled = not active

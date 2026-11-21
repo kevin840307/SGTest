@@ -14,7 +14,11 @@ class SessionStub:
 	var enters := 0
 	var last_name := ""
 	var last_slot := -1
-	func connect_secure(_host, _port, _user, _password, _tls_name, _trust) -> int:
+	var last_host := ""
+	var last_port := 0
+	func connect_secure(host, port, _user, _password, _tls_name, _trust) -> int:
+		last_host = str(host)
+		last_port = int(port)
 		logins += 1
 		return OK
 	func register_secure(_host, _port, _user, _password, _tls_name, _trust) -> int:
@@ -34,7 +38,8 @@ class SessionStub:
 		return {}
 
 func _initialize() -> void:
-	root.size = Vector2i(1280,900)
+	# Constrained 1280x720 desktop: allow OS title bar/taskbar margins.
+	root.size = Vector2i(1152,620)
 	_run.call_deferred()
 
 func _error(message: String) -> void:
@@ -43,12 +48,17 @@ func _error(message: String) -> void:
 
 func _capture(name: String, dir: String) -> void:
 	await process_frame
+	# A headless CI renderer has no GPU draw completion signal. Functional
+	# assertions still run; only capture requires a real Windows renderer.
+	if DisplayServer.get_name() == "headless":
+		print("RECOVERED2_CAPTURE_SKIPPED_HEADLESS "+name)
+		return
 	await RenderingServer.frame_post_draw
 	var image: Image = root.get_texture().get_image()
 	if image.save_png(dir.path_join(name+".png")) != OK:
 		_error("capture failed "+name)
 	else:
-		print("RECOVERED2_SCREEN "+name+" 1280x900")
+		print("RECOVERED2_SCREEN "+name+" "+str(root.size))
 
 func _run() -> void:
 	if not UiSkinCatalog.valid("recovered2_local"):
@@ -82,8 +92,21 @@ func _run() -> void:
 	var stub = SessionStub.new()
 	panel.session = stub
 	panel.active = false
+	panel.server_host = "127.0.0.1"
+	panel.server_port = 7778
 	panel._set_controls()
 	app._update_ui_stage(true)
+	# Host and port are internal deployment inputs, not editable UI.
+	var credentials_grid: Node = panel.username_input.get_parent()
+	if credentials_grid == null or panel.password_input.get_parent() != credentials_grid or credentials_grid.get_child_count() != 4:
+		_error("deployment host/port unexpectedly rendered in base UI")
+		return
+	if shell._login.find_children("*","LineEdit",true,false).size() != 2 or not shell._login.find_children("*","SpinBox",true,false).is_empty():
+		_error("Recovered2 login exposed more than account/password")
+		return
+	if shell._stage.position.x < -0.1 or shell._stage.position.y < -0.1 or shell._stage.position.x + shell._stage.size.x * shell._stage.scale.x > root.size.x + 1.0 or shell._stage.position.y + shell._stage.size.y * shell._stage.scale.y > root.size.y + 1.0:
+		_error("Recovered2 1200x900 UI clipped in 1152x620 desktop client")
+		return
 	if not shell.visible or shell._page_index != Layout.Page.LOGIN:
 		_error("login scene did not mount")
 		return
@@ -93,10 +116,17 @@ func _run() -> void:
 	await _capture("login",directory)
 	shell._account.text = "testexample"
 	shell._secret.text = "password12345"
-	shell._address.text = "127.0.0.1"
-	shell._port.value = 7778
+	# Invalid deployment endpoint must be rejected internally, not exposed
+	# as a client UI control or sent to a transport.
+	panel.server_port = 0
 	shell._login_button.pressed.emit()
-	if stub.logins != 1 or panel.username_input.text != "testexample":
+	if stub.logins != 0 or panel.active or not panel.status.text.contains("連線設定無效"):
+		_error("invalid hidden server port was accepted")
+		return
+	panel.server_port = 7778
+	shell._secret.text = "password12345"
+	shell._login_button.pressed.emit()
+	if stub.logins != 1 or panel.username_input.text != "testexample" or stub.last_host != "127.0.0.1" or stub.last_port != 7778:
 		_error("login button did not delegate to SGTest SessionPanel")
 		return
 	panel.active = true
@@ -153,6 +183,7 @@ func _run() -> void:
 	if app._current_skin != "recovered2_local" or panel.session != original_session:
 		_error("cannot restore Recovered2 skin without losing session")
 		return
-	print("RECOVERED2_LOCAL_UI_PASS login_select_create=true original_video_theme_pngs=true single_session_delegation=true")
+	print("RECOVERED2_LOCAL_UI_PASS login_select_create=true hidden_deployment_host_port=true original_video_theme_pngs=true viewport_fit_1152x620=true single_session_delegation=true")
 	app.queue_free()
+	await process_frame
 	quit(0)

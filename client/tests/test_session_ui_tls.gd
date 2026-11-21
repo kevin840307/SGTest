@@ -594,8 +594,8 @@ func run() -> void:
 		return
 	panel.trusted_chain = cert
 	panel.tls_name = "localhost"
-	panel.host_input.text = "127.0.0.1"
-	panel.port_input.value = int(args[0])
+	panel.server_host = "127.0.0.1"
+	panel.server_port = int(args[0])
 	panel.password_input.text = "Fixture-Password-123!"
 	panel.login_button.pressed.emit()
 	if not panel.active or not panel.password_input.text.is_empty() or not panel.login_button.disabled or not app._map_buttons[0].disabled:

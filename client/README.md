@@ -137,7 +137,7 @@ Once WorldReady has arrived, gameplay UI may call `ClientSession.npc_interact(sp
 
 ## MVP003-LOGIN-UI：正式入口接現行Session
 
-main的「登入／連線」面板提供伺服器／埠／帳號／密碼、角色選擇與登出。TLS憑證預設由系統信任鏈驗證；私人測試CA可透過`-- --host 127.0.0.1 --port 7777 --tls-name localhost --trusted-cert C:/private/server-cert.pem --pack C:/private/assets.pck`指定。帳號／密碼不透過命令列傳入，密碼提交後清空。7777須配合實際listener；現在可依server README啟動TLS `serve`，需預先建置可信帳號／角色DB，公開創角尚未接通。
+main的玩家登入畫面**只顯示帳號、密碼及登入操作，不提供 IP／Port 編輯欄位**。連線端點屬部署設定，仍由啟動參數 `--host`、`--port` 或內部預設值提供，不由 UI 風格決定或覆寫。TLS 憑證預設由系統信任鏈驗證；私人測試 CA 可透過 `-- --host 127.0.0.1 --port 7777 --tls-name localhost --trusted-cert C:/private/server-cert.pem --pack C:/private/assets.pck` 指定。帳號／密碼不透過命令列傳入，密碼提交後清空。7777須配合實際listener；現在可依server README啟動TLS `serve`，需預先建置可信帳號／角色DB，公開創角尚未接通。
 
 ClientSession的兩個worker負責收包與Reducer；UI每50ms只讀已發布快照。收到WorldReady後沿唯一AssetStore載入對應map，連線期間本地Map按鈕不可切圖；地圖就緒時左鍵提交Server Move，尚未接玩家紙娃娃／平滑移動顯示。創角與正式NPC互動UI仍未實作。沒有私有素材時能完成登入，但不會假裝地圖已顯示。
 
