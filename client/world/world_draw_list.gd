@@ -293,6 +293,20 @@ func _valid_actor(actor: Dictionary) -> bool:
 	return true
 
 
+func build_actor_preview(assets: Dictionary, actor: Dictionary, view: Rect2) -> Array:
+	# UI previews use the same SPR origin, trim, mirror and part ordering
+	# as the world, without fabricating a map or retaining map state.
+	clear()
+	_assets = assets
+	var commands: Array = []
+	if not _valid_actor(actor):
+		error = ERR_INVALID_DATA
+	else:
+		_append_actor(commands,actor,view)
+	_assets = {}
+	return commands
+
+
 func _append_actor(commands: Array, actor: Dictionary, view: Rect2) -> void:
 	# The whole paper doll occupies one position in scenery/actor order.
 	for part in actor.get("parts",[actor]):

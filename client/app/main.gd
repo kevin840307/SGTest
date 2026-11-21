@@ -122,6 +122,7 @@ func _ready() -> void:
 	# textures; that presentation is only built for the actual client or a
 	# local visual test which explicitly opts in.
 	if auto_start or preview_auth_offline:
+		recovered2_auth.set_asset_store(world_view.store)
 		_recovered2_local_ready = recovered2_auth.attach(session_panel)
 	# Only _update_ui_stage may display the local auth shell. An inactive
 	# offline map preview must never have its mouse input intercepted.

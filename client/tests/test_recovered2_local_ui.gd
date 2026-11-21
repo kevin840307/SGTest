@@ -60,6 +60,23 @@ func _capture(name: String, dir: String) -> void:
 	else:
 		print("RECOVERED2_SCREEN "+name+" "+str(root.size))
 
+func _wait_previews(shell: Control, count: int, creation := false) -> bool:
+	var deadline := Time.get_ticks_msec()+10000
+	var ready := false
+	while Time.get_ticks_msec() < deadline:
+		await process_frame
+		ready = true
+		for i in count:
+			var index := 3 if creation else i
+			var preview: Control = shell._character_previews[index]
+			if preview.status != "ready" or preview._canvas._commands.is_empty():
+				ready = false
+		if ready:
+			break
+	if not ready:
+		_error("actual character preview atlas/animation did not become ready")
+	return ready
+
 func _run() -> void:
 	if not UiSkinCatalog.valid("recovered2_local"):
 		print("RECOVERED2_LOCAL_UI_SKIP private Recovered2 assets unavailable")
@@ -75,6 +92,9 @@ func _run() -> void:
 	app.preview_auth_offline = true
 	root.add_child(app)
 	var shell = app.recovered2_auth
+	if args.size() > 1 and app.world_view.open_pack(str(args[1])) != OK:
+		_error("optional character preview PCK could not be mounted")
+		return
 	if not app._recovered2_local_ready:
 		_error("private source theme failed to load")
 		return
@@ -160,6 +180,14 @@ func _run() -> void:
 	if not shell._selection.visible or shell._slot_actions[0].text != "進入世界":
 		_error("3-column selection did not display account characters")
 		return
+	if args.size() > 1:
+		if not await _wait_previews(shell,2):
+			return
+		var first: Control = shell._character_previews[0]
+		var second: Control = shell._character_previews[1]
+		if first._assets["players/b/base/body"].pages[0] != second._assets["players/b/base/body"].pages[0]:
+			_error("character cards duplicated a shared atlas texture")
+			return
 	await _capture("select",directory)
 	shell._slot_actions[1].pressed.emit()
 	if stub.enters != 1:
@@ -172,6 +200,13 @@ func _run() -> void:
 	if not shell._creation.visible:
 		_error("source create image not shown")
 		return
+	if args.size() > 1:
+		if not await _wait_previews(shell,1,true):
+			return
+		for i in 3:
+			if shell._character_previews[i]._epoch > 0 or shell._character_previews[i].is_processing():
+				_error("hidden selection card retained a scope or animation loop")
+				return
 	await _capture("create",directory)
 	shell._name_edit.text = "NewHero"
 	shell._slot_edit.value = 2
@@ -200,7 +235,16 @@ func _run() -> void:
 	if app._current_skin != "recovered2_local" or panel.session != original_session:
 		_error("cannot restore Recovered2 skin without losing session")
 		return
-	print("RECOVERED2_LOCAL_UI_PASS login_select_create=true hidden_deployment_host_port=true original_video_theme_pngs=true viewport_fit_1152x620=true single_session_delegation=true")
+	var store = app.world_view.store
 	app.queue_free()
 	await process_frame
+	var drain_deadline := Time.get_ticks_msec()+10000
+	while store.statistics().decode_jobs+store.statistics().texture_jobs>0 and Time.get_ticks_msec()<drain_deadline:
+		store.pump(2)
+		await process_frame
+	var final: Dictionary = store.statistics()
+	if final.assets+final.scopes+final.rgba_bytes+final.decode_jobs+final.texture_jobs != 0:
+		_error("auth preview teardown retained assets or scopes")
+		return
+	print("RECOVERED2_LOCAL_UI_PASS login_select_create=true hidden_deployment_host_port=true original_video_theme_pngs=true viewport_fit_1152x620=true single_session_delegation=true character_preview_pack_tested=%s all_assets_drained=true" % str(args.size()>1))
 	quit(0)

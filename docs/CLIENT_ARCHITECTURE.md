@@ -11,7 +11,8 @@ UI Node 由實際頁面擁有：`Recovered2AuthShell` 只有在本機 Theme 成�
 - `tools/ui_art/sync_recovered2_auth.py` 只在使用者 Windows 電腦把需用的圖片／影片／Theme 複製到 `client/ui/private_recovered2/`，由根 `.gitignore` 排除；不帶入 Recovered2 的 Gameplay Script／NetworkManager／密碼持久化程式。
 - `client/ui/skins/recovered2_local.json` 是可抽換皮膚宣告，原始資產未安裝時不會出現在可選清單；`client/ui/recovered2_auth_shell.gd` 在可用時按照 Recovered2 的 1200×900 版型呈現登入、三欄選角、創角背景與其 Theme、登入影片。按鈕與輸入只委派給**同一個 SGTest SessionPanel 的登入／創角／選角指令**，不得建立第二份 Session／網路協定／WorldState。
 - `client/app/main.gd` 僅在 `recovered2_local` 且登入前啟用外部呈現層；SGTest 原 SessionPanel 在畫面外保持活著；切換其他皮膚或進入世界即恢復原本 UI。三個畫面右上角可切換皮膚，無須重新登入。**所有風格的玩家登入畫面不顯示 Host／IP／Port，只有帳號／密碼；正式端點由部署或 `--host`／`--port` 參數帶入，視覺層不可覆蓋端點。**
-- 已知功能差異：SGTest Server 僅支援角色名稱、欄位等已實作欄位。Recovered2 的三角色外觀紙娃娃、髮型／種族／能力點／角色密碼／刪除角色尚**未連接權威玩法**，UI 要標示不可用，不能製作假按鈕。
+- 人物預覽：`client/player/character_preview.gd` 為選角三欄及創角頁顯示與世界一致的**暫定 B 基礎外觀**，重用 PlayerPresentation／ActionTimeline、WorldDrawList 的 SPR geometry 與 WorldCanvas。只向 App 唯一 AssetStore 申請獨立 scope；三欄共用同一份六部件 texture，不建立另一個 Store、載入 loop 或 SubViewport。依來源 NS1 動畫固定 50Hz metadata 採樣，只在 frame／大小改變時更新 Canvas；空欄、隱藏、切換 skin 或銷毀時停止 process 並釋放 scope。素材不存在／解碼失敗顯示未就緒，不捏造替代外觀。
+- 已知功能差異：Server 僅支援角色名稱、欄位等既有欄位，尚未發布種族／髮型／裝備外觀。預覽因此**不是角色的完整外觀**，介面標明暫定 B 外觀；髮型／種族／能力點／角色密碼／刪除角色尚未連接權威玩法，不能製作假按鈕。
 - 驗收：`client/tests/test_recovered2_local_ui.gd` 在 Windows Godot 原生 GPU 以 **1152×620** 擷取三張畫面（適配 1280×720 桌面，無裁切）；正式 Client 初次開啟時僅在一般視窗模式中自動縮小超出可用桌面的視窗，不固定世界解析度；測試原始 Theme／影片／PNG、只顯示帳密、部署端點保留、登入／選角／創角操作委派、切換皮膚不重建 Session。Headless CI 不等待 GPU 繪製訊號，只執行功能測試；沒有私有素材時可安全跳過本機視覺測試。正式 Host TLS 的雙 Client 整合另由既有 CI 驗證。
 
 ## 2026-11-21 Recovered2 載入 UI、走路動畫與 MapEpoch 資源實測
@@ -22,7 +23,7 @@ UI Node 由實際頁面擁有：`Recovered2AuthShell` 只有在本機 Theme 成�
 - **有界紋理快取**：AssetStore 同時最多 2 個紋理下載／載入工作（舊 1），`max_assets=384`；`world_view_cache` 可保留**最多 128MiB** 已就緒地圖與 atlas 圖片，不保留 Actor、Monster、NPC、AOI／WorldState，MapEpoch 變更時必清理全部權威呈現狀態，正式登出／視窗結束釋放 cache 及所有引用。保留本地資源池只改善重新進圖，不影響 Server AOI 授權。
 - **實測**：Windows Godot 4.7.2／RTX3050，原始 86MB PCK，地圖 15→13→15，單紋理工作：3983／1117／3981ms；雙工作不保留：2063／618／2063ms；雙工作加有界快取：**2065／268／31ms**；Map15 約232個圖集／91.14MiB；兩圖合併約105.35MiB，最終 scope=0 / GPU貼圖任務=0 / 資源計數=0。相機純渲染 p95 約16.75ms，**不等於**真角色移動／多人 20+ 實際觀感已達60FPS。
 - **AOI 驗證**：兩個真 Godot TLS Client、Server WorldAoiPump，Map15→13→15 的 WorldReady、Spawn/Delta/Despawn、舊 MapEpoch 清除 PASS，`--crossmap` 23 AOI frames；`--portal` 真伺服器驗證 NPC 互動／拒絕不合法 ID、回圖無幽靈實體 PASS（25 frames）。這些是**測試資源**的 Server＋Client 協定結果；原版私有 PCK 的同時多人 GPU／高負載仍 NOT VERIFIED。
-- **待查問題**：正式獨立原版地圖像素對照 runner 有時可產生全部畫面、`WORLD_VIEW_RESULT PASS`、Final Store=0，但 Godot Windows driver 結束時仍有 Renderer RID/Texture leaked 警告，因此 runner 依嚴格規則判 **FAIL**（不能改成 PASS 或忽略）；需要找出是 driver shutdown 或引擎資源引用問題，另有真玩家路徑／GPU frame trace、停走動畫和 AOI 高人數負載尚需實機確認。
+- **結束資源修復**：`9edfe70` 已定位並修正未掛入場景樹的 auth 控制項及被覆蓋的預建按鈕，不是將 driver 警告排除。嚴格原版地圖 12 captures／39 SPR frames、人物 20 captures／91 SPR frames 均 PASS、超容差像素 0、engine_errors=[]、AssetStore 全歸零；[Client CI 44921797737](https://github.com/kevin840307/SGTest/actions/runs/44921797737) SUCCESS。真玩家路徑／GPU frame trace、停走動畫和 AOI 高人數負載仍需實機確認。
 
 ## 職責分離（不要為了分層先建立空檔案）
 

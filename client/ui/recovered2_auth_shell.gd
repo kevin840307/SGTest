@@ -9,6 +9,7 @@ signal skin_requested(id: String)
 const SessionLayout = preload("res://ui/session_layout.gd")
 const UiTextureLoader = preload("res://ui/ui_texture_loader.gd")
 const UiSkinCatalog = preload("res://ui/ui_skin_catalog.gd")
+const CharacterPreview = preload("res://player/character_preview.gd")
 
 const LOCAL := "res://ui/private_recovered2"
 const SIZE := Vector2(1200,900)
@@ -38,6 +39,13 @@ var _skin_picker: OptionButton
 var _selection_page := 0
 var _last_character_key := ""
 var _last_resize := Vector2.ZERO
+var _asset_store: RefCounted
+var _character_previews: Array[Control] = []
+
+func set_asset_store(store: RefCounted) -> void:
+	_asset_store = store
+	for preview in _character_previews:
+		preview.bind_store(store)
 
 func _init() -> void:
 	name = "Recovered2AuthenticationUI"
@@ -229,9 +237,15 @@ func _build_select() -> void:
 		var x := float([220,503,782][i])
 		var name := _label(_selection,"（空欄位）",x,385,200,32,17)
 		_names.append(name)
-		var preview := _label(_selection,"尚未建立角色",x+12,510,176,75,13)
+		var doll := CharacterPreview.new()
+		_put(_selection,doll,x+12,422,176,200)
+		doll.bind_store(_asset_store)
+		doll.tooltip_text = "與世界共用的暫定 B 外觀；種族／髮型／裝備待 Server 接入"
+		_character_previews.append(doll)
+		var preview := _label(_selection,"尚未建立角色",x+12,610,176,46,11)
 		preview.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		_slot_previews.append(preview)
+		doll.status_changed.connect(func(_status): _last_character_key = "")
 		var action := _button(_selection,"建立角色",x+36,670,125,37,true)
 		action.pressed.connect(_enter_slot.bind(i))
 		_slot_actions.append(action)
@@ -286,7 +300,13 @@ func _build_create() -> void:
 	# These fields exist in Recovered2 but SGTest currently has no
 	# authoritative race/hair/point-allocation protocol. Never invent values.
 	_label(_creation,"外觀與能力分配尚未接入",318,493,235,54,14)
-	_label(_creation,"人物預覽待接入",517,581,118,30,13)
+	var doll := CharacterPreview.new()
+	_put(_creation,doll,516,444,109,177)
+	doll.bind_store(_asset_store)
+	doll.set_occupied(true)
+	doll.tooltip_text = "暫定 B 基礎外觀；未實作的種族／髮型選擇不會改變角色資料"
+	_character_previews.append(doll)
+	_label(_creation,"暫定基礎外觀",507,600,128,25,11)
 	_confirm_create = _button(_creation,"建立角色",747,680,110,31,true)
 	_confirm_create.pressed.connect(_submit_create)
 	var cancel := _button(_creation,"返回選角",878,680,110,31)
@@ -327,6 +347,9 @@ func _update_characters() -> void:
 		var valid: bool = index < _panel._characters.size()
 		var character: Dictionary = _panel._characters[index] if valid else {}
 		_names[i].text = str(character.get("name","未建立角色")) if valid else "空白角色欄"
-		_slot_previews[i].text = "角色 ID %d\n模型預覽待接入" % int(character.get("character_id",0)) if valid else "可建立新角色"
+		_character_previews[i].set_occupied(valid)
+		var model_status := str(_character_previews[i].status)
+		var note := "暫定 B 外觀" if model_status == "ready" else ("人物素材載入中" if model_status == "loading" else "人物素材未就緒")
+		_slot_previews[i].text = "角色 ID %d · %s" % [int(character.get("character_id",0)),note] if valid else "可建立新角色"
 		_slot_actions[i].text = "進入世界" if valid else "建立角色"
 		_slot_actions[i].disabled = _panel._chosen
