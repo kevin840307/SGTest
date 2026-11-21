@@ -111,7 +111,9 @@ internal static class PvpSkillChecks
         };
         var coordinator=new MonsterWorldCoordinator([runtime],rules);
         var attacker=new ActorSnapshot(501,13,2,1,0,0,24,24,1,false,3,false);
-        var victim=new ActorSnapshot(502,13,3,1,0,0,56,24,1,false,6,false);
+        // Target and caster have independent per-character MapEpoch values;
+        // a reconnect or return portal must not disable same-map player skills.
+        var victim=new ActorSnapshot(502,13,3,7,0,0,56,24,1,false,6,false);
         coordinator.Process(new WorldChangedBatch(1,[],[
             new(ActorLifecycleKind.Joined,attacker),
             new(ActorLifecycleKind.Joined,victim)]));
@@ -141,6 +143,34 @@ internal static class PvpSkillChecks
         var cooldown=coordinator.PrepareSkill(p1 with {SkillSequence=3});
         Checks.Require(cooldown.Rejected?.Status==SkillUseStatus.Cooldown,
             "player skill did not share verified cooldown owner");
+
+        // Moving the target to another map must still be rejected, even if
+        // their private MapEpoch changes again. Rejoining the caster's map
+        // with another distinct epoch must become targetable immediately.
+        var otherMap=victim with {MapId=15,MapEpoch=8,EntityRevision=2};
+        coordinator.Process(new WorldChangedBatch(10,[],[
+            new(ActorLifecycleKind.Left,victim),
+            new(ActorLifecycleKind.Joined,otherMap)]));
+        var departed=coordinator.PrepareSkill(
+            p1 with {SkillSequence=4});
+        Checks.Require(departed.Rejected?.Status==SkillUseStatus.TargetMissing,
+            "player skill targeted an actor on a different map");
+
+        var returned=victim with {MapEpoch=9,EntityRevision=3};
+        coordinator.Process(new WorldChangedBatch(11,[],[
+            new(ActorLifecycleKind.Left,otherMap),
+            new(ActorLifecycleKind.Joined,returned)]));
+        var newGeneration=coordinator.PrepareSkill(
+            p1 with {SkillSequence=5});
+        Checks.Require(newGeneration.Ready&&
+            coordinator.CommitPreparedSkill(newGeneration.Prepared!.Value).Status==
+                SkillUseStatus.Applied,
+            "same-map player skill rejected a returned target with independent MapEpoch");
+
+        var staleCaster=coordinator.PrepareSkill(p1 with {
+            SkillSequence=6,RequestMapEpoch=7});
+        Checks.Require(staleCaster.Rejected?.Status==SkillUseStatus.OldMapEpoch,
+            "independent target MapEpoch relaxed caster generation validation");
     }
 
     private static async Task SettlementAndVisual(string root)

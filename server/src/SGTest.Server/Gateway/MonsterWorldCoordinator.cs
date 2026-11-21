@@ -396,9 +396,12 @@ public sealed class MonsterWorldCoordinator
         if(!PvpMapPolicy.AllowsPlayerPvp(attacker.MapId))
             return SkillUseStatus.NonPvpMap;
         if(attacker.CombatDead)return SkillUseStatus.CombatUnavailable;
+        // MapEpoch belongs to each actor's own session/map lifecycle.
+        // Players on the same map can legitimately have different epochs
+        // after independent reconnects/transfers. The current target
+        // snapshot and its own generation are validated by combat settlement.
         if(!_actors.TryGetValue(targetActorId,out target)||
-           target.MapId!=attacker.MapId||
-           target.MapEpoch!=attacker.MapEpoch)
+           target.MapId!=attacker.MapId)
             return SkillUseStatus.TargetMissing;
         if(target.CombatDead)return SkillUseStatus.TargetDead;
         double dx=target.X-attacker.X,dy=target.Y-attacker.Y;
