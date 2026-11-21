@@ -20,6 +20,11 @@ class CountingWorld:
 	var pvp_known := true
 	var pvp_sequence := 0
 	var pending_pvp_sequence := 0
+	var player_dead := false
+	var last_receipt_sequence := 0
+	var last_receipt_status := 0
+	var self_state: Dictionary = {}
+	var monsters: Dictionary = {501: {"current_hp": 90, "state": 0, "x": 40.0, "y": 8.0}}
 	var builds := 0
 
 	func snapshot() -> Dictionary:
@@ -66,6 +71,25 @@ func _initialize() -> void:
 		_fail("first snapshot contents changed")
 		return
 
+	# An unsettled Stop barrier and an in-progress monster chase are both
+	# polled by the same logic thread. Neither may snapshot all visible AOI.
+	var stopped := {"type": "stop_move", "_token": 1, "phase": "await_stop", "movement_sequence": 9}
+	session._intents.append(stopped)
+	for _i in range(200):
+		session._process_stop_movement_intent(stopped)
+	if world.builds != 1 or session._intents.size() != 1:
+		_fail("stop barrier idle polls cloned or consumed an unsettled world")
+		return
+	session._intents.clear()
+	var chasing := {"type": "attack_monster", "_token": 2, "phase": "await_move", "move_sequence": 9, "entity_id": 501}
+	session._intents.append(chasing)
+	for _i in range(200):
+		session._process_attack_monster_intent(chasing)
+	if world.builds != 1 or session._intents.size() != 1:
+		_fail("monster chase idle polls cloned or consumed an unsettled world")
+		return
+	session._intents.clear()
+
 	# Reconnect completion is a true transition: publish it once, then idle.
 	session._reconnecting = true
 	session._reconnect_attempt = 2
@@ -84,5 +108,5 @@ func _initialize() -> void:
 	if second.is_empty() or int(second.get("revision",-1)) != 2 or int((second.get("snapshot",{}) as Dictionary).get("reconnect_count",0)) != 1 or not session.snapshot_since(2).is_empty():
 		_fail("reconnect publication version/one-copy gate failed")
 		return
-	print("CLIENT_IDLE_PUBLICATION_PASS idle_polls=200 full_snapshot_builds=2 entry_once=true reconnect_once=true versioned_ui_copy=true")
+	print("CLIENT_IDLE_PUBLICATION_PASS idle_polls=200 waiting_intent_polls=400 full_snapshot_builds=2 entry_once=true reconnect_once=true versioned_ui_copy=true")
 	quit(0)

@@ -1767,7 +1767,8 @@ func _process_monster_skill_intent(intent: Dictionary) -> void:
 
 
 func _process_stop_movement_intent(intent: Dictionary) -> void:
-	var current: Dictionary = _world.snapshot()
+	# Called on the sole WorldState logic thread: no cross-thread snapshot needed.
+	var current: RefCounted = _world
 	var token := int(intent.get("_token",0))
 	if token <= 0 or not _first_intent_matches(token):
 		return
@@ -1807,7 +1808,8 @@ func _process_stop_movement_intent(intent: Dictionary) -> void:
 
 
 func _process_attack_monster_intent(intent: Dictionary) -> void:
-	var current: Dictionary = _world.snapshot()
+	# Called on the sole WorldState logic thread: no cross-thread snapshot needed.
+	var current: RefCounted = _world
 	var token := int(intent.get("_token",0))
 	if token <= 0 or not _first_intent_matches(token):
 		return
