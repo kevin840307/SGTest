@@ -12,7 +12,7 @@
 | Server Auth binding | [x] `IdentityTlsAuthorization.Binding.cs` 承接身分＋World Actor 綁定 | 原密鑰／身分／Actor cleanup、真 TLS Auth／重連 E2E 保持 |
 | Server Gateway 連線進出職責 | [x] `GatewayContracts.cs` 抽穩定可信命令契約；`GatewayConnection.cs` 保唯一綁定／Queue，`.Ingress.cs` 收包、`.ReliableOutput.cs` 回覆、`.AoiOutput.cs` 可靠可視事件 | 保留完全相同的 connection/binding gate、WorldReady ACK、MapEpoch、反壓入列、收發順序；Server 全量 checks、Godot 真 TLS 多端 |
 | Server WorldResultRouter 事件／回覆分區及關閉 | [x] `WorldResultRouter.cs` 保留 12 條 bounded Channel 與唯一 Router；`.GameplayIngress.cs` 接收 gameplay／AOI 事件、`.ReliableReplies.cs` 單一鎖分派、`.WorldTicks.cs` 單一 Tick 消費者 | 先 Changed 再 Receipt、背壓 fail-closed；補齊 Identity／PvP 3 條 AOI Channel shutdown completion；Server 與真 Godot TLS、多端 E2E |
-| Server Gameplay Gateway 瘦身 | [ ] `IdentityTlsAuthorization.cs` 仍有巨大 socket/gameplay 流程，逐步抽出經驗證的 domain command gate | 不新增可繞過身份／MapEpoch 的 dispatch 路徑；Server TLS 全量回歸 |
+| Server Gameplay Gateway 瘦身 | [x] `IdentityTlsAuthorization.cs` 保留連線生命週期及組裝；功能命令由對應模組處理 | 保留身分、MapEpoch、原先的鎖與回覆順序；Server TLS 全量回歸 PASS |
 | Server Inventory 物品命令 | [x] `Inventory/InventoryCommandHandler.cs` 接手 Pickup、Equipment、Discard 三項可信 UID 操作；不新增第二個 inventory owner | 沿用同一 gameplayGate／WorldResultRouter、SQLite commit-first／AOI 掉落取消順序與可靠回覆；Server TLS、物品回歸及架構 Gate |
 | Server 玩家復活與恢復／技能 | [x] `Combat/PlayerRecoveryHandler.cs` 掌管 Respawn／Recovery；`Skill/SkillCommandHandler.cs` 掌管一般技能 MP／可靠提交 | 同一 authenticated gameplayGate、Combat AI suspend／drain／resume、可靠結果先於傷害、SQLite 權威與 TLS 全量回歸 |
 | Server NPC 修理／強化流程 | [x] `Npc/NpcItemModificationHandler.cs` 合併同一個 auth gate 下的修理與強化服務命令；Gateway 僅組裝與指派 | 共用同一 `gameplayGate`／`WorldResultRouter`，保留 UID／Actor／MapEpoch／來源驗證；Server Checks 267/267 PASS |
