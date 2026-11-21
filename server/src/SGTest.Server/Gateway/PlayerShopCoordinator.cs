@@ -134,8 +134,8 @@ public sealed class PlayerShopCoordinator
                     // exact generation; peers on the same MapId need not have
                     // numerically equal epochs.
                     if(command.SellerActorId==command.ActorId||
-                       !router.IsVisibleActor(binding,command.SellerActorId)||
-                       !router.TryGetCurrentBinding(command.SellerActorId,out var seller))
+                       !router.TryGetCurrentBinding(command.SellerActorId,out var seller)||
+                       !router.IsVisibleActor(binding,seller))
                         return Queue(command,router,Result(
                             command,PlayerShopResultStatus.NotVisible,
                             sellerActorId:command.SellerActorId));
@@ -166,8 +166,8 @@ public sealed class PlayerShopCoordinator
             return Queue(command,router,Result(
                 command,PlayerShopResultStatus.SelfPurchase,
                 sellerActorId:command.SellerActorId));
-        if(!router.IsVisibleActor(buyerBinding,command.SellerActorId)||
-           !router.TryGetCurrentBinding(command.SellerActorId,out var sellerBinding))
+        if(!router.TryGetCurrentBinding(command.SellerActorId,out var sellerBinding)||
+           !router.IsVisibleActor(buyerBinding,sellerBinding))
             return Queue(command,router,Result(
                 command,PlayerShopResultStatus.NotVisible,
                 sellerActorId:command.SellerActorId));

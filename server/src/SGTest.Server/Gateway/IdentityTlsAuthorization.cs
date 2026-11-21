@@ -1953,11 +1953,10 @@ public sealed class IdentityTlsAuthorization
                 {
                     foreach(var recipient in router.SnapshotActiveBindings())
                     {
-                        bool self=recipient.ActorId==request.ActorId&&
-                            recipient.ConnectionEpoch==request.ConnectionEpoch;
+                        bool self=recipient==sender;
                         if(!self&&
-                           (!router.IsVisibleActor(sender,recipient.ActorId)||
-                            !router.IsVisibleActor(recipient,request.ActorId)))
+                           (!router.IsVisibleActor(sender,recipient)||
+                            !router.IsVisibleActor(recipient,sender)))
                             continue;
                         var delivery=new ChatDeliveryWire(
                             recipient.MapEpoch,request.ActorId,request.ConnectionEpoch,

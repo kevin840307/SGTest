@@ -382,6 +382,17 @@ public sealed class WorldResultRouter
                 connection.IsVisibleActor(targetActorId);
     }
 
+    public bool IsVisibleActor(ConnectionBinding viewer,ConnectionBinding target)
+    {
+        if(target.ActorId<=0||target.ConnectionEpoch<=0||target.MapEpoch<=0||
+           target.ActorId==viewer.ActorId)
+            return false;
+        lock(_gate)
+            return _connections.TryGetValue(viewer.ActorId,out var connection)&&
+                !connection.IsClosed&&connection.Binding==viewer&&
+                connection.IsVisibleActor(target);
+    }
+
     public bool TryGetCurrentBinding(long actorId,out ConnectionBinding binding)
     {
         lock(_gate)

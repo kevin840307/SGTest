@@ -86,12 +86,31 @@ internal static class PlayerShopWireChecks
                 GatewaySendStatus.Enqueued&&
             gateway.IsVisibleActor(peer.ActorId),
             "reliable AOI Spawn did not admit visible seller");
+        Checks.Require(gateway.IsVisibleActor(
+                ConnectionBinding.FromTrustedSnapshot(peer)),
+            "AOI Spawn did not retain exact seller generation");
         Checks.Require(gateway.QueueAoi(new(
                 AoiEventKind.Despawn,11,self.MapEpoch,null,
-                peer.ActorId,peer.ConnectionEpoch))==
+                peer.ActorId,peer.ConnectionEpoch,
+                EntityMapEpoch:peer.MapEpoch))==
                 GatewaySendStatus.Enqueued&&
             !gateway.IsVisibleActor(peer.ActorId),
             "AOI Despawn did not revoke visible seller");
+
+        var peerNext=peer with {MapEpoch=4,EntityRevision=2};
+        Checks.Require(gateway.QueueAoi(new(
+                AoiEventKind.Spawn,12,self.MapEpoch,peerNext))==
+                GatewaySendStatus.Enqueued&&
+            gateway.IsVisibleActor(ConnectionBinding.FromTrustedSnapshot(peerNext))&&
+            !gateway.IsVisibleActor(ConnectionBinding.FromTrustedSnapshot(peer)),
+            "AOI Spawn did not replace seller with exact new MapEpoch");
+        Checks.Require(gateway.QueueAoi(new(
+                AoiEventKind.Despawn,13,self.MapEpoch,null,
+                peer.ActorId,peer.ConnectionEpoch,
+                EntityMapEpoch:peer.MapEpoch))==
+                GatewaySendStatus.Enqueued&&
+            gateway.IsVisibleActor(ConnectionBinding.FromTrustedSnapshot(peerNext)),
+            "stale old-generation Despawn removed current seller visibility");
 
         var constrained=new GatewayConnection(
             self,new GatewayConnectionOptions(MaxReliableFrames:1));
@@ -121,7 +140,8 @@ internal static class PlayerShopWireChecks
         Checks.Require(routed.QueueAoi(new(
                 AoiEventKind.Spawn,15,self.MapEpoch,peer))==
                 GatewaySendStatus.Enqueued&&
-            router.IsVisibleActor(routed.Binding,peer.ActorId),
+            router.IsVisibleActor(
+                routed.Binding,ConnectionBinding.FromTrustedSnapshot(peer)),
             "router did not expose exact current AOI visibility");
         routed.Close();
         Checks.Require(!router.IsVisibleActor(routed.Binding,peer.ActorId),

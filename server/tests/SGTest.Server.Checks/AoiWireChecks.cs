@@ -201,7 +201,8 @@ internal static class AoiWireChecks
                 "own Ready enqueue");
         Require(gateway.QueueAoi(new(AoiEventKind.Spawn, 43, 1, other)) ==
                 GatewaySendStatus.Enqueued, "other Spawn enqueue");
-        Require(gateway.QueueAoi(new(AoiEventKind.Despawn, 45, 1, null, 22, 2)) ==
+        Require(gateway.QueueAoi(new(
+                AoiEventKind.Despawn,45,1,null,22,2,EntityMapEpoch:1)) ==
                 GatewaySendStatus.Enqueued, "other Despawn enqueue");
         Require(gateway.QueueAoi(new(AoiEventKind.Delta, 46, 1, other)) ==
                 GatewaySendStatus.Backpressured, "bounded AOI queue silently overflowed");

@@ -66,7 +66,8 @@ public readonly record struct AoiEvent(
     PlayerRespawnVisual? PlayerRespawn = null,
     PlayerIdentityPresentation? PlayerIdentity = null,
     PlayerPvpCombatVisual? PvpCombat = null,
-    PlayerPvpSkillVisual? PvpSkill = null);
+    PlayerPvpSkillVisual? PvpSkill = null,
+    long EntityMapEpoch = 0);
 
 public sealed class AoiBackpressureException : Exception
 {
@@ -757,7 +758,8 @@ public sealed class WorldAoi
         {
             if (observer.Visible.Remove(actor.ActorId))
                 Enqueue(observer, new(AoiEventKind.Despawn, tick,
-                    observer.Self.MapEpoch, null, old.ActorId, old.ConnectionEpoch));
+                    observer.Self.MapEpoch, null, old.ActorId, old.ConnectionEpoch,
+                    EntityMapEpoch:old.MapEpoch));
         }
     }
 

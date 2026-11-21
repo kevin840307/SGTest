@@ -237,7 +237,9 @@ public sealed class GatewayConnection
     private readonly string? _displayName;
     private CharacterPvpState? _pvpState;
     private readonly string? _gmOperatorId;
-    private readonly Dictionary<long,long> _visibleActors = new();
+    // Exact AOI identity. MapEpoch is scoped to the target actor's own
+    // trusted map lifecycle and may differ numerically from the viewer's.
+    private readonly Dictionary<long,ConnectionBinding> _visibleActors = new();
 
     public GatewayConnection(ActorSnapshot trustedActor,
                              GatewayConnectionOptions? options = null,
@@ -335,6 +337,14 @@ public sealed class GatewayConnection
         lock(_bindingGate)
             return !_closed&&actorId>0&&actorId!=_binding.ActorId&&
                 _visibleActors.ContainsKey(actorId);
+    }
+
+    public bool IsVisibleActor(ConnectionBinding actor)
+    {
+        lock(_bindingGate)
+            return !_closed&&actor.ActorId>0&&actor.ActorId!=_binding.ActorId&&
+                _visibleActors.TryGetValue(actor.ActorId,out var visible)&&
+                visible==actor;
     }
     public bool WorldReadyAcknowledged
     {
@@ -1856,7 +1866,8 @@ public sealed class GatewayConnection
                     break;
 
                 case AoiEventKind.Despawn
-                    when evt.EntityActorId > 0 && evt.EntityConnectionEpoch > 0:
+                    when evt.EntityActorId > 0 && evt.EntityConnectionEpoch > 0 &&
+                         evt.EntityMapEpoch > 0:
                     frame = WireProtocol.EncodeEntityDespawn(new(
                         evt.ReceiverMapEpoch, evt.Tick, evt.EntityActorId,
                         evt.EntityConnectionEpoch));
@@ -1964,10 +1975,12 @@ public sealed class GatewayConnection
                 _visibleActors.Clear();
             }
             else if(evt.Kind==AoiEventKind.Spawn&&evt.Entity is { } spawned)
-                _visibleActors[spawned.ActorId]=spawned.ConnectionEpoch;
+                _visibleActors[spawned.ActorId]=
+                    ConnectionBinding.FromTrustedSnapshot(spawned);
             else if(evt.Kind==AoiEventKind.Despawn&&
                     _visibleActors.TryGetValue(evt.EntityActorId,out var seen)&&
-                    seen==evt.EntityConnectionEpoch)
+                    seen==new ConnectionBinding(
+                        evt.EntityActorId,evt.EntityConnectionEpoch,evt.EntityMapEpoch))
                 _visibleActors.Remove(evt.EntityActorId);
             return GatewaySendStatus.Enqueued;
         }
