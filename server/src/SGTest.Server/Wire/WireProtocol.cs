@@ -5143,6 +5143,7 @@ public static class WireProtocol
             101 => WireOpcode.PartyResult,
             102 => WireOpcode.PartyInvite,
             103 => WireOpcode.PartySnapshot,
+            104 => WireOpcode.SkillBookSnapshot,
             _ => 0
         };
         if (opcode == 0) return false;
@@ -5286,6 +5287,11 @@ public static class WireProtocol
                 advertised <= InventorySnapshotHeaderBytes +
                     InventorySnapshotMaxItemsPerFrame*InventoryItemBytes &&
                 (advertised-InventorySnapshotHeaderBytes)%InventoryItemBytes==0,
+            WireOpcode.SkillBookSnapshot =>
+                advertised >= SkillBookSnapshotHeaderBytes &&
+                advertised <= SkillBookSnapshotHeaderBytes +
+                    SkillBookSnapshotMaxSkillsPerFrame*SkillBookEntryBytes &&
+                (advertised-SkillBookSnapshotHeaderBytes)%SkillBookEntryBytes==0,
             _ => false
         };
         if (!sizeOk) return false;
