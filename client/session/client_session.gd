@@ -1047,15 +1047,15 @@ func _decorate_snapshot(value: Dictionary) -> Dictionary:
 func _flush_control_frames() -> void:
 	# ACK/resync checks run on the same logic thread as WorldState writes.
 	# Read the current scalars directly, including after an ACK transition.
-	var ack_epoch := _world.pending_world_ready_ack_epoch
-	var ack_tick := _world.pending_world_ready_ack_tick
+	var ack_epoch: int = int(_world.pending_world_ready_ack_epoch)
+	var ack_tick: int = int(_world.pending_world_ready_ack_tick)
 	if ack_epoch > 0 and ack_tick >= 0:
 		var ack := WireCodec.encode_world_ready_ack(ack_epoch,ack_tick)
 		if not ack.is_empty() and _transport.send_frame(ack):
 			_world.mark_world_ready_ack_sent(ack_epoch,ack_tick)
 			_publish()
 	if _world.resync_pending and not _world.resync_request_sent:
-		var epoch := _world.map_epoch
+		var epoch: int = int(_world.map_epoch)
 		var request := WireCodec.encode_world_resync_request(epoch)
 		if not request.is_empty() and _transport.send_frame(request):
 			_world.mark_resync_request_sent(epoch)
