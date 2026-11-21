@@ -251,6 +251,7 @@ static class Checks
             InventoryDiscardChecks.Verify(root);
             InventorySnapshotChecks.Verify();
             SkillBookChecks.Verify(root);
+            SkillHealChecks.Verify(root);
             StorageChecks.Verify(root);
             EquipmentChecks.Verify(root);
             EnhancementMetadataChecks.Verify(root);

@@ -243,6 +243,35 @@ public sealed class PlayerCombatSettlement
         }
     }
 
+    /// <summary>Synchronize one already-durable player Heal with the same HP
+    /// projection used by Monster/PvP damage. Caller must hold the target's
+    /// gameplay gate and suspend/drain that exact actor generation first.</summary>
+    public bool TryApplyCommittedSkillHeal(
+        ActorSnapshot target,SkillHealResult result)
+    {
+        if(result.Status!=SkillHealStatus.Applied ||
+           result.TargetCharacterId!=target.ActorId||
+           result.HealApplied<=0||result.TargetPreviousHp<=0||
+           result.TargetCurrentHp!=result.TargetPreviousHp+result.HealApplied||
+           result.TargetCurrentHp>result.TargetMaxHp)
+            return false;
+        lock(_gate)
+        {
+            ThrowIfFaulted();
+            if(!_states.TryGetValue(target.ActorId,out var state)||
+               state.ConnectionEpoch!=target.ConnectionEpoch||
+               state.MapEpoch!=target.MapEpoch||
+               !state.Suspended||state.Closing||state.Pending!=0||
+               state.CommittedHp!=result.TargetPreviousHp||
+               state.ProjectedHp!=result.TargetPreviousHp||
+               state.MaxHp!=result.TargetMaxHp)
+                return false;
+            state.CommittedHp=result.TargetCurrentHp;
+            state.ProjectedHp=result.TargetCurrentHp;
+            return true;
+        }
+    }
+
     public CombatPostStatus TryPostMonsterHit(
         ActorSnapshot target, MonsterWorldEvent attack)
     {

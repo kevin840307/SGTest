@@ -9,7 +9,7 @@ internal static class SkillBookChecks
     public static void Verify(string root)
     {
         Checks.Run("skill book V1 wire is bounded Server-only SkillID plus level",Wire);
-        Checks.Run("skill book SQLite v22 persists original SkillID and Server-owned level",
+        Checks.Run("skill book SQLite v23 persists original SkillID and Server-owned level",
             ()=>Persistence(root).GetAwaiter().GetResult());
     }
 

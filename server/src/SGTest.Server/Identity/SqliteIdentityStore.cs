@@ -77,7 +77,7 @@ public sealed record CharacterCreateResult(CharacterCreateStatus Status, Charact
 /// </summary>
 public sealed partial class SqliteIdentityStore : IDisposable
 {
-    public const int SchemaVersion = 22;
+    public const int SchemaVersion = 23;
     private readonly string _databasePath;
     private readonly string _connectionString;
     private readonly IdentityStoreOptions _options;
@@ -772,6 +772,37 @@ CREATE TABLE IF NOT EXISTS character_skills (
             Execute(connection,@"
 CREATE INDEX IF NOT EXISTS ix_character_skills_character
 ON character_skills(character_id,skill_id);",tx);
+            // Schema v23: durable single-target/self Heal settlement detail.
+            // The same authenticated skill sequence is first recorded in the
+            // existing skill_mp_actions table so damage/support effects share
+            // one durable per-generation sequence namespace. This detail row
+            // freezes the Server-owned learned level, target and applied HP.
+            Execute(connection,@"
+CREATE TABLE IF NOT EXISTS skill_heal_actions (
+    character_id INTEGER NOT NULL REFERENCES characters(character_id),
+    connection_generation INTEGER NOT NULL CHECK(connection_generation > 0),
+    map_epoch INTEGER NOT NULL CHECK(map_epoch > 0),
+    skill_sequence INTEGER NOT NULL CHECK(skill_sequence BETWEEN 1 AND 4294967295),
+    skill_id INTEGER NOT NULL CHECK(skill_id BETWEEN 1 AND 100000000),
+    skill_level INTEGER NOT NULL CHECK(skill_level BETWEEN 1 AND 255),
+    target_character_id INTEGER NOT NULL REFERENCES characters(character_id),
+    mp_cost INTEGER NOT NULL CHECK(mp_cost BETWEEN 1 AND 100000000),
+    heal_requested INTEGER NOT NULL CHECK(heal_requested BETWEEN 1 AND 100000000),
+    heal_applied INTEGER NOT NULL CHECK(heal_applied BETWEEN 1 AND heal_requested),
+    caster_previous_mp INTEGER NOT NULL CHECK(caster_previous_mp >= 0),
+    caster_current_mp INTEGER NOT NULL CHECK(caster_current_mp >= 0),
+    caster_max_mp INTEGER NOT NULL CHECK(caster_max_mp >= caster_current_mp),
+    target_previous_hp INTEGER NOT NULL CHECK(target_previous_hp > 0),
+    target_current_hp INTEGER NOT NULL CHECK(target_current_hp > target_previous_hp),
+    target_max_hp INTEGER NOT NULL CHECK(target_max_hp >= target_current_hp),
+    created_unix_ms INTEGER NOT NULL,
+    PRIMARY KEY(character_id,connection_generation,map_epoch,skill_sequence),
+    FOREIGN KEY(character_id,connection_generation,map_epoch,skill_sequence)
+      REFERENCES skill_mp_actions(
+        character_id,connection_generation,map_epoch,skill_sequence),
+    CHECK(caster_previous_mp - caster_current_mp = mp_cost),
+    CHECK(target_current_hp - target_previous_hp = heal_applied)
+);",tx);
 
             Execute(connection,@"
 CREATE TABLE IF NOT EXISTS enhancement_actions (
