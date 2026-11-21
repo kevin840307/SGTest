@@ -98,8 +98,10 @@ jobs:
         run: .cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64 --headless --path client --script res://tests/test_normal_attack_wire.gd
       - name: Godot verified single-target skill wire and reducer gate
         run: .cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64 --headless --path client --script res://tests/test_skill_combat_wire.gd
+      - name: ClientSession idle-loop snapshot allocation regression
+        run: timeout 20s .cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64 --headless --path client --script res://tests/test_client_idle_publication.gd
       - name: ClientSession server-authoritative out-of-range auto approach attack
-        run: .cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64 --headless --path client --script res://tests/test_client_auto_approach_attack.gd
+        run: timeout 20s .cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64 --headless --path client --script res://tests/test_client_auto_approach_attack.gd
       - name: Recovered-compatible 1000ms cursor-follow autorun policy
         run: .cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64 --headless --path client --script res://tests/test_mouse_autorun_state.gd
       - name: ClientSession ordered movement stop barrier
@@ -114,8 +116,6 @@ jobs:
         run: .cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64 --headless --path client --script res://tests/test_world_state.gd
       - name: Render-FPS independent reducer gate
         run: timeout 20s .cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64 --headless --path client --script res://tests/test_client_fps_independence.gd
-      - name: ClientSession idle-loop snapshot allocation regression
-        run: .cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64 --headless --path client --script res://tests/test_client_idle_publication.gd
       - name: ClientSession automatic WorldReady ACK and AOI resync recovery
         run: .cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64 --headless --path client --script res://tests/test_client_resync.gd
       - name: Server-tick bounded player interpolation selection
