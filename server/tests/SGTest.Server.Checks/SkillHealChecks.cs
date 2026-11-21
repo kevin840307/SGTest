@@ -70,10 +70,18 @@ internal static class SkillHealChecks
                 next.CurrentMp==58&&next.TargetCurrentHp==100&&
                 next.HealApplied==40,
                 "Heal did not cap target HP while charging exact MP once");
+            var self=await store.SettleSkillHealAsync(
+                Ctx(caster,caster,3,casterHp:80,targetHp:80,cost:21,heal:20));
+            Checks.Require(self.Status==SkillHealStatus.Applied&&
+                self.PreviousMp==58&&self.CurrentMp==37&&
+                self.TargetPreviousHp==80&&self.TargetCurrentHp==100&&
+                self.HealApplied==20,
+                "target-zero original Cure self-heal transaction was not atomic");
             var casterProfile=(await store.GetCharacterCombatProfileAsync(caster))!.Data;
             var targetProfile=(await store.GetCharacterCombatProfileAsync(target))!.Data;
-            Checks.Require(casterProfile.CurrentMp==58&&targetProfile.CurrentHp==100,
-                "durable combat profiles diverged from Heal receipts");
+            Checks.Require(casterProfile.CurrentMp==37&&casterProfile.CurrentHp==100&&
+                targetProfile.CurrentHp==100,
+                "durable combat profiles diverged from target/self Heal receipts");
         }
         using var reopened=new SqliteIdentityStore(db);
         await reopened.InitializeAsync();

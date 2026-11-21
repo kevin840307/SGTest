@@ -151,6 +151,11 @@ internal static class IdentityTlsLifecycleChecks
                     choose.Status == CharacterChooseWireStatus.Success &&
                     choose.CharacterId == fixture.CharacterId && choose.MapEpoch > 0,
                 "reconnect World registration was rejected");
+            // CharacterChooseResult is authored inside AuthorizeAndBindAsync;
+            // the outer TLS authorization callback attaches the Gateway route
+            // immediately afterwards. Do not race that legal callback boundary
+            // with an instantaneous ActiveSessions assertion.
+            await WaitForActiveSessions(fixture.Router,1);
             return new Session(client, tls, server,
                 choose.MapId, choose.X, choose.Y, choose.MapEpoch);
         }
@@ -174,6 +179,19 @@ internal static class IdentityTlsLifecycleChecks
         header.CopyTo(frame, 0);
         await tls.ReadExactlyAsync(frame.AsMemory(8), timeout.Token);
         return frame;
+    }
+
+    private static async Task WaitForActiveSessions(
+        WorldResultRouter router,int expected)
+    {
+        var deadline=DateTime.UtcNow.AddSeconds(3);
+        while(router.Statistics.ActiveSessions!=expected)
+        {
+            if(DateTime.UtcNow>=deadline)
+                throw new Exception(
+                    $"Gateway route count did not reach {expected}; actual={router.Statistics.ActiveSessions}");
+            await Task.Delay(5);
+        }
     }
 
     private static async Task WaitForZeroActors(ServerWorldHost host)
