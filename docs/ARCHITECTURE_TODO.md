@@ -15,6 +15,7 @@
 | Client 玩家商店 | [x] `client/player_shop/player_shop_panel.gd` 承接販售、瀏覽與購買 | Godot 真 TLS SessionPanel UI 回歸 PASS，Server UID／買賣雙方仍維持既有權威；私有 GPU 未驗 |
 | Client 任務 | [x] `client/quest/quest_panel.gd` 承接任務開啟、選項、進度顯示 | 指令驗證仍由 SessionPanel 提供；真 TLS Quest UI 回歸 PASS |
 | Client NPC 銀行 | [x] `client/npc/bank_panel.gd` 自有 UI 控制項、快照呈現及操作回饋；SessionPanel 僅保留 action callback | 真 Godot TLS/UI bank_open/deposit/withdraw、跨端 Server 權威回歸 PASS |
+| Client PvP／GM 操作 UI | [x] `client/pvp/pvp_panel.gd` 接手模式切換、選人攻擊、技能目標及 GM 名稱狀態顯示 | Godot TLS/UI pvp_ui/pvp_attack_ui/gm_pvp_ui PASS；資格檢查、Sequence/MapEpoch 和 Server audit 留在原權威路徑 |
 | Client NPC 經濟 UI | [x] `client/npc/npc_shop_panel.gd`、`client/npc/storage_panel.gd`、`client/npc/repair_panel.gd`、`client/npc/enhancement_panel.gd` 分別持有控件及快照；`SessionPanel` 僅注入唯一 `item_catalog` 與既有 submit callback | 真 Godot TLS/UI 商店、倉庫、修理、強化與銀行回歸 PASS；UID、金錢、成功率皆 Server-owned |
 | Server 聊天 | [ ] `server/src/SGTest.Server/Chat/ChatRouting.cs` 集中附近與密語的對象選擇，Party 維持隊伍狀態 | 同／跨圖路由、權限與可靠送出 |
 | Server／Client 寵物 | [ ] Server `Pet/PetRuntime.cs` 預定掌管召喚、跟隨與成長；Client `pet/pet_presentation.gd` 接已確認的狀態 | 召喚／收回、掉線、跟隨、持久化與戰鬥回歸 |

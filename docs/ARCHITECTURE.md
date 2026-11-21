@@ -125,7 +125,7 @@ client/
   map/                      # 地形、建物、遮擋
   player/                   # 角色呈現
   monster/                  # 怪物呈現
-  pvp/                      # PvP 名稱標記
+  pvp/                      # PvP 名稱呈現、選人攻擊、GM 名稱操作面板
   inventory/                # 背包與裝備面板
   npc/                      # NPC 服務：銀行、商店、倉庫、修理、強化的獨立 UI 面板
   trade/                    # 玩家交易面板

@@ -1,5 +1,8 @@
 # SGTest 新版重建 TODO（2026-11-15）
 
+- ARCH-CLIENT-PVP-UI [x] 2026-11-21：現有 `client/pvp/` 追加 `pvp_panel.gd`，接手 PvP 模式／AOI 玩家目標／技能攻擊／GM 名稱操作的 Controls、可見性與伺服器回覆顯示；`SessionPanel` 只保留原有認證提交、WorldReady／pending／MapEpoch 與 `ClientSession` 意圖驗證。`PvpPanel` 使用明確 Callable，不擁有 Transport、Reducer 或獨立遊戲規則，並共用原 Skill 結果代碼映射。Godot 4.7.2 真 TLS/UI pvp_ui、pvp_attack_ui、gm_pvp_ui、pvp_tls_auto_query、Login E2E PASS；GPU、多開與 Server gameplay 未因重構變更，NOT VERIFIED。
+
+
 - ARCH-CLIENT-NPC-UI-GROUP [x] 2026-11-21：以常見遊戲功能 owner `client/npc/` 集中原本分散 5 個頂層資料夾的銀行、NPC 商店、倉庫、修理、強化 UI；每個 Panel 仍有各自 `apply_snapshot`、`reset` 與送出 callback，`SessionPanel` 不再管理它們的 Control／繪製快取，且保留唯一 Session／ItemCatalog、Server UID／扣款／強化機率權威。保留 `NpcShopPanel` 與 `PlayerShopPanel` 的語義區分，不新增 `Manager`／`System` 或假抽象。架構 9/9 PASS、Python 全量 unittest PASS、Godot 4.7.2 真 TLS UI shop/storage/repair/enhancement/bank 及 C# TLS Login E2E PASS。Server gameplay／WorldState／多開 GPU 未在此項修改／驗收；不宣稱所有架構改善完成。
 
 

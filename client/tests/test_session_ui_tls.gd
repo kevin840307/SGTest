@@ -1632,17 +1632,17 @@ func run() -> void:
 	panel._latest.pvp_mode = -1
 	panel._latest.pvp_map_allows = false
 	panel._latest.last_pvp_result = {}
-	panel._update_pvp_ui()
-	if panel.pvp_query_button.get_parent() == null or not panel.pvp_query_button.visible or panel.pvp_query_button.disabled or not panel.pvp_white_button.disabled or not panel.pvp_blue_button.disabled:
+	panel.pvp_panel.apply_snapshot(panel._latest, panel.active)
+	if panel.pvp_panel.pvp_query_button.get_parent() == null or not panel.pvp_panel.pvp_query_button.visible or panel.pvp_panel.pvp_query_button.disabled or not panel.pvp_panel.pvp_white_button.disabled or not panel.pvp_panel.pvp_blue_button.disabled:
 		fail("PvP query and locked mutation controls missing from SessionPanel")
 		return
-	panel.pvp_query_button.pressed.emit()
+	panel.pvp_panel.pvp_query_button.pressed.emit()
 	if stub.pvp_requests != 1 or stub.last_pvp_action != 0:
 		fail("PvP query did not use ClientSession")
 		return
 	panel._latest.pending_pvp_sequence = 1
-	panel._update_pvp_ui()
-	if not panel.pvp_query_button.disabled or not panel.pvp_white_button.disabled or not panel.pvp_blue_button.disabled:
+	panel.pvp_panel.apply_snapshot(panel._latest, panel.active)
+	if not panel.pvp_panel.pvp_query_button.disabled or not panel.pvp_panel.pvp_white_button.disabled or not panel.pvp_panel.pvp_blue_button.disabled:
 		fail("Pending authoritative PvP response re-enabled controls")
 		return
 	panel._latest.pending_pvp_sequence = 0
@@ -1650,8 +1650,8 @@ func run() -> void:
 	panel._latest.pvp_mode = 0
 	panel._latest.pvp_map_allows = false
 	panel._latest.last_pvp_result = {"status":0}
-	panel._update_pvp_ui()
-	if not panel.pvp_status.text.contains("藍名") or not panel.pvp_white_button.disabled:
+	panel.pvp_panel.apply_snapshot(panel._latest, panel.active)
+	if not panel.pvp_panel.pvp_status.text.contains("藍名") or not panel.pvp_panel.pvp_white_button.disabled:
 		fail("NonPK map allowed white PvP mode UI")
 		return
 	panel._latest.pvp_map_allows = true
@@ -1665,74 +1665,74 @@ func run() -> void:
 	panel._latest.pending_gm_target_actor_id = 0
 	panel._latest.pending_gm_name_state = -1
 	panel._latest.last_gm_result = {}
-	panel._update_pvp_ui()
-	if panel.gm_pvp_apply_button.visible or panel.gm_pvp_state_picker.visible:
+	panel.pvp_panel.apply_snapshot(panel._latest, panel.active)
+	if panel.pvp_panel.gm_pvp_apply_button.visible or panel.pvp_panel.gm_pvp_state_picker.visible:
 		fail("Ordinary player UI inferred GM capability without Server frame")
 		return
-	if panel.pvp_white_button.disabled:
+	if panel.pvp_panel.pvp_white_button.disabled:
 		fail("Verified PvP map did not expose white mode")
 		return
-	if panel.pvp_target_picker.get_parent() == null or panel.pvp_target_picker.item_count != 1 or panel.pvp_attack_button.disabled:
+	if panel.pvp_panel.pvp_target_picker.get_parent() == null or panel.pvp_panel.pvp_target_picker.item_count != 1 or panel.pvp_panel.pvp_attack_button.disabled:
 		fail("PvP attack target controls did not bind visible AOI player")
 		return
-	panel.pvp_attack_button.pressed.emit()
-	if stub.pvp_attacks != 1 or stub.last_pvp_target != 77 or not panel.pvp_attack_button.disabled:
+	panel.pvp_panel.pvp_attack_button.pressed.emit()
+	if stub.pvp_attacks != 1 or stub.last_pvp_target != 77 or not panel.pvp_panel.pvp_attack_button.disabled:
 		fail("PvP attack button did not send exactly one visible target")
 		return
 	panel._latest.pending_pvp_attack_sequence = 1
-	panel._update_pvp_ui()
-	if not panel.pvp_attack_button.disabled or stub.pvp_attacks != 1:
+	panel.pvp_panel.apply_snapshot(panel._latest, panel.active)
+	if not panel.pvp_panel.pvp_attack_button.disabled or stub.pvp_attacks != 1:
 		fail("Pending PvP attack re-enabled duplicate submit")
 		return
 	panel._latest.pending_pvp_attack_sequence = 0
 	panel._latest.last_pvp_attack_result = {"status":10,"target_actor_id":77,"damage":0,"died":false}
-	panel._update_pvp_ui()
-	if not panel.pvp_attack_status.text.contains("距離過遠") or panel.pvp_attack_button.disabled:
+	panel.pvp_panel.apply_snapshot(panel._latest, panel.active)
+	if not panel.pvp_panel.pvp_attack_status.text.contains("距離過遠") or panel.pvp_panel.pvp_attack_button.disabled:
 		fail("PvP attack did not display authoritative rejected result")
 		return
 
 	print("CLIENT_TLS_UI_CHECKPOINT gm_begin")
 	panel._latest.gm_authorized = true
-	panel._update_pvp_ui()
+	panel.pvp_panel.apply_snapshot(panel._latest, panel.active)
 	print("CLIENT_TLS_UI_CHECKPOINT gm_visible_updated")
 	if (
-		not panel.gm_pvp_apply_button.visible or panel.gm_pvp_apply_button.disabled or
-		not panel.gm_pvp_state_picker.visible
+		not panel.pvp_panel.gm_pvp_apply_button.visible or panel.pvp_panel.gm_pvp_apply_button.disabled or
+		not panel.pvp_panel.gm_pvp_state_picker.visible
 	):
 		fail("Server-issued GM capability did not expose bounded PvP-name controls")
 		return
-	panel.gm_pvp_state_picker.select(2)
+	panel.pvp_panel.gm_pvp_state_picker.select(2)
 	print("CLIENT_TLS_UI_CHECKPOINT gm_before_emit")
-	panel.gm_pvp_apply_button.pressed.emit()
+	panel.pvp_panel.gm_pvp_apply_button.pressed.emit()
 	print("CLIENT_TLS_UI_CHECKPOINT gm_after_emit")
 	if stub.gm_commands!=1 or stub.last_gm_target!=77 or stub.last_gm_state!=2:
 		fail("GM PvP-name UI did not send exact visible target/state")
 		return
 	panel._latest.pending_gm_sequence=1
-	panel._update_pvp_ui()
-	if not panel.gm_pvp_apply_button.disabled:
+	panel.pvp_panel.apply_snapshot(panel._latest, panel.active)
+	if not panel.pvp_panel.gm_pvp_apply_button.disabled:
 		fail("Pending GM audit command re-enabled duplicate submit")
 		return
 	panel._latest.pending_gm_sequence=0
 	panel._latest.last_gm_result={"status":0,"target_actor_id":77,"name_state":2}
-	panel._update_pvp_ui()
-	if not panel.gm_pvp_status.text.contains("已套用"):
+	panel.pvp_panel.apply_snapshot(panel._latest, panel.active)
+	if not panel.pvp_panel.gm_pvp_status.text.contains("已套用"):
 		fail("GM authoritative result not displayed")
 		return
 	panel._latest.gm_authorized=false
-	panel._update_pvp_ui()
+	panel.pvp_panel.apply_snapshot(panel._latest, panel.active)
 	print("CLIENT_TLS_UI_CHECKPOINT gm_revoked")
-	if panel.gm_pvp_apply_button.visible or panel.gm_pvp_state_picker.visible:
+	if panel.pvp_panel.gm_pvp_apply_button.visible or panel.pvp_panel.gm_pvp_state_picker.visible:
 		fail("Revoked GM capability left privileged controls visible")
 		return
 
-	panel.pvp_white_button.pressed.emit()
+	panel.pvp_panel.pvp_white_button.pressed.emit()
 	if stub.pvp_requests != 2 or stub.last_pvp_action != 2:
 		fail("White PvP command did not use ClientSession")
 		return
 	panel._latest.player_dead = true
-	panel._update_pvp_ui()
-	if not panel.pvp_white_button.disabled or not panel.pvp_blue_button.disabled or not panel.pvp_attack_button.disabled:
+	panel.pvp_panel.apply_snapshot(panel._latest, panel.active)
+	if not panel.pvp_panel.pvp_white_button.disabled or not panel.pvp_panel.pvp_blue_button.disabled or not panel.pvp_panel.pvp_attack_button.disabled:
 		fail("Dead player could mutate PvP mode or attack")
 		return
 	panel._refresh_inventory_panel()

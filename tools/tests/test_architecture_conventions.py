@@ -30,6 +30,7 @@ class ArchitectureConventionsChecks(unittest.TestCase):
             ("party", "party_panel.gd"),
             ("player_shop", "player_shop_panel.gd"),
             ("quest", "quest_panel.gd"),
+            ("pvp", "pvp_panel.gd"),
         ):
             with self.subTest(folder=folder):
                 self.assertTrue((CLIENT / folder / filename).is_file())
@@ -47,6 +48,21 @@ class ArchitectureConventionsChecks(unittest.TestCase):
                 self.assertFalse((CLIENT / feature).exists(),
                                  "Single-panel NPC directories must be consolidated")
                 self.assertNotIn("var " + feature + "_npc_input", panel)
+
+    def test_pvp_ui_keeps_its_own_controls_and_one_authoritative_session(self) -> None:
+        session = (CLIENT / "session" / "session_panel.gd").read_text(encoding="utf-8-sig")
+        pvp = (CLIENT / "pvp" / "pvp_panel.gd").read_text(encoding="utf-8-sig")
+        self.assertIn('preload("res://pvp/pvp_panel.gd")', session)
+        self.assertIn("func submit_pvp_mode(", session)
+        self.assertIn("func submit_gm_pvp_name(", session)
+        self.assertNotIn("var pvp_query_button", session)
+        self.assertNotIn("var gm_pvp_state_picker", session)
+        self.assertNotIn("func _update_pvp_ui(", session)
+        self.assertIn("func _update_pvp_ui(", pvp)
+        self.assertIn("func apply_snapshot(", pvp)
+        self.assertIn("func set_actions(", pvp)
+        self.assertIn("func reset()", pvp)
+        self.assertNotIn("session.request_pvp_mode(", pvp)
 
     def test_godot_scripts_use_snake_case_names(self) -> None:
         for script in CLIENT.rglob("*.gd"):
