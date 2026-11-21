@@ -171,6 +171,36 @@ class ArchitectureConventionsChecks(unittest.TestCase):
             self.assertNotIn("new SemaphoreSlim", owner)
             self.assertNotIn("new WorldResultRouter", owner)
 
+    def test_inventory_commands_share_one_authenticated_uid_owner(self) -> None:
+        gateway = (SERVER / "Gateway" / "IdentityTlsAuthorization.cs").read_text(
+            encoding="utf-8-sig")
+        inventory = (SERVER / "Inventory" / "InventoryCommandHandler.cs").read_text(
+            encoding="utf-8-sig")
+        self.assertEqual(gateway.count("new InventoryCommandHandler("), 1)
+        self.assertIn("_pickupWorldGeneration, router, gameplayGate)", gateway)
+        for connection, method in (
+            ("inventory.HandlePickupAsync, RecoveryHandler, inventory.HandleDiscardAsync",
+             "HandlePickupAsync"),
+            ("handleEquipment:inventory.HandleEquipmentAsync", "HandleEquipmentAsync"),
+        ):
+            with self.subTest(connection=connection):
+                self.assertIn(connection, gateway)
+                self.assertIn(f"internal async Task {method}(", inventory)
+        self.assertEqual(inventory.count("internal async Task HandleDiscardAsync("), 1)
+        self.assertEqual(inventory.count("await _gameplayGate.WaitAsync()"), 3)
+        self.assertEqual(inventory.count("finally { _gameplayGate.Release(); }"), 3)
+        self.assertEqual(inventory.count("_router.IsCurrentBinding(binding)"), 3)
+        self.assertIn("_identity.ClaimGroundDropAsync(", inventory)
+        self.assertIn("_identity.EquipInventoryItemAsync(", inventory)
+        self.assertIn("_identity.DiscardInventoryItemAsync(", inventory)
+        self.assertIn("_router.TryPostGroundDropClaimed(result.DropId)", inventory)
+        for forbidden in ("new SemaphoreSlim", "new WorldResultRouter",
+                          "new SqliteIdentityStore", "new TlsWireConnection"):
+            self.assertNotIn(forbidden, inventory)
+        for removed in ("async Task PickupHandler(", "async Task EquipmentHandler(",
+                        "async Task DiscardHandler("):
+            self.assertNotIn(removed, gateway)
+
     def test_character_reset_keeps_one_reducer_and_one_uid_location_policy(self) -> None:
         world = (CLIENT / "world" / "world_state.gd").read_text(encoding="utf-8-sig")
         self.assertEqual(world.count("func apply_frame("), 1)

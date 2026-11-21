@@ -15,6 +15,7 @@ using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using SGTest.Server.Identity;
+using SGTest.Server.Inventory;
 using SGTest.Server.Wire;
 using SGTest.Server.World;
 
@@ -387,52 +388,6 @@ public sealed partial class IdentityTlsAuthorization
                 finally { gameplayGate.Release(); }
             }
 
-            async Task PickupHandler(TrustedGroundPickup request)
-            {
-                var binding = new ConnectionBinding(
-                    request.ActorId,request.ConnectionEpoch,request.RequestMapEpoch);
-                await gameplayGate.WaitAsync().ConfigureAwait(false);
-                try
-                {
-                    if (!router.IsCurrentBinding(binding))
-                        return;
-                    ActorSnapshot? snapshot = await _world.TrustedGetActorAsync(
-                        request.ActorId).ConfigureAwait(false);
-                    PickupResult result;
-                    if (snapshot is not { } actor ||
-                        actor.ConnectionEpoch != request.ConnectionEpoch ||
-                        actor.MapEpoch != request.RequestMapEpoch ||
-                        actor.ActorId != request.ActorId)
-                        result = new(PickupStatus.StaleGeneration,request.DropId);
-                    else if (_combat is not null && _combat.CurrentHp(actor) <= 0)
-                        result = new(PickupStatus.PlayerDead,request.DropId);
-                    else
-                        result = await _identity.ClaimGroundDropAsync(
-                            new TrustedPickupContext(actor.ActorId,
-                                _pickupWorldGeneration == 0
-                                    ? actor.ConnectionEpoch // isolated fixture only
-                                    : SqliteIdentityStore.ComposePickupConnectionEpoch(
-                                        _pickupWorldGeneration,actor.ConnectionEpoch),
-                                actor.MapEpoch,
-                                request.PickupSequence,actor.MapId,actor.X,actor.Y),
-                            request.DropId).ConfigureAwait(false);
-
-                    // SQLite commits first. Never remove on rejection or
-                    // client intent alone. A failed notification is terminal,
-                    // not a fabricated successful response.
-                    if (result.Status == PickupStatus.Granted &&
-                        !router.TryPostGroundDropClaimed(result.DropId))
-                        throw new IOException(
-                            "Committed drop claimed but shared AOI notification was full");
-
-                    var sent = router.QueueGroundPickupResult(request,result);
-                    if (sent != GatewaySendStatus.Enqueued)
-                        throw new IOException(
-                            "Reliable pickup result could not be queued: " + sent);
-                }
-                finally { gameplayGate.Release(); }
-            }
-
             async Task RecoveryHandler(TrustedRecoveryUse request)
             {
                 // The World/AOI owner and existing auth binding supply ALL
@@ -612,59 +567,6 @@ public sealed partial class IdentityTlsAuthorization
             }
 
 
-            async Task EquipmentHandler(TrustedEquipmentCommand request)
-            {
-                var binding=new ConnectionBinding(
-                    request.ActorId,request.ConnectionEpoch,request.RequestMapEpoch);
-                await gameplayGate.WaitAsync().ConfigureAwait(false);
-                try
-                {
-                    if(!router.IsCurrentBinding(binding))return;
-                    var snapshot=await _world.TrustedGetActorAsync(
-                        request.ActorId).ConfigureAwait(false);
-                    var transferKind=request.Kind==TrustedEquipmentCommandKind.Equip
-                        ? EquipmentTransferKind.Equip:EquipmentTransferKind.Unequip;
-                    EquipmentTransferResult result;
-                    if(snapshot is not { } actor||
-                       actor.ActorId!=request.ActorId||
-                       actor.ConnectionEpoch!=request.ConnectionEpoch||
-                       actor.MapEpoch!=request.RequestMapEpoch)
-                    {
-                        result=new(EquipmentTransferStatus.StaleGeneration,
-                            transferKind,request.ItemUid,0,0,0);
-                    }
-                    else
-                    {
-                        long durableConnection=_pickupWorldGeneration==0
-                            ? actor.ConnectionEpoch
-                            : SqliteIdentityStore.ComposePickupConnectionEpoch(
-                                _pickupWorldGeneration,actor.ConnectionEpoch);
-                        var context=new TrustedEquipmentContext(
-                            actor.ActorId,durableConnection,actor.MapEpoch,
-                            request.EquipmentSequence);
-                        if(request.Kind==TrustedEquipmentCommandKind.Equip)
-                        {
-                            result=_equipmentRules is null
-                                ? new(EquipmentTransferStatus.NoRules,
-                                    EquipmentTransferKind.Equip,request.ItemUid,0,0,0)
-                                : await _identity.EquipInventoryItemAsync(
-                                    context,request.ItemUid,_equipmentRules)
-                                    .ConfigureAwait(false);
-                        }
-                        else
-                        {
-                            result=await _identity.UnequipItemAsync(
-                                context,request.ItemUid).ConfigureAwait(false);
-                        }
-                    }
-                    var sent=router.QueueEquipmentTransferResult(request,result);
-                    if(sent!=GatewaySendStatus.Enqueued)
-                        throw new IOException(
-                            "Reliable equipment transfer result could not be queued: "+sent);
-                }
-                finally { gameplayGate.Release(); }
-            }
-
             async Task PlayerShopHandler(TrustedPlayerShopCommand request)
             {
                 if(_playerShops is null)return;
@@ -701,42 +603,6 @@ public sealed partial class IdentityTlsAuthorization
                 return _parties.HandleAsync(request,router);
             }
 
-            async Task DiscardHandler(TrustedInventoryDiscard request)
-            {
-                var binding=new ConnectionBinding(
-                    request.ActorId,request.ConnectionEpoch,request.RequestMapEpoch);
-                await gameplayGate.WaitAsync().ConfigureAwait(false);
-                try
-                {
-                    if(!router.IsCurrentBinding(binding))return;
-                    var snapshot=await _world.TrustedGetActorAsync(
-                        request.ActorId).ConfigureAwait(false);
-                    InventoryDiscardResult result;
-                    if(snapshot is not { } actor ||
-                        actor.ActorId!=request.ActorId ||
-                        actor.ConnectionEpoch!=request.ConnectionEpoch ||
-                        actor.MapEpoch!=request.RequestMapEpoch)
-                        result=new(InventoryDiscardStatus.StaleGeneration,request.ItemUid);
-                    else
-                    {
-                        long durableConnection=_pickupWorldGeneration==0
-                            ? actor.ConnectionEpoch
-                            : SqliteIdentityStore.ComposePickupConnectionEpoch(
-                                _pickupWorldGeneration,actor.ConnectionEpoch);
-                        result=await _identity.DiscardInventoryItemAsync(
-                            new TrustedInventoryDiscardContext(
-                                actor.ActorId,durableConnection,actor.MapEpoch,
-                                request.DiscardSequence),
-                            request.ItemUid,request.Quantity).ConfigureAwait(false);
-                    }
-                    var sent=router.QueueInventoryDiscardResult(request,result);
-                    if(sent!=GatewaySendStatus.Enqueued)
-                        throw new IOException(
-                            "Reliable inventory discard receipt could not be queued: "+sent);
-                }
-                finally { gameplayGate.Release(); }
-            }
-
             // Repair and enhancement share this authenticated session's gameplay
             // gate with other commands; no new session or command queue is created.
             var npcItems = new NpcItemModificationHandler(
@@ -756,14 +622,19 @@ public sealed partial class IdentityTlsAuthorization
             var pvpCombat = new PvpCombatHandler(
                 _identity, _world, _combat, _pickupWorldGeneration,
                 router, gameplayGate);
+            // Inventory acquisition, equipment transfer and discard share the
+            // authenticated socket's existing gameplay lock and DB authority.
+            var inventory = new InventoryCommandHandler(
+                _identity, _world, _combat, _equipmentRules,
+                _pickupWorldGeneration, router, gameplayGate);
             return await TlsWireConnection.RunServerAsync(client, certificate,
                 Authorize, _world.TryPostMove, options, cancellationToken, Release,
                 npcHandler, router.TryRequestResync,
                 router.TryRequestNormalAttack, RespawnHandler,
-                PickupHandler, RecoveryHandler, DiscardHandler,
+                inventory.HandlePickupAsync, RecoveryHandler, inventory.HandleDiscardAsync,
                 handleSkill:SkillHandler,handleShop:npcEconomy.HandleShopAsync,
                 handleStorage:npcEconomy.HandleStorageAsync,
-                handleEquipment:EquipmentHandler,
+                handleEquipment:inventory.HandleEquipmentAsync,
                 handleBank:npcEconomy.HandleBankAsync,
                 handleRepair:npcItems.HandleRepairAsync,
                 handleEnhancement:npcItems.HandleEnhancementAsync,

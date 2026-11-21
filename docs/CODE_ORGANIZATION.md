@@ -28,7 +28,7 @@
 |---|---|---|---|
 | Session | `session/client_session.gd`、`session/session_panel.gd` | `Gateway/`、`Identity/` | ClientSession 唯一收送和 Reducer 排程；Gateway 認證綁定 |
 | World/AOI | `world/world_state.gd`、`world/world_view.gd` | `World/`、`Visibility/` | Server 單寫者權威；Client snapshot 不依賴 FPS |
-| Inventory/Equipment | `inventory/inventory_panel.gd` | `Identity/SqliteIdentityStore.*.cs` | UID／交易只由 Server 決定 |
+| Inventory/Equipment | `inventory/inventory_panel.gd` | `Inventory/InventoryCommandHandler.cs`、`Identity/SqliteIdentityStore.*.cs` | Gateway 發送可信指令，Inventory 驗證 Actor／UID／世代；SQLite 結算 |
 | Bank | `npc/bank_panel.gd` | `Npc/`、`Identity/SqliteIdentityStore.Bank.cs` | 面板顯示餘額、呼叫既有 Session 意圖；款項提交與限額 Server-owned |
 | NPC Shop | `npc/npc_shop_panel.gd` | `Npc/`、`Identity/SqliteIdentityStore.Shop.cs` | 商品價格／買賣／錢包由 Server 核准，不與 `player_shop/` 混淆 |
 | Storage | `npc/storage_panel.gd` | `Npc/`、`Identity/SqliteIdentityStore.Storage.cs` | 僅選取 Server 快照中的 UID，整組存取由 Server 結算 |
@@ -65,6 +65,8 @@
 - `Identity/SqliteIdentityStore.Schema.cs` 集中原本約 734 行的 Schema v23 建立與遷移流程，包含遷移前備份及現有 WAL／單一 transaction；與 `SqliteIdentityStore.Backup.cs` 的備份程序分工。原操作順序未重寫。
 - `Identity/SqliteIdentityStore.Combat.cs` 承接角色 CombatProfile、HP／MP 的原子資料存取。其他 `SqliteIdentityStore.<Feature>.cs` 已依功能分區，但**所有 partial 都是相同資料庫 owner**，不建立第二個連線池或交易所有者。
 - `Gateway/IdentityTlsAuthorization.Binding.cs` 承接認證帳號與 World Actor 的綁定程序；`IdentityTlsAuthorization.cs` 仍持有現有 TLS socket 與唯一 gameplay gate，保留同一授權狀態及可靠事件順序。
+- `Inventory/InventoryCommandHandler.cs` 收攏「撿取掉落物、裝備穿脫、背包丟棄」三個物品 UID 操作；與 `Identity/SqliteIdentityStore.*` 的資料庫交易 owner、World/AOI 掉落可視狀態及 authenticated socket 的同一 `gameplayGate` 分工。成功撿取仍先 SQLite commit 再通知 AOI；拒絕時不消除掉落物。這是有三個實際職責的遊戲領域目錄，不是新增另一個 Inventory 狀態倉儲、可變世界或 `InventoryManager`。
+- **暫不合入 Recovery**：消耗恢復道具需暫停／排空 Combat AI，先可靠送出 HP 結果再恢復戰鬥，與單純 UID 位置／裝備變更是不同生命週期，需另以 Combat 的原子性驗證再抽離。
 - `Npc/NpcItemModificationHandler.cs` 合併「修理／強化」這一組共用登入世代、玩法鎖與物品 UID 結算生命週期的 command handler。由每個 authenticated socket 的 Gateway 注入**原 gameplayGate 與原 WorldResultRouter**，在各流程進行目前綁定／Actor／MapEpoch 驗證；它不建立第二個 queue、database 或新的 socket。
 - `Npc/NpcEconomyHandler.cs` 負責 NPC 商店、個人倉庫、銀行三個既有可信命令流程。它們共享 NPC 地圖／距離驗證、Character／Account 錢物權威、ConnectionEpoch／MapEpoch 與同一 socket gameplay gate；原 DB owner、價格／存取規則、可靠 result 與 FIFO 不變。**不**合入 PlayerShop／Trade（需跨角色鎖與不同生命週期），也不與 ItemModification 合併成全能 `NpcManager`。
 - `Npc/NpcQuestHandler.cs` 專責 NPC 任務開啟與選項提交。任務的規則來源 `NpcQuestCatalog` 與 SQLite 進度 owner 不變；它與 NPC 經濟的價格／資金交易不是同一領域，不應硬合併。仍使用經驗證的 Actor／MapEpoch／QuestSequence 與原 gate。此獨立檔有實質可信選項處理及狀態結果，非命名用 façade。

@@ -9,6 +9,7 @@
 | Server Wire 分區 | [x] `WireProtocol.Combat.cs`、`.Identity.cs`、`.Inventory.cs`、`.Shop.cs`、`.World.cs` 按功能承接 Codec | V1 Opcode/Header 不變；Client 跨端 golden vectors 與 Server wire Gate |
 | Server Auth binding | [x] `IdentityTlsAuthorization.Binding.cs` 承接身分＋World Actor 綁定 | 原密鑰／身分／Actor cleanup、真 TLS Auth／重連 E2E 保持 |
 | Server Gameplay Gateway 瘦身 | [ ] `IdentityTlsAuthorization.cs` 仍有巨大 socket/gameplay 流程，逐步抽出經驗證的 domain command gate | 不新增可繞過身份／MapEpoch 的 dispatch 路徑；Server TLS 全量回歸 |
+| Server Inventory 物品命令 | [x] `Inventory/InventoryCommandHandler.cs` 接手 Pickup、Equipment、Discard 三項可信 UID 操作；不新增第二個 inventory owner | 沿用同一 gameplayGate／WorldResultRouter、SQLite commit-first／AOI 掉落取消順序與可靠回覆；Server TLS、物品回歸及架構 Gate |
 | Server NPC 修理／強化流程 | [x] `Npc/NpcItemModificationHandler.cs` 合併同一個 auth gate 下的修理與強化服務命令；Gateway 僅組裝與指派 | 共用同一 `gameplayGate`／`WorldResultRouter`，保留 UID／Actor／MapEpoch／來源驗證；Server Checks 267/267 PASS |
 | Server NPC 商業服務 | [x] `Npc/NpcEconomyHandler.cs` 集中商店、倉庫、銀行的可信 NPC 操作；Gateway 保留組裝／授權入口，裝備穿脫獨立 | 同一 `gameplayGate`／`WorldResultRouter`／SQLite owner；267/267 Server Checks、跨端 TLS/UI、經濟類測試；不新增 queue |
 | Server NPC 任務 | [x] `Npc/NpcQuestHandler.cs` 承接任務開啟、選項、權威拒絕／確認結果；和 NPC 金流分離 | 保留 QuestCatalog、SQLite 進度與唯一 auth gameplay gate；Server Quest TLS／Client Quest UI 回歸 |

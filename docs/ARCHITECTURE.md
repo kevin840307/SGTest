@@ -147,6 +147,7 @@ server/
     Map/                    # Blocking 與尋路
     Visibility/             # AOI
     Identity/               # 帳號、角色與 SQLite 交易
+    Inventory/              # 已驗證的掉落撿取／裝備穿脫／UID 丟棄命令
     Npc/                    # NPC 互動與經濟／裝備修改命令結算入口
     Monster/                # 怪物模擬與戰利品協調
     Combat/                 # 傷害結算
