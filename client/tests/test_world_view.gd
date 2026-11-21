@@ -189,6 +189,10 @@ func run_players(args: PackedStringArray) -> void:
 			for moving in [false,true]:
 				var own: Dictionary={"actor_id":1,"connection_epoch":1,"entity_map_epoch":id,"x":7872.0 if id==15 else 5760.0,"y":11296.0 if id==15 else 2760.0,"facing":facing,"moving":moving,"movement_action_sequence":1}
 				var remote: Dictionary=own.duplicate()
+				# Formal presentation requires an authoritative tick. These are
+				# fixed synthetic snapshots for source raster QA, not network data.
+				own.server_tick=0
+				remote.server_tick=0
 				remote.actor_id=2
 				remote.x+=80
 				remote.y+=40
@@ -200,6 +204,7 @@ func run_players(args: PackedStringArray) -> void:
 				app.world_view.players._actors.clear()
 				app.world_view.players.apply_snapshot(state,0)
 				var actors: Array=app.world_view.players.actors_at(320000)
+				check(actors.size()==2,"Player raster gate must actually render both actors")
 				var serialized: Array=[]
 				for actor in actors:
 					serialized.append({"id":actor.id,"p":[actor.p.x,actor.p.y],"parts":actor.parts})

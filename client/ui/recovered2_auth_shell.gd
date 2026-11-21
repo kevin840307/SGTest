@@ -18,23 +18,23 @@ var _stage := Control.new()
 var _login := Control.new()
 var _selection := Control.new()
 var _creation := Control.new()
-var _video := VideoStreamPlayer.new()
+var _video: VideoStreamPlayer
 var _theme: Theme
-var _account := LineEdit.new()
-var _secret := LineEdit.new()
-var _login_button := Button.new()
-var _register_button := Button.new()
-var _login_status := Label.new()
-var _select_status := Label.new()
-var _create_status := Label.new()
+var _account: LineEdit
+var _secret: LineEdit
+var _login_button: Button
+var _register_button: Button
+var _login_status: Label
+var _select_status: Label
+var _create_status: Label
 var _names: Array[Label] = []
 var _slot_actions: Array[Button] = []
 var _slot_previews: Array[Label] = []
-var _name_edit := LineEdit.new()
-var _slot_edit := SpinBox.new()
-var _confirm_create := Button.new()
+var _name_edit: LineEdit
+var _slot_edit: SpinBox
+var _confirm_create: Button
 var _page_index := -1
-var _skin_picker := OptionButton.new()
+var _skin_picker: OptionButton
 var _selection_page := 0
 var _last_character_key := ""
 var _last_resize := Vector2.ZERO
@@ -55,6 +55,8 @@ func _init() -> void:
 	set_process(false)
 
 func attach(panel: PanelContainer) -> bool:
+	if _theme != null:
+		return _panel == panel
 	_panel = panel
 	var loaded := load(LOCAL.path_join("paradise_window_theme.tres"))
 	if not loaded is Theme:
@@ -80,19 +82,22 @@ func resize_view(view_size: Vector2) -> void:
 	_stage.position = (view_size - SIZE * factor) * 0.5
 
 func enable_for_page(page: int, active: bool) -> void:
+	# An offline map or unavailable local theme never builds auth controls.
+	active = active and _theme != null
 	visible = active
 	set_process(active)
 	if not active:
-		_video.stop()
+		if _video != null:
+			_video.stop()
 		return
 	if _page_index != page:
 		_page_index = page
 		_login.visible = page == SessionLayout.Page.LOGIN
 		_selection.visible = page == SessionLayout.Page.CHARACTER_SELECT
 		_creation.visible = page == SessionLayout.Page.CHARACTER_CREATE
-		if _login.visible and _video.stream != null:
+		if _video != null and _login.visible and _video.stream != null:
 			_video.play()
-		else:
+		elif _video != null:
 			_video.stop()
 		if page == SessionLayout.Page.LOGIN and _panel != null:
 			_account.text = _panel.username_input.text
@@ -111,6 +116,7 @@ func _process(_delta: float) -> void:
 		_update_from_session()
 
 func _build_skin_picker() -> void:
+	_skin_picker = OptionButton.new()
 	_skin_picker.name = "Recovered2SkinSelector"
 	_skin_picker.tooltip_text = "切換介面風格（保留目前登入狀態）"
 	_skin_picker.theme_type_variation = &"ParadiseSecondaryButton"
@@ -161,6 +167,7 @@ func _build_login() -> void:
 	_build_background(_login,"SELECT_CHARACTER.png")
 	var stream = load(LOCAL.path_join("2.ogv"))
 	if stream is VideoStream:
+		_video = VideoStreamPlayer.new()
 		_video.stream = stream
 		_video.expand = true
 		_video.loop = true
@@ -183,10 +190,12 @@ func _build_login() -> void:
 	var separator := HSeparator.new()
 	separator.theme_type_variation = &"ParadiseHeaderSeparator"
 	_put(panel,separator,25,57,340,4)
+	_account = LineEdit.new()
 	_account.placeholder_text = "帳號"
 	_account.max_length = 32
 	_account.theme_type_variation = &"ParadiseLineEdit"
 	_put(panel,_account,48,86,294,40)
+	_secret = LineEdit.new()
 	_secret.placeholder_text = "密碼"
 	_secret.secret = true
 	_secret.max_length = 256
@@ -262,6 +271,8 @@ func _enter_slot(slot_on_page: int) -> void:
 
 func _build_create() -> void:
 	_build_background(_creation,"CREATE_CHARACTER.png")
+	_name_edit = LineEdit.new()
+	_slot_edit = SpinBox.new()
 	_name_edit.theme_type_variation = &"ParadiseLineEdit"
 	_name_edit.placeholder_text = "新角色名稱"
 	_name_edit.max_length = 24

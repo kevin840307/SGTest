@@ -4,6 +4,8 @@
 
 ## Recovered2 本機登入／選角／創角參考皮膚（2026-11-21）
 
+UI Node 由實際頁面擁有：`Recovered2AuthShell` 只有在本機 Theme 成功載入後才建立輸入框／按鈕／影片，且每個實例必須掛在頁面樹；不能預建一個 Node 再以另一個 Node 覆蓋欄位。影片不存在時不建立播放器，未 attach 時不顯示 auth shell；同一 Panel 重複 attach 不重建頁面。離線 map-only 模式也不建立未使用的 skin picker。`test_ui_lifecycle.gd` 反覆建立／釋放正式 main 場景，以 orphan-node 計數驗證離線、一般與可選本機素材三種生命週期；GPU 資源另由嚴格 `run_world_view.py` 的 engine log 與素材 scope 歸零驗證，不把計數歸零當成完整 GPU 釋放證據。
+
 使用者指定**暫停 Retro Terminal 的後續擴充，只先做三個畫面**。依 `C:\\SGO\\NewVersion\\Recovered2` 的 `LoginScreen.tscn`、`login_screen.gd`、`character_select.tscn`、`character_select.gd` 做唯讀設計參照，直接使用本機使用者提供的 `paradise_window_theme.tres`、`2.ogv`、`SELECT_CHARACTER.png`、`CREATE_CHARACTER.png` 及左右按鈕圖。這些外部素材屬使用者本機可使用的參考資料，**不可自動提交公開 GitHub**。
 
 - `tools/ui_art/sync_recovered2_auth.py` 只在使用者 Windows 電腦把需用的圖片／影片／Theme 複製到 `client/ui/private_recovered2/`，由根 `.gitignore` 排除；不帶入 Recovered2 的 Gameplay Script／NetworkManager／密碼持久化程式。

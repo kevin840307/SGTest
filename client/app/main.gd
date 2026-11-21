@@ -35,7 +35,7 @@ var _loading_ui_elapsed := 0.0
 var _recovered2_local_ready := false
 var preview_auth_offline := false
 var offline_map_only := false
-var skin_picker := OptionButton.new()
+var skin_picker: OptionButton
 var _map_buttons: Array[Button] = []
 var _last_snapshot: Dictionary = {}
 var _mouse_autorun = MouseAutorunState.new()
@@ -170,6 +170,7 @@ func _ready() -> void:
 
 
 func _install_skin_selector(row: HBoxContainer) -> void:
+	skin_picker = OptionButton.new()
 	# Only view styling changes; the existing SessionPanel and command
 	# callbacks survive a runtime skin switch without reconnecting.
 	var selected := UiSkinCatalog.load_selected()
