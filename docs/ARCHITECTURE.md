@@ -51,6 +51,23 @@ Server 使用 PascalCase C# namespace，Client 使用 Godot 小寫目錄。相�
 
 World 擁有權威狀態。Map 提供碰撞與尋路查詢，NPC 提供體系內的互動資料，Visibility 讀取世界結果並交由 Gateway 送出。SQLite 交易保留於 Identity 以維持原子性，功能協調器透過現有交易方法處理提交。Client Session 餵入 WorldState，WorldView 消費快照，角色動畫、地形與資源層透過明確的輸入參數接入。新增功能先確定規則、狀態與輸出的所有者，再在 Host 或 App 組裝；需要替換的行為透過具體輸入／結果或窄介面接入。現有跨功能協調器仍有直接依賴，後續依實際交易或玩法邊界解耦。
 
+## 模組導航與預留位置
+
+| 功能 | Server | Client | 狀態 |
+|---|---|---|---|
+| 交易 | `Trade/PlayerTradeCoordinator.cs`、`Trade/TradeCommandIngress.cs` | `trade/trade_panel.gd` | 編譯中的正式功能 |
+| PvP | `PvpMapPolicy.cs`、`PvpCrimePolicy.cs`、`PvpMode.cs`、`PvpNameState.cs` | `pvp/` | 依地圖規則、犯罪規則與狀態命名 |
+| NPC 介面 | `Npc/` | [`npc/`](../client/npc/README.md) | Client 既有入口待搬入 |
+| 隊伍與聊天 | `Party/`、[`Chat/`](../server/src/SGTest.Server/Chat/README.md) | [`party/`](../client/party/README.md)、[`chat/`](../client/chat/README.md) | 既有功能，待拆路由／介面 |
+| 玩家商店 | `PlayerShop/` | [`player_shop/`](../client/player_shop/README.md) | Client 交易以外的商店介面待搬入 |
+| 寵物 | [`Pet/`](../server/src/SGTest.Server/Pet/README.md) | [`pet/`](../client/pet/README.md) | TODO |
+| 機甲 | [`Mecha/`](../server/src/SGTest.Server/Mecha/README.md) | [`mecha/`](../client/mecha/README.md) | TODO |
+| AFK／失焦 | 既有 Session／World 持續運行 | [`afk/`](../client/afk/README.md) | 完整資源釋放與多開驗收 TODO |
+
+`README.md` 中未勾選的事項是該目錄的功能邊界及接入待辦。新增能運作的程式後再更新狀態。背包、裝備、倉庫、銀行等交易資料目前仍共用 SQLite，待拆的是功能介面與派發。好友依目前範圍暫緩。
+
+功能介面的改動從 Client 模組開始。Client 模組讀快照並用 Session 送意圖；Server Gateway 維持身分及連線生命週期，由對應模組負責指令處理。跨功能涉及原子性、鎖順序或世代時，在協調器集中規則並以既有 E2E 驗證。
+
 ## MVP 範圍：Map15 主城 + Map13 台地，兩張真地圖互通
 
 地圖先行，用唯一 Converter 先驗證兩圖 terrain／scenery／Blocking／NPC／傳點及原始方向動畫；不能因增加第二張圖就先建全圖多套 Loader。Map15 優先驗證登入角色、NPC 商店銀行倉庫修理、背包裝備、玩家交易／商店等主城互動；Map13 驗證 A*、追擊、Server authoritative AI/Combat、多人 AOI、掉落／拾取與正確 Facing/Attack/Hit/Death。實際原版地圖人口與功能必須由來源核對。

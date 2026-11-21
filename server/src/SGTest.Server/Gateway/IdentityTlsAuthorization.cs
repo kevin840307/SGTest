@@ -144,7 +144,7 @@ public sealed class IdentityTlsAuthorization
         bool sessionFinished = false;
         GatewayConnection? boundConnection = null;
         using var gameplayGate = new SemaphoreSlim(1,1);
-        using var tradeIngressGate = new SemaphoreSlim(1,1);
+        using var tradeIngress = _trades is null ? null : new TradeCommandIngress(_trades, router);
         var gmPvpNameGate=new GmPvpNameSequenceGate();
         var playerShopGate=new PlayerShopSequenceGate();
 
@@ -2066,25 +2066,6 @@ public sealed class IdentityTlsAuthorization
                 return _parties.HandleAsync(request,router);
             }
 
-            async Task TradeHandler(TrustedTradeCommand request)
-            {
-                if(_trades is null)return;
-                var binding=new ConnectionBinding(
-                    request.ActorId,request.ConnectionEpoch,request.RequestMapEpoch);
-                // Trade ingress has its OWN per-socket order. In particular,
-                // FinalConfirm cannot hold this socket's gameplay gate while
-                // trying to acquire the other participant's gameplay gate.
-                await tradeIngressGate.WaitAsync().ConfigureAwait(false);
-                try
-                {
-                    if(!router.IsCurrentBinding(binding))return;
-                    await _trades.HandleAsync(request,router).ConfigureAwait(false);
-                }
-                finally { tradeIngressGate.Release(); }
-            }
-            Func<TrustedTradeCommand,Task>? tradeHandler=
-                _trades is null ? null : TradeHandler;
-
             async Task DiscardHandler(TrustedInventoryDiscard request)
             {
                 var binding=new ConnectionBinding(
@@ -2132,7 +2113,7 @@ public sealed class IdentityTlsAuthorization
                 handleBank:BankHandler,
                 handleRepair:RepairHandler,
                 handleEnhancement:EnhancementHandler,
-                handleTrade:tradeHandler,
+                handleTrade:tradeIngress is null ? null : tradeIngress.HandleAsync,
                 handleQuest:QuestHandler,
                 handlePvp:PvpModeHandler,
                 handlePvpAttack:PvpAttackHandler,

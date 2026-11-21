@@ -6,8 +6,10 @@ signal world_snapshot(snapshot: Dictionary)
 
 const Session = preload("res://session/client_session.gd")
 const State = preload("res://world/world_state.gd")
+const TradePanel = preload("res://trade/trade_panel.gd")
 const ItemCatalog = preload("res://inventory/item_catalog.gd")
 var session = Session.new()
+var trade_panel := TradePanel.new()
 var item_catalog = ItemCatalog.new()
 var active := false
 var trusted_chain: X509Certificate
@@ -95,24 +97,6 @@ var enhancement_item_picker := OptionButton.new()
 var enhancement_button := Button.new()
 var enhancement_status := Label.new()
 var _enhancement_display_key := ""
-var trade_target_picker := OptionButton.new()
-var trade_request_button := Button.new()
-var trade_peer_label := Label.new()
-var trade_accept_button := Button.new()
-var trade_reject_button := Button.new()
-var trade_inventory_picker := OptionButton.new()
-var trade_my_offer_picker := OptionButton.new()
-var trade_offer_add_button := Button.new()
-var trade_offer_remove_button := Button.new()
-var trade_other_offer_label := Label.new()
-var trade_money_input := SpinBox.new()
-var trade_set_money_button := Button.new()
-var trade_money_label := Label.new()
-var trade_lock_button := Button.new()
-var trade_confirm_button := Button.new()
-var trade_cancel_button := Button.new()
-var trade_status := Label.new()
-var _trade_display_key := ""
 var player_shop_inventory_picker := OptionButton.new()
 var player_shop_price_input := SpinBox.new()
 var player_shop_open_button := Button.new()
@@ -318,7 +302,7 @@ func _ready() -> void:
 	bank_deposit_button.text = "存入金錢"
 	bank_withdraw_button.text = "領出金錢"
 	bank_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	for control in [bank_npc_input,bank_open_button,bank_scope_label,bank_wallet_label,bank_balance_label,bank_amount_input,bank_deposit_button,bank_withdraw_button,bank_status,repair_npc_input,repair_open_button,repair_wallet_label,repair_item_picker,repair_button,repair_status,trade_target_picker,trade_request_button,trade_peer_label,trade_accept_button,trade_reject_button,trade_inventory_picker,trade_my_offer_picker,trade_offer_add_button,trade_offer_remove_button,trade_other_offer_label,trade_money_input,trade_set_money_button,trade_money_label,trade_lock_button,trade_confirm_button,trade_cancel_button,trade_status]:
+	for control in [bank_npc_input,bank_open_button,bank_scope_label,bank_wallet_label,bank_balance_label,bank_amount_input,bank_deposit_button,bank_withdraw_button,bank_status,repair_npc_input,repair_open_button,repair_wallet_label,repair_item_picker,repair_button,repair_status]:
 		control.visible = false
 	repair_npc_input.min_value = 1
 	repair_npc_input.max_value = 2147483647
@@ -339,26 +323,6 @@ func _ready() -> void:
 	enhancement_button.text = "強化選中裝備"
 	enhancement_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	for control in [enhancement_npc_input,enhancement_open_button,enhancement_wallet_label,enhancement_item_picker,enhancement_button,enhancement_status]:
-		control.visible = false
-	trade_request_button.text = "邀請選中玩家交易"
-	trade_peer_label.text = "交易對象：—"
-	trade_accept_button.text = "接受交易"
-	trade_reject_button.text = "拒絕交易"
-	trade_offer_add_button.text = "加入選中背包物品（整組）"
-	trade_offer_remove_button.text = "移除選中出價物品"
-	trade_other_offer_label.text = "對方出價：—"
-	trade_other_offer_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	trade_money_input.min_value = 0
-	trade_money_input.max_value = 9000000000000000
-	trade_money_input.step = 1
-	trade_money_input.value = 0
-	trade_set_money_button.text = "更新金錢出價"
-	trade_money_label.text = "金錢出價：我 0｜對方 0"
-	trade_lock_button.text = "鎖定我的出價"
-	trade_confirm_button.text = "最終確認交易"
-	trade_cancel_button.text = "取消交易"
-	trade_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	for control in [trade_target_picker,trade_request_button,trade_peer_label,trade_accept_button,trade_reject_button,trade_inventory_picker,trade_my_offer_picker,trade_offer_add_button,trade_offer_remove_button,trade_other_offer_label,trade_money_input,trade_set_money_button,trade_money_label,trade_lock_button,trade_confirm_button,trade_cancel_button,trade_status]:
 		control.visible = false
 	player_shop_price_input.min_value = 1
 	player_shop_price_input.max_value = 9000000000000000
@@ -468,15 +432,6 @@ func _ready() -> void:
 	enhancement_open_button.pressed.connect(_open_enhancement_from_input)
 	enhancement_button.pressed.connect(_enhance_selected_item)
 	enhancement_item_picker.item_selected.connect(func(_index): _update_enhancement_buttons())
-	trade_request_button.pressed.connect(_request_selected_trade)
-	trade_accept_button.pressed.connect(_accept_trade_invite)
-	trade_reject_button.pressed.connect(_reject_trade_invite)
-	trade_offer_add_button.pressed.connect(_add_selected_trade_item)
-	trade_offer_remove_button.pressed.connect(_remove_selected_trade_item)
-	trade_set_money_button.pressed.connect(_set_trade_money)
-	trade_lock_button.pressed.connect(_lock_trade)
-	trade_confirm_button.pressed.connect(_confirm_trade)
-	trade_cancel_button.pressed.connect(_cancel_trade)
 	player_shop_open_button.pressed.connect(_open_selected_player_shop)
 	player_shop_close_button.pressed.connect(_close_player_shop)
 	player_shop_inspect_button.pressed.connect(_inspect_selected_player_shop)
@@ -495,9 +450,7 @@ func _ready() -> void:
 	party_chat_input.text_submitted.connect(func(_text): _send_party_chat())
 	quest_open_button.pressed.connect(_open_quest_from_input)
 	quest_choose_button.pressed.connect(_choose_selected_quest_option)
-	# Trade controls must actually be parented, not only instantiated/connected.
-	for control in [trade_target_picker,trade_request_button,trade_peer_label,trade_accept_button,trade_reject_button,trade_inventory_picker,trade_my_offer_picker,trade_offer_add_button,trade_offer_remove_button,trade_other_offer_label,trade_money_input,trade_set_money_button,trade_money_label,trade_lock_button,trade_confirm_button,trade_cancel_button,trade_status]:
-		column.add_child(control)
+	column.add_child(trade_panel)
 	for control in [player_shop_inventory_picker,player_shop_price_input,player_shop_open_button,player_shop_own_label,player_shop_close_button,player_shop_seller_picker,player_shop_inspect_button,player_shop_inspected_label,player_shop_buy_button,player_shop_status]:
 		column.add_child(control)
 	for control in [nearby_chat_history,nearby_chat_input,nearby_chat_send_button,nearby_chat_status,whisper_target_input,whisper_input,whisper_send_button,whisper_status,party_target_input,party_invite_button,party_invite_label,party_accept_button,party_reject_button,party_members_label,party_leave_button,party_kick_button,party_promote_button,party_chat_input,party_chat_send_button,party_status]:
@@ -592,7 +545,6 @@ func _begin_connection(register_first:bool)->void:
 	_bank_display_key = ""
 	_repair_display_key = ""
 	_enhancement_display_key = ""
-	_trade_display_key = ""
 	_player_shop_display_key = ""
 	_nearby_chat_display_key = ""
 	nearby_chat_history.text = ""
@@ -630,10 +582,7 @@ func _begin_connection(register_first:bool)->void:
 	repair_status.text = ""
 	repair_wallet_label.text = "角色錢包：—"
 	repair_item_picker.clear()
-	trade_status.text = ""
-	trade_target_picker.clear()
-	trade_inventory_picker.clear()
-	trade_my_offer_picker.clear()
+	trade_panel.reset()
 	player_shop_status.text = ""
 	player_shop_inventory_picker.clear()
 	player_shop_seller_picker.clear()
@@ -819,47 +768,6 @@ func submit_pvp_skill(target_actor_id:int,skill_id:int)->bool:
 	return session.cast_player_skill(skill_id,target_actor_id)
 
 
-func submit_trade_request(target_actor_id: int) -> bool:
-	if not active or int(_latest.get("state",-1)) != State.STATE_IN_WORLD or not bool(_latest.get("world_ready",false)) or not bool(_latest.get("inventory_ready",false)) or bool(_latest.get("player_dead",false)) or bool(_latest.get("reconnecting",false)) or bool(_latest.get("resync_pending",false)) or int(_latest.get("trade_id",0)) != 0:
-		return false
-	var entities: Dictionary = _latest.get("entities",{})
-	if target_actor_id <= 0 or target_actor_id == int(_latest.get("actor_id",0)) or not entities.has(target_actor_id):
-		return false
-	return session.request_trade(target_actor_id)
-
-
-func submit_trade_accept() -> bool:
-	return active and int(_latest.get("trade_state",0)) == 1 and int(_latest.get("trade_id",0)) > 0 and session.accept_trade()
-
-
-func submit_trade_reject() -> bool:
-	return active and int(_latest.get("trade_state",0)) == 1 and int(_latest.get("trade_id",0)) > 0 and session.reject_trade()
-
-
-func submit_trade_add_item(item_uid: int) -> bool:
-	var inventory: Dictionary = _latest.get("inventory_items",{})
-	return active and int(_latest.get("trade_state",0)) == 3 and not bool(_latest.get("trade_my_locked",false)) and item_uid > 0 and inventory.has(item_uid) and not (_latest.get("trade_my_items",{}) as Dictionary).has(item_uid) and session.trade_add_item(item_uid)
-
-
-func submit_trade_remove_item(item_uid: int) -> bool:
-	return active and int(_latest.get("trade_state",0)) == 3 and not bool(_latest.get("trade_my_locked",false)) and item_uid > 0 and (_latest.get("trade_my_items",{}) as Dictionary).has(item_uid) and session.trade_remove_item(item_uid)
-
-
-func submit_trade_money(money: int) -> bool:
-	return active and int(_latest.get("trade_state",0)) == 3 and not bool(_latest.get("trade_my_locked",false)) and money >= 0 and money <= 9000000000000000 and session.trade_set_money(money)
-
-
-func submit_trade_lock() -> bool:
-	return active and int(_latest.get("trade_state",0)) == 3 and not bool(_latest.get("trade_my_locked",false)) and session.trade_lock()
-
-
-func submit_trade_confirm() -> bool:
-	return active and int(_latest.get("trade_state",0)) == 4 and bool(_latest.get("trade_my_locked",false)) and bool(_latest.get("trade_other_locked",false)) and not bool(_latest.get("trade_my_confirmed",false)) and session.trade_final_confirm()
-
-
-func submit_trade_cancel() -> bool:
-	return active and int(_latest.get("trade_id",0)) > 0 and session.cancel_trade()
-
 func submit_quest_open(npc_spawn_id:int)->bool:
 	return (
 		active and npc_spawn_id>0 and
@@ -927,7 +835,6 @@ func disconnect_session() -> void:
 	_bank_display_key = ""
 	_repair_display_key = ""
 	_enhancement_display_key = ""
-	_trade_display_key = ""
 	_player_shop_display_key = ""
 	_nearby_chat_display_key = ""
 	nearby_chat_history.text = ""
@@ -957,10 +864,7 @@ func disconnect_session() -> void:
 	repair_status.text = ""
 	repair_wallet_label.text = "角色錢包：—"
 	repair_item_picker.clear()
-	trade_status.text = ""
-	trade_target_picker.clear()
-	trade_inventory_picker.clear()
-	trade_my_offer_picker.clear()
+	trade_panel.reset()
 	player_shop_status.text = ""
 	player_shop_inventory_picker.clear()
 	player_shop_seller_picker.clear()
@@ -1805,108 +1709,6 @@ func _player_shop_listing_text(prefix: String, listing: Dictionary) -> String:
 		int(listing.get("quantity",0)),enhancement_text,
 		int(listing.get("item_uid",0)),int(listing.get("price",0)),durability_text]
 
-func _request_selected_trade() -> void:
-	if trade_request_button.disabled or trade_target_picker.selected < 0:
-		return
-	var actor_id := int(trade_target_picker.get_item_metadata(trade_target_picker.selected))
-	if submit_trade_request(actor_id):
-		trade_status.text = "交易邀請已送出，等待對方回覆…"
-		trade_request_button.disabled = true
-	else:
-		trade_status.text = "目前無法邀請該玩家交易"
-
-
-func _accept_trade_invite() -> void:
-	if not trade_accept_button.disabled and submit_trade_accept():
-		trade_status.text = "已接受交易，等待伺服器建立出價狀態…"
-
-
-func _reject_trade_invite() -> void:
-	if not trade_reject_button.disabled and submit_trade_reject():
-		trade_status.text = "已拒絕交易，等待伺服器確認…"
-
-
-func _add_selected_trade_item() -> void:
-	if trade_offer_add_button.disabled or trade_inventory_picker.selected < 0:
-		return
-	var uid := int(trade_inventory_picker.get_item_metadata(trade_inventory_picker.selected))
-	if submit_trade_add_item(uid):
-		trade_status.text = "物品出價已送出，等待雙方快照更新…"
-
-
-func _remove_selected_trade_item() -> void:
-	if trade_offer_remove_button.disabled or trade_my_offer_picker.selected < 0:
-		return
-	var uid := int(trade_my_offer_picker.get_item_metadata(trade_my_offer_picker.selected))
-	if submit_trade_remove_item(uid):
-		trade_status.text = "移除出價已送出，等待雙方快照更新…"
-
-
-func _set_trade_money() -> void:
-	if not trade_set_money_button.disabled and submit_trade_money(int(trade_money_input.value)):
-		trade_status.text = "金錢出價已送出，等待雙方快照更新…"
-
-
-func _lock_trade() -> void:
-	if not trade_lock_button.disabled and submit_trade_lock():
-		trade_status.text = "我的出價已鎖定；任一方修改出價時伺服器會解除雙方鎖定"
-
-
-func _confirm_trade() -> void:
-	if not trade_confirm_button.disabled and submit_trade_confirm():
-		trade_status.text = "最終確認已送出；只有雙方都確認後伺服器才會原子結算"
-
-
-func _cancel_trade() -> void:
-	if not trade_cancel_button.disabled and submit_trade_cancel():
-		trade_status.text = "取消請求已送出…"
-
-
-func _trade_terminal_text(code: int) -> String:
-	match code:
-		0:
-			return "交易成功"
-		1:
-			return "交易已被拒絕"
-		2:
-			return "交易已取消"
-		3:
-			return "交易邀請已逾時"
-		4:
-			return "對方已離線"
-		5:
-			return "伺服器結算失敗，物品與金錢未完成交換"
-		6:
-			return "地圖／連線世代已變更，交易已取消"
-		_:
-			return "交易已結束（代碼 %d）" % code
-
-
-func _trade_state_text(value: int) -> String:
-	match value:
-		1:
-			return "收到交易邀請"
-		2:
-			return "交易邀請已送出"
-		3:
-			return "交易進行中"
-		4:
-			return "雙方出價已鎖定，等待最終確認"
-		_:
-			return "未交易"
-
-
-func _trade_item_text(item: Dictionary) -> String:
-	var level := int(item.get("enhancement_level",0))
-	var enhancement := "" if level <= 0 else "｜+%d" % level
-	var durability := int(item.get("durability_raw",-1))
-	var durability_text := "" if durability < 0 else "｜耐久 raw %d" % durability
-	return "%s ×%d%s%s｜UID %d" % [
-		item_catalog.name_for(int(item.get("item_definition_id",0))),
-		int(item.get("quantity",0)),enhancement,durability_text,
-		int(item.get("item_uid",0))]
-
-
 func _request_pvp_mode(action: int) -> void:
 	if session.request_pvp_mode(action):
 		pvp_status.text = "PvP 模式請求已送出，等待伺服器權威回覆…"
@@ -2107,7 +1909,7 @@ func _update_player_shop_ui() -> void:
 		for raw_uid in uids:
 			var uid := int(raw_uid)
 			var item: Dictionary = inventory[raw_uid]
-			player_shop_inventory_picker.add_item(_trade_item_text(item))
+			player_shop_inventory_picker.add_item(item_catalog.offer_item_text(item))
 			player_shop_inventory_picker.set_item_metadata(player_shop_inventory_picker.item_count-1,uid)
 		if player_shop_inventory_picker.item_count > 0:
 			player_shop_inventory_picker.select(0)
@@ -2142,97 +1944,6 @@ func _update_player_shop_ui() -> void:
 	var sold: Dictionary = _latest.get("last_player_shop_sold",{})
 	if not sold.is_empty() and int(_latest.get("last_player_shop_sold_listing_id",0)) > 0:
 		player_shop_status.text = "商店物品已由伺服器售出｜買家 %d｜UID %d｜錢包 %d" % [int(sold.get("buyer_actor_id",0)),int(sold.get("item_uid",0)),int(_latest.get("player_shop_wallet",0))]
-
-func _update_trade_ui() -> void:
-	var in_world := active and int(_latest.get("state",-1)) == State.STATE_IN_WORLD
-	for control in [trade_target_picker,trade_request_button,trade_peer_label,trade_accept_button,trade_reject_button,trade_inventory_picker,trade_my_offer_picker,trade_offer_add_button,trade_offer_remove_button,trade_other_offer_label,trade_money_input,trade_set_money_button,trade_money_label,trade_lock_button,trade_confirm_button,trade_cancel_button,trade_status]:
-		control.visible = in_world
-	if not in_world:
-		_trade_display_key = ""
-		return
-	var trade_id := int(_latest.get("trade_id",0))
-	var trade_state := int(_latest.get("trade_state",0))
-	var usable := bool(_latest.get("world_ready",false)) and bool(_latest.get("inventory_ready",false)) and not bool(_latest.get("player_dead",false)) and not bool(_latest.get("reconnecting",false)) and not bool(_latest.get("resync_pending",false)) and not bool(_latest.get("waiting_for_new_map",false))
-	var entity_ids: Array = (_latest.get("entities",{}) as Dictionary).keys()
-	entity_ids.sort()
-	var target_key := ""
-	for raw_actor in entity_ids:
-		target_key += "," + str(int(raw_actor))
-	var key := "%d/%d/%d/%d/%d/%s" % [trade_id,trade_state,int(_latest.get("trade_revision",0)),int(_latest.get("inventory_revision",0)),int(_latest.get("trade_sequence",0)),target_key]
-	if key != _trade_display_key:
-		_trade_display_key = key
-		trade_target_picker.clear()
-		if trade_id == 0:
-			for raw_actor in entity_ids:
-				var actor_id := int(raw_actor)
-				if actor_id <= 0 or actor_id == int(_latest.get("actor_id",0)):
-					continue
-				trade_target_picker.add_item("玩家 %d" % actor_id)
-				trade_target_picker.set_item_metadata(trade_target_picker.item_count-1,actor_id)
-			if trade_target_picker.item_count > 0:
-				trade_target_picker.select(0)
-		trade_inventory_picker.clear()
-		trade_my_offer_picker.clear()
-		var inventory: Dictionary = _latest.get("inventory_items",{})
-		var mine: Dictionary = _latest.get("trade_my_items",{})
-		var uids: Array = inventory.keys()
-		uids.sort()
-		if trade_state == 3 and not bool(_latest.get("trade_my_locked",false)):
-			for raw_uid in uids:
-				var uid := int(raw_uid)
-				if mine.has(uid):
-					continue
-				var item: Dictionary = inventory[raw_uid]
-				trade_inventory_picker.add_item(_trade_item_text(item))
-				trade_inventory_picker.set_item_metadata(trade_inventory_picker.item_count-1,uid)
-		var mine_uids: Array = mine.keys()
-		mine_uids.sort()
-		for raw_uid in mine_uids:
-			var item: Dictionary = mine[raw_uid]
-			trade_my_offer_picker.add_item(_trade_item_text(item))
-			trade_my_offer_picker.set_item_metadata(trade_my_offer_picker.item_count-1,int(raw_uid))
-		if trade_inventory_picker.item_count > 0:
-			trade_inventory_picker.select(0)
-		if trade_my_offer_picker.item_count > 0:
-			trade_my_offer_picker.select(0)
-		trade_money_input.value = int(_latest.get("trade_my_money",0))
-	var peer := int(_latest.get("trade_peer_actor_id",0))
-	trade_peer_label.text = ("交易對象：玩家 %d｜%s" % [peer,_trade_state_text(trade_state)]) if trade_id > 0 else "交易對象：—"
-	trade_money_label.text = "金錢出價：我 %d｜對方 %d" % [int(_latest.get("trade_my_money",0)),int(_latest.get("trade_other_money",0))]
-	var other_rows := PackedStringArray()
-	var other: Dictionary = _latest.get("trade_other_items",{})
-	var other_uids: Array = other.keys()
-	other_uids.sort()
-	for raw_uid in other_uids:
-		other_rows.append(_trade_item_text(other[raw_uid]))
-	trade_other_offer_label.text = "對方出價：" + ("—" if other_rows.is_empty() else "\n".join(other_rows))
-	trade_request_button.disabled = not usable or trade_id != 0 or trade_target_picker.item_count == 0
-	trade_accept_button.visible = in_world and trade_state == 1
-	trade_reject_button.visible = in_world and trade_state == 1
-	trade_accept_button.disabled = not usable or trade_state != 1
-	trade_reject_button.disabled = not usable or trade_state != 1
-	var mutable := usable and trade_state == 3 and not bool(_latest.get("trade_my_locked",false))
-	trade_inventory_picker.visible = in_world and trade_state == 3
-	trade_my_offer_picker.visible = in_world and trade_state == 3
-	trade_offer_add_button.visible = in_world and trade_state == 3
-	trade_offer_remove_button.visible = in_world and trade_state == 3
-	trade_money_input.visible = in_world and trade_state == 3
-	trade_set_money_button.visible = in_world and trade_state == 3
-	trade_offer_add_button.disabled = not mutable or trade_inventory_picker.item_count == 0
-	trade_offer_remove_button.disabled = not mutable or trade_my_offer_picker.item_count == 0
-	trade_money_input.editable = mutable
-	trade_set_money_button.disabled = not mutable
-	trade_lock_button.visible = in_world and trade_state == 3
-	trade_lock_button.disabled = not mutable
-	trade_confirm_button.visible = in_world and trade_state == 4
-	trade_confirm_button.disabled = not usable or trade_state != 4 or not bool(_latest.get("trade_my_locked",false)) or not bool(_latest.get("trade_other_locked",false)) or bool(_latest.get("trade_my_confirmed",false))
-	trade_cancel_button.visible = in_world and trade_id > 0
-	trade_cancel_button.disabled = not usable or trade_id <= 0
-	var terminal: Dictionary = _latest.get("last_trade_terminal",{})
-	if trade_id > 0:
-		trade_status.text = "%s｜我%s鎖定／對方%s鎖定｜我%s確認／對方%s確認" % [_trade_state_text(trade_state),"已" if bool(_latest.get("trade_my_locked",false)) else "未","已" if bool(_latest.get("trade_other_locked",false)) else "未","已" if bool(_latest.get("trade_my_confirmed",false)) else "未","已" if bool(_latest.get("trade_other_confirmed",false)) else "未"]
-	elif not terminal.is_empty():
-		trade_status.text = "%s｜伺服器代碼 %d" % [_trade_terminal_text(int(terminal.get("status",-1))),int(terminal.get("status",-1))]
 
 func _open_repair_from_input() -> void:
 	if repair_open_button.disabled:
@@ -2625,7 +2336,7 @@ func _process(delta: float) -> void:
 	_update_bank_ui()
 	_update_repair_ui()
 	_update_enhancement_ui()
-	_update_trade_ui()
+	_refresh_trade_panel()
 	_update_player_shop_ui()
 	_update_nearby_chat_ui()
 	_update_quest_ui()
@@ -2728,3 +2439,8 @@ func _character_create_status_text(code: int, character_name: String) -> String:
 
 func _exit_tree() -> void:
 	session.stop()
+
+
+func _refresh_trade_panel() -> void:
+	var in_world := active and int(_latest.get("state",-1)) == State.STATE_IN_WORLD
+	trade_panel.apply_snapshot(_latest, active, in_world, session, item_catalog)

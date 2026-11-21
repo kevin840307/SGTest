@@ -101,3 +101,14 @@ func icon_id_for(item_id: int) -> int:
 
 func category_for(item_id: int) -> String:
 	return str(_categories.get(item_id,""))
+
+
+func offer_item_text(item: Dictionary) -> String:
+	var level := int(item.get("enhancement_level",0))
+	var enhancement := "" if level <= 0 else "｜+%d" % level
+	var durability := int(item.get("durability_raw",-1))
+	var durability_text := "" if durability < 0 else "｜耐久 raw %d" % durability
+	return "%s ×%d%s%s｜UID %d" % [
+		name_for(int(item.get("item_definition_id",0))),
+		int(item.get("quantity",0)),enhancement,durability_text,
+		int(item.get("item_uid",0))]

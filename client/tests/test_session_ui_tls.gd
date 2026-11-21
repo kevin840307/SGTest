@@ -1160,18 +1160,18 @@ func run() -> void:
 	panel._latest.trade_other_items = {}
 	panel._latest.trade_sequence = 0
 	panel._latest.last_trade_terminal = {}
-	panel._update_trade_ui()
-	for control in [panel.trade_target_picker,panel.trade_request_button,panel.trade_accept_button,panel.trade_offer_add_button,panel.trade_set_money_button,panel.trade_confirm_button,panel.trade_status]:
+	panel._refresh_trade_panel()
+	for control in [panel.trade_panel.trade_target_picker,panel.trade_panel.trade_request_button,panel.trade_panel.trade_accept_button,panel.trade_panel.trade_offer_add_button,panel.trade_panel.trade_set_money_button,panel.trade_panel.trade_confirm_button,panel.trade_panel.trade_status]:
 		if control.get_parent() == null or not panel.is_ancestor_of(control):
 			fail("Trade controls are not descendants of SessionPanel")
 			return
-	if not panel.trade_target_picker.visible or not panel.trade_request_button.visible or not panel.trade_status.visible:
+	if not panel.trade_panel.trade_target_picker.visible or not panel.trade_panel.trade_request_button.visible or not panel.trade_panel.trade_status.visible:
 		fail("Trade invite controls are not visible when idle")
 		return
-	if panel.trade_target_picker.item_count != 1 or panel.trade_request_button.disabled:
+	if panel.trade_panel.trade_target_picker.item_count != 1 or panel.trade_panel.trade_request_button.disabled:
 		fail("Trade UI did not expose visible peer invite")
 		return
-	panel.trade_request_button.pressed.emit()
+	panel.trade_panel.trade_request_button.pressed.emit()
 	if stub.trade_requests != 1 or stub.last_trade_target != 22:
 		fail("Trade invite UI did not send selected ActorId")
 		return
@@ -1180,22 +1180,22 @@ func run() -> void:
 	panel._latest.trade_revision = 1
 	panel._latest.trade_state = 1
 	panel._latest.trade_peer_actor_id = 22
-	panel._update_trade_ui()
-	if not panel.trade_accept_button.visible or panel.trade_accept_button.disabled:
+	panel._refresh_trade_panel()
+	if not panel.trade_panel.trade_accept_button.visible or panel.trade_panel.trade_accept_button.disabled:
 		fail("Trade invite did not expose accept")
 		return
-	panel.trade_accept_button.pressed.emit()
+	panel.trade_panel.trade_accept_button.pressed.emit()
 	if stub.trade_accepts != 1:
 		fail("Trade accept UI did not use ClientSession")
 		return
 
 	panel._latest.trade_revision = 2
 	panel._latest.trade_state = 3
-	panel._update_trade_ui()
-	if panel.trade_inventory_picker.item_count == 0 or panel.trade_offer_add_button.disabled:
+	panel._refresh_trade_panel()
+	if panel.trade_panel.trade_inventory_picker.item_count == 0 or panel.trade_panel.trade_offer_add_button.disabled:
 		fail("Active trade did not expose offer controls")
 		return
-	panel.trade_offer_add_button.pressed.emit()
+	panel.trade_panel.trade_offer_add_button.pressed.emit()
 	if stub.trade_adds != 1 or stub.last_trade_uid != 10000:
 		fail("Trade item offer did not use exact ItemUid")
 		return
@@ -1204,14 +1204,14 @@ func run() -> void:
 	panel._latest.trade_my_items = {10000:{"item_uid":10000,"item_definition_id":4001,"quantity":3,"drop_id":501,"enhancement_level":5,"durability_raw":80}}
 	panel._latest.trade_other_items = {20000:{"item_uid":20000,"item_definition_id":4002,"quantity":1,"drop_id":502,"enhancement_level":7,"durability_raw":60}}
 	panel._latest.trade_other_money = 50
-	panel._update_trade_ui()
-	if panel.trade_my_offer_picker.item_count != 1 or not panel.trade_my_offer_picker.get_item_text(0).contains("+5") or not panel.trade_my_offer_picker.get_item_text(0).contains("耐久 raw 80") or not panel.trade_other_offer_label.text.contains("UID 20000") or not panel.trade_other_offer_label.text.contains("+7") or not panel.trade_other_offer_label.text.contains("耐久 raw 60"):
+	panel._refresh_trade_panel()
+	if panel.trade_panel.trade_my_offer_picker.item_count != 1 or not panel.trade_panel.trade_my_offer_picker.get_item_text(0).contains("+5") or not panel.trade_panel.trade_my_offer_picker.get_item_text(0).contains("耐久 raw 80") or not panel.trade_panel.trade_other_offer_label.text.contains("UID 20000") or not panel.trade_panel.trade_other_offer_label.text.contains("+7") or not panel.trade_panel.trade_other_offer_label.text.contains("耐久 raw 60"):
 		fail("Trade UI did not render authoritative offers/enhancement/durability")
 		return
-	panel.trade_money_input.value = 200
-	panel.trade_set_money_button.pressed.emit()
-	panel.trade_offer_remove_button.pressed.emit()
-	panel.trade_lock_button.pressed.emit()
+	panel.trade_panel.trade_money_input.value = 200
+	panel.trade_panel.trade_set_money_button.pressed.emit()
+	panel.trade_panel.trade_offer_remove_button.pressed.emit()
+	panel.trade_panel.trade_lock_button.pressed.emit()
 	if stub.trade_money_sets != 1 or stub.last_trade_money != 200 or stub.trade_removes != 1 or stub.trade_locks != 1:
 		fail("Trade mutation controls did not use ClientSession")
 		return
@@ -1222,11 +1222,11 @@ func run() -> void:
 	panel._latest.trade_other_locked = true
 	panel._latest.trade_my_confirmed = false
 	panel._latest.trade_other_confirmed = false
-	panel._update_trade_ui()
-	if not panel.trade_confirm_button.visible or panel.trade_confirm_button.disabled:
+	panel._refresh_trade_panel()
+	if not panel.trade_panel.trade_confirm_button.visible or panel.trade_panel.trade_confirm_button.disabled:
 		fail("Dual lock did not expose final confirm")
 		return
-	panel.trade_confirm_button.pressed.emit()
+	panel.trade_panel.trade_confirm_button.pressed.emit()
 	if stub.trade_confirms != 1:
 		fail("Trade final confirm UI did not use ClientSession")
 		return
@@ -1237,8 +1237,8 @@ func run() -> void:
 	panel._latest.trade_my_items = {}
 	panel._latest.trade_other_items = {}
 	panel._latest.last_trade_terminal = {"status":0,"wallet_money":850}
-	panel._update_trade_ui()
-	if not panel.trade_status.text.contains("交易成功") or panel.trade_cancel_button.visible:
+	panel._refresh_trade_panel()
+	if not panel.trade_panel.trade_status.text.contains("交易成功") or panel.trade_panel.trade_cancel_button.visible:
 		fail("Trade terminal UI did not show server outcome")
 		return
 

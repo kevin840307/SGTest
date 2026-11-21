@@ -313,3 +313,6 @@ Godot keeps authoritative Party membership through map transfer, clears only pen
 Verification: Server Core 44739756995 PASS; Client Core 44739756959 PASS on functional HEAD `efcc52c6`. The two-real-Client Map15→Map13→Map15 Gate creates the Party before transfer, retains membership after AOI separation, delivers Party Chat cross-map, and ends with `party_count=0` after clean socket teardown. Formal Host advertises `online_party_enabled=true`.
 
 Still outside this boundary: verified original party-size/distance behavior, EXP/drop sharing, party buff/assist gameplay rules, persistent/offline parties, and private Windows party visuals. Authenticated online invite-by-name is implemented, but does not claim the original game's distance/UI rules. Guild/Faction/Warband remain future systems.
+
+
+交易由 `TradeCommandIngress` 管理單一連線的請求順序及 binding 檢查，`PlayerTradeCoordinator` 保有雙方確認、雙 actor gameplay gate 與原子結算順序。Gateway 組裝 ingress，並接入換圖及離線生命週期。PvP 地圖與犯罪規則各有獨立檔案。未來領域見 [模組導航](ARCHITECTURE.md#模組導航與預留位置)。
