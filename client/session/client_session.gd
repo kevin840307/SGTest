@@ -2,6 +2,7 @@ extends RefCounted
 
 const Transport = preload("res://network/client_transport.gd")
 const WireCodec = preload("res://network/wire_codec.gd")
+const IntentAdmissionPolicy = preload("res://session/intent_admission_policy.gd")
 const WorldState = preload("res://world/world_state.gd")
 
 const MAX_INTENTS := 128
@@ -808,117 +809,8 @@ func _queue_intent(intent: Dictionary) -> bool:
 			if str(queued.get("type","")) not in ["move","attack_monster"]:
 				kept.append(queued)
 		_intents = kept
-	if accepted and kind == "stop_move":
-		for queued in _intents:
-			if str(queued.get("type","")) == "stop_move":
-				accepted = false
-				break
-	if accepted and kind == "use_recovery_item":
-		if int(_published.get("pending_shop_sequence",0)) != 0 or int(_published.get("pending_storage_sequence",0)) != 0 or int(_published.get("pending_equipment_sequence",0)) != 0 or int(_published.get("pending_bank_sequence",0)) != 0 or int(_published.get("pending_repair_sequence",0)) != 0 or int(_published.get("trade_id",0)) != 0:
-			accepted = false
-		for queued in _intents:
-			if str(queued.get("type","")) in ["use_recovery_item","discard_inventory_item","shop_buy","shop_sell","storage_deposit","storage_withdraw","equipment_equip","equipment_unequip","bank_deposit","bank_withdraw","repair_open","repair_item"]:
-				accepted = false
-				break
-	if accepted and kind == "discard_inventory_item":
-		if int(_published.get("pending_shop_sequence",0)) != 0 or int(_published.get("pending_storage_sequence",0)) != 0 or int(_published.get("pending_equipment_sequence",0)) != 0 or int(_published.get("pending_bank_sequence",0)) != 0 or int(_published.get("pending_repair_sequence",0)) != 0 or int(_published.get("trade_id",0)) != 0:
-			accepted = false
-		for queued in _intents:
-			if str(queued.get("type","")) in ["discard_inventory_item","use_recovery_item","shop_buy","shop_sell","storage_deposit","storage_withdraw","equipment_equip","equipment_unequip","bank_deposit","bank_withdraw","repair_open","repair_item"]:
-				accepted = false
-				break
-	if accepted and kind in ["shop_open","shop_buy","shop_sell"]:
-		if int(_published.get("pending_shop_sequence",0)) != 0 or int(_published.get("pending_storage_sequence",0)) != 0 or int(_published.get("pending_equipment_sequence",0)) != 0 or int(_published.get("pending_bank_sequence",0)) != 0 or int(_published.get("pending_repair_sequence",0)) != 0 or int(_published.get("trade_id",0)) != 0:
-			accepted = false
-		for queued in _intents:
-			if str(queued.get("type","")) in ["shop_open","shop_buy","shop_sell","use_recovery_item","discard_inventory_item","storage_open","storage_deposit","storage_withdraw","equipment_equip","equipment_unequip","bank_open","bank_deposit","bank_withdraw","repair_open","repair_item"]:
-				accepted = false
-				break
-	if accepted and kind in ["storage_open","storage_deposit","storage_withdraw"]:
-		if int(_published.get("pending_storage_sequence",0)) != 0 or int(_published.get("pending_shop_sequence",0)) != 0 or int(_published.get("pending_bank_sequence",0)) != 0 or int(_published.get("pending_repair_sequence",0)) != 0 or int(_published.get("trade_id",0)) != 0:
-			accepted = false
-		for queued in _intents:
-			if str(queued.get("type","")) in ["storage_open","storage_deposit","storage_withdraw","shop_open","shop_buy","shop_sell","use_recovery_item","discard_inventory_item","equipment_equip","equipment_unequip","bank_open","bank_deposit","bank_withdraw","repair_open","repair_item"]:
-				accepted = false
-				break
-	if accepted and kind in ["equipment_equip","equipment_unequip"]:
-		if int(_published.get("pending_equipment_sequence",0)) != 0 or int(_published.get("pending_shop_sequence",0)) != 0 or int(_published.get("pending_storage_sequence",0)) != 0 or int(_published.get("pending_bank_sequence",0)) != 0 or int(_published.get("pending_repair_sequence",0)) != 0 or int(_published.get("pending_recovery_sequence",0)) != 0 or int(_published.get("pending_discard_sequence",0)) != 0:
-			accepted = false
-		for queued in _intents:
-			if str(queued.get("type","")) in ["equipment_equip","equipment_unequip","shop_open","shop_buy","shop_sell","storage_open","storage_deposit","storage_withdraw","use_recovery_item","discard_inventory_item","bank_open","bank_deposit","bank_withdraw","repair_open","repair_item"]:
-				accepted = false
-				break
-	if accepted and kind in ["bank_open","bank_deposit","bank_withdraw"]:
-		if int(_published.get("pending_bank_sequence",0)) != 0 or int(_published.get("pending_repair_sequence",0)) != 0 or int(_published.get("pending_shop_sequence",0)) != 0 or int(_published.get("pending_storage_sequence",0)) != 0 or int(_published.get("pending_equipment_sequence",0)) != 0 or int(_published.get("pending_recovery_sequence",0)) != 0 or int(_published.get("pending_discard_sequence",0)) != 0:
-			accepted = false
-		for queued in _intents:
-			if str(queued.get("type","")) in ["bank_open","bank_deposit","bank_withdraw","shop_open","shop_buy","shop_sell","storage_open","storage_deposit","storage_withdraw","equipment_equip","equipment_unequip","use_recovery_item","discard_inventory_item","repair_open","repair_item"]:
-				accepted = false
-				break
-	if accepted and kind in ["repair_open","repair_item"]:
-		if int(_published.get("pending_repair_sequence",0)) != 0 or int(_published.get("pending_bank_sequence",0)) != 0 or int(_published.get("pending_shop_sequence",0)) != 0 or int(_published.get("pending_storage_sequence",0)) != 0 or int(_published.get("pending_equipment_sequence",0)) != 0 or int(_published.get("pending_recovery_sequence",0)) != 0 or int(_published.get("pending_discard_sequence",0)) != 0:
-			accepted = false
-		for queued in _intents:
-			if str(queued.get("type","")) in ["repair_open","repair_item","bank_open","bank_deposit","bank_withdraw","shop_open","shop_buy","shop_sell","storage_open","storage_deposit","storage_withdraw","equipment_equip","equipment_unequip","use_recovery_item","discard_inventory_item"]:
-				accepted = false
-				break
-	if accepted and kind=="player_shop":
-		if (
-			int(_published.get("pending_player_shop_sequence",0))!=0 or
-			int(_published.get("trade_id",0))!=0
-		):
-			accepted=false
-		for queued in _intents:
-			if str(queued.get("type",""))=="player_shop":
-				accepted=false
-				break
-	if accepted and kind in ["quest_open","quest_choose"]:
-		if int(_published.get("pending_quest_sequence",0))!=0:
-			accepted=false
-		for queued in _intents:
-			if str(queued.get("type","")) in ["quest_open","quest_choose"]:
-				accepted=false
-				break
-	if accepted and kind == "pvp_mode":
-		if int(_published.get("pending_pvp_sequence",0)) != 0:
-			accepted = false
-		for queued in _intents:
-			if str(queued.get("type","")) == "pvp_mode":
-				accepted = false
-				break
-	if accepted and kind == "gm_pvp_name":
-		if (
-			not bool(_published.get("gm_authorized",false)) or
-			int(_published.get("pending_gm_sequence",0))!=0
-		):
-			accepted=false
-		for queued in _intents:
-			if str(queued.get("type",""))=="gm_pvp_name":
-				accepted=false
-				break
-	if accepted and kind == "pvp_attack":
-		if int(_published.get("pending_pvp_attack_sequence",0)) != 0:
-			accepted = false
-		for queued in _intents:
-			if str(queued.get("type","")) == "pvp_attack":
-				accepted = false
-				break
-	if accepted and kind == "cast_skill":
-		# A direct caller must not enqueue a second MP debit while queued or
-		# while the reliable server receipt for the first skill is unresolved.
-		if int(_published.get("pending_skill_sequence",0)) != 0:
-			accepted = false
-		for queued in _intents:
-			if str(queued.get("type","")) == "cast_skill":
-				accepted = false
-				break
-	if accepted and kind == "pickup_ground_drop":
-		# Reject repeated clicks while the first one is still in the intent
-		# queue, before it acquires a pending authoritative sequence.
-		for queued in _intents:
-			if str(queued.get("type","")) == "pickup_ground_drop":
-				accepted = false
-				break
+	if accepted:
+		accepted = IntentAdmissionPolicy.allows(kind, _published, _intents)
 	if accepted:
 		_intent_token += 1
 		var queued_intent := intent.duplicate(true)

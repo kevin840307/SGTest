@@ -349,6 +349,37 @@ class ArchitectureConventionsChecks(unittest.TestCase):
                 with self.subTest(src=script.relative_to(ROOT), target=relative):
                     self.assertTrue((CLIENT / relative).is_file())
 
+    def test_client_intent_admission_policy_does_not_own_a_second_fifo(self) -> None:
+        session = (CLIENT / "session" / "client_session.gd").read_text(
+            encoding="utf-8-sig")
+        policy = (CLIENT / "session" / "intent_admission_policy.gd").read_text(
+            encoding="utf-8-sig")
+        self.assertIn(
+            'const IntentAdmissionPolicy = preload("res://session/intent_admission_policy.gd")',
+            session)
+        enqueue = session.split("func _queue_intent(intent: Dictionary) -> bool:", 1)[1].split(
+            "func _logic_loop() -> void:", 1)[0]
+        self.assertLess(len(enqueue.splitlines()), 55)
+        self.assertIn("_mutex.lock()", enqueue)
+        self.assertIn("_mutex.unlock()", enqueue)
+        self.assertIn("accepted = IntentAdmissionPolicy.allows(kind, _published, _intents)", enqueue)
+        self.assertIn("_intents.append(queued_intent)", enqueue)
+        self.assertIn('queued_intent["_token"] = _intent_token', enqueue)
+        self.assertEqual(session.count("var _intents: Array[Dictionary] = []"), 1)
+        self.assertIn("static func allows(kind: String, published: Dictionary, queued: Array[Dictionary])", policy)
+        self.assertIn("const ECONOMY_QUEUED", policy)
+        self.assertIn("const ITEM_QUEUED", policy)
+        self.assertIn("const BANK_REPAIR_PENDING", policy)
+        for forbidden in ("Thread.new", "Mutex.new", "StreamPeerTCP", "ClientTransport",
+                          "WorldState.new", "var _intents", ".append(", ".clear(", ".erase("):
+            with self.subTest(forbidden=forbidden):
+                self.assertNotIn(forbidden, policy)
+        fixture = (CLIENT / "tests" / "test_intent_admission_policy.gd").read_text(
+            encoding="utf-8-sig")
+        self.assertIn("original NPC-open/item FIFO asymmetry changed", fixture)
+        self.assertIn("INTENT_ADMISSION_PASS", fixture)
+        self.assertIn("MAX_INTENTS", fixture)
+
     def test_client_intent_dispatch_keeps_one_fifo_owner(self) -> None:
         source = (CLIENT / "session" / "client_session.gd").read_text(encoding="utf-8-sig")
         self.assertEqual(source.count("func _process_first_intent() -> void:"), 1)

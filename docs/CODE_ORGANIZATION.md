@@ -109,6 +109,12 @@
 - Handler 不能新增獨立 socket、Thread、Timer 或第二條任務佇列；改變資格檢查、地圖 epoch、角色 actor binding、重播與退款邊界時必須有對應真 TLS E2E。
 - 名稱採 `_process_player_shop_intent`、`_process_quest_intent`，保留 `kind` 參數只供同一系列下多種動作使用；避免單一 600 行函式長期累積業務邏輯。
 
+## ClientSession 入列政策（2026-11-21）
+
+- `session/client_session.gd` 保留唯一 `_intents` FIFO、`_intent_token`、Mutex、Transport、重連清空、導航取代及隊首消費。指令入列的靜態互斥判定改由**同一 `session/` 目錄**的 `intent_admission_policy.gd` 提供純函式 `allows(kind, published, queued)`；它沒有 Thread、Mutex、Transport、WorldState 或另一份 Queue／State。
+- `IntentAdmissionPolicy` 將經濟操作的共同佇列互斥清單，以及 Bank／Repair／Equipment／Storage／Shop／道具／PvP／GM／Quest 的不同 pending 需求集中在可測試的政策內。特別保留原先的不對稱行為：排隊中的 `shop_open`／`storage_open`／`bank_open` 不阻擋後來的 Recovery／Discard，而排隊中的 Recovery／Discard 仍阻擋新的 NPC 開啟操作。**這次是無功能變更重構，不自行改成對稱互斥**；往後若決定改善操作競態，要獨立需求及 E2E 檢驗。
+- 名稱使用常見 Command Admission／FIFO 語彙 `IntentAdmissionPolicy`，不命名為 `SessionManager`、`QueueManager` 或 `CommonUtils`；也不將每種 NPC 經濟命令拆成額外資料夾。Godot tests 應驗 pending/blocker 全矩陣、原不對稱規則、Stop barrier、token 單調及佇列上限；Host/Server 依然握有權威結算。
+
 ## 尚未完成、不得混淆為已實作
 
 - `client/world/world_state.gd` 與 `client/session/client_session.gd` 仍是大型責任集中點，需按 opcode owner 和可靠事件順序逐片重構，不能把單一 Reducer 拆成各自可亂序更新的物件。
