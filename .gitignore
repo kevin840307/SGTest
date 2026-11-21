@@ -1,4 +1,6 @@
 # Private original game data and all converted artwork (never publish).
+# Local Recovered2 login/character UI reference art and source theme.
+client/ui/private_recovered2/
 local-assets/
 reports/
 legacy-originals/

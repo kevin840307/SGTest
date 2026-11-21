@@ -1,0 +1,20 @@
+{
+  "id": "recovered2_local",
+  "name": "Recovered2｜經典星界（本機）",
+  "layout": "tabs",
+  "dock": "left",
+  "effect": "stars",
+  "bg": "#0b1531",
+  "border": "#4cb4e8",
+  "text": "#e8f3ff",
+  "field": "#14263e",
+  "button": "#16436a",
+  "hover": "#1a6389",
+  "accent": "#5cc4ee",
+  "source_theme": "res://ui/private_recovered2/paradise_window_theme.tres",
+  "requires_local_assets": true,
+  "art": {
+    "root": "res://ui/private_recovered2",
+    "backdrop": "SELECT_CHARACTER.png"
+  }
+}

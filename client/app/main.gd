@@ -9,6 +9,7 @@ const BackdropShader = preload("res://ui/skin_backdrop.gdshader")
 const TerminalWorldHud = preload("res://ui/terminal_world_hud.gd")
 const UiTextureLoader = preload("res://ui/ui_texture_loader.gd")
 const SharedGameCursor = preload("res://ui/shared_game_cursor.gd")
+const Recovered2AuthShell = preload("res://ui/recovered2_auth_shell.gd")
 var auto_start := true
 var world_view := WorldView.new()
 var _held := {}
@@ -27,6 +28,8 @@ var cursor_manager := SharedGameCursor.new()
 var _cursor_sample_elapsed := 0.0
 var terminal_hud := TerminalWorldHud.new()
 var session_panel := SessionPanel.new()
+var recovered2_auth := Recovered2AuthShell.new()
+var _recovered2_local_ready := false
 var skin_picker := OptionButton.new()
 var _map_buttons: Array[Button] = []
 var _last_snapshot: Dictionary = {}
@@ -80,6 +83,9 @@ func _ready() -> void:
 	world_view.status_changed.connect(_world_status)
 	layer.add_child(session_panel)
 	layer.add_child(terminal_hud)
+	layer.add_child(recovered2_auth)
+	_recovered2_local_ready = recovered2_auth.attach(session_panel)
+	recovered2_auth.skin_requested.connect(_select_recovered2_skin)
 	add_child(cursor_manager)
 	terminal_hud.visible = false
 	terminal_hud.section_requested.connect(_open_terminal_section)
@@ -114,6 +120,7 @@ func _ready() -> void:
 					session_panel.trusted_chain = cert
 				else:
 					session_panel.status.text = "無法讀取指定憑證；未停用 TLS 驗證"
+		recovered2_auth.refresh_connection_defaults()
 		if world_view.open_pack(pack) == OK:
 			world_view.request_map(15)
 		else:
@@ -154,6 +161,13 @@ func _install_skin_selector(row: HBoxContainer) -> void:
 	terminal_hud.set_ui_theme(UiSkinCatalog.build_theme(selected))
 
 
+func _select_recovered2_skin(id: String) -> void:
+	for i in skin_picker.item_count:
+		if str(skin_picker.get_item_metadata(i)) == id:
+			_skin_selected(i)
+			return
+
+
 func _skin_selected(index: int) -> void:
 	var skin := str(skin_picker.get_item_metadata(index))
 	if UiSkinCatalog.apply(skin,toolbar,session_panel):
@@ -170,6 +184,7 @@ func _resize() -> void:
 	world_view.resize_view(Vector2i(get_viewport().get_visible_rect().size))
 	_screen_backdrop.size = Vector2(get_viewport().get_visible_rect().size)
 	_photo_backdrop.size = _screen_backdrop.size
+	recovered2_auth.resize_view(_screen_backdrop.size)
 	terminal_hud.resize_view(Vector2i(_screen_backdrop.size))
 	_update_ui_stage(true)
 
@@ -178,6 +193,7 @@ func _update_ui_stage(force: bool = false) -> void:
 	if not auto_start:
 		return
 	var pre_world := session_panel.visible and session_panel._layout.current_page != SessionLayout.Page.WORLD
+	var r2_frontend := _current_skin == "recovered2_local" and _recovered2_local_ready and pre_world
 	var viewport_size := Vector2(get_viewport().get_visible_rect().size)
 	var key := "%s:%s:%d:%d:%d:%d" % [str(pre_world),_current_skin,int(viewport_size.x),int(viewport_size.y),int(session_panel.visible),int(session_panel._layout.current_page)]
 	if not force and key == _ui_stage_key:
@@ -190,7 +206,9 @@ func _update_ui_stage(force: bool = false) -> void:
 	var picture := UiTextureLoader.get_texture(backdrop_path)
 	_photo_backdrop.texture = picture if picture is Texture2D else null
 	_photo_backdrop.visible = pre_world and _photo_backdrop.texture != null
-	_screen_backdrop.visible = pre_world and not _photo_backdrop.visible
+	_screen_backdrop.visible = pre_world and not _photo_backdrop.visible and not r2_frontend
+	_photo_backdrop.visible = _photo_backdrop.visible and not r2_frontend
+	recovered2_auth.enable_for_page(session_panel._layout.current_page,r2_frontend)
 	toolbar.visible = not pre_world
 	var retro_world := _current_skin == "retro_terminal" and not pre_world
 	terminal_hud.visible = retro_world and session_panel.active
@@ -199,6 +217,11 @@ func _update_ui_stage(force: bool = false) -> void:
 	_help_label.visible = not retro_world
 	var panel_width := minf(560.0,maxf(360.0,viewport_size.x-32.0)) if pre_world else minf(420.0,maxf(300.0,viewport_size.x-32.0))
 	session_panel.custom_minimum_size.x = panel_width
+	if r2_frontend:
+		# Keep authoritative SessionPanel live; only its controls are offscreen.
+		# The optional local Recovered2 skin owns presentation, never commands.
+		session_panel.position = Vector2(-12000,-12000)
+		return
 	if pre_world:
 		# Authentication screens size to visible content rather than leaving
 		# an unused full-height sidebar on the title/character screen.

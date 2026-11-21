@@ -2,6 +2,16 @@
 
 **狀態：單一 AssetStore／Terrain／Scenery、threaded TLS／WorldState 與登入 UI 已實作；目前新增暫定 B 基礎玩家呈現與相機跟隨。平滑內插、正式外觀裝備、戰鬥及完整多人視覺 Gate 仍未完成。** 目標 Godot 4.7.2 / GDScript；功能導向的單一 Godot 專案。
 
+## Recovered2 本機登入／選角／創角參考皮膚（2026-11-21）
+
+使用者指定**暫停 Retro Terminal 的後續擴充，只先做三個畫面**。依 `C:\\SGO\\NewVersion\\Recovered2` 的 `LoginScreen.tscn`、`login_screen.gd`、`character_select.tscn`、`character_select.gd` 做唯讀設計參照，直接使用本機使用者提供的 `paradise_window_theme.tres`、`2.ogv`、`SELECT_CHARACTER.png`、`CREATE_CHARACTER.png` 及左右按鈕圖。這些外部素材屬使用者本機可使用的參考資料，**不可自動提交公開 GitHub**。
+
+- `tools/ui_art/sync_recovered2_auth.py` 只在使用者 Windows 電腦把需用的圖片／影片／Theme 複製到 `client/ui/private_recovered2/`，由根 `.gitignore` 排除；不帶入 Recovered2 的 Gameplay Script／NetworkManager／密碼持久化程式。
+- `client/ui/skins/recovered2_local.json` 是可抽換皮膚宣告，原始資產未安裝時不會出現在可選清單；`client/ui/recovered2_auth_shell.gd` 在可用時按照 Recovered2 的 1200×900 版型呈現登入、三欄選角、創角背景與其 Theme、登入影片。按鈕與輸入只委派給**同一個 SGTest SessionPanel 的登入／創角／選角指令**，不得建立第二份 Session／網路協定／WorldState。
+- `client/app/main.gd` 僅在 `recovered2_local` 且登入前啟用外部呈現層；SGTest 原 SessionPanel 在畫面外保持活著；切換其他皮膚或進入世界即恢復原本 UI。三個畫面右上角可切換皮膚，無須重新登入。
+- 已知功能差異：SGTest Server 僅支援角色名稱、欄位等已實作欄位。Recovered2 的三角色外觀紙娃娃、髮型／種族／能力點／角色密碼／刪除角色尚**未連接權威玩法**，UI 要標示不可用，不能製作假按鈕。
+- 驗收：`client/tests/test_recovered2_local_ui.gd` 使用 Godot GPU 實際擷取三張 1280×900 畫面，測試使用原始 Theme／影片／PNG、登入委派、選角委派、創角委派、切換皮膚不重建 Session。無私有素材的 GitHub CI 會跳過本機視覺測試；可另由正式 Host TLS 整合測試覆蓋玩法流程。
+
 ## 職責分離（不要為了分層先建立空檔案）
 
 | 責任 | 輸入 | 輸出 | 不可以做 |

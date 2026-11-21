@@ -23,6 +23,8 @@ static func _profiles() -> Array[Dictionary]:
 			SKIN_DIRECTORY.path_join(file)))
 		if not value is Dictionary:
 			continue
+		if bool(value.get("requires_local_assets",false)) and not FileAccess.file_exists(str(value.get("source_theme",""))):
+			continue
 		if str(value.get("id","")) != id or str(value.get("name","")).is_empty() or str(value.get("layout","")) not in ["tabs","stacked"]:
 			continue
 		var valid_colors := true
@@ -141,6 +143,8 @@ static func apply(id: String, toolbar: PanelContainer, session_panel: PanelConta
 	var colors := _palette(id)
 	if not session_panel.set_ui_layout(str(colors.layout)):
 		return false
+	# External Recovered2 Theme is scoped to the three local auth scenes;
+	# never replace SGTest's unrelated in-world gameplay controls with it.
 	var theme := build_theme(id)
 	toolbar.theme = theme
 	session_panel.theme = theme

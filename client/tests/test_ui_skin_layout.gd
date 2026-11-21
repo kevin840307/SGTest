@@ -22,6 +22,10 @@ func _run() -> void:
 	panel.show()
 	# Enable the normal app layout after scene setup; the offline test does
 	# not require a private PCK or a network Server.
+	# Validate the shipped Retro layout independently of the persisted
+	# local private Recovered2 preview. Never mutate user UI settings here.
+	app._current_skin = "retro_terminal"
+	Skins.apply("retro_terminal",app.toolbar,panel)
 	app.auto_start = true
 	app._update_ui_stage(true)
 	# Headless Godot may force a 64px viewport: check the layout policy,
@@ -33,7 +37,7 @@ func _run() -> void:
 	var session = panel.session
 	var controls = [panel.inventory_panel, panel.chat_panel, panel.npc_shop_panel,
 		panel.trade_panel, panel.quest_panel, panel.skill_area_button]
-	if app.skin_picker.item_count != 4 or layout.group_count() != 4:
+	if app.skin_picker.item_count < 4 or layout.group_count() != 4:
 		_fail(app,"skin picker or gameplay group registry missing")
 		return
 	var palette_colors := []
