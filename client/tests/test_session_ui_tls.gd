@@ -619,15 +619,15 @@ func run() -> void:
 	if not bool(pvp.get("pvp_known",false)) or int(pvp.get("pvp_mode",-1)) != 0 or bool(pvp.get("pvp_map_allows",true)) or int(pvp.get("pvp_sequence",0)) != 1 or int(pvp.get("pending_pvp_sequence",-1)) != 0 or int(pvp.get("last_pvp_result",{}).get("status",-1)) != 0:
 		fail("Real TLS PvP query missing or Map15 NonPK authority incorrect: %s" % pvp)
 		return
-	if not bool(entered.get("inventory_ready",false)) or not (entered.get("inventory_items",{}) as Dictionary).is_empty() or not panel.inventory_button.visible:
+	if not bool(entered.get("inventory_ready",false)) or not (entered.get("inventory_items",{}) as Dictionary).is_empty() or not panel.inventory_panel.inventory_button.visible:
 		fail("Real TLS login did not supply complete empty durable inventory baseline")
 		return
-	panel.inventory_button.pressed.emit()
-	if not panel.inventory_preview.visible or not panel.inventory_preview.text.contains("沒有物品"):
+	panel.inventory_panel.inventory_button.pressed.emit()
+	if not panel.inventory_panel.inventory_preview.visible or not panel.inventory_panel.inventory_preview.text.contains("沒有物品"):
 		fail("Inventory UI failed to render authoritative zero-item baseline")
 		return
-	panel.inventory_button.pressed.emit()
-	if panel.inventory_preview.visible:
+	panel.inventory_panel.inventory_button.pressed.emit()
+	if panel.inventory_panel.inventory_preview.visible:
 		fail("Inventory UI did not collapse")
 		return
 	if not panel.submit_move(Vector2(24,8)):
@@ -641,7 +641,7 @@ func run() -> void:
 		fail("UI path did not receive authoritative receipt")
 		return
 	panel.logout_button.pressed.emit()
-	if panel.inventory_button.visible or panel.inventory_preview.visible:
+	if panel.inventory_panel.inventory_button.visible or panel.inventory_panel.inventory_preview.visible:
 		fail("Logout left previous character inventory visible")
 		return
 	if panel.active or panel.login_button.disabled or app._map_buttons[0].disabled or not panel.characters.item_count == 0:
@@ -748,8 +748,8 @@ func run() -> void:
 		"inventory_revision":1,"inventory_items":{7001:{
 			"item_uid":7001,"item_definition_id":2701,
 			"quantity":2,"drop_id":501}}}
-	panel._update_inventory_ui()
-	if not panel.inventory_preview.text.contains("2701 ×2") or not panel.inventory_button.text.contains("1 件"):
+	panel._refresh_inventory_panel()
+	if not panel.inventory_panel.inventory_preview.text.contains("2701 ×2") or not panel.inventory_panel.inventory_button.text.contains("1 件"):
 		fail("Durable inventory items not reflected in UI")
 		return
 	panel._latest = {"state":State.STATE_IN_WORLD,"world_ready":true,
@@ -758,12 +758,12 @@ func run() -> void:
 		"inventory_revision":1,"inventory_items":{7002:{
 			"item_uid":7002,"item_definition_id":3701,
 			"quantity":3,"drop_id":502}}}
-	panel._update_inventory_ui()
-	if panel.inventory_preview.text.contains("2701") or not panel.inventory_preview.text.contains("3701 ×3"):
+	panel._refresh_inventory_panel()
+	if panel.inventory_panel.inventory_preview.text.contains("2701") or not panel.inventory_panel.inventory_preview.text.contains("3701 ×3"):
 		fail("Same inventory revision across new character retained stale UI")
 		return
-	panel.inventory_button.pressed.emit()
-	if not panel.inventory_preview.visible:
+	panel.inventory_panel.inventory_button.pressed.emit()
+	if not panel.inventory_panel.inventory_preview.visible:
 		fail("Inventory did not expand while loaded")
 		return
 	var metadata := JSON.stringify({
@@ -786,80 +786,80 @@ func run() -> void:
 			"enhancement_level":5 if index == 0 else 0}
 	panel._latest.inventory_items = many
 	panel._latest.inventory_revision = 2
-	panel._update_inventory_ui()
-	if not panel.inventory_preview.text.contains("測試素材原名") or not panel.inventory_page_label.text.contains("1 / 2") or panel.inventory_preview.text.contains("UID 10080"):
+	panel._refresh_inventory_panel()
+	if not panel.inventory_panel.inventory_preview.text.contains("測試素材原名") or not panel.inventory_panel.inventory_page_label.text.contains("1 / 2") or panel.inventory_panel.inventory_preview.text.contains("UID 10080"):
 		fail("Inventory page one did not use source-derived name and 80-row cap")
 		return
-	panel.inventory_next.pressed.emit()
-	if not panel.inventory_preview.text.contains("UID 10080") or panel.inventory_preview.text.contains("UID 10000") or not panel.inventory_page_label.text.contains("2 / 2"):
+	panel.inventory_panel.inventory_next.pressed.emit()
+	if not panel.inventory_panel.inventory_preview.text.contains("UID 10080") or panel.inventory_panel.inventory_preview.text.contains("UID 10000") or not panel.inventory_panel.inventory_page_label.text.contains("2 / 2"):
 		fail("Inventory next page did not display remaining five items")
 		return
-	panel.inventory_search.text = "2701"
-	panel.inventory_search.text_changed.emit("2701")
-	if not panel.inventory_preview.text.contains("測試素材原名") or panel.inventory_preview.text.contains("UID 10080") or not panel.inventory_page_label.text.contains("1 / 1"):
+	panel.inventory_panel.inventory_search.text = "2701"
+	panel.inventory_panel.inventory_search.text_changed.emit("2701")
+	if not panel.inventory_panel.inventory_preview.text.contains("測試素材原名") or panel.inventory_panel.inventory_preview.text.contains("UID 10080") or not panel.inventory_panel.inventory_page_label.text.contains("1 / 1"):
 		fail("Inventory search failed to filter on authoritative item definition")
 		return
-	if panel.recovery_picker.item_count != 1 or panel.recovery_button.disabled:
+	if panel.inventory_panel.recovery_picker.item_count != 1 or panel.inventory_panel.recovery_button.disabled:
 		fail("Inventory recovery UID selector did not resolve visible page")
 		return
-	panel.recovery_button.pressed.emit()
-	if stub.uses != 1 or stub.last_use_uid != 10000 or not panel.recovery_button.disabled:
+	panel.inventory_panel.recovery_button.pressed.emit()
+	if stub.uses != 1 or stub.last_use_uid != 10000 or not panel.inventory_panel.recovery_button.disabled:
 		fail("Recovery UI did not send one chosen UID or left double-click enabled")
 		return
 	panel._latest.pending_recovery_sequence = 1
-	panel._update_inventory_ui()
-	if not panel.recovery_button.disabled:
+	panel._refresh_inventory_panel()
+	if not panel.inventory_panel.recovery_button.disabled:
 		fail("Pending authoritative recovery result allowed another click")
 		return
 	panel._latest.pending_recovery_sequence = 0
 	panel._latest.last_recovery_result = {
 		"status":0,"current_hp":90,"max_hp":100,"remaining_quantity":1}
 	panel._latest.inventory_revision = 3
-	panel._update_inventory_ui()
-	if not panel.recovery_status.text.contains("90 / 100"):
+	panel._refresh_inventory_panel()
+	if not panel.inventory_panel.recovery_status.text.contains("90 / 100"):
 		fail("Recovery status did not display authoritative committed HP")
 		return
-	if panel.discard_button.disabled:
+	if panel.inventory_panel.discard_button.disabled:
 		fail("Loaded inventory did not expose server-authoritative discard")
 		return
-	if int(panel.discard_quantity.max_value) != 3 or int(panel.discard_quantity.value) != 1:
+	if int(panel.inventory_panel.discard_quantity.max_value) != 3 or int(panel.inventory_panel.discard_quantity.value) != 1:
 		fail("Discard quantity did not bind to selected authoritative stack")
 		return
-	panel.discard_all_button.pressed.emit()
-	if int(panel.discard_quantity.value) != 3:
+	panel.inventory_panel.discard_all_button.pressed.emit()
+	if int(panel.inventory_panel.discard_quantity.value) != 3:
 		fail("Discard-all did not select full stack")
 		return
-	panel.discard_button.pressed.emit()
-	if stub.discards != 0 or not panel.discard_confirm.dialog_text.contains("UID 10000"):
+	panel.inventory_panel.discard_button.pressed.emit()
+	if stub.discards != 0 or not panel.inventory_panel.discard_confirm.dialog_text.contains("UID 10000"):
 		fail("Destructive discard bypassed confirmation")
 		return
-	panel.discard_confirm.canceled.emit()
-	if not panel._pending_discard_confirmation.is_empty() or stub.discards != 0:
+	panel.inventory_panel.discard_confirm.canceled.emit()
+	if not panel.inventory_panel._pending_discard_confirmation.is_empty() or stub.discards != 0:
 		fail("Cancelled permanent discard left a stale confirmation lock")
 		return
-	panel.discard_button.pressed.emit()
+	panel.inventory_panel.discard_button.pressed.emit()
 	panel._latest.actor_id = 99
-	panel.discard_confirm.confirmed.emit()
+	panel.inventory_panel.discard_confirm.confirmed.emit()
 	if stub.discards != 0:
 		fail("Confirmed discard crossed character identity")
 		return
 	panel._latest.actor_id = 22
-	panel.discard_button.pressed.emit()
-	panel.discard_confirm.confirmed.emit()
-	if stub.discards != 1 or stub.last_discard_uid != 10000 or stub.last_discard_quantity != 3 or not panel.discard_button.disabled:
+	panel.inventory_panel.discard_button.pressed.emit()
+	panel.inventory_panel.discard_confirm.confirmed.emit()
+	if stub.discards != 1 or stub.last_discard_uid != 10000 or stub.last_discard_quantity != 3 or not panel.inventory_panel.discard_button.disabled:
 		fail("Confirmed full-stack discard did not send exact UID and quantity once")
 		return
 	panel._latest.pending_discard_sequence = 1
-	panel._update_inventory_ui()
-	if not panel.discard_button.disabled or not panel.recovery_button.disabled:
+	panel._refresh_inventory_panel()
+	if not panel.inventory_panel.discard_button.disabled or not panel.inventory_panel.recovery_button.disabled:
 		fail("Pending discard allowed another inventory mutation")
 		return
 	panel._latest.pending_discard_sequence = 0
 	panel._latest.last_discard_result = {
 		"status":0,"discarded_quantity":3,"remaining_quantity":0}
 	panel._latest.inventory_revision = 4
-	panel._update_inventory_ui()
-	if not panel.discard_status.text.contains("已移除 3"):
+	panel._refresh_inventory_panel()
+	if not panel.inventory_panel.discard_status.text.contains("已移除 3"):
 		fail("Discard status did not display authoritative committed quantity")
 		return
 
@@ -966,33 +966,33 @@ func run() -> void:
 	panel._latest.equipment_ready = false
 	panel._latest.equipment_items = {}
 	panel._latest.last_equipment_result = {}
-	panel._update_equipment_ui()
-	if not panel.equipment_equip_button.disabled or not panel.equipment_unequip_button.disabled or not panel.equipment_status.text.contains("尚未由伺服器啟用"):
+	panel._refresh_inventory_panel()
+	if not panel.inventory_panel.equipment_equip_button.disabled or not panel.inventory_panel.equipment_unequip_button.disabled or not panel.inventory_panel.equipment_status.text.contains("尚未由伺服器啟用"):
 		fail("Equipment UI was usable without authoritative baseline")
 		return
 	panel._latest.equipment_ready = true
 	panel._latest.equipment_revision = 1
 	panel._latest.equipment_items = {30000:{
 		"item_uid":30000,"slot_id":4,"item_definition_id":4001,"drop_id":0}}
-	panel._update_equipment_ui()
-	if panel.equipment_inventory_picker.item_count == 0 or panel.equipment_equipped_picker.item_count != 1 or panel.equipment_equip_button.disabled or panel.equipment_unequip_button.disabled:
+	panel._refresh_inventory_panel()
+	if panel.inventory_panel.equipment_inventory_picker.item_count == 0 or panel.inventory_panel.equipment_equipped_picker.item_count != 1 or panel.inventory_panel.equipment_equip_button.disabled or panel.inventory_panel.equipment_unequip_button.disabled:
 		fail("Authoritative equipment baseline was not rendered as playable controls")
 		return
-	if not panel.equipment_equipped_picker.get_item_text(0).contains("裝備欄位 4"):
+	if not panel.inventory_panel.equipment_equipped_picker.get_item_text(0).contains("裝備欄位 4"):
 		fail("Equipment UI guessed or hid opaque server slot id")
 		return
-	panel.equipment_equip_button.pressed.emit()
+	panel.inventory_panel.equipment_equip_button.pressed.emit()
 	if stub.equipment_equips != 1 or stub.last_equipment_uid != 10000:
 		fail("Equipment equip UI did not use selected inventory UID")
 		return
-	panel._update_equipment_ui()
-	panel.equipment_unequip_button.pressed.emit()
+	panel._refresh_inventory_panel()
+	panel.inventory_panel.equipment_unequip_button.pressed.emit()
 	if stub.equipment_unequips != 1 or stub.last_equipment_uid != 30000:
 		fail("Equipment unequip UI did not use selected equipped UID")
 		return
 	panel._latest.pending_equipment_sequence = 1
-	panel._update_equipment_ui()
-	if not panel.equipment_equip_button.disabled or not panel.equipment_unequip_button.disabled:
+	panel._refresh_inventory_panel()
+	if not panel.inventory_panel.equipment_equip_button.disabled or not panel.inventory_panel.equipment_unequip_button.disabled:
 		fail("Pending equipment mutation allowed another item move")
 		return
 	panel._latest.pending_equipment_sequence = 0
@@ -1006,7 +1006,7 @@ func run() -> void:
 	panel._latest.last_bank_open_status = -1
 	panel._latest.last_bank_result = {}
 	panel._update_bank_ui()
-	if panel.bank_open_button.get_parent() == null or panel.equipment_equip_button.get_parent() == null:
+	if panel.bank_open_button.get_parent() == null or panel.inventory_panel.equipment_equip_button.get_parent() == null:
 		fail("Equipment/bank controls were not attached to the visible SessionPanel")
 		return
 	panel.bank_npc_input.value = 77
@@ -1735,14 +1735,14 @@ func run() -> void:
 	if not panel.pvp_white_button.disabled or not panel.pvp_blue_button.disabled or not panel.pvp_attack_button.disabled:
 		fail("Dead player could mutate PvP mode or attack")
 		return
-	panel._update_inventory_ui()
-	if not panel.recovery_button.disabled or panel.submit_recovery_use(10000):
+	panel._refresh_inventory_panel()
+	if not panel.inventory_panel.recovery_button.disabled or panel.inventory_panel.submit_recovery_use(10000):
 		fail("Dead character could submit recovery use")
 		return
 	panel._latest.player_dead = false
 	panel._latest.inventory_ready = false
-	panel._update_inventory_ui()
-	if panel.inventory_preview.visible or not panel.inventory_button.disabled:
+	panel._refresh_inventory_panel()
+	if panel.inventory_panel.inventory_preview.visible or not panel.inventory_panel.inventory_button.disabled:
 		fail("Incomplete inventory leaked prior character item list")
 		return
 	panel.active = false

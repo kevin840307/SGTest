@@ -19,6 +19,8 @@
 
 ## 從哪份文件開始重建
 
+實際目錄與啟動入口見 [架構全貌](docs/ARCHITECTURE.md#實際目錄與入口)，還沒建立的功能檔與驗收點見 [架構 TODO](docs/ARCHITECTURE_TODO.md)。
+
 1. [正式架構總覽與重建決策](docs/ARCHITECTURE.md)
 2. [Client 新設計](docs/CLIENT_ARCHITECTURE.md) 與 [Server 新設計](docs/SERVER_ARCHITECTURE.md)
 3. [Asset 結構](docs/ASSET_ARCHITECTURE.md)、[素材轉換](docs/ASSET_CONVERTER.md)、[歷史效能證據](docs/research/ASSET_RENDERER_EVIDENCE.md)

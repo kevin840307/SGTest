@@ -69,17 +69,10 @@ World 擁有權威狀態。Map 提供碰撞與尋路查詢，NPC 提供體系內
 | 登入、連線及封包 | Server `Identity/`、`Gateway/`、`Wire/`；Client `session/`、`network/` |
 | PvP | Server `Pvp/PvpMapPolicy.cs` 和 `Pvp/PvpCrimePolicy.cs`；模式及標記型別隨後者放置。Client `pvp/` 呈現狀態 |
 | 玩家交易 | Server `Trade/PlayerTradeCoordinator.cs` 與 `Trade/TradeCommandIngress.cs`；Client `trade/trade_panel.gd` |
+| 背包與穿戴 | Server `Identity/SqliteIdentityStore.Equipment.cs`、`Identity/SqliteIdentityStore.InventoryDiscard.cs`；Client `inventory/inventory_panel.gd`、`item_catalog.gd` |
 | 資產 | Client `asset_store/` 管理執行期載入；`assets/` 放 Converter 輸出 |
 
-| TODO | 最先落點 | 屆時何時建立新目錄 |
-|---|---|---|
-| NPC 選單與呈現 | Server 已有 `Npc/`；Client 入口目前由 App／SessionPanel 組裝 | 移出第一組 NPC 專屬 UI 時建立 `client/npc/`，由 Session 送意圖 |
-| 隊伍和聊天 | Server `Party/` 及 Gateway；Client `session/` | 隊伍名單與邀請可獨立時建立 `client/party/`；聊天頻道政策集中後建立 Server `Chat/`，Client 聊天面板移出時建立 `client/chat/` |
-| 玩家商店、銀行、裝備、倉庫 | Server `PlayerShop/`、`Npc/`、`Identity/`；Client `session/`、`inventory/` | 獨立擺攤／購買 UI 移出時建立 `client/player_shop/`；其他介面先按實際工作流程歸屬 |
-| 寵物 | World 排程與既有角色儲存 | 跟隨／召喚有自己的狀態及測試時建立 Server `Pet/`，連接畫面時建立 Client `pet/` |
-| 機甲 | World 的權威角色狀態與既有戰鬥流程 | 乘降及能力有明確規則時建立 Server `Mecha/`，獨立操作或呈現時建立 Client `mecha/` |
-| AFK／失焦 | Client `app/` 協調、`world/` 管畫面和資源 | 先接既有生命週期。只有出現共用的 AFK 策略時才建立 `client/afk/` |
-| 好友與發行 | 好友依目前範圍暫緩；發行進度見 `todo.txt` 與 `TEST_PLAN.md` | 發行沿用現有 Host、Converter、CI 與測試入口 |
+尚未建立或仍待接入的檔案、資料邊界與驗收項目統一列在 [架構 TODO](ARCHITECTURE_TODO.md)。
 
 Client 模組讀取快照並由 Session 送出意圖。Server Gateway 管身分與連線，對應功能模組管理玩法規則。共用交易與鎖順序交由協調器管理，保留現有 SQLite 原子性。
 
@@ -117,52 +110,56 @@ Client Network I/O → Decoder → World Reducer → WorldState
 
 Render FPS 可 0 / 30 / 60 / 90；network/Client Reducer/Server tick 不可因此節流。Server 30Hz、Snapshot 10Hz 為**原型參考 baseline**，新版本須測試後決定。
 
-## 目前儲存庫
+## 實際目錄與入口
 
-- tools/asset_converter：唯一正式素材 Converter；保留轉換／研究／格式測試。
-- tools/tests：保留 Converter 契約／格式測試及獨立 Wire/AOI 合成比較 Probe；後者不是可執行 Client/Server，也不能當成真實 E2E Gate。
-- client/：只有 README、assets 輸出定位標記；**無 Godot 專案**。
-- server/：只有 README；**無 C# 專案**。
-- docs/：上述設計文件；docs/research 為歷史研究原文彙編。
-- SPEC.md：當期核心規格與技術契約；舊 SPEC 全文僅保留於 research 歷史彙編。
-- todo.txt：**新版唯一進度入口**。
-
-請按照 todo.txt 逐項實作。不要把 Git 歷史中的舊 main.gd 或舊 Server World 複製回來作新版骨架。
-## 建議的最小目錄配置（功能先於分類）
-
-以下是**逐步建立時的目標目錄**，不是宣稱目前已存在：
+這棵樹列出目前正式 Git 檔案的主要結構。預計新增的檔案及其責任見 [架構 TODO](ARCHITECTURE_TODO.md)。
 
 ```text
 client/
   project.godot
-  scenes/                     # 啟動畫面、World、UI，只有真的需要才新增
-  scripts/
-    app/                      # 極薄啟動與生命週期組裝
-    network/                  # Transport、Codec、bounded message queues
-    world/                    # State、Reducer、prediction、navigation、AOI
-    rendering/                # World Y-sort、動畫、插值與視覺快取
-    assets/                   # 唯一 AssetCatalog / AssetStore
-    ui/                       # 控制項／Theme／ViewModel
-  assets/                     # Converter 輸出；各原素材各自獨立
+  app/                      # main.tscn / main.gd，場景組裝與輸入
+  network/                  # TLS 收送、封包編解碼
+  session/                  # 登入、選角、連線世代、重連、介面組裝
+  world/                    # 權威快照 reducer、世界畫面、相機、排序
+  map/                      # 地形、建物、遮擋
+  player/                   # 角色呈現
+  monster/                  # 怪物呈現
+  pvp/                      # PvP 名稱標記
+  inventory/                # 背包與裝備面板
+  trade/                    # 玩家交易面板
+  movement/                 # 移動取樣與輸入狀態
+  animation/                # 共用 ACT 時序
+  asset_store/              # 執行期素材載入與釋放
+  assets/                   # Converter 輸出
+  tests/                    # Godot 定向測試與跨程序驗收
 server/
-  src/
-    Network/                  # Connection、Wire、序號／封包驗證
-    World/                    # Map authoritative tick、AOI、Blocking、A*
-    Gameplay/                 # Combat、Monster AI、Drops、Items（需要時拆）
-    Accounts/                 # 登入／角色
-    Persistence/              # SQLite／交易
-  tests/
-  content/                    # Converter 產出；不包含貼圖
+  host/SGTest.Server.Host/  # Program.cs，組裝與啟動 .NET Host
+  src/SGTest.Server/
+    Gateway/                # 登入及指令路由、連線限制
+    Wire/                   # 協定與編解碼
+    World/                  # 單寫者狀態與 Tick
+    Map/                    # Blocking 與尋路
+    Visibility/             # AOI
+    Identity/               # 帳號、角色與 SQLite 交易
+    Npc/                    # NPC 可互動資料與服務規則
+    Monster/                # 怪物模擬與戰利品協調
+    Combat/                 # 傷害結算
+    Skill/                  # 技能規則
+    Pvp/                    # 玩家對戰規則
+    Party/                  # 隊伍狀態與操作
+    Trade/                  # 玩家雙方交易
+    PlayerShop/             # 玩家擺攤
+  tests/                    # Server Checks、Godot TLS LoginFixture
 tools/
-  asset_converter/            # 唯一正式轉換器（source/atlas/content）
-  tests/                      # 與轉換器相關的研究／合約驗證
-docs/                         # 少量正式設計；research 為歷史證據彙編
+  asset_converter/         # cli.py；source/ atlas/ content/；runtime_pack.py
+  tests/                   # Converter 契約與獨立比較
+docs/                       # 架構、規格與測試；research/ 為歷史證據
+SPEC.md                     # 核心規格與技術契約
+todo.txt                    # 任務順序、完成狀態、驗證證據
+.github/workflows/          # CI 驗證
 ```
 
-不事先建立空的 Manager、Repository、Service、Engine 或不同類型專用 Cache；
-未來若設計真正需要再拆。Client 和 Server 共用**規格／資料格式／測試向量**，
-不共用彼此 executable code。Windows／macOS 使用相同 logical asset identity；
-Texture import／發行包可有平台差異。
+Player、Monster、Trade 等功能依自己的狀態與流程分組。Client 和 Server 共用協定、素材資料契約與測試向量，各自有可執行程式。跨端驗收從 Host、Godot 與 Converter 的現有入口開始。
 
 ## 交互關注的責任及不可妥協條件
 
