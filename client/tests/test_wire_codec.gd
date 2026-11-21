@@ -1,6 +1,7 @@
 extends SceneTree
 
 const WireCodec = preload("res://network/wire_codec.gd")
+const FrameCodec = preload("res://network/frame_codec.gd")
 const MOVE_TARGET_HEX := "1C00000001000100090000000000000007000000D819000078120000"
 const MOVE_RECEIPT_HEX := "1E0000000100020009000000000000000700000000002A00000000000000"
 const AUTH_REQUEST_HEX := "2300000001000A0007001000757365725F303150617373776F72642D31323334353621"
@@ -24,6 +25,40 @@ func _initialize() -> void:
 		return
 	if WireCodec.decode_move_target(move) != {"map_epoch": 9, "movement_sequence": 7, "target_x": 6616, "target_y": 4728}:
 		_fail("MoveTarget roundtrip")
+		return
+	# Header framing is shared by all feature payloads but V1 values are
+	# exclusively declared by WireCodec, not copied into FrameCodec.
+	var header := FrameCodec.writer(
+		WireCodec.MOVE_TARGET_FRAME_BYTES, WireCodec.VERSION, WireCodec.OPCODE_MOVE_TARGET)
+	if header.data_array != move.slice(0, WireCodec.HEADER_BYTES):
+		_fail("shared header writer changed golden V1 bytes")
+		return
+	var decoded_header := FrameCodec.reader(move, 8)
+	if decoded_header.get_64() != 9 or decoded_header.get_u32() != 7:
+		_fail("shared little-endian reader changed payload alignment")
+		return
+	if (
+		not FrameCodec.valid_header(
+			move, WireCodec.VERSION, WireCodec.HEADER_BYTES, WireCodec.MAX_FRAME_BYTES,
+			WireCodec.OPCODE_MOVE_TARGET, WireCodec.MOVE_TARGET_FRAME_BYTES) or
+		FrameCodec.valid_header(
+			_mutate_u16(move, 4, 2), WireCodec.VERSION, WireCodec.HEADER_BYTES,
+			WireCodec.MAX_FRAME_BYTES, WireCodec.OPCODE_MOVE_TARGET,
+			WireCodec.MOVE_TARGET_FRAME_BYTES) or
+		FrameCodec.valid_header(
+			_mutate_u16(move, 6, 999), WireCodec.VERSION, WireCodec.HEADER_BYTES,
+			WireCodec.MAX_FRAME_BYTES, WireCodec.OPCODE_MOVE_TARGET,
+			WireCodec.MOVE_TARGET_FRAME_BYTES) or
+		FrameCodec.valid_header(
+			_mutate_u32(move, 0, 27), WireCodec.VERSION, WireCodec.HEADER_BYTES,
+			WireCodec.MAX_FRAME_BYTES, WireCodec.OPCODE_MOVE_TARGET,
+			WireCodec.MOVE_TARGET_FRAME_BYTES) or
+		FrameCodec.valid_header(
+			move.slice(0, move.size() - 1), WireCodec.VERSION, WireCodec.HEADER_BYTES,
+			WireCodec.MAX_FRAME_BYTES, WireCodec.OPCODE_MOVE_TARGET,
+			WireCodec.MOVE_TARGET_FRAME_BYTES)
+	):
+		_fail("shared header gate did not reject invalid V1 framing")
 		return
 	var receipt := MOVE_RECEIPT_HEX.hex_decode()
 	if WireCodec.decode_move_receipt(receipt) != {"map_epoch": 9, "movement_sequence": 7, "status": 0, "server_tick": 42}:

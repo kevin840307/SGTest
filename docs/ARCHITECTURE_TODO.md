@@ -7,6 +7,7 @@
 | Client Session 指令入口 | [x] `client/session/client_session.gd` 的巨大 `_process_first_intent` 按功能提取單一 FIFO Handler 方法 | 不新增 State/Queue/Transport；真 TLS PlayerShop、Quest、Trade、PvP 及社交回歸為驗收 |
 | Server SQLite Schema／Combat | [x] `Identity/SqliteIdentityStore.Schema.cs`、`.Combat.cs` 及 `IdentityContracts.cs` 承接獨立責任 | 保留 Schema v23／WAL／migration backup／combat transaction；Server 265 checks |
 | Server Wire 分區 | [x] `WireProtocol.Combat.cs`、`.Identity.cs`、`.Inventory.cs`、`.Shop.cs`、`.World.cs` 按功能承接 Codec | V1 Opcode/Header 不變；Client 跨端 golden vectors 與 Server wire Gate |
+| Client Wire Frame 基礎去重 | [x] `network/frame_codec.gd` 專管純 framing；`wire_codec.gd` 繼續持有唯一 V1 constants／opcode／payload | 原有 24 個 Encoder 改共用 header writer；固定與可變長度 fail-closed、golden bytes、World／Combat／TLS 回歸 |
 | Server Auth binding | [x] `IdentityTlsAuthorization.Binding.cs` 承接身分＋World Actor 綁定 | 原密鑰／身分／Actor cleanup、真 TLS Auth／重連 E2E 保持 |
 | Server Gameplay Gateway 瘦身 | [ ] `IdentityTlsAuthorization.cs` 仍有巨大 socket/gameplay 流程，逐步抽出經驗證的 domain command gate | 不新增可繞過身份／MapEpoch 的 dispatch 路徑；Server TLS 全量回歸 |
 | Server Inventory 物品命令 | [x] `Inventory/InventoryCommandHandler.cs` 接手 Pickup、Equipment、Discard 三項可信 UID 操作；不新增第二個 inventory owner | 沿用同一 gameplayGate／WorldResultRouter、SQLite commit-first／AOI 掉落取消順序與可靠回覆；Server TLS、物品回歸及架構 Gate |

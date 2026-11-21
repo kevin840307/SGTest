@@ -369,6 +369,32 @@ class ArchitectureConventionsChecks(unittest.TestCase):
                 self.assertEqual(source.count("func " + name + "("), 1)
 
 
+    def test_client_framing_is_pure_and_wire_v1_contracts_have_one_owner(self) -> None:
+        wire = WIRE_CODEC.read_text(encoding="utf-8-sig")
+        framing = (CLIENT / "network" / "frame_codec.gd").read_text(
+            encoding="utf-8-sig")
+        self.assertIn('const FrameCodec = preload("res://network/frame_codec.gd")', wire)
+        self.assertIn("const VERSION := 1", wire)
+        self.assertIn("const HEADER_BYTES := 8", wire)
+        self.assertIn("static func _writer(frame_bytes: int, opcode: int)", wire)
+        self.assertIn("return FrameCodec.writer(frame_bytes, VERSION, opcode)", wire)
+        self.assertIn("return FrameCodec.reader(frame, offset)", wire)
+        self.assertIn("return FrameCodec.length_prefix(buffer, HEADER_BYTES, MAX_FRAME_BYTES)", wire)
+        self.assertIn("return FrameCodec.valid_variable_header(", wire)
+        self.assertIn("return FrameCodec.valid_header(", wire)
+        self.assertGreaterEqual(wire.count("var writer := _writer("), 20)
+        self.assertNotRegex(framing, r"(?m)^const (?:VERSION|OPCODE_|HEADER_BYTES|MAX_FRAME_BYTES)")
+        for forbidden in ("WorldState", "ClientSession", "PacketTransport",
+                          "StreamPeerTCP", "TCPClient", "OS.get_", "Thread.new"):
+            self.assertNotIn(forbidden, framing)
+        for helper in ("reader", "writer", "length_prefix", "valid_header",
+                       "valid_variable_header"):
+            self.assertEqual(framing.count("static func " + helper + "("), 1)
+        tests = (CLIENT / "tests" / "test_wire_codec.gd").read_text(
+            encoding="utf-8-sig")
+        self.assertIn("shared header writer changed golden V1 bytes", tests)
+        self.assertIn("shared header gate did not reject invalid V1 framing", tests)
+
     def test_wire_contracts_have_one_owner(self) -> None:
         contracts = WIRE_CONTRACTS.read_text(encoding="utf-8-sig")
         self.assertIn("public enum WireOpcode : ushort", contracts)

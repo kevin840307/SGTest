@@ -1,5 +1,7 @@
 extends RefCounted
 
+const FrameCodec = preload("res://network/frame_codec.gd")
+
 const VERSION := 1
 const HEADER_BYTES := 8
 const MAX_FRAME_BYTES := 65536
@@ -246,11 +248,7 @@ const MAX_MONEY := 9000000000000000
 static func encode_move_target(map_epoch: int, movement_sequence: int, target_x: int, target_y: int) -> PackedByteArray:
 	if map_epoch <= 0 or movement_sequence <= 0 or movement_sequence > 0xffffffff:
 		return PackedByteArray()
-	var writer := StreamPeerBuffer.new()
-	writer.big_endian = false
-	writer.put_u32(MOVE_TARGET_FRAME_BYTES)
-	writer.put_u16(VERSION)
-	writer.put_u16(OPCODE_MOVE_TARGET)
+	var writer := _writer(MOVE_TARGET_FRAME_BYTES, OPCODE_MOVE_TARGET)
 	writer.put_64(map_epoch)
 	writer.put_u32(movement_sequence)
 	writer.put_32(target_x)
@@ -284,11 +282,7 @@ static func decode_move_receipt(frame: PackedByteArray) -> Dictionary:
 static func encode_npc_interact(map_epoch: int, interaction_sequence: int, npc_spawn_id: int) -> PackedByteArray:
 	if map_epoch <= 0 or interaction_sequence <= 0 or interaction_sequence > 0xffffffff or npc_spawn_id <= 0:
 		return PackedByteArray()
-	var writer := StreamPeerBuffer.new()
-	writer.big_endian = false
-	writer.put_u32(NPC_INTERACT_FRAME_BYTES)
-	writer.put_u16(VERSION)
-	writer.put_u16(OPCODE_NPC_INTERACT)
+	var writer := _writer(NPC_INTERACT_FRAME_BYTES, OPCODE_NPC_INTERACT)
 	writer.put_64(map_epoch)
 	writer.put_u32(interaction_sequence)
 	writer.put_32(npc_spawn_id)
@@ -324,11 +318,7 @@ static func decode_npc_interact_result(frame: PackedByteArray) -> Dictionary:
 static func encode_normal_attack(map_epoch: int, attack_sequence: int, target_entity_id: int) -> PackedByteArray:
 	if map_epoch <= 0 or attack_sequence <= 0 or attack_sequence > 0xffffffff or target_entity_id <= 0:
 		return PackedByteArray()
-	var writer := StreamPeerBuffer.new()
-	writer.big_endian = false
-	writer.put_u32(NORMAL_ATTACK_FRAME_BYTES)
-	writer.put_u16(VERSION)
-	writer.put_u16(OPCODE_NORMAL_ATTACK)
+	var writer := _writer(NORMAL_ATTACK_FRAME_BYTES, OPCODE_NORMAL_ATTACK)
 	writer.put_64(map_epoch)
 	writer.put_u32(attack_sequence)
 	writer.put_64(target_entity_id)
@@ -375,11 +365,7 @@ static func decode_normal_attack_result(frame: PackedByteArray) -> Dictionary:
 static func encode_skill_use(map_epoch: int, skill_sequence: int, skill_id: int, target_entity_id: int) -> PackedByteArray:
 	if map_epoch <= 0 or skill_sequence <= 0 or skill_sequence > 0xffffffff or skill_id <= 0 or skill_id > 100000000 or target_entity_id < 0:
 		return PackedByteArray()
-	var writer := StreamPeerBuffer.new()
-	writer.big_endian = false
-	writer.put_u32(SKILL_USE_FRAME_BYTES)
-	writer.put_u16(VERSION)
-	writer.put_u16(OPCODE_SKILL_USE)
+	var writer := _writer(SKILL_USE_FRAME_BYTES, OPCODE_SKILL_USE)
 	writer.put_64(map_epoch)
 	writer.put_u32(skill_sequence)
 	writer.put_32(skill_id)
@@ -565,11 +551,7 @@ static func decode_player_damage(frame: PackedByteArray) -> Dictionary:
 static func encode_player_respawn(map_epoch: int, respawn_sequence: int) -> PackedByteArray:
 	if map_epoch <= 0 or respawn_sequence <= 0 or respawn_sequence > 0xffffffff:
 		return PackedByteArray()
-	var writer := StreamPeerBuffer.new()
-	writer.big_endian = false
-	writer.put_u32(PLAYER_RESPAWN_FRAME_BYTES)
-	writer.put_u16(VERSION)
-	writer.put_u16(OPCODE_PLAYER_RESPAWN)
+	var writer := _writer(PLAYER_RESPAWN_FRAME_BYTES, OPCODE_PLAYER_RESPAWN)
 	writer.put_64(map_epoch)
 	writer.put_u32(respawn_sequence)
 	return writer.data_array
@@ -605,11 +587,7 @@ static func encode_auth_request(username: String, password: String) -> PackedByt
 	var frame_bytes := HEADER_BYTES + 4 + username_bytes.size() + password_bytes.size()
 	if frame_bytes > MAX_AUTH_REQUEST_FRAME_BYTES:
 		return PackedByteArray()
-	var writer := StreamPeerBuffer.new()
-	writer.big_endian = false
-	writer.put_u32(frame_bytes)
-	writer.put_u16(VERSION)
-	writer.put_u16(OPCODE_AUTH_REQUEST)
+	var writer := _writer(frame_bytes, OPCODE_AUTH_REQUEST)
 	writer.put_u16(username_bytes.size())
 	writer.put_u16(password_bytes.size())
 	writer.put_data(username_bytes)
@@ -637,11 +615,7 @@ static func encode_account_register_request(
 	var frame_bytes:=HEADER_BYTES+4+username_bytes.size()+password_bytes.size()
 	if frame_bytes>MAX_ACCOUNT_REGISTER_REQUEST_FRAME_BYTES:
 		return PackedByteArray()
-	var writer:=StreamPeerBuffer.new()
-	writer.big_endian=false
-	writer.put_u32(frame_bytes)
-	writer.put_u16(VERSION)
-	writer.put_u16(OPCODE_ACCOUNT_REGISTER_REQUEST)
+	var writer := _writer(frame_bytes, OPCODE_ACCOUNT_REGISTER_REQUEST)
 	writer.put_u16(username_bytes.size())
 	writer.put_u16(password_bytes.size())
 	writer.put_data(username_bytes)
@@ -700,11 +674,7 @@ static func encode_character_create(slot: int, character_name: String) -> Packed
 	if slot < 0 or slot > 31 or name_bytes.size() < 1 or name_bytes.size() > 96:
 		return PackedByteArray()
 	var frame_bytes := HEADER_BYTES + 3 + name_bytes.size()
-	var writer := StreamPeerBuffer.new()
-	writer.big_endian = false
-	writer.put_u32(frame_bytes)
-	writer.put_u16(VERSION)
-	writer.put_u16(OPCODE_CHARACTER_CREATE)
+	var writer := _writer(frame_bytes, OPCODE_CHARACTER_CREATE)
 	writer.put_u8(slot)
 	writer.put_u16(name_bytes.size())
 	writer.put_data(name_bytes)
@@ -746,11 +716,7 @@ static func decode_character_create_result(frame: PackedByteArray) -> Dictionary
 static func encode_character_choose(character_id: int) -> PackedByteArray:
 	if character_id <= 0:
 		return PackedByteArray()
-	var writer := StreamPeerBuffer.new()
-	writer.big_endian = false
-	writer.put_u32(CHARACTER_CHOOSE_FRAME_BYTES)
-	writer.put_u16(VERSION)
-	writer.put_u16(OPCODE_CHARACTER_CHOOSE)
+	var writer := _writer(CHARACTER_CHOOSE_FRAME_BYTES, OPCODE_CHARACTER_CHOOSE)
 	writer.put_64(character_id)
 	return writer.data_array
 
@@ -776,11 +742,7 @@ static func decode_character_choose_result(frame: PackedByteArray) -> Dictionary
 static func encode_world_ready_ack(map_epoch: int, server_tick: int) -> PackedByteArray:
 	if map_epoch <= 0 or server_tick < 0:
 		return PackedByteArray()
-	var writer := StreamPeerBuffer.new()
-	writer.big_endian = false
-	writer.put_u32(WORLD_READY_ACK_FRAME_BYTES)
-	writer.put_u16(VERSION)
-	writer.put_u16(OPCODE_WORLD_READY_ACK)
+	var writer := _writer(WORLD_READY_ACK_FRAME_BYTES, OPCODE_WORLD_READY_ACK)
 	writer.put_64(map_epoch)
 	writer.put_64(server_tick)
 	return writer.data_array
@@ -796,11 +758,7 @@ static func decode_world_ready_ack(frame: PackedByteArray) -> Dictionary:
 static func encode_world_resync_request(map_epoch: int) -> PackedByteArray:
 	if map_epoch <= 0:
 		return PackedByteArray()
-	var writer := StreamPeerBuffer.new()
-	writer.big_endian = false
-	writer.put_u32(WORLD_RESYNC_REQUEST_FRAME_BYTES)
-	writer.put_u16(VERSION)
-	writer.put_u16(OPCODE_WORLD_RESYNC_REQUEST)
+	var writer := _writer(WORLD_RESYNC_REQUEST_FRAME_BYTES, OPCODE_WORLD_RESYNC_REQUEST)
 	writer.put_64(map_epoch)
 	return writer.data_array
 
@@ -874,11 +832,7 @@ static func decode_monster_state(frame: PackedByteArray) -> Dictionary:
 static func encode_recovery_use(epoch: int, sequence: int, uid: int) -> PackedByteArray:
 	if epoch <= 0 or sequence < 1 or sequence > 0xffffffff or uid <= 0:
 		return PackedByteArray()
-	var writer := StreamPeerBuffer.new()
-	writer.big_endian = false
-	writer.put_u32(RECOVERY_USE_FRAME_BYTES)
-	writer.put_u16(VERSION)
-	writer.put_u16(OPCODE_RECOVERY_USE)
+	var writer := _writer(RECOVERY_USE_FRAME_BYTES, OPCODE_RECOVERY_USE)
 	writer.put_64(epoch)
 	writer.put_u32(sequence)
 	writer.put_64(uid)
@@ -912,11 +866,7 @@ static func decode_recovery_use_result(frame: PackedByteArray) -> Dictionary:
 static func encode_inventory_discard(epoch: int, sequence: int, uid: int, quantity: int) -> PackedByteArray:
 	if epoch <= 0 or sequence < 1 or sequence > 0xffffffff or uid <= 0 or quantity < 1 or quantity > 1000000:
 		return PackedByteArray()
-	var writer := StreamPeerBuffer.new()
-	writer.big_endian = false
-	writer.put_u32(INVENTORY_DISCARD_FRAME_BYTES)
-	writer.put_u16(VERSION)
-	writer.put_u16(OPCODE_INVENTORY_DISCARD)
+	var writer := _writer(INVENTORY_DISCARD_FRAME_BYTES, OPCODE_INVENTORY_DISCARD)
 	writer.put_64(epoch)
 	writer.put_u32(sequence)
 	writer.put_64(uid)
@@ -950,11 +900,7 @@ static func decode_inventory_discard_result(frame: PackedByteArray) -> Dictionar
 static func encode_ground_pickup(epoch: int, sequence: int, drop_id: int) -> PackedByteArray:
 	if epoch <= 0 or sequence < 1 or sequence > 0xffffffff or drop_id <= 0:
 		return PackedByteArray()
-	var writer := StreamPeerBuffer.new()
-	writer.big_endian = false
-	writer.put_u32(GROUND_PICKUP_FRAME_BYTES)
-	writer.put_u16(VERSION)
-	writer.put_u16(OPCODE_GROUND_PICKUP)
+	var writer := _writer(GROUND_PICKUP_FRAME_BYTES, OPCODE_GROUND_PICKUP)
 	writer.put_64(epoch)
 	writer.put_u32(sequence)
 	writer.put_64(drop_id)
@@ -1050,11 +996,7 @@ static func decode_ground_pickup_result(frame: PackedByteArray) -> Dictionary:
 static func encode_shop_open(epoch: int, sequence: int, npc_spawn_id: int) -> PackedByteArray:
 	if epoch <= 0 or sequence < 1 or sequence > 0xffffffff or npc_spawn_id <= 0:
 		return PackedByteArray()
-	var writer := StreamPeerBuffer.new()
-	writer.big_endian = false
-	writer.put_u32(SHOP_OPEN_FRAME_BYTES)
-	writer.put_u16(VERSION)
-	writer.put_u16(OPCODE_SHOP_OPEN)
+	var writer := _writer(SHOP_OPEN_FRAME_BYTES, OPCODE_SHOP_OPEN)
 	writer.put_64(epoch)
 	writer.put_u32(sequence)
 	writer.put_32(npc_spawn_id)
@@ -1094,11 +1036,7 @@ static func decode_shop_snapshot(frame: PackedByteArray) -> Dictionary:
 static func encode_shop_buy(epoch: int, sequence: int, npc_spawn_id: int, item_definition_id: int, quantity: int) -> PackedByteArray:
 	if epoch <= 0 or sequence < 1 or sequence > 0xffffffff or npc_spawn_id <= 0 or item_definition_id < 1 or item_definition_id > 100000000 or quantity < 1 or quantity > 1000000:
 		return PackedByteArray()
-	var writer := StreamPeerBuffer.new()
-	writer.big_endian = false
-	writer.put_u32(SHOP_BUY_FRAME_BYTES)
-	writer.put_u16(VERSION)
-	writer.put_u16(OPCODE_SHOP_BUY)
+	var writer := _writer(SHOP_BUY_FRAME_BYTES, OPCODE_SHOP_BUY)
 	writer.put_64(epoch)
 	writer.put_u32(sequence)
 	writer.put_32(npc_spawn_id)
@@ -1110,11 +1048,7 @@ static func encode_shop_buy(epoch: int, sequence: int, npc_spawn_id: int, item_d
 static func encode_shop_sell(epoch: int, sequence: int, npc_spawn_id: int, item_uid: int, item_definition_id: int, quantity: int) -> PackedByteArray:
 	if epoch <= 0 or sequence < 1 or sequence > 0xffffffff or npc_spawn_id <= 0 or item_uid <= 0 or item_definition_id < 1 or item_definition_id > 100000000 or quantity < 1 or quantity > 1000000:
 		return PackedByteArray()
-	var writer := StreamPeerBuffer.new()
-	writer.big_endian = false
-	writer.put_u32(SHOP_SELL_FRAME_BYTES)
-	writer.put_u16(VERSION)
-	writer.put_u16(OPCODE_SHOP_SELL)
+	var writer := _writer(SHOP_SELL_FRAME_BYTES, OPCODE_SHOP_SELL)
 	writer.put_64(epoch)
 	writer.put_u32(sequence)
 	writer.put_32(npc_spawn_id)
@@ -1150,11 +1084,7 @@ static func decode_shop_transaction_result(frame: PackedByteArray) -> Dictionary
 static func encode_storage_open(epoch: int, sequence: int, npc_spawn_id: int) -> PackedByteArray:
 	if epoch <= 0 or sequence < 1 or sequence > 0xffffffff or npc_spawn_id <= 0:
 		return PackedByteArray()
-	var writer := StreamPeerBuffer.new()
-	writer.big_endian = false
-	writer.put_u32(STORAGE_OPEN_FRAME_BYTES)
-	writer.put_u16(VERSION)
-	writer.put_u16(OPCODE_STORAGE_OPEN)
+	var writer := _writer(STORAGE_OPEN_FRAME_BYTES, OPCODE_STORAGE_OPEN)
 	writer.put_64(epoch)
 	writer.put_u32(sequence)
 	writer.put_32(npc_spawn_id)
@@ -1247,11 +1177,7 @@ static func decode_storage_transfer_result(frame: PackedByteArray) -> Dictionary
 static func encode_bank_open(epoch: int, sequence: int, npc_spawn_id: int) -> PackedByteArray:
 	if epoch <= 0 or sequence < 1 or sequence > 0xffffffff or npc_spawn_id <= 0:
 		return PackedByteArray()
-	var writer := StreamPeerBuffer.new()
-	writer.big_endian = false
-	writer.put_u32(BANK_OPEN_FRAME_BYTES)
-	writer.put_u16(VERSION)
-	writer.put_u16(OPCODE_BANK_OPEN)
+	var writer := _writer(BANK_OPEN_FRAME_BYTES, OPCODE_BANK_OPEN)
 	writer.put_64(epoch)
 	writer.put_u32(sequence)
 	writer.put_32(npc_spawn_id)
@@ -1860,11 +1786,7 @@ static func decode_pvp_combat_visual(frame: PackedByteArray) -> Dictionary:
 static func encode_pvp_skill(epoch:int,sequence:int,skill_id:int,target_actor_id:int)->PackedByteArray:
 	if epoch<=0 or sequence<=0 or sequence>0xffffffff or skill_id<=0 or skill_id>100000000 or target_actor_id<=0:
 		return PackedByteArray()
-	var writer:=StreamPeerBuffer.new()
-	writer.big_endian=false
-	writer.put_u32(PVP_SKILL_FRAME_BYTES)
-	writer.put_u16(VERSION)
-	writer.put_u16(OPCODE_PVP_SKILL)
+	var writer := _writer(PVP_SKILL_FRAME_BYTES, OPCODE_PVP_SKILL)
 	writer.put_64(epoch)
 	writer.put_u32(sequence)
 	writer.put_32(skill_id)
@@ -1936,11 +1858,7 @@ static func encode_gm_pvp_name_command(
 		epoch:int,sequence:int,target_actor_id:int,state:int)->PackedByteArray:
 	if epoch<=0 or sequence<=0 or sequence>0xffffffff or target_actor_id<=0 or state<0 or state>4:
 		return PackedByteArray()
-	var writer:=StreamPeerBuffer.new()
-	writer.big_endian=false
-	writer.put_u32(GM_PVP_NAME_COMMAND_FRAME_BYTES)
-	writer.put_u16(VERSION)
-	writer.put_u16(OPCODE_GM_PVP_NAME_COMMAND)
+	var writer := _writer(GM_PVP_NAME_COMMAND_FRAME_BYTES, OPCODE_GM_PVP_NAME_COMMAND)
 	writer.put_64(epoch)
 	writer.put_u32(sequence)
 	writer.put_64(target_actor_id)
@@ -1984,11 +1902,7 @@ static func encode_player_shop_command(
 			valid=seller_actor_id>0 and listing_id>0 and item_uid==0 and price==0
 	if not valid:
 		return PackedByteArray()
-	var writer:=StreamPeerBuffer.new()
-	writer.big_endian=false
-	writer.put_u32(PLAYER_SHOP_COMMAND_FRAME_BYTES)
-	writer.put_u16(VERSION)
-	writer.put_u16(OPCODE_PLAYER_SHOP_COMMAND)
+	var writer := _writer(PLAYER_SHOP_COMMAND_FRAME_BYTES, OPCODE_PLAYER_SHOP_COMMAND)
 	writer.put_64(epoch)
 	writer.put_u32(sequence)
 	writer.put_u8(action)
@@ -2055,11 +1969,7 @@ static func encode_quest_open(
 		epoch:int,sequence:int,npc_spawn_id:int)->PackedByteArray:
 	if epoch<=0 or sequence<=0 or sequence>0xffffffff or npc_spawn_id<=0:
 		return PackedByteArray()
-	var writer:=StreamPeerBuffer.new()
-	writer.big_endian=false
-	writer.put_u32(QUEST_OPEN_FRAME_BYTES)
-	writer.put_u16(VERSION)
-	writer.put_u16(OPCODE_QUEST_OPEN)
+	var writer := _writer(QUEST_OPEN_FRAME_BYTES, OPCODE_QUEST_OPEN)
 	writer.put_64(epoch)
 	writer.put_u32(sequence)
 	writer.put_32(npc_spawn_id)
@@ -2075,11 +1985,7 @@ static func encode_quest_choose(
 		choice_id>100000000
 	):
 		return PackedByteArray()
-	var writer:=StreamPeerBuffer.new()
-	writer.big_endian=false
-	writer.put_u32(QUEST_CHOOSE_FRAME_BYTES)
-	writer.put_u16(VERSION)
-	writer.put_u16(OPCODE_QUEST_CHOOSE)
+	var writer := _writer(QUEST_CHOOSE_FRAME_BYTES, OPCODE_QUEST_CHOOSE)
 	writer.put_64(epoch)
 	writer.put_u32(sequence)
 	writer.put_32(npc_spawn_id)
@@ -2566,31 +2472,21 @@ static func frame_opcode(frame: PackedByteArray) -> int:
 	return opcode
 
 static func frame_length_prefix(buffer: PackedByteArray) -> int:
-	if buffer.size() < 4:
-		return -1
-	var reader := StreamPeerBuffer.new()
-	reader.big_endian = false
-	reader.data_array = buffer.slice(0, 4)
-	var size := reader.get_u32()
-	if size < HEADER_BYTES or size > MAX_FRAME_BYTES:
-		return -1
-	return size
+	return FrameCodec.length_prefix(buffer, HEADER_BYTES, MAX_FRAME_BYTES)
 
 static func _reader(frame: PackedByteArray, offset: int) -> StreamPeerBuffer:
-	var reader := StreamPeerBuffer.new()
-	reader.big_endian = false
-	reader.data_array = frame
-	reader.seek(offset)
-	return reader
+	return FrameCodec.reader(frame, offset)
+
+# Protocol constants have exactly one owner. The shared framing writer
+# supplies the length/version/opcode header; feature payloads follow in order.
+static func _writer(frame_bytes: int, opcode: int) -> StreamPeerBuffer:
+	return FrameCodec.writer(frame_bytes, VERSION, opcode)
 
 static func _valid_header(frame: PackedByteArray, expected_opcode: int, expected_bytes: int) -> bool:
-	return frame.size() == expected_bytes and _valid_variable_header(frame, expected_opcode, expected_bytes, expected_bytes)
+	return FrameCodec.valid_header(
+		frame, VERSION, HEADER_BYTES, MAX_FRAME_BYTES, expected_opcode, expected_bytes)
 
 static func _valid_variable_header(frame: PackedByteArray, expected_opcode: int, minimum_bytes: int, maximum_bytes: int) -> bool:
-	if frame.size() < minimum_bytes or frame.size() > maximum_bytes or frame.size() < HEADER_BYTES or frame.size() > MAX_FRAME_BYTES:
-		return false
-	var reader := _reader(frame, 0)
-	var advertised := reader.get_u32()
-	var version := reader.get_u16()
-	var opcode := reader.get_u16()
-	return advertised == frame.size() and version == VERSION and opcode == expected_opcode
+	return FrameCodec.valid_variable_header(
+		frame, VERSION, HEADER_BYTES, MAX_FRAME_BYTES,
+		expected_opcode, minimum_bytes, maximum_bytes)

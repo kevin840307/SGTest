@@ -43,6 +43,12 @@
 | Skills/Combat | `session/` 意圖、`world/` reducer、`player/` 呈現 | `Skill/`、`Combat/`、`Monster/` | 技能規則、MP、HP、傷害及死亡 Server-owned |
 | Wire | `network/wire_codec.gd` | `Wire/WireContracts.cs`、`Wire/WireProtocol.*.cs` | 唯一 V1 協定及 C#／Godot golden vectors |
 
+## Client Wire V1 的 Framing／Payload 邊界
+
+- **`client/network/wire_codec.gd` 是唯一 Client V1 契約入口**：`VERSION`、`HEADER_BYTES`、`MAX_FRAME_BYTES`、所有 `OPCODE_*`、功能封包長度與各 payload 編解碼仍在此宣告；外部 `WorldState`／`ClientSession`／`ClientTransport` 的既有 API 不改動。
+- `client/network/frame_codec.gd` 專責一般 little-endian Frame Header 的讀寫、長度前綴及固定／可變長度驗證。它由 `WireCodec` 注入 V1 常數，**不重新宣告 Opcode、協定版本、封包大小或另一條 socket／佇列**。24 個既有指令 Encoder 由重複的 Header 建置改為呼叫唯一 `_writer`；只抽無狀態二進位格式，沒有新增玩法規則。
+- 名稱 `FrameCodec` 是網路封包層職責，不是 `WireManager`。暫不為了分類把全部玩法 Codec 拆成 12 個僅剩轉接方法的檔案；等 payload 多到能獨立測試且不需要複製 Opcode／frame 契約時再按功能拆。驗收須保留跨語言 golden bytes、大小端、錯誤 header fail-closed、AOI／WorldReady、交易與 TLS。
+
 ## WireProtocol 物理分檔
 
 - `WireContracts.cs`：所有穩定 Opcode／wire enum／DTO。變動值須有跨端測試，不能為重構重新編號。
