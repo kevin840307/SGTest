@@ -1,5 +1,8 @@
 # SGTest 新版重建 TODO（2026-11-15）
 
+- ARCH-CLIENT-SOCIAL-PANELS [x] 2026-11-21：將 SessionPanel 內混合的附近聊天／密語／隊伍 UI 獨立到 `client/chat/chat_panel.gd`、`client/party/party_panel.gd`，採單一 ClientSession 提供快照及送出意圖；不新增 socket、state reducer 或隊伍權威。更新 UI TLS 回歸測試與命名分類自動檢查。Windows Godot 真 TLS/UI 測試含 Nearby、Whisper、Party、Trade、PvP、Quest、PlayerShop PASS；私有 GPU／多開量測仍 NOT VERIFIED。
+
+
 - ARCH-NAMING-MODULE-OWNERS [x] 2026-11-21：命名／分類第一輪整合：新增 `docs/CODE_ORGANIZATION.md`；Server wire enum/DTO 改由唯一 `WireContracts.cs` 宣告，同一 `WireProtocol` partial class 依 Economy、Social、Pvp、Quest 分區（不動 V1 bytes/opcode）；Godot 玩家商店移入 `client/player_shop/player_shop_panel.gd`、任務移入 `client/quest/quest_panel.gd`，SessionPanel 僅組裝及傳遞狀態／意圖；同步調整 UI 測試。Windows Host Release 0 warnings/0 errors、Server Checks 265/265 PASS、Godot 真 TLS UI Gate PASS（含 player_shop_ui、quest_ui）、命名/預載/雙端 Opcode 5/5 PASS；GitHub CI 結果以新提交後 Actions 為準。WorldState／ClientSession／Gateway Handler 深層拆分及真私有 GPU／多開／資源 Gate 仍 NOT VERIFIED，不宣稱全部架構債完成。
 
 

@@ -32,6 +32,8 @@
 | Trade | `trade/trade_panel.gd` | `Trade/PlayerTradeCoordinator.cs` | 雙方 gate + 原子 SQLite commit |
 | Player Shop | `player_shop/player_shop_panel.gd` | `PlayerShop/` | UI 僅提交販售／查看／購買意圖 |
 | Quest | `quest/quest_panel.gd` | `Npc/NpcQuestCatalog.cs`、`Identity/SqliteIdentityStore.Quest.cs` | 任務進度與合法選項由 Server 判定 |
+| Chat | `chat/chat_panel.gd` | `Gateway/`、`Party/` | 附近／私訊／隊伍頻道讀取可靠的 Server 訊息 |
+| Party | `party/party_panel.gd` | `Party/PartyCoordinator.cs` | 邀請、隊長、成員更新由 Server 決定 |
 | Skills/Combat | `session/` 意圖、`world/` reducer、`player/` 呈現 | `Skill/`、`Combat/`、`Monster/` | 技能規則、MP、HP、傷害及死亡 Server-owned |
 | Wire | `network/wire_codec.gd` | `Wire/WireContracts.cs`、`Wire/WireProtocol.*.cs` | 唯一 V1 協定及 C#／Godot golden vectors |
 
@@ -49,7 +51,7 @@
 ## Client UI 模組的最小契約
 
 - `SessionPanel` 負責登入頁組裝、共用快照、UI 生命週期及必要的提交前驗證；功能面板不直接輪詢 Transport，也不可自行變更 WorldState。
-- `InventoryPanel`、`TradePanel`、`PlayerShopPanel`、`QuestPanel` 由各自目錄持有自己的 Control、顯示快取與事件回呼。
+- `InventoryPanel`、`TradePanel`、`PlayerShopPanel`、`QuestPanel`、`ChatPanel`、`PartyPanel` 由各自目錄持有自己的 Control、顯示快取與事件回呼。
 - 面板從 Session 收到 `apply_snapshot`（或已定義的窄回呼）；連線／換角色時 `reset`；所有成功／失敗狀態以 Server 回覆為準。
 - 影響多人一致性的 `MapEpoch`、`ConnectionEpoch`、Reliable FIFO、UID/amount、交易 commit 與回放順序都不能因 UI 重構修改。
 

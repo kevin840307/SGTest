@@ -21,6 +21,8 @@ class ArchitectureConventionsChecks(unittest.TestCase):
         for folder, filename in (
             ("inventory", "inventory_panel.gd"),
             ("trade", "trade_panel.gd"),
+            ("chat", "chat_panel.gd"),
+            ("party", "party_panel.gd"),
             ("player_shop", "player_shop_panel.gd"),
             ("quest", "quest_panel.gd"),
         ):

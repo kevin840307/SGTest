@@ -1363,19 +1363,19 @@ func run() -> void:
 	panel._latest.pending_world_ready_ack_epoch = 0
 	panel._latest.last_world_ready_ack_epoch = panel._latest.map_epoch
 	panel._update_nearby_chat_ui()
-	for control in [panel.nearby_chat_history,panel.nearby_chat_input,panel.nearby_chat_send_button,panel.nearby_chat_status,panel.whisper_target_input,panel.whisper_input,panel.whisper_send_button,panel.whisper_status,panel.party_target_input,panel.party_invite_button,panel.party_invite_label,panel.party_accept_button,panel.party_reject_button,panel.party_members_label,panel.party_leave_button,panel.party_kick_button,panel.party_promote_button,panel.party_chat_input,panel.party_chat_send_button,panel.party_status]:
+	for control in [panel.chat_panel.history,panel.chat_panel.nearby_input,panel.chat_panel.nearby_send_button,panel.chat_panel.nearby_status,panel.chat_panel.whisper_target_input,panel.chat_panel.whisper_input,panel.chat_panel.whisper_send_button,panel.chat_panel.whisper_status,panel.party_panel.target_input,panel.party_panel.invite_button,panel.party_panel.invite_label,panel.party_panel.accept_button,panel.party_panel.reject_button,panel.party_panel.members_label,panel.party_panel.leave_button,panel.party_panel.kick_button,panel.party_panel.promote_button,panel.party_panel.chat_input,panel.party_panel.chat_send_button,panel.party_panel.status_label]:
 		if control.get_parent() == null or not panel.is_ancestor_of(control):
 			fail("Chat/whisper/party controls are not descendants of SessionPanel")
 			return
-	if panel.nearby_chat_send_button.disabled or not panel.nearby_chat_history.text.is_empty():
+	if panel.chat_panel.nearby_send_button.disabled or not panel.chat_panel.history.text.is_empty():
 		fail("Nearby chat idle controls/history incorrect")
 		return
-	panel.nearby_chat_input.text = "  附近測試  "
-	panel.nearby_chat_send_button.pressed.emit()
+	panel.chat_panel.nearby_input.text = "  附近測試  "
+	panel.chat_panel.nearby_send_button.pressed.emit()
 	if stub.nearby_chats != 1 or stub.last_nearby_message != "附近測試" or stub.last_nearby_bubble != 0:
 		fail("Nearby chat UI did not route sanitized message through ClientSession")
 		return
-	if not panel.nearby_chat_input.text.is_empty() or not panel.nearby_chat_history.text.is_empty():
+	if not panel.chat_panel.nearby_input.text.is_empty() or not panel.chat_panel.history.text.is_empty():
 		fail("Nearby chat UI locally echoed before Server delivery")
 		return
 	panel._latest.chat_messages = [{
@@ -1384,25 +1384,25 @@ func run() -> void:
 		"channel":0,"bubble_type":0,"sender_name":"NearbyHero",
 		"message":"附近測試"}]
 	panel._update_nearby_chat_ui()
-	if not panel.nearby_chat_history.text.contains("[附近] NearbyHero：附近測試"):
+	if not panel.chat_panel.history.text.contains("[附近] NearbyHero：附近測試"):
 		fail("Nearby chat UI did not render authoritative Server delivery")
 		return
-	panel.whisper_target_input.text = "22"
-	panel.whisper_input.text = "  私訊測試  "
-	panel.whisper_send_button.pressed.emit()
+	panel.chat_panel.whisper_target_input.text = "22"
+	panel.chat_panel.whisper_input.text = "  私訊測試  "
+	panel.chat_panel.whisper_send_button.pressed.emit()
 	if (
 		stub.whispers!=1 or stub.last_whisper_target!=22 or
 		stub.last_whisper_message!="私訊測試" or stub.last_whisper_bubble!=0
 	):
 		fail("Whisper UI did not route sanitized target/message through ClientSession")
 		return
-	if not panel.whisper_input.text.is_empty() or panel.nearby_chat_history.text.contains("私訊測試"):
+	if not panel.chat_panel.whisper_input.text.is_empty() or panel.chat_panel.history.text.contains("私訊測試"):
 		fail("Whisper UI locally echoed before Server result")
 		return
-	panel.whisper_target_input.text = "WhisperByName"
-	panel.whisper_input.text = "  名稱私訊測試  "
-	panel.whisper_send_button.disabled = false
-	panel.whisper_send_button.pressed.emit()
+	panel.chat_panel.whisper_target_input.text = "WhisperByName"
+	panel.chat_panel.whisper_input.text = "  名稱私訊測試  "
+	panel.chat_panel.whisper_send_button.disabled = false
+	panel.chat_panel.whisper_send_button.pressed.emit()
 	if (
 		stub.whisper_name_targets!=1 or
 		stub.last_whisper_target_name!="WhisperByName" or
@@ -1429,28 +1429,28 @@ func run() -> void:
 		"target_name":"WhisperTarget"}
 	panel._update_nearby_chat_ui()
 	if (
-		not panel.nearby_chat_history.text.contains("[私訊] 你 → WhisperTarget：私訊測試") or
-		not panel.nearby_chat_history.text.contains("[私訊] WhisperTarget → 你：收到") or
-		not panel.whisper_status.text.contains("已送達 WhisperTarget")
+		not panel.chat_panel.history.text.contains("[私訊] 你 → WhisperTarget：私訊測試") or
+		not panel.chat_panel.history.text.contains("[私訊] WhisperTarget → 你：收到") or
+		not panel.chat_panel.whisper_status.text.contains("已送達 WhisperTarget")
 	):
 		fail("Whisper UI did not render authoritative result/delivery")
 		return
 	panel._latest.pending_whisper_sequence=4
 	panel._update_nearby_chat_ui()
-	if not panel.whisper_send_button.disabled or not panel.nearby_chat_send_button.disabled:
+	if not panel.chat_panel.whisper_send_button.disabled or not panel.chat_panel.nearby_send_button.disabled:
 		fail("Pending whisper did not serialize chat send controls")
 		return
 	panel._latest.pending_whisper_sequence=0
 
 	# Party controls send only intents; membership and leader state render from
 	# authoritative PartySnapshot/PartyResult fields.
-	panel.party_target_input.text="22"
-	panel.party_invite_button.pressed.emit()
+	panel.party_panel.target_input.text="22"
+	panel.party_panel.invite_button.pressed.emit()
 	if stub.party_invites!=1 or stub.last_party_target!=22:
 		fail("Party invite UI did not send exact target ActorId")
 		return
-	panel.party_target_input.text="PartyByName"
-	panel.party_invite_button.pressed.emit()
+	panel.party_panel.target_input.text="PartyByName"
+	panel.party_panel.invite_button.pressed.emit()
 	if stub.party_name_invites!=1 or stub.last_party_target_name!="PartyByName":
 		fail("Party invite UI did not route character name")
 		return
@@ -1460,12 +1460,12 @@ func run() -> void:
 		"inviter_name":"PartyLeader"}
 	panel._update_nearby_chat_ui()
 	if (
-		not panel.party_invite_label.text.contains("PartyLeader") or
-		panel.party_accept_button.disabled or panel.party_reject_button.disabled
+		not panel.party_panel.invite_label.text.contains("PartyLeader") or
+		panel.party_panel.accept_button.disabled or panel.party_panel.reject_button.disabled
 	):
 		fail("Party invite UI did not render authoritative invite")
 		return
-	panel.party_accept_button.pressed.emit()
+	panel.party_panel.accept_button.pressed.emit()
 	if stub.party_accepts!=1:
 		fail("Party accept UI did not use ClientSession")
 		return
@@ -1489,35 +1489,35 @@ func run() -> void:
 		"bubble_type":0,"sender_name":"PartyMate","message":"隊伍測試"})
 	panel._update_nearby_chat_ui()
 	if (
-		not panel.party_members_label.text.contains("PartyMate") or
-		not panel.party_members_label.text.contains("★ SelfHero") or
-		not panel.nearby_chat_history.text.contains("[隊伍] PartyMate：隊伍測試") or
-		panel.party_leave_button.disabled or panel.party_kick_button.disabled or
-		panel.party_promote_button.disabled or panel.party_chat_send_button.disabled
+		not panel.party_panel.members_label.text.contains("PartyMate") or
+		not panel.party_panel.members_label.text.contains("★ SelfHero") or
+		not panel.chat_panel.history.text.contains("[隊伍] PartyMate：隊伍測試") or
+		panel.party_panel.leave_button.disabled or panel.party_panel.kick_button.disabled or
+		panel.party_panel.promote_button.disabled or panel.party_panel.chat_send_button.disabled
 	):
 		fail("Party UI did not render authoritative membership/leader/chat")
 		return
-	panel.party_chat_input.text="  隊伍送出測試  "
-	panel.party_chat_send_button.pressed.emit()
+	panel.party_panel.chat_input.text="  隊伍送出測試  "
+	panel.party_panel.chat_send_button.pressed.emit()
 	if stub.party_chats!=1 or stub.last_party_message!="隊伍送出測試":
 		fail("Party chat UI did not route sanitized message")
 		return
-	panel.party_target_input.text="22"
-	panel.party_kick_button.pressed.emit()
-	panel.party_promote_button.pressed.emit()
+	panel.party_panel.target_input.text="22"
+	panel.party_panel.kick_button.pressed.emit()
+	panel.party_panel.promote_button.pressed.emit()
 	if stub.party_kicks!=1 or stub.party_promotes!=1 or stub.last_party_target!=22:
 		fail("Party leader controls did not route target actions")
 		return
-	panel.party_leave_button.pressed.emit()
+	panel.party_panel.leave_button.pressed.emit()
 	if stub.party_leaves!=1:
 		fail("Party leave UI did not use ClientSession")
 		return
 	panel._latest.pending_party_sequence=2
 	panel._update_nearby_chat_ui()
 	if (
-		not panel.party_invite_button.disabled or
-		not panel.party_leave_button.disabled or
-		not panel.party_kick_button.disabled
+		not panel.party_panel.invite_button.disabled or
+		not panel.party_panel.leave_button.disabled or
+		not panel.party_panel.kick_button.disabled
 	):
 		fail("Pending Party command did not serialize membership controls")
 		return
