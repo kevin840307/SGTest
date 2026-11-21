@@ -67,6 +67,7 @@
 - `Gateway/IdentityTlsAuthorization.Binding.cs` 承接認證帳號與 World Actor 的綁定程序；`IdentityTlsAuthorization.cs` 仍持有現有 TLS socket 與唯一 gameplay gate，保留同一授權狀態及可靠事件順序。
 - `Npc/NpcItemModificationHandler.cs` 合併「修理／強化」這一組共用登入世代、玩法鎖與物品 UID 結算生命週期的 command handler。由每個 authenticated socket 的 Gateway 注入**原 gameplayGate 與原 WorldResultRouter**，在各流程進行目前綁定／Actor／MapEpoch 驗證；它不建立第二個 queue、database 或新的 socket。
 - `Npc/NpcEconomyHandler.cs` 負責 NPC 商店、個人倉庫、銀行三個既有可信命令流程。它們共享 NPC 地圖／距離驗證、Character／Account 錢物權威、ConnectionEpoch／MapEpoch 與同一 socket gameplay gate；原 DB owner、價格／存取規則、可靠 result 與 FIFO 不變。**不**合入 PlayerShop／Trade（需跨角色鎖與不同生命週期），也不與 ItemModification 合併成全能 `NpcManager`。
+- `Npc/NpcQuestHandler.cs` 專責 NPC 任務開啟與選項提交。任務的規則來源 `NpcQuestCatalog` 與 SQLite 進度 owner 不變；它與 NPC 經濟的價格／資金交易不是同一領域，不應硬合併。仍使用經驗證的 Actor／MapEpoch／QuestSequence 與原 gate。此獨立檔有實質可信選項處理及狀態結果，非命名用 façade。
 - **命名反思**：`NpcRepairCatalog`／`NpcEnhancementCatalog` 代表 NPC 位置與服務可用性；`RepairItemCatalog`／`EquipmentEnhancementCatalog` 則代表經驗證的物品規則。兩者不是重複的 Catalog，不應為了「合併」而混成一個 `NpcManager`。`NpcEconomyHandler` 比三個只有單一方法／單一目錄的 Handler 易導航，也比所有 NPC 功能揉成一大檔更有聚力。`IdentityTlsAuthorization` 的名稱確實低估了目前其他玩法職責，但必須先把玩法 Handler 徹底解耦，才適合變更公開類別名稱。
 - 遷移／授權相關重構必須通過 Server 全量 checks（本輪 267/267）（尤其 SQLite upgrade、WAL backup、TLS Host、雙方交易與 Epoch），而非僅憑 C# 可編譯宣稱正確。
 

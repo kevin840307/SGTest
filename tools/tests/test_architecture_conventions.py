@@ -121,6 +121,25 @@ class ArchitectureConventionsChecks(unittest.TestCase):
         self.assertNotIn("new SqliteIdentityStore", economy)
         self.assertNotIn("new TlsWireConnection", economy)
 
+    def test_npc_quest_handler_keeps_trusted_gate_and_quest_authority(self) -> None:
+        gateway = (SERVER / "Gateway" / "IdentityTlsAuthorization.cs").read_text(
+            encoding="utf-8-sig")
+        quest = (SERVER / "Npc" / "NpcQuestHandler.cs").read_text(
+            encoding="utf-8-sig")
+        self.assertEqual(gateway.count("new NpcQuestHandler("), 1)
+        self.assertIn("handleQuest:npcQuests.HandleQuestAsync", gateway)
+        self.assertIn("_combat, _quests, _pickupWorldGeneration", gateway)
+        self.assertIn("router, gameplayGate)", gateway)
+        self.assertNotIn("async Task QuestHandler(", gateway)
+        self.assertIn("internal async Task HandleQuestAsync(", quest)
+        self.assertEqual(quest.count("await _gameplayGate.WaitAsync()"), 1)
+        self.assertEqual(quest.count("finally { _gameplayGate.Release(); }"), 1)
+        self.assertIn("if(!_router.IsCurrentBinding(binding))return;", quest)
+        self.assertIn("_identity.ApplyQuestChoiceAsync(", quest)
+        self.assertIn("_router.QueueQuestView(", quest)
+        self.assertNotIn("new SemaphoreSlim", quest)
+        self.assertNotIn("new SqliteIdentityStore", quest)
+
     def test_character_reset_keeps_one_reducer_and_one_uid_location_policy(self) -> None:
         world = (CLIENT / "world" / "world_state.gd").read_text(encoding="utf-8-sig")
         self.assertEqual(world.count("func apply_frame("), 1)

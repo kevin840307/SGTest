@@ -1,5 +1,8 @@
 # SGTest 新版重建 TODO（2026-11-15）
 
+- ARCH-SERVER-NPC-QUEST [x] 2026-11-21：NPC Quest Open／Choice 原本約 120 行內嵌 `IdentityTlsAuthorization` 的可信處理移至同一既有 `Npc/` 的 `NpcQuestHandler.cs`，保持 `NpcQuestCatalog`、`SqliteIdentityStore.Quest` 與原 TLS 認證、唯一 gameplayGate、WorldResultRouter／MapEpoch、QuestSequence、可靠任務檢視／結果；沒有改封包／任務獎勵邏輯。與 Bank/Shop/Storage 的 `NpcEconomyHandler` 分開以維持真正高聚力，不新建 QuestManager 或第二 Database。Server 267/267 checks（含 Quest TLS）、Godot 4.7.2 真 TLS/UI `quest_ui=PASS`、跨端登入 E2E PASS、Python 全量 110/110、架構防退化 Gate 15/15 PASS，Server Release 編譯 0 warnings／0 errors。PvP、Item、WorldState／WireCodec 等仍待分區。
+
+
 - ARCH-SERVER-NPC-ECONOMY [x] 2026-11-21：NPC 商店／倉庫／銀行共用 NPC/地圖世代／經濟交易生命週期，從 `Gateway/IdentityTlsAuthorization.cs` 移至單一 `Npc/NpcEconomyHandler.cs`；保留原 `Shop/Storage/Bank` opcode、獨立價格與金流校驗、UID、交易 sequence、DB 原子性與可靠回覆，原本 per-socket gameplayGate／WorldResultRouter、TLS Auth 一律沿用，無新 queue、socket、Database 或 Reducer。此組不與 `NpcItemModificationHandler`、玩家交易、玩家擺攤合併，避免 NPC 萬用 Manager。Server 完整 267/267 PASS，Release build 0 warning／0 error，架構 Gate 已更新；Client 真 TLS/UI 與 CI 結果以該提交驗收為準。Gateway 其餘玩法、WorldState／WireCodec、GPU 多開仍待完成。
 
 
