@@ -10,6 +10,7 @@ const TerminalWorldHud = preload("res://ui/terminal_world_hud.gd")
 const UiTextureLoader = preload("res://ui/ui_texture_loader.gd")
 const SharedGameCursor = preload("res://ui/shared_game_cursor.gd")
 const Recovered2AuthShell = preload("res://ui/recovered2_auth_shell.gd")
+const WorldLoadingOverlay = preload("res://ui/world_loading_overlay.gd")
 var auto_start := true
 var world_view := WorldView.new()
 var _held := {}
@@ -29,7 +30,11 @@ var _cursor_sample_elapsed := 0.0
 var terminal_hud := TerminalWorldHud.new()
 var session_panel := SessionPanel.new()
 var recovered2_auth := Recovered2AuthShell.new()
+var loading_overlay := WorldLoadingOverlay.new()
+var _loading_ui_elapsed := 0.0
 var _recovered2_local_ready := false
+var preview_auth_offline := false
+var offline_map_only := false
 var skin_picker := OptionButton.new()
 var _map_buttons: Array[Button] = []
 var _last_snapshot: Dictionary = {}
@@ -42,6 +47,14 @@ var _autorun_last_blocked_sequence := 0
 
 ## Fit an oversized initial window into the available desktop area without
 ## changing the game viewport contract or forcing a fixed game resolution.
+func _exit_tree() -> void:
+	if offline_map_only and is_instance_valid(cursor_manager):
+		cursor_manager.free() # unmounted Node has no scene-tree owner
+	# Child cursors remove native pointer overrides first. Then release
+	# static UI image references so a closed scene retains no GPU textures.
+	UiTextureLoader.clear_cache()
+
+
 func _fit_initial_window_to_desktop() -> void:
 	if DisplayServer.get_name() == "headless":
 		return
@@ -104,9 +117,18 @@ func _ready() -> void:
 	layer.add_child(session_panel)
 	layer.add_child(terminal_hud)
 	layer.add_child(recovered2_auth)
-	_recovered2_local_ready = recovered2_auth.attach(session_panel)
+	layer.add_child(loading_overlay)
+	# Offline map tests must not load the private login movie or its GPU
+	# textures; that presentation is only built for the actual client or a
+	# local visual test which explicitly opts in.
+	if auto_start or preview_auth_offline:
+		_recovered2_local_ready = recovered2_auth.attach(session_panel)
+	# Only _update_ui_stage may display the local auth shell. An inactive
+	# offline map preview must never have its mouse input intercepted.
+	recovered2_auth.enable_for_page(SessionLayout.Page.LOGIN,false)
 	recovered2_auth.skin_requested.connect(_select_recovered2_skin)
-	add_child(cursor_manager)
+	if not offline_map_only:
+		add_child(cursor_manager)
 	terminal_hud.visible = false
 	terminal_hud.section_requested.connect(_open_terminal_section)
 	session_panel.visible = auto_start
@@ -119,7 +141,8 @@ func _ready() -> void:
 	login_toggle.focus_mode = Control.FOCUS_NONE
 	login_toggle.pressed.connect(func(): session_panel.visible = not session_panel.visible)
 	row.add_child(login_toggle)
-	_install_skin_selector(row)
+	if not offline_map_only:
+		_install_skin_selector(row)
 	get_viewport().size_changed.connect(_resize)
 	_resize()
 	if auto_start:
@@ -204,6 +227,7 @@ func _resize() -> void:
 	_screen_backdrop.size = Vector2(get_viewport().get_visible_rect().size)
 	_photo_backdrop.size = _screen_backdrop.size
 	recovered2_auth.resize_view(_screen_backdrop.size)
+	loading_overlay.resize_view(_screen_backdrop.size)
 	terminal_hud.resize_view(Vector2i(_screen_backdrop.size))
 	_update_ui_stage(true)
 
@@ -392,14 +416,30 @@ func _process(delta: float) -> void:
 			get_tree().quit()
 		return
 	_update_ui_stage()
+	_loading_ui_elapsed += delta
+	if _loading_ui_elapsed >= 0.10:
+		_loading_ui_elapsed = 0.0
+		_update_loading_ui()
 	_cursor_sample_elapsed += delta
-	if _cursor_sample_elapsed >= 0.06 or _mouse_autorun.latched:
+	if not offline_map_only and (_cursor_sample_elapsed >= 0.06 or _mouse_autorun.latched):
 		_cursor_sample_elapsed = 0.0
 		_update_cursor_mode()
 	if world_view.phase == "ready" and not session_panel.active:
 		var direction := Vector2(int(_held.has(KEY_RIGHT))-int(_held.has(KEY_LEFT)),int(_held.has(KEY_DOWN))-int(_held.has(KEY_UP)))
 		if direction != Vector2.ZERO:
 			world_view.camera.pan(world_view.epoch,direction.normalized()*600.0*delta)
+
+
+func _update_loading_ui() -> void:
+	# No percent is inferred from network packets: the overlay measures the
+	# actual local asset scope while the authenticated world is entering.
+	var entering_world := session_panel.active and session_panel._layout.current_page == SessionLayout.Page.WORLD
+	if not entering_world or world_view.phase not in ["map","palette"]:
+		loading_overlay.update_state(world_view.phase,world_view.map_id,0,0,0,0,false)
+		return
+	var stats: Dictionary = world_view.store.scope_progress(&"world_view",world_view.epoch)
+	loading_overlay.update_state(world_view.phase,world_view.map_id,
+		int(stats.ready),int(stats.total),int(stats.decoding),int(stats.textures),true)
 
 
 func _update_cursor_mode() -> void:
@@ -464,6 +504,7 @@ func _inspect_map(id: int) -> void:
 func _server_world_ready(snapshot: Dictionary) -> void:
 	if world_view.request_map(int(snapshot.map_id)) == OK:
 		world_view.set_player_snapshot(snapshot)
+		_update_loading_ui()
 	else:
 		_status.text = "已連線，地圖素材未就緒"
 

@@ -47,6 +47,8 @@ func _exit_tree() -> void:
 	for entry in CURSORS:
 		Input.set_custom_mouse_cursor(null,int(entry.shape))
 	Input.set_default_cursor_shape(Input.CURSOR_ARROW)
+	_locked_visual.texture = null
+	_loaded.clear()
 
 func install() -> void:
 	for entry in CURSORS:

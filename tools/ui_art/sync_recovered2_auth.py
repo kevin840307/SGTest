@@ -7,6 +7,7 @@ account data and network logic are intentionally not copied.
 """
 from __future__ import annotations
 import argparse
+import hashlib
 import shutil
 from pathlib import Path
 
@@ -19,6 +20,7 @@ FILES = {
     "ui/CREATE_CHARACTER.png":"CREATE_CHARACTER.png",
     "ui/LEFT_BUTTON.png":"LEFT_BUTTON.png",
     "ui/RIGHT_BUTTON.png":"RIGHT_BUTTON.png",
+    "ui/BG_LOADING.png":"BG_LOADING.png",
     "2.ogv":"2.ogv",
 }
 def main():
@@ -31,6 +33,12 @@ def main():
         if not file.is_file():
             raise SystemExit(f"MISSING_LOCAL_REFERENCE {file}")
         DEST.mkdir(parents=True,exist_ok=True)
+        # A running Godot client may hold an existing imported texture open.
+        # Do not overwrite unchanged private data during a UI-only sync.
+        if target.is_file() and target.stat().st_size == file.stat().st_size:
+            if hashlib.sha256(target.read_bytes()).digest() == hashlib.sha256(file.read_bytes()).digest():
+                print(f"LOCAL_REFERENCE_UNCHANGED {dst} bytes={target.stat().st_size}")
+                continue
         shutil.copy2(file,target)
         print(f"LOCAL_REFERENCE_COPY {dst} bytes={target.stat().st_size}")
     print("LOCAL_REFERENCE_READY original Recovered2 files are excluded from Git")

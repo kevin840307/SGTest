@@ -75,6 +75,7 @@ func run() -> void:
 	Fixture.run(check)
 	app = Main.new()
 	app.auto_start = false
+	app.offline_map_only = true
 	root.add_child(app)
 	check(app.world_view.open_pack(args[0]) == OK,"Open pack")
 	check(app.world_view.request_map(15) == OK,"Initial map request")

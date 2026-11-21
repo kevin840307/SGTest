@@ -72,6 +72,7 @@ func _run() -> void:
 	DirAccess.make_dir_recursive_absolute(directory)
 	var app = Main.new()
 	app.auto_start = false
+	app.preview_auth_offline = true
 	root.add_child(app)
 	var shell = app.recovered2_auth
 	if not app._recovered2_local_ready:
@@ -114,6 +115,22 @@ func _run() -> void:
 		_error("source Recovered2 theme/video missing")
 		return
 	await _capture("login",directory)
+	# Loading-bar screenshot uses a deterministic mocked asset counter;
+	# the gameplay MapEpoch/resource fixture exercises the real pipeline.
+	# Freeze the app's real-world loading sampler while capturing a manual
+	# preview over the login scene; otherwise it hides an intentionally
+	# synthetic loading state on its next idle tick.
+	app.set_process(false)
+	app.loading_overlay.update_state("palette",15,12,32,2,1,true)
+	if not app.loading_overlay.visible or app.loading_overlay._bar_art.texture == null:
+		_error("Recovered2 loading artwork was not mounted")
+		return
+	await _capture("loading_preview",directory)
+	app.loading_overlay.update_state("ready",15,32,32,0,0,true)
+	if app.loading_overlay.visible:
+		_error("loading overlay did not hide on world completion")
+		return
+	app.set_process(true)
 	shell._account.text = "testexample"
 	shell._secret.text = "password12345"
 	# Invalid deployment endpoint must be rejected internally, not exposed

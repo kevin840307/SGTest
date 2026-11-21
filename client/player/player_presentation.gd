@@ -200,7 +200,10 @@ func apply_snapshot(snapshot: Dictionary, now_usec: int) -> void:
 			elif _attack_active(old,now_usec):
 				action = "AA"
 				action_facing = int(old.action_facing)
-			elif str(old.action) != base_action or int(old.value.movement_action_sequence) != int(value.movement_action_sequence):
+			elif str(old.action) != base_action:
+				# A new MoveTarget sequence changes a destination, not the
+				# walking animation. Repeated long-hold repaths must not
+				# restart the NR clip at its first frame.
 				started = now_usec
 		var history = PositionHistory.new() if generation_changed else old.history
 		var tick := int(value.get("server_tick",snapshot.get("last_aoi_tick",-1)))

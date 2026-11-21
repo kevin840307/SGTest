@@ -3,6 +3,11 @@ extends RefCounted
 ## is optional: pure Godot --script CI tests can decode sources directly.
 static var _textures: Dictionary = {}
 
+static func clear_cache() -> void:
+	# Called after the only UI root exits; do not retain global GPU textures.
+	_textures.clear()
+
+
 static func get_texture(path: String) -> Texture2D:
 	if path.is_empty() or not path.begins_with("res://"):
 		return null

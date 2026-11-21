@@ -6,9 +6,9 @@ signal asset_ready(owner: StringName, epoch: int, asset_id: String)
 signal asset_failed(owner: StringName, epoch: int, asset_id: String, reason: String)
 
 static var _mounted_digest := ""
-var max_assets := 256
+var max_assets := 384
 var max_workers := 2
-var max_texture_jobs := 1
+var max_texture_jobs := 2
 var max_rgba_bytes := 256 * 1024 * 1024
 var _catalog: Dictionary = {}
 var _scopes: Dictionary = {}
@@ -293,6 +293,29 @@ func pump(max_commits := 2) -> void:
 					_fail(id, "Texture request failed: " + error_string(error))
 				else:
 					_textures[path] = {"id": id, "serial": entry.serial}
+
+
+func asset_bytes(asset_id: String) -> int:
+	# Used only to enforce a bounded optional presentation texture cache.
+	return int(_entries[asset_id].bytes) if _entries.has(asset_id) else 0
+
+
+func scope_progress(owner: StringName, scope_epoch: int) -> Dictionary:
+	# Keep progress bound to the CURRENT map scope. Jobs completing from an
+	# abandoned MapEpoch must not inflate the next map loading percentage.
+	var result := {"total":0,"ready":0,"decoding":0,"textures":0,"failed":0}
+	if not _scope_valid(owner,scope_epoch):
+		return result
+	for asset_id in _scopes[owner].assets:
+		if not _entries.has(asset_id):
+			continue
+		result.total += 1
+		match str(_entries[asset_id].state):
+			"ready": result.ready += 1
+			"decoding": result.decoding += 1
+			"textures": result.textures += 1
+			"failed": result.failed += 1
+	return result
 
 
 func statistics() -> Dictionary:

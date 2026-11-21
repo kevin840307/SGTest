@@ -36,6 +36,13 @@ var _players_dirty := false
 var _combat_seen := {}
 var _combat_overlays: Array[Dictionary] = []
 const COMBAT_OVERLAY_LIFETIME_USEC := 900000
+# Retain only reusable map/atlas textures across short MapEpoch transfers.
+# Actor, AOI, inventory and combat state are NEVER cached here.
+const MAX_PREVIOUS_MAP_CACHE_BYTES := 128 * 1024 * 1024
+var enable_map_cache := true
+var _cache_epoch := 0
+var _cache_assets: Dictionary = {}
+var _cache_bytes := 0
 
 
 func _ready() -> void:
@@ -54,7 +61,8 @@ func open_pack(path: String) -> Error:
 func request_map(id: int) -> Error:
 	if phase == "closed" or id <= 0:
 		return ERR_INVALID_PARAMETER
-	clear_map()
+	_retain_ready_map_assets()
+	clear_map(true)
 	epoch = store.begin_scope(&"world_view")
 	map_id = id
 	var error := store.acquire(&"world_view",epoch,"maps/"+str(id))
@@ -66,7 +74,47 @@ func request_map(id: int) -> Error:
 	return OK
 
 
-func clear_map() -> void:
+func _release_map_cache() -> void:
+	if _cache_epoch > 0:
+		store.end_scope(&"world_view_cache",_cache_epoch)
+	_cache_epoch = 0
+	_cache_assets.clear()
+	_cache_bytes = 0
+
+
+func _retain_ready_map_assets() -> void:
+	if not enable_map_cache or not show_players or phase != "ready" or epoch <= 0 or _palette.is_empty():
+		return
+	var candidates: Array = ["maps/"+str(map_id)]
+	candidates.append_array(_palette)
+	var additional_bytes := 0
+	var additions := 0
+	for id in candidates:
+		if _cache_assets.has(id):
+			continue
+		additional_bytes += store.asset_bytes(id)
+		additions += 1
+	# A Map15+Map13 cache fits under 128 MiB; larger future maps evict
+	# all old cache references before preparing a new map generation.
+	if _cache_bytes+additional_bytes > MAX_PREVIOUS_MAP_CACHE_BYTES or _cache_assets.size()+additions > store.max_assets-16:
+		_release_map_cache()
+	if additional_bytes > MAX_PREVIOUS_MAP_CACHE_BYTES or additions > store.max_assets-16:
+		return
+	if _cache_epoch <= 0:
+		_cache_epoch = store.begin_scope(&"world_view_cache")
+		if _cache_epoch <= 0:
+			return
+	for id in candidates:
+		if _cache_assets.has(id):
+			continue
+		if store.acquire(&"world_view_cache",_cache_epoch,id) != OK:
+			_release_map_cache()
+			return
+		_cache_assets[id] = true
+		_cache_bytes += store.asset_bytes(id)
+
+
+func clear_map(retain_cache: bool = false) -> void:
 	_canvas.clear()
 	_terrain.configure(null)
 	draw_list.clear()
@@ -86,6 +134,8 @@ func clear_map() -> void:
 	get_viewport().canvas_transform = Transform2D.IDENTITY
 	if epoch > 0:
 		store.end_scope(&"world_view",epoch)
+	if not retain_cache:
+		_release_map_cache()
 	map_id = 0
 	if phase != "closed":
 		phase = "empty"

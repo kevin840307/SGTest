@@ -171,7 +171,9 @@ func _build_login() -> void:
 		_login.add_child(_video)
 		_login.move_child(_video,1)
 	var shade := ColorRect.new()
-	shade.color = Color(0.025,0.055,0.09,0.42)
+	# Recovered2's background is already dark by design; a 42% shade
+	# hid most of its detail on a real 1280x720 display.
+	shade.color = Color(0.025,0.055,0.09,0.12)
 	shade.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_put(_login,shade,0,0,SIZE.x,SIZE.y)
 	var panel := Panel.new()

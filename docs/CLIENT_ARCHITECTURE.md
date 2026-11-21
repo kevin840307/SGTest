@@ -12,6 +12,16 @@
 - 已知功能差異：SGTest Server 僅支援角色名稱、欄位等已實作欄位。Recovered2 的三角色外觀紙娃娃、髮型／種族／能力點／角色密碼／刪除角色尚**未連接權威玩法**，UI 要標示不可用，不能製作假按鈕。
 - 驗收：`client/tests/test_recovered2_local_ui.gd` 在 Windows Godot 原生 GPU 以 **1152×620** 擷取三張畫面（適配 1280×720 桌面，無裁切）；正式 Client 初次開啟時僅在一般視窗模式中自動縮小超出可用桌面的視窗，不固定世界解析度；測試原始 Theme／影片／PNG、只顯示帳密、部署端點保留、登入／選角／創角操作委派、切換皮膚不重建 Session。Headless CI 不等待 GPU 繪製訊號，只執行功能測試；沒有私有素材時可安全跳過本機視覺測試。正式 Host TLS 的雙 Client 整合另由既有 CI 驗證。
 
+## 2026-11-21 Recovered2 載入 UI、走路動畫與 MapEpoch 資源實測
+
+- **登入亮度**：本機 Recovered2 登入影片上方額外深藍遮罩由 alpha 0.42 降至 0.12。原版背景影片／Theme 不修改；私有素材維持 `client/ui/private_recovered2/` 並由 Git 忽略。
+- **載入畫面**：新 `client/ui/world_loading_overlay.gd` 在已登入進世界／換圖且 WorldView phase=map/palette 時顯示 Recovered2 的 `BG_LOADING.png` 框線，顯示本 `WorldView` scope 的資源 ready/total、decode/texture 工作及經過秒數。**0–95% 是已準備資源比例，不是封包／場景總工期預測；進入 ready 後立刻隱藏**，避免假 100%。沒有本機私有圖時顯示 Godot 原生背景。CI Gate `test_world_loading_overlay.gd`、本機真 GPU `test_recovered2_local_ui.gd` 四張截圖（含 loading preview）。
+- **走路動畫**：`player_presentation.gd` 一直處於 NR（走路）時，不再因 `movement_action_sequence` 增加而重播第一格；只有 NS↔NR、有效一次性攻擊／受擊等動畫切換才重設動畫開始時間。`test_player_presentation.gd` 覆蓋重複目的地命令不重置走路幀。
+- **有界紋理快取**：AssetStore 同時最多 2 個紋理下載／載入工作（舊 1），`max_assets=384`；`world_view_cache` 可保留**最多 128MiB** 已就緒地圖與 atlas 圖片，不保留 Actor、Monster、NPC、AOI／WorldState，MapEpoch 變更時必清理全部權威呈現狀態，正式登出／視窗結束釋放 cache 及所有引用。保留本地資源池只改善重新進圖，不影響 Server AOI 授權。
+- **實測**：Windows Godot 4.7.2／RTX3050，原始 86MB PCK，地圖 15→13→15，單紋理工作：3983／1117／3981ms；雙工作不保留：2063／618／2063ms；雙工作加有界快取：**2065／268／31ms**；Map15 約232個圖集／91.14MiB；兩圖合併約105.35MiB，最終 scope=0 / GPU貼圖任務=0 / 資源計數=0。相機純渲染 p95 約16.75ms，**不等於**真角色移動／多人 20+ 實際觀感已達60FPS。
+- **AOI 驗證**：兩個真 Godot TLS Client、Server WorldAoiPump，Map15→13→15 的 WorldReady、Spawn/Delta/Despawn、舊 MapEpoch 清除 PASS，`--crossmap` 23 AOI frames；`--portal` 真伺服器驗證 NPC 互動／拒絕不合法 ID、回圖無幽靈實體 PASS（25 frames）。這些是**測試資源**的 Server＋Client 協定結果；原版私有 PCK 的同時多人 GPU／高負載仍 NOT VERIFIED。
+- **待查問題**：正式獨立原版地圖像素對照 runner 有時可產生全部畫面、`WORLD_VIEW_RESULT PASS`、Final Store=0，但 Godot Windows driver 結束時仍有 Renderer RID/Texture leaked 警告，因此 runner 依嚴格規則判 **FAIL**（不能改成 PASS 或忽略）；需要找出是 driver shutdown 或引擎資源引用問題，另有真玩家路徑／GPU frame trace、停走動畫和 AOI 高人數負載尚需實機確認。
+
 ## 職責分離（不要為了分層先建立空檔案）
 
 | 責任 | 輸入 | 輸出 | 不可以做 |

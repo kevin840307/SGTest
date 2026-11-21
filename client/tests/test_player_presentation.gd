@@ -40,9 +40,14 @@ func run() -> void:
 	remote.y=20.0
 	var snapshot := {"world_ready":true,"map_epoch":1,"map_id":15,"actor_id":1,"x":10.0,"y":10.0,"facing":6,"self_state":own,"entities":{2:remote},"last_aoi_tick":1}
 	players.apply_snapshot(snapshot,0)
+	# Long-held mouse movement can issue fresh MoveTarget commands while
+	# the character never stops running. A new command sequence must not
+	# reset the NR animation clock or lock the paper doll in frame zero.
+	own.movement_action_sequence = 2
+	remote.movement_action_sequence = 2
 	players.apply_snapshot(snapshot,100000)
 	var actors := players.actors_at(160000)
-	check(actors.size()==2 and actors[0].parts.size()==6 and int(actors[0].parts[0].frame)==1,"paper doll/timeline restarted on snapshot poll")
+	check(actors.size()==2 and actors[0].parts.size()==6 and int(actors[0].parts[0].frame)==1 and int(actors[1].parts[0].frame)==1,"continuous movement sequence repath reset walk animation")
 	var commands := draw.build(Rect2(-100,-100,400,400),actors)
 	check(draw.error==OK and commands.size()==12,"multipart ordered draw")
 	for i in 12:
