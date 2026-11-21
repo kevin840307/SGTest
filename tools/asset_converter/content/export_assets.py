@@ -32,6 +32,11 @@ PLAYER_PART_ASSETS = (
 
 PAGE_LAYOUT = 'height_dense_p0_block4_v1'
 
+# Original CSGOChar controller selection (Paradise.exe.lst 004C7BB2..004C7D02).
+# Y is present in the newer derivative but has no controller in this source;
+# do not silently borrow Boy timing for an unverified race.
+PLAYER_ACT_CONTROLLERS = {'b': 'boy', 'g': 'girl', 'a': 'alien', 'r': 'robot'}
+
 
 def runtime_page(payload: bytes, expected_size: list[int]) -> tuple[bytes, list[int]]:
     """Keep every source texel/rect; only extend the bottom/right page boundary.
@@ -155,6 +160,7 @@ def publish(source: Path, archive: Path, assets: Path, asset_ids: set[str] | Non
 
     for row in groups:
         group = row['group']
+        group_parts = group.split('/')
         original_folder = archive/'sprites'/group
         raw = json.loads((original_folder/'atlas.json').read_text(encoding='utf-8'))
         asset_id, classification = sprite_asset_id(group)
@@ -192,24 +198,28 @@ def publish(source: Path, archive: Path, assets: Path, asset_ids: set[str] | Non
                 act_timelines[clip] = timeline
                 semantics = {'status':'normalized_scenery_act','timing_verified':True,
                              'direction_mapping_verified':False,'timing_scope':'default_25_only'}
-        elif group.startswith('player/b/standard/'):
+        elif (len(group_parts) == 4 and group_parts[0] == 'player'
+              and group_parts[1] in PLAYER_ACT_CONTROLLERS
+              and group_parts[2] == 'standard'):
             try:
+                race = group_parts[1]
                 paths = [source/item['path'] for item in raw['sources']]
-                if group.endswith('/b-death'):
+                if group.endswith('/'+race+'-death'):
                     definition = compile_definition(
                         asset_id,paths,source,'single_view',
-                        source/'player/b/b-death.act',act_bindings={'ND':'Effect'})
+                        source/f'player/{race}/{race}-death.act',act_bindings={'ND':'Effect'})
                 else:
                     definition = compile_definition(
                         asset_id,paths,source,'character_part',
-                        source/'player/b/boy.act',
+                        source/f'player/{race}/{PLAYER_ACT_CONTROLLERS[race]}.act',
                         source/'player/charactionname.dat',
-                        source/'player/chardraworder.dat')
+                        source/('player/r_chardraworder.dat' if race == 'r'
+                                else 'player/chardraworder.dat'))
                 views = logical_views(definition)
                 document(asset_id+'/definition.json',definition)
-                semantics = {'status':'normalized_player_b_part','definition':asset_id+'/definition.json',
+                semantics = {'status':'normalized_player_part','definition':asset_id+'/definition.json',
                              'timing_verified':True,'direction_mapping_verified':True}
-            except (ValueError,KeyError) as error:
+            except (ValueError,KeyError,OSError) as error:
                 semantics['reason'] = str(error)
         semantic_counts[semantics['status']] += 1
         page_sizes, page_hashes = [], {}

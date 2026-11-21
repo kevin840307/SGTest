@@ -4,6 +4,8 @@
 
 ## 正式入口
 
+多種族創角素材的 ACT／排序來源與接入限制見 [創角外觀來源](research/CHARACTER_CREATION_APPEARANCE.md)。正式 Publisher 已由 B-only 擴為 B／G／A／R Standard 的各自動畫來源；Map15／13 的預設素材選集暫不擴大，等 Server 外觀與共用 profile 接入後再發布所需集合。
+
 ~~~powershell
 python -m pip install -r requirements.txt
 run_build_assets.bat "C:\SGO\Stargate Online IE HK2"

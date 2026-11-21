@@ -19,6 +19,62 @@ class Settings:
 
 
 class ScopedExportTests(unittest.TestCase):
+    def character_fixture(self, folder, missing_controller=False):
+        root = Path(folder)
+        source, archive, assets = root/'source', root/'archive', root/'assets'
+        (source/'player').mkdir(parents=True)
+        (source/'player/charactionname.dat').write_text('NS,NR,NU,NB,AS,AH,AA,AB,AG,GS,GH,GA,GB',encoding='ascii')
+        common = 'Head>Hair>leg+2>Body+2>L-Arm+2>R-Arm+2'
+        robot = 'Body+2>Head>Hair>leg+2>L-Arm+2>R-Arm+2'
+        for filename, order in [('chardraworder.dat',common),('r_chardraworder.dat',robot)]:
+            (source/'player'/filename).write_text('\n'.join(f'NS{f}: {order}' for f in [1,2,3,4,8]),encoding='ascii')
+        for race, controller, duration in [('b','boy',3),('g','girl',5),('a','alien',7),('r','robot',9),('y','unverified',11)]:
+            standard = source/f'player/{race}/standard'
+            standard.mkdir(parents=True)
+            for facing in [1,2,3,4,8]:
+                (standard/f'{race}-body_ns{facing}.spr').write_bytes(tiny_spr())
+            if race != 'y' and not missing_controller:
+                (standard.parent/f'{controller}.act').write_bytes(act(((0,duration),),key='NS'))
+                (standard/f'{race}-death_nd1.spr').write_bytes(tiny_spr())
+                (standard.parent/f'{race}-death.act').write_bytes(act(((0,duration+1),),False,key='Effect'))
+        archive_all(source,archive,Settings())
+        return source,archive,assets
+
+    def test_race_specific_act_and_robot_draw_order_without_boy_fallback(self):
+        with tempfile.TemporaryDirectory() as folder:
+            source,archive,assets = self.character_fixture(folder)
+            report = publish(source,archive,assets)
+            self.assertEqual(report['animation_semantics']['normalized_player_part'],8)
+            for race,controller,duration in [('b','boy',3),('g','girl',5),('a','alien',7),('r','robot',9)]:
+                path = assets/f'players/{race}/base/body'
+                manifest = json.loads((path/'atlas.json').read_text())
+                views = manifest['logical_views']
+                self.assertEqual(len(views),8)
+                self.assertEqual(views[f'{race.upper()}-BODY_NS5']['clip'],f'{race.upper()}-BODY_NS3')
+                self.assertTrue(views[f'{race.upper()}-BODY_NS5']['flip_h'])
+                self.assertEqual(views[f'{race.upper()}-BODY_NS1']['timeline_ticks'],[[0,duration*40//25]])
+                self.assertEqual(views[f'{race.upper()}-BODY_NS1']['draw_slots'][0],10 if race=='r' else 0)
+                definition = json.loads((path/'definition.json').read_text())
+                self.assertEqual(definition['act_source'],f'player/{race}/{controller}.act')
+                self.assertIn(f'player/{race}/{controller}.act',definition['source_sha256'])
+                death = json.loads((assets/f'players/{race}/base/death/atlas.json').read_text())
+                view = death['logical_views'][f'{race.upper()}-DEATH_ND8']
+                self.assertEqual(view['clip'],f'{race.upper()}-DEATH_ND1')
+                self.assertFalse(view['loop'])
+                self.assertEqual(view['timeline_ticks'],[[0,(duration+1)*40//25]])
+            unverified = json.loads((assets/'players/y/base/body/atlas.json').read_text())
+            self.assertEqual(unverified['logical_views'],{})
+            self.assertFalse(unverified['animation_semantics']['timing_verified'])
+
+    def test_missing_character_controller_never_marks_animation_verified(self):
+        with tempfile.TemporaryDirectory() as folder:
+            source,archive,assets = self.character_fixture(folder,missing_controller=True)
+            publish(source,archive,assets,{'players/g/base/body'})
+            manifest = json.loads((assets/'players/g/base/body/atlas.json').read_text())
+            self.assertEqual(manifest['logical_views'],{})
+            self.assertFalse(manifest['animation_semantics']['timing_verified'])
+            self.assertIn('girl.act',manifest['animation_semantics']['reason'])
+
     def fixture(self, folder):
         root = Path(folder)
         source, archive, assets = root/'source', root/'archive', root/'assets'
