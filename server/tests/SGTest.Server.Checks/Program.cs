@@ -9,6 +9,16 @@ static class Checks
 {
     private static int _passes;
 
+    internal static string HostAssemblyPath()
+    {
+        string? custom = Environment.GetEnvironmentVariable("SGTEST_CHECKS_HOST_DLL");
+        if (!string.IsNullOrWhiteSpace(custom)) return Path.GetFullPath(custom);
+        string repository = AppContext.BaseDirectory;
+        while (!Directory.Exists(Path.Combine(repository, "server", "host")))
+            repository = Directory.GetParent(repository)?.FullName ?? throw new Exception("Host build not found");
+        return Path.Combine(repository,"server/host/SGTest.Server.Host/bin/Release/net8.0/SGTest.Server.Host.dll");
+    }
+
     internal static void Require(bool condition, string name)
     {
         if (!condition) throw new Exception("SERVER_NAV_FAIL " + name);
@@ -315,6 +325,7 @@ static class Checks
             StorageGatewayChecks.Verify();
             TlsSocketChecks.Verify();
             IdentityStoreChecks.Verify();
+            CharacterAppearanceChecks.Verify();
             AuthenticationRateLimiterChecks.Verify();
             IdentityTlsAuthorizationChecks.Verify(root);
             IdentityTlsLifecycleChecks.Verify(root);

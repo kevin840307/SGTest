@@ -5,7 +5,12 @@ public sealed record IdentityStoreOptions(int MaxCharactersPerAccount = 8, int B
 public readonly record struct CharacterSpawn(int MapId, double X, double Y);
 public readonly record struct CharacterPositionUpdate(long CharacterId, CharacterSpawn Spawn);
 public sealed record CharacterRecord(long CharacterId, long AccountId, int Slot, string Name,
-    int MapId, double X, double Y, long CreatedUnixMilliseconds);
+    int MapId, double X, double Y, long CreatedUnixMilliseconds,
+    CharacterAppearanceState? Appearance = null);
+
+// HairIndex is the presentation index, not an original Hair item-definition ID.
+public readonly record struct CharacterAppearance(int Race, int HairIndex, int HairColor);
+public sealed record CharacterAppearanceState(CharacterAppearance Value, string SourceReference);
 
 public enum CombatProfileTrust : byte
 {

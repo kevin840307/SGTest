@@ -40,6 +40,10 @@ public sealed partial class SqliteIdentityStore
                     "SELECT COUNT(*) FROM characters WHERE character_id=$id;", tx,
                     ("$id", characterId)) != 1)
                 throw new KeyNotFoundException("Unknown character");
+            if (ScalarLong(connection,
+                    "SELECT COUNT(*) FROM character_appearances WHERE character_id=$id AND race<>$race;",
+                    tx, ("$id", characterId), ("$race", profile.Race)) != 0)
+                throw new InvalidOperationException("Combat race differs from persisted character appearance");
             using var command = connection.CreateCommand();
             command.Transaction = tx;
             command.CommandText = @"

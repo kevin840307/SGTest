@@ -285,7 +285,7 @@ internal static class IdentityStoreChecks
             }
 
             string[] backups = Directory.GetFiles(root,
-                "identity.db.pre-v20-to-v23.*.bak", SearchOption.TopDirectoryOnly);
+                $"identity.db.pre-v20-to-v{SqliteIdentityStore.SchemaVersion}.*.bak", SearchOption.TopDirectoryOnly);
             Checks.Require(backups.Length == 1,
                 "migration did not create exactly one pre-upgrade backup");
             using (var snapshot = OpenReadOnly(backups[0]))

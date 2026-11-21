@@ -461,10 +461,7 @@ internal static class TlsGatewayListenerChecks
         }
         string pfx = Path.Combine(content, "test-only.pfx");
         File.WriteAllBytes(pfx, fixture.Certificate.Export(X509ContentType.Pfx, "Listener-PFX-test-only"));
-        string repository = AppContext.BaseDirectory;
-        while (!Directory.Exists(Path.Combine(repository, "server", "host")))
-            repository = Directory.GetParent(repository)?.FullName ?? throw new Exception("Host build not found");
-        string hostDll = Path.Combine(repository, "server/host/SGTest.Server.Host/bin/Release/net8.0/SGTest.Server.Host.dll");
+        string hostDll = Checks.HostAssemblyPath();
         async Task<(int Exit, string Out, string Error)> Run(params string[] args)
         {
             var start = new ProcessStartInfo("dotnet") { RedirectStandardOutput = true,

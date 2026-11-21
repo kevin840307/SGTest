@@ -63,6 +63,14 @@ CREATE TABLE IF NOT EXISTS characters (
 );", tx);
             Execute(connection, "CREATE INDEX IF NOT EXISTS ix_characters_account ON characters(account_id, slot);", tx);
             Execute(connection, @"
+CREATE TABLE IF NOT EXISTS character_appearances (
+    character_id INTEGER PRIMARY KEY REFERENCES characters(character_id) ON DELETE CASCADE,
+    race INTEGER NOT NULL CHECK(race BETWEEN 0 AND 4),
+    hair_index INTEGER NOT NULL CHECK(hair_index BETWEEN 0 AND 65535),
+    hair_color INTEGER NOT NULL CHECK(hair_color BETWEEN 0 AND 7),
+    source_ref TEXT NOT NULL CHECK(length(source_ref) BETWEEN 1 AND 384)
+);", tx);
+            Execute(connection, @"
 CREATE TABLE IF NOT EXISTS character_combat_profiles (
     character_id INTEGER PRIMARY KEY REFERENCES characters(character_id) ON DELETE CASCADE,
     trust INTEGER NOT NULL CHECK(trust IN (1,2)),

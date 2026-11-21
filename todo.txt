@@ -1,5 +1,7 @@
 # SGTest 新版重建 TODO（2026-11-15）
 
+- UI-CHARACTER-APPEARANCE-PERSISTENCE [x] 2026-11-22：schema v24、既有 Identity 內加入 CharacterAppearance tuple／來源與 trusted CharacterAppearanceRules 不可變 bounded exact allowlist；新 Store overload 只接受規則允許 tuple，角色／外觀／錢包同交易建立，舊 API／舊角色維持未知外觀，不猜 B 預設。List／Auth 讀回外觀；後續 CombatProfile provision 的 Race 不得不同。新增四組檢查涵蓋非法／重複／過大規則、未列 tuple 拒絕、同欄並發、重名、錢包失敗完整 rollback、重開／登入、戰鬥 race、v23→24 備份保留舊角色。Host／Checks Release build 0 warning/error；全量 Server 275/275、Python 123/123、真 Godot TLS 主 UI 登入／選角／登出、註冊、兩 Client 雙向跨圖與 NPC 傳點回歸 PASS。因本機既有 Host 執行中，使用獨立測試輸出及 `SGTEST_CHECKS_HOST_DLL` 驗證，未中斷現有服務。**來源 rules Host 配置／正式 Wire／AOI／UI 仍未接入，尚不能從 Client 創建不同外觀；本次 CI 待驗證。**
+
 - UI-CHARACTER-RACE-ASSET-PUBLICATION [x] 2026-11-22：承接 `3e6f175`，Converter CI 44923254495 SUCCESS；唯一 Publisher 完整 Archive 稽核後，B／G／A 基本六部件與四種族 death 共 22 個獨立 Atlas 定向發布 PASS，22 個皆 normalized_player_part、1,904 logical views。私有輸出只在 `.cache/character_creation_assets/`，不入 Git、不替換現有雙圖 PCK。多種族 GPU、創角權威資料／持久化／Wire／AOI 與 UI 選項仍未完成。
 
 - UI-CHARACTER-RACE-ASSET-SEMANTICS [x] 2026-11-22：創角種族／髮型的前置修復。唯一 Converter 原本僅 B Standard 正規化，現依原版 `Paradise.exe.lst 004C7BB2..004C7D02` 對 B／G／A／R 指定各自 Boy／Girl／Alien／Robot ACT，R 使用獨立 draw-order，death 不跨種族混用。缺 Controller 或未驗證的 Y 不假設 Boy fallback／verified。完整 Python 123 tests PASS；本機原始 22 個素材、4,290 frames、1,904 logical views 全部編譯 PASS。新增 `docs/research/CHARACTER_CREATION_APPEARANCE.md` 記錄原版／R2 的差異及 Server、Wire、持久化、共用 profile、真雙 Client 的剩餘接入鏈。前筆 UI `b1d8704` Client CI 44922373464 SUCCESS。**這是素材前置，不代表 Server 已能創建不同外觀或多種族 GPU 已驗證；UI 仍清楚顯示暫定 B 外觀。**

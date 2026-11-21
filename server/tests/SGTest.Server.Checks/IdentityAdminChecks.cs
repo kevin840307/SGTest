@@ -67,13 +67,9 @@ internal static class IdentityAdminChecks
 
     private static ProcessStartInfo StartInfo(string? password, string[] args)
     {
-        string repository = AppContext.BaseDirectory;
-        while (!Directory.Exists(Path.Combine(repository, "server", "host")))
-            repository = Directory.GetParent(repository)?.FullName ?? throw new Exception("Host build not found");
         var start = new ProcessStartInfo("dotnet") { RedirectStandardInput = true,
             RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false };
-        start.ArgumentList.Add(Path.Combine(repository,
-            "server/host/SGTest.Server.Host/bin/Release/net8.0/SGTest.Server.Host.dll"));
+        start.ArgumentList.Add(Checks.HostAssemblyPath());
         foreach (string arg in args) start.ArgumentList.Add(arg);
         start.Environment.Remove("SGTEST_ACCOUNT_PASSWORD");
         if (password is not null) start.Environment["SGTEST_ACCOUNT_PASSWORD"] = password;

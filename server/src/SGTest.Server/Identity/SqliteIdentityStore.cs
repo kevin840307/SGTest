@@ -13,7 +13,7 @@ namespace SGTest.Server.Identity;
 /// </summary>
 public sealed partial class SqliteIdentityStore : IDisposable
 {
-    public const int SchemaVersion = 23;
+    public const int SchemaVersion = 24;
     private readonly string _databasePath;
     private readonly string _connectionString;
     private readonly IdentityStoreOptions _options;
@@ -108,8 +108,22 @@ VALUES($key,$display,$hash,$created); SELECT last_insert_rowid();";
             new AccountRecord(row.AccountId, row.UsernameDisplay, false, characters));
     }
 
-    public async Task<CharacterCreateResult> CreateCharacterAsync(long accountId, int slot,
+    public Task<CharacterCreateResult> CreateCharacterAsync(long accountId, int slot,
         string name, CharacterSpawn spawn, CancellationToken cancellationToken = default)
+        => CreateCharacterCoreAsync(accountId, slot, name, spawn, null, cancellationToken);
+
+    public Task<CharacterCreateResult> CreateCharacterAsync(long accountId, int slot,
+        string name, CharacterSpawn spawn, CharacterAppearance appearance,
+        CharacterAppearanceRules appearanceRules, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(appearanceRules);
+        return CreateCharacterCoreAsync(accountId, slot, name, spawn,
+            appearanceRules.Resolve(appearance), cancellationToken);
+    }
+
+    private async Task<CharacterCreateResult> CreateCharacterCoreAsync(long accountId, int slot,
+        string name, CharacterSpawn spawn, CharacterAppearanceState? appearance,
+        CancellationToken cancellationToken)
     {
         ThrowIfDisposed();
         if (accountId <= 0) throw new ArgumentOutOfRangeException(nameof(accountId));
@@ -117,7 +131,7 @@ VALUES($key,$display,$hash,$created); SELECT last_insert_rowid();";
             throw new ArgumentOutOfRangeException(nameof(slot));
         var characterName = NormalizeCharacterName(name);
         ValidateSpawn(spawn);
-        return await Task.Run(() => CreateCharacter(accountId, slot, characterName, spawn), cancellationToken)
+        return await Task.Run(() => CreateCharacter(accountId, slot, characterName, spawn, appearance), cancellationToken)
             .ConfigureAwait(false);
     }
 
@@ -191,7 +205,7 @@ WHERE character_id=$id;";
     }
 
     private CharacterCreateResult CreateCharacter(long accountId, int slot,
-        (string Display, string Key) name, CharacterSpawn spawn)
+        (string Display, string Key) name, CharacterSpawn spawn, CharacterAppearanceState? appearance)
     {
         using var connection = Open();
         using var tx = connection.BeginTransaction();
@@ -219,6 +233,20 @@ VALUES($account,$slot,$name,$key,$map,$x,$y,$created,$updated); SELECT last_inse
         try
         {
             long characterId = Convert.ToInt64(command.ExecuteScalar(), CultureInfo.InvariantCulture);
+            if (appearance is not null)
+            {
+                using var look = connection.CreateCommand();
+                look.Transaction = tx;
+                look.CommandText = @"INSERT INTO character_appearances(character_id,race,hair_index,hair_color,source_ref)
+VALUES($id,$race,$hair,$color,$source);";
+                look.Parameters.AddWithValue("$id", characterId);
+                look.Parameters.AddWithValue("$race", appearance.Value.Race);
+                look.Parameters.AddWithValue("$hair", appearance.Value.HairIndex);
+                look.Parameters.AddWithValue("$color", appearance.Value.HairColor);
+                look.Parameters.AddWithValue("$source", appearance.SourceReference);
+                if (look.ExecuteNonQuery() != 1)
+                    throw new InvalidOperationException("Character appearance creation failed");
+            }
             using (var wallet = connection.CreateCommand())
             {
                 wallet.Transaction = tx;
@@ -231,9 +259,10 @@ VALUES($character,0);";
             tx.Commit();
             return new CharacterCreateResult(CharacterCreateStatus.Created,
                 new CharacterRecord(characterId, accountId, slot, name.Display,
-                    spawn.MapId, spawn.X, spawn.Y, now));
+                    spawn.MapId, spawn.X, spawn.Y, now, appearance));
         }
-        catch (SqliteException e) when (e.SqliteErrorCode == 19)
+        catch (SqliteException e) when (e.SqliteErrorCode == 19 &&
+            e.SqliteExtendedErrorCode is 1555 or 2067)
         {
             bool slotTaken = ScalarLong(connection,
                 "SELECT COUNT(*) FROM characters WHERE account_id=$id AND slot=$slot;", tx,
@@ -260,15 +289,18 @@ FROM accounts WHERE username_key=$key LIMIT 1;";
     {
         using var connection = Open();
         using var command = connection.CreateCommand();
-        command.CommandText = @"SELECT character_id,account_id,slot,name,map_id,x,y,created_unix_ms
-FROM characters WHERE account_id=$account ORDER BY slot;";
+        command.CommandText = @"SELECT c.character_id,c.account_id,c.slot,c.name,c.map_id,c.x,c.y,c.created_unix_ms,
+a.race,a.hair_index,a.hair_color,a.source_ref
+FROM characters c LEFT JOIN character_appearances a ON a.character_id=c.character_id
+WHERE c.account_id=$account ORDER BY c.slot;";
         command.Parameters.AddWithValue("$account", accountId);
         using var reader = command.ExecuteReader();
         var rows = new List<CharacterRecord>();
         while (reader.Read())
             rows.Add(new CharacterRecord(reader.GetInt64(0), reader.GetInt64(1), reader.GetInt32(2),
                 reader.GetString(3), reader.GetInt32(4), reader.GetDouble(5), reader.GetDouble(6),
-                reader.GetInt64(7)));
+                reader.GetInt64(7), reader.IsDBNull(8) ? null : new CharacterAppearanceState(
+                    new(reader.GetInt32(8),reader.GetInt32(9),reader.GetInt32(10)),reader.GetString(11))));
         return rows;
     }
 
