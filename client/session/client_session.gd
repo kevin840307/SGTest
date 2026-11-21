@@ -963,32 +963,44 @@ func _process_reconnect_choose() -> void:
 		_publish()
 
 func _maybe_query_pvp_mode() -> void:
-	# The networking/reducer thread owns automatic mode discovery. This
-	# deliberately does not depend on SessionPanel visibility or Render FPS.
+	# Logic-thread-only reads. Public snapshots are for cross-thread/UI use;
+	# constructing a deep copy on every idle poll scales with AOI population.
 	# A trusted WorldReady ACK is required before a query is sent, and each
 	# new MapEpoch gets exactly one query unless the connection restarts.
-	var current: Dictionary = _world.snapshot()
-	if int(current.get("state",-1)) != WorldState.STATE_IN_WORLD or not bool(current.get("world_ready",false)) or bool(current.get("resync_pending",false)) or bool(current.get("waiting_for_new_map",false)) or int(current.get("pending_world_ready_ack_epoch",0)) != 0 or int(current.get("last_world_ready_ack_epoch",0)) != int(current.get("map_epoch",0)):
+	if (
+		_world.state != WorldState.STATE_IN_WORLD or
+		not _world.world_ready or _world.resync_pending or
+		_world.waiting_for_new_map or _world.pending_world_ready_ack_epoch != 0 or
+		_world.last_world_ready_ack_epoch != _world.map_epoch
+	):
 		return
-	if bool(current.get("pvp_known",false)) or int(current.get("pvp_sequence",0)) != 0 or int(current.get("pending_pvp_sequence",0)) != 0:
+	if _world.pvp_known or _world.pvp_sequence != 0 or _world.pending_pvp_sequence != 0:
 		return
-	var frame := WireCodec.encode_pvp_mode_command(int(current.get("map_epoch",0)),1,0)
+	var frame := WireCodec.encode_pvp_mode_command(_world.map_epoch,1,0)
 	if not frame.is_empty() and _transport.send_frame(frame) and _world.mark_pvp_sent(1,0):
 		_publish()
 
 
 func _maybe_finish_world_entry() -> void:
-	var current: Dictionary = _world.snapshot()
-	if int(current.state) != WorldState.STATE_IN_WORLD or not bool(current.world_ready) or int(current.pending_world_ready_ack_epoch) != 0 or int(current.last_world_ready_ack_epoch) != int(current.map_epoch):
+	# Only the logic thread owns WorldState; never copy the entire world to
+	# check four scalar fields at the idle polling cadence.
+	if (
+		_world.state != WorldState.STATE_IN_WORLD or not _world.world_ready or
+		_world.pending_world_ready_ack_epoch != 0 or
+		_world.last_world_ready_ack_epoch != _world.map_epoch
+	):
 		return
 	_mutex.lock()
+	var changed := not _has_entered_world
 	_has_entered_world = true
 	if _reconnecting:
 		_reconnecting = false
 		_reconnect_attempt = 0
 		_reconnect_count += 1
+		changed = true
 	_mutex.unlock()
-	_publish()
+	if changed:
+		_publish()
 
 func _credential_string() -> String:
 	_mutex.lock()
@@ -1017,17 +1029,17 @@ func _decorate_snapshot(value: Dictionary) -> Dictionary:
 	return value
 
 func _flush_control_frames() -> void:
-	var current: Dictionary = _world.snapshot()
-	var ack_epoch := int(current.pending_world_ready_ack_epoch)
-	var ack_tick := int(current.pending_world_ready_ack_tick)
+	# ACK/resync checks run on the same logic thread as WorldState writes.
+	# Read the current scalars directly, including after an ACK transition.
+	var ack_epoch := _world.pending_world_ready_ack_epoch
+	var ack_tick := _world.pending_world_ready_ack_tick
 	if ack_epoch > 0 and ack_tick >= 0:
 		var ack := WireCodec.encode_world_ready_ack(ack_epoch,ack_tick)
 		if not ack.is_empty() and _transport.send_frame(ack):
 			_world.mark_world_ready_ack_sent(ack_epoch,ack_tick)
 			_publish()
-			current = _world.snapshot()
-	if bool(current.resync_pending) and not bool(current.resync_request_sent):
-		var epoch := int(current.map_epoch)
+	if _world.resync_pending and not _world.resync_request_sent:
+		var epoch := _world.map_epoch
 		var request := WireCodec.encode_world_resync_request(epoch)
 		if not request.is_empty() and _transport.send_frame(request):
 			_world.mark_resync_request_sent(epoch)
