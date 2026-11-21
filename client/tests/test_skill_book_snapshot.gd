@@ -56,6 +56,7 @@ func _initialize()->void:
 	first[20]=0
 	first.encode_u16(21,1)
 	var second:=SKILLS.hex_decode().slice(0,23)
+	second.encode_s32(0,28)
 	second.encode_s32(16,1)
 	second[20]=1
 	second.encode_u16(21,1)
