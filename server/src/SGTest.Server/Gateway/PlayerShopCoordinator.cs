@@ -129,10 +129,13 @@ public sealed class PlayerShopCoordinator
                 }
                 case PlayerShopCommandAction.Inspect:
                 {
+                    // MapEpoch is scoped to each actor's own map/session
+                    // lifecycle. AOI visibility already validates the seller's
+                    // exact generation; peers on the same MapId need not have
+                    // numerically equal epochs.
                     if(command.SellerActorId==command.ActorId||
                        !router.IsVisibleActor(binding,command.SellerActorId)||
-                       !router.TryGetCurrentBinding(command.SellerActorId,out var seller)||
-                       seller.MapEpoch!=binding.MapEpoch)
+                       !router.TryGetCurrentBinding(command.SellerActorId,out var seller))
                         return Queue(command,router,Result(
                             command,PlayerShopResultStatus.NotVisible,
                             sellerActorId:command.SellerActorId));
@@ -164,8 +167,7 @@ public sealed class PlayerShopCoordinator
                 command,PlayerShopResultStatus.SelfPurchase,
                 sellerActorId:command.SellerActorId));
         if(!router.IsVisibleActor(buyerBinding,command.SellerActorId)||
-           !router.TryGetCurrentBinding(command.SellerActorId,out var sellerBinding)||
-           sellerBinding.MapEpoch!=buyerBinding.MapEpoch)
+           !router.TryGetCurrentBinding(command.SellerActorId,out var sellerBinding))
             return Queue(command,router,Result(
                 command,PlayerShopResultStatus.NotVisible,
                 sellerActorId:command.SellerActorId));

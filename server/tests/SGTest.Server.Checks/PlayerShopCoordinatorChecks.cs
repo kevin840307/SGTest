@@ -70,10 +70,19 @@ internal static class PlayerShopCoordinatorChecks
             var rules=new Dictionary<int,TradeItemRule>
             { [6101]=new(6101,true,"synthetic:player-shop-coord") };
 
-            var sellerActor=await world.TrustedRegisterAsync(seller,98,24,24)
+            var sellerInitial=await world.TrustedRegisterAsync(seller,98,24,24)
                 ??throw new Exception("seller world register");
             var buyerActor=await world.TrustedRegisterAsync(buyer,98,28,24)
                 ??throw new Exception("buyer world register");
+            // Each character owns its own MapEpoch. Move only the seller
+            // through a trusted same-map transfer so seller/buyer epochs differ
+            // while they remain on the same map and in AOI range.
+            var sellerActor=await world.TrustedTransferAsync(
+                seller,sellerInitial.ConnectionEpoch,sellerInitial.MapEpoch,98,40,24)
+                ??throw new Exception("seller same-map generation advance");
+            Checks.Require(sellerActor.MapId==buyerActor.MapId&&
+                sellerActor.MapEpoch!=buyerActor.MapEpoch,
+                "player-shop fixture did not create independent actor MapEpochs");
             var sellerGateway=new GatewayConnection(sellerActor);
             var buyerGateway=new GatewayConnection(buyerActor);
             var router=new WorldResultRouter();
