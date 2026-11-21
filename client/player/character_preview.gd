@@ -1,9 +1,10 @@
 extends Control
 ## UI-only standing paper doll. Shares the app AssetStore and formal renderer.
-## The current renderer supports B/hair00/default color. Explicit unsupported
-## choices hide that doll rather than misrepresenting another saved appearance.
+## Shares B/G/A source profiles and the formal sampler with the world renderer.
+## Unverified controllers/palettes stay unavailable instead of borrowing art.
 signal status_changed(status: String)
 const Players = preload("res://player/player_presentation.gd")
+const Profile = preload("res://player/character_appearance_profile.gd")
 const DrawList = preload("res://world/world_draw_list.gd")
 const Canvas = preload("res://world/world_canvas.gd")
 const BASE_APPEARANCE := {"race":0,"hair_index":0,"hair_color":0}
@@ -14,6 +15,7 @@ var _owner: StringName
 var _epoch := 0
 var _occupied := false
 var _appearance: Dictionary = {}
+var _definition: Dictionary = {}
 var _assets: Dictionary = {}
 var _players := Players.new()
 var _draw_list := DrawList.new()
@@ -72,7 +74,8 @@ func _sync_activity() -> void:
 		_release()
 		_set_status("empty")
 		return
-	if not _appearance.is_empty() and _appearance != BASE_APPEARANCE:
+	_definition = Profile.definition(_appearance)
+	if _definition.is_empty():
 		_release()
 		_set_status("unsupported")
 		return
@@ -84,7 +87,7 @@ func _sync_activity() -> void:
 		if _epoch <= 0:
 			_set_status("unavailable")
 			return
-		for part in Players.PARTS.values():
+		for part in _definition.parts.values():
 			if _store.acquire(_owner,_epoch,str(part[0])) != OK:
 				_release()
 				_set_status("unavailable")
@@ -96,18 +99,18 @@ func _process(_delta: float) -> void:
 	# WorldView pumps the single shared store; a preview never starts a
 	# second loader, pump loop, viewport, network session or world reducer.
 	if status == "loading":
-		for part in Players.PARTS.values():
+		for part in _definition.parts.values():
 			var id := str(part[0])
 			var asset: Dictionary = _store.get_asset(_owner,_epoch,id)
 			if asset.is_empty():
 				return
 			_assets[id] = asset
-		if _players.configure(_assets) != OK:
+		if _players.configure(_assets,_appearance) != OK:
 			_release()
 			_set_status("unavailable")
 			return
 		var own := {"actor_id":1,"connection_epoch":1,"entity_map_epoch":1,
-			"server_tick":0,"x":0.0,"y":0.0,"facing":1,"moving":false,"movement_action_sequence":0}
+			"server_tick":0,"x":0.0,"y":0.0,"facing":1,"moving":false,"movement_action_sequence":0,"appearance":_appearance}
 		_players.apply_snapshot({"world_ready":true,"map_id":1,"map_epoch":1,
 			"actor_id":1,"self_state":own,"entities":{}},Time.get_ticks_usec())
 		_set_status("ready")

@@ -1,5 +1,7 @@
 # SGTest — Clean-slate 測試與完工標準
 
+2026-11-22 shared appearance profile gate：`test_player_profiles.gd` 覆蓋 B/G/A 混合、髮型共享 metadata、固定走路／插值、各 profile AA/ND、換 race 中斷不支援 AA、失敗註冊原子性與未知外觀不 fallback；已加入 Client CI。Windows targeted tests 與 Python123 PASS。`python client/tests/run_world_view.py <Godot> --players --report reports/player_profiles_regression.json` 原 B GPU20張／91來源frame、超容差0、資源歸零 PASS。`Godot --path client --rendering-method gl_compatibility --script res://tests/test_recovered2_local_ui.gd -- <capture-dir> <private-22-asset-pack> profiles` 實際 B/G/A hair00/color0 預覽切換及9張畫面／scope釋放 PASS，來源 rules 是 fixture，不能推論全量原版合法集合或多人外觀。G/A 全方向逐像素及負載效能 NOT VERIFIED。
+
 ## MVP007-PVP-AUTHORITATIVE-COMBAT-CRIME-NAME-AOI — 玩家互打／罪名／名稱顏色（完成垂直切片）
 
 2026-11-19：已完成 Map13 玩家普通攻擊的 authenticated Server authority 閉環。Client 僅送 TargetActorId；Server 綁定 Actor/Connection/Profile，核對 MapEpoch、PK map、存活、距離、Blocking 直線與 cooldown，傷害採來源驗證的 `max(1, Attack - Defense/5)`，並透過唯一 `PlayerCombatSettlement` 寫入 durable HP。受害者 `PvpDamage(80)` 與 Monster damage 共用 damage sequence，攻擊者 `PvpAttackResult(79)` 只接受 committed receipt，重送不得造成第二次傷害。

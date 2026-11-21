@@ -274,6 +274,28 @@ func _run() -> void:
 	if panel.creation_options.selection()!=chosen or panel.appearance_picker._pickers.race.get_selected_id()!=1:
 		_error("skin switch lost shared appearance selection")
 		return
+	# Optional real B/G/A atlas gate; choices are fixture data, not original rules.
+	if args.size()>2 and args[2]=="profiles":
+		panel._latest.character_create_result_revision = 2
+		panel._latest.character_creation_appearances = [
+			{"race":0,"hair_index":0,"hair_color":0},
+			{"race":1,"hair_index":0,"hair_color":0},
+			{"race":2,"hair_index":0,"hair_color":0}]
+		panel._set_controls()
+		for race in 3:
+			panel.creation_options.select_value("race",race)
+			if not await _wait_previews(shell,1,true):
+				return
+			var preview = shell._character_previews[3]
+			var prefix: String = ["players/b/","players/g/","players/a/"][race]
+			if preview._canvas._commands.size()!=6:
+				_error("race preview lost source part count")
+				return
+			for part in preview._definition.parts.values():
+				if not str(part[0]).begins_with(prefix):
+					_error("race preview borrowed another race")
+					return
+			await _capture("create_profile_"+str(race),directory)
 	var store = app.world_view.store
 	app.queue_free()
 	await process_frame

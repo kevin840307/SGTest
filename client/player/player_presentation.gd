@@ -1,161 +1,61 @@
 extends RefCounted
-## Presentation of the current provisional B base profile. No network or authority.
-const Timeline = preload("res://animation/action_timeline.gd")
+## Shared multi-profile paper doll presentation. No loading or gameplay authority.
+const Profile = preload("res://player/character_appearance_profile.gd")
 const PositionHistory = preload("res://movement/position_history.gd")
-# Original slot groups; base art appears once, equipment overlay slots stay empty.
-const PARTS := {
-	12: ["players/b/base/leg", "B-LEG"],
-	7: ["players/b/base/right_arm", "B-R-ARM"],
-	9: ["players/b/base/body", "B-BODY"],
-	5: ["players/b/base/left_arm", "B-L-ARM"],
-	0: ["players/b/base/head", "B-HEAD"],
-	1: ["players/b/hair/hair00", "B-HAIR00"],
-}
-var _views := {}
+const PARTS = Profile.BASE_PARTS
+var _views: Dictionary = {}
+var _profiles: Dictionary = {}
+var _default_profile_key := "0:0:0"
 var _actors := {}
 var _seen_attack_events := {}
 var _seen_damage_events := {}
 var _seen_respawn_events := {}
-var _attack_available := false
-var _hit_available := false
-var _death_available := false
 var _epoch := 0
 var _map := 0
 
 func clear() -> void:
 	_views.clear()
+	_profiles.clear()
+	_default_profile_key = "0:0:0"
 	_actors.clear()
 	_seen_attack_events.clear()
 	_seen_damage_events.clear()
 	_seen_respawn_events.clear()
-	_attack_available = false
-	_hit_available = false
-	_death_available = false
 	_epoch = 0
 	_map = 0
 
-func configure(assets: Dictionary) -> Error:
+func configure(assets: Dictionary, appearance: Dictionary = {}) -> Error:
 	clear()
-	for part in PARTS.values():
-		if not assets.has(part[0]):
-			clear()
-			return ERR_INVALID_DATA
-		var manifest: Dictionary = assets[part[0]].manifest
-		for action in ["NS","NR"]:
-			for facing in range(1,9):
-				var key: String = str(part[1])+"_"+action+str(facing)
-				var value: Dictionary = manifest.get("logical_views",{}).get(key,{})
-				if not value.has_all(["clip","flip_h","timeline_ticks","loop","draw_slots"]) or not value.flip_h is bool or not value.loop is bool or not value.draw_slots is Array or not manifest.clips.has(value.clip):
-					clear()
-					return ERR_INVALID_DATA
-				var present := {}
-				for raw_slot in value.draw_slots:
-					var slot := int(raw_slot)
-					if float(raw_slot) != slot or slot < 0 or slot > 15 or present.has(slot):
-						clear()
-						return ERR_INVALID_DATA
-					present[slot] = true
-				for slot in PARTS:
-					if not present.has(slot):
-						clear()
-						return ERR_INVALID_DATA
-				var timeline := Timeline.new()
-				if timeline.configure_ticks(value.timeline_ticks,value.loop) != OK:
-					clear()
-					return ERR_INVALID_DATA
-				for step in value.timeline_ticks:
-					if int(step[0]) >= manifest.clips[value.clip].size():
-						clear()
-						return ERR_INVALID_DATA
-				_views[key] = {"view":value,"timeline":timeline}
-	# Current rebuilt Client has no equipment authority yet. The public recovered
-	# baseline confirms unarmed normal attack uses source action AA. Treat AA as
-	# optional until a full private pack is present; a partially-published AA set
-	# is invalid rather than silently mixing parts/directions.
-	var aa_parts := 0
-	for part in PARTS.values():
-		var manifest: Dictionary = assets[part[0]].manifest
-		if manifest.get("logical_views",{}).has(str(part[1])+"_AA1"):
-			aa_parts += 1
-	if aa_parts != 0 and aa_parts != PARTS.size():
-		clear()
-		return ERR_INVALID_DATA
-	_attack_available = aa_parts == PARTS.size()
-	if _attack_available:
-		for part in PARTS.values():
-			var manifest: Dictionary = assets[part[0]].manifest
-			for facing in range(1,9):
-				var key: String = str(part[1])+"_AA"+str(facing)
-				var value: Dictionary = manifest.get("logical_views",{}).get(key,{})
-				if not value.has_all(["clip","flip_h","timeline_ticks","loop","draw_slots"]) or not value.flip_h is bool or not value.loop is bool or bool(value.loop) or not value.draw_slots is Array or not manifest.clips.has(value.clip):
-					clear()
-					return ERR_INVALID_DATA
-				var present := {}
-				for raw_slot in value.draw_slots:
-					var slot := int(raw_slot)
-					if float(raw_slot) != slot or slot < 0 or slot > 15 or present.has(slot):
-						clear()
-						return ERR_INVALID_DATA
-					present[slot] = true
-				for slot in PARTS:
-					if not present.has(slot):
-						clear()
-						return ERR_INVALID_DATA
-				var timeline := Timeline.new()
-				if timeline.configure_ticks(value.timeline_ticks,false) != OK:
-					clear()
-					return ERR_INVALID_DATA
-				for step in value.timeline_ticks:
-					if int(step[0]) >= manifest.clips[value.clip].size():
-						clear()
-						return ERR_INVALID_DATA
-				_views[key] = {"view":value,"timeline":timeline}
-	var hit_state := _load_optional_one_shot(assets,"NH")
-	if hit_state < 0:
-		clear()
-		return ERR_INVALID_DATA
-	_hit_available = hit_state == 1
-	var death_state := _load_optional_one_shot(assets,"ND")
-	if death_state < 0:
-		clear()
-		return ERR_INVALID_DATA
-	_death_available = death_state == 1
+	var error := add_profile(assets,appearance)
+	if error == OK:
+		_default_profile_key = str(Profile.definition(appearance).key)
+	return error
+
+func add_profile(assets: Dictionary, appearance: Dictionary) -> Error:
+	var data := Profile.definition(appearance)
+	if data.is_empty():
+		return ERR_INVALID_PARAMETER
+	if _profiles.has(str(data.key)):
+		return OK
+	var profile := Profile.new()
+	var error := profile.configure(assets,appearance,_views)
+	if error != OK:
+		return error
+	_views.merge(profile.views)
+	_profiles[profile.key] = profile
 	return OK
 
-func _load_optional_one_shot(assets: Dictionary, action: String) -> int:
-	var present_parts := 0
-	for part in PARTS.values():
-		var manifest: Dictionary = assets[part[0]].manifest
-		if manifest.get("logical_views",{}).has(str(part[1])+"_"+action+"1"):
-			present_parts += 1
-	if present_parts == 0:
-		return 0
-	if present_parts != PARTS.size():
-		return -1
-	for part in PARTS.values():
-		var manifest: Dictionary = assets[part[0]].manifest
-		for facing in range(1,9):
-			var key: String = str(part[1])+"_"+action+str(facing)
-			var value: Dictionary = manifest.get("logical_views",{}).get(key,{})
-			if not value.has_all(["clip","flip_h","timeline_ticks","loop","draw_slots"]) or not value.flip_h is bool or not value.loop is bool or bool(value.loop) or not value.draw_slots is Array or not manifest.clips.has(value.clip):
-				return -1
-			var slots := {}
-			for raw_slot in value.draw_slots:
-				var slot := int(raw_slot)
-				if float(raw_slot) != slot or slot < 0 or slot > 15 or slots.has(slot):
-					return -1
-				slots[slot] = true
-			for slot in PARTS:
-				if not slots.has(slot):
-					return -1
-			var timeline := Timeline.new()
-			if timeline.configure_ticks(value.timeline_ticks,false) != OK:
-				return -1
-			for step in value.timeline_ticks:
-				if int(step[0]) >= manifest.clips[value.clip].size():
-					return -1
-			_views[key] = {"view":value,"timeline":timeline}
-	return 1
+func has_profile(appearance: Dictionary) -> bool:
+	var data := Profile.definition(appearance)
+	return not data.is_empty() and _profiles.has(str(data.key))
+
+func _profile_for(value: Dictionary) -> RefCounted:
+	if not value.has("appearance"):
+		return _profiles.get(_default_profile_key)
+	if not value.appearance is Dictionary:
+		return null
+	var data := Profile.definition(value.appearance)
+	return null if data.is_empty() else _profiles.get(str(data.key))
 
 func apply_snapshot(snapshot: Dictionary, now_usec: int) -> void:
 	if not snapshot.get("world_ready",false) or int(snapshot.get("map_epoch",0)) <= 0 or now_usec < 0:
@@ -181,6 +81,10 @@ func apply_snapshot(snapshot: Dictionary, now_usec: int) -> void:
 			_actors.erase(id)
 	for id in visible:
 		var value: Dictionary = visible[id]
+		var profile = _profile_for(value)
+		if profile == null:
+			_actors.erase(id)
+			continue
 		var old: Dictionary = _actors.get(id,{})
 		var base_action := "NR" if bool(value.moving) else "NS"
 		var generation_changed: bool = old.is_empty() or int(old.value.connection_epoch) != int(value.connection_epoch) or int(old.value.entity_map_epoch) != int(value.entity_map_epoch)
@@ -191,13 +95,13 @@ func apply_snapshot(snapshot: Dictionary, now_usec: int) -> void:
 		if not generation_changed:
 			started = int(old.started)
 			dead_visual = bool(old.get("dead_visual",false))
-			if dead_visual and _death_available:
+			if dead_visual and profile.death_available:
 				action = "ND"
 				action_facing = int(old.action_facing)
-			elif _one_shot_active(old,"NH",_hit_available,now_usec):
+			elif profile.hit_available and _one_shot_active(old,"NH",old.profile.hit_available,now_usec):
 				action = "NH"
 				action_facing = int(old.action_facing)
-			elif _attack_active(old,now_usec):
+			elif profile.attack_available and _attack_active(old,now_usec):
 				action = "AA"
 				action_facing = int(old.action_facing)
 			elif str(old.action) != base_action:
@@ -210,7 +114,7 @@ func apply_snapshot(snapshot: Dictionary, now_usec: int) -> void:
 		if tick < 0 or not history.push(tick,Vector2(float(value.x),float(value.y)),now_usec):
 			continue
 		_actors[id] = {"value":value,"action":action,"action_facing":action_facing,
-			"started":started,"history":history,"dead_visual":dead_visual}
+			"started":started,"history":history,"dead_visual":dead_visual,"profile":profile}
 
 	var events = snapshot.get("player_attack_events",[])
 	if events is Array:
@@ -224,7 +128,7 @@ func apply_snapshot(snapshot: Dictionary, now_usec: int) -> void:
 			if _seen_attack_events.has(key):
 				continue
 			_seen_attack_events[key] = true
-			if not _attack_available or not _actors.has(attacker):
+			if not _actors.has(attacker) or not _actors[attacker].profile.attack_available:
 				continue
 			var actor: Dictionary = _actors[attacker]
 			var actor_connection := int(actor.value.connection_epoch)
@@ -258,11 +162,11 @@ func apply_snapshot(snapshot: Dictionary, now_usec: int) -> void:
 			var died := bool(event.get("died",false))
 			if died:
 				actor.dead_visual = true
-				if _death_available:
+				if actor.profile.death_available:
 					actor.action = "ND"
 					actor.action_facing = int(event.get("facing",actor.value.facing))
 					actor.started = now_usec
-			elif _hit_available and not bool(actor.get("dead_visual",false)):
+			elif actor.profile.hit_available and not bool(actor.get("dead_visual",false)):
 				actor.action = "NH"
 				actor.action_facing = int(event.get("facing",actor.value.facing))
 				actor.started = now_usec
@@ -282,7 +186,7 @@ func apply_snapshot(snapshot: Dictionary, now_usec: int) -> void:
 			var attack_key:="pvp:%d:%d:%d" % [attacker,attacker_connection,attack_sequence]
 			if not _seen_attack_events.has(attack_key):
 				_seen_attack_events[attack_key]=true
-				if _attack_available and _actors.has(attacker):
+				if _actors.has(attacker) and _actors[attacker].profile.attack_available:
 					var attacker_actor:Dictionary=_actors[attacker]
 					var current_connection:=int(attacker_actor.value.connection_epoch)
 					var own_without_self_state:=attacker==int(snapshot.actor_id) and current_connection==0
@@ -301,11 +205,11 @@ func apply_snapshot(snapshot: Dictionary, now_usec: int) -> void:
 					if current_connection==victim_connection or own_without_self_state:
 						if bool(event.get("died",false)):
 							victim_actor.dead_visual=true
-							if _death_available:
+							if victim_actor.profile.death_available:
 								victim_actor.action="ND"
 								victim_actor.action_facing=int(event.get("victim_facing",victim_actor.value.facing))
 								victim_actor.started=now_usec
-						elif _hit_available and not bool(victim_actor.get("dead_visual",false)):
+						elif victim_actor.profile.hit_available and not bool(victim_actor.get("dead_visual",false)):
 							victim_actor.action="NH"
 							victim_actor.action_facing=int(event.get("victim_facing",victim_actor.value.facing))
 							victim_actor.started=now_usec
@@ -325,7 +229,7 @@ func apply_snapshot(snapshot: Dictionary, now_usec: int) -> void:
 			var attack_key:="pvpskill:%d:%d:%d" % [attacker,ac,skill_sequence]
 			if not _seen_attack_events.has(attack_key):
 				_seen_attack_events[attack_key]=true
-				if _attack_available and _actors.has(attacker):
+				if _actors.has(attacker) and _actors[attacker].profile.attack_available:
 					var actor:Dictionary=_actors[attacker]
 					var current_connection:=int(actor.value.connection_epoch)
 					var own_without_self_state:=attacker==int(snapshot.actor_id) and current_connection==0
@@ -344,11 +248,11 @@ func apply_snapshot(snapshot: Dictionary, now_usec: int) -> void:
 					if current_connection==vc or own_without_self_state:
 						if bool(event.get("died",false)):
 							actor.dead_visual=true
-							if _death_available:
+							if actor.profile.death_available:
 								actor.action="ND"
 								actor.action_facing=int(event.get("victim_facing",actor.value.facing))
 								actor.started=now_usec
-						elif _hit_available and not bool(actor.get("dead_visual",false)):
+						elif actor.profile.hit_available and not bool(actor.get("dead_visual",false)):
 							actor.action="NH"
 							actor.action_facing=int(event.get("victim_facing",actor.value.facing))
 							actor.started=now_usec
@@ -383,17 +287,17 @@ func _one_shot_active(actor: Dictionary,action: String,available: bool,now_usec:
 	if not available or str(actor.get("action","")) != action:
 		return false
 	var facing := int(actor.get("action_facing",0))
-	var body: Dictionary = _views.get("B-BODY_"+action+str(facing),{})
+	var body: Dictionary = actor.profile.views.get(actor.profile.body_prefix+"_"+action+str(facing),{})
 	if body.is_empty():
 		return false
 	var elapsed := maxi(0,now_usec-int(actor.get("started",now_usec)))*50/1000000
 	return not body.timeline.is_complete(elapsed)
 
 func _attack_active(actor: Dictionary,now_usec: int) -> bool:
-	if not _attack_available or str(actor.get("action","")) != "AA":
+	if not actor.profile.attack_available or str(actor.get("action","")) != "AA":
 		return false
 	var facing := int(actor.get("action_facing",0))
-	var body: Dictionary = _views.get("B-BODY_AA"+str(facing),{})
+	var body: Dictionary = actor.profile.views.get(actor.profile.body_prefix+"_AA"+str(facing),{})
 	if body.is_empty():
 		return false
 	var elapsed := maxi(0,now_usec-int(actor.get("started",now_usec)))*50/1000000
@@ -408,25 +312,26 @@ func actors_at(now_usec: int) -> Array:
 	for id in ids:
 		var actor: Dictionary = _actors[id]
 		var value: Dictionary = actor.value
+		var profile = actor.profile
 		var action := str(actor.action)
 		var facing := int(actor.action_facing)
 		var elapsed := maxi(0,now_usec-int(actor.started))*50/1000000
 		if action in ["AA","NH"]:
-			var one_shot_body: Dictionary = _views.get("B-BODY_"+action+str(facing),{})
+			var one_shot_body: Dictionary = profile.views.get(profile.body_prefix+"_"+action+str(facing),{})
 			if one_shot_body.is_empty() or one_shot_body.timeline.is_complete(elapsed):
 				action = "NR" if bool(value.moving) else "NS"
 				facing = int(value.facing)
 				elapsed = 0
 		var requested := action+str(facing)
-		var body: Dictionary = _views.get("B-BODY_"+requested,{})
+		var body: Dictionary = profile.views.get(profile.body_prefix+"_"+requested,{})
 		if body.is_empty():
 			continue
 		var parts: Array = []
 		for slot in body.view.draw_slots:
-			if not PARTS.has(int(slot)):
+			if not profile.parts.has(int(slot)):
 				continue
-			var part: Array = PARTS[int(slot)]
-			var resolved: Dictionary = _views[str(part[1])+"_"+requested]
+			var part: Array = profile.parts[int(slot)]
+			var resolved: Dictionary = profile.views[str(part[1])+"_"+requested]
 			parts.append({"asset":part[0],"clip":resolved.view.clip,
 				"frame":resolved.timeline.frame_at_update(elapsed),
 				"flip_h":resolved.view.flip_h,"part_slot":int(slot)})

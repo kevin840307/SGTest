@@ -124,6 +124,8 @@ jobs:
         run: timeout 20s .cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64 --headless --path client --script res://tests/test_ui_lifecycle.gd
       - name: Character preview shares paper doll animation and releases hidden scopes
         run: timeout 20s .cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64 --headless --path client --script res://tests/test_character_preview.gd
+      - name: Multi-profile player presentation
+        run: timeout 20s .cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64 --headless --path client --script res://tests/test_player_profiles.gd
       - name: Optional Recovered2 local authentication UI adapter gate
         run: timeout 20s .cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64 --headless --path client --script res://tests/test_recovered2_local_ui.gd
       - name: Scoped map loading progress with Recovered2 artwork fallback
