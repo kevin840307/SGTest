@@ -382,7 +382,8 @@ class ArchitectureConventionsChecks(unittest.TestCase):
         self.assertIn("return FrameCodec.length_prefix(buffer, HEADER_BYTES, MAX_FRAME_BYTES)", wire)
         self.assertIn("return FrameCodec.valid_variable_header(", wire)
         self.assertIn("return FrameCodec.valid_header(", wire)
-        self.assertGreaterEqual(wire.count("var writer := _writer("), 20)
+        self.assertGreaterEqual(wire.count("var writer := _writer("), 37)
+        self.assertNotRegex(wire, r"(?m)^\s*var writer\s*:?=\s*StreamPeerBuffer\.new\(")
         self.assertNotRegex(framing, r"(?m)^const (?:VERSION|OPCODE_|HEADER_BYTES|MAX_FRAME_BYTES)")
         for forbidden in ("WorldState", "ClientSession", "PacketTransport",
                           "StreamPeerTCP", "TCPClient", "OS.get_", "Thread.new"):

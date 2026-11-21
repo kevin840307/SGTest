@@ -1102,11 +1102,7 @@ static func encode_storage_withdraw(epoch: int, sequence: int, npc_spawn_id: int
 static func _encode_storage_move(opcode: int, epoch: int, sequence: int, npc_spawn_id: int, item_uid: int) -> PackedByteArray:
 	if opcode not in [OPCODE_STORAGE_DEPOSIT,OPCODE_STORAGE_WITHDRAW] or epoch <= 0 or sequence < 1 or sequence > 0xffffffff or npc_spawn_id <= 0 or item_uid <= 0:
 		return PackedByteArray()
-	var writer := StreamPeerBuffer.new()
-	writer.big_endian = false
-	writer.put_u32(STORAGE_MOVE_FRAME_BYTES)
-	writer.put_u16(VERSION)
-	writer.put_u16(opcode)
+	var writer := _writer(STORAGE_MOVE_FRAME_BYTES, opcode)
 	writer.put_64(epoch)
 	writer.put_u32(sequence)
 	writer.put_32(npc_spawn_id)
@@ -1218,11 +1214,7 @@ static func encode_bank_withdraw(epoch: int, sequence: int, npc_spawn_id: int, a
 static func _encode_bank_move(opcode: int, epoch: int, sequence: int, npc_spawn_id: int, amount: int) -> PackedByteArray:
 	if opcode not in [OPCODE_BANK_DEPOSIT,OPCODE_BANK_WITHDRAW] or epoch <= 0 or sequence < 1 or sequence > 0xffffffff or npc_spawn_id <= 0 or amount <= 0 or amount > MAX_MONEY:
 		return PackedByteArray()
-	var writer := StreamPeerBuffer.new()
-	writer.big_endian = false
-	writer.put_u32(BANK_MOVE_FRAME_BYTES)
-	writer.put_u16(VERSION)
-	writer.put_u16(opcode)
+	var writer := _writer(BANK_MOVE_FRAME_BYTES, opcode)
 	writer.put_64(epoch)
 	writer.put_u32(sequence)
 	writer.put_32(npc_spawn_id)
@@ -1275,11 +1267,7 @@ static func encode_trade_command(epoch: int, sequence: int, action: int,
 			valid = trade_id > 0 and target_actor_id == 0 and item_uid == 0 and money == 0
 	if not valid:
 		return PackedByteArray()
-	var writer := StreamPeerBuffer.new()
-	writer.big_endian = false
-	writer.put_u32(TRADE_COMMAND_FRAME_BYTES)
-	writer.put_u16(VERSION)
-	writer.put_u16(OPCODE_TRADE_COMMAND)
+	var writer := _writer(TRADE_COMMAND_FRAME_BYTES, OPCODE_TRADE_COMMAND)
 	writer.put_64(epoch)
 	writer.put_u32(sequence)
 	writer.put_u8(action)
@@ -1371,11 +1359,7 @@ static func decode_trade_terminal(frame: PackedByteArray) -> Dictionary:
 static func encode_repair_open(epoch: int, sequence: int, npc_spawn_id: int) -> PackedByteArray:
 	if epoch <= 0 or sequence < 1 or sequence > 0xffffffff or npc_spawn_id <= 0:
 		return PackedByteArray()
-	var writer := StreamPeerBuffer.new()
-	writer.big_endian = false
-	writer.put_u32(REPAIR_OPEN_FRAME_BYTES)
-	writer.put_u16(VERSION)
-	writer.put_u16(OPCODE_REPAIR_OPEN)
+	var writer := _writer(REPAIR_OPEN_FRAME_BYTES, OPCODE_REPAIR_OPEN)
 	writer.put_64(epoch)
 	writer.put_u32(sequence)
 	writer.put_32(npc_spawn_id)
@@ -1422,11 +1406,7 @@ static func decode_repair_snapshot(frame: PackedByteArray) -> Dictionary:
 static func encode_repair_item(epoch: int, sequence: int, npc_spawn_id: int, item_uid: int) -> PackedByteArray:
 	if epoch <= 0 or sequence < 1 or sequence > 0xffffffff or npc_spawn_id <= 0 or item_uid <= 0:
 		return PackedByteArray()
-	var writer := StreamPeerBuffer.new()
-	writer.big_endian = false
-	writer.put_u32(REPAIR_ITEM_FRAME_BYTES)
-	writer.put_u16(VERSION)
-	writer.put_u16(OPCODE_REPAIR_ITEM)
+	var writer := _writer(REPAIR_ITEM_FRAME_BYTES, OPCODE_REPAIR_ITEM)
 	writer.put_64(epoch)
 	writer.put_u32(sequence)
 	writer.put_32(npc_spawn_id)
@@ -1479,11 +1459,7 @@ static func decode_repair_result(frame: PackedByteArray) -> Dictionary:
 static func encode_enhancement_open(epoch: int, sequence: int, npc_spawn_id: int) -> PackedByteArray:
 	if epoch <= 0 or sequence < 1 or sequence > 0xffffffff or npc_spawn_id <= 0:
 		return PackedByteArray()
-	var writer := StreamPeerBuffer.new()
-	writer.big_endian = false
-	writer.put_u32(ENHANCEMENT_OPEN_FRAME_BYTES)
-	writer.put_u16(VERSION)
-	writer.put_u16(OPCODE_ENHANCEMENT_OPEN)
+	var writer := _writer(ENHANCEMENT_OPEN_FRAME_BYTES, OPCODE_ENHANCEMENT_OPEN)
 	writer.put_64(epoch)
 	writer.put_u32(sequence)
 	writer.put_32(npc_spawn_id)
@@ -1537,11 +1513,7 @@ static func decode_enhancement_snapshot(frame: PackedByteArray) -> Dictionary:
 static func encode_enhancement_item(epoch: int, sequence: int, npc_spawn_id: int, item_uid: int) -> PackedByteArray:
 	if epoch <= 0 or sequence < 1 or sequence > 0xffffffff or npc_spawn_id <= 0 or item_uid <= 0:
 		return PackedByteArray()
-	var writer := StreamPeerBuffer.new()
-	writer.big_endian = false
-	writer.put_u32(ENHANCEMENT_ITEM_FRAME_BYTES)
-	writer.put_u16(VERSION)
-	writer.put_u16(OPCODE_ENHANCEMENT_ITEM)
+	var writer := _writer(ENHANCEMENT_ITEM_FRAME_BYTES, OPCODE_ENHANCEMENT_ITEM)
 	writer.put_64(epoch)
 	writer.put_u32(sequence)
 	writer.put_32(npc_spawn_id)
@@ -1608,11 +1580,7 @@ static func encode_equipment_unequip(epoch: int, sequence: int, item_uid: int) -
 static func _encode_equipment_move(opcode: int, epoch: int, sequence: int, item_uid: int) -> PackedByteArray:
 	if opcode not in [OPCODE_EQUIPMENT_EQUIP,OPCODE_EQUIPMENT_UNEQUIP] or epoch <= 0 or sequence < 1 or sequence > 0xffffffff or item_uid <= 0:
 		return PackedByteArray()
-	var writer := StreamPeerBuffer.new()
-	writer.big_endian = false
-	writer.put_u32(EQUIPMENT_MOVE_FRAME_BYTES)
-	writer.put_u16(VERSION)
-	writer.put_u16(opcode)
+	var writer := _writer(EQUIPMENT_MOVE_FRAME_BYTES, opcode)
 	writer.put_64(epoch)
 	writer.put_u32(sequence)
 	writer.put_64(item_uid)
@@ -1671,11 +1639,7 @@ static func decode_equipment_snapshot(frame: PackedByteArray) -> Dictionary:
 static func encode_pvp_mode_command(epoch: int, sequence: int, action: int) -> PackedByteArray:
 	if epoch <= 0 or sequence < 1 or sequence > 0xffffffff or action < 0 or action > 2:
 		return PackedByteArray()
-	var writer := StreamPeerBuffer.new()
-	writer.big_endian = false
-	writer.put_u32(PVP_MODE_COMMAND_FRAME_BYTES)
-	writer.put_u16(VERSION)
-	writer.put_u16(OPCODE_PVP_MODE_COMMAND)
+	var writer := _writer(PVP_MODE_COMMAND_FRAME_BYTES, OPCODE_PVP_MODE_COMMAND)
 	writer.put_64(epoch)
 	writer.put_u32(sequence)
 	writer.put_u8(action)
@@ -1700,11 +1664,7 @@ static func decode_pvp_mode_result(frame: PackedByteArray) -> Dictionary:
 static func encode_pvp_attack(epoch: int, sequence: int, target_actor_id: int) -> PackedByteArray:
 	if epoch <= 0 or sequence < 1 or sequence > 0xffffffff or target_actor_id <= 0:
 		return PackedByteArray()
-	var writer := StreamPeerBuffer.new()
-	writer.big_endian = false
-	writer.put_u32(PVP_ATTACK_FRAME_BYTES)
-	writer.put_u16(VERSION)
-	writer.put_u16(OPCODE_PVP_ATTACK)
+	var writer := _writer(PVP_ATTACK_FRAME_BYTES, OPCODE_PVP_ATTACK)
 	writer.put_64(epoch)
 	writer.put_u32(sequence)
 	writer.put_64(target_actor_id)
@@ -2088,11 +2048,7 @@ static func encode_chat_command(epoch:int,sequence:int,channel:int,bubble_type:i
 	var bytes:=message.to_utf8_buffer()
 	if epoch<=0 or sequence<=0 or sequence>0xffffffff or channel<0 or channel>4 or bubble_type<0 or bubble_type>5 or bytes.size()<1 or bytes.size()>CHAT_MAX_MESSAGE_BYTES or message.strip_edges().is_empty():
 		return PackedByteArray()
-	var writer:=StreamPeerBuffer.new()
-	writer.big_endian=false
-	writer.put_u32(CHAT_COMMAND_HEADER_BYTES+bytes.size())
-	writer.put_u16(VERSION)
-	writer.put_u16(OPCODE_CHAT_COMMAND)
+	var writer := _writer(CHAT_COMMAND_HEADER_BYTES+bytes.size(), OPCODE_CHAT_COMMAND)
 	writer.put_64(epoch)
 	writer.put_u32(sequence)
 	writer.put_u8(channel)
@@ -2121,11 +2077,7 @@ static func encode_whisper_command(
 	):
 		return PackedByteArray()
 	var extra:=2+name_bytes.size() if by_name else 0
-	var writer:=StreamPeerBuffer.new()
-	writer.big_endian=false
-	writer.put_u32(WHISPER_COMMAND_HEADER_BYTES+bytes.size()+extra)
-	writer.put_u16(VERSION)
-	writer.put_u16(OPCODE_WHISPER_COMMAND)
+	var writer := _writer(WHISPER_COMMAND_HEADER_BYTES+bytes.size()+extra, OPCODE_WHISPER_COMMAND)
 	writer.put_64(epoch)
 	writer.put_u32(sequence)
 	writer.put_64(target_actor_id)
@@ -2216,11 +2168,7 @@ static func encode_party_command(
 			return PackedByteArray()
 	else:
 		return PackedByteArray()
-	var writer:=StreamPeerBuffer.new()
-	writer.big_endian=false
-	writer.put_u32(PARTY_COMMAND_FRAME_BYTES+name_bytes.size())
-	writer.put_u16(VERSION)
-	writer.put_u16(OPCODE_PARTY_COMMAND)
+	var writer := _writer(PARTY_COMMAND_FRAME_BYTES+name_bytes.size(), OPCODE_PARTY_COMMAND)
 	writer.put_64(epoch)
 	writer.put_u32(sequence)
 	writer.put_u8(action)
