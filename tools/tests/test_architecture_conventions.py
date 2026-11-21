@@ -20,6 +20,7 @@ class ArchitectureConventionsChecks(unittest.TestCase):
     def test_feature_panels_follow_owning_directory(self) -> None:
         for folder, filename in (
             ("inventory", "inventory_panel.gd"),
+            ("bank", "bank_panel.gd"),
             ("trade", "trade_panel.gd"),
             ("chat", "chat_panel.gd"),
             ("party", "party_panel.gd"),

@@ -13,6 +13,7 @@ const QuestPanel = preload("res://quest/quest_panel.gd")
 const ChatPanel = preload("res://chat/chat_panel.gd")
 const PartyPanel = preload("res://party/party_panel.gd")
 const ItemCatalog = preload("res://inventory/item_catalog.gd")
+const BankPanel = preload("res://bank/bank_panel.gd")
 var session = Session.new()
 var inventory_panel := InventoryPanel.new()
 var trade_panel := TradePanel.new()
@@ -21,6 +22,7 @@ var quest_panel := QuestPanel.new()
 var chat_panel := ChatPanel.new()
 var party_panel := PartyPanel.new()
 var item_catalog = ItemCatalog.new()
+var bank_panel := BankPanel.new()
 var active := false
 var trusted_chain: X509Certificate
 var tls_name := ""
@@ -63,16 +65,6 @@ var storage_deposit_button := Button.new()
 var storage_withdraw_button := Button.new()
 var storage_status := Label.new()
 var _storage_display_key := ""
-var bank_npc_input := SpinBox.new()
-var bank_open_button := Button.new()
-var bank_scope_label := Label.new()
-var bank_wallet_label := Label.new()
-var bank_balance_label := Label.new()
-var bank_amount_input := SpinBox.new()
-var bank_deposit_button := Button.new()
-var bank_withdraw_button := Button.new()
-var bank_status := Label.new()
-var _bank_display_key := ""
 var repair_npc_input := SpinBox.new()
 var repair_open_button := Button.new()
 var repair_wallet_label := Label.new()
@@ -197,23 +189,6 @@ func _ready() -> void:
 	storage_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	for control in [storage_npc_input,storage_open_button,storage_deposit_picker,storage_withdraw_picker,storage_deposit_button,storage_withdraw_button,storage_status]:
 		control.visible = false
-	bank_npc_input.min_value = 1
-	bank_npc_input.max_value = 2147483647
-	bank_npc_input.step = 1
-	bank_npc_input.value = 1
-	bank_open_button.text = "開啟附近 NPC 銀行"
-	bank_scope_label.text = "銀行範圍：—"
-	bank_wallet_label.text = "角色錢包：—"
-	bank_balance_label.text = "銀行餘額：—"
-	bank_amount_input.min_value = 1
-	bank_amount_input.max_value = 9000000000000000
-	bank_amount_input.step = 1
-	bank_amount_input.value = 1
-	bank_deposit_button.text = "存入金錢"
-	bank_withdraw_button.text = "領出金錢"
-	bank_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	for control in [bank_npc_input,bank_open_button,bank_scope_label,bank_wallet_label,bank_balance_label,bank_amount_input,bank_deposit_button,bank_withdraw_button,bank_status,repair_npc_input,repair_open_button,repair_wallet_label,repair_item_picker,repair_button,repair_status]:
-		control.visible = false
 	repair_npc_input.min_value = 1
 	repair_npc_input.max_value = 2147483647
 	repair_npc_input.step = 1
@@ -248,7 +223,7 @@ func _ready() -> void:
 	for control in [login_button,register_button,characters,choose_button,character_name_input,character_slot_input,create_character_button,character_create_status,respawn_button,skill_hint,skill_id_input,skill_target_mode,skill_area_button,skill_status,logout_button,status,pickup_status]:
 		column.add_child(control)
 	column.add_child(inventory_panel)
-	for control in [shop_npc_input,shop_open_button,shop_money_label,shop_item_picker,shop_sell_picker,shop_quantity,shop_sell_quantity,shop_buy_button,shop_sell_button,shop_status,storage_npc_input,storage_open_button,storage_deposit_picker,storage_withdraw_picker,storage_deposit_button,storage_withdraw_button,storage_status,bank_npc_input,bank_open_button,bank_scope_label,bank_wallet_label,bank_balance_label,bank_amount_input,bank_deposit_button,bank_withdraw_button,bank_status,repair_npc_input,repair_open_button,repair_wallet_label,repair_item_picker,repair_button,repair_status,enhancement_npc_input,enhancement_open_button,enhancement_wallet_label,enhancement_item_picker,enhancement_button,enhancement_status]:
+	for control in [shop_npc_input,shop_open_button,shop_money_label,shop_item_picker,shop_sell_picker,shop_quantity,shop_sell_quantity,shop_buy_button,shop_sell_button,shop_status,storage_npc_input,storage_open_button,storage_deposit_picker,storage_withdraw_picker,storage_deposit_button,storage_withdraw_button,storage_status,repair_npc_input,repair_open_button,repair_wallet_label,repair_item_picker,repair_button,repair_status,enhancement_npc_input,enhancement_open_button,enhancement_wallet_label,enhancement_item_picker,enhancement_button,enhancement_status]:
 		column.add_child(control)
 	login_button.pressed.connect(login)
 	register_button.pressed.connect(register_account)
@@ -266,9 +241,8 @@ func _ready() -> void:
 	storage_open_button.pressed.connect(_open_storage_from_input)
 	storage_deposit_button.pressed.connect(_deposit_selected_storage_item)
 	storage_withdraw_button.pressed.connect(_withdraw_selected_storage_item)
-	bank_open_button.pressed.connect(_open_bank_from_input)
-	bank_deposit_button.pressed.connect(_deposit_bank_amount)
-	bank_withdraw_button.pressed.connect(_withdraw_bank_amount)
+	bank_panel.set_actions(Callable(self,"submit_bank_open"),Callable(self,"submit_bank_deposit"),Callable(self,"submit_bank_withdraw"))
+	column.add_child(bank_panel)
 	repair_open_button.pressed.connect(_open_repair_from_input)
 	repair_button.pressed.connect(_repair_selected_item)
 	repair_item_picker.item_selected.connect(func(_index): _update_repair_buttons())
@@ -361,7 +335,6 @@ func _begin_connection(register_first:bool)->void:
 	pickup_status.text = ""
 	_shop_display_key = ""
 	_storage_display_key = ""
-	_bank_display_key = ""
 	_repair_display_key = ""
 	_enhancement_display_key = ""
 	chat_panel.reset()
@@ -373,10 +346,7 @@ func _begin_connection(register_first:bool)->void:
 	storage_status.text = ""
 	storage_deposit_picker.clear()
 	storage_withdraw_picker.clear()
-	bank_status.text = ""
-	bank_scope_label.text = "銀行範圍：—"
-	bank_wallet_label.text = "角色錢包：—"
-	bank_balance_label.text = "銀行餘額：—"
+	bank_panel.reset()
 	repair_status.text = ""
 	repair_wallet_label.text = "角色錢包：—"
 	repair_item_picker.clear()
@@ -607,7 +577,6 @@ func disconnect_session() -> void:
 	pickup_status.text = ""
 	_shop_display_key = ""
 	_storage_display_key = ""
-	_bank_display_key = ""
 	_repair_display_key = ""
 	_enhancement_display_key = ""
 	chat_panel.reset()
@@ -619,10 +588,7 @@ func disconnect_session() -> void:
 	storage_status.text = ""
 	storage_deposit_picker.clear()
 	storage_withdraw_picker.clear()
-	bank_status.text = ""
-	bank_scope_label.text = "銀行範圍：—"
-	bank_wallet_label.text = "角色錢包：—"
-	bank_balance_label.text = "銀行餘額：—"
+	bank_panel.reset()
 	repair_status.text = ""
 	repair_wallet_label.text = "角色錢包：—"
 	repair_item_picker.clear()
@@ -915,81 +881,6 @@ func _update_storage_ui() -> void:
 			storage_status.text = "倉庫操作失敗（伺服器代碼 %d）" % int(result.get("status",-1))
 	storage_deposit_button.disabled = not usable or pending or not ready or active_npc <= 0 or storage_deposit_picker.item_count == 0
 	storage_withdraw_button.disabled = not usable or pending or not ready or active_npc <= 0 or storage_withdraw_picker.item_count == 0
-
-
-func _open_bank_from_input() -> void:
-	if bank_open_button.disabled:
-		return
-	if submit_bank_open(int(bank_npc_input.value)):
-		bank_status.text = "銀行請求已送出，等待伺服器核准範圍與餘額…"
-		bank_open_button.disabled = true
-	else:
-		bank_status.text = "目前無法開啟該銀行"
-
-
-func _deposit_bank_amount() -> void:
-	if bank_deposit_button.disabled:
-		return
-	var amount := int(bank_amount_input.value)
-	if submit_bank_deposit(amount):
-		bank_status.text = "存入請求已送出，等待伺服器結算…"
-		bank_deposit_button.disabled = true
-		bank_withdraw_button.disabled = true
-	else:
-		bank_status.text = "目前無法存入該金額"
-
-
-func _withdraw_bank_amount() -> void:
-	if bank_withdraw_button.disabled:
-		return
-	var amount := int(bank_amount_input.value)
-	if submit_bank_withdraw(amount):
-		bank_status.text = "領出請求已送出，等待伺服器結算…"
-		bank_deposit_button.disabled = true
-		bank_withdraw_button.disabled = true
-	else:
-		bank_status.text = "目前無法領出該金額"
-
-
-func _bank_scope_text(scope: int) -> String:
-	match scope:
-		1:
-			return "角色專屬（伺服器規則）"
-		2:
-			return "帳號共用（伺服器規則）"
-		_:
-			return "—"
-
-
-func _update_bank_ui() -> void:
-	var in_world := active and int(_latest.get("state",-1)) == State.STATE_IN_WORLD
-	for control in [bank_npc_input,bank_open_button,bank_scope_label,bank_wallet_label,bank_balance_label,bank_amount_input,bank_deposit_button,bank_withdraw_button,bank_status]:
-		control.visible = in_world
-	if not in_world:
-		_bank_display_key = ""
-		return
-	var active_npc := int(_latest.get("active_bank_npc",0))
-	var scope := int(_latest.get("bank_scope",0))
-	var wallet := int(_latest.get("bank_wallet_money",0))
-	var balance := int(_latest.get("bank_money",0))
-	var pending := int(_latest.get("pending_bank_sequence",0)) != 0
-	var usable := bool(_latest.get("world_ready",false)) and not bool(_latest.get("player_dead",false)) and not bool(_latest.get("reconnecting",false)) and not bool(_latest.get("resync_pending",false)) and not bool(_latest.get("waiting_for_new_map",false)) and int(_latest.get("pending_world_ready_ack_epoch",0)) == 0 and int(_latest.get("last_world_ready_ack_epoch",0)) == int(_latest.get("map_epoch",0))
-	bank_open_button.disabled = not usable or pending
-	bank_scope_label.text = "銀行範圍：%s" % _bank_scope_text(scope)
-	bank_wallet_label.text = "角色錢包：%d" % wallet if active_npc > 0 else "角色錢包：—"
-	bank_balance_label.text = "銀行餘額：%d" % balance if active_npc > 0 else "銀行餘額：—"
-	var amount := int(bank_amount_input.value)
-	bank_deposit_button.disabled = not usable or pending or active_npc <= 0 or scope not in [1,2] or amount <= 0 or amount > wallet
-	bank_withdraw_button.disabled = not usable or pending or active_npc <= 0 or scope not in [1,2] or amount <= 0 or amount > balance
-	var open_status := int(_latest.get("last_bank_open_status",-1))
-	if open_status > 0 and active_npc == 0:
-		bank_status.text = "銀行無法開啟（伺服器代碼 %d）" % open_status
-	var result: Dictionary = _latest.get("last_bank_result",{})
-	if not result.is_empty():
-		if int(result.get("status",-1)) in [0,1]:
-			bank_status.text = "%s完成：%d｜錢包 %d｜銀行 %d" % ["存入" if int(result.get("kind",0)) == 1 else "領出",int(result.get("amount",0)),int(result.get("wallet_money",0)),int(result.get("bank_money",0))]
-		else:
-			bank_status.text = "銀行操作失敗（伺服器代碼 %d）" % int(result.get("status",-1))
 
 
 func _update_nearby_chat_ui() -> void:
@@ -1395,7 +1286,7 @@ func _process(delta: float) -> void:
 	_refresh_inventory_panel()
 	_update_shop_ui()
 	_update_storage_ui()
-	_update_bank_ui()
+	bank_panel.apply_snapshot(_latest, active)
 	_update_repair_ui()
 	_update_enhancement_ui()
 	_refresh_trade_panel()

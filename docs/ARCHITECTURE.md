@@ -127,6 +127,7 @@ client/
   monster/                  # 怪物呈現
   pvp/                      # PvP 名稱標記
   inventory/                # 背包與裝備面板
+  bank/                     # NPC 銀行 UI（Server 權威存提款）
   trade/                    # 玩家交易面板
   player_shop/              # 玩家擺攤與買賣面板
   quest/                    # NPC 任務對話與選項面板

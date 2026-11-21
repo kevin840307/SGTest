@@ -1,5 +1,8 @@
 # SGTest 新版重建 TODO（2026-11-15）
 
+- ARCH-CLIENT-BANK-PANEL [x] 2026-11-21：`client/bank/bank_panel.gd` 接手 NPC 銀行 UI 按鈕／餘額快照／狀態顯示，`SessionPanel` 只管理既有 Auth／MapEpoch／WorldReady 條件及動作 callback；沒有建立第二個 Session、交易狀態或自行結算金錢。Godot 4.7.2 真 TLS/UI `bank_ui=PASS`、Login E2E PASS，架構 Gate 已納入銀行功能目錄；其餘商店／倉庫／修理／強化 UI 與 WorldState Reducer 仍待按相同原則拆分，GPU／多開 NOT VERIFIED。
+
+
 - ARCH-SERVER-PARTIAL-COHESION [x] 2026-11-21：`SqliteIdentityStore` 的 Schema v23 migration 和 CombatProfile/HP/MP 搬到既有 partial class 的獨立功能檔，公開 DTO 集中 `IdentityContracts.cs`；`WireProtocol` 將 Combat、Identity、Inventory、NPC Shop、World Codec 按功能實體分檔；`IdentityTlsAuthorization.Binding.cs` 收攏身分→Trusted World 綁定。保留所有 public API、同一 DB owner／Gateway、Opcode 與 FIFO/Actor/MapEpoch 機制；新增 Python 架構 owner Gate。Server Release build 0 warnings/0 errors，265/265 Server Checks PASS（先重新編譯 Host），其餘 Gateway 巨大 Gameplay Handler、Client WorldState／SessionPanel、真 GPU/多開仍 NOT VERIFIED，不宣稱全部架構重構完成。
 
 

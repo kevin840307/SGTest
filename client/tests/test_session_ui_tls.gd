@@ -1005,13 +1005,13 @@ func run() -> void:
 	panel._latest.bank_money = 0
 	panel._latest.last_bank_open_status = -1
 	panel._latest.last_bank_result = {}
-	panel._update_bank_ui()
-	if panel.bank_open_button.get_parent() == null or panel.inventory_panel.equipment_equip_button.get_parent() == null:
+	panel.bank_panel.apply_snapshot(panel._latest, panel.active)
+	if panel.bank_panel.bank_open_button.get_parent() == null or panel.inventory_panel.equipment_equip_button.get_parent() == null:
 		fail("Equipment/bank controls were not attached to the visible SessionPanel")
 		return
-	panel.bank_npc_input.value = 77
-	panel.bank_open_button.pressed.emit()
-	if stub.bank_opens != 1 or stub.last_bank_npc != 77 or not panel.bank_open_button.disabled:
+	panel.bank_panel.bank_npc_input.value = 77
+	panel.bank_panel.bank_open_button.pressed.emit()
+	if stub.bank_opens != 1 or stub.last_bank_npc != 77 or not panel.bank_panel.bank_open_button.disabled:
 		fail("Bank open UI did not send exactly one NPC intent")
 		return
 	panel._latest.active_bank_npc = 77
@@ -1019,29 +1019,29 @@ func run() -> void:
 	panel._latest.bank_wallet_money = 1000
 	panel._latest.bank_money = 400
 	panel._latest.bank_sequence = 1
-	panel.bank_amount_input.value = 300
-	panel._update_bank_ui()
-	if not panel.bank_scope_label.text.contains("帳號共用") or not panel.bank_wallet_label.text.contains("1000") or not panel.bank_balance_label.text.contains("400") or panel.bank_deposit_button.disabled or panel.bank_withdraw_button.disabled:
+	panel.bank_panel.bank_amount_input.value = 300
+	panel.bank_panel.apply_snapshot(panel._latest, panel.active)
+	if not panel.bank_panel.bank_scope_label.text.contains("帳號共用") or not panel.bank_panel.bank_wallet_label.text.contains("1000") or not panel.bank_panel.bank_balance_label.text.contains("400") or panel.bank_panel.bank_deposit_button.disabled or panel.bank_panel.bank_withdraw_button.disabled:
 		fail("Authoritative bank scope/balances were not rendered as playable controls")
 		return
-	panel.bank_deposit_button.pressed.emit()
+	panel.bank_panel.bank_deposit_button.pressed.emit()
 	if stub.bank_deposits != 1 or stub.last_bank_amount != 300:
 		fail("Bank deposit UI did not send selected amount")
 		return
-	panel._update_bank_ui()
-	panel.bank_withdraw_button.pressed.emit()
+	panel.bank_panel.apply_snapshot(panel._latest, panel.active)
+	panel.bank_panel.bank_withdraw_button.pressed.emit()
 	if stub.bank_withdrawals != 1 or stub.last_bank_amount != 300:
 		fail("Bank withdraw UI did not send selected amount")
 		return
-	panel.bank_amount_input.value = 500
-	panel._update_bank_ui()
-	if panel.bank_withdraw_button.disabled != true or panel.bank_deposit_button.disabled:
+	panel.bank_panel.bank_amount_input.value = 500
+	panel.bank_panel.apply_snapshot(panel._latest, panel.active)
+	if panel.bank_panel.bank_withdraw_button.disabled != true or panel.bank_panel.bank_deposit_button.disabled:
 		fail("Bank UI did not apply current authoritative balance bounds")
 		return
 	panel._latest.pending_bank_sequence = 2
-	panel.bank_amount_input.value = 100
-	panel._update_bank_ui()
-	if not panel.bank_deposit_button.disabled or not panel.bank_withdraw_button.disabled:
+	panel.bank_panel.bank_amount_input.value = 100
+	panel.bank_panel.apply_snapshot(panel._latest, panel.active)
+	if not panel.bank_panel.bank_deposit_button.disabled or not panel.bank_panel.bank_withdraw_button.disabled:
 		fail("Pending bank mutation allowed another money move")
 		return
 

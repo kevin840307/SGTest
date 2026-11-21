@@ -14,7 +14,8 @@
 | Client 社交 | [x] `client/party/party_panel.gd` 管邀請及隊伍；`client/chat/chat_panel.gd` 管頻道與訊息顯示 | 本機 Godot 真 TLS/UI 邀請、密語、聊天、隊伍快照與重連流程 PASS；Server authority 未變動 |
 | Client 玩家商店 | [x] `client/player_shop/player_shop_panel.gd` 承接販售、瀏覽與購買 | Godot 真 TLS SessionPanel UI 回歸 PASS，Server UID／買賣雙方仍維持既有權威；私有 GPU 未驗 |
 | Client 任務 | [x] `client/quest/quest_panel.gd` 承接任務開啟、選項、進度顯示 | 指令驗證仍由 SessionPanel 提供；真 TLS Quest UI 回歸 PASS |
-| Client NPC 服務 | [ ] 先以 `client/session/session_panel.gd` 為遷移入口，商店、銀行、倉庫、修理、強化可各自操作後再定檔 | map epoch、關閉／返回及 Server 拒絕情境 |
+| Client NPC 銀行 | [x] `client/bank/bank_panel.gd` 自有 UI 控制項、快照呈現及操作回饋；SessionPanel 僅保留 action callback | 真 Godot TLS/UI bank_open/deposit/withdraw、跨端 Server 權威回歸 PASS |
+| Client 其他 NPC 服務 | [ ] 商店、倉庫、修理、強化仍在 `client/session/session_panel.gd`，依單一交易生命週期逐項拆分 | map epoch、關閉／返回及 Server 拒絕情境 |
 | Server 聊天 | [ ] `server/src/SGTest.Server/Chat/ChatRouting.cs` 集中附近與密語的對象選擇，Party 維持隊伍狀態 | 同／跨圖路由、權限與可靠送出 |
 | Server／Client 寵物 | [ ] Server `Pet/PetRuntime.cs` 預定掌管召喚、跟隨與成長；Client `pet/pet_presentation.gd` 接已確認的狀態 | 召喚／收回、掉線、跟隨、持久化與戰鬥回歸 |
 | Server／Client 機甲 | [ ] Server `Mecha/MechaState.cs` 預定掌管乘降與能力轉換；Client `mecha/mecha_presentation.gd` 接角色畫面 | 狀態互斥、斷線回復、移動與裝備限制 |
