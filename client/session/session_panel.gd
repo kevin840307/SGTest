@@ -633,6 +633,10 @@ func _process(delta: float) -> void:
 		disconnect_session()
 		status.text=_registration_status_text(registration_code) if registration_code>0 else "連線或登入失敗，請確認帳號與伺服器憑證後重試"
 		return
+	# Refresh controls on every published state transition, even when the
+	# authenticated account's character list is still empty. Otherwise a
+	# first-time player never sees the creation fields or button.
+	_set_controls()
 	if state == State.STATE_SELECTING_CHARACTER:
 		if _chosen and int(_latest.choose_status) >= 0:
 			disconnect_session()
