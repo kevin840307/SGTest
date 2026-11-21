@@ -163,11 +163,19 @@ Host的本機`account-create`／`character-create`委派同一SqliteIdentityStor
 
 ### 2026-11-20 Identity migration / backup boundary
 
-Identity persistence remains one `SqliteIdentityStore` outside the 30Hz World owner. Schema migration is a startup/operator concern, never a gameplay Policy or Client RPC. Before `InitializeAsync()` mutates any recognized older schema, the Store first creates a transactionally consistent SQLite Backup API snapshot in the same directory; only after that snapshot passes schema equality and `PRAGMA integrity_check` does normal migration proceed. Current schema remains v21.
+Identity persistence remains one `SqliteIdentityStore` outside the 30Hz World owner. Schema migration is a startup/operator concern, never a gameplay Policy or Client RPC. Before `InitializeAsync()` mutates any recognized older schema, the Store first creates a transactionally consistent SQLite Backup API snapshot in the same directory; only after that snapshot passes schema equality and `PRAGMA integrity_check` does normal migration proceed. Current schema is v22. The backup primitive remains unchanged: a recognized older schema is snapshotted before migration, and the current target version is reflected in the generated `pre-v<old>-to-v22` backup name.
 
 The local `identity-backup --identity <DB> --output <NEW_DB>` adapter uses the same backup primitive but deliberately does **not** initialize or migrate the source, so an operator can preserve the exact pre-upgrade schema. Destination creation is fail-closed: source==destination is invalid, existing files are never replaced, and a successful result reports schema version, byte length and SHA-256. This is an operator/persistence boundary only; no game socket can invoke it, and it does not add a background DB worker to World.
 
 Server Core **44766021159 PASS** verifies a live WAL point-in-time snapshot, a pre-v20→v21 migration backup that preserves the old version/data, CLI reopen/authentication and no-overwrite behavior; the complete Server suite reports **252/252 PASS**. This safety barrier is not an off-host backup service: retention, remote replication, encryption/key lifecycle and disaster-recovery rehearsal remain deployment work.
+
+### 2026-11-21 Server-owned learned SkillBook
+
+Original public Old-server evidence establishes that learned skills are durable Server state: `CSkill::AddSkill(WORD SkillID)` creates a `CDSkillInfo`, stores the original SkillID and initializes `Lv=1`; the old Skill DB exposes `SkillID/Lv/DBID/Recast`, and `CDSkillSys::GetSkillLv()` reads level from that Server-owned record. SGTest therefore does **not** accept a skill level from Client gameplay packets.
+
+SQLite schema v22 adds the single `character_skills(character_id, skill_id, level, source_reference, updated_unix_ms)` table keyed by character + original SkillID. The trusted Store API can upsert/read the learned level; V1 bounds SkillID to 1..65535 and level to 1..255. Login opcode104 `SkillBookSnapshot` is Server→Client only and carries chunked `SkillID(i32)+Lv(u8)` rows. Non-empty books are sent before WorldReady; zero-skill characters intentionally emit no extra frame so existing V1 login ordering stays unchanged, and WorldReady closes the baseline as authoritative empty. A partial non-empty book followed by WorldReady fails closed.
+
+Godot keeps only the authoritative level map and never invents levels locally. The real TLS gate seeds `28101 Lv3` in SQLite and requires Godot to observe `skill_book[28101]=3` before continuing gameplay. Server Core **44862370339 PASS** and Client Core **44862556115 PASS (71/71 steps)** cover schema persistence/reopen, bounded wire/golden, malformed/duplicate/reordered chunks, non-empty TLS reconstruction, normal reconnect/economy/PvP/cross-map regressions and formal Host + two main-scene clients. This is the authority prerequisite for original Cure/Buff formulas; **28101 healing itself is not enabled by this slice**.
 
 ### 2026-11-17 Changed-only owner state
 

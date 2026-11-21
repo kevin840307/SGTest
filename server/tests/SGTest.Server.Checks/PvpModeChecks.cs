@@ -196,7 +196,7 @@ CREATE TABLE character_pvp_modes(
         {
             await store.InitializeAsync();
             Checks.Require(SqliteIdentityStore.SchemaVersion==22,
-                "PvP schema version is not v21");
+                "PvP schema version is not v22");
             long account=(await store.CreateAccountAsync(
                 "pvp_user","Pvp-Password-123!")).AccountId;
             character=(await store.CreateCharacterAsync(
