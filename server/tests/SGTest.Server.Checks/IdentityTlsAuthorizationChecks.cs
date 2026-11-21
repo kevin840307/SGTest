@@ -181,9 +181,11 @@ internal static class IdentityTlsAuthorizationChecks
             await tls.DisposeAsync();
             client.Dispose();
             var ended = await serverTask.WaitAsync(TimeSpan.FromSeconds(2));
+            int persistedCharacters=(await store.ListCharactersAsync(accountId)).Count;
             Checks.Require(ended.Reason == TlsWireEndReason.CleanEof &&
-                (await store.ListCharactersAsync(accountId)).Count == 1,
-                "created character lifecycle did not persist cleanly");
+                persistedCharacters == 1,
+                $"created character lifecycle did not persist cleanly: " +
+                $"end={ended.Reason}, characters={persistedCharacters}");
             await world.StopAsync();
         }
         finally { Directory.Delete(identityRoot, true); }

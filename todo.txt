@@ -1,5 +1,8 @@
 # SGTest 新版重建 TODO（2026-11-15）
 
+- ARCH-SERVER-PLAYER-RECOVERY-SKILLS [x] 2026-11-21：`Gateway/IdentityTlsAuthorization.cs` 的 Respawn／RecoveryItem 生命與 HP 回復流程抽至既有 `Combat/PlayerRecoveryHandler.cs`；一般 SkillUse MP／preflight 結算抽至既有 `Skill/SkillCommandHandler.cs`。沿用每條已認證連線的同一 `gameplayGate`、WorldResultRouter、原 SQLite／Combat／Skill owner；包含連線和地圖世代、Combat AI suspend／drain／resume、HP／MP 可靠結果先於後續 PlayerDamage 的 FIFO 順序。`InventoryCommandHandler` 沒有吞下不相關的 Combat 邏輯，也未新增第二個 state/queue/DB。Release Host build 0 warnings／0 errors；完整 Server checks 首次跑在 TLS 選角結束條件偶發 FAIL（未確認根因），已加入 end reason／角色數診斷，後續 **2 次完整 267/267 PASS**；Python 全量 113/113、架構契約 18/18、Godot 4.7.2 真 TLS/UI 與跨端 E2E 均 PASS。該偶發 TLS 關閉現象須持續追蹤，不能宣稱根因已修復。
+
+
 - ARCH-SERVER-INVENTORY-COMMANDS [x] 2026-11-21：從 `Gateway/IdentityTlsAuthorization.cs` 抽出 Ground Pickup、Equipment Equip／Unequip、Inventory Discard 到現有 Client inventory 對應的新 Server `Inventory/InventoryCommandHandler.cs`。同一 authenticated socket 的 `gameplayGate`、`WorldResultRouter`、`SqliteIdentityStore`，保留 Actor／ConnectionEpoch／MapEpoch／UID、交易 Sequence、SQLite 先 commit 再 AOI 發送掉落消除、可靠結果順序；不建立另一個 Store／State／Socket。名字為常見 MMORPG 的 Inventory 領域，不額外建立 PickupManager／EquipManager。RecoveryUse 涉及 Combat drain／HP 續行，不合併。本機 Server 267/267 PASS、Python 全量 112/112、架構防退化 17/17、Host Release 0 warning／0 error、Godot 4.7.2 真 TLS/UI（pickup、equipment、discard）及跨端 Login E2E PASS；最新 GitHub CI 狀態以本次 commit 為準。
 
 

@@ -331,242 +331,6 @@ public sealed partial class IdentityTlsAuthorization
                     }
                     finally { gameplayGate.Release(); }
                 };
-            async Task RespawnHandler(TrustedPlayerRespawn request)
-            {
-                await gameplayGate.WaitAsync().ConfigureAwait(false);
-                try
-                {
-                var binding = new ConnectionBinding(
-                    request.ActorId, request.ConnectionEpoch, request.RequestMapEpoch);
-                if (!router.IsCurrentBinding(binding))
-                    return;
-
-                PlayerRespawnOutcome outcome;
-                ActorSnapshot? revived = null;
-                if (_combat is null)
-                {
-                    outcome = new(PlayerRespawnStatus.CombatUnavailable, 0, 0);
-                }
-                else
-                {
-                    outcome = await _combat.RespawnFullAsync(
-                        request.ActorId, request.ConnectionEpoch,
-                        request.RequestMapEpoch, request.RespawnSequence)
-                        .ConfigureAwait(false);
-
-                    if (outcome.Status == PlayerRespawnStatus.Accepted)
-                    {
-                        revived = await _world.TrustedSetCombatDeadAsync(
-                            request.ActorId, request.ConnectionEpoch,
-                            request.RequestMapEpoch, false).ConfigureAwait(false);
-                        if (revived is null)
-                            outcome = new(PlayerRespawnStatus.StaleGeneration,
-                                outcome.CurrentHp, outcome.MaxHp);
-                    }
-                }
-
-                var sent = router.QueuePlayerRespawnResult(request, outcome);
-                if (sent != GatewaySendStatus.Enqueued)
-                    throw new IOException(
-                        "Reliable player respawn result could not be queued: " + sent);
-
-                if (outcome.Status == PlayerRespawnStatus.Accepted &&
-                    revived is { } visualActor &&
-                    !router.TryPostPlayerRespawnVisual(
-                        visualActor,request.RespawnSequence))
-                    throw new AoiBackpressureException(
-                        "Committed respawn visual queue full; event cannot be dropped");
-
-                // Queue the authoritative full-HP baseline BEFORE reopening AI
-                // targetability, so later PlayerDamage cannot overtake RespawnResult.
-                if (outcome.Status == PlayerRespawnStatus.Accepted &&
-                    revived is { } actor &&
-                    (_combat is null || !_combat.TryResume(actor)))
-                    throw new InvalidOperationException(
-                        "Combat generation could not resume after player respawn");
-                }
-                finally { gameplayGate.Release(); }
-            }
-
-            async Task RecoveryHandler(TrustedRecoveryUse request)
-            {
-                // The World/AOI owner and existing auth binding supply ALL
-                // identity fields. A client can only choose its inventory UID.
-                var binding=new ConnectionBinding(
-                    request.ActorId,request.ConnectionEpoch,request.RequestMapEpoch);
-                await gameplayGate.WaitAsync().ConfigureAwait(false);
-                try
-                {
-                    if(!router.IsCurrentBinding(binding))return;
-                    var snapshot=await _world.TrustedGetActorAsync(
-                        request.ActorId).ConfigureAwait(false);
-                    RecoveryUseResult result;
-                    ActorSnapshot? suspendedActor=null;
-                    if(snapshot is not { } actor ||
-                        actor.ActorId!=request.ActorId ||
-                        actor.ConnectionEpoch!=request.ConnectionEpoch ||
-                        actor.MapEpoch!=request.RequestMapEpoch)
-                    {
-                        result=new(RecoveryUseStatus.CombatUnavailable,request.ItemUid);
-                    }
-                    else if(_combat is null)
-                        result=new(RecoveryUseStatus.CombatUnavailable,request.ItemUid);
-                    else if(_recoveryRules is null)
-                        result=new(RecoveryUseStatus.NoRule,request.ItemUid);
-                    else
-                    {
-                        // AI reservations must be blocked and all outstanding
-                        // SQLite damage committed before the HP + item TX.
-                        await _combat.SuspendAndDrainAsync(
-                            actor.ActorId,actor.ConnectionEpoch,
-                            actor.MapEpoch).ConfigureAwait(false);
-                        suspendedActor=actor;
-                        if(!_combat.TryGetSuspendedHp(actor,out int hp))
-                            result=new(RecoveryUseStatus.CombatUnavailable,request.ItemUid);
-                        else if(hp<=0)
-                            result=new(RecoveryUseStatus.Dead,request.ItemUid);
-                        else
-                        {
-                            long durableConnection=_pickupWorldGeneration==0
-                                ? actor.ConnectionEpoch // isolated test only
-                                : SqliteIdentityStore.ComposePickupConnectionEpoch(
-                                    _pickupWorldGeneration,actor.ConnectionEpoch);
-                            result=await _identity.UseVerifiedRecoveryItemAsync(
-                                new TrustedRecoveryUseContext(
-                                    actor.ActorId,durableConnection,
-                                    actor.MapEpoch,request.UseSequence,hp),
-                                request.ItemUid,_recoveryRules).ConfigureAwait(false);
-                            if(result.Status==RecoveryUseStatus.Granted &&
-                                !_combat.TryApplyCommittedRecovery(actor,result))
-                                throw new InvalidOperationException(
-                                    "Committed recovery diverged from reserved Combat state");
-                        }
-                    }
-                    var sent=router.QueueRecoveryUseResult(request,result);
-                    if(sent!=GatewaySendStatus.Enqueued)
-                        throw new IOException(
-                            "Reliable recovery receipt could not be queued: "+sent);
-                    // Resume AI only AFTER reliable result is in the same FIFO,
-                    // ensuring later PlayerDamage cannot overtake HP restoration.
-                    if(suspendedActor is { } resumed &&
-                        !_combat!.TryResume(resumed))
-                        throw new InvalidOperationException(
-                            "Recovery Combat generation could not resume");
-                }
-                finally { gameplayGate.Release(); }
-            }
-
-            async Task SkillHandler(TrustedSkillUse request)
-            {
-                var binding=new ConnectionBinding(
-                    request.ActorId,request.ConnectionEpoch,request.RequestMapEpoch);
-                await gameplayGate.WaitAsync().ConfigureAwait(false);
-                ActorSnapshot? suspended=null;
-                try
-                {
-                    if(!router.IsCurrentBinding(binding))return;
-
-                    var preflight=await router.PrepareSkillAsync(request)
-                        .ConfigureAwait(false);
-                    if(!preflight.Ready)
-                    {
-                        var rejected=preflight.Rejected ??
-                            throw new InvalidOperationException(
-                                "Skill preflight rejection missing outcome");
-                        var sent=router.QueueSkillUseResult(request,rejected);
-                        if(sent!=GatewaySendStatus.Enqueued)
-                            throw new IOException(
-                                "Reliable skill preflight rejection could not be queued: "+sent);
-                        return;
-                    }
-
-                    var prepared=preflight.Prepared!.Value;
-                    if(prepared.Rule.MpCost==0)
-                    {
-                        await router.FinishPreparedSkillAsync(prepared)
-                            .ConfigureAwait(false);
-                        return;
-                    }
-
-                    if(_combat is null)
-                    {
-                        await router.FinishPreparedSkillAsync(
-                            prepared,SkillUseStatus.CombatUnavailable)
-                            .ConfigureAwait(false);
-                        return;
-                    }
-
-                    var snapshot=await _world.TrustedGetActorAsync(request.ActorId)
-                        .ConfigureAwait(false);
-                    if(snapshot is not { } actor ||
-                        actor.ActorId!=request.ActorId ||
-                        actor.ConnectionEpoch!=request.ConnectionEpoch ||
-                        actor.MapEpoch!=request.RequestMapEpoch)
-                    {
-                        await router.FinishPreparedSkillAsync(
-                            prepared,SkillUseStatus.OldMapEpoch)
-                            .ConfigureAwait(false);
-                        return;
-                    }
-
-                    await _combat.SuspendAndDrainAsync(
-                        actor.ActorId,actor.ConnectionEpoch,actor.MapEpoch)
-                        .ConfigureAwait(false);
-                    suspended=actor;
-                    if(!_combat.TryGetSuspendedCombatState(
-                        actor,out int hp,out int maxHp) || hp<=0)
-                    {
-                        await router.FinishPreparedSkillAsync(
-                            prepared,SkillUseStatus.CombatUnavailable)
-                            .ConfigureAwait(false);
-                        return;
-                    }
-
-                    long durableConnection=_pickupWorldGeneration==0
-                        ? actor.ConnectionEpoch
-                        : SqliteIdentityStore.ComposePickupConnectionEpoch(
-                            _pickupWorldGeneration,actor.ConnectionEpoch);
-                    var mp=await _identity.ConsumeSkillMpAsync(
-                        new TrustedSkillMpContext(
-                            actor.ActorId,durableConnection,actor.MapEpoch,
-                            request.SkillSequence,request.SkillId),
-                        prepared.Rule.MpCost).ConfigureAwait(false);
-
-                    SkillUseStatus? cancel=mp.Status switch
-                    {
-                        SkillMpConsumeStatus.Consumed or
-                        SkillMpConsumeStatus.AlreadyConsumed => null,
-                        SkillMpConsumeStatus.InsufficientMp =>
-                            SkillUseStatus.InsufficientMp,
-                        SkillMpConsumeStatus.StaleSequence =>
-                            SkillUseStatus.ReplayedSequence,
-                        _ => SkillUseStatus.CombatUnavailable
-                    };
-
-                    if(cancel is null)
-                    {
-                        var baseline=router.QueuePlayerCombatState(
-                            binding,hp,maxHp,mp.CurrentMp,mp.MaxMp);
-                        if(baseline!=GatewaySendStatus.Enqueued)
-                            throw new IOException(
-                                "Committed skill MP baseline could not be queued: "+baseline);
-                    }
-
-                    await router.FinishPreparedSkillAsync(prepared,cancel)
-                        .ConfigureAwait(false);
-                }
-                finally
-                {
-                    if(suspended is { } actor &&
-                        router.IsCurrentBinding(binding) &&
-                        !_combat!.TryResume(actor))
-                        throw new InvalidOperationException(
-                            "Skill Combat generation could not resume");
-                    gameplayGate.Release();
-                }
-            }
-
-
             async Task PlayerShopHandler(TrustedPlayerShopCommand request)
             {
                 if(_playerShops is null)return;
@@ -627,12 +391,19 @@ public sealed partial class IdentityTlsAuthorization
             var inventory = new InventoryCommandHandler(
                 _identity, _world, _combat, _equipmentRules,
                 _pickupWorldGeneration, router, gameplayGate);
+            var recovery = new PlayerRecoveryHandler(
+                _identity, _world, _combat, _recoveryRules,
+                _pickupWorldGeneration, router, gameplayGate);
+            var skills = new SkillCommandHandler(
+                _identity, _world, _combat, _pickupWorldGeneration,
+                router, gameplayGate);
             return await TlsWireConnection.RunServerAsync(client, certificate,
                 Authorize, _world.TryPostMove, options, cancellationToken, Release,
                 npcHandler, router.TryRequestResync,
-                router.TryRequestNormalAttack, RespawnHandler,
-                inventory.HandlePickupAsync, RecoveryHandler, inventory.HandleDiscardAsync,
-                handleSkill:SkillHandler,handleShop:npcEconomy.HandleShopAsync,
+                router.TryRequestNormalAttack, recovery.HandleRespawnAsync,
+                inventory.HandlePickupAsync, recovery.HandleRecoveryItemAsync,
+                inventory.HandleDiscardAsync,
+                handleSkill:skills.HandleSkillAsync,handleShop:npcEconomy.HandleShopAsync,
                 handleStorage:npcEconomy.HandleStorageAsync,
                 handleEquipment:inventory.HandleEquipmentAsync,
                 handleBank:npcEconomy.HandleBankAsync,

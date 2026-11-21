@@ -179,7 +179,7 @@ class ArchitectureConventionsChecks(unittest.TestCase):
         self.assertEqual(gateway.count("new InventoryCommandHandler("), 1)
         self.assertIn("_pickupWorldGeneration, router, gameplayGate)", gateway)
         for connection, method in (
-            ("inventory.HandlePickupAsync, RecoveryHandler, inventory.HandleDiscardAsync",
+            ("inventory.HandlePickupAsync, recovery.HandleRecoveryItemAsync,",
              "HandlePickupAsync"),
             ("handleEquipment:inventory.HandleEquipmentAsync", "HandleEquipmentAsync"),
         ):
@@ -200,6 +200,41 @@ class ArchitectureConventionsChecks(unittest.TestCase):
         for removed in ("async Task PickupHandler(", "async Task EquipmentHandler(",
                         "async Task DiscardHandler("):
             self.assertNotIn(removed, gateway)
+
+    def test_combat_recovery_and_skill_handlers_preserve_single_gate(self) -> None:
+        gateway = (SERVER / "Gateway" / "IdentityTlsAuthorization.cs").read_text(
+            encoding="utf-8-sig")
+        recovery = (SERVER / "Combat" / "PlayerRecoveryHandler.cs").read_text(
+            encoding="utf-8-sig")
+        skills = (SERVER / "Skill" / "SkillCommandHandler.cs").read_text(
+            encoding="utf-8-sig")
+        self.assertEqual(gateway.count("new PlayerRecoveryHandler("), 1)
+        self.assertEqual(gateway.count("new SkillCommandHandler("), 1)
+        for name in ("HandleRespawnAsync", "HandleRecoveryItemAsync"):
+            self.assertEqual(recovery.count("internal async Task " + name + "("), 1)
+            self.assertIn("recovery." + name, gateway)
+        self.assertIn("handleSkill:skills.HandleSkillAsync", gateway)
+        self.assertEqual(skills.count("internal async Task HandleSkillAsync("), 1)
+        for owner, count in ((recovery, 2), (skills, 1)):
+            self.assertEqual(owner.count("await _gameplayGate.WaitAsync()"), count)
+            self.assertEqual(owner.count("_gameplayGate.Release()"), count)
+            self.assertNotIn("new SemaphoreSlim", owner)
+            self.assertNotIn("new SqliteIdentityStore", owner)
+            self.assertNotIn("new WorldResultRouter", owner)
+        self.assertEqual(recovery.count("_router.IsCurrentBinding(binding)"), 2)
+        self.assertIn("_combat.SuspendAndDrainAsync(", recovery)
+        self.assertIn("_identity.UseVerifiedRecoveryItemAsync(", recovery)
+        self.assertLess(recovery.index("QueueRecoveryUseResult(request,result)"),
+                        recovery.index("_combat!.TryResume(resumed)"))
+        self.assertLess(recovery.index("QueuePlayerRespawnResult(request, outcome)"),
+                        recovery.index("_combat.TryResume(actor)"))
+        self.assertIn("_router.PrepareSkillAsync(request)", skills)
+        self.assertIn("_identity.ConsumeSkillMpAsync(", skills)
+        self.assertLess(skills.index("_router.QueuePlayerCombatState("),
+                        skills.index("_router.FinishPreparedSkillAsync(prepared,cancel)"))
+        for old in ("async Task RespawnHandler(", "async Task RecoveryHandler(",
+                    "async Task SkillHandler("):
+            self.assertNotIn(old, gateway)
 
     def test_character_reset_keeps_one_reducer_and_one_uid_location_policy(self) -> None:
         world = (CLIENT / "world" / "world_state.gd").read_text(encoding="utf-8-sig")

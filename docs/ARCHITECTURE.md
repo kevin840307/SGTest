@@ -150,8 +150,8 @@ server/
     Inventory/              # 已驗證的掉落撿取／裝備穿脫／UID 丟棄命令
     Npc/                    # NPC 互動與經濟／裝備修改命令結算入口
     Monster/                # 怪物模擬與戰利品協調
-    Combat/                 # 傷害結算
-    Skill/                  # 技能規則
+    Combat/                 # 傷害／HP、復活與恢復道具可靠結算
+    Skill/                  # 技能規則、MP 驗證及施放命令
     Pvp/                    # PvP 政策／模式、GM 名稱狀態及玩家戰鬥命令
     Party/                  # 隊伍狀態與操作
     Chat/                   # 附近、隊伍及密語路由（信任邊界仍在 Gateway）
