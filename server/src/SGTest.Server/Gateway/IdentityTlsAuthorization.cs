@@ -2503,11 +2503,9 @@ public sealed class IdentityTlsAuthorization
                     new(snapshot.ActorId,start,final,group)),
                     cancellationToken).ConfigureAwait(false);
             }
-            if(skills.Count==0)
-                await WriteFrameAsync(tls,WireProtocol.EncodeSkillBookSnapshot(
-                    new(snapshot.ActorId,0,true,Array.Empty<SkillBookEntryWire>())),
-                    cancellationToken).ConfigureAwait(false);
-
+            // Zero learned skills deliberately emits no new V1 frame, preserving
+            // existing login ordering. The client resolves an absent skill-book
+            // baseline to authoritative empty when the following WorldReady arrives.
             // Preserve the legacy login frame sequence if equipment is entirely disabled.
             // Persisted equipped rows still force a baseline so a character can recover.
             if(_equipmentRules is not null || equipment.Count>0)

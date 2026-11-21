@@ -2193,6 +2193,15 @@ func _apply_world_ready(frame: PackedByteArray) -> bool:
 	resync_pending = false
 	resync_request_sent = false
 	resync_reason = ""
+	# A zero-skill character intentionally receives no opcode104 so legacy V1
+	# login ordering remains byte-for-byte unchanged. WorldReady is the barrier
+	# that proves the Server finished pre-world baselines. A partial non-empty
+	# skill book at this point is a protocol violation, never silently empty.
+	if not skill_book_ready:
+		if skill_book_next_index != 0:
+			return fail("skill_book_incomplete_before_world_ready")
+		skill_book_ready = true
+		skill_book_revision += 1
 	self_state.clear()
 	x = float(ready.x)
 	y = float(ready.y)
