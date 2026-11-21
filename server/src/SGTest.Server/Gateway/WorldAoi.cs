@@ -834,7 +834,8 @@ public sealed class WorldAoi
             {
                 observer.Visible.Remove(entry.Key);
                 Enqueue(observer, new(AoiEventKind.Despawn, tick,
-                    viewer.MapEpoch, null, entry.Key, entry.Value.ConnectionEpoch));
+                    viewer.MapEpoch, null, entry.Key, entry.Value.ConnectionEpoch,
+                    EntityMapEpoch:entry.Value.MapEpoch));
             }
         }
         foreach (var entry in observer.VisibleGroundDrops.ToArray())
@@ -904,7 +905,8 @@ public sealed class WorldAoi
             {
                 observer.Visible.Remove(actor.ActorId);
                 Enqueue(observer, new(AoiEventKind.Despawn, tick,
-                    observer.Self.MapEpoch, null, actor.ActorId, seen.ConnectionEpoch));
+                    observer.Self.MapEpoch, null, actor.ActorId, seen.ConnectionEpoch,
+                    EntityMapEpoch:seen.MapEpoch));
             }
             return;
         }
@@ -922,7 +924,8 @@ public sealed class WorldAoi
             observer.Visible[actor.ActorId] =
                 new(actor.ConnectionEpoch, actor.MapEpoch, actor.EntityRevision);
             Enqueue(observer, new(AoiEventKind.Despawn, tick,
-                observer.Self.MapEpoch, null, actor.ActorId, seen.ConnectionEpoch));
+                observer.Self.MapEpoch, null, actor.ActorId, seen.ConnectionEpoch,
+                    EntityMapEpoch:seen.MapEpoch));
             Enqueue(observer, new(AoiEventKind.Spawn, tick, observer.Self.MapEpoch, actor));
         }
         else if (actor.EntityRevision > seen.Revision)
