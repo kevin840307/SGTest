@@ -432,15 +432,18 @@ public sealed class WorldAoi
            result.ActorId<=0||result.ConnectionEpoch<=0||result.MapEpoch<=0||
            result.DamageSequence==0||result.ServerTick<0||
            result.ServerTick>_lastTick||result.AttackerActorId<=0||
-           result.AttackerConnectionEpoch<=0||result.AttackerAttackSequence==0||
+           result.AttackerConnectionEpoch<=0||result.AttackerMapEpoch<=0||
+           result.AttackerAttackSequence==0||
            result.Damage<=0||result.AttackerActorId==result.ActorId||
            result.AttackerFacing is <1 or >8||result.VictimFacing is <1 or >8)
             throw new InvalidOperationException(
                 "Invalid authoritative PvP combat visual");
 
+        // Each player owns an independent MapEpoch. The settled event carries
+        // the attacker's generation separately from the victim's MapEpoch.
         if(!_entities.TryGetValue(result.AttackerActorId,out var attacker)||
            attacker.ConnectionEpoch!=result.AttackerConnectionEpoch||
-           attacker.MapEpoch!=result.MapEpoch||
+           attacker.MapEpoch!=result.AttackerMapEpoch||
            !_entities.TryGetValue(result.ActorId,out var victim)||
            victim.ConnectionEpoch!=result.ConnectionEpoch||
            victim.MapEpoch!=result.MapEpoch||
@@ -491,14 +494,17 @@ public sealed class WorldAoi
            result.ActorId<=0||result.ConnectionEpoch<=0||result.MapEpoch<=0||
            result.DamageSequence==0||result.ServerTick<0||
            result.ServerTick>_lastTick||result.AttackerActorId<=0||
-           result.AttackerConnectionEpoch<=0||result.AttackerSkillSequence==0||
+           result.AttackerConnectionEpoch<=0||result.AttackerMapEpoch<=0||
+           result.AttackerSkillSequence==0||
            result.AttackerSkillId is <1 or >100_000_000||result.Damage<=0||
            result.AttackerActorId==result.ActorId||
            result.AttackerFacing is <1 or >8||result.VictimFacing is <1 or >8)
             throw new InvalidOperationException("Invalid authoritative PvP skill visual");
+        // Each player owns an independent MapEpoch. The settled event carries
+        // the attacker's generation separately from the victim's MapEpoch.
         if(!_entities.TryGetValue(result.AttackerActorId,out var attacker)||
            attacker.ConnectionEpoch!=result.AttackerConnectionEpoch||
-           attacker.MapEpoch!=result.MapEpoch||
+           attacker.MapEpoch!=result.AttackerMapEpoch||
            !_entities.TryGetValue(result.ActorId,out var victim)||
            victim.ConnectionEpoch!=result.ConnectionEpoch||
            victim.MapEpoch!=result.MapEpoch||attacker.MapId!=victim.MapId)

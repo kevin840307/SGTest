@@ -191,7 +191,7 @@ internal static class PvpSkillChecks
         await store.SetCharacterCombatProfileAsync(tid,tp);
 
         var attacker=new ActorSnapshot(aid,13,2,1,0,0,8,8,1,false,3,false);
-        var victim=new ActorSnapshot(tid,13,3,1,0,0,24,8,1,false,6,false);
+        var victim=new ActorSnapshot(tid,13,3,9,0,0,24,8,1,false,6,false);
         var victimGateway=new GatewayConnection(victim);
         var combat=new PlayerCombatSettlement(
             store,new(Capacity:8),victimGateway.QueuePlayerDamage);
@@ -236,6 +236,12 @@ internal static class PvpSkillChecks
                 "PvP skill AOI visual mismatch");
         }
 
+        Checks.Require(aoi.EnqueuePlayerPvpSkillVisual(
+                settled with {AttackerMapEpoch=attacker.MapEpoch+1})==0,
+            "stale attacker MapEpoch fanned out skill event");
+        Checks.Require(aoi.EnqueuePlayerPvpSkillVisual(
+                settled with {MapEpoch=victim.MapEpoch+1})==0,
+            "stale victim MapEpoch fanned out skill event");
         stop.Cancel();
         try{await worker;}catch(OperationCanceledException){}
     }

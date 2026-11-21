@@ -40,7 +40,8 @@ public readonly record struct PlayerDamageSettlement(
     long AttackerActorId = 0,long AttackerConnectionEpoch = 0,
     uint AttackerAttackSequence = 0,bool VictimWasNormalWhite = false,
     byte AttackerFacing = 0,byte VictimFacing = 0,
-    int AttackerSkillId = 0,uint AttackerSkillSequence = 0);
+    int AttackerSkillId = 0,uint AttackerSkillSequence = 0,
+    long AttackerMapEpoch = 0);
 
 public sealed record PlayerCombatSettlementOptions(int Capacity = 256);
 
@@ -91,7 +92,8 @@ public sealed class PlayerCombatSettlement
         uint AttackerAttackSequence = 0,bool VictimWasNormalWhite = false,
         byte AttackerFacing = 0,byte VictimFacing = 0,
         int AttackerSkillId = 0,uint AttackerSkillSequence = 0,
-        TaskCompletionSource<PlayerDamageSettlement>? Completion = null);
+        TaskCompletionSource<PlayerDamageSettlement>? Completion = null,
+        long AttackerMapEpoch = 0);
 
     private readonly SqliteIdentityStore _store;
     private readonly Channel<QueuedHit> _input;
@@ -318,7 +320,7 @@ public sealed class PlayerCombatSettlement
             var queued=new QueuedHit(target.ActorId,target.ConnectionEpoch,target.MapEpoch,
                 sequence,serverTick,0,0,applied,hpAfter,PlayerDamageSourceKind.PlayerPvp,
                 attacker.ActorId,attacker.ConnectionEpoch,attackSequence,victimWasNormalWhite,
-                attacker.Facing,target.Facing,0,0,tcs);
+                attacker.Facing,target.Facing,0,0,tcs,attacker.MapEpoch);
             if(!_input.Writer.TryWrite(queued))
             {
                 state.Pending--; state.ProjectedHp+=applied; state.DamageSequence--;
@@ -366,7 +368,7 @@ public sealed class PlayerCombatSettlement
                 sequence,serverTick,0,0,applied,hpAfter,
                 PlayerDamageSourceKind.PlayerSkill,
                 attacker.ActorId,attacker.ConnectionEpoch,0,victimWasNormalWhite,
-                attacker.Facing,target.Facing,skillId,skillSequence,tcs);
+                attacker.Facing,target.Facing,skillId,skillSequence,tcs,attacker.MapEpoch);
             if(!_input.Writer.TryWrite(queued))
             {
                 state.Pending--;
@@ -602,7 +604,8 @@ public sealed class PlayerCombatSettlement
                     hit.SourceKind,hit.AttackerActorId,hit.AttackerConnectionEpoch,
                     hit.AttackerAttackSequence,hit.VictimWasNormalWhite,
                     hit.AttackerFacing,hit.VictimFacing,
-                    hit.AttackerSkillId,hit.AttackerSkillSequence);
+                    hit.AttackerSkillId,hit.AttackerSkillSequence,
+                    hit.AttackerMapEpoch);
 
                 if (_committedLifecycle is not null)
                     await _committedLifecycle(result).ConfigureAwait(false);

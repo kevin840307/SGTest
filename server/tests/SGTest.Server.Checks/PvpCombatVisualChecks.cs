@@ -31,7 +31,7 @@ internal static class PvpCombatVisualChecks
     private static void Aoi()
     {
         var attacker=Actor(301,7,4,8,8,3);
-        var victim=Actor(302,8,4,24,8,6);
+        var victim=Actor(302,8,9,24,8,6);
         var observer=Actor(303,9,4,40,8,1);
         var far=Actor(304,10,4,4000,4000,1);
         var aoi=new WorldAoi();
@@ -47,7 +47,8 @@ internal static class PvpCombatVisualChecks
             2,49,0,0,28,72,100,false,
             PlayerDamageSourceKind.PlayerPvp,
             attacker.ActorId,attacker.ConnectionEpoch,7,false,
-            attacker.Facing,victim.Facing);
+            attacker.Facing,victim.Facing,
+            AttackerMapEpoch:attacker.MapEpoch);
         int queued=aoi.EnqueuePlayerPvpCombatVisual(settlement);
         Checks.Require(queued==3,
             "PvP visual did not fan out to attacker victim and nearby observer");
@@ -67,6 +68,12 @@ internal static class PvpCombatVisualChecks
         Checks.Require(!aoi.TryDequeue(
                 far.ActorId,far.ConnectionEpoch,far.MapEpoch,out _),
             "far observer received PvP combat visual");
+        Checks.Require(aoi.EnqueuePlayerPvpCombatVisual(
+                settlement with {AttackerMapEpoch=attacker.MapEpoch+1})==0,
+            "stale attacker map generation emitted PvP combat visual");
+        Checks.Require(aoi.EnqueuePlayerPvpCombatVisual(
+                settlement with {MapEpoch=victim.MapEpoch+1})==0,
+            "stale victim map generation emitted PvP combat visual");
     }
 
     private static void Drain(WorldAoi aoi,ActorSnapshot actor)
