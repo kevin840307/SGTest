@@ -2437,6 +2437,13 @@ public sealed class IdentityTlsAuthorization
                 throw new InvalidOperationException(
                     "Character inventory exceeds bounded V1 baseline capacity");
 
+            var skills = await _identity.ListCharacterSkillsAsync(
+                snapshot.ActorId,WireProtocol.SkillBookSnapshotMaxSkills+1,
+                cancellationToken).ConfigureAwait(false);
+            if(skills.Count>WireProtocol.SkillBookSnapshotMaxSkills)
+                throw new InvalidOperationException(
+                    "Character skill book exceeds bounded V1 baseline capacity");
+
             var equipment = await _identity.ListEquippedItemsAsync(
                 snapshot.ActorId,cancellationToken).ConfigureAwait(false);
             if(equipment.Count>WireProtocol.EquipmentSnapshotMaxItems)
@@ -2480,6 +2487,25 @@ public sealed class IdentityTlsAuthorization
             if(inventory.Count==0)
                 await WriteFrameAsync(tls,WireProtocol.EncodeInventorySnapshot(
                     new(snapshot.ActorId,0,true,Array.Empty<InventoryItemWire>())),
+                    cancellationToken).ConfigureAwait(false);
+
+            // Learned skill state is Server-owned even when empty. Always send
+            // a final baseline so the client can distinguish "no skills" from
+            // an incomplete login.
+            const int skillChunk=WireProtocol.SkillBookSnapshotMaxSkillsPerFrame;
+            for(int start=0;start<skills.Count;start+=skillChunk)
+            {
+                var group=skills.Skip(start).Take(skillChunk)
+                    .Select(skill=>new SkillBookEntryWire(skill.SkillId,skill.Level))
+                    .ToArray();
+                bool final=start+group.Length==skills.Count;
+                await WriteFrameAsync(tls,WireProtocol.EncodeSkillBookSnapshot(
+                    new(snapshot.ActorId,start,final,group)),
+                    cancellationToken).ConfigureAwait(false);
+            }
+            if(skills.Count==0)
+                await WriteFrameAsync(tls,WireProtocol.EncodeSkillBookSnapshot(
+                    new(snapshot.ActorId,0,true,Array.Empty<SkillBookEntryWire>())),
                     cancellationToken).ConfigureAwait(false);
 
             // Preserve the legacy login frame sequence if equipment is entirely disabled.

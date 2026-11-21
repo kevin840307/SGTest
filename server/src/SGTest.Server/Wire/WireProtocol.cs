@@ -107,7 +107,8 @@ public enum WireOpcode : ushort
     PartyCommand = 100,
     PartyResult = 101,
     PartyInvite = 102,
-    PartySnapshot = 103
+    PartySnapshot = 103,
+    SkillBookSnapshot = 104
 }
 
 public enum ChatChannel : byte { Nearby = 0, Faction = 1, Warband = 2, Party = 3, Whisper = 4 }
@@ -385,6 +386,10 @@ public readonly record struct InventoryItemWire(
 public sealed record InventorySnapshotWire(
     long CharacterId,int StartIndex,bool Complete,
     IReadOnlyList<InventoryItemWire> Items);
+public readonly record struct SkillBookEntryWire(int SkillId,int Level);
+public sealed record SkillBookSnapshotWire(
+    long CharacterId,int StartIndex,bool Complete,
+    IReadOnlyList<SkillBookEntryWire> Skills);
 public readonly record struct ShopOpenWire(
     long MapEpoch,uint ShopSequence,int NpcSpawnId);
 public readonly record struct ShopItemWire(
@@ -641,6 +646,10 @@ public static class WireProtocol
     public const int InventoryItemBytes = 25;
     public const int InventorySnapshotMaxItemsPerFrame = 128;
     public const int InventorySnapshotMaxItems = 4095;
+    public const int SkillBookSnapshotHeaderBytes = HeaderBytes + 8 + 4 + 1 + 2;
+    public const int SkillBookEntryBytes = 5;
+    public const int SkillBookSnapshotMaxSkillsPerFrame = 256;
+    public const int SkillBookSnapshotMaxSkills = 4095;
     public const int ShopOpenFrameBytes = HeaderBytes + 8 + 4 + 4;
     public const int ShopBuyFrameBytes = HeaderBytes + 8 + 4 + 4 + 4 + 4;
     public const int ShopSellFrameBytes = HeaderBytes + 8 + 4 + 4 + 8 + 4 + 4;
@@ -1793,6 +1802,71 @@ public static class WireProtocol
             items.Add(item);
         }
         value=new(character,start,complete==1,items);
+        return true;
+    }
+
+    /// <summary>Server-only learned-skill baseline. Skill level is owned by
+    /// durable Server state and is never accepted from a gameplay command.</summary>
+    public static byte[] EncodeSkillBookSnapshot(SkillBookSnapshotWire value)
+    {
+        ArgumentNullException.ThrowIfNull(value);
+        if(value.CharacterId<=0||value.StartIndex<0||
+           value.StartIndex>SkillBookSnapshotMaxSkills||
+           value.Skills is null||
+           value.Skills.Count>SkillBookSnapshotMaxSkillsPerFrame||
+           value.StartIndex+value.Skills.Count>SkillBookSnapshotMaxSkills)
+            throw new ArgumentOutOfRangeException(nameof(value));
+        var ids=new HashSet<int>();
+        foreach(var skill in value.Skills)
+            if(skill.SkillId is <1 or >65535||skill.Level is <1 or >255||
+               !ids.Add(skill.SkillId))
+                throw new ArgumentOutOfRangeException(nameof(value));
+        int count=value.Skills.Count;
+        var frame=NewFrame(WireOpcode.SkillBookSnapshot,
+            SkillBookSnapshotHeaderBytes+count*SkillBookEntryBytes);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(8,8),value.CharacterId);
+        BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(16,4),value.StartIndex);
+        frame[20]=(byte)(value.Complete?1:0);
+        BinaryPrimitives.WriteUInt16LittleEndian(frame.AsSpan(21,2),checked((ushort)count));
+        for(int i=0;i<count;i++)
+        {
+            int offset=SkillBookSnapshotHeaderBytes+i*SkillBookEntryBytes;
+            BinaryPrimitives.WriteInt32LittleEndian(
+                frame.AsSpan(offset,4),value.Skills[i].SkillId);
+            frame[offset+4]=checked((byte)value.Skills[i].Level);
+        }
+        return frame;
+    }
+
+    public static bool TryDecodeSkillBookSnapshot(
+        ReadOnlySpan<byte> frame,out SkillBookSnapshotWire? value)
+    {
+        value=null;
+        if(!TryReadHeader(frame,out var header)||
+           header.Opcode!=WireOpcode.SkillBookSnapshot)return false;
+        long character=BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(8,8));
+        int start=BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(16,4));
+        byte complete=frame[20];
+        int count=BinaryPrimitives.ReadUInt16LittleEndian(frame.Slice(21,2));
+        if(character<=0||start<0||complete>1||
+           count>SkillBookSnapshotMaxSkillsPerFrame||
+           start+count>SkillBookSnapshotMaxSkills||
+           frame.Length!=SkillBookSnapshotHeaderBytes+count*SkillBookEntryBytes)
+            return false;
+        var skills=new List<SkillBookEntryWire>(count);
+        var ids=new HashSet<int>();
+        for(int i=0;i<count;i++)
+        {
+            int offset=SkillBookSnapshotHeaderBytes+i*SkillBookEntryBytes;
+            var skill=new SkillBookEntryWire(
+                BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(offset,4)),
+                frame[offset+4]);
+            if(skill.SkillId is <1 or >65535||skill.Level is <1 or >255||
+               !ids.Add(skill.SkillId))
+                return false;
+            skills.Add(skill);
+        }
+        value=new(character,start,complete==1,skills);
         return true;
     }
 

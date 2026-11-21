@@ -104,6 +104,10 @@ var inventory_items := {}
 var inventory_ready := false
 var inventory_revision := 0
 var inventory_next_index := 0
+var skill_book := {}
+var skill_book_ready := false
+var skill_book_revision := 0
+var skill_book_next_index := 0
 var shop_sequence := 0
 var pending_shop_sequence := 0
 var pending_shop_kind := 0
@@ -873,6 +877,8 @@ func apply_frame(frame: PackedByteArray) -> bool:
 			return _apply_inventory_discard_result(frame)
 		WireCodec.OPCODE_INVENTORY_SNAPSHOT:
 			return _apply_inventory_snapshot(frame)
+		WireCodec.OPCODE_SKILL_BOOK_SNAPSHOT:
+			return _apply_skill_book_snapshot(frame)
 		WireCodec.OPCODE_SHOP_SNAPSHOT:
 			return _apply_shop_snapshot(frame)
 		WireCodec.OPCODE_SHOP_TRANSACTION_RESULT:
@@ -1048,6 +1054,10 @@ func snapshot() -> Dictionary:
 		"inventory_ready": inventory_ready,
 		"inventory_revision": inventory_revision,
 		"inventory_next_index": inventory_next_index,
+		"skill_book": skill_book.duplicate(true),
+		"skill_book_ready": skill_book_ready,
+		"skill_book_revision": skill_book_revision,
+		"skill_book_next_index": skill_book_next_index,
 		"shop_sequence": shop_sequence,
 		"pending_shop_sequence": pending_shop_sequence,
 		"pending_shop_kind": pending_shop_kind,
@@ -1403,6 +1413,10 @@ func _apply_choose(frame: PackedByteArray) -> bool:
 	inventory_ready = false
 	inventory_revision = 0
 	inventory_next_index = 0
+	skill_book.clear()
+	skill_book_ready = false
+	skill_book_revision = 0
+	skill_book_next_index = 0
 	shop_sequence = 0
 	pending_shop_sequence = 0
 	pending_shop_kind = 0
@@ -2382,6 +2396,33 @@ func _apply_inventory_snapshot(frame: PackedByteArray) -> bool:
 	if bool(value.complete):
 		inventory_ready = true
 		inventory_revision += 1
+	return true
+
+
+func _apply_skill_book_snapshot(frame:PackedByteArray)->bool:
+	if state!=STATE_IN_WORLD:
+		return fail("skill_book_snapshot_out_of_state")
+	var value:=WireCodec.decode_skill_book_snapshot(frame)
+	if value.is_empty():
+		return fail("invalid_skill_book_snapshot")
+	if (
+		skill_book_ready or int(value.character_id)!=actor_id or
+		int(value.start_index)!=skill_book_next_index
+	):
+		return fail("skill_book_snapshot_wrong_character_or_sequence")
+	var skills:Array=value.skills
+	if skills.is_empty() and not bool(value.complete):
+		return fail("skill_book_empty_nonfinal_chunk")
+	for raw in skills:
+		var skill:Dictionary=raw
+		var skill_id:=int(skill.skill_id)
+		if skill_book.has(skill_id):
+			return fail("skill_book_duplicate_skill_id")
+		skill_book[skill_id]=int(skill.level)
+		skill_book_next_index+=1
+	if bool(value.complete):
+		skill_book_ready=true
+		skill_book_revision+=1
 	return true
 
 

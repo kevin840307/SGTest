@@ -77,7 +77,7 @@ public sealed record CharacterCreateResult(CharacterCreateStatus Status, Charact
 /// </summary>
 public sealed partial class SqliteIdentityStore : IDisposable
 {
-    public const int SchemaVersion = 21;
+    public const int SchemaVersion = 22;
     private readonly string _databasePath;
     private readonly string _connectionString;
     private readonly IdentityStoreOptions _options;
@@ -757,6 +757,22 @@ CHECK(enhancement_level BETWEEN 0 AND 255);",tx);
 ADD COLUMN enhancement_level INTEGER NOT NULL DEFAULT 0
 CHECK(enhancement_level BETWEEN 0 AND 255);",tx);
             }
+            // Schema v22: original Server-owned learned skill state. Old
+            // CSkill/CDSkillInfo evidence stores SkillID + Lv on the player;
+            // clients never choose the level used by gameplay formulas.
+            Execute(connection,@"
+CREATE TABLE IF NOT EXISTS character_skills (
+    character_id INTEGER NOT NULL REFERENCES characters(character_id) ON DELETE CASCADE,
+    skill_id INTEGER NOT NULL CHECK(skill_id BETWEEN 1 AND 65535),
+    level INTEGER NOT NULL CHECK(level BETWEEN 1 AND 255),
+    source_reference TEXT NOT NULL CHECK(length(source_reference) BETWEEN 1 AND 256),
+    updated_unix_ms INTEGER NOT NULL,
+    PRIMARY KEY(character_id,skill_id)
+);",tx);
+            Execute(connection,@"
+CREATE INDEX IF NOT EXISTS ix_character_skills_character
+ON character_skills(character_id,skill_id);",tx);
+
             Execute(connection,@"
 CREATE TABLE IF NOT EXISTS enhancement_actions (
     character_id INTEGER NOT NULL REFERENCES characters(character_id) ON DELETE CASCADE,

@@ -250,6 +250,7 @@ static class Checks
             RecoveryUseWireChecks.Verify();
             InventoryDiscardChecks.Verify(root);
             InventorySnapshotChecks.Verify();
+            SkillBookChecks.Verify(root);
             StorageChecks.Verify(root);
             EquipmentChecks.Verify(root);
             EnhancementMetadataChecks.Verify(root);
