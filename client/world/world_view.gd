@@ -113,8 +113,11 @@ func _process(_delta: float) -> void:
 					ids[str(appearance.atlas).trim_suffix("/atlas.json")] = true
 		var npc_population: Dictionary = _map.get("extra",{}).get("npcs",{})
 		for npc in npc_population.get("npcs",[]):
-			if npc is Dictionary and npc.get("visual",{}) is Dictionary and bool(npc.visual.get("resolved",false)):
-				var atlas := str(npc.visual.get("atlas",""))
+			if not npc is Dictionary:
+				continue
+			var visual: Variant = npc.get("visual",null)
+			if visual is Dictionary and bool(visual.get("resolved",false)):
+				var atlas := str(visual.get("atlas",""))
 				if atlas.ends_with("/atlas.json"):
 					ids[atlas.trim_suffix("/atlas.json")] = true
 		if show_players:

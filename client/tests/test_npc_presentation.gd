@@ -37,6 +37,16 @@ func _initialize() -> void:
 	if presenter.interaction_for(46).destination.map_id != 13:
 		_fail("presenter leaked authoritative metadata")
 		return
+	# In formal-Host fixture maps, trusted NPCs may exist without any
+	# visual sprite. Their metadata must not crash or block world loading.
+	var partial = population.duplicate(true)
+	partial.npcs[1].erase("visual")
+	if presenter.configure(partial,{"npcs/npc003":asset}) != OK or presenter.count() != 1:
+		_fail("NPC without visual should remain gameplay-only, not break map")
+		return
+	if presenter.configure({}, {}) != OK or presenter.count() != 0:
+		_fail("absent NPC catalog should be a valid empty visual layer")
+		return
 	var invalid = population.duplicate(true)
 	invalid.npcs[1].spawn_id = 46
 	if presenter.configure(invalid,{"npcs/npc003":asset}) != ERR_INVALID_DATA or presenter.count() != 0:

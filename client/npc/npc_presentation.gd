@@ -12,6 +12,10 @@ func clear() -> void:
 
 func configure(population: Dictionary, assets: Dictionary) -> Error:
 	clear()
+	# NPC companion data is optional in synthetic/partial test worlds.
+	# An absent catalog means no sprites, not a broken map.
+	if population.is_empty():
+		return OK
 	if population.get("schema") != "sgtest.npcs/v1":
 		return ERR_INVALID_DATA
 	var records = population.get("npcs", null)
@@ -23,8 +27,17 @@ func configure(population: Dictionary, assets: Dictionary) -> Error:
 			return ERR_INVALID_DATA
 		var spawn_id := int(raw.get("spawn_id", 0))
 		var point = raw.get("p", null)
-		var visual = raw.get("visual", {})
-		if spawn_id <= 0 or _by_spawn.has(spawn_id) or not point is Array or point.size() != 2 or not visual is Dictionary or not bool(visual.get("resolved", false)):
+		var visual = raw.get("visual",null)
+		# Some authorized NPC records have no sprite in the current pack.
+		# Keep these in gameplay/Server data; skip only their presentation.
+		if visual == null:
+			continue
+		if not visual is Dictionary:
+			clear()
+			return ERR_INVALID_DATA
+		if not bool(visual.get("resolved",false)):
+			continue
+		if spawn_id <= 0 or _by_spawn.has(spawn_id) or not point is Array or point.size() != 2:
 			clear()
 			return ERR_INVALID_DATA
 		var atlas := str(visual.get("atlas", ""))
