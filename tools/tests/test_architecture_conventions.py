@@ -140,6 +140,37 @@ class ArchitectureConventionsChecks(unittest.TestCase):
         self.assertNotIn("new SemaphoreSlim", quest)
         self.assertNotIn("new SqliteIdentityStore", quest)
 
+    def test_pvp_commands_split_state_from_combat_with_one_gameplay_gate(self) -> None:
+        gateway = (SERVER / "Gateway" / "IdentityTlsAuthorization.cs").read_text(
+            encoding="utf-8-sig")
+        state = (SERVER / "Pvp" / "PvpStateHandler.cs").read_text(
+            encoding="utf-8-sig")
+        combat = (SERVER / "Pvp" / "PvpCombatHandler.cs").read_text(
+            encoding="utf-8-sig")
+        self.assertEqual(gateway.count("new PvpStateHandler("), 1)
+        self.assertEqual(gateway.count("new PvpCombatHandler("), 1)
+        for route, owner in (
+            ("handlePvp:pvpStates.HandleModeAsync", state),
+            ("handleGmPvpName:pvpStates.HandleGmNameAsync", state),
+            ("handlePvpAttack:pvpCombat.HandleAttackAsync", combat),
+            ("handlePvpSkill:pvpCombat.HandleSkillAsync", combat),
+        ):
+            with self.subTest(route=route):
+                self.assertIn(route, gateway)
+        self.assertNotIn("PvpCommandHandler", gateway)
+        self.assertFalse((SERVER / "Pvp" / "PvpCommandHandler.cs").exists())
+        self.assertIn("private static string OnlineGmEventId(", state)
+        self.assertNotIn("private static string OnlineGmEventId(", gateway)
+        self.assertIn("private readonly GmPvpNameSequenceGate _gmNameSequenceGate", state)
+        self.assertIn("_gmNameSequenceGate.Inspect(request)", state)
+        self.assertIn("_attackSequenceGate.Inspect(request)", combat)
+        for owner in (state, combat):
+            self.assertEqual(owner.count("await _gameplayGate.WaitAsync()"), 2)
+            self.assertEqual(owner.count("if(!_router.IsCurrentBinding(binding))return;"), 2)
+            self.assertEqual(owner.count("_gameplayGate.Release()"), 2)
+            self.assertNotIn("new SemaphoreSlim", owner)
+            self.assertNotIn("new WorldResultRouter", owner)
+
     def test_character_reset_keeps_one_reducer_and_one_uid_location_policy(self) -> None:
         world = (CLIENT / "world" / "world_state.gd").read_text(encoding="utf-8-sig")
         self.assertEqual(world.count("func apply_frame("), 1)

@@ -151,7 +151,7 @@ server/
     Monster/                # 怪物模擬與戰利品協調
     Combat/                 # 傷害結算
     Skill/                  # 技能規則
-    Pvp/                    # 玩家對戰規則
+    Pvp/                    # PvP 政策／模式、GM 名稱狀態及玩家戰鬥命令
     Party/                  # 隊伍狀態與操作
     Chat/                   # 附近、隊伍及密語路由（信任邊界仍在 Gateway）
     Trade/                  # 玩家雙方交易
