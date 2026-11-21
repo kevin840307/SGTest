@@ -45,6 +45,26 @@ class ArchitectureConventionsChecks(unittest.TestCase):
                 with self.subTest(src=script.relative_to(ROOT), target=relative):
                     self.assertTrue((CLIENT / relative).is_file())
 
+    def test_client_intent_dispatch_keeps_one_fifo_owner(self) -> None:
+        source = (CLIENT / "session" / "client_session.gd").read_text(encoding="utf-8-sig")
+        self.assertEqual(source.count("func _process_first_intent() -> void:"), 1)
+        router = source.split("func _process_first_intent() -> void:", 1)[1]
+        router = router.split("func _process_player_shop_intent(", 1)[0]
+        self.assertLess(len(router.splitlines()), 150,
+                        "ClientSession should route intentions, not embed every gameplay handler")
+        self.assertIn("var intent := _peek_intent()", router)
+        for name in (
+            "_process_player_shop_intent", "_process_quest_intent",
+            "_process_chat_intent", "_process_party_intent",
+            "_process_trade_intent", "_process_bank_intent",
+            "_process_storage_intent", "_process_pvp_attack_intent",
+            "_process_inventory_discard_intent", "_process_monster_skill_intent",
+        ):
+            with self.subTest(name=name):
+                self.assertIn(name + "(intent", router)
+                self.assertEqual(source.count("func " + name + "("), 1)
+
+
     def test_wire_contracts_have_one_owner(self) -> None:
         contracts = WIRE_CONTRACTS.read_text(encoding="utf-8-sig")
         self.assertIn("public enum WireOpcode : ushort", contracts)

@@ -1,5 +1,8 @@
 # SGTest 新版重建 TODO（2026-11-15）
 
+- ARCH-CLIENT-SINGLE-FIFO-INTENTS [x] 2026-11-21：將 ClientSession 原約 592 行的 `_process_first_intent` 拆為相同物件上的功能 Handler，保留單一 FIFO、原有 mark_sent/seq/backpressure、ACK/MapEpoch/WorldReady 及技能／交易權威行為；補架構防退化測試，持續沿用既有真 TLS 回歸。Gateway Handler、WorldState reducer、本機 Windows 多開效能仍 NOT VERIFIED。
+
+
 - ARCH-CLIENT-SOCIAL-PANELS [x] 2026-11-21：將 SessionPanel 內混合的附近聊天／密語／隊伍 UI 獨立到 `client/chat/chat_panel.gd`、`client/party/party_panel.gd`，採單一 ClientSession 提供快照及送出意圖；不新增 socket、state reducer 或隊伍權威。更新 UI TLS 回歸測試與命名分類自動檢查。Windows Godot 真 TLS/UI 測試含 Nearby、Whisper、Party、Trade、PvP、Quest、PlayerShop PASS；私有 GPU／多開量測仍 NOT VERIFIED。
 
 

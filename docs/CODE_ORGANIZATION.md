@@ -55,6 +55,13 @@
 - 面板從 Session 收到 `apply_snapshot`（或已定義的窄回呼）；連線／換角色時 `reset`；所有成功／失敗狀態以 Server 回覆為準。
 - 影響多人一致性的 `MapEpoch`、`ConnectionEpoch`、Reliable FIFO、UID/amount、交易 commit 與回放順序都不能因 UI 重構修改。
 
+## ClientSession 指令分派契約
+
+- `ClientSession._process_first_intent` 只依 `intent.type` 分派到同一個物件持有的 `_process_<feature>_intent`；包括 Party、Chat、Quest、Trade、PlayerShop、PvP、銀行、倉庫與裝備等。仍然只在原有傳輸／Reducer 排程中處理 **一個 FIFO 隊首**。
+- 同一隊首的消費只能使用既有 `_peek_intent`、`_pop_intent`、`_pop_intent_token`、`_replace_first_intent`；成功送出後仍須依原有 `WorldState.mark_*_sent` 更新 `pending sequence`，不能先移除後送出。
+- Handler 不能新增獨立 socket、Thread、Timer 或第二條任務佇列；改變資格檢查、地圖 epoch、角色 actor binding、重播與退款邊界時必須有對應真 TLS E2E。
+- 名稱採 `_process_player_shop_intent`、`_process_quest_intent`，保留 `kind` 參數只供同一系列下多種動作使用；避免單一 600 行函式長期累積業務邏輯。
+
 ## 尚未完成、不得混淆為已實作
 
 - `client/world/world_state.gd` 與 `client/session/client_session.gd` 仍是大型責任集中點，需按 opcode owner 和可靠事件順序逐片重構，不能把單一 Reducer 拆成各自可亂序更新的物件。

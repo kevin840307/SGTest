@@ -1177,542 +1177,85 @@ func _process_first_intent() -> void:
 			_publish()
 
 	elif kind=="player_shop":
-		var current:Dictionary=_world.snapshot()
-		if (
-			int(intent.get("actor_id",0))!=int(current.get("actor_id",0)) or
-			int(intent.get("map_epoch",0))!=int(current.get("map_epoch",0))
-		):
-			_pop_intent()
-			return
-		var action:=int(intent.get("action",0))
-		var seller:=int(intent.get("seller_actor_id",0))
-		var listing:=int(intent.get("listing_id",0))
-		var uid:=int(intent.get("item_uid",0))
-		var price:=int(intent.get("price",0))
-		var entities:Dictionary=current.get("entities",{})
-		if (
-			int(current.get("state",-1))!=WorldState.STATE_IN_WORLD or
-			bool(current.get("player_dead",false)) or
-			not bool(current.get("world_ready",false)) or
-			not bool(current.get("inventory_ready",false)) or
-			bool(current.get("resync_pending",false)) or
-			bool(current.get("waiting_for_new_map",false)) or
-			int(current.get("pending_world_ready_ack_epoch",0))!=0 or
-			int(current.get("last_world_ready_ack_epoch",0))!=int(current.get("map_epoch",0)) or
-			int(current.get("pending_player_shop_sequence",0))!=0 or
-			int(current.get("trade_id",0))!=0
-		):
-			return
-		var valid:=false
-		match action:
-			1:
-				valid=(
-					seller==0 and listing==0 and uid>0 and price>0 and
-					price<=WireCodec.MAX_MONEY and
-					(current.get("inventory_items",{}) as Dictionary).has(uid)
-				)
-			2:
-				valid=seller==0 and listing>0 and uid==0 and price==0
-			3:
-				valid=(
-					seller>0 and seller!=int(current.get("actor_id",0)) and
-					entities.has(seller) and listing==0 and uid==0 and price==0
-				)
-			4:
-				valid=(
-					seller>0 and seller!=int(current.get("actor_id",0)) and
-					entities.has(seller) and listing>0 and uid==0 and price==0
-				)
-		if not valid:
-			_pop_intent()
-			return
-		var sequence:=int(current.get("player_shop_sequence",0))+1
-		var frame:=WireCodec.encode_player_shop_command(
-			int(current.get("map_epoch",0)),sequence,action,
-			seller,listing,uid,price)
-		if frame.is_empty():
-			_pop_intent()
-			return
-		if (
-			_transport.send_frame(frame) and
-			_world.mark_player_shop_sent(
-				sequence,action,seller,listing,uid,price)
-		):
-			_pop_intent()
-			_publish()
+		_process_player_shop_intent(intent)
+
 
 	elif kind in ["quest_open","quest_choose"]:
-		var current:Dictionary=_world.snapshot()
-		if (
-			int(intent.get("actor_id",0))!=int(current.get("actor_id",0)) or
-			int(intent.get("map_epoch",0))!=int(current.get("map_epoch",0))
-		):
-			_pop_intent()
-			return
-		if (
-			int(current.get("state",-1))!=WorldState.STATE_IN_WORLD or
-			bool(current.get("player_dead",false)) or
-			not bool(current.get("world_ready",false)) or
-			bool(current.get("resync_pending",false)) or
-			bool(current.get("waiting_for_new_map",false)) or
-			int(current.get("pending_world_ready_ack_epoch",0))!=0 or
-			int(current.get("last_world_ready_ack_epoch",0))!=int(current.get("map_epoch",0)) or
-			int(current.get("pending_quest_sequence",0))!=0
-		):
-			return
-		var sequence:=int(current.get("quest_sequence",0))+1
-		var npc:=int(intent.get("npc_spawn_id",0))
-		var quest_id:=int(intent.get("quest_id",0))
-		var choice_id:=int(intent.get("choice_id",0))
-		var quest_kind:=1 if kind=="quest_open" else 2
-		var frame:=PackedByteArray()
-		if quest_kind==1:
-			frame=WireCodec.encode_quest_open(
-				int(current.get("map_epoch",0)),sequence,npc)
-		else:
-			frame=WireCodec.encode_quest_choose(
-				int(current.get("map_epoch",0)),sequence,npc,quest_id,choice_id)
-		if frame.is_empty():
-			_pop_intent()
-			return
-		if (
-			_transport.send_frame(frame) and
-			_world.mark_quest_sent(
-				sequence,quest_kind,npc,quest_id,choice_id)
-		):
-			_pop_intent()
-			_publish()
+		_process_quest_intent(intent, kind)
+
 
 	elif kind in ["nearby_chat","party_chat","whisper"]:
-		var current:Dictionary=_world.snapshot()
-		if (
-			int(intent.get("actor_id",0))!=int(current.get("actor_id",0)) or
-			int(intent.get("map_epoch",0))!=int(current.get("map_epoch",0))
-		):
-			_pop_intent()
-			return
-		if (
-			int(current.get("state",-1))!=WorldState.STATE_IN_WORLD or
-			not bool(current.get("world_ready",false)) or
-			bool(current.get("resync_pending",false)) or
-			bool(current.get("waiting_for_new_map",false)) or
-			int(current.get("pending_world_ready_ack_epoch",0))!=0 or
-			int(current.get("last_world_ready_ack_epoch",0))!=int(current.get("map_epoch",0)) or
-			int(current.get("pending_whisper_sequence",0))!=0
-		):
-			return
-		var message:=str(intent.get("message",""))
-		var bubble:=int(intent.get("bubble_type",0))
-		var sequence:=int(current.get("chat_sequence",0))+1
-		var frame:=PackedByteArray()
-		if kind in ["nearby_chat","party_chat"]:
-			var channel:=0 if kind=="nearby_chat" else 3
-			if channel==3 and int(current.get("party_id",0))<=0:
-				_pop_intent()
-				return
-			frame=WireCodec.encode_chat_command(
-				int(current.get("map_epoch",0)),sequence,channel,bubble,message)
-			if frame.is_empty():
-				_pop_intent()
-				return
-			if _transport.send_frame(frame) and _world.mark_chat_sent(
-				sequence,channel,bubble,message):
-				_pop_intent()
-				_publish()
-			return
-		var target:=int(intent.get("target_actor_id",0))
-		var target_name:=str(intent.get("target_name",""))
-		var by_name:=not target_name.is_empty()
-		if (
-			target<0 or (target>0)==by_name or
-			(target>0 and target==int(current.get("actor_id",0)))
-		):
-			_pop_intent()
-			return
-		frame=WireCodec.encode_whisper_command(
-			int(current.get("map_epoch",0)),sequence,target,bubble,message,target_name)
-		if frame.is_empty():
-			_pop_intent()
-			return
-		if (
-			_transport.send_frame(frame) and
-			_world.mark_whisper_sent(sequence,target,bubble,message,target_name)
-		):
-			_pop_intent()
-			_publish()
+		_process_chat_intent(intent, kind)
+
+
 	elif kind=="party":
-		var current:Dictionary=_world.snapshot()
-		if (
-			int(intent.get("actor_id",0))!=int(current.get("actor_id",0)) or
-			int(intent.get("map_epoch",0))!=int(current.get("map_epoch",0))
-		):
-			_pop_intent()
-			return
-		if (
-			int(current.get("state",-1))!=WorldState.STATE_IN_WORLD or
-			not bool(current.get("world_ready",false)) or
-			bool(current.get("resync_pending",false)) or
-			bool(current.get("waiting_for_new_map",false)) or
-			int(current.get("pending_world_ready_ack_epoch",0))!=0 or
-			int(current.get("last_world_ready_ack_epoch",0))!=int(current.get("map_epoch",0)) or
-			int(current.get("pending_party_sequence",0))!=0
-		):
-			return
-		var action:=int(intent.get("action",0))
-		var request_party_id:=int(intent.get("party_id",0))
-		var target:=int(intent.get("target_actor_id",0))
-		var target_name:=str(intent.get("target_name",""))
-		var sequence:=int(current.get("party_sequence",0))+1
-		var frame:=WireCodec.encode_party_command(
-			int(current.get("map_epoch",0)),sequence,action,request_party_id,
-			target,target_name)
-		if frame.is_empty():
-			_pop_intent()
-			return
-		if (
-			_transport.send_frame(frame) and
-			_world.mark_party_sent(
-				sequence,action,request_party_id,target,target_name)
-		):
-			_pop_intent()
-			_publish()
+		_process_party_intent(intent)
+
 
 	elif kind == "gm_pvp_name":
-		var current:Dictionary=_world.snapshot()
-		if (
-			int(intent.get("actor_id",0))!=int(current.get("actor_id",0)) or
-			int(intent.get("map_epoch",0))!=int(current.get("map_epoch",0))
-		):
-			_pop_intent()
-			return
-		var target:=int(intent.get("target_actor_id",0))
-		var name_state:=int(intent.get("name_state",-1))
-		var entities:Dictionary=current.get("entities",{})
-		if (
-			not bool(current.get("gm_authorized",false)) or
-			target<=0 or target==int(current.get("actor_id",0)) or
-			not entities.has(target) or name_state<0 or name_state>4
-		):
-			_pop_intent()
-			return
-		if (
-			int(current.get("state",-1))!=WorldState.STATE_IN_WORLD or
-			not bool(current.get("world_ready",false)) or
-			bool(current.get("resync_pending",false)) or
-			bool(current.get("waiting_for_new_map",false)) or
-			int(current.get("pending_world_ready_ack_epoch",0))!=0 or
-			int(current.get("last_world_ready_ack_epoch",0))!=int(current.get("map_epoch",0)) or
-			int(current.get("pending_gm_sequence",0))!=0
-		):
-			return
-		var sequence:=int(current.get("gm_sequence",0))+1
-		var frame:=WireCodec.encode_gm_pvp_name_command(
-			int(current.get("map_epoch",0)),sequence,target,name_state)
-		if frame.is_empty():
-			_pop_intent()
-			return
-		if (
-			_transport.send_frame(frame) and
-			_world.mark_gm_pvp_name_sent(sequence,target,name_state)
-		):
-			_pop_intent()
-			_publish()
+		_process_gm_pvp_name_intent(intent)
+
 
 	elif kind == "pvp_mode":
-		var current: Dictionary = _world.snapshot()
-		if int(intent.get("actor_id",0)) != int(current.get("actor_id",0)) or int(intent.get("map_epoch",0)) != int(current.get("map_epoch",0)):
-			_pop_intent()
-			return
-		var action := int(intent.get("action",-1))
-		if action not in [0,1,2] or (action != 0 and bool(current.get("player_dead",false))) or (action == 2 and bool(current.get("pvp_known",false)) and not bool(current.get("pvp_map_allows",false))):
-			_pop_intent()
-			return
-		if int(current.get("state",-1)) != WorldState.STATE_IN_WORLD or not bool(current.get("world_ready",false)) or bool(current.get("resync_pending",false)) or bool(current.get("waiting_for_new_map",false)) or int(current.get("pending_world_ready_ack_epoch",0)) != 0 or int(current.get("last_world_ready_ack_epoch",0)) != int(current.get("map_epoch",0)) or int(current.get("pending_pvp_sequence",0)) != 0:
-			return
-		var sequence := int(current.get("pvp_sequence",0))+1
-		var frame := WireCodec.encode_pvp_mode_command(int(current.get("map_epoch",0)),sequence,action)
-		if frame.is_empty():
-			_pop_intent()
-			return
-		if _transport.send_frame(frame) and _world.mark_pvp_sent(sequence,action):
-			_pop_intent()
-			_publish()
+		_process_pvp_mode_intent(intent)
+
 
 	elif kind == "pvp_attack":
-		var current: Dictionary = _world.snapshot()
-		if int(intent.get("actor_id",0)) != int(current.get("actor_id",0)) or int(intent.get("map_epoch",0)) != int(current.get("map_epoch",0)):
-			_pop_intent()
-			return
-		var target := int(intent.get("target_actor_id",0))
-		var entities: Dictionary = current.get("entities",{})
-		if target <= 0 or target == int(current.get("actor_id",0)) or not entities.has(target):
-			_pop_intent()
-			return
-		if int(current.get("state",-1)) != WorldState.STATE_IN_WORLD or not bool(current.get("combat_available",false)) or bool(current.get("player_dead",false)) or not bool(current.get("world_ready",false)) or bool(current.get("resync_pending",false)) or bool(current.get("waiting_for_new_map",false)) or int(current.get("pending_world_ready_ack_epoch",0)) != 0 or int(current.get("last_world_ready_ack_epoch",0)) != int(current.get("map_epoch",0)) or not bool(current.get("pvp_known",false)) or not bool(current.get("pvp_map_allows",false)) or int(current.get("pending_pvp_attack_sequence",0)) != 0:
-			return
-		var sequence := int(current.get("pvp_attack_sequence",0))+1
-		var frame := WireCodec.encode_pvp_attack(int(current.get("map_epoch",0)),sequence,target)
-		if frame.is_empty():
-			_pop_intent()
-			return
-		if _transport.send_frame(frame) and _world.mark_pvp_attack_sent(sequence,target):
-			_pop_intent()
-			_publish()
+		_process_pvp_attack_intent(intent)
+
 
 	elif kind == "cast_player_skill":
-		var current:Dictionary=_world.snapshot()
-		if int(intent.get("actor_id",0))!=int(current.get("actor_id",0)) or int(intent.get("map_epoch",0))!=int(current.get("map_epoch",0)):
-			_pop_intent()
-			return
-		var target:=int(intent.get("target_actor_id",0))
-		var skill_id:=int(intent.get("skill_id",0))
-		var entities:Dictionary=current.get("entities",{})
-		if target<=0 or target==int(current.get("actor_id",0)) or not entities.has(target) or skill_id<=0 or skill_id>100000000:
-			_pop_intent()
-			return
-		if int(current.get("state",-1))!=WorldState.STATE_IN_WORLD or not bool(current.get("combat_available",false)) or bool(current.get("player_dead",false)) or not bool(current.get("world_ready",false)) or bool(current.get("resync_pending",false)) or bool(current.get("waiting_for_new_map",false)) or int(current.get("pending_world_ready_ack_epoch",0))!=0 or int(current.get("last_world_ready_ack_epoch",0))!=int(current.get("map_epoch",0)) or not bool(current.get("pvp_known",false)) or not bool(current.get("pvp_map_allows",false)) or int(current.get("pending_skill_sequence",0))!=0:
-			return
-		var sequence:=int(current.get("skill_sequence",0))+1
-		var frame:=WireCodec.encode_pvp_skill(
-			int(current.get("map_epoch",0)),sequence,skill_id,target)
-		if frame.is_empty():
-			_pop_intent()
-			return
-		if _transport.send_frame(frame) and _world.mark_skill_sent(sequence,1,target):
-			_pop_intent()
-			_publish()
+		_process_player_skill_intent(intent)
+
 
 	elif kind == "trade":
-		var current: Dictionary = _world.snapshot()
-		if int(intent.get("actor_id",0)) != int(current.get("actor_id",0)) or int(intent.get("map_epoch",0)) != int(current.get("map_epoch",0)):
-			_pop_intent()
-			return
-		if int(current.get("state",-1)) != WorldState.STATE_IN_WORLD or bool(current.get("player_dead",false)) or not bool(current.get("world_ready",false)) or not bool(current.get("inventory_ready",false)) or bool(current.get("resync_pending",false)) or bool(current.get("waiting_for_new_map",false)) or int(current.get("pending_world_ready_ack_epoch",0)) != 0 or int(current.get("last_world_ready_ack_epoch",0)) != int(current.get("map_epoch",0)) or int(current.get("pending_repair_sequence",0)) != 0 or int(current.get("pending_enhancement_sequence",0)) != 0:
-			return
-		var sequence := int(current.get("trade_sequence",0))+1
-		var action := int(intent.get("action",0))
-		var trade_id := int(intent.get("trade_id",0))
-		var target := int(intent.get("target_actor_id",0))
-		var uid := int(intent.get("item_uid",0))
-		var money := int(intent.get("money",0))
-		var frame := WireCodec.encode_trade_command(
-			int(current.get("map_epoch",0)),sequence,action,
-			trade_id,target,uid,money)
-		if frame.is_empty():
-			_pop_intent()
-			return
-		if _transport.send_frame(frame) and _world.mark_trade_sent(
-				sequence,action,trade_id,target,uid,money):
-			_pop_intent()
-			_publish()
+		_process_trade_intent(intent)
+
 
 	elif kind in ["repair_open","repair_item"]:
-		var current: Dictionary = _world.snapshot()
-		if int(intent.get("actor_id",0)) != int(current.get("actor_id",0)) or int(intent.get("map_epoch",0)) != int(current.get("map_epoch",0)):
-			_pop_intent()
-			return
-		if int(current.state) != WorldState.STATE_IN_WORLD or bool(current.get("player_dead",false)) or not bool(current.get("world_ready",false)) or not bool(current.get("inventory_ready",false)) or bool(current.get("resync_pending",false)) or bool(current.get("waiting_for_new_map",false)) or int(current.get("pending_world_ready_ack_epoch",0)) != 0 or int(current.get("last_world_ready_ack_epoch",0)) != int(current.get("map_epoch",0)) or int(current.get("pending_repair_sequence",0)) != 0 or int(current.get("pending_enhancement_sequence",0)) != 0 or int(current.get("pending_bank_sequence",0)) != 0 or int(current.get("pending_shop_sequence",0)) != 0 or int(current.get("pending_storage_sequence",0)) != 0 or int(current.get("pending_equipment_sequence",0)) != 0 or int(current.get("pending_recovery_sequence",0)) != 0 or int(current.get("pending_discard_sequence",0)) != 0:
-			return
-		var sequence := int(current.get("repair_sequence",0))+1
-		var npc := int(intent.get("npc_spawn_id",0))
-		var uid := int(intent.get("item_uid",0))
-		var frame := PackedByteArray()
-		var repair_kind := 0
-		if kind == "repair_open":
-			repair_kind = 1
-			frame = WireCodec.encode_repair_open(int(current.map_epoch),sequence,npc)
-		else:
-			repair_kind = 2
-			if not bool(current.get("repair_ready",false)) or int(current.get("active_repair_npc",0)) != npc or not (current.get("repair_items",{}) as Dictionary).has(uid):
-				_pop_intent()
-				return
-			frame = WireCodec.encode_repair_item(int(current.map_epoch),sequence,npc,uid)
-		if not frame.is_empty() and _transport.send_frame(frame) and _world.mark_repair_sent(sequence,repair_kind,npc,uid):
-			_pop_intent()
-			_publish()
+		_process_repair_intent(intent, kind)
+
+
 	elif kind in ["enhancement_open","enhancement_item"]:
-		var current: Dictionary = _world.snapshot()
-		if int(intent.get("actor_id",0)) != int(current.get("actor_id",0)) or int(intent.get("map_epoch",0)) != int(current.get("map_epoch",0)):
-			_pop_intent()
-			return
-		if int(current.state) != WorldState.STATE_IN_WORLD or bool(current.get("player_dead",false)) or not bool(current.get("world_ready",false)) or not bool(current.get("inventory_ready",false)) or bool(current.get("resync_pending",false)) or bool(current.get("waiting_for_new_map",false)) or int(current.get("pending_world_ready_ack_epoch",0)) != 0 or int(current.get("last_world_ready_ack_epoch",0)) != int(current.get("map_epoch",0)) or int(current.get("pending_enhancement_sequence",0)) != 0 or int(current.get("pending_repair_sequence",0)) != 0 or int(current.get("pending_bank_sequence",0)) != 0 or int(current.get("pending_shop_sequence",0)) != 0 or int(current.get("pending_storage_sequence",0)) != 0 or int(current.get("pending_equipment_sequence",0)) != 0 or int(current.get("pending_recovery_sequence",0)) != 0 or int(current.get("pending_discard_sequence",0)) != 0 or int(current.get("trade_id",0)) != 0:
-			return
-		var sequence := int(current.get("enhancement_sequence",0))+1
-		var npc := int(intent.get("npc_spawn_id",0))
-		var uid := int(intent.get("item_uid",0))
-		var frame := PackedByteArray()
-		var enhancement_kind := 0
-		if kind == "enhancement_open":
-			enhancement_kind = 1
-			frame = WireCodec.encode_enhancement_open(
-				int(current.map_epoch),sequence,npc)
-		else:
-			enhancement_kind = 2
-			if not bool(current.get("enhancement_ready",false)) or int(current.get("active_enhancement_npc",0)) != npc or not (current.get("enhancement_items",{}) as Dictionary).has(uid):
-				_pop_intent()
-				return
-			frame = WireCodec.encode_enhancement_item(
-				int(current.map_epoch),sequence,npc,uid)
-		if not frame.is_empty() and _transport.send_frame(frame) and _world.mark_enhancement_sent(sequence,enhancement_kind,npc,uid):
-			_pop_intent()
-			_publish()
+		_process_enhancement_intent(intent, kind)
+
+
 	elif kind in ["bank_open","bank_deposit","bank_withdraw"]:
-		var current: Dictionary = _world.snapshot()
-		if int(intent.get("actor_id",0)) != int(current.get("actor_id",0)) or int(intent.get("map_epoch",0)) != int(current.get("map_epoch",0)):
-			_pop_intent()
-			return
-		if int(current.state) != WorldState.STATE_IN_WORLD or bool(current.get("player_dead",false)) or not bool(current.get("world_ready",false)) or bool(current.get("resync_pending",false)) or bool(current.get("waiting_for_new_map",false)) or int(current.get("pending_world_ready_ack_epoch",0)) != 0 or int(current.get("last_world_ready_ack_epoch",0)) != int(current.get("map_epoch",0)) or int(current.get("pending_bank_sequence",0)) != 0 or int(current.get("pending_repair_sequence",0)) != 0 or int(current.get("pending_enhancement_sequence",0)) != 0 or int(current.get("pending_shop_sequence",0)) != 0 or int(current.get("pending_storage_sequence",0)) != 0 or int(current.get("pending_equipment_sequence",0)) != 0 or int(current.get("pending_recovery_sequence",0)) != 0 or int(current.get("pending_discard_sequence",0)) != 0:
-			return
-		var sequence := int(current.get("bank_sequence",0))+1
-		var npc := int(intent.get("npc_spawn_id",0))
-		var amount := int(intent.get("amount",0))
-		var frame := PackedByteArray()
-		var bank_kind := 0
-		if kind == "bank_open":
-			bank_kind = 1
-			frame = WireCodec.encode_bank_open(int(current.map_epoch),sequence,npc)
-		elif kind == "bank_deposit":
-			bank_kind = 2
-			frame = WireCodec.encode_bank_deposit(int(current.map_epoch),sequence,npc,amount)
-		else:
-			bank_kind = 3
-			frame = WireCodec.encode_bank_withdraw(int(current.map_epoch),sequence,npc,amount)
-		if not frame.is_empty() and _transport.send_frame(frame) and _world.mark_bank_sent(sequence,bank_kind,npc,amount):
-			_pop_intent()
-			_publish()
+		_process_bank_intent(intent, kind)
+
+
 	elif kind in ["equipment_equip","equipment_unequip"]:
-		var current: Dictionary = _world.snapshot()
-		if int(intent.get("actor_id",0)) != int(current.get("actor_id",0)) or int(intent.get("map_epoch",0)) != int(current.get("map_epoch",0)):
-			_pop_intent()
-			return
-		if int(current.state) != WorldState.STATE_IN_WORLD or not bool(current.world_ready) or not bool(current.inventory_ready) or not bool(current.get("equipment_ready",false)) or bool(current.resync_pending) or bool(current.waiting_for_new_map) or int(current.pending_world_ready_ack_epoch) != 0 or int(current.last_world_ready_ack_epoch) != int(current.map_epoch) or int(current.get("pending_equipment_sequence",0)) != 0 or int(current.get("pending_shop_sequence",0)) != 0 or int(current.get("pending_storage_sequence",0)) != 0 or int(current.get("pending_recovery_sequence",0)) != 0 or int(current.get("pending_discard_sequence",0)) != 0:
-			return
-		var uid := int(intent.get("item_uid",0))
-		var sequence := int(current.get("equipment_sequence",0))+1
-		var equipment_kind := 1 if kind == "equipment_equip" else 2
-		var frame := WireCodec.encode_equipment_equip(int(current.map_epoch),sequence,uid) if equipment_kind == 1 else WireCodec.encode_equipment_unequip(int(current.map_epoch),sequence,uid)
-		if not frame.is_empty() and _transport.send_frame(frame) and _world.mark_equipment_sent(sequence,equipment_kind,uid):
-			_pop_intent()
-			_publish()
+		_process_equipment_intent(intent, kind)
+
+
 	elif kind in ["storage_open","storage_deposit","storage_withdraw"]:
-		var current: Dictionary = _world.snapshot()
-		if int(intent.get("actor_id",0)) != int(current.get("actor_id",0)) or int(intent.get("map_epoch",0)) != int(current.get("map_epoch",0)):
-			_pop_intent()
-			return
-		if int(current.state) != WorldState.STATE_IN_WORLD or bool(current.player_dead) or not bool(current.world_ready) or not bool(current.inventory_ready) or bool(current.resync_pending) or bool(current.waiting_for_new_map) or int(current.pending_world_ready_ack_epoch) != 0 or int(current.last_world_ready_ack_epoch) != int(current.map_epoch) or int(current.get("pending_storage_sequence",0)) != 0 or int(current.get("pending_shop_sequence",0)) != 0 or int(current.get("pending_equipment_sequence",0)) != 0 or int(current.get("pending_recovery_sequence",0)) != 0 or int(current.get("pending_discard_sequence",0)) != 0:
-			return
-		var sequence := int(current.get("storage_sequence",0))+1
-		var npc := int(intent.get("npc_spawn_id",0))
-		var uid := int(intent.get("item_uid",0))
-		var frame := PackedByteArray()
-		var storage_kind := 0
-		if kind == "storage_open":
-			storage_kind = 1
-			frame = WireCodec.encode_storage_open(int(current.map_epoch),sequence,npc)
-		elif kind == "storage_deposit":
-			storage_kind = 2
-			frame = WireCodec.encode_storage_deposit(int(current.map_epoch),sequence,npc,uid)
-		else:
-			storage_kind = 3
-			frame = WireCodec.encode_storage_withdraw(int(current.map_epoch),sequence,npc,uid)
-		if not frame.is_empty() and _transport.send_frame(frame) and _world.mark_storage_sent(sequence,storage_kind,npc,uid):
-			_pop_intent()
-			_publish()
+		_process_storage_intent(intent, kind)
+
+
 	elif kind in ["shop_open","shop_buy","shop_sell"]:
-		var current: Dictionary = _world.snapshot()
-		if int(intent.get("actor_id",0)) != int(current.get("actor_id",0)) or int(intent.get("map_epoch",0)) != int(current.get("map_epoch",0)):
-			_pop_intent()
-			return
-		if int(current.state) != WorldState.STATE_IN_WORLD or bool(current.player_dead) or not bool(current.world_ready) or not bool(current.inventory_ready) or bool(current.resync_pending) or bool(current.waiting_for_new_map) or int(current.pending_world_ready_ack_epoch) != 0 or int(current.last_world_ready_ack_epoch) != int(current.map_epoch) or int(current.get("pending_shop_sequence",0)) != 0 or int(current.get("pending_storage_sequence",0)) != 0 or int(current.get("pending_equipment_sequence",0)) != 0 or int(current.get("pending_recovery_sequence",0)) != 0 or int(current.get("pending_discard_sequence",0)) != 0:
-			return
-		var sequence := int(current.get("shop_sequence",0))+1
-		var npc := int(intent.get("npc_spawn_id",0))
-		var frame := PackedByteArray()
-		var shop_kind := 0
-		var item_id := int(intent.get("item_definition_id",0))
-		var uid := int(intent.get("item_uid",0))
-		var quantity := int(intent.get("quantity",0))
-		if kind == "shop_open":
-			shop_kind = 1
-			frame = WireCodec.encode_shop_open(int(current.map_epoch),sequence,npc)
-		elif kind == "shop_buy":
-			shop_kind = 2
-			frame = WireCodec.encode_shop_buy(int(current.map_epoch),sequence,npc,item_id,quantity)
-		else:
-			shop_kind = 3
-			frame = WireCodec.encode_shop_sell(int(current.map_epoch),sequence,npc,uid,item_id,quantity)
-		if not frame.is_empty() and _transport.send_frame(frame) and _world.mark_shop_sent(sequence,shop_kind,npc,item_id,uid,quantity):
-			_pop_intent()
-			_publish()
+		_process_shop_intent(intent, kind)
+
+
 	elif kind == "use_recovery_item":
-		var current: Dictionary = _world.snapshot()
-		if int(current.state) != WorldState.STATE_IN_WORLD or not bool(current.combat_available) or bool(current.player_dead) or not bool(current.inventory_ready) or not bool(current.world_ready) or bool(current.resync_pending) or bool(current.waiting_for_new_map) or int(current.pending_world_ready_ack_epoch) != 0 or int(current.last_world_ready_ack_epoch) != int(current.map_epoch) or int(current.pending_recovery_sequence) != 0 or int(current.pending_discard_sequence) != 0 or int(current.get("pending_shop_sequence",0)) != 0 or int(current.get("pending_storage_sequence",0)) != 0 or int(current.get("pending_equipment_sequence",0)) != 0 or int(current.get("pending_bank_sequence",0)) != 0 or int(current.get("pending_repair_sequence",0)) != 0 or int(current.get("pending_enhancement_sequence",0)) != 0 or int(current.get("trade_id",0)) != 0:
-			return
-		var uid := int(intent.item_uid)
-		if not (current.inventory_items as Dictionary).has(uid):
-			_pop_intent()
-			return
-		var sequence := int(current.recovery_sequence)+1
-		var frame := WireCodec.encode_recovery_use(int(current.map_epoch),sequence,uid)
-		if not frame.is_empty() and _transport.send_frame(frame) and _world.mark_recovery_use_sent(sequence,uid):
-			_pop_intent()
-			_publish()
+		_process_recovery_item_intent(intent)
+
+
 	elif kind == "discard_inventory_item":
-		var current: Dictionary = _world.snapshot()
-		if int(current.state) != WorldState.STATE_IN_WORLD or not bool(current.inventory_ready) or not bool(current.world_ready) or bool(current.resync_pending) or bool(current.waiting_for_new_map) or int(current.pending_world_ready_ack_epoch) != 0 or int(current.last_world_ready_ack_epoch) != int(current.map_epoch) or int(current.pending_discard_sequence) != 0 or int(current.pending_recovery_sequence) != 0 or int(current.get("pending_shop_sequence",0)) != 0 or int(current.get("pending_storage_sequence",0)) != 0 or int(current.get("pending_equipment_sequence",0)) != 0 or int(current.get("pending_bank_sequence",0)) != 0 or int(current.get("pending_repair_sequence",0)) != 0 or int(current.get("pending_enhancement_sequence",0)) != 0 or int(current.get("trade_id",0)) != 0:
-			return
-		var uid := int(intent.item_uid)
-		var quantity := int(intent.quantity)
-		var items: Dictionary = current.inventory_items
-		if not items.has(uid) or quantity < 1 or int((items[uid] as Dictionary).quantity) < quantity:
-			_pop_intent()
-			return
-		var sequence := int(current.discard_sequence)+1
-		var frame := WireCodec.encode_inventory_discard(int(current.map_epoch),sequence,uid,quantity)
-		if not frame.is_empty() and _transport.send_frame(frame) and _world.mark_inventory_discard_sent(sequence,uid,quantity):
-			_pop_intent()
-			_publish()
+		_process_inventory_discard_intent(intent)
+
+
 	elif kind == "pickup_ground_drop":
-		var current: Dictionary = _world.snapshot()
-		if int(current.state) != WorldState.STATE_IN_WORLD or bool(current.player_dead) or not bool(current.world_ready) or bool(current.resync_pending) or int(current.pending_world_ready_ack_epoch) != 0 or int(current.last_world_ready_ack_epoch) != int(current.map_epoch) or bool(current.waiting_for_new_map) or int(current.pending_pickup_sequence) != 0:
-			return
-		if not (current.ground_drops as Dictionary).has(int(intent.drop_id)):
-			_pop_intent() # ground item already disappeared before this intent sent
-			return
-		var sequence := int(current.pickup_sequence) + 1
-		var frame := WireCodec.encode_ground_pickup(int(current.map_epoch),sequence,int(intent.drop_id))
-		if not frame.is_empty() and _transport.send_frame(frame) and _world.mark_pickup_sent(sequence,int(intent.drop_id)):
-			_pop_intent()
-			_publish()
+		_process_pickup_intent(intent)
+
+
 	elif kind == "respawn":
-		var current: Dictionary = _world.snapshot()
-		if int(current.state) != WorldState.STATE_IN_WORLD or not bool(current.player_dead) or not bool(current.combat_available) or not bool(current.world_ready) or bool(current.resync_pending) or int(current.pending_world_ready_ack_epoch) != 0 or int(current.last_world_ready_ack_epoch) != int(current.map_epoch) or bool(current.waiting_for_new_map):
-			return
-		var sequence := int(current.respawn_sequence) + 1
-		var frame := WireCodec.encode_player_respawn(int(current.map_epoch),sequence)
-		if not frame.is_empty() and _transport.send_frame(frame) and _world.mark_player_respawn_sent(sequence):
-			_pop_intent()
-			_publish()
+		_process_respawn_intent(intent)
+
+
 	elif kind == "cast_skill":
-		var current: Dictionary = _world.snapshot()
-		if int(intent.get("actor_id",0)) != int(current.get("actor_id",0)) or int(intent.get("map_epoch",0)) != int(current.get("map_epoch",0)):
-			_pop_intent() # stale before send: never retarget a different map/actor
-			return
-		if int(current.state) != WorldState.STATE_IN_WORLD or bool(current.player_dead) or not bool(current.world_ready) or bool(current.resync_pending) or int(current.pending_world_ready_ack_epoch) != 0 or int(current.last_world_ready_ack_epoch) != int(current.map_epoch) or bool(current.waiting_for_new_map):
-			return
-		if int(current.get("pending_skill_sequence",0)) != 0:
-			return
-		var target := int(intent.entity_id)
-		var skill_id := int(intent.skill_id)
-		if target < 0 or skill_id <= 0:
-			_pop_intent()
-			return
-		var sequence := int(current.skill_sequence)+1
-		var frame := WireCodec.encode_skill_use(int(current.map_epoch),sequence,skill_id,target)
-		if not frame.is_empty() and _transport.send_frame(frame) and _world.mark_skill_sent(sequence):
-			# Publish pending before removing this intent: no duplicate window.
-			_publish()
-			_pop_intent()
+		_process_monster_skill_intent(intent)
+
+
 	elif kind == "attack_monster":
 		_process_attack_monster_intent(intent)
 	elif kind == "stop_move":
@@ -1732,6 +1275,576 @@ func _process_first_intent() -> void:
 	else:
 		_world.fail("unknown_intent")
 		_publish()
+
+func _process_player_shop_intent(intent: Dictionary) -> void:
+	var current:Dictionary=_world.snapshot()
+	if (
+		int(intent.get("actor_id",0))!=int(current.get("actor_id",0)) or
+		int(intent.get("map_epoch",0))!=int(current.get("map_epoch",0))
+	):
+		_pop_intent()
+		return
+	var action:=int(intent.get("action",0))
+	var seller:=int(intent.get("seller_actor_id",0))
+	var listing:=int(intent.get("listing_id",0))
+	var uid:=int(intent.get("item_uid",0))
+	var price:=int(intent.get("price",0))
+	var entities:Dictionary=current.get("entities",{})
+	if (
+		int(current.get("state",-1))!=WorldState.STATE_IN_WORLD or
+		bool(current.get("player_dead",false)) or
+		not bool(current.get("world_ready",false)) or
+		not bool(current.get("inventory_ready",false)) or
+		bool(current.get("resync_pending",false)) or
+		bool(current.get("waiting_for_new_map",false)) or
+		int(current.get("pending_world_ready_ack_epoch",0))!=0 or
+		int(current.get("last_world_ready_ack_epoch",0))!=int(current.get("map_epoch",0)) or
+		int(current.get("pending_player_shop_sequence",0))!=0 or
+		int(current.get("trade_id",0))!=0
+	):
+		return
+	var valid:=false
+	match action:
+		1:
+			valid=(
+				seller==0 and listing==0 and uid>0 and price>0 and
+				price<=WireCodec.MAX_MONEY and
+				(current.get("inventory_items",{}) as Dictionary).has(uid)
+			)
+		2:
+			valid=seller==0 and listing>0 and uid==0 and price==0
+		3:
+			valid=(
+				seller>0 and seller!=int(current.get("actor_id",0)) and
+				entities.has(seller) and listing==0 and uid==0 and price==0
+			)
+		4:
+			valid=(
+				seller>0 and seller!=int(current.get("actor_id",0)) and
+				entities.has(seller) and listing>0 and uid==0 and price==0
+			)
+	if not valid:
+		_pop_intent()
+		return
+	var sequence:=int(current.get("player_shop_sequence",0))+1
+	var frame:=WireCodec.encode_player_shop_command(
+		int(current.get("map_epoch",0)),sequence,action,
+		seller,listing,uid,price)
+	if frame.is_empty():
+		_pop_intent()
+		return
+	if (
+		_transport.send_frame(frame) and
+		_world.mark_player_shop_sent(
+			sequence,action,seller,listing,uid,price)
+	):
+		_pop_intent()
+		_publish()
+
+
+func _process_quest_intent(intent: Dictionary, kind: String) -> void:
+	var current:Dictionary=_world.snapshot()
+	if (
+		int(intent.get("actor_id",0))!=int(current.get("actor_id",0)) or
+		int(intent.get("map_epoch",0))!=int(current.get("map_epoch",0))
+	):
+		_pop_intent()
+		return
+	if (
+		int(current.get("state",-1))!=WorldState.STATE_IN_WORLD or
+		bool(current.get("player_dead",false)) or
+		not bool(current.get("world_ready",false)) or
+		bool(current.get("resync_pending",false)) or
+		bool(current.get("waiting_for_new_map",false)) or
+		int(current.get("pending_world_ready_ack_epoch",0))!=0 or
+		int(current.get("last_world_ready_ack_epoch",0))!=int(current.get("map_epoch",0)) or
+		int(current.get("pending_quest_sequence",0))!=0
+	):
+		return
+	var sequence:=int(current.get("quest_sequence",0))+1
+	var npc:=int(intent.get("npc_spawn_id",0))
+	var quest_id:=int(intent.get("quest_id",0))
+	var choice_id:=int(intent.get("choice_id",0))
+	var quest_kind:=1 if kind=="quest_open" else 2
+	var frame:=PackedByteArray()
+	if quest_kind==1:
+		frame=WireCodec.encode_quest_open(
+			int(current.get("map_epoch",0)),sequence,npc)
+	else:
+		frame=WireCodec.encode_quest_choose(
+			int(current.get("map_epoch",0)),sequence,npc,quest_id,choice_id)
+	if frame.is_empty():
+		_pop_intent()
+		return
+	if (
+		_transport.send_frame(frame) and
+		_world.mark_quest_sent(
+			sequence,quest_kind,npc,quest_id,choice_id)
+	):
+		_pop_intent()
+		_publish()
+
+
+func _process_chat_intent(intent: Dictionary, kind: String) -> void:
+	var current:Dictionary=_world.snapshot()
+	if (
+		int(intent.get("actor_id",0))!=int(current.get("actor_id",0)) or
+		int(intent.get("map_epoch",0))!=int(current.get("map_epoch",0))
+	):
+		_pop_intent()
+		return
+	if (
+		int(current.get("state",-1))!=WorldState.STATE_IN_WORLD or
+		not bool(current.get("world_ready",false)) or
+		bool(current.get("resync_pending",false)) or
+		bool(current.get("waiting_for_new_map",false)) or
+		int(current.get("pending_world_ready_ack_epoch",0))!=0 or
+		int(current.get("last_world_ready_ack_epoch",0))!=int(current.get("map_epoch",0)) or
+		int(current.get("pending_whisper_sequence",0))!=0
+	):
+		return
+	var message:=str(intent.get("message",""))
+	var bubble:=int(intent.get("bubble_type",0))
+	var sequence:=int(current.get("chat_sequence",0))+1
+	var frame:=PackedByteArray()
+	if kind in ["nearby_chat","party_chat"]:
+		var channel:=0 if kind=="nearby_chat" else 3
+		if channel==3 and int(current.get("party_id",0))<=0:
+			_pop_intent()
+			return
+		frame=WireCodec.encode_chat_command(
+			int(current.get("map_epoch",0)),sequence,channel,bubble,message)
+		if frame.is_empty():
+			_pop_intent()
+			return
+		if _transport.send_frame(frame) and _world.mark_chat_sent(
+			sequence,channel,bubble,message):
+			_pop_intent()
+			_publish()
+		return
+	var target:=int(intent.get("target_actor_id",0))
+	var target_name:=str(intent.get("target_name",""))
+	var by_name:=not target_name.is_empty()
+	if (
+		target<0 or (target>0)==by_name or
+		(target>0 and target==int(current.get("actor_id",0)))
+	):
+		_pop_intent()
+		return
+	frame=WireCodec.encode_whisper_command(
+		int(current.get("map_epoch",0)),sequence,target,bubble,message,target_name)
+	if frame.is_empty():
+		_pop_intent()
+		return
+	if (
+		_transport.send_frame(frame) and
+		_world.mark_whisper_sent(sequence,target,bubble,message,target_name)
+	):
+		_pop_intent()
+		_publish()
+
+
+func _process_party_intent(intent: Dictionary) -> void:
+	var current:Dictionary=_world.snapshot()
+	if (
+		int(intent.get("actor_id",0))!=int(current.get("actor_id",0)) or
+		int(intent.get("map_epoch",0))!=int(current.get("map_epoch",0))
+	):
+		_pop_intent()
+		return
+	if (
+		int(current.get("state",-1))!=WorldState.STATE_IN_WORLD or
+		not bool(current.get("world_ready",false)) or
+		bool(current.get("resync_pending",false)) or
+		bool(current.get("waiting_for_new_map",false)) or
+		int(current.get("pending_world_ready_ack_epoch",0))!=0 or
+		int(current.get("last_world_ready_ack_epoch",0))!=int(current.get("map_epoch",0)) or
+		int(current.get("pending_party_sequence",0))!=0
+	):
+		return
+	var action:=int(intent.get("action",0))
+	var request_party_id:=int(intent.get("party_id",0))
+	var target:=int(intent.get("target_actor_id",0))
+	var target_name:=str(intent.get("target_name",""))
+	var sequence:=int(current.get("party_sequence",0))+1
+	var frame:=WireCodec.encode_party_command(
+		int(current.get("map_epoch",0)),sequence,action,request_party_id,
+		target,target_name)
+	if frame.is_empty():
+		_pop_intent()
+		return
+	if (
+		_transport.send_frame(frame) and
+		_world.mark_party_sent(
+			sequence,action,request_party_id,target,target_name)
+	):
+		_pop_intent()
+		_publish()
+
+
+# PvP, economic and inventory requests share the same ClientSession FIFO consumer.
+func _process_gm_pvp_name_intent(intent: Dictionary) -> void:
+	var current:Dictionary=_world.snapshot()
+	if (
+		int(intent.get("actor_id",0))!=int(current.get("actor_id",0)) or
+		int(intent.get("map_epoch",0))!=int(current.get("map_epoch",0))
+	):
+		_pop_intent()
+		return
+	var target:=int(intent.get("target_actor_id",0))
+	var name_state:=int(intent.get("name_state",-1))
+	var entities:Dictionary=current.get("entities",{})
+	if (
+		not bool(current.get("gm_authorized",false)) or
+		target<=0 or target==int(current.get("actor_id",0)) or
+		not entities.has(target) or name_state<0 or name_state>4
+	):
+		_pop_intent()
+		return
+	if (
+		int(current.get("state",-1))!=WorldState.STATE_IN_WORLD or
+		not bool(current.get("world_ready",false)) or
+		bool(current.get("resync_pending",false)) or
+		bool(current.get("waiting_for_new_map",false)) or
+		int(current.get("pending_world_ready_ack_epoch",0))!=0 or
+		int(current.get("last_world_ready_ack_epoch",0))!=int(current.get("map_epoch",0)) or
+		int(current.get("pending_gm_sequence",0))!=0
+	):
+		return
+	var sequence:=int(current.get("gm_sequence",0))+1
+	var frame:=WireCodec.encode_gm_pvp_name_command(
+		int(current.get("map_epoch",0)),sequence,target,name_state)
+	if frame.is_empty():
+		_pop_intent()
+		return
+	if (
+		_transport.send_frame(frame) and
+		_world.mark_gm_pvp_name_sent(sequence,target,name_state)
+	):
+		_pop_intent()
+		_publish()
+
+
+func _process_pvp_mode_intent(intent: Dictionary) -> void:
+	var current: Dictionary = _world.snapshot()
+	if int(intent.get("actor_id",0)) != int(current.get("actor_id",0)) or int(intent.get("map_epoch",0)) != int(current.get("map_epoch",0)):
+		_pop_intent()
+		return
+	var action := int(intent.get("action",-1))
+	if action not in [0,1,2] or (action != 0 and bool(current.get("player_dead",false))) or (action == 2 and bool(current.get("pvp_known",false)) and not bool(current.get("pvp_map_allows",false))):
+		_pop_intent()
+		return
+	if int(current.get("state",-1)) != WorldState.STATE_IN_WORLD or not bool(current.get("world_ready",false)) or bool(current.get("resync_pending",false)) or bool(current.get("waiting_for_new_map",false)) or int(current.get("pending_world_ready_ack_epoch",0)) != 0 or int(current.get("last_world_ready_ack_epoch",0)) != int(current.get("map_epoch",0)) or int(current.get("pending_pvp_sequence",0)) != 0:
+		return
+	var sequence := int(current.get("pvp_sequence",0))+1
+	var frame := WireCodec.encode_pvp_mode_command(int(current.get("map_epoch",0)),sequence,action)
+	if frame.is_empty():
+		_pop_intent()
+		return
+	if _transport.send_frame(frame) and _world.mark_pvp_sent(sequence,action):
+		_pop_intent()
+		_publish()
+
+
+func _process_pvp_attack_intent(intent: Dictionary) -> void:
+	var current: Dictionary = _world.snapshot()
+	if int(intent.get("actor_id",0)) != int(current.get("actor_id",0)) or int(intent.get("map_epoch",0)) != int(current.get("map_epoch",0)):
+		_pop_intent()
+		return
+	var target := int(intent.get("target_actor_id",0))
+	var entities: Dictionary = current.get("entities",{})
+	if target <= 0 or target == int(current.get("actor_id",0)) or not entities.has(target):
+		_pop_intent()
+		return
+	if int(current.get("state",-1)) != WorldState.STATE_IN_WORLD or not bool(current.get("combat_available",false)) or bool(current.get("player_dead",false)) or not bool(current.get("world_ready",false)) or bool(current.get("resync_pending",false)) or bool(current.get("waiting_for_new_map",false)) or int(current.get("pending_world_ready_ack_epoch",0)) != 0 or int(current.get("last_world_ready_ack_epoch",0)) != int(current.get("map_epoch",0)) or not bool(current.get("pvp_known",false)) or not bool(current.get("pvp_map_allows",false)) or int(current.get("pending_pvp_attack_sequence",0)) != 0:
+		return
+	var sequence := int(current.get("pvp_attack_sequence",0))+1
+	var frame := WireCodec.encode_pvp_attack(int(current.get("map_epoch",0)),sequence,target)
+	if frame.is_empty():
+		_pop_intent()
+		return
+	if _transport.send_frame(frame) and _world.mark_pvp_attack_sent(sequence,target):
+		_pop_intent()
+		_publish()
+
+
+func _process_player_skill_intent(intent: Dictionary) -> void:
+	var current:Dictionary=_world.snapshot()
+	if int(intent.get("actor_id",0))!=int(current.get("actor_id",0)) or int(intent.get("map_epoch",0))!=int(current.get("map_epoch",0)):
+		_pop_intent()
+		return
+	var target:=int(intent.get("target_actor_id",0))
+	var skill_id:=int(intent.get("skill_id",0))
+	var entities:Dictionary=current.get("entities",{})
+	if target<=0 or target==int(current.get("actor_id",0)) or not entities.has(target) or skill_id<=0 or skill_id>100000000:
+		_pop_intent()
+		return
+	if int(current.get("state",-1))!=WorldState.STATE_IN_WORLD or not bool(current.get("combat_available",false)) or bool(current.get("player_dead",false)) or not bool(current.get("world_ready",false)) or bool(current.get("resync_pending",false)) or bool(current.get("waiting_for_new_map",false)) or int(current.get("pending_world_ready_ack_epoch",0))!=0 or int(current.get("last_world_ready_ack_epoch",0))!=int(current.get("map_epoch",0)) or not bool(current.get("pvp_known",false)) or not bool(current.get("pvp_map_allows",false)) or int(current.get("pending_skill_sequence",0))!=0:
+		return
+	var sequence:=int(current.get("skill_sequence",0))+1
+	var frame:=WireCodec.encode_pvp_skill(
+		int(current.get("map_epoch",0)),sequence,skill_id,target)
+	if frame.is_empty():
+		_pop_intent()
+		return
+	if _transport.send_frame(frame) and _world.mark_skill_sent(sequence,1,target):
+		_pop_intent()
+		_publish()
+
+
+func _process_trade_intent(intent: Dictionary) -> void:
+	var current: Dictionary = _world.snapshot()
+	if int(intent.get("actor_id",0)) != int(current.get("actor_id",0)) or int(intent.get("map_epoch",0)) != int(current.get("map_epoch",0)):
+		_pop_intent()
+		return
+	if int(current.get("state",-1)) != WorldState.STATE_IN_WORLD or bool(current.get("player_dead",false)) or not bool(current.get("world_ready",false)) or not bool(current.get("inventory_ready",false)) or bool(current.get("resync_pending",false)) or bool(current.get("waiting_for_new_map",false)) or int(current.get("pending_world_ready_ack_epoch",0)) != 0 or int(current.get("last_world_ready_ack_epoch",0)) != int(current.get("map_epoch",0)) or int(current.get("pending_repair_sequence",0)) != 0 or int(current.get("pending_enhancement_sequence",0)) != 0:
+		return
+	var sequence := int(current.get("trade_sequence",0))+1
+	var action := int(intent.get("action",0))
+	var trade_id := int(intent.get("trade_id",0))
+	var target := int(intent.get("target_actor_id",0))
+	var uid := int(intent.get("item_uid",0))
+	var money := int(intent.get("money",0))
+	var frame := WireCodec.encode_trade_command(
+		int(current.get("map_epoch",0)),sequence,action,
+		trade_id,target,uid,money)
+	if frame.is_empty():
+		_pop_intent()
+		return
+	if _transport.send_frame(frame) and _world.mark_trade_sent(
+			sequence,action,trade_id,target,uid,money):
+		_pop_intent()
+		_publish()
+
+
+func _process_repair_intent(intent: Dictionary, kind: String) -> void:
+	var current: Dictionary = _world.snapshot()
+	if int(intent.get("actor_id",0)) != int(current.get("actor_id",0)) or int(intent.get("map_epoch",0)) != int(current.get("map_epoch",0)):
+		_pop_intent()
+		return
+	if int(current.state) != WorldState.STATE_IN_WORLD or bool(current.get("player_dead",false)) or not bool(current.get("world_ready",false)) or not bool(current.get("inventory_ready",false)) or bool(current.get("resync_pending",false)) or bool(current.get("waiting_for_new_map",false)) or int(current.get("pending_world_ready_ack_epoch",0)) != 0 or int(current.get("last_world_ready_ack_epoch",0)) != int(current.get("map_epoch",0)) or int(current.get("pending_repair_sequence",0)) != 0 or int(current.get("pending_enhancement_sequence",0)) != 0 or int(current.get("pending_bank_sequence",0)) != 0 or int(current.get("pending_shop_sequence",0)) != 0 or int(current.get("pending_storage_sequence",0)) != 0 or int(current.get("pending_equipment_sequence",0)) != 0 or int(current.get("pending_recovery_sequence",0)) != 0 or int(current.get("pending_discard_sequence",0)) != 0:
+		return
+	var sequence := int(current.get("repair_sequence",0))+1
+	var npc := int(intent.get("npc_spawn_id",0))
+	var uid := int(intent.get("item_uid",0))
+	var frame := PackedByteArray()
+	var repair_kind := 0
+	if kind == "repair_open":
+		repair_kind = 1
+		frame = WireCodec.encode_repair_open(int(current.map_epoch),sequence,npc)
+	else:
+		repair_kind = 2
+		if not bool(current.get("repair_ready",false)) or int(current.get("active_repair_npc",0)) != npc or not (current.get("repair_items",{}) as Dictionary).has(uid):
+			_pop_intent()
+			return
+		frame = WireCodec.encode_repair_item(int(current.map_epoch),sequence,npc,uid)
+	if not frame.is_empty() and _transport.send_frame(frame) and _world.mark_repair_sent(sequence,repair_kind,npc,uid):
+		_pop_intent()
+		_publish()
+
+
+func _process_enhancement_intent(intent: Dictionary, kind: String) -> void:
+	var current: Dictionary = _world.snapshot()
+	if int(intent.get("actor_id",0)) != int(current.get("actor_id",0)) or int(intent.get("map_epoch",0)) != int(current.get("map_epoch",0)):
+		_pop_intent()
+		return
+	if int(current.state) != WorldState.STATE_IN_WORLD or bool(current.get("player_dead",false)) or not bool(current.get("world_ready",false)) or not bool(current.get("inventory_ready",false)) or bool(current.get("resync_pending",false)) or bool(current.get("waiting_for_new_map",false)) or int(current.get("pending_world_ready_ack_epoch",0)) != 0 or int(current.get("last_world_ready_ack_epoch",0)) != int(current.get("map_epoch",0)) or int(current.get("pending_enhancement_sequence",0)) != 0 or int(current.get("pending_repair_sequence",0)) != 0 or int(current.get("pending_bank_sequence",0)) != 0 or int(current.get("pending_shop_sequence",0)) != 0 or int(current.get("pending_storage_sequence",0)) != 0 or int(current.get("pending_equipment_sequence",0)) != 0 or int(current.get("pending_recovery_sequence",0)) != 0 or int(current.get("pending_discard_sequence",0)) != 0 or int(current.get("trade_id",0)) != 0:
+		return
+	var sequence := int(current.get("enhancement_sequence",0))+1
+	var npc := int(intent.get("npc_spawn_id",0))
+	var uid := int(intent.get("item_uid",0))
+	var frame := PackedByteArray()
+	var enhancement_kind := 0
+	if kind == "enhancement_open":
+		enhancement_kind = 1
+		frame = WireCodec.encode_enhancement_open(
+			int(current.map_epoch),sequence,npc)
+	else:
+		enhancement_kind = 2
+		if not bool(current.get("enhancement_ready",false)) or int(current.get("active_enhancement_npc",0)) != npc or not (current.get("enhancement_items",{}) as Dictionary).has(uid):
+			_pop_intent()
+			return
+		frame = WireCodec.encode_enhancement_item(
+			int(current.map_epoch),sequence,npc,uid)
+	if not frame.is_empty() and _transport.send_frame(frame) and _world.mark_enhancement_sent(sequence,enhancement_kind,npc,uid):
+		_pop_intent()
+		_publish()
+
+
+func _process_bank_intent(intent: Dictionary, kind: String) -> void:
+	var current: Dictionary = _world.snapshot()
+	if int(intent.get("actor_id",0)) != int(current.get("actor_id",0)) or int(intent.get("map_epoch",0)) != int(current.get("map_epoch",0)):
+		_pop_intent()
+		return
+	if int(current.state) != WorldState.STATE_IN_WORLD or bool(current.get("player_dead",false)) or not bool(current.get("world_ready",false)) or bool(current.get("resync_pending",false)) or bool(current.get("waiting_for_new_map",false)) or int(current.get("pending_world_ready_ack_epoch",0)) != 0 or int(current.get("last_world_ready_ack_epoch",0)) != int(current.get("map_epoch",0)) or int(current.get("pending_bank_sequence",0)) != 0 or int(current.get("pending_repair_sequence",0)) != 0 or int(current.get("pending_enhancement_sequence",0)) != 0 or int(current.get("pending_shop_sequence",0)) != 0 or int(current.get("pending_storage_sequence",0)) != 0 or int(current.get("pending_equipment_sequence",0)) != 0 or int(current.get("pending_recovery_sequence",0)) != 0 or int(current.get("pending_discard_sequence",0)) != 0:
+		return
+	var sequence := int(current.get("bank_sequence",0))+1
+	var npc := int(intent.get("npc_spawn_id",0))
+	var amount := int(intent.get("amount",0))
+	var frame := PackedByteArray()
+	var bank_kind := 0
+	if kind == "bank_open":
+		bank_kind = 1
+		frame = WireCodec.encode_bank_open(int(current.map_epoch),sequence,npc)
+	elif kind == "bank_deposit":
+		bank_kind = 2
+		frame = WireCodec.encode_bank_deposit(int(current.map_epoch),sequence,npc,amount)
+	else:
+		bank_kind = 3
+		frame = WireCodec.encode_bank_withdraw(int(current.map_epoch),sequence,npc,amount)
+	if not frame.is_empty() and _transport.send_frame(frame) and _world.mark_bank_sent(sequence,bank_kind,npc,amount):
+		_pop_intent()
+		_publish()
+
+
+func _process_equipment_intent(intent: Dictionary, kind: String) -> void:
+	var current: Dictionary = _world.snapshot()
+	if int(intent.get("actor_id",0)) != int(current.get("actor_id",0)) or int(intent.get("map_epoch",0)) != int(current.get("map_epoch",0)):
+		_pop_intent()
+		return
+	if int(current.state) != WorldState.STATE_IN_WORLD or not bool(current.world_ready) or not bool(current.inventory_ready) or not bool(current.get("equipment_ready",false)) or bool(current.resync_pending) or bool(current.waiting_for_new_map) or int(current.pending_world_ready_ack_epoch) != 0 or int(current.last_world_ready_ack_epoch) != int(current.map_epoch) or int(current.get("pending_equipment_sequence",0)) != 0 or int(current.get("pending_shop_sequence",0)) != 0 or int(current.get("pending_storage_sequence",0)) != 0 or int(current.get("pending_recovery_sequence",0)) != 0 or int(current.get("pending_discard_sequence",0)) != 0:
+		return
+	var uid := int(intent.get("item_uid",0))
+	var sequence := int(current.get("equipment_sequence",0))+1
+	var equipment_kind := 1 if kind == "equipment_equip" else 2
+	var frame := WireCodec.encode_equipment_equip(int(current.map_epoch),sequence,uid) if equipment_kind == 1 else WireCodec.encode_equipment_unequip(int(current.map_epoch),sequence,uid)
+	if not frame.is_empty() and _transport.send_frame(frame) and _world.mark_equipment_sent(sequence,equipment_kind,uid):
+		_pop_intent()
+		_publish()
+
+
+func _process_storage_intent(intent: Dictionary, kind: String) -> void:
+	var current: Dictionary = _world.snapshot()
+	if int(intent.get("actor_id",0)) != int(current.get("actor_id",0)) or int(intent.get("map_epoch",0)) != int(current.get("map_epoch",0)):
+		_pop_intent()
+		return
+	if int(current.state) != WorldState.STATE_IN_WORLD or bool(current.player_dead) or not bool(current.world_ready) or not bool(current.inventory_ready) or bool(current.resync_pending) or bool(current.waiting_for_new_map) or int(current.pending_world_ready_ack_epoch) != 0 or int(current.last_world_ready_ack_epoch) != int(current.map_epoch) or int(current.get("pending_storage_sequence",0)) != 0 or int(current.get("pending_shop_sequence",0)) != 0 or int(current.get("pending_equipment_sequence",0)) != 0 or int(current.get("pending_recovery_sequence",0)) != 0 or int(current.get("pending_discard_sequence",0)) != 0:
+		return
+	var sequence := int(current.get("storage_sequence",0))+1
+	var npc := int(intent.get("npc_spawn_id",0))
+	var uid := int(intent.get("item_uid",0))
+	var frame := PackedByteArray()
+	var storage_kind := 0
+	if kind == "storage_open":
+		storage_kind = 1
+		frame = WireCodec.encode_storage_open(int(current.map_epoch),sequence,npc)
+	elif kind == "storage_deposit":
+		storage_kind = 2
+		frame = WireCodec.encode_storage_deposit(int(current.map_epoch),sequence,npc,uid)
+	else:
+		storage_kind = 3
+		frame = WireCodec.encode_storage_withdraw(int(current.map_epoch),sequence,npc,uid)
+	if not frame.is_empty() and _transport.send_frame(frame) and _world.mark_storage_sent(sequence,storage_kind,npc,uid):
+		_pop_intent()
+		_publish()
+
+
+func _process_shop_intent(intent: Dictionary, kind: String) -> void:
+	var current: Dictionary = _world.snapshot()
+	if int(intent.get("actor_id",0)) != int(current.get("actor_id",0)) or int(intent.get("map_epoch",0)) != int(current.get("map_epoch",0)):
+		_pop_intent()
+		return
+	if int(current.state) != WorldState.STATE_IN_WORLD or bool(current.player_dead) or not bool(current.world_ready) or not bool(current.inventory_ready) or bool(current.resync_pending) or bool(current.waiting_for_new_map) or int(current.pending_world_ready_ack_epoch) != 0 or int(current.last_world_ready_ack_epoch) != int(current.map_epoch) or int(current.get("pending_shop_sequence",0)) != 0 or int(current.get("pending_storage_sequence",0)) != 0 or int(current.get("pending_equipment_sequence",0)) != 0 or int(current.get("pending_recovery_sequence",0)) != 0 or int(current.get("pending_discard_sequence",0)) != 0:
+		return
+	var sequence := int(current.get("shop_sequence",0))+1
+	var npc := int(intent.get("npc_spawn_id",0))
+	var frame := PackedByteArray()
+	var shop_kind := 0
+	var item_id := int(intent.get("item_definition_id",0))
+	var uid := int(intent.get("item_uid",0))
+	var quantity := int(intent.get("quantity",0))
+	if kind == "shop_open":
+		shop_kind = 1
+		frame = WireCodec.encode_shop_open(int(current.map_epoch),sequence,npc)
+	elif kind == "shop_buy":
+		shop_kind = 2
+		frame = WireCodec.encode_shop_buy(int(current.map_epoch),sequence,npc,item_id,quantity)
+	else:
+		shop_kind = 3
+		frame = WireCodec.encode_shop_sell(int(current.map_epoch),sequence,npc,uid,item_id,quantity)
+	if not frame.is_empty() and _transport.send_frame(frame) and _world.mark_shop_sent(sequence,shop_kind,npc,item_id,uid,quantity):
+		_pop_intent()
+		_publish()
+
+
+func _process_recovery_item_intent(intent: Dictionary) -> void:
+	var current: Dictionary = _world.snapshot()
+	if int(current.state) != WorldState.STATE_IN_WORLD or not bool(current.combat_available) or bool(current.player_dead) or not bool(current.inventory_ready) or not bool(current.world_ready) or bool(current.resync_pending) or bool(current.waiting_for_new_map) or int(current.pending_world_ready_ack_epoch) != 0 or int(current.last_world_ready_ack_epoch) != int(current.map_epoch) or int(current.pending_recovery_sequence) != 0 or int(current.pending_discard_sequence) != 0 or int(current.get("pending_shop_sequence",0)) != 0 or int(current.get("pending_storage_sequence",0)) != 0 or int(current.get("pending_equipment_sequence",0)) != 0 or int(current.get("pending_bank_sequence",0)) != 0 or int(current.get("pending_repair_sequence",0)) != 0 or int(current.get("pending_enhancement_sequence",0)) != 0 or int(current.get("trade_id",0)) != 0:
+		return
+	var uid := int(intent.item_uid)
+	if not (current.inventory_items as Dictionary).has(uid):
+		_pop_intent()
+		return
+	var sequence := int(current.recovery_sequence)+1
+	var frame := WireCodec.encode_recovery_use(int(current.map_epoch),sequence,uid)
+	if not frame.is_empty() and _transport.send_frame(frame) and _world.mark_recovery_use_sent(sequence,uid):
+		_pop_intent()
+		_publish()
+
+
+func _process_inventory_discard_intent(intent: Dictionary) -> void:
+	var current: Dictionary = _world.snapshot()
+	if int(current.state) != WorldState.STATE_IN_WORLD or not bool(current.inventory_ready) or not bool(current.world_ready) or bool(current.resync_pending) or bool(current.waiting_for_new_map) or int(current.pending_world_ready_ack_epoch) != 0 or int(current.last_world_ready_ack_epoch) != int(current.map_epoch) or int(current.pending_discard_sequence) != 0 or int(current.pending_recovery_sequence) != 0 or int(current.get("pending_shop_sequence",0)) != 0 or int(current.get("pending_storage_sequence",0)) != 0 or int(current.get("pending_equipment_sequence",0)) != 0 or int(current.get("pending_bank_sequence",0)) != 0 or int(current.get("pending_repair_sequence",0)) != 0 or int(current.get("pending_enhancement_sequence",0)) != 0 or int(current.get("trade_id",0)) != 0:
+		return
+	var uid := int(intent.item_uid)
+	var quantity := int(intent.quantity)
+	var items: Dictionary = current.inventory_items
+	if not items.has(uid) or quantity < 1 or int((items[uid] as Dictionary).quantity) < quantity:
+		_pop_intent()
+		return
+	var sequence := int(current.discard_sequence)+1
+	var frame := WireCodec.encode_inventory_discard(int(current.map_epoch),sequence,uid,quantity)
+	if not frame.is_empty() and _transport.send_frame(frame) and _world.mark_inventory_discard_sent(sequence,uid,quantity):
+		_pop_intent()
+		_publish()
+
+
+func _process_pickup_intent(intent: Dictionary) -> void:
+	var current: Dictionary = _world.snapshot()
+	if int(current.state) != WorldState.STATE_IN_WORLD or bool(current.player_dead) or not bool(current.world_ready) or bool(current.resync_pending) or int(current.pending_world_ready_ack_epoch) != 0 or int(current.last_world_ready_ack_epoch) != int(current.map_epoch) or bool(current.waiting_for_new_map) or int(current.pending_pickup_sequence) != 0:
+		return
+	if not (current.ground_drops as Dictionary).has(int(intent.drop_id)):
+		_pop_intent() # ground item already disappeared before this intent sent
+		return
+	var sequence := int(current.pickup_sequence) + 1
+	var frame := WireCodec.encode_ground_pickup(int(current.map_epoch),sequence,int(intent.drop_id))
+	if not frame.is_empty() and _transport.send_frame(frame) and _world.mark_pickup_sent(sequence,int(intent.drop_id)):
+		_pop_intent()
+		_publish()
+
+
+func _process_respawn_intent(intent: Dictionary) -> void:
+	var current: Dictionary = _world.snapshot()
+	if int(current.state) != WorldState.STATE_IN_WORLD or not bool(current.player_dead) or not bool(current.combat_available) or not bool(current.world_ready) or bool(current.resync_pending) or int(current.pending_world_ready_ack_epoch) != 0 or int(current.last_world_ready_ack_epoch) != int(current.map_epoch) or bool(current.waiting_for_new_map):
+		return
+	var sequence := int(current.respawn_sequence) + 1
+	var frame := WireCodec.encode_player_respawn(int(current.map_epoch),sequence)
+	if not frame.is_empty() and _transport.send_frame(frame) and _world.mark_player_respawn_sent(sequence):
+		_pop_intent()
+		_publish()
+
+
+func _process_monster_skill_intent(intent: Dictionary) -> void:
+	var current: Dictionary = _world.snapshot()
+	if int(intent.get("actor_id",0)) != int(current.get("actor_id",0)) or int(intent.get("map_epoch",0)) != int(current.get("map_epoch",0)):
+		_pop_intent() # stale before send: never retarget a different map/actor
+		return
+	if int(current.state) != WorldState.STATE_IN_WORLD or bool(current.player_dead) or not bool(current.world_ready) or bool(current.resync_pending) or int(current.pending_world_ready_ack_epoch) != 0 or int(current.last_world_ready_ack_epoch) != int(current.map_epoch) or bool(current.waiting_for_new_map):
+		return
+	if int(current.get("pending_skill_sequence",0)) != 0:
+		return
+	var target := int(intent.entity_id)
+	var skill_id := int(intent.skill_id)
+	if target < 0 or skill_id <= 0:
+		_pop_intent()
+		return
+	var sequence := int(current.skill_sequence)+1
+	var frame := WireCodec.encode_skill_use(int(current.map_epoch),sequence,skill_id,target)
+	if not frame.is_empty() and _transport.send_frame(frame) and _world.mark_skill_sent(sequence):
+		# Publish pending before removing this intent: no duplicate window.
+		_publish()
+		_pop_intent()
+
 
 func _process_stop_movement_intent(intent: Dictionary) -> void:
 	var current: Dictionary = _world.snapshot()
