@@ -150,10 +150,11 @@ internal static class SkillHealChecks
                 casterActor.ActorId,casterActor.ConnectionEpoch,casterActor.MapEpoch);
             await settlement.SuspendAndDrainAsync(
                 targetActor.ActorId,targetActor.ConnectionEpoch,targetActor.MapEpoch);
+            int casterHp=0,targetHp=0;
             Checks.Require(settlement.TryGetSuspendedCombatState(
-                    casterActor,out int casterHp,out _)&&
+                    casterActor,out casterHp,out _)&&
                 settlement.TryGetSuspendedCombatState(
-                    targetActor,out int targetHp,out _)&&
+                    targetActor,out targetHp,out _)&&
                 casterHp==80&&targetHp==40,
                 "Heal did not observe committed suspended HP");
             var result=await store.SettleSkillHealAsync(
