@@ -785,6 +785,8 @@ func _character_create_status_text(code: int, character_name: String) -> String:
 			return "角色欄位不合法"
 		6:
 			return "伺服器尚未開放遊戲內創角"
+		7:
+			return "角色外觀不符合伺服器創角規則，請重新選擇"
 		_:
 			return ""
 

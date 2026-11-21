@@ -21,6 +21,9 @@ var character_create_status := -1
 var last_created_character_id := 0
 var last_created_slot := -1
 var last_created_name := ""
+var last_created_appearance: Dictionary = {}
+var character_creation_appearances: Array = []
+var _pending_character_appearance: Dictionary = {}
 var characters: Array[Dictionary] = []
 var actor_id := 0
 var map_id := 0
@@ -340,12 +343,20 @@ func mark_auth_sent() -> bool:
 	state = STATE_AUTHENTICATING
 	return true
 
-func mark_character_create_sent(slot: int, character_name: String) -> bool:
+static func allows_character_appearance(appearance: Dictionary, choices: Array) -> bool:
+	if choices.is_empty():
+		return appearance.is_empty()
+	return WireCodec.valid_character_appearance(appearance) and choices.has(appearance)
+
+func mark_character_create_sent(slot: int, character_name: String, appearance: Dictionary = {}) -> bool:
 	if state != STATE_SELECTING_CHARACTER or slot < 0 or slot > 31:
 		return false
 	var bytes := character_name.to_utf8_buffer()
 	if bytes.size() < 1 or bytes.size() > 96:
 		return false
+	if not allows_character_appearance(appearance,character_creation_appearances):
+		return false
+	_pending_character_appearance = appearance.duplicate(true)
 	state = STATE_CREATING_CHARACTER
 	character_create_status = -1
 	return true
@@ -976,6 +987,8 @@ func snapshot() -> Dictionary:
 		"last_created_character_id": last_created_character_id,
 		"last_created_slot": last_created_slot,
 		"last_created_name": last_created_name,
+		"last_created_appearance": last_created_appearance.duplicate(true),
+		"character_creation_appearances": character_creation_appearances.duplicate(true),
 		"characters": characters.duplicate(true),
 		"actor_id": actor_id,
 		"map_id": map_id,
@@ -1305,7 +1318,15 @@ func _apply_character_list(frame: PackedByteArray) -> bool:
 	var decoded := WireCodec.decode_character_list(frame)
 	if decoded.is_empty():
 		return fail("invalid_character_list")
+	if character_create_status == 0 and not last_created_appearance.is_empty():
+		var found := false
+		for character in decoded.characters:
+			if int(character.character_id) == last_created_character_id:
+				found = int(character.slot) == last_created_slot and str(character.name) == last_created_name and character.get("appearance",{}) == last_created_appearance
+		if not found:
+			return fail("character_list_created_appearance_mismatch")
 	characters = decoded.characters.duplicate(true)
+	character_creation_appearances = decoded.get("creation_appearances",[]).duplicate(true)
 	state = STATE_SELECTING_CHARACTER
 	return true
 
@@ -1316,15 +1337,21 @@ func _apply_character_create_result(frame: PackedByteArray) -> bool:
 	var decoded := WireCodec.decode_character_create_result(frame)
 	if decoded.is_empty():
 		return fail("invalid_character_create_result")
+	var appearance: Dictionary = decoded.get("appearance",{})
+	if int(decoded.status) == 0 and appearance != _pending_character_appearance:
+		return fail("character_create_appearance_mismatch")
+	_pending_character_appearance.clear()
 	character_create_status = int(decoded.status)
 	if character_create_status == 0:
 		last_created_character_id = int(decoded.character_id)
 		last_created_slot = int(decoded.slot)
 		last_created_name = str(decoded.name)
+		last_created_appearance = appearance.duplicate(true)
 	else:
 		last_created_character_id = 0
 		last_created_slot = int(decoded.slot)
 		last_created_name = ""
+		last_created_appearance.clear()
 	# Server always follows the result with an authoritative CharacterList,
 	# including conflict failures. Wait for that refresh before allowing
 	# another create/choose intent.
@@ -1345,6 +1372,10 @@ func _apply_choose(frame: PackedByteArray) -> bool:
 		state = STATE_FAILED
 		return true
 	actor_id = int(decoded.character_id)
+	# Creation choices can contain 4096 tuples; do not deep-copy that menu
+	# into every subsequent world/AOI publication after entering the game.
+	character_creation_appearances.clear()
+	_pending_character_appearance.clear()
 	_reset_character_actions_and_combat()
 	_reset_character_economy_state()
 	_reset_character_world_state(decoded)

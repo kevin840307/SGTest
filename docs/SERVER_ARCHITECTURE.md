@@ -1,10 +1,10 @@
 # SGTest Server — 重建設計
 
-**狀態：已建立 .NET 8 Blocking/A*、單寫者 30Hz World、compact-binary V1、TLS listener／帳號認證／遊戲內創角／選角與本機 provision、generation-safe AOI／跨圖及自身權威位置／方向。創角出生點由 Host policy 指定並以 Blocking 驗證，Client 只提交 slot/name。登入節流、原版創角外觀／職業／出生規則、主要玩法與 Release Gate 仍未完成。** 目標為單體功能模組，固定世界模擬與獨立 Transport/Persistence。
+**狀態：已建立 .NET 8 Blocking/A*、單寫者 30Hz World、compact-binary V1、TLS listener／帳號認證／遊戲內創角／選角與本機 provision、generation-safe AOI／跨圖及自身權威位置／方向。創角出生點由 Host policy 指定並以 Blocking 驗證，Client 提交 slot/name，Server rules 開啟時可另送允許的 appearance tuple。登入節流、原版創角外觀／職業／出生規則、主要玩法與 Release Gate 仍未完成。** 目標為單體功能模組，固定世界模擬與獨立 Transport/Persistence。
 
 ## 核心邊界
 
-創角外觀的 domain 與持久化在既有 `Identity/`：`CharacterAppearanceRules` 是 trusted Server 的不可變完整 tuple allowlist，`SqliteIdentityStore` 才擁有建立角色／外觀／錢包的唯一原子交易，資料庫 schema v24 以可選 `character_appearances` 保留舊角色未知狀態。外觀 Race 與後續 CombatProfile provision 必須一致。來源合法集合、Host 配置、正式 Wire／AOI 及 UI 選項尚待接入，不能把 Storage 層驗證當作完整創角；詳 [來源與接入進度](research/CHARACTER_CREATION_APPEARANCE.md)。
+創角外觀的 domain 與持久化在既有 `Identity/`：`CharacterAppearanceRules` 是 trusted Server 的不可變完整 tuple allowlist，`SqliteIdentityStore` 才擁有建立角色／外觀／錢包的唯一原子交易，資料庫 schema v24 以可選 `character_appearances` 保留舊角色未知狀態。外觀 Race 與後續 CombatProfile provision 必須一致。創角／列表 Wire 已接上；來源合法集合、Host 配置、AOI 及 UI 選項尚待接入，不能把 Storage 層驗證當作完整創角；詳 [來源與接入進度](research/CHARACTER_CREATION_APPEARANCE.md)。
 
 | 責任 | 內容 | 禁止 |
 |---|---|---|

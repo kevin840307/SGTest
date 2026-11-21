@@ -134,11 +134,27 @@ All identity messages are legal **only inside the already-established TLS author
 
 - opcode 10 `AuthRequest`: `uint16 usernameUtf8Bytes + uint16 passwordUtf8Bytes + username + password`; username 3..32 bytes, password 8..256 bytes, strict UTF-8.
 - opcode 11 `AuthResult`: one byte status: `0 Success, 1 InvalidCredentials, 2 Disabled`.
-- opcode 12 `CharacterList`: `uint8 count` then repeated `int64 characterId + uint8 slot + uint16 nameUtf8Bytes + name`; max 32 entries and 4096-byte frame.
+- opcode 12 `CharacterList`: `uint8 count` then repeated `int64 characterId + uint8 slot + uint16 nameUtf8Bytes + name`; max 32 entries. Optional bounded appearance extension below raises the maximum frame size to 19,980 bytes.
 - opcode 13 `CharacterChoose`: `int64 characterId`.
 - opcode 14 `CharacterChooseResult`: `uint8 status + int64 characterId + int32 mapId + float64 x + float64 y + int64 mapEpoch`; status `0 Success, 1 NotOwned, 2 WorldRejected`. Failure frames carry zeroed identity/spawn fields.
 
 `IdentityTlsAuthorization` verifies password first, emits only that Account's CharacterList, checks ownership again on CharacterChoose, then uses persistent `character_id` plus stored server spawn to call `TrustedRegisterAsync`. Only the returned ActorSnapshot creates the gameplay Gateway binding. Thus a Client may select from server-advertised IDs but cannot assert authoritative ActorId/ConnectionEpoch or spawn. Successful result exposes MapEpoch because MoveTarget requires it; ConnectionEpoch remains server-only.
+
+### Character appearance extension (2026-11-22)
+
+The same Wire V1 identity messages now support `Appearance = uint8 race + uint16 hairIndex + uint8 hairColor` (4 bytes, little-endian). Bounds are race 0..4, hairIndex 0..65535, hairColor 0..7; these are storage/codec bounds, **not** legal creation choices. HairIndex is a presentation index, not an original Hair item-definition ID. Only a trusted Server `CharacterAppearanceRules` allowlist may permit the complete tuple. No source reference, ActorId, combat stats or spawn is accepted from the Client.
+
+| Opcode | Appearance encoding |
+|---|---|
+| 12 CharacterList | When any character has a saved appearance or creation choices exist, append `uint8 extensionSchema=1`, then **in the existing character order** `uint8 known + 4 appearance bytes` for each character; unknown has known=0 and four zero bytes. Follow with `uint16 choiceCount` and choiceCount distinct 4-byte tuples. At most 4,096 choices; whole-frame bound 19,980 bytes includes 32 maximum-length names. |
+| 15 CharacterCreate | Existing `uint8 slot + uint16 nameBytes + UTF8 name`, optionally followed by exactly 4 appearance bytes. Max frame 111 bytes. |
+| 16 CharacterCreateResult | Existing `uint8 status + int64 characterId + uint8 slot + uint16 nameBytes + UTF8 name`, optionally followed by exactly 4 appearance bytes **only on success**. Max frame 120 bytes. New failure status 7 is InvalidAppearance; failures have no character/name/appearance grant. |
+
+Without appearance data/options the original message bytes remain unchanged. Partial tails, unknown extension schema, invalid flags, nonzero unknown fields, duplicated choices, invalid tuples and trailing bytes fail closed. Creation with configured appearance rules requires an explicitly allowed tuple; omission is rejected. Supplying appearance to a creation policy without appearance rules is also rejected. A duplicate creation remains a slot/name conflict and grants no second character or wallet.
+
+Godot ClientSession copies the requested tuple into its existing bounded intent FIFO; the sole WorldState validates the advertised tuple, matches a successful result against the pending choice, and checks the refreshed list against that receipt. Snapshots deep-copy appearance data. Successful CharacterChoose clears the potentially large creation menu so ordinary World/AOI publication never copies it. No new socket, reducer or alternate gameplay protocol is introduced.
+
+Tests: C#/Godot shared golden, malformed extension and maximum-size parsing; real C# TLS rejects omitted/unlisted/unconfigured choices and tests duplicate/relogin; `run_tls_login.py --appearance` runs a real Godot ClientSession through creation, disconnect, durable relogin, selection and WorldReady. Source rules Host loading, UI selection/profile rendering and AOI appearance publication remain separate pending work; this protocol slice does not prove those features.
 
 The TLS handshake timeout remains 5s. The overall pre-gameplay authorization/character-selection timeout is configurable, default 120s and bounded to 10 minutes. Formal Host admission is bounded globally and per canonical IP before session allocation, and pre-gameplay authentication additionally uses an in-memory dual-scope limiter keyed by source address plus normalized account. Defaults are 12 failures/address, 6 failures/account, 60s failure window and 30s lockout; Host exposes bounded `--auth-*` overrides and reports the active values at startup. Invalid/blocked attempts use the same InvalidCredentials response. Active lockout buckets are never evicted merely to admit a new key; if every bounded slot is protected, the limiter temporarily fails closed for the configured lockout interval rather than allowing capacity pressure to erase a ban. After Gateway binding, identity opcodes are protocol violations. This is one-process admission/brute-force policy, not firewall/DDoS or cross-node persistent lockout.
 

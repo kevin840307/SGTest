@@ -21,7 +21,7 @@ using SGTest.Server.World;
 
 namespace SGTest.Server.Gateway;
 
-public sealed record CharacterCreationPolicy(CharacterSpawn Spawn);
+public sealed record CharacterCreationPolicy(CharacterSpawn Spawn, CharacterAppearanceRules? AppearanceRules = null);
 
 /// <summary>
 /// TLS-only registration/login/character-selection boundary. Public account

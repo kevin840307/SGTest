@@ -122,10 +122,10 @@ public sealed partial class IdentityTlsAuthorization
         {
             var summaries = characters
                 .Select(c => new CharacterSummaryWire(
-                    c.CharacterId, checked((byte)c.Slot), c.Name))
+                    c.CharacterId, checked((byte)c.Slot), c.Name,c.Appearance?.Value))
                 .ToArray();
             await WriteFrameAsync(tls,
-                WireProtocol.EncodeCharacterList(new(summaries)),
+                WireProtocol.EncodeCharacterList(new(summaries,_characterCreation?.AppearanceRules?.Choices)),
                 cancellationToken).ConfigureAwait(false);
         }
 
@@ -147,14 +147,22 @@ public sealed partial class IdentityTlsAuthorization
                 {
                     wireStatus = CharacterCreateWireStatus.Unavailable;
                 }
+                else if (_characterCreation.AppearanceRules is { } rules
+                    ? create.Appearance is not { } look || !rules.Allows(look)
+                    : create.Appearance is not null)
+                {
+                    wireStatus = CharacterCreateWireStatus.InvalidAppearance;
+                }
                 else
                 {
                     try
                     {
-                        var result = await _identity.CreateCharacterAsync(
-                            account.AccountId, create.Slot, create.Name,
-                            _characterCreation.Spawn, cancellationToken)
-                            .ConfigureAwait(false);
+                        var result = create.Appearance is { } appearance
+                            ? await _identity.CreateCharacterAsync(account.AccountId,create.Slot,create.Name,
+                                _characterCreation.Spawn,appearance,_characterCreation.AppearanceRules!,cancellationToken)
+                                .ConfigureAwait(false)
+                            : await _identity.CreateCharacterAsync(account.AccountId,create.Slot,create.Name,
+                                _characterCreation.Spawn,cancellationToken).ConfigureAwait(false);
                         wireStatus = result.Status switch
                         {
                             CharacterCreateStatus.Created =>
@@ -189,7 +197,7 @@ public sealed partial class IdentityTlsAuthorization
                         WireProtocol.EncodeCharacterCreateResult(new(
                             wireStatus, createdCharacter.CharacterId,
                             checked((byte)createdCharacter.Slot),
-                            createdCharacter.Name)),
+                            createdCharacter.Name,createdCharacter.Appearance?.Value)),
                         cancellationToken).ConfigureAwait(false);
                 }
                 else

@@ -168,7 +168,8 @@ public enum CharacterCreateWireStatus : byte
     LimitReached = 3,
     InvalidName = 4,
     InvalidSlot = 5,
-    Unavailable = 6
+    Unavailable = 6,
+    InvalidAppearance = 7
 }
 public enum PlayerRespawnStatus : byte
 {
@@ -338,11 +339,14 @@ public readonly record struct AuthRequestWire(string Username, string Password);
 public readonly record struct AuthResultWire(AuthWireStatus Status);
 public readonly record struct AccountRegisterRequestWire(string Username, string Password);
 public readonly record struct AccountRegisterResultWire(AccountRegisterWireStatus Status);
-public readonly record struct CharacterSummaryWire(long CharacterId, byte Slot, string Name);
-public sealed record CharacterListWire(IReadOnlyList<CharacterSummaryWire> Characters);
-public readonly record struct CharacterCreateWire(byte Slot, string Name);
+public readonly record struct CharacterSummaryWire(long CharacterId, byte Slot, string Name,
+    CharacterAppearance? Appearance = null);
+public sealed record CharacterListWire(IReadOnlyList<CharacterSummaryWire> Characters,
+    IReadOnlyList<CharacterAppearance>? CreationAppearances = null);
+public readonly record struct CharacterCreateWire(byte Slot, string Name, CharacterAppearance? Appearance = null);
 public readonly record struct CharacterCreateResultWire(
-    CharacterCreateWireStatus Status, long CharacterId, byte Slot, string Name);
+    CharacterCreateWireStatus Status, long CharacterId, byte Slot, string Name,
+    CharacterAppearance? Appearance = null);
 public readonly record struct CharacterChooseWire(long CharacterId);
 public readonly record struct CharacterChooseResultWire(
     CharacterChooseWireStatus Status, long CharacterId, int MapId,

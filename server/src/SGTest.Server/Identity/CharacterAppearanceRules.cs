@@ -33,8 +33,10 @@ public sealed class CharacterAppearanceRules
 
     internal CharacterAppearanceState Resolve(CharacterAppearance requested)
     {
-        if (!_allowed.Contains(requested))
+        if (!Allows(requested))
             throw new ArgumentException("Appearance is not permitted by creation rules", nameof(requested));
         return new(requested, SourceReference);
     }
+
+    public bool Allows(CharacterAppearance requested) => _allowed.Contains(requested);
 }

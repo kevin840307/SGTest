@@ -120,6 +120,26 @@ public static partial class WireProtocol
         return true;
     }
 
+    private static bool ValidAppearance(CharacterAppearance value) =>
+        value.Race is >= 0 and <= 4 && value.HairIndex is >= 0 and <= 65535 &&
+        value.HairColor is >= 0 and <= 7;
+
+    private static void WriteAppearance(Span<byte> target, CharacterAppearance value)
+    {
+        if (!ValidAppearance(value)) throw new ArgumentOutOfRangeException(nameof(value));
+        target[0] = (byte)value.Race;
+        BinaryPrimitives.WriteUInt16LittleEndian(target.Slice(1,2),(ushort)value.HairIndex);
+        target[3] = (byte)value.HairColor;
+    }
+
+    private static bool ReadAppearance(ReadOnlySpan<byte> source, out CharacterAppearance value)
+    {
+        value = default;
+        if (source.Length != 4) return false;
+        value = new(source[0],BinaryPrimitives.ReadUInt16LittleEndian(source.Slice(1,2)),source[3]);
+        return ValidAppearance(value);
+    }
+
     public static byte[] EncodeCharacterList(CharacterListWire value)
     {
         ArgumentNullException.ThrowIfNull(value);
@@ -138,6 +158,12 @@ public static partial class WireProtocol
             encodedNames[i] = name;
             size = checked(size + 11 + name.Length);
         }
+        var choices = value.CreationAppearances ?? Array.Empty<CharacterAppearance>();
+        if (choices.Count > MaxCreationAppearanceChoices || choices.Any(c => !ValidAppearance(c)) ||
+            choices.Distinct().Count() != choices.Count)
+            throw new ArgumentOutOfRangeException(nameof(value));
+        bool extended = choices.Count > 0 || value.Characters.Any(c => c.Appearance is not null);
+        if (extended) size = checked(size + 3 + value.Characters.Count * 5 + choices.Count * 4);
         if (size > MaxCharacterListFrameBytes) throw new ArgumentOutOfRangeException(nameof(value));
         var frame = NewFrame(WireOpcode.CharacterList, size);
         frame[8] = (byte)value.Characters.Count;
@@ -149,6 +175,18 @@ public static partial class WireProtocol
             frame[offset++] = c.Slot;
             BinaryPrimitives.WriteUInt16LittleEndian(frame.AsSpan(offset, 2), (ushort)name.Length); offset += 2;
             name.CopyTo(frame.AsSpan(offset)); offset += name.Length;
+        }
+        if (extended)
+        {
+            frame[offset++] = 1; // Appearance extension schema, not a new Wire version.
+            foreach (var character in value.Characters)
+            {
+                frame[offset++] = character.Appearance is null ? (byte)0 : (byte)1;
+                if (character.Appearance is { } appearance) WriteAppearance(frame.AsSpan(offset,4),appearance);
+                offset += 4; // Unknown appearances retain four canonical zero bytes.
+            }
+            BinaryPrimitives.WriteUInt16LittleEndian(frame.AsSpan(offset,2),(ushort)choices.Count); offset += 2;
+            foreach (var choice in choices) { WriteAppearance(frame.AsSpan(offset,4),choice); offset += 4; }
         }
         return frame;
     }
@@ -177,8 +215,26 @@ public static partial class WireProtocol
             }
         }
         catch (DecoderFallbackException) { return false; }
-        if (offset != frame.Length) return false;
-        value = new(list);
+        if (offset == frame.Length) { value = new(list); return true; }
+        if (frame.Length-offset < 3+count*5 || frame[offset++] != 1) return false;
+        for (int i=0;i<count;i++)
+        {
+            byte known=frame[offset++];
+            var bytes=frame.Slice(offset,4); offset+=4;
+            if (known>1 || !ReadAppearance(bytes,out var appearance) ||
+                (known==0 && appearance!=default)) return false;
+            list[i]=list[i] with { Appearance=known==1?appearance:null };
+        }
+        int choiceCount=BinaryPrimitives.ReadUInt16LittleEndian(frame.Slice(offset,2)); offset+=2;
+        if (choiceCount>MaxCreationAppearanceChoices || frame.Length-offset!=choiceCount*4) return false;
+        var choices=new List<CharacterAppearance>(choiceCount);
+        var seen=new HashSet<CharacterAppearance>();
+        for(int i=0;i<choiceCount;i++)
+        {
+            if(!ReadAppearance(frame.Slice(offset,4),out var choice)||!seen.Add(choice)) return false;
+            choices.Add(choice); offset+=4;
+        }
+        value = new(list,choices);
         return true;
     }
 
@@ -188,11 +244,12 @@ public static partial class WireProtocol
         byte[] name = StrictUtf8.GetBytes(value.Name ?? string.Empty);
         if (value.Slot > 31 || name.Length is < 1 or > 96)
             throw new ArgumentOutOfRangeException(nameof(value));
-        int size = HeaderBytes + 3 + name.Length;
+        int size = HeaderBytes + 3 + name.Length + (value.Appearance is null ? 0 : 4);
         var frame = NewFrame(WireOpcode.CharacterCreate, size);
         frame[8] = value.Slot;
         BinaryPrimitives.WriteUInt16LittleEndian(frame.AsSpan(9, 2), (ushort)name.Length);
         name.CopyTo(frame.AsSpan(11));
+        if (value.Appearance is { } appearance) WriteAppearance(frame.AsSpan(11+name.Length,4),appearance);
         return frame;
     }
 
@@ -205,11 +262,18 @@ public static partial class WireProtocol
             return false;
         byte slot = frame[8];
         int length = BinaryPrimitives.ReadUInt16LittleEndian(frame.Slice(9, 2));
-        if (slot > 31 || length is < 1 or > 96 || 11 + length != frame.Length)
+        if (slot > 31 || length is < 1 or > 96 ||
+            (11 + length != frame.Length && 15 + length != frame.Length))
             return false;
         try
         {
-            value = new(slot, StrictUtf8.GetString(frame.Slice(11, length)));
+            CharacterAppearance? appearance=null;
+            if(frame.Length==15+length)
+            {
+                if(!ReadAppearance(frame.Slice(11+length,4),out var decoded)) return false;
+                appearance=decoded;
+            }
+            value = new(slot, StrictUtf8.GetString(frame.Slice(11, length)),appearance);
             return true;
         }
         catch (DecoderFallbackException) { return false; }
@@ -217,7 +281,7 @@ public static partial class WireProtocol
 
     public static byte[] EncodeCharacterCreateResult(CharacterCreateResultWire value)
     {
-        if ((byte)value.Status > (byte)CharacterCreateWireStatus.Unavailable)
+        if ((byte)value.Status > (byte)CharacterCreateWireStatus.InvalidAppearance)
             throw new ArgumentOutOfRangeException(nameof(value));
         byte[] name = StrictUtf8.GetBytes(value.Name ?? string.Empty);
         if (value.Status == CharacterCreateWireStatus.Success)
@@ -225,15 +289,16 @@ public static partial class WireProtocol
             if (value.CharacterId <= 0 || value.Slot > 31 || name.Length is < 1 or > 96)
                 throw new ArgumentOutOfRangeException(nameof(value));
         }
-        else if (value.CharacterId != 0 || value.Slot > 31 || name.Length != 0)
+        else if (value.CharacterId != 0 || value.Slot > 31 || name.Length != 0 || value.Appearance is not null)
             throw new ArgumentOutOfRangeException(nameof(value));
-        int size = HeaderBytes + 12 + name.Length;
+        int size = HeaderBytes + 12 + name.Length + (value.Appearance is null ? 0 : 4);
         var frame = NewFrame(WireOpcode.CharacterCreateResult, size);
         frame[8] = (byte)value.Status;
         BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(9, 8), value.CharacterId);
         frame[17] = value.Slot;
         BinaryPrimitives.WriteUInt16LittleEndian(frame.AsSpan(18, 2), (ushort)name.Length);
         if (name.Length > 0) name.CopyTo(frame.AsSpan(20));
+        if (value.Appearance is { } appearance) WriteAppearance(frame.AsSpan(20+name.Length,4),appearance);
         return frame;
     }
 
@@ -249,8 +314,8 @@ public static partial class WireProtocol
         long characterId = BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(9, 8));
         byte slot = frame[17];
         int length = BinaryPrimitives.ReadUInt16LittleEndian(frame.Slice(18, 2));
-        if (raw > (byte)CharacterCreateWireStatus.Unavailable || slot > 31 ||
-            length > 96 || 20 + length != frame.Length)
+        if (raw > (byte)CharacterCreateWireStatus.InvalidAppearance || slot > 31 ||
+            length > 96 || (20 + length != frame.Length && 24 + length != frame.Length))
             return false;
         var status = (CharacterCreateWireStatus)raw;
         try
@@ -261,8 +326,14 @@ public static partial class WireProtocol
             {
                 if (characterId <= 0 || length < 1) return false;
             }
-            else if (characterId != 0 || length != 0) return false;
-            value = new(status, characterId, slot, name);
+            else if (characterId != 0 || length != 0 || frame.Length != 20) return false;
+            CharacterAppearance? appearance=null;
+            if(frame.Length==24+length)
+            {
+                if(!ReadAppearance(frame.Slice(20+length,4),out var decoded)) return false;
+                appearance=decoded;
+            }
+            value = new(status, characterId, slot, name,appearance);
             return true;
         }
         catch (DecoderFallbackException) { return false; }

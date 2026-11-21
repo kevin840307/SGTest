@@ -30,11 +30,11 @@
 
 Server 持久化前置已實作（schema v24）：`CharacterAppearance(Race,HairIndex,HairColor)` 及來源字串由 trusted `CharacterAppearanceRules` 的**完整 tuple 允許集合**核准，角色、外觀與錢包在同一 SQLite transaction 建立。Rules 會複製輸入集合並限制大小；通用數值範圍只是儲存邊界，不是各種族合法髮型規則，也不代表來源已由此 class 自動驗證。新 API 需明確提供 Server rules，舊 API 與舊角色保持 `Appearance=null`，不虛構 race/hair，也不從現有 CombatProfile 自動補值。已設定外觀的角色若 provision 不同 race 的 CombatProfile，會在同一交易中拒絕。CharacterRecord 查詢／重新認證會讀回原 tuple 和來源。
 
-此層沒有新增 Client 可用的外觀封包，也尚未提供正式來源 allowlist 的 Host 載入入口。C# synthetic tests 覆蓋不可變 allowlist、非法值／未列 tuple、重名／同欄並發、wallet failure 全回滾、重開／登入、combat race 一致、v23→24 備份與未知舊外觀保留；全量 Server 275、Python 123、現有真 Godot TLS UI 登入及註冊回歸 PASS。**不同外觀的真 Client 創角仍 NOT VERIFIED。**
+持久化切片 `f2a43e1` 的 [Server CI 44924564032](https://github.com/kevin840307/SGTest/actions/runs/44924564032) 與 [Client CI 44924564078](https://github.com/kevin840307/SGTest/actions/runs/44924564078) SUCCESS。後續已接上同一 Wire V1 的 CharacterList／CharacterCreate／CharacterCreateResult 外觀擴充：Server 發布 bounded exact choices，拒絕省略／未列／未啟用的外觀；成功與列表均帶保存值。ClientSession 透過原 intent FIFO 送出複本，WorldState 驗證選項與結果／列表一致，進世界後釋放 creation menu。真 Godot TLS 已驗證選定 tuple 創角→斷線→重登不變→選角→WorldReady，並非只測 C# codec。這仍是**合成規則的協定驗收**，正式來源 allowlist Host 載入、UI 操作／多種族 GPU／AOI 外觀尚未完成。格式與重跑命令見 [Runtime Protocol](../RUNTIME_PROTOCOL.md#character-appearance-extension-2026-11-22)。
 
 1. 原始 Hair／起始裝備 ID 與 ItemDefinition、種族、SPR／顏色的關係；確認每種族可選集合。Robot 的起始部件與 Y 的衍生版本規則需分別追溯。
 2. 接上來源核准的 creation options／Host rules，將已完成的外觀持久化接到正式創角入口；補外觀封包重送及滿欄測試。已完成的 v24 migration／並發／回滾不能代替此整合。
-3. 同一正式 Wire 的創角輸入、角色列表／創角結果及 AOI 外觀資料，跨端 golden、畸形封包與 generation 測試。
+3. 已完成創角／列表 Wire 與 ClientSession；仍需 AOI 外觀資料、Spawn 前後順序及 generation／重同步測試。
 4. 由同一 Converter 發布已支援 profile 的確切素材集；PlayerPresentation 依 Server 外觀選部件，預覽與世界共用 profile，不各維護一套 race/hair 對照。
 5. 創角選項放回來源頁面的位置；換種族／髮型／髮色即時預覽、創角後重登不變、至少兩個真 Client 的外觀一致、GPU／多開／資源 Gate。
 

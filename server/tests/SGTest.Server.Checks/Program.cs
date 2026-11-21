@@ -293,6 +293,7 @@ static class Checks
             CombatDeathGateChecks.Verify(root);
             PlayerRespawnChecks.Verify(root);
             IdentityWireChecks.Verify();
+            CharacterAppearanceWireChecks.Verify();
             GatewayConnectionChecks.Verify();
             TlsCommandWorkerChecks.Verify();
             WorldResultRouterChecks.Verify(root);

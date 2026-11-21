@@ -19,6 +19,8 @@ internal static class IdentityTlsAuthorizationChecks
             () => CreateCharacterAndEnterWorld(root).GetAwaiter().GetResult());
         Checks.Run("TLS character creation is unavailable without server-authorized spawn policy",
             () => CharacterCreationRequiresPolicy(root).GetAwaiter().GetResult());
+        Checks.Run("TLS character appearance rejects missing/unlisted choices and persists selected look across login",
+            () => CharacterAppearanceCreation(root).GetAwaiter().GetResult());
         Checks.Run("TLS NPC shop sell buy replay and relogin preserve wallet and Item UID",
             () => ShopSellBuyAndRelogin(root).GetAwaiter().GetResult());
         Checks.Run("TLS personal storage deposit withdraw replay and relogin preserve Item UID",
@@ -136,6 +138,12 @@ internal static class IdentityTlsAuthorizationChecks
                 empty.Characters.Count == 0,
                 "empty account did not receive empty selectable list");
 
+            await tls.WriteAsync(WireProtocol.EncodeCharacterCreate(new(0,"NoRuleLook",new CharacterAppearance(0,0,0))));
+            Checks.Require(WireProtocol.TryDecodeCharacterCreateResult(await ReadFrameAsync(tls),out var noRules) &&
+                noRules.Status==CharacterCreateWireStatus.InvalidAppearance,"client enabled appearance without trusted rules");
+            Checks.Require(WireProtocol.TryDecodeCharacterList(await ReadFrameAsync(tls),out var stillEmpty) &&
+                stillEmpty.Characters.Count==0,"unconfigured appearance mutated identity data");
+
             await tls.WriteAsync(WireProtocol.EncodeCharacterCreate(
                 new(0, "CreatedHero")));
             await tls.FlushAsync();
@@ -191,6 +199,65 @@ internal static class IdentityTlsAuthorizationChecks
         finally { Directory.Delete(identityRoot, true); }
     }
 
+
+    private static async Task CharacterAppearanceCreation(string root)
+    {
+        string identityRoot=TempRoot();
+        try
+        {
+            var grid=BlockingGrid.Load(Checks.Fixture(root,79,3,3,(_,_)=>0),79);
+            await using var world=new ServerWorldHost([grid]);
+            await world.StartAsync();
+            using var store=new SqliteIdentityStore(Path.Combine(identityRoot,"identity.db"));
+            await store.InitializeAsync();
+            long account=(await store.CreateAccountAsync("appearance_player","Appearance-Password-123!")).AccountId;
+            var look=new CharacterAppearance(1,3,7);
+            var rules=new CharacterAppearanceRules("synthetic/tls-appearance/v1",[new(0,0,0),look]);
+            var auth=new IdentityTlsAuthorization(store,world,
+                characterCreation:new(new CharacterSpawn(79,8,8),rules));
+            for(int pass=0;pass<2;pass++)
+            {
+                var (tls,serverTask,client)=await StartSession(auth,world);
+                await tls.WriteAsync(WireProtocol.EncodeAuthRequest(new("appearance_player","Appearance-Password-123!")));
+                Checks.Require(WireProtocol.TryDecodeAuthResult(await ReadFrameAsync(tls),out var login) &&
+                    login.Status==AuthWireStatus.Success,"appearance TLS auth failed");
+                Checks.Require(WireProtocol.TryDecodeCharacterList(await ReadFrameAsync(tls),out var list) &&
+                    list.CreationAppearances!.SequenceEqual(rules.Choices) && list.Characters.Count==pass,
+                    "appearance choices/list did not survive login");
+                if(pass==0)
+                {
+                    foreach(var request in new CharacterCreateWire[]{new(0,"AppearanceHero"),new(0,"AppearanceHero",new(2,3,7))})
+                    {
+                        await tls.WriteAsync(WireProtocol.EncodeCharacterCreate(request));
+                        Checks.Require(WireProtocol.TryDecodeCharacterCreateResult(await ReadFrameAsync(tls),out var denied) &&
+                            denied.Status==CharacterCreateWireStatus.InvalidAppearance && denied.Appearance is null,
+                            "unlisted or missing appearance was not denied");
+                        Checks.Require(WireProtocol.TryDecodeCharacterList(await ReadFrameAsync(tls),out var unchanged) &&
+                            unchanged.Characters.Count==0,"rejected appearance created a character");
+                    }
+                    await tls.WriteAsync(WireProtocol.EncodeCharacterCreate(new(0,"AppearanceHero",look)));
+                    Checks.Require(WireProtocol.TryDecodeCharacterCreateResult(await ReadFrameAsync(tls),out var created) &&
+                        created.Status==CharacterCreateWireStatus.Success && created.Appearance==look,"allowed appearance not acknowledged");
+                    Checks.Require(WireProtocol.TryDecodeCharacterList(await ReadFrameAsync(tls),out var refreshed) &&
+                        refreshed.Characters.Single().Appearance==look,"authoritative list lost appearance");
+                    // Replay is an ordinary slot conflict, never a second grant.
+                    await tls.WriteAsync(WireProtocol.EncodeCharacterCreate(new(0,"AppearanceHero",look)));
+                    Checks.Require(WireProtocol.TryDecodeCharacterCreateResult(await ReadFrameAsync(tls),out var duplicate) &&
+                        duplicate.Status==CharacterCreateWireStatus.SlotOccupied,"replayed creation granted again");
+                    await ReadFrameAsync(tls);
+                }
+                else Checks.Require(list.Characters.Single().Appearance==look,"relogin appearance changed");
+                await tls.DisposeAsync();
+                client.Dispose();
+                await serverTask.WaitAsync(TimeSpan.FromSeconds(2));
+            }
+            var persisted=(await store.ListCharactersAsync(account)).Single();
+            Checks.Require(persisted.Appearance==new CharacterAppearanceState(look,rules.SourceReference) &&
+                world.Statistics.ActiveActors==0,"appearance source changed or unauthorized actor spawned");
+            await world.StopAsync();
+        }
+        finally { Directory.Delete(identityRoot,true); }
+    }
 
     private static async Task CharacterCreationRequiresPolicy(string root)
     {

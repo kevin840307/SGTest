@@ -4,7 +4,7 @@
 
 ## 持續運行的TLS Host（MVP003-TLS-LISTENER）
 
-目前 schema **v24** 新增可選的 `character_appearances`。Trusted Server 可提供 `CharacterAppearanceRules` 允許集合，透過同一 Store 原子建立角色、外觀與錢包；沒有外觀資料的舊角色仍為未知，不會自動指定種族或髮型。此為持久化前置，正式 TLS 創角仍只有 slot/name；來源規則的 Host 載入、外觀封包與 Client 選項尚未接入，見 [創角外觀進度](../docs/research/CHARACTER_CREATION_APPEARANCE.md)。
+目前 schema **v24** 新增可選的 `character_appearances`。Trusted Server 可提供 `CharacterAppearanceRules` 允許集合，透過同一 Store 原子建立角色、外觀與錢包；沒有外觀資料的舊角色仍為未知，不會自動指定種族或髮型。TLS 創角／角色列表已支援 bounded appearance tuple 與 Server choices；標準 Host 尚未提供來源規則載入，玩家 UI／AOI 外觀亦未接入，見 [創角外觀進度](../docs/research/CHARACTER_CREATION_APPEARANCE.md)。
 
 本機已有 Host 執行、鎖住標準 build 輸出時，可用 `dotnet build server/host/SGTest.Server.Host/SGTest.Server.Host.csproj -c Release -o .cache/check-host` 建立相同正式專案的測試輸出，再設定 `SGTEST_CHECKS_HOST_DLL` 為該輸出的 **絕對** `SGTest.Server.Host.dll` 路徑執行 Server Checks。這只指定測試啟動哪個組件，不會重啟現有 Host 或改變正式配置；未設定時 Checks 使用既有標準 Release 輸出。
 

@@ -124,11 +124,12 @@ const AUTH_RESULT_FRAME_BYTES := 9
 const ACCOUNT_REGISTER_RESULT_FRAME_BYTES := 9
 const CHARACTER_CHOOSE_FRAME_BYTES := 16
 const CHARACTER_CHOOSE_RESULT_FRAME_BYTES := 45
-const MAX_CHARACTER_CREATE_FRAME_BYTES := 107
-const MAX_CHARACTER_CREATE_RESULT_FRAME_BYTES := 116
+const MAX_CHARACTER_CREATE_FRAME_BYTES := 111
+const MAX_CHARACTER_CREATE_RESULT_FRAME_BYTES := 120
 const MAX_AUTH_REQUEST_FRAME_BYTES := 300
 const MAX_ACCOUNT_REGISTER_REQUEST_FRAME_BYTES := 300
-const MAX_CHARACTER_LIST_FRAME_BYTES := 4096
+const MAX_CREATION_APPEARANCE_CHOICES := 4096
+const MAX_CHARACTER_LIST_FRAME_BYTES := 8+1+32*(11+96)+3+32*5+MAX_CREATION_APPEARANCE_CHOICES*4
 const WORLD_READY_FRAME_BYTES := 45
 const ENTITY_STATE_FRAME_BYTES := 74
 const ENTITY_DESPAWN_FRAME_BYTES := 40
@@ -634,6 +635,20 @@ static func decode_account_register_result(frame:PackedByteArray)->Dictionary:
 	return {"status":status}
 
 
+static func valid_character_appearance(value: Dictionary) -> bool:
+	if value.size() != 3 or not value.has_all(["race","hair_index","hair_color"]):
+		return false
+	for key in value:
+		if not value[key] is int:
+			return false
+	return value.race >= 0 and value.race <= 4 and value.hair_index >= 0 and value.hair_index <= 65535 and value.hair_color >= 0 and value.hair_color <= 7
+
+static func _read_character_appearance(reader: StreamPeerBuffer) -> Dictionary:
+	if reader.get_available_bytes() < 4:
+		return {}
+	var value := {"race":reader.get_u8(),"hair_index":reader.get_u16(),"hair_color":reader.get_u8()}
+	return value if valid_character_appearance(value) else {}
+
 static func decode_character_list(frame: PackedByteArray) -> Dictionary:
 	if not _valid_variable_header(frame, OPCODE_CHARACTER_LIST, 9, MAX_CHARACTER_LIST_FRAME_BYTES):
 		return {}
@@ -664,20 +679,48 @@ static func decode_character_list(frame: PackedByteArray) -> Dictionary:
 		ids[character_id] = true
 		slots[slot] = true
 		characters.append({"character_id": character_id, "slot": slot, "name": name})
-	if reader.get_available_bytes() != 0:
+	if reader.get_available_bytes() == 0:
+		return {"characters": characters}
+	if reader.get_available_bytes() < 3+count*5 or reader.get_u8() != 1:
 		return {}
-	return {"characters": characters}
+	for i in count:
+		var known := reader.get_u8()
+		var appearance := _read_character_appearance(reader)
+		if known > 1 or appearance.is_empty() or (known == 0 and appearance != {"race":0,"hair_index":0,"hair_color":0}):
+			return {}
+		characters[i].appearance = appearance if known == 1 else {}
+	var choice_count := reader.get_u16()
+	if choice_count > MAX_CREATION_APPEARANCE_CHOICES or reader.get_available_bytes() != choice_count*4:
+		return {}
+	var choices: Array[Dictionary] = []
+	var seen_choices := {}
+	for _i in choice_count:
+		var appearance := _read_character_appearance(reader)
+		if appearance.is_empty():
+			return {}
+		var key := int(appearance.race)*65536*8+int(appearance.hair_index)*8+int(appearance.hair_color)
+		if seen_choices.has(key):
+			return {}
+		seen_choices[key] = true
+		choices.append(appearance)
+	return {"characters": characters,"creation_appearances":choices}
 
 
-static func encode_character_create(slot: int, character_name: String) -> PackedByteArray:
+static func encode_character_create(slot: int, character_name: String, appearance: Dictionary = {}) -> PackedByteArray:
 	var name_bytes := character_name.to_utf8_buffer()
 	if slot < 0 or slot > 31 or name_bytes.size() < 1 or name_bytes.size() > 96:
 		return PackedByteArray()
-	var frame_bytes := HEADER_BYTES + 3 + name_bytes.size()
+	if not appearance.is_empty() and not valid_character_appearance(appearance):
+		return PackedByteArray()
+	var frame_bytes := HEADER_BYTES + 3 + name_bytes.size() + (0 if appearance.is_empty() else 4)
 	var writer := _writer(frame_bytes, OPCODE_CHARACTER_CREATE)
 	writer.put_u8(slot)
 	writer.put_u16(name_bytes.size())
 	writer.put_data(name_bytes)
+	if not appearance.is_empty():
+		writer.put_u8(int(appearance.race))
+		writer.put_u16(int(appearance.hair_index))
+		writer.put_u8(int(appearance.hair_color))
 	return writer.data_array
 
 static func decode_character_create_result(frame: PackedByteArray) -> Dictionary:
@@ -690,7 +733,7 @@ static func decode_character_create_result(frame: PackedByteArray) -> Dictionary
 	var character_id := reader.get_64()
 	var slot := reader.get_u8()
 	var name_bytes_count := reader.get_u16()
-	if status > 6 or slot > 31 or name_bytes_count > 96 or reader.get_available_bytes() != name_bytes_count:
+	if status > 7 or slot > 31 or name_bytes_count > 96 or (reader.get_available_bytes() != name_bytes_count and reader.get_available_bytes() != name_bytes_count+4):
 		return {}
 	var character_name := ""
 	if name_bytes_count > 0:
@@ -706,12 +749,22 @@ static func decode_character_create_result(frame: PackedByteArray) -> Dictionary
 			return {}
 	elif character_id != 0 or name_bytes_count != 0:
 		return {}
-	return {
+	var appearance := {}
+	if reader.get_available_bytes() > 0:
+		if status != 0:
+			return {}
+		appearance = _read_character_appearance(reader)
+		if appearance.is_empty():
+			return {}
+	var value := {
 		"status": status,
 		"character_id": character_id,
 		"slot": slot,
 		"name": character_name,
 	}
+	if not appearance.is_empty():
+		value.appearance = appearance
+	return value
 
 static func encode_character_choose(character_id: int) -> PackedByteArray:
 	if character_id <= 0:

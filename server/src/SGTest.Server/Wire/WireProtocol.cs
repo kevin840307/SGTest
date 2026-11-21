@@ -46,12 +46,14 @@ public static partial class WireProtocol
     public const int AccountRegisterResultFrameBytes = HeaderBytes + 1;
     public const int CharacterChooseFrameBytes = HeaderBytes + 8;
     public const int CharacterChooseResultFrameBytes = HeaderBytes + 37;
-    public const int MaxCharacterCreateFrameBytes = HeaderBytes + 1 + 2 + 96;
-    public const int MaxCharacterCreateResultFrameBytes = HeaderBytes + 1 + 8 + 1 + 2 + 96;
+    public const int MaxCharacterCreateFrameBytes = HeaderBytes + 1 + 2 + 96 + 4;
+    public const int MaxCharacterCreateResultFrameBytes = HeaderBytes + 1 + 8 + 1 + 2 + 96 + 4;
     public const int MaxAuthRequestFrameBytes = HeaderBytes + 4 + 32 + 256;
     public const int MaxAccountRegisterRequestFrameBytes =
         HeaderBytes + 4 + 32 + 256;
-    public const int MaxCharacterListFrameBytes = 4096;
+    public const int MaxCreationAppearanceChoices = 4096;
+    public const int MaxCharacterListFrameBytes = HeaderBytes + 1 + 32 * (11 + 96) +
+        3 + 32 * 5 + MaxCreationAppearanceChoices * 4;
     // Single-precision coordinates suffice across the original ~15k-pixel maps
     // (sub-0.002px resolution), saving bandwidth vs storing double on wire.
     public const int WorldReadyFrameBytes = 45;

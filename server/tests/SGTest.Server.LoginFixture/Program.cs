@@ -64,6 +64,8 @@ internal static class Program
             return await PvpLoginFixture.RunAsync().ConfigureAwait(false);
         if (args is ["--register"])
             return await RunRegistrationAsync().ConfigureAwait(false);
+        if (args is ["--appearance"])
+            return await CharacterAppearanceLoginFixture.RunAsync().ConfigureAwait(false);
         if (args is ["--checkpoint-crash-producer", var producerDb])
             return await RunCheckpointCrashProducerAsync(producerDb).ConfigureAwait(false);
         if (args is ["--checkpoint-crash-verify", var verifyDb])
