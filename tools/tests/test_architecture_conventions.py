@@ -315,6 +315,24 @@ class ArchitectureConventionsChecks(unittest.TestCase):
         self.assertIn("monster gap after PvP hit did not fail closed", test)
         self.assertIn("mixed PvP/monster/PvP sequence diverged", test)
 
+    def test_live_trade_fixture_waits_for_worldready_ack(self) -> None:
+        fixture = (CLIENT / "tests" / "test_client_trade_tls.gd").read_text(
+            encoding="utf-8-sig")
+        session = (CLIENT / "session" / "client_session.gd").read_text(
+            encoding="utf-8-sig")
+        self.assertIn("int(v.pending_world_ready_ack_epoch)==0", fixture)
+        self.assertIn("int(v.last_world_ready_ack_epoch)==int(v.map_epoch)", fixture)
+        self.assertLess(
+            fixture.index("int(v.last_world_ready_ack_epoch)==int(v.map_epoch)"),
+            fixture.index("CLIENT_TRADE_READY role=observer"))
+        self.assertIn('actor request "+str(session.snapshot())', fixture)
+        trade = session.split("func _queue_trade_intent(", 1)[1].split(
+            "func open_repair(", 1)[0]
+        self.assertIn('pending_world_ready_ack_epoch', trade)
+        self.assertIn('last_world_ready_ack_epoch', trade)
+        self.assertIn('return false', trade)
+        self.assertIn('return _queue_intent(', trade)
+
     def test_godot_scripts_use_snake_case_names(self) -> None:
         for script in CLIENT.rglob("*.gd"):
             if "assets" in script.parts:

@@ -39,7 +39,17 @@ func _initialize() -> void:
 	if not session.choose_character(self_id):
 		_fail("choose",session)
 		return
-	var ready := _wait(session,func(v): return int(v.state)==WorldState.STATE_IN_WORLD and bool(v.world_ready) and bool(v.inventory_ready) and v.inventory_items.has(own_item),7000)
+	# WorldReady and InventorySnapshot may be reduced before their ACK is
+	# sent. Trade intents are deliberately forbidden until the authoritative
+	# map generation has completed its WorldReady ACK handshake.
+	var ready := _wait(session,func(v): return (
+		int(v.state)==WorldState.STATE_IN_WORLD and
+		bool(v.world_ready) and bool(v.inventory_ready) and
+		v.inventory_items.has(own_item) and
+		not bool(v.resync_pending) and not bool(v.waiting_for_new_map) and
+		int(v.pending_world_ready_ack_epoch)==0 and
+		int(v.last_world_ready_ack_epoch)==int(v.map_epoch)
+	),7000)
 	if ready.is_empty():
 		_fail("world/inventory ready "+str(session.snapshot()),session)
 		return
@@ -77,7 +87,7 @@ func _run_observer(session, self_id: int, peer_id: int, own_item: int, peer_item
 
 func _run_actor(session, self_id: int, peer_id: int, own_item: int, peer_item: int) -> void:
 	if not session.request_trade(peer_id):
-		_fail("actor request",session)
+		_fail("actor request "+str(session.snapshot()),session)
 		return
 	var active := _wait(session,func(v): return int(v.trade_state)==3 and int(v.trade_peer_actor_id)==peer_id,7000)
 	if active.is_empty() or not session.trade_add_item(own_item):

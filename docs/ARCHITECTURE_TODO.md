@@ -17,6 +17,7 @@
 | Server PvP 命令責任 | [x] `Pvp/PvpStateHandler.cs` 處理保護／白名模式與 GM 名稱；`Pvp/PvpCombatHandler.cs` 處理普攻／玩家技能。避免單一 590 行 PvP 巨類 | 同一 gameplayGate／Router、原 mode／attack／GM sequence gate、SQLite／Combat owner、PvP TLS／GM audit 回歸 |
 | Client Reducer 分區 | [ ] `client/world/world_state.gd` 按 feature group 拆事件解析／處理，但保留唯一可重播 Reducer | 0/30/60 FPS、一致序號、重連／跨圖、可靠事件、TLS E2E |
 | Client WorldReady 跨圖重設 | [x] `_reset_map_combat_and_item_commands`、`_reset_map_npc_services`、`_reset_map_social_and_movement` 在同一 reducer 依原順序整理 | 新 MapEpoch 清除 pending／AOI／NPC；保留持有背包裝備及 revision；舊圖忽略，同圖 resync 不重置；真 Godot 測試 |
+| Client TLS 交易測試 ACK 競態 | [x] `test_client_trade_tls.gd` 兩端皆等 WorldReady ACK 完成，才開始可靠交易 | Linux CI `actor request` 早於 ACK 的拒絕；Godot×2 + SQLite 雙邊交易真 E2E 重跑 3 次 PASS，遊戲權限不放寬 |
 | Client HP 權威序列去重 | [x] `_apply_authoritative_damage` 統一 PlayerDamage／PvpDamage 的 HP／序號／Tick 驗證；兩種 opcode 維持各自解碼及來源標記 | PvP→怪物→PvP 混合傷害、重播／跨來源跳號、HP 來源標記；Godot Wire 與真 TLS 回歸 |
 | Client 選角重設／物品規則 | [x] `_reset_character_actions_and_combat`、`_reset_character_economy_state`、`_reset_character_world_state` 分組；修理與強化共用 `_item_matches_inventory_or_equipment` | 單一 WorldState；Bank／Storage／Repair／Enhancement／Trade／PvP／Skill／NPC Portal／AOI 及選角殘留清除共 10 組 Godot 回歸 PASS |
 | Client NPC | [ ] `client/npc/npc_interaction_panel.gd` 承接 App／SessionPanel 既有 NPC 選單與操作 | 開啟、取消與離開互動範圍，Server 仍驗距離及權限 |

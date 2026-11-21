@@ -1,5 +1,8 @@
 # SGTest 新版重建 TODO（2026-11-15）
 
+- CI-TLS-TRADE-READY-GATE [x] 2026-11-21：GitHub Client CI `82f0b46` 的玩家雙方交易 E2E 出現 `CLIENT_TRADE_TLS_FAIL actor request`，追日誌與原 `ClientSession._queue_trade_intent` 契約後，確認測試僅等 `world_ready && inventory_ready`，未等 `pending_world_ready_ack_epoch==0` 和 `last_world_ready_ack_epoch==map_epoch`，因而可能在合法的 ACK gate 前呼叫 `request_trade` 被拒。僅修正 `client/tests/test_client_trade_tls.gd` 的測試握手／失敗快照，不變更 ClientSession／WorldState／Server 交易權限、金錢和 UID 規則。Windows 同一真 TLS Godot 雙客戶端原子交換 E2E 已連續 3 次 PASS；跨平台 GitHub CI 需以本次提交驗收。
+
+
 - ARCH-CLIENT-SHARED-HP-DAMAGE [x] 2026-11-21：`client/world/world_state.gd` 的 Monster `PlayerDamage`／PvP `PvpDamage` 改共用 `_apply_authoritative_damage`，保留原 opcode 解碼、failure strings、PvP 的 `source_kind`、同一 DamageSequence、MapEpoch／Tick 防回放與 HP 不可憑空增加。`client/tests/test_player_damage_wire.gd` 增加真 Godot PvP→怪物→PvP 交錯命中，驗證跨來源單一序號／重播／來源標記歸零／跳號拒絕，`test_pvp_attack_wire.gd`、`test_world_state.gd`、AOI 與 FPS 回歸 PASS。沒有新增 HP store、CombatManager 或第二 Reducer。全量驗證結果以本輪測試為準。
 
 
