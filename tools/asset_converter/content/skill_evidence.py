@@ -71,14 +71,15 @@ def _level_returns(text: str, name: str):
     return values or None
 
 
-def _attack_calls(text: str):
+def _named_calls(text: str, names: tuple[str, ...]):
     calls = []
+    expression = "|".join(re.escape(name) for name in names)
     for raw in text.splitlines():
         line = raw.strip()
         if not line or line.startswith("--") or line.startswith("function "):
             continue
         match = re.match(
-            r'(Attack(?:_[A-Za-z0-9_]+)?)\s*\(\s*([0-9]+)?\s*\)',
+            rf'({expression})\s*\(\s*([0-9]+)?\s*\)',
             line,
         )
         if match:
@@ -89,21 +90,129 @@ def _attack_calls(text: str):
     return calls
 
 
+def _attack_calls(text: str):
+    return _named_calls(text, (
+        "Attack", "Attack_Range", "Attack_2_Consume",
+        "Attack_Range_2_Consume",
+    ))
+
+
+def _support_calls(text: str):
+    return _named_calls(text, (
+        "Cure", "Cure_2_Consume", "Cure_Range",
+        "Cure_Range_2_Boost", "Reanimate", "GoBoost",
+    ))
+
+
 def _script_facts(path: Path) -> dict:
     text = _decode(path)
     return {
         "resource": _one_assignment(text, "consume", quoted=True),
         "other_resource": _one_assignment(text, "other_consume", quoted=True),
+        "boost": _one_assignment(text, "boost", quoted=True),
+        "other_boost": _one_assignment(text, "other_boost", quoted=True),
         "ap_source": _one_assignment(text, "APcount", quoted=True),
         "dp_source": _one_assignment(text, "DPcount", quoted=True),
         "vary_delta_percent": _one_assignment(text, "varyDelta"),
         "min_hit": _one_assignment(text, "MinHit"),
         "min_hit_delta": _one_assignment(text, "MinHitDelta"),
+        "recast_time": _one_assignment(text, "recastTime"),
+        "duration": _one_assignment(text, "duration"),
         "attack_calls": _attack_calls(text),
+        "support_calls": _support_calls(text),
         "effect_by_level": _level_returns(text, "GetPara"),
+        "other_effect_by_level": _level_returns(text, "GetPara_Other"),
         "consume_by_level": _level_returns(text, "GetConTotal"),
+        "other_consume_by_level": _level_returns(text, "GetOtherConTotal"),
         "includes_skillcommon": bool(re.search(
             r'(?mi)^\s*#include\s+"skillcommon\.txt"\s*$', text)),
+        "includes_curecommon": bool(re.search(
+            r'(?mi)^\s*#include\s+"curecommon\.txt"\s*$', text)),
+        "includes_boostcommon": bool(re.search(
+            r'(?mi)^\s*#include\s+"boostcommon\.txt"\s*$', text)),
+    }
+
+
+def _cure_formula(cure_common: str | None, team_common: str | None) -> dict:
+    if cure_common is None:
+        return {
+            "available": False,
+            "direct_verified": False,
+            "range_verified": False,
+        }
+
+    direct = _function_body(cure_common, "Cure") or ""
+    direct_checks = {
+        "resource_guard": bool(re.search(
+            r'GetData\(\s*consume\s*\)\s*>=\s*conTotal', direct)),
+        "consume_once": bool(re.search(
+            r'ModifyData\(\s*consume\s*,\s*-conTotal\s*\)', direct)),
+        "variance": bool(re.search(
+            r'Cure_value\s*=\s*effect\s*\+\s*effect\s*\*\s*'
+            r'\(\s*varyDelta\s*-\s*random\(\s*varyDelta\s*\*\s*2\s*\)\s*\)'
+            r'\s*/\s*100', direct)),
+        "target_boost": bool(re.search(
+            r'ModifyTargetData\(\s*defender\s*,\s*boost\s*,\s*Cure_value\s*\)',
+            direct)),
+        "set_skill_defender": bool(re.search(
+            r'SetSkillDefender\(\s*defender\s*\)', direct)),
+    }
+    direct_verified = all(direct_checks.values())
+
+    ranged = _function_body(cure_common, "Cure_Range") or ""
+    range_checks = {
+        "resource_guard": bool(re.search(
+            r'GetData\(\s*consume\s*\)\s*>=\s*conTotal', ranged)),
+        "consume_once": bool(re.search(
+            r'ModifyData\(\s*consume\s*,\s*-conTotal\s*\)', ranged)),
+        "target_origin": bool(re.search(
+            r'x\s*,\s*y\s*=\s*GetTargetXY\(\s*defender\s*\)', ranged)),
+        "map_origin": bool(re.search(
+            r'mpid\s*=\s*GetData\(\s*"MapID"\s*\)', ranged)),
+        "team_iterator": (
+            "GetTeamList_First()" in ranged and
+            "GetTeamList_Next()" in ranged
+        ),
+        "helper_zero_branch": bool(re.search(
+            r'IsTargetCloseTo\(\s*teammember\s*,\s*x\s*,\s*y\s*,\s*mpid\s*,'
+            r'\s*CureRange\s*\)\s*==\s*0', ranged)),
+    }
+
+    helper_checks = {}
+    if team_common is not None:
+        helper = _function_body(team_common, "IsTargetCloseTo") or ""
+        helper_checks = {
+            "different_map_returns_zero": bool(re.search(
+                r'GetTargetData\(\s*object\s*,\s*"MapID"\s*\)\s*~=\s*mapid'
+                r'.*?return\s+0', helper, re.DOTALL)),
+            "outside_axis_range_returns_zero": bool(re.search(
+                r'if\s+disx\s*>\s*range\s+or\s+disy\s*>\s*range\s+then'
+                r'.*?return\s+0', helper, re.DOTALL)),
+            "otherwise_returns_one": bool(re.search(
+                r'else\s*return\s+1\s*end', helper, re.DOTALL)),
+        }
+
+    range_verified = all(range_checks.values()) and bool(helper_checks) and all(
+        helper_checks.values())
+    return {
+        "available": True,
+        "direct_verified": direct_verified,
+        "direct_checks": direct_checks,
+        "direct_formula": (
+            "heal=effect + effect*(varyDelta-random(varyDelta*2))/100"
+            if direct_verified else None
+        ),
+        "range_verified": range_verified,
+        "range_checks": range_checks,
+        "team_helper_checks": helper_checks,
+        "range_runtime_ready": False,
+        "range_note": (
+            "Old Cure_Range applies to a team member when IsTargetCloseTo(...)==0, "
+            "while CommTeam.IsTargetCloseTo returns 0 for another map/outside the "
+            "axis-aligned range and 1 otherwise. Preserve this source contradiction "
+            "as evidence; do not silently invert it in runtime."
+            if range_verified else None
+        ),
     }
 
 
@@ -406,6 +515,8 @@ def compile_skill_evidence(server_dat: Path, only_ids: set[int] | None = None) -
     skill_dir = server_dat / "Skill"
     table_path = skill_dir / "skill.csv"
     common_path = skill_dir / "skillcommon.txt"
+    cure_common_path = skill_dir / "curecommon.txt"
+    team_common_path = skill_dir / "CommTeam.txt"
     if not table_path.is_file() or not common_path.is_file():
         raise ValueError("original Skill/skill.csv and Skill/skillcommon.txt are required")
     if only_ids is not None and (
@@ -428,12 +539,18 @@ def compile_skill_evidence(server_dat: Path, only_ids: set[int] | None = None) -
     selected = sorted(available if only_ids is None else available & only_ids)
     missing = [] if only_ids is None else sorted(only_ids - available)
     common = _decode(common_path)
+    cure_common = _decode(cure_common_path) if cure_common_path.is_file() else None
+    team_common = _decode(team_common_path) if team_common_path.is_file() else None
 
     definitions = []
     source_hashes = {
         "Skill/skill.csv": _sha(table_path),
         "Skill/skillcommon.txt": _sha(common_path),
     }
+    if cure_common_path.is_file():
+        source_hashes["Skill/curecommon.txt"] = _sha(cure_common_path)
+    if team_common_path.is_file():
+        source_hashes["Skill/CommTeam.txt"] = _sha(team_common_path)
     for skill_id in selected:
         script = scripts.get(skill_id)
         if script is not None:
@@ -459,6 +576,7 @@ def compile_skill_evidence(server_dat: Path, only_ids: set[int] | None = None) -
         "hit_formula": _hit_formula(common),
         "damage_formula": _damage_formula(common),
         "range_semantics": _range_semantics(common),
+        "cure_formula": _cure_formula(cure_common, team_common),
         "enemy_attribute_structure": _enemy_attribute_structure(server_dat),
         "sources_sha256": dict(sorted(source_hashes.items())),
         "runtime_rules_generated": False,
@@ -467,6 +585,8 @@ def compile_skill_evidence(server_dat: Path, only_ids: set[int] | None = None) -
             "SkillId is joined to SKCxxJyyy by xx*1000+yyy only when that source file exists.",
             "Unknown skill.csv columns remain indexed raw evidence; semantics are not guessed.",
             "DP/DR semantic column mapping and durable MP/Will ownership must be verified before runtime activation.",
+            "Direct Cure source facts may be promoted only after Server-owned skill level/resource/HP settlement exists.",
+            "Cure_Range contains a verified source/helper predicate contradiction and remains runtime-blocked.",
             "Enemy/EN_Att relationships are emitted as structural candidates only and never promoted to runtime rules.",
         ],
     }

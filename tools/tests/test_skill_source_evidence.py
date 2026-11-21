@@ -86,6 +86,104 @@ function Attack_Range(AttackRange)
 end
 '''
 
+
+CURE_COMMON = r'''
+function Cure()
+    if GetData(consume) >= conTotal then
+        ModifyData(consume,-conTotal)
+        Cure_value = effect + effect * (varyDelta - random(varyDelta*2)) / 100
+        ModifyTargetData(defender,boost,Cure_value)
+        SetSkillDefender(defender)
+    end
+    QuestEnd()
+end
+function Cure_Range(CureRange)
+    if GetData(consume) >= conTotal then
+        ModifyData(consume,-conTotal)
+        Cure_value = effect + effect * (varyDelta - random(varyDelta*2)) / 100
+        ModifyTargetData(defender,boost,Cure_value)
+        SetSkillDefender(defender)
+        x, y = GetTargetXY(defender)
+        mpid = GetData("MapID")
+        hasdefender, teammember = GetTeamList_First()
+        while hasdefender ~= 0 do
+            if IsTargetCloseTo(teammember, x, y, mpid, CureRange)==0 then
+                Cure_value = effect + effect * (varyDelta - random(varyDelta*2)) / 100
+                ModifyTargetData(teammember,boost,Cure_value)
+                SetSkillDefender(teammember)
+            end
+            hasdefender, teammember = GetTeamList_Next()
+        end
+    end
+    QuestEnd()
+end
+'''
+
+COMM_TEAM = r'''
+function IsTargetCloseTo(object, posx, posy, mapid, range)
+    if GetTargetData(object, "MapID")~=mapid then
+        return 0
+    else
+        x, y = GetTargetXY(object)
+        disx = x-posx
+        if disx<0 then
+            disx = 0-disx
+        end
+        disy = y-posy
+        if disy<0 then
+            disy = 0-disy
+        end
+        if disx > range or disy>range then
+            return 0
+        else
+            return 1
+        end
+    end
+end
+'''
+
+SKILL_28101 = r'''
+function start()
+    consume = "MP"
+    boost = "HP"
+    varyDelta = 10
+    defender = GetTargetPtr()
+    if defender == 0 then
+        defender = GetCallerPtr()
+    end
+    effect = GetPara(skillLv)
+    conTotal = GetConTotal(skillLv)
+    Cure()
+end
+function GetPara(lv)
+    if lv == 1 then
+        return 11
+    elseif lv == 2 then
+        return 15
+    elseif lv == 3 then
+        return 21
+    elseif lv == 4 then
+        return 28
+    else
+        return 36
+    end
+end
+function GetConTotal(lv)
+    if lv == 1 then
+        return 11
+    elseif lv == 2 then
+        return 15
+    elseif lv == 3 then
+        return 21
+    elseif lv == 4 then
+        return 28
+    else
+        return 36
+    end
+end
+#include "curecommon.txt"
+'''
+
 SKILL_23102 = r'''
 function start()
     MinHit=2
@@ -155,11 +253,15 @@ class SkillSourceEvidenceTests(unittest.TestCase):
         rows = [
             '23102,Skill A,Single target,150,0,0,28,0,2,0,0,1,0,8,2,Use,Hit,,1,Effect',
             '23103,Skill B,Area target,150,0,63,0,3,2,0,0,1,0,9,1,Use,Hit,,1,Effect',
+            '28101,Heal,Target or self heal,250,0,16,0,0,3,0,0,2,0,45,1,Use,Heal,,0,0',
         ]
         (skill/'skill.csv').write_bytes(('\n'.join(rows)+'\n').encode('cp950'))
         (skill/'skillcommon.txt').write_bytes(COMMON.encode('ascii'))
+        (skill/'curecommon.txt').write_bytes(CURE_COMMON.encode('ascii'))
+        (skill/'CommTeam.txt').write_bytes(COMM_TEAM.encode('ascii'))
         (skill/'SKC23J102.txt').write_bytes(SKILL_23102.encode('ascii'))
         (skill/'SKC23J103.txt').write_bytes(SKILL_23103.encode('ascii'))
+        (skill/'SKC28J101.txt').write_bytes(SKILL_28101.encode('ascii'))
         enemy = dat/'Enemy'
         enemy.mkdir()
         # Columns 3/4 are deliberately shaped like the real Old candidate:
@@ -197,7 +299,7 @@ class SkillSourceEvidenceTests(unittest.TestCase):
     def test_script_join_resource_range_levels_and_direct_hit_formula(self):
         with tempfile.TemporaryDirectory() as directory:
             dat = self.fixture(Path(directory))
-            result = compile_skill_evidence(dat,{23102,23103})
+            result = compile_skill_evidence(dat,{23102,23103,28101})
             self.assertEqual(result['status'],'pass')
             self.assertTrue(result['hit_formula']['verified'])
             self.assertTrue(result['damage_formula']['verified'])
@@ -224,6 +326,7 @@ class SkillSourceEvidenceTests(unittest.TestCase):
             rows={entry['skill_id']:entry for entry in result['definitions']}
             single=rows[23102]['script_facts']
             area=rows[23103]['script_facts']
+            heal=rows[28101]['script_facts']
             self.assertEqual(rows[23102]['script'],'SKC23J102.txt')
             self.assertEqual(single['resource'],'Will')
             self.assertEqual(single['ap_source'],'AP')
@@ -235,6 +338,28 @@ class SkillSourceEvidenceTests(unittest.TestCase):
             self.assertEqual(area['attack_calls'],
                              [{'function':'Attack_Range','argument':125}])
             self.assertEqual(area['consume_by_level'],{'1':63,'else':168})
+            self.assertEqual(heal['resource'],'MP')
+            self.assertEqual(heal['boost'],'HP')
+            self.assertEqual(heal['vary_delta_percent'],10)
+            self.assertEqual(heal['support_calls'],
+                             [{'function':'Cure','argument':None}])
+            self.assertEqual(
+                heal['effect_by_level'],
+                {'1':11,'2':15,'3':21,'4':28,'else':36})
+            self.assertEqual(
+                heal['consume_by_level'],
+                {'1':11,'2':15,'3':21,'4':28,'else':36})
+            self.assertTrue(heal['includes_curecommon'])
+            cure=result['cure_formula']
+            self.assertTrue(cure['direct_verified'])
+            self.assertEqual(
+                cure['direct_formula'],
+                'heal=effect + effect*(varyDelta-random(varyDelta*2))/100')
+            self.assertTrue(cure['range_verified'])
+            self.assertFalse(cure['range_runtime_ready'])
+            self.assertIn('contradiction',cure['range_note'])
+            self.assertIn('Skill/curecommon.txt',result['sources_sha256'])
+            self.assertIn('Skill/CommTeam.txt',result['sources_sha256'])
             self.assertFalse(result['runtime_rules_generated'])
             self.assertFalse(result['combat_ready'])
 
@@ -264,7 +389,9 @@ class SkillSourceEvidenceTests(unittest.TestCase):
             first=compile_skill_evidence(dat,None)
             second=compile_skill_evidence(dat,None)
             self.assertEqual(first,second)
-            self.assertEqual([x['skill_id'] for x in first['definitions']],[23102,23103])
+            self.assertEqual(
+                [x['skill_id'] for x in first['definitions']],
+                [23102,23103,28101])
             self.assertIn('Skill/skill.csv',first['sources_sha256'])
             self.assertIn('Skill/SKC23J103.txt',first['sources_sha256'])
 
