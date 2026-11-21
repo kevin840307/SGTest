@@ -76,6 +76,8 @@ internal static class Program
             long accountId = (await store.CreateAccountAsync(Username, Password)).AccountId;
             var created = await store.CreateCharacterAsync(accountId, 0, "FixtureHero", new CharacterSpawn(15, 8, 8));
             long characterId = created.Character?.CharacterId ?? throw new InvalidOperationException("fixture character create failed");
+            await store.SetCharacterSkillLevelAsync(
+                characterId,28101,3,"ci:tls-skill-book-fixture");
             var authorization = new IdentityTlsAuthorization(store, world);
             var resultRouter = new WorldResultRouter();
             var aoiPump = new WorldAoiPump(resultRouter);

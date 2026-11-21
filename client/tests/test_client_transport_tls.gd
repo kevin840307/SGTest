@@ -39,6 +39,13 @@ func _initialize() -> void:
 	if in_world.is_empty() or int(in_world.actor_id) != character_id or int(in_world.map_id) != 15 or int(in_world.map_epoch) <= 0:
 		_fail("world entry invalid %s" % in_world, session)
 		return
+	if (
+		not bool(in_world.skill_book_ready) or
+		int(in_world.skill_book.get(28101,0)) != 3 or
+		int(in_world.skill_book_revision) != 1
+	):
+		_fail("Server-owned learned skill book was not restored %s" % in_world.skill_book, session)
+		return
 	if not session.move_target(24, 8):
 		_fail("move intent rejected", session)
 		return
@@ -70,7 +77,7 @@ func _initialize() -> void:
 		_fail("authoritative self movement/stop was not reduced %s" % acknowledged, session)
 		return
 	session.stop()
-	print("CLIENT_TLS_LOGIN_PASS auth=PASS character=%d map_epoch=%d move_sequence=1 receipt=PASS world_ready=PASS self_movement_stop=PASS facing_east=PASS server_tick=%d transport_thread=true reducer_thread=true certificate_validation=PASS" % [character_id, int(in_world.map_epoch), int(acknowledged.last_server_tick)])
+	print("CLIENT_TLS_LOGIN_PASS auth=PASS character=%d map_epoch=%d move_sequence=1 receipt=PASS world_ready=PASS skill_book=28101:3 server_owned_skill_level=true self_movement_stop=PASS facing_east=PASS server_tick=%d transport_thread=true reducer_thread=true certificate_validation=PASS" % [character_id, int(in_world.map_epoch), int(acknowledged.last_server_tick)])
 	quit(0)
 
 func _wait_state(session, expected: int, timeout_ms: int) -> Dictionary:
