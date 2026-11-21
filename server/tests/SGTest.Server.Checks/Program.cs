@@ -284,6 +284,7 @@ static class Checks
             PlayerRespawnChecks.Verify(root);
             IdentityWireChecks.Verify();
             GatewayConnectionChecks.Verify();
+            TlsCommandWorkerChecks.Verify();
             WorldResultRouterChecks.Verify(root);
             WorldAoiChecks.Verify(root);
             AoiWireChecks.Verify();

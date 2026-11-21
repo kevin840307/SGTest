@@ -215,540 +215,81 @@ public static class TlsWireConnection
                 }
             }
 
-            var respawnCommands = Channel.CreateBounded<TrustedPlayerRespawn>(
-                new BoundedChannelOptions(4)
-                {
-                    SingleReader = true, SingleWriter = true,
-                    FullMode = BoundedChannelFullMode.Wait
-                });
-            Func<TrustedPlayerRespawn, bool>? postRespawn = handleRespawn is null
-                ? null : request => respawnCommands.Writer.TryWrite(request);
-            Exception? respawnFault = null;
-            Task respawnWorker = handleRespawn is null
-                ? Task.CompletedTask : ProcessRespawnAsync();
+            var respawnQueue = new TlsCommandWorker<TrustedPlayerRespawn>(
+                4, handleRespawn, sessionCts);
+            Func<TrustedPlayerRespawn, bool>? postRespawn = respawnQueue.Post;
 
-            async Task ProcessRespawnAsync()
-            {
-                try
-                {
-                    await foreach (var request in respawnCommands.Reader
-                        .ReadAllAsync(sessionCts.Token).ConfigureAwait(false))
-                        await handleRespawn!(request).ConfigureAwait(false);
-                }
-                catch (OperationCanceledException) when (sessionCts.IsCancellationRequested) { }
-                catch (Exception error)
-                {
-                    respawnFault = error;
-                    sessionCts.Cancel();
-                }
-            }
+            var pickupQueue = new TlsCommandWorker<TrustedGroundPickup>(
+                16, handlePickup, sessionCts);
+            Func<TrustedGroundPickup, bool>? postPickup = pickupQueue.Post;
 
-            var pickupCommands = Channel.CreateBounded<TrustedGroundPickup>(
-                new BoundedChannelOptions(16)
-                {
-                    SingleReader = true, SingleWriter = true,
-                    FullMode = BoundedChannelFullMode.Wait
-                });
-            Func<TrustedGroundPickup,bool>? postPickup = handlePickup is null
-                ? null : request => pickupCommands.Writer.TryWrite(request);
-            Exception? pickupFault = null;
-            Task pickupWorker = handlePickup is null
-                ? Task.CompletedTask : ProcessPickupAsync();
+            var recoveryQueue = new TlsCommandWorker<TrustedRecoveryUse>(
+                16, handleRecovery, sessionCts);
+            Func<TrustedRecoveryUse, bool>? postRecovery = recoveryQueue.Post;
 
-            async Task ProcessPickupAsync()
-            {
-                try
-                {
-                    await foreach(var request in pickupCommands.Reader
-                        .ReadAllAsync(sessionCts.Token).ConfigureAwait(false))
-                        await handlePickup!(request).ConfigureAwait(false);
-                }
-                catch(OperationCanceledException) when (sessionCts.IsCancellationRequested) { }
-                catch(Exception error)
-                {
-                    pickupFault = error;
-                    sessionCts.Cancel();
-                }
-            }
+            var discardQueue = new TlsCommandWorker<TrustedInventoryDiscard>(
+                16, handleDiscard, sessionCts);
+            Func<TrustedInventoryDiscard, bool>? postDiscard = discardQueue.Post;
 
-            var recoveryCommands=Channel.CreateBounded<TrustedRecoveryUse>(
-                new BoundedChannelOptions(16)
-                {
-                    SingleReader=true,SingleWriter=true,
-                    FullMode=BoundedChannelFullMode.Wait
-                });
-            Func<TrustedRecoveryUse,bool>? postRecovery=handleRecovery is null
-                ? null : request=>recoveryCommands.Writer.TryWrite(request);
-            Exception? recoveryFault=null;
-            Task recoveryWorker=handleRecovery is null
-                ? Task.CompletedTask : ProcessRecoveryAsync();
+            var shopQueue = new TlsCommandWorker<TrustedShopCommand>(
+                16, handleShop, sessionCts);
+            Func<TrustedShopCommand, bool>? postShop = shopQueue.Post;
 
-            async Task ProcessRecoveryAsync()
-            {
-                try
-                {
-                    await foreach(var request in recoveryCommands.Reader
-                        .ReadAllAsync(sessionCts.Token).ConfigureAwait(false))
-                        await handleRecovery!(request).ConfigureAwait(false);
-                }
-                catch(OperationCanceledException) when(sessionCts.IsCancellationRequested){}
-                catch(Exception error)
-                {
-                    recoveryFault=error;
-                    sessionCts.Cancel();
-                }
-            }
+            var storageQueue = new TlsCommandWorker<TrustedStorageCommand>(
+                16, handleStorage, sessionCts);
+            Func<TrustedStorageCommand, bool>? postStorage = storageQueue.Post;
 
-            var discardCommands=Channel.CreateBounded<TrustedInventoryDiscard>(
-                new BoundedChannelOptions(16)
-                {
-                    SingleReader=true,SingleWriter=true,
-                    FullMode=BoundedChannelFullMode.Wait
-                });
-            Func<TrustedInventoryDiscard,bool>? postDiscard=handleDiscard is null
-                ? null : request=>discardCommands.Writer.TryWrite(request);
-            Exception? discardFault=null;
-            Task discardWorker=handleDiscard is null
-                ? Task.CompletedTask : ProcessDiscardAsync();
+            var equipmentQueue = new TlsCommandWorker<TrustedEquipmentCommand>(
+                16, handleEquipment, sessionCts);
+            Func<TrustedEquipmentCommand, bool>? postEquipment = equipmentQueue.Post;
 
-            async Task ProcessDiscardAsync()
-            {
-                try
-                {
-                    await foreach(var request in discardCommands.Reader
-                        .ReadAllAsync(sessionCts.Token).ConfigureAwait(false))
-                        await handleDiscard!(request).ConfigureAwait(false);
-                }
-                catch(OperationCanceledException) when(sessionCts.IsCancellationRequested){}
-                catch(Exception error)
-                {
-                    discardFault=error;
-                    sessionCts.Cancel();
-                }
-            }
+            var bankQueue = new TlsCommandWorker<TrustedBankCommand>(
+                16, handleBank, sessionCts);
+            Func<TrustedBankCommand, bool>? postBank = bankQueue.Post;
 
+            var repairQueue = new TlsCommandWorker<TrustedRepairCommand>(
+                16, handleRepair, sessionCts);
+            Func<TrustedRepairCommand, bool>? postRepair = repairQueue.Post;
 
-            var shopCommands=Channel.CreateBounded<TrustedShopCommand>(
-                new BoundedChannelOptions(16)
-                {
-                    SingleReader=true,SingleWriter=true,
-                    FullMode=BoundedChannelFullMode.Wait
-                });
-            Func<TrustedShopCommand,bool>? postShop=handleShop is null
-                ? null : request=>shopCommands.Writer.TryWrite(request);
-            Exception? shopFault=null;
-            Task shopWorker=handleShop is null
-                ? Task.CompletedTask : ProcessShopAsync();
+            var enhancementQueue = new TlsCommandWorker<TrustedEnhancementCommand>(
+                16, handleEnhancement, sessionCts);
+            Func<TrustedEnhancementCommand, bool>? postEnhancement = enhancementQueue.Post;
 
-            async Task ProcessShopAsync()
-            {
-                try
-                {
-                    await foreach(var request in shopCommands.Reader
-                        .ReadAllAsync(sessionCts.Token).ConfigureAwait(false))
-                        await handleShop!(request).ConfigureAwait(false);
-                }
-                catch(OperationCanceledException) when(sessionCts.IsCancellationRequested){}
-                catch(Exception error)
-                {
-                    shopFault=error;
-                    sessionCts.Cancel();
-                }
-            }
+            var tradeQueue = new TlsCommandWorker<TrustedTradeCommand>(
+                16, handleTrade, sessionCts);
+            Func<TrustedTradeCommand, bool>? postTrade = tradeQueue.Post;
 
-            var storageCommands=Channel.CreateBounded<TrustedStorageCommand>(
-                new BoundedChannelOptions(16)
-                {
-                    SingleReader=true,SingleWriter=true,
-                    FullMode=BoundedChannelFullMode.Wait
-                });
-            Func<TrustedStorageCommand,bool>? postStorage=handleStorage is null
-                ? null:request=>storageCommands.Writer.TryWrite(request);
-            Exception? storageFault=null;
-            Task storageWorker=handleStorage is null
-                ? Task.CompletedTask:ProcessStorageAsync();
+            var questQueue = new TlsCommandWorker<TrustedQuestCommand>(
+                16, handleQuest, sessionCts);
+            Func<TrustedQuestCommand, bool>? postQuest = questQueue.Post;
 
-            async Task ProcessStorageAsync()
-            {
-                try
-                {
-                    await foreach(var request in storageCommands.Reader
-                        .ReadAllAsync(sessionCts.Token).ConfigureAwait(false))
-                        await handleStorage!(request).ConfigureAwait(false);
-                }
-                catch(OperationCanceledException) when(sessionCts.IsCancellationRequested){}
-                catch(Exception error)
-                {
-                    storageFault=error;
-                    sessionCts.Cancel();
-                }
-            }
+            var pvpQueue = new TlsCommandWorker<TrustedPvpModeCommand>(
+                16, handlePvp, sessionCts);
+            Func<TrustedPvpModeCommand, bool>? postPvp = pvpQueue.Post;
 
-            var equipmentCommands=Channel.CreateBounded<TrustedEquipmentCommand>(
-                new BoundedChannelOptions(16)
-                {
-                    SingleReader=true,SingleWriter=true,
-                    FullMode=BoundedChannelFullMode.Wait
-                });
-            Func<TrustedEquipmentCommand,bool>? postEquipment=handleEquipment is null
-                ? null:request=>equipmentCommands.Writer.TryWrite(request);
-            Exception? equipmentFault=null;
-            Task equipmentWorker=handleEquipment is null
-                ? Task.CompletedTask:ProcessEquipmentAsync();
+            var pvpAttackQueue = new TlsCommandWorker<TrustedPvpAttack>(
+                16, handlePvpAttack, sessionCts);
+            Func<TrustedPvpAttack, bool>? postPvpAttack = pvpAttackQueue.Post;
 
-            async Task ProcessEquipmentAsync()
-            {
-                try
-                {
-                    await foreach(var request in equipmentCommands.Reader
-                        .ReadAllAsync(sessionCts.Token).ConfigureAwait(false))
-                        await handleEquipment!(request).ConfigureAwait(false);
-                }
-                catch(OperationCanceledException) when(sessionCts.IsCancellationRequested){}
-                catch(Exception error)
-                {
-                    equipmentFault=error;
-                    sessionCts.Cancel();
-                }
-            }
+            var pvpSkillQueue = new TlsCommandWorker<TrustedPvpSkill>(
+                16, handlePvpSkill, sessionCts);
+            Func<TrustedPvpSkill, bool>? postPvpSkill = pvpSkillQueue.Post;
 
-            var bankCommands=Channel.CreateBounded<TrustedBankCommand>(
-                new BoundedChannelOptions(16)
-                {
-                    SingleReader=true,SingleWriter=true,
-                    FullMode=BoundedChannelFullMode.Wait
-                });
-            Func<TrustedBankCommand,bool>? postBank=handleBank is null
-                ? null:request=>bankCommands.Writer.TryWrite(request);
-            Exception? bankFault=null;
-            Task bankWorker=handleBank is null
-                ? Task.CompletedTask:ProcessBankAsync();
+            var gmPvpNameQueue = new TlsCommandWorker<TrustedGmPvpNameCommand>(
+                16, handleGmPvpName, sessionCts);
+            Func<TrustedGmPvpNameCommand, bool>? postGmPvpName = gmPvpNameQueue.Post;
 
-            async Task ProcessBankAsync()
-            {
-                try
-                {
-                    await foreach(var request in bankCommands.Reader
-                        .ReadAllAsync(sessionCts.Token).ConfigureAwait(false))
-                        await handleBank!(request).ConfigureAwait(false);
-                }
-                catch(OperationCanceledException) when(sessionCts.IsCancellationRequested){}
-                catch(Exception error)
-                {
-                    bankFault=error;
-                    sessionCts.Cancel();
-                }
-            }
+            var playerShopQueue = new TlsCommandWorker<TrustedPlayerShopCommand>(
+                16, handlePlayerShop, sessionCts);
+            Func<TrustedPlayerShopCommand, bool>? postPlayerShop = playerShopQueue.Post;
 
-            var repairCommands=Channel.CreateBounded<TrustedRepairCommand>(
-                new BoundedChannelOptions(16)
-                {
-                    SingleReader=true,SingleWriter=true,
-                    FullMode=BoundedChannelFullMode.Wait
-                });
-            Func<TrustedRepairCommand,bool>? postRepair=handleRepair is null
-                ? null:request=>repairCommands.Writer.TryWrite(request);
-            Exception? repairFault=null;
-            Task repairWorker=handleRepair is null
-                ? Task.CompletedTask:ProcessRepairAsync();
+            var chatQueue = new TlsCommandWorker<TrustedChatCommand>(
+                32, handleChat, sessionCts);
+            Func<TrustedChatCommand, bool>? postChat = chatQueue.Post;
 
-            async Task ProcessRepairAsync()
-            {
-                try
-                {
-                    await foreach(var request in repairCommands.Reader
-                        .ReadAllAsync(sessionCts.Token).ConfigureAwait(false))
-                        await handleRepair!(request).ConfigureAwait(false);
-                }
-                catch(OperationCanceledException) when(sessionCts.IsCancellationRequested){}
-                catch(Exception error)
-                {
-                    repairFault=error;
-                    sessionCts.Cancel();
-                }
-            }
-
-            var enhancementCommands=Channel.CreateBounded<TrustedEnhancementCommand>(
-                new BoundedChannelOptions(16)
-                {
-                    SingleReader=true,SingleWriter=true,
-                    FullMode=BoundedChannelFullMode.Wait
-                });
-            Func<TrustedEnhancementCommand,bool>? postEnhancement=
-                handleEnhancement is null
-                    ? null:request=>enhancementCommands.Writer.TryWrite(request);
-            Exception? enhancementFault=null;
-            Task enhancementWorker=handleEnhancement is null
-                ? Task.CompletedTask:ProcessEnhancementAsync();
-
-            async Task ProcessEnhancementAsync()
-            {
-                try
-                {
-                    await foreach(var request in enhancementCommands.Reader
-                        .ReadAllAsync(sessionCts.Token).ConfigureAwait(false))
-                        await handleEnhancement!(request).ConfigureAwait(false);
-                }
-                catch(OperationCanceledException) when(sessionCts.IsCancellationRequested){}
-                catch(Exception error)
-                {
-                    enhancementFault=error;
-                    sessionCts.Cancel();
-                }
-            }
-
-            var tradeCommands=Channel.CreateBounded<TrustedTradeCommand>(
-                new BoundedChannelOptions(16)
-                {
-                    SingleReader=true,SingleWriter=true,
-                    FullMode=BoundedChannelFullMode.Wait
-                });
-            Func<TrustedTradeCommand,bool>? postTrade=handleTrade is null
-                ? null:request=>tradeCommands.Writer.TryWrite(request);
-            Exception? tradeFault=null;
-            Task tradeWorker=handleTrade is null
-                ? Task.CompletedTask:ProcessTradeAsync();
-
-            async Task ProcessTradeAsync()
-            {
-                try
-                {
-                    await foreach(var request in tradeCommands.Reader
-                        .ReadAllAsync(sessionCts.Token).ConfigureAwait(false))
-                        await handleTrade!(request).ConfigureAwait(false);
-                }
-                catch(OperationCanceledException) when(sessionCts.IsCancellationRequested){}
-                catch(Exception error)
-                {
-                    tradeFault=error;
-                    sessionCts.Cancel();
-                }
-            }
-
-            var questCommands=Channel.CreateBounded<TrustedQuestCommand>(
-                new BoundedChannelOptions(16)
-                {
-                    SingleReader=true,SingleWriter=true,
-                    FullMode=BoundedChannelFullMode.Wait
-                });
-            Func<TrustedQuestCommand,bool>? postQuest=handleQuest is null
-                ? null:request=>questCommands.Writer.TryWrite(request);
-            Exception? questFault=null;
-            Task questWorker=handleQuest is null
-                ? Task.CompletedTask:ProcessQuestAsync();
-
-            async Task ProcessQuestAsync()
-            {
-                try
-                {
-                    await foreach(var request in questCommands.Reader
-                        .ReadAllAsync(sessionCts.Token).ConfigureAwait(false))
-                        await handleQuest!(request).ConfigureAwait(false);
-                }
-                catch(OperationCanceledException) when(sessionCts.IsCancellationRequested){}
-                catch(Exception error)
-                {
-                    questFault=error;
-                    sessionCts.Cancel();
-                }
-            }
-
-            var pvpCommands=Channel.CreateBounded<TrustedPvpModeCommand>(
-                new BoundedChannelOptions(16)
-                {
-                    SingleReader=true,SingleWriter=true,
-                    FullMode=BoundedChannelFullMode.Wait
-                });
-            Func<TrustedPvpModeCommand,bool>? postPvp=handlePvp is null
-                ? null:request=>pvpCommands.Writer.TryWrite(request);
-            Exception? pvpFault=null;
-            Task pvpWorker=handlePvp is null ? Task.CompletedTask:ProcessPvpAsync();
-
-            async Task ProcessPvpAsync()
-            {
-                try
-                {
-                    await foreach(var request in pvpCommands.Reader
-                        .ReadAllAsync(sessionCts.Token).ConfigureAwait(false))
-                        await handlePvp!(request).ConfigureAwait(false);
-                }
-                catch(OperationCanceledException) when(sessionCts.IsCancellationRequested){}
-                catch(Exception error)
-                {
-                    pvpFault=error;
-                    sessionCts.Cancel();
-                }
-            }
-
-            var pvpAttackCommands=Channel.CreateBounded<TrustedPvpAttack>(
-                new BoundedChannelOptions(16)
-                {
-                    SingleReader=true,SingleWriter=true,
-                    FullMode=BoundedChannelFullMode.Wait
-                });
-            Func<TrustedPvpAttack,bool>? postPvpAttack=handlePvpAttack is null
-                ? null:request=>pvpAttackCommands.Writer.TryWrite(request);
-            Exception? pvpAttackFault=null;
-            Task pvpAttackWorker=handlePvpAttack is null
-                ? Task.CompletedTask:ProcessPvpAttackAsync();
-
-            async Task ProcessPvpAttackAsync()
-            {
-                try
-                {
-                    await foreach(var request in pvpAttackCommands.Reader
-                        .ReadAllAsync(sessionCts.Token).ConfigureAwait(false))
-                        await handlePvpAttack!(request).ConfigureAwait(false);
-                }
-                catch(OperationCanceledException) when(sessionCts.IsCancellationRequested){}
-                catch(Exception error)
-                {
-                    pvpAttackFault=error;
-                    sessionCts.Cancel();
-                }
-            }
-
-            var pvpSkillCommands=Channel.CreateBounded<TrustedPvpSkill>(
-                new BoundedChannelOptions(16)
-                {
-                    SingleReader=true,SingleWriter=true,
-                    FullMode=BoundedChannelFullMode.Wait
-                });
-            Func<TrustedPvpSkill,bool>? postPvpSkill=handlePvpSkill is null
-                ? null:request=>pvpSkillCommands.Writer.TryWrite(request);
-            Exception? pvpSkillFault=null;
-            Task pvpSkillWorker=handlePvpSkill is null
-                ? Task.CompletedTask:ProcessPvpSkillAsync();
-
-            async Task ProcessPvpSkillAsync()
-            {
-                try
-                {
-                    await foreach(var request in pvpSkillCommands.Reader
-                        .ReadAllAsync(sessionCts.Token).ConfigureAwait(false))
-                        await handlePvpSkill!(request).ConfigureAwait(false);
-                }
-                catch(OperationCanceledException) when(sessionCts.IsCancellationRequested){}
-                catch(Exception error)
-                {
-                    pvpSkillFault=error;
-                    sessionCts.Cancel();
-                }
-            }
-
-            var gmPvpNameCommands=Channel.CreateBounded<TrustedGmPvpNameCommand>(
-                new BoundedChannelOptions(16)
-                {
-                    SingleReader=true,SingleWriter=true,
-                    FullMode=BoundedChannelFullMode.Wait
-                });
-            Func<TrustedGmPvpNameCommand,bool>? postGmPvpName=
-                handleGmPvpName is null
-                    ? null:request=>gmPvpNameCommands.Writer.TryWrite(request);
-            Exception? gmPvpNameFault=null;
-            Task gmPvpNameWorker=handleGmPvpName is null
-                ? Task.CompletedTask:ProcessGmPvpNameAsync();
-
-            async Task ProcessGmPvpNameAsync()
-            {
-                try
-                {
-                    await foreach(var request in gmPvpNameCommands.Reader
-                        .ReadAllAsync(sessionCts.Token).ConfigureAwait(false))
-                        await handleGmPvpName!(request).ConfigureAwait(false);
-                }
-                catch(OperationCanceledException) when(sessionCts.IsCancellationRequested){}
-                catch(Exception error)
-                {
-                    gmPvpNameFault=error;
-                    sessionCts.Cancel();
-                }
-            }
-
-            var playerShopCommands=Channel.CreateBounded<TrustedPlayerShopCommand>(
-                new BoundedChannelOptions(16)
-                {
-                    SingleReader=true,SingleWriter=true,
-                    FullMode=BoundedChannelFullMode.Wait
-                });
-            Func<TrustedPlayerShopCommand,bool>? postPlayerShop=
-                handlePlayerShop is null
-                    ? null:request=>playerShopCommands.Writer.TryWrite(request);
-            Exception? playerShopFault=null;
-            Task playerShopWorker=handlePlayerShop is null
-                ? Task.CompletedTask:ProcessPlayerShopAsync();
-
-            async Task ProcessPlayerShopAsync()
-            {
-                try
-                {
-                    await foreach(var request in playerShopCommands.Reader
-                        .ReadAllAsync(sessionCts.Token).ConfigureAwait(false))
-                        await handlePlayerShop!(request).ConfigureAwait(false);
-                }
-                catch(OperationCanceledException) when(sessionCts.IsCancellationRequested){}
-                catch(Exception error)
-                {
-                    playerShopFault=error;
-                    sessionCts.Cancel();
-                }
-            }
-
-            var chatCommands=Channel.CreateBounded<TrustedChatCommand>(
-                new BoundedChannelOptions(32)
-                {
-                    SingleReader=true,SingleWriter=true,
-                    FullMode=BoundedChannelFullMode.Wait
-                });
-            Func<TrustedChatCommand,bool>? postChat=handleChat is null
-                ? null:request=>chatCommands.Writer.TryWrite(request);
-            Exception? chatFault=null;
-            Task chatWorker=handleChat is null
-                ? Task.CompletedTask:ProcessChatAsync();
-
-            async Task ProcessChatAsync()
-            {
-                try
-                {
-                    await foreach(var request in chatCommands.Reader
-                        .ReadAllAsync(sessionCts.Token).ConfigureAwait(false))
-                        await handleChat!(request).ConfigureAwait(false);
-                }
-                catch(OperationCanceledException) when(sessionCts.IsCancellationRequested){}
-                catch(Exception error)
-                {
-                    chatFault=error;
-                    sessionCts.Cancel();
-                }
-            }
-
-            var partyCommands=Channel.CreateBounded<TrustedPartyCommand>(
-                new BoundedChannelOptions(16)
-                {
-                    SingleReader=true,SingleWriter=true,
-                    FullMode=BoundedChannelFullMode.Wait
-                });
-            Func<TrustedPartyCommand,bool>? postParty=handleParty is null
-                ? null:request=>partyCommands.Writer.TryWrite(request);
-            Exception? partyFault=null;
-            Task partyWorker=handleParty is null
-                ? Task.CompletedTask:ProcessPartyAsync();
-
-            async Task ProcessPartyAsync()
-            {
-                try
-                {
-                    await foreach(var request in partyCommands.Reader
-                        .ReadAllAsync(sessionCts.Token).ConfigureAwait(false))
-                        await handleParty!(request).ConfigureAwait(false);
-                }
-                catch(OperationCanceledException) when(sessionCts.IsCancellationRequested){}
-                catch(Exception error)
-                {
-                    partyFault=error;
-                    sessionCts.Cancel();
-                }
-            }
+            var partyQueue = new TlsCommandWorker<TrustedPartyCommand>(
+                16, handleParty, sessionCts);
+            Func<TrustedPartyCommand, bool>? postParty = partyQueue.Post;
 
             var skillCommands=Channel.CreateBounded<TrustedSkillUse>(
                 new BoundedChannelOptions(16)
@@ -860,59 +401,59 @@ public static class TlsWireConnection
             ArrayPool<byte>.Shared.Return(rented, clearArray: false);
             sessionCts.Cancel();
             npcCommands.Writer.TryComplete();
-            respawnCommands.Writer.TryComplete();
-            pickupCommands.Writer.TryComplete();
-            recoveryCommands.Writer.TryComplete();
-            discardCommands.Writer.TryComplete();
+            respawnQueue.Complete();
+            pickupQueue.Complete();
+            recoveryQueue.Complete();
+            discardQueue.Complete();
             skillCommands.Writer.TryComplete();
-            shopCommands.Writer.TryComplete();
-            storageCommands.Writer.TryComplete();
-            equipmentCommands.Writer.TryComplete();
-            bankCommands.Writer.TryComplete();
-            repairCommands.Writer.TryComplete();
-            enhancementCommands.Writer.TryComplete();
-            tradeCommands.Writer.TryComplete();
-            questCommands.Writer.TryComplete();
-            pvpCommands.Writer.TryComplete();
-            pvpAttackCommands.Writer.TryComplete();
-            pvpSkillCommands.Writer.TryComplete();
-            gmPvpNameCommands.Writer.TryComplete();
-            playerShopCommands.Writer.TryComplete();
-            chatCommands.Writer.TryComplete();
-            partyCommands.Writer.TryComplete();
+            shopQueue.Complete();
+            storageQueue.Complete();
+            equipmentQueue.Complete();
+            bankQueue.Complete();
+            repairQueue.Complete();
+            enhancementQueue.Complete();
+            tradeQueue.Complete();
+            questQueue.Complete();
+            pvpQueue.Complete();
+            pvpAttackQueue.Complete();
+            pvpSkillQueue.Complete();
+            gmPvpNameQueue.Complete();
+            playerShopQueue.Complete();
+            chatQueue.Complete();
+            partyQueue.Complete();
             // In-flight authorized NPC/respawn/skill work may finish even after the
             // socket is closed; await both before final trusted release.
-            await respawnWorker.ConfigureAwait(false);
+            await respawnQueue.Completion.ConfigureAwait(false);
             // An in-flight authorized World transfer may finish even after the
             // socket is closed. Await that result BEFORE capturing final MapEpoch
             // for trusted disconnect; never leak the new World generation.
             await npcWorker.ConfigureAwait(false);
-            await pickupWorker.ConfigureAwait(false);
-            await recoveryWorker.ConfigureAwait(false);
-            await discardWorker.ConfigureAwait(false);
+            await pickupQueue.Completion.ConfigureAwait(false);
+            await recoveryQueue.Completion.ConfigureAwait(false);
+            await discardQueue.Completion.ConfigureAwait(false);
             await skillWorker.ConfigureAwait(false);
-            await shopWorker.ConfigureAwait(false);
-            await storageWorker.ConfigureAwait(false);
-            await equipmentWorker.ConfigureAwait(false);
-            await bankWorker.ConfigureAwait(false);
-            await repairWorker.ConfigureAwait(false);
-            await enhancementWorker.ConfigureAwait(false);
-            await tradeWorker.ConfigureAwait(false);
-            await questWorker.ConfigureAwait(false);
-            await pvpWorker.ConfigureAwait(false);
-            await pvpAttackWorker.ConfigureAwait(false);
-            await pvpSkillWorker.ConfigureAwait(false);
-            await gmPvpNameWorker.ConfigureAwait(false);
-            await playerShopWorker.ConfigureAwait(false);
-            await chatWorker.ConfigureAwait(false);
-            await partyWorker.ConfigureAwait(false);
+            await shopQueue.Completion.ConfigureAwait(false);
+            await storageQueue.Completion.ConfigureAwait(false);
+            await equipmentQueue.Completion.ConfigureAwait(false);
+            await bankQueue.Completion.ConfigureAwait(false);
+            await repairQueue.Completion.ConfigureAwait(false);
+            await enhancementQueue.Completion.ConfigureAwait(false);
+            await tradeQueue.Completion.ConfigureAwait(false);
+            await questQueue.Completion.ConfigureAwait(false);
+            await pvpQueue.Completion.ConfigureAwait(false);
+            await pvpAttackQueue.Completion.ConfigureAwait(false);
+            await pvpSkillQueue.Completion.ConfigureAwait(false);
+            await gmPvpNameQueue.Completion.ConfigureAwait(false);
+            await playerShopQueue.Completion.ConfigureAwait(false);
+            await chatQueue.Completion.ConfigureAwait(false);
+            await partyQueue.Completion.ConfigureAwait(false);
             Exception? workerFault =
-                npcFault ?? respawnFault ?? pickupFault ?? recoveryFault ??
-                discardFault ?? skillFault ?? shopFault ?? storageFault ??
-                equipmentFault ?? bankFault ?? repairFault ?? enhancementFault ??
-                tradeFault ??
-                questFault ?? pvpFault ?? pvpAttackFault ?? pvpSkillFault ??
-                gmPvpNameFault ?? playerShopFault ?? chatFault ?? partyFault;
+                npcFault ?? respawnQueue.Fault ?? pickupQueue.Fault ?? recoveryQueue.Fault ??
+                discardQueue.Fault ?? skillFault ?? shopQueue.Fault ?? storageQueue.Fault ??
+                equipmentQueue.Fault ?? bankQueue.Fault ?? repairQueue.Fault ?? enhancementQueue.Fault ??
+                tradeQueue.Fault ??
+                questQueue.Fault ?? pvpQueue.Fault ?? pvpAttackQueue.Fault ?? pvpSkillQueue.Fault ??
+                gmPvpNameQueue.Fault ?? playerShopQueue.Fault ?? chatQueue.Fault ?? partyQueue.Fault;
             if (workerFault is not null)
                 reason = TlsWireEndReason.GatewayClosed;
             var finalBinding = gateway.Binding;
