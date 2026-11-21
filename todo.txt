@@ -1,5 +1,8 @@
 # SGTest 新版重建 TODO（2026-11-15）
 
+- ARCH-SERVER-PARTIAL-COHESION [x] 2026-11-21：`SqliteIdentityStore` 的 Schema v23 migration 和 CombatProfile/HP/MP 搬到既有 partial class 的獨立功能檔，公開 DTO 集中 `IdentityContracts.cs`；`WireProtocol` 將 Combat、Identity、Inventory、NPC Shop、World Codec 按功能實體分檔；`IdentityTlsAuthorization.Binding.cs` 收攏身分→Trusted World 綁定。保留所有 public API、同一 DB owner／Gateway、Opcode 與 FIFO/Actor/MapEpoch 機制；新增 Python 架構 owner Gate。Server Release build 0 warnings/0 errors，265/265 Server Checks PASS（先重新編譯 Host），其餘 Gateway 巨大 Gameplay Handler、Client WorldState／SessionPanel、真 GPU/多開仍 NOT VERIFIED，不宣稱全部架構重構完成。
+
+
 - ARCH-CLIENT-SINGLE-FIFO-INTENTS [x] 2026-11-21：將 ClientSession 原約 592 行的 `_process_first_intent` 拆為相同物件上的功能 Handler，保留單一 FIFO、原有 mark_sent/seq/backpressure、ACK/MapEpoch/WorldReady 及技能／交易權威行為；補架構防退化測試，持續沿用既有真 TLS 回歸。Gateway Handler、WorldState reducer、本機 Windows 多開效能仍 NOT VERIFIED。
 
 

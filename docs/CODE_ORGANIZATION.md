@@ -45,8 +45,21 @@
 - `WireProtocol.Social.cs`：交易、玩家商店、聊天、隊伍、玩家身分。
 - `WireProtocol.Pvp.cs`：PvP／GM 封包，狀態仍是語義值。
 - `WireProtocol.Quest.cs`：任務指令與對話快照。
+- `WireProtocol.Combat.cs`：普攻、技能、傷害／復活以及戰鬥視覺事件。
+- `WireProtocol.Identity.cs`：帳號登入／註冊、創角／選角協定。
+- `WireProtocol.Inventory.cs`：背包、技能書、補品、丟棄和拾取。
+- `WireProtocol.Shop.cs`：NPC 商店買賣和快照。
+- `WireProtocol.World.cs`：WorldReady、AOI 實體和怪物快照。
 
-所有檔案宣告同一個 `public static partial class WireProtocol`；只為程式碼導航分區，不是分成新的 wire 實作或傳輸層。
+所有檔案宣告同一個 `public static partial class WireProtocol`；只為程式碼導航分區，不是分成新的 wire 實作或傳輸層。共用 Frame header／限制／驗證仍在 `WireProtocol.cs`；不得在各功能分區複製 Opcode 或 Frame header 處理。
+
+## Persistence 與 Gateway 責任拆分（2026-11-21）
+
+- `Identity/IdentityContracts.cs` 唯一持有帳號、角色與持久化 CombatProfile 的穩定 DTO，不在資料庫實作檔內混合公開契約。
+- `Identity/SqliteIdentityStore.Schema.cs` 集中原本約 734 行的 Schema v23 建立與遷移流程，包含遷移前備份及現有 WAL／單一 transaction；與 `SqliteIdentityStore.Backup.cs` 的備份程序分工。原操作順序未重寫。
+- `Identity/SqliteIdentityStore.Combat.cs` 承接角色 CombatProfile、HP／MP 的原子資料存取。其他 `SqliteIdentityStore.<Feature>.cs` 已依功能分區，但**所有 partial 都是相同資料庫 owner**，不建立第二個連線池或交易所有者。
+- `Gateway/IdentityTlsAuthorization.Binding.cs` 承接認證帳號與 World Actor 的綁定程序；`IdentityTlsAuthorization.cs` 仍持有現有 TLS socket 與 gameplay gate，保留同一授權狀態及可靠事件順序。Gateway 長函式的真正業務分離仍待後續實作，不能誤認為完成解耦。
+- 遷移／授權相關重構必須通過 Server 265 checks（尤其 SQLite upgrade、WAL backup、TLS Host、雙方交易與 Epoch），而非僅憑 C# 可編譯宣稱正確。
 
 ## Client UI 模組的最小契約
 

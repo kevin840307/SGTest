@@ -5,6 +5,11 @@
 | 區域 | 檔案 TODO 或現有接點 | 開始拆分時的驗收 |
 |---|---|---|
 | Client Session 指令入口 | [x] `client/session/client_session.gd` 的巨大 `_process_first_intent` 按功能提取單一 FIFO Handler 方法 | 不新增 State/Queue/Transport；真 TLS PlayerShop、Quest、Trade、PvP 及社交回歸為驗收 |
+| Server SQLite Schema／Combat | [x] `Identity/SqliteIdentityStore.Schema.cs`、`.Combat.cs` 及 `IdentityContracts.cs` 承接獨立責任 | 保留 Schema v23／WAL／migration backup／combat transaction；Server 265 checks |
+| Server Wire 分區 | [x] `WireProtocol.Combat.cs`、`.Identity.cs`、`.Inventory.cs`、`.Shop.cs`、`.World.cs` 按功能承接 Codec | V1 Opcode/Header 不變；Client 跨端 golden vectors 與 Server wire Gate |
+| Server Auth binding | [x] `IdentityTlsAuthorization.Binding.cs` 承接身分＋World Actor 綁定 | 原密鑰／身分／Actor cleanup、真 TLS Auth／重連 E2E 保持 |
+| Server Gameplay Gateway 瘦身 | [ ] `IdentityTlsAuthorization.cs` 仍有巨大 socket/gameplay 流程，逐步抽出經驗證的 domain command gate | 不新增可繞過身份／MapEpoch 的 dispatch 路徑；Server TLS 全量回歸 |
+| Client Reducer 分區 | [ ] `client/world/world_state.gd` 按 feature group 拆事件解析／處理，但保留唯一可重播 Reducer | 0/30/60 FPS、一致序號、重連／跨圖、可靠事件、TLS E2E |
 | Client NPC | [ ] `client/npc/npc_interaction_panel.gd` 承接 App／SessionPanel 既有 NPC 選單與操作 | 開啟、取消與離開互動範圍，Server 仍驗距離及權限 |
 | Client 社交 | [x] `client/party/party_panel.gd` 管邀請及隊伍；`client/chat/chat_panel.gd` 管頻道與訊息顯示 | 本機 Godot 真 TLS/UI 邀請、密語、聊天、隊伍快照與重連流程 PASS；Server authority 未變動 |
 | Client 玩家商店 | [x] `client/player_shop/player_shop_panel.gd` 承接販售、瀏覽與購買 | Godot 真 TLS SessionPanel UI 回歸 PASS，Server UID／買賣雙方仍維持既有權威；私有 GPU 未驗 |

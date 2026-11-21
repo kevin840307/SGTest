@@ -71,11 +71,39 @@ class ArchitectureConventionsChecks(unittest.TestCase):
         self.assertNotIn("public static partial class WireProtocol", contracts)
         for part in ("WireProtocol.cs", "WireProtocol.Economy.cs",
                      "WireProtocol.Social.cs", "WireProtocol.Pvp.cs",
-                     "WireProtocol.Quest.cs"):
+                     "WireProtocol.Quest.cs", "WireProtocol.Combat.cs",
+                     "WireProtocol.Identity.cs", "WireProtocol.Inventory.cs",
+                     "WireProtocol.Shop.cs", "WireProtocol.World.cs"):
             with self.subTest(part=part):
                 source = (SERVER / "Wire" / part).read_text(encoding="utf-8-sig")
                 self.assertIn("public static partial class WireProtocol", source)
                 self.assertNotIn("public enum WireOpcode : ushort", source)
+
+    def test_identity_storage_feature_files_keep_one_database_owner(self) -> None:
+        identity = SERVER / "Identity"
+        core = (identity / "SqliteIdentityStore.cs").read_text(encoding="utf-8-sig")
+        self.assertIn("public sealed partial class SqliteIdentityStore", core)
+        self.assertNotIn("public async Task InitializeAsync(", core)
+        self.assertNotIn("public async Task<CharacterCombatProfile?> GetCharacterCombatProfileAsync(", core)
+        for filename, method in (
+            ("SqliteIdentityStore.Schema.cs", "InitializeAsync("),
+            ("SqliteIdentityStore.Combat.cs", "GetCharacterCombatProfileAsync("),
+        ):
+            with self.subTest(part=filename):
+                source = (identity / filename).read_text(encoding="utf-8-sig")
+                self.assertIn("public sealed partial class SqliteIdentityStore", source)
+                self.assertIn(method, source)
+        self.assertIn("public sealed record IdentityStoreOptions(",
+                      (identity / "IdentityContracts.cs").read_text(encoding="utf-8-sig"))
+
+    def test_gateway_authorization_binding_has_one_owner(self) -> None:
+        gateway = SERVER / "Gateway"
+        core = (gateway / "IdentityTlsAuthorization.cs").read_text(encoding="utf-8-sig")
+        binding = (gateway / "IdentityTlsAuthorization.Binding.cs").read_text(encoding="utf-8-sig")
+        self.assertIn("public sealed partial class IdentityTlsAuthorization", core)
+        self.assertIn("public sealed partial class IdentityTlsAuthorization", binding)
+        self.assertNotIn("public async ValueTask<GatewayConnection?> AuthorizeAndBindAsync(", core)
+        self.assertEqual(binding.count("AuthorizeAndBindAsync("), 1)
 
     def test_shared_opcode_numbers_match_across_languages(self) -> None:
         # WireOpcode declarations are the durable public API; no display name,
