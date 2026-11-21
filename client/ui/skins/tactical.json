@@ -1,0 +1,14 @@
+{
+  "id": "tactical",
+  "name": "戰術機甲",
+  "layout": "tabs",
+  "dock": "right",
+  "effect": "grid",
+  "bg": "#111d20",
+  "border": "#52b0a3",
+  "text": "#d5ede8",
+  "field": "#1b3136",
+  "button": "#244349",
+  "hover": "#32636b",
+  "accent": "#81f0d4"
+}

@@ -3,6 +3,9 @@ extends Node
 const WorldView = preload("res://world/world_view.gd")
 const SessionPanel = preload("res://session/session_panel.gd")
 const MouseAutorunState = preload("res://movement/mouse_autorun_state.gd")
+const SessionLayout = preload("res://ui/session_layout.gd")
+const UiSkinCatalog = preload("res://ui/ui_skin_catalog.gd")
+const BackdropShader = preload("res://ui/skin_backdrop.gdshader")
 var auto_start := true
 var world_view := WorldView.new()
 var _held := {}
@@ -10,7 +13,12 @@ var _dragging := false
 var _closing := false
 var _status := Label.new()
 var toolbar := PanelContainer.new()
+var _screen_backdrop := ColorRect.new()
+var _backdrop_material := ShaderMaterial.new()
+var _ui_stage_key := ""
+var _current_skin := "celestial"
 var session_panel := SessionPanel.new()
+var skin_picker := OptionButton.new()
 var _map_buttons: Array[Button] = []
 var _last_snapshot: Dictionary = {}
 var _mouse_autorun = MouseAutorunState.new()
@@ -25,6 +33,12 @@ func _ready() -> void:
 	add_child(world_view)
 	var layer := CanvasLayer.new()
 	add_child(layer)
+	_screen_backdrop.mouse_filter = Control.MOUSE_FILTER_STOP
+	_backdrop_material.shader = BackdropShader
+	_screen_backdrop.material = _backdrop_material
+	_screen_backdrop.color = UiSkinCatalog.backdrop_color(_current_skin)
+	_screen_backdrop.visible = false
+	layer.add_child(_screen_backdrop)
 	layer.add_child(toolbar)
 	var style := StyleBoxFlat.new()
 	style.bg_color = Color("211c15")
@@ -46,7 +60,6 @@ func _ready() -> void:
 		button.pressed.connect(func(): _inspect_map(id))
 		row.add_child(button)
 		_map_buttons.append(button)
-	_status.add_theme_color_override("font_color",Color("f2d995"))
 	row.add_child(_status)
 	var help := Label.new()
 	help.text = "方向鍵／中鍵拖曳　Home 置中　長按地面 1 秒鎖定走路"
@@ -63,6 +76,7 @@ func _ready() -> void:
 	login_toggle.focus_mode = Control.FOCUS_NONE
 	login_toggle.pressed.connect(func(): session_panel.visible = not session_panel.visible)
 	row.add_child(login_toggle)
+	_install_skin_selector(row)
 	get_viewport().size_changed.connect(_resize)
 	_resize()
 	if auto_start:
@@ -89,8 +103,69 @@ func _ready() -> void:
 			_status.text = "素材包未就緒，請先依 Client README 建置"
 
 
+func _install_skin_selector(row: HBoxContainer) -> void:
+	# Only view styling changes; the existing SessionPanel and command
+	# callbacks survive a runtime skin switch without reconnecting.
+	var selected := UiSkinCatalog.load_selected()
+	_current_skin = selected
+	for skin in UiSkinCatalog.available():
+		var index := skin_picker.item_count
+		skin_picker.add_item(str(skin.name))
+		skin_picker.set_item_metadata(index,str(skin.id))
+		if str(skin.id) == selected:
+			skin_picker.select(index)
+	skin_picker.tooltip_text = "切換介面風格（不影響登入與遊戲狀態）"
+	skin_picker.focus_mode = Control.FOCUS_NONE
+	row.add_child(skin_picker)
+	skin_picker.item_selected.connect(_skin_selected)
+	UiSkinCatalog.apply(selected,toolbar,session_panel)
+
+
+func _skin_selected(index: int) -> void:
+	var skin := str(skin_picker.get_item_metadata(index))
+	if UiSkinCatalog.apply(skin,toolbar,session_panel):
+		UiSkinCatalog.save_selected(skin)
+		_current_skin = skin
+		_update_ui_stage(true)
+
+
 func _resize() -> void:
 	world_view.resize_view(Vector2i(get_viewport().get_visible_rect().size))
+	_screen_backdrop.size = Vector2(get_viewport().get_visible_rect().size)
+	_update_ui_stage(true)
+
+
+func _update_ui_stage(force: bool = false) -> void:
+	if not auto_start:
+		return
+	var pre_world := session_panel.visible and session_panel._layout.current_page != SessionLayout.Page.WORLD
+	var viewport_size := Vector2(get_viewport().get_visible_rect().size)
+	var key := "%s:%s:%d:%d:%d" % [str(pre_world),_current_skin,int(viewport_size.x),int(viewport_size.y),int(session_panel.visible)]
+	if not force and key == _ui_stage_key:
+		return
+	_ui_stage_key = key
+	_screen_backdrop.color = UiSkinCatalog.backdrop_color(_current_skin)
+	_backdrop_material.set_shader_parameter("base_color",_screen_backdrop.color)
+	_backdrop_material.set_shader_parameter("motif",UiSkinCatalog.backdrop_motif(_current_skin))
+	_screen_backdrop.visible = pre_world
+	toolbar.visible = not pre_world
+	var panel_width := minf(560.0,maxf(360.0,viewport_size.x-32.0)) if pre_world else minf(420.0,maxf(300.0,viewport_size.x-32.0))
+	session_panel.custom_minimum_size.x = panel_width
+	if pre_world:
+		# Authentication screens size to visible content rather than leaving
+		# an unused full-height sidebar on the title/character screen.
+		var screen_page := session_panel._layout.current_page
+		var minimum_height := 390.0 if screen_page == SessionLayout.Page.LOGIN else (350.0 if screen_page == SessionLayout.Page.CHARACTER_CREATE else 320.0)
+		# Hidden world tabs must not inflate an authentication screen. A small
+		# viewport can still scroll via SessionOptionsScroll when necessary.
+		var desired_height := minimum_height
+		var panel_height := minf(desired_height,maxf(160.0,viewport_size.y-48.0))
+		session_panel.size = Vector2(panel_width,panel_height)
+		session_panel.position = Vector2(maxf(16.0,(viewport_size.x-panel_width)*0.5),maxf(24.0,(viewport_size.y-panel_height)*0.5))
+	else:
+		var dock_right := UiSkinCatalog.dock(_current_skin) == "right"
+		session_panel.size = Vector2(panel_width,maxf(220.0,viewport_size.y-96.0))
+		session_panel.position = Vector2(maxf(16.0,viewport_size.x-panel_width-16.0) if dock_right else 16.0,64.0)
 
 
 func _unhandled_key_input(event: InputEvent) -> void:
@@ -132,6 +207,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		var point: Vector2 = world_view.camera.screen_to_world(event.position)
 		var drop_id: int = world_view.pick_ground_drop_at(point)
 		var monster_id: int = world_view.pick_monster_at(point) if drop_id == 0 else 0
+		var npc_id: int = world_view.pick_npc_at(point) if drop_id == 0 and monster_id == 0 else 0
 		if drop_id > 0:
 			# A latched click already queued an ordered stop barrier in _input;
 			# the item interaction follows it without losing normal click priority.
@@ -140,6 +216,16 @@ func _unhandled_input(event: InputEvent) -> void:
 			# A live visible monster takes combat priority over ground movement.
 			# Never fall back to movement when the combat intent is backpressured.
 			session_panel.submit_monster_action(monster_id)
+		elif npc_id > 0:
+			# Rendered NPCs use the original NPC.dat spawn ID. Client never
+			# executes source scripts or decides a teleport destination.
+			var interaction := world_view.npc_interaction_for(npc_id)
+			if str(interaction.get("mode","")) != "confirm_transfer" or not bool(interaction.get("dependencies_complete",false)):
+				_status.text = "NPC %d：對話／功能尚未完成" % npc_id
+			elif session_panel.submit_npc_interact(npc_id):
+				_status.text = "NPC %d：等待伺服器確認傳點" % npc_id
+			else:
+				_status.text = "NPC %d：目前無法互動，請稍後重試" % npc_id
 		elif not _autorun_left_press_cancelled:
 			_begin_ground_navigation(point,Time.get_ticks_msec())
 		# First bare-ground click after a latch only stops the old route.
@@ -205,6 +291,7 @@ func _process(delta: float) -> void:
 		if pending.decode_jobs + pending.texture_jobs == 0:
 			get_tree().quit()
 		return
+	_update_ui_stage()
 	if world_view.phase == "ready" and not session_panel.active:
 		var direction := Vector2(int(_held.has(KEY_RIGHT))-int(_held.has(KEY_LEFT)),int(_held.has(KEY_DOWN))-int(_held.has(KEY_UP)))
 		if direction != Vector2.ZERO:
@@ -263,6 +350,10 @@ func _server_snapshot(snapshot: Dictionary) -> void:
 			_cancel_mouse_autorun(false)
 		elif damaged or attacked:
 			_cancel_mouse_autorun(true)
+	if int(snapshot.get("last_npc_result_sequence",0)) > int(previous.get("last_npc_result_sequence",0)):
+		var npc_result := int(snapshot.get("last_npc_result_status",-1))
+		if npc_result != 0:
+			_status.text = "NPC 互動被伺服器拒絕（代碼 %d）" % npc_result
 	_last_snapshot = snapshot.duplicate(true)
 	world_view.set_player_snapshot(snapshot)
 

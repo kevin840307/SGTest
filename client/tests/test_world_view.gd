@@ -131,9 +131,12 @@ func run() -> void:
 				check(view.size == Vector2(size),"Window resize not applied")
 				var file := output.path_join("capture_"+str(captures.size())+".png")
 				check(root.get_texture().get_image().save_png(file) == OK,"Capture save")
+				var npc_actors: Array = []
+				for npc in app.world_view.npcs.actors_at(view):
+					npc_actors.append({"id":npc.id,"p":[npc.p.x,npc.p.y],"parts":npc.parts})
 				captures.append({"file":file,"map":id,"camera":[view.position.x,view.position.y],
 					"size":[size.x,size.y],"inside":false,"timing":true,"elapsed_updates":app.world_view._last_update,
-					"fade_updates":16,"actors":[],"commands":serialized_commands(app.world_view._canvas._commands)})
+					"fade_updates":16,"actors":npc_actors,"commands":serialized_commands(app.world_view._canvas._commands)})
 	# Same formal owner, repeated rapid requests. No parallel map owners accumulate.
 	for i in 6:
 		app.world_view.request_map(15)

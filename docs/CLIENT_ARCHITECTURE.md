@@ -55,7 +55,15 @@ AFK/Unfocus                             — may suspend only visual work
 
 ## UI 與解析度
 
-新 Godot Theme/Control 先自製後期《星夢 Online》金色 UI；現代 Theme 等未來需求確定再評估，**不必提前實作雙套 UI**。支援多解析度，camera viewport 改變需更新可視 AOI，不可固定舊 800×600。移動速率、機甲速度與動畫播放速度解耦。
+2026-11-21 使用者已明確要求**登入、選角、創角、遊戲內全部可替換 UI；不只是顏色，也可替換版面與風格**。原來「不必提前實作雙套 UI」已不適用。正式結構：
+
+- `client/ui/session_layout.gd`：登入、角色選擇、角色創建、遊戲內四個獨立畫面；遊戲內控制按功能分為角色／背包、戰鬥／技能、NPC 服務、社交／交易。現提供分頁（tabs）及堆疊（stacked）兩種排版；切換時**搬移同一組 Control，不重新建構 ClientSession、Server 意圖或事件綁定**。
+- `client/ui/ui_skin_catalog.gd`：安全載入 `res://ui/skins/*.json`；目前琥珀、Celestial Chronicle 星界編年、戰術機甲三款為資料驅動配色／layout／dock 定義。未來新配色新增 JSON；新排版應加入獨立 UI layout 策略，不複製玩法程式。
+- `client/ui/gameplay_hud.gd`：只讀 WorldState 發布值呈現角色、MapEpoch、HP／MP；本地 UI 樣式不得修改權威值。登入／選角／創角在 viewport 中置中，遊戲中才重新呈現世界和可停靠的遊戲面板。
+- `client/session/session_panel.gd` 保留既有登入／創角／選角／各功能命令所有權，只在 UI 層切換可見頁、布局、Theme；所有功能意圖仍走 ClientSession 的既有唯一 FIFO。選角／創角切換不得重建 session；變更風格不影響 Server／AOI／可靠事件。
+- 原版與 `C:\\SGO\\Recovered` 的 LOGIN／SELECT_CHARACTER／CREATE_CHARACTER 影像是**唯讀視覺參考**，不把私人圖片、反編譯原件或材質提交公開 Git；原版視覺精度、不同職業創角流程和完整浮動視窗仍需實際 GUI 比對，未通過的部分仍屬未完成。
+
+多解析度時保持正確 Camera/AOI，不能固定舊 800×600；移動速率與動畫播放速度解耦。測試 `test_ui_skin_layout.gd` 覆蓋四畫面、三款風格、兩排版、左右 dock 與切換保持同一 Session／HUD；`test_empty_character_creation_ui.gd` 保護初次登入沒有角色時的創角流程。
 
 ## MVP Client：Map15 + Map13，完整玩法與真實切圖
 

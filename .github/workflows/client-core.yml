@@ -114,6 +114,10 @@ jobs:
         run: .cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64 --headless --path client --script res://tests/test_client_transport.gd
       - name: First-login empty-character creation UI regression
         run: timeout 20s .cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64 --headless --path client --script res://tests/test_empty_character_creation_ui.gd
+      - name: Four-screen UI skins and swappable layout contract
+        run: timeout 20s .cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64 --headless --path client --script res://tests/test_ui_skin_layout.gd
+      - name: Source NPC sprite and portal hitbox presentation contract
+        run: timeout 20s .cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64 --headless --path client --script res://tests/test_npc_presentation.gd
       - name: Godot WorldState generation gate
         run: .cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64 --headless --path client --script res://tests/test_world_state.gd
       - name: Render-FPS independent reducer gate

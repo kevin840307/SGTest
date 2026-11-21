@@ -1,0 +1,14 @@
+{
+  "id": "celestial",
+  "name": "星界編年",
+  "layout": "tabs",
+  "dock": "left",
+  "effect": "stars",
+  "bg": "#171d36",
+  "border": "#8797d7",
+  "text": "#e6e9ff",
+  "field": "#26304e",
+  "button": "#313d65",
+  "hover": "#455685",
+  "accent": "#b8bcff"
+}

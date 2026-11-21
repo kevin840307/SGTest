@@ -1,0 +1,14 @@
+{
+  "id": "amber",
+  "name": "經典琥珀",
+  "layout": "stacked",
+  "dock": "left",
+  "effect": "nebula",
+  "bg": "#211c15",
+  "border": "#c8a452",
+  "text": "#f2dfb0",
+  "field": "#302820",
+  "button": "#453723",
+  "hover": "#625033",
+  "accent": "#f2c56a"
+}

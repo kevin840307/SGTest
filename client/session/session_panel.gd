@@ -5,6 +5,8 @@ signal world_ready(snapshot: Dictionary)
 signal world_snapshot(snapshot: Dictionary)
 
 const Session = preload("res://session/client_session.gd")
+const SessionLayout = preload("res://ui/session_layout.gd")
+const GameplayHud = preload("res://ui/gameplay_hud.gd")
 const State = preload("res://world/world_state.gd")
 const TradePanel = preload("res://trade/trade_panel.gd")
 const InventoryPanel = preload("res://inventory/inventory_panel.gd")
@@ -20,6 +22,12 @@ const RepairPanel = preload("res://npc/repair_panel.gd")
 const EnhancementPanel = preload("res://npc/enhancement_panel.gd")
 const PvpPanel = preload("res://pvp/pvp_panel.gd")
 var session = Session.new()
+var _layout := SessionLayout.new()
+var _scroll := ScrollContainer.new()
+var gameplay_hud := GameplayHud.new()
+var new_character_button := Button.new()
+var back_to_character_button := Button.new()
+var _show_create := false
 var inventory_panel := InventoryPanel.new()
 var trade_panel := TradePanel.new()
 var player_shop_panel := PlayerShopPanel.new()
@@ -74,24 +82,23 @@ func _ready() -> void:
 	# The authenticated gameplay controls exceed the viewport height.
 	# Clip and scroll the ONE existing form rather than letting trade/PvP
 	# actions extend off-screen or constructing a parallel UI.
-	var scroll := ScrollContainer.new()
+	var scroll := _scroll
 	scroll.name = "SessionOptionsScroll"
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
 	scroll.follow_focus = true
-	scroll.custom_minimum_size.y = maxf(220.0, get_viewport_rect().size.y - 96.0)
+	scroll.custom_minimum_size.y = 0.0
 	add_child(scroll)
 	get_viewport().size_changed.connect(func():
-		scroll.custom_minimum_size.y = maxf(220.0, get_viewport_rect().size.y - 96.0))
-	var column := VBoxContainer.new()
-	column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	scroll.add_child(column)
+		_scroll.custom_minimum_size.y = maxf(220.0,get_viewport_rect().size.y-96.0) if _layout.current_page == SessionLayout.Page.WORLD else 0.0)
+	_layout.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.add_child(_layout)
 	var title := Label.new()
 	title.text = "星夢 Online — 登入"
-	column.add_child(title)
+	_layout.login_page.add_child(title)
 	var grid := GridContainer.new()
 	grid.columns = 2
-	column.add_child(grid)
+	_layout.login_page.add_child(grid)
 	host_input.text = "localhost"
 	port_input.min_value = 1
 	port_input.max_value = 65535
@@ -118,6 +125,14 @@ func _ready() -> void:
 	character_slot_input.step = 1
 	character_slot_input.value = 0
 	create_character_button.text = "建立角色"
+	new_character_button.text = "建立新角色"
+	back_to_character_button.text = "返回角色選單"
+	new_character_button.pressed.connect(func():
+		_show_create = true
+		_set_controls())
+	back_to_character_button.pressed.connect(func():
+		_show_create = false
+		_set_controls())
 	character_create_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	character_create_status.text = ""
 	respawn_button.text = "復活"
@@ -131,17 +146,38 @@ func _ready() -> void:
 	skill_area_button.text = "施放自身中心範圍技能"
 	skill_area_button.focus_mode = Control.FOCUS_NONE
 	skill_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	for control in [login_button,register_button,characters,choose_button,character_name_input,character_slot_input,create_character_button,character_create_status,respawn_button,skill_hint,skill_id_input,skill_target_mode,skill_area_button,skill_status,logout_button,status,pickup_status]:
-		column.add_child(control)
-	column.add_child(inventory_panel)
+	for control in [login_button,register_button]:
+		_layout.login_page.add_child(control)
+	var selection_heading := Label.new()
+	selection_heading.text = "選擇角色"
+	_layout.select_page.add_child(selection_heading)
+	for control in [characters,choose_button,new_character_button]:
+		_layout.select_page.add_child(control)
+	var creation_heading := Label.new()
+	creation_heading.text = "建立角色"
+	_layout.create_page.add_child(creation_heading)
+	var create_grid := GridContainer.new()
+	_layout.create_page.add_child(create_grid)
+	for pair in [["角色名稱",character_name_input],["角色欄位",character_slot_input]]:
+		var label := Label.new()
+		label.text = pair[0]
+		create_grid.add_child(label)
+		create_grid.add_child(pair[1])
+	for control in [create_character_button,character_create_status,back_to_character_button]:
+		_layout.create_page.add_child(control)
+	_layout.bind_forms(grid,create_grid)
+	# Persisting controls remain in one owner and are only reparented when a
+	# skin switches gameplay layout; no gameplay event or Session is rebuilt.
+	_layout.add_child(status)
+	_layout.add_child(logout_button)
 	npc_shop_panel.set_actions(Callable(self,"submit_shop_open"),Callable(self,"submit_shop_buy"),Callable(self,"submit_shop_sell"),item_catalog)
-	column.add_child(npc_shop_panel)
+
 	storage_panel.set_actions(Callable(self,"submit_storage_open"),Callable(self,"submit_storage_deposit"),Callable(self,"submit_storage_withdraw"),item_catalog)
-	column.add_child(storage_panel)
+
 	repair_panel.set_actions(Callable(self,"submit_repair_open"),Callable(self,"submit_repair_item"),item_catalog)
-	column.add_child(repair_panel)
+
 	enhancement_panel.set_actions(Callable(self,"submit_enhancement_open"),Callable(self,"submit_enhancement_item"),item_catalog)
-	column.add_child(enhancement_panel)
+
 	login_button.pressed.connect(login)
 	register_button.pressed.connect(register_account)
 	password_input.text_submitted.connect(func(_text): login())
@@ -152,17 +188,22 @@ func _ready() -> void:
 	skill_area_button.pressed.connect(_cast_area_skill)
 	logout_button.pressed.connect(disconnect_session)
 	bank_panel.set_actions(Callable(self,"submit_bank_open"),Callable(self,"submit_bank_deposit"),Callable(self,"submit_bank_withdraw"))
-	column.add_child(bank_panel)
-	column.add_child(trade_panel)
-	column.add_child(player_shop_panel)
-	column.add_child(chat_panel)
-	column.add_child(party_panel)
+
+
+
+
+
 	quest_panel.set_actions(Callable(self, "submit_quest_open"), Callable(self, "submit_quest_choice"))
-	column.add_child(quest_panel)
+
 	pvp_panel.set_actions(Callable(self,"submit_pvp_mode"),Callable(self,"submit_pvp_attack"),
 		Callable(self,"submit_pvp_skill"),Callable(self,"submit_gm_pvp_name"),
 		Callable(skill_id_input,"get_value"),SKILL_RESULT_NAMES)
-	column.add_child(pvp_panel)
+	_layout.world_page.add_child(gameplay_hud)
+	_layout.world_page.move_child(gameplay_hud,1)
+	_layout.add_group("角色／背包",[inventory_panel,pickup_status])
+	_layout.add_group("戰鬥／技能",[respawn_button,skill_hint,skill_id_input,skill_target_mode,skill_area_button,skill_status,pvp_panel])
+	_layout.add_group("NPC 服務",[npc_shop_panel,storage_panel,bank_panel,repair_panel,enhancement_panel,quest_panel])
+	_layout.add_group("社交／交易",[chat_panel,party_panel,trade_panel,player_shop_panel])
 	var style := StyleBoxFlat.new()
 	style.bg_color = Color("211c15")
 	style.border_color = Color("c8a452")
@@ -209,9 +250,11 @@ func _begin_connection(register_first:bool)->void:
 		status.text = "無法開始連線（"+str(error)+"）"
 		return
 	active = true
+	_show_create = false
 	_chosen = false
 	_world_epoch = 0
 	_latest = {}
+	gameplay_hud.reset()
 	_last_publication_revision = -1
 	_respawn_queued_after = -1
 	_skill_queued_after = -1
@@ -444,9 +487,11 @@ func disconnect_session() -> void:
 	session.stop()
 	var was_active := active
 	active = false
+	_show_create = false
 	_chosen = false
 	_world_epoch = 0
 	_latest = {}
+	gameplay_hud.reset()
 	_last_publication_revision = -1
 	_respawn_queued_after = -1
 	_skill_queued_after = -1
@@ -485,12 +530,17 @@ func _set_controls() -> void:
 	login_button.disabled = active
 	register_button.disabled = active
 	logout_button.disabled = not active
+	logout_button.visible = active
 	var state := int(_latest.get("state",-1))
 	var selecting := active and state == State.STATE_SELECTING_CHARACTER
 	var creating := active and state == State.STATE_CREATING_CHARACTER
 	characters.visible = selecting and not _characters.is_empty()
 	choose_button.visible = characters.visible
 	choose_button.disabled = _chosen or not selecting or _characters.is_empty()
+	new_character_button.visible = selecting
+	new_character_button.disabled = not selecting
+	back_to_character_button.visible = selecting and not _characters.is_empty()
+	back_to_character_button.disabled = not selecting
 	for control in [character_name_input,character_slot_input,create_character_button,character_create_status]:
 		control.visible = active and state in [State.STATE_SELECTING_CHARACTER,State.STATE_CREATING_CHARACTER]
 	character_name_input.editable = selecting
@@ -498,6 +548,19 @@ func _set_controls() -> void:
 	create_character_button.disabled = not selecting
 	_set_respawn_controls()
 	_set_skill_controls()
+	if not active or state not in [State.STATE_SELECTING_CHARACTER,State.STATE_CREATING_CHARACTER,State.STATE_IN_WORLD]:
+		_layout.show_page(SessionLayout.Page.LOGIN)
+	elif state == State.STATE_IN_WORLD:
+		_layout.show_page(SessionLayout.Page.WORLD)
+	elif state == State.STATE_CREATING_CHARACTER or _show_create or _characters.is_empty():
+		_layout.show_page(SessionLayout.Page.CHARACTER_CREATE)
+	else:
+		_layout.show_page(SessionLayout.Page.CHARACTER_SELECT)
+	_scroll.custom_minimum_size.y = maxf(220.0,get_viewport_rect().size.y-96.0) if _layout.current_page == SessionLayout.Page.WORLD else 0.0
+
+
+func set_ui_layout(id: String) -> bool:
+	return _layout.set_layout(id)
 
 
 func _set_respawn_controls() -> void:
@@ -605,6 +668,7 @@ func _process(delta: float) -> void:
 		return
 	_last_publication_revision = int(update.revision)
 	_latest = update.snapshot
+	gameplay_hud.apply_snapshot(_latest)
 	_set_respawn_controls()
 	_set_skill_controls()
 	_refresh_inventory_panel()
@@ -656,6 +720,7 @@ func _process(delta: float) -> void:
 			if created_index >= 0:
 				characters.select(created_index)
 				character_name_input.clear()
+				_show_create = false
 			if used_slots.has(int(character_slot_input.value)):
 				for slot in range(8):
 					if not used_slots.has(slot):

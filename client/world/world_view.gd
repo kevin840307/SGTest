@@ -9,6 +9,7 @@ const Terrain = preload("res://map/terrain.gd")
 const DrawList = preload("res://world/world_draw_list.gd")
 const Players = preload("res://player/player_presentation.gd")
 const Monsters = preload("res://monster/monster_presentation.gd")
+const Npcs = preload("res://npc/npc_presentation.gd")
 const PvpNames = preload("res://pvp/pvp_name_presentation.gd")
 const Canvas = preload("res://world/world_canvas.gd")
 var store := Store.new()
@@ -28,6 +29,7 @@ var _last_rect := Rect2()
 var show_players := false
 var players := Players.new()
 var monsters := Monsters.new()
+var npcs := Npcs.new()
 var pvp_names := PvpNames.new()
 var _player_snapshot := {}
 var _players_dirty := false
@@ -70,6 +72,7 @@ func clear_map() -> void:
 	draw_list.clear()
 	players.clear()
 	monsters.clear()
+	npcs.clear()
 	pvp_names.clear()
 	_player_snapshot = {}
 	_players_dirty = true
@@ -108,6 +111,12 @@ func _process(_delta: float) -> void:
 			for appearance in definition.appearances:
 				if appearance != null:
 					ids[str(appearance.atlas).trim_suffix("/atlas.json")] = true
+		var npc_population: Dictionary = _map.get("extra",{}).get("npcs",{})
+		for npc in npc_population.get("npcs",[]):
+			if npc is Dictionary and npc.get("visual",{}) is Dictionary and bool(npc.visual.get("resolved",false)):
+				var atlas := str(npc.visual.get("atlas",""))
+				if atlas.ends_with("/atlas.json"):
+					ids[atlas.trim_suffix("/atlas.json")] = true
 		if show_players:
 			for part in Players.PARTS.values():
 				ids[part[0]] = true
@@ -133,6 +142,10 @@ func _process(_delta: float) -> void:
 		var data := TerrainData.new()
 		if data.configure(_map) != OK or draw_list.configure(_map.manifest,assets,epoch) != OK:
 			_fail("地圖資料無法顯示")
+			return
+		var npc_population: Dictionary = _map.get("extra",{}).get("npcs",{})
+		if npcs.configure(npc_population,assets) != OK:
+			_fail("NPC 素材與地圖資料不一致")
 			return
 		if show_players:
 			if players.configure(assets) != OK:
@@ -178,7 +191,7 @@ func present() -> void:
 		return
 	get_viewport().canvas_transform = Transform2D(0,-rect.position)
 	_terrain.set_view_rect(rect)
-	var actors: Array = []
+	var actors: Array = npcs.actors_at(rect)
 	if show_players:
 		actors.append_array(players.actors_at(now_usec))
 		actors.append_array(monsters.actors_at(now_usec))
@@ -413,6 +426,19 @@ func ground_drop_count() -> int:
 	if phase != "ready" or not show_players:
 		return 0
 	return (_player_snapshot.get("ground_drops",{}) as Dictionary).size()
+
+
+
+func npc_count() -> int:
+	return npcs.count() if phase == "ready" else 0
+
+
+func pick_npc_at(world_point: Vector2) -> int:
+	return npcs.pick_at(world_point) if phase == "ready" else 0
+
+
+func npc_interaction_for(spawn_id: int) -> Dictionary:
+	return npcs.interaction_for(spawn_id) if phase == "ready" else {}
 
 
 func monster_count() -> int:
