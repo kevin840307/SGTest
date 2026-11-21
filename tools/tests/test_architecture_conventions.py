@@ -20,7 +20,11 @@ class ArchitectureConventionsChecks(unittest.TestCase):
     def test_feature_panels_follow_owning_directory(self) -> None:
         for folder, filename in (
             ("inventory", "inventory_panel.gd"),
-            ("bank", "bank_panel.gd"),
+            ("npc", "bank_panel.gd"),
+            ("npc", "npc_shop_panel.gd"),
+            ("npc", "storage_panel.gd"),
+            ("npc", "repair_panel.gd"),
+            ("npc", "enhancement_panel.gd"),
             ("trade", "trade_panel.gd"),
             ("chat", "chat_panel.gd"),
             ("party", "party_panel.gd"),
@@ -29,6 +33,20 @@ class ArchitectureConventionsChecks(unittest.TestCase):
         ):
             with self.subTest(folder=folder):
                 self.assertTrue((CLIENT / folder / filename).is_file())
+
+    def test_npc_ui_owns_controls_without_extra_feature_directories(self) -> None:
+        panel = (CLIENT / "session" / "session_panel.gd").read_text(encoding="utf-8-sig")
+        for feature in ("bank", "npc_shop", "storage", "repair", "enhancement"):
+            with self.subTest(feature=feature):
+                script = CLIENT / "npc" / (feature + "_panel.gd")
+                source = script.read_text(encoding="utf-8-sig")
+                self.assertIn("func apply_snapshot(", source)
+                self.assertIn("func reset()", source)
+                self.assertIn("func set_actions(", source)
+                self.assertIn(f'preload("res://npc/{feature}_panel.gd")', panel)
+                self.assertFalse((CLIENT / feature).exists(),
+                                 "Single-panel NPC directories must be consolidated")
+                self.assertNotIn("var " + feature + "_npc_input", panel)
 
     def test_godot_scripts_use_snake_case_names(self) -> None:
         for script in CLIENT.rglob("*.gd"):

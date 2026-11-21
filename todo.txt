@@ -1,5 +1,8 @@
 # SGTest 新版重建 TODO（2026-11-15）
 
+- ARCH-CLIENT-NPC-UI-GROUP [x] 2026-11-21：以常見遊戲功能 owner `client/npc/` 集中原本分散 5 個頂層資料夾的銀行、NPC 商店、倉庫、修理、強化 UI；每個 Panel 仍有各自 `apply_snapshot`、`reset` 與送出 callback，`SessionPanel` 不再管理它們的 Control／繪製快取，且保留唯一 Session／ItemCatalog、Server UID／扣款／強化機率權威。保留 `NpcShopPanel` 與 `PlayerShopPanel` 的語義區分，不新增 `Manager`／`System` 或假抽象。架構 9/9 PASS、Python 全量 unittest PASS、Godot 4.7.2 真 TLS UI shop/storage/repair/enhancement/bank 及 C# TLS Login E2E PASS。Server gameplay／WorldState／多開 GPU 未在此項修改／驗收；不宣稱所有架構改善完成。
+
+
 - ARCH-CLIENT-BANK-PANEL [x] 2026-11-21：`client/bank/bank_panel.gd` 接手 NPC 銀行 UI 按鈕／餘額快照／狀態顯示，`SessionPanel` 只管理既有 Auth／MapEpoch／WorldReady 條件及動作 callback；沒有建立第二個 Session、交易狀態或自行結算金錢。Godot 4.7.2 真 TLS/UI `bank_ui=PASS`、Login E2E PASS，架構 Gate 已納入銀行功能目錄；其餘商店／倉庫／修理／強化 UI 與 WorldState Reducer 仍待按相同原則拆分，GPU／多開 NOT VERIFIED。
 
 

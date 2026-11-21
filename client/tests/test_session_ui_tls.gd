@@ -869,10 +869,10 @@ func run() -> void:
 		"resync_pending":false,"active_shop_npc":0,"pending_shop_sequence":0,
 		"shop_sequence":0,"shop_money":0,"shop_items":{},
 		"inventory_revision":4,"inventory_items":many}
-	panel._update_shop_ui()
-	panel.shop_npc_input.value = 99
-	panel.shop_open_button.pressed.emit()
-	if stub.shop_opens != 1 or stub.last_shop_npc != 99 or not panel.shop_open_button.disabled:
+	panel.npc_shop_panel.apply_snapshot(panel._latest, panel.active)
+	panel.npc_shop_panel.shop_npc_input.value = 99
+	panel.npc_shop_panel.shop_open_button.pressed.emit()
+	if stub.shop_opens != 1 or stub.last_shop_npc != 99 or not panel.npc_shop_panel.shop_open_button.disabled:
 		fail("Shop open UI did not send exactly one NPC intent")
 		return
 	panel._latest.active_shop_npc = 99
@@ -881,35 +881,35 @@ func run() -> void:
 	panel._latest.shop_items = {2701:{
 		"item_definition_id":2701,"buy_price":10,"sell_price":5}}
 	panel._latest.pending_shop_sequence = 0
-	panel._update_shop_ui()
-	if not panel.shop_money_label.text.contains("25") or panel.shop_item_picker.item_count != 1 or panel.shop_sell_picker.item_count != 1 or panel.shop_buy_button.disabled or panel.shop_sell_button.disabled:
+	panel.npc_shop_panel.apply_snapshot(panel._latest, panel.active)
+	if not panel.npc_shop_panel.shop_money_label.text.contains("25") or panel.npc_shop_panel.shop_item_picker.item_count != 1 or panel.npc_shop_panel.shop_sell_picker.item_count != 1 or panel.npc_shop_panel.shop_buy_button.disabled or panel.npc_shop_panel.shop_sell_button.disabled:
 		fail("Server shop snapshot was not rendered as playable controls")
 		return
 	# Switching sell UID or refreshing owned stack must never alter buy quantity.
-	panel.shop_quantity.value = 7
-	panel.shop_sell_quantity.value = 3
-	panel._update_shop_sell_quantity()
-	if int(panel.shop_quantity.value) != 7 or int(panel.shop_sell_quantity.max_value) != 3:
+	panel.npc_shop_panel.shop_quantity.value = 7
+	panel.npc_shop_panel.shop_sell_quantity.value = 3
+	panel.npc_shop_panel._update_shop_sell_quantity()
+	if int(panel.npc_shop_panel.shop_quantity.value) != 7 or int(panel.npc_shop_panel.shop_sell_quantity.max_value) != 3:
 		fail("Sell stack selection modified independent buy quantity or sell limit")
 		return
-	panel.shop_quantity.value = 2
-	panel.shop_buy_button.pressed.emit()
-	if stub.shop_buys != 1 or stub.last_shop_item != 2701 or stub.last_shop_quantity != 2 or not panel.shop_buy_button.disabled:
+	panel.npc_shop_panel.shop_quantity.value = 2
+	panel.npc_shop_panel.shop_buy_button.pressed.emit()
+	if stub.shop_buys != 1 or stub.last_shop_item != 2701 or stub.last_shop_quantity != 2 or not panel.npc_shop_panel.shop_buy_button.disabled:
 		fail("Shop buy UI did not send exact authoritative item/quantity once")
 		return
 	panel._latest.pending_shop_sequence = 2
-	panel._update_shop_ui()
-	if not panel.shop_buy_button.disabled or not panel.shop_sell_button.disabled:
+	panel.npc_shop_panel.apply_snapshot(panel._latest, panel.active)
+	if not panel.npc_shop_panel.shop_buy_button.disabled or not panel.npc_shop_panel.shop_sell_button.disabled:
 		fail("Pending shop transaction allowed another economy mutation")
 		return
 	panel._latest.pending_shop_sequence = 0
 	panel._latest.shop_sequence = 2
 	panel._latest.inventory_revision = 5
-	panel._update_shop_ui()
-	panel.shop_quantity.value = 9
-	panel.shop_sell_quantity.value = 1
-	panel.shop_sell_button.pressed.emit()
-	if stub.shop_sells != 1 or stub.last_shop_uid != 10000 or stub.last_shop_quantity != 1 or int(panel.shop_quantity.value) != 9:
+	panel.npc_shop_panel.apply_snapshot(panel._latest, panel.active)
+	panel.npc_shop_panel.shop_quantity.value = 9
+	panel.npc_shop_panel.shop_sell_quantity.value = 1
+	panel.npc_shop_panel.shop_sell_button.pressed.emit()
+	if stub.shop_sells != 1 or stub.last_shop_uid != 10000 or stub.last_shop_quantity != 1 or int(panel.npc_shop_panel.shop_quantity.value) != 9:
 		fail("Shop sell UI did not use independent sell quantity and owned Item UID")
 		return
 	if panel.submit_shop_sell(10000,4) or stub.shop_sells != 1:
@@ -926,10 +926,10 @@ func run() -> void:
 	panel._latest.storage_items = {}
 	panel._latest.last_storage_open_status = -1
 	panel._latest.last_storage_result = {}
-	panel._update_storage_ui()
-	panel.storage_npc_input.value = 88
-	panel.storage_open_button.pressed.emit()
-	if stub.storage_opens != 1 or stub.last_storage_npc != 88 or not panel.storage_open_button.disabled:
+	panel.storage_panel.apply_snapshot(panel._latest, panel.active)
+	panel.storage_panel.storage_npc_input.value = 88
+	panel.storage_panel.storage_open_button.pressed.emit()
+	if stub.storage_opens != 1 or stub.last_storage_npc != 88 or not panel.storage_panel.storage_open_button.disabled:
 		fail("Storage open UI did not send exactly one NPC intent")
 		return
 	panel._latest.active_storage_npc = 88
@@ -938,22 +938,22 @@ func run() -> void:
 	panel._latest.storage_revision = 1
 	panel._latest.storage_items = {20000:{
 		"item_uid":20000,"item_definition_id":4001,"quantity":2,"drop_id":0}}
-	panel._update_storage_ui()
-	if panel.storage_deposit_picker.item_count == 0 or panel.storage_withdraw_picker.item_count != 1 or panel.storage_deposit_button.disabled or panel.storage_withdraw_button.disabled:
+	panel.storage_panel.apply_snapshot(panel._latest, panel.active)
+	if panel.storage_panel.storage_deposit_picker.item_count == 0 or panel.storage_panel.storage_withdraw_picker.item_count != 1 or panel.storage_panel.storage_deposit_button.disabled or panel.storage_panel.storage_withdraw_button.disabled:
 		fail("Authoritative storage baseline was not rendered as playable controls")
 		return
-	panel.storage_deposit_button.pressed.emit()
+	panel.storage_panel.storage_deposit_button.pressed.emit()
 	if stub.storage_deposits != 1 or stub.last_storage_uid != 10000:
 		fail("Storage deposit UI did not use selected owned Item UID")
 		return
-	panel._update_storage_ui()
-	panel.storage_withdraw_button.pressed.emit()
+	panel.storage_panel.apply_snapshot(panel._latest, panel.active)
+	panel.storage_panel.storage_withdraw_button.pressed.emit()
 	if stub.storage_withdrawals != 1 or stub.last_storage_uid != 20000:
 		fail("Storage withdraw UI did not use selected stored Item UID")
 		return
 	panel._latest.pending_storage_sequence = 2
-	panel._update_storage_ui()
-	if not panel.storage_deposit_button.disabled or not panel.storage_withdraw_button.disabled:
+	panel.storage_panel.apply_snapshot(panel._latest, panel.active)
+	if not panel.storage_panel.storage_deposit_button.disabled or not panel.storage_panel.storage_withdraw_button.disabled:
 		fail("Pending storage mutation allowed another item move")
 		return
 
@@ -1056,13 +1056,13 @@ func run() -> void:
 	panel._latest.repair_items = {}
 	panel._latest.last_repair_open_status = -1
 	panel._latest.last_repair_result = {}
-	panel._update_repair_ui()
-	if panel.repair_open_button.get_parent() == null or not panel.repair_button.disabled:
+	panel.repair_panel.apply_snapshot(panel._latest, panel.active)
+	if panel.repair_panel.repair_open_button.get_parent() == null or not panel.repair_panel.repair_button.disabled:
 		fail("Repair controls were not attached or were usable before server preview")
 		return
-	panel.repair_npc_input.value = 66
-	panel.repair_open_button.pressed.emit()
-	if stub.repair_opens != 1 or stub.last_repair_npc != 66 or not panel.repair_open_button.disabled:
+	panel.repair_panel.repair_npc_input.value = 66
+	panel.repair_panel.repair_open_button.pressed.emit()
+	if stub.repair_opens != 1 or stub.last_repair_npc != 66 or not panel.repair_panel.repair_open_button.disabled:
 		fail("Repair open UI did not send exactly one NPC intent")
 		return
 	panel._latest.active_repair_npc = 66
@@ -1073,11 +1073,11 @@ func run() -> void:
 	panel._latest.repair_items = {10000:{
 		"item_uid":10000,"item_definition_id":4001,"location":1,
 		"current_durability":80,"max_durability":100,"cost":37}}
-	panel._update_repair_ui()
-	if panel.repair_item_picker.item_count != 1 or not panel.repair_item_picker.get_item_text(0).contains("耐久 80/100") or not panel.repair_item_picker.get_item_text(0).contains("費用 37") or not panel.repair_wallet_label.text.contains("100") or panel.repair_button.disabled:
+	panel.repair_panel.apply_snapshot(panel._latest, panel.active)
+	if panel.repair_panel.repair_item_picker.item_count != 1 or not panel.repair_panel.repair_item_picker.get_item_text(0).contains("耐久 80/100") or not panel.repair_panel.repair_item_picker.get_item_text(0).contains("費用 37") or not panel.repair_panel.repair_wallet_label.text.contains("100") or panel.repair_panel.repair_button.disabled:
 		fail("Repair UI did not render exact authoritative preview")
 		return
-	panel.repair_button.pressed.emit()
+	panel.repair_panel.repair_button.pressed.emit()
 	if stub.repairs != 1 or stub.last_repair_uid != 10000:
 		fail("Repair UI did not send selected UID only")
 		return
@@ -1089,8 +1089,8 @@ func run() -> void:
 		"status":0,"item_uid":10000,"item_definition_id":4001,
 		"location":1,"current_durability":100,"max_durability":100,
 		"cost":37,"wallet_money":63}
-	panel._update_repair_ui()
-	if not panel.repair_item_picker.get_item_text(0).contains("耐久 100/100") or not panel.repair_item_picker.get_item_text(0).contains("費用 0") or not panel.repair_wallet_label.text.contains("63") or not panel.repair_button.disabled:
+	panel.repair_panel.apply_snapshot(panel._latest, panel.active)
+	if not panel.repair_panel.repair_item_picker.get_item_text(0).contains("耐久 100/100") or not panel.repair_panel.repair_item_picker.get_item_text(0).contains("費用 0") or not panel.repair_panel.repair_wallet_label.text.contains("63") or not panel.repair_panel.repair_button.disabled:
 		fail("Repair UI locally recomputed or failed to apply server settlement")
 		return
 
@@ -1104,13 +1104,13 @@ func run() -> void:
 	panel._latest.enhancement_items = {}
 	panel._latest.last_enhancement_open_status = -1
 	panel._latest.last_enhancement_result = {}
-	panel._update_enhancement_ui()
-	if panel.enhancement_open_button.get_parent() == null or not panel.enhancement_button.disabled:
+	panel.enhancement_panel.apply_snapshot(panel._latest, panel.active)
+	if panel.enhancement_panel.enhancement_open_button.get_parent() == null or not panel.enhancement_panel.enhancement_button.disabled:
 		fail("Enhancement controls were not attached or were usable before server preview")
 		return
-	panel.enhancement_npc_input.value = 77
-	panel.enhancement_open_button.pressed.emit()
-	if stub.enhancement_opens != 1 or stub.last_enhancement_npc != 77 or not panel.enhancement_open_button.disabled:
+	panel.enhancement_panel.enhancement_npc_input.value = 77
+	panel.enhancement_panel.enhancement_open_button.pressed.emit()
+	if stub.enhancement_opens != 1 or stub.last_enhancement_npc != 77 or not panel.enhancement_panel.enhancement_open_button.disabled:
 		fail("Enhancement open UI did not send exactly one NPC intent")
 		return
 	panel._latest.active_enhancement_npc = 77
@@ -1122,12 +1122,12 @@ func run() -> void:
 		"item_uid":10001,"item_definition_id":4001,"location":2,
 		"current_level":2,"target_level":3,"success_ppm":725000,
 		"money_cost":37,"consume_money_on_failure":true}}
-	panel._update_enhancement_ui()
-	var enhancement_text: String = panel.enhancement_item_picker.get_item_text(0)
-	if panel.enhancement_item_picker.item_count != 1 or not enhancement_text.contains("+2 → +3") or not enhancement_text.contains("72.50%") or not enhancement_text.contains("費用 37") or not enhancement_text.contains("失敗扣款") or not panel.enhancement_wallet_label.text.contains("100") or panel.enhancement_button.disabled:
+	panel.enhancement_panel.apply_snapshot(panel._latest, panel.active)
+	var enhancement_text: String = panel.enhancement_panel.enhancement_item_picker.get_item_text(0)
+	if panel.enhancement_panel.enhancement_item_picker.item_count != 1 or not enhancement_text.contains("+2 → +3") or not enhancement_text.contains("72.50%") or not enhancement_text.contains("費用 37") or not enhancement_text.contains("失敗扣款") or not panel.enhancement_panel.enhancement_wallet_label.text.contains("100") or panel.enhancement_panel.enhancement_button.disabled:
 		fail("Enhancement UI did not render exact authoritative preview")
 		return
-	panel.enhancement_button.pressed.emit()
+	panel.enhancement_panel.enhancement_button.pressed.emit()
 	if stub.enhancements != 1 or stub.last_enhancement_uid != 10001:
 		fail("Enhancement UI did not send selected UID only")
 		return
@@ -1139,8 +1139,8 @@ func run() -> void:
 		"location":2,"previous_level":2,"target_level":3,
 		"current_level":3,"succeeded":true,"money_cost":37,
 		"money_charged":37,"wallet_money":63}
-	panel._update_enhancement_ui()
-	if panel.enhancement_item_picker.item_count != 0 or not panel.enhancement_wallet_label.text.contains("63") or not panel.enhancement_status.text.contains("+2 → +3") or not panel.enhancement_status.text.contains("實扣 37") or not panel.enhancement_button.disabled:
+	panel.enhancement_panel.apply_snapshot(panel._latest, panel.active)
+	if panel.enhancement_panel.enhancement_item_picker.item_count != 0 or not panel.enhancement_panel.enhancement_wallet_label.text.contains("63") or not panel.enhancement_panel.enhancement_status.text.contains("+2 → +3") or not panel.enhancement_panel.enhancement_status.text.contains("實扣 37") or not panel.enhancement_panel.enhancement_button.disabled:
 		fail("Enhancement UI locally recomputed or failed to apply server settlement")
 		return
 

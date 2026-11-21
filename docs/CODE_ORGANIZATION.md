@@ -29,7 +29,11 @@
 | Session | `session/client_session.gd`、`session/session_panel.gd` | `Gateway/`、`Identity/` | ClientSession 唯一收送和 Reducer 排程；Gateway 認證綁定 |
 | World/AOI | `world/world_state.gd`、`world/world_view.gd` | `World/`、`Visibility/` | Server 單寫者權威；Client snapshot 不依賴 FPS |
 | Inventory/Equipment | `inventory/inventory_panel.gd` | `Identity/SqliteIdentityStore.*.cs` | UID／交易只由 Server 決定 |
-| Bank | `bank/bank_panel.gd` | `Npc/`、`Identity/SqliteIdentityStore.Bank.cs` | 面板顯示餘額、呼叫既有 Session 意圖；款項提交與限額 Server-owned |
+| Bank | `npc/bank_panel.gd` | `Npc/`、`Identity/SqliteIdentityStore.Bank.cs` | 面板顯示餘額、呼叫既有 Session 意圖；款項提交與限額 Server-owned |
+| NPC Shop | `npc/npc_shop_panel.gd` | `Npc/`、`Identity/SqliteIdentityStore.Shop.cs` | 商品價格／買賣／錢包由 Server 核准，不與 `player_shop/` 混淆 |
+| Storage | `npc/storage_panel.gd` | `Npc/`、`Identity/SqliteIdentityStore.Storage.cs` | 僅選取 Server 快照中的 UID，整組存取由 Server 結算 |
+| Repair | `npc/repair_panel.gd` | `Npc/`、`Identity/SqliteIdentityStore.Repair.cs` | 耐久／費用／扣款只由 Server 判定 |
+| Enhancement | `npc/enhancement_panel.gd` | `Npc/`、`Identity/SqliteIdentityStore.Enhancement.cs` | 成功率／等級／扣款由 Server 決定，UI 不擲骰 |
 | Trade | `trade/trade_panel.gd` | `Trade/PlayerTradeCoordinator.cs` | 雙方 gate + 原子 SQLite commit |
 | Player Shop | `player_shop/player_shop_panel.gd` | `PlayerShop/` | UI 僅提交販售／查看／購買意圖 |
 | Quest | `quest/quest_panel.gd` | `Npc/NpcQuestCatalog.cs`、`Identity/SqliteIdentityStore.Quest.cs` | 任務進度與合法選項由 Server 判定 |
@@ -62,11 +66,18 @@
 - `Gateway/IdentityTlsAuthorization.Binding.cs` 承接認證帳號與 World Actor 的綁定程序；`IdentityTlsAuthorization.cs` 仍持有現有 TLS socket 與 gameplay gate，保留同一授權狀態及可靠事件順序。Gateway 長函式的真正業務分離仍待後續實作，不能誤認為完成解耦。
 - 遷移／授權相關重構必須通過 Server 265 checks（尤其 SQLite upgrade、WAL backup、TLS Host、雙方交易與 Epoch），而非僅憑 C# 可編譯宣稱正確。
 
+## NPC 相關 UI 分組決策（避免過度拆分）
+
+- 五個 NPC 操作面板統一在 `client/npc/`，與 Server `Npc/` 功能語意對應。**合併的是檔案導航與 UI 功能領域，不是合併五種規則或一個大類別**。這些 Panel 都有不同顯示資料及互動流程；合併成 `NpcManager` 或 `EconomyHelper` 會增加耦合。
+- `NpcShopPanel` 與 `PlayerShopPanel` 是不同業務；保留前者明確的 NPC 前綴，避免與玩家擺攤混淆。`BankPanel`／`StoragePanel`／`RepairPanel`／`EnhancementPanel` 是常見遊戲 UI 名稱，不改成模糊 `System` 或 `Manager`。
+- 不要為單一 UI 面板建立單獨的頂層功能資料夾；當功能成長到需要獨立場景、測試、資產或多個協調模組，才考慮從 `npc/` 拆出。`ClientSession` 保留唯一意圖隊列，所有權威規則仍在 Server。
+
 ## Client UI 模組的最小契約
 
 - `SessionPanel` 負責登入頁組裝、共用快照、UI 生命週期及必要的提交前驗證；功能面板不直接輪詢 Transport，也不可自行變更 WorldState。
-- `InventoryPanel`、`BankPanel`、`TradePanel`、`PlayerShopPanel`、`QuestPanel`、`ChatPanel`、`PartyPanel` 由各自目錄持有自己的 Control、顯示快取與事件回呼。
+- `InventoryPanel`、`BankPanel`、`NpcShopPanel`、`StoragePanel`、`RepairPanel`、`EnhancementPanel`、`TradePanel`、`PlayerShopPanel`、`QuestPanel`、`ChatPanel`、`PartyPanel` 由各自目錄持有自己的 Control、顯示快取與事件回呼。
 - 面板從 Session 收到 `apply_snapshot`（或已定義的窄回呼）；連線／換角色時 `reset`；所有成功／失敗狀態以 Server 回覆為準。
+- NPC 經濟類 `*_panel.gd` 只持有 Controls、Picker、文字與 `Callable` action；`SessionPanel` 仍保留 `submit_<feature>_*` 的身分、Epoch／pending／UID 操作約束。`item_catalog` 由單一組裝入口注入，不在各 Panel 建立重複 Loader。
 - 影響多人一致性的 `MapEpoch`、`ConnectionEpoch`、Reliable FIFO、UID/amount、交易 commit 與回放順序都不能因 UI 重構修改。
 
 ## ClientSession 指令分派契約

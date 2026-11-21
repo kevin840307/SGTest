@@ -13,7 +13,11 @@ const QuestPanel = preload("res://quest/quest_panel.gd")
 const ChatPanel = preload("res://chat/chat_panel.gd")
 const PartyPanel = preload("res://party/party_panel.gd")
 const ItemCatalog = preload("res://inventory/item_catalog.gd")
-const BankPanel = preload("res://bank/bank_panel.gd")
+const BankPanel = preload("res://npc/bank_panel.gd")
+const NpcShopPanel = preload("res://npc/npc_shop_panel.gd")
+const StoragePanel = preload("res://npc/storage_panel.gd")
+const RepairPanel = preload("res://npc/repair_panel.gd")
+const EnhancementPanel = preload("res://npc/enhancement_panel.gd")
 var session = Session.new()
 var inventory_panel := InventoryPanel.new()
 var trade_panel := TradePanel.new()
@@ -23,6 +27,10 @@ var chat_panel := ChatPanel.new()
 var party_panel := PartyPanel.new()
 var item_catalog = ItemCatalog.new()
 var bank_panel := BankPanel.new()
+var npc_shop_panel := NpcShopPanel.new()
+var storage_panel := StoragePanel.new()
+var repair_panel := RepairPanel.new()
+var enhancement_panel := EnhancementPanel.new()
 var active := false
 var trusted_chain: X509Certificate
 var tls_name := ""
@@ -46,39 +54,6 @@ var skill_target_mode := CheckButton.new()
 var skill_area_button := Button.new()
 var skill_status := Label.new()
 var pickup_status := Label.new()
-var shop_npc_input := SpinBox.new()
-var shop_open_button := Button.new()
-var shop_money_label := Label.new()
-var shop_item_picker := OptionButton.new()
-var shop_sell_picker := OptionButton.new()
-var shop_quantity := SpinBox.new()
-var shop_sell_quantity := SpinBox.new()
-var shop_buy_button := Button.new()
-var shop_sell_button := Button.new()
-var shop_status := Label.new()
-var _shop_display_key := ""
-var storage_npc_input := SpinBox.new()
-var storage_open_button := Button.new()
-var storage_deposit_picker := OptionButton.new()
-var storage_withdraw_picker := OptionButton.new()
-var storage_deposit_button := Button.new()
-var storage_withdraw_button := Button.new()
-var storage_status := Label.new()
-var _storage_display_key := ""
-var repair_npc_input := SpinBox.new()
-var repair_open_button := Button.new()
-var repair_wallet_label := Label.new()
-var repair_item_picker := OptionButton.new()
-var repair_button := Button.new()
-var repair_status := Label.new()
-var _repair_display_key := ""
-var enhancement_npc_input := SpinBox.new()
-var enhancement_open_button := Button.new()
-var enhancement_wallet_label := Label.new()
-var enhancement_item_picker := OptionButton.new()
-var enhancement_button := Button.new()
-var enhancement_status := Label.new()
-var _enhancement_display_key := ""
 var pvp_query_button := Button.new()
 var pvp_blue_button := Button.new()
 var pvp_white_button := Button.new()
@@ -160,55 +135,6 @@ func _ready() -> void:
 	create_character_button.text = "建立角色"
 	character_create_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	character_create_status.text = ""
-	shop_npc_input.min_value = 1
-	shop_npc_input.max_value = 2147483647
-	shop_npc_input.step = 1
-	shop_npc_input.value = 1
-	shop_open_button.text = "開啟附近 NPC 商店"
-	shop_money_label.text = "金錢：—"
-	shop_quantity.min_value = 1
-	shop_quantity.max_value = 1000000
-	shop_quantity.value = 1
-	shop_quantity.step = 1
-	shop_sell_quantity.min_value = 1
-	shop_sell_quantity.max_value = 1
-	shop_sell_quantity.value = 1
-	shop_sell_quantity.step = 1
-	shop_buy_button.text = "購買選中商品"
-	shop_sell_button.text = "販售選中背包物品"
-	shop_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	for control in [shop_npc_input,shop_open_button,shop_money_label,shop_item_picker,shop_sell_picker,shop_quantity,shop_sell_quantity,shop_buy_button,shop_sell_button,shop_status]:
-		control.visible = false
-	storage_npc_input.min_value = 1
-	storage_npc_input.max_value = 2147483647
-	storage_npc_input.step = 1
-	storage_npc_input.value = 1
-	storage_open_button.text = "開啟附近 NPC 倉庫"
-	storage_deposit_button.text = "存入選中背包物品（整組）"
-	storage_withdraw_button.text = "取出選中倉庫物品（整組）"
-	storage_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	for control in [storage_npc_input,storage_open_button,storage_deposit_picker,storage_withdraw_picker,storage_deposit_button,storage_withdraw_button,storage_status]:
-		control.visible = false
-	repair_npc_input.min_value = 1
-	repair_npc_input.max_value = 2147483647
-	repair_npc_input.step = 1
-	repair_npc_input.value = 1
-	repair_open_button.text = "開啟附近 NPC 修理"
-	repair_wallet_label.text = "角色錢包：—"
-	repair_button.text = "修理選中物品"
-	repair_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	for control in [repair_npc_input,repair_open_button,repair_wallet_label,repair_item_picker,repair_button,repair_status]:
-		control.visible = false
-	enhancement_npc_input.min_value = 1
-	enhancement_npc_input.max_value = 2147483647
-	enhancement_npc_input.step = 1
-	enhancement_npc_input.value = 1
-	enhancement_open_button.text = "開啟附近 NPC 強化"
-	enhancement_wallet_label.text = "角色錢包：—"
-	enhancement_button.text = "強化選中裝備"
-	enhancement_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	for control in [enhancement_npc_input,enhancement_open_button,enhancement_wallet_label,enhancement_item_picker,enhancement_button,enhancement_status]:
-		control.visible = false
 	respawn_button.text = "復活"
 	skill_hint.text = "技能 ID（需伺服器已核准規則）"
 	skill_id_input.min_value = 1
@@ -223,8 +149,14 @@ func _ready() -> void:
 	for control in [login_button,register_button,characters,choose_button,character_name_input,character_slot_input,create_character_button,character_create_status,respawn_button,skill_hint,skill_id_input,skill_target_mode,skill_area_button,skill_status,logout_button,status,pickup_status]:
 		column.add_child(control)
 	column.add_child(inventory_panel)
-	for control in [shop_npc_input,shop_open_button,shop_money_label,shop_item_picker,shop_sell_picker,shop_quantity,shop_sell_quantity,shop_buy_button,shop_sell_button,shop_status,storage_npc_input,storage_open_button,storage_deposit_picker,storage_withdraw_picker,storage_deposit_button,storage_withdraw_button,storage_status,repair_npc_input,repair_open_button,repair_wallet_label,repair_item_picker,repair_button,repair_status,enhancement_npc_input,enhancement_open_button,enhancement_wallet_label,enhancement_item_picker,enhancement_button,enhancement_status]:
-		column.add_child(control)
+	npc_shop_panel.set_actions(Callable(self,"submit_shop_open"),Callable(self,"submit_shop_buy"),Callable(self,"submit_shop_sell"),item_catalog)
+	column.add_child(npc_shop_panel)
+	storage_panel.set_actions(Callable(self,"submit_storage_open"),Callable(self,"submit_storage_deposit"),Callable(self,"submit_storage_withdraw"),item_catalog)
+	column.add_child(storage_panel)
+	repair_panel.set_actions(Callable(self,"submit_repair_open"),Callable(self,"submit_repair_item"),item_catalog)
+	column.add_child(repair_panel)
+	enhancement_panel.set_actions(Callable(self,"submit_enhancement_open"),Callable(self,"submit_enhancement_item"),item_catalog)
+	column.add_child(enhancement_panel)
 	login_button.pressed.connect(login)
 	register_button.pressed.connect(register_account)
 	password_input.text_submitted.connect(func(_text): login())
@@ -234,21 +166,8 @@ func _ready() -> void:
 	respawn_button.pressed.connect(request_respawn)
 	skill_area_button.pressed.connect(_cast_area_skill)
 	logout_button.pressed.connect(disconnect_session)
-	shop_open_button.pressed.connect(_open_shop_from_input)
-	shop_buy_button.pressed.connect(_buy_selected_shop_item)
-	shop_sell_button.pressed.connect(_sell_selected_shop_item)
-	shop_sell_picker.item_selected.connect(func(_index): _update_shop_sell_quantity())
-	storage_open_button.pressed.connect(_open_storage_from_input)
-	storage_deposit_button.pressed.connect(_deposit_selected_storage_item)
-	storage_withdraw_button.pressed.connect(_withdraw_selected_storage_item)
 	bank_panel.set_actions(Callable(self,"submit_bank_open"),Callable(self,"submit_bank_deposit"),Callable(self,"submit_bank_withdraw"))
 	column.add_child(bank_panel)
-	repair_open_button.pressed.connect(_open_repair_from_input)
-	repair_button.pressed.connect(_repair_selected_item)
-	repair_item_picker.item_selected.connect(func(_index): _update_repair_buttons())
-	enhancement_open_button.pressed.connect(_open_enhancement_from_input)
-	enhancement_button.pressed.connect(_enhance_selected_item)
-	enhancement_item_picker.item_selected.connect(func(_index): _update_enhancement_buttons())
 	column.add_child(trade_panel)
 	column.add_child(player_shop_panel)
 	column.add_child(chat_panel)
@@ -333,23 +252,14 @@ func _begin_connection(register_first:bool)->void:
 	skill_target_mode.button_pressed = false
 	skill_status.text = ""
 	pickup_status.text = ""
-	_shop_display_key = ""
-	_storage_display_key = ""
-	_repair_display_key = ""
-	_enhancement_display_key = ""
 	chat_panel.reset()
 	party_panel.reset()
 	quest_panel.reset()
-	shop_status.text = ""
-	shop_item_picker.clear()
-	shop_sell_picker.clear()
-	storage_status.text = ""
-	storage_deposit_picker.clear()
-	storage_withdraw_picker.clear()
+	npc_shop_panel.reset()
+	storage_panel.reset()
 	bank_panel.reset()
-	repair_status.text = ""
-	repair_wallet_label.text = "角色錢包：—"
-	repair_item_picker.clear()
+	repair_panel.reset()
+	enhancement_panel.reset()
 	trade_panel.reset()
 	player_shop_panel.reset()
 	inventory_panel.reset()
@@ -575,23 +485,14 @@ func disconnect_session() -> void:
 	skill_target_mode.button_pressed = false
 	skill_status.text = ""
 	pickup_status.text = ""
-	_shop_display_key = ""
-	_storage_display_key = ""
-	_repair_display_key = ""
-	_enhancement_display_key = ""
 	chat_panel.reset()
 	party_panel.reset()
 	quest_panel.reset()
-	shop_status.text = ""
-	shop_item_picker.clear()
-	shop_sell_picker.clear()
-	storage_status.text = ""
-	storage_deposit_picker.clear()
-	storage_withdraw_picker.clear()
+	npc_shop_panel.reset()
+	storage_panel.reset()
 	bank_panel.reset()
-	repair_status.text = ""
-	repair_wallet_label.text = "角色錢包：—"
-	repair_item_picker.clear()
+	repair_panel.reset()
+	enhancement_panel.reset()
 	trade_panel.reset()
 	player_shop_panel.reset()
 	inventory_panel.reset()
@@ -675,212 +576,6 @@ func _combat_status_suffix() -> String:
 		return ""
 	return "｜HP %d/%d｜MP %d/%d" % [int(_latest.get("player_current_hp",0)),int(_latest.get("player_max_hp",0)),int(_latest.get("player_current_mp",0)),int(_latest.get("player_max_mp",0))]
 
-
-func _open_shop_from_input() -> void:
-	if submit_shop_open(int(shop_npc_input.value)):
-		shop_status.text = "正在向伺服器確認 NPC 商店…"
-		shop_open_button.disabled = true
-	else:
-		shop_status.text = "目前無法開啟商店"
-
-
-func _buy_selected_shop_item() -> void:
-	if shop_buy_button.disabled or shop_item_picker.selected < 0:
-		return
-	var item_id := int(shop_item_picker.get_item_metadata(shop_item_picker.selected))
-	var quantity := int(shop_quantity.value)
-	if submit_shop_buy(item_id,quantity):
-		shop_status.text = "購買請求已送出，等待伺服器結算…"
-		shop_buy_button.disabled = true
-		shop_sell_button.disabled = true
-	else:
-		shop_status.text = "目前無法購買該商品"
-
-
-func _sell_selected_shop_item() -> void:
-	if shop_sell_button.disabled or shop_sell_picker.selected < 0:
-		return
-	var uid := int(shop_sell_picker.get_item_metadata(shop_sell_picker.selected))
-	var quantity := int(shop_sell_quantity.value)
-	if submit_shop_sell(uid,quantity):
-		shop_status.text = "販售請求已送出，等待伺服器結算…"
-		shop_buy_button.disabled = true
-		shop_sell_button.disabled = true
-	else:
-		shop_status.text = "目前無法販售該物品"
-
-
-func _update_shop_sell_quantity() -> void:
-	var uid := 0
-	if shop_sell_picker.selected >= 0:
-		uid = int(shop_sell_picker.get_item_metadata(shop_sell_picker.selected))
-	var item: Dictionary = (_latest.get("inventory_items",{}) as Dictionary).get(uid,{})
-	# Buying is independent of owned inventory. Only the sell input is
-	# bounded by the selected authoritative UID stack (and wire limit).
-	var owned := maxi(0,int(item.get("quantity",0)))
-	shop_sell_quantity.max_value = maxi(1,mini(1000000,owned))
-	shop_sell_quantity.value = mini(shop_sell_quantity.value,shop_sell_quantity.max_value)
-
-
-func _update_shop_ui() -> void:
-	var in_world := active and int(_latest.get("state",-1)) == State.STATE_IN_WORLD
-	for control in [shop_npc_input,shop_open_button,shop_money_label,shop_item_picker,shop_sell_picker,shop_quantity,shop_sell_quantity,shop_buy_button,shop_sell_button,shop_status]:
-		control.visible = in_world
-	if not in_world:
-		_shop_display_key = ""
-		return
-	var pending := int(_latest.get("pending_shop_sequence",0)) != 0
-	var usable := bool(_latest.get("world_ready",false)) and bool(_latest.get("inventory_ready",false)) and not bool(_latest.get("player_dead",false)) and not bool(_latest.get("reconnecting",false)) and not bool(_latest.get("resync_pending",false))
-	shop_npc_input.editable = usable and not pending
-	shop_open_button.disabled = not usable or pending
-	var active_npc := int(_latest.get("active_shop_npc",0))
-	var shop_items: Dictionary = _latest.get("shop_items",{})
-	shop_money_label.text = ("金錢：%d" % int(_latest.get("shop_money",0))) if active_npc > 0 else "金錢：—"
-	var key := "%d/%d/%d/%d/%d" % [
-		active_npc,int(_latest.get("shop_money",0)),
-		int(_latest.get("inventory_revision",0)),
-		int(_latest.get("shop_sequence",0)),shop_items.size()]
-	if key != _shop_display_key:
-		_shop_display_key = key
-		shop_item_picker.clear()
-		var ids: Array = shop_items.keys()
-		ids.sort()
-		for raw_id in ids:
-			var item_id := int(raw_id)
-			var item: Dictionary = shop_items[raw_id]
-			shop_item_picker.add_item("%s｜買 %d｜賣 %d" % [
-				item_catalog.name_for(item_id),
-				int(item.get("buy_price",0)),int(item.get("sell_price",0))])
-			shop_item_picker.set_item_metadata(shop_item_picker.item_count-1,item_id)
-		shop_sell_picker.clear()
-		var inventory: Dictionary = _latest.get("inventory_items",{})
-		var uids: Array = inventory.keys()
-		uids.sort()
-		for raw_uid in uids:
-			var uid := int(raw_uid)
-			var owned: Dictionary = inventory[raw_uid]
-			var item_id := int(owned.get("item_definition_id",0))
-			if not shop_items.has(item_id) or int((shop_items[item_id] as Dictionary).get("sell_price",0)) <= 0:
-				continue
-			shop_sell_picker.add_item("%s ×%d｜UID %d" % [
-				item_catalog.name_for(item_id),int(owned.get("quantity",0)),uid])
-			shop_sell_picker.set_item_metadata(shop_sell_picker.item_count-1,uid)
-		if shop_item_picker.item_count > 0:
-			shop_item_picker.select(0)
-		if shop_sell_picker.item_count > 0:
-			shop_sell_picker.select(0)
-			_update_shop_sell_quantity()
-	var open_status := int(_latest.get("last_shop_open_status",-1))
-	if open_status > 0 and active_npc == 0:
-		shop_status.text = "商店無法開啟（伺服器代碼 %d）" % open_status
-	var result: Dictionary = _latest.get("last_shop_result",{})
-	if not result.is_empty():
-		if int(result.get("status",-1)) in [0,1]:
-			shop_status.text = "%s完成：%s ×%d｜餘額 %d" % [
-				"購買" if int(result.get("kind",0)) == 1 else "販售",
-				item_catalog.name_for(int(result.get("item_definition_id",0))),
-				int(result.get("quantity",0)),int(result.get("money",0))]
-		else:
-			shop_status.text = "交易失敗（伺服器代碼 %d）" % int(result.get("status",-1))
-	shop_buy_button.disabled = not usable or pending or active_npc <= 0 or shop_item_picker.item_count == 0
-	shop_sell_button.disabled = not usable or pending or active_npc <= 0 or shop_sell_picker.item_count == 0
-	shop_quantity.editable = usable and not pending and active_npc > 0
-	shop_sell_quantity.editable = usable and not pending and active_npc > 0 and shop_sell_picker.item_count > 0
-
-
-func _open_storage_from_input() -> void:
-	if submit_storage_open(int(storage_npc_input.value)):
-		storage_status.text = "正在向伺服器確認 NPC 倉庫…"
-		storage_open_button.disabled = true
-	else:
-		storage_status.text = "目前無法開啟倉庫"
-
-
-func _deposit_selected_storage_item() -> void:
-	if storage_deposit_button.disabled or storage_deposit_picker.selected < 0:
-		return
-	var uid := int(storage_deposit_picker.get_item_metadata(storage_deposit_picker.selected))
-	if submit_storage_deposit(uid):
-		storage_status.text = "整組存入請求已送出，等待伺服器結算…"
-		storage_deposit_button.disabled = true
-		storage_withdraw_button.disabled = true
-	else:
-		storage_status.text = "目前無法存入該物品"
-
-
-func _withdraw_selected_storage_item() -> void:
-	if storage_withdraw_button.disabled or storage_withdraw_picker.selected < 0:
-		return
-	var uid := int(storage_withdraw_picker.get_item_metadata(storage_withdraw_picker.selected))
-	if submit_storage_withdraw(uid):
-		storage_status.text = "整組取出請求已送出，等待伺服器結算…"
-		storage_deposit_button.disabled = true
-		storage_withdraw_button.disabled = true
-	else:
-		storage_status.text = "目前無法取出該物品"
-
-
-func _update_storage_ui() -> void:
-	var in_world := active and int(_latest.get("state",-1)) == State.STATE_IN_WORLD
-	for control in [storage_npc_input,storage_open_button,storage_deposit_picker,storage_withdraw_picker,storage_deposit_button,storage_withdraw_button,storage_status]:
-		control.visible = in_world
-	if not in_world:
-		_storage_display_key = ""
-		return
-	var pending := int(_latest.get("pending_storage_sequence",0)) != 0
-	var usable := bool(_latest.get("world_ready",false)) and bool(_latest.get("inventory_ready",false)) and not bool(_latest.get("player_dead",false)) and not bool(_latest.get("reconnecting",false)) and not bool(_latest.get("resync_pending",false)) and not bool(_latest.get("waiting_for_new_map",false))
-	storage_npc_input.editable = usable and not pending
-	storage_open_button.disabled = not usable or pending
-	var active_npc := int(_latest.get("active_storage_npc",0))
-	var ready := bool(_latest.get("storage_ready",false))
-	var storage: Dictionary = _latest.get("storage_items",{})
-	var inventory: Dictionary = _latest.get("inventory_items",{})
-	var key := "%d/%d/%d/%d/%d/%d" % [
-		active_npc,int(_latest.get("inventory_revision",0)),
-		int(_latest.get("storage_revision",0)),
-		int(_latest.get("storage_sequence",0)),
-		inventory.size(),storage.size()]
-	if key != _storage_display_key:
-		_storage_display_key = key
-		storage_deposit_picker.clear()
-		storage_withdraw_picker.clear()
-		if ready and active_npc > 0:
-			var inventory_uids: Array = inventory.keys()
-			inventory_uids.sort()
-			for raw_uid in inventory_uids:
-				var uid := int(raw_uid)
-				var item: Dictionary = inventory[raw_uid]
-				var item_id := int(item.get("item_definition_id",0))
-				storage_deposit_picker.add_item("%s ×%d｜UID %d" % [
-					item_catalog.name_for(item_id),int(item.get("quantity",0)),uid])
-				storage_deposit_picker.set_item_metadata(storage_deposit_picker.item_count-1,uid)
-			var stored_uids: Array = storage.keys()
-			stored_uids.sort()
-			for raw_uid in stored_uids:
-				var uid := int(raw_uid)
-				var item: Dictionary = storage[raw_uid]
-				var item_id := int(item.get("item_definition_id",0))
-				storage_withdraw_picker.add_item("%s ×%d｜UID %d" % [
-					item_catalog.name_for(item_id),int(item.get("quantity",0)),uid])
-				storage_withdraw_picker.set_item_metadata(storage_withdraw_picker.item_count-1,uid)
-			if storage_deposit_picker.item_count > 0:
-				storage_deposit_picker.select(0)
-			if storage_withdraw_picker.item_count > 0:
-				storage_withdraw_picker.select(0)
-	var open_status := int(_latest.get("last_storage_open_status",-1))
-	if open_status > 0 and not ready:
-		storage_status.text = "倉庫無法開啟（伺服器代碼 %d）" % open_status
-	var result: Dictionary = _latest.get("last_storage_result",{})
-	if not result.is_empty():
-		if int(result.get("status",-1)) in [0,1]:
-			storage_status.text = "%s完成：%s ×%d｜UID %d" % [
-				"存入" if int(result.get("kind",0)) == 1 else "取出",
-				item_catalog.name_for(int(result.get("item_definition_id",0))),
-				int(result.get("quantity",0)),int(result.get("item_uid",0))]
-		else:
-			storage_status.text = "倉庫操作失敗（伺服器代碼 %d）" % int(result.get("status",-1))
-	storage_deposit_button.disabled = not usable or pending or not ready or active_npc <= 0 or storage_deposit_picker.item_count == 0
-	storage_withdraw_button.disabled = not usable or pending or not ready or active_npc <= 0 or storage_withdraw_picker.item_count == 0
 
 
 func _update_nearby_chat_ui() -> void:
@@ -1066,211 +761,6 @@ func _update_player_shop_ui() -> void:
 	player_shop_panel.apply_snapshot(_latest, active, session, item_catalog)
 
 
-func _open_repair_from_input() -> void:
-	if repair_open_button.disabled:
-		return
-	if submit_repair_open(int(repair_npc_input.value)):
-		repair_status.text = "修理清單請求已送出，等待伺服器核准耐久與費用…"
-		repair_open_button.disabled = true
-	else:
-		repair_status.text = "目前無法開啟該修理 NPC"
-
-
-func _repair_selected_item() -> void:
-	if repair_button.disabled or repair_item_picker.selected < 0:
-		return
-	var uid := int(repair_item_picker.get_item_metadata(repair_item_picker.selected))
-	if submit_repair_item(uid):
-		repair_status.text = "修理請求已送出，等待伺服器扣款與耐久結算…"
-		repair_button.disabled = true
-	else:
-		repair_status.text = "目前無法修理該物品"
-
-
-func _repair_location_text(location: int) -> String:
-	return "背包" if location == 1 else "裝備" if location == 2 else "未知"
-
-
-func _update_repair_buttons() -> void:
-	var pending := int(_latest.get("pending_repair_sequence",0)) != 0
-	var usable := active and int(_latest.get("state",-1)) == State.STATE_IN_WORLD and bool(_latest.get("world_ready",false)) and bool(_latest.get("inventory_ready",false)) and not bool(_latest.get("player_dead",false)) and not bool(_latest.get("reconnecting",false)) and not bool(_latest.get("resync_pending",false)) and not bool(_latest.get("waiting_for_new_map",false))
-	repair_open_button.disabled = not usable or pending
-	var can_repair := false
-	if usable and not pending and bool(_latest.get("repair_ready",false)) and int(_latest.get("active_repair_npc",0)) > 0 and repair_item_picker.selected >= 0:
-		var uid := int(repair_item_picker.get_item_metadata(repair_item_picker.selected))
-		var items: Dictionary = _latest.get("repair_items",{})
-		if items.has(uid):
-			var item: Dictionary = items[uid]
-			var cost := int(item.get("cost",0))
-			can_repair = cost > 0 and cost <= int(_latest.get("repair_wallet_money",0)) and int(item.get("current_durability",0)) < int(item.get("max_durability",0))
-	repair_button.disabled = not can_repair
-
-
-func _update_repair_ui() -> void:
-	var in_world := active and int(_latest.get("state",-1)) == State.STATE_IN_WORLD
-	for control in [repair_npc_input,repair_open_button,repair_wallet_label,repair_item_picker,repair_button,repair_status]:
-		control.visible = in_world
-	if not in_world:
-		_repair_display_key = ""
-		return
-	var active_npc := int(_latest.get("active_repair_npc",0))
-	var ready := bool(_latest.get("repair_ready",false))
-	var items: Dictionary = _latest.get("repair_items",{})
-	var wallet := int(_latest.get("repair_wallet_money",0))
-	repair_wallet_label.text = "角色錢包：%d" % wallet if active_npc > 0 else "角色錢包：—"
-	var key := "%d/%d/%d/%d/%d" % [
-		active_npc,int(_latest.get("repair_revision",0)),
-		int(_latest.get("repair_sequence",0)),wallet,items.size()]
-	if key != _repair_display_key:
-		_repair_display_key = key
-		repair_item_picker.clear()
-		if ready and active_npc > 0:
-			var uids: Array = items.keys()
-			uids.sort()
-			for raw_uid in uids:
-				var uid := int(raw_uid)
-				var item: Dictionary = items[raw_uid]
-				var item_id := int(item.get("item_definition_id",0))
-				repair_item_picker.add_item("%s｜%s｜耐久 %d/%d｜費用 %d｜UID %d" % [
-					item_catalog.name_for(item_id),
-					_repair_location_text(int(item.get("location",0))),
-					int(item.get("current_durability",0)),
-					int(item.get("max_durability",0)),
-					int(item.get("cost",0)),uid])
-				repair_item_picker.set_item_metadata(repair_item_picker.item_count-1,uid)
-			if repair_item_picker.item_count > 0:
-				repair_item_picker.select(0)
-	var open_status := int(_latest.get("last_repair_open_status",-1))
-	if open_status > 0 and not ready:
-		repair_status.text = "修理 NPC 無法開啟（伺服器代碼 %d）" % open_status
-	var result: Dictionary = _latest.get("last_repair_result",{})
-	if not result.is_empty():
-		var result_status := int(result.get("status",-1))
-		if result_status in [0,1]:
-			repair_status.text = "修理完成：%s｜耐久 %d/%d｜費用 %d｜錢包 %d" % [
-				item_catalog.name_for(int(result.get("item_definition_id",0))),
-				int(result.get("current_durability",0)),
-				int(result.get("max_durability",0)),
-				int(result.get("cost",0)),int(result.get("wallet_money",0))]
-		elif result_status == 6:
-			repair_status.text = "物品耐久已滿，不需修理"
-		elif result_status == 7:
-			repair_status.text = "金錢不足：需要 %d，錢包 %d" % [
-				int(result.get("cost",0)),int(result.get("wallet_money",0))]
-		else:
-			repair_status.text = "修理失敗（伺服器代碼 %d）" % result_status
-	_update_repair_buttons()
-
-
-func _open_enhancement_from_input() -> void:
-	if enhancement_open_button.disabled:
-		return
-	if submit_enhancement_open(int(enhancement_npc_input.value)):
-		enhancement_status.text = "強化清單請求已送出，等待伺服器核准等級、成功率與費用…"
-		enhancement_open_button.disabled = true
-	else:
-		enhancement_status.text = "目前無法開啟該強化 NPC"
-
-
-func _enhance_selected_item() -> void:
-	if enhancement_button.disabled or enhancement_item_picker.selected < 0:
-		return
-	var uid := int(enhancement_item_picker.get_item_metadata(
-		enhancement_item_picker.selected))
-	if submit_enhancement_item(uid):
-		enhancement_status.text = "強化請求已送出，等待伺服器擲骰、扣款與等級結算…"
-		enhancement_button.disabled = true
-	else:
-		enhancement_status.text = "目前無法強化該物品"
-
-
-func _enhancement_location_text(location: int) -> String:
-	return "背包" if location == 1 else "裝備" if location == 2 else "未知"
-
-
-func _update_enhancement_buttons() -> void:
-	var pending := int(_latest.get("pending_enhancement_sequence",0)) != 0
-	var usable := active and int(_latest.get("state",-1)) == State.STATE_IN_WORLD and bool(_latest.get("world_ready",false)) and bool(_latest.get("inventory_ready",false)) and not bool(_latest.get("player_dead",false)) and not bool(_latest.get("reconnecting",false)) and not bool(_latest.get("resync_pending",false)) and not bool(_latest.get("waiting_for_new_map",false))
-	enhancement_open_button.disabled = not usable or pending or int(_latest.get("pending_repair_sequence",0)) != 0
-	var can_enhance := false
-	if usable and not pending and bool(_latest.get("enhancement_ready",false)) and int(_latest.get("active_enhancement_npc",0)) > 0 and enhancement_item_picker.selected >= 0:
-		var uid := int(enhancement_item_picker.get_item_metadata(
-			enhancement_item_picker.selected))
-		var items: Dictionary = _latest.get("enhancement_items",{})
-		if items.has(uid):
-			var item: Dictionary = items[uid]
-			var cost := int(item.get("money_cost",0))
-			can_enhance = cost <= int(_latest.get("enhancement_wallet_money",0))
-	enhancement_button.disabled = not can_enhance
-
-
-func _update_enhancement_ui() -> void:
-	var in_world := active and int(_latest.get("state",-1)) == State.STATE_IN_WORLD
-	for control in [enhancement_npc_input,enhancement_open_button,enhancement_wallet_label,enhancement_item_picker,enhancement_button,enhancement_status]:
-		control.visible = in_world
-	if not in_world:
-		_enhancement_display_key = ""
-		return
-	var active_npc := int(_latest.get("active_enhancement_npc",0))
-	var ready := bool(_latest.get("enhancement_ready",false))
-	var items: Dictionary = _latest.get("enhancement_items",{})
-	var wallet := int(_latest.get("enhancement_wallet_money",0))
-	enhancement_wallet_label.text = "角色錢包：%d" % wallet if active_npc > 0 else "角色錢包：—"
-	var key := "%d/%d/%d/%d/%d" % [
-		active_npc,int(_latest.get("enhancement_revision",0)),
-		int(_latest.get("enhancement_sequence",0)),wallet,items.size()]
-	if key != _enhancement_display_key:
-		_enhancement_display_key = key
-		enhancement_item_picker.clear()
-		if ready and active_npc > 0:
-			var uids: Array = items.keys()
-			uids.sort()
-			for raw_uid in uids:
-				var uid := int(raw_uid)
-				var item: Dictionary = items[raw_uid]
-				var item_id := int(item.get("item_definition_id",0))
-				var chance := float(int(item.get("success_ppm",0))) / 10000.0
-				var failure_fee := "失敗扣款" if bool(
-					item.get("consume_money_on_failure",false)) else "失敗不扣"
-				enhancement_item_picker.add_item(
-					"%s｜%s｜+%d → +%d｜成功 %.2f%%｜費用 %d｜%s｜UID %d" % [
-						item_catalog.name_for(item_id),
-						_enhancement_location_text(int(item.get("location",0))),
-						int(item.get("current_level",0)),
-						int(item.get("target_level",0)),chance,
-						int(item.get("money_cost",0)),failure_fee,uid])
-				enhancement_item_picker.set_item_metadata(
-					enhancement_item_picker.item_count-1,uid)
-			if enhancement_item_picker.item_count > 0:
-				enhancement_item_picker.select(0)
-	var open_status := int(_latest.get("last_enhancement_open_status",-1))
-	if open_status > 0 and not ready:
-		enhancement_status.text = "強化 NPC 無法開啟（伺服器代碼 %d）" % open_status
-	var result: Dictionary = _latest.get("last_enhancement_result",{})
-	if not result.is_empty():
-		var status := int(result.get("status",-1))
-		if status in [0,1]:
-			var outcome := "成功" if bool(result.get("succeeded",false)) else "失敗，等級不變"
-			enhancement_status.text = "強化%s：%s｜+%d → +%d（目前 +%d）｜費用 %d／實扣 %d｜錢包 %d" % [
-				outcome,item_catalog.name_for(
-					int(result.get("item_definition_id",0))),
-				int(result.get("previous_level",0)),
-				int(result.get("target_level",0)),
-				int(result.get("current_level",0)),
-				int(result.get("money_cost",0)),
-				int(result.get("money_charged",0)),
-				int(result.get("wallet_money",0))]
-		elif status == 6:
-			enhancement_status.text = "此物品已達目前伺服器規則的最高強化等級"
-		elif status == 7:
-			enhancement_status.text = "金錢不足：需要 %d，錢包 %d" % [
-				int(result.get("money_cost",0)),
-				int(result.get("wallet_money",0))]
-		elif status == 5:
-			enhancement_status.text = "伺服器目前沒有此物品／等級的已驗證強化規則"
-		else:
-			enhancement_status.text = "強化失敗（伺服器代碼 %d）" % status
-	_update_enhancement_buttons()
 
 
 func _process(delta: float) -> void:
@@ -1284,11 +774,11 @@ func _process(delta: float) -> void:
 	_set_respawn_controls()
 	_set_skill_controls()
 	_refresh_inventory_panel()
-	_update_shop_ui()
-	_update_storage_ui()
+	npc_shop_panel.apply_snapshot(_latest, active)
+	storage_panel.apply_snapshot(_latest, active)
 	bank_panel.apply_snapshot(_latest, active)
-	_update_repair_ui()
-	_update_enhancement_ui()
+	repair_panel.apply_snapshot(_latest, active)
+	enhancement_panel.apply_snapshot(_latest, active)
 	_refresh_trade_panel()
 	_update_player_shop_ui()
 	_update_nearby_chat_ui()
