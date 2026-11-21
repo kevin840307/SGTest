@@ -314,13 +314,16 @@ public sealed class PartyCoordinator
             return;
         }
 
+        // A successful Accept must be deliverable before membership changes.
+        // If the recipient's reliable FIFO is full, retain the invitation so
+        // it can be retried without creating an unacknowledged party member.
+        QueueResultLocked(request,PartyResultStatus.Success,
+            party.PartyId,request.TargetActorId,router);
         _invitesByTarget.Remove(request.ActorId);
         party.Members.Add(request.ActorId);
         party.Connections.Add(request.ActorId,request.ConnectionEpoch);
         _partyByActor.Add(request.ActorId,party.PartyId);
         party.Revision=checked(party.Revision+1);
-        QueueResultLocked(request,PartyResultStatus.Success,
-            party.PartyId,request.TargetActorId,router);
         BroadcastSnapshotLocked(party,router);
     }
 
@@ -408,11 +411,13 @@ public sealed class PartyCoordinator
                 party.PartyId,request.TargetActorId,router);
             return;
         }
+        // A failed reliable receipt must not silently transfer leadership
+        // or invalidate outstanding invitations.
+        QueueResultLocked(request,PartyResultStatus.Success,
+            party.PartyId,request.TargetActorId,router);
         party.LeaderActorId=request.TargetActorId;
         party.Revision=checked(party.Revision+1);
         InvalidateInvitesForPartyLocked(party.PartyId);
-        QueueResultLocked(request,PartyResultStatus.Success,
-            party.PartyId,request.TargetActorId,router);
         BroadcastSnapshotLocked(party,router);
     }
 

@@ -15,6 +15,10 @@ internal static class PartyChecks
         Checks.Run("party pending invite expires on monotonic clock",InviteTimeout);
         Checks.Run("party failed reliable invite/result enqueue rolls back state",
             InviteEnqueueFailure);
+        Checks.Run("party accept backpressure preserves invitation and membership",
+            AcceptResultEnqueueFailure);
+        Checks.Run("party promote backpressure preserves leader and pending invite",
+            PromoteResultEnqueueFailure);
     }
 
     private static void Wire()
@@ -414,6 +418,120 @@ internal static class PartyChecks
             "recipient joined after sender receipt failed");
         secondRouter.TryDetach(sender);
         secondRouter.TryDetach(target);
+    }
+
+    private static void AcceptResultEnqueueFailure()
+    {
+        var router=new WorldResultRouter();
+        var leader=Gateway(Actor(801,11,1),"AcceptLeader");
+        var target=Gateway(Actor(802,12,1),"AcceptTarget",2);
+        Checks.Require(router.TryAttach(leader)&&router.TryAttach(target),
+            "accept-backpressure fixture attach failed");
+        var party=new PartyCoordinator();
+        party.HandleAsync(new TrustedPartyCommand(
+            801,11,1,1,PartyCommandAction.Invite,0,802),router)
+            .GetAwaiter().GetResult();
+        long partyId=DrainResult(leader).PartyId;
+        _=DrainSnapshot(leader);
+        Checks.Require(DrainInvite(target).PartyId==partyId,
+            "accept-backpressure initial invitation missing");
+
+        FillReliable(target,"AcceptTarget");
+        FillReliable(target,"AcceptTarget");
+        bool blocked=false;
+        try
+        {
+            party.HandleAsync(new TrustedPartyCommand(
+                802,12,1,1,PartyCommandAction.Accept,partyId,801),router)
+                .GetAwaiter().GetResult();
+        }
+        catch(IOException){blocked=true;}
+        Checks.Require(blocked&&party.PartyCount==1&&
+            party.TryGetRecipients(leader.Binding,router,out var leaderOnly)&&
+            leaderOnly.Length==1&&leaderOnly[0].ActorId==801&&
+            !party.TryGetRecipients(target.Binding,router,out _),
+            "failed accept receipt changed authoritative membership");
+
+        _=DrainSnapshot(target);
+        _=DrainSnapshot(target);
+        party.HandleAsync(new TrustedPartyCommand(
+            802,12,1,2,PartyCommandAction.Accept,partyId,801),router)
+            .GetAwaiter().GetResult();
+        Checks.Require(DrainResult(target).Status==PartyResultStatus.Success&&
+            DrainSnapshot(target).Members.Count==2&&
+            DrainSnapshot(leader).Members.Count==2&&
+            party.TryGetRecipients(target.Binding,router,out var joined)&&
+            joined.Length==2,
+            "accept retry could not consume preserved invitation");
+        router.TryDetach(leader);
+        router.TryDetach(target);
+    }
+
+    private static void PromoteResultEnqueueFailure()
+    {
+        var router=new WorldResultRouter();
+        var leader=Gateway(Actor(811,21,1),"PromoteLeader",2);
+        var member=Gateway(Actor(812,22,1),"PromoteMember");
+        var pending=Gateway(Actor(813,23,1),"PromotePending");
+        Checks.Require(router.TryAttach(leader)&&router.TryAttach(member)&&
+            router.TryAttach(pending),
+            "promote-backpressure fixture attach failed");
+        var party=new PartyCoordinator();
+        party.HandleAsync(new TrustedPartyCommand(
+            811,21,1,1,PartyCommandAction.Invite,0,812),router)
+            .GetAwaiter().GetResult();
+        long partyId=DrainResult(leader).PartyId;
+        _=DrainSnapshot(leader);
+        _=DrainInvite(member);
+        party.HandleAsync(new TrustedPartyCommand(
+            812,22,1,1,PartyCommandAction.Accept,partyId,811),router)
+            .GetAwaiter().GetResult();
+        _=DrainResult(member);
+        _=DrainSnapshot(member);
+        _=DrainSnapshot(leader);
+
+        party.HandleAsync(new TrustedPartyCommand(
+            811,21,1,2,PartyCommandAction.Invite,partyId,813),router)
+            .GetAwaiter().GetResult();
+        Checks.Require(DrainResult(leader).Status==PartyResultStatus.Success&&
+            DrainInvite(pending).PartyId==partyId,
+            "promote-backpressure pending invitation missing");
+        FillReliable(leader,"PromoteLeader");
+        FillReliable(leader,"PromoteLeader");
+        bool blocked=false;
+        try
+        {
+            party.HandleAsync(new TrustedPartyCommand(
+                811,21,1,3,PartyCommandAction.Promote,partyId,812),router)
+                .GetAwaiter().GetResult();
+        }
+        catch(IOException){blocked=true;}
+        Checks.Require(blocked,"full leader queue did not reject promote receipt");
+        _=DrainSnapshot(leader);
+        _=DrainSnapshot(leader);
+
+        // A failed promotion must leave the original leader able to accept
+        // the pending member. In particular, it must not invalidate the invite.
+        party.HandleAsync(new TrustedPartyCommand(
+            813,23,1,1,PartyCommandAction.Accept,partyId,811),router)
+            .GetAwaiter().GetResult();
+        Checks.Require(DrainResult(pending).Status==PartyResultStatus.Success&&
+            DrainSnapshot(pending).Members.Count==3&&
+            DrainSnapshot(leader).LeaderActorId==811&&
+            DrainSnapshot(member).LeaderActorId==811,
+            "failed promotion changed leader or invalidated pending invite");
+
+        party.HandleAsync(new TrustedPartyCommand(
+            811,21,1,4,PartyCommandAction.Promote,partyId,812),router)
+            .GetAwaiter().GetResult();
+        Checks.Require(DrainResult(leader).Status==PartyResultStatus.Success&&
+            DrainSnapshot(leader).LeaderActorId==812&&
+            DrainSnapshot(member).LeaderActorId==812&&
+            DrainSnapshot(pending).LeaderActorId==812,
+            "promotion retry failed after queue pressure was relieved");
+        router.TryDetach(leader);
+        router.TryDetach(member);
+        router.TryDetach(pending);
     }
 
     private static void FillReliable(GatewayConnection gateway,string name)
