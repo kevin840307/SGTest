@@ -20,6 +20,8 @@
 
 `tools/tests/test_scoped_export.py` 使用公開合成資料驗證不同種族實際讀取不同 ACT 時間、R 獨立排序、八方向鏡射、各種族非循環死亡動作、缺 Controller 不偽造 verified、Y 不借用 B。完整 Python tests：123 PASS。
 
+實作提交 `3e6f175`，[Converter CI 44923254495](https://github.com/kevin840307/SGTest/actions/runs/44923254495) SUCCESS。本機完整 Archive 稽核後的 22 素材定向發布仍在執行，發布驗收為 **NOT VERIFIED**；不以已通過的單獨 source metadata 編譯代替整體發布。
+
 本機原始來源另實際編譯 22 個素材（B／G／A 各六個基本部件與 B／G／A／R 四個 death），4,290 source frames、1,904 logical views 全部通過 metadata 驗證；私人證據為 `reports/character_animation_source_audit.json`。此結果**不是多種族 GPU／創角 Server／持久化測試**。
 
 前置 UI 切片 `b1d8704` 已有共用 AssetStore 的選角／創角站立預覽，仍使用與世界相同的暫定 B profile；[Client CI 44922373464](https://github.com/kevin840307/SGTest/actions/runs/44922373464) SUCCESS。
