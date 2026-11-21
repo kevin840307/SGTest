@@ -6,6 +6,9 @@ const MouseAutorunState = preload("res://movement/mouse_autorun_state.gd")
 const SessionLayout = preload("res://ui/session_layout.gd")
 const UiSkinCatalog = preload("res://ui/ui_skin_catalog.gd")
 const BackdropShader = preload("res://ui/skin_backdrop.gdshader")
+const TerminalWorldHud = preload("res://ui/terminal_world_hud.gd")
+const UiTextureLoader = preload("res://ui/ui_texture_loader.gd")
+const SharedGameCursor = preload("res://ui/shared_game_cursor.gd")
 var auto_start := true
 var world_view := WorldView.new()
 var _held := {}
@@ -14,9 +17,15 @@ var _closing := false
 var _status := Label.new()
 var toolbar := PanelContainer.new()
 var _screen_backdrop := ColorRect.new()
+var _photo_backdrop := TextureRect.new()
+var _lobby_skin_pickers: Array[OptionButton] = []
 var _backdrop_material := ShaderMaterial.new()
 var _ui_stage_key := ""
-var _current_skin := "celestial"
+var _current_skin := "retro_terminal"
+var _help_label := Label.new()
+var cursor_manager := SharedGameCursor.new()
+var _cursor_sample_elapsed := 0.0
+var terminal_hud := TerminalWorldHud.new()
 var session_panel := SessionPanel.new()
 var skin_picker := OptionButton.new()
 var _map_buttons: Array[Button] = []
@@ -39,6 +48,11 @@ func _ready() -> void:
 	_screen_backdrop.color = UiSkinCatalog.backdrop_color(_current_skin)
 	_screen_backdrop.visible = false
 	layer.add_child(_screen_backdrop)
+	_photo_backdrop.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_photo_backdrop.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_photo_backdrop.stretch_mode = TextureRect.STRETCH_SCALE
+	_photo_backdrop.visible = false
+	layer.add_child(_photo_backdrop)
 	layer.add_child(toolbar)
 	var style := StyleBoxFlat.new()
 	style.bg_color = Color("211c15")
@@ -61,11 +75,14 @@ func _ready() -> void:
 		row.add_child(button)
 		_map_buttons.append(button)
 	row.add_child(_status)
-	var help := Label.new()
-	help.text = "方向鍵／中鍵拖曳　Home 置中　長按地面 1 秒鎖定走路"
-	row.add_child(help)
+	_help_label.text = "方向鍵／中鍵拖曳　Home 置中　長按地面 1 秒鎖定走路"
+	row.add_child(_help_label)
 	world_view.status_changed.connect(_world_status)
 	layer.add_child(session_panel)
+	layer.add_child(terminal_hud)
+	add_child(cursor_manager)
+	terminal_hud.visible = false
+	terminal_hud.section_requested.connect(_open_terminal_section)
 	session_panel.visible = auto_start
 	session_panel.position = Vector2(16,64)
 	session_panel.connection_changed.connect(_connection_changed)
@@ -118,7 +135,23 @@ func _install_skin_selector(row: HBoxContainer) -> void:
 	skin_picker.focus_mode = Control.FOCUS_NONE
 	row.add_child(skin_picker)
 	skin_picker.item_selected.connect(_skin_selected)
+	# Character screens hide the gameplay toolbar. Offer the same style
+	# switcher there without rebuilding any authenticated controls.
+	for page in [session_panel._layout.login_page,session_panel._layout.select_page,session_panel._layout.create_page]:
+		var prompt := Label.new()
+		prompt.text = "INTERFACE  //  介面風格"
+		page.add_child(prompt)
+		var picker := OptionButton.new()
+		picker.name = "LobbySkinPicker"
+		for i in skin_picker.item_count:
+			picker.add_item(skin_picker.get_item_text(i))
+			picker.set_item_metadata(i,skin_picker.get_item_metadata(i))
+		picker.select(skin_picker.selected)
+		picker.item_selected.connect(_skin_selected)
+		page.add_child(picker)
+		_lobby_skin_pickers.append(picker)
 	UiSkinCatalog.apply(selected,toolbar,session_panel)
+	terminal_hud.set_ui_theme(UiSkinCatalog.build_theme(selected))
 
 
 func _skin_selected(index: int) -> void:
@@ -126,12 +159,18 @@ func _skin_selected(index: int) -> void:
 	if UiSkinCatalog.apply(skin,toolbar,session_panel):
 		UiSkinCatalog.save_selected(skin)
 		_current_skin = skin
+		terminal_hud.set_ui_theme(UiSkinCatalog.build_theme(skin))
+		skin_picker.select(index)
+		for picker in _lobby_skin_pickers:
+			picker.select(index)
 		_update_ui_stage(true)
 
 
 func _resize() -> void:
 	world_view.resize_view(Vector2i(get_viewport().get_visible_rect().size))
 	_screen_backdrop.size = Vector2(get_viewport().get_visible_rect().size)
+	_photo_backdrop.size = _screen_backdrop.size
+	terminal_hud.resize_view(Vector2i(_screen_backdrop.size))
 	_update_ui_stage(true)
 
 
@@ -140,22 +179,32 @@ func _update_ui_stage(force: bool = false) -> void:
 		return
 	var pre_world := session_panel.visible and session_panel._layout.current_page != SessionLayout.Page.WORLD
 	var viewport_size := Vector2(get_viewport().get_visible_rect().size)
-	var key := "%s:%s:%d:%d:%d" % [str(pre_world),_current_skin,int(viewport_size.x),int(viewport_size.y),int(session_panel.visible)]
+	var key := "%s:%s:%d:%d:%d:%d" % [str(pre_world),_current_skin,int(viewport_size.x),int(viewport_size.y),int(session_panel.visible),int(session_panel._layout.current_page)]
 	if not force and key == _ui_stage_key:
 		return
 	_ui_stage_key = key
 	_screen_backdrop.color = UiSkinCatalog.backdrop_color(_current_skin)
 	_backdrop_material.set_shader_parameter("base_color",_screen_backdrop.color)
 	_backdrop_material.set_shader_parameter("motif",UiSkinCatalog.backdrop_motif(_current_skin))
-	_screen_backdrop.visible = pre_world
+	var backdrop_path := UiSkinCatalog.backdrop_path(_current_skin)
+	var picture := UiTextureLoader.get_texture(backdrop_path)
+	_photo_backdrop.texture = picture if picture is Texture2D else null
+	_photo_backdrop.visible = pre_world and _photo_backdrop.texture != null
+	_screen_backdrop.visible = pre_world and not _photo_backdrop.visible
 	toolbar.visible = not pre_world
+	var retro_world := _current_skin == "retro_terminal" and not pre_world
+	terminal_hud.visible = retro_world and session_panel.active
+	for button in _map_buttons:
+		button.visible = not retro_world
+	_help_label.visible = not retro_world
 	var panel_width := minf(560.0,maxf(360.0,viewport_size.x-32.0)) if pre_world else minf(420.0,maxf(300.0,viewport_size.x-32.0))
 	session_panel.custom_minimum_size.x = panel_width
 	if pre_world:
 		# Authentication screens size to visible content rather than leaving
 		# an unused full-height sidebar on the title/character screen.
 		var screen_page := session_panel._layout.current_page
-		var minimum_height := 390.0 if screen_page == SessionLayout.Page.LOGIN else (350.0 if screen_page == SessionLayout.Page.CHARACTER_CREATE else 320.0)
+		var retro := _current_skin == "retro_terminal"
+		var minimum_height := (505.0 if screen_page == SessionLayout.Page.LOGIN else (590.0 if screen_page == SessionLayout.Page.CHARACTER_CREATE else 545.0)) if retro else (390.0 if screen_page == SessionLayout.Page.LOGIN else (350.0 if screen_page == SessionLayout.Page.CHARACTER_CREATE else 320.0))
 		# Hidden world tabs must not inflate an authentication screen. A small
 		# viewport can still scroll via SessionOptionsScroll when necessary.
 		var desired_height := minimum_height
@@ -166,6 +215,15 @@ func _update_ui_stage(force: bool = false) -> void:
 		var dock_right := UiSkinCatalog.dock(_current_skin) == "right"
 		session_panel.size = Vector2(panel_width,maxf(220.0,viewport_size.y-96.0))
 		session_panel.position = Vector2(maxf(16.0,viewport_size.x-panel_width-16.0) if dock_right else 16.0,64.0)
+
+
+func _open_terminal_section(index: int) -> void:
+	if not session_panel.active:
+		return
+	session_panel.visible = true
+	if session_panel._layout.layout_id == "tabs":
+		session_panel._layout.world_tabs.current_tab = clampi(index,0,3)
+	_update_ui_stage(true)
 
 
 func _unhandled_key_input(event: InputEvent) -> void:
@@ -292,10 +350,40 @@ func _process(delta: float) -> void:
 			get_tree().quit()
 		return
 	_update_ui_stage()
+	_cursor_sample_elapsed += delta
+	if _cursor_sample_elapsed >= 0.06 or _mouse_autorun.latched:
+		_cursor_sample_elapsed = 0.0
+		_update_cursor_mode()
 	if world_view.phase == "ready" and not session_panel.active:
 		var direction := Vector2(int(_held.has(KEY_RIGHT))-int(_held.has(KEY_LEFT)),int(_held.has(KEY_DOWN))-int(_held.has(KEY_UP)))
 		if direction != Vector2.ZERO:
 			world_view.camera.pan(world_view.epoch,direction.normalized()*600.0*delta)
+
+
+func _update_cursor_mode() -> void:
+	if not session_panel.active or session_panel._layout.current_page != SessionLayout.Page.WORLD or world_view.phase != "ready":
+		cursor_manager.set_mode("normal")
+		return
+	if _mouse_autorun.latched:
+		cursor_manager.set_mode("move")
+		return
+	var hovered := get_viewport().gui_get_hovered_control()
+	if hovered != null and (
+		hovered == session_panel or session_panel.is_ancestor_of(hovered) or
+		hovered == terminal_hud or terminal_hud.is_ancestor_of(hovered) or
+		hovered == toolbar or toolbar.is_ancestor_of(hovered)
+	):
+		cursor_manager.set_mode("normal")
+		return
+	var cursor_world := world_view.camera.screen_to_world(get_viewport().get_mouse_position())
+	if world_view.pick_ground_drop_at(cursor_world) > 0:
+		cursor_manager.set_mode("pickup")
+	elif world_view.pick_monster_at(cursor_world) > 0:
+		cursor_manager.set_mode("attack")
+	elif world_view.pick_npc_at(cursor_world) > 0:
+		cursor_manager.set_mode("inspect")
+	else:
+		cursor_manager.set_mode("normal")
 
 
 func _notification(what: int) -> void:
@@ -317,6 +405,7 @@ func _connection_changed(active: bool) -> void:
 		button.disabled = active
 	_held.clear()
 	_dragging = false
+	terminal_hud.clear()
 	world_view.clear_map()
 	world_view.show_players = active
 	if active:
@@ -355,6 +444,7 @@ func _server_snapshot(snapshot: Dictionary) -> void:
 		if npc_result != 0:
 			_status.text = "NPC 互動被伺服器拒絕（代碼 %d）" % npc_result
 	_last_snapshot = snapshot.duplicate(true)
+	terminal_hud.apply_snapshot(snapshot)
 	world_view.set_player_snapshot(snapshot)
 
 

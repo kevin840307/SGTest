@@ -26,14 +26,14 @@ func _run() -> void:
 	app._update_ui_stage(true)
 	# Headless Godot may force a 64px viewport: check the layout policy,
 	# rather than assuming a desktop-sized window in automated CI.
-	if not app._screen_backdrop.visible or app.toolbar.visible or panel.position.y < 24 or panel.custom_minimum_size.x < 360:
+	if not (app._screen_backdrop.visible or app._photo_backdrop.visible) or app.toolbar.visible or panel.position.y < 24 or panel.custom_minimum_size.x < 360:
 		_fail(app,"login/select/create screens must be full-viewport centered")
 		return
 	var layout = panel._layout
 	var session = panel.session
 	var controls = [panel.inventory_panel, panel.chat_panel, panel.npc_shop_panel,
 		panel.trade_panel, panel.quest_panel, panel.skill_area_button]
-	if app.skin_picker.item_count != 3 or layout.group_count() != 4:
+	if app.skin_picker.item_count != 4 or layout.group_count() != 4:
 		_fail(app,"skin picker or gameplay group registry missing")
 		return
 	var palette_colors := []
@@ -41,8 +41,16 @@ func _run() -> void:
 		if not Skins.apply(str(skin.id),app.toolbar,panel):
 			_fail(app,"failed to apply skin " + str(skin.id))
 			return
-		var surface: StyleBoxFlat = panel.get_theme_stylebox("panel")
-		palette_colors.append(surface.bg_color)
+		palette_colors.append(Skins.backdrop_color(str(skin.id)))
+		if str(skin.id) == "retro_terminal":
+			if not panel.get_theme_stylebox("panel") is StyleBoxTexture:
+				_fail(app,"Retro Terminal must have actual image-backed panel art")
+				return
+			var art: StyleBoxTexture = panel.get_theme_stylebox("panel")
+			var image := art.texture.get_image()
+			if image.get_pixel(55,20).is_equal_approx(image.get_pixel(55,80)):
+				_fail(app,"Retro Terminal window art lost its top-to-bottom metallic gradient")
+				return
 		if layout.layout_id != str(skin.layout) or panel.session != session:
 			_fail(app,"layout did not change atomically or session was replaced")
 			return
@@ -83,7 +91,7 @@ func _run() -> void:
 		_fail(app,"world HUD/tools not isolated")
 		return
 	app._update_ui_stage(true)
-	if app._screen_backdrop.visible or not app.toolbar.visible or panel.position.x != 16.0:
+	if app._screen_backdrop.visible or app._photo_backdrop.visible or not app.toolbar.visible or panel.position.x != maxf(16.0,root.size.x-panel.custom_minimum_size.x-16.0):
 		_fail(app,"world must restore map viewport and docked game UI")
 		return
 	panel.gameplay_hud.apply_snapshot({"world_ready":true,"actor_id":3,"map_id":15,"map_epoch":2,
@@ -109,5 +117,5 @@ func _run() -> void:
 		return
 	app.queue_free()
 	await process_frame
-	print("UI_SKIN_LAYOUT_PASS four_screens=true three_palettes=true two_layouts=true no_session_rebuild=true gameplay_panels_preserved=true")
+	print("UI_SKIN_LAYOUT_PASS four_screens=true four_palettes=true retro_art=true two_layouts=true no_session_rebuild=true gameplay_panels_preserved=true")
 	quit(0)

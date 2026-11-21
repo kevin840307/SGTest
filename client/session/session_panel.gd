@@ -7,6 +7,7 @@ signal world_snapshot(snapshot: Dictionary)
 const Session = preload("res://session/client_session.gd")
 const SessionLayout = preload("res://ui/session_layout.gd")
 const GameplayHud = preload("res://ui/gameplay_hud.gd")
+const SessionArtwork = preload("res://ui/session_artwork.gd")
 const State = preload("res://world/world_state.gd")
 const TradePanel = preload("res://trade/trade_panel.gd")
 const InventoryPanel = preload("res://inventory/inventory_panel.gd")
@@ -23,6 +24,7 @@ const EnhancementPanel = preload("res://npc/enhancement_panel.gd")
 const PvpPanel = preload("res://pvp/pvp_panel.gd")
 var session = Session.new()
 var _layout := SessionLayout.new()
+var _artwork := SessionArtwork.new()
 var _scroll := ScrollContainer.new()
 var gameplay_hud := GameplayHud.new()
 var new_character_button := Button.new()
@@ -204,6 +206,7 @@ func _ready() -> void:
 	_layout.add_group("戰鬥／技能",[respawn_button,skill_hint,skill_id_input,skill_target_mode,skill_area_button,skill_status,pvp_panel])
 	_layout.add_group("NPC 服務",[npc_shop_panel,storage_panel,bank_panel,repair_panel,enhancement_panel,quest_panel])
 	_layout.add_group("社交／交易",[chat_panel,party_panel,trade_panel,player_shop_panel])
+	_artwork.setup(_layout)
 	var style := StyleBoxFlat.new()
 	style.bg_color = Color("211c15")
 	style.border_color = Color("c8a452")
@@ -561,6 +564,9 @@ func _set_controls() -> void:
 
 func set_ui_layout(id: String) -> bool:
 	return _layout.set_layout(id)
+
+func apply_skin_art(profile: Dictionary) -> void:
+	_artwork.apply(profile)
 
 
 func _set_respawn_controls() -> void:

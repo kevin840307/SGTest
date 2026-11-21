@@ -3,9 +3,10 @@ extends RefCounted
 ## UI ownership, networking, command callbacks and input bindings never change
 ## when a style or layout changes.
 
+const SkinArtwork = preload("res://ui/skin_artwork.gd")
 const CONFIG_PATH := "user://ui_skin.cfg"
 const SKIN_DIRECTORY := "res://ui/skins"
-const DEFAULT_SKIN := "celestial"
+const DEFAULT_SKIN := "retro_terminal"
 const COLOR_FIELDS := ["bg","border","text","field","button","hover","accent"]
 
 static func _profiles() -> Array[Dictionary]:
@@ -49,6 +50,10 @@ static func load_selected() -> String:
 	var config := ConfigFile.new()
 	if config.load(CONFIG_PATH) != OK:
 		return DEFAULT_SKIN
+	# Migrate older palette-only selections to the new pictured UI baseline.
+	# After the user selects a skin in the new version, persist it normally.
+	if int(config.get_value("ui","skin_schema",0)) < 2:
+		return DEFAULT_SKIN
 	var chosen := str(config.get_value("ui","skin",DEFAULT_SKIN))
 	return chosen if valid(chosen) else DEFAULT_SKIN
 
@@ -57,6 +62,7 @@ static func save_selected(id: String) -> Error:
 		return ERR_INVALID_PARAMETER
 	var config := ConfigFile.new()
 	config.set_value("ui","skin",id)
+	config.set_value("ui","skin_schema",2)
 	return config.save(CONFIG_PATH)
 
 static func _palette(id: String) -> Dictionary:
@@ -75,6 +81,9 @@ static func dock(id: String) -> String:
 
 static func backdrop_color(id: String) -> Color:
 	return Color(str(_palette(id).get("bg","#171d36"))).darkened(0.55)
+
+static func backdrop_path(id: String) -> String:
+	return SkinArtwork.artwork_path(_palette(id),"backdrop")
 
 static func backdrop_motif(id: String) -> int:
 	match str(_palette(id).get("effect","stars")):
@@ -123,6 +132,7 @@ static func build_theme(id: String) -> Theme:
 	theme.set_stylebox("focus","LineEdit",_box(Color.TRANSPARENT,accent,1,2,0.0))
 	theme.set_stylebox("read_only","LineEdit",_box(background,background,1,2,4.0))
 	theme.set_stylebox("panel","PopupMenu",_box(background,border,1,3,6.0))
+	SkinArtwork.apply_theme(theme,colors)
 	return theme
 
 static func apply(id: String, toolbar: PanelContainer, session_panel: PanelContainer) -> bool:
@@ -138,6 +148,8 @@ static func apply(id: String, toolbar: PanelContainer, session_panel: PanelConta
 	var border := Color(str(colors.border))
 	# Existing outer shells had local overrides; replace both. Inner controls
 	# inherit Theme so every screen and gameplay tab uses this single profile.
-	toolbar.add_theme_stylebox_override("panel",_box(background,border,1,2,8.0))
-	session_panel.add_theme_stylebox_override("panel",_box(background,border,2,4,16.0))
+	var outer := SkinArtwork._image_style(str(colors.get("art",{}).get("root","")),"window_panel.png",18.0,18.0) if colors.has("art") else null
+	toolbar.add_theme_stylebox_override("panel",outer if outer != null else _box(background,border,1,2,8.0))
+	session_panel.add_theme_stylebox_override("panel",outer if outer != null else _box(background,border,2,4,16.0))
+	session_panel.apply_skin_art(colors)
 	return true

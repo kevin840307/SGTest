@@ -21,7 +21,14 @@ func _run() -> void:
 	app.auto_start = true
 	var panel = app.session_panel
 	panel.show()
+	# Freeze the disconnected ClientSession during the visual-only capture.
+	# Live login/UI/TLS tests exercise the real reducer separately.
+	panel.set_process(false)
 	var steps := [
+		{"skin":"retro_terminal","page":"login"},
+		{"skin":"retro_terminal","page":"select"},
+		{"skin":"retro_terminal","page":"create"},
+		{"skin":"retro_terminal","page":"world"},
 		{"skin":"celestial","page":"login"},
 		{"skin":"celestial","page":"select"},
 		{"skin":"celestial","page":"create"},

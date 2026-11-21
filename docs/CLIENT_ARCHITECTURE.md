@@ -57,13 +57,20 @@ AFK/Unfocus                             — may suspend only visual work
 
 2026-11-21 使用者已明確要求**登入、選角、創角、遊戲內全部可替換 UI；不只是顏色，也可替換版面與風格**。原來「不必提前實作雙套 UI」已不適用。正式結構：
 
+**Retro Terminal 正式第一套圖片化 UI（預設）**：
+- `client/ui/skins/retro_terminal.json` 定義圖片、色階、dock 和 tabs layout；`client/ui/skins/retro_terminal/art/*.png` 為自主產製的視覺圖（深黑鈦金、琥珀光澤、金屬漸層、陰影、9-slice 斜切框線）。`tools/ui_art/build_retro_terminal.py` 僅產生原創 UI 圖，**不是第二套遊戲素材轉換器**；原版地圖／Sprite 仍只由 `tools/asset_converter` 轉出。
+- `client/ui/skin_artwork.gd`／`session_artwork.gd`／`ui_texture_loader.gd` 將圖片貼到 Godot 控制項 Theme 與四畫面裝飾；沒該圖片的舊皮膚回退原 Theme。登入、選角、創角中央可切換圖片化版面；進入世界後可使用 `client/ui/terminal_world_hud.gd`（左狀態／四個快捷群組 + 右功能面板），只讀 Server 發布的 HP/MP/MapEpoch。
+- **全風格共用游標**：`tools/ui_art/build_shared_cursor.py` 產生 `client/ui/cursors/*.png` 九款原創一致 icon：一般、可點擊、文字、拖曳、攻擊、NPC 檢查、等待、禁止、移動。單一 `client/ui/shared_game_cursor.gd` 設定 Godot native mouse cursor、動態 Control 的 hover shape，根據玩家進入世界時的怪／NPC／掉落狀態調整，**長按走路鎖定顯示旋轉游標**；焦點離開要恢復系統指標。皮膚配置不得複製或改變這套全域游標；游標圖片沒有原版／Recovered 二創資產。
+- 來源辨識：**原版** `C:\\SGO\\Stargate Online IE HK2`（Old）；`C:\\SGO\\Recovered` 是二創；`C:\\SGO\\NewVersion\\Recovered2` 是二創新介面。只作唯讀互動與畫面參考，所有新 UI 圖、游標由本專案產生且不複製它們的檔案。
+
+
 - `client/ui/session_layout.gd`：登入、角色選擇、角色創建、遊戲內四個獨立畫面；遊戲內控制按功能分為角色／背包、戰鬥／技能、NPC 服務、社交／交易。現提供分頁（tabs）及堆疊（stacked）兩種排版；切換時**搬移同一組 Control，不重新建構 ClientSession、Server 意圖或事件綁定**。
-- `client/ui/ui_skin_catalog.gd`：安全載入 `res://ui/skins/*.json`；目前琥珀、Celestial Chronicle 星界編年、戰術機甲三款為資料驅動配色／layout／dock 定義。未來新配色新增 JSON；新排版應加入獨立 UI layout 策略，不複製玩法程式。
+- `client/ui/ui_skin_catalog.gd`：安全載入 `res://ui/skins/*.json`；目前 Retro Terminal（預設）及琥珀、Celestial Chronicle 星界編年、戰術機甲四款為資料驅動配色／layout／dock 定義。未來新配色新增 JSON；新排版應加入獨立 UI layout 策略，不複製玩法程式。
 - `client/ui/gameplay_hud.gd`：只讀 WorldState 發布值呈現角色、MapEpoch、HP／MP；本地 UI 樣式不得修改權威值。登入／選角／創角在 viewport 中置中，遊戲中才重新呈現世界和可停靠的遊戲面板。
 - `client/session/session_panel.gd` 保留既有登入／創角／選角／各功能命令所有權，只在 UI 層切換可見頁、布局、Theme；所有功能意圖仍走 ClientSession 的既有唯一 FIFO。選角／創角切換不得重建 session；變更風格不影響 Server／AOI／可靠事件。
 - 原版與 `C:\\SGO\\Recovered` 的 LOGIN／SELECT_CHARACTER／CREATE_CHARACTER 影像是**唯讀視覺參考**，不把私人圖片、反編譯原件或材質提交公開 Git；原版視覺精度、不同職業創角流程和完整浮動視窗仍需實際 GUI 比對，未通過的部分仍屬未完成。
 
-多解析度時保持正確 Camera/AOI，不能固定舊 800×600；移動速率與動畫播放速度解耦。測試 `test_ui_skin_layout.gd` 覆蓋四畫面、三款風格、兩排版、左右 dock 與切換保持同一 Session／HUD；`test_empty_character_creation_ui.gd` 保護初次登入沒有角色時的創角流程。
+多解析度時保持正確 Camera/AOI，不能固定舊 800×600；移動速率與動畫播放速度解耦。測試 `test_ui_skin_layout.gd` 覆蓋四畫面、四款風格、金屬漸層圖片、兩排版、左右 dock 與同一 Session／HUD；`test_shared_game_cursor.gd` 確認九款 icon 與長按旋轉圖、所有皮膚共用；`test_empty_character_creation_ui.gd` 保護初次登入沒有角色時的創角流程。
 
 ## MVP Client：Map15 + Map13，完整玩法與真實切圖
 

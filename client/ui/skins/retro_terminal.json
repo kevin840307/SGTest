@@ -1,0 +1,21 @@
+{
+  "id": "retro_terminal",
+  "name": "Retro Terminal｜復古終端",
+  "layout": "tabs",
+  "dock": "right",
+  "effect": "grid",
+  "bg": "#191d1e",
+  "border": "#bd8745",
+  "text": "#eee6d7",
+  "field": "#262b2b",
+  "button": "#363936",
+  "hover": "#594831",
+  "accent": "#f4b052",
+  "art": {
+    "root": "res://ui/skins/retro_terminal/art",
+    "backdrop": "terminal_backdrop.png",
+    "panel": "window_panel.png",
+    "logo": "terminal_mark.png",
+    "portrait": "identity_scan.png"
+  }
+}
