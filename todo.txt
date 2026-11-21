@@ -1,5 +1,8 @@
 # SGTest 新版重建 TODO（2026-11-15）
 
+- ARCH-NAMING-MODULE-OWNERS [x] 2026-11-21：命名／分類第一輪整合：新增 `docs/CODE_ORGANIZATION.md`；Server wire enum/DTO 改由唯一 `WireContracts.cs` 宣告，同一 `WireProtocol` partial class 依 Economy、Social、Pvp、Quest 分區（不動 V1 bytes/opcode）；Godot 玩家商店移入 `client/player_shop/player_shop_panel.gd`、任務移入 `client/quest/quest_panel.gd`，SessionPanel 僅組裝及傳遞狀態／意圖；同步調整 UI 測試。Windows Host Release 0 warnings/0 errors、Server Checks 265/265 PASS、Godot 真 TLS UI Gate PASS（含 player_shop_ui、quest_ui）、命名/預載/雙端 Opcode 5/5 PASS；GitHub CI 結果以新提交後 Actions 為準。WorldState／ClientSession／Gateway Handler 深層拆分及真私有 GPU／多開／資源 Gate 仍 NOT VERIFIED，不宣稱全部架構債完成。
+
+
 - ARCH-INVENTORY-AND-MAP [x] 背包／裝備面板移入 Client inventory，移除 SessionPanel 重複程式並更新介面測試。淘汰過期目錄圖，補齊 Client／Server／Converter／測試入口及 ARCHITECTURE_TODO 規劃檔。本機正式登入 UI／分頁／裝備／銷毀確認 PASS。實作 `9d1f9f8`，[Client Core](https://github.com/kevin840307/SGTest/actions/runs/44869866759) PASS。私有素材 GPU 與效能本輪 NOT VERIFIED。
 
 - ARCH-SHALLOW-LAYOUT [x] Client codec 歸回 network，PvP 小型狀態型別收回規則檔，純 README 目錄的未來工作集中到架構導航。本機 Host Release 編譯及 Godot Wire、AOI、PvP 模式、FPS 獨立回歸 PASS。實作 `2dc7697`，[Server Core](https://github.com/kevin840307/SGTest/actions/runs/44869010247) 與 [Client Core](https://github.com/kevin840307/SGTest/actions/runs/44869010177) PASS。私有素材 GPU 與性能本輪 NOT VERIFIED。

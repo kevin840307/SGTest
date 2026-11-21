@@ -5,12 +5,14 @@ on:
       - "client/**"
       - "server/src/SGTest.Server/**"
       - "server/tests/SGTest.Server.LoginFixture/**"
+      - "tools/tests/test_architecture_conventions.py"
       - ".github/workflows/client-core.yml"
   pull_request:
     paths:
       - "client/**"
       - "server/src/SGTest.Server/**"
       - "server/tests/SGTest.Server.LoginFixture/**"
+      - "tools/tests/test_architecture_conventions.py"
       - ".github/workflows/client-core.yml"
   workflow_dispatch:
 permissions:
@@ -24,6 +26,8 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: "8.0.x"
+      - name: Source layout and shared Wire opcode naming
+        run: python -m unittest tools.tests.test_architecture_conventions -v
       - uses: actions/cache@v4
         id: godot-cache
         with:

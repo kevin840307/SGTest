@@ -10,6 +10,7 @@
 |---|---|---|
 | Client | [CLIENT_ARCHITECTURE](CLIENT_ARCHITECTURE.md) | 運行時資料流、World Y-sort、FPS 隔離 |
 | Server | [SERVER_ARCHITECTURE](SERVER_ARCHITECTURE.md) | 權威狀態、Tick、AOI、DB |
+| 命名／功能分類 | [CODE_ORGANIZATION](CODE_ORGANIZATION.md) | C#、GDScript、Wire owner、命名與測試 Gate |
 | 素材 | [ASSET_ARCHITECTURE](ASSET_ARCHITECTURE.md) | 一素材一 Atlas／AssetStore 契約 |
 | 轉換與發行 | [ASSET_CONVERTER](ASSET_CONVERTER.md) | SPR/ACT/SIF、轉換器與獨立 PCK |
 | Wire | [RUNTIME_PROTOCOL](RUNTIME_PROTOCOL.md) | Epoch/序號／事件與資料合約 |
@@ -40,11 +41,11 @@ Server 使用 PascalCase C# namespace，Client 使用 Godot 小寫目錄。相�
 | 功能 | Server | Client |
 |---|---|---|
 | 地圖 | `Map/` 負責 Blocking、格線與尋路 | `map/` 負責地形、建物與遮擋 |
-| NPC | `Npc/` 負責傳點、商店、銀行、倉庫、修理、強化、任務資料 | `app/` 目前組裝互動 UI，獨立 NPC 呈現新增時放 `npc/` |
+| NPC | `Npc/` 負責傳點、商店、銀行、倉庫、修理、強化、任務資料 | `quest/` 已有任務面板；其他 NPC 服務 UI 仍由 `session/` 組裝 |
 | PvP | `Pvp/` 的地圖政策、狀態與指令序號 | `pvp/` 的名字狀態呈現 |
 | 怪物 | `Monster/` 的人口、模擬、協調和戰利品 | `monster/` 的怪物呈現 |
 | 戰鬥與技能 | `Combat/` 傷害結算、`Skill/` 技能規則資料 | 目前由 `world/` 接收事件、`player/` 和 `monster/` 呈現 |
-| 社交與交易 | `Party/`、`Trade/`、`PlayerShop/` 各自保有流程與狀態 | `trade/` 已有交易面板，其餘由 SessionPanel 組裝 |
+| 社交與交易 | `Party/`、`Trade/`、`PlayerShop/` 各自保有流程與狀態 | `trade/`、`player_shop/` 面板已獨立；隊伍／聊天 UI 仍在 `session/` |
 | 世界與視野 | `World/` 單寫者、生命週期，`Visibility/` AOI | `world/` reducer、相機、畫面組合 |
 | 帳號、連線與封包 | `Identity/`、`Gateway/`、`Wire/` | `session/` 登入與會話；`network/` TLS 與封包 |
 | 客戶端支援 | Host 組裝服務及載入內容 | `inventory/`、`movement/`、`animation/`、`asset_store/` |
@@ -127,6 +128,8 @@ client/
   pvp/                      # PvP 名稱標記
   inventory/                # 背包與裝備面板
   trade/                    # 玩家交易面板
+  player_shop/              # 玩家擺攤與買賣面板
+  quest/                    # NPC 任務對話與選項面板
   movement/                 # 移動取樣與輸入狀態
   animation/                # 共用 ACT 時序
   asset_store/              # 執行期素材載入與釋放
@@ -136,7 +139,7 @@ server/
   host/SGTest.Server.Host/  # Program.cs，組裝與啟動 .NET Host
   src/SGTest.Server/
     Gateway/                # 登入及指令路由、連線限制
-    Wire/                   # 協定與編解碼
+    Wire/                   # WireContracts + feature-partial 編解碼
     World/                  # 單寫者狀態與 Tick
     Map/                    # Blocking 與尋路
     Visibility/             # AOI

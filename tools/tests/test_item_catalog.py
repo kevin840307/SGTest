@@ -74,11 +74,11 @@ class ItemCatalogTests(unittest.TestCase):
         out=Path(self.temporary.name)/"item_catalog.json"
         publish_item_catalog(self.root,out,source_reference="fixture")
         before=out.read_bytes()
-        good.write_text('[resource]\nid = 2702\nitem_name = "偽造資料"\n')
+        good.write_text('[resource]\nid = 2702\nitem_name = "偽造資料"\n', encoding="utf-8")
         with self.assertRaisesRegex(ValueError,"file ID differs"):
             publish_item_catalog(self.root,out,source_reference="fixture")
         self.assertEqual(before,out.read_bytes())
-        good.write_text('[resource]\nid = 2701\nitem_name = "偽造\\n換行"\n')
+        good.write_text('[resource]\nid = 2701\nitem_name = "偽造\\n換行"\n', encoding="utf-8")
         with self.assertRaisesRegex(ValueError,"invalid item_name"):
             compile_item_catalog(self.root,source_reference="fixture")
         good.write_bytes(b'\xff\xfe')

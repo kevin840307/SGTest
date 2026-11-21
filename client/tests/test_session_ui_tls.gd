@@ -1258,15 +1258,15 @@ func run() -> void:
 	panel._latest.last_player_shop_sold = {}
 	panel._latest.last_player_shop_sold_listing_id = 0
 	panel._update_player_shop_ui()
-	for control in [panel.player_shop_inventory_picker,panel.player_shop_open_button,panel.player_shop_seller_picker,panel.player_shop_inspect_button,panel.player_shop_status]:
+	for control in [panel.player_shop_panel.inventory_picker,panel.player_shop_panel.open_button,panel.player_shop_panel.seller_picker,panel.player_shop_panel.inspect_button,panel.player_shop_panel.status_label]:
 		if control.get_parent() == null or not panel.is_ancestor_of(control):
 			fail("Player-shop controls are not descendants of SessionPanel")
 			return
-	if panel.player_shop_inventory_picker.item_count == 0 or panel.player_shop_open_button.disabled or panel.player_shop_seller_picker.item_count != 1 or panel.player_shop_inspect_button.disabled:
+	if panel.player_shop_panel.inventory_picker.item_count == 0 or panel.player_shop_panel.open_button.disabled or panel.player_shop_panel.seller_picker.item_count != 1 or panel.player_shop_panel.inspect_button.disabled:
 		fail("Idle player-shop UI did not expose inventory and AOI seller")
 		return
-	panel.player_shop_price_input.value = 300
-	panel.player_shop_open_button.pressed.emit()
+	panel.player_shop_panel.price_input.value = 300
+	panel.player_shop_panel.open_button.pressed.emit()
 	if stub.player_shop_opens != 1 or stub.last_player_shop_uid != 10000 or stub.last_player_shop_price != 300:
 		fail("Player-shop open UI did not send exact UID and price")
 		return
@@ -1285,10 +1285,10 @@ func run() -> void:
 	panel._latest.player_shop_wallet = 100
 	panel._latest.last_player_shop_result = {"action":1,"status":0}
 	panel._update_player_shop_ui()
-	if panel.player_shop_close_button.disabled or not panel.player_shop_own_label.text.contains("UID 10000") or not panel.player_shop_own_label.text.contains("+5") or not panel.player_shop_open_button.disabled:
+	if panel.player_shop_panel.close_button.disabled or not panel.player_shop_panel.own_listing_label.text.contains("UID 10000") or not panel.player_shop_panel.own_listing_label.text.contains("+5") or not panel.player_shop_panel.open_button.disabled:
 		fail("Authoritative own player-shop listing/enhancement was not rendered")
 		return
-	panel.player_shop_close_button.pressed.emit()
+	panel.player_shop_panel.close_button.pressed.emit()
 	if stub.player_shop_closes != 1 or stub.last_player_shop_listing != 91:
 		fail("Player-shop close UI did not send exact listing ID")
 		return
@@ -1298,7 +1298,7 @@ func run() -> void:
 	panel._latest.last_player_shop_result_sequence = 2
 	panel._latest.last_player_shop_result = {"action":2,"status":0}
 	panel._update_player_shop_ui()
-	panel.player_shop_inspect_button.pressed.emit()
+	panel.player_shop_panel.inspect_button.pressed.emit()
 	if stub.player_shop_inspects != 1 or stub.last_player_shop_seller != 22:
 		fail("Player-shop inspect UI did not send selected AOI ActorId")
 		return
@@ -1312,10 +1312,10 @@ func run() -> void:
 	panel._latest.player_shop_wallet = 700
 	panel._latest.last_player_shop_result = {"action":3,"status":0}
 	panel._update_player_shop_ui()
-	if panel.player_shop_buy_button.disabled or not panel.player_shop_inspected_label.text.contains("UID 20000") or not panel.player_shop_inspected_label.text.contains("300") or not panel.player_shop_inspected_label.text.contains("+7"):
+	if panel.player_shop_panel.buy_button.disabled or not panel.player_shop_panel.inspected_listing_label.text.contains("UID 20000") or not panel.player_shop_panel.inspected_listing_label.text.contains("300") or not panel.player_shop_panel.inspected_listing_label.text.contains("+7"):
 		fail("Authoritative inspected player-shop listing/enhancement was not rendered")
 		return
-	panel.player_shop_buy_button.pressed.emit()
+	panel.player_shop_panel.buy_button.pressed.emit()
 	if stub.player_shop_buys != 1 or stub.last_player_shop_seller != 22 or stub.last_player_shop_listing != 92:
 		fail("Player-shop buy UI did not send exact seller/listing IDs")
 		return
@@ -1327,7 +1327,7 @@ func run() -> void:
 	panel._latest.last_player_shop_sold_listing_id = 91
 	panel._latest.last_player_shop_sold = {"buyer_actor_id":22,"item_uid":10000,"seller_wallet":400}
 	panel._update_player_shop_ui()
-	if not panel.player_shop_status.text.contains("已由伺服器售出") or not panel.player_shop_own_label.text.ends_with("—") or int(panel._latest.player_shop_wallet) != 400:
+	if not panel.player_shop_panel.status_label.text.contains("已由伺服器售出") or not panel.player_shop_panel.own_listing_label.text.ends_with("—") or int(panel._latest.player_shop_wallet) != 400:
 		fail("Player-shop sold push did not converge UI to authoritative wallet/listing")
 		return
 	# Nearby chat UI never locally echoes; only authoritative Server delivery
@@ -1536,15 +1536,15 @@ func run() -> void:
 	panel._latest.stale_quest_results = 0
 	panel._latest.player_dead = false
 	panel._update_quest_ui()
-	for control in [panel.quest_npc_input,panel.quest_open_button,panel.quest_title_label,panel.quest_text_display,panel.quest_progress_label,panel.quest_choice_picker,panel.quest_choose_button,panel.quest_status]:
+	for control in [panel.quest_panel.npc_input,panel.quest_panel.open_button,panel.quest_panel.title_label,panel.quest_panel.text_display,panel.quest_panel.progress_label,panel.quest_panel.choice_picker,panel.quest_panel.choose_button,panel.quest_panel.status_label]:
 		if control.get_parent() == null or not panel.is_ancestor_of(control):
 			fail("Quest controls are not descendants of SessionPanel")
 			return
-	if panel.quest_open_button.disabled or not panel.quest_choose_button.disabled:
+	if panel.quest_panel.open_button.disabled or not panel.quest_panel.choose_button.disabled:
 		fail("Quest idle controls did not expose only Server-validated open")
 		return
-	panel.quest_npc_input.value = 88
-	panel.quest_open_button.pressed.emit()
+	panel.quest_panel.npc_input.value = 88
+	panel.quest_panel.open_button.pressed.emit()
 	if stub.quest_opens != 1 or stub.last_quest_npc != 88:
 		fail("Quest open UI did not send exact NPC SpawnId")
 		return
@@ -1564,18 +1564,18 @@ func run() -> void:
 	panel._latest.last_quest_result = panel._latest.quest_view.duplicate(true)
 	panel._update_quest_ui()
 	if (
-		not panel.quest_title_label.text.contains("Verified Quest Fixture") or
-		not panel.quest_text_display.text.contains("verified Quest") or
-		not panel.quest_progress_label.text.contains("未開始") or
-		panel.quest_choice_picker.item_count != 2 or
-		panel.quest_choose_button.disabled
+		not panel.quest_panel.title_label.text.contains("Verified Quest Fixture") or
+		not panel.quest_panel.text_display.text.contains("verified Quest") or
+		not panel.quest_panel.progress_label.text.contains("未開始") or
+		panel.quest_panel.choice_picker.item_count != 2 or
+		panel.quest_panel.choose_button.disabled
 	):
 		fail("Quest UI did not render authoritative initial View")
 		return
 	var stage_before:=int((panel._latest.quest_view as Dictionary).stage)
 	var revision_before:=int((panel._latest.quest_view as Dictionary).progress_revision)
-	panel.quest_choice_picker.select(0)
-	panel.quest_choose_button.pressed.emit()
+	panel.quest_panel.choice_picker.select(0)
+	panel.quest_panel.choose_button.pressed.emit()
 	if stub.quest_choices != 1 or stub.last_quest_choice != 1:
 		fail("Quest choice UI did not send exact Server ChoiceId")
 		return
@@ -1598,10 +1598,10 @@ func run() -> void:
 	panel._latest.last_quest_result = panel._latest.quest_view.duplicate(true)
 	panel._update_quest_ui()
 	if (
-		not panel.quest_progress_label.text.contains("進行中") or
-		not panel.quest_progress_label.text.contains("階段 1") or
-		panel.quest_choice_picker.item_count != 1 or
-		int(panel.quest_choice_picker.get_item_metadata(0)) != 2
+		not panel.quest_panel.progress_label.text.contains("進行中") or
+		not panel.quest_panel.progress_label.text.contains("階段 1") or
+		panel.quest_panel.choice_picker.item_count != 1 or
+		int(panel.quest_panel.choice_picker.get_item_metadata(0)) != 2
 	):
 		fail("Quest UI did not converge to authoritative active stage")
 		return
@@ -1616,10 +1616,10 @@ func run() -> void:
 	panel._latest.last_quest_result = panel._latest.quest_view.duplicate(true)
 	panel._update_quest_ui()
 	if (
-		not panel.quest_progress_label.text.contains("已完成") or
-		not panel.quest_text_display.text.contains("任務已完成") or
-		panel.quest_choice_picker.item_count != 0 or
-		not panel.quest_choose_button.disabled
+		not panel.quest_panel.progress_label.text.contains("已完成") or
+		not panel.quest_panel.text_display.text.contains("任務已完成") or
+		panel.quest_panel.choice_picker.item_count != 0 or
+		not panel.quest_panel.choose_button.disabled
 	):
 		fail("Completed Quest View still exposed a Client-side choice")
 		return

@@ -6,7 +6,8 @@
 |---|---|---|
 | Client NPC | [ ] `client/npc/npc_interaction_panel.gd` 承接 App／SessionPanel 既有 NPC 選單與操作 | 開啟、取消與離開互動範圍，Server 仍驗距離及權限 |
 | Client 社交 | [ ] `client/party/party_panel.gd` 管邀請及隊伍；`client/chat/chat_panel.gd` 管頻道與訊息顯示 | 隊伍路由、密語、換圖與斷線回歸 |
-| Client 玩家商店 | [ ] `client/player_shop/player_shop_panel.gd` 承接販售、瀏覽與購買 | 庫存 UID、過期商品、買賣雙方結算 |
+| Client 玩家商店 | [x] `client/player_shop/player_shop_panel.gd` 承接販售、瀏覽與購買 | Godot 真 TLS SessionPanel UI 回歸 PASS，Server UID／買賣雙方仍維持既有權威；私有 GPU 未驗 |
+| Client 任務 | [x] `client/quest/quest_panel.gd` 承接任務開啟、選項、進度顯示 | 指令驗證仍由 SessionPanel 提供；真 TLS Quest UI 回歸 PASS |
 | Client NPC 服務 | [ ] 先以 `client/session/session_panel.gd` 為遷移入口，商店、銀行、倉庫、修理、強化可各自操作後再定檔 | map epoch、關閉／返回及 Server 拒絕情境 |
 | Server 聊天 | [ ] `server/src/SGTest.Server/Chat/ChatRouting.cs` 集中附近與密語的對象選擇，Party 維持隊伍狀態 | 同／跨圖路由、權限與可靠送出 |
 | Server／Client 寵物 | [ ] Server `Pet/PetRuntime.cs` 預定掌管召喚、跟隨與成長；Client `pet/pet_presentation.gd` 接已確認的狀態 | 召喚／收回、掉線、跟隨、持久化與戰鬥回歸 |

@@ -25,6 +25,7 @@
 2. [Client 新設計](docs/CLIENT_ARCHITECTURE.md) 與 [Server 新設計](docs/SERVER_ARCHITECTURE.md)
 3. [Asset 結構](docs/ASSET_ARCHITECTURE.md)、[素材轉換](docs/ASSET_CONVERTER.md)、[歷史效能證據](docs/research/ASSET_RENDERER_EVIDENCE.md)
 4. [測試與效能 Gate](docs/TEST_PLAN.md)、[重建任務](todo.txt)、[開發規則](AGENTS.md)
+5. [命名與功能分類契約](docs/CODE_ORGANIZATION.md)
 
 歷史文獻、原型效能研究和舊 SPEC 大部分內容保留供對照，但**不能以其中「已實作／已通過」的說法代替新版本驗證**。
 

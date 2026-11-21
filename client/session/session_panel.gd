@@ -8,10 +8,14 @@ const Session = preload("res://session/client_session.gd")
 const State = preload("res://world/world_state.gd")
 const TradePanel = preload("res://trade/trade_panel.gd")
 const InventoryPanel = preload("res://inventory/inventory_panel.gd")
+const PlayerShopPanel = preload("res://player_shop/player_shop_panel.gd")
+const QuestPanel = preload("res://quest/quest_panel.gd")
 const ItemCatalog = preload("res://inventory/item_catalog.gd")
 var session = Session.new()
 var inventory_panel := InventoryPanel.new()
 var trade_panel := TradePanel.new()
+var player_shop_panel := PlayerShopPanel.new()
+var quest_panel := QuestPanel.new()
 var item_catalog = ItemCatalog.new()
 var active := false
 var trusted_chain: X509Certificate
@@ -79,17 +83,6 @@ var enhancement_item_picker := OptionButton.new()
 var enhancement_button := Button.new()
 var enhancement_status := Label.new()
 var _enhancement_display_key := ""
-var player_shop_inventory_picker := OptionButton.new()
-var player_shop_price_input := SpinBox.new()
-var player_shop_open_button := Button.new()
-var player_shop_own_label := Label.new()
-var player_shop_close_button := Button.new()
-var player_shop_seller_picker := OptionButton.new()
-var player_shop_inspect_button := Button.new()
-var player_shop_inspected_label := Label.new()
-var player_shop_buy_button := Button.new()
-var player_shop_status := Label.new()
-var _player_shop_display_key := ""
 var nearby_chat_history := TextEdit.new()
 var nearby_chat_input := LineEdit.new()
 var nearby_chat_send_button := Button.new()
@@ -111,15 +104,6 @@ var party_chat_input := LineEdit.new()
 var party_chat_send_button := Button.new()
 var party_status := Label.new()
 var _nearby_chat_display_key := ""
-var quest_npc_input := SpinBox.new()
-var quest_open_button := Button.new()
-var quest_title_label := Label.new()
-var quest_text_display := TextEdit.new()
-var quest_progress_label := Label.new()
-var quest_choice_picker := OptionButton.new()
-var quest_choose_button := Button.new()
-var quest_status := Label.new()
-var _quest_display_key := ""
 var pvp_query_button := Button.new()
 var pvp_blue_button := Button.new()
 var pvp_white_button := Button.new()
@@ -267,20 +251,6 @@ func _ready() -> void:
 	enhancement_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	for control in [enhancement_npc_input,enhancement_open_button,enhancement_wallet_label,enhancement_item_picker,enhancement_button,enhancement_status]:
 		control.visible = false
-	player_shop_price_input.min_value = 1
-	player_shop_price_input.max_value = 9000000000000000
-	player_shop_price_input.step = 1
-	player_shop_price_input.value = 1
-	player_shop_open_button.text = "以上架價格開啟玩家商店"
-	player_shop_own_label.text = "我的商店：—"
-	player_shop_close_button.text = "關閉我的玩家商店"
-	player_shop_inspect_button.text = "查看選中玩家商店"
-	player_shop_inspected_label.text = "查看中的商店：—"
-	player_shop_inspected_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	player_shop_buy_button.text = "購買查看中的整組物品"
-	player_shop_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	for control in [player_shop_inventory_picker,player_shop_price_input,player_shop_open_button,player_shop_own_label,player_shop_close_button,player_shop_seller_picker,player_shop_inspect_button,player_shop_inspected_label,player_shop_buy_button,player_shop_status]:
-		control.visible = false
 	nearby_chat_history.editable = false
 	nearby_chat_history.custom_minimum_size = Vector2(350,120)
 	nearby_chat_history.wrap_mode = TextEdit.LINE_WRAPPING_BOUNDARY
@@ -309,21 +279,6 @@ func _ready() -> void:
 	party_chat_send_button.text = "隊伍送出"
 	party_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	for control in [nearby_chat_history,nearby_chat_input,nearby_chat_send_button,nearby_chat_status,whisper_target_input,whisper_input,whisper_send_button,whisper_status,party_target_input,party_invite_button,party_invite_label,party_accept_button,party_reject_button,party_members_label,party_leave_button,party_kick_button,party_promote_button,party_chat_input,party_chat_send_button,party_status]:
-		control.visible = false
-	quest_npc_input.min_value = 1
-	quest_npc_input.max_value = 2147483647
-	quest_npc_input.step = 1
-	quest_npc_input.value = 1
-	quest_open_button.text = "開啟附近 NPC 任務"
-	quest_title_label.text = "任務：—"
-	quest_title_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	quest_text_display.editable = false
-	quest_text_display.custom_minimum_size = Vector2(350,100)
-	quest_text_display.wrap_mode = TextEdit.LINE_WRAPPING_BOUNDARY
-	quest_progress_label.text = "進度：—"
-	quest_choose_button.text = "選擇伺服器提供的選項"
-	quest_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	for control in [quest_npc_input,quest_open_button,quest_title_label,quest_text_display,quest_progress_label,quest_choice_picker,quest_choose_button,quest_status]:
 		control.visible = false
 	respawn_button.text = "復活"
 	skill_hint.text = "技能 ID（需伺服器已核准規則）"
@@ -366,10 +321,6 @@ func _ready() -> void:
 	enhancement_open_button.pressed.connect(_open_enhancement_from_input)
 	enhancement_button.pressed.connect(_enhance_selected_item)
 	enhancement_item_picker.item_selected.connect(func(_index): _update_enhancement_buttons())
-	player_shop_open_button.pressed.connect(_open_selected_player_shop)
-	player_shop_close_button.pressed.connect(_close_player_shop)
-	player_shop_inspect_button.pressed.connect(_inspect_selected_player_shop)
-	player_shop_buy_button.pressed.connect(_buy_inspected_player_shop)
 	nearby_chat_send_button.pressed.connect(_send_nearby_chat)
 	nearby_chat_input.text_submitted.connect(func(_text): _send_nearby_chat())
 	whisper_send_button.pressed.connect(_send_whisper)
@@ -382,15 +333,12 @@ func _ready() -> void:
 	party_promote_button.pressed.connect(_party_promote_target)
 	party_chat_send_button.pressed.connect(_send_party_chat)
 	party_chat_input.text_submitted.connect(func(_text): _send_party_chat())
-	quest_open_button.pressed.connect(_open_quest_from_input)
-	quest_choose_button.pressed.connect(_choose_selected_quest_option)
 	column.add_child(trade_panel)
-	for control in [player_shop_inventory_picker,player_shop_price_input,player_shop_open_button,player_shop_own_label,player_shop_close_button,player_shop_seller_picker,player_shop_inspect_button,player_shop_inspected_label,player_shop_buy_button,player_shop_status]:
-		column.add_child(control)
+	column.add_child(player_shop_panel)
 	for control in [nearby_chat_history,nearby_chat_input,nearby_chat_send_button,nearby_chat_status,whisper_target_input,whisper_input,whisper_send_button,whisper_status,party_target_input,party_invite_button,party_invite_label,party_accept_button,party_reject_button,party_members_label,party_leave_button,party_kick_button,party_promote_button,party_chat_input,party_chat_send_button,party_status]:
 		column.add_child(control)
-	for control in [quest_npc_input,quest_open_button,quest_title_label,quest_text_display,quest_progress_label,quest_choice_picker,quest_choose_button,quest_status]:
-		column.add_child(control)
+	quest_panel.set_actions(Callable(self, "submit_quest_open"), Callable(self, "submit_quest_choice"))
+	column.add_child(quest_panel)
 	pvp_query_button.text = "查詢 PvP 名稱模式"
 	pvp_blue_button.text = "設為藍名（保護）"
 	pvp_white_button.text = "設為白名（允許 PvP 地圖）"
@@ -474,7 +422,6 @@ func _begin_connection(register_first:bool)->void:
 	_bank_display_key = ""
 	_repair_display_key = ""
 	_enhancement_display_key = ""
-	_player_shop_display_key = ""
 	_nearby_chat_display_key = ""
 	nearby_chat_history.text = ""
 	nearby_chat_input.clear()
@@ -487,12 +434,7 @@ func _begin_connection(register_first:bool)->void:
 	party_members_label.text = "隊伍：—"
 	party_chat_input.clear()
 	party_status.text = ""
-	_quest_display_key = ""
-	quest_title_label.text = "任務：—"
-	quest_text_display.text = ""
-	quest_progress_label.text = "進度：—"
-	quest_choice_picker.clear()
-	quest_status.text = ""
+	quest_panel.reset()
 	shop_status.text = ""
 	shop_item_picker.clear()
 	shop_sell_picker.clear()
@@ -507,9 +449,7 @@ func _begin_connection(register_first:bool)->void:
 	repair_wallet_label.text = "角色錢包：—"
 	repair_item_picker.clear()
 	trade_panel.reset()
-	player_shop_status.text = ""
-	player_shop_inventory_picker.clear()
-	player_shop_seller_picker.clear()
+	player_shop_panel.reset()
 	inventory_panel.reset()
 	characters.clear()
 	_characters = []
@@ -738,17 +678,11 @@ func disconnect_session() -> void:
 	_bank_display_key = ""
 	_repair_display_key = ""
 	_enhancement_display_key = ""
-	_player_shop_display_key = ""
 	_nearby_chat_display_key = ""
 	nearby_chat_history.text = ""
 	nearby_chat_input.clear()
 	nearby_chat_status.text = ""
-	_quest_display_key = ""
-	quest_title_label.text = "任務：—"
-	quest_text_display.text = ""
-	quest_progress_label.text = "進度：—"
-	quest_choice_picker.clear()
-	quest_status.text = ""
+	quest_panel.reset()
 	shop_status.text = ""
 	shop_item_picker.clear()
 	shop_sell_picker.clear()
@@ -763,9 +697,7 @@ func disconnect_session() -> void:
 	repair_wallet_label.text = "角色錢包：—"
 	repair_item_picker.clear()
 	trade_panel.reset()
-	player_shop_status.text = ""
-	player_shop_inventory_picker.clear()
-	player_shop_seller_picker.clear()
+	player_shop_panel.reset()
 	inventory_panel.reset()
 	_characters = []
 	characters.clear()
@@ -1343,154 +1275,9 @@ func _update_nearby_chat_ui() -> void:
 				_:
 					whisper_status.text="私訊結果未知"
 
-func _open_quest_from_input()->void:
-	if quest_open_button.disabled:
-		return
-	if submit_quest_open(int(quest_npc_input.value)):
-		quest_status.text = "任務開啟請求已送出，等待伺服器 View…"
-	else:
-		quest_status.text = "目前無法開啟該 NPC 任務"
+func _update_quest_ui() -> void:
+	quest_panel.apply_snapshot(_latest, active)
 
-
-func _choose_selected_quest_option()->void:
-	if quest_choose_button.disabled or quest_choice_picker.selected<0:
-		return
-	var choice_id:=int(
-		quest_choice_picker.get_item_metadata(quest_choice_picker.selected))
-	if submit_quest_choice(choice_id):
-		quest_status.text = "任務選項已送出；進度只接受伺服器結果"
-	else:
-		quest_status.text = "目前無法送出該任務選項"
-
-
-func _quest_state_text(value:int)->String:
-	match value:
-		0:
-			return "未開始"
-		1:
-			return "進行中"
-		2:
-			return "已完成"
-		_:
-			return "未知"
-
-
-func _quest_status_text(value:int)->String:
-	var names:=PackedStringArray([
-		"就緒","已套用","重播已套用","地圖／連線世代已變更",
-		"找不到任務","距離過遠","無效選項","任務已完成",
-		"重複／過期序號","角色已死亡","任務規則版本不符"])
-	return names[value] if value>=0 and value<names.size() else "未知結果"
-
-
-func _update_quest_ui()->void:
-	var in_world:=active and int(_latest.get("state",-1))==State.STATE_IN_WORLD
-	for control in [quest_npc_input,quest_open_button,quest_title_label,quest_text_display,quest_progress_label,quest_choice_picker,quest_choose_button,quest_status]:
-		control.visible=in_world
-	if not in_world:
-		_quest_display_key=""
-		return
-	var pending:=int(_latest.get("pending_quest_sequence",0))!=0
-	var usable:=(
-		bool(_latest.get("world_ready",false)) and
-		not bool(_latest.get("player_dead",false)) and
-		not bool(_latest.get("reconnecting",false)) and
-		not bool(_latest.get("resync_pending",false)) and
-		not bool(_latest.get("waiting_for_new_map",false)) and
-		int(_latest.get("pending_world_ready_ack_epoch",0))==0 and
-		int(_latest.get("last_world_ready_ack_epoch",0))==
-			int(_latest.get("map_epoch",0))
-	)
-	quest_npc_input.editable=usable and not pending
-	quest_open_button.disabled=not usable or pending
-	var view:Dictionary=_latest.get("quest_view",{})
-	var key:="%d/%d/%d/%d/%d/%d" % [
-		int(_latest.get("map_epoch",0)),
-		int(_latest.get("last_quest_response_sequence",0)),
-		int(_latest.get("last_quest_status",-1)),
-		int(view.get("quest_id",0)),int(view.get("progress_revision",0)),
-		(view.get("choices",[]) as Array).size()]
-	if key!=_quest_display_key:
-		_quest_display_key=key
-		quest_choice_picker.clear()
-		if view.is_empty():
-			quest_title_label.text="任務：—"
-			quest_text_display.text=""
-			quest_progress_label.text="進度：—"
-		else:
-			quest_title_label.text="任務：%s（ID %d）" % [
-				str(view.get("title","")),int(view.get("quest_id",0))]
-			quest_text_display.text=str(view.get("text",""))
-			quest_progress_label.text="進度：%s｜階段 %d｜Revision %d" % [
-				_quest_state_text(int(view.get("state",-1))),
-				int(view.get("stage",0)),int(view.get("progress_revision",0))]
-			for raw in view.get("choices",[]):
-				var choice:Dictionary=raw
-				quest_choice_picker.add_item(str(choice.get("label","")))
-				quest_choice_picker.set_item_metadata(
-					quest_choice_picker.item_count-1,
-					int(choice.get("choice_id",0)))
-			if quest_choice_picker.item_count>0:
-				quest_choice_picker.select(0)
-	var result:Dictionary=_latest.get("last_quest_result",{})
-	if not result.is_empty():
-		quest_status.text="伺服器任務結果：%s（代碼 %d）" % [
-			_quest_status_text(int(result.get("status",-1))),
-			int(result.get("status",-1))]
-	quest_choice_picker.disabled=(
-		not usable or pending or view.is_empty() or
-		quest_choice_picker.item_count==0
-	)
-	quest_choose_button.disabled=quest_choice_picker.disabled
-
-
-func _open_selected_player_shop() -> void:
-	if player_shop_open_button.disabled or player_shop_inventory_picker.selected < 0:
-		return
-	var uid := int(player_shop_inventory_picker.get_item_metadata(player_shop_inventory_picker.selected))
-	var price := int(player_shop_price_input.value)
-	if session.open_player_shop(uid,price):
-		player_shop_status.text = "開店請求已送出；物品仍由伺服器保有權威，售出前不會從背包移除"
-
-
-func _close_player_shop() -> void:
-	if player_shop_close_button.disabled:
-		return
-	var listing: Dictionary = _latest.get("player_shop_own_listing",{})
-	if session.close_player_shop(int(listing.get("listing_id",0))):
-		player_shop_status.text = "關店請求已送出，等待伺服器確認…"
-
-
-func _inspect_selected_player_shop() -> void:
-	if player_shop_inspect_button.disabled or player_shop_seller_picker.selected < 0:
-		return
-	var seller := int(player_shop_seller_picker.get_item_metadata(player_shop_seller_picker.selected))
-	if session.inspect_player_shop(seller):
-		player_shop_status.text = "正在向伺服器查詢玩家 %d 的商店…" % seller
-
-
-func _buy_inspected_player_shop() -> void:
-	if player_shop_buy_button.disabled:
-		return
-	var listing: Dictionary = _latest.get("player_shop_inspected",{})
-	var seller := int(listing.get("seller_actor_id",0))
-	var listing_id := int(listing.get("listing_id",0))
-	if session.buy_player_shop(seller,listing_id):
-		player_shop_status.text = "購買請求已送出；UID、價格與雙方錢包只接受伺服器原子結算結果"
-
-
-func _player_shop_listing_text(prefix: String, listing: Dictionary) -> String:
-	if listing.is_empty():
-		return prefix + "—"
-	var item_name := item_catalog.name_for(int(listing.get("item_definition_id",0)))
-	var durability := int(listing.get("durability_raw",-1))
-	var durability_text := "" if durability < 0 else "｜耐久 raw %d" % durability
-	var level := int(listing.get("enhancement_level",0))
-	var enhancement_text := "" if level <= 0 else "｜+%d" % level
-	return "%s玩家 %d｜%s ×%d%s｜UID %d｜售價 %d%s" % [
-		prefix,int(listing.get("seller_actor_id",0)),item_name,
-		int(listing.get("quantity",0)),enhancement_text,
-		int(listing.get("item_uid",0)),int(listing.get("price",0)),durability_text]
 
 func _request_pvp_mode(action: int) -> void:
 	if session.request_pvp_mode(action):
@@ -1663,70 +1450,8 @@ func _update_pvp_ui() -> void:
 
 
 func _update_player_shop_ui() -> void:
-	var in_world := active and int(_latest.get("state",-1)) == State.STATE_IN_WORLD
-	for control in [player_shop_inventory_picker,player_shop_price_input,player_shop_open_button,player_shop_own_label,player_shop_close_button,player_shop_seller_picker,player_shop_inspect_button,player_shop_inspected_label,player_shop_buy_button,player_shop_status]:
-		control.visible = in_world
-	if not in_world:
-		_player_shop_display_key = ""
-		return
-	var usable := bool(_latest.get("world_ready",false)) and bool(_latest.get("inventory_ready",false)) and not bool(_latest.get("player_dead",false)) and not bool(_latest.get("reconnecting",false)) and not bool(_latest.get("resync_pending",false)) and not bool(_latest.get("waiting_for_new_map",false)) and int(_latest.get("pending_world_ready_ack_epoch",0)) == 0 and int(_latest.get("last_world_ready_ack_epoch",0)) == int(_latest.get("map_epoch",0)) and int(_latest.get("pending_player_shop_sequence",0)) == 0 and int(_latest.get("trade_id",0)) == 0
-	var own: Dictionary = _latest.get("player_shop_own_listing",{})
-	var inspected: Dictionary = _latest.get("player_shop_inspected",{})
-	var entities: Dictionary = _latest.get("entities",{})
-	var entity_ids: Array = entities.keys()
-	entity_ids.sort()
-	var entity_key := ""
-	for raw_actor in entity_ids:
-		entity_key += "," + str(int(raw_actor))
-	var key := "%d/%d/%d/%d/%d/%d/%s" % [
-		int(_latest.get("inventory_revision",0)),int(_latest.get("player_shop_sequence",0)),
-		int(_latest.get("last_player_shop_result_sequence",0)),
-		int(_latest.get("last_player_shop_sold_listing_id",0)),
-		int(own.get("listing_id",0)),int(inspected.get("listing_id",0)),entity_key]
-	if key != _player_shop_display_key:
-		_player_shop_display_key = key
-		player_shop_inventory_picker.clear()
-		var inventory: Dictionary = _latest.get("inventory_items",{})
-		var uids: Array = inventory.keys()
-		uids.sort()
-		for raw_uid in uids:
-			var uid := int(raw_uid)
-			var item: Dictionary = inventory[raw_uid]
-			player_shop_inventory_picker.add_item(item_catalog.offer_item_text(item))
-			player_shop_inventory_picker.set_item_metadata(player_shop_inventory_picker.item_count-1,uid)
-		if player_shop_inventory_picker.item_count > 0:
-			player_shop_inventory_picker.select(0)
-		player_shop_seller_picker.clear()
-		for raw_actor in entity_ids:
-			var actor_id := int(raw_actor)
-			if actor_id <= 0 or actor_id == int(_latest.get("actor_id",0)):
-				continue
-			player_shop_seller_picker.add_item("玩家 %d" % actor_id)
-			player_shop_seller_picker.set_item_metadata(player_shop_seller_picker.item_count-1,actor_id)
-		if player_shop_seller_picker.item_count > 0:
-			player_shop_seller_picker.select(0)
-	player_shop_own_label.text = _player_shop_listing_text("我的商店：",own)
-	player_shop_inspected_label.text = _player_shop_listing_text("查看中的商店：",inspected)
-	player_shop_open_button.disabled = not usable or not own.is_empty() or player_shop_inventory_picker.item_count == 0
-	player_shop_price_input.editable = usable and own.is_empty()
-	player_shop_close_button.disabled = not usable or own.is_empty()
-	player_shop_inspect_button.disabled = not usable or player_shop_seller_picker.item_count == 0
-	var inspected_seller := int(inspected.get("seller_actor_id",0))
-	player_shop_buy_button.disabled = not usable or inspected.is_empty() or inspected_seller <= 0 or not entities.has(inspected_seller)
-	if int(_latest.get("pending_player_shop_sequence",0)) > 0:
-		player_shop_status.text = "等待伺服器玩家商店結果…"
-	else:
-		var result: Dictionary = _latest.get("last_player_shop_result",{})
-		if not result.is_empty():
-			var code := int(result.get("status",-1))
-			var action := int(result.get("action",0))
-			if code in [0,1]:
-				player_shop_status.text = "玩家商店操作完成｜動作 %d｜伺服器代碼 %d｜錢包 %d" % [action,code,int(_latest.get("player_shop_wallet",0))]
-			else:
-				player_shop_status.text = "玩家商店操作未完成（伺服器代碼 %d）" % code
-	var sold: Dictionary = _latest.get("last_player_shop_sold",{})
-	if not sold.is_empty() and int(_latest.get("last_player_shop_sold_listing_id",0)) > 0:
-		player_shop_status.text = "商店物品已由伺服器售出｜買家 %d｜UID %d｜錢包 %d" % [int(sold.get("buyer_actor_id",0)),int(sold.get("item_uid",0)),int(_latest.get("player_shop_wallet",0))]
+	player_shop_panel.apply_snapshot(_latest, active, session, item_catalog)
+
 
 func _open_repair_from_input() -> void:
 	if repair_open_button.disabled:
