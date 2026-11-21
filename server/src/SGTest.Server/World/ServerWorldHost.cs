@@ -1,3 +1,5 @@
+using SGTest.Server.Npc;
+using SGTest.Server.Map;
 using System.Diagnostics;
 using System.Threading.Channels;
 

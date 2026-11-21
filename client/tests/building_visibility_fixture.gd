@@ -1,5 +1,5 @@
 extends RefCounted
-const Visibility = preload("res://rendering/building_visibility.gd")
+const Visibility = preload("res://map/building_visibility.gd")
 
 
 static func run(check: Callable) -> void:

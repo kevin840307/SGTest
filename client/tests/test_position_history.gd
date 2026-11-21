@@ -1,5 +1,5 @@
 extends SceneTree
-const History = preload("res://rendering/position_history.gd")
+const History = preload("res://movement/position_history.gd")
 var failures: Array[String] = []
 
 func check(ok: bool, message: String) -> void:

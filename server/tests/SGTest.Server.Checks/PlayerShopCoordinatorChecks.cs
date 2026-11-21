@@ -1,3 +1,8 @@
+using SGTest.Server.Visibility;
+using SGTest.Server.Trade;
+using SGTest.Server.PlayerShop;
+using SGTest.Server.Npc;
+using SGTest.Server.Map;
 using Microsoft.Data.Sqlite;
 using SGTest.Server.Gateway;
 using SGTest.Server.Identity;

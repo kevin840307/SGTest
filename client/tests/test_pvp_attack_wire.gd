@@ -1,7 +1,7 @@
 extends SceneTree
 
-const WireCodec = preload("res://network/wire_codec.gd")
-const WorldState = preload("res://network/world_state.gd")
+const WireCodec = preload("res://wire/wire_codec.gd")
+const WorldState = preload("res://world/world_state.gd")
 
 func _fail(reason: String) -> void:
 	push_error("PVP_ATTACK_WIRE_FAIL "+reason)

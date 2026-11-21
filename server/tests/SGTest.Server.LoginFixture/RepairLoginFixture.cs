@@ -1,3 +1,6 @@
+using SGTest.Server.Visibility;
+using SGTest.Server.Npc;
+using SGTest.Server.Map;
 using Microsoft.Data.Sqlite;
 using System.Net;
 using System.Net.Sockets;

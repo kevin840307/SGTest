@@ -2,8 +2,8 @@ extends SceneTree
 
 # Real concurrently connected Godot ClientSession workers. The C# fixture
 # runs one shared 30Hz authoritative World with TLS/WorldAoiPump, not fake wire.
-const Session = preload("res://network/client_session.gd")
-const WorldState = preload("res://network/world_state.gd")
+const Session = preload("res://session/client_session.gd")
+const WorldState = preload("res://world/world_state.gd")
 const PASSWORD := "Fixture-Password-123!"
 
 func _fail(message: String, session = null) -> void:

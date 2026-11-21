@@ -1,8 +1,8 @@
 extends Node
 ## UI composition and presentation input; ClientSession owns networking/reduction.
-const WorldView = preload("res://rendering/world_view.gd")
-const SessionPanel = preload("res://ui/session_panel.gd")
-const MouseAutorunState = preload("res://app/mouse_autorun_state.gd")
+const WorldView = preload("res://world/world_view.gd")
+const SessionPanel = preload("res://session/session_panel.gd")
+const MouseAutorunState = preload("res://movement/mouse_autorun_state.gd")
 var auto_start := true
 var world_view := WorldView.new()
 var _held := {}

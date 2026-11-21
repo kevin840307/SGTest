@@ -69,8 +69,8 @@ def main():
     if os.name == 'nt' and godot.name.endswith('_console.exe'):
         godot = godot.with_name(godot.name.replace('_console.exe','.exe'))
     args.report.parent.mkdir(parents=True,exist_ok=True)
-    sources = [REPO/'client'/name for name in ['project.godot','assets_runtime/asset_store.gd',
-               'rendering/terrain_data.gd','rendering/terrain.gd','tests/terrain_visible_chunks_candidate.gd','tests/terrain_chunks_candidate.gd','tests/test_terrain.gd']]
+    sources = [REPO/'client'/name for name in ['project.godot','asset_store/asset_store.gd',
+               'map/terrain_data.gd','map/terrain.gd','tests/terrain_visible_chunks_candidate.gd','tests/terrain_chunks_candidate.gd','tests/test_terrain.gd']]
     source_hashes = {str(path.relative_to(REPO)):hashlib.sha256(path.read_bytes()).hexdigest() for path in sources}
     runs = []
     for round_id in range(args.rounds):

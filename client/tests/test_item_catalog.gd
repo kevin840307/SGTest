@@ -1,5 +1,5 @@
 extends SceneTree
-const ItemCatalog = preload("res://ui/item_catalog.gd")
+const ItemCatalog = preload("res://inventory/item_catalog.gd")
 
 
 func _fail(message: String) -> void:

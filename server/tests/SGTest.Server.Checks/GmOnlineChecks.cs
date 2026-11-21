@@ -1,3 +1,5 @@
+using SGTest.Server.Pvp;
+using SGTest.Server.Map;
 using System.Net;
 using System.Net.Security;
 using System.Net.Sockets;

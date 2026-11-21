@@ -64,7 +64,7 @@ def main():
         engine = godot.with_name(godot.name.replace('_console.exe', '.exe'))
         if engine.is_file():
             godot = engine
-    source_files = [REPO/'client'/name for name in ('project.godot', 'assets_runtime/asset_store.gd', args.script)]
+    source_files = [REPO/'client'/name for name in ('project.godot', 'asset_store/asset_store.gd', args.script)]
     source_hashes = {str(path.relative_to(REPO)):hashlib.sha256(path.read_bytes()).hexdigest() for path in source_files}
     records = []
     pack_hash = hashlib.sha256(args.pack.read_bytes()).hexdigest()

@@ -338,7 +338,7 @@ def main():
         godot = engine
     runs, originals = [],set()
     modes = ['canvas','sprites'] if args.mode == 'all' else [args.mode]
-    files = [*sorted((REPO/'client/rendering').glob('*.gd')),REPO/'client/tests/test_world.gd',
+    files = [*sorted((p for folder in ('world','map','animation','movement','player','monster','pvp') for p in (REPO/'client'/folder).glob('*.gd'))),REPO/'client/tests/test_world.gd',
              REPO/'client/tests/world_sprites_candidate.gd',Path(__file__).resolve(),
              REPO/'client/tests/building_visibility_fixture.gd',
              REPO/'tools/asset_converter/source/scenery.py',REPO/'tools/asset_converter/content/build_maps.py']

@@ -1,3 +1,6 @@
+using SGTest.Server.Visibility;
+using SGTest.Server.Npc;
+using SGTest.Server.Map;
 using System.Text.Json;
 using SGTest.Server.Gateway;
 using SGTest.Server.World;

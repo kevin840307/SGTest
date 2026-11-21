@@ -1,6 +1,6 @@
 extends Node2D
 ## Test-only visible chunk policy, no cross-asset texture cache.
-const Data = preload("res://rendering/terrain_data.gd")
+const Data = preload("res://map/terrain_data.gd")
 const CHUNK := 32
 const CORNERS := [Vector2(0, 0), Vector2(1, 0), Vector2(1, 1), Vector2(0, 1)]
 const TRIANGLES := [0, 1, 2, 0, 2, 3]

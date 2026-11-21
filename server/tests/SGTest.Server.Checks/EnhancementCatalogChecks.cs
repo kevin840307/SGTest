@@ -1,3 +1,4 @@
+using SGTest.Server.Npc;
 using System.Text.Json;
 using SGTest.Server.World;
 

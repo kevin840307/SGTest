@@ -1,6 +1,6 @@
 extends SceneTree
 
-const Names=preload("res://rendering/pvp_name_presentation.gd")
+const Names=preload("res://pvp/pvp_name_presentation.gd")
 
 func _fail(message:String)->void:
 	push_error("PVP_NAME_PRESENTATION_FAIL "+message)

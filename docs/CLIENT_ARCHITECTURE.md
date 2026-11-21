@@ -100,7 +100,7 @@ Map13 同圖測 20 連線／300 Enemy／500 Drop（兩個真 Client 測畫面，
 
 ## MVP002-ASSETSTORE 實作與選擇（2026-11-15）
 
-唯一實作 `client/assets_runtime/asset_store.gd`：RefCounted owner／epoch store，Catalog 索引＋既有 maps/<id> world 契約；背景 DecodeJob（FileAccess／JSON／SHA／幾何驗證，無 SceneTree）與 Godot threaded ResourceLoader；main-thread pump 接收完成結果，唯讀 FrameTable／manifest／Texture 由不同 owner 共用。scope release 之後，無 owner 的 entries 直接移除，過期 serial 的工作排空後丟棄；不發舊 epoch ready、不持有額外 idle Texture cache。`begin_scope`／`end_scope` 不是伺服器 MapEpoch，而是本機視覺資源取消世代；不可拿它替代權威版本。
+唯一實作 `client/asset_store/asset_store.gd`：RefCounted owner／epoch store，Catalog 索引＋既有 maps/<id> world 契約；背景 DecodeJob（FileAccess／JSON／SHA／幾何驗證，無 SceneTree）與 Godot threaded ResourceLoader；main-thread pump 接收完成結果，唯讀 FrameTable／manifest／Texture 由不同 owner 共用。scope release 之後，無 owner 的 entries 直接移除，過期 serial 的工作排空後丟棄；不發舊 epoch ready、不持有額外 idle Texture cache。`begin_scope`／`end_scope` 不是伺服器 MapEpoch，而是本機視覺資源取消世代；不可拿它替代權威版本。
 
 數量預算：metadata worker 2、Texture job 預設 1、active assets／scopes 各至多 256、RGBA 頁面估算 256 MiB。主 pump 的 max_commits 限制完成 Texture 的交接數，Godot／driver 的實際 GPU upload 時間仍須另測；metadata 初始化時只讀固定 Catalog 索引，完整 manifest／地圖 companions 在背景解析。兩 owner 同素材共用同 Texture instance。外部 consumer 若還握著 Texture／data，Store 不能強制回收；離圖必須先拆 Scene／放下引用，再 end_scope，並持續排空取消工作。
 
@@ -127,7 +127,7 @@ DIRECT 來源：唯一 `tools/asset_converter/content/build_maps.py::build` 保�
 
 來源修正實測：舊 direct-index 規則相對原版在 Map15 **230,400/230,400** 格、Map13 **230,393/230,400** 格會選到不同 PIC tile；這會讓接縫看起來像地磚位置錯誤，但 row-major `y*width+x` 與 32px 世界座標本身和原版 `DrawTile` 一致。修正後 Python 82/82、雙圖私有 runtime rebuild、PCK ResourceLoader（256 textures／508 codec extents）、Godot Terrain 16 GPU captures（720p/1080p，全0 mismatch）、World-view 12 captures／38原始SPR frame、World Canvas 一輪皆 PASS；PCK SHA256 `5ecee8d59fcde47554766b01c9c752b0c43784ef9ec1dafc6cf6ff2c0638c1ac`。這是資料來源契約修正，未重開 ALT001 Renderer 選型。
 
-正式唯一 Renderer 是 `client/rendering/terrain.gd`。以 Node2D `_draw` 對可視範圍（多一格 margin）呼叫 draw_texture_rect_region；只在可視 tile 矩形變更時 queue_redraw，使用 nearest 與 clip_uv。每張圖只有一個 ground node，共用 Store terrain Texture，沒有全圖 Mesh／額外 Texture cache，ground z=-100。這是呈現層，不承擔碰撞／移動或 authority。地物／人物排序和來源 Z/pivot 另有 Gate。
+正式唯一 Renderer 是 `client/map/terrain.gd`。以 Node2D `_draw` 對可視範圍（多一格 margin）呼叫 draw_texture_rect_region；只在可視 tile 矩形變更時 queue_redraw，使用 nearest 與 clip_uv。每張圖只有一個 ground node，共用 Store terrain Texture，沒有全圖 Mesh／額外 Texture cache，ground z=-100。這是呈現層，不承擔碰撞／移動或 authority。地物／人物排序和來源 Z/pivot 另有 Gate。
 
 ### ALT001 三個合理候選
 

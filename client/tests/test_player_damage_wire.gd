@@ -1,6 +1,6 @@
 extends SceneTree
-const WireCodec = preload("res://network/wire_codec.gd")
-const WorldState = preload("res://network/world_state.gd")
+const WireCodec = preload("res://wire/wire_codec.gd")
+const WorldState = preload("res://world/world_state.gd")
 
 const MONSTER_ID := 1001500001
 const DAMAGE_VISUAL_GOLDEN := "4200000001002A0001000000000000003C000000000000000B0000000000000003000000000000000100000061ADB13B000000000700000000000000120000000006"

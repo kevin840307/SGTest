@@ -43,7 +43,7 @@ def main() -> int:
     files = [
         REPO / "client/app/main.gd", REPO / "client/app/main.tscn",
         REPO / "client/project.godot",
-        *sorted((REPO / "client/rendering").glob("*.gd")),
+        *sorted((p for folder in ("world","map","animation","movement","player","monster","pvp") for p in (REPO / "client" / folder).glob("*.gd"))),
         REPO / "client/tests/test_world_view.gd",
         REPO / "client/tests/world_camera_fixture.gd",
         Path(__file__).resolve(),

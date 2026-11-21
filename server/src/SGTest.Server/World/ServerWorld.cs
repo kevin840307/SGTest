@@ -1,3 +1,6 @@
+using SGTest.Server.Pvp;
+using SGTest.Server.Npc;
+using SGTest.Server.Map;
 using System.Collections.Concurrent;
 using System.Globalization;
 using System.Security.Cryptography;

@@ -1,3 +1,4 @@
+using SGTest.Server.Visibility;
 using SGTest.Server.Gateway;
 using SGTest.Server.Wire;
 using SGTest.Server.World;

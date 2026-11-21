@@ -1,6 +1,6 @@
 extends SceneTree
-const WireCodec = preload("res://network/wire_codec.gd")
-const State = preload("res://network/world_state.gd")
+const WireCodec = preload("res://wire/wire_codec.gd")
+const State = preload("res://world/world_state.gd")
 
 const AUTH := "0900000001000B0000"
 const LIST := "1800000001000C00010B000000000000000004004865726F"

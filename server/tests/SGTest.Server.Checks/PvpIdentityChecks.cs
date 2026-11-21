@@ -1,3 +1,5 @@
+using SGTest.Server.Visibility;
+using SGTest.Server.Pvp;
 using SGTest.Server.Gateway;
 using SGTest.Server.Identity;
 using SGTest.Server.Wire;

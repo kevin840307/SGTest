@@ -1,3 +1,4 @@
+using SGTest.Server.Npc;
 using Microsoft.Data.Sqlite;
 using SGTest.Server.Identity;
 

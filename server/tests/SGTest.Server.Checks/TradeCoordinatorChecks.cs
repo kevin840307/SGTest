@@ -1,3 +1,6 @@
+using SGTest.Server.Trade;
+using SGTest.Server.Map;
+using SGTest.Server.Combat;
 using Microsoft.Data.Sqlite;
 using SGTest.Server.Gateway;
 using SGTest.Server.Identity;

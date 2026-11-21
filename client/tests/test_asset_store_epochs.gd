@@ -1,6 +1,6 @@
 extends SceneTree
 
-const Store = preload("res://assets_runtime/asset_store.gd")
+const Store = preload("res://asset_store/asset_store.gd")
 var store = Store.new()
 var events: Array = []
 var failures: Array = []

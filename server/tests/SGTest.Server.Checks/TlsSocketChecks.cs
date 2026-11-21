@@ -1,3 +1,4 @@
+using SGTest.Server.Visibility;
 using System.Net;
 using System.Net.Security;
 using System.Net.Sockets;

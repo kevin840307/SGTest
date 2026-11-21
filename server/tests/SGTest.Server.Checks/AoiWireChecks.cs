@@ -1,3 +1,5 @@
+using SGTest.Server.Visibility;
+using SGTest.Server.Monster;
 using System.Buffers.Binary;
 using SGTest.Server.Gateway;
 using SGTest.Server.Wire;

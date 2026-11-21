@@ -1,3 +1,7 @@
+using SGTest.Server.Visibility;
+using SGTest.Server.Monster;
+using SGTest.Server.Map;
+using SGTest.Server.Combat;
 using System.Buffers.Binary;
 using System.Diagnostics;
 using System.Net;

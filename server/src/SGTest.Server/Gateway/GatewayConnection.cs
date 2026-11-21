@@ -1,3 +1,9 @@
+using SGTest.Server.Visibility;
+using SGTest.Server.Skill;
+using SGTest.Server.Pvp;
+using SGTest.Server.Npc;
+using SGTest.Server.Monster;
+using SGTest.Server.Combat;
 using System.Text;
 using SGTest.Server.Wire;
 using SGTest.Server.World;

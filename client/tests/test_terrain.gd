@@ -1,8 +1,8 @@
 extends SceneTree
 
-const Store = preload("res://assets_runtime/asset_store.gd")
-const Data = preload("res://rendering/terrain_data.gd")
-const Draw = preload("res://rendering/terrain.gd")
+const Store = preload("res://asset_store/asset_store.gd")
+const Data = preload("res://map/terrain_data.gd")
+const Draw = preload("res://map/terrain.gd")
 const Chunks = preload("res://tests/terrain_chunks_candidate.gd")
 const VisibleChunks = preload("res://tests/terrain_visible_chunks_candidate.gd")
 var failures: Array = []

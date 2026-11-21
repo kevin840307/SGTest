@@ -1,3 +1,4 @@
+using SGTest.Server.Npc;
 using System.Buffers;
 using System.Diagnostics;
 using System.Net.Security;

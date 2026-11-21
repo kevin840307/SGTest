@@ -1,5 +1,5 @@
 extends RefCounted
-const Camera = preload("res://rendering/world_camera.gd")
+const Camera = preload("res://world/world_camera.gd")
 
 
 static func run(check: Callable) -> void:

@@ -1,7 +1,7 @@
 extends SceneTree
 
-const Session=preload("res://network/client_session.gd")
-const WorldState=preload("res://network/world_state.gd")
+const Session=preload("res://session/client_session.gd")
+const WorldState=preload("res://world/world_state.gd")
 const PASSWORD:="Fixture-Password-123!"
 
 func _fail(message:String,session=null)->void:

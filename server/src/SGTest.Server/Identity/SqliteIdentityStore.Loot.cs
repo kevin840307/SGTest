@@ -1,3 +1,4 @@
+using SGTest.Server.Monster;
 using Microsoft.Data.Sqlite;
 
 namespace SGTest.Server.Identity;

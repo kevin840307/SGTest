@@ -1,3 +1,5 @@
+using SGTest.Server.Npc;
+using SGTest.Server.Map;
 using System.Buffers.Binary;
 using System.Net;
 using System.Net.Security;

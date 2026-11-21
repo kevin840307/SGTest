@@ -1,5 +1,5 @@
 extends SceneTree
-const Players = preload("res://rendering/player_presentation.gd")
+const Players = preload("res://player/player_presentation.gd")
 
 func _initialize() -> void:
 	build.call_deferred()

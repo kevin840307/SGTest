@@ -1,3 +1,4 @@
+using SGTest.Server.Map;
 using SGTest.Server.World;
 
 internal static class FacingChecks

@@ -1,7 +1,7 @@
 extends SceneTree
 
-const Session=preload("res://network/client_session.gd")
-const State=preload("res://network/world_state.gd")
+const Session=preload("res://session/client_session.gd")
+const State=preload("res://world/world_state.gd")
 
 func _fail(message:String,session:RefCounted=null)->void:
 	if session!=null:

@@ -1,16 +1,16 @@
 extends SceneTree
 
-const Store = preload("res://assets_runtime/asset_store.gd")
-const Order = preload("res://rendering/world_order.gd")
-const List = preload("res://rendering/world_draw_list.gd")
-const Canvas = preload("res://rendering/world_canvas.gd")
+const Store = preload("res://asset_store/asset_store.gd")
+const Order = preload("res://world/world_order.gd")
+const List = preload("res://world/world_draw_list.gd")
+const Canvas = preload("res://world/world_canvas.gd")
 const Sprites = preload("res://tests/world_sprites_candidate.gd")
-const TerrainData = preload("res://rendering/terrain_data.gd")
-const Terrain = preload("res://rendering/terrain.gd")
-const Timeline = preload("res://rendering/action_timeline.gd")
-const Fade = preload("res://rendering/building_fade.gd")
+const TerrainData = preload("res://map/terrain_data.gd")
+const Terrain = preload("res://map/terrain.gd")
+const Timeline = preload("res://animation/action_timeline.gd")
+const Fade = preload("res://map/building_fade.gd")
 const VisibilityFixture = preload("res://tests/building_visibility_fixture.gd")
-const Visibility = preload("res://rendering/building_visibility.gd")
+const Visibility = preload("res://map/building_visibility.gd")
 var store = Store.new()
 var failures: Array = []
 var captures: Array = []

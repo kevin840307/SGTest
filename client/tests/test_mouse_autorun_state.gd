@@ -1,5 +1,5 @@
 extends SceneTree
-const Autorun = preload("res://app/mouse_autorun_state.gd")
+const Autorun = preload("res://movement/mouse_autorun_state.gd")
 
 func fail(message: String) -> void:
 	push_error("MOUSE_AUTORUN_STATE_FAIL "+message)

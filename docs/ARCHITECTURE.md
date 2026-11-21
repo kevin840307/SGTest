@@ -33,6 +33,24 @@
 7. **AOI ≠ full-map broadcast** — Server 先依 Interest 過濾可見與必要事件，只為需要更新的實體產生 Delta；不因地圖有大量怪物／掉落物就向每位玩家傳全部。
 8. **Wire ≠ JSON** — 不預設 JSON、MessagePack 或自訂二進位，先研究原版／Recovered，採同負載實測選擇低成本、可維護的單一正式協定。
 
+## 功能模組
+
+Server 使用 PascalCase C# namespace，Client 使用 Godot 小寫目錄。相同功能沿用相同名稱，從入口即可找到規則或呈現。
+
+| 功能 | Server | Client |
+|---|---|---|
+| 地圖 | `Map/` 負責 Blocking、格線與尋路 | `map/` 負責地形、建物與遮擋 |
+| NPC | `Npc/` 負責傳點、商店、銀行、倉庫、修理、強化、任務資料 | `app/` 目前組裝互動 UI，獨立 NPC 呈現新增時放 `npc/` |
+| PvP | `Pvp/` 的地圖政策、狀態與指令序號 | `pvp/` 的名字狀態呈現 |
+| 怪物 | `Monster/` 的人口、模擬、協調和戰利品 | `monster/` 的怪物呈現 |
+| 戰鬥與技能 | `Combat/` 傷害結算、`Skill/` 技能規則資料 | 目前由 `world/` 接收事件、`player/` 和 `monster/` 呈現 |
+| 社交與交易 | `Party/`、`Trade/`、`PlayerShop/` 各自保有流程與狀態 | 目前由 App 組裝既有 UI，擴充時依相同功能名拆分 |
+| 世界與視野 | `World/` 單寫者、生命週期，`Visibility/` AOI | `world/` reducer、相機、畫面組合 |
+| 帳號、連線與封包 | `Identity/`、`Gateway/`、`Wire/` | `session/`、`network/`、`wire/` |
+| 客戶端支援 | Host 組裝服務及載入內容 | `inventory/`、`movement/`、`animation/`、`asset_store/` |
+
+World 擁有權威狀態。Map 提供碰撞與尋路查詢，NPC 提供體系內的互動資料，Visibility 讀取世界結果並交由 Gateway 送出。SQLite 交易保留於 Identity 以維持原子性，功能協調器透過現有交易方法處理提交。Client Session 餵入 WorldState，WorldView 消費快照，角色動畫、地形與資源層透過明確的輸入參數接入。新增功能先確定規則、狀態與輸出的所有者，再在 Host 或 App 組裝；需要替換的行為透過具體輸入／結果或窄介面接入。現有跨功能協調器仍有直接依賴，後續依實際交易或玩法邊界解耦。
+
 ## MVP 範圍：Map15 主城 + Map13 台地，兩張真地圖互通
 
 地圖先行，用唯一 Converter 先驗證兩圖 terrain／scenery／Blocking／NPC／傳點及原始方向動畫；不能因增加第二張圖就先建全圖多套 Loader。Map15 優先驗證登入角色、NPC 商店銀行倉庫修理、背包裝備、玩家交易／商店等主城互動；Map13 驗證 A*、追擊、Server authoritative AI/Combat、多人 AOI、掉落／拾取與正確 Facing/Attack/Hit/Death。實際原版地圖人口與功能必須由來源核對。

@@ -1,3 +1,6 @@
+using SGTest.Server.Visibility;
+using SGTest.Server.Npc;
+using SGTest.Server.Map;
 using System.Net;
 using System.Net.Sockets;
 using SGTest.Server.Gateway;

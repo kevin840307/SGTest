@@ -1,3 +1,6 @@
+using SGTest.Server.Pvp;
+using SGTest.Server.Map;
+using SGTest.Server.Combat;
 using SGTest.Server.Gateway;
 using SGTest.Server.Identity;
 using SGTest.Server.Wire;

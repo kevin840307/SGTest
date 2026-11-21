@@ -1,3 +1,8 @@
+using SGTest.Server.Visibility;
+using SGTest.Server.Skill;
+using SGTest.Server.Monster;
+using SGTest.Server.Map;
+using SGTest.Server.Combat;
 using SGTest.Server.Gateway;
 using SGTest.Server.World;
 using SGTest.Server.Identity;

@@ -2,26 +2,14 @@ name: Client core checks
 on:
   push:
     paths:
-      - "client/network/**"
-      - "client/app/**"
-      - "client/rendering/**"
-      - "client/ui/**"
-      - "client/tests/**"
-      - "server/src/SGTest.Server/Wire/**"
-      - "server/src/SGTest.Server/Identity/**"
-      - "server/src/SGTest.Server/Gateway/**"
+      - "client/**"
+      - "server/src/SGTest.Server/**"
       - "server/tests/SGTest.Server.LoginFixture/**"
       - ".github/workflows/client-core.yml"
   pull_request:
     paths:
-      - "client/network/**"
-      - "client/app/**"
-      - "client/rendering/**"
-      - "client/ui/**"
-      - "client/tests/**"
-      - "server/src/SGTest.Server/Wire/**"
-      - "server/src/SGTest.Server/Identity/**"
-      - "server/src/SGTest.Server/Gateway/**"
+      - "client/**"
+      - "server/src/SGTest.Server/**"
       - "server/tests/SGTest.Server.LoginFixture/**"
       - ".github/workflows/client-core.yml"
   workflow_dispatch:

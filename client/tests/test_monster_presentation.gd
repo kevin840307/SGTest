@@ -1,6 +1,6 @@
 extends SceneTree
-const Monsters = preload("res://rendering/monster_presentation.gd")
-const DrawList = preload("res://rendering/world_draw_list.gd")
+const Monsters = preload("res://monster/monster_presentation.gd")
+const DrawList = preload("res://world/world_draw_list.gd")
 var failures: Array = []
 
 func check(ok: bool, message: String) -> void:
