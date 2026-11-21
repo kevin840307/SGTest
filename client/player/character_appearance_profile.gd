@@ -13,15 +13,23 @@ var attack_available := false
 var hit_available := false
 var death_available := false
 
-static func definition(appearance: Dictionary = {}) -> Dictionary:
-	var value := {"race":0,"hair_index":0,"hair_color":0} if appearance.is_empty() else appearance
-	if value.size()!=3 or not value.has_all(["race","hair_index","hair_color"]):
-		return {}
+static func appearance_key(appearance: Dictionary = {}) -> String:
+	if appearance.is_empty():
+		return "0:0:0"
+	if appearance.size()!=3 or not appearance.has_all(["race","hair_index","hair_color"]):
+		return ""
 	for field in ["race","hair_index","hair_color"]:
-		if not value[field] is int:
-			return {}
-	if value.race < 0 or value.race > 2 or value.hair_index < 0 or value.hair_index > 65535 or value.hair_color != 0:
-		return {} # Robot parts, Y controller and hair palettes need their own source evidence.
+		if not appearance[field] is int:
+			return ""
+	if appearance.race < 0 or appearance.race > 2 or appearance.hair_index < 0 or appearance.hair_index > 65535 or appearance.hair_color != 0:
+		return "" # Robot parts, Y controller and hair palettes need source evidence.
+	return "%d:%d:0" % [int(appearance.race),int(appearance.hair_index)]
+
+static func definition(appearance: Dictionary = {}) -> Dictionary:
+	var resolved_key := appearance_key(appearance)
+	if resolved_key.is_empty():
+		return {}
+	var value := {"race":0,"hair_index":0,"hair_color":0} if appearance.is_empty() else appearance
 	var race: String = ["b","g","a"][int(value.race)]
 	var prefix := race.to_upper()
 	var hair := "hair%02d" % int(value.hair_index)
@@ -31,7 +39,7 @@ static func definition(appearance: Dictionary = {}) -> Dictionary:
 			resolved[slot] = ["players/%s/hair/%s" % [race,hair],prefix+"-"+hair.to_upper()]
 		else:
 			resolved[slot] = [str(resolved[slot][0]).replace("players/b/","players/"+race+"/"),str(resolved[slot][1]).replace("B-",prefix+"-")]
-	return {"key":"%d:%d:0" % [int(value.race),int(value.hair_index)],"parts":resolved,"body_prefix":prefix+"-BODY"}
+	return {"key":resolved_key,"parts":resolved,"body_prefix":prefix+"-BODY"}
 
 func configure(assets: Dictionary, appearance: Dictionary, shared_views: Dictionary) -> Error:
 	var data := definition(appearance)

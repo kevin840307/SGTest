@@ -46,16 +46,16 @@ func add_profile(assets: Dictionary, appearance: Dictionary) -> Error:
 	return OK
 
 func has_profile(appearance: Dictionary) -> bool:
-	var data := Profile.definition(appearance)
-	return not data.is_empty() and _profiles.has(str(data.key))
+	var key := Profile.appearance_key(appearance)
+	return not key.is_empty() and _profiles.has(key)
 
 func _profile_for(value: Dictionary) -> RefCounted:
 	if not value.has("appearance"):
 		return _profiles.get(_default_profile_key)
 	if not value.appearance is Dictionary:
 		return null
-	var data := Profile.definition(value.appearance)
-	return null if data.is_empty() else _profiles.get(str(data.key))
+	var key := Profile.appearance_key(value.appearance)
+	return null if key.is_empty() else _profiles.get(key)
 
 func apply_snapshot(snapshot: Dictionary, now_usec: int) -> void:
 	if not snapshot.get("world_ready",false) or int(snapshot.get("map_epoch",0)) <= 0 or now_usec < 0:
