@@ -55,7 +55,7 @@ public sealed partial class SqliteIdentityStore
            actor.HealAmount is <1 or >100_000_000)
             throw new ArgumentOutOfRangeException(nameof(actor));
 
-        return await Task.Run(() =>
+        return await Task.Run<SkillHealResult>(() =>
         {
             using var connection=Open();
             using var tx=connection.BeginTransaction();
