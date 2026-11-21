@@ -1,5 +1,8 @@
 # SGTest 新版重建 TODO（2026-11-15）
 
+- ARCH-CLIENT-WORLDREADY-MAP-RESET [x] 2026-11-21：`client/world/world_state.gd` 的 `_apply_world_ready` 換圖 reset 依單一 Reducer 所擁有的戰鬥／物品 pending、NPC 服務、社交／移動三個私有方法分組；保持每行賦值與 map epoch gate 次序，**不引入第二個可變 Store／Queue／傳輸線程**。`client/tests/test_world_state.gd` 增加 MapEpoch 1→2、Map15→Map13、舊 WorldReady 忽略、同圖 resync 的回歸：舊圖 pending／NPC Session／AOI 清零但權威持有的背包／裝備 UID、slot、revision 保留。命名採常見 `WorldState`／`WorldReady`／`MapEpoch`，不新增 `WorldManager`；所有功能解析還未物理分檔。Godot 世界狀態定向測試 PASS，完整 Python／TLS/UI 驗收以本輪結果為準。
+
+
 - ARCH-SERVER-PLAYER-RECOVERY-SKILLS [x] 2026-11-21：`Gateway/IdentityTlsAuthorization.cs` 的 Respawn／RecoveryItem 生命與 HP 回復流程抽至既有 `Combat/PlayerRecoveryHandler.cs`；一般 SkillUse MP／preflight 結算抽至既有 `Skill/SkillCommandHandler.cs`。沿用每條已認證連線的同一 `gameplayGate`、WorldResultRouter、原 SQLite／Combat／Skill owner；包含連線和地圖世代、Combat AI suspend／drain／resume、HP／MP 可靠結果先於後續 PlayerDamage 的 FIFO 順序。`InventoryCommandHandler` 沒有吞下不相關的 Combat 邏輯，也未新增第二個 state/queue/DB。Release Host build 0 warnings／0 errors；完整 Server checks 首次跑在 TLS 選角結束條件偶發 FAIL（未確認根因），已加入 end reason／角色數診斷，後續 **2 次完整 267/267 PASS**；Python 全量 113/113、架構契約 18/18、Godot 4.7.2 真 TLS/UI 與跨端 E2E 均 PASS。該偶發 TLS 關閉現象須持續追蹤，不能宣稱根因已修復。
 
 

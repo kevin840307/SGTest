@@ -2049,155 +2049,9 @@ func _apply_world_ready(frame: PackedByteArray) -> bool:
 		map_epoch = next_epoch
 		map_id = int(ready.map_id)
 		waiting_for_new_map = false
-		npc_interaction_sequence = 0
-		attack_sequence = 0
-		last_attack_result_sequence = 0
-		last_attack_result_status = -1
-		last_attack_server_tick = -1
-		last_attack_result.clear()
-		stale_attack_results = 0
-		skill_sequence = 0
-		pending_skill_sequence = 0
-		pending_skill_target_kind = 0
-		pending_skill_target_id = 0
-		last_skill_result_sequence = 0
-		last_skill_result_status = -1
-		last_skill_server_tick = -1
-		last_skill_result.clear()
-		stale_skill_results = 0
-		player_skill_events.clear()
-		player_skill_sequences.clear()
-		stale_player_skill_visuals = 0
-		player_attack_events.clear()
-		player_attack_sequences.clear()
-		stale_player_attack_visuals = 0
-		player_damage_visual_events.clear()
-		player_damage_visual_sequences.clear()
-		stale_player_damage_visuals = 0
-		player_respawn_visual_events.clear()
-		player_respawn_visual_sequences.clear()
-		stale_player_respawn_visuals = 0
-		recovery_sequence = 0
-		pending_recovery_sequence = 0
-		pending_recovery_item_uid = 0
-		last_recovery_result_sequence = 0
-		last_recovery_result_status = -1
-		last_recovery_result.clear()
-		stale_recovery_results = 0
-		discard_sequence = 0
-		pending_discard_sequence = 0
-		pending_discard_item_uid = 0
-		pending_discard_quantity = 0
-		last_discard_result_sequence = 0
-		last_discard_result_status = -1
-		last_discard_result.clear()
-		stale_discard_results = 0
-		pickup_sequence = 0
-		pending_pickup_sequence = 0
-		pending_pickup_drop_id = 0
-		last_pickup_result_sequence = 0
-		last_pickup_result_status = -1
-		last_pickup_result.clear()
-		stale_pickup_results = 0
-		shop_sequence = 0
-		pending_shop_sequence = 0
-		pending_shop_kind = 0
-		pending_shop_npc = 0
-		pending_shop_item_uid = 0
-		pending_shop_item_definition_id = 0
-		pending_shop_quantity = 0
-		active_shop_npc = 0
-		shop_items.clear()
-		shop_money = 0
-		last_shop_open_status = -1
-		last_shop_response_sequence = 0
-		last_shop_result.clear()
-		stale_shop_results = 0
-		storage_sequence = 0
-		pending_storage_sequence = 0
-		pending_storage_kind = 0
-		pending_storage_npc = 0
-		pending_storage_item_uid = 0
-		active_storage_npc = 0
-		storage_items.clear()
-		storage_ready = false
-		storage_next_index = 0
-		storage_revision = 0
-		last_storage_open_status = -1
-		last_storage_response_sequence = 0
-		last_storage_result.clear()
-		stale_storage_results = 0
-		# Equipment location persists across maps, but map-scoped request
-		# sequences and any unresolved old-map mutation must not.
-		equipment_sequence = 0
-		pending_equipment_sequence = 0
-		pending_equipment_kind = 0
-		pending_equipment_item_uid = 0
-		last_equipment_response_sequence = 0
-		last_equipment_result.clear()
-		stale_equipment_results = 0
-		bank_sequence = 0
-		pending_bank_sequence = 0
-		pending_bank_kind = 0
-		pending_bank_npc = 0
-		pending_bank_amount = 0
-		active_bank_npc = 0
-		bank_scope = 0
-		bank_wallet_money = 0
-		bank_money = 0
-		last_bank_open_status = -1
-		last_bank_response_sequence = 0
-		last_bank_result.clear()
-		stale_bank_results = 0
-		repair_sequence = 0
-		pending_repair_sequence = 0
-		pending_repair_kind = 0
-		pending_repair_npc = 0
-		pending_repair_item_uid = 0
-		active_repair_npc = 0
-		repair_items.clear()
-		repair_ready = false
-		repair_next_index = 0
-		repair_revision = 0
-		repair_wallet_money = 0
-		last_repair_open_status = -1
-		last_repair_response_sequence = 0
-		last_repair_result.clear()
-		stale_repair_results = 0
-		enhancement_sequence = 0
-		pending_enhancement_sequence = 0
-		pending_enhancement_kind = 0
-		pending_enhancement_npc = 0
-		pending_enhancement_item_uid = 0
-		active_enhancement_npc = 0
-		enhancement_items.clear()
-		enhancement_ready = false
-		enhancement_next_index = 0
-		enhancement_revision = 0
-		enhancement_wallet_money = 0
-		last_enhancement_open_status = -1
-		last_enhancement_response_sequence = 0
-		last_enhancement_result.clear()
-		stale_enhancement_results = 0
-		_clear_trade_state(true)
-		_clear_player_shop_map()
-		_clear_quest_map()
-		_clear_pvp_map()
-		last_trade_terminal.clear()
-		stale_trade_frames = 0
-		respawn_sequence = 0
-		last_respawn_result_sequence = 0
-		last_respawn_result_status = -1
-		last_respawn_result.clear()
-		stale_respawn_results = 0
-		_clear_pending_whisper()
-		_clear_pending_party()
-		movement_sequence = 0
-		last_receipt_sequence = 0
-		last_receipt_status = -1
-		last_server_tick = -1
-		last_world_ready_ack_epoch = 0
-		last_world_ready_ack_tick = -1
+		_reset_map_combat_and_item_commands()
+		_reset_map_npc_services()
+		_reset_map_social_and_movement()
 	if completing_resync:
 		resync_completions += 1
 		last_world_ready_ack_epoch = 0
@@ -2236,6 +2090,164 @@ func _apply_world_ready(frame: PackedByteArray) -> bool:
 	pending_world_ready_ack_epoch = map_epoch
 	pending_world_ready_ack_tick = tick
 	return true
+
+# New MapEpoch invalidates command sequences and visuals from the old map.
+# These methods intentionally mutate only this WorldState: never create a
+# second reducer, transport owner, or unordered replay queue.
+func _reset_map_combat_and_item_commands() -> void:
+	npc_interaction_sequence = 0
+	attack_sequence = 0
+	last_attack_result_sequence = 0
+	last_attack_result_status = -1
+	last_attack_server_tick = -1
+	last_attack_result.clear()
+	stale_attack_results = 0
+	skill_sequence = 0
+	pending_skill_sequence = 0
+	pending_skill_target_kind = 0
+	pending_skill_target_id = 0
+	last_skill_result_sequence = 0
+	last_skill_result_status = -1
+	last_skill_server_tick = -1
+	last_skill_result.clear()
+	stale_skill_results = 0
+	player_skill_events.clear()
+	player_skill_sequences.clear()
+	stale_player_skill_visuals = 0
+	player_attack_events.clear()
+	player_attack_sequences.clear()
+	stale_player_attack_visuals = 0
+	player_damage_visual_events.clear()
+	player_damage_visual_sequences.clear()
+	stale_player_damage_visuals = 0
+	player_respawn_visual_events.clear()
+	player_respawn_visual_sequences.clear()
+	stale_player_respawn_visuals = 0
+	recovery_sequence = 0
+	pending_recovery_sequence = 0
+	pending_recovery_item_uid = 0
+	last_recovery_result_sequence = 0
+	last_recovery_result_status = -1
+	last_recovery_result.clear()
+	stale_recovery_results = 0
+	discard_sequence = 0
+	pending_discard_sequence = 0
+	pending_discard_item_uid = 0
+	pending_discard_quantity = 0
+	last_discard_result_sequence = 0
+	last_discard_result_status = -1
+	last_discard_result.clear()
+	stale_discard_results = 0
+	pickup_sequence = 0
+	pending_pickup_sequence = 0
+	pending_pickup_drop_id = 0
+	last_pickup_result_sequence = 0
+	last_pickup_result_status = -1
+	last_pickup_result.clear()
+	stale_pickup_results = 0
+
+func _reset_map_npc_services() -> void:
+	shop_sequence = 0
+	pending_shop_sequence = 0
+	pending_shop_kind = 0
+	pending_shop_npc = 0
+	pending_shop_item_uid = 0
+	pending_shop_item_definition_id = 0
+	pending_shop_quantity = 0
+	active_shop_npc = 0
+	shop_items.clear()
+	shop_money = 0
+	last_shop_open_status = -1
+	last_shop_response_sequence = 0
+	last_shop_result.clear()
+	stale_shop_results = 0
+	storage_sequence = 0
+	pending_storage_sequence = 0
+	pending_storage_kind = 0
+	pending_storage_npc = 0
+	pending_storage_item_uid = 0
+	active_storage_npc = 0
+	storage_items.clear()
+	storage_ready = false
+	storage_next_index = 0
+	storage_revision = 0
+	last_storage_open_status = -1
+	last_storage_response_sequence = 0
+	last_storage_result.clear()
+	stale_storage_results = 0
+	# Equipment location persists across maps, but map-scoped request
+	# sequences and any unresolved old-map mutation must not.
+	equipment_sequence = 0
+	pending_equipment_sequence = 0
+	pending_equipment_kind = 0
+	pending_equipment_item_uid = 0
+	last_equipment_response_sequence = 0
+	last_equipment_result.clear()
+	stale_equipment_results = 0
+	bank_sequence = 0
+	pending_bank_sequence = 0
+	pending_bank_kind = 0
+	pending_bank_npc = 0
+	pending_bank_amount = 0
+	active_bank_npc = 0
+	bank_scope = 0
+	bank_wallet_money = 0
+	bank_money = 0
+	last_bank_open_status = -1
+	last_bank_response_sequence = 0
+	last_bank_result.clear()
+	stale_bank_results = 0
+	repair_sequence = 0
+	pending_repair_sequence = 0
+	pending_repair_kind = 0
+	pending_repair_npc = 0
+	pending_repair_item_uid = 0
+	active_repair_npc = 0
+	repair_items.clear()
+	repair_ready = false
+	repair_next_index = 0
+	repair_revision = 0
+	repair_wallet_money = 0
+	last_repair_open_status = -1
+	last_repair_response_sequence = 0
+	last_repair_result.clear()
+	stale_repair_results = 0
+	enhancement_sequence = 0
+	pending_enhancement_sequence = 0
+	pending_enhancement_kind = 0
+	pending_enhancement_npc = 0
+	pending_enhancement_item_uid = 0
+	active_enhancement_npc = 0
+	enhancement_items.clear()
+	enhancement_ready = false
+	enhancement_next_index = 0
+	enhancement_revision = 0
+	enhancement_wallet_money = 0
+	last_enhancement_open_status = -1
+	last_enhancement_response_sequence = 0
+	last_enhancement_result.clear()
+	stale_enhancement_results = 0
+
+func _reset_map_social_and_movement() -> void:
+	_clear_trade_state(true)
+	_clear_player_shop_map()
+	_clear_quest_map()
+	_clear_pvp_map()
+	last_trade_terminal.clear()
+	stale_trade_frames = 0
+	respawn_sequence = 0
+	last_respawn_result_sequence = 0
+	last_respawn_result_status = -1
+	last_respawn_result.clear()
+	stale_respawn_results = 0
+	_clear_pending_whisper()
+	_clear_pending_party()
+	movement_sequence = 0
+	last_receipt_sequence = 0
+	last_receipt_status = -1
+	last_server_tick = -1
+	last_world_ready_ack_epoch = 0
+	last_world_ready_ack_tick = -1
 
 func _check_aoi_generation(receiver_epoch: int, tick: int) -> int:
 	if resync_pending:

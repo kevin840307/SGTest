@@ -141,8 +141,116 @@ func _initialize() -> void:
 	if world.apply_frame(future) or int(world.snapshot().state) != WorldState.STATE_FAILED:
 		_fail("future map receipt did not fail closed")
 		return
-	print("WORLD_STATE_PASS registration_then_auth=PASS registration_rate_limit=FAIL_CLOSED auth_create_refresh_choose_ready_ack_move=PASS choose_clears_prior_actor=PASS duplicate_receipt=IGNORED future_map=FAIL_CLOSED")
+	if not _verify_cross_map_reset():
+		return
+	print("WORLD_STATE_PASS registration_then_auth=PASS registration_rate_limit=FAIL_CLOSED auth_create_refresh_choose_ready_ack_move=PASS choose_clears_prior_actor=PASS crossmap_preserves_owned_items=PASS crossmap_clears_pending=PASS same_epoch_resync=PASS duplicate_receipt=IGNORED future_map=FAIL_CLOSED")
 	quit(0)
+
+func _verify_cross_map_reset() -> bool:
+	var transfer = WorldState.new()
+	if not transfer.mark_auth_sent() or not transfer.apply_frame(AUTH_OK.hex_decode()) or not transfer.apply_frame(LIST.hex_decode()) or not transfer.mark_choose_sent(11) or not transfer.apply_frame(CHOOSE.hex_decode()) or not transfer.apply_frame(READY.hex_decode()):
+		_fail("crossmap fixture login failed")
+		return false
+	# Authenticated owned item locations persist; map-scoped command intent,
+	# NPC sessions, world AOI and combat visuals must never follow the actor.
+	transfer.inventory_items[301] = {"item_uid": 301, "item_definition_id": 201, "quantity": 3}
+	transfer.inventory_ready = true
+	transfer.inventory_revision = 4
+	transfer.equipment_items[302] = {"item_uid": 302, "item_definition_id": 202, "slot_id": 3}
+	transfer.equipment_slots[3] = 302
+	transfer.equipment_ready = true
+	transfer.equipment_revision = 5
+	transfer.skill_sequence = 6
+	transfer.pending_skill_sequence = 6
+	transfer.player_skill_events.append({"skill_id": 101})
+	transfer.pending_recovery_sequence = 7
+	transfer.pending_discard_sequence = 8
+	transfer.pending_pickup_sequence = 9
+	transfer.shop_sequence = 4
+	transfer.pending_shop_sequence = 4
+	transfer.active_shop_npc = 99
+	transfer.shop_money = 650
+	transfer.shop_items[10] = {"item_definition_id": 10}
+	transfer.storage_sequence = 5
+	transfer.pending_storage_sequence = 5
+	transfer.bank_sequence = 2
+	transfer.pending_bank_sequence = 2
+	transfer.repair_sequence = 3
+	transfer.pending_repair_sequence = 3
+	transfer.enhancement_sequence = 4
+	transfer.pending_enhancement_sequence = 4
+	transfer.trade_id = 33
+	transfer.pvp_sequence = 5
+	transfer.pending_pvp_sequence = 5
+	transfer.respawn_sequence = 4
+	transfer.entities[55] = {"actor_id": 55}
+	transfer.monsters[61] = {"entity_id": 61}
+	transfer.ground_drops[75] = {"drop_id": 75}
+	transfer.waiting_for_new_map = true
+	var next_ready := _mutate_i64(READY.hex_decode(), 8, 2)
+	# WorldReady layout: header (8), epoch (8), tick (8), actor (8),
+	# map ID (4), x (4), y (4), facing (1).
+	next_ready[32] = 13
+	if not transfer.apply_frame(next_ready):
+		_fail("trusted map-epoch 2 WorldReady rejected")
+		return false
+	var changed: Dictionary = transfer.snapshot()
+	if (
+		int(changed.map_epoch) != 2 or int(changed.map_id) != 13 or
+		not bool(changed.world_ready) or bool(changed.waiting_for_new_map) or
+		not changed.inventory_items.has(301) or
+		not changed.equipment_items.has(302) or
+		int(changed.equipment_slots.get(3, 0)) != 302 or
+		int(changed.inventory_revision) != 4 or
+		int(changed.equipment_revision) != 5 or
+		int(changed.pending_skill_sequence) != 0 or
+		not changed.player_skill_events.is_empty() or
+		int(changed.pending_recovery_sequence) != 0 or
+		int(changed.pending_discard_sequence) != 0 or
+		int(changed.pending_pickup_sequence) != 0 or
+		int(changed.pending_shop_sequence) != 0 or
+		int(changed.active_shop_npc) != 0 or
+		not changed.shop_items.is_empty() or
+		int(changed.shop_money) != 0 or
+		int(changed.pending_storage_sequence) != 0 or
+		int(changed.pending_bank_sequence) != 0 or
+		int(changed.pending_repair_sequence) != 0 or
+		int(changed.pending_enhancement_sequence) != 0 or
+		int(changed.trade_id) != 0 or
+		int(changed.pending_pvp_sequence) != 0 or
+		int(changed.respawn_sequence) != 0 or
+		not changed.entities.is_empty() or
+		not changed.monsters.is_empty() or
+		not changed.ground_drops.is_empty()
+	):
+		_fail("map change leaked old map intent/AOI or discarded authoritative owned items")
+		return false
+	# A stale previous-map baseline cannot rewind the new-map actor.
+	if not transfer.apply_frame(READY.hex_decode()):
+		_fail("old WorldReady was not ignored")
+		return false
+	if int(transfer.snapshot().map_epoch) != 2:
+		_fail("old WorldReady rewound map epoch")
+		return false
+	# Same-epoch resync replaces AOI, but must not clear owned items or
+	# map-scoped command generations as a new map transfer would.
+	transfer.resync_pending = true
+	transfer.shop_sequence = 17
+	var same_epoch := _mutate_i64(next_ready, 16, 43)
+	if not transfer.apply_frame(same_epoch):
+		_fail("same-epoch resync rejected")
+		return false
+	var resynced: Dictionary = transfer.snapshot()
+	if (
+		int(resynced.resync_completions) != 1 or
+		int(resynced.shop_sequence) != 17 or
+		not resynced.inventory_items.has(301) or
+		not resynced.equipment_items.has(302) or
+		bool(resynced.resync_pending)
+	):
+		_fail("same-map resync changed durable items or reset command sequence")
+		return false
+	return true
 
 func _mutate_i64(source: PackedByteArray, offset: int, value: int) -> PackedByteArray:
 	var copy := source.duplicate()

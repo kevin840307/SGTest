@@ -255,6 +255,42 @@ class ArchitectureConventionsChecks(unittest.TestCase):
         self.assertNotIn("inventory_items.clear()", choose)
         self.assertNotIn("pvp_skill_visual_events.clear()", choose)
 
+    def test_map_epoch_reset_is_partitioned_inside_one_world_reducer(self) -> None:
+        world = (CLIENT / "world" / "world_state.gd").read_text(encoding="utf-8-sig")
+        self.assertEqual(world.count("func apply_frame("), 1)
+        self.assertEqual(world.count("func snapshot("), 1)
+        ready = world.split("func _apply_world_ready(", 1)[1].split(
+            "func _reset_map_combat_and_item_commands(", 1)[0]
+        for name in (
+            "_reset_map_combat_and_item_commands",
+            "_reset_map_npc_services",
+            "_reset_map_social_and_movement",
+        ):
+            with self.subTest(helper=name):
+                self.assertEqual(world.count("func " + name + "("), 1)
+                self.assertIn(name + "()", ready)
+        self.assertLess(
+            ready.index("_reset_map_combat_and_item_commands()"),
+            ready.index("_reset_map_npc_services()"))
+        self.assertLess(
+            ready.index("_reset_map_npc_services()"),
+            ready.index("_reset_map_social_and_movement()"))
+        self.assertIn("if next_epoch > map_epoch:", ready)
+        self.assertIn("var completing_resync :=", ready)
+        self.assertNotIn("inventory_items.clear()", ready)
+        self.assertNotIn("equipment_items.clear()", ready)
+        self.assertIn("equipment_sequence = 0", world.split(
+            "func _reset_map_npc_services(", 1)[1].split(
+            "func _reset_map_social_and_movement(", 1)[0])
+        self.assertIn("player_skill_events.clear()", world.split(
+            "func _reset_map_combat_and_item_commands(", 1)[1].split(
+            "func _reset_map_npc_services(", 1)[0])
+        test = (CLIENT / "tests" / "test_world_state.gd").read_text(
+            encoding="utf-8-sig")
+        self.assertIn("func _verify_cross_map_reset()", test)
+        self.assertIn("crossmap_preserves_owned_items=PASS", test)
+        self.assertIn("same_epoch_resync=PASS", test)
+
     def test_godot_scripts_use_snake_case_names(self) -> None:
         for script in CLIENT.rglob("*.gd"):
             if "assets" in script.parts:

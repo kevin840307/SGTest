@@ -93,7 +93,7 @@
 ## Server 聊天與 Client Reducer 職責（2026-11-21）
 
 - `server/Chat/ChatRouting.cs` 只接收經 Gateway 綁定的 `TrustedChatCommand`、現有 `WorldResultRouter` 及可選 `PartyCoordinator`。負責 AOI Nearby、Party 成員及線上角色名稱／ActorId 密語路由；**不**取得 socket、密碼或 Client IP，沒有第二個驗證入口或 queue。
-- `client/world/world_state.gd` 仍是唯一封包 Reducer 與快照 owner。選角成功後重設依「操作／戰鬥」、「背包／經濟」、「世界／PvP」三組方法；移動源碼但保留狀態更新順序。修理與強化 UID 位置驗證合用一條規則，不產生另一份可變遊戲狀態。
+- `client/world/world_state.gd` 仍是唯一封包 Reducer 與快照 owner。選角成功後重設依「操作／戰鬥」、「背包／經濟」、「世界／PvP」三組方法；換圖後的 `WorldReady` 重設另依「戰鬥／物品指令」、「NPC 服務」、「社交／移動」三組方法依**原順序**執行。注意兩種 reset 的契約不同：新角色需清空舊物品；新地圖需保留已持有的 `inventory_items`、`equipment_items`／slot 及 revision，僅關閉舊圖 pending／NPC／AOI。修理與強化 UID 位置驗證共用唯一規則，不產生第二份可變遊戲狀態。
 - `WorldState` 仍屬大型模組；日後拆純解析器或值物件需保留 MapEpoch、可靠序號與 Tick 的唯一寫入者。架構測試不得取代真 TLS、重連與多 Client 驗收。
 
 ## ClientSession 指令分派契約
