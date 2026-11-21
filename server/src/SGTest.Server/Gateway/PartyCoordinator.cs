@@ -301,16 +301,16 @@ public sealed class PartyCoordinator
            !router.TryGetCurrentBinding(invite.InviterActorId,out var inviterCurrent)||
            inviterCurrent.ConnectionEpoch!=invite.InviterConnectionEpoch)
         {
-            _invitesByTarget.Remove(request.ActorId);
             QueueResultLocked(request,PartyResultStatus.InviteStale,
                 request.PartyId,request.TargetActorId,router);
+            _invitesByTarget.Remove(request.ActorId);
             return;
         }
         if(party.Members.Count>=WireProtocol.PartyMaxMembers)
         {
-            _invitesByTarget.Remove(request.ActorId);
             QueueResultLocked(request,PartyResultStatus.PartyFull,
                 party.PartyId,request.TargetActorId,router);
+            _invitesByTarget.Remove(request.ActorId);
             return;
         }
 
@@ -341,14 +341,15 @@ public sealed class PartyCoordinator
            invite.PartyId!=request.PartyId||
            invite.InviterActorId!=request.TargetActorId)
         {
-            _invitesByTarget.Remove(request.ActorId);
             QueueResultLocked(request,PartyResultStatus.InviteStale,
                 request.PartyId,request.TargetActorId,router);
+            _invitesByTarget.Remove(request.ActorId);
             return;
         }
-        _invitesByTarget.Remove(request.ActorId);
+        // Keep the pending invitation if its reliable rejection receipt fails.
         QueueResultLocked(request,PartyResultStatus.Success,
             request.PartyId,request.TargetActorId,router);
+        _invitesByTarget.Remove(request.ActorId);
     }
 
     private void HandleLeaveLocked(

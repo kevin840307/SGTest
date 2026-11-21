@@ -19,6 +19,8 @@ internal static class PartyChecks
             AcceptResultEnqueueFailure);
         Checks.Run("party promote backpressure preserves leader and pending invite",
             PromoteResultEnqueueFailure);
+        Checks.Run("party reject backpressure retains retryable invitation",
+            RejectResultEnqueueFailure);
     }
 
     private static void Wire()
@@ -532,6 +534,51 @@ internal static class PartyChecks
         router.TryDetach(leader);
         router.TryDetach(member);
         router.TryDetach(pending);
+    }
+
+    private static void RejectResultEnqueueFailure()
+    {
+        var router=new WorldResultRouter();
+        var leader=Gateway(Actor(821,31,1),"RejectLeader");
+        var target=Gateway(Actor(822,32,1),"RejectTarget",2);
+        Checks.Require(router.TryAttach(leader)&&router.TryAttach(target),
+            "reject-backpressure fixture attach failed");
+        var party=new PartyCoordinator();
+        party.HandleAsync(new TrustedPartyCommand(
+            821,31,1,1,PartyCommandAction.Invite,0,822),router)
+            .GetAwaiter().GetResult();
+        long partyId=DrainResult(leader).PartyId;
+        _=DrainSnapshot(leader);
+        Checks.Require(DrainInvite(target).PartyId==partyId,
+            "reject-backpressure invitation missing");
+
+        FillReliable(target,"RejectTarget");
+        FillReliable(target,"RejectTarget");
+        bool blocked=false;
+        try
+        {
+            party.HandleAsync(new TrustedPartyCommand(
+                822,32,1,1,PartyCommandAction.Reject,partyId,821),router)
+                .GetAwaiter().GetResult();
+        }
+        catch(IOException){blocked=true;}
+        Checks.Require(blocked&&party.PartyCount==1&&
+            !party.TryGetRecipients(target.Binding,router,out _),
+            "failed reject receipt mutated membership");
+        _=DrainSnapshot(target);
+        _=DrainSnapshot(target);
+
+        // Nothing was acknowledged, so the target can still accept the
+        // original invitation rather than receiving a phantom InviteMissing.
+        party.HandleAsync(new TrustedPartyCommand(
+            822,32,1,2,PartyCommandAction.Accept,partyId,821),router)
+            .GetAwaiter().GetResult();
+        Checks.Require(DrainResult(target).Status==PartyResultStatus.Success&&
+            DrainSnapshot(target).Members.Count==2&&
+            DrainSnapshot(leader).Members.Count==2,
+            "failed reject receipt erased the retryable invitation");
+        router.TryDetach(leader);
+        router.TryDetach(target);
     }
 
     private static void FillReliable(GatewayConnection gateway,string name)
