@@ -1710,6 +1710,13 @@ func _apply_player_damage(frame: PackedByteArray) -> bool:
 	var value := WireCodec.decode_player_damage(frame)
 	if value.is_empty():
 		return fail("invalid_player_damage")
+	return _apply_authoritative_damage(value, false)
+
+
+# PlayerDamage and PvpDamage share one HP/sequence timeline. Keep the protocol
+# decoder and failure messages distinct, but never allow two sets of HP rules.
+func _apply_authoritative_damage(value: Dictionary, is_pvp: bool) -> bool:
+	var source := "pvp" if is_pvp else "player"
 	var epoch := int(value.map_epoch)
 	var sequence := int(value.damage_sequence)
 	var tick := int(value.server_tick)
@@ -1717,24 +1724,27 @@ func _apply_player_damage(frame: PackedByteArray) -> bool:
 		stale_player_damage += 1
 		return true
 	if epoch > map_epoch:
-		return fail("future_player_damage")
+		return fail("future_%s_damage" % source)
 	if sequence <= player_damage_sequence:
 		stale_player_damage += 1
 		return true
 	if sequence != player_damage_sequence + 1:
-		return fail("player_damage_sequence_gap")
+		return fail("%s_damage_sequence_gap" % source)
 	if last_player_damage_tick >= 0 and tick < last_player_damage_tick:
-		return fail("player_damage_tick_regressed")
+		return fail("%s_damage_tick_regressed" % source)
 	if int(value.max_hp) != player_max_hp:
-		return fail("player_damage_max_hp_changed_without_baseline")
+		return fail("%s_damage_max_hp_changed_without_baseline" % source)
 	if int(value.current_hp) > player_current_hp:
-		return fail("player_damage_healed")
+		return fail("%s_damage_healed" % source)
 	player_damage_sequence = sequence
 	last_player_damage_tick = tick
 	player_current_hp = int(value.current_hp)
 	player_dead = bool(value.died)
 	last_player_damage = value.duplicate(true)
+	if is_pvp:
+		last_player_damage["source_kind"] = "pvp"
 	return true
+
 
 func _apply_player_respawn_result(frame: PackedByteArray) -> bool:
 	if state != STATE_IN_WORLD or not combat_available:
@@ -3942,32 +3952,7 @@ func _apply_pvp_damage(frame: PackedByteArray) -> bool:
 	var value := WireCodec.decode_pvp_damage(frame)
 	if value.is_empty():
 		return fail("invalid_pvp_damage")
-	var epoch := int(value.map_epoch)
-	var sequence := int(value.damage_sequence)
-	var tick := int(value.server_tick)
-	if epoch < map_epoch:
-		stale_player_damage += 1
-		return true
-	if epoch > map_epoch:
-		return fail("future_pvp_damage")
-	if sequence <= player_damage_sequence:
-		stale_player_damage += 1
-		return true
-	if sequence != player_damage_sequence + 1:
-		return fail("pvp_damage_sequence_gap")
-	if last_player_damage_tick >= 0 and tick < last_player_damage_tick:
-		return fail("pvp_damage_tick_regressed")
-	if int(value.max_hp) != player_max_hp:
-		return fail("pvp_damage_max_hp_changed_without_baseline")
-	if int(value.current_hp) > player_current_hp:
-		return fail("pvp_damage_healed")
-	player_damage_sequence = sequence
-	last_player_damage_tick = tick
-	player_current_hp = int(value.current_hp)
-	player_dead = bool(value.died)
-	last_player_damage = value.duplicate(true)
-	last_player_damage["source_kind"] = "pvp"
-	return true
+	return _apply_authoritative_damage(value, true)
 
 
 func _apply_pvp_combat_visual(frame: PackedByteArray) -> bool:

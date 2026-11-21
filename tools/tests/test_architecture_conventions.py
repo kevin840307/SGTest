@@ -291,6 +291,30 @@ class ArchitectureConventionsChecks(unittest.TestCase):
         self.assertIn("crossmap_preserves_owned_items=PASS", test)
         self.assertIn("same_epoch_resync=PASS", test)
 
+    def test_all_player_damage_sources_share_one_authoritative_hp_timeline(self) -> None:
+        world = (CLIENT / "world" / "world_state.gd").read_text(encoding="utf-8-sig")
+        self.assertEqual(world.count("func _apply_authoritative_damage("), 1)
+        self.assertEqual(world.count("return _apply_authoritative_damage(value, false)"), 1)
+        self.assertEqual(world.count("return _apply_authoritative_damage(value, true)"), 1)
+        authoritative = world.split("func _apply_authoritative_damage(", 1)[1].split(
+            "func _apply_player_respawn_result(", 1)[0]
+        for line in (
+            "player_damage_sequence = sequence",
+            "last_player_damage_tick = tick",
+            "player_current_hp = int(value.current_hp)",
+            'last_player_damage["source_kind"] = "pvp"',
+        ):
+            with self.subTest(statement=line):
+                self.assertEqual(authoritative.count(line), 1)
+        self.assertIn('return fail("%s_damage_sequence_gap" % source)', authoritative)
+        self.assertIn('return fail("%s_damage_healed" % source)', authoritative)
+        self.assertIn('return fail("%s_damage_tick_regressed" % source)', authoritative)
+        test = (CLIENT / "tests" / "test_player_damage_wire.gd").read_text(
+            encoding="utf-8-sig")
+        self.assertIn("mixed_sources_single_hp_sequence=PASS", test)
+        self.assertIn("monster gap after PvP hit did not fail closed", test)
+        self.assertIn("mixed PvP/monster/PvP sequence diverged", test)
+
     def test_godot_scripts_use_snake_case_names(self) -> None:
         for script in CLIENT.rglob("*.gd"):
             if "assets" in script.parts:

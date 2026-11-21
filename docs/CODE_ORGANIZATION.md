@@ -94,7 +94,7 @@
 
 - `server/Chat/ChatRouting.cs` 只接收經 Gateway 綁定的 `TrustedChatCommand`、現有 `WorldResultRouter` 及可選 `PartyCoordinator`。負責 AOI Nearby、Party 成員及線上角色名稱／ActorId 密語路由；**不**取得 socket、密碼或 Client IP，沒有第二個驗證入口或 queue。
 - `client/world/world_state.gd` 仍是唯一封包 Reducer 與快照 owner。選角成功後重設依「操作／戰鬥」、「背包／經濟」、「世界／PvP」三組方法；換圖後的 `WorldReady` 重設另依「戰鬥／物品指令」、「NPC 服務」、「社交／移動」三組方法依**原順序**執行。注意兩種 reset 的契約不同：新角色需清空舊物品；新地圖需保留已持有的 `inventory_items`、`equipment_items`／slot 及 revision，僅關閉舊圖 pending／NPC／AOI。修理與強化 UID 位置驗證共用唯一規則，不產生第二份可變遊戲狀態。
-- `WorldState` 仍屬大型模組；日後拆純解析器或值物件需保留 MapEpoch、可靠序號與 Tick 的唯一寫入者。架構測試不得取代真 TLS、重連與多 Client 驗收。
+- `WorldState` 將普通怪物傷害 `PlayerDamage` 與玩家 PvP 傷害 `PvpDamage` 的 HP／DamageSequence／ServerTick／MaxHP／不可憑空回血驗證統一於 `_apply_authoritative_damage`。兩種 opcode 各自解碼並維持原有失敗代碼，只有 PvP 對外追加 `source_kind=pvp`；同一角色不應有兩條 HP 序列或重播記憶。新測試以 PvP→怪物→PvP 交錯傷害確認。`WorldState` 仍屬大型模組；日後拆純解析器或值物件需保留 MapEpoch、可靠序號與 Tick 的唯一寫入者。架構測試不得取代真 TLS、重連與多 Client 驗收。
 
 ## ClientSession 指令分派契約
 

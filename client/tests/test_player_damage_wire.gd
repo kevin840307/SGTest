@@ -190,7 +190,43 @@ func _initialize() -> void:
 	if dead_npc_parsed.is_empty() or int(dead_npc_parsed.status)!=6:
 		_fail("CombatDead NPC result codec")
 		return
-	print("PLAYER_DAMAGE_GODOT_PASS baseline_bytes=32 mp_baseline=true mid_session_mp_refresh_preserves_damage_sequence=true damage_bytes=57 damage_visual_bytes=66 respawn_request_bytes=20 respawn_result_bytes=29 respawn_visual_bytes=45 durable_event=true presentation_only=true no_observer_hp_authority=true duplicate_stale=true visual_replay_stale=true sequence_gap_fail_closed=true death_gates_intents=true respawn_reopens_intents=true damage_sequence_continuous=true combat_dead_statuses=true old_map_stale=true")
+	# PvP and monster hits must advance a single HP sequence, not maintain
+	# two incompatible sources of truth for max HP, ticks or death.
+	var mixed := _world(1)
+	if not mixed.apply_frame(_combat_state(1,100,100)) or not mixed.apply_frame(
+			_pvp_damage(1,1,50,99,4,1,28,72,100,false)):
+		_fail("PvP first hit could not start shared damage timeline")
+		return
+	var mixed_snap: Dictionary = mixed.snapshot()
+	if int(mixed_snap.player_current_hp)!=72 or str(mixed_snap.last_player_damage.get("source_kind",""))!="pvp":
+		_fail("PvP hit missing HP authority or source tag")
+		return
+	if not mixed.apply_frame(_damage(1,2,51,MONSTER_ID,2,12,60,100,false)):
+		_fail("monster hit did not advance PvP damage sequence")
+		return
+	mixed_snap = mixed.snapshot()
+	if int(mixed_snap.player_current_hp)!=60 or int(mixed_snap.player_damage_sequence)!=2 or mixed_snap.last_player_damage.has("source_kind"):
+		_fail("monster hit retained stale PvP source or lost sequence continuity")
+		return
+	if not mixed.apply_frame(_pvp_damage(1,1,50,99,4,1,28,72,100,false)) or int(mixed.snapshot().stale_player_damage)!=1:
+		_fail("old PvP hit replay after monster damage not stale")
+		return
+	if not mixed.apply_frame(_pvp_damage(1,3,52,99,4,2,10,50,100,false)):
+		_fail("PvP hit did not resume shared damage timeline")
+		return
+	mixed_snap = mixed.snapshot()
+	if int(mixed_snap.player_current_hp)!=50 or int(mixed_snap.player_damage_sequence)!=3 or str(mixed_snap.last_player_damage.get("source_kind",""))!="pvp":
+		_fail("mixed PvP/monster/PvP sequence diverged")
+		return
+	var mixed_gap := _world(1)
+	if not mixed_gap.apply_frame(_combat_state(1,100,100)) or not mixed_gap.apply_frame(
+			_pvp_damage(1,1,50,99,4,1,28,72,100,false)):
+		_fail("mixed sequence gap fixture failed")
+		return
+	if mixed_gap.apply_frame(_damage(1,3,51,MONSTER_ID,2,12,60,100,false)) or int(mixed_gap.state)!=WorldState.STATE_FAILED:
+		_fail("monster gap after PvP hit did not fail closed")
+		return
+	print("PLAYER_DAMAGE_GODOT_PASS mixed_sources_single_hp_sequence=PASS PvP_source_transition=PASS baseline_bytes=32 mp_baseline=true mid_session_mp_refresh_preserves_damage_sequence=true damage_bytes=57 damage_visual_bytes=66 respawn_request_bytes=20 respawn_result_bytes=29 respawn_visual_bytes=45 durable_event=true presentation_only=true no_observer_hp_authority=true duplicate_stale=true visual_replay_stale=true sequence_gap_fail_closed=true death_gates_intents=true respawn_reopens_intents=true damage_sequence_continuous=true combat_dead_statuses=true old_map_stale=true")
 	quit(0)
 
 func _world(epoch: int) -> RefCounted:
@@ -226,6 +262,27 @@ func _damage(epoch: int,sequence: int,tick: int,attacker: int,revision: int,
 	writer.put_64(tick)
 	writer.put_64(attacker)
 	writer.put_64(revision)
+	writer.put_32(damage)
+	writer.put_32(current_hp)
+	writer.put_32(max_hp)
+	writer.put_u8(1 if died else 0)
+	return writer.data_array
+
+
+func _pvp_damage(epoch: int,sequence: int,tick: int,attacker: int,
+		connection: int,attack_sequence: int,damage: int,
+		current_hp: int,max_hp: int,died: bool) -> PackedByteArray:
+	var writer := StreamPeerBuffer.new()
+	writer.big_endian=false
+	writer.put_u32(61)
+	writer.put_u16(1)
+	writer.put_u16(WireCodec.OPCODE_PVP_DAMAGE)
+	writer.put_64(epoch)
+	writer.put_u32(sequence)
+	writer.put_64(tick)
+	writer.put_64(attacker)
+	writer.put_64(connection)
+	writer.put_u32(attack_sequence)
 	writer.put_32(damage)
 	writer.put_32(current_hp)
 	writer.put_32(max_hp)
