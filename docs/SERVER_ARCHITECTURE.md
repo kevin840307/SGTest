@@ -16,6 +16,7 @@
 | Persistence | SQLite WAL／migration／UID／交易原子性 | 用 DB 查詢驅動每隻怪 AI；在 repository layer 重算 gameplay rule |
 
 實作分類（同一個 `SGTest.Server` 專案）：`GatewayContracts.cs` 是公開 trusted command 契約；`GatewayConnection` 使用同一個 `partial class` 按 `Ingress`／`ReliableOutput`／`AoiOutput` 實際生命週期分檔，主檔持有連線綁定、兩個 Gate 與唯一 bounded reliable FIFO。這不是切出新的 TCP listener、World/AOI 寫入者或各自的封包協定；WorldReady ACK／Resync 和 AOI 事件的入列／更新次序必須在同一鎖下保持。
+`WorldResultRouter` 同樣是一個物件、同一個 session 索引和 12 條 bounded Channel；依 `GameplayIngress`／`ReliableReplies`／`WorldTicks` 部分類別分區。唯一 World Tick 消費者負責先保存 Changed 再可靠回覆；生命週期結束時必須完成**全部** Channel（包含 Identity／PvP 視覺），傳遞相同失敗例外，防止 AOI 下游等待無限延長。這不是把 Router 換成第二個 EventBus 或不同的 Queue Owner。
 
 暫不建立多個空 project、抽象 Service 層、事件總線和微服務。當 Combat/Items/Social 複雜到需要獨立測試才拆成模組。這個 modular-monolith + authoritative simulation + adapter/persistence boundary 是常見且適合目前規模的 game-server 架構；不是因為大型遊戲常見某技術就先導入 ECS、Actor framework 或 microservice。
 

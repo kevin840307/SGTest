@@ -24,6 +24,8 @@ internal static class WorldResultRouterChecks
         Checks.Run("router fails closed on bounded delta or reliable output overflow", Backpressure);
         Checks.Run("router consumes a bounded world result channel exactly once",
             () => SourcePump().GetAwaiter().GetResult());
+        Checks.Run("router propagates failed World source to every bounded AOI/gameplay channel",
+            () => FaultedSourceCompletesAllChannels().GetAwaiter().GetResult());
         Checks.Run("router preserves empty authoritative ticks for shared AOI/AI clock",
             EmptyTickClock);
         Checks.Run("live 30Hz host routes concurrent player receipts through bounded gateway queues",
@@ -171,10 +173,49 @@ internal static class WorldResultRouterChecks
                 "async result pump lost receipt or changed batch");
         Require(await router.ChangedBatches.WaitToReadAsync() == false,
                 "changed output channel not completed with source");
+        // The PvP and identity visual streams have the same lifetime as the
+        // other bounded AOI queues. A forgotten TryComplete can strand their
+        // downstream waiters after a clean World result-pump shutdown.
+        Require(router.PlayerIdentityUpdates.Completion.IsCompletedSuccessfully &&
+                router.PlayerPvpCombatVisuals.Completion.IsCompletedSuccessfully &&
+                router.PlayerPvpSkillVisuals.Completion.IsCompletedSuccessfully,
+                "PvP/identity AOI channels remained open after router shutdown");
         bool doubleReaderRejected = false;
         try { await router.RunAsync(source.Reader); }
         catch (InvalidOperationException) { doubleReaderRejected = true; }
         Require(doubleReaderRejected, "second result pump silently started");
+    }
+
+    private static async Task FaultedSourceCompletesAllChannels()
+    {
+        var router = new WorldResultRouter();
+        var source = Channel.CreateBounded<WorldTickResult>(1);
+        var fault = new InvalidOperationException("forced world stream failure");
+        Require(source.Writer.TryComplete(fault), "failed fixture did not close source");
+        bool propagated = false;
+        try { await router.RunAsync(source.Reader).WaitAsync(TimeSpan.FromSeconds(3)); }
+        catch (InvalidOperationException error) when (error.Message == fault.Message)
+        {
+            propagated = true;
+        }
+        Require(propagated, "World source failure was swallowed by result router");
+        Task[] completed =
+        [
+            router.ChangedBatches.Completion,
+            router.ResyncRequests.Completion,
+            router.AttackRequests.Completion,
+            router.SkillRequests.Completion,
+            router.SkillPreflightRequests.Completion,
+            router.PreparedSkillActions.Completion,
+            router.ClaimedGroundDrops.Completion,
+            router.PlayerDamageVisuals.Completion,
+            router.PlayerRespawnVisuals.Completion,
+            router.PlayerIdentityUpdates.Completion,
+            router.PlayerPvpCombatVisuals.Completion,
+            router.PlayerPvpSkillVisuals.Completion
+        ];
+        Require(completed.All(task => task.IsFaulted),
+            "failed World source left a live or successfully completed dependent channel");
     }
 
     private static async Task LiveTwoActors(string root)

@@ -64,6 +64,69 @@ class ArchitectureConventionsChecks(unittest.TestCase):
         self.assertIn("func reset()", pvp)
         self.assertNotIn("session.request_pvp_mode(", pvp)
 
+    def test_world_result_router_partials_keep_single_bounded_channel_owner(self) -> None:
+        root = SERVER / "Gateway"
+        parts = {
+            name: (root / name).read_text(encoding="utf-8-sig")
+            for name in (
+                "WorldResultRouter.cs",
+                "WorldResultRouter.GameplayIngress.cs",
+                "WorldResultRouter.ReliableReplies.cs",
+                "WorldResultRouter.WorldTicks.cs",
+            )
+        }
+        core, ingress, replies, ticks = parts.values()
+        for name, source in parts.items():
+            with self.subTest(name=name):
+                self.assertEqual(source.count("public sealed partial class WorldResultRouter"), 1)
+                self.assertIn("namespace SGTest.Server.Gateway;", source)
+        self.assertEqual(core.count("private readonly object _gate"), 1)
+        self.assertEqual(core.count("new WorldResultRouterOptions()"), 1)
+        self.assertEqual(core.count("Channel.CreateBounded<"), 12)
+        for source in (ingress, replies, ticks):
+            self.assertNotIn("Channel.CreateBounded", source)
+            self.assertNotIn("new WorldResultRouter(", source)
+            self.assertNotIn("new GatewayConnection(", source)
+            self.assertNotIn("new SqliteIdentityStore(", source)
+            self.assertNotIn("new SemaphoreSlim(", source)
+        for name in ("TryRequestNormalAttack", "TryRequestSkill",
+                     "PrepareSkillAsync", "FinishPreparedSkillAsync",
+                     "TryPostPlayerDamageVisual", "TryRequestResync"):
+            with self.subTest(request=name):
+                self.assertIn(" " + name + "(", ingress)
+                self.assertNotIn(" " + name + "(", replies)
+        for name in ("QueuePlayerRespawnResult", "QueueAoi", "QueuePlayerDamage",
+                     "QueuePvpAttackResult", "QueueShopSnapshot",
+                     "QueueTradeTerminal", "QueueGroundPickupResult"):
+            with self.subTest(reply=name):
+                self.assertIn(" " + name + "(", replies)
+                self.assertNotIn(" " + name + "(", ingress)
+                self.assertNotIn(" " + name + "(", core)
+        self.assertIn("public void Route(WorldTickResult tick)", ticks)
+        self.assertIn("public async Task RunAsync(", ticks)
+        self.assertIn("Interlocked.Exchange(ref _running, 1)", ticks)
+        self.assertIn("if (!_changed.Writer.TryWrite(batch))", ticks)
+        self.assertLess(ticks.index("if (!_changed.Writer.TryWrite(batch))"),
+                        ticks.index("foreach (var receipt in tick.Receipts)"))
+        self.assertIn("case GatewaySendStatus.Backpressured:", ticks)
+        # PvP and identity visual AOI streams must close with the world pump,
+        # not hang downstream consumers after clean shutdown or a fault.
+        for channel in (
+            "_changed", "_resync", "_attacks", "_skills", "_skillPreflights",
+            "_preparedSkills", "_claimedGroundDrops", "_playerDamageVisuals",
+            "_playerRespawnVisuals", "_playerIdentityUpdates",
+            "_playerPvpCombatVisuals", "_playerPvpSkillVisuals",
+        ):
+            with self.subTest(shutdown=channel):
+                self.assertEqual(ticks.count(channel + ".Writer.TryComplete(fault)"), 1)
+        test = (ROOT / "server" / "tests" / "SGTest.Server.Checks" /
+                "WorldResultRouterChecks.cs").read_text(encoding="utf-8-sig")
+        self.assertIn("router.PlayerIdentityUpdates.Completion.IsCompletedSuccessfully", test)
+        self.assertIn("router.PlayerPvpCombatVisuals.Completion.IsCompletedSuccessfully", test)
+        self.assertIn("router.PlayerPvpSkillVisuals.Completion.IsCompletedSuccessfully", test)
+        self.assertIn("FaultedSourceCompletesAllChannels", test)
+        self.assertIn("completed.All(task => task.IsFaulted)", test)
+
     def test_gateway_connection_partial_modules_keep_one_connection_and_reliable_fifo(self) -> None:
         root = SERVER / "Gateway"
         names = (
