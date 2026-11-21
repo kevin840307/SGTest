@@ -94,6 +94,9 @@ class RespawnSession extends RefCounted:
 	var last_pvp_action := -1
 	var pvp_attacks := 0
 	var last_pvp_target := 0
+	var pvp_skill_attacks := 0
+	var last_pvp_skill_id := 0
+	var last_pvp_skill_target := 0
 	var gm_commands := 0
 	var last_gm_target := 0
 	var last_gm_state := -1
@@ -109,6 +112,13 @@ class RespawnSession extends RefCounted:
 			return false
 		pvp_attacks += 1
 		last_pvp_target = target_actor_id
+		return true
+	func cast_player_skill(skill_id: int, target_actor_id: int) -> bool:
+		if skill_id <= 0 or target_actor_id <= 0:
+			return false
+		pvp_skill_attacks += 1
+		last_pvp_skill_id = skill_id
+		last_pvp_skill_target = target_actor_id
 		return true
 	func request_pvp_mode(action: int) -> bool:
 		if action not in [0,1,2]:
@@ -1689,6 +1699,32 @@ func run() -> void:
 	panel.pvp_panel.apply_snapshot(panel._latest, panel.active)
 	if not panel.pvp_panel.pvp_attack_status.text.contains("距離過遠") or panel.pvp_panel.pvp_attack_button.disabled:
 		fail("PvP attack did not display authoritative rejected result")
+		return
+	# A PvP skill reads the current Skill UI selection through the existing
+	# SessionPanel guard, rather than bypassing it with a second ClientSession.
+	panel._latest.pending_skill_sequence = 0
+	panel.skill_id_input.value = 99001
+	panel.pvp_panel.apply_snapshot(panel._latest, panel.active)
+	if panel.pvp_panel.pvp_skill_button.disabled:
+		fail("Verified AOI PvP skill could not be selected")
+		return
+	panel.pvp_panel.pvp_skill_button.pressed.emit()
+	if stub.pvp_skill_attacks != 1 or stub.last_pvp_skill_id != 99001 or stub.last_pvp_skill_target != 77:
+		fail("PvP skill panel bypassed the selected Skill ID or authoritative Session intent")
+		return
+	panel._latest.pending_skill_sequence = 1
+	panel._latest.pending_skill_target_kind = 1
+	panel.pvp_panel.apply_snapshot(panel._latest, panel.active)
+	if not panel.pvp_panel.pvp_skill_button.disabled or stub.pvp_skill_attacks != 1:
+		fail("Pending PvP skill re-enabled a duplicate submit")
+		return
+	panel._latest.pending_skill_sequence = 0
+	panel._latest.pending_skill_target_kind = 0
+	panel._latest.last_skill_result = {"target_kind":"player","damage":7,"died":false}
+	panel._latest.last_skill_result_status = 0
+	panel.pvp_panel.apply_snapshot(panel._latest, panel.active)
+	if not panel.pvp_panel.pvp_skill_status.text.contains("傷害 7"):
+		fail("PvP skill did not display the authoritative damage result")
 		return
 
 	print("CLIENT_TLS_UI_CHECKPOINT gm_begin")
