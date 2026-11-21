@@ -133,6 +133,52 @@ def _script_facts(path: Path) -> dict:
     }
 
 
+def _lua_random_semantics(path: Path) -> dict:
+    if not path.is_file():
+        return {
+            "available": False,
+            "verified": False,
+            "one_argument_range": None,
+        }
+    text = _decode(path)
+    body_match = re.search(
+        r'(?ms)_math_random\s+proc\s+near(.*?)_math_random\s+endp',
+        text,
+    )
+    body = body_match.group(1) if body_match else ""
+    checks = {
+        "crt_rand": "__imp__rand" in body,
+        "mod_rand_max_32767": bool(re.search(
+            r'mov\s+ecx,\s*7FFFh.*?idiv\s+ecx', body, re.DOTALL)),
+        "normalize_by_32767": bool(re.search(
+            r'fdiv\s+ds:__real@8@400dfffe000000000000', body)) and
+            bool(re.search(
+                r'__real@8@400dfffe000000000000\s+dq\s+32767\.0', text)),
+        "one_argument_branch": bool(re.search(
+            r'cmp\s+\[ebp\+var_1C\],\s*1.*?'
+            r'jz\s+short\s+loc_', body, re.DOTALL)),
+        "argument_is_numeric": "_luaL_checknumber" in body,
+        "multiply_by_argument": bool(re.search(r'fmul', body)),
+        "floor": "__imp__floor" in body,
+        "plus_one": bool(re.search(r'add\s+eax,\s*1', body)),
+    }
+    verified = all(checks.values())
+    return {
+        "available": True,
+        "verified": verified,
+        "checks": checks,
+        "normalized_random": (
+            "(rand()%32767)/32767.0" if verified else None
+        ),
+        "one_argument_formula": (
+            "floor(n*x)+1" if verified else None
+        ),
+        "one_argument_range": (
+            "1..n inclusive" if verified else None
+        ),
+    }
+
+
 def _cure_formula(cure_common: str | None, team_common: str | None) -> dict:
     if cure_common is None:
         return {
@@ -517,6 +563,7 @@ def compile_skill_evidence(server_dat: Path, only_ids: set[int] | None = None) -
     common_path = skill_dir / "skillcommon.txt"
     cure_common_path = skill_dir / "curecommon.txt"
     team_common_path = skill_dir / "CommTeam.txt"
+    lua_runtime_path = server_dat.parent / "CDELua.dll.lst"
     if not table_path.is_file() or not common_path.is_file():
         raise ValueError("original Skill/skill.csv and Skill/skillcommon.txt are required")
     if only_ids is not None and (
@@ -551,6 +598,8 @@ def compile_skill_evidence(server_dat: Path, only_ids: set[int] | None = None) -
         source_hashes["Skill/curecommon.txt"] = _sha(cure_common_path)
     if team_common_path.is_file():
         source_hashes["Skill/CommTeam.txt"] = _sha(team_common_path)
+    if lua_runtime_path.is_file():
+        source_hashes["../CDELua.dll.lst"] = _sha(lua_runtime_path)
     for skill_id in selected:
         script = scripts.get(skill_id)
         if script is not None:
@@ -577,6 +626,7 @@ def compile_skill_evidence(server_dat: Path, only_ids: set[int] | None = None) -
         "damage_formula": _damage_formula(common),
         "range_semantics": _range_semantics(common),
         "cure_formula": _cure_formula(cure_common, team_common),
+        "lua_random_semantics": _lua_random_semantics(lua_runtime_path),
         "enemy_attribute_structure": _enemy_attribute_structure(server_dat),
         "sources_sha256": dict(sorted(source_hashes.items())),
         "runtime_rules_generated": False,
@@ -586,6 +636,7 @@ def compile_skill_evidence(server_dat: Path, only_ids: set[int] | None = None) -
             "Unknown skill.csv columns remain indexed raw evidence; semantics are not guessed.",
             "DP/DR semantic column mapping and durable MP/Will ownership must be verified before runtime activation.",
             "Direct Cure source facts may be promoted only after Server-owned skill level/resource/HP settlement exists.",
+            "CDELua random(n) is promoted only when the old Lua runtime proves rand%32767 normalization, floor(n*x)+1 and the 32767.0 divisor.",
             "Cure_Range contains a verified source/helper predicate contradiction and remains runtime-blocked.",
             "Enemy/EN_Att relationships are emitted as structural candidates only and never promoted to runtime rules.",
         ],

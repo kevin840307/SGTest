@@ -87,6 +87,26 @@ end
 '''
 
 
+CDELUA_RANDOM = r'''
+_math_random proc near
+call    ds:__imp__rand
+cdq
+mov     ecx, 7FFFh
+idiv    ecx
+fild    [ebp+var_18]
+fdiv    ds:__real@8@400dfffe000000000000
+cmp     [ebp+var_1C], 1
+jz      short loc_10007252
+loc_10007252:
+call    _luaL_checknumber
+fmul    [ebp+var_8]
+call    ds:__imp__floor
+call    __ftol
+add     eax, 1
+_math_random endp
+__real@8@400dfffe000000000000 dq 32767.0
+'''
+
 CURE_COMMON = r'''
 function Cure()
     if GetData(consume) >= conTotal then
@@ -256,6 +276,7 @@ class SkillSourceEvidenceTests(unittest.TestCase):
             '28101,Heal,Target or self heal,250,0,16,0,0,3,0,0,2,0,45,1,Use,Heal,,0,0',
         ]
         (skill/'skill.csv').write_bytes(('\n'.join(rows)+'\n').encode('cp950'))
+        (dat.parent/'CDELua.dll.lst').write_text(CDELUA_RANDOM,encoding='ascii')
         (skill/'skillcommon.txt').write_bytes(COMMON.encode('ascii'))
         (skill/'curecommon.txt').write_bytes(CURE_COMMON.encode('ascii'))
         (skill/'CommTeam.txt').write_bytes(COMM_TEAM.encode('ascii'))
@@ -360,6 +381,12 @@ class SkillSourceEvidenceTests(unittest.TestCase):
             self.assertIn('contradiction',cure['range_note'])
             self.assertIn('Skill/curecommon.txt',result['sources_sha256'])
             self.assertIn('Skill/CommTeam.txt',result['sources_sha256'])
+            self.assertIn('../CDELua.dll.lst',result['sources_sha256'])
+            rng=result['lua_random_semantics']
+            self.assertTrue(rng['verified'])
+            self.assertEqual(rng['normalized_random'],'(rand()%32767)/32767.0')
+            self.assertEqual(rng['one_argument_formula'],'floor(n*x)+1')
+            self.assertEqual(rng['one_argument_range'],'1..n inclusive')
             self.assertFalse(result['runtime_rules_generated'])
             self.assertFalse(result['combat_ready'])
 
