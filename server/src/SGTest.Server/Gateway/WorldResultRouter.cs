@@ -390,6 +390,8 @@ public sealed class WorldResultRouter
         lock(_gate)
             return _connections.TryGetValue(viewer.ActorId,out var connection)&&
                 !connection.IsClosed&&connection.Binding==viewer&&
+                _connections.TryGetValue(target.ActorId,out var targetConnection)&&
+                !targetConnection.IsClosed&&targetConnection.Binding==target&&
                 connection.IsVisibleActor(target);
     }
 

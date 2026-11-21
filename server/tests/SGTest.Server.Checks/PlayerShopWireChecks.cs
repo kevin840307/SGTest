@@ -134,7 +134,8 @@ internal static class PlayerShopWireChecks
 
         var router=new WorldResultRouter();
         var routed=new GatewayConnection(self);
-        Checks.Require(router.TryAttach(routed)&&
+        var routedPeer=new GatewayConnection(peer);
+        Checks.Require(router.TryAttach(routed)&&router.TryAttach(routedPeer)&&
             !router.IsVisibleActor(routed.Binding,peer.ActorId),
             "router invented player-shop seller visibility");
         Checks.Require(routed.QueueAoi(new(
@@ -143,6 +144,10 @@ internal static class PlayerShopWireChecks
             router.IsVisibleActor(
                 routed.Binding,ConnectionBinding.FromTrustedSnapshot(peer)),
             "router did not expose exact current AOI visibility");
+        routedPeer.Close();
+        Checks.Require(!router.IsVisibleActor(
+                routed.Binding,ConnectionBinding.FromTrustedSnapshot(peer)),
+            "closed target binding remained exactly visible");
         routed.Close();
         Checks.Require(!router.IsVisibleActor(routed.Binding,peer.ActorId),
             "closed gateway retained player-shop visibility");
