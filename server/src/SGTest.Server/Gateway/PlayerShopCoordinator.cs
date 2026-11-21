@@ -218,7 +218,7 @@ public sealed class PlayerShopCoordinator
                b.MapId!=s.MapId||b.CombatDead||s.CombatDead||
                !router.IsCurrentBinding(buyerBinding)||
                !router.IsCurrentBinding(sellerBinding)||
-               !router.IsVisibleActor(buyerBinding,sellerBinding.ActorId)||
+               !router.IsVisibleActor(buyerBinding,sellerBinding)||
                (_combat is not null&&
                 (!_combat.TryGetSuspendedCombatState(b,out int buyerHp,out _)||
                  buyerHp<=0||
