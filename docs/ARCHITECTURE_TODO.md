@@ -9,6 +9,7 @@
 | Server Wire 分區 | [x] `WireProtocol.Combat.cs`、`.Identity.cs`、`.Inventory.cs`、`.Shop.cs`、`.World.cs` 按功能承接 Codec | V1 Opcode/Header 不變；Client 跨端 golden vectors 與 Server wire Gate |
 | Server Auth binding | [x] `IdentityTlsAuthorization.Binding.cs` 承接身分＋World Actor 綁定 | 原密鑰／身分／Actor cleanup、真 TLS Auth／重連 E2E 保持 |
 | Server Gameplay Gateway 瘦身 | [ ] `IdentityTlsAuthorization.cs` 仍有巨大 socket/gameplay 流程，逐步抽出經驗證的 domain command gate | 不新增可繞過身份／MapEpoch 的 dispatch 路徑；Server TLS 全量回歸 |
+| Server NPC 修理／強化流程 | [x] `Npc/NpcItemModificationHandler.cs` 合併同一個 auth gate 下的修理與強化服務命令；Gateway 僅組裝與指派 | 共用同一 `gameplayGate`／`WorldResultRouter`，保留 UID／Actor／MapEpoch／來源驗證；Server Checks 267/267 PASS |
 | Client Reducer 分區 | [ ] `client/world/world_state.gd` 按 feature group 拆事件解析／處理，但保留唯一可重播 Reducer | 0/30/60 FPS、一致序號、重連／跨圖、可靠事件、TLS E2E |
 | Client 選角重設／物品規則 | [x] `_reset_character_actions_and_combat`、`_reset_character_economy_state`、`_reset_character_world_state` 分組；修理與強化共用 `_item_matches_inventory_or_equipment` | 單一 WorldState；Bank／Storage／Repair／Enhancement／Trade／PvP／Skill／NPC Portal／AOI 及選角殘留清除共 10 組 Godot 回歸 PASS |
 | Client NPC | [ ] `client/npc/npc_interaction_panel.gd` 承接 App／SessionPanel 既有 NPC 選單與操作 | 開啟、取消與離開互動範圍，Server 仍驗距離及權限 |

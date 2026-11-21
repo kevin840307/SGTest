@@ -64,8 +64,10 @@
 - `Identity/IdentityContracts.cs` 唯一持有帳號、角色與持久化 CombatProfile 的穩定 DTO，不在資料庫實作檔內混合公開契約。
 - `Identity/SqliteIdentityStore.Schema.cs` 集中原本約 734 行的 Schema v23 建立與遷移流程，包含遷移前備份及現有 WAL／單一 transaction；與 `SqliteIdentityStore.Backup.cs` 的備份程序分工。原操作順序未重寫。
 - `Identity/SqliteIdentityStore.Combat.cs` 承接角色 CombatProfile、HP／MP 的原子資料存取。其他 `SqliteIdentityStore.<Feature>.cs` 已依功能分區，但**所有 partial 都是相同資料庫 owner**，不建立第二個連線池或交易所有者。
-- `Gateway/IdentityTlsAuthorization.Binding.cs` 承接認證帳號與 World Actor 的綁定程序；`IdentityTlsAuthorization.cs` 仍持有現有 TLS socket 與 gameplay gate，保留同一授權狀態及可靠事件順序。Gateway 長函式的真正業務分離仍待後續實作，不能誤認為完成解耦。
-- 遷移／授權相關重構必須通過 Server 265 checks（尤其 SQLite upgrade、WAL backup、TLS Host、雙方交易與 Epoch），而非僅憑 C# 可編譯宣稱正確。
+- `Gateway/IdentityTlsAuthorization.Binding.cs` 承接認證帳號與 World Actor 的綁定程序；`IdentityTlsAuthorization.cs` 仍持有現有 TLS socket 與唯一 gameplay gate，保留同一授權狀態及可靠事件順序。
+- `Npc/NpcItemModificationHandler.cs` 合併「修理／強化」這一組共用登入世代、玩法鎖與物品 UID 結算生命週期的 command handler。由每個 authenticated socket 的 Gateway 注入**原 gameplayGate 與原 WorldResultRouter**，在各流程進行目前綁定／Actor／MapEpoch 驗證；它不建立第二個 queue、database 或新的 socket。
+- **命名反思**：`NpcRepairCatalog`／`NpcEnhancementCatalog` 代表 NPC 位置與服務可用性；`RepairItemCatalog`／`EquipmentEnhancementCatalog` 則代表經驗證的物品規則。兩者不是重複的 Catalog，不應為了「合併」而混成一個 `NpcManager`。`IdentityTlsAuthorization` 的名稱確實低估了目前其他玩法職責，但必須先把玩法 Handler 徹底解耦，才適合變更公開類別名稱。
+- 遷移／授權相關重構必須通過 Server 全量 checks（本輪 267/267）（尤其 SQLite upgrade、WAL backup、TLS Host、雙方交易與 Epoch），而非僅憑 C# 可編譯宣稱正確。
 
 ## NPC 相關 UI 分組決策（避免過度拆分）
 
@@ -110,4 +112,4 @@
 4. Wire enum 與 partial owner 唯一性。
 5. C# 與 Godot 共用 Opcode 是否保持相同數值。
 
-保留原本 Host Release、Server 265 checks、Godot UI/TLS、雙 Client／cross-map 等完整 Gate；命名測試 **不能替代** 任何遊戲行為和效能測試。
+保留原本 Host Release、Server 全量 checks（本輪 267/267）、Godot UI/TLS、雙 Client／cross-map 等完整 Gate；命名測試 **不能替代** 任何遊戲行為和效能測試。

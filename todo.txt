@@ -1,5 +1,8 @@
 # SGTest 新版重建 TODO（2026-11-15）
 
+- ARCH-SERVER-NPC-ITEM-MODIFICATION [x] 2026-11-21：`IdentityTlsAuthorization` 原本約 240 行的 Repair／Enhancement 本地 Handler 移至**同一個** `Npc/NpcItemModificationHandler.cs`，不是拆成兩個小型 Manager。只組裝一次、沿用 authenticated socket 既有 `gameplayGate`／`WorldResultRouter`，Actor／ConnectionEpoch／MapEpoch／UID／DB 原子結算及可靠回覆順序保持不變；不新增 session、socket、state reducer 或第二條資料庫通道。Server Release build 0 warnings／0 errors，Server 267/267 checks PASS（含 Repair／Enhancement TLS 與交易競態），Python 架構 owner Gate 已增補。名稱／分組決策更新 `docs/CODE_ORGANIZATION.md`；仍有其它 Gateway Handler／WorldState／WireCodec 待分區，私有多開 GPU NOT VERIFIED。
+
+
 - ARCH-CLIENT-CHARACTER-RESET [x] 2026-11-21：WorldState 選角成功的約 190 行重設依操作／戰鬥、背包／經濟、世界／PvP 世代改成三個同 Reducer 私有方法，維持原始寫入順序；修理與強化重複 UID 位置檢查合併為 `_item_matches_inventory_or_equipment`。9 組 Godot 真 headless Bank／Storage／Repair／Enhancement／Trade／PvP／Skill／NPC Portal／AOI 加上 `test_world_state.gd` 的選角殘留污染檢查，共 10 組回歸 PASS。WorldState 仍為唯一事件及 Snapshot owner；完整 Reducer 功能分類／效能及私有 GPU NOT VERIFIED。
 
 - ARCH-SERVER-CHAT-ROUTING [x] 2026-11-21：`Gateway/IdentityTlsAuthorization.cs` 將約 110 行 Trusted Chat Handler 移至 `Chat/ChatRouting.cs`，維持 Gateway 的 TLS/Auth、ChatSequence、MapEpoch 綁定；新增 Server ChatWireChecks 驗證 Nearby 非 AOI 隔離、跨圖依名稱密語、TargetUnavailable／過期 Binding 不投遞。Host Release build 0 警告／0 錯誤，Server Checks **267/267 PASS**（新增跨圖隊伍邀請／聊天收件世代驗證）；沒有新 Socket／Message Queue／第二身份入口。Gateway 其他大型玩法 Handler 尚待逐項移出。

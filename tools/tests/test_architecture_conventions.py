@@ -78,6 +78,26 @@ class ArchitectureConventionsChecks(unittest.TestCase):
         self.assertNotIn("TcpClient", routing)
         self.assertNotIn("SslStream", routing)
 
+    def test_npc_item_modification_uses_one_authenticated_gameplay_gate(self) -> None:
+        gateway = (SERVER / "Gateway" / "IdentityTlsAuthorization.cs").read_text(
+            encoding="utf-8-sig")
+        npc = (SERVER / "Npc" / "NpcItemModificationHandler.cs").read_text(
+            encoding="utf-8-sig")
+        self.assertEqual(gateway.count("new NpcItemModificationHandler("), 1)
+        self.assertIn("router, gameplayGate)", gateway)
+        self.assertIn("handleRepair:npcItems.HandleRepairAsync", gateway)
+        self.assertIn("handleEnhancement:npcItems.HandleEnhancementAsync", gateway)
+        self.assertNotIn("async Task RepairHandler(", gateway)
+        self.assertNotIn("async Task EnhancementHandler(", gateway)
+        self.assertIn("internal sealed class NpcItemModificationHandler", npc)
+        self.assertIn("internal async Task HandleRepairAsync(", npc)
+        self.assertIn("internal async Task HandleEnhancementAsync(", npc)
+        self.assertEqual(npc.count("await _gameplayGate.WaitAsync()"), 2)
+        self.assertEqual(npc.count("finally { _gameplayGate.Release(); }"), 2)
+        self.assertEqual(npc.count("if(!_router.IsCurrentBinding(binding))return;"), 2)
+        self.assertNotIn("new SemaphoreSlim", npc)
+        self.assertNotIn("new WorldResultRouter", npc)
+
     def test_character_reset_keeps_one_reducer_and_one_uid_location_policy(self) -> None:
         world = (CLIENT / "world" / "world_state.gd").read_text(encoding="utf-8-sig")
         self.assertEqual(world.count("func apply_frame("), 1)
