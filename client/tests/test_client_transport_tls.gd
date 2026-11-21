@@ -39,13 +39,28 @@ func _initialize() -> void:
 	if in_world.is_empty() or int(in_world.actor_id) != character_id or int(in_world.map_id) != 15 or int(in_world.map_epoch) <= 0:
 		_fail("world entry invalid %s" % in_world, session)
 		return
+	var baseline_deadline := Time.get_ticks_msec() + 5000
+	var baseline: Dictionary = session.snapshot()
+	while Time.get_ticks_msec() < baseline_deadline:
+		baseline = session.snapshot()
+		if (
+			bool(baseline.world_ready) and bool(baseline.skill_book_ready) and
+			int(baseline.skill_book.get(28101,0)) == 3 and
+			int(baseline.skill_book_revision) == 1
+		):
+			break
+		if int(baseline.state) == WorldState.STATE_FAILED:
+			break
+		OS.delay_msec(2)
 	if (
-		not bool(in_world.skill_book_ready) or
-		int(in_world.skill_book.get(28101,0)) != 3 or
-		int(in_world.skill_book_revision) != 1
+		int(baseline.state) != WorldState.STATE_IN_WORLD or
+		not bool(baseline.world_ready) or not bool(baseline.skill_book_ready) or
+		int(baseline.skill_book.get(28101,0)) != 3 or
+		int(baseline.skill_book_revision) != 1
 	):
-		_fail("Server-owned learned skill book was not restored %s" % in_world.skill_book, session)
+		_fail("Server-owned learned skill book was not restored %s" % baseline, session)
 		return
+	in_world = baseline
 	if not session.move_target(24, 8):
 		_fail("move intent rejected", session)
 		return
