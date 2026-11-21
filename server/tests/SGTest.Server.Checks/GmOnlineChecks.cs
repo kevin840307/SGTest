@@ -157,18 +157,22 @@ internal static class GmOnlineChecks
             "GM capability choose failed");
         byte[] next=await Read(tls);
         if(expectCapability)
+        {
             Checks.Require(WireProtocol.TryDecodeGmCapability(next,out var cap)&&
                 cap.Authorized,"allowlisted account did not receive GM capability");
-        else
-            Checks.Require(WireProtocol.TryDecodeInventorySnapshot(next,out var inventory)&&
-                inventory is not null&&inventory.Complete,
-                "ordinary account received GM capability or wrong next baseline");
+            // Finish the known empty-inventory login baseline before closing.
+            // Otherwise the GM case races the Server's remaining TLS write.
+            next=await Read(tls);
+        }
+        Checks.Require(WireProtocol.TryDecodeInventorySnapshot(next,out var inventory)&&
+            inventory is not null&&inventory.Complete,
+            "GM/ordinary login did not finish inventory baseline or ordinary account received GM capability");
 
         await tls.DisposeAsync();
         client.Dispose();
         var ended=await serverTask.WaitAsync(TimeSpan.FromSeconds(2));
         Checks.Require(ended.Reason==TlsWireEndReason.CleanEof,
-            "GM capability TLS did not close cleanly");
+            "GM capability TLS did not close cleanly: "+ended.Reason);
     }
 
     private static async Task AuditAndPublish(string root)

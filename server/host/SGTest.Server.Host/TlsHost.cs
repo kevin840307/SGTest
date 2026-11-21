@@ -87,6 +87,8 @@ internal static class TlsHost
                 throw new ArgumentException(
                     "Character creation spawn requires map, x and y together");
             CharacterCreationPolicy? characterCreation = null;
+            if (options.ContainsKey("--character-appearance-rules") && !anyCharacterSpawn)
+                throw new ArgumentException("Appearance rules require explicit character spawn configuration");
             if (anyCharacterSpawn)
             {
                 int mapId = Number(options, "--character-spawn-map", 0, 1, 65535);
@@ -98,7 +100,9 @@ internal static class TlsHost
                 if (!map.TryWorldCell(x, y, out var cell) || !map.IsWalkable(cell))
                     throw new ArgumentException(
                         "Character creation spawn must be inside a walkable Blocking cell");
-                characterCreation = new(new CharacterSpawn(mapId, x, y));
+                var appearanceRules=options.TryGetValue("--character-appearance-rules",out var appearancePath)
+                    ? CharacterAppearanceRules.LoadVerified(Path.GetFullPath(appearancePath)) : null;
+                characterCreation = new(new CharacterSpawn(mapId, x, y),appearanceRules);
             }
 
             var monsterRuntimes = new List<MonsterRuntime>();
@@ -360,7 +364,8 @@ internal static class TlsHost
                     gm_account_count = gmAccounts.Count,
                     unpicked_ground_drops = activeDrops.Count,
                     character_creation_enabled = characterCreation is not null,
-                    character_creation_map = characterCreation?.Spawn.MapId
+                    character_creation_map = characterCreation?.Spawn.MapId,
+                    character_appearance_choices = characterCreation?.AppearanceRules?.Choices.Count ?? 0
                 }));
                 var stopping = Task.Delay(Timeout.Infinite, stop.Token);
                 var completed = await Task.WhenAny(
@@ -436,6 +441,7 @@ internal static class TlsHost
                 "[--quest-rules <VERIFIED_JSON>] [--trade-item-rules <VERIFIED_JSON>] " +
                 "[--gm-accounts <user1,user2>] " +
                 "[--character-spawn-map <13|15> --character-spawn-x <X> --character-spawn-y <Y>] " +
+                "[--character-appearance-rules <VERIFIED_JSON>] " +
                 "[--seconds N]");
             return 2;
         }
@@ -467,7 +473,7 @@ internal static class TlsHost
                           "--repair-rules", "--repair-item-rules", "--quest-rules",
                           "--trade-item-rules", "--gm-accounts",
                           "--character-spawn-map", "--character-spawn-x",
-                          "--character-spawn-y", "--seconds"];
+                          "--character-spawn-y", "--character-appearance-rules", "--seconds"];
         var values = new Dictionary<string, string>(StringComparer.Ordinal);
         if (args.Length % 2 != 0) throw new ArgumentException("Every option requires a value");
         for (int i = 0; i < args.Length; i += 2)

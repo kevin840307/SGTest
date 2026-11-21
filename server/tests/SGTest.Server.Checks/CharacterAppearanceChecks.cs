@@ -1,5 +1,6 @@
 using Microsoft.Data.Sqlite;
 using SGTest.Server.Identity;
+using System.Text.Json;
 
 internal static class CharacterAppearanceChecks
 {
@@ -10,6 +11,7 @@ internal static class CharacterAppearanceChecks
     public static void Verify()
     {
         Checks.Run("character appearance allowlist is bounded immutable and rejects invalid source data", Rules);
+        Checks.Run("character appearance manifest requires bounded explicit verified fields", Manifest);
         Checks.Run("character appearance atomic creation persists exact choice and rejects race divergence",
             () => Persistence().GetAwaiter().GetResult());
         Checks.Run("character appearance and wallet roll back together on failed creation",
@@ -19,6 +21,33 @@ internal static class CharacterAppearanceChecks
     }
 
     private static CharacterAppearanceRules Ruleset() => new("synthetic/appearance-creation/v1",[Boy,Girl]);
+
+    private static void Manifest()
+    {
+        string root=TempRoot(),path=Path.Combine(root,"appearance.json");
+        try
+        {
+            string valid=JsonSerializer.Serialize(new {
+                kind="verified_character_appearance_rules",version=1,rules_verified=true,
+                source_reference="synthetic/manifest/v1",
+                choices=new[]{new{race=0,hair_index=0,hair_color=0},new{race=1,hair_index=3,hair_color=7}}
+            });
+            File.WriteAllText(path,valid);
+            var loaded=CharacterAppearanceRules.LoadVerified(path);
+            Checks.Require(loaded.Allows(Girl) && loaded.Choices.Count==2 && loaded.SourceReference=="synthetic/manifest/v1",
+                "appearance manifest lost choices/source");
+            foreach(string invalid in new[]{valid.Replace("\"rules_verified\":true","\"rules_verified\":false"),
+                valid.Replace("\"version\":1","\"version\":2"),valid.Replace("\"race\":1","\"race\":5"),
+                valid.Replace("\"hair_color\":7","\"hair_color\":8"),valid.Replace("\"hair_index\":3","\"hair_index\":\"3\""),
+                valid.Replace("\"race\":1","\"race\":1,\"race\":0"),valid.Replace("\"hair_index\":3,",""),
+                valid.Replace("\"rules_verified\":true,",""),"{}","[]","broken json",new string('x',1024*1024+1)})
+            {
+                File.WriteAllText(path,invalid);
+                Reject<InvalidDataException>(()=>CharacterAppearanceRules.LoadVerified(path));
+            }
+        }
+        finally { Directory.Delete(root,true); }
+    }
 
     private static void Reject<T>(Action action) where T : Exception
     {

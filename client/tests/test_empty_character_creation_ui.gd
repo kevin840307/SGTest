@@ -68,6 +68,9 @@ func _run() -> void:
 	if fake.creates != 1 or fake.last_created_name != "NewHero":
 		_fail(panel, "creation button did not submit intent")
 		return
+	if not panel.create_character_button.disabled or panel.character_name_input.editable or panel.creation_options.editable:
+		_fail(panel,"queued creation must lock controls before the network reply")
+		return
 
 	source.state = State.STATE_CREATING_CHARACTER
 	fake.published = source.snapshot()
@@ -81,6 +84,7 @@ func _run() -> void:
 	fake.published = source.snapshot()
 	fake.published["characters"] = [{"character_id": 101, "name": "NewHero", "slot": 0}]
 	fake.published["last_created_character_id"] = 101
+	fake.published["character_create_result_revision"] = 1
 	fake.revision += 1
 	panel._process(0.06)
 	if not panel.characters.visible or not panel.choose_button.visible or panel.choose_button.disabled or panel.characters.item_count != 1:

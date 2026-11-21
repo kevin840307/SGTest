@@ -14,6 +14,7 @@ class SessionStub:
 	var enters := 0
 	var last_name := ""
 	var last_slot := -1
+	var last_appearance: Dictionary = {}
 	var last_host := ""
 	var last_port := 0
 	func connect_secure(host, port, _user, _password, _tls_name, _trust) -> int:
@@ -24,10 +25,11 @@ class SessionStub:
 	func register_secure(_host, _port, _user, _password, _tls_name, _trust) -> int:
 		logins += 1
 		return OK
-	func create_character(slot: int, name: String) -> bool:
+	func create_character(slot: int, name: String, appearance: Dictionary = {}) -> bool:
 		creates += 1
 		last_name = name
 		last_slot = slot
+		last_appearance = appearance.duplicate()
 		return true
 	func choose_character(id: int) -> bool:
 		enters += 1
@@ -214,6 +216,40 @@ func _run() -> void:
 	if stub.creates != 1 or stub.last_name != "NewHero" or stub.last_slot != 2:
 		_error("creation did not delegate to SGTest authorizing session")
 		return
+	panel.character_create_status.text = ""
+	panel._latest.character_create_result_revision = 1
+	panel._latest.character_creation_appearances = [
+		{"race":0,"hair_index":0,"hair_color":0},
+		{"race":0,"hair_index":1,"hair_color":2},
+		{"race":0,"hair_index":1,"hair_color":5},
+		{"race":1,"hair_index":3,"hair_color":7}]
+	panel._set_controls()
+	if args.size()>1 and not await _wait_previews(shell,1,true):
+		return
+	await _capture("create_options",directory)
+	for field in ["race","hair_index","hair_color"]:
+		var row := ["race","hair_index","hair_color"].find(field)
+		if shell._appearance_buttons[field][0].position != Vector2(351,424+36*row) or shell._appearance_values[field].position != Vector2(386,422+36*row):
+			_error("appearance controls moved from source positions")
+			return
+	shell._appearance_buttons.hair_index[1].pressed.emit()
+	shell._appearance_buttons.hair_color[1].pressed.emit()
+	if panel.creation_options.selection()!={"race":0,"hair_index":1,"hair_color":5}:
+		_error("hair/color arrows did not select exact allowed tuples")
+		return
+	shell._appearance_buttons.race[1].pressed.emit()
+	var chosen := {"race":1,"hair_index":3,"hair_color":7}
+	if panel.creation_options.selection()!=chosen or shell._character_previews[3].status!="unsupported" or not shell._character_previews[3]._canvas._commands.is_empty() or shell._slot_edit.visible:
+		_error("unbound profile drew a B doll or slot overlapped race controls")
+		return
+	await _capture("create_options_pending_profile",directory)
+	shell._confirm_create.pressed.emit()
+	if stub.creates!=2 or stub.last_appearance!=chosen:
+		_error("appearance UI did not submit shared choice to ClientSession")
+		return
+	if not shell._confirm_create.disabled or panel.creation_options.editable:
+		_error("source create controls stayed interactive after queue admission")
+		return
 	if app._current_skin != "recovered2_local":
 		_error("skin selection was not retained")
 		return
@@ -234,6 +270,9 @@ func _run() -> void:
 	app._select_recovered2_skin("recovered2_local")
 	if app._current_skin != "recovered2_local" or panel.session != original_session:
 		_error("cannot restore Recovered2 skin without losing session")
+		return
+	if panel.creation_options.selection()!=chosen or panel.appearance_picker._pickers.race.get_selected_id()!=1:
+		_error("skin switch lost shared appearance selection")
 		return
 	var store = app.world_view.store
 	app.queue_free()

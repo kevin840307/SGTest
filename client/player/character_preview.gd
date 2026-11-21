@@ -1,17 +1,19 @@
 extends Control
 ## UI-only standing paper doll. Shares the app AssetStore and formal renderer.
-## Current protocol has no appearance fields: use the same provisional B profile
-## as WorldView, never synthesize a character's race/hair/equipment.
+## The current renderer supports B/hair00/default color. Explicit unsupported
+## choices hide that doll rather than misrepresenting another saved appearance.
 signal status_changed(status: String)
 const Players = preload("res://player/player_presentation.gd")
 const DrawList = preload("res://world/world_draw_list.gd")
 const Canvas = preload("res://world/world_canvas.gd")
+const BASE_APPEARANCE := {"race":0,"hair_index":0,"hair_color":0}
 
 var status := "empty"
 var _store: RefCounted
 var _owner: StringName
 var _epoch := 0
 var _occupied := false
+var _appearance: Dictionary = {}
 var _assets: Dictionary = {}
 var _players := Players.new()
 var _draw_list := DrawList.new()
@@ -49,6 +51,16 @@ func set_occupied(value: bool) -> void:
 	_occupied = value
 	_sync_activity()
 
+func set_appearance(value: Dictionary) -> void:
+	if value == _appearance:
+		return
+	var same_base := (_appearance.is_empty() or _appearance == BASE_APPEARANCE) and (value.is_empty() or value == BASE_APPEARANCE)
+	_appearance = value.duplicate()
+	if same_base and _epoch > 0:
+		return
+	_release()
+	_sync_activity()
+
 func _set_status(value: String) -> void:
 	if status != value:
 		status = value
@@ -59,6 +71,10 @@ func _sync_activity() -> void:
 	if not active:
 		_release()
 		_set_status("empty")
+		return
+	if not _appearance.is_empty() and _appearance != BASE_APPEARANCE:
+		_release()
+		_set_status("unsupported")
 		return
 	if _store == null:
 		_set_status("unavailable")

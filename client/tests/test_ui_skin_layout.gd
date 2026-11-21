@@ -102,6 +102,9 @@ func _run() -> void:
 	if app._screen_backdrop.visible or app._photo_backdrop.visible or not app.toolbar.visible or panel.position.x != maxf(16.0,root.size.x-panel.custom_minimum_size.x-16.0):
 		_fail(app,"world must restore map viewport and docked game UI")
 		return
+	if app._status.visible or app._help_label.visible or app._map_buttons.any(func(button): return button.visible):
+		_fail(app,"map inspector title/switches exposed in player UI")
+		return
 	panel.gameplay_hud.apply_snapshot({"world_ready":true,"actor_id":3,"map_id":15,"map_epoch":2,
 		"player_max_hp":100,"player_current_hp":75,"player_max_mp":60,"player_current_mp":40})
 	if not panel.gameplay_hud.hp.visible or panel.gameplay_hud.hp.value != 75 or panel.gameplay_hud.mp.value != 40:

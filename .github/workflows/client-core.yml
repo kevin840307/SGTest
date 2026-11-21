@@ -50,6 +50,8 @@ jobs:
         run: .cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64 --headless --path client --script res://tests/test_wire_codec.gd
       - name: Character appearance CSharp golden and exact creation-menu reducer
         run: timeout 20s .cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64 --headless --path client --script res://tests/test_character_appearance_wire.gd
+      - name: Shared character race hair and color selection across UI views
+        run: timeout 20s .cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64 --headless --path client --script res://tests/test_character_creation_options.gd
       - name: Godot AOI compact wire and WorldState generation gate
         run: .cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64 --headless --path client --script res://tests/test_aoi_wire.gd
       - name: Godot authoritative pickup golden and one-time item UID reducer

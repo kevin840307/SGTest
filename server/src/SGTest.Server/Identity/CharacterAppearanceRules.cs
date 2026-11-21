@@ -1,3 +1,5 @@
+using System.Text.Json;
+
 namespace SGTest.Server.Identity;
 
 /// <summary>
@@ -39,4 +41,47 @@ public sealed class CharacterAppearanceRules
     }
 
     public bool Allows(CharacterAppearance requested) => _allowed.Contains(requested);
+
+    public static CharacterAppearanceRules LoadVerified(string path)
+    {
+        var bytes=File.ReadAllBytes(path);
+        if(bytes.Length is <1 or >1024*1024)
+            throw new InvalidDataException("Appearance rule file size out of range");
+        try
+        {
+            using var document=JsonDocument.Parse(bytes,new JsonDocumentOptions { MaxDepth=8 });
+            var root=document.RootElement;
+            UniqueFields(root);
+            if(root.GetProperty("kind").GetString()!="verified_character_appearance_rules" ||
+                root.GetProperty("version").GetInt32()!=1 ||
+                root.GetProperty("rules_verified").ValueKind!=JsonValueKind.True)
+                throw new InvalidDataException("Appearance rules require explicit verification");
+            string source=root.GetProperty("source_reference").GetString() ?? string.Empty;
+            var choices=root.GetProperty("choices");
+            if(choices.ValueKind!=JsonValueKind.Array || choices.GetArrayLength() is <1 or >4096)
+                throw new InvalidDataException("Appearance choice count out of range");
+            var values=new List<CharacterAppearance>();
+            foreach(var choice in choices.EnumerateArray())
+            {
+                UniqueFields(choice);
+                values.Add(new(choice.GetProperty("race").GetInt32(),
+                    choice.GetProperty("hair_index").GetInt32(),choice.GetProperty("hair_color").GetInt32()));
+            }
+            return new(source,values);
+        }
+        catch(Exception error) when(error is JsonException or InvalidOperationException or
+            KeyNotFoundException or FormatException or ArgumentException)
+        {
+            throw new InvalidDataException("Invalid character appearance rule manifest",error);
+        }
+    }
+
+    private static void UniqueFields(JsonElement value)
+    {
+        if(value.ValueKind!=JsonValueKind.Object)
+            throw new InvalidDataException("Appearance rule must be an object");
+        var names=new HashSet<string>(StringComparer.Ordinal);
+        foreach(var property in value.EnumerateObject())
+            if(!names.Add(property.Name)) throw new InvalidDataException("Duplicate appearance rule field");
+    }
 }

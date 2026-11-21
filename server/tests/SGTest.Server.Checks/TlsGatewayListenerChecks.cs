@@ -519,6 +519,30 @@ internal static class TlsGatewayListenerChecks
         Checks.Require(denied.Exit==1 && !denied.Out.Contains("TLS_HOST_READY"),
             "unverified recovery rule file started a production listener");
 
+        string appearancePath=Path.Combine(content,"appearance-verified.json");
+        string appearanceJson=JsonSerializer.Serialize(new {
+            kind="verified_character_appearance_rules",version=1,rules_verified=true,
+            source_reference="synthetic/host-appearance/v1",
+            choices=new[]{new{race=0,hair_index=0,hair_color=0}}
+        });
+        File.WriteAllText(appearancePath,appearanceJson);
+        var appearanceEnabled=await Run("serve","--content",content,"--identity",Path.Combine(content,"identity.db"),
+            "--certificate",pfx,"--port","0","--character-spawn-map","15","--character-spawn-x","8",
+            "--character-spawn-y","8","--character-appearance-rules",appearancePath,"--seconds","1");
+        Checks.Require(appearanceEnabled.Exit==0 && appearanceEnabled.Out.Contains("TLS_HOST_READY") &&
+            appearanceEnabled.Out.Contains("\"character_appearance_choices\":1"),
+            "formal Host did not enable configured appearance rules: "+appearanceEnabled.Error);
+        var missingSpawn=await Run("serve","--content",content,"--identity",Path.Combine(content,"identity.db"),
+            "--certificate",pfx,"--port","0","--character-appearance-rules",appearancePath,"--seconds","1");
+        Checks.Require(missingSpawn.Exit==2 && !missingSpawn.Out.Contains("TLS_HOST_READY"),
+            "appearance rules without trusted spawn opened listener");
+        File.WriteAllText(appearancePath,appearanceJson.Replace("\"rules_verified\":true","\"rules_verified\":false"));
+        var unverifiedAppearance=await Run("serve","--content",content,"--identity",Path.Combine(content,"identity.db"),
+            "--certificate",pfx,"--port","0","--character-spawn-map","15","--character-spawn-x","8",
+            "--character-spawn-y","8","--character-appearance-rules",appearancePath,"--seconds","1");
+        Checks.Require(unverifiedAppearance.Exit==1 && !unverifiedAppearance.Out.Contains("TLS_HOST_READY"),
+            "unverified appearance choices opened listener");
+
         var invalid = await Run("serve", "--content", content, "--identity", Path.Combine(content, "identity.db"),
             "--certificate", pfx, "--bind", "not-an-ip");
         Checks.Require(invalid.Exit == 2 && !invalid.Out.Contains("TLS_HOST_READY"),

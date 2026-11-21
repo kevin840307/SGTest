@@ -258,8 +258,9 @@ func _update_ui_stage(force: bool = false) -> void:
 	var retro_world := _current_skin == "retro_terminal" and not pre_world
 	terminal_hud.visible = retro_world and session_panel.active
 	for button in _map_buttons:
-		button.visible = not retro_world
-	_help_label.visible = not retro_world
+		button.hide()
+	_help_label.hide()
+	_status.hide()
 	var panel_width := minf(560.0,maxf(360.0,viewport_size.x-32.0)) if pre_world else minf(420.0,maxf(300.0,viewport_size.x-32.0))
 	session_panel.custom_minimum_size.x = panel_width
 	if r2_frontend:

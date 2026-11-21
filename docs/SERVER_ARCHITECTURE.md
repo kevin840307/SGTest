@@ -4,7 +4,7 @@
 
 ## 核心邊界
 
-創角外觀的 domain 與持久化在既有 `Identity/`：`CharacterAppearanceRules` 是 trusted Server 的不可變完整 tuple allowlist，`SqliteIdentityStore` 才擁有建立角色／外觀／錢包的唯一原子交易，資料庫 schema v24 以可選 `character_appearances` 保留舊角色未知狀態。外觀 Race 與後續 CombatProfile provision 必須一致。創角／列表 Wire 已接上；來源合法集合、Host 配置、AOI 及 UI 選項尚待接入，不能把 Storage 層驗證當作完整創角；詳 [來源與接入進度](research/CHARACTER_CREATION_APPEARANCE.md)。
+創角外觀的 domain 與持久化在既有 `Identity/`：`CharacterAppearanceRules` 是 trusted Server 的不可變完整 tuple allowlist，`SqliteIdentityStore` 才擁有建立角色／外觀／錢包的唯一原子交易，資料庫 schema v24 以可選 `character_appearances` 保留舊角色未知狀態。外觀 Race 與後續 CombatProfile provision 必須一致。創角／列表 Wire 已接上；Host 檔案載入與 UI 選項已接上；全量來源合法集合、AOI 及一般外觀渲染仍待接入，不能把 Storage 層驗證當作完整創角；詳 [來源與接入進度](research/CHARACTER_CREATION_APPEARANCE.md)。
 
 | 責任 | 內容 | 禁止 |
 |---|---|---|

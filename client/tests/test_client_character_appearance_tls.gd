@@ -1,6 +1,7 @@
 extends SceneTree
 const Session = preload("res://session/client_session.gd")
 const State = preload("res://world/world_state.gd")
+const SessionPanel = preload("res://session/session_panel.gd")
 const LOOK := {"race":1,"hair_index":3,"hair_color":7}
 
 func _initialize() -> void:
@@ -21,6 +22,7 @@ func _run() -> void:
 		quit(2)
 		return
 	for pass_index in 2:
+		var panel: PanelContainer
 		var session = Session.new()
 		if session.connect_secure("127.0.0.1",int(args[0]),"fixture_user","Fixture-Password-123!","localhost",cert)!=OK:
 			_fail("TLS connect",session)
@@ -37,9 +39,20 @@ func _run() -> void:
 			if session.create_character(0,"Chosen") or session.create_character(0,"Chosen",{"race":2,"hair_index":3,"hair_color":7}):
 				_fail("client admitted unlisted/missing choice",session)
 				return
-			if not session.create_character(0,"Chosen",LOOK):
-				_fail("allowed choice refused",session)
+			panel = SessionPanel.new()
+			root.add_child(panel)
+			panel.set_process(false)
+			panel.session = session
+			panel.active = true
+			panel._latest = snapshot
+			panel._set_controls()
+			panel.appearance_picker._pickers.race.item_selected.emit(1)
+			if panel.creation_options.selection()!=LOOK:
+				_fail("real UI picker did not select allowed appearance",session)
 				return
+			panel.character_name_input.text = "Chosen"
+			panel.character_slot_input.value = 0
+			panel.create_character_button.pressed.emit()
 			while int(snapshot.get("last_created_character_id",0))==0 and Time.get_ticks_msec()<deadline:
 				await process_frame
 				snapshot = session.snapshot()
@@ -60,6 +73,8 @@ func _run() -> void:
 				_fail("world transition retained creation menu or failed ready",session)
 				return
 		session.stop()
+		if panel != null:
+			panel.queue_free()
 		await process_frame
-	print("CLIENT_CHARACTER_APPEARANCE_TLS_PASS server_choices=true exact_choice=true persisted_relogin=true choose_world=true menu_released=true")
+	print("CLIENT_CHARACTER_APPEARANCE_TLS_PASS server_choices=true UI_picker_and_button=true exact_choice=true persisted_relogin=true choose_world=true menu_released=true")
 	quit(0)

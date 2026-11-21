@@ -10,6 +10,8 @@ const SessionLayout = preload("res://ui/session_layout.gd")
 const UiTextureLoader = preload("res://ui/ui_texture_loader.gd")
 const UiSkinCatalog = preload("res://ui/ui_skin_catalog.gd")
 const CharacterPreview = preload("res://player/character_preview.gd")
+const AppearancePicker = preload("res://ui/character_appearance_picker.gd")
+const State = preload("res://world/world_state.gd")
 
 const LOCAL := "res://ui/private_recovered2"
 const SIZE := Vector2(1200,900)
@@ -41,6 +43,10 @@ var _last_character_key := ""
 var _last_resize := Vector2.ZERO
 var _asset_store: RefCounted
 var _character_previews: Array[Control] = []
+var _appearance_values: Dictionary = {}
+var _appearance_buttons: Dictionary = {}
+var _appearance_note: Label
+var _preview_note: Label
 
 func set_asset_store(store: RefCounted) -> void:
 	_asset_store = store
@@ -76,6 +82,8 @@ func attach(panel: PanelContainer) -> bool:
 	_build_select()
 	_build_create()
 	_build_skin_picker()
+	_panel.creation_options.changed.connect(_refresh_appearance)
+	_refresh_appearance()
 	resize_view(get_viewport_rect().size)
 	return true
 
@@ -296,17 +304,27 @@ func _build_create() -> void:
 	_slot_edit.max_value = 7
 	_slot_edit.step = 1
 	_put(_creation,_slot_edit,386,422,92,30)
-	_label(_creation,"欄位",280,422,65,28,14)
-	# These fields exist in Recovered2 but SGTest currently has no
-	# authoritative race/hair/point-allocation protocol. Never invent values.
-	_label(_creation,"外觀與能力分配尚未接入",318,493,235,54,14)
+	# Recovered2 chooses a slot on the selection screen, not in the race row.
+	_slot_edit.hide()
+	for i in 3:
+		var field: String = ["race","hair_index","hair_color"][i]
+		var y := float(424+36*i)
+		_label(_creation,["種族","髮型","髮色"][i],232,y,78,24,14)
+		var value := _label(_creation,"未開放",386,y-2,72,29,14)
+		value.theme_type_variation = &"ParadiseAccentText"
+		_appearance_values[field] = value
+		_appearance_buttons[field] = [_appearance_arrow(field,-1,351,y),_appearance_arrow(field,1,464,y)]
+	_appearance_note = _label(_creation,"",318,539,180,51,11)
+	_appearance_note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	var doll := CharacterPreview.new()
 	_put(_creation,doll,516,444,109,177)
 	doll.bind_store(_asset_store)
 	doll.set_occupied(true)
-	doll.tooltip_text = "暫定 B 基礎外觀；未實作的種族／髮型選擇不會改變角色資料"
+	doll.tooltip_text = "預覽目前選擇的人物外觀；部分外觀暫無預覽"
 	_character_previews.append(doll)
-	_label(_creation,"暫定基礎外觀",507,600,128,25,11)
+	_preview_note = _label(_creation,"",507,594,128,38,10)
+	_preview_note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	doll.status_changed.connect(func(_status): _refresh_appearance())
 	_confirm_create = _button(_creation,"建立角色",747,680,110,31,true)
 	_confirm_create.pressed.connect(_submit_create)
 	var cancel := _button(_creation,"返回選角",878,680,110,31)
@@ -317,6 +335,41 @@ func _build_create() -> void:
 			_panel.back_to_character_button.pressed.emit())
 	_create_status = _label(_creation,"",263,621,418,36,14)
 	_create_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+
+func _appearance_arrow(field: String, delta: int, x: float, y: float) -> BaseButton:
+	var texture := UiTextureLoader.get_texture(LOCAL.path_join("LEFT_BUTTON.png" if delta<0 else "RIGHT_BUTTON.png"))
+	var button: BaseButton
+	if texture != null:
+		var image_button := TextureButton.new()
+		image_button.texture_normal = texture
+		image_button.ignore_texture_size = true
+		image_button.stretch_mode = TextureButton.STRETCH_SCALE
+		button = image_button
+	else:
+		var fallback := Button.new()
+		fallback.text = "‹" if delta<0 else "›"
+		button = fallback
+	button.focus_mode = Control.FOCUS_NONE
+	button.pressed.connect(func(): _panel.creation_options.cycle(field,delta))
+	_put(_creation,button,x,y,29,25)
+	return button
+
+func _refresh_appearance() -> void:
+	var options = _panel.creation_options
+	_confirm_create.disabled = not options.editable
+	var selected: Dictionary = options.selection()
+	for field in _appearance_values:
+		_appearance_values[field].text = AppearancePicker.value_label(field,int(selected[field])) if not selected.is_empty() else "未開放"
+		for button in _appearance_buttons[field]:
+			button.disabled = not options.editable or options.values(field).size()<2
+			button.modulate = Color(1,1,1,0.45 if button.disabled else 1.0)
+	_appearance_note.text = "能力分配暫未開放" if not selected.is_empty() else "此伺服器暫未開放外觀選擇"
+	var preview: Control = _character_previews[3]
+	preview.set_occupied(_panel.active and int(_panel._latest.get("state",-1)) in [State.STATE_SELECTING_CHARACTER,State.STATE_CREATING_CHARACTER])
+	preview.set_appearance(selected)
+	_preview_note.text = "此外觀暫無預覽" if preview.status == "unsupported" else ("預設人物示意" if selected.is_empty() else "基本外觀預覽")
+	if preview.status in ["loading","unavailable"]:
+		_preview_note.text = "人物素材載入中" if preview.status == "loading" else "人物素材未就緒"
 
 func _submit_create() -> void:
 	_panel.character_name_input.text = _name_edit.text
@@ -347,9 +400,15 @@ func _update_characters() -> void:
 		var valid: bool = index < _panel._characters.size()
 		var character: Dictionary = _panel._characters[index] if valid else {}
 		_names[i].text = str(character.get("name","未建立角色")) if valid else "空白角色欄"
+		var appearance: Dictionary = character.get("appearance",{}) if valid else {}
+		_character_previews[i].set_appearance(appearance)
 		_character_previews[i].set_occupied(valid)
 		var model_status := str(_character_previews[i].status)
 		var note := "暫定 B 外觀" if model_status == "ready" else ("人物素材載入中" if model_status == "loading" else "人物素材未就緒")
+		if not appearance.is_empty():
+			note = "%s／%s／%s" % [AppearancePicker.value_label("race",int(appearance.race)),AppearancePicker.value_label("hair_index",int(appearance.hair_index)),AppearancePicker.value_label("hair_color",int(appearance.hair_color))]
+			if model_status == "unsupported":
+				note += "（暫無預覽）"
 		_slot_previews[i].text = "角色 ID %d · %s" % [int(character.get("character_id",0)),note] if valid else "可建立新角色"
 		_slot_actions[i].text = "進入世界" if valid else "建立角色"
 		_slot_actions[i].disabled = _panel._chosen

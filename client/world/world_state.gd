@@ -18,6 +18,7 @@ var registration_status := -1
 var auth_status := -1
 var choose_status := -1
 var character_create_status := -1
+var character_create_result_revision := 0
 var last_created_character_id := 0
 var last_created_slot := -1
 var last_created_name := ""
@@ -984,6 +985,7 @@ func snapshot() -> Dictionary:
 		"auth_status": auth_status,
 		"choose_status": choose_status,
 		"character_create_status": character_create_status,
+		"character_create_result_revision": character_create_result_revision,
 		"last_created_character_id": last_created_character_id,
 		"last_created_slot": last_created_slot,
 		"last_created_name": last_created_name,
@@ -1341,6 +1343,7 @@ func _apply_character_create_result(frame: PackedByteArray) -> bool:
 	if int(decoded.status) == 0 and appearance != _pending_character_appearance:
 		return fail("character_create_appearance_mismatch")
 	_pending_character_appearance.clear()
+	character_create_result_revision += 1
 	character_create_status = int(decoded.status)
 	if character_create_status == 0:
 		last_created_character_id = int(decoded.character_id)

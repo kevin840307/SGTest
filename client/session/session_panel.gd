@@ -8,6 +8,8 @@ const Session = preload("res://session/client_session.gd")
 const SessionLayout = preload("res://ui/session_layout.gd")
 const GameplayHud = preload("res://ui/gameplay_hud.gd")
 const SessionArtwork = preload("res://ui/session_artwork.gd")
+const CreationOptions = preload("res://player/character_creation_options.gd")
+const AppearancePicker = preload("res://ui/character_appearance_picker.gd")
 const State = preload("res://world/world_state.gd")
 const TradePanel = preload("res://trade/trade_panel.gd")
 const InventoryPanel = preload("res://inventory/inventory_panel.gd")
@@ -23,6 +25,8 @@ const RepairPanel = preload("res://npc/repair_panel.gd")
 const EnhancementPanel = preload("res://npc/enhancement_panel.gd")
 const PvpPanel = preload("res://pvp/pvp_panel.gd")
 var session = Session.new()
+var creation_options := CreationOptions.new()
+var appearance_picker := AppearancePicker.new()
 var _layout := SessionLayout.new()
 var _artwork := SessionArtwork.new()
 var _scroll := ScrollContainer.new()
@@ -74,6 +78,7 @@ var _world_epoch := 0
 var _poll_elapsed := 0.0
 var _latest := {}
 var _last_publication_revision := -1
+var _create_queued_after := -1
 var _respawn_queued_after := -1
 var _skill_queued_after := -1
 var _skill_queued_at_ms := 0
@@ -166,6 +171,9 @@ func _ready() -> void:
 		create_grid.add_child(pair[1])
 	for control in [create_character_button,character_create_status,back_to_character_button]:
 		_layout.create_page.add_child(control)
+	_layout.create_page.add_child(appearance_picker)
+	_layout.create_page.move_child(appearance_picker,2)
+	appearance_picker.bind_options(creation_options)
 	_layout.bind_forms(grid,create_grid)
 	# Persisting controls remain in one owner and are only reparented when a
 	# skin switches gameplay layout; no gameplay event or Session is rebuilt.
@@ -286,13 +294,16 @@ func _begin_connection(register_first:bool)->void:
 
 
 func create_character() -> void:
-	if not active:
+	if not active or _chosen or _create_queued_after >= 0:
 		return
 	var character_name := character_name_input.text.strip_edges()
 	if character_name.is_empty():
 		character_create_status.text = "請輸入角色名稱"
 		return
-	if session.create_character(int(character_slot_input.value),character_name):
+	var appearance := creation_options.selection()
+	var queued: bool = session.create_character(int(character_slot_input.value),character_name,appearance) if not appearance.is_empty() else session.create_character(int(character_slot_input.value),character_name)
+	if queued:
+		_create_queued_after = int(_latest.get("character_create_result_revision",0))
 		character_create_status.text = "建立角色中…"
 		_set_controls()
 	else:
@@ -497,6 +508,7 @@ func disconnect_session() -> void:
 	_latest = {}
 	gameplay_hud.reset()
 	_last_publication_revision = -1
+	_create_queued_after = -1
 	_respawn_queued_after = -1
 	_skill_queued_after = -1
 	_skill_queued_at_ms = 0
@@ -535,19 +547,24 @@ func _set_controls() -> void:
 	logout_button.visible = active
 	var state := int(_latest.get("state",-1))
 	var selecting := active and state == State.STATE_SELECTING_CHARACTER
+	if _create_queued_after >= 0 and int(_latest.get("character_create_result_revision",0)) > _create_queued_after:
+		_create_queued_after = -1
+	var can_create := selecting and not _chosen and _create_queued_after < 0
+	creation_options.set_choices(_latest.get("character_creation_appearances",[]))
+	creation_options.set_editable(can_create)
 	var creating := active and state == State.STATE_CREATING_CHARACTER
 	characters.visible = selecting and not _characters.is_empty()
 	choose_button.visible = characters.visible
-	choose_button.disabled = _chosen or not selecting or _characters.is_empty()
+	choose_button.disabled = _chosen or not selecting or _characters.is_empty() or _create_queued_after >= 0
 	new_character_button.visible = selecting
-	new_character_button.disabled = not selecting
+	new_character_button.disabled = not can_create
 	back_to_character_button.visible = selecting and not _characters.is_empty()
-	back_to_character_button.disabled = not selecting
+	back_to_character_button.disabled = not can_create
 	for control in [character_name_input,character_slot_input,create_character_button,character_create_status]:
 		control.visible = active and state in [State.STATE_SELECTING_CHARACTER,State.STATE_CREATING_CHARACTER]
-	character_name_input.editable = selecting
-	character_slot_input.editable = selecting
-	create_character_button.disabled = not selecting
+	character_name_input.editable = can_create
+	character_slot_input.editable = can_create
+	create_character_button.disabled = not can_create
 	_set_respawn_controls()
 	_set_skill_controls()
 	if not active or state not in [State.STATE_SELECTING_CHARACTER,State.STATE_CREATING_CHARACTER,State.STATE_IN_WORLD]:

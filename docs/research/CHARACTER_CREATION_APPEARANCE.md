@@ -28,14 +28,26 @@
 
 ## 接下來必須完成
 
+Host／UI 已接入：`serve --character-appearance-rules <PRIVATE_JSON>` 必須與完整的合法 spawn 設定同時提供；`CharacterAppearanceRules.LoadVerified` 限制檔案大小、深度、明確驗證標記、必要整數欄位、重複欄位／選項與數量。設定有誤時不啟動 listener。範例格式（以下**只有合成示例，不是原版合法集合**）：
+
+```json
+{"kind":"verified_character_appearance_rules","version":1,"rules_verified":true,"source_reference":"synthetic/example-only","choices":[{"race":0,"hair_index":0,"hair_color":0}]}
+```
+
+`client/player/character_creation_options.gd` 是 SessionPanel 唯一的 UI 選擇模型，按 Server tuple 推導相依選單，不以素材目錄數量猜選項。一般皮膚的 `character_appearance_picker.gd` 下拉選單與 Recovered2 左右箭頭共用該模型；切皮膚不重設選擇，待送／登出停止編輯。入列成功即鎖定，以本機 WorldState 的單調 create-result revision 解鎖，避免快回覆被 UI 輪詢略過或等待入列時仍可重按。Recovered2 三列箭頭／數值位置分別依來源 `(351/386/464,424/460/496)`，原先擠在種族列的 slot 編輯器已隱藏，由選角欄位決定。外觀 tuple 會經原 ClientSession 送出並持久化。
+
+現有預覽 Renderer 仍只支援 B／Hair00／色0（與 legacy 預設示意共用）：選到其他外觀時立即清空預覽、停止更新並釋放 scope，顯示暫無預覽，不畫錯誤的 B 人物；角色列表已保存的其他外觀亦如此。這是正確的未完成狀態，**不是已完成所有人物外觀**。未設定外觀的 legacy 角色仍明示為基本示意。
+
+Windows Godot RTX3050 1152×620 六張登入／載入／選角／創角畫面及外觀選擇箭頭已實際檢視；source-coordinate、相依選項、跨 skin 選擇、UI→ClientSession→TLS→SQLite→重登、資源釋放 PASS。Server 279、Python 123 tests PASS。GM capability 測試原先關線前未讀完空背包登入基線，已補齊收包，沒有放寬 CleanEof／權限斷言。正式玩家 UI 各皮膚的 Map13／Map15 檢視按鈕、檢視標題與提示已隱藏，離線 QA 模式保留。
+
 Server 持久化前置已實作（schema v24）：`CharacterAppearance(Race,HairIndex,HairColor)` 及來源字串由 trusted `CharacterAppearanceRules` 的**完整 tuple 允許集合**核准，角色、外觀與錢包在同一 SQLite transaction 建立。Rules 會複製輸入集合並限制大小；通用數值範圍只是儲存邊界，不是各種族合法髮型規則，也不代表來源已由此 class 自動驗證。新 API 需明確提供 Server rules，舊 API 與舊角色保持 `Appearance=null`，不虛構 race/hair，也不從現有 CombatProfile 自動補值。已設定外觀的角色若 provision 不同 race 的 CombatProfile，會在同一交易中拒絕。CharacterRecord 查詢／重新認證會讀回原 tuple 和來源。
 
-持久化切片 `f2a43e1` 的 [Server CI 44924564032](https://github.com/kevin840307/SGTest/actions/runs/44924564032) 與 [Client CI 44924564078](https://github.com/kevin840307/SGTest/actions/runs/44924564078) SUCCESS。後續已接上同一 Wire V1 的 CharacterList／CharacterCreate／CharacterCreateResult 外觀擴充：Server 發布 bounded exact choices，拒絕省略／未列／未啟用的外觀；成功與列表均帶保存值。ClientSession 透過原 intent FIFO 送出複本，WorldState 驗證選項與結果／列表一致，進世界後釋放 creation menu。真 Godot TLS 已驗證選定 tuple 創角→斷線→重登不變→選角→WorldReady，並非只測 C# codec。這仍是**合成規則的協定驗收**，正式來源 allowlist Host 載入、UI 操作／多種族 GPU／AOI 外觀尚未完成。格式與重跑命令見 [Runtime Protocol](../RUNTIME_PROTOCOL.md#character-appearance-extension-2026-11-22)。
+持久化切片 `f2a43e1` 的 [Server CI 44924564032](https://github.com/kevin840307/SGTest/actions/runs/44924564032) 與 [Client CI 44924564078](https://github.com/kevin840307/SGTest/actions/runs/44924564078) SUCCESS。後續已接上同一 Wire V1 的 CharacterList／CharacterCreate／CharacterCreateResult 外觀擴充：Server 發布 bounded exact choices，拒絕省略／未列／未啟用的外觀；成功與列表均帶保存值。ClientSession 透過原 intent FIFO 送出複本，WorldState 驗證選項與結果／列表一致，進世界後釋放 creation menu。真 Godot TLS 已驗證選定 tuple 創角→斷線→重登不變→選角→WorldReady，並非只測 C# codec。這仍是**合成規則的協定驗收**，Host 載入與 UI 操作已由後續切片接上；全量原版 allowlist、多種族 GPU／AOI 外觀尚未完成。格式與重跑命令見 [Runtime Protocol](../RUNTIME_PROTOCOL.md#character-appearance-extension-2026-11-22)。
 
 1. 原始 Hair／起始裝備 ID 與 ItemDefinition、種族、SPR／顏色的關係；確認每種族可選集合。Robot 的起始部件與 Y 的衍生版本規則需分別追溯。
-2. 接上來源核准的 creation options／Host rules，將已完成的外觀持久化接到正式創角入口；補外觀封包重送及滿欄測試。已完成的 v24 migration／並發／回滾不能代替此整合。
+2. Host 與 UI 入口已接通；接續以真正來源合法集合驗收，而非只用合成 allowlist。創角初始裝備／能力／完整滿欄流程仍須驗證。
 3. 已完成創角／列表 Wire 與 ClientSession；仍需 AOI 外觀資料、Spawn 前後順序及 generation／重同步測試。
 4. 由同一 Converter 發布已支援 profile 的確切素材集；PlayerPresentation 依 Server 外觀選部件，預覽與世界共用 profile，不各維護一套 race/hair 對照。
-5. 創角選項放回來源頁面的位置；換種族／髮型／髮色即時預覽、創角後重登不變、至少兩個真 Client 的外觀一致、GPU／多開／資源 Gate。
+5. 三組選項已放回 Recovered2 來源位置並通過真 UI→TLS 重登；仍需各選項的真實動態人物預覽、至少兩個真 Client 的外觀一致、GPU／多開／資源 Gate。
 
 以上未完成前，UI 保留暫定外觀提示，不加入會誤導玩家的假選項。

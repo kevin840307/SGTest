@@ -4,6 +4,8 @@
 
 ## Recovered2 本機登入／選角／創角參考皮膚（2026-11-21）
 
+創角種族／髮型／髮色現在透過 SessionPanel 單一 `player/character_creation_options.gd` 共用選擇，`ui/character_appearance_picker.gd` 是一般皮膚的下拉視圖，Recovered2 箭頭委派同一模型。資料只來自 Server 發布的 exact tuples；皮膚不自行猜合法髮型數量。UI 入列成功立即鎖定選項／名稱／再次建立，依 WorldState 本機單調 `character_create_result_revision` 確認收到新的可靠結果後才解鎖，不能靠 Renderer 是否看見短暫 CREATING 狀態。該 revision 不改 Wire，也不代替 Server 成功回覆。Unsupported profile 的預覽必須清圖並釋放 scope，不能套用其他人物。
+
 UI Node 由實際頁面擁有：`Recovered2AuthShell` 只有在本機 Theme 成功載入後才建立輸入框／按鈕／影片，且每個實例必須掛在頁面樹；不能預建一個 Node 再以另一個 Node 覆蓋欄位。影片不存在時不建立播放器，未 attach 時不顯示 auth shell；同一 Panel 重複 attach 不重建頁面。離線 map-only 模式也不建立未使用的 skin picker。`test_ui_lifecycle.gd` 反覆建立／釋放正式 main 場景，以 orphan-node 計數驗證離線、一般與可選本機素材三種生命週期；GPU 資源另由嚴格 `run_world_view.py` 的 engine log 與素材 scope 歸零驗證，不把計數歸零當成完整 GPU 釋放證據。
 
 使用者指定**暫停 Retro Terminal 的後續擴充，只先做三個畫面**。依 `C:\\SGO\\NewVersion\\Recovered2` 的 `LoginScreen.tscn`、`login_screen.gd`、`character_select.tscn`、`character_select.gd` 做唯讀設計參照，直接使用本機使用者提供的 `paradise_window_theme.tres`、`2.ogv`、`SELECT_CHARACTER.png`、`CREATE_CHARACTER.png` 及左右按鈕圖。這些外部素材屬使用者本機可使用的參考資料，**不可自動提交公開 GitHub**。
@@ -12,7 +14,7 @@ UI Node 由實際頁面擁有：`Recovered2AuthShell` 只有在本機 Theme 成�
 - `client/ui/skins/recovered2_local.json` 是可抽換皮膚宣告，原始資產未安裝時不會出現在可選清單；`client/ui/recovered2_auth_shell.gd` 在可用時按照 Recovered2 的 1200×900 版型呈現登入、三欄選角、創角背景與其 Theme、登入影片。按鈕與輸入只委派給**同一個 SGTest SessionPanel 的登入／創角／選角指令**，不得建立第二份 Session／網路協定／WorldState。
 - `client/app/main.gd` 僅在 `recovered2_local` 且登入前啟用外部呈現層；SGTest 原 SessionPanel 在畫面外保持活著；切換其他皮膚或進入世界即恢復原本 UI。三個畫面右上角可切換皮膚，無須重新登入。**所有風格的玩家登入畫面不顯示 Host／IP／Port，只有帳號／密碼；正式端點由部署或 `--host`／`--port` 參數帶入，視覺層不可覆蓋端點。**
 - 人物預覽：`client/player/character_preview.gd` 為選角三欄及創角頁顯示與世界一致的**暫定 B 基礎外觀**，重用 PlayerPresentation／ActionTimeline、WorldDrawList 的 SPR geometry 與 WorldCanvas。只向 App 唯一 AssetStore 申請獨立 scope；三欄共用同一份六部件 texture，不建立另一個 Store、載入 loop 或 SubViewport。依來源 NS1 動畫固定 50Hz metadata 採樣，只在 frame／大小改變時更新 Canvas；空欄、隱藏、切換 skin 或銷毀時停止 process 並釋放 scope。素材不存在／解碼失敗顯示未就緒，不捏造替代外觀。
-- 已知功能差異：Server 與 ClientSession 已支援創角／列表的 appearance tuple 與允許選項，但標準 Host 來源 rules、UI 操作及 AOI 外觀仍未接上。預覽因此**不是角色的完整外觀**，介面標明暫定 B 外觀；髮型／種族／能力點／角色密碼／刪除角色尚未連接權威玩法，不能製作假按鈕。
+- 已知功能差異：Server 與 ClientSession 已支援創角／列表的 appearance tuple 與允許選項，標準 Host 已可載入 rules，UI 已可選擇／送出；全量原版規則、AOI 外觀與一般 profile 渲染仍未完成。預覽因此**不是角色的完整外觀**，介面標明暫定 B 外觀；髮型／種族／能力點／角色密碼／刪除角色尚未連接權威玩法，不能製作假按鈕。
 - 驗收：`client/tests/test_recovered2_local_ui.gd` 在 Windows Godot 原生 GPU 以 **1152×620** 擷取三張畫面（適配 1280×720 桌面，無裁切）；正式 Client 初次開啟時僅在一般視窗模式中自動縮小超出可用桌面的視窗，不固定世界解析度；測試原始 Theme／影片／PNG、只顯示帳密、部署端點保留、登入／選角／創角操作委派、切換皮膚不重建 Session。Headless CI 不等待 GPU 繪製訊號，只執行功能測試；沒有私有素材時可安全跳過本機視覺測試。正式 Host TLS 的雙 Client 整合另由既有 CI 驗證。
 
 ## 2026-11-21 Recovered2 載入 UI、走路動畫與 MapEpoch 資源實測
