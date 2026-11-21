@@ -1344,6 +1344,15 @@ func _apply_choose(frame: PackedByteArray) -> bool:
 		state = STATE_FAILED
 		return true
 	actor_id = int(decoded.character_id)
+	_reset_character_actions_and_combat()
+	_reset_character_economy_state()
+	_reset_character_world_state(decoded)
+	state = STATE_IN_WORLD
+	return true
+
+# A newly chosen character must not inherit prior Actor, UID or map generations.
+# Keep all mutations in this sole reducer; command/visual processing stays FIFO.
+func _reset_character_actions_and_combat() -> void:
 	npc_interaction_sequence = 0
 	pending_npc_sequence = 0
 	pending_npc_epoch = 0
@@ -1386,6 +1395,8 @@ func _apply_choose(frame: PackedByteArray) -> bool:
 	last_player_damage_tick = -1
 	last_player_damage.clear()
 	stale_player_damage = 0
+
+func _reset_character_economy_state() -> void:
 	recovery_sequence = 0
 	pending_recovery_sequence = 0
 	pending_recovery_item_uid = 0
@@ -1502,6 +1513,8 @@ func _apply_choose(frame: PackedByteArray) -> bool:
 	stale_enhancement_results = 0
 	_clear_trade_state(true)
 	_clear_player_shop_map()
+
+func _reset_character_world_state(decoded: Dictionary) -> void:
 	_clear_pvp_map()
 	last_trade_terminal.clear()
 	stale_trade_frames = 0
@@ -1537,8 +1550,7 @@ func _apply_choose(frame: PackedByteArray) -> bool:
 	resync_reason = ""
 	resync_requests = 0
 	resync_completions = 0
-	state = STATE_IN_WORLD
-	return true
+
 
 func _apply_receipt(frame: PackedByteArray) -> bool:
 	if state != STATE_IN_WORLD:
@@ -3006,7 +3018,7 @@ func _close_repair() -> void:
 	repair_wallet_money = 0
 
 
-func _repair_item_matches_location(item: Dictionary) -> bool:
+func _item_matches_inventory_or_equipment(item: Dictionary) -> bool:
 	var uid := int(item.item_uid)
 	var item_id := int(item.item_definition_id)
 	var location := int(item.location)
@@ -3054,7 +3066,7 @@ func _apply_repair_snapshot(frame: PackedByteArray) -> bool:
 		return fail("repair_empty_nonfinal_chunk")
 	for item in items:
 		var uid := int(item.item_uid)
-		if repair_items.has(uid) or not _repair_item_matches_location(item):
+		if repair_items.has(uid) or not _item_matches_inventory_or_equipment(item):
 			return fail("repair_preview_uid_or_location_conflict")
 		repair_items[uid] = item.duplicate(true)
 		repair_next_index += 1
@@ -3138,17 +3150,6 @@ func _close_enhancement() -> void:
 	enhancement_wallet_money = 0
 
 
-func _enhancement_item_matches_location(item: Dictionary) -> bool:
-	var uid := int(item.item_uid)
-	var item_id := int(item.item_definition_id)
-	var location := int(item.location)
-	if location == 1:
-		return inventory_items.has(uid) and int((inventory_items[uid] as Dictionary).item_definition_id) == item_id
-	if location == 2:
-		return equipment_ready and equipment_items.has(uid) and int((equipment_items[uid] as Dictionary).item_definition_id) == item_id
-	return false
-
-
 func _apply_enhancement_snapshot(frame: PackedByteArray) -> bool:
 	if state != STATE_IN_WORLD:
 		return fail("enhancement_snapshot_out_of_state")
@@ -3186,7 +3187,7 @@ func _apply_enhancement_snapshot(frame: PackedByteArray) -> bool:
 		return fail("enhancement_empty_nonfinal_chunk")
 	for item in items:
 		var uid := int(item.item_uid)
-		if enhancement_items.has(uid) or not _enhancement_item_matches_location(item):
+		if enhancement_items.has(uid) or not _item_matches_inventory_or_equipment(item):
 			return fail("enhancement_preview_uid_or_location_conflict")
 		enhancement_items[uid] = item.duplicate(true)
 		enhancement_next_index += 1

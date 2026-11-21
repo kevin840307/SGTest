@@ -10,6 +10,7 @@
 | Server Auth binding | [x] `IdentityTlsAuthorization.Binding.cs` 承接身分＋World Actor 綁定 | 原密鑰／身分／Actor cleanup、真 TLS Auth／重連 E2E 保持 |
 | Server Gameplay Gateway 瘦身 | [ ] `IdentityTlsAuthorization.cs` 仍有巨大 socket/gameplay 流程，逐步抽出經驗證的 domain command gate | 不新增可繞過身份／MapEpoch 的 dispatch 路徑；Server TLS 全量回歸 |
 | Client Reducer 分區 | [ ] `client/world/world_state.gd` 按 feature group 拆事件解析／處理，但保留唯一可重播 Reducer | 0/30/60 FPS、一致序號、重連／跨圖、可靠事件、TLS E2E |
+| Client 選角重設／物品規則 | [x] `_reset_character_actions_and_combat`、`_reset_character_economy_state`、`_reset_character_world_state` 分組；修理與強化共用 `_item_matches_inventory_or_equipment` | 單一 WorldState；Bank／Storage／Repair／Enhancement／Trade／PvP／Skill／NPC Portal／AOI 及選角殘留清除共 10 組 Godot 回歸 PASS |
 | Client NPC | [ ] `client/npc/npc_interaction_panel.gd` 承接 App／SessionPanel 既有 NPC 選單與操作 | 開啟、取消與離開互動範圍，Server 仍驗距離及權限 |
 | Client 社交 | [x] `client/party/party_panel.gd` 管邀請及隊伍；`client/chat/chat_panel.gd` 管頻道與訊息顯示 | 本機 Godot 真 TLS/UI 邀請、密語、聊天、隊伍快照與重連流程 PASS；Server authority 未變動 |
 | Client 玩家商店 | [x] `client/player_shop/player_shop_panel.gd` 承接販售、瀏覽與購買 | Godot 真 TLS SessionPanel UI 回歸 PASS，Server UID／買賣雙方仍維持既有權威；私有 GPU 未驗 |
@@ -17,7 +18,7 @@
 | Client NPC 銀行 | [x] `client/npc/bank_panel.gd` 自有 UI 控制項、快照呈現及操作回饋；SessionPanel 僅保留 action callback | 真 Godot TLS/UI bank_open/deposit/withdraw、跨端 Server 權威回歸 PASS |
 | Client PvP／GM 操作 UI | [x] `client/pvp/pvp_panel.gd` 接手模式切換、選人攻擊、技能目標及 GM 名稱狀態顯示 | Godot TLS/UI pvp_ui/pvp_attack_ui/gm_pvp_ui PASS；資格檢查、Sequence/MapEpoch 和 Server audit 留在原權威路徑 |
 | Client NPC 經濟 UI | [x] `client/npc/npc_shop_panel.gd`、`client/npc/storage_panel.gd`、`client/npc/repair_panel.gd`、`client/npc/enhancement_panel.gd` 分別持有控件及快照；`SessionPanel` 僅注入唯一 `item_catalog` 與既有 submit callback | 真 Godot TLS/UI 商店、倉庫、修理、強化與銀行回歸 PASS；UID、金錢、成功率皆 Server-owned |
-| Server 聊天 | [ ] `server/src/SGTest.Server/Chat/ChatRouting.cs` 集中附近與密語的對象選擇，Party 維持隊伍狀態 | 同／跨圖路由、權限與可靠送出 |
+| Server 聊天 | [x] `server/src/SGTest.Server/Chat/ChatRouting.cs` 集中附近／隊伍／密語收件者選擇；TLS／命令校驗仍留 Gateway | 267/267 Server checks：跨圖密語／隊伍聊天、AOI 非訂閱隔離、過期 Binding、可靠回覆 PASS |
 | Server／Client 寵物 | [ ] Server `Pet/PetRuntime.cs` 預定掌管召喚、跟隨與成長；Client `pet/pet_presentation.gd` 接已確認的狀態 | 召喚／收回、掉線、跟隨、持久化與戰鬥回歸 |
 | Server／Client 機甲 | [ ] Server `Mecha/MechaState.cs` 預定掌管乘降與能力轉換；Client `mecha/mecha_presentation.gd` 接角色畫面 | 狀態互斥、斷線回復、移動與裝備限制 |
 | AFK／失焦 | [ ] 在 `client/app/main.gd` 和 `client/world/world_view.gd` 接生命週期。共用策略成形後評估 `client/afk/afk_presentation.gd` | 收包不中斷、資產釋放與恢復、同機多開量測 |

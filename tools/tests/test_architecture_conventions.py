@@ -64,6 +64,39 @@ class ArchitectureConventionsChecks(unittest.TestCase):
         self.assertIn("func reset()", pvp)
         self.assertNotIn("session.request_pvp_mode(", pvp)
 
+    def test_chat_routing_is_separate_from_tls_authorization(self) -> None:
+        gateway = (SERVER / "Gateway" / "IdentityTlsAuthorization.cs").read_text(
+            encoding="utf-8-sig")
+        routing = (SERVER / "Chat" / "ChatRouting.cs").read_text(
+            encoding="utf-8-sig")
+        self.assertIn("handleChat:request=>ChatRouting.RouteAsync(request,router,_parties)", gateway)
+        self.assertNotIn("Task ChatHandler(", gateway)
+        self.assertIn("public static Task RouteAsync(", routing)
+        self.assertIn("router.IsCurrentBinding(sender)", routing)
+        self.assertIn("router.IsVisibleActor(sender,recipient)", routing)
+        self.assertIn("router.QueueWhisperResult(request,result)", routing)
+        self.assertNotIn("TcpClient", routing)
+        self.assertNotIn("SslStream", routing)
+
+    def test_character_reset_keeps_one_reducer_and_one_uid_location_policy(self) -> None:
+        world = (CLIENT / "world" / "world_state.gd").read_text(encoding="utf-8-sig")
+        self.assertEqual(world.count("func apply_frame("), 1)
+        self.assertEqual(world.count("func _item_matches_inventory_or_equipment("), 1)
+        self.assertNotIn("_enhancement_item_matches_location(", world)
+        self.assertNotIn("_repair_item_matches_location(", world)
+        choose = world.split("func _apply_choose(", 1)[1].split(
+            "func _reset_character_actions_and_combat(", 1)[0]
+        for name in (
+            "_reset_character_actions_and_combat",
+            "_reset_character_economy_state",
+            "_reset_character_world_state",
+        ):
+            with self.subTest(method=name):
+                self.assertIn(name + "(", choose)
+                self.assertEqual(world.count("func " + name + "("), 1)
+        self.assertNotIn("inventory_items.clear()", choose)
+        self.assertNotIn("pvp_skill_visual_events.clear()", choose)
+
     def test_godot_scripts_use_snake_case_names(self) -> None:
         for script in CLIENT.rglob("*.gd"):
             if "assets" in script.parts:

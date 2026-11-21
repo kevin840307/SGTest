@@ -153,6 +153,7 @@ server/
     Skill/                  # 技能規則
     Pvp/                    # 玩家對戰規則
     Party/                  # 隊伍狀態與操作
+    Chat/                   # 附近、隊伍及密語路由（信任邊界仍在 Gateway）
     Trade/                  # 玩家雙方交易
     PlayerShop/             # 玩家擺攤
   tests/                    # Server Checks、Godot TLS LoginFixture

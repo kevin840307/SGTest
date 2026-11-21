@@ -58,10 +58,63 @@ func _initialize() -> void:
 	if not world.mark_auth_sent() or not world.apply_frame(AUTH_OK.hex_decode()) or not world.apply_frame(LIST.hex_decode()):
 		_fail("auth/list transition")
 		return
+	# Character selection must clear every domain from a previous actor/session.
+	# These are intentionally poisoned *before* the trusted choose reply.
+	world.npc_interaction_sequence = 10
+	world.pending_npc_sequence = 10
+	world.skill_sequence = 6
+	world.pending_skill_sequence = 6
+	world.player_skill_events.append({"skill_id":101})
+	world.player_dead = true
+	world.inventory_items[777] = {"item_uid":777,"quantity":1}
+	world.shop_money = 999
+	world.storage_items[777] = {"item_uid":777}
+	world.bank_money = 555
+	world.repair_items[777] = {"item_uid":777}
+	world.enhancement_items[777] = {"item_uid":777}
+	world.trade_id = 99
+	world.trade_my_items[777] = {"item_uid":777}
+	world.pvp_sequence = 7
+	world.pending_pvp_sequence = 7
+	world.respawn_sequence = 12
+	world.entities[22] = {"actor_id":22}
+	world.player_identities[22] = {"actor_id":22}
+	world.monsters[1001] = {"entity_id":1001}
+	world.ground_drops[7] = {"drop_id":7}
+	world.pending_world_ready_ack_epoch = 9
+	world.last_world_ready_ack_epoch = 9
+	world.resync_pending = true
+	world.world_ready = true
 	if not world.mark_choose_sent(11) or not world.apply_frame(CHOOSE.hex_decode()):
 		_fail("choose transition")
 		return
-	if int(world.snapshot().state) != WorldState.STATE_IN_WORLD or world.mark_move_sent(1):
+	var chosen: Dictionary = world.snapshot()
+	if (
+		int(chosen.state) != WorldState.STATE_IN_WORLD or
+		int(chosen.actor_id) != 11 or int(chosen.map_epoch) != 1 or
+		int(chosen.pending_npc_sequence) != 0 or
+		int(chosen.pending_skill_sequence) != 0 or
+		not chosen.player_skill_events.is_empty() or bool(chosen.player_dead) or
+		not chosen.inventory_items.is_empty() or
+		not chosen.storage_items.is_empty() or int(chosen.shop_money) != 0 or
+		int(chosen.bank_money) != 0 or
+		not chosen.repair_items.is_empty() or
+		not chosen.enhancement_items.is_empty() or
+		int(chosen.trade_id) != 0 or not chosen.trade_my_items.is_empty() or
+		int(chosen.pvp_sequence) != 0 or
+		int(chosen.pending_pvp_sequence) != 0 or
+		int(chosen.respawn_sequence) != 0 or
+		not chosen.entities.is_empty() or
+		not chosen.player_identities.is_empty() or
+		not chosen.monsters.is_empty() or
+		not chosen.ground_drops.is_empty() or
+		int(chosen.pending_world_ready_ack_epoch) != 0 or
+		int(chosen.last_world_ready_ack_epoch) != 0 or
+		bool(chosen.resync_pending) or bool(chosen.world_ready)
+	):
+		_fail("chosen character retained a previous actor's combat, UID, PvP or WorldReady state")
+		return
+	if world.mark_move_sent(1):
 		_fail("move escaped WorldReady gate")
 		return
 	if not world.apply_frame(READY.hex_decode()):
@@ -88,7 +141,7 @@ func _initialize() -> void:
 	if world.apply_frame(future) or int(world.snapshot().state) != WorldState.STATE_FAILED:
 		_fail("future map receipt did not fail closed")
 		return
-	print("WORLD_STATE_PASS registration_then_auth=PASS registration_rate_limit=FAIL_CLOSED auth_create_refresh_choose_ready_ack_move=PASS duplicate_receipt=IGNORED future_map=FAIL_CLOSED")
+	print("WORLD_STATE_PASS registration_then_auth=PASS registration_rate_limit=FAIL_CLOSED auth_create_refresh_choose_ready_ack_move=PASS choose_clears_prior_actor=PASS duplicate_receipt=IGNORED future_map=FAIL_CLOSED")
 	quit(0)
 
 func _mutate_i64(source: PackedByteArray, offset: int, value: int) -> PackedByteArray:

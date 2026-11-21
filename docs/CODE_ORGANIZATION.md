@@ -37,7 +37,7 @@
 | Trade | `trade/trade_panel.gd` | `Trade/PlayerTradeCoordinator.cs` | 雙方 gate + 原子 SQLite commit |
 | Player Shop | `player_shop/player_shop_panel.gd` | `PlayerShop/` | UI 僅提交販售／查看／購買意圖 |
 | Quest | `quest/quest_panel.gd` | `Npc/NpcQuestCatalog.cs`、`Identity/SqliteIdentityStore.Quest.cs` | 任務進度與合法選項由 Server 判定 |
-| Chat | `chat/chat_panel.gd` | `Gateway/`、`Party/` | 附近／私訊／隊伍頻道讀取可靠的 Server 訊息 |
+| Chat | `chat/chat_panel.gd` | `Chat/ChatRouting.cs`、`Gateway/`、`Party/` | Gateway 驗證身份與序號，ChatRouting 依 AOI／隊伍／線上名稱路由可靠訊息 |
 | Party | `party/party_panel.gd` | `Party/PartyCoordinator.cs` | 邀請、隊長、成員更新由 Server 決定 |
 | PvP/GM | `pvp/pvp_panel.gd` 與原有名稱呈現模組 | `Pvp/`、`Gateway/` | UI 只選擇模式／AOI 玩家／技能 ID，授權與 PvP 攻擊／GM audit 由 Server 判定 |
 | Skills/Combat | `session/` 意圖、`world/` reducer、`player/` 呈現 | `Skill/`、`Combat/`、`Monster/` | 技能規則、MP、HP、傷害及死亡 Server-owned |
@@ -80,6 +80,12 @@
 - 面板從 Session 收到 `apply_snapshot`（或已定義的窄回呼）；連線／換角色時 `reset`；所有成功／失敗狀態以 Server 回覆為準。
 - NPC 經濟類 `*_panel.gd` 只持有 Controls、Picker、文字與 `Callable` action；`SessionPanel` 仍保留 `submit_<feature>_*` 的身分、Epoch／pending／UID 操作約束。`item_catalog` 由單一組裝入口注入，不在各 Panel 建立重複 Loader。
 - 影響多人一致性的 `MapEpoch`、`ConnectionEpoch`、Reliable FIFO、UID/amount、交易 commit 與回放順序都不能因 UI 重構修改。
+
+## Server 聊天與 Client Reducer 職責（2026-11-21）
+
+- `server/Chat/ChatRouting.cs` 只接收經 Gateway 綁定的 `TrustedChatCommand`、現有 `WorldResultRouter` 及可選 `PartyCoordinator`。負責 AOI Nearby、Party 成員及線上角色名稱／ActorId 密語路由；**不**取得 socket、密碼或 Client IP，沒有第二個驗證入口或 queue。
+- `client/world/world_state.gd` 仍是唯一封包 Reducer 與快照 owner。選角成功後重設依「操作／戰鬥」、「背包／經濟」、「世界／PvP」三組方法；移動源碼但保留狀態更新順序。修理與強化 UID 位置驗證合用一條規則，不產生另一份可變遊戲狀態。
+- `WorldState` 仍屬大型模組；日後拆純解析器或值物件需保留 MapEpoch、可靠序號與 Tick 的唯一寫入者。架構測試不得取代真 TLS、重連與多 Client 驗收。
 
 ## ClientSession 指令分派契約
 
