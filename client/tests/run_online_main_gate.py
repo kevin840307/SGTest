@@ -166,7 +166,8 @@ def main() -> int:
                 env["SGTEST_E2E_USERNAME"] = username
                 env["SGTEST_E2E_PASSWORD"] = PASSWORD
                 command = [
-                    args.godot, "--headless", "--path", str(repo / "client"), "--",
+                    args.godot, "--headless", "--path", str(repo / "client"),
+                    "--script", "res://tests/test_online_main_gate.gd", "--",
                     "--pack", str(pack), "--host", "127.0.0.1", "--port", str(port),
                     "--tls-name", "localhost", "--trusted-cert", str(cert),
                     "--e2e-role", role,

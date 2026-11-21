@@ -138,3 +138,19 @@
 5. C# 與 Godot 共用 Opcode 是否保持相同數值。
 
 保留原本 Host Release、Server 全量 checks（本輪 267/267）、Godot UI/TLS、雙 Client／cross-map 等完整 Gate；命名測試 **不能替代** 任何遊戲行為和效能測試。
+
+## 命名與分層再審查
+
+| 名稱 | 決定 | 理由 |
+|---|---|---|
+| `Map`、`World`、`Visibility` | 保留 | 地圖提供地形與碰撞資料，World 擁有權威模擬，Visibility 管每條連線的 AOI。三者更新頻率及測試方式不同。 |
+| `network`、`session`、`Gateway`、`Wire` | 保留 | Client 將 socket 與 codec 放在 network，登入、選角及重連在 session。Server Gateway 負責連線與派發，Wire 負責版本化封包。兩邊用語按實際用途。 |
+| `Inventory`、`Npc`、`Trade`、`PlayerShop` | 保留 | 背包操作屬角色本人，NPC 服務依距離授權，Trade 依賴兩方確認，PlayerShop 依賴上架及購買生命週期。把 UI 放在功能旁，SQLite 交易仍由同一 owner 提交。 |
+| `Handler`、`Policy`、`Coordinator` | 依副作用使用 | Handler 接命令，Policy 做純判定，Coordinator 負責跨玩家或跨流程的順序。 |
+| `WorldState` | 保留單一 reducer | 無副作用的規則可移到功能模組，像 `ChatDeliveryPolicy`。訊息順序、復位與快照仍由同一處寫入。進一步拆分以可明確列出輸入、輸出的功能為單位。 |
+
+本輪把 NPC 跨圖的戰鬥暫停、舊交易結束、商店清理和世代續接整理到 `NpcPortalHandler`。玩家商店的單連線重播處理移到 `PlayerShopCommandHandler`，結算仍由原 Coordinator 管理。Gateway 保留登入、斷線、授權和組裝。這兩個 Handler 沿用同一連線、路由與鎖，檔名直接指向實際責任。新的預留檔案以零位元組 `.todo` 放在預計位置。
+
+Godot 的 `snake_case` 與相近功能放一起的做法可參考 [Godot 專案組織指南](https://docs.godotengine.org/en/4.7/tutorials/best_practices/project_organization.html)。
+
+正式入口 `app/main.gd` 處理組裝、視窗與遊戲輸入。在線雙端驗收由 `tests/test_online_main_gate.gd` 實例化原本的 `main.tscn`。測試角色、環境密碼與測試里程碑各自在測試目錄維護。

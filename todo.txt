@@ -1,5 +1,7 @@
 # SGTest 新版重建 TODO（2026-11-15）
 
+- ARCH-BOUNDARIES-AND-PLACEHOLDERS [ ] NPC 跨圖與玩家商店指令移回功能 Handler，聊天來源純判定移到 Client chat，新增 6 個零位元組 `.todo` 顯示預計落點。雙端在線驗收驅動移出正式 App。Host build、Chat／Party／FPS、雙 Client TLS 商店及傳點、本機架構檢查及正式 Host + 兩個 main.tscn 的合成內容驗收 PASS，CI 待驗。
+
 - ARCH-SERVER-WORLDRESULTROUTER [x] 2026-11-21：`server/src/SGTest.Server/Gateway/WorldResultRouter.cs` 原約 1,092 行，同時維護連線表、12 條 bounded Channel、可信玩法 request、可靠 result 分派和單一 World Tick consumer；採**同一個 `public sealed partial class WorldResultRouter`** 分檔：主檔維持唯一連線表／Channel owner，`.GameplayIngress.cs` 接收可信技能／普攻／視覺事件、`.ReliableReplies.cs` 在原 Router Gate 轉發至同一 GatewayConnection FIFO、`.WorldTicks.cs` 保留原 Tick 先 Changed 後 Receipt、背壓 fail-closed 的唯一消費。實際修復 `RunAsync.finally` 未完成三條 Identity／PvP AOI Channel 的關閉問題，Server Checks 新增 shutdown completion 驗證，Python 架構測試防止新 Channel／Router／Queue。沒有改動 Wire V1、SQLite 交易、Actor／ConnectionEpoch／MapEpoch、公開 API；不新建 MessageBus／WorldManager／AoiService。C# Host／Checks Release 0 warnings/errors，Server 268/268（新增 faulted World source 全 Channel error completion）PASS、Python 全量 120/120、架構 25/25 PASS；真 Godot 4.7.2 TLS/UI、兩名玩家原子交易、雙向 Map15↔Map13、重連、PvP／GM、玩家商店、NPC Portal 及 Quest 重新登入持久化 E2E 全部 PASS。GitHub CI 依最新 commit 追蹤。
 
 

@@ -41,7 +41,7 @@ Server 使用 PascalCase C# namespace，Client 使用 Godot 小寫目錄。相�
 | 功能 | Server | Client |
 |---|---|---|
 | 地圖 | `Map/` 負責 Blocking、格線與尋路 | `map/` 負責地形、建物與遮擋 |
-| NPC | `Npc/` 負責傳點、商店、銀行、倉庫、修理、強化、任務資料 | `quest/` 已有任務面板；其他 NPC 服務 UI 仍由 `session/` 組裝 |
+| NPC | `Npc/` 負責傳點、商店、銀行、倉庫、修理、強化及 NPC 任務交互 | `npc/` 放 NPC 服務面板，`quest/` 放任務選項與進度，`session/` 組裝 |
 | PvP | `Pvp/` 的地圖政策、狀態與指令序號 | `pvp/` 的名字狀態呈現 |
 | 怪物 | `Monster/` 的人口、模擬、協調和戰利品 | `monster/` 的怪物呈現 |
 | 戰鬥與技能 | `Combat/` 傷害結算、`Skill/` 技能規則資料 | 目前由 `world/` 接收事件、`player/` 和 `monster/` 呈現 |
@@ -58,7 +58,7 @@ World 擁有權威狀態。Map 提供碰撞與尋路查詢，NPC 提供體系內
 - 經常一起修改、共用同一狀態或交易邊界的檔案放在一起。小型 enum、DTO 或輔助方法可以與主要責任同檔。檔案行數是檢查訊號，拆分以責任及測試邊界為準。
 - Server／Client 用同一套功能名稱，各自保留實際所需的模組。共用基礎能力放在清楚的所有者底下，跨模組整合由 Host、App 或既有協調器負責。
 - 共用流程的程式放在一起，保留檔案責任。例如 Client 的 TLS transport 和封包 codec 同在 `network/`，各自保有獨立檔案。
-- 尚無獨立程式的功能集中記錄於下方 TODO。第一個可執行切片需要功能邊界時，再於正式原始碼新增目錄。
+- 已有明確落點的未實作檔案放空白 `.todo` 佔位。檔名保留預計的語言副檔名，例如 `pet_presentation.gd.todo`，完成後才改成可載入的 `.gd`／`.cs`。其餘待辦留在架構 TODO。
 
 ## 模組導航與預留位置
 
@@ -168,6 +168,21 @@ todo.txt                    # 任務順序、完成狀態、驗證證據
 ```
 
 Player、Monster、Trade 等功能依自己的狀態與流程分組。Client 和 Server 共用協定、素材資料契約與測試向量，各自有可執行程式。跨端驗收從 Host、Godot 與 Converter 的現有入口開始。
+
+## 檔案樹中的預留位置
+
+以下檔案為零位元組。預留名稱標示預期落點與語言，功能進度及驗收見 [架構 TODO](ARCHITECTURE_TODO.md)。
+
+```text
+client/
+  afk/afk_presentation.gd.todo
+  mecha/mecha_presentation.gd.todo
+  npc/npc_interaction_panel.gd.todo
+  pet/pet_presentation.gd.todo
+server/src/SGTest.Server/
+  Mecha/MechaState.cs.todo
+  Pet/PetRuntime.cs.todo
+```
 
 ## 交互關注的責任及不可妥協條件
 

@@ -147,7 +147,7 @@ public sealed partial class IdentityTlsAuthorization
         GatewayConnection? boundConnection = null;
         using var gameplayGate = new SemaphoreSlim(1,1);
         using var tradeIngress = _trades is null ? null : new TradeCommandIngress(_trades, router);
-        var playerShopGate=new PlayerShopSequenceGate();
+        var playerShop = _playerShops is null ? null : new PlayerShopCommandHandler(_playerShops, router);
 
         IPAddress remoteAddress=((IPEndPoint?)client.Client.RemoteEndPoint)?.Address
             ??IPAddress.None;
@@ -282,91 +282,8 @@ public sealed partial class IdentityTlsAuthorization
 
         try
         {
-            // Map transfers and pickup settlement for this authenticated
-            // socket must not race one another across separate async workers.
-            Func<TrustedNpcInteraction, Task<NpcPortalOutcome>>? npcHandler =
-                _portals is null ? null : async request =>
-                {
-                    await gameplayGate.WaitAsync().ConfigureAwait(false);
-                    try
-                    {
-                    if (_combat is not null)
-                        await _combat.SuspendAndDrainAsync(
-                            request.ActorId, request.ConnectionEpoch).ConfigureAwait(false);
-
-                    var oldBinding=new ConnectionBinding(
-                        request.ActorId,request.ConnectionEpoch,request.RequestMapEpoch);
-                    var outcome = await router.TrustedNpcInteractAsync(
-                        _world, _portals!,oldBinding,
-                        request.InteractionSequence, request.NpcSpawnId).ConfigureAwait(false);
-
-                    // Trade cannot span a MapEpoch. The old binding stored by the
-                    // trade coordinator is intentionally used to cancel the
-                    // pre-transfer session after a successful authoritative portal.
-                    if(outcome.Status==NpcPortalStatus.Accepted)
-                    {
-                        if(_playerShops is not null&&outcome.TransferredActor is { } shopAfter)
-                            await _playerShops.CloseForBindingAsync(
-                                ConnectionBinding.FromTrustedSnapshot(shopAfter),router)
-                                .ConfigureAwait(false);
-                        _trades?.Disconnect(oldBinding,router);
-                        if(_trades is not null&&
-                           (outcome.TransferredActor is not { } after||
-                            !_trades.TryAdvanceGameplayGate(
-                                oldBinding,after,gameplayGate)))
-                            throw new InvalidOperationException(
-                                "Trade gameplay lock did not advance with trusted NPC map generation");
-                    }
-
-                    if (_combat is not null)
-                    {
-                        long nextEpoch = outcome.TransferredActor?.MapEpoch
-                            ?? request.RequestMapEpoch;
-                        if (!_combat.ResumeIfAttached(
-                                request.ActorId, request.ConnectionEpoch, nextEpoch))
-                            throw new InvalidOperationException(
-                                "Combat generation could not resume after NPC interaction");
-                    }
-                    return outcome;
-                    }
-                    finally { gameplayGate.Release(); }
-                };
-            async Task PlayerShopHandler(TrustedPlayerShopCommand request)
-            {
-                if(_playerShops is null)return;
-                var decision=playerShopGate.Inspect(request);
-                if(decision==PlayerShopSequenceDecision.ExactReplay)
-                {
-                    var replay=router.QueuePlayerShopResult(
-                        request,playerShopGate.LastReceipt);
-                    if(replay!=GatewaySendStatus.Enqueued)
-                        throw new IOException(
-                            "Reliable player-shop replay could not be queued: "+replay);
-                    return;
-                }
-                if(decision==PlayerShopSequenceDecision.Stale)
-                {
-                    var stale=new PlayerShopResultWire(
-                        request.RequestMapEpoch,request.ShopSequence,request.Action,
-                        PlayerShopResultStatus.StaleSequence,
-                        request.SellerActorId,request.ListingId,0,0,0,0,-1,0,0,0);
-                    var sent=router.QueuePlayerShopResult(request,stale);
-                    if(sent!=GatewaySendStatus.Enqueued)
-                        throw new IOException(
-                            "Reliable stale player-shop result could not be queued: "+sent);
-                    return;
-                }
-                var receipt=await _playerShops.HandleNewAsync(request,router)
-                    .ConfigureAwait(false);
-                playerShopGate.Record(request,receipt);
-            }
-
-            Task PartyHandler(TrustedPartyCommand request)
-            {
-                if(_parties is null)return Task.CompletedTask;
-                return _parties.HandleAsync(request,router);
-            }
-
+            var portal = _portals is null ? null : new NpcPortalHandler(
+                _world, _portals, _combat, _playerShops, _trades, router, gameplayGate);
             // Repair and enhancement share this authenticated session's gameplay
             // gate with other commands; no new session or command queue is created.
             var npcItems = new NpcItemModificationHandler(
@@ -399,7 +316,7 @@ public sealed partial class IdentityTlsAuthorization
                 router, gameplayGate);
             return await TlsWireConnection.RunServerAsync(client, certificate,
                 Authorize, _world.TryPostMove, options, cancellationToken, Release,
-                npcHandler, router.TryRequestResync,
+                portal is null ? null : portal.HandleAsync, router.TryRequestResync,
                 router.TryRequestNormalAttack, recovery.HandleRespawnAsync,
                 inventory.HandlePickupAsync, recovery.HandleRecoveryItemAsync,
                 inventory.HandleDiscardAsync,
@@ -415,9 +332,9 @@ public sealed partial class IdentityTlsAuthorization
                 handlePvpAttack:pvpCombat.HandleAttackAsync,
                 handlePvpSkill:pvpCombat.HandleSkillAsync,
                 handleGmPvpName:pvpStates.HandleGmNameAsync,
-                handlePlayerShop:_playerShops is null?null:PlayerShopHandler,
+                handlePlayerShop: playerShop is null ? null : playerShop.HandleAsync,
                 handleChat:request=>ChatRouting.RouteAsync(request,router,_parties),
-                handleParty:_parties is null?null:PartyHandler)
+                handleParty: _parties is null ? null : request => _parties.HandleAsync(request, router))
                 .ConfigureAwait(false);
         }
         finally

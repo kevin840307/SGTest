@@ -1,6 +1,7 @@
 extends RefCounted
 
 const WireCodec = preload("res://network/wire_codec.gd")
+const ChatDeliveryPolicy = preload("res://chat/chat_delivery_policy.gd")
 
 const STATE_NEW := 0
 const STATE_AUTHENTICATING := 1
@@ -3492,44 +3493,16 @@ func _apply_chat_delivery(frame:PackedByteArray)->bool:
 	if epoch>map_epoch:
 		return fail("future_chat_delivery")
 	var channel:=int(value.channel)
-	if channel not in [0,3,4]:
-		return fail("unsupported_chat_delivery_channel")
-	var sender:=int(value.sender_actor_id)
-	var connection:=int(value.sender_connection_epoch)
-	var sequence:=int(value.chat_sequence)
-	if channel==0:
-		if sender==actor_id:
-			if sequence>chat_sequence:
-				return fail("chat_self_delivery_without_send")
-		else:
-			if not entities.has(sender):
-				stale_chat_deliveries+=1
-				return true
-			var entity:Dictionary=entities[sender]
-			if int(entity.get("connection_epoch",0))!=connection:
-				stale_chat_deliveries+=1
-				return true
-	elif channel==3:
-		if party_id<=0:
-			stale_chat_deliveries+=1
-			return true
-		if sender==actor_id:
-			if sequence>chat_sequence:
-				return fail("party_chat_self_delivery_without_send")
-		else:
-			if not party_members.has(sender):
-				stale_chat_deliveries+=1
-				return true
-			var member:Dictionary=party_members[sender]
-			if int(member.get("connection_epoch",0))!=connection:
-				stale_chat_deliveries+=1
-				return true
-	else:
-		# Whisper is a direct online route and intentionally does not require
-		# the sender to be inside AOI or on the same map. The Server-authenticated
-		# sender generation in this reliable delivery is the authority.
-		if sender==actor_id:
-			return fail("whisper_delivery_from_self")
+	var sender := int(value.sender_actor_id)
+	var connection := int(value.sender_connection_epoch)
+	var sequence := int(value.chat_sequence)
+	var decision := ChatDeliveryPolicy.check_sender(
+		value, actor_id, chat_sequence, entities, party_id, party_members)
+	if decision == ChatDeliveryPolicy.STALE:
+		stale_chat_deliveries += 1
+		return true
+	if not decision.is_empty():
+		return fail(decision)
 	var key:="%d/%d" % [sender,connection]
 	var previous:=int(chat_sender_sequences.get(key,0))
 	if sequence<=previous:
@@ -3539,10 +3512,14 @@ func _apply_chat_delivery(frame:PackedByteArray)->bool:
 	var row:Dictionary=value.duplicate(true)
 	if channel==4:
 		row["direction"]="incoming"
-	chat_messages.append(row)
-	while chat_messages.size()>CHAT_BACKLOG_MAX:
-		chat_messages.pop_front()
+	_append_chat_message(row)
 	return true
+
+
+func _append_chat_message(message: Dictionary) -> void:
+	chat_messages.append(message)
+	while chat_messages.size() > CHAT_BACKLOG_MAX:
+		chat_messages.pop_front()
 
 
 func _apply_whisper_result(frame:PackedByteArray)->bool:
@@ -3576,7 +3553,7 @@ func _apply_whisper_result(frame:PackedByteArray)->bool:
 			str(value.target_name).strip_edges().is_empty()
 		):
 			return fail("whisper_delivered_without_target_identity")
-		chat_messages.append({
+		_append_chat_message({
 			"receiver_map_epoch":map_epoch,
 			"sender_actor_id":actor_id,
 			"sender_connection_epoch":0,
@@ -3590,8 +3567,6 @@ func _apply_whisper_result(frame:PackedByteArray)->bool:
 			"target_connection_epoch":int(value.target_connection_epoch),
 			"target_name":str(value.target_name)
 		})
-		while chat_messages.size()>CHAT_BACKLOG_MAX:
-			chat_messages.pop_front()
 	elif status==2:
 		if response_target<=0:
 			return fail("whisper_self_target_without_resolved_actor")

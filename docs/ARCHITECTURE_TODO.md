@@ -1,6 +1,6 @@
 # 架構檔案 TODO
 
-[回架構與現有目錄](ARCHITECTURE.md#實際目錄與入口)。此頁按預計責任列出未完成檔案或既有檔案的缺口。列出的新路徑是命名建議，會隨第一個可執行切片調整。`todo.txt` 記錄交付和驗證進度。
+[回架構與現有目錄](ARCHITECTURE.md#實際目錄與入口)。此頁按預計責任列出未完成檔案或既有檔案的缺口。檔案樹裡的空白 `.todo` 標示預定落點與語言。進入開發時才改成正式腳本。未確定需要獨立程式的維護點直接列於此頁。`todo.txt` 記錄交付和驗證進度。
 
 | 區域 | 檔案 TODO 或現有接點 | 開始拆分時的驗收 |
 |---|---|---|
@@ -24,7 +24,10 @@
 | Client TLS 交易測試 ACK 競態 | [x] `test_client_trade_tls.gd` 兩端皆等 WorldReady ACK 完成，才開始可靠交易 | Linux CI `actor request` 早於 ACK 的拒絕；Godot×2 + SQLite 雙邊交易真 E2E 重跑 3 次 PASS，遊戲權限不放寬 |
 | Client HP 權威序列去重 | [x] `_apply_authoritative_damage` 統一 PlayerDamage／PvpDamage 的 HP／序號／Tick 驗證；兩種 opcode 維持各自解碼及來源標記 | PvP→怪物→PvP 混合傷害、重播／跨來源跳號、HP 來源標記；Godot Wire 與真 TLS 回歸 |
 | Client 選角重設／物品規則 | [x] `_reset_character_actions_and_combat`、`_reset_character_economy_state`、`_reset_character_world_state` 分組；修理與強化共用 `_item_matches_inventory_or_equipment` | 單一 WorldState；Bank／Storage／Repair／Enhancement／Trade／PvP／Skill／NPC Portal／AOI 及選角殘留清除共 10 組 Godot 回歸 PASS |
-| Client NPC | [ ] `client/npc/npc_interaction_panel.gd` 承接 App／SessionPanel 既有 NPC 選單與操作 | 開啟、取消與離開互動範圍，Server 仍驗距離及權限 |
+| Server Gateway 傳點及玩家商店 | [x] `Npc/NpcPortalHandler.cs` 管共享鎖下的跨圖協調；`PlayerShop/PlayerShopCommandHandler.cs` 管單連線重播及過期回覆 | 真雙 Client TLS 傳點與玩家商店交換 PASS |
+| Client 聊天來源規則 | [x] `chat/chat_delivery_policy.gd` 純判定可見角色、隊伍、密語來源；世界 Reducer 保留順序、快照與有界歷史 | Chat Wire、Party Wire、FPS 獨立 PASS |
+| Client App 驗收入口 | [x] 測試驅動移至 `client/tests/test_online_main_gate.gd`，由它實例化正式 `app/main.tscn` | 雙 Client 仍從正式場景進入，驗收失敗可重現 |
+| Client NPC | [ ] `client/npc/npc_interaction_panel.gd.todo` 承接 App／SessionPanel 既有 NPC 選單與操作 | 開啟、取消與離開互動範圍，Server 仍驗距離及權限 |
 | Client 社交 | [x] `client/party/party_panel.gd` 管邀請及隊伍；`client/chat/chat_panel.gd` 管頻道與訊息顯示 | 本機 Godot 真 TLS/UI 邀請、密語、聊天、隊伍快照與重連流程 PASS；Server authority 未變動 |
 | Client 玩家商店 | [x] `client/player_shop/player_shop_panel.gd` 承接販售、瀏覽與購買 | Godot 真 TLS SessionPanel UI 回歸 PASS，Server UID／買賣雙方仍維持既有權威；私有 GPU 未驗 |
 | Client 任務 | [x] `client/quest/quest_panel.gd` 承接任務開啟、選項、進度顯示 | 指令驗證仍由 SessionPanel 提供；真 TLS Quest UI 回歸 PASS |
@@ -32,9 +35,9 @@
 | Client PvP／GM 操作 UI | [x] `client/pvp/pvp_panel.gd` 接手模式切換、選人攻擊、技能目標及 GM 名稱狀態顯示 | Godot TLS/UI pvp_ui/pvp_attack_ui/gm_pvp_ui PASS；資格檢查、Sequence/MapEpoch 和 Server audit 留在原權威路徑 |
 | Client NPC 經濟 UI | [x] `client/npc/npc_shop_panel.gd`、`client/npc/storage_panel.gd`、`client/npc/repair_panel.gd`、`client/npc/enhancement_panel.gd` 分別持有控件及快照；`SessionPanel` 僅注入唯一 `item_catalog` 與既有 submit callback | 真 Godot TLS/UI 商店、倉庫、修理、強化與銀行回歸 PASS；UID、金錢、成功率皆 Server-owned |
 | Server 聊天 | [x] `server/src/SGTest.Server/Chat/ChatRouting.cs` 集中附近／隊伍／密語收件者選擇；TLS／命令校驗仍留 Gateway | 267/267 Server checks：跨圖密語／隊伍聊天、AOI 非訂閱隔離、過期 Binding、可靠回覆 PASS |
-| Server／Client 寵物 | [ ] Server `Pet/PetRuntime.cs` 預定掌管召喚、跟隨與成長；Client `pet/pet_presentation.gd` 接已確認的狀態 | 召喚／收回、掉線、跟隨、持久化與戰鬥回歸 |
-| Server／Client 機甲 | [ ] Server `Mecha/MechaState.cs` 預定掌管乘降與能力轉換；Client `mecha/mecha_presentation.gd` 接角色畫面 | 狀態互斥、斷線回復、移動與裝備限制 |
-| AFK／失焦 | [ ] 在 `client/app/main.gd` 和 `client/world/world_view.gd` 接生命週期。共用策略成形後評估 `client/afk/afk_presentation.gd` | 收包不中斷、資產釋放與恢復、同機多開量測 |
+| Server／Client 寵物 | [ ] Server `Pet/PetRuntime.cs.todo` 預定掌管召喚、跟隨與成長；Client `pet/pet_presentation.gd.todo` 接已確認的狀態 | 召喚／收回、掉線、跟隨、持久化與戰鬥回歸 |
+| Server／Client 機甲 | [ ] Server `Mecha/MechaState.cs.todo` 預定掌管乘降與能力轉換；Client `mecha/mecha_presentation.gd.todo` 接角色畫面 | 狀態互斥、斷線回復、移動與裝備限制 |
+| AFK／失焦 | [ ] 在 `client/app/main.gd` 和 `client/world/world_view.gd` 接生命週期。共用策略成形後評估 `client/afk/afk_presentation.gd.todo` | 收包不中斷、資產釋放與恢復、同機多開量測 |
 | 全量資料 | [ ] 擴充 `tools/asset_converter/content/` 的現有入口及契約測試 | Converter 可重跑、缺料明確報錯、發行包內容一致 |
 | 發行 | [ ] 擴充現有 Host、Client、`runtime_pack.py` 與 CI 入口 | 雙圖 MVP、全量地圖、多開、壓力與跨平台發行依 TEST_PLAN |
 | 好友 | 暫緩 | 依目前範圍保留在規劃 |
