@@ -10,6 +10,7 @@
 | Server Wire 分區 | [x] `WireProtocol.Combat.cs`、`.Identity.cs`、`.Inventory.cs`、`.Shop.cs`、`.World.cs` 按功能承接 Codec | V1 Opcode/Header 不變；Client 跨端 golden vectors 與 Server wire Gate |
 | Client Wire Frame 基礎去重 | [x] `network/frame_codec.gd` 專管純 framing；`wire_codec.gd` 繼續持有唯一 V1 constants／opcode／payload | 37 個 Encoder 改共用 header writer、無個別 raw Header writer；固定與可變長度 fail-closed、golden bytes、World／Combat／TLS 回歸 |
 | Server Auth binding | [x] `IdentityTlsAuthorization.Binding.cs` 承接身分＋World Actor 綁定 | 原密鑰／身分／Actor cleanup、真 TLS Auth／重連 E2E 保持 |
+| Server Gateway 連線進出職責 | [x] `GatewayContracts.cs` 抽穩定可信命令契約；`GatewayConnection.cs` 保唯一綁定／Queue，`.Ingress.cs` 收包、`.ReliableOutput.cs` 回覆、`.AoiOutput.cs` 可靠可視事件 | 保留完全相同的 connection/binding gate、WorldReady ACK、MapEpoch、反壓入列、收發順序；Server 全量 checks、Godot 真 TLS 多端 |
 | Server Gameplay Gateway 瘦身 | [ ] `IdentityTlsAuthorization.cs` 仍有巨大 socket/gameplay 流程，逐步抽出經驗證的 domain command gate | 不新增可繞過身份／MapEpoch 的 dispatch 路徑；Server TLS 全量回歸 |
 | Server Inventory 物品命令 | [x] `Inventory/InventoryCommandHandler.cs` 接手 Pickup、Equipment、Discard 三項可信 UID 操作；不新增第二個 inventory owner | 沿用同一 gameplayGate／WorldResultRouter、SQLite commit-first／AOI 掉落取消順序與可靠回覆；Server TLS、物品回歸及架構 Gate |
 | Server 玩家復活與恢復／技能 | [x] `Combat/PlayerRecoveryHandler.cs` 掌管 Respawn／Recovery；`Skill/SkillCommandHandler.cs` 掌管一般技能 MP／可靠提交 | 同一 authenticated gameplayGate、Combat AI suspend／drain／resume、可靠結果先於傷害、SQLite 權威與 TLS 全量回歸 |

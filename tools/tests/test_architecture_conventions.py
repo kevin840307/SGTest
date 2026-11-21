@@ -64,6 +64,73 @@ class ArchitectureConventionsChecks(unittest.TestCase):
         self.assertIn("func reset()", pvp)
         self.assertNotIn("session.request_pvp_mode(", pvp)
 
+    def test_gateway_connection_partial_modules_keep_one_connection_and_reliable_fifo(self) -> None:
+        root = SERVER / "Gateway"
+        names = (
+            "GatewayConnection.cs",
+            "GatewayConnection.Ingress.cs",
+            "GatewayConnection.ReliableOutput.cs",
+            "GatewayConnection.AoiOutput.cs",
+        )
+        parts = {
+            name: (root / name).read_text(encoding="utf-8-sig")
+            for name in names
+        }
+        core, ingress, reliable, aoi = (parts[name] for name in names)
+        contracts = (root / "GatewayContracts.cs").read_text(encoding="utf-8-sig")
+        for name, content in parts.items():
+            with self.subTest(name=name):
+                self.assertEqual(content.count("public sealed partial class GatewayConnection"), 1)
+                self.assertIn("namespace SGTest.Server.Gateway;", content)
+        self.assertNotIn("class GatewayConnection", contracts)
+        self.assertEqual(contracts.count("public readonly record struct ConnectionBinding("), 1)
+        self.assertEqual(contracts.count("public enum GatewaySendStatus"), 1)
+        self.assertIn("public sealed record GatewayConnectionOptions(", contracts)
+        self.assertIn("public readonly record struct TrustedTradeCommand(", contracts)
+        self.assertIn("public readonly record struct TrustedPlayerShopCommand(", contracts)
+        for name in names:
+            if name != "GatewayConnection.cs":
+                self.assertNotIn("private sealed class ReliableFrameQueue", parts[name])
+                self.assertNotIn("new WireStreamParser(", parts[name])
+        self.assertEqual(core.count("private sealed class ReliableFrameQueue"), 1)
+        self.assertEqual(core.count("new ReliableFrameQueue("), 1)
+        self.assertEqual(core.count("new WireStreamParser("), 1)
+        self.assertEqual(core.count("private readonly object _bindingGate"), 1)
+        self.assertEqual(core.count("private readonly object _receiveGate"), 1)
+        self.assertIn("public void Close()", core)
+        self.assertIn("public bool TryUpdateTrustedBinding(", core)
+        self.assertIn("public bool TryDequeueReliable(", core)
+        self.assertIn("public async ValueTask<byte[]?> DequeueReliableAsync(", core)
+        for method in ("FeedClientBytes", "ResumeClientIngress", "HandleClientFrame",
+                       "GameplayReady", "TryAcknowledgeWorldReady", "TryArmResync",
+                       "CancelArmedResync"):
+            self.assertIn(method + "(", ingress)
+            for other in (core, reliable, aoi):
+                self.assertNotIn(" " + method + "(", other)
+        self.assertIn("return _parser.Feed(", ingress)
+        self.assertIn("return _parser.Resume(", ingress)
+        self.assertIn("lock (_receiveGate)", ingress)
+        self.assertIn("lock (_bindingGate)", ingress)
+        for reply in ("QueueNpcResult", "QueuePlayerDamage",
+                      "QueueShopSnapshot", "QueueTradeSnapshot", "QueuePvpAttackResult",
+                      "QueueGroundPickupResult", "QueueReceipt"):
+            with self.subTest(reply=reply):
+                self.assertIn(" " + reply + "(", reliable)
+                self.assertNotIn(" " + reply + "(", core)
+                self.assertNotIn(" " + reply + "(", aoi)
+        self.assertEqual(aoi.count("public GatewaySendStatus QueueAoi("), 1)
+        self.assertIn("if (evt.ReceiverMapEpoch != bound.MapEpoch || evt.Tick < 0)", aoi)
+        self.assertLess(aoi.index("if (!_reliable.TryEnqueue(frame))"),
+                        aoi.index("if (evt.Kind == AoiEventKind.WorldReady)"))
+        self.assertIn("_visibleActors.Clear()", aoi)
+        self.assertIn("_visibleActors.Remove(evt.EntityActorId)", aoi)
+        self.assertIn("_worldReadySentMapEpoch = bound.MapEpoch", aoi)
+        for source in (ingress, reliable, aoi):
+            self.assertNotIn("new ReliableFrameQueue(", source)
+            self.assertNotIn("new SemaphoreSlim(", source)
+            self.assertNotIn("new SqliteIdentityStore(", source)
+            self.assertNotIn("new TlsWireConnection(", source)
+
     def test_chat_routing_is_separate_from_tls_authorization(self) -> None:
         gateway = (SERVER / "Gateway" / "IdentityTlsAuthorization.cs").read_text(
             encoding="utf-8-sig")
