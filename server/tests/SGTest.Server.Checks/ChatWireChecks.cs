@@ -1,4 +1,8 @@
+using SGTest.Server.Chat;
 using SGTest.Server.Gateway;
+using SGTest.Server.Identity;
+using SGTest.Server.Pvp;
+using SGTest.Server.Party;
 using SGTest.Server.Wire;
 using SGTest.Server.World;
 
@@ -9,6 +13,114 @@ internal static class ChatWireChecks
         Checks.Run("nearby chat wire binds sender identity only at Gateway", Wire);
         Checks.Run("whisper wire binds sender and target in shared chat sequence", Whisper);
         Checks.Run("nearby chat gateway rejects unsupported channel and replay", Gate);
+        Checks.Run("trusted chat routing isolates nearby and cross-map whisper", Routing);
+        Checks.Run("trusted party chat reaches cross-map members only", PartyRouting);
+    }
+
+    private static void Routing()
+    {
+        var router=new WorldResultRouter();
+        var sender=new GatewayConnection(
+            new ActorSnapshot(11,15,5,3,0,0,8,8,1,false),
+            displayName:"SenderHero",
+            pvpState:new CharacterPvpState(11,PvpMode.ProtectedBlue,false,0,0,0));
+        var target=new GatewayConnection(
+            new ActorSnapshot(22,13,7,4,0,0,8,8,1,false),
+            displayName:"TargetHero",
+            pvpState:new CharacterPvpState(22,PvpMode.ProtectedBlue,false,0,0,0));
+        Checks.Require(router.TryAttach(sender)&&router.TryAttach(target),
+            "chat routing fixture attach failed");
+
+        ChatRouting.RouteAsync(
+            new(11,5,3,1,ChatChannel.Nearby,2,"nearby"),router,null)
+            .GetAwaiter().GetResult();
+        Checks.Require(sender.TryDequeueReliable(out var nearby)&&
+            WireProtocol.TryDecodeChatDelivery(nearby,out var nearbyBack)&&
+            nearbyBack.SenderActorId==11&&nearbyBack.SenderName=="SenderHero"&&
+            nearbyBack.Channel==ChatChannel.Nearby&&
+            !target.TryDequeueReliable(out _),
+            "nearby chat leaked to unobserved cross-map player or missed self");
+
+        ChatRouting.RouteAsync(
+            new(11,5,3,2,ChatChannel.Whisper,1,"private",0,"TargetHero"),
+            router,null).GetAwaiter().GetResult();
+        Checks.Require(target.TryDequeueReliable(out var delivery)&&
+            WireProtocol.TryDecodeChatDelivery(delivery,out var privateBack)&&
+            privateBack.ReceiverMapEpoch==4&&privateBack.Message=="private"&&
+            sender.TryDequeueReliable(out var receipt)&&
+            WireProtocol.TryDecodeWhisperResult(receipt,out var whisperBack)&&
+            whisperBack.Status==WhisperResultStatus.Delivered&&
+            whisperBack.TargetActorId==22&&whisperBack.TargetConnectionEpoch==7,
+            "cross-map by-name whisper lost target binding or reliable receipt");
+
+        ChatRouting.RouteAsync(
+            new(11,5,3,3,ChatChannel.Whisper,0,"missing",0,"Nobody"),
+            router,null).GetAwaiter().GetResult();
+        Checks.Require(sender.TryDequeueReliable(out var unavailable)&&
+            WireProtocol.TryDecodeWhisperResult(unavailable,out var missingBack)&&
+            missingBack.Status==WhisperResultStatus.TargetUnavailable&&
+            !target.TryDequeueReliable(out _),
+            "unresolved whisper leaked to recipient or missed denial receipt");
+
+        ChatRouting.RouteAsync(
+            new(11,4,3,4,ChatChannel.Nearby,0,"stale"),router,null)
+            .GetAwaiter().GetResult();
+        Checks.Require(!sender.TryDequeueReliable(out _)&&
+            !target.TryDequeueReliable(out _),
+            "stale authenticated chat generation delivered a frame");
+    }
+
+    private static void PartyRouting()
+    {
+        var router=new WorldResultRouter();
+        var leader=new GatewayConnection(
+            new ActorSnapshot(31,15,11,1,0,0,8,8,1,false),
+            displayName:"Leader",
+            pvpState:new CharacterPvpState(31,PvpMode.ProtectedBlue,false,0,0,0));
+        var member=new GatewayConnection(
+            new ActorSnapshot(32,13,12,4,0,0,8,8,1,false),
+            displayName:"Member",
+            pvpState:new CharacterPvpState(32,PvpMode.ProtectedBlue,false,0,0,0));
+        Checks.Require(router.TryAttach(leader)&&router.TryAttach(member),
+            "cross-map party chat fixture attach failed");
+        var parties=new PartyCoordinator();
+        parties.HandleAsync(new(
+            31,11,1,1,PartyCommandAction.Invite,0,32),router)
+            .GetAwaiter().GetResult();
+        PartyResultWire inviteResult=default;
+        Checks.Require(leader.TryDequeueReliable(out var inviteFrame)&&
+            WireProtocol.TryDecodePartyResult(inviteFrame,out inviteResult)&&
+            inviteResult.Status==PartyResultStatus.Success&&inviteResult.PartyId>0&&
+            member.TryDequeueReliable(out var receivedInvite)&&
+            WireProtocol.TryDecodePartyInvite(receivedInvite,out _)&&
+            leader.TryDequeueReliable(out var soloSnapshot)&&
+            WireProtocol.TryDecodePartySnapshot(soloSnapshot,out _),
+            "trusted party invite did not yield authoritative membership baseline");
+        parties.HandleAsync(new(
+            32,12,4,1,PartyCommandAction.Accept,inviteResult.PartyId,31),router)
+            .GetAwaiter().GetResult();
+        Checks.Require(member.TryDequeueReliable(out var acceptResult)&&
+            WireProtocol.TryDecodePartyResult(acceptResult,out var accepted)&&
+            accepted.Status==PartyResultStatus.Success&&
+            leader.TryDequeueReliable(out var leaderSnapshot)&&
+            WireProtocol.TryDecodePartySnapshot(leaderSnapshot,out _)&&
+            member.TryDequeueReliable(out var memberSnapshot)&&
+            WireProtocol.TryDecodePartySnapshot(memberSnapshot,out _),
+            "cross-map party invite acceptance did not publish current members");
+
+        ChatRouting.RouteAsync(
+            new(31,11,1,2,ChatChannel.Party,0,"party cross map"),router,parties)
+            .GetAwaiter().GetResult();
+        Checks.Require(leader.TryDequeueReliable(out var selfFrame)&&
+            WireProtocol.TryDecodeChatDelivery(selfFrame,out var selfMessage)&&
+            selfMessage.ReceiverMapEpoch==1&&
+            member.TryDequeueReliable(out var memberFrame)&&
+            WireProtocol.TryDecodeChatDelivery(memberFrame,out var memberMessage)&&
+            memberMessage.ReceiverMapEpoch==4&&
+            selfMessage.Channel==ChatChannel.Party&&
+            memberMessage.Message=="party cross map"&&
+            !leader.TryDequeueReliable(out _)&&!member.TryDequeueReliable(out _),
+            "cross-map party routing delivered wrong epoch or duplicate messages");
     }
 
     private static void Wire()
