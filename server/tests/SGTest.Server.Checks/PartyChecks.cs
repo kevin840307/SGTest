@@ -13,6 +13,8 @@ internal static class PartyChecks
         Checks.Run("party invite resolves exact authenticated online character name",InviteByName);
         Checks.Run("party invite cannot cross target reconnect or stale old cleanup",InviteGeneration);
         Checks.Run("party pending invite expires on monotonic clock",InviteTimeout);
+        Checks.Run("party failed reliable invite/result enqueue rolls back state",
+            InviteEnqueueFailure);
     }
 
     private static void Wire()
@@ -346,11 +348,93 @@ internal static class PartyChecks
         router.TryDetach(target);
     }
 
-    private static GatewayConnection Gateway(ActorSnapshot actor,string name)
+
+    private static void InviteEnqueueFailure()
+    {
+        // Saturate the target's bounded reliable FIFO: the invite must not
+        // create a phantom party or send Success to its inviter.
+        var router=new WorldResultRouter();
+        var a=Gateway(Actor(701,1,1),"QueueLeader");
+        var b=Gateway(Actor(702,2,1),"QueueTarget",1);
+        Checks.Require(router.TryAttach(a)&&router.TryAttach(b),
+            "party target-backpressure fixture attach failed");
+        FillReliable(b,"QueueTarget");
+        var party=new PartyCoordinator();
+        bool targetFailed=false;
+        try
+        {
+            party.HandleAsync(new TrustedPartyCommand(
+                701,1,1,1,PartyCommandAction.Invite,0,702),router)
+                .GetAwaiter().GetResult();
+        }
+        catch(IOException){targetFailed=true;}
+        Checks.Require(targetFailed&&party.PartyCount==0&&
+            !a.TryDequeueReliable(out _),
+            "failed target delivery acknowledged or retained ghost party");
+        _=DrainSnapshot(b);
+        party.HandleAsync(new TrustedPartyCommand(
+            701,1,1,2,PartyCommandAction.Invite,0,702),router)
+            .GetAwaiter().GetResult();
+        var success=DrainResult(a);
+        Checks.Require(success.Status==PartyResultStatus.Success&&
+            success.PartyId>0&&DrainInvite(b).PartyId==success.PartyId&&
+            DrainSnapshot(a).Members.Count==1,
+            "re-invite after target backpressure failed");
+        router.TryDetach(a);
+        router.TryDetach(b);
+
+        // A sender queue can fail *after* the recipient accepted a reliable
+        // invite frame. The stale frame may arrive but can never join a party.
+        var secondRouter=new WorldResultRouter();
+        var sender=Gateway(Actor(711,3,1),"FullSender",1);
+        var target=Gateway(Actor(712,4,1),"WaitingTarget");
+        Checks.Require(secondRouter.TryAttach(sender)&&
+            secondRouter.TryAttach(target),
+            "party sender-backpressure fixture attach failed");
+        FillReliable(sender,"FullSender");
+        var secondParty=new PartyCoordinator();
+        bool senderFailed=false;
+        try
+        {
+            secondParty.HandleAsync(new TrustedPartyCommand(
+                711,3,1,1,PartyCommandAction.Invite,0,712),secondRouter)
+                .GetAwaiter().GetResult();
+        }
+        catch(IOException){senderFailed=true;}
+        Checks.Require(senderFailed&&secondParty.PartyCount==0,
+            "failed sender receipt retained ghost party");
+        _=DrainSnapshot(sender);
+        var leakedInvite=DrainInvite(target);
+        secondParty.HandleAsync(new TrustedPartyCommand(
+            712,4,1,1,PartyCommandAction.Accept,
+            leakedInvite.PartyId,711),secondRouter)
+            .GetAwaiter().GetResult();
+        Checks.Require(DrainResult(target).Status==PartyResultStatus.InviteMissing&&
+            !secondParty.TryGetRecipients(target.Binding,secondRouter,out _),
+            "recipient joined after sender receipt failed");
+        secondRouter.TryDetach(sender);
+        secondRouter.TryDetach(target);
+    }
+
+    private static void FillReliable(GatewayConnection gateway,string name)
+    {
+        var binding=gateway.Binding;
+        var snapshot=new PartySnapshotWire(
+            binding.MapEpoch,999,1,binding.ActorId,
+            [new PartyMemberWire(
+                binding.ActorId,binding.ConnectionEpoch,name)]);
+        Checks.Require(gateway.QueuePartySnapshot(
+                binding,snapshot)==GatewaySendStatus.Enqueued,
+            "party reliable-queue backpressure fixture failed");
+    }
+
+    private static GatewayConnection Gateway(ActorSnapshot actor,string name,int maxReliableFrames=256)
     {
         var pvp=new CharacterPvpState(
             actor.ActorId,PvpMode.ProtectedBlue,false,0,0,0);
-        return new GatewayConnection(actor,displayName:name,pvpState:pvp);
+        return new GatewayConnection(actor,
+            new GatewayConnectionOptions(MaxReliableFrames:maxReliableFrames),
+            displayName:name,pvpState:pvp);
     }
 
     private static ActorSnapshot Actor(long id,long connection,long mapEpoch)=>

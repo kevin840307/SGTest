@@ -245,13 +245,32 @@ public sealed class PartyCoordinator
             return;
         }
 
-        _invitesByTarget.Add(targetActorId,
-            new(party.PartyId,request.ActorId,request.ConnectionEpoch,
-                target.ConnectionEpoch,_timestamp()));
-        QueueResultLocked(request,PartyResultStatus.Success,
-            party.PartyId,targetActorId,router);
-        QueueInviteLocked(target,party,request.ActorId,
-            request.ConnectionEpoch,targetIdentity.DisplayName,router);
+        // The invitation must enter the recipient's reliable FIFO before the
+        // inviter receives Success. A full/closed queue must not leave a
+        // pending invite or a newly-created one-person party behind.
+        // HandleAsync serializes invite/accept under _gate, so rollback cannot
+        // race an Accept. A recipient that saw an invite before a later sender
+        // enqueue failure will get InviteMissing instead of joining a ghost party.
+        try
+        {
+            QueueInviteLocked(target,party,request.ActorId,
+                request.ConnectionEpoch,router);
+            _invitesByTarget.Add(targetActorId,
+                new(party.PartyId,request.ActorId,request.ConnectionEpoch,
+                    target.ConnectionEpoch,_timestamp()));
+            QueueResultLocked(request,PartyResultStatus.Success,
+                party.PartyId,targetActorId,router);
+        }
+        catch
+        {
+            _invitesByTarget.Remove(targetActorId);
+            if(created)
+            {
+                _partyByActor.Remove(request.ActorId);
+                _parties.Remove(party.PartyId);
+            }
+            throw;
+        }
         if(created)BroadcastSnapshotLocked(party,router);
     }
 
@@ -471,7 +490,7 @@ public sealed class PartyCoordinator
 
     private void QueueInviteLocked(
         ConnectionBinding target,Party party,long inviterActorId,
-        long inviterConnectionEpoch,string targetDisplayName,WorldResultRouter router)
+        long inviterConnectionEpoch,WorldResultRouter router)
     {
         if(!router.TryGetPlayerIdentity(
                 inviterActorId,inviterConnectionEpoch,out var inviterIdentity))
