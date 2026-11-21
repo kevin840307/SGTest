@@ -45,7 +45,7 @@
 
 ## 不能違反的架構契約
 
-- **功能目錄**：Server／Client 優先依遊戲功能命名，對應 `Map/map`、`Npc/npc`、`Pvp/pvp` 等現有領域。Server namespace 與該功能目錄一致。World 保有狀態寫入權，Gateway 負責連線及路由，Wire 保持協定邊界，Client App 負責場景組裝。功能以窄輸入／結果接入，於實際需要時才加入可替換介面；沿用 [架構模組表](docs/ARCHITECTURE.md#功能模組)。
+- **功能目錄**：Server／Client 優先依遊戲功能命名，對應 `Map/map`、`Npc/npc`、`Pvp/pvp` 等現有領域。Server namespace 與該功能目錄一致。預設一層功能目錄，按責任、狀態及一起修改的範圍決定是否拆分。兩端按實際職責分層，共用的小型型別可以留在主要責任檔案；只有已確認功能才用 README／TODO 預留位置。World 保有狀態寫入權，Gateway 負責連線及路由，Wire 保持協定邊界，Client App 負責場景組裝。功能以窄輸入／結果接入，於實際需要時才加入可替換介面；沿用 [架構模組表](docs/ARCHITECTURE.md#功能模組)。
 
 - **資產**：一個原素材一個獨立 logical/physical Asset（Enemy / NPC / Scenery / Player part / Equipment 等）；Frame 高度排序、POT 尺寸只是同一 Asset 內策略。禁止跨素材合圖，怪物目錄使用 `Enemy/`，不得多一層 `generation/`。
 - **來源**：`Old`、`Recovered`、`TestGoGo` 為唯讀研究來源；未有發佈權時不可把原圖、音效、反編譯文本複製進公開 Git。

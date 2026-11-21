@@ -1,6 +1,6 @@
 # SGTest 新版重建 TODO（2026-11-15）
 
-- ARCH-FEATURE-BOUNDARIES [ ] 交易面板與命令入口分別移入 Client trade／Server Trade，PvP 規則分檔，新增未來功能的 README／TODO 導航。本機正式 UI 與雙 Client TLS 原子交易 PASS，main CI 待驗。
+- ARCH-FEATURE-BOUNDARIES [x] 交易面板與命令入口分別移入 Client trade／Server Trade，PvP 規則分檔，新增未來功能的 README／TODO 導航。實作 `a806e70`。本機正式 UI、雙 Client TLS 原子交易、補建 Host 後 Listener 9/9 PASS。[Server Core](https://github.com/kevin840307/SGTest/actions/runs/44868519704) 與 [Client Core](https://github.com/kevin840307/SGTest/actions/runs/44868519686) PASS。私有素材圖形／效能本輪 NOT VERIFIED。
 
 - ARCH-GAME-MODULES [x] 由最新 main 依功能重新歸屬 Map、Npc、Pvp、Monster、Skill、Combat、Party、Trade、PlayerShop、Visibility，以及 Client 對應領域。保持單一執行體、現有協定與 DB 交易，更新資源路徑、UID 及 CI 觸發。已通過 Server Checks／Host 編譯與 Godot Player、FPS、AOI、雙 Client TLS 傳點定向驗證；架構提交 `4fa627b`、換行修正 `090457d`。本機 Server **265/265 PASS**，[Server Core](https://github.com/kevin840307/SGTest/actions/runs/44867837937) 與 [Client Core](https://github.com/kevin840307/SGTest/actions/runs/44867837629) **PASS**。私有圖形回歸 NOT VERIFIED。現有戰鬥／交易協調器的依賴反轉待下一階段。
 
