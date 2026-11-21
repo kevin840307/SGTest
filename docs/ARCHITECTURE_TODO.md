@@ -7,6 +7,7 @@
 | Client Session 指令入口 | [x] `client/session/client_session.gd` 的巨大 `_process_first_intent` 按功能提取單一 FIFO Handler 方法 | 不新增 State/Queue/Transport；真 TLS PlayerShop、Quest、Trade、PvP 及社交回歸為驗收 |
 | Client Session 入列互斥政策 | [x] `client/session/intent_admission_policy.gd` 整合原 `_queue_intent` 重複 pending／queued 擋單規則，FIFO 與導航取代仍在原 ClientSession | Godot 101 pending + 219 queued blocker 矩陣、Stop barrier、Token／Queue 上限、真 TLS NPC／Trade／跨圖、Linux CI |
 | Client Session idle snapshot | [ ] `client_session.gd` 的 logic-thread 控制閘改讀 WorldState scalar；世界入場／重連只在狀態轉換時發布 | `test_client_idle_publication.gd` 檢查閒置200次掃描僅2次發布（含初入與重連），FPS、TLS、AOI、跨圖、交易 CI 需驗證；不變更公開 snapshot/queue/wire |
+| Client UI versioned snapshot | [ ] `ClientSession.snapshot_since(last_revision)` 在 mutex 內一次取得 revision 與深複製快照；`SessionPanel._process` 只在 revision 改變後更新 UI | 閒置快照與版本測試、失敗登入 Stub、真 Godot TLS/UI、跨圖、多端、FPS Gate 均需驗證；既有 `snapshot()` API 不變 |
 | Server SQLite Schema／Combat | [x] `Identity/SqliteIdentityStore.Schema.cs`、`.Combat.cs` 及 `IdentityContracts.cs` 承接獨立責任 | 保留 Schema v23／WAL／migration backup／combat transaction；Server 265 checks |
 | Server Wire 分區 | [x] `WireProtocol.Combat.cs`、`.Identity.cs`、`.Inventory.cs`、`.Shop.cs`、`.World.cs` 按功能承接 Codec | V1 Opcode/Header 不變；Client 跨端 golden vectors 與 Server wire Gate |
 | Client Wire Frame 基礎去重 | [x] `network/frame_codec.gd` 專管純 framing；`wire_codec.gd` 繼續持有唯一 V1 constants／opcode／payload | 37 個 Encoder 改共用 header writer、無個別 raw Header writer；固定與可變長度 fail-closed、golden bytes、World／Combat／TLS 回歸 |

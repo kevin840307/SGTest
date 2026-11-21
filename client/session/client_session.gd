@@ -22,6 +22,7 @@ var _stop_requested := false
 var _running := false
 var _intents: Array[Dictionary] = []
 var _published: Dictionary = _world.snapshot()
+var _published_revision := 0 # monotonic for this ClientSession, including reconnects
 var _host := ""
 var _port := 0
 var _common_name := ""
@@ -82,6 +83,7 @@ func _connect_secure(
 	_last_transport_error = OK
 	_intent_token = 0
 	_published = _decorate_snapshot(_world.snapshot())
+	_published_revision += 1
 	_running = true
 	_mutex.unlock()
 	var error: int = _transport.start_secure(host, port, common_name, trusted_chain)
@@ -770,6 +772,20 @@ func snapshot() -> Dictionary:
 	var result := _published.duplicate(true)
 	_mutex.unlock()
 	return result
+
+func snapshot_since(last_revision: int) -> Dictionary:
+	# Version and immutable copy are captured under one lock. Checking a
+	# separate revision getter before snapshot() would race with publication.
+	_mutex.lock()
+	if _published_revision == last_revision:
+		_mutex.unlock()
+		return {}
+	var update := {
+		"revision": _published_revision,
+		"snapshot": _published.duplicate(true),
+	}
+	_mutex.unlock()
+	return update
 
 func stop() -> void:
 	_mutex.lock()
@@ -1957,4 +1973,5 @@ func _publish() -> void:
 	var value: Dictionary = _world.snapshot()
 	_mutex.lock()
 	_published = _decorate_snapshot(value)
+	_published_revision += 1
 	_mutex.unlock()

@@ -42,6 +42,18 @@ func _initialize() -> void:
 	if world.builds != 1 or not session._has_entered_world:
 		_fail("first WorldReady must publish once")
 		return
+	var first: Dictionary = session.snapshot_since(-1)
+	if first.is_empty() or int(first.get("revision",-1)) != 1 or not bool((first.get("snapshot",{}) as Dictionary).get("world_ready",false)):
+		_fail("atomic initial versioned snapshot missing")
+		return
+	if not session.snapshot_since(1).is_empty():
+		_fail("unchanged version unexpectedly returned a deep snapshot")
+		return
+	# Returned snapshots remain independent copies, even with version caching.
+	(first.snapshot as Dictionary)["world_ready"] = false
+	if not bool(session.snapshot().get("world_ready",false)):
+		_fail("caller mutation leaked into the published snapshot")
+		return
 
 	for _i in range(100):
 		session._flush_control_frames()
@@ -68,5 +80,9 @@ func _initialize() -> void:
 	if world.builds != 2 or session._reconnect_count != 1:
 		_fail("reconnect idle loop copied snapshot or incremented counter")
 		return
-	print("CLIENT_IDLE_PUBLICATION_PASS idle_polls=200 full_snapshot_builds=2 entry_once=true reconnect_once=true")
+	var second: Dictionary = session.snapshot_since(1)
+	if second.is_empty() or int(second.get("revision",-1)) != 2 or int((second.get("snapshot",{}) as Dictionary).get("reconnect_count",0)) != 1 or not session.snapshot_since(2).is_empty():
+		_fail("reconnect publication version/one-copy gate failed")
+		return
+	print("CLIENT_IDLE_PUBLICATION_PASS idle_polls=200 full_snapshot_builds=2 entry_once=true reconnect_once=true versioned_ui_copy=true")
 	quit(0)

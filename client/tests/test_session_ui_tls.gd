@@ -438,6 +438,8 @@ class FailedSession extends RefCounted:
 		return OK
 	func snapshot():
 		return {"state":State.STATE_FAILED}
+	func snapshot_since(_last_revision: int) -> Dictionary:
+		return {"revision":0, "snapshot":snapshot()}
 	func stop():
 		pass
 

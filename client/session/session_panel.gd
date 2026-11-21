@@ -62,6 +62,7 @@ var _chosen := false
 var _world_epoch := 0
 var _poll_elapsed := 0.0
 var _latest := {}
+var _last_publication_revision := -1
 var _respawn_queued_after := -1
 var _skill_queued_after := -1
 var _skill_queued_at_ms := 0
@@ -211,6 +212,7 @@ func _begin_connection(register_first:bool)->void:
 	_chosen = false
 	_world_epoch = 0
 	_latest = {}
+	_last_publication_revision = -1
 	_respawn_queued_after = -1
 	_skill_queued_after = -1
 	_skill_queued_at_ms = 0
@@ -445,6 +447,7 @@ func disconnect_session() -> void:
 	_chosen = false
 	_world_epoch = 0
 	_latest = {}
+	_last_publication_revision = -1
 	_respawn_queued_after = -1
 	_skill_queued_after = -1
 	_skill_queued_at_ms = 0
@@ -591,7 +594,13 @@ func _process(delta: float) -> void:
 	if _poll_elapsed < 0.05:
 		return
 	_poll_elapsed = 0.0
-	_latest = session.snapshot() # Reads published state; never pumps packets.
+	# Skip full snapshot cloning and UI refresh when the logic thread has not
+	# published a new state. WorldView animation continues on its own clock.
+	var update: Dictionary = session.snapshot_since(_last_publication_revision)
+	if update.is_empty():
+		return
+	_last_publication_revision = int(update.revision)
+	_latest = update.snapshot
 	_set_respawn_controls()
 	_set_skill_controls()
 	_refresh_inventory_panel()
