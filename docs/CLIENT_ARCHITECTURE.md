@@ -350,3 +350,5 @@ Client core 44202614410 PASS includes the pure autorun policy, stop-barrier orde
 
 
 交易 UI 位於 `client/trade/trade_panel.gd`。SessionPanel 組裝節點，提供當前快照、連線意圖入口與 ItemCatalog，登出時 reset。TradePanel 負責邀請、出價、鎖定與確認的顯示及按鈕。玩家商店共用 ItemCatalog 的出價物品文字。其他預留目錄見 [模組導航](ARCHITECTURE.md#模組導航與預留位置)。
+
+Client 封包 codec 和 TLS transport 位在 `client/network/`，會話流程與登入 UI 位在 `client/session/`。純規劃功能的接入位置集中在 [架構導航](ARCHITECTURE.md#模組導航與預留位置)。

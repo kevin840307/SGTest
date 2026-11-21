@@ -1,5 +1,5 @@
 extends RefCounted
-const WireCodec = preload("res://wire/wire_codec.gd")
+const WireCodec = preload("res://network/wire_codec.gd")
 const STATE_STOPPED := 0
 const STATE_CONNECTED := 3
 const STATE_FAILED := 4

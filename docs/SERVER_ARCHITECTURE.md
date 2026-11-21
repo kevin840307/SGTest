@@ -316,3 +316,5 @@ Still outside this boundary: verified original party-size/distance behavior, EXP
 
 
 交易由 `TradeCommandIngress` 管理單一連線的請求順序及 binding 檢查，`PlayerTradeCoordinator` 保有雙方確認、雙 actor gameplay gate 與原子結算順序。Gateway 組裝 ingress，並接入換圖及離線生命週期。PvP 地圖與犯罪規則各有獨立檔案。未來領域見 [模組導航](ARCHITECTURE.md#模組導航與預留位置)。
+
+`PvpMapPolicy.cs` 管地圖是否允許 PvP。`PvpCrimePolicy.cs` 管犯罪與標記轉換，並保有一起使用的 `PvpMode` 和 `PvpNameState`。新領域以實際程式及依賴邊界建立目錄，規劃見 [架構導航](ARCHITECTURE.md#模組導航與預留位置)。

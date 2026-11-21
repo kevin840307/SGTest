@@ -1,6 +1,6 @@
 extends SceneTree
 
-const Wire = preload("res://wire/wire_codec.gd")
+const Wire = preload("res://network/wire_codec.gd")
 const World = preload("res://world/world_state.gd")
 
 func _fail(message:String)->void:

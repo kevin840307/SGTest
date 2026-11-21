@@ -2,6 +2,21 @@ using SGTest.Server.Identity;
 
 namespace SGTest.Server.Pvp;
 
+public enum PvpMode : byte
+{
+    ProtectedBlue = 0,
+    EnabledWhite = 1
+}
+
+public enum PvpNameState : byte
+{
+    ProtectedBlue = 0,
+    EnabledWhite = 1,
+    Red = 2,
+    Pink = 3,
+    PinkFlashing = 4
+}
+
 /// <summary>
 /// Server gameplay semantics recovered from the private reference implementation.
 /// Presentation colors are Client concerns; Server code uses English semantic enum

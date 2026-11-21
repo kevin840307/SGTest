@@ -44,9 +44,9 @@ Server 使用 PascalCase C# namespace，Client 使用 Godot 小寫目錄。相�
 | PvP | `Pvp/` 的地圖政策、狀態與指令序號 | `pvp/` 的名字狀態呈現 |
 | 怪物 | `Monster/` 的人口、模擬、協調和戰利品 | `monster/` 的怪物呈現 |
 | 戰鬥與技能 | `Combat/` 傷害結算、`Skill/` 技能規則資料 | 目前由 `world/` 接收事件、`player/` 和 `monster/` 呈現 |
-| 社交與交易 | `Party/`、`Trade/`、`PlayerShop/` 各自保有流程與狀態 | 目前由 App 組裝既有 UI，擴充時依相同功能名拆分 |
+| 社交與交易 | `Party/`、`Trade/`、`PlayerShop/` 各自保有流程與狀態 | `trade/` 已有交易面板，其餘由 SessionPanel 組裝 |
 | 世界與視野 | `World/` 單寫者、生命週期，`Visibility/` AOI | `world/` reducer、相機、畫面組合 |
-| 帳號、連線與封包 | `Identity/`、`Gateway/`、`Wire/` | `session/`、`network/`、`wire/` |
+| 帳號、連線與封包 | `Identity/`、`Gateway/`、`Wire/` | `session/` 登入與會話；`network/` TLS 與封包 |
 | 客戶端支援 | Host 組裝服務及載入內容 | `inventory/`、`movement/`、`animation/`、`asset_store/` |
 
 World 擁有權威狀態。Map 提供碰撞與尋路查詢，NPC 提供體系內的互動資料，Visibility 讀取世界結果並交由 Gateway 送出。SQLite 交易保留於 Identity 以維持原子性，功能協調器透過現有交易方法處理提交。Client Session 餵入 WorldState，WorldView 消費快照，角色動畫、地形與資源層透過明確的輸入參數接入。新增功能先確定規則、狀態與輸出的所有者，再在 Host 或 App 組裝；需要替換的行為透過具體輸入／結果或窄介面接入。現有跨功能協調器仍有直接依賴，後續依實際交易或玩法邊界解耦。
@@ -56,24 +56,32 @@ World 擁有權威狀態。Map 提供碰撞與尋路查詢，NPC 提供體系內
 - 預設用一層功能目錄。檔案少時放在同一層，只有功能內出現多組明確責任、維護者經常需要分開找時，才加子目錄。
 - 經常一起修改、共用同一狀態或交易邊界的檔案放在一起。小型 enum、DTO 或輔助方法可以與主要責任同檔。檔案行數是檢查訊號，拆分以責任及測試邊界為準。
 - Server／Client 用同一套功能名稱，各自保留實際所需的模組。共用基礎能力放在清楚的所有者底下，跨模組整合由 Host、App 或既有協調器負責。
-- 確定要做且容易找錯位置的功能可以先加目錄和一份 README／TODO。待程式有實際需求時再加介面、子目錄與接點。
+- 共用流程的程式放在一起，保留檔案責任。例如 Client 的 TLS transport 和封包 codec 同在 `network/`，各自保有獨立檔案。
+- 尚無獨立程式的功能集中記錄於下方 TODO。第一個可執行切片需要功能邊界時，再於正式原始碼新增目錄。
 
 ## 模組導航與預留位置
 
-| 功能 | Server | Client | 狀態 |
-|---|---|---|---|
-| 交易 | `Trade/PlayerTradeCoordinator.cs`、`Trade/TradeCommandIngress.cs` | `trade/trade_panel.gd` | 編譯中的正式功能 |
-| PvP | `PvpMapPolicy.cs`、`PvpCrimePolicy.cs`、`PvpMode.cs`、`PvpNameState.cs` | `pvp/` | 依地圖規則、犯罪規則與狀態命名 |
-| NPC 介面 | `Npc/` | [`npc/`](../client/npc/README.md) | Client 既有入口待搬入 |
-| 隊伍與聊天 | `Party/`、[`Chat/`](../server/src/SGTest.Server/Chat/README.md) | [`party/`](../client/party/README.md)、[`chat/`](../client/chat/README.md) | 既有功能，待拆路由／介面 |
-| 玩家商店 | `PlayerShop/` | [`player_shop/`](../client/player_shop/README.md) | Client 交易以外的商店介面待搬入 |
-| 寵物 | [`Pet/`](../server/src/SGTest.Server/Pet/README.md) | [`pet/`](../client/pet/README.md) | TODO |
-| 機甲 | [`Mecha/`](../server/src/SGTest.Server/Mecha/README.md) | [`mecha/`](../client/mecha/README.md) | TODO |
-| AFK／失焦 | 既有 Session／World 持續運行 | [`afk/`](../client/afk/README.md) | 完整資源釋放與多開驗收 TODO |
+以下保留兩端的共同功能名稱。路徑相對於 Server 的 `server/src/SGTest.Server/` 和 Client 的 `client/`。
 
-`README.md` 中未勾選的事項是該目錄的功能邊界及接入待辦。新增能運作的程式後再更新狀態。背包、裝備、倉庫、銀行等交易資料目前仍共用 SQLite，待拆的是功能介面與派發。好友依目前範圍暫緩。
+| 查找什麼 | 現有位置 |
+|---|---|
+| 地圖、尋路與視野 | Server `Map/`、`Visibility/`；Client `map/`、`world/` |
+| 登入、連線及封包 | Server `Identity/`、`Gateway/`、`Wire/`；Client `session/`、`network/` |
+| PvP | Server `Pvp/PvpMapPolicy.cs` 和 `Pvp/PvpCrimePolicy.cs`；模式及標記型別隨後者放置。Client `pvp/` 呈現狀態 |
+| 玩家交易 | Server `Trade/PlayerTradeCoordinator.cs` 與 `Trade/TradeCommandIngress.cs`；Client `trade/trade_panel.gd` |
+| 資產 | Client `asset_store/` 管理執行期載入；`assets/` 放 Converter 輸出 |
 
-功能介面的改動從 Client 模組開始。Client 模組讀快照並用 Session 送意圖；Server Gateway 維持身分及連線生命週期，由對應模組負責指令處理。跨功能涉及原子性、鎖順序或世代時，在協調器集中規則並以既有 E2E 驗證。
+| TODO | 最先落點 | 屆時何時建立新目錄 |
+|---|---|---|
+| NPC 選單與呈現 | Server 已有 `Npc/`；Client 入口目前由 App／SessionPanel 組裝 | 移出第一組 NPC 專屬 UI 時建立 `client/npc/`，由 Session 送意圖 |
+| 隊伍和聊天 | Server `Party/` 及 Gateway；Client `session/` | 隊伍名單與邀請可獨立時建立 `client/party/`；聊天頻道政策集中後建立 Server `Chat/`，Client 聊天面板移出時建立 `client/chat/` |
+| 玩家商店、銀行、裝備、倉庫 | Server `PlayerShop/`、`Npc/`、`Identity/`；Client `session/`、`inventory/` | 獨立擺攤／購買 UI 移出時建立 `client/player_shop/`；其他介面先按實際工作流程歸屬 |
+| 寵物 | World 排程與既有角色儲存 | 跟隨／召喚有自己的狀態及測試時建立 Server `Pet/`，連接畫面時建立 Client `pet/` |
+| 機甲 | World 的權威角色狀態與既有戰鬥流程 | 乘降及能力有明確規則時建立 Server `Mecha/`，獨立操作或呈現時建立 Client `mecha/` |
+| AFK／失焦 | Client `app/` 協調、`world/` 管畫面和資源 | 先接既有生命週期。只有出現共用的 AFK 策略時才建立 `client/afk/` |
+| 好友與發行 | 好友依目前範圍暫緩；發行進度見 `todo.txt` 與 `TEST_PLAN.md` | 發行沿用現有 Host、Converter、CI 與測試入口 |
+
+Client 模組讀取快照並由 Session 送出意圖。Server Gateway 管身分與連線，對應功能模組管理玩法規則。共用交易與鎖順序交由協調器管理，保留現有 SQLite 原子性。
 
 ## MVP 範圍：Map15 主城 + Map13 台地，兩張真地圖互通
 

@@ -1,7 +1,7 @@
 extends SceneTree
 const Session = preload("res://session/client_session.gd")
 const WorldState = preload("res://world/world_state.gd")
-const WireCodec = preload("res://wire/wire_codec.gd")
+const WireCodec = preload("res://network/wire_codec.gd")
 const FakeAutoAttackTransport = preload("res://tests/fake_auto_attack_transport.gd")
 
 const MONSTER_ID := 1001500001

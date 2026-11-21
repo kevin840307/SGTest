@@ -1,7 +1,7 @@
 extends RefCounted
 
 const Transport = preload("res://network/client_transport.gd")
-const WireCodec = preload("res://wire/wire_codec.gd")
+const WireCodec = preload("res://network/wire_codec.gd")
 const WorldState = preload("res://world/world_state.gd")
 
 const MAX_INTENTS := 128

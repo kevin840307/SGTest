@@ -2,7 +2,7 @@ extends SceneTree
 
 const Session = preload("res://session/client_session.gd")
 const WorldState = preload("res://world/world_state.gd")
-const WireCodec = preload("res://wire/wire_codec.gd")
+const WireCodec = preload("res://network/wire_codec.gd")
 const FakeTransport = preload("res://tests/fake_transport.gd")
 
 func _fail(message: String) -> void:
