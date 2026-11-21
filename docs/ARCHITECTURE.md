@@ -147,7 +147,7 @@ server/
     Map/                    # Blocking 與尋路
     Visibility/             # AOI
     Identity/               # 帳號、角色與 SQLite 交易
-    Npc/                    # NPC 可互動規則、修理／強化命令結算入口
+    Npc/                    # NPC 互動與經濟／裝備修改命令結算入口
     Monster/                # 怪物模擬與戰利品協調
     Combat/                 # 傷害結算
     Skill/                  # 技能規則

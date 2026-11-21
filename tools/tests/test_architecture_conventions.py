@@ -98,6 +98,29 @@ class ArchitectureConventionsChecks(unittest.TestCase):
         self.assertNotIn("new SemaphoreSlim", npc)
         self.assertNotIn("new WorldResultRouter", npc)
 
+    def test_npc_economy_uses_one_authenticated_transaction_owner(self) -> None:
+        gateway = (SERVER / "Gateway" / "IdentityTlsAuthorization.cs").read_text(
+            encoding="utf-8-sig")
+        economy = (SERVER / "Npc" / "NpcEconomyHandler.cs").read_text(
+            encoding="utf-8-sig")
+        self.assertEqual(gateway.count("new NpcEconomyHandler("), 1)
+        self.assertIn("_shops, _storages, _banks, router, gameplayGate", gateway)
+        for feature in ("Shop", "Storage", "Bank"):
+            with self.subTest(feature=feature):
+                self.assertIn(
+                    f"handle{feature}:npcEconomy.Handle{feature}Async", gateway)
+                self.assertNotIn(f"async Task {feature}Handler(", gateway)
+                self.assertEqual(
+                    economy.count(f"internal async Task Handle{feature}Async("), 1)
+        self.assertEqual(economy.count("await _gameplayGate.WaitAsync()"), 3)
+        self.assertEqual(economy.count("finally { _gameplayGate.Release(); }"), 3)
+        self.assertEqual(
+            economy.count("if(!_router.IsCurrentBinding(binding))return;"), 3)
+        self.assertNotIn("new SemaphoreSlim", economy)
+        self.assertNotIn("new WorldResultRouter", economy)
+        self.assertNotIn("new SqliteIdentityStore", economy)
+        self.assertNotIn("new TlsWireConnection", economy)
+
     def test_character_reset_keeps_one_reducer_and_one_uid_location_policy(self) -> None:
         world = (CLIENT / "world" / "world_state.gd").read_text(encoding="utf-8-sig")
         self.assertEqual(world.count("func apply_frame("), 1)

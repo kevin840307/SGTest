@@ -1,5 +1,8 @@
 # SGTest 新版重建 TODO（2026-11-15）
 
+- ARCH-SERVER-NPC-ECONOMY [x] 2026-11-21：NPC 商店／倉庫／銀行共用 NPC/地圖世代／經濟交易生命週期，從 `Gateway/IdentityTlsAuthorization.cs` 移至單一 `Npc/NpcEconomyHandler.cs`；保留原 `Shop/Storage/Bank` opcode、獨立價格與金流校驗、UID、交易 sequence、DB 原子性與可靠回覆，原本 per-socket gameplayGate／WorldResultRouter、TLS Auth 一律沿用，無新 queue、socket、Database 或 Reducer。此組不與 `NpcItemModificationHandler`、玩家交易、玩家擺攤合併，避免 NPC 萬用 Manager。Server 完整 267/267 PASS，Release build 0 warning／0 error，架構 Gate 已更新；Client 真 TLS/UI 與 CI 結果以該提交驗收為準。Gateway 其餘玩法、WorldState／WireCodec、GPU 多開仍待完成。
+
+
 - ARCH-SERVER-NPC-ITEM-MODIFICATION [x] 2026-11-21：`IdentityTlsAuthorization` 原本約 240 行的 Repair／Enhancement 本地 Handler 移至**同一個** `Npc/NpcItemModificationHandler.cs`，不是拆成兩個小型 Manager。只組裝一次、沿用 authenticated socket 既有 `gameplayGate`／`WorldResultRouter`，Actor／ConnectionEpoch／MapEpoch／UID／DB 原子結算及可靠回覆順序保持不變；不新增 session、socket、state reducer 或第二條資料庫通道。Server Release build 0 warnings／0 errors，Server 267/267 checks PASS（含 Repair／Enhancement TLS 與交易競態），Python 架構 owner Gate 已增補。名稱／分組決策更新 `docs/CODE_ORGANIZATION.md`；仍有其它 Gateway Handler／WorldState／WireCodec 待分區，私有多開 GPU NOT VERIFIED。
 
 
