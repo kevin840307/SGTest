@@ -128,7 +128,8 @@ public enum WireOpcode : ushort
     PetEntityDespawn = 115,
     PetEntityDelta = 116,
     PetAttack = 117,
-    PetAttackResult = 118
+    PetAttackResult = 118,
+    PetAttackVisual = 119
 }
 
 public enum ChatChannel : byte { Nearby = 0, Faction = 1, Warband = 2, Party = 3, Whisper = 4 }
@@ -678,6 +679,10 @@ public readonly record struct PetAttackWire(
 public readonly record struct PetAttackResultWire(
     long MapEpoch,uint AttackSequence,NormalAttackStatus Status,long PetUid,
     long TargetEntityId,int Damage,int CurrentHp,int MaxHp,long TargetRevision,long ServerTick);
+public readonly record struct PetAttackVisualWire(
+    long ReceiverMapEpoch,long ServerTick,long OwnerActorId,long OwnerConnectionEpoch,
+    long OwnerMapEpoch,uint AttackSequence,long PetUid,long TargetEntityId,
+    NormalAttackStatus Status,int Damage,long TargetRevision);
 
 public readonly record struct QuestOpenWire(
     long MapEpoch,uint QuestSequence,int NpcSpawnId);

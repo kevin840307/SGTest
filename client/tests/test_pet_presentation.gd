@@ -114,21 +114,44 @@ func _initialize() -> void:
 		_fail("cooldown/rejected pet attack fabricated attack animation")
 		return
 
-	if pets.apply_snapshot(_snapshot(7,{}),380000)!=OK or pets.count()!=0:
+	var remote_visual:=_snapshot(7,{
+		1001:_entity(1001,4,102,5002,7,48,48.0,36.0)
+	})
+	remote_visual["pet_attack_visual_events"]=[{
+		"receiver_map_epoch":7,"server_tick":57,"owner_actor_id":1001,
+		"owner_connection_epoch":4,"owner_map_epoch":1,"attack_sequence":5,
+		"pet_uid":102,"target_entity_id":1001300001,"status":0,
+		"damage":25,"target_revision":5
+	}]
+	if pets.apply_snapshot(remote_visual,380000)!=OK:
+		_fail("remote pet attack visual broke presentation")
+		return
+	var remote_attack:=pets.actors_at(380000)
+	if remote_attack.size()!=1 or str(remote_attack[0].clip)!="attack" or int(remote_attack[0].frame)!=0:
+		_fail("remote observer attack event did not start pet attack view")
+		return
+	if pets.actors_at(510000).size()!=1 or str(pets.actors_at(510000)[0].clip)!="idle":
+		_fail("remote pet attack did not settle to fallback visual")
+		return
+	if pets.apply_snapshot(remote_visual,520000)!=OK or str(pets.actors_at(520000)[0].clip)!="idle":
+		_fail("duplicate remote pet attack visual restarted animation")
+		return
+
+	if pets.apply_snapshot(_snapshot(7,{}),530000)!=OK or pets.count()!=0:
 		_fail("despawn snapshot retained pet presentation")
 		return
 
 	var replacement := _snapshot(8,{
 		1001:_entity(1001,5,202,7001,3,3,300.0,400.0)
 	})
-	if pets.apply_snapshot(replacement,400000)!=OK or pets.position_at(1001,400000)!=Vector2(300.0,400.0):
+	if pets.apply_snapshot(replacement,550000)!=OK or pets.position_at(1001,550000)!=Vector2(300.0,400.0):
 		_fail("map generation did not reset pet history")
 		return
 	if pets.unresolved_definition_ids()!=[7001] or pets.unresolved_visual_keys()!=["7001:3"]:
 		_fail("replacement generation retained old visual identity")
 		return
 
-	print("PET_PRESENTATION_PASS interpolation=true no_extrapolation=true generation=true visual_bridge=true attack_event=true source_timing=true")
+	print("PET_PRESENTATION_PASS interpolation=true no_extrapolation=true generation=true visual_bridge=true attack_event=true remote_attack_visual=true source_timing=true")
 	quit(0)
 
 func _snapshot(map_epoch:int,entities:Dictionary)->Dictionary:

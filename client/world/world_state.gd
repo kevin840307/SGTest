@@ -296,6 +296,9 @@ var last_pet_attack_result_status := -1
 var last_pet_attack_server_tick := -1
 var last_pet_attack_result := {}
 var stale_pet_attack_results := 0
+var pet_attack_visual_events: Array[Dictionary] = []
+var pet_attack_visual_sequences := {}
+var stale_pet_attack_visuals := 0
 const CHAT_BACKLOG_MAX := 100
 var quest_sequence := 0
 var pending_quest_sequence := 0
@@ -1107,6 +1110,8 @@ func apply_frame(frame: PackedByteArray) -> bool:
 			return _apply_pet_entity_despawn(frame)
 		WireCodec.OPCODE_PET_ATTACK_RESULT:
 			return _apply_pet_attack_result(frame)
+		WireCodec.OPCODE_PET_ATTACK_VISUAL:
+			return _apply_pet_attack_visual(frame)
 		WireCodec.OPCODE_QUEST_VIEW:
 			return _apply_quest_view(frame)
 		WireCodec.OPCODE_WORLD_READY:
@@ -1410,6 +1415,9 @@ func snapshot() -> Dictionary:
 		"last_pet_attack_server_tick": last_pet_attack_server_tick,
 		"last_pet_attack_result": last_pet_attack_result.duplicate(true),
 		"stale_pet_attack_results": stale_pet_attack_results,
+		"pet_attack_visual_events": pet_attack_visual_events.duplicate(true),
+		"pet_attack_visual_sequences": pet_attack_visual_sequences.duplicate(true),
+		"stale_pet_attack_visuals": stale_pet_attack_visuals,
 		"quest_sequence": quest_sequence,
 		"pending_quest_sequence": pending_quest_sequence,
 		"pending_quest_kind": pending_quest_kind,
@@ -1669,6 +1677,9 @@ func _reset_character_pet_state() -> void:
 	last_pet_attack_server_tick=-1
 	last_pet_attack_result.clear()
 	stale_pet_attack_results=0
+	pet_attack_visual_events.clear()
+	pet_attack_visual_sequences.clear()
+	stale_pet_attack_visuals=0
 
 
 func _reset_character_economy_state() -> void:
@@ -2371,6 +2382,7 @@ func _apply_world_ready(frame: PackedByteArray) -> bool:
 	# a delayed pre-resync visual cannot replay.
 	player_skill_events.clear()
 	player_attack_events.clear()
+	pet_attack_visual_events.clear()
 	player_damage_visual_events.clear()
 	player_respawn_visual_events.clear()
 	pvp_combat_visual_events.clear()
@@ -2406,6 +2418,9 @@ func _reset_map_combat_and_item_commands() -> void:
 	player_attack_events.clear()
 	player_attack_sequences.clear()
 	stale_player_attack_visuals = 0
+	pet_attack_visual_events.clear()
+	pet_attack_visual_sequences.clear()
+	stale_pet_attack_visuals = 0
 	player_damage_visual_events.clear()
 	player_damage_visual_sequences.clear()
 	stale_player_damage_visuals = 0
@@ -4141,6 +4156,61 @@ func _clear_quest_map()->void:
 	last_quest_status=-1
 	last_quest_result.clear()
 	stale_quest_results=0
+
+
+func _apply_pet_attack_visual(frame:PackedByteArray)->bool:
+	if state!=STATE_IN_WORLD or not world_ready:
+		return fail("pet_attack_visual_out_of_state")
+	var value:=WireCodec.decode_pet_attack_visual(frame)
+	if value.is_empty():
+		return fail("invalid_pet_attack_visual")
+	var disposition:=_check_aoi_generation(
+		int(value.receiver_map_epoch),int(value.server_tick))
+	if disposition<=0:
+		if disposition==0:
+			stale_pet_attack_visuals+=1
+		return disposition==0
+	var owner:=int(value.owner_actor_id)
+	if owner==actor_id:
+		return fail("pet_attack_visual_for_owner")
+	var pet:Dictionary=pet_entities.get(owner,{})
+	if pet.is_empty():
+		return _need_resync("pet_attack_visual_without_pet_spawn")
+	if (
+		int(pet.get("owner_connection_epoch",0))!=int(value.owner_connection_epoch) or
+		int(pet.get("owner_map_epoch",0))!=int(value.owner_map_epoch) or
+		int(pet.get("pet_uid",0))!=int(value.pet_uid)
+	):
+		return _need_resync("pet_attack_visual_pet_generation")
+	var target:=int(value.target_entity_id)
+	if not monsters.has(target):
+		return _need_resync("pet_attack_visual_target_without_spawn")
+	var current_revision:=int(monsters[target].get("revision",0))
+	if int(value.target_revision)<current_revision:
+		stale_pet_attack_visuals+=1
+		return true
+	var sequence:=int(value.attack_sequence)
+	var prior:Dictionary=pet_attack_visual_sequences.get(owner,{})
+	if not prior.is_empty():
+		if (
+			int(prior.get("connection_epoch",0))!=int(value.owner_connection_epoch) or
+			int(prior.get("map_epoch",0))!=int(value.owner_map_epoch)
+		):
+			return _need_resync("pet_attack_visual_sequence_generation")
+		if sequence<=int(prior.get("sequence",0)):
+			stale_pet_attack_visuals+=1
+			return true
+	pet_attack_visual_sequences[owner]={
+		"connection_epoch":int(value.owner_connection_epoch),
+		"map_epoch":int(value.owner_map_epoch),"sequence":sequence}
+	pet_attack_visual_events.append(value.duplicate(true))
+	var cutoff:=maxi(int(value.server_tick),last_aoi_tick)-PLAYER_ATTACK_EVENT_TTL_TICKS
+	while not pet_attack_visual_events.is_empty() and int(pet_attack_visual_events[0].get("server_tick",-1))<cutoff:
+		pet_attack_visual_events.pop_front()
+	if pet_attack_visual_events.size()>PLAYER_ATTACK_EVENT_MAX:
+		return fail("pet_attack_visual_backlog_overflow")
+	last_aoi_tick=maxi(last_aoi_tick,int(value.server_tick))
+	return true
 
 
 func _apply_pet_attack_result(frame:PackedByteArray)->bool:

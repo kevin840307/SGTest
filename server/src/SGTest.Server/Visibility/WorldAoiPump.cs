@@ -170,6 +170,9 @@ public sealed class WorldAoiPump
                     else
                         outcome=_monsters.ResolvePetNormalAttack(petAttack,pet);
 
+                    if(outcome.Status is NormalAttackStatus.Applied or NormalAttackStatus.Miss)
+                        _aoi.EnqueuePetAttackVisual(petAttack,outcome);
+
                     if(outcome.Status==NormalAttackStatus.Applied&&
                        outcome.Monster is { } changed)
                     {

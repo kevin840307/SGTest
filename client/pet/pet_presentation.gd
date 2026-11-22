@@ -151,6 +151,7 @@ func apply_snapshot(snapshot: Dictionary, now_usec: int) -> Error:
 			"attack_sequence":int(old.get("attack_sequence",0)) if same_generation else 0
 		}
 	_apply_attack_result(snapshot,now_usec)
+	_apply_attack_visuals(snapshot,now_usec)
 	return OK
 
 func _apply_attack_result(snapshot: Dictionary, now_usec: int) -> void:
@@ -177,6 +178,35 @@ func _apply_attack_result(snapshot: Dictionary, now_usec: int) -> void:
 		pet["attack_sequence"] = sequence
 		_pets[owner] = pet
 		return
+
+
+func _apply_attack_visuals(snapshot: Dictionary, now_usec: int) -> void:
+	var events = snapshot.get("pet_attack_visual_events",[])
+	if not events is Array:
+		return
+	for raw_event in events:
+		if not raw_event is Dictionary:
+			continue
+		var event: Dictionary = raw_event
+		if int(event.get("receiver_map_epoch",0)) != _epoch:
+			continue
+		var owner := int(event.get("owner_actor_id",0))
+		var pet: Dictionary = _pets.get(owner,{})
+		if pet.is_empty():
+			continue
+		var value: Dictionary = pet.value
+		if (
+			int(event.get("owner_connection_epoch",0)) != int(value.owner_connection_epoch) or
+			int(event.get("owner_map_epoch",0)) != int(value.owner_map_epoch) or
+			int(event.get("pet_uid",0)) != int(value.pet_uid)
+		):
+			continue
+		var sequence := int(event.get("attack_sequence",0))
+		if sequence <= int(pet.get("attack_sequence",0)):
+			continue
+		pet["attack_started"] = now_usec
+		pet["attack_sequence"] = sequence
+		_pets[owner] = pet
 
 
 func position_at(owner_actor_id: int, now_usec: int) -> Vector2:

@@ -666,6 +666,7 @@ public static partial class WireProtocol
             116 => WireOpcode.PetEntityDelta,
             117 => WireOpcode.PetAttack,
             118 => WireOpcode.PetAttackResult,
+            119 => WireOpcode.PetAttackVisual,
             _ => 0
         };
         if (opcode == 0) return false;
@@ -704,6 +705,7 @@ public static partial class WireProtocol
             WireOpcode.PetEntityDelta => advertised == PetEntityDeltaFrameBytes,
             WireOpcode.PetAttack => advertised == PetAttackFrameBytes,
             WireOpcode.PetAttackResult => advertised == PetAttackResultFrameBytes,
+            WireOpcode.PetAttackVisual => advertised == PetAttackVisualFrameBytes,
             WireOpcode.CharacterCreate => advertised is >= 12 and <= MaxCharacterCreateFrameBytes,
             WireOpcode.CharacterCreateResult => advertised is >= 20 and <= MaxCharacterCreateResultFrameBytes,
             WireOpcode.WorldReady => advertised == WorldReadyFrameBytes,

@@ -10,6 +10,7 @@ const PET_DELTA_HEX := "400000000100740007000000000000002b00000000000000e9030000
 const PET_DESPAWN_HEX := "380000000100730007000000000000002c00000000000000e9030000000000000b0000000000000004000000000000006600000000000000"
 const PET_ATTACK_HEX := "2400000001007500070000000000000003000000660000000000000021a0ae3b00000000"
 const PET_ATTACK_RESULT_HEX := "410000000100760007000000000000000300000000660000000000000021a0ae3b00000000190000004b0000006400000004000000000000003700000000000000"
+const PET_ATTACK_VISUAL_HEX := "510000000100770007000000000000003700000000000000e9030000000000000b00000000000000040000000000000003000000660000000000000021a0ae3b0000000000190000000400000000000000"
 
 func _initialize() -> void:
 	var command := Codec.encode_pet_command(7,1,1,101)
@@ -58,6 +59,42 @@ func _initialize() -> void:
 		int(attack_result.server_tick) != 55
 	):
 		_fail("pet attack result golden rejected")
+		return
+
+	var attack_visual:=Codec.decode_pet_attack_visual(PET_ATTACK_VISUAL_HEX.hex_decode())
+	if (
+		attack_visual.is_empty() or Codec.frame_opcode(PET_ATTACK_VISUAL_HEX.hex_decode())!=Codec.OPCODE_PET_ATTACK_VISUAL or
+		int(attack_visual.owner_actor_id)!=1001 or int(attack_visual.owner_connection_epoch)!=11 or
+		int(attack_visual.owner_map_epoch)!=4 or int(attack_visual.pet_uid)!=102 or
+		int(attack_visual.attack_sequence)!=3 or int(attack_visual.damage)!=25
+	):
+		_fail("pet remote attack visual golden rejected")
+		return
+
+	var remote_state:=State.new()
+	remote_state.state=State.STATE_IN_WORLD
+	remote_state.world_ready=true
+	remote_state.map_epoch=7
+	remote_state.actor_id=2002
+	remote_state.last_world_ready_ack_epoch=7
+	remote_state.entities[1001]={"connection_epoch":11,"entity_map_epoch":4}
+	remote_state.monsters[1001300001]={"revision":3}
+	if not remote_state.apply_frame(PET_SPAWN_HEX.hex_decode()):
+		_fail("remote observer pet spawn reducer failed")
+		return
+	if not remote_state.apply_frame(PET_ATTACK_VISUAL_HEX.hex_decode()):
+		_fail("remote observer pet attack visual reducer failed")
+		return
+	var remote_view:=remote_state.snapshot()
+	if remote_view.pet_attack_visual_events.size()!=1 or int(remote_view.pet_attack_visual_events[0].attack_sequence)!=3:
+		_fail("remote observer pet attack visual was not published")
+		return
+	if not remote_state.apply_frame(PET_ATTACK_VISUAL_HEX.hex_decode()):
+		_fail("duplicate remote observer pet attack visual was not safely ignored")
+		return
+	remote_view=remote_state.snapshot()
+	if remote_view.pet_attack_visual_events.size()!=1 or int(remote_view.stale_pet_attack_visuals)!=1:
+		_fail("duplicate remote pet attack visual replayed instead of deduping")
 		return
 
 	var state := State.new()
@@ -128,7 +165,7 @@ func _initialize() -> void:
 		_fail("stale pet snapshot changed current state")
 		return
 
-	print("PET_WIRE_PASS csharp_golden=true reducer=true aoi_presence=true aoi_movement=true pet_combat=true pets=2")
+	print("PET_WIRE_PASS csharp_golden=true reducer=true aoi_presence=true aoi_movement=true pet_combat=true remote_attack_visual=true pets=2")
 	quit(0)
 
 func _fail(message:String)->void:

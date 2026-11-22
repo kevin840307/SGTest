@@ -46,6 +46,8 @@ internal static class WorldAoiChecks
             MonsterInterest);
         Checks.Run("pet AOI follows owner visibility and one-tick authoritative trail with safe transfer generation",
             PetInterest);
+        Checks.Run("pet attack visual reaches visible remote peers without duplicating owner result",
+            PetAttackVisualInterest);
         Checks.Run("player attack visual reaches only viewers seeing attacker and target",
             PlayerAttackVisualInterest);
         Checks.Run("player skill visual reaches only viewers seeing attacker and target",
@@ -139,6 +141,49 @@ internal static class WorldAoiChecks
                 x.Pet?.PetUid==9002&&x.Pet?.OwnerMapEpoch==transferred.MapEpoch&&
                 x.Pet?.X==transferred.X&&x.Pet?.Y==transferred.Y),
             "active pet did not heal owner generation/spawn position after transfer");
+    }
+
+    private static void PetAttackVisualInterest()
+    {
+        var aoi=new WorldAoi(new WorldAoiOptions(
+            EnterHalfWidth:200,EnterHalfHeight:150,ExitMargin:60,BucketSize:64));
+        var owner=Actor(74,15,24,24,connection:7,mapEpoch:4);
+        var peer=Actor(75,15,48,24,connection:8,mapEpoch:5);
+        var far=Actor(76,15,1200,24,connection:9,mapEpoch:6);
+        var monster=new MonsterSnapshot(
+            1001500001,1,0,15,40,24,40,24,100,100,
+            MonsterAiState.Idle,0,1,2);
+        aoi.Apply(new WorldChangedBatch(1,Array.Empty<ActorSnapshot>(),
+            [Join(owner),Join(peer),Join(far)]),[monster]);
+        Drain(aoi,owner);Drain(aoi,peer);Drain(aoi,far);
+        aoi.ApplyPetState(new(owner.ActorId,owner.ConnectionEpoch,owner.MapEpoch,
+            9101,5002,7,7,true));
+        Drain(aoi,owner);Drain(aoi,peer);Drain(aoi,far);
+
+        var request=new TrustedPetAttack(owner.ActorId,owner.ConnectionEpoch,
+            owner.MapEpoch,3,9101,monster.EntityId);
+        var changed=monster with {CurrentHp=75,EntityRevision=2};
+        var outcome=new NormalAttackOutcome(
+            NormalAttackStatus.Applied,1,monster.EntityId,25,75,100,2,changed);
+        Require(aoi.EnqueuePetAttackVisual(request,outcome)==1,
+            "pet attack visual did not target exactly one visible remote peer");
+        Require(Drain(aoi,owner).Length==0,
+            "pet owner received duplicate observer attack visual");
+        var peerEvents=Drain(aoi,peer);
+        Require(peerEvents is [var seen]&&seen.Kind==AoiEventKind.PetAttackVisual&&
+            seen.PetAttack?.OwnerActorId==owner.ActorId&&
+            seen.PetAttack?.OwnerConnectionEpoch==owner.ConnectionEpoch&&
+            seen.PetAttack?.OwnerMapEpoch==owner.MapEpoch&&
+            seen.PetAttack?.PetUid==9101&&seen.PetAttack?.AttackSequence==3&&
+            seen.PetAttack?.Damage==25&&Drain(aoi,far).Length==0,
+            "pet attack visual AOI scope/generation payload mismatch");
+
+        var miss=new NormalAttackOutcome(
+            NormalAttackStatus.Miss,1,monster.EntityId,0,75,100,2,changed);
+        Require(aoi.EnqueuePetAttackVisual(request with {AttackSequence=4},miss)==1&&
+            Drain(aoi,peer).Single().PetAttack?.Status==NormalAttackStatus.Miss&&
+            Drain(aoi,owner).Length==0,
+            "pet MISS visual was lost or duplicated to owner");
     }
 
     private static void PlayerAttackVisualInterest()

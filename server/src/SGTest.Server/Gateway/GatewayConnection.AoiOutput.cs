@@ -129,6 +129,14 @@ public sealed partial class GatewayConnection
                         evt.ReceiverMapEpoch,evt.Tick,pet.OwnerActorId,
                         pet.OwnerConnectionEpoch,pet.OwnerMapEpoch,pet.PetUid));
                     break;
+                case AoiEventKind.PetAttackVisual when evt.PetAttack is { } petAttack:
+                    frame=WireProtocol.EncodePetAttackVisual(new(
+                        evt.ReceiverMapEpoch,evt.Tick,petAttack.OwnerActorId,
+                        petAttack.OwnerConnectionEpoch,petAttack.OwnerMapEpoch,
+                        petAttack.AttackSequence,petAttack.PetUid,
+                        petAttack.TargetEntityId,petAttack.Status,
+                        petAttack.Damage,petAttack.TargetRevision));
+                    break;
                 case AoiEventKind.PlayerAttackVisual when evt.PlayerAttack is { } attack:
                     frame=WireProtocol.EncodePlayerAttackVisual(new(
                         evt.ReceiverMapEpoch,evt.Tick,

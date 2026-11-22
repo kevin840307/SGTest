@@ -17,6 +17,7 @@ public static partial class WireProtocol
     public const int PetEntityDeltaFrameBytes=64;
     public const int PetAttackFrameBytes=36;
     public const int PetAttackResultFrameBytes=65;
+    public const int PetAttackVisualFrameBytes=81;
 
     public static byte[] EncodePetCommand(PetCommandWire value)
     {
@@ -323,6 +324,57 @@ public static partial class WireProtocol
             BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(49,8)),
             BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(57,8)));
         return ValidPetAttackResult(value);
+    }
+
+    public static byte[] EncodePetAttackVisual(PetAttackVisualWire value)
+    {
+        if(!ValidPetAttackVisual(value))
+            throw new ArgumentOutOfRangeException(nameof(value));
+        var frame=NewFrame(WireOpcode.PetAttackVisual,PetAttackVisualFrameBytes);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(8,8),value.ReceiverMapEpoch);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(16,8),value.ServerTick);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(24,8),value.OwnerActorId);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(32,8),value.OwnerConnectionEpoch);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(40,8),value.OwnerMapEpoch);
+        BinaryPrimitives.WriteUInt32LittleEndian(frame.AsSpan(48,4),value.AttackSequence);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(52,8),value.PetUid);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(60,8),value.TargetEntityId);
+        frame[68]=(byte)value.Status;
+        BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(69,4),value.Damage);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(73,8),value.TargetRevision);
+        return frame;
+    }
+
+    public static bool TryDecodePetAttackVisual(
+        ReadOnlySpan<byte> frame,out PetAttackVisualWire value)
+    {
+        value=default;
+        if(!TryReadHeader(frame,out var header)||header.Opcode!=WireOpcode.PetAttackVisual||
+           frame.Length!=PetAttackVisualFrameBytes)return false;
+        value=new(
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(8,8)),
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(16,8)),
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(24,8)),
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(32,8)),
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(40,8)),
+            BinaryPrimitives.ReadUInt32LittleEndian(frame.Slice(48,4)),
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(52,8)),
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(60,8)),
+            (NormalAttackStatus)frame[68],
+            BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(69,4)),
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(73,8)));
+        return ValidPetAttackVisual(value);
+    }
+
+    private static bool ValidPetAttackVisual(PetAttackVisualWire value)
+    {
+        if(value.ReceiverMapEpoch<=0||value.ServerTick<0||value.OwnerActorId<=0||
+           value.OwnerConnectionEpoch<=0||value.OwnerMapEpoch<=0||
+           value.AttackSequence==0||value.PetUid<=0||value.TargetEntityId<=0||
+           value.TargetRevision<=0||
+           value.Status is not (NormalAttackStatus.Applied or NormalAttackStatus.Miss))
+            return false;
+        return value.Status==NormalAttackStatus.Applied?value.Damage>0:value.Damage==0;
     }
 
     private static bool ValidPetAttackResult(PetAttackResultWire value)

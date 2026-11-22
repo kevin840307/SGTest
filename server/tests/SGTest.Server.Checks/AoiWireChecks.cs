@@ -23,6 +23,7 @@ internal static class AoiWireChecks
     private const string GroundSpawn = "340000000100200001000000000000003700000000000000F5010000000000000F000000000040420000C0418D0A000002000000";
     private const string GroundDespawn = "200000000100210001000000000000003800000000000000F501000000000000";
     private const string PlayerAttack = "4200000001002900010000000000000032000000000000000B0000000000000002000000000000000700000021A0AE3B00000000001E000000030000000000000006";
+    private const string PetAttackVisualHex = "510000000100770007000000000000003700000000000000E9030000000000000B00000000000000040000000000000003000000660000000000000021A0AE3B0000000000190000000400000000000000";
     private const string PlayerDamageVisual = "4200000001002A0001000000000000003C00000000000000160000000000000003000000000000000400000021A0AE3B000000000700000000000000120000000006";
     private const string PlayerRespawnVisual = "2D00000001002B0001000000000000003D00000000000000160000000000000003000000000000000200000006";
 
@@ -119,6 +120,14 @@ internal static class AoiWireChecks
             WireProtocol.TryDecodePlayerAttackVisual(playerAttackBytes,out var parsedAttack) &&
             parsedAttack==playerAttack,
             "PlayerAttackVisual C#/Godot golden binary");
+        var petAttackVisual=new PetAttackVisualWire(
+            7,55,1001,11,4,3,102,1001300001,NormalAttackStatus.Applied,25,4);
+        byte[] petAttackVisualBytes=WireProtocol.EncodePetAttackVisual(petAttackVisual);
+        Require(Convert.ToHexString(petAttackVisualBytes)==PetAttackVisualHex,
+            $"PetAttackVisual C#/Godot golden binary actual={Convert.ToHexString(petAttackVisualBytes)}");
+        Require(WireProtocol.TryDecodePetAttackVisual(petAttackVisualBytes,out var parsedPetAttack)&&
+            parsedPetAttack==petAttackVisual,
+            "PetAttackVisual C# roundtrip");
         var playerDamageVisual=new PlayerDamageVisualWire(
             1,60,22,3,4,1001300001,7,18,false,6);
         byte[] playerDamageVisualBytes=WireProtocol.EncodePlayerDamageVisual(playerDamageVisual);
@@ -293,6 +302,18 @@ internal static class AoiWireChecks
                 visualWire.AttackSequence==7 && visualWire.Damage==30 &&
                 visualWire.Facing==6,
                 "player attack visual did not use shared reliable Gateway FIFO");
+        var petVisual=new PetAttackVisual(
+            owner.ActorId,owner.ConnectionEpoch,owner.MapEpoch,3,102,
+            monster.EntityId,NormalAttackStatus.Applied,25,monster.EntityRevision);
+        Require(gateway.QueueAoi(new(AoiEventKind.PetAttackVisual,50,1,
+                    PetAttack:petVisual))==GatewaySendStatus.Enqueued&&
+                gateway.TryDequeueReliable(out visualFrame)&&
+                WireProtocol.TryDecodePetAttackVisual(visualFrame,out var petVisualWire)&&
+                petVisualWire.OwnerActorId==owner.ActorId&&
+                petVisualWire.OwnerMapEpoch==owner.MapEpoch&&
+                petVisualWire.PetUid==102&&petVisualWire.AttackSequence==3&&
+                petVisualWire.Damage==25,
+                "pet attack visual did not use shared reliable Gateway FIFO");
         var damageVisual=new PlayerDamageVisual(
             owner.ActorId,owner.ConnectionEpoch,4,monster.EntityId,
             monster.EntityRevision,18,false,6);
