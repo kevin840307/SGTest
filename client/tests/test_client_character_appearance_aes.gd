@@ -65,8 +65,20 @@ func _run() -> void:
 			_fail("create/relogin appearance changed "+str(snapshot),session)
 			return
 		if pass_index==1:
-			if not session.choose_character(int(snapshot.characters[0].character_id),"2468"):
-				_fail("choose persisted character",session)
+			var character_id := int(snapshot.characters[0].character_id)
+			if not session.choose_character(character_id,"0000"):
+				_fail("queue wrong secondary password",session)
+				return
+			var wrong_deadline := Time.get_ticks_msec()+5000
+			while (int(snapshot.get("state",-1))!=State.STATE_SELECTING_CHARACTER or
+					int(snapshot.get("choose_status",-1))!=4) and Time.get_ticks_msec()<wrong_deadline:
+				await process_frame
+				snapshot = session.snapshot()
+			if int(snapshot.get("state",-1))!=State.STATE_SELECTING_CHARACTER or int(snapshot.get("choose_status",-1))!=4 or snapshot.get("world_ready",false):
+				_fail("wrong secondary password did not return retryable selection "+str(snapshot),session)
+				return
+			if not session.choose_character(character_id,"2468"):
+				_fail("retry persisted character with correct secondary password",session)
 				return
 			while not snapshot.get("world_ready",false) and Time.get_ticks_msec()<deadline:
 				await process_frame
@@ -78,5 +90,5 @@ func _run() -> void:
 		if panel != null:
 			panel.queue_free()
 		await process_frame
-	print("CLIENT_CHARACTER_APPEARANCE_AES_PASS server_choices=true UI_picker_and_button=true exact_choice=true persisted_relogin=true choose_world=true menu_released=true")
+	print("CLIENT_CHARACTER_APPEARANCE_AES_PASS server_choices=true UI_picker_and_button=true exact_choice=true persisted_relogin=true wrong_password_retry=true choose_world=true menu_released=true")
 	quit(0)
