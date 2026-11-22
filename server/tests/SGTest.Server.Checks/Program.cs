@@ -101,6 +101,12 @@ static class Checks
                 Console.WriteLine($"CLAN_CHECKS PASS total={_passes}");
                 return 0;
             }
+            if (args is ["--pet-only"])
+            {
+                PetChecks.Verify();
+                Console.WriteLine($"PET_CHECKS PASS total={_passes}");
+                return 0;
+            }
             if (args is ["--identity-admin-only", "--aes"])
             {
                 IdentityAdminChecks.Verify(root, tlsOnly: true);
@@ -328,6 +334,7 @@ static class Checks
             GmOnlineChecks.Verify(root);
             PartyChecks.Verify(root);
             ClanChecks.Verify();
+            PetChecks.Verify();
             TradeChecks.Verify(root);
             PlayerShopChecks.Verify(root);
             PlayerShopCoordinatorChecks.Verify(root);

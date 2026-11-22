@@ -274,6 +274,17 @@ var last_clan_result_sequence := 0
 var last_clan_result_status := -1
 var last_clan_result := {}
 var stale_clan_frames := 0
+var pet_sequence := 0
+var pending_pet_sequence := 0
+var pending_pet_action := 0
+var pending_pet_uid := 0
+var active_pet_uid := 0
+var pet_instances := {}
+var pet_snapshot_received := false
+var last_pet_result_sequence := 0
+var last_pet_result_status := -1
+var last_pet_result := {}
+var stale_pet_frames := 0
 const CHAT_BACKLOG_MAX := 100
 var quest_sequence := 0
 var pending_quest_sequence := 0
@@ -808,6 +819,37 @@ func _clear_pending_clan()->void:
 	pending_clan_name=""
 
 
+func mark_pet_sent(sequence:int,action:int,pet_uid:int)->bool:
+	if (
+		state!=STATE_IN_WORLD or not world_ready or resync_pending or
+		waiting_for_new_map or pending_world_ready_ack_epoch!=0 or
+		last_world_ready_ack_epoch!=map_epoch or pending_pet_sequence!=0 or
+		sequence<=pet_sequence or sequence>0xffffffff or action<1 or action>3
+	):
+		return false
+	if action==3:
+		if pet_uid!=0:
+			return false
+	else:
+		if pet_uid<=0 or not pet_instances.has(pet_uid):
+			return false
+		if action==1 and active_pet_uid==pet_uid:
+			return false
+		if action==2 and active_pet_uid!=pet_uid:
+			return false
+	pet_sequence=sequence
+	pending_pet_sequence=sequence
+	pending_pet_action=action
+	pending_pet_uid=pet_uid
+	return true
+
+
+func _clear_pending_pet()->void:
+	pending_pet_sequence=0
+	pending_pet_action=0
+	pending_pet_uid=0
+
+
 func mark_quest_sent(
 		sequence:int,kind:int,npc_spawn_id:int,quest_id:int=0,
 		choice_id:int=0)->bool:
@@ -1020,6 +1062,10 @@ func apply_frame(frame: PackedByteArray) -> bool:
 			return _apply_clan_result(frame)
 		WireCodec.OPCODE_CLAN_SNAPSHOT:
 			return _apply_clan_snapshot(frame)
+		WireCodec.OPCODE_PET_RESULT:
+			return _apply_pet_result(frame)
+		WireCodec.OPCODE_PET_SNAPSHOT:
+			return _apply_pet_snapshot(frame)
 		WireCodec.OPCODE_QUEST_VIEW:
 			return _apply_quest_view(frame)
 		WireCodec.OPCODE_WORLD_READY:
@@ -1301,6 +1347,17 @@ func snapshot() -> Dictionary:
 		"last_clan_result_status": last_clan_result_status,
 		"last_clan_result": last_clan_result.duplicate(true),
 		"stale_clan_frames": stale_clan_frames,
+		"pet_sequence": pet_sequence,
+		"pending_pet_sequence": pending_pet_sequence,
+		"pending_pet_action": pending_pet_action,
+		"pending_pet_uid": pending_pet_uid,
+		"active_pet_uid": active_pet_uid,
+		"pet_instances": pet_instances.duplicate(true),
+		"pet_snapshot_received": pet_snapshot_received,
+		"last_pet_result_sequence": last_pet_result_sequence,
+		"last_pet_result_status": last_pet_result_status,
+		"last_pet_result": last_pet_result.duplicate(true),
+		"stale_pet_frames": stale_pet_frames,
 		"quest_sequence": quest_sequence,
 		"pending_quest_sequence": pending_quest_sequence,
 		"pending_quest_kind": pending_quest_kind,
@@ -1490,6 +1547,7 @@ func _apply_choose(frame: PackedByteArray) -> bool:
 	_pending_character_appearance.clear()
 	_reset_character_actions_and_combat()
 	_reset_character_economy_state()
+	_reset_character_pet_state()
 	_reset_character_world_state(decoded)
 	state = STATE_IN_WORLD
 	return true
@@ -1539,6 +1597,18 @@ func _reset_character_actions_and_combat() -> void:
 	last_player_damage_tick = -1
 	last_player_damage.clear()
 	stale_player_damage = 0
+
+func _reset_character_pet_state() -> void:
+	pet_sequence=0
+	_clear_pending_pet()
+	active_pet_uid=0
+	pet_instances.clear()
+	pet_snapshot_received=false
+	last_pet_result_sequence=0
+	last_pet_result_status=-1
+	last_pet_result.clear()
+	stale_pet_frames=0
+
 
 func _reset_character_economy_state() -> void:
 	recovery_sequence = 0
@@ -4008,6 +4078,63 @@ func _clear_quest_map()->void:
 	last_quest_status=-1
 	last_quest_result.clear()
 	stale_quest_results=0
+
+
+func _apply_pet_result(frame:PackedByteArray)->bool:
+	if state!=STATE_IN_WORLD:
+		return fail("pet_result_out_of_state")
+	var value:=WireCodec.decode_pet_result(frame)
+	if value.is_empty():
+		return fail("invalid_pet_result")
+	var epoch:=int(value.map_epoch)
+	var sequence:=int(value.pet_sequence)
+	if epoch<map_epoch:
+		stale_pet_frames+=1
+		return true
+	if epoch>map_epoch:
+		return fail("future_pet_result")
+	if sequence<=last_pet_result_sequence:
+		stale_pet_frames+=1
+		return true
+	if (
+		sequence>pet_sequence or sequence!=pending_pet_sequence or
+		int(value.action)!=pending_pet_action or int(value.pet_uid)!=pending_pet_uid
+	):
+		return fail("pet_result_without_matching_request")
+	var status:=int(value.status)
+	if status<0 or status>5:
+		return fail("pet_result_unknown_status")
+	last_pet_result_sequence=sequence
+	last_pet_result_status=status
+	last_pet_result=value.duplicate(true)
+	active_pet_uid=int(value.active_pet_uid)
+	_clear_pending_pet()
+	return true
+
+
+func _apply_pet_snapshot(frame:PackedByteArray)->bool:
+	if state!=STATE_IN_WORLD:
+		return fail("pet_snapshot_out_of_state")
+	var value:=WireCodec.decode_pet_snapshot(frame)
+	if value.is_empty():
+		return fail("invalid_pet_snapshot")
+	var epoch:=int(value.receiver_map_epoch)
+	if epoch<map_epoch:
+		stale_pet_frames+=1
+		return true
+	if epoch>map_epoch:
+		return fail("future_pet_snapshot")
+	var next_pets:={}
+	for raw in value.pets:
+		var pet:Dictionary=raw
+		next_pets[int(pet.pet_uid)]=pet.duplicate(true)
+	var incoming_active:=int(value.active_pet_uid)
+	if incoming_active>0 and not next_pets.has(incoming_active):
+		return fail("pet_snapshot_missing_active")
+	pet_instances=next_pets
+	active_pet_uid=incoming_active
+	pet_snapshot_received=true
+	return true
 
 
 func _apply_quest_view(frame:PackedByteArray)->bool:

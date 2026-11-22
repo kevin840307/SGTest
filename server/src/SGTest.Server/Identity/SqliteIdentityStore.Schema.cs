@@ -806,6 +806,35 @@ CHECK(sleeve_color BETWEEN 0 AND 255);",tx);
 );",tx);
             Execute(connection,@"CREATE INDEX IF NOT EXISTS ix_clan_members_clan
 ON clan_members(clan_id,role DESC,joined_unix_ms,character_id);",tx);
+            // Schema v30: durable pet ownership and exactly one active pet per
+            // character. Definition/level/experience/state remain server-owned.
+            Execute(connection,@"CREATE TABLE IF NOT EXISTS pet_instances (
+    pet_uid INTEGER PRIMARY KEY AUTOINCREMENT,
+    character_id INTEGER NOT NULL REFERENCES characters(character_id) ON DELETE CASCADE,
+    definition_id INTEGER NOT NULL CHECK(definition_id BETWEEN 1 AND 100000000),
+    level INTEGER NOT NULL DEFAULT 1 CHECK(level BETWEEN 1 AND 1000000),
+    experience INTEGER NOT NULL DEFAULT 0 CHECK(experience BETWEEN 0 AND 9000000000000000),
+    is_active INTEGER NOT NULL DEFAULT 0 CHECK(is_active IN (0,1)),
+    state_blob BLOB NOT NULL DEFAULT X'' CHECK(length(state_blob) <= 4096),
+    created_unix_ms INTEGER NOT NULL,
+    updated_unix_ms INTEGER NOT NULL
+);",tx);
+            Execute(connection,@"CREATE INDEX IF NOT EXISTS ix_pet_instances_character
+ON pet_instances(character_id,pet_uid);",tx);
+            Execute(connection,@"CREATE UNIQUE INDEX IF NOT EXISTS ux_pet_instances_active
+ON pet_instances(character_id) WHERE is_active=1;",tx);
+            Execute(connection,@"CREATE TABLE IF NOT EXISTS pet_actions (
+    character_id INTEGER NOT NULL REFERENCES characters(character_id) ON DELETE CASCADE,
+    connection_generation INTEGER NOT NULL CHECK(connection_generation > 0),
+    map_epoch INTEGER NOT NULL CHECK(map_epoch > 0),
+    action_sequence INTEGER NOT NULL CHECK(action_sequence BETWEEN 1 AND 4294967295),
+    action INTEGER NOT NULL CHECK(action IN (1,2)),
+    pet_uid INTEGER NOT NULL CHECK(pet_uid > 0),
+    result_status INTEGER NOT NULL CHECK(result_status BETWEEN 0 AND 5),
+    resulting_active_uid INTEGER NOT NULL CHECK(resulting_active_uid >= 0),
+    created_unix_ms INTEGER NOT NULL,
+    PRIMARY KEY(character_id,connection_generation,map_epoch,action_sequence)
+);",tx);
             if (schemaVersion < SchemaVersion)
                 Execute(connection,
                     $"UPDATE schema_version SET version={SchemaVersion};", tx);

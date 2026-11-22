@@ -120,7 +120,10 @@ public enum WireOpcode : ushort
     ClanCommand = 107,
     ClanResult = 108,
     ClanSnapshot = 109,
-    PlayerMovementIntent = 110
+    PlayerMovementIntent = 110,
+    PetCommand = 111,
+    PetResult = 112,
+    PetSnapshot = 113
 }
 
 public enum ChatChannel : byte { Nearby = 0, Faction = 1, Warband = 2, Party = 3, Whisper = 4 }
@@ -135,6 +138,12 @@ public enum ClanResultStatus : byte
 {
     Success=0,AlreadyInClan=1,NotInClan=2,ClanNotFound=3,
     NameTaken=4,InvalidName=5,ClanFull=6,Conflict=7
+}
+public enum PetCommandAction : byte { Summon=1, Recall=2, Refresh=3 }
+public enum PetResultStatus : byte
+{
+    Applied=0,AlreadyProcessed=1,PetNotOwned=2,
+    AlreadyActive=3,NotActive=4,SequenceConflict=5
 }
 
 public enum PartyCommandAction : byte
@@ -640,6 +649,16 @@ public readonly record struct ClanMemberWire(long CharacterId,byte Role,string N
 public sealed record ClanSnapshotWire(
     long ReceiverMapEpoch,long ClanId,uint Revision,long LeaderCharacterId,string Name,
     IReadOnlyList<ClanMemberWire> Members);
+
+public readonly record struct PetCommandWire(
+    long MapEpoch,uint PetSequence,PetCommandAction Action,long PetUid);
+public readonly record struct PetResultWire(
+    long MapEpoch,uint PetSequence,PetCommandAction Action,PetResultStatus Status,
+    long PetUid,long ActivePetUid);
+public readonly record struct PetSnapshotEntryWire(
+    long PetUid,int DefinitionId,int Level,long Experience);
+public sealed record PetSnapshotWire(
+    long ReceiverMapEpoch,long ActivePetUid,IReadOnlyList<PetSnapshotEntryWire> Pets);
 
 public readonly record struct QuestOpenWire(
     long MapEpoch,uint QuestSequence,int NpcSpawnId);

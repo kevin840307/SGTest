@@ -4,6 +4,7 @@ using SGTest.Server.Skill;
 using SGTest.Server.Pvp;
 using SGTest.Server.PlayerShop;
 using SGTest.Server.Party;
+using SGTest.Server.Pet;
 using SGTest.Server.Npc;
 using SGTest.Server.Combat;
 using SGTest.Server.Chat;
@@ -53,6 +54,7 @@ public sealed partial class IdentitySessionAuthorization
     private readonly PlayerShopCoordinator? _playerShops;
     private readonly PartyCoordinator? _parties;
     private readonly ClanCoordinator? _clans;
+    private readonly PetCoordinator? _pets;
     private readonly AuthenticationRateLimiter? _rateLimiter;
     private readonly AccountRegistrationRateLimiter? _registrationRateLimiter;
     private readonly HashSet<string> _gmAccounts;
@@ -78,6 +80,7 @@ public sealed partial class IdentitySessionAuthorization
                                      PlayerShopCoordinator? playerShops = null,
                                      PartyCoordinator? parties = null,
                                      ClanCoordinator? clans = null,
+                                     PetCoordinator? pets = null,
                                      AuthenticationRateLimiter? rateLimiter = null,
                                      AccountRegistrationRateLimiter? registrationRateLimiter = null,
                                      IReadOnlySet<string>? gmAccounts = null)
@@ -112,6 +115,7 @@ public sealed partial class IdentitySessionAuthorization
         _playerShops=playerShops;
         _parties=parties;
         _clans=clans;
+        _pets=pets;
         _rateLimiter=rateLimiter;
         _registrationRateLimiter=registrationRateLimiter;
         if(_playerShops is not null&&_trades is null)

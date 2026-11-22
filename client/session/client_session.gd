@@ -461,6 +461,52 @@ func clan_refresh()->bool:
 	return _queue_clan_intent(4,0,"",current)
 
 
+func pet_summon(pet_uid:int)->bool:
+	var current:=snapshot()
+	return _queue_pet_intent(1,pet_uid,current)
+
+
+func pet_recall()->bool:
+	var current:=snapshot()
+	return _queue_pet_intent(2,int(current.get("active_pet_uid",0)),current)
+
+
+func pet_refresh()->bool:
+	var current:=snapshot()
+	return _queue_pet_intent(3,0,current)
+
+
+func _queue_pet_intent(action:int,pet_uid:int,current:Dictionary)->bool:
+	if (
+		int(current.get("state",-1))!=WorldState.STATE_IN_WORLD or
+		not bool(current.get("world_ready",false)) or
+		bool(current.get("resync_pending",false)) or
+		bool(current.get("waiting_for_new_map",false)) or
+		int(current.get("pending_world_ready_ack_epoch",0))!=0 or
+		int(current.get("last_world_ready_ack_epoch",0))!=int(current.get("map_epoch",0)) or
+		int(current.get("pending_pet_sequence",0))!=0
+	):
+		return false
+	var pets:Dictionary=current.get("pet_instances",{})
+	match action:
+		1:
+			if pet_uid<=0 or not pets.has(pet_uid) or int(current.get("active_pet_uid",0))==pet_uid:
+				return false
+		2:
+			if pet_uid<=0 or int(current.get("active_pet_uid",0))!=pet_uid:
+				return false
+		3:
+			if pet_uid!=0:
+				return false
+		_:
+			return false
+	return _queue_intent({
+		"type":"pet","action":action,"pet_uid":pet_uid,
+		"actor_id":int(current.get("actor_id",0)),
+		"map_epoch":int(current.get("map_epoch",0))
+	})
+
+
 func _queue_clan_intent(action:int,request_clan_id:int,name:String,current:Dictionary)->bool:
 	if (
 		int(current.get("state",-1))!=WorldState.STATE_IN_WORLD or
@@ -1256,6 +1302,10 @@ func _process_first_intent() -> void:
 		_process_clan_intent(intent)
 
 
+	elif kind=="pet":
+		_process_pet_intent(intent)
+
+
 	elif kind == "gm_pvp_name":
 		_process_gm_pvp_name_intent(intent)
 
@@ -1577,6 +1627,37 @@ func _process_clan_intent(intent: Dictionary) -> void:
 		_transport.send_frame(frame) and
 		_world.mark_clan_sent(sequence,action,request_clan_id,clan_name)
 	):
+		_pop_intent()
+		_publish()
+
+
+func _process_pet_intent(intent:Dictionary)->void:
+	var current:Dictionary=_world.snapshot()
+	if (
+		int(intent.get("actor_id",0))!=int(current.get("actor_id",0)) or
+		int(intent.get("map_epoch",0))!=int(current.get("map_epoch",0))
+	):
+		_pop_intent()
+		return
+	if (
+		int(current.get("state",-1))!=WorldState.STATE_IN_WORLD or
+		not bool(current.get("world_ready",false)) or
+		bool(current.get("resync_pending",false)) or
+		bool(current.get("waiting_for_new_map",false)) or
+		int(current.get("pending_world_ready_ack_epoch",0))!=0 or
+		int(current.get("last_world_ready_ack_epoch",0))!=int(current.get("map_epoch",0)) or
+		int(current.get("pending_pet_sequence",0))!=0
+	):
+		return
+	var action:=int(intent.get("action",0))
+	var pet_uid:=int(intent.get("pet_uid",0))
+	var sequence:=int(current.get("pet_sequence",0))+1
+	var frame:=WireCodec.encode_pet_command(
+		int(current.get("map_epoch",0)),sequence,action,pet_uid)
+	if frame.is_empty():
+		_pop_intent()
+		return
+	if _transport.send_frame(frame) and _world.mark_pet_sent(sequence,action,pet_uid):
 		_pop_intent()
 		_publish()
 

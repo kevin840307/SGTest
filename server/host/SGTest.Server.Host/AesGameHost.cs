@@ -3,6 +3,7 @@ using SGTest.Server.Trade;
 using SGTest.Server.Skill;
 using SGTest.Server.PlayerShop;
 using SGTest.Server.Party;
+using SGTest.Server.Pet;
 using SGTest.Server.Clan;
 using SGTest.Server.Npc;
 using SGTest.Server.Monster;
@@ -277,6 +278,7 @@ internal static class AesGameHost
                     identity,world,tradeItemRules!,trades,combat);
             var parties=new PartyCoordinator();
             var clans=new ClanCoordinator(identity);
+            var pets=new PetCoordinator(identity);
             var authRateLimiter=new AuthenticationRateLimiter(new(
                 MaxFailuresPerAddress:authAddressFailures,
                 MaxFailuresPerAccount:authAccountFailures,
@@ -309,6 +311,7 @@ internal static class AesGameHost
                 playerShops: playerShops,
                 parties: parties,
                 clans: clans,
+                pets: pets,
                 rateLimiter: authRateLimiter,
                 registrationRateLimiter: registrationRateLimiter,
                 gmAccounts: gmAccounts);

@@ -658,6 +658,9 @@ public static partial class WireProtocol
             108 => WireOpcode.ClanResult,
             109 => WireOpcode.ClanSnapshot,
             110 => WireOpcode.PlayerMovementIntent,
+            111 => WireOpcode.PetCommand,
+            112 => WireOpcode.PetResult,
+            113 => WireOpcode.PetSnapshot,
             _ => 0
         };
         if (opcode == 0) return false;
@@ -686,6 +689,11 @@ public static partial class WireProtocol
             WireOpcode.ClanCommand => advertised >= ClanCommandHeaderBytes && advertised <= ClanCommandMaximumFrameBytes,
             WireOpcode.ClanResult => advertised == ClanResultFrameBytes,
             WireOpcode.ClanSnapshot => advertised >= ClanSnapshotHeaderBytes && advertised <= ClanSnapshotMaximumFrameBytes,
+            WireOpcode.PetCommand => advertised == PetCommandFrameBytes,
+            WireOpcode.PetResult => advertised == PetResultFrameBytes,
+            WireOpcode.PetSnapshot => advertised >= PetSnapshotHeaderBytes &&
+                advertised <= PetSnapshotMaximumFrameBytes &&
+                (advertised-PetSnapshotHeaderBytes)%PetSnapshotEntryBytes==0,
             WireOpcode.CharacterCreate => advertised is >= 12 and <= MaxCharacterCreateFrameBytes,
             WireOpcode.CharacterCreateResult => advertised is >= 20 and <= MaxCharacterCreateResultFrameBytes,
             WireOpcode.WorldReady => advertised == WorldReadyFrameBytes,
