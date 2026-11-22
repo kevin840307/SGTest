@@ -23,8 +23,6 @@ var _epoch := 0
 var _map := 0
 var _local_visual: Dictionary = {} # own actor presentation only; never authoritative
 var _own_actor_id := 0
-var _source_assets: Dictionary = {}
-var _name_top_cache: Dictionary = {}
 
 func clear() -> void:
 	_views.clear()
@@ -38,13 +36,10 @@ func clear() -> void:
 	_map = 0
 	_local_visual.clear()
 	_own_actor_id = 0
-	# Assets belong to the caller; never mutate the shared manifest on clear.
-	_source_assets = {}
-	_name_top_cache.clear()
+
 
 func configure(assets: Dictionary, appearance: Dictionary = {}) -> Error:
 	clear()
-	_source_assets = assets
 	var error := add_profile(assets,appearance)
 	if error == OK:
 		_default_profile_key = str(Profile.definition(appearance).key)
@@ -62,10 +57,6 @@ func add_profile(assets: Dictionary, appearance: Dictionary) -> Error:
 		return error
 	_views.merge(profile.views)
 	_profiles[profile.key] = profile
-	# Dynamic profiles can introduce hair/equipment atlases after configure().
-	# Keep them available for stable name geometry too.
-	_source_assets.merge(assets,true)
-	_name_top_cache.erase(profile.key)
 	return OK
 
 func has_profile(appearance: Dictionary) -> bool:
@@ -451,38 +442,6 @@ func actors_at(now_usec: int) -> Array:
 			sampled = Vector2(float(value.x),float(value.y))
 		result.append({"id":str(id),"p":sampled,"parts":parts})
 	return result
-
-
-func stable_name_top_offset(actor_id: int) -> float:
-	# Player names attach to the standing paper-doll pivot, not per-frame
-	# sprite bounds. Walking animation trims/head bob made those bounds vary
-	# every 100ms, moving names up/down even on perfectly straight terrain.
-	if not _actors.has(actor_id):
-		return -58.0
-	var profile = _actors[actor_id].profile
-	if _name_top_cache.has(profile.key):
-		return float(_name_top_cache[profile.key])
-	var highest := -52.0
-	var all_parts: Array = profile.parts.values()
-	all_parts.append_array(profile.overlays.values())
-	for part in all_parts:
-		if not _source_assets.has(str(part[0])):
-			continue
-		var manifest: Dictionary = _source_assets[str(part[0])].manifest
-		for action in ["NS","NR"]:
-			for facing in range(1,9):
-				var key: String = str(part[1])+"_"+action+str(facing)
-				var view: Dictionary = manifest.get("logical_views",{}).get(key,{})
-				if view.is_empty():
-					continue
-				var indices: Array = manifest.clips.get(str(view.clip),[])
-				for index in indices:
-					var frame: Dictionary = manifest.frames[int(index)]
-					if int(frame.page)<0:
-						continue
-					highest = minf(highest,float(frame.trim[1])-float(frame.origin[1]))
-	_name_top_cache[profile.key] = highest - 6.0
-	return highest - 6.0
 
 
 func position_at(actor_id: int, now_usec: int) -> Vector2:

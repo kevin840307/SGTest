@@ -203,8 +203,8 @@ func run() -> void:
 	# A fresh command after one completed stop cannot inherit the prior
 	# settling target or a stale route.
 	check(continuous.request_target(Vector2(152,24),2),"new move after stop rejected")
-	check(continuous._settle_target == Vector2.INF and continuous.moving,
-		"old settle target interrupted a new click")
+	check(continuous.moving and continuous.active,
+		"new click did not restart a clean Recovered route after Server stop")
 	var walls: Array[Vector2i] = []
 	for y in range(10):
 		walls.append(Vector2i(5,y))

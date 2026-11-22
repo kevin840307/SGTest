@@ -68,6 +68,14 @@ func _run() -> void:
 		"facing":own.facing,
 		"self_state":own,
 		"entities":{2:remote},
+		"player_identities":{
+			1:{"connection_epoch":1,"entity_map_epoch":15,"server_unix_ms":1000,
+				"pink_until_unix_ms":0,"pvp_updated_unix_ms":0,"mode":0,
+				"red_man":false,"display_name":"AppearanceSelf"},
+			2:{"connection_epoch":1,"entity_map_epoch":15,"server_unix_ms":1000,
+				"pink_until_unix_ms":0,"pvp_updated_unix_ms":0,"mode":0,
+				"red_man":false,"display_name":"AppearanceRemote"},
+		},
 		"last_aoi_tick":1,
 	}
 	view.set_player_snapshot(snapshot)

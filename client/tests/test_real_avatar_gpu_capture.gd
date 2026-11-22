@@ -32,7 +32,12 @@ func _run() -> void:
 	world.set_player_snapshot({
 		"world_ready":true,"map_epoch":1,"map_id":15,"actor_id":27,
 		"x":p.x,"y":p.y,"facing":6,"self_state":own,
-		"entities":{},"monsters":{},"player_identities":{}
+		"entities":{},"monsters":{},
+		"player_identities":{
+			27:{"connection_epoch":1,"entity_map_epoch":1,"server_unix_ms":1000,
+				"pink_until_unix_ms":0,"pvp_updated_unix_ms":0,"mode":0,
+				"red_man":false,"display_name":"GPU Name Anchor"}
+		}
 	})
 	var deadline := Time.get_ticks_msec()+30000
 	while world.phase != "ready" and Time.get_ticks_msec()<deadline:
@@ -52,6 +57,16 @@ func _run() -> void:
 		quit(1)
 		return
 	var avatar_commands: Array = world._canvas._commands.filter(func(c):return str(c.actor_id)=="27")
+	var name_rows: Array = world._canvas._player_labels.filter(func(l):return str(l.actor_id)=="27")
+	if name_rows.size()!=1 or not bool(name_rows[0].get("recovered_player_anchor",false)):
+		push_error("Actual GPU player name did not use Recovered fixed anchor")
+		quit(1)
+		return
+	var displayed_feet:=world.players.position_at(27,Time.get_ticks_usec())
+	if name_rows[0].p.distance_to(displayed_feet)>0.01:
+		push_error("Actual GPU player name moved relative to player pivot")
+		quit(1)
+		return
 	if avatar_commands.size() < 4:
 		push_error("Own paper doll has no draw commands "+str(world.draw_list.invalid_actor_examples))
 		quit(1)

@@ -9,13 +9,9 @@ const FAST_PATH_BUDGET_USEC := 5000 # Recovered caps normal query at 6000us.
 const SEARCH_BUDGET_CHECK_INTERVAL := 16
 # Recovered player.gd movement semantics: path is fully solved before walking,
 # then visible waypoints/corner probes make turns continuous.
-const WAYPOINT_REACH_DISTANCE := 10.0
 const CORNER_STEER_SAMPLES := 4
-const CORRECTION_DEADBAND := 24.0
 const CORRECTION_SNAP := 96.0
 const SETTLE_SNAP := 5.0
-const VISUAL_RECOVERY_SPEED := 480.0
-const MAX_VISUAL_CORRECTION := 320.0
 const DIRECTIONS := [
 	Vector2i(1,0),Vector2i(0,1),Vector2i(-1,0),Vector2i(0,-1),
 	Vector2i(1,1),Vector2i(-1,1),Vector2i(-1,-1),Vector2i(1,-1)
@@ -25,10 +21,9 @@ var ready := false
 var active := false
 var moving := false
 var position := Vector2.INF
-# Logical route and displayed paper doll are separate during a Server
-# correction. Never teleport the rendered actor 146-200px in one frame.
+# Presentation follows the verified local route 1:1. Recovered-style Server
+# corrections cancel that route rather than starting a second catch-up motion.
 var visual_position := Vector2.INF
-var _visual_settling := false
 var facing := 6
 var width := 0
 var height := 0
@@ -40,10 +35,8 @@ var _route_index := 0
 var _target_cell := Vector2i(-1,-1)
 var _expected_sequence := 0
 var _server_seen_moving_for_expected := false
-var _waiting_server_stop := false
 var _last_server_tick := -1
 var _last_authority := Vector2.INF
-var _settle_target := Vector2.INF
 var _full_path_searches := 0
 var _last_correction_warn_msec := -5000
 var correction_events := 0
@@ -58,7 +51,6 @@ func clear() -> void:
 	moving = false
 	position = Vector2.INF
 	visual_position = Vector2.INF
-	_visual_settling = false
 	facing = 6
 	width = 0
 	height = 0
@@ -70,10 +62,8 @@ func clear() -> void:
 	_target_cell = Vector2i(-1,-1)
 	_expected_sequence = 0
 	_server_seen_moving_for_expected = false
-	_waiting_server_stop = false
 	_last_server_tick = -1
 	_last_authority = Vector2.INF
-	_settle_target = Vector2.INF
 	_full_path_searches = 0
 	_last_correction_warn_msec = -5000
 	correction_events = 0
@@ -303,20 +293,9 @@ func _diagnose_correction(reason: String, authoritative: Vector2) -> void:
 		reason,map_epoch,actor_id,_expected_sequence,str(position),str(authoritative),distance])
 
 
-func _begin_visual_correction() -> void:
-	# Recovered apply_position_correction() does not create a second, faster
-	# visual walk. A correction replaces the route and returns to idle.
-	visual_position = position
-	_visual_settling = false
-	active = false
-	moving = false
-
-
 func advance_visual(_delta: float) -> void:
-	# During ordinary movement the paper doll is the movement position itself.
-	# Keeping a second 480px/s follower is what made obstacle routes look as if
-	# the actor paused and then slid/caught up.
-	if ready and position.is_finite() and not _visual_settling:
+	# Recovered-style presentation: no separate catch-up velocity.
+	if ready and position.is_finite():
 		visual_position = position
 
 
@@ -345,7 +324,6 @@ func observe(snapshot: Dictionary) -> void:
 	if not position.is_finite() or not active:
 		position = authoritative
 		visual_position = authoritative
-		_visual_settling = false
 		facing = int(own.get("facing",6))
 		return
 	if bool(snapshot.get("player_dead",false)) or bool(snapshot.get("waiting_for_new_map",false)):
@@ -353,7 +331,6 @@ func observe(snapshot: Dictionary) -> void:
 		active = false
 		position = authoritative
 		visual_position = authoritative
-		_visual_settling = false
 		return
 	var receipt := int(snapshot.get("last_receipt_sequence",0))
 	if _expected_sequence > 0 and receipt >= _expected_sequence and int(snapshot.get("last_receipt_status",-1)) != 0:
@@ -362,7 +339,6 @@ func observe(snapshot: Dictionary) -> void:
 		stop("receipt_rejected")
 		position = authoritative
 		visual_position = authoritative
-		_visual_settling = false
 		active = false
 		return
 	# A successful receipt can precede the SelfState for the new movement
@@ -398,8 +374,6 @@ func observe(snapshot: Dictionary) -> void:
 	visual_position = authoritative
 	stop("server_stop")
 	active = false
-	_visual_settling = false
-	_settle_target = Vector2.INF
 
 func _set_route(goal: Vector2i) -> bool:
 	# Recovered solves the complete route BEFORE movement starts. Do the same:
@@ -457,8 +431,7 @@ func retarget_safe(max_authority_error: float = 32.0) -> bool:
 	# new cursor route on top of an unresolved correction / large prediction
 	# lead; otherwise every 80ms hold repath starts from a different cell than
 	# ServerWorld and the two paths can diverge by hundreds of pixels.
-	return ready and active and not _visual_settling and \
-		position.is_finite() and _last_authority.is_finite() and \
+	return ready and active and position.is_finite() and _last_authority.is_finite() and \
 		authority_error() <= max_authority_error
 
 
@@ -468,8 +441,6 @@ func request_target(point: Vector2, sequence: int) -> bool:
 	var goal := _cell(point)
 	if not _walkable(goal):
 		return false
-	_settle_target = Vector2.INF
-	_visual_settling = false
 	if not visual_position.is_finite():
 		visual_position = position
 	if goal == _target_cell and (moving or not _search.is_empty()):
@@ -482,7 +453,6 @@ func request_target(point: Vector2, sequence: int) -> bool:
 		return false
 	_expected_sequence = maxi(_expected_sequence,sequence)
 	_server_seen_moving_for_expected = false
-	_waiting_server_stop = false
 	active = true
 	return true
 
@@ -496,14 +466,11 @@ func _wait_for_server_stop() -> void:
 	_route.clear()
 	_route_index = 0
 	moving = false
-	_waiting_server_stop = true
 	active = true
 
 
 func stop(reason: String = "external") -> void:
 	last_stop_reason = reason
-	_waiting_server_stop = false
-	_settle_target = Vector2.INF
 	_search.clear()
 	moving = false
 	_route.clear()

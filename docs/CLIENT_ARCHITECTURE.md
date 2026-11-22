@@ -1,5 +1,19 @@
 # SGTest Client — 重建設計
 
+## 2026-11-22 — Recovered 障礙移動與固定 NameLabel 錨點（現行方案）
+
+> **本節取代同日較早的「Server correction 以 480px/s 顯示收斂」與「依 paper-doll/profile 計算名字高度」方案。** 真實障礙案例證明這兩個額外 presentation 層反而會造成停頓、追趕滑行與名稱初始跳動；現行實作改回 Recovered 的單一路徑／固定人物節點模型。
+
+- **直接對照來源**：以 `C:\SGO\Recovered\client\player.gd`、`scripts\legacy_pathfinder.gd`、`player.tscn` 為基準。Recovered 在人物開始走之前先得到完整 route；移動時每 physics frame 只做一次固定速度步進，能看見下一 waypoint 才提前切換，轉角用 3/4、1/2、1/4 probe；`NameLabel` 是 Player 節點的固定子 UI，rect 為 top=-130、bottom=-107，而不是每個動畫 frame 重新量 sprite bounds。
+- **Client 完整路徑後才開始走**：`LocalMovement._set_route()` 對直線使用 verified direct segment；有障礙則完整完成 bounded A* 後才公開 route，再用 `Blocking.dat` line-of-sight 做 path smoothing。A* 不再跨 render frame 先讓人物停著、完成後再補走，因此不會形成「障礙前不動→突然加快／滑過去」。
+- **Client/Server 同一個 steering 契約**：`MapNavigator` 也先 direct-clear、否則 A* 完成後 smoothing；Client 60FPS 每步最多約4px，Server 30Hz 每 tick 最多8px。每個轉角只有下一 waypoint 已 `IsDirectClear` 才能提前 promotion；不採 Recovered 的 10px close-to-waypoint 提前轉彎，因 SGTest 沒有 CharacterBody2D collider 可兜底。每個實際小步只驗證「目標 cell 可走、最多跨相鄰 cell」；完整 segment 安全性已由 A*/smoothing/corner probe 的 supercover 驗證，避免對 4px 浮點子線段重跑 supercover 在格線角誤判撞牆。
+- **到終點不倒退**：Client 先到 collision-cell centre 時停止走路動畫，但維持 local visual owner；等 Server 走到相同終點並回報 stop 才釋放。這修正了實測 Client 到 `(952,808)` 後因 Server 還在 `(940.7,799.0)` 而瞬間倒退約13.7px 的問題，不使用額外 catch-up velocity。
+- **Server correction 回歸 Recovered 語意**：真 divergence／拒絕／權威 stop 直接取消 local route 並採用 Server anchor；不再建立第二條 480px/s presentation route。正常路徑的目標是讓 Client/Server route 一致，使 correction 在日常走路中為0，而不是把 correction 動畫化掩蓋。
+- **玩家名稱完全固定於人物節點**：WorldView 只把 label 綁到 actor feet/pivot，WorldCanvas 依 Recovered `NameLabel[-130,-107]` 算固定文字 baseline。移除 `stable_name_top_offset()`、profile asset 高度 cache 等死碼。第一個有名稱的 frame、動態換 Hair/衣物後、125 個八方向走路 frame 均要求名稱相對人物 pivot 不變；NPC 名稱仍使用其靜態 sprite bounds。
+- **強制障礙驗收**：新增 `test_recovered_obstacle_movement.gd`，垂直牆強迫繞路，要求 `request_target()` 回傳前 `_search` 已清空、route>=2、moving frame 不得0位移、60FPS單步<=4.01px、不得進 blocked cell。Formal Host Gate 的 Map15 也加入真 Blocking wall，`ONLINE_MAIN_GATE_OBSTACLE_ROUTE waypoints=2` 成為 runner 必要 milestone；雙 Godot Main＋.NET Server PASS，251 個移動 samples、長按9次 retarget `corrections=0 max=0.0`，AOI、Map15↔13、資源釋放皆 PASS。
+- **真 GPU**：正式 `assets.pck`、Godot 4.7.2、RTX3050 OpenGL 1140×660 實際 framebuffer PASS；10層 paper doll、Hair01 與玩家名稱同時存在，角色 on/off 比較仍有 **3,728px** 真像素差異，人工檢視畫面名稱位於人物上方固定位置。
+- **Server checks**：先正式建置 `SGTest.Server.Host`（Release 0 warning / 0 error），再真正執行 `SGTest.Server.Checks`（不是只做 `dotnet test` build），完整 checks **exit code 0**。其中 Blocking/MapNavigator 的 direct shortcut、`IsStepClear`、堵角、門洞繞路、封閉牆，以及後續 Gateway／AOI／Identity／Combat／Inventory／Trade 等整套檢查皆 PASS。
+
 ## 2026-11-22 — 長按順移、Hair01 消失、玩家名稱抖動
 
 - **Hair01 根因已由實機 log 證實**：正式 7778 Client 反覆記錄 `WORLD_ACTOR_RENDER_SKIPPED ... layer=players/b/hair/hair01`，並非髮型來源檔缺資料。正式 `assets.pck` 檢查 hair01 的 NS/NR 八方向、各4 frame 均完整；真正缺口是動態 AOI 外觀在 `_pump_pending_player_profiles()` 只加入 `PlayerPresentation`，沒有把新 atlas 同步加入已初始化的 `WorldDrawList._assets`。新增 `WorldDrawList.add_actor_assets()`，late-loaded hair/衣物在 profile 生效前同步註冊繪製器；`PlayerPresentation` 亦合併這些來源供固定名稱幾何使用。另依 Recovered paper-doll RAW_ORDER（Head 後 Hair）補上來源 Body draw_slots 未包含的 Hair slot 1。

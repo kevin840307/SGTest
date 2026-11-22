@@ -74,16 +74,12 @@ static class Checks
         for (int i = 0; i < path.Cells.Count; i++)
         {
             var curr = path.Cells[i];
-            Require(grid.IsWalkable(curr), "each cell traversable");
+            Require(grid.IsWalkable(curr), "each waypoint traversable");
             if (i == 0) continue;
             var prev = path.Cells[i - 1];
-            int dx = curr.X - prev.X, dy = curr.Y - prev.Y;
-            Require(Math.Abs(dx) <= 1 && Math.Abs(dy) <= 1 && (dx != 0 || dy != 0),
-                    "path adjacent");
-            if (dx != 0 && dy != 0)
-                Require(grid.IsWalkable(new GridCell(prev.X + dx, prev.Y)) &&
-                        grid.IsWalkable(new GridCell(prev.X, prev.Y + dy)),
-                        "path cannot cut corner");
+            var a = Center(prev); var b = Center(curr);
+            Require(grid.IsDirectClear(a.X, a.Y, b.X, b.Y),
+                    "smoothed waypoint segment must be direct-clear");
         }
     }
 
@@ -190,14 +186,27 @@ static class Checks
                         "blocked start rejected");
             });
 
-            Run("open map direct line and deterministic diagonal A*", () =>
+            Run("movement step validates local destination without rerunning route supercover", () =>
+            {
+                Require(grid.IsStepClear(15.9, 8.0, 16.1, 8.0),
+                        "adjacent verified step rejected at cell boundary");
+                Require(!grid.IsStepClear(8.0, 8.0, 40.0, 8.0),
+                        "movement step skipped more than one cell");
+                string folder = Fixture(root, 38, 3, 3,
+                    (x, y) => (x, y) == (1, 0) ? (byte)7 : (byte)0);
+                var blocked = BlockingGrid.Load(folder, 38);
+                Require(!blocked.IsStepClear(8.0, 8.0, 24.0, 8.0),
+                        "movement step entered blocked target cell");
+            });
+
+            Run("open map direct line uses Recovered shortcut deterministically", () =>
             {
                 Require(grid.IsDirectClear(8, 8, 72, 72), "empty diagonal direct");
                 var route = navigation.FindPath(8, 8, 72, 72);
                 AssertPath(grid, route, new GridCell(0, 0), new GridCell(4, 4));
-                Require(route.Cells.Count == 5, "octile shortest path");
+                Require(route.Cells.Count == 2, "direct route should expose only start and goal");
                 Require(route.Cells.SequenceEqual(navigation.FindPath(8, 8, 72, 72).Cells),
-                        "deterministic ties");
+                        "direct route deterministic");
                 Require(navigation.FindPath(8, 8, 8, 8).Cells.Count == 1, "same cell");
                 MustReject<ArgumentOutOfRangeException>(() =>
                     navigation.FindPath(8, 8, 72, 72, maxExpanded: 0), "zero budget");
@@ -226,7 +235,7 @@ static class Checks
                 Require(!g.IsDirectClear(a.X, a.Y, b.X, b.Y), "wall chord blocked");
                 var path = nav.FindPath(a.X, a.Y, b.X, b.Y);
                 AssertPath(g, path, start, goal);
-                Require(path.Cells.Contains(new GridCell(3, 6)), "must use actual door");
+                Require(path.Cells.Count >= 3, "detour must retain at least one verified bend");
                 Require(nav.FindPath(a.X, a.Y, b.X, b.Y, 2).Status == PathStatus.BudgetExceeded,
                         "work budget fails closed");
                 Require(path.Cells.SequenceEqual(nav.FindPath(a.X, a.Y, b.X, b.Y).Cells),
