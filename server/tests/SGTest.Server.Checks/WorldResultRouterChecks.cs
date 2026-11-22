@@ -179,8 +179,9 @@ internal static class WorldResultRouterChecks
         Require(router.PlayerIdentityUpdates.Completion.IsCompletedSuccessfully &&
                 router.PlayerPvpCombatVisuals.Completion.IsCompletedSuccessfully &&
                 router.PlayerPvpSkillVisuals.Completion.IsCompletedSuccessfully &&
-                router.PetWorldUpdates.Completion.IsCompletedSuccessfully,
-                "PvP/identity/pet AOI channels remained open after router shutdown");
+                router.PetWorldUpdates.Completion.IsCompletedSuccessfully &&
+                router.PetAttackRequests.Completion.IsCompletedSuccessfully,
+                "PvP/identity/pet channels remained open after router shutdown");
         bool doubleReaderRejected = false;
         try { await router.RunAsync(source.Reader); }
         catch (InvalidOperationException) { doubleReaderRejected = true; }
@@ -205,6 +206,7 @@ internal static class WorldResultRouterChecks
             router.ChangedBatches.Completion,
             router.ResyncRequests.Completion,
             router.AttackRequests.Completion,
+            router.PetAttackRequests.Completion,
             router.SkillRequests.Completion,
             router.SkillPreflightRequests.Completion,
             router.PreparedSkillActions.Completion,

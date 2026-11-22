@@ -120,21 +120,21 @@ class ArchitectureConventionsChecks(unittest.TestCase):
                 self.assertIn("namespace SGTest.Server.Gateway;", source)
         self.assertEqual(core.count("private readonly object _gate"), 1)
         self.assertEqual(core.count("new WorldResultRouterOptions()"), 1)
-        self.assertEqual(core.count("Channel.CreateBounded<"), 13)
+        self.assertEqual(core.count("Channel.CreateBounded<"), 14)
         for source in (ingress, replies, ticks):
             self.assertNotIn("Channel.CreateBounded", source)
             self.assertNotIn("new WorldResultRouter(", source)
             self.assertNotIn("new GatewayConnection(", source)
             self.assertNotIn("new SqliteIdentityStore(", source)
             self.assertNotIn("new SemaphoreSlim(", source)
-        for name in ("TryRequestNormalAttack", "TryRequestSkill",
+        for name in ("TryRequestNormalAttack", "TryRequestPetAttack", "TryRequestSkill",
                      "PrepareSkillAsync", "FinishPreparedSkillAsync",
                      "TryPostPlayerDamageVisual", "TryRequestResync"):
             with self.subTest(request=name):
                 self.assertIn(" " + name + "(", ingress)
                 self.assertNotIn(" " + name + "(", replies)
         for name in ("QueuePlayerRespawnResult", "QueueAoi", "QueuePlayerDamage",
-                     "QueuePvpAttackResult", "QueueShopSnapshot",
+                     "QueuePvpAttackResult", "QueuePetAttackResult", "QueueShopSnapshot",
                      "QueueTradeTerminal", "QueueGroundPickupResult"):
             with self.subTest(reply=name):
                 self.assertIn(" " + name + "(", replies)
@@ -150,7 +150,7 @@ class ArchitectureConventionsChecks(unittest.TestCase):
         # PvP and identity visual AOI streams must close with the world pump,
         # not hang downstream consumers after clean shutdown or a fault.
         for channel in (
-            "_changed", "_resync", "_attacks", "_skills", "_skillPreflights",
+            "_changed", "_resync", "_attacks", "_petAttacks", "_skills", "_skillPreflights",
             "_preparedSkills", "_claimedGroundDrops", "_playerDamageVisuals",
             "_playerRespawnVisuals", "_playerIdentityUpdates",
             "_playerPvpCombatVisuals", "_playerPvpSkillVisuals", "_petWorldUpdates",
