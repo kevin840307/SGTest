@@ -3,10 +3,11 @@ extends RefCounted
 const Profile = preload("res://player/character_appearance_profile.gd")
 const PositionHistory = preload("res://movement/position_history.gd")
 const PARTS = Profile.BASE_PARTS
-# Recovered2 PaperDollLoader creates every walk_ frame at 8 FPS and the
-# engine keeps all parts on the same frame/progress. Never scale a variable
-# per-part ACT timeline to approximate that cadence.
-const WALK_FRAME_USEC := 125000
+# Recovered2 uses synced 8 FPS walk SpriteFrames; the original xnAction
+# engine has a 50Hz timeline with an adjustable action speed. Raise only
+# SGTest's shared paper-doll walk cadence to 10 FPS after gameplay feedback.
+# No change to world movement, network tick or server authority.
+const WALK_FRAME_USEC := 100000
 var _views: Dictionary = {}
 var _profiles: Dictionary = {}
 var _default_profile_key := "0:0:0:0:0"

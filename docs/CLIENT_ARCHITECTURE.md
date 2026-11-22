@@ -43,6 +43,12 @@ UI Node 由實際頁面擁有：`Recovered2AuthShell` 只有在本機 Theme 成�
 - SGTest 先前把 ACT 50Hz 變長幀 `timeline_ticks` 統一乘 1.25，會讓不同部件原始幀長造成腿／衣服與身體不同步；現在 `ActionTimeline.frame_at_uniform_cadence` 用 **125000µs/frame**，各 NR 動畫均用相同 wall-clock phase，仍使用來源 frame 順序。朝向切換和 Server 多次 MoveTarget 不重啟循環，攻擊／受擊 one-shot 結束後沿用同一 walk phase；真正停走才重設。NS/AA/NH/ND 仍使用原有 ACT 時間軸，不改原素材、碰撞、Server 協定。
 - `test_player_presentation.gd` 加入刻意不等長的 Leg ACT `5/11` ticks、其他 part `8/8` ticks，證明在 124999／125000／249999／250000／375000µs 邊界所有部件同幀，轉向、one-shot 回復與停止再走均 PASS；`test_world_appearance_profile.gd` 對本機私人 PCK 的正式角色分層 PASS。原生 GPU 主畫面動畫及使用者體感尚待實機視覺確認。
 
+## 2026-11-22 — 走路動畫第二次速度調整：8 FPS → 10 FPS
+
+- 使用者測試指出畫面中的腳步仍偏慢。參考 `C:\\SGO\\NewVersion\\Recovered2\\scripts\\paper_doll_loader.gd` + `paper_doll_engine.gd`：二創的 NR 紙娃娃部件固定 8 FPS，Body frame/progress 用於保持手腳／衣服同幀；同時讀取原版 `C:\\SGO\\Recovered\\Old\\ClientData\\Paradise.exe.lst` 中 `xnAction::SetSpeed`、`xnAction::SetAction`，原版有固定 50Hz 動作計時和可調整的 action speed，並**不能**從反編譯資料推導所有角色的單一真實 FPS。
+- 保留 SGTest 上輪已修正的所有部件共享 NR 時鐘、轉向／重派目的地不中斷步伐、AA/NH 結束後不重置步伐；依使用者體感將 `PlayerPresentation.WALK_FRAME_USEC` **125000 → 100000（8→10 FPS，+25%）**，這是 SGTest 的視覺調校，並非宣稱原版就是 10 FPS。`NS/AA/NH/ND` 等其他動畫、Server 權威移速、30Hz 運動 Tick、封包與碰撞皆不改。
+- 回歸測試採 99999／100000／199999／200000／300000µs 邊界，涵蓋所有目前紙娃娃層（包含另一工作分支新增的袖子圖層），確認本人與他人同步／轉向／受擊與攻擊後恢復／idle→walk 重啟。Windows Godot headless `test_player_presentation`、`test_position_history`、`test_client_fps_independence` PASS。**玩家實際感受與原版真視覺節奏仍待人工測試確認。**
+
 ## 2026-11-22 — 2D 角色移動／相機跟隨的連續插值修正
 
 - 參照唯讀 `C:\\SGO\\Recovered\\client\\player.gd` 的 `_physics_process` 連續位移及 Player `Camera2D`；SGTest 不採用本地遊戲權威，而是維持 Server 30Hz authoritative path，Client `SessionPanel` 目前每 50ms（約 20Hz）發布 UI snapshot，`WorldView` 跟隨 PlayerPresentation 的呈現位置。

@@ -1,5 +1,7 @@
 # SGTest 新版重建 TODO（2026-11-15）
 
+- PLAYER-WALK-ANIMATION-SPEED-TUNING [ ] 2026-11-22：使用者實機回饋8FPS人物步伐仍慢；比對二創 Recovered2 紙娃娃 8FPS 與原版 Paradise.exe.lst xnAction（50Hz更新，可變速度，不等於8FPS），只提高 SGTest NR 走路 **8→10FPS（125ms→100ms/圖，+25%）**；不改位移、Server同步或碰撞。所有部件包含新袖子共享 walk 時鐘；方向、重派路、攻擊恢復、停走重啟與 ACT 長短不一致的回歸測試 PASS。待玩家實際走路主觀觀感確認。
+
 - PLAYER-WALK-ANIMATION-RECOVERED2 [ ] 2026-11-22：使用者澄清不順暢主要是人物本身走路動畫，對照二創 Recovered2 PaperDollLoader 走路每部件固定8FPS、PaperDollEngine共享Body frame/progress、走路速率固定。SGTest 移除舊 NR 變長 ACT *1.25，改以每125ms一幀且所有紙娃娃部件共享時間相位；方向變化、長按 repath、AA/NH one-shot 後不中斷步伐，idle->walk才重設。人工設定不等長腿/身體 ACT regression、角色渲染／正式私人 PCK 外觀測試 PASS。**正式遊戲真人長走路與 GPU 視覺體感仍須驗收**。
 
 - PLAYABILITY-RECOVERED-MOVEMENT-SECOND-PASS [ ] 2026-11-22：Recovered 原 Client 本地 physics 連續移動、SyncPosition 約50ms、Server 不變位置略過及排隊 MoveEntity 併合，與 SGTest Client MoveTarget + Server30Hz權威移動不同。這輪 Server 授權視線內前瞻最多6個 collision 路點、每步仍驗證Blocking.dat且8px/tick；同終點格重複 MoveTarget 確認序號但不重跑A*／不重置路線或重發移動行為修訂。Client 僅 confirmed moving 有限1.5tick/12px視覺預測，收到新的權威位置或idle可拉回；不動真實座標、碰撞、射程、物品等規則。新增兩個Server路線案例 + Client dead-reckoning、idle、斷包回歸。**本輪尚未實作本地Blocking.dat A* 預測，也未修改30Hz AOI廣播頻率；真GPU走路觀感與玩家多開負載未驗證，Server現有進程需重啟載入程式。**

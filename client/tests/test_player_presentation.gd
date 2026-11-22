@@ -18,8 +18,14 @@ func run() -> void:
 	var texture := ImageTexture.create_from_image(image)
 	var assets := {}
 	var source_slots := [12.0,7.0,9.0,5.0,0.0,1.0] # Real JSON numbers use float Variants.
-	var rendered_slots := [12,12,7,9,9,5,0,1]
 	var definition: Dictionary = AppearanceProfile.definition({})
+	var rendered_slots: Array[int] = []
+	for raw_slot in source_slots:
+		var slot := int(raw_slot)
+		if definition.parts.has(slot):
+			rendered_slots.append(slot)
+		if definition.overlays.has(slot):
+			rendered_slots.append(slot)
 	var profile_parts: Array = definition.parts.values()
 	profile_parts.append_array(definition.overlays.values())
 	for part in profile_parts:
@@ -31,7 +37,7 @@ func run() -> void:
 				views[str(part[1])+"_"+action+str(facing)] = {
 					"clip":str(action),"flip_h":facing>=5,
 					# One leg layer has deliberately uneven original ACT timings.
-					# Recovered2 walks every part at fixed 8 FPS regardless.
+					# All body, leg, sleeve and equipment layers share 10 FPS in SGTest.
 					"timeline_ticks":[[0,4],[1,4]] if one_shot else ([[0,5],[1,11]] if str(part[1]) == "B-LEG" else [[0,8],[1,8]]),
 					"loop":not one_shot,"draw_slots":source_slots}
 		assets[part[0]] = {"pages":[texture],"manifest":{"logical_views":views,"clips":clips,"frames":[
@@ -47,18 +53,19 @@ func run() -> void:
 	remote.y=20.0
 	var snapshot := {"world_ready":true,"map_epoch":1,"map_id":15,"actor_id":1,"x":10.0,"y":10.0,"facing":6,"self_state":own,"entities":{2:remote},"last_aoi_tick":1}
 	players.apply_snapshot(snapshot,0)
-	# Recovered2 PaperDollLoader drives all walk parts at exactly 8 FPS.
+	# Recovered2's 8 FPS shared paper-doll timing is the baseline, but
+	# SGTest runs 10 FPS for a more readable stride; no 50Hz ACT drift.
 	# A variable raw ACT duration in B-LEG must not desynchronize the legs.
 	var cadence := Players.new()
 	check(cadence.configure(assets)==OK,"walk-cadence profile setup")
 	var walk_snapshot: Dictionary = snapshot.duplicate(true)
 	cadence.apply_snapshot(walk_snapshot,0)
-	for sample in [[124999,0],[125000,1],[249999,1],[250000,0],[374999,0],[375000,1]]:
+	for sample in [[99999,0],[100000,1],[199999,1],[200000,0],[299999,0],[300000,1]]:
 		var sample_actors: Array = cadence.actors_at(int(sample[0]))
 		check(sample_actors.size()==2,"fixed walk cadence actor lost")
 		for sample_actor in sample_actors:
 			for layer in sample_actor.parts:
-				check(int(layer.frame)==int(sample[1]),"8 FPS body/legs/clothes diverged at %d usec" % int(sample[0]))
+				check(int(layer.frame)==int(sample[1]),"10 FPS body/legs/clothes diverged at %d usec" % int(sample[0]))
 	# Change facing during the walk: retain the same phase for the new
 	# directional clips, exactly like Recovered2 sharing the Body frame.
 	walk_snapshot.self_state.facing=3
@@ -74,8 +81,8 @@ func run() -> void:
 		"attacker_connection_epoch":1,"attack_sequence":1,
 		"target_entity_id":1001500001,"status":0,"damage":1,
 		"target_revision":2,"facing":3}]
-	cadence.apply_snapshot(walk_snapshot,410000)
-	var after_attack: Dictionary=cadence.actors_at(625000).filter(func(v):return str(v.id)=="2")[0]
+	cadence.apply_snapshot(walk_snapshot,350000)
+	var after_attack: Dictionary=cadence.actors_at(550000).filter(func(v):return str(v.id)=="2")[0]
 	check(int(after_attack.parts[0].frame)==1,"one-shot completion restarted walk at frame zero")
 	# A genuine stop/restart does reset the cycle, unlike path repaths.
 	walk_snapshot.player_attack_events=[]
@@ -85,21 +92,23 @@ func run() -> void:
 	walk_snapshot.self_state.moving=true
 	walk_snapshot.entities[2].moving=true
 	cadence.apply_snapshot(walk_snapshot,725000)
-	check(int(cadence.actors_at(849999)[0].parts[0].frame)==0 and
-		int(cadence.actors_at(850000)[0].parts[0].frame)==1,
-		"idle->walk did not restart the exact 125ms walking cadence")
+	check(int(cadence.actors_at(824999)[0].parts[0].frame)==0 and
+		int(cadence.actors_at(825000)[0].parts[0].frame)==1,
+		"idle->walk did not restart the exact 100ms walking cadence")
 	# Long-held mouse movement can issue fresh MoveTarget commands while
 	# the character never stops running. A new command sequence must not
 	# reset the NR animation clock or lock the paper doll in frame zero.
 	own.movement_action_sequence = 2
 	remote.movement_action_sequence = 2
 	players.apply_snapshot(snapshot,100000)
-	# 1.25x walk cadence advances NR sooner than the raw 50 Hz timeline;
-	# all paper-doll parts stay on the same frame without affecting movement.
+	# The 100ms shared walk clock advances at a fixed 10 FPS regardless of
+	# 50 Hz ACT per-layer frame time or MoveTarget retransmissions.
 	var early_walk: Array = players.actors_at(140000)
 	check(early_walk.size()==2 and int(early_walk[0].parts[0].frame)==1 and int(early_walk[1].parts[0].frame)==1,"walk animation did not speed up for owner and observer")
 	var actors := players.actors_at(160000)
-	check(actors.size()==2 and actors[0].parts.size()==8 and int(actors[0].parts[0].frame)==1 and int(actors[1].parts[0].frame)==1,"continuous movement sequence repath reset walk animation")
+	check(actors.size()==2 and actors[0].parts.size()==rendered_slots.size() and
+		int(actors[0].parts[0].frame)==1 and int(actors[1].parts[0].frame)==1,
+		"continuous movement sequence repath reset walk animation")
 	for actor in actors:
 		var base_leg_at: int = actor.parts.find_custom(
 			func(part): return str(part.asset)=="players/b/base/leg")
@@ -108,10 +117,11 @@ func run() -> void:
 		check(base_leg_at>=0 and shorts_at>base_leg_at,
 			"starter shorts replaced Standard Leg")
 	var commands := draw.build(Rect2(-100,-100,400,400),actors)
-	check(draw.error==OK and commands.size()==16,"multipart ordered draw")
-	for i in 16:
-		var actor_offset := 0 if i<8 else 8
-		check(commands[i].actor_id==("1" if i<8 else "2") and 				int(commands[i].slot)==rendered_slots[i-actor_offset],
+	check(draw.error==OK and commands.size()==rendered_slots.size()*2,"multipart ordered draw")
+	for i in commands.size():
+		var part_index: int = i%rendered_slots.size()
+		check(commands[i].actor_id==("1" if i<rendered_slots.size() else "2") and
+			int(commands[i].slot)==rendered_slots[part_index],
 			"actor parts interleaved / wrong source slot")
 	check(commands[0].destination==Rect2(9,9,-3,2),"mirrored trimmed origin wrong")
 	# A reliable remote attack event uses Server facing=3 even while the last
