@@ -235,6 +235,38 @@ internal static class WorldSimulationChecks
                   Math.Abs(settled.Y - 88) < 0.000001, "smooth path missed target");
         });
 
+        Checks.Run("8-way heading boundary does not rapidly flip facing during repath", () =>
+        {
+            var world = new ServerWorld([b], new WorldLimits(MovementPixelsPerTick: 8));
+            Check(world.TryTrustedRegister(143, 81, 24, 24, out var actor), "register");
+            // Alternating two legal targets makes the actual heading straddle
+            // E/SE's 22.5-degree boundary without a meaningful turn.
+            foreach (var (sequence, x, y) in new[] {
+                (1u, 120.0, 56.0), (2u, 120.0, 72.0),
+                (3u, 120.0, 56.0), (4u, 120.0, 72.0) })
+            {
+                Check(world.TryPostMove(Move(actor, sequence, x, y)), "enqueue repath");
+                HasReceipt(world.Tick(), MoveReceiptStatus.Accepted);
+                var at = world.GetActor(143)!.Value;
+                Check(at.Facing == 6, "small heading fluctuation flipped E/SE sprite");
+            }
+            // A real sharp turn must not be delayed by the facing dead band.
+            Check(world.TryPostMove(Move(actor, 5, 24, 104)), "sharp turn");
+            HasReceipt(world.Tick(), MoveReceiptStatus.Accepted);
+            Check(world.GetActor(143)!.Value.Facing == 1,
+                  "hysteresis prevented deliberate SW turn");
+
+            var upper = new ServerWorld([b], new WorldLimits(MovementPixelsPerTick: 8));
+            Check(upper.TryTrustedRegister(144, 81, 24, 72, out var session), "negative heading register");
+            Check(upper.TryPostMove(Move(session, 1, 120, 40)), "negative heading east");
+            HasReceipt(upper.Tick(), MoveReceiptStatus.Accepted);
+            Check(upper.GetActor(144)!.Value.Facing == 6, "negative heading east facing");
+            Check(upper.TryPostMove(Move(session, 2, 120, 24)), "negative heading northeast");
+            HasReceipt(upper.Tick(), MoveReceiptStatus.Accepted);
+            Check(upper.GetActor(144)!.Value.Facing == 6,
+                  "small negative heading fluctuation flipped E/NE sprite");
+        });
+
         Checks.Run("A* detour proceeds cell-by-cell without tunnelling through solid wall", () =>
         {
             var world = new ServerWorld(both);

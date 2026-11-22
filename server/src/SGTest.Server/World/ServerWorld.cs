@@ -509,7 +509,7 @@ public sealed class ServerWorld
                 updated = true;
                 break;
             }
-            actor.Facing = FacingFromDisplacement(dx, dy);
+            actor.Facing = FacingFromDisplacement(dx, dy, actor.Facing);
             actor.X = nx;
             actor.Y = ny;
             remaining -= pixels;
@@ -533,11 +533,25 @@ public sealed class ServerWorld
         }
     }
 
-    private static byte FacingFromDisplacement(double dx, double dy)
+    private static byte FacingFromDisplacement(double dx, double dy, byte previousFacing)
     {
         // Original world-space convention: E=6, SE=7, S=8, SW=1,
-        // W=2, NW=3, N=4, NE=5. Only a legal traversed segment calls this.
-        int sector = (int)Math.Floor(Math.Atan2(dy, dx) / (Math.PI / 4) + 0.5);
+        // W=2, NW=3, N=4, NE=5. A* waypoint steering can move a few
+        // degrees either side of a 22.5-degree sector boundary on adjacent
+        // ticks. Retain the existing facing until the new heading is clearly
+        // outside its sector: this is visual facing hysteresis, NOT steering.
+        double heading = Math.Atan2(dy, dx);
+        if (previousFacing is >= 1 and <= 8)
+        {
+            int oldSector = (previousFacing + 2) % 8;
+            double oldHeading = oldSector * Math.PI / 4;
+            double delta = Math.Atan2(Math.Sin(heading - oldHeading),
+                                      Math.Cos(heading - oldHeading));
+            const double margin = Math.PI / 24; // 7.5 degrees
+            if (Math.Abs(delta) <= Math.PI / 8 + margin)
+                return previousFacing;
+        }
+        int sector = (int)Math.Floor(heading / (Math.PI / 4) + 0.5);
         return (byte)(((sector + 5) % 8 + 8) % 8 + 1);
     }
 

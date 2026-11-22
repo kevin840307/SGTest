@@ -112,6 +112,13 @@ static class Checks
                 Console.WriteLine($"IDENTITY_SESSION_AES_CHECKS PASS total={_passes}");
                 return 0;
             }
+            if (args is ["--movement-only"])
+            {
+                WorldSimulationChecks.Verify(root);
+                FacingChecks.Verify(root);
+                Console.WriteLine($"SERVER_MOVEMENT_CHECKS PASS total={_passes}");
+                return 0;
+            }
             if (args is ["--aoi-only"])
             {
                 FacingChecks.Verify(root);

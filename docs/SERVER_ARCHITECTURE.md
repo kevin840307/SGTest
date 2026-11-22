@@ -2,6 +2,12 @@
 
 **狀態：已建立 .NET 8 Blocking/A*、單寫者 30Hz World、compact-binary V1、TLS listener／帳號認證／遊戲內創角／選角與本機 provision、generation-safe AOI／跨圖及自身權威位置／方向。創角出生點由 Host policy 指定並以 Blocking 驗證，Client 提交 slot/name，Server rules 開啟時可另送允許的 appearance tuple。登入節流、原版創角外觀／職業／出生規則、主要玩法與 Release Gate 仍未完成。** 目標為單體功能模組，固定世界模擬與獨立 Transport/Persistence。
 
+## 2026-11-22 — 8 方向走路方位邊界抖動修正
+
+- 來源比對：二創 `C:\\SGO\\Recovered\\client\\player.gd::update_direction_8way` 依每段連續速度向量以 45° 整數分區；SGTest 原 `ServerWorld.FacingFromDisplacement(dx,dy)` 對 **每個 A* 路點** 都重做 `Atan2` 四捨五入。角度靠近 22.5°／67.5° 等 8 方向分界，鄰近 Tick 路徑略有變化就會交替 E/SE、E/NE 兩組素材。
+- 單寫者 `ServerWorld` 現在對上一個合法方向設 **7.5°** 顯示遲滯（保留方向直到偏離舊方向中心超過 30°，實際向別的方向轉到閾值外仍立即變換）。用最短圓弧角度差，因此 0°／360° 也安全；不改 A*、碰撞、移速、封包契約與 World/MapEpoch。這是 Server 對向外同步的 facing 穩定化，並非擅改位置。
+- 回歸 `WorldSimulationChecks` 增加斜向目標靠近 E/SE、E/NE 分界反覆重派路的測試，並驗證大角度轉彎仍立刻生效；原 `FacingChecks` 測 8 個合法方向、停走、移轉／錯誤目標的行為都保持。`dotnet run --project server/tests/SGTest.Server.Checks -c Release -- --movement-only` 已 **16 PASS**。完整 Server 檢查在另一個尚未整合的創角 `sleeve_color` DB 欄位改動下失敗，**不能宣稱全套 PASS**；Live 127.0.0.1:7778 Server 仍舊進程，需在創角同步完成後重新部署新 binary 才可實際驗收。
+
 ## 核心邊界
 
 創角外觀的 domain 與持久化在既有 `Identity/`：`CharacterAppearanceRules` 是 trusted Server 的不可變完整 tuple allowlist，`SqliteIdentityStore` 才擁有建立角色／外觀／錢包的唯一原子交易，資料庫 schema v24 以可選 `character_appearances` 保留舊角色未知狀態。外觀 Race 與後續 CombatProfile provision 必須一致。創角／列表 Wire 已接上；Host 檔案載入與 UI 選項已接上；全量來源合法集合、AOI 及一般外觀渲染仍待接入，不能把 Storage 層驗證當作完整創角；詳 [來源與接入進度](research/CHARACTER_CREATION_APPEARANCE.md)。
