@@ -64,6 +64,8 @@ jobs:
         run: .cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64 --headless --path client --script res://tests/test_ground_pickup_wire.gd
       - name: Godot durable inventory login chunks and pickup UID merge
         run: .cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64 --headless --path client --script res://tests/test_inventory_snapshot.gd
+      - name: Godot equipment picker invalidation across character and reconnect
+        run: timeout 20s .cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64 --headless --path client --script res://tests/test_equipment_picker_identity.gd
       - name: Godot Server-owned learned skill book baseline
         run: .cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64 --headless --path client --script res://tests/test_skill_book_snapshot.gd
       - name: Godot verified recovery use wire, HP and one-time quantity reducer

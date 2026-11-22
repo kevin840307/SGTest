@@ -282,7 +282,11 @@ func _update_equipment_ui() -> void:
 	var usable := ready and bool(_latest.get("world_ready",false)) and bool(_latest.get("inventory_ready",false)) and not bool(_latest.get("reconnecting",false)) and not bool(_latest.get("resync_pending",false)) and not bool(_latest.get("waiting_for_new_map",false))
 	var inventory: Dictionary = _latest.get("inventory_items",{})
 	var equipment: Dictionary = _latest.get("equipment_items",{})
-	var key := "%d/%d/%d/%d/%d" % [int(_latest.get("inventory_revision",0)),int(_latest.get("equipment_revision",0)),int(_latest.get("equipment_sequence",0)),inventory.size(),equipment.size()]
+	# Revisions may match across characters or reconnects. Include session identity.
+	var key := "%d/%d/%d/%d/%d/%d/%d" % [
+		int(_latest.get("actor_id",0)),int(_latest.get("reconnect_count",0)),
+		int(_latest.get("inventory_revision",0)),int(_latest.get("equipment_revision",0)),
+		int(_latest.get("equipment_sequence",0)),inventory.size(),equipment.size()]
 	if key != _equipment_display_key:
 		_equipment_display_key = key
 		equipment_inventory_picker.clear()
