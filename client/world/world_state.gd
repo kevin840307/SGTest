@@ -332,6 +332,7 @@ var stale_receipts := 0
 var protocol_error := ""
 var world_ready := false
 var entities := {}
+var remote_movement_intents := {}
 var player_identities := {}
 var stale_player_identities := 0
 var monsters := {}
@@ -1029,6 +1030,8 @@ func apply_frame(frame: PackedByteArray) -> bool:
 			return _apply_entity_state(frame, opcode)
 		WireCodec.OPCODE_ENTITY_DESPAWN:
 			return _apply_entity_despawn(frame)
+		WireCodec.OPCODE_PLAYER_MOVEMENT_INTENT:
+			return _apply_player_movement_intent(frame)
 		WireCodec.OPCODE_MONSTER_SPAWN, WireCodec.OPCODE_MONSTER_DELTA:
 			return _apply_monster_state(frame,opcode)
 		WireCodec.OPCODE_MONSTER_DESPAWN:
@@ -1354,6 +1357,7 @@ func snapshot() -> Dictionary:
 		"protocol_error": protocol_error,
 		"world_ready": world_ready,
 		"entities": entities.duplicate(true),
+		"remote_movement_intents": remote_movement_intents.duplicate(true),
 		"player_identities": player_identities.duplicate(true),
 		"stale_player_identities": stale_player_identities,
 		"monsters": monsters.duplicate(true),
@@ -1675,6 +1679,7 @@ func _reset_character_world_state(decoded: Dictionary) -> void:
 	world_ready = false
 	self_state.clear()
 	entities.clear()
+	remote_movement_intents.clear()
 	player_identities.clear()
 	stale_player_identities = 0
 	monsters.clear()
@@ -2224,6 +2229,7 @@ func _apply_world_ready(frame: PackedByteArray) -> bool:
 	facing = int(ready.facing)
 	world_ready = true
 	entities.clear()
+	remote_movement_intents.clear()
 	player_identities.clear()
 	monsters.clear()
 	ground_drops.clear()
@@ -2513,6 +2519,42 @@ func _apply_entity_state(frame: PackedByteArray, opcode: int) -> bool:
 	last_aoi_tick = maxi(last_aoi_tick, int(value.server_tick))
 	return true
 
+func _apply_player_movement_intent(frame: PackedByteArray) -> bool:
+	var value := WireCodec.decode_player_movement_intent(frame)
+	if value.is_empty():
+		return fail("invalid_player_movement_intent")
+	var disposition := _check_aoi_generation(int(value.receiver_map_epoch), int(value.server_tick))
+	if disposition <= 0:
+		return disposition == 0
+	var id := int(value.actor_id)
+	if id == actor_id:
+		return fail("movement_intent_for_self")
+	var entity: Dictionary = entities.get(id,{})
+	if entity.is_empty():
+		return _need_resync("movement_intent_without_spawn")
+	if int(entity.connection_epoch) != int(value.connection_epoch) or int(entity.entity_map_epoch) != int(value.entity_map_epoch):
+		return _need_resync("movement_intent_wrong_entity_generation")
+	var previous: Dictionary = remote_movement_intents.get(id,{})
+	if not previous.is_empty():
+		var sequence := int(value.movement_action_sequence)
+		var prior_sequence := int(previous.movement_action_sequence)
+		if sequence < prior_sequence:
+			stale_aoi_events += 1
+			return true
+		if sequence == prior_sequence:
+			var prior_moving := bool(previous.moving)
+			if prior_moving == bool(value.moving):
+				if int(value.server_tick) <= int(previous.server_tick):
+					stale_aoi_events += 1
+					return true
+				if float(previous.target_x) != float(value.target_x) or float(previous.target_y) != float(value.target_y):
+					return _need_resync("movement_intent_same_action_conflict")
+			elif not prior_moving and bool(value.moving):
+				return _need_resync("movement_intent_restarted_same_action")
+	remote_movement_intents[id] = value.duplicate(true)
+	last_aoi_tick = maxi(last_aoi_tick, int(value.server_tick))
+	return true
+
 func _apply_entity_despawn(frame: PackedByteArray) -> bool:
 	var value := WireCodec.decode_entity_despawn(frame)
 	if value.is_empty():
@@ -2528,6 +2570,7 @@ func _apply_entity_despawn(frame: PackedByteArray) -> bool:
 	if int(value.connection_epoch) != int(previous.connection_epoch):
 		return _need_resync("despawn_wrong_entity_generation")
 	entities.erase(id)
+	remote_movement_intents.erase(id)
 	player_identities.erase(id)
 	if (
 		not player_shop_inspected.is_empty() and

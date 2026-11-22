@@ -459,6 +459,7 @@ internal static class WorldAoiChecks
         Drain(aoi,remote);
 
         var wireRevisions = new List<long>();
+        var movementIntents = new List<AoiEvent>();
         var moving = remote;
         for(int index=0; index<30; index++)
         {
@@ -467,12 +468,17 @@ internal static class WorldAoiChecks
                 X=148+index*8,
                 EntityRevision=2+index,
                 IsMoving=true,
-                MovementActionSequence=1
+                MovementActionSequence=1,
+                MovementTargetX=900,
+                MovementTargetY=100
             };
             Move(aoi,2+index,moving);
-            wireRevisions.AddRange(Drain(aoi,observer)
+            var observerEvents=Drain(aoi,observer);
+            wireRevisions.AddRange(observerEvents
                 .Where(x=>x.Kind==AoiEventKind.Delta)
                 .Select(x=>x.Entity?.EntityRevision ?? 0));
+            movementIntents.AddRange(observerEvents
+                .Where(x=>x.Kind==AoiEventKind.PlayerMovementIntent));
             var own=Drain(aoi,moving);
             Require(own is [var self] && self.Kind==AoiEventKind.SelfState &&
                     self.Entity?.EntityRevision==moving.EntityRevision,
@@ -480,6 +486,13 @@ internal static class WorldAoiChecks
         }
         Require(wireRevisions.SequenceEqual(Enumerable.Range(2,10).Select(x=>(long)x)),
             "30 source movement revisions did not coalesce to 10 contiguous remote wire revisions");
+        Require(movementIntents is [var startIntent] &&
+                startIntent.Entity is { } startMovement &&
+                startMovement.MovementActionSequence==1 &&
+                startMovement.MovementTargetX==900 &&
+                startMovement.MovementTargetY==100 &&
+                startMovement.IsMoving,
+            "movement start intent was missing, duplicated or lost its authoritative target");
 
         // Deterministic A/B on the identical source trace. Interval=1 is the
         // previous every-World-revision behavior; the production default is 3.
@@ -522,19 +535,35 @@ internal static class WorldAoiChecks
         {
             X=moving.X+4,
             EntityRevision=33,
-            MovementActionSequence=2
+            MovementActionSequence=2,
+            MovementTargetX=1000,
+            MovementTargetY=180
         };
         Move(aoi,33,moving);
-        Require(Drain(aoi,observer).Length==0,
-            "remote-only movement action sequence forced an unnecessary Delta");
+        Require(Drain(aoi,observer) is [var retarget] &&
+                retarget.Kind==AoiEventKind.PlayerMovementIntent &&
+                retarget.Entity is { } retargeted &&
+                retargeted.MovementActionSequence==2 &&
+                retargeted.MovementTargetX==1000 &&
+                retargeted.MovementTargetY==180,
+            "retarget did not emit exactly one intent without an unnecessary Delta");
         Drain(aoi,moving);
 
-        var stopped=moving with {X=moving.X+4,EntityRevision=34,IsMoving=false};
+        var stopped=moving with
+        {
+            X=moving.X+4,EntityRevision=34,IsMoving=false,
+            MovementTargetX=moving.X+4,MovementTargetY=moving.Y
+        };
         Move(aoi,34,stopped);
-        Require(Drain(aoi,observer) is [var stop] &&
+        Require(Drain(aoi,observer) is [var stop, var stopIntent] &&
                 stop.Kind==AoiEventKind.Delta && stop.Entity?.EntityRevision==13 &&
-                stop.Entity?.MovementActionSequence==2 && stop.Entity?.IsMoving==false,
-            "stop boundary did not flush latest action state with contiguous wire revision");
+                stop.Entity?.MovementActionSequence==2 && stop.Entity?.IsMoving==false &&
+                stopIntent.Kind==AoiEventKind.PlayerMovementIntent &&
+                stopIntent.Entity is { } stoppedIntent &&
+                stoppedIntent.MovementActionSequence==2 && !stoppedIntent.IsMoving &&
+                stoppedIntent.MovementTargetX==stopped.X &&
+                stoppedIntent.MovementTargetY==stopped.Y,
+            "stop boundary did not flush contiguous checkpoint plus stop intent");
         Drain(aoi,stopped);
 
         var corrected=stopped with {X=stopped.X+2,EntityRevision=35};
@@ -669,20 +698,25 @@ internal static class WorldAoiChecks
         Life(aoi, 1, Join(a), Join(b));
         Drain(aoi,a); Drain(aoi,b);
         var moved = b with { X = 136, EntityRevision = 2, IsMoving = true,
-                             MovementActionSequence = 1 };
+                             MovementActionSequence = 1,
+                             MovementTargetX = 320, MovementTargetY = 100 };
         Move(aoi,2,moved);
-        Require(aoi.PendingEvents(a.ActorId) == 1, "resync fixture missing stale pending delta");
+        Require(aoi.PendingEvents(a.ActorId) == 2,
+            "resync fixture missing stale pending delta plus movement intent");
         Require(aoi.TryResync(new TrustedWorldResyncRequest(
                     a.ActorId,a.ConnectionEpoch,a.MapEpoch)),
                 "current observer resync rejected");
         var rebuilt = Drain(aoi,a);
-        Require(rebuilt.Length == 3 &&
+        Require(rebuilt.Length == 4 &&
                 rebuilt[0].Kind == AoiEventKind.WorldReady &&
                 rebuilt[1].Kind == AoiEventKind.SelfState &&
                 rebuilt[1].Entity?.ActorId == a.ActorId &&
                 rebuilt[2].Kind == AoiEventKind.Spawn &&
                 rebuilt[2].Entity?.ActorId == b.ActorId &&
-                rebuilt[2].Entity?.EntityRevision == 2,
+                rebuilt[2].Entity?.EntityRevision == 2 &&
+                rebuilt[3].Kind == AoiEventKind.PlayerMovementIntent &&
+                rebuilt[3].Entity?.MovementActionSequence == 1 &&
+                rebuilt[3].Entity?.MovementTargetX == 320,
                 "resync baseline order/content wrong");
         Require(!aoi.TryResync(new TrustedWorldResyncRequest(
                     a.ActorId,a.ConnectionEpoch+1,a.MapEpoch)),

@@ -72,6 +72,16 @@ public sealed partial class GatewayConnection
                         evt.EntityConnectionEpoch));
                     break;
 
+                case AoiEventKind.PlayerMovementIntent
+                    when evt.Entity is { } movement && movement.ActorId != bound.ActorId:
+                    frame = WireProtocol.EncodePlayerMovementIntent(new(
+                        evt.ReceiverMapEpoch, evt.Tick, movement.ActorId,
+                        movement.ConnectionEpoch, movement.MapEpoch,
+                        movement.MovementActionSequence,
+                        (float)movement.MovementTargetX, (float)movement.MovementTargetY,
+                        movement.IsMoving, movement.Facing));
+                    break;
+
                 case AoiEventKind.MonsterSpawn or AoiEventKind.MonsterDelta
                     when evt.Monster is { } monster &&
                          monster.EntityId != bound.ActorId:

@@ -14,6 +14,7 @@ internal static class AoiWireChecks
     private const string Delta = "4A0000000100170001000000000000002C000000000000001600000000000000020000000000000001000000000000000F0000000800000000000000000060420000C041000500000001";
     private const string Self = "4A0000000100180001000000000000002C000000000000000B00000000000000020000000000000001000000000000000F0000000800000000000000000060420000C041000500000006";
     private const string Despawn = "280000000100160001000000000000002D0000000000000016000000000000000200000000000000";
+    private const string MovementIntent = "3E00000001006E0001000000000000002D00000000000000160000000000000002000000000000000100000000000000050000000000A043000034430106";
     private const string ReadyAck = "180000000100190001000000000000002A00000000000000";
     private const string Resync = "1000000001001A000100000000000000";
     private const string MonsterSpawn = "4E00000001001B000100000000000000320000000000000021A0AE3B0000000001000000000000000D0000000000F0420000A04202000000000000005A0000006400000002060B00000000000000";
@@ -61,6 +62,14 @@ internal static class AoiWireChecks
         Require(Convert.ToHexString(ownBytes) == Self &&
                 WireProtocol.TryDecodeEntityState(ownBytes, out kind, out parsed) &&
                 kind == WireOpcode.SelfState && parsed == self, "SelfState binary fixture");
+        var movementIntent = new PlayerMovementIntentWire(
+            1,45,22,2,1,5,320,180,true,6);
+        byte[] movementIntentBytes = WireProtocol.EncodePlayerMovementIntent(movementIntent);
+        Require(Convert.ToHexString(movementIntentBytes) == MovementIntent &&
+                WireProtocol.TryDecodePlayerMovementIntent(
+                    movementIntentBytes,out var parsedMovementIntent) &&
+                parsedMovementIntent == movementIntent,
+            "PlayerMovementIntent C#/Godot golden binary");
         byte[] ack = WireProtocol.EncodeWorldReadyAck(new(1, 42));
         Require(Convert.ToHexString(ack) == ReadyAck &&
                 WireProtocol.TryDecodeWorldReadyAck(ack, out var ackValue) &&
@@ -154,6 +163,18 @@ internal static class AoiWireChecks
         bad[60] = 0; bad[61] = 0; bad[62] = 0xC0; bad[63] = 0x7F; // quiet NaN float
         Require(!WireProtocol.TryDecodeEntityState(bad, out _, out _),
                 "NaN coordinate accepted");
+        bad = Convert.FromHexString(MovementIntent);
+        bad[60] = 2;
+        Require(!WireProtocol.TryDecodePlayerMovementIntent(bad, out _),
+                "invalid movement intent moving bit accepted");
+        bad = Convert.FromHexString(MovementIntent);
+        bad[61] = 9;
+        Require(!WireProtocol.TryDecodePlayerMovementIntent(bad, out _),
+                "invalid movement intent facing accepted");
+        bad = Convert.FromHexString(MovementIntent);
+        BinaryPrimitives.WriteUInt32LittleEndian(bad.AsSpan(52,4),0x7FC00000);
+        Require(!WireProtocol.TryDecodePlayerMovementIntent(bad, out _),
+                "NaN movement intent target accepted");
         bad = Convert.FromHexString(MonsterSpawn);
         bad[68] = 5;
         Require(!WireProtocol.TryDecodeMonsterState(bad,out _,out _),

@@ -119,7 +119,8 @@ public enum WireOpcode : ushort
     CharacterManageResult = 106,
     ClanCommand = 107,
     ClanResult = 108,
-    ClanSnapshot = 109
+    ClanSnapshot = 109,
+    PlayerMovementIntent = 110
 }
 
 public enum ChatChannel : byte { Nearby = 0, Faction = 1, Warband = 2, Party = 3, Whisper = 4 }
@@ -401,6 +402,10 @@ public readonly record struct EntityStateWire(
     long Revision, float X, float Y, bool IsMoving, uint MovementActionSequence, byte Facing = 1);
 public readonly record struct EntityDespawnWire(
     long ReceiverMapEpoch, long ServerTick, long ActorId, long ConnectionEpoch);
+public readonly record struct PlayerMovementIntentWire(
+    long ReceiverMapEpoch, long ServerTick, long ActorId,
+    long ConnectionEpoch, long EntityMapEpoch, uint MovementActionSequence,
+    float TargetX, float TargetY, bool IsMoving, byte Facing);
 public readonly record struct WorldReadyAckWire(long MapEpoch, long ServerTick);
 public readonly record struct WorldResyncRequestWire(long MapEpoch);
 public readonly record struct MonsterStateWire(

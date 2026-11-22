@@ -236,13 +236,21 @@ A recoverable same-session AOI continuity failure (for example Delta without its
 
 Security/correctness boundary: wrong own ActorId/MapId/EntityMapEpoch/ConnectionEpoch still fails closed; resync is for continuity loss within an authenticated current binding, not a way to heal identity corruption. Server core CI 43988244612 passes 92/92 checks including the live bounded AOI pump rebuild and raw TLS listener ACK. Client core CI 43988918797 passes the reducer golden fixtures, 0/30/60/90 FPS independence, automatic `ClientSession` resync orchestration, real TLS, UI, two-client AOI/cross-map/NPC and formal Host + two real main scenes. Same-socket resync本身不等於 reconnect；其後正式 ClientSession 已另加入 bounded TLS/TCP auto-reconnect，見下一節。
 
-### 2026-11-22 Remote player EntityDelta checkpoint coalescing
+### 2026-11-22 Remote player checkpoint coalescing + authoritative movement intent
 
-`ServerWorld` 仍以 30Hz 保存每一個權威 Player `EntityRevision`，本人的 `SelfState` 也仍在每個權威 revision 可靠送達，Client prediction/reconciliation 不降頻。節流只發生在 `WorldAoi` 對**其他 observer** 的移動呈現：同一段連續移動預設最多每 **3 World ticks** 或累積 **24px** 送一個 `EntityDelta` checkpoint；Facing 改變、Move↔Stop、CombatDead 改變及 idle 權威位置校正立即送。remote-only `MovementActionSequence` 不作獨立視覺事件，會隨下一個 checkpoint 或 Stop 一起送；Client 遠端人物呈現不以此 sequence 做本地 reconciliation。
+`ServerWorld` 仍以 30Hz 保存每一個權威 Player `EntityRevision`，本人的 `SelfState` 也仍在每個權威 revision 可靠送達，Client prediction/reconciliation 不降頻。對其他 observer 的位置 checkpoint 仍由 `WorldAoi` coalesce：同一段連續移動預設最多每 **3 World ticks** 或累積 **24px** 送一個 `EntityDelta`；Facing 改變、Move↔Stop、CombatDead 改變及 idle 權威位置校正立即送。為了不把「刻意 coalesce」誤判成丟包，AOI 對每個 observer 分開保存 **SourceRevision** 與 **WireRevision**，每個真正送出的 Delta wire revision 只 +1；Godot 的 `entity_revision_gap` 保護不放寬，same-MapEpoch resync 仍以最新 source snapshot 重新 Spawn baseline。
 
-為了不把「刻意 coalesce」誤判成網路丟包，AOI 對每個 observer 分開保存 **SourceRevision** 與 **WireRevision**。Spawn 建立該 observer 的 baseline；其後每個真正送出的 Delta 只將 wire revision 加 1，即使中間跳過多個 World source revision。Godot 原有 `entity_revision_gap` 規則完全不放寬，所以真正少掉一個已送出的 Delta 仍會觸發 bounded resync；same-MapEpoch resync 清掉 observer visible baseline，再以最新 source revision 的 Spawn 重建。這不是第二套協定、不是 Client authority，也沒有改可靠 FIFO／MapEpoch／ConnectionEpoch 邊界。
+在此 checkpoint 之上，正式 V1 compact-binary 追加一個 **server-only** 事件，不改舊 opcode 編號：
 
-固定相同的 30 個、每 tick 8px 的 source movement trace 做 deterministic A/B：`RemotePlayerDeltaIntervalTicks=1`（舊 every-revision 行為）送 **30 Delta**，正式預設 3 tick/24px 送 **10 Delta**，該 trace 減少 **66.7%**。`SGTest.Server.Checks --aoi-only` 23/23 PASS；`--load-only` 5/5 PASS，含 20 獨立認證 Client、300 Monster、500 Drop、320 次 sustained MoveReceipt，Router backpressure 0。這一切仍只是 position checkpoint coalescing；真正 route-intent（只送目標／route／stop，由遠端 Client 依合法路線持續走）仍未實作。
+| Opcode | Event | Total bytes | Payload, little endian |
+|---|---|---:|---|
+| 110 | PlayerMovementIntent | 62 | `int64 receiverMapEpoch, int64 serverTick, int64 actorId, int64 entityConnectionEpoch, int64 entityMapEpoch, uint32 movementActionSequence, float32 finalTargetX, float32 finalTargetY, uint8 moving, uint8 facing` |
+
+`PlayerMovementIntent` 的 target 不是 Client 原始 click 座標；它由 `ServerWorld` 已接受、已通過 Blocking/A* 權威驗證的 route 最後一格中心推導。AOI 在 **Start / Retarget / Stop** 邊界可靠送出 intent；若 observer 在另一玩家已移動途中才進 AOI，或 same-MapEpoch resync 重建 baseline，順序為 `Spawn → PlayerMovementIntent`，所以不需等待下一個 checkpoint 才知道目前動作目標。Stop 會保留即時 `EntityDelta` checkpoint，再追加同 action sequence 的 `moving=false` intent。事件使用既有 bounded AOI pending FIFO、Gateway reliable FIFO、MapEpoch/ConnectionEpoch generation gate，沒有新增 Client authority 或第二套 transport。
+
+Godot `WorldState` 將 intent 存在獨立的 `remote_movement_intents`，不覆寫 checkpoint revision。Reducer 要求先有對應 Spawn、generation 完全一致、action sequence 不回退；同 action 若 target 無故改變或 stop 後又以相同 sequence restart 會要求 bounded resync。Despawn、換圖與 replacement WorldReady 都清除舊 intent。**目前 presentation 尚未消費 final target 去重建 Blocking route**，所以這個切片只完成 Server→wire→reducer 的正式語意與安全邊界，不能宣稱遠端人物已做到原版整段自走。
+
+固定相同的 30 個、每 tick 8px source trace A/B 仍為舊 every-revision **30 Delta**、正式預設 **10 Delta**，減少 **66.7%**；新增 intent 後沒有把 checkpoint 降頻倒退。`SGTest.Server.Checks --aoi-only` **23/23 PASS**；`--load-only` **5/5 PASS**。本機最重 sustained Gate 為 20 個真 AES 認證連線、同視野 300 Monster + 500 Drop、320 MoveReceipt：move receipt P95 **47.23ms**、P99 **47.26ms**、Router backpressure **0**、World skipped deadlines **0**。C#／Godot 共用 62-byte golden、Godot AOI reducer與 wire codec headless 測試亦 PASS；Windows 真 renderer A/B、WAN/jitter、長時間 soak 與 presentation route reconstruction 仍 NOT VERIFIED。
 
 
 ### 2026-11-17 Bounded TLS/TCP automatic reconnect

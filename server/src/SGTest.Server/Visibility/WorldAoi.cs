@@ -22,7 +22,7 @@ public sealed record WorldAoiOptions(
 
 public enum AoiEventKind : byte
 {
-    WorldReady, Spawn, Delta, Despawn, SelfState, PlayerIdentity,
+    WorldReady, Spawn, Delta, Despawn, SelfState, PlayerIdentity, PlayerMovementIntent,
     MonsterSpawn, MonsterDelta, MonsterDespawn,
     GroundDropSpawn, GroundDropDespawn,
     PlayerAttackVisual, PlayerSkillVisual, PlayerDamageVisual, PlayerRespawnVisual,
@@ -108,7 +108,8 @@ public sealed class WorldAoi
         long ConnectionEpoch, long MapEpoch,
         long SourceRevision, long WireRevision, long SentTick,
         double X, double Y, bool IsMoving, uint MovementActionSequence,
-        byte Facing, bool CombatDead);
+        byte Facing, bool CombatDead,
+        uint MovementIntentSequence, bool MovementIntentMoving);
 
     private sealed class Observer
     {
@@ -932,6 +933,9 @@ public sealed class WorldAoi
                 throw new AoiBackpressureException("AOI visible entity cap exceeded");
             observer.Visible.Add(actor.ActorId, SeenFrom(actor, tick));
             Enqueue(observer, new(AoiEventKind.Spawn, tick, observer.Self.MapEpoch, actor));
+            if (actor.IsMoving)
+                Enqueue(observer, new(AoiEventKind.PlayerMovementIntent, tick,
+                    observer.Self.MapEpoch, actor));
         }
         else if (seen.ConnectionEpoch != actor.ConnectionEpoch || seen.MapEpoch != actor.MapEpoch)
         {
@@ -940,13 +944,34 @@ public sealed class WorldAoi
                 observer.Self.MapEpoch, null, actor.ActorId, seen.ConnectionEpoch,
                     EntityMapEpoch:seen.MapEpoch));
             Enqueue(observer, new(AoiEventKind.Spawn, tick, observer.Self.MapEpoch, actor));
+            if (actor.IsMoving)
+                Enqueue(observer, new(AoiEventKind.PlayerMovementIntent, tick,
+                    observer.Self.MapEpoch, actor));
         }
-        else if (actor.EntityRevision > seen.SourceRevision && ShouldQueueRemoteDelta(seen, actor, tick))
+        else
         {
-            long wireRevision = checked(seen.WireRevision + 1);
-            var wireActor = actor with { EntityRevision = wireRevision };
-            observer.Visible[actor.ActorId] = SeenFrom(actor, tick, wireRevision);
-            Enqueue(observer, new(AoiEventKind.Delta, tick, observer.Self.MapEpoch, wireActor));
+            bool movementIntentChanged =
+                actor.MovementActionSequence != seen.MovementIntentSequence ||
+                actor.IsMoving != seen.MovementIntentMoving;
+            if (actor.EntityRevision > seen.SourceRevision && ShouldQueueRemoteDelta(seen, actor, tick))
+            {
+                long wireRevision = checked(seen.WireRevision + 1);
+                var wireActor = actor with { EntityRevision = wireRevision };
+                observer.Visible[actor.ActorId] = SeenFrom(actor, tick, wireRevision);
+                Enqueue(observer, new(AoiEventKind.Delta, tick, observer.Self.MapEpoch, wireActor));
+            }
+            if (movementIntentChanged)
+            {
+                if (!observer.Visible.TryGetValue(actor.ActorId, out var current))
+                    throw new InvalidOperationException("AOI movement intent lost visible entity");
+                observer.Visible[actor.ActorId] = current with
+                {
+                    MovementIntentSequence = actor.MovementActionSequence,
+                    MovementIntentMoving = actor.IsMoving
+                };
+                Enqueue(observer, new(AoiEventKind.PlayerMovementIntent, tick,
+                    observer.Self.MapEpoch, actor));
+            }
         }
     }
 
@@ -954,7 +979,8 @@ public sealed class WorldAoi
         actor.ConnectionEpoch, actor.MapEpoch,
         actor.EntityRevision, wireRevision ?? actor.EntityRevision, tick,
         actor.X, actor.Y, actor.IsMoving, actor.MovementActionSequence,
-        actor.Facing, actor.CombatDead);
+        actor.Facing, actor.CombatDead,
+        actor.MovementActionSequence, actor.IsMoving);
 
     private bool ShouldQueueRemoteDelta(Seen seen, ActorSnapshot actor, long tick)
     {

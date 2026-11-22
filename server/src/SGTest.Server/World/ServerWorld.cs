@@ -52,7 +52,8 @@ public readonly record struct MoveReceipt(
 public readonly record struct ActorSnapshot(
     long ActorId, int MapId, long ConnectionEpoch, long MapEpoch,
     uint LastMovementSequence, uint MovementActionSequence, double X, double Y,
-    long EntityRevision, bool IsMoving, byte Facing = 1, bool CombatDead = false);
+    long EntityRevision, bool IsMoving, byte Facing = 1, bool CombatDead = false,
+    double MovementTargetX = 0, double MovementTargetY = 0);
 
 public enum PvpAttackGeometryStatus : byte
 {
@@ -96,8 +97,20 @@ public sealed class ServerWorld
         public IReadOnlyList<GridCell> Route = Array.Empty<GridCell>();
         public int RouteIndex;
 
-        public ActorSnapshot Snapshot() => new(Id, Map, ConnectionEpoch, MapEpoch,
-            LastSequence, MovementActionSequence, X, Y, Revision, RouteIndex < Route.Count, Facing, CombatDead);
+        public ActorSnapshot Snapshot()
+        {
+            bool isMoving = RouteIndex < Route.Count;
+            double targetX = X, targetY = Y;
+            if (isMoving)
+            {
+                var target = Route[^1];
+                targetX = target.X * BlockingGrid.CellPixels + BlockingGrid.CellPixels / 2.0;
+                targetY = target.Y * BlockingGrid.CellPixels + BlockingGrid.CellPixels / 2.0;
+            }
+            return new(Id, Map, ConnectionEpoch, MapEpoch,
+                LastSequence, MovementActionSequence, X, Y, Revision, isMoving, Facing, CombatDead,
+                targetX, targetY);
+        }
 
         public void ClearRoute()
         {

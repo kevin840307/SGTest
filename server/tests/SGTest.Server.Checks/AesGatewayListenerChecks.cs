@@ -695,7 +695,13 @@ AuthorizationTimeoutMilliseconds: 30000)));
                     // Dense baseline alone has 19+300+500 Spawn frames.
                     // Leave headroom for live AI and movement Deltas; a
                     // finite limit detects a stalled/rebroadcasting snapshot.
-                    Checks.Require(valid && ++frames <= (denseLoad ? 4096 : mixedLoad ? 192 : 128),
+                    // The player-only baseline can now legitimately receive at
+                    // most one Start + one Stop intent for each of the 19 peers
+                    // while all clients perform their initial short move. Keep
+                    // the old 128-frame guard and add only that new bounded cost.
+                    int frameLimit = denseLoad ? 4096 : mixedLoad ? 192 :
+                        128 + 2 * (players - 1);
+                    Checks.Require(valid && ++frames <= frameLimit,
                         $"load client {index} AOI frame limit exceeded");
                     switch (header.Opcode)
                     {
@@ -749,6 +755,15 @@ AuthorizationTimeoutMilliseconds: 30000)));
                                 accounts.Any(x=>x.CharacterId==identity.ActorId) &&
                                 (identity.ActorId==choice.CharacterId || seen.Contains(identity.ActorId)),
                                 $"load client {index} received identity before matching Spawn/generation");
+                            break;
+                        case WireOpcode.PlayerMovementIntent:
+                            Checks.Require(worldReady &&
+                                WireProtocol.TryDecodePlayerMovementIntent(frame,out var movementIntent) &&
+                                movementIntent.ReceiverMapEpoch==choice.MapEpoch &&
+                                movementIntent.ActorId!=choice.CharacterId &&
+                                accounts.Any(x=>x.CharacterId==movementIntent.ActorId) &&
+                                seen.Contains(movementIntent.ActorId),
+                                $"load client {index} received foreign/unspawned movement intent");
                             break;
                         case WireOpcode.MonsterSpawn:
                             int minMonster = denseLoad ? 0 : index * monstersPerViewer;
@@ -870,6 +885,15 @@ AuthorizationTimeoutMilliseconds: 30000)));
                                         accounts.Any(a=>a.CharacterId==liveIdentity.ActorId) &&
                                         (liveIdentity.ActorId==choice.CharacterId || seen.Contains(liveIdentity.ActorId)),
                                         $"sustained client {index} foreign player identity");
+                                    break;
+                                case WireOpcode.PlayerMovementIntent:
+                                    Checks.Require(
+                                        WireProtocol.TryDecodePlayerMovementIntent(liveFrame,out var liveMovementIntent) &&
+                                        liveMovementIntent.ReceiverMapEpoch==choice.MapEpoch &&
+                                        liveMovementIntent.ActorId!=choice.CharacterId &&
+                                        accounts.Any(a=>a.CharacterId==liveMovementIntent.ActorId) &&
+                                        seen.Contains(liveMovementIntent.ActorId),
+                                        $"sustained client {index} foreign/unspawned movement intent");
                                     break;
                                 case WireOpcode.MonsterDelta:
                                     Checks.Require(

@@ -77,6 +77,7 @@ public static partial class WireProtocol
     public const int WorldReadyFrameBytes = 45;
     public const int EntityStateFrameBytes = 74;
     public const int EntityDespawnFrameBytes = 40;
+    public const int PlayerMovementIntentFrameBytes = 62;
     public const int WorldReadyAckFrameBytes = HeaderBytes + 16;
     public const int WorldResyncRequestFrameBytes = HeaderBytes + 8;
     public const int MonsterStateFrameBytes = 78;
@@ -656,6 +657,7 @@ public static partial class WireProtocol
             107 => WireOpcode.ClanCommand,
             108 => WireOpcode.ClanResult,
             109 => WireOpcode.ClanSnapshot,
+            110 => WireOpcode.PlayerMovementIntent,
             _ => 0
         };
         if (opcode == 0) return false;
@@ -689,6 +691,7 @@ public static partial class WireProtocol
             WireOpcode.WorldReady => advertised == WorldReadyFrameBytes,
             WireOpcode.EntitySpawn or WireOpcode.EntityDelta or WireOpcode.SelfState => advertised == EntityStateFrameBytes,
             WireOpcode.EntityDespawn => advertised == EntityDespawnFrameBytes,
+            WireOpcode.PlayerMovementIntent => advertised == PlayerMovementIntentFrameBytes,
             WireOpcode.WorldReadyAck => advertised == WorldReadyAckFrameBytes,
             WireOpcode.WorldResyncRequest => advertised == WorldResyncRequestFrameBytes,
             WireOpcode.MonsterSpawn or WireOpcode.MonsterDelta => advertised == MonsterStateFrameBytes,

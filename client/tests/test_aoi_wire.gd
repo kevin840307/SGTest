@@ -12,6 +12,7 @@ const SPAWN := "4A0000000100150001000000000000002B000000000000001600000000000000
 const DELTA := "4A0000000100170001000000000000002C000000000000001600000000000000020000000000000001000000000000000F0000000800000000000000000060420000C041000500000001"
 const SELF := "4A0000000100180001000000000000002C000000000000000B00000000000000020000000000000001000000000000000F0000000800000000000000000060420000C041000500000006"
 const DESPAWN := "280000000100160001000000000000002D0000000000000016000000000000000200000000000000"
+const MOVEMENT_INTENT := "3E00000001006E0001000000000000002D00000000000000160000000000000002000000000000000100000000000000050000000000A043000034430106"
 const MAP13_READY := "2D00000001001400020000000000000032000000000000000B000000000000000D000000000020420000A04201"
 const READY_ACK := "180000000100190001000000000000002A00000000000000"
 const RESYNC := "1000000001001A000100000000000000"
@@ -34,6 +35,46 @@ func _initialize() -> void:
 	var resync_value := WireCodec.decode_world_resync_request(RESYNC.hex_decode())
 	if ack.hex_encode().to_upper() != READY_ACK or int(ack_value.map_epoch) != 1 or int(ack_value.server_tick) != 42 or resync.hex_encode().to_upper() != RESYNC or int(resync_value.map_epoch) != 1:
 		_fail("WorldReady ACK/resync C# golden")
+		return
+	var movement_intent := WireCodec.decode_player_movement_intent(MOVEMENT_INTENT.hex_decode())
+	if movement_intent.is_empty() or int(movement_intent.actor_id) != 22 or int(movement_intent.movement_action_sequence) != 5 or float(movement_intent.target_x) != 320.0 or float(movement_intent.target_y) != 180.0 or not bool(movement_intent.moving) or int(movement_intent.facing) != 6:
+		_fail("PlayerMovementIntent C# golden decode")
+		return
+	var malformed_intent := MOVEMENT_INTENT.hex_decode()
+	malformed_intent[60] = 2
+	if not WireCodec.decode_player_movement_intent(malformed_intent).is_empty():
+		_fail("invalid movement intent moving bit accepted")
+		return
+	malformed_intent = MOVEMENT_INTENT.hex_decode()
+	malformed_intent[61] = 9
+	if not WireCodec.decode_player_movement_intent(malformed_intent).is_empty():
+		_fail("invalid movement intent facing accepted")
+		return
+	malformed_intent = MOVEMENT_INTENT.hex_decode()
+	malformed_intent.encode_u32(52,0x7FC00000)
+	if not WireCodec.decode_player_movement_intent(malformed_intent).is_empty():
+		_fail("NaN movement intent target accepted")
+		return
+	var movement_world = _ready_world()
+	if not movement_world.apply_frame(SPAWN.hex_decode()) or not movement_world.apply_frame(MOVEMENT_INTENT.hex_decode()):
+		_fail("movement intent reducer rejected Spawn+Intent")
+		return
+	var movement_snapshot: Dictionary = movement_world.snapshot()
+	if not movement_snapshot.remote_movement_intents.has(22) or int(movement_snapshot.remote_movement_intents[22].movement_action_sequence) != 5 or float(movement_snapshot.remote_movement_intents[22].target_x) != 320.0:
+		_fail("movement intent reducer lost authoritative target")
+		return
+	var stop_intent := MOVEMENT_INTENT.hex_decode()
+	stop_intent.encode_s64(16,46)
+	stop_intent.encode_float(52,56.0)
+	stop_intent.encode_float(56,24.0)
+	stop_intent[60]=0
+	if not movement_world.apply_frame(stop_intent) or bool(movement_world.snapshot().remote_movement_intents[22].moving):
+		_fail("movement stop intent not accepted for same action")
+		return
+	var movement_despawn := DESPAWN.hex_decode()
+	movement_despawn.encode_s64(16,47)
+	if not movement_world.apply_frame(movement_despawn) or movement_world.snapshot().remote_movement_intents.has(22):
+		_fail("movement intent survived remote Despawn")
 		return
 	var monster_spawn := WireCodec.decode_monster_state(MONSTER_SPAWN.hex_decode())
 	var monster_delta := WireCodec.decode_monster_state(MONSTER_DELTA.hex_decode())

@@ -130,6 +130,52 @@ public static partial class WireProtocol
                value.ConnectionEpoch > 0 && value.EntityMapEpoch > 0 && value.Revision > 0;
     }
 
+    public static byte[] EncodePlayerMovementIntent(PlayerMovementIntentWire value)
+    {
+        if (value.ReceiverMapEpoch <= 0 || value.ServerTick < 0 || value.ActorId <= 0 ||
+            value.ConnectionEpoch <= 0 || value.EntityMapEpoch <= 0 ||
+            value.MovementActionSequence == 0 ||
+            !float.IsFinite(value.TargetX) || !float.IsFinite(value.TargetY) ||
+            value.TargetX < 0 || value.TargetY < 0 || value.Facing is < 1 or > 8)
+            throw new ArgumentOutOfRangeException(nameof(value));
+        var frame = NewFrame(WireOpcode.PlayerMovementIntent, PlayerMovementIntentFrameBytes);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(8, 8), value.ReceiverMapEpoch);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(16, 8), value.ServerTick);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(24, 8), value.ActorId);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(32, 8), value.ConnectionEpoch);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(40, 8), value.EntityMapEpoch);
+        BinaryPrimitives.WriteUInt32LittleEndian(frame.AsSpan(48, 4), value.MovementActionSequence);
+        WriteFloat(frame.AsSpan(52, 4), value.TargetX);
+        WriteFloat(frame.AsSpan(56, 4), value.TargetY);
+        frame[60] = value.IsMoving ? (byte)1 : (byte)0;
+        frame[61] = value.Facing;
+        return frame;
+    }
+
+    public static bool TryDecodePlayerMovementIntent(ReadOnlySpan<byte> frame,
+        out PlayerMovementIntentWire value)
+    {
+        value = default;
+        if (!TryReadHeader(frame, out var header) ||
+            header.Opcode != WireOpcode.PlayerMovementIntent ||
+            frame[60] > 1 || frame[61] is < 1 or > 8)
+            return false;
+        value = new(
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(8, 8)),
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(16, 8)),
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(24, 8)),
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(32, 8)),
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(40, 8)),
+            BinaryPrimitives.ReadUInt32LittleEndian(frame.Slice(48, 4)),
+            ReadFloat(frame.Slice(52, 4)), ReadFloat(frame.Slice(56, 4)),
+            frame[60] != 0, frame[61]);
+        return value.ReceiverMapEpoch > 0 && value.ServerTick >= 0 && value.ActorId > 0 &&
+               value.ConnectionEpoch > 0 && value.EntityMapEpoch > 0 &&
+               value.MovementActionSequence > 0 &&
+               float.IsFinite(value.TargetX) && float.IsFinite(value.TargetY) &&
+               value.TargetX >= 0 && value.TargetY >= 0;
+    }
+
     public static byte[] EncodeMonsterState(WireOpcode opcode, MonsterStateWire value)
     {
         if (opcode is not (WireOpcode.MonsterSpawn or WireOpcode.MonsterDelta) ||
