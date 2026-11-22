@@ -13,12 +13,11 @@ func _fail(message: String, session = null) -> void:
 
 func _initialize() -> void:
 	var args := OS.get_cmdline_user_args()
-	if args.size()!=2 or not str(args[0]).is_valid_int():
+	if args.size()!=1 or not str(args[0]).is_valid_int():
 		_fail("expected port/certificate")
 		return
-	var cert = null
 	var session = Session.new()
-	if session.connect_secure("127.0.0.1",int(args[0]),USERNAME,PASSWORD,"localhost",cert) != OK:
+	if session.connect_secure("127.0.0.1",int(args[0]),USERNAME,PASSWORD) != OK:
 		_fail("connect",session)
 		return
 	var selecting := _wait(session,func(v):

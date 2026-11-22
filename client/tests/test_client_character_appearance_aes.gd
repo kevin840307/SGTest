@@ -14,14 +14,13 @@ func _fail(reason: String, session: RefCounted) -> void:
 
 func _run() -> void:
 	var args := OS.get_cmdline_user_args()
-	if args.size()!=2:
+	if args.size()!=1:
 		quit(2)
 		return
-	var cert = null
 	for pass_index in 2:
 		var panel: PanelContainer
 		var session = Session.new()
-		if session.connect_secure("127.0.0.1",int(args[0]),"fixture_user","Fixture-Password-123!","localhost",cert)!=OK:
+		if session.connect_secure("127.0.0.1",int(args[0]),"fixture_user","Fixture-Password-123!")!=OK:
 			_fail("AES connect",session)
 			return
 		var deadline := Time.get_ticks_msec()+10000

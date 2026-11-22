@@ -289,7 +289,7 @@ internal static class AesGameHost
             var aoi = new WorldAoiPump(
                 router, monsters: monsters, playerCombat: combat, loot: loot,
                 initialGroundDrops: activeDrops);
-            var authorization = new IdentityTlsAuthorization(
+            var authorization = new IdentitySessionAuthorization(
                 identity, world, portals, positions, combat,
                 pickupWorldGeneration: lootGeneration,
                 recoveryRules: recoveryRules,

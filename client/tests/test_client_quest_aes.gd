@@ -16,22 +16,21 @@ func _fail(message:String,session=null)->void:
 func _initialize()->void:
 	var args:=OS.get_cmdline_user_args()
 	if (
-		args.size()!=6 or not str(args[0]).is_valid_int() or
-		str(args[2]) not in ["mutate","relogin"] or
-		not str(args[3]).is_valid_int() or not str(args[4]).is_valid_int() or
-		not str(args[5]).is_valid_int()
+		args.size()!=5 or not str(args[0]).is_valid_int() or
+		str(args[1]) not in ["mutate","relogin"] or
+		not str(args[2]).is_valid_int() or not str(args[3]).is_valid_int() or
+		not str(args[4]).is_valid_int()
 	):
 		_fail("expected port/certificate/role/character/npc/quest")
 		return
 	var port:=int(args[0])
-	var role:=str(args[2])
-	var character_id:=int(args[3])
-	var npc:=int(args[4])
-	var quest_id:=int(args[5])
-	var cert = null
+	var role:=str(args[1])
+	var character_id:=int(args[2])
+	var npc:=int(args[3])
+	var quest_id:=int(args[4])
 	var session=Session.new()
 	if session.connect_secure(
-		"127.0.0.1",port,USERNAME,PASSWORD,"localhost",cert)!=OK:
+		"127.0.0.1",port,USERNAME,PASSWORD)!=OK:
 		_fail("connect",session)
 		return
 	var selecting:=_wait(session,func(v):

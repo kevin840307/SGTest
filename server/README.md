@@ -2,7 +2,7 @@
 
 ## 2026-11-22：正式 AES-CBC Binary 傳輸（取代 TLS Serve）
 
-正式 `serve` 入口使用 `AesGameHost` → `AesGatewayListener` → `AesWireConnection` → `AesCbcFrameStream`，不需要 PFX/CA/TLS 握手。它仍使用現有 `GatewayConnection`、`WireProtocol`、SQLite Argon2id Auth/CharacterChoose、權威 World 與 backpressure；Client 是 `network/client_transport.gd` + `network/aes_cbc_frame.gd`。認證必須先於 Gameplay。原 TLS 歷史測試保留，**不是正式 Serve 回退模式**。
+正式 `serve` 入口使用 `AesGameHost` → `AesGatewayListener` → `AesWireConnection` → `AesCbcFrameStream`，不需要 PFX/CA/TLS 握手。它仍使用現有 `GatewayConnection`、`WireProtocol`、SQLite Argon2id Auth/CharacterChoose、權威 World 與 backpressure；Client 是 `network/client_transport.gd` + `network/aes_cbc_frame.gd`。認證必須先於 Gameplay。既有 Server TLS 測試已遷移為 AES-CBC Transport 測試；正式程式碼不再包含 TLS Socket／Listener、X509 憑證或 TLS 授權入口。歷史記錄僅作設計沿革，不可當成現行執行命令。
 
 **安全取捨（使用者明確要求）：** AES-256-CBC／PKCS7、固定 Key、固定 IV、沒有 MAC；密文沒有來源驗證或完整性保證，重複開頭會洩漏模式，公開 Client 取得共用 Key 後可產生有效密文。Server Authority／序號／登入權限驗證不能替代密文完整性驗證，亦不能防止未經授權的網路攔截／MITM。**不得稱之為 TLS 等級安全的公開登入防護。** 建議正式公網環境改用經認證的加密傳輸。
 
@@ -20,30 +20,30 @@ dotnet run --project server/host/SGTest.Server.Host -c Release -- serve --conten
 跨語言加密 Golden + 真 TCP roundtrip（僅本機 fixture）：`dotnet run --project tools/tests/aes_transport_probe/AesTransportProbe.csproj -c Release`，驗證 `AES_CBC_TRANSPORT_PROBE_PASS`。Server 端正式 Host 登入／選角／WorldReady／移動回覆：`dotnet run --project server/tests/SGTest.Server.Checks -c Release -- --identity-admin-only --aes`（測試參數沿用歷史名稱，實際進入 AES Host）。
 
 
-新版 Server 是**從零重建**，不還原舊 SGO 原型。現有權威 Blocking/A*、30Hz World、SQLite帳號／遊戲內創角／選角、compact-binary V1、TLS授權、WorldReady／AOI及NPC轉圖。Host `serve` 透過有界 AES-CBC TCP listener 接入同一組正式授權／Router／AOI；無內建帳密、明文或自動測試憑證。公開帳號註冊已完成為預設關閉的 opt-in TLS 功能；原版創角外觀／職業／預設出生規則及完整 Release 仍未完成。
+新版 Server 是**從零重建**，不還原舊 SGO 原型。現有權威 Blocking/A*、30Hz World、SQLite帳號／遊戲內創角／選角、compact-binary V1、AES-CBC 傳輸與授權、WorldReady／AOI及NPC轉圖。Host `serve` 透過有界 AES-CBC TCP listener 接入同一組正式授權／Router／AOI；無內建帳密、明文或自動測試憑證。公開帳號註冊已完成為預設關閉的 opt-in 帳號註冊功能；原版創角外觀／職業／預設出生規則及完整 Release 仍未完成。
 
-## 歷史 TLS Host 設計紀錄（已由 AES-CBC Serve 取代）
+## AES-CBC Binary Serve 與角色建立
 
-目前 schema **v24** 新增可選的 `character_appearances`。Trusted Server 可提供 `CharacterAppearanceRules` 允許集合，透過同一 Store 原子建立角色、外觀與錢包；沒有外觀資料的舊角色仍為未知，不會自動指定種族或髮型。TLS 創角／角色列表已支援 bounded appearance tuple 與 Server choices；標準 Host 可透過 `--character-appearance-rules` 載入明確核准的選項，玩家 UI 已接選擇／送出；全量原版合法集合、一般外觀渲染及 AOI 外觀仍待完成，見 [創角外觀進度](../docs/research/CHARACTER_CREATION_APPEARANCE.md)。
+目前 schema **v24** 新增可選的 `character_appearances`。Trusted Server 可提供 `CharacterAppearanceRules` 允許集合，透過同一 Store 原子建立角色、外觀與錢包；沒有外觀資料的舊角色仍為未知，不會自動指定種族或髮型。AES-CBC 創角／角色列表已支援 bounded appearance tuple 與 Server choices；標準 Host 可透過 `--character-appearance-rules` 載入明確核准的選項，玩家 UI 已接選擇／送出；全量原版合法集合、一般外觀渲染及 AOI 外觀仍待完成，見 [創角外觀進度](../docs/research/CHARACTER_CREATION_APPEARANCE.md)。
 
 本機已有 Host 執行、鎖住標準 build 輸出時，可用 `dotnet build server/host/SGTest.Server.Host/SGTest.Server.Host.csproj -c Release -o .cache/check-host` 建立相同正式專案的測試輸出，再設定 `SGTEST_CHECKS_HOST_DLL` 為該輸出的 **絕對** `SGTest.Server.Host.dll` 路徑執行 Server Checks。這只指定測試啟動哪個組件，不會重啟現有 Host 或改變正式配置；未設定時 Checks 使用既有標準 Release 輸出。
 
 ```powershell
-# 以下 TLS 指令僅供歷史紀錄，2026-11-22 後不能用於正式 serve；請使用本檔上方 AES-CBC 啟動指令。
-dotnet run --project server/host/SGTest.Server.Host -c Release -- serve --content C:/private/runtime --identity C:/private/identity.db --certificate C:/private/server.pfx --bind 127.0.0.1 --port 7777
+# AES-CBC 正式 serve；執行前先設定 SGTEST_AES_KEY_HEX 及 SGTEST_AES_IV_HEX。
+dotnet run --project server/host/SGTest.Server.Host -c Release -- serve --content C:/private/runtime --identity C:/private/identity.db --bind 127.0.0.1 --port 7777
 
 # 啟用遊戲內創角（以下座標只是部署範例，不宣稱原版預設出生點）
-dotnet run --project server/host/SGTest.Server.Host -c Release -- serve --content C:/private/runtime --identity C:/private/identity.db --certificate C:/private/server.pfx --bind 127.0.0.1 --port 7777 --character-spawn-map 15 --character-spawn-x 7872 --character-spawn-y 11296
+dotnet run --project server/host/SGTest.Server.Host -c Release -- serve --content C:/private/runtime --identity C:/private/identity.db --bind 127.0.0.1 --port 7777 --character-spawn-map 15 --character-spawn-x 7872 --character-spawn-y 11296
 # 可選創角外觀：另加 --character-appearance-rules C:/private/appearance-rules.json（需上述完整 spawn 設定）
 # 可選：--max-connections 128 --max-per-address 8 --seconds 60
-# 精準檢查先建置Host，再執行；只用合成地圖與臨時憑證，不需遊戲素材。
+# 精準檢查先建置Host，再執行；只用合成地圖與測試 AES 金鑰，不需遊戲素材。
 dotnet build server/host/SGTest.Server.Host -c Release
 dotnet run --project server/tests/SGTest.Server.Checks -c Release -- --listener-only
 ```
 
-PFX密碼環境名稱為`SGTEST_TLS_PASSWORD`；未加密PFX可不設定。Host讀取唯一 Converter 產出的兩圖 world／blocking 及 `npcs.json`，缺失／無效內容拒絕啟動；不讀貼圖。Identity DB 不會自動建立帳號；帳號仍由下節管理命令 provision。若要允許登入後遊戲內創角，啟動時必須同時提供 `--character-spawn-map/--character-spawn-x/--character-spawn-y`；Host 會先確認該點屬於目前服務地圖且 authoritative Blocking 可走。未提供時 CharacterCreate 明確回 `Unavailable`。Godot 登入面板的 host／port／TLS 名稱與信任鏈須配合實際憑證。
+正式 Serve 需要 `SGTEST_AES_KEY_HEX`（32 bytes，64 hex）及 `SGTEST_AES_IV_HEX`（16 bytes，32 hex）兩個環境變數，Client／Server 必須使用相同設定。Host讀取唯一 Converter 產出的兩圖 world／blocking 及 `npcs.json`，缺失／無效內容拒絕啟動；不讀貼圖。Identity DB 不會自動建立帳號；帳號仍由下節管理命令 provision。若要允許登入後遊戲內創角，啟動時必須同時提供 `--character-spawn-map/--character-spawn-x/--character-spawn-y`；Host 會先確認該點屬於目前服務地圖且 authoritative Blocking 可走。未提供時 CharacterCreate 明確回 `Unavailable`。Godot 登入面板只需要設定 host／port；通訊金鑰由部署環境設定，不再接受 TLS 憑證參數。
 
-預設只監聽127.0.0.1，Ctrl+C或期限到期停止；總連線上限包含握手、登入與清理中的Socket，每IP另有限額。Socket讀寫與KDF沿用既有有界實作，不在World鎖或Tick內執行。關閉順序為停止接入／排空授權Socket與可信Disconnect→停止World→停止Router/AOI，pump故障不會繼續提供半套服務。`TLS_HOST_READY`／`TLS_HOST_STOPPED`輸出實際endpoint與統計，無帳密。
+預設只監聽127.0.0.1，Ctrl+C或期限到期停止；總連線上限包含握手、登入與清理中的Socket，每IP另有限額。Socket讀寫與KDF沿用既有有界實作，不在World鎖或Tick內執行。關閉順序為停止接入／排空授權Socket與可信Disconnect→停止World→停止Router/AOI，pump故障不會繼續提供半套服務。`AES_HOST_READY`／`AES_HOST_STOPPED`輸出實際endpoint與統計，無帳密。
 
 本機7項targeted checks與受影響Release build PASS；main CI結果見todo。此為持續登入服務切片，不代表公開網際網路安全／壓測／Release完成；時間型登入速率限制、WorldReady ACK/resync與持久座標仍待驗證。下方限時無網路Host命令保留作smoke，並非serve模式。
 
@@ -52,7 +52,7 @@ PFX密碼環境名稱為`SGTEST_TLS_PASSWORD`；未加密PFX可不設定。Host�
 正式 `serve` 未帶 `--loot-rules` 時不會自行創造物品。只有已明確核對原版表格／規則的操作者，才可指定私人掉落規則文件：
 
 ```powershell
-dotnet run --project server/host/SGTest.Server.Host -c Release -- serve --content C:/private/runtime --identity C:/private/identity.db --certificate C:/private/server.pfx --loot-rules C:/private/verified-loot-rules.json
+dotnet run --project server/host/SGTest.Server.Host -c Release -- serve --content C:/private/runtime --identity C:/private/identity.db --loot-rules C:/private/verified-loot-rules.json
 ```
 
 文件格式是 JSON object：`kind="verified_monster_drop_rules"`、`version=1`、`rules_verified=true`、`gameplay_ready=true`、必填 `source_reference`（用於追溯人工核對的原版來源），及 `rules` array。每個 rule 必須提供 `map_id`、`enemy_id`、`slot`（0～31）、`item_definition_id`、`quantity`。規則必須匹配**已載入的 v4 可信怪物清單**，同 map/enemy/slot 不可重複；檔案最多1MiB、1024條規則，違規拒絕。**這一版每個列出的 slot 都是保證掉落，還沒有原版機率／抽樣規則。不要將任意 item ID 或測試規則直接視為原版掉落。** `source_reference` 是操作者自行聲明的來源，不是程式自動驗證原版的真實性。
@@ -71,7 +71,7 @@ dotnet run --project server/host/SGTest.Server.Host -c Release -- identity-backu
 
 dotnet build server/host/SGTest.Server.Host -c Release
 dotnet run --project server/tests/SGTest.Server.Checks -c Release -- --identity-admin-only
-# 若只需重驗PFX載入／真Host TLS路徑：同一測試加上 --tls
+# 僅重驗正式 AES Host 登入路徑：同一測試加上 --aes
 ```
 
 座標只是管理者明示的範例，必須在待部署Blocking可走範圍內，**不是原版預設出生點**。目前只准備Host已服務的Map13／15，slot0..7；CLI先驗證來源SHA、座標有限／邊界／flag0，再驗證帳密及disabled並呼叫既有Store。兩步各自原子，不是跨步驟交易；帳號建好而角色名稱衝突時，可修正後重跑character-create，不刪除或覆寫帳號。重複帳號不重設密碼，名稱／slot／角色數限制沿用同一 SqliteIdentityStore；目前正式 schema 為 v24；v22 新增 Server-owned `character_skills(SkillID,Lv)`。已存在的已知舊 schema 在 `InitializeAsync()` 真正 migration 前會先以 SQLite Backup API 建立 `identity.db.pre-v<old>-to-v24.<UTC>.<GUID>.bak`，備份成功並通過 schema／integrity 驗證後才繼續升級。
@@ -90,7 +90,7 @@ dotnet run --project server/host/SGTest.Server.Host -c Release -- pvp-name-set -
 
 `--state` 僅接受 stable Server tokens `blue|white|pink|flash|red`；中文／其他語系名稱只屬 UI/localization 或文件，不是 Server command contract，localized token 會被拒絕。每次命令必須提供 `--operator`、`--reason`、`--event-id`；schema v18 將狀態變更與 `pvp_name_admin_events` audit row 放在同一 SQLite transaction。相同 event-id＋相同內容重送回 `PVP_NAME_REPLAY` 且不重複修改；相同 event-id 改內容直接拒絕。此命令適合停服／直接 DB 管理；**它不會向已在線角色即時 fanout AOI 更新，也不是網路 GM 權限系統**。正式線上 GM command/auth/audit 已由後續 authenticated GM slice 實作，兩者仍維持不同 trust boundary。
 
-退出碼0=建立／管理成功、2=參數／密碼格式／出生地或管理輸入拒絕、3=重複／帳密／角色政策／管理 event 衝突或未知角色拒絕、1=來源／DB錯誤、4=互動取消。已驗證DB重開、錯誤／disabled、跨程序slot競態，以及CLI建置DB→實際Host serve→TLS Auth／選角／WorldReady／MoveReceipt與清理。Windows互動終端另驗證隱藏輸入、emoji退格後帳密正確、Esc取消碼4／無DB、過長輸入無回顯／無DB；超限後持續讀至Enter才拒絕，不截斷或留下尾端給Shell。私有原版地圖與Godot直連此Host的畫面仍NOT VERIFIED。
+退出碼0=建立／管理成功、2=參數／密碼格式／出生地或管理輸入拒絕、3=重複／帳密／角色政策／管理 event 衝突或未知角色拒絕、1=來源／DB錯誤、4=互動取消。已驗證DB重開、錯誤／disabled、跨程序slot競態，以及CLI建置DB→實際Host serve→AES-CBC Auth／選角／WorldReady／MoveReceipt與清理。Windows互動終端另驗證隱藏輸入、emoji退格後帳密正確、Esc取消碼4／無DB、過長輸入無回顯／無DB；超限後持續讀至Enter才拒絕，不截斷或留下尾端給Shell。私有原版地圖與Godot直連此Host的畫面仍NOT VERIFIED。
 
 ## 正式內容契約
 
@@ -115,7 +115,7 @@ dotnet build server/src/SGTest.Server/SGTest.Server.csproj -c Release
 
 2026-11-16 的初步 Blocking/A* 基準：合成＋雙圖原版 **10 組 PASS**（已保留於現行更完整的 24 組測試中）。Map13／Map15 各 960×960，原始 source SHA 匹配，靜態雙向傳點目的地座標對應可走格並有鄰格路徑（**不是實際傳點**）。128 個 deterministic 候選目的地／圖的獨立 query trace，Map13 77 個可走目標／77 成功、Map15 119/119 成功，無超出 1500 cell 預算；樣本 query P95 Map13 59.5µs／Map15 26.0µs，managed bytes/attempt 約10.2KB／10.9KB。**此為當次私有資料／单程序查詢時間，不是 Server Tick P95/P99、300 怪／多人效能或網路延遲。**
 
-所有原版資料、圖片、PCK、測試輸出都只保留在未追蹤的私有目錄；本 repo 只提交格式解析／導航／權威 World／正式 Wire/Gateway/TLS session 核心與可重跑驗收。WIRE001 + Gateway + 真 loopback TLS session 已有 CI Gate；下一個網路 Gate 是真正 Account Auth/CharacterChoose + production listener/certificate lifecycle，之後接 ACK/WorldReady/reconnect。特殊 terrain/Blocking 旗標與原版速度仍須另外核實。
+所有原版資料、圖片、PCK、測試輸出都只保留在未追蹤的私有目錄；本 repo 只提交格式解析／導航／權威 World／正式 Wire/Gateway/AES-CBC session 核心與可重跑驗收。WIRE001 + Gateway + 真 loopback AES-CBC session 已有 CI Gate；下一個網路 Gate 是真正 Account Auth/CharacterChoose + production listener/Key 配置，之後接 ACK/WorldReady/reconnect。特殊 terrain/Blocking 旗標與原版速度仍須另外核實。
 
 
 ## REB021-WORLD-CORE（2026-11-16：手動模擬核心，非已啟動 Server）
@@ -164,13 +164,13 @@ dotnet run -c Release --project server/tests/SGTest.Server.Checks/SGTest.Server.
 
 `src/SGTest.Server/Identity/` now provides SQLite schema v1 for Account/Character and bounded Argon2id password verification. The DB/KDF path is deliberately outside the authoritative 30Hz World thread. Account names are normalized for identity, character slot/name uniqueness is enforced by SQLite constraints, schema mismatch fails closed, and passwords are never stored plaintext. Character records persist server-authorized map/position and a stable `character_id`; a future TLS `CharacterChoose` layer will convert only a server-owned selected character into `TrustedRegisterAsync`/`GatewayConnection` identity.
 
-This paragraph records the original 2026-11-16 identity-core baseline. The current Server has mandatory TLS Auth/CharacterChoose, formal listener/certificate admission, bounded login rate policy, selected-character binding, reconnect position persistence and Godot TLS E2E. Public self-service account registration and original source-verified character creation appearance/career/spawn rules remain separate work.
+This paragraph records the original 2026-11-16 identity-core baseline. The current Server has mandatory AES-CBC Auth/CharacterChoose, formal listener/certificate admission, bounded login rate policy, selected-character binding, reconnect position persistence and Godot TLS E2E. Public self-service account registration and original source-verified character creation appearance/career/spawn rules remain separate work.
 
-## 2026-11-16 TLS Auth/CharacterChoose binding
+## 2026-11-16 AES-CBC Auth/CharacterChoose binding
 
-The server performs the complete **server-side** pre-gameplay identity flow over TLS: AuthRequest, AuthResult, owned CharacterList, optional CharacterCreate/CharacterCreateResult plus authoritative list refresh, CharacterChoose, trusted World registration and Gateway binding. Persistent `character_id` becomes ActorId only after ownership verification; ConnectionEpoch and creation spawn are never accepted from the Client. Wrong passwords, foreign-character selections, missing creation policy, invalid names/slots and SQLite conflicts fail closed.
+The server performs the complete **server-side** pre-gameplay identity flow over AES-CBC: AuthRequest, AuthResult, owned CharacterList, optional CharacterCreate/CharacterCreateResult plus authoritative list refresh, CharacterChoose, trusted World registration and Gateway binding. Persistent `character_id` becomes ActorId only after ownership verification; ConnectionEpoch and creation spawn are never accepted from the Client. Wrong passwords, foreign-character selections, missing creation policy, invalid names/slots and SQLite conflicts fail closed.
 
-This paragraph records the first Auth/CharacterChoose slice. Formal `SGTest.Server.Host serve` now opens the configured TLS listener, applies global/per-address concurrent admission and an address+account authentication failure limiter, and the Godot client implements these identity frames. Public account registration is now implemented by the later opt-in registration slice below; Internet-facing firewall/DDoS controls remain deployment concerns.
+This paragraph records the first Auth/CharacterChoose slice. Formal `SGTest.Server.Host serve` now opens the configured AES-CBC listener, applies global/per-address concurrent admission and an address+account authentication failure limiter, and the Godot client implements these identity frames. Public account registration is now implemented by the later opt-in registration slice below; Internet-facing firewall/DDoS controls remain deployment concerns.
 
 ## 2026-11-20 Opt-in public account registration
 
@@ -185,13 +185,13 @@ dotnet run --project server/host/SGTest.Server.Host -c Release -- serve ... \
 
 The Client’s “建立帳號並登入” action sends opcode17 AccountRegisterRequest. Result opcode18 is one of Created / Unavailable / UsernameTaken / InvalidInput / RateLimited. Every registration attempt consumes the separate canonical-IP quota; bounded-table exhaustion is fail-closed. Ordinary Login never creates an account implicitly.
 
-**Created is not authentication.** The same TLS connection must immediately complete the normal AuthRequest/AuthResult flow before CharacterList is sent. Only a later CharacterChoose can register a trusted World actor. This preserves the same ownership/Gateway authority path for operator-provisioned and public-created accounts, and reconnect uses only normal Auth rather than re-registering. Server Core **44769015052 PASS (256/256)** and Client Core **44770285345 PASS** include real TLS/Godot registration→Auth with an empty character list and zero gameplay authority.
+**Created is not authentication.** The same AES-CBC connection must immediately complete the normal AuthRequest/AuthResult flow before CharacterList is sent. Only a later CharacterChoose can register a trusted World actor. This preserves the same ownership/Gateway authority path for operator-provisioned and public-created accounts, and reconnect uses only normal Auth rather than re-registering. Server Core **44769015052 PASS (256/256)** and Client Core **44770285345 PASS** include real AES-CBC/Godot registration→Auth with an empty character list and zero gameplay authority.
 
 This feature does not provide email verification, CAPTCHA, account recovery, cross-node quota persistence or Internet WAF/DDoS controls.
 
 ## 2026-11-20 Formal authentication admission / rate policy
 
-`serve` applies two bounded layers before gameplay: `TlsGatewayListener` caps global and canonical-IP concurrent sockets, while `AuthenticationRateLimiter` gates AuthRequest failures by both source address and normalized account. Defaults are 12 failures/address, 6 failures/account, a 60-second failure window and 30-second lockout. Operator overrides are:
+`serve` applies two bounded layers before gameplay: `AesGatewayListener` caps global and canonical-IP concurrent sockets, while `AuthenticationRateLimiter` gates AuthRequest failures by both source address and normalized account. Defaults are 12 failures/address, 6 failures/account, a 60-second failure window and 30-second lockout. Operator overrides are:
 
 ```powershell
 dotnet run --project server/host/SGTest.Server.Host -c Release -- serve ... \
@@ -199,7 +199,7 @@ dotnet run --project server/host/SGTest.Server.Host -c Release -- serve ... \
   --auth-failure-window-seconds 60 --auth-lockout-seconds 30
 ```
 
-All values are bounded and printed in `TLS_HOST_READY`; invalid values fail before listener startup. The limiter tables remain bounded (default 4096 addresses / 16384 accounts). Nonblocked least-recently-seen buckets may be evicted, but an **active lockout is never evicted to admit a new key**. If every slot in a scope is currently protected, admission temporarily fails closed for the configured lockout window instead of turning table pressure into a lockout bypass. Blocked attempts deliberately return the same `InvalidCredentials` status. Successful credential verification clears that account bucket but does not launder source-IP failures.
+All values are bounded and printed in `AES_HOST_READY`; invalid values fail before listener startup. The limiter tables remain bounded (default 4096 addresses / 16384 accounts). Nonblocked least-recently-seen buckets may be evicted, but an **active lockout is never evicted to admit a new key**. If every slot in a scope is currently protected, admission temporarily fails closed for the configured lockout window instead of turning table pressure into a lockout bypass. Blocked attempts deliberately return the same `InvalidCredentials` status. Successful credential verification clears that account bucket but does not launder source-IP failures.
 
 This is an in-process game-server safety boundary. Restart resets limiter memory, and it is not a replacement for network firewall, anti-DDoS, cross-node shared bans or abuse analytics. Server Core **44767204976 PASS (253/253)** includes capacity-saturation bypass regression and real Host non-default CLI policy startup; Client Core **44767205009 PASS**.
 
@@ -209,11 +209,11 @@ This is an in-process game-server safety boundary. Restart resets limiter memory
 
 ## 2026-11-16 Login session cleanup and same-character reconnect
 
-For authenticated TCP clients use `IdentityTlsAuthorization.RunAuthenticatedSocketAsync(...)`: it composes Account/CharacterChoose + Router attach + mandatory TLS gameplay + safe Router detach and authoritative World disconnect. Do **not** call bare `TlsWireConnection.RunServerAsync` with a real authenticated World session without wiring equivalent session cleanup. Only trusted World generations can release the matching character; a stale disconnect cannot remove a new login. On failure after registration but before the successful choose response is committed, the actor is rolled back. The new real TLS checks cover normal disconnect/relogin and invalid gameplay opcode/relogin. Actual login UI, character state save, production listener/rate limit, AOI/WorldReady/resync still remain pending.
+For authenticated TCP clients use `IdentitySessionAuthorization.RunAuthenticatedAesSocketAsync(...)`: it composes Account/CharacterChoose + Router attach + mandatory AES-CBC gameplay + safe Router detach and authoritative World disconnect. Do **not** call bare `AesWireConnection.RunServerAsync` with a real authenticated World session without wiring equivalent session cleanup. Only trusted World generations can release the matching character; a stale disconnect cannot remove a new login. On failure after registration but before the successful choose response is committed, the actor is rolled back. The new real TLS checks cover normal disconnect/relogin and invalid gameplay opcode/relogin. Actual login UI, character state save, production listener/rate limit, AOI/WorldReady/resync still remain pending.
 
 ## 2026-11-16 AOI output consumer
 
-Use `WorldResultRouter.RunAsync(WorldHost.Results)` as the sole authoritative World-result reader and `WorldAoiPump.RunAsync()` as its sole ChangedBatch consumer. The pump retains pending AOI events until authenticated Gateway egress accepts them, and fails closed on overflow; don't bypass it with another all-entities broadcast. The test-only login fixture also invokes it and requires the Godot client to receive WorldReady over TLS. Github Server core 68/68 and Client core secure TLS PASS; production admission/supervision, ACK/resync, Enemy/Drop and two visual clients still incomplete.
+Use `WorldResultRouter.RunAsync(WorldHost.Results)` as the sole authoritative World-result reader and `WorldAoiPump.RunAsync()` as its sole ChangedBatch consumer. The pump retains pending AOI events until authenticated Gateway egress accepts them, and fails closed on overflow; don't bypass it with another all-entities broadcast. The test-only login fixture also invokes it and requires the Godot client to receive WorldReady over AES-CBC. Github Server core 68/68 and Client core secure TLS PASS; production admission/supervision, ACK/resync, Enemy/Drop and two visual clients still incomplete.
 
 
 ## 2026-11-17 已提交地上物同步（MVP006 Ground AOI）
@@ -225,13 +225,13 @@ Use `WorldResultRouter.RunAsync(WorldHost.Results)` as the sole authoritative Wo
 
 ## 2026-11-17 玩家權威拾取（MVP006 Pickup partial）
 
-Godot 左鍵優先命中 AOI 的可見地上物標記（目前採 14 world px 近距點選），ClientSession 只傳 `GroundPickup` V1 **opcode 34／28 bytes**：`MapEpoch:int64, PickupSequence:uint32, DropId:int64`。TLS Server Gateway 依已認證 CharacterId/ConnectionEpoch 建 TrustedGroundPickup，不接受玩家自行指定座標、角色、道具 ID 或物品數。每連線有界 async Worker 會從 ServerWorld 單一 owner 讀取可信位置及 MapEpoch，與 NPC 換圖處理透過 per-session semaphore 序列化；不可用的 World/世代拒絕，死亡角色拒絕。
+Godot 左鍵優先命中 AOI 的可見地上物標記（目前採 14 world px 近距點選），ClientSession 只傳 `GroundPickup` V1 **opcode 34／28 bytes**：`MapEpoch:int64, PickupSequence:uint32, DropId:int64`。AES-CBC Server Gateway 依已認證 CharacterId/ConnectionEpoch 建 TrustedGroundPickup，不接受玩家自行指定座標、角色、道具 ID 或物品數。每連線有界 async Worker 會從 ServerWorld 單一 owner 讀取可信位置及 MapEpoch，與 NPC 換圖處理透過 per-session semaphore 序列化；不可用的 World/世代拒絕，死亡角色拒絕。
 
 既有 SQLite `ClaimGroundDropAsync` 檢查同圖與距離（目前 96 world px：**暫定值，原版尚未核實**）、同掉落 UID 只能一角色領取，且背包 `item_instances` 產生持久物品 UID 與 Claim 在**同一 Transaction**。結果經同一可靠 Gateway FIFO 回覆 `GroundPickupResult` V1 **opcode 35／45 bytes**；只有真正 `Granted` 才向既有 AOI pump 發已領取 UID 通知，對可見玩家送 GroundDropDespawn；不在拾取點擊時樂觀刪除。Server Checks 加入 C#/Godot 互通 golden、偽造 Server result opcode 拒絕、真擊殺→DB Drop→Gateway Pickup→SQLite ItemUid→AOI 消失完整合成環境驗收。Server CI 44085408907 PASS。
 
 Client WorldState 拒絕不同 UID／未送出的拾取結果、只允許一筆等待中的拾取，對相同操作重送不重發物品；`received_item_grants` **僅供目前登入拾取回饋，並非可跨登入讀取的背包快照**。Godot `SessionPanel` 顯示最新 Server 授權物品 UID、ItemId 和數量，不冒充原版物品名稱。正式全背包需另接 Server InventorySnapshot/增量同步，並載入核實後的原版物品圖與名稱。
 
-仍須驗證：原版 96px 拾取距離、Windows GPU/GUI 真地圖、20玩家搶同一 UID 的 TLS 壓測、硬中斷在 DB commit 與 AOI remove notification 間的 reconciliation；同 session NPC transfer 已序列化，但瞬間怪物攻擊致死與拾取跨 worker 的完全線性化仍需實際設計與回歸。
+仍須驗證：原版 96px 拾取距離、Windows GPU/GUI 真地圖、20玩家搶同一 UID 的 AES-CBC 壓測、硬中斷在 DB commit 與 AOI remove notification 間的 reconciliation；同 session NPC transfer 已序列化，但瞬間怪物攻擊致死與拾取跨 worker 的完全線性化仍需實際設計與回歸。
 
 
 ### SQLite 拾取跨重啟冪等世代（2026-11-17）
@@ -262,4 +262,4 @@ Godot 可開啟「背包（N 件）」檢視物品編號、數量、UID，目前
 
 Server 收到 opcode37/28B RecoveryUse，只接受 mapEpoch、單調 useSequence 與 ItemUid。原本 TLS 認證/World Snapshot 供應真正角色/ConnectionEpoch；本連線有界16筆 async worker 與 NPC/Respawn/Pickup 共用 gate，Combat Owner 先暫停/排空怪物傷害。SQLite schema v4 將背包 stack 扣1、持久 HP 回復、獨立 replay receipt 合為一筆 Transaction；最後一件消耗後 UID 從背包移除，但重送紀錄保留。成功結算後更新 Combat projection，送 opcode38/45B reliable result，再恢復怪物傷害；拒絕未核實/不持有/滿血/死亡/不足等級等狀況時不更動道具或 HP。
 
-驗證 Server CI https://github.com/kevin840307/SGTest/actions/runs/44109415226 PASS：真 TLS 登入→回復兩次→重送→用盡堆疊→重登持久 HP/Inventory；queued Monster Damage→回復→再攻擊；Host 用明確核實 JSON 啟動、未核實 JSON 拒絕。Client CI https://github.com/kevin840307/SGTest/actions/runs/44107865203 PASS，涵蓋只扣一次、MapEpoch、按鈕及 HP 變化。原始 ITD 公式、Cooldown、Buff、MP/SP 和真 Windows UI 仍未驗證。
+驗證 Server CI https://github.com/kevin840307/SGTest/actions/runs/44109415226 PASS：真 AES-CBC 登入→回復兩次→重送→用盡堆疊→重登持久 HP/Inventory；queued Monster Damage→回復→再攻擊；Host 用明確核實 JSON 啟動、未核實 JSON 拒絕。Client CI https://github.com/kevin840307/SGTest/actions/runs/44107865203 PASS，涵蓋只扣一次、MapEpoch、按鈕及 HP 變化。原始 ITD 公式、Cooldown、Buff、MP/SP 和真 Windows UI 仍未驗證。

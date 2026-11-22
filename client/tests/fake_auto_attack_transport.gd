@@ -29,7 +29,7 @@ func _init(hold_first_attack: bool = false, simulate_resync_gap: bool = false) -
 	_hold_first_attack = hold_first_attack
 	_simulate_resync_gap = simulate_resync_gap
 
-func start_encrypted(_host: String, _port: int, _common_name: String = "", _trusted_chain = null) -> Error:
+func start_encrypted(_host: String, _port: int, ) -> Error:
 	_mutex.lock()
 	_state = STATE_CONNECTED
 	_error = OK

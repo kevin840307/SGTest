@@ -49,7 +49,7 @@ internal static class EquipmentLoginFixture
                 new Dictionary<int,EquipmentRule>{[3701]=new(3701,4)};
             var router=new WorldResultRouter();
             var pump=new WorldAoiPump(router);
-            var authorization=new IdentityTlsAuthorization(
+            var authorization=new IdentitySessionAuthorization(
                 store,world,pickupWorldGeneration:generation,equipmentRules:rules);
             var settings = AesCbcSettings.FromEnvironment();
                                     var listener=new TcpListener(IPAddress.Loopback,0);
@@ -61,7 +61,7 @@ internal static class EquipmentLoginFixture
             {
                 int port=((IPEndPoint)listener.LocalEndpoint).Port;
                 Console.WriteLine(
-                    $"EQUIPMENT_FIXTURE_READY port={port} cert=unused username={Program.Username} " +
+                    $"EQUIPMENT_FIXTURE_READY port={port} username={Program.Username} " +
                     $"character={characterId} item_uid={grant.ItemUid} slot=4");
                 Console.Out.Flush();
 

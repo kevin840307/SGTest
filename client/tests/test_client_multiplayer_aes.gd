@@ -14,18 +14,17 @@ func _fail(message: String, session = null) -> void:
 
 func _initialize() -> void:
 	var args := OS.get_cmdline_user_args()
-	if args.size() not in [3, 4] or not str(args[0]).is_valid_int() or str(args[2]) not in ["observer", "actor"] or (args.size() == 4 and str(args[3]) not in ["crossmap", "portal"]):
+	if args.size() not in [2, 3] or not str(args[0]).is_valid_int() or str(args[1]) not in ["observer", "actor"] or (args.size() == 3 and str(args[2]) not in ["crossmap", "portal"]):
 		_fail("expected AES port, certificate path, observer|actor")
 		return
-	var role := str(args[2])
-	var crossmap := args.size() == 4
-	var portal := args.size() == 4 and str(args[3]) == "portal"
+	var role := str(args[1])
+	var crossmap := args.size() == 3
+	var portal := args.size() == 3 and str(args[2]) == "portal"
 	var prefix := "PORTAL" if portal else "CROSSMAP" if crossmap else "MULTI"
-	var cert = null
 	var username := "fixture_one" if role == "observer" else "fixture_two"
 	var session = Session.new()
 	var started := session.connect_secure("127.0.0.1", int(args[0]), username,
-		PASSWORD, "localhost", cert)
+		PASSWORD)
 	if started != OK:
 		_fail("AES connect rejected %d" % started, session)
 		return

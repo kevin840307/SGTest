@@ -13,7 +13,7 @@ func _fail(message: String, session = null) -> void:
 func _initialize() -> void:
 	var fake = FakeResyncTransport.new()
 	var session = Session.new(fake)
-	if session.connect_secure("fixture",443,"user_01","Password-123456!","fixture",null) != OK:
+	if session.connect_secure("fixture",443,"user_01","Password-123456!") != OK:
 		_fail("connect",session)
 		return
 	var selecting := _wait(session,func(v): return int(v.state)==WorldState.STATE_SELECTING_CHARACTER,1500)

@@ -23,7 +23,7 @@ public readonly record struct AesGatewayListenerStatistics(
 public sealed class AesGatewayListener : IAsyncDisposable
 {
     private readonly TcpListener _listener;
-    private readonly IdentityTlsAuthorization _authorization;
+    private readonly IdentitySessionAuthorization _authorization;
     private readonly AesCbcSettings _settings;
     private readonly WorldResultRouter _router;
     private readonly AesGatewayListenerOptions _options;
@@ -40,7 +40,7 @@ public sealed class AesGatewayListener : IAsyncDisposable
     private long _accepted, _capacityRejected, _addressRejected, _completed, _commands, _frames;
 
     public AesGatewayListener(IPAddress address, int port,
-        IdentityTlsAuthorization authorization, AesCbcSettings settings,
+        IdentitySessionAuthorization authorization, AesCbcSettings settings,
         WorldResultRouter router, AesGatewayListenerOptions? options = null)
     {
         ArgumentNullException.ThrowIfNull(address);

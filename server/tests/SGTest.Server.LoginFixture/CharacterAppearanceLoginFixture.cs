@@ -23,7 +23,7 @@ internal static class CharacterAppearanceLoginFixture
             long account=(await store.CreateAccountAsync(Program.Username,Program.Password)).AccountId;
             var chosen=new CharacterAppearance(1,3,7);
             var rules=new CharacterAppearanceRules("synthetic/godot-tls-appearance/v1",[new(0,0,0),chosen]);
-            var authorization=new IdentityTlsAuthorization(store,world,
+            var authorization=new IdentitySessionAuthorization(store,world,
                 characterCreation:new(new CharacterSpawn(15,8,8),rules));
             var router=new WorldResultRouter();
             var pump=new WorldAoiPump(router);
@@ -35,7 +35,7 @@ internal static class CharacterAppearanceLoginFixture
             listener.Start(1);
             try
             {
-                Console.WriteLine($"APPEARANCE_FIXTURE_READY port={((IPEndPoint)listener.LocalEndpoint).Port} cert=unused username={Program.Username}");
+                Console.WriteLine($"APPEARANCE_FIXTURE_READY port={((IPEndPoint)listener.LocalEndpoint).Port} username={Program.Username}");
                 Console.Out.Flush();
                 for(int pass=0;pass<2;pass++)
                 {

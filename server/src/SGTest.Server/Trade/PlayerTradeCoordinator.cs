@@ -66,7 +66,7 @@ public sealed class PlayerTradeCoordinator
     }
 
     /// <summary>Called only after an authenticated Gateway binding is attached.
-    /// A stale TLS session must never replace a newer actor's semaphore.</summary>
+    /// A stale authenticated transport session must never replace a newer actor's semaphore.</summary>
     public bool TryRegisterGameplayGate(ConnectionBinding binding,SemaphoreSlim gate)
     {
         ArgumentNullException.ThrowIfNull(gate);

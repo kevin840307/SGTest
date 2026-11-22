@@ -83,7 +83,7 @@ public sealed class AoiBackpressureException : Exception
 /// Single-writer, transport-independent AOI for authoritative player and monster snapshots.
 /// Spatial buckets are per-map; only candidate buckets around a moving viewer
 /// are scanned. Each entity update examines observers on its own map, not every
-/// entity in the World. No DB, socket, TLS or renderer runs here.
+/// entity in the World. No DB, transport or renderer runs here.
 ///
 /// Call Apply in WorldResultRouter.ChangedBatches order; DO NOT feed unordered
 /// events or stale generations. Player and monster Spawn/Delta/Despawn are retained in

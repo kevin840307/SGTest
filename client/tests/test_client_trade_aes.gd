@@ -11,22 +11,21 @@ func _fail(message: String, session = null) -> void:
 
 func _initialize() -> void:
 	var args := OS.get_cmdline_user_args()
-	if args.size() != 7 or not str(args[0]).is_valid_int() or str(args[2]) not in ["observer","actor"]:
-		_fail("expected port cert role actor_a actor_b item_a item_b")
+	if args.size() != 6 or not str(args[0]).is_valid_int() or str(args[1]) not in ["observer","actor"]:
+		_fail("expected port role actor_a actor_b item_a item_b")
 		return
-	var role := str(args[2])
-	var actor_a := int(args[3])
-	var actor_b := int(args[4])
-	var item_a := int(args[5])
-	var item_b := int(args[6])
+	var role := str(args[1])
+	var actor_a := int(args[2])
+	var actor_b := int(args[3])
+	var item_a := int(args[4])
+	var item_b := int(args[5])
 	var self_id := actor_b if role == "observer" else actor_a
 	var peer_id := actor_a if role == "observer" else actor_b
 	var own_item := item_b if role == "observer" else item_a
 	var peer_item := item_a if role == "observer" else item_b
 	var username := "trade_two" if role == "observer" else "trade_one"
-	var cert = null
 	var session = Session.new()
-	if session.connect_secure("127.0.0.1",int(args[0]),username,PASSWORD,"localhost",cert) != OK:
+	if session.connect_secure("127.0.0.1",int(args[0]),username,PASSWORD) != OK:
 		_fail("connect",session)
 		return
 	var selecting := _wait(session,func(v): return int(v.state)==WorldState.STATE_SELECTING_CHARACTER,7000)

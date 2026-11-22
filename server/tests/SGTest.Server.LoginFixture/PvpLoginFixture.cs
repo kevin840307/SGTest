@@ -120,7 +120,7 @@ internal static class PvpLoginFixture
                 });
             var pump=new WorldAoiPump(
                 router,monsters:coordinator,playerCombat:settlement);
-            var authorization=new IdentityTlsAuthorization(
+            var authorization=new IdentitySessionAuthorization(
                 store,world,combat:settlement,
                 gmAccounts:new HashSet<string>(
                     ["pvp_one"],StringComparer.OrdinalIgnoreCase));
@@ -135,7 +135,7 @@ internal static class PvpLoginFixture
             {
                 int port=((IPEndPoint)listener.LocalEndpoint).Port;
                 Console.WriteLine(
-                    $"PVP_FIXTURE_READY port={port} cert=unused " +
+                    $"PVP_FIXTURE_READY port={port} " +
                     $"actor_a={actorA} actor_b={actorB}");
                 Console.Out.Flush();
 

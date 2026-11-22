@@ -14,14 +14,13 @@ func _initialize()->void:
 
 func _run()->void:
 	var args:=OS.get_cmdline_user_args()
-	if args.size()!=2:
+	if args.size()!=1:
 		_fail("expected port and certificate")
 		return
-	var cert = null
 	var session=Session.new()
 	var error:int=session.register_secure(
 		"127.0.0.1",int(args[0]),"fixture_user",
-		"Fixture-Password-123!","localhost",cert)
+		"Fixture-Password-123!")
 	if error!=OK:
 		_fail("register_secure start "+str(error),session)
 		return

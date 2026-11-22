@@ -56,7 +56,7 @@ internal static class PlayerShopLoginFixture
             var shops=new PlayerShopCoordinator(store,world,rules,trades);
             var router=new WorldResultRouter();
             var pump=new WorldAoiPump(router);
-            var authorization=new IdentityTlsAuthorization(
+            var authorization=new IdentitySessionAuthorization(
                 store,world,pickupWorldGeneration:generation,
                 trades:trades,playerShops:shops);
 
@@ -70,7 +70,7 @@ internal static class PlayerShopLoginFixture
             {
                 int port=((IPEndPoint)listener.LocalEndpoint).Port;
                 Console.WriteLine(
-                    $"PLAYER_SHOP_FIXTURE_READY port={port} cert=unused " +
+                    $"PLAYER_SHOP_FIXTURE_READY port={port} " +
                     $"seller={seller} buyer={buyer} item_uid={seeded.ItemUid} " +
                     $"drop_id={seeded.DropId} enhancement=6");
                 Console.Out.Flush();

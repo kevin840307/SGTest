@@ -8,7 +8,7 @@ namespace SGTest.Server.Npc;
 
 /// <summary>
 /// NPC equipment repair and enhancement command settlement after the trusted
-/// TLS/gameplay binding. Shares the authenticated socket's gameplay gate with
+/// authenticated transport/gameplay binding. Shares the authenticated socket's gameplay gate with
 /// trades, pickups and map transfers; no independent transport or persistence.
 /// </summary>
 internal sealed class NpcItemModificationHandler

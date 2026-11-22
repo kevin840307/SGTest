@@ -25,7 +25,7 @@ func _initialize() -> void:
 func _auto_approach_then_attack() -> bool:
 	var fake = FakeAutoAttackTransport.new(false)
 	var session = Session.new(fake)
-	if session.connect_secure("fixture",443,"user_01","Password-123456!","fixture",null) != OK:
+	if session.connect_secure("fixture",443,"user_01","Password-123456!") != OK:
 		_fail("connect",session)
 		return false
 	var ready := _enter_world(session)
@@ -61,7 +61,7 @@ func _auto_approach_then_attack() -> bool:
 func _resync_gap_preserves_chase() -> bool:
 	var fake = FakeAutoAttackTransport.new(false,true)
 	var session = Session.new(fake)
-	if session.connect_secure("fixture",443,"user_01","Password-123456!","fixture",null) != OK:
+	if session.connect_secure("fixture",443,"user_01","Password-123456!") != OK:
 		_fail("resync connect",session)
 		return false
 	var ready := _enter_world(session)
@@ -92,7 +92,7 @@ func _resync_gap_preserves_chase() -> bool:
 func _manual_move_cancels_chase() -> bool:
 	var fake = FakeAutoAttackTransport.new(true)
 	var session = Session.new(fake)
-	if session.connect_secure("fixture",443,"user_01","Password-123456!","fixture",null) != OK:
+	if session.connect_secure("fixture",443,"user_01","Password-123456!") != OK:
 		_fail("cancel connect",session)
 		return false
 	var ready := _enter_world(session)

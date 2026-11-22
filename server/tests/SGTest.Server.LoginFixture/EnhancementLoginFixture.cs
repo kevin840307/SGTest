@@ -77,7 +77,7 @@ internal static class EnhancementLoginFixture
             var enhancers=new NpcEnhancementCatalog([enhancer]);
             var router=new WorldResultRouter();
             var pump=new WorldAoiPump(router);
-            var authorization=new IdentityTlsAuthorization(
+            var authorization=new IdentitySessionAuthorization(
                 store,world,pickupWorldGeneration:generation,
                 enhancers:enhancers,enhancementItemRules:itemRules);
             var settings = AesCbcSettings.FromEnvironment();
@@ -90,7 +90,7 @@ internal static class EnhancementLoginFixture
             {
                 int port=((IPEndPoint)listener.LocalEndpoint).Port;
                 Console.WriteLine(
-                    $"ENHANCEMENT_FIXTURE_READY port={port} cert=unused " +
+                    $"ENHANCEMENT_FIXTURE_READY port={port} " +
                     $"username={Program.Username} character={characterId} " +
                     $"item_uid={itemUid} npc=99 level=0 target=1 success_ppm=1000000 " +
                     "cost=100 wallet=200");

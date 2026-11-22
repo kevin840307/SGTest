@@ -13,23 +13,22 @@ func _fail(message:String,session=null)->void:
 func _initialize()->void:
 	var args:=OS.get_cmdline_user_args()
 	if (
-		args.size()!=7 or
+		args.size()!=6 or
 		not str(args[0]).is_valid_int() or
-		str(args[2]) not in ["seller","buyer"]
+		str(args[1]) not in ["seller","buyer"]
 	):
-		_fail("expected port cert role seller buyer item_uid drop_id")
+		_fail("expected port role seller buyer item_uid drop_id")
 		return
-	var role:=str(args[2])
-	var seller_id:=int(args[3])
-	var buyer_id:=int(args[4])
-	var item_uid:=int(args[5])
-	var drop_id:=int(args[6])
+	var role:=str(args[1])
+	var seller_id:=int(args[2])
+	var buyer_id:=int(args[3])
+	var item_uid:=int(args[4])
+	var drop_id:=int(args[5])
 	var self_id:=seller_id if role=="seller" else buyer_id
 	var username:="pshop_one" if role=="seller" else "pshop_two"
-	var cert = null
 	var session=Session.new()
 	if session.connect_secure(
-		"127.0.0.1",int(args[0]),username,PASSWORD,"localhost",cert)!=OK:
+		"127.0.0.1",int(args[0]),username,PASSWORD)!=OK:
 		_fail("connect",session)
 		return
 	var selecting:=_wait(session,func(v):

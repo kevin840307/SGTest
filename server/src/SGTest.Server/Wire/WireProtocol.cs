@@ -14,9 +14,9 @@ namespace SGTest.Server.Wire;
 
 
 /// <summary>
-/// Version 1 complete-frame codec. Transport/TLS/socket buffering is separate.
+/// Version 1 complete-frame codec. Transport/authenticated transport/socket buffering is separate.
 /// Header = uint32 frameBytes + uint16 version + uint16 opcode, little-endian.
-/// Identity credentials are allowed only inside the mandatory TLS authorization phase.
+/// Identity credentials are allowed only inside the mandatory authenticated transport authorization phase.
 /// ActorId and ConnectionEpoch remain server-owned and absent from gameplay commands.
 /// </summary>
 public static partial class WireProtocol

@@ -5,35 +5,34 @@ using SGTest.Server.Combat;
 using System.Buffers.Binary;
 using System.Diagnostics;
 using System.Net;
-using System.Net.Security;
 using System.Net.Sockets;
-using System.Security.Cryptography.X509Certificates;
 using System.Security.Cryptography;
 using System.Text.Json;
 using SGTest.Server.Gateway;
+using SGTest.Server.Transport;
 using SGTest.Server.Identity;
 using SGTest.Server.Wire;
 using SGTest.Server.World;
 
-internal static class TlsGatewayListenerChecks
+internal static class AesGatewayListenerChecks
 {
     public static void Verify(string root)
     {
-        Checks.Run("TLS listener rejects invalid bounds and public-only certificate before binding",
+        Checks.Run("AES listener rejects invalid capacity and key size before binding",
             () => InvalidConfiguration(root).GetAwaiter().GetResult());
-        Checks.Run("TLS listener global capacity and cancelled slow handshake release socket and slot",
+        Checks.Run("AES listener global capacity and cancelled pending authorization release socket and slot",
             () => Admission(root, false).GetAwaiter().GetResult());
-        Checks.Run("TLS listener per-address capacity refuses without allocating another session",
+        Checks.Run("AES listener per-address capacity refuses without allocating another session",
             () => Admission(root, true).GetAwaiter().GetResult());
-        Checks.Run("TLS listener authenticates reconnect, WorldReady, MoveReceipt and cleans actors on shutdown",
+        Checks.Run("AES listener authenticates reconnect, WorldReady, MoveReceipt and cleans actors on shutdown",
             () => AuthenticatedReconnect(root).GetAwaiter().GetResult());
-        Checks.Run("verified recovery TLS request atomically changes HP and last stack, then relogin persists",
+        Checks.Run("verified recovery AES request atomically changes HP and last stack, then relogin persists",
             () => AuthenticatedRecovery(root).GetAwaiter().GetResult());
-        Checks.Run("inventory discard TLS request atomically removes owned stack and relogin persists",
+        Checks.Run("inventory discard AES request atomically removes owned stack and relogin persists",
             () => AuthenticatedInventoryDiscard(root).GetAwaiter().GetResult());
         Checks.Run("Plaintext and invalid credentials close only that client and release admission",
             () => UntrustedClients(root).GetAwaiter().GetResult());
-        Checks.Run("TLS session infrastructure failure stops admission and is observable by supervisor",
+        Checks.Run("AES listener cancellation releases pending authorization and admission slots",
             () => SessionFailure(root).GetAwaiter().GetResult());
         Checks.Run("Host serve boots AES-CBC on synthetic maps, stops cleanly and rejects invalid CLI",
             () => HostEntry(root).GetAwaiter().GetResult());
@@ -41,11 +40,11 @@ internal static class TlsGatewayListenerChecks
 
     public static void VerifyLoad(string root)
     {
-        Checks.Run("20 distinct accounts use real TLS listener auth, choose, AOI and move receipt with cleanup",
+        Checks.Run("20 distinct accounts use real AES listener auth, choose, AOI and move receipt with cleanup",
             () => AuthenticatedTwentyClients(root).GetAwaiter().GetResult());
-        Checks.Run("20 authenticated TLS clients and 300 monsters + 500 drops in one spatial AOI",
+        Checks.Run("20 authenticated AES clients and 300 monsters + 500 drops in one spatial AOI",
             () => AuthenticatedTwentyClients(root, mixedLoad: true).GetAwaiter().GetResult());
-        Checks.Run("20 authenticated TLS clients share one dense view with 300 monsters and 500 ground drops",
+        Checks.Run("20 authenticated AES clients share one dense view with 300 monsters and 500 ground drops",
             () => AuthenticatedTwentyClients(root, mixedLoad: true, denseLoad: true)
                 .GetAwaiter().GetResult());
         Checks.Run("20 authenticated dense clients sustain movement while 300-monster AI and 500 drops stay live",
@@ -59,11 +58,10 @@ internal static class TlsGatewayListenerChecks
         bool bounds = false, certificate = false;
         try { await using var invalid = fixture.Listener(new(MaxConnections: 0)); }
         catch (ArgumentOutOfRangeException) { bounds = true; }
-        using var publicOnly = new X509Certificate2(fixture.Certificate.Export(X509ContentType.Cert));
+        // Invalid key size must be rejected before listener accepts any client.
         try
         {
-            await using var invalid = new TlsGatewayListener(IPAddress.Loopback, 0,
-                fixture.Authorization, publicOnly, fixture.Router);
+            _ = new AesCbcSettings(new byte[31], new byte[16]);
         }
         catch (ArgumentException) { certificate = true; }
         Checks.Require(bounds && certificate, "listener accepted unsafe deployment configuration");
@@ -85,7 +83,7 @@ internal static class TlsGatewayListenerChecks
         await Until(() => perAddress ? listener.Statistics.RejectedAddress == 1
                                     : listener.Statistics.RejectedCapacity == 1);
         Checks.Require(listener.Statistics.AcceptedConnections == 1 &&
-            listener.Statistics.ActiveAddresses == 1, "rejection allocated TLS/identity session");
+            listener.Statistics.ActiveAddresses == 1, "rejection allocated AES/identity session");
         stop.Cancel();
         await run.WaitAsync(TimeSpan.FromSeconds(5));
         Checks.Require(listener.Statistics.ActiveConnections == 0 &&
@@ -107,9 +105,8 @@ internal static class TlsGatewayListenerChecks
         {
             using var client = new TcpClient();
             await client.ConnectAsync(listener.LocalEndpoint);
-            using var tls = new SslStream(client.GetStream(), false, (_, cert, _, _) =>
-                cert?.GetCertHashString() == fixture.Certificate.GetCertHashString());
-            await TlsSocketChecks.AuthenticateClient(tls);
+            using var tls = new AesCbcFrameStream(client.GetStream(), fixture.Settings);
+
             await tls.WriteAsync(WireProtocol.EncodeAuthRequest(new("listener_user", "Listener-Password-123!")));
             Checks.Require(WireProtocol.TryDecodeAuthResult(await Read(tls), out var auth) &&
                 auth.Status == AuthWireStatus.Success, "listener Auth failed");
@@ -128,7 +125,7 @@ internal static class TlsGatewayListenerChecks
                 loaded.Items.Count==2 &&
                 loaded.Items.Select(x=>x.ItemUid).OrderBy(x=>x)
                     .SequenceEqual(fixture.InventoryUids.OrderBy(x=>x)),
-                "TLS reconnect did not reload the same two persistent inventory UIDs");
+                "AES reconnect did not reload the same two persistent inventory UIDs");
             Checks.Require(WireProtocol.TryDecodeWorldReady(await Read(tls), out var ready) &&
                 ready.ActorId == fixture.CharacterId && ready.ReceiverMapEpoch == choose.MapEpoch,
                 "listener did not deliver authoritative WorldReady");
@@ -173,13 +170,12 @@ internal static class TlsGatewayListenerChecks
         long firstUid=fixture.InventoryUids[0];
         long otherUid=fixture.InventoryUids[1];
 
-        async Task<(SslStream Tls,TcpClient Client,long Epoch)> Login()
+        async Task<(AesCbcFrameStream Aes,TcpClient Client,long Epoch)> Login()
         {
             var client=new TcpClient();
             await client.ConnectAsync(listener.LocalEndpoint);
-            var tls=new SslStream(client.GetStream(),false,(_,cert,_,_)=>
-                cert?.GetCertHashString()==fixture.Certificate.GetCertHashString());
-            await TlsSocketChecks.AuthenticateClient(tls);
+            var tls=new AesCbcFrameStream(client.GetStream(), fixture.Settings);
+
             await tls.WriteAsync(WireProtocol.EncodeAuthRequest(
                 new("listener_user","Listener-Password-123!")));
             Checks.Require(WireProtocol.TryDecodeAuthResult(
@@ -213,7 +209,7 @@ internal static class TlsGatewayListenerChecks
             return (tls,client,selected.MapEpoch);
         }
 
-        async Task<RecoveryUseResultWire> ReadRecovery(SslStream tls)
+        async Task<RecoveryUseResultWire> ReadRecovery(AesCbcFrameStream tls)
         {
             for(int i=0;i<32;i++)
             {
@@ -227,41 +223,41 @@ internal static class TlsGatewayListenerChecks
         var first=await Login();
         try
         {
-            await first.Tls.WriteAsync(WireProtocol.EncodeRecoveryUse(
+            await first.Aes.WriteAsync(WireProtocol.EncodeRecoveryUse(
                 new(first.Epoch,1,firstUid)));
-            var granted=await ReadRecovery(first.Tls);
+            var granted=await ReadRecovery(first.Aes);
             Checks.Require(granted.Status==RecoveryUseStatus.Granted &&
                 granted.ItemUid==firstUid && granted.ItemDefinitionId==1001 &&
                 granted.RemainingQuantity==1 && granted.CurrentHp==90 &&
                 granted.MaxHp==100,
                 "authenticated first potion did not restore one amount");
-            await first.Tls.WriteAsync(WireProtocol.EncodeRecoveryUse(
+            await first.Aes.WriteAsync(WireProtocol.EncodeRecoveryUse(
                 new(first.Epoch,1,firstUid)));
-            var repeated=await ReadRecovery(first.Tls);
+            var repeated=await ReadRecovery(first.Aes);
             Checks.Require(repeated.Status==RecoveryUseStatus.AlreadyGranted &&
                 repeated.RemainingQuantity==1 && repeated.CurrentHp==90,
-                "TLS replay duplicated recovery consumption");
-            await first.Tls.WriteAsync(WireProtocol.EncodeRecoveryUse(
+                "AES replay duplicated recovery consumption");
+            await first.Aes.WriteAsync(WireProtocol.EncodeRecoveryUse(
                 new(first.Epoch,2,firstUid)));
-            var emptied=await ReadRecovery(first.Tls);
+            var emptied=await ReadRecovery(first.Aes);
             Checks.Require(emptied.Status==RecoveryUseStatus.Granted &&
                 emptied.RemainingQuantity==0 && emptied.CurrentHp==100,
-                "TLS second potion did not consume last stack");
+                "AES second potion did not consume last stack");
             Checks.Require((await fixture.Store.GetCharacterCombatProfileAsync(
                 fixture.CharacterId))?.Data.CurrentHp==100 &&
                 (await fixture.Store.ListInventoryItemsAsync(
                     fixture.CharacterId)).Select(x=>x.ItemUid)
                     .SequenceEqual(new[]{otherUid}),
-                "recovery granted wrong persistent inventory/HP after TLS action");
+                "recovery granted wrong persistent inventory/HP after AES action");
         }
         finally
         {
-            await first.Tls.DisposeAsync();
+            await first.Aes.DisposeAsync();
             first.Client.Dispose();
         }
         await Until(()=>listener.Statistics.ActiveConnections==0);
         var second=await Login();
-        await second.Tls.DisposeAsync();
+        await second.Aes.DisposeAsync();
         second.Client.Dispose();
         await Until(()=>listener.Statistics.ActiveConnections==0);
         Checks.Require((await fixture.Store.ListInventoryItemsAsync(
@@ -281,13 +277,12 @@ internal static class TlsGatewayListenerChecks
         long firstUid=fixture.InventoryUids[0];
         long otherUid=fixture.InventoryUids[1];
 
-        async Task<(SslStream Tls,TcpClient Client,long Epoch,InventorySnapshotWire Inventory)> Login()
+        async Task<(AesCbcFrameStream Aes,TcpClient Client,long Epoch,InventorySnapshotWire Inventory)> Login()
         {
             var client=new TcpClient();
             await client.ConnectAsync(listener.LocalEndpoint);
-            var tls=new SslStream(client.GetStream(),false,(_,cert,_,_)=>
-                cert?.GetCertHashString()==fixture.Certificate.GetCertHashString());
-            await TlsSocketChecks.AuthenticateClient(tls);
+            var tls=new AesCbcFrameStream(client.GetStream(), fixture.Settings);
+
             await tls.WriteAsync(WireProtocol.EncodeAuthRequest(
                 new("listener_user","Listener-Password-123!")));
             Checks.Require(WireProtocol.TryDecodeAuthResult(
@@ -317,7 +312,7 @@ internal static class TlsGatewayListenerChecks
             return (tls,client,selected.MapEpoch,inventory!);
         }
 
-        async Task<InventoryDiscardResultWire> ReadDiscard(SslStream tls)
+        async Task<InventoryDiscardResultWire> ReadDiscard(AesCbcFrameStream tls)
         {
             for(int i=0;i<32;i++)
             {
@@ -336,25 +331,25 @@ internal static class TlsGatewayListenerChecks
                 first.Inventory.Items.Any(x=>x.ItemUid==firstUid&&x.Quantity==2) &&
                 first.Inventory.Items.Any(x=>x.ItemUid==otherUid&&x.Quantity==3),
                 "discard login baseline did not expose durable owned stacks");
-            await first.Tls.WriteAsync(WireProtocol.EncodeInventoryDiscard(
+            await first.Aes.WriteAsync(WireProtocol.EncodeInventoryDiscard(
                 new(first.Epoch,1,firstUid,1)));
-            var applied=await ReadDiscard(first.Tls);
+            var applied=await ReadDiscard(first.Aes);
             Checks.Require(applied.Status==InventoryDiscardStatus.Applied &&
                 applied.ItemUid==firstUid && applied.ItemDefinitionId==2701 &&
                 applied.DiscardedQuantity==1 && applied.RemainingQuantity==1,
                 "authenticated discard did not remove exactly one owned unit");
-            await first.Tls.WriteAsync(WireProtocol.EncodeInventoryDiscard(
+            await first.Aes.WriteAsync(WireProtocol.EncodeInventoryDiscard(
                 new(first.Epoch,1,firstUid,1)));
-            var replay=await ReadDiscard(first.Tls);
+            var replay=await ReadDiscard(first.Aes);
             Checks.Require(replay.Status==InventoryDiscardStatus.AlreadyApplied &&
                 replay.DiscardedQuantity==1 && replay.RemainingQuantity==1,
-                "TLS discard replay consumed another unit");
-            await first.Tls.WriteAsync(WireProtocol.EncodeInventoryDiscard(
+                "AES discard replay consumed another unit");
+            await first.Aes.WriteAsync(WireProtocol.EncodeInventoryDiscard(
                 new(first.Epoch,2,firstUid,1)));
-            var emptied=await ReadDiscard(first.Tls);
+            var emptied=await ReadDiscard(first.Aes);
             Checks.Require(emptied.Status==InventoryDiscardStatus.Applied &&
                 emptied.RemainingQuantity==0,
-                "TLS second discard did not remove final stack unit");
+                "AES second discard did not remove final stack unit");
             var persisted=await fixture.Store.ListInventoryItemsAsync(
                 fixture.CharacterId);
             Checks.Require(persisted.Count==1 &&
@@ -363,7 +358,7 @@ internal static class TlsGatewayListenerChecks
         }
         finally
         {
-            await first.Tls.DisposeAsync();
+            await first.Aes.DisposeAsync();
             first.Client.Dispose();
         }
 
@@ -378,7 +373,7 @@ internal static class TlsGatewayListenerChecks
         }
         finally
         {
-            await second.Tls.DisposeAsync();
+            await second.Aes.DisposeAsync();
             second.Client.Dispose();
         }
         await Until(()=>listener.Statistics.ActiveConnections==0);
@@ -388,27 +383,24 @@ internal static class TlsGatewayListenerChecks
 
     private static async Task SessionFailure(string root)
     {
+        // An AES-CBC listener has no certificate to invalidate mid-handshake.
+        // Exercise cancellation while an authenticated transport admission is pending.
         await using var fixture = await Fixture.Create(root);
-        var listener = fixture.Listener(new(MaxConnections: 2, MaxConnectionsPerAddress: 2));
-        var run = listener.RunAsync();
+        await using var listener = fixture.Listener(
+            new(MaxConnections: 2, MaxConnectionsPerAddress: 2));
+        using var stop = new CancellationTokenSource();
+        var run = listener.RunAsync(stop.Token);
         var endpoint = listener.LocalEndpoint;
-        // Deliberately invalidate the borrowed certificate after startup. This
-        // models an infrastructure fault, not an untrusted malformed packet.
-        fixture.Certificate.Dispose();
         using var client = new TcpClient();
         await client.ConnectAsync(endpoint);
-        bool failed = false;
-        try { await run.WaitAsync(TimeSpan.FromSeconds(5)); }
-        catch (Exception error) when (error is CryptographicException or InvalidOperationException or ObjectDisposedException)
-        { failed = true; }
-        finally
-        {
-            try { await listener.DisposeAsync(); }
-            catch (Exception error) when (error is CryptographicException or InvalidOperationException or ObjectDisposedException) { }
-        }
-        Checks.Require(failed && listener.Statistics.ActiveConnections == 0 &&
-            listener.Statistics.ActiveAddresses == 0 && fixture.Router.Statistics.ActiveSessions == 0,
-            "session failure was hidden or left open admission/socket/route");
+        await Until(() => listener.Statistics.ActiveConnections == 1);
+        stop.Cancel();
+        await run.WaitAsync(TimeSpan.FromSeconds(5));
+        Checks.Require(listener.Statistics.ActiveConnections == 0 &&
+            listener.Statistics.ActiveAddresses == 0 &&
+            listener.Statistics.CompletedConnections == 1 &&
+            fixture.Router.Statistics.ActiveSessions == 0,
+            "session cancellation leaked AES admission/socket/route");
         using var replacement = new TcpListener(endpoint);
         replacement.Start();
         replacement.Stop();
@@ -418,22 +410,21 @@ internal static class TlsGatewayListenerChecks
     {
         await using var fixture = await Fixture.Create(root);
         await using var listener = fixture.Listener(new(MaxConnections: 2, MaxConnectionsPerAddress: 2,
-            Connection: new(HandshakeTimeoutMilliseconds: 500, AuthorizationTimeoutMilliseconds: 1000)));
+            Connection: new(AuthorizationTimeoutMilliseconds: 1000)));
         using var stop = new CancellationTokenSource();
         var run = listener.RunAsync(stop.Token);
         using (var plaintext = new TcpClient())
         {
             await plaintext.ConnectAsync(listener.LocalEndpoint);
-            await plaintext.GetStream().WriteAsync("not-a-TLS-client"u8.ToArray());
+            await plaintext.GetStream().WriteAsync("not-a-AES-client"u8.ToArray());
         }
         await Until(() => listener.Statistics.CompletedConnections == 1);
         Checks.Require(!run.IsCompleted, "untrusted plaintext stopped all admission");
         using (var denied = new TcpClient())
         {
             await denied.ConnectAsync(listener.LocalEndpoint);
-            using var tls = new SslStream(denied.GetStream(), false, (_, cert, _, _) =>
-                cert?.GetCertHashString() == fixture.Certificate.GetCertHashString());
-            await TlsSocketChecks.AuthenticateClient(tls);
+            using var tls = new AesCbcFrameStream(denied.GetStream(), fixture.Settings);
+
             await tls.WriteAsync(WireProtocol.EncodeAuthRequest(new("listener_user", "Wrong-Password-123!")));
             Checks.Require(WireProtocol.TryDecodeAuthResult(await Read(tls), out var result) &&
                 result.Status == AuthWireStatus.InvalidCredentials, "invalid login was not rejected");
@@ -459,9 +450,7 @@ internal static class TlsGatewayListenerChecks
                 npcs = Array.Empty<object>()
             }));
         }
-        string pfx = Path.Combine(content, "test-only.pfx");
-        File.WriteAllBytes(pfx, fixture.Certificate.Export(X509ContentType.Pfx, "Listener-PFX-test-only"));
-        string hostDll = Checks.HostAssemblyPath();
+                string hostDll = Checks.HostAssemblyPath();
         async Task<(int Exit, string Out, string Error)> Run(params string[] args)
         {
             var start = new ProcessStartInfo("dotnet") { RedirectStandardOutput = true,
@@ -559,7 +548,7 @@ internal static class TlsGatewayListenerChecks
 
     /// <summary>
     /// End-to-end admission through the real listener and SQLite identity.
-    /// Unlike the earlier pre-bound 20-TLS AOI resync test, each independent
+    /// Unlike the earlier pre-bound 20-AES AOI resync test, each independent
     /// client must authenticate its own account, select its own character,
     /// and verify every other actor appears through the shared AOI pipeline.
     /// This is a synthetic 20-client .NET loopback test, not 20 Godot renderers.
@@ -597,9 +586,8 @@ internal static class TlsGatewayListenerChecks
 
         await using var listener = fixture.Listener(new(
             MaxConnections: players, MaxConnectionsPerAddress: players, Backlog: 32,
-            Connection: new TlsWireConnectionOptions(
-                HandshakeTimeoutMilliseconds: 10000,
-                AuthorizationTimeoutMilliseconds: 30000)));
+            Connection: new AesWireConnectionOptions(
+AuthorizationTimeoutMilliseconds: 30000)));
         using var stop = new CancellationTokenSource();
         using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(50));
         var run = listener.RunAsync(stop.Token);
@@ -642,12 +630,8 @@ internal static class TlsGatewayListenerChecks
                 await client.ConnectAsync(listener.LocalEndpoint, deadline.Token);
                 // Pin the fixture's ephemeral self-signed certificate instead
                 // of disabling certificate validation for this E2E login.
-                using var tls = new SslStream(client.GetStream(), false,
-                    (_, certificate, _, _) =>
-                        certificate?.GetCertHashString() ==
-                        fixture.Certificate.GetCertHashString());
-                await TlsSocketChecks.AuthenticateClient(tls)
-                    .WaitAsync(deadline.Token);
+                using var tls = new AesCbcFrameStream(client.GetStream(), fixture.Settings);
+
                 async Task<byte[]> Receive()
                 {
                     var header = new byte[WireProtocol.HeaderBytes];
@@ -655,7 +639,7 @@ internal static class TlsGatewayListenerChecks
                     int length = BinaryPrimitives.ReadInt32LittleEndian(header);
                     Checks.Require(length >= WireProtocol.HeaderBytes &&
                         length <= WireProtocol.MaximumFrameBytes,
-                        $"authenticated client {index} invalid TLS frame length");
+                        $"authenticated client {index} invalid AES frame length");
                     var frame = new byte[length];
                     header.CopyTo(frame, 0);
                     await tls.ReadExactlyAsync(frame.AsMemory(header.Length), deadline.Token);
@@ -975,10 +959,10 @@ internal static class TlsGatewayListenerChecks
                     "authenticated mixed load lost Host, Router or Monster authority");
             }
             Console.WriteLine(
-                (sustainedLoad ? "SERVER_AUTHENTICATED_SUSTAINED_20_TLS_PASS " :
-                    denseLoad ? "SERVER_AUTHENTICATED_DENSE_20_TLS_PASS " :
-                    mixedLoad ? "SERVER_AUTHENTICATED_MIXED_20_TLS_PASS " :
-                    "SERVER_AUTHENTICATED_20_TLS_PASS ") +
+                (sustainedLoad ? "SERVER_AUTHENTICATED_SUSTAINED_20_AES_PASS " :
+                    denseLoad ? "SERVER_AUTHENTICATED_DENSE_20_AES_PASS " :
+                    mixedLoad ? "SERVER_AUTHENTICATED_MIXED_20_AES_PASS " :
+                    "SERVER_AUTHENTICATED_20_AES_PASS ") +
                 $"distinct_accounts={players} concurrent_sessions={players} " +
                 $"peer_spawns={receivedSpawns} monster_spawns={receivedMonsters} " +
                 $"ground_drop_spawns={receivedDrops} move_receipts={receipts} " +
@@ -1028,13 +1012,13 @@ internal static class TlsGatewayListenerChecks
         }
     }
 
-    private static async Task<byte[]> Read(SslStream tls)
+    private static async Task<byte[]> Read(AesCbcFrameStream tls)
     {
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
         byte[] header = new byte[8];
         await tls.ReadExactlyAsync(header, timeout.Token);
         int length = BinaryPrimitives.ReadInt32LittleEndian(header);
-        Checks.Require(length is >= 8 and <= 4096, "TLS frame bound");
+        Checks.Require(length is >= 8 and <= 4096, "AES frame bound");
         byte[] frame = new byte[length];
         header.CopyTo(frame, 0);
         await tls.ReadExactlyAsync(frame.AsMemory(8), timeout.Token);
@@ -1045,9 +1029,9 @@ internal static class TlsGatewayListenerChecks
     {
         public required ServerWorldHost Host;
         public required SqliteIdentityStore Store;
-        public required X509Certificate2 Certificate;
+        public required AesCbcSettings Settings;
         public required WorldResultRouter Router;
-        public required IdentityTlsAuthorization Authorization;
+        public required IdentitySessionAuthorization Authorization;
         public long CharacterId;
         public required long[] InventoryUids;
         public required Task Routing;
@@ -1198,7 +1182,7 @@ internal static class TlsGatewayListenerChecks
             IReadOnlyDictionary<int,RecoveryItemRule>? rules=withRecovery
                 ? new Dictionary<int,RecoveryItemRule>{{1001,new(1001,30,1)}} : null;
             return new() {
-                Host=host,Store=store,Certificate=TlsSocketChecks.CreateCertificate(),
+                Host=host,Store=store,Settings=AesSocketChecks.CreateSettings(),
                 Router=router,
                 Authorization=new(store,host,combat:combat,
                     pickupWorldGeneration:generation,recoveryRules:rules),
@@ -1210,8 +1194,8 @@ internal static class TlsGatewayListenerChecks
             };
         }
 
-        public TlsGatewayListener Listener(TlsGatewayListenerOptions options) =>
-            new(IPAddress.Loopback, 0, Authorization, Certificate, Router, options);
+        public AesGatewayListener Listener(AesGatewayListenerOptions options) =>
+            new(IPAddress.Loopback, 0, Authorization, Settings, Router, options);
 
         public async ValueTask DisposeAsync()
         {
@@ -1222,7 +1206,7 @@ internal static class TlsGatewayListenerChecks
                 await CombatWorker.WaitAsync(TimeSpan.FromSeconds(5));
             CombatStop?.Dispose();
             await Host.DisposeAsync();
-            Certificate.Dispose();
+
             Store.Dispose();
         }
     }

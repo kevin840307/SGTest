@@ -58,7 +58,7 @@ internal static class TradeLoginFixture
             var coordinator=new PlayerTradeCoordinator(store,world,rules);
             var router=new WorldResultRouter();
             var pump=new WorldAoiPump(router);
-            var authorization=new IdentityTlsAuthorization(
+            var authorization=new IdentitySessionAuthorization(
                 store,world,pickupWorldGeneration:generation,trades:coordinator);
             var settings = AesCbcSettings.FromEnvironment();
                                     var listener=new TcpListener(IPAddress.Loopback,0);
@@ -70,7 +70,7 @@ internal static class TradeLoginFixture
             {
                 int port=((IPEndPoint)listener.LocalEndpoint).Port;
                 Console.WriteLine(
-                    $"TRADE_FIXTURE_READY port={port} cert=unused " +
+                    $"TRADE_FIXTURE_READY port={port} " +
                     $"actor_a={charA} actor_b={charB} item_a={itemA.ItemUid} item_b={itemB.ItemUid} " +
                     "level_a=5 level_b=7 durability_a=80 durability_b=60");
                 Console.Out.Flush();

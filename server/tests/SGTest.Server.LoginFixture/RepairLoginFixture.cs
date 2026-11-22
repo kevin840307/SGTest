@@ -72,7 +72,7 @@ internal static class RepairLoginFixture
             var repairs=new NpcRepairCatalog([repairNpc]);
             var router=new WorldResultRouter();
             var pump=new WorldAoiPump(router);
-            var authorization=new IdentityTlsAuthorization(
+            var authorization=new IdentitySessionAuthorization(
                 store,world,pickupWorldGeneration:generation,
                 repairs:repairs,repairItemRules:repairItems);
             var settings = AesCbcSettings.FromEnvironment();
@@ -85,7 +85,7 @@ internal static class RepairLoginFixture
             {
                 int port=((IPEndPoint)listener.LocalEndpoint).Port;
                 Console.WriteLine(
-                    $"REPAIR_FIXTURE_READY port={port} cert=unused username={Program.Username} " +
+                    $"REPAIR_FIXTURE_READY port={port} username={Program.Username} " +
                     $"character={characterId} item_uid={itemUid} npc=88 current=80 max=100 cost=20 wallet=100");
                 Console.Out.Flush();
 

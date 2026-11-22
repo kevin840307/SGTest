@@ -192,7 +192,7 @@ public sealed class WorldAoiPump
                     }
                 }
 
-                // Kept for transport-independent unit callers. Production TLS
+                // Kept for transport-independent unit callers. Production authenticated transport
                 // uses PrepareSkillAsync -> durable resource settlement ->
                 // FinishPreparedSkillAsync instead of this immediate path.
                 while(_router.SkillRequests.TryRead(out var skill))

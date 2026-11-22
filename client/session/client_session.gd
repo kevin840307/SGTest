@@ -25,8 +25,6 @@ var _published: Dictionary = _world.snapshot()
 var _published_revision := 0 # monotonic for this ClientSession, including reconnects
 var _host := ""
 var _port := 0
-var _common_name := ""
-var _trusted_chain = null
 var _username := ""
 var _credential_bytes := PackedByteArray()
 var _register_first := false
@@ -41,23 +39,17 @@ var _intent_token := 0
 func _init(transport_override: RefCounted = null) -> void:
 	_transport = transport_override if transport_override != null else Transport.new()
 
-func connect_secure(
-		host:String,port:int,username:String,password:String,
-		common_name:String="",trusted_chain=null)->Error:
-	return _connect_secure(
-		host,port,username,password,common_name,trusted_chain,false)
+func connect_secure(host:String,port:int,username:String,password:String)->Error:
+	return _connect_secure(host,port,username,password,false)
 
 
-func register_secure(
-		host:String,port:int,username:String,password:String,
-		common_name:String="",trusted_chain=null)->Error:
-	return _connect_secure(
-		host,port,username,password,common_name,trusted_chain,true)
+func register_secure(host:String,port:int,username:String,password:String)->Error:
+	return _connect_secure(host,port,username,password,true)
 
 
 func _connect_secure(
 		host:String,port:int,username:String,password:String,
-		common_name:String,trusted_chain,register_first:bool)->Error:
+		register_first:bool)->Error:
 	if username.is_empty() or password.is_empty():
 		return ERR_INVALID_PARAMETER
 	_mutex.lock()
@@ -69,8 +61,6 @@ func _connect_secure(
 	_world = WorldState.new()
 	_host = host
 	_port = port
-	_common_name = common_name
-	_trusted_chain = trusted_chain
 	_username = username
 	_clear_credentials_locked()
 	_credential_bytes = password.to_utf8_buffer()

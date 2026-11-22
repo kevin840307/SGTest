@@ -4,7 +4,7 @@ namespace SGTest.Server.Gateway;
 
 /// <summary>
 /// One existing per-command-type bounded FIFO and sequential consumer within
-/// a single authenticated TLS session. Does not own a socket, gameplay gate,
+/// a single authenticated authenticated transport session. Does not own a socket, gameplay gate,
 /// identity, World state, or an additional dispatch path.
 /// </summary>
 internal sealed class SessionCommandWorker<T>

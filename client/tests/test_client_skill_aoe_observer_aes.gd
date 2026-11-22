@@ -12,14 +12,13 @@ func _fail(message: String, session = null) -> void:
 
 func _initialize() -> void:
 	var args := OS.get_cmdline_user_args()
-	if args.size()!=3 or not str(args[0]).is_valid_int() or str(args[2]) not in ["observer","actor"]:
+	if args.size()!=2 or not str(args[0]).is_valid_int() or str(args[1]) not in ["observer","actor"]:
 		_fail("expected AES port, certificate path, observer|actor")
 		return
-	var role := str(args[2])
-	var cert = null
+	var role := str(args[1])
 	var username := "fixture_one" if role=="observer" else "fixture_two"
 	var session = Session.new()
-	if session.connect_secure("127.0.0.1",int(args[0]),username,PASSWORD,"localhost",cert) != OK:
+	if session.connect_secure("127.0.0.1",int(args[0]),username,PASSWORD) != OK:
 		_fail("connect",session)
 		return
 	var selecting := _wait(session,func(v):

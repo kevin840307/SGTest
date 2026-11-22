@@ -8,10 +8,8 @@ using SGTest.Server.Npc;
 using SGTest.Server.Combat;
 using System.Buffers.Binary;
 using System.Net;
-using System.Net.Security;
 using System.Net.Sockets;
 using System.Security.Cryptography;
-using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using SGTest.Server.Identity;
 using SGTest.Server.Wire;
@@ -20,7 +18,7 @@ using SGTest.Server.World;
 namespace SGTest.Server.Gateway;
 
 /// <summary>Authenticated account/character binding to the trusted gateway and world lifecycle.</summary>
-public sealed partial class IdentityTlsAuthorization
+public sealed partial class IdentitySessionAuthorization
 {
     public async ValueTask<GatewayConnection?> AuthorizeAndBindAsync(
         Stream tls, CancellationToken cancellationToken,
@@ -72,7 +70,7 @@ public sealed partial class IdentityTlsAuthorization
                 return null;
 
             // Registration only creates durable credentials. Authentication is
-            // deliberately a second explicit step on the SAME mandatory TLS
+            // deliberately a second explicit step on the SAME mandatory authenticated transport
             // connection so account creation never grants gameplay authority.
             authFrame=await ReadFrameAsync(
                 tls,cancellationToken).ConfigureAwait(false);
@@ -243,7 +241,7 @@ public sealed partial class IdentityTlsAuthorization
                 character.CharacterId,cancellationToken).ConfigureAwait(false);
 
         // Do not cancel ONLY the waiter: the trusted World queue may finish
-        // registration after the TLS authorization timeout, leaking a character.
+        // registration after the authenticated transport authorization timeout, leaking a character.
         ActorSnapshot? actor;
         try
         {
@@ -284,7 +282,7 @@ public sealed partial class IdentityTlsAuthorization
                 }
             }
 
-            // Bounded durable inventory baseline is read on the TLS async
+            // Bounded durable inventory baseline is read on the authenticated transport async
             // authorization path, before the Gateway begins AOI egress.
             // Do not emit a partial/truncated snapshot. Item instances are
             // owned by the selected authenticated character only.

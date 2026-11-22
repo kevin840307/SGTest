@@ -29,7 +29,7 @@ func _initialize() -> void:
 func _run_case(cadence: int) -> Dictionary:
 	var fake = FakeTransport.new()
 	var session = Session.new(fake)
-	var error := session.connect_secure("fixture", 443, "user_01", "Password-123456!", "fixture", null)
+	var error := session.connect_secure("fixture", 443, "user_01", "Password-123456!")
 	if error != OK:
 		_fail("cadence %d connect error %d" % [cadence, error])
 		return {}

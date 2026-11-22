@@ -8,7 +8,7 @@ import sys
 import threading
 import time
 
-READY = re.compile(r"LOGIN_FIXTURE_READY port=(\d+) cert=unused username=")
+READY = re.compile(r"LOGIN_FIXTURE_READY port=(\d+) username=")
 
 
 def main() -> int:
@@ -213,7 +213,7 @@ def main() -> int:
 def run_identity_creation(args, repo: Path, fixture: Path, env: dict[str, str], *, appearance=False) -> int:
     prefix = "APPEARANCE_FIXTURE" if appearance else "REGISTER_FIXTURE"
     client_marker = "CLIENT_CHARACTER_APPEARANCE_AES_PASS" if appearance else "CLIENT_REGISTRATION_AES_PASS"
-    ready_pattern = re.compile(prefix + r"_READY port=(\d+) cert=(.+?) username=")
+    ready_pattern = re.compile(prefix + r"_READY port=(\d+) username=")
     server = subprocess.Popen(
         ["dotnet", "run", "--project", str(fixture), "-c", "Release",
          "--no-build", "--", "--appearance" if appearance else "--register"],
@@ -246,11 +246,11 @@ def run_identity_creation(args, repo: Path, fixture: Path, env: dict[str, str], 
                 break
         if ready is None:
             raise RuntimeError(prefix+" never became ready")
-        port, cert = ready.group(1), ready.group(2)
+        port = ready.group(1)
         client = subprocess.run(
             [args.godot, "--headless", "--path", str(repo / "client"),
              "--script", "res://tests/test_client_character_appearance_aes.gd" if appearance else "res://tests/test_client_registration_aes.gd",
-             "--", port, cert],
+             "--", port],
             cwd=repo, text=True, stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT, timeout=args.timeout)
         print(client.stdout, end="")
@@ -316,13 +316,13 @@ def run_auto_attack(args, repo: Path, fixture: Path, env: dict[str, str]) -> int
                 break
         if ready is None:
             raise RuntimeError("auto-attack fixture never became ready")
-        match = re.search(r"AUTO_ATTACK_FIXTURE_READY port=(\d+) cert=(.+?) username=", ready)
+        match = re.search(r"AUTO_ATTACK_FIXTURE_READY port=(\d+) username=", ready)
         if match is None:
             raise RuntimeError("malformed auto-attack fixture readiness: " + ready)
-        port, cert = match.group(1), match.group(2)
+        port = match.group(1)
         client = subprocess.run(
             [args.godot, "--headless", "--path", str(repo / "client"),
-             "--script", "res://tests/test_client_auto_approach_aes.gd", "--", port, cert],
+             "--script", "res://tests/test_client_auto_approach_aes.gd", "--", port],
             cwd=repo, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
             timeout=max(1.0, deadline - time.monotonic()))
         print(client.stdout, end="")
@@ -383,13 +383,13 @@ def run_discard(args, repo: Path, fixture: Path, env: dict[str, str]) -> int:
                 break
         if ready is None:
             raise RuntimeError("discard fixture never became ready")
-        match = re.search(r"DISCARD_FIXTURE_READY port=(\d+) cert=(.+?) username=", ready)
+        match = re.search(r"DISCARD_FIXTURE_READY port=(\d+) username=", ready)
         if match is None:
             raise RuntimeError("malformed discard fixture readiness: " + ready)
-        port, cert = match.group(1), match.group(2)
+        port = match.group(1)
         client = subprocess.run(
             [args.godot, "--headless", "--path", str(repo / "client"),
-             "--script", "res://tests/test_client_discard_aes.gd", "--", port, cert],
+             "--script", "res://tests/test_client_discard_aes.gd", "--", port],
             cwd=repo, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
             timeout=max(1.0, deadline - time.monotonic()))
         print(client.stdout, end="")
@@ -450,13 +450,13 @@ def run_storage(args, repo: Path, fixture: Path, env: dict[str, str]) -> int:
                 break
         if ready is None:
             raise RuntimeError("storage fixture never became ready")
-        match = re.search(r"STORAGE_FIXTURE_READY port=(\d+) cert=(.+?) username=", ready)
+        match = re.search(r"STORAGE_FIXTURE_READY port=(\d+) username=", ready)
         if match is None:
             raise RuntimeError("malformed storage fixture readiness: " + ready)
-        port, cert = match.group(1), match.group(2)
+        port = match.group(1)
         client = subprocess.run(
             [args.godot, "--headless", "--path", str(repo / "client"),
-             "--script", "res://tests/test_client_storage_aes.gd", "--", port, cert],
+             "--script", "res://tests/test_client_storage_aes.gd", "--", port],
             cwd=repo, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
             timeout=max(1.0, deadline - time.monotonic()))
         print(client.stdout, end="")
@@ -519,13 +519,13 @@ def run_equipment(args, repo: Path, fixture: Path, env: dict[str, str]) -> int:
                 break
         if ready is None:
             raise RuntimeError("equipment fixture never became ready")
-        match = re.search(r"EQUIPMENT_FIXTURE_READY port=(\d+) cert=(.+?) username=", ready)
+        match = re.search(r"EQUIPMENT_FIXTURE_READY port=(\d+) username=", ready)
         if match is None:
             raise RuntimeError("malformed equipment fixture readiness: " + ready)
-        port, cert = match.group(1), match.group(2)
+        port = match.group(1)
         client = subprocess.run(
             [args.godot, "--headless", "--path", str(repo / "client"),
-             "--script", "res://tests/test_client_equipment_aes.gd", "--", port, cert],
+             "--script", "res://tests/test_client_equipment_aes.gd", "--", port],
             cwd=repo, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
             timeout=max(1.0, deadline - time.monotonic()))
         print(client.stdout, end="")
@@ -587,13 +587,13 @@ def run_bank(args, repo: Path, fixture: Path, env: dict[str, str]) -> int:
                 break
         if ready is None:
             raise RuntimeError("bank fixture never became ready")
-        match = re.search(r"BANK_FIXTURE_READY port=(\d+) cert=(.+?) username=", ready)
+        match = re.search(r"BANK_FIXTURE_READY port=(\d+) username=", ready)
         if match is None:
             raise RuntimeError("malformed bank fixture readiness: " + ready)
-        port, cert = match.group(1), match.group(2)
+        port = match.group(1)
         client = subprocess.run(
             [args.godot, "--headless", "--path", str(repo / "client"),
-             "--script", "res://tests/test_client_bank_aes.gd", "--", port, cert],
+             "--script", "res://tests/test_client_bank_aes.gd", "--", port],
             cwd=repo, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
             timeout=max(1.0, deadline - time.monotonic()))
         print(client.stdout, end="")
@@ -657,13 +657,13 @@ def run_repair(args, repo: Path, fixture: Path, env: dict[str, str]) -> int:
                 break
         if ready is None:
             raise RuntimeError("repair fixture never became ready")
-        match = re.search(r"REPAIR_FIXTURE_READY port=(\d+) cert=(.+?) username=", ready)
+        match = re.search(r"REPAIR_FIXTURE_READY port=(\d+) username=", ready)
         if match is None:
             raise RuntimeError("malformed repair fixture readiness: " + ready)
-        port, cert = match.group(1), match.group(2)
+        port = match.group(1)
         client = subprocess.run(
             [args.godot, "--headless", "--path", str(repo / "client"),
-             "--script", "res://tests/test_client_repair_aes.gd", "--", port, cert],
+             "--script", "res://tests/test_client_repair_aes.gd", "--", port],
             cwd=repo, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
             timeout=max(1.0, deadline - time.monotonic()))
         print(client.stdout, end="")
@@ -729,16 +729,16 @@ def run_enhancement(args, repo: Path, fixture: Path, env: dict[str, str]) -> int
         if ready is None:
             raise RuntimeError("enhancement fixture never became ready")
         match = re.search(
-            r"ENHANCEMENT_FIXTURE_READY port=(\d+) cert=(.+?) username=",
+            r"ENHANCEMENT_FIXTURE_READY port=(\d+) username=",
             ready)
         if match is None:
             raise RuntimeError(
                 "malformed enhancement fixture readiness: " + ready)
-        port, cert = match.group(1), match.group(2)
+        port = match.group(1)
         client = subprocess.run(
             [args.godot, "--headless", "--path", str(repo / "client"),
              "--script", "res://tests/test_client_enhancement_aes.gd", "--",
-             port, cert],
+             port],
             cwd=repo, text=True, stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             timeout=max(1.0, deadline - time.monotonic()))
@@ -813,14 +813,14 @@ def run_player_shop(args, repo: Path, fixture: Path, env: dict[str, str]) -> int
     try:
         ready=until(server_notices,"PLAYER_SHOP_FIXTURE_READY",deadline,server)
         match=re.search(
-            r"PLAYER_SHOP_FIXTURE_READY port=(\d+) cert=(.+?) seller=(\d+) "
+            r"PLAYER_SHOP_FIXTURE_READY port=(\d+) seller=(\d+) "
             r"buyer=(\d+) item_uid=(\d+) drop_id=(\d+)",ready)
         if match is None:
             raise RuntimeError("malformed player-shop fixture readiness: "+ready)
-        port,cert,seller_id,buyer_id,item_uid,drop_id=match.groups()
+        port, seller_id,buyer_id,item_uid,drop_id=match.groups()
         base=[args.godot,"--headless","--path",str(repo/"client"),
               "--script","res://tests/test_client_player_shop_aes.gd","--",
-              port,cert]
+              port]
         tail=[seller_id,buyer_id,item_uid,drop_id]
 
         seller=subprocess.Popen(
@@ -925,14 +925,14 @@ def run_pvp(args, repo: Path, fixture: Path, env: dict[str, str]) -> int:
     try:
         ready = until(server_events, "PVP_FIXTURE_READY", server)
         match = re.search(
-            r"PVP_FIXTURE_READY port=(\d+) cert=(.+?) actor_a=(\d+) actor_b=(\d+)",
+            r"PVP_FIXTURE_READY port=(\d+) actor_a=(\d+) actor_b=(\d+)",
             ready)
         if match is None:
             raise RuntimeError("malformed PvP fixture readiness: " + ready)
-        port, cert, actor_a, actor_b = match.groups()
+        port, actor_a, actor_b = match.groups()
         base = [args.godot, "--headless", "--path", str(repo / "client"),
                 "--script", "res://tests/test_client_pvp_aes.gd", "--",
-                port, cert]
+                port]
 
         victim = subprocess.Popen(
             [*base, "victim", actor_a, actor_b],
@@ -1033,14 +1033,14 @@ def run_combat_observer(args, repo: Path, fixture: Path, env: dict[str, str]) ->
     try:
         ready=until(server_events,"COMBAT_OBSERVER_FIXTURE_READY",server)
         match=re.search(
-            r"COMBAT_OBSERVER_FIXTURE_READY port=(\d+) cert=(.+?) actor_a=(\d+) actor_b=(\d+)",
+            r"COMBAT_OBSERVER_FIXTURE_READY port=(\d+) actor_a=(\d+) actor_b=(\d+)",
             ready)
         if match is None:
             raise RuntimeError("malformed combat-observer readiness: "+ready)
-        port,cert=match.group(1),match.group(2)
+        port = match.group(1)
         base=[args.godot,"--headless","--path",str(repo/"client"),
               "--script","res://tests/test_client_combat_observer_aes.gd","--",
-              port,cert]
+              port]
         observer=subprocess.Popen(
             [*base,"observer"],cwd=repo,text=True,stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,bufsize=1)
@@ -1139,14 +1139,14 @@ def run_skill_aoe_observer(args, repo: Path, fixture: Path, env: dict[str, str])
     try:
         ready=until(server_events,"SKILL_AOE_OBSERVER_FIXTURE_READY",server)
         match=re.search(
-            r"SKILL_AOE_OBSERVER_FIXTURE_READY port=(\d+) cert=(.+?) actor_a=(\d+) actor_b=(\d+)",
+            r"SKILL_AOE_OBSERVER_FIXTURE_READY port=(\d+) actor_a=(\d+) actor_b=(\d+)",
             ready)
         if match is None:
             raise RuntimeError("malformed skill AoE observer readiness: "+ready)
-        port,cert=match.group(1),match.group(2)
+        port = match.group(1)
         base=[args.godot,"--headless","--path",str(repo/"client"),
               "--script","res://tests/test_client_skill_aoe_observer_aes.gd",
-              "--",port,cert]
+              "--",port]
         observer=subprocess.Popen(
             [*base,"observer"],cwd=repo,text=True,stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,bufsize=1)
@@ -1238,13 +1238,13 @@ def run_skill_aoe(args, repo: Path, fixture: Path, env: dict[str, str]) -> int:
                 break
         if ready is None:
             raise RuntimeError("skill AoE fixture never became ready")
-        match=re.search(r"SKILL_AOE_FIXTURE_READY port=(\d+) cert=(.+?) username=",ready)
+        match=re.search(r"SKILL_AOE_FIXTURE_READY port=(\d+) username=",ready)
         if match is None:
             raise RuntimeError("malformed skill AoE readiness: "+ready)
-        port,cert=match.group(1),match.group(2)
+        port = match.group(1)
         client=subprocess.run(
             [args.godot,"--headless","--path",str(repo/"client"),
-             "--script","res://tests/test_client_skill_aoe_aes.gd","--",port,cert],
+             "--script","res://tests/test_client_skill_aoe_aes.gd","--",port],
             cwd=repo,text=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,
             timeout=max(1.0,deadline-time.monotonic()))
         print(client.stdout,end="")
@@ -1305,13 +1305,13 @@ def run_combat(args, repo: Path, fixture: Path, env: dict[str, str]) -> int:
                 break
         if ready is None:
             raise RuntimeError("combat fixture never became ready")
-        match = re.search(r"COMBAT_FIXTURE_READY port=(\d+) cert=(.+?) username=", ready)
+        match = re.search(r"COMBAT_FIXTURE_READY port=(\d+) username=", ready)
         if match is None:
             raise RuntimeError("malformed combat fixture readiness: " + ready)
-        port, cert = match.group(1), match.group(2)
+        port = match.group(1)
         client = subprocess.run(
             [args.godot, "--headless", "--path", str(repo / "client"),
-             "--script", "res://tests/test_client_combat_aes.gd", "--", port, cert],
+             "--script", "res://tests/test_client_combat_aes.gd", "--", port],
             cwd=repo, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
             timeout=max(1.0, deadline - time.monotonic()))
         print(client.stdout, end="")
@@ -1377,14 +1377,14 @@ def run_reconnect(args, repo: Path, fixture: Path, env: dict[str, str]) -> int:
     try:
         ready = until(server_events, "RECONNECT_FIXTURE_READY", server)
         match = re.search(
-            r"RECONNECT_FIXTURE_READY port=(\d+) cert=(.+?) username=.*? character=(\d+)",
+            r"RECONNECT_FIXTURE_READY port=(\d+) username=.*? character=(\d+)",
             ready)
         if match is None:
             raise RuntimeError("malformed reconnect readiness: " + ready)
-        port, cert = match.group(1), match.group(2)
+        port = match.group(1)
         client = subprocess.Popen(
             [args.godot, "--headless", "--path", str(repo / "client"),
-             "--script", "res://tests/test_client_reconnect_aes.gd", "--", port, cert],
+             "--script", "res://tests/test_client_reconnect_aes.gd", "--", port],
             cwd=repo, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
             bufsize=1)
         threading.Thread(target=capture, args=(client, client_lines, client_events),
@@ -1467,14 +1467,14 @@ def run_trade(args, repo: Path, fixture: Path, env: dict[str, str]) -> int:
     try:
         ready = until(server_notices, "TRADE_FIXTURE_READY", deadline, server)
         match = re.search(
-            r"TRADE_FIXTURE_READY port=(\d+) cert=(.+?) actor_a=(\d+) actor_b=(\d+) item_a=(\d+) item_b=(\d+)",
+            r"TRADE_FIXTURE_READY port=(\d+) actor_a=(\d+) actor_b=(\d+) item_a=(\d+) item_b=(\d+)",
             ready)
         if match is None:
             raise RuntimeError("malformed trade fixture readiness: " + ready)
-        port, cert, actor_a, actor_b, item_a, item_b = match.groups()
+        port, actor_a, actor_b, item_a, item_b = match.groups()
         base = [args.godot, "--headless", "--path", str(repo / "client"),
                 "--script", "res://tests/test_client_trade_aes.gd", "--",
-                port, cert]
+                port]
         tail = [actor_a, actor_b, item_a, item_b]
         observer = subprocess.Popen(
             [*base, "observer", *tail], cwd=repo, text=True,
@@ -1571,13 +1571,13 @@ def run_multiplayer(args, repo: Path, fixture: Path, env: dict[str, str],
     deadline = time.monotonic() + args.timeout
     try:
         ready = until(server_notices, label + "_FIXTURE_READY", deadline, server)
-        match = re.search(label + r"_FIXTURE_READY port=(\d+) cert=(.+?) actor_a=(\d+) actor_b=(\d+)", ready)
+        match = re.search(label + r"_FIXTURE_READY port=(\d+) actor_a=(\d+) actor_b=(\d+)", ready)
         if match is None:
             raise RuntimeError(f"malformed multiplayer fixture readiness {ready}")
-        port, cert = match.group(1), match.group(2)
+        port = match.group(1)
         base = [args.godot, "--headless", "--path", str(repo / "client"),
                 "--script", "res://tests/test_client_multiplayer_aes.gd", "--",
-                port, cert]
+                port]
 
         extra = ["portal"] if portal else []
         observer = subprocess.Popen(
@@ -1682,15 +1682,15 @@ def run_quest(args, repo: Path, fixture: Path, env: dict[str, str]) -> int:
         if ready is None:
             raise RuntimeError("quest fixture never became ready")
         match = re.search(
-            r"QUEST_FIXTURE_READY port=(\d+) cert=(.+?) username=.*? "
+            r"QUEST_FIXTURE_READY port=(\d+) username=.*? "
             r"character=(\d+) npc=(\d+) quest=(\d+)", ready)
         if match is None:
             raise RuntimeError("malformed quest readiness: " + ready)
-        port, cert, character, npc, quest = match.groups()
+        port, character, npc, quest = match.groups()
         base = [
             args.godot, "--headless", "--path", str(repo / "client"),
             "--script", "res://tests/test_client_quest_aes.gd", "--",
-            port, cert]
+            port]
         tail = [character, npc, quest]
 
         mutate = subprocess.run(
@@ -1787,14 +1787,14 @@ def run_crossmap(args, repo: Path, fixture: Path, env: dict[str, str]) -> int:
     try:
         ready = until(server_events, "CROSSMAP_FIXTURE_READY", deadline, server)
         match = re.search(
-            r"CROSSMAP_FIXTURE_READY port=(\d+) cert=(.+?) actor_a=(\d+) actor_b=(\d+)",
+            r"CROSSMAP_FIXTURE_READY port=(\d+) actor_a=(\d+) actor_b=(\d+)",
             ready)
         if match is None:
             raise RuntimeError("invalid cross-map fixture readiness: " + ready)
-        port, certificate = match.group(1), match.group(2)
+        port = match.group(1)
         command = [args.godot, "--headless", "--path", str(repo / "client"),
                    "--script", "res://tests/test_client_multiplayer_aes.gd", "--",
-                   port, certificate]
+                   port]
         observer = subprocess.Popen(
             [*command, "observer", "crossmap"], cwd=repo, text=True,
             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, bufsize=1)

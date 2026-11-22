@@ -2,19 +2,19 @@ using SGTest.Server.Npc;
 using SGTest.Server.Map;
 using System.Buffers.Binary;
 using System.Net;
-using System.Net.Security;
 using System.Net.Sockets;
 using Microsoft.Data.Sqlite;
 using SGTest.Server.Gateway;
+using SGTest.Server.Transport;
 using SGTest.Server.Identity;
 using SGTest.Server.Wire;
 using SGTest.Server.World;
 
-internal static class EnhancementTlsChecks
+internal static class EnhancementAesChecks
 {
     public static void Verify(string root)
     {
-        Checks.Run("TLS enhancement preview settlement and replay are authoritative",
+        Checks.Run("AES enhancement preview settlement and replay are authoritative",
             () => Lifecycle(root).GetAwaiter().GetResult());
     }
 
@@ -33,11 +33,11 @@ internal static class EnhancementTlsChecks
             using var store=new SqliteIdentityStore(db);
             await store.InitializeAsync();
             long account=(await store.CreateAccountAsync(
-                "enhance_tls_user","Enhance-Tls-Password-123!")).AccountId;
+                "enhance_tls_user","Enhance-Aes-Password-123!")).AccountId;
             long actor=(await store.CreateCharacterAsync(
-                account,0,"EnhanceTlsHero",new CharacterSpawn(80,8,8)))
+                account,0,"EnhanceAesHero",new CharacterSpawn(80,8,8)))
                 .Character?.CharacterId
-                ??throw new Exception("enhancement TLS character missing");
+                ??throw new Exception("enhancement AES character missing");
             SeedWallet(db,actor,200);
 
             long generation=await store.AllocateLootWorldGenerationAsync();
@@ -48,7 +48,7 @@ internal static class EnhancementTlsChecks
             var grant=await store.ClaimGroundDropAsync(new TrustedPickupContext(
                 actor,1,1,1,80,8,8),drop.DropId);
             Checks.Require(grant.Status==PickupStatus.Granted&&grant.ItemUid>0,
-                "enhancement TLS item seed failed");
+                "enhancement AES item seed failed");
             long uid=grant.ItemUid;
 
             IReadOnlyDictionary<int,EquipmentEnhancementItemRule> rules=
@@ -67,26 +67,26 @@ internal static class EnhancementTlsChecks
                 new NpcEnhancementCatalog.EnhancementPoint(
                     80,99,8,8,"ci:enhancer-npc")
             ]);
-            var authorization=new IdentityTlsAuthorization(
+            var authorization=new IdentitySessionAuthorization(
                 store,world,pickupWorldGeneration:generation,
                 enhancers:enhancers,enhancementItemRules:rules);
             var router=new WorldResultRouter();
 
             var session=await StartSession(authorization,router);
-            await LoginAndChoose(session.Tls,actor,
-                "enhance_tls_user","Enhance-Tls-Password-123!");
+            await LoginAndChoose(session.Aes,actor,
+                "enhance_tls_user","Enhance-Aes-Password-123!");
             Checks.Require(WireProtocol.TryDecodeInventorySnapshot(
-                await ReadFrame(session.Tls),out var inventory)&&
+                await ReadFrame(session.Aes),out var inventory)&&
                 inventory is not null&&inventory.Complete&&
                 inventory.Items.Single().ItemUid==uid,
-                "enhancement TLS inventory baseline mismatch");
+                "enhancement AES inventory baseline mismatch");
 
             long epoch=_lastMapEpoch;
-            await session.Tls.WriteAsync(
+            await session.Aes.WriteAsync(
                 WireProtocol.EncodeEnhancementOpen(new(epoch,1,99)));
-            await session.Tls.FlushAsync();
+            await session.Aes.FlushAsync();
             Checks.Require(WireProtocol.TryDecodeEnhancementSnapshot(
-                await ReadFrame(session.Tls),out var opened)&&opened is not null&&
+                await ReadFrame(session.Aes),out var opened)&&opened is not null&&
                 opened.Status==EnhancementOpenStatus.Opened&&
                 opened.NpcSpawnId==99&&opened.WalletMoney==200&&
                 opened.Complete&&opened.Items.Count==1&&
@@ -96,34 +96,34 @@ internal static class EnhancementTlsChecks
                 opened.Items[0].TargetLevel==1&&
                 opened.Items[0].SuccessPpm==1_000_000&&
                 opened.Items[0].MoneyCost==100,
-                "enhancement TLS preview mismatch");
+                "enhancement AES preview mismatch");
 
             var enhance=WireProtocol.EncodeEnhancementItem(new(epoch,2,99,uid));
-            await session.Tls.WriteAsync(enhance);
-            await session.Tls.FlushAsync();
+            await session.Aes.WriteAsync(enhance);
+            await session.Aes.FlushAsync();
             Checks.Require(WireProtocol.TryDecodeEnhancementResult(
-                await ReadFrame(session.Tls),out var applied)&&
+                await ReadFrame(session.Aes),out var applied)&&
                 applied.Status==EnhancementStatus.Applied&&applied.Succeeded&&
                 applied.ItemUid==uid&&applied.ItemDefinitionId==5701&&
                 applied.PreviousLevel==0&&applied.TargetLevel==1&&
                 applied.CurrentLevel==1&&applied.MoneyCost==100&&
                 applied.MoneyCharged==100&&applied.WalletMoney==100,
-                "enhancement TLS settlement mismatch");
+                "enhancement AES settlement mismatch");
 
-            await session.Tls.WriteAsync(enhance);
-            await session.Tls.FlushAsync();
+            await session.Aes.WriteAsync(enhance);
+            await session.Aes.FlushAsync();
             Checks.Require(WireProtocol.TryDecodeEnhancementResult(
-                await ReadFrame(session.Tls),out var replay)&&
+                await ReadFrame(session.Aes),out var replay)&&
                 replay.Status==EnhancementStatus.AlreadyApplied&&
                 replay.Succeeded&&replay.CurrentLevel==1&&
                 replay.WalletMoney==100,
-                "enhancement TLS replay mismatch");
+                "enhancement AES replay mismatch");
 
-            await session.Tls.DisposeAsync();
+            await session.Aes.DisposeAsync();
             session.Client.Dispose();
             var ended=await session.ServerTask.WaitAsync(TimeSpan.FromSeconds(3));
-            Checks.Require(ended.Reason==TlsWireEndReason.CleanEof,
-                "enhancement TLS session did not close cleanly");
+            Checks.Require(ended.Reason==AesWireEndReason.CleanEof,
+                "enhancement AES session did not close cleanly");
 
             var durable=await store.ListEnhancementPreviewAsync(
                 actor,new TrustedEnhancementNpcRule(99,"ci:enhancer-npc"),rules);
@@ -131,21 +131,21 @@ internal static class EnhancementTlsChecks
                 "enhancement durable final state mismatch");
 
             var relogin=await StartSession(authorization,router);
-            await LoginAndChoose(relogin.Tls,actor,
-                "enhance_tls_user","Enhance-Tls-Password-123!");
+            await LoginAndChoose(relogin.Aes,actor,
+                "enhance_tls_user","Enhance-Aes-Password-123!");
             Checks.Require(WireProtocol.TryDecodeInventorySnapshot(
-                await ReadFrame(relogin.Tls),out var reloginInventory)&&
+                await ReadFrame(relogin.Aes),out var reloginInventory)&&
                 reloginInventory is not null&&reloginInventory.Complete&&
                 reloginInventory.Items.Count==1&&
                 reloginInventory.Items[0].ItemUid==uid&&
                 reloginInventory.Items[0].EnhancementLevel==1,
                 "relogin inventory baseline lost durable enhancement level");
-            await relogin.Tls.DisposeAsync();
+            await relogin.Aes.DisposeAsync();
             relogin.Client.Dispose();
             var reloginEnded=await relogin.ServerTask.WaitAsync(
                 TimeSpan.FromSeconds(3));
-            Checks.Require(reloginEnded.Reason==TlsWireEndReason.CleanEof,
-                "enhancement relogin TLS session did not close cleanly");
+            Checks.Require(reloginEnded.Reason==AesWireEndReason.CleanEof,
+                "enhancement relogin AES session did not close cleanly");
 
             await world.StopAsync();
         }
@@ -170,13 +170,13 @@ ON CONFLICT(character_id) DO UPDATE SET money=excluded.money;";
         command.Parameters.AddWithValue("$id",actor);
         command.Parameters.AddWithValue("$money",money);
         Checks.Require(command.ExecuteNonQuery()==1,
-            "enhancement TLS wallet seed failed");
+            "enhancement AES wallet seed failed");
     }
 
-    private static async Task<(SslStream Tls,Task<TlsWireConnectionResult> ServerTask,TcpClient Client)>
-        StartSession(IdentityTlsAuthorization authorization,WorldResultRouter router)
+    private static async Task<(AesCbcFrameStream Aes,Task<AesWireConnectionResult> ServerTask,TcpClient Client)>
+        StartSession(IdentitySessionAuthorization authorization,WorldResultRouter router)
     {
-        var certificate=TlsSocketChecks.CreateCertificate();
+        var settings=AesSocketChecks.CreateSettings();
         var listener=new TcpListener(IPAddress.Loopback,0);
         listener.Start(1);
         int port=((IPEndPoint)listener.LocalEndpoint).Port;
@@ -184,49 +184,49 @@ ON CONFLICT(character_id) DO UPDATE SET money=excluded.money;";
         var client=new TcpClient(AddressFamily.InterNetwork);
         await client.ConnectAsync(IPAddress.Loopback,port);
         var serverClient=await accepted;
-        var serverTask=authorization.RunAuthenticatedSocketAsync(
-            serverClient,certificate,router).ContinueWith(t=>
+        var serverTask=authorization.RunAuthenticatedAesSocketAsync(
+            serverClient,settings,router).ContinueWith(t=>
             {
-                certificate.Dispose();
+
                 listener.Stop();
                 return t.GetAwaiter().GetResult();
             },TaskScheduler.Default);
-        var tls=TlsSocketChecks.CreateClientTls(client);
-        await TlsSocketChecks.AuthenticateClient(tls);
+        var tls=AesSocketChecks.CreateClientStream(client);
+
         return(tls,serverTask,client);
     }
 
     private static async Task LoginAndChoose(
-        SslStream tls,long actor,string username,string password)
+        AesCbcFrameStream tls,long actor,string username,string password)
     {
         await tls.WriteAsync(WireProtocol.EncodeAuthRequest(new(username,password)));
         await tls.FlushAsync();
         Checks.Require(WireProtocol.TryDecodeAuthResult(
             await ReadFrame(tls),out var auth)&&auth.Status==AuthWireStatus.Success,
-            "enhancement TLS auth failed");
+            "enhancement AES auth failed");
         Checks.Require(WireProtocol.TryDecodeCharacterList(
             await ReadFrame(tls),out var list)&&
             list.Characters.Single().CharacterId==actor,
-            "enhancement TLS list mismatch");
+            "enhancement AES list mismatch");
         await tls.WriteAsync(WireProtocol.EncodeCharacterChoose(new(actor)));
         await tls.FlushAsync();
         Checks.Require(WireProtocol.TryDecodeCharacterChooseResult(
             await ReadFrame(tls),out var choose)&&
             choose.Status==CharacterChooseWireStatus.Success,
-            "enhancement TLS choose failed");
+            "enhancement AES choose failed");
         _lastMapEpoch=choose.MapEpoch;
     }
 
     private static long _lastMapEpoch;
 
-    private static async Task<byte[]> ReadFrame(SslStream tls)
+    private static async Task<byte[]> ReadFrame(AesCbcFrameStream tls)
     {
         byte[] header=new byte[WireProtocol.HeaderBytes];
         await tls.ReadExactlyAsync(header);
         int length=BinaryPrimitives.ReadInt32LittleEndian(header.AsSpan(0,4));
         Checks.Require(length>=WireProtocol.HeaderBytes&&
             length<=WireProtocol.MaximumFrameBytes,
-            "enhancement TLS invalid frame length");
+            "enhancement AES invalid frame length");
         byte[] frame=new byte[length];
         header.CopyTo(frame,0);
         if(length>header.Length)

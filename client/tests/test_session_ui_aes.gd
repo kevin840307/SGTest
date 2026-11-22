@@ -422,8 +422,7 @@ class RegistrationSession extends RefCounted:
 	var registrations:=0
 	var last_username:=""
 	func register_secure(
-			_host:String,_port:int,username:String,password:String,
-			_common_name:String="",_trusted_chain=null)->Error:
+			_host:String,_port:int,username:String,password:String)->Error:
 		if username.is_empty() or password.is_empty():
 			return ERR_INVALID_PARAMETER
 		registrations+=1

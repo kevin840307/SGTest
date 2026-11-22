@@ -1,9 +1,9 @@
 using SGTest.Server.Pvp;
 using SGTest.Server.Map;
 using System.Net;
-using System.Net.Security;
 using System.Net.Sockets;
 using SGTest.Server.Gateway;
+using SGTest.Server.Transport;
 using SGTest.Server.Identity;
 using SGTest.Server.Wire;
 using SGTest.Server.World;
@@ -109,7 +109,7 @@ internal static class GmOnlineChecks
                 gmAccount,0,"GmHero",new(13,8,8))).Character!.CharacterId;
             long normalChar=(await store.CreateCharacterAsync(
                 normalAccount,0,"NormalHero",new(13,24,8))).Character!.CharacterId;
-            var authorization=new IdentityTlsAuthorization(
+            var authorization=new IdentitySessionAuthorization(
                 store,world,gmAccounts:new HashSet<string>(
                     ["GM_USER"],StringComparer.OrdinalIgnoreCase));
 
@@ -123,10 +123,10 @@ internal static class GmOnlineChecks
     }
 
     private static async Task VerifyCapability(
-        IdentityTlsAuthorization authorization,ServerWorldHost world,
+        IdentitySessionAuthorization authorization,ServerWorldHost world,
         string username,string password,long characterId,bool expectCapability)
     {
-        using var certificate=TlsSocketChecks.CreateCertificate();
+        var settings=AesSocketChecks.CreateSettings();
         using var listener=new TcpListener(IPAddress.Loopback,0);
         listener.Start(1);
         var accepting=listener.AcceptTcpClientAsync();
@@ -134,12 +134,12 @@ internal static class GmOnlineChecks
         await client.ConnectAsync(IPAddress.Loopback,
             ((IPEndPoint)listener.LocalEndpoint).Port);
         var serverClient=await accepting;
-        var serverTask=TlsWireConnection.RunServerAsync(
-            serverClient,certificate,(tls,token) => authorization.AuthorizeAndBindAsync(tls,token),
+        var serverTask=AesWireConnection.RunServerAsync(
+            serverClient,settings,(tls,token) => authorization.AuthorizeAndBindAsync(tls,token),
             world.TryPostMove);
 
-        var tls=TlsSocketChecks.CreateClientTls(client);
-        await TlsSocketChecks.AuthenticateClient(tls);
+        var tls=AesSocketChecks.CreateClientStream(client);
+
         await tls.WriteAsync(WireProtocol.EncodeAuthRequest(new(username,password)));
         await tls.FlushAsync();
         Checks.Require(WireProtocol.TryDecodeAuthResult(
@@ -171,7 +171,7 @@ internal static class GmOnlineChecks
         await tls.DisposeAsync();
         client.Dispose();
         var ended=await serverTask.WaitAsync(TimeSpan.FromSeconds(2));
-        Checks.Require(ended.Reason==TlsWireEndReason.CleanEof,
+        Checks.Require(ended.Reason==AesWireEndReason.CleanEof,
             "GM capability TLS did not close cleanly: "+ended.Reason);
     }
 
@@ -219,7 +219,7 @@ internal static class GmOnlineChecks
         finally{Directory.Delete(dir,true);}
     }
 
-    private static async Task<byte[]> Read(SslStream tls)
+    private static async Task<byte[]> Read(AesCbcFrameStream tls)
     {
         byte[] header=new byte[WireProtocol.HeaderBytes];
         await tls.ReadExactlyAsync(header);

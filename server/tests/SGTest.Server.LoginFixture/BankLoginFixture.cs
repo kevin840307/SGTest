@@ -42,7 +42,7 @@ internal static class BankLoginFixture
             ]);
             var router=new WorldResultRouter();
             var pump=new WorldAoiPump(router);
-            var authorization=new IdentityTlsAuthorization(
+            var authorization=new IdentitySessionAuthorization(
                 store,world,pickupWorldGeneration:generation,banks:banks);
             var settings = AesCbcSettings.FromEnvironment();
                                     var listener=new TcpListener(IPAddress.Loopback,0);
@@ -54,7 +54,7 @@ internal static class BankLoginFixture
             {
                 int port=((IPEndPoint)listener.LocalEndpoint).Port;
                 Console.WriteLine(
-                    $"BANK_FIXTURE_READY port={port} cert=unused username={Program.Username} " +
+                    $"BANK_FIXTURE_READY port={port} username={Program.Username} " +
                     $"character={characterId} npc=88 scope=account wallet=1000");
                 Console.Out.Flush();
 

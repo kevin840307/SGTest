@@ -12,20 +12,19 @@ func _fail(message: String, session = null) -> void:
 
 func _initialize() -> void:
 	var args:=OS.get_cmdline_user_args()
-	if args.size()!=5 or not str(args[0]).is_valid_int() or str(args[2]) not in ["victim","actor"]:
-		_fail("expected port cert role actor_a actor_b")
+	if args.size()!=4 or not str(args[0]).is_valid_int() or str(args[1]) not in ["victim","actor"]:
+		_fail("expected port role actor_a actor_b")
 		return
-	var role:=str(args[2])
-	var actor_a:=int(args[3])
-	var actor_b:=int(args[4])
+	var role:=str(args[1])
+	var actor_a:=int(args[2])
+	var actor_b:=int(args[3])
 	var self_id:=actor_a if role=="actor" else actor_b
 	var peer_id:=actor_b if role=="actor" else actor_a
 	var username:="pvp_one" if role=="actor" else "pvp_two"
 
-	var cert = null
 	var session=Session.new()
 	if session.connect_secure(
-		"127.0.0.1",int(args[0]),username,PASSWORD,"localhost",cert)!=OK:
+		"127.0.0.1",int(args[0]),username,PASSWORD)!=OK:
 		_fail("connect",session)
 		return
 	var selecting:=_wait(session,func(v):

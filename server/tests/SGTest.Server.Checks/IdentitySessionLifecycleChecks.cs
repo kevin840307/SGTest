@@ -1,36 +1,35 @@
 using SGTest.Server.Map;
 using System.Buffers.Binary;
 using System.Net;
-using System.Net.Security;
 using System.Net.Sockets;
-using System.Security.Cryptography.X509Certificates;
 using SGTest.Server.Gateway;
+using SGTest.Server.Transport;
 using SGTest.Server.Identity;
 using SGTest.Server.Wire;
 using SGTest.Server.World;
 
-internal static class IdentityTlsLifecycleChecks
+internal static class IdentitySessionLifecycleChecks
 {
     private static void Require(bool ok, string name) => Checks.Require(ok, name);
 
-    private sealed record Session(TcpClient Client, SslStream Tls,
-        Task<TlsWireConnectionResult> Server, int MapId, double X, double Y,
+    private sealed record Session(TcpClient Client, AesCbcFrameStream Stream,
+        Task<AesWireConnectionResult> Server, int MapId, double X, double Y,
         long MapEpoch) : IAsyncDisposable
     {
         public async ValueTask DisposeAsync()
         {
-            await Tls.DisposeAsync();
+            await Stream.DisposeAsync();
             Client.Dispose();
         }
     }
 
     public static void Verify(string root)
     {
-        Checks.Run("TLS socket cleanup allows same character login again with a new generation",
+        Checks.Run("AES socket cleanup allows same character login again with a new generation",
             () => Reconnect(root).GetAwaiter().GetResult());
-        Checks.Run("TLS protocol violation releases authenticated actor for subsequent login",
+        Checks.Run("AES protocol violation releases authenticated actor for subsequent login",
             () => ProtocolFailureCleanup(root).GetAwaiter().GetResult());
-        Checks.Run("TLS clean disconnect persists final authoritative position before reconnect",
+        Checks.Run("AES clean disconnect persists final authoritative position before reconnect",
             () => PositionPersistsAcrossReconnect(root).GetAwaiter().GetResult());
     }
 
@@ -41,18 +40,18 @@ internal static class IdentityTlsLifecycleChecks
         long oldEpoch = first.MapEpoch;
         await first.DisposeAsync();
         var ended = await first.Server.WaitAsync(TimeSpan.FromSeconds(3));
-        Require(ended.Reason is TlsWireEndReason.CleanEof or TlsWireEndReason.TransportError &&
+        Require(ended.Reason is AesWireEndReason.CleanEof or AesWireEndReason.TransportError &&
                 fixture.Router.Statistics.ActiveSessions == 0,
-            "first TLS socket failed to release its Gateway");
+            "first AES socket failed to release its Gateway");
         await WaitForZeroActors(fixture.Host);
 
         await using var second = await OpenAsync(fixture);
         Require(second.MapEpoch > oldEpoch, "reconnected actor did not advance World MapEpoch");
         Require(fixture.Router.Statistics.ActiveSessions == 1,
-            "second valid TLS socket did not rebind receipt route");
+            "second valid AES socket did not rebind receipt route");
         await second.DisposeAsync();
         var endedAgain = await second.Server.WaitAsync(TimeSpan.FromSeconds(3));
-        Require(endedAgain.Reason is TlsWireEndReason.CleanEof or TlsWireEndReason.TransportError &&
+        Require(endedAgain.Reason is AesWireEndReason.CleanEof or AesWireEndReason.TransportError &&
                 fixture.Router.Statistics.ActiveSessions == 0,
             "second socket cleanup left stale Gateway");
         await WaitForZeroActors(fixture.Host);
@@ -63,9 +62,9 @@ internal static class IdentityTlsLifecycleChecks
         using var fixture = await Fixture.CreateAsync(root, 99);
         await using var first = await OpenAsync(fixture);
         Require(first.X == 8 && first.Y == 8, "initial persisted position mismatch");
-        await first.Tls.WriteAsync(WireProtocol.EncodeMoveTarget(
+        await first.Stream.WriteAsync(WireProtocol.EncodeMoveTarget(
             new MoveTargetWire(first.MapEpoch, 1, 40, 8)));
-        await first.Tls.FlushAsync();
+        await first.Stream.FlushAsync();
 
         using (var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(3)))
         {
@@ -81,7 +80,7 @@ internal static class IdentityTlsLifecycleChecks
 
         await first.DisposeAsync();
         var ended = await first.Server.WaitAsync(TimeSpan.FromSeconds(3));
-        Require(ended.Reason is TlsWireEndReason.CleanEof or TlsWireEndReason.TransportError,
+        Require(ended.Reason is AesWireEndReason.CleanEof or AesWireEndReason.TransportError,
             "moved session did not close cleanly");
         await WaitForZeroActors(fixture.Host);
 
@@ -104,11 +103,11 @@ internal static class IdentityTlsLifecycleChecks
         using var fixture = await Fixture.CreateAsync(root, 98);
         await using var session = await OpenAsync(fixture);
         // Server-bound gameplay only accepts MoveTarget, never an AuthRequest.
-        await session.Tls.WriteAsync(WireProtocol.EncodeAuthRequest(
+        await session.Stream.WriteAsync(WireProtocol.EncodeAuthRequest(
             new AuthRequestWire("retry_user", "Retry-Password-123!")));
-        await session.Tls.FlushAsync();
+        await session.Stream.FlushAsync();
         var ended = await session.Server.WaitAsync(TimeSpan.FromSeconds(3));
-        Require(ended.Reason == TlsWireEndReason.ProtocolViolation &&
+        Require(ended.Reason == AesWireEndReason.ProtocolViolation &&
                 fixture.Router.Statistics.ActiveSessions == 0,
             "protocol violation did not close and detach authenticated socket");
         await WaitForZeroActors(fixture.Host);
@@ -131,13 +130,13 @@ internal static class IdentityTlsLifecycleChecks
         var client = new TcpClient(AddressFamily.InterNetwork);
         await client.ConnectAsync(IPAddress.Loopback, port);
         var socket = await accepted;
-        var server = fixture.Auth.RunAuthenticatedSocketAsync(socket,
-            fixture.Certificate, fixture.Router,
-            new TlsWireConnectionOptions(AuthorizationTimeoutMilliseconds: 10000));
-        var tls = TlsSocketChecks.CreateClientTls(client); // test-only certificate
+        var server = fixture.Auth.RunAuthenticatedAesSocketAsync(socket,
+            fixture.Settings, fixture.Router,
+            new AesWireConnectionOptions(AuthorizationTimeoutMilliseconds: 10000));
+        var tls = AesSocketChecks.CreateClientStream(client); // test-only certificate
         try
         {
-            await TlsSocketChecks.AuthenticateClient(tls);
+
             await tls.WriteAsync(WireProtocol.EncodeAuthRequest(
                 new AuthRequestWire("retry_user", "Retry-Password-123!")));
             await tls.FlushAsync();
@@ -153,7 +152,7 @@ internal static class IdentityTlsLifecycleChecks
                     choose.CharacterId == fixture.CharacterId && choose.MapEpoch > 0,
                 "reconnect World registration was rejected");
             // CharacterChooseResult is authored inside AuthorizeAndBindAsync;
-            // the outer TLS authorization callback attaches the Gateway route
+            // the outer AES authorization callback attaches the Gateway route
             // immediately afterwards. Do not race that legal callback boundary
             // with an instantaneous ActiveSessions assertion.
             await WaitForActiveSessions(fixture.Router,1);
@@ -169,13 +168,13 @@ internal static class IdentityTlsLifecycleChecks
         }
     }
 
-    private static async Task<byte[]> ReadFrameAsync(SslStream tls)
+    private static async Task<byte[]> ReadFrameAsync(AesCbcFrameStream tls)
     {
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(3));
         var header = new byte[8];
         await tls.ReadExactlyAsync(header, timeout.Token);
         int length = BinaryPrimitives.ReadInt32LittleEndian(header);
-        Require(length is >= 8 and <= 4096, "TLS test frame bound");
+        Require(length is >= 8 and <= 4096, "AES test frame bound");
         var frame = new byte[length];
         header.CopyTo(frame, 0);
         await tls.ReadExactlyAsync(frame.AsMemory(8), timeout.Token);
@@ -211,8 +210,8 @@ internal static class IdentityTlsLifecycleChecks
         public required ServerWorldHost Host;
         public required SqliteIdentityStore Store;
         public required WorldResultRouter Router;
-        public required IdentityTlsAuthorization Auth;
-        public required X509Certificate2 Certificate;
+        public required IdentitySessionAuthorization Auth;
+        public required AesCbcSettings Settings;
         public long CharacterId;
         public long AccountId;
 
@@ -230,8 +229,8 @@ internal static class IdentityTlsLifecycleChecks
             long characterId = created.Character?.CharacterId ?? throw new Exception("fixture character missing");
             var router = new WorldResultRouter();
             return new Fixture { Host = host, Store = store,
-                Router = router, Auth = new IdentityTlsAuthorization(store, host),
-                Certificate = TlsSocketChecks.CreateCertificate(),
+                Router = router, Auth = new IdentitySessionAuthorization(store, host),
+                Settings = AesSocketChecks.CreateSettings(),
                 CharacterId = characterId, AccountId = accountId };
         }
 
@@ -239,7 +238,7 @@ internal static class IdentityTlsLifecycleChecks
         {
             Host.StopAsync().GetAwaiter().GetResult();
             Host.DisposeAsync().AsTask().GetAwaiter().GetResult();
-            Certificate.Dispose();
+
             Store.Dispose();
         }
     }

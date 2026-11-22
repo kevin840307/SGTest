@@ -87,7 +87,7 @@ internal static class Program
             long characterId = created.Character?.CharacterId ?? throw new InvalidOperationException("fixture character create failed");
             await store.SetCharacterSkillLevelAsync(
                 characterId,28101,3,"ci:tls-skill-book-fixture");
-            var authorization = new IdentityTlsAuthorization(store, world);
+            var authorization = new IdentitySessionAuthorization(store, world);
             var resultRouter = new WorldResultRouter();
             var aoiPump = new WorldAoiPump(resultRouter);
 
@@ -98,7 +98,7 @@ internal static class Program
             try
             {
                 int port = ((IPEndPoint)listener.LocalEndpoint).Port;
-                Console.WriteLine($"LOGIN_FIXTURE_READY port={port} cert=unused username={Username} character={characterId}");
+                Console.WriteLine($"LOGIN_FIXTURE_READY port={port} username={Username} character={characterId}");
                 Console.Out.Flush();
                 using var client = await listener.AcceptTcpClientAsync().WaitAsync(TimeSpan.FromSeconds(15));
                 using var aoiStop = new CancellationTokenSource();
@@ -173,7 +173,7 @@ internal static class Program
             await world.StartAsync().ConfigureAwait(false);
             using var store=new SqliteIdentityStore(Path.Combine(root,"identity.db"));
             await store.InitializeAsync().ConfigureAwait(false);
-            var authorization=new IdentityTlsAuthorization(
+            var authorization=new IdentitySessionAuthorization(
                 store,world,
                 registrationRateLimiter:new AccountRegistrationRateLimiter());
             var router=new WorldResultRouter();
@@ -186,7 +186,7 @@ internal static class Program
             {
                 int port=((IPEndPoint)listener.LocalEndpoint).Port;
                 Console.WriteLine(
-                    $"REGISTER_FIXTURE_READY port={port} cert=unused username={Username}");
+                    $"REGISTER_FIXTURE_READY port={port} username={Username}");
                 Console.Out.Flush();
                 using var client=await listener.AcceptTcpClientAsync()
                     .WaitAsync(TimeSpan.FromSeconds(15)).ConfigureAwait(false);
@@ -338,7 +338,7 @@ internal static class Program
                 });
             var pump = new WorldAoiPump(
                 router, monsters: coordinator, playerCombat: settlement);
-            var authorization = new IdentityTlsAuthorization(
+            var authorization = new IdentitySessionAuthorization(
                 store, world, combat: settlement);
             var settings = AesCbcSettings.FromEnvironment();
 
@@ -352,7 +352,7 @@ internal static class Program
             {
                 int port = ((IPEndPoint)listener.LocalEndpoint).Port;
                 Console.WriteLine(
-                    $"COMBAT_FIXTURE_READY port={port} cert=unused username={Username} character={characterId}");
+                    $"COMBAT_FIXTURE_READY port={port} username={Username} character={characterId}");
                 Console.Out.Flush();
 
                 using var client = await listener.AcceptTcpClientAsync()
@@ -481,7 +481,7 @@ internal static class Program
                 store,new(Capacity:8),router.QueuePlayerDamage);
             var pump=new WorldAoiPump(
                 router,monsters:coordinator,playerCombat:settlement);
-            var authorization=new IdentityTlsAuthorization(
+            var authorization=new IdentitySessionAuthorization(
                 store,world,combat:settlement);
             var settings=AesCbcSettings.FromEnvironment();
 
@@ -495,7 +495,7 @@ internal static class Program
             {
                 int port=((IPEndPoint)listener.LocalEndpoint).Port;
                 Console.WriteLine(
-                    $"SKILL_AOE_FIXTURE_READY port={port} cert=unused " +
+                    $"SKILL_AOE_FIXTURE_READY port={port} " +
                     $"username={Username} character={characterId}");
                 Console.Out.Flush();
 
@@ -635,7 +635,7 @@ internal static class Program
                 store,new(Capacity:8),router.QueuePlayerDamage);
             var pump=new WorldAoiPump(
                 router,monsters:coordinator,playerCombat:settlement);
-            var authorization=new IdentityTlsAuthorization(
+            var authorization=new IdentitySessionAuthorization(
                 store,world,combat:settlement);
             var settings=AesCbcSettings.FromEnvironment();
 
@@ -649,7 +649,7 @@ internal static class Program
             {
                 int port=((IPEndPoint)listener.LocalEndpoint).Port;
                 Console.WriteLine(
-                    $"SKILL_AOE_OBSERVER_FIXTURE_READY port={port} cert=unused " +
+                    $"SKILL_AOE_OBSERVER_FIXTURE_READY port={port} " +
                     $"actor_a={observerId} actor_b={actorId}");
                 Console.Out.Flush();
 
@@ -820,7 +820,7 @@ internal static class Program
                 });
             var pump = new WorldAoiPump(
                 router,monsters:coordinator,playerCombat:settlement);
-            var authorization = new IdentityTlsAuthorization(
+            var authorization = new IdentitySessionAuthorization(
                 store,world,combat:settlement);
             var settings = AesCbcSettings.FromEnvironment();
 
@@ -834,7 +834,7 @@ internal static class Program
             {
                 int port=((IPEndPoint)listener.LocalEndpoint).Port;
                 Console.WriteLine(
-                    $"COMBAT_OBSERVER_FIXTURE_READY port={port} cert=unused " +
+                    $"COMBAT_OBSERVER_FIXTURE_READY port={port} " +
                     $"actor_a={observerId} actor_b={actorId}");
                 Console.Out.Flush();
 
@@ -980,7 +980,7 @@ internal static class Program
             var router = new WorldResultRouter(
                 new WorldResultRouterOptions(AttackRequestCapacity:8));
             var pump = new WorldAoiPump(router, monsters:coordinator);
-            var authorization = new IdentityTlsAuthorization(store, world);
+            var authorization = new IdentitySessionAuthorization(store, world);
             var settings = AesCbcSettings.FromEnvironment();
 
             var listener = new TcpListener(IPAddress.Loopback, 0);
@@ -992,7 +992,7 @@ internal static class Program
             {
                 int port = ((IPEndPoint)listener.LocalEndpoint).Port;
                 Console.WriteLine(
-                    $"AUTO_ATTACK_FIXTURE_READY port={port} cert=unused " +
+                    $"AUTO_ATTACK_FIXTURE_READY port={port} " +
                     $"username={Username} character={characterId}");
                 Console.Out.Flush();
 
@@ -1080,7 +1080,7 @@ internal static class Program
 
             var router = new WorldResultRouter();
             var pump = new WorldAoiPump(router);
-            var authorization = new IdentityTlsAuthorization(
+            var authorization = new IdentitySessionAuthorization(
                 store, world, pickupWorldGeneration:generation);
             var settings = AesCbcSettings.FromEnvironment();
 
@@ -1093,7 +1093,7 @@ internal static class Program
             {
                 int port = ((IPEndPoint)listener.LocalEndpoint).Port;
                 Console.WriteLine(
-                    $"DISCARD_FIXTURE_READY port={port} cert=unused username={Username} " +
+                    $"DISCARD_FIXTURE_READY port={port} username={Username} " +
                     $"character={characterId} item_uid={grant.ItemUid}");
                 Console.Out.Flush();
 
@@ -1198,7 +1198,7 @@ internal static class Program
             ]);
             var router = new WorldResultRouter();
             var pump = new WorldAoiPump(router);
-            var authorization = new IdentityTlsAuthorization(
+            var authorization = new IdentitySessionAuthorization(
                 store, world, pickupWorldGeneration:generation,
                 storages:storageCatalog);
             var settings = AesCbcSettings.FromEnvironment();
@@ -1212,7 +1212,7 @@ internal static class Program
             {
                 int port = ((IPEndPoint)listener.LocalEndpoint).Port;
                 Console.WriteLine(
-                    $"STORAGE_FIXTURE_READY port={port} cert=unused username={Username} " +
+                    $"STORAGE_FIXTURE_READY port={port} username={Username} " +
                     $"character={characterId} item_uid={grant.ItemUid} npc=88 enhancement=5");
                 Console.Out.Flush();
 
@@ -1388,7 +1388,7 @@ internal static class Program
                 throw new InvalidOperationException("reconnect character missing");
 
             var router = new WorldResultRouter();
-            var authorization = new IdentityTlsAuthorization(store, world);
+            var authorization = new IdentitySessionAuthorization(store, world);
             var aoiPump = new WorldAoiPump(router);
             var routerTask = router.RunAsync(world.Results);
             using var aoiStop = new CancellationTokenSource();
@@ -1401,7 +1401,7 @@ internal static class Program
             try
             {
                 int port = ((IPEndPoint)listener.LocalEndpoint).Port;
-                Console.WriteLine($"RECONNECT_FIXTURE_READY port={port} cert=unused username={Username} character={characterId}");
+                Console.WriteLine($"RECONNECT_FIXTURE_READY port={port} username={Username} character={characterId}");
                 Console.Out.Flush();
 
                 var first = await listener.AcceptTcpClientAsync()
@@ -1519,7 +1519,7 @@ internal static class Program
             var auditedPortals = portals ? PortalCatalog.LoadNpcDocuments([
                 CreatePortalDocument(root, 15), CreatePortalDocument(root, 13)]) : null;
             var parties=new PartyCoordinator();
-            var authorization = new IdentityTlsAuthorization(
+            var authorization = new IdentitySessionAuthorization(
                 store, world, auditedPortals, parties:parties);
             var aoiPump = new WorldAoiPump(router);
             var routerTask = router.RunAsync(world.Results);
@@ -1533,7 +1533,7 @@ internal static class Program
             {
                 int port = ((IPEndPoint)listener.LocalEndpoint).Port;
                 var prefix = portals ? "PORTAL" : crossmap ? "CROSSMAP" : "MULTI";
-                Console.WriteLine($"{prefix}_FIXTURE_READY port={port} cert=unused actor_a={aId} actor_b={bId}");
+                Console.WriteLine($"{prefix}_FIXTURE_READY port={port} actor_a={aId} actor_b={bId}");
                 Console.Out.Flush();
 
                 using var first = await listener.AcceptTcpClientAsync()

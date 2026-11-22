@@ -41,7 +41,7 @@ internal static class QuestLoginFixture
             ]);
             var router=new WorldResultRouter();
             var pump=new WorldAoiPump(router);
-            var authorization=new IdentityTlsAuthorization(
+            var authorization=new IdentitySessionAuthorization(
                 store,world,quests:quests);
 
             var settings = AesCbcSettings.FromEnvironment();
@@ -54,7 +54,7 @@ internal static class QuestLoginFixture
             {
                 int port=((IPEndPoint)listener.LocalEndpoint).Port;
                 Console.WriteLine(
-                    $"QUEST_FIXTURE_READY port={port} cert=unused " +
+                    $"QUEST_FIXTURE_READY port={port} " +
                     $"username={Program.Username} character={character} " +
                     $"npc={NpcSpawnId} quest={QuestId}");
                 Console.Out.Flush();
