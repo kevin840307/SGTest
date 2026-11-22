@@ -140,7 +140,7 @@ jobs:
         run: timeout 20s .cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64 --headless --path client --script res://tests/test_recovered2_world_ui.gd
       - name: Optional original IE HK2 800x600 UI and runtime skin switching
         run: timeout 20s .cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64 --headless --path client --script res://tests/test_classic_ie_ui.gd
-      - name: All UI skins share the same nine cursor icons and animated autorun pointer
+      - name: Cursor fallback modes and optional Recovered animated cursor frames
         run: timeout 20s .cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64 --headless --path client --script res://tests/test_shared_game_cursor.gd
       - name: Source NPC sprite and portal hitbox presentation contract
         run: timeout 20s .cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64 --headless --path client --script res://tests/test_npc_presentation.gd
