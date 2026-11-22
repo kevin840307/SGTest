@@ -212,7 +212,11 @@ WHERE character_id=$id;";
     {
         using var connection = Open();
         using var tx = connection.BeginTransaction();
-        if (ScalarLong(connection, "SELECT COUNT(*) FROM accounts WHERE account_id=$id;", tx,
+        // Re-check the account inside the same character-create transaction.
+        // Authentication happened earlier, but a local operator may disable the
+        // account between Auth and Create; creation must not bypass that state.
+        if (ScalarLong(connection,
+            "SELECT COUNT(*) FROM accounts WHERE account_id=$id AND disabled=0;", tx,
             ("$id", accountId)) != 1)
             return new CharacterCreateResult(CharacterCreateStatus.UnknownAccount);
         if (ScalarLong(connection, "SELECT COUNT(*) FROM characters WHERE account_id=$id;", tx,

@@ -145,6 +145,7 @@ internal static class IdentityAdminChecks
         File.WriteAllBytes(blocking,bytes);
         Checks.Require((await Run(Password, Character(c))).Exit == 1, "corrupt Blocking source hash accepted");
         using var store = new SqliteIdentityStore(c.Database);
+        await store.InitializeAsync();
         Checks.Require((await store.AuthenticateAsync("admin_user",Password)).Account?.Characters.Count == 0,
             "refused admin commands created a partial character");
     }
@@ -155,18 +156,30 @@ internal static class IdentityAdminChecks
         Checks.Require((await Run(Password, Account(c))).Exit == 0 &&
             (await Run(OtherPassword, Account(c,"second_user"))).Exit == 0, "ownership fixture account failed");
         Checks.Require((await Run(OtherPassword, Character(c))).Exit == 3, "another account's password was accepted");
-        using var store = new SqliteIdentityStore(c.Database);
-        long account = (await store.AuthenticateAsync("admin_user",Password)).Account!.AccountId;
-        await store.SetDisabledAsync(account,true);
+        long account;
+        using (var store = new SqliteIdentityStore(c.Database))
+        {
+            await store.InitializeAsync();
+            account = (await store.AuthenticateAsync("admin_user",Password)).Account!.AccountId;
+            await store.SetDisabledAsync(account,true);
+        }
         Checks.Require((await Run(Password, Character(c))).Exit == 3, "disabled account created a character");
-        await store.SetDisabledAsync(account,false);
+        using (var store = new SqliteIdentityStore(c.Database))
+        {
+            await store.InitializeAsync();
+            await store.SetDisabledAsync(account,false);
+        }
         Checks.Require((await Run(Password, Character(c,name:"UniqueHero"))).Exit == 0, "owner could not create character");
         Checks.Require((await Run(Password, Character(c,name:"DifferentHero"))).Exit == 3, "duplicate slot accepted");
         Checks.Require((await Run(OtherPassword, Character(c,name:"UniqueHero",username:"second_user"))).Exit == 3,
             "globally duplicate name accepted");
-        Checks.Require((await store.AuthenticateAsync("admin_user",Password)).Account!.Characters.Count == 1 &&
-            (await store.AuthenticateAsync("second_user",OtherPassword)).Account!.Characters.Count == 0,
-            "refused ownership/name conflict mutated another account");
+        using (var store = new SqliteIdentityStore(c.Database))
+        {
+            await store.InitializeAsync();
+            Checks.Require((await store.AuthenticateAsync("admin_user",Password)).Account!.Characters.Count == 1 &&
+                (await store.AuthenticateAsync("second_user",OtherPassword)).Account!.Characters.Count == 0,
+                "refused ownership/name conflict mutated another account");
+        }
     }
 
     private static async Task ConcurrentSlot(string root)
@@ -176,6 +189,7 @@ internal static class IdentityAdminChecks
         var results = await Task.WhenAll(Run(Password,Character(c,name:"FirstHero")), Run(Password,Character(c,name:"SecondHero")));
         Checks.Require(results.Count(r=>r.Exit==0)==1 && results.Count(r=>r.Exit==3)==1, "cross-process slot race did not serialize");
         using var store = new SqliteIdentityStore(c.Database);
+        await store.InitializeAsync();
         Checks.Require((await store.AuthenticateAsync("admin_user",Password)).Account!.Characters.Count == 1,
             "slot race created duplicate/missing persistent character");
     }
@@ -317,9 +331,9 @@ FROM pvp_name_admin_events WHERE character_id=$id;";
                     inventory.StartIndex==0 && inventory.Complete &&
                     inventory.Items.Count==0,
                     "fresh CLI character did not receive complete empty inventory baseline");
-                bool clanBaseline=false, worldReady=false;
+                bool clanBaseline=false, petBaseline=false, worldReady=false;
                 WorldReadyWire world=default;
-                for(int i=0;i<4 && !worldReady;i++)
+                for(int i=0;i<6 && !worldReady;i++)
                 {
                     var baseline=await Read(tls);
                     if(WireProtocol.TryDecodeClanSnapshot(baseline,out var clan) && clan is not null)
@@ -329,6 +343,14 @@ FROM pvp_name_admin_events WHERE character_id=$id;";
                             clan.Members.Count==0,
                             "fresh CLI character received invalid clan baseline");
                         clanBaseline=true;
+                        continue;
+                    }
+                    if(WireProtocol.TryDecodePetSnapshot(baseline,out var pets) && pets is not null)
+                    {
+                        Checks.Require(!petBaseline && pets.ReceiverMapEpoch==choose.MapEpoch &&
+                            pets.ActivePetUid==0 && pets.Pets.Count==0,
+                            "fresh CLI character received invalid pet baseline");
+                        petBaseline=true;
                         continue;
                     }
                     if(WireProtocol.TryDecodeWorldReady(baseline,out world) &&

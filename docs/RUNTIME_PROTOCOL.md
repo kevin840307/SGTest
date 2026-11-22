@@ -268,7 +268,7 @@ SQLite schema v30 新增 `pet_instances` 與 `pet_actions`；同一角色以 par
 
 `PetEntitySpawn/Despawn` 是第二階段的 **world identity / AOI presence**，仍不代表真正 Pet follow AI。Server 只在 durable active pet 已提交後把 identity 發給單一 AOI owner；observer 只有在看得到 owner（或 owner 自己）時才看得到 Pet，recall、離開視野、斷線與換圖 generation 會可靠 Despawn/重建。Godot 以 `OwnerActorId + OwnerConnectionEpoch + OwnerMapEpoch` 驗證，replacement WorldReady/換圖會清除舊 Pet entity。此階段 Pet 位置刻意錨定 owner，未實作獨立座標、跟隨距離、A*、動畫或戰鬥，因此**不得**把這個 AOI presence 當成 HK follow 行為已還原。
 
-第一階段 authority 實作 commit `e62fdda`；第二階段 PET-AOI-V1 為本次提交。C#/Godot Pet/AOI golden、Server `--pet-only` **2/2 PASS**、`--aoi-only` **24/24 PASS**，以及 Godot `test_pet_wire.gd`、`test_aoi_wire.gd`、`test_client_fps_independence.gd` 均實跑 PASS；Server/Checks Release build 0 warning/0 error。完整 Server Checks 在與 Pet 無關的既有 `IdentityAdminChecks.InvalidInput` 測試 fixture 重現 `character_password_overrides` table 缺失而中止，因此本次不宣稱完整 suite PASS。真正 follow/pathing、戰鬥、外觀/動畫、成長、裝備/卡片、取得流程、Mecha 與 Paradise/HK A/B 仍 NOT VERIFIED。
+第一階段 authority 實作 commit `e62fdda`；第二階段 PET-AOI-V1 為本次提交。C#/Godot Pet/AOI golden、architecture conventions **26/26 PASS**、Server `--pet-only` **2/2 PASS**、`--aoi-only` **24/24 PASS**，以及 Godot `test_pet_wire.gd`、`test_aoi_wire.gd`、`test_client_fps_independence.gd` 均實跑 PASS；Server/Checks Release build 0 warning/0 error。本機既有 PID 61460 鎖住正式 Host Release DLL，因此未終止該程序，改以 `tmp/pet-aoi-host-validation` 隔離編譯本次 source，`--identity-admin-only` **7/7 PASS**、完整 Server Checks **301/301 PASS**。真正 follow/pathing、戰鬥、外觀/動畫、成長、裝備/卡片、取得流程、Mecha 與 Paradise/HK A/B 仍 NOT VERIFIED。
 
 ### 2026-11-17 Bounded TLS/TCP automatic reconnect
 

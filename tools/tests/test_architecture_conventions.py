@@ -71,7 +71,7 @@ class ArchitectureConventionsChecks(unittest.TestCase):
         tests = (ROOT / "server" / "tests" / "SGTest.Server.Checks" /
                  "SessionCommandWorkerChecks.cs").read_text(encoding="utf-8-sig")
         project = (SERVER / "SGTest.Server.csproj").read_text(encoding="utf-8-sig")
-        self.assertEqual(tls.count("new SessionCommandWorker<"), 20)
+        self.assertEqual(tls.count("new SessionCommandWorker<"), 21)
         self.assertEqual(tls.count("Channel.CreateBounded<"), 2,
                          "NPC and skill are the only special command workers")
         self.assertEqual(worker.count("Channel.CreateBounded<T>"), 1)
@@ -83,6 +83,7 @@ class ArchitectureConventionsChecks(unittest.TestCase):
         self.assertIn("public void Complete() => _commands.Writer.TryComplete()", worker)
         self.assertIn("new SessionCommandWorker<TrustedPlayerRespawn>(\n                4,", tls)
         self.assertIn("new SessionCommandWorker<TrustedChatCommand>(\n                32,", tls)
+        self.assertIn("new SessionCommandWorker<TrustedPetCommand>(\n                16,", tls)
         self.assertIn("var npcCommands = Channel.CreateBounded<TrustedNpcInteraction>", tls)
         self.assertIn("var skillCommands=Channel.CreateBounded<TrustedSkillUse>", tls)
         self.assertIn("skillCommands.Reader.ReadAllAsync()", tls,
@@ -93,7 +94,7 @@ class ArchitectureConventionsChecks(unittest.TestCase):
         for feature in ("Respawn", "Pickup", "Recovery", "Discard", "Shop",
                         "Storage", "Equipment", "Bank", "Repair", "Enhancement",
                         "Trade", "Quest", "Pvp", "PvpAttack", "PvpSkill",
-                        "GmPvpName", "PlayerShop", "Chat", "Party", "Clan"):
+                        "GmPvpName", "PlayerShop", "Chat", "Party", "Clan", "Pet"):
             with self.subTest(feature=feature):
                 self.assertNotIn("Process" + feature + "Async()", tls)
         self.assertIn('<InternalsVisibleTo Include="SGTest.Server.Checks" />', project)
@@ -119,7 +120,7 @@ class ArchitectureConventionsChecks(unittest.TestCase):
                 self.assertIn("namespace SGTest.Server.Gateway;", source)
         self.assertEqual(core.count("private readonly object _gate"), 1)
         self.assertEqual(core.count("new WorldResultRouterOptions()"), 1)
-        self.assertEqual(core.count("Channel.CreateBounded<"), 12)
+        self.assertEqual(core.count("Channel.CreateBounded<"), 13)
         for source in (ingress, replies, ticks):
             self.assertNotIn("Channel.CreateBounded", source)
             self.assertNotIn("new WorldResultRouter(", source)
@@ -152,7 +153,7 @@ class ArchitectureConventionsChecks(unittest.TestCase):
             "_changed", "_resync", "_attacks", "_skills", "_skillPreflights",
             "_preparedSkills", "_claimedGroundDrops", "_playerDamageVisuals",
             "_playerRespawnVisuals", "_playerIdentityUpdates",
-            "_playerPvpCombatVisuals", "_playerPvpSkillVisuals",
+            "_playerPvpCombatVisuals", "_playerPvpSkillVisuals", "_petWorldUpdates",
         ):
             with self.subTest(shutdown=channel):
                 self.assertEqual(ticks.count(channel + ".Writer.TryComplete(fault)"), 1)
@@ -161,6 +162,7 @@ class ArchitectureConventionsChecks(unittest.TestCase):
         self.assertIn("router.PlayerIdentityUpdates.Completion.IsCompletedSuccessfully", test)
         self.assertIn("router.PlayerPvpCombatVisuals.Completion.IsCompletedSuccessfully", test)
         self.assertIn("router.PlayerPvpSkillVisuals.Completion.IsCompletedSuccessfully", test)
+        self.assertIn("router.PetWorldUpdates.Completion.IsCompletedSuccessfully", test)
         self.assertIn("FaultedSourceCompletesAllChannels", test)
         self.assertIn("completed.All(task => task.IsFaulted)", test)
 

@@ -178,8 +178,9 @@ internal static class WorldResultRouterChecks
         // downstream waiters after a clean World result-pump shutdown.
         Require(router.PlayerIdentityUpdates.Completion.IsCompletedSuccessfully &&
                 router.PlayerPvpCombatVisuals.Completion.IsCompletedSuccessfully &&
-                router.PlayerPvpSkillVisuals.Completion.IsCompletedSuccessfully,
-                "PvP/identity AOI channels remained open after router shutdown");
+                router.PlayerPvpSkillVisuals.Completion.IsCompletedSuccessfully &&
+                router.PetWorldUpdates.Completion.IsCompletedSuccessfully,
+                "PvP/identity/pet AOI channels remained open after router shutdown");
         bool doubleReaderRejected = false;
         try { await router.RunAsync(source.Reader); }
         catch (InvalidOperationException) { doubleReaderRejected = true; }
@@ -212,7 +213,8 @@ internal static class WorldResultRouterChecks
             router.PlayerRespawnVisuals.Completion,
             router.PlayerIdentityUpdates.Completion,
             router.PlayerPvpCombatVisuals.Completion,
-            router.PlayerPvpSkillVisuals.Completion
+            router.PlayerPvpSkillVisuals.Completion,
+            router.PetWorldUpdates.Completion
         ];
         Require(completed.All(task => task.IsFaulted),
             "failed World source left a live or successfully completed dependent channel");
