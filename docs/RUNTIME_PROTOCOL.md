@@ -252,6 +252,19 @@ Godot `WorldState` 將 intent 存在獨立的 `remote_movement_intents`，不覆
 
 固定相同的 30 個、每 tick 8px source trace A/B 仍為舊 every-revision **30 Delta**、正式預設 **10 Delta**，減少 **66.7%**；新增 intent 後沒有把 checkpoint 降頻倒退。`SGTest.Server.Checks --aoi-only` **23/23 PASS**；`--load-only` **5/5 PASS**。本機最重 sustained Gate 為 20 個真 AES 認證連線、同視野 300 Monster + 500 Drop、320 MoveReceipt：move receipt P95 **47.23ms**、P99 **47.26ms**、Router backpressure **0**、World skipped deadlines **0**。C#／Godot 共用 62-byte golden、Godot AOI reducer與 wire codec headless 測試亦 PASS；Windows 真 renderer A/B、WAN/jitter、長時間 soak 與 presentation route reconstruction 仍 NOT VERIFIED。
 
+### 2026-11-23 Pet authority V1（第一階段）
+
+Pet 第一個正式切片沿用既有 authenticated Gateway／bounded SessionCommandWorker／reliable FIFO，不新增第二套 transport。Client 只送召喚意圖；Pet Definition、Level、EXP、active state 與 state blob 均由 Server/SQLite 權威持有。
+
+| Opcode | Direction | Bytes | Payload |
+|---|---|---:|---|
+| 111 `PetCommand` | Client→Server | 29 | `int64 MapEpoch, uint32 PetSequence, uint8 Action, int64 PetUid`；Action=`1 Summon / 2 Recall / 3 Refresh`，Refresh 的 PetUid 必須為0 |
+| 112 `PetResult` | Server→Client | 38 | `int64 MapEpoch, uint32 PetSequence, uint8 Action, uint8 Status, int64 PetUid, int64 ActivePetUid` |
+| 113 `PetSnapshot` | Server→Client | `26 + 24*N` | `MapEpoch, ActivePetUid, count`，每列 `PetUid, DefinitionId, Level, Experience`；N≤64 |
+
+SQLite schema v30 新增 `pet_instances` 與 `pet_actions`；同一角色以 partial unique index 保證最多一隻 active pet，action key 綁定 `(character, connection generation, MapEpoch, sequence)`。完全相同重送可回 AlreadyProcessed；相同 sequence 不同 payload 回 SequenceConflict；外來 PetUid 不可召喚。登入/重連 attach 會可靠送 authoritative roster/active snapshot。Godot `WorldState` 只接受目前 MapEpoch，舊 map frame 計 stale 不污染新角色/新地圖，future frame fail closed；`ClientSession` 的 summon/recall/refresh 共用正式 intent FIFO。
+
+此切片**尚未**定義 Pet world entity、follow/AOI、戰鬥、外觀/動畫、成長、裝備/卡片、取得流程或 Mecha，也沒有把 Paradise/HK 未實測行為宣稱成 A/B PASS。實作 commit `e62fdda`；C#/Godot golden 與 shared Godot regression PASS，使用本次 source 隔離編譯的 Host 完整 Server Checks **300/300 PASS**。
 
 ### 2026-11-17 Bounded TLS/TCP automatic reconnect
 
