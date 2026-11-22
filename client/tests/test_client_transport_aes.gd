@@ -4,6 +4,7 @@ const Session = preload("res://session/client_session.gd")
 const WorldState = preload("res://world/world_state.gd")
 const USERNAME := "fixture_user"
 const PASSWORD := "Fixture-Password-123!"
+const CHARACTER_PASSWORD := "2468"
 
 func _fail(message: String, session = null) -> void:
 	if session != null:
@@ -27,12 +28,23 @@ func _initialize() -> void:
 		_fail("character list timeout/state %s" % session.snapshot(), session)
 		return
 	var character_id := int(selecting.characters[0].character_id)
-	if not session.choose_character(character_id):
+	# Synthetic/legacy fixtures predate mandatory secondary character proof.
+	# Exercise the production migration path instead of weakening the Server:
+	# provision the 4-character proof over the authenticated AES session, wait
+	# for its authoritative list refresh, then choose with that proof.
+	if not session.change_character_password(character_id, "", CHARACTER_PASSWORD):
+		_fail("secondary password setup intent rejected", session)
+		return
+	var managed := _wait_character_manage(session, 1, 5000)
+	if managed.is_empty() or int(managed.character_manage_status) != 0:
+		_fail("secondary password setup failed %s" % managed, session)
+		return
+	if not session.choose_character(character_id, CHARACTER_PASSWORD):
 		_fail("choose intent rejected", session)
 		return
 	var in_world := _wait_state(session, WorldState.STATE_IN_WORLD, 5000)
 	if in_world.is_empty() or int(in_world.actor_id) != character_id or int(in_world.map_id) != 15 or int(in_world.map_epoch) <= 0:
-		_fail("world entry invalid %s" % in_world, session)
+		_fail("world entry invalid wait=%s current=%s" % [in_world,session.snapshot()], session)
 		return
 	var baseline_deadline := Time.get_ticks_msec() + 5000
 	var baseline: Dictionary = session.snapshot()
@@ -89,6 +101,17 @@ func _initialize() -> void:
 	session.stop()
 	print("CLIENT_AES_LOGIN_PASS auth=PASS character=%d map_epoch=%d move_sequence=1 receipt=PASS world_ready=PASS skill_book=28101:3 server_owned_skill_level=true self_movement_stop=PASS facing_east=PASS server_tick=%d transport_thread=true reducer_thread=true aes_cbc_transport=PASS" % [character_id, int(in_world.map_epoch), int(acknowledged.last_server_tick)])
 	quit(0)
+
+func _wait_character_manage(session, revision: int, timeout_ms: int) -> Dictionary:
+	var deadline := Time.get_ticks_msec() + timeout_ms
+	while Time.get_ticks_msec() < deadline:
+		var value: Dictionary = session.snapshot()
+		if int(value.character_manage_result_revision) >= revision and int(value.state) == WorldState.STATE_SELECTING_CHARACTER:
+			return value
+		if int(value.state) == WorldState.STATE_FAILED:
+			return value
+		OS.delay_msec(2)
+	return {}
 
 func _wait_state(session, expected: int, timeout_ms: int) -> Dictionary:
 	var deadline := Time.get_ticks_msec() + timeout_ms
