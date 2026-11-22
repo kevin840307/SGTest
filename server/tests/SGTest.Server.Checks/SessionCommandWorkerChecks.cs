@@ -1,6 +1,6 @@
 using SGTest.Server.Gateway;
 
-internal static class TlsCommandWorkerChecks
+internal static class SessionCommandWorkerChecks
 {
     private static void Require(bool ok, string reason) => Checks.Require(ok, reason);
 
@@ -22,7 +22,7 @@ internal static class TlsCommandWorkerChecks
         var release = new TaskCompletionSource<bool>(
             TaskCreationOptions.RunContinuationsAsynchronously);
         var seen = new List<int>();
-        var worker = new TlsCommandWorker<int>(2, async n =>
+        var worker = new SessionCommandWorker<int>(2, async n =>
         {
             if (n == 1)
             {
@@ -49,7 +49,7 @@ internal static class TlsCommandWorkerChecks
     private static async Task FaultCancelsSession()
     {
         using var session = new CancellationTokenSource();
-        var worker = new TlsCommandWorker<int>(1,
+        var worker = new SessionCommandWorker<int>(1,
             _ => Task.FromException(new InvalidOperationException("forced command failure")),
             session);
         Require(worker.Post is { } post && post(42), "fault fixture enqueue failed");
@@ -64,10 +64,10 @@ internal static class TlsCommandWorkerChecks
     private static async Task CancelAndDisabled()
     {
         using var session = new CancellationTokenSource();
-        var disabled = new TlsCommandWorker<int>(2, null, session);
+        var disabled = new SessionCommandWorker<int>(2, null, session);
         Require(disabled.Post is null && disabled.Completion.IsCompletedSuccessfully,
             "disabled gameplay command became a new ingress");
-        var worker = new TlsCommandWorker<int>(2,
+        var worker = new SessionCommandWorker<int>(2,
             _ => Task.CompletedTask, session);
         session.Cancel();
         worker.Complete();

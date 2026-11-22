@@ -93,10 +93,10 @@ static class Checks
         Directory.CreateDirectory(root);
         try
         {
-            if (args is ["--identity-admin-only", "--tls"])
+            if (args is ["--identity-admin-only", "--aes"])
             {
                 IdentityAdminChecks.Verify(root, tlsOnly: true);
-                Console.WriteLine($"IDENTITY_ADMIN_TLS_CHECKS PASS total={_passes}");
+                Console.WriteLine($"IDENTITY_ADMIN_AES_CHECKS PASS total={_passes}");
                 return 0;
             }
             if (args is ["--identity-admin-only"])
@@ -295,7 +295,7 @@ static class Checks
             IdentityWireChecks.Verify();
             CharacterAppearanceWireChecks.Verify();
             GatewayConnectionChecks.Verify();
-            TlsCommandWorkerChecks.Verify();
+            SessionCommandWorkerChecks.Verify();
             WorldResultRouterChecks.Verify(root);
             WorldAoiChecks.Verify(root);
             AoiWireChecks.Verify();

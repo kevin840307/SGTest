@@ -86,7 +86,7 @@ func _connect_secure(
 	_published_revision += 1
 	_running = true
 	_mutex.unlock()
-	var error: int = _transport.start_secure(host, port, common_name, trusted_chain)
+	var error: int = _transport.start_encrypted(host, port)
 	if error != OK:
 		_mutex.lock()
 		_running = false
@@ -960,7 +960,7 @@ func _start_reconnect_attempt() -> bool:
 		OS.delay_msec(mini(LOGIC_SLEEP_MS,until-Time.get_ticks_msec()))
 	_world = WorldState.new()
 	_publish()
-	var error: int = _transport.start_secure(_host,_port,_common_name,_trusted_chain)
+	var error: int = _transport.start_encrypted(_host,_port)
 	if error != OK:
 		_last_transport_error = error
 		return _start_reconnect_attempt() if attempt < MAX_RECONNECT_ATTEMPTS else false

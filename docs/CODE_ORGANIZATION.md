@@ -1,5 +1,8 @@
 # SGTest — 命名、模組分類與責任邊界契約
 
+**2026-11-22 Transport 命名更新：** Server 新增 `Transport/AesCbcFrameStream.cs`（CBC Record）、`Transport/AesWireConnection.cs`（TCP 命令收發）、`Transport/AesGatewayListener.cs`（Socket admission），Host `AesGameHost.cs`；Client `network/aes_cbc_frame.gd`／`network/client_transport.gd`。共用背景佇列更名 `Gateway/SessionCommandWorker.cs`，不再依加密技術命名。唯一 Codec 仍在 `Wire/`（Server）、`network/wire_codec.gd`（Client）；Identity/World/Trade 等權威驗證不得依賴 CBC。未遷移的 TLS Test/Legacy 名稱仍需後續整理，不可作為新正式路徑。
+
+
 > 適用於唯一正式 main。這是目前程式碼的維護規範，不是要求新增空目錄或改寫所有舊功能。
 
 ## 設計原則

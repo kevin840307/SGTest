@@ -64,14 +64,14 @@ class ArchitectureConventionsChecks(unittest.TestCase):
         self.assertIn("func reset()", pvp)
         self.assertNotIn("session.request_pvp_mode(", pvp)
 
-    def test_tls_command_workers_reuse_bounded_fifo_without_new_dispatch_owner(self) -> None:
+    def test_session_command_workers_reuse_bounded_fifo_without_new_dispatch_owner(self) -> None:
         gateway = SERVER / "Gateway"
         tls = (gateway / "TlsWireConnection.cs").read_text(encoding="utf-8-sig")
-        worker = (gateway / "TlsCommandWorker.cs").read_text(encoding="utf-8-sig")
+        worker = (gateway / "SessionCommandWorker.cs").read_text(encoding="utf-8-sig")
         tests = (ROOT / "server" / "tests" / "SGTest.Server.Checks" /
-                 "TlsCommandWorkerChecks.cs").read_text(encoding="utf-8-sig")
+                 "SessionCommandWorkerChecks.cs").read_text(encoding="utf-8-sig")
         project = (SERVER / "SGTest.Server.csproj").read_text(encoding="utf-8-sig")
-        self.assertEqual(tls.count("new TlsCommandWorker<"), 19)
+        self.assertEqual(tls.count("new SessionCommandWorker<"), 19)
         self.assertEqual(tls.count("Channel.CreateBounded<"), 2,
                          "NPC and skill are the only special command workers")
         self.assertEqual(worker.count("Channel.CreateBounded<T>"), 1)
@@ -81,8 +81,8 @@ class ArchitectureConventionsChecks(unittest.TestCase):
         self.assertIn("ReadAllAsync(_sessionCts.Token)", worker)
         self.assertIn("_sessionCts.Cancel()", worker)
         self.assertIn("public void Complete() => _commands.Writer.TryComplete()", worker)
-        self.assertIn("new TlsCommandWorker<TrustedPlayerRespawn>(\n                4,", tls)
-        self.assertIn("new TlsCommandWorker<TrustedChatCommand>(\n                32,", tls)
+        self.assertIn("new SessionCommandWorker<TrustedPlayerRespawn>(\n                4,", tls)
+        self.assertIn("new SessionCommandWorker<TrustedChatCommand>(\n                32,", tls)
         self.assertIn("var npcCommands = Channel.CreateBounded<TrustedNpcInteraction>", tls)
         self.assertIn("var skillCommands=Channel.CreateBounded<TrustedSkillUse>", tls)
         self.assertIn("skillCommands.Reader.ReadAllAsync()", tls,

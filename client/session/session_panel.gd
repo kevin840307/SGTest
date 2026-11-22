@@ -48,8 +48,6 @@ var repair_panel := RepairPanel.new()
 var enhancement_panel := EnhancementPanel.new()
 var pvp_panel := PvpPanel.new()
 var active := false
-var trusted_chain: X509Certificate
-var tls_name := ""
 ## Deployment-only connection parameters; never Godot GUI widgets.
 var server_host := "localhost"
 var server_port := 7777
@@ -253,10 +251,10 @@ func _begin_connection(register_first:bool)->void:
 		status.text = "連線設定無效，請聯絡管理員"
 		return
 	var error:int=session.register_secure(
-		server_host.strip_edges(),server_port,username,password,
-		tls_name,trusted_chain) if register_first else session.connect_secure(
-			server_host.strip_edges(),server_port,username,password,
-			tls_name,trusted_chain)
+		server_host.strip_edges(),server_port,username,password
+	) if register_first else session.connect_secure(
+		server_host.strip_edges(),server_port,username,password
+	)
 	password=""
 	if error != OK:
 		status.text = "無法開始連線（"+str(error)+"）"

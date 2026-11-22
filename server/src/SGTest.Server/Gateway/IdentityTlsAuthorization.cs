@@ -387,7 +387,7 @@ public sealed partial class IdentityTlsAuthorization
         return true;
     }
 
-    private static async Task<byte[]?> ReadFrameAsync(SslStream tls, CancellationToken cancellationToken)
+    private static async Task<byte[]?> ReadFrameAsync(Stream tls, CancellationToken cancellationToken)
     {
         byte[] header = new byte[WireProtocol.HeaderBytes];
         try { await tls.ReadExactlyAsync(header, cancellationToken).ConfigureAwait(false); }
@@ -405,7 +405,7 @@ public sealed partial class IdentityTlsAuthorization
         return WireProtocol.TryReadHeader(frame, out _) ? frame : null;
     }
 
-    private static async Task WriteFrameAsync(SslStream tls, byte[] frame, CancellationToken cancellationToken)
+    private static async Task WriteFrameAsync(Stream tls, byte[] frame, CancellationToken cancellationToken)
     {
         await tls.WriteAsync(frame, cancellationToken).ConfigureAwait(false);
         await tls.FlushAsync(cancellationToken).ConfigureAwait(false);

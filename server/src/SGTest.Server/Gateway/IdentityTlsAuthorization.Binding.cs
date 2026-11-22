@@ -23,7 +23,7 @@ namespace SGTest.Server.Gateway;
 public sealed partial class IdentityTlsAuthorization
 {
     public async ValueTask<GatewayConnection?> AuthorizeAndBindAsync(
-        SslStream tls, CancellationToken cancellationToken,
+        Stream tls, CancellationToken cancellationToken,
         IPAddress? remoteAddress = null)
     {
         ArgumentNullException.ThrowIfNull(tls);

@@ -1,5 +1,10 @@
 # SGTest Client 資源基礎
 
+**目前正式 Client Transport（2026-11-22）：** `network/client_transport.gd` 使用 TCP + `network/aes_cbc_frame.gd`（AES-256-CBC/PKCS7、固定 Key 與 IV），不使用 TLS；須以 `SGTEST_AES_KEY_HEX`／`SGTEST_AES_IV_HEX` 環境變數提供與 Server 相同的 32B/16B 配置。登入介面沒有憑證參數。
+
+> 舊版 TLS 文件及測試記錄屬 2026-11-21 之前的歷史證據，不適用現行 Serve。固定 IV／共用 Key／無 MAC 不能抵抗密文竄改、可見重複模式；詳 `server/README.md` 的安全取捨。
+
+
 Godot 4.7.2 單一 Client，沿用 AssetStore／External PCK 與既有地形景物 Renderer。正式 threaded TLS／WorldState 已接登入、選角與權威位置／方向；在線 WorldView 新增暫定 B 基礎六部件紙娃娃、logical view／ACT／鏡像、共同排序及自身相機跟隨。**平滑內插、正式角色外觀／裝備同步、戰鬥與主要多人玩法仍未完成**。新程式沒有取回舊 prototype。
 
 ## 驗證

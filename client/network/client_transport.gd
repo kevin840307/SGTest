@@ -1,10 +1,10 @@
 extends RefCounted
 
 const WireCodec = preload("res://network/wire_codec.gd")
+const AesPacket = preload("res://network/aes_cbc_frame.gd")
 
 const STATE_STOPPED := 0
 const STATE_CONNECTING := 1
-const STATE_TLS_HANDSHAKING := 2
 const STATE_CONNECTED := 3
 const STATE_FAILED := 4
 
@@ -14,7 +14,6 @@ const MAX_EVENT_FRAMES := 256
 const MAX_EVENT_BYTES := 262144
 const MAX_RECEIVE_BUFFER_BYTES := 262144
 const CONNECT_TIMEOUT_MS := 5000
-const TLS_TIMEOUT_MS := 5000
 const WORKER_SLEEP_MS := 1
 
 var _thread := Thread.new()
@@ -31,17 +30,13 @@ var _frames_received := 0
 var _bytes_sent := 0
 var _bytes_received := 0
 
-func start_secure(host: String, port: int, common_name: String = "", trusted_chain = null) -> Error:
-	return _start(host, port, common_name, false, trusted_chain)
-
-func start_test_unsafe(host: String, port: int, common_name: String = "localhost") -> Error:
-	if not OS.is_debug_build():
-		return ERR_UNAUTHORIZED
-	return _start(host, port, common_name, true, null)
-
-func _start(host: String, port: int, common_name: String, unsafe_test_tls: bool, trusted_chain) -> Error:
+func start_encrypted(host: String, port: int) -> Error:
 	if host.is_empty() or port < 1 or port > 65535:
 		return ERR_INVALID_PARAMETER
+	var key: PackedByteArray = AesPacket.read_key_from_environment()
+	var iv: PackedByteArray = AesPacket.read_iv_from_environment()
+	if key.size() != 32 or iv.size() != 16:
+		return ERR_INVALID_DATA
 	_mutex.lock()
 	if _thread.is_started() or _state != STATE_STOPPED:
 		_mutex.unlock()
@@ -58,9 +53,8 @@ func _start(host: String, port: int, common_name: String, unsafe_test_tls: bool,
 	_bytes_received = 0
 	_state = STATE_CONNECTING
 	_mutex.unlock()
-	var tls_name := common_name if not common_name.is_empty() else host
 	_thread = Thread.new()
-	var error := _thread.start(_worker.bind(host, port, tls_name, unsafe_test_tls, trusted_chain))
+	var error := _thread.start(_worker.bind(host, port, key, iv))
 	if error != OK:
 		_set_failed(error)
 	return error
@@ -69,7 +63,7 @@ func send_frame(frame: PackedByteArray) -> bool:
 	if frame.is_empty() or WireCodec.frame_length_prefix(frame) != frame.size():
 		return false
 	_mutex.lock()
-	var accepted := _state in [STATE_CONNECTING, STATE_TLS_HANDSHAKING, STATE_CONNECTED] and not _stop_requested and _outbound.size() < MAX_OUTBOUND_FRAMES and frame.size() <= MAX_OUTBOUND_BYTES - _outbound_bytes
+	var accepted := _state in [STATE_CONNECTING, STATE_CONNECTED] and not _stop_requested and _outbound.size() < MAX_OUTBOUND_FRAMES and frame.size() <= MAX_OUTBOUND_BYTES - _outbound_bytes
 	if accepted:
 		var copy := frame.duplicate()
 		_outbound.append(copy)
@@ -119,7 +113,7 @@ func stop() -> void:
 	_outbound_bytes = 0
 	_mutex.unlock()
 
-func _worker(host: String, port: int, common_name: String, unsafe_test_tls: bool, trusted_chain) -> void:
+func _worker(host: String, port: int, key: PackedByteArray, iv: PackedByteArray) -> void:
 	var tcp := StreamPeerTCP.new()
 	var error := tcp.connect_to_host(host, port)
 	if error != OK:
@@ -145,48 +139,28 @@ func _worker(host: String, port: int, common_name: String, unsafe_test_tls: bool
 		return
 	tcp.set_no_delay(true)
 
-	_set_state(STATE_TLS_HANDSHAKING)
-	var tls := StreamPeerTLS.new()
-	var options = TLSOptions.client_unsafe() if unsafe_test_tls else (TLSOptions.client() if trusted_chain == null else TLSOptions.client(trusted_chain))
-	error = tls.connect_to_stream(tcp, common_name, options)
-	if error != OK:
-		_set_failed(error)
-		tcp.disconnect_from_host()
-		return
-	deadline = Time.get_ticks_msec() + TLS_TIMEOUT_MS
-	while not _should_stop():
-		tls.poll()
-		var tls_status := tls.get_status()
-		if tls_status == StreamPeerTLS.STATUS_CONNECTED:
-			break
-		if tls_status in [StreamPeerTLS.STATUS_ERROR, StreamPeerTLS.STATUS_ERROR_HOSTNAME_MISMATCH, StreamPeerTLS.STATUS_DISCONNECTED]:
-			_set_failed(ERR_CONNECTION_ERROR)
-			return
-		if Time.get_ticks_msec() >= deadline:
-			_set_failed(ERR_TIMEOUT)
-			return
-		OS.delay_msec(WORKER_SLEEP_MS)
-	if _should_stop():
-		tls.disconnect_from_stream()
-		return
-
 	_set_state(STATE_CONNECTED)
 	_push_event({"type": "connected", "bytes": 0})
 	var receive_buffer := PackedByteArray()
 	var pending_send := PackedByteArray()
 	var pending_offset := 0
 	while not _should_stop():
-		tls.poll()
-		if tls.get_status() != StreamPeerTLS.STATUS_CONNECTED:
+		error = tcp.poll()
+		if error != OK or tcp.get_status() != StreamPeerTCP.STATUS_CONNECTED:
 			_set_failed(ERR_CONNECTION_ERROR)
 			break
 
 		if pending_send.is_empty():
-			pending_send = _take_outbound()
+			var plain := _take_outbound()
+			if not plain.is_empty():
+				pending_send = AesPacket.encrypt_frame(plain, key, iv)
+				if pending_send.is_empty():
+					_set_failed(ERR_INVALID_DATA)
+					break
 			pending_offset = 0
 		if not pending_send.is_empty():
 			var remaining := pending_send.slice(pending_offset)
-			var sent_result := tls.put_partial_data(remaining)
+			var sent_result := tcp.put_partial_data(remaining)
 			var send_error := int(sent_result[0])
 			var sent := int(sent_result[1])
 			if send_error != OK:
@@ -200,9 +174,9 @@ func _worker(host: String, port: int, common_name: String, unsafe_test_tls: bool
 				pending_send = PackedByteArray()
 				pending_offset = 0
 
-		var available := tls.get_available_bytes()
+		var available := tcp.get_available_bytes()
 		if available > 0:
-			var read_result := tls.get_partial_data(available)
+			var read_result := tcp.get_partial_data(available)
 			var read_error := int(read_result[0])
 			if read_error != OK:
 				_set_failed(read_error)
@@ -214,25 +188,29 @@ func _worker(host: String, port: int, common_name: String, unsafe_test_tls: bool
 				if receive_buffer.size() > MAX_RECEIVE_BUFFER_BYTES:
 					_set_failed(ERR_OUT_OF_MEMORY)
 					break
-				if not _drain_receive_buffer(receive_buffer):
+				if not _drain_receive_buffer(receive_buffer, key, iv):
 					break
 		OS.delay_msec(WORKER_SLEEP_MS)
 
-	tls.disconnect_from_stream()
+	tcp.disconnect_from_host()
 
-func _drain_receive_buffer(buffer: PackedByteArray) -> bool:
+func _drain_receive_buffer(buffer: PackedByteArray, key: PackedByteArray, iv: PackedByteArray) -> bool:
 	while buffer.size() >= 4:
-		var length := WireCodec.frame_length_prefix(buffer)
-		if length < 0:
+		var cipher_size := int(buffer.decode_u32(0))
+		if cipher_size < 16 or cipher_size > AesPacket.MAX_CIPHER_BYTES or cipher_size % 16 != 0:
 			_set_failed(ERR_INVALID_DATA)
 			return false
-		if buffer.size() < length:
+		if buffer.size() < 4 + cipher_size:
 			return true
-		var frame := buffer.slice(0, length)
-		var tail := buffer.slice(length)
+		var cipher := buffer.slice(4, 4 + cipher_size)
+		var tail := buffer.slice(4 + cipher_size)
 		buffer.clear()
 		if not tail.is_empty():
 			buffer.append_array(tail)
+		var frame := AesPacket.decrypt_record(cipher, key, iv)
+		if frame.is_empty() or WireCodec.frame_length_prefix(frame) != frame.size():
+			_set_failed(ERR_INVALID_DATA)
+			return false
 		if not _push_event({"type": "frame", "frame": frame, "bytes": frame.size()}):
 			_set_failed(ERR_OUT_OF_MEMORY)
 			return false

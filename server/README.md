@@ -1,15 +1,35 @@
-# SGTest Server — .NET 8 重建（權威 World／TLS Host）
+# SGTest Server — .NET 8 重建（權威 World／AES-CBC Binary Host）
 
-新版 Server 是**從零重建**，不還原舊 SGO 原型。現有權威 Blocking/A*、30Hz World、SQLite帳號／遊戲內創角／選角、compact-binary V1、TLS授權、WorldReady／AOI及NPC轉圖。Host `serve` 透過有界 TLS listener 接入同一組正式授權／Router／AOI；無內建帳密、明文或自動測試憑證。公開帳號註冊已完成為預設關閉的 opt-in TLS 功能；原版創角外觀／職業／預設出生規則及完整 Release 仍未完成。
+## 2026-11-22：正式 AES-CBC Binary 傳輸（取代 TLS Serve）
 
-## 持續運行的TLS Host（MVP003-TLS-LISTENER）
+正式 `serve` 入口使用 `AesGameHost` → `AesGatewayListener` → `AesWireConnection` → `AesCbcFrameStream`，不需要 PFX/CA/TLS 握手。它仍使用現有 `GatewayConnection`、`WireProtocol`、SQLite Argon2id Auth/CharacterChoose、權威 World 與 backpressure；Client 是 `network/client_transport.gd` + `network/aes_cbc_frame.gd`。認證必須先於 Gameplay。原 TLS 歷史測試保留，**不是正式 Serve 回退模式**。
+
+**安全取捨（使用者明確要求）：** AES-256-CBC／PKCS7、固定 Key、固定 IV、沒有 MAC；密文沒有來源驗證或完整性保證，重複開頭會洩漏模式，公開 Client 取得共用 Key 後可產生有效密文。Server Authority／序號／登入權限驗證不能替代密文完整性驗證，亦不能防止未經授權的網路攔截／MITM。**不得稱之為 TLS 等級安全的公開登入防護。** 建議正式公網環境改用經認證的加密傳輸。
+
+Record 契約：`u32_le(ciphertext length)` + `AES-256-CBC-PKCS7(WireProtocol 的完整 Compact Binary frame)`，每筆獨立用同一固定 IV 重新初始化 CBC，長度上限 65,552，解密後使用唯一 V1 `u32 frame_length + u16 version + u16 opcode`、最大 65,536。IV 不隨封包傳送。TCP 粘／拆包由 Record Stream 解析；Server 不信任 Client 傳入的 ActorId。
+
+啟動前以**部署環境**提供 `SGTEST_AES_KEY_HEX`（64 hex = 32 bytes）和 `SGTEST_AES_IV_HEX`（32 hex = 16 bytes）。Client 與 Server 必須相同；原則上不得把正式 Key/IV 寫進 Git、CLI 參數、Log。沒有正確配置時應拒絕連線／啟動。**固定 Key 被破解後視為全體 Client 共用密鑰洩漏。**
+
+```powershell
+$env:SGTEST_AES_KEY_HEX = '<64個十六進位字元>'
+$env:SGTEST_AES_IV_HEX = '<32個十六進位字元>'
+dotnet run --project server/host/SGTest.Server.Host -c Release -- serve --content C:/private/runtime --identity C:/private/identity.db --bind 127.0.0.1 --port 7777
+& 'C:/SGO/Godot/Godot_v4.7.2-stable_win64_console.exe' --path client -- --host 127.0.0.1 --port 7777
+```
+
+跨語言加密 Golden + 真 TCP roundtrip（僅本機 fixture）：`dotnet run --project tools/tests/aes_transport_probe/AesTransportProbe.csproj -c Release`，驗證 `AES_CBC_TRANSPORT_PROBE_PASS`。Server 端正式 Host 登入／選角／WorldReady／移動回覆：`dotnet run --project server/tests/SGTest.Server.Checks -c Release -- --identity-admin-only --aes`（測試參數沿用歷史名稱，實際進入 AES Host）。
+
+
+新版 Server 是**從零重建**，不還原舊 SGO 原型。現有權威 Blocking/A*、30Hz World、SQLite帳號／遊戲內創角／選角、compact-binary V1、TLS授權、WorldReady／AOI及NPC轉圖。Host `serve` 透過有界 AES-CBC TCP listener 接入同一組正式授權／Router／AOI；無內建帳密、明文或自動測試憑證。公開帳號註冊已完成為預設關閉的 opt-in TLS 功能；原版創角外觀／職業／預設出生規則及完整 Release 仍未完成。
+
+## 歷史 TLS Host 設計紀錄（已由 AES-CBC Serve 取代）
 
 目前 schema **v24** 新增可選的 `character_appearances`。Trusted Server 可提供 `CharacterAppearanceRules` 允許集合，透過同一 Store 原子建立角色、外觀與錢包；沒有外觀資料的舊角色仍為未知，不會自動指定種族或髮型。TLS 創角／角色列表已支援 bounded appearance tuple 與 Server choices；標準 Host 可透過 `--character-appearance-rules` 載入明確核准的選項，玩家 UI 已接選擇／送出；全量原版合法集合、一般外觀渲染及 AOI 外觀仍待完成，見 [創角外觀進度](../docs/research/CHARACTER_CREATION_APPEARANCE.md)。
 
 本機已有 Host 執行、鎖住標準 build 輸出時，可用 `dotnet build server/host/SGTest.Server.Host/SGTest.Server.Host.csproj -c Release -o .cache/check-host` 建立相同正式專案的測試輸出，再設定 `SGTEST_CHECKS_HOST_DLL` 為該輸出的 **絕對** `SGTest.Server.Host.dll` 路徑執行 Server Checks。這只指定測試啟動哪個組件，不會重啟現有 Host 或改變正式配置；未設定時 Checks 使用既有標準 Release 輸出。
 
 ```powershell
-# PFX必須有目前有效的private key；密碼由環境提供，不放在命令列或repo。
+# 以下 TLS 指令僅供歷史紀錄，2026-11-22 後不能用於正式 serve；請使用本檔上方 AES-CBC 啟動指令。
 dotnet run --project server/host/SGTest.Server.Host -c Release -- serve --content C:/private/runtime --identity C:/private/identity.db --certificate C:/private/server.pfx --bind 127.0.0.1 --port 7777
 
 # 啟用遊戲內創角（以下座標只是部署範例，不宣稱原版預設出生點）

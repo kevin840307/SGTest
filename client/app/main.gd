@@ -156,14 +156,6 @@ func _ready() -> void:
 				session_panel.server_host = args[i+1]
 			elif args[i] == "--port" and args[i+1].is_valid_int():
 				session_panel.server_port = int(args[i+1])
-			elif args[i] == "--tls-name":
-				session_panel.tls_name = args[i+1]
-			elif args[i] == "--trusted-cert":
-				var cert := X509Certificate.new()
-				if cert.load(args[i+1]) == OK:
-					session_panel.trusted_chain = cert
-				else:
-					session_panel.status.text = "無法讀取指定憑證；未停用 TLS 驗證"
 		if world_view.open_pack(pack) == OK:
 			world_view.request_map(15)
 		else:

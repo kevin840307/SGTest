@@ -20,7 +20,7 @@ var _events: Array[Dictionary] = []
 var _sent: Array[PackedByteArray] = []
 var _error := OK
 
-func start_secure(_host: String, _port: int, _common_name: String = "", _trusted_chain = null) -> Error:
+func start_encrypted(_host: String, _port: int, _common_name: String = "", _trusted_chain = null) -> Error:
 	_mutex.lock()
 	_state = STATE_CONNECTED
 	_error = OK

@@ -215,79 +215,79 @@ public static class TlsWireConnection
                 }
             }
 
-            var respawnQueue = new TlsCommandWorker<TrustedPlayerRespawn>(
+            var respawnQueue = new SessionCommandWorker<TrustedPlayerRespawn>(
                 4, handleRespawn, sessionCts);
             Func<TrustedPlayerRespawn, bool>? postRespawn = respawnQueue.Post;
 
-            var pickupQueue = new TlsCommandWorker<TrustedGroundPickup>(
+            var pickupQueue = new SessionCommandWorker<TrustedGroundPickup>(
                 16, handlePickup, sessionCts);
             Func<TrustedGroundPickup, bool>? postPickup = pickupQueue.Post;
 
-            var recoveryQueue = new TlsCommandWorker<TrustedRecoveryUse>(
+            var recoveryQueue = new SessionCommandWorker<TrustedRecoveryUse>(
                 16, handleRecovery, sessionCts);
             Func<TrustedRecoveryUse, bool>? postRecovery = recoveryQueue.Post;
 
-            var discardQueue = new TlsCommandWorker<TrustedInventoryDiscard>(
+            var discardQueue = new SessionCommandWorker<TrustedInventoryDiscard>(
                 16, handleDiscard, sessionCts);
             Func<TrustedInventoryDiscard, bool>? postDiscard = discardQueue.Post;
 
-            var shopQueue = new TlsCommandWorker<TrustedShopCommand>(
+            var shopQueue = new SessionCommandWorker<TrustedShopCommand>(
                 16, handleShop, sessionCts);
             Func<TrustedShopCommand, bool>? postShop = shopQueue.Post;
 
-            var storageQueue = new TlsCommandWorker<TrustedStorageCommand>(
+            var storageQueue = new SessionCommandWorker<TrustedStorageCommand>(
                 16, handleStorage, sessionCts);
             Func<TrustedStorageCommand, bool>? postStorage = storageQueue.Post;
 
-            var equipmentQueue = new TlsCommandWorker<TrustedEquipmentCommand>(
+            var equipmentQueue = new SessionCommandWorker<TrustedEquipmentCommand>(
                 16, handleEquipment, sessionCts);
             Func<TrustedEquipmentCommand, bool>? postEquipment = equipmentQueue.Post;
 
-            var bankQueue = new TlsCommandWorker<TrustedBankCommand>(
+            var bankQueue = new SessionCommandWorker<TrustedBankCommand>(
                 16, handleBank, sessionCts);
             Func<TrustedBankCommand, bool>? postBank = bankQueue.Post;
 
-            var repairQueue = new TlsCommandWorker<TrustedRepairCommand>(
+            var repairQueue = new SessionCommandWorker<TrustedRepairCommand>(
                 16, handleRepair, sessionCts);
             Func<TrustedRepairCommand, bool>? postRepair = repairQueue.Post;
 
-            var enhancementQueue = new TlsCommandWorker<TrustedEnhancementCommand>(
+            var enhancementQueue = new SessionCommandWorker<TrustedEnhancementCommand>(
                 16, handleEnhancement, sessionCts);
             Func<TrustedEnhancementCommand, bool>? postEnhancement = enhancementQueue.Post;
 
-            var tradeQueue = new TlsCommandWorker<TrustedTradeCommand>(
+            var tradeQueue = new SessionCommandWorker<TrustedTradeCommand>(
                 16, handleTrade, sessionCts);
             Func<TrustedTradeCommand, bool>? postTrade = tradeQueue.Post;
 
-            var questQueue = new TlsCommandWorker<TrustedQuestCommand>(
+            var questQueue = new SessionCommandWorker<TrustedQuestCommand>(
                 16, handleQuest, sessionCts);
             Func<TrustedQuestCommand, bool>? postQuest = questQueue.Post;
 
-            var pvpQueue = new TlsCommandWorker<TrustedPvpModeCommand>(
+            var pvpQueue = new SessionCommandWorker<TrustedPvpModeCommand>(
                 16, handlePvp, sessionCts);
             Func<TrustedPvpModeCommand, bool>? postPvp = pvpQueue.Post;
 
-            var pvpAttackQueue = new TlsCommandWorker<TrustedPvpAttack>(
+            var pvpAttackQueue = new SessionCommandWorker<TrustedPvpAttack>(
                 16, handlePvpAttack, sessionCts);
             Func<TrustedPvpAttack, bool>? postPvpAttack = pvpAttackQueue.Post;
 
-            var pvpSkillQueue = new TlsCommandWorker<TrustedPvpSkill>(
+            var pvpSkillQueue = new SessionCommandWorker<TrustedPvpSkill>(
                 16, handlePvpSkill, sessionCts);
             Func<TrustedPvpSkill, bool>? postPvpSkill = pvpSkillQueue.Post;
 
-            var gmPvpNameQueue = new TlsCommandWorker<TrustedGmPvpNameCommand>(
+            var gmPvpNameQueue = new SessionCommandWorker<TrustedGmPvpNameCommand>(
                 16, handleGmPvpName, sessionCts);
             Func<TrustedGmPvpNameCommand, bool>? postGmPvpName = gmPvpNameQueue.Post;
 
-            var playerShopQueue = new TlsCommandWorker<TrustedPlayerShopCommand>(
+            var playerShopQueue = new SessionCommandWorker<TrustedPlayerShopCommand>(
                 16, handlePlayerShop, sessionCts);
             Func<TrustedPlayerShopCommand, bool>? postPlayerShop = playerShopQueue.Post;
 
-            var chatQueue = new TlsCommandWorker<TrustedChatCommand>(
+            var chatQueue = new SessionCommandWorker<TrustedChatCommand>(
                 32, handleChat, sessionCts);
             Func<TrustedChatCommand, bool>? postChat = chatQueue.Post;
 
-            var partyQueue = new TlsCommandWorker<TrustedPartyCommand>(
+            var partyQueue = new SessionCommandWorker<TrustedPartyCommand>(
                 16, handleParty, sessionCts);
             Func<TrustedPartyCommand, bool>? postParty = partyQueue.Post;
 

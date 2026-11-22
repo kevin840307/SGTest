@@ -3,6 +3,7 @@ on:
   push:
     paths:
       - "client/**"
+      - "tools/tests/aes_transport_probe/**"
       - "server/src/SGTest.Server/**"
       - "server/tests/SGTest.Server.LoginFixture/**"
       - "tools/tests/test_architecture_conventions.py"
@@ -10,6 +11,7 @@ on:
   pull_request:
     paths:
       - "client/**"
+      - "tools/tests/aes_transport_probe/**"
       - "server/src/SGTest.Server/**"
       - "server/tests/SGTest.Server.LoginFixture/**"
       - "tools/tests/test_architecture_conventions.py"
@@ -46,6 +48,10 @@ jobs:
           chmod +x .cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64
       - name: Validate real OS process CPU/RSS telemetry sampler
         run: python -m unittest client.tests.test_process_telemetry -v
+      - name: AES-256-CBC Binary Godot to .NET TCP roundtrip
+        env:
+          SGTEST_GODOT_BIN: ${{ github.workspace }}/.cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64
+        run: dotnet run --project tools/tests/aes_transport_probe/AesTransportProbe.csproj -c Release
       - name: Godot wire codec
         run: .cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64 --headless --path client --script res://tests/test_wire_codec.gd
       - name: Character appearance CSharp golden and exact creation-menu reducer

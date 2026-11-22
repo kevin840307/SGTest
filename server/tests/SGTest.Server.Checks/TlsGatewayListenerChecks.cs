@@ -35,7 +35,7 @@ internal static class TlsGatewayListenerChecks
             () => UntrustedClients(root).GetAwaiter().GetResult());
         Checks.Run("TLS session infrastructure failure stops admission and is observable by supervisor",
             () => SessionFailure(root).GetAwaiter().GetResult());
-        Checks.Run("Host serve boots TLS on synthetic maps, stops cleanly and rejects invalid CLI",
+        Checks.Run("Host serve boots AES-CBC on synthetic maps, stops cleanly and rejects invalid CLI",
             () => HostEntry(root).GetAwaiter().GetResult());
     }
 
@@ -468,7 +468,8 @@ internal static class TlsGatewayListenerChecks
                 RedirectStandardError = true, UseShellExecute = false };
             start.ArgumentList.Add(hostDll);
             foreach (string arg in args) start.ArgumentList.Add(arg);
-            start.Environment["SGTEST_TLS_PASSWORD"] = "Listener-PFX-test-only";
+            start.Environment["SGTEST_AES_KEY_HEX"] = "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f";
+            start.Environment["SGTEST_AES_IV_HEX"] = "000102030405060708090a0b0c0d0e0f";
             using var process = Process.Start(start) ?? throw new Exception("Host process not started");
             var output = process.StandardOutput.ReadToEndAsync();
             var errors = process.StandardError.ReadToEndAsync();
@@ -477,14 +478,14 @@ internal static class TlsGatewayListenerChecks
             return (process.ExitCode, await output, await errors);
         }
         var valid = await Run("serve", "--content", content, "--identity", Path.Combine(content, "identity.db"),
-            "--certificate", pfx, "--port", "0",
+             "--port", "0",
             "--auth-failures-per-address", "3",
             "--auth-failures-per-account", "2",
             "--auth-failure-window-seconds", "17",
             "--auth-lockout-seconds", "19",
             "--seconds", "1");
-        Checks.Require(valid.Exit == 0 && valid.Out.Contains("TLS_HOST_READY") &&
-            valid.Out.Contains("TLS_HOST_STOPPED") &&
+        Checks.Require(valid.Exit == 0 && valid.Out.Contains("AES_HOST_READY") &&
+            valid.Out.Contains("AES_HOST_STOPPED") &&
             valid.Out.Contains("\"auth_failures_per_address\":3") &&
             valid.Out.Contains("\"auth_failures_per_account\":2") &&
             valid.Out.Contains("\"auth_failure_window_seconds\":17") &&
@@ -501,9 +502,9 @@ internal static class TlsGatewayListenerChecks
             rules=new[]{new{item_definition_id=1001,restore_hp=140,required_level=1}}
         }));
         var enabled=await Run("serve","--content",content,"--identity",
-            Path.Combine(content,"identity.db"),"--certificate",pfx,
+            Path.Combine(content,"identity.db"),
             "--port","0","--recovery-rules",rules,"--seconds","1");
-        Checks.Require(enabled.Exit==0 && enabled.Out.Contains("TLS_HOST_READY") &&
+        Checks.Require(enabled.Exit==0 && enabled.Out.Contains("AES_HOST_READY") &&
             enabled.Out.Contains("\"verified_recovery_rule_count\":1"),
             "verified recovery manifest was not admitted by formal Host: "+enabled.Error);
         string unverified=Path.Combine(content,"recovery-unverified.json");
@@ -514,9 +515,9 @@ internal static class TlsGatewayListenerChecks
             rules=new[]{new{item_definition_id=1001,restore_hp=140,required_level=1}}
         }));
         var denied=await Run("serve","--content",content,"--identity",
-            Path.Combine(content,"identity.db"),"--certificate",pfx,
+            Path.Combine(content,"identity.db"),
             "--port","0","--recovery-rules",unverified,"--seconds","1");
-        Checks.Require(denied.Exit==1 && !denied.Out.Contains("TLS_HOST_READY"),
+        Checks.Require(denied.Exit==1 && !denied.Out.Contains("AES_HOST_READY"),
             "unverified recovery rule file started a production listener");
 
         string appearancePath=Path.Combine(content,"appearance-verified.json");
@@ -527,31 +528,31 @@ internal static class TlsGatewayListenerChecks
         });
         File.WriteAllText(appearancePath,appearanceJson);
         var appearanceEnabled=await Run("serve","--content",content,"--identity",Path.Combine(content,"identity.db"),
-            "--certificate",pfx,"--port","0","--character-spawn-map","15","--character-spawn-x","8",
+            "--port","0","--character-spawn-map","15","--character-spawn-x","8",
             "--character-spawn-y","8","--character-appearance-rules",appearancePath,"--seconds","1");
-        Checks.Require(appearanceEnabled.Exit==0 && appearanceEnabled.Out.Contains("TLS_HOST_READY") &&
+        Checks.Require(appearanceEnabled.Exit==0 && appearanceEnabled.Out.Contains("AES_HOST_READY") &&
             appearanceEnabled.Out.Contains("\"character_appearance_choices\":1"),
             "formal Host did not enable configured appearance rules: "+appearanceEnabled.Error);
         var missingSpawn=await Run("serve","--content",content,"--identity",Path.Combine(content,"identity.db"),
-            "--certificate",pfx,"--port","0","--character-appearance-rules",appearancePath,"--seconds","1");
-        Checks.Require(missingSpawn.Exit==2 && !missingSpawn.Out.Contains("TLS_HOST_READY"),
+            "--port","0","--character-appearance-rules",appearancePath,"--seconds","1");
+        Checks.Require(missingSpawn.Exit==2 && !missingSpawn.Out.Contains("AES_HOST_READY"),
             "appearance rules without trusted spawn opened listener");
         File.WriteAllText(appearancePath,appearanceJson.Replace("\"rules_verified\":true","\"rules_verified\":false"));
         var unverifiedAppearance=await Run("serve","--content",content,"--identity",Path.Combine(content,"identity.db"),
-            "--certificate",pfx,"--port","0","--character-spawn-map","15","--character-spawn-x","8",
+            "--port","0","--character-spawn-map","15","--character-spawn-x","8",
             "--character-spawn-y","8","--character-appearance-rules",appearancePath,"--seconds","1");
-        Checks.Require(unverifiedAppearance.Exit==1 && !unverifiedAppearance.Out.Contains("TLS_HOST_READY"),
+        Checks.Require(unverifiedAppearance.Exit==1 && !unverifiedAppearance.Out.Contains("AES_HOST_READY"),
             "unverified appearance choices opened listener");
 
         var invalid = await Run("serve", "--content", content, "--identity", Path.Combine(content, "identity.db"),
-            "--certificate", pfx, "--bind", "not-an-ip");
-        Checks.Require(invalid.Exit == 2 && !invalid.Out.Contains("TLS_HOST_READY"),
+             "--bind", "not-an-ip");
+        Checks.Require(invalid.Exit == 2 && !invalid.Out.Contains("AES_HOST_READY"),
             "invalid host configuration opened a listener");
         var invalidAuthPolicy = await Run("serve", "--content", content,
             "--identity", Path.Combine(content, "identity.db"),
-            "--certificate", pfx, "--auth-lockout-seconds", "0");
+             "--auth-lockout-seconds", "0");
         Checks.Require(invalidAuthPolicy.Exit == 2 &&
-            !invalidAuthPolicy.Out.Contains("TLS_HOST_READY"),
+            !invalidAuthPolicy.Out.Contains("AES_HOST_READY"),
             "invalid authentication lockout policy opened a listener");
     }
 

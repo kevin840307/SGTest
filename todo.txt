@@ -1,5 +1,8 @@
 # SGTest 新版重建 TODO（2026-11-15）
 
+- TRANSPORT-AES-CBC-FIXED [ ] 2026-11-22：依使用者明確要求將正式 `serve` 改 AES-256-CBC/PKCS7 + 固定 Key/IV + Compact Binary TCP；Client/Server 使用唯一 V1 Wire 與既有 trusted binding，新增 `Transport/` 與 `SessionCommandWorker` 命名。Golden、Godot↔C# TCP、AES Host CLI 帳號/選角/WorldReady/Move PASS；本機 Server 既有（含舊 TLS）完整回歸 **286/286 PASS**，但 Godot 真 UI/多玩家和遠端 CI 尚未驗收，**不得稱整體遊戲 Gate PASS**。固定 Key/IV、未加 MAC 沒有密文完整性／MITM 保護；已在 Runtime doc 明列。
+
+
 - UI-CHARACTER-CREATION-PERSISTENCE [x] 2026-11-22：Identity schema25原子保存四項起始能力／外觀／角色／錢包；驗證每項1..5、總和8、名稱寬12及四字角色密碼，使用既有有界Argon2id與獨立用途前綴，不存明文。第二密碼失敗5次鎖60秒（SGTest防護策略，非原版規則），SQLite交易保存並發計數／鎖定，重啟仍有效；舊角色不虛構密碼。受保護角色不能繞過既有無密碼選角入口；正式Wire／Client尚待接線，不能宣稱可用完整創角。Server286/286、Python125/125 PASS；涵蓋同slot競態、回滾、舊庫備份升級、正錯密碼／disabled／foreign、初始Combat配點一致及真TLS拒絕繞過。CI待驗證。
 
 - UI-REFERENCE-BATCH-AND-SOURCE-VIEWPORT [x] 2026-11-22：依使用者要求啟動Recovered本機Client/Server，隔離DB／userdata；完成登入、創角名稱／換髮型／四項各加1／四碼角色密碼、重登與真主城，主要視窗批次截圖；用戶建立社團後補成員／科技／公告編輯，背包五分類、狀態、技能、隊伍、任務、商城、設定、資訊、製造及地圖。28張精選私人總覽 reports/recovered_ui_reference/index.html，原PNG／node bounds在.cache；私人素材／桌面截圖不入Git。經使用者允許，備份後將參照player缺失的guard呼叫改至既有GameManager，無正式SGTest依賴。確認右下角是Status1/2任務追蹤區，無任務隱藏，不挪他用；聊天包含頭頂泡泡。正式Adapter補來源1400×900 viewport縮放，基準黑底登入窗RGB差異0，1152×620九圖／真TLS十圖／lifecycle PASS。**完整創角、R2世界HUD／各窗及HK2仍未完成；本項是來源捕捉與縮放修復，不是全UI PASS。** 本次CI待驗證。

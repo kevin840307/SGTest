@@ -10,13 +10,13 @@ using SGTest.Server.Combat;
 using System.Net;
 using System.Globalization;
 using System.Security.Cryptography;
-using System.Security.Cryptography.X509Certificates;
+using SGTest.Server.Transport;
 using System.Text.Json;
 using SGTest.Server.Gateway;
 using SGTest.Server.Identity;
 using SGTest.Server.World;
 
-internal static class TlsHost
+internal static class AesGameHost
 {
     public static async Task<int> RunAsync(string[] args)
     {
@@ -28,7 +28,7 @@ internal static class TlsHost
             var options = Parse(args);
             string root = Path.GetFullPath(Required(options, "--content"));
             string database = Path.GetFullPath(Required(options, "--identity"));
-            string certificatePath = Path.GetFullPath(Required(options, "--certificate"));
+            var aesSettings = AesCbcSettings.FromEnvironment();
             if (!IPAddress.TryParse(options.GetValueOrDefault("--bind", "127.0.0.1"), out var address))
                 throw new ArgumentException("--bind must be an IP address");
             int port = Number(options, "--port", 7777, 0, 65535);
@@ -69,12 +69,6 @@ internal static class TlsHost
             int checkpointMs = Number(options, "--position-checkpoint-ms", 5000, 500, 60000);
             if (options.ContainsKey("--seconds"))
                 stop.CancelAfter(TimeSpan.FromSeconds(Number(options, "--seconds", 1, 1, 86400)));
-            using var certificate = new X509Certificate2(certificatePath,
-                Environment.GetEnvironmentVariable("SGTEST_TLS_PASSWORD"),
-                // Schannel needs an accessible user-key container. Do not mark
-                // it Exportable/PersistKeySet; disposal releases the temporary
-                // imported key. Linux can use an ephemeral in-memory key.
-                OperatingSystem.IsWindows() ? X509KeyStorageFlags.UserKeySet : X509KeyStorageFlags.EphemeralKeySet);
             var maps = new[] { 13, 15 }.Select(id =>
                 BlockingGrid.Load(Path.Combine(root, "maps", id.ToString()), id)).ToArray();
 
@@ -315,8 +309,8 @@ internal static class TlsHost
                 rateLimiter: authRateLimiter,
                 registrationRateLimiter: registrationRateLimiter,
                 gmAccounts: gmAccounts);
-            await using var listener = new TlsGatewayListener(address, port, authorization,
-                certificate, router, new(MaxConnections: maximum, MaxConnectionsPerAddress: perAddress));
+            await using var listener = new AesGatewayListener(address, port, authorization,
+                aesSettings, router, new(MaxConnections: maximum, MaxConnectionsPerAddress: perAddress));
             await world.StartAsync();
             using var pumps = new CancellationTokenSource();
             var routing = router.RunAsync(world.Results, pumps.Token);
@@ -332,7 +326,7 @@ internal static class TlsHost
                 var accepting = listener.RunAsync(stop.Token);
                 Console.WriteLine(JsonSerializer.Serialize(new
                 {
-                    result = "TLS_HOST_READY", endpoint = listener.LocalEndpoint.ToString(),
+                    result = "AES_HOST_READY", endpoint = listener.LocalEndpoint.ToString(),
                     max_connections = maximum, max_per_address = perAddress,
                     auth_failures_per_address = authAddressFailures,
                     auth_failures_per_account = authAccountFailures,
@@ -402,7 +396,7 @@ internal static class TlsHost
             }
             Console.WriteLine(JsonSerializer.Serialize(new
             {
-                result = "TLS_HOST_STOPPED", listener = listener.Statistics,
+                result = "AES_HOST_STOPPED", listener = listener.Statistics,
                 authentication_rate_limit = authRateLimiter.Statistics,
                 account_registration_rate_limit = registrationRateLimiter?.Statistics,
                 world = world.Statistics, router = router.Statistics,
@@ -426,8 +420,8 @@ internal static class TlsHost
         }
         catch (ArgumentException error)
         {
-            Console.Error.WriteLine("TLS_HOST_CONFIGURATION: " + error.Message);
-            Console.Error.WriteLine("Usage: serve --content <PRIVATE_ROOT> --identity <DB> --certificate <PFX> " +
+            Console.Error.WriteLine("AES_HOST_CONFIGURATION: " + error.Message);
+            Console.Error.WriteLine("Usage: serve --content <PRIVATE_ROOT> --identity <DB> " +
                 "[--bind 127.0.0.1] [--port 7777] [--max-connections 128] [--max-per-address 8] " +
                 "[--auth-failures-per-address 12] [--auth-failures-per-account 6] " +
                 "[--auth-failure-window-seconds 60] [--auth-lockout-seconds 30] " +
@@ -452,7 +446,7 @@ internal static class TlsHost
                                      CharacterPositionCheckpointException or
                                      PlayerCombatSettlementException or MonsterLootSettlementException or InvalidDataException)
         {
-            Console.Error.WriteLine("TLS_HOST_FAIL: " + error.GetType().Name + ": " + error.Message);
+            Console.Error.WriteLine("AES_HOST_FAIL: " + error.GetType().Name + ": " + error.Message);
             return 1;
         }
         finally { Console.CancelKeyPress -= cancel; }
@@ -460,7 +454,7 @@ internal static class TlsHost
 
     private static Dictionary<string, string> Parse(string[] args)
     {
-        string[] known = ["--content", "--identity", "--certificate", "--bind", "--port",
+        string[] known = ["--content", "--identity", "--bind", "--port",
                           "--max-connections", "--max-per-address",
                           "--auth-failures-per-address", "--auth-failures-per-account",
                           "--auth-failure-window-seconds", "--auth-lockout-seconds",

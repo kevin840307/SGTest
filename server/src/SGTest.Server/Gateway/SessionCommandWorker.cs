@@ -7,12 +7,12 @@ namespace SGTest.Server.Gateway;
 /// a single authenticated TLS session. Does not own a socket, gameplay gate,
 /// identity, World state, or an additional dispatch path.
 /// </summary>
-internal sealed class TlsCommandWorker<T>
+internal sealed class SessionCommandWorker<T>
 {
     private readonly Channel<T> _commands;
     private readonly CancellationTokenSource _sessionCts;
 
-    public TlsCommandWorker(
+    public SessionCommandWorker(
         int capacity, Func<T, Task>? handler, CancellationTokenSource sessionCts)
     {
         if (capacity < 1)

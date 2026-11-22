@@ -10,6 +10,7 @@ using System.Text.Json;
 using SGTest.Server.Identity;
 using SGTest.Server.Wire;
 using SGTest.Server.World;
+using SGTest.Server.Transport;
 
 internal static class IdentityAdminChecks
 {
@@ -36,8 +37,8 @@ internal static class IdentityAdminChecks
             Checks.Run("Local operator PvP name command is audited idempotent and not a game RPC",
                 () => PvpNameAdmin(root).GetAwaiter().GetResult());
         }
-        Checks.Run("CLI-provisioned database logs in through real Host serve TLS WorldReady and MoveReceipt",
-            () => BootstrapTls(root).GetAwaiter().GetResult());
+        Checks.Run("CLI-provisioned database logs in through AES Host WorldReady and MoveReceipt",
+            () => BootstrapAes(root).GetAwaiter().GetResult());
     }
 
     private static Context Create(string root)
@@ -73,7 +74,8 @@ internal static class IdentityAdminChecks
         foreach (string arg in args) start.ArgumentList.Add(arg);
         start.Environment.Remove("SGTEST_ACCOUNT_PASSWORD");
         if (password is not null) start.Environment["SGTEST_ACCOUNT_PASSWORD"] = password;
-        start.Environment["SGTEST_TLS_PASSWORD"] = PfxPassword;
+        start.Environment["SGTEST_AES_KEY_HEX"] = "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f";
+        start.Environment["SGTEST_AES_IV_HEX"] = "000102030405060708090a0b0c0d0e0f";
         return start;
     }
 
@@ -280,29 +282,28 @@ FROM pvp_name_admin_events WHERE character_id=$id;";
             "unknown PvP admin character accepted");
     }
 
-    private static async Task BootstrapTls(string root)
+    private static async Task BootstrapAes(string root)
     {
         var c = Create(root);
         Checks.Require((await Run(Password,Account(c))).Exit == 0 &&
             (await Run(Password,Character(c))).Exit == 0, "bootstrap provisioning failed");
-        using var certificate = TlsSocketChecks.CreateCertificate();
-        string pfx = Path.Combine(c.Root,"test-only.pfx");
-        File.WriteAllBytes(pfx,certificate.Export(X509ContentType.Pfx,PfxPassword));
+        var aesSettings = new AesCbcSettings(
+            Convert.FromHexString("000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f"),
+            Convert.FromHexString("000102030405060708090a0b0c0d0e0f"));
         using var server = Process.Start(StartInfo(null,["serve","--content",c.Content,"--identity",c.Database,
-            "--certificate",pfx,"--port","0","--seconds","8"])) ?? throw new Exception("Host not started");
+            "--port","0","--seconds","8"])) ?? throw new Exception("Host not started");
         server.StandardInput.Close();
         var errors = server.StandardError.ReadToEndAsync();
         try
         {
             string? line = await server.StandardOutput.ReadLineAsync().WaitAsync(TimeSpan.FromSeconds(10));
             using var readyDocument = JsonDocument.Parse(line ?? "{}");
-            Checks.Require(readyDocument.RootElement.GetProperty("result").GetString()=="TLS_HOST_READY", "real Host was not ready");
+            Checks.Require(readyDocument.RootElement.GetProperty("result").GetString()=="AES_HOST_READY", "real Host was not ready");
             var endpoint = IPEndPoint.Parse(readyDocument.RootElement.GetProperty("endpoint").GetString()!);
             using (var client = new TcpClient())
             {
                 await client.ConnectAsync(endpoint);
-                using var tls = new SslStream(client.GetStream(),false,(_,cert,_,_)=>cert?.GetCertHashString()==certificate.GetCertHashString());
-                await TlsSocketChecks.AuthenticateClient(tls);
+                using var tls = new AesCbcFrameStream(client.GetStream(),aesSettings);
                 await tls.WriteAsync(WireProtocol.EncodeAuthRequest(new("admin_user",Password)));
                 Checks.Require(WireProtocol.TryDecodeAuthResult(await Read(tls),out var auth) && auth.Status==AuthWireStatus.Success,
                     "CLI-created password did not authenticate to Host");
@@ -330,7 +331,7 @@ FROM pvp_name_admin_events WHERE character_id=$id;";
             var output = server.StandardOutput.ReadToEndAsync();
             await server.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(15));
             string stopped = await output;
-            Checks.Require(server.ExitCode==0 && stopped.Contains("TLS_HOST_STOPPED") &&
+            Checks.Require(server.ExitCode==0 && stopped.Contains("AES_HOST_STOPPED") &&
                 stopped.Contains("\"ActiveConnections\":0") && stopped.Contains("\"ActiveActors\":0") &&
                 stopped.Contains("\"ActiveSessions\":0"), "Host did not clean provisioned login: " + await errors);
             Checks.Require(!stopped.Contains(Password) && !(await errors).Contains(Password), "Host emitted credential");
@@ -345,7 +346,7 @@ FROM pvp_name_admin_events WHERE character_id=$id;";
         }
     }
 
-    private static async Task<byte[]> Read(SslStream tls)
+    private static async Task<byte[]> Read(Stream tls)
     {
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
         byte[] header = new byte[8];
