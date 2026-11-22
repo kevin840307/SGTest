@@ -5,21 +5,26 @@ extends RefCounted
 ## does not yet carry HK-verified facing/action or a trusted definition/evolution
 ## -> sprite catalog. The original Pet data keeps PETID and EvolID separately, so
 ## a visual binding is only valid for that pair. This presenter smooths only
-## committed positions; movement animation stays disabled until action mapping is verified.
+## committed positions. Movement animation remains disabled until verified mapping exists;
+## attack playback is optional and only consumes an explicitly source-backed logical view.
+const Timeline = preload("res://animation/action_timeline.gd")
 const PositionHistory = preload("res://movement/position_history.gd")
 
 var _pets: Dictionary = {}
 var _visuals: Dictionary = {}
 var _epoch := 0
+var _last_attack_sequence := 0
 
 func clear() -> void:
 	_pets.clear()
 	_visuals.clear()
 	_epoch = 0
+	_last_attack_sequence = 0
 
 func clear_entities() -> void:
 	_pets.clear()
 	_epoch = 0
+	_last_attack_sequence = 0
 
 func configure_visuals(definitions: Dictionary, assets: Dictionary) -> Error:
 	_visuals.clear()
@@ -46,11 +51,41 @@ func configure_visuals(definitions: Dictionary, assets: Dictionary) -> Error:
 			if not clips.has(clip) or not clips[clip] is Array or clips[clip].is_empty():
 				_visuals.clear()
 				return ERR_INVALID_DATA
-			_visuals[_visual_key(definition_id,evolution_id)] = {
+			var binding := {
 				"asset":asset_id,
 				"clip":clip,
 				"frame":maxi(0,int(visual.get("frame",0)))
 			}
+			var attack_view_name := str(visual.get("attack_view",""))
+			if not attack_view_name.is_empty():
+				var logical: Dictionary = manifest.get("logical_views",{})
+				var attack_view = logical.get(attack_view_name,{})
+				if (
+					not attack_view is Dictionary or
+					not attack_view.has_all(["clip","flip_h","timeline_ticks","loop"]) or
+					not attack_view.flip_h is bool or not attack_view.loop is bool or
+					not attack_view.timeline_ticks is Array
+				):
+					_visuals.clear()
+					return ERR_INVALID_DATA
+				var attack_clip_name := str(attack_view.clip)
+				if not clips.has(attack_clip_name) or not clips[attack_clip_name] is Array or clips[attack_clip_name].is_empty():
+					_visuals.clear()
+					return ERR_INVALID_DATA
+				var timeline := Timeline.new()
+				if timeline.configure_ticks(attack_view.timeline_ticks,false) != OK:
+					_visuals.clear()
+					return ERR_INVALID_DATA
+				var attack_clip: Array = clips[attack_clip_name]
+				for step in attack_view.timeline_ticks:
+					if int(step[0]) < 0 or int(step[0]) >= attack_clip.size():
+						_visuals.clear()
+						return ERR_INVALID_DATA
+				binding["attack"] = {
+					"view":attack_view.duplicate(true),
+					"timeline":timeline
+				}
+			_visuals[_visual_key(definition_id,evolution_id)] = binding
 	return OK
 
 func apply_snapshot(snapshot: Dictionary, now_usec: int) -> Error:
@@ -60,6 +95,7 @@ func apply_snapshot(snapshot: Dictionary, now_usec: int) -> Error:
 	if incoming_epoch != _epoch:
 		_pets.clear()
 		_epoch = incoming_epoch
+		_last_attack_sequence = 0
 	var visible = snapshot.get("pet_entities",{})
 	if not visible is Dictionary:
 		return ERR_INVALID_DATA
@@ -110,9 +146,38 @@ func apply_snapshot(snapshot: Dictionary, now_usec: int) -> Error:
 			continue
 		_pets[owner] = {
 			"value":value.duplicate(true),
-			"history":history
+			"history":history,
+			"attack_started":int(old.get("attack_started",-1)) if same_generation else -1,
+			"attack_sequence":int(old.get("attack_sequence",0)) if same_generation else 0
 		}
+	_apply_attack_result(snapshot,now_usec)
 	return OK
+
+func _apply_attack_result(snapshot: Dictionary, now_usec: int) -> void:
+	var sequence := int(snapshot.get("last_pet_attack_result_sequence",0))
+	if sequence <= 0 or sequence <= _last_attack_sequence:
+		return
+	_last_attack_sequence = sequence
+	var status := int(snapshot.get("last_pet_attack_result_status",-1))
+	var result = snapshot.get("last_pet_attack_result",{})
+	# Only a committed Applied/Miss result represents an actual attack event.
+	# Rejections/cooldowns are UI feedback, not animation triggers.
+	if status not in [0,1] or not result is Dictionary:
+		return
+	if int(result.get("map_epoch",0)) != _epoch or int(result.get("attack_sequence",0)) != sequence:
+		return
+	var pet_uid := int(result.get("pet_uid",0))
+	if pet_uid <= 0:
+		return
+	for owner in _pets.keys():
+		var pet: Dictionary = _pets[owner]
+		if int(pet.value.pet_uid) != pet_uid:
+			continue
+		pet["attack_started"] = now_usec
+		pet["attack_sequence"] = sequence
+		_pets[owner] = pet
+		return
+
 
 func position_at(owner_actor_id: int, now_usec: int) -> Vector2:
 	var pet: Dictionary = _pets.get(owner_actor_id,{})
@@ -141,12 +206,24 @@ func actors_at(now_usec: int) -> Array:
 		var position := position_at(owner,now_usec)
 		if not position.is_finite():
 			continue
+		var clip := str(visual.clip)
+		var frame := int(visual.frame)
+		var flip_h := false
+		var attack: Dictionary = visual.get("attack",{})
+		var attack_started := int(pet.get("attack_started",-1))
+		if attack_started >= 0 and not attack.is_empty():
+			var elapsed := maxi(0,now_usec-attack_started)*50/1000000
+			if not attack.timeline.is_complete(elapsed):
+				clip = str(attack.view.clip)
+				frame = attack.timeline.frame_at_update(elapsed)
+				flip_h = bool(attack.view.flip_h)
 		result.append({
 			"id":"pet:"+str(int(value.pet_uid)),
 			"p":position,
 			"asset":visual.asset,
-			"clip":visual.clip,
-			"frame":int(visual.frame),
+			"clip":clip,
+			"frame":frame,
+			"flip_h":flip_h,
 			"part_slot":0,
 			"owner_actor_id":owner,
 			"pet_uid":int(value.pet_uid)

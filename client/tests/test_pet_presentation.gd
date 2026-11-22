@@ -46,11 +46,16 @@ func _initialize() -> void:
 
 	var fake_assets := {
 		"pets/source-backed":{
-			"manifest":{"clips":{"idle":[0]}}
+			"manifest":{
+				"clips":{"idle":[0],"attack":[0,1,2]},
+				"logical_views":{
+					"attack":{"clip":"attack","flip_h":true,"timeline_ticks":[[0,2],[1,2],[2,2]],"loop":false}
+				}
+			}
 		}
 	}
 	if pets.configure_visuals({
-		5002:{7:{"asset":"pets/source-backed","clip":"idle","frame":0}}
+		5002:{7:{"asset":"pets/source-backed","clip":"idle","frame":0,"attack_view":"attack"}}
 	},fake_assets)!=OK:
 		_fail("valid visual binding rejected")
 		return
@@ -59,21 +64,71 @@ func _initialize() -> void:
 		_fail("world draw actor bridge missing")
 		return
 
-	if pets.apply_snapshot(_snapshot(7,{}),230000)!=OK or pets.count()!=0:
+	var combat := _snapshot(7,{
+		1001:_entity(1001,4,102,5002,7,46,48.0,36.0)
+	})
+	combat["last_pet_attack_result_sequence"] = 3
+	combat["last_pet_attack_result_status"] = 0
+	combat["last_pet_attack_result"] = {
+		"map_epoch":7,"attack_sequence":3,"status":0,"pet_uid":102,
+		"target_entity_id":1001300001,"damage":25,"current_hp":75,
+		"max_hp":100,"target_revision":4,"server_tick":55
+	}
+	if pets.apply_snapshot(combat,230000)!=OK:
+		_fail("authoritative pet attack result rejected by presentation")
+		return
+	var attack0 := pets.actors_at(230000)
+	if attack0.size()!=1 or str(attack0[0].clip)!="attack" or int(attack0[0].frame)!=0 or not bool(attack0[0].flip_h):
+		_fail("authoritative pet attack did not start source-backed attack view")
+		return
+	var attack1 := pets.actors_at(270000)
+	if attack1.size()!=1 or int(attack1[0].frame)!=1:
+		_fail("pet attack did not follow source timeline ticks")
+		return
+	var settled := pets.actors_at(360000)
+	if settled.size()!=1 or str(settled[0].clip)!="idle" or int(settled[0].frame)!=0 or bool(settled[0].flip_h):
+		_fail("pet attack did not return to configured fallback visual")
+		return
+	if pets.apply_snapshot(combat,370000)!=OK:
+		_fail("duplicate authoritative pet snapshot rejected")
+		return
+	var replayed := pets.actors_at(370000)
+	if replayed.size()!=1 or str(replayed[0].clip)!="idle":
+		_fail("duplicate pet attack result restarted one-shot animation")
+		return
+	var rejected := _snapshot(7,{
+		1001:_entity(1001,4,102,5002,7,47,48.0,36.0)
+	})
+	rejected["last_pet_attack_result_sequence"] = 4
+	rejected["last_pet_attack_result_status"] = 6
+	rejected["last_pet_attack_result"] = {
+		"map_epoch":7,"attack_sequence":4,"status":6,"pet_uid":102,
+		"target_entity_id":1001300001,"damage":0,"current_hp":0,
+		"max_hp":0,"target_revision":0,"server_tick":56
+	}
+	if pets.apply_snapshot(rejected,375000)!=OK:
+		_fail("rejected pet attack result broke presentation")
+		return
+	var rejected_visual := pets.actors_at(375000)
+	if rejected_visual.size()!=1 or str(rejected_visual[0].clip)!="idle":
+		_fail("cooldown/rejected pet attack fabricated attack animation")
+		return
+
+	if pets.apply_snapshot(_snapshot(7,{}),380000)!=OK or pets.count()!=0:
 		_fail("despawn snapshot retained pet presentation")
 		return
 
 	var replacement := _snapshot(8,{
 		1001:_entity(1001,5,202,7001,3,3,300.0,400.0)
 	})
-	if pets.apply_snapshot(replacement,300000)!=OK or pets.position_at(1001,300000)!=Vector2(300.0,400.0):
+	if pets.apply_snapshot(replacement,400000)!=OK or pets.position_at(1001,400000)!=Vector2(300.0,400.0):
 		_fail("map generation did not reset pet history")
 		return
 	if pets.unresolved_definition_ids()!=[7001] or pets.unresolved_visual_keys()!=["7001:3"]:
 		_fail("replacement generation retained old visual identity")
 		return
 
-	print("PET_PRESENTATION_PASS interpolation=true no_extrapolation=true generation=true visual_bridge=true")
+	print("PET_PRESENTATION_PASS interpolation=true no_extrapolation=true generation=true visual_bridge=true attack_event=true source_timing=true")
 	quit(0)
 
 func _snapshot(map_epoch:int,entities:Dictionary)->Dictionary:
