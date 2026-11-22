@@ -444,13 +444,13 @@ func _build_select() -> void:
 	var nav_gap := 14.0
 	var nav_width := 108.0 + nav_gap + 120.0 + nav_gap + 108.0
 	var nav_x := (SIZE.x-nav_width)*0.5
-	_select_prev = _button(_selection,"上一頁",nav_x,750,108,30)
+	_select_prev = _button(_selection,"上一頁",nav_x,798,108,36)
 	_select_prev.pressed.connect(_change_page.bind(-1))
 	_select_back = _button(
-		_selection,"返回登入",nav_x+108.0+nav_gap,750,120,30)
+		_selection,"返回登入",nav_x+108.0+nav_gap,798,120,36)
 	_select_back.pressed.connect(func(): _panel.disconnect_session())
 	_select_next = _button(
-		_selection,"下一頁",nav_x+108.0+nav_gap+120.0+nav_gap,750,108,30)
+		_selection,"下一頁",nav_x+108.0+nav_gap+120.0+nav_gap,798,108,36)
 	_select_next.pressed.connect(_change_page.bind(1))
 	_select_status = _label(_selection,"",350,139,500,28,13)
 	_select_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER

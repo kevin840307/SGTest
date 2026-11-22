@@ -283,8 +283,8 @@ func _run() -> void:
 	if not is_equal_approx((nav_left+nav_right)*0.5,600.0) or 			not is_equal_approx(gap_left,gap_right):
 		_error("previous/login/next navigation group is not centered symmetrically")
 		return
-	if shell._select_prev.position.y != 750.0 or shell._select_next.position.y != 750.0 or shell._select_back.position.y != 750.0 or shell._select_back.position.y + shell._select_back.size.y >= 785.0:
-		_error("navigation row must sit above source line and below status")
+	if shell._select_prev.position.y != 798.0 or shell._select_next.position.y != 798.0 or shell._select_back.position.y != 798.0 or shell._select_back.size.y != 36.0:
+		_error("navigation must remain only 3 source pixels above original position")
 		return
 	if not pack_path.is_empty():
 		if not await _wait_previews(shell,2):
