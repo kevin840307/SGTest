@@ -19,6 +19,8 @@ internal static class PlayerShopCoordinatorChecks
             Sequence);
         Checks.Run("player shop buy loses to trusted seller MapEpoch transfer without settlement",
             ()=>PortalRace(root).GetAwaiter().GetResult());
+        Checks.Run("player shop ten concurrent buyers settle exactly once through gameplay gates",
+            ()=>ConcurrentBuyers(root).GetAwaiter().GetResult());
     }
 
     private static void Sequence()
@@ -170,6 +172,164 @@ internal static class PlayerShopCoordinatorChecks
             trades.UnregisterGameplayGate(buyerGateway.Binding,buyerGate);
             router.TryDetach(sellerGateway);
             router.TryDetach(buyerGateway);
+        }
+        finally
+        {
+            await world.StopAsync();
+            Directory.Delete(dir,true);
+        }
+    }
+
+    private static async Task ConcurrentBuyers(string root)
+    {
+        const int buyerCount=10;
+        string dir=Path.Combine(root,"player_shop_concurrent_"+Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+        string db=Path.Combine(dir,"identity.db");
+        string mapDir=Checks.Fixture(root,100,8,8,(_,_)=>0);
+        await using var world=new ServerWorldHost([BlockingGrid.Load(mapDir,100)]);
+        await world.StartAsync();
+        try
+        {
+            using var store=new SqliteIdentityStore(db);
+            await store.InitializeAsync();
+            long sellerAccount=(await store.CreateAccountAsync(
+                "shop_concurrent_s","Shop-Concurrent-S-Password-123!")).AccountId;
+            long seller=(await store.CreateCharacterAsync(
+                sellerAccount,0,"ConcurrentSell",new(100,24,24)))
+                .Character!.CharacterId;
+            SeedWallet(db,seller,100);
+            long generation=await store.AllocateLootWorldGenerationAsync();
+            var item=await SeedItem(store,generation,seller,6301,1,100,24,24);
+            var rules=new Dictionary<int,TradeItemRule>
+            { [6301]=new(6301,true,"synthetic:player-shop-concurrent") };
+
+            var sellerActor=await world.TrustedRegisterAsync(seller,100,24,24)
+                ??throw new Exception("concurrent seller world register");
+            var sellerGateway=new GatewayConnection(sellerActor);
+            var router=new WorldResultRouter();
+            Checks.Require(router.TryAttach(sellerGateway),
+                "concurrent seller gateway attach failed");
+            var trades=new PlayerTradeCoordinator(store,world,rules);
+            using var sellerGate=new SemaphoreSlim(1,1);
+            Checks.Require(trades.TryRegisterGameplayGate(
+                    sellerGateway.Binding,sellerGate),
+                "concurrent seller gameplay gate registration failed");
+            var shops=new PlayerShopCoordinator(store,world,rules,trades);
+            await shops.AttachAsync(sellerGateway.Binding);
+
+            var buyerActors=new ActorSnapshot[buyerCount];
+            var buyerGateways=new GatewayConnection[buyerCount];
+            var buyerGates=new SemaphoreSlim[buyerCount];
+            var buyers=new long[buyerCount];
+            try
+            {
+                for(int i=0;i<buyerCount;i++)
+                {
+                    long account=(await store.CreateAccountAsync(
+                        $"shop_concurrent_b{i:D2}",
+                        $"Shop-Concurrent-B{i:D2}-Password-123!")).AccountId;
+                    long buyer=(await store.CreateCharacterAsync(
+                        account,0,$"ShopBuyer{i:D2}",new(100,28+i*4,24)))
+                        .Character!.CharacterId;
+                    buyers[i]=buyer;
+                    SeedWallet(db,buyer,1000);
+                    var actor=await world.TrustedRegisterAsync(
+                        buyer,100,28+i*4,24)
+                        ??throw new Exception("concurrent buyer world register");
+                    buyerActors[i]=actor;
+                    var gateway=new GatewayConnection(actor);
+                    buyerGateways[i]=gateway;
+                    Checks.Require(router.TryAttach(gateway),
+                        "concurrent buyer gateway attach failed");
+                    var gate=new SemaphoreSlim(1,1);
+                    buyerGates[i]=gate;
+                    Checks.Require(trades.TryRegisterGameplayGate(
+                            gateway.Binding,gate),
+                        "concurrent buyer gameplay gate registration failed");
+                    await shops.AttachAsync(gateway.Binding);
+                    Checks.Require(gateway.QueueAoi(new(
+                            AoiEventKind.Spawn,100+i,actor.MapEpoch,sellerActor))==
+                            GatewaySendStatus.Enqueued,
+                        "concurrent buyer seller AOI Spawn failed");
+                    DrainAny(gateway,WireOpcode.EntitySpawn);
+                }
+
+                var open=new TrustedPlayerShopCommand(
+                    seller,sellerActor.ConnectionEpoch,sellerActor.MapEpoch,1,
+                    PlayerShopCommandAction.Open,0,0,item.ItemUid,300);
+                var opened=await shops.HandleNewAsync(open,router);
+                Checks.Require(opened.Status==PlayerShopResultStatus.Applied&&
+                    opened.ListingId>0&&DrainResult(sellerGateway)==opened,
+                    "concurrent player-shop open failed");
+
+                var pending=new Task<PlayerShopResultWire>[buyerCount];
+                for(int i=0;i<buyerCount;i++)
+                {
+                    var actor=buyerActors[i];
+                    var buy=new TrustedPlayerShopCommand(
+                        buyers[i],actor.ConnectionEpoch,actor.MapEpoch,1,
+                        PlayerShopCommandAction.Buy,seller,opened.ListingId,0,0);
+                    pending[i]=shops.HandleNewAsync(buy,router);
+                }
+                var results=await Task.WhenAll(pending)
+                    .WaitAsync(TimeSpan.FromSeconds(5));
+                Checks.Require(
+                    results.Count(x=>x.Status==PlayerShopResultStatus.Applied)==1&&
+                    results.Count(x=>x.Status==PlayerShopResultStatus.NoShop)==buyerCount-1,
+                    "concurrent player-shop did not converge to one sale and nine closed listings");
+
+                int winnerIndex=Array.FindIndex(
+                    results,x=>x.Status==PlayerShopResultStatus.Applied);
+                Checks.Require(winnerIndex>=0&&
+                    results[winnerIndex].BuyerWallet==700&&
+                    results[winnerIndex].SellerWallet==400,
+                    "concurrent player-shop winner receipt wallet mismatch");
+                for(int i=0;i<buyerCount;i++)
+                    Checks.Require(DrainResult(buyerGateways[i])==results[i],
+                        "concurrent player-shop requester reliable receipt mismatch");
+
+                Checks.Require(sellerGateway.TryDequeueReliable(out var soldFrame)&&
+                    WireProtocol.TryDecodePlayerShopSold(soldFrame,out var sold)&&
+                    sold.ListingId==opened.ListingId&&
+                    sold.BuyerActorId==buyers[winnerIndex]&&
+                    sold.ItemUid==item.ItemUid&&sold.SellerWallet==400,
+                    "concurrent player-shop seller durable sale notice mismatch");
+                Checks.Require(!sellerGateway.TryDequeueReliable(out _),
+                    "concurrent player-shop emitted duplicate seller sale notice");
+
+                Checks.Require(await store.GetCharacterMoneyAsync(seller)==400,
+                    "concurrent player-shop credited seller more than once");
+                int itemOwners=0;
+                for(int i=0;i<buyerCount;i++)
+                {
+                    long expectedMoney=i==winnerIndex?700:1000;
+                    Checks.Require(await store.GetCharacterMoneyAsync(buyers[i])==
+                            expectedMoney,
+                        "concurrent player-shop debited a losing buyer");
+                    if((await store.ListInventoryItemsAsync(buyers[i]))
+                        .Any(x=>x.ItemUid==item.ItemUid))
+                        itemOwners++;
+                }
+                Checks.Require(itemOwners==1&&
+                    (await store.GetActivePlayerShopListingAsync(seller)) is null,
+                    "concurrent player-shop duplicated UID or left listing active");
+            }
+            finally
+            {
+                for(int i=0;i<buyerCount;i++)
+                {
+                    if(buyerGateways[i] is { } gateway)
+                    {
+                        if(buyerGates[i] is { } gate)
+                            trades.UnregisterGameplayGate(gateway.Binding,gate);
+                        router.TryDetach(gateway);
+                    }
+                    buyerGates[i]?.Dispose();
+                }
+                trades.UnregisterGameplayGate(sellerGateway.Binding,sellerGate);
+                router.TryDetach(sellerGateway);
+            }
         }
         finally
         {
