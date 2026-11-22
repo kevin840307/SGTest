@@ -220,7 +220,9 @@ public sealed partial class IdentityTlsAuthorization
                 return null;
             character = characters.FirstOrDefault(
                 c => c.CharacterId == choose.CharacterId);
-            if (character is null)
+            // Protected characters cannot enter through the legacy proof-free choose frame.
+            // The forthcoming bounded wire extension must verify via Identity before binding.
+            if (character is null || character.RequiresCharacterPassword)
             {
                 await WriteFrameAsync(tls,
                     WireProtocol.EncodeCharacterChooseResult(new(

@@ -81,4 +81,4 @@ Server 持久化前置已實作（schema v24）：`CharacterAppearance(Race,Hair
 
 來源位置（均為1200×900創角頁局部座標）：NameEdit=(343,384,201,31)；PwdEdit=(897,579,83,31)，ConfirmPwdEdit=(897,615,83,31)。四列減／加按鈕x857/967，y387/423/459/495，29×25；數值x891，y386/422/458/494，71×27；餘點=(891,530,71,27)。後續需以原Scene畫面與真Input再驗證，而不是只看表格。
 
-目前尚無這兩項權威接線：一般CharacterCreate只有name/slot及可選appearance，CharacterChoose尚無角色密碼驗證。下一個完整切片須包含Identity原子保存起始四項及角色密碼雜湊、選角驗證／失敗節流、同一Wire V1的有界可選擴充／能力宣告、ClientSession secret在送出後清除且不入World snapshot、共用創角選擇模型及來源位置視圖；不能把第二密碼當純UI欄位或保存明文。既有legacy角色沒有第二密碼時須保持已知舊行為，不可猜密碼。必要Gate：非法點數／未分完／重送、同欄並發、交易rollback、關閉重開、錯密碼／正確密碼／重連與跨圖、至少真UI→TLS→SQLite→重登→世界，並確認日誌及快照無密碼。
+2026-11-22 Identity schema25已完成起始四項／外觀／角色／錢包原子保存、用途分離密碼雜湊及持久失敗鎖定，Server286項PASS；legacy無密碼選角入口會拒絕受保護角色。一般Wire CharacterCreate仍只有name/slot及可選appearance，CharacterChoose尚無角色密碼proof。下一個完整切片仍須包含同一Wire V1的有界可選擴充／能力宣告、ClientSession secret在送出後清除且不入World snapshot、共用創角選擇模型及來源位置視圖；不能把第二密碼當純UI欄位或保存明文。既有legacy角色沒有第二密碼時須保持已知舊行為，不可猜密碼。必要Gate：非法點數／未分完／重送、同欄並發、交易rollback、關閉重開、錯密碼／正確密碼／重連與跨圖、至少真UI→TLS→SQLite→重登→世界，並確認日誌及快照無密碼。

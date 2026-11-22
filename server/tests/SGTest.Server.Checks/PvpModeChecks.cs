@@ -165,7 +165,7 @@ CREATE TABLE character_pvp_modes(
         using(var store=new SqliteIdentityStore(db))
         {
             await store.InitializeAsync();
-            Checks.Require(SqliteIdentityStore.SchemaVersion==24,
+            Checks.Require(SqliteIdentityStore.SchemaVersion==25,
                 "v16 PvP migration did not reach current v24");
             long account=(await store.CreateAccountAsync(
                 "pvp_migrate","Pvp-Migrate-Password-123!")).AccountId;
@@ -196,7 +196,7 @@ CREATE TABLE character_pvp_modes(
         using(var store=new SqliteIdentityStore(db))
         {
             await store.InitializeAsync();
-            Checks.Require(SqliteIdentityStore.SchemaVersion==24,
+            Checks.Require(SqliteIdentityStore.SchemaVersion==25,
                 "PvP schema version is not v24");
             long account=(await store.CreateAccountAsync(
                 "pvp_user","Pvp-Password-123!")).AccountId;

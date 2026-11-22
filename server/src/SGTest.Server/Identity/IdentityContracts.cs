@@ -6,7 +6,10 @@ public readonly record struct CharacterSpawn(int MapId, double X, double Y);
 public readonly record struct CharacterPositionUpdate(long CharacterId, CharacterSpawn Spawn);
 public sealed record CharacterRecord(long CharacterId, long AccountId, int Slot, string Name,
     int MapId, double X, double Y, long CreatedUnixMilliseconds,
-    CharacterAppearanceState? Appearance = null);
+    CharacterAppearanceState? Appearance = null, CharacterCreationState? Creation = null)
+{
+    public bool RequiresCharacterPassword => Creation is not null;
+}
 
 // HairIndex is the presentation index, not an original Hair item-definition ID.
 public readonly record struct CharacterAppearance(int Race, int HairIndex, int HairColor);

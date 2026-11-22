@@ -327,6 +327,7 @@ static class Checks
             TlsSocketChecks.Verify();
             IdentityStoreChecks.Verify();
             CharacterAppearanceChecks.Verify();
+            CharacterCreationSettingsChecks.Verify();
             AuthenticationRateLimiterChecks.Verify();
             IdentityTlsAuthorizationChecks.Verify(root);
             IdentityTlsLifecycleChecks.Verify(root);

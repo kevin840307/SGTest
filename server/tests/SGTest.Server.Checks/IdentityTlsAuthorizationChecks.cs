@@ -30,7 +30,9 @@ internal static class IdentityTlsAuthorizationChecks
         Checks.Run("TLS invalid password never reaches CharacterList or World",
             () => InvalidPasswordRejected(root).GetAwaiter().GetResult());
         Checks.Run("TLS authenticated account cannot choose another account character",
-            () => ForeignCharacterRejected(root).GetAwaiter().GetResult());
+            () => RejectedCharacterSelection(root).GetAwaiter().GetResult());
+        Checks.Run("TLS legacy proof-free choose cannot enter a password-protected owned character",
+            () => RejectedCharacterSelection(root,protectedOwned:true).GetAwaiter().GetResult());
     }
 
     private static async Task OwnedCharacterEntersWorld(string root)
@@ -834,7 +836,7 @@ internal static class IdentityTlsAuthorizationChecks
         finally { Directory.Delete(identityRoot, true); }
     }
 
-    private static async Task ForeignCharacterRejected(string root)
+    private static async Task RejectedCharacterSelection(string root, bool protectedOwned=false)
     {
         string identityRoot = TempRoot();
         try
@@ -847,9 +849,11 @@ internal static class IdentityTlsAuthorizationChecks
             await store.InitializeAsync();
             long ownerA = (await store.CreateAccountAsync("owner_a", "OwnerA-Password-123!")).AccountId;
             long ownerB = (await store.CreateAccountAsync("owner_b", "OwnerB-Password-123!")).AccountId;
-            long foreignId = (await store.CreateCharacterAsync(ownerA, 0, "ForeignHero", new CharacterSpawn(73, 8, 8)))
-                .Character?.CharacterId ?? throw new Exception("foreign fixture character missing");
-            await store.CreateCharacterAsync(ownerB, 0, "OwnHero", new CharacterSpawn(73, 8, 8));
+            long targetId = protectedOwned
+                ? (await store.CreateCharacterWithSettingsAsync(ownerB,0,"SecretHero",new(73,8,8),
+                    new(new(2,2,2,2),"2468","synthetic/protected-choose"))).Character!.CharacterId
+                : (await store.CreateCharacterAsync(ownerA,0,"ForeignHero",new(73,8,8))).Character!.CharacterId;
+            if(!protectedOwned) await store.CreateCharacterAsync(ownerB,0,"OwnHero",new(73,8,8));
             var authorization = new IdentityTlsAuthorization(store, world);
 
             var (tls, serverTask, client) = await StartSession(authorization, world);
@@ -858,8 +862,8 @@ internal static class IdentityTlsAuthorizationChecks
             Checks.Require(WireProtocol.TryDecodeAuthResult(await ReadFrameAsync(tls), out var auth) &&
                 auth.Status == AuthWireStatus.Success, "owner B auth failed");
             Checks.Require(WireProtocol.TryDecodeCharacterList(await ReadFrameAsync(tls), out var list) &&
-                list.Characters.All(c => c.CharacterId != foreignId), "foreign character leaked into CharacterList");
-            await tls.WriteAsync(WireProtocol.EncodeCharacterChoose(new(foreignId)));
+                (protectedOwned ? list.Characters.Any(c=>c.CharacterId==targetId) : list.Characters.All(c=>c.CharacterId!=targetId)), "foreign character leaked into CharacterList");
+            await tls.WriteAsync(WireProtocol.EncodeCharacterChoose(new(targetId)));
             await tls.FlushAsync();
             Checks.Require(WireProtocol.TryDecodeCharacterChooseResult(await ReadFrameAsync(tls), out var choose) &&
                 choose.Status == CharacterChooseWireStatus.NotOwned,

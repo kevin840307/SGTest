@@ -44,6 +44,14 @@ public sealed partial class SqliteIdentityStore
                     "SELECT COUNT(*) FROM character_appearances WHERE character_id=$id AND race<>$race;",
                     tx, ("$id", characterId), ("$race", profile.Race)) != 0)
                 throw new InvalidOperationException("Combat race differs from persisted character appearance");
+            if (profile.Level == 1 && ScalarLong(connection,@"
+SELECT COUNT(*) FROM character_creation_settings s
+WHERE s.character_id=$id AND NOT EXISTS(
+    SELECT 1 FROM character_combat_profiles p WHERE p.character_id=s.character_id)
+AND (s.strength<>$str OR s.dexterity<>$dex OR s.constitution<>$con OR s.wisdom<>$wis);",tx,
+                ("$id",characterId),("$str",profile.Strength),("$dex",profile.Dexterity),
+                ("$con",profile.Constitution),("$wis",profile.Wisdom)) != 0)
+                throw new InvalidOperationException("Initial combat attributes differ from character creation choices");
             using var command = connection.CreateCommand();
             command.Transaction = tx;
             command.CommandText = @"

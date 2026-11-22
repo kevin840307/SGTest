@@ -71,6 +71,19 @@ CREATE TABLE IF NOT EXISTS character_appearances (
     source_ref TEXT NOT NULL CHECK(length(source_ref) BETWEEN 1 AND 384)
 );", tx);
             Execute(connection, @"
+CREATE TABLE IF NOT EXISTS character_creation_settings (
+    character_id INTEGER PRIMARY KEY REFERENCES characters(character_id) ON DELETE CASCADE,
+    strength INTEGER NOT NULL CHECK(strength BETWEEN 1 AND 5),
+    dexterity INTEGER NOT NULL CHECK(dexterity BETWEEN 1 AND 5),
+    constitution INTEGER NOT NULL CHECK(constitution BETWEEN 1 AND 5),
+    wisdom INTEGER NOT NULL CHECK(wisdom BETWEEN 1 AND 5),
+    source_ref TEXT NOT NULL CHECK(length(source_ref) BETWEEN 1 AND 384),
+    password_hash TEXT NOT NULL CHECK(length(password_hash) BETWEEN 1 AND 512),
+    failed_password_attempts INTEGER NOT NULL DEFAULT 0 CHECK(failed_password_attempts BETWEEN 0 AND 5),
+    password_locked_until_ms INTEGER NOT NULL DEFAULT 0 CHECK(password_locked_until_ms >= 0),
+    CHECK(strength+dexterity+constitution+wisdom=8)
+);", tx);
+            Execute(connection, @"
 CREATE TABLE IF NOT EXISTS character_combat_profiles (
     character_id INTEGER PRIMARY KEY REFERENCES characters(character_id) ON DELETE CASCADE,
     trust INTEGER NOT NULL CHECK(trust IN (1,2)),
