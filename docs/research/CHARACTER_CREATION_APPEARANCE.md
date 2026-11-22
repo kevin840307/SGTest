@@ -73,3 +73,12 @@ Server 持久化前置已實作（schema v24）：`CharacterAppearance(Race,Hair
 
 
 2026-11-22 Client來源補證：唯一解包輸出 `interface/createcharpara.dat` 與 Old Server 設定的清單目前相同。原 Client `InitCreateCharLib 004174DF..00417604` 讀取此檔並按欄位順序組裝11個選項集合。`ReadOptionConfig 00426C50..00426CA3` 讀取第9/10集合首值到0x18e/0x190；`RefreshHead 00426660..004266AB` 使用 `option1*option2_count+option2` 作第8集合的索引，再將取出的數值套用至人物資料。這補足原版兩層選項映射的算式，但尚未連結 Item ID 到 SPR／palette，未據此啟用全量 Server rules。R2 自有髮型索引與此原版數值不能直接混用。
+
+
+### 使用者明確要求的完整創角（2026-11-22，待實作）
+
+必須能換髮型、分配能力、輸入名稱、設定第二組角色密碼；不能只放看似可用的欄位。Recovered2 `character_select.gd` 與 `scripts/game_constants.gd` 已逐項核對：STR/DEX/CON/WIS初值各1，另有4點可分；減點不可低於1，加點消耗餘額，確認時須分完。這與前述Old Server四項至少1／合計最多8的有效分完結果一致，但不能因此自行推導Combat公式。名稱上限是寬度12（codepoint>255計2），Script覆蓋TSCN原max_length。角色密碼長度4，確認欄必須一致；來源並未在此檢查只可數字，不可僅憑virtual_keyboard_type就認定只有數字。
+
+來源位置（均為1200×900創角頁局部座標）：NameEdit=(343,384,201,31)；PwdEdit=(897,579,83,31)，ConfirmPwdEdit=(897,615,83,31)。四列減／加按鈕x857/967，y387/423/459/495，29×25；數值x891，y386/422/458/494，71×27；餘點=(891,530,71,27)。後續需以原Scene畫面與真Input再驗證，而不是只看表格。
+
+目前尚無這兩項權威接線：一般CharacterCreate只有name/slot及可選appearance，CharacterChoose尚無角色密碼驗證。下一個完整切片須包含Identity原子保存起始四項及角色密碼雜湊、選角驗證／失敗節流、同一Wire V1的有界可選擴充／能力宣告、ClientSession secret在送出後清除且不入World snapshot、共用創角選擇模型及來源位置視圖；不能把第二密碼當純UI欄位或保存明文。既有legacy角色沒有第二密碼時須保持已知舊行為，不可猜密碼。必要Gate：非法點數／未分完／重送、同欄並發、交易rollback、關閉重開、錯密碼／正確密碼／重連與跨圖、至少真UI→TLS→SQLite→重登→世界，並確認日誌及快照無密碼。
