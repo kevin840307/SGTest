@@ -5,7 +5,7 @@ const PositionHistory = preload("res://movement/position_history.gd")
 const PARTS = Profile.BASE_PARTS
 var _views: Dictionary = {}
 var _profiles: Dictionary = {}
-var _default_profile_key := "0:0:0"
+var _default_profile_key := "0:0:0:0:0"
 var _actors := {}
 var _seen_attack_events := {}
 var _seen_damage_events := {}
@@ -16,7 +16,7 @@ var _map := 0
 func clear() -> void:
 	_views.clear()
 	_profiles.clear()
-	_default_profile_key = "0:0:0"
+	_default_profile_key = "0:0:0:0:0"
 	_actors.clear()
 	_seen_attack_events.clear()
 	_seen_damage_events.clear()

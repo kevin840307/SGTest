@@ -28,33 +28,50 @@ var death_available := false
 
 static func appearance_key(appearance: Dictionary = {}) -> String:
 	if appearance.is_empty():
-		return "0:0:0"
-	if appearance.size()!=3 or not appearance.has_all(["race","hair_index","hair_color"]):
+		return "0:0:0:0:0"
+	if appearance.size() not in [3,5] or 			not appearance.has_all(["race","hair_index","hair_color"]):
 		return ""
-	for field in ["race","hair_index","hair_color"]:
+	if appearance.size() == 5 and 			not appearance.has_all(["body_index","leg_index"]):
+		return ""
+	for field in appearance:
 		if not appearance[field] is int:
 			return ""
 	var race := int(appearance.race)
 	var hair := int(appearance.hair_index)
 	var color := int(appearance.hair_color)
-	if race < 0 or race >= RACE_KEYS.size() or hair < 0 or hair > 65535 or color < 0 or color > 7:
+	var body := int(appearance.get("body_index",0))
+	var leg := int(appearance.get("leg_index",0))
+	if race < 0 or race >= RACE_KEYS.size() or hair < 0 or hair > 65535 or 			color < 0 or color > 7 or body < 0 or body > 255 or leg < 0 or leg > 255:
 		return ""
-	# Recovered2 CharacterCreate disables both hair selectors for Robot.
+	# Robot has no hair selectors; Yas has no source-verified HK2 armor mapping.
 	if race == 3 and (hair != 0 or color != 0):
 		return ""
-	return "%d:%d:%d" % [race,hair,color]
+	if race == 4 and (body != 0 or leg != 0):
+		return ""
+	return "%d:%d:%d:%d:%d" % [race,hair,color,body,leg]
 
 static func definition(appearance: Dictionary = {}) -> Dictionary:
 	var resolved_key := appearance_key(appearance)
 	if resolved_key.is_empty():
 		return {}
-	var value := {"race":0,"hair_index":0,"hair_color":0} if appearance.is_empty() else appearance
+	var value := {
+		"race":0,"hair_index":0,"hair_color":0,"body_index":0,"leg_index":0
+	} if appearance.is_empty() else appearance
 	var race_index := int(value.race)
+	var body_index := int(value.get("body_index",0))
+	var leg_index := int(value.get("leg_index",0))
 	if race_index == 3:
+		var robot := ROBOT_BASE_PARTS.duplicate(true)
+		robot[9] = [
+			"equipment/r/cloth/body%02d" % body_index,
+			"R-BODY%02d" % body_index]
+		robot[12] = [
+			"equipment/r/cloth/leg%02d" % leg_index,
+			"R-LEG%02d" % leg_index]
 		return {
 			"key":resolved_key,
-			"parts":ROBOT_BASE_PARTS.duplicate(true),
-			"body_prefix":"R-BODY00",
+			"parts":robot,
+			"body_prefix":"R-BODY%02d" % body_index,
 			"hair_slot":-1,
 			"hair_color":0,
 		}
@@ -65,6 +82,14 @@ static func definition(appearance: Dictionary = {}) -> Dictionary:
 	for slot in resolved:
 		if slot == 1:
 			resolved[slot] = ["players/%s/hair/%s" % [race,hair],prefix+"-"+hair.to_upper()]
+		elif race_index != 4 and slot == 9:
+			resolved[slot] = [
+				"equipment/%s/cloth/body%02d" % [race,body_index],
+				"%s-BODY%02d" % [prefix,body_index]]
+		elif race_index != 4 and slot == 12:
+			resolved[slot] = [
+				"equipment/%s/cloth/leg%02d" % [race,leg_index],
+				"%s-LEG%02d" % [prefix,leg_index]]
 		else:
 			resolved[slot] = [
 				str(resolved[slot][0]).replace("players/b/","players/"+race+"/"),
@@ -72,7 +97,7 @@ static func definition(appearance: Dictionary = {}) -> Dictionary:
 	return {
 		"key":resolved_key,
 		"parts":resolved,
-		"body_prefix":prefix+"-BODY",
+		"body_prefix":prefix+("-BODY" if race_index == 4 else "-BODY%02d" % body_index),
 		"hair_slot":1,
 		"hair_color":int(value.hair_color),
 	}

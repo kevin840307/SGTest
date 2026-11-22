@@ -868,7 +868,8 @@ public static partial class WireProtocol
            name.Length is <1 or >PlayerIdentityMaxNameBytes||
            string.IsNullOrWhiteSpace(value.Name))
             throw new ArgumentOutOfRangeException(nameof(value));
-        int bytes=PlayerIdentityHeaderBytes+name.Length;
+        int extensionBytes=value.Appearance is null ? 0 : 1+CharacterAppearanceBytes;
+        int bytes=PlayerIdentityHeaderBytes+name.Length+extensionBytes;
         var frame=NewFrame(WireOpcode.PlayerIdentity,bytes);
         BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(8,8),value.ReceiverMapEpoch);
         BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(16,8),value.ActorId);
@@ -884,6 +885,12 @@ public static partial class WireProtocol
             frame.AsSpan(58,8),value.PvpUpdatedUnixMilliseconds);
         BinaryPrimitives.WriteUInt16LittleEndian(frame.AsSpan(66,2),(ushort)name.Length);
         name.AsSpan().CopyTo(frame.AsSpan(PlayerIdentityHeaderBytes));
+        if(value.Appearance is { } appearance)
+        {
+            int offset=PlayerIdentityHeaderBytes+name.Length;
+            frame[offset++]=1; // Optional authoritative appearance extension.
+            WriteAppearance(frame.AsSpan(offset,CharacterAppearanceBytes),appearance);
+        }
         return frame;
     }
 
@@ -904,19 +911,30 @@ public static partial class WireProtocol
         long pinkUntil=BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(50,8));
         long updated=BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(58,8));
         int nameLength=BinaryPrimitives.ReadUInt16LittleEndian(frame.Slice(66,2));
+        int baseBytes=PlayerIdentityHeaderBytes+nameLength;
+        int remaining=frame.Length-baseBytes;
         if(receiver<=0||actor<=0||connection<=0||entityMap<=0||
            mode is not (PvpMode.ProtectedBlue or PvpMode.EnabledWhite)||
            red>1||serverUnix<=0||pinkUntil<0||updated<0||
            nameLength is <1 or >PlayerIdentityMaxNameBytes||
-           frame.Length!=PlayerIdentityHeaderBytes+nameLength)
+           (remaining!=0&&remaining!=1+CharacterAppearanceBytes))
             return false;
         try
         {
             string name=StrictUtf8.GetString(
                 frame.Slice(PlayerIdentityHeaderBytes,nameLength));
             if(string.IsNullOrWhiteSpace(name))return false;
+            CharacterAppearance? appearance=null;
+            if(remaining>0)
+            {
+                int offset=baseBytes;
+                if(frame[offset++]!=1||
+                   !ReadAppearance(frame.Slice(offset,CharacterAppearanceBytes),out var decoded))
+                    return false;
+                appearance=decoded;
+            }
             value=new(receiver,actor,connection,entityMap,mode,red==1,
-                serverUnix,pinkUntil,updated,name);
+                serverUnix,pinkUntil,updated,name,appearance);
             return true;
         }
         catch(DecoderFallbackException)

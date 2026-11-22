@@ -103,6 +103,7 @@ public sealed partial class GatewayConnection
     private uint _lastChatSequence;
     private uint _lastPartySequence;
     private readonly string? _displayName;
+    private readonly CharacterAppearance? _appearance;
     private CharacterPvpState? _pvpState;
     private readonly string? _gmOperatorId;
     // Exact AOI identity. MapEpoch is scoped to the target actor's own
@@ -114,7 +115,8 @@ public sealed partial class GatewayConnection
                              TrustedCombatProfile? combatProfile = null,
                              string? displayName = null,
                              CharacterPvpState? pvpState = null,
-                             string? gmOperatorId = null)
+                             string? gmOperatorId = null,
+                             CharacterAppearance? appearance = null)
     {
         var configured = options ?? new GatewayConnectionOptions();
         if (configured.MaxBufferedInputBytes < WireProtocol.MaximumFrameBytes ||
@@ -144,6 +146,7 @@ public sealed partial class GatewayConnection
                 throw new ArgumentOutOfRangeException(nameof(displayName));
         }
         _displayName=displayName;
+        _appearance=appearance;
         _pvpState=pvpState;
         if(gmOperatorId is not null&&
            (string.IsNullOrWhiteSpace(gmOperatorId)||gmOperatorId.Length>64||
@@ -173,7 +176,7 @@ public sealed partial class GatewayConnection
                 _displayName,_pvpState.Mode,_pvpState.RedMan,
                 DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
                 _pvpState.PinkUntilUnixMilliseconds,
-                _pvpState.UpdatedUnixMilliseconds);
+                _pvpState.UpdatedUnixMilliseconds,_appearance);
             return true;
         }
     }

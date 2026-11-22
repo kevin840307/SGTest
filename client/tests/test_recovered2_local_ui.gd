@@ -224,6 +224,11 @@ func _run() -> void:
 	if not shell._selection.visible or shell._slot_actions[0].text != "進入世界":
 		_error("3-column selection did not display account characters")
 		return
+	for i in 2:
+		var preview_label: Label = shell._slot_previews[i]
+		if not preview_label.text.is_empty():
+			_error("existing character card leaked internal presentation diagnostics")
+			return
 	var nav_left: float = shell._select_prev.position.x
 	var nav_right: float = shell._select_next.position.x+shell._select_next.size.x
 	var gap_left: float = shell._select_back.position.x-(
@@ -238,7 +243,7 @@ func _run() -> void:
 			return
 		var first: Control = shell._character_previews[0]
 		var second: Control = shell._character_previews[1]
-		if first._assets["players/b/base/body"].pages[0] != second._assets["players/b/base/body"].pages[0]:
+		if first._assets["equipment/b/cloth/body00"].pages[0] != second._assets["equipment/b/cloth/body00"].pages[0]:
 			_error("character cards duplicated a shared atlas texture")
 			return
 	await _capture("select",directory)
@@ -267,10 +272,12 @@ func _run() -> void:
 	panel.character_create_status.text = ""
 	panel._latest.character_create_result_revision = 1
 	panel._latest.character_creation_appearances = [
-		{"race":0,"hair_index":0,"hair_color":0},
-		{"race":0,"hair_index":1,"hair_color":2},
-		{"race":0,"hair_index":1,"hair_color":5},
-		{"race":1,"hair_index":3,"hair_color":7}]
+		{"race":0,"hair_index":0,"hair_color":0,"body_index":0,"leg_index":0},
+		{"race":0,"hair_index":0,"hair_color":0,"body_index":1,"leg_index":0},
+		{"race":0,"hair_index":0,"hair_color":0,"body_index":1,"leg_index":2},
+		{"race":0,"hair_index":1,"hair_color":2,"body_index":0,"leg_index":0},
+		{"race":0,"hair_index":1,"hair_color":5,"body_index":0,"leg_index":0},
+		{"race":1,"hair_index":3,"hair_color":7,"body_index":2,"leg_index":1}]
 	panel._set_controls()
 	if not pack_path.is_empty() and not await _wait_previews(shell,1,true):
 		return
@@ -292,19 +299,41 @@ func _run() -> void:
 	if shell._create_password_label.position != Vector2(745,583) or 			shell._create_password.position != Vector2(897,579) or 			shell._create_password.size != Vector2(83,31) or 			shell._create_password_confirm_label.position != Vector2(745,619) or 			shell._create_password_confirm.position != Vector2(897,615) or 			shell._create_password_confirm.size != Vector2(83,31):
 		_error("secondary password controls drifted from source artwork")
 		return
-	for field in ["race","hair_index","hair_color"]:
-		var row := ["race","hair_index","hair_color"].find(field)
+	if shell._appearance_note.visible or not shell._appearance_note.text.is_empty():
+		_error("internal appearance/server guidance is visible to player")
+		return
+	var appearance_fields := ["race","hair_index","hair_color","body_index","leg_index"]
+	for field in appearance_fields:
+		var row := appearance_fields.find(field)
 		if shell._appearance_buttons[field][0].position != Vector2(351,424+36*row) or 				shell._appearance_values[field].position != Vector2(386,422+36*row) or 				shell._appearance_values[field].size != Vector2(72,29):
-			_error("appearance controls drifted from source artwork")
+			_error("appearance controls drifted from source/create rows: "+field)
 			return
 	var creation_preview: Control = shell._character_previews[3]
+	var commands_before_clothes: int = creation_preview._canvas._commands.size()
+	shell._appearance_buttons.body_index[1].pressed.emit()
+	if not pack_path.is_empty() and commands_before_clothes > 0 and 			creation_preview._canvas._commands.is_empty():
+		_error("upper-armor switch blanked previous preview")
+		return
+	shell._appearance_buttons.leg_index[1].pressed.emit()
+	if panel.creation_options.selection().body_index != 1 or 			panel.creation_options.selection().leg_index != 2:
+		_error("upper/lower armor arrows did not select independent source choices")
+		return
+	if not pack_path.is_empty():
+		if not await _wait_previews(shell,1,true):
+			return
+		if creation_preview._definition.parts[9][0] != "equipment/b/cloth/body01" or 				creation_preview._definition.parts[12][0] != "equipment/b/cloth/leg02":
+			_error("upper/lower armor selection did not replace body/leg atlas")
+			return
+		await _capture("create_clothing",directory)
 	var commands_before_hair: int = creation_preview._canvas._commands.size()
 	shell._appearance_buttons.hair_index[1].pressed.emit()
 	if not pack_path.is_empty() and commands_before_hair > 0 and 			creation_preview._canvas._commands.is_empty():
 		_error("hair-style switch blanked the previous preview before replacement loaded")
 		return
 	shell._appearance_buttons.hair_color[1].pressed.emit()
-	if panel.creation_options.selection()!={"race":0,"hair_index":1,"hair_color":5}:
+	if panel.creation_options.selection()!={
+			"race":0,"hair_index":1,"hair_color":5,
+			"body_index":0,"leg_index":0}:
 		_error("hair/color arrows did not select exact allowed tuples")
 		return
 	var commands_before_race: int = creation_preview._canvas._commands.size()
@@ -312,7 +341,7 @@ func _run() -> void:
 	if not pack_path.is_empty() and commands_before_race > 0 and 			creation_preview._canvas._commands.is_empty():
 		_error("race switch blanked the previous preview before replacement loaded")
 		return
-	var chosen := {"race":1,"hair_index":3,"hair_color":7}
+	var chosen := {"race":1,"hair_index":3,"hair_color":7,"body_index":2,"leg_index":1}
 	if panel.creation_options.selection()!=chosen or 			AppearanceProfile.definition(chosen).is_empty() or shell._slot_edit.visible:
 		_error("verified race/hair/color choice did not bind a real profile")
 		return
@@ -375,11 +404,11 @@ func _run() -> void:
 	if args.size()>2 and args[2]=="profiles":
 		panel._latest.character_create_result_revision = 2
 		panel._latest.character_creation_appearances = [
-			{"race":0,"hair_index":0,"hair_color":0},
-			{"race":1,"hair_index":0,"hair_color":0},
-			{"race":2,"hair_index":0,"hair_color":0},
-			{"race":3,"hair_index":0,"hair_color":0},
-			{"race":4,"hair_index":0,"hair_color":7}]
+			{"race":0,"hair_index":0,"hair_color":0,"body_index":0,"leg_index":0},
+			{"race":1,"hair_index":0,"hair_color":0,"body_index":0,"leg_index":0},
+			{"race":2,"hair_index":0,"hair_color":0,"body_index":0,"leg_index":0},
+			{"race":3,"hair_index":0,"hair_color":0,"body_index":0,"leg_index":0},
+			{"race":4,"hair_index":0,"hair_color":7,"body_index":0,"leg_index":0}]
 		panel._set_controls()
 		var prefixes := [
 			"players/b/","players/g/","players/a/",
@@ -396,7 +425,12 @@ func _run() -> void:
 				_error("race preview lost source part count: "+str(race))
 				return
 			for part in preview._definition.parts.values():
-				if not str(part[0]).begins_with(prefixes[race]):
+				var asset_path := str(part[0])
+				var valid_prefix := asset_path.begins_with(prefixes[race])
+				if race in [0,1,2]:
+					valid_prefix = valid_prefix or asset_path.begins_with(
+						"equipment/"+["b","g","a"][race]+"/cloth/")
+				if not valid_prefix:
 					_error("race preview borrowed another race: "+str(race))
 					return
 			if race==4 and not is_equal_approx(

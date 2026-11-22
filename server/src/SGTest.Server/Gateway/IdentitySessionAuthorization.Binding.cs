@@ -446,7 +446,8 @@ public sealed partial class IdentitySessionAuthorization
             var gateway = new GatewayConnection(
                 snapshot,combatProfile:trustedCombat,
                 displayName:character.Name,pvpState:pvpPresentation,
-                gmOperatorId:gmOperatorId);
+                gmOperatorId:gmOperatorId,
+                appearance:character.Appearance?.Value);
             completed = true;
             return gateway;
         }

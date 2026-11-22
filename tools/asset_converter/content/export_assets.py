@@ -35,10 +35,14 @@ PLAYER_PART_ASSETS = tuple(
     for race in ('b','g','a') for hair in range(10)
 ) + tuple(
     f'players/y/hair/hair{hair:02d}' for hair in range(3)
+) + tuple(
+    f'equipment/{race}/cloth/{part}{index:02d}'
+    for race in ('b','g','a','r')
+    for part in ('body','leg')
+    for index in range(3)
 ) + (
     'players/b/base/death','players/g/base/death','players/a/base/death',
     'players/r/base/death',
-    'equipment/r/cloth/body00','equipment/r/cloth/leg00',
     'equipment/r/cloth/l_arm00','equipment/r/cloth/r_arm00',
     'equipment/r/cloth/bonnet00',
 )
@@ -54,8 +58,13 @@ PLAYER_ACT_CONTROLLERS = {'b':'boy','g':'girl','a':'alien','r':'robot','y':'boy'
 # Boy timing controller. The original Y sprite sources have no standalone ACT,
 # so use the original B/boy.act as timing authority instead of inventing one.
 PLAYER_ACT_CONTROLLER_RACES = {'y':'b'}
+CREATION_CLOTH_GROUPS = {
+    f'player/{race}/cloth/{race}-{part}{index:02d}'
+    for race in ('b','g','a','r')
+    for part in ('body','leg')
+    for index in range(3)
+}
 ROBOT_BASE_GROUPS = {
-    'player/r/cloth/r-body00','player/r/cloth/r-leg00',
     'player/r/cloth/r-l-arm00','player/r/cloth/r-r-arm00',
     'player/r/cloth/r-bonnet00',
 }
@@ -224,7 +233,8 @@ def publish(source: Path, archive: Path, assets: Path, asset_ids: set[str] | Non
         elif ((len(group_parts) == 4 and group_parts[0] == 'player'
                and group_parts[1] in PLAYER_ACT_CONTROLLERS
                and group_parts[2] == 'standard')
-              or group in ROBOT_BASE_GROUPS):
+              or group in ROBOT_BASE_GROUPS
+              or group in CREATION_CLOTH_GROUPS):
             try:
                 race = group_parts[1]
                 paths = [source/item['path'] for item in raw['sources']]

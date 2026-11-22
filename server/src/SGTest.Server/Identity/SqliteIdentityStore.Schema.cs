@@ -68,6 +68,8 @@ CREATE TABLE IF NOT EXISTS character_appearances (
     race INTEGER NOT NULL CHECK(race BETWEEN 0 AND 4),
     hair_index INTEGER NOT NULL CHECK(hair_index BETWEEN 0 AND 65535),
     hair_color INTEGER NOT NULL CHECK(hair_color BETWEEN 0 AND 7),
+    body_index INTEGER NOT NULL DEFAULT 0 CHECK(body_index BETWEEN 0 AND 255),
+    leg_index INTEGER NOT NULL DEFAULT 0 CHECK(leg_index BETWEEN 0 AND 255),
     source_ref TEXT NOT NULL CHECK(length(source_ref) BETWEEN 1 AND 384)
 );", tx);
             Execute(connection, @"
@@ -755,6 +757,20 @@ WHEN NEW.current_mp > NEW.max_mp
 BEGIN
     SELECT RAISE(ABORT,'current_mp exceeds max_mp');
 END;", tx);
+            // Schema v26: original HK2 CreateCharPara.dat exposes
+            // independent Upper_armor / Lower_armor creation selectors.
+            // Existing characters preserve the historical base look as 0/0.
+            if(schemaVersion<26)
+            {
+                if(!ColumnExists(connection,"character_appearances","body_index",tx))
+                    Execute(connection,@"ALTER TABLE character_appearances
+ADD COLUMN body_index INTEGER NOT NULL DEFAULT 0
+CHECK(body_index BETWEEN 0 AND 255);",tx);
+                if(!ColumnExists(connection,"character_appearances","leg_index",tx))
+                    Execute(connection,@"ALTER TABLE character_appearances
+ADD COLUMN leg_index INTEGER NOT NULL DEFAULT 0
+CHECK(leg_index BETWEEN 0 AND 255);",tx);
+            }
             if (schemaVersion < SchemaVersion)
                 Execute(connection,
                     $"UPDATE schema_version SET version={SchemaVersion};", tx);

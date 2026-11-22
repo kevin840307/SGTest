@@ -23,14 +23,15 @@ public sealed class CharacterAppearanceRules
         {
             // Storage bounds only. The exact allowed tuples are source-owned.
             if (choice.Race is < 0 or > 4 || choice.HairIndex is < 0 or > 65535 ||
-                choice.HairColor is < 0 or > 7 || !_allowed.Add(choice) || _allowed.Count > 4096)
+                choice.HairColor is < 0 or > 7 || choice.BodyIndex is < 0 or > 255 ||
+                choice.LegIndex is < 0 or > 255 || !_allowed.Add(choice) || _allowed.Count > 4096)
                 throw new ArgumentException("Invalid, duplicate or oversized appearance choices", nameof(choices));
         }
         if (_allowed.Count == 0)
             throw new ArgumentException("Appearance choices cannot be empty", nameof(choices));
         SourceReference = sourceReference;
         Choices = Array.AsReadOnly(_allowed.OrderBy(c => c.Race).ThenBy(c => c.HairIndex)
-            .ThenBy(c => c.HairColor).ToArray());
+            .ThenBy(c => c.HairColor).ThenBy(c => c.BodyIndex).ThenBy(c => c.LegIndex).ToArray());
     }
 
     internal CharacterAppearanceState Resolve(CharacterAppearance requested)
@@ -65,7 +66,9 @@ public sealed class CharacterAppearanceRules
             {
                 UniqueFields(choice);
                 values.Add(new(choice.GetProperty("race").GetInt32(),
-                    choice.GetProperty("hair_index").GetInt32(),choice.GetProperty("hair_color").GetInt32()));
+                    choice.GetProperty("hair_index").GetInt32(),choice.GetProperty("hair_color").GetInt32(),
+                    choice.TryGetProperty("body_index",out var body) ? body.GetInt32() : 0,
+                    choice.TryGetProperty("leg_index",out var leg) ? leg.GetInt32() : 0));
             }
             return new(source,values);
         }

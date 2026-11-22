@@ -2352,10 +2352,26 @@ func _apply_player_identity(frame:PackedByteArray)->bool:
 			stale_player_identities+=1
 			return true
 		if updated==prior_updated:
-			if str(previous.get("display_name",""))!=str(value.display_name) or int(previous.get("mode",-1))!=int(value.mode) or bool(previous.get("red_man",false))!=bool(value.red_man) or int(previous.get("pink_until_unix_ms",0))!=int(value.pink_until_unix_ms):
+			if str(previous.get("display_name",""))!=str(value.display_name) or 					int(previous.get("mode",-1))!=int(value.mode) or 					bool(previous.get("red_man",false))!=bool(value.red_man) or 					int(previous.get("pink_until_unix_ms",0))!=int(value.pink_until_unix_ms) or 					previous.get("appearance",{})!=value.get("appearance",{}):
 				return _need_resync("player_identity_same_revision_conflict")
 	player_identities[id]=value.duplicate(true)
+	var appearance: Variant=value.get("appearance",{})
+	if appearance is Dictionary and not appearance.is_empty():
+		if id==actor_id:
+			if not self_state.is_empty():
+				self_state.appearance=appearance.duplicate(true)
+		elif entities.has(id):
+			var entity:Dictionary=entities[id]
+			entity.appearance=appearance.duplicate(true)
+			entities[id]=entity
 	return true
+
+func _attach_player_identity_appearance(value:Dictionary,id:int)->Dictionary:
+	var identity:Dictionary=player_identities.get(id,{})
+	var appearance:Variant=identity.get("appearance",{})
+	if appearance is Dictionary and not appearance.is_empty():
+		value.appearance=appearance.duplicate(true)
+	return value
 
 
 func _apply_entity_state(frame: PackedByteArray, opcode: int) -> bool:
@@ -2377,7 +2393,7 @@ func _apply_entity_state(frame: PackedByteArray, opcode: int) -> bool:
 				return _need_resync("entity_spawn_without_despawn")
 			stale_aoi_events += 1
 			return true
-		entities[id] = value
+		entities[id] = _attach_player_identity_appearance(value,id)
 	else:
 		if previous.is_empty():
 			return _need_resync("delta_without_spawn")
@@ -2388,7 +2404,7 @@ func _apply_entity_state(frame: PackedByteArray, opcode: int) -> bool:
 			return true
 		if int(value.revision) > int(previous.revision) + 1:
 			return _need_resync("entity_revision_gap")
-		entities[id] = value
+		entities[id] = _attach_player_identity_appearance(value,id)
 	last_aoi_tick = maxi(last_aoi_tick, int(value.server_tick))
 	return true
 
@@ -4324,7 +4340,7 @@ func _apply_self_state(frame: PackedByteArray) -> bool:
 			return _need_resync("self_state_revision_gap")
 		if int(value.movement_action_sequence) < int(self_state.movement_action_sequence):
 			return _need_resync("self_state_action_regressed")
-	self_state = value
+	self_state = _attach_player_identity_appearance(value,actor_id)
 	x = float(value.x)
 	y = float(value.y)
 	facing = int(value.facing)

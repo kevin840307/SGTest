@@ -472,14 +472,16 @@ func _build_create() -> void:
 	_put(_creation,_slot_edit,386,422,92,30)
 	# Recovered2 chooses a slot on the selection screen, not in the race row.
 	_slot_edit.hide()
-	for i in 3:
-		var field: String = ["race","hair_index","hair_color"][i]
+	var appearance_fields := [
+		"race","hair_index","hair_color","body_index","leg_index"]
+	var appearance_labels := ["種族","髮型","髮色","上衣","褲子"]
+	for i in appearance_fields.size():
+		var field: String = appearance_fields[i]
 		var y := float(424+36*i)
-		# These coordinates intentionally mirror Recovered2 character_select.tscn.
-		# The text is centered against artwork baked into CREATE_CHARACTER.png,
-		# so reflowing the row by generic column widths visibly shifts it.
+		# The first three rows mirror Recovered2; the last two restore original
+		# HK2 CreateCharPara Upper_armor / Lower_armor selectors.
 		var source_label := _label(
-			_creation,["種族","髮型","髮色"][i],232,y,78,24,14)
+			_creation,appearance_labels[i],232,y,78,24,14)
 		source_label.theme_type_variation = &"ParadiseSecondaryText"
 		var value := _label(_creation,"未開放",386,y-2,72,29,14)
 		value.theme_type_variation = &"ParadiseAccentText"
@@ -489,7 +491,8 @@ func _build_create() -> void:
 			_appearance_arrow(field,1,464,y,25)
 		]
 	_appearance_note = _label(_creation,"",318,539,200,51,11)
-	_appearance_note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	# Internal Server allowlist/stat guidance is not player-facing UI.
+	_appearance_note.hide()
 
 	var stat_fields := ["strength","dexterity","constitution","wisdom"]
 	var stat_names := ["力量","速度","體質","智慧"]
@@ -642,10 +645,7 @@ func _refresh_appearance() -> void:
 		for button in _appearance_buttons[field]:
 			button.disabled = not options.editable or options.values(field).size()<2
 			button.modulate = Color(1,1,1,0.45 if button.disabled else 1.0)
-	_appearance_note.text = (
-		"外觀由伺服器核准；請再分配 4 點能力"
-		if not selected.is_empty()
-		else "此伺服器暫未開放外觀選擇")
+	_appearance_note.text = ""
 	var preview: Control = _character_previews[3]
 	preview.set_occupied(_panel.active and int(_panel._latest.get("state",-1)) in [State.STATE_SELECTING_CHARACTER,State.STATE_CREATING_CHARACTER])
 	preview.set_appearance(selected)
@@ -701,12 +701,7 @@ func _update_characters() -> void:
 		var appearance: Dictionary = character.get("appearance",{}) if valid else {}
 		_character_previews[i].set_appearance(appearance)
 		_character_previews[i].set_occupied(valid)
-		var model_status := str(_character_previews[i].status)
-		var note := "暫定 B 外觀" if model_status == "ready" else ("人物素材載入中" if model_status == "loading" else "人物素材未就緒")
-		if not appearance.is_empty():
-			note = "%s／%s／%s" % [AppearancePicker.value_label("race",int(appearance.race)),AppearancePicker.value_label("hair_index",int(appearance.hair_index)),AppearancePicker.value_label("hair_color",int(appearance.hair_color))]
-			if model_status == "unsupported":
-				note += "（暫無預覽）"
-		_slot_previews[i].text = "角色 ID %d · %s" % [int(character.get("character_id",0)),note] if valid else "可建立新角色"
+		# Character IDs and presentation diagnostics are internal state, never player-facing.
+		_slot_previews[i].text = "" if valid else "可建立新角色"
 		_slot_actions[i].text = "進入世界" if valid else "建立角色"
 		_slot_actions[i].disabled = _panel._chosen

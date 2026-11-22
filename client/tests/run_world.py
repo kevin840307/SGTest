@@ -82,19 +82,24 @@ def expected_players(assets, states):
     # command data: selects logical facing before resolving physical source art.
     output=[]
     for state in sorted(states,key=lambda x:x['id']):
-        appearance=state.get('appearance',{'race':0,'hair_index':0,'hair_color':0})
-        if set(appearance)!={'race','hair_index','hair_color'} or any(type(x) is not int for x in appearance.values()) or appearance['race'] not in (0,1,2) or appearance['hair_color']!=0 or not 0<=appearance['hair_index']<=65535:
+        appearance=state.get('appearance',{'race':0,'hair_index':0,'hair_color':0,'body_index':0,'leg_index':0})
+        fields=set(appearance)
+        if fields not in ({'race','hair_index','hair_color'},{'race','hair_index','hair_color','body_index','leg_index'}) or any(type(x) is not int for x in appearance.values()) or appearance['race'] not in (0,1,2) or appearance['hair_color']!=0 or not 0<=appearance['hair_index']<=65535:
             raise ValueError('unsupported source profile')
+        body=appearance.get('body_index',0)
+        leg=appearance.get('leg_index',0)
+        if not 0<=body<=2 or not 0<=leg<=2:
+            raise ValueError('unsupported source creation clothing')
         race=('b','g','a')[appearance['race']]
         prefix=race.upper()
         hair=f"HAIR{appearance['hair_index']:02d}"
-        profiles={12:(f'players/{race}/base/leg',prefix+'-LEG'),7:(f'players/{race}/base/right_arm',prefix+'-R-ARM'),
-                  9:(f'players/{race}/base/body',prefix+'-BODY'),5:(f'players/{race}/base/left_arm',prefix+'-L-ARM'),
+        profiles={12:(f'equipment/{race}/cloth/leg{leg:02d}',f'{prefix}-LEG{leg:02d}'),7:(f'players/{race}/base/right_arm',prefix+'-R-ARM'),
+                  9:(f'equipment/{race}/cloth/body{body:02d}',f'{prefix}-BODY{body:02d}'),5:(f'players/{race}/base/left_arm',prefix+'-L-ARM'),
                   0:(f'players/{race}/base/head',prefix+'-HEAD'),1:(f'players/{race}/hair/{hair.lower()}',prefix+'-'+hair)}
         manifests={slot:json.loads((assets/p[0]/'atlas.json').read_text(encoding='utf-8')) for slot,p in profiles.items()}
         action='NR' if state['moving'] else 'NS'
         requested=action+str(state['facing'])
-        order=manifests[9]['logical_views'][prefix+'-BODY_'+requested]['draw_slots']
+        order=manifests[9]['logical_views'][f'{prefix}-BODY{body:02d}_'+requested]['draw_slots']
         parts=[]
         for slot in order:
             if slot not in profiles:continue

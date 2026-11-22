@@ -122,21 +122,28 @@ public static partial class WireProtocol
 
     private static bool ValidAppearance(CharacterAppearance value) =>
         value.Race is >= 0 and <= 4 && value.HairIndex is >= 0 and <= 65535 &&
-        value.HairColor is >= 0 and <= 7;
+        value.HairColor is >= 0 and <= 7 && value.BodyIndex is >= 0 and <= 255 &&
+        value.LegIndex is >= 0 and <= 255;
 
     private static void WriteAppearance(Span<byte> target, CharacterAppearance value)
     {
-        if (!ValidAppearance(value)) throw new ArgumentOutOfRangeException(nameof(value));
+        if (!ValidAppearance(value) || target.Length != CharacterAppearanceBytes)
+            throw new ArgumentOutOfRangeException(nameof(value));
         target[0] = (byte)value.Race;
         BinaryPrimitives.WriteUInt16LittleEndian(target.Slice(1,2),(ushort)value.HairIndex);
         target[3] = (byte)value.HairColor;
+        target[4] = (byte)value.BodyIndex;
+        target[5] = (byte)value.LegIndex;
     }
 
     private static bool ReadAppearance(ReadOnlySpan<byte> source, out CharacterAppearance value)
     {
         value = default;
-        if (source.Length != 4) return false;
-        value = new(source[0],BinaryPrimitives.ReadUInt16LittleEndian(source.Slice(1,2)),source[3]);
+        if (source.Length != LegacyCharacterAppearanceBytes &&
+            source.Length != CharacterAppearanceBytes) return false;
+        value = new(source[0],BinaryPrimitives.ReadUInt16LittleEndian(source.Slice(1,2)),source[3],
+            source.Length == CharacterAppearanceBytes ? source[4] : 0,
+            source.Length == CharacterAppearanceBytes ? source[5] : 0);
         return ValidAppearance(value);
     }
 
@@ -163,7 +170,9 @@ public static partial class WireProtocol
             choices.Distinct().Count() != choices.Count)
             throw new ArgumentOutOfRangeException(nameof(value));
         bool extended = choices.Count > 0 || value.Characters.Any(c => c.Appearance is not null);
-        if (extended) size = checked(size + 3 + value.Characters.Count * 5 + choices.Count * 4);
+        if (extended) size = checked(size + 3 +
+            value.Characters.Count * (1 + CharacterAppearanceBytes) +
+            choices.Count * CharacterAppearanceBytes);
         if (size > MaxCharacterListFrameBytes) throw new ArgumentOutOfRangeException(nameof(value));
         var frame = NewFrame(WireOpcode.CharacterList, size);
         frame[8] = (byte)value.Characters.Count;
@@ -178,15 +187,20 @@ public static partial class WireProtocol
         }
         if (extended)
         {
-            frame[offset++] = 1; // Appearance extension schema, not a new Wire version.
+            frame[offset++] = 2; // v2 adds original HK2 Body/leg selectors.
             foreach (var character in value.Characters)
             {
                 frame[offset++] = character.Appearance is null ? (byte)0 : (byte)1;
-                if (character.Appearance is { } appearance) WriteAppearance(frame.AsSpan(offset,4),appearance);
-                offset += 4; // Unknown appearances retain four canonical zero bytes.
+                if (character.Appearance is { } appearance)
+                    WriteAppearance(frame.AsSpan(offset,CharacterAppearanceBytes),appearance);
+                offset += CharacterAppearanceBytes;
             }
             BinaryPrimitives.WriteUInt16LittleEndian(frame.AsSpan(offset,2),(ushort)choices.Count); offset += 2;
-            foreach (var choice in choices) { WriteAppearance(frame.AsSpan(offset,4),choice); offset += 4; }
+            foreach (var choice in choices)
+            {
+                WriteAppearance(frame.AsSpan(offset,CharacterAppearanceBytes),choice);
+                offset += CharacterAppearanceBytes;
+            }
         }
         return frame;
     }
@@ -216,23 +230,34 @@ public static partial class WireProtocol
         }
         catch (DecoderFallbackException) { return false; }
         if (offset == frame.Length) { value = new(list); return true; }
-        if (frame.Length-offset < 3+count*5 || frame[offset++] != 1) return false;
+        if (frame.Length-offset < 3) return false;
+        byte appearanceVersion=frame[offset++];
+        int appearanceBytes=appearanceVersion switch
+        {
+            1 => LegacyCharacterAppearanceBytes,
+            2 => CharacterAppearanceBytes,
+            _ => 0
+        };
+        if (appearanceBytes==0 ||
+            frame.Length-offset < count*(1+appearanceBytes)+2) return false;
         for (int i=0;i<count;i++)
         {
             byte known=frame[offset++];
-            var bytes=frame.Slice(offset,4); offset+=4;
+            var bytes=frame.Slice(offset,appearanceBytes); offset+=appearanceBytes;
             if (known>1 || !ReadAppearance(bytes,out var appearance) ||
                 (known==0 && appearance!=default)) return false;
             list[i]=list[i] with { Appearance=known==1?appearance:null };
         }
         int choiceCount=BinaryPrimitives.ReadUInt16LittleEndian(frame.Slice(offset,2)); offset+=2;
-        if (choiceCount>MaxCreationAppearanceChoices || frame.Length-offset!=choiceCount*4) return false;
+        if (choiceCount>MaxCreationAppearanceChoices ||
+            frame.Length-offset!=choiceCount*appearanceBytes) return false;
         var choices=new List<CharacterAppearance>(choiceCount);
         var seen=new HashSet<CharacterAppearance>();
         for(int i=0;i<choiceCount;i++)
         {
-            if(!ReadAppearance(frame.Slice(offset,4),out var choice)||!seen.Add(choice)) return false;
-            choices.Add(choice); offset+=4;
+            if(!ReadAppearance(frame.Slice(offset,appearanceBytes),out var choice)||!seen.Add(choice))
+                return false;
+            choices.Add(choice); offset+=appearanceBytes;
         }
         value = new(list,choices);
         return true;
@@ -254,9 +279,9 @@ public static partial class WireProtocol
                 password = StrictUtf8.GetBytes(creation.CharacterPassword ?? string.Empty);
                 if (password.Length is < 1 or > MaxCharacterPasswordBytes)
                     throw new ArgumentOutOfRangeException(nameof(value));
-                suffixBytes = 11 + password.Length;
+                suffixBytes = 13 + password.Length;
             }
-            else suffixBytes = value.Appearance is null ? 0 : 4;
+            else suffixBytes = value.Appearance is null ? 0 : CharacterAppearanceBytes;
 
             int size = HeaderBytes + 3 + name.Length + suffixBytes;
             var frame = NewFrame(WireOpcode.CharacterCreate, size);
@@ -267,12 +292,12 @@ public static partial class WireProtocol
 
             if (value.Creation is { } settings)
             {
-                frame[offset++] = 2; // extended creation payload version
+                frame[offset++] = 3; // v3 adds original HK2 Body/leg selectors.
                 frame[offset++] = value.Appearance is null ? (byte)0 : (byte)1;
                 if (value.Appearance is { } appearance)
-                    WriteAppearance(frame.AsSpan(offset,4),appearance);
-                else frame.AsSpan(offset,4).Clear();
-                offset += 4;
+                    WriteAppearance(frame.AsSpan(offset,CharacterAppearanceBytes),appearance);
+                else frame.AsSpan(offset,CharacterAppearanceBytes).Clear();
+                offset += CharacterAppearanceBytes;
                 frame[offset++] = settings.Strength;
                 frame[offset++] = settings.Dexterity;
                 frame[offset++] = settings.Constitution;
@@ -281,7 +306,7 @@ public static partial class WireProtocol
                 password.CopyTo(frame.AsSpan(offset));
             }
             else if (value.Appearance is { } appearance)
-                WriteAppearance(frame.AsSpan(offset,4),appearance);
+                WriteAppearance(frame.AsSpan(offset,CharacterAppearanceBytes),appearance);
             return frame;
         }
         finally
@@ -311,21 +336,30 @@ public static partial class WireProtocol
                 value = new(slot,name);
                 return true;
             }
-            if (frame.Length == offset + 4)
+            if (frame.Length == offset + LegacyCharacterAppearanceBytes ||
+                frame.Length == offset + CharacterAppearanceBytes)
             {
-                if (!ReadAppearance(frame.Slice(offset,4),out var legacyAppearance))
+                if (!ReadAppearance(frame.Slice(offset,frame.Length-offset),out var legacyAppearance))
                     return false;
                 value = new(slot,name,legacyAppearance);
                 return true;
             }
-            if (frame.Length < offset + 11 || frame[offset++] != 2)
+            if (frame.Length < offset + 11) return false;
+            byte payloadVersion=frame[offset++];
+            int appearanceBytes=payloadVersion switch
+            {
+                2 => LegacyCharacterAppearanceBytes,
+                3 => CharacterAppearanceBytes,
+                _ => 0
+            };
+            if (appearanceBytes==0 || frame.Length < offset + 1 + appearanceBytes + 5)
                 return false;
             byte appearanceKnown = frame[offset++];
             if (appearanceKnown > 1)
                 return false;
-            if (!ReadAppearance(frame.Slice(offset,4),out var decodedAppearance))
+            if (!ReadAppearance(frame.Slice(offset,appearanceBytes),out var decodedAppearance))
                 return false;
-            offset += 4;
+            offset += appearanceBytes;
             if (appearanceKnown == 0 && decodedAppearance != default)
                 return false;
             var creation = new CharacterCreationWire(
@@ -355,14 +389,16 @@ public static partial class WireProtocol
         }
         else if (value.CharacterId != 0 || value.Slot > 31 || name.Length != 0 || value.Appearance is not null)
             throw new ArgumentOutOfRangeException(nameof(value));
-        int size = HeaderBytes + 12 + name.Length + (value.Appearance is null ? 0 : 4);
+        int size = HeaderBytes + 12 + name.Length +
+            (value.Appearance is null ? 0 : CharacterAppearanceBytes);
         var frame = NewFrame(WireOpcode.CharacterCreateResult, size);
         frame[8] = (byte)value.Status;
         BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(9, 8), value.CharacterId);
         frame[17] = value.Slot;
         BinaryPrimitives.WriteUInt16LittleEndian(frame.AsSpan(18, 2), (ushort)name.Length);
         if (name.Length > 0) name.CopyTo(frame.AsSpan(20));
-        if (value.Appearance is { } appearance) WriteAppearance(frame.AsSpan(20+name.Length,4),appearance);
+        if (value.Appearance is { } appearance)
+            WriteAppearance(frame.AsSpan(20+name.Length,CharacterAppearanceBytes),appearance);
         return frame;
     }
 
@@ -379,7 +415,9 @@ public static partial class WireProtocol
         byte slot = frame[17];
         int length = BinaryPrimitives.ReadUInt16LittleEndian(frame.Slice(18, 2));
         if (raw > (byte)CharacterCreateWireStatus.InvalidCreationSettings || slot > 31 ||
-            length > 96 || (20 + length != frame.Length && 24 + length != frame.Length))
+            length > 96 || (20 + length != frame.Length &&
+                20 + length + LegacyCharacterAppearanceBytes != frame.Length &&
+                20 + length + CharacterAppearanceBytes != frame.Length))
             return false;
         var status = (CharacterCreateWireStatus)raw;
         try
@@ -392,9 +430,10 @@ public static partial class WireProtocol
             }
             else if (characterId != 0 || length != 0 || frame.Length != 20) return false;
             CharacterAppearance? appearance=null;
-            if(frame.Length==24+length)
+            int remaining=frame.Length-(20+length);
+            if(remaining is LegacyCharacterAppearanceBytes or CharacterAppearanceBytes)
             {
-                if(!ReadAppearance(frame.Slice(20+length,4),out var decoded)) return false;
+                if(!ReadAppearance(frame.Slice(20+length,remaining),out var decoded)) return false;
                 appearance=decoded;
             }
             value = new(status, characterId, slot, name,appearance);

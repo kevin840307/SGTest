@@ -48,14 +48,19 @@ public static partial class WireProtocol
     public const int MaxCharacterPasswordBytes = 16;
     public const int MaxCharacterChooseFrameBytes = CharacterChooseFrameBytes + 2 + MaxCharacterPasswordBytes;
     public const int CharacterChooseResultFrameBytes = HeaderBytes + 37;
-    public const int MaxCharacterCreateFrameBytes = HeaderBytes + 1 + 2 + 96 + 11 + MaxCharacterPasswordBytes;
-    public const int MaxCharacterCreateResultFrameBytes = HeaderBytes + 1 + 8 + 1 + 2 + 96 + 4;
+    public const int LegacyCharacterAppearanceBytes = 4;
+    public const int CharacterAppearanceBytes = 6;
+    public const int MaxCharacterCreateFrameBytes =
+        HeaderBytes + 1 + 2 + 96 + 13 + MaxCharacterPasswordBytes;
+    public const int MaxCharacterCreateResultFrameBytes =
+        HeaderBytes + 1 + 8 + 1 + 2 + 96 + CharacterAppearanceBytes;
     public const int MaxAuthRequestFrameBytes = HeaderBytes + 4 + 32 + 256;
     public const int MaxAccountRegisterRequestFrameBytes =
         HeaderBytes + 4 + 32 + 256;
     public const int MaxCreationAppearanceChoices = 4096;
     public const int MaxCharacterListFrameBytes = HeaderBytes + 1 + 32 * (11 + 96) +
-        3 + 32 * 5 + MaxCreationAppearanceChoices * 4;
+        3 + 32 * (1 + CharacterAppearanceBytes) +
+        MaxCreationAppearanceChoices * CharacterAppearanceBytes;
     // Single-precision coordinates suffice across the original ~15k-pixel maps
     // (sub-0.002px resolution), saving bandwidth vs storing double on wire.
     public const int WorldReadyFrameBytes = 45;
@@ -138,7 +143,8 @@ public static partial class WireProtocol
         HeaderBytes + 8 + 8 + 8 + 8 + 1 + 1 + 8 + 8 + 8 + 2;
     public const int PlayerIdentityMaxNameBytes = 96;
     public const int PlayerIdentityMaximumFrameBytes =
-        PlayerIdentityHeaderBytes + PlayerIdentityMaxNameBytes;
+        PlayerIdentityHeaderBytes + PlayerIdentityMaxNameBytes +
+        1 + CharacterAppearanceBytes;
     public const int PvpCombatVisualFrameBytes =
         HeaderBytes + 8 + 8 + 8 + 8 + 4 + 8 + 8 + 4 + 4 + 1 + 1 + 1;
     public const int PvpSkillFrameBytes = HeaderBytes + 8 + 4 + 4 + 8;

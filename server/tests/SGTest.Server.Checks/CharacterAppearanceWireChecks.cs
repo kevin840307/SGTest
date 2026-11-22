@@ -4,11 +4,14 @@ using SGTest.Server.Wire;
 
 internal static class CharacterAppearanceWireChecks
 {
-    internal const string EmptyHex="1400000001000c00000102000000000001030007";
-    internal const string ListHex="4000000001000c00020b000000000000000006004c6567616379160000000000000001060043686f73656e010000000000010103000702000000000001030007";
-    internal const string CreateHex="1500000001000f0001060043686f73656e01030007";
-    internal const string ResultHex="1e0000000100100000160000000000000001060043686f73656e01030007";
-    private static readonly CharacterAppearance Look=new(1,3,7);
+    internal const string EmptyHex="1800000001000C0000020200000000000000010300070201";
+    internal const string ListHex="4800000001000C00020B000000000000000006004C6567616379160000000000000001060043686F73656E0200000000000000010103000702010200000000000000010300070201";
+    internal const string CreateHex="1700000001000F0001060043686F73656E010300070201";
+    internal const string ResultHex="200000000100100000160000000000000001060043686F73656E010300070201";
+    internal const string LegacyListHex="4000000001000c00020b000000000000000006004c6567616379160000000000000001060043686f73656e010000000000010103000702000000000001030007";
+    internal const string LegacyCreateHex="1500000001000f0001060043686f73656e01030007";
+    internal const string LegacyResultHex="1e0000000100100000160000000000000001060043686f73656e01030007";
+    private static readonly CharacterAppearance Look=new(1,3,7,2,1);
     private static readonly CharacterAppearance[] Choices=[new(0,0,0),Look];
 
     internal static void Verify()
@@ -25,6 +28,17 @@ internal static class CharacterAppearanceWireChecks
         var result=WireProtocol.EncodeCharacterCreateResult(new(CharacterCreateWireStatus.Success,22,1,"Chosen",Look));
         foreach(var pair in new[]{(empty,EmptyHex),(list,ListHex),(create,CreateHex),(result,ResultHex)})
             Checks.Require(Convert.ToHexString(pair.Item1).Equals(pair.Item2,StringComparison.OrdinalIgnoreCase),"appearance golden differs");
+        var legacyList=Convert.FromHexString(LegacyListHex);
+        var legacyCreate=Convert.FromHexString(LegacyCreateHex);
+        var legacyResult=Convert.FromHexString(LegacyResultHex);
+        Checks.Require(
+            WireProtocol.TryDecodeCharacterList(legacyList,out var oldList) &&
+            oldList.Characters[1].Appearance==new CharacterAppearance(1,3,7) &&
+            WireProtocol.TryDecodeCharacterCreate(legacyCreate,out var oldCreate) &&
+            oldCreate.Appearance==new CharacterAppearance(1,3,7) &&
+            WireProtocol.TryDecodeCharacterCreateResult(legacyResult,out var oldResult) &&
+            oldResult.Appearance==new CharacterAppearance(1,3,7),
+            "legacy four-byte appearance frames are no longer readable");
         Checks.Require(WireProtocol.TryDecodeCharacterList(list,out var decoded) &&
             decoded.Characters[0].Appearance is null && decoded.Characters[1].Appearance==Look &&
             decoded.CreationAppearances!.SequenceEqual(Choices),"appearance list lost known/unknown/allowed values");
@@ -44,16 +58,16 @@ internal static class CharacterAppearanceWireChecks
             if(at>=8) BinaryPrimitives.WriteInt32LittleEndian(truncated,at);
             Checks.Require(!WireProtocol.TryDecodeCharacterList(truncated,out _),"truncated menu accepted");
         }
-        foreach(int at in new[]{9,12,15,16,19})
+        foreach(int at in new[]{9,12,15,18,21})
         {
             var bad=empty.ToArray(); bad[at]=255;
-            Checks.Require(!WireProtocol.TryDecodeCharacterList(bad,out _),"invalid menu schema/count/race/color accepted");
+            Checks.Require(!WireProtocol.TryDecodeCharacterList(bad,out _),"invalid menu schema/race/color accepted");
         }
-        var duplicate=empty.ToArray(); Array.Copy(duplicate,12,duplicate,16,4);
+        var duplicate=empty.ToArray(); Array.Copy(duplicate,12,duplicate,18,6);
         Checks.Require(!WireProtocol.TryDecodeCharacterList(duplicate,out _),"duplicate appearance choice accepted");
         var unknown=list.ToArray(); unknown[45]=1;
         Checks.Require(!WireProtocol.TryDecodeCharacterList(unknown,out _),"unknown appearance has nonzero reserved data");
-        var badCreate=create.ToArray(); badCreate[^1]=8;
+        var badCreate=create.ToArray(); badCreate[20]=8;
         Checks.Require(!WireProtocol.TryDecodeCharacterCreate(badCreate,out _),"bad appearance color accepted");
         var badResult=result.ToArray(); badResult[8]=(byte)CharacterCreateWireStatus.InvalidAppearance;
         Checks.Require(!WireProtocol.TryDecodeCharacterCreateResult(badResult,out _),"failed create may not claim a character/appearance");

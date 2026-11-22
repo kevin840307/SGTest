@@ -8,6 +8,7 @@ const TerrainData = preload("res://map/terrain_data.gd")
 const Terrain = preload("res://map/terrain.gd")
 const DrawList = preload("res://world/world_draw_list.gd")
 const Players = preload("res://player/player_presentation.gd")
+const AppearanceProfile = preload("res://player/character_appearance_profile.gd")
 const Monsters = preload("res://monster/monster_presentation.gd")
 const Npcs = preload("res://npc/npc_presentation.gd")
 const PvpNames = preload("res://pvp/pvp_name_presentation.gd")
@@ -33,6 +34,7 @@ var npcs := Npcs.new()
 var pvp_names := PvpNames.new()
 var _player_snapshot := {}
 var _players_dirty := false
+var _pending_player_profiles: Dictionary = {}
 var _combat_seen := {}
 var _combat_overlays: Array[Dictionary] = []
 const COMBAT_OVERLAY_LIFETIME_USEC := 900000
@@ -124,6 +126,7 @@ func clear_map(retain_cache: bool = false) -> void:
 	pvp_names.clear()
 	_player_snapshot = {}
 	_players_dirty = true
+	_pending_player_profiles.clear()
 	_combat_seen.clear()
 	_combat_overlays.clear()
 	camera.clear()
@@ -148,10 +151,99 @@ func resize_view(size: Vector2i) -> Error:
 	return camera.resize(epoch,size) if phase == "ready" else OK
 
 
+func _snapshot_profile_definitions(snapshot: Dictionary) -> Dictionary:
+	var profiles := {}
+	if snapshot.is_empty():
+		return profiles
+	var candidates: Array = []
+	var own: Variant = snapshot.get("self_state",{})
+	if own is Dictionary and not own.is_empty():
+		candidates.append(own)
+	var entities_value: Variant = snapshot.get("entities",{})
+	if entities_value is Dictionary:
+		for entity in entities_value.values():
+			if entity is Dictionary:
+				candidates.append(entity)
+	for value in candidates:
+		var appearance: Variant = value.get("appearance",{})
+		if not appearance is Dictionary or appearance.is_empty():
+			continue
+		var definition: Dictionary = AppearanceProfile.definition(appearance)
+		if definition.is_empty():
+			continue
+		profiles[str(definition.key)] = {
+			"appearance":appearance.duplicate(true),
+			"definition":definition,
+		}
+	return profiles
+
+
+func _add_profile_asset_ids(ids: Dictionary, profiles: Dictionary) -> void:
+	for record in profiles.values():
+		for part in record.definition.parts.values():
+			ids[str(part[0])] = true
+
+
+func _request_snapshot_profiles(snapshot: Dictionary) -> Error:
+	if not show_players or phase != "ready" or epoch <= 0:
+		return OK
+	var profiles := _snapshot_profile_definitions(snapshot)
+	for key in profiles:
+		var record: Dictionary = profiles[key]
+		var appearance: Dictionary = record.appearance
+		if players.has_profile(appearance) or _pending_player_profiles.has(key):
+			continue
+		for part in record.definition.parts.values():
+			var asset_id := str(part[0])
+			if _palette.has(asset_id):
+				continue
+			var error := store.acquire(&"world_view",epoch,asset_id)
+			if error != OK:
+				return error
+			_palette.append(asset_id)
+		_pending_player_profiles[key] = appearance.duplicate(true)
+	return OK
+
+
+func _pump_pending_player_profiles() -> Error:
+	if _pending_player_profiles.is_empty():
+		return OK
+	var added := false
+	for key in _pending_player_profiles.keys():
+		var appearance: Dictionary = _pending_player_profiles[key]
+		var definition: Dictionary = AppearanceProfile.definition(appearance)
+		if definition.is_empty():
+			return ERR_INVALID_DATA
+		var assets := {}
+		var ready := true
+		for part in definition.parts.values():
+			var asset_id := str(part[0])
+			var asset: Dictionary = store.get_asset(&"world_view",epoch,asset_id)
+			if asset.is_empty():
+				ready = false
+				break
+			assets[asset_id] = asset
+		if not ready:
+			continue
+		var error := players.add_profile(assets,appearance)
+		if error != OK:
+			return error
+		_pending_player_profiles.erase(key)
+		added = true
+	if added and not _player_snapshot.is_empty():
+		players.apply_snapshot(_player_snapshot,Time.get_ticks_usec())
+		_players_dirty = true
+	return OK
+
+
 func _process(_delta: float) -> void:
 	# Only presentation resource work runs here. Future network/reducer must
 	# have a separate owner/scheduler; this is never a world simulation tick.
 	store.pump(2)
+	if phase == "ready" and not _pending_player_profiles.is_empty():
+		if _pump_pending_player_profiles() != OK:
+			_fail("角色外觀素材資料無法顯示")
+			return
 	if phase == "map":
 		_map = store.get_asset(&"world_view",epoch,"maps/"+str(map_id))
 		if _map.is_empty():
@@ -171,8 +263,10 @@ func _process(_delta: float) -> void:
 				if atlas.ends_with("/atlas.json"):
 					ids[atlas.trim_suffix("/atlas.json")] = true
 		if show_players:
-			for part in Players.PARTS.values():
-				ids[part[0]] = true
+			var default_profile: Dictionary = AppearanceProfile.definition({})
+			for part in default_profile.parts.values():
+				ids[str(part[0])] = true
+			_add_profile_asset_ids(ids,_snapshot_profile_definitions(_player_snapshot))
 			var population: Dictionary = _map.get("extra",{}).get("population",{})
 			for definition in population.get("definitions",[]):
 				if definition is Dictionary:
@@ -204,6 +298,10 @@ func _process(_delta: float) -> void:
 			if players.configure(assets) != OK:
 				_fail("角色素材資料無法顯示")
 				return
+			for record in _snapshot_profile_definitions(_player_snapshot).values():
+				if players.add_profile(assets,record.appearance) != OK:
+					_fail("角色外觀素材資料無法顯示")
+					return
 			var population: Dictionary = _map.get("extra",{}).get("population",{})
 			if monsters.configure(population,assets) != OK:
 				_fail("怪物素材資料無法顯示")
@@ -326,6 +424,9 @@ func set_player_snapshot(snapshot: Dictionary) -> void:
 	_player_snapshot = snapshot
 	_players_dirty = true
 	if phase == "ready":
+		if _request_snapshot_profiles(snapshot) != OK:
+			_fail("角色外觀素材載入失敗")
+			return
 		var now_usec := Time.get_ticks_usec()
 		players.apply_snapshot(snapshot,now_usec)
 		pvp_names.apply_snapshot(snapshot,now_usec)

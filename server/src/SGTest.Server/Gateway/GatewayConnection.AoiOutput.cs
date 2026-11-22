@@ -140,7 +140,7 @@ public sealed partial class GatewayConnection
                         identity.ServerUnixMilliseconds,
                         identity.PinkUntilUnixMilliseconds,
                         identity.PvpUpdatedUnixMilliseconds,
-                        identity.DisplayName));
+                        identity.DisplayName,identity.Appearance));
                     break;
                 case AoiEventKind.PvpCombatVisual when evt.PvpCombat is { } pvp:
                     frame=WireProtocol.EncodePvpCombatVisual(new(

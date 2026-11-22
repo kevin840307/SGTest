@@ -21,12 +21,23 @@ func _initialize() -> void:
 			assets[part[0]] = _asset(str(part[1]),texture,race)
 	var hair1 := Profile.definition({"race":1,"hair_index":1,"hair_color":0})
 	assets[hair1.parts[1][0]] = _asset(str(hair1.parts[1][1]),texture,1)
+	var dressed := Profile.definition({
+		"race":0,"hair_index":0,"hair_color":0,
+		"body_index":1,"leg_index":2})
+	assets[dressed.parts[9][0]] = _asset(str(dressed.parts[9][1]),texture,0)
+	assets[dressed.parts[12][0]] = _asset(str(dressed.parts[12][1]),texture,0)
 	var players := Players.new()
 	check(players.configure(assets)==OK,"B default profile rejected")
 	for race in [1,2]:
 		check(players.add_profile(assets,{"race":race,"hair_index":0,"hair_color":0})==OK,"G/A profile rejected")
 	check(players.add_profile(assets,{"race":1,"hair_index":1,"hair_color":0})==OK,"extra hair profile rejected")
-	check(players._profiles["1:0:0"].views["G-BODY_NR1"].timeline==players._profiles["1:1:0"].views["G-BODY_NR1"].timeline,"same body allocated another timeline")
+	check(players.add_profile(assets,{
+		"race":0,"hair_index":0,"hair_color":0,
+		"body_index":1,"leg_index":2})==OK,"creation clothes profile rejected")
+	check(
+		players._profiles["1:0:0:0:0"].views["G-BODY00_NR1"].timeline==
+		players._profiles["1:1:0:0:0"].views["G-BODY00_NR1"].timeline,
+		"same body allocated another timeline")
 	var own := _actor(1,0)
 	var girl := _actor(2,1)
 	var alien := _actor(3,2)
@@ -43,10 +54,14 @@ func _initialize() -> void:
 	var actors := players.actors_at(160000)
 	check(actors.size()==3 and players._actors[2].history==history,"unknown race fell back or profile change reset interpolation")
 	for i in 3:
-		var expected: String = ["players/b/","players/g/","players/a/"][i]
+		var race_key: String = ["b","g","a"][i]
 		check(actors[i].parts.size()==6 and int(actors[i].parts[0].frame)==1,"retarget/profile change restarted fixed-speed walk")
 		for part in actors[i].parts:
-			check(str(part.asset).begins_with(expected),"profile borrowed another race's parts")
+			var asset_path := str(part.asset)
+			check(
+				asset_path.begins_with("players/"+race_key+"/") or
+				asset_path.begins_with("equipment/"+race_key+"/cloth/"),
+				"profile borrowed another race's parts")
 	check(actors[1].parts.any(func(part): return part.asset=="players/g/hair/hair01"),"selected hair not rendered")
 	snapshot.player_attack_events=[{"attacker_actor_id":2,"attacker_connection_epoch":1,"attack_sequence":1,"facing":3}]
 	snapshot.player_damage_visual_events=[{"victim_actor_id":3,"victim_connection_epoch":1,"damage_sequence":1,"facing":2,"died":true}]
@@ -67,10 +82,18 @@ func _initialize() -> void:
 		{"race":0,"hair_index":0,"hair_color":1})
 	check(
 		not color_profile.is_empty() and
-		color_profile.key=="0:0:1" and
+		color_profile.key=="0:0:1:0:0" and
 		color_profile.parts==Profile.definition(
 			{"race":0,"hair_index":0,"hair_color":0}).parts,
 		"verified hair palette changed source atlases or was rejected")
+	var clothing := Profile.definition({
+		"race":0,"hair_index":0,"hair_color":0,
+		"body_index":1,"leg_index":2})
+	check(
+		str(clothing.parts[9][0])=="equipment/b/cloth/body01" and
+		str(clothing.parts[12][0])=="equipment/b/cloth/leg02" and
+		clothing.key=="0:0:0:1:2",
+		"original HK2 upper/lower armor selection did not replace body/leg atlases")
 	var yas := Profile.definition({"race":4,"hair_index":2,"hair_color":7})
 	check(
 		not yas.is_empty() and
@@ -102,7 +125,7 @@ func _initialize() -> void:
 	players.clear()
 	check(players._profiles.is_empty() and players._views.is_empty() and players.actors_at(0).is_empty(),"clear retained profile data or actors")
 	if failures.is_empty():
-		print("PLAYER_PROFILES_PASS BGA_six_parts=true RY_definitions=true hair_selection=true hair_palette=true shared_timelines=true fixed_walk=true preserves_interpolation=true per_profile_AA_ND=true no_unknown_fallback=true")
+		print("PLAYER_PROFILES_PASS BGA_six_parts=true RY_definitions=true hair_selection=true hair_palette=true creation_clothing=true shared_timelines=true fixed_walk=true preserves_interpolation=true per_profile_AA_ND=true no_unknown_fallback=true")
 	quit(0 if failures.is_empty() else 1)
 
 func _actor(id: int, race: int) -> Dictionary:

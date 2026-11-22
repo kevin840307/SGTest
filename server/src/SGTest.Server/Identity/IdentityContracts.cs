@@ -12,7 +12,8 @@ public sealed record CharacterRecord(long CharacterId, long AccountId, int Slot,
 }
 
 // HairIndex is the presentation index, not an original Hair item-definition ID.
-public readonly record struct CharacterAppearance(int Race, int HairIndex, int HairColor);
+public readonly record struct CharacterAppearance(
+    int Race, int HairIndex, int HairColor, int BodyIndex = 0, int LegIndex = 0);
 public sealed record CharacterAppearanceState(CharacterAppearance Value, string SourceReference);
 
 public enum CombatProfileTrust : byte

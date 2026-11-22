@@ -6,7 +6,7 @@ internal static class CharacterAppearanceChecks
 {
     private static readonly CharacterSpawn Spawn = new(15,100,100);
     private static readonly CharacterAppearance Boy = new(0,0,0);
-    private static readonly CharacterAppearance Girl = new(1,3,7);
+    private static readonly CharacterAppearance Girl = new(1,3,7,2,1);
 
     public static void Verify()
     {
@@ -30,7 +30,9 @@ internal static class CharacterAppearanceChecks
             string valid=JsonSerializer.Serialize(new {
                 kind="verified_character_appearance_rules",version=1,rules_verified=true,
                 source_reference="synthetic/manifest/v1",
-                choices=new[]{new{race=0,hair_index=0,hair_color=0},new{race=1,hair_index=3,hair_color=7}}
+                choices=new[]{
+                    new{race=0,hair_index=0,hair_color=0,body_index=0,leg_index=0},
+                    new{race=1,hair_index=3,hair_color=7,body_index=2,leg_index=1}}
             });
             File.WriteAllText(path,valid);
             var loaded=CharacterAppearanceRules.LoadVerified(path);
@@ -39,6 +41,7 @@ internal static class CharacterAppearanceChecks
             foreach(string invalid in new[]{valid.Replace("\"rules_verified\":true","\"rules_verified\":false"),
                 valid.Replace("\"version\":1","\"version\":2"),valid.Replace("\"race\":1","\"race\":5"),
                 valid.Replace("\"hair_color\":7","\"hair_color\":8"),valid.Replace("\"hair_index\":3","\"hair_index\":\"3\""),
+                valid.Replace("\"body_index\":2","\"body_index\":256"),valid.Replace("\"leg_index\":1","\"leg_index\":-1"),
                 valid.Replace("\"race\":1","\"race\":1,\"race\":0"),valid.Replace("\"hair_index\":3,",""),
                 valid.Replace("\"rules_verified\":true,",""),"{}","[]","broken json",new string('x',1024*1024+1)})
             {
@@ -64,7 +67,8 @@ internal static class CharacterAppearanceChecks
         Checks.Require(rules.Choices.SequenceEqual(new[]{Boy,Girl}),"caller mutated appearance rules");
         Reject<NotSupportedException>(() => ((IList<CharacterAppearance>)rules.Choices)[0]=new(4,0,0));
         foreach (var invalid in new[]{new CharacterAppearance(-1,0,0),new(5,0,0),new(0,-1,0),
-                     new(0,65536,0),new(0,0,-1),new(0,0,8)})
+                     new(0,65536,0),new(0,0,-1),new(0,0,8),new(0,0,0,-1,0),
+                     new(0,0,0,256,0),new(0,0,0,0,-1),new(0,0,0,0,256)})
             Reject<ArgumentException>(() => new CharacterAppearanceRules("synthetic",[invalid]));
         Reject<ArgumentException>(() => new CharacterAppearanceRules("",[Boy]));
         Reject<ArgumentException>(() => new CharacterAppearanceRules("bad\nsource",[Boy]));
@@ -209,11 +213,11 @@ BEGIN SELECT RAISE(ABORT,'synthetic wallet failure'); END;");
                 Checks.Require((await migrated.CreateCharacterAsync(account,1,"MigratedNew",Spawn,Girl,Ruleset())).Status==
                     CharacterCreateStatus.Created,"migrated database cannot persist appearance");
             }
-            string backup=Directory.GetFiles(root,"identity.db.pre-v23-to-v25.*.bak").Single();
+            string backup=Directory.GetFiles(root,"identity.db.pre-v23-to-v26.*.bak").Single();
             Checks.Require(Scalar(backup,"SELECT version FROM schema_version;")==23 &&
                 Scalar(backup,"SELECT COUNT(*) FROM sqlite_master WHERE name='character_appearances';")==0 &&
                 Scalar(backup,"SELECT COUNT(*) FROM characters;")==1,"backup did not preserve pre-upgrade schema/data");
-            Checks.Require(Scalar(db,"SELECT version FROM schema_version;")==25,"appearance migration version wrong");
+            Checks.Require(Scalar(db,"SELECT version FROM schema_version;")==26,"appearance migration version wrong");
         }
         finally { Directory.Delete(root,true); }
     }

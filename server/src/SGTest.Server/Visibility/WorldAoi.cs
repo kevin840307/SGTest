@@ -49,7 +49,8 @@ public readonly record struct PlayerRespawnVisual(
 public readonly record struct PlayerIdentityPresentation(
     long ActorId,long ConnectionEpoch,long EntityMapEpoch,string DisplayName,
     PvpMode Mode,bool RedMan,long ServerUnixMilliseconds,
-    long PinkUntilUnixMilliseconds,long PvpUpdatedUnixMilliseconds);
+    long PinkUntilUnixMilliseconds,long PvpUpdatedUnixMilliseconds,
+    CharacterAppearance? Appearance = null);
 public readonly record struct PlayerPvpCombatVisual(
     long AttackerActorId,long AttackerConnectionEpoch,uint AttackSequence,
     long VictimActorId,long VictimConnectionEpoch,uint DamageSequence,

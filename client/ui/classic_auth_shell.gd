@@ -107,7 +107,7 @@ func _build_create() -> void:
 	_name.placeholder_text = "角色名稱"
 	_name.max_length = 24
 	_input_at(create_page,_name,227,253,134,26)
-	var fields := ["race","hair_index","hair_color"]
+	var fields := ["race","hair_index","hair_color","body_index","leg_index"]
 	for i in fields.size():
 		var field: String = str(fields[i])
 		var y := 284.0 + float(i)*25.0

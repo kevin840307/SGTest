@@ -21,8 +21,9 @@ internal static class CharacterAppearanceLoginFixture
             using var store=new SqliteIdentityStore(Path.Combine(root,"identity.db"));
             await store.InitializeAsync();
             long account=(await store.CreateAccountAsync(Program.Username,Program.Password)).AccountId;
-            var chosen=new CharacterAppearance(1,3,7);
-            var rules=new CharacterAppearanceRules("synthetic/godot-aes-appearance/v1",[new(0,0,0),chosen]);
+            var chosen=new CharacterAppearance(1,3,7,2,1);
+            var rules=new CharacterAppearanceRules("synthetic/godot-aes-appearance/v2",[
+                new(0,0,0,0,0),chosen]);
             var authorization=new IdentitySessionAuthorization(store,world,
                 characterCreation:new(new CharacterSpawn(15,8,8),rules));
             var router=new WorldResultRouter();

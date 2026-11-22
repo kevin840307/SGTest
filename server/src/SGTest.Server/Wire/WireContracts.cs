@@ -539,7 +539,8 @@ public readonly record struct PvpDamageWire(
 public readonly record struct PlayerIdentityWire(
     long ReceiverMapEpoch,long ActorId,long ConnectionEpoch,long EntityMapEpoch,
     PvpMode Mode,bool RedMan,long ServerUnixMilliseconds,
-    long PinkUntilUnixMilliseconds,long PvpUpdatedUnixMilliseconds,string Name);
+    long PinkUntilUnixMilliseconds,long PvpUpdatedUnixMilliseconds,string Name,
+    CharacterAppearance? Appearance = null);
 public readonly record struct PvpCombatVisualWire(
     long ReceiverMapEpoch,long ServerTick,
     long AttackerActorId,long AttackerConnectionEpoch,uint AttackSequence,

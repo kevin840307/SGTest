@@ -13,7 +13,7 @@ namespace SGTest.Server.Identity;
 /// </summary>
 public sealed partial class SqliteIdentityStore : IDisposable
 {
-    public const int SchemaVersion = 25;
+    public const int SchemaVersion = 26;
     private readonly string _databasePath;
     private readonly string _connectionString;
     private readonly IdentityStoreOptions _options;
@@ -240,12 +240,15 @@ VALUES($account,$slot,$name,$key,$map,$x,$y,$created,$updated); SELECT last_inse
             {
                 using var look = connection.CreateCommand();
                 look.Transaction = tx;
-                look.CommandText = @"INSERT INTO character_appearances(character_id,race,hair_index,hair_color,source_ref)
-VALUES($id,$race,$hair,$color,$source);";
+                look.CommandText = @"INSERT INTO character_appearances(
+character_id,race,hair_index,hair_color,body_index,leg_index,source_ref)
+VALUES($id,$race,$hair,$color,$body,$leg,$source);";
                 look.Parameters.AddWithValue("$id", characterId);
                 look.Parameters.AddWithValue("$race", appearance.Value.Race);
                 look.Parameters.AddWithValue("$hair", appearance.Value.HairIndex);
                 look.Parameters.AddWithValue("$color", appearance.Value.HairColor);
+                look.Parameters.AddWithValue("$body", appearance.Value.BodyIndex);
+                look.Parameters.AddWithValue("$leg", appearance.Value.LegIndex);
                 look.Parameters.AddWithValue("$source", appearance.SourceReference);
                 if (look.ExecuteNonQuery() != 1)
                     throw new InvalidOperationException("Character appearance creation failed");
@@ -294,7 +297,7 @@ FROM accounts WHERE username_key=$key LIMIT 1;";
         using var connection = Open();
         using var command = connection.CreateCommand();
         command.CommandText = @"SELECT c.character_id,c.account_id,c.slot,c.name,c.map_id,c.x,c.y,c.created_unix_ms,
-a.race,a.hair_index,a.hair_color,a.source_ref,
+a.race,a.hair_index,a.hair_color,a.body_index,a.leg_index,a.source_ref,
 s.strength,s.dexterity,s.constitution,s.wisdom,s.source_ref
 FROM characters c LEFT JOIN character_appearances a ON a.character_id=c.character_id
 LEFT JOIN character_creation_settings s ON s.character_id=c.character_id
@@ -306,9 +309,11 @@ WHERE c.account_id=$account ORDER BY c.slot;";
             rows.Add(new CharacterRecord(reader.GetInt64(0), reader.GetInt64(1), reader.GetInt32(2),
                 reader.GetString(3), reader.GetInt32(4), reader.GetDouble(5), reader.GetDouble(6),
                 reader.GetInt64(7), reader.IsDBNull(8) ? null : new CharacterAppearanceState(
-                    new(reader.GetInt32(8),reader.GetInt32(9),reader.GetInt32(10)),reader.GetString(11)),
-                reader.IsDBNull(12) ? null : new CharacterCreationState(
-                    new(reader.GetInt32(12),reader.GetInt32(13),reader.GetInt32(14),reader.GetInt32(15)),reader.GetString(16))));
+                    new(reader.GetInt32(8),reader.GetInt32(9),reader.GetInt32(10),
+                        reader.GetInt32(11),reader.GetInt32(12)),reader.GetString(13)),
+                reader.IsDBNull(14) ? null : new CharacterCreationState(
+                    new(reader.GetInt32(14),reader.GetInt32(15),reader.GetInt32(16),reader.GetInt32(17)),
+                    reader.GetString(18))));
         return rows;
     }
 
@@ -349,7 +354,7 @@ WHERE account_id=$id AND password_hash=$old;";
         if (table is not ("character_combat_profiles" or
                 "item_instances" or "storage_items" or "equipped_items" or
                 "trade_commit_items" or "player_shop_listings" or
-                "character_pvp_modes") ||
+                "character_pvp_modes" or "character_appearances") ||
             string.IsNullOrWhiteSpace(column))
             throw new ArgumentOutOfRangeException(nameof(table));
         using var command = connection.CreateCommand();

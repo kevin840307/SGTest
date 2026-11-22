@@ -124,12 +124,16 @@ const AUTH_RESULT_FRAME_BYTES := 9
 const ACCOUNT_REGISTER_RESULT_FRAME_BYTES := 9
 const CHARACTER_CHOOSE_FRAME_BYTES := 16
 const CHARACTER_CHOOSE_RESULT_FRAME_BYTES := 45
-const MAX_CHARACTER_CREATE_FRAME_BYTES := 111
-const MAX_CHARACTER_CREATE_RESULT_FRAME_BYTES := 120
+const LEGACY_CHARACTER_APPEARANCE_BYTES := 4
+const CHARACTER_APPEARANCE_BYTES := 6
+const MAX_CHARACTER_CREATE_FRAME_BYTES := 136
+const MAX_CHARACTER_CREATE_RESULT_FRAME_BYTES := 122
 const MAX_AUTH_REQUEST_FRAME_BYTES := 300
 const MAX_ACCOUNT_REGISTER_REQUEST_FRAME_BYTES := 300
 const MAX_CREATION_APPEARANCE_CHOICES := 4096
-const MAX_CHARACTER_LIST_FRAME_BYTES := 8+1+32*(11+96)+3+32*5+MAX_CREATION_APPEARANCE_CHOICES*4
+const MAX_CHARACTER_LIST_FRAME_BYTES := (
+	8+1+32*(11+96)+3+32*(1+CHARACTER_APPEARANCE_BYTES)+
+	MAX_CREATION_APPEARANCE_CHOICES*CHARACTER_APPEARANCE_BYTES)
 const WORLD_READY_FRAME_BYTES := 45
 const ENTITY_STATE_FRAME_BYTES := 74
 const ENTITY_DESPAWN_FRAME_BYTES := 40
@@ -214,7 +218,7 @@ const PVP_ATTACK_RESULT_FRAME_BYTES := 42
 const PVP_DAMAGE_FRAME_BYTES := 61
 const PLAYER_IDENTITY_HEADER_BYTES := 68
 const PLAYER_IDENTITY_MAX_NAME_BYTES := 96
-const PLAYER_IDENTITY_MAX_FRAME_BYTES := PLAYER_IDENTITY_HEADER_BYTES + PLAYER_IDENTITY_MAX_NAME_BYTES
+const PLAYER_IDENTITY_MAX_FRAME_BYTES := PLAYER_IDENTITY_HEADER_BYTES + PLAYER_IDENTITY_MAX_NAME_BYTES + 1 + CHARACTER_APPEARANCE_BYTES
 const PVP_COMBAT_VISUAL_FRAME_BYTES := 71
 const PVP_SKILL_FRAME_BYTES := 32
 const PVP_SKILL_RESULT_FRAME_BYTES := 46
@@ -636,18 +640,43 @@ static func decode_account_register_result(frame:PackedByteArray)->Dictionary:
 
 
 static func valid_character_appearance(value: Dictionary) -> bool:
-	if value.size() != 3 or not value.has_all(["race","hair_index","hair_color"]):
+	if value.size() not in [3,5] or not value.has_all(["race","hair_index","hair_color"]):
+		return false
+	if value.size() == 5 and not value.has_all(["body_index","leg_index"]):
 		return false
 	for key in value:
 		if not value[key] is int:
 			return false
-	return value.race >= 0 and value.race <= 4 and value.hair_index >= 0 and value.hair_index <= 65535 and value.hair_color >= 0 and value.hair_color <= 7
+	var body := int(value.get("body_index",0))
+	var leg := int(value.get("leg_index",0))
+	return (
+		value.race >= 0 and value.race <= 4 and
+		value.hair_index >= 0 and value.hair_index <= 65535 and
+		value.hair_color >= 0 and value.hair_color <= 7 and
+		body >= 0 and body <= 255 and leg >= 0 and leg <= 255)
 
-static func _read_character_appearance(reader: StreamPeerBuffer) -> Dictionary:
-	if reader.get_available_bytes() < 4:
+static func _read_character_appearance(
+		reader: StreamPeerBuffer, appearance_bytes: int) -> Dictionary:
+	if appearance_bytes not in [LEGACY_CHARACTER_APPEARANCE_BYTES,CHARACTER_APPEARANCE_BYTES] or 			reader.get_available_bytes() < appearance_bytes:
 		return {}
-	var value := {"race":reader.get_u8(),"hair_index":reader.get_u16(),"hair_color":reader.get_u8()}
+	var value := {
+		"race":reader.get_u8(),
+		"hair_index":reader.get_u16(),
+		"hair_color":reader.get_u8()
+	}
+	if appearance_bytes == CHARACTER_APPEARANCE_BYTES:
+		value.body_index = reader.get_u8()
+		value.leg_index = reader.get_u8()
 	return value if valid_character_appearance(value) else {}
+
+static func _write_character_appearance(
+		writer: StreamPeerBuffer, value: Dictionary, appearance_bytes: int) -> void:
+	writer.put_u8(int(value.race))
+	writer.put_u16(int(value.hair_index))
+	writer.put_u8(int(value.hair_color))
+	if appearance_bytes == CHARACTER_APPEARANCE_BYTES:
+		writer.put_u8(int(value.get("body_index",0)))
+		writer.put_u8(int(value.get("leg_index",0)))
 
 static func decode_character_list(frame: PackedByteArray) -> Dictionary:
 	if not _valid_variable_header(frame, OPCODE_CHARACTER_LIST, 9, MAX_CHARACTER_LIST_FRAME_BYTES):
@@ -681,24 +710,40 @@ static func decode_character_list(frame: PackedByteArray) -> Dictionary:
 		characters.append({"character_id": character_id, "slot": slot, "name": name})
 	if reader.get_available_bytes() == 0:
 		return {"characters": characters}
-	if reader.get_available_bytes() < 3+count*5 or reader.get_u8() != 1:
+	if reader.get_available_bytes() < 3:
+		return {}
+	var appearance_version := reader.get_u8()
+	var appearance_bytes := (
+		LEGACY_CHARACTER_APPEARANCE_BYTES if appearance_version == 1
+		else CHARACTER_APPEARANCE_BYTES if appearance_version == 2
+		else 0)
+	if appearance_bytes == 0 or 			reader.get_available_bytes() < count*(1+appearance_bytes)+2:
 		return {}
 	for i in count:
 		var known := reader.get_u8()
-		var appearance := _read_character_appearance(reader)
-		if known > 1 or appearance.is_empty() or (known == 0 and appearance != {"race":0,"hair_index":0,"hair_color":0}):
+		var appearance := _read_character_appearance(reader,appearance_bytes)
+		var zero_appearance := {
+			"race":0,"hair_index":0,"hair_color":0
+		}
+		if appearance_bytes == CHARACTER_APPEARANCE_BYTES:
+			zero_appearance.body_index = 0
+			zero_appearance.leg_index = 0
+		if known > 1 or appearance.is_empty() or 				(known == 0 and appearance != zero_appearance):
 			return {}
 		characters[i].appearance = appearance if known == 1 else {}
 	var choice_count := reader.get_u16()
-	if choice_count > MAX_CREATION_APPEARANCE_CHOICES or reader.get_available_bytes() != choice_count*4:
+	if choice_count > MAX_CREATION_APPEARANCE_CHOICES or 			reader.get_available_bytes() != choice_count*appearance_bytes:
 		return {}
 	var choices: Array[Dictionary] = []
 	var seen_choices := {}
 	for _i in choice_count:
-		var appearance := _read_character_appearance(reader)
+		var appearance := _read_character_appearance(reader,appearance_bytes)
 		if appearance.is_empty():
 			return {}
-		var key := int(appearance.race)*65536*8+int(appearance.hair_index)*8+int(appearance.hair_color)
+		var key := "%d:%d:%d:%d:%d" % [
+			int(appearance.race),int(appearance.hair_index),
+			int(appearance.hair_color),int(appearance.get("body_index",0)),
+			int(appearance.get("leg_index",0))]
 		if seen_choices.has(key):
 			return {}
 		seen_choices[key] = true
@@ -738,28 +783,29 @@ static func encode_character_create(
 	if not creation.is_empty() and not valid_character_creation_settings(creation):
 		return PackedByteArray()
 	var password_bytes := PackedByteArray()
+	var appearance_bytes := (
+		CHARACTER_APPEARANCE_BYTES
+		if appearance.has_all(["body_index","leg_index"])
+		else LEGACY_CHARACTER_APPEARANCE_BYTES)
 	var suffix_bytes := 0
 	if not creation.is_empty():
 		password_bytes = str(creation.password).to_utf8_buffer()
-		suffix_bytes = 11 + password_bytes.size()
+		suffix_bytes = 7 + appearance_bytes + password_bytes.size()
 	elif not appearance.is_empty():
-		suffix_bytes = 4
+		suffix_bytes = appearance_bytes
 	var frame_bytes := HEADER_BYTES + 3 + name_bytes.size() + suffix_bytes
 	var writer := _writer(frame_bytes, OPCODE_CHARACTER_CREATE)
 	writer.put_u8(slot)
 	writer.put_u16(name_bytes.size())
 	writer.put_data(name_bytes)
 	if not creation.is_empty():
-		writer.put_u8(2)
+		writer.put_u8(3 if appearance_bytes == CHARACTER_APPEARANCE_BYTES else 2)
 		writer.put_u8(0 if appearance.is_empty() else 1)
 		if appearance.is_empty():
-			writer.put_u8(0)
-			writer.put_u16(0)
-			writer.put_u8(0)
+			for _i in appearance_bytes:
+				writer.put_u8(0)
 		else:
-			writer.put_u8(int(appearance.race))
-			writer.put_u16(int(appearance.hair_index))
-			writer.put_u8(int(appearance.hair_color))
+			_write_character_appearance(writer,appearance,appearance_bytes)
 		writer.put_u8(int(creation.strength))
 		writer.put_u8(int(creation.dexterity))
 		writer.put_u8(int(creation.constitution))
@@ -768,9 +814,7 @@ static func encode_character_create(
 		writer.put_data(password_bytes)
 		password_bytes.fill(0)
 	elif not appearance.is_empty():
-		writer.put_u8(int(appearance.race))
-		writer.put_u16(int(appearance.hair_index))
-		writer.put_u8(int(appearance.hair_color))
+		_write_character_appearance(writer,appearance,appearance_bytes)
 	return writer.data_array
 
 static func decode_character_create_result(frame: PackedByteArray) -> Dictionary:
@@ -783,7 +827,11 @@ static func decode_character_create_result(frame: PackedByteArray) -> Dictionary
 	var character_id := reader.get_64()
 	var slot := reader.get_u8()
 	var name_bytes_count := reader.get_u16()
-	if status > 8 or slot > 31 or name_bytes_count > 96 or (reader.get_available_bytes() != name_bytes_count and reader.get_available_bytes() != name_bytes_count+4):
+	var remaining_before_name := reader.get_available_bytes()
+	if status > 8 or slot > 31 or name_bytes_count > 96 or (
+			remaining_before_name != name_bytes_count and
+			remaining_before_name != name_bytes_count+LEGACY_CHARACTER_APPEARANCE_BYTES and
+			remaining_before_name != name_bytes_count+CHARACTER_APPEARANCE_BYTES):
 		return {}
 	var character_name := ""
 	if name_bytes_count > 0:
@@ -803,7 +851,11 @@ static func decode_character_create_result(frame: PackedByteArray) -> Dictionary
 	if reader.get_available_bytes() > 0:
 		if status != 0:
 			return {}
-		appearance = _read_character_appearance(reader)
+		var appearance_bytes := reader.get_available_bytes()
+		if appearance_bytes not in [
+				LEGACY_CHARACTER_APPEARANCE_BYTES,CHARACTER_APPEARANCE_BYTES]:
+			return {}
+		appearance = _read_character_appearance(reader,appearance_bytes)
 		if appearance.is_empty():
 			return {}
 	var value := {
@@ -2446,7 +2498,8 @@ static func decode_player_identity(frame: PackedByteArray) -> Dictionary:
 	var pink_until_unix_ms:=reader.get_64()
 	var pvp_updated_unix_ms:=reader.get_64()
 	var name_bytes_count:=reader.get_u16()
-	if receiver_epoch<=0 or actor<=0 or connection<=0 or entity_map_epoch<=0 or mode>1 or red>1 or server_unix_ms<=0 or pink_until_unix_ms<0 or pvp_updated_unix_ms<0 or name_bytes_count<1 or name_bytes_count>PLAYER_IDENTITY_MAX_NAME_BYTES or reader.get_available_bytes()!=name_bytes_count:
+	var remaining := reader.get_available_bytes()-name_bytes_count
+	if receiver_epoch<=0 or actor<=0 or connection<=0 or entity_map_epoch<=0 or mode>1 or red>1 or server_unix_ms<=0 or pink_until_unix_ms<0 or pvp_updated_unix_ms<0 or name_bytes_count<1 or name_bytes_count>PLAYER_IDENTITY_MAX_NAME_BYTES or remaining not in [0,1+CHARACTER_APPEARANCE_BYTES]:
 		return {}
 	var result:=reader.get_data(name_bytes_count)
 	if result[0]!=OK:
@@ -2455,6 +2508,13 @@ static func decode_player_identity(frame: PackedByteArray) -> Dictionary:
 	var display_name:=name_bytes.get_string_from_utf8()
 	if display_name.to_utf8_buffer()!=name_bytes or display_name.strip_edges().is_empty():
 		return {}
+	var appearance := {}
+	if remaining > 0:
+		if reader.get_u8() != 1:
+			return {}
+		appearance = _read_character_appearance(reader,CHARACTER_APPEARANCE_BYTES)
+		if appearance.is_empty() or reader.get_available_bytes()!=0:
+			return {}
 	return {
 		"receiver_map_epoch":receiver_epoch,
 		"actor_id":actor,
@@ -2466,6 +2526,7 @@ static func decode_player_identity(frame: PackedByteArray) -> Dictionary:
 		"pink_until_unix_ms":pink_until_unix_ms,
 		"pvp_updated_unix_ms":pvp_updated_unix_ms,
 		"display_name":display_name,
+		"appearance":appearance,
 	}
 
 

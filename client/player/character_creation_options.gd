@@ -2,7 +2,7 @@ extends RefCounted
 ## One UI selection shared by every skin. Options come from the Server snapshot;
 ## this model neither grants appearances nor modifies authoritative WorldState.
 signal changed
-const FIELDS := ["race","hair_index","hair_color"]
+const FIELDS := ["race","hair_index","hair_color","body_index","leg_index"]
 var editable := false
 var _choices: Array = []
 var _selected: Dictionary = {}
@@ -31,7 +31,9 @@ func values(field: String) -> Array:
 			continue
 		if field == "hair_color" and choice.hair_index != _selected.get("hair_index",-1):
 			continue
-		found[int(choice[field])] = true
+		# Clothing selectors are source-owned independent creation choices.
+		# Server rules still decide the available values for each race.
+		found[int(choice.get(field,0))] = true
 	var result := found.keys()
 	result.sort()
 	return result
