@@ -328,13 +328,21 @@ func actors_at(now_usec: int) -> Array:
 			continue
 		var parts: Array = []
 		for slot in body.view.draw_slots:
-			if not profile.parts.has(int(slot)):
-				continue
-			var part: Array = profile.parts[int(slot)]
-			var resolved: Dictionary = profile.views[str(part[1])+"_"+requested]
-			parts.append({"asset":part[0],"clip":resolved.view.clip,
-				"frame":resolved.timeline.frame_at_update(elapsed),
-				"flip_h":resolved.view.flip_h,"part_slot":int(slot)})
+			var logical_slot := int(slot)
+			if profile.parts.has(logical_slot):
+				var part: Array = profile.parts[logical_slot]
+				var resolved: Dictionary = profile.views[str(part[1])+"_"+requested]
+				parts.append({"asset":part[0],"clip":resolved.view.clip,
+					"frame":resolved.timeline.frame_at_update(elapsed),
+					"flip_h":resolved.view.flip_h,"part_slot":logical_slot})
+			# Recovered paper doll draws Standard first, then the equipment
+			# overlay for the same logical body/leg slot.
+			if profile.overlays.has(logical_slot):
+				var overlay: Array = profile.overlays[logical_slot]
+				var overlay_view: Dictionary = profile.views[str(overlay[1])+"_"+requested]
+				parts.append({"asset":overlay[0],"clip":overlay_view.view.clip,
+					"frame":overlay_view.timeline.frame_at_update(elapsed),
+					"flip_h":overlay_view.view.flip_h,"part_slot":logical_slot})
 		var sampled: Vector2 = actor.history.sample(now_usec)
 		if not sampled.is_finite():
 			sampled = Vector2(float(value.x),float(value.y))

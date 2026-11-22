@@ -178,9 +178,17 @@ func _snapshot_profile_definitions(snapshot: Dictionary) -> Dictionary:
 	return profiles
 
 
+func _profile_definition_parts(definition: Dictionary) -> Array:
+	if definition.is_empty():
+		return []
+	var result: Array = definition.parts.values()
+	result.append_array(definition.get("overlays",{}).values())
+	return result
+
+
 func _add_profile_asset_ids(ids: Dictionary, profiles: Dictionary) -> void:
 	for record in profiles.values():
-		for part in record.definition.parts.values():
+		for part in _profile_definition_parts(record.definition):
 			ids[str(part[0])] = true
 
 
@@ -193,7 +201,7 @@ func _request_snapshot_profiles(snapshot: Dictionary) -> Error:
 		var appearance: Dictionary = record.appearance
 		if players.has_profile(appearance) or _pending_player_profiles.has(key):
 			continue
-		for part in record.definition.parts.values():
+		for part in _profile_definition_parts(record.definition):
 			var asset_id := str(part[0])
 			if _palette.has(asset_id):
 				continue
@@ -216,7 +224,7 @@ func _pump_pending_player_profiles() -> Error:
 			return ERR_INVALID_DATA
 		var assets := {}
 		var ready := true
-		for part in definition.parts.values():
+		for part in _profile_definition_parts(definition):
 			var asset_id := str(part[0])
 			var asset: Dictionary = store.get_asset(&"world_view",epoch,asset_id)
 			if asset.is_empty():
@@ -264,7 +272,7 @@ func _process(_delta: float) -> void:
 					ids[atlas.trim_suffix("/atlas.json")] = true
 		if show_players:
 			var default_profile: Dictionary = AppearanceProfile.definition({})
-			for part in default_profile.parts.values():
+			for part in _profile_definition_parts(default_profile):
 				ids[str(part[0])] = true
 			_add_profile_asset_ids(ids,_snapshot_profile_definitions(_player_snapshot))
 			var population: Dictionary = _map.get("extra",{}).get("population",{})

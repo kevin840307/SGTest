@@ -36,10 +36,9 @@ PLAYER_PART_ASSETS = tuple(
 ) + tuple(
     f'players/y/hair/hair{hair:02d}' for hair in range(3)
 ) + tuple(
-    f'equipment/{race}/cloth/{part}{index:02d}'
+    f'equipment/{race}/cloth/{part}00'
     for race in ('b','g','a','r')
     for part in ('body','leg')
-    for index in range(3)
 ) + (
     'players/b/base/death','players/g/base/death','players/a/base/death',
     'players/r/base/death',
@@ -59,10 +58,9 @@ PLAYER_ACT_CONTROLLERS = {'b':'boy','g':'girl','a':'alien','r':'robot','y':'boy'
 # so use the original B/boy.act as timing authority instead of inventing one.
 PLAYER_ACT_CONTROLLER_RACES = {'y':'b'}
 CREATION_CLOTH_GROUPS = {
-    f'player/{race}/cloth/{race}-{part}{index:02d}'
+    f'player/{race}/cloth/{race}-{part}00'
     for race in ('b','g','a','r')
     for part in ('body','leg')
-    for index in range(3)
 }
 ROBOT_BASE_GROUPS = {
     'player/r/cloth/r-l-arm00','player/r/cloth/r-r-arm00',

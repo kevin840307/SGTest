@@ -80,10 +80,12 @@ def main() -> None:
             hair_count=max(hair_count,1)
             color_count=COLORS
         counts[race]=hair_count
-        # Original HK2 has verified armor assets/creation mappings for B/G/A/R.
-        # Yas is derivative-only here, so keep its source-safe base body/leg.
-        body_values=range(len(upper)) if race in {0,1,2,3} else range(1)
-        leg_values=range(len(lower)) if race in {0,1,2,3} else range(1)
+        # CreateCharPara exposes three legacy values, but their item->spr_id
+        # mapping is not yet source-verified. Recovered's paper doll proves only the
+        # zero equipment overlay can be rendered safely with the current conversion.
+        # Keep the wire fields now, but expose only the verified 0/0 appearance.
+        body_values=range(1)
+        leg_values=range(1)
         for hair in range(hair_count):
             for color in range(color_count):
                 for body in body_values:
@@ -97,9 +99,9 @@ def main() -> None:
         "version":1,
         "rules_verified":True,
         "source_reference":(
-            "Recovered2 character_select.gd hair/race + original HK2 "
-            "interface/CreateCharPara.dat Upper_armor=570,571,572 "
-            "Lower_armor=620,621,622"),
+            "Recovered2 character_select.gd hair/race + Recovered paper_doll_engine "
+            "Standard Body/Leg + verified zero EquipBody/EquipLeg overlay; original HK2 "
+            "CreateCharPara 570/571/572 and 620/621/622 retained as unresolved mapping"),
         "choices":choices,
     }
     args.out.parent.mkdir(parents=True,exist_ok=True)

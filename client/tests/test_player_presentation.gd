@@ -1,5 +1,6 @@
 extends SceneTree
 const Players = preload("res://player/player_presentation.gd")
+const AppearanceProfile = preload("res://player/character_appearance_profile.gd")
 const WorldView = preload("res://world/world_view.gd")
 const DrawList = preload("res://world/world_draw_list.gd")
 var failures: Array = []
@@ -16,8 +17,12 @@ func run() -> void:
 	image.fill(Color.WHITE)
 	var texture := ImageTexture.create_from_image(image)
 	var assets := {}
-	var slots := [12.0,7.0,9.0,5.0,0.0,1.0] # Real JSON numbers use float Variants.
-	for part in Players.PARTS.values():
+	var source_slots := [12.0,7.0,9.0,5.0,0.0,1.0] # Real JSON numbers use float Variants.
+	var rendered_slots := [12,12,7,9,9,5,0,1]
+	var definition: Dictionary = AppearanceProfile.definition({})
+	var profile_parts: Array = definition.parts.values()
+	profile_parts.append_array(definition.overlays.values())
+	for part in profile_parts:
 		var views := {}
 		var clips := {"NS":[0,1],"NR":[0,1],"AA":[0,1],"NH":[0,1],"ND":[0,1]}
 		for action in ["NS","NR","AA","NH","ND"]:
@@ -26,7 +31,7 @@ func run() -> void:
 				views[str(part[1])+"_"+action+str(facing)] = {
 					"clip":str(action),"flip_h":facing>=5,
 					"timeline_ticks":[[0,4],[1,4]] if one_shot else [[0,8],[1,8]],
-					"loop":not one_shot,"draw_slots":slots}
+					"loop":not one_shot,"draw_slots":source_slots}
 		assets[part[0]] = {"pages":[texture],"manifest":{"logical_views":views,"clips":clips,"frames":[
 			{"page":0,"rect":[0,0,3,2],"trim":[2,0],"origin":[1,1]},
 			{"page":0,"rect":[0,2,3,2],"trim":[2,0],"origin":[1,1]}]}}
@@ -47,11 +52,20 @@ func run() -> void:
 	remote.movement_action_sequence = 2
 	players.apply_snapshot(snapshot,100000)
 	var actors := players.actors_at(160000)
-	check(actors.size()==2 and actors[0].parts.size()==6 and int(actors[0].parts[0].frame)==1 and int(actors[1].parts[0].frame)==1,"continuous movement sequence repath reset walk animation")
+	check(actors.size()==2 and actors[0].parts.size()==8 and int(actors[0].parts[0].frame)==1 and int(actors[1].parts[0].frame)==1,"continuous movement sequence repath reset walk animation")
+	for actor in actors:
+		var base_leg_at: int = actor.parts.find_custom(
+			func(part): return str(part.asset)=="players/b/base/leg")
+		var shorts_at: int = actor.parts.find_custom(
+			func(part): return str(part.asset)=="equipment/b/cloth/leg00")
+		check(base_leg_at>=0 and shorts_at>base_leg_at,
+			"starter shorts replaced Standard Leg")
 	var commands := draw.build(Rect2(-100,-100,400,400),actors)
-	check(draw.error==OK and commands.size()==12,"multipart ordered draw")
-	for i in 12:
-		check(commands[i].actor_id==("1" if i<6 else "2") and int(commands[i].slot)==slots[i%6],"actor parts interleaved / wrong source slot")
+	check(draw.error==OK and commands.size()==16,"multipart ordered draw")
+	for i in 16:
+		var actor_offset := 0 if i<8 else 8
+		check(commands[i].actor_id==("1" if i<8 else "2") and 				int(commands[i].slot)==rendered_slots[i-actor_offset],
+			"actor parts interleaved / wrong source slot")
 	check(commands[0].destination==Rect2(9,9,-3,2),"mirrored trimmed origin wrong")
 	# A reliable remote attack event uses Server facing=3 even while the last
 	# movement snapshot still faces 6. Repeated snapshot polling cannot restart

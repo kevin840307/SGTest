@@ -273,11 +273,9 @@ func _run() -> void:
 	panel._latest.character_create_result_revision = 1
 	panel._latest.character_creation_appearances = [
 		{"race":0,"hair_index":0,"hair_color":0,"body_index":0,"leg_index":0},
-		{"race":0,"hair_index":0,"hair_color":0,"body_index":1,"leg_index":0},
-		{"race":0,"hair_index":0,"hair_color":0,"body_index":1,"leg_index":2},
 		{"race":0,"hair_index":1,"hair_color":2,"body_index":0,"leg_index":0},
 		{"race":0,"hair_index":1,"hair_color":5,"body_index":0,"leg_index":0},
-		{"race":1,"hair_index":3,"hair_color":7,"body_index":2,"leg_index":1}]
+		{"race":1,"hair_index":3,"hair_color":7,"body_index":0,"leg_index":0}]
 	panel._set_controls()
 	if not pack_path.is_empty() and not await _wait_previews(shell,1,true):
 		return
@@ -309,20 +307,19 @@ func _run() -> void:
 			_error("appearance controls drifted from source/create rows: "+field)
 			return
 	var creation_preview: Control = shell._character_previews[3]
-	var commands_before_clothes: int = creation_preview._canvas._commands.size()
-	shell._appearance_buttons.body_index[1].pressed.emit()
-	if not pack_path.is_empty() and commands_before_clothes > 0 and 			creation_preview._canvas._commands.is_empty():
-		_error("upper-armor switch blanked previous preview")
-		return
-	shell._appearance_buttons.leg_index[1].pressed.emit()
-	if panel.creation_options.selection().body_index != 1 or 			panel.creation_options.selection().leg_index != 2:
-		_error("upper/lower armor arrows did not select independent source choices")
+	for field in ["body_index","leg_index"]:
+		if not shell._appearance_buttons[field][0].disabled or 				not shell._appearance_buttons[field][1].disabled:
+			_error("unverified starter clothing selector stayed interactive: "+field)
+			return
+	if panel.creation_options.selection().body_index != 0 or 			panel.creation_options.selection().leg_index != 0:
+		_error("starter clothing did not stay on the single verified 0/0 choice")
 		return
 	if not pack_path.is_empty():
 		if not await _wait_previews(shell,1,true):
 			return
-		if creation_preview._definition.parts[9][0] != "equipment/b/cloth/body01" or 				creation_preview._definition.parts[12][0] != "equipment/b/cloth/leg02":
-			_error("upper/lower armor selection did not replace body/leg atlas")
+		var definition: Dictionary = creation_preview._definition
+		if definition.parts[9][0] != "players/b/base/body" or 				definition.parts[12][0] != "players/b/base/leg" or 				definition.overlays[9][0] != "equipment/b/cloth/body00" or 				definition.overlays[12][0] != "equipment/b/cloth/leg00":
+			_error("starter clothes did not preserve Standard body/leg plus verified overlays")
 			return
 		await _capture("create_clothing",directory)
 	var commands_before_hair: int = creation_preview._canvas._commands.size()
@@ -341,7 +338,7 @@ func _run() -> void:
 	if not pack_path.is_empty() and commands_before_race > 0 and 			creation_preview._canvas._commands.is_empty():
 		_error("race switch blanked the previous preview before replacement loaded")
 		return
-	var chosen := {"race":1,"hair_index":3,"hair_color":7,"body_index":2,"leg_index":1}
+	var chosen := {"race":1,"hair_index":3,"hair_color":7,"body_index":0,"leg_index":0}
 	if panel.creation_options.selection()!=chosen or 			AppearanceProfile.definition(chosen).is_empty() or shell._slot_edit.visible:
 		_error("verified race/hair/color choice did not bind a real profile")
 		return
@@ -413,7 +410,7 @@ func _run() -> void:
 		var prefixes := [
 			"players/b/","players/g/","players/a/",
 			"equipment/r/cloth/","players/y/"]
-		var expected_parts := [6,6,6,5,6]
+		var expected_parts := [8,8,8,5,6]
 		for race in 5:
 			panel.creation_options.select_value("race",race)
 			if race == 4:
@@ -424,7 +421,10 @@ func _run() -> void:
 			if preview._canvas._commands.size()!=expected_parts[race]:
 				_error("race preview lost source part count: "+str(race))
 				return
-			for part in preview._definition.parts.values():
+			var profile_parts: Array = preview._definition.parts.values()
+			profile_parts.append_array(
+				preview._definition.get("overlays",{}).values())
+			for part in profile_parts:
 				var asset_path := str(part[0])
 				var valid_prefix := asset_path.begins_with(prefixes[race])
 				if race in [0,1,2]:

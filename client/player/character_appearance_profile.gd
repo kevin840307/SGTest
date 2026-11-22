@@ -20,6 +20,7 @@ const RACE_KEYS := ["b","g","a","r","y"]
 
 var key := ""
 var parts: Dictionary = {}
+var overlays: Dictionary = {}
 var body_prefix := ""
 var views: Dictionary = {}
 var attack_available := false
@@ -61,17 +62,14 @@ static func definition(appearance: Dictionary = {}) -> Dictionary:
 	var body_index := int(value.get("body_index",0))
 	var leg_index := int(value.get("leg_index",0))
 	if race_index == 3:
-		var robot := ROBOT_BASE_PARTS.duplicate(true)
-		robot[9] = [
-			"equipment/r/cloth/body%02d" % body_index,
-			"R-BODY%02d" % body_index]
-		robot[12] = [
-			"equipment/r/cloth/leg%02d" % leg_index,
-			"R-LEG%02d" % leg_index]
+		# Recovered's Robot path has no separate Standard legs/arms. Until the
+		# legacy CreateCharPara item->spr_id mapping is verified, render the one
+		# source-verified zero outfit regardless of stored selector values.
 		return {
 			"key":resolved_key,
-			"parts":robot,
-			"body_prefix":"R-BODY%02d" % body_index,
+			"parts":ROBOT_BASE_PARTS.duplicate(true),
+			"overlays":{},
+			"body_prefix":"R-BODY00",
 			"hair_slot":-1,
 			"hair_color":0,
 		}
@@ -81,23 +79,31 @@ static func definition(appearance: Dictionary = {}) -> Dictionary:
 	var resolved := HUMANOID_BASE_PARTS.duplicate(true)
 	for slot in resolved:
 		if slot == 1:
-			resolved[slot] = ["players/%s/hair/%s" % [race,hair],prefix+"-"+hair.to_upper()]
-		elif race_index != 4 and slot == 9:
 			resolved[slot] = [
-				"equipment/%s/cloth/body%02d" % [race,body_index],
-				"%s-BODY%02d" % [prefix,body_index]]
-		elif race_index != 4 and slot == 12:
-			resolved[slot] = [
-				"equipment/%s/cloth/leg%02d" % [race,leg_index],
-				"%s-LEG%02d" % [prefix,leg_index]]
+				"players/%s/hair/%s" % [race,hair],
+				prefix+"-"+hair.to_upper()]
 		else:
 			resolved[slot] = [
 				str(resolved[slot][0]).replace("players/b/","players/"+race+"/"),
 				str(resolved[slot][1]).replace("B-",prefix+"-")]
+	var equipment_overlays := {}
+	if race_index != 4:
+		# Recovered builds Standard Body/Leg first, then EquipBody/EquipLeg.
+		# Body000 is the verified starter shirt; Leg000 is shorts and must NOT
+		# replace Standard Leg, otherwise the lower legs disappear.
+		equipment_overlays = {
+			9:[
+				"equipment/%s/cloth/body00" % race,
+				"%s-BODY00" % prefix],
+			12:[
+				"equipment/%s/cloth/leg00" % race,
+				"%s-LEG00" % prefix],
+		}
 	return {
 		"key":resolved_key,
 		"parts":resolved,
-		"body_prefix":prefix+("-BODY" if race_index == 4 else "-BODY%02d" % body_index),
+		"overlays":equipment_overlays,
+		"body_prefix":prefix+"-BODY",
 		"hair_slot":1,
 		"hair_color":int(value.hair_color),
 	}
@@ -108,8 +114,12 @@ func configure(assets: Dictionary, appearance: Dictionary, shared_views: Diction
 		return ERR_INVALID_PARAMETER
 	key = str(data.key)
 	parts = data.parts
+	overlays = data.get("overlays",{})
 	body_prefix = str(data.body_prefix)
 	for part in parts.values():
+		if not assets.has(part[0]):
+			return ERR_INVALID_DATA
+	for part in overlays.values():
 		if not assets.has(part[0]):
 			return ERR_INVALID_DATA
 	for action in ["NS","NR"]:
@@ -126,15 +136,17 @@ func configure(assets: Dictionary, appearance: Dictionary, shared_views: Diction
 	return OK
 
 func _load_action(assets: Dictionary, action: String, required: bool, one_shot: bool, shared_views: Dictionary) -> int:
+	var all_parts: Array = parts.values()
+	all_parts.append_array(overlays.values())
 	var present := 0
-	for part in parts.values():
+	for part in all_parts:
 		if assets[part[0]].manifest.get("logical_views",{}).has(str(part[1])+"_"+action+"1"):
 			present += 1
 	if present == 0 and not required:
 		return 0
-	if present != parts.size():
+	if present != all_parts.size():
 		return -1
-	for part in parts.values():
+	for part in all_parts:
 		var manifest: Dictionary = assets[part[0]].manifest
 		for facing in range(1,9):
 			var view_key := str(part[1])+"_"+action+str(facing)

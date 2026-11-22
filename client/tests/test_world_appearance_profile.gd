@@ -52,10 +52,10 @@ func _run() -> void:
 
 	var own_app := {
 		"race":0,"hair_index":0,"hair_color":0,
-		"body_index":1,"leg_index":2}
+		"body_index":0,"leg_index":0}
 	var remote_app := {
 		"race":1,"hair_index":0,"hair_color":0,
-		"body_index":2,"leg_index":1}
+		"body_index":0,"leg_index":0}
 	var own := actor_state(1,7872.0,own_app,1)
 	var remote := actor_state(2,7952.0,remote_app,1)
 	var snapshot := {
@@ -77,7 +77,7 @@ func _run() -> void:
 	check(
 		view.players._actors.has(1) and
 		str(view.players._actors[1].profile.key)==Profile.appearance_key(own_app),
-		"self actor did not keep body01/leg02 profile")
+		"self actor did not keep verified starter clothing profile")
 	check(
 		view.players._actors.has(2) and
 		str(view.players._actors[2].profile.key)==Profile.appearance_key(remote_app),
@@ -85,7 +85,7 @@ func _run() -> void:
 
 	var dynamic_app := {
 		"race":2,"hair_index":1,"hair_color":0,
-		"body_index":1,"leg_index":2}
+		"body_index":0,"leg_index":0}
 	remote=actor_state(2,7976.0,dynamic_app,2)
 	snapshot.entities={2:remote}
 	snapshot.last_aoi_tick=2
@@ -102,10 +102,27 @@ func _run() -> void:
 		str(view.players._actors[2].profile.key)==Profile.appearance_key(dynamic_app),
 		"runtime AOI appearance did not switch actor profile")
 	for asset_id in [
-		"equipment/a/cloth/body01",
-		"equipment/a/cloth/leg02",
+		"players/a/base/leg",
+		"equipment/a/cloth/body00",
+		"equipment/a/cloth/leg00",
 		"players/a/hair/hair01"]:
 		check(view._palette.has(asset_id),"dynamic profile asset not acquired: "+asset_id)
+	var remote_actor: Dictionary = view.players._actors[2]
+	var rendered := view.players.actors_at(Time.get_ticks_usec())
+	var remote_render: Dictionary = {}
+	for actor in rendered:
+		if str(actor.id)=="2":
+			remote_render=actor
+			break
+	check(not remote_render.is_empty(),"remote layered actor was not rendered")
+	if not remote_render.is_empty():
+		var base_leg_at: int = remote_render.parts.find_custom(
+			func(part): return str(part.asset)=="players/a/base/leg")
+		var shorts_at: int = remote_render.parts.find_custom(
+			func(part): return str(part.asset)=="equipment/a/cloth/leg00")
+		check(
+			base_leg_at>=0 and shorts_at>base_leg_at,
+			"starter shorts replaced Standard Leg in world rendering")
 
 	view.clear_map()
 	var drain_deadline := Time.get_ticks_msec()+30000
@@ -121,5 +138,5 @@ func _run() -> void:
 	view.queue_free()
 	await process_frame
 	if failures.is_empty():
-		print("WORLD_APPEARANCE_PROFILE_PASS initial_clothing=true dynamic_aoi=true bounded_loading=true resources_drained=true")
+		print("WORLD_APPEARANCE_PROFILE_PASS initial_clothing=true standard_leg_preserved=true shorts_overlay=true dynamic_aoi=true bounded_loading=true resources_drained=true")
 	quit(0 if failures.is_empty() else 1)

@@ -61,7 +61,8 @@ func set_appearance(value: Dictionary) -> void:
 	var same_assets: bool = (
 		not old_definition.is_empty() and
 		not new_definition.is_empty() and
-		old_definition.parts == new_definition.parts)
+		old_definition.parts == new_definition.parts and
+		old_definition.get("overlays",{}) == new_definition.get("overlays",{}))
 	_appearance = value.duplicate()
 	# Hair colour changes share the exact same source atlases. Do not tear down
 	# the AssetStore scope just to change one shader parameter.
@@ -86,6 +87,14 @@ func _set_status(value: String) -> void:
 		status = value
 		status_changed.emit(status)
 
+func _definition_parts() -> Array:
+	if _definition.is_empty():
+		return []
+	var result: Array = _definition.parts.values()
+	result.append_array(_definition.get("overlays",{}).values())
+	return result
+
+
 func _sync_activity() -> void:
 	var active := is_inside_tree() and is_visible_in_tree() and _occupied
 	if not active:
@@ -105,7 +114,7 @@ func _sync_activity() -> void:
 		if _epoch <= 0:
 			_set_status("unavailable")
 			return
-		for part in _definition.parts.values():
+		for part in _definition_parts():
 			if _store.acquire(_owner,_epoch,str(part[0])) != OK:
 				_release()
 				_set_status("unavailable")
@@ -117,7 +126,7 @@ func _process(_delta: float) -> void:
 	# WorldView pumps the single shared store; a preview never starts a
 	# second loader, pump loop, viewport, network session or world reducer.
 	if status == "loading":
-		for part in _definition.parts.values():
+		for part in _definition_parts():
 			var id := str(part[0])
 			var asset: Dictionary = _store.get_asset(_owner,_epoch,id)
 			if asset.is_empty():
