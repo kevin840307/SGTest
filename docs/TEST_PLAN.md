@@ -522,3 +522,9 @@ Formal Host 的 listener global/per-IP admission、TLS/auth timeout 與 authenti
 
 
 2026-11-22新增Source viewport驗證：原Scene參照測試必須設定來源 `content_scale_size=1400×900`、canvas_items/keep；可加 `base-resolution` 使用1400×900。`test_recovered2_local_ui.gd -- <DIR> <PACK> profiles static-login base-resolution` 與 `test_recovered2_login_reference.gd -- <SOURCE_TSCN> <PNG> static-login base-resolution` 的登入區域(560,290,840,610)RGB逐像素差異0。先前1152×620孤立Scene比較不能代替來源專案縮放契約；本輪補齊此範圍，並跑1152×620 R2九圖、正式SGTest native TLS十圖及lifecycle PASS。Recovered參照另已實際打開主要世界視窗、用戶建立的社團與聊天泡泡，28張精選在私人HTML總覽；這是視覺／操作研究，不是SGTest完整UI或Server gameplay PASS。NPC服務完整交易及未開啟視窗仍NOT VERIFIED。
+
+## 合成 Atlas 的 GPU 回收
+
+執行 `python client/tests/run_asset_store_gpu.py <Godot console executable>`。測試即時生成 64×64 貼圖、透過正式打包器建立 PCK，使用 OpenGL Compatibility 繪製，再於 30 輪內檢查共用引用與最後一次釋放。每輪須回到初始貼圖記憶體，AssetStore 帳目須歸零。
+
+Windows RTX 3050、Godot 4.7.2 實測 PASS。貼圖基線 643,363 bytes、峰值 665,207 bytes、最大殘留 0 bytes。完整換圖、登出與程序 RSS 回收仍待驗證。
