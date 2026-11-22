@@ -11,6 +11,7 @@ const Players = preload("res://player/player_presentation.gd")
 const LocalMovement = preload("res://movement/local_movement.gd")
 const AppearanceProfile = preload("res://player/character_appearance_profile.gd")
 const Monsters = preload("res://monster/monster_presentation.gd")
+const Pets = preload("res://pet/pet_presentation.gd")
 const Npcs = preload("res://npc/npc_presentation.gd")
 const PvpNames = preload("res://pvp/pvp_name_presentation.gd")
 const Canvas = preload("res://world/world_canvas.gd")
@@ -33,6 +34,7 @@ var players := Players.new()
 var local_movement := LocalMovement.new()
 var _prediction_applied := false
 var monsters := Monsters.new()
+var pets := Pets.new()
 var npcs := Npcs.new()
 var pvp_names := PvpNames.new()
 var _player_snapshot := {}
@@ -134,6 +136,7 @@ func clear_map(retain_cache: bool = false) -> void:
 	local_movement.clear()
 	_prediction_applied = false
 	monsters.clear()
+	pets.clear_entities()
 	npcs.clear()
 	pvp_names.clear()
 	_player_snapshot = {}
@@ -384,6 +387,9 @@ func _process(_delta: float) -> void:
 				if monsters.apply_snapshot(_player_snapshot,presentation_now) != OK:
 					_fail("怪物狀態與地圖素材不一致")
 					return
+				if pets.apply_snapshot(_player_snapshot,presentation_now) != OK:
+					_fail("寵物狀態與地圖世代不一致")
+					return
 		var world_size := Vector2i(_map.manifest.size[0],_map.manifest.size[1])
 		if camera.configure(epoch,world_size,_size,Vector2(world_size)/2.0) != OK:
 			_fail("相機設定失敗")
@@ -447,6 +453,9 @@ func present() -> void:
 	if show_players:
 		actors.append_array(players.actors_at(now_usec))
 		actors.append_array(monsters.actors_at(now_usec))
+		# Pet presentation consumes the same authoritative snapshot/interpolation
+		# path. actors_at remains empty until a source-backed visual binding exists.
+		actors.append_array(pets.actors_at(now_usec))
 		# Same-y insertion stays deterministic across AOI arrival order.
 		actors.sort_custom(func(a: Dictionary,b: Dictionary) -> bool:
 			return str(a.id) < str(b.id))
@@ -572,6 +581,9 @@ func set_player_snapshot(snapshot: Dictionary) -> void:
 		pvp_names.apply_snapshot(snapshot,now_usec)
 		if monsters.apply_snapshot(snapshot,now_usec) != OK:
 			_fail("怪物狀態與地圖素材不一致")
+			return
+		if pets.apply_snapshot(snapshot,now_usec) != OK:
+			_fail("寵物狀態與地圖世代不一致")
 			return
 		_consume_player_attack_events(snapshot,now_usec)
 		_consume_player_damage_visual_events(snapshot,now_usec)
