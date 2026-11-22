@@ -1070,6 +1070,8 @@ func apply_frame(frame: PackedByteArray) -> bool:
 			return _apply_pet_snapshot(frame)
 		WireCodec.OPCODE_PET_ENTITY_SPAWN:
 			return _apply_pet_entity_spawn(frame)
+		WireCodec.OPCODE_PET_ENTITY_DELTA:
+			return _apply_pet_entity_delta(frame)
 		WireCodec.OPCODE_PET_ENTITY_DESPAWN:
 			return _apply_pet_entity_despawn(frame)
 		WireCodec.OPCODE_QUEST_VIEW:
@@ -4190,6 +4192,38 @@ func _apply_pet_entity_spawn(frame:PackedByteArray)->bool:
 			return true
 		return _need_resync("pet_entity_spawn_without_despawn")
 	pet_entities[owner]=value.duplicate(true)
+	last_aoi_tick=maxi(last_aoi_tick,int(value.server_tick))
+	return true
+
+
+func _apply_pet_entity_delta(frame:PackedByteArray)->bool:
+	if state!=STATE_IN_WORLD or not world_ready:
+		return fail("pet_entity_delta_out_of_state")
+	var value:=WireCodec.decode_pet_entity_delta(frame)
+	if value.is_empty():
+		return fail("invalid_pet_entity_delta")
+	var disposition:=_check_aoi_generation(
+		int(value.receiver_map_epoch),int(value.server_tick))
+	if disposition<=0:
+		if disposition==0:
+			stale_pet_entity_frames+=1
+		return disposition==0
+	var owner:=int(value.owner_actor_id)
+	var previous:Dictionary=pet_entities.get(owner,{})
+	if previous.is_empty():
+		return _need_resync("pet_entity_delta_without_spawn")
+	var owner_connection:=int(value.owner_connection_epoch)
+	if (
+		owner_connection!=int(previous.owner_connection_epoch) or
+		int(value.owner_map_epoch)!=int(previous.owner_map_epoch) or
+		int(value.pet_uid)!=int(previous.pet_uid)
+	):
+		return _need_resync("pet_entity_delta_generation")
+	previous=previous.duplicate(true)
+	previous.x=float(value.x)
+	previous.y=float(value.y)
+	previous.server_tick=int(value.server_tick)
+	pet_entities[owner]=previous
 	last_aoi_tick=maxi(last_aoi_tick,int(value.server_tick))
 	return true
 

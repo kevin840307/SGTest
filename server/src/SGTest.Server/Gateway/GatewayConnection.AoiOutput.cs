@@ -118,6 +118,12 @@ public sealed partial class GatewayConnection
                         pet.OwnerConnectionEpoch,pet.OwnerMapEpoch,pet.PetUid,
                         pet.DefinitionId,pet.Level,(float)pet.X,(float)pet.Y));
                     break;
+                case AoiEventKind.PetDelta when evt.Pet is { } pet:
+                    frame=WireProtocol.EncodePetEntityDelta(new(
+                        evt.ReceiverMapEpoch,evt.Tick,pet.OwnerActorId,
+                        pet.OwnerConnectionEpoch,pet.OwnerMapEpoch,pet.PetUid,
+                        (float)pet.X,(float)pet.Y));
+                    break;
                 case AoiEventKind.PetDespawn when evt.Pet is { } pet:
                     frame=WireProtocol.EncodePetEntityDespawn(new(
                         evt.ReceiverMapEpoch,evt.Tick,pet.OwnerActorId,

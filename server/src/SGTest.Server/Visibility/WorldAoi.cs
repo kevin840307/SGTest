@@ -26,7 +26,7 @@ public enum AoiEventKind : byte
     WorldReady, Spawn, Delta, Despawn, SelfState, PlayerIdentity, PlayerMovementIntent,
     MonsterSpawn, MonsterDelta, MonsterDespawn,
     GroundDropSpawn, GroundDropDespawn,
-    PetSpawn, PetDespawn,
+    PetSpawn, PetDelta, PetDespawn,
     PlayerAttackVisual, PlayerSkillVisual, PlayerDamageVisual, PlayerRespawnVisual,
     PvpCombatVisual, PvpSkillVisual
 }
@@ -1173,10 +1173,14 @@ public sealed class WorldAoi
 
         if(observer.VisiblePets.TryGetValue(owner.ActorId,out var current))
         {
-            // Position changes are not represented as Spawn/Despawn churn. The
-            // future Pet movement delta owns those updates; this slice only gives
-            // a newly visible Pet an authoritative spawn baseline.
-            if(SamePetIdentity(current,pet))return;
+            if(SamePetIdentity(current,pet))
+            {
+                if(current.X==pet.X&&current.Y==pet.Y)return;
+                observer.VisiblePets[owner.ActorId]=pet;
+                Enqueue(observer,new(AoiEventKind.PetDelta,tick,
+                    observer.Self.MapEpoch,Pet:pet));
+                return;
+            }
             observer.VisiblePets.Remove(owner.ActorId);
             Enqueue(observer,new(AoiEventKind.PetDespawn,tick,
                 observer.Self.MapEpoch,Pet:current));

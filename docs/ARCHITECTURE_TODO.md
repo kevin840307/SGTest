@@ -40,7 +40,7 @@
 | Client PvP／GM 操作 UI | [x] `client/pvp/pvp_panel.gd` 接手模式切換、選人攻擊、技能目標及 GM 名稱狀態顯示 | Godot TLS/UI pvp_ui/pvp_attack_ui/gm_pvp_ui PASS；資格檢查、Sequence/MapEpoch 和 Server audit 留在原權威路徑 |
 | Client NPC 經濟 UI | [x] `client/npc/npc_shop_panel.gd`、`client/npc/storage_panel.gd`、`client/npc/repair_panel.gd`、`client/npc/enhancement_panel.gd` 分別持有控件及快照；`SessionPanel` 僅注入唯一 `item_catalog` 與既有 submit callback | 真 Godot TLS/UI 商店、倉庫、修理、強化與銀行回歸 PASS；UID、金錢、成功率皆 Server-owned |
 | Server 聊天 | [x] `server/src/SGTest.Server/Chat/ChatRouting.cs` 集中附近／隊伍／密語收件者選擇；TLS／命令校驗仍留 Gateway | 267/267 Server checks：跨圖密語／隊伍聊天、AOI 非訂閱隔離、過期 Binding、可靠回覆 PASS |
-| Server／Client 寵物 | [ ] Server `Pet/PetRuntime.cs.todo` 預定掌管召喚、跟隨與成長；Client `pet/pet_presentation.gd.todo` 接已確認的狀態 | 召喚／收回、掉線、跟隨、持久化與戰鬥回歸 |
+| Server／Client 寵物 | [ ] Server `Pet/PetRuntime.cs` 已掌管 durable roster/召喚/收回與 owner-scoped AOI identity；opcode116 已提供 Server-owned movement delta baseline。Client `WorldState.pet_entities` 已接 spawn/delta/despawn generation gate，`pet/pet_presentation.gd.todo` 仍待接已確認狀態 | 召喚／收回、掉線、持久化與 movement delta 已有回歸；真 follow/pathing、presentation/動畫、戰鬥、成長仍待來源驗證與實作 |
 | Server／Client 機甲 | [ ] Server `Mecha/MechaState.cs.todo` 預定掌管乘降與能力轉換；Client `mecha/mecha_presentation.gd.todo` 接角色畫面 | 狀態互斥、斷線回復、移動與裝備限制 |
 | AFK／失焦 | [ ] 在 `client/app/main.gd` 和 `client/world/world_view.gd` 接生命週期。共用策略成形後評估 `client/afk/afk_presentation.gd.todo` | 收包不中斷、資產釋放與恢復、同機多開量測 |
 | 全量資料 | [ ] 擴充 `tools/asset_converter/content/` 的現有入口及契約測試 | Converter 可重跑、缺料明確報錯、發行包內容一致 |

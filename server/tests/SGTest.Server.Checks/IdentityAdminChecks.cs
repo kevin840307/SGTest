@@ -359,7 +359,8 @@ FROM pvp_name_admin_events WHERE character_id=$id;";
                         worldReady=true;
                         continue;
                     }
-                    throw new Exception("Unexpected authenticated baseline before WorldReady");
+                    WireProtocol.TryReadHeader(baseline,out var unexpectedHeader);
+                    throw new Exception($"Unexpected authenticated baseline before WorldReady opcode={unexpectedHeader.Opcode} bytes={baseline.Length}");
                 }
                 Checks.Require(clanBaseline && worldReady,
                     "Host did not deliver clan baseline and WorldReady after provisioned login");

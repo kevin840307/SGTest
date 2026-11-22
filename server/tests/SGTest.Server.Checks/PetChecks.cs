@@ -51,7 +51,20 @@ internal static class PetChecks
         catch(ArgumentOutOfRangeException){invalidPositionRejected=true;}
         Checks.Require(invalidPositionRejected,
             "pet AOI spawn accepted non-finite authoritative position");
-        var despawn=new PetEntityDespawnWire(7,43,1001,11,4,102);
+        var delta=new PetEntityDeltaWire(7,43,1001,11,4,102,40f,36f);
+        Checks.Require(WireProtocol.TryDecodePetEntityDelta(
+            WireProtocol.EncodePetEntityDelta(delta),out var decodedDelta)&&
+            decodedDelta==delta,
+            "pet AOI movement delta wire roundtrip failed");
+        bool invalidDeltaRejected=false;
+        try
+        {
+            WireProtocol.EncodePetEntityDelta(delta with {Y=float.PositiveInfinity});
+        }
+        catch(ArgumentOutOfRangeException){invalidDeltaRejected=true;}
+        Checks.Require(invalidDeltaRejected,
+            "pet AOI movement delta accepted non-finite authoritative position");
+        var despawn=new PetEntityDespawnWire(7,44,1001,11,4,102);
         Checks.Require(WireProtocol.TryDecodePetEntityDespawn(
             WireProtocol.EncodePetEntityDespawn(despawn),out var decodedDespawn)&&
             decodedDespawn==despawn,

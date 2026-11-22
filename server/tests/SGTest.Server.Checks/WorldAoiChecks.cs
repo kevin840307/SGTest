@@ -87,8 +87,22 @@ internal static class WorldAoiChecks
             peerSpawn is [var seen]&&seen.Pet==own.Pet&&Drain(aoi,far).Length==0,
             "pet spawn was not scoped to owner visibility/authoritative position");
 
+        var movedOwner=owner with {X=40,EntityRevision=2};
+        Move(aoi,2,movedOwner);
+        var ownerMoveEvents=Drain(aoi,movedOwner);
+        var peerMoveEvents=Drain(aoi,peer);
+        Require(
+            ownerMoveEvents.Any(x=>x.Kind==AoiEventKind.PetDelta&&
+                x.Pet?.PetUid==9001&&x.Pet?.X==40&&x.Pet?.Y==24)&&
+            peerMoveEvents.Any(x=>x.Kind==AoiEventKind.PetDelta&&
+                x.Pet?.PetUid==9001&&x.Pet?.X==40&&x.Pet?.Y==24)&&
+            !ownerMoveEvents.Any(x=>x.Kind is AoiEventKind.PetSpawn or AoiEventKind.PetDespawn)&&
+            !peerMoveEvents.Any(x=>x.Kind is AoiEventKind.PetSpawn or AoiEventKind.PetDespawn),
+            "pet movement did not publish delta without spawn/despawn churn");
+        owner=movedOwner;
+
         var movedPeer=peer with {X=1000,EntityRevision=2};
-        Move(aoi,2,movedPeer);
+        Move(aoi,3,movedPeer);
         var peerExit=Drain(aoi,movedPeer);
         Require(peerExit.Any(x=>x.Kind==AoiEventKind.PetDespawn&&
                 x.Pet?.PetUid==9001)&&
@@ -107,10 +121,10 @@ internal static class WorldAoiChecks
             9002,5002,7,true));
         Require(Drain(aoi,owner).Single().Kind==AoiEventKind.PetSpawn,
             "replacement active pet did not spawn for owner");
-        Life(aoi,3,Leave(owner));
+        Life(aoi,4,Leave(owner));
         Drain(aoi,owner);
         var transferred=owner with {MapId=13,MapEpoch=owner.MapEpoch+1,EntityRevision=1};
-        Life(aoi,4,Join(transferred));
+        Life(aoi,5,Join(transferred));
         var transferEvents=Drain(aoi,transferred);
         Require(transferEvents.Any(x=>x.Kind==AoiEventKind.PetSpawn&&
                 x.Pet?.PetUid==9002&&x.Pet?.OwnerMapEpoch==transferred.MapEpoch&&

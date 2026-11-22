@@ -6,7 +6,8 @@ const COMMAND_HEX := "1d00000001006f00070000000000000001000000016500000000000000
 const RESULT_HEX := "2600000001007000070000000000000001000000010065000000000000006500000000000000"
 const SNAPSHOT_HEX := "4a0000000100710007000000000000006600000000000000020065000000000000008913000004000000580000000000000066000000000000008a13000007000000d204000000000000"
 const PET_SPAWN_HEX := "480000000100720007000000000000002a00000000000000e9030000000000000b00000000000000040000000000000066000000000000008a130000070000000000c04100001042"
-const PET_DESPAWN_HEX := "380000000100730007000000000000002b00000000000000e9030000000000000b0000000000000004000000000000006600000000000000"
+const PET_DELTA_HEX := "400000000100740007000000000000002b00000000000000e9030000000000000b00000000000000040000000000000066000000000000000000204200001042"
+const PET_DESPAWN_HEX := "380000000100730007000000000000002c00000000000000e9030000000000000b0000000000000004000000000000006600000000000000"
 
 func _initialize() -> void:
 	var command := Codec.encode_pet_command(7,1,1,101)
@@ -31,6 +32,13 @@ func _initialize() -> void:
 	):
 		_fail("pet AOI spawn golden/position rejected")
 		return
+	var delta := Codec.decode_pet_entity_delta(PET_DELTA_HEX.hex_decode())
+	if (
+		delta.is_empty() or delta.owner_actor_id != 1001 or delta.pet_uid != 102 or
+		delta.x != 40.0 or delta.y != 36.0
+	):
+		_fail("pet AOI movement delta golden rejected")
+		return
 	var despawn := Codec.decode_pet_entity_despawn(PET_DESPAWN_HEX.hex_decode())
 	if despawn.is_empty() or despawn.owner_actor_id != 1001 or despawn.pet_uid != 102:
 		_fail("pet AOI despawn golden rejected")
@@ -51,6 +59,17 @@ func _initialize() -> void:
 	var pet_entity:Dictionary = state.snapshot().pet_entities[1001]
 	if int(pet_entity.pet_uid) != 102 or float(pet_entity.x) != 24.0 or float(pet_entity.y) != 36.0:
 		_fail("pet AOI spawn state/position missing")
+		return
+	if not state.apply_frame(PET_DELTA_HEX.hex_decode()):
+		_fail("pet AOI movement delta reducer failed")
+		return
+	pet_entity=state.snapshot().pet_entities[1001]
+	if (
+		int(pet_entity.pet_uid) != 102 or int(pet_entity.definition_id) != 5002 or
+		float(pet_entity.x) != 40.0 or float(pet_entity.y) != 36.0 or
+		int(pet_entity.server_tick) != 43
+	):
+		_fail("pet AOI movement delta state missing or identity changed")
 		return
 	if not state.apply_frame(PET_DESPAWN_HEX.hex_decode()) or not state.snapshot().pet_entities.is_empty():
 		_fail("pet AOI despawn reducer failed")
@@ -76,7 +95,7 @@ func _initialize() -> void:
 		_fail("stale pet snapshot changed current state")
 		return
 
-	print("PET_WIRE_PASS csharp_golden=true reducer=true aoi_presence=true pets=2")
+	print("PET_WIRE_PASS csharp_golden=true reducer=true aoi_presence=true aoi_movement=true pets=2")
 	quit(0)
 
 func _fail(message:String)->void:
