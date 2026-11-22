@@ -2,7 +2,7 @@ extends SceneTree
 const Transport = preload("res://network/client_transport.gd")
 func _initialize() -> void:
 	var transport = Transport.new()
-	if transport.start_secure("", 443) != ERR_INVALID_PARAMETER:
+	if transport.start_encrypted("", 443) != ERR_INVALID_PARAMETER:
 		push_error("TRANSPORT_FAIL invalid start")
 		quit(1)
 		return

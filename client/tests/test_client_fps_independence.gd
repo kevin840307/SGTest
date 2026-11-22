@@ -29,13 +29,22 @@ func _initialize() -> void:
 func _run_case(cadence: int) -> Dictionary:
 	var fake = FakeTransport.new()
 	var session = Session.new(fake)
-	var error := session.connect_secure("fixture", 443, "user_01", "Password-123456!", "fixture", null)
+	var error := session.connect_secure("fixture", 443, "user_01", "Password-123456!")
 	if error != OK:
 		_fail("cadence %d connect error %d" % [cadence, error])
 		return {}
+	# This is transport/authorization setup, not a render poll. On slower CI
+	# runners Auth and CharacterList may arrive after connect_secure returns.
+	var ready_deadline := Time.get_ticks_msec() + 1500
+	while int(session.snapshot().get("state",-1)) != WorldState.STATE_SELECTING_CHARACTER and Time.get_ticks_msec() < ready_deadline:
+		OS.delay_msec(2)
+	if int(session.snapshot().get("state",-1)) != WorldState.STATE_SELECTING_CHARACTER:
+		session.stop()
+		_fail("cadence %d never reached character selection" % cadence)
+		return {}
 	if not session.choose_character(11) or not session.move_target(24, 8):
 		session.stop()
-		_fail("cadence %d intent queue rejected" % cadence)
+		_fail("cadence %d intent queue rejected after authorized selection" % cadence)
 		return {}
 
 	var render_polls := 0

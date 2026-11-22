@@ -13,7 +13,7 @@ namespace SGTest.Server.Gateway;
 
 /// <summary>
 /// Transport-independent state for one authenticated connection.
-/// Authentication/TLS/socket lifetime live above this class; raw client bytes can
+/// Authentication/authenticated transport/socket lifetime live above this class; raw client bytes can
 /// never choose ActorId or ConnectionEpoch. Reconnect creates a NEW instance.
 /// </summary>
 public sealed partial class GatewayConnection

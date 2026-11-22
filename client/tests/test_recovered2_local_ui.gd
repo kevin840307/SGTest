@@ -18,12 +18,12 @@ class SessionStub:
 	var last_creation: Dictionary = {}
 	var last_host := ""
 	var last_port := 0
-	func connect_secure(host, port, _user, _password, _tls_name, _trust) -> int:
+	func connect_secure(host, port, _user, _password, ) -> int:
 		last_host = str(host)
 		last_port = int(port)
 		logins += 1
 		return OK
-	func register_secure(_host, _port, _user, _password, _tls_name, _trust) -> int:
+	func register_secure(_host, _port, _user, _password, ) -> int:
 		logins += 1
 		return OK
 	func create_character(

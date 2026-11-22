@@ -4,11 +4,11 @@ using SGTest.Server.Map;
 using System.Text.Json;
 using System.Buffers.Binary;
 using System.Net;
-using System.Net.Security;
 using System.Net.Sockets;
 using System.Security.Authentication;
 using System.Diagnostics;
 using SGTest.Server.Gateway;
+using SGTest.Server.Transport;
 using SGTest.Server.Identity;
 using SGTest.Server.Wire;
 using SGTest.Server.World;
@@ -650,7 +650,7 @@ internal static class WorldAoiPumpChecks
                 $"host_ticks={hostStats.Ticks} host_max_tick_us={hostStats.MaxTickWorkMicroseconds} " +
                 $"host_skipped_deadlines={hostStats.SkippedDeadlines} wall_ms={loadTimer.ElapsedMilliseconds} " +
                 $"source=synthetic no_tls_or_gpu=true");
-            await VerifyMixedTlsResyncAsync(
+            await VerifyMixedAesResyncAsync(
                 router, gateways, actors, initialReadyTicks,
                 monstersPerCluster, dropsPerCluster);
         }
@@ -665,25 +665,25 @@ internal static class WorldAoiPumpChecks
 
 
     /// <summary>
-    /// 20 real encrypted TCP/TLS transports on the already authorized test
+    /// 20 real encrypted TCP/AES transports on the already authorized test
     /// bindings. This intentionally does NOT claim 20 account logins, 20 real
     /// Godot renderers, or 20 production listener admission slots.
     /// Unlike the direct Gateway dequeue check, each observer must parse its
-    /// 15 monster + 25 ground spawn frames from a real SslStream after a valid
+    /// 15 monster + 25 ground spawn frames from a real AesCbcFrameStream after a valid
     /// client WorldReady ACK followed by a same-map resync request.
     /// </summary>
-    private static async Task VerifyMixedTlsResyncAsync(
+    private static async Task VerifyMixedAesResyncAsync(
         WorldResultRouter router, IReadOnlyList<GatewayConnection> gateways,
         IReadOnlyList<ActorSnapshot> actors, IReadOnlyList<long> initialReadyTicks,
         int monstersPerCluster, int dropsPerCluster)
     {
-        using var certificate = TlsSocketChecks.CreateCertificate();
+        var settings = AesSocketChecks.CreateSettings();
         using var listener = new TcpListener(IPAddress.Loopback, 0);
         listener.Start(gateways.Count);
         int port = ((IPEndPoint)listener.LocalEndpoint).Port;
         var clients = new List<TcpClient>(gateways.Count);
-        var secureStreams = new List<SslStream>(gateways.Count);
-        var servers = new List<Task<TlsWireConnectionResult>>(gateways.Count);
+        var secureStreams = new List<AesCbcFrameStream>(gateways.Count);
+        var servers = new List<Task<AesWireConnectionResult>>(gateways.Count);
         using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(25));
         try
         {
@@ -695,19 +695,17 @@ internal static class WorldAoiPumpChecks
                 await client.ConnectAsync(IPAddress.Loopback, port, deadline.Token);
                 TcpClient accepted = await accepting.WaitAsync(deadline.Token);
                 int observerIndex = i;
-                servers.Add(TlsWireConnection.RunServerAsync(
-                    accepted, certificate,
+                servers.Add(AesWireConnection.RunServerAsync(
+                    accepted, settings,
                     (_, _) => ValueTask.FromResult<GatewayConnection?>(
                         gateways[observerIndex]),
                     _ => false,
-                    new TlsWireConnectionOptions(
-                        HandshakeTimeoutMilliseconds: 10000,
-                        AuthorizationTimeoutMilliseconds: 10000),
+                    new AesWireConnectionOptions(AuthorizationTimeoutMilliseconds: 10000),
                     deadline.Token, postResync: router.TryRequestResync));
-                var tls = TlsSocketChecks.CreateClientTls(client);
+                var tls = AesSocketChecks.CreateClientStream(client);
                 secureStreams.Add(tls);
-                await TlsSocketChecks.AuthenticateClient(tls)
-                    .WaitAsync(deadline.Token);
+
+
             }
 
             // ACKs pass through the real authenticated wire parser, not an
@@ -730,7 +728,7 @@ internal static class WorldAoiPumpChecks
             for (int i = 0; i < gateways.Count; i++)
             {
                 int observer = i;
-                readers[i] = ReadTlsSnapshotAsync(
+                readers[i] = ReadAesSnapshotAsync(
                     secureStreams[i], observer, actors[i], monstersPerCluster,
                     dropsPerCluster, () => starts[observer], deadline.Token);
             }
@@ -746,16 +744,16 @@ internal static class WorldAoiPumpChecks
             var completed = await Task.WhenAll(readers).WaitAsync(deadline.Token);
             Require(completed.Length == gateways.Count &&
                     completed.All(x => x.Frames >= 1 + monstersPerCluster + dropsPerCluster),
-                "20 real TLS connections did not receive complete AOI resync");
+                "20 real AES connections did not receive complete AOI resync");
             Require(servers.All(x => !x.IsCompleted),
-                "one of the TLS sessions exited before clients finished resync");
+                "one of the AES sessions exited before clients finished resync");
             var latencies = completed.Select(x => x.LatencyMs)
                 .OrderBy(x => x).ToArray();
             static double P(double[] values, double q) =>
                 values[Math.Clamp((int)Math.Ceiling(values.Length * q) - 1,
                     0, values.Length - 1)];
             Console.WriteLine(
-                $"SERVER_MIXED_TLS_RESYNC_PASS clients={gateways.Count} " +
+                $"SERVER_MIXED_AES_RESYNC_PASS clients={gateways.Count} " +
                 $"monsters={gateways.Count * monstersPerCluster} " +
                 $"drops={gateways.Count * dropsPerCluster} " +
                 $"network_frames={completed.Sum(x => x.Frames)} " +
@@ -782,9 +780,8 @@ internal static class WorldAoiPumpChecks
                     var finished = await Task.WhenAll(servers)
                         .WaitAsync(TimeSpan.FromSeconds(5));
                     Require(finished.All(x =>
-                        x.Reason is TlsWireEndReason.CleanEof or TlsWireEndReason.Cancelled &&
-                        x.Protocol is SslProtocols.Tls12 or SslProtocols.Tls13),
-                        "TLS resync tests ended with a socket/protocol failure");
+                        x.Reason is AesWireEndReason.CleanEof or AesWireEndReason.Cancelled ),
+                        "AES resync tests ended with a socket/protocol failure");
                 }
                 catch (OperationCanceledException) when (deadline.IsCancellationRequested)
                 {
@@ -794,8 +791,8 @@ internal static class WorldAoiPumpChecks
         }
     }
 
-    private static async Task<(long Bytes, int Frames, double LatencyMs)> ReadTlsSnapshotAsync(
-        SslStream tls, int observer, ActorSnapshot actor,
+    private static async Task<(long Bytes, int Frames, double LatencyMs)> ReadAesSnapshotAsync(
+        AesCbcFrameStream tls, int observer, ActorSnapshot actor,
         int monstersPerCluster, int dropsPerCluster, Func<long> startedAt,
         CancellationToken cancellationToken)
     {
@@ -812,23 +809,23 @@ internal static class WorldAoiPumpChecks
             int size = BinaryPrimitives.ReadInt32LittleEndian(lengthBytes);
             Require(size >= WireProtocol.HeaderBytes &&
                     size <= WireProtocol.MaximumFrameBytes,
-                $"TLS observer {observer} invalid frame length {size}");
+                $"AES observer {observer} invalid frame length {size}");
             var frame = new byte[size];
             lengthBytes.CopyTo(frame, 0);
             await tls.ReadExactlyAsync(frame.AsMemory(4), cancellationToken);
             Require(WireProtocol.TryReadHeader(frame, out var header),
-                $"TLS observer {observer} malformed frame");
+                $"AES observer {observer} malformed frame");
             encodedBytes += size;
             frames++;
             Require(frames < 200,
-                $"TLS observer {observer} resync did not converge within 200 frames");
+                $"AES observer {observer} resync did not converge within 200 frames");
 
             if (header.Opcode == WireOpcode.WorldReady)
             {
                 Require(WireProtocol.TryDecodeWorldReady(frame, out var result) &&
                         result.ActorId == actor.ActorId &&
                         result.ReceiverMapEpoch == actor.MapEpoch &&
-                        !ready, $"TLS observer {observer} invalid/replayed WorldReady");
+                        !ready, $"AES observer {observer} invalid/replayed WorldReady");
                 ready = true;
                 continue;
             }
@@ -839,7 +836,7 @@ internal static class WorldAoiPumpChecks
                         frame, out var kind, out var result) &&
                     kind == WireOpcode.SelfState &&
                     result.ActorId == actor.ActorId,
-                    $"TLS observer {observer} wrong SelfState");
+                    $"AES observer {observer} wrong SelfState");
                 self = true;
                 continue;
             }
@@ -852,7 +849,7 @@ internal static class WorldAoiPumpChecks
                     monster.SourceIndex >= observer * monstersPerCluster &&
                     monster.SourceIndex < (observer + 1) * monstersPerCluster &&
                     monsters.Add(monster.SourceIndex),
-                    $"TLS observer {observer} missing, foreign or repeated monster");
+                    $"AES observer {observer} missing, foreign or repeated monster");
                 continue;
             }
             if (header.Opcode == WireOpcode.GroundDropSpawn)
@@ -862,13 +859,13 @@ internal static class WorldAoiPumpChecks
                     drop.DropId >= first &&
                     drop.DropId < first + dropsPerCluster &&
                     drops.Add(drop.DropId),
-                    $"TLS observer {observer} missing, foreign or repeated ground drop");
+                    $"AES observer {observer} missing, foreign or repeated ground drop");
                 continue;
             }
-            Require(false, $"TLS observer {observer} unexpected opcode {header.Opcode}");
+            Require(false, $"AES observer {observer} unexpected opcode {header.Opcode}");
         }
         long since = startedAt();
-        Require(since > 0, $"TLS observer {observer} no resync send time");
+        Require(since > 0, $"AES observer {observer} no resync send time");
         return (encodedBytes, frames,
             Stopwatch.GetElapsedTime(since).TotalMilliseconds);
     }

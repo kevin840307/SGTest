@@ -25,8 +25,6 @@ var _published: Dictionary = _world.snapshot()
 var _published_revision := 0 # monotonic for this ClientSession, including reconnects
 var _host := ""
 var _port := 0
-var _common_name := ""
-var _trusted_chain = null
 var _username := ""
 var _credential_bytes := PackedByteArray()
 var _register_first := false
@@ -41,23 +39,17 @@ var _intent_token := 0
 func _init(transport_override: RefCounted = null) -> void:
 	_transport = transport_override if transport_override != null else Transport.new()
 
-func connect_secure(
-		host:String,port:int,username:String,password:String,
-		common_name:String="",trusted_chain=null)->Error:
-	return _connect_secure(
-		host,port,username,password,common_name,trusted_chain,false)
+func connect_secure(host:String,port:int,username:String,password:String)->Error:
+	return _connect_secure(host,port,username,password,false)
 
 
-func register_secure(
-		host:String,port:int,username:String,password:String,
-		common_name:String="",trusted_chain=null)->Error:
-	return _connect_secure(
-		host,port,username,password,common_name,trusted_chain,true)
+func register_secure(host:String,port:int,username:String,password:String)->Error:
+	return _connect_secure(host,port,username,password,true)
 
 
 func _connect_secure(
 		host:String,port:int,username:String,password:String,
-		common_name:String,trusted_chain,register_first:bool)->Error:
+		register_first:bool)->Error:
 	if username.is_empty() or password.is_empty():
 		return ERR_INVALID_PARAMETER
 	_mutex.lock()
@@ -69,8 +61,6 @@ func _connect_secure(
 	_world = WorldState.new()
 	_host = host
 	_port = port
-	_common_name = common_name
-	_trusted_chain = trusted_chain
 	_username = username
 	_clear_credentials_locked()
 	_credential_bytes = password.to_utf8_buffer()
@@ -86,7 +76,7 @@ func _connect_secure(
 	_published_revision += 1
 	_running = true
 	_mutex.unlock()
-	var error: int = _transport.start_secure(host, port, common_name, trusted_chain)
+	var error: int = _transport.start_encrypted(host, port)
 	if error != OK:
 		_mutex.lock()
 		_running = false
@@ -970,7 +960,7 @@ func _start_reconnect_attempt() -> bool:
 		OS.delay_msec(mini(LOGIC_SLEEP_MS,until-Time.get_ticks_msec()))
 	_world = WorldState.new()
 	_publish()
-	var error: int = _transport.start_secure(_host,_port,_common_name,_trusted_chain)
+	var error: int = _transport.start_encrypted(_host,_port)
 	if error != OK:
 		_last_transport_error = error
 		return _start_reconnect_attempt() if attempt < MAX_RECONNECT_ATTEMPTS else false
@@ -1081,35 +1071,39 @@ func _flush_control_frames() -> void:
 			_world.mark_resync_request_sent(epoch)
 			_publish()
 
+func _process_character_create_intent(intent: Dictionary) -> void:
+	if int(_world.state) != WorldState.STATE_SELECTING_CHARACTER:
+		return
+	var slot := int(intent.get("slot",-1))
+	var character_name := str(intent.get("name",""))
+	var appearance: Dictionary = intent.get("appearance",{})
+	var creation: Dictionary = intent.get("creation",{})
+	if not WorldState.allows_character_appearance(
+			appearance,_world.character_creation_appearances):
+		_world.fail("queued_character_appearance_no_longer_allowed")
+		_publish()
+		return
+	if not creation.is_empty() and not WireCodec.valid_character_creation_settings(creation):
+		_world.fail("queued_character_creation_settings_invalid")
+		_publish()
+		return
+	var frame := WireCodec.encode_character_create(
+		slot,character_name,appearance,creation)
+	if not frame.is_empty() and _transport.send_frame(frame) and _world.mark_character_create_sent(slot,character_name,appearance):
+		if creation.has("password"):
+			creation.erase("password")
+		intent.erase("creation")
+		_pop_intent()
+		_publish()
+
+
 func _process_first_intent() -> void:
 	var intent := _peek_intent()
 	if intent.is_empty():
 		return
 	var kind := str(intent.get("type", ""))
 	if kind == "create_character":
-		if int(_world.state) != WorldState.STATE_SELECTING_CHARACTER:
-			return
-		var slot := int(intent.get("slot",-1))
-		var character_name := str(intent.get("name",""))
-		var appearance: Dictionary = intent.get("appearance",{})
-		var creation: Dictionary = intent.get("creation",{})
-		if not WorldState.allows_character_appearance(
-				appearance,_world.character_creation_appearances):
-			_world.fail("queued_character_appearance_no_longer_allowed")
-			_publish()
-			return
-		if not creation.is_empty() and not WireCodec.valid_character_creation_settings(creation):
-			_world.fail("queued_character_creation_settings_invalid")
-			_publish()
-			return
-		var frame := WireCodec.encode_character_create(
-			slot,character_name,appearance,creation)
-		if not frame.is_empty() and _transport.send_frame(frame) and 				_world.mark_character_create_sent(slot,character_name,appearance):
-			if creation.has("password"):
-				creation.erase("password")
-			intent.erase("creation")
-			_pop_intent()
-			_publish()
+		_process_character_create_intent(intent)
 	elif kind == "choose":
 		if int(_world.state) != WorldState.STATE_SELECTING_CHARACTER:
 			return

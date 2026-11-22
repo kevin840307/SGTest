@@ -5,7 +5,7 @@ using SGTest.Server.World;
 namespace SGTest.Server.Pvp;
 
 /// <summary>
-/// One authenticated TLS session's PvP command admission. A map transfer
+/// One authenticated authenticated transport session's PvP command admission. A map transfer
 /// starts a new MapEpoch sequence. Exact retries replay the original reliable
 /// receipt; reordered/conflicting bytes must not mutate the durable mode.
 /// The single PvP command worker owns this state (no locking or DB I/O).

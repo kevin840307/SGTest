@@ -1,5 +1,8 @@
 # SGTest — 命名、模組分類與責任邊界契約
 
+**2026-11-22 Transport 命名更新：** Server 新增 `Transport/AesCbcFrameStream.cs`（CBC Record）、`Transport/AesWireConnection.cs`（TCP 命令收發）、`Transport/AesGatewayListener.cs`（Socket admission），Host `AesGameHost.cs`；Client `network/aes_cbc_frame.gd`／`network/client_transport.gd`。共用背景佇列更名 `Gateway/SessionCommandWorker.cs`，不再依加密技術命名。唯一 Codec 仍在 `Wire/`（Server）、`network/wire_codec.gd`（Client）；Identity/World/Trade 等權威驗證不得依賴 CBC。本次移除舊 `TlsWireConnection`、`TlsGatewayListener`、TLS 授權入口與憑證設定，Server 回歸測試改由 AES Transport 執行。歷史文件與部分測試資料字串可追溯舊版本，不是運行中的協定。
+
+
 > 適用於唯一正式 main。這是目前程式碼的維護規範，不是要求新增空目錄或改寫所有舊功能。
 
 ## 設計原則
@@ -70,12 +73,12 @@
 - `Identity/IdentityContracts.cs` 唯一持有帳號、角色與持久化 CombatProfile 的穩定 DTO，不在資料庫實作檔內混合公開契約。
 - `Identity/SqliteIdentityStore.Schema.cs` 集中原本約 734 行的 Schema v23 建立與遷移流程，包含遷移前備份及現有 WAL／單一 transaction；與 `SqliteIdentityStore.Backup.cs` 的備份程序分工。原操作順序未重寫。
 - `Identity/SqliteIdentityStore.Combat.cs` 承接角色 CombatProfile、HP／MP 的原子資料存取。其他 `SqliteIdentityStore.<Feature>.cs` 已依功能分區，但**所有 partial 都是相同資料庫 owner**，不建立第二個連線池或交易所有者。
-- `Gateway/IdentityTlsAuthorization.Binding.cs` 承接認證帳號與 World Actor 的綁定程序；`IdentityTlsAuthorization.cs` 仍持有現有 TLS socket 與唯一 gameplay gate，保留同一授權狀態及可靠事件順序。
+- `Gateway/IdentitySessionAuthorization.Binding.cs` 承接認證帳號與 World Actor 的綁定程序；`IdentitySessionAuthorization.Aes.cs` 持有每次連線的唯一 gameplay gate；實際 AES-CBC Socket／Record 位於 `Transport/`，保留同一授權狀態與可靠事件順序。
 - `Gateway/GatewayContracts.cs` 放置 Gateway 與玩法 Handler 共用的公開 `Trusted*Command`、`ConnectionBinding`、`GatewayConnectionOptions`、結果與 `GatewaySendStatus`；與既有 `IdentityContracts.cs` 的「契約獨立於實作」命名習慣一致，但**不**複製 Wire V1 opcode／binary DTO。
 - `Gateway/GatewayConnection.cs` 保留一條已認證連線的**唯一** trusted binding、`_bindingGate`／`_receiveGate`、bounded `WireStreamParser`、`ReliableFrameQueue`、Close／可靠隊列消費；`GatewayConnection.Ingress.cs` 負責 Client Frame 接收、trusted command 映射、GameplayReady、WorldReady ACK／Resync；`GatewayConnection.ReliableOutput.cs` 負責一般可靠結果（NPC、錢物、技能、PvP、社交等）的驗證與編碼；`GatewayConnection.AoiOutput.cs` 負責 WorldReady、AOI Spawn／Delta／Despawn、視野紀錄與換圖可視清理，**都使用同一個 bounded reliable FIFO**。這是 C# 正常的 `partial class` 按 IO 責任分檔，不是新增另一個 Connection、AOI owner、Store、Queue 或 Thread。
-- `GatewayConnection` 本身是 transport-independent，真正 TLS socket／登入授權仍歸 `TlsWireConnection`／`IdentityTlsAuthorization`；不應更名成 `GatewayManager`，也不把 `GatewayContracts` 埋回 2000 行的連線實作。AOI 輸出另成 partial 的原因是它唯一會在成功入列後更新可視集與 WorldReady ACK gate；與其他僅發送結果的 reliable method 有不同副作用與維護需求。
-- `Gateway/TlsCommandWorker.cs` 將 TLS session 內原本 **19 組**完全同構的 bounded `Channel<T>`、`TryWrite`、單讀者、例外取消與關閉／等待工作合併為一種泛型 Worker；**實際上仍每個命令型別一個各自容量的 FIFO**（Respawn=4、Chat=32、其他=16），不新增集中式佇列、Socket、World 狀態或新 Gameplay Gate。`TlsWireConnection.cs` 保留 NPC 指令的可靠結果回覆與 Skill 在乾淨關線時排空的特殊生命週期，不強迫走相同取消行為。這個名稱比 `CommandManager` 更具體，類別位於既有 `Gateway/`，因 19 個真實消費者而非裝飾性拆檔。
-- 此切片**沒有減少 TLS 入口的玩法型別回呼數量**，只是安全統一每命令的背壓／取消實作；未來若收斂 `RunServerAsync` 的大量 `handle*` 參數，應採窄且不可變的 per-session dispatch contract，不能製造第二個 Auth/MapEpoch 檢查路徑。縮行數不代表 CPU／GC／VRAM 已改善。
+- `GatewayConnection` 本身是 transport-independent，AES-CBC Socket 與登入授權分別由 `Transport/AesWireConnection.cs`、`Gateway/IdentitySessionAuthorization.*.cs` 負責；不應更名成 `GatewayManager`，也不把 `GatewayContracts` 埋回龐大的連線實作。AOI 輸出另成 partial 的原因是它唯一會在成功入列後更新可視集與 WorldReady ACK gate；與其他僅發送結果的 reliable method 有不同副作用與維護需求。
+- `Gateway/SessionCommandWorker.cs` 將 AES-CBC session 內原本 **19 組**完全同構的 bounded `Channel<T>`、`TryWrite`、單讀者、例外取消與關閉／等待工作合併為一種泛型 Worker；**實際上仍每個命令型別一個各自容量的 FIFO**（Respawn=4、Chat=32、其他=16），不新增集中式佇列、Socket、World 狀態或新 Gameplay Gate。`Transport/AesWireConnection.cs` 保留 NPC 指令的可靠結果回覆與 Skill 在乾淨關線時排空的特殊生命週期，不強迫走相同取消行為。這個名稱比 `CommandManager` 更具體，類別位於既有 `Gateway/`，因 19 個真實消費者而非裝飾性拆檔。
+- 此切片**沒有減少 AES-CBC 入口的玩法型別回呼數量**，只是安全統一每命令的背壓／取消實作；未來若收斂 `RunServerAsync` 的大量 `handle*` 參數，應採窄且不可變的 per-session dispatch contract，不能製造第二個 Auth/MapEpoch 檢查路徑。縮行數不代表 CPU／GC／VRAM 已改善。
 - `Gateway/WorldResultRouter.cs` 維持**唯一** `WorldResultRouter` 的連線索引、12 條 bounded Channel 建立、選角可信綁定／跨圖與統計；`WorldResultRouter.GameplayIngress.cs` 接收已驗證的技能／普攻、AI 視覺、復活及 Resync 等要求；`WorldResultRouter.ReliableReplies.cs` 在**原 `_gate`** 之下查找連線後轉發所有可靠結果，絕不自行補發或再次序列化；`WorldResultRouter.WorldTicks.cs` 唯一消費 Server World Tick、先保存 Changed 再送 Receipt、背壓即終止，維持原 `RunAsync` 單一消費者契約。全部是同一個 C# `partial` 物件而不是多個 Router 或 Channel owner。
 - **Router 結束生命週期修正**：原來 `RunAsync.finally` 漏了 `PlayerIdentityUpdates`、`PlayerPvpCombatVisuals`、`PlayerPvpSkillVisuals` 三條 AOI Channel 的 `TryComplete(fault)`。現在和其餘 Channel 一起完成，避免正常停機或故障時下游讀取者持續等待；`WorldResultRouterChecks.SourcePump` 與 Python 架構測試保護這個契約。這項是實際關閉完整性改善，非只是縮減原檔行數。
 - **命名判斷**：保留遊戲網路常用 `WorldResultRouter` 與 `GatewayConnection`，在既有 `Gateway/` 下用 `GameplayIngress`（已綁定的玩法事件，不是 socket 解碼）、`ReliableReplies`（世代驗證後派送）、`WorldTicks`（唯一 World 事件消費）分辨實際生命週期。不可合成 `WorldManager`、`MessageBus` 或新增獨立 AOI Queue；未證實的 FPS／CPU 改善不得因檔案變短而聲稱達標。
@@ -87,8 +90,8 @@
 - `Npc/NpcQuestHandler.cs` 專責 NPC 任務開啟與選項提交。任務的規則來源 `NpcQuestCatalog` 與 SQLite 進度 owner 不變；它與 NPC 經濟的價格／資金交易不是同一領域，不應硬合併。仍使用經驗證的 Actor／MapEpoch／QuestSequence 與原 gate。此獨立檔有實質可信選項處理及狀態結果，非命名用 façade。
 - `Pvp/PvpStateHandler.cs` 負責 PvP 可攻擊模式及 GM 名稱狀態、序號重播與可靠發布；`Pvp/PvpCombatHandler.cs` 負責普攻／玩家技能、幾何驗證、MP／傷害結算及戰鬥續行。兩者**共享原 authenticated socket 的 gameplayGate 和 WorldResultRouter**，分別持有原本每次連線的 mode／GM 與 attack sequence gate；PvpCrimePolicy、PvpMapPolicy、Combat／SQLite 仍是規則 owner。不建立第二個 PvP 狀態或交易通道。
 - **命名與分類決策**：原規劃單一約 590 行 `PvpCommandHandler` 雖較 Gateway 改善，仍混合不同的權限／變更原因；改以常見遊戲領域名稱 `PvpStateHandler`／`PvpCombatHandler`，均留在現有 `Pvp/`，避免新增 PvP 狀態／戰鬥子目錄或更多 `Manager`。Public Wire enum 與封包名稱一律不為重構重新命名。
-- **命名反思**：`NpcRepairCatalog`／`NpcEnhancementCatalog` 代表 NPC 位置與服務可用性；`RepairItemCatalog`／`EquipmentEnhancementCatalog` 則代表經驗證的物品規則。兩者不是重複的 Catalog，不應為了「合併」而混成一個 `NpcManager`。`NpcEconomyHandler` 比三個只有單一方法／單一目錄的 Handler 易導航，也比所有 NPC 功能揉成一大檔更有聚力。`IdentityTlsAuthorization` 的名稱確實低估了目前其他玩法職責，但必須先把玩法 Handler 徹底解耦，才適合變更公開類別名稱。
-- 遷移／授權相關重構必須通過 Server 全量 checks（本輪 267/267）（尤其 SQLite upgrade、WAL backup、TLS Host、雙方交易與 Epoch），而非僅憑 C# 可編譯宣稱正確。
+- **命名反思**：`NpcRepairCatalog`／`NpcEnhancementCatalog` 代表 NPC 位置與服務可用性；`RepairItemCatalog`／`EquipmentEnhancementCatalog` 則代表經驗證的物品規則。兩者不是重複的 Catalog，不應為了「合併」而混成一個 `NpcManager`。`NpcEconomyHandler` 比三個只有單一方法／單一目錄的 Handler 易導航，也比所有 NPC 功能揉成一大檔更有聚力。`IdentitySessionAuthorization` 已取代傳輸技術限定的舊命名，玩法 Handler 仍可進一步解耦；改名不應改變原權限、世代與玩法鎖。
+- 遷移／授權相關重構必須通過 Server 全量 checks（本輪 287/287）（尤其 SQLite upgrade、WAL backup、AES-CBC Host、雙方交易與 Epoch），而非僅憑 C# 可編譯宣稱正確。
 
 ## NPC 相關 UI 分組決策（避免過度拆分）
 
@@ -126,7 +129,7 @@
 ## 尚未完成、不得混淆為已實作
 
 - `client/world/world_state.gd` 與 `client/session/client_session.gd` 仍是大型責任集中點，需按 opcode owner 和可靠事件順序逐片重構，不能把單一 Reducer 拆成各自可亂序更新的物件。
-- `server/Gateway/IdentityTlsAuthorization.cs` 的玩法 Handler 還可移至明確的協調模組，但需維持 authenticated gameplay gate 和跨角色交易鎖順序。
+- `server/Gateway/IdentitySessionAuthorization.Aes.cs` 的玩法 Handler 還可移至明確的協調模組，但需維持 authenticated gameplay gate 和跨角色交易鎖順序。
 - `SqliteIdentityStore` schema 遷移應逐版獨立稽核，尤其 pre-migration backup、WAL／持久化設定與 crash recovery；禁止只有檔名漂亮卻改壞交易原子性。
 - Windows 真正 1/2/4/8 開、AFK、GPU、CPU/RSS/VRAM、World Tick P95/P99 尚待完整驗證，不可拿 Linux headless 或 synthetic load 宣稱 Release PASS。
 

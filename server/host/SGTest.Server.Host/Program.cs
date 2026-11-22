@@ -6,10 +6,10 @@ using SGTest.Server.World;
 internal static class Program
 {
     // The original bounded offline smoke remains available. Network startup is
-    // explicit and requires a deployment certificate and persistent identity DB.
+    // explicit and requires a configured AES-256-CBC key/IV and persistent identity DB.
     public static async Task<int> Main(string[] args)
     {
-        if (args is ["serve", .. var serveArgs]) return await TlsHost.RunAsync(serveArgs);
+        if (args is ["serve", .. var serveArgs]) return await AesGameHost.RunAsync(serveArgs);
         if (args is ["account-create", .. var accountArgs]) return await IdentityAdmin.RunAsync(true, accountArgs);
         if (args is ["character-create", .. var characterArgs]) return await IdentityAdmin.RunAsync(false, characterArgs);
         if (args is ["identity-backup", .. var backupArgs]) return await IdentityBackupAdmin.RunAsync(backupArgs);

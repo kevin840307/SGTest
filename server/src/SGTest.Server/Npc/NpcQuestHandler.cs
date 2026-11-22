@@ -8,7 +8,7 @@ namespace SGTest.Server.Npc;
 
 /// <summary>
 /// Trusted NPC quest open and choice handling. The quest catalog and SQLite
-/// store retain rule and progress ownership; TLS authorization, map generation,
+/// store retain rule and progress ownership; authenticated transport authorization, map generation,
 /// reliable delivery, and command serialization remain on the calling session.
 /// </summary>
 internal sealed class NpcQuestHandler

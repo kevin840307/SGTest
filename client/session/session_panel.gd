@@ -48,8 +48,6 @@ var repair_panel := RepairPanel.new()
 var enhancement_panel := EnhancementPanel.new()
 var pvp_panel := PvpPanel.new()
 var active := false
-var trusted_chain: X509Certificate
-var tls_name := ""
 ## Deployment-only connection parameters; never Godot GUI widgets.
 var server_host := "localhost"
 var server_port := 7777
@@ -148,6 +146,7 @@ func _ready() -> void:
 	character_password_input.secret = true
 	character_password_confirm_input.secret = true
 	character_choose_password_input.secret = true
+	character_choose_password_input.placeholder_text = "角色密碼（4 字元，需要時輸入）"
 	for secret_input in [
 		character_password_input,character_password_confirm_input,
 		character_choose_password_input
@@ -180,7 +179,7 @@ func _ready() -> void:
 	var selection_heading := Label.new()
 	selection_heading.text = "選擇角色"
 	_layout.select_page.add_child(selection_heading)
-	for control in [characters,choose_button,new_character_button]:
+	for control in [characters,character_choose_password_input,choose_button,new_character_button]:
 		_layout.select_page.add_child(control)
 	var creation_heading := Label.new()
 	creation_heading.text = "建立角色"
@@ -282,10 +281,10 @@ func _begin_connection(register_first:bool)->void:
 		status.text = "連線設定無效，請聯絡管理員"
 		return
 	var error:int=session.register_secure(
-		server_host.strip_edges(),server_port,username,password,
-		tls_name,trusted_chain) if register_first else session.connect_secure(
-			server_host.strip_edges(),server_port,username,password,
-			tls_name,trusted_chain)
+		server_host.strip_edges(),server_port,username,password
+	) if register_first else session.connect_secure(
+		server_host.strip_edges(),server_port,username,password
+	)
 	password=""
 	if error != OK:
 		status.text = "無法開始連線（"+str(error)+"）"

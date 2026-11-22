@@ -15,7 +15,51 @@ func _run() -> void:
 	root.add_child(cursor)
 	await process_frame
 	if not cursor.using_recovered_cursor():
-		_fail(cursor,"local Recovered cursor pack was not loaded")
+		# Public CI cannot include the private Recovered sprite frames. The
+		# production path must still load all nine published fallback icons,
+		# map every input intent to the appropriate native cursor, and clean up.
+		var fallback_icons := [
+			"arrow.png", "point.png", "text.png", "drag.png",
+			"attack.png", "inspect.png", "wait.png", "forbidden.png", "move.png"
+		]
+		for filename in fallback_icons:
+			if not cursor._loaded.has("fallback/" + filename):
+				_fail(cursor, "missing portable cursor icon: " + filename)
+				return
+		if cursor._loaded.size() != fallback_icons.size() or cursor._cursor_visual.visible:
+			_fail(cursor, "fallback did not load nine icons or left animated cursor visible")
+			return
+		var shapes := {
+			"normal":Input.CURSOR_ARROW,
+			"attack":Input.CURSOR_CROSS,
+			"inspect":Input.CURSOR_HELP,
+			"pickup":Input.CURSOR_POINTING_HAND,
+			"move":Input.CURSOR_MOVE,
+			"wait":Input.CURSOR_WAIT,
+			"forbidden":Input.CURSOR_FORBIDDEN,
+			"player":Input.CURSOR_ARROW,
+			"skill":Input.CURSOR_ARROW,
+		}
+		for mode in shapes:
+			cursor.set_mode(mode)
+			# Headless Godot reports its current mouse shape as Arrow even when
+			# set_default_cursor_shape changes; verify the mapping actually used
+			# by _apply_mode rather than the unavailable window-system cursor.
+			if cursor._mode != mode or cursor._native_shape_for_mode() != shapes[mode]:
+				_fail(cursor, "portable cursor mode did not select native shape: " + mode)
+				return
+		if Input.mouse_mode != Input.MOUSE_MODE_VISIBLE:
+			_fail(cursor, "native fallback pointer is hidden")
+			return
+		cursor.restore_pointer()
+		cursor.queue_free()
+		await process_frame
+		if is_instance_valid(cursor) or Input.mouse_mode != Input.MOUSE_MODE_VISIBLE:
+			push_error("SHARED_GAME_CURSOR_FAIL fallback cursor was not released")
+			quit(1)
+			return
+		print("SHARED_GAME_CURSOR_FALLBACK_PASS portable_icons=9 native_modes=9 cleanup=true recovered_reference_not_verified=true")
+		quit(0)
 		return
 	var frames: SpriteFrames = cursor._cursor_visual.sprite_frames
 	var expected_counts := {

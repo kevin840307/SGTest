@@ -20,7 +20,7 @@ public readonly record struct AuthenticationRateLimitStatistics(
     long CapacitySaturationBlocks);
 
 /// <summary>
-/// In-memory brute-force limiter for the pre-gameplay TLS authorization boundary.
+/// In-memory brute-force limiter for the pre-gameplay authenticated transport authorization boundary.
 /// It is deliberately not an account database and does not persist lockouts across
 /// process restart. Tables are bounded so hostile usernames/addresses cannot turn
 /// the limiter itself into an unbounded-memory attack.

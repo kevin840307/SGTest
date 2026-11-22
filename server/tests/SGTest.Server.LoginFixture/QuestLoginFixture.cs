@@ -4,6 +4,7 @@ using SGTest.Server.Map;
 using System.Net;
 using System.Net.Sockets;
 using SGTest.Server.Gateway;
+using SGTest.Server.Transport;
 using SGTest.Server.Identity;
 using SGTest.Server.World;
 
@@ -40,13 +41,11 @@ internal static class QuestLoginFixture
             ]);
             var router=new WorldResultRouter();
             var pump=new WorldAoiPump(router);
-            var authorization=new IdentityTlsAuthorization(
+            var authorization=new IdentitySessionAuthorization(
                 store,world,quests:quests);
 
-            using var certificate=Program.CreateCertificate();
-            string certPath=Path.Combine(root,"fixture-cert.pem");
-            Program.WriteCertificatePem(certPath,certificate);
-            var listener=new TcpListener(IPAddress.Loopback,0);
+            var settings = AesCbcSettings.FromEnvironment();
+                                    var listener=new TcpListener(IPAddress.Loopback,0);
             listener.Start(1);
             using var stop=new CancellationTokenSource();
             var routing=router.RunAsync(world.Results);
@@ -55,7 +54,7 @@ internal static class QuestLoginFixture
             {
                 int port=((IPEndPoint)listener.LocalEndpoint).Port;
                 Console.WriteLine(
-                    $"QUEST_FIXTURE_READY port={port} cert={certPath} " +
+                    $"QUEST_FIXTURE_READY port={port} " +
                     $"username={Program.Username} character={character} " +
                     $"npc={NpcSpawnId} quest={QuestId}");
                 Console.Out.Flush();
@@ -63,9 +62,9 @@ internal static class QuestLoginFixture
                 using(var first=await listener.AcceptTcpClientAsync()
                     .WaitAsync(TimeSpan.FromSeconds(15)).ConfigureAwait(false))
                 {
-                    var ended=await authorization.RunAuthenticatedSocketAsync(
-                        first,certificate,router,
-                        new TlsWireConnectionOptions(
+                    var ended=await authorization.RunAuthenticatedAesSocketAsync(
+                        first,settings,router,
+                        new AesWireConnectionOptions(
                             AuthorizationTimeoutMilliseconds:15000))
                         .WaitAsync(TimeSpan.FromSeconds(30)).ConfigureAwait(false);
                     if(ended.CommandsAccepted!=4)
@@ -89,9 +88,9 @@ internal static class QuestLoginFixture
                 using(var second=await listener.AcceptTcpClientAsync()
                     .WaitAsync(TimeSpan.FromSeconds(15)).ConfigureAwait(false))
                 {
-                    var ended=await authorization.RunAuthenticatedSocketAsync(
-                        second,certificate,router,
-                        new TlsWireConnectionOptions(
+                    var ended=await authorization.RunAuthenticatedAesSocketAsync(
+                        second,settings,router,
+                        new AesWireConnectionOptions(
                             AuthorizationTimeoutMilliseconds:15000))
                         .WaitAsync(TimeSpan.FromSeconds(25)).ConfigureAwait(false);
                     if(ended.CommandsAccepted!=2)

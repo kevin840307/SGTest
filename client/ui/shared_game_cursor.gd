@@ -196,16 +196,21 @@ func _animation_for_mode() -> String:
 		_:
 			return "normal"
 
+func _native_shape_for_mode() -> int:
+	# One tested mapping serves the portable nine-icon fallback on systems
+	# without the private Recovered animated sprite assets.
+	match _mode:
+		"attack": return Input.CURSOR_CROSS
+		"inspect": return Input.CURSOR_HELP
+		"pickup": return Input.CURSOR_POINTING_HAND
+		"move": return Input.CURSOR_MOVE
+		"wait": return Input.CURSOR_WAIT
+		"forbidden": return Input.CURSOR_FORBIDDEN
+		_: return Input.CURSOR_ARROW
+
 func _apply_mode() -> void:
 	if not _using_recovered_cursor:
-		match _mode:
-			"attack": Input.set_default_cursor_shape(Input.CURSOR_CROSS)
-			"inspect": Input.set_default_cursor_shape(Input.CURSOR_HELP)
-			"pickup": Input.set_default_cursor_shape(Input.CURSOR_POINTING_HAND)
-			"move": Input.set_default_cursor_shape(Input.CURSOR_MOVE)
-			"wait": Input.set_default_cursor_shape(Input.CURSOR_WAIT)
-			"forbidden": Input.set_default_cursor_shape(Input.CURSOR_FORBIDDEN)
-			_: Input.set_default_cursor_shape(Input.CURSOR_ARROW)
+		Input.set_default_cursor_shape(_native_shape_for_mode())
 		return
 	if not _focus_inside or _popup_depth > 0:
 		_cursor_visual.hide()

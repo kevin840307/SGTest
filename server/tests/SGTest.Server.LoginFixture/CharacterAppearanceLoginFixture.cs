@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Sockets;
 using SGTest.Server.Gateway;
+using SGTest.Server.Transport;
 using SGTest.Server.Identity;
 using SGTest.Server.Map;
 using SGTest.Server.World;
@@ -21,32 +22,33 @@ internal static class CharacterAppearanceLoginFixture
             await store.InitializeAsync();
             long account=(await store.CreateAccountAsync(Program.Username,Program.Password)).AccountId;
             var chosen=new CharacterAppearance(1,3,7);
-            var rules=new CharacterAppearanceRules("synthetic/godot-tls-appearance/v1",[new(0,0,0),chosen]);
-            var authorization=new IdentityTlsAuthorization(store,world,
+            var rules=new CharacterAppearanceRules("synthetic/godot-aes-appearance/v1",[new(0,0,0),chosen]);
+            var authorization=new IdentitySessionAuthorization(store,world,
                 characterCreation:new(new CharacterSpawn(15,8,8),rules));
             var router=new WorldResultRouter();
             var pump=new WorldAoiPump(router);
             using var stop=new CancellationTokenSource();
             var routing=router.RunAsync(world.Results);
             var pumping=pump.RunAsync(stop.Token);
-            using var certificate=Program.CreateCertificate();
-            string cert=Path.Combine(root,"fixture-cert.pem");
-            Program.WriteCertificatePem(cert,certificate);
-            var listener=new TcpListener(IPAddress.Loopback,0);
+            var settings = AesCbcSettings.FromEnvironment();
+                                    var listener=new TcpListener(IPAddress.Loopback,0);
             listener.Start(1);
             try
             {
-                Console.WriteLine($"APPEARANCE_FIXTURE_READY port={((IPEndPoint)listener.LocalEndpoint).Port} cert={cert} username={Program.Username}");
+                Console.WriteLine($"APPEARANCE_FIXTURE_READY port={((IPEndPoint)listener.LocalEndpoint).Port} username={Program.Username}");
                 Console.Out.Flush();
                 for(int pass=0;pass<2;pass++)
                 {
                     using var client=await listener.AcceptTcpClientAsync().WaitAsync(TimeSpan.FromSeconds(15));
-                    await authorization.RunAuthenticatedSocketAsync(client,certificate,router,
-                        new TlsWireConnectionOptions(AuthorizationTimeoutMilliseconds:15000))
+                    await authorization.RunAuthenticatedAesSocketAsync(client,settings,router,
+                        new AesWireConnectionOptions(AuthorizationTimeoutMilliseconds:15000))
                         .WaitAsync(TimeSpan.FromSeconds(25));
                     var row=(await store.ListCharactersAsync(account)).Single();
-                    if(row.Appearance!=new CharacterAppearanceState(chosen,rules.SourceReference))
-                        throw new InvalidOperationException("Godot creation/relogin changed persisted appearance");
+                    if(row.Appearance!=new CharacterAppearanceState(chosen,rules.SourceReference) ||
+                       !row.RequiresCharacterPassword ||
+                       row.Creation?.Attributes!=new CharacterCreationAttributes(3,2,2,1))
+                        throw new InvalidOperationException(
+                            "Godot creation/relogin did not preserve appearance, attributes and secondary password");
                 }
                 if(router.Statistics.ActiveSessions!=0 || world.Statistics.ActiveActors!=0)
                     throw new InvalidOperationException("appearance fixture leaked session or actor");

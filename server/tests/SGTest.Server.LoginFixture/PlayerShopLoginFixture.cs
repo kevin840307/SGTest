@@ -6,6 +6,7 @@ using Microsoft.Data.Sqlite;
 using System.Net;
 using System.Net.Sockets;
 using SGTest.Server.Gateway;
+using SGTest.Server.Transport;
 using SGTest.Server.Identity;
 using SGTest.Server.World;
 
@@ -55,14 +56,12 @@ internal static class PlayerShopLoginFixture
             var shops=new PlayerShopCoordinator(store,world,rules,trades);
             var router=new WorldResultRouter();
             var pump=new WorldAoiPump(router);
-            var authorization=new IdentityTlsAuthorization(
+            var authorization=new IdentitySessionAuthorization(
                 store,world,pickupWorldGeneration:generation,
                 trades:trades,playerShops:shops);
 
-            using var certificate=Program.CreateCertificate();
-            string certPath=Path.Combine(root,"fixture-cert.pem");
-            Program.WriteCertificatePem(certPath,certificate);
-            var listener=new TcpListener(IPAddress.Loopback,0);
+            var settings = AesCbcSettings.FromEnvironment();
+                                    var listener=new TcpListener(IPAddress.Loopback,0);
             listener.Start(2);
             using var stop=new CancellationTokenSource();
             var routing=router.RunAsync(world.Results);
@@ -71,16 +70,16 @@ internal static class PlayerShopLoginFixture
             {
                 int port=((IPEndPoint)listener.LocalEndpoint).Port;
                 Console.WriteLine(
-                    $"PLAYER_SHOP_FIXTURE_READY port={port} cert={certPath} " +
+                    $"PLAYER_SHOP_FIXTURE_READY port={port} " +
                     $"seller={seller} buyer={buyer} item_uid={seeded.ItemUid} " +
                     $"drop_id={seeded.DropId} enhancement=6");
                 Console.Out.Flush();
 
                 using var sellerSocket=await listener.AcceptTcpClientAsync()
                     .WaitAsync(TimeSpan.FromSeconds(15)).ConfigureAwait(false);
-                var sellerTask=authorization.RunAuthenticatedSocketAsync(
-                    sellerSocket,certificate,router,
-                    new TlsWireConnectionOptions(
+                var sellerTask=authorization.RunAuthenticatedAesSocketAsync(
+                    sellerSocket,settings,router,
+                    new AesWireConnectionOptions(
                         AuthorizationTimeoutMilliseconds:15000));
                 _=sellerTask.ContinueWith(task=>
                 {
@@ -103,9 +102,9 @@ internal static class PlayerShopLoginFixture
 
                 using var buyerSocket=await listener.AcceptTcpClientAsync()
                     .WaitAsync(TimeSpan.FromSeconds(15)).ConfigureAwait(false);
-                var buyerTask=authorization.RunAuthenticatedSocketAsync(
-                    buyerSocket,certificate,router,
-                    new TlsWireConnectionOptions(
+                var buyerTask=authorization.RunAuthenticatedAesSocketAsync(
+                    buyerSocket,settings,router,
+                    new AesWireConnectionOptions(
                         AuthorizationTimeoutMilliseconds:15000));
 
                 var ended=await Task.WhenAll(sellerTask,buyerTask)

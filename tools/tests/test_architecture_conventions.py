@@ -64,14 +64,14 @@ class ArchitectureConventionsChecks(unittest.TestCase):
         self.assertIn("func reset()", pvp)
         self.assertNotIn("session.request_pvp_mode(", pvp)
 
-    def test_tls_command_workers_reuse_bounded_fifo_without_new_dispatch_owner(self) -> None:
+    def test_session_command_workers_reuse_bounded_fifo_without_new_dispatch_owner(self) -> None:
         gateway = SERVER / "Gateway"
-        tls = (gateway / "TlsWireConnection.cs").read_text(encoding="utf-8-sig")
-        worker = (gateway / "TlsCommandWorker.cs").read_text(encoding="utf-8-sig")
+        tls = (SERVER / "Transport" / "AesWireConnection.cs").read_text(encoding="utf-8-sig")
+        worker = (gateway / "SessionCommandWorker.cs").read_text(encoding="utf-8-sig")
         tests = (ROOT / "server" / "tests" / "SGTest.Server.Checks" /
-                 "TlsCommandWorkerChecks.cs").read_text(encoding="utf-8-sig")
+                 "SessionCommandWorkerChecks.cs").read_text(encoding="utf-8-sig")
         project = (SERVER / "SGTest.Server.csproj").read_text(encoding="utf-8-sig")
-        self.assertEqual(tls.count("new TlsCommandWorker<"), 19)
+        self.assertEqual(tls.count("new SessionCommandWorker<"), 19)
         self.assertEqual(tls.count("Channel.CreateBounded<"), 2,
                          "NPC and skill are the only special command workers")
         self.assertEqual(worker.count("Channel.CreateBounded<T>"), 1)
@@ -81,12 +81,12 @@ class ArchitectureConventionsChecks(unittest.TestCase):
         self.assertIn("ReadAllAsync(_sessionCts.Token)", worker)
         self.assertIn("_sessionCts.Cancel()", worker)
         self.assertIn("public void Complete() => _commands.Writer.TryComplete()", worker)
-        self.assertIn("new TlsCommandWorker<TrustedPlayerRespawn>(\n                4,", tls)
-        self.assertIn("new TlsCommandWorker<TrustedChatCommand>(\n                32,", tls)
+        self.assertIn("new SessionCommandWorker<TrustedPlayerRespawn>(\n                4,", tls)
+        self.assertIn("new SessionCommandWorker<TrustedChatCommand>(\n                32,", tls)
         self.assertIn("var npcCommands = Channel.CreateBounded<TrustedNpcInteraction>", tls)
         self.assertIn("var skillCommands=Channel.CreateBounded<TrustedSkillUse>", tls)
         self.assertIn("skillCommands.Reader.ReadAllAsync()", tls,
-                      "Skill still drains accepted work on clean TLS shutdown")
+                      "Skill still drains accepted work on clean AES-CBC shutdown")
         self.assertIn("gateway.QueueNpcResult(request, outcome)", tls)
         self.assertIn("npcCommands.Writer.TryComplete()", tls)
         self.assertIn("skillCommands.Writer.TryComplete()", tls)
@@ -229,10 +229,10 @@ class ArchitectureConventionsChecks(unittest.TestCase):
             self.assertNotIn("new ReliableFrameQueue(", source)
             self.assertNotIn("new SemaphoreSlim(", source)
             self.assertNotIn("new SqliteIdentityStore(", source)
-            self.assertNotIn("new TlsWireConnection(", source)
+            self.assertNotIn("new AesWireConnection(", source)
 
     def test_chat_routing_is_separate_from_tls_authorization(self) -> None:
-        gateway = (SERVER / "Gateway" / "IdentityTlsAuthorization.cs").read_text(
+        gateway = (SERVER / "Gateway" / "IdentitySessionAuthorization.Aes.cs").read_text(
             encoding="utf-8-sig")
         routing = (SERVER / "Chat" / "ChatRouting.cs").read_text(
             encoding="utf-8-sig")
@@ -246,7 +246,7 @@ class ArchitectureConventionsChecks(unittest.TestCase):
         self.assertNotIn("SslStream", routing)
 
     def test_npc_item_modification_uses_one_authenticated_gameplay_gate(self) -> None:
-        gateway = (SERVER / "Gateway" / "IdentityTlsAuthorization.cs").read_text(
+        gateway = (SERVER / "Gateway" / "IdentitySessionAuthorization.Aes.cs").read_text(
             encoding="utf-8-sig")
         npc = (SERVER / "Npc" / "NpcItemModificationHandler.cs").read_text(
             encoding="utf-8-sig")
@@ -266,7 +266,7 @@ class ArchitectureConventionsChecks(unittest.TestCase):
         self.assertNotIn("new WorldResultRouter", npc)
 
     def test_npc_economy_uses_one_authenticated_transaction_owner(self) -> None:
-        gateway = (SERVER / "Gateway" / "IdentityTlsAuthorization.cs").read_text(
+        gateway = (SERVER / "Gateway" / "IdentitySessionAuthorization.Aes.cs").read_text(
             encoding="utf-8-sig")
         economy = (SERVER / "Npc" / "NpcEconomyHandler.cs").read_text(
             encoding="utf-8-sig")
@@ -286,10 +286,10 @@ class ArchitectureConventionsChecks(unittest.TestCase):
         self.assertNotIn("new SemaphoreSlim", economy)
         self.assertNotIn("new WorldResultRouter", economy)
         self.assertNotIn("new SqliteIdentityStore", economy)
-        self.assertNotIn("new TlsWireConnection", economy)
+        self.assertNotIn("new AesWireConnection", economy)
 
     def test_npc_quest_handler_keeps_trusted_gate_and_quest_authority(self) -> None:
-        gateway = (SERVER / "Gateway" / "IdentityTlsAuthorization.cs").read_text(
+        gateway = (SERVER / "Gateway" / "IdentitySessionAuthorization.Aes.cs").read_text(
             encoding="utf-8-sig")
         quest = (SERVER / "Npc" / "NpcQuestHandler.cs").read_text(
             encoding="utf-8-sig")
@@ -308,7 +308,7 @@ class ArchitectureConventionsChecks(unittest.TestCase):
         self.assertNotIn("new SqliteIdentityStore", quest)
 
     def test_pvp_commands_split_state_from_combat_with_one_gameplay_gate(self) -> None:
-        gateway = (SERVER / "Gateway" / "IdentityTlsAuthorization.cs").read_text(
+        gateway = (SERVER / "Gateway" / "IdentitySessionAuthorization.Aes.cs").read_text(
             encoding="utf-8-sig")
         state = (SERVER / "Pvp" / "PvpStateHandler.cs").read_text(
             encoding="utf-8-sig")
@@ -339,7 +339,7 @@ class ArchitectureConventionsChecks(unittest.TestCase):
             self.assertNotIn("new WorldResultRouter", owner)
 
     def test_inventory_commands_share_one_authenticated_uid_owner(self) -> None:
-        gateway = (SERVER / "Gateway" / "IdentityTlsAuthorization.cs").read_text(
+        gateway = (SERVER / "Gateway" / "IdentitySessionAuthorization.Aes.cs").read_text(
             encoding="utf-8-sig")
         inventory = (SERVER / "Inventory" / "InventoryCommandHandler.cs").read_text(
             encoding="utf-8-sig")
@@ -362,14 +362,14 @@ class ArchitectureConventionsChecks(unittest.TestCase):
         self.assertIn("_identity.DiscardInventoryItemAsync(", inventory)
         self.assertIn("_router.TryPostGroundDropClaimed(result.DropId)", inventory)
         for forbidden in ("new SemaphoreSlim", "new WorldResultRouter",
-                          "new SqliteIdentityStore", "new TlsWireConnection"):
+                          "new SqliteIdentityStore", "new AesWireConnection"):
             self.assertNotIn(forbidden, inventory)
         for removed in ("async Task PickupHandler(", "async Task EquipmentHandler(",
                         "async Task DiscardHandler("):
             self.assertNotIn(removed, gateway)
 
     def test_combat_recovery_and_skill_handlers_preserve_single_gate(self) -> None:
-        gateway = (SERVER / "Gateway" / "IdentityTlsAuthorization.cs").read_text(
+        gateway = (SERVER / "Gateway" / "IdentitySessionAuthorization.Aes.cs").read_text(
             encoding="utf-8-sig")
         recovery = (SERVER / "Combat" / "PlayerRecoveryHandler.cs").read_text(
             encoding="utf-8-sig")
@@ -483,7 +483,7 @@ class ArchitectureConventionsChecks(unittest.TestCase):
         self.assertIn("mixed PvP/monster/PvP sequence diverged", test)
 
     def test_live_trade_fixture_waits_for_worldready_ack(self) -> None:
-        fixture = (CLIENT / "tests" / "test_client_trade_tls.gd").read_text(
+        fixture = (CLIENT / "tests" / "test_client_trade_aes.gd").read_text(
             encoding="utf-8-sig")
         session = (CLIENT / "session" / "client_session.gd").read_text(
             encoding="utf-8-sig")
@@ -627,10 +627,10 @@ class ArchitectureConventionsChecks(unittest.TestCase):
 
     def test_gateway_authorization_binding_has_one_owner(self) -> None:
         gateway = SERVER / "Gateway"
-        core = (gateway / "IdentityTlsAuthorization.cs").read_text(encoding="utf-8-sig")
-        binding = (gateway / "IdentityTlsAuthorization.Binding.cs").read_text(encoding="utf-8-sig")
-        self.assertIn("public sealed partial class IdentityTlsAuthorization", core)
-        self.assertIn("public sealed partial class IdentityTlsAuthorization", binding)
+        core = (gateway / "IdentitySessionAuthorization.cs").read_text(encoding="utf-8-sig")
+        binding = (gateway / "IdentitySessionAuthorization.Binding.cs").read_text(encoding="utf-8-sig")
+        self.assertIn("public sealed partial class IdentitySessionAuthorization", core)
+        self.assertIn("public sealed partial class IdentitySessionAuthorization", binding)
         self.assertNotIn("public async ValueTask<GatewayConnection?> AuthorizeAndBindAsync(", core)
         self.assertEqual(binding.count("AuthorizeAndBindAsync("), 1)
 

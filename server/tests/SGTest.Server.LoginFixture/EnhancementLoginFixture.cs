@@ -5,6 +5,7 @@ using Microsoft.Data.Sqlite;
 using System.Net;
 using System.Net.Sockets;
 using SGTest.Server.Gateway;
+using SGTest.Server.Transport;
 using SGTest.Server.Identity;
 using SGTest.Server.World;
 
@@ -76,13 +77,11 @@ internal static class EnhancementLoginFixture
             var enhancers=new NpcEnhancementCatalog([enhancer]);
             var router=new WorldResultRouter();
             var pump=new WorldAoiPump(router);
-            var authorization=new IdentityTlsAuthorization(
+            var authorization=new IdentitySessionAuthorization(
                 store,world,pickupWorldGeneration:generation,
                 enhancers:enhancers,enhancementItemRules:itemRules);
-            using var certificate=Program.CreateCertificate();
-            string certPath=Path.Combine(root,"fixture-cert.pem");
-            Program.WriteCertificatePem(certPath,certificate);
-            var listener=new TcpListener(IPAddress.Loopback,0);
+            var settings = AesCbcSettings.FromEnvironment();
+                                    var listener=new TcpListener(IPAddress.Loopback,0);
             listener.Start(1);
             using var stop=new CancellationTokenSource();
             var routing=router.RunAsync(world.Results);
@@ -91,7 +90,7 @@ internal static class EnhancementLoginFixture
             {
                 int port=((IPEndPoint)listener.LocalEndpoint).Port;
                 Console.WriteLine(
-                    $"ENHANCEMENT_FIXTURE_READY port={port} cert={certPath} " +
+                    $"ENHANCEMENT_FIXTURE_READY port={port} " +
                     $"username={Program.Username} character={characterId} " +
                     $"item_uid={itemUid} npc=99 level=0 target=1 success_ppm=1000000 " +
                     "cost=100 wallet=200");
@@ -99,9 +98,9 @@ internal static class EnhancementLoginFixture
 
                 using var client=await listener.AcceptTcpClientAsync()
                     .WaitAsync(TimeSpan.FromSeconds(15)).ConfigureAwait(false);
-                var ended=await authorization.RunAuthenticatedSocketAsync(
-                    client,certificate,router,
-                    new TlsWireConnectionOptions(
+                var ended=await authorization.RunAuthenticatedAesSocketAsync(
+                    client,settings,router,
+                    new AesWireConnectionOptions(
                         AuthorizationTimeoutMilliseconds:15000))
                     .WaitAsync(TimeSpan.FromSeconds(25)).ConfigureAwait(false);
 
@@ -121,7 +120,7 @@ internal static class EnhancementLoginFixture
                         $"sessions={router.Statistics.ActiveSessions}");
 
                 Console.WriteLine(
-                    $"ENHANCEMENT_FIXTURE_PASS tls={ended.Protocol} " +
+                    $"ENHANCEMENT_FIXTURE_PASS aes=true " +
                     $"item_uid={itemUid} level=1 wallet=100 cost=100 " +
                     $"commands={ended.CommandsAccepted}");
                 Console.Out.Flush();

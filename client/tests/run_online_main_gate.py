@@ -16,7 +16,6 @@ import time
 from process_telemetry import ProcessTelemetry
 
 PASSWORD = "Online-Gate-Password-123!"
-PFX_PASSWORD = "Online-Gate-PFX-123!"
 MARKER = "ONLINE_MAIN_GATE_PASS role="
 
 def run_checked(command: list[str], cwd: Path, env: dict[str, str], timeout: float) -> str:
@@ -67,6 +66,8 @@ def main() -> int:
     host_dll = repo / "server/host/SGTest.Server.Host/bin/Release/net8.0/SGTest.Server.Host.dll"
     base_env = os.environ.copy()
     base_env["DOTNET_CLI_UI_LANGUAGE"] = "en-US"
+    base_env["SGTEST_AES_KEY_HEX"] = "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f"
+    base_env["SGTEST_AES_IV_HEX"] = "000102030405060708090a0b0c0d0e0f"
 
     processes: list[subprocess.Popen[str]] = []
     logs: dict[str, list[str]] = {}
@@ -81,9 +82,6 @@ def main() -> int:
             pack = temp / "assets.pck"
             content = temp / "content"
             database = temp / "identity.db"
-            cert = temp / "cert.pem"
-            key = temp / "key.pem"
-            pfx = temp / "cert.pfx"
 
             build_source = run_checked(
                 [args.godot, "--headless", "--path", str(repo / "client"),
@@ -108,19 +106,8 @@ def main() -> int:
             run_checked(["dotnet", "build", str(host_project), "-c", "Release", "--nologo"],
                         repo, base_env, args.timeout)
 
-            run_checked(["openssl", "req", "-x509", "-newkey", "rsa:2048", "-sha256",
-                         "-nodes", "-keyout", str(key), "-out", str(cert), "-days", "1",
-                         "-subj", "/CN=localhost",
-                         "-addext", "subjectAltName=DNS:localhost,IP:127.0.0.1",
-                         "-addext", "extendedKeyUsage=serverAuth"],
-                        repo, base_env, args.timeout)
-            run_checked(["openssl", "pkcs12", "-export", "-out", str(pfx), "-inkey",
-                         str(key), "-in", str(cert), "-passout", "pass:" + PFX_PASSWORD],
-                        repo, base_env, args.timeout)
-
             provision_env = base_env.copy()
             provision_env["SGTEST_ACCOUNT_PASSWORD"] = PASSWORD
-            provision_env["SGTEST_TLS_PASSWORD"] = PFX_PASSWORD
             for username, character, x, y in [
                 ("gate_observer", "GateObserver", "880", "800"),
                 ("gate_actor", "GateActor", "760", "800"),
@@ -139,10 +126,9 @@ def main() -> int:
                     raise RuntimeError("character provisioning did not create " + username)
 
             host_env = base_env.copy()
-            host_env["SGTEST_TLS_PASSWORD"] = PFX_PASSWORD
             host = subprocess.Popen(
                 ["dotnet", str(host_dll), "serve", "--content", str(content),
-                 "--identity", str(database), "--certificate", str(pfx),
+                 "--identity", str(database),
                  "--bind", "127.0.0.1", "--port", "0", "--max-connections", "8",
                  "--max-per-address", "4", "--seconds", "30"],
                 cwd=repo, env=host_env, text=True, stdout=subprocess.PIPE,
@@ -155,9 +141,9 @@ def main() -> int:
             threading.Thread(target=capture, args=(host, logs["host"], host_events),
                              daemon=True).start()
             deadline = time.monotonic() + args.timeout
-            ready_line = wait_for(host_events, '"TLS_HOST_READY"', host, deadline)
+            ready_line = wait_for(host_events, '"AES_HOST_READY"', host, deadline)
             ready = json.loads(ready_line)
-            if ready.get("result") != "TLS_HOST_READY":
+            if ready.get("result") != "AES_HOST_READY":
                 raise RuntimeError("formal Host readiness payload invalid")
             port = int(str(ready["endpoint"]).rsplit(":", 1)[1])
 
@@ -169,7 +155,6 @@ def main() -> int:
                     args.godot, "--headless", "--path", str(repo / "client"),
                     "--script", "res://tests/test_online_main_gate.gd", "--",
                     "--pack", str(pack), "--host", "127.0.0.1", "--port", str(port),
-                    "--tls-name", "localhost", "--trusted-cert", str(cert),
                     "--e2e-role", role,
                 ]
                 process = subprocess.Popen(command, cwd=repo, env=env, text=True,
@@ -204,7 +189,7 @@ def main() -> int:
             host.wait(timeout=max(1.0, deadline - time.monotonic()))
             if args.metrics_report:
                 telemetry.finish("host")
-            if host.returncode != 0 or not any('"TLS_HOST_STOPPED"' in line for line in logs["host"]):
+            if host.returncode != 0 or not any('"AES_HOST_STOPPED"' in line for line in logs["host"]):
                 raise RuntimeError("formal Host did not stop cleanly")
 
             required_actor = [
@@ -230,10 +215,10 @@ def main() -> int:
                     if line.startswith("ONLINE_MAIN_GATE_"):
                         print(line)
             for line in logs["host"]:
-                if '"TLS_HOST_' in line:
+                if '"AES_HOST_' in line:
                     print(line)
             print("ONLINE_MAIN_SCENE_FORMAL_HOST_GATE_PASS "
-                  "formal_host=true main_scenes=2 tls=true provision_cli=true "
+                  "formal_host=true main_scenes=2 aes_cbc=true provision_cli=true "
                   "move=true aoi=true monster_state=true camera_follow=true map15_map13_return=true "
                   "resource_release=true synthetic_content=true private_original_content=false")
             successful = True
@@ -256,7 +241,7 @@ def main() -> int:
                 process.wait()
         telemetry.close()
         if args.metrics_report:
-            # Never include credentials, private content paths or certificate material.
+            # Never include credentials, private content paths or AES key material.
             report = {
                 "kind": "sgtest_formal_host_main_headless_process_baseline",
                 "version": 1,

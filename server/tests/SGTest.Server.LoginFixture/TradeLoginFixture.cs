@@ -5,6 +5,7 @@ using Microsoft.Data.Sqlite;
 using System.Net;
 using System.Net.Sockets;
 using SGTest.Server.Gateway;
+using SGTest.Server.Transport;
 using SGTest.Server.Identity;
 using SGTest.Server.World;
 
@@ -57,12 +58,10 @@ internal static class TradeLoginFixture
             var coordinator=new PlayerTradeCoordinator(store,world,rules);
             var router=new WorldResultRouter();
             var pump=new WorldAoiPump(router);
-            var authorization=new IdentityTlsAuthorization(
+            var authorization=new IdentitySessionAuthorization(
                 store,world,pickupWorldGeneration:generation,trades:coordinator);
-            using var certificate=Program.CreateCertificate();
-            string certPath=Path.Combine(root,"fixture-cert.pem");
-            Program.WriteCertificatePem(certPath,certificate);
-            var listener=new TcpListener(IPAddress.Loopback,0);
+            var settings = AesCbcSettings.FromEnvironment();
+                                    var listener=new TcpListener(IPAddress.Loopback,0);
             listener.Start(2);
             using var stop=new CancellationTokenSource();
             var routing=router.RunAsync(world.Results);
@@ -71,21 +70,21 @@ internal static class TradeLoginFixture
             {
                 int port=((IPEndPoint)listener.LocalEndpoint).Port;
                 Console.WriteLine(
-                    $"TRADE_FIXTURE_READY port={port} cert={certPath} " +
+                    $"TRADE_FIXTURE_READY port={port} " +
                     $"actor_a={charA} actor_b={charB} item_a={itemA.ItemUid} item_b={itemB.ItemUid} " +
                     "level_a=5 level_b=7 durability_a=80 durability_b=60");
                 Console.Out.Flush();
 
                 using var first=await listener.AcceptTcpClientAsync()
                     .WaitAsync(TimeSpan.FromSeconds(15)).ConfigureAwait(false);
-                var firstTask=authorization.RunAuthenticatedSocketAsync(
-                    first,certificate,router,
-                    new TlsWireConnectionOptions(AuthorizationTimeoutMilliseconds:15000));
+                var firstTask=authorization.RunAuthenticatedAesSocketAsync(
+                    first,settings,router,
+                    new AesWireConnectionOptions(AuthorizationTimeoutMilliseconds:15000));
                 using var second=await listener.AcceptTcpClientAsync()
                     .WaitAsync(TimeSpan.FromSeconds(15)).ConfigureAwait(false);
-                var secondTask=authorization.RunAuthenticatedSocketAsync(
-                    second,certificate,router,
-                    new TlsWireConnectionOptions(AuthorizationTimeoutMilliseconds:15000));
+                var secondTask=authorization.RunAuthenticatedAesSocketAsync(
+                    second,settings,router,
+                    new AesWireConnectionOptions(AuthorizationTimeoutMilliseconds:15000));
                 var ended=await Task.WhenAll(firstTask,secondTask)
                     .WaitAsync(TimeSpan.FromSeconds(30)).ConfigureAwait(false);
 

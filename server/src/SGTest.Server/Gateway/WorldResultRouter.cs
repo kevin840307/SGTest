@@ -221,7 +221,7 @@ public sealed partial class WorldResultRouter
     }
 
     /// <summary>
-    /// Called ONLY after TLS Auth + CharacterChoose returned a trusted World
+    /// Called ONLY after authenticated transport Auth + CharacterChoose returned a trusted World
     /// registration. Reconnect may replace an older ConnectionEpoch, but an
     /// older/duplicate session cannot replace a newer binding.
     /// </summary>
@@ -290,7 +290,7 @@ public sealed partial class WorldResultRouter
     /// The caller must validate the relevant NPC/portal and its destination:
     /// this is not an exposed client RPC or generic teleport permission.
     /// Host World generation changes before the trusted Gateway changes.
-    /// If the TLS session disconnects during that hand-off, release the new
+    /// If the authenticated transport session disconnects during that hand-off, release the new
     /// World generation so a stale old-epoch disconnect cannot leave a ghost.
     /// No socket, database, or AOI work occurs on the World Tick owner thread.
     /// </summary>
@@ -328,11 +328,11 @@ public sealed partial class WorldResultRouter
     }
 
     /// <summary>
-    /// Trusted RPC boundary used by the authenticated TLS NPC action handler.
+    /// Trusted RPC boundary used by the authenticated authenticated transport NPC action handler.
     /// The connection supplies only an NPC SpawnId and request sequence; the
     /// World owner validates current map, distance and audited portal content.
     /// On success, advance the same Gateway MapEpoch, or release the World
-    /// generation if the TLS socket disappeared during the async hand-off.
+    /// generation if the authenticated transport socket disappeared during the async hand-off.
     /// </summary>
     public async Task<NpcPortalOutcome> TrustedNpcInteractAsync(
         ServerWorldHost world, PortalCatalog portals, ConnectionBinding requester,

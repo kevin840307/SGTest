@@ -4,11 +4,13 @@ on:
     paths:
       - "server/**"
       - "tools/tests/test_architecture_conventions.py"
+      - "tools/tests/aes_transport_probe/**"
       - ".github/workflows/server-core.yml"
   pull_request:
     paths:
       - "server/**"
       - "tools/tests/test_architecture_conventions.py"
+      - "tools/tests/aes_transport_probe/**"
       - ".github/workflows/server-core.yml"
   workflow_dispatch:
 permissions:
@@ -30,6 +32,8 @@ jobs:
         run: dotnet build server/host/SGTest.Server.Host/SGTest.Server.Host.csproj -c Release --nologo
       - name: Build Godot TLS login fixture
         run: dotnet build server/tests/SGTest.Server.LoginFixture/SGTest.Server.LoginFixture.csproj -c Release --nologo
+      - name: AES-256-CBC cross-runtime golden test (C# half on server runner)
+        run: dotnet run --project tools/tests/aes_transport_probe/AesTransportProbe.csproj -c Release
       - name: Synthetic authoritative world, wire and gateway checks
         run: dotnet run --project server/tests/SGTest.Server.Checks/SGTest.Server.Checks.csproj -c Release
       - name: Hard-kill process position checkpoint recovery

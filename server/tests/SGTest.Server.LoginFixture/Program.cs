@@ -10,10 +10,10 @@ using System.Net;
 using System.Net.Security;
 using System.Net.Sockets;
 using System.Security.Cryptography;
-using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
 using Microsoft.Data.Sqlite;
 using SGTest.Server.Gateway;
+using SGTest.Server.Transport;
 using SGTest.Server.Identity;
 using SGTest.Server.World;
 
@@ -87,28 +87,27 @@ internal static class Program
             long characterId = created.Character?.CharacterId ?? throw new InvalidOperationException("fixture character create failed");
             await store.SetCharacterSkillLevelAsync(
                 characterId,28101,3,"ci:tls-skill-book-fixture");
-            var authorization = new IdentityTlsAuthorization(store, world);
+            var authorization = new IdentitySessionAuthorization(store, world);
             var resultRouter = new WorldResultRouter();
             var aoiPump = new WorldAoiPump(resultRouter);
 
-            using var certificate = CreateCertificate();
-            string certPath = Path.Combine(root, "fixture-cert.pem");
-            WriteCertificatePem(certPath, certificate);
+            var settings = AesCbcSettings.FromEnvironment();
+
             var listener = new TcpListener(IPAddress.Loopback, 0);
             listener.Start(1);
             try
             {
                 int port = ((IPEndPoint)listener.LocalEndpoint).Port;
-                Console.WriteLine($"LOGIN_FIXTURE_READY port={port} cert={certPath} username={Username} character={characterId}");
+                Console.WriteLine($"LOGIN_FIXTURE_READY port={port} username={Username} character={characterId}");
                 Console.Out.Flush();
                 using var client = await listener.AcceptTcpClientAsync().WaitAsync(TimeSpan.FromSeconds(15));
                 using var aoiStop = new CancellationTokenSource();
                 var aoiTask = aoiPump.RunAsync(aoiStop.Token);
                 try
                 {
-                var serverTask = authorization.RunAuthenticatedSocketAsync(client,
-                    certificate, resultRouter,
-                    new TlsWireConnectionOptions(AuthorizationTimeoutMilliseconds: 15000));
+                var serverTask = authorization.RunAuthenticatedAesSocketAsync(client,
+                    settings, resultRouter,
+                    new AesWireConnectionOptions(AuthorizationTimeoutMilliseconds: 15000));
 
                 using var receiptCts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
                 var receipt = await WaitForMoveAsync(world, resultRouter, characterId, receiptCts.Token);
@@ -123,7 +122,7 @@ internal static class Program
                 // Continue routing every World tick after the first receipt;
                 // owner position/stop updates must reach the real TLS Client too.
                 var routingTask = resultRouter.RunAsync(world.Results);
-                TlsWireConnectionResult ended;
+                AesWireConnectionResult ended;
                 try { ended = await serverTask.WaitAsync(TimeSpan.FromSeconds(5)); }
                 finally
                 {
@@ -135,7 +134,7 @@ internal static class Program
                     aoiPump.FramesQueued < 1 || resultRouter.Statistics.ActiveSessions != 0)
                     throw new InvalidOperationException($"fixture disconnect or send mismatch commands={ended.CommandsAccepted} reliable_frames={ended.ReliableFramesSent} aoi={aoiPump.FramesQueued} active_routes={resultRouter.Statistics.ActiveSessions}");
                 Console.WriteLine($"LOGIN_FIXTURE_WORLD_READY_ROUTED aoi_frames={aoiPump.FramesQueued}");
-                Console.WriteLine($"LOGIN_FIXTURE_PASS tls={ended.Protocol} commands={ended.CommandsAccepted}");
+                Console.WriteLine($"LOGIN_FIXTURE_PASS aes=true commands={ended.CommandsAccepted}");
                 Console.Out.Flush();
                 return 0;
                 }
@@ -174,27 +173,26 @@ internal static class Program
             await world.StartAsync().ConfigureAwait(false);
             using var store=new SqliteIdentityStore(Path.Combine(root,"identity.db"));
             await store.InitializeAsync().ConfigureAwait(false);
-            var authorization=new IdentityTlsAuthorization(
+            var authorization=new IdentitySessionAuthorization(
                 store,world,
                 registrationRateLimiter:new AccountRegistrationRateLimiter());
             var router=new WorldResultRouter();
 
-            using var certificate=CreateCertificate();
-            string certPath=Path.Combine(root,"fixture-cert.pem");
-            WriteCertificatePem(certPath,certificate);
+            var settings=AesCbcSettings.FromEnvironment();
+
             var listener=new TcpListener(IPAddress.Loopback,0);
             listener.Start(1);
             try
             {
                 int port=((IPEndPoint)listener.LocalEndpoint).Port;
                 Console.WriteLine(
-                    $"REGISTER_FIXTURE_READY port={port} cert={certPath} username={Username}");
+                    $"REGISTER_FIXTURE_READY port={port} username={Username}");
                 Console.Out.Flush();
                 using var client=await listener.AcceptTcpClientAsync()
                     .WaitAsync(TimeSpan.FromSeconds(15)).ConfigureAwait(false);
-                var serverTask=authorization.RunAuthenticatedSocketAsync(
-                    client,certificate,router,
-                    new TlsWireConnectionOptions(
+                var serverTask=authorization.RunAuthenticatedAesSocketAsync(
+                    client,settings,router,
+                    new AesWireConnectionOptions(
                         AuthorizationTimeoutMilliseconds:15000));
                 var ended=await serverTask.WaitAsync(TimeSpan.FromSeconds(15))
                     .ConfigureAwait(false);
@@ -340,11 +338,10 @@ internal static class Program
                 });
             var pump = new WorldAoiPump(
                 router, monsters: coordinator, playerCombat: settlement);
-            var authorization = new IdentityTlsAuthorization(
+            var authorization = new IdentitySessionAuthorization(
                 store, world, combat: settlement);
-            using var certificate = CreateCertificate();
-            string certPath = Path.Combine(root, "fixture-cert.pem");
-            WriteCertificatePem(certPath, certificate);
+            var settings = AesCbcSettings.FromEnvironment();
+
             var listener = new TcpListener(IPAddress.Loopback, 0);
             listener.Start(1);
             using var stop = new CancellationTokenSource();
@@ -355,14 +352,14 @@ internal static class Program
             {
                 int port = ((IPEndPoint)listener.LocalEndpoint).Port;
                 Console.WriteLine(
-                    $"COMBAT_FIXTURE_READY port={port} cert={certPath} username={Username} character={characterId}");
+                    $"COMBAT_FIXTURE_READY port={port} username={Username} character={characterId}");
                 Console.Out.Flush();
 
                 using var client = await listener.AcceptTcpClientAsync()
                     .WaitAsync(TimeSpan.FromSeconds(15)).ConfigureAwait(false);
-                var ended = await authorization.RunAuthenticatedSocketAsync(
-                    client, certificate, router,
-                    new TlsWireConnectionOptions(AuthorizationTimeoutMilliseconds: 15000))
+                var ended = await authorization.RunAuthenticatedAesSocketAsync(
+                    client, settings, router,
+                    new AesWireConnectionOptions(AuthorizationTimeoutMilliseconds: 15000))
                     .WaitAsync(TimeSpan.FromSeconds(20)).ConfigureAwait(false);
 
                 var monster = runtime.SnapshotAll().Single();
@@ -383,7 +380,7 @@ internal static class Program
                         $"commands={ended.CommandsAccepted} sessions={router.Statistics.ActiveSessions}");
 
                 Console.WriteLine(
-                    $"COMBAT_FIXTURE_PASS tls={ended.Protocol} target={monster.EntityId} " +
+                    $"COMBAT_FIXTURE_PASS aes=true target={monster.EntityId} " +
                     $"monster_hp={monster.CurrentHp}/{monster.MaxHp} player_hp={player.Data.CurrentHp}/{player.Data.MaxHp} " +
                     $"player_mp={player.Data.CurrentMp}/{player.Data.MaxMp} respawn=true skill_99001=true skill_mp_cost=1 insufficient_skill_99002=true monster_damage_committed={settlement.Statistics.DamageCommitted} deaths={settlement.Statistics.DeathsCommitted} commands={ended.CommandsAccepted}");
                 Console.Out.Flush();
@@ -484,11 +481,10 @@ internal static class Program
                 store,new(Capacity:8),router.QueuePlayerDamage);
             var pump=new WorldAoiPump(
                 router,monsters:coordinator,playerCombat:settlement);
-            var authorization=new IdentityTlsAuthorization(
+            var authorization=new IdentitySessionAuthorization(
                 store,world,combat:settlement);
-            using var certificate=CreateCertificate();
-            string certPath=Path.Combine(root,"fixture-cert.pem");
-            WriteCertificatePem(certPath,certificate);
+            var settings=AesCbcSettings.FromEnvironment();
+
             var listener=new TcpListener(IPAddress.Loopback,0);
             listener.Start(1);
             using var stop=new CancellationTokenSource();
@@ -499,15 +495,15 @@ internal static class Program
             {
                 int port=((IPEndPoint)listener.LocalEndpoint).Port;
                 Console.WriteLine(
-                    $"SKILL_AOE_FIXTURE_READY port={port} cert={certPath} " +
+                    $"SKILL_AOE_FIXTURE_READY port={port} " +
                     $"username={Username} character={characterId}");
                 Console.Out.Flush();
 
                 using var client=await listener.AcceptTcpClientAsync()
                     .WaitAsync(TimeSpan.FromSeconds(15)).ConfigureAwait(false);
-                var ended=await authorization.RunAuthenticatedSocketAsync(
-                    client,certificate,router,
-                    new TlsWireConnectionOptions(
+                var ended=await authorization.RunAuthenticatedAesSocketAsync(
+                    client,settings,router,
+                    new AesWireConnectionOptions(
                         AuthorizationTimeoutMilliseconds:15000))
                     .WaitAsync(TimeSpan.FromSeconds(20)).ConfigureAwait(false);
 
@@ -530,7 +526,7 @@ internal static class Program
                         $"sessions={router.Statistics.ActiveSessions}");
 
                 Console.WriteLine(
-                    $"SKILL_AOE_FIXTURE_PASS tls={ended.Protocol} " +
+                    $"SKILL_AOE_FIXTURE_PASS aes=true " +
                     $"monster_hp={monsters[0].CurrentHp},{monsters[1].CurrentHp},{monsters[2].CurrentHp} " +
                     $"player_mp={player!.Data.CurrentMp}/{player.Data.MaxMp} " +
                     $"commands={ended.CommandsAccepted} aoi_frames={pump.FramesQueued}");
@@ -639,11 +635,10 @@ internal static class Program
                 store,new(Capacity:8),router.QueuePlayerDamage);
             var pump=new WorldAoiPump(
                 router,monsters:coordinator,playerCombat:settlement);
-            var authorization=new IdentityTlsAuthorization(
+            var authorization=new IdentitySessionAuthorization(
                 store,world,combat:settlement);
-            using var certificate=CreateCertificate();
-            string certPath=Path.Combine(root,"fixture-cert.pem");
-            WriteCertificatePem(certPath,certificate);
+            var settings=AesCbcSettings.FromEnvironment();
+
             var listener=new TcpListener(IPAddress.Loopback,0);
             listener.Start(2);
             using var stop=new CancellationTokenSource();
@@ -654,21 +649,21 @@ internal static class Program
             {
                 int port=((IPEndPoint)listener.LocalEndpoint).Port;
                 Console.WriteLine(
-                    $"SKILL_AOE_OBSERVER_FIXTURE_READY port={port} cert={certPath} " +
+                    $"SKILL_AOE_OBSERVER_FIXTURE_READY port={port} " +
                     $"actor_a={observerId} actor_b={actorId}");
                 Console.Out.Flush();
 
                 using var first=await listener.AcceptTcpClientAsync()
                     .WaitAsync(TimeSpan.FromSeconds(15)).ConfigureAwait(false);
-                var firstTask=authorization.RunAuthenticatedSocketAsync(
-                    first,certificate,router,
-                    new TlsWireConnectionOptions(
+                var firstTask=authorization.RunAuthenticatedAesSocketAsync(
+                    first,settings,router,
+                    new AesWireConnectionOptions(
                         AuthorizationTimeoutMilliseconds:15000));
                 using var second=await listener.AcceptTcpClientAsync()
                     .WaitAsync(TimeSpan.FromSeconds(15)).ConfigureAwait(false);
-                var secondTask=authorization.RunAuthenticatedSocketAsync(
-                    second,certificate,router,
-                    new TlsWireConnectionOptions(
+                var secondTask=authorization.RunAuthenticatedAesSocketAsync(
+                    second,settings,router,
+                    new AesWireConnectionOptions(
                         AuthorizationTimeoutMilliseconds:15000));
 
                 var results=await Task.WhenAll(firstTask,secondTask)
@@ -691,8 +686,8 @@ internal static class Program
                     monsters[2].CurrentHp!=100 ||
                     actorProfile?.Data.CurrentMp!=1 ||
                     actorProfile.Data.MaxMp!=2 ||
-                    results[0].Reason!=TlsWireEndReason.CleanEof ||
-                    results[1].Reason!=TlsWireEndReason.CleanEof ||
+                    results[0].Reason!=AesWireEndReason.CleanEof ||
+                    results[1].Reason!=AesWireEndReason.CleanEof ||
                     results[0].CommandsAccepted!=1 ||
                     results[1].CommandsAccepted!=2)
                     throw new InvalidOperationException(
@@ -825,11 +820,10 @@ internal static class Program
                 });
             var pump = new WorldAoiPump(
                 router,monsters:coordinator,playerCombat:settlement);
-            var authorization = new IdentityTlsAuthorization(
+            var authorization = new IdentitySessionAuthorization(
                 store,world,combat:settlement);
-            using var certificate = CreateCertificate();
-            string certPath = Path.Combine(root,"fixture-cert.pem");
-            WriteCertificatePem(certPath,certificate);
+            var settings = AesCbcSettings.FromEnvironment();
+
             var listener = new TcpListener(IPAddress.Loopback,0);
             listener.Start(2);
             using var stop = new CancellationTokenSource();
@@ -840,20 +834,20 @@ internal static class Program
             {
                 int port=((IPEndPoint)listener.LocalEndpoint).Port;
                 Console.WriteLine(
-                    $"COMBAT_OBSERVER_FIXTURE_READY port={port} cert={certPath} " +
+                    $"COMBAT_OBSERVER_FIXTURE_READY port={port} " +
                     $"actor_a={observerId} actor_b={actorId}");
                 Console.Out.Flush();
 
                 using var first=await listener.AcceptTcpClientAsync()
                     .WaitAsync(TimeSpan.FromSeconds(15)).ConfigureAwait(false);
-                var firstTask=authorization.RunAuthenticatedSocketAsync(
-                    first,certificate,router,
-                    new TlsWireConnectionOptions(AuthorizationTimeoutMilliseconds:15000));
+                var firstTask=authorization.RunAuthenticatedAesSocketAsync(
+                    first,settings,router,
+                    new AesWireConnectionOptions(AuthorizationTimeoutMilliseconds:15000));
                 using var second=await listener.AcceptTcpClientAsync()
                     .WaitAsync(TimeSpan.FromSeconds(15)).ConfigureAwait(false);
-                var secondTask=authorization.RunAuthenticatedSocketAsync(
-                    second,certificate,router,
-                    new TlsWireConnectionOptions(AuthorizationTimeoutMilliseconds:15000));
+                var secondTask=authorization.RunAuthenticatedAesSocketAsync(
+                    second,settings,router,
+                    new AesWireConnectionOptions(AuthorizationTimeoutMilliseconds:15000));
 
                 var results=await Task.WhenAll(firstTask,secondTask)
                     .WaitAsync(TimeSpan.FromSeconds(20)).ConfigureAwait(false);
@@ -874,8 +868,8 @@ internal static class Program
                     actorProfile.Data.CurrentMp!=1 || actorProfile.Data.MaxMp!=2 ||
                     settlement.Statistics.HitsCommitted!=1 ||
                     settlement.Statistics.DamageCommitted!=18 ||
-                    results[0].Reason!=TlsWireEndReason.CleanEof ||
-                    results[1].Reason!=TlsWireEndReason.CleanEof ||
+                    results[0].Reason!=AesWireEndReason.CleanEof ||
+                    results[1].Reason!=AesWireEndReason.CleanEof ||
                     results[0].CommandsAccepted!=1 ||
                     results[1].CommandsAccepted!=3 ||
                     pump.FramesQueued<10)
@@ -986,10 +980,9 @@ internal static class Program
             var router = new WorldResultRouter(
                 new WorldResultRouterOptions(AttackRequestCapacity:8));
             var pump = new WorldAoiPump(router, monsters:coordinator);
-            var authorization = new IdentityTlsAuthorization(store, world);
-            using var certificate = CreateCertificate();
-            string certPath = Path.Combine(root, "fixture-cert.pem");
-            WriteCertificatePem(certPath, certificate);
+            var authorization = new IdentitySessionAuthorization(store, world);
+            var settings = AesCbcSettings.FromEnvironment();
+
             var listener = new TcpListener(IPAddress.Loopback, 0);
             listener.Start(1);
             using var stop = new CancellationTokenSource();
@@ -999,15 +992,15 @@ internal static class Program
             {
                 int port = ((IPEndPoint)listener.LocalEndpoint).Port;
                 Console.WriteLine(
-                    $"AUTO_ATTACK_FIXTURE_READY port={port} cert={certPath} " +
+                    $"AUTO_ATTACK_FIXTURE_READY port={port} " +
                     $"username={Username} character={characterId}");
                 Console.Out.Flush();
 
                 using var client = await listener.AcceptTcpClientAsync()
                     .WaitAsync(TimeSpan.FromSeconds(15)).ConfigureAwait(false);
-                var ended = await authorization.RunAuthenticatedSocketAsync(
-                    client, certificate, router,
-                    new TlsWireConnectionOptions(AuthorizationTimeoutMilliseconds:15000))
+                var ended = await authorization.RunAuthenticatedAesSocketAsync(
+                    client, settings, router,
+                    new AesWireConnectionOptions(AuthorizationTimeoutMilliseconds:15000))
                     .WaitAsync(TimeSpan.FromSeconds(20)).ConfigureAwait(false);
 
                 var monster = runtime.SnapshotAll().Single();
@@ -1022,7 +1015,7 @@ internal static class Program
                         $"commands={ended.CommandsAccepted} sessions={router.Statistics.ActiveSessions}");
 
                 Console.WriteLine(
-                    $"AUTO_ATTACK_FIXTURE_PASS tls={ended.Protocol} " +
+                    $"AUTO_ATTACK_FIXTURE_PASS aes=true " +
                     $"monster_hp={monster.CurrentHp}/{monster.MaxHp} " +
                     $"final_x={character.X:F1} final_y={character.Y:F1} " +
                     $"commands={ended.CommandsAccepted}");
@@ -1087,11 +1080,10 @@ internal static class Program
 
             var router = new WorldResultRouter();
             var pump = new WorldAoiPump(router);
-            var authorization = new IdentityTlsAuthorization(
+            var authorization = new IdentitySessionAuthorization(
                 store, world, pickupWorldGeneration:generation);
-            using var certificate = CreateCertificate();
-            string certPath = Path.Combine(root, "fixture-cert.pem");
-            WriteCertificatePem(certPath, certificate);
+            var settings = AesCbcSettings.FromEnvironment();
+
             var listener = new TcpListener(IPAddress.Loopback, 0);
             listener.Start(1);
             using var stop = new CancellationTokenSource();
@@ -1101,15 +1093,15 @@ internal static class Program
             {
                 int port = ((IPEndPoint)listener.LocalEndpoint).Port;
                 Console.WriteLine(
-                    $"DISCARD_FIXTURE_READY port={port} cert={certPath} username={Username} " +
+                    $"DISCARD_FIXTURE_READY port={port} username={Username} " +
                     $"character={characterId} item_uid={grant.ItemUid}");
                 Console.Out.Flush();
 
                 using var client = await listener.AcceptTcpClientAsync()
                     .WaitAsync(TimeSpan.FromSeconds(15)).ConfigureAwait(false);
-                var ended = await authorization.RunAuthenticatedSocketAsync(
-                    client, certificate, router,
-                    new TlsWireConnectionOptions(AuthorizationTimeoutMilliseconds: 15000))
+                var ended = await authorization.RunAuthenticatedAesSocketAsync(
+                    client, settings, router,
+                    new AesWireConnectionOptions(AuthorizationTimeoutMilliseconds: 15000))
                     .WaitAsync(TimeSpan.FromSeconds(20)).ConfigureAwait(false);
 
                 var remaining = await store.ListInventoryItemsAsync(characterId)
@@ -1121,7 +1113,7 @@ internal static class Program
                         $"commands={ended.CommandsAccepted} sessions={router.Statistics.ActiveSessions}");
 
                 Console.WriteLine(
-                    $"DISCARD_FIXTURE_PASS tls={ended.Protocol} item_uid={grant.ItemUid} " +
+                    $"DISCARD_FIXTURE_PASS aes=true item_uid={grant.ItemUid} " +
                     $"remaining=0 commands={ended.CommandsAccepted}");
                 Console.Out.Flush();
                 return 0;
@@ -1206,12 +1198,11 @@ internal static class Program
             ]);
             var router = new WorldResultRouter();
             var pump = new WorldAoiPump(router);
-            var authorization = new IdentityTlsAuthorization(
+            var authorization = new IdentitySessionAuthorization(
                 store, world, pickupWorldGeneration:generation,
                 storages:storageCatalog);
-            using var certificate = CreateCertificate();
-            string certPath = Path.Combine(root, "fixture-cert.pem");
-            WriteCertificatePem(certPath, certificate);
+            var settings = AesCbcSettings.FromEnvironment();
+
             var listener = new TcpListener(IPAddress.Loopback, 0);
             listener.Start(1);
             using var stop = new CancellationTokenSource();
@@ -1221,15 +1212,15 @@ internal static class Program
             {
                 int port = ((IPEndPoint)listener.LocalEndpoint).Port;
                 Console.WriteLine(
-                    $"STORAGE_FIXTURE_READY port={port} cert={certPath} username={Username} " +
+                    $"STORAGE_FIXTURE_READY port={port} username={Username} " +
                     $"character={characterId} item_uid={grant.ItemUid} npc=88 enhancement=5");
                 Console.Out.Flush();
 
                 using var client = await listener.AcceptTcpClientAsync()
                     .WaitAsync(TimeSpan.FromSeconds(15)).ConfigureAwait(false);
-                var ended = await authorization.RunAuthenticatedSocketAsync(
-                    client, certificate, router,
-                    new TlsWireConnectionOptions(AuthorizationTimeoutMilliseconds: 15000))
+                var ended = await authorization.RunAuthenticatedAesSocketAsync(
+                    client, settings, router,
+                    new AesWireConnectionOptions(AuthorizationTimeoutMilliseconds: 15000))
                     .WaitAsync(TimeSpan.FromSeconds(25)).ConfigureAwait(false);
 
                 var inventory = await store.ListInventoryItemsAsync(characterId)
@@ -1250,7 +1241,7 @@ internal static class Program
                         $"commands={ended.CommandsAccepted} sessions={router.Statistics.ActiveSessions}");
 
                 Console.WriteLine(
-                    $"STORAGE_FIXTURE_PASS tls={ended.Protocol} item_uid={grant.ItemUid} " +
+                    $"STORAGE_FIXTURE_PASS aes=true item_uid={grant.ItemUid} " +
                     $"quantity=2 source_drop={drops.Single().DropId} enhancement=5 storage=0 " +
                     $"commands={ended.CommandsAccepted}");
                 Console.Out.Flush();
@@ -1397,28 +1388,27 @@ internal static class Program
                 throw new InvalidOperationException("reconnect character missing");
 
             var router = new WorldResultRouter();
-            var authorization = new IdentityTlsAuthorization(store, world);
+            var authorization = new IdentitySessionAuthorization(store, world);
             var aoiPump = new WorldAoiPump(router);
             var routerTask = router.RunAsync(world.Results);
             using var aoiStop = new CancellationTokenSource();
             var aoiTask = aoiPump.RunAsync(aoiStop.Token);
 
-            using var certificate = CreateCertificate();
-            string certPath = Path.Combine(root, "fixture-cert.pem");
-            WriteCertificatePem(certPath, certificate);
+            var settings = AesCbcSettings.FromEnvironment();
+
             var listener = new TcpListener(IPAddress.Loopback, 0);
             listener.Start(2);
             try
             {
                 int port = ((IPEndPoint)listener.LocalEndpoint).Port;
-                Console.WriteLine($"RECONNECT_FIXTURE_READY port={port} cert={certPath} username={Username} character={characterId}");
+                Console.WriteLine($"RECONNECT_FIXTURE_READY port={port} username={Username} character={characterId}");
                 Console.Out.Flush();
 
                 var first = await listener.AcceptTcpClientAsync()
                     .WaitAsync(TimeSpan.FromSeconds(15)).ConfigureAwait(false);
-                var firstTask = authorization.RunAuthenticatedSocketAsync(
-                    first, certificate, router,
-                    new TlsWireConnectionOptions(AuthorizationTimeoutMilliseconds: 15000));
+                var firstTask = authorization.RunAuthenticatedAesSocketAsync(
+                    first, settings, router,
+                    new AesWireConnectionOptions(AuthorizationTimeoutMilliseconds: 15000));
 
                 string? command = await Console.In.ReadLineAsync()
                     .WaitAsync(TimeSpan.FromSeconds(20)).ConfigureAwait(false);
@@ -1449,9 +1439,9 @@ internal static class Program
 
                 using var second = await listener.AcceptTcpClientAsync()
                     .WaitAsync(TimeSpan.FromSeconds(10)).ConfigureAwait(false);
-                var secondTask = authorization.RunAuthenticatedSocketAsync(
-                    second, certificate, router,
-                    new TlsWireConnectionOptions(AuthorizationTimeoutMilliseconds: 15000));
+                var secondTask = authorization.RunAuthenticatedAesSocketAsync(
+                    second, settings, router,
+                    new AesWireConnectionOptions(AuthorizationTimeoutMilliseconds: 15000));
                 var secondEnded = await secondTask.WaitAsync(TimeSpan.FromSeconds(20))
                     .ConfigureAwait(false);
 
@@ -1529,34 +1519,33 @@ internal static class Program
             var auditedPortals = portals ? PortalCatalog.LoadNpcDocuments([
                 CreatePortalDocument(root, 15), CreatePortalDocument(root, 13)]) : null;
             var parties=new PartyCoordinator();
-            var authorization = new IdentityTlsAuthorization(
+            var authorization = new IdentitySessionAuthorization(
                 store, world, auditedPortals, parties:parties);
             var aoiPump = new WorldAoiPump(router);
             var routerTask = router.RunAsync(world.Results);
             using var aoiStop = new CancellationTokenSource();
             var aoiTask = aoiPump.RunAsync(aoiStop.Token);
-            using var certificate = CreateCertificate();
-            string certPath = Path.Combine(root, "fixture-cert.pem");
-            WriteCertificatePem(certPath, certificate);
+            var settings = AesCbcSettings.FromEnvironment();
+
             var listener = new TcpListener(IPAddress.Loopback, 0);
             listener.Start(2);
             try
             {
                 int port = ((IPEndPoint)listener.LocalEndpoint).Port;
                 var prefix = portals ? "PORTAL" : crossmap ? "CROSSMAP" : "MULTI";
-                Console.WriteLine($"{prefix}_FIXTURE_READY port={port} cert={certPath} actor_a={aId} actor_b={bId}");
+                Console.WriteLine($"{prefix}_FIXTURE_READY port={port} actor_a={aId} actor_b={bId}");
                 Console.Out.Flush();
 
                 using var first = await listener.AcceptTcpClientAsync()
                     .WaitAsync(TimeSpan.FromSeconds(15)).ConfigureAwait(false);
-                var firstTask = authorization.RunAuthenticatedSocketAsync(
-                    first, certificate, router,
-                    new TlsWireConnectionOptions(AuthorizationTimeoutMilliseconds: 15000));
+                var firstTask = authorization.RunAuthenticatedAesSocketAsync(
+                    first, settings, router,
+                    new AesWireConnectionOptions(AuthorizationTimeoutMilliseconds: 15000));
                 using var second = await listener.AcceptTcpClientAsync()
                     .WaitAsync(TimeSpan.FromSeconds(15)).ConfigureAwait(false);
-                var secondTask = authorization.RunAuthenticatedSocketAsync(
-                    second, certificate, router,
-                    new TlsWireConnectionOptions(AuthorizationTimeoutMilliseconds: 15000));
+                var secondTask = authorization.RunAuthenticatedAesSocketAsync(
+                    second, settings, router,
+                    new AesWireConnectionOptions(AuthorizationTimeoutMilliseconds: 15000));
                 if (crossmap)
                 {
                     // Test-only coordination: Python waits for real Godot's
@@ -1590,12 +1579,8 @@ internal static class Program
                         throw new InvalidOperationException("multi fixture left ghost World actors");
                     await Task.Delay(5).ConfigureAwait(false);
                 }
-                if (results[0].Protocol is not (System.Security.Authentication.SslProtocols.Tls12 or
-                    System.Security.Authentication.SslProtocols.Tls13) ||
-                    results[1].Protocol is not (System.Security.Authentication.SslProtocols.Tls12 or
-                    System.Security.Authentication.SslProtocols.Tls13) ||
-                    results[0].Reason != TlsWireEndReason.CleanEof ||
-                    results[1].Reason != TlsWireEndReason.CleanEof ||
+                if (results[0].Reason != AesWireEndReason.CleanEof ||
+                    results[1].Reason != AesWireEndReason.CleanEof ||
                     results[1].CommandsAccepted != (portals ? 8 : crossmap ? 11 : 3) ||
                     parties.PartyCount != 0 ||
                     router.Statistics.ActiveSessions != 0 ||
@@ -1686,21 +1671,4 @@ internal static class Program
         return directory;
     }
 
-    internal static void WriteCertificatePem(string path, X509Certificate2 certificate)
-    {
-        string b64 = Convert.ToBase64String(certificate.RawData, Base64FormattingOptions.InsertLineBreaks);
-        File.WriteAllText(path, "-----BEGIN CERTIFICATE-----\n" + b64 + "\n-----END CERTIFICATE-----\n");
-    }
-
-    internal static X509Certificate2 CreateCertificate()
-    {
-        using var key = RSA.Create(2048);
-        var request = new CertificateRequest("CN=localhost", key, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
-        request.CertificateExtensions.Add(new X509BasicConstraintsExtension(false, false, 0, false));
-        request.CertificateExtensions.Add(new X509KeyUsageExtension(X509KeyUsageFlags.DigitalSignature, false));
-        request.CertificateExtensions.Add(new X509SubjectKeyIdentifierExtension(request.PublicKey, false));
-        using var ephemeral = request.CreateSelfSigned(DateTimeOffset.UtcNow.AddMinutes(-5), DateTimeOffset.UtcNow.AddHours(1));
-        return new X509Certificate2(ephemeral.Export(X509ContentType.Pfx), string.Empty,
-            X509KeyStorageFlags.UserKeySet | X509KeyStorageFlags.Exportable);
-    }
 }

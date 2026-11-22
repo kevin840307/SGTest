@@ -30,6 +30,7 @@ func _run() -> void:
 			await process_frame
 			var remaining := int(Performance.get_monitor(Performance.OBJECT_ORPHAN_NODE_COUNT)) - baseline
 			if remaining != 0:
+				Node.print_orphan_nodes()
 				push_error("UI_LIFECYCLE_FAIL mode=%s iteration=%d orphan_nodes=%d" % [mode,iteration,remaining])
 				quit(1)
 				return

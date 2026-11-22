@@ -93,16 +93,23 @@ static class Checks
         Directory.CreateDirectory(root);
         try
         {
-            if (args is ["--identity-admin-only", "--tls"])
+            if (args is ["--identity-admin-only", "--aes"])
             {
                 IdentityAdminChecks.Verify(root, tlsOnly: true);
-                Console.WriteLine($"IDENTITY_ADMIN_TLS_CHECKS PASS total={_passes}");
+                Console.WriteLine($"IDENTITY_ADMIN_AES_CHECKS PASS total={_passes}");
                 return 0;
             }
             if (args is ["--identity-admin-only"])
             {
                 IdentityAdminChecks.Verify(root);
                 Console.WriteLine($"IDENTITY_ADMIN_CHECKS PASS total={_passes}");
+                return 0;
+            }
+            if (args is ["--identity-session-only"])
+            {
+                IdentitySessionAuthorizationChecks.Verify(root);
+                IdentitySessionLifecycleChecks.Verify(root);
+                Console.WriteLine($"IDENTITY_SESSION_AES_CHECKS PASS total={_passes}");
                 return 0;
             }
             if (args is ["--aoi-only"])
@@ -116,14 +123,14 @@ static class Checks
             }
             if (args is ["--listener-only"])
             {
-                TlsGatewayListenerChecks.Verify(root);
+                AesGatewayListenerChecks.Verify(root);
                 Console.WriteLine($"SERVER_LISTENER_CHECKS PASS total={_passes}");
                 return 0;
             }
             if (args is ["--load-only"])
             {
                 WorldAoiPumpChecks.VerifyLoad(root);
-                TlsGatewayListenerChecks.VerifyLoad(root);
+                AesGatewayListenerChecks.VerifyLoad(root);
                 Console.WriteLine($"SERVER_LOAD_CHECKS PASS total={_passes}");
                 return 0;
             }
@@ -270,7 +277,7 @@ static class Checks
             EnhancementCatalogChecks.Verify(root);
             EnhancementWireChecks.Verify();
             EnhancementGatewayChecks.Verify();
-            EnhancementTlsChecks.Verify(root);
+            EnhancementAesChecks.Verify(root);
             BankChecks.Verify(root);
             RepairCatalogChecks.Verify(root);
             RepairChecks.Verify(root);
@@ -295,7 +302,7 @@ static class Checks
             IdentityWireChecks.Verify();
             CharacterAppearanceWireChecks.Verify();
             GatewayConnectionChecks.Verify();
-            TlsCommandWorkerChecks.Verify();
+            SessionCommandWorkerChecks.Verify();
             WorldResultRouterChecks.Verify(root);
             WorldAoiChecks.Verify(root);
             AoiWireChecks.Verify();
@@ -319,19 +326,19 @@ static class Checks
             BankGatewayChecks.Verify();
             RepairGatewayChecks.Verify();
             QuestGatewayChecks.Verify();
-            BankTlsChecks.Verify(root);
-            RepairTlsChecks.Verify(root);
-            QuestTlsChecks.Verify(root);
-            EquipmentTlsChecks.Verify(root);
+            BankAesChecks.Verify(root);
+            RepairAesChecks.Verify(root);
+            QuestAesChecks.Verify(root);
+            EquipmentAesChecks.Verify(root);
             StorageGatewayChecks.Verify();
-            TlsSocketChecks.Verify();
+            AesSocketChecks.Verify();
             IdentityStoreChecks.Verify();
             CharacterAppearanceChecks.Verify();
             CharacterCreationSettingsChecks.Verify();
             AuthenticationRateLimiterChecks.Verify();
-            IdentityTlsAuthorizationChecks.Verify(root);
-            IdentityTlsLifecycleChecks.Verify(root);
-            TlsGatewayListenerChecks.Verify(root);
+            IdentitySessionAuthorizationChecks.Verify(root);
+            IdentitySessionLifecycleChecks.Verify(root);
+            AesGatewayListenerChecks.Verify(root);
             IdentityAdminChecks.Verify(root);
             WorldSimulationChecks.Verify(root);
             MonsterRuntimeChecks.Verify(root);
@@ -422,7 +429,7 @@ static class Checks
                 return 2;
             }
 
-            Console.WriteLine($"SERVER_WORLD_CHECKS PASS total={_passes} scope=collision_Astar_30Hz_host_wire_auth_character_gateway_bounded_TLS_listener_SQLite_identity_no_Godot_clients");
+            Console.WriteLine($"SERVER_WORLD_CHECKS PASS total={_passes} scope=collision_Astar_30Hz_host_wire_auth_character_gateway_bounded_AES_listener_SQLite_identity_no_Godot_clients");
             return 0;
         }
         finally

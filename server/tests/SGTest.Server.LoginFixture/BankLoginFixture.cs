@@ -5,6 +5,7 @@ using Microsoft.Data.Sqlite;
 using System.Net;
 using System.Net.Sockets;
 using SGTest.Server.Gateway;
+using SGTest.Server.Transport;
 using SGTest.Server.Identity;
 using SGTest.Server.World;
 
@@ -41,12 +42,10 @@ internal static class BankLoginFixture
             ]);
             var router=new WorldResultRouter();
             var pump=new WorldAoiPump(router);
-            var authorization=new IdentityTlsAuthorization(
+            var authorization=new IdentitySessionAuthorization(
                 store,world,pickupWorldGeneration:generation,banks:banks);
-            using var certificate=Program.CreateCertificate();
-            string certPath=Path.Combine(root,"fixture-cert.pem");
-            Program.WriteCertificatePem(certPath,certificate);
-            var listener=new TcpListener(IPAddress.Loopback,0);
+            var settings = AesCbcSettings.FromEnvironment();
+                                    var listener=new TcpListener(IPAddress.Loopback,0);
             listener.Start(1);
             using var stop=new CancellationTokenSource();
             var routing=router.RunAsync(world.Results);
@@ -55,15 +54,15 @@ internal static class BankLoginFixture
             {
                 int port=((IPEndPoint)listener.LocalEndpoint).Port;
                 Console.WriteLine(
-                    $"BANK_FIXTURE_READY port={port} cert={certPath} username={Program.Username} " +
+                    $"BANK_FIXTURE_READY port={port} username={Program.Username} " +
                     $"character={characterId} npc=88 scope=account wallet=1000");
                 Console.Out.Flush();
 
                 using var client=await listener.AcceptTcpClientAsync()
                     .WaitAsync(TimeSpan.FromSeconds(15)).ConfigureAwait(false);
-                var ended=await authorization.RunAuthenticatedSocketAsync(
-                    client,certificate,router,
-                    new TlsWireConnectionOptions(AuthorizationTimeoutMilliseconds:15000))
+                var ended=await authorization.RunAuthenticatedAesSocketAsync(
+                    client,settings,router,
+                    new AesWireConnectionOptions(AuthorizationTimeoutMilliseconds:15000))
                     .WaitAsync(TimeSpan.FromSeconds(25)).ConfigureAwait(false);
 
                 var balance=await store.GetBankBalanceAsync(
@@ -76,7 +75,7 @@ internal static class BankLoginFixture
                         $"commands={ended.CommandsAccepted} sessions={router.Statistics.ActiveSessions}");
 
                 Console.WriteLine(
-                    $"BANK_FIXTURE_PASS tls={ended.Protocol} scope=account " +
+                    $"BANK_FIXTURE_PASS aes=true scope=account " +
                     $"wallet={balance.WalletMoney} bank={balance.BankMoney} " +
                     $"commands={ended.CommandsAccepted}");
                 Console.Out.Flush();

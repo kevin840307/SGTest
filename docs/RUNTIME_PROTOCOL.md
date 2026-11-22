@@ -1,6 +1,9 @@
 # SGTest — Client / Server Wire Contract
 
-**狀態：WIRE001 codec、正式 TLS listener、SQLite Account/Auth/CharacterChoose、Godot TLS Client、WorldReady baseline ACK 與 bounded same-connection AOI resync 已整合到唯一 versioned compact-binary Runtime。** `GatewayConnection` 提供 trusted binding／bounded parser／reliable egress；`TlsWireConnection` 強制 TLS，成功 Auth/CharacterChoose 後才進 gameplay，正式 WorldReady 必須 exact ACK 才開放 Move/NPC。**尚未完成的是實際部署憑證/公網政策、TCP 中斷後自動 reconnect、crash recovery 與後續 Combat/經濟可靠事件協定。** MessagePack／Protobuf 只保留在 test probe。
+**2026-11-22 現行傳輸覆寫歷史狀態：** 正式 Serve 已由 TLS 改為 **TCP + AES-256-CBC（固定 32B Key／16B IV）+ Compact Binary V1**。外層每筆 `uint32_le ciphertext_bytes` + `AES-CBC/PKCS7(binary-frame)`，上限 65552。WireProtocol（Header/Opcode/DTO）、Server Authoritative、可靠佇列／身分綁定不變。Transport 位置：`server/src/SGTest.Server/Transport/`、`client/network/aes_cbc_frame.gd`。**CBC 無 MAC、固定 IV、共用 Key 非 TLS 同等安全**；這是使用者指定的折衷，不代表加密認證安全；其後既有 TLS 內容僅保留為版本歷史與測試證據。請見 `server/README.md`。
+
+
+**2026-11-22 現行程式碼：** 唯一 V1 `WireProtocol`，`AesGatewayListener` + `AesWireConnection` + `AesCbcFrameStream` 正式 TCP AES-256-CBC 傳輸；TLS Server Socket、Listener 與憑證設定已移除。帳號／角色授權由 `IdentitySessionAuthorization` 接管，需在成功 Auth/CharacterChoose／WorldReady ACK 後依權威規則執行玩法。Godot TCP Transport 已透過真實 Client/Server 登入、UI、重連、交易與 AOI E2E 驗證。完整 Release 與正式 CI 尚需獨立驗收；MessagePack／Protobuf 非正式協定。
 
 ## 原則
 

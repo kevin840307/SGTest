@@ -1,6 +1,11 @@
 # SGTest Client 資源基礎
 
-Godot 4.7.2 單一 Client，沿用 AssetStore／External PCK 與既有地形景物 Renderer。正式 threaded TLS／WorldState 已接登入、選角與權威位置／方向；在線 WorldView 新增暫定 B 基礎六部件紙娃娃、logical view／ACT／鏡像、共同排序及自身相機跟隨。**平滑內插、正式角色外觀／裝備同步、戰鬥與主要多人玩法仍未完成**。新程式沒有取回舊 prototype。
+**目前正式 Client Transport（2026-11-22）：** `network/client_transport.gd` 使用 TCP + `network/aes_cbc_frame.gd`（AES-256-CBC/PKCS7、固定 Key 與 IV），不使用 TLS；須以 `SGTEST_AES_KEY_HEX`／`SGTEST_AES_IV_HEX` 環境變數提供與 Server 相同的 32B/16B 配置。登入介面沒有憑證參數。
+
+> 舊版 TLS 文件及測試記錄屬 2026-11-21 之前的歷史證據，不適用現行 Serve。固定 IV／共用 Key／無 MAC 不能抵抗密文竄改、可見重複模式；詳 `server/README.md` 的安全取捨。
+
+
+Godot 4.7.2 單一 Client，沿用 AssetStore／External PCK 與既有地形景物 Renderer。正式 threaded AES-CBC／WorldState 已接登入、選角與權威位置／方向；在線 WorldView 新增暫定 B 基礎六部件紙娃娃、logical view／ACT／鏡像、共同排序及自身相機跟隨。**平滑內插、正式角色外觀／裝備同步、戰鬥與主要多人玩法仍未完成**。新程式沒有取回舊 prototype。
 
 ## 驗證
 
@@ -98,66 +103,66 @@ python client/tests/run_world_view.py "C:\SGO\Godot\Godot_v4.7.2-stable_win64_co
 
 原有 `run_world.py --mode canvas --rounds 1` 亦回歸 PASS，現行 Python suite 81/81 PASS。報告在 `reports/`，原圖、PCK 與 GPU 截圖均不得推送。下階段仍需玩家 actor/Paper-doll、權威 Server A*、網路收包與 Render FPS 解耦、多開及 AFK/Unfocus；Viewer PASS 不能當作可玩 Client 或正式 Release。
 
-## 2026-11-16 threaded TLS login transport
+## AES-256-CBC Binary Client transport（2026-11-22）
 
-`network/wire_codec.gd` now covers the Client-facing V1 login/character frames in addition to MoveTarget/MoveReceipt. `network/client_transport.gd` owns TCP/TLS on a dedicated Godot `Thread`; networking is therefore not polled by a render `_process()` callback. The worker has bounded outbound/event/receive memory and uses partial send/read calls rather than a blocking full-frame send. Production startup uses certificate validation (`TLSOptions.client()`); the explicitly unsafe helper is debug-build-only.
+`network/wire_codec.gd` now covers the Client-facing V1 login/character frames in addition to MoveTarget/MoveReceipt. `network/client_transport.gd` owns TCP + AES-256-CBC on a dedicated Godot `Thread`; networking is therefore not polled by a render `_process()` callback. The worker has bounded outbound/event/receive memory and uses partial send/read calls rather than a blocking full-frame send. Production startup requires `SGTEST_AES_KEY_HEX` (32-byte key) and `SGTEST_AES_IV_HEX` (16-byte fixed IV); no certificate or TLS handshake remains.
 
 A real local E2E is available:
 
 ```powershell
-python client/tests/run_tls_login.py "C:\SGO\Godot\Godot_v4.7.2-stable_win64_console.exe"
+python client/tests/run_aes_login.py "C:\SGO\Godot\Godot_v4.7.2-stable_win64_console.exe"
 ```
 
-The runner starts `SGTest.Server.LoginFixture`, loads its public test certificate into Godot as the trusted chain, and verifies TLS Auth -> CharacterList -> CharacterChoose -> Move. Both sides must print PASS. This is a transport/login gate only: the application scene/login UI, non-render WorldState reducer, reconnect/WorldReady and render=0/30/60/90 packet-order tests are still NOT VERIFIED.
+The runner starts `SGTest.Server.LoginFixture` with test-only AES configuration and verifies encrypted Auth -> CharacterList -> CharacterChoose -> Move. Both sides must print PASS. This is a transport/login gate only: the application scene/login UI, non-render WorldState reducer, reconnect/WorldReady and render=0/30/60/90 packet-order tests are still NOT VERIFIED.
 
 ## 2026-11-16 non-render WorldState / ClientSession
 
 `network/world_state.gd` is a presentation-free protocol reducer. `network/client_session.gd` owns it on a dedicated logic thread and drains `ClientTransport` frames independently of render callbacks. Application/render code only submits bounded intents and reads copied snapshots. Current transitions cover Auth, CharacterList, CharacterChoose and MoveReceipt with MapEpoch/sequence fail-closed rules.
 
-`test_client_fps_independence.gd` runs the same Auth -> Choose -> Move script at simulated render polling 0/30/60/90 and requires identical final state and exact outgoing frame order. The zero-render case performs no snapshot polling during the work interval, proving this current logic path is not advanced by render FPS. The real TLS runner now uses `ClientSession` too.
+`test_client_fps_independence.gd` runs the same Auth -> Choose -> Move script at simulated render polling 0/30/60/90 and requires identical final state and exact outgoing frame order. The zero-render case performs no snapshot polling during the work interval, proving this current logic path is not advanced by render FPS. The real AES-CBC runner uses `ClientSession` too.
 
-GitHub `Client core checks` downloads the official Godot 4.7.2 Linux standard binary, verifies its published SHA256, caches it, and runs codec/transport/WorldState/FPS plus the Godot<->C# secure TLS E2E. Real WorldReady/AOI/snapshot interpolation/reconnect and the app UI integration are still later gates.
+GitHub `Client core checks` downloads the official Godot 4.7.2 Linux standard binary, verifies its published SHA256, caches it, and runs codec/transport/WorldState/FPS plus the Godot<->C# AES-CBC E2E. Real WorldReady/AOI/snapshot interpolation/reconnect and the app UI integration are still later gates.
 
-## 2026-11-16 TLS MoveReceipt round-trip
+## AES-CBC MoveReceipt round-trip
 
-`client/tests/run_tls_login.py` now requires the complete **server-to-client receipt return path**, not merely that the Server accepted Move. The C# fixture enqueues its authoritative MoveReceipt on the bound Gateway connection; the TLS writer sends it, and Godot `ClientSession`/`WorldState` must observe the accepted sequence and ServerTick before the test can PASS. GitHub CI passed this one-client secure loopback test; production reliable result routing/AOI/WorldReady, login UI and multi-client graphics remain pending.
+`client/tests/run_aes_login.py` now requires the complete **server-to-client receipt return path**, not merely that the Server accepted Move. The C# fixture enqueues its authoritative MoveReceipt on the bound Gateway connection; the AES-CBC writer sends it, and Godot `ClientSession`/`WorldState` must observe the accepted sequence and ServerTick before the test can PASS. GitHub CI passed this one-client secure loopback test; production reliable result routing/AOI/WorldReady, login UI and multi-client graphics remain pending.
 
-## 2026-11-16 WorldReady real TLS E2E
+## AES-CBC WorldReady E2E
 
-`client/tests/run_tls_login.py` now requires the real Godot `ClientSession` to receive and reduce **WorldReady and MoveReceipt** on a certificate-validated TLS connection. The C# fixture starts the production `WorldAoiPump` path, routes the trusted lifecycle event through the existing Gateway reliable FIFO and independently logs `LOGIN_FIXTURE_WORLD_READY_ROUTED`. GitHub Client core E2E PASS. This confirms one Godot headless client’s protocol/WorldState path, **not** actual two-client drawing/animation, Enemy/Drop visibility, WorldReady ACK or reconnection resync.
+`client/tests/run_aes_login.py` now requires the real Godot `ClientSession` to receive and reduce **WorldReady and MoveReceipt** on a AES-CBC encrypted connection. The C# fixture starts the production `WorldAoiPump` path, routes the trusted lifecycle event through the existing Gateway reliable FIFO and independently logs `LOGIN_FIXTURE_WORLD_READY_ROUTED`. GitHub Client core E2E PASS. This confirms one Godot headless client’s protocol/WorldState path, **not** actual two-client drawing/animation, Enemy/Drop visibility, WorldReady ACK or reconnection resync.
 
-## 2026-11-16 Cross-map two-client TLS regression
+## AES-CBC Cross-map two-client regression
 
-The existing `client/tests/run_tls_login.py` supports `--crossmap --timeout 70`, reusing the **single** `.NET 8 Server.LoginFixture` and two genuine concurrent Godot 4.7.2 `ClientSession` processes. The fixture uses only a *test-only trusted server control* for Map15→Map13→Map15 after actual Godot observation barriers; it does not give a Client an arbitrary teleport RPC. It asserts new `WorldReady` and monotonic MapEpoch, clear old entities, Map13 MoveReceipt with reset sequence, Map15 spectator Despawn and fresh-generation Spawn, and finally no ghost World actors. GitHub Client workflow **43880543810 PASS**; Server **43880543863 PASS 69/69**. Actual original portal/NPC validation, private original two-map rendering and Windows performance are NOT VERIFIED.
+The existing `client/tests/run_aes_login.py` supports `--crossmap --timeout 70`, reusing the **single** `.NET 8 Server.LoginFixture` and two genuine concurrent Godot 4.7.2 `ClientSession` processes. The fixture uses only a *test-only trusted server control* for Map15→Map13→Map15 after actual Godot observation barriers; it does not give a Client an arbitrary teleport RPC. It asserts new `WorldReady` and monotonic MapEpoch, clear old entities, Map13 MoveReceipt with reset sequence, Map15 spectator Despawn and fresh-generation Spawn, and finally no ghost World actors. GitHub Client workflow **43880543810 PASS**; Server **43880543863 PASS 69/69**. Actual original portal/NPC validation, private original two-map rendering and Windows performance are NOT VERIFIED.
 
 
 ## 2026-11-16 audited NPC click network path
 
-Once WorldReady has arrived, gameplay UI may call `ClientSession.npc_interact(spawn_id)`; do not send destinations or use a test-only transfer RPC. Successful/denied results appear in WorldState `last_npc_result_status`, `last_npc_result_map_epoch`, `pending_npc_sequence` and `waiting_for_new_map`. Server validates the actual NPC from private runtime Converter `npcs.json`. The headless CI gate exercises two real Godot processes and the test-only audited metadata via `client/tests/run_tls_login.py --portal --timeout 70`. This does not itself create a clickable NPC UI, load original private PCK, or confirm legacy NPC distance; those remain NOT VERIFIED.
+Once WorldReady has arrived, gameplay UI may call `ClientSession.npc_interact(spawn_id)`; do not send destinations or use a test-only transfer RPC. Successful/denied results appear in WorldState `last_npc_result_status`, `last_npc_result_map_epoch`, `pending_npc_sequence` and `waiting_for_new_map`. Server validates the actual NPC from private runtime Converter `npcs.json`. The headless CI gate exercises two real Godot processes and the test-only audited metadata via `client/tests/run_aes_login.py --portal --timeout 70`. This does not itself create a clickable NPC UI, load original private PCK, or confirm legacy NPC distance; those remain NOT VERIFIED.
 
 ## MVP003-LOGIN-UI：正式入口接現行Session
 
-main的玩家登入畫面**只顯示帳號、密碼及登入操作，不提供 IP／Port 編輯欄位**。連線端點屬部署設定，仍由啟動參數 `--host`、`--port` 或內部預設值提供，不由 UI 風格決定或覆寫。TLS 憑證預設由系統信任鏈驗證；私人測試 CA 可透過 `-- --host 127.0.0.1 --port 7777 --tls-name localhost --trusted-cert C:/private/server-cert.pem --pack C:/private/assets.pck` 指定。帳號／密碼不透過命令列傳入，密碼提交後清空。7777須配合實際listener；現在可依server README啟動TLS `serve`，需預先建置可信帳號／角色DB，公開創角尚未接通。
+main的玩家登入畫面**只顯示帳號、密碼及登入操作，不提供 IP／Port 編輯欄位**。連線端點屬部署設定，仍由啟動參數 `--host`、`--port` 或內部預設值提供，不由 UI 風格決定或覆寫。Client／Server 必須以部署環境變數 `SGTEST_AES_KEY_HEX` 與 `SGTEST_AES_IV_HEX` 提供相同的固定 Key／IV；啟動參數不再提供 TLS 憑證。測試環境可使用 `-- --host 127.0.0.1 --port 7777 --pack C:/private/assets.pck`。帳號／密碼不透過命令列傳入，密碼提交後清空。7777須配合實際listener；現在可依 server README 啟動 AES-CBC `serve`，需預先建置可信帳號／角色DB，公開創角尚未接通。
 
 ClientSession的兩個worker負責收包與Reducer；UI每50ms只讀已發布快照。收到WorldReady後沿唯一AssetStore載入對應map，連線期間本地Map按鈕不可切圖；地圖就緒時左鍵提交Server Move，尚未接玩家紙娃娃／平滑移動顯示。創角與正式NPC互動UI仍未實作。沒有私有素材時能完成登入，但不會假裝地圖已顯示。
 
 ```powershell
-python client/tests/run_tls_login.py "C:/SGO/Godot/Godot_v4.7.2-stable_win64.exe" --app-ui --timeout 45
+python client/tests/run_aes_login.py "C:/SGO/Godot/Godot_v4.7.2-stable_win64.exe" --app-ui --timeout 45
 # 可選原生UI截圖（保留私人本機，非headless）
-python client/tests/run_tls_login.py "C:/SGO/Godot/Godot_v4.7.2-stable_win64.exe" --app-ui --ui-screenshot reports/session_ui_login.png --timeout 45
+python client/tests/run_aes_login.py "C:/SGO/Godot/Godot_v4.7.2-stable_win64.exe" --app-ui --ui-screenshot reports/session_ui_login.png --timeout 45
 ```
 
-Windows真TLS UI Gate與雙圖既有12張GPU／38原始幀回歸PASS。地形PCK必須含最新`int16_plus_one_wrap`契約；舊PCK會被拒絕。`run_world_view.py --pack PATH --assets MATCHING_PUBLISHED_ASSETS`可指定對應的只讀Oracle，避免改寫其他Session輸出。這些分別驗證UI網路路徑與Renderer回歸，尚非兩個真Client在原版地圖上的連線視覺E2E。
+Windows AES-CBC UI Gate與雙圖既有12張GPU／38原始幀回歸PASS。地形PCK必須含最新`int16_plus_one_wrap`契約；舊PCK會被拒絕。`run_world_view.py --pack PATH --assets MATCHING_PUBLISHED_ASSETS`可指定對應的只讀Oracle，避免改寫其他Session輸出。這些分別驗證UI網路路徑與Renderer回歸，尚非兩個真Client在原版地圖上的連線視覺E2E。
 
 ## 在線基礎玩家呈現（2026-11-17）
 
 使用對應最新 Converter 契約的私有 PCK（包含 `PLAYER_PART_ASSETS`），啟動既有 main；在登入介面輸入帳密，選角後會載入 Server WorldReady 指定地圖並跟隨自身。範例：
 
 ```powershell
-& "<Godot4.7.2>" --path client -- --pack "<assets.pck>" --host 127.0.0.1 --port 7777 --tls-name localhost --trusted-cert "<trusted.pem>"
+& "<Godot4.7.2>" --path client -- --pack "<assets.pck>" --host 127.0.0.1 --port 7777
 ```
 
-未提供 trusted-cert 時使用系統正常 CA 驗證；不會停用憑證驗證。在線左鍵送 Server Move，方向鍵／中鍵／Home 的自由檢視僅限離線；登出、跨圖先清除畫面與角色引用，再結束原 scope。現有所有角色暫用 B 基礎六部件（含 hair00），尚不是帳號角色的正式外觀／裝備。資料更新與動畫只影響呈現，WorldState／收包仍在各自 worker；此版位置直接呈現權威更新，平滑內插為下一 Gate。
+本協定不使用 TLS 憑證，AES-CBC 固定 IV／共用 Key 且無 MAC，密文不具完整性認證，不可將此傳輸宣稱與 TLS 同等安全。在線左鍵送 Server Move，方向鍵／中鍵／Home 的自由檢視僅限離線；登出、跨圖先清除畫面與角色引用，再結束原 scope。現有所有角色暫用 B 基礎六部件（含 hair00），尚不是帳號角色的正式外觀／裝備。資料更新與動畫只影響呈現，WorldState／收包仍在各自 worker；此版位置直接呈現權威更新，平滑內插為下一 Gate。
 
 `test_player_presentation.gd` 是公開 synthetic headless Gate。私有 GPU/source Gate 沿用現有 runner：
 
