@@ -82,6 +82,18 @@ func _run() -> void:
 		view.players._actors.has(2) and
 		str(view.players._actors[2].profile.key)==Profile.appearance_key(remote_app),
 		"initial remote actor did not use authoritative appearance")
+	view._players_dirty=true
+	view.present()
+	var initial_remote_label: Dictionary = {}
+	for label in view._canvas._player_labels:
+		if str(label.actor_id)=="2":
+			initial_remote_label=label
+			break
+	var initial_remote_feet:=view.players.position_at(2,Time.get_ticks_usec())
+	check(not initial_remote_label.is_empty() and
+		bool(initial_remote_label.get("recovered_player_anchor",false)) and
+		initial_remote_label.p.distance_to(initial_remote_feet)<0.01,
+		"first player-name frame did not use Recovered fixed player-node anchor")
 
 	var dynamic_app := {
 		"race":2,"hair_index":1,"hair_color":2,
@@ -101,6 +113,18 @@ func _run() -> void:
 		view.players._actors.has(2) and
 		str(view.players._actors[2].profile.key)==Profile.appearance_key(dynamic_app),
 		"runtime AOI appearance did not switch actor profile")
+	view._players_dirty=true
+	view.present()
+	var dynamic_remote_label: Dictionary = {}
+	for label in view._canvas._player_labels:
+		if str(label.actor_id)=="2":
+			dynamic_remote_label=label
+			break
+	var dynamic_remote_feet:=view.players.position_at(2,Time.get_ticks_usec())
+	check(not dynamic_remote_label.is_empty() and
+		bool(dynamic_remote_label.get("recovered_player_anchor",false)) and
+		dynamic_remote_label.p.distance_to(dynamic_remote_feet)<0.01,
+		"appearance load changed player-name local anchor")
 	for asset_id in [
 		"players/a/base/leg",
 		"equipment/a/cloth/body00",

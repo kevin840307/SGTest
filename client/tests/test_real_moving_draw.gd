@@ -143,9 +143,10 @@ func run() -> void:
 			else:
 				var actor_id := int(label_id)
 				var feet := view.players.position_at(actor_id,now)
-				var expected := feet+Vector2(0,view.players.stable_name_top_offset(actor_id))
-				check(name_label.p.distance_to(expected)<0.01,
-					"player name jittered with animation bounds frame "+str(i))
+				check(bool(name_label.get("recovered_player_anchor",false)),
+					"player name lost Recovered fixed node anchor frame "+str(i))
+				check(name_label.p.distance_to(feet)<0.01,
+					"player name moved relative to player pivot frame "+str(i))
 		if failures.size()>9: break
 		await process_frame
 	# A Server correction of 200px caused a real user's terrain to pan

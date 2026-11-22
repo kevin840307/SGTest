@@ -99,9 +99,9 @@ func run() -> void:
 	ack_gap.observe(duplicate_ack)
 	check(ack_gap.active and ack_gap.moving and ack_gap.position==before_duplicate,
 		"duplicate ACK broke the original moving route")
-	# Real-game diagnostics caught 146px stop and 200px moving corrections.
-	# The simulation snaps to Server authority, but the rendered paper doll
-	# must never jump that distance in one 60Hz frame.
+	# Recovered correction semantics: a REAL divergence cancels the local route
+	# and adopts the authoritative anchor immediately. It must never create a
+	# second 480px/s visual "catch-up walk" that looks like sliding.
 	var wide_manifest := {"collision_cell":16,"size":[640,192]}
 	var correction := LocalMovement.new()
 	check(correction.configure(grid(40,12),wide_manifest,5,27),"correction map invalid")
@@ -109,51 +109,41 @@ func run() -> void:
 	check(correction.request_target(Vector2(552,24),1),"long route rejected")
 	for frame in 16:
 		correction.advance(1.0/60.0)
-		correction.advance_visual(1.0/60.0)
-	var visual_before := correction.visual_position
 	var late_server := initial(27,5,Vector2(300,24),30)
 	late_server.self_state.moving=true
 	late_server.self_state.movement_action_sequence=1
 	late_server.last_receipt_sequence=1
 	late_server.last_receipt_status=0
 	correction.observe(late_server)
-	check(correction.position==Vector2(300,24) and correction.visual_position==visual_before,
-		"large Server correction teleported rendered avatar")
-	for frame in 30:
-		var before_frame := correction.visual_position
-		correction.advance(1.0/60.0)
-		correction.advance_visual(1.0/60.0)
-		check(correction.visual_position.distance_to(before_frame)<=8.001,
-			"rendered player snapped during moving correction at frame %d" % frame)
+	check(not correction.active and not correction.moving and \
+		correction.position==Vector2(300,24) and correction.visual_position==Vector2(300,24) and \
+		correction.last_stop_reason=="moving_divergence",
+		"large Server divergence created a fake catch-up route instead of Recovered correction")
+
+	# Once the Server has actually shown this action moving, an authoritative
+	# stop is final. Recovered anchors immediately; no idle/sliding transition.
 	var stop_correction := LocalMovement.new()
 	check(stop_correction.configure(grid(40,12),wide_manifest,6,28),"stop rollback map invalid")
 	stop_correction.observe(initial(28,6,Vector2(24,24)))
 	check(stop_correction.request_target(Vector2(552,24),1),"stop rollback route rejected")
 	for frame in 36:
 		stop_correction.advance(1.0/60.0)
-		stop_correction.advance_visual(1.0/60.0)
-	var before_stop := stop_correction.visual_position
+	var moving_state := initial(28,6,Vector2(160,24),59)
+	moving_state.self_state.moving=true
+	moving_state.self_state.movement_action_sequence=1
+	moving_state.last_receipt_sequence=1
+	moving_state.last_receipt_status=0
+	stop_correction.observe(moving_state)
 	var remote_stop := initial(28,6,Vector2(24,24),60)
 	remote_stop.self_state.moving=false
 	remote_stop.self_state.movement_action_sequence=1
 	remote_stop.last_receipt_sequence=1
 	remote_stop.last_receipt_status=0
 	stop_correction.observe(remote_stop)
-	check(stop_correction.active and stop_correction.position==Vector2(24,24) and \
-		stop_correction.visual_position==before_stop,
-		"authoritative stop instantly rewound entire player and camera")
-	var visually_settled := false
-	for frame in 48:
-		var prior_visual := stop_correction.visual_position
-		stop_correction.advance(1.0/60.0)
-		stop_correction.advance_visual(1.0/60.0)
-		check(stop_correction.visual_position.distance_to(prior_visual)<=8.001,
-			"stop correction jumped across terrain at %d" % frame)
-		if not stop_correction.active:
-			visually_settled = true
-			break
-	check(visually_settled and stop_correction.visual_position==Vector2(24,24),
-		"Server-authoritative correction failed to visually converge")
+	check(not stop_correction.active and not stop_correction.moving and \
+		stop_correction.position==Vector2(24,24) and stop_correction.visual_position==Vector2(24,24) and \
+		stop_correction.last_stop_reason=="server_stop",
+		"authoritative stop created a presentation slide instead of a final anchor")
 	# Long-hold retargets must not stack routes while local prediction is far
 	# ahead of the last Server position. Recovered repaths from local position;
 	# SGTest additionally gates that repath because the Server is authoritative.
@@ -180,8 +170,9 @@ func run() -> void:
 	check(continuous.configure(grid(12,12),manifest,1,7),"continuous map invalid")
 	continuous.observe(initial(7,1,Vector2(24,24)))
 	check(continuous.request_target(Vector2(152,24),1),"straight route not started")
-	check(continuous._full_path_searches == 1 and continuous._route.size() > 2,
-		"unobstructed target bypassed Server-equivalent octile A-star")
+	check(continuous._full_path_searches == 1 and continuous._search.is_empty() and \
+		continuous._route.size()==1,
+		"Recovered direct-clear path did not finish before movement")
 	var preceding := continuous.position
 	for frame in 18:
 		continuous.advance(1.0/60.0)
@@ -197,29 +188,18 @@ func run() -> void:
 			delayed.last_receipt_status = 0
 			continuous.observe(delayed)
 			check(continuous.position == current,"moving SelfState rewound the local view")
-	# An early authoritative stop 24px behind predicted position must not
-	# force an immediate idle snap; walk the small safe correction in frames.
-	var start_settle := continuous.position
+	# After this action has been observed moving, Server stop is authoritative.
+	# Do not synthesize a second slow route to the older position.
 	var server_stop := initial(7,1,Vector2(72,24),30)
 	server_stop.self_state.moving = false
 	server_stop.self_state.movement_action_sequence = 1
 	server_stop.last_receipt_sequence = 1
 	server_stop.last_receipt_status = 0
 	continuous.observe(server_stop)
-	check(continuous.position == start_settle and continuous.active and continuous.moving,
-		"authoritative stop instantly snapped and skipped walking")
-	var settled := false
-	var preceding_settle := continuous.position
-	for frame in 16:
-		continuous.advance(1.0/60.0)
-		check(continuous.position.distance_to(preceding_settle)<=4.001,
-			"stop transition jumped instead of bounded walking at frame %d" % frame)
-		preceding_settle = continuous.position
-		if not continuous.active:
-			settled = true
-			break
-	check(settled and continuous.position == Vector2(72,24) and not continuous.moving,
-		"failed to finish the Server-authoritative stop smoothly")
+	check(not continuous.active and not continuous.moving and \
+		continuous.position == Vector2(72,24) and continuous.visual_position == Vector2(72,24) and \
+		continuous.last_stop_reason=="server_stop",
+		"Server stop produced a fake settling walk")
 	# A fresh command after one completed stop cannot inherit the prior
 	# settling target or a stale route.
 	check(continuous.request_target(Vector2(152,24),2),"new move after stop rejected")
@@ -233,9 +213,8 @@ func run() -> void:
 	check(around.configure(grid(12,12,walls),manifest,2,8),"wall map unavailable")
 	around.observe(initial(8,2,Vector2(40,40)))
 	check(around.request_target(Vector2(152,40),1),"wall detour A-star path not found")
-	check((around._search.is_empty() and around.moving and around._route.size()>1) or \
-		(not around._search.is_empty() and not around.moving and around._route.is_empty()),
-		"A-star exposed an incomplete path to its movement consumer")
+	check(around._search.is_empty() and around.moving and around._route.size()>1,
+		"A-star did not finish/smooth the complete obstacle route before walking")
 	var pass_wall:=false
 	for i in range(240):
 		var pending_before := not around._search.is_empty()

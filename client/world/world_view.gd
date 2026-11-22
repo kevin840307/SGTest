@@ -502,11 +502,12 @@ func present() -> void:
 			if not feet.is_finite():
 				continue
 			var rendered := label.duplicate(true)
-			# A name must not track the highest trimmed animation pixel: head
-			# bob and different NR directions changed that bound every 100ms.
-			# Source sprite geometry defines a single invariant offset for this
-			# appearance; position follows the same local/peer render pivot.
-			rendered["p"] = feet+Vector2(0.0,players.stable_name_top_offset(actor_id))
+			# Recovered player.tscn owns NameLabel under the Player node at a
+			# fixed local rect (-130..-107). Do not derive player-name height
+			# from paper-doll frames or appearance loading: that causes an
+			# initial jump and animation-frame bob.
+			rendered["p"] = feet
+			rendered["recovered_player_anchor"] = true
 			name_labels.append(rendered)
 	for raw_label in npcs.labels_at(rect):
 		var key := str(raw_label.actor_id)

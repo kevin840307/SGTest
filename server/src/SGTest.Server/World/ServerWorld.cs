@@ -461,71 +461,91 @@ public sealed class ServerWorld
     private void AdvanceMovement(Actor actor, List<ActorSnapshot> changed,
                                  List<MoveReceipt> receipts)
     {
-        double remaining = _limits.MovementPixelsPerTick;
+        if (actor.RouteIndex >= actor.Route.Count) return;
+
+        // Match Recovered player.gd: route is already complete/smoothed.
+        // Each 30Hz tick performs ONE speed-clamped movement step. Waypoints
+        // may be promoted and corner probes adjusted, but elapsed time is
+        // never "caught up" with a faster visual move after pathfinding.
+        double stepDistance = _limits.MovementPixelsPerTick;
         bool updated = false;
-        // Recovered steers through verified visible waypoints rather than
-        // stopping at every 16px Blocking.dat cell centre. Do the same on
-        // the authoritative writer: skip only to a cell with proven line
-        // of sight, then still collision-check every actual movement step.
-        // Cap lookahead work per moving actor / 30Hz tick.
-        const int maxLookaheadCells = 6;
-        // At <=16px per tick no valid grid path can consume more than 3 segments.
-        for (int step = 0; step < 4 && remaining > 1e-9 &&
-             actor.RouteIndex < actor.Route.Count; step++)
+
+        while (actor.RouteIndex + 1 < actor.Route.Count)
         {
-            int farthest = Math.Min(actor.Route.Count - 1,
-                actor.RouteIndex + maxLookaheadCells);
-            for (int probe = farthest; probe > actor.RouteIndex; probe--)
-            {
-                var candidate = actor.Route[probe];
-                double cx = candidate.X * BlockingGrid.CellPixels +
-                            BlockingGrid.CellPixels / 2.0;
-                double cy = candidate.Y * BlockingGrid.CellPixels +
-                            BlockingGrid.CellPixels / 2.0;
-                if (!_maps[actor.Map].IsDirectClear(actor.X, actor.Y, cx, cy))
-                    continue;
-                actor.RouteIndex = probe;
-                break;
-            }
-            var waypoint = actor.Route[actor.RouteIndex];
-            double tx = waypoint.X * BlockingGrid.CellPixels + BlockingGrid.CellPixels / 2.0;
-            double ty = waypoint.Y * BlockingGrid.CellPixels + BlockingGrid.CellPixels / 2.0;
-            double dx = tx - actor.X, dy = ty - actor.Y;
-            double distance = Math.Sqrt(dx * dx + dy * dy);
-            if (distance <= 1e-9)
-            {
-                actor.RouteIndex++;
-                continue;
-            }
-            double pixels = Math.Min(distance, remaining);
-            double nx = actor.X + dx / distance * pixels;
-            double ny = actor.Y + dy / distance * pixels;
-            if (!_maps[actor.Map].IsDirectClear(actor.X, actor.Y, nx, ny))
-            {
-                actor.ClearRoute();
-                receipts.Add(new MoveReceipt(
-                    actor.Id, actor.ConnectionEpoch, actor.MapEpoch, actor.LastSequence,
-                    MoveReceiptStatus.RouteBecameBlocked, _tick));
-                updated = true;
-                break;
-            }
-            actor.Facing = FacingFromDisplacement(dx, dy, actor.Facing);
-            actor.X = nx;
-            actor.Y = ny;
-            remaining -= pixels;
-            updated = true;
-            if (pixels >= distance - 1e-9)
-            {
-                actor.X = tx;
-                actor.Y = ty;
-                actor.RouteIndex++;
-            }
+            var next = actor.Route[actor.RouteIndex + 1];
+            double nextX = next.X * BlockingGrid.CellPixels + BlockingGrid.CellPixels / 2.0;
+            double nextY = next.Y * BlockingGrid.CellPixels + BlockingGrid.CellPixels / 2.0;
+            bool nextVisible = _maps[actor.Map].IsDirectClear(actor.X, actor.Y, nextX, nextY);
+            // Recovered's close-to-waypoint promotion relies on CharacterBody2D
+            // collision as a safety net. This authoritative coordinate writer
+            // has no body collider, so early promotion requires proven LOS.
+            if (!nextVisible) break;
+            actor.RouteIndex++;
         }
-        if (actor.RouteIndex >= actor.Route.Count && actor.Route.Count != 0)
+
+        var waypoint = actor.Route[actor.RouteIndex];
+        double finalX = waypoint.X * BlockingGrid.CellPixels + BlockingGrid.CellPixels / 2.0;
+        double finalY = waypoint.Y * BlockingGrid.CellPixels + BlockingGrid.CellPixels / 2.0;
+        double finalDx = finalX - actor.X, finalDy = finalY - actor.Y;
+        double finalDistance = Math.Sqrt(finalDx * finalDx + finalDy * finalDy);
+
+        // Preserve Recovered steering, but never use its ~10px final snap;
+        // the last authoritative step is still bounded by normal tick speed.
+        if (actor.RouteIndex + 1 >= actor.Route.Count && finalDistance <= stepDistance)
         {
+            actor.X = finalX;
+            actor.Y = finalY;
             actor.ClearRoute();
             updated = true;
         }
+        else
+        {
+            double targetX = finalX, targetY = finalY;
+            if (actor.RouteIndex + 1 < actor.Route.Count)
+            {
+                var next = actor.Route[actor.RouteIndex + 1];
+                double nextX = next.X * BlockingGrid.CellPixels + BlockingGrid.CellPixels / 2.0;
+                double nextY = next.Y * BlockingGrid.CellPixels + BlockingGrid.CellPixels / 2.0;
+                // Recovered probes 3/4, 1/2, 1/4 of the next segment and
+                // steers toward the furthest currently visible point.
+                for (int sample = 3; sample >= 1; sample--)
+                {
+                    double ratio = sample / 4.0;
+                    double probeX = finalX + (nextX - finalX) * ratio;
+                    double probeY = finalY + (nextY - finalY) * ratio;
+                    if (!_maps[actor.Map].IsDirectClear(actor.X, actor.Y, probeX, probeY))
+                        continue;
+                    targetX = probeX;
+                    targetY = probeY;
+                    break;
+                }
+            }
+
+            double dx = targetX - actor.X, dy = targetY - actor.Y;
+            double distance = Math.Sqrt(dx * dx + dy * dy);
+            if (distance > 1e-9)
+            {
+                double pixels = Math.Min(stepDistance, distance);
+                double nx = actor.X + dx / distance * pixels;
+                double ny = actor.Y + dy / distance * pixels;
+                if (!_maps[actor.Map].IsStepClear(actor.X, actor.Y, nx, ny))
+                {
+                    actor.ClearRoute();
+                    receipts.Add(new MoveReceipt(
+                        actor.Id, actor.ConnectionEpoch, actor.MapEpoch, actor.LastSequence,
+                        MoveReceiptStatus.RouteBecameBlocked, _tick));
+                    updated = true;
+                }
+                else
+                {
+                    actor.Facing = FacingFromDisplacement(dx, dy, actor.Facing);
+                    actor.X = nx;
+                    actor.Y = ny;
+                    updated = true;
+                }
+            }
+        }
+
         if (updated)
         {
             actor.Revision = checked(actor.Revision + 1);

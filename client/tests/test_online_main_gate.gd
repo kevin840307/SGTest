@@ -209,6 +209,12 @@ func _online_gate_actor() -> void:
 			var own_id := int(_app._last_snapshot.get("actor_id",0))
 			var before := _app.world_view.players.position_at(own_id,Time.get_ticks_usec())
 			_app._begin_ground_navigation(Vector2(952,808),Time.get_ticks_msec())
+			var obstacle_route = _app.world_view.local_movement
+			if not obstacle_route._search.is_empty() or obstacle_route._route.size()<2:
+				_online_gate_fail("obstacle_route_not_complete_before_walk_target_%s_route_%s_search_%s" % [
+					str(obstacle_route._target_cell),str(obstacle_route._route),str(obstacle_route._search)])
+				return
+			print("ONLINE_MAIN_GATE_OBSTACLE_ROUTE role=actor waypoints=",obstacle_route._route.size())
 			if not _app.world_view.local_movement.active:
 				_online_gate_fail("local_prediction_not_started_ready_%s_pos_%s_phase_%s_own_%s" % [str(_app.world_view.local_movement.ready),str(_app.world_view.local_movement.position),str(_app.world_view.phase),str(_app._last_snapshot.get("self_state",{}))])
 				return

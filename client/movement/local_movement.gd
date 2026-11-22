@@ -6,8 +6,11 @@ const CELL := 16
 const PIXELS_PER_SECOND := 240.0 # Server 8px / 30Hz authoritative tick.
 const MAX_EXPANDED := 2048 # Exactly the current WorldLimits.MaxPathExpandedCells.
 const FAST_PATH_BUDGET_USEC := 5000 # Recovered caps normal query at 6000us.
-const FALLBACK_FRAME_BUDGET_USEC := 1500 # Same fallback frame budget as Recovered.
 const SEARCH_BUDGET_CHECK_INTERVAL := 16
+# Recovered player.gd movement semantics: path is fully solved before walking,
+# then visible waypoints/corner probes make turns continuous.
+const WAYPOINT_REACH_DISTANCE := 10.0
+const CORNER_STEER_SAMPLES := 4
 const CORRECTION_DEADBAND := 24.0
 const CORRECTION_SNAP := 96.0
 const SETTLE_SNAP := 5.0
@@ -36,6 +39,8 @@ var _route: Array[Vector2i] = []
 var _route_index := 0
 var _target_cell := Vector2i(-1,-1)
 var _expected_sequence := 0
+var _server_seen_moving_for_expected := false
+var _waiting_server_stop := false
 var _last_server_tick := -1
 var _last_authority := Vector2.INF
 var _settle_target := Vector2.INF
@@ -44,6 +49,7 @@ var _last_correction_warn_msec := -5000
 var correction_events := 0
 var large_correction_events := 0
 var max_correction_distance := 0.0
+var last_stop_reason := ""
 var _search: Dictionary = {}
 
 func clear() -> void:
@@ -63,6 +69,8 @@ func clear() -> void:
 	_route_index = 0
 	_target_cell = Vector2i(-1,-1)
 	_expected_sequence = 0
+	_server_seen_moving_for_expected = false
+	_waiting_server_stop = false
 	_last_server_tick = -1
 	_last_authority = Vector2.INF
 	_settle_target = Vector2.INF
@@ -71,6 +79,7 @@ func clear() -> void:
 	correction_events = 0
 	large_correction_events = 0
 	max_correction_distance = 0.0
+	last_stop_reason = ""
 	_search.clear()
 
 func configure(blocking: PackedByteArray, manifest: Dictionary, epoch: int, own_actor: int) -> bool:
@@ -133,6 +142,25 @@ func _direct_clear(start: Vector2, goal: Vector2) -> bool:
 		if not _walkable(source):
 			return false
 	return source == target
+
+func _step_clear(start: Vector2, goal: Vector2) -> bool:
+	# Recovered hands motion to CharacterBody2D after the whole route/segment
+	# is validated. SGTest has no per-player physics body, so validate only the
+	# cell transition made by this <=4px render step. Re-running supercover on
+	# tiny floating subsegments can disagree at an exact grid corner and falsely
+	# stop an otherwise valid route.
+	var source := _cell(start)
+	var target := _cell(goal)
+	if not _walkable(source) or not _walkable(target):
+		return false
+	var dx := absi(target.x-source.x)
+	var dy := absi(target.y-source.y)
+	# The complete route / current corner probe has already passed supercover.
+	# This check only ensures a single render step cannot jump over cells or
+	# enter a blocked cell; do not reinterpret the same safe continuous line
+	# as a fresh diagonal-corner path query.
+	return dx <= 1 and dy <= 1
+
 
 func _h(a: Vector2i,b: Vector2i) -> int:
 	var dx := absi(a.x-b.x)
@@ -276,45 +304,20 @@ func _diagnose_correction(reason: String, authoritative: Vector2) -> void:
 
 
 func _begin_visual_correction() -> void:
-	if not visual_position.is_finite() or not position.is_finite() or \
-		visual_position.distance_to(position)>MAX_VISUAL_CORRECTION:
-		visual_position = position
-		_visual_settling = false
-		active = false
-		moving = false
-		return
-	if visual_position.distance_to(position) <= SETTLE_SNAP:
-		visual_position = position
-		_visual_settling = false
-		active = false
-		moving = false
-		return
-	# Presentation-only bounded correction: Server remains the simulation
-	# authority, but a 146px stop correction must not teleport the Canvas.
-	_visual_settling = true
-	active = true
-	moving = true
-	facing = _face(position-visual_position,facing)
+	# Recovered apply_position_correction() does not create a second, faster
+	# visual walk. A correction replaces the route and returns to idle.
+	visual_position = position
+	_visual_settling = false
+	active = false
+	moving = false
 
 
-func advance_visual(delta: float) -> void:
-	if not ready or not position.is_finite() or delta <= 0.0:
-		return
-	if not visual_position.is_finite():
+func advance_visual(_delta: float) -> void:
+	# During ordinary movement the paper doll is the movement position itself.
+	# Keeping a second 480px/s follower is what made obstacle routes look as if
+	# the actor paused and then slid/caught up.
+	if ready and position.is_finite() and not _visual_settling:
 		visual_position = position
-	var remaining := visual_position.distance_to(position)
-	var step := VISUAL_RECOVERY_SPEED*minf(delta,0.1)
-	if remaining <= maxf(SETTLE_SNAP,step):
-		visual_position = position
-		if _visual_settling:
-			_visual_settling = false
-			active = false
-			moving = false
-	elif remaining > 0.0:
-		visual_position = visual_position.move_toward(position,step)
-		if _visual_settling:
-			moving = true
-			facing = _face(position-visual_position,facing)
 
 
 func observe(snapshot: Dictionary) -> void:
@@ -346,7 +349,7 @@ func observe(snapshot: Dictionary) -> void:
 		facing = int(own.get("facing",6))
 		return
 	if bool(snapshot.get("player_dead",false)) or bool(snapshot.get("waiting_for_new_map",false)):
-		stop()
+		stop("map_or_death")
 		active = false
 		position = authoritative
 		visual_position = authoritative
@@ -356,75 +359,91 @@ func observe(snapshot: Dictionary) -> void:
 	if _expected_sequence > 0 and receipt >= _expected_sequence and int(snapshot.get("last_receipt_status",-1)) != 0:
 		# A rejected command means movement is unauthorized: rollback now.
 		_diagnose_correction("receipt_rejected_%d" % int(snapshot.get("last_receipt_status",-1)),authoritative)
-		stop()
+		stop("receipt_rejected")
 		position = authoritative
 		visual_position = authoritative
 		_visual_settling = false
 		active = false
 		return
-	# A newly queued intent may already be moving locally before the Server
-	# processes it. Old SelfState locations must never pull it backwards.
-	# A receipt ACK and a matching SelfState are distinct ordered streams.
-	# A successful receipt may arrive while SelfState still describes the OLD
-	# idle action. Never accept that old idle as completion of a new route:
-	# it stops after the first ~4px and then jumps along Server updates.
-	if _visual_settling and not bool(own.get("moving",false)):
-		position = authoritative
-		return
+	# A successful receipt can precede the SelfState for the new movement
+	# action. Ignore that old sample until the action sequence catches up.
 	var confirmed := int(own.get("movement_action_sequence",0)) >= _expected_sequence
 	if not confirmed:
 		return
+	var server_moving := bool(own.get("moving",false))
+	if server_moving:
+		_server_seen_moving_for_expected = true
 	var delta := position.distance_to(authoritative)
-	# Normal moving SelfState is a delayed sample, not our current draw
-	# position. Repeated lerp(0.12) against it slowed the character after
-	# EVERY packet and made mid-distance movement rubber-band and slide.
-	if bool(own.get("moving",false)):
-		if delta > CORRECTION_SNAP * 2.0:
-			# Genuine large divergence: authoritative relocation / bad route.
+	if server_moving:
+		# Recovered does not create a second visual route for a correction.
+		# Delayed moving SelfStates are ignored while the locally verified route
+		# remains close; a real divergence cancels the route and adopts Server.
+		if delta > CORRECTION_SNAP:
 			_diagnose_correction("moving_divergence",authoritative)
 			position = authoritative
-			if moving and _target_cell != Vector2i(-1,-1):
-				_set_route(_target_cell)
+			visual_position = authoritative
+			stop("moving_divergence")
+			active = false
 		return
-	# The Server reached a final position. Do not switch directly to
-	# the ~83ms delayed owner PositionHistory (a visible stop-time rewind).
-	if delta <= SETTLE_SNAP:
-		position = authoritative
-		visual_position = authoritative
-		stop()
-		active = false
-		_visual_settling = false
-		_settle_target = Vector2.INF
-	elif delta > CORRECTION_SNAP or not _direct_clear(position,authoritative):
-		# Preserve the display position while the logical route is corrected.
+	# Gateway/receipt ordering can expose a confirmed action sequence with the
+	# prior idle SelfState before the first moving state of that route. Do not
+	# let that transitional idle cancel a fully solved Recovered-style path.
+	if active and moving and not _server_seen_moving_for_expected:
+		return
+	# Server has completed/stopped the accepted movement. Recovered treats a
+	# correction as a new authoritative anchor, not as a 480px/s catch-up walk.
+	if delta > SETTLE_SNAP:
 		_diagnose_correction("stop_divergence",authoritative)
-		position = authoritative
-		stop()
-		_begin_visual_correction()
-		_settle_target = Vector2.INF
-	else:
-		if not _settle_target.is_finite():
-			stop()
-		_settle_target = authoritative
-		moving = true
+	position = authoritative
+	visual_position = authoritative
+	stop("server_stop")
+	active = false
+	_visual_settling = false
+	_settle_target = Vector2.INF
 
 func _set_route(goal: Vector2i) -> bool:
-	# Server.MapNavigator ALWAYS runs the same 8-way octile A*, even when
-	# the straight segment is clear. The previous Client shortcut invented a
-	# two-point diagonal route while the Server followed octile grid waypoints;
-	# the resulting trajectory drift caused late corrections / snap backs.
-	# Use exactly the Server A* path and its six-cell steering lookahead.
+	# Recovered solves the complete route BEFORE movement starts. Do the same:
+	# never expose a partial A* across render frames and then catch up later.
 	_full_path_searches += 1
 	_route.clear()
 	_route_index = 0
 	_target_cell = goal
 	moving = false
+	var goal_world := Vector2(goal)*CELL+Vector2.ONE*(CELL*0.5)
+	if _direct_clear(position,goal_world):
+		_route = [goal]
+		moving = true
+		return true
 	if not _begin_search(_cell(position),goal):
 		return false
-	# Complete the usual short A* within the click's 5ms budget; large routes
-	# finish incrementally before a MoveTarget is ever sent to the Server.
-	_search_frame(FAST_PATH_BUDGET_USEC)
-	return moving or not _search.is_empty()
+	# Keep the same bounded 2048-cell authority budget as ServerWorld, but
+	# finish the query synchronously like Recovered's normal A*.
+	while not _search.is_empty():
+		_search_frame(FAST_PATH_BUDGET_USEC)
+	if not moving or _route.size() <= 1:
+		return false
+	# Recovered smooths the completed cell path by promoting the furthest
+	# waypoint that remains line-of-sight safe. The route stays private until
+	# this entire pass is finished.
+	var raw: Array[Vector2i] = _route.duplicate()
+	var smoothed: Array[Vector2i] = []
+	var anchor := position
+	var index := 1 # raw[0] is the current/start cell.
+	while index < raw.size():
+		var furthest := index
+		for candidate in range(index,raw.size()):
+			var point := Vector2(raw[candidate])*CELL+Vector2.ONE*(CELL*0.5)
+			if _direct_clear(anchor,point):
+				furthest = candidate
+			else:
+				break
+		smoothed.append(raw[furthest])
+		anchor = Vector2(raw[furthest])*CELL+Vector2.ONE*(CELL*0.5)
+		index = furthest+1
+	_route = smoothed
+	_route_index = 0
+	moving = not _route.is_empty()
+	return moving
 
 func authority_error() -> float:
 	if not position.is_finite() or not _last_authority.is_finite():
@@ -462,10 +481,28 @@ func request_target(point: Vector2, sequence: int) -> bool:
 	if not _set_route(goal):
 		return false
 	_expected_sequence = maxi(_expected_sequence,sequence)
+	_server_seen_moving_for_expected = false
+	_waiting_server_stop = false
 	active = true
 	return true
 
-func stop() -> void:
+
+func _wait_for_server_stop() -> void:
+	# Local route has reached the same collision-cell centre that ServerWorld
+	# is still approaching. Keep the local visual owner at rest; releasing it
+	# here would expose the 1-2 tick delayed Server position as a backwards jump.
+	last_stop_reason = "route_wait_server"
+	_search.clear()
+	_route.clear()
+	_route_index = 0
+	moving = false
+	_waiting_server_stop = true
+	active = true
+
+
+func stop(reason: String = "external") -> void:
+	last_stop_reason = reason
+	_waiting_server_stop = false
 	_settle_target = Vector2.INF
 	_search.clear()
 	moving = false
@@ -474,54 +511,59 @@ func stop() -> void:
 	_target_cell = Vector2i(-1,-1)
 
 func advance(delta: float) -> void:
-	if not ready or not active or delta <= 0.0:
+	if not ready or not active or delta <= 0.0 or not moving:
 		return
-	var remaining := PIXELS_PER_SECOND*minf(delta,0.1)
-	if _settle_target.is_finite():
-		var drift := position.distance_to(_settle_target)
-		if drift <= maxf(SETTLE_SNAP,remaining):
-			position = _settle_target
-			_settle_target = Vector2.INF
-			active = false
-			moving = false
-		else:
-			facing = _face(_settle_target-position,facing)
-			position = position.move_toward(_settle_target,remaining)
-			moving = true # Never visibly slide toward a correction in idle pose.
+	if _route.is_empty() or _route_index >= _route.size():
+		stop("route_empty")
+		active = false
 		return
-	if not _search.is_empty():
-		_search_frame(FALLBACK_FRAME_BUDGET_USEC)
-	if not moving:
-		return
-	for step in 8:
-		if remaining <= 0.00001 or _route_index >= _route.size():
+	# Recovered uses exactly one speed-clamped movement step per physics frame.
+	# It may promote waypoints/corner probes, but never consumes accumulated
+	# "missed" distance after A* completes.
+	var step_distance := PIXELS_PER_SECOND*minf(delta,0.1)
+	while _route_index+1 < _route.size():
+		var next_waypoint := Vector2(_route[_route_index+1])*CELL+Vector2.ONE*(CELL*0.5)
+		var next_visible := _direct_clear(position,next_waypoint)
+		# Recovered can promote while merely "close" because CharacterBody2D
+		# collision prevents a premature turn from entering the wall. Our local
+		# predictor is coordinate-only: promote early ONLY with proven LOS.
+		if not next_visible:
 			break
-		# Follow server's six-cell visibility lookahead; never cut across walls.
-		var farthest := mini(_route.size()-1,_route_index+6)
-		for probe in range(farthest,_route_index,-1):
-			var candidate := Vector2(_route[probe])*CELL+Vector2.ONE*8.0
-			if _direct_clear(position,candidate):
-				_route_index = probe
+		_route_index += 1
+	var final_waypoint := Vector2(_route[_route_index])*CELL+Vector2.ONE*(CELL*0.5)
+	var final_distance := position.distance_to(final_waypoint)
+	# Better than Recovered's 10px final snap: stop only when the remaining
+	# distance fits this frame's normal movement budget.
+	if _route_index+1 >= _route.size() and final_distance <= step_distance:
+		position = final_waypoint
+		visual_position = position
+		_wait_for_server_stop()
+		return
+	# Same 3/4, 1/2, 1/4 corner steering as Recovered. Each probe must remain
+	# Blocking.dat-clear, so the character bends around corners without sliding
+	# through the obstacle or stopping at every 16px cell centre.
+	var target_position := final_waypoint
+	if _route_index+1 < _route.size():
+		var next_waypoint := Vector2(_route[_route_index+1])*CELL+Vector2.ONE*(CELL*0.5)
+		for sample_index in range(CORNER_STEER_SAMPLES-1,0,-1):
+			var ratio := float(sample_index)/float(CORNER_STEER_SAMPLES)
+			var probe := final_waypoint.lerp(next_waypoint,ratio)
+			if _direct_clear(position,probe):
+				target_position = probe
 				break
-		var next := Vector2(_route[_route_index])*CELL+Vector2.ONE*8.0
-		var motion := next-position
-		var distance := motion.length()
-		if distance <= 0.00001:
-			_route_index += 1
-			continue
-		var travel := minf(distance,remaining)
-		var arrived := position+motion/distance*travel
-		if not _direct_clear(position,arrived):
-			stop()
-			break
-		facing = _face(motion,facing)
-		position = arrived
-		remaining -= travel
-		if travel >= distance-0.00001:
-			position = next
-			_route_index += 1
-	if _route_index >= _route.size():
-		stop()
+	var motion := target_position-position
+	var distance := motion.length()
+	if distance <= 0.001:
+		return
+	var travel := minf(step_distance,distance)
+	var arrived := position+motion/distance*travel
+	if not _step_clear(position,arrived):
+		stop("step_blocked")
+		active = false
+		return
+	facing = _face(motion,facing)
+	position = arrived
+	visual_position = position
 
 func _face(displacement: Vector2, previous: int) -> int:
 	var angle := atan2(displacement.y,displacement.x)

@@ -153,8 +153,17 @@ func _draw() -> void:
 		var name_color: Color = label.color
 		if name_text.is_empty():
 			continue
-		var width := font.get_string_size(name_text,HORIZONTAL_ALIGNMENT_LEFT,-1,16).x
-		var at := name_position-Vector2(width*0.5,0.0)
+		var font_size := 16
+		var width := font.get_string_size(name_text,HORIZONTAL_ALIGNMENT_LEFT,-1,font_size).x
+		var baseline_y := name_position.y
+		if bool(label.get("recovered_player_anchor",false)):
+			# Recovered player.tscn: NameLabel top=-130, bottom=-107,
+			# vertical_alignment=CENTER. Reproduce that fixed child-node geometry
+			# with our batched Canvas text instead of sampling sprite bounds.
+			var rect_top := name_position.y-130.0
+			var rect_height := 23.0
+			baseline_y = rect_top+(rect_height-font.get_height(font_size))*0.5+font.get_ascent(font_size)
+		var at := Vector2(name_position.x-width*0.5,baseline_y)
 		draw_string(font,at+Vector2(1,1),name_text,
 			HORIZONTAL_ALIGNMENT_LEFT,-1,16,Color(0.0,0.0,0.0,0.92))
 		draw_string(font,at,name_text,HORIZONTAL_ALIGNMENT_LEFT,-1,16,name_color)

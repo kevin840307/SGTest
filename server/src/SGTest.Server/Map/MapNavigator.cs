@@ -53,6 +53,13 @@ public sealed class MapNavigator
         if (!_map.IsWalkable(goal)) return Fail(PathStatus.GoalBlocked);
         if (start == goal) return new NavigationPath(PathStatus.Found, [start], 0);
 
+        // Recovered first uses a verified direct segment. This avoids doing A*
+        // just to recreate a straight route and keeps Client/Server steering
+        // identical before an obstacle is involved.
+        var goalPoint = Center(goal);
+        if (_map.IsDirectClear(fromX, fromY, goalPoint.X, goalPoint.Y))
+            return new NavigationPath(PathStatus.Found, [start, goal], 0);
+
         int initial = Index(start), target = Index(goal);
         // A* avoids scanning the full 960x960 grid for every player path request.
         var queue = new PriorityQueue<(int Index, int Cost), (int F, int H, int Index)>();
@@ -82,7 +89,8 @@ public sealed class MapNavigator
                 }
                 cells.Add(start);
                 cells.Reverse();
-                return new NavigationPath(PathStatus.Found, cells, expanded);
+                return new NavigationPath(PathStatus.Found,
+                    SmoothPath(cells, fromX, fromY), expanded);
             }
             var current = Cell(queued.Index);
             foreach (var (stepX, stepY, cost) in Directions)
@@ -104,6 +112,37 @@ public sealed class MapNavigator
         }
         return Fail(PathStatus.NoRoute, expanded);
     }
+
+    private IReadOnlyList<GridCell> SmoothPath(IReadOnlyList<GridCell> raw,
+                                                double startX, double startY)
+    {
+        if (raw.Count <= 2) return raw;
+        var result = new List<GridCell> { raw[0] };
+        double anchorX = startX, anchorY = startY;
+        int index = 1;
+        while (index < raw.Count)
+        {
+            int furthest = index;
+            for (int candidate = index; candidate < raw.Count; candidate++)
+            {
+                var p = Center(raw[candidate]);
+                if (!_map.IsDirectClear(anchorX, anchorY, p.X, p.Y))
+                    break;
+                furthest = candidate;
+            }
+            var selected = raw[furthest];
+            result.Add(selected);
+            var point = Center(selected);
+            anchorX = point.X;
+            anchorY = point.Y;
+            index = furthest + 1;
+        }
+        return result;
+    }
+
+    private static (double X, double Y) Center(GridCell cell) =>
+        (cell.X * BlockingGrid.CellPixels + BlockingGrid.CellPixels / 2.0,
+         cell.Y * BlockingGrid.CellPixels + BlockingGrid.CellPixels / 2.0);
 
     private int Index(GridCell point) => checked(point.Y * _map.Width + point.X);
 

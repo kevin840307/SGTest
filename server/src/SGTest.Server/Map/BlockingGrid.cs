@@ -113,6 +113,29 @@ public sealed class BlockingGrid
     }
 
     /// <summary>
+    /// Validate one already-routed movement step. Recovered validates the full
+    /// route/steering segment first and lets CharacterBody2D move locally; SGTest
+    /// has no player physics body, so the authoritative writer checks only the
+    /// cell transition of this <= MovementPixelsPerTick step. Re-running full
+    /// floating-point supercover on tiny subsegments can disagree at exact cell
+    /// corners and falsely cancel an otherwise valid verified route.
+    /// </summary>
+    public bool IsStepClear(double fromX, double fromY, double toX, double toY)
+    {
+        if (!TryWorldCell(fromX, fromY, out var start) ||
+            !TryWorldCell(toX, toY, out var goal) ||
+            !IsWalkable(start) || !IsWalkable(goal))
+            return false;
+
+        int dx = Math.Abs(goal.X - start.X);
+        int dy = Math.Abs(goal.Y - start.Y);
+        // Full route smoothing / corner steering has already proven the
+        // continuous segment with IsDirectClear. This only prevents a single
+        // authoritative tick from skipping cells or entering a blocked cell.
+        return dx <= 1 && dy <= 1;
+    }
+
+    /// <summary>
     /// Conservative 2D grid supercover traversal: both orthogonal neighbors
     /// must be open at an exact diagonal cell corner. Checks the WHOLE segment,
     /// never accepts a chord through a wall just because an A* detour exists.
