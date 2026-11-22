@@ -80,15 +80,21 @@ def expected_focus(world,capture):
 def expected_players(assets, states):
     # Independent reconstruction from normalized Converter metadata, not runtime
     # command data: selects logical facing before resolving physical source art.
-    profiles = {12:('players/b/base/leg','B-LEG'),7:('players/b/base/right_arm','B-R-ARM'),
-                9:('players/b/base/body','B-BODY'),5:('players/b/base/left_arm','B-L-ARM'),
-                0:('players/b/base/head','B-HEAD'),1:('players/b/hair/hair00','B-HAIR00')}
-    manifests={slot:json.loads((assets/p[0]/'atlas.json').read_text(encoding='utf-8')) for slot,p in profiles.items()}
     output=[]
     for state in sorted(states,key=lambda x:x['id']):
+        appearance=state.get('appearance',{'race':0,'hair_index':0,'hair_color':0})
+        if set(appearance)!={'race','hair_index','hair_color'} or any(type(x) is not int for x in appearance.values()) or appearance['race'] not in (0,1,2) or appearance['hair_color']!=0 or not 0<=appearance['hair_index']<=65535:
+            raise ValueError('unsupported source profile')
+        race=('b','g','a')[appearance['race']]
+        prefix=race.upper()
+        hair=f"HAIR{appearance['hair_index']:02d}"
+        profiles={12:(f'players/{race}/base/leg',prefix+'-LEG'),7:(f'players/{race}/base/right_arm',prefix+'-R-ARM'),
+                  9:(f'players/{race}/base/body',prefix+'-BODY'),5:(f'players/{race}/base/left_arm',prefix+'-L-ARM'),
+                  0:(f'players/{race}/base/head',prefix+'-HEAD'),1:(f'players/{race}/hair/{hair.lower()}',prefix+'-'+hair)}
+        manifests={slot:json.loads((assets/p[0]/'atlas.json').read_text(encoding='utf-8')) for slot,p in profiles.items()}
         action='NR' if state['moving'] else 'NS'
         requested=action+str(state['facing'])
-        order=manifests[9]['logical_views']['B-BODY_'+requested]['draw_slots']
+        order=manifests[9]['logical_views'][prefix+'-BODY_'+requested]['draw_slots']
         parts=[]
         for slot in order:
             if slot not in profiles:continue
@@ -105,7 +111,34 @@ def expected_players(assets, states):
     return output
 
 
+def append_expected_sprite(output,assets,view,asset_id,clip,frame,p,index,slot,actor_id,alpha=255,flip=False):
+    if alpha <= 0:
+        return
+    manifest = json.loads((assets/asset_id/'atlas.json').read_text(encoding='utf-8'))
+    row = manifest['frames'][manifest['clips'][clip][frame]]
+    if row['page'] == -1:
+        return
+    destination = [p[0]+row['trim'][0]-row['origin'][0],p[1]+row['trim'][1]-row['origin'][1],*row['rect'][2:]]
+    if flip:
+        destination[0] = 2*p[0]-destination[0]
+        destination[2] = -destination[2]
+    bounds = [destination[0]+min(0,destination[2]),destination[1],abs(destination[2]),destination[3]]
+    if intersects(bounds,view):
+        output.append({'index':index,'slot':slot,'frame':frame,'actor_id':actor_id,'destination':destination,'alpha':alpha,
+                       'uv':row['rect'],'texture_source':[asset_id,row['page']], 'source':row,'flip':flip})
+
+
 def expected_commands(assets, capture):
+    if capture.get('sprite_only'):
+        actors=expected_players(assets,capture['player_states'])
+        if actors != capture['actors']:
+            raise ValueError('player logical view/timing/order differs from source metadata')
+        output=[]
+        view=[*capture['camera'],*capture['size']]
+        for actor in actors:
+            for part in actor['parts']:
+                append_expected_sprite(output,assets,view,part['asset'],part['clip'],part['frame'],actor['p'],-1,part['part_slot'],actor['id'],flip=part['flip_h'])
+        return output
     world = json.loads((assets/f"maps/{capture['map']}/world.json").read_text(encoding='utf-8'))
     placements, definitions = world['objects'],world['scenery_definitions']
     view = [*capture['camera'],*capture['size']]
@@ -142,20 +175,7 @@ def expected_commands(assets, capture):
     output = []
 
     def append(asset_id,clip,frame,p,index,slot,actor_id,alpha=255,flip=False):
-        if alpha <= 0:
-            return
-        manifest = json.loads((assets/asset_id/'atlas.json').read_text(encoding='utf-8'))
-        row = manifest['frames'][manifest['clips'][clip][frame]]
-        if row['page'] == -1:
-            return
-        destination = [p[0]+row['trim'][0]-row['origin'][0],p[1]+row['trim'][1]-row['origin'][1],*row['rect'][2:]]
-        if flip:
-            destination[0] = 2*p[0]-destination[0]
-            destination[2] = -destination[2]
-        bounds = [destination[0]+min(0,destination[2]),destination[1],abs(destination[2]),destination[3]]
-        if intersects(bounds,view):
-            output.append({'index':index,'slot':slot,'frame':frame,'actor_id':actor_id,'destination':destination,'alpha':alpha,
-                           'uv':row['rect'],'texture_source':[asset_id,row['page']], 'source':row,'flip':flip})
+        append_expected_sprite(output,assets,view,asset_id,clip,frame,p,index,slot,actor_id,alpha,flip)
 
     def placement(index,slot,alpha):
         row = placements[index]
@@ -238,7 +258,7 @@ def validate_capture(assets, source, capture, originals):
     actual_commands = capture['commands']
     if len(expected) != len(actual_commands):
         raise ValueError(f"command count differs: {len(expected)} != {len(actual_commands)}")
-    output = expected_view(assets,capture).convert('RGBA')
+    output = Image.new('RGBA',tuple(capture['size']),(0,0,0,255)) if capture.get('sprite_only') else expected_view(assets,capture).convert('RGBA')
     lower,upper = output.copy(),output.copy()
     for command,actual in zip(expected,actual_commands):
         for key in ('index','slot','frame','actor_id','destination','uv','texture_source','alpha'):

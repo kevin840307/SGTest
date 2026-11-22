@@ -36,7 +36,7 @@ Host／UI 已接入：`serve --character-appearance-rules <PRIVATE_JSON>` 必須
 
 `client/player/character_creation_options.gd` 是 SessionPanel 唯一的 UI 選擇模型，按 Server tuple 推導相依選單，不以素材目錄數量猜選項。一般皮膚的 `character_appearance_picker.gd` 下拉選單與 Recovered2 左右箭頭共用該模型；切皮膚不重設選擇，待送／登出停止編輯。入列成功即鎖定，以本機 WorldState 的單調 create-result revision 解鎖，避免快回覆被 UI 輪詢略過或等待入列時仍可重按。Recovered2 三列箭頭／數值位置分別依來源 `(351/386/464,424/460/496)`，原先擠在種族列的 slot 編輯器已隱藏，由選角欄位決定。外觀 tuple 會經原 ClientSession 送出並持久化。
 
-現有預覽 Renderer 仍只支援 B／Hair00／色0（與 legacy 預設示意共用）：選到其他外觀時立即清空預覽、停止更新並釋放 scope，顯示暫無預覽，不畫錯誤的 B 人物；角色列表已保存的其他外觀亦如此。這是正確的未完成狀態，**不是已完成所有人物外觀**。未設定外觀的 legacy 角色仍明示為基本示意。
+現有預覽 Renderer 已共用 B/G/A profile（hair00／色0 實機驗證；legacy 預設示意維持 B）：選到其他外觀時立即清空預覽、停止更新並釋放 scope，顯示暫無預覽，不畫錯誤的 B 人物；角色列表已保存的其他外觀亦如此。這是正確的未完成狀態，**不是已完成所有人物外觀**。未設定外觀的 legacy 角色仍明示為基本示意。
 
 Windows Godot RTX3050 1152×620 六張登入／載入／選角／創角畫面及外觀選擇箭頭已實際檢視；source-coordinate、相依選項、跨 skin 選擇、UI→ClientSession→TLS→SQLite→重登、資源釋放 PASS。Server 279、Python 123 tests PASS。GM capability 測試原先關線前未讀完空背包登入基線，已補齊收包，沒有放寬 CleanEof／權限斷言。正式玩家 UI 各皮膚的 Map13／Map15 檢視按鈕、檢視標題與提示已隱藏，離線 QA 模式保留。
 
@@ -51,3 +51,6 @@ Server 持久化前置已實作（schema v24）：`CharacterAppearance(Race,Hair
 5. 三組選項已放回 Recovered2 來源位置並通過真 UI→TLS 重登；仍需各選項的真實動態人物預覽、至少兩個真 Client 的外觀一致、GPU／多開／資源 Gate。
 
 以上未完成前，UI 保留暫定外觀提示，不加入會誤導玩家的假選項。
+
+
+2026-11-22 GPU補充：`reports/character_profiles_gpu.json` 已完成 B/G/A hair00/color0、八方向NS/NR在16 updates的16張／48姿態來源比對，原SPR180 frame，超容差0、資源全0、engine error0。Python驗證器不使用Runtime commands推導預期部件，來源manifest獨立重建並核對SPR。frame／flip_h／part_slot故意變異均拒絕。既有雙圖12張和B人物20張回歸PASS。這仍不是所有動畫幀、其他髮型／色、R/Y、AOI或完整創角規則證據。

@@ -69,6 +69,9 @@ func run() -> void:
 		quit(2)
 		return
 	output = args[1]
+	if args.size() == 3 and args[2] == "profiles":
+		await run_profiles(args)
+		return
 	if args.size() == 3 and args[2] == "players":
 		await run_players(args)
 		return
@@ -234,5 +237,81 @@ func run_players(args: PackedStringArray) -> void:
 	var result_file:=FileAccess.open(output.path_join("result.json"),FileAccess.WRITE)
 	result_file.store_string(JSON.stringify(result))
 	result_file.close()
+	print("WORLD_VIEW_RESULT ",result.status)
+	quit(0 if failures.is_empty() else 1)
+
+
+func run_profiles(args: PackedStringArray) -> void:
+	# Formal Store pump, presentation and geometry; only fixed source snapshots are synthetic.
+	root.size = Vector2i(768,448)
+	var world = preload("res://world/world_view.gd").new()
+	root.add_child(world)
+	check(world.open_pack(args[0])==OK,"Profile gate open pack")
+	var profile_type = preload("res://player/character_appearance_profile.gd")
+	var epoch: int = world.store.begin_scope(&"profile_gate")
+	var assets := {}
+	var ids := {}
+	for race in 3:
+		var definition: Dictionary = profile_type.definition({"race":race,"hair_index":0,"hair_color":0})
+		for part in definition.parts.values():
+			ids[str(part[0])] = true
+			check(world.store.acquire(&"profile_gate",epoch,str(part[0]))==OK,"Profile acquire")
+	var deadline := Time.get_ticks_msec()+30000
+	while assets.size()<ids.size() and Time.get_ticks_msec()<deadline:
+		await process_frame
+		for id in ids:
+			var asset: Dictionary = world.store.get_asset(&"profile_gate",epoch,id)
+			if not asset.is_empty():
+				assets[id] = asset
+	check(assets.size()==18,"All B/G/A six-part assets must load")
+	check(world.players.configure(assets)==OK,"B profile configure")
+	for race in [1,2]:
+		check(world.players.add_profile(assets,{"race":race,"hair_index":0,"hair_color":0})==OK,"G/A profile configure")
+	for id in assets:
+		for page in assets[id].pages.size():
+			sources[str(assets[id].pages[page].get_instance_id())] = [id,page]
+	var view := Rect2(0,0,768,448)
+	for facing in range(1,9):
+		for moving in [false,true]:
+			var values := {}
+			var states := []
+			for race in 3:
+				var appearance := {"race":race,"hair_index":0,"hair_color":0}
+				var actor := {"actor_id":race+1,"connection_epoch":1,"entity_map_epoch":1,"server_tick":1,
+					"x":192.0*(race+1),"y":280.0,"facing":facing,"moving":moving,
+					"movement_action_sequence":1,"appearance":appearance}
+				values[race+1] = actor
+				states.append({"id":race+1,"p":[actor.x,actor.y],"facing":facing,"moving":moving,"elapsed_updates":16,"appearance":appearance})
+			world.players._actors.clear()
+			world.players.apply_snapshot({"world_ready":true,"map_id":15,"map_epoch":1,"actor_id":1,"self_state":values[1],"entities":{2:values[2],3:values[3]}},0)
+			var actors: Array = world.players.actors_at(320000)
+			check(actors.size()==3,"All three source races must render")
+			var serialized := []
+			var commands := []
+			for actor in actors:
+				serialized.append({"id":actor.id,"p":[actor.p.x,actor.p.y],"parts":actor.parts})
+				commands.append_array(world.draw_list.build_actor_preview(assets,actor,view))
+				check(world.draw_list.error==OK,"Profile draw failed")
+			world._canvas.present(commands)
+			await process_frame
+			await RenderingServer.frame_post_draw
+			var file := output.path_join("capture_"+str(captures.size())+".png")
+			check(root.get_texture().get_image().save_png(file)==OK,"Profile capture save")
+			captures.append({"file":file,"sprite_only":true,"camera":[0,0],"size":[768,448],"actors":serialized,"player_states":states,"commands":serialized_commands(commands)})
+	world.clear_map()
+	assets.clear()
+	world.store.end_scope(&"profile_gate",epoch)
+	deadline = Time.get_ticks_msec()+30000
+	while world.store.statistics().decode_jobs+world.store.statistics().texture_jobs>0 and Time.get_ticks_msec()<deadline:
+		await process_frame
+	var final: Dictionary = world.store.statistics()
+	check(final.assets+final.scopes+final.rgba_bytes+final.decode_jobs+final.texture_jobs==0,"Profile gate retained resources")
+	world.queue_free()
+	await process_frame
+	await process_frame
+	var result := {"status":"PASS" if failures.is_empty() else "FAIL","failures":failures,"captures":captures,"final":final}
+	var file := FileAccess.open(output.path_join("result.json"),FileAccess.WRITE)
+	file.store_string(JSON.stringify(result))
+	file.close()
 	print("WORLD_VIEW_RESULT ",result.status)
 	quit(0 if failures.is_empty() else 1)

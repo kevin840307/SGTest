@@ -1,5 +1,7 @@
 # SGTest — Clean-slate 測試與完工標準
 
+2026-11-22 B/G/A private GPU gate：`python client/tests/run_world_view.py <Godot> --profiles --pack .cache/character_profiles.pck --assets .cache/character_creation_assets --report reports/character_profiles_gpu.json`。八方向×NS/NR×三種族，共16張圖／48 poses，固定16 updates；verifier強制完整覆蓋集合，不以截圖數量單獨當PASS。原SPR180 frames及origin／crop、ACT frame、flip與六部件順序，超容差0、resources全0、engine error0 PASS。手動mutation frame／flip_h／part_slot各拒絕；既有雙圖12張與B人物20張回歸及Python123 PASS。只使用既有唯一Converter產出的私有22-asset PCK，沒有正式包替換。非全動畫幀、AA/NH/ND或多人同步／效能比較證據。
+
 2026-11-22 shared appearance profile gate：`test_player_profiles.gd` 覆蓋 B/G/A 混合、髮型共享 metadata、固定走路／插值、各 profile AA/ND、換 race 中斷不支援 AA、失敗註冊原子性與未知外觀不 fallback；已加入 Client CI。Windows targeted tests 與 Python123 PASS。`python client/tests/run_world_view.py <Godot> --players --report reports/player_profiles_regression.json` 原 B GPU20張／91來源frame、超容差0、資源歸零 PASS。`Godot --path client --rendering-method gl_compatibility --script res://tests/test_recovered2_local_ui.gd -- <capture-dir> <private-22-asset-pack> profiles` 實際 B/G/A hair00/color0 預覽切換及9張畫面／scope釋放 PASS，來源 rules 是 fixture，不能推論全量原版合法集合或多人外觀。G/A 全方向逐像素及負載效能 NOT VERIFIED。
 
 ## MVP007-PVP-AUTHORITATIVE-COMBAT-CRIME-NAME-AOI — 玩家互打／罪名／名稱顏色（完成垂直切片）

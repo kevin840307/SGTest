@@ -6,6 +6,8 @@
 
 `player/character_appearance_profile.gd` 只解析外觀到來源部件與已驗證 timeline metadata；`PlayerPresentation` 擁有 actor 插值／動作狀態，`CharacterPreview` 擁有 UI scope，App 原 AssetStore 負責載入。Profile 不持有 Texture、不執行網路或自行載入。每次 actor snapshot 只驗證外觀 key 並查詢已登錄 profile，不重建六部件定義。不同髮型共用相同身體 timeline，完整 profile 驗證成功才登錄，失敗不污染共用表；換外觀保留連續走路時間與位置 history，遇到新 profile 沒有的 AA／NH 會返回基本動作。維持既有 `player/` 一層功能分類，沒有新增 Manager／Loader／第二個 renderer。
 
+B/G/A hair00/color0 已通過原始素材 GPU gate：既有 `run_world_view.py --profiles` 使用相同 Store pump／PlayerPresentation／WorldDrawList／WorldCanvas，在無地圖場景逐八方向採樣 NS/NR，16張／48姿態／180來源frame、超容差0及完整釋放。沒有新增第三方繪圖層；該來源驗收不代表正式 WorldView 已接上 AOI appearance 動態載入或完整髮色。
+
 
 創角種族／髮型／髮色現在透過 SessionPanel 單一 `player/character_creation_options.gd` 共用選擇，`ui/character_appearance_picker.gd` 是一般皮膚的下拉視圖，Recovered2 箭頭委派同一模型。資料只來自 Server 發布的 exact tuples；皮膚不自行猜合法髮型數量。UI 入列成功立即鎖定選項／名稱／再次建立，依 WorldState 本機單調 `character_create_result_revision` 確認收到新的可靠結果後才解鎖，不能靠 Renderer 是否看見短暫 CREATING 狀態。該 revision 不改 Wire，也不代替 Server 成功回覆。Unsupported profile 的預覽必須清圖並釋放 scope，不能套用其他人物。
 

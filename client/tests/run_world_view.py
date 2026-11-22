@@ -25,7 +25,10 @@ def main() -> int:
     parser.add_argument("--report", type=Path, default=REPO / "reports/world_view_native.json")
     parser.add_argument("--timeout", type=int, default=180)
     parser.add_argument("--players", action="store_true", help="native B base paper doll logical view, origin/mirror and source raster gate")
+    parser.add_argument("--profiles", action="store_true", help="B/G/A all-facing source raster gate without map assets")
     args = parser.parse_args()
+    if args.players and args.profiles:
+        parser.error("choose --players or --profiles")
     exe = args.godot.resolve()
     if exe.name.endswith("_console.exe"):
         normal = exe.with_name(exe.name.replace("_console.exe", ".exe"))
@@ -46,7 +49,7 @@ def main() -> int:
         *sorted((p for folder in ("world","map","animation","movement","player","monster","pvp") for p in (REPO / "client" / folder).glob("*.gd"))),
         REPO / "client/tests/test_world_view.gd",
         REPO / "client/tests/world_camera_fixture.gd",
-        Path(__file__).resolve(),
+        Path(__file__).resolve(), REPO / "client/tests/run_world.py",
     ]
     original_hashes = {
         str(p.relative_to(REPO)): hashlib.sha256(p.read_bytes()).hexdigest() for p in files
@@ -57,8 +60,8 @@ def main() -> int:
         "gl_compatibility", "--disable-vsync", "--script",
         "res://tests/test_world_view.gd", "--", str(pack), str(folder),
     ]
-    if args.players:
-        command.append("players")
+    if args.players or args.profiles:
+        command.append("profiles" if args.profiles else "players")
     metrics = ProcessMetrics()
     start = time.monotonic()
     with (folder / "engine.log").open("w", encoding="utf-8") as log:
@@ -84,6 +87,15 @@ def main() -> int:
                 checks.append(validate_capture(args.assets.resolve(), source, capture, originals))
             except Exception as exc:
                 validation_errors.append({"capture": index, "message": str(exc)})
+    profile_coverage = set()
+    if args.profiles:
+        for capture in result.get("captures", []):
+            for state in capture.get("player_states", []):
+                appearance = state.get("appearance", {})
+                if appearance.get("hair_index") == 0 and appearance.get("hair_color") == 0:
+                    profile_coverage.add((appearance.get("race"), state.get("facing"), state.get("moving")))
+    expected_profile_coverage = {(race, facing, moving) for race in range(3) for facing in range(1,9) for moving in (False,True)}
+    coverage_complete = not args.profiles or profile_coverage == expected_profile_coverage
     final = result.get("final", {})
     counts_zero = all(
         final.get(key) == 0 for key in
@@ -94,18 +106,20 @@ def main() -> int:
     }
     passed = (
         process.returncode == 0 and not engine_errors and result.get("status") == "PASS"
-        and not result.get("failures") and len(checks) == (20 if args.players else 12)
+        and not result.get("failures") and len(checks) == (16 if args.profiles else 20 if args.players else 12)
         and not validation_errors and all(c["pixels_over_tolerance"] == 0 for c in checks)
-        and counts_zero and stable
+        and counts_zero and stable and coverage_complete
     )
     summary = {
         "status": "PASS" if passed else "FAIL",
-        "scope": "player_source_GPU_not_network_or_multiplayer" if args.players else "map_view_only_not_player_server_or_multiplayer",
+        "scope": "BGA_profile_source_GPU_not_network_or_multiplayer" if args.profiles else "player_source_GPU_not_network_or_multiplayer" if args.players else "map_view_only_not_player_server_or_multiplayer",
         "exit_code": process.returncode,
         "engine_errors": engine_errors,
         "validation_errors": validation_errors,
         "view_failures": result.get("failures", []),
         "captures": len(checks),
+        "profile_poses_checked": len(profile_coverage),
+        "profile_coverage_complete": coverage_complete if args.profiles else None,
         "original_spr_frames_checked": len(originals),
         "max_outside_sampler_envelope": max(
             (x["max_outside_sampler_envelope"] for x in checks), default=None
