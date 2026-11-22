@@ -44,12 +44,18 @@ func run() -> void:
 		for frame in range(3):
 			await RenderingServer.frame_post_draw
 		peak = max(peak, Performance.get_monitor(Performance.RENDER_TEXTURE_MEM_USED))
-		sprite.texture = null
-		sprite.queue_free()
 		store.end_scope(&"map", a)
 		if store.get_asset(&"actor", b, id).is_empty():
 			quit(5)
 			return
+		await RenderingServer.frame_post_draw
+		var image := root.get_texture().get_image()
+		if not image.get_pixel(100, 100).is_equal_approx(Color8(20, 100, 210)):
+			push_error("Shared sprite was not drawn after map scope release")
+			quit(10)
+			return
+		sprite.texture = null
+		sprite.queue_free()
 		store.end_scope(&"actor", b)
 		if store.statistics() != {"assets":0,"scopes":0,"ready":0,"decode_jobs":0,"texture_jobs":0,"rgba_bytes":0}:
 			quit(6)

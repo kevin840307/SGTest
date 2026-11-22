@@ -525,6 +525,6 @@ Formal Host 的 listener global/per-IP admission、TLS/auth timeout 與 authenti
 
 ## 合成 Atlas 的 GPU 回收
 
-執行 `python client/tests/run_asset_store_gpu.py <Godot console executable>`。測試即時生成 64×64 貼圖、透過正式打包器建立 PCK，使用 OpenGL Compatibility 繪製，再於 30 輪內檢查共用引用與最後一次釋放。每輪須回到初始貼圖記憶體，AssetStore 帳目須歸零。
+執行 `python client/tests/run_asset_store_gpu.py <Godot console executable>`。測試即時生成 64×64 貼圖、透過正式打包器建立 PCK，使用 OpenGL Compatibility 繪製，再於 30 輪內檢查共用引用與最後一次釋放。每輪須回到初始貼圖記憶體，AssetStore 帳目須歸零。 測試在地圖釋放引用後讀回角色像素，並在最後一個引用釋放後驗證貼圖物件已銷毀。
 
 Windows RTX 3050、Godot 4.7.2 實測 PASS。貼圖基線 643,363 bytes、峰值 665,207 bytes、最大殘留 0 bytes。完整換圖、登出與程序 RSS 回收仍待驗證。
