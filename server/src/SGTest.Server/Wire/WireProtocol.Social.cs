@@ -917,7 +917,8 @@ public static partial class WireProtocol
            mode is not (PvpMode.ProtectedBlue or PvpMode.EnabledWhite)||
            red>1||serverUnix<=0||pinkUntil<0||updated<0||
            nameLength is <1 or >PlayerIdentityMaxNameBytes||
-           (remaining!=0&&remaining!=1+CharacterAppearanceBytes))
+           (remaining!=0&&remaining!=1+BodyLegCharacterAppearanceBytes&&
+            remaining!=1+CharacterAppearanceBytes))
             return false;
         try
         {
@@ -928,8 +929,9 @@ public static partial class WireProtocol
             if(remaining>0)
             {
                 int offset=baseBytes;
+                int appearanceBytes=remaining-1;
                 if(frame[offset++]!=1||
-                   !ReadAppearance(frame.Slice(offset,CharacterAppearanceBytes),out var decoded))
+                   !ReadAppearance(frame.Slice(offset,appearanceBytes),out var decoded))
                     return false;
                 appearance=decoded;
             }

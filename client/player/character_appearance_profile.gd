@@ -30,10 +30,12 @@ var death_available := false
 
 static func appearance_key(appearance: Dictionary = {}) -> String:
 	if appearance.is_empty():
-		return "0:0:0:0:0"
-	if appearance.size() not in [3,5] or 			not appearance.has_all(["race","hair_index","hair_color"]):
+		return "0:0:0:0:0:0"
+	if appearance.size() not in [3,5,6] or 			not appearance.has_all(["race","hair_index","hair_color"]):
 		return ""
-	if appearance.size() == 5 and 			not appearance.has_all(["body_index","leg_index"]):
+	if appearance.size() >= 5 and 			not appearance.has_all(["body_index","leg_index"]):
+		return ""
+	if appearance.size() == 6 and not appearance.has("sleeve_color"):
 		return ""
 	for field in appearance:
 		if not appearance[field] is int:
@@ -43,34 +45,41 @@ static func appearance_key(appearance: Dictionary = {}) -> String:
 	var color := int(appearance.hair_color)
 	var body := int(appearance.get("body_index",0))
 	var leg := int(appearance.get("leg_index",0))
-	if race < 0 or race >= RACE_KEYS.size() or hair < 0 or hair > 65535 or 			color < 0 or color > 7 or body < 0 or body > 255 or leg < 0 or leg > 255:
+	var sleeve := int(appearance.get("sleeve_color",0))
+	if race < 0 or race >= RACE_KEYS.size() or hair < 0 or hair > 65535 or 			color < 0 or color > 7 or body < 0 or body > 255 or leg < 0 or leg > 255 or 			sleeve < 0 or sleeve > 255:
 		return ""
 	# Robot has no hair selectors; Yas has no source-verified HK2 armor mapping.
 	if race == 3 and (hair != 0 or color != 0):
 		return ""
-	if race in [0,1,2] and (body > 2 or leg > 2):
+	if race in [0,1,2] and (body > 2 or leg > 2 or sleeve > 2):
 		return ""
-	if race in [3,4] and (body != 0 or leg != 0):
+	if race == 3 and (body != 0 or leg != 0 or sleeve > 2):
 		return ""
-	return "%d:%d:%d:%d:%d" % [race,hair,color,body,leg]
+	if race == 4 and (body != 0 or leg != 0 or sleeve != 0):
+		return ""
+	return "%d:%d:%d:%d:%d:%d" % [race,hair,color,body,leg,sleeve]
 
 static func definition(appearance: Dictionary = {}) -> Dictionary:
 	var resolved_key := appearance_key(appearance)
 	if resolved_key.is_empty():
 		return {}
 	var value := {
-		"race":0,"hair_index":0,"hair_color":0,"body_index":0,"leg_index":0
+		"race":0,"hair_index":0,"hair_color":0,"body_index":0,"leg_index":0,
+		"sleeve_color":0
 	} if appearance.is_empty() else appearance
 	var race_index := int(value.race)
 	var body_index := int(value.get("body_index",0))
 	var leg_index := int(value.get("leg_index",0))
+	var sleeve_color := int(value.get("sleeve_color",0))
 	if race_index == 3:
-		# Recovered's Robot path has no separate Standard legs/arms. The verified
-		# CreateCharPara starter color mapping applies to humanoid B/G/A only,
-		# so Robot keeps its source zero outfit.
+		# Robot already uses the zero Arm00 sprites as its base limbs. Original
+		# Left_hand/Right_hand share one selector, so color both arms in place.
+		var robot := ROBOT_BASE_PARTS.duplicate(true)
+		robot[5] = [robot[5][0],robot[5][1],sleeve_color]
+		robot[7] = [robot[7][0],robot[7][1],sleeve_color]
 		return {
 			"key":resolved_key,
-			"parts":ROBOT_BASE_PARTS.duplicate(true),
+			"parts":robot,
 			"overlays":{},
 			"body_prefix":"R-BODY00",
 			"hair_slot":-1,
@@ -91,10 +100,9 @@ static func definition(appearance: Dictionary = {}) -> Dictionary:
 				str(resolved[slot][1]).replace("B-",prefix+"-")]
 	var equipment_overlays := {}
 	if race_index != 4:
-		# Recovered builds Standard Body/Leg first, then EquipBody/EquipLeg.
-		# Original 570..572 / 620..622 all use Body00 / Leg00; their only visual
-		# difference is item color_index 0/1/2. Leg00 is shorts and must NOT
-		# replace Standard Leg, otherwise the lower legs disappear.
+		# Recovered builds Standard limbs first, then all starter equipment.
+		# Body00/Leg00/L-Arm00/R-Arm00 stay the same sprites; color_index 0/1/2
+		# selects the source palette. Shorts and sleeves never replace bare limbs.
 		equipment_overlays = {
 			9:[
 				"equipment/%s/cloth/body00" % race,
@@ -104,6 +112,14 @@ static func definition(appearance: Dictionary = {}) -> Dictionary:
 				"equipment/%s/cloth/leg00" % race,
 				"%s-LEG00" % prefix,
 				leg_index],
+			5:[
+				"equipment/%s/cloth/l_arm00" % race,
+				"%s-L-ARM00" % prefix,
+				sleeve_color],
+			7:[
+				"equipment/%s/cloth/r_arm00" % race,
+				"%s-R-ARM00" % prefix,
+				sleeve_color],
 		}
 	return {
 		"key":resolved_key,

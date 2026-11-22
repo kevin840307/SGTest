@@ -49,15 +49,16 @@ public static partial class WireProtocol
     public const int MaxCharacterChooseFrameBytes = CharacterChooseFrameBytes + 2 + MaxCharacterPasswordBytes;
     public const int CharacterChooseResultFrameBytes = HeaderBytes + 37;
     public const int LegacyCharacterAppearanceBytes = 4;
-    public const int CharacterAppearanceBytes = 6;
+    public const int BodyLegCharacterAppearanceBytes = 6;
+    public const int CharacterAppearanceBytes = 7;
     public const int MaxCharacterCreateFrameBytes =
-        HeaderBytes + 1 + 2 + 96 + 13 + MaxCharacterPasswordBytes;
+        HeaderBytes + 1 + 2 + 96 + 14 + MaxCharacterPasswordBytes;
     public const int MaxCharacterCreateResultFrameBytes =
         HeaderBytes + 1 + 8 + 1 + 2 + 96 + CharacterAppearanceBytes;
     public const int MaxAuthRequestFrameBytes = HeaderBytes + 4 + 32 + 256;
     public const int MaxAccountRegisterRequestFrameBytes =
         HeaderBytes + 4 + 32 + 256;
-    public const int MaxCreationAppearanceChoices = 4096;
+    public const int MaxCreationAppearanceChoices = 7000;
     public const int MaxCharacterListFrameBytes = HeaderBytes + 1 + 32 * (11 + 96) +
         3 + 32 * (1 + CharacterAppearanceBytes) +
         MaxCreationAppearanceChoices * CharacterAppearanceBytes;

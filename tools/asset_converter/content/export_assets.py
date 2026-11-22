@@ -37,7 +37,10 @@ PLAYER_PART_ASSETS = tuple(
     f'players/y/hair/hair{hair:02d}' for hair in range(3)
 ) + tuple(
     f'equipment/{race}/cloth/{part}00'
-    for race in ('b','g','a','r')
+    for race in ('b','g','a')
+    for part in ('body','leg','l_arm','r_arm')
+) + tuple(
+    f'equipment/r/cloth/{part}00'
     for part in ('body','leg')
 ) + (
     'players/b/base/death','players/g/base/death','players/a/base/death',
@@ -61,6 +64,10 @@ CREATION_CLOTH_GROUPS = {
     f'player/{race}/cloth/{race}-{part}00'
     for race in ('b','g','a','r')
     for part in ('body','leg')
+} | {
+    f'player/{race}/cloth/{race}-{side}-arm00'
+    for race in ('b','g','a')
+    for side in ('l','r')
 }
 ROBOT_BASE_GROUPS = {
     'player/r/cloth/r-l-arm00','player/r/cloth/r-r-arm00',

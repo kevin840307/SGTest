@@ -272,12 +272,13 @@ func _run() -> void:
 	panel.character_create_status.text = ""
 	panel._latest.character_create_result_revision = 1
 	panel._latest.character_creation_appearances = [
-		{"race":0,"hair_index":0,"hair_color":0,"body_index":0,"leg_index":0},
-		{"race":0,"hair_index":0,"hair_color":0,"body_index":1,"leg_index":0},
-		{"race":0,"hair_index":0,"hair_color":0,"body_index":1,"leg_index":2},
-		{"race":0,"hair_index":1,"hair_color":2,"body_index":0,"leg_index":0},
-		{"race":0,"hair_index":1,"hair_color":5,"body_index":0,"leg_index":0},
-		{"race":1,"hair_index":3,"hair_color":7,"body_index":2,"leg_index":1}]
+		{"race":0,"hair_index":0,"hair_color":0,"body_index":0,"leg_index":0,"sleeve_color":0},
+		{"race":0,"hair_index":0,"hair_color":0,"body_index":1,"leg_index":0,"sleeve_color":0},
+		{"race":0,"hair_index":0,"hair_color":0,"body_index":1,"leg_index":2,"sleeve_color":0},
+		{"race":0,"hair_index":0,"hair_color":0,"body_index":1,"leg_index":2,"sleeve_color":2},
+		{"race":0,"hair_index":1,"hair_color":2,"body_index":0,"leg_index":0,"sleeve_color":0},
+		{"race":0,"hair_index":1,"hair_color":5,"body_index":0,"leg_index":0,"sleeve_color":0},
+		{"race":1,"hair_index":3,"hair_color":7,"body_index":2,"leg_index":1,"sleeve_color":2}]
 	panel._set_controls()
 	if not pack_path.is_empty() and not await _wait_previews(shell,1,true):
 		return
@@ -302,31 +303,34 @@ func _run() -> void:
 	if shell._appearance_note.visible or not shell._appearance_note.text.is_empty():
 		_error("internal appearance/server guidance is visible to player")
 		return
-	var appearance_fields := ["race","hair_index","hair_color","body_index","leg_index"]
+	var appearance_fields := ["race","hair_index","hair_color","body_index","leg_index","sleeve_color"]
 	for field in appearance_fields:
 		var row := appearance_fields.find(field)
 		if shell._appearance_buttons[field][0].position != Vector2(351,424+36*row) or 				shell._appearance_values[field].position != Vector2(386,422+36*row) or 				shell._appearance_values[field].size != Vector2(72,29):
 			_error("appearance controls drifted from source/create rows: "+field)
 			return
 	var creation_preview: Control = shell._character_previews[3]
-	for field in ["body_index","leg_index"]:
+	for field in ["body_index","leg_index","sleeve_color"]:
 		if shell._appearance_buttons[field][0].disabled or 				shell._appearance_buttons[field][1].disabled:
 			_error("verified starter color selector stayed disabled: "+field)
 			return
 	shell._appearance_buttons.body_index[1].pressed.emit()
 	shell._appearance_buttons.leg_index[1].pressed.emit()
-	if panel.creation_options.selection().body_index != 1 or 			panel.creation_options.selection().leg_index != 2:
-		_error("starter color selectors did not choose original color indexes 1/2")
+	shell._appearance_buttons.sleeve_color[1].pressed.emit()
+	if panel.creation_options.selection().body_index != 1 or 			panel.creation_options.selection().leg_index != 2 or 			panel.creation_options.selection().sleeve_color != 2:
+		_error("starter color selectors did not choose original top/shorts/sleeve indexes 1/2/2")
 		return
 	if not pack_path.is_empty():
 		if not await _wait_previews(shell,1,true):
 			return
 		var definition: Dictionary = creation_preview._definition
-		if definition.parts[9][0] != "players/b/base/body" or 				definition.parts[12][0] != "players/b/base/leg" or 				definition.overlays[9][0] != "equipment/b/cloth/body00" or 				definition.overlays[12][0] != "equipment/b/cloth/leg00" or 				int(definition.overlays[9][2]) != 1 or 				int(definition.overlays[12][2]) != 2:
-			_error("starter colors changed source sprites instead of Body00/Leg00 palette indexes")
+		if definition.parts[9][0] != "players/b/base/body" or 				definition.parts[12][0] != "players/b/base/leg" or 				definition.overlays[9][0] != "equipment/b/cloth/body00" or 				definition.overlays[12][0] != "equipment/b/cloth/leg00" or 				definition.overlays[5][0] != "equipment/b/cloth/l_arm00" or 				definition.overlays[7][0] != "equipment/b/cloth/r_arm00" or 				int(definition.overlays[9][2]) != 1 or 				int(definition.overlays[12][2]) != 2 or 				int(definition.overlays[5][2]) != 2 or 				int(definition.overlays[7][2]) != 2:
+			_error("starter colors changed source sprites instead of Body00/Leg00/L-R-Arm00 palette indexes")
 			return
 		var body_material_found := false
 		var leg_material_found := false
+		var left_sleeve_material_found := false
+		var right_sleeve_material_found := false
 		for sprite in creation_preview._canvas._sprites:
 			if not sprite.visible:
 				continue
@@ -336,8 +340,12 @@ func _run() -> void:
 				body_material_found = true
 			if slot == 12 and palette == 2 and sprite.material != null:
 				leg_material_found = true
-		if not body_material_found or not leg_material_found:
-			_error("starter Body00/Leg00 color indexes did not bind palette shader materials")
+			if slot == 5 and palette == 2 and sprite.material != null:
+				left_sleeve_material_found = true
+			if slot == 7 and palette == 2 and sprite.material != null:
+				right_sleeve_material_found = true
+		if not body_material_found or not leg_material_found or 				not left_sleeve_material_found or not right_sleeve_material_found:
+			_error("starter Body00/Leg00/L-R-Arm00 colors did not bind palette shader materials")
 			return
 		await _capture("create_clothing",directory)
 	var commands_before_hair: int = creation_preview._canvas._commands.size()
@@ -348,7 +356,7 @@ func _run() -> void:
 	shell._appearance_buttons.hair_color[1].pressed.emit()
 	if panel.creation_options.selection()!={
 			"race":0,"hair_index":1,"hair_color":5,
-			"body_index":0,"leg_index":0}:
+			"body_index":0,"leg_index":0,"sleeve_color":0}:
 		_error("hair/color arrows did not select exact allowed tuples")
 		return
 	var commands_before_race: int = creation_preview._canvas._commands.size()
@@ -356,7 +364,7 @@ func _run() -> void:
 	if not pack_path.is_empty() and commands_before_race > 0 and 			creation_preview._canvas._commands.is_empty():
 		_error("race switch blanked the previous preview before replacement loaded")
 		return
-	var chosen := {"race":1,"hair_index":3,"hair_color":7,"body_index":2,"leg_index":1}
+	var chosen := {"race":1,"hair_index":3,"hair_color":7,"body_index":2,"leg_index":1,"sleeve_color":2}
 	if panel.creation_options.selection()!=chosen or 			AppearanceProfile.definition(chosen).is_empty() or shell._slot_edit.visible:
 		_error("verified race/hair/color choice did not bind a real profile")
 		return
@@ -419,16 +427,16 @@ func _run() -> void:
 	if args.size()>2 and args[2]=="profiles":
 		panel._latest.character_create_result_revision = 2
 		panel._latest.character_creation_appearances = [
-			{"race":0,"hair_index":0,"hair_color":0,"body_index":0,"leg_index":0},
-			{"race":1,"hair_index":0,"hair_color":0,"body_index":0,"leg_index":0},
-			{"race":2,"hair_index":0,"hair_color":0,"body_index":0,"leg_index":0},
-			{"race":3,"hair_index":0,"hair_color":0,"body_index":0,"leg_index":0},
-			{"race":4,"hair_index":0,"hair_color":7,"body_index":0,"leg_index":0}]
+			{"race":0,"hair_index":0,"hair_color":0,"body_index":0,"leg_index":0,"sleeve_color":0},
+			{"race":1,"hair_index":0,"hair_color":0,"body_index":0,"leg_index":0,"sleeve_color":0},
+			{"race":2,"hair_index":0,"hair_color":0,"body_index":0,"leg_index":0,"sleeve_color":0},
+			{"race":3,"hair_index":0,"hair_color":0,"body_index":0,"leg_index":0,"sleeve_color":0},
+			{"race":4,"hair_index":0,"hair_color":7,"body_index":0,"leg_index":0,"sleeve_color":0}]
 		panel._set_controls()
 		var prefixes := [
 			"players/b/","players/g/","players/a/",
 			"equipment/r/cloth/","players/y/"]
-		var expected_parts := [8,8,8,5,6]
+		var expected_parts := [10,10,10,5,6]
 		for race in 5:
 			panel.creation_options.select_value("race",race)
 			if race == 4:

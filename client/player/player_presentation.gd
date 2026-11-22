@@ -10,7 +10,7 @@ const PARTS = Profile.BASE_PARTS
 const WALK_FRAME_USEC := 100000
 var _views: Dictionary = {}
 var _profiles: Dictionary = {}
-var _default_profile_key := "0:0:0:0:0"
+var _default_profile_key := "0:0:0:0:0:0"
 var _actors := {}
 var _seen_attack_events := {}
 var _seen_damage_events := {}
@@ -21,7 +21,7 @@ var _map := 0
 func clear() -> void:
 	_views.clear()
 	_profiles.clear()
-	_default_profile_key = "0:0:0:0:0"
+	_default_profile_key = "0:0:0:0:0:0"
 	_actors.clear()
 	_seen_attack_events.clear()
 	_seen_damage_events.clear()
@@ -350,7 +350,10 @@ func actors_at(now_usec: int) -> Array:
 				parts.append({"asset":part[0],"clip":resolved.view.clip,
 					"frame":resolved.timeline.frame_at_uniform_cadence(walk_elapsed_usec,WALK_FRAME_USEC) if action == "NR" else resolved.timeline.frame_at_update(elapsed),
 					"flip_h":resolved.view.flip_h,"part_slot":logical_slot,
-					"palette_index":profile.hair_color if logical_slot==1 else 0})
+					"palette_index":(
+						profile.hair_color if logical_slot==1
+						else int(part[2]) if part.size()>2
+						else 0)})
 			# Recovered paper doll draws Standard first, then the equipment
 			# overlay for the same logical body/leg slot.
 			if profile.overlays.has(logical_slot):

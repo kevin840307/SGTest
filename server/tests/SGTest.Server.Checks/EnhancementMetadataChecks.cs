@@ -24,7 +24,7 @@ internal static class EnhancementMetadataChecks
         using(var store=new SqliteIdentityStore(db))
         {
             await store.InitializeAsync();
-            Checks.Require(SqliteIdentityStore.SchemaVersion==26,
+            Checks.Require(SqliteIdentityStore.SchemaVersion==27,
                 "enhancement metadata requires schema v24");
             long account=(await store.CreateAccountAsync(
                 "enhance_user","Enhance-Password-123!")).AccountId;
@@ -155,7 +155,7 @@ internal static class EnhancementMetadataChecks
         {
             await migrated.InitializeAsync();
             Checks.Require(
-                SqliteIdentityStore.SchemaVersion==26&&
+                SqliteIdentityStore.SchemaVersion==27&&
                 ReadLevel(db,"item_instances",inventoryUid)==0&&
                 ReadLevel(db,"storage_items",storageUid)==0&&
                 ReadLevel(db,"equipped_items",equippedUid)==0&&
@@ -197,7 +197,7 @@ internal static class EnhancementMetadataChecks
             await migrated.InitializeAsync();
             using var connection=Open(db);
             Checks.Require(
-                SqliteIdentityStore.SchemaVersion==26&&
+                SqliteIdentityStore.SchemaVersion==27&&
                 HasColumn(connection,"trade_commit_items","enhancement_level")&&
                 HasColumn(connection,"player_shop_listings","enhancement_level"),
                 "v20 receipt migration did not restore enhancement metadata");

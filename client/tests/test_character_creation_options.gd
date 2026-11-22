@@ -14,12 +14,13 @@ func _initialize() -> void:
 func _run() -> void:
 	var options := Options.new()
 	var choices := [
-		{"race":0,"hair_index":0,"hair_color":0,"body_index":0,"leg_index":0},
-		{"race":0,"hair_index":0,"hair_color":0,"body_index":1,"leg_index":0},
-		{"race":0,"hair_index":0,"hair_color":0,"body_index":1,"leg_index":2},
-		{"race":0,"hair_index":1,"hair_color":2,"body_index":0,"leg_index":0},
-		{"race":0,"hair_index":1,"hair_color":5,"body_index":0,"leg_index":0},
-		{"race":1,"hair_index":3,"hair_color":7,"body_index":2,"leg_index":1},
+		{"race":0,"hair_index":0,"hair_color":0,"body_index":0,"leg_index":0,"sleeve_color":0},
+		{"race":0,"hair_index":0,"hair_color":0,"body_index":1,"leg_index":0,"sleeve_color":0},
+		{"race":0,"hair_index":0,"hair_color":0,"body_index":1,"leg_index":2,"sleeve_color":0},
+		{"race":0,"hair_index":0,"hair_color":0,"body_index":1,"leg_index":2,"sleeve_color":2},
+		{"race":0,"hair_index":1,"hair_color":2,"body_index":0,"leg_index":0,"sleeve_color":0},
+		{"race":0,"hair_index":1,"hair_color":5,"body_index":0,"leg_index":0,"sleeve_color":0},
+		{"race":1,"hair_index":3,"hair_color":7,"body_index":2,"leg_index":1,"sleeve_color":2},
 	]
 	options.set_choices(choices)
 	options.set_editable(true)
@@ -36,18 +37,22 @@ func _run() -> void:
 		options.values("hair_index")==[0,1] and
 		options.values("hair_color")==[0] and
 		options.values("body_index")==[0,1] and
-		options.values("leg_index")==[0,2],
+		options.values("leg_index")==[0,2] and
+		options.values("sleeve_color")==[0,2],
 		"dependent option sets wrong")
 	options.select_value("body_index",1)
 	options.select_value("leg_index",2)
+	options.select_value("sleeve_color",2)
 	check(
-		options.selection().body_index==1 and options.selection().leg_index==2,
-		"original upper/lower armor choices are not independently selectable")
+		options.selection().body_index==1 and
+		options.selection().leg_index==2 and
+		options.selection().sleeve_color==2,
+		"original upper/lower/sleeve color choices are not independently selectable")
 	first._pickers.hair_index.item_selected.emit(1)
 	check(
 		options.selection()=={
 			"race":0,"hair_index":1,"hair_color":2,
-			"body_index":0,"leg_index":0} and
+			"body_index":0,"leg_index":0,"sleeve_color":0} and
 		second._pickers.hair_index.get_selected_id()==1,
 		"views do not share selection or dependent fallback invalid")
 	options.cycle("hair_color",1)
@@ -56,13 +61,14 @@ func _run() -> void:
 	check(
 		options.selection()=={
 			"race":1,"hair_index":3,"hair_color":7,
-			"body_index":2,"leg_index":1},
+			"body_index":2,"leg_index":1,"sleeve_color":2},
 		"race switch created an unlisted combination")
 	check(
 		first._pickers.hair_index.disabled and
 		first._pickers.hair_color.disabled and
 		first._pickers.body_index.disabled and
-		first._pickers.leg_index.disabled,
+		first._pickers.leg_index.disabled and
+		first._pickers.sleeve_color.disabled,
 		"single-option fields still clickable")
 	options.set_editable(false)
 	check(not options.select_value("race",0) and first._pickers.race.disabled,"pending UI still permits edits")
@@ -72,5 +78,5 @@ func _run() -> void:
 	second.queue_free()
 	await process_frame
 	if failures.is_empty():
-		print("CHARACTER_CREATION_OPTIONS_PASS shared_views=true dependent_exact_choices=true clothing_independent=true source_copy=true pending_disabled=true clear_releases=true")
+		print("CHARACTER_CREATION_OPTIONS_PASS shared_views=true dependent_exact_choices=true clothing_and_sleeve_independent=true source_copy=true pending_disabled=true clear_releases=true")
 	quit(0 if failures.is_empty() else 1)

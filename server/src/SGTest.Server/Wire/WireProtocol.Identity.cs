@@ -123,7 +123,7 @@ public static partial class WireProtocol
     private static bool ValidAppearance(CharacterAppearance value) =>
         value.Race is >= 0 and <= 4 && value.HairIndex is >= 0 and <= 65535 &&
         value.HairColor is >= 0 and <= 7 && value.BodyIndex is >= 0 and <= 255 &&
-        value.LegIndex is >= 0 and <= 255;
+        value.LegIndex is >= 0 and <= 255 && value.SleeveColor is >= 0 and <= 255;
 
     private static void WriteAppearance(Span<byte> target, CharacterAppearance value)
     {
@@ -134,16 +134,19 @@ public static partial class WireProtocol
         target[3] = (byte)value.HairColor;
         target[4] = (byte)value.BodyIndex;
         target[5] = (byte)value.LegIndex;
+        target[6] = (byte)value.SleeveColor;
     }
 
     private static bool ReadAppearance(ReadOnlySpan<byte> source, out CharacterAppearance value)
     {
         value = default;
         if (source.Length != LegacyCharacterAppearanceBytes &&
+            source.Length != BodyLegCharacterAppearanceBytes &&
             source.Length != CharacterAppearanceBytes) return false;
         value = new(source[0],BinaryPrimitives.ReadUInt16LittleEndian(source.Slice(1,2)),source[3],
-            source.Length == CharacterAppearanceBytes ? source[4] : 0,
-            source.Length == CharacterAppearanceBytes ? source[5] : 0);
+            source.Length >= BodyLegCharacterAppearanceBytes ? source[4] : 0,
+            source.Length >= BodyLegCharacterAppearanceBytes ? source[5] : 0,
+            source.Length == CharacterAppearanceBytes ? source[6] : 0);
         return ValidAppearance(value);
     }
 
@@ -187,7 +190,7 @@ public static partial class WireProtocol
         }
         if (extended)
         {
-            frame[offset++] = 2; // v2 adds original HK2 Body/leg selectors.
+            frame[offset++] = 3; // v3 adds synchronized original HK2 sleeve/wrist color.
             foreach (var character in value.Characters)
             {
                 frame[offset++] = character.Appearance is null ? (byte)0 : (byte)1;
@@ -235,7 +238,8 @@ public static partial class WireProtocol
         int appearanceBytes=appearanceVersion switch
         {
             1 => LegacyCharacterAppearanceBytes,
-            2 => CharacterAppearanceBytes,
+            2 => BodyLegCharacterAppearanceBytes,
+            3 => CharacterAppearanceBytes,
             _ => 0
         };
         if (appearanceBytes==0 ||
@@ -279,7 +283,7 @@ public static partial class WireProtocol
                 password = StrictUtf8.GetBytes(creation.CharacterPassword ?? string.Empty);
                 if (password.Length is < 1 or > MaxCharacterPasswordBytes)
                     throw new ArgumentOutOfRangeException(nameof(value));
-                suffixBytes = 13 + password.Length;
+                suffixBytes = 14 + password.Length;
             }
             else suffixBytes = value.Appearance is null ? 0 : CharacterAppearanceBytes;
 
@@ -292,7 +296,7 @@ public static partial class WireProtocol
 
             if (value.Creation is { } settings)
             {
-                frame[offset++] = 3; // v3 adds original HK2 Body/leg selectors.
+                frame[offset++] = 4; // v4 adds original synchronized sleeve/wrist color.
                 frame[offset++] = value.Appearance is null ? (byte)0 : (byte)1;
                 if (value.Appearance is { } appearance)
                     WriteAppearance(frame.AsSpan(offset,CharacterAppearanceBytes),appearance);
@@ -337,6 +341,7 @@ public static partial class WireProtocol
                 return true;
             }
             if (frame.Length == offset + LegacyCharacterAppearanceBytes ||
+                frame.Length == offset + BodyLegCharacterAppearanceBytes ||
                 frame.Length == offset + CharacterAppearanceBytes)
             {
                 if (!ReadAppearance(frame.Slice(offset,frame.Length-offset),out var legacyAppearance))
@@ -349,7 +354,8 @@ public static partial class WireProtocol
             int appearanceBytes=payloadVersion switch
             {
                 2 => LegacyCharacterAppearanceBytes,
-                3 => CharacterAppearanceBytes,
+                3 => BodyLegCharacterAppearanceBytes,
+                4 => CharacterAppearanceBytes,
                 _ => 0
             };
             if (appearanceBytes==0 || frame.Length < offset + 1 + appearanceBytes + 5)
@@ -417,6 +423,7 @@ public static partial class WireProtocol
         if (raw > (byte)CharacterCreateWireStatus.InvalidCreationSettings || slot > 31 ||
             length > 96 || (20 + length != frame.Length &&
                 20 + length + LegacyCharacterAppearanceBytes != frame.Length &&
+                20 + length + BodyLegCharacterAppearanceBytes != frame.Length &&
                 20 + length + CharacterAppearanceBytes != frame.Length))
             return false;
         var status = (CharacterCreateWireStatus)raw;
@@ -431,7 +438,8 @@ public static partial class WireProtocol
             else if (characterId != 0 || length != 0 || frame.Length != 20) return false;
             CharacterAppearance? appearance=null;
             int remaining=frame.Length-(20+length);
-            if(remaining is LegacyCharacterAppearanceBytes or CharacterAppearanceBytes)
+            if(remaining is LegacyCharacterAppearanceBytes or
+                BodyLegCharacterAppearanceBytes or CharacterAppearanceBytes)
             {
                 if(!ReadAppearance(frame.Slice(20+length,remaining),out var decoded)) return false;
                 appearance=decoded;

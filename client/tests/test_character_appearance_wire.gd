@@ -1,13 +1,16 @@
 extends SceneTree
 const Codec = preload("res://network/wire_codec.gd")
 const State = preload("res://world/world_state.gd")
-const EMPTY_HEX := "1800000001000c0000020200000000000000010300070201"
-const LIST_HEX := "4800000001000c00020b000000000000000006004c6567616379160000000000000001060043686f73656e0200000000000000010103000702010200000000000000010300070201"
-const CREATE_HEX := "1700000001000f0001060043686f73656e010300070201"
-const RESULT_HEX := "200000000100100000160000000000000001060043686f73656e010300070201"
+const EMPTY_HEX := "1a00000001000c00000302000000000000000001030007020102"
+const LIST_HEX := "4c00000001000c00020b000000000000000006004c6567616379160000000000000001060043686f73656e030000000000000000010103000702010202000000000000000001030007020102"
+const CREATE_HEX := "1800000001000f0001060043686f73656e01030007020102"
+const RESULT_HEX := "210000000100100000160000000000000001060043686f73656e01030007020102"
+const BODY_LEG_LIST_HEX := "4800000001000c00020b000000000000000006004c6567616379160000000000000001060043686f73656e0200000000000000010103000702010200000000000000010300070201"
+const BODY_LEG_RESULT_HEX := "200000000100100000160000000000000001060043686f73656e010300070201"
 const LEGACY_LIST_HEX := "4000000001000c00020b000000000000000006004c6567616379160000000000000001060043686f73656e010000000000010103000702000000000001030007"
 const LEGACY_RESULT_HEX := "1e0000000100100000160000000000000001060043686f73656e01030007"
-const LOOK := {"race":1,"hair_index":3,"hair_color":7,"body_index":2,"leg_index":1}
+const LOOK := {"race":1,"hair_index":3,"hair_color":7,"body_index":2,"leg_index":1,"sleeve_color":2}
+const BODY_LEG_LOOK := {"race":1,"hair_index":3,"hair_color":7,"body_index":2,"leg_index":1}
 const LEGACY_LOOK := {"race":1,"hair_index":3,"hair_color":7}
 var failed := false
 
@@ -23,6 +26,9 @@ func _initialize() -> void:
 	check(list.characters[0].appearance.is_empty() and list.characters[1].appearance==LOOK,"unknown/known appearance lost")
 	check(Codec.encode_character_create(1,"Chosen",LOOK).hex_encode()==CREATE_HEX,"C# create golden mismatch")
 	check(Codec.decode_character_create_result(RESULT_HEX.hex_decode()).get("appearance",{})==LOOK,"C# result golden mismatch")
+	var body_leg_list := Codec.decode_character_list(BODY_LEG_LIST_HEX.hex_decode())
+	check(body_leg_list.characters[1].appearance==BODY_LEG_LOOK,"legacy six-byte list no longer decodes")
+	check(Codec.decode_character_create_result(BODY_LEG_RESULT_HEX.hex_decode()).get("appearance",{})==BODY_LEG_LOOK,"legacy six-byte result no longer decodes")
 	var legacy_list := Codec.decode_character_list(LEGACY_LIST_HEX.hex_decode())
 	check(legacy_list.characters[1].appearance==LEGACY_LOOK,"legacy four-byte list no longer decodes")
 	check(Codec.decode_character_create_result(LEGACY_RESULT_HEX.hex_decode()).get("appearance",{})==LEGACY_LOOK,"legacy four-byte result no longer decodes")
@@ -31,13 +37,13 @@ func _initialize() -> void:
 		if at>=8:
 			short.encode_u32(0,at)
 		check(Codec.decode_character_list(short).is_empty(),"truncated menu accepted")
-	for at in [9,12,15,18,21]:
+	for at in [9,12,15,19,22]:
 		var bad := EMPTY_HEX.hex_decode()
 		bad[at] = 255
 		check(Codec.decode_character_list(bad).is_empty(),"invalid schema/race/color accepted")
 	var duplicate := EMPTY_HEX.hex_decode()
-	for i in 6:
-		duplicate[18+i] = duplicate[12+i]
+	for i in 7:
+		duplicate[19+i] = duplicate[12+i]
 	check(Codec.decode_character_list(duplicate).is_empty(),"duplicate choices accepted")
 	var unknown := LIST_HEX.hex_decode()
 	unknown[45] = 1
@@ -61,7 +67,7 @@ func _initialize() -> void:
 	forged.apply_frame(EMPTY_HEX.hex_decode())
 	forged.mark_character_create_sent(1,"Chosen",LOOK)
 	var mismatch := RESULT_HEX.hex_decode()
-	mismatch[mismatch.size()-2] = 0
+	mismatch[mismatch.size()-1] = 0
 	check(not forged.apply_frame(mismatch),"unrequested successful appearance accepted")
 	var maximum := StreamPeerBuffer.new()
 	maximum.big_endian = false
@@ -74,19 +80,20 @@ func _initialize() -> void:
 		maximum.put_u8(i)
 		maximum.put_u16(96)
 		maximum.put_data("x".repeat(96).to_utf8_buffer())
-	maximum.put_u8(2)
+	maximum.put_u8(3)
 	for i in 32:
 		maximum.put_u8(1)
-		maximum.put_data(PackedByteArray([1,3,0,7,2,1]))
-	maximum.put_u16(4096)
-	for i in 4096:
+		maximum.put_data(PackedByteArray([1,3,0,7,2,1,2]))
+	maximum.put_u16(7000)
+	for i in 7000:
 		maximum.put_u8(0)
 		maximum.put_u16(i)
 		maximum.put_u8(0)
 		maximum.put_u8(0)
 		maximum.put_u8(0)
+		maximum.put_u8(0)
 	var decoded_max := Codec.decode_character_list(maximum.data_array)
-	check(maximum.data_array.size()==Codec.MAX_CHARACTER_LIST_FRAME_BYTES and decoded_max.get("characters",[]).size()==32 and decoded_max.get("creation_appearances",[]).size()==4096,"maximum bounded 32-character/4096-choice frame failed")
+	check(maximum.data_array.size()==Codec.MAX_CHARACTER_LIST_FRAME_BYTES and decoded_max.get("characters",[]).size()==32 and decoded_max.get("creation_appearances",[]).size()==7000,"maximum bounded 32-character/7000-choice frame failed")
 	if not failed:
 		print("CHARACTER_APPEARANCE_WIRE_PASS CSharp_golden=true bounded_extension=true unknown_preserved=true exact_options=true request_copy=true result_correlation=true snapshot_copy=true")
 	quit(1 if failed else 0)

@@ -473,13 +473,14 @@ func _build_create() -> void:
 	# Recovered2 chooses a slot on the selection screen, not in the race row.
 	_slot_edit.hide()
 	var appearance_fields := [
-		"race","hair_index","hair_color","body_index","leg_index"]
-	var appearance_labels := ["種族","髮型","髮色","上衣","褲子"]
+		"race","hair_index","hair_color","body_index","leg_index","sleeve_color"]
+	var appearance_labels := [
+		"種族","髮型","髮色","上衣顏色","短褲顏色","手袖顏色"]
 	for i in appearance_fields.size():
 		var field: String = appearance_fields[i]
 		var y := float(424+36*i)
-		# The first three rows mirror Recovered2; the last two restore original
-		# HK2 CreateCharPara Upper_armor / Lower_armor selectors.
+		# The first three rows mirror Recovered2; the last three restore original
+		# HK2 Upper_armor / Lower_armor and synchronized hand/wrist selectors.
 		var source_label := _label(
 			_creation,appearance_labels[i],232,y,78,24,14)
 		source_label.theme_type_variation = &"ParadiseSecondaryText"
@@ -557,7 +558,7 @@ func _build_create() -> void:
 			_panel.disconnect_session()
 		else:
 			_panel.back_to_character_button.pressed.emit())
-	_create_status = _label(_creation,"",263,621,418,36,14)
+	_create_status = _label(_creation,"",263,642,418,28,14)
 	_create_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 
 func _stat_control(field: String) -> SpinBox:

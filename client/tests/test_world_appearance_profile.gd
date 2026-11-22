@@ -52,10 +52,10 @@ func _run() -> void:
 
 	var own_app := {
 		"race":0,"hair_index":0,"hair_color":1,
-		"body_index":1,"leg_index":2}
+		"body_index":1,"leg_index":2,"sleeve_color":2}
 	var remote_app := {
 		"race":1,"hair_index":0,"hair_color":2,
-		"body_index":2,"leg_index":1}
+		"body_index":2,"leg_index":1,"sleeve_color":1}
 	var own := actor_state(1,7872.0,own_app,1)
 	var remote := actor_state(2,7952.0,remote_app,1)
 	var snapshot := {
@@ -85,7 +85,7 @@ func _run() -> void:
 
 	var dynamic_app := {
 		"race":2,"hair_index":1,"hair_color":2,
-		"body_index":1,"leg_index":2}
+		"body_index":1,"leg_index":2,"sleeve_color":2}
 	remote=actor_state(2,7976.0,dynamic_app,2)
 	snapshot.entities={2:remote}
 	snapshot.last_aoi_tick=2
@@ -105,6 +105,8 @@ func _run() -> void:
 		"players/a/base/leg",
 		"equipment/a/cloth/body00",
 		"equipment/a/cloth/leg00",
+		"equipment/a/cloth/l_arm00",
+		"equipment/a/cloth/r_arm00",
 		"players/a/hair/hair01"]:
 		check(view._palette.has(asset_id),"dynamic profile asset not acquired: "+asset_id)
 	var remote_actor: Dictionary = view.players._actors[2]
@@ -123,14 +125,27 @@ func _run() -> void:
 		check(
 			base_leg_at>=0 and shorts_at>base_leg_at,
 			"starter shorts replaced Standard Leg in world rendering")
+		for side in ["left","right"]:
+			var slot := 5 if side=="left" else 7
+			var base_arm_at: int = remote_render.parts.find_custom(
+				func(part): return int(part.part_slot)==slot and str(part.asset)=="players/a/base/%s_arm" % side)
+			var sleeve_at: int = remote_render.parts.find_custom(
+				func(part): return int(part.part_slot)==slot and str(part.asset)=="equipment/a/cloth/%s_arm00" % ("l" if side=="left" else "r"))
+			check(base_arm_at>=0 and sleeve_at>base_arm_at,
+				"starter sleeve replaced Standard %s arm in world rendering" % side)
 		var hair_colored: bool = remote_render.parts.any(
 			func(part): return str(part.asset)=="players/a/hair/hair01" and int(part.get("palette_index",-1))==2)
 		var body_colored: bool = remote_render.parts.any(
 			func(part): return str(part.asset)=="equipment/a/cloth/body00" and int(part.get("palette_index",-1))==1)
 		var leg_colored: bool = remote_render.parts.any(
 			func(part): return str(part.asset)=="equipment/a/cloth/leg00" and int(part.get("palette_index",-1))==2)
-		check(hair_colored and body_colored and leg_colored,
-			"authoritative hair/body/leg palette indexes did not reach world commands")
+		var left_sleeve_colored: bool = remote_render.parts.any(
+			func(part): return str(part.asset)=="equipment/a/cloth/l_arm00" and int(part.get("palette_index",-1))==2)
+		var right_sleeve_colored: bool = remote_render.parts.any(
+			func(part): return str(part.asset)=="equipment/a/cloth/r_arm00" and int(part.get("palette_index",-1))==2)
+		check(hair_colored and body_colored and leg_colored and
+				left_sleeve_colored and right_sleeve_colored,
+			"authoritative hair/body/leg/sleeve palette indexes did not reach world commands")
 	# WorldView.present() is the production path that feeds palette commands
 	# into the batched WorldCanvas. Palette baking must stay off the main thread.
 	var present_started := Time.get_ticks_usec()
@@ -143,8 +158,8 @@ func _run() -> void:
 		await process_frame
 	check(view._canvas.palette_pending_count()==0,
 		"async world palette jobs did not drain")
-	check(view._canvas.palette_texture_count()>=3,
-		"world palette cache did not bake shared hair/body/leg variants")
+	check(view._canvas.palette_texture_count()>=5,
+		"world palette cache did not bake shared hair/body/leg/sleeve variants")
 
 	view.clear_map()
 	check(view._canvas.palette_texture_count()==0,
@@ -162,5 +177,5 @@ func _run() -> void:
 	view.queue_free()
 	await process_frame
 	if failures.is_empty():
-		print("WORLD_APPEARANCE_PROFILE_PASS initial_clothing=true standard_leg_preserved=true shorts_overlay=true dynamic_aoi=true bounded_loading=true resources_drained=true")
+		print("WORLD_APPEARANCE_PROFILE_PASS initial_clothing=true standard_limbs_preserved=true shorts_overlay=true sleeves_overlay=true dynamic_aoi=true bounded_loading=true resources_drained=true")
 	quit(0 if failures.is_empty() else 1)

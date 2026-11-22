@@ -2,7 +2,7 @@ extends SceneTree
 const Session = preload("res://session/client_session.gd")
 const State = preload("res://world/world_state.gd")
 const SessionPanel = preload("res://session/session_panel.gd")
-const LOOK := {"race":1,"hair_index":3,"hair_color":7,"body_index":2,"leg_index":1}
+const LOOK := {"race":1,"hair_index":3,"hair_color":7,"body_index":2,"leg_index":1,"sleeve_color":2}
 
 func _initialize() -> void:
 	_run.call_deferred()

@@ -28,7 +28,7 @@ func _initialize() -> void:
 	assets[hair1.parts[1][0]] = _asset(str(hair1.parts[1][1]),texture,1)
 	var dressed := Profile.definition({
 		"race":0,"hair_index":0,"hair_color":0,
-		"body_index":1,"leg_index":2})
+		"body_index":1,"leg_index":2,"sleeve_color":2})
 	var players := Players.new()
 	check(players.configure(assets)==OK,"B default profile rejected")
 	for race in [1,2]:
@@ -36,14 +36,15 @@ func _initialize() -> void:
 	check(players.add_profile(assets,{"race":1,"hair_index":1,"hair_color":0})==OK,"extra hair profile rejected")
 	check(players.add_profile(assets,{
 		"race":0,"hair_index":0,"hair_color":0,
-		"body_index":1,"leg_index":2})==OK,"creation clothes profile rejected")
+		"body_index":1,"leg_index":2,"sleeve_color":2})==OK,"creation clothes/sleeves profile rejected")
 	check(
-		players._profiles["1:0:0:0:0"].views["G-BODY_NR1"].timeline==
-		players._profiles["1:1:0:0:0"].views["G-BODY_NR1"].timeline,
+		players._profiles["1:0:0:0:0:0"].views["G-BODY_NR1"].timeline==
+		players._profiles["1:1:0:0:0:0"].views["G-BODY_NR1"].timeline,
 		"same body allocated another timeline")
 	var own := _actor(1,0)
 	own.appearance.body_index = 1
 	own.appearance.leg_index = 2
+	own.appearance.sleeve_color = 2
 	var girl := _actor(2,1)
 	var alien := _actor(3,2)
 	var unknown := _actor(4,3)
@@ -60,7 +61,7 @@ func _initialize() -> void:
 	check(actors.size()==3 and players._actors[2].history==history,"unknown race fell back or profile change reset interpolation")
 	for i in 3:
 		var race_key: String = ["b","g","a"][i]
-		check(actors[i].parts.size()==8 and int(actors[i].parts[0].frame)==1,"retarget/profile change restarted fixed-speed walk")
+		check(actors[i].parts.size()==10 and int(actors[i].parts[0].frame)==1,"retarget/profile change restarted fixed-speed walk")
 		for part in actors[i].parts:
 			var asset_path := str(part.asset)
 			check(
@@ -72,8 +73,12 @@ func _initialize() -> void:
 		func(part): return part.asset=="equipment/b/cloth/body00" and int(part.get("palette_index",-1))==1)
 	var leg_colored: bool = actors[0].parts.any(
 		func(part): return part.asset=="equipment/b/cloth/leg00" and int(part.get("palette_index",-1))==2)
-	check(body_colored and leg_colored,
-		"starter clothing color indexes did not reach presentation metadata")
+	var left_sleeve_colored: bool = actors[0].parts.any(
+		func(part): return part.asset=="equipment/b/cloth/l_arm00" and int(part.get("palette_index",-1))==2)
+	var right_sleeve_colored: bool = actors[0].parts.any(
+		func(part): return part.asset=="equipment/b/cloth/r_arm00" and int(part.get("palette_index",-1))==2)
+	check(body_colored and leg_colored and left_sleeve_colored and right_sleeve_colored,
+		"starter clothing/sleeve color indexes did not reach presentation metadata")
 	for i in 3:
 		var race_key: String = ["b","g","a"][i]
 		var base_leg := "players/%s/base/leg" % race_key
@@ -85,6 +90,16 @@ func _initialize() -> void:
 		check(
 			base_leg_at >= 0 and shorts_at > base_leg_at,
 			"starter shorts replaced or covered the required Standard Leg layer")
+		for side in ["left","right"]:
+			var slot := 5 if side=="left" else 7
+			var base_arm := "players/%s/base/%s_arm" % [race_key,side]
+			var sleeve := "equipment/%s/cloth/%s_arm00" % [race_key,"l" if side=="left" else "r"]
+			var base_arm_at: int = actors[i].parts.find_custom(
+				func(part): return int(part.part_slot)==slot and str(part.asset)==base_arm)
+			var sleeve_at: int = actors[i].parts.find_custom(
+				func(part): return int(part.part_slot)==slot and str(part.asset)==sleeve)
+			check(base_arm_at>=0 and sleeve_at>base_arm_at,
+				"starter sleeve replaced the required Standard %s arm" % side)
 	snapshot.player_attack_events=[{"attacker_actor_id":2,"attacker_connection_epoch":1,"attack_sequence":1,"facing":3}]
 	snapshot.player_damage_visual_events=[{"victim_actor_id":3,"victim_connection_epoch":1,"damage_sequence":1,"facing":2,"died":true}]
 	players.apply_snapshot(snapshot,200000)
@@ -99,12 +114,12 @@ func _initialize() -> void:
 	check(str(changed[1].parts[0].clip)=="NR","profile change retained unsupported AA")
 	var draw := DrawList.new()
 	for actor in actors:
-		check(draw.build_actor_preview(assets,actor,Rect2(-100,-100,500,500)).size()==8,"shared geometry renderer rejected layered profile")
+		check(draw.build_actor_preview(assets,actor,Rect2(-100,-100,500,500)).size()==10,"shared geometry renderer rejected layered profile")
 	var color_profile := Profile.definition(
 		{"race":0,"hair_index":0,"hair_color":1})
 	check(
 		not color_profile.is_empty() and
-		color_profile.key=="0:0:1:0:0" and
+		color_profile.key=="0:0:1:0:0:0" and
 		color_profile.parts==Profile.definition(
 			{"race":0,"hair_index":0,"hair_color":0}).parts and
 		color_profile.overlays==Profile.definition(
@@ -112,7 +127,7 @@ func _initialize() -> void:
 		"verified hair palette changed source atlases or was rejected")
 	var clothing := Profile.definition({
 		"race":0,"hair_index":0,"hair_color":0,
-		"body_index":1,"leg_index":2})
+		"body_index":1,"leg_index":2,"sleeve_color":2})
 	check(
 		str(clothing.parts[9][0])=="players/b/base/body" and
 		str(clothing.parts[12][0])=="players/b/base/leg" and
@@ -120,20 +135,25 @@ func _initialize() -> void:
 		str(clothing.overlays[12][0])=="equipment/b/cloth/leg00" and
 		int(clothing.overlays[9][2])==1 and
 		int(clothing.overlays[12][2])==2 and
-		clothing.key=="0:0:0:1:2",
-		"starter color indexes changed sprites instead of Body00/Leg00 palettes")
+		str(clothing.overlays[5][0])=="equipment/b/cloth/l_arm00" and
+		str(clothing.overlays[7][0])=="equipment/b/cloth/r_arm00" and
+		int(clothing.overlays[5][2])==2 and int(clothing.overlays[7][2])==2 and
+		clothing.key=="0:0:0:1:2:2",
+		"starter color indexes changed sprites instead of Body00/Leg00/L-R-Arm00 palettes")
 	var yas := Profile.definition({"race":4,"hair_index":2,"hair_color":7})
 	check(
 		not yas.is_empty() and
 		str(yas.parts[9][0])=="players/y/base/body" and
 		str(yas.parts[1][0])=="players/y/hair/hair02",
 		"Yas profile did not use source Y body/hair assets")
-	var robot := Profile.definition({"race":3,"hair_index":0,"hair_color":0})
+	var robot := Profile.definition({"race":3,"hair_index":0,"hair_color":0,
+		"body_index":0,"leg_index":0,"sleeve_color":2})
 	check(
 		not robot.is_empty() and
 		str(robot.parts[9][0])=="equipment/r/cloth/body00" and
-		not robot.parts.has(1),
-		"Robot profile did not use source zero-cloth body without hair")
+		not robot.parts.has(1) and
+		int(robot.parts[5][2])==2 and int(robot.parts[7][2])==2,
+		"Robot profile did not use source zero-cloth body/arm palette without hair")
 	check(
 		Profile.definition({"race":3,"hair_index":1,"hair_color":0}).is_empty() and
 		Profile.definition({"race":3,"hair_index":0,"hair_color":1}).is_empty(),
@@ -153,7 +173,7 @@ func _initialize() -> void:
 	players.clear()
 	check(players._profiles.is_empty() and players._views.is_empty() and players.actors_at(0).is_empty(),"clear retained profile data or actors")
 	if failures.is_empty():
-		print("PLAYER_PROFILES_PASS BGA_layered_parts=true standard_leg_preserved=true starter_shorts_overlay=true RY_definitions=true hair_selection=true hair_palette=true creation_clothing=true shared_timelines=true fixed_walk=true preserves_interpolation=true per_profile_AA_ND=true no_unknown_fallback=true")
+		print("PLAYER_PROFILES_PASS BGA_ten_layers=true standard_limbs_preserved=true starter_shorts_overlay=true starter_sleeves=true RY_definitions=true hair_selection=true hair_palette=true creation_clothing=true shared_timelines=true fixed_walk=true preserves_interpolation=true per_profile_AA_ND=true no_unknown_fallback=true")
 	quit(0 if failures.is_empty() else 1)
 
 func _actor(id: int, race: int) -> Dictionary:

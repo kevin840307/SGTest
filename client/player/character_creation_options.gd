@@ -2,7 +2,7 @@ extends RefCounted
 ## One UI selection shared by every skin. Options come from the Server snapshot;
 ## this model neither grants appearances nor modifies authoritative WorldState.
 signal changed
-const FIELDS := ["race","hair_index","hair_color","body_index","leg_index"]
+const FIELDS := ["race","hair_index","hair_color","body_index","leg_index","sleeve_color"]
 var editable := false
 var _choices: Array = []
 var _selected: Dictionary = {}

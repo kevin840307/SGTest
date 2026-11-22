@@ -3,7 +3,7 @@
 
 Hair/race choices follow the recovered presentation assets. Original HK2
 interface/CreateCharPara.dat is the authority for independent creation-time
-Upper_armor / Lower_armor selectors.
+Upper_armor / Lower_armor plus synchronized Left_hand / Right_hand selectors.
 """
 from __future__ import annotations
 import argparse
@@ -20,8 +20,12 @@ RACES = ((0,"B"),(1,"G"),(2,"A"),(3,"R"),(4,"Y"))
 COLORS = 8
 EXPECTED_UPPER = [570,571,572]
 EXPECTED_LOWER = [620,621,622]
+EXPECTED_LEFT_HAND = [520,521,522]
+EXPECTED_RIGHT_HAND = [1000,1001,1002]
 CURRENT_UPPER = [18501,18502,18503]
 CURRENT_LOWER = [18535,18536,18537]
+CURRENT_LEFT_HAND = [18569,18570,18571]
+CURRENT_RIGHT_HAND = [18603,18604,18605]
 
 
 def count_hair(source: Path, prefix: str) -> int:
@@ -36,7 +40,8 @@ def count_hair(source: Path, prefix: str) -> int:
     return len(bases)
 
 
-def read_creation_armor(path: Path) -> tuple[list[int],list[int]]:
+def read_creation_appearance(
+        path: Path) -> tuple[list[int],list[int],list[int],list[int]]:
     if not path.is_file():
         raise SystemExit(f"MISSING_CREATE_CHAR_PARA {path}")
     parser = configparser.ConfigParser()
@@ -51,19 +56,25 @@ def read_creation_armor(path: Path) -> tuple[list[int],list[int]]:
         except (KeyError,ValueError) as error:
             raise SystemExit(f"INVALID_CREATE_CHAR_PARA {name}") from error
     upper,lower = values("Upper_armor"),values("Lower_armor")
-    if upper != EXPECTED_UPPER or lower != EXPECTED_LOWER:
+    left,right = values("Left_hand"),values("Right_hand")
+    if (
+        upper != EXPECTED_UPPER or lower != EXPECTED_LOWER or
+        left != EXPECTED_LEFT_HAND or right != EXPECTED_RIGHT_HAND
+    ):
         raise SystemExit(
-            f"UNVERIFIED_CREATE_ARMOR upper={upper} lower={lower}; "
-            f"expected={EXPECTED_UPPER}/{EXPECTED_LOWER}")
-    return upper,lower
+            "UNVERIFIED_CREATE_APPEARANCE "
+            f"upper={upper} lower={lower} left={left} right={right}")
+    return upper,lower,left,right
 
 
 def verify_recovered_starter_colors(root: Path) -> None:
     expected = [
-        (CURRENT_UPPER, 3, "布製服．"),
-        (CURRENT_LOWER, 4, "布製下衣．"),
+        (CURRENT_UPPER, 3, ("布製服．1","布製服．2","布製服．3")),
+        (CURRENT_LOWER, 4, ("布製下衣．1","布製下衣．2","布製下衣．3")),
+        (CURRENT_LEFT_HAND, 1, ("小左護腕","輕左護腕","布左護腕")),
+        (CURRENT_RIGHT_HAND, 2, ("小右護腕","輕右護腕","布右護腕")),
     ]
-    for item_ids, slot, name_prefix in expected:
+    for item_ids, slot, names in expected:
         for color_index, item_id in enumerate(item_ids):
             path = root / f"{item_id}.tres"
             if not path.is_file():
@@ -82,7 +93,7 @@ def verify_recovered_starter_colors(root: Path) -> None:
             req_race = str_field("req_race")
             if (
                 actual_slot != slot or spr_id != 0 or actual_color != color_index or
-                req_race != "無" or actual_name != f"{name_prefix}{color_index+1}"
+                req_race != "無" or actual_name != names[color_index]
             ):
                 raise SystemExit(
                     "UNVERIFIED_STARTER_COLOR "
@@ -98,7 +109,7 @@ def main() -> None:
     parser.add_argument("--out",type=Path,required=True)
     args=parser.parse_args()
 
-    upper,lower=read_creation_armor(args.create_char_para)
+    upper,lower,left,right=read_creation_appearance(args.create_char_para)
     verify_recovered_starter_colors(args.recovered_items)
     boy_count=count_hair(args.source,"B")
     choices:list[dict[str,int]]=[]
@@ -123,13 +134,16 @@ def main() -> None:
         # selectors as different sprite IDs.
         body_values=range(3) if race in {0,1,2} else range(1)
         leg_values=range(3) if race in {0,1,2} else range(1)
+        sleeve_values=range(3) if race in {0,1,2,3} else range(1)
         for hair in range(hair_count):
             for color in range(color_count):
                 for body in body_values:
                     for leg in leg_values:
-                        choices.append({
-                            "race":race,"hair_index":hair,"hair_color":color,
-                            "body_index":body,"leg_index":leg})
+                        for sleeve in sleeve_values:
+                            choices.append({
+                                "race":race,"hair_index":hair,"hair_color":color,
+                                "body_index":body,"leg_index":leg,
+                                "sleeve_color":sleeve})
 
     payload={
         "kind":"verified_character_appearance_rules",
@@ -139,7 +153,9 @@ def main() -> None:
             "Recovered2 character_select.gd hair/race + Recovered paper_doll_engine "
             "Standard Body/Leg + Body00/Leg00 overlays; original HK2 CreateCharPara "
             "570/571/572 -> Recovered 18501/18502/18503 spr_id=0 color_index=0/1/2; "
-            "620/621/622 -> 18535/18536/18537 spr_id=0 color_index=0/1/2"),
+            "620/621/622 -> 18535/18536/18537 spr_id=0 color_index=0/1/2; "
+            "520/521/522 + 1000/1001/1002 -> synchronized L/R Arm00 "
+            "spr_id=0 color_index=0/1/2"),
         "choices":choices,
     }
     args.out.parent.mkdir(parents=True,exist_ok=True)
@@ -148,7 +164,7 @@ def main() -> None:
     print(
         "CHARACTER_APPEARANCE_RULES_READY "
         f"choices={len(choices)} hair_counts={counts} "
-        f"upper={upper} lower={lower} out={args.out}")
+        f"upper={upper} lower={lower} left={left} right={right} out={args.out}")
 
 
 if __name__=="__main__":

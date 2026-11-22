@@ -70,6 +70,7 @@ CREATE TABLE IF NOT EXISTS character_appearances (
     hair_color INTEGER NOT NULL CHECK(hair_color BETWEEN 0 AND 7),
     body_index INTEGER NOT NULL DEFAULT 0 CHECK(body_index BETWEEN 0 AND 255),
     leg_index INTEGER NOT NULL DEFAULT 0 CHECK(leg_index BETWEEN 0 AND 255),
+    sleeve_color INTEGER NOT NULL DEFAULT 0 CHECK(sleeve_color BETWEEN 0 AND 255),
     source_ref TEXT NOT NULL CHECK(length(source_ref) BETWEEN 1 AND 384)
 );", tx);
             Execute(connection, @"
@@ -771,6 +772,13 @@ CHECK(body_index BETWEEN 0 AND 255);",tx);
 ADD COLUMN leg_index INTEGER NOT NULL DEFAULT 0
 CHECK(leg_index BETWEEN 0 AND 255);",tx);
             }
+            // Schema v27: original CreateCharPara Left_hand / Right_hand are
+            // one synchronized starter sleeve/wrist color selector.
+            if(schemaVersion<27 &&
+               !ColumnExists(connection,"character_appearances","sleeve_color",tx))
+                Execute(connection,@"ALTER TABLE character_appearances
+ADD COLUMN sleeve_color INTEGER NOT NULL DEFAULT 0
+CHECK(sleeve_color BETWEEN 0 AND 255);",tx);
             if (schemaVersion < SchemaVersion)
                 Execute(connection,
                     $"UPDATE schema_version SET version={SchemaVersion};", tx);
