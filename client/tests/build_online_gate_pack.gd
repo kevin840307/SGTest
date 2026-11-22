@@ -121,11 +121,33 @@ func build() -> void:
 	}}):
 		fail("monster catalog")
 		return
+	# Rendered NPCs are essential to detecting the regression where a bad
+	# walking player makes ALL players and NPC sprites disappear.
+	var npc_id := "npcs/npc003"
+	var npc_dir := assets_root.path_join(npc_id)
+	DirAccess.make_dir_recursive_absolute(npc_dir)
+	var npc_page := npc_dir.path_join("page.png")
+	if not make_texture(npc_page,24,40,Color(0.7,0.55,0.18),Color(0.95,0.87,0.37)):
+		fail("NPC texture")
+		return
+	var npc_manifest := {
+		"version":9,"asset_id":npc_id,"pages":["page.png"],"page_sizes":[[24,40]],
+		"page_sha256":{"page.png":FileAccess.get_sha256(npc_page)},
+		"frames":[{"page":0,"rect":[0,0,24,40],"trim":[0,0],"origin":[12,36]}],
+		"clips":{"NPC003":[0]}
+	}
+	if not write_json(npc_dir.path_join("atlas.json"),npc_manifest) or \
+			not write_json(catalog.path_join("npcs.json"),{"assets":{
+			npc_id:{"kind":"sprite_atlas","file":npc_id+"/atlas.json"}
+		}}):
+		fail("NPC atlas/catalog")
+		return
 	if not write_json(catalog.path_join("assets.json"),{
 		"schema":"sgtest.asset_catalog_root/v1",
 		"categories":{
 			"players":{"index":"catalog/players.json"},
-			"Enemy":{"index":"catalog/Enemy.json"}
+			"Enemy":{"index":"catalog/Enemy.json"},
+			"npcs":{"index":"catalog/npcs.json"}
 		}
 	}):
 		fail("root catalog")
@@ -158,7 +180,9 @@ func build() -> void:
 		var target := 13 if map_id == 15 else 15
 		var npcs := {
 			"schema":"sgtest.npcs/v1","coordinate_space":"world_pixels","map_id":map_id,
-			"npcs":[{"spawn_id":spawn_id,"p":[800,800],"interaction":{
+			"npcs":[{"spawn_id":spawn_id,"name":"測試傳點管理員","p":[800,800],
+				"visual":{"resolved":true,"atlas":"npcs/npc003/atlas.json"},
+				"interaction":{
 				"mode":"confirm_transfer","adapter":"audited_TS_Common_v1",
 				"dependencies_complete":true,"destination_status":"walkable","choice":0,
 				"destination":{"map_id":target,"p":[800,800]}

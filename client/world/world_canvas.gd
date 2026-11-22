@@ -155,16 +155,21 @@ func _draw() -> void:
 		draw_circle(position, 6.0, DROP_OUTLINE)
 		draw_circle(position, 4.0, DROP_CORE)
 
-	# Names are one batched Canvas pass, not one Label Node per player.
+	# Players and NPCs use one batched world-space Canvas pass. With width=-1
+	# Godot doesn't center text using HORIZONTAL_ALIGNMENT_CENTER; offset by
+	# the actual font width and follow the center of the sprite's visible bounds.
 	var font := ThemeDB.fallback_font
 	for label in _player_labels:
-		var name_position:Vector2=label.p
-		var name_text:=str(label.text)
-		var name_color:Color=label.color
-		draw_string(font,name_position+Vector2(1,1),name_text,
-			HORIZONTAL_ALIGNMENT_CENTER,-1,16,Color(0.0,0.0,0.0,0.92))
-		draw_string(font,name_position,name_text,
-			HORIZONTAL_ALIGNMENT_CENTER,-1,16,name_color)
+		var name_position: Vector2 = label.p
+		var name_text := str(label.text)
+		var name_color: Color = label.color
+		if name_text.is_empty():
+			continue
+		var width := font.get_string_size(name_text,HORIZONTAL_ALIGNMENT_LEFT,-1,16).x
+		var at := name_position-Vector2(width*0.5,0.0)
+		draw_string(font,at+Vector2(1,1),name_text,
+			HORIZONTAL_ALIGNMENT_LEFT,-1,16,Color(0.0,0.0,0.0,0.92))
+		draw_string(font,at,name_text,HORIZONTAL_ALIGNMENT_LEFT,-1,16,name_color)
 
 	# Reliable combat presentation is still rendered by this shared Canvas.
 	# No Label/Sprite Node is allocated per attack, so dense fights do not

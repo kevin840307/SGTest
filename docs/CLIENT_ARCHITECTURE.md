@@ -1,5 +1,12 @@
 # SGTest Client — 重建設計
 
+## 2026-11-22 — 修正移動後玩家／NPC 整批不顯示，補原版 NPC 名稱與精靈置中姓名
+
+- **緊急原因與防護**：原 `client/world/world_draw_list.gd` 的 `build()` 遇到任何一個無效 AOI actor，立即 `return []`；`_append()` 遇到超出當前 clip 的動畫影格也設定整批錯誤，最終 `return []`。地圖、NPC 與所有玩家共用同一份 Canvas commands，因此單一角色資料或走路影格異常可能使所有角色、NPC 與場景圖層一次清空。修正為**演出層局部隔離**：跳過無效個別角色、超界動畫 frame 回退已驗證 clip 的第一格；其餘角色與 NPC 保留，紀錄 `skipped_actors/skipped_frames` 並節流警告；但地圖/場景 metadata 的嚴重錯誤仍保持 `error` 直接拒絕，**不放寬 Server gameplay 授權**。正式 Map15 通常移動的125個模擬影格沒自然重現原問題，因此不能宣稱已完全找到使用者當時的特定觸發條件；**注入失效 actor 和失效 ACT frame 確實重現舊版「整批繪製中止」故障分支，新版通過**。
+- **人物名稱位置**：PVP/玩家名稱不再以 foot-point `-54px` 硬編碼；`WorldView.present()` 統計每位 actor 本影格所有已成功輸出的 SPR parts `Rect2.abs()` 合併可見矩形，名稱 anchor 放在 **實際圖像上緣-6px、可見圖像水平中心**。同步跟隨人物、方向、衣服、特殊種族和相機，不使用滯後的 Server x/y。Canvas 用 `Font.get_string_size` 算實際文字寬度後向左偏移一半，修正 `draw_string(..., HORIZONTAL_ALIGNMENT_CENTER, width=-1)` 實際沒有置中的問題。PVP 藍/白/粉/紅配色保留。
+- **NPC 原名**：`npc_content.py` 原本即由 `NPC.dat` CP950 解出 `name`，但 `NpcPresentation` 未使用；本次保存於純顯示 entry，提供 `labels_at(view)`，NPC 名稱僅限可見、已有真 SPR 及非空原始名稱；和人物名稱使用同一份 sprite-bounds/camera 節點座標及 Canvas 批次文字。已在私人 PCK Map15 驗證「倉庫管理員」、「往尼西亞台地」名稱，未做假 NPC 名稱回退。
+- **測試更嚴格**：`test_real_moving_draw.gd` 直接讀真 `assets.pck`，Map15 125 render ticks、自己＋其他玩家＋兩個已解析 NPC 每次保持命令，校對 NPC／玩家名稱貼齊實際 SPR 上緣和中心，單獨注入錯 AOI actor 及異常 NR frame 也不能清空其他正常角色。合成 `build_online_gate_pack.gd` 補有真正 atlas 的 NPC 而不只是 invisible portal，`test_online_main_gate.gd` 在移動每個階段確認自己、NPC sprite 及「測試傳點管理員」姓名均在 Canvas；原 test 預設 Headless `64×64` 與正式 `1280×720` 不一致造成 NPC 正常離開可視範圍的假陽性，已固定測試 viewport 1280×720。獨立 clean worktree 的雙 Godot main + 真 .NET Host + Map15/Map13+AOI + 資源釋放 `ONLINE_MAIN_SCENE_FORMAL_HOST_GATE_PASS`；正式 7778 使用者特定地圖走路的 GPU 實際畫面仍須現場驗收。
+
 ## 2026-11-22 — 修正「走 4px 後被 Server 位置追上」的瞬移回歸
 
 使用者在 7778 正式畫面實測「點擊後稍微動一下、接著順移到目的地」。Godot 單元測試已復現：Server `MoveReceipt(sequence=1, Accepted)` 先於同命令的 `SelfState(movement_action_sequence=1)` 到達，舊 `SelfState(moving=false, movement_action_sequence=0)` 被 Client 誤當作新路線已停止，於是只走首個4px後 `local_movement.active=false`。之後 PlayerPresentation 自己的人物改讀權威座標，Server 每次發布移動位置即直接替換畫面位置，造成跳步／瞬移。**回執接受不代表同一動作的 SelfState 已更新**。

@@ -13,6 +13,10 @@ var _timelines: Dictionary = {}
 var _animated: Dictionary = {}
 var _map_epoch := 0
 var error := OK
+# Presentation may reject a bad *individual* actor/animation frame without
+# blacking out all other players, NPCs, and scenery for the entire frame.
+var skipped_actors := 0
+var skipped_frames := 0
 
 
 func clear() -> void:
@@ -23,6 +27,8 @@ func clear() -> void:
 	_animated.clear()
 	_map_epoch = 0
 	error = OK
+	skipped_actors = 0
+	skipped_frames = 0
 
 
 func configure(world: Dictionary, assets: Dictionary, map_epoch: int = 0) -> Error:
@@ -174,6 +180,8 @@ func _record(index: int) -> Dictionary:
 
 func build(view: Rect2, actors: Array = [], inside: Dictionary = {}, frames: Dictionary = {}, transitions: Dictionary = {}, selected_overlay: int = -1) -> Array:
 	error = OK
+	skipped_actors = 0
+	skipped_frames = 0
 	if _world.is_empty():
 		error = ERR_UNCONFIGURED
 		return []
@@ -194,8 +202,10 @@ func build(view: Rect2, actors: Array = [], inside: Dictionary = {}, frames: Dic
 	# Actor order is the caller's stable presentation order, independent of camera.
 	for actor in actors:
 		if not _valid_actor(actor):
-			error = ERR_INVALID_DATA
-			return []
+			# Do not invalidate the entire draw list because one transient
+			# AOI actor is malformed / its appearance isn't loaded yet.
+			skipped_actors += 1
+			continue
 		var record: Dictionary = actor.duplicate()
 		record.sorting_mode = 1
 		record.index = -1
@@ -235,6 +245,8 @@ func build(view: Rect2, actors: Array = [], inside: Dictionary = {}, frames: Dic
 							_append_actor(commands,inside_record,view)
 						else:
 							_child(commands,int(inside_record.index),view,frames)
+	# Soft actor/frame errors are already skipped individually. Keep strict
+	# rejection for corrupt scenery/focus metadata (never render partial maps).
 	return commands if error == OK else []
 
 
@@ -263,8 +275,12 @@ func _placement(commands: Array, index: int, view: Rect2, slot: int, frames: Dic
 func _append(commands: Array, asset: Dictionary, clip: String, frame_index: int, position: Vector2, view: Rect2, index: int, slot: int, actor_id: String, alpha: int = 255, flip_h: bool = false, palette_index: int = 0) -> void:
 	var indices: Array = asset.manifest.clips[clip]
 	if frame_index < 0 or frame_index >= indices.size():
-		error = ERR_INVALID_PARAMETER
-		return
+		# Keep this actor visible on transient malformed ACT samples too.
+		# Show a safe first pose; never blank the other players and NPCs.
+		skipped_frames += 1
+		if indices.is_empty():
+			return
+		frame_index = 0
 	var frame: Dictionary = asset.manifest.frames[int(indices[frame_index])]
 	if int(frame.page) == -1:
 		return  # A real empty source frame; preserve its identity/timing externally.

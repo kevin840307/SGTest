@@ -25,6 +25,9 @@ func _initialize() -> void:
 
 
 func _launch() -> void:
+	# Headless SceneTree defaults to 64x64, which falsely despawns visible NPCs
+	# when following a player. Match the real production 1280x720 viewport.
+	root.size = Vector2i(1280,720)
 	var args := OS.get_cmdline_user_args()
 	for i in range(args.size() - 1):
 		if args[i] == "--e2e-role":
@@ -152,6 +155,28 @@ func _online_gate_watch_walk() -> void:
 			not _app.world_view.local_movement.active:
 		_online_gate_fail("server_moving_without_local_route_at_%s" % str(visual))
 		return
+	# This synthetic scene now includes a real rendered NPC atlas and a
+	# source name. A single malformed moving player frame must never wipe
+	# the NPC, our paper doll, or the name while the camera follows.
+	if _walk_smooth_frames > 6 and _app.world_view.phase == "ready":
+		var view = _app.world_view
+		var commands: Array = view._canvas._commands
+		var npc_id := "npc:46"
+		var npc_sprite := commands.any(func(c):return str(c.actor_id)==npc_id)
+		var own_sprite := commands.any(func(c):return str(c.actor_id)==str(own_id))
+		var name_visible: bool = view._canvas._player_labels.any(
+			func(l):return str(l.actor_id)==npc_id and str(l.text)=="測試傳點管理員")
+		if not npc_sprite or not own_sprite or not name_visible:
+			print("NPC_DRAW_DIAG rect=",view.camera.view_rect(),
+				" actor=",visual," NPC_bounds=",view.npcs._entries[0].bounds if view.npcs.count()>0 else Rect2(),
+				" NPC_in_rect=",view.npcs.actors_at(view.camera.view_rect()).size())
+			var ids := commands.map(func(c):return str(c.get("actor_id","")))
+			var names: Array = view._canvas._player_labels.map(func(l):return [str(l.get("actor_id","")),str(l.get("text",""))])
+			_online_gate_fail("world_canvas_missing_npc_%s_own_%s_name_%s_phase_%s_npcs_%d_error_%d_skipped_%d_%d_ids_%s_labels_%s" %
+				[str(npc_sprite),str(own_sprite),str(name_visible),view.phase,
+				view.npc_count(),view.draw_list.error,view.draw_list.skipped_actors,
+				view.draw_list.skipped_frames,str(ids.slice(0,28)),str(names.slice(0,8))])
+			return
 	var now_usec := Time.get_ticks_usec()
 	if _walk_last_visual.is_finite():
 		var dt := clampf(float(now_usec - _walk_last_sample_usec)/1000000.0,0.0,0.25)

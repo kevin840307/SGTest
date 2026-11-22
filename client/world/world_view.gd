@@ -37,6 +37,7 @@ var npcs := Npcs.new()
 var pvp_names := PvpNames.new()
 var _player_snapshot := {}
 var _players_dirty := false
+var _next_draw_warning_msec := 0
 var _pending_player_profiles: Dictionary = {}
 var _combat_seen := {}
 var _combat_overlays: Array[Dictionary] = []
@@ -139,6 +140,7 @@ func clear_map(retain_cache: bool = false) -> void:
 	_palette = []
 	_last_update = -1
 	_last_rect = Rect2()
+	_next_draw_warning_msec = 0
 	get_viewport().canvas_transform = Transform2D.IDENTITY
 	if epoch > 0:
 		store.end_scope(&"world_view",epoch)
@@ -436,19 +438,42 @@ func present() -> void:
 			"alpha":1.0-progress
 		})
 	_combat_overlays = surviving
-	var player_labels:Array=[]
+	var draw_commands: Array = draw_list.build(rect,actors,{},draw_list.frames_at_update(update))
+	# Source SPR origin/trim differ across races, armor and NPC types. Name
+	# anchoring must follow the actual visible pixel bounds, never a fixed -54.
+	var sprite_bounds: Dictionary = {}
+	for command in draw_commands:
+		var key := str(command.get("actor_id",""))
+		if key.is_empty():
+			continue
+		var bounds: Rect2 = (command.destination as Rect2).abs()
+		if sprite_bounds.has(key):
+			sprite_bounds[key] = (sprite_bounds[key] as Rect2).merge(bounds)
+		else:
+			sprite_bounds[key] = bounds
+	var name_labels: Array = []
 	if show_players:
 		for raw_label in pvp_names.labels_at(now_usec):
-			var label:Dictionary=raw_label
-			var actor_position:=players.position_at(int(label.actor_id),now_usec)
-			if not actor_position.is_finite() or not rect.has_point(actor_position):
+			var label: Dictionary = raw_label
+			var key := str(label.actor_id)
+			if not sprite_bounds.has(key):
 				continue
-			var rendered:=label.duplicate(true)
-			rendered["p"]=actor_position+Vector2(0.0,-54.0)
-			player_labels.append(rendered)
-	_canvas.present(
-		draw_list.build(rect,actors,{},draw_list.frames_at_update(update)),
-		markers,combat_labels,player_labels)
+			var bound: Rect2 = sprite_bounds[key]
+			var rendered := label.duplicate(true)
+			rendered["p"] = Vector2(bound.get_center().x,bound.position.y-6.0)
+			name_labels.append(rendered)
+	for raw_label in npcs.labels_at(rect):
+		var key := str(raw_label.actor_id)
+		if not sprite_bounds.has(key):
+			continue
+		var rendered: Dictionary = raw_label.duplicate()
+		var bound: Rect2 = sprite_bounds[key]
+		rendered["p"] = Vector2(bound.get_center().x,bound.position.y-6.0)
+		name_labels.append(rendered)
+	if (draw_list.skipped_actors>0 or draw_list.skipped_frames>0) and Time.get_ticks_msec()>=_next_draw_warning_msec:
+		_next_draw_warning_msec = Time.get_ticks_msec()+5000
+		push_warning("WORLD_ACTOR_RENDER_SKIPPED map=%d actors=%d frames=%d remaining=%d" % [map_id,draw_list.skipped_actors,draw_list.skipped_frames,draw_commands.size()])
+	_canvas.present(draw_commands,markers,combat_labels,name_labels)
 	_players_dirty = false
 	_last_rect = rect
 	_last_update = update

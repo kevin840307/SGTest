@@ -10,7 +10,7 @@ func _initialize() -> void:
 	var frame := {"page":0,"rect":[0,0,52,80],"trim":[0,0],"origin":[26,70]}
 	var asset := {"manifest":{"clips":{"NPC003":[0]},"frames":[frame]},"pages":[]}
 	var population := {"schema":"sgtest.npcs/v1","npcs":[
-		{"spawn_id":46,"p":[7906,11358],"visual":{"resolved":true,"atlas":"npcs/npc003/atlas.json"},
+		{"spawn_id":46,"name":"星夢守門人","p":[7906,11358],"visual":{"resolved":true,"atlas":"npcs/npc003/atlas.json"},
 			"interaction":{"mode":"confirm_transfer","destination":{"map_id":13}}},
 		{"spawn_id":2,"p":[200,200],"visual":{"resolved":true,"atlas":"npcs/npc003/atlas.json"},
 			"interaction":{"mode":"script_required","dependencies_complete":false}}
@@ -22,6 +22,14 @@ func _initialize() -> void:
 	var actors: Array = presenter.actors_at(view)
 	if actors.size() != 1 or actors[0].id != "npc:46" or actors[0].parts[0].clip != "NPC003":
 		_fail("scenery actor pipeline dropped visible NPC or used wrong clip")
+		return
+	var label_records: Array = presenter.labels_at(view)
+	if label_records.size()!=1 or str(label_records[0].text)!="星夢守門人" or \
+			str(label_records[0].actor_id)!="npc:46" or label_records[0].p!=Vector2(7906,11283):
+		_fail("NPC name must come from original NPC.dat and align above SPR")
+		return
+	if not presenter.labels_at(Rect2(0,0,32,32)).is_empty():
+		_fail("offscreen NPC leaked its name")
 		return
 	if presenter.pick_at(Vector2(7906,11295)) != 46 or presenter.pick_at(Vector2(7906,11358)) != 46:
 		_fail("visible original SPR body cannot be clicked")

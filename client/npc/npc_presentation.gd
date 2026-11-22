@@ -86,8 +86,12 @@ func configure(population: Dictionary, assets: Dictionary) -> Error:
 		# This is a presentation record. A non-audited NPC may be visible but
 		# never becomes a client-authorized shop, quest or teleport.
 		var interaction: Dictionary = raw.get("interaction", {})
+		var display_name := str(raw.get("name","")).strip_edges()
+		# NPC.dat already contains the source CP950 name, normalized by the
+		# converter. Never fabricate names from sprite type or NPC id.
 		var entry := {"spawn_id": spawn_id, "p": p, "bounds": bounds,
-			"asset": asset_id, "clip": clip, "interaction": interaction}
+			"asset": asset_id, "clip": clip, "name":display_name,
+			"interaction": interaction}
 		_entries.append(entry)
 		_by_spawn[spawn_id] = entry
 	return OK
@@ -103,6 +107,20 @@ func actors_at(view: Rect2) -> Array:
 		result.append({"id": "npc:" + str(entry.spawn_id), "p": entry.p,
 			"parts": [{"asset": entry.asset, "clip": entry.clip, "frame": 0, "part_slot": 0}]})
 	return result
+
+func labels_at(view: Rect2) -> Array:
+	var result: Array = []
+	for entry in _entries:
+		if not (entry.bounds as Rect2).intersects(view):
+			continue
+		var name := str(entry.get("name", ""))
+		if name.is_empty():
+			continue
+		result.append({"actor_id":"npc:"+str(entry.spawn_id),
+			"text":name,"color":Color(1.0,0.88,0.46,1.0),
+			"p":Vector2(float(entry.p.x),float(entry.bounds.position.y)-5.0)})
+	return result
+
 
 func pick_at(point: Vector2) -> int:
 	if not point.is_finite():
