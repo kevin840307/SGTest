@@ -35,7 +35,11 @@ func run() -> void:
 			return
 		var sprite = Sprite2D.new()
 		sprite.position = Vector2(100, 100)
-		sprite.texture = store.get_asset(&"map", a, id).pages[0]
+		var texture_ref := bind_shared_texture(store, sprite, a, b, id)
+		if texture_ref == null:
+			push_error("Map and actor received different Texture resources")
+			quit(8)
+			return
 		root.add_child(sprite)
 		for frame in range(3):
 			await RenderingServer.frame_post_draw
@@ -53,9 +57,22 @@ func run() -> void:
 		for frame in range(3):
 			await RenderingServer.frame_post_draw
 		max_residual = max(max_residual, Performance.get_monitor(Performance.RENDER_TEXTURE_MEM_USED) - baseline)
+		if texture_ref.get_ref() != null:
+			push_error("Texture survived its last scope in cycle %d" % (cycle + 1))
+			quit(9)
+			return
 	print("GPU_TEXTURE_BYTES baseline=", baseline, " peak=", peak, " max_residual=", max_residual)
 	if peak <= baseline or max_residual != 0:
 		quit(7)
 		return
 	print("SYNTHETIC_ASSET_SCOPE_PASS cycles=30 ", store.statistics())
 	quit()
+
+
+func bind_shared_texture(store: RefCounted, sprite: Sprite2D, map_epoch: int, actor_epoch: int, id: String) -> WeakRef:
+	var map_texture: Texture2D = store.get_asset(&"map", map_epoch, id).pages[0]
+	var actor_texture: Texture2D = store.get_asset(&"actor", actor_epoch, id).pages[0]
+	if map_texture != actor_texture:
+		return null
+	sprite.texture = map_texture
+	return weakref(map_texture)

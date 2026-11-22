@@ -60,9 +60,10 @@ def main() -> None:
         result = subprocess.run(
             [godot, "--rendering-method", "gl_compatibility", "--path", str(REPO / "client"),
              "--script", "res://tests/test_asset_store_gpu.gd", "--quit-after", "1800", "--", str(pack)],
-            check=True, timeout=60, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+            timeout=60, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
         )
         print(result.stdout, end="")
+        result.check_returncode()
         if "SYNTHETIC_ASSET_SCOPE_PASS cycles=30" not in result.stdout:
             raise SystemExit("GPU test exited before completing all cycles")
 
