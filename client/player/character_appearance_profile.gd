@@ -22,6 +22,7 @@ var key := ""
 var parts: Dictionary = {}
 var overlays: Dictionary = {}
 var body_prefix := ""
+var hair_color := 0
 var views: Dictionary = {}
 var attack_available := false
 var hit_available := false
@@ -47,7 +48,9 @@ static func appearance_key(appearance: Dictionary = {}) -> String:
 	# Robot has no hair selectors; Yas has no source-verified HK2 armor mapping.
 	if race == 3 and (hair != 0 or color != 0):
 		return ""
-	if race == 4 and (body != 0 or leg != 0):
+	if race in [0,1,2] and (body > 2 or leg > 2):
+		return ""
+	if race in [3,4] and (body != 0 or leg != 0):
 		return ""
 	return "%d:%d:%d:%d:%d" % [race,hair,color,body,leg]
 
@@ -62,9 +65,9 @@ static func definition(appearance: Dictionary = {}) -> Dictionary:
 	var body_index := int(value.get("body_index",0))
 	var leg_index := int(value.get("leg_index",0))
 	if race_index == 3:
-		# Recovered's Robot path has no separate Standard legs/arms. Until the
-		# legacy CreateCharPara item->spr_id mapping is verified, render the one
-		# source-verified zero outfit regardless of stored selector values.
+		# Recovered's Robot path has no separate Standard legs/arms. The verified
+		# CreateCharPara starter color mapping applies to humanoid B/G/A only,
+		# so Robot keeps its source zero outfit.
 		return {
 			"key":resolved_key,
 			"parts":ROBOT_BASE_PARTS.duplicate(true),
@@ -89,15 +92,18 @@ static func definition(appearance: Dictionary = {}) -> Dictionary:
 	var equipment_overlays := {}
 	if race_index != 4:
 		# Recovered builds Standard Body/Leg first, then EquipBody/EquipLeg.
-		# Body000 is the verified starter shirt; Leg000 is shorts and must NOT
+		# Original 570..572 / 620..622 all use Body00 / Leg00; their only visual
+		# difference is item color_index 0/1/2. Leg00 is shorts and must NOT
 		# replace Standard Leg, otherwise the lower legs disappear.
 		equipment_overlays = {
 			9:[
 				"equipment/%s/cloth/body00" % race,
-				"%s-BODY00" % prefix],
+				"%s-BODY00" % prefix,
+				body_index],
 			12:[
 				"equipment/%s/cloth/leg00" % race,
-				"%s-LEG00" % prefix],
+				"%s-LEG00" % prefix,
+				leg_index],
 		}
 	return {
 		"key":resolved_key,
@@ -116,6 +122,7 @@ func configure(assets: Dictionary, appearance: Dictionary, shared_views: Diction
 	parts = data.parts
 	overlays = data.get("overlays",{})
 	body_prefix = str(data.body_prefix)
+	hair_color = int(data.get("hair_color",0))
 	for part in parts.values():
 		if not assets.has(part[0]):
 			return ERR_INVALID_DATA

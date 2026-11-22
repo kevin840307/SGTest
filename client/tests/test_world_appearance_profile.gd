@@ -51,11 +51,11 @@ func _run() -> void:
 	check(view.request_map(15)==OK,"cannot request Map15")
 
 	var own_app := {
-		"race":0,"hair_index":0,"hair_color":0,
-		"body_index":0,"leg_index":0}
+		"race":0,"hair_index":0,"hair_color":1,
+		"body_index":1,"leg_index":2}
 	var remote_app := {
-		"race":1,"hair_index":0,"hair_color":0,
-		"body_index":0,"leg_index":0}
+		"race":1,"hair_index":0,"hair_color":2,
+		"body_index":2,"leg_index":1}
 	var own := actor_state(1,7872.0,own_app,1)
 	var remote := actor_state(2,7952.0,remote_app,1)
 	var snapshot := {
@@ -84,8 +84,8 @@ func _run() -> void:
 		"initial remote actor did not use authoritative appearance")
 
 	var dynamic_app := {
-		"race":2,"hair_index":1,"hair_color":0,
-		"body_index":0,"leg_index":0}
+		"race":2,"hair_index":1,"hair_color":2,
+		"body_index":1,"leg_index":2}
 	remote=actor_state(2,7976.0,dynamic_app,2)
 	snapshot.entities={2:remote}
 	snapshot.last_aoi_tick=2
@@ -123,8 +123,32 @@ func _run() -> void:
 		check(
 			base_leg_at>=0 and shorts_at>base_leg_at,
 			"starter shorts replaced Standard Leg in world rendering")
+		var hair_colored: bool = remote_render.parts.any(
+			func(part): return str(part.asset)=="players/a/hair/hair01" and int(part.get("palette_index",-1))==2)
+		var body_colored: bool = remote_render.parts.any(
+			func(part): return str(part.asset)=="equipment/a/cloth/body00" and int(part.get("palette_index",-1))==1)
+		var leg_colored: bool = remote_render.parts.any(
+			func(part): return str(part.asset)=="equipment/a/cloth/leg00" and int(part.get("palette_index",-1))==2)
+		check(hair_colored and body_colored and leg_colored,
+			"authoritative hair/body/leg palette indexes did not reach world commands")
+	# WorldView.present() is the production path that feeds palette commands
+	# into the batched WorldCanvas. Palette baking must stay off the main thread.
+	var present_started := Time.get_ticks_usec()
+	view.present()
+	var present_usec := Time.get_ticks_usec()-present_started
+	check(present_usec < 50000,
+		"world palette submission blocked the main thread")
+	var palette_deadline := Time.get_ticks_msec()+30000
+	while view._canvas.palette_pending_count()>0 and Time.get_ticks_msec()<palette_deadline:
+		await process_frame
+	check(view._canvas.palette_pending_count()==0,
+		"async world palette jobs did not drain")
+	check(view._canvas.palette_texture_count()>=3,
+		"world palette cache did not bake shared hair/body/leg variants")
 
 	view.clear_map()
+	check(view._canvas.palette_texture_count()==0,
+		"map clear retained palette GPU textures")
 	var drain_deadline := Time.get_ticks_msec()+30000
 	while (view.store.statistics().decode_jobs+
 			view.store.statistics().texture_jobs)>0 and 			Time.get_ticks_msec()<drain_deadline:

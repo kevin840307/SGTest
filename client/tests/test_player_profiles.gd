@@ -42,6 +42,8 @@ func _initialize() -> void:
 		players._profiles["1:1:0:0:0"].views["G-BODY_NR1"].timeline,
 		"same body allocated another timeline")
 	var own := _actor(1,0)
+	own.appearance.body_index = 1
+	own.appearance.leg_index = 2
 	var girl := _actor(2,1)
 	var alien := _actor(3,2)
 	var unknown := _actor(4,3)
@@ -66,6 +68,12 @@ func _initialize() -> void:
 				asset_path.begins_with("equipment/"+race_key+"/cloth/"),
 				"profile borrowed another race's parts")
 	check(actors[1].parts.any(func(part): return part.asset=="players/g/hair/hair01"),"selected hair not rendered")
+	var body_colored: bool = actors[0].parts.any(
+		func(part): return part.asset=="equipment/b/cloth/body00" and int(part.get("palette_index",-1))==1)
+	var leg_colored: bool = actors[0].parts.any(
+		func(part): return part.asset=="equipment/b/cloth/leg00" and int(part.get("palette_index",-1))==2)
+	check(body_colored and leg_colored,
+		"starter clothing color indexes did not reach presentation metadata")
 	for i in 3:
 		var race_key: String = ["b","g","a"][i]
 		var base_leg := "players/%s/base/leg" % race_key
@@ -110,8 +118,10 @@ func _initialize() -> void:
 		str(clothing.parts[12][0])=="players/b/base/leg" and
 		str(clothing.overlays[9][0])=="equipment/b/cloth/body00" and
 		str(clothing.overlays[12][0])=="equipment/b/cloth/leg00" and
+		int(clothing.overlays[9][2])==1 and
+		int(clothing.overlays[12][2])==2 and
 		clothing.key=="0:0:0:1:2",
-		"unresolved selectors replaced Standard body/leg instead of safe zero overlays")
+		"starter color indexes changed sprites instead of Body00/Leg00 palettes")
 	var yas := Profile.definition({"race":4,"hair_index":2,"hair_color":7})
 	check(
 		not yas.is_empty() and

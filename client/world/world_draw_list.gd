@@ -260,7 +260,7 @@ func _placement(commands: Array, index: int, view: Rect2, slot: int, frames: Dic
 	_append(commands, _assets[id], appearance.clip, int(frames.get(index,0)), Vector2(placement.p[0],placement.p[1]), view, index, slot, "",alpha)
 
 
-func _append(commands: Array, asset: Dictionary, clip: String, frame_index: int, position: Vector2, view: Rect2, index: int, slot: int, actor_id: String, alpha: int = 255, flip_h: bool = false) -> void:
+func _append(commands: Array, asset: Dictionary, clip: String, frame_index: int, position: Vector2, view: Rect2, index: int, slot: int, actor_id: String, alpha: int = 255, flip_h: bool = false, palette_index: int = 0) -> void:
 	var indices: Array = asset.manifest.clips[clip]
 	if frame_index < 0 or frame_index >= indices.size():
 		error = ERR_INVALID_PARAMETER
@@ -278,6 +278,7 @@ func _append(commands: Array, asset: Dictionary, clip: String, frame_index: int,
 	if destination.abs().intersects(view):
 		commands.append({"texture":asset.pages[int(frame.page)],"destination":destination,"uv":uv,
 			"index":index,"slot":slot,"frame":frame_index,"actor_id":actor_id,"alpha":alpha,
+			"palette_index":palette_index,
 			"modulate":Color(1,1,1,alpha/255.0)})
 
 
@@ -310,4 +311,6 @@ func build_actor_preview(assets: Dictionary, actor: Dictionary, view: Rect2) -> 
 func _append_actor(commands: Array, actor: Dictionary, view: Rect2) -> void:
 	# The whole paper doll occupies one position in scenery/actor order.
 	for part in actor.get("parts",[actor]):
-		_append(commands,_assets[part.asset],part.clip,int(part.get("frame",0)),actor.p,view,-1,int(part.get("part_slot",0)),actor.id,255,bool(part.get("flip_h",false)))
+		_append(commands,_assets[part.asset],part.clip,int(part.get("frame",0)),actor.p,view,-1,
+			int(part.get("part_slot",0)),actor.id,255,bool(part.get("flip_h",false)),
+			int(part.get("palette_index",0)))

@@ -1,10 +1,11 @@
 extends Node2D
 ## Small auth/character-select paper-doll renderer.
 ## Unlike the world batch Canvas, previews have only a handful of parts, so
-## Sprite2D layers let the verified Recovered2 hair hue shader apply to Hair
-## without changing the multiplayer renderer or duplicating eight atlases.
+## Sprite2D layers use the original indexed HSL palette for hair and starter
+## clothing without duplicating source atlases.
 
-const HUE_DEGREES := [0.0,90.0,180.0,270.0,45.0,135.0,225.0,315.0]
+const PaletteHue = preload("res://player/palette_hue.gd")
+const HUE_DEGREES := PaletteHue.HUE_DEGREES
 const HAIR_SHADER_CODE := """
 shader_type canvas_item;
 uniform float hue_shift = 0.0;
@@ -51,18 +52,28 @@ var _commands: Array = []
 var _sprites: Array[Sprite2D] = []
 var _hair_color := 0
 var _hair_shader := Shader.new()
-var _hair_material := ShaderMaterial.new()
+var _hair_material: ShaderMaterial = null
+var _palette_materials: Dictionary = {}
 
 func _init() -> void:
 	_hair_shader.code = HAIR_SHADER_CODE
-	_hair_material.shader = _hair_shader
-	_hair_material.set_shader_parameter("hue_shift",0.0)
+	_hair_material = _material_for(0)
 	texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 
 func set_hair_color(value: int) -> void:
 	_hair_color = clampi(value,0,HUE_DEGREES.size()-1)
-	_hair_material.set_shader_parameter("hue_shift",HUE_DEGREES[_hair_color])
+	_hair_material = _material_for(_hair_color)
 	_apply_materials()
+
+func _material_for(color_index: int) -> ShaderMaterial:
+	var index := clampi(color_index,0,HUE_DEGREES.size()-1)
+	if _palette_materials.has(index):
+		return _palette_materials[index]
+	var material := ShaderMaterial.new()
+	material.shader = _hair_shader
+	material.set_shader_parameter("hue_shift",HUE_DEGREES[index])
+	_palette_materials[index] = material
+	return material
 
 func present(
 		commands: Array, _ground_markers: Array = [],
@@ -92,6 +103,7 @@ func present(
 		sprite.scale = Vector2(-1.0,1.0) if destination.size.x < 0 else Vector2.ONE
 		sprite.modulate = command.modulate
 		sprite.set_meta("part_slot",int(command.get("slot",-1)))
+		sprite.set_meta("palette_index",int(command.get("palette_index",0)))
 		sprite.show()
 	_apply_materials()
 
@@ -112,4 +124,5 @@ func _apply_materials() -> void:
 	for sprite in _sprites:
 		if not sprite.visible:
 			continue
-		sprite.material = _hair_material if int(sprite.get_meta("part_slot",-1)) == 1 and _hair_color > 0 else null
+		var palette_index := int(sprite.get_meta("palette_index",0))
+		sprite.material = _material_for(palette_index) if palette_index > 0 else null

@@ -9,15 +9,19 @@ from __future__ import annotations
 import argparse
 import configparser
 import json
+import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_SOURCE = Path(r"C:\SGO\NewVersion\Recovered2")
 DEFAULT_CREATE_CHAR_PARA = ROOT/".cache/asset_converter/source/interface/createcharpara.dat"
+DEFAULT_RECOVERED_ITEMS = Path(r"C:\SGO\Recovered\client\Items\equip")
 RACES = ((0,"B"),(1,"G"),(2,"A"),(3,"R"),(4,"Y"))
 COLORS = 8
 EXPECTED_UPPER = [570,571,572]
 EXPECTED_LOWER = [620,621,622]
+CURRENT_UPPER = [18501,18502,18503]
+CURRENT_LOWER = [18535,18536,18537]
 
 
 def count_hair(source: Path, prefix: str) -> int:
@@ -54,14 +58,48 @@ def read_creation_armor(path: Path) -> tuple[list[int],list[int]]:
     return upper,lower
 
 
+def verify_recovered_starter_colors(root: Path) -> None:
+    expected = [
+        (CURRENT_UPPER, 3, "布製服．"),
+        (CURRENT_LOWER, 4, "布製下衣．"),
+    ]
+    for item_ids, slot, name_prefix in expected:
+        for color_index, item_id in enumerate(item_ids):
+            path = root / f"{item_id}.tres"
+            if not path.is_file():
+                raise SystemExit(f"MISSING_RECOVERED_STARTER_ITEM {path}")
+            text = path.read_text(encoding="utf-8")
+            def int_field(name: str, default: int = 0) -> int:
+                match = re.search(rf"(?m)^{re.escape(name)}\s*=\s*(-?\d+)\s*$", text)
+                return int(match.group(1)) if match else default
+            def str_field(name: str, default: str = "") -> str:
+                match = re.search(rf'(?m)^{re.escape(name)}\s*=\s*"([^"]*)"\s*$', text)
+                return match.group(1) if match else default
+            actual_name = str_field("item_name")
+            actual_slot = int_field("equip_slot",-1)
+            spr_id = int_field("spr_id",0)
+            actual_color = int_field("color_index",0)
+            req_race = str_field("req_race")
+            if (
+                actual_slot != slot or spr_id != 0 or actual_color != color_index or
+                req_race != "無" or actual_name != f"{name_prefix}{color_index+1}"
+            ):
+                raise SystemExit(
+                    "UNVERIFIED_STARTER_COLOR "
+                    f"id={item_id} name={actual_name!r} slot={actual_slot} "
+                    f"spr_id={spr_id} color_index={actual_color} req_race={req_race!r}")
+
+
 def main() -> None:
     parser=argparse.ArgumentParser()
     parser.add_argument("--source",type=Path,default=DEFAULT_SOURCE)
     parser.add_argument("--create-char-para",type=Path,default=DEFAULT_CREATE_CHAR_PARA)
+    parser.add_argument("--recovered-items",type=Path,default=DEFAULT_RECOVERED_ITEMS)
     parser.add_argument("--out",type=Path,required=True)
     args=parser.parse_args()
 
     upper,lower=read_creation_armor(args.create_char_para)
+    verify_recovered_starter_colors(args.recovered_items)
     boy_count=count_hair(args.source,"B")
     choices:list[dict[str,int]]=[]
     counts:dict[int,int]={}
@@ -80,12 +118,11 @@ def main() -> None:
             hair_count=max(hair_count,1)
             color_count=COLORS
         counts[race]=hair_count
-        # CreateCharPara exposes three legacy values, but their item->spr_id
-        # mapping is not yet source-verified. Recovered's paper doll proves only the
-        # zero equipment overlay can be rendered safely with the current conversion.
-        # Keep the wire fields now, but expose only the verified 0/0 appearance.
-        body_values=range(1)
-        leg_values=range(1)
+        # Original CreateCharPara 570..572 / 620..622 map to one Body00 /
+        # Leg00 sprite with Recovered color_index 0/1/2. Do not interpret these
+        # selectors as different sprite IDs.
+        body_values=range(3) if race in {0,1,2} else range(1)
+        leg_values=range(3) if race in {0,1,2} else range(1)
         for hair in range(hair_count):
             for color in range(color_count):
                 for body in body_values:
@@ -100,8 +137,9 @@ def main() -> None:
         "rules_verified":True,
         "source_reference":(
             "Recovered2 character_select.gd hair/race + Recovered paper_doll_engine "
-            "Standard Body/Leg + verified zero EquipBody/EquipLeg overlay; original HK2 "
-            "CreateCharPara 570/571/572 and 620/621/622 retained as unresolved mapping"),
+            "Standard Body/Leg + Body00/Leg00 overlays; original HK2 CreateCharPara "
+            "570/571/572 -> Recovered 18501/18502/18503 spr_id=0 color_index=0/1/2; "
+            "620/621/622 -> 18535/18536/18537 spr_id=0 color_index=0/1/2"),
         "choices":choices,
     }
     args.out.parent.mkdir(parents=True,exist_ok=True)

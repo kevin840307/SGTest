@@ -273,9 +273,11 @@ func _run() -> void:
 	panel._latest.character_create_result_revision = 1
 	panel._latest.character_creation_appearances = [
 		{"race":0,"hair_index":0,"hair_color":0,"body_index":0,"leg_index":0},
+		{"race":0,"hair_index":0,"hair_color":0,"body_index":1,"leg_index":0},
+		{"race":0,"hair_index":0,"hair_color":0,"body_index":1,"leg_index":2},
 		{"race":0,"hair_index":1,"hair_color":2,"body_index":0,"leg_index":0},
 		{"race":0,"hair_index":1,"hair_color":5,"body_index":0,"leg_index":0},
-		{"race":1,"hair_index":3,"hair_color":7,"body_index":0,"leg_index":0}]
+		{"race":1,"hair_index":3,"hair_color":7,"body_index":2,"leg_index":1}]
 	panel._set_controls()
 	if not pack_path.is_empty() and not await _wait_previews(shell,1,true):
 		return
@@ -308,18 +310,34 @@ func _run() -> void:
 			return
 	var creation_preview: Control = shell._character_previews[3]
 	for field in ["body_index","leg_index"]:
-		if not shell._appearance_buttons[field][0].disabled or 				not shell._appearance_buttons[field][1].disabled:
-			_error("unverified starter clothing selector stayed interactive: "+field)
+		if shell._appearance_buttons[field][0].disabled or 				shell._appearance_buttons[field][1].disabled:
+			_error("verified starter color selector stayed disabled: "+field)
 			return
-	if panel.creation_options.selection().body_index != 0 or 			panel.creation_options.selection().leg_index != 0:
-		_error("starter clothing did not stay on the single verified 0/0 choice")
+	shell._appearance_buttons.body_index[1].pressed.emit()
+	shell._appearance_buttons.leg_index[1].pressed.emit()
+	if panel.creation_options.selection().body_index != 1 or 			panel.creation_options.selection().leg_index != 2:
+		_error("starter color selectors did not choose original color indexes 1/2")
 		return
 	if not pack_path.is_empty():
 		if not await _wait_previews(shell,1,true):
 			return
 		var definition: Dictionary = creation_preview._definition
-		if definition.parts[9][0] != "players/b/base/body" or 				definition.parts[12][0] != "players/b/base/leg" or 				definition.overlays[9][0] != "equipment/b/cloth/body00" or 				definition.overlays[12][0] != "equipment/b/cloth/leg00":
-			_error("starter clothes did not preserve Standard body/leg plus verified overlays")
+		if definition.parts[9][0] != "players/b/base/body" or 				definition.parts[12][0] != "players/b/base/leg" or 				definition.overlays[9][0] != "equipment/b/cloth/body00" or 				definition.overlays[12][0] != "equipment/b/cloth/leg00" or 				int(definition.overlays[9][2]) != 1 or 				int(definition.overlays[12][2]) != 2:
+			_error("starter colors changed source sprites instead of Body00/Leg00 palette indexes")
+			return
+		var body_material_found := false
+		var leg_material_found := false
+		for sprite in creation_preview._canvas._sprites:
+			if not sprite.visible:
+				continue
+			var slot := int(sprite.get_meta("part_slot",-1))
+			var palette := int(sprite.get_meta("palette_index",0))
+			if slot == 9 and palette == 1 and sprite.material != null:
+				body_material_found = true
+			if slot == 12 and palette == 2 and sprite.material != null:
+				leg_material_found = true
+		if not body_material_found or not leg_material_found:
+			_error("starter Body00/Leg00 color indexes did not bind palette shader materials")
 			return
 		await _capture("create_clothing",directory)
 	var commands_before_hair: int = creation_preview._canvas._commands.size()
@@ -338,7 +356,7 @@ func _run() -> void:
 	if not pack_path.is_empty() and commands_before_race > 0 and 			creation_preview._canvas._commands.is_empty():
 		_error("race switch blanked the previous preview before replacement loaded")
 		return
-	var chosen := {"race":1,"hair_index":3,"hair_color":7,"body_index":0,"leg_index":0}
+	var chosen := {"race":1,"hair_index":3,"hair_color":7,"body_index":2,"leg_index":1}
 	if panel.creation_options.selection()!=chosen or 			AppearanceProfile.definition(chosen).is_empty() or shell._slot_edit.visible:
 		_error("verified race/hair/color choice did not bind a real profile")
 		return
