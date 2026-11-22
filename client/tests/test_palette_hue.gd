@@ -44,6 +44,8 @@ func _run() -> void:
 	}
 	var started := Time.get_ticks_usec()
 	canvas.present([command])
+	check(canvas._draw_texture_for_color(texture,1) == texture,
+		"pending tint hid the entire actor instead of showing the base SPR")
 	var submit_usec := Time.get_ticks_usec()-started
 	check(submit_usec < 20000,
 		"palette present blocked main thread instead of queuing worker")
@@ -54,6 +56,8 @@ func _run() -> void:
 		await process_frame
 	check(canvas.palette_pending_count()==0 and canvas.palette_texture_count()==1,
 		"palette worker/cache did not complete")
+	check(canvas._draw_texture_for_color(texture,1) != texture,
+		"completed tint did not replace the base SPR")
 	canvas.present([command])
 	check(canvas.palette_pending_count()==0 and canvas.palette_texture_count()==1,
 		"same texture/color did not reuse cache")

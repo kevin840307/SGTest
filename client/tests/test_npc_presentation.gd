@@ -25,7 +25,8 @@ func _initialize() -> void:
 		return
 	var label_records: Array = presenter.labels_at(view)
 	if label_records.size()!=1 or str(label_records[0].text)!="星夢守門人" or \
-			str(label_records[0].actor_id)!="npc:46" or label_records[0].p!=Vector2(7906,11283):
+			str(label_records[0].actor_id)!="npc:46" or label_records[0].p!=Vector2(7906,11283) or \
+			not (label_records[0].color as Color).is_equal_approx(Color(0.80,0.60,0.98,1.0)):
 		_fail("NPC name must come from original NPC.dat and align above SPR")
 		return
 	if not presenter.labels_at(Rect2(0,0,32,32)).is_empty():

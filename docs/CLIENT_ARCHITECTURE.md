@@ -1,5 +1,12 @@
 # SGTest Client — 重建設計
 
+## 2026-11-22 — 實機角色消失、位置校正與 NPC 淡紫色名稱
+
+- **正式截圖回歸：角色不可見**：原本 `WorldCanvas._draw()` 只要任何一層 hair/body/leg/sleeve 的索引染色貼圖尚在 worker 產生、`get_image()` 失敗或背景工作停滯，便將該 actor 整體列入 `pending_actors`，導致包含標準身體在內的所有層都不畫；若某個貼圖永遠不可用就會無限隱藏。現將染色改成**演出層安全降級**：色票完成後正常用染色版，等待／失敗期間即繪製原始 SPR，不再隱藏整位人物；不改物品、裝備、權威外觀，原調色非同步快取保留。正式外部 PCK 的 Map15／動態多層外觀及 `test_palette_hue.gd` pending→complete 測試通過；真實當次截圖角色是否僅由此觸發仍待使用者實測。
+- **偶發 Server 校正**：`LocalMovement._set_route` 過去若原地到目的地可直接通行，跳過 A* 只建 [start,goal] 直線；但 Server `MapNavigator.FindPath()` **無論是否可直走都使用原 Blocking.dat 八方向10/14 octile A***。兩端 route/6-cell lookahead 不一樣會產生分岔與碰撞校正。現一律先算與 Server 相同的 **整條 A***（一般路線有限時 5ms，同步成功就開始；較大繞路 1.5ms/影格分攤，完成才送 MoveTarget），兩端保持同序 tie-break、禁止斜角穿牆；伺服器仍完全權威。真發生拒絕／大偏差／Stop 異常時，節流輸出 `LOCAL_MOVE_CORRECTION` 附原因、epoch、sequence、兩端位置與誤差，以便從真實 log 分析。
+- **NPC 名稱依玩家參考圖**：改為偏紫的淡薰衣草色 `Color(0.80,0.60,0.98,1.0)`（約 `#CC99FA`），保留黑色文字陰影、以 NPC 真實 SPR bounds 置中；不再使用先前藍色／黃色方案。
+- **測試邊界**：本次 `test_local_movement.gd`、`test_npc_presentation.gd`、`test_palette_hue.gd`、`test_player_presentation.gd`、私人素材 `test_real_moving_draw.gd` 和 `test_world_appearance_profile.gd` PASS。獨立 **pre-secondary-password** 基線的雙 Godot main + 真 .NET Server 合成 Map15/13 E2E PASS（201 次移動樣本，不跳位、AOI與NPC可見）。但**最新 main 的 CLI 建立角色現在無第二組密碼、Server 按新規則拒絕登入**，最新 main 的 E2E 目前卡在登入而非宣稱 PASS；需另行改造 E2E 建立有 4 碼密碼的合成角色。完整私人原版地圖 GPU 走路修正/角色顯示仍須實機驗收。
+
 ## 2026-11-22 — 修正移動後玩家／NPC 整批不顯示，補原版 NPC 名稱與精靈置中姓名
 
 - **緊急原因與防護**：原 `client/world/world_draw_list.gd` 的 `build()` 遇到任何一個無效 AOI actor，立即 `return []`；`_append()` 遇到超出當前 clip 的動畫影格也設定整批錯誤，最終 `return []`。地圖、NPC 與所有玩家共用同一份 Canvas commands，因此單一角色資料或走路影格異常可能使所有角色、NPC 與場景圖層一次清空。修正為**演出層局部隔離**：跳過無效個別角色、超界動畫 frame 回退已驗證 clip 的第一格；其餘角色與 NPC 保留，紀錄 `skipped_actors/skipped_frames` 並節流警告；但地圖/場景 metadata 的嚴重錯誤仍保持 `error` 直接拒絕，**不放寬 Server gameplay 授權**。正式 Map15 通常移動的125個模擬影格沒自然重現原問題，因此不能宣稱已完全找到使用者當時的特定觸發條件；**注入失效 actor 和失效 ACT frame 確實重現舊版「整批繪製中止」故障分支，新版通過**。

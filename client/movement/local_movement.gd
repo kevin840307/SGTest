@@ -34,6 +34,7 @@ var _last_server_tick := -1
 var _last_authority := Vector2.INF
 var _settle_target := Vector2.INF
 var _full_path_searches := 0
+var _last_correction_warn_msec := -5000
 var _search: Dictionary = {}
 
 func clear() -> void:
@@ -55,6 +56,7 @@ func clear() -> void:
 	_last_authority = Vector2.INF
 	_settle_target = Vector2.INF
 	_full_path_searches = 0
+	_last_correction_warn_msec = -5000
 	_search.clear()
 
 func configure(blocking: PackedByteArray, manifest: Dictionary, epoch: int, own_actor: int) -> bool:
@@ -245,6 +247,15 @@ func _search_frame(budget_usec: int) -> void:
 		_abort_search()
 
 
+func _diagnose_correction(reason: String, authoritative: Vector2) -> void:
+	var now := Time.get_ticks_msec()
+	if now-_last_correction_warn_msec < 5000:
+		return
+	_last_correction_warn_msec = now
+	push_warning("LOCAL_MOVE_CORRECTION reason=%s epoch=%d actor=%d sequence=%d visual=%s authority=%s delta=%.1f" % [
+		reason,map_epoch,actor_id,_expected_sequence,str(position),str(authoritative),position.distance_to(authoritative)])
+
+
 func observe(snapshot: Dictionary) -> void:
 	if not ready or not bool(snapshot.get("world_ready",false)) or int(snapshot.get("map_epoch",0)) != map_epoch or int(snapshot.get("actor_id",0)) != actor_id:
 		return
@@ -277,6 +288,7 @@ func observe(snapshot: Dictionary) -> void:
 		return
 	var receipt := int(snapshot.get("last_receipt_sequence",0))
 	if _expected_sequence > 0 and receipt >= _expected_sequence and int(snapshot.get("last_receipt_status",-1)) != 0:
+		_diagnose_correction("receipt_rejected_%d" % int(snapshot.get("last_receipt_status",-1)),authoritative)
 		stop()
 		active = false
 		position = authoritative
@@ -297,6 +309,7 @@ func observe(snapshot: Dictionary) -> void:
 	if bool(own.get("moving",false)):
 		if delta > CORRECTION_SNAP * 2.0:
 			# Genuine large divergence: authoritative relocation / bad route.
+			_diagnose_correction("moving_divergence",authoritative)
 			position = authoritative
 			if moving and _target_cell != Vector2i(-1,-1):
 				_set_route(_target_cell)
@@ -310,6 +323,7 @@ func observe(snapshot: Dictionary) -> void:
 		_settle_target = Vector2.INF
 	elif delta > CORRECTION_SNAP or not _direct_clear(position,authoritative):
 		# A denied/different route or unsafe correction cannot slide through walls.
+		_diagnose_correction("stop_divergence",authoritative)
 		position = authoritative
 		stop()
 		active = false
@@ -321,29 +335,22 @@ func observe(snapshot: Dictionary) -> void:
 		moving = true
 
 func _set_route(goal: Vector2i) -> bool:
-	var center := Vector2(goal)*CELL+Vector2.ONE*8.0
-	if _direct_clear(position,center):
-		# Recovered's fast visible-line route: avoid blocking Godot's draw
-		# thread with A* for the overwhelmingly common straight terrain click.
-		_route = [_cell(position),goal]
-	else:
-		_full_path_searches += 1
-		_route.clear()
-		_route_index = 0
-		_target_cell = goal
-		moving = false
-		if not _begin_search(_cell(position),goal):
-			return false
-		# Fast path first: the common 1-3-cell turn starts during the click.
-		# A hard detour remains pending; never give the movement controller
-		# an incomplete waypoint list.
-		_search_frame(FAST_PATH_BUDGET_USEC)
-		return moving or not _search.is_empty()
-	_search.clear()
-	_route_index = 1
+	# Server.MapNavigator ALWAYS runs the same 8-way octile A*, even when
+	# the straight segment is clear. The previous Client shortcut invented a
+	# two-point diagonal route while the Server followed octile grid waypoints;
+	# the resulting trajectory drift caused late corrections / snap backs.
+	# Use exactly the Server A* path and its six-cell steering lookahead.
+	_full_path_searches += 1
+	_route.clear()
+	_route_index = 0
 	_target_cell = goal
-	moving = _route.size() > 1
-	return moving
+	moving = false
+	if not _begin_search(_cell(position),goal):
+		return false
+	# Complete the usual short A* within the click's 5ms budget; large routes
+	# finish incrementally before a MoveTarget is ever sent to the Server.
+	_search_frame(FAST_PATH_BUDGET_USEC)
+	return moving or not _search.is_empty()
 
 func request_target(point: Vector2, sequence: int) -> bool:
 	if not ready or not position.is_finite() or not point.is_finite():

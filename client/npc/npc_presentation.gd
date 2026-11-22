@@ -117,7 +117,7 @@ func labels_at(view: Rect2) -> Array:
 		if name.is_empty():
 			continue
 		result.append({"actor_id":"npc:"+str(entry.spawn_id),
-			"text":name,"color":Color(1.0,0.88,0.46,1.0),
+			"text":name,"color":Color(0.80,0.60,0.98,1.0),
 			"p":Vector2(float(entry.p.x),float(entry.bounds.position.y)-5.0)})
 	return result
 

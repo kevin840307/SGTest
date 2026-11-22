@@ -111,32 +111,20 @@ func palette_pending_count() -> int:
 			count += 1
 	return count
 
-func _draw() -> void:
-	# Never flash a player in the wrong palette while an async color variant
-	# is being prepared. Hide the whole actor until every requested layer is ready.
-	var pending_actors := {}
-	for command in _commands:
-		var palette_index := int(command.get("palette_index",0))
-		if palette_index <= 0:
-			continue
-		var source: Texture2D = command.texture
-		if _palette_texture(source,palette_index) == null:
-			var actor_id := str(command.get("actor_id",""))
-			if not actor_id.is_empty():
-				pending_actors[actor_id] = true
+func _draw_texture_for_color(source: Texture2D, color_index: int) -> Texture2D:
+	# A palette is purely cosmetic. Even if get_image() returns null, a worker
+	# stalls, or a new animation page has not been baked yet, render the SOURCE.
+	# Never hide the entire player because one hair/cloth tint is unavailable.
+	var baked := _palette_texture(source,color_index)
+	return baked if baked != null else source
 
+
+func _draw() -> void:
 	for command in _commands:
-		var actor_id := str(command.get("actor_id",""))
-		if not actor_id.is_empty() and pending_actors.has(actor_id):
-			continue
 		var destination: Rect2 = command.destination
 		var palette_index := int(command.get("palette_index",0))
-		var texture: Texture2D = command.texture
-		if palette_index > 0:
-			var shifted := _palette_texture(texture,palette_index)
-			if shifted == null:
-				continue
-			texture = shifted
+		var source: Texture2D = command.texture
+		var texture: Texture2D = _draw_texture_for_color(source,palette_index)
 		if destination.size.x < 0:
 			# draw_texture_rect_region normalizes negative destination sizes;
 			# use a Canvas transform to mirror UVs as well as SPR geometry.

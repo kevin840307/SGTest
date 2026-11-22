@@ -106,7 +106,8 @@ func run() -> void:
 	check(continuous.configure(grid(12,12),manifest,1,7),"continuous map invalid")
 	continuous.observe(initial(7,1,Vector2(24,24)))
 	check(continuous.request_target(Vector2(152,24),1),"straight route not started")
-	check(continuous._full_path_searches == 0,"visible short route executed blocking A-star")
+	check(continuous._full_path_searches == 1 and continuous._route.size() > 2,
+		"unobstructed target bypassed Server-equivalent octile A-star")
 	var preceding := continuous.position
 	for frame in 18:
 		continuous.advance(1.0/60.0)
