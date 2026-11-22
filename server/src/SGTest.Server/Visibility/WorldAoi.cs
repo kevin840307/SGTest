@@ -103,6 +103,7 @@ public sealed class WorldAoi
     private readonly Dictionary<long, MonsterSnapshot> _monsters = new();
     private readonly Dictionary<long, GroundDropRecord> _groundDrops = new();
     private readonly Dictionary<long, PetWorldPresence> _petsByOwner = new();
+    private readonly Dictionary<long, PetFollowTarget> _petFollowTargets = new();
     private readonly Dictionary<(int Map, int X, int Y), HashSet<long>> _groundBuckets = new();
     private readonly Dictionary<(int Map, int X, int Y), HashSet<long>> _monsterBuckets = new();
     private readonly Dictionary<long, Observer> _observers = new();
@@ -114,6 +115,9 @@ public sealed class WorldAoi
         double X, double Y, bool IsMoving, uint MovementActionSequence,
         byte Facing, bool CombatDead,
         uint MovementIntentSequence, bool MovementIntentMoving);
+
+    private readonly record struct PetFollowTarget(
+        long OwnerConnectionEpoch,long OwnerMapEpoch,long QueuedTick,double X,double Y);
 
     private sealed class Observer
     {
@@ -251,6 +255,12 @@ public sealed class WorldAoi
                     throw new InvalidOperationException("Unknown trusted lifecycle event");
             }
         }
+
+        // Pet movement deliberately trails one accepted World tick behind the owner.
+        // Advancing BEFORE this tick's actor deltas means every pet waypoint came from
+        // a position that the authoritative player movement pipeline already accepted.
+        AdvancePetFollowTargets(batch.Tick);
+
         foreach (var changed in batch.Changed)
             Changed(changed, batch.Tick);
 
@@ -312,10 +322,12 @@ public sealed class WorldAoi
 
         if(!update.Present)
         {
+            _petFollowTargets.Remove(update.OwnerActorId);
             _petsByOwner.Remove(update.OwnerActorId);
             return;
         }
 
+        _petFollowTargets.Remove(update.OwnerActorId);
         double x=0,y=0;
         if(_entities.TryGetValue(update.OwnerActorId,out var activeOwner)&&
            activeOwner.ConnectionEpoch==update.OwnerConnectionEpoch&&
@@ -840,7 +852,10 @@ public sealed class WorldAoi
         if(_petsByOwner.TryGetValue(actor.ActorId,out var activePet)&&
            activePet.OwnerConnectionEpoch==actor.ConnectionEpoch&&
            activePet.OwnerMapEpoch==actor.MapEpoch)
+        {
             HidePet(activePet);
+            _petFollowTargets.Remove(actor.ActorId);
+        }
         RemoveBucket(old);
         _entities.Remove(actor.ActorId);
         // After disconnect or a trusted map transfer, the old observer queue is
@@ -869,6 +884,7 @@ public sealed class WorldAoi
             return; // same-tick replay of identical revision
         RemoveBucket(previous);
         Store(actor);
+        QueuePetFollowTarget(actor,tick);
         foreach (var observer in _observers.Values)
             if (observer.Self.MapId == actor.MapId)
             {
@@ -1130,6 +1146,42 @@ public sealed class WorldAoi
         }
     }
 
+    private void QueuePetFollowTarget(ActorSnapshot owner,long tick)
+    {
+        if(!_petsByOwner.TryGetValue(owner.ActorId,out var pet)||
+           pet.OwnerConnectionEpoch!=owner.ConnectionEpoch||
+           pet.OwnerMapEpoch!=owner.MapEpoch)
+            return;
+        _petFollowTargets[owner.ActorId]=new(
+            owner.ConnectionEpoch,owner.MapEpoch,tick,owner.X,owner.Y);
+    }
+
+    private void AdvancePetFollowTargets(long tick)
+    {
+        foreach(var entry in _petFollowTargets.ToArray())
+        {
+            var target=entry.Value;
+            if(target.QueuedTick>=tick)continue;
+            if(!_petsByOwner.TryGetValue(entry.Key,out var pet)||
+               pet.OwnerConnectionEpoch!=target.OwnerConnectionEpoch||
+               pet.OwnerMapEpoch!=target.OwnerMapEpoch||
+               !_entities.TryGetValue(entry.Key,out var owner)||
+               owner.ConnectionEpoch!=target.OwnerConnectionEpoch||
+               owner.MapEpoch!=target.OwnerMapEpoch)
+            {
+                _petFollowTargets.Remove(entry.Key);
+                continue;
+            }
+
+            _petFollowTargets.Remove(entry.Key);
+            if(pet.X==target.X&&pet.Y==target.Y)continue;
+            pet=pet with {X=target.X,Y=target.Y};
+            _petsByOwner[entry.Key]=pet;
+            foreach(var observer in _observers.Values)
+                RefreshPet(observer,owner,tick);
+        }
+    }
+
     private void HidePet(PetWorldPresence pet)
     {
         foreach(var observer in _observers.Values)
@@ -1154,8 +1206,14 @@ public sealed class WorldAoi
             return;
         }
 
-        pet=pet with {OwnerMapEpoch=owner.MapEpoch,X=owner.X,Y=owner.Y};
-        _petsByOwner[owner.ActorId]=pet;
+        if(pet.OwnerMapEpoch!=owner.MapEpoch)
+        {
+            // A trusted map transfer establishes a fresh generation. Re-anchor
+            // immediately; old-map trail targets must never leak into the new map.
+            pet=pet with {OwnerMapEpoch=owner.MapEpoch,X=owner.X,Y=owner.Y};
+            _petsByOwner[owner.ActorId]=pet;
+            _petFollowTargets.Remove(owner.ActorId);
+        }
 
         bool ownerVisible=observer.Self.ActorId==owner.ActorId&&
             observer.Self.ConnectionEpoch==owner.ConnectionEpoch&&

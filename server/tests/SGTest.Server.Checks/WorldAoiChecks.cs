@@ -44,7 +44,7 @@ internal static class WorldAoiChecks
             RemoteMovementCheckpointRate);
         Checks.Run("same AOI tracks monster Spawn/Delta/Despawn hysteresis and resync baseline",
             MonsterInterest);
-        Checks.Run("pet AOI follows owner visibility with reliable summon recall and transfer generation",
+        Checks.Run("pet AOI follows owner visibility and one-tick authoritative trail with safe transfer generation",
             PetInterest);
         Checks.Run("player attack visual reaches only viewers seeing attacker and target",
             PlayerAttackVisualInterest);
@@ -92,17 +92,26 @@ internal static class WorldAoiChecks
         var ownerMoveEvents=Drain(aoi,movedOwner);
         var peerMoveEvents=Drain(aoi,peer);
         Require(
-            ownerMoveEvents.Any(x=>x.Kind==AoiEventKind.PetDelta&&
+            !ownerMoveEvents.Any(x=>x.Kind is AoiEventKind.PetDelta or AoiEventKind.PetSpawn or AoiEventKind.PetDespawn)&&
+            !peerMoveEvents.Any(x=>x.Kind is AoiEventKind.PetDelta or AoiEventKind.PetSpawn or AoiEventKind.PetDespawn),
+            "pet still mirrored the owner's same-tick position instead of trailing an accepted waypoint");
+
+        aoi.Apply(new WorldChangedBatch(3,Array.Empty<ActorSnapshot>()));
+        var ownerFollowEvents=Drain(aoi,movedOwner);
+        var peerFollowEvents=Drain(aoi,peer);
+        Require(
+            ownerFollowEvents.Any(x=>x.Kind==AoiEventKind.PetDelta&&
                 x.Pet?.PetUid==9001&&x.Pet?.X==40&&x.Pet?.Y==24)&&
-            peerMoveEvents.Any(x=>x.Kind==AoiEventKind.PetDelta&&
+            peerFollowEvents.Any(x=>x.Kind==AoiEventKind.PetDelta&&
                 x.Pet?.PetUid==9001&&x.Pet?.X==40&&x.Pet?.Y==24)&&
-            !ownerMoveEvents.Any(x=>x.Kind is AoiEventKind.PetSpawn or AoiEventKind.PetDespawn)&&
-            !peerMoveEvents.Any(x=>x.Kind is AoiEventKind.PetSpawn or AoiEventKind.PetDespawn),
-            "pet movement did not publish delta without spawn/despawn churn");
+            !ownerFollowEvents.Any(x=>x.Kind is AoiEventKind.PetSpawn or AoiEventKind.PetDespawn)&&
+            !peerFollowEvents.Any(x=>x.Kind is AoiEventKind.PetSpawn or AoiEventKind.PetDespawn)&&
+            Drain(aoi,far).Length==0,
+            "pet did not advance one World tick later along the authoritative owner trail");
         owner=movedOwner;
 
         var movedPeer=peer with {X=1000,EntityRevision=2};
-        Move(aoi,3,movedPeer);
+        Move(aoi,4,movedPeer);
         var peerExit=Drain(aoi,movedPeer);
         Require(peerExit.Any(x=>x.Kind==AoiEventKind.PetDespawn&&
                 x.Pet?.PetUid==9001)&&
@@ -121,10 +130,10 @@ internal static class WorldAoiChecks
             9002,5002,7,true));
         Require(Drain(aoi,owner).Single().Kind==AoiEventKind.PetSpawn,
             "replacement active pet did not spawn for owner");
-        Life(aoi,4,Leave(owner));
+        Life(aoi,5,Leave(owner));
         Drain(aoi,owner);
         var transferred=owner with {MapId=13,MapEpoch=owner.MapEpoch+1,EntityRevision=1};
-        Life(aoi,5,Join(transferred));
+        Life(aoi,6,Join(transferred));
         var transferEvents=Drain(aoi,transferred);
         Require(transferEvents.Any(x=>x.Kind==AoiEventKind.PetSpawn&&
                 x.Pet?.PetUid==9002&&x.Pet?.OwnerMapEpoch==transferred.MapEpoch&&
