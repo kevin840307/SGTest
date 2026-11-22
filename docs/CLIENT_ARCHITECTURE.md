@@ -1,5 +1,12 @@
 # SGTest Client — 重建設計
 
+## 2026-11-22 — 長按順移、Hair01 消失、玩家名稱抖動
+
+- **Hair01 根因已由實機 log 證實**：正式 7778 Client 反覆記錄 `WORLD_ACTOR_RENDER_SKIPPED ... layer=players/b/hair/hair01`，並非髮型來源檔缺資料。正式 `assets.pck` 檢查 hair01 的 NS/NR 八方向、各4 frame 均完整；真正缺口是動態 AOI 外觀在 `_pump_pending_player_profiles()` 只加入 `PlayerPresentation`，沒有把新 atlas 同步加入已初始化的 `WorldDrawList._assets`。新增 `WorldDrawList.add_actor_assets()`，late-loaded hair/衣物在 profile 生效前同步註冊繪製器；`PlayerPresentation` 亦合併這些來源供固定名稱幾何使用。另依 Recovered paper-doll RAW_ORDER（Head 後 Hair）補上來源 Body draw_slots 未包含的 Hair slot 1。
+- **玩家名稱不再跟 NR 影格上下跳**：舊版每影格以所有紙娃娃 sprite 的即時 bounds 上緣定位名稱；走路 head bob、trim/origin、方向切換都會改變 bounds，所以名稱每100ms抖動。改成以 actor render pivot（腳底位置）＋該 appearance 的 NS/NR 全方向靜態最上緣 offset 作固定 anchor，offset 依 profile 快取；NPC 為靜態圖仍沿原 sprite bounds。正式 Map15 125 影格／8方向檢查名稱與人物 pivot 誤差 <0.01。
+- **長按順移／回朔**：Recovered 的長按是從本地 `global_position` 做80ms／24px repath；SGTest 原本用延遲 Server snapshot 判斷距離，且 ACK 到就能再次派路，即使對應 `movement_action_sequence` 尚未生效。這會讓 Client 每80ms從較前方 cell 重算、Server 從較後方權威 cell 重算，實機曾形成 sequence 354/383 的 **192.3px／207.7px moving divergence**。現在長按 reach/repath 改用 LocalMovement.position；新 MoveTarget 必須等目前 sequence 的 Server action 可見，且 Client 與最後權威位置差距 <= **32px（4個30Hz movement tick）**、不在 visual correction 中才允許再次 retarget。原 80ms/24px 手感規則保留，不降低一般點擊反應。
+- **驗收**：`test_local_movement` 新增 >32px retarget gate；正式 `assets.pck` 的 dynamic hair01 profile 確認同時存在 PlayerPresentation/DrawList 並實際出 slot1 command；GPU OpenGL 測試仍為 **10層、3,744px 真像素差異**。獨立 QA 使用兩個真正 Godot Main＋.NET 8 Server，正常移動201影格 max 4px/frame，接著每100ms連續9次改變長按方向/目的地，`ONLINE_MAIN_GATE_LONG_HOLD_PASS targets=9 corrections=0 max=0.0`，再完成 AOI、Map15↔13 與資源釋放。最新 main 的二次密碼 E2E fixture 仍是另一項待改工作，不影響此 QA worktree 的 movement 驗證。
+
 ## 2026-11-22 — 實際角色消失與走路鏡頭反覆回朔的根因修復
 
 - **使用者實機證據（非合成數據）**：7778 Client 留下 `WORLD_ACTOR_RENDER_SKIPPED actors=1` 至少 27 次，另 `LOCAL_MOVE_CORRECTION` 記錄 `stop_divergence=146.4px` 及 `moving_divergence=200.8px`。先前未能驗證真實 GPU 顯示的測試不能據以宣稱修正完成。

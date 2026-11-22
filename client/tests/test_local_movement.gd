@@ -154,6 +154,25 @@ func run() -> void:
 			break
 	check(visually_settled and stop_correction.visual_position==Vector2(24,24),
 		"Server-authoritative correction failed to visually converge")
+	# Long-hold retargets must not stack routes while local prediction is far
+	# ahead of the last Server position. Recovered repaths from local position;
+	# SGTest additionally gates that repath because the Server is authoritative.
+	var hold_gate := LocalMovement.new()
+	check(hold_gate.configure(grid(40,12),wide_manifest,7,29),"hold gate map invalid")
+	hold_gate.observe(initial(29,7,Vector2(24,24)))
+	check(hold_gate.request_target(Vector2(552,24),1),"hold gate route rejected")
+	for frame in 9:
+		hold_gate.advance(1.0/60.0)
+	check(hold_gate.authority_error()>32.0 and not hold_gate.retarget_safe(32.0),
+		"long-hold allowed a new A-star while prediction was >32px ahead")
+	var caught_up := initial(29,7,Vector2(44,24),20)
+	caught_up.self_state.moving=true
+	caught_up.self_state.movement_action_sequence=1
+	caught_up.last_receipt_sequence=1
+	caught_up.last_receipt_status=0
+	hold_gate.observe(caught_up)
+	check(hold_gate.authority_error()<=32.0 and hold_gate.retarget_safe(32.0),
+		"long-hold stayed blocked after Server caught up")
 	# Sustained 60fps local walk while Server sends old-but-accepted positions.
 	# These packets used to repeatedly lerp backwards, causing 4px/8px
 	# alternation (stutter) and the visual slipping between walk sprites.

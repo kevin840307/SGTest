@@ -41,6 +41,9 @@ var _last_authority := Vector2.INF
 var _settle_target := Vector2.INF
 var _full_path_searches := 0
 var _last_correction_warn_msec := -5000
+var correction_events := 0
+var large_correction_events := 0
+var max_correction_distance := 0.0
 var _search: Dictionary = {}
 
 func clear() -> void:
@@ -65,6 +68,9 @@ func clear() -> void:
 	_settle_target = Vector2.INF
 	_full_path_searches = 0
 	_last_correction_warn_msec = -5000
+	correction_events = 0
+	large_correction_events = 0
+	max_correction_distance = 0.0
 	_search.clear()
 
 func configure(blocking: PackedByteArray, manifest: Dictionary, epoch: int, own_actor: int) -> bool:
@@ -256,12 +262,17 @@ func _search_frame(budget_usec: int) -> void:
 
 
 func _diagnose_correction(reason: String, authoritative: Vector2) -> void:
+	var distance := position.distance_to(authoritative)
+	correction_events += 1
+	max_correction_distance = maxf(max_correction_distance,distance)
+	if distance >= 96.0:
+		large_correction_events += 1
 	var now := Time.get_ticks_msec()
 	if now-_last_correction_warn_msec < 5000:
 		return
 	_last_correction_warn_msec = now
 	push_warning("LOCAL_MOVE_CORRECTION reason=%s epoch=%d actor=%d sequence=%d visual=%s authority=%s delta=%.1f" % [
-		reason,map_epoch,actor_id,_expected_sequence,str(position),str(authoritative),position.distance_to(authoritative)])
+		reason,map_epoch,actor_id,_expected_sequence,str(position),str(authoritative),distance])
 
 
 func _begin_visual_correction() -> void:
@@ -414,6 +425,23 @@ func _set_route(goal: Vector2i) -> bool:
 	# finish incrementally before a MoveTarget is ever sent to the Server.
 	_search_frame(FAST_PATH_BUDGET_USEC)
 	return moving or not _search.is_empty()
+
+func authority_error() -> float:
+	if not position.is_finite() or not _last_authority.is_finite():
+		return INF
+	return position.distance_to(_last_authority)
+
+
+func retarget_safe(max_authority_error: float = 32.0) -> bool:
+	# Recovered can repath immediately because its local player position is the
+	# movement source. SGTest also has an authoritative Server. Do not stack a
+	# new cursor route on top of an unresolved correction / large prediction
+	# lead; otherwise every 80ms hold repath starts from a different cell than
+	# ServerWorld and the two paths can diverge by hundreds of pixels.
+	return ready and active and not _visual_settling and \
+		position.is_finite() and _last_authority.is_finite() and \
+		authority_error() <= max_authority_error
+
 
 func request_target(point: Vector2, sequence: int) -> bool:
 	if not ready or not position.is_finite() or not point.is_finite():

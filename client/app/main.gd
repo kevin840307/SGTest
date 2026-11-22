@@ -443,14 +443,38 @@ func _physics_process(_delta: float) -> void:
 			_mouse_autorun.defer_blocked_retry(now)
 
 	var own: Dictionary = _last_snapshot.get("self_state",{})
-	var moving := bool(own.get("moving",false)) if not own.is_empty() else false
-	var actor_position := Vector2(
+	var server_moving := bool(own.get("moving",false)) if not own.is_empty() else false
+	var controller = world_view.local_movement
+	var moving: bool = bool(controller.moving) if bool(controller.active) else server_moving
+	# Recovered repaths from global_position, not from a delayed network
+	# snapshot. Use our local movement position for hold/reach policy too.
+	var actor_position: Vector2 = controller.position if controller.position.is_finite() else Vector2(
 		float(_last_snapshot.get("x",0.0)),float(_last_snapshot.get("y",0.0)))
 	var cursor_position := world_view.camera.screen_to_world(
 		get_viewport().get_mouse_position())
-	if _mouse_autorun.should_request(
-			now,actor_position,cursor_position,moving):
-		_submit_autorun_target(cursor_position,now,not moving)
+	if not _mouse_autorun.should_request(now,actor_position,cursor_position,moving):
+		return
+	# A fresh receipt is not enough: wait until the corresponding authoritative
+	# movement action is visible, then require the local prediction to remain
+	# within four 30Hz movement ticks (32px). This prevents long-hold from
+	# stacking new A* starts while ServerWorld is still following an older route.
+	var action_sequence := int(own.get("movement_action_sequence",0))
+	if not _autorun_retarget_server_safe(
+			movement_sequence,receipt_sequence,
+			int(_last_snapshot.get("last_receipt_status",-1)),
+			action_sequence,controller):
+		return
+	_submit_autorun_target(cursor_position,now,not moving)
+
+
+func _autorun_retarget_server_safe(movement_sequence: int, receipt_sequence: int,
+		receipt_status: int, action_sequence: int, controller) -> bool:
+	if movement_sequence > 0 and receipt_sequence == movement_sequence and \
+			receipt_status == 0 and action_sequence < movement_sequence:
+		return false
+	if controller.active and not controller.retarget_safe(32.0):
+		return false
+	return true
 
 
 func _process(delta: float) -> void:

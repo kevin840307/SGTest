@@ -109,6 +109,8 @@ func _run() -> void:
 		"equipment/a/cloth/r_arm00",
 		"players/a/hair/hair01"]:
 		check(view._palette.has(asset_id),"dynamic profile asset not acquired: "+asset_id)
+		check(view.draw_list._assets.has(asset_id),
+			"dynamic profile asset loaded for PlayerPresentation but not DrawList: "+asset_id)
 	var remote_actor: Dictionary = view.players._actors[2]
 	var rendered := view.players.actors_at(Time.get_ticks_usec())
 	var remote_render: Dictionary = {}
@@ -118,6 +120,13 @@ func _run() -> void:
 			break
 	check(not remote_render.is_empty(),"remote layered actor was not rendered")
 	if not remote_render.is_empty():
+		check(remote_render.parts.any(func(part):return str(part.asset)=="players/a/hair/hair01"),
+			"dynamic hair01 missing from paper-doll parts")
+		view._players_dirty=true
+		view.present()
+		check(view._canvas._commands.any(func(c):
+			return str(c.actor_id)=="2" and int(c.get("slot",-1))==1),
+			"dynamic hair01 was rejected by DrawList after profile load")
 		var base_leg_at: int = remote_render.parts.find_custom(
 			func(part): return str(part.asset)=="players/a/base/leg")
 		var shorts_at: int = remote_render.parts.find_custom(

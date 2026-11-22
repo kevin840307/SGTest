@@ -43,6 +43,22 @@ func run() -> void:
 	# Force exactly the same old all-or-nothing error branch with a broken
 	# transient AOI actor and with a bad NR animation frame. A good actor,
 	# NPC and scenery must stay drawn regardless of those isolated failures.
+	var own_profile = view.players._actors[1].profile
+	var hair_asset := str(own_profile.parts[1][0])
+	var hair_prefix := str(own_profile.parts[1][1])
+	for facing in range(1,9):
+		for act in ["NS","NR"]:
+			var body = own_profile.views.get(own_profile.body_prefix+"_"+act+str(facing),{})
+			var hair = own_profile.views.get(hair_prefix+"_"+act+str(facing),{})
+			var missing: Array = []
+			var asset: Dictionary = view.draw_list._assets.get(hair_asset,{})
+			if not hair.is_empty():
+				if not asset.is_empty():
+					for i in range(asset.manifest.clips[hair.view.clip].size()):
+						var fr = asset.manifest.frames[int(asset.manifest.clips[hair.view.clip][i])]
+						if int(fr.page)<0: missing.append(i)
+			check(not body.is_empty() and not hair.is_empty() and not asset.is_empty() and missing.is_empty(),
+				"hair01 source view invalid face=%d action=%s" % [facing,act])
 	var original_actors: Array = view.players.actors_at(Time.get_ticks_usec())
 	var invalid_actors: Array = visible_npcs.duplicate(true)
 	invalid_actors.append_array(original_actors)
@@ -95,6 +111,12 @@ func run() -> void:
 		check(not commands.is_empty(),"empty world draw commands on move frame "+str(i))
 		check(id_counts.get("1",0)>0,"self actor disappeared frame "+str(i))
 		check(id_counts.get("2",0)>0,"remote actor disappeared frame "+str(i))
+		var own_actor_rows: Array = actors.filter(func(v):return str(v.id)=="1")
+		check(not own_actor_rows.is_empty() and own_actor_rows[0].parts.any(
+			func(part):return str(part.asset)=="players/b/hair/hair01"),
+			"own hair01 disappeared from paper doll frame "+str(i))
+		check(commands.any(func(c):return str(c.actor_id)=="1" and int(c.slot)==1),
+			"own hair01 was not drawn frame "+str(i))
 		var label_ids: Array = view._canvas._player_labels.map(func(l):return str(l.actor_id))
 		check(label_ids.has("1") and label_ids.has("2"),
 			"player name detached/disappeared during movement frame "+str(i))
@@ -102,19 +124,28 @@ func run() -> void:
 			check(label_ids.has(str(npc_label.actor_id)),
 				"NPC name vanished on camera movement frame "+str(i))
 		for name_label in view._canvas._player_labels:
-			var matching := commands.filter(func(c):return str(c.actor_id)==str(name_label.actor_id))
+			var label_id := str(name_label.actor_id)
+			var matching := commands.filter(func(c):return str(c.actor_id)==label_id)
 			if matching.is_empty(): continue
-			var min_y := INF
-			var min_x := INF
-			var max_x := -INF
-			for c in matching:
-				var bb: Rect2 = (c.destination as Rect2).abs()
-				min_y = minf(min_y,bb.position.y)
-				min_x = minf(min_x,bb.position.x)
-				max_x = maxf(max_x,bb.end.x)
-			check(is_equal_approx(float(name_label.p.y),min_y-6.0) and \
-				is_equal_approx(float(name_label.p.x),(min_x+max_x)*0.5),
-				"name label not anchored to actual sprite bounds frame "+str(i))
+			if label_id.begins_with("npc:"):
+				# NPC names still use their static visible sprite top.
+				var min_y := INF
+				var min_x := INF
+				var max_x := -INF
+				for c in matching:
+					var bb: Rect2 = (c.destination as Rect2).abs()
+					min_y = minf(min_y,bb.position.y)
+					min_x = minf(min_x,bb.position.x)
+					max_x = maxf(max_x,bb.end.x)
+				check(is_equal_approx(float(name_label.p.y),min_y-6.0) and \
+					is_equal_approx(float(name_label.p.x),(min_x+max_x)*0.5),
+					"NPC name lost static sprite anchor frame "+str(i))
+			else:
+				var actor_id := int(label_id)
+				var feet := view.players.position_at(actor_id,now)
+				var expected := feet+Vector2(0,view.players.stable_name_top_offset(actor_id))
+				check(name_label.p.distance_to(expected)<0.01,
+					"player name jittered with animation bounds frame "+str(i))
 		if failures.size()>9: break
 		await process_frame
 	# A Server correction of 200px caused a real user's terrain to pan

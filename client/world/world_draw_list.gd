@@ -114,6 +114,21 @@ func configure(world: Dictionary, assets: Dictionary, map_epoch: int = 0) -> Err
 	return OK
 
 
+func add_actor_assets(assets: Dictionary) -> Error:
+	# Dynamic AOI appearance assets arrive after the map draw list has already
+	# been configured. They are presentation-only and may extend the actor
+	# atlas set, but must never replace a map/scenery asset with another value.
+	for asset_id in assets:
+		var id := str(asset_id)
+		var asset: Variant = assets[asset_id]
+		if not asset is Dictionary or not asset.has_all(["manifest","pages"]):
+			return ERR_INVALID_DATA
+		if _assets.has(id) and _assets[id] != asset:
+			return ERR_INVALID_DATA
+		_assets[id] = asset
+	return OK
+
+
 func frames_at_update(now: int, started_at: Dictionary = {}) -> Dictionary:
 	# Epoch/phase belongs to the caller. No render callback mutates a clock.
 	var frames := {}

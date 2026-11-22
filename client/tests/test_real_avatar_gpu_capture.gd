@@ -56,6 +56,10 @@ func _run() -> void:
 		push_error("Own paper doll has no draw commands "+str(world.draw_list.invalid_actor_examples))
 		quit(1)
 		return
+	if not avatar_commands.any(func(c):return int(c.get("slot",-1))==1):
+		push_error("Hair01 was not present in the actual GPU draw list")
+		quit(1)
+		return
 	var bounds: Rect2 = avatar_commands[0].destination.abs()
 	for c in avatar_commands:
 		bounds = bounds.merge((c.destination as Rect2).abs())

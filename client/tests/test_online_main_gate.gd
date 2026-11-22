@@ -18,6 +18,14 @@ var _walk_last_sample_usec := 0
 var _walk_smooth_frames := 0
 var _walk_max_visual_step := 0.0
 var _walk_invalid_steps := 0
+var _hold_targets: Array[Vector2] = [
+	Vector2(1032,808),Vector2(1064,856),Vector2(1048,920),
+	Vector2(1000,968),Vector2(936,984),Vector2(872,952),
+	Vector2(824,904),Vector2(808,856),Vector2(840,808)
+]
+var _hold_index := 0
+var _hold_next_msec := 0
+var _hold_large_corrections_before := 0
 
 
 func _initialize() -> void:
@@ -90,7 +98,7 @@ func _online_gate_tick() -> void:
 	if Time.get_ticks_msec() > _online_gate_deadline:
 		_online_gate_fail("timeout_phase_%d_state_%s_view_%s_status_%s" % [_online_gate_phase,str(_app._last_snapshot.get("state","none")),_app.world_view.phase,_app.session_panel.status.text])
 		return
-	if _online_gate_role == "actor" and _online_gate_phase in [1,3]:
+	if _online_gate_role == "actor" and _online_gate_phase in [1,3,31,32,33]:
 		_online_gate_watch_walk()
 	if _app.world_view.phase == "failed":
 		_online_gate_fail("world_view_failed_"+_app._status.text.replace(" ","_"))
@@ -151,8 +159,8 @@ func _online_gate_watch_walk() -> void:
 	# repeated 8px Server delta updates alone would otherwise look smooth.
 	var target := Vector2(952,808) if _online_gate_phase == 1 else Vector2(808,808)
 	var own: Dictionary = _app._last_snapshot.get("self_state",{})
-	if bool(own.get("moving",false)) and visual.distance_to(target)>32.0 and \
-			not _app.world_view.local_movement.active:
+	if _online_gate_phase in [1,3,33] and bool(own.get("moving",false)) and \
+			visual.distance_to(target)>32.0 and not _app.world_view.local_movement.active:
 		_online_gate_fail("server_moving_without_local_route_at_%s" % str(visual))
 		return
 	# This synthetic scene now includes a real rendered NPC atlas and a
@@ -225,6 +233,55 @@ func _online_gate_actor() -> void:
 				_online_gate_fail("own_walk_not_continuous_frames_%d_invalid_%d" % [_walk_smooth_frames,_walk_invalid_steps])
 				return
 			print("ONLINE_MAIN_GATE_MOTION_SMOOTH role=actor samples=",_walk_smooth_frames," max_step=",snappedf(_walk_max_visual_step,0.01))
+			_hold_index = 0
+			_hold_next_msec = Time.get_ticks_msec()
+			_hold_large_corrections_before = _app.world_view.local_movement.large_correction_events
+			_online_gate_deadline = maxi(_online_gate_deadline,Time.get_ticks_msec()+15000)
+			print("ONLINE_MAIN_GATE_LONG_HOLD_START role=actor")
+			_online_gate_phase = 31
+	elif _online_gate_phase == 31:
+		var now := Time.get_ticks_msec()
+		if _hold_index < _hold_targets.size() and now >= _hold_next_msec:
+			var movement_sequence := int(_app._last_snapshot.get("movement_sequence",0))
+			var receipt_sequence := int(_app._last_snapshot.get("last_receipt_sequence",0))
+			if movement_sequence > receipt_sequence:
+				return
+			var receipt_status := int(_app._last_snapshot.get("last_receipt_status",-1))
+			if movement_sequence > 0 and receipt_sequence == movement_sequence and receipt_status != 0:
+				_online_gate_fail("long_hold_server_rejected_%d_seq_%d" % [receipt_status,movement_sequence])
+				return
+			var own: Dictionary = _app._last_snapshot.get("self_state",{})
+			var controller = _app.world_view.local_movement
+			if not _app._autorun_retarget_server_safe(
+					movement_sequence,receipt_sequence,receipt_status,
+					int(own.get("movement_action_sequence",0)),controller):
+				return
+			var target: Vector2 = _hold_targets[_hold_index]
+			if not _app._submit_autorun_target(target,now,not controller.moving):
+				_online_gate_fail("long_hold_retarget_enqueue_%d" % _hold_index)
+				return
+			_hold_index += 1
+			_hold_next_msec = now + 100
+			return
+		if _hold_index >= _hold_targets.size():
+			_online_gate_phase = 32
+	elif _online_gate_phase == 32:
+		var target: Vector2 = _hold_targets[_hold_targets.size()-1]
+		var at := Vector2(float(_app._last_snapshot.get("x",0.0)),float(_app._last_snapshot.get("y",0.0)))
+		if at.distance_to(target) <= 1.0 and _online_gate_ready(15):
+			var controller = _app.world_view.local_movement
+			if controller.large_correction_events != _hold_large_corrections_before:
+				_online_gate_fail("long_hold_large_correction_count_%d_max_%.1f" % [
+					controller.large_correction_events-_hold_large_corrections_before,
+					controller.max_correction_distance])
+				return
+			print("ONLINE_MAIN_GATE_LONG_HOLD_PASS role=actor targets=",_hold_targets.size(),
+				" corrections=",controller.correction_events," max=",snappedf(controller.max_correction_distance,0.1))
+			_app._begin_ground_navigation(Vector2(808,808),Time.get_ticks_msec())
+			_online_gate_phase = 33
+	elif _online_gate_phase == 33:
+		var at := Vector2(float(_app._last_snapshot.get("x",0.0)),float(_app._last_snapshot.get("y",0.0)))
+		if at.distance_to(Vector2(808,808)) <= 1.0 and _online_gate_ready(15):
 			_online_gate_not_before = Time.get_ticks_msec() + 350
 			_online_gate_phase = 4
 	elif _online_gate_phase == 4 and Time.get_ticks_msec() >= _online_gate_not_before:

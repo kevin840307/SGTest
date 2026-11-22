@@ -283,7 +283,12 @@ func _pump_pending_player_profiles() -> Error:
 			assets[asset_id] = asset
 		if not ready:
 			continue
-		var error := players.add_profile(assets,appearance)
+		# The PlayerPresentation profile and the WorldDrawList must see the
+		# same late-loaded atlases. Previously only Players received hair01,
+		# so the actor carried the layer but DrawList rejected it forever.
+		var error := draw_list.add_actor_assets(assets)
+		if error == OK:
+			error = players.add_profile(assets,appearance)
 		if error != OK:
 			return error
 		_pending_player_profiles.erase(key)
@@ -492,9 +497,16 @@ func present() -> void:
 			var key := str(label.actor_id)
 			if not sprite_bounds.has(key):
 				continue
-			var bound: Rect2 = sprite_bounds[key]
+			var actor_id := int(label.actor_id)
+			var feet := players.position_at(actor_id,now_usec)
+			if not feet.is_finite():
+				continue
 			var rendered := label.duplicate(true)
-			rendered["p"] = Vector2(bound.get_center().x,bound.position.y-6.0)
+			# A name must not track the highest trimmed animation pixel: head
+			# bob and different NR directions changed that bound every 100ms.
+			# Source sprite geometry defines a single invariant offset for this
+			# appearance; position follows the same local/peer render pivot.
+			rendered["p"] = feet+Vector2(0.0,players.stable_name_top_offset(actor_id))
 			name_labels.append(rendered)
 	for raw_label in npcs.labels_at(rect):
 		var key := str(raw_label.actor_id)
