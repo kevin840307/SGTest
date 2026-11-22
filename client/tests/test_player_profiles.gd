@@ -63,7 +63,30 @@ func _initialize() -> void:
 	var draw := DrawList.new()
 	for actor in actors:
 		check(draw.build_actor_preview(assets,actor,Rect2(-100,-100,500,500)).size()==6,"shared geometry renderer rejected profile")
-	check(Profile.definition({"race":0,"hair_index":0,"hair_color":1}).is_empty(),"unverified palette silently defaulted")
+	var color_profile := Profile.definition(
+		{"race":0,"hair_index":0,"hair_color":1})
+	check(
+		not color_profile.is_empty() and
+		color_profile.key=="0:0:1" and
+		color_profile.parts==Profile.definition(
+			{"race":0,"hair_index":0,"hair_color":0}).parts,
+		"verified hair palette changed source atlases or was rejected")
+	var yas := Profile.definition({"race":4,"hair_index":2,"hair_color":7})
+	check(
+		not yas.is_empty() and
+		str(yas.parts[9][0])=="players/y/base/body" and
+		str(yas.parts[1][0])=="players/y/hair/hair02",
+		"Yas profile did not use source Y body/hair assets")
+	var robot := Profile.definition({"race":3,"hair_index":0,"hair_color":0})
+	check(
+		not robot.is_empty() and
+		str(robot.parts[9][0])=="equipment/r/cloth/body00" and
+		not robot.parts.has(1),
+		"Robot profile did not use source zero-cloth body without hair")
+	check(
+		Profile.definition({"race":3,"hair_index":1,"hair_color":0}).is_empty() and
+		Profile.definition({"race":3,"hair_index":0,"hair_color":1}).is_empty(),
+		"Robot incorrectly admitted disabled hair controls")
 	var bad := assets.duplicate(true)
 	bad["players/g/hair/hair01"].manifest.logical_views["G-HAIR01_NS1"].timeline_ticks = [[99,8]]
 	var probe := Players.new()
@@ -79,7 +102,7 @@ func _initialize() -> void:
 	players.clear()
 	check(players._profiles.is_empty() and players._views.is_empty() and players.actors_at(0).is_empty(),"clear retained profile data or actors")
 	if failures.is_empty():
-		print("PLAYER_PROFILES_PASS BGA_six_parts=true hair_selection=true shared_timelines=true fixed_walk=true preserves_interpolation=true per_profile_AA_ND=true no_unknown_fallback=true")
+		print("PLAYER_PROFILES_PASS BGA_six_parts=true RY_definitions=true hair_selection=true hair_palette=true shared_timelines=true fixed_walk=true preserves_interpolation=true per_profile_AA_ND=true no_unknown_fallback=true")
 	quit(0 if failures.is_empty() else 1)
 
 func _actor(id: int, race: int) -> Dictionary:

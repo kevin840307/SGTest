@@ -84,11 +84,17 @@ def sprite_asset_id(group: str) -> tuple[str, str]:
             "player_equipment",
         )
 
-    # MA/MS/SR are kept as verified source families until their exact gameplay
-    # meaning is proven from the original client. Do not rename them to mecha,
-    # pet, mount, etc. merely because Recovered code references them together.
-    if category in ("ma", "ms", "sr"):
-        return f"data/legacy/{category}/{rest}", f"legacy_{category}"
+    # MA/MS are now source-verified mecha families, not a naming guess:
+    # the original Paradise.exe loads MA\MA%02d.act, MS\Ms.act,
+    # MS\MS_CharDrawOrder.txt and MS\HorseMA.csv, while Recovered2 maps the
+    # same roots to MechaStandard/MechaHead/MA_Standard. This classifies their
+    # runtime location only; individual gameplay semantics remain source-only
+    # until separately normalized.
+    if category in ("ma", "ms"):
+        return f"mecha/{category}/{rest}", f"mecha_{category}_source"
+    # SR still lacks equivalent source proof; preserve it fail-closed.
+    if category == "sr":
+        return f"data/legacy/{category}/{rest}", "legacy_sr"
 
     if category == "effect":
         return "effects/" + rest, "effect"

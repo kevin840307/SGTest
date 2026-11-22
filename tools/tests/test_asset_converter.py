@@ -20,6 +20,8 @@ from asset_converter.source.convert_assets import decode_spr
 from asset_converter.source.runtime_spr import decode_spr as runtime_decode
 from PIL import Image
 from asset_converter.source.extract_client import audit_sprite_coverage
+from asset_converter.content.asset_paths import sprite_asset_id
+from asset_converter.content.export_assets import PLAYER_PART_ASSETS
 
 
 def tiny_spr(rgb=0xF800):
@@ -36,6 +38,17 @@ class Settings:
 
 
 class ConverterTests(unittest.TestCase):
+    def test_verified_mecha_source_families_are_not_left_under_legacy_data(self):
+        self.assertEqual(
+            sprite_asset_id("MA/Standard/A_MA01_NS1"),
+            ("mecha/ma/standard/a_ma01_ns1","mecha_ma_source"))
+        self.assertEqual(
+            sprite_asset_id("MS/Standard/MSBody01_NS1"),
+            ("mecha/ms/standard/msbody01_ns1","mecha_ms_source"))
+        self.assertEqual(
+            sprite_asset_id("SR/fixture"),
+            ("data/legacy/sr/fixture","legacy_sr"))
+
     def test_cli_can_start_from_another_directory(self):
         with tempfile.TemporaryDirectory() as temp:
             result = subprocess.run([sys.executable,str(REPO/'tools/asset_converter/cli.py'),'--help'],
@@ -284,13 +297,7 @@ class ConverterTests(unittest.TestCase):
                 "maps/visuals/tree/atlas.json",
                 "Enemy/en001a/atlas.json",
                 "npcs/npc001/atlas.json",
-                "players/b/base/body/atlas.json",
-                "players/b/base/leg/atlas.json",
-                "players/b/base/head/atlas.json",
-                "players/b/hair/hair00/atlas.json",
-                "players/b/base/left_arm/atlas.json",
-                "players/b/base/right_arm/atlas.json",
-                "players/b/base/death/atlas.json",
+                *[asset_id+"/atlas.json" for asset_id in PLAYER_PART_ASSETS],
             ]
             for relative in required:
                 path = assets / relative
@@ -300,7 +307,7 @@ class ConverterTests(unittest.TestCase):
             self.assertFalse(result["cross_asset_bundle"])
             self.assertEqual(result["map_visual_assets"], 1)
             self.assertEqual(result["monster_visual_assets"], 1)
-            self.assertEqual(result["player_part_assets"], 7)
+            self.assertEqual(result["player_part_assets"], len(PLAYER_PART_ASSETS))
             self.assertEqual(result['npc_visual_assets'], 1)
             self.assertFalse(result['gameplay_ready'])
             appearances = world['scenery_definitions']['tree']['appearances']

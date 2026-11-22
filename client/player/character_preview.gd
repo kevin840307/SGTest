@@ -1,12 +1,12 @@
 extends Control
-## UI-only standing paper doll. Shares the app AssetStore and formal renderer.
-## Shares B/G/A source profiles and the formal sampler with the world renderer.
-## Unverified controllers/palettes stay unavailable instead of borrowing art.
+## UI-only standing paper doll. Shares the app AssetStore and formal sampler.
+## B/G/A/R/Y use source-normalized profiles; only this small preview renderer
+## applies the verified Recovered2 hair hue palette, leaving world batching intact.
 signal status_changed(status: String)
 const Players = preload("res://player/player_presentation.gd")
 const Profile = preload("res://player/character_appearance_profile.gd")
 const DrawList = preload("res://world/world_draw_list.gd")
-const Canvas = preload("res://world/world_canvas.gd")
+const Canvas = preload("res://player/character_preview_canvas.gd")
 const BASE_APPEARANCE := {"race":0,"hair_index":0,"hair_color":0}
 
 var status := "empty"
@@ -56,11 +56,29 @@ func set_occupied(value: bool) -> void:
 func set_appearance(value: Dictionary) -> void:
 	if value == _appearance:
 		return
-	var same_base := (_appearance.is_empty() or _appearance == BASE_APPEARANCE) and (value.is_empty() or value == BASE_APPEARANCE)
+	var old_definition := Profile.definition(_appearance)
+	var new_definition := Profile.definition(value)
+	var same_assets: bool = (
+		not old_definition.is_empty() and
+		not new_definition.is_empty() and
+		old_definition.parts == new_definition.parts)
 	_appearance = value.duplicate()
-	if same_base and _epoch > 0:
+	# Hair colour changes share the exact same source atlases. Do not tear down
+	# the AssetStore scope just to change one shader parameter.
+	if same_assets and _epoch > 0:
+		_canvas.set_hair_color(int(_appearance.get("hair_color",0)))
+		_definition = new_definition
+		_frame_key.clear()
+		if status == "ready":
+			if _players.configure(_assets,_appearance) != OK:
+				_release()
+				_set_status("unavailable")
+				return
+			_apply_preview_snapshot()
 		return
-	_release()
+	# Hair/race changes require different atlases. Keep the last good frame
+	# visible while the replacement scope loads, then swap in one frame.
+	_release(true)
 	_sync_activity()
 
 func _set_status(value: String) -> void:
@@ -109,10 +127,8 @@ func _process(_delta: float) -> void:
 			_release()
 			_set_status("unavailable")
 			return
-		var own := {"actor_id":1,"connection_epoch":1,"entity_map_epoch":1,
-			"server_tick":0,"x":0.0,"y":0.0,"facing":1,"moving":false,"movement_action_sequence":0,"appearance":_appearance}
-		_players.apply_snapshot({"world_ready":true,"map_id":1,"map_epoch":1,
-			"actor_id":1,"self_state":own,"entities":{}},Time.get_ticks_usec())
+		_apply_preview_snapshot()
+		_canvas.set_hair_color(int(_appearance.get("hair_color",0)))
 		_set_status("ready")
 	var actors: Array = _players.actors_at(Time.get_ticks_usec())
 	if actors.is_empty():
@@ -126,9 +142,17 @@ func _process(_delta: float) -> void:
 	actors[0].p = Vector2(size.x*0.5,size.y*0.5+30.0)
 	_canvas.present(_draw_list.build_actor_preview(_assets,actors[0],Rect2(Vector2.ZERO,size)))
 
-func _release() -> void:
+func _apply_preview_snapshot() -> void:
+	var own := {"actor_id":1,"connection_epoch":1,"entity_map_epoch":1,
+		"server_tick":0,"x":0.0,"y":0.0,"facing":1,"moving":false,
+		"movement_action_sequence":0,"appearance":_appearance}
+	_players.apply_snapshot({"world_ready":true,"map_id":1,"map_epoch":1,
+		"actor_id":1,"self_state":own,"entities":{}},Time.get_ticks_usec())
+
+func _release(preserve_canvas: bool = false) -> void:
 	set_process(false)
-	_canvas.clear()
+	if not preserve_canvas:
+		_canvas.clear()
 	_draw_list.clear()
 	_players.clear()
 	_assets.clear()

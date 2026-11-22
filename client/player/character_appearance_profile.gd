@@ -1,10 +1,23 @@
 extends RefCounted
 ## Source-normalized part/timeline data only. No loading, networking or actor state.
 const Timeline = preload("res://animation/action_timeline.gd")
-const BASE_PARTS := {
+
+const HUMANOID_BASE_PARTS := {
 	12:["players/b/base/leg","B-LEG"],7:["players/b/base/right_arm","B-R-ARM"],
 	9:["players/b/base/body","B-BODY"],5:["players/b/base/left_arm","B-L-ARM"],
 	0:["players/b/base/head","B-HEAD"],1:["players/b/hair/hair00","B-HAIR00"]}
+# Recovered2 build_human_model() uses Robot's zero equipment parts rather
+# than borrowing humanoid Standard limbs. These five groups are normalized by
+# asset_converter against the original robot.act + r_chardraworder.dat.
+const ROBOT_BASE_PARTS := {
+	12:["equipment/r/cloth/leg00","R-LEG00"],
+	7:["equipment/r/cloth/r_arm00","R-R-ARM00"],
+	9:["equipment/r/cloth/body00","R-BODY00"],
+	5:["equipment/r/cloth/l_arm00","R-L-ARM00"],
+	2:["equipment/r/cloth/bonnet00","R-BONNET00"]}
+const BASE_PARTS := HUMANOID_BASE_PARTS
+const RACE_KEYS := ["b","g","a","r","y"]
+
 var key := ""
 var parts: Dictionary = {}
 var body_prefix := ""
@@ -21,25 +34,48 @@ static func appearance_key(appearance: Dictionary = {}) -> String:
 	for field in ["race","hair_index","hair_color"]:
 		if not appearance[field] is int:
 			return ""
-	if appearance.race < 0 or appearance.race > 2 or appearance.hair_index < 0 or appearance.hair_index > 65535 or appearance.hair_color != 0:
-		return "" # Robot parts, Y controller and hair palettes need source evidence.
-	return "%d:%d:0" % [int(appearance.race),int(appearance.hair_index)]
+	var race := int(appearance.race)
+	var hair := int(appearance.hair_index)
+	var color := int(appearance.hair_color)
+	if race < 0 or race >= RACE_KEYS.size() or hair < 0 or hair > 65535 or color < 0 or color > 7:
+		return ""
+	# Recovered2 CharacterCreate disables both hair selectors for Robot.
+	if race == 3 and (hair != 0 or color != 0):
+		return ""
+	return "%d:%d:%d" % [race,hair,color]
 
 static func definition(appearance: Dictionary = {}) -> Dictionary:
 	var resolved_key := appearance_key(appearance)
 	if resolved_key.is_empty():
 		return {}
 	var value := {"race":0,"hair_index":0,"hair_color":0} if appearance.is_empty() else appearance
-	var race: String = ["b","g","a"][int(value.race)]
+	var race_index := int(value.race)
+	if race_index == 3:
+		return {
+			"key":resolved_key,
+			"parts":ROBOT_BASE_PARTS.duplicate(true),
+			"body_prefix":"R-BODY00",
+			"hair_slot":-1,
+			"hair_color":0,
+		}
+	var race: String = RACE_KEYS[race_index]
 	var prefix := race.to_upper()
 	var hair := "hair%02d" % int(value.hair_index)
-	var resolved := BASE_PARTS.duplicate(true)
+	var resolved := HUMANOID_BASE_PARTS.duplicate(true)
 	for slot in resolved:
 		if slot == 1:
 			resolved[slot] = ["players/%s/hair/%s" % [race,hair],prefix+"-"+hair.to_upper()]
 		else:
-			resolved[slot] = [str(resolved[slot][0]).replace("players/b/","players/"+race+"/"),str(resolved[slot][1]).replace("B-",prefix+"-")]
-	return {"key":resolved_key,"parts":resolved,"body_prefix":prefix+"-BODY"}
+			resolved[slot] = [
+				str(resolved[slot][0]).replace("players/b/","players/"+race+"/"),
+				str(resolved[slot][1]).replace("B-",prefix+"-")]
+	return {
+		"key":resolved_key,
+		"parts":resolved,
+		"body_prefix":prefix+"-BODY",
+		"hair_slot":1,
+		"hair_color":int(value.hair_color),
+	}
 
 func configure(assets: Dictionary, appearance: Dictionary, shared_views: Dictionary) -> Error:
 	var data := definition(appearance)

@@ -46,6 +46,9 @@ var _login_button: Button
 var _register_button: Button
 var _login_status: Label
 var _select_status: Label
+var _select_prev: Button
+var _select_back: Button
+var _select_next: Button
 var _create_status: Label
 var _names: Array[Label] = []
 var _slot_actions: Array[Button] = []
@@ -64,8 +67,12 @@ var _appearance_values: Dictionary = {}
 var _appearance_buttons: Dictionary = {}
 var _appearance_note: Label
 var _preview_note: Label
+var _stat_labels: Dictionary = {}
 var _stat_values: Dictionary = {}
+var _remaining_points_label: Label
 var _remaining_points: Label
+var _create_password_label: Label
+var _create_password_confirm_label: Label
 var _create_password: LineEdit
 var _create_password_confirm: LineEdit
 var _choose_password_box: Panel
@@ -258,6 +265,24 @@ func _button(parent: Control, value: String, x: float, y: float, w: float, h: fl
 	_put(parent,button,x,y,w,h)
 	return button
 
+func _set_line_edit_background_alpha(
+		edit: LineEdit, normal_alpha: float, focus_alpha: float) -> void:
+	for state in ["normal","focus"]:
+		var source := edit.get_theme_stylebox(state)
+		if source == null:
+			continue
+		var style := source.duplicate()
+		var alpha := normal_alpha if state == "normal" else focus_alpha
+		if style is StyleBoxFlat:
+			var color: Color = style.bg_color
+			color.a = alpha
+			style.bg_color = color
+		elif style is StyleBoxTexture:
+			var tint: Color = style.modulate_color
+			tint.a = alpha
+			style.modulate_color = tint
+		edit.add_theme_stylebox_override(state,style)
+
 func _build_login() -> void:
 	# LoginScreen uses viewport anchors, unlike the fixed 1200x900 character page.
 	# Its 280x320 panel belongs to the source 1400x900 canvas_items viewport.
@@ -301,6 +326,7 @@ func _build_login() -> void:
 	_account.add_theme_font_size_override("font_size",18)
 	_account.theme_type_variation = &"ParadiseLineEdit"
 	_put(_login_window,_account,25,59,230,50)
+	_set_line_edit_background_alpha(_account,0.72,0.84)
 	_secret = LineEdit.new()
 	_secret.placeholder_text = "請輸入密碼"
 	_secret.secret = true
@@ -309,6 +335,7 @@ func _build_login() -> void:
 	_secret.add_theme_font_size_override("font_size",18)
 	_secret.theme_type_variation = &"ParadiseLineEdit"
 	_put(_login_window,_secret,25,121,230,50)
+	_set_line_edit_background_alpha(_secret,0.72,0.84)
 	_secret.text_submitted.connect(func(_unused): _submit_login(false))
 	_login_button = _button(_login_window,"登入",77.5,188,125,45,true)
 	_login_button.add_theme_font_size_override("font_size",18)
@@ -352,13 +379,20 @@ func _build_select() -> void:
 		var action := _button(_selection,"建立角色",x+36,670,125,37,true)
 		action.pressed.connect(_enter_slot.bind(i))
 		_slot_actions.append(action)
-	var back := _button(
-		_selection,"返回登入",(SIZE.x-120.0)*0.5,801,120,36)
-	back.pressed.connect(func(): _panel.disconnect_session())
-	var prev := _button(_selection,"上一頁",365,801,108,36)
-	prev.pressed.connect(_change_page.bind(-1))
-	var next := _button(_selection,"下一頁",611,801,108,36)
-	next.pressed.connect(_change_page.bind(1))
+	# Treat the three navigation buttons as one centered group. Keeping only
+	# the middle button centered made Previous/Next visibly skewed and even
+	# overlapped the middle hitbox at some source scales.
+	var nav_gap := 14.0
+	var nav_width := 108.0 + nav_gap + 120.0 + nav_gap + 108.0
+	var nav_x := (SIZE.x-nav_width)*0.5
+	_select_prev = _button(_selection,"上一頁",nav_x,801,108,36)
+	_select_prev.pressed.connect(_change_page.bind(-1))
+	_select_back = _button(
+		_selection,"返回登入",nav_x+108.0+nav_gap,801,120,36)
+	_select_back.pressed.connect(func(): _panel.disconnect_session())
+	_select_next = _button(
+		_selection,"下一頁",nav_x+108.0+nav_gap+120.0+nav_gap,801,108,36)
+	_select_next.pressed.connect(_change_page.bind(1))
 	_select_status = _label(_selection,"",368,741,464,35,14)
 	_choose_password_box = Panel.new()
 	_choose_password_box.theme_type_variation = &"ParadiseWindowPanel"
@@ -441,33 +475,53 @@ func _build_create() -> void:
 	for i in 3:
 		var field: String = ["race","hair_index","hair_color"][i]
 		var y := float(424+36*i)
-		_label(_creation,["種族","髮型","髮色"][i],232,y,78,24,14)
+		# These coordinates intentionally mirror Recovered2 character_select.tscn.
+		# The text is centered against artwork baked into CREATE_CHARACTER.png,
+		# so reflowing the row by generic column widths visibly shifts it.
+		var source_label := _label(
+			_creation,["種族","髮型","髮色"][i],232,y,78,24,14)
+		source_label.theme_type_variation = &"ParadiseSecondaryText"
 		var value := _label(_creation,"未開放",386,y-2,72,29,14)
 		value.theme_type_variation = &"ParadiseAccentText"
 		_appearance_values[field] = value
-		_appearance_buttons[field] = [_appearance_arrow(field,-1,351,y),_appearance_arrow(field,1,464,y)]
-	_appearance_note = _label(_creation,"",318,539,180,51,11)
+		_appearance_buttons[field] = [
+			_appearance_arrow(field,-1,351,y,25),
+			_appearance_arrow(field,1,464,y,25)
+		]
+	_appearance_note = _label(_creation,"",318,539,200,51,11)
 	_appearance_note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 
 	var stat_fields := ["strength","dexterity","constitution","wisdom"]
 	var stat_names := ["力量","速度","體質","智慧"]
+	var stat_label_widths := [77.0,78.0,78.0,78.0]
 	for i in 4:
 		var field: String = stat_fields[i]
-		var y := float(388+36*i)
-		_label(_creation,stat_names[i],745,y,88,24,14)
-		var minus := _button(_creation,"−",857,y,28,25)
-		minus.pressed.connect(_adjust_stat.bind(field,-1))
-		var value := _label(_creation,"1",891,y-2,60,29,14)
+		var label_y := float(388+36*i)
+		var button_y := float(387+36*i)
+		var value_y := float(386+36*i)
+		var stat_label := _label(
+			_creation,stat_names[i],745,label_y,stat_label_widths[i],24,14)
+		stat_label.theme_type_variation = &"ParadiseSecondaryText"
+		_stat_labels[field] = stat_label
+		var minus := _source_step_button(
+			-1,857,button_y,_adjust_stat.bind(field,-1))
+		var value := _label(_creation,"1",891,value_y,71,27,14)
 		value.theme_type_variation = &"ParadiseAccentText"
 		_stat_values[field] = value
-		var plus := _button(_creation,"+",967,y,28,25)
-		plus.pressed.connect(_adjust_stat.bind(field,1))
-	_label(_creation,"剩餘點數",745,532,110,24,14)
-	_remaining_points = _label(_creation,"4",891,530,60,29,14)
+		var plus := _source_step_button(
+			1,967,button_y,_adjust_stat.bind(field,1))
+	_remaining_points_label = _label(
+		_creation,"剩餘配點",745,532,78,24,14)
+	_remaining_points_label.theme_type_variation = &"ParadiseSecondaryText"
+	_remaining_points = _label(_creation,"4",891,530,71,27,14)
 	_remaining_points.theme_type_variation = &"ParadiseAccentText"
 
-	_label(_creation,"角色密碼",745,583,135,24,14)
-	_label(_creation,"確認密碼",745,619,135,24,14)
+	_create_password_label = _label(
+		_creation,"角色密碼",745,583,78,24,14)
+	_create_password_label.theme_type_variation = &"ParadiseSecondaryText"
+	_create_password_confirm_label = _label(
+		_creation,"確認密碼",745,619,78,24,14)
+	_create_password_confirm_label.theme_type_variation = &"ParadiseSecondaryText"
 	_create_password = LineEdit.new()
 	_create_password.secret = true
 	_create_password.max_length = 4
@@ -552,8 +606,11 @@ func _refresh_create_ready() -> void:
 		not password_ready or
 		_panel.create_character_button.disabled)
 
-func _appearance_arrow(field: String, delta: int, x: float, y: float) -> BaseButton:
-	var texture := UiTextureLoader.get_texture(LOCAL.path_join("LEFT_BUTTON.png" if delta<0 else "RIGHT_BUTTON.png"))
+func _source_step_button(
+		delta: int, x: float, y: float, callback: Callable,
+		height: float = 25.0) -> BaseButton:
+	var texture := UiTextureLoader.get_texture(
+		LOCAL.path_join("LEFT_BUTTON.png" if delta<0 else "RIGHT_BUTTON.png"))
 	var button: BaseButton
 	if texture != null:
 		var image_button := TextureButton.new()
@@ -563,12 +620,19 @@ func _appearance_arrow(field: String, delta: int, x: float, y: float) -> BaseBut
 		button = image_button
 	else:
 		var fallback := Button.new()
-		fallback.text = "‹" if delta<0 else "›"
+		fallback.text = "−" if delta<0 else "+"
+		fallback.theme_type_variation = &"ParadiseSecondaryButton"
 		button = fallback
 	button.focus_mode = Control.FOCUS_NONE
-	button.pressed.connect(func(): _panel.creation_options.cycle(field,delta))
-	_put(_creation,button,x,y,29,25)
+	button.pressed.connect(callback)
+	_put(_creation,button,x,y,29,height)
 	return button
+
+func _appearance_arrow(
+		field: String, delta: int, x: float, y: float,
+		height: float = 25.0) -> BaseButton:
+	return _source_step_button(
+		delta,x,y,func(): _panel.creation_options.cycle(field,delta),height)
 
 func _refresh_appearance() -> void:
 	var options = _panel.creation_options

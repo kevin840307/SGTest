@@ -44,11 +44,11 @@ class ScopedExportTests(unittest.TestCase):
         archive_all(source,archive,Settings())
         return source,archive,assets
 
-    def test_race_specific_act_and_robot_draw_order_without_boy_fallback(self):
+    def test_race_specific_act_robot_draw_order_and_verified_yas_boy_controller(self):
         with tempfile.TemporaryDirectory() as folder:
             source,archive,assets = self.character_fixture(folder)
             report = publish(source,archive,assets)
-            self.assertEqual(report['animation_semantics']['normalized_player_part'],8)
+            self.assertEqual(report['animation_semantics']['normalized_player_part'],9)
             for race,controller,duration in [('b','boy',3),('g','girl',5),('a','alien',7),('r','robot',9)]:
                 path = assets/f'players/{race}/base/body'
                 manifest = json.loads((path/'atlas.json').read_text())
@@ -66,9 +66,14 @@ class ScopedExportTests(unittest.TestCase):
                 self.assertEqual(view['clip'],f'{race.upper()}-DEATH_ND1')
                 self.assertFalse(view['loop'])
                 self.assertEqual(view['timeline_ticks'],[[0,(duration+1)*40//25]])
-            unverified = json.loads((assets/'players/y/base/body/atlas.json').read_text())
-            self.assertEqual(unverified['logical_views'],{})
-            self.assertFalse(unverified['animation_semantics']['timing_verified'])
+            yas = json.loads((assets/'players/y/base/body/atlas.json').read_text())
+            self.assertEqual(len(yas['logical_views']),8)
+            self.assertEqual(yas['logical_views']['Y-BODY_NS1']['timeline_ticks'],[[0,3*40//25]])
+            self.assertTrue(yas['animation_semantics']['timing_verified'])
+            self.assertEqual(yas['animation_semantics']['controller_race'],'b')
+            yas_definition = json.loads((assets/'players/y/base/body/definition.json').read_text())
+            self.assertEqual(yas_definition['act_source'],'player/b/boy.act')
+            self.assertIn('player/b/boy.act',yas_definition['source_sha256'])
 
     def test_missing_character_controller_never_marks_animation_verified(self):
         with tempfile.TemporaryDirectory() as folder:

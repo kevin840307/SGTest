@@ -6,6 +6,7 @@ const Main = preload("res://app/main.gd")
 const State = preload("res://world/world_state.gd")
 const UiSkinCatalog = preload("res://ui/ui_skin_catalog.gd")
 const Layout = preload("res://ui/session_layout.gd")
+const AppearanceProfile = preload("res://player/character_appearance_profile.gd")
 
 class SessionStub:
 	extends RefCounted
@@ -80,7 +81,17 @@ func _wait_previews(shell: Control, count: int, creation := false) -> bool:
 		if ready:
 			break
 	if not ready:
-		_error("actual character preview atlas/animation did not become ready")
+		var states: Array[String] = []
+		for i in count:
+			var index := 3 if creation else i
+			var preview: Control = shell._character_previews[index]
+			states.append(
+				"%d:%s epoch=%d assets=%d commands=%d" % [
+					index,preview.status,preview._epoch,
+					preview._assets.size(),preview._canvas._commands.size()])
+		_error(
+			"actual character preview atlas/animation did not become ready: "+
+			", ".join(states))
 	return ready
 
 func _run() -> void:
@@ -156,6 +167,11 @@ func _run() -> void:
 	if shell._login_window.size!=Vector2(280,320) or shell._login_window.position!=Vector2(560,290) or not is_equal_approx(shell._login_content.scale.x,maxf(0.05,minf(root.size.x/1400.0,root.size.y/900.0))) or shell._account.position!=Vector2(25,59) or shell._account.size!=Vector2(230,50) or shell._secret.position!=Vector2(25,121) or shell._login_button.position!=Vector2(77.5,188):
 		_error("LoginScreen source anchors/geometry changed")
 		return
+	var account_normal = shell._account.get_theme_stylebox("normal")
+	var account_focus = shell._account.get_theme_stylebox("focus")
+	if not account_normal is StyleBoxFlat or not account_focus is StyleBoxFlat or 			not is_equal_approx(account_normal.bg_color.a,0.72) or 			not is_equal_approx(account_focus.bg_color.a,0.84):
+		_error("login account/password background translucency changed")
+		return
 	if args.has("static-login"):
 		shell._video.stop()
 		shell._video.hide()
@@ -208,6 +224,15 @@ func _run() -> void:
 	if not shell._selection.visible or shell._slot_actions[0].text != "進入世界":
 		_error("3-column selection did not display account characters")
 		return
+	var nav_left: float = shell._select_prev.position.x
+	var nav_right: float = shell._select_next.position.x+shell._select_next.size.x
+	var gap_left: float = shell._select_back.position.x-(
+		shell._select_prev.position.x+shell._select_prev.size.x)
+	var gap_right: float = shell._select_next.position.x-(
+		shell._select_back.position.x+shell._select_back.size.x)
+	if not is_equal_approx((nav_left+nav_right)*0.5,600.0) or 			not is_equal_approx(gap_left,gap_right):
+		_error("previous/login/next navigation group is not centered symmetrically")
+		return
 	if not pack_path.is_empty():
 		if not await _wait_previews(shell,2):
 			return
@@ -250,21 +275,56 @@ func _run() -> void:
 	if not pack_path.is_empty() and not await _wait_previews(shell,1,true):
 		return
 	await _capture("create_options",directory)
+	# Creation controls are aligned to the baked CREATE_CHARACTER artwork,
+	# so verify the source TSCN coordinates rather than generic geometric rows.
+	var stat_fields := ["strength","dexterity","constitution","wisdom"]
+	var stat_widths := [77.0,78.0,78.0,78.0]
+	for i in 4:
+		var field: String = stat_fields[i]
+		var label: Label = shell._stat_labels[field]
+		var value: Label = shell._stat_values[field]
+		if label.position != Vector2(745,388+36*i) or 				label.size != Vector2(stat_widths[i],24) or 				value.position != Vector2(891,386+36*i) or 				value.size != Vector2(71,27):
+			_error("create stat source alignment drifted: "+field)
+			return
+	if shell._remaining_points_label.position != Vector2(745,532) or 			shell._remaining_points_label.size != Vector2(78,24) or 			shell._remaining_points.position != Vector2(891,530) or 			shell._remaining_points.size != Vector2(71,27):
+		_error("remaining-points controls drifted from source artwork")
+		return
+	if shell._create_password_label.position != Vector2(745,583) or 			shell._create_password.position != Vector2(897,579) or 			shell._create_password.size != Vector2(83,31) or 			shell._create_password_confirm_label.position != Vector2(745,619) or 			shell._create_password_confirm.position != Vector2(897,615) or 			shell._create_password_confirm.size != Vector2(83,31):
+		_error("secondary password controls drifted from source artwork")
+		return
 	for field in ["race","hair_index","hair_color"]:
 		var row := ["race","hair_index","hair_color"].find(field)
-		if shell._appearance_buttons[field][0].position != Vector2(351,424+36*row) or shell._appearance_values[field].position != Vector2(386,422+36*row):
-			_error("appearance controls moved from source positions")
+		if shell._appearance_buttons[field][0].position != Vector2(351,424+36*row) or 				shell._appearance_values[field].position != Vector2(386,422+36*row) or 				shell._appearance_values[field].size != Vector2(72,29):
+			_error("appearance controls drifted from source artwork")
 			return
+	var creation_preview: Control = shell._character_previews[3]
+	var commands_before_hair: int = creation_preview._canvas._commands.size()
 	shell._appearance_buttons.hair_index[1].pressed.emit()
+	if not pack_path.is_empty() and commands_before_hair > 0 and 			creation_preview._canvas._commands.is_empty():
+		_error("hair-style switch blanked the previous preview before replacement loaded")
+		return
 	shell._appearance_buttons.hair_color[1].pressed.emit()
 	if panel.creation_options.selection()!={"race":0,"hair_index":1,"hair_color":5}:
 		_error("hair/color arrows did not select exact allowed tuples")
 		return
+	var commands_before_race: int = creation_preview._canvas._commands.size()
 	shell._appearance_buttons.race[1].pressed.emit()
-	var chosen := {"race":1,"hair_index":3,"hair_color":7}
-	if panel.creation_options.selection()!=chosen or shell._character_previews[3].status!="unsupported" or not shell._character_previews[3]._canvas._commands.is_empty() or shell._slot_edit.visible:
-		_error("unbound profile drew a B doll or slot overlapped race controls")
+	if not pack_path.is_empty() and commands_before_race > 0 and 			creation_preview._canvas._commands.is_empty():
+		_error("race switch blanked the previous preview before replacement loaded")
 		return
+	var chosen := {"race":1,"hair_index":3,"hair_color":7}
+	if panel.creation_options.selection()!=chosen or 			AppearanceProfile.definition(chosen).is_empty() or shell._slot_edit.visible:
+		_error("verified race/hair/color choice did not bind a real profile")
+		return
+	if not pack_path.is_empty():
+		if not await _wait_previews(shell,1,true):
+			return
+		var colored_preview = shell._character_previews[3]
+		if colored_preview._canvas._commands.is_empty() or 				not is_equal_approx(
+					float(colored_preview._canvas._hair_material.get_shader_parameter(
+						"hue_shift")),315.0):
+			_error("hair color 8 did not render with verified 315-degree hue shift")
+			return
 	await _capture("create_options_pending_profile",directory)
 	shell._name_edit.text = "NewHero"
 	shell._slot_edit.value = 2
@@ -310,27 +370,40 @@ func _run() -> void:
 	if panel.creation_options.selection()!=chosen or panel.appearance_picker._pickers.race.get_selected_id()!=1:
 		_error("skin switch lost shared appearance selection")
 		return
-	# Optional real B/G/A atlas gate; choices are fixture data, not original rules.
+	# Optional real five-race atlas gate against generated client/assets.
+	# These choices are test fixture values; server allowlisting remains separate.
 	if args.size()>2 and args[2]=="profiles":
 		panel._latest.character_create_result_revision = 2
 		panel._latest.character_creation_appearances = [
 			{"race":0,"hair_index":0,"hair_color":0},
 			{"race":1,"hair_index":0,"hair_color":0},
-			{"race":2,"hair_index":0,"hair_color":0}]
+			{"race":2,"hair_index":0,"hair_color":0},
+			{"race":3,"hair_index":0,"hair_color":0},
+			{"race":4,"hair_index":0,"hair_color":7}]
 		panel._set_controls()
-		for race in 3:
+		var prefixes := [
+			"players/b/","players/g/","players/a/",
+			"equipment/r/cloth/","players/y/"]
+		var expected_parts := [6,6,6,5,6]
+		for race in 5:
 			panel.creation_options.select_value("race",race)
+			if race == 4:
+				panel.creation_options.select_value("hair_color",7)
 			if not await _wait_previews(shell,1,true):
 				return
 			var preview = shell._character_previews[3]
-			var prefix: String = ["players/b/","players/g/","players/a/"][race]
-			if preview._canvas._commands.size()!=6:
-				_error("race preview lost source part count")
+			if preview._canvas._commands.size()!=expected_parts[race]:
+				_error("race preview lost source part count: "+str(race))
 				return
 			for part in preview._definition.parts.values():
-				if not str(part[0]).begins_with(prefix):
-					_error("race preview borrowed another race")
+				if not str(part[0]).begins_with(prefixes[race]):
+					_error("race preview borrowed another race: "+str(race))
 					return
+			if race==4 and not is_equal_approx(
+					float(preview._canvas._hair_material.get_shader_parameter(
+						"hue_shift")),315.0):
+				_error("Yas colored hair did not retain verified hue")
+				return
 			await _capture("create_profile_"+str(race),directory)
 	var store = app.world_view.store
 	app.queue_free()

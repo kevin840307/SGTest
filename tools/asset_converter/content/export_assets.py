@@ -24,18 +24,41 @@ from .runtime_animation_semantics import logical_views
 from .asset_paths import sprite_asset_id, source_sprite_manifest
 
 
-PLAYER_PART_ASSETS = (
-    'players/b/base/body', 'players/b/base/leg', 'players/b/base/head',
-    'players/b/hair/hair00', 'players/b/base/left_arm',
-    'players/b/base/right_arm', 'players/b/base/death',
+# Scoped map packs still need every appearance that CharacterCreate can
+# authorize; otherwise auth previews work only after a full private export.
+_PLAYER_BASE_NAMES = ('body','leg','head','left_arm','right_arm')
+PLAYER_PART_ASSETS = tuple(
+    f'players/{race}/base/{part}'
+    for race in ('b','g','a','y') for part in _PLAYER_BASE_NAMES
+) + tuple(
+    f'players/{race}/hair/hair{hair:02d}'
+    for race in ('b','g','a') for hair in range(10)
+) + tuple(
+    f'players/y/hair/hair{hair:02d}' for hair in range(3)
+) + (
+    'players/b/base/death','players/g/base/death','players/a/base/death',
+    'players/r/base/death',
+    'equipment/r/cloth/body00','equipment/r/cloth/leg00',
+    'equipment/r/cloth/l_arm00','equipment/r/cloth/r_arm00',
+    'equipment/r/cloth/bonnet00',
 )
 
 PAGE_LAYOUT = 'height_dense_p0_block4_v1'
 
-# Original CSGOChar controller selection (Paradise.exe.lst 004C7BB2..004C7D02).
-# Y is present in the newer derivative but has no controller in this source;
-# do not silently borrow Boy timing for an unverified race.
-PLAYER_ACT_CONTROLLERS = {'b': 'boy', 'g': 'girl', 'a': 'alien', 'r': 'robot'}
+# Original CSGOChar controller selection plus the verified Recovered2
+# compatibility mapping. Yas has original Y sprite groups but no Y ACT file;
+# Recovered2 explicitly maps Yas -> Boy, so the converter binds those Y sprites
+# to the original B/boy.act timing rather than inventing an animation clock.
+PLAYER_ACT_CONTROLLERS = {'b':'boy','g':'girl','a':'alien','r':'robot','y':'boy'}
+# Recovered2's verified paper-doll controller map explicitly maps Yas to the
+# Boy timing controller. The original Y sprite sources have no standalone ACT,
+# so use the original B/boy.act as timing authority instead of inventing one.
+PLAYER_ACT_CONTROLLER_RACES = {'y':'b'}
+ROBOT_BASE_GROUPS = {
+    'player/r/cloth/r-body00','player/r/cloth/r-leg00',
+    'player/r/cloth/r-l-arm00','player/r/cloth/r-r-arm00',
+    'player/r/cloth/r-bonnet00',
+}
 
 
 def runtime_page(payload: bytes, expected_size: list[int]) -> tuple[bytes, list[int]]:
@@ -198,9 +221,10 @@ def publish(source: Path, archive: Path, assets: Path, asset_ids: set[str] | Non
                 act_timelines[clip] = timeline
                 semantics = {'status':'normalized_scenery_act','timing_verified':True,
                              'direction_mapping_verified':False,'timing_scope':'default_25_only'}
-        elif (len(group_parts) == 4 and group_parts[0] == 'player'
-              and group_parts[1] in PLAYER_ACT_CONTROLLERS
-              and group_parts[2] == 'standard'):
+        elif ((len(group_parts) == 4 and group_parts[0] == 'player'
+               and group_parts[1] in PLAYER_ACT_CONTROLLERS
+               and group_parts[2] == 'standard')
+              or group in ROBOT_BASE_GROUPS):
             try:
                 race = group_parts[1]
                 paths = [source/item['path'] for item in raw['sources']]
@@ -209,16 +233,18 @@ def publish(source: Path, archive: Path, assets: Path, asset_ids: set[str] | Non
                         asset_id,paths,source,'single_view',
                         source/f'player/{race}/{race}-death.act',act_bindings={'ND':'Effect'})
                 else:
+                    controller_race = PLAYER_ACT_CONTROLLER_RACES.get(race,race)
                     definition = compile_definition(
                         asset_id,paths,source,'character_part',
-                        source/f'player/{race}/{PLAYER_ACT_CONTROLLERS[race]}.act',
+                        source/f'player/{controller_race}/{PLAYER_ACT_CONTROLLERS[race]}.act',
                         source/'player/charactionname.dat',
                         source/('player/r_chardraworder.dat' if race == 'r'
                                 else 'player/chardraworder.dat'))
                 views = logical_views(definition)
                 document(asset_id+'/definition.json',definition)
                 semantics = {'status':'normalized_player_part','definition':asset_id+'/definition.json',
-                             'timing_verified':True,'direction_mapping_verified':True}
+                             'timing_verified':True,'direction_mapping_verified':True,
+                             'controller_race':PLAYER_ACT_CONTROLLER_RACES.get(race,race)}
             except (ValueError,KeyError,OSError) as error:
                 semantics['reason'] = str(error)
         semantic_counts[semantics['status']] += 1
