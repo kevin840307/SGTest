@@ -36,7 +36,7 @@ Host／UI 已接入：`serve --character-appearance-rules <PRIVATE_JSON>` 必須
 
 `client/player/character_creation_options.gd` 是 SessionPanel 唯一的 UI 選擇模型，按 Server tuple 推導相依選單，不以素材目錄數量猜選項。一般皮膚的 `character_appearance_picker.gd` 下拉選單與 Recovered2 左右箭頭共用該模型；切皮膚不重設選擇，待送／登出停止編輯。入列成功即鎖定，以本機 WorldState 的單調 create-result revision 解鎖，避免快回覆被 UI 輪詢略過或等待入列時仍可重按。Recovered2 三列箭頭／數值位置分別依來源 `(351/386/464,424/460/496)`，原先擠在種族列的 slot 編輯器已隱藏，由選角欄位決定。外觀 tuple 會經原 ClientSession 送出並持久化。
 
-現有預覽 Renderer 已共用 B/G/A profile（hair00／色0 實機驗證；legacy 預設示意維持 B）：選到其他外觀時立即清空預覽、停止更新並釋放 scope，顯示暫無預覽，不畫錯誤的 B 人物；角色列表已保存的其他外觀亦如此。這是正確的未完成狀態，**不是已完成所有人物外觀**。未設定外觀的 legacy 角色仍明示為基本示意。
+現有預覽 Renderer 已共用 B/G/A profile（hair00／色0 實機驗證；legacy 預設示意維持 B）：選到未支援的控制器／髮色時立即清空預覽、停止更新並釋放 scope，顯示暫無預覽，不畫錯誤的 B 人物；角色列表已保存的其他外觀亦如此。這是正確的未完成狀態，**不是已完成所有人物外觀**。未設定外觀的 legacy 角色仍明示為基本示意。
 
 Windows Godot RTX3050 1152×620 六張登入／載入／選角／創角畫面及外觀選擇箭頭已實際檢視；source-coordinate、相依選項、跨 skin 選擇、UI→ClientSession→TLS→SQLite→重登、資源釋放 PASS。Server 279、Python 123 tests PASS。GM capability 測試原先關線前未讀完空背包登入基線，已補齊收包，沒有放寬 CleanEof／權限斷言。正式玩家 UI 各皮膚的 Map13／Map15 檢視按鈕、檢視標題與提示已隱藏，離線 QA 模式保留。
 
@@ -54,3 +54,19 @@ Server 持久化前置已實作（schema v24）：`CharacterAppearance(Race,Hair
 
 
 2026-11-22 GPU補充：`reports/character_profiles_gpu.json` 已完成 B/G/A hair00/color0、八方向NS/NR在16 updates的16張／48姿態來源比對，原SPR180 frame，超容差0、資源全0、engine error0。Python驗證器不使用Runtime commands推導預期部件，來源manifest獨立重建並核對SPR。frame／flip_h／part_slot故意變異均拒絕。既有雙圖12張和B人物20張回歸PASS。這仍不是所有動畫幀、其他髮型／色、R/Y、AOI或完整創角規則證據。
+
+
+### 原版創角封包檢查補證（2026-11-22）
+
+以下是唯讀 `SGOLogin.dll.lst` 的直接行為，尚未完成所有欄位語義及素材映射，不能直接匯出正式允許 tuple：
+
+- `OnCreateChar 1000FF22..1000FF30` 以 display-info 指標和起始 slot 參數呼叫 `CheckCreationPacket`。
+- `10015873..100158A9` 從該起始 slot 連續檢查8個 ushort，位址為 `display_info + 0x0e + slot*2`，交給 `SubCheckCreation(value,slot)`。
+- `SubCheckCreation 10017533..1001757E` 將 value 遮罩為 ushort，再與該 slot 的 `CELArray<ushort>.GetSize()+1` 比較，值不大於此上限才接受。這是**索引範圍檢查**，並未在此函式做 Hair 來源數字 ID 的 membership test；不能直接把 INI Hair 值當作 `HairIndex`。原程式可接受的邊界也不能直接當安全 Runtime 索引，仍須追查其後解析／fallback。
+- `10015CC1..10015CCC` 檢查 display-info offset `0x0b` 的 byte 小於4；其完整欄位語義仍需對照 caller/client packet，不能由這一條 alone 推論衍生版本 Y 種族合法。
+- `100160D3..10016110`、`10016518..1001652D` 檢查 ushort slots9..12每項至少1，合計最多8。這是後續能力點 UI／Server 規則研究的具體入口，四項名稱與 display-info layout 尚需交叉確認。
+
+下一個來源追查點是 `OnCreateChar` 通過檢查後如何取 `CELArray` 值、配置起始裝備與外觀，以及原 Client Hair/HairColor 封包欄位；不能以 R2 按目錄計算髮型數量的做法替代此映射。
+
+
+`OnCreateChar` 的後續映射亦已找到：`1000FF07..1000FF1B` 依 offset0x0b 是否等於3，選擇起始 slot0 或1；`10010D1C..10010D4E` 將傳入 ushort 當作各 slot 的 `CELArray<ushort>::operator[]` 索引，取出真正數值寫入裝備結構；`10010D7F..10010DB2` 再以起始 slot+迴圈索引取來源數值寫入建立角色的 CDStream。這確認了「傳入選項索引→配置清單值」是兩層映射，下一步要連結該值的 Item／外觀來源；仍不能將配置清單內容直接當作 SPR 髮型號碼。沒有把原程式寬鬆的 `size+1` 邊界搬入正式 Server。
