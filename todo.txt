@@ -1,5 +1,7 @@
 # SGTest 新版重建 TODO（2026-11-15）
 
+- PLAYER-WALK-STUTTER-ASTAR-ATOM [ ] 2026-11-22：依玩家實際試走回饋「起步、中短距離與停止時很頓、人物滑行」，比對原 Paradise.exe.lst CSGOPlayer::SetMoveTo 的 CSGOMap::FindPath/GetPath，及二創 LegacyPathfinder 正常 6ms、fallback 1.5ms/影格、完整 route 才走。SGTest 本輪移除每包 moving SelfState 逆插值、停止改合法 bounded walk 收斂且 own 不切延遲 history、WorldReady 空 SelfState 不重啟 NR、render-clock 本地移動。直線 <0.06ms；960² 合成A* 46.3ms 主線卡住→正常同步限5ms＋超限 fallback 每frame 1.5ms（實測最長2.22ms），完整路徑成功才讓人物走且 App 才送 Server MoveTarget；確保舊路線／換圖／失敗無陳舊封包。Godot Local/Player/Position/Camera/FPS/stop/auto-approach 和真 2 Client+Host 合成 Map15/13 AOI PASS；**真私人原始地圖遊玩手感、多人流量、GPU FPS P95/P99 待實測，未宣稱完全修好**。
+
 - PLAYER-LOCAL-MOVEMENT-PREDICTION [ ] 2026-11-22：已加入 Client local_movement.gd 讀取已驗證的 Blocking.dat，本地八方向 2048-expanded A*、防斜角穿牆、固定 240px/s、6-cell Lookahead；點地板先將 MoveTarget 入列隨即本地移動與相機/紙娃娃呈現、Server 權威收到拒絕與超出24/96px偏差時校正；重派路/停止/換圖清理。Godot local/test_player_presentation/position_history/Camera/FPS PASS、真雙 Godot Host+合成雙地圖和 AOI E2E PASS。真私有資產 GPU、斷線後仍能走路（未完成 offline play）、長期延遲/人數壓測 NOT VERIFIED。
 
 - PLAYER-REMOTE-MOVE-INTENT-AOI [ ] 2026-11-22：參照原版／二創 MoveEntity 由 Client 自行步行；這輪僅把 *其他玩家* 的 PositionHistory 補間外推限制由1.5tick/12px獨立延長到4tick/32px，在短快照缺口保持移動、停止/異常仍收斂權威位置，並新增回歸。**真正「只收到其他人目標/路線與停步」與Server降低每Tick EntityDelta數量尚未實作**：須連同合法 Server Route 事件、AOI mid-route snapshot、可靠事件屏障、revision gap、重連／換圖、多人大壓測一起設計；不能誤宣稱已省下行流量。

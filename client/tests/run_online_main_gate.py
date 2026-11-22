@@ -20,6 +20,7 @@ MARKER = "ONLINE_MAIN_GATE_PASS role="
 
 def run_checked(command: list[str], cwd: Path, env: dict[str, str], timeout: float) -> str:
     result = subprocess.run(command, cwd=cwd, env=env, text=True,
+                            encoding="utf-8", errors="replace",
                             stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                             timeout=timeout)
     if result.returncode != 0:
@@ -63,7 +64,6 @@ def main() -> int:
 
     repo = Path(__file__).resolve().parents[2]
     host_project = repo / "server/host/SGTest.Server.Host/SGTest.Server.Host.csproj"
-    host_dll = repo / "server/host/SGTest.Server.Host/bin/Release/net8.0/SGTest.Server.Host.dll"
     base_env = os.environ.copy()
     base_env["DOTNET_CLI_UI_LANGUAGE"] = "en-US"
     base_env["SGTEST_AES_KEY_HEX"] = "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f"
@@ -82,6 +82,9 @@ def main() -> int:
             pack = temp / "assets.pck"
             content = temp / "content"
             database = temp / "identity.db"
+            # Running local game servers may lock the default Release binary;
+            # E2E must build/run its own private Host without touching them.
+            host_dll = temp / "host-bin/SGTest.Server.Host.dll"
 
             build_source = run_checked(
                 [args.godot, "--headless", "--path", str(repo / "client"),
@@ -103,7 +106,8 @@ def main() -> int:
                     "size_bytes": pack.stat().st_size,
                 }
 
-            run_checked(["dotnet", "build", str(host_project), "-c", "Release", "--nologo"],
+            run_checked(["dotnet", "build", str(host_project), "-c", "Release", "--nologo",
+                         "-o", str(host_dll.parent)],
                         repo, base_env, args.timeout)
 
             provision_env = base_env.copy()
@@ -131,7 +135,8 @@ def main() -> int:
                  "--identity", str(database),
                  "--bind", "127.0.0.1", "--port", "0", "--max-connections", "8",
                  "--max-per-address", "4", "--seconds", "30"],
-                cwd=repo, env=host_env, text=True, stdout=subprocess.PIPE,
+                cwd=repo, env=host_env, text=True, encoding="utf-8", errors="replace",
+                stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT, bufsize=1)
             processes.append(host)
             if args.metrics_report:
@@ -158,6 +163,7 @@ def main() -> int:
                     "--e2e-role", role,
                 ]
                 process = subprocess.Popen(command, cwd=repo, env=env, text=True,
+                                           encoding="utf-8", errors="replace",
                                            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                                            bufsize=1)
                 processes.append(process)

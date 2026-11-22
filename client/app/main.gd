@@ -50,6 +50,11 @@ var _autorun_left_press_cancelled := false
 var _autorun_map_epoch := 0
 var _autorun_waiting_sequence_floor := -1
 var _autorun_last_blocked_sequence := 0
+# Pending complex path: never send a MoveTarget before the local path is
+# complete. This prevents the Server beginning the route before the Client.
+var _pending_path_target := Vector2.INF
+var _pending_path_epoch := 0
+var _pending_path_sequence_floor := -1
 
 
 ## Fit an oversized initial window into the available desktop area without
@@ -454,6 +459,7 @@ func _process(delta: float) -> void:
 		if pending.decode_jobs + pending.texture_jobs == 0:
 			get_tree().quit()
 		return
+	_flush_pending_path()
 	_update_ui_stage()
 	_loading_ui_elapsed += delta
 	if _loading_ui_elapsed >= 0.10:
@@ -584,16 +590,57 @@ func _begin_ground_navigation(point: Vector2,now_msec: int) -> void:
 	_submit_autorun_target(point,now_msec,false)
 
 
+func _flush_pending_path() -> void:
+	if not _pending_path_target.is_finite():
+		return
+	var controller = world_view.local_movement
+	var valid := session_panel.active and world_view.phase == "ready" and \
+		int(_last_snapshot.get("map_epoch",0)) == _pending_path_epoch and \
+		int(_last_snapshot.get("movement_sequence",0)) == _pending_path_sequence_floor and \
+		bool(_last_snapshot.get("world_ready",false)) and \
+		not bool(_last_snapshot.get("resync_pending",false)) and \
+		not bool(_last_snapshot.get("player_dead",false))
+	if not valid or not controller.active:
+		_pending_path_target = Vector2.INF
+		_pending_path_epoch = 0
+		_pending_path_sequence_floor = -1
+		_autorun_waiting_sequence_floor = -1
+		if controller.active:
+			world_view.stop_local_move()
+		return
+	if not controller.moving or not controller._search.is_empty():
+		return
+	var goal := _pending_path_target
+	_pending_path_target = Vector2.INF
+	_pending_path_epoch = 0
+	_pending_path_sequence_floor = -1
+	if not session_panel.submit_move(goal):
+		_autorun_waiting_sequence_floor = -1
+		world_view.stop_local_move()
+
+
 func _submit_autorun_target(point: Vector2,now_msec: int,was_stopped: bool) -> bool:
 	if not point.is_finite() or not session_panel.active:
 		return false
 	var sequence_floor := int(_last_snapshot.get("movement_sequence",0))
-	if not session_panel.submit_move(point):
+	if not world_view.begin_local_move(point,sequence_floor+1):
 		return false
 	_autorun_waiting_sequence_floor = sequence_floor
-	# Start local collision-checked movement immediately; MoveTarget still goes
-	# through ClientSession to the authoritative Server, never every frame.
-	world_view.begin_local_move(point,sequence_floor+1)
+	if world_view.local_movement.moving:
+		# Fast-path (direct/normal A*) is complete: send after route validation.
+		if not session_panel.submit_move(point):
+			world_view.stop_local_move()
+			_autorun_waiting_sequence_floor = -1
+			return false
+		_pending_path_target = Vector2.INF
+		_pending_path_epoch = 0
+		_pending_path_sequence_floor = -1
+	else:
+		# Recovered's large-detour fallback returns only a COMPLETE path.
+		# Wait for that full route before posting the authoritative MoveTarget.
+		_pending_path_target = point
+		_pending_path_epoch = int(_last_snapshot.get("map_epoch",0))
+		_pending_path_sequence_floor = sequence_floor
 	_mouse_autorun.note_request(point,now_msec,was_stopped)
 	return true
 
@@ -604,6 +651,9 @@ func _cancel_mouse_autorun(stop_movement: bool) -> void:
 	_autorun_map_epoch = 0
 	_autorun_waiting_sequence_floor = -1
 	_autorun_last_blocked_sequence = 0
+	_pending_path_target = Vector2.INF
+	_pending_path_epoch = 0
+	_pending_path_sequence_floor = -1
 	if stop_movement and was_active and session_panel.active:
 		world_view.stop_local_move()
 		session_panel.submit_stop_movement()

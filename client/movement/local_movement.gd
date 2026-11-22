@@ -5,8 +5,12 @@ extends RefCounted
 const CELL := 16
 const PIXELS_PER_SECOND := 240.0 # Server 8px / 30Hz authoritative tick.
 const MAX_EXPANDED := 2048 # Exactly the current WorldLimits.MaxPathExpandedCells.
+const FAST_PATH_BUDGET_USEC := 5000 # Recovered caps normal query at 6000us.
+const FALLBACK_FRAME_BUDGET_USEC := 1500 # Same fallback frame budget as Recovered.
+const SEARCH_BUDGET_CHECK_INTERVAL := 16
 const CORRECTION_DEADBAND := 24.0
 const CORRECTION_SNAP := 96.0
+const SETTLE_SNAP := 5.0
 const DIRECTIONS := [
 	Vector2i(1,0),Vector2i(0,1),Vector2i(-1,0),Vector2i(0,-1),
 	Vector2i(1,1),Vector2i(-1,1),Vector2i(-1,-1),Vector2i(1,-1)
@@ -28,6 +32,9 @@ var _target_cell := Vector2i(-1,-1)
 var _expected_sequence := 0
 var _last_server_tick := -1
 var _last_authority := Vector2.INF
+var _settle_target := Vector2.INF
+var _full_path_searches := 0
+var _search: Dictionary = {}
 
 func clear() -> void:
 	ready = false
@@ -46,6 +53,9 @@ func clear() -> void:
 	_expected_sequence = 0
 	_last_server_tick = -1
 	_last_authority = Vector2.INF
+	_settle_target = Vector2.INF
+	_full_path_searches = 0
+	_search.clear()
 
 func configure(blocking: PackedByteArray, manifest: Dictionary, epoch: int, own_actor: int) -> bool:
 	clear()
@@ -148,40 +158,70 @@ func _heap_pop(heap: Array) -> Array:
 	heap[i] = last
 	return item
 
-func _find_route(start: Vector2i, goal: Vector2i) -> Array[Vector2i]:
-	var empty: Array[Vector2i] = []
-	if not _walkable(start) or not _walkable(goal):
-		return empty
-	if start == goal:
-		return [start]
+func _begin_search(start: Vector2i, goal: Vector2i) -> bool:
+	if not _walkable(start) or not _walkable(goal) or start == goal:
+		return false
 	var begin := start.y*width+start.x
 	var finish := goal.y*width+goal.x
-	var best := {begin:0}
-	var parent := {}
-	var closed := {}
 	var heap: Array = []
-	var initial_h := _h(start,goal)
-	_heap_push(heap,[initial_h,initial_h,begin,0])
-	var expanded := 0
+	var heuristic := _h(start,goal)
+	_heap_push(heap,[heuristic,heuristic,begin,0])
+	_search = {"begin":begin,"finish":finish,"start":start,"goal":goal,
+		"best":{begin:0},"parents":{},"closed":{},"heap":heap,"expanded":0}
+	return true
+
+
+func _abort_search() -> void:
+	_search.clear()
+	_route.clear()
+	_route_index = 0
+	moving = false
+	active = false
+
+
+func _search_frame(budget_usec: int) -> void:
+	# Recovered: complete normal A* within a 6ms synchronous budget;
+	# only large-detour fallback yields across render frames (1.5ms budget).
+	# The route remains private until the FULL path reaches the goal.
+	if _search.is_empty():
+		return
+	var heap: Array = _search.heap
+	var best: Dictionary = _search.best
+	var parents: Dictionary = _search.parents
+	var closed: Dictionary = _search.closed
+	var expanded := int(_search.expanded)
+	var started_usec := Time.get_ticks_usec()
+	var used := 0
+	var goal: Vector2i = _search.goal
 	while not heap.is_empty():
+		if used > 0 and used % SEARCH_BUDGET_CHECK_INTERVAL == 0 and Time.get_ticks_usec() - started_usec >= budget_usec:
+			break
 		var entry: Array = _heap_pop(heap)
 		var idx := int(entry[2])
 		var cost := int(entry[3])
 		if int(best.get(idx,-1)) != cost or closed.has(idx):
 			continue
-		closed[idx] = true
 		if expanded >= MAX_EXPANDED:
-			return empty
+			_abort_search()
+			return
+		closed[idx] = true
 		expanded += 1
-		if idx == finish:
+		used += 1
+		if idx == int(_search.finish):
 			var path: Array[Vector2i] = []
-			var cursor := finish
-			while cursor != begin:
+			var cursor := idx
+			while cursor != int(_search.begin):
 				path.append(Vector2i(cursor%width,cursor/width))
-				cursor = int(parent[cursor])
-			path.append(start)
+				cursor = int(parents[cursor])
+			path.append(Vector2i(_search.start))
 			path.reverse()
-			return path
+			_route = path
+			_route_index = 1
+			_search.clear()
+			moving = _route.size() > 1
+			if not moving:
+				active = false
+			return
 		var cell := Vector2i(idx%width,idx/width)
 		for direction in DIRECTIONS:
 			var next: Vector2i = cell+direction
@@ -197,10 +237,13 @@ func _find_route(start: Vector2i, goal: Vector2i) -> Array[Vector2i]:
 			if best.has(next_idx) and next_cost >= int(best[next_idx]):
 				continue
 			best[next_idx] = next_cost
-			parent[next_idx] = idx
+			parents[next_idx] = idx
 			var heuristic := _h(next,goal)
 			_heap_push(heap,[next_cost+heuristic,heuristic,next_idx,next_cost])
-	return empty
+	_search["expanded"] = expanded
+	if heap.is_empty():
+		_abort_search()
+
 
 func observe(snapshot: Dictionary) -> void:
 	if not ready or not bool(snapshot.get("world_ready",false)) or int(snapshot.get("map_epoch",0)) != map_epoch or int(snapshot.get("actor_id",0)) != actor_id:
@@ -244,19 +287,55 @@ func observe(snapshot: Dictionary) -> void:
 	if not confirmed and receipt < _expected_sequence:
 		return
 	var delta := position.distance_to(authoritative)
-	if delta > CORRECTION_SNAP:
+	# Normal moving SelfState is a delayed sample, not our current draw
+	# position. Repeated lerp(0.12) against it slowed the character after
+	# EVERY packet and made mid-distance movement rubber-band and slide.
+	if bool(own.get("moving",false)):
+		if delta > CORRECTION_SNAP * 2.0:
+			# Genuine large divergence: authoritative relocation / bad route.
+			position = authoritative
+			if moving and _target_cell != Vector2i(-1,-1):
+				_set_route(_target_cell)
+		return
+	# The Server reached a final position. Do not switch directly to
+	# the ~83ms delayed owner PositionHistory (a visible stop-time rewind).
+	if delta <= SETTLE_SNAP:
 		position = authoritative
-		if moving and _target_cell != Vector2i(-1,-1):
-			_set_route(_target_cell)
-	elif delta > CORRECTION_DEADBAND:
-		# Smaller disagreement is network age, not a command to rewind each frame.
-		position = position.lerp(authoritative,0.12)
-	if not moving and receipt >= _expected_sequence and not bool(own.get("moving",false)) and delta <= CORRECTION_DEADBAND:
+		stop()
 		active = false
+		_settle_target = Vector2.INF
+	elif delta > CORRECTION_SNAP or not _direct_clear(position,authoritative):
+		# A denied/different route or unsafe correction cannot slide through walls.
 		position = authoritative
+		stop()
+		active = false
+		_settle_target = Vector2.INF
+	else:
+		if not _settle_target.is_finite():
+			stop()
+		_settle_target = authoritative
+		moving = true
 
 func _set_route(goal: Vector2i) -> bool:
-	_route = _find_route(_cell(position),goal)
+	var center := Vector2(goal)*CELL+Vector2.ONE*8.0
+	if _direct_clear(position,center):
+		# Recovered's fast visible-line route: avoid blocking Godot's draw
+		# thread with A* for the overwhelmingly common straight terrain click.
+		_route = [_cell(position),goal]
+	else:
+		_full_path_searches += 1
+		_route.clear()
+		_route_index = 0
+		_target_cell = goal
+		moving = false
+		if not _begin_search(_cell(position),goal):
+			return false
+		# Fast path first: the common 1-3-cell turn starts during the click.
+		# A hard detour remains pending; never give the movement controller
+		# an incomplete waypoint list.
+		_search_frame(FAST_PATH_BUDGET_USEC)
+		return moving or not _search.is_empty()
+	_search.clear()
 	_route_index = 1
 	_target_cell = goal
 	moving = _route.size() > 1
@@ -269,7 +348,8 @@ func request_target(point: Vector2, sequence: int) -> bool:
 	if not _walkable(goal):
 		return false
 	_expected_sequence = maxi(_expected_sequence,sequence)
-	if moving and goal == _target_cell:
+	_settle_target = Vector2.INF
+	if goal == _target_cell and (moving or not _search.is_empty()):
 		active = true
 		return true
 	if not _set_route(goal):
@@ -278,15 +358,33 @@ func request_target(point: Vector2, sequence: int) -> bool:
 	return true
 
 func stop() -> void:
+	_settle_target = Vector2.INF
+	_search.clear()
 	moving = false
 	_route.clear()
 	_route_index = 0
 	_target_cell = Vector2i(-1,-1)
 
 func advance(delta: float) -> void:
-	if not ready or not active or not moving or delta <= 0.0:
+	if not ready or not active or delta <= 0.0:
 		return
 	var remaining := PIXELS_PER_SECOND*minf(delta,0.1)
+	if _settle_target.is_finite():
+		var drift := position.distance_to(_settle_target)
+		if drift <= maxf(SETTLE_SNAP,remaining):
+			position = _settle_target
+			_settle_target = Vector2.INF
+			active = false
+			moving = false
+		else:
+			facing = _face(_settle_target-position,facing)
+			position = position.move_toward(_settle_target,remaining)
+			moving = true # Never visibly slide toward a correction in idle pose.
+		return
+	if not _search.is_empty():
+		_search_frame(FALLBACK_FRAME_BUDGET_USEC)
+	if not moving:
+		return
 	for step in 8:
 		if remaining <= 0.00001 or _route_index >= _route.size():
 			break

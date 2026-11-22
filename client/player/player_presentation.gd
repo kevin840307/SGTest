@@ -22,6 +22,7 @@ var _seen_respawn_events := {}
 var _epoch := 0
 var _map := 0
 var _local_visual: Dictionary = {} # own actor presentation only; never authoritative
+var _own_actor_id := 0
 
 func clear() -> void:
 	_views.clear()
@@ -34,6 +35,7 @@ func clear() -> void:
 	_epoch = 0
 	_map = 0
 	_local_visual.clear()
+	_own_actor_id = 0
 
 func configure(assets: Dictionary, appearance: Dictionary = {}) -> Error:
 	clear()
@@ -73,6 +75,7 @@ func apply_snapshot(snapshot: Dictionary, now_usec: int) -> void:
 		return
 	var epoch := int(snapshot.map_epoch)
 	var map := int(snapshot.map_id)
+	_own_actor_id = int(snapshot.actor_id)
 	if epoch != _epoch or map != _map:
 		_actors.clear()
 		_seen_attack_events.clear()
@@ -81,13 +84,16 @@ func apply_snapshot(snapshot: Dictionary, now_usec: int) -> void:
 		_epoch = epoch
 		_map = map
 	var own: Dictionary = snapshot.self_state.duplicate()
-	if not own.is_empty() and not _local_visual.is_empty() and int(_local_visual.get("actor_id",0)) == int(snapshot.actor_id):
-		own["moving"] = bool(_local_visual.moving)
-		own["facing"] = int(_local_visual.facing)
 	if own.is_empty():
 		own = {"actor_id":snapshot.actor_id,"connection_epoch":0,"entity_map_epoch":epoch,
 			"x":snapshot.x,"y":snapshot.y,"facing":snapshot.facing,"moving":false,
 			"movement_action_sequence":0,"server_tick":int(snapshot.get("last_aoi_tick",0))}
+	# Apply the immediate local NR state AFTER constructing WorldReady fallback.
+	# Previously each SelfState-less snapshot forced NS and reset the walk
+	# clock every ~50ms, so the actor appeared to slide on its first steps.
+	if not _local_visual.is_empty() and int(_local_visual.get("actor_id",0)) == _own_actor_id:
+		own["moving"] = bool(_local_visual.moving)
+		own["facing"] = int(_local_visual.facing)
 	var visible: Dictionary = snapshot.entities.duplicate()
 	visible[int(snapshot.actor_id)] = own
 	for id in _actors.keys():
@@ -393,7 +399,7 @@ func actors_at(now_usec: int) -> Array:
 					"frame":overlay_view.timeline.frame_at_uniform_cadence(walk_elapsed_usec,WALK_FRAME_USEC) if action == "NR" else overlay_view.timeline.frame_at_update(elapsed),
 					"flip_h":overlay_view.view.flip_h,"part_slot":logical_slot,
 					"palette_index":int(overlay[2]) if overlay.size()>2 else 0})
-		var sampled: Vector2 = Vector2(_local_visual.position) if int(_local_visual.get("actor_id",0)) == int(id) else actor.history.sample(now_usec,PositionHistory.DEFAULT_DELAY_TICKS,REMOTE_MAX_PREDICTION_TICKS,REMOTE_MAX_PREDICTION_PIXELS)
+		var sampled: Vector2 = (Vector2(_local_visual.position) if int(_local_visual.get("actor_id",0)) == int(id) else Vector2(float(value.x),float(value.y)) if int(id)==_own_actor_id else actor.history.sample(now_usec,PositionHistory.DEFAULT_DELAY_TICKS,REMOTE_MAX_PREDICTION_TICKS,REMOTE_MAX_PREDICTION_PIXELS))
 		if not sampled.is_finite():
 			sampled = Vector2(float(value.x),float(value.y))
 		result.append({"id":str(id),"p":sampled,"parts":parts})
@@ -404,5 +410,5 @@ func position_at(actor_id: int, now_usec: int) -> Vector2:
 	var actor: Dictionary = _actors.get(actor_id,{})
 	if actor.is_empty():
 		return Vector2.INF
-	var sampled: Vector2 = Vector2(_local_visual.position) if int(_local_visual.get("actor_id",0)) == actor_id else actor.history.sample(now_usec,PositionHistory.DEFAULT_DELAY_TICKS,REMOTE_MAX_PREDICTION_TICKS,REMOTE_MAX_PREDICTION_PIXELS)
+	var sampled: Vector2 = (Vector2(_local_visual.position) if int(_local_visual.get("actor_id",0)) == actor_id else Vector2(float(actor.value.x),float(actor.value.y)) if actor_id==_own_actor_id else actor.history.sample(now_usec,PositionHistory.DEFAULT_DELAY_TICKS,REMOTE_MAX_PREDICTION_TICKS,REMOTE_MAX_PREDICTION_PIXELS))
 	return sampled if sampled.is_finite() else Vector2(float(actor.value.x),float(actor.value.y))

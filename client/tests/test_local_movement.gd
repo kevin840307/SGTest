@@ -62,6 +62,57 @@ func run() -> void:
 	predictor.observe(rejected)
 	check(not predictor.active and predictor.position==Vector2(56,24),
 		"denied move did not restore Server position")
+	# Sustained 60fps local walk while Server sends old-but-accepted positions.
+	# These packets used to repeatedly lerp backwards, causing 4px/8px
+	# alternation (stutter) and the visual slipping between walk sprites.
+	var continuous := LocalMovement.new()
+	check(continuous.configure(grid(12,12),manifest,1,7),"continuous map invalid")
+	continuous.observe(initial(7,1,Vector2(24,24)))
+	check(continuous.request_target(Vector2(152,24),1),"straight route not started")
+	check(continuous._full_path_searches == 0,"visible short route executed blocking A-star")
+	var preceding := continuous.position
+	for frame in 18:
+		continuous.advance(1.0/60.0)
+		var current := continuous.position
+		check(is_equal_approx(current.distance_to(preceding),4.0),
+			"server stutter: predicted frame travel wasn't stable at 60 FPS frame %d" % frame)
+		preceding = current
+		if frame%3==2:
+			var delayed := initial(7,1,Vector2(24+maxi(0,frame-7)*4,24),frame+2)
+			delayed.self_state.moving = true
+			delayed.self_state.movement_action_sequence = 1
+			delayed.last_receipt_sequence = 1
+			delayed.last_receipt_status = 0
+			continuous.observe(delayed)
+			check(continuous.position == current,"moving SelfState rewound the local view")
+	# An early authoritative stop 24px behind predicted position must not
+	# force an immediate idle snap; walk the small safe correction in frames.
+	var start_settle := continuous.position
+	var server_stop := initial(7,1,Vector2(72,24),30)
+	server_stop.self_state.moving = false
+	server_stop.self_state.movement_action_sequence = 1
+	server_stop.last_receipt_sequence = 1
+	server_stop.last_receipt_status = 0
+	continuous.observe(server_stop)
+	check(continuous.position == start_settle and continuous.active and continuous.moving,
+		"authoritative stop instantly snapped and skipped walking")
+	var settled := false
+	var preceding_settle := continuous.position
+	for frame in 16:
+		continuous.advance(1.0/60.0)
+		check(continuous.position.distance_to(preceding_settle)<=4.001,
+			"stop transition jumped instead of bounded walking at frame %d" % frame)
+		preceding_settle = continuous.position
+		if not continuous.active:
+			settled = true
+			break
+	check(settled and continuous.position == Vector2(72,24) and not continuous.moving,
+		"failed to finish the Server-authoritative stop smoothly")
+	# A fresh command after one completed stop cannot inherit the prior
+	# settling target or a stale route.
+	check(continuous.request_target(Vector2(152,24),2),"new move after stop rejected")
+	check(continuous._settle_target == Vector2.INF and continuous.moving,
+		"old settle target interrupted a new click")
 	var walls: Array[Vector2i] = []
 	for y in range(10):
 		walls.append(Vector2i(5,y))
@@ -70,9 +121,20 @@ func run() -> void:
 	check(around.configure(grid(12,12,walls),manifest,2,8),"wall map unavailable")
 	around.observe(initial(8,2,Vector2(40,40)))
 	check(around.request_target(Vector2(152,40),1),"wall detour A-star path not found")
+	check((around._search.is_empty() and around.moving and around._route.size()>1) or \
+		(not around._search.is_empty() and not around.moving and around._route.is_empty()),
+		"A-star exposed an incomplete path to its movement consumer")
 	var pass_wall:=false
 	for i in range(240):
+		var pending_before := not around._search.is_empty()
+		var before_frame := around.position
 		around.advance(1.0/60.0)
+		if pending_before and not around._search.is_empty():
+			check(around.position == before_frame and not around.moving and around._route.is_empty(),
+				"actor walked a partial A-star path before the final goal was found")
+		if around.moving:
+			check(around._search.is_empty() and around._route.size()>1,
+				"actor started walking without a complete route")
 		check(around._walkable(around._cell(around.position)),"predicted actor entered blocked grid")
 		if around.position.x>88.0:
 			pass_wall=true
@@ -81,7 +143,10 @@ func run() -> void:
 	var corner := LocalMovement.new()
 	check(corner.configure(grid(12,12,[Vector2i(1,0),Vector2i(0,1)]),manifest,3,9),"corner grid invalid")
 	corner.observe(initial(9,3,Vector2(8,8)))
-	check(not corner.request_target(Vector2(24,24),1),"A-star crossed a blocked diagonal corner")
+	var corner_result := corner.request_target(Vector2(24,24),1)
+	corner.advance(1.0/60.0)
+	check((not corner_result or not corner.moving) and not corner.active and corner.position==Vector2(8,8),
+		"A-star crossed a blocked diagonal corner")
 	var stale := around.position
 	around.observe(initial(8,1,Vector2(24,24),999))
 	check(around.position==stale,"stale MapEpoch moved actor")

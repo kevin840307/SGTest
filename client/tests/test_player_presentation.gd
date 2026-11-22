@@ -75,6 +75,22 @@ func run() -> void:
 	prediction_probe.clear_local_visual()
 	check(prediction_probe.position_at(1,200000).distance_to(Vector2(10,10))<2.0,
 		"clearing own prediction kept stale position")
+	# WorldReady comes before SelfState. A locally walking player must never
+	# revert to NS and reset the walk phase on repeated empty-SelfState polls.
+	var spawn_probe := Players.new()
+	check(spawn_probe.configure(assets)==OK,"WorldReady-only visual configure")
+	var spawn_snapshot: Dictionary = snapshot.duplicate(true)
+	spawn_snapshot.self_state = {}
+	spawn_probe.apply_snapshot(spawn_snapshot,0)
+	spawn_probe.set_local_visual(1,Vector2(14,10),true,6,0)
+	for at_usec in [25000,50000,75000,125000]:
+		spawn_probe.apply_snapshot(spawn_snapshot,at_usec)
+		check(str(spawn_probe._actors[1].action)=="NR",
+			"WorldReady missing SelfState reset walk pose at %d" % at_usec)
+	check(int(spawn_probe.actors_at(125000).filter(func(v):return str(v.id)=="1")[0].parts[0].frame)==1,
+		"WorldReady replay restarted the walking phase instead of moving")
+	check(spawn_probe.position_at(1,125000)==Vector2(14,10),
+		"WorldReady fallback left own walk behind predicted position")
 	# Recovered2's 8 FPS shared paper-doll timing is the baseline, but
 	# SGTest runs 10 FPS for a more readable stride; no 50Hz ACT drift.
 	# A variable raw ACT duration in B-LEG must not desynchronize the legs.

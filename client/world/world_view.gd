@@ -166,7 +166,10 @@ func stop_local_move() -> void:
 		_prediction_applied = true
 
 
-func _physics_process(delta: float) -> void:
+func _advance_local_visual(delta: float) -> void:
+	# Presentation samples follow the render clock, as in Recovered's
+	# Camera2D/Sprite2D pipeline. Fixed-physics sampling made a custom Canvas
+	# repeat positions at high render FPS, creating visible step/hold jitter.
 	if phase != "ready" or not show_players or _player_snapshot.is_empty() or not local_movement.ready:
 		return
 	local_movement.advance(delta)
@@ -373,6 +376,7 @@ func _process(_delta: float) -> void:
 		phase = "ready"
 		status_changed.emit("地圖 " + str(map_id) + "｜地圖檢視・尚未連線")
 	if phase == "ready":
+		_advance_local_visual(_delta)
 		present()
 
 
