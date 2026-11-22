@@ -5,8 +5,12 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+from argparse import Namespace
+from contextlib import redirect_stdout
+from unittest.mock import patch
 
 from test_asset_converter import tiny_spr
+from asset_converter import cli
 from asset_converter.cli import archive_all
 from asset_converter.content.export_assets import publish, runtime_page, PAGE_LAYOUT
 from PIL import Image
@@ -84,6 +88,36 @@ class ScopedExportTests(unittest.TestCase):
         (source/'map/extra.dat').write_bytes(b'uninterpreted fixture')
         archive_all(source, archive, Settings())
         return source, archive, assets
+
+    def test_cli_explicit_asset_selection_and_map_union(self):
+        for include_map in (False,True):
+            with self.subTest(include_map=include_map), tempfile.TemporaryDirectory() as folder:
+                source,archive,assets = self.fixture(folder)
+                report_path = Path(folder)/'report.json'
+                args = Namespace(command='export-assets',original=source,extracted_source=source,
+                                 archive_output=archive,assets=assets,report=report_path,
+                                 map=[15] if include_map else None,map_ids=[15],server_dat=source,
+                                 asset_id=['maps/visuals/two'])
+                with patch.object(cli,'map_asset_ids',return_value={'maps/visuals/one'}), patch.object(cli,'resolve_server_dat',return_value=source), redirect_stdout(io.StringIO()):
+                    self.assertEqual(cli._execute(args),0)
+                report = json.loads(report_path.read_text())
+                self.assertEqual(report['sprite_groups'],2 if include_map else 1)
+                self.assertEqual(report['requested_maps'],[15] if include_map else [])
+                self.assertEqual(report['requested_asset_ids'],['maps/visuals/two'])
+                self.assertTrue((assets/'maps/visuals/two/atlas.json').is_file())
+                self.assertEqual((assets/'maps/visuals/one').exists(),include_map)
+
+    def test_cli_rejects_bad_unknown_or_duplicate_asset_ids_without_output(self):
+        for selected in (['../private'],['maps/visuals/missing'],['maps/visuals/one']*2,['x']*4097):
+            with self.subTest(selected=selected[:2]), tempfile.TemporaryDirectory() as folder:
+                source,archive,assets = self.fixture(folder)
+                args = Namespace(command='export-assets',original=source,extracted_source=source,
+                                 archive_output=archive,assets=assets,report=Path(folder)/'report.json',
+                                 map=None,map_ids=[13],server_dat=None,asset_id=selected)
+                with redirect_stdout(io.StringIO()):
+                    self.assertEqual(cli._execute(args),1)
+                self.assertFalse(assets.exists())
+                self.assertFalse(json.loads(args.report.read_text())['complete_asset_conversion'])
 
     def test_selected_catalog_matches_pages_and_repeats_deterministically(self):
         with tempfile.TemporaryDirectory() as folder:

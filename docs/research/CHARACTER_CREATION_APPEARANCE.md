@@ -70,3 +70,6 @@ Server 持久化前置已實作（schema v24）：`CharacterAppearance(Race,Hair
 
 
 `OnCreateChar` 的後續映射亦已找到：`1000FF07..1000FF1B` 依 offset0x0b 是否等於3，選擇起始 slot0 或1；`10010D1C..10010D4E` 將傳入 ushort 當作各 slot 的 `CELArray<ushort>::operator[]` 索引，取出真正數值寫入裝備結構；`10010D7F..10010DB2` 再以起始 slot+迴圈索引取來源數值寫入建立角色的 CDStream。這確認了「傳入選項索引→配置清單值」是兩層映射，下一步要連結該值的 Item／外觀來源；仍不能將配置清單內容直接當作 SPR 髮型號碼。沒有把原程式寬鬆的 `size+1` 邊界搬入正式 Server。
+
+
+2026-11-22 Client來源補證：唯一解包輸出 `interface/createcharpara.dat` 與 Old Server 設定的清單目前相同。原 Client `InitCreateCharLib 004174DF..00417604` 讀取此檔並按欄位順序組裝11個選項集合。`ReadOptionConfig 00426C50..00426CA3` 讀取第9/10集合首值到0x18e/0x190；`RefreshHead 00426660..004266AB` 使用 `option1*option2_count+option2` 作第8集合的索引，再將取出的數值套用至人物資料。這補足原版兩層選項映射的算式，但尚未連結 Item ID 到 SPR／palette，未據此啟用全量 Server rules。R2 自有髮型索引與此原版數值不能直接混用。

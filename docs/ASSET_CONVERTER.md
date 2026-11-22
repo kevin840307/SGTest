@@ -205,3 +205,8 @@ python tools/asset_converter/smoke_runtime_pack.py "C:\SGO\Godot\Godot_v4.7.2-st
 ### 2026-11-17 本機來源 Item metadata（單一 Converter）
 
 唯一 Converter 新增 item-catalog，唯讀從使用者已合法取得的舊版衍生 Godot Items 子目錄讀取 .tres，輸出名稱、類別與原始 icon_id 及 SHA256 到 Git 忽略的 client/content/item_catalog.json。來源是 TestGoGo/client/Items 的轉換後資料，不是原始 ITD 的逐筆實證；Runtime 不據此推算 Item 使用、攻防、價錢或裝備規則。目錄缺失／無法驗證時 Client 降級顯示數字 ID。見 tools/asset_converter/README.md 指令。轉換器 CI 44098608220 PASS（只有合成測試來源，未跑完整私有5003件或 Windows Release PCK）。
+
+
+### 指定額外角色素材（2026-11-22）
+
+正式 `export-assets` 支援重複 `--asset-id <canonical-id>`，例如 `--asset-id players/g/hair/hair01`。可單獨選確切素材，或與 `--map 15 --map 13` 合併：後者保留地圖依賴並加入額外髮型，避免為新外觀再寫一條發布腳本。仍先完整 Archive audit，未知 ID／非安全相對路徑／重複或超過4096個明確ID會失敗，不發布錯誤 Catalog；報告區分 requested_maps／requested_asset_ids／實際 selected_assets。這只是素材選取，不核准任何 Server 創角規則，不掃目錄猜合法髮型。公開合成 scoped export／map union／未知與非法ID測試及Python125/125 PASS；新髮型的私人正式發布仍待執行。

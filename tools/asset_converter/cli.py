@@ -20,7 +20,7 @@ from asset_converter.source.convert_assets import (
 from asset_converter.source.extract_client import extract, audit_sprite_coverage
 from asset_converter.content.build_maps import build as build_map
 from asset_converter.content.npc_content import build as build_npcs
-from asset_converter.content.export_assets import publish as export_assets, map_asset_ids, PLAYER_PART_ASSETS
+from asset_converter.content.export_assets import publish as export_assets, map_asset_ids, PLAYER_PART_ASSETS, safe_relative
 from asset_converter.content.server_source import resolve_server_dat
 from asset_converter.content.build_maps import server_map_directory, scenery_asset_paths
 from asset_converter.content.build_enemy_map_palette import read_enemy_catalog, read_enemy_dat
@@ -353,6 +353,7 @@ def main() -> int:
     publication.add_argument('--report',type=Path,default=REPO/'reports/asset_export.json')
     publication.add_argument('--map',type=int,action='append',help='publish only original map visuals, enemies, NPCs and standard player parts')
     publication.add_argument('--server-dat',type=Path,help='original server Dat for map-scoped asset selection')
+    publication.add_argument('--asset-id',action='append',help='repeat exact logical sprite IDs; combine with --map to include additional character hair or other assets')
     skills = sub.add_parser('skill-evidence',
                             help='compile private Old Dat/Skill source evidence without inventing runtime rules')
     skills.add_argument('--server-dat',type=Path,required=True,
@@ -446,11 +447,19 @@ def _execute(args):
             original = args.original.resolve()
             if output == original or output.is_relative_to(original):
                 raise ValueError('asset output must not overwrite original game')
+            explicit = args.asset_id or []
+            if len(explicit)>4096 or len(set(explicit))!=len(explicit):
+                raise ValueError('asset IDs must be unique and bounded to 4096')
+            for asset_id in explicit:
+                safe_relative(asset_id)
             source = resolve_source(args)
             selected = map_asset_ids(source,resolve_server_dat(args.server_dat),args.map_ids) if args.map else None
+            if explicit:
+                selected = (selected or set()) | set(explicit)
             report = export_assets(source,args.archive_output,output,asset_ids=selected)
             if selected is not None:
-                report['requested_maps'] = args.map_ids
+                report['requested_maps'] = args.map_ids if args.map else []
+                report['requested_asset_ids'] = explicit
                 report['selected_assets'] = sorted(selected)
         except (OSError,ValueError,KeyError,TypeError) as error:
             report = {'status':'failed','error':str(error),'complete_asset_conversion':False}
