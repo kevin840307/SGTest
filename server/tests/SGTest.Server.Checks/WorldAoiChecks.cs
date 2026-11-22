@@ -1,6 +1,7 @@
 using SGTest.Server.Visibility;
 using SGTest.Server.Skill;
 using SGTest.Server.Monster;
+using SGTest.Server.Pet;
 using SGTest.Server.Map;
 using SGTest.Server.Combat;
 using SGTest.Server.Gateway;
@@ -43,6 +44,8 @@ internal static class WorldAoiChecks
             RemoteMovementCheckpointRate);
         Checks.Run("same AOI tracks monster Spawn/Delta/Despawn hysteresis and resync baseline",
             MonsterInterest);
+        Checks.Run("pet AOI follows owner visibility with reliable summon recall and transfer generation",
+            PetInterest);
         Checks.Run("player attack visual reaches only viewers seeing attacker and target",
             PlayerAttackVisualInterest);
         Checks.Run("player skill visual reaches only viewers seeing attacker and target",
@@ -62,6 +65,55 @@ internal static class WorldAoiChecks
             InvalidAndBounded);
         Checks.Run("30Hz Host publishes idle join and leave to AOI through WorldResultRouter",
             () => RealHostLifecycle(root).GetAwaiter().GetResult());
+    }
+
+    private static void PetInterest()
+    {
+        var aoi=new WorldAoi(new WorldAoiOptions(
+            EnterHalfWidth:200,EnterHalfHeight:150,ExitMargin:60,BucketSize:64));
+        var owner=Actor(71,15,24,24,connection:3,mapEpoch:4);
+        var peer=Actor(72,15,48,24,connection:4,mapEpoch:5);
+        var far=Actor(73,15,1200,24,connection:5,mapEpoch:6);
+        Life(aoi,1,Join(owner),Join(peer),Join(far));
+        Drain(aoi,owner);Drain(aoi,peer);Drain(aoi,far);
+
+        aoi.ApplyPetState(new(owner.ActorId,owner.ConnectionEpoch,owner.MapEpoch,
+            9001,5001,4,true));
+        var ownerSpawn=Drain(aoi,owner);
+        var peerSpawn=Drain(aoi,peer);
+        Require(ownerSpawn is [var own]&&own.Kind==AoiEventKind.PetSpawn&&
+            own.Pet?.PetUid==9001&&own.Pet?.OwnerActorId==owner.ActorId&&
+            peerSpawn is [var seen]&&seen.Pet==own.Pet&&Drain(aoi,far).Length==0,
+            "pet spawn was not scoped to owner visibility");
+
+        var movedPeer=peer with {X=1000,EntityRevision=2};
+        Move(aoi,2,movedPeer);
+        var peerExit=Drain(aoi,movedPeer);
+        Require(peerExit.Any(x=>x.Kind==AoiEventKind.PetDespawn&&
+                x.Pet?.PetUid==9001)&&
+            Drain(aoi,owner).Any(x=>x.Kind==AoiEventKind.Despawn&&
+                x.EntityActorId==peer.ActorId),
+            "pet did not leave AOI when observer lost owner visibility");
+
+        aoi.ApplyPetState(new(owner.ActorId,owner.ConnectionEpoch,owner.MapEpoch,
+            0,0,0,false));
+        Require(Drain(aoi,owner) is [var recall]&&
+            recall.Kind==AoiEventKind.PetDespawn&&recall.Pet?.PetUid==9001&&
+            aoi.PetCount==0,
+            "pet recall did not reliably despawn/remove active presence");
+
+        aoi.ApplyPetState(new(owner.ActorId,owner.ConnectionEpoch,owner.MapEpoch,
+            9002,5002,7,true));
+        Require(Drain(aoi,owner).Single().Kind==AoiEventKind.PetSpawn,
+            "replacement active pet did not spawn for owner");
+        Life(aoi,3,Leave(owner));
+        Drain(aoi,owner);
+        var transferred=owner with {MapId=13,MapEpoch=owner.MapEpoch+1,EntityRevision=1};
+        Life(aoi,4,Join(transferred));
+        var transferEvents=Drain(aoi,transferred);
+        Require(transferEvents.Any(x=>x.Kind==AoiEventKind.PetSpawn&&
+                x.Pet?.PetUid==9002&&x.Pet?.OwnerMapEpoch==transferred.MapEpoch),
+            "active pet did not heal its owner map generation after transfer");
     }
 
     private static void PlayerAttackVisualInterest()

@@ -261,10 +261,14 @@ Pet 第一個正式切片沿用既有 authenticated Gateway／bounded SessionCom
 | 111 `PetCommand` | Client→Server | 29 | `int64 MapEpoch, uint32 PetSequence, uint8 Action, int64 PetUid`；Action=`1 Summon / 2 Recall / 3 Refresh`，Refresh 的 PetUid 必須為0 |
 | 112 `PetResult` | Server→Client | 38 | `int64 MapEpoch, uint32 PetSequence, uint8 Action, uint8 Status, int64 PetUid, int64 ActivePetUid` |
 | 113 `PetSnapshot` | Server→Client | `26 + 24*N` | `MapEpoch, ActivePetUid, count`，每列 `PetUid, DefinitionId, Level, Experience`；N≤64 |
+| 114 `PetEntitySpawn` | Server→Client | 64 | `int64 ReceiverMapEpoch, int64 ServerTick, int64 OwnerActorId, int64 OwnerConnectionEpoch, int64 OwnerMapEpoch, int64 PetUid, int32 DefinitionId, int32 Level` |
+| 115 `PetEntityDespawn` | Server→Client | 56 | `int64 ReceiverMapEpoch, int64 ServerTick, int64 OwnerActorId, int64 OwnerConnectionEpoch, int64 OwnerMapEpoch, int64 PetUid` |
 
 SQLite schema v30 新增 `pet_instances` 與 `pet_actions`；同一角色以 partial unique index 保證最多一隻 active pet，action key 綁定 `(character, connection generation, MapEpoch, sequence)`。完全相同重送可回 AlreadyProcessed；相同 sequence 不同 payload 回 SequenceConflict；外來 PetUid 不可召喚。登入/重連 attach 會可靠送 authoritative roster/active snapshot。Godot `WorldState` 只接受目前 MapEpoch，舊 map frame 計 stale 不污染新角色/新地圖，future frame fail closed；`ClientSession` 的 summon/recall/refresh 共用正式 intent FIFO。
 
-此切片**尚未**定義 Pet world entity、follow/AOI、戰鬥、外觀/動畫、成長、裝備/卡片、取得流程或 Mecha，也沒有把 Paradise/HK 未實測行為宣稱成 A/B PASS。實作 commit `e62fdda`；C#/Godot golden 與 shared Godot regression PASS，使用本次 source 隔離編譯的 Host 完整 Server Checks **300/300 PASS**。
+`PetEntitySpawn/Despawn` 是第二階段的 **world identity / AOI presence**，仍不代表真正 Pet follow AI。Server 只在 durable active pet 已提交後把 identity 發給單一 AOI owner；observer 只有在看得到 owner（或 owner 自己）時才看得到 Pet，recall、離開視野、斷線與換圖 generation 會可靠 Despawn/重建。Godot 以 `OwnerActorId + OwnerConnectionEpoch + OwnerMapEpoch` 驗證，replacement WorldReady/換圖會清除舊 Pet entity。此階段 Pet 位置刻意錨定 owner，未實作獨立座標、跟隨距離、A*、動畫或戰鬥，因此**不得**把這個 AOI presence 當成 HK follow 行為已還原。
+
+第一階段 authority 實作 commit `e62fdda`；第二階段 PET-AOI-V1 為本次提交。C#/Godot Pet/AOI golden、Server `--pet-only` **2/2 PASS**、`--aoi-only` **24/24 PASS**，以及 Godot `test_pet_wire.gd`、`test_aoi_wire.gd`、`test_client_fps_independence.gd` 均實跑 PASS；Server/Checks Release build 0 warning/0 error。完整 Server Checks 在與 Pet 無關的既有 `IdentityAdminChecks.InvalidInput` 測試 fixture 重現 `character_password_overrides` table 缺失而中止，因此本次不宣稱完整 suite PASS。真正 follow/pathing、戰鬥、外觀/動畫、成長、裝備/卡片、取得流程、Mecha 與 Paradise/HK A/B 仍 NOT VERIFIED。
 
 ### 2026-11-17 Bounded TLS/TCP automatic reconnect
 

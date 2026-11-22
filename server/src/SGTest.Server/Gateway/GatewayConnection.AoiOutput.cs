@@ -112,6 +112,17 @@ public sealed partial class GatewayConnection
                     frame=WireProtocol.EncodeGroundDropDespawn(new(
                         evt.ReceiverMapEpoch,evt.Tick,evt.GroundDropId));
                     break;
+                case AoiEventKind.PetSpawn when evt.Pet is { } pet:
+                    frame=WireProtocol.EncodePetEntitySpawn(new(
+                        evt.ReceiverMapEpoch,evt.Tick,pet.OwnerActorId,
+                        pet.OwnerConnectionEpoch,pet.OwnerMapEpoch,pet.PetUid,
+                        pet.DefinitionId,pet.Level));
+                    break;
+                case AoiEventKind.PetDespawn when evt.Pet is { } pet:
+                    frame=WireProtocol.EncodePetEntityDespawn(new(
+                        evt.ReceiverMapEpoch,evt.Tick,pet.OwnerActorId,
+                        pet.OwnerConnectionEpoch,pet.OwnerMapEpoch,pet.PetUid));
+                    break;
                 case AoiEventKind.PlayerAttackVisual when evt.PlayerAttack is { } attack:
                     frame=WireProtocol.EncodePlayerAttackVisual(new(
                         evt.ReceiverMapEpoch,evt.Tick,

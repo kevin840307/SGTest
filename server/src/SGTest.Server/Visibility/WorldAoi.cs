@@ -1,6 +1,7 @@
 using SGTest.Server.Skill;
 using SGTest.Server.Pvp;
 using SGTest.Server.Monster;
+using SGTest.Server.Pet;
 using SGTest.Server.Combat;
 using SGTest.Server.Gateway;
 using SGTest.Server.World;
@@ -25,6 +26,7 @@ public enum AoiEventKind : byte
     WorldReady, Spawn, Delta, Despawn, SelfState, PlayerIdentity, PlayerMovementIntent,
     MonsterSpawn, MonsterDelta, MonsterDespawn,
     GroundDropSpawn, GroundDropDespawn,
+    PetSpawn, PetDespawn,
     PlayerAttackVisual, PlayerSkillVisual, PlayerDamageVisual, PlayerRespawnVisual,
     PvpCombatVisual, PvpSkillVisual
 }
@@ -68,6 +70,7 @@ public readonly record struct AoiEvent(
     ActorSnapshot? Entity = null, long EntityActorId = 0, long EntityConnectionEpoch = 0,
     MonsterSnapshot? Monster = null, long MonsterEntityId = 0, long MonsterRevision = 0,
     GroundDropRecord? GroundDrop = null, long GroundDropId = 0,
+    PetWorldPresence? Pet = null,
     PlayerAttackVisual? PlayerAttack = null,
     PlayerSkillVisual? PlayerSkill = null,
     PlayerDamageVisual? PlayerDamage = null,
@@ -99,6 +102,7 @@ public sealed class WorldAoi
     private readonly Dictionary<(int Map, int X, int Y), HashSet<long>> _buckets = new();
     private readonly Dictionary<long, MonsterSnapshot> _monsters = new();
     private readonly Dictionary<long, GroundDropRecord> _groundDrops = new();
+    private readonly Dictionary<long, PetWorldPresence> _petsByOwner = new();
     private readonly Dictionary<(int Map, int X, int Y), HashSet<long>> _groundBuckets = new();
     private readonly Dictionary<(int Map, int X, int Y), HashSet<long>> _monsterBuckets = new();
     private readonly Dictionary<long, Observer> _observers = new();
@@ -117,6 +121,7 @@ public sealed class WorldAoi
         public readonly Dictionary<long, Seen> Visible = new();
         public readonly Dictionary<long, long> VisibleMonsters = new();
         public readonly HashSet<long> VisibleGroundDrops = new();
+        public readonly Dictionary<long, PetWorldPresence> VisiblePets = new();
         public readonly Queue<AoiEvent> Pending = new();
 
         public Observer(ActorSnapshot actor) => Self = actor;
@@ -142,7 +147,9 @@ public sealed class WorldAoi
     public int EntityCount => _entities.Count;
     public int MonsterCount => _monsters.Count;
     public int GroundDropCount => _groundDrops.Count;
-    public int TrackedEntityCount => _entities.Count + _monsters.Count + _groundDrops.Count;
+    public int PetCount => _petsByOwner.Count;
+    public int TrackedEntityCount =>
+        _entities.Count + _monsters.Count + _groundDrops.Count + _petsByOwner.Count;
     public int ObserverCount => _observers.Count;
     public long LastTick => _lastTick;
 
@@ -199,6 +206,7 @@ public sealed class WorldAoi
         observer.Visible.Clear();
         observer.VisibleMonsters.Clear();
         observer.VisibleGroundDrops.Clear();
+        observer.VisiblePets.Clear();
         observer.Self = current;
         Enqueue(observer, new(AoiEventKind.WorldReady, _lastTick, current.MapEpoch, current));
         Enqueue(observer, new(AoiEventKind.SelfState, _lastTick, current.MapEpoch, current));
@@ -268,6 +276,58 @@ public sealed class WorldAoi
                 "Monster AOI changes must share the current authoritative World Tick");
         foreach (var monster in changed)
             ChangedMonster(monster, tick);
+    }
+
+    /// <summary>
+    /// Applies committed active-pet identity on the same single AOI owner. Pet
+    /// position is owner-anchored in this slice: observers see the pet exactly
+    /// when they see its owner (the owner always sees its own active pet).
+    /// </summary>
+    public void ApplyPetState(PetWorldStateUpdate update)
+    {
+        if(update.OwnerActorId<=0||update.OwnerConnectionEpoch<=0||
+           update.OwnerMapEpoch<=0)
+            throw new InvalidOperationException("Invalid pet AOI update");
+        if(update.Present)
+        {
+            if(update.PetUid<=0||update.DefinitionId is <=0 or >100000000||
+               update.Level is <=0 or >1000000)
+                throw new InvalidOperationException("Invalid active pet AOI identity");
+        }
+        else if(update.PetUid!=0||update.DefinitionId!=0||update.Level!=0)
+            throw new InvalidOperationException("Inactive pet AOI update carried identity");
+
+        if(_petsByOwner.TryGetValue(update.OwnerActorId,out var previous))
+        {
+            if(update.OwnerConnectionEpoch<previous.OwnerConnectionEpoch||
+               (update.OwnerConnectionEpoch==previous.OwnerConnectionEpoch&&
+                update.OwnerMapEpoch<previous.OwnerMapEpoch))
+                return;
+            if(!update.Present||previous.PetUid!=update.PetUid||
+               previous.DefinitionId!=update.DefinitionId||previous.Level!=update.Level||
+               previous.OwnerConnectionEpoch!=update.OwnerConnectionEpoch||
+               previous.OwnerMapEpoch!=update.OwnerMapEpoch)
+                HidePet(previous);
+        }
+
+        if(!update.Present)
+        {
+            _petsByOwner.Remove(update.OwnerActorId);
+            return;
+        }
+
+        var next=new PetWorldPresence(
+            update.OwnerActorId,update.OwnerConnectionEpoch,update.OwnerMapEpoch,
+            update.PetUid,update.DefinitionId,update.Level);
+        if(!_petsByOwner.ContainsKey(update.OwnerActorId)&&
+           TrackedEntityCount>=_limits.MaxEntities)
+            throw new AoiBackpressureException("Pet AOI entity capacity exceeded");
+        _petsByOwner[update.OwnerActorId]=next;
+        if(_entities.TryGetValue(update.OwnerActorId,out var owner)&&
+           owner.ConnectionEpoch==update.OwnerConnectionEpoch&&
+           owner.MapEpoch==update.OwnerMapEpoch)
+            foreach(var observer in _observers.Values)
+                RefreshPet(observer,owner,_lastTick);
     }
 
     public int EnqueuePlayerIdentity(PlayerIdentityPresentation identity)
@@ -720,7 +780,8 @@ public sealed class WorldAoi
         }
         if (visible) return; // immutable until picked, never per-tick resend
         if (observer.Visible.Count + observer.VisibleMonsters.Count +
-            observer.VisibleGroundDrops.Count >= _limits.MaxVisiblePerObserver)
+            observer.VisibleGroundDrops.Count + observer.VisiblePets.Count >=
+            _limits.MaxVisiblePerObserver)
             throw new AoiBackpressureException("AOI visible ground entity cap exceeded");
         observer.VisibleGroundDrops.Add(drop.DropId);
         Enqueue(observer,new(AoiEventKind.GroundDropSpawn,tick,
@@ -749,7 +810,10 @@ public sealed class WorldAoi
         Store(actor);
         foreach (var observer in _observers.Values)
             if (observer.Self.MapId == actor.MapId)
+            {
                 RefreshEntity(observer, actor, tick);
+                RefreshPet(observer, actor, tick);
+            }
 
         var viewer = new Observer(actor);
         _observers.Add(actor.ActorId, viewer);
@@ -765,6 +829,10 @@ public sealed class WorldAoi
             old.MapId != actor.MapId)
             throw new InvalidOperationException("Stale or untracked AOI Leave");
 
+        if(_petsByOwner.TryGetValue(actor.ActorId,out var activePet)&&
+           activePet.OwnerConnectionEpoch==actor.ConnectionEpoch&&
+           activePet.OwnerMapEpoch==actor.MapEpoch)
+            HidePet(activePet);
         RemoveBucket(old);
         _entities.Remove(actor.ActorId);
         // After disconnect or a trusted map transfer, the old observer queue is
@@ -795,7 +863,10 @@ public sealed class WorldAoi
         Store(actor);
         foreach (var observer in _observers.Values)
             if (observer.Self.MapId == actor.MapId)
+            {
                 RefreshEntity(observer, actor, tick);
+                RefreshPet(observer, actor, tick);
+            }
         if (_observers.TryGetValue(actor.ActorId, out var moving))
         {
             moving.Self = actor;
@@ -876,6 +947,19 @@ public sealed class WorldAoi
                     MonsterRevision: revision));
             }
         }
+        foreach(var entry in observer.VisiblePets.ToArray())
+        {
+            bool ownerVisible=entry.Key==viewer.ActorId || observer.Visible.ContainsKey(entry.Key);
+            if(!_petsByOwner.TryGetValue(entry.Key,out var pet)||
+               pet.PetUid!=entry.Value.PetUid||
+               pet.OwnerConnectionEpoch!=entry.Value.OwnerConnectionEpoch||
+               !ownerVisible)
+            {
+                observer.VisiblePets.Remove(entry.Key);
+                Enqueue(observer,new(AoiEventKind.PetDespawn,tick,
+                    viewer.MapEpoch,Pet:entry.Value));
+            }
+        }
 
         // Scan only the bounded map-specific spatial buckets surrounding this
         // observer, not the entire entity dictionaries each movement tick.
@@ -890,7 +974,11 @@ public sealed class WorldAoi
                     candidates.UnionWith(ids);
         foreach (long id in candidates.OrderBy(id => id))
             if (_entities.TryGetValue(id, out var actor))
+            {
                 RefreshEntity(observer, actor, tick);
+                RefreshPet(observer,actor,tick);
+            }
+        RefreshPet(observer,viewer,tick);
 
         candidates.Clear();
         for (int bx = minX; bx <= maxX; bx++)
@@ -928,7 +1016,8 @@ public sealed class WorldAoi
         }
         if (!visible)
         {
-            if (observer.Visible.Count + observer.VisibleMonsters.Count + observer.VisibleGroundDrops.Count >=
+            if (observer.Visible.Count + observer.VisibleMonsters.Count +
+                observer.VisibleGroundDrops.Count + observer.VisiblePets.Count >=
                 _limits.MaxVisiblePerObserver)
                 throw new AoiBackpressureException("AOI visible entity cap exceeded");
             observer.Visible.Add(actor.ActorId, SeenFrom(actor, tick));
@@ -1017,7 +1106,8 @@ public sealed class WorldAoi
         }
         if (!visible)
         {
-            if (observer.Visible.Count + observer.VisibleMonsters.Count + observer.VisibleGroundDrops.Count >=
+            if (observer.Visible.Count + observer.VisibleMonsters.Count +
+                observer.VisibleGroundDrops.Count + observer.VisiblePets.Count >=
                 _limits.MaxVisiblePerObserver)
                 throw new AoiBackpressureException("AOI visible entity cap exceeded");
             observer.VisibleMonsters.Add(monster.EntityId, monster.EntityRevision);
@@ -1030,6 +1120,66 @@ public sealed class WorldAoi
             Enqueue(observer, new(AoiEventKind.MonsterDelta, tick,
                 observer.Self.MapEpoch, Monster: monster));
         }
+    }
+
+    private void HidePet(PetWorldPresence pet)
+    {
+        foreach(var observer in _observers.Values)
+            if(observer.VisiblePets.TryGetValue(pet.OwnerActorId,out var seen)&&
+               seen.PetUid==pet.PetUid&&
+               seen.OwnerConnectionEpoch==pet.OwnerConnectionEpoch)
+            {
+                observer.VisiblePets.Remove(pet.OwnerActorId);
+                Enqueue(observer,new(AoiEventKind.PetDespawn,_lastTick,
+                    observer.Self.MapEpoch,Pet:seen));
+            }
+    }
+
+    private void RefreshPet(Observer observer,ActorSnapshot owner,long tick)
+    {
+        if(!_petsByOwner.TryGetValue(owner.ActorId,out var pet)||
+           pet.OwnerConnectionEpoch!=owner.ConnectionEpoch)
+        {
+            if(observer.VisiblePets.Remove(owner.ActorId,out var stale))
+                Enqueue(observer,new(AoiEventKind.PetDespawn,tick,
+                    observer.Self.MapEpoch,Pet:stale));
+            return;
+        }
+
+        if(pet.OwnerMapEpoch!=owner.MapEpoch)
+        {
+            pet=pet with {OwnerMapEpoch=owner.MapEpoch};
+            _petsByOwner[owner.ActorId]=pet;
+        }
+
+        bool ownerVisible=observer.Self.ActorId==owner.ActorId&&
+            observer.Self.ConnectionEpoch==owner.ConnectionEpoch&&
+            observer.Self.MapEpoch==owner.MapEpoch;
+        if(!ownerVisible&&observer.Visible.TryGetValue(owner.ActorId,out var seenOwner))
+            ownerVisible=seenOwner.ConnectionEpoch==owner.ConnectionEpoch&&
+                seenOwner.MapEpoch==owner.MapEpoch;
+        if(!ownerVisible)
+        {
+            if(observer.VisiblePets.Remove(owner.ActorId,out var hidden))
+                Enqueue(observer,new(AoiEventKind.PetDespawn,tick,
+                    observer.Self.MapEpoch,Pet:hidden));
+            return;
+        }
+
+        if(observer.VisiblePets.TryGetValue(owner.ActorId,out var current))
+        {
+            if(current==pet)return;
+            observer.VisiblePets.Remove(owner.ActorId);
+            Enqueue(observer,new(AoiEventKind.PetDespawn,tick,
+                observer.Self.MapEpoch,Pet:current));
+        }
+        if(observer.Visible.Count+observer.VisibleMonsters.Count+
+           observer.VisibleGroundDrops.Count+observer.VisiblePets.Count>=
+           _limits.MaxVisiblePerObserver)
+            throw new AoiBackpressureException("AOI visible pet cap exceeded");
+        observer.VisiblePets[owner.ActorId]=pet;
+        Enqueue(observer,new(AoiEventKind.PetSpawn,tick,
+            observer.Self.MapEpoch,Pet:pet));
     }
 
     private bool Within(ActorSnapshot viewer, ActorSnapshot actor, bool alreadyVisible)

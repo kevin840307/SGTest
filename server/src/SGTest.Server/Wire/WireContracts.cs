@@ -123,7 +123,9 @@ public enum WireOpcode : ushort
     PlayerMovementIntent = 110,
     PetCommand = 111,
     PetResult = 112,
-    PetSnapshot = 113
+    PetSnapshot = 113,
+    PetEntitySpawn = 114,
+    PetEntityDespawn = 115
 }
 
 public enum ChatChannel : byte { Nearby = 0, Faction = 1, Warband = 2, Party = 3, Whisper = 4 }
@@ -659,6 +661,12 @@ public readonly record struct PetSnapshotEntryWire(
     long PetUid,int DefinitionId,int Level,long Experience);
 public sealed record PetSnapshotWire(
     long ReceiverMapEpoch,long ActivePetUid,IReadOnlyList<PetSnapshotEntryWire> Pets);
+public readonly record struct PetEntitySpawnWire(
+    long ReceiverMapEpoch,long ServerTick,long OwnerActorId,long OwnerConnectionEpoch,
+    long OwnerMapEpoch,long PetUid,int DefinitionId,int Level);
+public readonly record struct PetEntityDespawnWire(
+    long ReceiverMapEpoch,long ServerTick,long OwnerActorId,long OwnerConnectionEpoch,
+    long OwnerMapEpoch,long PetUid);
 
 public readonly record struct QuestOpenWire(
     long MapEpoch,uint QuestSequence,int NpcSpawnId);

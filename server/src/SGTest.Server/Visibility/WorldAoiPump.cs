@@ -110,6 +110,9 @@ public sealed class WorldAoiPump
                         out var identity))
                         _aoi.EnqueuePlayerIdentity(identity);
 
+                while(_router.PetWorldUpdates.TryRead(out var petUpdate))
+                    _aoi.ApplyPetState(petUpdate);
+
                 while (_router.AttackRequests.TryRead(out var attack))
                 {
                     bool attackerDead = _playerCombat is not null &&

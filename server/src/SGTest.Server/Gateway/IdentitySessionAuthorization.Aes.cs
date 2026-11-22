@@ -170,6 +170,9 @@ public sealed partial class IdentitySessionAuthorization
             // route so the peer can receive one authoritative terminal event.
             _trades?.Disconnect(binding,router);
             _parties?.Disconnect(binding,router);
+            // Presentation cleanup is best-effort during shutdown/backpressure;
+            // World Leave still hides the pet and a later attach heals durable state.
+            _pets?.TryDetach(binding,router);
             if (connection is not null) router.TryDetach(connection);
 
             // Keep the character registered while its final authoritative

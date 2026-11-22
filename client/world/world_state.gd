@@ -281,6 +281,8 @@ var pending_pet_uid := 0
 var active_pet_uid := 0
 var pet_instances := {}
 var pet_snapshot_received := false
+var pet_entities := {}
+var stale_pet_entity_frames := 0
 var last_pet_result_sequence := 0
 var last_pet_result_status := -1
 var last_pet_result := {}
@@ -1066,6 +1068,10 @@ func apply_frame(frame: PackedByteArray) -> bool:
 			return _apply_pet_result(frame)
 		WireCodec.OPCODE_PET_SNAPSHOT:
 			return _apply_pet_snapshot(frame)
+		WireCodec.OPCODE_PET_ENTITY_SPAWN:
+			return _apply_pet_entity_spawn(frame)
+		WireCodec.OPCODE_PET_ENTITY_DESPAWN:
+			return _apply_pet_entity_despawn(frame)
 		WireCodec.OPCODE_QUEST_VIEW:
 			return _apply_quest_view(frame)
 		WireCodec.OPCODE_WORLD_READY:
@@ -1354,6 +1360,8 @@ func snapshot() -> Dictionary:
 		"active_pet_uid": active_pet_uid,
 		"pet_instances": pet_instances.duplicate(true),
 		"pet_snapshot_received": pet_snapshot_received,
+		"pet_entities": pet_entities.duplicate(true),
+		"stale_pet_entity_frames": stale_pet_entity_frames,
 		"last_pet_result_sequence": last_pet_result_sequence,
 		"last_pet_result_status": last_pet_result_status,
 		"last_pet_result": last_pet_result.duplicate(true),
@@ -1604,6 +1612,8 @@ func _reset_character_pet_state() -> void:
 	active_pet_uid=0
 	pet_instances.clear()
 	pet_snapshot_received=false
+	pet_entities.clear()
+	stale_pet_entity_frames=0
 	last_pet_result_sequence=0
 	last_pet_result_status=-1
 	last_pet_result.clear()
@@ -1754,6 +1764,7 @@ func _reset_character_world_state(decoded: Dictionary) -> void:
 	stale_player_identities = 0
 	monsters.clear()
 	ground_drops.clear()
+	pet_entities.clear()
 	last_aoi_tick = -1
 	stale_aoi_events = 0
 	pending_world_ready_ack_epoch = 0
@@ -2303,6 +2314,7 @@ func _apply_world_ready(frame: PackedByteArray) -> bool:
 	player_identities.clear()
 	monsters.clear()
 	ground_drops.clear()
+	pet_entities.clear()
 	# One-shot presentation events are never replayed through a replacement
 	# WorldReady baseline. Sequence memory is retained for same-epoch resync so
 	# a delayed pre-resync visual cannot replay.
@@ -4134,6 +4146,84 @@ func _apply_pet_snapshot(frame:PackedByteArray)->bool:
 	pet_instances=next_pets
 	active_pet_uid=incoming_active
 	pet_snapshot_received=true
+	return true
+
+
+func _apply_pet_entity_spawn(frame:PackedByteArray)->bool:
+	if state!=STATE_IN_WORLD or not world_ready:
+		return fail("pet_entity_spawn_out_of_state")
+	var value:=WireCodec.decode_pet_entity_spawn(frame)
+	if value.is_empty():
+		return fail("invalid_pet_entity_spawn")
+	var disposition:=_check_aoi_generation(
+		int(value.receiver_map_epoch),int(value.server_tick))
+	if disposition<=0:
+		if disposition==0:
+			stale_pet_entity_frames+=1
+		return disposition==0
+	var owner:=int(value.owner_actor_id)
+	var owner_connection:=int(value.owner_connection_epoch)
+	var owner_map_epoch:=int(value.owner_map_epoch)
+	if owner==actor_id:
+		if not self_state.is_empty() and (
+			int(self_state.get("connection_epoch",0))!=owner_connection or
+			int(self_state.get("entity_map_epoch",0))!=owner_map_epoch
+		):
+			return _need_resync("pet_entity_self_generation")
+	else:
+		var remote:Dictionary=entities.get(owner,{})
+		if remote.is_empty():
+			return _need_resync("pet_entity_owner_without_spawn")
+		if (
+			int(remote.get("connection_epoch",0))!=owner_connection or
+			int(remote.get("entity_map_epoch",0))!=owner_map_epoch
+		):
+			return _need_resync("pet_entity_owner_generation")
+	var previous:Dictionary=pet_entities.get(owner,{})
+	if not previous.is_empty():
+		if (
+			int(previous.pet_uid)==int(value.pet_uid) and
+			int(previous.owner_connection_epoch)==owner_connection and
+			int(previous.owner_map_epoch)==owner_map_epoch
+		):
+			stale_pet_entity_frames+=1
+			return true
+		return _need_resync("pet_entity_spawn_without_despawn")
+	pet_entities[owner]=value.duplicate(true)
+	last_aoi_tick=maxi(last_aoi_tick,int(value.server_tick))
+	return true
+
+
+func _apply_pet_entity_despawn(frame:PackedByteArray)->bool:
+	if state!=STATE_IN_WORLD or not world_ready:
+		return fail("pet_entity_despawn_out_of_state")
+	var value:=WireCodec.decode_pet_entity_despawn(frame)
+	if value.is_empty():
+		return fail("invalid_pet_entity_despawn")
+	var disposition:=_check_aoi_generation(
+		int(value.receiver_map_epoch),int(value.server_tick))
+	if disposition<=0:
+		if disposition==0:
+			stale_pet_entity_frames+=1
+		return disposition==0
+	var owner:=int(value.owner_actor_id)
+	var previous:Dictionary=pet_entities.get(owner,{})
+	if previous.is_empty():
+		stale_pet_entity_frames+=1
+		return true
+	var owner_connection:=int(value.owner_connection_epoch)
+	var previous_connection:=int(previous.owner_connection_epoch)
+	if owner_connection<previous_connection:
+		stale_pet_entity_frames+=1
+		return true
+	if (
+		owner_connection!=previous_connection or
+		int(value.owner_map_epoch)!=int(previous.owner_map_epoch) or
+		int(value.pet_uid)!=int(previous.pet_uid)
+	):
+		return _need_resync("pet_entity_despawn_generation")
+	pet_entities.erase(owner)
+	last_aoi_tick=maxi(last_aoi_tick,int(value.server_tick))
 	return true
 
 
