@@ -45,6 +45,7 @@ Godot `WireCodec → WorldState.STATE_CREATING_CHARACTER → ClientSession → S
 - **MVP-AI/COMBAT**：Map13 多種尺寸／行為 Enemy，可站立、獨立 NextDecisionTick、分散巡邏／追擊／脫戰，不集體同步；普攻、單體／範圍技能、Buff、MISS、Death／Respawn、掉落與拾取；Server 判定和多人觀看一致。
 - **MVP-ITEM/ECONOMY**：Map15 NPC 商店／倉庫／銀行／修理、物品 UID／背包／強化／金錢、玩家交易／商店；Map13 地面 Drop/Pickup，含併發拾取、餘額／UID 原子性、重送／非法操作／斷線一致性。
 - **MVP-SYSTEM**：Pet／Mecha 裝備卡片升級、技能效果與 CD、聊天／交易／玩家商店、PvP 原版地圖權限／名稱顏色／GM 指令，兩圖適用場景依原版規則測試，Server Authority 及錯誤／多人競態，好友暫緩。
+  - **PET-AES-LIFECYCLE**：至少一個真 Godot Client 需以正式 AES/Compact Binary 路徑完成 summon，斷線後由 SQLite active state 重登重建 PetSnapshot + owner AOI entity，再 recall 並驗證 durable inactive；DefinitionId/EvolutionId/Level/EXP 不得由 Client 改寫。`19a21ea` 已建立此 Gate 並於 Windows Godot 4.7.2 實測 PASS；它不取代 Pet 多人 observer、HK visual/follow/combat/成長/裝備/卡片與 Mecha 驗收。
 - **MVP-WIRE/SECURITY**：ALT001 方案比較、Godot↔C# golden fixture、header/framing／replay／invalid input、Epoch/Sequence、bounded queue、慢 Client/backpressure、AFK／FPS 0/30/60 還能可靠同步。
 - **MVP-RESOURCE/LOAD**：Map13 同圖逐步到 **20 連線玩家／300 Enemy／500 Drop**（至少兩個真 Godot Client 觀察動畫，Bot 明確標記）；Map15 多玩家互動、兩地圖同時活躍、往返切圖至少 10 次、1/2/4 開、AFK/Unfocus，稀疏／密集 AOI、AI 與 Protocol FPS 影響。量測 bytes/sec、Queue Age、World Tick/Frame P95/P99、Input latency、CPU、Process RSS、Texture/VRAM、GC、載入／釋放與可靠事件；不能將 Bot Server 負載等同所有真 Client 畫面 PASS。
 - **MVP-GATE**：以上全部可重跑且正確性／功能完整度／資源 Gate PASS，Map15／Map13 雙向真實傳點必須完成，ALT001 選型有資料，文件／TODO 跟上後才准宣稱 MVP 完成。
