@@ -83,8 +83,9 @@ internal static class WorldAoiChecks
         var peerSpawn=Drain(aoi,peer);
         Require(ownerSpawn is [var own]&&own.Kind==AoiEventKind.PetSpawn&&
             own.Pet?.PetUid==9001&&own.Pet?.OwnerActorId==owner.ActorId&&
+            own.Pet?.X==owner.X&&own.Pet?.Y==owner.Y&&
             peerSpawn is [var seen]&&seen.Pet==own.Pet&&Drain(aoi,far).Length==0,
-            "pet spawn was not scoped to owner visibility");
+            "pet spawn was not scoped to owner visibility/authoritative position");
 
         var movedPeer=peer with {X=1000,EntityRevision=2};
         Move(aoi,2,movedPeer);
@@ -112,8 +113,9 @@ internal static class WorldAoiChecks
         Life(aoi,4,Join(transferred));
         var transferEvents=Drain(aoi,transferred);
         Require(transferEvents.Any(x=>x.Kind==AoiEventKind.PetSpawn&&
-                x.Pet?.PetUid==9002&&x.Pet?.OwnerMapEpoch==transferred.MapEpoch),
-            "active pet did not heal its owner map generation after transfer");
+                x.Pet?.PetUid==9002&&x.Pet?.OwnerMapEpoch==transferred.MapEpoch&&
+                x.Pet?.X==transferred.X&&x.Pet?.Y==transferred.Y),
+            "active pet did not heal owner generation/spawn position after transfer");
     }
 
     private static void PlayerAttackVisualInterest()

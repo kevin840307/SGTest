@@ -663,7 +663,7 @@ public sealed record PetSnapshotWire(
     long ReceiverMapEpoch,long ActivePetUid,IReadOnlyList<PetSnapshotEntryWire> Pets);
 public readonly record struct PetEntitySpawnWire(
     long ReceiverMapEpoch,long ServerTick,long OwnerActorId,long OwnerConnectionEpoch,
-    long OwnerMapEpoch,long PetUid,int DefinitionId,int Level);
+    long OwnerMapEpoch,long PetUid,int DefinitionId,int Level,float X,float Y);
 public readonly record struct PetEntityDespawnWire(
     long ReceiverMapEpoch,long ServerTick,long OwnerActorId,long OwnerConnectionEpoch,
     long OwnerMapEpoch,long PetUid);

@@ -280,8 +280,8 @@ public sealed class WorldAoi
 
     /// <summary>
     /// Applies committed active-pet identity on the same single AOI owner. Pet
-    /// position is owner-anchored in this slice: observers see the pet exactly
-    /// when they see its owner (the owner always sees its own active pet).
+    /// visibility follows owner visibility; the spawn baseline position comes from
+    /// the authoritative owner snapshot until independent pet movement is added.
     /// </summary>
     public void ApplyPetState(PetWorldStateUpdate update)
     {
@@ -316,9 +316,17 @@ public sealed class WorldAoi
             return;
         }
 
+        double x=0,y=0;
+        if(_entities.TryGetValue(update.OwnerActorId,out var activeOwner)&&
+           activeOwner.ConnectionEpoch==update.OwnerConnectionEpoch&&
+           activeOwner.MapEpoch==update.OwnerMapEpoch)
+        {
+            x=activeOwner.X;
+            y=activeOwner.Y;
+        }
         var next=new PetWorldPresence(
             update.OwnerActorId,update.OwnerConnectionEpoch,update.OwnerMapEpoch,
-            update.PetUid,update.DefinitionId,update.Level);
+            update.PetUid,update.DefinitionId,update.Level,x,y);
         if(!_petsByOwner.ContainsKey(update.OwnerActorId)&&
            TrackedEntityCount>=_limits.MaxEntities)
             throw new AoiBackpressureException("Pet AOI entity capacity exceeded");
@@ -1146,11 +1154,8 @@ public sealed class WorldAoi
             return;
         }
 
-        if(pet.OwnerMapEpoch!=owner.MapEpoch)
-        {
-            pet=pet with {OwnerMapEpoch=owner.MapEpoch};
-            _petsByOwner[owner.ActorId]=pet;
-        }
+        pet=pet with {OwnerMapEpoch=owner.MapEpoch,X=owner.X,Y=owner.Y};
+        _petsByOwner[owner.ActorId]=pet;
 
         bool ownerVisible=observer.Self.ActorId==owner.ActorId&&
             observer.Self.ConnectionEpoch==owner.ConnectionEpoch&&
@@ -1168,7 +1173,10 @@ public sealed class WorldAoi
 
         if(observer.VisiblePets.TryGetValue(owner.ActorId,out var current))
         {
-            if(current==pet)return;
+            // Position changes are not represented as Spawn/Despawn churn. The
+            // future Pet movement delta owns those updates; this slice only gives
+            // a newly visible Pet an authoritative spawn baseline.
+            if(SamePetIdentity(current,pet))return;
             observer.VisiblePets.Remove(owner.ActorId);
             Enqueue(observer,new(AoiEventKind.PetDespawn,tick,
                 observer.Self.MapEpoch,Pet:current));
@@ -1181,6 +1189,14 @@ public sealed class WorldAoi
         Enqueue(observer,new(AoiEventKind.PetSpawn,tick,
             observer.Self.MapEpoch,Pet:pet));
     }
+
+    private static bool SamePetIdentity(PetWorldPresence left,PetWorldPresence right) =>
+        left.OwnerActorId==right.OwnerActorId&&
+        left.OwnerConnectionEpoch==right.OwnerConnectionEpoch&&
+        left.OwnerMapEpoch==right.OwnerMapEpoch&&
+        left.PetUid==right.PetUid&&
+        left.DefinitionId==right.DefinitionId&&
+        left.Level==right.Level;
 
     private bool Within(ActorSnapshot viewer, ActorSnapshot actor, bool alreadyVisible)
     {

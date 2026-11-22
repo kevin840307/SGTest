@@ -5,13 +5,13 @@ using SGTest.Server.Wire;
 namespace SGTest.Server.Pet;
 
 /// <summary>
-/// Minimal authoritative world identity for an active pet. Position is intentionally
-/// owner-anchored in this slice; independent follow offsets/pathing/combat remain a
-/// later source-backed behavior gate rather than being guessed here.
+/// Authoritative world identity for an active pet. X/Y is the server-owned spawn
+/// baseline only; independent movement/follow/pathing/combat remains a later
+/// source-backed behavior gate rather than being guessed here.
 /// </summary>
 public readonly record struct PetWorldPresence(
     long OwnerActorId,long OwnerConnectionEpoch,long OwnerMapEpoch,
-    long PetUid,int DefinitionId,int Level);
+    long PetUid,int DefinitionId,int Level,double X,double Y);
 
 public readonly record struct PetWorldStateUpdate(
     long OwnerActorId,long OwnerConnectionEpoch,long OwnerMapEpoch,

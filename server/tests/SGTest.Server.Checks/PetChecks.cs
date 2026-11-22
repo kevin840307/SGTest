@@ -38,11 +38,19 @@ internal static class PetChecks
             decodedSnapshot.Pets.Count==2&&decodedSnapshot.Pets[1].Experience==1234,
             "pet snapshot wire roundtrip failed");
 
-        var spawn=new PetEntitySpawnWire(7,42,1001,11,4,102,5002,7);
+        var spawn=new PetEntitySpawnWire(7,42,1001,11,4,102,5002,7,24f,36f);
         Checks.Require(WireProtocol.TryDecodePetEntitySpawn(
             WireProtocol.EncodePetEntitySpawn(spawn),out var decodedSpawn)&&
             decodedSpawn==spawn,
             "pet AOI spawn wire roundtrip failed");
+        bool invalidPositionRejected=false;
+        try
+        {
+            WireProtocol.EncodePetEntitySpawn(spawn with {X=float.NaN});
+        }
+        catch(ArgumentOutOfRangeException){invalidPositionRejected=true;}
+        Checks.Require(invalidPositionRejected,
+            "pet AOI spawn accepted non-finite authoritative position");
         var despawn=new PetEntityDespawnWire(7,43,1001,11,4,102);
         Checks.Require(WireProtocol.TryDecodePetEntityDespawn(
             WireProtocol.EncodePetEntityDespawn(despawn),out var decodedDespawn)&&

@@ -5,7 +5,7 @@ const State = preload("res://world/world_state.gd")
 const COMMAND_HEX := "1d00000001006f00070000000000000001000000016500000000000000"
 const RESULT_HEX := "2600000001007000070000000000000001000000010065000000000000006500000000000000"
 const SNAPSHOT_HEX := "4a0000000100710007000000000000006600000000000000020065000000000000008913000004000000580000000000000066000000000000008a13000007000000d204000000000000"
-const PET_SPAWN_HEX := "400000000100720007000000000000002a00000000000000e9030000000000000b00000000000000040000000000000066000000000000008a13000007000000"
+const PET_SPAWN_HEX := "480000000100720007000000000000002a00000000000000e9030000000000000b00000000000000040000000000000066000000000000008a130000070000000000c04100001042"
 const PET_DESPAWN_HEX := "380000000100730007000000000000002b00000000000000e9030000000000000b0000000000000004000000000000006600000000000000"
 
 func _initialize() -> void:
@@ -25,8 +25,11 @@ func _initialize() -> void:
 		_fail("pet snapshot golden rejected")
 		return
 	var spawn := Codec.decode_pet_entity_spawn(PET_SPAWN_HEX.hex_decode())
-	if spawn.is_empty() or spawn.owner_actor_id != 1001 or spawn.pet_uid != 102 or spawn.definition_id != 5002:
-		_fail("pet AOI spawn golden rejected")
+	if (
+		spawn.is_empty() or spawn.owner_actor_id != 1001 or spawn.pet_uid != 102 or
+		spawn.definition_id != 5002 or spawn.x != 24.0 or spawn.y != 36.0
+	):
+		_fail("pet AOI spawn golden/position rejected")
 		return
 	var despawn := Codec.decode_pet_entity_despawn(PET_DESPAWN_HEX.hex_decode())
 	if despawn.is_empty() or despawn.owner_actor_id != 1001 or despawn.pet_uid != 102:
@@ -45,8 +48,9 @@ func _initialize() -> void:
 	if not state.apply_frame(PET_SPAWN_HEX.hex_decode()):
 		_fail("pet AOI spawn reducer failed")
 		return
-	if int(state.snapshot().pet_entities[1001].pet_uid) != 102:
-		_fail("pet AOI spawn state missing")
+	var pet_entity:Dictionary = state.snapshot().pet_entities[1001]
+	if int(pet_entity.pet_uid) != 102 or float(pet_entity.x) != 24.0 or float(pet_entity.y) != 36.0:
+		_fail("pet AOI spawn state/position missing")
 		return
 	if not state.apply_frame(PET_DESPAWN_HEX.hex_decode()) or not state.snapshot().pet_entities.is_empty():
 		_fail("pet AOI despawn reducer failed")

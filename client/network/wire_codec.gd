@@ -150,7 +150,7 @@ const PET_SNAPSHOT_HEADER_BYTES := 26
 const PET_SNAPSHOT_ENTRY_BYTES := 24
 const PET_MAX_INSTANCES := 64
 const PET_SNAPSHOT_MAX_FRAME_BYTES := PET_SNAPSHOT_HEADER_BYTES + PET_MAX_INSTANCES * PET_SNAPSHOT_ENTRY_BYTES
-const PET_ENTITY_SPAWN_FRAME_BYTES := 64
+const PET_ENTITY_SPAWN_FRAME_BYTES := 72
 const PET_ENTITY_DESPAWN_FRAME_BYTES := 56
 const LEGACY_CHARACTER_APPEARANCE_BYTES := 4
 const BODY_LEG_CHARACTER_APPEARANCE_BYTES := 6
@@ -2607,10 +2607,13 @@ static func decode_pet_entity_spawn(frame:PackedByteArray)->Dictionary:
 	var pet_uid:=reader.get_64()
 	var definition_id:=reader.get_32()
 	var level:=reader.get_32()
+	var x:=reader.get_float()
+	var y:=reader.get_float()
 	if (
 		epoch<=0 or tick<0 or owner_actor<=0 or owner_connection<=0 or
 		owner_map_epoch<=0 or pet_uid<=0 or definition_id<=0 or
 		definition_id>100000000 or level<=0 or level>1000000 or
+		not is_finite(x) or not is_finite(y) or x<0 or y<0 or
 		reader.get_available_bytes()!=0
 	):
 		return {}
@@ -2618,7 +2621,7 @@ static func decode_pet_entity_spawn(frame:PackedByteArray)->Dictionary:
 		"receiver_map_epoch":epoch,"server_tick":tick,
 		"owner_actor_id":owner_actor,"owner_connection_epoch":owner_connection,
 		"owner_map_epoch":owner_map_epoch,"pet_uid":pet_uid,
-		"definition_id":definition_id,"level":level
+		"definition_id":definition_id,"level":level,"x":x,"y":y
 	}
 
 
