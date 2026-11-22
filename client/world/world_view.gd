@@ -8,6 +8,7 @@ const TerrainData = preload("res://map/terrain_data.gd")
 const Terrain = preload("res://map/terrain.gd")
 const DrawList = preload("res://world/world_draw_list.gd")
 const Players = preload("res://player/player_presentation.gd")
+const LocalMovement = preload("res://movement/local_movement.gd")
 const AppearanceProfile = preload("res://player/character_appearance_profile.gd")
 const Monsters = preload("res://monster/monster_presentation.gd")
 const Npcs = preload("res://npc/npc_presentation.gd")
@@ -29,6 +30,8 @@ var _last_update := -1
 var _last_rect := Rect2()
 var show_players := false
 var players := Players.new()
+var local_movement := LocalMovement.new()
+var _prediction_applied := false
 var monsters := Monsters.new()
 var npcs := Npcs.new()
 var pvp_names := PvpNames.new()
@@ -121,6 +124,8 @@ func clear_map(retain_cache: bool = false) -> void:
 	_terrain.configure(null)
 	draw_list.clear()
 	players.clear()
+	local_movement.clear()
+	_prediction_applied = false
 	monsters.clear()
 	npcs.clear()
 	pvp_names.clear()
@@ -142,6 +147,37 @@ func clear_map(retain_cache: bool = false) -> void:
 	map_id = 0
 	if phase != "closed":
 		phase = "empty"
+
+
+func begin_local_move(target: Vector2, expected_sequence: int) -> bool:
+	if phase != "ready" or not show_players or not local_movement.request_target(target,expected_sequence):
+		return false
+	players.set_local_visual(local_movement.actor_id,local_movement.position,
+		local_movement.moving,local_movement.facing,Time.get_ticks_usec())
+	_prediction_applied = true
+	return true
+
+
+func stop_local_move() -> void:
+	if local_movement.active:
+		local_movement.stop()
+		players.set_local_visual(local_movement.actor_id,local_movement.position,
+			false,local_movement.facing,Time.get_ticks_usec())
+		_prediction_applied = true
+
+
+func _physics_process(delta: float) -> void:
+	if phase != "ready" or not show_players or _player_snapshot.is_empty() or not local_movement.ready:
+		return
+	local_movement.advance(delta)
+	if local_movement.active:
+		players.set_local_visual(local_movement.actor_id,local_movement.position,
+			local_movement.moving,local_movement.facing,Time.get_ticks_usec())
+		_prediction_applied = true
+	elif _prediction_applied:
+		players.clear_local_visual()
+		players.apply_snapshot(_player_snapshot,Time.get_ticks_usec())
+		_prediction_applied = false
 
 
 func resize_view(size: Vector2i) -> Error:
@@ -328,6 +364,11 @@ func _process(_delta: float) -> void:
 		if show_players and not _player_snapshot.is_empty():
 			camera.set_focus(epoch,Vector2(_player_snapshot.x,_player_snapshot.y))
 		_terrain.configure(data)
+		if show_players and not _player_snapshot.is_empty():
+			var blocking: Variant = _map.get("extra",{}).get("blocking",PackedByteArray())
+			if blocking is PackedByteArray and local_movement.configure(
+					blocking,_map.manifest,int(_player_snapshot.map_epoch),int(_player_snapshot.actor_id)):
+				local_movement.observe(_player_snapshot)
 		_started_at = Time.get_ticks_msec()
 		phase = "ready"
 		status_changed.emit("地圖 " + str(map_id) + "｜地圖檢視・尚未連線")
@@ -436,7 +477,13 @@ func set_player_snapshot(snapshot: Dictionary) -> void:
 			_fail("角色外觀素材載入失敗")
 			return
 		var now_usec := Time.get_ticks_usec()
+		if local_movement.ready:
+			local_movement.observe(snapshot)
 		players.apply_snapshot(snapshot,now_usec)
+		if local_movement.active:
+			players.set_local_visual(local_movement.actor_id,local_movement.position,
+				local_movement.moving,local_movement.facing,now_usec)
+			_prediction_applied = true
 		pvp_names.apply_snapshot(snapshot,now_usec)
 		if monsters.apply_snapshot(snapshot,now_usec) != OK:
 			_fail("怪物狀態與地圖素材不一致")

@@ -8,6 +8,10 @@ const PARTS = Profile.BASE_PARTS
 # SGTest's shared paper-doll walk cadence to 10 FPS after gameplay feedback.
 # No change to world movement, network tick or server authority.
 const WALK_FRAME_USEC := 100000
+# Peer walking remains visual-only. Keep playing through short AOI gaps
+# instead of waiting on every authoritative coordinate update.
+const REMOTE_MAX_PREDICTION_TICKS := 4.0
+const REMOTE_MAX_PREDICTION_PIXELS := 32.0
 var _views: Dictionary = {}
 var _profiles: Dictionary = {}
 var _default_profile_key := "0:0:0:0:0:0"
@@ -17,6 +21,7 @@ var _seen_damage_events := {}
 var _seen_respawn_events := {}
 var _epoch := 0
 var _map := 0
+var _local_visual: Dictionary = {} # own actor presentation only; never authoritative
 
 func clear() -> void:
 	_views.clear()
@@ -28,6 +33,7 @@ func clear() -> void:
 	_seen_respawn_events.clear()
 	_epoch = 0
 	_map = 0
+	_local_visual.clear()
 
 func configure(assets: Dictionary, appearance: Dictionary = {}) -> Error:
 	clear()
@@ -75,6 +81,9 @@ func apply_snapshot(snapshot: Dictionary, now_usec: int) -> void:
 		_epoch = epoch
 		_map = map
 	var own: Dictionary = snapshot.self_state.duplicate()
+	if not own.is_empty() and not _local_visual.is_empty() and int(_local_visual.get("actor_id",0)) == int(snapshot.actor_id):
+		own["moving"] = bool(_local_visual.moving)
+		own["facing"] = int(_local_visual.facing)
 	if own.is_empty():
 		own = {"actor_id":snapshot.actor_id,"connection_epoch":0,"entity_map_epoch":epoch,
 			"x":snapshot.x,"y":snapshot.y,"facing":snapshot.facing,"moving":false,
@@ -295,6 +304,27 @@ func apply_snapshot(snapshot: Dictionary, now_usec: int) -> void:
 			actor.started = now_usec
 			_actors[revived] = actor
 
+func set_local_visual(own_actor: int, pos: Vector2, is_moving: bool, heading: int, now_usec: int) -> void:
+	if own_actor <= 0 or not pos.is_finite() or heading < 1 or heading > 8:
+		return
+	_local_visual = {"actor_id":own_actor,"position":pos,"moving":is_moving,"facing":heading}
+	if not _actors.has(own_actor):
+		return
+	var actor: Dictionary = _actors[own_actor]
+	var old_move := bool(actor.value.moving)
+	actor.value["moving"] = is_moving
+	actor.value["facing"] = heading
+	if str(actor.action) in ["NS","NR"]:
+		if is_moving and not old_move:
+			actor.walk_started = now_usec
+		actor.action = "NR" if is_moving else "NS"
+		actor.action_facing = heading
+	_actors[own_actor] = actor
+
+func clear_local_visual() -> void:
+	_local_visual.clear()
+
+
 func _one_shot_active(actor: Dictionary,action: String,available: bool,now_usec: int) -> bool:
 	if not available or str(actor.get("action","")) != action:
 		return false
@@ -334,7 +364,7 @@ func actors_at(now_usec: int) -> Array:
 				action = "NR" if bool(value.moving) else "NS"
 				facing = int(value.facing)
 				elapsed = 0
-		# Exactly 8 FPS for walk, matching Recovered2 AnimatedSprite2D.
+		# SGTest uses a fixed 10 FPS walk cadence; independent from motion packets.
 		# Preserve this clock during turns, re-paths and temporary AA/NH.
 		var walk_elapsed_usec := maxi(0,now_usec-int(actor.get("walk_started",actor.started)))
 		var requested := action+str(facing)
@@ -363,7 +393,7 @@ func actors_at(now_usec: int) -> Array:
 					"frame":overlay_view.timeline.frame_at_uniform_cadence(walk_elapsed_usec,WALK_FRAME_USEC) if action == "NR" else overlay_view.timeline.frame_at_update(elapsed),
 					"flip_h":overlay_view.view.flip_h,"part_slot":logical_slot,
 					"palette_index":int(overlay[2]) if overlay.size()>2 else 0})
-		var sampled: Vector2 = actor.history.sample(now_usec)
+		var sampled: Vector2 = Vector2(_local_visual.position) if int(_local_visual.get("actor_id",0)) == int(id) else actor.history.sample(now_usec,PositionHistory.DEFAULT_DELAY_TICKS,REMOTE_MAX_PREDICTION_TICKS,REMOTE_MAX_PREDICTION_PIXELS)
 		if not sampled.is_finite():
 			sampled = Vector2(float(value.x),float(value.y))
 		result.append({"id":str(id),"p":sampled,"parts":parts})
@@ -374,5 +404,5 @@ func position_at(actor_id: int, now_usec: int) -> Vector2:
 	var actor: Dictionary = _actors.get(actor_id,{})
 	if actor.is_empty():
 		return Vector2.INF
-	var sampled: Vector2 = actor.history.sample(now_usec)
+	var sampled: Vector2 = Vector2(_local_visual.position) if int(_local_visual.get("actor_id",0)) == actor_id else actor.history.sample(now_usec,PositionHistory.DEFAULT_DELAY_TICKS,REMOTE_MAX_PREDICTION_TICKS,REMOTE_MAX_PREDICTION_PIXELS)
 	return sampled if sampled.is_finite() else Vector2(float(actor.value.x),float(actor.value.y))

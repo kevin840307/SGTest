@@ -1,5 +1,6 @@
 extends SceneTree
 const Players = preload("res://player/player_presentation.gd")
+const Appearance = preload("res://player/character_appearance_profile.gd")
 
 func _initialize() -> void:
 	build.call_deferred()
@@ -48,7 +49,12 @@ func build() -> void:
 
 	var catalog_assets := {}
 	var part_index := 0
-	for part in Players.PARTS.values():
+	# Online fixture must include the SAME default starter clothing overlays
+	# as production (body, shorts and both sleeve layers), not only bare limbs.
+	var default_profile: Dictionary = Appearance.definition({})
+	var source_parts: Array = default_profile.parts.values()
+	source_parts.append_array(default_profile.overlays.values())
+	for part in source_parts:
 		var asset_id := str(part[0])
 		var label := str(part[1])
 		var directory := assets_root.path_join(asset_id)

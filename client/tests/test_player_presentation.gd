@@ -53,6 +53,28 @@ func run() -> void:
 	remote.y=20.0
 	var snapshot := {"world_ready":true,"map_epoch":1,"map_id":15,"actor_id":1,"x":10.0,"y":10.0,"facing":6,"self_state":own,"entities":{2:remote},"last_aoi_tick":1}
 	players.apply_snapshot(snapshot,0)
+	# The local avatar is presented from locally predicted position; remote
+	# avatars independently continue walking on their last known velocity.
+	var prediction_probe := Players.new()
+	check(prediction_probe.configure(assets)==OK,"prediction probe configure")
+	var probe_snapshot := snapshot.duplicate(true)
+	prediction_probe.apply_snapshot(probe_snapshot,0)
+	probe_snapshot.entities[2].x=18.0
+	probe_snapshot.entities[2].server_tick=2
+	prediction_probe.apply_snapshot(probe_snapshot,33333)
+	var known_remote: Vector2 = prediction_probe.position_at(2,33333)
+	prediction_probe.set_local_visual(1,Vector2(60,10),true,3,50000)
+	var predicted_own: Vector2 = prediction_probe.position_at(1,200000)
+	var predicted_remote: Vector2 = prediction_probe.position_at(2,200000)
+	check(predicted_own==Vector2(60,10),"owner view waited for authoritative SelfState")
+	check(predicted_remote.x>18.0 and predicted_remote.x<=50.01 and predicted_remote.x>=known_remote.x,
+		"remote stopped walking between received AOI positions")
+	check(int(prediction_probe.actors_at(200000).filter(func(v):return str(v.id)=="1")[0].p.x)==60,
+		"paper doll ignored own local position")
+	check(probe_snapshot.self_state.x==10.0,"visual prediction mutated source authority")
+	prediction_probe.clear_local_visual()
+	check(prediction_probe.position_at(1,200000).distance_to(Vector2(10,10))<2.0,
+		"clearing own prediction kept stale position")
 	# Recovered2's 8 FPS shared paper-doll timing is the baseline, but
 	# SGTest runs 10 FPS for a more readable stride; no 50Hz ACT drift.
 	# A variable raw ACT duration in B-LEG must not desynchronize the legs.

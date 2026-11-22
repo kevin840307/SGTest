@@ -135,9 +135,20 @@ func _online_gate_actor() -> void:
 	if _online_gate_phase == 0:
 		if _online_gate_ready(15):
 			print("ONLINE_MAIN_GATE_READY role=actor")
-			if not _app.session_panel.submit_move(Vector2(808,808)):
-				_online_gate_fail("move_enqueue")
+			# Drive the same terrain-click path as gameplay: start prediction
+			# synchronously and leave the Server authoritative MoveTarget queued.
+			var own_id := int(_app._last_snapshot.get("actor_id",0))
+			var before := _app.world_view.players.position_at(own_id,Time.get_ticks_usec())
+			_app._begin_ground_navigation(Vector2(808,808),Time.get_ticks_msec())
+			if not _app.world_view.local_movement.active:
+				_online_gate_fail("local_prediction_not_started_ready_%s_pos_%s_phase_%s_own_%s" % [str(_app.world_view.local_movement.ready),str(_app.world_view.local_movement.position),str(_app.world_view.phase),str(_app._last_snapshot.get("self_state",{}))])
 				return
+			_app.world_view.local_movement.advance(1.0/60.0)
+			var ahead := _app.world_view.local_movement.position
+			if not ahead.is_finite() or ahead.distance_to(before)<=0.01:
+				_online_gate_fail("local_move_waited_for_server")
+				return
+			print("ONLINE_MAIN_GATE_LOCAL_MOVE role=actor pre_server_receipt=true")
 			_online_gate_phase = 1
 		return
 	if _online_gate_phase == 1:

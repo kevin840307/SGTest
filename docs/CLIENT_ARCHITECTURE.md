@@ -1,5 +1,14 @@
 # SGTest Client — 重建設計
 
+## 2026-11-22 — 本地立即走路與其他玩家封包間補步（Client-side prediction first slice）
+
+- **原版參考與選擇**：Recovered 主角每個 physics frame 本地位移、約50ms上報 SyncPosition；二創的遠端玩家收到 Server MoveEntity 座標、方向和時間，在自己 Client 繼續走路而非每個 Render frame 等封包。SGTest 保留既有 Compact Binary `MoveTarget(map_epoch,seq,target)` 與 Server 30Hz 權威 A*（`server/Map/MapNavigator.cs`）；Client 本次不宣告自己報送的座標合法，也不模擬遠端戰鬥、傳點、交易。
+- **自己的呈現路徑**：`client/movement/local_movement.gd` 直接重用 AssetStore 驗證過 SHA256 的每圖 `blocking.dat` bytes，16px 原始 collision grid、同 Server 的八方向 A*（2048 expanded／禁止 diagonal corner cutting）、最多6路點可視前瞻和每一步超級覆蓋檢查。原本 `App` 點地面先經 `SessionPanel` 有界佇列送一筆 MoveTarget，隨即在 `WorldView.begin_local_move()` 以 240px/s、固定 physics delta 推進紙娃娃和相機；不新增每影格 Move 封包。長按仍依既有 80ms／24px 間距與 Server 回覆節流，同目的地 cell 不中斷本地步伐。
+- **權威校正／防呆**：WorldState 是唯一合法角色狀態；此路徑只覆寫 PlayerPresentation 的自有角色顯示位置、方向與 NR/NS 播放，不影響攻擊、碰撞權限、物品或交易。MapEpoch/ActorId 變更、Map clear、停止、死亡、拒絕／失敗 receipt 各有清理或 rollback；WorldReady 有合法出生位置但 SelfState 尚未到達時也可立即初始化；未收到該移動命令 ACK 時，不能用較舊 SelfState 把已開始走路的圖像拉回。已確認命令下，24px 內視覺不校正，24–96px 漸進修正，>96px 立即重設至權威座標並重新求路。這些數值是初步顯示策略，不是作弊容忍距離。
+- **其他玩家**：`PositionHistory` 現有 2.5tick 平滑緩衝及連續時鐘保留；針對 PlayerPresentation 的 *remote player* 單獨放寬為最多 4 ticks／32px 的有限畫面外推（速度仍限制8px/Server tick），沒有新封包會在上限停住，收到停止、傳點、傷害／死亡／新方向仍優先 Server。自己已使用完整本地 A*，其他玩家尚無 final destination wire，並未聲稱每個他人角色都能憑最後目的地自走整條 A*。
+- **正式待完成**：目前 Server 仍依權威位移修訂送 SelfState/EntityDelta（最多30Hz），尚**未**改成「PeerMovementStart(goal/path/speed) + Stop + 低頻校正」。要真的減少多人下行封包，需原子地改 AOI 出入視野新進觀眾 mid-route、重連、stop/attack/map epoch 可靠事件與 WorldState revision/gap contract，並用 2/20 人、300 怪和不同封包延遲公平實測，不可直接丟掉 EntityDelta 或越權。
+- **驗收**：Godot `test_local_movement.gd` 覆蓋無Server新封包走路、真實 grid bytes 格式、A*繞障、斜角防撞、被拒 rollback、未 ACK 老SelfState防回拉和方向防抖；`test_player_presentation.gd` 驗證自己的預測不污染 Server snapshot、他人在短 AOI 缺口持續步行及 32px 上限、NR/AA/NH／紙娃娃層；`test_position_history.gd`、`test_world_camera.gd`、`test_client_fps_independence.gd` PASS。另 `run_online_main_gate.py` 使用 UTF-8 在 Windows 啟動兩個真正 Godot main + .NET Host，**從正常主場景點地面路徑驗證收到 Server ACK 前自己的局部位置就已改變**，之後合成素材雙圖 Map15↔Map13 + AOI Spawn/Delta/Despawn + camera + resource release PASS；因袖子外觀新增，同步補正合成測試 PCK 的 starter clothing overlays。**私人原始 Map15/13 長時間走路、多人真 GPU 視覺／P95 和離線無登入仍走路 NOT VERIFIED。**
+
 **狀態：單一 AssetStore／Terrain／Scenery、threaded TLS／WorldState 與登入 UI 已實作；目前新增暫定 B 基礎玩家呈現與相機跟隨。平滑內插、正式外觀裝備、戰鬥及完整多人視覺 Gate 仍未完成。** 目標 Godot 4.7.2 / GDScript；功能導向的單一 Godot 專案。
 
 ## Recovered2 本機登入／選角／創角參考皮膚（2026-11-21）

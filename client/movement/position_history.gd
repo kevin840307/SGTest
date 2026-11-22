@@ -56,8 +56,10 @@ func push(server_tick: int, position: Vector2, arrival_usec: int,
 		_samples.pop_front()
 	return true
 
-func sample(now_usec: int, delay_ticks := DEFAULT_DELAY_TICKS) -> Vector2:
-	if _samples.is_empty() or now_usec < 0 or delay_ticks < 0.0 or delay_ticks > 8.0:
+func sample(now_usec: int, delay_ticks := DEFAULT_DELAY_TICKS,
+		prediction_ticks := MAX_PREDICTION_TICKS,
+		prediction_pixels := MAX_PREDICTION_PIXELS) -> Vector2:
+	if _samples.is_empty() or now_usec < 0 or delay_ticks < 0.0 or delay_ticks > 8.0 or prediction_ticks < 0.0 or prediction_ticks > 4.0 or prediction_pixels < 0.0 or prediction_pixels > 32.0:
 		return Vector2.INF
 	if _samples.size() == 1:
 		if is_inf(_last_target_tick):
@@ -76,8 +78,9 @@ func sample(now_usec: int, delay_ticks := DEFAULT_DELAY_TICKS) -> Vector2:
 		_last_target_tick = maxf(_last_target_tick,candidate)
 	# Recovered keeps drawing locally between packets, then accepts delayed
 	# authoritative corrections. Never run indefinitely on an old velocity:
-	# only a confirmed moving actor may lead by <=1.5 server ticks / 12 px.
-	var prediction_limit := MAX_PREDICTION_TICKS if bool(latest.get("moving",false)) else 0.0
+	# Only confirmed moving actors may lead. The owner defaults to 1.5 ticks / 12 px;
+	# observer presentation may request up to 4 ticks / 32 px for AOI gaps.
+	var prediction_limit := prediction_ticks if bool(latest.get("moving",false)) else 0.0
 	_last_target_tick = minf(_last_target_tick,float(latest.tick)+prediction_limit)
 	var target := _last_target_tick
 	if target > float(latest.tick):
@@ -88,7 +91,7 @@ func sample(now_usec: int, delay_ticks := DEFAULT_DELAY_TICKS) -> Vector2:
 		var step := (Vector2(latest.p)-Vector2(prior.p))/interval
 		step = step.limit_length(MAX_PREDICTED_SPEED_PER_TICK)
 		return Vector2(latest.p)+(
-			step*(target-float(latest.tick))).limit_length(MAX_PREDICTION_PIXELS)
+			step*(target-float(latest.tick))).limit_length(prediction_pixels)
 	if target <= float(_samples[0].tick):
 		return Vector2(_samples[0].p)
 	for i in range(1,_samples.size()):

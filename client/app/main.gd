@@ -591,6 +591,9 @@ func _submit_autorun_target(point: Vector2,now_msec: int,was_stopped: bool) -> b
 	if not session_panel.submit_move(point):
 		return false
 	_autorun_waiting_sequence_floor = sequence_floor
+	# Start local collision-checked movement immediately; MoveTarget still goes
+	# through ClientSession to the authoritative Server, never every frame.
+	world_view.begin_local_move(point,sequence_floor+1)
 	_mouse_autorun.note_request(point,now_msec,was_stopped)
 	return true
 
@@ -602,6 +605,7 @@ func _cancel_mouse_autorun(stop_movement: bool) -> void:
 	_autorun_waiting_sequence_floor = -1
 	_autorun_last_blocked_sequence = 0
 	if stop_movement and was_active and session_panel.active:
+		world_view.stop_local_move()
 		session_panel.submit_stop_movement()
 
 

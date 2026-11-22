@@ -1,5 +1,9 @@
 # SGTest 新版重建 TODO（2026-11-15）
 
+- PLAYER-LOCAL-MOVEMENT-PREDICTION [ ] 2026-11-22：已加入 Client local_movement.gd 讀取已驗證的 Blocking.dat，本地八方向 2048-expanded A*、防斜角穿牆、固定 240px/s、6-cell Lookahead；點地板先將 MoveTarget 入列隨即本地移動與相機/紙娃娃呈現、Server 權威收到拒絕與超出24/96px偏差時校正；重派路/停止/換圖清理。Godot local/test_player_presentation/position_history/Camera/FPS PASS、真雙 Godot Host+合成雙地圖和 AOI E2E PASS。真私有資產 GPU、斷線後仍能走路（未完成 offline play）、長期延遲/人數壓測 NOT VERIFIED。
+
+- PLAYER-REMOTE-MOVE-INTENT-AOI [ ] 2026-11-22：參照原版／二創 MoveEntity 由 Client 自行步行；這輪僅把 *其他玩家* 的 PositionHistory 補間外推限制由1.5tick/12px獨立延長到4tick/32px，在短快照缺口保持移動、停止/異常仍收斂權威位置，並新增回歸。**真正「只收到其他人目標/路線與停步」與Server降低每Tick EntityDelta數量尚未實作**：須連同合法 Server Route 事件、AOI mid-route snapshot、可靠事件屏障、revision gap、重連／換圖、多人大壓測一起設計；不能誤宣稱已省下行流量。
+
 - PLAYER-WALK-FACING-BOUNDARY [ ] 2026-11-22：某斜角人物8方向圖反覆切換；追查 ServerWorld 原本逐A*路點直接 atan2 round(45°)，比對二創連續速度向量，新增上一個方位±30°容忍、即原22.5°加7.5°遲滯，E/SE與E/NE邊界反覆重派路不再跳幀，明顯轉彎立即改圖；16項 `--movement-only` World + Facing PASS。**全套Server受並行創角袖子sleeve_color schema未合入影響，不認定PASS；既有本機7778 Server仍是舊binary，需重啟才能觀察結果。**
 
 - PLAYER-WALK-ANIMATION-SPEED-TUNING [ ] 2026-11-22：使用者實機回饋8FPS人物步伐仍慢；比對二創 Recovered2 紙娃娃 8FPS 與原版 Paradise.exe.lst xnAction（50Hz更新，可變速度，不等於8FPS），只提高 SGTest NR 走路 **8→10FPS（125ms→100ms/圖，+25%）**；不改位移、Server同步或碰撞。所有部件包含新袖子共享 walk 時鐘；方向、重派路、攻擊恢復、停走重啟與 ACT 長短不一致的回歸測試 PASS。待玩家實際走路主觀觀感確認。
