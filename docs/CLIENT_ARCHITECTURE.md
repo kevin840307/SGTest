@@ -426,7 +426,7 @@ The real Godot↔C# fixture now proves WorldReady reaches the threaded ClientSes
 
 ### MVP003-LOGIN-UI（2026-11-16）
 
-`ui/session_panel.gd`是現行ClientSession的UI adapter：登入／列表選角／登出；沿用憑證驗證、bounded intents與獨立transport/reducer threads。UI每50ms只讀snapshot，沒有在_process消化封包。main把WorldReady映射到唯一WorldView／AssetStore載入世代，地圖就緒後才定位Server提供的初始座標；連線時停用並守衛本地檢視Map按鈕，左鍵移動交給Server。Server MapEpoch與資源owner epoch保持分開。取消／錯誤／Scene退出停止Session，提交密碼立即從UI清除。
+`ui/session_panel.gd`是現行ClientSession的UI adapter：登入／列表選角／登出；沿用憑證驗證、bounded intents與獨立transport/reducer threads。UI每50ms只讀snapshot，沒有在_process消化封包。main把WorldReady映射到唯一WorldView／AssetStore載入世代，地圖就緒後才定位Server提供的初始座標；連線時停用並守衛本地檢視Map按鈕，左鍵移動交給Server。Server MapEpoch與資源owner epoch保持分開。取消／錯誤／Scene退出停止Session；帳號密碼與角色第二密碼提交後立即從UI清除。ClientSession 為支援同一角色的自動重連，只在目前 Session 記憶體保留可覆寫/清零的 credential bytes，不把第二密碼放入 WorldState/snapshot；重連 CharacterChoose 必須重新帶同一 proof，stop/failure/scene exit 會與帳號 credential 一起清零。
 
 真Godot main UI→正式C# TLS fixture的 Auth／選角／WorldReady／MoveReceipt／logout PASS；登入面板現亦提供遊戲內創角 slot/name 控制，送出後鎖定直到 Server result/list refresh。CharacterCreate codec/reducer/UI boundary 與 Server 真 TLS empty-account create→conflict→refresh→choose Gate 均已通過。尚缺原版創角 Race/Career／外觀／能力值與預設出生規則、玩家完整 Paper-doll／真私有地圖多人視覺等，不因此切片標 MVP 完成。
 
