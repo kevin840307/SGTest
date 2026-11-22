@@ -27,6 +27,10 @@ var _host := ""
 var _port := 0
 var _username := ""
 var _credential_bytes := PackedByteArray()
+# Session-scoped secondary character proof. Like the account credential, keep
+# only zeroable bytes so automatic reconnect can authenticate the same selected
+# character without weakening the Server's password gate.
+var _character_credential_bytes := PackedByteArray()
 var _register_first := false
 var _selected_character_id := 0
 var _has_entered_world := false
@@ -1036,8 +1040,10 @@ func _start_reconnect_attempt() -> bool:
 	return true
 
 func _process_reconnect_choose() -> void:
-	# A new connection requires a fresh secondary proof. Never retain it for
-	# reconnect or repeatedly submit proof-free frames after PasswordRequired.
+	# A reconnect is a new authenticated connection generation, but the active
+	# ClientSession must still prove the same selected character. Reuse only the
+	# zeroable in-memory proof captured by the successful selection intent; it is
+	# never published and is cleared with the account credential on stop/failure.
 	if int(_world.choose_status) in [3, 4, 5]:
 		_mutex.lock()
 		_reconnecting = false
@@ -1053,7 +1059,9 @@ func _process_reconnect_choose() -> void:
 		_world.fail("reconnect_character_missing")
 		_publish()
 		return
-	var frame := WireCodec.encode_character_choose(character_id)
+	var character_password := _character_credential_string()
+	var frame := WireCodec.encode_character_choose(character_id, character_password)
+	character_password = ""
 	if not frame.is_empty() and _transport.send_frame(frame) and _world.mark_choose_sent(character_id):
 		_publish()
 
@@ -1105,6 +1113,14 @@ func _credential_string() -> String:
 	copy.fill(0)
 	return value
 
+func _character_credential_string() -> String:
+	_mutex.lock()
+	var copy := _character_credential_bytes.duplicate()
+	_mutex.unlock()
+	var value := copy.get_string_from_utf8()
+	copy.fill(0)
+	return value
+
 func _clear_credentials() -> void:
 	_mutex.lock()
 	_clear_credentials_locked()
@@ -1114,6 +1130,12 @@ func _clear_credentials_locked() -> void:
 	if not _credential_bytes.is_empty():
 		_credential_bytes.fill(0)
 		_credential_bytes.clear()
+	_clear_character_credential_locked()
+
+func _clear_character_credential_locked() -> void:
+	if not _character_credential_bytes.is_empty():
+		_character_credential_bytes.fill(0)
+		_character_credential_bytes.clear()
 
 func _decorate_snapshot(value: Dictionary) -> Dictionary:
 	value["reconnecting"] = _reconnecting
@@ -1191,11 +1213,16 @@ func _process_first_intent() -> void:
 		if int(_world.state) != WorldState.STATE_SELECTING_CHARACTER:
 			return
 		var character_id := int(intent.character_id)
-		var frame := WireCodec.encode_character_choose(character_id, str(intent.get("character_password", "")))
+		var character_password := str(intent.get("character_password", ""))
+		var frame := WireCodec.encode_character_choose(character_id, character_password)
 		if not frame.is_empty() and _transport.send_frame(frame) and _world.mark_choose_sent(character_id):
+			var character_credential := character_password.to_utf8_buffer()
+			character_password = ""
 			intent.erase("character_password")
 			_mutex.lock()
 			_selected_character_id = character_id
+			_clear_character_credential_locked()
+			_character_credential_bytes = character_credential
 			_mutex.unlock()
 			_pop_intent()
 			_publish()
