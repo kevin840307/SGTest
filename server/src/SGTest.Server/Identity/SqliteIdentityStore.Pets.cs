@@ -15,7 +15,7 @@ public enum PetActionStatus : byte
 public enum PetActionKind : byte { Summon=1, Recall=2, Refresh=3 }
 
 public sealed record PetInstanceRecord(
-    long PetUid,long CharacterId,int DefinitionId,int Level,long Experience,
+    long PetUid,long CharacterId,int DefinitionId,int EvolutionId,int Level,long Experience,
     bool IsActive,byte[] StateBlob);
 
 public sealed record PetActionOutcome(PetActionStatus Status,long ActivePetUid);
@@ -31,12 +31,13 @@ public sealed partial class SqliteIdentityStore
 
     public async Task<long> ProvisionPetAsync(
         long characterId,int definitionId,int level=1,long experience=0,
-        ReadOnlyMemory<byte> stateBlob=default,
+        ReadOnlyMemory<byte> stateBlob=default,int evolutionId=0,
         CancellationToken cancellationToken=default)
     {
         ThrowIfDisposed();
         if(characterId<=0||definitionId is <=0 or >100000000||
-           level is <=0 or >1000000||experience is <0 or >9000000000000000L||
+           evolutionId is <0 or >65535||level is <=0 or >1000000||
+           experience is <0 or >9000000000000000L||
            stateBlob.Length>PetMaximumStateBlobBytes)
             throw new ArgumentOutOfRangeException();
 
@@ -65,11 +66,12 @@ public sealed partial class SqliteIdentityStore
             using var command=connection.CreateCommand();
             command.Transaction=tx;
             command.CommandText=@"INSERT INTO pet_instances(
-character_id,definition_id,level,experience,is_active,state_blob,created_unix_ms,updated_unix_ms)
-VALUES($character,$definition,$level,$experience,0,$state,$now,$now);
+character_id,definition_id,evolution_id,level,experience,is_active,state_blob,created_unix_ms,updated_unix_ms)
+VALUES($character,$definition,$evolution,$level,$experience,0,$state,$now,$now);
 SELECT last_insert_rowid();";
             command.Parameters.AddWithValue("$character",characterId);
             command.Parameters.AddWithValue("$definition",definitionId);
+            command.Parameters.AddWithValue("$evolution",evolutionId);
             command.Parameters.AddWithValue("$level",level);
             command.Parameters.AddWithValue("$experience",experience);
             command.Parameters.Add("$state",SqliteType.Blob).Value=state;
@@ -90,16 +92,16 @@ SELECT last_insert_rowid();";
         {
             using var connection=Open();
             using var command=connection.CreateCommand();
-            command.CommandText=@"SELECT pet_uid,character_id,definition_id,level,experience,is_active,state_blob
+            command.CommandText=@"SELECT pet_uid,character_id,definition_id,evolution_id,level,experience,is_active,state_blob
 FROM pet_instances WHERE character_id=$character ORDER BY pet_uid;";
             command.Parameters.AddWithValue("$character",characterId);
             using var reader=command.ExecuteReader();
             var pets=new List<PetInstanceRecord>();
             while(reader.Read())
                 pets.Add(new(
-                    reader.GetInt64(0),reader.GetInt64(1),reader.GetInt32(2),
-                    reader.GetInt32(3),reader.GetInt64(4),reader.GetInt64(5)!=0,
-                    (byte[])reader[6]));
+                    reader.GetInt64(0),reader.GetInt64(1),reader.GetInt32(2),reader.GetInt32(3),
+                    reader.GetInt32(4),reader.GetInt64(5),reader.GetInt64(6)!=0,
+                    (byte[])reader[7]));
             return (IReadOnlyList<PetInstanceRecord>)pets;
         },cancellationToken).ConfigureAwait(false);
     }

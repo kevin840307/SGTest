@@ -7,11 +7,11 @@ public static partial class WireProtocol
     public const int PetCommandFrameBytes=29;
     public const int PetResultFrameBytes=38;
     public const int PetSnapshotHeaderBytes=26;
-    public const int PetSnapshotEntryBytes=24;
+    public const int PetSnapshotEntryBytes=28;
     public const int PetSnapshotMaximumPets=64;
     public const int PetSnapshotMaximumFrameBytes=
         PetSnapshotHeaderBytes+PetSnapshotMaximumPets*PetSnapshotEntryBytes;
-    public const int PetEntitySpawnFrameBytes=72;
+    public const int PetEntitySpawnFrameBytes=76;
     public const int PetEntityDespawnFrameBytes=56;
     public const int PetEntityDeltaFrameBytes=64;
 
@@ -88,7 +88,7 @@ public static partial class WireProtocol
         foreach(var pet in value.Pets)
         {
             if(pet.PetUid<=0||pet.DefinitionId is <=0 or >100000000||
-               pet.Level is <=0 or >1000000||
+               pet.EvolutionId is <0 or >65535||pet.Level is <=0 or >1000000||
                pet.Experience is <0 or >9000000000000000L||
                !ids.Add(pet.PetUid))
                 throw new ArgumentOutOfRangeException(nameof(value));
@@ -105,8 +105,9 @@ public static partial class WireProtocol
         {
             BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(offset,8),pet.PetUid);
             BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(offset+8,4),pet.DefinitionId);
-            BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(offset+12,4),pet.Level);
-            BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(offset+16,8),pet.Experience);
+            BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(offset+12,4),pet.EvolutionId);
+            BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(offset+16,4),pet.Level);
+            BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(offset+20,8),pet.Experience);
             offset+=PetSnapshotEntryBytes;
         }
         return frame;
@@ -133,7 +134,8 @@ public static partial class WireProtocol
                 BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(offset,8)),
                 BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(offset+8,4)),
                 BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(offset+12,4)),
-                BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(offset+16,8))));
+                BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(offset+16,4)),
+                BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(offset+20,8))));
             offset+=PetSnapshotEntryBytes;
         }
         value=new(epoch,active,pets);
@@ -146,7 +148,8 @@ public static partial class WireProtocol
         if(value.ReceiverMapEpoch<=0||value.ServerTick<0||
            value.OwnerActorId<=0||value.OwnerConnectionEpoch<=0||value.OwnerMapEpoch<=0||
            value.PetUid<=0||value.DefinitionId is <=0 or >100000000||
-           value.Level is <=0 or >1000000||!float.IsFinite(value.X)||!float.IsFinite(value.Y)||
+           value.EvolutionId is <0 or >65535||value.Level is <=0 or >1000000||
+           !float.IsFinite(value.X)||!float.IsFinite(value.Y)||
            value.X<0||value.Y<0)
             throw new ArgumentOutOfRangeException(nameof(value));
         var frame=NewFrame(WireOpcode.PetEntitySpawn,PetEntitySpawnFrameBytes);
@@ -157,9 +160,10 @@ public static partial class WireProtocol
         BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(40,8),value.OwnerMapEpoch);
         BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(48,8),value.PetUid);
         BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(56,4),value.DefinitionId);
-        BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(60,4),value.Level);
-        BinaryPrimitives.WriteSingleLittleEndian(frame.AsSpan(64,4),value.X);
-        BinaryPrimitives.WriteSingleLittleEndian(frame.AsSpan(68,4),value.Y);
+        BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(60,4),value.EvolutionId);
+        BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(64,4),value.Level);
+        BinaryPrimitives.WriteSingleLittleEndian(frame.AsSpan(68,4),value.X);
+        BinaryPrimitives.WriteSingleLittleEndian(frame.AsSpan(72,4),value.Y);
         return frame;
     }
 
@@ -177,8 +181,9 @@ public static partial class WireProtocol
             BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(48,8)),
             BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(56,4)),
             BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(60,4)),
-            BinaryPrimitives.ReadSingleLittleEndian(frame.Slice(64,4)),
-            BinaryPrimitives.ReadSingleLittleEndian(frame.Slice(68,4)));
+            BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(64,4)),
+            BinaryPrimitives.ReadSingleLittleEndian(frame.Slice(68,4)),
+            BinaryPrimitives.ReadSingleLittleEndian(frame.Slice(72,4)));
         try{_=EncodePetEntitySpawn(value);return true;}
         catch(ArgumentOutOfRangeException){value=default;return false;}
     }

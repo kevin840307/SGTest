@@ -659,12 +659,12 @@ public readonly record struct PetResultWire(
     long MapEpoch,uint PetSequence,PetCommandAction Action,PetResultStatus Status,
     long PetUid,long ActivePetUid);
 public readonly record struct PetSnapshotEntryWire(
-    long PetUid,int DefinitionId,int Level,long Experience);
+    long PetUid,int DefinitionId,int EvolutionId,int Level,long Experience);
 public sealed record PetSnapshotWire(
     long ReceiverMapEpoch,long ActivePetUid,IReadOnlyList<PetSnapshotEntryWire> Pets);
 public readonly record struct PetEntitySpawnWire(
     long ReceiverMapEpoch,long ServerTick,long OwnerActorId,long OwnerConnectionEpoch,
-    long OwnerMapEpoch,long PetUid,int DefinitionId,int Level,float X,float Y);
+    long OwnerMapEpoch,long PetUid,int DefinitionId,int EvolutionId,int Level,float X,float Y);
 public readonly record struct PetEntityDeltaWire(
     long ReceiverMapEpoch,long ServerTick,long OwnerActorId,long OwnerConnectionEpoch,
     long OwnerMapEpoch,long PetUid,float X,float Y);

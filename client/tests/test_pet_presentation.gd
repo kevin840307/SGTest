@@ -4,7 +4,7 @@ const Pets = preload("res://pet/pet_presentation.gd")
 func _initialize() -> void:
 	var pets := Pets.new()
 	var first := _snapshot(7,{
-		1001:_entity(1001,4,102,5002,42,24.0,36.0)
+		1001:_entity(1001,4,102,5002,7,42,24.0,36.0)
 	})
 	if pets.apply_snapshot(first,0) != OK:
 		_fail("initial authoritative pet snapshot rejected")
@@ -12,12 +12,12 @@ func _initialize() -> void:
 	if pets.count()!=1 or pets.position_at(1001,0)!=Vector2(24.0,36.0):
 		_fail("initial pet position missing")
 		return
-	if pets.unresolved_definition_ids()!=[5002]:
-		_fail("unresolved visual definition was not exposed")
+	if pets.unresolved_definition_ids()!=[5002] or pets.unresolved_visual_keys()!=["5002:7"]:
+		_fail("unresolved visual definition/evolution was not exposed")
 		return
 
 	var moved := _snapshot(7,{
-		1001:_entity(1001,4,102,5002,45,48.0,36.0)
+		1001:_entity(1001,4,102,5002,7,45,48.0,36.0)
 	})
 	if pets.apply_snapshot(moved,100000) != OK:
 		_fail("movement snapshot rejected")
@@ -31,14 +31,14 @@ func _initialize() -> void:
 		return
 
 	var stale := _snapshot(7,{
-		1001:_entity(1001,4,102,5002,44,12.0,36.0)
+		1001:_entity(1001,4,102,5002,7,44,12.0,36.0)
 	})
 	if pets.apply_snapshot(stale,210000)!=OK or pets.position_at(1001,220000).x<28.0:
 		_fail("stale pet presentation regressed position")
 		return
 
 	var bad_same_tick := _snapshot(7,{
-		1001:_entity(1001,4,102,5002,45,99.0,36.0)
+		1001:_entity(1001,4,102,5002,7,45,99.0,36.0)
 	})
 	if pets.apply_snapshot(bad_same_tick,220000)!=ERR_INVALID_DATA:
 		_fail("same authoritative tick accepted two positions")
@@ -50,7 +50,7 @@ func _initialize() -> void:
 		}
 	}
 	if pets.configure_visuals({
-		5002:{"asset":"pets/source-backed","clip":"idle","frame":0}
+		5002:{7:{"asset":"pets/source-backed","clip":"idle","frame":0}}
 	},fake_assets)!=OK:
 		_fail("valid visual binding rejected")
 		return
@@ -64,12 +64,12 @@ func _initialize() -> void:
 		return
 
 	var replacement := _snapshot(8,{
-		1001:_entity(1001,5,202,7001,3,300.0,400.0)
+		1001:_entity(1001,5,202,7001,3,3,300.0,400.0)
 	})
 	if pets.apply_snapshot(replacement,300000)!=OK or pets.position_at(1001,300000)!=Vector2(300.0,400.0):
 		_fail("map generation did not reset pet history")
 		return
-	if pets.unresolved_definition_ids()!=[7001]:
+	if pets.unresolved_definition_ids()!=[7001] or pets.unresolved_visual_keys()!=["7001:3"]:
 		_fail("replacement generation retained old visual identity")
 		return
 
@@ -84,7 +84,7 @@ func _snapshot(map_epoch:int,entities:Dictionary)->Dictionary:
 		"pet_entities":entities
 	}
 
-func _entity(owner:int,connection:int,uid:int,definition:int,tick:int,x:float,y:float)->Dictionary:
+func _entity(owner:int,connection:int,uid:int,definition:int,evolution:int,tick:int,x:float,y:float)->Dictionary:
 	return {
 		"receiver_map_epoch":7,
 		"server_tick":tick,
@@ -93,6 +93,7 @@ func _entity(owner:int,connection:int,uid:int,definition:int,tick:int,x:float,y:
 		"owner_map_epoch":1,
 		"pet_uid":uid,
 		"definition_id":definition,
+		"evolution_id":evolution,
 		"level":7,
 		"x":x,
 		"y":y

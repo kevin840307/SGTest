@@ -807,11 +807,13 @@ CHECK(sleeve_color BETWEEN 0 AND 255);",tx);
             Execute(connection,@"CREATE INDEX IF NOT EXISTS ix_clan_members_clan
 ON clan_members(clan_id,role DESC,joined_unix_ms,character_id);",tx);
             // Schema v30: durable pet ownership and exactly one active pet per
-            // character. Definition/level/experience/state remain server-owned.
+            // character. Schema v31 adds the server-owned evolution identity that
+            // the original Pet table persisted separately from PETID.
             Execute(connection,@"CREATE TABLE IF NOT EXISTS pet_instances (
     pet_uid INTEGER PRIMARY KEY AUTOINCREMENT,
     character_id INTEGER NOT NULL REFERENCES characters(character_id) ON DELETE CASCADE,
     definition_id INTEGER NOT NULL CHECK(definition_id BETWEEN 1 AND 100000000),
+    evolution_id INTEGER NOT NULL DEFAULT 0 CHECK(evolution_id BETWEEN 0 AND 65535),
     level INTEGER NOT NULL DEFAULT 1 CHECK(level BETWEEN 1 AND 1000000),
     experience INTEGER NOT NULL DEFAULT 0 CHECK(experience BETWEEN 0 AND 9000000000000000),
     is_active INTEGER NOT NULL DEFAULT 0 CHECK(is_active IN (0,1)),
@@ -835,6 +837,9 @@ ON pet_instances(character_id) WHERE is_active=1;",tx);
     created_unix_ms INTEGER NOT NULL,
     PRIMARY KEY(character_id,connection_generation,map_epoch,action_sequence)
 );",tx);
+            if(schemaVersion==30)
+                Execute(connection,@"ALTER TABLE pet_instances
+ADD COLUMN evolution_id INTEGER NOT NULL DEFAULT 0 CHECK(evolution_id BETWEEN 0 AND 65535);",tx);
             if (schemaVersion < SchemaVersion)
                 Execute(connection,
                     $"UPDATE schema_version SET version={SchemaVersion};", tx);

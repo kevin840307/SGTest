@@ -11,11 +11,11 @@ namespace SGTest.Server.Pet;
 /// </summary>
 public readonly record struct PetWorldPresence(
     long OwnerActorId,long OwnerConnectionEpoch,long OwnerMapEpoch,
-    long PetUid,int DefinitionId,int Level,double X,double Y);
+    long PetUid,int DefinitionId,int EvolutionId,int Level,double X,double Y);
 
 public readonly record struct PetWorldStateUpdate(
     long OwnerActorId,long OwnerConnectionEpoch,long OwnerMapEpoch,
-    long PetUid,int DefinitionId,int Level,bool Present);
+    long PetUid,int DefinitionId,int EvolutionId,int Level,bool Present);
 
 /// <summary>
 /// Durable pet roster/summon boundary. SQLite owns pet instances and active state;
@@ -89,7 +89,7 @@ public sealed class PetCoordinator
         if(binding.ActorId<=0||binding.ConnectionEpoch<=0||binding.MapEpoch<=0)
             return false;
         return router.TryPostPetWorldState(new(
-            binding.ActorId,binding.ConnectionEpoch,binding.MapEpoch,0,0,0,false));
+            binding.ActorId,binding.ConnectionEpoch,binding.MapEpoch,0,0,0,0,false));
     }
 
     private static PetSnapshotWire ToSnapshot(
@@ -97,7 +97,7 @@ public sealed class PetCoordinator
     {
         long active=pets.FirstOrDefault(x=>x.IsActive)?.PetUid??0;
         return new(mapEpoch,active,pets.Select(x=>new PetSnapshotEntryWire(
-            x.PetUid,x.DefinitionId,x.Level,x.Experience)).ToArray());
+            x.PetUid,x.DefinitionId,x.EvolutionId,x.Level,x.Experience)).ToArray());
     }
 
     private static PetWorldStateUpdate ToWorldUpdate(
@@ -105,9 +105,9 @@ public sealed class PetCoordinator
     {
         var active=pets.SingleOrDefault(x=>x.IsActive);
         return active is null
-            ?new(binding.ActorId,binding.ConnectionEpoch,binding.MapEpoch,0,0,0,false)
+            ?new(binding.ActorId,binding.ConnectionEpoch,binding.MapEpoch,0,0,0,0,false)
             :new(binding.ActorId,binding.ConnectionEpoch,binding.MapEpoch,
-                active.PetUid,active.DefinitionId,active.Level,true);
+                active.PetUid,active.DefinitionId,active.EvolutionId,active.Level,true);
     }
 
     private static void EnsureWorldPosted(

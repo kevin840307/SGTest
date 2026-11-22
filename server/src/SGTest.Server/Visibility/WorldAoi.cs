@@ -301,10 +301,10 @@ public sealed class WorldAoi
         if(update.Present)
         {
             if(update.PetUid<=0||update.DefinitionId is <=0 or >100000000||
-               update.Level is <=0 or >1000000)
+               update.EvolutionId is <0 or >65535||update.Level is <=0 or >1000000)
                 throw new InvalidOperationException("Invalid active pet AOI identity");
         }
-        else if(update.PetUid!=0||update.DefinitionId!=0||update.Level!=0)
+        else if(update.PetUid!=0||update.DefinitionId!=0||update.EvolutionId!=0||update.Level!=0)
             throw new InvalidOperationException("Inactive pet AOI update carried identity");
 
         if(_petsByOwner.TryGetValue(update.OwnerActorId,out var previous))
@@ -314,7 +314,8 @@ public sealed class WorldAoi
                 update.OwnerMapEpoch<previous.OwnerMapEpoch))
                 return;
             if(!update.Present||previous.PetUid!=update.PetUid||
-               previous.DefinitionId!=update.DefinitionId||previous.Level!=update.Level||
+               previous.DefinitionId!=update.DefinitionId||previous.EvolutionId!=update.EvolutionId||
+               previous.Level!=update.Level||
                previous.OwnerConnectionEpoch!=update.OwnerConnectionEpoch||
                previous.OwnerMapEpoch!=update.OwnerMapEpoch)
                 HidePet(previous);
@@ -338,7 +339,7 @@ public sealed class WorldAoi
         }
         var next=new PetWorldPresence(
             update.OwnerActorId,update.OwnerConnectionEpoch,update.OwnerMapEpoch,
-            update.PetUid,update.DefinitionId,update.Level,x,y);
+            update.PetUid,update.DefinitionId,update.EvolutionId,update.Level,x,y);
         if(!_petsByOwner.ContainsKey(update.OwnerActorId)&&
            TrackedEntityCount>=_limits.MaxEntities)
             throw new AoiBackpressureException("Pet AOI entity capacity exceeded");
@@ -1258,6 +1259,7 @@ public sealed class WorldAoi
         left.OwnerMapEpoch==right.OwnerMapEpoch&&
         left.PetUid==right.PetUid&&
         left.DefinitionId==right.DefinitionId&&
+        left.EvolutionId==right.EvolutionId&&
         left.Level==right.Level;
 
     private bool Within(ActorSnapshot viewer, ActorSnapshot actor, bool alreadyVisible)

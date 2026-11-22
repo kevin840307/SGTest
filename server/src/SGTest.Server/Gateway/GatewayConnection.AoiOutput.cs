@@ -116,7 +116,7 @@ public sealed partial class GatewayConnection
                     frame=WireProtocol.EncodePetEntitySpawn(new(
                         evt.ReceiverMapEpoch,evt.Tick,pet.OwnerActorId,
                         pet.OwnerConnectionEpoch,pet.OwnerMapEpoch,pet.PetUid,
-                        pet.DefinitionId,pet.Level,(float)pet.X,(float)pet.Y));
+                        pet.DefinitionId,pet.EvolutionId,pet.Level,(float)pet.X,(float)pet.Y));
                     break;
                 case AoiEventKind.PetDelta when evt.Pet is { } pet:
                     frame=WireProtocol.EncodePetEntityDelta(new(

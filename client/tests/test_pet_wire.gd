@@ -4,8 +4,8 @@ const State = preload("res://world/world_state.gd")
 
 const COMMAND_HEX := "1d00000001006f00070000000000000001000000016500000000000000"
 const RESULT_HEX := "2600000001007000070000000000000001000000010065000000000000006500000000000000"
-const SNAPSHOT_HEX := "4a0000000100710007000000000000006600000000000000020065000000000000008913000004000000580000000000000066000000000000008a13000007000000d204000000000000"
-const PET_SPAWN_HEX := "480000000100720007000000000000002a00000000000000e9030000000000000b00000000000000040000000000000066000000000000008a130000070000000000c04100001042"
+const SNAPSHOT_HEX := "52000000010071000700000000000000660000000000000002006500000000000000891300000200000004000000580000000000000066000000000000008a1300000700000007000000d204000000000000"
+const PET_SPAWN_HEX := "4c0000000100720007000000000000002a00000000000000e9030000000000000b00000000000000040000000000000066000000000000008a13000007000000070000000000c04100001042"
 const PET_DELTA_HEX := "400000000100740007000000000000002b00000000000000e9030000000000000b00000000000000040000000000000066000000000000000000204200001042"
 const PET_DESPAWN_HEX := "380000000100730007000000000000002c00000000000000e9030000000000000b0000000000000004000000000000006600000000000000"
 
@@ -22,13 +22,14 @@ func _initialize() -> void:
 		_fail("pet result golden rejected")
 		return
 	var snapshot := Codec.decode_pet_snapshot(SNAPSHOT_HEX.hex_decode())
-	if snapshot.is_empty() or snapshot.active_pet_uid != 102 or snapshot.pets.size() != 2:
+	if snapshot.is_empty() or snapshot.active_pet_uid != 102 or snapshot.pets.size() != 2 or snapshot.pets[0].evolution_id != 2 or snapshot.pets[1].evolution_id != 7:
 		_fail("pet snapshot golden rejected")
 		return
 	var spawn := Codec.decode_pet_entity_spawn(PET_SPAWN_HEX.hex_decode())
 	if (
 		spawn.is_empty() or spawn.owner_actor_id != 1001 or spawn.pet_uid != 102 or
-		spawn.definition_id != 5002 or spawn.x != 24.0 or spawn.y != 36.0
+		spawn.definition_id != 5002 or spawn.evolution_id != 7 or
+		spawn.x != 24.0 or spawn.y != 36.0
 	):
 		_fail("pet AOI spawn golden/position rejected")
 		return
@@ -66,6 +67,7 @@ func _initialize() -> void:
 	pet_entity=state.snapshot().pet_entities[1001]
 	if (
 		int(pet_entity.pet_uid) != 102 or int(pet_entity.definition_id) != 5002 or
+		int(pet_entity.evolution_id) != 7 or
 		float(pet_entity.x) != 40.0 or float(pet_entity.y) != 36.0 or
 		int(pet_entity.server_tick) != 43
 	):
@@ -84,7 +86,8 @@ func _initialize() -> void:
 	if (
 		view.active_pet_uid != 101 or view.pet_instances.size() != 2 or
 		view.pending_pet_sequence != 0 or not view.pet_snapshot_received or
-		int(view.pet_instances[101].definition_id) != 5001
+		int(view.pet_instances[101].definition_id) != 5001 or
+		int(view.pet_instances[101].evolution_id) != 2
 	):
 		_fail("pet reducer state mismatch")
 		return

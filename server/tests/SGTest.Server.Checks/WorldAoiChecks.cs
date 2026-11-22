@@ -78,12 +78,12 @@ internal static class WorldAoiChecks
         Drain(aoi,owner);Drain(aoi,peer);Drain(aoi,far);
 
         aoi.ApplyPetState(new(owner.ActorId,owner.ConnectionEpoch,owner.MapEpoch,
-            9001,5001,4,true));
+            9001,5001,2,4,true));
         var ownerSpawn=Drain(aoi,owner);
         var peerSpawn=Drain(aoi,peer);
         Require(ownerSpawn is [var own]&&own.Kind==AoiEventKind.PetSpawn&&
             own.Pet?.PetUid==9001&&own.Pet?.OwnerActorId==owner.ActorId&&
-            own.Pet?.X==owner.X&&own.Pet?.Y==owner.Y&&
+            own.Pet?.EvolutionId==2&&own.Pet?.X==owner.X&&own.Pet?.Y==owner.Y&&
             peerSpawn is [var seen]&&seen.Pet==own.Pet&&Drain(aoi,far).Length==0,
             "pet spawn was not scoped to owner visibility/authoritative position");
 
@@ -120,16 +120,16 @@ internal static class WorldAoiChecks
             "pet did not leave AOI when observer lost owner visibility");
 
         aoi.ApplyPetState(new(owner.ActorId,owner.ConnectionEpoch,owner.MapEpoch,
-            0,0,0,false));
+            0,0,0,0,false));
         Require(Drain(aoi,owner) is [var recall]&&
             recall.Kind==AoiEventKind.PetDespawn&&recall.Pet?.PetUid==9001&&
             aoi.PetCount==0,
             "pet recall did not reliably despawn/remove active presence");
 
         aoi.ApplyPetState(new(owner.ActorId,owner.ConnectionEpoch,owner.MapEpoch,
-            9002,5002,7,true));
-        Require(Drain(aoi,owner).Single().Kind==AoiEventKind.PetSpawn,
-            "replacement active pet did not spawn for owner");
+            9002,5002,7,7,true));
+        Require(Drain(aoi,owner).Single() is {Kind:AoiEventKind.PetSpawn,Pet.EvolutionId:7},
+            "replacement active pet did not spawn with evolution identity for owner");
         Life(aoi,5,Leave(owner));
         Drain(aoi,owner);
         var transferred=owner with {MapId=13,MapEpoch=owner.MapEpoch+1,EntityRevision=1};

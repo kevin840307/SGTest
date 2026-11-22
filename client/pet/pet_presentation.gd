@@ -2,10 +2,10 @@ extends RefCounted
 ## Presentation-only Pet AOI state. WorldState remains authoritative.
 ##
 ## The current compact PetEntity stream proves independent Pet coordinates but
-## does not yet carry HK-verified facing/action or a trusted definition->sprite
-## catalog. This presenter therefore smooths only committed positions. Optional
-## visual bindings may expose a static source-backed actor through WorldDrawList;
-## movement animation stays disabled until the visual/action mapping is verified.
+## does not yet carry HK-verified facing/action or a trusted definition/evolution
+## -> sprite catalog. The original Pet data keeps PETID and EvolID separately, so
+## a visual binding is only valid for that pair. This presenter smooths only
+## committed positions; movement animation stays disabled until action mapping is verified.
 const PositionHistory = preload("res://movement/position_history.gd")
 
 var _pets: Dictionary = {}
@@ -23,28 +23,34 @@ func clear_entities() -> void:
 
 func configure_visuals(definitions: Dictionary, assets: Dictionary) -> Error:
 	_visuals.clear()
-	for raw_id in definitions:
-		var definition_id := int(raw_id)
-		var visual = definitions[raw_id]
-		if definition_id <= 0 or not visual is Dictionary:
+	for raw_definition in definitions:
+		var definition_id := int(raw_definition)
+		var evolutions = definitions[raw_definition]
+		if definition_id <= 0 or not evolutions is Dictionary:
 			_visuals.clear()
 			return ERR_INVALID_DATA
-		var asset_id := str(visual.get("asset",""))
-		var clip := str(visual.get("clip",""))
-		if asset_id.is_empty() or clip.is_empty() or not assets.has(asset_id):
-			_visuals.clear()
-			return ERR_INVALID_DATA
-		var asset: Dictionary = assets[asset_id]
-		var manifest: Dictionary = asset.get("manifest",{})
-		var clips: Dictionary = manifest.get("clips",{})
-		if not clips.has(clip) or not clips[clip] is Array or clips[clip].is_empty():
-			_visuals.clear()
-			return ERR_INVALID_DATA
-		_visuals[definition_id] = {
-			"asset":asset_id,
-			"clip":clip,
-			"frame":maxi(0,int(visual.get("frame",0)))
-		}
+		for raw_evolution in evolutions:
+			var evolution_id := int(raw_evolution)
+			var visual = evolutions[raw_evolution]
+			if evolution_id < 0 or evolution_id > 65535 or not visual is Dictionary:
+				_visuals.clear()
+				return ERR_INVALID_DATA
+			var asset_id := str(visual.get("asset",""))
+			var clip := str(visual.get("clip",""))
+			if asset_id.is_empty() or clip.is_empty() or not assets.has(asset_id):
+				_visuals.clear()
+				return ERR_INVALID_DATA
+			var asset: Dictionary = assets[asset_id]
+			var manifest: Dictionary = asset.get("manifest",{})
+			var clips: Dictionary = manifest.get("clips",{})
+			if not clips.has(clip) or not clips[clip] is Array or clips[clip].is_empty():
+				_visuals.clear()
+				return ERR_INVALID_DATA
+			_visuals[_visual_key(definition_id,evolution_id)] = {
+				"asset":asset_id,
+				"clip":clip,
+				"frame":maxi(0,int(visual.get("frame",0)))
+			}
 	return OK
 
 func apply_snapshot(snapshot: Dictionary, now_usec: int) -> Error:
@@ -71,11 +77,12 @@ func apply_snapshot(snapshot: Dictionary, now_usec: int) -> Error:
 			return ERR_INVALID_DATA
 		var pet_uid := int(value.get("pet_uid",0))
 		var definition_id := int(value.get("definition_id",0))
+		var evolution_id := int(value.get("evolution_id",-1))
 		var owner_connection_epoch := int(value.get("owner_connection_epoch",0))
 		var owner_map_epoch := int(value.get("owner_map_epoch",0))
 		var server_tick := int(value.get("server_tick",-1))
 		var position := Vector2(float(value.get("x",INF)),float(value.get("y",INF)))
-		if pet_uid <= 0 or definition_id <= 0 or owner_connection_epoch <= 0 or owner_map_epoch <= 0 or server_tick < 0 or not position.is_finite():
+		if pet_uid <= 0 or definition_id <= 0 or evolution_id < 0 or evolution_id > 65535 or owner_connection_epoch <= 0 or owner_map_epoch <= 0 or server_tick < 0 or not position.is_finite():
 			return ERR_INVALID_DATA
 
 		var old: Dictionary = _pets.get(owner,{})
@@ -127,7 +134,8 @@ func actors_at(now_usec: int) -> Array:
 		var owner := int(raw_owner)
 		var pet: Dictionary = _pets[owner]
 		var value: Dictionary = pet.value
-		var visual: Dictionary = _visuals.get(int(value.definition_id),{})
+		var visual: Dictionary = _visuals.get(
+			_visual_key(int(value.definition_id),int(value.evolution_id)),{})
 		if visual.is_empty():
 			continue
 		var position := position_at(owner,now_usec)
@@ -149,11 +157,27 @@ func unresolved_definition_ids() -> Array:
 	var missing := {}
 	for pet in _pets.values():
 		var definition_id := int(pet.value.definition_id)
-		if not _visuals.has(definition_id):
+		var evolution_id := int(pet.value.evolution_id)
+		if not _visuals.has(_visual_key(definition_id,evolution_id)):
 			missing[definition_id] = true
 	var result: Array = missing.keys()
 	result.sort()
 	return result
+
+func unresolved_visual_keys() -> Array:
+	var missing := {}
+	for pet in _pets.values():
+		var definition_id := int(pet.value.definition_id)
+		var evolution_id := int(pet.value.evolution_id)
+		var key := _visual_key(definition_id,evolution_id)
+		if not _visuals.has(key):
+			missing[key] = true
+	var result: Array = missing.keys()
+	result.sort()
+	return result
+
+func _visual_key(definition_id:int,evolution_id:int)->String:
+	return str(definition_id)+":"+str(evolution_id)
 
 func count() -> int:
 	return _pets.size()
