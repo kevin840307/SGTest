@@ -1,12 +1,23 @@
 using Microsoft.Data.Sqlite;
+using System.Text.Json;
+using SGTest.Server.Gateway;
 using SGTest.Server.Identity;
+using SGTest.Server.Map;
+using SGTest.Server.Monster;
+using SGTest.Server.Pet;
 using SGTest.Server.Wire;
+using SGTest.Server.World;
+using SGTest.Server.Visibility;
 
 internal static class PetChecks
 {
-    public static void Verify()
+    public static void Verify(string root)
     {
-        Checks.Run("pet wire roundtrips bounded command result and roster snapshot",Wire);
+        Checks.Run("pet wire roundtrips command roster AOI and server-owned combat",Wire);
+        Checks.Run("pet combat manifest requires audited exact-level rules",
+            ()=>CombatManifest(root));
+        Checks.Run("pet attack authority owns active identity position range cooldown replay and damage",
+            ()=>CombatAuthority(root));
         Checks.Run("pet summon recall replay and persistence are server authoritative",
             ()=>Persistence().GetAwaiter().GetResult());
         Checks.Run("schema v30 pet rows migrate to explicit evolution zero without data loss",
@@ -74,6 +85,22 @@ internal static class PetChecks
             decodedDespawn==despawn,
             "pet AOI despawn wire roundtrip failed");
 
+        var attack=new PetAttackWire(7,3,102,1_001_300_001);
+        var attackFrame=WireProtocol.EncodePetAttack(attack);
+        Checks.Require(attackFrame.Length==WireProtocol.PetAttackFrameBytes&&
+            WireProtocol.TryDecodePetAttack(attackFrame,out var decodedAttack)&&
+            decodedAttack==attack,
+            "pet attack wire roundtrip failed");
+        var attackResult=new PetAttackResultWire(
+            7,3,NormalAttackStatus.Applied,102,1_001_300_001,
+            25,75,100,4,55);
+        var attackResultFrame=WireProtocol.EncodePetAttackResult(attackResult);
+        Checks.Require(attackResultFrame.Length==WireProtocol.PetAttackResultFrameBytes&&
+            WireProtocol.TryDecodePetAttackResult(
+                attackResultFrame,out var decodedAttackResult)&&
+            decodedAttackResult==attackResult,
+            "pet attack result wire roundtrip failed");
+
         var malformed=WireProtocol.EncodePetCommand(summon);
         malformed[20]=9;
         Checks.Require(!WireProtocol.TryDecodePetCommand(malformed,out _),
@@ -88,6 +115,151 @@ internal static class PetChecks
         }
         catch(ArgumentOutOfRangeException){rejected=true;}
         Checks.Require(rejected,"pet snapshot accepted active uid outside roster");
+    }
+
+    private static void CombatManifest(string root)
+    {
+        string valid=Path.Combine(root,"pet-combat-rules.json");
+        File.WriteAllText(valid,JsonSerializer.Serialize(new
+        {
+            source="unit-test audited fixture",
+            rules=new[]
+            {
+                new
+                {
+                    definition_id=5002,evolution_id=7,level=7,
+                    fixed_damage=25,attack_range=24.0,cooldown_ticks=3
+                }
+            }
+        }));
+        var rules=PetCombatRuleCatalog.LoadVerified(valid);
+        Checks.Require(rules.Count==1&&
+            rules.TryGetValue(new(5002,7,7),out var rule)&&
+            rule.FixedDamage==25&&rule.AttackRange==24&&
+            rule.CooldownTicks==3&&rule.EvidenceSource=="unit-test audited fixture",
+            "verified pet combat manifest did not retain exact source-backed rule");
+
+        string invalid=Path.Combine(root,"pet-combat-rules-invalid.json");
+        File.WriteAllText(invalid,JsonSerializer.Serialize(new
+        {
+            source="",
+            rules=Array.Empty<object>()
+        }));
+        bool rejected=false;
+        try { PetCombatRuleCatalog.LoadVerified(invalid); }
+        catch(InvalidDataException){rejected=true;}
+        Checks.Require(rejected,
+            "pet combat manifest accepted rules without audited source");
+    }
+
+    private static void CombatAuthority(string root)
+    {
+        const int mapId=215;
+        string folder=Checks.Fixture(root,mapId,12,12,(_,_)=>0);
+        var grid=BlockingGrid.Load(folder,mapId);
+        string populationPath=Path.Combine(folder,"population-pet-combat.json");
+        File.WriteAllText(populationPath,JsonSerializer.Serialize(new
+        {
+            version=4,kind="verified_monster_runtime",map_id=mapId,
+            stats_verified=true,gameplay_ready=true,
+            definitions=new[]
+            {
+                new
+                {
+                    id=1,name="PetCombatFixture",sprite="EN001A",
+                    atlas="Enemy/EN001A/atlas.json",
+                    stats=new
+                    {
+                        level=3,max_hp=100,attack_damage=1,move_step=8.0,
+                        aggro_radius=1.0,lose_target_radius=2.0,
+                        leash_radius=2.0,attack_range=1.0,
+                        attack_cooldown_ticks=30,respawn_ticks=30,
+                        wander_radius=0.0,wander_interval_ticks=100
+                    }
+                }
+            },
+            spawns=new[]
+            {
+                new { source_index=0,source_flags=7,definition=1,p=new[]{40,24} }
+            }
+        }));
+        var population=MonsterPopulationCatalog.LoadVerified(
+            populationPath,mapId,grid);
+        var runtime=new MonsterRuntime(grid,population,
+            new(AiIntervalTicks:1,MaxAiPerStep:4,MaxPathQueriesPerStep:1,
+                MaxPathExpandedCells:128));
+        var key=new PetCombatRuleKey(5002,7,7);
+        var coordinator=new MonsterWorldCoordinator(
+            [runtime],petRules:new Dictionary<PetCombatRuleKey,VerifiedPetCombatRule>
+            {
+                [key]=new(5002,7,7,25,24,3,"unit-test audited fixture")
+            });
+        var actor=new ActorSnapshot(
+            1001,mapId,11,4,0,0,24,24,1,false);
+        var baseline=coordinator.Process(new WorldChangedBatch(
+            1,[],[new(ActorLifecycleKind.Joined,actor)]));
+        var target=baseline.Changed.Single(x=>x.CurrentHp==100);
+        var pet=new PetWorldPresence(
+            actor.ActorId,actor.ConnectionEpoch,actor.MapEpoch,
+            102,5002,7,7,24,24);
+
+        var first=coordinator.ResolvePetNormalAttack(
+            new(actor.ActorId,actor.ConnectionEpoch,actor.MapEpoch,
+                1,pet.PetUid,target.EntityId),pet);
+        Checks.Require(first.Status==NormalAttackStatus.Applied&&
+            first.Damage==25&&first.CurrentHp==75&&first.MaxHp==100,
+            "verified pet rule did not apply server-owned damage");
+
+        var replay=coordinator.ResolvePetNormalAttack(
+            new(actor.ActorId,actor.ConnectionEpoch,actor.MapEpoch,
+                1,pet.PetUid,target.EntityId),pet);
+        Checks.Require(replay.Status==NormalAttackStatus.ReplayedSequence,
+            "pet attack replay was not rejected");
+
+        var cooldown=coordinator.ResolvePetNormalAttack(
+            new(actor.ActorId,actor.ConnectionEpoch,actor.MapEpoch,
+                2,pet.PetUid,target.EntityId),pet);
+        Checks.Require(cooldown.Status==NormalAttackStatus.Cooldown,
+            "pet attack ignored server-owned cooldown");
+
+        coordinator.Process(new WorldChangedBatch(2,[]));
+        coordinator.Process(new WorldChangedBatch(3,[]));
+        coordinator.Process(new WorldChangedBatch(4,[]));
+        var second=coordinator.ResolvePetNormalAttack(
+            new(actor.ActorId,actor.ConnectionEpoch,actor.MapEpoch,
+                3,pet.PetUid,target.EntityId),pet);
+        Checks.Require(second.Status==NormalAttackStatus.Applied&&
+            second.Damage==25&&second.CurrentHp==50,
+            "pet attack did not resume after verified cooldown");
+
+        var noRule=pet with {Level=8};
+        var blocked=coordinator.ResolvePetNormalAttack(
+            new(actor.ActorId,actor.ConnectionEpoch,actor.MapEpoch,
+                4,noRule.PetUid,target.EntityId),noRule);
+        Checks.Require(blocked.Status==NormalAttackStatus.CombatUnavailable,
+            "pet combat guessed damage for an unverified exact level");
+
+        var gateway=new GatewayConnection(actor);
+        Checks.Require(gateway.QueueAoi(
+                new(AoiEventKind.WorldReady,10,actor.MapEpoch,actor))==
+                GatewaySendStatus.Enqueued&&
+            gateway.FeedClientBytes(
+                WireProtocol.EncodeWorldReadyAck(new(actor.MapEpoch,10)),
+                _=>true,out _)==WireFeedStatus.Accepted,
+            "pet combat gateway Ready ACK failed");
+        TrustedPetAttack captured=default;
+        byte[] frame=WireProtocol.EncodePetAttack(
+            new(actor.MapEpoch,1,pet.PetUid,target.EntityId));
+        Checks.Require(gateway.FeedClientBytes(
+                frame,_=>true,out var accepted,
+                postPetAttack:value=>{captured=value;return true;})==
+                WireFeedStatus.Accepted&&accepted==1&&
+            captured.ActorId==actor.ActorId&&
+            captured.ConnectionEpoch==actor.ConnectionEpoch&&
+            captured.RequestMapEpoch==actor.MapEpoch&&
+            captured.AttackSequence==1&&captured.PetUid==pet.PetUid&&
+            captured.TargetEntityId==target.EntityId,
+            "pet combat gateway did not stamp trusted actor generation");
     }
 
     private static async Task MigrationV30()

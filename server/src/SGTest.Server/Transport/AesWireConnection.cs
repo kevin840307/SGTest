@@ -50,6 +50,7 @@ public static class AesWireConnection
         Func<TrustedNpcInteraction, Task<NpcPortalOutcome>>? handleNpc = null,
         Func<TrustedWorldResyncRequest, bool>? postResync = null,
         Func<TrustedNormalAttack, bool>? postAttack = null,
+        Func<TrustedPetAttack, bool>? postPetAttack = null,
         Func<TrustedPlayerRespawn, Task>? handleRespawn = null,
         Func<TrustedGroundPickup, Task>? handlePickup = null,
         Func<TrustedRecoveryUse, Task>? handleRecovery = null,
@@ -306,7 +307,7 @@ public static class AesWireConnection
 
                     var status = gateway.FeedClientBytes(
                         rented.AsSpan(0, count), postMove, out int accepted,
-                        postNpc, postResync, postAttack, postRespawn, postPickup,
+                        postNpc, postResync, postAttack, postPetAttack, postRespawn, postPickup,
                         postRecovery, postDiscard, postSkill, postShop, postStorage, postEquipment, postBank, postRepair, postEnhancement, postTrade, postQuest, postPvp, postPvpAttack, postPvpSkill, postGmPvpName, postPlayerShop, postChat, postParty, postClan, postPet);
                     commandsAccepted += accepted;
 
@@ -327,7 +328,7 @@ public static class AesWireConnection
                                 .ConfigureAwait(false);
                             status = gateway.ResumeClientIngress(
                                 postMove, out accepted, postNpc, postResync,
-                                postAttack, postRespawn, postPickup, postRecovery,
+                                postAttack, postPetAttack, postRespawn, postPickup, postRecovery,
                                 postDiscard, postSkill, postShop, postStorage, postEquipment, postBank, postRepair, postEnhancement, postTrade, postQuest, postPvp, postPvpAttack, postPvpSkill, postGmPvpName, postPlayerShop, postChat, postParty, postClan, postPet);
                             commandsAccepted += accepted;
                         }

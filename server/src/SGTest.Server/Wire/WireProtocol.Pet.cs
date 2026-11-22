@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using SGTest.Server.Monster;
 
 namespace SGTest.Server.Wire;
 
@@ -14,6 +15,8 @@ public static partial class WireProtocol
     public const int PetEntitySpawnFrameBytes=76;
     public const int PetEntityDespawnFrameBytes=56;
     public const int PetEntityDeltaFrameBytes=64;
+    public const int PetAttackFrameBytes=36;
+    public const int PetAttackResultFrameBytes=65;
 
     public static byte[] EncodePetCommand(PetCommandWire value)
     {
@@ -255,5 +258,85 @@ public static partial class WireProtocol
             BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(48,8)));
         try{_=EncodePetEntityDespawn(value);return true;}
         catch(ArgumentOutOfRangeException){value=default;return false;}
+    }
+
+    public static byte[] EncodePetAttack(PetAttackWire value)
+    {
+        if(value.MapEpoch<=0||value.AttackSequence==0||
+           value.PetUid<=0||value.TargetEntityId<=0)
+            throw new ArgumentOutOfRangeException(nameof(value));
+        var frame=NewFrame(WireOpcode.PetAttack,PetAttackFrameBytes);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(8,8),value.MapEpoch);
+        BinaryPrimitives.WriteUInt32LittleEndian(frame.AsSpan(16,4),value.AttackSequence);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(20,8),value.PetUid);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(28,8),value.TargetEntityId);
+        return frame;
+    }
+
+    public static bool TryDecodePetAttack(ReadOnlySpan<byte> frame,out PetAttackWire value)
+    {
+        value=default;
+        if(!TryReadHeader(frame,out var header)||header.Opcode!=WireOpcode.PetAttack||
+           frame.Length!=PetAttackFrameBytes)return false;
+        value=new(
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(8,8)),
+            BinaryPrimitives.ReadUInt32LittleEndian(frame.Slice(16,4)),
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(20,8)),
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(28,8)));
+        try{_=EncodePetAttack(value);return true;}
+        catch(ArgumentOutOfRangeException){value=default;return false;}
+    }
+
+    public static byte[] EncodePetAttackResult(PetAttackResultWire value)
+    {
+        if(!ValidPetAttackResult(value))
+            throw new ArgumentOutOfRangeException(nameof(value));
+        var frame=NewFrame(WireOpcode.PetAttackResult,PetAttackResultFrameBytes);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(8,8),value.MapEpoch);
+        BinaryPrimitives.WriteUInt32LittleEndian(frame.AsSpan(16,4),value.AttackSequence);
+        frame[20]=(byte)value.Status;
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(21,8),value.PetUid);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(29,8),value.TargetEntityId);
+        BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(37,4),value.Damage);
+        BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(41,4),value.CurrentHp);
+        BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(45,4),value.MaxHp);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(49,8),value.TargetRevision);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(57,8),value.ServerTick);
+        return frame;
+    }
+
+    public static bool TryDecodePetAttackResult(
+        ReadOnlySpan<byte> frame,out PetAttackResultWire value)
+    {
+        value=default;
+        if(!TryReadHeader(frame,out var header)||header.Opcode!=WireOpcode.PetAttackResult||
+           frame.Length!=PetAttackResultFrameBytes)return false;
+        value=new(
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(8,8)),
+            BinaryPrimitives.ReadUInt32LittleEndian(frame.Slice(16,4)),
+            (NormalAttackStatus)frame[20],
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(21,8)),
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(29,8)),
+            BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(37,4)),
+            BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(41,4)),
+            BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(45,4)),
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(49,8)),
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(57,8)));
+        return ValidPetAttackResult(value);
+    }
+
+    private static bool ValidPetAttackResult(PetAttackResultWire value)
+    {
+        if(value.MapEpoch<=0||value.AttackSequence==0||
+           (byte)value.Status>(byte)NormalAttackStatus.ReplayedSequence||
+           value.PetUid<=0||value.TargetEntityId<=0||value.ServerTick<0||
+           value.Damage<0||value.CurrentHp<0||value.MaxHp<0||value.TargetRevision<0)
+            return false;
+        if(value.MaxHp>0&&value.CurrentHp>value.MaxHp)return false;
+        if(value.Status==NormalAttackStatus.Applied)
+            return value.Damage>0&&value.MaxHp>0&&value.TargetRevision>0;
+        if(value.Status==NormalAttackStatus.Miss)
+            return value.Damage==0&&value.MaxHp>0&&value.TargetRevision>0;
+        return value.Damage==0;
     }
 }

@@ -8,6 +8,8 @@ const SNAPSHOT_HEX := "520000000100710007000000000000006600000000000000020065000
 const PET_SPAWN_HEX := "4c0000000100720007000000000000002a00000000000000e9030000000000000b00000000000000040000000000000066000000000000008a13000007000000070000000000c04100001042"
 const PET_DELTA_HEX := "400000000100740007000000000000002b00000000000000e9030000000000000b00000000000000040000000000000066000000000000000000204200001042"
 const PET_DESPAWN_HEX := "380000000100730007000000000000002c00000000000000e9030000000000000b0000000000000004000000000000006600000000000000"
+const PET_ATTACK_HEX := "2400000001007500070000000000000003000000660000000000000021a0ae3b00000000"
+const PET_ATTACK_RESULT_HEX := "410000000100760007000000000000000300000000660000000000000021a0ae3b00000000190000004b0000006400000004000000000000003700000000000000"
 
 func _initialize() -> void:
 	var command := Codec.encode_pet_command(7,1,1,101)
@@ -44,6 +46,19 @@ func _initialize() -> void:
 	if despawn.is_empty() or despawn.owner_actor_id != 1001 or despawn.pet_uid != 102:
 		_fail("pet AOI despawn golden rejected")
 		return
+	var attack := Codec.encode_pet_attack(7,3,102,1001300001)
+	if attack.hex_encode() != PET_ATTACK_HEX or Codec.frame_opcode(attack) != Codec.OPCODE_PET_ATTACK:
+		_fail("C# pet attack golden mismatch")
+		return
+	var attack_result := Codec.decode_pet_attack_result(PET_ATTACK_RESULT_HEX.hex_decode())
+	if (
+		attack_result.is_empty() or int(attack_result.pet_uid) != 102 or
+		int(attack_result.target_entity_id) != 1001300001 or
+		int(attack_result.damage) != 25 or int(attack_result.current_hp) != 75 or
+		int(attack_result.server_tick) != 55
+	):
+		_fail("pet attack result golden rejected")
+		return
 
 	var state := State.new()
 	state.state = State.STATE_IN_WORLD
@@ -73,6 +88,21 @@ func _initialize() -> void:
 	):
 		_fail("pet AOI movement delta state missing or identity changed")
 		return
+	if not state.mark_pet_attack_sent(3,102,1001300001):
+		_fail("valid pet attack request rejected")
+		return
+	if not state.apply_frame(PET_ATTACK_RESULT_HEX.hex_decode()):
+		_fail("pet attack result reducer failed")
+		return
+	var combat_view:=state.snapshot()
+	if (
+		int(combat_view.pending_pet_attack_sequence)!=0 or
+		int(combat_view.last_pet_attack_result_sequence)!=3 or
+		int(combat_view.last_pet_attack_result_status)!=0 or
+		int(combat_view.last_pet_attack_result.damage)!=25
+	):
+		_fail("pet attack reducer authority state mismatch")
+		return
 	if not state.apply_frame(PET_DESPAWN_HEX.hex_decode()) or not state.snapshot().pet_entities.is_empty():
 		_fail("pet AOI despawn reducer failed")
 		return
@@ -98,7 +128,7 @@ func _initialize() -> void:
 		_fail("stale pet snapshot changed current state")
 		return
 
-	print("PET_WIRE_PASS csharp_golden=true reducer=true aoi_presence=true aoi_movement=true pets=2")
+	print("PET_WIRE_PASS csharp_golden=true reducer=true aoi_presence=true aoi_movement=true pet_combat=true pets=2")
 	quit(0)
 
 func _fail(message:String)->void:

@@ -127,8 +127,13 @@ internal static class AesGameHost
             IReadOnlyDictionary<int,VerifiedSkillRule>? skillRules=
                 skillManifest is null ? null :
                 SkillRuleCatalog.LoadVerified(Path.GetFullPath(skillManifest));
+            string? petCombatManifest=options.GetValueOrDefault("--pet-combat-rules");
+            IReadOnlyDictionary<PetCombatRuleKey,VerifiedPetCombatRule>? petCombatRules=
+                petCombatManifest is null ? null :
+                PetCombatRuleCatalog.LoadVerified(Path.GetFullPath(petCombatManifest));
             MonsterWorldCoordinator? monsters = monsterRuntimes.Count == 0
-                ? null : new MonsterWorldCoordinator(monsterRuntimes,skillRules);
+                ? null : new MonsterWorldCoordinator(
+                    monsterRuntimes,skillRules,petCombatRules);
             // No original source-verified manifest means no fabricated drops.
             string? lootManifest = options.GetValueOrDefault("--loot-rules");
             IReadOnlyList<MonsterDropRule>? dropRules = lootManifest is null

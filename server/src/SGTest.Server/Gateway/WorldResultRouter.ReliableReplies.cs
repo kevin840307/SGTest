@@ -477,4 +477,16 @@ public sealed partial class WorldResultRouter
             return connection.QueueNormalAttackResult(request, outcome);
         }
     }
+
+    public GatewaySendStatus QueuePetAttackResult(
+        TrustedPetAttack request,NormalAttackOutcome outcome)
+    {
+        lock(_gate)
+        {
+            if(!_connections.TryGetValue(request.ActorId,out var connection)||
+               connection.IsClosed)
+                return GatewaySendStatus.Closed;
+            return connection.QueuePetAttackResult(request,outcome);
+        }
+    }
 }

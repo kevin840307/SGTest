@@ -29,6 +29,7 @@ public sealed partial class GatewayConnection
                                           Func<TrustedNpcInteraction, bool>? postNpc = null,
                                           Func<TrustedWorldResyncRequest, bool>? postResync = null,
                                           Func<TrustedNormalAttack, bool>? postAttack = null,
+                                          Func<TrustedPetAttack, bool>? postPetAttack = null,
                                           Func<TrustedPlayerRespawn, bool>? postRespawn = null,
                                               Func<TrustedGroundPickup, bool>? postPickup = null,
                                               Func<TrustedRecoveryUse, bool>? postRecovery = null,
@@ -62,7 +63,7 @@ public sealed partial class GatewayConnection
             }
             return _parser.Feed(bytes,
                 frame => HandleClientFrame(
-                    frame, postMove, postNpc, postResync, postAttack, postRespawn,
+                    frame, postMove, postNpc, postResync, postAttack, postPetAttack, postRespawn,
                     postPickup, postRecovery, postDiscard, postSkill, postShop, postStorage, postEquipment, postBank, postRepair, postEnhancement, postTrade, postQuest, postPvp, postPvpAttack, postPvpSkill, postGmPvpName, postPlayerShop, postChat, postParty, postClan, postPet),
                 out commandsAccepted);
         }
@@ -73,6 +74,7 @@ public sealed partial class GatewayConnection
                                               Func<TrustedNpcInteraction, bool>? postNpc = null,
                                               Func<TrustedWorldResyncRequest, bool>? postResync = null,
                                               Func<TrustedNormalAttack, bool>? postAttack = null,
+                                              Func<TrustedPetAttack, bool>? postPetAttack = null,
                                               Func<TrustedPlayerRespawn, bool>? postRespawn = null,
                                               Func<TrustedGroundPickup, bool>? postPickup = null,
                                               Func<TrustedRecoveryUse, bool>? postRecovery = null,
@@ -106,7 +108,7 @@ public sealed partial class GatewayConnection
             }
             return _parser.Resume(
                 frame => HandleClientFrame(
-                    frame, postMove, postNpc, postResync, postAttack, postRespawn,
+                    frame, postMove, postNpc, postResync, postAttack, postPetAttack, postRespawn,
                     postPickup, postRecovery, postDiscard, postSkill, postShop, postStorage, postEquipment, postBank, postRepair, postEnhancement, postTrade, postQuest, postPvp, postPvpAttack, postPvpSkill, postGmPvpName, postPlayerShop, postChat, postParty, postClan, postPet),
                 out commandsAccepted);
         }
@@ -118,6 +120,7 @@ public sealed partial class GatewayConnection
         Func<TrustedNpcInteraction, bool>? postNpc,
         Func<TrustedWorldResyncRequest, bool>? postResync,
         Func<TrustedNormalAttack, bool>? postAttack,
+        Func<TrustedPetAttack, bool>? postPetAttack,
         Func<TrustedPlayerRespawn, bool>? postRespawn,
         Func<TrustedGroundPickup, bool>? postPickup,
         Func<TrustedRecoveryUse, bool>? postRecovery,
@@ -510,6 +513,22 @@ public sealed partial class GatewayConnection
             if(!postPet(request))
                 return WireFrameDisposition.Backpressured;
             _lastPetSequence=pet.PetSequence;
+            return WireFrameDisposition.Accepted;
+        }
+
+        if(header.Opcode==WireOpcode.PetAttack &&
+            postPetAttack is not null &&
+            WireProtocol.TryDecodePetAttack(frame,out var petAttack))
+        {
+            if(!GameplayReady(bound)||petAttack.MapEpoch!=bound.MapEpoch||
+               petAttack.AttackSequence<=_lastPetAttackSequence)
+                return WireFrameDisposition.ProtocolViolation;
+            var request=new TrustedPetAttack(
+                bound.ActorId,bound.ConnectionEpoch,petAttack.MapEpoch,
+                petAttack.AttackSequence,petAttack.PetUid,petAttack.TargetEntityId);
+            if(!postPetAttack(request))
+                return WireFrameDisposition.Backpressured;
+            _lastPetAttackSequence=petAttack.AttackSequence;
             return WireFrameDisposition.Accepted;
         }
 

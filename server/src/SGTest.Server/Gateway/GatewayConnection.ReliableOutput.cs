@@ -864,6 +864,29 @@ public sealed partial class GatewayConnection
         }
     }
 
+    public GatewaySendStatus QueuePetAttackResult(
+        TrustedPetAttack request,NormalAttackOutcome outcome)
+    {
+        lock(_bindingGate)
+        {
+            if(_closed)return GatewaySendStatus.Closed;
+            var bound=_binding;
+            if(request.ActorId!=bound.ActorId||
+               request.ConnectionEpoch!=bound.ConnectionEpoch||
+               request.RequestMapEpoch<=0||
+               request.RequestMapEpoch>bound.MapEpoch||
+               outcome.TargetEntityId!=request.TargetEntityId)
+                return GatewaySendStatus.GenerationMismatch;
+            var frame=WireProtocol.EncodePetAttackResult(new(
+                request.RequestMapEpoch,request.AttackSequence,outcome.Status,
+                request.PetUid,outcome.TargetEntityId,outcome.Damage,
+                outcome.CurrentHp,outcome.MaxHp,outcome.TargetRevision,
+                outcome.ServerTick));
+            return _reliable.TryEnqueue(frame)
+                ? GatewaySendStatus.Enqueued:GatewaySendStatus.Backpressured;
+        }
+    }
+
     public GatewaySendStatus QueueSkillUseResult(
         TrustedSkillUse request,SkillUseOutcome outcome)
     {

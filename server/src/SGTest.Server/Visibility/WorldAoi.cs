@@ -157,6 +157,17 @@ public sealed class WorldAoi
     public int ObserverCount => _observers.Count;
     public long LastTick => _lastTick;
 
+    public bool TryGetPet(
+        long ownerActorId,long connectionEpoch,long mapEpoch,long petUid,
+        out PetWorldPresence pet)
+    {
+        pet=default;
+        return ownerActorId>0&&connectionEpoch>0&&mapEpoch>0&&petUid>0&&
+            _petsByOwner.TryGetValue(ownerActorId,out pet)&&
+            pet.OwnerConnectionEpoch==connectionEpoch&&
+            pet.OwnerMapEpoch==mapEpoch&&pet.PetUid==petUid;
+    }
+
     public int PendingEvents(long actorId) =>
         _observers.TryGetValue(actorId, out var observer) ? observer.Pending.Count : 0;
 

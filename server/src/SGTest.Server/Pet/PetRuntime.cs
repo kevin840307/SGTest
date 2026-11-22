@@ -5,9 +5,9 @@ using SGTest.Server.Wire;
 namespace SGTest.Server.Pet;
 
 /// <summary>
-/// Authoritative world identity for an active pet. X/Y is the server-owned spawn
-/// baseline only; independent movement/follow/pathing/combat remains a later
-/// source-backed behavior gate rather than being guessed here.
+/// Authoritative world identity for an active pet. X/Y is server-owned world
+/// position consumed by AOI and source-gated pet combat. Independent follow/pathing
+/// behavior remains a separate source-backed gate rather than being guessed here.
 /// </summary>
 public readonly record struct PetWorldPresence(
     long OwnerActorId,long OwnerConnectionEpoch,long OwnerMapEpoch,
@@ -20,7 +20,8 @@ public readonly record struct PetWorldStateUpdate(
 /// <summary>
 /// Durable pet roster/summon boundary. SQLite owns pet instances and active state;
 /// the single AOI owner receives only committed active/inactive presentation state.
-/// Independent follow/combat behavior is intentionally a later slice.
+/// Follow/pathing and combat rules remain separate owners; combat consumes this
+/// committed identity/position and only verified rule data.
 /// </summary>
 public sealed class PetCoordinator
 {

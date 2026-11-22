@@ -103,7 +103,7 @@ static class Checks
             }
             if (args is ["--pet-only"])
             {
-                PetChecks.Verify();
+                PetChecks.Verify(root);
                 Console.WriteLine($"PET_CHECKS PASS total={_passes}");
                 return 0;
             }
@@ -334,7 +334,7 @@ static class Checks
             GmOnlineChecks.Verify(root);
             PartyChecks.Verify(root);
             ClanChecks.Verify();
-            PetChecks.Verify();
+            PetChecks.Verify(root);
             TradeChecks.Verify(root);
             PlayerShopChecks.Verify(root);
             PlayerShopCoordinatorChecks.Verify(root);

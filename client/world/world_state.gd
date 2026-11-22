@@ -287,6 +287,15 @@ var last_pet_result_sequence := 0
 var last_pet_result_status := -1
 var last_pet_result := {}
 var stale_pet_frames := 0
+var pet_attack_sequence := 0
+var pending_pet_attack_sequence := 0
+var pending_pet_attack_uid := 0
+var pending_pet_attack_target := 0
+var last_pet_attack_result_sequence := 0
+var last_pet_attack_result_status := -1
+var last_pet_attack_server_tick := -1
+var last_pet_attack_result := {}
+var stale_pet_attack_results := 0
 const CHAT_BACKLOG_MAX := 100
 var quest_sequence := 0
 var pending_quest_sequence := 0
@@ -415,6 +424,28 @@ func mark_normal_attack_sent(sequence: int) -> bool:
 		return false
 	attack_sequence = sequence
 	return true
+
+func mark_pet_attack_sent(sequence:int,pet_uid:int,target_entity_id:int)->bool:
+	if (
+		state!=STATE_IN_WORLD or player_dead or not world_ready or
+		resync_pending or waiting_for_new_map or pending_world_ready_ack_epoch!=0 or
+		last_world_ready_ack_epoch!=map_epoch or pending_pet_attack_sequence!=0 or
+		sequence<=pet_attack_sequence or sequence>0xffffffff or pet_uid<=0 or
+		target_entity_id<=0 or active_pet_uid!=pet_uid
+	):
+		return false
+	pet_attack_sequence=sequence
+	pending_pet_attack_sequence=sequence
+	pending_pet_attack_uid=pet_uid
+	pending_pet_attack_target=target_entity_id
+	return true
+
+
+func _clear_pending_pet_attack()->void:
+	pending_pet_attack_sequence=0
+	pending_pet_attack_uid=0
+	pending_pet_attack_target=0
+
 
 func mark_skill_sent(sequence: int,target_kind: int = 0,target_id: int = 0) -> bool:
 	if state != STATE_IN_WORLD or player_dead or not world_ready or resync_pending or waiting_for_new_map or pending_world_ready_ack_epoch != 0 or last_world_ready_ack_epoch != map_epoch or pending_skill_sequence != 0 or sequence <= skill_sequence or sequence > 0xffffffff or target_kind not in [0,1] or (target_kind == 1 and target_id <= 0):
@@ -1074,6 +1105,8 @@ func apply_frame(frame: PackedByteArray) -> bool:
 			return _apply_pet_entity_delta(frame)
 		WireCodec.OPCODE_PET_ENTITY_DESPAWN:
 			return _apply_pet_entity_despawn(frame)
+		WireCodec.OPCODE_PET_ATTACK_RESULT:
+			return _apply_pet_attack_result(frame)
 		WireCodec.OPCODE_QUEST_VIEW:
 			return _apply_quest_view(frame)
 		WireCodec.OPCODE_WORLD_READY:
@@ -1368,6 +1401,15 @@ func snapshot() -> Dictionary:
 		"last_pet_result_status": last_pet_result_status,
 		"last_pet_result": last_pet_result.duplicate(true),
 		"stale_pet_frames": stale_pet_frames,
+		"pet_attack_sequence": pet_attack_sequence,
+		"pending_pet_attack_sequence": pending_pet_attack_sequence,
+		"pending_pet_attack_uid": pending_pet_attack_uid,
+		"pending_pet_attack_target": pending_pet_attack_target,
+		"last_pet_attack_result_sequence": last_pet_attack_result_sequence,
+		"last_pet_attack_result_status": last_pet_attack_result_status,
+		"last_pet_attack_server_tick": last_pet_attack_server_tick,
+		"last_pet_attack_result": last_pet_attack_result.duplicate(true),
+		"stale_pet_attack_results": stale_pet_attack_results,
 		"quest_sequence": quest_sequence,
 		"pending_quest_sequence": pending_quest_sequence,
 		"pending_quest_kind": pending_quest_kind,
@@ -1620,6 +1662,13 @@ func _reset_character_pet_state() -> void:
 	last_pet_result_status=-1
 	last_pet_result.clear()
 	stale_pet_frames=0
+	pet_attack_sequence=0
+	_clear_pending_pet_attack()
+	last_pet_attack_result_sequence=0
+	last_pet_attack_result_status=-1
+	last_pet_attack_server_tick=-1
+	last_pet_attack_result.clear()
+	stale_pet_attack_results=0
 
 
 func _reset_character_economy_state() -> void:
@@ -4092,6 +4141,39 @@ func _clear_quest_map()->void:
 	last_quest_status=-1
 	last_quest_result.clear()
 	stale_quest_results=0
+
+
+func _apply_pet_attack_result(frame:PackedByteArray)->bool:
+	if state!=STATE_IN_WORLD:
+		return fail("pet_attack_result_out_of_state")
+	var result:=WireCodec.decode_pet_attack_result(frame)
+	if result.is_empty():
+		return fail("invalid_pet_attack_result")
+	var epoch:=int(result.map_epoch)
+	var sequence:=int(result.attack_sequence)
+	var tick:=int(result.server_tick)
+	if epoch<map_epoch:
+		stale_pet_attack_results+=1
+		return true
+	if epoch>map_epoch:
+		return fail("future_pet_attack_result")
+	if sequence<=last_pet_attack_result_sequence:
+		stale_pet_attack_results+=1
+		return true
+	if (
+		sequence>pet_attack_sequence or sequence!=pending_pet_attack_sequence or
+		int(result.pet_uid)!=pending_pet_attack_uid or
+		int(result.target_entity_id)!=pending_pet_attack_target
+	):
+		return fail("pet_attack_result_without_matching_request")
+	if last_pet_attack_server_tick>=0 and tick<last_pet_attack_server_tick:
+		return fail("pet_attack_server_tick_regressed")
+	last_pet_attack_result_sequence=sequence
+	last_pet_attack_result_status=int(result.status)
+	last_pet_attack_server_tick=tick
+	last_pet_attack_result=result.duplicate(true)
+	_clear_pending_pet_attack()
+	return true
 
 
 func _apply_pet_result(frame:PackedByteArray)->bool:

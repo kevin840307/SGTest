@@ -68,6 +68,7 @@ public sealed partial class WorldResultRouter
     private readonly Channel<WorldChangedBatch> _changed;
     private readonly Channel<TrustedWorldResyncRequest> _resync;
     private readonly Channel<TrustedNormalAttack> _attacks;
+    private readonly Channel<TrustedPetAttack> _petAttacks;
     private readonly Channel<TrustedSkillUse> _skills;
     private readonly Channel<SkillPreflightRequest> _skillPreflights;
     private readonly Channel<PreparedSkillAction> _preparedSkills;
@@ -116,6 +117,14 @@ public sealed partial class WorldResultRouter
                 SingleWriter = false,
                 FullMode = BoundedChannelFullMode.Wait,
                 AllowSynchronousContinuations = false
+            });
+        _petAttacks=Channel.CreateBounded<TrustedPetAttack>(
+            new BoundedChannelOptions(_options.AttackRequestCapacity)
+            {
+                SingleReader=true,
+                SingleWriter=false,
+                FullMode=BoundedChannelFullMode.Wait,
+                AllowSynchronousContinuations=false
             });
         _skills=Channel.CreateBounded<TrustedSkillUse>(
             new BoundedChannelOptions(_options.AttackRequestCapacity)
@@ -202,6 +211,7 @@ public sealed partial class WorldResultRouter
     public ChannelReader<WorldChangedBatch> ChangedBatches => _changed.Reader;
     public ChannelReader<TrustedWorldResyncRequest> ResyncRequests => _resync.Reader;
     public ChannelReader<TrustedNormalAttack> AttackRequests => _attacks.Reader;
+    public ChannelReader<TrustedPetAttack> PetAttackRequests => _petAttacks.Reader;
     public ChannelReader<TrustedSkillUse> SkillRequests => _skills.Reader;
     public ChannelReader<SkillPreflightRequest> SkillPreflightRequests =>
         _skillPreflights.Reader;

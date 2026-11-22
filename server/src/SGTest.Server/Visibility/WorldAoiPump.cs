@@ -152,6 +152,47 @@ public sealed class WorldAoiPump
                     Interlocked.Increment(ref _framesQueued);
                 }
 
+                while(_router.PetAttackRequests.TryRead(out var petAttack))
+                {
+                    bool attackerDead=_playerCombat is not null&&
+                        _monsters is not null&&
+                        _monsters.TryGetActor(petAttack.ActorId,out var petOwner)&&
+                        _playerCombat.CurrentHp(petOwner)<=0;
+                    NormalAttackOutcome outcome;
+                    if(_monsters is null||attackerDead||
+                       !_aoi.TryGetPet(
+                           petAttack.ActorId,petAttack.ConnectionEpoch,
+                           petAttack.RequestMapEpoch,petAttack.PetUid,out var pet))
+                        outcome=new(
+                            NormalAttackStatus.CombatUnavailable,
+                            Math.Max(0,_aoi.LastTick),petAttack.TargetEntityId,
+                            0,0,0,0);
+                    else
+                        outcome=_monsters.ResolvePetNormalAttack(petAttack,pet);
+
+                    if(outcome.Status==NormalAttackStatus.Applied&&
+                       outcome.Monster is { } changed)
+                    {
+                        _aoi.ApplyMonsters(_aoi.LastTick,[changed]);
+                        if(_loot is not null&&changed.CurrentHp==0&&
+                           changed.State==MonsterAiState.Dead&&
+                           _loot.TryPostDeath(changed)==MonsterLootPostStatus.Backpressured)
+                            throw new AoiBackpressureException(
+                                "Loot settlement queue full; accepted pet death must not be dropped");
+                    }
+
+                    var sent=_router.QueuePetAttackResult(petAttack,outcome);
+                    if(sent is GatewaySendStatus.GenerationMismatch or GatewaySendStatus.Closed)
+                        continue;
+                    if(sent==GatewaySendStatus.Backpressured)
+                        throw new AoiBackpressureException(
+                            "Authenticated Gateway pet combat FIFO full; result cannot be dropped");
+                    if(sent!=GatewaySendStatus.Enqueued)
+                        throw new InvalidOperationException(
+                            "Pet combat delivery accounting diverged");
+                    Interlocked.Increment(ref _framesQueued);
+                }
+
                 while(_router.SkillPreflightRequests.TryRead(out var preflight))
                 {
                     MonsterWorldCoordinator.SkillPrepareResult result;

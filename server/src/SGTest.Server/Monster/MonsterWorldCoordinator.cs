@@ -1,4 +1,5 @@
 using SGTest.Server.Skill;
+using SGTest.Server.Pet;
 using SGTest.Server.Pvp;
 using SGTest.Server.Combat;
 using SGTest.Server.Gateway;
@@ -58,8 +59,10 @@ public sealed class MonsterWorldCoordinator
     }
 
     private readonly IReadOnlyDictionary<int,VerifiedSkillRule> _skillRules;
+    private readonly IReadOnlyDictionary<PetCombatRuleKey,VerifiedPetCombatRule> _petRules;
     private readonly Dictionary<long, ActorSnapshot> _actors = [];
     private readonly Dictionary<long, AttackCursor> _attack = [];
+    private readonly Dictionary<long, AttackCursor> _petAttack = [];
     private readonly Dictionary<long, SkillCursor> _skill = [];
     private readonly HashSet<int> _seededMaps = [];
     private long _lastTick;
@@ -67,12 +70,25 @@ public sealed class MonsterWorldCoordinator
 
     public MonsterWorldCoordinator(
         IEnumerable<MonsterRuntime> runtimes,
-        IReadOnlyDictionary<int,VerifiedSkillRule>? skillRules = null)
+        IReadOnlyDictionary<int,VerifiedSkillRule>? skillRules = null,
+        IReadOnlyDictionary<PetCombatRuleKey,VerifiedPetCombatRule>? petRules = null)
     {
         ArgumentNullException.ThrowIfNull(runtimes);
         _skillRules=skillRules is null
             ? new Dictionary<int,VerifiedSkillRule>()
             : new Dictionary<int,VerifiedSkillRule>(skillRules);
+        _petRules=petRules is null
+            ? new Dictionary<PetCombatRuleKey,VerifiedPetCombatRule>()
+            : new Dictionary<PetCombatRuleKey,VerifiedPetCombatRule>(petRules);
+        if(_petRules.Count>PetCombatRuleCatalog.MaximumRules ||
+           _petRules.Any(pair=>pair.Key!=new PetCombatRuleKey(
+                    pair.Value.DefinitionId,pair.Value.EvolutionId,pair.Value.Level) ||
+                pair.Value.FixedDamage is <1 or >100_000_000 ||
+                !double.IsFinite(pair.Value.AttackRange) ||
+                pair.Value.AttackRange is <=0 or >500 ||
+                pair.Value.CooldownTicks is <0 or >3_600 ||
+                string.IsNullOrWhiteSpace(pair.Value.EvidenceSource)))
+            throw new ArgumentOutOfRangeException(nameof(petRules));
         if(_skillRules.Count>64 ||
             _skillRules.Any(pair=>pair.Key!=pair.Value.SkillId ||
                 pair.Key is <1 or >100_000_000 ||
@@ -208,6 +224,53 @@ public sealed class MonsterWorldCoordinator
         return new(NormalAttackStatus.Applied, _lastTick, request.TargetEntityId,
             applied.Damage, changed.CurrentHp, changed.MaxHp,
             changed.EntityRevision, changed);
+    }
+
+    public NormalAttackOutcome ResolvePetNormalAttack(
+        TrustedPetAttack request,PetWorldPresence pet)
+    {
+        if(_lastTick<=0||!_actors.TryGetValue(request.ActorId,out var actor)||
+           !_petAttack.TryGetValue(request.ActorId,out var cursor)||
+           actor.ConnectionEpoch!=request.ConnectionEpoch||
+           cursor.ConnectionEpoch!=request.ConnectionEpoch)
+            return PetEmpty(request,NormalAttackStatus.OldMapEpoch);
+
+        if(request.RequestMapEpoch!=actor.MapEpoch||cursor.MapEpoch!=actor.MapEpoch)
+            return PetEmpty(request,NormalAttackStatus.OldMapEpoch);
+
+        if(pet.OwnerActorId!=request.ActorId||
+           pet.OwnerConnectionEpoch!=request.ConnectionEpoch||
+           pet.OwnerMapEpoch!=request.RequestMapEpoch||pet.PetUid!=request.PetUid)
+            return PetEmpty(request,NormalAttackStatus.CombatUnavailable);
+
+        if(request.AttackSequence<=cursor.LastSequence)
+            return PetEmpty(request,NormalAttackStatus.ReplayedSequence);
+        cursor.LastSequence=request.AttackSequence;
+
+        var key=new PetCombatRuleKey(pet.DefinitionId,pet.EvolutionId,pet.Level);
+        if(!_petRules.TryGetValue(key,out var rule)||
+           !_runtimes.TryGetValue(actor.MapId,out var runtime))
+            return PetEmpty(request,NormalAttackStatus.CombatUnavailable);
+
+        if(cursor.LastAppliedTick>=0&&
+           _lastTick-cursor.LastAppliedTick<rule.CooldownTicks)
+            return PetEmpty(request,NormalAttackStatus.Cooldown);
+
+        var status=runtime.ValidateNormalAttackTarget(
+            request.TargetEntityId,pet.X,pet.Y,rule.AttackRange,out var target);
+        if(status!=NormalAttackStatus.Applied)
+            return PetFromTarget(request,status,target);
+
+        cursor.LastAppliedTick=_lastTick;
+        var applied=runtime.ApplyTrustedDamage(
+            request.TargetEntityId,request.ActorId,rule.FixedDamage,_lastTick);
+        if(!applied.Applied)
+            return PetFromTarget(request,NormalAttackStatus.TargetDead,target);
+
+        var changed=applied.Monster;
+        return new(NormalAttackStatus.Applied,_lastTick,request.TargetEntityId,
+            applied.Damage,changed.CurrentHp,changed.MaxHp,
+            changed.EntityRevision,changed);
     }
 
     public SkillUseOutcome ResolveSkill(TrustedSkillUse request)
@@ -473,6 +536,19 @@ public sealed class MonsterWorldCoordinator
             target.CurrentHp, target.MaxHp, target.EntityRevision, target);
     }
 
+    private NormalAttackOutcome PetEmpty(
+        TrustedPetAttack request,NormalAttackStatus status) =>
+        new(status,Math.Max(0,_lastTick),request.TargetEntityId,0,0,0,0);
+
+    private NormalAttackOutcome PetFromTarget(
+        TrustedPetAttack request,NormalAttackStatus status,MonsterSnapshot target)
+    {
+        if(target.EntityId<=0)
+            return PetEmpty(request,status);
+        return new(status,Math.Max(0,_lastTick),request.TargetEntityId,0,
+            target.CurrentHp,target.MaxHp,target.EntityRevision,target);
+    }
+
     private void Join(ActorSnapshot actor)
     {
         ValidateActor(actor);
@@ -484,6 +560,11 @@ public sealed class MonsterWorldCoordinator
         {
             ConnectionEpoch = actor.ConnectionEpoch,
             MapEpoch = actor.MapEpoch
+        });
+        _petAttack.Add(actor.ActorId,new AttackCursor
+        {
+            ConnectionEpoch=actor.ConnectionEpoch,
+            MapEpoch=actor.MapEpoch
         });
         _skill.Add(actor.ActorId,new SkillCursor
         {
@@ -501,6 +582,7 @@ public sealed class MonsterWorldCoordinator
             throw new InvalidOperationException("Monster coordinator received stale Leave");
         _actors.Remove(actor.ActorId);
         _attack.Remove(actor.ActorId);
+        _petAttack.Remove(actor.ActorId);
         _skill.Remove(actor.ActorId);
     }
 
