@@ -13,6 +13,8 @@ var _online_gate_remote_start := Vector2.ZERO
 var _online_gate_finish_code := -1
 var _online_gate_finish_reason := ""
 var _online_gate_monster_seen := false
+var _character_proof_requested := false
+var _character_proof_ready := false
 var _walk_last_visual := Vector2.INF
 var _walk_last_sample_usec := 0
 var _walk_smooth_frames := 0
@@ -108,6 +110,28 @@ func _online_gate_tick() -> void:
 		return
 	if _app.session_panel.characters.visible and not _app.session_panel.choose_button.disabled and _app.session_panel.characters.item_count > 0:
 		_app.session_panel.characters.select(0)
+		# CLI-provisioned synthetic characters intentionally bypass normal
+		# creation UI, so migrate their secondary proof through SessionPanel once
+		# before exercising the real choose-password field/button path.
+		if not _character_proof_ready:
+			if not _character_proof_requested:
+				var listed: Array = _app.session_panel._latest.get("characters",[])
+				if listed.is_empty():
+					return
+				if not _app.session_panel.change_character_password(int(listed[0].character_id),"","2468"):
+					_online_gate_fail("character_proof_migration_rejected")
+					return
+				_character_proof_requested = true
+				return
+			var manage_revision := int(_app.session_panel._latest.get("character_manage_result_revision",0))
+			if manage_revision <= 0:
+				return
+			var manage_status := int(_app.session_panel._latest.get("character_manage_status",-1))
+			if manage_status not in [0,2]:
+				_online_gate_fail("character_proof_migration_status_%d" % manage_status)
+				return
+			_character_proof_ready = true
+		_app.session_panel.character_choose_password_input.text = "2468"
 		_app.session_panel.choose()
 	if _online_gate_role == "observer":
 		_online_gate_observer()

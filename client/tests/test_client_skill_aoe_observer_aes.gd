@@ -2,6 +2,7 @@ extends SceneTree
 
 const Session = preload("res://session/client_session.gd")
 const WorldState = preload("res://world/world_state.gd")
+const FixtureLogin = preload("res://tests/aes_character_fixture.gd")
 const PASSWORD := "Fixture-Password-123!"
 
 func _fail(message: String, session = null) -> void:
@@ -27,7 +28,7 @@ func _initialize() -> void:
 		_fail("character list "+str(session.snapshot()),session)
 		return
 	var self_id := int(selecting.characters[0].character_id)
-	if not session.choose_character(self_id):
+	if not FixtureLogin.provision_and_choose(session, self_id):
 		_fail("choose",session)
 		return
 	var ready := _wait(session,func(v):

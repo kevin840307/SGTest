@@ -4,6 +4,7 @@ extends SceneTree
 # runs one shared 30Hz authoritative World with AES/WorldAoiPump, not fake wire.
 const Session = preload("res://session/client_session.gd")
 const WorldState = preload("res://world/world_state.gd")
+const FixtureLogin = preload("res://tests/aes_character_fixture.gd")
 const PASSWORD := "Fixture-Password-123!"
 
 func _fail(message: String, session = null) -> void:
@@ -34,7 +35,7 @@ func _initialize() -> void:
 		_fail("%s character list %s" % [role, session.snapshot()], session)
 		return
 	var self_id := int(selecting.characters[0].character_id)
-	if not session.choose_character(self_id):
+	if not FixtureLogin.provision_and_choose(session, self_id):
 		_fail("%s character choose rejected" % role, session)
 		return
 	var ready := _wait_ready(session, 7000)

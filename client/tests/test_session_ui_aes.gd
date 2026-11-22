@@ -608,6 +608,20 @@ func run() -> void:
 			fail("UI screenshot save")
 			return
 	panel.characters.select(0)
+	# This login fixture predates mandatory per-character proof. Migrate it
+	# through the same SessionPanel management action exposed to authenticated
+	# UI shells, then exercise the actual choose-password field/button path.
+	var character_id := int(panel._characters[0].character_id)
+	var manage_before := int(panel._latest.get("character_manage_result_revision",0))
+	if not panel.change_character_password(character_id,"","2468"):
+		fail("UI secondary password migration intent rejected")
+		return
+	while int(panel._latest.get("character_manage_result_revision",0)) <= manage_before and Time.get_ticks_msec()<deadline and panel.active:
+		await process_frame
+	if int(panel._latest.get("character_manage_status",-1)) != 0:
+		fail("UI secondary password migration failed")
+		return
+	panel.character_choose_password_input.text = "2468"
 	panel.choose_button.pressed.emit()
 	while not bool(panel._latest.get("world_ready",false)) and Time.get_ticks_msec()<deadline and panel.active:
 		await process_frame
@@ -1224,8 +1238,8 @@ func run() -> void:
 	panel._latest.trade_other_items = {20000:{"item_uid":20000,"item_definition_id":4002,"quantity":1,"drop_id":502,"enhancement_level":7,"durability_raw":60}}
 	panel._latest.trade_other_money = 50
 	panel._refresh_trade_panel()
-	if panel.trade_panel.trade_my_offer_picker.item_count != 1 or not panel.trade_panel.trade_my_offer_picker.get_item_text(0).contains("+5") or not panel.trade_panel.trade_my_offer_picker.get_item_text(0).contains("耐久 raw 80") or not panel.trade_panel.trade_other_offer_label.text.contains("UID 20000") or not panel.trade_panel.trade_other_offer_label.text.contains("+7") or not panel.trade_panel.trade_other_offer_label.text.contains("耐久 raw 60"):
-		fail("Trade UI did not render authoritative offers/enhancement/durability")
+	if panel.trade_panel.trade_my_offer_picker.item_count != 1 or not panel.trade_panel.trade_my_offer_picker.get_item_text(0).contains("+5") or not panel.trade_panel.trade_my_offer_picker.get_item_text(0).contains("耐久 2") or not panel.trade_panel.trade_other_offer_label.text.contains("UID 20000") or not panel.trade_panel.trade_other_offer_label.text.contains("+7") or not panel.trade_panel.trade_other_offer_label.text.contains("耐久 2"):
+		fail("Trade UI did not render authoritative offers/enhancement/display durability")
 		return
 	panel.trade_panel.trade_money_input.value = 200
 	panel.trade_panel.trade_set_money_button.pressed.emit()
