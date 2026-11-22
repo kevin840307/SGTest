@@ -260,6 +260,20 @@ var last_party_result_sequence := 0
 var last_party_result_status := -1
 var last_party_result := {}
 var stale_party_frames := 0
+var clan_sequence := 0
+var pending_clan_sequence := 0
+var pending_clan_action := 0
+var pending_clan_id := 0
+var pending_clan_name := ""
+var clan_id := 0
+var clan_revision := 0
+var clan_leader_actor_id := 0
+var clan_name := ""
+var clan_members := {}
+var last_clan_result_sequence := 0
+var last_clan_result_status := -1
+var last_clan_result := {}
+var stale_clan_frames := 0
 const CHAT_BACKLOG_MAX := 100
 var quest_sequence := 0
 var pending_quest_sequence := 0
@@ -751,6 +765,48 @@ func _clear_pending_party()->void:
 	pending_party_target_name=""
 
 
+func mark_clan_sent(sequence:int,action:int,request_clan_id:int,name:String="")->bool:
+	if (
+		state!=STATE_IN_WORLD or not world_ready or resync_pending or
+		waiting_for_new_map or pending_world_ready_ack_epoch!=0 or
+		last_world_ready_ack_epoch!=map_epoch or pending_clan_sequence!=0 or
+		sequence<=clan_sequence or sequence>0xffffffff or action<1 or action>4 or
+		request_clan_id<0
+	):
+		return false
+	var clean:=name.strip_edges()
+	if clean!=name or clean.to_utf8_buffer().size()>WireCodec.CLAN_MAX_NAME_BYTES:
+		return false
+	match action:
+		1:
+			if clan_id!=0 or request_clan_id!=0 or clean.length()<2 or clean.length()>24:
+				return false
+		2:
+			if clan_id!=0 or request_clan_id<=0 or not clean.is_empty():
+				return false
+		3:
+			if clan_id<=0 or request_clan_id!=0 or not clean.is_empty():
+				return false
+		4:
+			if request_clan_id!=0 or not clean.is_empty():
+				return false
+		_:
+			return false
+	clan_sequence=sequence
+	pending_clan_sequence=sequence
+	pending_clan_action=action
+	pending_clan_id=request_clan_id
+	pending_clan_name=clean
+	return true
+
+
+func _clear_pending_clan()->void:
+	pending_clan_sequence=0
+	pending_clan_action=0
+	pending_clan_id=0
+	pending_clan_name=""
+
+
 func mark_quest_sent(
 		sequence:int,kind:int,npc_spawn_id:int,quest_id:int=0,
 		choice_id:int=0)->bool:
@@ -959,6 +1015,10 @@ func apply_frame(frame: PackedByteArray) -> bool:
 			return _apply_party_invite(frame)
 		WireCodec.OPCODE_PARTY_SNAPSHOT:
 			return _apply_party_snapshot(frame)
+		WireCodec.OPCODE_CLAN_RESULT:
+			return _apply_clan_result(frame)
+		WireCodec.OPCODE_CLAN_SNAPSHOT:
+			return _apply_clan_snapshot(frame)
 		WireCodec.OPCODE_QUEST_VIEW:
 			return _apply_quest_view(frame)
 		WireCodec.OPCODE_WORLD_READY:
@@ -1224,6 +1284,20 @@ func snapshot() -> Dictionary:
 		"last_party_result_status": last_party_result_status,
 		"last_party_result": last_party_result.duplicate(true),
 		"stale_party_frames": stale_party_frames,
+		"clan_sequence": clan_sequence,
+		"pending_clan_sequence": pending_clan_sequence,
+		"pending_clan_action": pending_clan_action,
+		"pending_clan_id": pending_clan_id,
+		"pending_clan_name": pending_clan_name,
+		"clan_id": clan_id,
+		"clan_revision": clan_revision,
+		"clan_leader_actor_id": clan_leader_actor_id,
+		"clan_name": clan_name,
+		"clan_members": clan_members.duplicate(true),
+		"last_clan_result_sequence": last_clan_result_sequence,
+		"last_clan_result_status": last_clan_result_status,
+		"last_clan_result": last_clan_result.duplicate(true),
+		"stale_clan_frames": stale_clan_frames,
 		"quest_sequence": quest_sequence,
 		"pending_quest_sequence": pending_quest_sequence,
 		"pending_quest_kind": pending_quest_kind,
@@ -2910,6 +2984,7 @@ func _apply_storage_transfer_result(frame: PackedByteArray) -> bool:
 			if int(previous.item_definition_id) != int(receipt.item_definition_id) or int(previous.quantity) != int(receipt.quantity) or int(previous.get("drop_id",0)) != int(receipt.drop_id):
 				return fail("storage_deposit_receipt_mismatch")
 			receipt["enhancement_level"] = int(previous.get("enhancement_level",0))
+			receipt["durability_raw"] = int(previous.get("durability_raw",-1))
 			inventory_items.erase(uid)
 			storage_items[uid] = receipt
 		else:
@@ -2919,6 +2994,7 @@ func _apply_storage_transfer_result(frame: PackedByteArray) -> bool:
 			if int(previous.item_definition_id) != int(receipt.item_definition_id) or int(previous.quantity) != int(receipt.quantity) or int(previous.get("drop_id",0)) != int(receipt.drop_id):
 				return fail("storage_withdraw_receipt_mismatch")
 			receipt["enhancement_level"] = int(previous.get("enhancement_level",0))
+			receipt["durability_raw"] = int(previous.get("durability_raw",-1))
 			storage_items.erase(uid)
 			inventory_items[uid] = receipt
 		inventory_revision += 1
@@ -2995,6 +3071,7 @@ func _apply_equipment_transfer_result(frame: PackedByteArray) -> bool:
 			if int(previous.item_definition_id) != int(receipt.item_definition_id) or int(previous.quantity) != 1 or int(previous.get("drop_id",0)) != int(receipt.drop_id):
 				return fail("equipment_equip_receipt_mismatch")
 			receipt["enhancement_level"] = int(previous.get("enhancement_level",0))
+			receipt["durability_raw"] = int(previous.get("durability_raw",-1))
 			inventory_items.erase(uid)
 			equipment_items[uid] = receipt
 			equipment_slots[slot_id] = uid
@@ -3005,12 +3082,13 @@ func _apply_equipment_transfer_result(frame: PackedByteArray) -> bool:
 			if int(previous.item_definition_id) != int(receipt.item_definition_id) or int(previous.slot_id) != slot_id or int(previous.get("drop_id",0)) != int(receipt.drop_id) or int(equipment_slots.get(slot_id,0)) != uid:
 				return fail("equipment_unequip_receipt_mismatch")
 			var level := int(previous.get("enhancement_level",0))
+			var durability_raw := int(previous.get("durability_raw",-1))
 			equipment_items.erase(uid)
 			equipment_slots.erase(slot_id)
 			inventory_items[uid] = {"item_uid":uid,
 				"item_definition_id":int(receipt.item_definition_id),
 				"quantity":1,"drop_id":int(receipt.drop_id),
-				"enhancement_level":level}
+				"enhancement_level":level,"durability_raw":durability_raw}
 		inventory_revision += 1
 		equipment_revision += 1
 	last_equipment_response_sequence = sequence
@@ -3792,6 +3870,82 @@ func _apply_party_snapshot(frame:PackedByteArray)->bool:
 		int(pending_party_invite.get("party_id",0))==incoming_party
 	):
 		pending_party_invite.clear()
+	return true
+
+
+func _apply_clan_result(frame:PackedByteArray)->bool:
+	if state!=STATE_IN_WORLD:
+		return fail("clan_result_out_of_state")
+	var value:=WireCodec.decode_clan_result(frame)
+	if value.is_empty():
+		return fail("invalid_clan_result")
+	var epoch:=int(value.map_epoch)
+	var sequence:=int(value.clan_sequence)
+	if epoch<map_epoch:
+		stale_clan_frames+=1
+		return true
+	if epoch>map_epoch:
+		return fail("future_clan_result")
+	if sequence<=last_clan_result_sequence:
+		stale_clan_frames+=1
+		return true
+	if (
+		sequence>clan_sequence or sequence!=pending_clan_sequence or
+		int(value.action)!=pending_clan_action
+	):
+		return fail("clan_result_without_matching_request")
+	var status:=int(value.status)
+	if status<0 or status>7:
+		return fail("clan_result_unknown_status")
+	last_clan_result_sequence=sequence
+	last_clan_result_status=status
+	last_clan_result=value.duplicate(true)
+	if not pending_clan_name.is_empty():
+		last_clan_result["requested_name"]=pending_clan_name
+	_clear_pending_clan()
+	return true
+
+
+func _apply_clan_snapshot(frame:PackedByteArray)->bool:
+	if state!=STATE_IN_WORLD:
+		return fail("clan_snapshot_out_of_state")
+	var value:=WireCodec.decode_clan_snapshot(frame)
+	if value.is_empty():
+		return fail("invalid_clan_snapshot")
+	var epoch:=int(value.receiver_map_epoch)
+	if epoch<map_epoch:
+		stale_clan_frames+=1
+		return true
+	if epoch>map_epoch:
+		return fail("future_clan_snapshot")
+	var incoming:=int(value.clan_id)
+	var revision:=int(value.revision)
+	if incoming==0:
+		clan_id=0
+		clan_revision=0
+		clan_leader_actor_id=0
+		clan_name=""
+		clan_members.clear()
+		return true
+	if clan_id==incoming and revision<=clan_revision:
+		stale_clan_frames+=1
+		return true
+	if clan_id!=0 and clan_id!=incoming:
+		return fail("clan_snapshot_conflicts_with_current_clan")
+	var next_members:={}
+	for raw in value.members:
+		var member:Dictionary=raw
+		next_members[int(member.actor_id)]=member.duplicate(true)
+	if not next_members.has(actor_id):
+		return fail("clan_snapshot_missing_self")
+	var leader:=int(value.leader_actor_id)
+	if not next_members.has(leader):
+		return fail("clan_snapshot_missing_leader")
+	clan_id=incoming
+	clan_revision=revision
+	clan_leader_actor_id=leader
+	clan_name=str(value.name)
+	clan_members=next_members
 	return true
 
 

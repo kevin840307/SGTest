@@ -317,8 +317,30 @@ FROM pvp_name_admin_events WHERE character_id=$id;";
                     inventory.StartIndex==0 && inventory.Complete &&
                     inventory.Items.Count==0,
                     "fresh CLI character did not receive complete empty inventory baseline");
-                Checks.Require(WireProtocol.TryDecodeWorldReady(await Read(tls),out var world) && world.ReceiverMapEpoch==choose.MapEpoch,
-                    "Host did not deliver WorldReady after provisioned login");
+                bool clanBaseline=false, worldReady=false;
+                WorldReadyWire world=default;
+                for(int i=0;i<4 && !worldReady;i++)
+                {
+                    var baseline=await Read(tls);
+                    if(WireProtocol.TryDecodeClanSnapshot(baseline,out var clan) && clan is not null)
+                    {
+                        Checks.Require(!clanBaseline && clan.ReceiverMapEpoch==choose.MapEpoch &&
+                            clan.ClanId==0 && clan.Revision==0 && clan.LeaderCharacterId==0 &&
+                            clan.Members.Count==0,
+                            "fresh CLI character received invalid clan baseline");
+                        clanBaseline=true;
+                        continue;
+                    }
+                    if(WireProtocol.TryDecodeWorldReady(baseline,out world) &&
+                       world.ReceiverMapEpoch==choose.MapEpoch)
+                    {
+                        worldReady=true;
+                        continue;
+                    }
+                    throw new Exception("Unexpected authenticated baseline before WorldReady");
+                }
+                Checks.Require(clanBaseline && worldReady,
+                    "Host did not deliver clan baseline and WorldReady after provisioned login");
                 await tls.WriteAsync(WireProtocol.EncodeWorldReadyAck(
                     new(world.ReceiverMapEpoch, world.ServerTick)));
                 await tls.WriteAsync(WireProtocol.EncodeMoveTarget(new(choose.MapEpoch,1,40,24)));

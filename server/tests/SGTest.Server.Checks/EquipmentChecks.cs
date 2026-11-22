@@ -105,6 +105,20 @@ internal static class EquipmentChecks
             Checks.Require(shieldGrant.Status==PickupStatus.Granted&&
                 shieldGrant.Quantity==1,"equipment shield seed failed");
             shieldUid=shieldGrant.ItemUid;
+            using(var connection=new SqliteConnection(
+                new SqliteConnectionStringBuilder
+                {
+                    DataSource=db,Mode=SqliteOpenMode.ReadWrite,Pooling=false
+                }.ToString()))
+            {
+                connection.Open();
+                using var command=connection.CreateCommand();
+                command.CommandText=
+                    "UPDATE item_instances SET enhancement_level=5,durability_raw=80 WHERE item_uid=$uid;";
+                command.Parameters.AddWithValue("$uid",swordUid);
+                Checks.Require(command.ExecuteNonQuery()==1,
+                    "equipment instance metadata seed failed");
+            }
 
             IReadOnlyDictionary<int,EquipmentRule> sameSlotRules=
                 new Dictionary<int,EquipmentRule>
@@ -132,8 +146,9 @@ internal static class EquipmentChecks
                 equipped.SlotId==4&&equipped.SourceDropId==swordDrop&&
                 equippedRows.Count==1&&equippedRows[0].ItemUid==swordUid&&
                 equippedRows[0].SlotId==4&&equippedRows[0].SourceDropId==swordDrop&&
+                equippedRows[0].EnhancementLevel==5&&equippedRows[0].DurabilityRaw==80&&
                 inventory.Count==1&&inventory[0].ItemUid==shieldUid,
-                "equipment equip/replay did not preserve exact UID");
+                "equipment equip/replay did not preserve exact UID metadata");
 
             var occupied=await store.EquipInventoryItemAsync(
                 new TrustedEquipmentContext(characterA,301,1,2),
@@ -175,9 +190,10 @@ internal static class EquipmentChecks
                 unequipReplay.Status==EquipmentTransferStatus.AlreadyApplied&&
                 unequipped.SlotId==4&&unequipped.SourceDropId==swordDrop&&
                 (await store.ListEquippedItemsAsync(characterA)).Count==0&&
-                inventory.Count==2&&inventory.Any(x=>x.ItemUid==swordUid)&&
+                inventory.Count==2&&
+                inventory.Any(x=>x.ItemUid==swordUid&&x.EnhancementLevel==5&&x.DurabilityRaw==80)&&
                 inventory.Any(x=>x.ItemUid==shieldUid),
-                "equipment unequip/replay did not restore exact inventory UID");
+                "equipment unequip/replay did not restore exact inventory UID metadata");
 
             bool overlapRejected=false;
             try
@@ -212,7 +228,8 @@ FROM item_instances WHERE item_uid=$uid;";
             await reopened.InitializeAsync();
             var inventory=await reopened.ListInventoryItemsAsync(characterA);
             Checks.Require(
-                inventory.Count==2&&inventory.Any(x=>x.ItemUid==swordUid)&&
+                inventory.Count==2&&
+                inventory.Any(x=>x.ItemUid==swordUid&&x.EnhancementLevel==5&&x.DurabilityRaw==80)&&
                 inventory.Any(x=>x.ItemUid==shieldUid)&&
                 (await reopened.ListEquippedItemsAsync(characterA)).Count==0,
                 "equipment lifecycle did not survive database reopen");

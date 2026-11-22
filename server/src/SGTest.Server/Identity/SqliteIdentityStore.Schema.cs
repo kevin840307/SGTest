@@ -787,6 +787,25 @@ CHECK(sleeve_color BETWEEN 0 AND 255);",tx);
     failed_password_attempts INTEGER NOT NULL DEFAULT 0 CHECK(failed_password_attempts BETWEEN 0 AND 5),
     password_locked_until_ms INTEGER NOT NULL DEFAULT 0 CHECK(password_locked_until_ms >= 0)
 );",tx);
+            // Schema v29: durable clan identity and one-clan-per-character
+            // membership. Client payloads never choose leader/member names.
+            Execute(connection,@"CREATE TABLE IF NOT EXISTS clans (
+    clan_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    name_key TEXT NOT NULL UNIQUE,
+    leader_character_id INTEGER NOT NULL UNIQUE REFERENCES characters(character_id) ON DELETE RESTRICT,
+    revision INTEGER NOT NULL DEFAULT 1 CHECK(revision BETWEEN 1 AND 4294967295),
+    created_unix_ms INTEGER NOT NULL
+);",tx);
+            Execute(connection,@"CREATE TABLE IF NOT EXISTS clan_members (
+    character_id INTEGER PRIMARY KEY REFERENCES characters(character_id) ON DELETE CASCADE,
+    clan_id INTEGER NOT NULL REFERENCES clans(clan_id) ON DELETE CASCADE,
+    role INTEGER NOT NULL CHECK(role IN (0,1)),
+    joined_unix_ms INTEGER NOT NULL,
+    UNIQUE(clan_id,character_id)
+);",tx);
+            Execute(connection,@"CREATE INDEX IF NOT EXISTS ix_clan_members_clan
+ON clan_members(clan_id,role DESC,joined_unix_ms,character_id);",tx);
             if (schemaVersion < SchemaVersion)
                 Execute(connection,
                     $"UPDATE schema_version SET version={SchemaVersion};", tx);

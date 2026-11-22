@@ -124,6 +124,9 @@ public readonly record struct TrustedPartyCommand(
     long ActorId,long ConnectionEpoch,long RequestMapEpoch,
     uint PartySequence,PartyCommandAction Action,long PartyId,long TargetActorId,
     string TargetName = "");
+public readonly record struct TrustedClanCommand(
+    long ActorId,long ConnectionEpoch,long RequestMapEpoch,
+    uint ClanSequence,ClanCommandAction Action,long ClanId,string Name = "");
 public enum TrustedQuestCommandKind : byte { Open=1, Choose=2 }
 public readonly record struct TrustedQuestCommand(
     long ActorId,long ConnectionEpoch,long RequestMapEpoch,

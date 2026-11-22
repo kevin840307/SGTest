@@ -147,6 +147,30 @@ public sealed partial class WorldResultRouter
         }
     }
 
+    public GatewaySendStatus QueueClanResult(
+        TrustedClanCommand request,ClanResultWire result)
+    {
+        lock(_gate)
+        {
+            if(!_connections.TryGetValue(request.ActorId,out var connection)||
+               connection.IsClosed)
+                return GatewaySendStatus.Closed;
+            return connection.QueueClanResult(request,result);
+        }
+    }
+
+    public GatewaySendStatus QueueClanSnapshot(
+        ConnectionBinding recipient,ClanSnapshotWire snapshot)
+    {
+        lock(_gate)
+        {
+            if(!_connections.TryGetValue(recipient.ActorId,out var connection)||
+               connection.IsClosed||connection.Binding!=recipient)
+                return GatewaySendStatus.Closed;
+            return connection.QueueClanSnapshot(recipient,snapshot);
+        }
+    }
+
     public GatewaySendStatus QueuePlayerShopResult(
         TrustedPlayerShopCommand request,PlayerShopResultWire result)
     {

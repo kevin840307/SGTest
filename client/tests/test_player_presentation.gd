@@ -37,7 +37,7 @@ func run() -> void:
 				views[str(part[1])+"_"+action+str(facing)] = {
 					"clip":str(action),"flip_h":facing>=5,
 					# One leg layer has deliberately uneven original ACT timings.
-					# All body, leg, sleeve and equipment layers share 10 FPS in SGTest.
+					# All body, leg, sleeve and equipment layers share fixed 8 FPS.
 					"timeline_ticks":[[0,4],[1,4]] if one_shot else ([[0,5],[1,11]] if str(part[1]) == "B-LEG" else [[0,8],[1,8]]),
 					"loop":not one_shot,"draw_slots":source_slots}
 		assets[part[0]] = {"pages":[texture],"manifest":{"logical_views":views,"clips":clips,"frames":[
@@ -106,19 +106,19 @@ func run() -> void:
 		"WorldReady replay restarted the walking phase instead of moving")
 	check(spawn_probe.position_at(1,125000)==Vector2(14,10),
 		"WorldReady fallback left own walk behind predicted position")
-	# Recovered2's 8 FPS shared paper-doll timing is the baseline, but
-	# SGTest runs 10 FPS for a more readable stride; no 50Hz ACT drift.
+	# Recovered2's fixed 8 FPS shared paper-doll timing is the contract;
+	# movement speed and raw ACT durations must never change this cadence.
 	# A variable raw ACT duration in B-LEG must not desynchronize the legs.
 	var cadence := Players.new()
 	check(cadence.configure(assets)==OK,"walk-cadence profile setup")
 	var walk_snapshot: Dictionary = snapshot.duplicate(true)
 	cadence.apply_snapshot(walk_snapshot,0)
-	for sample in [[99999,0],[100000,1],[199999,1],[200000,0],[299999,0],[300000,1]]:
+	for sample in [[124999,0],[125000,1],[249999,1],[250000,0],[374999,0],[375000,1]]:
 		var sample_actors: Array = cadence.actors_at(int(sample[0]))
 		check(sample_actors.size()==2,"fixed walk cadence actor lost")
 		for sample_actor in sample_actors:
 			for layer in sample_actor.parts:
-				check(int(layer.frame)==int(sample[1]),"10 FPS body/legs/clothes diverged at %d usec" % int(sample[0]))
+				check(int(layer.frame)==int(sample[1]),"8 FPS body/legs/clothes diverged at %d usec" % int(sample[0]))
 	# Change facing during the walk: retain the same phase for the new
 	# directional clips, exactly like Recovered2 sharing the Body frame.
 	walk_snapshot.self_state.facing=3
@@ -136,7 +136,7 @@ func run() -> void:
 		"target_revision":2,"facing":3}]
 	cadence.apply_snapshot(walk_snapshot,350000)
 	var after_attack: Dictionary=cadence.actors_at(550000).filter(func(v):return str(v.id)=="2")[0]
-	check(int(after_attack.parts[0].frame)==1,"one-shot completion restarted walk at frame zero")
+	check(int(after_attack.parts[0].frame)==0,"one-shot completion changed the fixed walk phase")
 	# A genuine stop/restart does reset the cycle, unlike path repaths.
 	walk_snapshot.player_attack_events=[]
 	walk_snapshot.self_state.moving=false
@@ -145,19 +145,19 @@ func run() -> void:
 	walk_snapshot.self_state.moving=true
 	walk_snapshot.entities[2].moving=true
 	cadence.apply_snapshot(walk_snapshot,725000)
-	check(int(cadence.actors_at(824999)[0].parts[0].frame)==0 and
-		int(cadence.actors_at(825000)[0].parts[0].frame)==1,
-		"idle->walk did not restart the exact 100ms walking cadence")
+	check(int(cadence.actors_at(849999)[0].parts[0].frame)==0 and
+		int(cadence.actors_at(850000)[0].parts[0].frame)==1,
+		"idle->walk did not restart the exact 125ms walking cadence")
 	# Long-held mouse movement can issue fresh MoveTarget commands while
 	# the character never stops running. A new command sequence must not
 	# reset the NR animation clock or lock the paper doll in frame zero.
 	own.movement_action_sequence = 2
 	remote.movement_action_sequence = 2
 	players.apply_snapshot(snapshot,100000)
-	# The 100ms shared walk clock advances at a fixed 10 FPS regardless of
-	# 50 Hz ACT per-layer frame time or MoveTarget retransmissions.
+	# The 125ms shared walk clock advances at a fixed 8 FPS regardless of
+	# 50 Hz ACT per-layer frame time, position delta, or MoveTarget retransmissions.
 	var early_walk: Array = players.actors_at(140000)
-	check(early_walk.size()==2 and int(early_walk[0].parts[0].frame)==1 and int(early_walk[1].parts[0].frame)==1,"walk animation did not speed up for owner and observer")
+	check(early_walk.size()==2 and int(early_walk[0].parts[0].frame)==1 and int(early_walk[1].parts[0].frame)==1,"fixed walk animation phase diverged for owner and observer")
 	var actors := players.actors_at(160000)
 	check(actors.size()==2 and actors[0].parts.size()==rendered_slots.size() and
 		int(actors[0].parts[0].frame)==1 and int(actors[1].parts[0].frame)==1,

@@ -3,11 +3,11 @@ extends RefCounted
 const Profile = preload("res://player/character_appearance_profile.gd")
 const PositionHistory = preload("res://movement/position_history.gd")
 const PARTS = Profile.BASE_PARTS
-# Recovered2 uses synced 8 FPS walk SpriteFrames; the original xnAction
-# engine has a 50Hz timeline with an adjustable action speed. Raise only
-# SGTest's shared paper-doll walk cadence to 10 FPS after gameplay feedback.
-# No change to world movement, network tick or server authority.
-const WALK_FRAME_USEC := 100000
+# Recovered2 uses one synchronized 8 FPS SpriteFrames clock for walking.
+# Keep this presentation cadence independent from movement speed, position
+# delta, network tick, repath frequency, and Server correction magnitude.
+# Future mecha/mount renderers must consume this same fixed cadence contract.
+const WALK_FRAME_USEC := 125000
 # Peer walking remains visual-only. Keep playing through short AOI gaps
 # instead of waiting on every authoritative coordinate update.
 const REMOTE_MAX_PREDICTION_TICKS := 4.0
@@ -384,7 +384,7 @@ func actors_at(now_usec: int) -> Array:
 				action = "NR" if bool(value.moving) else "NS"
 				facing = int(value.facing)
 				elapsed = 0
-		# SGTest uses a fixed 10 FPS walk cadence; independent from motion packets.
+		# SGTest uses the Recovered2 fixed 8 FPS walk cadence; independent from motion packets.
 		# Preserve this clock during turns, re-paths and temporary AA/NH.
 		var walk_elapsed_usec := maxi(0,now_usec-int(actor.get("walk_started",actor.started)))
 		var requested := action+str(facing)

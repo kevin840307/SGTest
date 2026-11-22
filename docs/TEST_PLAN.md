@@ -523,6 +523,14 @@ Formal Host 的 listener global/per-IP admission、TLS/auth timeout 與 authenti
 
 2026-11-22新增Source viewport驗證：原Scene參照測試必須設定來源 `content_scale_size=1400×900`、canvas_items/keep；可加 `base-resolution` 使用1400×900。`test_recovered2_local_ui.gd -- <DIR> <PACK> profiles static-login base-resolution` 與 `test_recovered2_login_reference.gd -- <SOURCE_TSCN> <PNG> static-login base-resolution` 的登入區域(560,290,840,610)RGB逐像素差異0。先前1152×620孤立Scene比較不能代替來源專案縮放契約；本輪補齊此範圍，並跑1152×620 R2九圖、正式SGTest native TLS十圖及lifecycle PASS。Recovered參照另已實際打開主要世界視窗、用戶建立的社團與聊天泡泡，28張精選在私人HTML總覽；這是視覺／操作研究，不是SGTest完整UI或Server gameplay PASS。NPC服務完整交易及未開啟視窗仍NOT VERIFIED。
 
+### 2026-11-22 HK Item UI evidence / runtime catalog
+
+- `py -m unittest tools.tests.test_hk_item_itd tools.tests.test_item_catalog -v`: **9/9 PASS**。合成測試覆蓋六種 HK item record boundary、未知／截斷 fail-closed、非法 CP950 tooltip 排除、schema v1 相容、schema v2 presentation metadata、跨版本 exact-name overlay 保留 SGTest runtime ID。
+- 真 HK `Item/item.itd` 經正式 Converter 既有 C.D.E. unwrap 後為 **8,236,329 bytes / 9,096 records / 0 unknown bytes**；type 0/1/2/3/4/6 數量 5239/1291/1/45/85/2435。5000 件現有 Item source 中 **3,030** 件唯一名稱可對應 HK（60.6%），其中 **914** 件具嚴格可解碼 HK 原版 tooltip；runtime Item ID 一律不被 HK ID 取代。
+- 真實 `item-catalog` 輸出 **2,838,031 bytes**，本機完整 CLI 約 **1.119s**；Godot 4.7.2 `test_item_catalog.gd` **PASS**，完整 catalog 載入約 **282.979ms**。有 HK tooltip 時原字串優先，動態數量／目前耐久仍取 Server state；不可把二創最大耐久混成 HK 值。
+- Godot headless `test_recovered2_world_ui.gd`：**PASS**；`test_classic_ie_ui.gd`：**PASS**（含 800×600 original SPR、shared session、runtime switch）。這是 UI/data-contract 回歸，不是 Windows 實機截圖像素一致、VRAM/RSS 或完整 Release PASS。
+- HK 裝備中由 Client 動態格式化、無法從固定 tooltip 欄直接解碼的靜態數值與 rarity/color formatter 仍 **NOT VERIFIED**；後續需繼續追 `CSGOItemFastView/CItemItf` 數值欄位與畫字流程，不能以二創 metadata 宣稱原版已完整還原。
+
 ## 合成 Atlas 的 GPU 回收
 
 執行 `python client/tests/run_asset_store_gpu.py <Godot console executable>`。測試即時生成 64×64 貼圖、透過正式打包器建立 PCK，使用 OpenGL Compatibility 繪製，再於 30 輪內檢查共用引用與最後一次釋放。每輪須回到初始貼圖記憶體，AssetStore 帳目須歸零。 測試在地圖釋放引用後讀回角色像素，並在最後一個引用釋放後驗證貼圖物件已銷毀。

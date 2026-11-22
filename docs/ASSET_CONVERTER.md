@@ -204,7 +204,7 @@ python tools/asset_converter/smoke_runtime_pack.py "C:\SGO\Godot\Godot_v4.7.2-st
 
 ### 2026-11-17 本機來源 Item metadata（單一 Converter）
 
-唯一 Converter 新增 item-catalog，唯讀從使用者已合法取得的舊版衍生 Godot Items 子目錄讀取 .tres，輸出名稱、類別與原始 icon_id 及 SHA256 到 Git 忽略的 client/content/item_catalog.json。來源是 TestGoGo/client/Items 的轉換後資料，不是原始 ITD 的逐筆實證；Runtime 不據此推算 Item 使用、攻防、價錢或裝備規則。目錄缺失／無法驗證時 Client 降級顯示數字 ID。見 tools/asset_converter/README.md 指令。轉換器 CI 44098608220 PASS（只有合成測試來源，未跑完整私有5003件或 Windows Release PCK）。
+唯一 Converter 的 `item-catalog` 會唯讀既有 Godot `Items/*.tres`，輸出名稱、類別、`icon_id`、來源 SHA256 與 bounded presentation metadata 到 Git 忽略的 `client/content/item_catalog.json`；Runtime 不可用這些欄位決定 Item 使用、攻防結算、價格、裝備合法性或任何 Server 規則。另可加 `--hk-item-itd` 指向 HK `Item/item.itd`；`source/hk_item_itd.py` 重用既有 C.D.E. `unwrap_cde`，不建立第二套解密器，按 `SGOClient.exe.lst` 已確認的六種 record 邊界完整解析並以唯一 exact-name crosswalk 疊加 `hk_original_tooltip` 證據，永不改寫 SGTest runtime Item ID。2026-11-22 真實私有資料：5000 件 catalog + HK 9,096 records，3,030 unique-name matches、914 HK tooltip matches；輸出 2,838,031 bytes，CLI 約 1.119s，Godot 4.7.2 驗證載入約 282.979ms，catalog SHA256 `bf9d52e0b0e055ad6d3d55cf9e93178e62c5b14384dd52337b928dae121d8fe6`。Python 9 targeted tests PASS，兩套 UI headless regressions PASS。HK 裝備中無法直接 CP950 解碼的動態數值 formatter、真 Windows GUI/GPU/RSS 與完整 Release 仍 NOT VERIFIED。
 
 
 ### 指定額外角色素材（2026-11-22）

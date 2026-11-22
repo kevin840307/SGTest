@@ -19,6 +19,7 @@ func run() -> void:
 	var baseline = Performance.get_monitor(Performance.RENDER_TEXTURE_MEM_USED)
 	var peak = baseline
 	var max_residual = 0
+	var load_times: Array[int] = []
 	for cycle in range(30):
 		var a = store.begin_scope(&"map")
 		var b = store.begin_scope(&"actor")
@@ -26,6 +27,7 @@ func run() -> void:
 		if store.acquire(&"map", a, id) != OK or store.acquire(&"actor", b, id) != OK:
 			quit(3)
 			return
+		var started := Time.get_ticks_usec()
 		var deadline = Time.get_ticks_msec() + 2000
 		while store.get_asset(&"map", a, id).is_empty() and Time.get_ticks_msec() < deadline:
 			store.pump()
@@ -33,6 +35,7 @@ func run() -> void:
 		if store.statistics().ready != 1:
 			quit(4)
 			return
+		load_times.append(Time.get_ticks_usec() - started)
 		var sprite = Sprite2D.new()
 		sprite.position = Vector2(100, 100)
 		var texture_ref := bind_shared_texture(store, sprite, a, b, id)
@@ -67,6 +70,8 @@ func run() -> void:
 			push_error("Texture survived its last scope in cycle %d" % (cycle + 1))
 			quit(9)
 			return
+	load_times.sort()
+	print("ATLAS_READY_US median=", load_times[15], " p95=", load_times[28], " max=", load_times[29])
 	print("GPU_TEXTURE_BYTES baseline=", baseline, " peak=", peak, " max_residual=", max_residual)
 	if peak <= baseline or max_residual != 0:
 		quit(7)

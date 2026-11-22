@@ -54,7 +54,7 @@ public static partial class WireProtocol
         foreach(var item in value.Items)
             if(item.ItemUid<=0||item.ItemDefinitionId is <1 or >100_000_000||
                item.Quantity is <1 or >1_000_000||item.SourceDropId<0||
-               item.EnhancementLevel is <0 or >255||
+               item.EnhancementLevel is <0 or >255||item.DurabilityRaw < -1||
                !seen.Add(item.ItemUid))
                 throw new ArgumentOutOfRangeException(nameof(value));
         var frame=NewFrame(WireOpcode.StorageSnapshot,
@@ -76,6 +76,7 @@ public static partial class WireProtocol
             BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(offset+12,4),item.Quantity);
             BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(offset+16,8),item.SourceDropId);
             frame[offset+24]=checked((byte)item.EnhancementLevel);
+            BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(offset+25,4),item.DurabilityRaw);
         }
         return frame;
     }
@@ -113,10 +114,11 @@ public static partial class WireProtocol
                 BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(offset+8,4)),
                 BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(offset+12,4)),
                 BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(offset+16,8)),
-                frame[offset+24]);
+                frame[offset+24],
+                BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(offset+25,4)));
             if(item.ItemUid<=0||item.ItemDefinitionId is <1 or >100_000_000||
                item.Quantity is <1 or >1_000_000||item.SourceDropId<0||
-               item.EnhancementLevel is <0 or >255||
+               item.EnhancementLevel is <0 or >255||item.DurabilityRaw < -1||
                !seen.Add(item.ItemUid))return false;
             items.Add(item);
         }
@@ -230,7 +232,7 @@ public static partial class WireProtocol
         foreach(var item in value.Items)
             if(item.ItemUid<=0||item.SlotId is <1 or >255||
                item.ItemDefinitionId is <1 or >100_000_000||item.SourceDropId<0||
-               item.EnhancementLevel is <0 or >255||
+               item.EnhancementLevel is <0 or >255||item.DurabilityRaw < -1||
                !uids.Add(item.ItemUid)||!slots.Add(item.SlotId))
                 throw new ArgumentOutOfRangeException(nameof(value));
         var frame=NewFrame(WireOpcode.EquipmentSnapshot,
@@ -248,6 +250,7 @@ public static partial class WireProtocol
             BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(offset+12,4),item.ItemDefinitionId);
             BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(offset+16,8),item.SourceDropId);
             frame[offset+24]=checked((byte)item.EnhancementLevel);
+            BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(offset+25,4),item.DurabilityRaw);
         }
         return frame;
     }
@@ -275,10 +278,11 @@ public static partial class WireProtocol
                 BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(offset+8,4)),
                 BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(offset+12,4)),
                 BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(offset+16,8)),
-                frame[offset+24]);
+                frame[offset+24],
+                BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(offset+25,4)));
             if(item.ItemUid<=0||item.SlotId is <1 or >255||
                item.ItemDefinitionId is <1 or >100_000_000||item.SourceDropId<0||
-               item.EnhancementLevel is <0 or >255||
+               item.EnhancementLevel is <0 or >255||item.DurabilityRaw < -1||
                !uids.Add(item.ItemUid)||!slots.Add(item.SlotId))return false;
             items.Add(item);
         }

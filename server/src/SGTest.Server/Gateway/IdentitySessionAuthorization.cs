@@ -7,6 +7,7 @@ using SGTest.Server.Party;
 using SGTest.Server.Npc;
 using SGTest.Server.Combat;
 using SGTest.Server.Chat;
+using SGTest.Server.Clan;
 using System.Buffers.Binary;
 using System.Net;
 using System.Net.Sockets;
@@ -51,6 +52,7 @@ public sealed partial class IdentitySessionAuthorization
     private readonly PlayerTradeCoordinator? _trades;
     private readonly PlayerShopCoordinator? _playerShops;
     private readonly PartyCoordinator? _parties;
+    private readonly ClanCoordinator? _clans;
     private readonly AuthenticationRateLimiter? _rateLimiter;
     private readonly AccountRegistrationRateLimiter? _registrationRateLimiter;
     private readonly HashSet<string> _gmAccounts;
@@ -75,6 +77,7 @@ public sealed partial class IdentitySessionAuthorization
                                      PlayerTradeCoordinator? trades = null,
                                      PlayerShopCoordinator? playerShops = null,
                                      PartyCoordinator? parties = null,
+                                     ClanCoordinator? clans = null,
                                      AuthenticationRateLimiter? rateLimiter = null,
                                      AccountRegistrationRateLimiter? registrationRateLimiter = null,
                                      IReadOnlySet<string>? gmAccounts = null)
@@ -108,6 +111,7 @@ public sealed partial class IdentitySessionAuthorization
         _trades = trades;
         _playerShops=playerShops;
         _parties=parties;
+        _clans=clans;
         _rateLimiter=rateLimiter;
         _registrationRateLimiter=registrationRateLimiter;
         if(_playerShops is not null&&_trades is null)

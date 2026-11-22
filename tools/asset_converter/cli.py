@@ -379,6 +379,14 @@ def main() -> int:
                        default=REPO/'client/content/item_catalog.json')
     items.add_argument('--source-reference',default='local-converted-Items',
                        help='non-private descriptive provenance label')
+    items.add_argument('--hk-item-itd',type=Path,
+                       help='optional HK Item/item.itd; augments display evidence by unique exact-name matching without replacing runtime IDs')
+    items.add_argument('--hk-item-extra',type=Path,
+                       help='optional HK Item/item_extra.csv; requires --hk-grading and --hk-item-itd for verified grade/color presentation')
+    items.add_argument('--hk-grading',type=Path,
+                       help='optional HK Item/grading.csv; requires --hk-item-extra and --hk-item-itd')
+    items.add_argument('--hk-source-reference',default='HK SGO Item/item.itd',
+                       help='non-private descriptive provenance label for HK item.itd')
     items.add_argument('--item-id',type=int,action='append',
                        help='optional repeated IDs for a small runtime subset')
     args = ap.parse_args()
@@ -434,7 +442,11 @@ def _execute(args):
         try:
             result = publish_item_catalog(
                 args.items,args.output,source_reference=args.source_reference,
-                only_ids=set(args.item_id) if args.item_id else None)
+                only_ids=set(args.item_id) if args.item_id else None,
+                hk_item_itd=args.hk_item_itd,
+                hk_item_extra=args.hk_item_extra,
+                hk_grading=args.hk_grading,
+                hk_source_reference=args.hk_source_reference)
         except (OSError,ValueError,TypeError) as error:
             result = {'status':'failed','error':str(error)}
         print(json.dumps(result,ensure_ascii=False,indent=2),flush=True)

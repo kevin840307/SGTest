@@ -417,7 +417,7 @@ public sealed partial class IdentitySessionAuthorization
                 var group=inventory.Skip(start).Take(chunkSize)
                     .Select(item=>new InventoryItemWire(item.ItemUid,
                         item.ItemDefinitionId,item.Quantity,item.SourceDropId,
-                        item.EnhancementLevel))
+                        item.EnhancementLevel,item.DurabilityRaw??-1))
                     .ToArray();
                 bool final=start+group.Length==inventory.Count;
                 await WriteFrameAsync(tls,WireProtocol.EncodeInventorySnapshot(
@@ -456,7 +456,7 @@ public sealed partial class IdentitySessionAuthorization
                     var group=equipment.Skip(start).Take(equipmentChunk)
                         .Select(item=>new EquipmentItemWire(
                             item.ItemUid,item.SlotId,item.ItemDefinitionId,item.SourceDropId,
-                            item.EnhancementLevel))
+                            item.EnhancementLevel,item.DurabilityRaw??-1))
                         .ToArray();
                     bool final=start+group.Length==equipment.Count;
                     await WriteFrameAsync(tls,WireProtocol.EncodeEquipmentSnapshot(

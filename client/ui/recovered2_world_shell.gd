@@ -33,7 +33,6 @@ var mall_window := AuxWindow.new()
 var settings_window := AuxWindow.new()
 var _aux_windows: Array = []
 var _popup_body := Label.new()
-var _character_info := Label.new()
 var _character_fields: Dictionary = {}
 var _map_label: Label
 var _coord_label: Label
@@ -339,51 +338,53 @@ func _build_windows() -> void:
 	var theme_resource = load(PRIVATE.path_join("paradise_window_theme.tres")) if FileAccess.file_exists(PRIVATE.path_join("paradise_window_theme.tres")) else null
 	if theme_resource is Theme:
 		stage.theme = theme_resource
-	# All windows live under the same stage and are persistent; user clicks
-	# show/hide them without reallocating game assets or reconstructing panels.
+	# Persistent windows are allocated once. Showing/hiding never reloads map,
+	# actor, item photo, or theme resources.
 	stage.add_child(inventory)
 	inventory.position = Vector2(1082,130)
-	inventory.size = Vector2(278,510)
-	for row in [[character,"CharacterWindow","角色資訊",_character_info,Vector2(410,123),Vector2(580,600)],
-		[popup,"InformationWindow","提示",_popup_body,Vector2(480,225),Vector2(440,285)]]:
-		var window: PanelContainer = row[0]
-		window.name = row[1]
-		window.theme_type_variation = &"ParadiseWindowFrame"
-		window.position = row[4]
-		window.size = row[5]
-		window.mouse_filter = Control.MOUSE_FILTER_STOP
-		window.visible = false
-		stage.add_child(window)
-		var vertical := VBoxContainer.new()
-		vertical.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		window.add_child(vertical)
-		var heading := HBoxContainer.new()
-		vertical.add_child(heading)
-		var text := Label.new()
-		text.text = row[2]
-		text.theme_type_variation = &"ParadiseWindowTitle"
-		text.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		heading.add_child(text)
-		if window == popup:
-			_popup_title = text
-			_popup_layout = vertical
-		var close := TextureButton.new()
-		close.name = "CloseWindow"
-		close.custom_minimum_size = Vector2(22,22)
-		close.ignore_texture_size = true
-		close.stretch_mode = TextureButton.STRETCH_KEEP_ASPECT_CENTERED
-		close.texture_normal = skin
-		close.pressed.connect(window.hide)
-		heading.add_child(close)
-		vertical.add_child(HSeparator.new())
-		var content: Label = row[3]
-		content.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		content.size_flags_vertical = Control.SIZE_EXPAND_FILL
-		content.add_theme_font_size_override("font_size",15)
-		vertical.add_child(content)
-		if window == character:
-			content.hide()
-			_build_character_sections(vertical)
+	inventory.size = Vector2(300,520)
+
+	character.name = "CharacterWindow"
+	character.theme_type_variation = &"ParadiseWindowFrame"
+	character.position = Vector2(420,118)
+	character.size = Vector2(560,610)
+	character.mouse_filter = Control.MOUSE_FILTER_STOP
+	character.visible = false
+	stage.add_child(character)
+	_build_character_source_layout(character,skin)
+
+	popup.name = "InformationWindow"
+	popup.theme_type_variation = &"ParadiseWindowFrame"
+	popup.position = Vector2(480,225)
+	popup.size = Vector2(440,285)
+	popup.mouse_filter = Control.MOUSE_FILTER_STOP
+	popup.visible = false
+	stage.add_child(popup)
+	var vertical := VBoxContainer.new()
+	vertical.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	popup.add_child(vertical)
+	var heading := HBoxContainer.new()
+	vertical.add_child(heading)
+	_popup_title = Label.new()
+	_popup_title.text = "提示"
+	_popup_title.theme_type_variation = &"ParadiseWindowTitle"
+	_popup_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	heading.add_child(_popup_title)
+	var close := TextureButton.new()
+	close.name = "CloseWindow"
+	close.custom_minimum_size = Vector2(22,22)
+	close.ignore_texture_size = true
+	close.stretch_mode = TextureButton.STRETCH_KEEP_ASPECT_CENTERED
+	close.texture_normal = skin
+	close.pressed.connect(popup.hide)
+	heading.add_child(close)
+	vertical.add_child(HSeparator.new())
+	_popup_body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_popup_body.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_popup_body.add_theme_font_size_override("font_size",15)
+	vertical.add_child(_popup_body)
+	_popup_layout = vertical
+
 	_skin_selection.name = "UiProfilePicker"
 	_skin_selection.visible = false
 	_skin_selection.item_selected.connect(_skin_picked)
@@ -476,6 +477,7 @@ func _build_party_aux() -> void:
 	target.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	invite_row.add_child(target)
 	var invite := Button.new()
+	invite.name = "PartyInviteButton"
 	invite.text = "邀請加入隊伍"
 	invite.pressed.connect(func():
 		if _panel == null:
@@ -486,8 +488,9 @@ func _build_party_aux() -> void:
 	invite_row.add_child(invite)
 	party_window.body.add_child(invite_row)
 	var actions := HBoxContainer.new()
-	for entry in [["接受邀請","_party_accept_invite"],["拒絕邀請","_party_reject_invite"],["離開隊伍","_party_leave"]]:
+	for entry in [["接受邀請","_party_accept_invite","PartyAcceptButton"],["拒絕邀請","_party_reject_invite","PartyRejectButton"],["離開隊伍","_party_leave","PartyLeaveButton"]]:
 		var button := Button.new()
+		button.name = str(entry[2])
 		button.text = str(entry[0])
 		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		button.pressed.connect(func():
@@ -498,19 +501,186 @@ func _build_party_aux() -> void:
 	party_window.body.add_child(actions)
 
 func _build_clan_aux() -> void:
-	var panel = clan_window.section("戰團")
-	var empty := Label.new()
-	empty.name = "ClanUnavailable"
-	empty.text = "尚未加入戰團\n\nSGTest Server 目前沒有戰團／社團協定。\n此視窗只對齊 Recovered2 外觀，不會偽造會員、資金或操作結果。"
-	empty.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	empty.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	empty.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	empty.add_theme_font_size_override("font_size",18)
-	panel.add_child(empty)
+	# Recovered2 clan window is a wide member-management surface. The client
+	# never mutates membership locally; controls submit authenticated intents
+	# and the member list is rebuilt only from ClanSnapshot.
+	var row := HBoxContainer.new()
+	row.name = "ClanSourceLayout"
+	row.add_theme_constant_override("separation",14)
+	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	clan_window.body.add_child(row)
+
+	var overview := PanelContainer.new()
+	overview.name = "ClanOverviewPanel"
+	overview.custom_minimum_size = Vector2(320,570)
+	overview.theme_type_variation = &"ParadiseContentPanel"
+	overview.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	row.add_child(overview)
+	var left := VBoxContainer.new()
+	left.add_theme_constant_override("separation",10)
+	overview.add_child(left)
+
+	var identity_title := Label.new()
+	identity_title.text = "戰團資訊"
+	identity_title.theme_type_variation = &"ParadiseSectionTitle"
+	left.add_child(identity_title)
+	var identity := Label.new()
+	identity.name = "ClanIdentitySummary"
+	identity.text = "尚未加入戰團"
+	identity.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	identity.custom_minimum_size.y = 90
+	left.add_child(identity)
+
+	var create_section := VBoxContainer.new()
+	create_section.name = "ClanCreateSection"
+	left.add_child(create_section)
+	var create_title := Label.new()
+	create_title.text = "建立戰團"
+	create_title.theme_type_variation = &"ParadiseSecondaryText"
+	create_section.add_child(create_title)
+	var create_name := LineEdit.new()
+	create_name.name = "ClanCreateName"
+	create_name.placeholder_text = "戰團名稱（2–24 字元）"
+	create_name.max_length = 24
+	create_section.add_child(create_name)
+	var create := Button.new()
+	create.name = "ClanCreateButton"
+	create.text = "建立戰團"
+	create.theme_type_variation = &"ParadisePrimaryButton"
+	create.pressed.connect(func():
+		if _panel != null:
+			_panel.submit_clan_create(create_name.text)
+	)
+	create_section.add_child(create)
+
+	var join_section := VBoxContainer.new()
+	join_section.name = "ClanJoinSection"
+	left.add_child(join_section)
+	var join_title := Label.new()
+	join_title.text = "加入戰團"
+	join_title.theme_type_variation = &"ParadiseSecondaryText"
+	join_section.add_child(join_title)
+	var join_id := SpinBox.new()
+	join_id.name = "ClanJoinId"
+	join_id.min_value = 1
+	join_id.max_value = 2147483647
+	join_id.value = 1
+	join_section.add_child(join_id)
+	var join := Button.new()
+	join.name = "ClanJoinButton"
+	join.text = "依戰團 ID 加入"
+	join.theme_type_variation = &"ParadisePrimaryButton"
+	join.pressed.connect(func():
+		if _panel != null:
+			_panel.submit_clan_join(int(join_id.value))
+	)
+	join_section.add_child(join)
+
+	var spacer := Control.new()
+	spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	left.add_child(spacer)
+	var actions := HBoxContainer.new()
+	actions.add_theme_constant_override("separation",7)
+	left.add_child(actions)
+	var refresh := Button.new()
+	refresh.name = "ClanRefreshButton"
+	refresh.text = "更新"
+	refresh.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	refresh.pressed.connect(func():
+		if _panel != null:
+			_panel.submit_clan_refresh()
+	)
+	actions.add_child(refresh)
+	var leave := Button.new()
+	leave.name = "ClanLeaveButton"
+	leave.text = "離開戰團"
+	leave.theme_type_variation = &"ParadiseDangerButton"
+	leave.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	leave.pressed.connect(func():
+		if _panel != null:
+			_panel.submit_clan_leave()
+	)
+	actions.add_child(leave)
+
+	var members_panel := PanelContainer.new()
+	members_panel.name = "ClanMembersPanel"
+	members_panel.custom_minimum_size = Vector2(500,570)
+	members_panel.theme_type_variation = &"ParadiseContentPanel"
+	members_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	members_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	row.add_child(members_panel)
+	var members_layout := VBoxContainer.new()
+	members_layout.add_theme_constant_override("separation",8)
+	members_panel.add_child(members_layout)
+	var members_title := Label.new()
+	members_title.text = "成員"
+	members_title.theme_type_variation = &"ParadiseWindowTitle"
+	members_layout.add_child(members_title)
+	var members_meta := Label.new()
+	members_meta.name = "ClanMembersMeta"
+	members_meta.text = "0 / 100"
+	members_meta.theme_type_variation = &"ParadiseSecondaryText"
+	members_layout.add_child(members_meta)
+	var member_scroll := ScrollContainer.new()
+	member_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	member_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	members_layout.add_child(member_scroll)
+	var member_rows := VBoxContainer.new()
+	member_rows.name = "ClanMemberRows"
+	member_rows.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	member_rows.add_theme_constant_override("separation",5)
+	member_scroll.add_child(member_rows)
+	var status := Label.new()
+	status.name = "ClanOperationStatus"
+	status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	status.theme_type_variation = &"ParadiseSecondaryText"
+	members_layout.add_child(status)
 
 func _build_shop_aux() -> void:
-	var panel = shop_window.section("NPC 商店")
+	# npc_shop_window.tscn uses a 360x520 shop panel beside a shared inventory.
+	# SGTest mirrors that two-pane hierarchy without duplicating inventory state.
+	var row := HBoxContainer.new()
+	row.name = "NpcShopSourceRow"
+	row.add_theme_constant_override("separation",16)
+	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	shop_window.body.add_child(row)
+
+	var shop_panel := PanelContainer.new()
+	shop_panel.name = "NpcShopPanel"
+	shop_panel.custom_minimum_size = Vector2(360,470)
+	shop_panel.theme_type_variation = &"ParadiseContentPanel"
+	shop_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	row.add_child(shop_panel)
+	var shop_layout := VBoxContainer.new()
+	shop_layout.add_theme_constant_override("separation",10)
+	shop_panel.add_child(shop_layout)
+
+	var mode := Label.new()
+	mode.text = "購買商品"
+	mode.theme_type_variation = &"ParadiseModeBadge"
+	mode.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	shop_layout.add_child(mode)
+
+	var summary_frame := PanelContainer.new()
+	summary_frame.theme_type_variation = &"ParadiseSectionPanel"
+	shop_layout.add_child(summary_frame)
+	var summary_layout := VBoxContainer.new()
+	summary_frame.add_child(summary_layout)
+	var caption := Label.new()
+	caption.text = "商店資訊"
+	caption.theme_type_variation = &"ParadiseSecondaryText"
+	summary_layout.add_child(caption)
+	var status := Label.new()
+	status.name = "ShopSummary"
+	status.text = "尚未開啟 NPC 商店"
+	status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	status.add_theme_font_size_override("font_size",15)
+	summary_layout.add_child(status)
+
 	var npc_row := HBoxContainer.new()
+	shop_layout.add_child(npc_row)
 	var npc := SpinBox.new()
 	npc.name = "ShopNpcInput"
 	npc.min_value = 1
@@ -519,7 +689,8 @@ func _build_shop_aux() -> void:
 	npc.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	npc_row.add_child(npc)
 	var open := Button.new()
-	open.text = "開啟附近 NPC 商店"
+	open.name = "ShopOpenButton"
+	open.text = "開啟 NPC 商店"
 	open.pressed.connect(func():
 		if _panel == null:
 			return
@@ -527,111 +698,179 @@ func _build_shop_aux() -> void:
 		_panel.npc_shop_panel._open_shop_from_input()
 	)
 	npc_row.add_child(open)
-	panel.add_child(npc_row)
-	var status := Label.new()
-	status.name = "ShopSummary"
-	status.text = "尚未開啟 NPC 商店"
-	status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	panel.add_child(status)
-	var buy_row := HBoxContainer.new()
+
+	var product_heading := Label.new()
+	product_heading.text = "販售商品"
+	product_heading.theme_type_variation = &"ParadiseBodyText"
+	shop_layout.add_child(product_heading)
 	var buy_picker := OptionButton.new()
 	buy_picker.name = "ShopBuyPicker"
 	buy_picker.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	buy_row.add_child(buy_picker)
+	shop_layout.add_child(buy_picker)
+	var buy_row := HBoxContainer.new()
+	shop_layout.add_child(buy_row)
 	var buy_qty := SpinBox.new()
 	buy_qty.name = "ShopBuyQuantity"
 	buy_qty.min_value = 1
 	buy_qty.max_value = 1000000
 	buy_qty.value = 1
-	buy_qty.custom_minimum_size.x = 90
+	buy_qty.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	buy_row.add_child(buy_qty)
 	var buy := Button.new()
+	buy.name = "ShopBuyButton"
 	buy.text = "購買"
+	buy.theme_type_variation = &"ParadisePrimaryButton"
 	buy.pressed.connect(func():
 		if _panel == null or buy_picker.selected < 0:
 			return
 		_panel.submit_shop_buy(int(buy_picker.get_item_metadata(buy_picker.selected)),int(buy_qty.value))
 	)
 	buy_row.add_child(buy)
-	panel.add_child(buy_row)
-	var sell_row := HBoxContainer.new()
+	var buy_spacer := Control.new()
+	buy_spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	shop_layout.add_child(buy_spacer)
+
+	var inventory_panel := PanelContainer.new()
+	inventory_panel.name = "ShopInventoryPanel"
+	inventory_panel.custom_minimum_size = Vector2(300,470)
+	inventory_panel.theme_type_variation = &"ParadiseContentPanel"
+	inventory_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	row.add_child(inventory_panel)
+	var inventory_layout := VBoxContainer.new()
+	inventory_layout.add_theme_constant_override("separation",10)
+	inventory_panel.add_child(inventory_layout)
+	var inventory_title := Label.new()
+	inventory_title.text = "背包出售"
+	inventory_title.theme_type_variation = &"ParadiseWindowTitle"
+	inventory_layout.add_child(inventory_title)
+	var inventory_hint := Label.new()
+	inventory_hint.text = "只列出目前 NPC 可收購的物品"
+	inventory_hint.theme_type_variation = &"ParadiseSecondaryText"
+	inventory_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	inventory_layout.add_child(inventory_hint)
 	var sell_picker := OptionButton.new()
 	sell_picker.name = "ShopSellPicker"
 	sell_picker.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	sell_row.add_child(sell_picker)
+	inventory_layout.add_child(sell_picker)
 	var sell_qty := SpinBox.new()
 	sell_qty.name = "ShopSellQuantity"
 	sell_qty.min_value = 1
 	sell_qty.max_value = 1000000
 	sell_qty.value = 1
-	sell_qty.custom_minimum_size.x = 90
-	sell_row.add_child(sell_qty)
+	inventory_layout.add_child(sell_qty)
 	var sell := Button.new()
+	sell.name = "ShopSellButton"
 	sell.text = "販售"
+	sell.theme_type_variation = &"ParadisePrimaryButton"
 	sell.pressed.connect(func():
 		if _panel == null or sell_picker.selected < 0:
 			return
 		_panel.submit_shop_sell(int(sell_picker.get_item_metadata(sell_picker.selected)),int(sell_qty.value))
 	)
-	sell_row.add_child(sell)
-	panel.add_child(sell_row)
-	var filler := Control.new()
-	filler.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	panel.add_child(filler)
+	inventory_layout.add_child(sell)
+	var sell_spacer := Control.new()
+	sell_spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	inventory_layout.add_child(sell_spacer)
+
+func _quest_panel(parent: Control,node_name: String,rect: Rect2,title: String) -> Control:
+	var frame := PanelContainer.new()
+	frame.name = node_name
+	frame.position = rect.position
+	frame.size = rect.size
+	frame.theme_type_variation = &"ParadiseContentPanel"
+	parent.add_child(frame)
+	var layout := VBoxContainer.new()
+	layout.add_theme_constant_override("separation",6)
+	frame.add_child(layout)
+	var heading := Label.new()
+	heading.text = title
+	heading.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	heading.theme_type_variation = &"ParadiseSectionTitle"
+	layout.add_child(heading)
+	return layout
 
 func _build_quest_aux() -> void:
-	var columns := HBoxContainer.new()
-	columns.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	for title in ["待領取","進行中","已完成"]:
-		var column := PanelContainer.new()
-		column.theme_type_variation = &"ParadiseContentPanel"
-		column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		columns.add_child(column)
-		var label := Label.new()
-		label.text = title
-		label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		label.vertical_alignment = VERTICAL_ALIGNMENT_TOP
-		column.add_child(label)
-	quest_window.body.add_child(columns)
-	var detail = quest_window.section("任務流程／任務獎勵")
-	var view := Label.new()
-	view.name = "QuestSummary"
-	view.text = "目前沒有伺服器任務檢視"
-	view.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	view.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	detail.add_child(view)
-	var row := HBoxContainer.new()
+	# Recovered2 quest_window.tscn is 900x600: three state columns above,
+	# flow + rewards below. AuxWindow owns only the common chrome.
+	var source := Control.new()
+	source.name = "QuestSourceLayout"
+	source.custom_minimum_size = Vector2(860,510)
+	source.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	source.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	quest_window.body.add_child(source)
+
+	var available := _quest_panel(source,"AvailablePanel",Rect2(4,0,266,164),"待領取")
+	var available_list := Label.new()
+	available_list.name = "QuestAvailableList"
+	available_list.text = "—"
+	available_list.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	available_list.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	available.add_child(available_list)
+
+	var progress := _quest_panel(source,"InProgressPanel",Rect2(294,0,266,164),"進行中")
+	var progress_list := Label.new()
+	progress_list.name = "QuestInProgressList"
+	progress_list.text = "—"
+	progress_list.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	progress_list.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	progress.add_child(progress_list)
+
+	var completed := _quest_panel(source,"CompletedPanel",Rect2(584,0,266,164),"已完成")
+	var completed_list := Label.new()
+	completed_list.name = "QuestCompletedList"
+	completed_list.text = "—"
+	completed_list.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	completed_list.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	completed.add_child(completed_list)
+
+	var steps := _quest_panel(source,"StepsPanel",Rect2(4,176,396,326),"任務流程")
+	var summary := Label.new()
+	summary.name = "QuestSummary"
+	summary.text = "目前沒有伺服器任務檢視"
+	summary.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	summary.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	steps.add_child(summary)
+	var npc_row := HBoxContainer.new()
+	steps.add_child(npc_row)
 	var npc := SpinBox.new()
 	npc.name = "QuestNpcInput"
 	npc.min_value = 1
 	npc.max_value = 2147483647
 	npc.value = 1
 	npc.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	row.add_child(npc)
+	npc_row.add_child(npc)
 	var open := Button.new()
-	open.text = "開啟附近 NPC 任務"
+	open.name = "QuestOpenButton"
+	open.text = "開啟 NPC 任務"
 	open.pressed.connect(func():
 		if _panel == null:
 			return
 		_panel.quest_panel.npc_input.value = npc.value
 		_panel.quest_panel._open_quest_from_input()
 	)
-	row.add_child(open)
-	quest_window.body.add_child(row)
-	var choice_row := HBoxContainer.new()
+	npc_row.add_child(open)
+
+	var rewards := _quest_panel(source,"RewardsPanel",Rect2(412,176,438,326),"任務獎勵／選項")
+	var reward_summary := Label.new()
+	reward_summary.name = "QuestRewardSummary"
+	reward_summary.text = "由伺服器任務資料決定"
+	reward_summary.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	reward_summary.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	rewards.add_child(reward_summary)
 	var choice := OptionButton.new()
 	choice.name = "QuestChoicePicker"
 	choice.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	choice_row.add_child(choice)
+	rewards.add_child(choice)
 	var choose := Button.new()
-	choose.text = "選擇任務選項"
+	choose.name = "QuestChooseButton"
+	choose.text = "確認任務選項"
+	choose.theme_type_variation = &"ParadisePrimaryButton"
 	choose.pressed.connect(func():
 		if _panel == null or choice.selected < 0:
 			return
 		_panel.submit_quest_choice(int(choice.get_item_metadata(choice.selected)))
 	)
-	choice_row.add_child(choose)
-	quest_window.body.add_child(choice_row)
+	rewards.add_child(choose)
 
 func _build_mall_aux() -> void:
 	var row := HBoxContainer.new()
@@ -677,6 +916,111 @@ func _build_settings_aux() -> void:
 	skin_picker.item_selected.connect(func(index): skin_requested.emit(str(skin_picker.get_item_metadata(index))))
 	skin_row.add_child(skin_picker)
 	general.add_child(skin_row)
+
+func _character_panel(parent: Control,node_name: String,rect: Rect2) -> Panel:
+	var panel := Panel.new()
+	panel.name = node_name
+	panel.position = rect.position
+	panel.size = rect.size
+	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	panel.theme_type_variation = &"ParadiseSection"
+	parent.add_child(panel)
+	return panel
+
+func _character_text(parent: Control,node_name: String,text: String,rect: Rect2,font_size := 14,center := false,accent := false) -> Label:
+	var label := Label.new()
+	label.name = node_name
+	label.text = text
+	label.position = rect.position
+	label.size = rect.size
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	if center:
+		label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.add_theme_font_size_override("font_size",font_size)
+	label.add_theme_color_override("font_color",Color("#50d4e5") if accent else Color("#8fa9ba"))
+	parent.add_child(label)
+	return label
+
+func _character_value(parent: Control,key: String,rect: Rect2,accent := false) -> Label:
+	var value := _character_text(parent,"Field"+key,"—",rect,15,true,accent)
+	value.add_theme_color_override("font_color",Color("#50e9d9") if accent else Color("#e6f2ff"))
+	_character_fields[key] = value
+	return value
+
+func _build_character_source_layout(window: PanelContainer,close_texture: Texture2D) -> void:
+	# Source geometry from Recovered2 game_hud.tscn CharacterWindow (560x610).
+	var layout := Control.new()
+	layout.name = "SourceCharacterLayout"
+	layout.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	window.add_child(layout)
+
+	var title := _character_text(layout,"WindowTitle","角色資訊",Rect2(18,7,200,30),18,false,false)
+	title.theme_type_variation = &"ParadiseWindowTitle"
+	var close := TextureButton.new()
+	close.name = "CloseWindow"
+	close.position = Vector2(524,10)
+	close.size = Vector2(22,22)
+	close.ignore_texture_size = true
+	close.stretch_mode = TextureButton.STRETCH_KEEP_ASPECT_CENTERED
+	close.texture_normal = close_texture
+	close.pressed.connect(window.hide)
+	layout.add_child(close)
+	var separator := HSeparator.new()
+	separator.position = Vector2(12,43)
+	separator.size = Vector2(536,2)
+	separator.theme_type_variation = &"ParadiseHeaderSeparator"
+	layout.add_child(separator)
+
+	_character_panel(layout,"IdentityPanel",Rect2(14,54,532,72))
+	_character_panel(layout,"AttributesPanel",Rect2(14,136,532,86))
+	_character_panel(layout,"CombatPanel",Rect2(14,230,532,220))
+	_character_panel(layout,"StatusPanel",Rect2(14,458,532,138))
+
+	_character_text(layout,"AttributesTitle","基礎屬性",Rect2(28,142,504,24),13,true,true)
+	_character_text(layout,"CombatTitle","戰鬥能力",Rect2(28,237,504,24),13,true,true)
+	_character_text(layout,"StatusTitle","角色狀態",Rect2(28,465,504,23),13,true,true)
+
+	_character_text(layout,"NameCaption","名稱",Rect2(28,58,50,20))
+	_character_value(layout,"名稱",Rect2(86,58,184,20))
+	_character_text(layout,"LevelCaption","等級",Rect2(28,79,50,22))
+	_character_value(layout,"等級",Rect2(86,79,98,22))
+	_character_text(layout,"CareerCaption","職業",Rect2(28,102,50,20))
+	_character_value(layout,"職業",Rect2(86,102,184,20))
+	_character_text(layout,"RaceCaption","種族",Rect2(304,102,50,20),14,true)
+	_character_value(layout,"種族",Rect2(370,102,156,20))
+
+	for entry in [
+		["力量",Rect2(32,171,68,20),Rect2(112,171,66,22)],
+		["敏捷",Rect2(300,171,68,20),Rect2(380,171,66,22)],
+		["體質",Rect2(32,196,68,20),Rect2(112,196,66,22)],
+		["智力",Rect2(300,196,68,20),Rect2(380,196,66,22)]
+	]:
+		_character_text(layout,"Caption"+str(entry[0]),str(entry[0]),entry[1])
+		_character_value(layout,str(entry[0]),entry[2])
+
+	for entry in [
+		["攻擊",Rect2(32,266,86,20),Rect2(126,266,84,20)],
+		["防禦",Rect2(32,293,86,20),Rect2(126,293,84,20)],
+		["命中",Rect2(300,266,96,20),Rect2(404,266,124,20)],
+		["迴避",Rect2(300,293,96,20),Rect2(404,293,124,20)],
+		["移動速度",Rect2(32,347,86,20),Rect2(126,347,84,20)],
+		["攻擊速度",Rect2(300,347,96,20),Rect2(404,347,124,20)]
+	]:
+		_character_text(layout,"Caption"+str(entry[0]),str(entry[0]),entry[1])
+		_character_value(layout,str(entry[0]),entry[2])
+
+	# Recovered2 resource/status rows occupy the lower source section. SGTest
+	# currently owns HP/MP, inventory/equipment counts, wallet and map.
+	for entry in [
+		["HP",Rect2(28,494,32,20),Rect2(64,494,210,20)],
+		["MP",Rect2(28,519,32,20),Rect2(64,519,210,20)],
+		["背包",Rect2(304,494,70,20),Rect2(390,494,138,20)],
+		["裝備",Rect2(304,519,70,20),Rect2(390,519,138,20)],
+		["金錢",Rect2(304,544,70,20),Rect2(390,544,138,20)],
+		["地圖",Rect2(304,569,70,20),Rect2(390,569,138,20)]
+	]:
+		_character_text(layout,"Caption"+str(entry[0]),str(entry[0]),entry[1])
+		_character_value(layout,str(entry[0]),entry[2],str(entry[0])=="金錢")
 
 func _build_character_sections(container: VBoxContainer) -> void:
 	# The source character window uses separate headed panels, not a long log.
@@ -811,6 +1155,67 @@ func _refresh_aux_snapshot() -> void:
 				var member: Dictionary = members[id]
 				rows.append("%s%s　Actor %d" % ["★ " if int(id)==int(_stats.get("party_leader_actor_id",0)) else "・ ",str(member.get("name","玩家")),int(id)])
 			(members_node as Label).text = "\n".join(rows)
+	var clan_id := int(_stats.get("clan_id",0))
+	var clan_name := str(_stats.get("clan_name",""))
+	var clan_revision := int(_stats.get("clan_revision",0))
+	var clan_leader := int(_stats.get("clan_leader_actor_id",0))
+	var clan_members: Dictionary = _stats.get("clan_members",{})
+	clan_window.meta_label.text = "成員 %d / 100" % clan_members.size()
+	var clan_identity = clan_window.find_child("ClanIdentitySummary",true,false)
+	if clan_identity is Label:
+		(clan_identity as Label).text = (
+			"%s\n戰團 ID %d\nRevision %d\n團長 Actor %d" % [
+				clan_name,clan_id,clan_revision,clan_leader]
+		) if clan_id>0 else "尚未加入戰團"
+	var clan_create = clan_window.find_child("ClanCreateSection",true,false)
+	var clan_join = clan_window.find_child("ClanJoinSection",true,false)
+	var clan_leave = clan_window.find_child("ClanLeaveButton",true,false)
+	if clan_create is Control:
+		(clan_create as Control).visible = clan_id==0
+	if clan_join is Control:
+		(clan_join as Control).visible = clan_id==0
+	if clan_leave is Button:
+		(clan_leave as Button).disabled = clan_id<=0
+	var clan_rows = clan_window.find_child("ClanMemberRows",true,false)
+	if clan_rows is VBoxContainer:
+		for child in (clan_rows as VBoxContainer).get_children():
+			(clan_rows as VBoxContainer).remove_child(child)
+			child.queue_free()
+		var clan_ids := clan_members.keys()
+		clan_ids.sort()
+		for raw_id in clan_ids:
+			var actor := int(raw_id)
+			var member: Dictionary = clan_members[raw_id]
+			var row := Label.new()
+			row.name = "ClanMember%d" % actor
+			row.text = "%s　%s　Actor %d" % [
+				"★ 團長" if actor==clan_leader else "・ 成員",
+				str(member.get("name","玩家")),actor]
+			row.custom_minimum_size.y = 30
+			row.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+			row.add_theme_font_size_override("font_size",14)
+			(clan_rows as VBoxContainer).add_child(row)
+		if clan_ids.is_empty():
+			var empty := Label.new()
+			empty.text = "尚未加入戰團" if clan_id==0 else "等待伺服器成員快照"
+			empty.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			empty.custom_minimum_size.y = 60
+			(clan_rows as VBoxContainer).add_child(empty)
+	var clan_meta = clan_window.find_child("ClanMembersMeta",true,false)
+	if clan_meta is Label:
+		(clan_meta as Label).text = "%d / 100" % clan_members.size()
+	var clan_status = clan_window.find_child("ClanOperationStatus",true,false)
+	if clan_status is Label:
+		var clan_result_status := int(_stats.get("last_clan_result_status",-1))
+		var clan_result_text := ""
+		if clan_result_status>=0:
+			var messages := [
+				"操作成功","已經加入戰團","目前沒有戰團","找不到戰團",
+				"戰團名稱已被使用","戰團名稱格式錯誤","戰團人數已滿","戰團資料已變更，請重新操作"]
+			if clan_result_status<messages.size():
+				clan_result_text = messages[clan_result_status]
+		(clan_status as Label).text = clan_result_text
+
 	var shop_summary = shop_window.find_child("ShopSummary",true,false)
 	var active_npc := int(_stats.get("active_shop_npc",0))
 	var shop_items: Dictionary = _stats.get("shop_items",{})
@@ -847,8 +1252,29 @@ func _refresh_aux_snapshot() -> void:
 			(sell_picker as OptionButton).set_item_metadata((sell_picker as OptionButton).item_count-1,uid)
 	var quest_summary = quest_window.find_child("QuestSummary",true,false)
 	var quest: Dictionary = _stats.get("quest_view",{})
+	var available_list = quest_window.find_child("QuestAvailableList",true,false)
+	var progress_list = quest_window.find_child("QuestInProgressList",true,false)
+	var completed_list = quest_window.find_child("QuestCompletedList",true,false)
+	for node in [available_list,progress_list,completed_list]:
+		if node is Label:
+			(node as Label).text = "—"
 	if quest_summary is Label:
-		(quest_summary as Label).text = ("任務：%s\n%s\n階段 %d" % [str(quest.get("title","")),str(quest.get("text","")),int(quest.get("stage",0))]) if not quest.is_empty() else "目前沒有伺服器任務檢視"
+		if quest.is_empty():
+			(quest_summary as Label).text = "目前沒有伺服器任務檢視"
+		else:
+			var title := str(quest.get("title","未命名任務"))
+			var state := int(quest.get("state",0))
+			(quest_summary as Label).text = "%s\n\n%s\n\n階段 %d　Revision %d" % [
+				title,str(quest.get("text","")),int(quest.get("stage",0)),
+				int(quest.get("progress_revision",0))]
+			var target_list = available_list if state == 0 else (progress_list if state == 1 else completed_list)
+			if target_list is Label:
+				(target_list as Label).text = title
+	var reward_summary = quest_window.find_child("QuestRewardSummary",true,false)
+	if reward_summary is Label:
+		var reward_text := str(quest.get("reward_text",""))
+		(reward_summary as Label).text = reward_text if not reward_text.is_empty() else (
+			"請選擇伺服器提供的任務選項。" if not quest.is_empty() else "目前沒有任務獎勵資料")
 	var choice_picker = quest_window.find_child("QuestChoicePicker",true,false)
 	if choice_picker is OptionButton:
 		(choice_picker as OptionButton).clear()
@@ -856,6 +1282,9 @@ func _refresh_aux_snapshot() -> void:
 			var choice: Dictionary = raw_choice
 			(choice_picker as OptionButton).add_item(str(choice.get("label","選項")))
 			(choice_picker as OptionButton).set_item_metadata((choice_picker as OptionButton).item_count-1,int(choice.get("choice_id",0)))
+		var choose = quest_window.find_child("QuestChooseButton",true,false)
+		if choose is Button:
+			(choose as Button).disabled = (choice_picker as OptionButton).item_count == 0
 
 func _hide_floating_windows() -> void:
 	inventory.hide()
@@ -944,9 +1373,9 @@ func resize_view(view: Vector2) -> void:
 		chat_hud.position = Vector2(logical.x*0.5-314.0,logical.y-134.0)
 		chat_hud.size = Vector2(700,134)
 		inventory.position = Vector2(logical.x-318.0,130.0)
-		inventory.size = Vector2(278,510)
-		character.position = Vector2((logical.x-580.0)*0.5,(logical.y-600.0)*0.5)
-		character.size = Vector2(580,600)
+		inventory.size = Vector2(300,520)
+		character.position = Vector2((logical.x-560.0)*0.5,(logical.y-610.0)*0.5)
+		character.size = Vector2(560,610)
 		popup.position = Vector2((logical.x-440.0)*0.5,(logical.y-285.0)*0.5)
 		# Reference screenshot/source-space positions.
 		skill_window.position = Vector2(logical.x-695.0,logical.y*0.5-313.0)

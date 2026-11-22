@@ -95,6 +95,12 @@ static class Checks
                 Console.WriteLine($"CHARACTER_MANAGEMENT_CHECKS PASS total={_passes}");
                 return 0;
             }
+            if (args is ["--clan-only"])
+            {
+                ClanChecks.Verify();
+                Console.WriteLine($"CLAN_CHECKS PASS total={_passes}");
+                return 0;
+            }
             if (args is ["--identity-admin-only", "--aes"])
             {
                 IdentityAdminChecks.Verify(root, tlsOnly: true);
@@ -141,6 +147,16 @@ static class Checks
                 WorldAoiPumpChecks.VerifyLoad(root);
                 AesGatewayListenerChecks.VerifyLoad(root);
                 Console.WriteLine($"SERVER_LOAD_CHECKS PASS total={_passes}");
+                return 0;
+            }
+            if (args is ["--item-snapshot-wire-only"])
+            {
+                InventorySnapshotChecks.Verify();
+                StorageChecks.Verify(root);
+                EquipmentChecks.Verify(root);
+                StorageWireChecks.Verify();
+                EquipmentWireChecks.Verify();
+                Console.WriteLine($"SERVER_ITEM_SNAPSHOT_CHECKS PASS total={_passes}");
                 return 0;
             }
             string opened = Fixture(root, 31, 5, 5, (_, _) => 0);
@@ -311,6 +327,7 @@ static class Checks
             PvpSkillChecks.Verify(root);
             GmOnlineChecks.Verify(root);
             PartyChecks.Verify(root);
+            ClanChecks.Verify();
             TradeChecks.Verify(root);
             PlayerShopChecks.Verify(root);
             PlayerShopCoordinatorChecks.Verify(root);

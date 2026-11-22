@@ -482,7 +482,7 @@ Godot `WireCodec.decode_inventory_snapshot` validates opcode36, max128 items/fra
 
 ### 2026-11-17 私有道具來源與背包分頁
 
-ui/item_catalog.gd 僅在 res://content/item_catalog.json 存在、kind/source_reference/item_count/每筆 item_id、name、category、icon_id、source_path、SHA256 全部完整合法時顯示來源衍生名稱；不能證明原版二進位 ITD 或物品效果。未核實的 item 一律保留道具 ID，來源未提供則不新增動作與不建立 Item Texture。SessionPanel 已支援80件每頁和來源名稱、ItemId、類別查詢；相同 ActorId/reconnect_count/inventory_revision/page/query 的 UI 輪詢跳過 Dictionary 全掃描。CI 44099300883 PASS，測試含 85 件列表分頁及真 TLS UI；Private Item 5003筆全量、原版圖示渲染與 Windows Release 仍 NOT VERIFIED。
+ui/item_catalog.gd 僅在 res://content/item_catalog.json 存在且完整通過 kind/version/source_reference/item_count/每筆 item_id、name、category、icon_id、source_path、SHA256 與 presentation 欄位驗證時採用來源資料；未知 item 仍保留道具 ID。2026-11-22 起正式唯一 Converter 的 item-catalog schema v2 可保留二創來源中的展示 metadata，但它永遠不是 Server gameplay authority；Client 只拿它顯示名稱、說明、需求與靜態數值，數量、強化、目前耐久與所有玩法結算仍以 Server snapshot/result 為準。HK Item/item.itd 另由同一 Converter 的 source/hk_item_itd.py 解析：依 SGOClient.exe.lst 的 Size 遞減確認 type 0/1/2/3/4/6 record 長度 0x446/0x4B1/0x480/0x47E/0x480/0x14A，解密後 8,236,329 bytes 可精確消耗為 9,096 records、0 unknown byte。因 HK 與目前 runtime Item ID 已實證不同（例如精靈捕捉器 HK=32028、現有 runtime=2801），cross-version mapping 僅允許唯一 exact-name match，絕不覆寫 runtime ID。5000 件私有來源實測 3,030 件可安全唯一名稱對應（60.6%），其中 914 件有嚴格 CP950 可解碼的 HK 原版 tooltip；有 HK tooltip 時兩套 UI 直接優先使用原字串，只附加 Server 權威的數量／目前耐久／UID，避免用二創最大耐久冒充 HK 值。其餘裝備由 HK Client 動態組字的數值語意仍 NOT VERIFIED，不得聲稱完整原版一致。
 
 ## 2026-11-17 Inventory recovery item use
 

@@ -91,6 +91,24 @@ public sealed partial class IdentitySessionAuthorization
                     attached=false;
                 }
             }
+            if(attached&&_clans is not null)
+            {
+                try
+                {
+                    await _clans.AttachAsync(binding,router).ConfigureAwait(false);
+                }
+                catch
+                {
+                    lock(bindingGate)
+                    {
+                        if(ReferenceEquals(boundConnection,connection))
+                            boundConnection=null;
+                    }
+                    router.TryDetach(connection);
+                    _trades?.UnregisterGameplayGate(binding,gameplayGate);
+                    attached=false;
+                }
+            }
             if (!attached)
             {
                 if (_combat is not null)
@@ -225,7 +243,8 @@ public sealed partial class IdentitySessionAuthorization
                 handleGmPvpName:pvpStates.HandleGmNameAsync,
                 handlePlayerShop: playerShop is null ? null : playerShop.HandleAsync,
                 handleChat:request=>ChatRouting.RouteAsync(request,router,_parties),
-                handleParty: _parties is null ? null : request => _parties.HandleAsync(request, router))
+                handleParty: _parties is null ? null : request => _parties.HandleAsync(request, router),
+                handleClan: _clans is null ? null : request => _clans.HandleAsync(request, router))
                 .ConfigureAwait(false);
         }
         finally

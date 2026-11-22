@@ -12,7 +12,7 @@ from PIL import Image
 REPO = Path(__file__).resolve().parents[2]
 
 
-def build_fixture(project: Path) -> None:
+def build_fixture(project: Path, size: int) -> None:
     assets = project / "assets"
     catalog = assets / "catalog"
     atlas = assets / "test" / "shared"
@@ -20,7 +20,7 @@ def build_fixture(project: Path) -> None:
     atlas.mkdir(parents=True)
     (project / "project.godot").write_text("config_version=5\n", encoding="utf-8")
     page = atlas / "page.png"
-    Image.new("RGBA", (64, 64), (20, 100, 210, 255)).save(page)
+    Image.new("RGBA", (size, size), (20, 100, 210, 255)).save(page)
     documents = {
         catalog / "assets.json": {
             "schema": "sgtest.asset_catalog_root/v1",
@@ -33,9 +33,9 @@ def build_fixture(project: Path) -> None:
             "version": 9,
             "asset_id": "test/shared",
             "pages": ["page.png"],
-            "page_sizes": [[64, 64]],
+            "page_sizes": [[size, size]],
             "page_sha256": {"page.png": hashlib.sha256(page.read_bytes()).hexdigest()},
-            "frames": [{"page": 0, "rect": [0, 0, 64, 64], "origin": [0, 0]}],
+            "frames": [{"page": 0, "rect": [0, 0, size, size], "origin": [0, 0]}],
             "clips": {"idle": [0]},
         },
     }
@@ -46,12 +46,14 @@ def build_fixture(project: Path) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("godot", type=Path)
-    godot = str(parser.parse_args().godot.resolve())
+    parser.add_argument("--size", type=int, choices=(64, 512, 1024, 2048, 4096), default=64)
+    args = parser.parse_args()
+    godot = str(args.godot.resolve())
     cache = REPO / ".cache"
     cache.mkdir(exist_ok=True)
     with TemporaryDirectory(prefix="asset-store-gpu-", dir=cache) as directory:
         project = Path(directory)
-        build_fixture(project)
+        build_fixture(project, args.size)
         pack = project / "synthetic.pck"
         fixture_command = [godot, "--headless", "--rendering-method", "gl_compatibility", "--path", directory]
         subprocess.run(fixture_command + ["--editor", "--import"], check=True, timeout=60)

@@ -437,6 +437,63 @@ func party_promote(target_actor_id:int)->bool:
 	return _queue_party_intent(6,int(current.get("party_id",0)),target_actor_id,current)
 
 
+func clan_create(name:String)->bool:
+	var current:=snapshot()
+	return _queue_clan_intent(1,0,name,current)
+
+
+func clan_join(clan_id:int)->bool:
+	var current:=snapshot()
+	return _queue_clan_intent(2,clan_id,"",current)
+
+
+func clan_leave()->bool:
+	var current:=snapshot()
+	return _queue_clan_intent(3,0,"",current)
+
+
+func clan_refresh()->bool:
+	var current:=snapshot()
+	return _queue_clan_intent(4,0,"",current)
+
+
+func _queue_clan_intent(action:int,request_clan_id:int,name:String,current:Dictionary)->bool:
+	if (
+		int(current.get("state",-1))!=WorldState.STATE_IN_WORLD or
+		not bool(current.get("world_ready",false)) or
+		bool(current.get("resync_pending",false)) or
+		bool(current.get("waiting_for_new_map",false)) or
+		int(current.get("pending_world_ready_ack_epoch",0))!=0 or
+		int(current.get("last_world_ready_ack_epoch",0))!=int(current.get("map_epoch",0)) or
+		int(current.get("pending_clan_sequence",0))!=0
+	):
+		return false
+	var clean:=name.strip_edges()
+	if clean!=name or clean.to_utf8_buffer().size()>WireCodec.CLAN_MAX_NAME_BYTES:
+		return false
+	var current_clan:=int(current.get("clan_id",0))
+	match action:
+		1:
+			if current_clan!=0 or request_clan_id!=0 or clean.length()<2 or clean.length()>24:
+				return false
+		2:
+			if current_clan!=0 or request_clan_id<=0 or not clean.is_empty():
+				return false
+		3:
+			if current_clan<=0 or request_clan_id!=0 or not clean.is_empty():
+				return false
+		4:
+			if request_clan_id!=0 or not clean.is_empty():
+				return false
+		_:
+			return false
+	return _queue_intent({
+		"type":"clan","action":action,"clan_id":request_clan_id,"name":clean,
+		"actor_id":int(current.get("actor_id",0)),
+		"map_epoch":int(current.get("map_epoch",0))
+	})
+
+
 func _queue_party_intent(
 		action:int,party_id:int,target_actor_id:int,current:Dictionary,
 		target_name:String="")->bool:
@@ -1168,6 +1225,10 @@ func _process_first_intent() -> void:
 		_process_party_intent(intent)
 
 
+	elif kind=="clan":
+		_process_clan_intent(intent)
+
+
 	elif kind == "gm_pvp_name":
 		_process_gm_pvp_name_intent(intent)
 
@@ -1453,6 +1514,41 @@ func _process_party_intent(intent: Dictionary) -> void:
 		_transport.send_frame(frame) and
 		_world.mark_party_sent(
 			sequence,action,request_party_id,target,target_name)
+	):
+		_pop_intent()
+		_publish()
+
+
+func _process_clan_intent(intent: Dictionary) -> void:
+	var current:Dictionary=_world.snapshot()
+	if (
+		int(intent.get("actor_id",0))!=int(current.get("actor_id",0)) or
+		int(intent.get("map_epoch",0))!=int(current.get("map_epoch",0))
+	):
+		_pop_intent()
+		return
+	if (
+		int(current.get("state",-1))!=WorldState.STATE_IN_WORLD or
+		not bool(current.get("world_ready",false)) or
+		bool(current.get("resync_pending",false)) or
+		bool(current.get("waiting_for_new_map",false)) or
+		int(current.get("pending_world_ready_ack_epoch",0))!=0 or
+		int(current.get("last_world_ready_ack_epoch",0))!=int(current.get("map_epoch",0)) or
+		int(current.get("pending_clan_sequence",0))!=0
+	):
+		return
+	var action:=int(intent.get("action",0))
+	var request_clan_id:=int(intent.get("clan_id",0))
+	var clan_name:=str(intent.get("name",""))
+	var sequence:=int(current.get("clan_sequence",0))+1
+	var frame:=WireCodec.encode_clan_command(
+		int(current.get("map_epoch",0)),sequence,action,request_clan_id,clan_name)
+	if frame.is_empty():
+		_pop_intent()
+		return
+	if (
+		_transport.send_frame(frame) and
+		_world.mark_clan_sent(sequence,action,request_clan_id,clan_name)
 	):
 		_pop_intent()
 		_publish()

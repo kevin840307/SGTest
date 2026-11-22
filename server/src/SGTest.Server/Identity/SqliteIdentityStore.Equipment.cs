@@ -80,7 +80,7 @@ public sealed record EquipmentTransferResult(
 
 public sealed record EquippedItem(
     long ItemUid,long CharacterId,int SlotId,int ItemDefinitionId,long SourceDropId,
-    int EnhancementLevel = 0);
+    int EnhancementLevel = 0,int? DurabilityRaw = null);
 
 public sealed partial class SqliteIdentityStore
 {
@@ -107,7 +107,7 @@ public sealed partial class SqliteIdentityStore
             using var connection=Open();
             using var command=connection.CreateCommand();
             command.CommandText=@"SELECT item_uid,character_id,slot_id,
-item_definition_id,COALESCE(source_drop_id,0),enhancement_level
+item_definition_id,COALESCE(source_drop_id,0),enhancement_level,durability_raw
 FROM equipped_items WHERE character_id=$actor ORDER BY slot_id,item_uid;";
             command.Parameters.AddWithValue("$actor",characterId);
             using var reader=command.ExecuteReader();
@@ -115,7 +115,8 @@ FROM equipped_items WHERE character_id=$actor ORDER BY slot_id,item_uid;";
             while(reader.Read())
                 result.Add(new(reader.GetInt64(0),reader.GetInt64(1),
                     reader.GetInt32(2),reader.GetInt32(3),reader.GetInt64(4),
-                    reader.GetInt32(5)));
+                    reader.GetInt32(5),
+                    reader.IsDBNull(6)?null:reader.GetInt32(6)));
             return result;
         },cancellationToken).ConfigureAwait(false);
     }

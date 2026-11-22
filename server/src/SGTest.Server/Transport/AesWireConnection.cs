@@ -69,7 +69,8 @@ public static class AesWireConnection
         Func<TrustedGmPvpNameCommand, Task>? handleGmPvpName = null,
         Func<TrustedPlayerShopCommand, Task>? handlePlayerShop = null,
         Func<TrustedChatCommand, Task>? handleChat = null,
-        Func<TrustedPartyCommand, Task>? handleParty = null)
+        Func<TrustedPartyCommand, Task>? handleParty = null,
+        Func<TrustedClanCommand, Task>? handleClan = null)
     {
         ArgumentNullException.ThrowIfNull(client);
         ArgumentNullException.ThrowIfNull(settings);
@@ -250,6 +251,10 @@ public static class AesWireConnection
                 16, handleParty, sessionCts);
             Func<TrustedPartyCommand, bool>? postParty = partyQueue.Post;
 
+            var clanQueue = new SessionCommandWorker<TrustedClanCommand>(
+                16, handleClan, sessionCts);
+            Func<TrustedClanCommand, bool>? postClan = clanQueue.Post;
+
             var skillCommands=Channel.CreateBounded<TrustedSkillUse>(
                 new BoundedChannelOptions(16)
                 {
@@ -297,7 +302,7 @@ public static class AesWireConnection
                     var status = gateway.FeedClientBytes(
                         rented.AsSpan(0, count), postMove, out int accepted,
                         postNpc, postResync, postAttack, postRespawn, postPickup,
-                        postRecovery, postDiscard, postSkill, postShop, postStorage, postEquipment, postBank, postRepair, postEnhancement, postTrade, postQuest, postPvp, postPvpAttack, postPvpSkill, postGmPvpName, postPlayerShop, postChat, postParty);
+                        postRecovery, postDiscard, postSkill, postShop, postStorage, postEquipment, postBank, postRepair, postEnhancement, postTrade, postQuest, postPvp, postPvpAttack, postPvpSkill, postGmPvpName, postPlayerShop, postChat, postParty, postClan);
                     commandsAccepted += accepted;
 
                     if (status == WireFeedStatus.Backpressured)
@@ -318,7 +323,7 @@ public static class AesWireConnection
                             status = gateway.ResumeClientIngress(
                                 postMove, out accepted, postNpc, postResync,
                                 postAttack, postRespawn, postPickup, postRecovery,
-                                postDiscard, postSkill, postShop, postStorage, postEquipment, postBank, postRepair, postEnhancement, postTrade, postQuest, postPvp, postPvpAttack, postPvpSkill, postGmPvpName, postPlayerShop, postChat, postParty);
+                                postDiscard, postSkill, postShop, postStorage, postEquipment, postBank, postRepair, postEnhancement, postTrade, postQuest, postPvp, postPvpAttack, postPvpSkill, postGmPvpName, postPlayerShop, postChat, postParty, postClan);
                             commandsAccepted += accepted;
                         }
                         while (status == WireFeedStatus.Backpressured);

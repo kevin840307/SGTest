@@ -6,11 +6,11 @@ const LIST := "1800000001000C00010B000000000000000004004865726F"
 const CHOOSE := "2D00000001000E00000B000000000000000F000000000000000000204000000000000020400100000000000000"
 const READY := "2D0000000100140001000000000000002A000000000000000B000000000000000F0000000000C0410000004101"
 const MAP13_READY := "2D00000001001400020000000000000032000000000000000B000000000000000D000000000020420000A04201"
-const INVENTORY := "49000000010024000B0000000000000000000000010200591B0000000000008D0A000002000000F501000000000000005A1B000000000000750E000003000000F60100000000000000"
+const INVENTORY := "51000000010024000B0000000000000000000000010200591B0000000000008D0A000002000000F50100000000000000FFFFFFFF5A1B000000000000750E000003000000F60100000000000000FFFFFFFF"
 const OPEN := "180000000100340009000000000000000700000063000000"
 const DEPOSIT := "200000000100360009000000000000000800000063000000591B000000000000"
 const WITHDRAW := "200000000100370009000000000000000900000063000000591B000000000000"
-const SNAPSHOT := "3900000001003500090000000000000007000000006300000000000000010100591B0000000000008D0A000002000000F50100000000000005"
+const SNAPSHOT := "3D00000001003500090000000000000007000000006300000000000000010100591B0000000000008D0A000002000000F5010000000000000550000000"
 const RESULT := "3200000001003800090000000000000008000000010063000000591B0000000000008D0A000002000000F501000000000000"
 
 func fail(message: String) -> void:
@@ -22,13 +22,14 @@ func new_world():
 	if not world.mark_auth_sent() or not world.apply_frame(AUTH.hex_decode()) or not world.apply_frame(LIST.hex_decode()) or not world.mark_choose_sent(11) or not world.apply_frame(CHOOSE.hex_decode()) or not world.apply_frame(READY.hex_decode()) or not world.mark_world_ready_ack_sent(1,42):
 		return null
 	var bag := INVENTORY.hex_decode()
-	bag.resize(48)
-	bag.encode_s32(0,48)
+	bag.resize(52)
+	bag.encode_s32(0,52)
 	bag.encode_u16(21,1)
 	bag.encode_s32(31,2701)
 	bag.encode_s32(35,2)
 	bag.encode_s64(39,501)
 	bag[47] = 5
+	bag.encode_s32(48,80)
 	bag[20] = 1
 	if not world.apply_frame(bag):
 		return null
@@ -40,7 +41,7 @@ func _initialize() -> void:
 		return
 	var snapshot := Wire.decode_storage_snapshot(SNAPSHOT.hex_decode())
 	var result := Wire.decode_storage_transfer_result(RESULT.hex_decode())
-	if snapshot.is_empty() or int(snapshot.items[0].item_uid) != 7001 or int(snapshot.items[0].drop_id) != 501 or int(snapshot.items[0].enhancement_level) != 5 or result.is_empty() or int(result.item_uid) != 7001 or int(result.drop_id) != 501:
+	if snapshot.is_empty() or int(snapshot.items[0].item_uid) != 7001 or int(snapshot.items[0].drop_id) != 501 or int(snapshot.items[0].enhancement_level) != 5 or int(snapshot.items[0].durability_raw) != 80 or result.is_empty() or int(result.item_uid) != 7001 or int(result.drop_id) != 501:
 		fail("server storage golden mismatch")
 		return
 
@@ -72,7 +73,7 @@ func _initialize() -> void:
 		fail("deposit settlement")
 		return
 	state = world.snapshot()
-	if (state.inventory_items as Dictionary).has(7001) or not (state.storage_items as Dictionary).has(7001) or int(state.storage_items[7001].drop_id) != 501 or int(state.storage_items[7001].enhancement_level) != 5:
+	if (state.inventory_items as Dictionary).has(7001) or not (state.storage_items as Dictionary).has(7001) or int(state.storage_items[7001].drop_id) != 501 or int(state.storage_items[7001].enhancement_level) != 5 or int(state.storage_items[7001].durability_raw) != 80:
 		fail("deposit did not move exact UID/provenance")
 		return
 	var revision := int(state.storage_revision)
@@ -92,7 +93,7 @@ func _initialize() -> void:
 		fail("withdraw settlement")
 		return
 	state = world.snapshot()
-	if not (state.inventory_items as Dictionary).has(7001) or (state.storage_items as Dictionary).has(7001) or int(state.inventory_items[7001].quantity) != 2 or int(state.inventory_items[7001].drop_id) != 501 or int(state.inventory_items[7001].enhancement_level) != 5:
+	if not (state.inventory_items as Dictionary).has(7001) or (state.storage_items as Dictionary).has(7001) or int(state.inventory_items[7001].quantity) != 2 or int(state.inventory_items[7001].drop_id) != 501 or int(state.inventory_items[7001].enhancement_level) != 5 or int(state.inventory_items[7001].durability_raw) != 80:
 		fail("withdraw did not restore exact inventory UID")
 		return
 

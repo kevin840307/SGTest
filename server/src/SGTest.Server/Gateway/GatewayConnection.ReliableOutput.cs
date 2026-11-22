@@ -202,7 +202,7 @@ public sealed partial class GatewayConnection
                     .Take(WireProtocol.StorageSnapshotMaxItemsPerFrame)
                     .Select(item=>new StorageItemWire(
                         item.ItemUid,item.ItemDefinitionId,item.Quantity,item.SourceDropId,
-                        item.EnhancementLevel))
+                        item.EnhancementLevel,item.DurabilityRaw??-1))
                     .ToArray();
                 bool complete=start+chunk.Length==ordered.Length;
                 var frame=WireProtocol.EncodeStorageSnapshot(new(
@@ -497,6 +497,38 @@ public sealed partial class GatewayConnection
             if(_binding!=expected||snapshot.ReceiverMapEpoch!=expected.MapEpoch)
                 return GatewaySendStatus.GenerationMismatch;
             return _reliable.TryEnqueue(WireProtocol.EncodePartySnapshot(snapshot))
+                ?GatewaySendStatus.Enqueued:GatewaySendStatus.Backpressured;
+        }
+    }
+
+    public GatewaySendStatus QueueClanResult(
+        TrustedClanCommand request,ClanResultWire result)
+    {
+        lock(_bindingGate)
+        {
+            if(_closed)return GatewaySendStatus.Closed;
+            var bound=_binding;
+            if(request.ActorId!=bound.ActorId||
+               request.ConnectionEpoch!=bound.ConnectionEpoch||
+               request.RequestMapEpoch!=bound.MapEpoch||
+               request.ClanSequence!=result.ClanSequence||
+               request.RequestMapEpoch!=result.MapEpoch||
+               request.Action!=result.Action)
+                return GatewaySendStatus.GenerationMismatch;
+            return _reliable.TryEnqueue(WireProtocol.EncodeClanResult(result))
+                ?GatewaySendStatus.Enqueued:GatewaySendStatus.Backpressured;
+        }
+    }
+
+    public GatewaySendStatus QueueClanSnapshot(
+        ConnectionBinding expected,ClanSnapshotWire snapshot)
+    {
+        lock(_bindingGate)
+        {
+            if(_closed)return GatewaySendStatus.Closed;
+            if(_binding!=expected||snapshot.ReceiverMapEpoch!=expected.MapEpoch)
+                return GatewaySendStatus.GenerationMismatch;
+            return _reliable.TryEnqueue(WireProtocol.EncodeClanSnapshot(snapshot))
                 ?GatewaySendStatus.Enqueued:GatewaySendStatus.Backpressured;
         }
     }

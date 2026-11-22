@@ -48,7 +48,8 @@ public sealed partial class GatewayConnection
                                               Func<TrustedGmPvpNameCommand, bool>? postGmPvpName = null,
                                               Func<TrustedPlayerShopCommand, bool>? postPlayerShop = null,
                                               Func<TrustedChatCommand, bool>? postChat = null,
-                                              Func<TrustedPartyCommand, bool>? postParty = null)
+                                              Func<TrustedPartyCommand, bool>? postParty = null,
+                                              Func<TrustedClanCommand, bool>? postClan = null)
     {
         ArgumentNullException.ThrowIfNull(postMove);
         lock (_receiveGate)
@@ -61,7 +62,7 @@ public sealed partial class GatewayConnection
             return _parser.Feed(bytes,
                 frame => HandleClientFrame(
                     frame, postMove, postNpc, postResync, postAttack, postRespawn,
-                    postPickup, postRecovery, postDiscard, postSkill, postShop, postStorage, postEquipment, postBank, postRepair, postEnhancement, postTrade, postQuest, postPvp, postPvpAttack, postPvpSkill, postGmPvpName, postPlayerShop, postChat, postParty),
+                    postPickup, postRecovery, postDiscard, postSkill, postShop, postStorage, postEquipment, postBank, postRepair, postEnhancement, postTrade, postQuest, postPvp, postPvpAttack, postPvpSkill, postGmPvpName, postPlayerShop, postChat, postParty, postClan),
                 out commandsAccepted);
         }
     }
@@ -90,7 +91,8 @@ public sealed partial class GatewayConnection
                                               Func<TrustedGmPvpNameCommand, bool>? postGmPvpName = null,
                                               Func<TrustedPlayerShopCommand, bool>? postPlayerShop = null,
                                               Func<TrustedChatCommand, bool>? postChat = null,
-                                              Func<TrustedPartyCommand, bool>? postParty = null)
+                                              Func<TrustedPartyCommand, bool>? postParty = null,
+                                              Func<TrustedClanCommand, bool>? postClan = null)
     {
         ArgumentNullException.ThrowIfNull(postMove);
         lock (_receiveGate)
@@ -103,7 +105,7 @@ public sealed partial class GatewayConnection
             return _parser.Resume(
                 frame => HandleClientFrame(
                     frame, postMove, postNpc, postResync, postAttack, postRespawn,
-                    postPickup, postRecovery, postDiscard, postSkill, postShop, postStorage, postEquipment, postBank, postRepair, postEnhancement, postTrade, postQuest, postPvp, postPvpAttack, postPvpSkill, postGmPvpName, postPlayerShop, postChat, postParty),
+                    postPickup, postRecovery, postDiscard, postSkill, postShop, postStorage, postEquipment, postBank, postRepair, postEnhancement, postTrade, postQuest, postPvp, postPvpAttack, postPvpSkill, postGmPvpName, postPlayerShop, postChat, postParty, postClan),
                 out commandsAccepted);
         }
     }
@@ -133,7 +135,8 @@ public sealed partial class GatewayConnection
         Func<TrustedGmPvpNameCommand, bool>? postGmPvpName,
         Func<TrustedPlayerShopCommand, bool>? postPlayerShop,
         Func<TrustedChatCommand, bool>? postChat,
-        Func<TrustedPartyCommand, bool>? postParty)
+        Func<TrustedPartyCommand, bool>? postParty,
+        Func<TrustedClanCommand, bool>? postClan)
     {
         if (!WireProtocol.TryReadHeader(frame, out var header))
             return WireFrameDisposition.ProtocolViolation;
@@ -472,6 +475,22 @@ public sealed partial class GatewayConnection
             if(!postParty(request))
                 return WireFrameDisposition.Backpressured;
             _lastPartySequence=party.PartySequence;
+            return WireFrameDisposition.Accepted;
+        }
+
+        if(header.Opcode==WireOpcode.ClanCommand &&
+            postClan is not null &&
+            WireProtocol.TryDecodeClanCommand(frame,out var clan))
+        {
+            if(!GameplayReady(bound)||clan.MapEpoch!=bound.MapEpoch||
+               clan.ClanSequence<=_lastClanSequence)
+                return WireFrameDisposition.ProtocolViolation;
+            var request=new TrustedClanCommand(
+                bound.ActorId,bound.ConnectionEpoch,clan.MapEpoch,
+                clan.ClanSequence,clan.Action,clan.ClanId,clan.Name);
+            if(!postClan(request))
+                return WireFrameDisposition.Backpressured;
+            _lastClanSequence=clan.ClanSequence;
             return WireFrameDisposition.Accepted;
         }
 

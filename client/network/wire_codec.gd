@@ -109,6 +109,9 @@ const OPCODE_PARTY_SNAPSHOT := 103
 const OPCODE_SKILL_BOOK_SNAPSHOT := 104
 const OPCODE_CHARACTER_MANAGE := 105
 const OPCODE_CHARACTER_MANAGE_RESULT := 106
+const OPCODE_CLAN_COMMAND := 107
+const OPCODE_CLAN_RESULT := 108
+const OPCODE_CLAN_SNAPSHOT := 109
 const MOVE_TARGET_FRAME_BYTES := 28
 const MOVE_RECEIPT_FRAME_BYTES := 30
 const NPC_INTERACT_FRAME_BYTES := 24
@@ -127,6 +130,14 @@ const ACCOUNT_REGISTER_RESULT_FRAME_BYTES := 9
 const CHARACTER_CHOOSE_FRAME_BYTES := 16
 const CHARACTER_CHOOSE_RESULT_FRAME_BYTES := 45
 const CHARACTER_MANAGE_RESULT_FRAME_BYTES := 18
+const CLAN_MAX_NAME_BYTES := 72
+const CLAN_COMMAND_HEADER_BYTES := 31
+const CLAN_COMMAND_MAX_FRAME_BYTES := CLAN_COMMAND_HEADER_BYTES + CLAN_MAX_NAME_BYTES
+const CLAN_RESULT_FRAME_BYTES := 30
+const CLAN_SNAPSHOT_HEADER_BYTES := 39
+const CLAN_MEMBER_HEADER_BYTES := 11
+const CLAN_MAX_MEMBERS := 100
+const CLAN_SNAPSHOT_MAX_FRAME_BYTES := CLAN_SNAPSHOT_HEADER_BYTES + CLAN_MAX_NAME_BYTES + CLAN_MAX_MEMBERS * (CLAN_MEMBER_HEADER_BYTES + PLAYER_IDENTITY_MAX_NAME_BYTES)
 const LEGACY_CHARACTER_APPEARANCE_BYTES := 4
 const BODY_LEG_CHARACTER_APPEARANCE_BYTES := 6
 const CHARACTER_APPEARANCE_BYTES := 7
@@ -157,7 +168,7 @@ const PLAYER_ATTACK_VISUAL_FRAME_BYTES := 66
 const PLAYER_DAMAGE_VISUAL_FRAME_BYTES := 66
 const PLAYER_RESPAWN_VISUAL_FRAME_BYTES := 45
 const INVENTORY_SNAPSHOT_HEADER_BYTES := 23
-const INVENTORY_ITEM_BYTES := 25
+const INVENTORY_ITEM_BYTES := 29
 const INVENTORY_SNAPSHOT_MAX_PER_FRAME := 128
 const INVENTORY_SNAPSHOT_MAX_ITEMS := 4095
 const SKILL_BOOK_SNAPSHOT_HEADER_BYTES := 23
@@ -174,12 +185,12 @@ const SHOP_SNAPSHOT_MAX_ITEMS := 256
 const STORAGE_OPEN_FRAME_BYTES := 24
 const STORAGE_MOVE_FRAME_BYTES := 32
 const STORAGE_SNAPSHOT_HEADER_BYTES := 32
-const STORAGE_ITEM_BYTES := 25
+const STORAGE_ITEM_BYTES := 29
 const STORAGE_SNAPSHOT_MAX_PER_FRAME := 128
 const STORAGE_SNAPSHOT_MAX_ITEMS := 4095
 const STORAGE_TRANSFER_RESULT_FRAME_BYTES := 50
 const EQUIPMENT_SNAPSHOT_HEADER_BYTES := 23
-const EQUIPMENT_ITEM_BYTES := 25
+const EQUIPMENT_ITEM_BYTES := 29
 const EQUIPMENT_SNAPSHOT_MAX_PER_FRAME := 128
 const EQUIPMENT_SNAPSHOT_MAX_ITEMS := 255
 const EQUIPMENT_MOVE_FRAME_BYTES := 28
@@ -1157,12 +1168,13 @@ static func decode_inventory_snapshot(frame: PackedByteArray) -> Dictionary:
 		var quantity := reader.get_32()
 		var drop_id := reader.get_64()
 		var enhancement_level := reader.get_u8()
-		if uid <= 0 or item_id < 1 or item_id > 100000000 or quantity < 1 or quantity > 1000000 or drop_id < 0 or enhancement_level < 0 or enhancement_level > 255 or ids.has(uid):
+		var durability_raw := reader.get_32()
+		if uid <= 0 or item_id < 1 or item_id > 100000000 or quantity < 1 or quantity > 1000000 or drop_id < 0 or enhancement_level < 0 or enhancement_level > 255 or durability_raw < -1 or ids.has(uid):
 			return {}
 		ids[uid] = true
 		items.append({"item_uid":uid,"item_definition_id":item_id,
 			"quantity":quantity,"drop_id":drop_id,
-			"enhancement_level":enhancement_level})
+			"enhancement_level":enhancement_level,"durability_raw":durability_raw})
 	return {"character_id":character,"start_index":start,
 		"complete":final_chunk==1,"items":items}
 
@@ -1365,12 +1377,13 @@ static func decode_storage_snapshot(frame: PackedByteArray) -> Dictionary:
 		var quantity := reader.get_32()
 		var source_drop_id := reader.get_64()
 		var enhancement_level := reader.get_u8()
-		if uid <= 0 or item_id < 1 or item_id > 100000000 or quantity < 1 or quantity > 1000000 or source_drop_id < 0 or enhancement_level < 0 or enhancement_level > 255 or uids.has(uid):
+		var durability_raw := reader.get_32()
+		if uid <= 0 or item_id < 1 or item_id > 100000000 or quantity < 1 or quantity > 1000000 or source_drop_id < 0 or enhancement_level < 0 or enhancement_level > 255 or durability_raw < -1 or uids.has(uid):
 			return {}
 		uids[uid] = true
 		items.append({"item_uid":uid,"item_definition_id":item_id,
 			"quantity":quantity,"drop_id":source_drop_id,
-			"enhancement_level":enhancement_level})
+			"enhancement_level":enhancement_level,"durability_raw":durability_raw})
 	return {"map_epoch":epoch,"storage_sequence":sequence,"status":status,
 		"npc_spawn_id":npc_spawn_id,"start_index":start_index,
 		"complete":complete_raw==1,"items":items}
@@ -1859,13 +1872,14 @@ static func decode_equipment_snapshot(frame: PackedByteArray) -> Dictionary:
 		var item_id := reader.get_32()
 		var source_drop_id := reader.get_64()
 		var enhancement_level := reader.get_u8()
-		if uid <= 0 or slot_id < 1 or slot_id > 255 or item_id < 1 or item_id > 100000000 or source_drop_id < 0 or enhancement_level < 0 or enhancement_level > 255 or uids.has(uid) or slots.has(slot_id):
+		var durability_raw := reader.get_32()
+		if uid <= 0 or slot_id < 1 or slot_id > 255 or item_id < 1 or item_id > 100000000 or source_drop_id < 0 or enhancement_level < 0 or enhancement_level > 255 or durability_raw < -1 or uids.has(uid) or slots.has(slot_id):
 			return {}
 		uids[uid] = true
 		slots[slot_id] = true
 		items.append({"item_uid":uid,"slot_id":slot_id,
 			"item_definition_id":item_id,"drop_id":source_drop_id,
-			"enhancement_level":enhancement_level})
+			"enhancement_level":enhancement_level,"durability_raw":durability_raw})
 	return {"character_id":character_id,"start_index":start_index,"complete":complete_raw==1,"items":items}
 
 static func encode_pvp_mode_command(epoch: int, sequence: int, action: int) -> PackedByteArray:
@@ -2369,6 +2383,93 @@ static func decode_whisper_result(frame:PackedByteArray)->Dictionary:
 	}
 
 
+static func encode_clan_command(
+		epoch:int,sequence:int,action:int,clan_id:int,name:String="")->PackedByteArray:
+	var name_bytes:=name.to_utf8_buffer()
+	if epoch<=0 or sequence<=0 or sequence>0xffffffff or action<1 or action>4 or clan_id<0 or name_bytes.size()>CLAN_MAX_NAME_BYTES:
+		return PackedByteArray()
+	if action==1:
+		if clan_id!=0 or name!=name.strip_edges() or name.length()<2 or name.length()>24 or name_bytes.is_empty():
+			return PackedByteArray()
+	elif action==2:
+		if clan_id<=0 or not name.is_empty():
+			return PackedByteArray()
+	elif action in [3,4]:
+		if clan_id!=0 or not name.is_empty():
+			return PackedByteArray()
+	var writer:=_writer(CLAN_COMMAND_HEADER_BYTES+name_bytes.size(),OPCODE_CLAN_COMMAND)
+	writer.put_64(epoch)
+	writer.put_u32(sequence)
+	writer.put_u8(action)
+	writer.put_64(clan_id)
+	writer.put_u16(name_bytes.size())
+	writer.put_data(name_bytes)
+	return writer.data_array
+
+static func decode_clan_result(frame:PackedByteArray)->Dictionary:
+	if not _valid_header(frame,OPCODE_CLAN_RESULT,CLAN_RESULT_FRAME_BYTES):
+		return {}
+	var reader:=_reader(frame,8)
+	var epoch:=reader.get_64()
+	var sequence:=reader.get_u32()
+	var action:=reader.get_u8()
+	var status:=reader.get_u8()
+	var clan_id:=reader.get_64()
+	if epoch<=0 or sequence<=0 or action<1 or action>4 or status<0 or status>7 or clan_id<0 or reader.get_available_bytes()!=0:
+		return {}
+	return {"map_epoch":epoch,"clan_sequence":sequence,"action":action,"status":status,"clan_id":clan_id}
+
+static func decode_clan_snapshot(frame:PackedByteArray)->Dictionary:
+	if not _valid_variable_header(frame,OPCODE_CLAN_SNAPSHOT,CLAN_SNAPSHOT_HEADER_BYTES,CLAN_SNAPSHOT_MAX_FRAME_BYTES):
+		return {}
+	var reader:=_reader(frame,8)
+	var epoch:=reader.get_64()
+	var clan_id:=reader.get_64()
+	var revision:=reader.get_u32()
+	var leader:=reader.get_64()
+	var name_count:=reader.get_u16()
+	var member_count:=reader.get_u8()
+	if epoch<=0 or clan_id<0 or name_count>CLAN_MAX_NAME_BYTES or member_count>CLAN_MAX_MEMBERS or reader.get_available_bytes()<name_count:
+		return {}
+	if clan_id==0:
+		if revision!=0 or leader!=0 or name_count!=0 or member_count!=0 or reader.get_available_bytes()!=0:
+			return {}
+		return {"receiver_map_epoch":epoch,"clan_id":0,"revision":0,"leader_actor_id":0,"name":"","members":[]}
+	if revision<=0 or leader<=0 or name_count<1:
+		return {}
+	var name_result:=reader.get_data(name_count)
+	if name_result[0]!=OK:
+		return {}
+	var name_bytes:PackedByteArray=name_result[1]
+	var clan_name:=name_bytes.get_string_from_utf8()
+	if clan_name.to_utf8_buffer()!=name_bytes or clan_name.strip_edges().is_empty():
+		return {}
+	var members:Array[Dictionary]=[]
+	var seen:={}
+	var leaders:=0
+	for _i in member_count:
+		if reader.get_available_bytes()<CLAN_MEMBER_HEADER_BYTES:
+			return {}
+		var actor:=reader.get_64()
+		var role:=reader.get_u8()
+		var member_name_count:=reader.get_u16()
+		if actor<=0 or role<0 or role>1 or member_name_count<1 or member_name_count>PLAYER_IDENTITY_MAX_NAME_BYTES or reader.get_available_bytes()<member_name_count or seen.has(actor):
+			return {}
+		var member_result:=reader.get_data(member_name_count)
+		if member_result[0]!=OK:
+			return {}
+		var member_bytes:PackedByteArray=member_result[1]
+		var member_name:=member_bytes.get_string_from_utf8()
+		if member_name.to_utf8_buffer()!=member_bytes or member_name.strip_edges().is_empty():
+			return {}
+		seen[actor]=true
+		if role==1:
+			leaders+=1
+		members.append({"actor_id":actor,"role":role,"name":member_name})
+	if reader.get_available_bytes()!=0 or not seen.has(leader) or leaders!=1:
+		return {}
+	return {"receiver_map_epoch":epoch,"clan_id":clan_id,"revision":revision,"leader_actor_id":leader,"name":clan_name,"members":members}
+
 static func encode_party_command(
 		epoch:int,sequence:int,action:int,party_id:int,target_actor_id:int,
 		target_name:String=""
@@ -2656,7 +2757,7 @@ static func frame_opcode(frame: PackedByteArray) -> int:
 	if reader.get_u16() != VERSION:
 		return -1
 	var opcode := reader.get_u16()
-	if opcode not in [OPCODE_MOVE_TARGET, OPCODE_MOVE_RECEIPT, OPCODE_NPC_INTERACT, OPCODE_NPC_INTERACT_RESULT, OPCODE_NORMAL_ATTACK, OPCODE_NORMAL_ATTACK_RESULT, OPCODE_PLAYER_COMBAT_STATE, OPCODE_PLAYER_DAMAGE, OPCODE_AUTH_REQUEST, OPCODE_AUTH_RESULT, OPCODE_CHARACTER_LIST, OPCODE_CHARACTER_CHOOSE, OPCODE_CHARACTER_CHOOSE_RESULT, OPCODE_CHARACTER_CREATE, OPCODE_CHARACTER_CREATE_RESULT, OPCODE_ACCOUNT_REGISTER_REQUEST, OPCODE_ACCOUNT_REGISTER_RESULT, OPCODE_WORLD_READY, OPCODE_ENTITY_SPAWN, OPCODE_ENTITY_DESPAWN, OPCODE_ENTITY_DELTA, OPCODE_SELF_STATE, OPCODE_WORLD_READY_ACK, OPCODE_WORLD_RESYNC_REQUEST, OPCODE_MONSTER_SPAWN, OPCODE_MONSTER_DELTA, OPCODE_MONSTER_DESPAWN, OPCODE_PLAYER_RESPAWN, OPCODE_PLAYER_RESPAWN_RESULT, OPCODE_GROUND_DROP_SPAWN, OPCODE_GROUND_DROP_DESPAWN, OPCODE_GROUND_PICKUP, OPCODE_GROUND_PICKUP_RESULT, OPCODE_INVENTORY_SNAPSHOT, OPCODE_RECOVERY_USE, OPCODE_RECOVERY_USE_RESULT, OPCODE_INVENTORY_DISCARD, OPCODE_INVENTORY_DISCARD_RESULT, OPCODE_PLAYER_ATTACK_VISUAL, OPCODE_PLAYER_DAMAGE_VISUAL, OPCODE_PLAYER_RESPAWN_VISUAL, OPCODE_SKILL_USE, OPCODE_SKILL_USE_RESULT, OPCODE_PLAYER_SKILL_VISUAL, OPCODE_SHOP_OPEN, OPCODE_SHOP_SNAPSHOT, OPCODE_SHOP_BUY, OPCODE_SHOP_SELL, OPCODE_SHOP_TRANSACTION_RESULT, OPCODE_STORAGE_OPEN, OPCODE_STORAGE_SNAPSHOT, OPCODE_STORAGE_DEPOSIT, OPCODE_STORAGE_WITHDRAW, OPCODE_STORAGE_TRANSFER_RESULT, OPCODE_EQUIPMENT_SNAPSHOT, OPCODE_EQUIPMENT_EQUIP, OPCODE_EQUIPMENT_UNEQUIP, OPCODE_EQUIPMENT_TRANSFER_RESULT, OPCODE_BANK_OPEN, OPCODE_BANK_SNAPSHOT, OPCODE_BANK_DEPOSIT, OPCODE_BANK_WITHDRAW, OPCODE_BANK_TRANSACTION_RESULT, OPCODE_REPAIR_OPEN, OPCODE_REPAIR_SNAPSHOT, OPCODE_REPAIR_ITEM, OPCODE_REPAIR_RESULT, OPCODE_TRADE_COMMAND, OPCODE_TRADE_SNAPSHOT, OPCODE_TRADE_TERMINAL, OPCODE_PVP_MODE_COMMAND, OPCODE_PVP_MODE_RESULT, OPCODE_PVP_ATTACK, OPCODE_PVP_ATTACK_RESULT, OPCODE_PVP_DAMAGE, OPCODE_PLAYER_IDENTITY, OPCODE_PVP_COMBAT_VISUAL, OPCODE_PVP_SKILL, OPCODE_PVP_SKILL_RESULT, OPCODE_PVP_SKILL_VISUAL, OPCODE_GM_CAPABILITY, OPCODE_GM_PVP_NAME_COMMAND, OPCODE_GM_PVP_NAME_RESULT, OPCODE_PLAYER_SHOP_COMMAND, OPCODE_PLAYER_SHOP_RESULT, OPCODE_PLAYER_SHOP_SOLD, OPCODE_CHAT_COMMAND, OPCODE_CHAT_DELIVERY, OPCODE_QUEST_OPEN, OPCODE_QUEST_VIEW, OPCODE_QUEST_CHOOSE, OPCODE_ENHANCEMENT_OPEN, OPCODE_ENHANCEMENT_SNAPSHOT, OPCODE_ENHANCEMENT_ITEM, OPCODE_ENHANCEMENT_RESULT, OPCODE_WHISPER_COMMAND, OPCODE_WHISPER_RESULT, OPCODE_PARTY_COMMAND, OPCODE_PARTY_RESULT, OPCODE_PARTY_INVITE, OPCODE_PARTY_SNAPSHOT, OPCODE_SKILL_BOOK_SNAPSHOT, OPCODE_CHARACTER_MANAGE, OPCODE_CHARACTER_MANAGE_RESULT]:
+	if opcode not in [OPCODE_MOVE_TARGET, OPCODE_MOVE_RECEIPT, OPCODE_NPC_INTERACT, OPCODE_NPC_INTERACT_RESULT, OPCODE_NORMAL_ATTACK, OPCODE_NORMAL_ATTACK_RESULT, OPCODE_PLAYER_COMBAT_STATE, OPCODE_PLAYER_DAMAGE, OPCODE_AUTH_REQUEST, OPCODE_AUTH_RESULT, OPCODE_CHARACTER_LIST, OPCODE_CHARACTER_CHOOSE, OPCODE_CHARACTER_CHOOSE_RESULT, OPCODE_CHARACTER_CREATE, OPCODE_CHARACTER_CREATE_RESULT, OPCODE_ACCOUNT_REGISTER_REQUEST, OPCODE_ACCOUNT_REGISTER_RESULT, OPCODE_WORLD_READY, OPCODE_ENTITY_SPAWN, OPCODE_ENTITY_DESPAWN, OPCODE_ENTITY_DELTA, OPCODE_SELF_STATE, OPCODE_WORLD_READY_ACK, OPCODE_WORLD_RESYNC_REQUEST, OPCODE_MONSTER_SPAWN, OPCODE_MONSTER_DELTA, OPCODE_MONSTER_DESPAWN, OPCODE_PLAYER_RESPAWN, OPCODE_PLAYER_RESPAWN_RESULT, OPCODE_GROUND_DROP_SPAWN, OPCODE_GROUND_DROP_DESPAWN, OPCODE_GROUND_PICKUP, OPCODE_GROUND_PICKUP_RESULT, OPCODE_INVENTORY_SNAPSHOT, OPCODE_RECOVERY_USE, OPCODE_RECOVERY_USE_RESULT, OPCODE_INVENTORY_DISCARD, OPCODE_INVENTORY_DISCARD_RESULT, OPCODE_PLAYER_ATTACK_VISUAL, OPCODE_PLAYER_DAMAGE_VISUAL, OPCODE_PLAYER_RESPAWN_VISUAL, OPCODE_SKILL_USE, OPCODE_SKILL_USE_RESULT, OPCODE_PLAYER_SKILL_VISUAL, OPCODE_SHOP_OPEN, OPCODE_SHOP_SNAPSHOT, OPCODE_SHOP_BUY, OPCODE_SHOP_SELL, OPCODE_SHOP_TRANSACTION_RESULT, OPCODE_STORAGE_OPEN, OPCODE_STORAGE_SNAPSHOT, OPCODE_STORAGE_DEPOSIT, OPCODE_STORAGE_WITHDRAW, OPCODE_STORAGE_TRANSFER_RESULT, OPCODE_EQUIPMENT_SNAPSHOT, OPCODE_EQUIPMENT_EQUIP, OPCODE_EQUIPMENT_UNEQUIP, OPCODE_EQUIPMENT_TRANSFER_RESULT, OPCODE_BANK_OPEN, OPCODE_BANK_SNAPSHOT, OPCODE_BANK_DEPOSIT, OPCODE_BANK_WITHDRAW, OPCODE_BANK_TRANSACTION_RESULT, OPCODE_REPAIR_OPEN, OPCODE_REPAIR_SNAPSHOT, OPCODE_REPAIR_ITEM, OPCODE_REPAIR_RESULT, OPCODE_TRADE_COMMAND, OPCODE_TRADE_SNAPSHOT, OPCODE_TRADE_TERMINAL, OPCODE_PVP_MODE_COMMAND, OPCODE_PVP_MODE_RESULT, OPCODE_PVP_ATTACK, OPCODE_PVP_ATTACK_RESULT, OPCODE_PVP_DAMAGE, OPCODE_PLAYER_IDENTITY, OPCODE_PVP_COMBAT_VISUAL, OPCODE_PVP_SKILL, OPCODE_PVP_SKILL_RESULT, OPCODE_PVP_SKILL_VISUAL, OPCODE_GM_CAPABILITY, OPCODE_GM_PVP_NAME_COMMAND, OPCODE_GM_PVP_NAME_RESULT, OPCODE_PLAYER_SHOP_COMMAND, OPCODE_PLAYER_SHOP_RESULT, OPCODE_PLAYER_SHOP_SOLD, OPCODE_CHAT_COMMAND, OPCODE_CHAT_DELIVERY, OPCODE_QUEST_OPEN, OPCODE_QUEST_VIEW, OPCODE_QUEST_CHOOSE, OPCODE_ENHANCEMENT_OPEN, OPCODE_ENHANCEMENT_SNAPSHOT, OPCODE_ENHANCEMENT_ITEM, OPCODE_ENHANCEMENT_RESULT, OPCODE_WHISPER_COMMAND, OPCODE_WHISPER_RESULT, OPCODE_PARTY_COMMAND, OPCODE_PARTY_RESULT, OPCODE_PARTY_INVITE, OPCODE_PARTY_SNAPSHOT, OPCODE_SKILL_BOOK_SNAPSHOT, OPCODE_CHARACTER_MANAGE, OPCODE_CHARACTER_MANAGE_RESULT, OPCODE_CLAN_COMMAND, OPCODE_CLAN_RESULT, OPCODE_CLAN_SNAPSHOT]:
 		return -1
 	return opcode
 

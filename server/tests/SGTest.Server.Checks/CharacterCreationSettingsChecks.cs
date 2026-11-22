@@ -205,9 +205,9 @@ internal static class CharacterCreationSettingsChecks
                 Require(row.Creation is null && !row.RequiresCharacterPassword && row.Appearance is null,"migration fabricated creation choices or password");
                 Require((await b.CreateCharacterWithSettingsAsync(account,1,"NewHero",Spawn,Settings())).Status==CharacterCreateStatus.Created,"upgraded Store cannot create protected characters");
             }
-            string backup=Directory.GetFiles(root,"identity.db.pre-v24-to-v28.*.bak").Single();
+            string backup=Directory.GetFiles(root,"identity.db.pre-v24-to-v29.*.bak").Single();
             Require(Count(backup,"SELECT version FROM schema_version;")==24 && Count(backup,"SELECT COUNT(*) FROM sqlite_master WHERE name='character_creation_settings';")==0,"migration backup lost prior schema");
-            Require(Count(db,"SELECT version FROM schema_version;")==28,"creation migration version wrong");
+            Require(Count(db,"SELECT version FROM schema_version;")==29,"creation migration version wrong");
         }
         finally { Directory.Delete(root,true); }
     }

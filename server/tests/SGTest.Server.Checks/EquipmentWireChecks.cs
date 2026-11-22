@@ -17,7 +17,7 @@ internal static class EquipmentWireChecks
                 "equipment UID-only move golden/roundtrip");
 
             var snapshot=new EquipmentSnapshotWire(11,0,true,[
-                new EquipmentItemWire(7001,4,3701,501,5)
+                new EquipmentItemWire(7001,4,3701,501,5,80)
             ]);
             var snapshotFrame=WireProtocol.EncodeEquipmentSnapshot(snapshot);
             Checks.Require(
@@ -39,7 +39,7 @@ internal static class EquipmentWireChecks
 
         Checks.Run("equipment wire rejects duplicate slots and malformed results", () =>
         {
-            bool duplicate=false,badSuccess=false,badFailure=false;
+            bool duplicate=false,badSuccess=false,badFailure=false,badDurability=false;
             try
             {
                 WireProtocol.EncodeEquipmentSnapshot(new(11,0,true,[
@@ -62,7 +62,14 @@ internal static class EquipmentWireChecks
                     7001,3701,4,0));
             }
             catch(ArgumentOutOfRangeException){badFailure=true;}
-            Checks.Require(duplicate&&badSuccess&&badFailure,
+            try
+            {
+                WireProtocol.EncodeEquipmentSnapshot(new(11,0,true,[
+                    new EquipmentItemWire(7001,4,3701,501,5,-2)
+                ]));
+            }
+            catch(ArgumentOutOfRangeException){badDurability=true;}
+            Checks.Require(duplicate&&badSuccess&&badFailure&&badDurability,
                 "invalid equipment wire payload was admitted");
         });
     }

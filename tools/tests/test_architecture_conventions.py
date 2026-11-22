@@ -71,7 +71,7 @@ class ArchitectureConventionsChecks(unittest.TestCase):
         tests = (ROOT / "server" / "tests" / "SGTest.Server.Checks" /
                  "SessionCommandWorkerChecks.cs").read_text(encoding="utf-8-sig")
         project = (SERVER / "SGTest.Server.csproj").read_text(encoding="utf-8-sig")
-        self.assertEqual(tls.count("new SessionCommandWorker<"), 19)
+        self.assertEqual(tls.count("new SessionCommandWorker<"), 20)
         self.assertEqual(tls.count("Channel.CreateBounded<"), 2,
                          "NPC and skill are the only special command workers")
         self.assertEqual(worker.count("Channel.CreateBounded<T>"), 1)
@@ -93,7 +93,7 @@ class ArchitectureConventionsChecks(unittest.TestCase):
         for feature in ("Respawn", "Pickup", "Recovery", "Discard", "Shop",
                         "Storage", "Equipment", "Bank", "Repair", "Enhancement",
                         "Trade", "Quest", "Pvp", "PvpAttack", "PvpSkill",
-                        "GmPvpName", "PlayerShop", "Chat", "Party"):
+                        "GmPvpName", "PlayerShop", "Chat", "Party", "Clan"):
             with self.subTest(feature=feature):
                 self.assertNotIn("Process" + feature + "Async()", tls)
         self.assertIn('<InternalsVisibleTo Include="SGTest.Server.Checks" />', project)

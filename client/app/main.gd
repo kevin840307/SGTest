@@ -12,6 +12,7 @@ const SharedGameCursor = preload("res://ui/shared_game_cursor.gd")
 const Recovered2AuthShell = preload("res://ui/recovered2_auth_shell.gd")
 const Recovered2WorldShell = preload("res://ui/recovered2_world_shell.gd")
 const ClassicAuthShell = preload("res://ui/classic_auth_shell.gd")
+const ClassicWorldShell = preload("res://ui/classic_world_shell.gd")
 const WorldLoadingOverlay = preload("res://ui/world_loading_overlay.gd")
 var auto_start := true
 var world_view := WorldView.new()
@@ -34,6 +35,7 @@ var session_panel := SessionPanel.new()
 var recovered2_auth := Recovered2AuthShell.new()
 var recovered2_world := Recovered2WorldShell.new()
 var classic_auth := ClassicAuthShell.new()
+var classic_world := ClassicWorldShell.new()
 var _r2_legacy_group := -1
 var _r2_close := Button.new()
 var loading_overlay := WorldLoadingOverlay.new()
@@ -132,6 +134,7 @@ func _ready() -> void:
 	layer.add_child(recovered2_auth)
 	layer.add_child(classic_auth)
 	layer.add_child(recovered2_world)
+	layer.add_child(classic_world)
 	layer.add_child(loading_overlay)
 	_r2_close.text = "×"
 	_r2_close.name = "Recovered2CloseLegacyPanel"
@@ -150,8 +153,10 @@ func _ready() -> void:
 	recovered2_auth.skin_requested.connect(_select_recovered2_skin)
 	classic_auth.bind_session(session_panel,world_view.store)
 	recovered2_world.bind_session(session_panel)
+	classic_world.bind_session(session_panel)
 	recovered2_world.request_legacy_section.connect(_show_r2_legacy_group)
 	recovered2_world.skin_requested.connect(_select_recovered2_skin)
+	classic_world.skin_requested.connect(_select_recovered2_skin)
 	if not offline_map_only:
 		add_child(cursor_manager)
 	terminal_hud.visible = false
@@ -237,6 +242,7 @@ func _resize() -> void:
 	recovered2_auth.resize_view(_screen_backdrop.size)
 	classic_auth.resize_view(_screen_backdrop.size)
 	recovered2_world.resize_view(_screen_backdrop.size)
+	classic_world.resize_view(_screen_backdrop.size)
 	loading_overlay.resize_view(_screen_backdrop.size)
 	terminal_hud.resize_view(Vector2i(_screen_backdrop.size))
 	_update_ui_stage(true)
@@ -249,7 +255,8 @@ func _update_ui_stage(force: bool = false) -> void:
 	var r2_frontend := _current_skin == "recovered2_local" and _recovered2_local_ready and pre_world
 	var original_skin := _current_skin == "original_ie_hk2" and UiSkinCatalog.valid("original_ie_hk2")
 	var original_frontend := original_skin and pre_world
-	var r2_world := ((_current_skin == "recovered2_local" and _recovered2_local_ready) or original_skin) and session_panel.active and session_panel._layout.current_page == SessionLayout.Page.WORLD
+	var r2_world := _current_skin == "recovered2_local" and _recovered2_local_ready and session_panel.active and session_panel._layout.current_page == SessionLayout.Page.WORLD
+	var classic_world_active := original_skin and session_panel.active and session_panel._layout.current_page == SessionLayout.Page.WORLD
 	var viewport_size := Vector2(get_viewport().get_visible_rect().size)
 	var key := "%s:%s:%d:%d:%d:%d:%d" % [str(pre_world),_current_skin,int(viewport_size.x),int(viewport_size.y),int(session_panel.visible),int(session_panel._layout.current_page),_r2_legacy_group]
 	if not force and key == _ui_stage_key:
@@ -266,9 +273,10 @@ func _update_ui_stage(force: bool = false) -> void:
 	_photo_backdrop.visible = _photo_backdrop.visible and not r2_frontend and not original_frontend
 	recovered2_auth.enable_for_page(session_panel._layout.current_page,r2_frontend)
 	classic_auth.enable_for_page(session_panel._layout.current_page,original_frontend)
-	recovered2_world.set_profile("original_ie_hk2" if original_skin else "recovered2_local")
-	toolbar.visible = dev_overlay_enabled and not pre_world and not r2_world
+	recovered2_world.set_profile("recovered2_local")
+	toolbar.visible = dev_overlay_enabled and not pre_world and not r2_world and not classic_world_active
 	recovered2_world.set_world_active(r2_world)
+	classic_world.set_world_active(classic_world_active)
 	_r2_close.visible = r2_world and _r2_legacy_group >= 0
 	var retro_world := _current_skin == "retro_terminal" and not pre_world
 	terminal_hud.visible = retro_world and session_panel.active
@@ -282,8 +290,8 @@ func _update_ui_stage(force: bool = false) -> void:
 		# One SessionPanel stays alive but never covers the private login art.
 		session_panel.position = Vector2(-12000,-12000)
 		return
-	if r2_world:
-		# Floating windows are independent presentation. The existing live
+	if r2_world or classic_world_active:
+		# Source-specific floating windows are independent presentation. The existing live
 		# SessionPanel is opened only for features not yet promoted to a
 		# source-position native window; all Server callbacks stay intact.
 		if _r2_legacy_group < 0:
@@ -559,6 +567,7 @@ func _connection_changed(active: bool) -> void:
 	terminal_hud.clear()
 	_r2_legacy_group = -1
 	recovered2_world.set_world_active(false)
+	classic_world.set_world_active(false)
 	world_view.clear_map()
 	world_view.show_players = active
 	if active:
@@ -600,6 +609,7 @@ func _server_snapshot(snapshot: Dictionary) -> void:
 	_last_snapshot = snapshot.duplicate(true)
 	terminal_hud.apply_snapshot(snapshot)
 	recovered2_world.apply_snapshot(snapshot)
+	classic_world.apply_snapshot(snapshot)
 	world_view.set_player_snapshot(snapshot)
 
 

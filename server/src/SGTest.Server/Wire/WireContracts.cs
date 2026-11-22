@@ -116,7 +116,10 @@ public enum WireOpcode : ushort
     PartySnapshot = 103,
     SkillBookSnapshot = 104,
     CharacterManage = 105,
-    CharacterManageResult = 106
+    CharacterManageResult = 106,
+    ClanCommand = 107,
+    ClanResult = 108,
+    ClanSnapshot = 109
 }
 
 public enum ChatChannel : byte { Nearby = 0, Faction = 1, Warband = 2, Party = 3, Whisper = 4 }
@@ -126,6 +129,13 @@ public enum WhisperResultStatus : byte
     TargetUnavailable = 1,
     SelfTarget = 2
 }
+public enum ClanCommandAction : byte { Create=1, Join=2, Leave=3, Refresh=4 }
+public enum ClanResultStatus : byte
+{
+    Success=0,AlreadyInClan=1,NotInClan=2,ClanNotFound=3,
+    NameTaken=4,InvalidName=5,ClanFull=6,Conflict=7
+}
+
 public enum PartyCommandAction : byte
 {
     Invite = 1, Accept = 2, Reject = 3, Leave = 4, Kick = 5, Promote = 6
@@ -423,7 +433,7 @@ public readonly record struct GroundPickupResultWire(
     long DropId,long ItemUid,int ItemDefinitionId,int Quantity);
 public readonly record struct InventoryItemWire(
     long ItemUid,int ItemDefinitionId,int Quantity,long SourceDropId,
-    int EnhancementLevel = 0);
+    int EnhancementLevel = 0,int DurabilityRaw = -1);
 public sealed record InventorySnapshotWire(
     long CharacterId,int StartIndex,bool Complete,
     IReadOnlyList<InventoryItemWire> Items);
@@ -453,7 +463,7 @@ public readonly record struct StorageOpenWire(
     long MapEpoch,uint StorageSequence,int NpcSpawnId);
 public readonly record struct StorageItemWire(
     long ItemUid,int ItemDefinitionId,int Quantity,long SourceDropId,
-    int EnhancementLevel = 0);
+    int EnhancementLevel = 0,int DurabilityRaw = -1);
 public sealed record StorageSnapshotWire(
     long MapEpoch,uint StorageSequence,StorageOpenStatus Status,
     int NpcSpawnId,int StartIndex,bool Complete,
@@ -467,7 +477,7 @@ public readonly record struct StorageTransferResultWire(
 
 public readonly record struct EquipmentItemWire(
     long ItemUid,int SlotId,int ItemDefinitionId,long SourceDropId,
-    int EnhancementLevel = 0);
+    int EnhancementLevel = 0,int DurabilityRaw = -1);
 public sealed record EquipmentSnapshotWire(
     long CharacterId,int StartIndex,bool Complete,
     IReadOnlyList<EquipmentItemWire> Items);
@@ -616,6 +626,15 @@ public readonly record struct PartyMemberWire(
 public sealed record PartySnapshotWire(
     long ReceiverMapEpoch,long PartyId,uint Revision,long LeaderActorId,
     IReadOnlyList<PartyMemberWire> Members);
+
+public readonly record struct ClanCommandWire(
+    long MapEpoch,uint ClanSequence,ClanCommandAction Action,long ClanId,string Name="");
+public readonly record struct ClanResultWire(
+    long MapEpoch,uint ClanSequence,ClanCommandAction Action,ClanResultStatus Status,long ClanId);
+public readonly record struct ClanMemberWire(long CharacterId,byte Role,string Name);
+public sealed record ClanSnapshotWire(
+    long ReceiverMapEpoch,long ClanId,uint Revision,long LeaderCharacterId,string Name,
+    IReadOnlyList<ClanMemberWire> Members);
 
 public readonly record struct QuestOpenWire(
     long MapEpoch,uint QuestSequence,int NpcSpawnId);

@@ -1,13 +1,16 @@
 extends Control
-## Original 800x600 IE HK2 UI visuals, separate from R2. Same SessionPanel.
-## Only original source assets decoded by our converter; all auth state is shared.
+## Original 800x600 IE HK2 authentication presentation.
+## This shell owns only visuals/hitboxes. Login/character state remains in the
+## shared SessionPanel/ClientSession so UI profile switching never reconnects.
 const Layout = preload("res://ui/session_layout.gd")
 const PlayerPreview = preload("res://player/character_preview.gd")
 const AppearanceLabels = preload("res://ui/character_appearance_picker.gd")
 const UiTextures = preload("res://ui/ui_texture_loader.gd")
+
 const SOURCE := Vector2(800,600)
 const ART := "res://ui/private_ie_hk2"
-const LABELS := ["種族","髮型","髮色"]
+const CREATE_FIELDS := ["race","hair_index","hair_color","body_index","leg_index","sleeve_color"]
+
 var stage := Control.new()
 var login_page := Control.new()
 var select_page := Control.new()
@@ -20,6 +23,9 @@ var _name := LineEdit.new()
 var _status: Label
 var _create_note: Label
 var _slots: Array[Button] = []
+var _slot_names: Array[Label] = []
+var _slot_empty_art: Array[TextureRect] = []
+var _slot_play_art: Array[TextureRect] = []
 var _previews: Array = []
 var _values: Dictionary = {}
 var _current_page := -1
@@ -41,6 +47,9 @@ func _init() -> void:
 	set_process(false)
 	resize_view(Vector2(1152,620))
 
+func _tex(name: String) -> Texture2D:
+	return UiTextures.get_texture(ART.path_join(name + ".png"))
+
 func _art(parent: Control,file: String) -> TextureRect:
 	var picture := TextureRect.new()
 	picture.name = file.trim_suffix(".png")
@@ -57,10 +66,46 @@ func _input_at(parent: Control,node: Control,x: float,y: float,w: float,h: float
 	node.size = Vector2(w,h)
 	parent.add_child(node)
 
-func _button(parent: Control,text: String,x: float,y: float,w: float,h: float,callback: Callable) -> Button:
+func _empty_style() -> StyleBoxEmpty:
+	return StyleBoxEmpty.new()
+
+func _style_line_edit(input: LineEdit) -> void:
+	input.add_theme_stylebox_override("normal",_empty_style())
+	input.add_theme_stylebox_override("focus",_empty_style())
+	input.add_theme_stylebox_override("read_only",_empty_style())
+	input.add_theme_color_override("font_color",Color("#fff7d8"))
+	input.add_theme_color_override("font_placeholder_color",Color("#c9b889"))
+	input.add_theme_color_override("caret_color",Color("#ffffff"))
+	input.add_theme_font_size_override("font_size",13)
+	input.select_all_on_focus = false
+
+func _style_hit(button: Button,visible_text:=true) -> void:
+	button.flat = true
+	button.focus_mode = Control.FOCUS_NONE
+	for state in ["normal","hover","pressed","focus","disabled"]:
+		button.add_theme_stylebox_override(state,_empty_style())
+	button.add_theme_color_override("font_color",Color("#fff4c6") if visible_text else Color.TRANSPARENT)
+	button.add_theme_color_override("font_hover_color",Color.WHITE if visible_text else Color.TRANSPARENT)
+	button.add_theme_color_override("font_pressed_color",Color("#ffe49b") if visible_text else Color.TRANSPARENT)
+	button.add_theme_color_override("font_shadow_color",Color(0,0,0,0.9))
+	button.add_theme_constant_override("shadow_offset_x",1)
+	button.add_theme_constant_override("shadow_offset_y",1)
+	button.add_theme_font_size_override("font_size",12)
+
+func _button(parent: Control,text: String,x: float,y: float,w: float,h: float,callback: Callable,art_name: String="") -> Button:
+	if not art_name.is_empty():
+		var art := TextureRect.new()
+		art.name = art_name + "Art"
+		art.texture = _tex(art_name + "_0")
+		art.position = Vector2(x,y)
+		art.size = Vector2(w,h)
+		art.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		art.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		parent.add_child(art)
 	var button := Button.new()
 	button.text = text
-	button.add_theme_font_size_override("font_size",12)
+	_style_hit(button,true)
 	button.pressed.connect(callback)
 	_input_at(parent,button,x,y,w,h)
 	return button
@@ -68,8 +113,12 @@ func _button(parent: Control,text: String,x: float,y: float,w: float,h: float,ca
 func _label(parent: Control,text: String,x: float,y: float,w: float,h: float) -> Label:
 	var l := Label.new()
 	l.text = text
-	l.add_theme_color_override("font_color",Color("#633b14"))
+	l.add_theme_color_override("font_color",Color("#5a3212"))
+	l.add_theme_color_override("font_shadow_color",Color("#fff0b8"))
+	l.add_theme_constant_override("shadow_offset_x",1)
+	l.add_theme_constant_override("shadow_offset_y",1)
 	l.add_theme_font_size_override("font_size",12)
+	l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_input_at(parent,l,x,y,w,h)
 	return l
@@ -78,51 +127,84 @@ func _build_login() -> void:
 	_art(login_page,"ACCOUNT_LOGIN.png")
 	_username.placeholder_text = "帳號"
 	_username.max_length = 32
-	_username.add_theme_font_size_override("font_size",13)
 	_password.secret = true
 	_password.max_length = 256
 	_password.placeholder_text = "密碼"
-	_password.add_theme_font_size_override("font_size",13)
-	_input_at(login_page,_username,368,248,181,25)
-	_input_at(login_page,_password,368,276,181,25)
+	_style_line_edit(_username)
+	_style_line_edit(_password)
+	_input_at(login_page,_username,368,251,181,22)
+	_input_at(login_page,_password,368,277,181,22)
 	_password.text_submitted.connect(func(_unused): _login())
-	_button(login_page,"登入",365,316,84,27,_login)
-	_button(login_page,"註冊",465,316,84,27,_register)
-	_status = _label(login_page,"",237,350,326,32)
+	_button(login_page,"登入",365,314,85,21,_login,"YELLOW_BUTTON")
+	_button(login_page,"註冊",465,314,85,21,_register,"YELLOW_BUTTON")
+	_status = _label(login_page,"",237,343,326,32)
+	_status.add_theme_color_override("font_color",Color("#7a3517"))
 
 func _build_select() -> void:
 	_art(select_page,"SELECT_CHARACTER.png")
 	for i in 3:
 		var x := 170.0 + float(i)*188.0
+		var name_label := _label(select_page,"",x-25,256,136,22)
+		name_label.add_theme_color_override("font_color",Color("#fff0bd"))
+		name_label.add_theme_color_override("font_shadow_color",Color.BLACK)
+		_slot_names.append(name_label)
 		var preview := PlayerPreview.new()
-		_input_at(select_page,preview,x,293,86,122)
+		_input_at(select_page,preview,x,286,85,128)
 		preview.bind_store(_asset_store)
 		_previews.append(preview)
-		var button := _button(select_page,"建立角色",x-26,427,138,27,_select_slot.bind(i))
+		var empty_art := TextureRect.new()
+		empty_art.texture = _tex("NEW_CHARACTER_0")
+		empty_art.position = Vector2(x,284)
+		empty_art.size = Vector2(85,132)
+		empty_art.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		empty_art.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		empty_art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		select_page.add_child(empty_art)
+		_slot_empty_art.append(empty_art)
+		var play_art := TextureRect.new()
+		play_art.texture = _tex("PLAY_GAME_0")
+		play_art.position = Vector2(x+9,418)
+		play_art.size = Vector2(67,23)
+		play_art.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		play_art.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		play_art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		play_art.hide()
+		select_page.add_child(play_art)
+		_slot_play_art.append(play_art)
+		var button := Button.new()
+		button.name = "CharacterSlot%d" % i
+		button.text = ""
+		_style_hit(button,false)
+		button.pressed.connect(_select_slot.bind(i))
+		_input_at(select_page,button,x-4,280,94,164)
 		_slots.append(button)
-	_button(select_page,"登出",342,491,115,27,func(): _panel.disconnect_session())
+	_button(select_page,"登出",357,482,85,21,func(): _panel.disconnect_session(),"YELLOW_BUTTON")
 
 func _build_create() -> void:
 	_art(create_page,"CREATE_CHARACTER.png")
 	_name.placeholder_text = "角色名稱"
 	_name.max_length = 24
-	_input_at(create_page,_name,227,253,134,26)
-	var fields := ["race","hair_index","hair_color","body_index","leg_index"]
-	for i in fields.size():
-		var field: String = str(fields[i])
-		var y := 284.0 + float(i)*25.0
-		var left := _button(create_page,"◀",158,y,25,24,_cycle.bind(field,-1))
-		var value := _label(create_page,"尚未開放",185,y,107,24)
+	_style_line_edit(_name)
+	_input_at(create_page,_name,228,255,134,22)
+	for i in CREATE_FIELDS.size():
+		var field: String = CREATE_FIELDS[i]
+		var y := 282.0 + float(i)*24.0
+		_button(create_page,"",158,y,24,21,_cycle.bind(field,-1),"LEFT_BUTTON")
+		var value := _label(create_page,"尚未開放",184,y-1,111,22)
+		value.add_theme_color_override("font_color",Color("#fff2c7"))
+		value.add_theme_color_override("font_shadow_color",Color.BLACK)
 		_values[field] = value
-		_button(create_page,"▶",300,y,25,24,_cycle.bind(field,1))
+		_button(create_page,"",299,y,24,21,_cycle.bind(field,1),"RIGHT_BUTTON")
 	var doll := PlayerPreview.new()
 	_input_at(create_page,doll,346,291,76,126)
 	doll.bind_store(_asset_store)
 	_previews.append(doll)
 	var note := _label(create_page,"",147,435,267,52)
+	note.add_theme_color_override("font_color",Color("#5a3212"))
+	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_create_note = note
-	_button(create_page,"建立",510,442,65,29,_create)
-	_button(create_page,"返回",591,442,64,29,func(): _panel.back_to_character_button.pressed.emit())
+	_button(create_page,"建立",510,442,85,21,_create,"YELLOW_BUTTON")
+	_button(create_page,"返回",600,442,85,21,func(): _panel.back_to_character_button.pressed.emit(),"YELLOW_BUTTON")
 
 func bind_session(panel, store) -> void:
 	_panel = panel
@@ -205,8 +287,12 @@ func _update_characters() -> void:
 	for i in _slots.size():
 		var occupied: bool = i < _panel._characters.size()
 		var c: Dictionary = _panel._characters[i] if occupied else {}
-		_slots[i].text = ("進入 " + str(c.get("name","角色"))) if occupied else "建立角色"
+		_slots[i].text = str(c.get("name","")) if occupied else ""
 		_slots[i].disabled = _panel._chosen
+		_slot_names[i].text = str(c.get("name","")) if occupied else "建立角色"
+		_slot_empty_art[i].visible = not occupied
+		_slot_play_art[i].visible = occupied
+		_previews[i].visible = occupied
 		_previews[i].set_occupied(occupied)
 		_previews[i].set_appearance(c.get("appearance",{}) if occupied else {})
 
@@ -218,7 +304,7 @@ func _update_appearance() -> void:
 		_values[field].text = AppearanceLabels.value_label(field,int(selected.get(field,-1))) if not selected.is_empty() else "未開放"
 	_previews[3].set_occupied(not selected.is_empty())
 	_previews[3].set_appearance(selected)
-	_create_note.text = "角色外觀僅顯示來源已有的資產"
+	_create_note.text = "外觀選項直接使用伺服器允許清單；切換 UI 不改角色資料。"
 
 func resize_view(view: Vector2) -> void:
 	size = view

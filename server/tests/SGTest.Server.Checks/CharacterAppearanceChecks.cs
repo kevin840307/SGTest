@@ -215,11 +215,11 @@ BEGIN SELECT RAISE(ABORT,'synthetic wallet failure'); END;");
                 Checks.Require((await migrated.CreateCharacterAsync(account,1,"MigratedNew",Spawn,Girl,Ruleset())).Status==
                     CharacterCreateStatus.Created,"migrated database cannot persist appearance");
             }
-            string backup=Directory.GetFiles(root,"identity.db.pre-v23-to-v28.*.bak").Single();
+            string backup=Directory.GetFiles(root,"identity.db.pre-v23-to-v29.*.bak").Single();
             Checks.Require(Scalar(backup,"SELECT version FROM schema_version;")==23 &&
                 Scalar(backup,"SELECT COUNT(*) FROM sqlite_master WHERE name='character_appearances';")==0 &&
                 Scalar(backup,"SELECT COUNT(*) FROM characters;")==1,"backup did not preserve pre-upgrade schema/data");
-            Checks.Require(Scalar(db,"SELECT version FROM schema_version;")==28,"appearance migration version wrong");
+            Checks.Require(Scalar(db,"SELECT version FROM schema_version;")==29,"appearance migration version wrong");
         }
         finally { Directory.Delete(root,true); }
     }

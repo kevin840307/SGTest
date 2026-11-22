@@ -50,6 +50,14 @@ public static partial class WireProtocol
     public const int CharacterChooseResultFrameBytes = HeaderBytes + 37;
     public const int CharacterManageMaxFrameBytes = HeaderBytes + 8 + 3 + 2*MaxCharacterPasswordBytes;
     public const int CharacterManageResultFrameBytes = HeaderBytes + 1 + 1 + 8;
+    public const int ClanMaxNameBytes = 72;
+    public const int ClanCommandHeaderBytes = HeaderBytes + 8 + 4 + 1 + 8 + 2;
+    public const int ClanCommandMaximumFrameBytes = ClanCommandHeaderBytes + ClanMaxNameBytes;
+    public const int ClanResultFrameBytes = HeaderBytes + 8 + 4 + 1 + 1 + 8;
+    public const int ClanSnapshotHeaderBytes = HeaderBytes + 8 + 8 + 4 + 8 + 2 + 1;
+    public const int ClanMemberHeaderBytes = 8 + 1 + 2;
+    public const int ClanMaximumMembers = 100;
+    public const int ClanSnapshotMaximumFrameBytes = ClanSnapshotHeaderBytes + ClanMaxNameBytes + ClanMaximumMembers * (ClanMemberHeaderBytes + PlayerIdentityMaxNameBytes);
     public const int LegacyCharacterAppearanceBytes = 4;
     public const int BodyLegCharacterAppearanceBytes = 6;
     public const int CharacterAppearanceBytes = 7;
@@ -82,7 +90,7 @@ public static partial class WireProtocol
     public const int GroundPickupFrameBytes = HeaderBytes + 8 + 4 + 8;
     public const int GroundPickupResultFrameBytes = HeaderBytes + 8 + 4 + 1 + 8 + 8 + 4 + 4;
     public const int InventorySnapshotHeaderBytes = HeaderBytes + 8 + 4 + 1 + 2;
-    public const int InventoryItemBytes = 25;
+    public const int InventoryItemBytes = 29;
     public const int InventorySnapshotMaxItemsPerFrame = 128;
     public const int InventorySnapshotMaxItems = 4095;
     public const int SkillBookSnapshotHeaderBytes = HeaderBytes + 8 + 4 + 1 + 2;
@@ -102,13 +110,13 @@ public static partial class WireProtocol
     public const int StorageMoveFrameBytes = HeaderBytes + 8 + 4 + 4 + 8;
     public const int StorageSnapshotHeaderBytes =
         HeaderBytes + 8 + 4 + 1 + 4 + 4 + 1 + 2;
-    public const int StorageItemBytes = 25;
+    public const int StorageItemBytes = 29;
     public const int StorageSnapshotMaxItemsPerFrame = 128;
     public const int StorageSnapshotMaxItems = 4095;
     public const int StorageTransferResultFrameBytes =
         HeaderBytes + 8 + 4 + 1 + 1 + 4 + 8 + 4 + 4 + 8;
     public const int EquipmentSnapshotHeaderBytes = HeaderBytes + 8 + 4 + 1 + 2;
-    public const int EquipmentItemBytes = 25;
+    public const int EquipmentItemBytes = 29;
     public const int EquipmentSnapshotMaxItemsPerFrame = 128;
     public const int EquipmentSnapshotMaxItems = 255;
     public const int EquipmentMoveFrameBytes = HeaderBytes + 8 + 4 + 8;
@@ -645,6 +653,9 @@ public static partial class WireProtocol
             104 => WireOpcode.SkillBookSnapshot,
             105 => WireOpcode.CharacterManage,
             106 => WireOpcode.CharacterManageResult,
+            107 => WireOpcode.ClanCommand,
+            108 => WireOpcode.ClanResult,
+            109 => WireOpcode.ClanSnapshot,
             _ => 0
         };
         if (opcode == 0) return false;
@@ -670,6 +681,9 @@ public static partial class WireProtocol
             WireOpcode.CharacterChooseResult => advertised == CharacterChooseResultFrameBytes,
             WireOpcode.CharacterManage => advertised >= HeaderBytes+11 && advertised <= CharacterManageMaxFrameBytes,
             WireOpcode.CharacterManageResult => advertised == CharacterManageResultFrameBytes,
+            WireOpcode.ClanCommand => advertised >= ClanCommandHeaderBytes && advertised <= ClanCommandMaximumFrameBytes,
+            WireOpcode.ClanResult => advertised == ClanResultFrameBytes,
+            WireOpcode.ClanSnapshot => advertised >= ClanSnapshotHeaderBytes && advertised <= ClanSnapshotMaximumFrameBytes,
             WireOpcode.CharacterCreate => advertised is >= 12 and <= MaxCharacterCreateFrameBytes,
             WireOpcode.CharacterCreateResult => advertised is >= 20 and <= MaxCharacterCreateResultFrameBytes,
             WireOpcode.WorldReady => advertised == WorldReadyFrameBytes,

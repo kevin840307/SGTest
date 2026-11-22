@@ -26,8 +26,8 @@ internal static class StorageWireChecks
 
             var snapshot=new StorageSnapshotWire(9,7,StorageOpenStatus.Opened,
                 99,0,true,[
-                    new StorageItemWire(7001,2701,2,501,5),
-                    new StorageItemWire(7002,2702,1,0,7)]);
+                    new StorageItemWire(7001,2701,2,501,5,80),
+                    new StorageItemWire(7002,2702,1,0,7,-1)]);
             var snapshotFrame=WireProtocol.EncodeStorageSnapshot(snapshot);
             Checks.Require(
                 WireProtocol.TryDecodeStorageSnapshot(snapshotFrame,out var snapshotBack) &&
@@ -54,7 +54,7 @@ internal static class StorageWireChecks
                 WireProtocol.EncodeStorageSnapshot(failed),out _),
                 "empty access rejection should be representable");
 
-            bool badFailure=false,badDuplicate=false,badResult=false;
+            bool badFailure=false,badDuplicate=false,badResult=false,badDurability=false;
             try
             {
                 WireProtocol.EncodeStorageSnapshot(new(9,7,StorageOpenStatus.TooFar,
@@ -76,7 +76,13 @@ internal static class StorageWireChecks
                     99,7001,0,0,0));
             }
             catch(ArgumentOutOfRangeException){badResult=true;}
-            Checks.Require(badFailure&&badDuplicate&&badResult,
+            try
+            {
+                WireProtocol.EncodeStorageSnapshot(new(9,7,StorageOpenStatus.Opened,
+                    99,0,true,[new StorageItemWire(1,1,1,0,0,-2)]));
+            }
+            catch(ArgumentOutOfRangeException){badDurability=true;}
+            Checks.Require(badFailure&&badDuplicate&&badResult&&badDurability,
                 "invalid storage wire payload was admitted");
         });
     }

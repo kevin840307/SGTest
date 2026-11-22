@@ -564,6 +564,30 @@ func submit_quest_choice(choice_id:int)->bool:
 	return false
 
 
+func submit_clan_create(name:String)->bool:
+	if not active or int(_latest.get("state",-1))!=State.STATE_IN_WORLD or not bool(_latest.get("world_ready",false)) or int(_latest.get("clan_id",0))!=0 or int(_latest.get("pending_clan_sequence",0))!=0:
+		return false
+	return session.clan_create(name)
+
+
+func submit_clan_join(clan_id:int)->bool:
+	if not active or clan_id<=0 or int(_latest.get("state",-1))!=State.STATE_IN_WORLD or not bool(_latest.get("world_ready",false)) or int(_latest.get("clan_id",0))!=0 or int(_latest.get("pending_clan_sequence",0))!=0:
+		return false
+	return session.clan_join(clan_id)
+
+
+func submit_clan_leave()->bool:
+	if not active or int(_latest.get("state",-1))!=State.STATE_IN_WORLD or not bool(_latest.get("world_ready",false)) or int(_latest.get("clan_id",0))<=0 or int(_latest.get("pending_clan_sequence",0))!=0:
+		return false
+	return session.clan_leave()
+
+
+func submit_clan_refresh()->bool:
+	if not active or int(_latest.get("state",-1))!=State.STATE_IN_WORLD or not bool(_latest.get("world_ready",false)) or int(_latest.get("pending_clan_sequence",0))!=0:
+		return false
+	return session.clan_refresh()
+
+
 func request_respawn() -> void:
 	if respawn_button.disabled or not respawn_button.visible or not active:
 		return
