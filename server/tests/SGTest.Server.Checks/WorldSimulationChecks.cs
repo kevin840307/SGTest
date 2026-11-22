@@ -190,6 +190,51 @@ internal static class WorldSimulationChecks
                   "stationary Stop must produce a revision for remote observers");
         });
 
+        Checks.Run("holding the same destination does not restart or re-budget the route", () =>
+        {
+            var world = new ServerWorld([b],
+                new WorldLimits(MaxPathRequestsPerTick: 1, MovementPixelsPerTick: 8));
+            Check(world.TryTrustedRegister(141, 81, 24, 24, out var actor), "register");
+            Check(world.TryPostMove(Move(actor, 1, 104, 88)) &&
+                  world.TryPostMove(Move(actor, 2, 103, 90)),
+                  "repeated target commands accepted by queue");
+            var tick = world.Tick();
+            Check(tick.Receipts.Count == 2 &&
+                  tick.Receipts.All(r => r.Status == MoveReceiptStatus.Accepted),
+                  "same collision cell incorrectly repeated A* or consumed route budget");
+            var moving = world.GetActor(141)!.Value;
+            Check(moving.IsMoving && moving.MovementActionSequence == 1 &&
+                  moving.LastMovementSequence == 2 &&
+                  Math.Abs(Math.Sqrt(Math.Pow(moving.X - 24, 2) +
+                                     Math.Pow(moving.Y - 24, 2)) - 8) < 0.0001,
+                  "duplicate destination altered fixed-step movement or ACK sequencing");
+        });
+
+        Checks.Run("2D open-path steering uses collision-checked line of sight", () =>
+        {
+            var world = new ServerWorld([b], new WorldLimits(MovementPixelsPerTick: 8));
+            Check(world.TryTrustedRegister(142, 81, 24, 24, out var actor), "register");
+            Check(world.TryPostMove(Move(actor, 1, 104, 88)), "move intent");
+            HasReceipt(world.Tick(), MoveReceiptStatus.Accepted);
+            var first = world.GetActor(142)!.Value;
+            Check(first.X > 24 && Math.Abs((first.Y - 24) / (first.X - 24) - 0.8) < 0.06,
+                  "open-path movement followed staircase-cell diagonals, not visible endpoint");
+            for (int n = 0; n < 30 && world.GetActor(142)!.Value.IsMoving; n++)
+            {
+                var before = world.GetActor(142)!.Value;
+                world.Tick();
+                var after = world.GetActor(142)!.Value;
+                Check(b.IsDirectClear(before.X, before.Y, after.X, after.Y),
+                      "lookahead travelled through blocked grid");
+                Check(Math.Sqrt(Math.Pow(after.X - before.X, 2) +
+                                     Math.Pow(after.Y - before.Y, 2)) <= 8.000001,
+                      "lookahead exceeded authoritative pixels per tick");
+            }
+            var settled = world.GetActor(142)!.Value;
+            Check(!settled.IsMoving && Math.Abs(settled.X - 104) < 0.000001 &&
+                  Math.Abs(settled.Y - 88) < 0.000001, "smooth path missed target");
+        });
+
         Checks.Run("A* detour proceeds cell-by-cell without tunnelling through solid wall", () =>
         {
             var world = new ServerWorld(both);

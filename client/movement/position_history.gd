@@ -5,6 +5,10 @@ const SERVER_TICK_USEC := 1000000.0 / 30.0
 const DEFAULT_DELAY_TICKS := 2.5 # 83.3ms: absorbs 20Hz UI polls of 30Hz authoritative ticks.
 const MAX_BRIDGE_TICKS := 8
 const MAX_BRIDGE_PIXELS_PER_TICK := 64.0
+# Visual-only short dead reckoning. Never changes WorldState or move/attack wire.
+const MAX_PREDICTION_TICKS := 1.5
+const MAX_PREDICTION_PIXELS := 12.0
+const MAX_PREDICTED_SPEED_PER_TICK := 8.0
 
 var _samples: Array[Dictionary] = []
 var _last_target_tick := -INF
@@ -20,10 +24,12 @@ func clear() -> void:
 func size() -> int:
 	return _samples.size()
 
-func push(server_tick: int, position: Vector2, arrival_usec: int) -> bool:
+func push(server_tick: int, position: Vector2, arrival_usec: int,
+		is_moving: bool = false) -> bool:
 	if server_tick < 0 or arrival_usec < 0 or not position.is_finite():
 		return false
-	var next := {"tick":server_tick,"p":position,"arrival":arrival_usec}
+	var next := {"tick":server_tick,"p":position,"arrival":arrival_usec,
+		"moving":is_moving}
 	if _samples.is_empty():
 		_samples.append(next)
 		_clock_tick = server_tick
@@ -34,7 +40,7 @@ func push(server_tick: int, position: Vector2, arrival_usec: int) -> bool:
 	if server_tick < previous_tick:
 		return false
 	if server_tick == previous_tick:
-		if Vector2(previous.p) != position:
+		if Vector2(previous.p) != position or bool(previous.get("moving",false)) != is_moving:
 			_samples[-1] = next
 		return true
 	var gap := server_tick - previous_tick
@@ -68,10 +74,21 @@ func sample(now_usec: int, delay_ticks := DEFAULT_DELAY_TICKS) -> Vector2:
 		_last_target_tick = maxf(float(_samples[0].tick),candidate)
 	else:
 		_last_target_tick = maxf(_last_target_tick,candidate)
-	# Never accumulate imaginary future ticks during packet stalls: doing so
-	# would freeze the camera again after the server connection resumes.
-	_last_target_tick = minf(_last_target_tick,float(latest.tick))
+	# Recovered keeps drawing locally between packets, then accepts delayed
+	# authoritative corrections. Never run indefinitely on an old velocity:
+	# only a confirmed moving actor may lead by <=1.5 server ticks / 12 px.
+	var prediction_limit := MAX_PREDICTION_TICKS if bool(latest.get("moving",false)) else 0.0
+	_last_target_tick = minf(_last_target_tick,float(latest.tick)+prediction_limit)
 	var target := _last_target_tick
+	if target > float(latest.tick):
+		var prior: Dictionary = _samples[-2]
+		var interval := float(int(latest.tick)-int(prior.tick))
+		if interval <= 0.0:
+			return Vector2(latest.p)
+		var step := (Vector2(latest.p)-Vector2(prior.p))/interval
+		step = step.limit_length(MAX_PREDICTED_SPEED_PER_TICK)
+		return Vector2(latest.p)+(
+			step*(target-float(latest.tick))).limit_length(MAX_PREDICTION_PIXELS)
 	if target <= float(_samples[0].tick):
 		return Vector2(_samples[0].p)
 	for i in range(1,_samples.size()):

@@ -43,6 +43,13 @@ UI Node 由實際頁面擁有：`Recovered2AuthShell` 只有在本機 Theme 成�
 - 既有 `PositionHistory` 每收到新封包會用最新 `arrival_usec` 重新計算 `candidate = tick + elapsed - delay`，導致相機每 50ms 短暫等緩衝回填。現在在同一 actor history／epoch 維持一個連續本地時鐘 anchor，封包更新不會把呈現時間倒退；新增 2.5-tick／83.3ms 緩衝吸收 20Hz UI poll，保持最多 8 個資料點，權威大修正仍直接 snap，封包斷流不累積未來 tick。這是純 2D presentation，不更動權威座標、移速、A*、碰撞或可靠事件。
 - `test_position_history.gd` 在 20Hz snapshot／60Hz render 1.5 秒合成直線軌跡中暖機後 **0 hold／0 backward／max step 4.0001px**；30Hz irregular trace 2.5 ticks 有 **0 hold、max step 2.0002px**，對比 2 ticks **3 hold／5.7602px**；停封包再恢復、teleport snap、8 樣本上限皆 PASS。`test_player_presentation.gd`、`test_world_camera.gd` Godot 4.7.2 Windows headless PASS。真人長時間走路、GPU Frame P95/P99、視覺敏感的 subpixel nearest filter 與同機多人實測 **NOT VERIFIED**；合成通過不等於已解決所有肉眼頓感。
 
+## 2026-11-22 — Recovered 走路封包／Server 權威與局部畫面預測（第二輪）
+
+- 參考唯讀 `C:\\SGO\\Recovered\\client\\player.gd`、`scripts/remote_player_motion.gd`、`server/Application/PacketRouter.cs`、`server/Application/Messaging/ServerBroadcastHub.cs`：Recovered 本人每個 physics frame 走路，約每 50ms 送 `SyncPosition`；Server 驗證 Blocking.dat，對不合理位置延遲糾正（拉回），忽略不變位置，對觀眾併合尚未送出的 `MoveEntity`，不跨越停步／攻擊等可靠事件。SGTest 不直接信任 Client 報送的世界座標，目前 Compact Binary `MoveTarget` 只提交目的地，Server 30Hz 權威計算；這個協定模型不能假裝已是 Recovered 的本地 A* 預測。
+- 改善 `ServerWorld.ApplyMove`：長按滑鼠重新指向同一個終點 **Blocking.dat 16px cell**，仍消耗新請求序號並回覆 Accepted，但不再重新運行 A*、不重置現有路線，也不產生不必要的移動行為修訂。`AdvanceMovement` 最多往前檢查 6 個路點，跳向 Blocking.dat 證實可直行的較遠路點，每個權威實際位移仍需 `IsDirectClear`，不改最大 8px/Tick，不允許穿牆或改寫停步／地圖世代規則。相關 Server 全量 289 項測試與路線／隔牆檢查已在最後調整後重新執行 PASS。
+- `PositionHistory` 只對 **已由 Server 確認 moving** 的玩家、而且有至少兩筆權威位置時，允許最長 1.5 個 Tick／12px 的純畫面外推；後續 Server 位置或 idle 仍可修正／拉回。預測上限每 tick 8px，原 2.5tick 延遲插值與 8 筆界線保留。怪物保持原插值，攻擊距離、碰撞、物品操作、傳送、真正移速與 Client->Server 封包全部不受預測影響。測試涵蓋延遲、斷包、邊界、同 tick idle，Godot headless PASS。
+- 此次**尚未降低 SGTest 30Hz AOI 位置快照頻率**，也尚未加入 Client 本地 Blocking.dat A* 路徑預測；真人長走路、GPU frame P95/P99、多人高負載及即時 rubberband 體感仍待實機測量，不能宣稱所有頓感已消除。已運行的本機 Server 需要重啟載入新 binary，不能把測試執行成功當作現行 Server 已套用。
+
 ## 2026-11-22 — Recovered2／原版 IE HK2 UI 雙模式對齊（持續中）
 
 **來源與界線**：`reports/recovered_ui_reference/`（本機參考截圖），`C:\SGO\NewVersion\Recovered2\game_hud.tscn`、`shared_inventory_panel.tscn`、`ui/themes/paradise_window_theme.tres` 及登入／選角／創角 UI 作唯讀比對；原版 `C:\SGO\Stargate Online IE HK2\Interface/*.spr` 用**已有正式 Converter** `runtime_spr.decode_spr` 解碼成**本機私有**畫面。**原二創／原版素材不可加入 public Git**；只提交 UI 表示程式、映射及驗證。

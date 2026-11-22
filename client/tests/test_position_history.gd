@@ -96,6 +96,24 @@ func run() -> void:
 		"network stall accumulated imaginary future ticks")
 	check(paused.push(12,Vector2(16,0),701000) and paused.sample(701000)==Vector2(16,0),
 		"resuming Server updates left presentation frozen")
+	var predicted := History.new()
+	check(predicted.push(10,Vector2.ZERO,0,true) and
+		predicted.push(11,Vector2(8,0),33333,true),"moving prediction samples rejected")
+	var ahead := predicted.sample(300000)
+	check(ahead.distance_to(Vector2(8,0)) <= History.MAX_PREDICTION_PIXELS+0.001 and
+		ahead.x > 8.0 and ahead.x <= 20.001,
+		"visual prediction did not bridge delayed packet or exceeded max 12px")
+	check(predicted.sample(1000000).distance_to(Vector2(8,0)) <= 12.001,
+		"prediction ran forever across long missing server updates")
+	check(predicted.push(12,Vector2(16,0),1000100,false) and
+		predicted.sample(1000100) == Vector2(16,0),
+		"authoritative idle correction did not stop visual prediction")
+	var same_tick := History.new()
+	same_tick.push(10,Vector2.ZERO,0,true)
+	same_tick.push(11,Vector2(8,0),33333,true)
+	same_tick.push(11,Vector2(8,0),33334,false)
+	check(same_tick.sample(300000)==Vector2(8,0),
+		"same-tick idle transition left a stale moving state")
 	if failures.is_empty():
-		print("POSITION_HISTORY_PASS selected_delay_ticks=2.5 selected_delay_ms=83.3 max_samples=8 no_extrapolation=true delay1_holds=%d delay2_holds=%d delay2_5_holds=%d delay1_max_step=%.3f delay2_max_step=%.3f delay2_5_max_step=%.3f" % [one.holds,two.holds,two_half.holds,one.max_step,two.max_step,two_half.max_step])
+		print("POSITION_HISTORY_PASS selected_delay_ticks=2.5 selected_delay_ms=83.3 max_samples=8 bounded_prediction_ticks=1.5 bounded_prediction_px=12 delay1_holds=%d delay2_holds=%d delay2_5_holds=%d delay1_max_step=%.3f delay2_max_step=%.3f delay2_5_max_step=%.3f" % [one.holds,two.holds,two_half.holds,one.max_step,two.max_step,two_half.max_step])
 	quit(0 if failures.is_empty() else 1)

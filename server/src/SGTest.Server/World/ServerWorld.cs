@@ -432,6 +432,16 @@ public sealed class ServerWorld
         if (!map.TryWorldCell(input.TargetX, input.TargetY, out var goal))
             return MoveReceiptStatus.InvalidTarget;
         if (!map.IsWalkable(goal)) return MoveReceiptStatus.TargetBlocked;
+        // Held-cursor updates can resolve to the existing final collision
+        // cell. Acknowledge their fresh sequence, but do NOT restart A* or
+        // the active route: doing so can cause a visible 16px turn/jitter.
+        if (actor.RouteIndex < actor.Route.Count && actor.Route[^1] == goal)
+        {
+            // LastSequence already acknowledges this newer request. Preserve
+            // the current walk action/revision; otherwise a harmless repeated
+            // command still generates unnecessary AOI traffic.
+            return MoveReceiptStatus.Accepted;
+        }
         if (routeQueries >= _limits.MaxPathRequestsPerTick)
             return MoveReceiptStatus.TickRouteBudgetExhausted;
 
@@ -453,10 +463,30 @@ public sealed class ServerWorld
     {
         double remaining = _limits.MovementPixelsPerTick;
         bool updated = false;
+        // Recovered steers through verified visible waypoints rather than
+        // stopping at every 16px Blocking.dat cell centre. Do the same on
+        // the authoritative writer: skip only to a cell with proven line
+        // of sight, then still collision-check every actual movement step.
+        // Cap lookahead work per moving actor / 30Hz tick.
+        const int maxLookaheadCells = 6;
         // At <=16px per tick no valid grid path can consume more than 3 segments.
         for (int step = 0; step < 4 && remaining > 1e-9 &&
              actor.RouteIndex < actor.Route.Count; step++)
         {
+            int farthest = Math.Min(actor.Route.Count - 1,
+                actor.RouteIndex + maxLookaheadCells);
+            for (int probe = farthest; probe > actor.RouteIndex; probe--)
+            {
+                var candidate = actor.Route[probe];
+                double cx = candidate.X * BlockingGrid.CellPixels +
+                            BlockingGrid.CellPixels / 2.0;
+                double cy = candidate.Y * BlockingGrid.CellPixels +
+                            BlockingGrid.CellPixels / 2.0;
+                if (!_maps[actor.Map].IsDirectClear(actor.X, actor.Y, cx, cy))
+                    continue;
+                actor.RouteIndex = probe;
+                break;
+            }
             var waypoint = actor.Route[actor.RouteIndex];
             double tx = waypoint.X * BlockingGrid.CellPixels + BlockingGrid.CellPixels / 2.0;
             double ty = waypoint.Y * BlockingGrid.CellPixels + BlockingGrid.CellPixels / 2.0;

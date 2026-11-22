@@ -115,7 +115,7 @@ func apply_snapshot(snapshot: Dictionary, now_usec: int) -> void:
 				started = now_usec
 		var history = PositionHistory.new() if generation_changed else old.history
 		var tick := int(value.get("server_tick",snapshot.get("last_aoi_tick",-1)))
-		if tick < 0 or not history.push(tick,Vector2(float(value.x),float(value.y)),now_usec):
+		if tick < 0 or not history.push(tick,Vector2(float(value.x),float(value.y)),now_usec,bool(value.moving)):
 			continue
 		_actors[id] = {"value":value,"action":action,"action_facing":action_facing,
 			"started":started,"history":history,"dead_visual":dead_visual,"profile":profile}
