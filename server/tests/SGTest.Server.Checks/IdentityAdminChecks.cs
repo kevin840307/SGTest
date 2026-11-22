@@ -333,7 +333,7 @@ FROM pvp_name_admin_events WHERE character_id=$id;";
                     "fresh CLI character did not receive complete empty inventory baseline");
                 bool clanBaseline=false, petBaseline=false, worldReady=false;
                 WorldReadyWire world=default;
-                for(int i=0;i<6 && !worldReady;i++)
+                for(int i=0;i<8 && !(clanBaseline && worldReady);i++)
                 {
                     var baseline=await Read(tls);
                     if(WireProtocol.TryDecodeClanSnapshot(baseline,out var clan) && clan is not null)
