@@ -103,8 +103,21 @@ func apply_snapshot(snapshot: Dictionary, now_usec: int) -> void:
 		var value: Dictionary = visible[id]
 		var profile = _profile_for(value)
 		if profile == null:
-			_actors.erase(id)
-			continue
+			# Recovered retains an existing paper doll while cosmetics/loadouts
+			# update. The old code erased the entire actor on every snapshot
+			# until an asynchronous appearance profile finished loading.
+			var retained: Dictionary = _actors.get(id,{})
+			if not retained.is_empty() and \
+					int(retained.value.connection_epoch)==int(value.connection_epoch) and \
+					int(retained.value.entity_map_epoch)==int(value.entity_map_epoch):
+				profile = retained.profile
+			if profile == null and int(id)==_own_actor_id:
+				# A temporary default visible body is preferable to an invisible
+				# local player; replace it when the requested profile loads.
+				profile = _profiles.get(_default_profile_key)
+			if profile == null:
+				_actors.erase(id)
+				continue
 		var old: Dictionary = _actors.get(id,{})
 		var base_action := "NR" if bool(value.moving) else "NS"
 		var generation_changed: bool = old.is_empty() or int(old.value.connection_epoch) != int(value.connection_epoch) or int(old.value.entity_map_epoch) != int(value.entity_map_epoch)
@@ -376,13 +389,22 @@ func actors_at(now_usec: int) -> Array:
 		var requested := action+str(facing)
 		var body: Dictionary = profile.views.get(profile.body_prefix+"_"+requested,{})
 		if body.is_empty():
-			continue
+			# Unsupported transient action/facing should not drop the player.
+			# Recovered leaves paper-doll Sprite2Ds visible in their last pose.
+			requested = "NS6"
+			action = "NS"
+			facing = 6
+			body = profile.views.get(profile.body_prefix+"_"+requested,{})
+			if body.is_empty():
+				continue
 		var parts: Array = []
 		for slot in body.view.draw_slots:
 			var logical_slot := int(slot)
 			if profile.parts.has(logical_slot):
 				var part: Array = profile.parts[logical_slot]
-				var resolved: Dictionary = profile.views[str(part[1])+"_"+requested]
+				var resolved: Dictionary = profile.views.get(str(part[1])+"_"+requested,{})
+				if resolved.is_empty():
+					continue
 				parts.append({"asset":part[0],"clip":resolved.view.clip,
 					"frame":resolved.timeline.frame_at_uniform_cadence(walk_elapsed_usec,WALK_FRAME_USEC) if action == "NR" else resolved.timeline.frame_at_update(elapsed),
 					"flip_h":resolved.view.flip_h,"part_slot":logical_slot,
@@ -394,7 +416,9 @@ func actors_at(now_usec: int) -> Array:
 			# overlay for the same logical body/leg slot.
 			if profile.overlays.has(logical_slot):
 				var overlay: Array = profile.overlays[logical_slot]
-				var overlay_view: Dictionary = profile.views[str(overlay[1])+"_"+requested]
+				var overlay_view: Dictionary = profile.views.get(str(overlay[1])+"_"+requested,{})
+				if overlay_view.is_empty():
+					continue
 				parts.append({"asset":overlay[0],"clip":overlay_view.view.clip,
 					"frame":overlay_view.timeline.frame_at_uniform_cadence(walk_elapsed_usec,WALK_FRAME_USEC) if action == "NR" else overlay_view.timeline.frame_at_update(elapsed),
 					"flip_h":overlay_view.view.flip_h,"part_slot":logical_slot,

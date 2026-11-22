@@ -17,6 +17,10 @@ func run() -> void:
 	check(view.open_pack(args[0])==OK,"open real pack")
 	check(view.request_map(15)==OK,"load map15")
 	var own: Dictionary = state(1,Vector2(7872,11296),1)
+	# Full paper-doll customization from the real local dev identity database:
+	# older tests only exercised the default undyed hair/body/legs.
+	own["appearance"]={"race":0,"hair_index":1,"hair_color":1,
+		"body_index":1,"leg_index":1,"sleeve_color":2}
 	var remote: Dictionary = state(2,Vector2(7892,11300),1)
 	var snapshot := {"world_ready":true,"map_epoch":1,"map_id":15,"actor_id":1,
 		"x":7872.0,"y":11296.0,"facing":6,"self_state":own,"entities":{2:remote},"monsters":{},"player_identities":{
@@ -52,6 +56,16 @@ func run() -> void:
 		retained.any(func(c):return str(c.actor_id).begins_with("npc:")),
 		"corrupt single actor blanked valid players or NPCs")
 	invalid_actors.pop_back()
+	# Recovered renders individual paper-doll Sprite2Ds independently.
+	# An invalid hair/jacket layer must preserve every healthy body limb.
+	var partial_actor: Dictionary = (original_actors[0] as Dictionary).duplicate(true)
+	partial_actor.parts[0]["asset"]="missing/hair-or-cloth"
+	invalid_actors.append(partial_actor)
+	retained = view.draw_list.build(area,invalid_actors)
+	check(view.draw_list.error==OK and view.draw_list.skipped_parts>=1 and \
+		retained.any(func(c):return str(c.actor_id)=="1"),
+		"one missing paper-doll layer incorrectly made entire own avatar invisible")
+	invalid_actors.pop_back()
 	var invalid_frame: Dictionary = (original_actors[0] as Dictionary).duplicate(true)
 	invalid_frame.parts[0].frame = 123456
 	invalid_actors.append(invalid_frame)
@@ -64,7 +78,7 @@ func run() -> void:
 	var detected := {}
 	for i in 125:
 		var now := Time.get_ticks_usec()
-		if i>0: view.players.set_local_visual(1,Vector2(7872+i*1.4,11296),true,6,now)
+		if i>0: view.players.set_local_visual(1,Vector2(7872+i*1.4,11296),true,1+(i/15)%8,now)
 		view._players_dirty = true
 		view.present()
 		var actors := view.players.actors_at(now)
@@ -103,6 +117,26 @@ func run() -> void:
 				"name label not anchored to actual sprite bounds frame "+str(i))
 		if failures.size()>9: break
 		await process_frame
+	# A Server correction of 200px caused a real user's terrain to pan
+	# backwards abruptly. Camera2D-style follow now has exactly one owner,
+	# on render frames, and bounds large corrections to 480px/s.
+	var follow_before: Vector2 = view.camera.view_rect().position
+	var visual_focus: Vector2 = view._camera_visual_focus
+	var future_usec := view._camera_last_usec+16666
+	view._follow_camera_visual(visual_focus+Vector2(200,0),future_usec)
+	var after_first: Vector2 = view.camera.view_rect().position
+	check(after_first.distance_to(follow_before)<=8.1 and after_first.distance_to(follow_before)>0.1,
+		"large Server correction shifted entire terrain more than one bounded frame")
+	for follow_frame in 42:
+		future_usec += 16666
+		view._follow_camera_visual(visual_focus+Vector2(200,0),future_usec)
+	check(view._camera_visual_focus.distance_to(visual_focus+Vector2(200,0))<1.0,
+		"camera failed to converge after smoothing authoritative correction")
+	# Normal 4px local walks must follow immediately, with no artificial lag.
+	var recovered_focus: Vector2 = view._camera_visual_focus
+	view._follow_camera_visual(recovered_focus+Vector2(4,0),future_usec+16666)
+	check(view._camera_visual_focus.distance_to(recovered_focus+Vector2(4,0))<0.01,
+		"normal local motion introduced unnecessary camera smoothing")
 	print("REAL_MOVING_DRAW_RESULT failures=",failures)
 	view.queue_free()
 	await process_frame

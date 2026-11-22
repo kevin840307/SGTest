@@ -1,5 +1,14 @@
 # SGTest Client — 重建設計
 
+## 2026-11-22 — 實際角色消失與走路鏡頭反覆回朔的根因修復
+
+- **使用者實機證據（非合成數據）**：7778 Client 留下 `WORLD_ACTOR_RENDER_SKIPPED actors=1` 至少 27 次，另 `LOCAL_MOVE_CORRECTION` 記錄 `stop_divergence=146.4px` 及 `moving_divergence=200.8px`。先前未能驗證真實 GPU 顯示的測試不能據以宣稱修正完成。
+- **二創紙娃娃比對**：`C:\SGO\Recovered\client\player.tscn` 用真正分層的 2D sprite，不會因為一層裝備失效而清掉整個 actor。SGTest 的 `WorldDrawList._valid_actor()` 卻原本只要一層的 asset／clip／frame 不合法就丟掉整名角色；改成「任一有效部位就保留角色，僅略過失效部位」，並於節流警告帶上實際 actor id、layer、clip 和 asset 是否載入（`invalid_actor_examples`）。`PlayerPresentation.apply_snapshot()` 對新外觀分段載入時不再直接 erase own actor，暫用既有外觀，或以有效的預設 Base PaperDoll 保持人物可見；臨時動作／朝向找不到 body view 時採合法 NS6 作外觀保護。只影響視覺，不改 Server authoritative entity/asset identity。
+- **地圖頓挫確認是雙重相機寫入**：原本 `WorldView.set_player_snapshot()` 每收到網路 snapshot 就 `camera.set_focus(server/local pos)`，`WorldView.present()` 又在 render clock 用自己的預測位置改一次相機，兩個回呼互相搶相機，位差會造成整張地圖前後搖擺。移除網路回呼的相機設定，所有 camera focus 僅由 render frame 更新。平常步行不增加延遲；實際碰到 146／200px 位置校正，Camera 以 `480px/s`、最大 16.7ms 約 8px/影格有界追蹤；新 MapEpoch 視為換圖直接初始化，不做錯誤平移。
+- **Server 校正不得視覺瞬移**：`LocalMovement.position` 繼續代表與 Server 對齊的合法路徑／碰撞，另設 presentation-only `visual_position` 和 `advance_visual()`。在 Server accepted 的 moving/stop divergence 下可立即將邏輯位置對齊權威，但 SPR 顯示以最多 `480px/s` 收斂，直到收斂完成才釋放本地 visual override；Server 明確拒絕的 MoveReceipt 和死亡／換圖仍**立即服從伺服器**，不假裝合法移動或修改本地權威 State。保留 `LOCAL_MOVE_CORRECTION` 警告，未掩蓋真正的同步差異。
+- **真素材與真正 GPU 驗證**：使用本機開發角色的非敏感外觀參數 `race0/hair1/color1/body1/leg1/sleeve2`，`test_real_moving_draw.gd` 走 125 影格、跨 8 方向／服裝、故意注入缺失衣服層及錯誤 NR frame 仍保留玩家／NPC。新增 `test_real_avatar_gpu_capture.gd` 在 Windows Godot 4.7.2 RTX3050 OpenGL 1140×660 實際生成 PNG，用展示角色和僅移除該角色的兩張 GPU framebuffer 比對，得 **3,744 個實際像素差異、10層 paper doll 畫面可見**（非純 command list 的假成功），圖像已人工檢視並有綠髮人物及紫色 NPC 名稱。單元 `test_local_movement` 加入 212px moving divergence 和 144px stop divergence，逐影格確定顯示每 1/60 秒位移不超過 8px，拒絕仍立即硬回退。 `test_player_presentation.gd` 新增等待新外觀不能抹掉 own actor。
+- **E2E**：使用獨立 pre-secondary-password 基線 QA worktree，同步本次修改後，兩個真正 Godot Main＋.NET 8 Server 在 synthetic Map15↔13、AOI、NPC、201 連續移動影格、MapEpoch 資源釋放 **PASS**，最大影格位移 4px。**最新 main 的 E2E 建立測試角色尚未適配現在的二次密碼規則，故不能宣稱其登入 E2E 通過。**新畫面、原始私有 Map15 玩家真實操作需登入後再次回歸；多人 20人壓測／端到端路由差異與 Server 移動延遲仍待追查。
+
 ## 2026-11-22 — 實機角色消失、位置校正與 NPC 淡紫色名稱
 
 - **正式截圖回歸：角色不可見**：原本 `WorldCanvas._draw()` 只要任何一層 hair/body/leg/sleeve 的索引染色貼圖尚在 worker 產生、`get_image()` 失敗或背景工作停滯，便將該 actor 整體列入 `pending_actors`，導致包含標準身體在內的所有層都不畫；若某個貼圖永遠不可用就會無限隱藏。現將染色改成**演出層安全降級**：色票完成後正常用染色版，等待／失敗期間即繪製原始 SPR，不再隱藏整位人物；不改物品、裝備、權威外觀，原調色非同步快取保留。正式外部 PCK 的 Map15／動態多層外觀及 `test_palette_hue.gd` pending→complete 測試通過；真實當次截圖角色是否僅由此觸發仍待使用者實測。

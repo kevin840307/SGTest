@@ -11,6 +11,8 @@ const SEARCH_BUDGET_CHECK_INTERVAL := 16
 const CORRECTION_DEADBAND := 24.0
 const CORRECTION_SNAP := 96.0
 const SETTLE_SNAP := 5.0
+const VISUAL_RECOVERY_SPEED := 480.0
+const MAX_VISUAL_CORRECTION := 320.0
 const DIRECTIONS := [
 	Vector2i(1,0),Vector2i(0,1),Vector2i(-1,0),Vector2i(0,-1),
 	Vector2i(1,1),Vector2i(-1,1),Vector2i(-1,-1),Vector2i(1,-1)
@@ -20,6 +22,10 @@ var ready := false
 var active := false
 var moving := false
 var position := Vector2.INF
+# Logical route and displayed paper doll are separate during a Server
+# correction. Never teleport the rendered actor 146-200px in one frame.
+var visual_position := Vector2.INF
+var _visual_settling := false
 var facing := 6
 var width := 0
 var height := 0
@@ -42,6 +48,8 @@ func clear() -> void:
 	active = false
 	moving = false
 	position = Vector2.INF
+	visual_position = Vector2.INF
+	_visual_settling = false
 	facing = 6
 	width = 0
 	height = 0
@@ -256,6 +264,48 @@ func _diagnose_correction(reason: String, authoritative: Vector2) -> void:
 		reason,map_epoch,actor_id,_expected_sequence,str(position),str(authoritative),position.distance_to(authoritative)])
 
 
+func _begin_visual_correction() -> void:
+	if not visual_position.is_finite() or not position.is_finite() or \
+		visual_position.distance_to(position)>MAX_VISUAL_CORRECTION:
+		visual_position = position
+		_visual_settling = false
+		active = false
+		moving = false
+		return
+	if visual_position.distance_to(position) <= SETTLE_SNAP:
+		visual_position = position
+		_visual_settling = false
+		active = false
+		moving = false
+		return
+	# Presentation-only bounded correction: Server remains the simulation
+	# authority, but a 146px stop correction must not teleport the Canvas.
+	_visual_settling = true
+	active = true
+	moving = true
+	facing = _face(position-visual_position,facing)
+
+
+func advance_visual(delta: float) -> void:
+	if not ready or not position.is_finite() or delta <= 0.0:
+		return
+	if not visual_position.is_finite():
+		visual_position = position
+	var remaining := visual_position.distance_to(position)
+	var step := VISUAL_RECOVERY_SPEED*minf(delta,0.1)
+	if remaining <= maxf(SETTLE_SNAP,step):
+		visual_position = position
+		if _visual_settling:
+			_visual_settling = false
+			active = false
+			moving = false
+	elif remaining > 0.0:
+		visual_position = visual_position.move_toward(position,step)
+		if _visual_settling:
+			moving = true
+			facing = _face(position-visual_position,facing)
+
+
 func observe(snapshot: Dictionary) -> void:
 	if not ready or not bool(snapshot.get("world_ready",false)) or int(snapshot.get("map_epoch",0)) != map_epoch or int(snapshot.get("actor_id",0)) != actor_id:
 		return
@@ -267,6 +317,7 @@ func observe(snapshot: Dictionary) -> void:
 			var spawn := Vector2(float(snapshot.get("x",INF)),float(snapshot.get("y",INF)))
 			if spawn.is_finite() and _walkable(_cell(spawn)):
 				position = spawn
+				visual_position = spawn
 				facing = clampi(int(snapshot.get("facing",6)),1,8)
 		return
 	var server_tick := int(own.get("server_tick",-1))
@@ -279,19 +330,26 @@ func observe(snapshot: Dictionary) -> void:
 	_last_authority = authoritative
 	if not position.is_finite() or not active:
 		position = authoritative
+		visual_position = authoritative
+		_visual_settling = false
 		facing = int(own.get("facing",6))
 		return
 	if bool(snapshot.get("player_dead",false)) or bool(snapshot.get("waiting_for_new_map",false)):
 		stop()
 		active = false
 		position = authoritative
+		visual_position = authoritative
+		_visual_settling = false
 		return
 	var receipt := int(snapshot.get("last_receipt_sequence",0))
 	if _expected_sequence > 0 and receipt >= _expected_sequence and int(snapshot.get("last_receipt_status",-1)) != 0:
+		# A rejected command means movement is unauthorized: rollback now.
 		_diagnose_correction("receipt_rejected_%d" % int(snapshot.get("last_receipt_status",-1)),authoritative)
 		stop()
-		active = false
 		position = authoritative
+		visual_position = authoritative
+		_visual_settling = false
+		active = false
 		return
 	# A newly queued intent may already be moving locally before the Server
 	# processes it. Old SelfState locations must never pull it backwards.
@@ -299,6 +357,9 @@ func observe(snapshot: Dictionary) -> void:
 	# A successful receipt may arrive while SelfState still describes the OLD
 	# idle action. Never accept that old idle as completion of a new route:
 	# it stops after the first ~4px and then jumps along Server updates.
+	if _visual_settling and not bool(own.get("moving",false)):
+		position = authoritative
+		return
 	var confirmed := int(own.get("movement_action_sequence",0)) >= _expected_sequence
 	if not confirmed:
 		return
@@ -318,15 +379,17 @@ func observe(snapshot: Dictionary) -> void:
 	# the ~83ms delayed owner PositionHistory (a visible stop-time rewind).
 	if delta <= SETTLE_SNAP:
 		position = authoritative
+		visual_position = authoritative
 		stop()
 		active = false
+		_visual_settling = false
 		_settle_target = Vector2.INF
 	elif delta > CORRECTION_SNAP or not _direct_clear(position,authoritative):
-		# A denied/different route or unsafe correction cannot slide through walls.
+		# Preserve the display position while the logical route is corrected.
 		_diagnose_correction("stop_divergence",authoritative)
 		position = authoritative
 		stop()
-		active = false
+		_begin_visual_correction()
 		_settle_target = Vector2.INF
 	else:
 		if not _settle_target.is_finite():
@@ -359,6 +422,9 @@ func request_target(point: Vector2, sequence: int) -> bool:
 	if not _walkable(goal):
 		return false
 	_settle_target = Vector2.INF
+	_visual_settling = false
+	if not visual_position.is_finite():
+		visual_position = position
 	if goal == _target_cell and (moving or not _search.is_empty()):
 		# Server deduplicates identical-target updates but consumes their wire
 		# sequence without increasing movement_action_sequence. Keep the pending

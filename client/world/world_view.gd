@@ -38,6 +38,12 @@ var pvp_names := PvpNames.new()
 var _player_snapshot := {}
 var _players_dirty := false
 var _next_draw_warning_msec := 0
+# Camera follows render positions once per frame; it is NEVER repositioned
+# directly from an asynchronous Server snapshot callback.
+const CAMERA_CORRECTION_MAX_SPEED := 480.0
+const CAMERA_CORRECTION_SNAP_THRESHOLD := 320.0
+var _camera_visual_focus := Vector2.INF
+var _camera_last_usec := 0
 var _pending_player_profiles: Dictionary = {}
 var _combat_seen := {}
 var _combat_overlays: Array[Dictionary] = []
@@ -141,6 +147,8 @@ func clear_map(retain_cache: bool = false) -> void:
 	_last_update = -1
 	_last_rect = Rect2()
 	_next_draw_warning_msec = 0
+	_camera_visual_focus = Vector2.INF
+	_camera_last_usec = 0
 	get_viewport().canvas_transform = Transform2D.IDENTITY
 	if epoch > 0:
 		store.end_scope(&"world_view",epoch)
@@ -154,7 +162,7 @@ func clear_map(retain_cache: bool = false) -> void:
 func begin_local_move(target: Vector2, expected_sequence: int) -> bool:
 	if phase != "ready" or not show_players or not local_movement.request_target(target,expected_sequence):
 		return false
-	players.set_local_visual(local_movement.actor_id,local_movement.position,
+	players.set_local_visual(local_movement.actor_id,local_movement.visual_position,
 		local_movement.moving,local_movement.facing,Time.get_ticks_usec())
 	_prediction_applied = true
 	return true
@@ -163,7 +171,7 @@ func begin_local_move(target: Vector2, expected_sequence: int) -> bool:
 func stop_local_move() -> void:
 	if local_movement.active:
 		local_movement.stop()
-		players.set_local_visual(local_movement.actor_id,local_movement.position,
+		players.set_local_visual(local_movement.actor_id,local_movement.visual_position,
 			false,local_movement.facing,Time.get_ticks_usec())
 		_prediction_applied = true
 
@@ -175,8 +183,9 @@ func _advance_local_visual(delta: float) -> void:
 	if phase != "ready" or not show_players or _player_snapshot.is_empty() or not local_movement.ready:
 		return
 	local_movement.advance(delta)
+	local_movement.advance_visual(delta)
 	if local_movement.active:
-		players.set_local_visual(local_movement.actor_id,local_movement.position,
+		players.set_local_visual(local_movement.actor_id,local_movement.visual_position,
 			local_movement.moving,local_movement.facing,Time.get_ticks_usec())
 		_prediction_applied = true
 	elif _prediction_applied:
@@ -367,7 +376,9 @@ func _process(_delta: float) -> void:
 			_fail("相機設定失敗")
 			return
 		if show_players and not _player_snapshot.is_empty():
-			camera.set_focus(epoch,Vector2(_player_snapshot.x,_player_snapshot.y))
+			_camera_visual_focus = Vector2(_player_snapshot.x,_player_snapshot.y)
+			_camera_last_usec = Time.get_ticks_usec()
+			camera.set_focus(epoch,_camera_visual_focus)
 		_terrain.configure(data)
 		if show_players and not _player_snapshot.is_empty():
 			var blocking: Variant = _map.get("extra",{}).get("blocking",PackedByteArray())
@@ -382,14 +393,37 @@ func _process(_delta: float) -> void:
 		present()
 
 
+func _follow_camera_visual(target: Vector2, now_usec: int) -> void:
+	if not target.is_finite():
+		return
+	if not _camera_visual_focus.is_finite():
+		_camera_visual_focus = target
+	else:
+		var gap := _camera_visual_focus.distance_to(target)
+		# Normal 240px/s walking follows the paper doll 1:1. Only a genuine
+		# asynchronous 30Hz Server correction gets bounded camera recovery,
+		# so a 150-200px rollback cannot shake the whole terrain in one frame.
+		if gap <= 16.0 or gap >= CAMERA_CORRECTION_SNAP_THRESHOLD:
+			_camera_visual_focus = target
+		else:
+			var dt := clampf(float(now_usec-_camera_last_usec)/1000000.0,0.0,0.08)
+			_camera_visual_focus = _camera_visual_focus.move_toward(
+				target,CAMERA_CORRECTION_MAX_SPEED*dt)
+	_camera_last_usec = now_usec
+	camera.set_focus(epoch,_camera_visual_focus)
+
+
 func present() -> void:
 	if phase != "ready":
 		return
 	var now_usec := Time.get_ticks_usec()
 	if show_players and not _player_snapshot.is_empty():
 		var focus := players.position_at(int(_player_snapshot.actor_id),now_usec)
-		if focus.is_finite():
-			camera.set_focus(epoch,focus)
+		if not focus.is_finite():
+			var own: Dictionary = _player_snapshot.get("self_state",{})
+			focus = Vector2(float(own.get("x",_player_snapshot.get("x",INF))),
+				float(own.get("y",_player_snapshot.get("y",INF))))
+		_follow_camera_visual(focus,now_usec)
 	var rect := camera.view_rect()
 	# Stateless ACT sampling; no callbacks, combat, or visibility state advances.
 	var update := (Time.get_ticks_msec()-_started_at)*50/1000
@@ -470,9 +504,11 @@ func present() -> void:
 		var bound: Rect2 = sprite_bounds[key]
 		rendered["p"] = Vector2(bound.get_center().x,bound.position.y-6.0)
 		name_labels.append(rendered)
-	if (draw_list.skipped_actors>0 or draw_list.skipped_frames>0) and Time.get_ticks_msec()>=_next_draw_warning_msec:
+	if (draw_list.skipped_actors>0 or draw_list.skipped_parts>0 or draw_list.skipped_frames>0) and Time.get_ticks_msec()>=_next_draw_warning_msec:
 		_next_draw_warning_msec = Time.get_ticks_msec()+5000
-		push_warning("WORLD_ACTOR_RENDER_SKIPPED map=%d actors=%d frames=%d remaining=%d" % [map_id,draw_list.skipped_actors,draw_list.skipped_frames,draw_commands.size()])
+		push_warning("WORLD_ACTOR_RENDER_SKIPPED map=%d actors=%d parts=%d frames=%d remaining=%d details=%s" % [
+			map_id,draw_list.skipped_actors,draw_list.skipped_parts,draw_list.skipped_frames,
+			draw_commands.size(),str(draw_list.invalid_actor_examples)])
 	_canvas.present(draw_commands,markers,combat_labels,name_labels)
 	_players_dirty = false
 	_last_rect = rect
@@ -510,7 +546,7 @@ func set_player_snapshot(snapshot: Dictionary) -> void:
 			local_movement.observe(snapshot)
 		players.apply_snapshot(snapshot,now_usec)
 		if local_movement.active:
-			players.set_local_visual(local_movement.actor_id,local_movement.position,
+			players.set_local_visual(local_movement.actor_id,local_movement.visual_position,
 				local_movement.moving,local_movement.facing,now_usec)
 			_prediction_applied = true
 		pvp_names.apply_snapshot(snapshot,now_usec)
@@ -521,9 +557,9 @@ func set_player_snapshot(snapshot: Dictionary) -> void:
 		_consume_player_damage_visual_events(snapshot,now_usec)
 		_consume_pvp_combat_visual_events(snapshot,now_usec)
 		_consume_pvp_skill_visual_events(snapshot,now_usec)
-		var focus := players.position_at(int(snapshot.actor_id),now_usec)
-		if focus.is_finite():
-			camera.set_focus(epoch,focus)
+		# Camera is owned by present() on the render clock. Updating it here
+		# allowed every network packet to yank terrain back to the Server,
+		# then _process() yanked it back to local prediction next frame.
 
 
 func _consume_player_attack_events(snapshot: Dictionary,now_usec: int) -> void:

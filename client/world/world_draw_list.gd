@@ -17,6 +17,8 @@ var error := OK
 # blacking out all other players, NPCs, and scenery for the entire frame.
 var skipped_actors := 0
 var skipped_frames := 0
+var skipped_parts := 0
+var invalid_actor_examples: Array[String] = []
 
 
 func clear() -> void:
@@ -29,6 +31,8 @@ func clear() -> void:
 	error = OK
 	skipped_actors = 0
 	skipped_frames = 0
+	skipped_parts = 0
+	invalid_actor_examples.clear()
 
 
 func configure(world: Dictionary, assets: Dictionary, map_epoch: int = 0) -> Error:
@@ -182,6 +186,8 @@ func build(view: Rect2, actors: Array = [], inside: Dictionary = {}, frames: Dic
 	error = OK
 	skipped_actors = 0
 	skipped_frames = 0
+	skipped_parts = 0
+	invalid_actor_examples.clear()
 	if _world.is_empty():
 		error = ERR_UNCONFIGURED
 		return []
@@ -202,9 +208,9 @@ func build(view: Rect2, actors: Array = [], inside: Dictionary = {}, frames: Dic
 	# Actor order is the caller's stable presentation order, independent of camera.
 	for actor in actors:
 		if not _valid_actor(actor):
-			# Do not invalidate the entire draw list because one transient
-			# AOI actor is malformed / its appearance isn't loaded yet.
 			skipped_actors += 1
+			if invalid_actor_examples.size()<4:
+				invalid_actor_examples.append(_invalid_actor_reason(actor))
 			continue
 		var record: Dictionary = actor.duplicate()
 		record.sorting_mode = 1
@@ -298,16 +304,39 @@ func _append(commands: Array, asset: Dictionary, clip: String, frame_index: int,
 			"modulate":Color(1,1,1,alpha/255.0)})
 
 
+func _valid_part(part: Variant) -> bool:
+	return part is Dictionary and part.has_all(["asset","clip"]) and \
+		_assets.has(str(part.asset)) and _valid_clip(_assets[str(part.asset)],str(part.clip))
+
+
+func _invalid_actor_reason(actor: Dictionary) -> String:
+	var id := str(actor.get("id","?"))
+	if not actor.has_all(["id","p"]) or not actor.get("p") is Vector2 or not (actor.get("p") as Vector2).is_finite():
+		return "%s:position_invalid" % id
+	var parts = actor.get("parts",[actor])
+	if not parts is Array or parts.is_empty():
+		return "%s:parts_missing" % id
+	for part in parts:
+		if not _valid_part(part):
+			return "%s:bad_part=%s clip=%s asset_available=%s" % [
+				id,str(part.get("asset","?")) if part is Dictionary else "not-dict",
+				str(part.get("clip","?")) if part is Dictionary else "not-dict",
+				str(_assets.has(str(part.get("asset","")))) if part is Dictionary else "false"]
+	return "%s:unknown" % id
+
+
 func _valid_actor(actor: Dictionary) -> bool:
 	if not actor.has_all(["id","p"]) or not actor.p is Vector2 or not actor.p.is_finite():
 		return false
 	var parts = actor.get("parts",[actor])
 	if not parts is Array or parts.is_empty():
 		return false
+	# Recovered draws its paper-doll layers independently. Never suppress the
+	# ENTIRE avatar because one sleeve/hair animation page is missing.
 	for part in parts:
-		if not part is Dictionary or not part.has_all(["asset","clip"]) or not _assets.has(part.asset) or not _valid_clip(_assets[part.asset],part.clip):
-			return false
-	return true
+		if _valid_part(part):
+			return true
+	return false
 
 
 func build_actor_preview(assets: Dictionary, actor: Dictionary, view: Rect2) -> Array:
@@ -325,8 +354,15 @@ func build_actor_preview(assets: Dictionary, actor: Dictionary, view: Rect2) -> 
 
 
 func _append_actor(commands: Array, actor: Dictionary, view: Rect2) -> void:
-	# The whole paper doll occupies one position in scenery/actor order.
+	# One bad paper-doll layer cannot suppress the remaining body/limbs.
 	for part in actor.get("parts",[actor]):
+		if not _valid_part(part):
+			skipped_parts += 1
+			if invalid_actor_examples.size()<4:
+				invalid_actor_examples.append("%s:layer=%s clip=%s" % [
+					str(actor.id),str(part.get("asset","?")) if part is Dictionary else "?",
+					str(part.get("clip","?")) if part is Dictionary else "?"])
+			continue
 		_append(commands,_assets[part.asset],part.clip,int(part.get("frame",0)),actor.p,view,-1,
 			int(part.get("part_slot",0)),actor.id,255,bool(part.get("flip_h",false)),
 			int(part.get("palette_index",0)))

@@ -75,6 +75,21 @@ func run() -> void:
 	prediction_probe.clear_local_visual()
 	check(prediction_probe.position_at(1,200000).distance_to(Vector2(10,10))<2.0,
 		"clearing own prediction kept stale position")
+	# A newly reported avatar appearance may need async atlas loads. Keep
+	# the self avatar visible using an existing/default profile during loading.
+	var pending_profile := Players.new()
+	check(pending_profile.configure(assets)==OK,"pending profile probe")
+	pending_profile.apply_snapshot(snapshot,0)
+	var profile_wait: Dictionary = snapshot.duplicate(true)
+	profile_wait.self_state["appearance"]={"race":1,"hair_index":1,"hair_color":0,
+		"body_index":0,"leg_index":0,"sleeve_color":0}
+	profile_wait.self_state.x=26.0
+	profile_wait.self_state.server_tick=2
+	pending_profile.apply_snapshot(profile_wait,33000)
+	check(pending_profile.actors_at(33000).any(func(a):return str(a.id)=="1"),
+		"pending custom appearance erased the entire local avatar")
+	check(pending_profile.position_at(1,33000).x==26.0,
+		"pending appearance froze owner's position and camera")
 	# WorldReady comes before SelfState. A locally walking player must never
 	# revert to NS and reset the walk phase on repeated empty-SelfState polls.
 	var spawn_probe := Players.new()

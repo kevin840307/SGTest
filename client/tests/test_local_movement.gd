@@ -99,6 +99,61 @@ func run() -> void:
 	ack_gap.observe(duplicate_ack)
 	check(ack_gap.active and ack_gap.moving and ack_gap.position==before_duplicate,
 		"duplicate ACK broke the original moving route")
+	# Real-game diagnostics caught 146px stop and 200px moving corrections.
+	# The simulation snaps to Server authority, but the rendered paper doll
+	# must never jump that distance in one 60Hz frame.
+	var wide_manifest := {"collision_cell":16,"size":[640,192]}
+	var correction := LocalMovement.new()
+	check(correction.configure(grid(40,12),wide_manifest,5,27),"correction map invalid")
+	correction.observe(initial(27,5,Vector2(24,24)))
+	check(correction.request_target(Vector2(552,24),1),"long route rejected")
+	for frame in 16:
+		correction.advance(1.0/60.0)
+		correction.advance_visual(1.0/60.0)
+	var visual_before := correction.visual_position
+	var late_server := initial(27,5,Vector2(300,24),30)
+	late_server.self_state.moving=true
+	late_server.self_state.movement_action_sequence=1
+	late_server.last_receipt_sequence=1
+	late_server.last_receipt_status=0
+	correction.observe(late_server)
+	check(correction.position==Vector2(300,24) and correction.visual_position==visual_before,
+		"large Server correction teleported rendered avatar")
+	for frame in 30:
+		var before_frame := correction.visual_position
+		correction.advance(1.0/60.0)
+		correction.advance_visual(1.0/60.0)
+		check(correction.visual_position.distance_to(before_frame)<=8.001,
+			"rendered player snapped during moving correction at frame %d" % frame)
+	var stop_correction := LocalMovement.new()
+	check(stop_correction.configure(grid(40,12),wide_manifest,6,28),"stop rollback map invalid")
+	stop_correction.observe(initial(28,6,Vector2(24,24)))
+	check(stop_correction.request_target(Vector2(552,24),1),"stop rollback route rejected")
+	for frame in 36:
+		stop_correction.advance(1.0/60.0)
+		stop_correction.advance_visual(1.0/60.0)
+	var before_stop := stop_correction.visual_position
+	var remote_stop := initial(28,6,Vector2(24,24),60)
+	remote_stop.self_state.moving=false
+	remote_stop.self_state.movement_action_sequence=1
+	remote_stop.last_receipt_sequence=1
+	remote_stop.last_receipt_status=0
+	stop_correction.observe(remote_stop)
+	check(stop_correction.active and stop_correction.position==Vector2(24,24) and \
+		stop_correction.visual_position==before_stop,
+		"authoritative stop instantly rewound entire player and camera")
+	var visually_settled := false
+	for frame in 48:
+		var prior_visual := stop_correction.visual_position
+		stop_correction.advance(1.0/60.0)
+		stop_correction.advance_visual(1.0/60.0)
+		check(stop_correction.visual_position.distance_to(prior_visual)<=8.001,
+			"stop correction jumped across terrain at %d" % frame)
+		if not stop_correction.active:
+			visually_settled = true
+			break
+	check(visually_settled and stop_correction.visual_position==Vector2(24,24),
+		"Server-authoritative correction failed to visually converge")
 	# Sustained 60fps local walk while Server sends old-but-accepted positions.
 	# These packets used to repeatedly lerp backwards, causing 4px/8px
 	# alternation (stutter) and the visual slipping between walk sprites.
