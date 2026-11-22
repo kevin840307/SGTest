@@ -4,6 +4,11 @@
 
 ## Recovered2 本機登入／選角／創角參考皮膚（2026-11-21）
 
+登入頁與選角頁有不同座標契約：Recovered2 `LoginScreen.tscn` 使用全視窗 anchor，280×320登入窗保持實際UI尺寸、置中；背景原影片置於黑底16:9 AspectRatioContainer，不加額外遮罩或 SELECT_CHARACTER 背景。帳號／密碼各230×50、字體18，登入／註冊各125×45；標題為「帳號登入」。選角／創角才使用1200×900的固定頁面縮放。`_login` 為 auth shell 直接子節點，`_stage` 忽略自身滑鼠命中，讓其皮膚選單子節點仍可操作，同時不攔住後方登入欄位。原註冊對話窗／Email、帳號記憶、錯誤彈窗仍待接入；現有註冊按鈕仍委派同一 SGTest registration path，不宣稱整體登入功能完全一致。
+
+2026-11-22已實際開啟原 `LoginScreen.tscn`（僅移除其Script與替換私有Theme/video資源定位），與正式Adapter在相同1152×620下比較。影片隱藏成相同黑底後，登入280×320區域RGB差異0；有影片的背景時刻不同，不作整張像素相等宣稱。`test_native_ui_walkthrough.gd` 透過引擎正常Input.parse_input_event派送滑鼠／鍵盤，對獨立正式TLS Host實際註冊→創角→選角→WorldReady→四組現有遊戲選單，10張GPU截圖、資源全0、無engine error PASS。這是現有操作驗證，**世界仍是通用左側分頁，沒有Recovered2浮窗／社團／獨立人物狀態／創角能力與第二密碼**，全目標維持未完成。
+
+
 `player/character_appearance_profile.gd` 只解析外觀到來源部件與已驗證 timeline metadata；`PlayerPresentation` 擁有 actor 插值／動作狀態，`CharacterPreview` 擁有 UI scope，App 原 AssetStore 負責載入。Profile 不持有 Texture、不執行網路或自行載入。每次 actor snapshot 只驗證外觀 key 並查詢已登錄 profile，不重建六部件定義。不同髮型共用相同身體 timeline，完整 profile 驗證成功才登錄，失敗不污染共用表；換外觀保留連續走路時間與位置 history，遇到新 profile 沒有的 AA／NH 會返回基本動作。維持既有 `player/` 一層功能分類，沒有新增 Manager／Loader／第二個 renderer。
 
 B/G/A hair00/color0 已通過原始素材 GPU gate：既有 `run_world_view.py --profiles` 使用相同 Store pump／PlayerPresentation／WorldDrawList／WorldCanvas，在無地圖場景逐八方向採樣 NS/NR，16張／48姿態／180來源frame、超容差0及完整釋放。沒有新增第三方繪圖層；該來源驗收不代表正式 WorldView 已接上 AOI appearance 動態載入或完整髮色。

@@ -25,6 +25,7 @@ var _video: VideoStreamPlayer
 var _theme: Theme
 var _account: LineEdit
 var _secret: LineEdit
+var _login_window: Panel
 var _login_button: Button
 var _register_button: Button
 var _login_status: Label
@@ -59,7 +60,7 @@ func _init() -> void:
 	visible = false
 	_stage.name = "OriginalVisualStage"
 	_stage.size = SIZE
-	_stage.mouse_filter = Control.MOUSE_FILTER_PASS
+	_stage.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_stage)
 	for page in [_login,_selection,_creation]:
 		page.size = SIZE
@@ -77,6 +78,7 @@ func attach(panel: PanelContainer) -> bool:
 		push_warning("Recovered2 source Theme missing; auth adapter unavailable")
 		return false
 	_theme = loaded
+	theme = _theme
 	_stage.theme = _theme
 	_build_login()
 	_build_select()
@@ -96,6 +98,9 @@ func resize_view(view_size: Vector2) -> void:
 	factor = maxf(0.05,factor)
 	_stage.scale = Vector2.ONE * factor
 	_stage.position = (view_size - SIZE * factor) * 0.5
+	_login.size = view_size
+	if _login_window != null:
+		_login_window.position = (view_size-Vector2(280,320))*0.5
 
 func enable_for_page(page: int, active: bool) -> void:
 	# An offline map or unavailable local theme never builds auth controls.
@@ -180,7 +185,20 @@ func _button(parent: Control, value: String, x: float, y: float, w: float, h: fl
 	return button
 
 func _build_login() -> void:
-	_build_background(_login,"SELECT_CHARACTER.png")
+	# LoginScreen uses viewport anchors, unlike the fixed 1200x900 character page.
+	# Keep its 280x320 panel in physical UI pixels; do not scale it with _stage.
+	_login.reparent(self)
+	move_child(_login,0)
+	var background := ColorRect.new()
+	background.color = Color.BLACK
+	background.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_login.add_child(background)
+	background.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	var aspect := AspectRatioContainer.new()
+	aspect.ratio = 1.7778
+	aspect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	background.add_child(aspect)
+	aspect.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	var stream = load(LOCAL.path_join("2.ogv"))
 	if stream is VideoStream:
 		_video = VideoStreamPlayer.new()
@@ -188,43 +206,41 @@ func _build_login() -> void:
 		_video.expand = true
 		_video.loop = true
 		_video.volume_db = -80.0
-		_video.position = Vector2.ZERO
-		_video.size = SIZE
 		_video.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		_login.add_child(_video)
-		_login.move_child(_video,1)
-	var shade := ColorRect.new()
-	# Recovered2's background is already dark by design; a 42% shade
-	# hid most of its detail on a real 1280x720 display.
-	shade.color = Color(0.025,0.055,0.09,0.12)
-	shade.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_put(_login,shade,0,0,SIZE.x,SIZE.y)
-	var panel := Panel.new()
-	panel.theme_type_variation = &"ParadiseWindowPanel"
-	_put(_login,panel,405,255,390,390)
-	_label(panel,"星夢 Online  |  帳號登入",20,14,350,40,21).theme_type_variation = &"ParadiseWindowTitle"
+		aspect.add_child(_video)
+	_login_window = Panel.new()
+	_login_window.name = "LoginPanel"
+	_login_window.theme_type_variation = &"ParadiseWindowPanel"
+	_put(_login,_login_window,0,0,280,320)
+	_label(_login_window,"帳號登入",18,10,244,30,20).theme_type_variation = &"ParadiseWindowTitle"
 	var separator := HSeparator.new()
 	separator.theme_type_variation = &"ParadiseHeaderSeparator"
-	_put(panel,separator,25,57,340,4)
+	_put(_login_window,separator,16,47,248,3)
 	_account = LineEdit.new()
-	_account.placeholder_text = "帳號"
-	_account.max_length = 32
+	_account.placeholder_text = "請輸入帳號"
+	_account.max_length = 32 # Formal Server contract; appearance follows source.
+	_account.alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_account.add_theme_font_size_override("font_size",18)
 	_account.theme_type_variation = &"ParadiseLineEdit"
-	_put(panel,_account,48,86,294,40)
+	_put(_login_window,_account,25,59,230,50)
 	_secret = LineEdit.new()
-	_secret.placeholder_text = "密碼"
+	_secret.placeholder_text = "請輸入密碼"
 	_secret.secret = true
 	_secret.max_length = 256
+	_secret.alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_secret.add_theme_font_size_override("font_size",18)
 	_secret.theme_type_variation = &"ParadiseLineEdit"
-	_put(panel,_secret,48,136,294,40)
+	_put(_login_window,_secret,25,121,230,50)
 	_secret.text_submitted.connect(func(_unused): _submit_login(false))
-	_login_button = _button(panel,"登入",48,199,294,43,true)
+	_login_button = _button(_login_window,"登入",77.5,188,125,45,true)
+	_login_button.add_theme_font_size_override("font_size",18)
 	_login_button.pressed.connect(_submit_login.bind(false))
-	_register_button = _button(panel,"建立帳號並登入",48,255,294,37)
+	_register_button = _button(_login_window,"註冊帳號",77.5,254,125,45)
+	_register_button.add_theme_font_size_override("font_size",18)
 	_register_button.pressed.connect(_submit_login.bind(true))
-	# Address/port are intentionally not rendered. Deployment configures
-	# them through Main's --host/--port arguments, independent of UI skins.
-	_login_status = _label(panel,"請輸入帳號與密碼",30,308,330,49,13)
+	# SGTest registration still delegates to its existing authenticated path.
+	# Separate source registration/email dialog remains an explicit TODO.
+	_login_status = _label(_login_window,"",0,326,280,48,13)
 	_login_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 
 func _submit_login(create_first: bool) -> void:
@@ -381,6 +397,7 @@ func _update_from_session() -> void:
 		return
 	if _page_index == SessionLayout.Page.LOGIN:
 		_login_status.text = _panel.status.text
+		_login_status.visible = _panel.active or not (_panel.status.text.begins_with("請登入") or _panel.status.text.begins_with("請輸入"))
 		_login_button.disabled = _panel.active
 		_register_button.disabled = _panel.active
 	elif _page_index == SessionLayout.Page.CHARACTER_CREATE:

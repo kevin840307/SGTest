@@ -136,7 +136,16 @@ func _run() -> void:
 	if shell._theme == null or shell._video.stream == null:
 		_error("source Recovered2 theme/video missing")
 		return
+	if shell._login_window.size!=Vector2(280,320) or shell._login_window.position!=(Vector2(root.size)-Vector2(280,320))*0.5 or shell._account.position!=Vector2(25,59) or shell._account.size!=Vector2(230,50) or shell._secret.position!=Vector2(25,121) or shell._login_button.position!=Vector2(77.5,188):
+		_error("LoginScreen source anchors/geometry changed")
+		return
+	if args.has("static-login"):
+		shell._video.stop()
+		shell._video.hide()
 	await _capture("login",directory)
+	if args.has("static-login"):
+		shell._video.show()
+		shell._video.play()
 	# Loading-bar screenshot uses a deterministic mocked asset counter;
 	# the gameplay MapEpoch/resource fixture exercises the real pipeline.
 	# Freeze the app's real-world loading sampler while capturing a manual
