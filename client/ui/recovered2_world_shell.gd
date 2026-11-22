@@ -35,21 +35,20 @@ var _aux_windows: Array = []
 var _popup_body := Label.new()
 var _character_info := Label.new()
 var _character_fields: Dictionary = {}
-var _map_label := Label.new()
-var _coord_label := Label.new()
+var _map_label: Label
+var _coord_label: Label
 var _hp := ProgressBar.new()
 var _mp := ProgressBar.new()
 var _stamina := ProgressBar.new()
-var _hp_text := Label.new()
-var _mp_text := Label.new()
-var _stamina_text := Label.new()
-var _money := Label.new()
-var _level := Label.new()
+var _hp_text: Label
+var _mp_text: Label
+var _stamina_text: Label
+var _money: Label
+var _level: Label
 var _chat_input := LineEdit.new()
 var _chat_log := TextEdit.new()
-var _info_title := Label.new()
-var _popup_title := Label.new()
-var _popup_layout := VBoxContainer.new()
+var _popup_title: Label
+var _popup_layout: VBoxContainer
 var _skin_selection := OptionButton.new()
 var _is_bound := false
 var _profile := "recovered2_local"
@@ -385,7 +384,6 @@ func _build_windows() -> void:
 		if window == character:
 			content.hide()
 			_build_character_sections(vertical)
-	_info_title.text = "角色"
 	_skin_selection.name = "UiProfilePicker"
 	_skin_selection.visible = false
 	_skin_selection.item_selected.connect(_skin_picked)

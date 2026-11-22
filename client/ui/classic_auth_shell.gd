@@ -17,8 +17,8 @@ var _asset_store
 var _username := LineEdit.new()
 var _password := LineEdit.new()
 var _name := LineEdit.new()
-var _status := Label.new()
-var _create_note := Label.new()
+var _status: Label
+var _create_note: Label
 var _slots: Array[Button] = []
 var _previews: Array = []
 var _values: Dictionary = {}
