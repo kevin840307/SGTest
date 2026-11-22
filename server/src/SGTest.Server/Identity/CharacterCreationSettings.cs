@@ -42,6 +42,7 @@ public static class CharacterCreationRules
     public const int PasswordCharacters = 4;
     public const int PasswordFailureLimit = 5;
     public const int PasswordLockoutSeconds = 60;
+    public const string SourceReference = "Recovered2 character_select.gd; Old total-eight creation rules";
     internal const string PasswordPurpose = "SGTest/CharacterPassword/v1:";
     private static readonly UTF8Encoding StrictUtf8 = new(false, true);
 

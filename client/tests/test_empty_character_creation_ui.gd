@@ -10,6 +10,7 @@ class SessionStub:
 	var published: Dictionary
 	var creates := 0
 	var last_created_name := ""
+	var last_creation: Dictionary = {}
 	var chosen_id := 0
 
 	func snapshot_since(last_revision: int) -> Dictionary:
@@ -17,14 +18,17 @@ class SessionStub:
 			return {}
 		return {"revision": revision, "snapshot": published.duplicate(true)}
 
-	func create_character(slot: int, name: String) -> bool:
-		if slot != 0 or name.is_empty():
+	func create_character(
+			slot: int, name: String, _appearance: Dictionary = {},
+			creation: Dictionary = {}) -> bool:
+		if slot != 0 or name.is_empty() or creation.is_empty():
 			return false
 		creates += 1
 		last_created_name = name
+		last_creation = creation.duplicate(true)
 		return true
 
-	func choose_character(character_id: int) -> bool:
+	func choose_character(character_id: int, _character_password: String = "") -> bool:
 		chosen_id = character_id
 		return character_id > 0
 
@@ -64,9 +68,15 @@ func _run() -> void:
 
 	panel.character_name_input.text = "NewHero"
 	panel.character_slot_input.value = 0
+	panel.character_strength_input.value = 3
+	panel.character_dexterity_input.value = 2
+	panel.character_constitution_input.value = 2
+	panel.character_wisdom_input.value = 1
+	panel.character_password_input.text = "2468"
+	panel.character_password_confirm_input.text = "2468"
 	panel.create_character_button.pressed.emit()
-	if fake.creates != 1 or fake.last_created_name != "NewHero":
-		_fail(panel, "creation button did not submit intent")
+	if fake.creates != 1 or fake.last_created_name != "NewHero" or 			int(fake.last_creation.get("strength",0)) != 3 or 			str(fake.last_creation.get("password","")) != "2468":
+		_fail(panel, "creation button did not submit protected stat intent")
 		return
 	if not panel.create_character_button.disabled or panel.character_name_input.editable or panel.creation_options.editable:
 		_fail(panel,"queued creation must lock controls before the network reply")

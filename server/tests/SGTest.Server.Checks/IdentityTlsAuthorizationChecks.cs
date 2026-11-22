@@ -21,6 +21,8 @@ internal static class IdentityTlsAuthorizationChecks
             () => CharacterCreationRequiresPolicy(root).GetAwaiter().GetResult());
         Checks.Run("TLS character appearance rejects missing/unlisted choices and persists selected look across login",
             () => CharacterAppearanceCreation(root).GetAwaiter().GetResult());
+        Checks.Run("TLS extended character creation persists stats and requires secondary password",
+            () => ProtectedCharacterCreation(root).GetAwaiter().GetResult());
         Checks.Run("TLS NPC shop sell buy replay and relogin preserve wallet and Item UID",
             () => ShopSellBuyAndRelogin(root).GetAwaiter().GetResult());
         Checks.Run("TLS personal storage deposit withdraw replay and relogin preserve Item UID",
@@ -256,6 +258,83 @@ internal static class IdentityTlsAuthorizationChecks
             var persisted=(await store.ListCharactersAsync(account)).Single();
             Checks.Require(persisted.Appearance==new CharacterAppearanceState(look,rules.SourceReference) &&
                 world.Statistics.ActiveActors==0,"appearance source changed or unauthorized actor spawned");
+            await world.StopAsync();
+        }
+        finally { Directory.Delete(identityRoot,true); }
+    }
+
+
+    private static async Task ProtectedCharacterCreation(string root)
+    {
+        string identityRoot=TempRoot();
+        try
+        {
+            var grid=BlockingGrid.Load(Checks.Fixture(root,80,3,3,(_,_)=>0),80);
+            await using var world=new ServerWorldHost([grid]);
+            await world.StartAsync();
+            using var store=new SqliteIdentityStore(Path.Combine(identityRoot,"identity.db"));
+            await store.InitializeAsync();
+            long account=(await store.CreateAccountAsync(
+                "protected_create","Protected-Create-Password-123!")).AccountId;
+            var look=new CharacterAppearance(4,2,6);
+            var rules=new CharacterAppearanceRules(
+                "synthetic/tls-protected-create/v1",[look]);
+            var auth=new IdentityTlsAuthorization(store,world,
+                characterCreation:new(new CharacterSpawn(80,8,8),rules));
+            var (tls,serverTask,client)=await StartSession(auth,world);
+
+            await tls.WriteAsync(WireProtocol.EncodeAuthRequest(new(
+                "protected_create","Protected-Create-Password-123!")));
+            Checks.Require(WireProtocol.TryDecodeAuthResult(
+                    await ReadFrameAsync(tls),out var login) &&
+                login.Status==AuthWireStatus.Success,
+                "protected-create auth failed");
+            Checks.Require(WireProtocol.TryDecodeCharacterList(
+                    await ReadFrameAsync(tls),out var empty) &&
+                empty.Characters.Count==0 &&
+                empty.CreationAppearances!.SequenceEqual(rules.Choices),
+                "protected-create menu mismatch");
+
+            await tls.WriteAsync(WireProtocol.EncodeCharacterCreate(new(
+                0,"ProtectHero",look,
+                new CharacterCreationWire(3,2,2,1,"2468"))));
+            Checks.Require(WireProtocol.TryDecodeCharacterCreateResult(
+                    await ReadFrameAsync(tls),out var created) &&
+                created.Status==CharacterCreateWireStatus.Success &&
+                created.CharacterId>0 && created.Appearance==look,
+                "extended protected character create failed");
+            Checks.Require(WireProtocol.TryDecodeCharacterList(
+                    await ReadFrameAsync(tls),out var refreshed) &&
+                refreshed.Characters.Single().CharacterId==created.CharacterId,
+                "protected character list refresh failed");
+
+            var persisted=(await store.ListCharactersAsync(account)).Single();
+            Checks.Require(persisted.RequiresCharacterPassword &&
+                persisted.Creation!.Attributes==
+                    new CharacterCreationAttributes(3,2,2,1) &&
+                persisted.Creation.SourceReference==CharacterCreationRules.SourceReference,
+                "extended creation settings were not persisted");
+
+            await tls.WriteAsync(WireProtocol.EncodeCharacterChoose(
+                new(created.CharacterId)));
+            Checks.Require(WireProtocol.TryDecodeCharacterChooseResult(
+                    await ReadFrameAsync(tls),out var passwordRequired) &&
+                passwordRequired.Status==CharacterChooseWireStatus.PasswordRequired &&
+                world.Statistics.ActiveActors==0,
+                "proof-free protected choose was not held at password gate");
+
+            await tls.WriteAsync(WireProtocol.EncodeCharacterChoose(
+                new(created.CharacterId,"2468")));
+            Checks.Require(WireProtocol.TryDecodeCharacterChooseResult(
+                    await ReadFrameAsync(tls),out var choose) &&
+                choose.Status==CharacterChooseWireStatus.Success &&
+                choose.CharacterId==created.CharacterId &&
+                choose.MapId==80 && choose.X==8 && choose.Y==8,
+                "correct secondary password did not enter configured spawn");
+
+            await tls.DisposeAsync();
+            client.Dispose();
+            await serverTask.WaitAsync(TimeSpan.FromSeconds(2));
             await world.StopAsync();
         }
         finally { Directory.Delete(identityRoot,true); }
@@ -866,12 +945,31 @@ internal static class IdentityTlsAuthorizationChecks
             await tls.WriteAsync(WireProtocol.EncodeCharacterChoose(new(targetId)));
             await tls.FlushAsync();
             Checks.Require(WireProtocol.TryDecodeCharacterChooseResult(await ReadFrameAsync(tls), out var choose) &&
-                choose.Status == CharacterChooseWireStatus.NotOwned,
-                "foreign CharacterId was not rejected");
-            var ended = await serverTask.WaitAsync(TimeSpan.FromSeconds(2));
-            Checks.Require(ended.Reason == TlsWireEndReason.AuthorizationRejected &&
-                world.Statistics.ActiveActors == 0, "foreign character entered World");
-            await tls.DisposeAsync(); client.Dispose(); await world.StopAsync();
+                choose.Status == (protectedOwned
+                    ? CharacterChooseWireStatus.PasswordRequired
+                    : CharacterChooseWireStatus.NotOwned),
+                protectedOwned
+                    ? "protected owned character did not request secondary password"
+                    : "foreign CharacterId was not rejected");
+            if (protectedOwned)
+            {
+                Checks.Require(world.Statistics.ActiveActors == 0,
+                    "proof-free protected character entered World");
+                await tls.DisposeAsync();
+                client.Dispose();
+                var ended = await serverTask.WaitAsync(TimeSpan.FromSeconds(2));
+                Checks.Require(ended.Reason == TlsWireEndReason.AuthorizationRejected,
+                    "closing password prompt unexpectedly entered gameplay authorization");
+            }
+            else
+            {
+                var ended = await serverTask.WaitAsync(TimeSpan.FromSeconds(2));
+                Checks.Require(ended.Reason == TlsWireEndReason.AuthorizationRejected &&
+                    world.Statistics.ActiveActors == 0, "foreign character entered World");
+                await tls.DisposeAsync();
+                client.Dispose();
+            }
+            await world.StopAsync();
         }
         finally { Directory.Delete(identityRoot, true); }
     }

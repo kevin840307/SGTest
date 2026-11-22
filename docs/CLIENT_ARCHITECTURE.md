@@ -37,6 +37,17 @@ UI Node 由實際頁面擁有：`Recovered2AuthShell` 只有在本機 Theme 成�
 - **AOI 驗證**：兩個真 Godot TLS Client、Server WorldAoiPump，Map15→13→15 的 WorldReady、Spawn/Delta/Despawn、舊 MapEpoch 清除 PASS，`--crossmap` 23 AOI frames；`--portal` 真伺服器驗證 NPC 互動／拒絕不合法 ID、回圖無幽靈實體 PASS（25 frames）。這些是**測試資源**的 Server＋Client 協定結果；原版私有 PCK 的同時多人 GPU／高負載仍 NOT VERIFIED。
 - **結束資源修復**：`9edfe70` 已定位並修正未掛入場景樹的 auth 控制項及被覆蓋的預建按鈕，不是將 driver 警告排除。嚴格原版地圖 12 captures／39 SPR frames、人物 20 captures／91 SPR frames 均 PASS、超容差像素 0、engine_errors=[]、AssetStore 全歸零；[Client CI 44921797737](https://github.com/kevin840307/SGTest/actions/runs/44921797737) SUCCESS。真玩家路徑／GPU frame trace、停走動畫和 AOI 高人數負載仍需實機確認。
 
+## 2026-11-22 — Recovered2／原版 IE HK2 UI 雙模式對齊（持續中）
+
+**來源與界線**：`reports/recovered_ui_reference/`（本機參考截圖），`C:\SGO\NewVersion\Recovered2\game_hud.tscn`、`shared_inventory_panel.tscn`、`ui/themes/paradise_window_theme.tres` 及登入／選角／創角 UI 作唯讀比對；原版 `C:\SGO\Stargate Online IE HK2\Interface/*.spr` 用**已有正式 Converter** `runtime_spr.decode_spr` 解碼成**本機私有**畫面。**原二創／原版素材不可加入 public Git**；只提交 UI 表示程式、映射及驗證。
+
+- `tools/ui_art/sync_recovered2_auth.py --item-photos` 同步原版 R2 圖片和 824 個 Items/Photos（約 2.7MB 壓縮圖）到 `client/ui/private_recovered2/`；`python -m tools.asset_converter.cli item-catalog --items ...` 提取私有物品名稱／分類／icon ID 到 Git 忽略的 `client/content/item_catalog.json`。所有照片**只在物品列實際出現時解碼**，`local_item_photo_cache.gd` 的 LRU 限 96 個 Texture；重複照片共享；原 Game Server 的 UID／數量／金錢／效果值從未由 UI 生成。
+- `client/ui/recovered2_world_shell.gd` 對準 R2 `game_hud.tscn` 1400×900 版面，原始圖片 `COMMAND` 50×439、`HPBAR` 192×135、`BH_HOTKEY` 192×135、`MINIMAP` 180×166。Source 固定座標幾何**整體同比縮放且置中**到 Windows 1152×620；右側 9 個 hitboxes／hover，底部只讀 HP/MP／快捷列／聊天，原本開發 Map13/Map15/title 工具在遊戲內隱藏。
+- `client/ui/recovered2_inventory_window.gd` 源樣式 5 Tab、可搜尋、道具圖、數量、裝備／強化後綴、列 hover 與分頁。最多 40 列正在畫面，其他物品不建立 Control/TextureRect。任何使用、裝備、丟棄按鈕最終仍透過**唯一 SessionPanel 及 Server 權威驗證**，不跳過交易 FIFO、確認或伺服器拒絕。物品標題源自同一 source-derived catalog，陌生 ID 保留 `道具 N`。社團／商城目前無可信 Server 契約，用明確不可用訊息，不顯示虛構公會／金額／物品。
+- `tools/ui_art/sync_original_ie_ui.py` 從本機 IE HK2 的原 `Interface/*.spr` 還原 18 項單幀原始 UI，例如三個 800×600 身分畫面及 `BG_ITEM/COMMAND/HPBAR/BG_CHARACTER_INFO`，源檔 SHA 不改動、轉存的 PNG Git 忽略。`client/ui/classic_auth_shell.gd` 用**不同來源圖、800×600 幾何**提供原版三角色登入／選角／創角（外觀選項取同一 Server profile、可用時載入同一 `CharacterPreview` 及 `AssetStore`）；`client/ui/skins/original_ie_hk2.json` 為可切換 profile。WorldShell `set_profile` 改用原 30×249 Command、128×90 HPBar、原 BG_ITEM/CHARACTER_INFO 圖；保留唯一 ClientSession、WorldState、MapEpoch 和指令解碼。
+- **驗證**：Windows Godot 4.7.2 原生 GPU screenshot：Recovered2 登入／選角／創角及原 PCK 人物預覽全部 PASS（Avatar 資產 Scope drain=0）；Recovered2 Map15 主畫面／背包 `小藥水` 圖示／裝備／角色資訊 PASS；IE HK2 經驗證的原版登入／選角／創角／背包／世界及切換 R2 PASS。Godot 真 TLS Login/UI fixture 結果含選角、角色入場、權威移動 ACK、背包顯示／伺服器道具使用與銷毀／NPC shop、storage、repair、bank、trade、quest、PvP PASS。**附註** Windows Godot 退出時仍印 Renderer RID/Texture leaked 警告，嚴格零警告 gate 不可認定 PASS。
+- **明確尚未完成**：全套 R2 商店／社團／NPC 訊息窗／人物詳細資訊／小地圖真圖塊／快捷鍵與原版所有浮窗逐項 1:1；「原版 IE HK2」原型世界窗仍與原 800×600 配置有視覺差距，角色動畫對所有外觀的正確性僅受提供素材範圍限制；Mecha UI、mecha source animation、寵物未有完整權威 Server／Avatar 契約，不應假裝能按。原版物品照片，Mac/iOS/Android export／touch/retina、GPU/RSS 百人場景、正式素材壓測未驗證。未完成前保留 `todo`，不能稱全 UI 完整對齊。
+
 ## 職責分離（不要為了分層先建立空檔案）
 
 | 責任 | 輸入 | 輸出 | 不可以做 |

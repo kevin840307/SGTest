@@ -1,6 +1,8 @@
 # Private original game data and all converted artwork (never publish).
 # Local Recovered2 login/character UI reference art and source theme.
 client/ui/private_recovered2/
+# Original IE HK2 800x600 Interface SPR frames, decoded locally only.
+client/ui/private_ie_hk2/
 local-assets/
 reports/
 legacy-originals/

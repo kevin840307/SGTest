@@ -159,7 +159,11 @@ public enum AccountRegisterWireStatus : byte
     InvalidInput = 3,
     RateLimited = 4
 }
-public enum CharacterChooseWireStatus : byte { Success = 0, NotOwned = 1, WorldRejected = 2 }
+public enum CharacterChooseWireStatus : byte
+{
+    Success = 0, NotOwned = 1, WorldRejected = 2,
+    PasswordRequired = 3, InvalidPassword = 4, PasswordLocked = 5
+}
 public enum CharacterCreateWireStatus : byte
 {
     Success = 0,
@@ -169,7 +173,8 @@ public enum CharacterCreateWireStatus : byte
     InvalidName = 4,
     InvalidSlot = 5,
     Unavailable = 6,
-    InvalidAppearance = 7
+    InvalidAppearance = 7,
+    InvalidCreationSettings = 8
 }
 public enum PlayerRespawnStatus : byte
 {
@@ -343,11 +348,22 @@ public readonly record struct CharacterSummaryWire(long CharacterId, byte Slot, 
     CharacterAppearance? Appearance = null);
 public sealed record CharacterListWire(IReadOnlyList<CharacterSummaryWire> Characters,
     IReadOnlyList<CharacterAppearance>? CreationAppearances = null);
-public readonly record struct CharacterCreateWire(byte Slot, string Name, CharacterAppearance? Appearance = null);
+public readonly record struct CharacterCreationWire(
+    byte Strength, byte Dexterity, byte Constitution, byte Wisdom, string CharacterPassword)
+{
+    public override string ToString() =>
+        $"CharacterCreationWire {{ Strength = {Strength}, Dexterity = {Dexterity}, Constitution = {Constitution}, Wisdom = {Wisdom}, Password = [REDACTED] }}";
+}
+public readonly record struct CharacterCreateWire(
+    byte Slot, string Name, CharacterAppearance? Appearance = null,
+    CharacterCreationWire? Creation = null);
 public readonly record struct CharacterCreateResultWire(
     CharacterCreateWireStatus Status, long CharacterId, byte Slot, string Name,
     CharacterAppearance? Appearance = null);
-public readonly record struct CharacterChooseWire(long CharacterId);
+public readonly record struct CharacterChooseWire(long CharacterId, string? CharacterPassword = null)
+{
+    public override string ToString() => $"CharacterChooseWire {{ CharacterId = {CharacterId}, Password = [REDACTED] }}";
+}
 public readonly record struct CharacterChooseResultWire(
     CharacterChooseWireStatus Status, long CharacterId, int MapId,
     double X, double Y, long MapEpoch);

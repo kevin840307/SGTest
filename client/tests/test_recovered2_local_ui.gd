@@ -15,6 +15,7 @@ class SessionStub:
 	var last_name := ""
 	var last_slot := -1
 	var last_appearance: Dictionary = {}
+	var last_creation: Dictionary = {}
 	var last_host := ""
 	var last_port := 0
 	func connect_secure(host, port, _user, _password, _tls_name, _trust) -> int:
@@ -25,13 +26,16 @@ class SessionStub:
 	func register_secure(_host, _port, _user, _password, _tls_name, _trust) -> int:
 		logins += 1
 		return OK
-	func create_character(slot: int, name: String, appearance: Dictionary = {}) -> bool:
+	func create_character(
+			slot: int, name: String, appearance: Dictionary = {},
+			creation: Dictionary = {}) -> bool:
 		creates += 1
 		last_name = name
 		last_slot = slot
 		last_appearance = appearance.duplicate()
+		last_creation = creation.duplicate(true)
 		return true
-	func choose_character(id: int) -> bool:
+	func choose_character(id: int, _character_password: String = "") -> bool:
 		enters += 1
 		return id > 0
 	func stop() -> void:
@@ -87,16 +91,27 @@ func _run() -> void:
 	var args := OS.get_cmdline_user_args()
 	if args.has("base-resolution"):
 		root.size = Vector2i(1400,900)
+	for arg in args:
+		var value := str(arg)
+		if value.begins_with("viewport="):
+			var parts := value.trim_prefix("viewport=").split("x")
+			if parts.size() == 2 and parts[0].is_valid_int() and parts[1].is_valid_int():
+				root.size = Vector2i(int(parts[0]),int(parts[1]))
 	var directory := "user://recovered2_ui_captures"
-	if args.size() > 0:
-		directory = args[0]
+	var pack_path := ""
+	for arg in args:
+		var value := str(arg)
+		if value.ends_with(".pck"):
+			pack_path = value
+		elif not value.begins_with("viewport=") and value not in ["base-resolution","static-login"] and directory == "user://recovered2_ui_captures":
+			directory = value
 	DirAccess.make_dir_recursive_absolute(directory)
 	var app = Main.new()
 	app.auto_start = false
 	app.preview_auth_offline = true
 	root.add_child(app)
 	var shell = app.recovered2_auth
-	if args.size() > 1 and app.world_view.open_pack(str(args[1])) != OK:
+	if not pack_path.is_empty() and app.world_view.open_pack(pack_path) != OK:
 		_error("optional character preview PCK could not be mounted")
 		return
 	if not app._recovered2_local_ready:
@@ -138,7 +153,7 @@ func _run() -> void:
 	if shell._theme == null or shell._video.stream == null:
 		_error("source Recovered2 theme/video missing")
 		return
-	if shell._login_window.size!=Vector2(280,320) or shell._login_window.position!=Vector2(560,290) or not is_equal_approx(shell._login_content.scale.x,minf(root.size.x/1400.0,root.size.y/900.0)) or shell._account.position!=Vector2(25,59) or shell._account.size!=Vector2(230,50) or shell._secret.position!=Vector2(25,121) or shell._login_button.position!=Vector2(77.5,188):
+	if shell._login_window.size!=Vector2(280,320) or shell._login_window.position!=Vector2(560,290) or not is_equal_approx(shell._login_content.scale.x,maxf(0.05,minf(root.size.x/1400.0,root.size.y/900.0))) or shell._account.position!=Vector2(25,59) or shell._account.size!=Vector2(230,50) or shell._secret.position!=Vector2(25,121) or shell._login_button.position!=Vector2(77.5,188):
 		_error("LoginScreen source anchors/geometry changed")
 		return
 	if args.has("static-login"):
@@ -193,7 +208,7 @@ func _run() -> void:
 	if not shell._selection.visible or shell._slot_actions[0].text != "進入世界":
 		_error("3-column selection did not display account characters")
 		return
-	if args.size() > 1:
+	if not pack_path.is_empty():
 		if not await _wait_previews(shell,2):
 			return
 		var first: Control = shell._character_previews[0]
@@ -213,7 +228,7 @@ func _run() -> void:
 	if not shell._creation.visible:
 		_error("source create image not shown")
 		return
-	if args.size() > 1:
+	if not pack_path.is_empty():
 		if not await _wait_previews(shell,1,true):
 			return
 		for i in 3:
@@ -221,11 +236,8 @@ func _run() -> void:
 				_error("hidden selection card retained a scope or animation loop")
 				return
 	await _capture("create",directory)
-	shell._name_edit.text = "NewHero"
-	shell._slot_edit.value = 2
-	shell._confirm_create.pressed.emit()
-	if stub.creates != 1 or stub.last_name != "NewHero" or stub.last_slot != 2:
-		_error("creation did not delegate to SGTest authorizing session")
+	if not shell._confirm_create.disabled:
+		_error("creation must stay disabled until Server appearance rules and full creation settings exist")
 		return
 	panel.character_create_status.text = ""
 	panel._latest.character_create_result_revision = 1
@@ -235,7 +247,7 @@ func _run() -> void:
 		{"race":0,"hair_index":1,"hair_color":5},
 		{"race":1,"hair_index":3,"hair_color":7}]
 	panel._set_controls()
-	if args.size()>1 and not await _wait_previews(shell,1,true):
+	if not pack_path.is_empty() and not await _wait_previews(shell,1,true):
 		return
 	await _capture("create_options",directory)
 	for field in ["race","hair_index","hair_color"]:
@@ -254,9 +266,22 @@ func _run() -> void:
 		_error("unbound profile drew a B doll or slot overlapped race controls")
 		return
 	await _capture("create_options_pending_profile",directory)
+	shell._name_edit.text = "NewHero"
+	shell._slot_edit.value = 2
+	# Allocate the four remaining source-verified points through the real UI.
+	shell._adjust_stat("strength",1)
+	shell._adjust_stat("strength",1)
+	shell._adjust_stat("dexterity",1)
+	shell._adjust_stat("constitution",1)
+	shell._create_password.text = "2468"
+	shell._create_password_confirm.text = "2468"
+	shell._refresh_create_ready()
+	if shell._remaining_points.text != "0" or shell._confirm_create.disabled:
+		_error("full stat allocation and matching secondary password did not enable create")
+		return
 	shell._confirm_create.pressed.emit()
-	if stub.creates!=2 or stub.last_appearance!=chosen:
-		_error("appearance UI did not submit shared choice to ClientSession")
+	if stub.creates!=1 or stub.last_appearance!=chosen or 			int(stub.last_creation.get("strength",0))!=3 or 			int(stub.last_creation.get("dexterity",0))!=2 or 			int(stub.last_creation.get("constitution",0))!=2 or 			int(stub.last_creation.get("wisdom",0))!=1 or 			str(stub.last_creation.get("password",""))!="2468":
+		_error("appearance/stats/secondary-password UI did not submit shared choice")
 		return
 	if not shell._confirm_create.disabled or panel.creation_options.editable:
 		_error("source create controls stayed interactive after queue admission")
@@ -318,5 +343,5 @@ func _run() -> void:
 	if final.assets+final.scopes+final.rgba_bytes+final.decode_jobs+final.texture_jobs != 0:
 		_error("auth preview teardown retained assets or scopes")
 		return
-	print("RECOVERED2_LOCAL_UI_PASS login_select_create=true hidden_deployment_host_port=true original_video_theme_pngs=true viewport_fit_1152x620=true single_session_delegation=true character_preview_pack_tested=%s all_assets_drained=true" % str(args.size()>1))
+	print("RECOVERED2_LOCAL_UI_PASS login_select_create=true hidden_deployment_host_port=true original_video_theme_pngs=true viewport_fit_1152x620=true single_session_delegation=true character_preview_pack_tested=%s all_assets_drained=true" % str(not pack_path.is_empty()))
 	quit(0)

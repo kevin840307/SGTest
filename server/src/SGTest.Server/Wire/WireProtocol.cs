@@ -45,8 +45,10 @@ public static partial class WireProtocol
     public const int AuthResultFrameBytes = HeaderBytes + 1;
     public const int AccountRegisterResultFrameBytes = HeaderBytes + 1;
     public const int CharacterChooseFrameBytes = HeaderBytes + 8;
+    public const int MaxCharacterPasswordBytes = 16;
+    public const int MaxCharacterChooseFrameBytes = CharacterChooseFrameBytes + 2 + MaxCharacterPasswordBytes;
     public const int CharacterChooseResultFrameBytes = HeaderBytes + 37;
-    public const int MaxCharacterCreateFrameBytes = HeaderBytes + 1 + 2 + 96 + 4;
+    public const int MaxCharacterCreateFrameBytes = HeaderBytes + 1 + 2 + 96 + 11 + MaxCharacterPasswordBytes;
     public const int MaxCharacterCreateResultFrameBytes = HeaderBytes + 1 + 8 + 1 + 2 + 96 + 4;
     public const int MaxAuthRequestFrameBytes = HeaderBytes + 4 + 32 + 256;
     public const int MaxAccountRegisterRequestFrameBytes =
@@ -652,7 +654,8 @@ public static partial class WireProtocol
             WireOpcode.AccountRegisterResult =>
                 advertised == AccountRegisterResultFrameBytes,
             WireOpcode.CharacterList => advertised is >= 9 and <= MaxCharacterListFrameBytes,
-            WireOpcode.CharacterChoose => advertised == CharacterChooseFrameBytes,
+            WireOpcode.CharacterChoose => advertised == CharacterChooseFrameBytes ||
+                advertised is >= CharacterChooseFrameBytes + 2 and <= MaxCharacterChooseFrameBytes,
             WireOpcode.CharacterChooseResult => advertised == CharacterChooseResultFrameBytes,
             WireOpcode.CharacterCreate => advertised is >= 12 and <= MaxCharacterCreateFrameBytes,
             WireOpcode.CharacterCreateResult => advertised is >= 20 and <= MaxCharacterCreateResultFrameBytes,

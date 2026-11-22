@@ -62,6 +62,13 @@ var characters := OptionButton.new()
 var choose_button := Button.new()
 var character_name_input := LineEdit.new()
 var character_slot_input := SpinBox.new()
+var character_strength_input := SpinBox.new()
+var character_dexterity_input := SpinBox.new()
+var character_constitution_input := SpinBox.new()
+var character_wisdom_input := SpinBox.new()
+var character_password_input := LineEdit.new()
+var character_password_confirm_input := LineEdit.new()
+var character_choose_password_input := LineEdit.new()
 var create_character_button := Button.new()
 var character_create_status := Label.new()
 var respawn_button := Button.new()
@@ -130,6 +137,22 @@ func _ready() -> void:
 	character_slot_input.max_value = 7
 	character_slot_input.step = 1
 	character_slot_input.value = 0
+	for stat in [
+		character_strength_input,character_dexterity_input,
+		character_constitution_input,character_wisdom_input
+	]:
+		stat.min_value = 1
+		stat.max_value = 5
+		stat.step = 1
+		stat.value = 1
+	character_password_input.secret = true
+	character_password_confirm_input.secret = true
+	character_choose_password_input.secret = true
+	for secret_input in [
+		character_password_input,character_password_confirm_input,
+		character_choose_password_input
+	]:
+		secret_input.max_length = 4
 	create_character_button.text = "建立角色"
 	new_character_button.text = "建立新角色"
 	back_to_character_button.text = "返回角色選單"
@@ -164,7 +187,13 @@ func _ready() -> void:
 	_layout.create_page.add_child(creation_heading)
 	var create_grid := GridContainer.new()
 	_layout.create_page.add_child(create_grid)
-	for pair in [["角色名稱",character_name_input],["角色欄位",character_slot_input]]:
+	for pair in [
+		["角色名稱",character_name_input],["角色欄位",character_slot_input],
+		["力量",character_strength_input],["速度",character_dexterity_input],
+		["體質",character_constitution_input],["智慧",character_wisdom_input],
+		["角色密碼",character_password_input],
+		["確認密碼",character_password_confirm_input]
+	]:
 		var label := Label.new()
 		label.text = pair[0]
 		create_grid.add_child(label)
@@ -300,21 +329,48 @@ func create_character() -> void:
 	if character_name.is_empty():
 		character_create_status.text = "請輸入角色名稱"
 		return
+	var attributes := {
+		"strength": int(character_strength_input.value),
+		"dexterity": int(character_dexterity_input.value),
+		"constitution": int(character_constitution_input.value),
+		"wisdom": int(character_wisdom_input.value),
+	}
+	if int(attributes.strength)+int(attributes.dexterity)+int(attributes.constitution)+int(attributes.wisdom) != 8:
+		character_create_status.text = "能力點必須全部分配（四項合計 8）"
+		return
+	var character_password := character_password_input.text
+	if character_password.length() != 4:
+		character_create_status.text = "角色密碼必須是 4 個字元"
+		return
+	if character_password != character_password_confirm_input.text:
+		character_create_status.text = "兩次角色密碼不一致"
+		return
+	var creation := attributes.duplicate()
+	creation.password = character_password
 	var appearance := creation_options.selection()
-	var queued: bool = session.create_character(int(character_slot_input.value),character_name,appearance) if not appearance.is_empty() else session.create_character(int(character_slot_input.value),character_name)
+	var queued: bool = session.create_character(
+		int(character_slot_input.value),character_name,appearance,creation)
 	if queued:
 		_create_queued_after = int(_latest.get("character_create_result_revision",0))
 		character_create_status.text = "建立角色中…"
+		character_password_input.clear()
+		character_password_confirm_input.clear()
+		creation.erase("password")
 		_set_controls()
 	else:
-		character_create_status.text = "目前無法建立角色，請稍後重試"
+		creation.erase("password")
+		character_create_status.text = "目前無法建立角色，請確認外觀、能力點與角色密碼"
 
-func choose() -> void:
+func choose(character_password: String = "") -> void:
 	if not active or _chosen or characters.selected < 0 or characters.selected >= _characters.size():
 		return
-	if session.choose_character(int(_characters[characters.selected].character_id)):
+	var password := character_password
+	if password.is_empty():
+		password = character_choose_password_input.text
+	if session.choose_character(int(_characters[characters.selected].character_id),password):
 		_chosen = true
 		choose_button.disabled = true
+		character_choose_password_input.clear()
 		status.text = "進入世界中…"
 	else:
 		status.text = "操作佇列忙碌，請稍後重試"
@@ -725,9 +781,23 @@ func _process(delta: float) -> void:
 	_set_controls()
 	if state == State.STATE_SELECTING_CHARACTER:
 		if _chosen and int(_latest.choose_status) >= 0:
-			disconnect_session()
-			status.text = "角色無法使用，請重新登入"
-			return
+			var choose_code := int(_latest.choose_status)
+			if choose_code == 1:
+				disconnect_session()
+				status.text = "角色不屬於此帳號，請重新登入"
+				return
+			_chosen = false
+			choose_button.disabled = false
+			match choose_code:
+				3:
+					status.text = "此角色需要 4 位角色密碼"
+				4:
+					status.text = "角色密碼錯誤"
+				5:
+					status.text = "角色密碼錯誤次數過多，暫時鎖定"
+				_:
+					status.text = "角色暫時無法使用"
+			_set_controls()
 		if _latest.characters != _characters:
 			_characters = _latest.characters
 			characters.clear()
@@ -804,6 +874,8 @@ func _character_create_status_text(code: int, character_name: String) -> String:
 			return "伺服器尚未開放遊戲內創角"
 		7:
 			return "角色外觀不符合伺服器創角規則，請重新選擇"
+		8:
+			return "能力點或 4 位角色密碼不符合創角規則"
 		_:
 			return ""
 

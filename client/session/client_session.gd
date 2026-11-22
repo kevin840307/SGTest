@@ -104,25 +104,35 @@ func _connect_secure(
 		_mutex.unlock()
 	return error
 
-func create_character(slot: int, character_name: String, appearance: Dictionary = {}) -> bool:
+func create_character(
+		slot: int, character_name: String, appearance: Dictionary = {},
+		creation: Dictionary = {}) -> bool:
 	var current := snapshot()
 	var trimmed := character_name.strip_edges()
 	var bytes := trimmed.to_utf8_buffer()
-	if int(current.get("state",-1)) != WorldState.STATE_SELECTING_CHARACTER or 		slot < 0 or slot > 31 or bytes.size() < 1 or bytes.size() > 96:
+	if int(current.get("state",-1)) != WorldState.STATE_SELECTING_CHARACTER or 			slot < 0 or slot > 31 or bytes.size() < 1 or bytes.size() > 96:
 		return false
-	if not WorldState.allows_character_appearance(appearance,current.get("character_creation_appearances",[])):
+	if not WorldState.allows_character_appearance(
+			appearance,current.get("character_creation_appearances",[])):
+		return false
+	if not creation.is_empty() and not WireCodec.valid_character_creation_settings(creation):
 		return false
 	return _queue_intent({
 		"type": "create_character",
 		"slot": slot,
 		"name": trimmed,
 		"appearance": appearance.duplicate(true),
+		"creation": creation.duplicate(true),
 	})
 
-func choose_character(character_id: int) -> bool:
-	if character_id <= 0:
+func choose_character(character_id: int, character_password: String = "") -> bool:
+	if int(snapshot().get("state", -1)) != WorldState.STATE_SELECTING_CHARACTER:
 		return false
-	return _queue_intent({"type": "choose", "character_id": character_id})
+	var encoded := WireCodec.encode_character_choose(character_id, character_password)
+	if encoded.is_empty():
+		return false
+	encoded.fill(0)
+	return _queue_intent({"type": "choose", "character_id": character_id, "character_password": character_password})
 
 func move_target(target_x: int, target_y: int) -> bool:
 	if bool(snapshot().get("player_dead",false)):
@@ -967,6 +977,13 @@ func _start_reconnect_attempt() -> bool:
 	return true
 
 func _process_reconnect_choose() -> void:
+	# A new connection requires a fresh secondary proof. Never retain it for
+	# reconnect or repeatedly submit proof-free frames after PasswordRequired.
+	if int(_world.choose_status) in [3, 4, 5]:
+		_mutex.lock()
+		_reconnecting = false
+		_mutex.unlock()
+		return
 	_mutex.lock()
 	var reconnecting := _reconnecting
 	var character_id := _selected_character_id
@@ -1075,20 +1092,31 @@ func _process_first_intent() -> void:
 		var slot := int(intent.get("slot",-1))
 		var character_name := str(intent.get("name",""))
 		var appearance: Dictionary = intent.get("appearance",{})
-		if not WorldState.allows_character_appearance(appearance,_world.character_creation_appearances):
+		var creation: Dictionary = intent.get("creation",{})
+		if not WorldState.allows_character_appearance(
+				appearance,_world.character_creation_appearances):
 			_world.fail("queued_character_appearance_no_longer_allowed")
 			_publish()
 			return
-		var frame := WireCodec.encode_character_create(slot,character_name,appearance)
-		if not frame.is_empty() and _transport.send_frame(frame) and 			_world.mark_character_create_sent(slot,character_name,appearance):
+		if not creation.is_empty() and not WireCodec.valid_character_creation_settings(creation):
+			_world.fail("queued_character_creation_settings_invalid")
+			_publish()
+			return
+		var frame := WireCodec.encode_character_create(
+			slot,character_name,appearance,creation)
+		if not frame.is_empty() and _transport.send_frame(frame) and 				_world.mark_character_create_sent(slot,character_name,appearance):
+			if creation.has("password"):
+				creation.erase("password")
+			intent.erase("creation")
 			_pop_intent()
 			_publish()
 	elif kind == "choose":
 		if int(_world.state) != WorldState.STATE_SELECTING_CHARACTER:
 			return
 		var character_id := int(intent.character_id)
-		var frame := WireCodec.encode_character_choose(character_id)
+		var frame := WireCodec.encode_character_choose(character_id, str(intent.get("character_password", "")))
 		if not frame.is_empty() and _transport.send_frame(frame) and _world.mark_choose_sent(character_id):
+			intent.erase("character_password")
 			_mutex.lock()
 			_selected_character_id = character_id
 			_mutex.unlock()

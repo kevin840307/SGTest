@@ -16,6 +16,20 @@ const State = preload("res://world/world_state.gd")
 const LOCAL := "res://ui/private_recovered2"
 const SIZE := Vector2(1200,900)
 const SOURCE_VIEWPORT := Vector2(1400,900)
+const EDGE_CLAMP_SHADER := """
+shader_type canvas_item;
+uniform vec2 viewport_size = vec2(1200.0, 900.0);
+uniform vec2 source_size = vec2(1200.0, 900.0);
+void fragment() {
+	vec2 fitted = source_size * min(
+		viewport_size.x / source_size.x,
+		viewport_size.y / source_size.y);
+	vec2 offset = (viewport_size - fitted) * 0.5;
+	vec2 pixel = UV * viewport_size;
+	vec2 source_uv = clamp((pixel - offset) / fitted, vec2(0.0), vec2(1.0));
+	COLOR = texture(TEXTURE, source_uv);
+}
+"""
 
 var _panel: PanelContainer
 var _stage := Control.new()
@@ -50,6 +64,15 @@ var _appearance_values: Dictionary = {}
 var _appearance_buttons: Dictionary = {}
 var _appearance_note: Label
 var _preview_note: Label
+var _stat_values: Dictionary = {}
+var _remaining_points: Label
+var _create_password: LineEdit
+var _create_password_confirm: LineEdit
+var _choose_password_box: Panel
+var _choose_password_edit: LineEdit
+var _choose_password_message: Label
+var _selection_backdrop_fill: TextureRect
+var _creation_backdrop_fill: TextureRect
 
 func set_asset_store(store: RefCounted) -> void:
 	_asset_store = store
@@ -96,14 +119,31 @@ func resize_view(view_size: Vector2) -> void:
 		return
 	_last_resize = view_size
 	size = view_size
-	var factor := minf(view_size.x / SOURCE_VIEWPORT.x, view_size.y / SOURCE_VIEWPORT.y)
-	factor = maxf(0.05,factor)
-	_stage.scale = Vector2.ONE * factor
-	_stage.position = (view_size - SIZE * factor) * 0.5
+
+	# Character select/create source art is 1200x900. Keep that safe content
+	# intact and scale it from its own real dimensions instead of the login
+	# screen's 1400x900 source viewport. Extra widescreen area is filled by a
+	# separate cover backdrop so controls never drift or get clipped.
+	var character_factor := minf(view_size.x / SIZE.x, view_size.y / SIZE.y)
+	character_factor = maxf(0.05,character_factor)
+	_stage.scale = Vector2.ONE * character_factor
+	_stage.position = (view_size - SIZE * character_factor) * 0.5
+
 	_login.size = view_size
+	var login_factor := minf(
+		view_size.x / SOURCE_VIEWPORT.x, view_size.y / SOURCE_VIEWPORT.y)
+	login_factor = maxf(0.05,login_factor)
 	if _login_content != null:
-		_login_content.scale = Vector2.ONE*factor
-		_login_content.position = (view_size-SOURCE_VIEWPORT*factor)*0.5
+		_login_content.scale = Vector2.ONE*login_factor
+		_login_content.position = (
+			view_size-SOURCE_VIEWPORT*login_factor) * 0.5
+	for backdrop in [_selection_backdrop_fill,_creation_backdrop_fill]:
+		if is_instance_valid(backdrop):
+			backdrop.position = Vector2.ZERO
+			backdrop.size = view_size
+			if backdrop.material is ShaderMaterial:
+				(backdrop.material as ShaderMaterial).set_shader_parameter(
+					"viewport_size",view_size)
 
 func enable_for_page(page: int, active: bool) -> void:
 	# An offline map or unavailable local theme never builds auth controls.
@@ -119,6 +159,10 @@ func enable_for_page(page: int, active: bool) -> void:
 		_login.visible = page == SessionLayout.Page.LOGIN
 		_selection.visible = page == SessionLayout.Page.CHARACTER_SELECT
 		_creation.visible = page == SessionLayout.Page.CHARACTER_CREATE
+		if is_instance_valid(_selection_backdrop_fill):
+			_selection_backdrop_fill.visible = _selection.visible
+		if is_instance_valid(_creation_backdrop_fill):
+			_creation_backdrop_fill.visible = _creation.visible
 		if _video != null and _login.visible and _video.stream != null:
 			_video.play()
 		elif _video != null:
@@ -128,6 +172,8 @@ func enable_for_page(page: int, active: bool) -> void:
 		if page == SessionLayout.Page.CHARACTER_CREATE:
 			_name_edit.text = _panel.character_name_input.text
 			_slot_edit.value = _panel.character_slot_input.value
+			_refresh_stats()
+			_refresh_create_ready()
 		_last_character_key = ""
 	_update_from_session()
 
@@ -152,7 +198,11 @@ func _build_skin_picker() -> void:
 			_skin_picker.select(index)
 	_skin_picker.item_selected.connect(func(index: int):
 		skin_requested.emit(str(_skin_picker.get_item_metadata(index))))
+	# Keep the selector as a non-visual test/control bridge. Recovered2 auth
+	# screens do not contain this SGTest-only widget; UI switching belongs in
+	# the in-world System Settings window.
 	_put(_stage,_skin_picker,980,17,205,33)
+	_skin_picker.hide()
 
 func _build_background(page: Control, path: String) -> TextureRect:
 	var backdrop := TextureRect.new()
@@ -162,6 +212,27 @@ func _build_background(page: Control, path: String) -> TextureRect:
 	backdrop.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	backdrop.texture = UiTextureLoader.get_texture(LOCAL.path_join(path))
 	page.add_child(backdrop)
+	return backdrop
+
+func _build_viewport_fill(path: String) -> TextureRect:
+	var backdrop := TextureRect.new()
+	backdrop.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	# Render the same aspect-fit transform as the 1200x900 safe stage, then
+	# clamp pixels outside that fitted rectangle to the nearest source edge.
+	# This preserves exact UI/frame alignment while filling ultrawide/tall
+	# viewports without a second differently-cropped background or gray bars.
+	backdrop.stretch_mode = TextureRect.STRETCH_SCALE
+	backdrop.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	backdrop.texture = UiTextureLoader.get_texture(LOCAL.path_join(path))
+	var shader := Shader.new()
+	shader.code = EDGE_CLAMP_SHADER
+	var material := ShaderMaterial.new()
+	material.shader = shader
+	material.set_shader_parameter("source_size",SIZE)
+	backdrop.material = material
+	backdrop.visible = false
+	add_child(backdrop)
+	move_child(backdrop,0)
 	return backdrop
 
 func _put(parent: Control, node: Control, x: float, y: float, w: float, h: float) -> void:
@@ -262,6 +333,7 @@ func _submit_login(create_first: bool) -> void:
 		_panel.login()
 
 func _build_select() -> void:
+	_selection_backdrop_fill = _build_viewport_fill("SELECT_CHARACTER.png")
 	_build_background(_selection,"SELECT_CHARACTER.png")
 	_label(_selection,"請選擇角色",405,75,390,48,25)
 	for i in 3:
@@ -280,13 +352,38 @@ func _build_select() -> void:
 		var action := _button(_selection,"建立角色",x+36,670,125,37,true)
 		action.pressed.connect(_enter_slot.bind(i))
 		_slot_actions.append(action)
-	var back := _button(_selection,"返回登入",483,801,120,36)
+	var back := _button(
+		_selection,"返回登入",(SIZE.x-120.0)*0.5,801,120,36)
 	back.pressed.connect(func(): _panel.disconnect_session())
 	var prev := _button(_selection,"上一頁",365,801,108,36)
 	prev.pressed.connect(_change_page.bind(-1))
 	var next := _button(_selection,"下一頁",611,801,108,36)
 	next.pressed.connect(_change_page.bind(1))
 	_select_status = _label(_selection,"",368,741,464,35,14)
+	_choose_password_box = Panel.new()
+	_choose_password_box.theme_type_variation = &"ParadiseWindowPanel"
+	_put(_selection,_choose_password_box,450,646,300,104)
+	_choose_password_message = _label(
+		_choose_password_box,"請輸入 4 位角色密碼",15,8,270,25,13)
+	_choose_password_edit = LineEdit.new()
+	_choose_password_edit.secret = true
+	_choose_password_edit.max_length = 4
+	_choose_password_edit.alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_choose_password_edit.theme_type_variation = &"ParadiseLineEdit"
+	_put(_choose_password_box,_choose_password_edit,25,42,165,38)
+	var unlock := _button(
+		_choose_password_box,"確認",204,42,72,38,true)
+	unlock.pressed.connect(_submit_character_password)
+	_choose_password_edit.text_submitted.connect(
+		func(_unused): _submit_character_password())
+	_choose_password_box.hide()
+
+func _submit_character_password() -> void:
+	if _choose_password_edit.text.length() != 4:
+		_choose_password_message.text = "角色密碼必須是 4 個字元"
+		return
+	_panel.choose(_choose_password_edit.text)
+	_choose_password_edit.clear()
 
 func _change_page(delta: int) -> void:
 	_selection_page = clampi(_selection_page+delta,0,2)
@@ -310,11 +407,23 @@ func _enter_slot(slot_on_page: int) -> void:
 					proposed = s
 					break
 		_panel.character_slot_input.value = proposed
+		for stat in [
+			_panel.character_strength_input,_panel.character_dexterity_input,
+			_panel.character_constitution_input,_panel.character_wisdom_input
+		]:
+			stat.value = 1
+		_panel.character_password_input.clear()
+		_panel.character_password_confirm_input.clear()
 		_panel.new_character_button.pressed.emit()
 		_name_edit.clear()
 		_slot_edit.value = proposed
+		if _create_password != null:
+			_create_password.clear()
+			_create_password_confirm.clear()
+		_refresh_stats()
 
 func _build_create() -> void:
+	_creation_backdrop_fill = _build_viewport_fill("CREATE_CHARACTER.png")
 	_build_background(_creation,"CREATE_CHARACTER.png")
 	_name_edit = LineEdit.new()
 	_slot_edit = SpinBox.new()
@@ -339,6 +448,41 @@ func _build_create() -> void:
 		_appearance_buttons[field] = [_appearance_arrow(field,-1,351,y),_appearance_arrow(field,1,464,y)]
 	_appearance_note = _label(_creation,"",318,539,180,51,11)
 	_appearance_note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+
+	var stat_fields := ["strength","dexterity","constitution","wisdom"]
+	var stat_names := ["力量","速度","體質","智慧"]
+	for i in 4:
+		var field: String = stat_fields[i]
+		var y := float(388+36*i)
+		_label(_creation,stat_names[i],745,y,88,24,14)
+		var minus := _button(_creation,"−",857,y,28,25)
+		minus.pressed.connect(_adjust_stat.bind(field,-1))
+		var value := _label(_creation,"1",891,y-2,60,29,14)
+		value.theme_type_variation = &"ParadiseAccentText"
+		_stat_values[field] = value
+		var plus := _button(_creation,"+",967,y,28,25)
+		plus.pressed.connect(_adjust_stat.bind(field,1))
+	_label(_creation,"剩餘點數",745,532,110,24,14)
+	_remaining_points = _label(_creation,"4",891,530,60,29,14)
+	_remaining_points.theme_type_variation = &"ParadiseAccentText"
+
+	_label(_creation,"角色密碼",745,583,135,24,14)
+	_label(_creation,"確認密碼",745,619,135,24,14)
+	_create_password = LineEdit.new()
+	_create_password.secret = true
+	_create_password.max_length = 4
+	_create_password.alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_create_password.theme_type_variation = &"ParadiseLineEdit"
+	_put(_creation,_create_password,897,579,83,31)
+	_create_password_confirm = LineEdit.new()
+	_create_password_confirm.secret = true
+	_create_password_confirm.max_length = 4
+	_create_password_confirm.alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_create_password_confirm.theme_type_variation = &"ParadiseLineEdit"
+	_put(_creation,_create_password_confirm,897,615,83,31)
+	_create_password.text_changed.connect(func(_text): _refresh_create_ready())
+	_create_password_confirm.text_changed.connect(func(_text): _refresh_create_ready())
+
 	var doll := CharacterPreview.new()
 	_put(_creation,doll,516,444,109,177)
 	doll.bind_store(_asset_store)
@@ -358,6 +502,55 @@ func _build_create() -> void:
 			_panel.back_to_character_button.pressed.emit())
 	_create_status = _label(_creation,"",263,621,418,36,14)
 	_create_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+
+func _stat_control(field: String) -> SpinBox:
+	match field:
+		"strength":
+			return _panel.character_strength_input
+		"dexterity":
+			return _panel.character_dexterity_input
+		"constitution":
+			return _panel.character_constitution_input
+		_:
+			return _panel.character_wisdom_input
+
+func _remaining_stat_points() -> int:
+	return 8 - (
+		int(_panel.character_strength_input.value) +
+		int(_panel.character_dexterity_input.value) +
+		int(_panel.character_constitution_input.value) +
+		int(_panel.character_wisdom_input.value))
+
+func _adjust_stat(field: String, delta: int) -> void:
+	var stat := _stat_control(field)
+	var next_value := int(stat.value) + delta
+	if next_value < 1 or next_value > 5:
+		return
+	if delta > 0 and _remaining_stat_points() <= 0:
+		return
+	stat.value = next_value
+	_refresh_stats()
+
+func _refresh_stats() -> void:
+	if _panel == null or _remaining_points == null:
+		return
+	for field in _stat_values:
+		_stat_values[field].text = str(int(_stat_control(field).value))
+	_remaining_points.text = str(maxi(0,_remaining_stat_points()))
+	_refresh_create_ready()
+
+func _refresh_create_ready() -> void:
+	if _confirm_create == null or _panel == null:
+		return
+	var password_ready := (
+		_create_password != null and
+		_create_password.text.length() == 4 and
+		_create_password.text == _create_password_confirm.text)
+	_confirm_create.disabled = (
+		not _panel.creation_options.editable or
+		_remaining_stat_points() != 0 or
+		not password_ready or
+		_panel.create_character_button.disabled)
 
 func _appearance_arrow(field: String, delta: int, x: float, y: float) -> BaseButton:
 	var texture := UiTextureLoader.get_texture(LOCAL.path_join("LEFT_BUTTON.png" if delta<0 else "RIGHT_BUTTON.png"))
@@ -379,25 +572,33 @@ func _appearance_arrow(field: String, delta: int, x: float, y: float) -> BaseBut
 
 func _refresh_appearance() -> void:
 	var options = _panel.creation_options
-	_confirm_create.disabled = not options.editable
 	var selected: Dictionary = options.selection()
 	for field in _appearance_values:
 		_appearance_values[field].text = AppearancePicker.value_label(field,int(selected[field])) if not selected.is_empty() else "未開放"
 		for button in _appearance_buttons[field]:
 			button.disabled = not options.editable or options.values(field).size()<2
 			button.modulate = Color(1,1,1,0.45 if button.disabled else 1.0)
-	_appearance_note.text = "能力分配暫未開放" if not selected.is_empty() else "此伺服器暫未開放外觀選擇"
+	_appearance_note.text = (
+		"外觀由伺服器核准；請再分配 4 點能力"
+		if not selected.is_empty()
+		else "此伺服器暫未開放外觀選擇")
 	var preview: Control = _character_previews[3]
 	preview.set_occupied(_panel.active and int(_panel._latest.get("state",-1)) in [State.STATE_SELECTING_CHARACTER,State.STATE_CREATING_CHARACTER])
 	preview.set_appearance(selected)
 	_preview_note.text = "此外觀暫無預覽" if preview.status == "unsupported" else ("預設人物示意" if selected.is_empty() else "基本外觀預覽")
 	if preview.status in ["loading","unavailable"]:
 		_preview_note.text = "人物素材載入中" if preview.status == "loading" else "人物素材未就緒"
+	_refresh_create_ready()
 
 func _submit_create() -> void:
 	_panel.character_name_input.text = _name_edit.text
 	_panel.character_slot_input.value = _slot_edit.value
+	_panel.character_password_input.text = _create_password.text
+	_panel.character_password_confirm_input.text = _create_password_confirm.text
 	_panel.create_character()
+	_create_password.clear()
+	_create_password_confirm.clear()
+	_refresh_create_ready()
 
 func _update_from_session() -> void:
 	if _panel == null:
@@ -409,9 +610,18 @@ func _update_from_session() -> void:
 		_register_button.disabled = _panel.active
 	elif _page_index == SessionLayout.Page.CHARACTER_CREATE:
 		_create_status.text = _panel.character_create_status.text
-		_confirm_create.disabled = _panel.create_character_button.disabled
+		_refresh_stats()
+		_refresh_create_ready()
 	elif _page_index == SessionLayout.Page.CHARACTER_SELECT:
 		_select_status.text = _panel.status.text
+		var choose_code := int(_panel._latest.get("choose_status",-1))
+		_choose_password_box.visible = choose_code in [3,4,5]
+		if choose_code == 3:
+			_choose_password_message.text = "請輸入 4 位角色密碼"
+		elif choose_code == 4:
+			_choose_password_message.text = "密碼錯誤，請重新輸入"
+		elif choose_code == 5:
+			_choose_password_message.text = "密碼暫時鎖定，稍後再試"
 		_update_characters()
 
 func _update_characters() -> void:

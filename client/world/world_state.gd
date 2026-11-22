@@ -1368,7 +1368,7 @@ func _apply_choose(frame: PackedByteArray) -> bool:
 	if decoded.is_empty():
 		return fail("invalid_choose_result")
 	choose_status = int(decoded.status)
-	if choose_status == 1:
+	if choose_status in [1, 3, 4, 5]:
 		state = STATE_SELECTING_CHARACTER
 		return true
 	if choose_status != 0:

@@ -706,18 +706,68 @@ static func decode_character_list(frame: PackedByteArray) -> Dictionary:
 	return {"characters": characters,"creation_appearances":choices}
 
 
-static func encode_character_create(slot: int, character_name: String, appearance: Dictionary = {}) -> PackedByteArray:
+static func valid_character_creation_settings(value: Dictionary) -> bool:
+	if value.size() != 5 or not value.has_all(["strength","dexterity","constitution","wisdom","password"]):
+		return false
+	for key in ["strength","dexterity","constitution","wisdom"]:
+		if not value[key] is int or int(value[key]) < 1 or int(value[key]) > 5:
+			return false
+	if int(value.strength)+int(value.dexterity)+int(value.constitution)+int(value.wisdom) != 8:
+		return false
+	if not value.password is String:
+		return false
+	var password: String = value.password
+	var bytes := password.to_utf8_buffer()
+	if password.length() != 4 or password != password.strip_edges() or bytes.size() < 1 or bytes.size() > 16:
+		return false
+	for i in password.length():
+		var code := password.unicode_at(i)
+		if code < 32 or (code >= 127 and code <= 159):
+			return false
+	return true
+
+
+static func encode_character_create(
+		slot: int, character_name: String, appearance: Dictionary = {},
+		creation: Dictionary = {}) -> PackedByteArray:
 	var name_bytes := character_name.to_utf8_buffer()
 	if slot < 0 or slot > 31 or name_bytes.size() < 1 or name_bytes.size() > 96:
 		return PackedByteArray()
 	if not appearance.is_empty() and not valid_character_appearance(appearance):
 		return PackedByteArray()
-	var frame_bytes := HEADER_BYTES + 3 + name_bytes.size() + (0 if appearance.is_empty() else 4)
+	if not creation.is_empty() and not valid_character_creation_settings(creation):
+		return PackedByteArray()
+	var password_bytes := PackedByteArray()
+	var suffix_bytes := 0
+	if not creation.is_empty():
+		password_bytes = str(creation.password).to_utf8_buffer()
+		suffix_bytes = 11 + password_bytes.size()
+	elif not appearance.is_empty():
+		suffix_bytes = 4
+	var frame_bytes := HEADER_BYTES + 3 + name_bytes.size() + suffix_bytes
 	var writer := _writer(frame_bytes, OPCODE_CHARACTER_CREATE)
 	writer.put_u8(slot)
 	writer.put_u16(name_bytes.size())
 	writer.put_data(name_bytes)
-	if not appearance.is_empty():
+	if not creation.is_empty():
+		writer.put_u8(2)
+		writer.put_u8(0 if appearance.is_empty() else 1)
+		if appearance.is_empty():
+			writer.put_u8(0)
+			writer.put_u16(0)
+			writer.put_u8(0)
+		else:
+			writer.put_u8(int(appearance.race))
+			writer.put_u16(int(appearance.hair_index))
+			writer.put_u8(int(appearance.hair_color))
+		writer.put_u8(int(creation.strength))
+		writer.put_u8(int(creation.dexterity))
+		writer.put_u8(int(creation.constitution))
+		writer.put_u8(int(creation.wisdom))
+		writer.put_u8(password_bytes.size())
+		writer.put_data(password_bytes)
+		password_bytes.fill(0)
+	elif not appearance.is_empty():
 		writer.put_u8(int(appearance.race))
 		writer.put_u16(int(appearance.hair_index))
 		writer.put_u8(int(appearance.hair_color))
@@ -733,7 +783,7 @@ static func decode_character_create_result(frame: PackedByteArray) -> Dictionary
 	var character_id := reader.get_64()
 	var slot := reader.get_u8()
 	var name_bytes_count := reader.get_u16()
-	if status > 7 or slot > 31 or name_bytes_count > 96 or (reader.get_available_bytes() != name_bytes_count and reader.get_available_bytes() != name_bytes_count+4):
+	if status > 8 or slot > 31 or name_bytes_count > 96 or (reader.get_available_bytes() != name_bytes_count and reader.get_available_bytes() != name_bytes_count+4):
 		return {}
 	var character_name := ""
 	if name_bytes_count > 0:
@@ -766,11 +816,24 @@ static func decode_character_create_result(frame: PackedByteArray) -> Dictionary
 		value.appearance = appearance
 	return value
 
-static func encode_character_choose(character_id: int) -> PackedByteArray:
+static func encode_character_choose(character_id: int, character_password: String = "") -> PackedByteArray:
 	if character_id <= 0:
 		return PackedByteArray()
-	var writer := _writer(CHARACTER_CHOOSE_FRAME_BYTES, OPCODE_CHARACTER_CHOOSE)
+	var proof := character_password.to_utf8_buffer()
+	if not character_password.is_empty():
+		if character_password.length() != 4 or character_password != character_password.strip_edges() or proof.size() > 16:
+			return PackedByteArray()
+		for i in character_password.length():
+			var code := character_password.unicode_at(i)
+			if code < 32 or (code >= 127 and code <= 159):
+				return PackedByteArray()
+	var writer := _writer(CHARACTER_CHOOSE_FRAME_BYTES + (0 if proof.is_empty() else 2 + proof.size()), OPCODE_CHARACTER_CHOOSE)
 	writer.put_64(character_id)
+	if not proof.is_empty():
+		writer.put_u8(1)
+		writer.put_u8(proof.size())
+		writer.put_data(proof)
+	proof.fill(0)
 	return writer.data_array
 
 static func decode_character_choose_result(frame: PackedByteArray) -> Dictionary:
@@ -783,7 +846,7 @@ static func decode_character_choose_result(frame: PackedByteArray) -> Dictionary
 	var x := reader.get_double()
 	var y := reader.get_double()
 	var map_epoch := reader.get_64()
-	if status > 2:
+	if status > 5:
 		return {}
 	if status == 0:
 		if character_id <= 0 or map_id <= 0 or map_epoch <= 0 or not is_finite(x) or not is_finite(y):

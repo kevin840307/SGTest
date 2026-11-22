@@ -761,7 +761,8 @@ func run() -> void:
 			"item_uid":7001,"item_definition_id":2701,
 			"quantity":2,"drop_id":501}}}
 	panel._refresh_inventory_panel()
-	if not panel.inventory_panel.inventory_preview.text.contains("2701 ×2") or not panel.inventory_panel.inventory_button.text.contains("1 件"):
+	var verified_name_2701: String = str(panel.item_catalog.name_for(2701))
+	if not panel.inventory_panel.inventory_preview.text.contains(str(verified_name_2701)) or not panel.inventory_panel.inventory_preview.text.contains("×2") or not panel.inventory_panel.inventory_button.text.contains("1 件"):
 		fail("Durable inventory items not reflected in UI")
 		return
 	panel._latest = {"state":State.STATE_IN_WORLD,"world_ready":true,
@@ -771,7 +772,8 @@ func run() -> void:
 			"item_uid":7002,"item_definition_id":3701,
 			"quantity":3,"drop_id":502}}}
 	panel._refresh_inventory_panel()
-	if panel.inventory_panel.inventory_preview.text.contains("2701") or not panel.inventory_panel.inventory_preview.text.contains("3701 ×3"):
+	var verified_name_3701: String = str(panel.item_catalog.name_for(3701))
+	if panel.inventory_panel.inventory_preview.text.contains("UID 7001") or not panel.inventory_panel.inventory_preview.text.contains(str(verified_name_3701)) or not panel.inventory_panel.inventory_preview.text.contains("×3"):
 		fail("Same inventory revision across new character retained stale UI")
 		return
 	panel.inventory_panel.inventory_button.pressed.emit()
