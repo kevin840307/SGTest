@@ -43,15 +43,44 @@ func feed_trace(delay: float) -> Dictionary:
 		max_step = maxf(max_step,step)
 	return {"holds":holds,"negative":negative,"max_step":max_step}
 
+func feed_ui_20hz_trace() -> Dictionary:
+	var history := History.new()
+	var next_publish_usec := 0
+	var last_position := -INF
+	var holds := 0
+	var backwards := 0
+	var largest_step := 0.0
+	for render_frame in 91: # 60fps for 1.5s, 20Hz input with 30Hz server ticks.
+		var now_usec := roundi(float(render_frame) * (1000000.0 / 60.0))
+		while next_publish_usec <= now_usec:
+			var server_tick := roundi(float(next_publish_usec) / History.SERVER_TICK_USEC)
+			history.push(server_tick,Vector2(float(server_tick)*8.0,0.0),next_publish_usec)
+			next_publish_usec += 50000
+		var position := history.sample(now_usec).x
+		if now_usec >= 300000 and is_finite(last_position):
+			var step := position-last_position
+			if step < -0.001:
+				backwards += 1
+			elif step <= 0.001:
+				holds += 1
+			largest_step = maxf(largest_step,step)
+		last_position = position
+	return {"holds":holds,"backwards":backwards,"max_step":largest_step}
+
 func run() -> void:
+	var cadence := feed_ui_20hz_trace()
+	print("POSITION_HISTORY_20HZ_UI_60HZ_RENDER ",cadence)
+	check(int(cadence.backwards)==0 and int(cadence.holds)==0 and float(cadence.max_step) < 4.1,
+		"20Hz UI publication made 60Hz camera hold or jump")
 	var one := feed_trace(1.0)
 	var two := feed_trace(2.0)
 	var two_half := feed_trace(2.5)
+	print("POSITION_HISTORY_CANDIDATES delay1=",one," delay2=",two," delay2.5=",two_half)
 	check(int(two.negative)==0,"2-tick interpolation rewound presentation time")
 	check(int(two.holds)<int(one.holds),"2-tick buffer did not reduce jitter holds")
 	check(float(two.max_step)<float(one.max_step),"2-tick buffer did not reduce correction tail")
-	check(int(two_half.holds)==int(two.holds) and absf(float(two_half.max_step)-float(two.max_step))<0.001,
-		"2.5-tick trace unexpectedly improves smoothness; candidate selection must be reviewed")
+	check(int(two_half.holds)<int(two.holds) and float(two_half.max_step)<float(two.max_step),
+		"2.5-tick continuous clock did not improve 20Hz-poll jitter")
 	var bounded := History.new()
 	for tick in 20:
 		check(bounded.push(tick,Vector2(tick*8,0),tick*33333),"valid sample rejected")
@@ -61,6 +90,12 @@ func run() -> void:
 	check(bounded.sample(700000)==before,"stale tick changed presentation")
 	check(bounded.push(30,Vector2(9000,9000),720000),"large authoritative correction rejected")
 	check(bounded.size()==1 and bounded.sample(720000)==Vector2(9000,9000),"large correction was interpolated instead of snapped")
+	var paused := History.new()
+	check(paused.push(10,Vector2.ZERO,0) and paused.push(11,Vector2(8,0),33333),"pause baseline rejected")
+	check(paused.sample(700000)==Vector2(8,0) and is_equal_approx(paused.target_tick(),11.0),
+		"network stall accumulated imaginary future ticks")
+	check(paused.push(12,Vector2(16,0),701000) and paused.sample(701000)==Vector2(16,0),
+		"resuming Server updates left presentation frozen")
 	if failures.is_empty():
-		print("POSITION_HISTORY_PASS selected_delay_ticks=2 selected_delay_ms=66.7 max_samples=8 no_extrapolation=true delay1_holds=%d delay2_holds=%d delay1_max_step=%.3f delay2_max_step=%.3f delay2_5_no_gain=true" % [one.holds,two.holds,one.max_step,two.max_step])
+		print("POSITION_HISTORY_PASS selected_delay_ticks=2.5 selected_delay_ms=83.3 max_samples=8 no_extrapolation=true delay1_holds=%d delay2_holds=%d delay2_5_holds=%d delay1_max_step=%.3f delay2_max_step=%.3f delay2_5_max_step=%.3f" % [one.holds,two.holds,two_half.holds,one.max_step,two.max_step,two_half.max_step])
 	quit(0 if failures.is_empty() else 1)

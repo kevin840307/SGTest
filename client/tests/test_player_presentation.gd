@@ -51,6 +51,10 @@ func run() -> void:
 	own.movement_action_sequence = 2
 	remote.movement_action_sequence = 2
 	players.apply_snapshot(snapshot,100000)
+	# 1.25x walk cadence advances NR sooner than the raw 50 Hz timeline;
+	# all paper-doll parts stay on the same frame without affecting movement.
+	var early_walk: Array = players.actors_at(140000)
+	check(early_walk.size()==2 and int(early_walk[0].parts[0].frame)==1 and int(early_walk[1].parts[0].frame)==1,"walk animation did not speed up for owner and observer")
 	var actors := players.actors_at(160000)
 	check(actors.size()==2 and actors[0].parts.size()==8 and int(actors[0].parts[0].frame)==1 and int(actors[1].parts[0].frame)==1,"continuous movement sequence repath reset walk animation")
 	for actor in actors:

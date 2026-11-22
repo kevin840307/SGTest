@@ -2,16 +2,20 @@ extends RefCounted
 ## Bounded presentation-only snapshot interpolation. Authority remains in WorldState.
 const MAX_SAMPLES := 8
 const SERVER_TICK_USEC := 1000000.0 / 30.0
-const DEFAULT_DELAY_TICKS := 2.0
+const DEFAULT_DELAY_TICKS := 2.5 # 83.3ms: absorbs 20Hz UI polls of 30Hz authoritative ticks.
 const MAX_BRIDGE_TICKS := 8
 const MAX_BRIDGE_PIXELS_PER_TICK := 64.0
 
 var _samples: Array[Dictionary] = []
 var _last_target_tick := -INF
+var _clock_tick := 0
+var _clock_usec := 0
 
 func clear() -> void:
 	_samples.clear()
 	_last_target_tick = -INF
+	_clock_tick = 0
+	_clock_usec = 0
 
 func size() -> int:
 	return _samples.size()
@@ -22,6 +26,8 @@ func push(server_tick: int, position: Vector2, arrival_usec: int) -> bool:
 	var next := {"tick":server_tick,"p":position,"arrival":arrival_usec}
 	if _samples.is_empty():
 		_samples.append(next)
+		_clock_tick = server_tick
+		_clock_usec = arrival_usec
 		return true
 	var previous: Dictionary = _samples[-1]
 	var previous_tick := int(previous.tick)
@@ -36,6 +42,8 @@ func push(server_tick: int, position: Vector2, arrival_usec: int) -> bool:
 	if gap > MAX_BRIDGE_TICKS or distance > MAX_BRIDGE_PIXELS_PER_TICK * float(gap):
 		_samples = [next]
 		_last_target_tick = -INF
+		_clock_tick = server_tick
+		_clock_usec = arrival_usec
 		return true
 	_samples.append(next)
 	while _samples.size() > MAX_SAMPLES:
@@ -50,15 +58,20 @@ func sample(now_usec: int, delay_ticks := DEFAULT_DELAY_TICKS) -> Vector2:
 			_last_target_tick = float(_samples[0].tick)
 		return Vector2(_samples[0].p)
 	var latest: Dictionary = _samples[-1]
-	var elapsed := float(maxi(0,now_usec-int(latest.arrival))) / SERVER_TICK_USEC
-	var candidate := minf(float(latest.tick),float(latest.tick)+elapsed-delay_ticks)
+	# UI can publish at 20 Hz while the Server runs at 30 Hz. Anchoring the
+	# render clock to each *new* packet's arrival creates a sawtooth: each
+	# update rewinds its desired time by delay_ticks, making the camera hold.
+	# Use one continuous local time origin per entity generation instead.
+	var elapsed := float(maxi(0,now_usec-_clock_usec)) / SERVER_TICK_USEC
+	var candidate := float(_clock_tick)+elapsed-delay_ticks
 	if is_inf(_last_target_tick):
 		_last_target_tick = maxf(float(_samples[0].tick),candidate)
 	else:
-		# A newly-arrived packet may have more jitter than the prior one. Never
-		# rewind presentation time; hold until the requested buffer refills.
 		_last_target_tick = maxf(_last_target_tick,candidate)
-	var target := minf(_last_target_tick,float(latest.tick))
+	# Never accumulate imaginary future ticks during packet stalls: doing so
+	# would freeze the camera again after the server connection resumes.
+	_last_target_tick = minf(_last_target_tick,float(latest.tick))
+	var target := _last_target_tick
 	if target <= float(_samples[0].tick):
 		return Vector2(_samples[0].p)
 	for i in range(1,_samples.size()):

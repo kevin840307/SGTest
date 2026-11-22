@@ -1,10 +1,10 @@
 extends RefCounted
-## Presentation only: integer canvas origin, fractional pan accumulation, no clock.
+## Presentation only: subpixel canvas origin and fractional pan, no clock.
 var _epoch := 0
 var _world := Vector2i.ZERO
 var _size := Vector2i.ZERO
 var _focus := Vector2.ZERO
-var _origin := Vector2i.ZERO
+var _origin := Vector2.ZERO
 var _active := false
 
 
@@ -25,7 +25,7 @@ func clear() -> void:
 	_world = Vector2i.ZERO
 	_size = Vector2i.ZERO
 	_focus = Vector2.ZERO
-	_origin = Vector2i.ZERO
+	_origin = Vector2.ZERO
 
 
 func set_focus(epoch: int, focus: Vector2) -> Error:
@@ -75,4 +75,6 @@ func _clamp() -> void:
 			_focus[axis] = float(_world[axis]) / 2.0
 		else:
 			_focus[axis] = clampf(_focus[axis], half, float(_world[axis])-half)
-	_origin = Vector2i((_focus-Vector2(_size)/2.0).floor())
+	# Preserve fractional movement like Recovered's Camera2D. Rounding to
+	# integer pixels produces uneven 1px jumps at 30/60/120 render FPS.
+	_origin = _focus-Vector2(_size)/2.0

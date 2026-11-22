@@ -1,5 +1,7 @@
 # SGTest 新版重建 TODO（2026-11-15）
 
+- PLAYABILITY-2D-MOVEMENT-INTERPOLATION [ ] 2026-11-22：比對 Recovered Player._physics_process + Camera2D，確認 SGTest 30Hz Server + 50ms SessionPanel UI polling 會讓舊版 per-arrival interpolation 產生 hold；`position_history.gd` 改連續時鐘 anchor、2.5tick緩衝、斷包不累積未來 tick，權威位置/封包/碰撞不變。Windows Godot 4.7.2 合成 20Hz->60Hz 直行 0 hold/0 backward/max step4.0001px、irregular 2.5tick 0 hold/max step2.0002px、Server修正/停包復原與PlayerPresentation/Camera headless PASS。Client已用現存本機AES Server 7778 重新開啟測試。**尚需玩家實際走路觀感、GPU Frame P95/P99、多人／大地圖場景實機驗證；不可據此宣稱完全滑順。**
+
 - TRANSPORT-AES-CBC-FIXED [x] 2026-11-22：正式 `serve` 已改 AES-256-CBC/PKCS7 + 固定 Key/IV + Compact Binary V1 TCP；刪除 TLS Server Socket、Listener、認證入口及部署憑證選項；`IdentitySessionAuthorization` 與 AES 專屬 Test/Fixture 運行，無舊 TLS 傳輸實作。Godot↔C# Golden/TCP/Login/UI、雙人 AOI、交易、銀行與 Server 完整回歸 **286/286 PASS**，架構測試 **26/26 PASS**。正式 CI、長時多人壓力及完整遊戲 Release 另行驗收。固定 Key/IV、無 MAC 不具密文完整性／MITM 保護。
 
 

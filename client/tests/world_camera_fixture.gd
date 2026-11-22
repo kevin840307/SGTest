@@ -5,7 +5,7 @@ const Camera = preload("res://world/world_camera.gd")
 static func run(check: Callable) -> void:
 	var camera := Camera.new()
 	check.call(camera.configure(1,Vector2i(2000,1800),Vector2i(1001,701),Vector2(1000,900)) == OK,"Camera configure")
-	check.call(camera.view_rect() == Rect2(499,549,1001,701),"Odd viewport origin")
+	check.call(camera.view_rect() == Rect2(499.5,549.5,1001,701),"Odd viewport preserves subpixel origin")
 	for x in range(-50,51):
 		for y in [-100.25,0.0,1200.75]:
 			var point := Vector2(x*3.25,y)
@@ -24,6 +24,10 @@ static func run(check: Callable) -> void:
 	check.call(camera.view_rect().end == Vector2(2000,1800),"Bottom-right clamp")
 	camera.set_focus(1,Vector2(800,800))
 	var focus: Vector2 = camera.snapshot().focus
+	var origin_before: Vector2 = camera.view_rect().position
+	camera.pan(1,Vector2(0.125,0.25))
+	check.call(camera.view_rect().position.is_equal_approx(origin_before+Vector2(0.125,0.25)),"Camera snapped fractional motion and stuttered")
+	camera.set_focus(1,focus)
 	for i in 64:
 		camera.pan(1,Vector2(0.125,0.25))
 	check.call(camera.snapshot().focus == focus+Vector2(8,16),"Fractional pan discarded")
@@ -33,7 +37,7 @@ static func run(check: Callable) -> void:
 			camera.pan(1,Vector2(600.0/rate,0))
 		check.call(camera.snapshot().focus == Vector2(1300,700),"Camera pan depends on render rate")
 	camera.resize(1,Vector2i(4000,3001))
-	check.call(camera.view_rect() == Rect2(-1000,-601,4000,3001),"Small world must center with odd black border")
+	check.call(camera.view_rect() == Rect2(-1000,-600.5,4000,3001),"Small world must center with odd black border")
 	camera.resize(1,Vector2i(1000,700))
 	check.call(camera.snapshot().focus == Vector2(1000,900),"Resize lost valid center")
 	camera.clear()

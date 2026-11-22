@@ -37,6 +37,12 @@ UI Node 由實際頁面擁有：`Recovered2AuthShell` 只有在本機 Theme 成�
 - **AOI 驗證**：兩個真 Godot TLS Client、Server WorldAoiPump，Map15→13→15 的 WorldReady、Spawn/Delta/Despawn、舊 MapEpoch 清除 PASS，`--crossmap` 23 AOI frames；`--portal` 真伺服器驗證 NPC 互動／拒絕不合法 ID、回圖無幽靈實體 PASS（25 frames）。這些是**測試資源**的 Server＋Client 協定結果；原版私有 PCK 的同時多人 GPU／高負載仍 NOT VERIFIED。
 - **結束資源修復**：`9edfe70` 已定位並修正未掛入場景樹的 auth 控制項及被覆蓋的預建按鈕，不是將 driver 警告排除。嚴格原版地圖 12 captures／39 SPR frames、人物 20 captures／91 SPR frames 均 PASS、超容差像素 0、engine_errors=[]、AssetStore 全歸零；[Client CI 44921797737](https://github.com/kevin840307/SGTest/actions/runs/44921797737) SUCCESS。真玩家路徑／GPU frame trace、停走動畫和 AOI 高人數負載仍需實機確認。
 
+## 2026-11-22 — 2D 角色移動／相機跟隨的連續插值修正
+
+- 參照唯讀 `C:\\SGO\\Recovered\\client\\player.gd` 的 `_physics_process` 連續位移及 Player `Camera2D`；SGTest 不採用本地遊戲權威，而是維持 Server 30Hz authoritative path，Client `SessionPanel` 目前每 50ms（約 20Hz）發布 UI snapshot，`WorldView` 跟隨 PlayerPresentation 的呈現位置。
+- 既有 `PositionHistory` 每收到新封包會用最新 `arrival_usec` 重新計算 `candidate = tick + elapsed - delay`，導致相機每 50ms 短暫等緩衝回填。現在在同一 actor history／epoch 維持一個連續本地時鐘 anchor，封包更新不會把呈現時間倒退；新增 2.5-tick／83.3ms 緩衝吸收 20Hz UI poll，保持最多 8 個資料點，權威大修正仍直接 snap，封包斷流不累積未來 tick。這是純 2D presentation，不更動權威座標、移速、A*、碰撞或可靠事件。
+- `test_position_history.gd` 在 20Hz snapshot／60Hz render 1.5 秒合成直線軌跡中暖機後 **0 hold／0 backward／max step 4.0001px**；30Hz irregular trace 2.5 ticks 有 **0 hold、max step 2.0002px**，對比 2 ticks **3 hold／5.7602px**；停封包再恢復、teleport snap、8 樣本上限皆 PASS。`test_player_presentation.gd`、`test_world_camera.gd` Godot 4.7.2 Windows headless PASS。真人長時間走路、GPU Frame P95/P99、視覺敏感的 subpixel nearest filter 與同機多人實測 **NOT VERIFIED**；合成通過不等於已解決所有肉眼頓感。
+
 ## 2026-11-22 — Recovered2／原版 IE HK2 UI 雙模式對齊（持續中）
 
 **來源與界線**：`reports/recovered_ui_reference/`（本機參考截圖），`C:\SGO\NewVersion\Recovered2\game_hud.tscn`、`shared_inventory_panel.tscn`、`ui/themes/paradise_window_theme.tres` 及登入／選角／創角 UI 作唯讀比對；原版 `C:\SGO\Stargate Online IE HK2\Interface/*.spr` 用**已有正式 Converter** `runtime_spr.decode_spr` 解碼成**本機私有**畫面。**原二創／原版素材不可加入 public Git**；只提交 UI 表示程式、映射及驗證。

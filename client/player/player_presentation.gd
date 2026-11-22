@@ -3,6 +3,10 @@ extends RefCounted
 const Profile = preload("res://player/character_appearance_profile.gd")
 const PositionHistory = preload("res://movement/position_history.gd")
 const PARTS = Profile.BASE_PARTS
+# Recovered's paper-doll walk clips use an 8 FPS visual cadence. Speed up
+# SGTest's slower normalized NR timeline without changing Server movement.
+const WALK_PLAYBACK_NUMERATOR := 5
+const WALK_PLAYBACK_DENOMINATOR := 4
 var _views: Dictionary = {}
 var _profiles: Dictionary = {}
 var _default_profile_key := "0:0:0:0:0"
@@ -322,6 +326,10 @@ func actors_at(now_usec: int) -> Array:
 				action = "NR" if bool(value.moving) else "NS"
 				facing = int(value.facing)
 				elapsed = 0
+		# Animation timing is presentation-only and independent of velocity,
+		# frame rate and incoming MoveTarget sequence changes.
+		if action == "NR":
+			elapsed = elapsed * WALK_PLAYBACK_NUMERATOR / WALK_PLAYBACK_DENOMINATOR
 		var requested := action+str(facing)
 		var body: Dictionary = profile.views.get(profile.body_prefix+"_"+requested,{})
 		if body.is_empty():
