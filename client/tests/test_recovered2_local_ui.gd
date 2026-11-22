@@ -13,6 +13,10 @@ class SessionStub:
 	var logins := 0
 	var creates := 0
 	var enters := 0
+	var changes := 0
+	var deletes := 0
+	var last_choose_password := ""
+	var last_manage_id := -1
 	var last_name := ""
 	var last_slot := -1
 	var last_appearance: Dictionary = {}
@@ -36,9 +40,18 @@ class SessionStub:
 		last_appearance = appearance.duplicate()
 		last_creation = creation.duplicate(true)
 		return true
-	func choose_character(id: int, _character_password: String = "") -> bool:
+	func choose_character(id: int, character_password: String = "") -> bool:
 		enters += 1
+		last_choose_password = character_password
 		return id > 0
+	func change_character_password(id: int, _old: String, _new: String) -> bool:
+		changes += 1
+		last_manage_id = id
+		return true
+	func delete_character(id: int, _password: String) -> bool:
+		deletes += 1
+		last_manage_id = id
+		return true
 	func stop() -> void:
 		pass
 	func snapshot_since(_version: int) -> Dictionary:
@@ -224,6 +237,9 @@ func _run() -> void:
 	if not shell._selection.visible or shell._slot_actions[0].text != "進入遊戲":
 		_error("3-column selection did not display account characters")
 		return
+	if shell._select_status.text.contains("請選擇角色或建立"):
+		_error("obsolete character-selection placeholder is visible")
+		return
 	for i in 2:
 		var preview_label: Label = shell._slot_previews[i]
 		if not preview_label.text.is_empty() or not shell._slot_password_actions[i].visible or not shell._slot_actions[i].visible or not shell._slot_delete_actions[i].visible or shell._slot_empty_arts[i].visible:
@@ -233,12 +249,30 @@ func _run() -> void:
 		_error("empty character card did not use four original Recovered2 create frames")
 		return
 	shell._slot_password_actions[0].pressed.emit()
-	if not panel.status.text.contains("尚未支援角色密碼設定"):
-		_error("password button failed to report unsupported server operation")
+	if not shell._manage_box.visible or shell._manage_action != 1 or shell._manage_character_id != 10:
+		_error("password settings dialog did not open")
 		return
+	shell._close_manage_dialog()
 	shell._slot_delete_actions[0].pressed.emit()
-	if not panel.status.text.contains("尚未支援刪除角色"):
-		_error("delete button failed to report unsupported server operation")
+	if not shell._manage_box.visible or shell._manage_action != 2 or shell._manage_character_id != 10:
+		_error("delete confirmation dialog did not open")
+		return
+	shell._manage_old.text = "2468"
+	shell._manage_submit.pressed.emit()
+	if stub.deletes != 0 or not shell._delete_confirmation:
+		_error("delete triggered without final confirmation")
+		return
+	shell._manage_submit.pressed.emit()
+	if stub.deletes != 1 or stub.last_manage_id != 10:
+		_error("confirmed deletion did not delegate to session")
+		return
+	shell._slot_password_actions[0].pressed.emit()
+	shell._manage_old.text = "2468"
+	shell._manage_new.text = "1357"
+	shell._manage_confirm.text = "1357"
+	shell._manage_submit.pressed.emit()
+	if stub.changes != 1 or stub.last_manage_id != 10:
+		_error("password change did not delegate to session")
 		return
 	var nav_left: float = shell._select_prev.position.x
 	var nav_right: float = shell._select_next.position.x+shell._select_next.size.x
@@ -248,6 +282,9 @@ func _run() -> void:
 		shell._select_back.position.x+shell._select_back.size.x)
 	if not is_equal_approx((nav_left+nav_right)*0.5,600.0) or 			not is_equal_approx(gap_left,gap_right):
 		_error("previous/login/next navigation group is not centered symmetrically")
+		return
+	if shell._select_prev.position.y != 750.0 or shell._select_next.position.y != 750.0 or shell._select_back.position.y != 750.0 or shell._select_back.position.y + shell._select_back.size.y >= 785.0:
+		_error("navigation row must sit above source line and below status")
 		return
 	if not pack_path.is_empty():
 		if not await _wait_previews(shell,2):
@@ -259,8 +296,17 @@ func _run() -> void:
 			return
 	await _capture("select",directory)
 	shell._slot_actions[1].pressed.emit()
-	if stub.enters != 1:
-		_error("character selection did not submit existing choose intent")
+	if not shell._choose_password_box.visible or not shell._select_modal_scrim.visible or stub.enters != 0:
+		_error("enter game bypassed secondary password dialog")
+		return
+	if shell._choose_password_box.position.x + shell._choose_password_box.size.x * 0.5 != 600.0 or shell._choose_password_edit.position.x < 30.0 or shell._choose_password_edit.size.x < 280.0:
+		_error("secondary password modal spacing is not centered")
+		return
+	await _capture("secondary_password",directory)
+	shell._choose_password_edit.text = "2468"
+	shell._submit_character_password()
+	if stub.enters != 1 or stub.last_choose_password != "2468":
+		_error("secondary password dialog did not submit choose proof")
 		return
 	panel._chosen = false
 	shell._slot_empty_hotspots[2].pressed.emit()
@@ -294,6 +340,9 @@ func _run() -> void:
 		{"race":1,"hair_index":3,"hair_color":7,"body_index":2,"leg_index":1,"sleeve_color":2}]
 	panel._set_controls()
 	if not pack_path.is_empty() and not await _wait_previews(shell,1,true):
+		return
+	if shell._preview_note.text in ["基本外觀預覽","預設人物示意"]:
+		_error("redundant appearance preview caption is still visible")
 		return
 	await _capture("create_options",directory)
 	# Creation controls are aligned to the baked CREATE_CHARACTER artwork,

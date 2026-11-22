@@ -779,6 +779,14 @@ CHECK(leg_index BETWEEN 0 AND 255);",tx);
                 Execute(connection,@"ALTER TABLE character_appearances
 ADD COLUMN sleeve_color INTEGER NOT NULL DEFAULT 0
 CHECK(sleeve_color BETWEEN 0 AND 255);",tx);
+            // Schema v28: purpose-separated optional secondary credentials for
+            // legacy characters. Does not overwrite creation stats or combat state.
+            Execute(connection,@"CREATE TABLE IF NOT EXISTS character_password_overrides (
+    character_id INTEGER PRIMARY KEY REFERENCES characters(character_id) ON DELETE CASCADE,
+    password_hash TEXT NOT NULL CHECK(length(password_hash) BETWEEN 1 AND 512),
+    failed_password_attempts INTEGER NOT NULL DEFAULT 0 CHECK(failed_password_attempts BETWEEN 0 AND 5),
+    password_locked_until_ms INTEGER NOT NULL DEFAULT 0 CHECK(password_locked_until_ms >= 0)
+);",tx);
             if (schemaVersion < SchemaVersion)
                 Execute(connection,
                     $"UPDATE schema_version SET version={SchemaVersion};", tx);

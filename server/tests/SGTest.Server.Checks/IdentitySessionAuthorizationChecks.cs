@@ -33,8 +33,93 @@ internal static class IdentitySessionAuthorizationChecks
             () => InvalidPasswordRejected(root).GetAwaiter().GetResult());
         Checks.Run("AES authenticated account cannot choose another account character",
             () => RejectedCharacterSelection(root).GetAwaiter().GetResult());
+        Checks.Run("AES character password set and delete return authoritative refreshed list",
+            () => CharacterManagementViaAes(root).GetAwaiter().GetResult());
         Checks.Run("AES legacy proof-free choose cannot enter a password-protected owned character",
             () => RejectedCharacterSelection(root,protectedOwned:true).GetAwaiter().GetResult());
+    }
+
+    private static async Task CharacterManagementViaAes(string root)
+    {
+        string identityRoot=TempRoot();
+        try
+        {
+            string mapDir=Checks.Fixture(root,118,5,5,(_,_)=>0);
+            var grid=BlockingGrid.Load(mapDir,118);
+            await using var world=new ServerWorldHost([grid]);
+            await world.StartAsync();
+            using var store=new SqliteIdentityStore(Path.Combine(identityRoot,"identity.db"));
+            await store.InitializeAsync();
+            const string accountName="secondary_user";
+            const string password="Secondary-Account-123!";
+            long account=(await store.CreateAccountAsync(accountName,password)).AccountId;
+            long character=(await store.CreateCharacterAsync(
+                account,0,"SecretHero",new CharacterSpawn(118,8,8))).Character!.CharacterId;
+            var authorization=new IdentitySessionAuthorization(store,world);
+            var (tls,serverTask,client)=await StartSession(authorization,world);
+            await tls.WriteAsync(WireProtocol.EncodeAuthRequest(new(accountName,password)));
+            Checks.Require(WireProtocol.TryDecodeAuthResult(
+                await ReadFrameAsync(tls),out var auth) &&
+                auth.Status==AuthWireStatus.Success,"secondary AES account login failed");
+            Checks.Require(WireProtocol.TryDecodeCharacterList(
+                await ReadFrameAsync(tls),out var list) &&
+                list.Characters.Single().CharacterId==character,"secondary AES selection list failed");
+
+            await tls.WriteAsync(WireProtocol.EncodeCharacterChoose(new(character)));
+            Checks.Require(WireProtocol.TryDecodeCharacterChooseResult(
+                await ReadFrameAsync(tls),out var required) &&
+                required.Status==CharacterChooseWireStatus.PasswordRequired,
+                "legacy character entered world without second password");
+
+            await tls.WriteAsync(WireProtocol.EncodeCharacterManage(
+                new(CharacterManageAction.ChangePassword,character,null,"2468")));
+            Checks.Require(WireProtocol.TryDecodeCharacterManageResult(
+                await ReadFrameAsync(tls),out var initial) &&
+                initial.Status==CharacterManageStatus.Success,
+                "secondary password setup rejected");
+            Checks.Require(WireProtocol.TryDecodeCharacterList(
+                await ReadFrameAsync(tls),out list) &&
+                list.Characters.Single().CharacterId==character,
+                "set password did not refresh server list");
+
+            await tls.WriteAsync(WireProtocol.EncodeCharacterManage(
+                new(CharacterManageAction.ChangePassword,character,"2468","1357")));
+            Checks.Require(WireProtocol.TryDecodeCharacterManageResult(
+                await ReadFrameAsync(tls),out var changed) &&
+                changed.Status==CharacterManageStatus.Success,
+                "secondary password rotation rejected");
+            Checks.Require(WireProtocol.TryDecodeCharacterList(
+                await ReadFrameAsync(tls),out list) &&
+                list.Characters.Count==1,
+                "password rotation omitted list refresh");
+
+            await tls.WriteAsync(WireProtocol.EncodeCharacterManage(
+                new(CharacterManageAction.Delete,character,"2468",null)));
+            Checks.Require(WireProtocol.TryDecodeCharacterManageResult(
+                await ReadFrameAsync(tls),out var denied) &&
+                denied.Status==CharacterManageStatus.InvalidPassword,
+                "obsolete second password authorized deletion");
+            Checks.Require((await store.ListCharactersAsync(account)).Count==1,
+                "rejected deletion damaged character");
+
+            await tls.WriteAsync(WireProtocol.EncodeCharacterManage(
+                new(CharacterManageAction.Delete,character,"1357",null)));
+            Checks.Require(WireProtocol.TryDecodeCharacterManageResult(
+                await ReadFrameAsync(tls),out var removed) &&
+                removed.Status==CharacterManageStatus.Success,
+                "authenticated AES character delete rejected");
+            Checks.Require(WireProtocol.TryDecodeCharacterList(
+                await ReadFrameAsync(tls),out list) &&
+                list.Characters.Count==0 &&
+                (await store.ListCharactersAsync(account)).Count==0,
+                "deleted character remained visible after authoritative refresh");
+
+            await tls.DisposeAsync();
+            client.Dispose();
+            await serverTask.WaitAsync(TimeSpan.FromSeconds(2));
+            await world.StopAsync();
+        }
+        finally { Directory.Delete(identityRoot,true); }
     }
 
     private static async Task OwnedCharacterEntersWorld(string root)
@@ -76,7 +161,7 @@ internal static class IdentitySessionAuthorizationChecks
                 list.Characters.Count == 1 && list.Characters[0].CharacterId == characterId &&
                 list.Characters[0].Name == "Hero", "owned CharacterList mismatch");
 
-            await tls.WriteAsync(WireProtocol.EncodeCharacterChoose(new(characterId)));
+            await CharacterChooseTestHarness.ChooseAsync(tls,characterId);
             await tls.FlushAsync();
             var chooseFrame = await ReadFrameAsync(tls);
             Checks.Require(WireProtocol.TryDecodeCharacterChooseResult(chooseFrame, out var choose) &&
@@ -180,8 +265,7 @@ internal static class IdentitySessionAuthorizationChecks
                 afterConflict.Characters.Count == 1,
                 "failed create changed authoritative character list");
 
-            await tls.WriteAsync(WireProtocol.EncodeCharacterChoose(
-                new(created.CharacterId)));
+            await CharacterChooseTestHarness.ChooseAsync(tls,created.CharacterId);
             await tls.FlushAsync();
             Checks.Require(WireProtocol.TryDecodeCharacterChooseResult(
                     await ReadFrameAsync(tls), out var choose) &&
@@ -447,7 +531,7 @@ internal static class IdentitySessionAuthorizationChecks
                     await ReadFrameAsync(first.Stream), out var list) &&
                 list.Characters.Single().CharacterId == characterId,
                 "shop character list mismatch");
-            await first.Stream.WriteAsync(WireProtocol.EncodeCharacterChoose(new(characterId)));
+            await CharacterChooseTestHarness.ChooseAsync(first.Stream,characterId);
             await first.Stream.FlushAsync();
             Checks.Require(WireProtocol.TryDecodeCharacterChooseResult(
                     await ReadFrameAsync(first.Stream), out var choose) &&
@@ -546,7 +630,7 @@ internal static class IdentitySessionAuthorizationChecks
                     await ReadFrameAsync(second.Stream), out var list2) &&
                 list2.Characters.Single().CharacterId == characterId,
                 "shop relogin list mismatch");
-            await second.Stream.WriteAsync(WireProtocol.EncodeCharacterChoose(new(characterId)));
+            await CharacterChooseTestHarness.ChooseAsync(second.Stream,characterId);
             await second.Stream.FlushAsync();
             Checks.Require(WireProtocol.TryDecodeCharacterChooseResult(
                     await ReadFrameAsync(second.Stream), out var choose2) &&
@@ -622,8 +706,7 @@ internal static class IdentitySessionAuthorizationChecks
                     await ReadFrameAsync(first.Stream), out var list) &&
                 list.Characters.Single().CharacterId == characterId,
                 "storage AES character list mismatch");
-            await first.Stream.WriteAsync(WireProtocol.EncodeCharacterChoose(
-                new(characterId)));
+            await CharacterChooseTestHarness.ChooseAsync(first.Stream,characterId);
             await first.Stream.FlushAsync();
             Checks.Require(WireProtocol.TryDecodeCharacterChooseResult(
                     await ReadFrameAsync(first.Stream), out var choose) &&
@@ -742,8 +825,7 @@ internal static class IdentitySessionAuthorizationChecks
                     await ReadFrameAsync(second.Stream), out var list2) &&
                 list2.Characters.Single().CharacterId == characterId,
                 "storage AES relogin list mismatch");
-            await second.Stream.WriteAsync(WireProtocol.EncodeCharacterChoose(
-                new(characterId)));
+            await CharacterChooseTestHarness.ChooseAsync(second.Stream,characterId);
             await second.Stream.FlushAsync();
             Checks.Require(WireProtocol.TryDecodeCharacterChooseResult(
                     await ReadFrameAsync(second.Stream), out var choose2) &&

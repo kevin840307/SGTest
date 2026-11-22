@@ -13,7 +13,7 @@ namespace SGTest.Server.Identity;
 /// </summary>
 public sealed partial class SqliteIdentityStore : IDisposable
 {
-    public const int SchemaVersion = 27;
+    public const int SchemaVersion = 28;
     private readonly string _databasePath;
     private readonly string _connectionString;
     private readonly IdentityStoreOptions _options;
@@ -299,9 +299,10 @@ FROM accounts WHERE username_key=$key LIMIT 1;";
         using var command = connection.CreateCommand();
         command.CommandText = @"SELECT c.character_id,c.account_id,c.slot,c.name,c.map_id,c.x,c.y,c.created_unix_ms,
 a.race,a.hair_index,a.hair_color,a.body_index,a.leg_index,a.sleeve_color,a.source_ref,
-s.strength,s.dexterity,s.constitution,s.wisdom,s.source_ref
+s.strength,s.dexterity,s.constitution,s.wisdom,s.source_ref,p.character_id
 FROM characters c LEFT JOIN character_appearances a ON a.character_id=c.character_id
 LEFT JOIN character_creation_settings s ON s.character_id=c.character_id
+LEFT JOIN character_password_overrides p ON p.character_id=c.character_id
 WHERE c.account_id=$account ORDER BY c.slot;";
         command.Parameters.AddWithValue("$account", accountId);
         using var reader = command.ExecuteReader();
@@ -314,7 +315,7 @@ WHERE c.account_id=$account ORDER BY c.slot;";
                         reader.GetInt32(11),reader.GetInt32(12),reader.GetInt32(13)),reader.GetString(14)),
                 reader.IsDBNull(15) ? null : new CharacterCreationState(
                     new(reader.GetInt32(15),reader.GetInt32(16),reader.GetInt32(17),reader.GetInt32(18)),
-                    reader.GetString(19))));
+                    reader.GetString(19)), !reader.IsDBNull(20)));
         return rows;
     }
 

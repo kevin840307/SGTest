@@ -82,6 +82,23 @@ var _create_password_confirm: LineEdit
 var _choose_password_box: Panel
 var _choose_password_edit: LineEdit
 var _choose_password_message: Label
+var _choose_password_title: Label
+var _choose_password_subtitle: Label
+var _choose_password_submit: Button
+var _select_modal_scrim: ColorRect
+var _choose_target := -1
+var _manage_box: Panel
+var _manage_title: Label
+var _manage_old: LineEdit
+var _manage_new: LineEdit
+var _manage_confirm: LineEdit
+var _manage_new_label: Label
+var _manage_confirm_label: Label
+var _manage_note: Label
+var _manage_submit: Button
+var _manage_action := 0
+var _manage_character_id := 0
+var _delete_confirmation := false
 var _selection_backdrop_fill: TextureRect
 var _creation_backdrop_fill: TextureRect
 
@@ -168,6 +185,9 @@ func enable_for_page(page: int, active: bool) -> void:
 			art.stop()
 		return
 	if _page_index != page:
+		if _choose_password_box != null and page != SessionLayout.Page.CHARACTER_SELECT:
+			_close_choose_dialog()
+			_close_manage_dialog()
 		_page_index = page
 		_login.visible = page == SessionLayout.Page.LOGIN
 		_selection.visible = page == SessionLayout.Page.CHARACTER_SELECT
@@ -409,14 +429,14 @@ func _build_select() -> void:
 		_slot_previews.append(preview)
 		doll.status_changed.connect(func(_status): _last_character_key = "")
 		var password := _button(_selection,"密碼設定",x+36,629,125,31)
-		password.pressed.connect(_unsupported_slot_action.bind("密碼設定",i))
+		password.pressed.connect(_open_manage.bind(1,i))
 		_slot_password_actions.append(password)
 		var action := _button(_selection,"進入遊戲",x+36,670,125,37,true)
 		action.pressed.connect(_enter_slot.bind(i))
 		_slot_actions.append(action)
 		var remove := _button(_selection,"刪除角色",x+36,711,125,37)
 		remove.theme_type_variation = &"ParadiseDangerButton"
-		remove.pressed.connect(_unsupported_slot_action.bind("刪除角色",i))
+		remove.pressed.connect(_open_manage.bind(2,i))
 		_slot_delete_actions.append(remove)
 	# Treat the three navigation buttons as one centered group. Keeping only
 	# the middle button centered made Previous/Next visibly skewed and even
@@ -424,59 +444,204 @@ func _build_select() -> void:
 	var nav_gap := 14.0
 	var nav_width := 108.0 + nav_gap + 120.0 + nav_gap + 108.0
 	var nav_x := (SIZE.x-nav_width)*0.5
-	_select_prev = _button(_selection,"上一頁",nav_x,801,108,36)
+	_select_prev = _button(_selection,"上一頁",nav_x,750,108,30)
 	_select_prev.pressed.connect(_change_page.bind(-1))
 	_select_back = _button(
-		_selection,"返回登入",nav_x+108.0+nav_gap,801,120,36)
+		_selection,"返回登入",nav_x+108.0+nav_gap,750,120,30)
 	_select_back.pressed.connect(func(): _panel.disconnect_session())
 	_select_next = _button(
-		_selection,"下一頁",nav_x+108.0+nav_gap+120.0+nav_gap,801,108,36)
+		_selection,"下一頁",nav_x+108.0+nav_gap+120.0+nav_gap,750,108,30)
 	_select_next.pressed.connect(_change_page.bind(1))
-	_select_status = _label(_selection,"",368,759,464,32,14)
+	_select_status = _label(_selection,"",350,139,500,28,13)
+	_select_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	# Centered, consistent modal for the mandatory second-password step.
+	# Dim the character cards while editing; the character artwork remains intact.
+	_select_modal_scrim = ColorRect.new()
+	_select_modal_scrim.name = "CharacterDialogBackdrop"
+	_select_modal_scrim.color = Color(0.02,0.035,0.065,0.60)
+	_select_modal_scrim.mouse_filter = Control.MOUSE_FILTER_STOP
+	_put(_selection,_select_modal_scrim,0,0,SIZE.x,SIZE.y)
+	_select_modal_scrim.hide()
 	_choose_password_box = Panel.new()
+	_choose_password_box.name = "SecondaryPasswordDialog"
 	_choose_password_box.theme_type_variation = &"ParadiseWindowPanel"
-	_put(_selection,_choose_password_box,450,646,300,104)
-	_choose_password_message = _label(
-		_choose_password_box,"請輸入 4 位角色密碼",15,8,270,25,13)
+	_put(_selection,_choose_password_box,405,322,390,252)
+	_choose_password_title = _label(
+		_choose_password_box,"第二組密碼驗證",32,18,326,36,20)
+	_choose_password_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_choose_password_subtitle = _label(
+		_choose_password_box,"輸入角色設定的 4 位密碼，即可進入遊戲",25,64,340,28,13)
+	_choose_password_subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_choose_password_edit = LineEdit.new()
 	_choose_password_edit.secret = true
 	_choose_password_edit.max_length = 4
 	_choose_password_edit.alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_choose_password_edit.placeholder_text = "輸入 4 位密碼"
 	_choose_password_edit.theme_type_variation = &"ParadiseLineEdit"
-	_put(_choose_password_box,_choose_password_edit,25,42,165,38)
-	var unlock := _button(
-		_choose_password_box,"確認",204,42,72,38,true)
-	unlock.pressed.connect(_submit_character_password)
+	_choose_password_edit.add_theme_font_size_override("font_size",20)
+	_put(_choose_password_box,_choose_password_edit,46,100,298,46)
+	_choose_password_message = _label(
+		_choose_password_box,"",25,153,340,27,13)
+	_choose_password_message.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_choose_password_message.add_theme_color_override(
+		"font_color",Color(1.0,0.75,0.64))
+	_choose_password_submit = _button(
+		_choose_password_box,"確認進入",50,192,132,41,true)
+	_choose_password_submit.pressed.connect(_submit_character_password)
 	_choose_password_edit.text_submitted.connect(
 		func(_unused): _submit_character_password())
+	var cancel_choose := _button(_choose_password_box,"取消",208,192,132,41)
+	cancel_choose.pressed.connect(_close_choose_dialog)
 	_choose_password_box.hide()
+	_build_manage_dialog()
 
-func _unsupported_slot_action(action: String, slot_on_page: int) -> void:
-	var index := _selection_page*3+slot_on_page
-	if not _panel.active or index >= _panel._characters.size():
+func _character_index_at_slot(slot: int) -> int:
+	for i in _panel._characters.size():
+		if int(_panel._characters[i].get("slot",-1)) == slot:
+			return i
+	return -1
+
+func _sync_modal_scrim() -> void:
+	if _select_modal_scrim == null:
 		return
-	# The SGTest wire protocol has no authenticated password-change/delete
-	# request yet. Never modify local character state to simulate a success.
-	_panel.status.text = "伺服器尚未支援%s" % ("角色密碼設定" if action == "密碼設定" else "刪除角色")
+	_select_modal_scrim.visible = (
+		(_choose_password_box != null and _choose_password_box.visible) or
+		(_manage_box != null and _manage_box.visible))
+
+func _close_choose_dialog() -> void:
+	_choose_target = -1
+	_choose_password_edit.clear()
+	_choose_password_box.hide()
+	_sync_modal_scrim()
+
+func _open_choose_dialog(index: int) -> void:
+	_close_manage_dialog()
+	_choose_target = index
+	_choose_password_message.text = ""
+	_choose_password_edit.clear()
+	_choose_password_edit.editable = true
+	_choose_password_submit.disabled = false
+	_choose_password_subtitle.text = "角色「%s」的 4 位密碼" % str(_panel._characters[index].get("name",""))
+	_choose_password_box.show()
+	_sync_modal_scrim()
+	_choose_password_edit.grab_focus()
 
 func _submit_character_password() -> void:
-	if _choose_password_edit.text.length() != 4:
-		_choose_password_message.text = "角色密碼必須是 4 個字元"
+	if _choose_target < 0 or _choose_target >= _panel._characters.size():
 		return
+	if _choose_password_edit.text.length() != 4:
+		_choose_password_message.text = "第二組密碼必須是 4 個字元"
+		return
+	_panel.characters.select(_choose_target)
 	_panel.choose(_choose_password_edit.text)
 	_choose_password_edit.clear()
+	_choose_password_box.hide()
+	_sync_modal_scrim()
+
+func _build_manage_dialog() -> void:
+	_manage_box = Panel.new()
+	_manage_box.theme_type_variation = &"ParadiseWindowPanel"
+	_put(_selection,_manage_box,405,330,390,280)
+	_manage_title = _label(_manage_box,"角色密碼設定",20,8,350,32,19)
+	_label(_manage_box,"舊密碼",22,55,105,34,14)
+	_manage_new_label = _label(_manage_box,"新密碼",22,100,105,34,14)
+	_manage_confirm_label = _label(_manage_box,"確認密碼",22,145,105,34,14)
+	_manage_old = LineEdit.new()
+	_manage_new = LineEdit.new()
+	_manage_confirm = LineEdit.new()
+	for entry in [
+		[_manage_old,55],[_manage_new,100],[_manage_confirm,145]
+	]:
+		var field: LineEdit = entry[0]
+		field.secret = true
+		field.max_length = 4
+		field.theme_type_variation = &"ParadiseLineEdit"
+		_put(_manage_box,field,134,float(entry[1]),227,34)
+	_manage_note = _label(_manage_box,"",20,185,350,40,12)
+	_manage_note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_manage_submit = _button(_manage_box,"確認",80,229,105,36,true)
+	_manage_submit.pressed.connect(_submit_manage)
+	var cancel := _button(_manage_box,"取消",205,229,105,36)
+	cancel.pressed.connect(_close_manage_dialog)
+	_manage_box.hide()
+
+func _close_manage_dialog() -> void:
+	if _manage_box == null:
+		return
+	_manage_box.hide()
+	_manage_old.clear()
+	_manage_new.clear()
+	_manage_confirm.clear()
+	_manage_action = 0
+	_manage_character_id = 0
+	_delete_confirmation = false
+	_sync_modal_scrim()
+
+func _open_manage(action: int, slot_on_page: int) -> void:
+	if not _panel.active or _panel._chosen:
+		return
+	var index := _character_index_at_slot(_selection_page*3+slot_on_page)
+	if index < 0:
+		return
+	_close_choose_dialog()
+	_close_manage_dialog()
+	_manage_action = action
+	_manage_character_id = int(_panel._characters[index].get("character_id",0))
+	_manage_title.text = "密碼設定" if action == 1 else "刪除角色"
+	_manage_note.text = "首次設定可不填舊密碼" if action == 1 else "輸入第二組密碼後，再次確認永久刪除"
+	_manage_old.placeholder_text = "舊密碼（首次設定可空白）" if action == 1 else "第二組密碼"
+	_manage_new.visible = action == 1
+	_manage_confirm.visible = action == 1
+	_manage_new_label.visible = action == 1
+	_manage_confirm_label.visible = action == 1
+	_manage_submit.text = "確認修改" if action == 1 else "刪除角色"
+	_manage_submit.theme_type_variation = &"ParadisePrimaryButton" if action == 1 else &"ParadiseDangerButton"
+	_manage_box.show()
+	_sync_modal_scrim()
+	_manage_old.grab_focus()
+
+func _submit_manage() -> void:
+	if _manage_action == 0 or _manage_character_id <= 0:
+		return
+	var old_password := _manage_old.text
+	if _manage_action == 1:
+		if _manage_new.text.length() != 4 or _manage_confirm.text != _manage_new.text:
+			_manage_note.text = "新密碼須為 4 字元，且兩次輸入相同"
+			return
+		if not old_password.is_empty() and old_password.length() != 4:
+			_manage_note.text = "舊密碼須為 4 字元"
+			return
+		if _panel.change_character_password(_manage_character_id,old_password,_manage_new.text):
+			_close_manage_dialog()
+		else:
+			_manage_note.text = "無法送出修改請求，請稍後再試"
+		return
+	if old_password.length() != 4:
+		_manage_note.text = "刪除前請輸入 4 位第二組密碼"
+		return
+	if not _delete_confirmation:
+		_delete_confirmation = true
+		_manage_note.text = "此操作無法復原！再次點選「永久刪除」才會送出"
+		_manage_submit.text = "永久刪除"
+		return
+	if _panel.delete_character(_manage_character_id,old_password):
+		_close_manage_dialog()
+	else:
+		_manage_note.text = "無法送出刪除請求，請稍後再試"
 
 func _change_page(delta: int) -> void:
+	_close_choose_dialog()
+	_close_manage_dialog()
 	_selection_page = clampi(_selection_page+delta,0,2)
 	_last_character_key = ""
 	_update_characters()
 
 func _enter_slot(slot_on_page: int) -> void:
 	var index := _selection_page * 3 + slot_on_page
-	if index < _panel._characters.size() and _panel.active:
-		_panel.characters.select(index)
-		_panel.choose()
-	elif _panel.active:
+	var entry_index := _character_index_at_slot(index)
+	if entry_index >= 0 and _panel.active:
+		_open_choose_dialog(entry_index)
+	elif _panel.active and index < 8:
 		var taken := {}
 		for character in _panel._characters:
 			taken[int(character.get("slot",-1))] = true
@@ -697,9 +862,10 @@ func _refresh_appearance() -> void:
 	var preview: Control = _character_previews[3]
 	preview.set_occupied(_panel.active and int(_panel._latest.get("state",-1)) in [State.STATE_SELECTING_CHARACTER,State.STATE_CREATING_CHARACTER])
 	preview.set_appearance(selected)
-	_preview_note.text = "此外觀暫無預覽" if preview.status == "unsupported" else ("預設人物示意" if selected.is_empty() else "基本外觀預覽")
+	_preview_note.text = "此外觀暫無預覽" if preview.status == "unsupported" else ""
 	if preview.status in ["loading","unavailable"]:
 		_preview_note.text = "人物素材載入中" if preview.status == "loading" else "人物素材未就緒"
+	_preview_note.visible = not _preview_note.text.is_empty()
 	_refresh_create_ready()
 
 func _submit_create() -> void:
@@ -725,15 +891,21 @@ func _update_from_session() -> void:
 		_refresh_stats()
 		_refresh_create_ready()
 	elif _page_index == SessionLayout.Page.CHARACTER_SELECT:
-		_select_status.text = _panel.status.text
+		_select_status.text = "" if _panel.status.text.begins_with("請選擇角色或建立") else _panel.status.text
 		var choose_code := int(_panel._latest.get("choose_status",-1))
-		_choose_password_box.visible = choose_code in [3,4,5]
+		if _choose_target >= 0 and choose_code in [3,4,5]:
+			_choose_password_box.show()
+			_choose_password_edit.editable = choose_code != 5
+			_choose_password_submit.disabled = choose_code == 5
+		elif _choose_target < 0:
+			_choose_password_box.hide()
 		if choose_code == 3:
-			_choose_password_message.text = "請輸入 4 位角色密碼"
+			_choose_password_message.text = "請輸入此角色的第二組密碼"
 		elif choose_code == 4:
 			_choose_password_message.text = "密碼錯誤，請重新輸入"
 		elif choose_code == 5:
-			_choose_password_message.text = "密碼暫時鎖定，稍後再試"
+			_choose_password_message.text = "輸入次數過多，暫時鎖定"
+		_sync_modal_scrim()
 		_update_characters()
 
 func _update_characters() -> void:
@@ -743,8 +915,9 @@ func _update_characters() -> void:
 	_last_character_key = key
 	for i in 3:
 		var index := _selection_page * 3 + i
-		var valid: bool = index < _panel._characters.size()
-		var character: Dictionary = _panel._characters[index] if valid else {}
+		var entry_index := _character_index_at_slot(index)
+		var valid := entry_index >= 0
+		var character: Dictionary = _panel._characters[entry_index] if valid else {}
 		_names[i].text = str(character.get("name","")) if valid else ""
 		var appearance: Dictionary = character.get("appearance",{}) if valid else {}
 		_character_previews[i].set_appearance(appearance)
@@ -756,7 +929,7 @@ func _update_characters() -> void:
 		else:
 			_slot_empty_arts[i].stop()
 		_slot_empty_hotspots[i].visible = not valid
-		_slot_empty_hotspots[i].disabled = _panel._chosen or not _panel.active
+		_slot_empty_hotspots[i].disabled = _panel._chosen or not _panel.active or index >= 8
 		_slot_password_actions[i].visible = valid
 		_slot_password_actions[i].disabled = _panel._chosen or not _panel.active
 		_slot_actions[i].visible = valid

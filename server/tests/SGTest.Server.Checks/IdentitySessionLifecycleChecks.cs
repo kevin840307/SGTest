@@ -145,7 +145,7 @@ internal static class IdentitySessionLifecycleChecks
             Require(WireProtocol.TryDecodeCharacterList(await ReadFrameAsync(tls), out var list) &&
                     list.Characters.Count == 1 && list.Characters[0].CharacterId == fixture.CharacterId,
                 "reconnect list ownership failed");
-            await tls.WriteAsync(WireProtocol.EncodeCharacterChoose(new CharacterChooseWire(fixture.CharacterId)));
+            await CharacterChooseTestHarness.ChooseAsync(tls,fixture.CharacterId);
             await tls.FlushAsync();
             Require(WireProtocol.TryDecodeCharacterChooseResult(await ReadFrameAsync(tls), out var choose) &&
                     choose.Status == CharacterChooseWireStatus.Success &&

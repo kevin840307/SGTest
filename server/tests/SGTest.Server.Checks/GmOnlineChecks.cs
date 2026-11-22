@@ -149,7 +149,7 @@ internal static class GmOnlineChecks
             await Read(tls),out var list)&&
             list.Characters.Single().CharacterId==characterId,
             "GM capability character list mismatch");
-        await tls.WriteAsync(WireProtocol.EncodeCharacterChoose(new(characterId)));
+        await CharacterChooseTestHarness.ChooseAsync(tls,characterId);
         await tls.FlushAsync();
         Checks.Require(WireProtocol.TryDecodeCharacterChooseResult(
             await Read(tls),out var choose)&&

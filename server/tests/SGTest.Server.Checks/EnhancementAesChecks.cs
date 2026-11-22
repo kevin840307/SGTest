@@ -208,7 +208,7 @@ ON CONFLICT(character_id) DO UPDATE SET money=excluded.money;";
             await ReadFrame(tls),out var list)&&
             list.Characters.Single().CharacterId==actor,
             "enhancement AES list mismatch");
-        await tls.WriteAsync(WireProtocol.EncodeCharacterChoose(new(actor)));
+        await CharacterChooseTestHarness.ChooseAsync(tls,actor);
         await tls.FlushAsync();
         Checks.Require(WireProtocol.TryDecodeCharacterChooseResult(
             await ReadFrame(tls),out var choose)&&

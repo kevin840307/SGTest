@@ -124,6 +124,18 @@ func choose_character(character_id: int, character_password: String = "") -> boo
 	encoded.fill(0)
 	return _queue_intent({"type": "choose", "character_id": character_id, "character_password": character_password})
 
+func change_character_password(character_id: int, old_password: String, new_password: String) -> bool:
+	if int(snapshot().get("state",-1)) != WorldState.STATE_SELECTING_CHARACTER or WireCodec.encode_character_manage(1,character_id,old_password,new_password).is_empty():
+		return false
+	return _queue_intent({"type":"character_manage","action":1,"character_id":character_id,
+		"old_password":old_password,"new_password":new_password})
+
+func delete_character(character_id: int, password: String) -> bool:
+	if int(snapshot().get("state",-1)) != WorldState.STATE_SELECTING_CHARACTER or WireCodec.encode_character_manage(2,character_id,password).is_empty():
+		return false
+	return _queue_intent({"type":"character_manage","action":2,"character_id":character_id,
+		"old_password":password,"new_password":""})
+
 func move_target(target_x: int, target_y: int) -> bool:
 	if bool(snapshot().get("player_dead",false)):
 		return false
@@ -1097,6 +1109,18 @@ func _process_character_create_intent(intent: Dictionary) -> void:
 		_publish()
 
 
+func _process_character_manage_intent(intent: Dictionary) -> void:
+	if int(_world.state) != WorldState.STATE_SELECTING_CHARACTER:
+		return
+	var character_id := int(intent.get("character_id",0))
+	var frame := WireCodec.encode_character_manage(int(intent.action),character_id,
+		str(intent.get("old_password","")),str(intent.get("new_password","")))
+	if not frame.is_empty() and _transport.send_frame(frame) and _world.mark_character_manage_sent(character_id):
+		intent.erase("old_password")
+		intent.erase("new_password")
+		_pop_intent()
+		_publish()
+
 func _process_first_intent() -> void:
 	var intent := _peek_intent()
 	if intent.is_empty():
@@ -1104,6 +1128,8 @@ func _process_first_intent() -> void:
 	var kind := str(intent.get("type", ""))
 	if kind == "create_character":
 		_process_character_create_intent(intent)
+	elif kind == "character_manage":
+		_process_character_manage_intent(intent)
 	elif kind == "choose":
 		if int(_world.state) != WorldState.STATE_SELECTING_CHARACTER:
 			return

@@ -84,6 +84,7 @@ var _poll_elapsed := 0.0
 var _latest := {}
 var _last_publication_revision := -1
 var _create_queued_after := -1
+var _last_manage_revision := -1
 var _respawn_queued_after := -1
 var _skill_queued_after := -1
 var _skill_queued_at_ms := 0
@@ -296,6 +297,7 @@ func _begin_connection(register_first:bool)->void:
 	_latest = {}
 	gameplay_hud.reset()
 	_last_publication_revision = -1
+	_last_manage_revision = -1
 	_respawn_queued_after = -1
 	_skill_queued_after = -1
 	_skill_queued_at_ms = 0
@@ -374,6 +376,28 @@ func choose(character_password: String = "") -> void:
 	else:
 		status.text = "操作佇列忙碌，請稍後重試"
 
+
+func change_character_password(character_id: int, old_password: String, new_password: String) -> bool:
+	if not active or not _owns_character(character_id):
+		return false
+	var accepted: bool = session.change_character_password(character_id,old_password,new_password)
+	if accepted:
+		status.text = "正在更新角色密碼…"
+	return accepted
+
+func delete_character(character_id: int, password: String) -> bool:
+	if not active or not _owns_character(character_id):
+		return false
+	var accepted: bool = session.delete_character(character_id,password)
+	if accepted:
+		status.text = "正在刪除角色…"
+	return accepted
+
+func _owns_character(character_id: int) -> bool:
+	for entry in _characters:
+		if int(entry.character_id) == character_id:
+			return true
+	return false
 
 func submit_move(point: Vector2) -> bool:
 	return active and not bool(_latest.get("reconnecting",false)) and bool(_latest.get("world_ready",false)) and point.is_finite() and session.move_target(int(floor(point.x)),int(floor(point.y)))
@@ -602,16 +626,17 @@ func _set_controls() -> void:
 	logout_button.visible = active
 	var state := int(_latest.get("state",-1))
 	var selecting := active and state == State.STATE_SELECTING_CHARACTER
+	var selecting_page := active and state in [State.STATE_SELECTING_CHARACTER,State.STATE_MANAGING_CHARACTER] or (active and state == State.STATE_WAIT_CHARACTER_LIST and not _characters.is_empty())
 	if _create_queued_after >= 0 and int(_latest.get("character_create_result_revision",0)) > _create_queued_after:
 		_create_queued_after = -1
 	var can_create := selecting and not _chosen and _create_queued_after < 0
 	creation_options.set_choices(_latest.get("character_creation_appearances",[]))
 	creation_options.set_editable(can_create)
 	var creating := active and state == State.STATE_CREATING_CHARACTER
-	characters.visible = selecting and not _characters.is_empty()
+	characters.visible = selecting_page and not _characters.is_empty()
 	choose_button.visible = characters.visible
 	choose_button.disabled = _chosen or not selecting or _characters.is_empty() or _create_queued_after >= 0
-	new_character_button.visible = selecting
+	new_character_button.visible = selecting_page
 	new_character_button.disabled = not can_create
 	back_to_character_button.visible = selecting and not _characters.is_empty()
 	back_to_character_button.disabled = not can_create
@@ -622,11 +647,11 @@ func _set_controls() -> void:
 	create_character_button.disabled = not can_create
 	_set_respawn_controls()
 	_set_skill_controls()
-	if not active or state not in [State.STATE_SELECTING_CHARACTER,State.STATE_CREATING_CHARACTER,State.STATE_IN_WORLD]:
+	if not active or state not in [State.STATE_SELECTING_CHARACTER,State.STATE_MANAGING_CHARACTER,State.STATE_WAIT_CHARACTER_LIST,State.STATE_CREATING_CHARACTER,State.STATE_IN_WORLD] or (state == State.STATE_WAIT_CHARACTER_LIST and _characters.is_empty()):
 		_layout.show_page(SessionLayout.Page.LOGIN)
 	elif state == State.STATE_IN_WORLD:
 		_layout.show_page(SessionLayout.Page.WORLD)
-	elif state == State.STATE_CREATING_CHARACTER or _show_create or _characters.is_empty():
+	elif state == State.STATE_CREATING_CHARACTER or (_show_create and selecting) or (_characters.is_empty() and selecting):
 		_layout.show_page(SessionLayout.Page.CHARACTER_CREATE)
 	else:
 		_layout.show_page(SessionLayout.Page.CHARACTER_SELECT)
@@ -822,8 +847,14 @@ func _process(delta: float) -> void:
 		if create_code >= 0:
 			character_create_status.text = _character_create_status_text(
 				create_code,str(_latest.get("last_created_name","")))
-		if not _chosen:
+		if not _chosen and int(_latest.get("character_manage_result_revision",0)) == 0:
 			status.text = "請選擇角色或建立新角色"
+		var manage_revision := int(_latest.get("character_manage_result_revision",0))
+		if manage_revision > 0 and manage_revision > _last_manage_revision:
+			_last_manage_revision = manage_revision
+			var manage_status := int(_latest.get("character_manage_status",-1))
+			var action := int(_latest.get("character_manage_action",0))
+			status.text = _character_manage_status_text(manage_status,action)
 	elif state == State.STATE_IN_WORLD:
 		characters.hide()
 		choose_button.hide()
@@ -854,6 +885,17 @@ func _registration_status_text(code:int)->String:
 		_:
 			return "建立帳號失敗"
 
+
+func _character_manage_status_text(code: int, action: int) -> String:
+	match code:
+		0: return "角色密碼設定成功" if action == 1 else "角色已刪除"
+		1: return "此角色不屬於目前帳號"
+		2: return "第二組密碼錯誤"
+		3: return "第二組密碼錯誤次數過多，暫時鎖定"
+		4: return "請先設定角色第二組密碼，或檢查輸入格式"
+		5: return "角色資料已更新，請重新操作"
+		6: return "角色含交易或管理歷史，為保護資料暫不允許刪除"
+		_: return "角色操作失敗"
 
 func _character_create_status_text(code: int, character_name: String) -> String:
 	match code:

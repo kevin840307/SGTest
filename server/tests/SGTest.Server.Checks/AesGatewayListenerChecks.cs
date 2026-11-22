@@ -112,7 +112,7 @@ internal static class AesGatewayListenerChecks
                 auth.Status == AuthWireStatus.Success, "listener Auth failed");
             Checks.Require(WireProtocol.TryDecodeCharacterList(await Read(tls), out var list) &&
                 list.Characters.Count == 1, "listener character ownership/list failed");
-            await tls.WriteAsync(WireProtocol.EncodeCharacterChoose(new(fixture.CharacterId)));
+            await CharacterChooseTestHarness.ChooseAsync(tls,fixture.CharacterId);
             Checks.Require(WireProtocol.TryDecodeCharacterChooseResult(await Read(tls), out var choose) &&
                 choose.Status == CharacterChooseWireStatus.Success && choose.MapEpoch > previousEpoch,
                 "listener reconnect did not advance generation");
@@ -186,7 +186,7 @@ internal static class AesGatewayListenerChecks
                 await Read(tls),out var characters) &&
                 characters.Characters.Count==1,
                 "recovery login character list missing");
-            await tls.WriteAsync(WireProtocol.EncodeCharacterChoose(new(fixture.CharacterId)));
+            await CharacterChooseTestHarness.ChooseAsync(tls,fixture.CharacterId);
             Checks.Require(WireProtocol.TryDecodeCharacterChooseResult(
                 await Read(tls),out var selected) &&
                 selected.Status==CharacterChooseWireStatus.Success,
@@ -293,8 +293,7 @@ internal static class AesGatewayListenerChecks
                 await Read(tls),out var characters) &&
                 characters.Characters.Count==1,
                 "discard login character list missing");
-            await tls.WriteAsync(WireProtocol.EncodeCharacterChoose(
-                new(fixture.CharacterId)));
+            await CharacterChooseTestHarness.ChooseAsync(tls,fixture.CharacterId);
             Checks.Require(WireProtocol.TryDecodeCharacterChooseResult(
                 await Read(tls),out var selected) &&
                 selected.Status==CharacterChooseWireStatus.Success,
@@ -659,8 +658,7 @@ AuthorizationTimeoutMilliseconds: 30000)));
                     list.Characters.Count == 1 &&
                     list.Characters[0].CharacterId == accounts[index].CharacterId,
                     $"load account {index} character ownership leaked");
-                await tls.WriteAsync(WireProtocol.EncodeCharacterChoose(
-                    new(accounts[index].CharacterId)), deadline.Token);
+                await CharacterChooseTestHarness.ChooseAsync(tls,accounts[index].CharacterId,cancellationToken:deadline.Token);
                 var chooseFrame = await Receive();
                 Checks.Require(WireProtocol.TryDecodeCharacterChooseResult(
                     chooseFrame, out _), $"load character {index} malformed choose result");

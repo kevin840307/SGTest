@@ -200,7 +200,7 @@ internal static class BankAesChecks
             await ReadFrame(tls),out var list)&&
             list.Characters.Single().CharacterId==characterId,
             "bank AES list mismatch");
-        await tls.WriteAsync(WireProtocol.EncodeCharacterChoose(new(characterId)));
+        await CharacterChooseTestHarness.ChooseAsync(tls,characterId);
         await tls.FlushAsync();
         Checks.Require(WireProtocol.TryDecodeCharacterChooseResult(
             await ReadFrame(tls),out var choose)&&

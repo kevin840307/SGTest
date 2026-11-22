@@ -48,6 +48,8 @@ public static partial class WireProtocol
     public const int MaxCharacterPasswordBytes = 16;
     public const int MaxCharacterChooseFrameBytes = CharacterChooseFrameBytes + 2 + MaxCharacterPasswordBytes;
     public const int CharacterChooseResultFrameBytes = HeaderBytes + 37;
+    public const int CharacterManageMaxFrameBytes = HeaderBytes + 8 + 3 + 2*MaxCharacterPasswordBytes;
+    public const int CharacterManageResultFrameBytes = HeaderBytes + 1 + 1 + 8;
     public const int LegacyCharacterAppearanceBytes = 4;
     public const int BodyLegCharacterAppearanceBytes = 6;
     public const int CharacterAppearanceBytes = 7;
@@ -641,6 +643,8 @@ public static partial class WireProtocol
             102 => WireOpcode.PartyInvite,
             103 => WireOpcode.PartySnapshot,
             104 => WireOpcode.SkillBookSnapshot,
+            105 => WireOpcode.CharacterManage,
+            106 => WireOpcode.CharacterManageResult,
             _ => 0
         };
         if (opcode == 0) return false;
@@ -664,6 +668,8 @@ public static partial class WireProtocol
             WireOpcode.CharacterChoose => advertised == CharacterChooseFrameBytes ||
                 advertised is >= CharacterChooseFrameBytes + 2 and <= MaxCharacterChooseFrameBytes,
             WireOpcode.CharacterChooseResult => advertised == CharacterChooseResultFrameBytes,
+            WireOpcode.CharacterManage => advertised >= HeaderBytes+11 && advertised <= CharacterManageMaxFrameBytes,
+            WireOpcode.CharacterManageResult => advertised == CharacterManageResultFrameBytes,
             WireOpcode.CharacterCreate => advertised is >= 12 and <= MaxCharacterCreateFrameBytes,
             WireOpcode.CharacterCreateResult => advertised is >= 20 and <= MaxCharacterCreateResultFrameBytes,
             WireOpcode.WorldReady => advertised == WorldReadyFrameBytes,

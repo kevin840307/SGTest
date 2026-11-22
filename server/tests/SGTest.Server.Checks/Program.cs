@@ -93,6 +93,12 @@ static class Checks
         Directory.CreateDirectory(root);
         try
         {
+            if (args is ["--character-management-only"])
+            {
+                CharacterManagementChecks.Verify();
+                Console.WriteLine($"CHARACTER_MANAGEMENT_CHECKS PASS total={_passes}");
+                return 0;
+            }
             if (args is ["--identity-admin-only", "--aes"])
             {
                 IdentityAdminChecks.Verify(root, tlsOnly: true);
@@ -342,6 +348,7 @@ static class Checks
             IdentityStoreChecks.Verify();
             CharacterAppearanceChecks.Verify();
             CharacterCreationSettingsChecks.Verify();
+            CharacterManagementChecks.Verify();
             AuthenticationRateLimiterChecks.Verify();
             IdentitySessionAuthorizationChecks.Verify(root);
             IdentitySessionLifecycleChecks.Verify(root);

@@ -114,7 +114,9 @@ public enum WireOpcode : ushort
     PartyResult = 101,
     PartyInvite = 102,
     PartySnapshot = 103,
-    SkillBookSnapshot = 104
+    SkillBookSnapshot = 104,
+    CharacterManage = 105,
+    CharacterManageResult = 106
 }
 
 public enum ChatChannel : byte { Nearby = 0, Faction = 1, Warband = 2, Party = 3, Whisper = 4 }
@@ -163,6 +165,12 @@ public enum CharacterChooseWireStatus : byte
 {
     Success = 0, NotOwned = 1, WorldRejected = 2,
     PasswordRequired = 3, InvalidPassword = 4, PasswordLocked = 5
+}
+public enum CharacterManageAction : byte { ChangePassword = 1, Delete = 2 }
+public enum CharacterManageStatus : byte
+{
+    Success = 0, NotOwned = 1, InvalidPassword = 2, PasswordLocked = 3,
+    InvalidInput = 4, Conflict = 5, HasHistory = 6
 }
 public enum CharacterCreateWireStatus : byte
 {
@@ -364,6 +372,13 @@ public readonly record struct CharacterChooseWire(long CharacterId, string? Char
 {
     public override string ToString() => $"CharacterChooseWire {{ CharacterId = {CharacterId}, Password = [REDACTED] }}";
 }
+public readonly record struct CharacterManageWire(
+    CharacterManageAction Action, long CharacterId, string? OldPassword, string? NewPassword)
+{
+    public override string ToString() => $"CharacterManageWire {{ Action = {Action}, CharacterId = {CharacterId}, Passwords = [REDACTED] }}";
+}
+public readonly record struct CharacterManageResultWire(
+    CharacterManageAction Action, CharacterManageStatus Status, long CharacterId);
 public readonly record struct CharacterChooseResultWire(
     CharacterChooseWireStatus Status, long CharacterId, int MapId,
     double X, double Y, long MapEpoch);

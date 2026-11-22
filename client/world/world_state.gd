@@ -12,6 +12,7 @@ const STATE_IN_WORLD := 5
 const STATE_FAILED := 6
 const STATE_CREATING_CHARACTER := 7
 const STATE_REGISTERING := 8
+const STATE_MANAGING_CHARACTER := 9
 
 var state := STATE_NEW
 var registration_status := -1
@@ -19,6 +20,10 @@ var auth_status := -1
 var choose_status := -1
 var character_create_status := -1
 var character_create_result_revision := 0
+var character_manage_result_revision := 0
+var character_manage_status := -1
+var character_manage_action := 0
+var character_manage_id := 0
 var last_created_character_id := 0
 var last_created_slot := -1
 var last_created_name := ""
@@ -858,6 +863,8 @@ func apply_frame(frame: PackedByteArray) -> bool:
 			return _apply_character_list(frame)
 		WireCodec.OPCODE_CHARACTER_CREATE_RESULT:
 			return _apply_character_create_result(frame)
+		WireCodec.OPCODE_CHARACTER_MANAGE_RESULT:
+			return _apply_character_manage_result(frame)
 		WireCodec.OPCODE_CHARACTER_CHOOSE_RESULT:
 			return _apply_choose(frame)
 		WireCodec.OPCODE_MOVE_RECEIPT:
@@ -986,6 +993,10 @@ func snapshot() -> Dictionary:
 		"choose_status": choose_status,
 		"character_create_status": character_create_status,
 		"character_create_result_revision": character_create_result_revision,
+		"character_manage_result_revision": character_manage_result_revision,
+		"character_manage_status": character_manage_status,
+		"character_manage_action": character_manage_action,
+		"character_manage_id": character_manage_id,
 		"last_created_character_id": last_created_character_id,
 		"last_created_slot": last_created_slot,
 		"last_created_name": last_created_name,
@@ -1332,6 +1343,26 @@ func _apply_character_list(frame: PackedByteArray) -> bool:
 	state = STATE_SELECTING_CHARACTER
 	return true
 
+
+func mark_character_manage_sent(character_id: int) -> bool:
+	if state != STATE_SELECTING_CHARACTER or character_id <= 0:
+		return false
+	character_manage_id = character_id
+	character_manage_status = -1
+	state = STATE_MANAGING_CHARACTER
+	return true
+
+func _apply_character_manage_result(frame: PackedByteArray) -> bool:
+	if state != STATE_MANAGING_CHARACTER:
+		return fail("character_manage_result_out_of_state")
+	var decoded := WireCodec.decode_character_manage_result(frame)
+	if decoded.is_empty() or int(decoded.character_id) != character_manage_id:
+		return fail("invalid_character_manage_result")
+	character_manage_result_revision += 1
+	character_manage_status = int(decoded.status)
+	character_manage_action = int(decoded.action)
+	state = STATE_WAIT_CHARACTER_LIST if character_manage_status == 0 else STATE_SELECTING_CHARACTER
+	return true
 
 func _apply_character_create_result(frame: PackedByteArray) -> bool:
 	if state != STATE_CREATING_CHARACTER:

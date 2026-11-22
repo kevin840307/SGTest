@@ -308,7 +308,7 @@ FROM pvp_name_admin_events WHERE character_id=$id;";
                     "CLI-created password did not authenticate to Host");
                 Checks.Require(WireProtocol.TryDecodeCharacterList(await Read(tls),out var list) && list.Characters.Count==1,
                     "Host did not list CLI-created character");
-                await tls.WriteAsync(WireProtocol.EncodeCharacterChoose(new(list.Characters[0].CharacterId)));
+                await CharacterChooseTestHarness.ChooseAsync(tls,list.Characters[0].CharacterId);
                 Checks.Require(WireProtocol.TryDecodeCharacterChooseResult(await Read(tls),out var choose) &&
                     choose.Status==CharacterChooseWireStatus.Success && choose.MapId==15 && choose.X==24 && choose.Y==24,
                     "Host did not enter explicit validated spawn");

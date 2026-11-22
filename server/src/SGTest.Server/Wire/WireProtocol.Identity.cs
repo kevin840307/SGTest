@@ -529,4 +529,91 @@ public static partial class WireProtocol
         value = new(status, id, map, x, y, epoch); return true;
     }
 
+    // Account-authenticated character management; credentials never appear in result DTOs.
+    // Payload: action(1) characterId(8) oldLength(1) newLength(1) oldUTF8 newUTF8.
+    public static byte[] EncodeCharacterManage(CharacterManageWire value)
+    {
+        if(value.CharacterId<=0 || value.Action is not (
+            CharacterManageAction.ChangePassword or CharacterManageAction.Delete))
+            throw new ArgumentOutOfRangeException(nameof(value));
+        if(value.Action==CharacterManageAction.ChangePassword)
+            CharacterCreationRules.ValidatePassword(value.NewPassword!);
+        else if(value.NewPassword is not null)
+            throw new ArgumentException("Delete must not contain new password",nameof(value));
+        if(value.OldPassword is not null)
+            CharacterCreationRules.ValidatePassword(value.OldPassword);
+        if(value.Action==CharacterManageAction.Delete && value.OldPassword is null)
+            throw new ArgumentException("Deletion requires secondary proof",nameof(value));
+        byte[] oldBytes=value.OldPassword is null ? [] : StrictUtf8.GetBytes(value.OldPassword);
+        byte[] newBytes=value.NewPassword is null ? [] : StrictUtf8.GetBytes(value.NewPassword);
+        try
+        {
+            if(oldBytes.Length>MaxCharacterPasswordBytes || newBytes.Length>MaxCharacterPasswordBytes)
+                throw new ArgumentOutOfRangeException(nameof(value));
+            var frame=NewFrame(WireOpcode.CharacterManage,HeaderBytes+11+oldBytes.Length+newBytes.Length);
+            frame[8]=(byte)value.Action;
+            BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(9,8),value.CharacterId);
+            frame[17]=checked((byte)oldBytes.Length);
+            frame[18]=checked((byte)newBytes.Length);
+            oldBytes.CopyTo(frame.AsSpan(19));
+            newBytes.CopyTo(frame.AsSpan(19+oldBytes.Length));
+            return frame;
+        }
+        finally
+        {
+            System.Security.Cryptography.CryptographicOperations.ZeroMemory(oldBytes);
+            System.Security.Cryptography.CryptographicOperations.ZeroMemory(newBytes);
+        }
+    }
+
+    public static bool TryDecodeCharacterManage(ReadOnlySpan<byte> frame,out CharacterManageWire value)
+    {
+        value=default;
+        if(!TryReadHeader(frame,out var h) || h.Opcode!=WireOpcode.CharacterManage ||
+            frame.Length<HeaderBytes+11 || frame.Length>CharacterManageMaxFrameBytes)
+            return false;
+        byte action=frame[8], oldLength=frame[17], newLength=frame[18];
+        long id=BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(9,8));
+        if(id<=0 || action is <1 or >2 || oldLength>MaxCharacterPasswordBytes ||
+            newLength>MaxCharacterPasswordBytes || frame.Length!=19+oldLength+newLength ||
+            (action==2 && (oldLength==0 || newLength!=0)) ||
+            (action==1 && newLength==0)) return false;
+        try
+        {
+            string? oldPassword=oldLength==0 ? null : StrictUtf8.GetString(frame.Slice(19,oldLength));
+            string? newPassword=newLength==0 ? null :
+                StrictUtf8.GetString(frame.Slice(19+oldLength,newLength));
+            if(oldPassword is not null) CharacterCreationRules.ValidatePassword(oldPassword);
+            if(newPassword is not null) CharacterCreationRules.ValidatePassword(newPassword);
+            value=new((CharacterManageAction)action,id,oldPassword,newPassword);
+            return true;
+        }
+        catch(ArgumentException) { return false; }
+    }
+
+    public static byte[] EncodeCharacterManageResult(CharacterManageResultWire value)
+    {
+        if(value.Action is not (CharacterManageAction.ChangePassword or CharacterManageAction.Delete) ||
+            (byte)value.Status>(byte)CharacterManageStatus.HasHistory || value.CharacterId<=0)
+            throw new ArgumentOutOfRangeException(nameof(value));
+        var frame=NewFrame(WireOpcode.CharacterManageResult,CharacterManageResultFrameBytes);
+        frame[8]=(byte)value.Action;
+        frame[9]=(byte)value.Status;
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(10,8),value.CharacterId);
+        return frame;
+    }
+
+    public static bool TryDecodeCharacterManageResult(ReadOnlySpan<byte> frame,out CharacterManageResultWire value)
+    {
+        value=default;
+        if(!TryReadHeader(frame,out var h) || h.Opcode!=WireOpcode.CharacterManageResult ||
+            frame.Length!=CharacterManageResultFrameBytes ||
+            frame[8] is <1 or >2 || frame[9]>(byte)CharacterManageStatus.HasHistory)
+            return false;
+        long id=BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(10,8));
+        if(id<=0) return false;
+        value=new((CharacterManageAction)frame[8],(CharacterManageStatus)frame[9],id);
+        return true;
+    }
+
 }

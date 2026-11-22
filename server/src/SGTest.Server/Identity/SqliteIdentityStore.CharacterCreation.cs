@@ -6,7 +6,7 @@ namespace SGTest.Server.Identity;
 public sealed partial class SqliteIdentityStore
 {
     private sealed record PreparedCharacterCreation(CharacterCreationState State, string PasswordHash);
-    private sealed record CharacterCredential(string? PasswordHash, int Failures, long LockedUntil);
+    private sealed record CharacterCredential(string? PasswordHash, int Failures, long LockedUntil, bool Override);
 
     public async Task<CharacterCreateResult> CreateCharacterWithSettingsAsync(
         long accountId, int slot, string name, CharacterSpawn spawn, CharacterCreationSettings settings,
@@ -87,7 +87,8 @@ VALUES($id,$str,$dex,$con,$wis,$source,$hash);";
             ? now+CharacterCreationRules.PasswordLockoutSeconds*1000L : 0;
         using var command = connection.CreateCommand();
         command.Transaction = tx;
-        command.CommandText = @"UPDATE character_creation_settings
+        command.CommandText = current.Override ? @"UPDATE character_password_overrides
+SET failed_password_attempts=$failures,password_locked_until_ms=$locked WHERE character_id=$id;" : @"UPDATE character_creation_settings
 SET failed_password_attempts=$failures,password_locked_until_ms=$locked WHERE character_id=$id;";
         command.Parameters.AddWithValue("$failures",failures);
         command.Parameters.AddWithValue("$locked",lockedUntil);
@@ -103,14 +104,18 @@ SET failed_password_attempts=$failures,password_locked_until_ms=$locked WHERE ch
     {
         using var command = connection.CreateCommand();
         command.Transaction = tx;
-        command.CommandText = @"SELECT s.password_hash,s.failed_password_attempts,s.password_locked_until_ms
+        command.CommandText = @"SELECT COALESCE(p.password_hash,s.password_hash),
+COALESCE(p.failed_password_attempts,s.failed_password_attempts,0),
+COALESCE(p.password_locked_until_ms,s.password_locked_until_ms,0),
+p.character_id
 FROM characters c JOIN accounts a ON a.account_id=c.account_id
 LEFT JOIN character_creation_settings s ON s.character_id=c.character_id
+LEFT JOIN character_password_overrides p ON p.character_id=c.character_id
 WHERE c.character_id=$character AND c.account_id=$account AND a.disabled=0;";
         command.Parameters.AddWithValue("$character",characterId);
         command.Parameters.AddWithValue("$account",accountId);
         using var reader = command.ExecuteReader();
-        return !reader.Read() ? null : reader.IsDBNull(0) ? new(null,0,0) :
-            new(reader.GetString(0),reader.GetInt32(1),reader.GetInt64(2));
+        return !reader.Read() ? null : reader.IsDBNull(0) ? new(null,0,0,false) :
+            new(reader.GetString(0),reader.GetInt32(1),reader.GetInt64(2),!reader.IsDBNull(3));
     }
 }

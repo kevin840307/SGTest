@@ -127,6 +127,26 @@ public sealed partial class IdentitySessionAuthorization
                 cancellationToken).ConfigureAwait(false);
         }
 
+        async Task HandleCharacterManageAsync(CharacterManageWire manage,long accountId)
+        {
+            var status=manage.Action==CharacterManageAction.ChangePassword
+                ? await _identity.ChangeCharacterPasswordAsync(
+                    accountId,manage.CharacterId,manage.OldPassword,
+                    manage.NewPassword!,cancellationToken).ConfigureAwait(false)
+                : await _identity.DeleteCharacterWithPasswordAsync(
+                    accountId,manage.CharacterId,manage.OldPassword!,
+                    cancellationToken).ConfigureAwait(false);
+            await WriteFrameAsync(tls,WireProtocol.EncodeCharacterManageResult(
+                new(manage.Action,(CharacterManageStatus)status,manage.CharacterId)),
+                cancellationToken).ConfigureAwait(false);
+            if(status==CharacterManagementStatus.Success)
+            {
+                characters=(await _identity.ListCharactersAsync(
+                    accountId,cancellationToken).ConfigureAwait(false)).ToList();
+                await SendCharacterListAsync().ConfigureAwait(false);
+            }
+        }
+
         await SendCharacterListAsync().ConfigureAwait(false);
 
         CharacterRecord? character = null;
@@ -135,6 +155,13 @@ public sealed partial class IdentitySessionAuthorization
             byte[]? selectionFrame = await ReadFrameAsync(
                 tls, cancellationToken).ConfigureAwait(false);
             if (selectionFrame is null) return null;
+
+            if (WireProtocol.TryDecodeCharacterManage(selectionFrame,out var manage))
+            {
+                try { await HandleCharacterManageAsync(manage,account.AccountId); }
+                finally { CryptographicOperations.ZeroMemory(selectionFrame); }
+                continue;
+            }
 
             if (WireProtocol.TryDecodeCharacterCreate(
                     selectionFrame, out var create))
@@ -267,7 +294,7 @@ public sealed partial class IdentitySessionAuthorization
             CharacterChooseWireStatus passwordStatus;
             try
             {
-                passwordStatus = character.RequiresCharacterPassword && choose.CharacterPassword is null
+                passwordStatus = (!character.RequiresCharacterPassword || choose.CharacterPassword is null)
                     ? CharacterChooseWireStatus.PasswordRequired
                     : await _identity.VerifyCharacterPasswordAsync(account.AccountId,
                         character.CharacterId,choose.CharacterPassword,cancellationToken).ConfigureAwait(false) switch
