@@ -47,6 +47,8 @@ static func allows(kind: String, published: Dictionary, queued: Array[Dictionary
 	var pending: Array = []
 	var conflicts: Array = []
 	match kind:
+		"choose":
+			conflicts = ["choose"]
 		"use_recovery_item", "discard_inventory_item":
 			pending = SHOP_AND_ITEM_PENDING
 			conflicts = ITEM_QUEUED

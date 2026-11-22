@@ -30,6 +30,12 @@ internal static class CharacterAppearanceWireChecks
             decoded.CreationAppearances!.SequenceEqual(Choices),"appearance list lost known/unknown/allowed values");
         Checks.Require(WireProtocol.TryDecodeCharacterCreate(create,out var request) && request.Appearance==Look,
             "appearance request roundtrip failed");
+        var protectedCreate=WireProtocol.EncodeCharacterCreate(new(
+            2,"Protected",Look,new CharacterCreationWire(3,2,2,1,"2468")));
+        Checks.Require(WireProtocol.TryDecodeCharacterCreate(protectedCreate,out var protectedRequest) &&
+            protectedRequest.Appearance==Look &&
+            protectedRequest.Creation is { Strength:3,Dexterity:2,Constitution:2,Wisdom:1,CharacterPassword:"2468" },
+            "extended creation attributes/password roundtrip failed");
         Checks.Require(WireProtocol.TryDecodeCharacterCreateResult(result,out var receipt) && receipt.Appearance==Look,
             "appearance result roundtrip failed");
         foreach(int at in new[]{0,8,10,11,12,13,14,15,16,17,18,19})

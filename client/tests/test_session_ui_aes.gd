@@ -408,12 +408,14 @@ class CharacterCreateSession extends RefCounted:
 	var creates := 0
 	var last_slot := -1
 	var last_name := ""
-	func create_character(slot: int, character_name: String) -> bool:
+	var last_creation: Dictionary = {}
+	func create_character(slot: int, character_name: String, _appearance: Dictionary = {}, creation: Dictionary = {}) -> bool:
 		if slot < 0 or character_name.is_empty():
 			return false
 		creates += 1
 		last_slot = slot
 		last_name = character_name
+		last_creation = creation.duplicate(true)
 		return true
 	func stop() -> void:
 		pass
@@ -690,9 +692,19 @@ func run() -> void:
 		return
 	panel.character_slot_input.value = 2
 	panel.character_name_input.text = "UiCreatedHero"
+	panel.character_strength_input.value = 3
+	panel.character_dexterity_input.value = 2
+	panel.character_constitution_input.value = 2
+	panel.character_wisdom_input.value = 1
+	panel.character_password_input.text = "2468"
+	panel.character_password_confirm_input.text = "2468"
 	panel.create_character_button.pressed.emit()
-	if create_stub.creates != 1 or create_stub.last_slot != 2 or 		create_stub.last_name != "UiCreatedHero":
-		fail("Character creation UI did not send exact slot/name once")
+	var expected_creation := {"strength":3,"dexterity":2,"constitution":2,"wisdom":1,"password":"2468"}
+	if create_stub.creates != 1 or create_stub.last_slot != 2 or create_stub.last_name != "UiCreatedHero" or create_stub.last_creation != expected_creation:
+		fail("Character creation UI did not forward slot/name/attributes/secondary password exactly once")
+		return
+	if not panel.character_password_input.text.is_empty() or not panel.character_password_confirm_input.text.is_empty():
+		fail("Character creation UI kept secondary password after queuing")
 		return
 	panel._latest.state = State.STATE_CREATING_CHARACTER
 	panel._set_controls()
@@ -754,7 +766,8 @@ func run() -> void:
 			"item_uid":7001,"item_definition_id":2701,
 			"quantity":2,"drop_id":501}}}
 	panel._refresh_inventory_panel()
-	if not panel.inventory_panel.inventory_preview.text.contains("2701 ×2") or not panel.inventory_panel.inventory_button.text.contains("1 件"):
+	var verified_name_2701: String = str(panel.item_catalog.name_for(2701))
+	if not panel.inventory_panel.inventory_preview.text.contains(str(verified_name_2701)) or not panel.inventory_panel.inventory_preview.text.contains("×2") or not panel.inventory_panel.inventory_button.text.contains("1 件"):
 		fail("Durable inventory items not reflected in UI")
 		return
 	panel._latest = {"state":State.STATE_IN_WORLD,"world_ready":true,
@@ -764,7 +777,8 @@ func run() -> void:
 			"item_uid":7002,"item_definition_id":3701,
 			"quantity":3,"drop_id":502}}}
 	panel._refresh_inventory_panel()
-	if panel.inventory_panel.inventory_preview.text.contains("2701") or not panel.inventory_panel.inventory_preview.text.contains("3701 ×3"):
+	var verified_name_3701: String = str(panel.item_catalog.name_for(3701))
+	if panel.inventory_panel.inventory_preview.text.contains("UID 7001") or not panel.inventory_panel.inventory_preview.text.contains(str(verified_name_3701)) or not panel.inventory_panel.inventory_preview.text.contains("×3"):
 		fail("Same inventory revision across new character retained stale UI")
 		return
 	panel.inventory_panel.inventory_button.pressed.emit()

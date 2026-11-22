@@ -99,8 +99,8 @@ func _run() -> void:
 		_fail(app,"world HUD/tools not isolated")
 		return
 	app._update_ui_stage(true)
-	if app._screen_backdrop.visible or app._photo_backdrop.visible or not app.toolbar.visible or panel.position.x != maxf(16.0,root.size.x-panel.custom_minimum_size.x-16.0):
-		_fail(app,"world must restore map viewport and docked game UI")
+	if app._screen_backdrop.visible or app._photo_backdrop.visible or app.toolbar.visible or panel.position.x != maxf(16.0,root.size.x-panel.custom_minimum_size.x-16.0):
+		_fail(app,"world must restore map viewport and docked game UI without developer toolbar")
 		return
 	if app._status.visible or app._help_label.visible or app._map_buttons.any(func(button): return button.visible):
 		_fail(app,"map inspector title/switches exposed in player UI")

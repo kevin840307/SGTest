@@ -23,7 +23,7 @@ func _manifest(entries: Array) -> String:
 
 
 func _initialize() -> void:
-	var catalog = ItemCatalog.new()
+	var catalog = ItemCatalog.new(false)
 	if catalog.loaded or catalog.name_for(2701) != "道具 2701" or catalog.icon_id_for(2701) != 0:
 		_fail("unverified names escaped fallback")
 		return

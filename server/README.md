@@ -241,9 +241,9 @@ Client WorldState 拒絕不同 UID／未送出的拾取結果、只允許一筆�
 
 ## 2026-11-17 SQLite 持久背包登入同步（MVP006 Inventory baseline）
 
-在登入與角色歸屬認證後，`IdentityTlsAuthorization.AuthorizeAndBindAsync` 經已授權 `character.CharacterId` 從**同一 SQLite identity/item_instances** 載入目前所有物品，成功選角回覆及初始 HP 狀態後、WorldReady/其他 AOI 封包開始前，以原有受 TLS 保護的連線傳出 `InventorySnapshot`（V1 opcode36）分批快照。每個封包包含 `CharacterId:int64`、`StartIndex:int32`、`Complete:byte`、`Count:uint16`、每件 `ItemUid:int64`、`ItemDefinitionId:int32`、`Quantity:int32`、`SourceDropId:int64`。固定 header23 bytes、每 item24 bytes，批量128，至多4095件；**登入時若數量超過4095，會拒絕此次背包同步，不顯示錯誤的「完整清單」**。即使沒有物品也必須送 23 bytes 的 complete 空包。原來的 `GroundPickupResult` 仍作為權威即時增量，依 item_uid 去重合併；重新登入則從 DB 全新讀取，與上次臨時收到的物品清單無關。
+在登入與角色歸屬認證後，`IdentitySessionAuthorization.AuthorizeAndBindAsync` 經已授權 `character.CharacterId` 從**同一 SQLite identity/item_instances** 載入目前所有物品，成功選角回覆及初始 HP 狀態後、WorldReady/其他 AOI 封包開始前，透過現行 AES-CBC 二進位連線傳出 `InventorySnapshot`（V1 opcode36）分批快照。每個封包包含 `CharacterId:int64`、`StartIndex:int32`、`Complete:byte`、`Count:uint16`、每件 `ItemUid:int64`、`ItemDefinitionId:int32`、`Quantity:int32`、`SourceDropId:int64`。固定 header23 bytes、每 item24 bytes，批量128，至多4095件；**登入時若數量超過4095，會拒絕此次背包同步，不顯示錯誤的「完整清單」**。即使沒有物品也必須送 23 bytes 的 complete 空包。原來的 `GroundPickupResult` 仍作為權威即時增量，依 item_uid 去重合併；重新登入則從 DB 全新讀取，與上次臨時收到的物品清單無關。
 
-Godot 可開啟「背包（N 件）」檢視物品編號、數量、UID，目前為保護 UI 只列出前80件，避免同時生成大量 Item Sprite。**此階段不推定原版物品名稱或貼圖，也尚未實作裝備/使用/丟棄、分類、交易、背包容量規則及完整分頁。** 初次登入/重連、跨圖與 Pickup Result 的唯一 UID 維護已加入 Godot 測試及正式 TLS Server 整合驗收；持久背包的超大數量資源消耗還需額外性能量測。驗證：Server CI 44089132226 PASS、Godot CI 44088959344 PASS。
+Godot 可開啟「背包（N 件）」檢視物品編號、數量、UID，目前為保護 UI 只列出前80件，避免同時生成大量 Item Sprite。**此階段不推定原版物品名稱或貼圖，也尚未實作裝備/使用/丟棄、分類、交易、背包容量規則及完整分頁。** 初次登入/重連、跨圖與 Pickup Result 的唯一 UID 維護已加入 Godot 測試及正式 AES-CBC Server 整合驗收；持久背包的超大數量資源消耗還需額外性能量測。驗證：Server CI 44089132226 PASS、Godot CI 44088959344 PASS。
 
 ## 2026-11-17 回復道具使用：來源明確核實才開放
 

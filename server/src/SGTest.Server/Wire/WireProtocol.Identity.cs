@@ -244,13 +244,51 @@ public static partial class WireProtocol
         byte[] name = StrictUtf8.GetBytes(value.Name ?? string.Empty);
         if (value.Slot > 31 || name.Length is < 1 or > 96)
             throw new ArgumentOutOfRangeException(nameof(value));
-        int size = HeaderBytes + 3 + name.Length + (value.Appearance is null ? 0 : 4);
-        var frame = NewFrame(WireOpcode.CharacterCreate, size);
-        frame[8] = value.Slot;
-        BinaryPrimitives.WriteUInt16LittleEndian(frame.AsSpan(9, 2), (ushort)name.Length);
-        name.CopyTo(frame.AsSpan(11));
-        if (value.Appearance is { } appearance) WriteAppearance(frame.AsSpan(11+name.Length,4),appearance);
-        return frame;
+
+        byte[]? password = null;
+        try
+        {
+            int suffixBytes;
+            if (value.Creation is { } creation)
+            {
+                password = StrictUtf8.GetBytes(creation.CharacterPassword ?? string.Empty);
+                if (password.Length is < 1 or > MaxCharacterPasswordBytes)
+                    throw new ArgumentOutOfRangeException(nameof(value));
+                suffixBytes = 11 + password.Length;
+            }
+            else suffixBytes = value.Appearance is null ? 0 : 4;
+
+            int size = HeaderBytes + 3 + name.Length + suffixBytes;
+            var frame = NewFrame(WireOpcode.CharacterCreate, size);
+            frame[8] = value.Slot;
+            BinaryPrimitives.WriteUInt16LittleEndian(frame.AsSpan(9, 2), (ushort)name.Length);
+            name.CopyTo(frame.AsSpan(11));
+            int offset = 11 + name.Length;
+
+            if (value.Creation is { } settings)
+            {
+                frame[offset++] = 2; // extended creation payload version
+                frame[offset++] = value.Appearance is null ? (byte)0 : (byte)1;
+                if (value.Appearance is { } appearance)
+                    WriteAppearance(frame.AsSpan(offset,4),appearance);
+                else frame.AsSpan(offset,4).Clear();
+                offset += 4;
+                frame[offset++] = settings.Strength;
+                frame[offset++] = settings.Dexterity;
+                frame[offset++] = settings.Constitution;
+                frame[offset++] = settings.Wisdom;
+                frame[offset++] = checked((byte)password!.Length);
+                password.CopyTo(frame.AsSpan(offset));
+            }
+            else if (value.Appearance is { } appearance)
+                WriteAppearance(frame.AsSpan(offset,4),appearance);
+            return frame;
+        }
+        finally
+        {
+            if (password is not null)
+                System.Security.Cryptography.CryptographicOperations.ZeroMemory(password);
+        }
     }
 
     public static bool TryDecodeCharacterCreate(
@@ -262,18 +300,44 @@ public static partial class WireProtocol
             return false;
         byte slot = frame[8];
         int length = BinaryPrimitives.ReadUInt16LittleEndian(frame.Slice(9, 2));
-        if (slot > 31 || length is < 1 or > 96 ||
-            (11 + length != frame.Length && 15 + length != frame.Length))
+        int offset = 11 + length;
+        if (slot > 31 || length is < 1 or > 96 || offset > frame.Length)
             return false;
         try
         {
-            CharacterAppearance? appearance=null;
-            if(frame.Length==15+length)
+            string name = StrictUtf8.GetString(frame.Slice(11,length));
+            if (offset == frame.Length)
             {
-                if(!ReadAppearance(frame.Slice(11+length,4),out var decoded)) return false;
-                appearance=decoded;
+                value = new(slot,name);
+                return true;
             }
-            value = new(slot, StrictUtf8.GetString(frame.Slice(11, length)),appearance);
+            if (frame.Length == offset + 4)
+            {
+                if (!ReadAppearance(frame.Slice(offset,4),out var legacyAppearance))
+                    return false;
+                value = new(slot,name,legacyAppearance);
+                return true;
+            }
+            if (frame.Length < offset + 11 || frame[offset++] != 2)
+                return false;
+            byte appearanceKnown = frame[offset++];
+            if (appearanceKnown > 1)
+                return false;
+            if (!ReadAppearance(frame.Slice(offset,4),out var decodedAppearance))
+                return false;
+            offset += 4;
+            if (appearanceKnown == 0 && decodedAppearance != default)
+                return false;
+            var creation = new CharacterCreationWire(
+                frame[offset++], frame[offset++], frame[offset++], frame[offset++],
+                string.Empty);
+            int passwordBytes = frame[offset++];
+            if (passwordBytes is < 1 or > MaxCharacterPasswordBytes ||
+                frame.Length != offset + passwordBytes)
+                return false;
+            string characterPassword = StrictUtf8.GetString(frame.Slice(offset,passwordBytes));
+            value = new(slot,name,appearanceKnown == 1 ? decodedAppearance : null,
+                creation with { CharacterPassword = characterPassword });
             return true;
         }
         catch (DecoderFallbackException) { return false; }
@@ -281,7 +345,7 @@ public static partial class WireProtocol
 
     public static byte[] EncodeCharacterCreateResult(CharacterCreateResultWire value)
     {
-        if ((byte)value.Status > (byte)CharacterCreateWireStatus.InvalidAppearance)
+        if ((byte)value.Status > (byte)CharacterCreateWireStatus.InvalidCreationSettings)
             throw new ArgumentOutOfRangeException(nameof(value));
         byte[] name = StrictUtf8.GetBytes(value.Name ?? string.Empty);
         if (value.Status == CharacterCreateWireStatus.Success)
@@ -314,7 +378,7 @@ public static partial class WireProtocol
         long characterId = BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(9, 8));
         byte slot = frame[17];
         int length = BinaryPrimitives.ReadUInt16LittleEndian(frame.Slice(18, 2));
-        if (raw > (byte)CharacterCreateWireStatus.InvalidAppearance || slot > 31 ||
+        if (raw > (byte)CharacterCreateWireStatus.InvalidCreationSettings || slot > 31 ||
             length > 96 || (20 + length != frame.Length && 24 + length != frame.Length))
             return false;
         var status = (CharacterCreateWireStatus)raw;
@@ -342,8 +406,22 @@ public static partial class WireProtocol
     public static byte[] EncodeCharacterChoose(CharacterChooseWire value)
     {
         if (value.CharacterId <= 0) throw new ArgumentOutOfRangeException(nameof(value));
-        var frame = NewFrame(WireOpcode.CharacterChoose, CharacterChooseFrameBytes);
+        byte[]? proof = null;
+        if (value.CharacterPassword is not null)
+        {
+            CharacterCreationRules.ValidatePassword(value.CharacterPassword);
+            proof = StrictUtf8.GetBytes(value.CharacterPassword);
+        }
+        var frame = NewFrame(WireOpcode.CharacterChoose,
+            CharacterChooseFrameBytes + (proof is null ? 0 : 2 + proof.Length));
         BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(8, 8), value.CharacterId);
+        if (proof is not null)
+        {
+            frame[16] = 1;
+            frame[17] = checked((byte)proof.Length);
+            proof.CopyTo(frame.AsSpan(18));
+            System.Security.Cryptography.CryptographicOperations.ZeroMemory(proof);
+        }
         return frame;
     }
 
@@ -353,12 +431,21 @@ public static partial class WireProtocol
         if (!TryReadHeader(frame, out var h) || h.Opcode != WireOpcode.CharacterChoose) return false;
         long id = BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(8, 8));
         if (id <= 0) return false;
-        value = new(id); return true;
+        if (frame.Length == CharacterChooseFrameBytes) { value = new(id); return true; }
+        if (frame[16] != 1 || frame[17] is < 4 or > MaxCharacterPasswordBytes || frame.Length != 18 + frame[17])
+            return false;
+        try
+        {
+            string password = StrictUtf8.GetString(frame.Slice(18));
+            CharacterCreationRules.ValidatePassword(password);
+            value = new(id,password); return true;
+        }
+        catch (ArgumentException) { return false; }
     }
 
     public static byte[] EncodeCharacterChooseResult(CharacterChooseResultWire value)
     {
-        if ((byte)value.Status > (byte)CharacterChooseWireStatus.WorldRejected) throw new ArgumentOutOfRangeException(nameof(value));
+        if ((byte)value.Status > (byte)CharacterChooseWireStatus.PasswordLocked) throw new ArgumentOutOfRangeException(nameof(value));
         if (value.Status == CharacterChooseWireStatus.Success)
         {
             if (value.CharacterId <= 0 || value.MapId <= 0 || value.MapEpoch <= 0 ||
@@ -379,7 +466,8 @@ public static partial class WireProtocol
     public static bool TryDecodeCharacterChooseResult(ReadOnlySpan<byte> frame, out CharacterChooseResultWire value)
     {
         value = default;
-        if (!TryReadHeader(frame, out var h) || h.Opcode != WireOpcode.CharacterChooseResult || frame[8] > 2) return false;
+        if (!TryReadHeader(frame, out var h) || h.Opcode != WireOpcode.CharacterChooseResult ||
+            frame[8] > (byte)CharacterChooseWireStatus.PasswordLocked) return false;
         var status = (CharacterChooseWireStatus)frame[8];
         long id = BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(9, 8));
         int map = BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(17, 4));

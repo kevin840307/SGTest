@@ -35,8 +35,10 @@ static func _sha256_hex(digest: String) -> bool:
 	return true
 
 
-func _init() -> void:
-	if FileAccess.file_exists(CATALOG_PATH):
+func _init(load_private_default: bool = true) -> void:
+	# Synthetic CI fixtures must never inherit the developer's private
+	# source catalog; normal UI construction retains the original behavior.
+	if load_private_default and FileAccess.file_exists(CATALOG_PATH):
 		var file := FileAccess.open(CATALOG_PATH,FileAccess.READ)
 		if file != null and file.get_length() <= MAX_BYTES:
 			load_json_text(file.get_as_text())

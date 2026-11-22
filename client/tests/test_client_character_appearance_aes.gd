@@ -48,6 +48,12 @@ func _run() -> void:
 				return
 			panel.character_name_input.text = "Chosen"
 			panel.character_slot_input.value = 0
+			panel.character_strength_input.value = 3
+			panel.character_dexterity_input.value = 2
+			panel.character_constitution_input.value = 2
+			panel.character_wisdom_input.value = 1
+			panel.character_password_input.text = "2468"
+			panel.character_password_confirm_input.text = "2468"
 			panel.create_character_button.pressed.emit()
 			while int(snapshot.get("last_created_character_id",0))==0 and Time.get_ticks_msec()<deadline:
 				await process_frame
@@ -59,7 +65,7 @@ func _run() -> void:
 			_fail("create/relogin appearance changed "+str(snapshot),session)
 			return
 		if pass_index==1:
-			if not session.choose_character(int(snapshot.characters[0].character_id)):
+			if not session.choose_character(int(snapshot.characters[0].character_id),"2468"):
 				_fail("choose persisted character",session)
 				return
 			while not snapshot.get("world_ready",false) and Time.get_ticks_msec()<deadline:

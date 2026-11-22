@@ -10,6 +10,8 @@ const TerminalWorldHud = preload("res://ui/terminal_world_hud.gd")
 const UiTextureLoader = preload("res://ui/ui_texture_loader.gd")
 const SharedGameCursor = preload("res://ui/shared_game_cursor.gd")
 const Recovered2AuthShell = preload("res://ui/recovered2_auth_shell.gd")
+const Recovered2WorldShell = preload("res://ui/recovered2_world_shell.gd")
+const ClassicAuthShell = preload("res://ui/classic_auth_shell.gd")
 const WorldLoadingOverlay = preload("res://ui/world_loading_overlay.gd")
 var auto_start := true
 var world_view := WorldView.new()
@@ -30,11 +32,16 @@ var _cursor_sample_elapsed := 0.0
 var terminal_hud := TerminalWorldHud.new()
 var session_panel := SessionPanel.new()
 var recovered2_auth := Recovered2AuthShell.new()
+var recovered2_world := Recovered2WorldShell.new()
+var classic_auth := ClassicAuthShell.new()
+var _r2_legacy_group := -1
+var _r2_close := Button.new()
 var loading_overlay := WorldLoadingOverlay.new()
 var _loading_ui_elapsed := 0.0
 var _recovered2_local_ready := false
 var preview_auth_offline := false
 var offline_map_only := false
+var dev_overlay_enabled := false
 var skin_picker: OptionButton
 var _map_buttons: Array[Button] = []
 var _last_snapshot: Dictionary = {}
@@ -73,6 +80,7 @@ func _fit_initial_window_to_desktop() -> void:
 
 func _ready() -> void:
 	get_tree().auto_accept_quit = false
+	dev_overlay_enabled = OS.get_cmdline_user_args().has("--dev-ui")
 	if auto_start:
 		_fit_initial_window_to_desktop()
 	add_child(world_view)
@@ -117,7 +125,14 @@ func _ready() -> void:
 	layer.add_child(session_panel)
 	layer.add_child(terminal_hud)
 	layer.add_child(recovered2_auth)
+	layer.add_child(classic_auth)
+	layer.add_child(recovered2_world)
 	layer.add_child(loading_overlay)
+	_r2_close.text = "×"
+	_r2_close.name = "Recovered2CloseLegacyPanel"
+	_r2_close.pressed.connect(_close_r2_legacy_group)
+	_r2_close.hide()
+	layer.add_child(_r2_close)
 	# Offline map tests must not load the private login movie or its GPU
 	# textures; that presentation is only built for the actual client or a
 	# local visual test which explicitly opts in.
@@ -128,6 +143,10 @@ func _ready() -> void:
 	# offline map preview must never have its mouse input intercepted.
 	recovered2_auth.enable_for_page(SessionLayout.Page.LOGIN,false)
 	recovered2_auth.skin_requested.connect(_select_recovered2_skin)
+	classic_auth.bind_session(session_panel,world_view.store)
+	recovered2_world.bind_session(session_panel)
+	recovered2_world.request_legacy_section.connect(_show_r2_legacy_group)
+	recovered2_world.skin_requested.connect(_select_recovered2_skin)
 	if not offline_map_only:
 		add_child(cursor_manager)
 	terminal_hud.visible = false
@@ -137,13 +156,15 @@ func _ready() -> void:
 	session_panel.connection_changed.connect(_connection_changed)
 	session_panel.world_ready.connect(_server_world_ready)
 	session_panel.world_snapshot.connect(_server_snapshot)
-	var login_toggle := Button.new()
-	login_toggle.text = "登入／連線"
-	login_toggle.focus_mode = Control.FOCUS_NONE
-	login_toggle.pressed.connect(func(): session_panel.visible = not session_panel.visible)
-	row.add_child(login_toggle)
+	if dev_overlay_enabled:
+		var login_toggle := Button.new()
+		login_toggle.text = "登入／連線"
+		login_toggle.focus_mode = Control.FOCUS_NONE
+		login_toggle.pressed.connect(func(): session_panel.visible = not session_panel.visible)
+		row.add_child(login_toggle)
 	if not offline_map_only:
 		_install_skin_selector(row)
+	toolbar.visible = dev_overlay_enabled
 	get_viewport().size_changed.connect(_resize)
 	_resize()
 	if auto_start:
@@ -177,22 +198,10 @@ func _install_skin_selector(row: HBoxContainer) -> void:
 	skin_picker.tooltip_text = "切換介面風格（不影響登入與遊戲狀態）"
 	skin_picker.focus_mode = Control.FOCUS_NONE
 	row.add_child(skin_picker)
+	skin_picker.visible = dev_overlay_enabled
 	skin_picker.item_selected.connect(_skin_selected)
-	# Character screens hide the gameplay toolbar. Offer the same style
-	# switcher there without rebuilding any authenticated controls.
-	for page in [session_panel._layout.login_page,session_panel._layout.select_page,session_panel._layout.create_page]:
-		var prompt := Label.new()
-		prompt.text = "INTERFACE  //  介面風格"
-		page.add_child(prompt)
-		var picker := OptionButton.new()
-		picker.name = "LobbySkinPicker"
-		for i in skin_picker.item_count:
-			picker.add_item(skin_picker.get_item_text(i))
-			picker.set_item_metadata(i,skin_picker.get_item_metadata(i))
-		picker.select(skin_picker.selected)
-		picker.item_selected.connect(_skin_selected)
-		page.add_child(picker)
-		_lobby_skin_pickers.append(picker)
+	# Normal login/select/create screens contain no SGTest-only UI selector.
+	# Runtime UI switching is exposed by the in-world System Settings window.
 	UiSkinCatalog.apply(selected,toolbar,session_panel)
 	terminal_hud.set_ui_theme(UiSkinCatalog.build_theme(selected))
 
@@ -221,6 +230,8 @@ func _resize() -> void:
 	_screen_backdrop.size = Vector2(get_viewport().get_visible_rect().size)
 	_photo_backdrop.size = _screen_backdrop.size
 	recovered2_auth.resize_view(_screen_backdrop.size)
+	classic_auth.resize_view(_screen_backdrop.size)
+	recovered2_world.resize_view(_screen_backdrop.size)
 	loading_overlay.resize_view(_screen_backdrop.size)
 	terminal_hud.resize_view(Vector2i(_screen_backdrop.size))
 	_update_ui_stage(true)
@@ -231,8 +242,11 @@ func _update_ui_stage(force: bool = false) -> void:
 		return
 	var pre_world := session_panel.visible and session_panel._layout.current_page != SessionLayout.Page.WORLD
 	var r2_frontend := _current_skin == "recovered2_local" and _recovered2_local_ready and pre_world
+	var original_skin := _current_skin == "original_ie_hk2" and UiSkinCatalog.valid("original_ie_hk2")
+	var original_frontend := original_skin and pre_world
+	var r2_world := ((_current_skin == "recovered2_local" and _recovered2_local_ready) or original_skin) and session_panel.active and session_panel._layout.current_page == SessionLayout.Page.WORLD
 	var viewport_size := Vector2(get_viewport().get_visible_rect().size)
-	var key := "%s:%s:%d:%d:%d:%d" % [str(pre_world),_current_skin,int(viewport_size.x),int(viewport_size.y),int(session_panel.visible),int(session_panel._layout.current_page)]
+	var key := "%s:%s:%d:%d:%d:%d:%d" % [str(pre_world),_current_skin,int(viewport_size.x),int(viewport_size.y),int(session_panel.visible),int(session_panel._layout.current_page),_r2_legacy_group]
 	if not force and key == _ui_stage_key:
 		return
 	_ui_stage_key = key
@@ -243,10 +257,14 @@ func _update_ui_stage(force: bool = false) -> void:
 	var picture := UiTextureLoader.get_texture(backdrop_path)
 	_photo_backdrop.texture = picture if picture is Texture2D else null
 	_photo_backdrop.visible = pre_world and _photo_backdrop.texture != null
-	_screen_backdrop.visible = pre_world and not _photo_backdrop.visible and not r2_frontend
-	_photo_backdrop.visible = _photo_backdrop.visible and not r2_frontend
+	_screen_backdrop.visible = pre_world and not _photo_backdrop.visible and not r2_frontend and not original_frontend
+	_photo_backdrop.visible = _photo_backdrop.visible and not r2_frontend and not original_frontend
 	recovered2_auth.enable_for_page(session_panel._layout.current_page,r2_frontend)
-	toolbar.visible = not pre_world
+	classic_auth.enable_for_page(session_panel._layout.current_page,original_frontend)
+	recovered2_world.set_profile("original_ie_hk2" if original_skin else "recovered2_local")
+	toolbar.visible = dev_overlay_enabled and not pre_world and not r2_world
+	recovered2_world.set_world_active(r2_world)
+	_r2_close.visible = r2_world and _r2_legacy_group >= 0
 	var retro_world := _current_skin == "retro_terminal" and not pre_world
 	terminal_hud.visible = retro_world and session_panel.active
 	for button in _map_buttons:
@@ -255,10 +273,22 @@ func _update_ui_stage(force: bool = false) -> void:
 	_status.hide()
 	var panel_width := minf(560.0,maxf(360.0,viewport_size.x-32.0)) if pre_world else minf(420.0,maxf(300.0,viewport_size.x-32.0))
 	session_panel.custom_minimum_size.x = panel_width
-	if r2_frontend:
-		# Keep authoritative SessionPanel live; only its controls are offscreen.
-		# The optional local Recovered2 skin owns presentation, never commands.
+	if r2_frontend or original_frontend:
+		# One SessionPanel stays alive but never covers the private login art.
 		session_panel.position = Vector2(-12000,-12000)
+		return
+	if r2_world:
+		# Floating windows are independent presentation. The existing live
+		# SessionPanel is opened only for features not yet promoted to a
+		# source-position native window; all Server callbacks stay intact.
+		if _r2_legacy_group < 0:
+			session_panel.position = Vector2(-12000,-12000)
+		else:
+			var width := minf(445.0,viewport_size.x-84.0)
+			session_panel.size = Vector2(width,minf(530.0,viewport_size.y-120.0))
+			session_panel.position = Vector2(maxf(20.0,viewport_size.x-width-86.0),76.0)
+			_r2_close.position = session_panel.position + Vector2(width-35.0,-15.0)
+			_r2_close.size = Vector2(35,31)
 		return
 	if pre_world:
 		# Authentication screens size to visible content rather than leaving
@@ -276,6 +306,20 @@ func _update_ui_stage(force: bool = false) -> void:
 		var dock_right := UiSkinCatalog.dock(_current_skin) == "right"
 		session_panel.size = Vector2(panel_width,maxf(220.0,viewport_size.y-96.0))
 		session_panel.position = Vector2(maxf(16.0,viewport_size.x-panel_width-16.0) if dock_right else 16.0,64.0)
+
+
+func _show_r2_legacy_group(index: int) -> void:
+	if not session_panel.active:
+		return
+	_r2_legacy_group = -1 if _r2_legacy_group == index else index
+	if _r2_legacy_group >= 0 and session_panel._layout.layout_id == "tabs":
+		session_panel._layout.world_tabs.current_tab = clampi(index,0,3)
+	_update_ui_stage(true)
+
+
+func _close_r2_legacy_group() -> void:
+	_r2_legacy_group = -1
+	_update_ui_stage(true)
 
 
 func _open_terminal_section(index: int) -> void:
@@ -483,6 +527,8 @@ func _connection_changed(active: bool) -> void:
 	_held.clear()
 	_dragging = false
 	terminal_hud.clear()
+	_r2_legacy_group = -1
+	recovered2_world.set_world_active(false)
 	world_view.clear_map()
 	world_view.show_players = active
 	if active:
@@ -523,6 +569,7 @@ func _server_snapshot(snapshot: Dictionary) -> void:
 			_status.text = "NPC 互動被伺服器拒絕（代碼 %d）" % npc_result
 	_last_snapshot = snapshot.duplicate(true)
 	terminal_hud.apply_snapshot(snapshot)
+	recovered2_world.apply_snapshot(snapshot)
 	world_view.set_player_snapshot(snapshot)
 
 

@@ -6,7 +6,8 @@ extends RefCounted
 const SkinArtwork = preload("res://ui/skin_artwork.gd")
 const CONFIG_PATH := "user://ui_skin.cfg"
 const SKIN_DIRECTORY := "res://ui/skins"
-const DEFAULT_SKIN := "retro_terminal"
+const DEFAULT_SKIN := "recovered2_local"
+const FALLBACK_SKIN := "retro_terminal"
 const COLOR_FIELDS := ["bg","border","text","field","button","hover","accent"]
 
 static func _profiles() -> Array[Dictionary]:
@@ -49,22 +50,23 @@ static func valid(id: String) -> bool:
 	return false
 
 static func load_selected() -> String:
+	var default_id := DEFAULT_SKIN if valid(DEFAULT_SKIN) else FALLBACK_SKIN
 	var config := ConfigFile.new()
 	if config.load(CONFIG_PATH) != OK:
-		return DEFAULT_SKIN
+		return default_id
 	# Migrate older palette-only selections to the new pictured UI baseline.
 	# After the user selects a skin in the new version, persist it normally.
-	if int(config.get_value("ui","skin_schema",0)) < 2:
-		return DEFAULT_SKIN
-	var chosen := str(config.get_value("ui","skin",DEFAULT_SKIN))
-	return chosen if valid(chosen) else DEFAULT_SKIN
+	if int(config.get_value("ui","skin_schema",0)) < 3:
+		return default_id
+	var chosen := str(config.get_value("ui","skin",default_id))
+	return chosen if valid(chosen) else default_id
 
 static func save_selected(id: String) -> Error:
 	if not valid(id):
 		return ERR_INVALID_PARAMETER
 	var config := ConfigFile.new()
 	config.set_value("ui","skin",id)
-	config.set_value("ui","skin_schema",2)
+	config.set_value("ui","skin_schema",3)
 	return config.save(CONFIG_PATH)
 
 static func _palette(id: String) -> Dictionary:
@@ -74,6 +76,9 @@ static func _palette(id: String) -> Dictionary:
 			return skin
 	for skin in profiles:
 		if str(skin.id) == DEFAULT_SKIN:
+			return skin
+	for skin in profiles:
+		if str(skin.id) == FALLBACK_SKIN:
 			return skin
 	return profiles[0] if not profiles.is_empty() else {}
 

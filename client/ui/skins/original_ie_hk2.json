@@ -1,0 +1,16 @@
+{
+  "id": "original_ie_hk2",
+  "name": "星夢 Online｜原版 IE HK2（本機）",
+  "layout": "tabs",
+  "dock": "right",
+  "effect": "stars",
+  "bg": "#f8e9ca",
+  "border": "#b88829",
+  "text": "#e9d3aa",
+  "field": "#432b17",
+  "button": "#896020",
+  "hover": "#b58a36",
+  "accent": "#ffe4a7",
+  "source_theme": "res://ui/private_ie_hk2/ACCOUNT_LOGIN.png",
+  "requires_local_assets": true
+}

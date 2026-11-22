@@ -139,7 +139,7 @@ public sealed partial class IdentitySessionAuthorization
             if (WireProtocol.TryDecodeCharacterCreate(
                     selectionFrame, out var create))
             {
-                CharacterCreateWireStatus wireStatus;
+                CharacterCreateWireStatus wireStatus = CharacterCreateWireStatus.Unavailable;
                 CharacterRecord? createdCharacter = null;
                 if (_characterCreation is null)
                 {
@@ -153,35 +153,71 @@ public sealed partial class IdentitySessionAuthorization
                 }
                 else
                 {
-                    try
+                    CharacterCreationSettings? creationSettings = null;
+                    if (create.Creation is { } creation)
                     {
-                        var result = create.Appearance is { } appearance
-                            ? await _identity.CreateCharacterAsync(account.AccountId,create.Slot,create.Name,
-                                _characterCreation.Spawn,appearance,_characterCreation.AppearanceRules!,cancellationToken)
-                                .ConfigureAwait(false)
-                            : await _identity.CreateCharacterAsync(account.AccountId,create.Slot,create.Name,
-                                _characterCreation.Spawn,cancellationToken).ConfigureAwait(false);
-                        wireStatus = result.Status switch
+                        try
                         {
-                            CharacterCreateStatus.Created =>
-                                CharacterCreateWireStatus.Success,
-                            CharacterCreateStatus.SlotOccupied =>
-                                CharacterCreateWireStatus.SlotOccupied,
-                            CharacterCreateStatus.NameTaken =>
-                                CharacterCreateWireStatus.NameTaken,
-                            CharacterCreateStatus.LimitReached =>
-                                CharacterCreateWireStatus.LimitReached,
-                            _ => CharacterCreateWireStatus.Unavailable
-                        };
-                        createdCharacter = result.Character;
+                            creationSettings = new CharacterCreationSettings(
+                                new(creation.Strength,creation.Dexterity,
+                                    creation.Constitution,creation.Wisdom),
+                                creation.CharacterPassword,
+                                CharacterCreationRules.SourceReference);
+                        }
+                        catch (ArgumentException)
+                        {
+                            wireStatus = CharacterCreateWireStatus.InvalidCreationSettings;
+                        }
                     }
-                    catch (ArgumentOutOfRangeException)
+
+                    if (create.Creation is null || creationSettings is not null)
                     {
-                        wireStatus = CharacterCreateWireStatus.InvalidSlot;
-                    }
-                    catch (ArgumentException)
-                    {
-                        wireStatus = CharacterCreateWireStatus.InvalidName;
+                        try
+                        {
+                            CharacterCreateResult result;
+                            if (creationSettings is not null)
+                            {
+                                result = await _identity.CreateCharacterWithSettingsAsync(
+                                    account.AccountId,create.Slot,create.Name,
+                                    _characterCreation.Spawn,creationSettings,
+                                    create.Appearance,_characterCreation.AppearanceRules,
+                                    cancellationToken).ConfigureAwait(false);
+                            }
+                            else
+                            {
+                                result = create.Appearance is { } appearance
+                                    ? await _identity.CreateCharacterAsync(
+                                        account.AccountId,create.Slot,create.Name,
+                                        _characterCreation.Spawn,appearance,
+                                        _characterCreation.AppearanceRules!,cancellationToken)
+                                        .ConfigureAwait(false)
+                                    : await _identity.CreateCharacterAsync(
+                                        account.AccountId,create.Slot,create.Name,
+                                        _characterCreation.Spawn,cancellationToken)
+                                        .ConfigureAwait(false);
+                            }
+                            wireStatus = result.Status switch
+                            {
+                                CharacterCreateStatus.Created =>
+                                    CharacterCreateWireStatus.Success,
+                                CharacterCreateStatus.SlotOccupied =>
+                                    CharacterCreateWireStatus.SlotOccupied,
+                                CharacterCreateStatus.NameTaken =>
+                                    CharacterCreateWireStatus.NameTaken,
+                                CharacterCreateStatus.LimitReached =>
+                                    CharacterCreateWireStatus.LimitReached,
+                                _ => CharacterCreateWireStatus.Unavailable
+                            };
+                            createdCharacter = result.Character;
+                        }
+                        catch (ArgumentOutOfRangeException)
+                        {
+                            wireStatus = CharacterCreateWireStatus.InvalidSlot;
+                        }
+                        catch (ArgumentException)
+                        {
+                            wireStatus = CharacterCreateWireStatus.InvalidName;
+                        }
                     }
                 }
 
@@ -210,6 +246,7 @@ public sealed partial class IdentitySessionAuthorization
                 // recover from a concurrent slot/name conflict without
                 // reconnecting and keeps the authoritative list server-owned.
                 await SendCharacterListAsync().ConfigureAwait(false);
+                CryptographicOperations.ZeroMemory(selectionFrame);
                 continue;
             }
 
@@ -218,9 +255,7 @@ public sealed partial class IdentitySessionAuthorization
                 return null;
             character = characters.FirstOrDefault(
                 c => c.CharacterId == choose.CharacterId);
-            // Protected characters cannot enter through the legacy proof-free choose frame.
-            // The forthcoming bounded wire extension must verify via Identity before binding.
-            if (character is null || character.RequiresCharacterPassword)
+            if (character is null)
             {
                 await WriteFrameAsync(tls,
                     WireProtocol.EncodeCharacterChooseResult(new(
@@ -228,6 +263,28 @@ public sealed partial class IdentitySessionAuthorization
                         0, 0, 0, 0, 0)), cancellationToken)
                     .ConfigureAwait(false);
                 return null;
+            }
+            CharacterChooseWireStatus passwordStatus;
+            try
+            {
+                passwordStatus = character.RequiresCharacterPassword && choose.CharacterPassword is null
+                    ? CharacterChooseWireStatus.PasswordRequired
+                    : await _identity.VerifyCharacterPasswordAsync(account.AccountId,
+                        character.CharacterId,choose.CharacterPassword,cancellationToken).ConfigureAwait(false) switch
+                    {
+                        CharacterPasswordStatus.Success => CharacterChooseWireStatus.Success,
+                        CharacterPasswordStatus.NotOwned => CharacterChooseWireStatus.NotOwned,
+                        CharacterPasswordStatus.Locked => CharacterChooseWireStatus.PasswordLocked,
+                        _ => CharacterChooseWireStatus.InvalidPassword
+                    };
+            }
+            finally { CryptographicOperations.ZeroMemory(selectionFrame); }
+            if (passwordStatus != CharacterChooseWireStatus.Success)
+            {
+                await WriteFrameAsync(tls, WireProtocol.EncodeCharacterChooseResult(new(
+                    passwordStatus,0,0,0,0,0)),cancellationToken).ConfigureAwait(false);
+                if (passwordStatus == CharacterChooseWireStatus.NotOwned) return null;
+                character = null;
             }
         }
 
