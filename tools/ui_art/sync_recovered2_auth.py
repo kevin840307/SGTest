@@ -19,6 +19,11 @@ FILES = {
     "ui/themes/paradise_window_theme.tres":"paradise_window_theme.tres",
     "ui/SELECT_CHARACTER.png":"SELECT_CHARACTER.png",
     "ui/CREATE_CHARACTER.png":"CREATE_CHARACTER.png",
+    **{
+        f"ui/create_anim/NEW_CHARACTER.spr.{i:04d}.png":
+            f"create_anim/NEW_CHARACTER.spr.{i:04d}.png"
+        for i in range(4)
+    },
     "ui/LEFT_BUTTON.png":"LEFT_BUTTON.png",
     "ui/RIGHT_BUTTON.png":"RIGHT_BUTTON.png",
     "ui/BG_LOADING.png":"BG_LOADING.png",

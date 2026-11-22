@@ -221,14 +221,25 @@ func _run() -> void:
 	panel._latest = {"state":State.STATE_SELECTING_CHARACTER}
 	panel._set_controls()
 	app._update_ui_stage(true)
-	if not shell._selection.visible or shell._slot_actions[0].text != "進入世界":
+	if not shell._selection.visible or shell._slot_actions[0].text != "進入遊戲":
 		_error("3-column selection did not display account characters")
 		return
 	for i in 2:
 		var preview_label: Label = shell._slot_previews[i]
-		if not preview_label.text.is_empty():
-			_error("existing character card leaked internal presentation diagnostics")
+		if not preview_label.text.is_empty() or not shell._slot_password_actions[i].visible or not shell._slot_actions[i].visible or not shell._slot_delete_actions[i].visible or shell._slot_empty_arts[i].visible:
+			_error("occupied character card lost Recovered2 three-button layout")
 			return
+	if not shell._slot_empty_arts[2].visible or not shell._slot_empty_hotspots[2].visible or shell._slot_actions[2].visible or shell._slot_password_actions[2].visible or shell._slot_delete_actions[2].visible or shell._slot_empty_arts[2].sprite_frames.get_frame_count(&"default") != 4:
+		_error("empty character card did not use four original Recovered2 create frames")
+		return
+	shell._slot_password_actions[0].pressed.emit()
+	if not panel.status.text.contains("尚未支援角色密碼設定"):
+		_error("password button failed to report unsupported server operation")
+		return
+	shell._slot_delete_actions[0].pressed.emit()
+	if not panel.status.text.contains("尚未支援刪除角色"):
+		_error("delete button failed to report unsupported server operation")
+		return
 	var nav_left: float = shell._select_prev.position.x
 	var nav_right: float = shell._select_next.position.x+shell._select_next.size.x
 	var gap_left: float = shell._select_back.position.x-(
@@ -252,8 +263,10 @@ func _run() -> void:
 		_error("character selection did not submit existing choose intent")
 		return
 	panel._chosen = false
-	panel._show_create = true
-	panel._set_controls()
+	shell._slot_empty_hotspots[2].pressed.emit()
+	if not panel._show_create or int(panel.character_slot_input.value) != 2:
+		_error("empty character artwork did not enter creation in the selected slot")
+		return
 	app._update_ui_stage(true)
 	if not shell._creation.visible:
 		_error("source create image not shown")

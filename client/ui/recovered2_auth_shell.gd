@@ -52,6 +52,10 @@ var _select_next: Button
 var _create_status: Label
 var _names: Array[Label] = []
 var _slot_actions: Array[Button] = []
+var _slot_password_actions: Array[Button] = []
+var _slot_delete_actions: Array[Button] = []
+var _slot_empty_arts: Array[AnimatedSprite2D] = []
+var _slot_empty_hotspots: Array[Button] = []
 var _slot_previews: Array[Label] = []
 var _name_edit: LineEdit
 var _slot_edit: SpinBox
@@ -160,12 +164,17 @@ func enable_for_page(page: int, active: bool) -> void:
 	if not active:
 		if _video != null:
 			_video.stop()
+		for art in _slot_empty_arts:
+			art.stop()
 		return
 	if _page_index != page:
 		_page_index = page
 		_login.visible = page == SessionLayout.Page.LOGIN
 		_selection.visible = page == SessionLayout.Page.CHARACTER_SELECT
 		_creation.visible = page == SessionLayout.Page.CHARACTER_CREATE
+		if not _selection.visible:
+			for art in _slot_empty_arts:
+				art.stop()
 		if is_instance_valid(_selection_backdrop_fill):
 			_selection_backdrop_fill.visible = _selection.visible
 		if is_instance_valid(_creation_backdrop_fill):
@@ -363,22 +372,52 @@ func _build_select() -> void:
 	_selection_backdrop_fill = _build_viewport_fill("SELECT_CHARACTER.png")
 	_build_background(_selection,"SELECT_CHARACTER.png")
 	_label(_selection,"請選擇角色",405,75,390,48,25)
+	# Reuse the four original Recovered2 NEW_CHARACTER frames (2 FPS), not
+	# a hand-drawn substitute or the yellow IE HK2 selection art.
+	var empty_frames := SpriteFrames.new()
+	if not empty_frames.has_animation(&"default"):
+		empty_frames.add_animation(&"default")
+	empty_frames.set_animation_speed(&"default",2.0)
+	for frame in 4:
+		var texture := UiTextureLoader.get_texture(
+			LOCAL.path_join("create_anim/NEW_CHARACTER.spr.%04d.png" % frame))
+		if texture != null:
+			empty_frames.add_frame(&"default",texture)
 	for i in 3:
 		var x := float([220,503,782][i])
-		var name := _label(_selection,"（空欄位）",x,385,200,32,17)
+		var name := _label(_selection,"",x,385,200,32,17)
 		_names.append(name)
 		var doll := CharacterPreview.new()
 		_put(_selection,doll,x+12,422,176,200)
 		doll.bind_store(_asset_store)
-		doll.tooltip_text = "與世界共用的暫定 B 外觀；種族／髮型／裝備待 Server 接入"
 		_character_previews.append(doll)
-		var preview := _label(_selection,"尚未建立角色",x+12,610,176,46,11)
-		preview.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		var art := AnimatedSprite2D.new()
+		art.name = "EmptyCharacterArt%d" % i
+		art.position = Vector2(x+100,522)
+		art.sprite_frames = empty_frames
+		_selection.add_child(art)
+		_slot_empty_arts.append(art)
+		var hotspot := Button.new()
+		hotspot.name = "CreateCharacterSlot%d" % i
+		hotspot.flat = true
+		hotspot.focus_mode = Control.FOCUS_NONE
+		hotspot.tooltip_text = "建立新角色"
+		_put(_selection,hotspot,x+12,422,176,200)
+		hotspot.pressed.connect(_enter_slot.bind(i))
+		_slot_empty_hotspots.append(hotspot)
+		var preview := _label(_selection,"",x+12,610,176,20,11)
 		_slot_previews.append(preview)
 		doll.status_changed.connect(func(_status): _last_character_key = "")
-		var action := _button(_selection,"建立角色",x+36,670,125,37,true)
+		var password := _button(_selection,"密碼設定",x+36,629,125,31)
+		password.pressed.connect(_unsupported_slot_action.bind("密碼設定",i))
+		_slot_password_actions.append(password)
+		var action := _button(_selection,"進入遊戲",x+36,670,125,37,true)
 		action.pressed.connect(_enter_slot.bind(i))
 		_slot_actions.append(action)
+		var remove := _button(_selection,"刪除角色",x+36,711,125,37)
+		remove.theme_type_variation = &"ParadiseDangerButton"
+		remove.pressed.connect(_unsupported_slot_action.bind("刪除角色",i))
+		_slot_delete_actions.append(remove)
 	# Treat the three navigation buttons as one centered group. Keeping only
 	# the middle button centered made Previous/Next visibly skewed and even
 	# overlapped the middle hitbox at some source scales.
@@ -393,7 +432,7 @@ func _build_select() -> void:
 	_select_next = _button(
 		_selection,"下一頁",nav_x+108.0+nav_gap+120.0+nav_gap,801,108,36)
 	_select_next.pressed.connect(_change_page.bind(1))
-	_select_status = _label(_selection,"",368,741,464,35,14)
+	_select_status = _label(_selection,"",368,759,464,32,14)
 	_choose_password_box = Panel.new()
 	_choose_password_box.theme_type_variation = &"ParadiseWindowPanel"
 	_put(_selection,_choose_password_box,450,646,300,104)
@@ -411,6 +450,14 @@ func _build_select() -> void:
 	_choose_password_edit.text_submitted.connect(
 		func(_unused): _submit_character_password())
 	_choose_password_box.hide()
+
+func _unsupported_slot_action(action: String, slot_on_page: int) -> void:
+	var index := _selection_page*3+slot_on_page
+	if not _panel.active or index >= _panel._characters.size():
+		return
+	# The SGTest wire protocol has no authenticated password-change/delete
+	# request yet. Never modify local character state to simulate a success.
+	_panel.status.text = "伺服器尚未支援%s" % ("角色密碼設定" if action == "密碼設定" else "刪除角色")
 
 func _submit_character_password() -> void:
 	if _choose_password_edit.text.length() != 4:
@@ -698,11 +745,22 @@ func _update_characters() -> void:
 		var index := _selection_page * 3 + i
 		var valid: bool = index < _panel._characters.size()
 		var character: Dictionary = _panel._characters[index] if valid else {}
-		_names[i].text = str(character.get("name","未建立角色")) if valid else "空白角色欄"
+		_names[i].text = str(character.get("name","")) if valid else ""
 		var appearance: Dictionary = character.get("appearance",{}) if valid else {}
 		_character_previews[i].set_appearance(appearance)
 		_character_previews[i].set_occupied(valid)
-		# Character IDs and presentation diagnostics are internal state, never player-facing.
-		_slot_previews[i].text = "" if valid else "可建立新角色"
-		_slot_actions[i].text = "進入世界" if valid else "建立角色"
-		_slot_actions[i].disabled = _panel._chosen
+		_slot_previews[i].text = ""
+		_slot_empty_arts[i].visible = not valid
+		if not valid and _slot_empty_arts[i].sprite_frames.get_frame_count(&"default") > 0:
+			_slot_empty_arts[i].play(&"default")
+		else:
+			_slot_empty_arts[i].stop()
+		_slot_empty_hotspots[i].visible = not valid
+		_slot_empty_hotspots[i].disabled = _panel._chosen or not _panel.active
+		_slot_password_actions[i].visible = valid
+		_slot_password_actions[i].disabled = _panel._chosen or not _panel.active
+		_slot_actions[i].visible = valid
+		_slot_actions[i].text = "進入遊戲"
+		_slot_actions[i].disabled = _panel._chosen or not _panel.active
+		_slot_delete_actions[i].visible = valid
+		_slot_delete_actions[i].disabled = _panel._chosen or not _panel.active
