@@ -295,6 +295,7 @@ dotnet run -c Release --project tools/tests/wire_aoi_probe/WireAoiProbe.csproj
 - **WIRE001**：固定包頭／length-prefix + 緊湊二進位、MessagePack、Protobuf 或其他合理方案使用相同 golden fixture 比較 Godot ↔ C# 的每訊息 bytes、serialize/parse P95/P99、CPU／alloc／GC、端序、拆包黏包、版本、異常輸入、安全／維護成本；僅證據充分後定版。
 - **WIRE002**：使用正式 AOI／combat／drop trace，測 high-frequency snapshots 的 coalescing/batching、transport head-of-line／backpressure、慢 Client、連線與跨圖恢復；不能只用單一微基準宣稱正式網路更快。
 - **GAME001**：第二階段裝備強化、NPC 商店／銀行／修理、技能、寵物／機甲、交易／玩家商店、PvP 顏色／GM 權限逐功能建立可重跑合約、多人及持久化測例。
+- **GAME001-PLAYER-SHOP-CONCURRENCY（2026-11-23）**：正式 `PlayerShopCoordinator` 以 1 seller + 10 authenticated/trusted buyer generations、`WorldResultRouter`、AOI visibility 與共用 gameplay semaphores 同時購買同一 listing；必須恰好 1 個 `Applied`、其餘 9 個收斂為已關閉商店結果，seller 只收到 1 個可靠 `PlayerShopSold`，錢包只加價一次、loser 不扣款、原 ItemUid 只能有 1 個新 owner 且 listing 關閉。實作 `25c1d00`；`dotnet build server/host/SGTest.Server.Host/SGTest.Server.Host.csproj -c Release` 0 warning/error，完整 Server Checks `SERVER_WORLD_CHECKS PASS total=298`。這是 synthetic Server multiplayer authority Gate，不代表 Godot UI 或 HK 視覺/A-B PASS。
 
 任何腳本未實際執行時記錄 **NOT VERIFIED**，不可把先前 isolated Monster Benchmark 當成完成上述 Gate。
 
