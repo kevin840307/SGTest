@@ -62,6 +62,43 @@ func run() -> void:
 	predictor.observe(rejected)
 	check(not predictor.active and predictor.position==Vector2(56,24),
 		"denied move did not restore Server position")
+	# Regression: MoveReceipt can arrive BEFORE the matching SelfState.
+	# An accepted receipt with an old 'idle' SelfState must not stop the
+	# client after the first 4px step (it would then teleport with AOI updates).
+	var ack_gap := LocalMovement.new()
+	check(ack_gap.configure(grid(12,12),manifest,4,10),"ACK gap grid invalid")
+	ack_gap.observe(initial(10,4,Vector2(24,24)))
+	check(ack_gap.request_target(Vector2(152,24),1),"ACK gap route not started")
+	ack_gap.advance(1.0/60.0)
+	var first_step := ack_gap.position
+	var receipt_before_self := initial(10,4,Vector2(24,24),2)
+	receipt_before_self.last_receipt_sequence=1
+	receipt_before_self.last_receipt_status=0
+	# movement_action_sequence=0 and moving=false: the OLD state.
+	ack_gap.observe(receipt_before_self)
+	check(ack_gap.active and ack_gap.moving and ack_gap.position==first_step,
+		"accepted receipt with old idle SelfState interrupted walk immediately")
+	for frame in 20:
+		var prior := ack_gap.position
+		ack_gap.advance(1.0/60.0)
+		check(ack_gap.position.distance_to(prior)<=4.001 and ack_gap.position.x>=prior.x,
+			"local predicted motion jumped after accepted receipt")
+	check(ack_gap.position.x>first_step.x+70.0,
+		"ACK-only transition froze local walking; server would teleport ahead")
+	# Held-click same destination can consume a newer wire sequence without
+	# changing Server MovementActionSequence. Keep the original active action.
+	check(ack_gap.request_target(Vector2(152,24),2),"repeated target rejected")
+	check(ack_gap._expected_sequence==1,
+		"repeat-target receipt incorrectly changed the active action sequence")
+	var duplicate_ack := initial(10,4,Vector2(92,24),25)
+	duplicate_ack.self_state.moving = true
+	duplicate_ack.self_state.movement_action_sequence = 1
+	duplicate_ack.last_receipt_sequence = 2
+	duplicate_ack.last_receipt_status = 0
+	var before_duplicate := ack_gap.position
+	ack_gap.observe(duplicate_ack)
+	check(ack_gap.active and ack_gap.moving and ack_gap.position==before_duplicate,
+		"duplicate ACK broke the original moving route")
 	# Sustained 60fps local walk while Server sends old-but-accepted positions.
 	# These packets used to repeatedly lerp backwards, causing 4px/8px
 	# alternation (stutter) and the visual slipping between walk sprites.

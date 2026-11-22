@@ -283,8 +283,12 @@ func observe(snapshot: Dictionary) -> void:
 		return
 	# A newly queued intent may already be moving locally before the Server
 	# processes it. Old SelfState locations must never pull it backwards.
+	# A receipt ACK and a matching SelfState are distinct ordered streams.
+	# A successful receipt may arrive while SelfState still describes the OLD
+	# idle action. Never accept that old idle as completion of a new route:
+	# it stops after the first ~4px and then jumps along Server updates.
 	var confirmed := int(own.get("movement_action_sequence",0)) >= _expected_sequence
-	if not confirmed and receipt < _expected_sequence:
+	if not confirmed:
 		return
 	var delta := position.distance_to(authoritative)
 	# Normal moving SelfState is a delayed sample, not our current draw
@@ -347,13 +351,16 @@ func request_target(point: Vector2, sequence: int) -> bool:
 	var goal := _cell(point)
 	if not _walkable(goal):
 		return false
-	_expected_sequence = maxi(_expected_sequence,sequence)
 	_settle_target = Vector2.INF
 	if goal == _target_cell and (moving or not _search.is_empty()):
+		# Server deduplicates identical-target updates but consumes their wire
+		# sequence without increasing movement_action_sequence. Keep the pending
+		# ROUTE sequence; otherwise later SelfStates can never confirm it.
 		active = true
 		return true
 	if not _set_route(goal):
 		return false
+	_expected_sequence = maxi(_expected_sequence,sequence)
 	active = true
 	return true
 

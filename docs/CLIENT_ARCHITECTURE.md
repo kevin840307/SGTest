@@ -1,5 +1,15 @@
 # SGTest Client — 重建設計
 
+## 2026-11-22 — 修正「走 4px 後被 Server 位置追上」的瞬移回歸
+
+使用者在 7778 正式畫面實測「點擊後稍微動一下、接著順移到目的地」。Godot 單元測試已復現：Server `MoveReceipt(sequence=1, Accepted)` 先於同命令的 `SelfState(movement_action_sequence=1)` 到達，舊 `SelfState(moving=false, movement_action_sequence=0)` 被 Client 誤當作新路線已停止，於是只走首個4px後 `local_movement.active=false`。之後 PlayerPresentation 自己的人物改讀權威座標，Server 每次發布移動位置即直接替換畫面位置，造成跳步／瞬移。**回執接受不代表同一動作的 SelfState 已更新**。
+
+修正 `client/movement/local_movement.gd`：在成功 ACK 但 `SelfState.movement_action_sequence < expected_sequence` 時不推論正常停止，保持本地預測，直到收到該路線 action；拒絕命令仍可由可靠 receipt 停止回退。相同終點重複 `MoveTarget` 於 Server 會回 ACK 但不增加 `MovementActionSequence`，因此本地重點同格不得將 `_expected_sequence` 改為新 wire sequence，以免永遠等不到根本不存在的 action id。此行為與 `ServerWorld.ApplyMove` 的去重規則一致。
+
+參考 `C:\SGO\Recovered\client\player.gd`：`_set_navigation_target` 先算完整路徑，正常採6ms查詢預算，較難路線分影格1.5ms算完整；`_physics_process` 本地前進；`_handle_network_sync` 在合法格且有移動時定期（Sync_RATE）傳位置，`_stop_movement` 只傳此圖已驗證可走的最終座標。原版 `C:\SGO\Recovered\Old\ClientData\Paradise.exe.lst` 中 `CSGOPlayer::SetMoveTo` 也先 `FindPath/GetPath`。SGTest 路線與Server `MapNavigator` 現都使用同份原 Blocking.dat、八向 10/14 octile cost、同 tie-break／防斜角切角和2048 cell budget；封包 **不直接混用二創 SyncPosition**，因 SGTest 獨立的 `MoveTarget/MoveReceipt/SelfState` 及Server權威契約不同，強行換格式會破壞授權驗證。保留「完整路徑才走，UI本地連續移動、Server驗證」的可驗證特性。
+
+回歸：`test_local_movement.gd` 在改前重現兩個 FAIL，修後檢查 ACK-before-matching-SelfState、同目標重送、60FPS 連續最多4px/影格、拒絕回退、完整路徑、停步、繞障均 PASS。雙 Godot Client + .NET Host 合成 Map15 由(760,800)→(952,808)→(808,808)長距離往返，強制每個呈現影格檢查不得超過240px/s的速度上限，並要求 Server moving 時距離終點仍遠則本地路徑必須保持 active；AOI Spawn/Delta/Despawn、Map13雙向換圖與資源釋放一起驗證。**真私有 Map13/15 完整 GPU 上的長按與障礙物轉向仍需玩家實測；只宣稱本地合成測試通過。**
+
 ## 2026-11-22 — 起步／途中／停步頓挫修正；A* 完整路徑才起走
 
 - **原版與二創核對**：原始 `C:\SGO\Recovered\Old\ClientData\Paradise.exe.lst` 中 `CSGOPlayer::SetMoveTo` 在派人物動作前同步 `CSGOMap::FindPath` 然後 `CELFindPath2D::GetPath`；二創 `C:\SGO\Recovered\client\player.gd` 先 `LegacyPathfinder.find_path` 回傳完整路徑才設定 `move_path`，一般路線有 **6000usec** 同步查詢預算，額外大繞路才 `await ...find_large_detour_path_async` 以 **1500usec/影格** 分配搜尋，**沒有輸出半條路徑讓角色先走**。SGTest 同樣採此語義；沒有把分影格當成逐步提供路徑。

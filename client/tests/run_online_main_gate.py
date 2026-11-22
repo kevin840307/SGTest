@@ -201,6 +201,7 @@ def main() -> int:
             required_actor = [
                 "ONLINE_MAIN_GATE_MONSTER role=actor",
                 "ONLINE_MAIN_GATE_MOVE_CAMERA role=actor",
+                "ONLINE_MAIN_GATE_MOTION_SMOOTH role=actor",
                 "ONLINE_MAIN_GATE_MAP13 role=actor",
                 "ONLINE_MAIN_GATE_RETURN_MAP15 role=actor",
             ]

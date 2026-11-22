@@ -13,6 +13,11 @@ var _online_gate_remote_start := Vector2.ZERO
 var _online_gate_finish_code := -1
 var _online_gate_finish_reason := ""
 var _online_gate_monster_seen := false
+var _walk_last_visual := Vector2.INF
+var _walk_last_sample_usec := 0
+var _walk_smooth_frames := 0
+var _walk_max_visual_step := 0.0
+var _walk_invalid_steps := 0
 
 
 func _initialize() -> void:
@@ -82,6 +87,8 @@ func _online_gate_tick() -> void:
 	if Time.get_ticks_msec() > _online_gate_deadline:
 		_online_gate_fail("timeout_phase_%d_state_%s_view_%s_status_%s" % [_online_gate_phase,str(_app._last_snapshot.get("state","none")),_app.world_view.phase,_app.session_panel.status.text])
 		return
+	if _online_gate_role == "actor" and _online_gate_phase in [1,3]:
+		_online_gate_watch_walk()
 	if _app.world_view.phase == "failed":
 		_online_gate_fail("world_view_failed_"+_app._status.text.replace(" ","_"))
 		return
@@ -131,6 +138,35 @@ func _online_gate_observer() -> void:
 		_online_gate_finish(true,"")
 
 
+func _online_gate_watch_walk() -> void:
+	var own_id := int(_app._last_snapshot.get("actor_id",0))
+	var visual := _app.world_view.players.position_at(own_id,Time.get_ticks_usec())
+	if not visual.is_finite():
+		return
+	# A moving authoritative actor far from the destination must still
+	# have a live local walk. This catches the ACK-before-SelfState regression:
+	# repeated 8px Server delta updates alone would otherwise look smooth.
+	var target := Vector2(952,808) if _online_gate_phase == 1 else Vector2(808,808)
+	var own: Dictionary = _app._last_snapshot.get("self_state",{})
+	if bool(own.get("moving",false)) and visual.distance_to(target)>32.0 and \
+			not _app.world_view.local_movement.active:
+		_online_gate_fail("server_moving_without_local_route_at_%s" % str(visual))
+		return
+	var now_usec := Time.get_ticks_usec()
+	if _walk_last_visual.is_finite():
+		var dt := clampf(float(now_usec - _walk_last_sample_usec)/1000000.0,0.0,0.25)
+		var travel := visual.distance_to(_walk_last_visual)
+		_walk_max_visual_step = maxf(_walk_max_visual_step,travel)
+		if travel > 0.1:
+			_walk_smooth_frames += 1
+		if travel > 240.0*dt+10.0:
+			_walk_invalid_steps += 1
+			_online_gate_fail("own_visual_teleport_displacement_%.1f_dt_ms_%.1f" % [travel,dt*1000.0])
+			return
+	_walk_last_sample_usec = now_usec
+	_walk_last_visual = visual
+
+
 func _online_gate_actor() -> void:
 	if _online_gate_phase == 0:
 		if _online_gate_ready(15):
@@ -139,7 +175,7 @@ func _online_gate_actor() -> void:
 			# synchronously and leave the Server authoritative MoveTarget queued.
 			var own_id := int(_app._last_snapshot.get("actor_id",0))
 			var before := _app.world_view.players.position_at(own_id,Time.get_ticks_usec())
-			_app._begin_ground_navigation(Vector2(808,808),Time.get_ticks_msec())
+			_app._begin_ground_navigation(Vector2(952,808),Time.get_ticks_msec())
 			if not _app.world_view.local_movement.active:
 				_online_gate_fail("local_prediction_not_started_ready_%s_pos_%s_phase_%s_own_%s" % [str(_app.world_view.local_movement.ready),str(_app.world_view.local_movement.position),str(_app.world_view.phase),str(_app._last_snapshot.get("self_state",{}))])
 				return
@@ -153,25 +189,34 @@ func _online_gate_actor() -> void:
 		return
 	if _online_gate_phase == 1:
 		var at := Vector2(float(_app._last_snapshot.get("x",0.0)),float(_app._last_snapshot.get("y",0.0)))
-		if at.distance_to(Vector2(808,808)) <= 1.0 and _online_gate_ready(15):
+		if at.distance_to(Vector2(952,808)) <= 1.0 and _online_gate_ready(15):
 			print("ONLINE_MAIN_GATE_MOVE_CAMERA role=actor")
+			_app._begin_ground_navigation(Vector2(808,808),Time.get_ticks_msec())
+			_online_gate_phase = 3
+	elif _online_gate_phase == 3:
+		var at := Vector2(float(_app._last_snapshot.get("x",0.0)),float(_app._last_snapshot.get("y",0.0)))
+		if at.distance_to(Vector2(808,808)) <= 1.0 and _online_gate_ready(15):
+			if _walk_smooth_frames < 25 or _walk_invalid_steps != 0:
+				_online_gate_fail("own_walk_not_continuous_frames_%d_invalid_%d" % [_walk_smooth_frames,_walk_invalid_steps])
+				return
+			print("ONLINE_MAIN_GATE_MOTION_SMOOTH role=actor samples=",_walk_smooth_frames," max_step=",snappedf(_walk_max_visual_step,0.01))
 			_online_gate_not_before = Time.get_ticks_msec() + 350
-			_online_gate_phase = 2
-	elif _online_gate_phase == 2 and Time.get_ticks_msec() >= _online_gate_not_before:
+			_online_gate_phase = 4
+	elif _online_gate_phase == 4 and Time.get_ticks_msec() >= _online_gate_not_before:
 		if not _app.session_panel.submit_npc_interact(46):
 			_online_gate_fail("portal_46_enqueue")
 			return
-		_online_gate_phase = 3
-	elif _online_gate_phase == 3 and _online_gate_ready(13):
+		_online_gate_phase = 5
+	elif _online_gate_phase == 5 and _online_gate_ready(13):
 		print("ONLINE_MAIN_GATE_MAP13 role=actor")
 		_online_gate_not_before = Time.get_ticks_msec() + 350
-		_online_gate_phase = 4
-	elif _online_gate_phase == 4 and Time.get_ticks_msec() >= _online_gate_not_before:
+		_online_gate_phase = 6
+	elif _online_gate_phase == 6 and Time.get_ticks_msec() >= _online_gate_not_before:
 		if not _app.session_panel.submit_npc_interact(1):
 			_online_gate_fail("portal_1_enqueue")
 			return
-		_online_gate_phase = 5
-	elif _online_gate_phase == 5 and _online_gate_ready(15):
+		_online_gate_phase = 7
+	elif _online_gate_phase == 7 and _online_gate_ready(15):
 		print("ONLINE_MAIN_GATE_RETURN_MAP15 role=actor")
 		_online_gate_finish(true,"")
 

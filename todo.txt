@@ -1,5 +1,7 @@
 # SGTest 新版重建 TODO（2026-11-15）
 
+- PLAYER-MOVE-ACK-SELFSTATE-TELEPORT [ ] 2026-11-22：使用者在正式遊戲反饋「先走一下就瞬移」。單元重現 Server MoveReceipt Accepted 早於對應 SelfState，舊 idle 被誤判為本次停步，造成 local.active=false 之後畫面直接以Server座標更新。現改為只有 SelfState.movement_action_sequence >= 本次 route sequence 才准按該動作狀態正常停步；same-cell重複MoveTarget可有新ACK但不增加Server movement_action_sequence，本地保留原 action id。Local走4px+ACK gap、duplicate ACK、拒絕處理、追怪/停步/長按和完整A*回歸PASS；雙Client真Host合成路線新增多影格連續檢查、Map15→13往返。**完整私人素材長時間實機驗收、AI多人100%正確仍待驗證**。
+
 - PLAYER-WALK-STUTTER-ASTAR-ATOM [ ] 2026-11-22：依玩家實際試走回饋「起步、中短距離與停止時很頓、人物滑行」，比對原 Paradise.exe.lst CSGOPlayer::SetMoveTo 的 CSGOMap::FindPath/GetPath，及二創 LegacyPathfinder 正常 6ms、fallback 1.5ms/影格、完整 route 才走。SGTest 本輪移除每包 moving SelfState 逆插值、停止改合法 bounded walk 收斂且 own 不切延遲 history、WorldReady 空 SelfState 不重啟 NR、render-clock 本地移動。直線 <0.06ms；960² 合成A* 46.3ms 主線卡住→正常同步限5ms＋超限 fallback 每frame 1.5ms（實測最長2.22ms），完整路徑成功才讓人物走且 App 才送 Server MoveTarget；確保舊路線／換圖／失敗無陳舊封包。Godot Local/Player/Position/Camera/FPS/stop/auto-approach 和真 2 Client+Host 合成 Map15/13 AOI PASS；**真私人原始地圖遊玩手感、多人流量、GPU FPS P95/P99 待實測，未宣稱完全修好**。
 
 - PLAYER-LOCAL-MOVEMENT-PREDICTION [ ] 2026-11-22：已加入 Client local_movement.gd 讀取已驗證的 Blocking.dat，本地八方向 2048-expanded A*、防斜角穿牆、固定 240px/s、6-cell Lookahead；點地板先將 MoveTarget 入列隨即本地移動與相機/紙娃娃呈現、Server 權威收到拒絕與超出24/96px偏差時校正；重派路/停止/換圖清理。Godot local/test_player_presentation/position_history/Camera/FPS PASS、真雙 Godot Host+合成雙地圖和 AOI E2E PASS。真私有資產 GPU、斷線後仍能走路（未完成 offline play）、長期延遲/人數壓測 NOT VERIFIED。
