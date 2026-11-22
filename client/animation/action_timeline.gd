@@ -82,5 +82,19 @@ func frame_at_update(elapsed: int) -> int:
 	return _frames[low]
 
 
+## Recovered2's AnimatedSprite2D uses a uniform 8 FPS paper-doll walk
+## cadence, not variable ACT raw_time durations. Keep the source frame order,
+## but share one continuous elapsed clock across all paper-doll layers.
+func frame_at_uniform_cadence(elapsed_usec: int, frame_duration_usec: int) -> int:
+	if _frames.is_empty() or frame_duration_usec <= 0:
+		return -1
+	var index := maxi(0,elapsed_usec) / frame_duration_usec
+	if _loops:
+		index %= _frames.size()
+	else:
+		index = mini(index,_frames.size()-1)
+	return _frames[index]
+
+
 func is_complete(elapsed: int) -> bool:
 	return _total > 0 and not _loops and elapsed >= _total

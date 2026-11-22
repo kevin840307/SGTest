@@ -30,7 +30,9 @@ func run() -> void:
 				var one_shot: bool = str(action) in ["AA","NH","ND"]
 				views[str(part[1])+"_"+action+str(facing)] = {
 					"clip":str(action),"flip_h":facing>=5,
-					"timeline_ticks":[[0,4],[1,4]] if one_shot else [[0,8],[1,8]],
+					# One leg layer has deliberately uneven original ACT timings.
+					# Recovered2 walks every part at fixed 8 FPS regardless.
+					"timeline_ticks":[[0,4],[1,4]] if one_shot else ([[0,5],[1,11]] if str(part[1]) == "B-LEG" else [[0,8],[1,8]]),
 					"loop":not one_shot,"draw_slots":source_slots}
 		assets[part[0]] = {"pages":[texture],"manifest":{"logical_views":views,"clips":clips,"frames":[
 			{"page":0,"rect":[0,0,3,2],"trim":[2,0],"origin":[1,1]},
@@ -45,6 +47,47 @@ func run() -> void:
 	remote.y=20.0
 	var snapshot := {"world_ready":true,"map_epoch":1,"map_id":15,"actor_id":1,"x":10.0,"y":10.0,"facing":6,"self_state":own,"entities":{2:remote},"last_aoi_tick":1}
 	players.apply_snapshot(snapshot,0)
+	# Recovered2 PaperDollLoader drives all walk parts at exactly 8 FPS.
+	# A variable raw ACT duration in B-LEG must not desynchronize the legs.
+	var cadence := Players.new()
+	check(cadence.configure(assets)==OK,"walk-cadence profile setup")
+	var walk_snapshot: Dictionary = snapshot.duplicate(true)
+	cadence.apply_snapshot(walk_snapshot,0)
+	for sample in [[124999,0],[125000,1],[249999,1],[250000,0],[374999,0],[375000,1]]:
+		var sample_actors: Array = cadence.actors_at(int(sample[0]))
+		check(sample_actors.size()==2,"fixed walk cadence actor lost")
+		for sample_actor in sample_actors:
+			for layer in sample_actor.parts:
+				check(int(layer.frame)==int(sample[1]),"8 FPS body/legs/clothes diverged at %d usec" % int(sample[0]))
+	# Change facing during the walk: retain the same phase for the new
+	# directional clips, exactly like Recovered2 sharing the Body frame.
+	walk_snapshot.self_state.facing=3
+	walk_snapshot.entities[2].facing=3
+	cadence.apply_snapshot(walk_snapshot,188000)
+	var turned: Array = cadence.actors_at(188000)
+	check(turned.size()==2 and int(turned[0].parts[0].frame)==1 and not bool(turned[0].parts[0].flip_h),
+		"turning restarted the walk cycle")
+	# A one-shot overlay cannot freeze the underlying walk pose on its first
+	# frame while the Server still considers the player to be walking.
+	walk_snapshot.player_attack_events=[{
+		"receiver_map_epoch":1,"server_tick":2,"attacker_actor_id":2,
+		"attacker_connection_epoch":1,"attack_sequence":1,
+		"target_entity_id":1001500001,"status":0,"damage":1,
+		"target_revision":2,"facing":3}]
+	cadence.apply_snapshot(walk_snapshot,410000)
+	var after_attack: Dictionary=cadence.actors_at(625000).filter(func(v):return str(v.id)=="2")[0]
+	check(int(after_attack.parts[0].frame)==1,"one-shot completion restarted walk at frame zero")
+	# A genuine stop/restart does reset the cycle, unlike path repaths.
+	walk_snapshot.player_attack_events=[]
+	walk_snapshot.self_state.moving=false
+	walk_snapshot.entities[2].moving=false
+	cadence.apply_snapshot(walk_snapshot,680000)
+	walk_snapshot.self_state.moving=true
+	walk_snapshot.entities[2].moving=true
+	cadence.apply_snapshot(walk_snapshot,725000)
+	check(int(cadence.actors_at(849999)[0].parts[0].frame)==0 and
+		int(cadence.actors_at(850000)[0].parts[0].frame)==1,
+		"idle->walk did not restart the exact 125ms walking cadence")
 	# Long-held mouse movement can issue fresh MoveTarget commands while
 	# the character never stops running. A new command sequence must not
 	# reset the NR animation clock or lock the paper doll in frame zero.

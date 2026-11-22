@@ -1,5 +1,7 @@
 # SGTest 新版重建 TODO（2026-11-15）
 
+- PLAYER-WALK-ANIMATION-RECOVERED2 [ ] 2026-11-22：使用者澄清不順暢主要是人物本身走路動畫，對照二創 Recovered2 PaperDollLoader 走路每部件固定8FPS、PaperDollEngine共享Body frame/progress、走路速率固定。SGTest 移除舊 NR 變長 ACT *1.25，改以每125ms一幀且所有紙娃娃部件共享時間相位；方向變化、長按 repath、AA/NH one-shot 後不中斷步伐，idle->walk才重設。人工設定不等長腿/身體 ACT regression、角色渲染／正式私人 PCK 外觀測試 PASS。**正式遊戲真人長走路與 GPU 視覺體感仍須驗收**。
+
 - PLAYABILITY-RECOVERED-MOVEMENT-SECOND-PASS [ ] 2026-11-22：Recovered 原 Client 本地 physics 連續移動、SyncPosition 約50ms、Server 不變位置略過及排隊 MoveEntity 併合，與 SGTest Client MoveTarget + Server30Hz權威移動不同。這輪 Server 授權視線內前瞻最多6個 collision 路點、每步仍驗證Blocking.dat且8px/tick；同終點格重複 MoveTarget 確認序號但不重跑A*／不重置路線或重發移動行為修訂。Client 僅 confirmed moving 有限1.5tick/12px視覺預測，收到新的權威位置或idle可拉回；不動真實座標、碰撞、射程、物品等規則。新增兩個Server路線案例 + Client dead-reckoning、idle、斷包回歸。**本輪尚未實作本地Blocking.dat A* 預測，也未修改30Hz AOI廣播頻率；真GPU走路觀感與玩家多開負載未驗證，Server現有進程需重啟載入程式。**
 
 - PLAYABILITY-2D-MOVEMENT-INTERPOLATION [ ] 2026-11-22：比對 Recovered Player._physics_process + Camera2D，確認 SGTest 30Hz Server + 50ms SessionPanel UI polling 會讓舊版 per-arrival interpolation 產生 hold；`position_history.gd` 改連續時鐘 anchor、2.5tick緩衝、斷包不累積未來 tick，權威位置/封包/碰撞不變。Windows Godot 4.7.2 合成 20Hz->60Hz 直行 0 hold/0 backward/max step4.0001px、irregular 2.5tick 0 hold/max step2.0002px、Server修正/停包復原與PlayerPresentation/Camera headless PASS。Client已用現存本機AES Server 7778 重新開啟測試。**尚需玩家實際走路觀感、GPU Frame P95/P99、多人／大地圖場景實機驗證；不可據此宣稱完全滑順。**

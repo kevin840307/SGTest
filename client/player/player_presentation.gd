@@ -3,10 +3,10 @@ extends RefCounted
 const Profile = preload("res://player/character_appearance_profile.gd")
 const PositionHistory = preload("res://movement/position_history.gd")
 const PARTS = Profile.BASE_PARTS
-# Recovered's paper-doll walk clips use an 8 FPS visual cadence. Speed up
-# SGTest's slower normalized NR timeline without changing Server movement.
-const WALK_PLAYBACK_NUMERATOR := 5
-const WALK_PLAYBACK_DENOMINATOR := 4
+# Recovered2 PaperDollLoader creates every walk_ frame at 8 FPS and the
+# engine keeps all parts on the same frame/progress. Never scale a variable
+# per-part ACT timeline to approximate that cadence.
+const WALK_FRAME_USEC := 125000
 var _views: Dictionary = {}
 var _profiles: Dictionary = {}
 var _default_profile_key := "0:0:0:0:0"
@@ -95,9 +95,15 @@ func apply_snapshot(snapshot: Dictionary, now_usec: int) -> void:
 		var action := base_action
 		var action_facing := int(value.facing)
 		var started := now_usec
+		var walk_started := now_usec
 		var dead_visual := false
 		if not generation_changed:
 			started = int(old.started)
+			walk_started = int(old.get("walk_started",started))
+			# Attack/hit one-shots and turn updates must not restart the
+			# underlying walk cycle; only a true idle->walk transition does.
+			if base_action == "NR" and not bool(old.value.moving):
+				walk_started = now_usec
 			dead_visual = bool(old.get("dead_visual",false))
 			if dead_visual and profile.death_available:
 				action = "ND"
@@ -118,7 +124,8 @@ func apply_snapshot(snapshot: Dictionary, now_usec: int) -> void:
 		if tick < 0 or not history.push(tick,Vector2(float(value.x),float(value.y)),now_usec,bool(value.moving)):
 			continue
 		_actors[id] = {"value":value,"action":action,"action_facing":action_facing,
-			"started":started,"history":history,"dead_visual":dead_visual,"profile":profile}
+			"started":started,"walk_started":walk_started,"history":history,
+			"dead_visual":dead_visual,"profile":profile}
 
 	var events = snapshot.get("player_attack_events",[])
 	if events is Array:
@@ -326,10 +333,9 @@ func actors_at(now_usec: int) -> Array:
 				action = "NR" if bool(value.moving) else "NS"
 				facing = int(value.facing)
 				elapsed = 0
-		# Animation timing is presentation-only and independent of velocity,
-		# frame rate and incoming MoveTarget sequence changes.
-		if action == "NR":
-			elapsed = elapsed * WALK_PLAYBACK_NUMERATOR / WALK_PLAYBACK_DENOMINATOR
+		# Exactly 8 FPS for walk, matching Recovered2 AnimatedSprite2D.
+		# Preserve this clock during turns, re-paths and temporary AA/NH.
+		var walk_elapsed_usec := maxi(0,now_usec-int(actor.get("walk_started",actor.started)))
 		var requested := action+str(facing)
 		var body: Dictionary = profile.views.get(profile.body_prefix+"_"+requested,{})
 		if body.is_empty():
@@ -341,7 +347,7 @@ func actors_at(now_usec: int) -> Array:
 				var part: Array = profile.parts[logical_slot]
 				var resolved: Dictionary = profile.views[str(part[1])+"_"+requested]
 				parts.append({"asset":part[0],"clip":resolved.view.clip,
-					"frame":resolved.timeline.frame_at_update(elapsed),
+					"frame":resolved.timeline.frame_at_uniform_cadence(walk_elapsed_usec,WALK_FRAME_USEC) if action == "NR" else resolved.timeline.frame_at_update(elapsed),
 					"flip_h":resolved.view.flip_h,"part_slot":logical_slot,
 					"palette_index":profile.hair_color if logical_slot==1 else 0})
 			# Recovered paper doll draws Standard first, then the equipment
@@ -350,7 +356,7 @@ func actors_at(now_usec: int) -> Array:
 				var overlay: Array = profile.overlays[logical_slot]
 				var overlay_view: Dictionary = profile.views[str(overlay[1])+"_"+requested]
 				parts.append({"asset":overlay[0],"clip":overlay_view.view.clip,
-					"frame":overlay_view.timeline.frame_at_update(elapsed),
+					"frame":overlay_view.timeline.frame_at_uniform_cadence(walk_elapsed_usec,WALK_FRAME_USEC) if action == "NR" else overlay_view.timeline.frame_at_update(elapsed),
 					"flip_h":overlay_view.view.flip_h,"part_slot":logical_slot,
 					"palette_index":int(overlay[2]) if overlay.size()>2 else 0})
 		var sampled: Vector2 = actor.history.sample(now_usec)
