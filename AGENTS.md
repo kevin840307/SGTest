@@ -4,12 +4,12 @@
 
 使用者決定**保留規格、研究證據、素材轉換程式與必要測試，刪除舊 Client/Server 原型，依文件重新設計實作**。不得自 Git 歷史還原舊 Client 或 Server 當成新版本，也不得以歷史 PASS 宣稱現在能運行。
 
-本版取代此前 AGENTS.md 中「舊原型已實作／禁止開始原型」等互相矛盾的工作階段狀態描述。仍須參考 `SPEC.md` 與歷史文件的功能需求；新版本狀態以 `todo.txt` 為準。
+本版取代此前 AGENTS.md 中「舊原型已實作／禁止開始原型」等互相矛盾的工作階段狀態描述。仍須參考 `SPEC.md` 與歷史文件的功能需求；當前工作優先級以 `todo.txt` 為準，功能驗收狀態以唯一正式 `docs/FEATURE_MATRIX.md` 為準；若兩者或測試證據衝突，採較保守狀態。
 
 ## 開工前
 
 1. 先 `git fetch`，確認目前分支與遠端狀態，查看 `git status --short`，避免踩到其他 Session 未提交的工作。
-2. 先讀 `README.md`、`docs/ARCHITECTURE.md`、`docs/CODE_ORGANIZATION.md`、`docs/CLIENT_ARCHITECTURE.md`、`docs/SERVER_ARCHITECTURE.md`、`todo.txt`；依任務補讀相關素材／原版證據文件。
+2. 先讀 `README.md`、`docs/ARCHITECTURE.md`、`docs/CODE_ORGANIZATION.md`、`docs/CLIENT_ARCHITECTURE.md`、`docs/SERVER_ARCHITECTURE.md`、`docs/FEATURE_MATRIX.md`、`todo.txt`；依任務補讀相關素材／原版證據文件。
 3. 若與其他 Session 共用工作樹且有 WIP，**建立自己的 worktree/branch**，不要 stash、reset、clean、覆寫、刪除他人的未提交內容。
 4. 領取一項具體 TODO，先寫預期行為、指標、驗收測試，再動手；完成才勾選，未跑寫 NOT VERIFIED。
 5. 確保拆成小 commit，commit 僅包含自己變更的檔案；每次更新 TODO 與架構決策證據。
@@ -65,7 +65,7 @@
 
 - `tools/asset_converter/` 是唯一正式轉換器。純 Asset 結構驗證不應依賴一個可執行的 Client / Server。
 - `client/`、`server/` 為未來位置；新增檔案之前先對照對應 ARCHITECTURE 與當期 TODO，不複製舊原型大類別。
-- `docs/` 為規格、研究證據與決策，`docs/research/FEATURE_DECISION_HISTORY.md#source-todo-pre-rebuild-20261115-txt` 只作歷史；`todo.txt` 才是現在的任務。
+- `docs/` 為規格、研究證據與決策；`docs/FEATURE_MATRIX.md` 是唯一正式功能完成度矩陣，`todo.txt` 是現在的工作優先級；`docs/research/FEATURE_DECISION_HISTORY.md#source-todo-pre-rebuild-20261115-txt` 只作歷史。
 - 每次完成記錄：任務 ID、行為 Before/After、檔案、測試命令與結果、Commit SHA、未解風險。
 - **文件同步**：修改協定、AFK、AOI、素材格式或測試 Gate 時，同步核對 SPEC／對應 ARCHITECTURE／TEST_PLAN／TODO；歷史研究彙編僅供證據，不為修正現行設計而改寫歷史原文。
 
