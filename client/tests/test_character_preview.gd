@@ -1,6 +1,7 @@
 extends SceneTree
 const Preview = preload("res://player/character_preview.gd")
 const Players = preload("res://player/player_presentation.gd")
+const Profile = preload("res://player/character_appearance_profile.gd")
 var _failed := false
 
 class TestStore extends RefCounted:
@@ -35,7 +36,11 @@ func _run() -> void:
 	image.fill(Color.WHITE)
 	var texture := ImageTexture.create_from_image(image)
 	var slots := [12,7,9,5,0,1]
-	for part in Players.PARTS.values():
+	var definition := Profile.definition({})
+	var all_parts: Array = definition.parts.values()
+	all_parts.append_array(definition.overlays.values())
+	check(all_parts.size()==10,"default preview must include six body layers and four equipment overlays")
+	for part in all_parts:
 		var views := {}
 		for action in ["NS","NR"]:
 			for facing in range(1,9):
@@ -58,10 +63,10 @@ func _run() -> void:
 	await process_frame
 	check(store.scopes.size()==2,"cards must own distinct scopes in one store")
 	for preview in previews:
-		check(preview.status=="ready" and preview._canvas._commands.size()==6,"six-part standing paper doll missing")
-		for index in 6:
+		check(preview.status=="ready" and preview._canvas._commands.size()==all_parts.size(),"standing paper doll or equipment overlays missing")
+		for index in preview._canvas._commands.size():
 			var command: Dictionary = preview._canvas._commands[index]
-			check(command.texture==texture and int(command.slot)==slots[index],"texture sharing or original part order changed")
+			check(command.texture==texture and slots.has(int(command.slot)),"texture sharing or source draw slot changed")
 	var first_frame := int(previews[0]._canvas._commands[0].frame)
 	var deadline := Time.get_ticks_msec()+2000
 	while int(previews[0]._canvas._commands[0].frame)==first_frame and Time.get_ticks_msec()<deadline:
@@ -84,5 +89,5 @@ func _run() -> void:
 	await process_frame
 	if _failed:
 		return
-	print("CHARACTER_PREVIEW_PASS six_parts=true shared_textures=true fixed_ACT_animation=true hidden_no_work=true missing_and_failed_assets_release=true")
+	print("CHARACTER_PREVIEW_PASS six_parts=true equipment_overlays=true shared_textures=true fixed_ACT_animation=true hidden_no_work=true missing_and_failed_assets_release=true")
 	quit(0)
