@@ -8,7 +8,7 @@ const PASSWORD := "Fixture-Password-123!"
 func _fail(message: String, session = null) -> void:
 	if session != null:
 		session.stop()
-	push_error("CLIENT_AUTO_APPROACH_TLS_FAIL "+message)
+	push_error("CLIENT_AUTO_APPROACH_AES_FAIL "+message)
 	quit(1)
 
 func _initialize() -> void:
@@ -16,10 +16,7 @@ func _initialize() -> void:
 	if args.size()!=2 or not str(args[0]).is_valid_int():
 		_fail("expected port/certificate")
 		return
-	var cert := X509Certificate.new()
-	if cert.load(str(args[1])) != OK:
-		_fail("certificate load")
-		return
+	var cert = null
 	var session = Session.new()
 	if session.connect_secure("127.0.0.1",int(args[0]),USERNAME,PASSWORD,"localhost",cert) != OK:
 		_fail("connect",session)
@@ -70,7 +67,7 @@ func _initialize() -> void:
 		return
 
 	session.stop()
-	print("CLIENT_AUTO_APPROACH_TLS_PASS target=%d first_attack_out_of_range=true server_astar_move=true final_x=40 final_y=8 second_attack_applied=true monster_hp=40 client_range_guess=false" % target)
+	print("CLIENT_AUTO_APPROACH_AES_PASS target=%d first_attack_out_of_range=true server_astar_move=true final_x=40 final_y=8 second_attack_applied=true monster_hp=40 client_range_guess=false" % target)
 	quit(0)
 
 func _wait(session, predicate: Callable, timeout_ms: int) -> Dictionary:

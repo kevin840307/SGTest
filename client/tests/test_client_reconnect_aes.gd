@@ -16,10 +16,7 @@ func _initialize() -> void:
 	if args.size()!=2 or not str(args[0]).is_valid_int():
 		_fail("expected port/certificate")
 		return
-	var cert := X509Certificate.new()
-	if cert.load(str(args[1])) != OK:
-		_fail("certificate load")
-		return
+	var cert = null
 	var session = Session.new()
 	if session.connect_secure("127.0.0.1",int(args[0]),USERNAME,PASSWORD,"localhost",cert) != OK:
 		_fail("initial connect",session)

@@ -8,57 +8,57 @@ import sys
 import threading
 import time
 
-READY = re.compile(r"LOGIN_FIXTURE_READY port=(\d+) cert=(.+?) username=")
+READY = re.compile(r"LOGIN_FIXTURE_READY port=(\d+) cert=unused username=")
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Run real Godot -> C# TLS login/CharacterChoose/Move E2E")
+    parser = argparse.ArgumentParser(description="Run real Godot -> C# AES login/CharacterChoose/Move E2E")
     parser.add_argument("godot", help="Godot 4.7.2 console executable")
     parser.add_argument("--timeout", type=float, default=30.0)
     parser.add_argument("--app-ui", action="store_true",
-                        help="exercise real main-scene login/choose/logout UI over TLS (no private textures)")
+                        help="exercise real main-scene login/choose/logout UI over AES (no private textures)")
     parser.add_argument("--ui-screenshot", type=Path,
                         help="with --app-ui, render the UI natively and save a private screenshot")
     parser.add_argument("--multi", action="store_true",
-                        help="run two concurrent real Godot TLS clients against the same 30Hz World")
+                        help="run two concurrent real Godot AES clients against the same 30Hz World")
     parser.add_argument("--crossmap", action="store_true",
-                        help="run two-client Map15 -> Map13 -> Map15 trusted transfer TLS E2E")
+                        help="run two-client Map15 -> Map13 -> Map15 trusted transfer AES E2E")
     parser.add_argument("--portal", action="store_true",
-                        help="run two-client audited NPC interaction TLS transfer E2E")
+                        help="run two-client audited NPC interaction AES transfer E2E")
     parser.add_argument("--reconnect", action="store_true",
-                        help="force one TLS socket drop and require automatic same-character reconnect")
+                        help="force one AES socket drop and require automatic same-character reconnect")
     parser.add_argument("--combat", action="store_true",
-                        help="run real TLS ClientSession normal-attack authority E2E")
+                        help="run real AES ClientSession normal-attack authority E2E")
     parser.add_argument("--combat-observer", action="store_true",
-                        help="run two real TLS clients and verify remote player attack visuals")
+                        help="run two real AES clients and verify remote player attack visuals")
     parser.add_argument("--skill-aoe", action="store_true",
-                        help="run real TLS self-centered AoE skill against three monsters")
+                        help="run real AES self-centered AoE skill against three monsters")
     parser.add_argument("--skill-aoe-observer", action="store_true",
-                        help="run two real TLS clients and verify multi-target AoE visuals")
+                        help="run two real AES clients and verify multi-target AoE visuals")
     parser.add_argument("--auto-attack", action="store_true",
-                        help="run real TLS out-of-range attack -> Server A* approach -> retry E2E")
+                        help="run real AES out-of-range attack -> Server A* approach -> retry E2E")
     parser.add_argument("--discard", action="store_true",
-                        help="run real TLS ClientSession durable inventory discard E2E")
+                        help="run real AES ClientSession durable inventory discard E2E")
     parser.add_argument("--storage", action="store_true",
-                        help="run real TLS ClientSession personal storage deposit/withdraw E2E")
+                        help="run real AES ClientSession personal storage deposit/withdraw E2E")
     parser.add_argument("--equipment", action="store_true",
-                        help="run real TLS ClientSession durable equipment equip/unequip E2E")
+                        help="run real AES ClientSession durable equipment equip/unequip E2E")
     parser.add_argument("--bank", action="store_true",
-                        help="run real TLS ClientSession scoped bank deposit/withdraw E2E")
+                        help="run real AES ClientSession scoped bank deposit/withdraw E2E")
     parser.add_argument("--repair", action="store_true",
-                        help="run real TLS ClientSession server-authoritative repair E2E")
+                        help="run real AES ClientSession server-authoritative repair E2E")
     parser.add_argument("--enhancement", action="store_true",
-                        help="run real TLS ClientSession server-authoritative equipment enhancement E2E")
+                        help="run real AES ClientSession server-authoritative equipment enhancement E2E")
     parser.add_argument("--quest", action="store_true",
-                        help="run real TLS verified quest progression and relogin E2E")
+                        help="run real AES verified quest progression and relogin E2E")
     parser.add_argument("--trade", action="store_true",
-                        help="run two real TLS clients through durable player trade E2E")
+                        help="run two real AES clients through durable player trade E2E")
     parser.add_argument("--player-shop", action="store_true",
-                        help="run two real TLS clients through authoritative player-shop E2E")
+                        help="run two real AES clients through authoritative player-shop E2E")
     parser.add_argument("--pvp", action="store_true",
-                        help="run two real TLS clients through authoritative player PvP E2E")
+                        help="run two real AES clients through authoritative player PvP E2E")
     parser.add_argument("--register", action="store_true",
-                        help="create a public account then authenticate on the same TLS connection")
+                        help="create a public account then authenticate on the same AES connection")
     parser.add_argument("--appearance", action="store_true",
                         help="create with authoritative appearance choices and verify durable relogin")
     args = parser.parse_args()
@@ -70,6 +70,11 @@ def main() -> int:
     fixture = repo / "server/tests/SGTest.Server.LoginFixture/SGTest.Server.LoginFixture.csproj"
     env = os.environ.copy()
     env["DOTNET_CLI_UI_LANGUAGE"] = "en-US"
+    env["SGTEST_AES_KEY_HEX"] = "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f"
+    env["SGTEST_AES_IV_HEX"] = "000102030405060708090a0b0c0d0e0f"
+    # The Godot fixture subprocesses inherit these test-only keys.
+    os.environ["SGTEST_AES_KEY_HEX"] = env["SGTEST_AES_KEY_HEX"]
+    os.environ["SGTEST_AES_IV_HEX"] = env["SGTEST_AES_IV_HEX"]
     # Build time is environment/setup work, not an E2E gameplay deadline.
     # GitHub-hosted runners can occasionally cross the historical 30s default
     # on a cold NuGet/MSBuild path; keep gameplay timeouts unchanged.
@@ -155,16 +160,16 @@ def main() -> int:
                 break
         if match is None:
             raise RuntimeError("fixture never became ready")
-        port, cert = match.group(1), match.group(2)
+        port = match.group(1)
         client = subprocess.run(
             [args.godot, *([] if args.ui_screenshot else ["--headless"]), "--path", str(repo / "client"),
-             "--script", "res://tests/test_session_ui_tls.gd" if args.app_ui else "res://tests/test_client_transport_tls.gd", "--", port, cert,
+             "--script", "res://tests/test_session_ui_aes.gd" if args.app_ui else "res://tests/test_client_transport_aes.gd", "--", port,
              *([str(args.ui_screenshot.resolve())] if args.ui_screenshot else [])],
-            cwd=repo, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            cwd=repo, env=env, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
             timeout=args.timeout)
         print(client.stdout, end="")
-        if client.returncode != 0 or "CLIENT_TLS_LOGIN_PASS" not in client.stdout or "receipt=PASS" not in client.stdout or "world_ready=PASS" not in client.stdout:
-            raise RuntimeError("Godot TLS login test failed")
+        if client.returncode != 0 or "CLIENT_AES_LOGIN_PASS" not in client.stdout or "receipt=PASS" not in client.stdout or "world_ready=PASS" not in client.stdout:
+            raise RuntimeError("Godot AES login test failed")
         remaining = max(1.0, deadline - time.monotonic())
         server.wait(timeout=remaining)
         reader.join(timeout=2)
@@ -174,22 +179,22 @@ def main() -> int:
         for line in lines:
             if line.startswith("LOGIN_FIXTURE_"):
                 print(line)
-        print("GODOT_CSHARP_TLS_LOGIN_E2E_PASS secure_tls=true authenticated_move=true authoritative_receipt_returned=true world_ready_delivered=true transport_thread=true reducer_thread=true")
+        print("GODOT_CSHARP_AES_LOGIN_E2E_PASS aes_cbc=true authenticated_move=true authoritative_receipt_returned=true world_ready_delivered=true transport_thread=true reducer_thread=true")
         return 0
     except subprocess.TimeoutExpired as error:
-        print("TLS_LOGIN_RUNNER_FAIL", error, file=sys.stderr)
+        print("AES_LOGIN_RUNNER_FAIL", error, file=sys.stderr)
         partial = error.stdout or ""
         if isinstance(partial, bytes):
             partial = partial.decode("utf-8", errors="replace")
         if partial:
-            print("TLS_LOGIN_GODOT_PARTIAL_BEGIN", file=sys.stderr)
+            print("AES_LOGIN_GODOT_PARTIAL_BEGIN", file=sys.stderr)
             print(partial, file=sys.stderr, end="" if partial.endswith("\n") else "\n")
-            print("TLS_LOGIN_GODOT_PARTIAL_END", file=sys.stderr)
+            print("AES_LOGIN_GODOT_PARTIAL_END", file=sys.stderr)
         for line in lines[-30:]:
             print(line, file=sys.stderr)
         return 1
     except Exception as error:
-        print("TLS_LOGIN_RUNNER_FAIL", error, file=sys.stderr)
+        print("AES_LOGIN_RUNNER_FAIL", error, file=sys.stderr)
         for line in lines[-30:]:
             print(line, file=sys.stderr)
         return 1
@@ -207,7 +212,7 @@ def main() -> int:
 
 def run_identity_creation(args, repo: Path, fixture: Path, env: dict[str, str], *, appearance=False) -> int:
     prefix = "APPEARANCE_FIXTURE" if appearance else "REGISTER_FIXTURE"
-    client_marker = "CLIENT_CHARACTER_APPEARANCE_TLS_PASS" if appearance else "CLIENT_REGISTRATION_TLS_PASS"
+    client_marker = "CLIENT_CHARACTER_APPEARANCE_AES_PASS" if appearance else "CLIENT_REGISTRATION_AES_PASS"
     ready_pattern = re.compile(prefix + r"_READY port=(\d+) cert=(.+?) username=")
     server = subprocess.Popen(
         ["dotnet", "run", "--project", str(fixture), "-c", "Release",
@@ -244,7 +249,7 @@ def run_identity_creation(args, repo: Path, fixture: Path, env: dict[str, str], 
         port, cert = ready.group(1), ready.group(2)
         client = subprocess.run(
             [args.godot, "--headless", "--path", str(repo / "client"),
-             "--script", "res://tests/test_client_character_appearance_tls.gd" if appearance else "res://tests/test_client_registration_tls.gd",
+             "--script", "res://tests/test_client_character_appearance_aes.gd" if appearance else "res://tests/test_client_registration_aes.gd",
              "--", port, cert],
             cwd=repo, text=True, stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT, timeout=args.timeout)
@@ -260,12 +265,12 @@ def run_identity_creation(args, repo: Path, fixture: Path, env: dict[str, str], 
             if line.startswith(prefix+"_"):
                 print(line)
         if appearance:
-            print("GODOT_CSHARP_TLS_APPEARANCE_E2E_PASS server_choices=true created=true durable_relogin=true choose_world=true")
+            print("GODOT_CSHARP_AES_APPEARANCE_E2E_PASS server_choices=true created=true durable_relogin=true choose_world=true")
         else:
-            print("GODOT_CSHARP_TLS_REGISTRATION_E2E_PASS created=true explicit_auth=true same_tls=true character_list_empty=true gameplay_authority=false")
+            print("GODOT_CSHARP_AES_REGISTRATION_E2E_PASS created=true explicit_auth=true same_aes_cbc=true character_list_empty=true gameplay_authority=false")
         return 0
     except Exception as error:
-        print("TLS_APPEARANCE_RUNNER_FAIL" if appearance else "TLS_REGISTRATION_RUNNER_FAIL", error, file=sys.stderr)
+        print("AES_APPEARANCE_RUNNER_FAIL" if appearance else "AES_REGISTRATION_RUNNER_FAIL", error, file=sys.stderr)
         for line in lines[-30:]:
             print(line, file=sys.stderr)
         return 1
@@ -317,12 +322,12 @@ def run_auto_attack(args, repo: Path, fixture: Path, env: dict[str, str]) -> int
         port, cert = match.group(1), match.group(2)
         client = subprocess.run(
             [args.godot, "--headless", "--path", str(repo / "client"),
-             "--script", "res://tests/test_client_auto_approach_tls.gd", "--", port, cert],
+             "--script", "res://tests/test_client_auto_approach_aes.gd", "--", port, cert],
             cwd=repo, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
             timeout=max(1.0, deadline - time.monotonic()))
         print(client.stdout, end="")
-        if client.returncode != 0 or "CLIENT_AUTO_APPROACH_TLS_PASS" not in client.stdout:
-            raise RuntimeError("Godot auto-approach TLS test failed")
+        if client.returncode != 0 or "CLIENT_AUTO_APPROACH_AES_PASS" not in client.stdout:
+            raise RuntimeError("Godot auto-approach AES test failed")
         server.wait(timeout=max(1.0, deadline - time.monotonic()))
         output = "\n".join(lines)
         if server.returncode != 0 or "AUTO_ATTACK_FIXTURE_PASS" not in output:
@@ -330,10 +335,10 @@ def run_auto_attack(args, repo: Path, fixture: Path, env: dict[str, str]) -> int
         for line in lines:
             if line.startswith("AUTO_ATTACK_FIXTURE_"):
                 print(line)
-        print("GODOT_CSHARP_TLS_AUTO_APPROACH_ATTACK_E2E_PASS secure_tls=true first_attack_out_of_range=true server_astar_move=true self_state_stop=true second_attack_applied=true client_range_guess=false")
+        print("GODOT_CSHARP_AES_AUTO_APPROACH_ATTACK_E2E_PASS aes_cbc=true first_attack_out_of_range=true server_astar_move=true self_state_stop=true second_attack_applied=true client_range_guess=false")
         return 0
     except Exception as error:
-        print("TLS_AUTO_ATTACK_RUNNER_FAIL", error, file=sys.stderr)
+        print("AES_AUTO_ATTACK_RUNNER_FAIL", error, file=sys.stderr)
         for line in lines[-30:]:
             print(line, file=sys.stderr)
         return 1
@@ -384,12 +389,12 @@ def run_discard(args, repo: Path, fixture: Path, env: dict[str, str]) -> int:
         port, cert = match.group(1), match.group(2)
         client = subprocess.run(
             [args.godot, "--headless", "--path", str(repo / "client"),
-             "--script", "res://tests/test_client_discard_tls.gd", "--", port, cert],
+             "--script", "res://tests/test_client_discard_aes.gd", "--", port, cert],
             cwd=repo, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
             timeout=max(1.0, deadline - time.monotonic()))
         print(client.stdout, end="")
-        if client.returncode != 0 or "CLIENT_DISCARD_TLS_PASS" not in client.stdout:
-            raise RuntimeError("Godot discard TLS test failed")
+        if client.returncode != 0 or "CLIENT_DISCARD_AES_PASS" not in client.stdout:
+            raise RuntimeError("Godot discard AES test failed")
         server.wait(timeout=max(1.0, deadline - time.monotonic()))
         output = "\n".join(lines)
         if server.returncode != 0 or "DISCARD_FIXTURE_PASS" not in output:
@@ -397,10 +402,10 @@ def run_discard(args, repo: Path, fixture: Path, env: dict[str, str]) -> int:
         for line in lines:
             if line.startswith("DISCARD_FIXTURE_"):
                 print(line)
-        print("GODOT_CSHARP_TLS_DISCARD_E2E_PASS secure_tls=true durable_inventory=true request_identity_server_bound=true receipt_before_local_mutation=true final_delete_persisted=true")
+        print("GODOT_CSHARP_AES_DISCARD_E2E_PASS aes_cbc=true durable_inventory=true request_identity_server_bound=true receipt_before_local_mutation=true final_delete_persisted=true")
         return 0
     except Exception as error:
-        print("TLS_DISCARD_RUNNER_FAIL", error, file=sys.stderr)
+        print("AES_DISCARD_RUNNER_FAIL", error, file=sys.stderr)
         for line in lines[-30:]:
             print(line, file=sys.stderr)
         return 1
@@ -451,12 +456,12 @@ def run_storage(args, repo: Path, fixture: Path, env: dict[str, str]) -> int:
         port, cert = match.group(1), match.group(2)
         client = subprocess.run(
             [args.godot, "--headless", "--path", str(repo / "client"),
-             "--script", "res://tests/test_client_storage_tls.gd", "--", port, cert],
+             "--script", "res://tests/test_client_storage_aes.gd", "--", port, cert],
             cwd=repo, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
             timeout=max(1.0, deadline - time.monotonic()))
         print(client.stdout, end="")
-        if client.returncode != 0 or "CLIENT_STORAGE_TLS_PASS" not in client.stdout:
-            raise RuntimeError("Godot storage TLS test failed")
+        if client.returncode != 0 or "CLIENT_STORAGE_AES_PASS" not in client.stdout:
+            raise RuntimeError("Godot storage AES test failed")
         server.wait(timeout=max(1.0, deadline - time.monotonic()))
         output = "\n".join(lines)
         if server.returncode != 0 or "STORAGE_FIXTURE_PASS" not in output:
@@ -464,12 +469,12 @@ def run_storage(args, repo: Path, fixture: Path, env: dict[str, str]) -> int:
         for line in lines:
             if line.startswith("STORAGE_FIXTURE_"):
                 print(line)
-        print("GODOT_CSHARP_TLS_STORAGE_E2E_PASS secure_tls=true "
+        print("GODOT_CSHARP_AES_STORAGE_E2E_PASS aes_cbc=true "
               "identity_server_bound=true whole_uid_stack=true "
               "deposit=true withdraw=true durable_uid_and_provenance=true")
         return 0
     except Exception as error:
-        print("TLS_STORAGE_RUNNER_FAIL", error, file=sys.stderr)
+        print("AES_STORAGE_RUNNER_FAIL", error, file=sys.stderr)
         for line in lines[-30:]:
             print(line, file=sys.stderr)
         return 1
@@ -520,12 +525,12 @@ def run_equipment(args, repo: Path, fixture: Path, env: dict[str, str]) -> int:
         port, cert = match.group(1), match.group(2)
         client = subprocess.run(
             [args.godot, "--headless", "--path", str(repo / "client"),
-             "--script", "res://tests/test_client_equipment_tls.gd", "--", port, cert],
+             "--script", "res://tests/test_client_equipment_aes.gd", "--", port, cert],
             cwd=repo, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
             timeout=max(1.0, deadline - time.monotonic()))
         print(client.stdout, end="")
-        if client.returncode != 0 or "CLIENT_EQUIPMENT_TLS_PASS" not in client.stdout:
-            raise RuntimeError("Godot equipment TLS test failed")
+        if client.returncode != 0 or "CLIENT_EQUIPMENT_AES_PASS" not in client.stdout:
+            raise RuntimeError("Godot equipment AES test failed")
         server.wait(timeout=max(1.0, deadline - time.monotonic()))
         output = "\n".join(lines)
         if server.returncode != 0 or "EQUIPMENT_FIXTURE_PASS" not in output:
@@ -533,12 +538,12 @@ def run_equipment(args, repo: Path, fixture: Path, env: dict[str, str]) -> int:
         for line in lines:
             if line.startswith("EQUIPMENT_FIXTURE_"):
                 print(line)
-        print("GODOT_CSHARP_TLS_EQUIPMENT_E2E_PASS secure_tls=true "
+        print("GODOT_CSHARP_AES_EQUIPMENT_E2E_PASS aes_cbc=true "
               "identity_server_bound=true slot_server_rule=true "
               "equip=true unequip=true durable_uid_and_provenance=true")
         return 0
     except Exception as error:
-        print("TLS_EQUIPMENT_RUNNER_FAIL", error, file=sys.stderr)
+        print("AES_EQUIPMENT_RUNNER_FAIL", error, file=sys.stderr)
         for line in lines[-30:]:
             print(line, file=sys.stderr)
         return 1
@@ -588,12 +593,12 @@ def run_bank(args, repo: Path, fixture: Path, env: dict[str, str]) -> int:
         port, cert = match.group(1), match.group(2)
         client = subprocess.run(
             [args.godot, "--headless", "--path", str(repo / "client"),
-             "--script", "res://tests/test_client_bank_tls.gd", "--", port, cert],
+             "--script", "res://tests/test_client_bank_aes.gd", "--", port, cert],
             cwd=repo, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
             timeout=max(1.0, deadline - time.monotonic()))
         print(client.stdout, end="")
-        if client.returncode != 0 or "CLIENT_BANK_TLS_PASS" not in client.stdout:
-            raise RuntimeError("Godot bank TLS test failed")
+        if client.returncode != 0 or "CLIENT_BANK_AES_PASS" not in client.stdout:
+            raise RuntimeError("Godot bank AES test failed")
         server.wait(timeout=max(1.0, deadline - time.monotonic()))
         output = "\n".join(lines)
         if server.returncode != 0 or "BANK_FIXTURE_PASS" not in output:
@@ -601,12 +606,12 @@ def run_bank(args, repo: Path, fixture: Path, env: dict[str, str]) -> int:
         for line in lines:
             if line.startswith("BANK_FIXTURE_"):
                 print(line)
-        print("GODOT_CSHARP_TLS_BANK_E2E_PASS secure_tls=true "
+        print("GODOT_CSHARP_AES_BANK_E2E_PASS aes_cbc=true "
               "identity_server_bound=true scope_server_rule=true "
               "deposit=true withdraw=true durable_balances=true")
         return 0
     except Exception as error:
-        print("TLS_BANK_RUNNER_FAIL", error, file=sys.stderr)
+        print("AES_BANK_RUNNER_FAIL", error, file=sys.stderr)
         for line in lines[-30:]:
             print(line, file=sys.stderr)
         return 1
@@ -658,12 +663,12 @@ def run_repair(args, repo: Path, fixture: Path, env: dict[str, str]) -> int:
         port, cert = match.group(1), match.group(2)
         client = subprocess.run(
             [args.godot, "--headless", "--path", str(repo / "client"),
-             "--script", "res://tests/test_client_repair_tls.gd", "--", port, cert],
+             "--script", "res://tests/test_client_repair_aes.gd", "--", port, cert],
             cwd=repo, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
             timeout=max(1.0, deadline - time.monotonic()))
         print(client.stdout, end="")
-        if client.returncode != 0 or "CLIENT_REPAIR_TLS_PASS" not in client.stdout:
-            raise RuntimeError("Godot repair TLS test failed")
+        if client.returncode != 0 or "CLIENT_REPAIR_AES_PASS" not in client.stdout:
+            raise RuntimeError("Godot repair AES test failed")
         server.wait(timeout=max(1.0, deadline - time.monotonic()))
         output = "\n".join(lines)
         if server.returncode != 0 or "REPAIR_FIXTURE_PASS" not in output:
@@ -671,13 +676,13 @@ def run_repair(args, repo: Path, fixture: Path, env: dict[str, str]) -> int:
         for line in lines:
             if line.startswith("REPAIR_FIXTURE_"):
                 print(line)
-        print("GODOT_CSHARP_TLS_REPAIR_E2E_PASS secure_tls=true "
+        print("GODOT_CSHARP_AES_REPAIR_E2E_PASS aes_cbc=true "
               "identity_server_bound=true npc_rate_server_rule=true "
               "durability_server_auth=true cost_server_auth=true "
               "wallet_debit_once=true equipment_uid_preserved=true")
         return 0
     except Exception as error:
-        print("TLS_REPAIR_RUNNER_FAIL", error, file=sys.stderr)
+        print("AES_REPAIR_RUNNER_FAIL", error, file=sys.stderr)
         for line in lines[-30:]:
             print(line, file=sys.stderr)
         return 1
@@ -732,14 +737,14 @@ def run_enhancement(args, repo: Path, fixture: Path, env: dict[str, str]) -> int
         port, cert = match.group(1), match.group(2)
         client = subprocess.run(
             [args.godot, "--headless", "--path", str(repo / "client"),
-             "--script", "res://tests/test_client_enhancement_tls.gd", "--",
+             "--script", "res://tests/test_client_enhancement_aes.gd", "--",
              port, cert],
             cwd=repo, text=True, stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             timeout=max(1.0, deadline - time.monotonic()))
         print(client.stdout, end="")
-        if client.returncode != 0 or                 "CLIENT_ENHANCEMENT_TLS_PASS" not in client.stdout:
-            raise RuntimeError("Godot enhancement TLS test failed")
+        if client.returncode != 0 or                 "CLIENT_ENHANCEMENT_AES_PASS" not in client.stdout:
+            raise RuntimeError("Godot enhancement AES test failed")
         server.wait(timeout=max(1.0, deadline - time.monotonic()))
         output = "\n".join(lines)
         if server.returncode != 0 or "ENHANCEMENT_FIXTURE_PASS" not in output:
@@ -748,13 +753,13 @@ def run_enhancement(args, repo: Path, fixture: Path, env: dict[str, str]) -> int
         for line in lines:
             if line.startswith("ENHANCEMENT_FIXTURE_"):
                 print(line)
-        print("GODOT_CSHARP_TLS_ENHANCEMENT_E2E_PASS secure_tls=true "
+        print("GODOT_CSHARP_AES_ENHANCEMENT_E2E_PASS aes_cbc=true "
               "identity_server_bound=true probability_server_auth=true "
               "cost_server_auth=true wallet_debit_once=true "
               "enhancement_level_durable=true equipment_uid_preserved=true")
         return 0
     except Exception as error:
-        print("TLS_ENHANCEMENT_RUNNER_FAIL", error, file=sys.stderr)
+        print("AES_ENHANCEMENT_RUNNER_FAIL", error, file=sys.stderr)
         for line in lines[-30:]:
             print(line, file=sys.stderr)
         return 1
@@ -814,7 +819,7 @@ def run_player_shop(args, repo: Path, fixture: Path, env: dict[str, str]) -> int
             raise RuntimeError("malformed player-shop fixture readiness: "+ready)
         port,cert,seller_id,buyer_id,item_uid,drop_id=match.groups()
         base=[args.godot,"--headless","--path",str(repo/"client"),
-              "--script","res://tests/test_client_player_shop_tls.gd","--",
+              "--script","res://tests/test_client_player_shop_aes.gd","--",
               port,cert]
         tail=[seller_id,buyer_id,item_uid,drop_id]
 
@@ -856,14 +861,14 @@ def run_player_shop(args, repo: Path, fixture: Path, env: dict[str, str]) -> int
             if line.startswith("PLAYER_SHOP_FIXTURE_"):
                 print(line)
         print("GODOT_CSHARP_TWO_CLIENT_PLAYER_SHOP_E2E_PASS "
-              "tls=true concurrent_clients=2 online_only=true "
+              "aes_cbc=true concurrent_clients=2 online_only=true "
               "aoi_seller=true inspect=true atomic_uid=true "
               "quantity=2 source_drop=true durability=80 "
               "seller_wallet=100_to_400 buyer_wallet=1000_to_700 "
               "seller_sold_push=true client_price_math=false")
         return 0
     except Exception as error:
-        print("TLS_PLAYER_SHOP_RUNNER_FAIL",error,file=sys.stderr)
+        print("AES_PLAYER_SHOP_RUNNER_FAIL",error,file=sys.stderr)
         for name,lines in (("server",server_lines),("seller",seller_lines)):
             for line in lines[-30:]:
                 print(name,line,file=sys.stderr)
@@ -926,7 +931,7 @@ def run_pvp(args, repo: Path, fixture: Path, env: dict[str, str]) -> int:
             raise RuntimeError("malformed PvP fixture readiness: " + ready)
         port, cert, actor_a, actor_b = match.groups()
         base = [args.godot, "--headless", "--path", str(repo / "client"),
-                "--script", "res://tests/test_client_pvp_tls.gd", "--",
+                "--script", "res://tests/test_client_pvp_aes.gd", "--",
                 port, cert]
 
         victim = subprocess.Popen(
@@ -963,7 +968,7 @@ def run_pvp(args, repo: Path, fixture: Path, env: dict[str, str]) -> int:
             if line.startswith("PVP_FIXTURE_"):
                 print(line)
         print("GODOT_CSHARP_TWO_CLIENT_PVP_E2E_PASS "
-              "tls=true concurrent_clients=2 map13=true white_opt_in=true "
+              "aes_cbc=true concurrent_clients=2 map13=true white_opt_in=true "
               "server_range=true server_damage=true shared_hp_sequence=true "
               "normal_hit=58 player_skill_fixed_hit=42 skill_id=99003 "
               "skill_mp=2_to_1 victim_dead=true attacker_red=true "
@@ -971,7 +976,7 @@ def run_pvp(args, repo: Path, fixture: Path, env: dict[str, str]) -> int:
               "client_damage_estimate=false")
         return 0
     except Exception as error:
-        print("TLS_PVP_RUNNER_FAIL", error, file=sys.stderr)
+        print("AES_PVP_RUNNER_FAIL", error, file=sys.stderr)
         for name, lines in (("server", server_lines), ("victim", victim_lines)):
             for line in lines[-30:]:
                 print(name, line, file=sys.stderr)
@@ -1034,7 +1039,7 @@ def run_combat_observer(args, repo: Path, fixture: Path, env: dict[str, str]) ->
             raise RuntimeError("malformed combat-observer readiness: "+ready)
         port,cert=match.group(1),match.group(2)
         base=[args.godot,"--headless","--path",str(repo/"client"),
-              "--script","res://tests/test_client_combat_observer_tls.gd","--",
+              "--script","res://tests/test_client_combat_observer_aes.gd","--",
               port,cert]
         observer=subprocess.Popen(
             [*base,"observer"],cwd=repo,text=True,stdout=subprocess.PIPE,
@@ -1070,13 +1075,13 @@ def run_combat_observer(args, repo: Path, fixture: Path, env: dict[str, str]) ->
             if line.startswith("COMBAT_OBSERVER_FIXTURE_"):
                 print(line)
         print("GODOT_CSHARP_TWO_CLIENT_ATTACK_VISUAL_E2E_PASS "
-              "tls=true concurrent_clients=2 attacker_visual=true "
+              "aes_cbc=true concurrent_clients=2 attacker_visual=true "
               "observer_visual=true damage=60 monster_delta_hp=40 "
               "actor_hit_visual=true observer_hit_visual=true monster_damage=18 "
               "observer_remote_hp_authority=false same_reliable_aoi=true")
         return 0
     except Exception as error:
-        print("TLS_COMBAT_OBSERVER_RUNNER_FAIL",error,file=sys.stderr)
+        print("AES_COMBAT_OBSERVER_RUNNER_FAIL",error,file=sys.stderr)
         for name,lines in (("server",server_lines),("observer",observer_lines)):
             for line in lines[-30:]:
                 print(name,line,file=sys.stderr)
@@ -1140,7 +1145,7 @@ def run_skill_aoe_observer(args, repo: Path, fixture: Path, env: dict[str, str])
             raise RuntimeError("malformed skill AoE observer readiness: "+ready)
         port,cert=match.group(1),match.group(2)
         base=[args.godot,"--headless","--path",str(repo/"client"),
-              "--script","res://tests/test_client_skill_aoe_observer_tls.gd",
+              "--script","res://tests/test_client_skill_aoe_observer_aes.gd",
               "--",port,cert]
         observer=subprocess.Popen(
             [*base,"observer"],cwd=repo,text=True,stdout=subprocess.PIPE,
@@ -1176,12 +1181,12 @@ def run_skill_aoe_observer(args, repo: Path, fixture: Path, env: dict[str, str])
             if line.startswith("SKILL_AOE_OBSERVER_FIXTURE_"):
                 print(line)
         print("GODOT_CSHARP_TWO_CLIENT_SKILL_AOE_E2E_PASS "
-              "tls=true concurrent_clients=2 target_zero=true hits=2 "
+              "aes_cbc=true concurrent_clients=2 target_zero=true hits=2 "
               "same_sequence_multi_target=true observer_target_memory=2 "
               "mp_owner_actor_only=true monster_delta_authority=true")
         return 0
     except Exception as error:
-        print("TLS_SKILL_AOE_OBSERVER_RUNNER_FAIL",error,file=sys.stderr)
+        print("AES_SKILL_AOE_OBSERVER_RUNNER_FAIL",error,file=sys.stderr)
         for name,lines in (("server",server_lines),("observer",observer_lines)):
             for line in lines[-30:]:
                 print(name,line,file=sys.stderr)
@@ -1239,12 +1244,12 @@ def run_skill_aoe(args, repo: Path, fixture: Path, env: dict[str, str]) -> int:
         port,cert=match.group(1),match.group(2)
         client=subprocess.run(
             [args.godot,"--headless","--path",str(repo/"client"),
-             "--script","res://tests/test_client_skill_aoe_tls.gd","--",port,cert],
+             "--script","res://tests/test_client_skill_aoe_aes.gd","--",port,cert],
             cwd=repo,text=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,
             timeout=max(1.0,deadline-time.monotonic()))
         print(client.stdout,end="")
-        if client.returncode!=0 or "CLIENT_SKILL_AOE_TLS_PASS" not in client.stdout:
-            raise RuntimeError("Godot skill AoE TLS test failed")
+        if client.returncode!=0 or "CLIENT_SKILL_AOE_AES_PASS" not in client.stdout:
+            raise RuntimeError("Godot skill AoE AES test failed")
         server.wait(timeout=max(1.0,deadline-time.monotonic()))
         output="\n".join(lines)
         if server.returncode!=0 or "SKILL_AOE_FIXTURE_PASS" not in output:
@@ -1252,10 +1257,10 @@ def run_skill_aoe(args, repo: Path, fixture: Path, env: dict[str, str]) -> int:
         for line in lines:
             if line.startswith("SKILL_AOE_FIXTURE_"):
                 print(line)
-        print("GODOT_CSHARP_TLS_SKILL_AOE_E2E_PASS secure_tls=true target_zero=true hits=2 mp_debit_once=true third_target_untouched=true per_target_visual=true monster_delta_authority=true")
+        print("GODOT_CSHARP_AES_SKILL_AOE_E2E_PASS aes_cbc=true target_zero=true hits=2 mp_debit_once=true third_target_untouched=true per_target_visual=true monster_delta_authority=true")
         return 0
     except Exception as error:
-        print("TLS_SKILL_AOE_RUNNER_FAIL",error,file=sys.stderr)
+        print("AES_SKILL_AOE_RUNNER_FAIL",error,file=sys.stderr)
         for line in lines[-30:]:
             print(line,file=sys.stderr)
         return 1
@@ -1306,12 +1311,12 @@ def run_combat(args, repo: Path, fixture: Path, env: dict[str, str]) -> int:
         port, cert = match.group(1), match.group(2)
         client = subprocess.run(
             [args.godot, "--headless", "--path", str(repo / "client"),
-             "--script", "res://tests/test_client_combat_tls.gd", "--", port, cert],
+             "--script", "res://tests/test_client_combat_aes.gd", "--", port, cert],
             cwd=repo, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
             timeout=max(1.0, deadline - time.monotonic()))
         print(client.stdout, end="")
-        if client.returncode != 0 or "CLIENT_COMBAT_TLS_PASS" not in client.stdout:
-            raise RuntimeError("Godot combat TLS test failed")
+        if client.returncode != 0 or "CLIENT_COMBAT_AES_PASS" not in client.stdout:
+            raise RuntimeError("Godot combat AES test failed")
         server.wait(timeout=max(1.0, deadline - time.monotonic()))
         output = "\n".join(lines)
         if server.returncode != 0 or "COMBAT_FIXTURE_PASS" not in output:
@@ -1319,10 +1324,10 @@ def run_combat(args, repo: Path, fixture: Path, env: dict[str, str]) -> int:
         for line in lines:
             if line.startswith("COMBAT_FIXTURE_"):
                 print(line)
-        print("GODOT_CSHARP_TLS_COMBAT_E2E_PASS secure_tls=true synthetic_profile_explicit=true client_damage_absent=true authoritative_monster_hp=true shared_monster_delta=true monster_hit_committed_before_player_damage=true authoritative_player_hp=true lethal_world_stop_before_delivery=true dead_intents_blocked=true")
+        print("GODOT_CSHARP_AES_COMBAT_E2E_PASS aes_cbc=true synthetic_profile_explicit=true client_damage_absent=true authoritative_monster_hp=true shared_monster_delta=true monster_hit_committed_before_player_damage=true authoritative_player_hp=true lethal_world_stop_before_delivery=true dead_intents_blocked=true")
         return 0
     except Exception as error:
-        print("TLS_COMBAT_RUNNER_FAIL", error, file=sys.stderr)
+        print("AES_COMBAT_RUNNER_FAIL", error, file=sys.stderr)
         for line in lines[-30:]:
             print(line, file=sys.stderr)
         return 1
@@ -1379,7 +1384,7 @@ def run_reconnect(args, repo: Path, fixture: Path, env: dict[str, str]) -> int:
         port, cert = match.group(1), match.group(2)
         client = subprocess.Popen(
             [args.godot, "--headless", "--path", str(repo / "client"),
-             "--script", "res://tests/test_client_reconnect_tls.gd", "--", port, cert],
+             "--script", "res://tests/test_client_reconnect_aes.gd", "--", port, cert],
             cwd=repo, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
             bufsize=1)
         threading.Thread(target=capture, args=(client, client_lines, client_events),
@@ -1402,13 +1407,13 @@ def run_reconnect(args, repo: Path, fixture: Path, env: dict[str, str]) -> int:
             for line in lines:
                 if line.startswith(("CLIENT_RECONNECT_", "RECONNECT_FIXTURE_")):
                     print(line)
-        print("GODOT_CSHARP_TLS_RECONNECT_E2E_PASS forced_drop=true auto_reauth=true "
+        print("GODOT_CSHARP_AES_RECONNECT_E2E_PASS forced_drop=true auto_reauth=true "
               "same_character=true new_generation=true persisted_position=true "
               "world_ready_reack=true old_intents_not_replayed=true "
               "chat_generation_reset=true bounded_attempts=3")
         return 0
     except Exception as error:
-        print("TLS_RECONNECT_RUNNER_FAIL", error, file=sys.stderr)
+        print("AES_RECONNECT_RUNNER_FAIL", error, file=sys.stderr)
         for name, lines in (("server", server_lines), ("client", client_lines)):
             for line in lines[-25:]:
                 print(name, line, file=sys.stderr)
@@ -1468,7 +1473,7 @@ def run_trade(args, repo: Path, fixture: Path, env: dict[str, str]) -> int:
             raise RuntimeError("malformed trade fixture readiness: " + ready)
         port, cert, actor_a, actor_b, item_a, item_b = match.groups()
         base = [args.godot, "--headless", "--path", str(repo / "client"),
-                "--script", "res://tests/test_client_trade_tls.gd", "--",
+                "--script", "res://tests/test_client_trade_aes.gd", "--",
                 port, cert]
         tail = [actor_a, actor_b, item_a, item_b]
         observer = subprocess.Popen(
@@ -1500,12 +1505,12 @@ def run_trade(args, repo: Path, fixture: Path, env: dict[str, str]) -> int:
         for line in server_lines:
             if line.startswith("TRADE_FIXTURE_"):
                 print(line)
-        print("GODOT_CSHARP_TWO_CLIENT_TRADE_E2E_PASS tls=true concurrent_clients=2 "
+        print("GODOT_CSHARP_TWO_CLIENT_TRADE_E2E_PASS aes_cbc=true concurrent_clients=2 "
               "invite=true offers=true money=true dual_lock=true dual_confirm=true "
               "sqlite_atomic_swap=true uid_provenance=true")
         return 0
     except Exception as error:
-        print("TLS_TRADE_RUNNER_FAIL", error, file=sys.stderr)
+        print("AES_TRADE_RUNNER_FAIL", error, file=sys.stderr)
         for line in server_lines[-25:]:
             print(line, file=sys.stderr)
         for line in observer_lines[-25:]:
@@ -1528,7 +1533,7 @@ def run_trade(args, repo: Path, fixture: Path, env: dict[str, str]) -> int:
 
 def run_multiplayer(args, repo: Path, fixture: Path, env: dict[str, str],
                     portal: bool = False) -> int:
-    """Real TLS AOI with optional audited NPC action, no test-only teleport RPC."""
+    """Real AES AOI with optional audited NPC action, no test-only teleport RPC."""
     label = "PORTAL" if portal else "MULTI"
     server = subprocess.Popen(
         ["dotnet", "run", "--project", str(fixture), "-c", "Release",
@@ -1571,7 +1576,7 @@ def run_multiplayer(args, repo: Path, fixture: Path, env: dict[str, str],
             raise RuntimeError(f"malformed multiplayer fixture readiness {ready}")
         port, cert = match.group(1), match.group(2)
         base = [args.godot, "--headless", "--path", str(repo / "client"),
-                "--script", "res://tests/test_client_multiplayer_tls.gd", "--",
+                "--script", "res://tests/test_client_multiplayer_aes.gd", "--",
                 port, cert]
 
         extra = ["portal"] if portal else []
@@ -1610,19 +1615,19 @@ def run_multiplayer(args, repo: Path, fixture: Path, env: dict[str, str],
                 print(line)
         if portal:
             print("GODOT_CSHARP_TWO_CLIENT_NPC_PORTAL_E2E_PASS "
-                  "tls=true concurrent_clients=2 audited_clicks=true "
+                  "aes_cbc=true concurrent_clients=2 audited_clicks=true "
                   "unknown_npc_denied=true map15_to_map13_to_map15=true "
                   "world_ready=true delta=true despawn=true return_spawn=true "
                   "zero_ghost_actors=true")
         else:
             print("GODOT_CSHARP_TWO_CLIENT_AOI_E2E_PASS "
-                  "tls=true concurrent_clients=2 world_ready=true "
+                  "aes_cbc=true concurrent_clients=2 world_ready=true "
                   "spawn=true authoritative_delta=true despawn=true "
                   "same_30hz_world=true")
         return 0
     except Exception as error:
-        print("TLS_NPC_PORTAL_RUNNER_FAIL" if portal else
-              "TLS_MULTIPLAYER_RUNNER_FAIL", error, file=sys.stderr)
+        print("AES_NPC_PORTAL_RUNNER_FAIL" if portal else
+              "AES_MULTIPLAYER_RUNNER_FAIL", error, file=sys.stderr)
         for line in server_lines[-20:]:
             print(line, file=sys.stderr)
         for line in observer_lines[-20:]:
@@ -1684,7 +1689,7 @@ def run_quest(args, repo: Path, fixture: Path, env: dict[str, str]) -> int:
         port, cert, character, npc, quest = match.groups()
         base = [
             args.godot, "--headless", "--path", str(repo / "client"),
-            "--script", "res://tests/test_client_quest_tls.gd", "--",
+            "--script", "res://tests/test_client_quest_aes.gd", "--",
             port, cert]
         tail = [character, npc, quest]
 
@@ -1693,7 +1698,7 @@ def run_quest(args, repo: Path, fixture: Path, env: dict[str, str]) -> int:
             stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
             timeout=max(1.0, deadline-time.monotonic()))
         print(mutate.stdout, end="")
-        if mutate.returncode != 0 or "CLIENT_QUEST_TLS_PASS role=mutate" not in mutate.stdout:
+        if mutate.returncode != 0 or "CLIENT_QUEST_AES_PASS role=mutate" not in mutate.stdout:
             raise RuntimeError("quest mutate Godot client failed")
 
         relogin = subprocess.run(
@@ -1701,7 +1706,7 @@ def run_quest(args, repo: Path, fixture: Path, env: dict[str, str]) -> int:
             stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
             timeout=max(1.0, deadline-time.monotonic()))
         print(relogin.stdout, end="")
-        if relogin.returncode != 0 or "CLIENT_QUEST_TLS_PASS role=relogin" not in relogin.stdout:
+        if relogin.returncode != 0 or "CLIENT_QUEST_AES_PASS role=relogin" not in relogin.stdout:
             raise RuntimeError("quest relogin Godot client failed")
 
         server.wait(timeout=max(1.0, deadline-time.monotonic()))
@@ -1717,13 +1722,13 @@ def run_quest(args, repo: Path, fixture: Path, env: dict[str, str]) -> int:
             if line.startswith("QUEST_FIXTURE_"):
                 print(line)
         print(
-            "GODOT_CSHARP_TLS_QUEST_E2E_PASS secure_tls=true "
+            "GODOT_CSHARP_AES_QUEST_E2E_PASS aes_cbc=true "
             "verified_rule=true npc_distance_server_auth=true "
             "choice_ids_server_view=true durable_progress=true "
             "relogin_completed=true client_stage_math=false")
         return 0
     except Exception as error:
-        print("TLS_QUEST_RUNNER_FAIL", error, file=sys.stderr)
+        print("AES_QUEST_RUNNER_FAIL", error, file=sys.stderr)
         for line in lines[-30:]:
             print(line, file=sys.stderr)
         return 1
@@ -1737,7 +1742,7 @@ def run_quest(args, repo: Path, fixture: Path, env: dict[str, str]) -> int:
 
 
 def run_crossmap(args, repo: Path, fixture: Path, env: dict[str, str]) -> int:
-    """Two actual Godot processes on one TLS World; test-only trusted transfer signals.
+    """Two actual Godot processes on one AES World; test-only trusted transfer signals.
 
     Python waits until the observing Godot process has *actually seen* the
     first Delta before asking the C# fixture to transfer the other actor.
@@ -1788,7 +1793,7 @@ def run_crossmap(args, repo: Path, fixture: Path, env: dict[str, str]) -> int:
             raise RuntimeError("invalid cross-map fixture readiness: " + ready)
         port, certificate = match.group(1), match.group(2)
         command = [args.godot, "--headless", "--path", str(repo / "client"),
-                   "--script", "res://tests/test_client_multiplayer_tls.gd", "--",
+                   "--script", "res://tests/test_client_multiplayer_aes.gd", "--",
                    port, certificate]
         observer = subprocess.Popen(
             [*command, "observer", "crossmap"], cwd=repo, text=True,
@@ -1835,7 +1840,7 @@ def run_crossmap(args, repo: Path, fixture: Path, env: dict[str, str]) -> int:
                 if line.startswith(("CLIENT_CROSSMAP_", "CROSSMAP_FIXTURE_")):
                     print(line)
         print("GODOT_CSHARP_TWO_CLIENT_CROSSMAP_E2E_PASS "
-              "tls=true map15_to_map13_to_map15=true "
+              "aes_cbc=true map15_to_map13_to_map15=true "
               "world_ready=true old_map_clear=true "
               "despawn=true return_spawn=true "
               "nearby_chat_isolation=true "
@@ -1845,7 +1850,7 @@ def run_crossmap(args, repo: Path, fixture: Path, env: dict[str, str]) -> int:
               "same_authoritative_30hz_world=true")
         return 0
     except Exception as error:
-        print("TLS_CROSSMAP_RUNNER_FAIL", error, file=sys.stderr)
+        print("AES_CROSSMAP_RUNNER_FAIL", error, file=sys.stderr)
         for name, lines in (("server", server_lines), ("observer", observer_lines),
                             ("actor", actor_lines)):
             for line in lines[-18:]:

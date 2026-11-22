@@ -7,7 +7,7 @@ const PASSWORD := "Fixture-Password-123!"
 func _fail(message: String, session = null) -> void:
 	if session != null:
 		session.stop()
-	push_error("CLIENT_PVP_TLS_FAIL "+message)
+	push_error("CLIENT_PVP_AES_FAIL "+message)
 	quit(1)
 
 func _initialize() -> void:
@@ -22,10 +22,7 @@ func _initialize() -> void:
 	var peer_id:=actor_b if role=="actor" else actor_a
 	var username:="pvp_one" if role=="actor" else "pvp_two"
 
-	var cert:=X509Certificate.new()
-	if cert.load(str(args[1]))!=OK:
-		_fail("certificate load")
-		return
+	var cert = null
 	var session=Session.new()
 	if session.connect_secure(
 		"127.0.0.1",int(args[0]),username,PASSWORD,"localhost",cert)!=OK:

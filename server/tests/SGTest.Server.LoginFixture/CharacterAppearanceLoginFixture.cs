@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Sockets;
 using SGTest.Server.Gateway;
+using SGTest.Server.Transport;
 using SGTest.Server.Identity;
 using SGTest.Server.Map;
 using SGTest.Server.World;
@@ -29,20 +30,18 @@ internal static class CharacterAppearanceLoginFixture
             using var stop=new CancellationTokenSource();
             var routing=router.RunAsync(world.Results);
             var pumping=pump.RunAsync(stop.Token);
-            using var certificate=Program.CreateCertificate();
-            string cert=Path.Combine(root,"fixture-cert.pem");
-            Program.WriteCertificatePem(cert,certificate);
-            var listener=new TcpListener(IPAddress.Loopback,0);
+            var settings = AesCbcSettings.FromEnvironment();
+                                    var listener=new TcpListener(IPAddress.Loopback,0);
             listener.Start(1);
             try
             {
-                Console.WriteLine($"APPEARANCE_FIXTURE_READY port={((IPEndPoint)listener.LocalEndpoint).Port} cert={cert} username={Program.Username}");
+                Console.WriteLine($"APPEARANCE_FIXTURE_READY port={((IPEndPoint)listener.LocalEndpoint).Port} cert=unused username={Program.Username}");
                 Console.Out.Flush();
                 for(int pass=0;pass<2;pass++)
                 {
                     using var client=await listener.AcceptTcpClientAsync().WaitAsync(TimeSpan.FromSeconds(15));
-                    await authorization.RunAuthenticatedSocketAsync(client,certificate,router,
-                        new TlsWireConnectionOptions(AuthorizationTimeoutMilliseconds:15000))
+                    await authorization.RunAuthenticatedAesSocketAsync(client,settings,router,
+                        new AesWireConnectionOptions(AuthorizationTimeoutMilliseconds:15000))
                         .WaitAsync(TimeSpan.FromSeconds(25));
                     var row=(await store.ListCharactersAsync(account)).Single();
                     if(row.Appearance!=new CharacterAppearanceState(chosen,rules.SourceReference))

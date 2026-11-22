@@ -6,7 +6,7 @@ const PASSWORD := "Fixture-Password-123!"
 func _fail(message: String, session = null) -> void:
 	if session != null:
 		session.stop()
-	push_error("CLIENT_TRADE_TLS_FAIL "+message)
+	push_error("CLIENT_TRADE_AES_FAIL "+message)
 	quit(1)
 
 func _initialize() -> void:
@@ -24,10 +24,7 @@ func _initialize() -> void:
 	var own_item := item_b if role == "observer" else item_a
 	var peer_item := item_a if role == "observer" else item_b
 	var username := "trade_two" if role == "observer" else "trade_one"
-	var cert := X509Certificate.new()
-	if cert.load(str(args[1])) != OK:
-		_fail("certificate load")
-		return
+	var cert = null
 	var session = Session.new()
 	if session.connect_secure("127.0.0.1",int(args[0]),username,PASSWORD,"localhost",cert) != OK:
 		_fail("connect",session)

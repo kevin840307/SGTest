@@ -1,7 +1,7 @@
 extends SceneTree
 
 # Real concurrently connected Godot ClientSession workers. The C# fixture
-# runs one shared 30Hz authoritative World with TLS/WorldAoiPump, not fake wire.
+# runs one shared 30Hz authoritative World with AES/WorldAoiPump, not fake wire.
 const Session = preload("res://session/client_session.gd")
 const WorldState = preload("res://world/world_state.gd")
 const PASSWORD := "Fixture-Password-123!"
@@ -15,22 +15,19 @@ func _fail(message: String, session = null) -> void:
 func _initialize() -> void:
 	var args := OS.get_cmdline_user_args()
 	if args.size() not in [3, 4] or not str(args[0]).is_valid_int() or str(args[2]) not in ["observer", "actor"] or (args.size() == 4 and str(args[3]) not in ["crossmap", "portal"]):
-		_fail("expected TLS port, certificate path, observer|actor")
+		_fail("expected AES port, certificate path, observer|actor")
 		return
 	var role := str(args[2])
 	var crossmap := args.size() == 4
 	var portal := args.size() == 4 and str(args[3]) == "portal"
 	var prefix := "PORTAL" if portal else "CROSSMAP" if crossmap else "MULTI"
-	var cert := X509Certificate.new()
-	if cert.load(str(args[1])) != OK:
-		_fail("test-only TLS certificate missing")
-		return
+	var cert = null
 	var username := "fixture_one" if role == "observer" else "fixture_two"
 	var session = Session.new()
 	var started := session.connect_secure("127.0.0.1", int(args[0]), username,
 		PASSWORD, "localhost", cert)
 	if started != OK:
-		_fail("TLS connect rejected %d" % started, session)
+		_fail("AES connect rejected %d" % started, session)
 		return
 
 	var selecting := _wait_character_list(session, 7000)

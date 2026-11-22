@@ -8,7 +8,7 @@ const PASSWORD := "Fixture-Password-123!"
 func _fail(message: String, session = null) -> void:
 	if session != null:
 		session.stop()
-	push_error("CLIENT_REPAIR_TLS_FAIL "+message)
+	push_error("CLIENT_REPAIR_AES_FAIL "+message)
 	quit(1)
 
 func _initialize() -> void:
@@ -16,10 +16,7 @@ func _initialize() -> void:
 	if args.size()!=2 or not str(args[0]).is_valid_int():
 		_fail("expected port/certificate")
 		return
-	var cert := X509Certificate.new()
-	if cert.load(str(args[1])) != OK:
-		_fail("certificate load")
-		return
+	var cert = null
 	var session = Session.new()
 	if session.connect_secure("127.0.0.1",int(args[0]),USERNAME,PASSWORD,"localhost",cert) != OK:
 		_fail("connect",session)
@@ -84,7 +81,7 @@ func _initialize() -> void:
 		return
 
 	session.stop()
-	print("CLIENT_REPAIR_TLS_PASS npc=88 location=equipped durability=80_to_100 cost=20 wallet=100_to_80 request=npc_uid_only local_formula=false")
+	print("CLIENT_REPAIR_AES_PASS npc=88 location=equipped durability=80_to_100 cost=20 wallet=100_to_80 request=npc_uid_only local_formula=false")
 	quit(0)
 
 func _wait(session, predicate: Callable, timeout_ms: int) -> Dictionary:

@@ -3,6 +3,7 @@ using SGTest.Server.Map;
 using System.Net;
 using System.Net.Sockets;
 using SGTest.Server.Gateway;
+using SGTest.Server.Transport;
 using SGTest.Server.Identity;
 using SGTest.Server.World;
 
@@ -50,10 +51,8 @@ internal static class EquipmentLoginFixture
             var pump=new WorldAoiPump(router);
             var authorization=new IdentityTlsAuthorization(
                 store,world,pickupWorldGeneration:generation,equipmentRules:rules);
-            using var certificate=Program.CreateCertificate();
-            string certPath=Path.Combine(root,"fixture-cert.pem");
-            Program.WriteCertificatePem(certPath,certificate);
-            var listener=new TcpListener(IPAddress.Loopback,0);
+            var settings = AesCbcSettings.FromEnvironment();
+                                    var listener=new TcpListener(IPAddress.Loopback,0);
             listener.Start(1);
             using var stop=new CancellationTokenSource();
             var routing=router.RunAsync(world.Results);
@@ -62,15 +61,15 @@ internal static class EquipmentLoginFixture
             {
                 int port=((IPEndPoint)listener.LocalEndpoint).Port;
                 Console.WriteLine(
-                    $"EQUIPMENT_FIXTURE_READY port={port} cert={certPath} username={Program.Username} " +
+                    $"EQUIPMENT_FIXTURE_READY port={port} cert=unused username={Program.Username} " +
                     $"character={characterId} item_uid={grant.ItemUid} slot=4");
                 Console.Out.Flush();
 
                 using var client=await listener.AcceptTcpClientAsync()
                     .WaitAsync(TimeSpan.FromSeconds(15)).ConfigureAwait(false);
-                var ended=await authorization.RunAuthenticatedSocketAsync(
-                    client,certificate,router,
-                    new TlsWireConnectionOptions(AuthorizationTimeoutMilliseconds:15000))
+                var ended=await authorization.RunAuthenticatedAesSocketAsync(
+                    client,settings,router,
+                    new AesWireConnectionOptions(AuthorizationTimeoutMilliseconds:15000))
                     .WaitAsync(TimeSpan.FromSeconds(25)).ConfigureAwait(false);
 
                 var inventory=await store.ListInventoryItemsAsync(characterId)
@@ -89,7 +88,7 @@ internal static class EquipmentLoginFixture
                         $"commands={ended.CommandsAccepted} sessions={router.Statistics.ActiveSessions}");
 
                 Console.WriteLine(
-                    $"EQUIPMENT_FIXTURE_PASS tls={ended.Protocol} item_uid={grant.ItemUid} " +
+                    $"EQUIPMENT_FIXTURE_PASS aes=true item_uid={grant.ItemUid} " +
                     $"quantity=1 source_drop={drops.Single().DropId} equipment=0 " +
                     $"commands={ended.CommandsAccepted}");
                 Console.Out.Flush();

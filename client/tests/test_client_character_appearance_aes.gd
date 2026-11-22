@@ -9,7 +9,7 @@ func _initialize() -> void:
 
 func _fail(reason: String, session: RefCounted) -> void:
 	session.stop()
-	push_error("CLIENT_CHARACTER_APPEARANCE_TLS_FAIL "+reason)
+	push_error("CLIENT_CHARACTER_APPEARANCE_AES_FAIL "+reason)
 	quit(1)
 
 func _run() -> void:
@@ -17,15 +17,12 @@ func _run() -> void:
 	if args.size()!=2:
 		quit(2)
 		return
-	var cert := X509Certificate.new()
-	if cert.load(args[1])!=OK:
-		quit(2)
-		return
+	var cert = null
 	for pass_index in 2:
 		var panel: PanelContainer
 		var session = Session.new()
 		if session.connect_secure("127.0.0.1",int(args[0]),"fixture_user","Fixture-Password-123!","localhost",cert)!=OK:
-			_fail("TLS connect",session)
+			_fail("AES connect",session)
 			return
 		var deadline := Time.get_ticks_msec()+10000
 		var snapshot: Dictionary = session.snapshot()
@@ -76,5 +73,5 @@ func _run() -> void:
 		if panel != null:
 			panel.queue_free()
 		await process_frame
-	print("CLIENT_CHARACTER_APPEARANCE_TLS_PASS server_choices=true UI_picker_and_button=true exact_choice=true persisted_relogin=true choose_world=true menu_released=true")
+	print("CLIENT_CHARACTER_APPEARANCE_AES_PASS server_choices=true UI_picker_and_button=true exact_choice=true persisted_relogin=true choose_world=true menu_released=true")
 	quit(0)

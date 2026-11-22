@@ -13,13 +13,10 @@ func _fail(message: String, session = null) -> void:
 func _initialize() -> void:
 	var args := OS.get_cmdline_user_args()
 	if args.size()!=3 or not str(args[0]).is_valid_int() or str(args[2]) not in ["observer","actor"]:
-		_fail("expected TLS port, certificate path, observer|actor")
+		_fail("expected AES port, certificate path, observer|actor")
 		return
 	var role := str(args[2])
-	var cert := X509Certificate.new()
-	if cert.load(str(args[1])) != OK:
-		_fail("certificate load")
-		return
+	var cert = null
 	var username := "fixture_one" if role=="observer" else "fixture_two"
 	var session = Session.new()
 	if session.connect_secure("127.0.0.1",int(args[0]),username,PASSWORD,"localhost",cert) != OK:

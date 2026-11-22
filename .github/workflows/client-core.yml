@@ -164,52 +164,52 @@ jobs:
           .cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64 --headless --path client --script res://tests/test_monster_presentation.gd 2>&1 | tee /tmp/sgtest-monster-presentation.log
           grep -q '^MONSTER_PRESENTATION_PASS ' /tmp/sgtest-monster-presentation.log
           ! grep -E 'ERROR:|SCRIPT ERROR:|leaked|still in use' /tmp/sgtest-monster-presentation.log
-      - name: Real Godot to CSharp secure TLS login E2E
-        run: python client/tests/run_tls_login.py "$PWD/.cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64"
-      - name: Real Godot opt-in public registration then normal Auth over TLS
-        run: python client/tests/run_tls_login.py "$PWD/.cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64" --register --timeout 35
-      - name: Real Godot appearance creation and durable relogin over TLS
-        run: python client/tests/run_tls_login.py "$PWD/.cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64" --appearance --timeout 35
-      - name: Real Godot ClientSession inventory discard over TLS
-        run: python client/tests/run_tls_login.py "$PWD/.cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64" --discard --timeout 45
-      - name: Real Godot ClientSession personal storage over TLS
-        run: python client/tests/run_tls_login.py "$PWD/.cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64" --storage --timeout 45
-      - name: Real Godot ClientSession durable equipment over TLS
-        run: python client/tests/run_tls_login.py "$PWD/.cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64" --equipment --timeout 45
-      - name: Real Godot ClientSession scoped bank over TLS
-        run: python client/tests/run_tls_login.py "$PWD/.cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64" --bank --timeout 45
-      - name: Real Godot ClientSession server-authoritative repair over TLS
-        run: python client/tests/run_tls_login.py "$PWD/.cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64" --repair --timeout 45
-      - name: Real Godot ClientSession server-authoritative enhancement over TLS
-        run: python client/tests/run_tls_login.py "$PWD/.cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64" --enhancement --timeout 45
-      - name: Real Godot verified Quest progression and relogin over TLS
-        run: python client/tests/run_tls_login.py "$PWD/.cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64" --quest --timeout 55
-      - name: Two real Godot ClientSessions durable player trade over TLS
-        run: python client/tests/run_tls_login.py "$PWD/.cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64" --trade --timeout 55
-      - name: Two real Godot ClientSessions authoritative player shop over TLS
-        run: python client/tests/run_tls_login.py "$PWD/.cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64" --player-shop --timeout 55
-      - name: Two real Godot ClientSessions authoritative player PvP over TLS
-        run: python client/tests/run_tls_login.py "$PWD/.cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64" --pvp --timeout 55
-      - name: Real Godot ClientSession out-of-range auto approach attack over TLS
-        run: python client/tests/run_tls_login.py "$PWD/.cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64" --auto-attack --timeout 45
-      - name: Real Godot ClientSession trusted normal attack over TLS
-        run: python client/tests/run_tls_login.py "$PWD/.cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64" --combat --timeout 45
-      - name: Real Godot ClientSession self-centered AoE skill over TLS
-        run: python client/tests/run_tls_login.py "$PWD/.cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64" --skill-aoe --timeout 45
+      - name: Real Godot to CSharp secure AES-CBC login E2E
+        run: python client/tests/run_aes_login.py "$PWD/.cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64"
+      - name: Real Godot opt-in public registration then normal Auth over AES-CBC
+        run: python client/tests/run_aes_login.py "$PWD/.cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64" --register --timeout 35
+      - name: Real Godot appearance creation and durable relogin over AES-CBC
+        run: python client/tests/run_aes_login.py "$PWD/.cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64" --appearance --timeout 35
+      - name: Real Godot ClientSession inventory discard over AES-CBC
+        run: python client/tests/run_aes_login.py "$PWD/.cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64" --discard --timeout 45
+      - name: Real Godot ClientSession personal storage over AES-CBC
+        run: python client/tests/run_aes_login.py "$PWD/.cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64" --storage --timeout 45
+      - name: Real Godot ClientSession durable equipment over AES-CBC
+        run: python client/tests/run_aes_login.py "$PWD/.cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64" --equipment --timeout 45
+      - name: Real Godot ClientSession scoped bank over AES-CBC
+        run: python client/tests/run_aes_login.py "$PWD/.cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64" --bank --timeout 45
+      - name: Real Godot ClientSession server-authoritative repair over AES-CBC
+        run: python client/tests/run_aes_login.py "$PWD/.cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64" --repair --timeout 45
+      - name: Real Godot ClientSession server-authoritative enhancement over AES-CBC
+        run: python client/tests/run_aes_login.py "$PWD/.cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64" --enhancement --timeout 45
+      - name: Real Godot verified Quest progression and relogin over AES-CBC
+        run: python client/tests/run_aes_login.py "$PWD/.cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64" --quest --timeout 55
+      - name: Two real Godot ClientSessions durable player trade over AES-CBC
+        run: python client/tests/run_aes_login.py "$PWD/.cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64" --trade --timeout 55
+      - name: Two real Godot ClientSessions authoritative player shop over AES-CBC
+        run: python client/tests/run_aes_login.py "$PWD/.cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64" --player-shop --timeout 55
+      - name: Two real Godot ClientSessions authoritative player PvP over AES-CBC
+        run: python client/tests/run_aes_login.py "$PWD/.cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64" --pvp --timeout 55
+      - name: Real Godot ClientSession out-of-range auto approach attack over AES-CBC
+        run: python client/tests/run_aes_login.py "$PWD/.cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64" --auto-attack --timeout 45
+      - name: Real Godot ClientSession trusted normal attack over AES-CBC
+        run: python client/tests/run_aes_login.py "$PWD/.cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64" --combat --timeout 45
+      - name: Real Godot ClientSession self-centered AoE skill over AES-CBC
+        run: python client/tests/run_aes_login.py "$PWD/.cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64" --skill-aoe --timeout 45
       - name: Two real Godot Clients multi-target AoE visual E2E
-        run: python client/tests/run_tls_login.py "$PWD/.cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64" --skill-aoe-observer --timeout 50
+        run: python client/tests/run_aes_login.py "$PWD/.cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64" --skill-aoe-observer --timeout 50
       - name: Two real Godot Clients authoritative player attack visual E2E
-        run: python client/tests/run_tls_login.py "$PWD/.cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64" --combat-observer --timeout 50
-      - name: Forced TLS disconnect automatic same-character reconnect E2E
-        run: python client/tests/run_tls_login.py "$PWD/.cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64" --reconnect --timeout 55
-      - name: Real application login selection and logout UI over TLS
-        run: python client/tests/run_tls_login.py "$PWD/.cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64" --app-ui
-      - name: Two concurrent Godot Clients TLS player AOI E2E
-        run: python client/tests/run_tls_login.py "$PWD/.cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64" --multi --timeout 50
+        run: python client/tests/run_aes_login.py "$PWD/.cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64" --combat-observer --timeout 50
+      - name: Forced AES-CBC disconnect automatic same-character reconnect E2E
+        run: python client/tests/run_aes_login.py "$PWD/.cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64" --reconnect --timeout 55
+      - name: Real application login selection and logout UI over AES-CBC
+        run: python client/tests/run_aes_login.py "$PWD/.cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64" --app-ui
+      - name: Two concurrent Godot Clients AES-CBC player AOI E2E
+        run: python client/tests/run_aes_login.py "$PWD/.cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64" --multi --timeout 50
       - name: Two Godot Clients trusted Map15 Map13 Map15 AOI transfer E2E
-        run: python client/tests/run_tls_login.py "$PWD/.cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64" --crossmap --timeout 70
+        run: python client/tests/run_aes_login.py "$PWD/.cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64" --crossmap --timeout 70
       - name: Two Godot Clients audited NPC portal action E2E
-        run: python client/tests/run_tls_login.py "$PWD/.cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64" --portal --timeout 70
+        run: python client/tests/run_aes_login.py "$PWD/.cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64" --portal --timeout 70
       - name: Formal Host plus two actual main-scene Godot clients
         run: python client/tests/run_online_main_gate.py "$PWD/.cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64" --timeout 70 --metrics-report "$RUNNER_TEMP/sgtest_online_main_process_metrics.json"
       - name: Archive headless main-scene resource baseline (not Windows gameplay)

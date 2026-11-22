@@ -483,7 +483,7 @@ class ArchitectureConventionsChecks(unittest.TestCase):
         self.assertIn("mixed PvP/monster/PvP sequence diverged", test)
 
     def test_live_trade_fixture_waits_for_worldready_ack(self) -> None:
-        fixture = (CLIENT / "tests" / "test_client_trade_tls.gd").read_text(
+        fixture = (CLIENT / "tests" / "test_client_trade_aes.gd").read_text(
             encoding="utf-8-sig")
         session = (CLIENT / "session" / "client_session.gd").read_text(
             encoding="utf-8-sig")

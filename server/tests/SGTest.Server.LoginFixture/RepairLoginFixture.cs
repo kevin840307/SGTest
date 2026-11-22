@@ -5,6 +5,7 @@ using Microsoft.Data.Sqlite;
 using System.Net;
 using System.Net.Sockets;
 using SGTest.Server.Gateway;
+using SGTest.Server.Transport;
 using SGTest.Server.Identity;
 using SGTest.Server.World;
 
@@ -74,10 +75,8 @@ internal static class RepairLoginFixture
             var authorization=new IdentityTlsAuthorization(
                 store,world,pickupWorldGeneration:generation,
                 repairs:repairs,repairItemRules:repairItems);
-            using var certificate=Program.CreateCertificate();
-            string certPath=Path.Combine(root,"fixture-cert.pem");
-            Program.WriteCertificatePem(certPath,certificate);
-            var listener=new TcpListener(IPAddress.Loopback,0);
+            var settings = AesCbcSettings.FromEnvironment();
+                                    var listener=new TcpListener(IPAddress.Loopback,0);
             listener.Start(1);
             using var stop=new CancellationTokenSource();
             var routing=router.RunAsync(world.Results);
@@ -86,15 +85,15 @@ internal static class RepairLoginFixture
             {
                 int port=((IPEndPoint)listener.LocalEndpoint).Port;
                 Console.WriteLine(
-                    $"REPAIR_FIXTURE_READY port={port} cert={certPath} username={Program.Username} " +
+                    $"REPAIR_FIXTURE_READY port={port} cert=unused username={Program.Username} " +
                     $"character={characterId} item_uid={itemUid} npc=88 current=80 max=100 cost=20 wallet=100");
                 Console.Out.Flush();
 
                 using var client=await listener.AcceptTcpClientAsync()
                     .WaitAsync(TimeSpan.FromSeconds(15)).ConfigureAwait(false);
-                var ended=await authorization.RunAuthenticatedSocketAsync(
-                    client,certificate,router,
-                    new TlsWireConnectionOptions(AuthorizationTimeoutMilliseconds:15000))
+                var ended=await authorization.RunAuthenticatedAesSocketAsync(
+                    client,settings,router,
+                    new AesWireConnectionOptions(AuthorizationTimeoutMilliseconds:15000))
                     .WaitAsync(TimeSpan.FromSeconds(25)).ConfigureAwait(false);
 
                 var preview=await store.ListRepairPreviewAsync(
@@ -121,7 +120,7 @@ internal static class RepairLoginFixture
                         $"sessions={router.Statistics.ActiveSessions}");
 
                 Console.WriteLine(
-                    $"REPAIR_FIXTURE_PASS tls={ended.Protocol} item_uid={itemUid} " +
+                    $"REPAIR_FIXTURE_PASS aes=true item_uid={itemUid} " +
                     $"current=100 max=100 wallet=80 cost=0 equipment_preserved=true " +
                     $"commands={ended.CommandsAccepted}");
                 Console.Out.Flush();

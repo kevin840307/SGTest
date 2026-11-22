@@ -434,7 +434,7 @@ class RegistrationSession extends RefCounted:
 
 
 class FailedSession extends RefCounted:
-	func connect_secure(_host, _port, _user, _password, _name, _trust):
+	func connect_secure(_host, _port, _user, _password):
 		return OK
 	func snapshot():
 		return {"state":State.STATE_FAILED}
@@ -560,8 +560,8 @@ func check_skill_ui(panel, stub) -> void:
 
 func run() -> void:
 	var args := OS.get_cmdline_user_args()
-	if args.size() < 2 or args.size() > 3:
-		fail("Expected port and certificate")
+	if args.size() < 1 or args.size() > 2:
+		fail("Expected AES port and optional screenshot path")
 		return
 	app = Main.new()
 	app.auto_start = false
@@ -588,12 +588,6 @@ func run() -> void:
 		fail("Failed session did not return cleanly to login")
 		return
 	panel.session = Session.new()
-	var cert := X509Certificate.new()
-	if cert.load(args[1]) != OK:
-		fail("Certificate load")
-		return
-	panel.trusted_chain = cert
-	panel.tls_name = "localhost"
 	panel.server_host = "127.0.0.1"
 	panel.server_port = int(args[0])
 	panel.password_input.text = "Fixture-Password-123!"
@@ -607,9 +601,9 @@ func run() -> void:
 	if panel.characters.item_count != 1 or panel.choose_button.disabled:
 		fail("UI character list unavailable")
 		return
-	if args.size() == 3:
+	if args.size() == 2:
 		await RenderingServer.frame_post_draw
-		if root.get_texture().get_image().save_png(args[2]) != OK:
+		if root.get_texture().get_image().save_png(args[1]) != OK:
 			fail("UI screenshot save")
 			return
 	panel.characters.select(0)
@@ -623,16 +617,16 @@ func run() -> void:
 	if app.world_view.phase != "closed":
 		fail("Missing private assets must not fake a ready map")
 		return
-	# Real authenticated TLS must automatically query the durable PvP mode
+	# Real authenticated AES must automatically query the durable PvP mode
 	# after WorldReady ACK. No click, Render FPS, or fake server result.
 	while not bool(panel._latest.get("pvp_known",false)) and Time.get_ticks_msec()<deadline and panel.active:
 		await process_frame
 	var pvp: Dictionary = panel._latest
 	if not bool(pvp.get("pvp_known",false)) or int(pvp.get("pvp_mode",-1)) != 0 or bool(pvp.get("pvp_map_allows",true)) or int(pvp.get("pvp_sequence",0)) != 1 or int(pvp.get("pending_pvp_sequence",-1)) != 0 or int(pvp.get("last_pvp_result",{}).get("status",-1)) != 0:
-		fail("Real TLS PvP query missing or Map15 NonPK authority incorrect: %s" % pvp)
+		fail("Real AES PvP query missing or Map15 NonPK authority incorrect: %s" % pvp)
 		return
 	if not bool(entered.get("inventory_ready",false)) or not (entered.get("inventory_items",{}) as Dictionary).is_empty() or not panel.inventory_panel.inventory_button.visible:
-		fail("Real TLS login did not supply complete empty durable inventory baseline")
+		fail("Real AES login did not supply complete empty durable inventory baseline")
 		return
 	panel.inventory_panel.inventory_button.pressed.emit()
 	if not panel.inventory_panel.inventory_preview.visible or not panel.inventory_panel.inventory_preview.text.contains("沒有物品"):
@@ -680,7 +674,7 @@ func run() -> void:
 		return
 
 	# Character creation controls must expose exactly the authoritative Session
-	# intent while selecting; the real TLS creation/store lifecycle is covered
+	# intent while selecting; the real AES creation/store lifecycle is covered
 	# by the C# authenticated E2E.
 	var create_stub := CharacterCreateSession.new()
 	panel.session = create_stub
@@ -1729,10 +1723,10 @@ func run() -> void:
 		fail("PvP skill did not display the authoritative damage result")
 		return
 
-	print("CLIENT_TLS_UI_CHECKPOINT gm_begin")
+	print("CLIENT_AES_UI_CHECKPOINT gm_begin")
 	panel._latest.gm_authorized = true
 	panel.pvp_panel.apply_snapshot(panel._latest, panel.active)
-	print("CLIENT_TLS_UI_CHECKPOINT gm_visible_updated")
+	print("CLIENT_AES_UI_CHECKPOINT gm_visible_updated")
 	if (
 		not panel.pvp_panel.gm_pvp_apply_button.visible or panel.pvp_panel.gm_pvp_apply_button.disabled or
 		not panel.pvp_panel.gm_pvp_state_picker.visible
@@ -1740,9 +1734,9 @@ func run() -> void:
 		fail("Server-issued GM capability did not expose bounded PvP-name controls")
 		return
 	panel.pvp_panel.gm_pvp_state_picker.select(2)
-	print("CLIENT_TLS_UI_CHECKPOINT gm_before_emit")
+	print("CLIENT_AES_UI_CHECKPOINT gm_before_emit")
 	panel.pvp_panel.gm_pvp_apply_button.pressed.emit()
-	print("CLIENT_TLS_UI_CHECKPOINT gm_after_emit")
+	print("CLIENT_AES_UI_CHECKPOINT gm_after_emit")
 	if stub.gm_commands!=1 or stub.last_gm_target!=77 or stub.last_gm_state!=2:
 		fail("GM PvP-name UI did not send exact visible target/state")
 		return
@@ -1759,7 +1753,7 @@ func run() -> void:
 		return
 	panel._latest.gm_authorized=false
 	panel.pvp_panel.apply_snapshot(panel._latest, panel.active)
-	print("CLIENT_TLS_UI_CHECKPOINT gm_revoked")
+	print("CLIENT_AES_UI_CHECKPOINT gm_revoked")
 	if panel.pvp_panel.gm_pvp_apply_button.visible or panel.pvp_panel.gm_pvp_state_picker.visible:
 		fail("Revoked GM capability left privileged controls visible")
 		return
@@ -1787,5 +1781,5 @@ func run() -> void:
 	panel._set_respawn_controls()
 	app.queue_free()
 	await process_frame
-	print("CLIENT_TLS_LOGIN_PASS ui=PASS auth=PASS choose=PASS receipt=PASS world_ready=PASS password_cleared=PASS logout=PASS respawn_ui=PASS click_attack_ui=PASS click_pickup_ui=PASS persistent_inventory_ui=PASS item_metadata=PASS inventory_pagination=PASS recovery_item_button=PASS inventory_discard_button=PASS inventory_discard_quantity_confirm=PASS shop_ui=PASS storage_ui=PASS equipment_ui=PASS bank_ui=PASS repair_ui=PASS trade_ui=PASS trade_ui_parenting=PASS player_shop_ui=PASS nearby_chat_ui=PASS quest_ui=PASS pvp_ui=PASS pvp_attack_ui=PASS gm_pvp_ui=PASS pvp_tls_auto_query=PASS skill_cast_ui=PASS skill_singleflight=PASS combat_mp_ui=PASS")
+	print("CLIENT_AES_LOGIN_PASS ui=PASS auth=PASS choose=PASS receipt=PASS world_ready=PASS password_cleared=PASS logout=PASS respawn_ui=PASS click_attack_ui=PASS click_pickup_ui=PASS persistent_inventory_ui=PASS item_metadata=PASS inventory_pagination=PASS recovery_item_button=PASS inventory_discard_button=PASS inventory_discard_quantity_confirm=PASS shop_ui=PASS storage_ui=PASS equipment_ui=PASS bank_ui=PASS repair_ui=PASS trade_ui=PASS trade_ui_parenting=PASS player_shop_ui=PASS nearby_chat_ui=PASS quest_ui=PASS pvp_ui=PASS pvp_attack_ui=PASS gm_pvp_ui=PASS pvp_tls_auto_query=PASS skill_cast_ui=PASS skill_singleflight=PASS combat_mp_ui=PASS")
 	quit(0)

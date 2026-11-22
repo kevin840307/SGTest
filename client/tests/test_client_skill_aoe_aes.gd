@@ -8,7 +8,7 @@ const PASSWORD := "Fixture-Password-123!"
 func _fail(message: String, session = null) -> void:
 	if session != null:
 		session.stop()
-	push_error("CLIENT_SKILL_AOE_TLS_FAIL "+message)
+	push_error("CLIENT_SKILL_AOE_AES_FAIL "+message)
 	quit(1)
 
 func _initialize() -> void:
@@ -16,10 +16,7 @@ func _initialize() -> void:
 	if args.size()!=2 or not str(args[0]).is_valid_int():
 		_fail("expected port/certificate")
 		return
-	var cert := X509Certificate.new()
-	if cert.load(str(args[1])) != OK:
-		_fail("certificate load")
-		return
+	var cert = null
 	var session = Session.new()
 	if session.connect_secure("127.0.0.1",int(args[0]),USERNAME,PASSWORD,"localhost",cert) != OK:
 		_fail("connect",session)
@@ -70,7 +67,7 @@ func _initialize() -> void:
 		_fail("authoritative area settlement "+str(session.snapshot()),session)
 		return
 	session.stop()
-	print("CLIENT_SKILL_AOE_TLS_PASS skill_id=99001 target=0 hits=2 near_hp=60,60 far_hp=100 mp=2_to_1 summary_damage=0 per_hit_visuals=2 monster_delta_authority=true")
+	print("CLIENT_SKILL_AOE_AES_PASS skill_id=99001 target=0 hits=2 near_hp=60,60 far_hp=100 mp=2_to_1 summary_damage=0 per_hit_visuals=2 monster_delta_authority=true")
 	quit(0)
 
 func _area_settled(v: Dictionary, near_ids: Array[int], far_id: int) -> bool:

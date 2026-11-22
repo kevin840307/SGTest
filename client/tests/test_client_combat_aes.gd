@@ -8,7 +8,7 @@ const PASSWORD := "Fixture-Password-123!"
 func _fail(message: String, session = null) -> void:
 	if session != null:
 		session.stop()
-	push_error("CLIENT_COMBAT_TLS_FAIL "+message)
+	push_error("CLIENT_COMBAT_AES_FAIL "+message)
 	quit(1)
 
 func _initialize() -> void:
@@ -16,10 +16,7 @@ func _initialize() -> void:
 	if args.size()!=2 or not str(args[0]).is_valid_int():
 		_fail("expected port/certificate")
 		return
-	var cert := X509Certificate.new()
-	if cert.load(str(args[1])) != OK:
-		_fail("certificate load")
-		return
+	var cert = null
 	var session = Session.new()
 	if session.connect_secure("127.0.0.1",int(args[0]),USERNAME,PASSWORD,"localhost",cert) != OK:
 		_fail("connect",session)
@@ -165,7 +162,7 @@ func _initialize() -> void:
 		_fail("rejected MP skill emitted presentation damage",session)
 		return
 	session.stop()
-	print("CLIENT_COMBAT_TLS_PASS target=%d player_damage=60 normal_attack_hp=40 skill_id=99001 skill_damage=40 skill_mp=2_to_1 insufficient_mp_status=11 rejected_skill_no_damage=true monster_respawn_hp=100 monster_damage=18 death_hp=0 respawn_hp=100 dead=false skill_request_has_no_damage=true skill_receipt_does_not_mutate_monster=true player_damage_visual=true player_respawn_visual=true visual_after_db_commit=true public_intents_blocked_while_dead=true move_after_respawn=true damage_sequence_continuous=true request_has_no_damage=true receipt_does_not_mutate_monster=true delta_owns_hp=true damage_after_db_commit=true" % target)
+	print("CLIENT_COMBAT_AES_PASS target=%d player_damage=60 normal_attack_hp=40 skill_id=99001 skill_damage=40 skill_mp=2_to_1 insufficient_mp_status=11 rejected_skill_no_damage=true monster_respawn_hp=100 monster_damage=18 death_hp=0 respawn_hp=100 dead=false skill_request_has_no_damage=true skill_receipt_does_not_mutate_monster=true player_damage_visual=true player_respawn_visual=true visual_after_db_commit=true public_intents_blocked_while_dead=true move_after_respawn=true damage_sequence_continuous=true request_has_no_damage=true receipt_does_not_mutate_monster=true delta_owns_hp=true damage_after_db_commit=true" % target)
 	quit(0)
 
 func _wait(session, predicate: Callable, timeout_ms: int) -> Dictionary:

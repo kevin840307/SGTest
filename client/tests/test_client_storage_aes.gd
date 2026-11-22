@@ -8,7 +8,7 @@ const PASSWORD := "Fixture-Password-123!"
 func _fail(message: String, session = null) -> void:
 	if session != null:
 		session.stop()
-	push_error("CLIENT_STORAGE_TLS_FAIL "+message)
+	push_error("CLIENT_STORAGE_AES_FAIL "+message)
 	quit(1)
 
 func _initialize() -> void:
@@ -16,10 +16,7 @@ func _initialize() -> void:
 	if args.size()!=2 or not str(args[0]).is_valid_int():
 		_fail("expected port/certificate")
 		return
-	var cert := X509Certificate.new()
-	if cert.load(str(args[1])) != OK:
-		_fail("certificate load")
-		return
+	var cert = null
 	var session = Session.new()
 	if session.connect_secure("127.0.0.1",int(args[0]),USERNAME,PASSWORD,"localhost",cert) != OK:
 		_fail("connect",session)
@@ -104,7 +101,7 @@ func _initialize() -> void:
 		return
 
 	session.stop()
-	print("CLIENT_STORAGE_TLS_PASS item_uid=%d quantity=2 source_drop=%d enhancement=5 open=true deposit=true withdraw=true local_update_after_receipt=true request_has_no_actor_or_item_definition_or_quantity=true" % [uid,source_drop])
+	print("CLIENT_STORAGE_AES_PASS item_uid=%d quantity=2 source_drop=%d enhancement=5 open=true deposit=true withdraw=true local_update_after_receipt=true request_has_no_actor_or_item_definition_or_quantity=true" % [uid,source_drop])
 	quit(0)
 
 func _wait(session, predicate: Callable, timeout_ms: int) -> Dictionary:

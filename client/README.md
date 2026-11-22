@@ -110,7 +110,7 @@ python client/tests/run_world_view.py "C:\SGO\Godot\Godot_v4.7.2-stable_win64_co
 A real local E2E is available:
 
 ```powershell
-python client/tests/run_tls_login.py "C:\SGO\Godot\Godot_v4.7.2-stable_win64_console.exe"
+python client/tests/run_aes_login.py "C:\SGO\Godot\Godot_v4.7.2-stable_win64_console.exe"
 ```
 
 The runner starts `SGTest.Server.LoginFixture`, loads its public test certificate into Godot as the trusted chain, and verifies TLS Auth -> CharacterList -> CharacterChoose -> Move. Both sides must print PASS. This is a transport/login gate only: the application scene/login UI, non-render WorldState reducer, reconnect/WorldReady and render=0/30/60/90 packet-order tests are still NOT VERIFIED.
@@ -125,20 +125,20 @@ GitHub `Client core checks` downloads the official Godot 4.7.2 Linux standard bi
 
 ## 2026-11-16 TLS MoveReceipt round-trip
 
-`client/tests/run_tls_login.py` now requires the complete **server-to-client receipt return path**, not merely that the Server accepted Move. The C# fixture enqueues its authoritative MoveReceipt on the bound Gateway connection; the TLS writer sends it, and Godot `ClientSession`/`WorldState` must observe the accepted sequence and ServerTick before the test can PASS. GitHub CI passed this one-client secure loopback test; production reliable result routing/AOI/WorldReady, login UI and multi-client graphics remain pending.
+`client/tests/run_aes_login.py` now requires the complete **server-to-client receipt return path**, not merely that the Server accepted Move. The C# fixture enqueues its authoritative MoveReceipt on the bound Gateway connection; the TLS writer sends it, and Godot `ClientSession`/`WorldState` must observe the accepted sequence and ServerTick before the test can PASS. GitHub CI passed this one-client secure loopback test; production reliable result routing/AOI/WorldReady, login UI and multi-client graphics remain pending.
 
 ## 2026-11-16 WorldReady real TLS E2E
 
-`client/tests/run_tls_login.py` now requires the real Godot `ClientSession` to receive and reduce **WorldReady and MoveReceipt** on a certificate-validated TLS connection. The C# fixture starts the production `WorldAoiPump` path, routes the trusted lifecycle event through the existing Gateway reliable FIFO and independently logs `LOGIN_FIXTURE_WORLD_READY_ROUTED`. GitHub Client core E2E PASS. This confirms one Godot headless client’s protocol/WorldState path, **not** actual two-client drawing/animation, Enemy/Drop visibility, WorldReady ACK or reconnection resync.
+`client/tests/run_aes_login.py` now requires the real Godot `ClientSession` to receive and reduce **WorldReady and MoveReceipt** on a certificate-validated TLS connection. The C# fixture starts the production `WorldAoiPump` path, routes the trusted lifecycle event through the existing Gateway reliable FIFO and independently logs `LOGIN_FIXTURE_WORLD_READY_ROUTED`. GitHub Client core E2E PASS. This confirms one Godot headless client’s protocol/WorldState path, **not** actual two-client drawing/animation, Enemy/Drop visibility, WorldReady ACK or reconnection resync.
 
 ## 2026-11-16 Cross-map two-client TLS regression
 
-The existing `client/tests/run_tls_login.py` supports `--crossmap --timeout 70`, reusing the **single** `.NET 8 Server.LoginFixture` and two genuine concurrent Godot 4.7.2 `ClientSession` processes. The fixture uses only a *test-only trusted server control* for Map15→Map13→Map15 after actual Godot observation barriers; it does not give a Client an arbitrary teleport RPC. It asserts new `WorldReady` and monotonic MapEpoch, clear old entities, Map13 MoveReceipt with reset sequence, Map15 spectator Despawn and fresh-generation Spawn, and finally no ghost World actors. GitHub Client workflow **43880543810 PASS**; Server **43880543863 PASS 69/69**. Actual original portal/NPC validation, private original two-map rendering and Windows performance are NOT VERIFIED.
+The existing `client/tests/run_aes_login.py` supports `--crossmap --timeout 70`, reusing the **single** `.NET 8 Server.LoginFixture` and two genuine concurrent Godot 4.7.2 `ClientSession` processes. The fixture uses only a *test-only trusted server control* for Map15→Map13→Map15 after actual Godot observation barriers; it does not give a Client an arbitrary teleport RPC. It asserts new `WorldReady` and monotonic MapEpoch, clear old entities, Map13 MoveReceipt with reset sequence, Map15 spectator Despawn and fresh-generation Spawn, and finally no ghost World actors. GitHub Client workflow **43880543810 PASS**; Server **43880543863 PASS 69/69**. Actual original portal/NPC validation, private original two-map rendering and Windows performance are NOT VERIFIED.
 
 
 ## 2026-11-16 audited NPC click network path
 
-Once WorldReady has arrived, gameplay UI may call `ClientSession.npc_interact(spawn_id)`; do not send destinations or use a test-only transfer RPC. Successful/denied results appear in WorldState `last_npc_result_status`, `last_npc_result_map_epoch`, `pending_npc_sequence` and `waiting_for_new_map`. Server validates the actual NPC from private runtime Converter `npcs.json`. The headless CI gate exercises two real Godot processes and the test-only audited metadata via `client/tests/run_tls_login.py --portal --timeout 70`. This does not itself create a clickable NPC UI, load original private PCK, or confirm legacy NPC distance; those remain NOT VERIFIED.
+Once WorldReady has arrived, gameplay UI may call `ClientSession.npc_interact(spawn_id)`; do not send destinations or use a test-only transfer RPC. Successful/denied results appear in WorldState `last_npc_result_status`, `last_npc_result_map_epoch`, `pending_npc_sequence` and `waiting_for_new_map`. Server validates the actual NPC from private runtime Converter `npcs.json`. The headless CI gate exercises two real Godot processes and the test-only audited metadata via `client/tests/run_aes_login.py --portal --timeout 70`. This does not itself create a clickable NPC UI, load original private PCK, or confirm legacy NPC distance; those remain NOT VERIFIED.
 
 ## MVP003-LOGIN-UI：正式入口接現行Session
 
@@ -147,9 +147,9 @@ main的玩家登入畫面**只顯示帳號、密碼及登入操作，不提供 I
 ClientSession的兩個worker負責收包與Reducer；UI每50ms只讀已發布快照。收到WorldReady後沿唯一AssetStore載入對應map，連線期間本地Map按鈕不可切圖；地圖就緒時左鍵提交Server Move，尚未接玩家紙娃娃／平滑移動顯示。創角與正式NPC互動UI仍未實作。沒有私有素材時能完成登入，但不會假裝地圖已顯示。
 
 ```powershell
-python client/tests/run_tls_login.py "C:/SGO/Godot/Godot_v4.7.2-stable_win64.exe" --app-ui --timeout 45
+python client/tests/run_aes_login.py "C:/SGO/Godot/Godot_v4.7.2-stable_win64.exe" --app-ui --timeout 45
 # 可選原生UI截圖（保留私人本機，非headless）
-python client/tests/run_tls_login.py "C:/SGO/Godot/Godot_v4.7.2-stable_win64.exe" --app-ui --ui-screenshot reports/session_ui_login.png --timeout 45
+python client/tests/run_aes_login.py "C:/SGO/Godot/Godot_v4.7.2-stable_win64.exe" --app-ui --ui-screenshot reports/session_ui_login.png --timeout 45
 ```
 
 Windows真TLS UI Gate與雙圖既有12張GPU／38原始幀回歸PASS。地形PCK必須含最新`int16_plus_one_wrap`契約；舊PCK會被拒絕。`run_world_view.py --pack PATH --assets MATCHING_PUBLISHED_ASSETS`可指定對應的只讀Oracle，避免改寫其他Session輸出。這些分別驗證UI網路路徑與Renderer回歸，尚非兩個真Client在原版地圖上的連線視覺E2E。

@@ -6,7 +6,7 @@ const State=preload("res://world/world_state.gd")
 func _fail(message:String,session:RefCounted=null)->void:
 	if session!=null:
 		session.stop()
-	push_error("CLIENT_REGISTRATION_TLS_FAIL "+message)
+	push_error("CLIENT_REGISTRATION_AES_FAIL "+message)
 	quit(1)
 
 func _initialize()->void:
@@ -17,10 +17,7 @@ func _run()->void:
 	if args.size()!=2:
 		_fail("expected port and certificate")
 		return
-	var cert:=X509Certificate.new()
-	if cert.load(args[1])!=OK:
-		_fail("certificate load")
-		return
+	var cert = null
 	var session=Session.new()
 	var error:int=session.register_secure(
 		"127.0.0.1",int(args[0]),"fixture_user",
@@ -47,5 +44,5 @@ func _run()->void:
 		_fail("registration/auth/list state "+str(snapshot),session)
 		return
 	session.stop()
-	print("CLIENT_REGISTRATION_TLS_PASS created=true authenticated=true character_list_empty=true gameplay_authority=false")
+	print("CLIENT_REGISTRATION_AES_PASS created=true authenticated=true character_list_empty=true gameplay_authority=false")
 	quit(0)

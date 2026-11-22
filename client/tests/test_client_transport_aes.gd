@@ -8,22 +8,17 @@ const PASSWORD := "Fixture-Password-123!"
 func _fail(message: String, session = null) -> void:
 	if session != null:
 		session.stop()
-	push_error("CLIENT_TLS_LOGIN_FAIL " + message)
+	push_error("CLIENT_AES_LOGIN_FAIL " + message)
 	quit(1)
 
 func _initialize() -> void:
 	var args := OS.get_cmdline_user_args()
-	if args.size() != 2 or not str(args[0]).is_valid_int():
-		_fail("expected port and trusted certificate path")
+	if args.size() != 1 or not str(args[0]).is_valid_int():
+		_fail("expected AES TCP port")
 		return
 	var port := int(args[0])
-	var trusted := X509Certificate.new()
-	var cert_error := trusted.load(str(args[1]))
-	if cert_error != OK:
-		_fail("trusted certificate load %d" % cert_error)
-		return
 	var session = Session.new()
-	var error := session.connect_secure("127.0.0.1", port, USERNAME, PASSWORD, "localhost", trusted)
+	var error := session.connect_secure("127.0.0.1", port, USERNAME, PASSWORD)
 	if error != OK:
 		_fail("session connect %d" % error, session)
 		return
@@ -92,7 +87,7 @@ func _initialize() -> void:
 		_fail("authoritative self movement/stop was not reduced %s" % acknowledged, session)
 		return
 	session.stop()
-	print("CLIENT_TLS_LOGIN_PASS auth=PASS character=%d map_epoch=%d move_sequence=1 receipt=PASS world_ready=PASS skill_book=28101:3 server_owned_skill_level=true self_movement_stop=PASS facing_east=PASS server_tick=%d transport_thread=true reducer_thread=true certificate_validation=PASS" % [character_id, int(in_world.map_epoch), int(acknowledged.last_server_tick)])
+	print("CLIENT_AES_LOGIN_PASS auth=PASS character=%d map_epoch=%d move_sequence=1 receipt=PASS world_ready=PASS skill_book=28101:3 server_owned_skill_level=true self_movement_stop=PASS facing_east=PASS server_tick=%d transport_thread=true reducer_thread=true aes_cbc_transport=PASS" % [character_id, int(in_world.map_epoch), int(acknowledged.last_server_tick)])
 	quit(0)
 
 func _wait_state(session, expected: int, timeout_ms: int) -> Dictionary:

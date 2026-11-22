@@ -8,6 +8,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Text.Json;
 using SGTest.Server.Gateway;
+using SGTest.Server.Transport;
 using SGTest.Server.Identity;
 using SGTest.Server.World;
 
@@ -123,10 +124,8 @@ internal static class PvpLoginFixture
                 store,world,combat:settlement,
                 gmAccounts:new HashSet<string>(
                     ["pvp_one"],StringComparer.OrdinalIgnoreCase));
-            using var certificate=Program.CreateCertificate();
-            string certPath=Path.Combine(root,"fixture-cert.pem");
-            Program.WriteCertificatePem(certPath,certificate);
-            var listener=new TcpListener(IPAddress.Loopback,0);
+            var settings = AesCbcSettings.FromEnvironment();
+                                    var listener=new TcpListener(IPAddress.Loopback,0);
             listener.Start(2);
             using var stop=new CancellationTokenSource();
             var routing=router.RunAsync(world.Results);
@@ -136,22 +135,22 @@ internal static class PvpLoginFixture
             {
                 int port=((IPEndPoint)listener.LocalEndpoint).Port;
                 Console.WriteLine(
-                    $"PVP_FIXTURE_READY port={port} cert={certPath} " +
+                    $"PVP_FIXTURE_READY port={port} cert=unused " +
                     $"actor_a={actorA} actor_b={actorB}");
                 Console.Out.Flush();
 
                 using var victim=await listener.AcceptTcpClientAsync()
                     .WaitAsync(TimeSpan.FromSeconds(15)).ConfigureAwait(false);
-                var victimTask=authorization.RunAuthenticatedSocketAsync(
-                    victim,certificate,router,
-                    new TlsWireConnectionOptions(
+                var victimTask=authorization.RunAuthenticatedAesSocketAsync(
+                    victim,settings,router,
+                    new AesWireConnectionOptions(
                         AuthorizationTimeoutMilliseconds:15000));
 
                 using var attacker=await listener.AcceptTcpClientAsync()
                     .WaitAsync(TimeSpan.FromSeconds(15)).ConfigureAwait(false);
-                var attackerTask=authorization.RunAuthenticatedSocketAsync(
-                    attacker,certificate,router,
-                    new TlsWireConnectionOptions(
+                var attackerTask=authorization.RunAuthenticatedAesSocketAsync(
+                    attacker,settings,router,
+                    new AesWireConnectionOptions(
                         AuthorizationTimeoutMilliseconds:15000));
 
                 var ended=await Task.WhenAll(victimTask,attackerTask)
@@ -174,8 +173,8 @@ internal static class PvpLoginFixture
                     await Task.Delay(5).ConfigureAwait(false);
                 }
 
-                if(ended[0].Reason!=TlsWireEndReason.CleanEof||
-                   ended[1].Reason!=TlsWireEndReason.CleanEof||
+                if(ended[0].Reason!=AesWireEndReason.CleanEof||
+                   ended[1].Reason!=AesWireEndReason.CleanEof||
                    ended[0].CommandsAccepted!=1||
                    ended[1].CommandsAccepted!=4||
                    attackerProfile?.Data.CurrentHp!=100||
