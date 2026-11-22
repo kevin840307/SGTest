@@ -16,7 +16,9 @@ public sealed record WorldAoiOptions(
     int MaxEntities = 10000,
     int MaxObservers = 256,
     int MaxVisiblePerObserver = 2048,
-    int MaxPendingEventsPerObserver = 4096);
+    int MaxPendingEventsPerObserver = 4096,
+    int RemotePlayerDeltaIntervalTicks = 3,
+    double RemotePlayerDeltaDistance = 24);
 
 public enum AoiEventKind : byte
 {
@@ -102,7 +104,11 @@ public sealed class WorldAoi
     private readonly Dictionary<long, Observer> _observers = new();
     private long _lastTick;
 
-    private readonly record struct Seen(long ConnectionEpoch, long MapEpoch, long Revision);
+    private readonly record struct Seen(
+        long ConnectionEpoch, long MapEpoch,
+        long SourceRevision, long WireRevision, long SentTick,
+        double X, double Y, bool IsMoving, uint MovementActionSequence,
+        byte Facing, bool CombatDead);
 
     private sealed class Observer
     {
@@ -125,7 +131,10 @@ public sealed class WorldAoi
             _limits.MaxEntities is < 1 or > 100000 ||
             _limits.MaxObservers is < 1 or > 10000 ||
             _limits.MaxVisiblePerObserver is < 1 or > 10000 ||
-            _limits.MaxPendingEventsPerObserver is < 1 or > 65536)
+            _limits.MaxPendingEventsPerObserver is < 1 or > 65536 ||
+            _limits.RemotePlayerDeltaIntervalTicks is < 1 or > 30 ||
+            !double.IsFinite(_limits.RemotePlayerDeltaDistance) ||
+            _limits.RemotePlayerDeltaDistance is < 1 or > 512)
             throw new ArgumentOutOfRangeException(nameof(options));
     }
 
@@ -921,25 +930,49 @@ public sealed class WorldAoi
             if (observer.Visible.Count + observer.VisibleMonsters.Count + observer.VisibleGroundDrops.Count >=
                 _limits.MaxVisiblePerObserver)
                 throw new AoiBackpressureException("AOI visible entity cap exceeded");
-            observer.Visible.Add(actor.ActorId,
-                new(actor.ConnectionEpoch, actor.MapEpoch, actor.EntityRevision));
+            observer.Visible.Add(actor.ActorId, SeenFrom(actor, tick));
             Enqueue(observer, new(AoiEventKind.Spawn, tick, observer.Self.MapEpoch, actor));
         }
         else if (seen.ConnectionEpoch != actor.ConnectionEpoch || seen.MapEpoch != actor.MapEpoch)
         {
-            observer.Visible[actor.ActorId] =
-                new(actor.ConnectionEpoch, actor.MapEpoch, actor.EntityRevision);
+            observer.Visible[actor.ActorId] = SeenFrom(actor, tick);
             Enqueue(observer, new(AoiEventKind.Despawn, tick,
                 observer.Self.MapEpoch, null, actor.ActorId, seen.ConnectionEpoch,
                     EntityMapEpoch:seen.MapEpoch));
             Enqueue(observer, new(AoiEventKind.Spawn, tick, observer.Self.MapEpoch, actor));
         }
-        else if (actor.EntityRevision > seen.Revision)
+        else if (actor.EntityRevision > seen.SourceRevision && ShouldQueueRemoteDelta(seen, actor, tick))
         {
-            observer.Visible[actor.ActorId] =
-                new(actor.ConnectionEpoch, actor.MapEpoch, actor.EntityRevision);
-            Enqueue(observer, new(AoiEventKind.Delta, tick, observer.Self.MapEpoch, actor));
+            long wireRevision = checked(seen.WireRevision + 1);
+            var wireActor = actor with { EntityRevision = wireRevision };
+            observer.Visible[actor.ActorId] = SeenFrom(actor, tick, wireRevision);
+            Enqueue(observer, new(AoiEventKind.Delta, tick, observer.Self.MapEpoch, wireActor));
         }
+    }
+
+    private static Seen SeenFrom(ActorSnapshot actor, long tick, long? wireRevision = null) => new(
+        actor.ConnectionEpoch, actor.MapEpoch,
+        actor.EntityRevision, wireRevision ?? actor.EntityRevision, tick,
+        actor.X, actor.Y, actor.IsMoving, actor.MovementActionSequence,
+        actor.Facing, actor.CombatDead);
+
+    private bool ShouldQueueRemoteDelta(Seen seen, ActorSnapshot actor, long tick)
+    {
+        // Observable motion boundaries stay immediate. MovementActionSequence
+        // is required for the owner's reconciliation, but remote presentation
+        // does not consume it as an event; it can travel with the next checkpoint.
+        if (actor.IsMoving != seen.IsMoving ||
+            actor.Facing != seen.Facing ||
+            actor.CombatDead != seen.CombatDead)
+            return true;
+        if (!actor.IsMoving)
+            return actor.X != seen.X || actor.Y != seen.Y;
+        if (tick - seen.SentTick >= _limits.RemotePlayerDeltaIntervalTicks)
+            return true;
+        double dx = actor.X - seen.X;
+        double dy = actor.Y - seen.Y;
+        double distance = _limits.RemotePlayerDeltaDistance;
+        return dx * dx + dy * dy >= distance * distance;
     }
 
     private void RefreshMonster(Observer observer, MonsterSnapshot monster, long tick)

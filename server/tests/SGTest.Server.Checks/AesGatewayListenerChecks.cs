@@ -742,6 +742,14 @@ AuthorizationTimeoutMilliseconds: 30000)));
                                 $"load client {index} foreign AOI Delta");
                             Interlocked.Increment(ref observedPlayerDeltaFrames);
                             break;
+                        case WireOpcode.PlayerIdentity:
+                            Checks.Require(worldReady &&
+                                WireProtocol.TryDecodePlayerIdentity(frame,out var identity) &&
+                                identity.ReceiverMapEpoch==choice.MapEpoch &&
+                                accounts.Any(x=>x.CharacterId==identity.ActorId) &&
+                                (identity.ActorId==choice.CharacterId || seen.Contains(identity.ActorId)),
+                                $"load client {index} received identity before matching Spawn/generation");
+                            break;
                         case WireOpcode.MonsterSpawn:
                             int minMonster = denseLoad ? 0 : index * monstersPerViewer;
                             Checks.Require(mixedLoad && worldReady &&
@@ -854,6 +862,14 @@ AuthorizationTimeoutMilliseconds: 30000)));
                                         accounts.Any(a => a.CharacterId == playerDelta.ActorId),
                                         $"sustained client {index} foreign player Delta");
                                     Interlocked.Increment(ref sustainedPlayerDeltaFrames);
+                                    break;
+                                case WireOpcode.PlayerIdentity:
+                                    Checks.Require(
+                                        WireProtocol.TryDecodePlayerIdentity(liveFrame,out var liveIdentity) &&
+                                        liveIdentity.ReceiverMapEpoch==choice.MapEpoch &&
+                                        accounts.Any(a=>a.CharacterId==liveIdentity.ActorId) &&
+                                        (liveIdentity.ActorId==choice.CharacterId || seen.Contains(liveIdentity.ActorId)),
+                                        $"sustained client {index} foreign player identity");
                                     break;
                                 case WireOpcode.MonsterDelta:
                                     Checks.Require(

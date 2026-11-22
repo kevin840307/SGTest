@@ -39,6 +39,8 @@ internal static class WorldAoiChecks
             () => TrustedLifecycle(root));
         Checks.Run("AOI WorldReady, Spawn/Delta/Despawn, hysteresis and map isolation",
             Interest);
+        Checks.Run("AOI coalesces remote movement while preserving contiguous wire revisions and boundaries",
+            RemoteMovementCheckpointRate);
         Checks.Run("same AOI tracks monster Spawn/Delta/Despawn hysteresis and resync baseline",
             MonsterInterest);
         Checks.Run("player attack visual reaches only viewers seeing attacker and target",
@@ -443,6 +445,114 @@ internal static class WorldAoiChecks
 
         Require(aoi.EntityCount == 4 && aoi.ObserverCount == 4 &&
                 aoi.LastTick == 7, "AOI world counters");
+    }
+
+    private static void RemoteMovementCheckpointRate()
+    {
+        var aoi = new WorldAoi(new WorldAoiOptions(
+            EnterHalfWidth:640, EnterHalfHeight:400, ExitMargin:96, BucketSize:64,
+            RemotePlayerDeltaIntervalTicks:3, RemotePlayerDeltaDistance:24));
+        var observer = Actor(41,15,100,100);
+        var remote = Actor(42,15,140,100);
+        Life(aoi,1,Join(observer),Join(remote));
+        Drain(aoi,observer);
+        Drain(aoi,remote);
+
+        var wireRevisions = new List<long>();
+        var moving = remote;
+        for(int index=0; index<30; index++)
+        {
+            moving = moving with
+            {
+                X=148+index*8,
+                EntityRevision=2+index,
+                IsMoving=true,
+                MovementActionSequence=1
+            };
+            Move(aoi,2+index,moving);
+            wireRevisions.AddRange(Drain(aoi,observer)
+                .Where(x=>x.Kind==AoiEventKind.Delta)
+                .Select(x=>x.Entity?.EntityRevision ?? 0));
+            var own=Drain(aoi,moving);
+            Require(own is [var self] && self.Kind==AoiEventKind.SelfState &&
+                    self.Entity?.EntityRevision==moving.EntityRevision,
+                "remote coalescing changed owner authoritative SelfState cadence/revision");
+        }
+        Require(wireRevisions.SequenceEqual(Enumerable.Range(2,10).Select(x=>(long)x)),
+            "30 source movement revisions did not coalesce to 10 contiguous remote wire revisions");
+
+        // Deterministic A/B on the identical source trace. Interval=1 is the
+        // previous every-World-revision behavior; the production default is 3.
+        var baseline = new WorldAoi(new WorldAoiOptions(
+            EnterHalfWidth:640, EnterHalfHeight:400, ExitMargin:96, BucketSize:64,
+            RemotePlayerDeltaIntervalTicks:1, RemotePlayerDeltaDistance:24));
+        var baselineObserver=Actor(51,15,100,100);
+        var baselineRemote=Actor(52,15,140,100);
+        Life(baseline,1,Join(baselineObserver),Join(baselineRemote));
+        Drain(baseline,baselineObserver); Drain(baseline,baselineRemote);
+        int baselineDeltas=0;
+        for(int index=0; index<30; index++)
+        {
+            baselineRemote=baselineRemote with
+            {
+                X=148+index*8,
+                EntityRevision=2+index,
+                IsMoving=true,
+                MovementActionSequence=1
+            };
+            Move(baseline,2+index,baselineRemote);
+            baselineDeltas+=Drain(baseline,baselineObserver)
+                .Count(x=>x.Kind==AoiEventKind.Delta);
+            Drain(baseline,baselineRemote);
+        }
+        Require(baselineDeltas==30 && wireRevisions.Count==10,
+            "remote movement A/B gate did not prove 30-to-10 checkpoint reduction");
+        Console.WriteLine(
+            "SERVER_REMOTE_MOVE_CHECKPOINT_AB before_deltas=30 after_deltas=10 reduction_pct=66.7");
+
+        moving=moving with {X=moving.X+4,EntityRevision=32,Facing=7};
+        Move(aoi,32,moving);
+        Require(Drain(aoi,observer) is [var turn] &&
+                turn.Kind==AoiEventKind.Delta && turn.Entity?.EntityRevision==12 &&
+                turn.Entity?.Facing==7,
+            "facing boundary was delayed or broke contiguous wire revision");
+        Drain(aoi,moving);
+
+        moving=moving with
+        {
+            X=moving.X+4,
+            EntityRevision=33,
+            MovementActionSequence=2
+        };
+        Move(aoi,33,moving);
+        Require(Drain(aoi,observer).Length==0,
+            "remote-only movement action sequence forced an unnecessary Delta");
+        Drain(aoi,moving);
+
+        var stopped=moving with {X=moving.X+4,EntityRevision=34,IsMoving=false};
+        Move(aoi,34,stopped);
+        Require(Drain(aoi,observer) is [var stop] &&
+                stop.Kind==AoiEventKind.Delta && stop.Entity?.EntityRevision==13 &&
+                stop.Entity?.MovementActionSequence==2 && stop.Entity?.IsMoving==false,
+            "stop boundary did not flush latest action state with contiguous wire revision");
+        Drain(aoi,stopped);
+
+        var corrected=stopped with {X=stopped.X+2,EntityRevision=35};
+        Move(aoi,35,corrected);
+        Require(Drain(aoi,observer) is [var correction] &&
+                correction.Kind==AoiEventKind.Delta &&
+                correction.Entity?.EntityRevision==14 &&
+                correction.Entity?.X==corrected.X,
+            "idle authoritative correction was incorrectly coalesced");
+        Drain(aoi,corrected);
+
+        Require(aoi.TryResync(new(observer.ActorId,observer.ConnectionEpoch,observer.MapEpoch)),
+            "checkpoint observer resync rejected");
+        var rebuilt=Drain(aoi,observer);
+        Require(rebuilt.Any(x=>x.Kind==AoiEventKind.Spawn &&
+                    x.Entity?.ActorId==remote.ActorId &&
+                    x.Entity?.EntityRevision==corrected.EntityRevision),
+            "resync did not restore latest source revision baseline");
     }
 
     private static MonsterSnapshot Monster(long id, int map, double x, double y,

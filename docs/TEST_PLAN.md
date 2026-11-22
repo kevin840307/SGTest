@@ -75,6 +75,12 @@ Godot `WireCodec → WorldState.STATE_CREATING_CHARACTER → ClientSession → S
 
 **邊界**：這是短時間 burst/sustained movement Gate，不是數分鐘 soak；沒有玩家普攻/技能、怪物實際傷害落 DB、死亡/重生、500 次 SQLite Drop spawn/pickup，也沒有 Godot renderer、Windows GPU、WAN。`MoveReceipt` latency 是本機 TLS request→authoritative receipt，不是 Input-to-Render。4.154ms 是單寫者 World Tick 的當次 max，不含 AOI Pump/MonsterRuntime 獨立執行時間。Player path budget 32 是依 MVP 20 concurrent movement 的實測容量修正，不代表100人後仍適用；擴到100 Player 時需重新跑 ALT/負載 Gate。MVP008 整體仍 [ ]。
 
+### 2026-11-22 Remote Player Delta checkpoint A/B
+
+正式 `WorldAoi` 對**遠端玩家移動**新增 observer-local checkpoint coalescing；自己的 `SelfState` 不降頻。為避免用不同機器／不同 Monster 排程的總 bytes 做不公平比較，新增同一測試內的 deterministic A/B：兩組 AOI 接受完全相同的 30 個 source movement revisions（每 tick 8px、相同方向與 moving state）。舊 every-revision 設定 `RemotePlayerDeltaIntervalTicks=1` 必須送 **30** 個 remote Delta；正式預設 `3 tick / 24px` 必須送 **10** 個，輸出 `SERVER_REMOTE_MOVE_CHECKPOINT_AB before_deltas=30 after_deltas=10 reduction_pct=66.7`。同一 Gate 還要求 remote wire revision 連續、Facing／Stop／CombatDead／idle correction 不被延遲、owner SelfState 保持 source revision，same-epoch resync 以最新 source revision 重建 Spawn baseline。
+
+`--aoi-only` 目前 **23/23 PASS**。修正既有 load harness 對正式 `PlayerIdentity` opcode 的漏接後，`--load-only` **5/5 PASS**：20 個獨立認證 Client、dense 300 Monster＋500 Drop、320/320 sustained MoveReceipt，Router backpressure=0、沒有 visibility churn／漏 Receipt。單次本機 sustained 數字會受到 Monster tick 與排程時序影響，因此不把其總 bytes/PlayerDelta 與舊歷史 CI 直接當硬性效能百分比；本切片的可重複效能證據以同 trace 30→10 為準。這仍不是 route-intent protocol，也尚未驗證 Windows 真 Godot 動態畫面、WAN、長時間 soak 或100玩家。
+
 ## MVP008-AUTHENTICATED-DENSE-20P-300M-500D — 完整認證＋密集同視野可靠 AOI Snapshot Gate（部分完成）
 
 2026-11-18：擴充既有 `server/tests/SGTest.Server.Checks/TlsGatewayListenerChecks.cs` 的 `AuthenticatedTwentyClients`，新增 `mixedLoad:true,denseLoad:true`；原本純20玩家同視野與 20 分群稀疏300怪500Drop 兩種測試仍分別保留。單一 **Map115 synthetic open-grid (420×240 cells)**，20 位各具獨立 SQLite 帳號/角色的 .NET TCP/TLS Client，在同一座標 `(3200,2000)` 附近 Auth→CharacterChoose→InventorySnapshot→WorldReady ACK→MoveTarget/MoveReceipt。真 `TlsGatewayListener` + `IdentityTlsAuthorization` + 30Hz `ServerWorldHost` + `WorldResultRouter` + 單一 `MonsterWorldCoordinator`/`WorldAoiPump` + bounded `WorldAoi` 為唯一 Server 路徑，未修改 production Wire 或 Client、未增加第二套 AOI。
