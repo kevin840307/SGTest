@@ -5,7 +5,7 @@ func _initialize() -> void:
 
 func _run() -> void:
 	var args := OS.get_cmdline_user_args()
-	if args.size() not in [2,3] or DisplayServer.get_name()=="headless":
+	if (args.size()<2 or args.size()>4) or DisplayServer.get_name()=="headless":
 		quit(2)
 		return
 	var text := FileAccess.get_file_as_string(args[0])
@@ -25,11 +25,14 @@ func _run() -> void:
 	var file := FileAccess.open(path,FileAccess.WRITE)
 	file.store_string("\n".join(lines))
 	file.close()
-	root.size = Vector2i(1152,620)
+	root.size = Vector2i(1400,900) if args.has("base-resolution") else Vector2i(1152,620)
+	root.content_scale_size = Vector2i(1400,900)
+	root.content_scale_mode = Window.CONTENT_SCALE_MODE_CANVAS_ITEMS
+	root.content_scale_aspect = Window.CONTENT_SCALE_ASPECT_KEEP
 	var scene = load(path).instantiate()
 	root.add_child(scene)
 	var video = scene.get_node("IntroVideoWrapper/AspectRatioContainer/BackgroundVideo")
-	if args.size()==3 and args[2]=="static-login":
+	if args.has("static-login"):
 		video.hide()
 	else:
 		video.play()

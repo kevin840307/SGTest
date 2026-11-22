@@ -85,6 +85,8 @@ func _run() -> void:
 		quit(0)
 		return
 	var args := OS.get_cmdline_user_args()
+	if args.has("base-resolution"):
+		root.size = Vector2i(1400,900)
 	var directory := "user://recovered2_ui_captures"
 	if args.size() > 0:
 		directory = args[0]
@@ -136,7 +138,7 @@ func _run() -> void:
 	if shell._theme == null or shell._video.stream == null:
 		_error("source Recovered2 theme/video missing")
 		return
-	if shell._login_window.size!=Vector2(280,320) or shell._login_window.position!=(Vector2(root.size)-Vector2(280,320))*0.5 or shell._account.position!=Vector2(25,59) or shell._account.size!=Vector2(230,50) or shell._secret.position!=Vector2(25,121) or shell._login_button.position!=Vector2(77.5,188):
+	if shell._login_window.size!=Vector2(280,320) or shell._login_window.position!=Vector2(560,290) or not is_equal_approx(shell._login_content.scale.x,minf(root.size.x/1400.0,root.size.y/900.0)) or shell._account.position!=Vector2(25,59) or shell._account.size!=Vector2(230,50) or shell._secret.position!=Vector2(25,121) or shell._login_button.position!=Vector2(77.5,188):
 		_error("LoginScreen source anchors/geometry changed")
 		return
 	if args.has("static-login"):

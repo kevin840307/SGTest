@@ -15,6 +15,7 @@ const State = preload("res://world/world_state.gd")
 
 const LOCAL := "res://ui/private_recovered2"
 const SIZE := Vector2(1200,900)
+const SOURCE_VIEWPORT := Vector2(1400,900)
 
 var _panel: PanelContainer
 var _stage := Control.new()
@@ -25,6 +26,7 @@ var _video: VideoStreamPlayer
 var _theme: Theme
 var _account: LineEdit
 var _secret: LineEdit
+var _login_content: Control
 var _login_window: Panel
 var _login_button: Button
 var _register_button: Button
@@ -94,13 +96,14 @@ func resize_view(view_size: Vector2) -> void:
 		return
 	_last_resize = view_size
 	size = view_size
-	var factor := minf(view_size.x / SIZE.x, view_size.y / SIZE.y)
+	var factor := minf(view_size.x / SOURCE_VIEWPORT.x, view_size.y / SOURCE_VIEWPORT.y)
 	factor = maxf(0.05,factor)
 	_stage.scale = Vector2.ONE * factor
 	_stage.position = (view_size - SIZE * factor) * 0.5
 	_login.size = view_size
-	if _login_window != null:
-		_login_window.position = (view_size-Vector2(280,320))*0.5
+	if _login_content != null:
+		_login_content.scale = Vector2.ONE*factor
+		_login_content.position = (view_size-SOURCE_VIEWPORT*factor)*0.5
 
 func enable_for_page(page: int, active: bool) -> void:
 	# An offline map or unavailable local theme never builds auth controls.
@@ -186,7 +189,7 @@ func _button(parent: Control, value: String, x: float, y: float, w: float, h: fl
 
 func _build_login() -> void:
 	# LoginScreen uses viewport anchors, unlike the fixed 1200x900 character page.
-	# Keep its 280x320 panel in physical UI pixels; do not scale it with _stage.
+	# Its 280x320 panel belongs to the source 1400x900 canvas_items viewport.
 	_login.reparent(self)
 	move_child(_login,0)
 	var background := ColorRect.new()
@@ -194,10 +197,14 @@ func _build_login() -> void:
 	background.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_login.add_child(background)
 	background.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_login_content = Control.new()
+	_login_content.size = SOURCE_VIEWPORT
+	_login_content.mouse_filter = Control.MOUSE_FILTER_PASS
+	_login.add_child(_login_content)
 	var aspect := AspectRatioContainer.new()
 	aspect.ratio = 1.7778
 	aspect.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	background.add_child(aspect)
+	_login_content.add_child(aspect)
 	aspect.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	var stream = load(LOCAL.path_join("2.ogv"))
 	if stream is VideoStream:
@@ -211,7 +218,7 @@ func _build_login() -> void:
 	_login_window = Panel.new()
 	_login_window.name = "LoginPanel"
 	_login_window.theme_type_variation = &"ParadiseWindowPanel"
-	_put(_login,_login_window,0,0,280,320)
+	_put(_login_content,_login_window,560,290,280,320)
 	_label(_login_window,"帳號登入",18,10,244,30,20).theme_type_variation = &"ParadiseWindowTitle"
 	var separator := HSeparator.new()
 	separator.theme_type_variation = &"ParadiseHeaderSeparator"
