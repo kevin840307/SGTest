@@ -2,6 +2,7 @@ extends RefCounted
 ## Shared multi-profile paper doll presentation. No loading or gameplay authority.
 const Profile = preload("res://player/character_appearance_profile.gd")
 const PositionHistory = preload("res://movement/position_history.gd")
+const LocalMovement = preload("res://movement/local_movement.gd")
 const PARTS = Profile.BASE_PARTS
 # Recovered2 uses one synchronized 8 FPS SpriteFrames clock for walking.
 # Keep this presentation cadence independent from movement speed, position
@@ -12,6 +13,10 @@ const WALK_FRAME_USEC := 125000
 # instead of waiting on every authoritative coordinate update.
 const REMOTE_MAX_PREDICTION_TICKS := 4.0
 const REMOTE_MAX_PREDICTION_PIXELS := 32.0
+# Sparse checkpoints remain a fallback, but a trusted movement intent may
+# reconstruct the same Blocking.dat route continuously. Only a large mismatch
+# abandons that visual route and re-anchors to Server state.
+const REMOTE_ROUTE_RECONCILE_PIXELS := 96.0
 var _views: Dictionary = {}
 var _profiles: Dictionary = {}
 var _default_profile_key := "0:0:0:0:0:0"
@@ -23,6 +28,9 @@ var _epoch := 0
 var _map := 0
 var _local_visual: Dictionary = {} # own actor presentation only; never authoritative
 var _own_actor_id := 0
+var _remote_blocking := PackedByteArray()
+var _remote_manifest: Dictionary = {}
+var _remote_routes: Dictionary = {}
 
 func clear() -> void:
 	_views.clear()
@@ -36,6 +44,9 @@ func clear() -> void:
 	_map = 0
 	_local_visual.clear()
 	_own_actor_id = 0
+	_remote_blocking.clear()
+	_remote_manifest.clear()
+	_remote_routes.clear()
 
 
 func configure(assets: Dictionary, appearance: Dictionary = {}) -> Error:
@@ -44,6 +55,121 @@ func configure(assets: Dictionary, appearance: Dictionary = {}) -> Error:
 	if error == OK:
 		_default_profile_key = str(Profile.definition(appearance).key)
 	return error
+
+func configure_remote_routes(blocking: PackedByteArray, manifest: Dictionary) -> bool:
+	_remote_blocking.clear()
+	_remote_manifest.clear()
+	_remote_routes.clear()
+	# Validate the exact same collision contract once before any peer route is
+	# reconstructed. A bad/missing map simply falls back to checkpoint history.
+	var probe = LocalMovement.new()
+	if not probe.configure(blocking,manifest,1,1):
+		return false
+	_remote_blocking = blocking.duplicate()
+	_remote_manifest = manifest.duplicate(true)
+	return true
+
+
+func _remote_intent_for(snapshot: Dictionary, actor_id: int, value: Dictionary) -> Dictionary:
+	if actor_id == _own_actor_id:
+		return {}
+	var intents: Variant = snapshot.get("remote_movement_intents",{})
+	if not intents is Dictionary:
+		return {}
+	var intent: Variant = intents.get(actor_id,{})
+	if not intent is Dictionary or intent.is_empty():
+		return {}
+	if int(intent.get("actor_id",0)) != actor_id or \
+			int(intent.get("connection_epoch",0)) != int(value.get("connection_epoch",-1)) or \
+			int(intent.get("entity_map_epoch",0)) != int(value.get("entity_map_epoch",-1)):
+		return {}
+	return intent
+
+
+func _route_generation_matches(route: Dictionary, value: Dictionary) -> bool:
+	return not route.is_empty() and \
+		int(route.get("connection_epoch",0)) == int(value.get("connection_epoch",-1)) and \
+		int(route.get("entity_map_epoch",0)) == int(value.get("entity_map_epoch",-1))
+
+
+func _sync_remote_route(actor_id: int, value: Dictionary, intent: Dictionary) -> void:
+	if actor_id == _own_actor_id or intent.is_empty() or _remote_blocking.is_empty() or _remote_manifest.is_empty():
+		_remote_routes.erase(actor_id)
+		return
+	var authoritative := Vector2(float(value.get("x",INF)),float(value.get("y",INF)))
+	var target := Vector2(float(intent.get("target_x",INF)),float(intent.get("target_y",INF)))
+	var heading := int(intent.get("facing",0))
+	var sequence := int(intent.get("movement_action_sequence",0))
+	if not authoritative.is_finite() or not target.is_finite() or heading < 1 or heading > 8 or sequence <= 0:
+		_remote_routes.erase(actor_id)
+		return
+	var route: Dictionary = _remote_routes.get(actor_id,{})
+	var same_generation := _route_generation_matches(route,value)
+	var controller = route.get("controller") if same_generation else null
+	if not bool(intent.get("moving",false)):
+		if controller == null:
+			controller = LocalMovement.new()
+			if not controller.configure(_remote_blocking,_remote_manifest,int(value.entity_map_epoch),actor_id):
+				_remote_routes.erase(actor_id)
+				return
+		if not controller.seed_visual(authoritative,heading):
+			_remote_routes.erase(actor_id)
+			return
+		_remote_routes[actor_id] = {"controller":controller,
+			"connection_epoch":int(value.connection_epoch),
+			"entity_map_epoch":int(value.entity_map_epoch),"sequence":sequence,
+			"target":target}
+		return
+	var route_changed := controller == null or int(route.get("sequence",0)) != sequence or Vector2(route.get("target",Vector2.INF)) != target
+	if controller == null:
+		controller = LocalMovement.new()
+		if not controller.configure(_remote_blocking,_remote_manifest,int(value.entity_map_epoch),actor_id):
+			_remote_routes.erase(actor_id)
+			return
+	var anchor := authoritative
+	if same_generation and controller.visual_position.is_finite():
+		anchor = controller.visual_position
+	if not route_changed:
+		# Checkpoints are deliberately sparse. Do not rewind a healthy route for
+		# normal network delay; only a true divergence re-seeds from authority.
+		if controller.position.is_finite() and controller.position.distance_to(authoritative) <= REMOTE_ROUTE_RECONCILE_PIXELS:
+			return
+		anchor = authoritative
+	if not controller.seed_visual(anchor,heading) or not controller.request_target(target,sequence):
+		_remote_routes.erase(actor_id)
+		return
+	_remote_routes[actor_id] = {"controller":controller,
+		"connection_epoch":int(value.connection_epoch),
+		"entity_map_epoch":int(value.entity_map_epoch),"sequence":sequence,
+		"target":target}
+
+
+func advance_remote_visual(delta: float) -> void:
+	if delta <= 0.0:
+		return
+	for raw_id in _remote_routes.keys():
+		var actor_id := int(raw_id)
+		if not _actors.has(actor_id):
+			_remote_routes.erase(actor_id)
+			continue
+		var route: Dictionary = _remote_routes[actor_id]
+		var controller = route.get("controller")
+		if controller == null:
+			_remote_routes.erase(actor_id)
+			continue
+		controller.advance(delta)
+		controller.advance_visual(delta)
+		var actor: Dictionary = _actors[actor_id]
+		var was_moving := bool(actor.value.get("moving",false))
+		actor.value["moving"] = bool(controller.moving)
+		actor.value["facing"] = int(controller.facing)
+		if str(actor.action) in ["NS","NR"]:
+			if bool(controller.moving) and not was_moving:
+				actor.walk_started = Time.get_ticks_usec()
+			actor.action = "NR" if bool(controller.moving) else "NS"
+			actor.action_facing = int(controller.facing)
+		_actors[actor_id] = actor
+
 
 func add_profile(assets: Dictionary, appearance: Dictionary) -> Error:
 	var data := Profile.definition(appearance)
@@ -79,6 +205,7 @@ func apply_snapshot(snapshot: Dictionary, now_usec: int) -> void:
 	_own_actor_id = int(snapshot.actor_id)
 	if epoch != _epoch or map != _map:
 		_actors.clear()
+		_remote_routes.clear()
 		_seen_attack_events.clear()
 		_seen_damage_events.clear()
 		_seen_respawn_events.clear()
@@ -100,8 +227,19 @@ func apply_snapshot(snapshot: Dictionary, now_usec: int) -> void:
 	for id in _actors.keys():
 		if not visible.has(id):
 			_actors.erase(id)
+			_remote_routes.erase(id)
 	for id in visible:
-		var value: Dictionary = visible[id]
+		# Presentation may use authoritative intent state without ever mutating
+		# the reducer snapshot shared with gameplay/UI consumers.
+		var value: Dictionary = (visible[id] as Dictionary).duplicate(true)
+		var intent := _remote_intent_for(snapshot,int(id),value)
+		_sync_remote_route(int(id),value,intent)
+		var route: Dictionary = _remote_routes.get(int(id),{})
+		if not route.is_empty():
+			var route_controller = route.get("controller")
+			if route_controller != null:
+				value["moving"] = bool(route_controller.moving)
+				value["facing"] = int(route_controller.facing)
 		var profile = _profile_for(value)
 		if profile == null:
 			# Recovered retains an existing paper doll while cosmetics/loadouts
@@ -437,7 +575,18 @@ func actors_at(now_usec: int) -> Array:
 					"frame":overlay_view.timeline.frame_at_uniform_cadence(walk_elapsed_usec,WALK_FRAME_USEC) if action == "NR" else overlay_view.timeline.frame_at_update(elapsed),
 					"flip_h":overlay_view.view.flip_h,"part_slot":logical_slot,
 					"palette_index":int(overlay[2]) if overlay.size()>2 else 0})
-		var sampled: Vector2 = (Vector2(_local_visual.position) if int(_local_visual.get("actor_id",0)) == int(id) else Vector2(float(value.x),float(value.y)) if int(id)==_own_actor_id else actor.history.sample(now_usec,PositionHistory.DEFAULT_DELAY_TICKS,REMOTE_MAX_PREDICTION_TICKS,REMOTE_MAX_PREDICTION_PIXELS))
+		var sampled := Vector2.INF
+		if int(_local_visual.get("actor_id",0)) == int(id):
+			sampled = Vector2(_local_visual.position)
+		elif int(id) == _own_actor_id:
+			sampled = Vector2(float(value.x),float(value.y))
+		else:
+			var remote_route: Dictionary = _remote_routes.get(int(id),{})
+			var route_controller = remote_route.get("controller") if not remote_route.is_empty() else null
+			if route_controller != null and route_controller.visual_position.is_finite():
+				sampled = route_controller.visual_position
+			else:
+				sampled = actor.history.sample(now_usec,PositionHistory.DEFAULT_DELAY_TICKS,REMOTE_MAX_PREDICTION_TICKS,REMOTE_MAX_PREDICTION_PIXELS)
 		if not sampled.is_finite():
 			sampled = Vector2(float(value.x),float(value.y))
 		result.append({"id":str(id),"p":sampled,"parts":parts})
@@ -448,5 +597,16 @@ func position_at(actor_id: int, now_usec: int) -> Vector2:
 	var actor: Dictionary = _actors.get(actor_id,{})
 	if actor.is_empty():
 		return Vector2.INF
-	var sampled: Vector2 = (Vector2(_local_visual.position) if int(_local_visual.get("actor_id",0)) == actor_id else Vector2(float(actor.value.x),float(actor.value.y)) if actor_id==_own_actor_id else actor.history.sample(now_usec,PositionHistory.DEFAULT_DELAY_TICKS,REMOTE_MAX_PREDICTION_TICKS,REMOTE_MAX_PREDICTION_PIXELS))
+	var sampled := Vector2.INF
+	if int(_local_visual.get("actor_id",0)) == actor_id:
+		sampled = Vector2(_local_visual.position)
+	elif actor_id == _own_actor_id:
+		sampled = Vector2(float(actor.value.x),float(actor.value.y))
+	else:
+		var remote_route: Dictionary = _remote_routes.get(actor_id,{})
+		var route_controller = remote_route.get("controller") if not remote_route.is_empty() else null
+		if route_controller != null and route_controller.visual_position.is_finite():
+			sampled = route_controller.visual_position
+		else:
+			sampled = actor.history.sample(now_usec,PositionHistory.DEFAULT_DELAY_TICKS,REMOTE_MAX_PREDICTION_TICKS,REMOTE_MAX_PREDICTION_PIXELS)
 	return sampled if sampled.is_finite() else Vector2(float(actor.value.x),float(actor.value.y))

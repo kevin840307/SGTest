@@ -91,6 +91,21 @@ func configure(blocking: PackedByteArray, manifest: Dictionary, epoch: int, own_
 	ready = true
 	return true
 
+func seed_visual(anchor: Vector2, heading: int) -> bool:
+	# Shared presentation primitive for both the local predictor and remote
+	# route reconstruction. This only seeds a verified visual anchor; it never
+	# changes WorldState or authorizes gameplay movement.
+	if not ready or not anchor.is_finite() or heading < 1 or heading > 8 or not _walkable(_cell(anchor)):
+		return false
+	stop("visual_seed")
+	active = false
+	position = anchor
+	visual_position = anchor
+	facing = heading
+	_last_authority = anchor
+	return true
+
+
 func _cell(p: Vector2) -> Vector2i:
 	if not p.is_finite() or p.x < 0.0 or p.y < 0.0 or p.x >= width*CELL or p.y >= height*CELL:
 		return Vector2i(-1,-1)

@@ -12,6 +12,15 @@ func check(ok: bool, message: String) -> void:
 func _initialize() -> void:
 	run.call_deferred()
 
+func grid(w: int,h: int, walls: Array[Vector2i] = []) -> PackedByteArray:
+	var bytes := PackedByteArray()
+	bytes.resize(8+w*h)
+	bytes.encode_u32(0,w)
+	bytes.encode_u32(4,h)
+	for wall in walls:
+		bytes[8+wall.y*w+wall.x] = 7
+	return bytes
+
 func run() -> void:
 	var image := Image.create(4,4,false,Image.FORMAT_RGBA8)
 	image.fill(Color.WHITE)
@@ -75,6 +84,52 @@ func run() -> void:
 	prediction_probe.clear_local_visual()
 	check(prediction_probe.position_at(1,200000).distance_to(Vector2(10,10))<2.0,
 		"clearing own prediction kept stale position")
+	# PlayerMovementIntent carries the Server-accepted final target. When the
+	# current map exposes the same Blocking.dat, a peer should keep walking the
+	# reconstructed route far beyond the old 32px dead-reckoning cap without
+	# mutating the authoritative snapshot or rewinding on sparse checkpoints.
+	var route_probe := Players.new()
+	check(route_probe.configure(assets)==OK,"remote route profile configure")
+	var route_manifest := {"collision_cell":16,"size":[192,192]}
+	check(route_probe.configure_remote_routes(grid(12,12),route_manifest),
+		"remote route collision configure")
+	var route_snapshot: Dictionary = snapshot.duplicate(true)
+	route_snapshot.entities[2].x=24.0
+	route_snapshot.entities[2].y=24.0
+	route_snapshot.entities[2].server_tick=1
+	route_snapshot.entities[2].moving=true
+	route_snapshot.remote_movement_intents={2:{
+		"receiver_map_epoch":1,"server_tick":1,"actor_id":2,
+		"connection_epoch":1,"entity_map_epoch":1,"movement_action_sequence":1,
+		"target_x":152.0,"target_y":24.0,"moving":true,"facing":6}}
+	route_probe.apply_snapshot(route_snapshot,0)
+	check(route_probe.position_at(2,0)==Vector2(24,24),"remote route did not seed authority")
+	for _frame in range(20):
+		route_probe.advance_remote_visual(1.0/60.0)
+	var routed_before_checkpoint := route_probe.position_at(2,333333)
+	check(routed_before_checkpoint.x>100.0 and routed_before_checkpoint.x<=104.01,
+		"movement intent remained capped to short checkpoint extrapolation")
+	check(route_snapshot.entities[2].x==24.0,
+		"remote route presentation mutated WorldState snapshot")
+	route_snapshot.entities[2].x=64.0
+	route_snapshot.entities[2].server_tick=8
+	route_probe.apply_snapshot(route_snapshot,333333)
+	check(route_probe.position_at(2,333333)==routed_before_checkpoint,
+		"sparse authoritative checkpoint rewound healthy remote route")
+	for _frame in range(20):
+		route_probe.advance_remote_visual(1.0/60.0)
+	check(route_probe.position_at(2,666666).distance_to(Vector2(152,24))<0.01,
+		"remote route did not reach authoritative final target")
+	check(not bool(route_probe._actors[2].value.moving),
+		"remote paper doll kept walking after reconstructed route arrival")
+	route_snapshot.entities[2].x=152.0
+	route_snapshot.entities[2].moving=false
+	route_snapshot.entities[2].server_tick=20
+	route_snapshot.remote_movement_intents[2].moving=false
+	route_snapshot.remote_movement_intents[2].server_tick=20
+	route_probe.apply_snapshot(route_snapshot,700000)
+	check(route_probe.position_at(2,700000)==Vector2(152,24) and not bool(route_probe._actors[2].value.moving),
+		"authoritative remote stop did not anchor the final position")
 	# A newly reported avatar appearance may need async atlas loads. Keep
 	# the self avatar visible using an existing/default profile during loading.
 	var pending_profile := Players.new()

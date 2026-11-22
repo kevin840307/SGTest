@@ -180,7 +180,10 @@ func _advance_local_visual(delta: float) -> void:
 	# Presentation samples follow the render clock, as in Recovered's
 	# Camera2D/Sprite2D pipeline. Fixed-physics sampling made a custom Canvas
 	# repeat positions at high render FPS, creating visible step/hold jitter.
-	if phase != "ready" or not show_players or _player_snapshot.is_empty() or not local_movement.ready:
+	if phase != "ready" or not show_players or _player_snapshot.is_empty():
+		return
+	players.advance_remote_visual(delta)
+	if not local_movement.ready:
 		return
 	local_movement.advance(delta)
 	local_movement.advance_visual(delta)
@@ -357,10 +360,15 @@ func _process(_delta: float) -> void:
 		if npcs.configure(npc_population,assets) != OK:
 			_fail("NPC 素材與地圖資料不一致")
 			return
+		var blocking: Variant = _map.get("extra",{}).get("blocking",PackedByteArray())
 		if show_players:
 			if players.configure(assets) != OK:
 				_fail("角色素材資料無法顯示")
 				return
+			if blocking is PackedByteArray:
+				# Remote movement intent reconstruction is presentation-only and
+				# uses the exact same map collision source as local prediction.
+				players.configure_remote_routes(blocking,_map.manifest)
 			for record in _snapshot_profile_definitions(_player_snapshot).values():
 				if players.add_profile(assets,record.appearance) != OK:
 					_fail("角色外觀素材資料無法顯示")
@@ -386,7 +394,6 @@ func _process(_delta: float) -> void:
 			camera.set_focus(epoch,_camera_visual_focus)
 		_terrain.configure(data)
 		if show_players and not _player_snapshot.is_empty():
-			var blocking: Variant = _map.get("extra",{}).get("blocking",PackedByteArray())
 			if blocking is PackedByteArray and local_movement.configure(
 					blocking,_map.manifest,int(_player_snapshot.map_epoch),int(_player_snapshot.actor_id)):
 				local_movement.observe(_player_snapshot)
