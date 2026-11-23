@@ -147,12 +147,16 @@ Repository 已有原版 UI 解析管線：
 - `HOTKEY_*`
 - 多組按鈕與 multi-frame SPR
 
-因此 UI 實作遵守以下素材優先級：
+因此 UI／人物／怪物／特效等原版圖片一律依下列**硬性素材搜尋順序**（使用者已完成解包，先用現成圖，避免重複解包）：
 
-1. **原版可解析素材**：直接從 HK 原版 `.spr` / `Data1.dat` 解析出 PNG／frame，保留原像素、尺寸、alpha、frame 次序；這是第一優先。
-2. **原版鬆散 PNG／已授權本機素材**：直接使用，不重新繪製。
-3. **原版只能從執行畫面觀察**：以截圖／錄影、`.lst`、座標與尺寸證據重建，並保留 A/B 證據。
-4. **完全沒有原版證據**：才允許暫時重建；必須標 `NOT VERIFIED`，不得宣稱與 HK 一樣。
+1. **首選 HK `C:\SGO\Stargate Online IE HK\Data1_PNG2`**：優先搜尋子目錄的已解包 PNG／frame。
+2. **其次 HK `C:\SGO\Stargate Online IE HK\Data1_PNG`**：PNG2 找不到、缺 frame 或資料不完整時回查。
+3. **再次 HK 原始 `C:\SGO\Stargate Online IE HK\Data1.dat`**：兩處解包資料都不足時，才使用現有 converter / `sync_original_ie_ui.py` 從 HK 原始封包補解，維持原始像素、alpha、frame、origin、trim、尺寸與可回查的資源身分。
+4. **最後才搜尋 HK 其他 loose folders**：例如 `C:\SGO\Stargate Online IE HK\Interface` 等原版目錄；再往 Paradise／其他已授權參考來源找。**不能因 folder 比較容易搜尋就跳過上述 HK Data1 來源**。
+5. **只能從畫面觀察**：依 HK／Paradise 截圖、`.lst`、座標與尺寸證據重建並記錄 A/B。
+6. **完全無證據**：才可暫時重建且標 `NOT VERIFIED`，不得宣稱 HK 一樣。
+
+每一個資源要核對名稱、frame/動畫狀態、alpha、origin、比例與所屬版本；若 PNG2 中同名圖疑似損壞或不符 HK，記錄證據並回退到 PNG／Data1.dat，不得盲用。使用者已解包資料是**本機唯讀來源**；不得提交圖片、Data1.dat、解包輸出或原版私有素材到公開 Git。
 
 禁止：
 
@@ -186,18 +190,16 @@ HK Client 反編譯：
 - sound / animation trigger
 - 同一資源在其他畫面的共用關係
 
-找到資源名稱後，立即回查：
+找到資源名稱後，**優先以 HK 的 Data1 已解包內容搜尋**：
 
-1. `Interface/*.spr` loose files。
-2. `Data1.dat` index。
-3. 現有 `sync_original_ie_ui.py` / asset-converter 是否已能解析。
-4. 若工具清單未包含該 SPR，但 decoder 已支援，**擴充解析清單／manifest，而不是自行重畫。**
-5. 將解析出的 private PNG/frame 與 `.lst` 取得的尺寸／位置／狀態邏輯一起套入 SGTest。
-6. 最後用 Paradise/HK 可執行畫面做 A/B 驗證。
+1. `Data1_PNG2`（最高優先）→ `Data1_PNG`。
+2. 兩處沒有可信完整圖／frame 時才查 HK `Data1.dat` index，使用 `sync_original_ie_ui.py` / converter 補解。
+3. 最後才查 HK `Interface/*.spr` 等 loose folder／其他版本參考。
+4. 缺解碼項目時擴充 converter／manifest，**不得重畫替代**。
+5. 核對來源版本、frame、alpha、origin、文字／控制項原始位置，再套入 Godot。
+6. **優先使用 `C:\SGO\SGO Paradise\program\client.exe` 真正開遊戲做 A/B**；HK 與 Paradise 有版本差異時以 HK 資料及反編譯證據為準並註記。
 
-因此每個 UI 功能的證據鏈應盡量形成：
-
-`HK .lst 邏輯/資源名 → Interface/Data1.dat 原素材 → decoder 解析 PNG/frame → Godot 使用 → Paradise/HK A/B`
+證據鏈：`HK .lst 邏輯/資源名 → HK Data1_PNG2（缺才 Data1_PNG → Data1.dat → HK loose folder）→ Godot → Paradise 實機 A/B + HK 差異核對`
 
 如果 `.lst` 明確指出載入某個原版資源，**不得因目前 SGTest 尚未匯入該檔，就改用自創圖替代**；先擴充工具把原資源解析出來。
 
@@ -555,9 +557,13 @@ Trade / Party / Friend / PvP / Stall 等未完成時維持 `IN PROGRESS` / `NOT 
 
 Old 與 HK 不一定同版。結論分 `CONFIRMED` / `INFERRED` / `UNKNOWN`，不得把推論寫成原版確定行為。
 
-### Paradise 舊版實機
+### Paradise 舊版實機 — 原版遊戲實機測試第一優先
 
 `C:\SGO\SGO Paradise\program\client.exe`
+
+**需要測原版遊戲時，優先直接啟動這個 client.exe，以真滑鼠鍵盤操作；不要先以其他版本、Recovered2、靜態圖片或 headless 模擬取代。** 原版 Client 用來取得畫面、流程、座標、文字與行為 A/B；SGTest 仍須獨立以正式 Godot Client／Server 真實操作驗收。Paradise 無法驗的版本差異改從 HK `.lst` / Data1 素材與其他可信資料補證，不得以 Paradise 為 HK 版本唯一權威。
+
+**帳號／密碼／第二密碼已於下方提供，直接使用已知測試資料；不要再向使用者重複詢問。** 只在經授權的本機測試環境輸入，不輸出到 log、報告或 Git 提交。
 
 測試帳號：
 
