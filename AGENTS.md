@@ -104,6 +104,37 @@ Keep quality gates, but do not repeat expensive validation without a reason.
 4. Batch repository reads/edits/tests where practical. Do not repeatedly fetch the same files or rerun a full suite after every small edit. A failed targeted test should be fixed and rerun at the narrowest scope first.
 5. Update TODO/spec/architecture/test evidence once per deliverable slice, immediately before final CI/merge. Never trade correctness, security, fail-closed behavior, concurrency safety, source fidelity, or reproducible tests for speed.
 
+## 可見 UI／Windows 實機驗收 Gate（2026-11-23 使用者決策，最高優先級）
+
+**凡是玩家看得到、點得到、操作得到的 Client 變更，都必須在交付前跑真正的可見 Windows Godot Client；headless、fixture、mock、單元測試或自動 Scene 測試只能當前置 Gate，不能取代 UI／UX 實機驗收。**
+
+1. **強制範圍**：只要本輪修改 Client UI、HUD、登入／選角／創角、背包、裝備、Pet、Mecha、社交／交易／商店／任務／PvP 面板、Renderer、動畫、移動呈現、滑鼠／鍵盤輸入、解析度／縮放／視窗生命週期或任何玩家可觀察行為，就必須執行本 Gate。純 Server／純文件且完全不影響玩家可見行為才可略過。
+2. **必須使用當前正式 main 的真 Runtime**：先完成必要自動測試，再以目前 `main` 建置／啟動真 .NET Server（使用隔離測試 DB／資料，不碰其他 Session），並以 `Godot_v4.7.2-stable_win64.exe` **非 `--headless`** 啟動正式 `client`。不得只跑 test script、截一張預製 Scene 或用 fixture 假資料就宣稱 UI PASS。
+3. **必須像玩家一樣操作**：使用真滑鼠／鍵盤／Computer Use 走完整路徑；至少涵蓋登入 → 選角／創角（若相關）→ 進入世界 → 開啟本輪受影響面板 → 實際按鈕／列表／選取／拖放或核心互動 → 關閉再開 → 狀態變化 → 登出／重登確認。禁止只呼叫 `pressed.emit()`、直接呼叫 handler 或只檢查 node property 取代人工操作。
+4. **UI 實機必查**：至少觀察啟動卡頓／Windows「未回應」、遮擋、裁切、重疊、Z-order、焦點、Tab／Scroll、hover、disabled 狀態、文字截斷、按鈕可點區、視窗切換、面板關閉／重開、logout teardown、錯誤彈窗與 Godot/Server console error。改到 layout／viewport 時至少檢查 800×600 與目前常用寬螢幕解析度；不能只在單一尺寸看起來正常。
+5. **動態行為必須動態驗收**：移動、AOI、攻擊／受擊、技能、Pet／Mecha 跟隨、動畫、傷害數字、玩家同步、切圖等，不得用單張截圖代替。至少實際操作一段連續流程；多人同步相關功能至少開兩個真 Client 視窗，除非本輪只改純單人 UI。
+6. **保留可追溯證據**：必要時保存實機截圖／短錄影、Console log、Server log、版本 SHA 與重現步驟；私人素材與帳號資料不得提交公開 Git。原版／Paradise/HK 能執行時，涉及原版 UI／手感的功能應同步做 A/B；無法執行就維持 `NOT VERIFIED`，不得用程式推測取代。
+7. **看到一個可見 bug 就不能交付**：只要實機操作發現本輪功能或既有主流程有明顯 UI／UX／Runtime regression，本輪狀態回到 `IN PROGRESS`／`TEST FAILED`；先修、重跑 targeted automated tests，再重新跑可見實機 Gate。不得因 headless／C# checks 全 PASS 就宣稱 `VERIFIED`／`COMPLETE`。
+8. **使用者要求「看目前成果」時直接開給他看**：應啟動真 Server + 真可見 Client、切到前景並提供可登入的隔離測試環境；不要只回覆啟動指令或說「之後會測」。啟動本身若出現超長 loading、未回應、黑畫面或初始化錯誤，也算實機缺陷並需記錄／修正。
+9. **多 Session 安全仍優先**：不得為了實機驗收殺掉來源不明的 Godot／Server、覆寫他人 DB、搶既有 port 或清除未知暫存；一律另用安全 port／隔離 DB，除非已確認既有程序就是本 Session 建立且可安全重啟。
+
+### 每輪 Client 交付必跑：最低可玩 Smoke Gate
+
+**只要本輪有任何 Client／UI／Renderer／輸入／玩家呈現修改，除了測本輪功能，還必須用真可見 Client 跑以下核心路徑。這是跨系統回歸 Gate，不能因「本輪沒改那裡」而省略。任一項失敗，本輪不可交付。**
+
+1. **登入後靜止外觀**：登入選角進世界後至少原地停留 10 秒，不按移動鍵；角色外觀、髮型、衣服、裝備、名稱不得退回預設或占位外觀。接著走路、停下、再走，外觀不得因動作切換才突然恢復。這一項專門防止「剛登入是預設人物，走路後才變成自己的角色」。
+2. **換圖後仍可操作**：至少完成一次 Map15 ↔ 另一張已支援地圖的真傳點／換圖，確認新地圖 WorldReady 後可以點地面走路、長按走路、停止、重新下指令；不得殘留 input lock、pending map、舊 epoch 或透明遮罩導致不能走。
+3. **HP／MP 真值與變化**：登入後 HUD 與角色資料面板的 Current/Max HP、MP 必須和 Server authoritative state 一致；再實際造成 HP 或 MP 變化（受擊、技能、喝水／恢復等可用路徑），確認 HUD、個人資料、Server 狀態同步更新，不能只驗證初始文字存在。
+4. **個人資料完整可用**：打開角色／個人資料視窗，至少確認角色名、等級、職業／可得身份欄位、EXP、HP、MP、主要屬性 STR／INT／DEX／VIT／AGI 等應存在資料都有顯示；可分配屬性時實際點擊至少一個可用按鈕並驗證 Server 結果，不能分配時必須有正確 disabled／剩餘點數狀態，不能空白或有按鈕卻無作用。
+5. **基礎面板開關**：背包、裝備、Pet、Mecha 及本輪相關主要面板至少各開啟／關閉一次，確認不互相遮死、不失焦消失、不產生無法關閉的 modal，不因切換導致 HUD 或世界輸入永久失效。
+6. **換圖後資料仍正確**：換圖完成後重新檢查角色外觀、HP/MP、個人資料、背包／裝備核心狀態，避免 WorldReady／map reset 把 presentation 或 player profile 清成預設值。
+7. **登出／重登入**：登出回登入畫面，再用同角色重登；確認外觀、HP/MP、個人資料、可持久化狀態正常恢復，且舊 UI node／pending action 不殘留。
+8. **至少雙 Client 多人 Smoke**：啟動兩個非 headless 真 Client，兩者登入同地圖，確認彼此 Spawn、名稱／外觀、走路、停止、離開視野再回來、換圖／登出 Despawn。至少做一次可用的玩家互動或本輪涉及的多人功能；若 Trade／Party／Friend／PvP 等尚未完成，保持 `NOT VERIFIED`／`IN PROGRESS`，不能因 wire test PASS 就說多人正常。
+9. **戰鬥 Smoke**：若目前版本已有戰鬥，至少實際打怪一次，確認目標選取、接近／攻擊距離、普通攻擊或技能、受擊、HP 變化、MISS／傷害數字、死亡／清除目標的可見流程沒有明顯錯誤；本輪碰到戰鬥或同步時必跑雙 Client 觀察他人動作。
+10. **實機 Console Gate**：上述流程中持續檢查 Godot error/warning、Server exception、連線斷開、Windows 未回應。任何會影響玩家體驗的錯誤都算失敗；不得只看畫面「好像能動」。
+
+**最低可玩 Smoke Gate 的目的不是增加形式測試，而是保證每次 main 的可見成果至少維持「登入正常、人物資料正常、能走、換圖後能走、HP/MP 正確、核心 UI 可操作、雙 Client 基本同步正常」。若連這些都未通過，就不能對使用者說目前版本已有明顯進步。**
+
 ## Main-Only Git policy（2026-11-23 使用者決策，最高優先級）
 
 **SGTest 正式開發一律以 `C:\SGO\SRC\SGTest` 的本機 `main` 與 `origin/main` 為唯一開發／整合／交付主線。** 一般開發禁止建立新的 feature/fix/temp/release branch、Git worktree、第二份 clone 或其他長期正式工作目錄；不得把「避免衝突」當成另開 worktree/branch 的理由。
