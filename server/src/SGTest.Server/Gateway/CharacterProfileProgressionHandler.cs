@@ -59,12 +59,24 @@ public sealed class CharacterProfileProgressionHandler
         long visibleExperience=rules is null
             ?lifetimeExperience
             :rules.CurrentExperience(profile.Level,lifetimeExperience);
-        bool combatStatsVerified=
-            profile.Trust==CombatProfileTrust.Verified;
+        PlayerProfileStatVerification verifiedStats=profile.Trust switch
+        {
+            CombatProfileTrust.Verified or CombatProfileTrust.SyntheticTest =>
+                PlayerProfileStatVerification.All,
+            // Old SGOPlayer::UpdateParam + CheckAttrib prove effective values are
+            // clamped base + modifier. HK starter candidates have zero Attack/Hit/
+            // Dodge modifiers, while Defense candidates are non-zero and their
+            // effective application is still unresolved.
+            CombatProfileTrust.ProfileOnlyVerified =>
+                PlayerProfileStatVerification.Attack |
+                PlayerProfileStatVerification.Hit |
+                PlayerProfileStatVerification.Dodge,
+            _ => PlayerProfileStatVerification.None
+        };
         return new(
             characterId,profile.Race,profile.Career,profile.Level,visibleExperience,
             profile.Strength,profile.Dexterity,profile.Constitution,profile.Wisdom,
             profile.Attack,profile.Defense,profile.Hit,profile.Dodge,
-            profile.AvailableAttributePoints,combatStatsVerified);
+            profile.AvailableAttributePoints,verifiedStats);
     }
 }

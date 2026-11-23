@@ -1,6 +1,8 @@
 using System.Text.Json;
 using Microsoft.Data.Sqlite;
+using SGTest.Server.Gateway;
 using SGTest.Server.Identity;
+using SGTest.Server.Wire;
 
 internal static class CharacterProgressionChecks
 {
@@ -35,6 +37,15 @@ internal static class CharacterProgressionChecks
                     Level:1,CurrentHp:151,MaxHp:151,Attack:6,Defense:3,Hit:8,Dodge:8,
                     AttackRange:0,AttackCooldownTicks:0,CurrentMp:121,MaxMp:121,
                     AvailableAttributePoints:0));
+                var initial=await store.GetCharacterCombatProfileAsync(character);
+                var initialWire=CharacterProfileProgressionHandler.BuildState(
+                    initial!.Data,character,0,rules);
+                Checks.Require(
+                    initialWire.VerifiedStats==
+                        (PlayerProfileStatVerification.Attack |
+                         PlayerProfileStatVerification.Hit |
+                         PlayerProfileStatVerification.Dodge),
+                    "profile-only verification mask exposed unresolved effective Defense");
 
                 var first=await store.ApplyCharacterProgressionExperienceAsync(
                     character,1,"monsterdeath:1:1",rules);

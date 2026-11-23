@@ -17,7 +17,8 @@ public static partial class WireProtocol
             value.Strength < 0 || value.Dexterity < 0 ||
             value.Constitution < 0 || value.Wisdom < 0 ||
             value.Attack < 0 || value.Defense < 0 ||
-            value.Hit < 0 || value.Dodge < 0 || value.AvailableAttributePoints < 0)
+            value.Hit < 0 || value.Dodge < 0 || value.AvailableAttributePoints < 0 ||
+            (value.VerifiedStats & ~PlayerProfileStatVerification.All) != 0)
             throw new ArgumentOutOfRangeException(nameof(value));
 
         var frame = NewFrame(WireOpcode.PlayerProfileState, PlayerProfileStateFrameBytes);
@@ -35,7 +36,14 @@ public static partial class WireProtocol
         BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(60,4), value.Hit);
         BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(64,4), value.Dodge);
         BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(68,4), value.AvailableAttributePoints);
-        frame[72] = value.CombatStatsVerified ? (byte)1 : (byte)0;
+        // Preserve legacy V1 semantics: 0=None and 1=All. Partial verification
+        // is an in-frame extension marked by bit 7, with the low nibble as mask.
+        frame[72] = value.VerifiedStats switch
+        {
+            PlayerProfileStatVerification.None => 0,
+            PlayerProfileStatVerification.All => 1,
+            _ => (byte)(0x80 | (byte)value.VerifiedStats)
+        };
         return frame;
     }
 
@@ -46,6 +54,17 @@ public static partial class WireProtocol
         if (!TryReadHeader(frame, out var header) ||
             header.Opcode != WireOpcode.PlayerProfileState ||
             frame.Length != PlayerProfileStateFrameBytes)
+            return false;
+        byte verificationByte=frame[72];
+        PlayerProfileStatVerification verifiedStats;
+        if(verificationByte==0)
+            verifiedStats=PlayerProfileStatVerification.None;
+        else if(verificationByte==1)
+            verifiedStats=PlayerProfileStatVerification.All;
+        else if((verificationByte&0xF0)==0x80 &&
+                (verificationByte&0x0F)!=0)
+            verifiedStats=(PlayerProfileStatVerification)(verificationByte&0x0F);
+        else
             return false;
         value = new(
             BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(8,8)),
@@ -62,9 +81,7 @@ public static partial class WireProtocol
             BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(60,4)),
             BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(64,4)),
             BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(68,4)),
-            frame[72] == 1);
-        if (frame[72] > 1)
-            return false;
+            verifiedStats);
         try
         {
             _ = EncodePlayerProfileState(value);

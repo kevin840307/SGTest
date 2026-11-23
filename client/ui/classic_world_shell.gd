@@ -937,13 +937,23 @@ func _refresh_character()->void:
 		var fields: Dictionary = {
 			"等級":"player_level","職業":"player_job"
 		}
-		if bool(_stats.get("player_combat_stats_verified",false)):
-			fields.merge({
-				"攻擊":"player_attack","防禦":"player_defense",
-				"命中":"player_hit","迴避":"player_dodge"
-			})
 		for field in fields:
 			values[field]=str(_stats.get(fields[field],"—"))
+		var verified_stats_mask:=int(_stats.get("player_verified_stats_mask",0))
+		# ProfileOnly values are source-backed only while no runtime equipment can
+		# contribute an unintegrated modifier. Full verified profiles remain valid.
+		if verified_stats_mask != 0x0F:
+			var equipped:Dictionary=_stats.get("equipment_items",{}) as Dictionary
+			if not bool(_stats.get("equipment_ready",false)) or not equipped.is_empty():
+				verified_stats_mask=0
+		var verified_fields: Dictionary = {
+			"攻擊":["player_attack",1],"防禦":["player_defense",2],
+			"命中":["player_hit",4],"迴避":["player_dodge",8]
+		}
+		for field in verified_fields:
+			var spec:Array=verified_fields[field]
+			if (verified_stats_mask & int(spec[1])) != 0:
+				values[field]=str(_stats.get(str(spec[0]),"—"))
 		values["EXP"]="%s EXP"%str(_stats.get("player_experience","—"))
 		values["配點"]=str(maxi(0,int(_stats.get("player_available_attribute_points",0))))
 	var can_allocate:=profile_ready and int(_stats.get("player_available_attribute_points",0))>0

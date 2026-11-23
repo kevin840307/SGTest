@@ -87,7 +87,7 @@ func _run() -> void:
 				_fail("world transition retained creation menu or failed ready",session)
 				return
 			if not bool(snapshot.get("player_profile_ready",false)) or \
-					bool(snapshot.get("player_combat_stats_verified",true)) or \
+					int(snapshot.get("player_verified_stats_mask",-1))!=13 or \
 					bool(snapshot.get("combat_available",true)) or \
 					int(snapshot.get("player_level",0))!=1 or \
 					int(snapshot.get("player_strength",0))!=3 or \

@@ -187,7 +187,7 @@ func _run() -> void:
 		"x":100.0,"y":200.0,"player_current_hp":75,"player_max_hp":100,
 		"player_current_mp":30,"player_max_mp":40,"player_level":22,
 		"character_name":"TestA","player_job":"聖靈使","player_profile_ready":true,
-		"player_combat_stats_verified":true,
+		"player_verified_stats_mask":15,
 		"player_experience":1234,"player_wisdom":24,"player_dodge":35,
 		"player_strength":18,"player_dexterity":20,"player_constitution":16,
 		"player_intelligence":24,"player_attack":188,"player_defense":142,
@@ -297,13 +297,29 @@ func _run() -> void:
 	if world._character_hp_fill.get_rect() != Rect2(30,268,69,10) or world._character_mp_fill.get_rect() != Rect2(30,285,69,10):
 		_fail("013_Character_INFO.ITF HP and MP must fill from server ratios")
 		return
-	fixture["player_combat_stats_verified"]=false
+	fixture["player_verified_stats_mask"]=0
 	world.apply_snapshot(fixture)
 	for field in ["攻擊","防禦","命中","迴避"]:
 		if str(world._character_labels[field].text)!="—":
-			_fail("profile-only source value leaked into unverified effective combat field "+field)
+			_fail("unverified effective combat field leaked into profile "+field)
 			return
-	fixture["player_combat_stats_verified"]=true
+	fixture["equipment_items"]={}
+	fixture["player_verified_stats_mask"]=13
+	world.apply_snapshot(fixture)
+	if str(world._character_labels["攻擊"].text)!="188" or \
+			str(world._character_labels["命中"].text)!="96" or \
+			str(world._character_labels["迴避"].text)!="35" or \
+			str(world._character_labels["防禦"].text)!="—":
+		_fail("partial verified profile stat mask did not keep Defense fail-closed")
+		return
+	fixture["equipment_items"]={999:{"item_definition_id":999}}
+	world.apply_snapshot(fixture)
+	for field in ["攻擊","防禦","命中","迴避"]:
+		if field!="防禦" and str(world._character_labels[field].text)!="—":
+			_fail("partial verified stat remained visible after unintegrated equipment "+field)
+			return
+	fixture["equipment_items"]={}
+	fixture["player_verified_stats_mask"]=15
 	world.apply_snapshot(fixture)
 	if not directory.is_empty():
 		await _capture(directory.path_join("classic_world.png"))

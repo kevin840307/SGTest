@@ -85,7 +85,7 @@ var player_max_hp := 0
 var player_current_mp := 0
 var player_max_mp := 0
 var player_profile_ready := false
-var player_combat_stats_verified := false
+var player_verified_stats_mask := 0
 var player_creation_profile_ready := false
 var player_race := 0
 var player_career := 0
@@ -1435,7 +1435,7 @@ func snapshot() -> Dictionary:
 		"player_current_mp": player_current_mp,
 		"player_max_mp": player_max_mp,
 		"player_profile_ready": player_profile_ready,
-		"player_combat_stats_verified": player_combat_stats_verified,
+		"player_verified_stats_mask": player_verified_stats_mask,
 		"player_creation_profile_ready": player_creation_profile_ready,
 		"player_race": player_race,
 		"player_career": player_career,
@@ -1955,7 +1955,7 @@ func _reset_character_actions_and_combat() -> void:
 	player_current_mp = 0
 	player_max_mp = 0
 	player_profile_ready = false
-	player_combat_stats_verified = false
+	player_verified_stats_mask = 0
 	player_creation_profile_ready = false
 	player_race = 0
 	player_career = 0
@@ -2366,7 +2366,7 @@ func _apply_player_profile_state(frame: PackedByteArray) -> bool:
 	if int(value.character_id) != actor_id:
 		return fail("player_profile_state_wrong_character")
 	player_profile_ready = true
-	player_combat_stats_verified = bool(value.get("combat_stats_verified",false))
+	player_verified_stats_mask = int(value.get("verified_stats_mask",0))
 	player_creation_profile_ready = true
 	player_race = int(value.race)
 	player_career = int(value.career)

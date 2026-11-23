@@ -13,7 +13,7 @@ const CHARACTER_CHOOSE_HEX := "1000000001000D001600000000000000"
 const CHARACTER_CHOOSE_RESULT_HEX := "2D00000001000E000016000000000000000F0000000000000000C0BE40000000000010C6400300000000000000"
 const CHARACTER_CREATE_HEX := "1200000001000F000207004E65774865726F"
 const CHARACTER_CREATE_RESULT_HEX := "1B000000010010000021000000000000000207004E65774865726F"
-const PLAYER_PROFILE_STATE_HEX := "49000000010085000B0000000000000002000000030000000400000040E2010000000000050000000600000007000000080000005A00000050000000460000003C0000000200000001"
+const PLAYER_PROFILE_STATE_HEX := "49000000010085000B0000000000000002000000030000000400000040E2010000000000050000000600000007000000080000005A00000050000000460000003C000000020000008D"
 
 func _fail(message: String) -> void:
 	push_error("WIRE_CODEC_FAIL " + message)
@@ -69,8 +69,18 @@ func _initialize() -> void:
 	if profile != {"character_id":11,"race":2,"career":3,"level":4,"experience":123456,
 		"strength":5,"dexterity":6,"constitution":7,"wisdom":8,
 		"attack":90,"defense":80,"hit":70,"dodge":60,"available_attribute_points":2,
-		"combat_stats_verified":true}:
+		"verified_stats_mask":13}:
 		_fail("PlayerProfileState decode "+str(profile))
+		return
+	var legacy_profile:=PLAYER_PROFILE_STATE_HEX.hex_decode()
+	legacy_profile[72]=1
+	if int(WireCodec.decode_player_profile_state(legacy_profile).get("verified_stats_mask",-1))!=15:
+		_fail("PlayerProfileState legacy all-verification byte changed semantics")
+		return
+	var invalid_profile:=PLAYER_PROFILE_STATE_HEX.hex_decode()
+	invalid_profile[72]=0x10
+	if not WireCodec.decode_player_profile_state(invalid_profile).is_empty():
+		_fail("PlayerProfileState accepted unknown verification encoding")
 		return
 	var allocate:=WireCodec.encode_player_attribute_allocate(1)
 	if allocate.hex_encode().to_upper()!="090000000100870001":

@@ -636,15 +636,24 @@ static func decode_player_profile_state(frame: PackedByteArray) -> Dictionary:
 	var hit := reader.get_32()
 	var dodge := reader.get_32()
 	var available_attribute_points := reader.get_32()
-	var combat_stats_verified := reader.get_u8()
-	if character_id <= 0 or race < 0 or career < 0 or level < 0 or experience < 0 or strength < 0 or dexterity < 0 or constitution < 0 or wisdom < 0 or attack < 0 or defense < 0 or hit < 0 or dodge < 0 or available_attribute_points < 0 or combat_stats_verified > 1:
+	var verification_byte := reader.get_u8()
+	var verified_stats_mask := 0
+	if verification_byte == 1:
+		verified_stats_mask=0x0F
+	elif verification_byte == 0:
+		verified_stats_mask=0
+	elif (verification_byte & 0xF0) == 0x80 and (verification_byte & 0x0F) != 0:
+		verified_stats_mask=verification_byte & 0x0F
+	else:
+		return {}
+	if character_id <= 0 or race < 0 or career < 0 or level < 0 or experience < 0 or strength < 0 or dexterity < 0 or constitution < 0 or wisdom < 0 or attack < 0 or defense < 0 or hit < 0 or dodge < 0 or available_attribute_points < 0:
 		return {}
 	return {"character_id":character_id,"race":race,"career":career,"level":level,
 		"experience":experience,"strength":strength,"dexterity":dexterity,
 		"constitution":constitution,"wisdom":wisdom,"attack":attack,
 		"defense":defense,"hit":hit,"dodge":dodge,
 		"available_attribute_points":available_attribute_points,
-		"combat_stats_verified":combat_stats_verified==1}
+		"verified_stats_mask":verified_stats_mask}
 
 static func encode_player_attribute_allocate(attribute: int) -> PackedByteArray:
 	if attribute < 1 or attribute > 4:

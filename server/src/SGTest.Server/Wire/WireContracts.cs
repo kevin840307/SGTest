@@ -408,12 +408,24 @@ public readonly record struct PlayerRespawnVisualWire(
 public readonly record struct PlayerCombatStateWire(
     long MapEpoch, int CurrentHp, int MaxHp, int CurrentMp, int MaxMp,
     bool CombatEnabled = true);
+
+[Flags]
+public enum PlayerProfileStatVerification : byte
+{
+    None = 0,
+    Attack = 1 << 0,
+    Defense = 1 << 1,
+    Hit = 1 << 2,
+    Dodge = 1 << 3,
+    All = Attack | Defense | Hit | Dodge
+}
+
 public readonly record struct PlayerProfileStateWire(
     long CharacterId, int Race, int Career, int Level, long Experience,
     int Strength, int Dexterity, int Constitution, int Wisdom,
     int Attack, int Defense, int Hit, int Dodge,
     int AvailableAttributePoints,
-    bool CombatStatsVerified = true);
+    PlayerProfileStatVerification VerifiedStats = PlayerProfileStatVerification.All);
 public readonly record struct PlayerAttributeAllocateWire(CharacterAttributeKind Attribute);
 public readonly record struct PlayerCreationProfileStateWire(
     long CharacterId, int Strength, int Dexterity, int Constitution, int Wisdom);
