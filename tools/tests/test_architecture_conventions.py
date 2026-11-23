@@ -71,7 +71,7 @@ class ArchitectureConventionsChecks(unittest.TestCase):
         tests = (ROOT / "server" / "tests" / "SGTest.Server.Checks" /
                  "SessionCommandWorkerChecks.cs").read_text(encoding="utf-8-sig")
         project = (SERVER / "SGTest.Server.csproj").read_text(encoding="utf-8-sig")
-        self.assertEqual(tls.count("new SessionCommandWorker<"), 21)
+        self.assertEqual(tls.count("new SessionCommandWorker<"), 22)
         self.assertEqual(tls.count("Channel.CreateBounded<"), 2,
                          "NPC and skill are the only special command workers")
         self.assertEqual(worker.count("Channel.CreateBounded<T>"), 1)
@@ -83,6 +83,7 @@ class ArchitectureConventionsChecks(unittest.TestCase):
         self.assertIn("public void Complete() => _commands.Writer.TryComplete()", worker)
         self.assertIn("new SessionCommandWorker<TrustedPlayerRespawn>(\n                4,", tls)
         self.assertIn("new SessionCommandWorker<TrustedChatCommand>(\n                32,", tls)
+        self.assertIn("new SessionCommandWorker<TrustedFriendCommand>(\n                16,", tls)
         self.assertIn("new SessionCommandWorker<TrustedPetCommand>(\n                16,", tls)
         self.assertIn("var npcCommands = Channel.CreateBounded<TrustedNpcInteraction>", tls)
         self.assertIn("var skillCommands=Channel.CreateBounded<TrustedSkillUse>", tls)
@@ -94,7 +95,7 @@ class ArchitectureConventionsChecks(unittest.TestCase):
         for feature in ("Respawn", "Pickup", "Recovery", "Discard", "Shop",
                         "Storage", "Equipment", "Bank", "Repair", "Enhancement",
                         "Trade", "Quest", "Pvp", "PvpAttack", "PvpSkill",
-                        "GmPvpName", "PlayerShop", "Chat", "Party", "Clan", "Pet"):
+                        "GmPvpName", "PlayerShop", "Chat", "Party", "Clan", "Friend", "Pet"):
             with self.subTest(feature=feature):
                 self.assertNotIn("Process" + feature + "Async()", tls)
         self.assertIn('<InternalsVisibleTo Include="SGTest.Server.Checks" />', project)
@@ -560,7 +561,7 @@ class ArchitectureConventionsChecks(unittest.TestCase):
         for name in (
             "_process_player_shop_intent", "_process_quest_intent",
             "_process_chat_intent", "_process_party_intent",
-            "_process_trade_intent", "_process_bank_intent",
+            "_process_friend_intent", "_process_trade_intent", "_process_bank_intent",
             "_process_storage_intent", "_process_pvp_attack_intent",
             "_process_inventory_discard_intent", "_process_monster_skill_intent",
         ):

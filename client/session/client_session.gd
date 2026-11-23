@@ -1398,12 +1398,8 @@ func _process_first_intent() -> void:
 
 	elif kind=="clan":
 		_process_clan_intent(intent)
-
-
 	elif kind=="friend":
 		_process_friend_intent(intent)
-
-
 	elif kind=="pet":
 		_process_pet_intent(intent)
 
