@@ -80,8 +80,23 @@ Parser 依 HK Client `sub_403B49` 的實際讀取順序 fail-closed 解析
 animation compiler 驗證 outlook 對應的原始 Enemy SPR+ACT 是否具備
 normalized NS/FA 八方向與 timeline。可另傳 `--assets client/assets`
 做 production atlas gate；缺少任何 atlas/view 即失敗，不 fallback。
-目前 HK source identity 已可重建，但 **SGTest DefinitionId→HK source PetID
-bridge、完整 Pet runtime atlas publication 與 Pet action 動態 A/B 仍未完成**。
+目前 HK source identity 已可重建，且正式專案已加入 `sgtest.pet_definition_bridge/v1`：
+`100001..100024` 是 **SGTest 自有 DefinitionId**，明確對應 HK source PetID
+`5100..5123`，絕不把兩套 ID 當成同一命名空間。`pet-runtime-catalog` 會把 bridge
+與已 audit 的 evidence 合併，並要求每個對應 Enemy atlas 具備 normalized NS/FA view；
+缺少 mapping、atlas 或 metadata 即 fail-closed。Client 的 `PetVisualCatalog` / `WorldView`
+只對目前 AOI snapshot 真正出現的 Pet 動態 acquire 對應 atlas，不預載全部 46 組。
+
+~~~powershell
+python tools/asset_converter/cli.py pet-runtime-catalog `
+  --evidence "local-assets/asset_converter/pet/hk_pet_visual_evidence.json" `
+  --assets "client/assets" `
+  --output "client/assets/catalog/pet_visuals.json"
+~~~
+
+**完整 46 組 private runtime atlas publication 與 Pet action 動態 A/B 仍未完成。**
+目前 NS/FA 在 Pet runtime 的 idle/attack 語意只標 `INFERRED`；本輪實際 publication
+曾被另一個 converter operation 的正式 lock 阻擋，因此不得把 runtime atlas 宣稱 PASS。
 
 ## 私有原版衍生道具名稱目錄（2026-11-17）
 
