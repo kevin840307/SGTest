@@ -137,7 +137,8 @@ public enum WireOpcode : ushort
     MechaResult = 124,
     MechaSnapshot = 125,
     MechaPresentation = 126,
-    PlayerShopSnapshot = 127
+    PlayerShopSnapshot = 127,
+    MechaEquipmentSnapshot = 128
 }
 
 public enum ChatChannel : byte { Nearby = 0, Faction = 1, Warband = 2, Party = 3, Whisper = 4 }
@@ -169,11 +170,17 @@ public enum PetResultStatus : byte
     Applied=0,AlreadyProcessed=1,PetNotOwned=2,
     AlreadyActive=3,NotActive=4,SequenceConflict=5
 }
-public enum MechaCommandAction : byte { Mount=1, Dismount=2, Refresh=3 }
+public enum MechaCommandAction : byte
+{
+    Mount=1,Dismount=2,Refresh=3,Equip=4,Unequip=5
+}
 public enum MechaResultStatus : byte
 {
     Applied=0,AlreadyProcessed=1,MechaNotOwned=2,
-    AlreadyMounted=3,NotMounted=4,SequenceConflict=5
+    AlreadyMounted=3,NotMounted=4,SequenceConflict=5,
+    ItemNotOwned=6,InvalidEquipment=7,LevelTooLow=8,
+    MountedLocked=9,NotEquipped=10,CorePartCannotUnequip=11,
+    CardSlotsFull=12,RulesUnavailable=13
 }
 
 public enum PartyCommandAction : byte
@@ -727,14 +734,19 @@ public readonly record struct PetAttackVisualWire(
     NormalAttackStatus Status,int Damage,long TargetRevision);
 
 public readonly record struct MechaCommandWire(
-    long MapEpoch,uint MechaSequence,MechaCommandAction Action,long MechaUid);
+    long MapEpoch,uint MechaSequence,MechaCommandAction Action,long MechaUid,long ItemUid=0);
 public readonly record struct MechaResultWire(
     long MapEpoch,uint MechaSequence,MechaCommandAction Action,MechaResultStatus Status,
-    long MechaUid,long MountedMechaUid);
+    long MechaUid,long MountedMechaUid,long ItemUid=0,int SlotId=0,long ReplacedItemUid=0);
 public readonly record struct MechaSnapshotEntryWire(
     long MechaUid,int DefinitionId,int Level,long Experience);
 public sealed record MechaSnapshotWire(
     long ReceiverMapEpoch,long MountedMechaUid,IReadOnlyList<MechaSnapshotEntryWire> Mechas);
+public readonly record struct MechaEquipmentEntryWire(
+    long MechaUid,long ItemUid,int SlotId,int ItemDefinitionId,long SourceDropId,
+    int EnhancementLevel,int DurabilityRaw);
+public sealed record MechaEquipmentSnapshotWire(
+    long ReceiverMapEpoch,IReadOnlyList<MechaEquipmentEntryWire> Items);
 public readonly record struct MechaPresentationWire(
     long ReceiverMapEpoch,long ServerTick,long OwnerActorId,long OwnerConnectionEpoch,
     long OwnerMapEpoch,bool Mounted,long MechaUid,int DefinitionId,int Level);

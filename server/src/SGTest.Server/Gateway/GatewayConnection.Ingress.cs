@@ -549,7 +549,7 @@ public sealed partial class GatewayConnection
                 return WireFrameDisposition.ProtocolViolation;
             var request=new TrustedMechaCommand(
                 bound.ActorId,bound.ConnectionEpoch,mecha.MapEpoch,
-                mecha.MechaSequence,mecha.Action,mecha.MechaUid);
+                mecha.MechaSequence,mecha.Action,mecha.MechaUid,mecha.ItemUid);
             if(!postMecha(request))
                 return WireFrameDisposition.Backpressured;
             _lastMechaSequence=mecha.MechaSequence;

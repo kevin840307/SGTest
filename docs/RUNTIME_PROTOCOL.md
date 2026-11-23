@@ -279,10 +279,15 @@ Mecha lifecycle authority remains rooted in durable `mecha_instances`/`mecha_act
 
 | Opcode | Direction | Bytes | Payload |
 |---|---|---:|---|
-| 123 `MechaCommand` | Client→Server | 29 | `int64 MapEpoch, uint32 MechaSequence, uint8 Action, int64 MechaUid` |
-| 124 `MechaResult` | Server→Client | 38 | authoritative command result and mounted MechaUid |
+| 123 `MechaCommand` | Client→Server | 37 | `int64 MapEpoch, uint32 MechaSequence, uint8 Action, int64 MechaUid, int64 ItemUid`; ItemUid is zero for mount/dismount/refresh and required for equip/unequip |
+| 124 `MechaResult` | Server→Client | 55 | authoritative command result + mounted MechaUid + ItemUid + resolved slot + replaced ItemUid |
 | 125 `MechaSnapshot` | Server→Client | bounded | authoritative roster + mounted MechaUid |
 | 126 `MechaPresentation` | Server→Client | 65 | `int64 ReceiverMapEpoch, int64 ServerTick, int64 OwnerActorId, int64 OwnerConnectionEpoch, int64 OwnerMapEpoch, uint8 Mounted, int64 MechaUid, int32 DefinitionId, int32 Level` |
+| 128 `MechaEquipmentSnapshot` | Server→Client | 18 + 34×N | authoritative owner equipment records: MechaUid, ItemUid, resolved slot, ItemDefinitionId, provenance DropId, enhancement and durability |
+
+Schema v38 adds a separate physical `mecha_equipped_items` location while preserving the same ItemUid and provenance metadata used by inventory/storage/player equipment. Database triggers reject overlap in either direction. Equip/unequip reuse the durable `mecha_actions` sequence key: exact retransmission is idempotent and a different payload on the same sequence fails closed. Production equip admission requires an operator-verified `verified_mecha_equipment_rules/v1` manifest; absence returns `RulesUnavailable`. Source-backed V1 slot policy is weapon=1, engine=2, card-class→first free 3/4/5, guardian=6; mounted Mecha equipment mutation is locked, and weapon/engine may be replaced but not directly emptied. The Client never chooses a slot or derives equipment stats; `MechaEquipmentSnapshot` reconciles inventory↔Mecha ItemUid location after the SQLite transaction commits.
+
+Verification for this equipment amendment: Mecha-specific C# checks **4/4 PASS**, full Server Checks **322/322 PASS**, and Windows Godot 4.7.2 `test_mecha_wire.gd` plus shared WireCodec/WorldState/Inventory/Equipment/PlayerShop/UI-lifetime regressions PASS. Exact HK MS/MA compatibility, stat transforms/combat effects, Body/Weapon/Engine visual mapping, production rule publication, repair/upgrade behavior and Paradise/HK dynamic A/B remain **NOT VERIFIED**.
 
 After durable attach/action commit, `MechaCoordinator` posts a bounded `MechaWorldStateUpdate` into `WorldResultRouter`; the sole `WorldAoiPump/WorldAoi` owner fans it only to the owner and observers that can see the exact player generation. Enter/relogin rebuilds presentation; dismount/visibility exit/disconnect clears it; trusted map transfer re-anchors OwnerMapEpoch. A mounted identity replacement inside the same player generation is atomic and emits the new mounted state directly, avoiding an artificial dismount frame. Godot stores only generation-validated `WorldState.mecha_presentations`; a remote Mecha presentation without the corresponding player Spawn, or with mismatched ConnectionEpoch/MapEpoch, triggers fail-closed resync. WorldReady/resync/player Despawn remove stale state.
 

@@ -137,7 +137,7 @@ public readonly record struct TrustedPetCommand(
     uint PetSequence,PetCommandAction Action,long PetUid);
 public readonly record struct TrustedMechaCommand(
     long ActorId,long ConnectionEpoch,long RequestMapEpoch,
-    uint MechaSequence,MechaCommandAction Action,long MechaUid);
+    uint MechaSequence,MechaCommandAction Action,long MechaUid,long ItemUid=0);
 public readonly record struct TrustedPetAttack(
     long ActorId,long ConnectionEpoch,long RequestMapEpoch,
     uint AttackSequence,long PetUid,long TargetEntityId);

@@ -3,9 +3,11 @@ const Codec = preload("res://network/wire_codec.gd")
 const State = preload("res://world/world_state.gd")
 const ClientSession = preload("res://session/client_session.gd")
 
-const COMMAND_HEX := "1d00000001007b00070000000000000001000000016500000000000000"
-const RESULT_HEX := "2600000001007c00070000000000000001000000010065000000000000006500000000000000"
+const COMMAND_HEX := "2500000001007b000700000000000000010000000165000000000000000000000000000000"
+const RESULT_HEX := "3700000001007c000700000000000000010000000100650000000000000065000000000000000000000000000000000000000000000000"
 const SNAPSHOT_HEX := "4a00000001007d000700000000000000660000000000000002006500000000000000591b000004000000580000000000000066000000000000005a1b000007000000d204000000000000"
+const EQUIPMENT_HEX := "5600000001008000070000000000000002006500000000000000292300000000000001bd1b0000f501000000000000055000000065000000000000002a2300000000000003851c0000f60100000000000002ffffffff"
+const EQUIPMENT_EMPTY_HEX := "120000000100800007000000000000000000"
 const PRESENTATION_HEX := "4100000001007e0007000000000000006300000000000000e9030000000000000b0000000000000007000000000000000166000000000000005a1b000007000000"
 const PRESENTATION_CLEAR_HEX := "4100000001007e0007000000000000006400000000000000e9030000000000000b0000000000000007000000000000000000000000000000000000000000000000"
 
@@ -19,6 +21,13 @@ func _initialize() -> void:
 		return
 	if not Codec.encode_mecha_command(7,1,1,0).is_empty():
 		_fail("mount accepted zero mecha uid")
+		return
+	var equip_command:=Codec.encode_mecha_command(7,2,4,101,9001)
+	if equip_command.is_empty() or Codec.frame_opcode(equip_command)!=Codec.OPCODE_MECHA_COMMAND:
+		_fail("valid mecha equip command rejected")
+		return
+	if not Codec.encode_mecha_command(7,2,4,101,0).is_empty():
+		_fail("mecha equip accepted zero item uid")
 		return
 
 	var result := Codec.decode_mecha_result(RESULT_HEX.hex_decode())
@@ -42,6 +51,17 @@ func _initialize() -> void:
 		int(snapshot.mechas[1].experience) != 1234
 	):
 		_fail("mecha snapshot golden rejected")
+		return
+	var equipment:=Codec.decode_mecha_equipment_snapshot(EQUIPMENT_HEX.hex_decode())
+	if (
+		equipment.is_empty() or equipment.items.size()!=2 or
+		int(equipment.items[0].item_uid)!=9001 or
+		int(equipment.items[0].slot_id)!=1 or
+		int(equipment.items[1].slot_id)!=3 or
+		int(equipment.items[1].durability_raw)!=-1 or
+		Codec.frame_opcode(EQUIPMENT_HEX.hex_decode())!=Codec.OPCODE_MECHA_EQUIPMENT_SNAPSHOT
+	):
+		_fail("mecha equipment snapshot golden rejected")
 		return
 
 	var presentation:=Codec.decode_mecha_presentation(PRESENTATION_HEX.hex_decode())
@@ -70,6 +90,37 @@ func _initialize() -> void:
 		not bool(initial.mecha_snapshot_received)
 	):
 		_fail("mecha authoritative roster was not published")
+		return
+	state.inventory_items[9001]={
+		"item_uid":9001,"item_definition_id":7101,"quantity":1,
+		"drop_id":501,"enhancement_level":5,"durability_raw":80
+	}
+	state.inventory_items[9002]={
+		"item_uid":9002,"item_definition_id":7301,"quantity":1,
+		"drop_id":502,"enhancement_level":2,"durability_raw":-1
+	}
+	if not state.apply_frame(EQUIPMENT_HEX.hex_decode()):
+		_fail("mecha equipment reducer failed")
+		return
+	var equipped_view:=state.snapshot()
+	if (
+		equipped_view.mecha_equipment_items.size()!=2 or
+		not equipped_view.inventory_items.is_empty() or
+		not bool(equipped_view.mecha_equipment_snapshot_received)
+	):
+		_fail("mecha equipment snapshot did not reconcile physical inventory location")
+		return
+	if not state.apply_frame(EQUIPMENT_EMPTY_HEX.hex_decode()):
+		_fail("mecha empty equipment reducer failed")
+		return
+	var unequipped_view:=state.snapshot()
+	if (
+		not unequipped_view.mecha_equipment_items.is_empty() or
+		unequipped_view.inventory_items.size()!=2 or
+		int(unequipped_view.inventory_items[9001].enhancement_level)!=5 or
+		int(unequipped_view.inventory_items[9002].drop_id)!=502
+	):
+		_fail("mecha equipment removal did not restore exact inventory metadata")
 		return
 	if not state.apply_frame(PRESENTATION_HEX.hex_decode()):
 		_fail("mecha presentation reducer mount failed")
@@ -115,13 +166,19 @@ func _initialize() -> void:
 		return
 
 	# Instantiation additionally parses the real ClientSession path that exposes
-	# mecha_mount/mecha_dismount/mecha_refresh and shares this WorldState reducer.
+	# mount/dismount/refresh plus authoritative equip/unequip.
 	var session := ClientSession.new()
-	if not session.has_method("mecha_mount") or not session.has_method("mecha_dismount") or not session.has_method("mecha_refresh"):
+	if (
+		not session.has_method("mecha_mount") or
+		not session.has_method("mecha_dismount") or
+		not session.has_method("mecha_refresh") or
+		not session.has_method("mecha_equip") or
+		not session.has_method("mecha_unequip")
+	):
 		_fail("ClientSession mecha command surface missing")
 		return
 
-	print("MECHA_WIRE_PASS csharp_golden=true reducer=true presentation=true session_surface=true mechas=2")
+	print("MECHA_WIRE_PASS csharp_golden=true reducer=true equipment=true presentation=true session_surface=true mechas=2")
 	quit(0)
 
 func _fail(message:String)->void:

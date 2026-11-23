@@ -171,6 +171,12 @@ internal static class AesGameHost
             IReadOnlyDictionary<int,EquipmentRule>? equipmentRules=
                 equipmentManifest is null ? null :
                 EquipmentItemCatalog.LoadVerified(Path.GetFullPath(equipmentManifest));
+            string? mechaEquipmentManifest=
+                options.GetValueOrDefault("--mecha-equipment-rules");
+            IReadOnlyDictionary<int,MechaEquipmentRule>? mechaEquipmentRules=
+                mechaEquipmentManifest is null ? null :
+                MechaEquipmentCatalog.LoadVerified(
+                    Path.GetFullPath(mechaEquipmentManifest));
             string? bankManifest=options.GetValueOrDefault("--bank-rules");
             NpcBankCatalog? banks=bankManifest is null ? null :
                 NpcBankCatalog.LoadVerified(
@@ -296,7 +302,7 @@ internal static class AesGameHost
             var clans=new ClanCoordinator(identity);
             var friends=new FriendCoordinator(identity);
             var pets=new PetCoordinator(identity,petGrowth);
-            var mechas=new MechaCoordinator(identity);
+            var mechas=new MechaCoordinator(identity,mechaEquipmentRules);
             CharacterExperienceSettlement? experience=experienceRules is null
                 ? null:new CharacterExperienceSettlement(
                     identity,router,lootGeneration,experienceRules,
@@ -382,6 +388,8 @@ internal static class AesGameHost
                     verified_shop_count = shops?.Count ?? 0,
                     verified_storage_count = storages?.Count ?? 0,
                     verified_equipment_rule_count = equipmentRules?.Count ?? 0,
+                    verified_mecha_equipment_rule_count =
+                        mechaEquipmentRules?.Count ?? 0,
                     verified_bank_count = banks?.Count ?? 0,
                     verified_repair_count = repairs?.Count ?? 0,
                     verified_repair_item_rule_count = repairItemRules?.Count ?? 0,
@@ -454,6 +462,8 @@ internal static class AesGameHost
                 verified_shop_count = shops?.Count ?? 0,
                 verified_storage_count = storages?.Count ?? 0,
                 verified_equipment_rule_count = equipmentRules?.Count ?? 0,
+                verified_mecha_equipment_rule_count =
+                    mechaEquipmentRules?.Count ?? 0,
                 verified_bank_count = banks?.Count ?? 0,
                 verified_repair_count = repairs?.Count ?? 0,
                 verified_repair_item_rule_count = repairItemRules?.Count ?? 0,
@@ -477,7 +487,8 @@ internal static class AesGameHost
                 "[--recovery-rules <VERIFIED_JSON>] [--skill-rules <VERIFIED_JSON>] " +
                 "[--pet-combat-rules <VERIFIED_JSON>] [--pet-growth-rules <VERIFIED_JSON>] " +
                 "[--shop-rules <VERIFIED_JSON>] [--storage-rules <VERIFIED_JSON>] " +
-                "[--equipment-rules <VERIFIED_JSON>] [--bank-rules <VERIFIED_JSON>] " +
+                "[--equipment-rules <VERIFIED_JSON>] [--mecha-equipment-rules <VERIFIED_JSON>] " +
+                "[--bank-rules <VERIFIED_JSON>] " +
                 "[--repair-rules <VERIFIED_JSON> --repair-item-rules <VERIFIED_JSON>] " +
                 "[--quest-rules <VERIFIED_JSON>] [--trade-item-rules <VERIFIED_JSON>] " +
                 "[--gm-accounts <user1,user2>] " +
@@ -514,7 +525,8 @@ internal static class AesGameHost
                           "--loot-rules", "--experience-rules",
                           "--recovery-rules", "--skill-rules",
                           "--pet-combat-rules", "--pet-growth-rules",
-                          "--shop-rules", "--storage-rules", "--equipment-rules", "--bank-rules",
+                          "--shop-rules", "--storage-rules", "--equipment-rules",
+                          "--mecha-equipment-rules", "--bank-rules",
                           "--repair-rules", "--repair-item-rules", "--quest-rules",
                           "--trade-item-rules", "--gm-accounts",
                           "--character-spawn-map", "--character-spawn-x",

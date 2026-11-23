@@ -556,7 +556,17 @@ func mecha_refresh()->bool:
 	return _queue_mecha_intent(3,0,current)
 
 
-func _queue_mecha_intent(action:int,mecha_uid:int,current:Dictionary)->bool:
+func mecha_equip(mecha_uid:int,item_uid:int)->bool:
+	var current:=snapshot()
+	return _queue_mecha_intent(4,mecha_uid,current,item_uid)
+
+
+func mecha_unequip(mecha_uid:int,item_uid:int)->bool:
+	var current:=snapshot()
+	return _queue_mecha_intent(5,mecha_uid,current,item_uid)
+
+
+func _queue_mecha_intent(action:int,mecha_uid:int,current:Dictionary,item_uid:int=0)->bool:
 	if (
 		int(current.get("state",-1))!=WorldState.STATE_IN_WORLD or
 		not bool(current.get("world_ready",false)) or
@@ -568,20 +578,36 @@ func _queue_mecha_intent(action:int,mecha_uid:int,current:Dictionary)->bool:
 	):
 		return false
 	var mechas:Dictionary=current.get("mecha_instances",{})
+	var mounted:=int(current.get("mounted_mecha_uid",0))
 	match action:
 		1:
-			if mecha_uid<=0 or not mechas.has(mecha_uid) or int(current.get("mounted_mecha_uid",0))==mecha_uid:
+			if item_uid!=0 or mecha_uid<=0 or not mechas.has(mecha_uid) or mounted==mecha_uid:
 				return false
 		2:
-			if mecha_uid<=0 or int(current.get("mounted_mecha_uid",0))!=mecha_uid:
+			if item_uid!=0 or mecha_uid<=0 or mounted!=mecha_uid:
 				return false
 		3:
-			if mecha_uid!=0:
+			if mecha_uid!=0 or item_uid!=0:
+				return false
+		4:
+			var inventory:Dictionary=current.get("inventory_items",{})
+			if (
+				mecha_uid<=0 or not mechas.has(mecha_uid) or mounted==mecha_uid or
+				item_uid<=0 or not inventory.has(item_uid)
+			):
+				return false
+		5:
+			var equipped:Dictionary=current.get("mecha_equipment_items",{}).get(item_uid,{})
+			if (
+				mecha_uid<=0 or not mechas.has(mecha_uid) or mounted==mecha_uid or
+				item_uid<=0 or equipped.is_empty() or
+				int(equipped.get("mecha_uid",0))!=mecha_uid
+			):
 				return false
 		_:
 			return false
 	return _queue_intent({
-		"type":"mecha","action":action,"mecha_uid":mecha_uid,
+		"type":"mecha","action":action,"mecha_uid":mecha_uid,"item_uid":item_uid,
 		"actor_id":int(current.get("actor_id",0)),
 		"map_epoch":int(current.get("map_epoch",0))
 	})
@@ -1864,13 +1890,16 @@ func _process_mecha_intent(intent:Dictionary)->void:
 		return
 	var action:=int(intent.get("action",0))
 	var mecha_uid:=int(intent.get("mecha_uid",0))
+	var item_uid:=int(intent.get("item_uid",0))
 	var sequence:=int(current.get("mecha_sequence",0))+1
 	var frame:=WireCodec.encode_mecha_command(
-		int(current.get("map_epoch",0)),sequence,action,mecha_uid)
+		int(current.get("map_epoch",0)),sequence,action,mecha_uid,item_uid)
 	if frame.is_empty():
 		_pop_intent()
 		return
-	if _transport.send_frame(frame) and _world.mark_mecha_sent(sequence,action,mecha_uid):
+	if _transport.send_frame(frame) and _world.mark_mecha_sent(
+		sequence,action,mecha_uid,item_uid
+	):
 		_pop_intent()
 		_publish()
 

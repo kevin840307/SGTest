@@ -9,16 +9,33 @@ public enum MechaActionStatus : byte
     MechaNotOwned=2,
     AlreadyMounted=3,
     NotMounted=4,
-    SequenceConflict=5
+    SequenceConflict=5,
+    ItemNotOwned=6,
+    InvalidEquipment=7,
+    LevelTooLow=8,
+    MountedLocked=9,
+    NotEquipped=10,
+    CorePartCannotUnequip=11,
+    CardSlotsFull=12,
+    RulesUnavailable=13
 }
 
-public enum MechaActionKind : byte { Mount=1, Dismount=2, Refresh=3 }
+public enum MechaActionKind : byte
+{
+    Mount=1,
+    Dismount=2,
+    Refresh=3,
+    Equip=4,
+    Unequip=5
+}
 
 public sealed record MechaInstanceRecord(
     long MechaUid,long CharacterId,int DefinitionId,int Level,long Experience,
     bool IsMounted,byte[] PartsBlob);
 
-public sealed record MechaActionOutcome(MechaActionStatus Status,long MountedMechaUid);
+public sealed record MechaActionOutcome(
+    MechaActionStatus Status,long MountedMechaUid,long ItemUid=0,
+    int SlotId=0,long ReplacedItemUid=0);
 
 /// <summary>
 /// Durable mecha ownership and mounted-state authority. Client requests identify

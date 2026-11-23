@@ -243,6 +243,18 @@ public sealed partial class WorldResultRouter
         }
     }
 
+    public GatewaySendStatus QueueMechaEquipmentSnapshot(
+        ConnectionBinding recipient,MechaEquipmentSnapshotWire snapshot)
+    {
+        lock(_gate)
+        {
+            if(!_connections.TryGetValue(recipient.ActorId,out var connection)||
+               connection.IsClosed||connection.Binding!=recipient)
+                return GatewaySendStatus.Closed;
+            return connection.QueueMechaEquipmentSnapshot(recipient,snapshot);
+        }
+    }
+
     public GatewaySendStatus QueuePlayerShopResult(
         TrustedPlayerShopCommand request,PlayerShopResultWire result)
     {

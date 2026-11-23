@@ -305,9 +305,12 @@ var mecha_sequence := 0
 var pending_mecha_sequence := 0
 var pending_mecha_action := 0
 var pending_mecha_uid := 0
+var pending_mecha_item_uid := 0
 var mounted_mecha_uid := 0
 var mecha_instances := {}
 var mecha_snapshot_received := false
+var mecha_equipment_items := {}
+var mecha_equipment_snapshot_received := false
 var mecha_presentations := {}
 var stale_mecha_presentation_frames := 0
 var last_mecha_result_sequence := 0
@@ -961,28 +964,40 @@ func _clear_pending_pet()->void:
 	pending_pet_uid=0
 
 
-func mark_mecha_sent(sequence:int,action:int,mecha_uid:int)->bool:
+func mark_mecha_sent(sequence:int,action:int,mecha_uid:int,item_uid:int=0)->bool:
 	if (
 		state!=STATE_IN_WORLD or not world_ready or resync_pending or
 		waiting_for_new_map or pending_world_ready_ack_epoch!=0 or
 		last_world_ready_ack_epoch!=map_epoch or pending_mecha_sequence!=0 or
-		sequence<=mecha_sequence or sequence>0xffffffff or action<1 or action>3
+		sequence<=mecha_sequence or sequence>0xffffffff or action<1 or action>5
 	):
 		return false
+	var equipment_action:=action==4 or action==5
 	if action==3:
-		if mecha_uid!=0:
+		if mecha_uid!=0 or item_uid!=0:
 			return false
 	else:
 		if mecha_uid<=0 or not mecha_instances.has(mecha_uid):
+			return false
+		if equipment_action!=(item_uid>0):
 			return false
 		if action==1 and mounted_mecha_uid==mecha_uid:
 			return false
 		if action==2 and mounted_mecha_uid!=mecha_uid:
 			return false
+		if equipment_action and mounted_mecha_uid==mecha_uid:
+			return false
+		if action==4 and not inventory_items.has(item_uid):
+			return false
+		if action==5:
+			var equipped:Dictionary=mecha_equipment_items.get(item_uid,{})
+			if equipped.is_empty() or int(equipped.get("mecha_uid",0))!=mecha_uid:
+				return false
 	mecha_sequence=sequence
 	pending_mecha_sequence=sequence
 	pending_mecha_action=action
 	pending_mecha_uid=mecha_uid
+	pending_mecha_item_uid=item_uid
 	return true
 
 
@@ -990,6 +1005,7 @@ func _clear_pending_mecha()->void:
 	pending_mecha_sequence=0
 	pending_mecha_action=0
 	pending_mecha_uid=0
+	pending_mecha_item_uid=0
 
 
 func mark_quest_sent(
@@ -1218,6 +1234,8 @@ func apply_frame(frame: PackedByteArray) -> bool:
 			return _apply_mecha_result(frame)
 		WireCodec.OPCODE_MECHA_SNAPSHOT:
 			return _apply_mecha_snapshot(frame)
+		WireCodec.OPCODE_MECHA_EQUIPMENT_SNAPSHOT:
+			return _apply_mecha_equipment_snapshot(frame)
 		WireCodec.OPCODE_MECHA_PRESENTATION:
 			return _apply_mecha_presentation(frame)
 		WireCodec.OPCODE_PET_ENTITY_SPAWN:
@@ -1542,9 +1560,12 @@ func snapshot() -> Dictionary:
 		"pending_mecha_sequence": pending_mecha_sequence,
 		"pending_mecha_action": pending_mecha_action,
 		"pending_mecha_uid": pending_mecha_uid,
+		"pending_mecha_item_uid": pending_mecha_item_uid,
 		"mounted_mecha_uid": mounted_mecha_uid,
 		"mecha_instances": mecha_instances.duplicate(true),
 		"mecha_snapshot_received": mecha_snapshot_received,
+		"mecha_equipment_items": mecha_equipment_items.duplicate(true),
+		"mecha_equipment_snapshot_received": mecha_equipment_snapshot_received,
 		"mecha_presentations": mecha_presentations.duplicate(true),
 		"stale_mecha_presentation_frames": stale_mecha_presentation_frames,
 		"last_mecha_result_sequence": last_mecha_result_sequence,
@@ -1834,6 +1855,8 @@ func _reset_character_mecha_state() -> void:
 	mounted_mecha_uid=0
 	mecha_instances.clear()
 	mecha_snapshot_received=false
+	mecha_equipment_items.clear()
+	mecha_equipment_snapshot_received=false
 	mecha_presentations.clear()
 	stale_mecha_presentation_frames=0
 	last_mecha_result_sequence=0
@@ -2943,7 +2966,7 @@ func _apply_inventory_snapshot(frame: PackedByteArray) -> bool:
 		var uid := int(item.item_uid)
 		if inventory_items.has(uid):
 			return fail("inventory_duplicate_item_uid")
-		if equipment_items.has(uid) or storage_items.has(uid):
+		if equipment_items.has(uid) or storage_items.has(uid) or mecha_equipment_items.has(uid):
 			return fail("inventory_item_uid_location_conflict")
 		inventory_items[uid] = item.duplicate(true)
 		inventory_next_index += 1
@@ -4601,11 +4624,13 @@ func _apply_mecha_result(frame:PackedByteArray)->bool:
 		return true
 	if (
 		sequence>mecha_sequence or sequence!=pending_mecha_sequence or
-		int(value.action)!=pending_mecha_action or int(value.mecha_uid)!=pending_mecha_uid
+		int(value.action)!=pending_mecha_action or
+		int(value.mecha_uid)!=pending_mecha_uid or
+		int(value.item_uid)!=pending_mecha_item_uid
 	):
 		return fail("mecha_result_without_matching_request")
 	var status:=int(value.status)
-	if status<0 or status>5:
+	if status<0 or status>13:
 		return fail("mecha_result_unknown_status")
 	last_mecha_result_sequence=sequence
 	last_mecha_result_status=status
@@ -4634,9 +4659,63 @@ func _apply_mecha_snapshot(frame:PackedByteArray)->bool:
 	var incoming_mounted:=int(value.mounted_mecha_uid)
 	if incoming_mounted>0 and not next_mechas.has(incoming_mounted):
 		return fail("mecha_snapshot_missing_mounted")
+	if mecha_equipment_snapshot_received:
+		for raw in mecha_equipment_items.values():
+			var equipped:Dictionary=raw
+			if not next_mechas.has(int(equipped.get("mecha_uid",0))):
+				return fail("mecha_snapshot_missing_equipment_owner")
 	mecha_instances=next_mechas
 	mounted_mecha_uid=incoming_mounted
 	mecha_snapshot_received=true
+	return true
+
+
+func _apply_mecha_equipment_snapshot(frame:PackedByteArray)->bool:
+	if state!=STATE_IN_WORLD:
+		return fail("mecha_equipment_snapshot_out_of_state")
+	var value:=WireCodec.decode_mecha_equipment_snapshot(frame)
+	if value.is_empty():
+		return fail("invalid_mecha_equipment_snapshot")
+	var epoch:=int(value.receiver_map_epoch)
+	if epoch<map_epoch:
+		stale_mecha_frames+=1
+		return true
+	if epoch>map_epoch:
+		return fail("future_mecha_equipment_snapshot")
+	var next_items:={}
+	for raw in value.items:
+		var item:Dictionary=raw
+		var uid:=int(item.item_uid)
+		var mecha_uid:=int(item.mecha_uid)
+		if mecha_snapshot_received and not mecha_instances.has(mecha_uid):
+			return fail("mecha_equipment_unknown_mecha")
+		if equipment_items.has(uid) or storage_items.has(uid):
+			return fail("mecha_equipment_item_uid_location_conflict")
+		next_items[uid]=item.duplicate(true)
+	# Authoritative physical-location reconciliation. Items newly equipped leave
+	# inventory; items that disappeared from the Mecha snapshot return to it.
+	for uid_value in mecha_equipment_items.keys():
+		var uid:=int(uid_value)
+		if next_items.has(uid):
+			continue
+		var old:Dictionary=mecha_equipment_items[uid]
+		if equipment_items.has(uid) or storage_items.has(uid):
+			return fail("mecha_unequip_item_uid_location_conflict")
+		inventory_items[uid]={
+			"item_uid":uid,
+			"item_definition_id":int(old.item_definition_id),
+			"quantity":1,
+			"drop_id":int(old.source_drop_id),
+			"enhancement_level":int(old.enhancement_level),
+			"durability_raw":int(old.durability_raw)
+		}
+	for uid_value in next_items.keys():
+		inventory_items.erase(int(uid_value))
+	var changed:=mecha_equipment_items!=next_items
+	mecha_equipment_items=next_items
+	mecha_equipment_snapshot_received=true
+	if changed:
+		inventory_revision+=1
 	return true
 
 

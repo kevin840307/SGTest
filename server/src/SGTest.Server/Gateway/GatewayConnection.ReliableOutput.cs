@@ -631,7 +631,8 @@ public sealed partial class GatewayConnection
                request.MechaSequence!=result.MechaSequence||
                request.RequestMapEpoch!=result.MapEpoch||
                request.Action!=result.Action||
-               request.MechaUid!=result.MechaUid)
+               request.MechaUid!=result.MechaUid||
+               request.ItemUid!=result.ItemUid)
                 return GatewaySendStatus.GenerationMismatch;
             return _reliable.TryEnqueue(WireProtocol.EncodeMechaResult(result))
                 ?GatewaySendStatus.Enqueued:GatewaySendStatus.Backpressured;
@@ -647,6 +648,19 @@ public sealed partial class GatewayConnection
             if(_binding!=expected||snapshot.ReceiverMapEpoch!=expected.MapEpoch)
                 return GatewaySendStatus.GenerationMismatch;
             return _reliable.TryEnqueue(WireProtocol.EncodeMechaSnapshot(snapshot))
+                ?GatewaySendStatus.Enqueued:GatewaySendStatus.Backpressured;
+        }
+    }
+
+    public GatewaySendStatus QueueMechaEquipmentSnapshot(
+        ConnectionBinding expected,MechaEquipmentSnapshotWire snapshot)
+    {
+        lock(_bindingGate)
+        {
+            if(_closed)return GatewaySendStatus.Closed;
+            if(_binding!=expected||snapshot.ReceiverMapEpoch!=expected.MapEpoch)
+                return GatewaySendStatus.GenerationMismatch;
+            return _reliable.TryEnqueue(WireProtocol.EncodeMechaEquipmentSnapshot(snapshot))
                 ?GatewaySendStatus.Enqueued:GatewaySendStatus.Backpressured;
         }
     }

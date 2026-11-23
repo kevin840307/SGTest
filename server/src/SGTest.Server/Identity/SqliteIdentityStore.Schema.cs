@@ -916,13 +916,126 @@ ON mecha_instances(character_id) WHERE is_mounted=1;",tx);
     connection_generation INTEGER NOT NULL CHECK(connection_generation > 0),
     map_epoch INTEGER NOT NULL CHECK(map_epoch > 0),
     action_sequence INTEGER NOT NULL CHECK(action_sequence BETWEEN 1 AND 4294967295),
-    action INTEGER NOT NULL CHECK(action IN (1,2)),
+    action INTEGER NOT NULL CHECK(action IN (1,2,4,5)),
     mecha_uid INTEGER NOT NULL CHECK(mecha_uid > 0),
-    result_status INTEGER NOT NULL CHECK(result_status BETWEEN 0 AND 5),
+    item_uid INTEGER NOT NULL DEFAULT 0 CHECK(item_uid >= 0),
+    result_status INTEGER NOT NULL CHECK(result_status BETWEEN 0 AND 13),
     resulting_mounted_uid INTEGER NOT NULL CHECK(resulting_mounted_uid >= 0),
+    resulting_slot_id INTEGER NOT NULL DEFAULT 0 CHECK(resulting_slot_id BETWEEN 0 AND 6),
+    replaced_item_uid INTEGER NOT NULL DEFAULT 0 CHECK(replaced_item_uid >= 0),
     created_unix_ms INTEGER NOT NULL,
+    CHECK(
+      (action IN (1,2) AND item_uid=0 AND resulting_slot_id=0 AND replaced_item_uid=0)
+      OR (action IN (4,5) AND item_uid>0)
+    ),
     PRIMARY KEY(character_id,connection_generation,map_epoch,action_sequence)
 );",tx);
+            // Schema v38: Mecha equipment is a fourth physical ItemUid location.
+            // Recovered2 source evidence exposes weapon(1), engine(2), card-class(3)
+            // and guardian-stone(6) equipment. Card-class items occupy runtime slots
+            // 3..5; body slot 0 remains represented by the Mecha definition itself.
+            Execute(connection,@"CREATE TABLE IF NOT EXISTS mecha_equipped_items (
+    item_uid INTEGER PRIMARY KEY,
+    character_id INTEGER NOT NULL REFERENCES characters(character_id) ON DELETE CASCADE,
+    mecha_uid INTEGER NOT NULL REFERENCES mecha_instances(mecha_uid) ON DELETE CASCADE,
+    slot_id INTEGER NOT NULL CHECK(slot_id BETWEEN 1 AND 6),
+    item_definition_id INTEGER NOT NULL CHECK(item_definition_id BETWEEN 1 AND 100000000),
+    quantity INTEGER NOT NULL CHECK(quantity = 1),
+    source_drop_id INTEGER UNIQUE REFERENCES ground_drops(drop_id),
+    durability_raw INTEGER CHECK(durability_raw IS NULL OR durability_raw BETWEEN 0 AND 2147483647),
+    enhancement_level INTEGER NOT NULL DEFAULT 0 CHECK(enhancement_level BETWEEN 0 AND 255),
+    source_kind INTEGER NOT NULL CHECK(source_kind IN (1,2)),
+    source_reference TEXT NOT NULL,
+    created_unix_ms INTEGER NOT NULL,
+    UNIQUE(mecha_uid,slot_id),
+    CHECK(
+      (source_kind=1 AND source_drop_id IS NOT NULL)
+      OR (source_kind=2 AND source_drop_id IS NULL)
+    )
+);",tx);
+            Execute(connection,@"CREATE INDEX IF NOT EXISTS ix_mecha_equipped_owner
+ON mecha_equipped_items(character_id,mecha_uid,slot_id);",tx);
+
+            Execute(connection,@"CREATE TRIGGER IF NOT EXISTS trg_mecha_equipped_owner_match
+BEFORE INSERT ON mecha_equipped_items
+WHEN NOT EXISTS(
+  SELECT 1 FROM mecha_instances
+  WHERE mecha_uid=NEW.mecha_uid AND character_id=NEW.character_id
+)
+BEGIN
+    SELECT RAISE(ABORT,'mecha equipment owner mismatch');
+END;",tx);
+            Execute(connection,@"CREATE TRIGGER IF NOT EXISTS trg_mecha_equipped_no_other_location
+BEFORE INSERT ON mecha_equipped_items
+WHEN EXISTS(SELECT 1 FROM item_instances WHERE item_uid=NEW.item_uid)
+  OR EXISTS(SELECT 1 FROM storage_items WHERE item_uid=NEW.item_uid)
+  OR EXISTS(SELECT 1 FROM equipped_items WHERE item_uid=NEW.item_uid)
+  OR (NEW.source_drop_id IS NOT NULL AND (
+      EXISTS(SELECT 1 FROM item_instances WHERE source_drop_id=NEW.source_drop_id)
+      OR EXISTS(SELECT 1 FROM storage_items WHERE source_drop_id=NEW.source_drop_id)
+      OR EXISTS(SELECT 1 FROM equipped_items WHERE source_drop_id=NEW.source_drop_id)))
+BEGIN
+    SELECT RAISE(ABORT,'item already exists outside mecha equipment');
+END;",tx);
+            Execute(connection,@"CREATE TRIGGER IF NOT EXISTS trg_inventory_no_mecha_equipped_overlap
+BEFORE INSERT ON item_instances
+WHEN EXISTS(SELECT 1 FROM mecha_equipped_items WHERE item_uid=NEW.item_uid)
+  OR (NEW.source_drop_id IS NOT NULL AND
+      EXISTS(SELECT 1 FROM mecha_equipped_items WHERE source_drop_id=NEW.source_drop_id))
+BEGIN
+    SELECT RAISE(ABORT,'item already exists on mecha');
+END;",tx);
+            Execute(connection,@"CREATE TRIGGER IF NOT EXISTS trg_storage_no_mecha_equipped_overlap
+BEFORE INSERT ON storage_items
+WHEN EXISTS(SELECT 1 FROM mecha_equipped_items WHERE item_uid=NEW.item_uid)
+  OR (NEW.source_drop_id IS NOT NULL AND
+      EXISTS(SELECT 1 FROM mecha_equipped_items WHERE source_drop_id=NEW.source_drop_id))
+BEGIN
+    SELECT RAISE(ABORT,'item already exists on mecha');
+END;",tx);
+            Execute(connection,@"CREATE TRIGGER IF NOT EXISTS trg_equipped_no_mecha_equipped_overlap
+BEFORE INSERT ON equipped_items
+WHEN EXISTS(SELECT 1 FROM mecha_equipped_items WHERE item_uid=NEW.item_uid)
+  OR (NEW.source_drop_id IS NOT NULL AND
+      EXISTS(SELECT 1 FROM mecha_equipped_items WHERE source_drop_id=NEW.source_drop_id))
+BEGIN
+    SELECT RAISE(ABORT,'item already exists on mecha');
+END;",tx);
+
+            // Existing v36/v37 databases had a narrower mecha_actions CHECK.
+            // Rebuild once, preserving all mount/dismount receipts byte-for-byte.
+            if(schemaVersion is >=36 and <38 &&
+               !ColumnExists(connection,"mecha_actions","item_uid",tx))
+            {
+                Execute(connection,@"ALTER TABLE mecha_actions RENAME TO mecha_actions_v37;",tx);
+                Execute(connection,@"CREATE TABLE mecha_actions (
+    character_id INTEGER NOT NULL REFERENCES characters(character_id) ON DELETE CASCADE,
+    connection_generation INTEGER NOT NULL CHECK(connection_generation > 0),
+    map_epoch INTEGER NOT NULL CHECK(map_epoch > 0),
+    action_sequence INTEGER NOT NULL CHECK(action_sequence BETWEEN 1 AND 4294967295),
+    action INTEGER NOT NULL CHECK(action IN (1,2,4,5)),
+    mecha_uid INTEGER NOT NULL CHECK(mecha_uid > 0),
+    item_uid INTEGER NOT NULL DEFAULT 0 CHECK(item_uid >= 0),
+    result_status INTEGER NOT NULL CHECK(result_status BETWEEN 0 AND 13),
+    resulting_mounted_uid INTEGER NOT NULL CHECK(resulting_mounted_uid >= 0),
+    resulting_slot_id INTEGER NOT NULL DEFAULT 0 CHECK(resulting_slot_id BETWEEN 0 AND 6),
+    replaced_item_uid INTEGER NOT NULL DEFAULT 0 CHECK(replaced_item_uid >= 0),
+    created_unix_ms INTEGER NOT NULL,
+    CHECK(
+      (action IN (1,2) AND item_uid=0 AND resulting_slot_id=0 AND replaced_item_uid=0)
+      OR (action IN (4,5) AND item_uid>0)
+    ),
+    PRIMARY KEY(character_id,connection_generation,map_epoch,action_sequence)
+);",tx);
+                Execute(connection,@"INSERT INTO mecha_actions(
+character_id,connection_generation,map_epoch,action_sequence,action,mecha_uid,
+item_uid,result_status,resulting_mounted_uid,resulting_slot_id,replaced_item_uid,created_unix_ms)
+SELECT character_id,connection_generation,map_epoch,action_sequence,action,mecha_uid,
+0,result_status,resulting_mounted_uid,0,0,created_unix_ms
+FROM mecha_actions_v37;",tx);
+                Execute(connection,@"DROP TABLE mecha_actions_v37;",tx);
+            }
+
             // Schema v37: a player stall may contain multiple active ItemUid
             // listings. The 16-row runtime bound is an SGTest safety limit, not
             // a claim about the HK original capacity. Item UID uniqueness stays

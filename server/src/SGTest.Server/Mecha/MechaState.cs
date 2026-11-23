@@ -7,26 +7,30 @@ namespace SGTest.Server.Mecha;
 /// <summary>
 /// Player-attached authoritative Mecha presentation state. Recovered2 evidence
 /// keeps the driven Mecha on the player model (type/body/weapon/engine) rather
-/// than as an independently positioned world entity, so AOI carries only the
-/// committed mounted identity. Exact HK visual parts remain a separate source gate.
+/// than as an independently positioned world entity, so AOI currently carries
+/// committed mounted identity. Exact HK part visuals remain source-gated.
 /// </summary>
 public readonly record struct MechaWorldStateUpdate(
     long OwnerActorId,long OwnerConnectionEpoch,long OwnerMapEpoch,
     bool Mounted,long MechaUid,int DefinitionId,int Level);
 
 /// <summary>
-/// Server-authoritative Mecha roster and mount lifecycle. This first vertical
-/// slice deliberately owns only durable identity/mounted state. Movement speed,
-/// stat transforms, parts/cards and visual outlook stay disabled until backed by
-/// verified HK/Old data rather than guessed constants.
+/// Server-authoritative Mecha roster, mount lifecycle and physical equipment
+/// ownership. Equipment rules are fail-closed and must come from a verified
+/// manifest. Exact HK stat transforms and visual part mapping remain disabled
+/// until source-backed rules are available.
 /// </summary>
 public sealed class MechaCoordinator
 {
     private readonly SqliteIdentityStore _identity;
+    private readonly IReadOnlyDictionary<int,MechaEquipmentRule>? _equipmentRules;
 
-    public MechaCoordinator(SqliteIdentityStore identity)
+    public MechaCoordinator(
+        SqliteIdentityStore identity,
+        IReadOnlyDictionary<int,MechaEquipmentRule>? equipmentRules=null)
     {
         _identity=identity??throw new ArgumentNullException(nameof(identity));
+        _equipmentRules=equipmentRules;
     }
 
     public async Task AttachAsync(ConnectionBinding binding,WorldResultRouter router)
@@ -35,8 +39,12 @@ public sealed class MechaCoordinator
         if(binding.ActorId<=0||binding.ConnectionEpoch<=0||binding.MapEpoch<=0)
             throw new ArgumentOutOfRangeException(nameof(binding));
         var mechas=await _identity.GetMechasAsync(binding.ActorId).ConfigureAwait(false);
+        var equipment=await _identity.ListMechaEquippedItemsAsync(
+            binding.ActorId).ConfigureAwait(false);
         EnsureQueued(router.QueueMechaSnapshot(
             binding,ToSnapshot(binding.MapEpoch,mechas)));
+        EnsureQueued(router.QueueMechaEquipmentSnapshot(
+            binding,ToEquipmentSnapshot(binding.MapEpoch,equipment)));
         EnsureWorldPosted(router,ToWorldUpdate(binding,mechas));
     }
 
@@ -49,38 +57,54 @@ public sealed class MechaCoordinator
            binding.MapEpoch!=request.RequestMapEpoch)
             return;
 
-        MechaResultStatus status;
-        long mounted;
+        MechaActionOutcome outcome;
         if(request.Action==MechaCommandAction.Refresh)
         {
             var before=await _identity.GetMechasAsync(request.ActorId).ConfigureAwait(false);
-            mounted=before.FirstOrDefault(x=>x.IsMounted)?.MechaUid??0;
-            status=MechaResultStatus.Applied;
+            outcome=new(
+                MechaActionStatus.Applied,
+                before.FirstOrDefault(x=>x.IsMounted)?.MechaUid??0);
+        }
+        else if(request.Action is MechaCommandAction.Equip or MechaCommandAction.Unequip)
+        {
+            outcome=await _identity.ApplyMechaEquipmentActionAsync(
+                request.ActorId,request.ConnectionEpoch,request.RequestMapEpoch,
+                request.MechaSequence,
+                request.Action==MechaCommandAction.Equip
+                    ?MechaActionKind.Equip:MechaActionKind.Unequip,
+                request.MechaUid,request.ItemUid,
+                request.Action==MechaCommandAction.Equip?_equipmentRules:null)
+                .ConfigureAwait(false);
         }
         else
         {
-            var outcome=await _identity.ApplyMechaActionAsync(
+            outcome=await _identity.ApplyMechaActionAsync(
                 request.ActorId,request.ConnectionEpoch,request.RequestMapEpoch,
                 request.MechaSequence,
                 request.Action==MechaCommandAction.Mount
                     ?MechaActionKind.Mount:MechaActionKind.Dismount,
                 request.MechaUid).ConfigureAwait(false);
-            status=(MechaResultStatus)outcome.Status;
-            mounted=outcome.MountedMechaUid;
         }
 
         EnsureQueued(router.QueueMechaResult(request,new(
-            request.RequestMapEpoch,request.MechaSequence,request.Action,status,
-            request.MechaUid,mounted)));
+            request.RequestMapEpoch,request.MechaSequence,request.Action,
+            (MechaResultStatus)outcome.Status,request.MechaUid,outcome.MountedMechaUid,
+            request.ItemUid,outcome.SlotId,outcome.ReplacedItemUid)));
 
         if(!router.TryGetCurrentBinding(request.ActorId,out var after)||
            after.ConnectionEpoch!=request.ConnectionEpoch||
            after.MapEpoch!=request.RequestMapEpoch)
             return;
         var mechas=await _identity.GetMechasAsync(request.ActorId).ConfigureAwait(false);
+        var equipment=await _identity.ListMechaEquippedItemsAsync(
+            request.ActorId).ConfigureAwait(false);
         EnsureQueued(router.QueueMechaSnapshot(
             after,ToSnapshot(after.MapEpoch,mechas)));
-        EnsureWorldPosted(router,ToWorldUpdate(after,mechas));
+        EnsureQueued(router.QueueMechaEquipmentSnapshot(
+            after,ToEquipmentSnapshot(after.MapEpoch,equipment)));
+        if(request.Action is MechaCommandAction.Mount or
+           MechaCommandAction.Dismount or MechaCommandAction.Refresh)
+            EnsureWorldPosted(router,ToWorldUpdate(after,mechas));
     }
 
     public bool TryDetach(ConnectionBinding binding,WorldResultRouter router)
@@ -100,6 +124,12 @@ public sealed class MechaCoordinator
         return new(mapEpoch,mounted,mechas.Select(x=>new MechaSnapshotEntryWire(
             x.MechaUid,x.DefinitionId,x.Level,x.Experience)).ToArray());
     }
+
+    private static MechaEquipmentSnapshotWire ToEquipmentSnapshot(
+        long mapEpoch,IReadOnlyList<MechaEquippedItem> equipment) =>
+        new(mapEpoch,equipment.Select(x=>new MechaEquipmentEntryWire(
+            x.MechaUid,x.ItemUid,x.SlotId,x.ItemDefinitionId,x.SourceDropId,
+            x.EnhancementLevel,x.DurabilityRaw??-1)).ToArray());
 
     private static MechaWorldStateUpdate ToWorldUpdate(
         ConnectionBinding binding,IReadOnlyList<MechaInstanceRecord> mechas)
