@@ -533,6 +533,38 @@ public sealed partial class GatewayConnection
         }
     }
 
+    public GatewaySendStatus QueueFriendResult(
+        TrustedFriendCommand request,FriendResultWire result)
+    {
+        lock(_bindingGate)
+        {
+            if(_closed)return GatewaySendStatus.Closed;
+            var bound=_binding;
+            if(request.ActorId!=bound.ActorId||
+               request.ConnectionEpoch!=bound.ConnectionEpoch||
+               request.RequestMapEpoch!=bound.MapEpoch||
+               request.FriendSequence!=result.FriendSequence||
+               request.RequestMapEpoch!=result.MapEpoch||
+               request.Action!=result.Action)
+                return GatewaySendStatus.GenerationMismatch;
+            return _reliable.TryEnqueue(WireProtocol.EncodeFriendResult(result))
+                ?GatewaySendStatus.Enqueued:GatewaySendStatus.Backpressured;
+        }
+    }
+
+    public GatewaySendStatus QueueFriendSnapshot(
+        ConnectionBinding expected,FriendSnapshotWire snapshot)
+    {
+        lock(_bindingGate)
+        {
+            if(_closed)return GatewaySendStatus.Closed;
+            if(_binding!=expected||snapshot.ReceiverMapEpoch!=expected.MapEpoch)
+                return GatewaySendStatus.GenerationMismatch;
+            return _reliable.TryEnqueue(WireProtocol.EncodeFriendSnapshot(snapshot))
+                ?GatewaySendStatus.Enqueued:GatewaySendStatus.Backpressured;
+        }
+    }
+
     public GatewaySendStatus QueuePetResult(
         TrustedPetCommand request,PetResultWire result)
     {

@@ -9,6 +9,7 @@ using SGTest.Server.Npc;
 using SGTest.Server.Combat;
 using SGTest.Server.Chat;
 using SGTest.Server.Clan;
+using SGTest.Server.Friend;
 using System.Buffers.Binary;
 using System.Net;
 using System.Net.Sockets;
@@ -54,6 +55,7 @@ public sealed partial class IdentitySessionAuthorization
     private readonly PlayerShopCoordinator? _playerShops;
     private readonly PartyCoordinator? _parties;
     private readonly ClanCoordinator? _clans;
+    private readonly FriendCoordinator? _friends;
     private readonly PetCoordinator? _pets;
     private readonly AuthenticationRateLimiter? _rateLimiter;
     private readonly AccountRegistrationRateLimiter? _registrationRateLimiter;
@@ -80,6 +82,7 @@ public sealed partial class IdentitySessionAuthorization
                                      PlayerShopCoordinator? playerShops = null,
                                      PartyCoordinator? parties = null,
                                      ClanCoordinator? clans = null,
+                                     FriendCoordinator? friends = null,
                                      PetCoordinator? pets = null,
                                      AuthenticationRateLimiter? rateLimiter = null,
                                      AccountRegistrationRateLimiter? registrationRateLimiter = null,
@@ -115,6 +118,7 @@ public sealed partial class IdentitySessionAuthorization
         _playerShops=playerShops;
         _parties=parties;
         _clans=clans;
+        _friends=friends;
         _pets=pets;
         _rateLimiter=rateLimiter;
         _registrationRateLimiter=registrationRateLimiter;

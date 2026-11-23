@@ -103,6 +103,7 @@ public sealed partial class GatewayConnection
     private uint _lastChatSequence;
     private uint _lastPartySequence;
     private uint _lastClanSequence;
+    private uint _lastFriendSequence;
     private uint _lastPetSequence;
     private uint _lastPetAttackSequence;
     private readonly string? _displayName;

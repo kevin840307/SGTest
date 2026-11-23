@@ -5,6 +5,7 @@ using SGTest.Server.PlayerShop;
 using SGTest.Server.Party;
 using SGTest.Server.Pet;
 using SGTest.Server.Clan;
+using SGTest.Server.Friend;
 using SGTest.Server.Npc;
 using SGTest.Server.Monster;
 using SGTest.Server.Map;
@@ -292,6 +293,7 @@ internal static class AesGameHost
                     identity,world,tradeItemRules!,trades,combat);
             var parties=new PartyCoordinator();
             var clans=new ClanCoordinator(identity);
+            var friends=new FriendCoordinator(identity);
             var pets=new PetCoordinator(identity,petGrowth);
             CharacterExperienceSettlement? experience=experienceRules is null
                 ? null:new CharacterExperienceSettlement(
@@ -330,6 +332,7 @@ internal static class AesGameHost
                 playerShops: playerShops,
                 parties: parties,
                 clans: clans,
+                friends: friends,
                 pets: pets,
                 rateLimiter: authRateLimiter,
                 registrationRateLimiter: registrationRateLimiter,

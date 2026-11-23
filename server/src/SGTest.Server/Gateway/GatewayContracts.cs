@@ -128,6 +128,10 @@ public readonly record struct TrustedClanCommand(
     long ActorId,long ConnectionEpoch,long RequestMapEpoch,
     uint ClanSequence,ClanCommandAction Action,long ClanId,string Name = "",
     long TargetActorId = 0);
+public readonly record struct TrustedFriendCommand(
+    long ActorId,long ConnectionEpoch,long RequestMapEpoch,
+    uint FriendSequence,FriendCommandAction Action,long TargetActorId,
+    string TargetName = "");
 public readonly record struct TrustedPetCommand(
     long ActorId,long ConnectionEpoch,long RequestMapEpoch,
     uint PetSequence,PetCommandAction Action,long PetUid);

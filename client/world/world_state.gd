@@ -276,6 +276,16 @@ var last_clan_result_sequence := 0
 var last_clan_result_status := -1
 var last_clan_result := {}
 var stale_clan_frames := 0
+var friend_sequence := 0
+var pending_friend_sequence := 0
+var pending_friend_action := 0
+var pending_friend_target_actor_id := 0
+var pending_friend_target_name := ""
+var friends := {}
+var last_friend_result_sequence := 0
+var last_friend_result_status := -1
+var last_friend_result := {}
+var stale_friend_frames := 0
 var pet_sequence := 0
 var pending_pet_sequence := 0
 var pending_pet_action := 0
@@ -865,6 +875,46 @@ func _clear_pending_clan()->void:
 	pending_clan_target_actor_id=0
 
 
+func mark_friend_sent(
+		sequence:int,action:int,target_actor_id:int=0,target_name:String="")->bool:
+	if (
+		state!=STATE_IN_WORLD or not world_ready or resync_pending or
+		waiting_for_new_map or pending_world_ready_ack_epoch!=0 or
+		last_world_ready_ack_epoch!=map_epoch or pending_friend_sequence!=0 or
+		sequence<=friend_sequence or sequence>0xffffffff or action<1 or action>3 or
+		target_actor_id<0
+	):
+		return false
+	var clean:=target_name.strip_edges()
+	if clean!=target_name or clean.to_utf8_buffer().size()>WireCodec.PLAYER_IDENTITY_MAX_NAME_BYTES:
+		return false
+	match action:
+		1:
+			if (target_actor_id>0)==(not clean.is_empty()) or target_actor_id==actor_id:
+				return false
+		2:
+			if target_actor_id<=0 or target_actor_id==actor_id or not clean.is_empty() or not friends.has(target_actor_id):
+				return false
+		3:
+			if target_actor_id!=0 or not clean.is_empty():
+				return false
+		_:
+			return false
+	friend_sequence=sequence
+	pending_friend_sequence=sequence
+	pending_friend_action=action
+	pending_friend_target_actor_id=target_actor_id
+	pending_friend_target_name=clean
+	return true
+
+
+func _clear_pending_friend()->void:
+	pending_friend_sequence=0
+	pending_friend_action=0
+	pending_friend_target_actor_id=0
+	pending_friend_target_name=""
+
+
 func mark_pet_sent(sequence:int,action:int,pet_uid:int)->bool:
 	if (
 		state!=STATE_IN_WORLD or not world_ready or resync_pending or
@@ -1108,6 +1158,10 @@ func apply_frame(frame: PackedByteArray) -> bool:
 			return _apply_clan_result(frame)
 		WireCodec.OPCODE_CLAN_SNAPSHOT:
 			return _apply_clan_snapshot(frame)
+		WireCodec.OPCODE_FRIEND_RESULT:
+			return _apply_friend_result(frame)
+		WireCodec.OPCODE_FRIEND_SNAPSHOT:
+			return _apply_friend_snapshot(frame)
 		WireCodec.OPCODE_PET_RESULT:
 			return _apply_pet_result(frame)
 		WireCodec.OPCODE_PET_SNAPSHOT:
@@ -1405,6 +1459,16 @@ func snapshot() -> Dictionary:
 		"last_clan_result_status": last_clan_result_status,
 		"last_clan_result": last_clan_result.duplicate(true),
 		"stale_clan_frames": stale_clan_frames,
+		"friend_sequence": friend_sequence,
+		"pending_friend_sequence": pending_friend_sequence,
+		"pending_friend_action": pending_friend_action,
+		"pending_friend_target_actor_id": pending_friend_target_actor_id,
+		"pending_friend_target_name": pending_friend_target_name,
+		"friends": friends.duplicate(true),
+		"last_friend_result_sequence": last_friend_result_sequence,
+		"last_friend_result_status": last_friend_result_status,
+		"last_friend_result": last_friend_result.duplicate(true),
+		"stale_friend_frames": stale_friend_frames,
 		"pet_sequence": pet_sequence,
 		"pending_pet_sequence": pending_pet_sequence,
 		"pending_pet_action": pending_pet_action,
@@ -4153,6 +4217,64 @@ func _apply_clan_snapshot(frame:PackedByteArray)->bool:
 	clan_name=str(value.name)
 	clan_announcement=str(value.get("announcement",""))
 	clan_members=next_members
+	return true
+
+
+func _apply_friend_result(frame:PackedByteArray)->bool:
+	if state!=STATE_IN_WORLD:
+		return fail("friend_result_out_of_state")
+	var value:=WireCodec.decode_friend_result(frame)
+	if value.is_empty():
+		return fail("invalid_friend_result")
+	var epoch:=int(value.map_epoch)
+	var sequence:=int(value.friend_sequence)
+	if epoch<map_epoch:
+		stale_friend_frames+=1
+		return true
+	if epoch>map_epoch:
+		return fail("future_friend_result")
+	if sequence<=last_friend_result_sequence:
+		stale_friend_frames+=1
+		return true
+	if (
+		sequence>friend_sequence or sequence!=pending_friend_sequence or
+		int(value.action)!=pending_friend_action
+	):
+		return fail("friend_result_without_matching_request")
+	var status:=int(value.status)
+	if status<0 or status>5:
+		return fail("friend_result_unknown_status")
+	last_friend_result_sequence=sequence
+	last_friend_result_status=status
+	last_friend_result=value.duplicate(true)
+	if not pending_friend_target_name.is_empty():
+		last_friend_result["target_name"]=pending_friend_target_name
+	if pending_friend_target_actor_id>0:
+		last_friend_result["requested_target_actor_id"]=pending_friend_target_actor_id
+	_clear_pending_friend()
+	return true
+
+
+func _apply_friend_snapshot(frame:PackedByteArray)->bool:
+	if state!=STATE_IN_WORLD:
+		return fail("friend_snapshot_out_of_state")
+	var value:=WireCodec.decode_friend_snapshot(frame)
+	if value.is_empty():
+		return fail("invalid_friend_snapshot")
+	var epoch:=int(value.receiver_map_epoch)
+	if epoch<map_epoch:
+		stale_friend_frames+=1
+		return true
+	if epoch>map_epoch:
+		return fail("future_friend_snapshot")
+	var next_friends:={}
+	for raw in value.friends:
+		var entry:Dictionary=raw
+		var friend_actor:=int(entry.actor_id)
+		if friend_actor<=0 or friend_actor==actor_id or next_friends.has(friend_actor):
+			return fail("invalid_friend_snapshot_entry")
+		next_friends[friend_actor]=entry.duplicate(true)
+	friends=next_friends
 	return true
 
 

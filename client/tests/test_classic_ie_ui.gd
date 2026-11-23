@@ -138,6 +138,11 @@ func _run() -> void:
 			43:{"name":"附近玩家","x":120.0,"y":205.0},
 			44:{"name":"另一玩家","x":140.0,"y":210.0},
 		},
+		"friends":{
+			43:{"actor_id":43,"name":"附近玩家","online":true},
+			44:{"actor_id":44,"name":"離線好友","online":false},
+		},
+		"pending_friend_sequence":0,
 		"chat_messages":[
 			{"channel":0,"sender_actor_id":43,"sender_name":"附近玩家","message":"你好"},
 			{"channel":3,"sender_actor_id":44,"sender_name":"隊友","message":"出發吧"},
@@ -175,8 +180,13 @@ func _run() -> void:
 		return
 	if not directory.is_empty():
 		await _capture(directory.path_join("classic_world.png"))
-	if world._chat_history.text.find("你好") < 0 or world._friend_rows.get_child_count() != 2:
-		_fail("classic persistent chat/visible-player panels did not bind live snapshot")
+	if (
+		world._chat_history.text.find("你好") < 0 or
+		world._friend_rows.get_child_count() != 2 or
+		not str(world._friend_rows.get_child(0).text).begins_with("● ") or
+		not str(world._friend_rows.get_child(1).text).begins_with("○ ")
+	):
+		_fail("classic persistent chat/friend panels did not bind authoritative friend presence")
 		return
 	world.menu.get_node("Menu2").pressed.emit()
 	if (

@@ -100,6 +100,12 @@ static class Checks
                 Console.WriteLine($"CLAN_CHECKS PASS total={_passes}");
                 return 0;
             }
+            if (args is ["--friend-only"])
+            {
+                FriendChecks.Verify();
+                Console.WriteLine($"FRIEND_CHECKS PASS total={_passes}");
+                return 0;
+            }
             if (args is ["--pet-only"])
             {
                 PetChecks.Verify(root);
@@ -339,6 +345,7 @@ static class Checks
             GmOnlineChecks.Verify(root);
             PartyChecks.Verify(root);
             ClanChecks.Verify();
+            FriendChecks.Verify();
             PetChecks.Verify(root);
             CharacterExperienceChecks.Verify(root);
             TradeChecks.Verify(root);

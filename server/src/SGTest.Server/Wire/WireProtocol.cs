@@ -59,6 +59,11 @@ public static partial class WireProtocol
     public const int ClanMemberHeaderBytes = 8 + 1 + 2;
     public const int ClanMaximumMembers = 100;
     public const int ClanSnapshotMaximumFrameBytes = ClanSnapshotHeaderBytes + ClanMaxNameBytes + ClanMaxAnnouncementBytes + ClanMaximumMembers * (ClanMemberHeaderBytes + PlayerIdentityMaxNameBytes);
+    public const int FriendCommandHeaderBytes = HeaderBytes + 8 + 4 + 1 + 8 + 2;
+    public const int FriendCommandMaximumFrameBytes = FriendCommandHeaderBytes + PlayerIdentityMaxNameBytes;
+    public const int FriendResultFrameBytes = HeaderBytes + 8 + 4 + 1 + 1 + 8;
+    public const int FriendSnapshotHeaderBytes = HeaderBytes + 8 + 2;
+    public const int FriendEntryHeaderBytes = 8 + 1 + 2;
     public const int LegacyCharacterAppearanceBytes = 4;
     public const int BodyLegCharacterAppearanceBytes = 6;
     public const int CharacterAppearanceBytes = 7;
@@ -668,6 +673,9 @@ public static partial class WireProtocol
             117 => WireOpcode.PetAttack,
             118 => WireOpcode.PetAttackResult,
             119 => WireOpcode.PetAttackVisual,
+            120 => WireOpcode.FriendCommand,
+            121 => WireOpcode.FriendResult,
+            122 => WireOpcode.FriendSnapshot,
             _ => 0
         };
         if (opcode == 0) return false;
@@ -696,6 +704,9 @@ public static partial class WireProtocol
             WireOpcode.ClanCommand => advertised >= ClanCommandHeaderBytes && advertised <= ClanCommandMaximumFrameBytes,
             WireOpcode.ClanResult => advertised == ClanResultFrameBytes,
             WireOpcode.ClanSnapshot => advertised >= ClanSnapshotHeaderBytes && advertised <= ClanSnapshotMaximumFrameBytes,
+            WireOpcode.FriendCommand => advertised >= FriendCommandHeaderBytes && advertised <= FriendCommandMaximumFrameBytes,
+            WireOpcode.FriendResult => advertised == FriendResultFrameBytes,
+            WireOpcode.FriendSnapshot => advertised >= FriendSnapshotHeaderBytes && advertised <= MaximumFrameBytes,
             WireOpcode.PetCommand => advertised == PetCommandFrameBytes,
             WireOpcode.PetResult => advertised == PetResultFrameBytes,
             WireOpcode.PetSnapshot => advertised >= PetSnapshotHeaderBytes &&

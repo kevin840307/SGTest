@@ -109,6 +109,24 @@ public sealed partial class IdentitySessionAuthorization
                     attached=false;
                 }
             }
+            if(attached&&_friends is not null)
+            {
+                try
+                {
+                    await _friends.AttachAsync(binding,router).ConfigureAwait(false);
+                }
+                catch
+                {
+                    lock(bindingGate)
+                    {
+                        if(ReferenceEquals(boundConnection,connection))
+                            boundConnection=null;
+                    }
+                    router.TryDetach(connection);
+                    _trades?.UnregisterGameplayGate(binding,gameplayGate);
+                    attached=false;
+                }
+            }
             if(attached&&_pets is not null)
             {
                 try
@@ -170,6 +188,8 @@ public sealed partial class IdentitySessionAuthorization
             // route so the peer can receive one authoritative terminal event.
             _trades?.Disconnect(binding,router);
             _parties?.Disconnect(binding,router);
+            if(_friends is not null)
+                await _friends.DetachAsync(binding,router).ConfigureAwait(false);
             // Presentation cleanup is best-effort during shutdown/backpressure;
             // World Leave still hides the pet and a later attach heals durable state.
             _pets?.TryDetach(binding,router);
@@ -267,6 +287,7 @@ public sealed partial class IdentitySessionAuthorization
                 handleChat:request=>ChatRouting.RouteAsync(request,router,_parties),
                 handleParty: _parties is null ? null : request => _parties.HandleAsync(request, router),
                 handleClan: _clans is null ? null : request => _clans.HandleAsync(request, router),
+                handleFriend: _friends is null ? null : request => _friends.HandleAsync(request, router),
                 handlePet: _pets is null ? null : request => _pets.HandleAsync(request, router))
                 .ConfigureAwait(false);
         }
@@ -295,6 +316,8 @@ public sealed partial class IdentitySessionAuthorization
                         .ConfigureAwait(false);
                 _trades?.Disconnect(binding,router);
                 _parties?.Disconnect(binding,router);
+                if(_friends is not null)
+                    await _friends.DetachAsync(binding,router).ConfigureAwait(false);
                 router.TryDetach(abandoned);
                 await _world.TrustedDisconnectAsync(
                     binding.ActorId, binding.ConnectionEpoch, binding.MapEpoch)

@@ -83,7 +83,7 @@ Client 模組讀取快照並由 Session 送出意圖。Server Gateway 管身分�
 
 **雙圖轉換和 MapEpoch/WorldReady 是 MVP 必須完成的功能**：Map15↔Map13 雙向傳點、AOI 舊實體清除、快照重建、資產載入／卸載、位置檢查、同時換圖／斷線恢復，至少兩個真 Client E2E。資料不足時擴充單一 Converter 並記錄阻礙，不能用偽 Map 代替已完成真圖。
 
-每一張圖上能使用的主要原版系統仍需完整 Server Authority、正常／錯誤／競態測試；好友暫緩。MVP 總 Gate：Map13 同圖 20 玩家／300 Enemy／500 Drop，Map15 多人城市互動，兩圖同時活躍／往返傳點、AFK／多開和 CPU/RSS/VRAM／Network／P95/P99。**MVP 後**再擴其餘地圖／全種類與 100/1000/5000 正式大負載，不把兩張圖視為全部原版覆蓋。
+每一張圖上能使用的主要原版系統仍需完整 Server Authority、正常／錯誤／競態測試；好友已採 schema v35 canonical bilateral relation + live authenticated binding presence，HK 精確社交規則仍待驗證。MVP 總 Gate：Map13 同圖 20 玩家／300 Enemy／500 Drop，Map15 多人城市互動，兩圖同時活躍／往返傳點、AFK／多開和 CPU/RSS/VRAM／Network／P95/P99。**MVP 後**再擴其餘地圖／全種類與 100/1000/5000 正式大負載，不把兩張圖視為全部原版覆蓋。
 
 ## 多方案比較 Gate
 

@@ -51,6 +51,7 @@ public sealed partial class GatewayConnection
                                               Func<TrustedChatCommand, bool>? postChat = null,
                                               Func<TrustedPartyCommand, bool>? postParty = null,
                                               Func<TrustedClanCommand, bool>? postClan = null,
+                                              Func<TrustedFriendCommand, bool>? postFriend = null,
                                               Func<TrustedPetCommand, bool>? postPet = null)
     {
         ArgumentNullException.ThrowIfNull(postMove);
@@ -64,7 +65,7 @@ public sealed partial class GatewayConnection
             return _parser.Feed(bytes,
                 frame => HandleClientFrame(
                     frame, postMove, postNpc, postResync, postAttack, postPetAttack, postRespawn,
-                    postPickup, postRecovery, postDiscard, postSkill, postShop, postStorage, postEquipment, postBank, postRepair, postEnhancement, postTrade, postQuest, postPvp, postPvpAttack, postPvpSkill, postGmPvpName, postPlayerShop, postChat, postParty, postClan, postPet),
+                    postPickup, postRecovery, postDiscard, postSkill, postShop, postStorage, postEquipment, postBank, postRepair, postEnhancement, postTrade, postQuest, postPvp, postPvpAttack, postPvpSkill, postGmPvpName, postPlayerShop, postChat, postParty, postClan, postFriend, postPet),
                 out commandsAccepted);
         }
     }
@@ -96,6 +97,7 @@ public sealed partial class GatewayConnection
                                               Func<TrustedChatCommand, bool>? postChat = null,
                                               Func<TrustedPartyCommand, bool>? postParty = null,
                                               Func<TrustedClanCommand, bool>? postClan = null,
+                                              Func<TrustedFriendCommand, bool>? postFriend = null,
                                               Func<TrustedPetCommand, bool>? postPet = null)
     {
         ArgumentNullException.ThrowIfNull(postMove);
@@ -109,7 +111,7 @@ public sealed partial class GatewayConnection
             return _parser.Resume(
                 frame => HandleClientFrame(
                     frame, postMove, postNpc, postResync, postAttack, postPetAttack, postRespawn,
-                    postPickup, postRecovery, postDiscard, postSkill, postShop, postStorage, postEquipment, postBank, postRepair, postEnhancement, postTrade, postQuest, postPvp, postPvpAttack, postPvpSkill, postGmPvpName, postPlayerShop, postChat, postParty, postClan, postPet),
+                    postPickup, postRecovery, postDiscard, postSkill, postShop, postStorage, postEquipment, postBank, postRepair, postEnhancement, postTrade, postQuest, postPvp, postPvpAttack, postPvpSkill, postGmPvpName, postPlayerShop, postChat, postParty, postClan, postFriend, postPet),
                 out commandsAccepted);
         }
     }
@@ -142,6 +144,7 @@ public sealed partial class GatewayConnection
         Func<TrustedChatCommand, bool>? postChat,
         Func<TrustedPartyCommand, bool>? postParty,
         Func<TrustedClanCommand, bool>? postClan,
+        Func<TrustedFriendCommand, bool>? postFriend,
         Func<TrustedPetCommand, bool>? postPet)
     {
         if (!WireProtocol.TryReadHeader(frame, out var header))
@@ -498,6 +501,23 @@ public sealed partial class GatewayConnection
             if(!postClan(request))
                 return WireFrameDisposition.Backpressured;
             _lastClanSequence=clan.ClanSequence;
+            return WireFrameDisposition.Accepted;
+        }
+
+        if(header.Opcode==WireOpcode.FriendCommand &&
+            postFriend is not null &&
+            WireProtocol.TryDecodeFriendCommand(frame,out var friend))
+        {
+            if(!GameplayReady(bound)||friend.MapEpoch!=bound.MapEpoch||
+               friend.FriendSequence<=_lastFriendSequence)
+                return WireFrameDisposition.ProtocolViolation;
+            var request=new TrustedFriendCommand(
+                bound.ActorId,bound.ConnectionEpoch,friend.MapEpoch,
+                friend.FriendSequence,friend.Action,friend.TargetActorId,
+                friend.TargetName);
+            if(!postFriend(request))
+                return WireFrameDisposition.Backpressured;
+            _lastFriendSequence=friend.FriendSequence;
             return WireFrameDisposition.Accepted;
         }
 

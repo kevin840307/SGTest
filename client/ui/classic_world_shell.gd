@@ -61,6 +61,8 @@ var _quest_choices:=VBoxContainer.new()
 var _chat_history:=TextEdit.new()
 var _chat_input:=LineEdit.new()
 var _friend_rows:=VBoxContainer.new()
+var _friend_name_input:=LineEdit.new()
+var _friend_action:Button
 var _player_shop_rows:=VBoxContainer.new()
 var _player_shop_price:=SpinBox.new()
 var _player_shop_buy:=Button.new()
@@ -322,11 +324,28 @@ func _build_hud()->void:
 	friend_panel.mouse_filter=Control.MOUSE_FILTER_STOP
 	hud.add_child(friend_panel)
 	_background(friend_panel,"BG_RIGHTBOX",friend_panel.size)
+	_friend_name_input.name="FriendNameInput"
+	_friend_name_input.position=Vector2(3,18)
+	_friend_name_input.size=Vector2(57,16)
+	_friend_name_input.placeholder_text="好友名稱"
+	_friend_name_input.max_length=32
+	_transparent_line_edit(_friend_name_input)
+	_friend_name_input.add_theme_font_size_override("font_size",9)
+	_friend_name_input.text_changed.connect(func(_value):_update_friend_action())
+	_friend_name_input.text_submitted.connect(func(_value):_friend_action_pressed())
+	friend_panel.add_child(_friend_name_input)
+	_friend_action=_hit(friend_panel,"FriendAction",Rect2(61,18,21,16),_friend_action_pressed,"新增好友")
+	_friend_action.text="+"
+	_friend_action.add_theme_font_size_override("font_size",9)
+	var friend_scroll:=ScrollContainer.new()
+	friend_scroll.name="FriendScroll"
+	friend_scroll.position=Vector2(3,35)
+	friend_scroll.size=Vector2(80,60)
+	friend_panel.add_child(friend_scroll)
 	_friend_rows.name="FriendRows"
-	_friend_rows.position=Vector2(3,18)
-	_friend_rows.size=Vector2(80,77)
+	_friend_rows.custom_minimum_size.x=76
 	_friend_rows.add_theme_constant_override("separation",0)
-	friend_panel.add_child(_friend_rows)
+	friend_scroll.add_child(_friend_rows)
 
 	menu.name="MainCommandBar"
 	menu.position=Vector2(615,489)
@@ -853,20 +872,61 @@ func _refresh_chat_and_friends()->void:
 	if not rows.is_empty():
 		_chat_history.set_v_scroll(_chat_history.get_line_count())
 	_clear_rows(_friend_rows)
-	var entities:Dictionary=_stats.get("entities",{})
-	var ids:Array=entities.keys();ids.sort()
-	var shown:=0
-	for raw_actor in ids:
+	var friends:Dictionary=_stats.get("friends",{})
+	var ordered:Array=friends.keys()
+	ordered.sort_custom(func(a,b):
+		var left:Dictionary=friends[a]
+		var right:Dictionary=friends[b]
+		var lo:=bool(left.get("online",false))
+		var ro:=bool(right.get("online",false))
+		if lo!=ro:return lo and not ro
+		return str(left.get("name",""))<str(right.get("name","")))
+	for raw_actor in ordered:
 		var actor_id:=int(raw_actor)
-		if actor_id<=0 or actor_id==int(_stats.get("actor_id",0)):
-			continue
-		var entity:Dictionary=entities[raw_actor]
-		_classic_row(_friend_rows,_entity_name(actor_id,entity),16.0,func():
-			_chat_input.placeholder_text="私訊功能請由聊天面板指定玩家；此列為目前可見玩家")
-		shown+=1
-		if shown>=4:break
-	if shown==0:
-		_classic_row(_friend_rows,"目前沒有可見玩家",16.0)
+		var entry:Dictionary=friends[raw_actor]
+		var friend_name:=str(entry.get("name","玩家 %d"%actor_id))
+		var prefix:="● " if bool(entry.get("online",false)) else "○ "
+		_classic_row(_friend_rows,prefix+friend_name,16.0,_select_friend.bind(friend_name))
+	if ordered.is_empty():
+		_classic_row(_friend_rows,"尚無好友",16.0)
+	_update_friend_action()
+
+
+func _friend_actor_for_name(target_name:String)->int:
+	var clean:=target_name.strip_edges()
+	if clean.is_empty():return 0
+	var friends:Dictionary=_stats.get("friends",{})
+	for raw_actor in friends:
+		var entry:Dictionary=friends[raw_actor]
+		if str(entry.get("name",""))==clean:
+			return int(raw_actor)
+	return 0
+
+
+func _select_friend(friend_name:String)->void:
+	_friend_name_input.text=friend_name
+	_friend_name_input.caret_column=friend_name.length()
+	_update_friend_action()
+
+
+func _update_friend_action()->void:
+	var clean:=_friend_name_input.text.strip_edges()
+	var actor:=_friend_actor_for_name(clean)
+	_friend_action.text="-" if actor>0 else "+"
+	_friend_action.tooltip_text="移除好友" if actor>0 else "新增好友"
+	_friend_action.disabled=clean.is_empty() or int(_stats.get("pending_friend_sequence",0))!=0
+
+
+func _friend_action_pressed()->void:
+	if _panel==null or _panel.session==null:return
+	var clean:=_friend_name_input.text.strip_edges()
+	if clean.is_empty():return
+	var actor:=_friend_actor_for_name(clean)
+	var queued:bool=_panel.session.friend_remove(actor) if actor>0 else _panel.session.friend_add_name(clean)
+	if queued:
+		_friend_name_input.clear()
+		_update_friend_action()
+
 
 func _open_player_shop_item(uid:int)->void:
 	if _panel!=null and _panel.session!=null:

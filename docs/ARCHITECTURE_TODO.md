@@ -45,6 +45,6 @@
 | AFK／失焦 | [ ] 在 `client/app/main.gd` 和 `client/world/world_view.gd` 接生命週期。共用策略成形後評估 `client/afk/afk_presentation.gd.todo` | 收包不中斷、資產釋放與恢復、同機多開量測 |
 | 全量資料 | [ ] 擴充 `tools/asset_converter/content/` 的現有入口及契約測試 | Converter 可重跑、缺料明確報錯、發行包內容一致 |
 | 發行 | [ ] 擴充現有 Host、Client、`runtime_pack.py` 與 CI 入口 | 雙圖 MVP、全量地圖、多開、壓力與跨平台發行依 TEST_PLAN |
-| 好友 | 暫緩 | 依目前範圍保留在規劃 |
+| 好友 | IN PROGRESS | schema v35 bilateral persistence、authenticated add/remove/refresh、online/offline/relog presence 與 Classic 真好友清單已完成；HK invite/accept、上限、分類/ignore、Original UI A/B 待驗 |
 
 確立資料所有權後再新增檔案。常一起修改的規則放在一處；實際出現多組責任才加子目錄。Server 繼續由既有資料交易處理跨玩法原子性，Client 顯示快照並送操作意圖。

@@ -129,7 +129,10 @@ public enum WireOpcode : ushort
     PetEntityDelta = 116,
     PetAttack = 117,
     PetAttackResult = 118,
-    PetAttackVisual = 119
+    PetAttackVisual = 119,
+    FriendCommand = 120,
+    FriendResult = 121,
+    FriendSnapshot = 122
 }
 
 public enum ChatChannel : byte { Nearby = 0, Faction = 1, Warband = 2, Party = 3, Whisper = 4 }
@@ -148,6 +151,12 @@ public enum ClanResultStatus : byte
     Success=0,AlreadyInClan=1,NotInClan=2,ClanNotFound=3,
     NameTaken=4,InvalidName=5,ClanFull=6,Conflict=7,
     NotLeader=8,TargetNotMember=9,CannotTargetSelf=10,InvalidAnnouncement=11
+}
+public enum FriendCommandAction : byte { Add=1, Remove=2, Refresh=3 }
+public enum FriendResultStatus : byte
+{
+    Success=0,TargetNotFound=1,CannotTargetSelf=2,
+    AlreadyFriends=3,NotFriends=4,Conflict=5
 }
 public enum PetCommandAction : byte { Summon=1, Recall=2, Refresh=3 }
 public enum PetResultStatus : byte
@@ -660,6 +669,16 @@ public readonly record struct ClanMemberWire(long CharacterId,byte Role,string N
 public sealed record ClanSnapshotWire(
     long ReceiverMapEpoch,long ClanId,uint Revision,long LeaderCharacterId,string Name,
     IReadOnlyList<ClanMemberWire> Members,string Announcement="");
+
+public readonly record struct FriendCommandWire(
+    long MapEpoch,uint FriendSequence,FriendCommandAction Action,
+    long TargetActorId,string TargetName="");
+public readonly record struct FriendResultWire(
+    long MapEpoch,uint FriendSequence,FriendCommandAction Action,
+    FriendResultStatus Status,long TargetActorId);
+public readonly record struct FriendEntryWire(long CharacterId,string Name,bool IsOnline);
+public sealed record FriendSnapshotWire(
+    long ReceiverMapEpoch,IReadOnlyList<FriendEntryWire> Friends);
 
 public readonly record struct PetCommandWire(
     long MapEpoch,uint PetSequence,PetCommandAction Action,long PetUid);

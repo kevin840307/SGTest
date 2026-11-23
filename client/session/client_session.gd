@@ -476,6 +476,26 @@ func clan_transfer_leadership(target_actor_id:int)->bool:
 	return _queue_clan_intent(7,0,"",current,target_actor_id)
 
 
+func friend_add_name(target_name:String)->bool:
+	var current:=snapshot()
+	return _queue_friend_intent(1,0,target_name,current)
+
+
+func friend_add_actor(target_actor_id:int)->bool:
+	var current:=snapshot()
+	return _queue_friend_intent(1,target_actor_id,"",current)
+
+
+func friend_remove(target_actor_id:int)->bool:
+	var current:=snapshot()
+	return _queue_friend_intent(2,target_actor_id,"",current)
+
+
+func friend_refresh()->bool:
+	var current:=snapshot()
+	return _queue_friend_intent(3,0,"",current)
+
+
 func pet_summon(pet_uid:int)->bool:
 	var current:=snapshot()
 	return _queue_pet_intent(1,pet_uid,current)
@@ -564,6 +584,43 @@ func _queue_clan_intent(action:int,request_clan_id:int,name:String,current:Dicti
 	return _queue_intent({
 		"type":"clan","action":action,"clan_id":request_clan_id,"name":clean,
 		"target_actor_id":target_actor_id,
+		"actor_id":actor,
+		"map_epoch":int(current.get("map_epoch",0))
+	})
+
+
+func _queue_friend_intent(
+		action:int,target_actor_id:int,target_name:String,current:Dictionary)->bool:
+	if (
+		int(current.get("state",-1))!=WorldState.STATE_IN_WORLD or
+		not bool(current.get("world_ready",false)) or
+		bool(current.get("resync_pending",false)) or
+		bool(current.get("waiting_for_new_map",false)) or
+		int(current.get("pending_world_ready_ack_epoch",0))!=0 or
+		int(current.get("last_world_ready_ack_epoch",0))!=int(current.get("map_epoch",0)) or
+		int(current.get("pending_friend_sequence",0))!=0
+	):
+		return false
+	var clean:=target_name.strip_edges()
+	if clean!=target_name or clean.to_utf8_buffer().size()>WireCodec.PLAYER_IDENTITY_MAX_NAME_BYTES:
+		return false
+	var actor:=int(current.get("actor_id",0))
+	var friends:Dictionary=current.get("friends",{})
+	match action:
+		1:
+			if (target_actor_id>0)==(not clean.is_empty()) or target_actor_id==actor:
+				return false
+		2:
+			if target_actor_id<=0 or target_actor_id==actor or not clean.is_empty() or not friends.has(target_actor_id):
+				return false
+		3:
+			if target_actor_id!=0 or not clean.is_empty():
+				return false
+		_:
+			return false
+	return _queue_intent({
+		"type":"friend","action":action,
+		"target_actor_id":target_actor_id,"target_name":clean,
 		"actor_id":actor,
 		"map_epoch":int(current.get("map_epoch",0))
 	})
@@ -1343,6 +1400,10 @@ func _process_first_intent() -> void:
 		_process_clan_intent(intent)
 
 
+	elif kind=="friend":
+		_process_friend_intent(intent)
+
+
 	elif kind=="pet":
 		_process_pet_intent(intent)
 
@@ -1670,6 +1731,41 @@ func _process_clan_intent(intent: Dictionary) -> void:
 	if (
 		_transport.send_frame(frame) and
 		_world.mark_clan_sent(sequence,action,request_clan_id,clan_name,target_actor_id)
+	):
+		_pop_intent()
+		_publish()
+
+
+func _process_friend_intent(intent:Dictionary)->void:
+	var current:Dictionary=_world.snapshot()
+	if (
+		int(intent.get("actor_id",0))!=int(current.get("actor_id",0)) or
+		int(intent.get("map_epoch",0))!=int(current.get("map_epoch",0))
+	):
+		_pop_intent()
+		return
+	if (
+		int(current.get("state",-1))!=WorldState.STATE_IN_WORLD or
+		not bool(current.get("world_ready",false)) or
+		bool(current.get("resync_pending",false)) or
+		bool(current.get("waiting_for_new_map",false)) or
+		int(current.get("pending_world_ready_ack_epoch",0))!=0 or
+		int(current.get("last_world_ready_ack_epoch",0))!=int(current.get("map_epoch",0)) or
+		int(current.get("pending_friend_sequence",0))!=0
+	):
+		return
+	var action:=int(intent.get("action",0))
+	var target_actor_id:=int(intent.get("target_actor_id",0))
+	var target_name:=str(intent.get("target_name",""))
+	var sequence:=int(current.get("friend_sequence",0))+1
+	var frame:=WireCodec.encode_friend_command(
+		int(current.get("map_epoch",0)),sequence,action,target_actor_id,target_name)
+	if frame.is_empty():
+		_pop_intent()
+		return
+	if (
+		_transport.send_frame(frame) and
+		_world.mark_friend_sent(sequence,action,target_actor_id,target_name)
 	):
 		_pop_intent()
 		_publish()

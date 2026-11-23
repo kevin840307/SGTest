@@ -877,6 +877,17 @@ ADD COLUMN evolution_id INTEGER NOT NULL DEFAULT 0 CHECK(evolution_id BETWEEN 0 
     created_unix_ms INTEGER NOT NULL,
     PRIMARY KEY(character_id,grant_key)
 );",tx);
+            // Schema v35: one durable row per bilateral friendship. Canonical
+            // low/high ordering makes asymmetric friend state impossible.
+            Execute(connection,@"CREATE TABLE IF NOT EXISTS character_friendships (
+    character_low_id INTEGER NOT NULL REFERENCES characters(character_id) ON DELETE CASCADE,
+    character_high_id INTEGER NOT NULL REFERENCES characters(character_id) ON DELETE CASCADE,
+    created_unix_ms INTEGER NOT NULL,
+    PRIMARY KEY(character_low_id,character_high_id),
+    CHECK(character_low_id < character_high_id)
+);",tx);
+            Execute(connection,@"CREATE INDEX IF NOT EXISTS ix_character_friendships_high
+ON character_friendships(character_high_id,character_low_id);",tx);
             if (schemaVersion < SchemaVersion)
                 Execute(connection,
                     $"UPDATE schema_version SET version={SchemaVersion};", tx);
