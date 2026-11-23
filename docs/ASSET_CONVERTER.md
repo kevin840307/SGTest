@@ -16,6 +16,18 @@ python -m unittest discover -s tools/tests -p "test_*.py" -q
 
 Converter **不應依賴**可執行的 client/project.godot 或 server/*.csproj。保留的 client/assets/ 和 server/content/ 僅供輸出。
 
+### 角色 EXP reward manifest（Old Server audited source）
+
+`character-experience-rules` 只讀 Old Server Dat，依指定地圖的 `Map/MapXX/Enemy.dat` 收斂實際 Enemy ID，再重現原版 `LoadNewCSVData` → `FindAttrTbl/FindAttr` → `LoadEnAttData` → `AddAttr` 的 RExp 鏈。CONFIRMED schema：`Enemy_Data.csv` col[3] 是 WORD[5] level/FindAttr key、col[4] 是 BYTE[0x23] `EN_AttXX` selector，`EN_AttXX.csv` col[7] 最終成為 `CDEnemyWORDStr[12]=RExp`。輸出符合 Server `--experience-rules` 所需 `verified_character_experience_reward_rules/v1`；私有原始 CSV/Enemy.dat 不進 Git，manifest 可留在 ignored `local-assets`。
+
+~~~powershell
+python tools/asset_converter/cli.py character-experience-rules `
+  --server-dat "<Old Server Dat>" --map 13 --map 15 `
+  --output local-assets/asset_converter/combat/character_experience_reward_rules.json
+~~~
+
+規則為 fail-closed：指定 Enemy 缺 definition、attr table 缺列、同 key 卻有不同 RExp 都拒絕；0xffff level key 會依 Old `FindAttr` miss / `AddAttr` false 記錄 `excluded_no_attribute_reward`，不得降成 Lv255 或猜測 reward。2026-11-23 真 Old Map13/15 驗證：Map13 78 spawn／9 unique Enemy 產出 9 個 exact rules；Map15 4 spawn 的 Enemy245 全數命中 0xffff no-reward audit。實作 commit `e27ee9a`，新增 synthetic source/manifest tests 後 Python converter 全套 157/157 PASS。
+
 ## MVP Map15 + Map13 定向素材與資料轉換
 
 先確認原版 Map15／Map13 的 Map、Scenery、Blocking、原始座標、Server population/NPC、傳點；用唯一 Converter 產出兩圖必要資產及 Server content，不預先全量解包所有 Runtime 素材。Map15 先供應城市 NPC、Item/Equipment、UI、Player；Map13 供應 Enemy 多種體型與各 Action／方向、地上 Drop、技能與世界地物；Pet/Mecha 依玩法逐步補充。**素材缺失先擴充同一 Converter／metadata，不新增第二套 Map15 或 Map13 腳本。**
