@@ -173,6 +173,17 @@ public sealed class WorldAoi
             pet.OwnerMapEpoch==mapEpoch&&pet.PetUid==petUid;
     }
 
+    public bool TryGetActivePet(
+        long ownerActorId,long connectionEpoch,long mapEpoch,
+        out PetWorldPresence pet)
+    {
+        pet=default;
+        return ownerActorId>0&&connectionEpoch>0&&mapEpoch>0&&
+            _petsByOwner.TryGetValue(ownerActorId,out pet)&&
+            pet.OwnerConnectionEpoch==connectionEpoch&&
+            pet.OwnerMapEpoch==mapEpoch&&pet.PetUid>0;
+    }
+
     public int PendingEvents(long actorId) =>
         _observers.TryGetValue(actorId, out var observer) ? observer.Pending.Count : 0;
 

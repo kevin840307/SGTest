@@ -106,6 +106,12 @@ static class Checks
                 Console.WriteLine($"PET_CHECKS PASS total={_passes}");
                 return 0;
             }
+            if(args is ["--experience-only"])
+            {
+                CharacterExperienceChecks.Verify(root);
+                Console.WriteLine($"CHARACTER_EXPERIENCE_CHECKS PASS total={_passes}");
+                return 0;
+            }
             if (args is ["--identity-admin-only", "--aes"])
             {
                 IdentityAdminChecks.Verify(root, tlsOnly: true);
@@ -334,6 +340,7 @@ static class Checks
             PartyChecks.Verify(root);
             ClanChecks.Verify();
             PetChecks.Verify(root);
+            CharacterExperienceChecks.Verify(root);
             TradeChecks.Verify(root);
             PlayerShopChecks.Verify(root);
             PlayerShopCoordinatorChecks.Verify(root);

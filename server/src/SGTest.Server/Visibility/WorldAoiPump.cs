@@ -5,6 +5,7 @@ using SGTest.Server.Gateway;
 using SGTest.Server.World;
 using SGTest.Server.Identity;
 using SGTest.Server.Pet;
+using SGTest.Server.Party;
 
 namespace SGTest.Server.Visibility;
 
@@ -27,6 +28,8 @@ public sealed class WorldAoiPump
     private readonly MonsterWorldCoordinator? _monsters;
     private readonly PlayerCombatSettlement? _playerCombat;
     private readonly MonsterLootSettlement? _loot;
+    private readonly CharacterExperienceSettlement? _experience;
+    private readonly PartyCoordinator? _parties;
     private int _started;
     private long _processedBatches, _framesQueued;
 
@@ -35,6 +38,8 @@ public sealed class WorldAoiPump
                         MonsterWorldCoordinator? monsters = null,
                         PlayerCombatSettlement? playerCombat = null,
                         MonsterLootSettlement? loot = null,
+                        CharacterExperienceSettlement? experience = null,
+                        PartyCoordinator? parties = null,
                         IReadOnlyList<GroundDropRecord>? initialGroundDrops = null)
     {
         _router = router ?? throw new ArgumentNullException(nameof(router));
@@ -43,6 +48,8 @@ public sealed class WorldAoiPump
         _monsters = monsters;
         _playerCombat = playerCombat;
         _loot = loot;
+        _experience = experience;
+        _parties = parties;
         if (initialGroundDrops is { Count: > 0 })
             _aoi.SeedGroundDrops(initialGroundDrops);
         if (_options.FlushIntervalMilliseconds is < 1 or > 1000 ||
@@ -54,6 +61,30 @@ public sealed class WorldAoiPump
     public long ProcessedBatches => Interlocked.Read(ref _processedBatches);
     public long FramesQueued => Interlocked.Read(ref _framesQueued);
     public WorldAoi Aoi => _aoi;
+
+    private void TryPostSoloExperienceDeath(
+        ConnectionBinding binding,MonsterSnapshot monster,long activePetUid=0)
+    {
+        if(_experience is null)
+            return;
+
+        // The verified solo policy must never be applied to a party member.
+        // Until the complete legacy party split is implemented, party deaths
+        // intentionally fail closed rather than minting solo EXP.
+        if(_parties is not null&&
+           _parties.TryGetRecipients(binding,_router,out _))
+            return;
+
+        if(activePetUid==0&&
+           _aoi.TryGetActivePet(
+               binding.ActorId,binding.ConnectionEpoch,binding.MapEpoch,out var pet))
+            activePetUid=pet.PetUid;
+
+        if(_experience.TryPostSoloDeath(binding,monster,activePetUid)==
+           CharacterExperienceDeathPostStatus.Backpressured)
+            throw new AoiBackpressureException(
+                "Character EXP settlement queue full; accepted death must not be dropped");
+    }
 
     public async Task RunAsync(CancellationToken cancellationToken = default)
     {
@@ -135,11 +166,19 @@ public sealed class WorldAoiPump
                         _aoi.ApplyMonsters(_aoi.LastTick, [changed]);
                         // Only successful Server-computed lethal attacks mint a
                         // death event, never replay/cooldown/other result status.
-                        if (_loot is not null && changed.CurrentHp == 0 &&
-                            changed.State == MonsterAiState.Dead &&
-                            _loot.TryPostDeath(changed) == MonsterLootPostStatus.Backpressured)
-                            throw new AoiBackpressureException(
-                                "Loot settlement queue full; accepted death must not be dropped");
+                        if(changed.CurrentHp==0&&
+                           changed.State==MonsterAiState.Dead)
+                        {
+                            if(_loot is not null&&
+                               _loot.TryPostDeath(changed)==MonsterLootPostStatus.Backpressured)
+                                throw new AoiBackpressureException(
+                                    "Loot settlement queue full; accepted death must not be dropped");
+                            TryPostSoloExperienceDeath(
+                                new ConnectionBinding(
+                                    attack.ActorId,attack.ConnectionEpoch,
+                                    attack.RequestMapEpoch),
+                                changed);
+                        }
                     }
 
                     var sent = _router.QueueNormalAttackResult(attack, outcome);
@@ -185,12 +224,11 @@ public sealed class WorldAoiPump
                                _loot.TryPostDeath(changed)==MonsterLootPostStatus.Backpressured)
                                 throw new AoiBackpressureException(
                                     "Loot settlement queue full; accepted pet death must not be dropped");
-                            // Do not mint Pet EXP from EnemyId/level/RExp here.
-                            // Old battle code awards the Pet only AFTER character
-                            // EXP has passed its player/party settlement, then takes
-                            // floor(settledCharacterExp / 2). This AOI path does not
-                            // own that settled value, so production remains fail-closed
-                            // until the character reward authority supplies it.
+                            TryPostSoloExperienceDeath(
+                                new ConnectionBinding(
+                                    petAttack.ActorId,petAttack.ConnectionEpoch,
+                                    petAttack.RequestMapEpoch),
+                                changed,pet.PetUid);
                         }
                     }
 
@@ -398,13 +436,19 @@ public sealed class WorldAoiPump
             if(changed.Length>0)
             {
                 _aoi.ApplyMonsters(_aoi.LastTick,changed);
-                if(_loot is not null)
-                    foreach(var monster in changed)
-                        if(monster.CurrentHp==0 &&
-                            monster.State==MonsterAiState.Dead &&
-                            _loot.TryPostDeath(monster)==MonsterLootPostStatus.Backpressured)
+                foreach(var monster in changed)
+                    if(monster.CurrentHp==0&&monster.State==MonsterAiState.Dead)
+                    {
+                        if(_loot is not null&&
+                           _loot.TryPostDeath(monster)==MonsterLootPostStatus.Backpressured)
                             throw new AoiBackpressureException(
                                 "Loot settlement queue full; accepted skill death must not be dropped");
+                        TryPostSoloExperienceDeath(
+                            new ConnectionBinding(
+                                skill.ActorId,skill.ConnectionEpoch,
+                                skill.RequestMapEpoch),
+                            monster);
+                    }
             }
         }
 

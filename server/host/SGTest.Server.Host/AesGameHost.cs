@@ -142,6 +142,12 @@ internal static class AesGameHost
             IReadOnlyList<MonsterDropRule>? dropRules = lootManifest is null
                 ? null : MonsterDropCatalog.LoadVerified(
                     Path.GetFullPath(lootManifest),monsterRuntimes);
+            string? experienceManifest=
+                options.GetValueOrDefault("--experience-rules");
+            IReadOnlyList<CharacterExperienceRewardRule>? experienceRules=
+                experienceManifest is null ? null :
+                CharacterExperienceRewardCatalog.LoadVerified(
+                    Path.GetFullPath(experienceManifest),monsterRuntimes);
             // Explicit audited content only. If omitted, no HP recovery item
             // can be used; client-side names or .tres never grant authority.
             string? recoveryManifest=options.GetValueOrDefault("--recovery-rules");
@@ -287,6 +293,10 @@ internal static class AesGameHost
             var parties=new PartyCoordinator();
             var clans=new ClanCoordinator(identity);
             var pets=new PetCoordinator(identity,petGrowth);
+            CharacterExperienceSettlement? experience=experienceRules is null
+                ? null:new CharacterExperienceSettlement(
+                    identity,router,lootGeneration,experienceRules,
+                    petGrowth is null ? null : pets);
             var authRateLimiter=new AuthenticationRateLimiter(new(
                 MaxFailuresPerAddress:authAddressFailures,
                 MaxFailuresPerAccount:authAccountFailures,
@@ -300,6 +310,7 @@ internal static class AesGameHost
                     :null;
             var aoi = new WorldAoiPump(
                 router, monsters: monsters, playerCombat: combat, loot: loot,
+                experience: experience,parties: parties,
                 initialGroundDrops: activeDrops);
             var authorization = new IdentitySessionAuthorization(
                 identity, world, portals, positions, combat,
@@ -335,6 +346,8 @@ internal static class AesGameHost
             // controlled shutdown before releasing the shared SQLite store.
             var lootSettlement = loot?.RunAsync() ??
                 Task.Delay(Timeout.Infinite,pumps.Token);
+            var experienceSettlement=experience?.RunAsync() ??
+                Task.Delay(Timeout.Infinite,pumps.Token);
             try
             {
                 var accepting = listener.RunAsync(stop.Token);
@@ -354,7 +367,10 @@ internal static class AesGameHost
                     monsters = monsterRuntimes.Sum(m => m.Count),
                     position_checkpoint_ms = checkpointMs,
                     loot_rule_count = dropRules?.Count ?? 0,
-                    pet_experience_settlement_enabled = false,
+                    character_experience_settlement_enabled = experience is not null,
+                    verified_experience_rule_count = experienceRules?.Count ?? 0,
+                    pet_experience_settlement_enabled =
+                        experience is not null&&petGrowth is not null,
                     verified_recovery_rule_count = recoveryRules?.Count ?? 0,
                     verified_skill_rule_count = skillRules?.Count ?? 0,
                     verified_shop_count = shops?.Count ?? 0,
@@ -379,7 +395,7 @@ internal static class AesGameHost
                 var stopping = Task.Delay(Timeout.Infinite, stop.Token);
                 var completed = await Task.WhenAny(
                     accepting, routing, visibility, checkpointing, combatSettlement,
-                    lootSettlement,stopping);
+                    lootSettlement,experienceSettlement,stopping);
                 if (completed != stopping && !stop.IsCancellationRequested)
                 {
                     await completed; // propagate faults; never serve after a result/AOI pump failed
@@ -405,7 +421,9 @@ internal static class AesGameHost
                     finally
                     {
                         loot?.Complete();
+                        experience?.Complete();
                         if(loot is not null)await lootSettlement;
+                        if(experience is not null)await experienceSettlement;
                     }
                 }
             }
@@ -419,7 +437,11 @@ internal static class AesGameHost
                 positions = positions.Statistics,
                 combat = combat.Statistics,
                 loot = loot?.Statistics,
-                pet_experience_settlement_enabled = false,
+                character_experience = experience?.Statistics,
+                character_experience_settlement_enabled = experience is not null,
+                verified_experience_rule_count = experienceRules?.Count ?? 0,
+                pet_experience_settlement_enabled =
+                    experience is not null&&petGrowth is not null,
                 verified_recovery_rule_count = recoveryRules?.Count ?? 0,
                 verified_skill_rule_count = skillRules?.Count ?? 0,
                 pet_growth_enabled = petGrowth is not null,
@@ -445,6 +467,7 @@ internal static class AesGameHost
                 "[--account-registration disabled|enabled] " +
                 "[--registration-attempts-per-address 3] [--registration-window-seconds 600] " +
                 "[--position-checkpoint-ms 5000] [--loot-rules <VERIFIED_JSON>] " +
+                "[--experience-rules <VERIFIED_JSON>] " +
                 "[--recovery-rules <VERIFIED_JSON>] [--skill-rules <VERIFIED_JSON>] " +
                 "[--pet-combat-rules <VERIFIED_JSON>] [--pet-growth-rules <VERIFIED_JSON>] " +
                 "[--shop-rules <VERIFIED_JSON>] [--storage-rules <VERIFIED_JSON>] " +
@@ -463,6 +486,7 @@ internal static class AesGameHost
                                      WorldResultRoutingException or AoiBackpressureException or
                                      CharacterPositionCheckpointException or
                                      PlayerCombatSettlementException or MonsterLootSettlementException or
+                                     CharacterExperienceSettlementException or
                                      PetExperienceDeathSettlementException or InvalidDataException)
         {
             Console.Error.WriteLine("AES_HOST_FAIL: " + error.GetType().Name + ": " + error.Message);
@@ -481,7 +505,8 @@ internal static class AesGameHost
                           "--registration-attempts-per-address",
                           "--registration-window-seconds",
                           "--position-checkpoint-ms",
-                          "--loot-rules", "--recovery-rules", "--skill-rules",
+                          "--loot-rules", "--experience-rules",
+                          "--recovery-rules", "--skill-rules",
                           "--pet-combat-rules", "--pet-growth-rules",
                           "--shop-rules", "--storage-rules", "--equipment-rules", "--bank-rules",
                           "--repair-rules", "--repair-item-rules", "--quest-rules",

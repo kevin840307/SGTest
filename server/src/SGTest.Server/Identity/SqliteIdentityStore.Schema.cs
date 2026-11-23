@@ -854,6 +854,23 @@ ADD COLUMN evolution_id INTEGER NOT NULL DEFAULT 0 CHECK(evolution_id BETWEEN 0 
     created_unix_ms INTEGER NOT NULL,
     PRIMARY KEY(character_id,grant_key)
 );",tx);
+            // Schema v33: character EXP is a durable server-owned settlement.
+            // Zero-EXP grants are recorded so high-level/no-reward deaths remain
+            // exactly-once rather than being retried forever after a restart.
+            Execute(connection,@"CREATE TABLE IF NOT EXISTS character_experience_state (
+    character_id INTEGER PRIMARY KEY REFERENCES characters(character_id) ON DELETE CASCADE,
+    experience INTEGER NOT NULL DEFAULT 0 CHECK(experience BETWEEN 0 AND 9000000000000000),
+    updated_unix_ms INTEGER NOT NULL
+);",tx);
+            Execute(connection,@"CREATE TABLE IF NOT EXISTS character_experience_grants (
+    character_id INTEGER NOT NULL REFERENCES characters(character_id) ON DELETE CASCADE,
+    grant_key TEXT NOT NULL CHECK(length(grant_key) BETWEEN 1 AND 128),
+    amount INTEGER NOT NULL CHECK(amount BETWEEN 0 AND 9000000000000000),
+    result_status INTEGER NOT NULL CHECK(result_status BETWEEN 0 AND 3),
+    resulting_experience INTEGER NOT NULL CHECK(resulting_experience BETWEEN 0 AND 9000000000000000),
+    created_unix_ms INTEGER NOT NULL,
+    PRIMARY KEY(character_id,grant_key)
+);",tx);
             if (schemaVersion < SchemaVersion)
                 Execute(connection,
                     $"UPDATE schema_version SET version={SchemaVersion};", tx);
