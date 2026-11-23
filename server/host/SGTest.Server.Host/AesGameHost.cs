@@ -164,6 +164,11 @@ internal static class AesGameHost
                     Path.GetFullPath(experienceManifest),monsterRuntimes);
             // Explicit audited content only. If omitted, no HP recovery item
             // can be used; client-side names or .tres never grant authority.
+            string? progressionManifest=
+                options.GetValueOrDefault("--character-progression-rules");
+            CharacterProgressionRules? progressionRules=progressionManifest is null
+                ?null:CharacterProgressionRules.LoadVerified(
+                    Path.GetFullPath(progressionManifest));
             string? recoveryManifest=options.GetValueOrDefault("--recovery-rules");
             IReadOnlyDictionary<int,RecoveryItemRule>? recoveryRules=
                 recoveryManifest is null ? null :
@@ -324,7 +329,7 @@ internal static class AesGameHost
             CharacterExperienceSettlement? experience=experienceRules is null
                 ? null:new CharacterExperienceSettlement(
                     identity,router,lootGeneration,experienceRules,
-                    petGrowth is null ? null : pets);
+                    petGrowth is null ? null : pets,progressionRules);
             var authRateLimiter=new AuthenticationRateLimiter(new(
                 MaxFailuresPerAddress:authAddressFailures,
                 MaxFailuresPerAccount:authAccountFailures,
@@ -361,6 +366,7 @@ internal static class AesGameHost
                 friends: friends,
                 pets: pets,
                 mechas: mechas,
+                progressionRules: progressionRules,
                 rateLimiter: authRateLimiter,
                 registrationRateLimiter: registrationRateLimiter,
                 gmAccounts: gmAccounts);
@@ -516,7 +522,7 @@ internal static class AesGameHost
                 "[--quest-rules <VERIFIED_JSON>] [--trade-item-rules <VERIFIED_JSON>] " +
                 "[--gm-accounts <user1,user2>] " +
                 "[--character-spawn-map <13|15> --character-spawn-x <X> --character-spawn-y <Y>] " +
-                "[--character-appearance-rules <VERIFIED_JSON>] " +
+                "[--character-appearance-rules <VERIFIED_JSON>] [--character-progression-rules <VERIFIED_JSON>] " +
                 "[--seconds N]");
             return 2;
         }
@@ -554,7 +560,7 @@ internal static class AesGameHost
                           "--repair-rules", "--repair-item-rules", "--quest-rules",
                           "--trade-item-rules", "--gm-accounts",
                           "--character-spawn-map", "--character-spawn-x",
-                          "--character-spawn-y", "--character-appearance-rules", "--seconds"];
+                          "--character-spawn-y", "--character-appearance-rules", "--character-progression-rules", "--seconds"];
         var values = new Dictionary<string, string>(StringComparer.Ordinal);
         if (args.Length % 2 != 0) throw new ArgumentException("Every option requires a value");
         for (int i = 0; i < args.Length; i += 2)

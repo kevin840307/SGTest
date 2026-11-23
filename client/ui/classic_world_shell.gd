@@ -64,6 +64,7 @@ var _inventory_tab:=0
 var _classic_mecha_uid:=0
 var _inventory_tab_buttons:Array[TextureButton]=[]
 var _character_labels:Dictionary={}
+var _character_point_buttons:Array[TextureButton]=[]
 var _character_hp_fill:Control
 var _character_mp_fill:Control
 var _skill_rows:=VBoxContainer.new()
@@ -413,11 +414,19 @@ func _build_character()->void:
 	close.size=Vector2(16,16)
 	_character_hp_fill=_character_vital_fill("HP",Vector2(30,268))
 	_character_mp_fill=_character_vital_fill("MP",Vector2(30,285))
-	for y in [99,119,139,159]:
-		var plus:=TextureRect.new()
-		plus.texture=_tex("ADD_POINT_3")
-		plus.position=Vector2(93,y)
-		plus.mouse_filter=Control.MOUSE_FILTER_IGNORE
+	for index in 4:
+		var plus:=TextureButton.new()
+		plus.name="AddPoint%d"%(index+1)
+		plus.texture_normal=_tex("ADD_POINT_0")
+		plus.texture_hover=_tex("ADD_POINT_1")
+		plus.texture_pressed=_tex("ADD_POINT_2")
+		plus.texture_disabled=_tex("ADD_POINT_3")
+		plus.position=Vector2(93,[99,119,139,159][index])
+		plus.size=Vector2(17,17)
+		plus.ignore_texture_size=true
+		plus.disabled=true
+		plus.pressed.connect(_submit_character_attribute.bind(index+1))
+		_character_point_buttons.append(plus)
 		character.add_child(plus)
 	for pair in [
 		["名　稱",Rect2(11,37,36,12)],["稱　號",Rect2(11,53,36,12)],
@@ -936,16 +945,15 @@ func _refresh_character()->void:
 		for field in fields:
 			values[field]=str(_stats.get(fields[field],"—"))
 		values["EXP"]="%s EXP"%str(_stats.get("player_experience","—"))
-		# Old SGOPlayer::LevelUp grants ExpUse +2 per level and
-		# SGOCareer::AddAttrib spends one point per main-attribute increment.
-		# Creation always starts with eight total main-attribute points.
-		var used_points:=maxi(0,
-			int(_stats.get("player_strength",0))+
-			int(_stats.get("player_dexterity",0))+
-			int(_stats.get("player_constitution",0))+
-			int(_stats.get("player_wisdom",0))-8)
-		values["配點"]=str(maxi(0,2*maxi(0,int(_stats.get("player_level",1))-1)-used_points))
+		values["配點"]=str(maxi(0,int(_stats.get("player_available_attribute_points",0))))
+	var can_allocate:=profile_ready and int(_stats.get("player_available_attribute_points",0))>0
+	for button in _character_point_buttons:
+		button.disabled=not can_allocate
 	for key in _character_labels:(_character_labels[key] as CharacterText).text=str(values.get(key,"—"))
+
+func _submit_character_attribute(attribute:int)->void:
+	if _panel!=null:
+		_panel.submit_attribute_allocate(attribute)
 
 func _character_vital(stat:String)->String:
 	var maximum:=int(_stats.get("player_max_"+stat,0))

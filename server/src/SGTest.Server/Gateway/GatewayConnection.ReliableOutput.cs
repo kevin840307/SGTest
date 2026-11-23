@@ -65,6 +65,19 @@ public sealed partial class GatewayConnection
     /// on this connection. Old-map receipts on the SAME connection are allowed so
     /// the client can discard them using the receipt MapEpoch.
     /// </summary>
+    public GatewaySendStatus QueuePlayerProfileState(
+        ConnectionBinding expected,PlayerProfileStateWire state)
+    {
+        lock(_bindingGate)
+        {
+            if(_closed)return GatewaySendStatus.Closed;
+            if(_binding!=expected||state.CharacterId!=expected.ActorId)
+                return GatewaySendStatus.GenerationMismatch;
+            return _reliable.TryEnqueue(WireProtocol.EncodePlayerProfileState(state))
+                ?GatewaySendStatus.Enqueued:GatewaySendStatus.Backpressured;
+        }
+    }
+
     public GatewaySendStatus QueuePlayerDamage(PlayerDamageSettlement result)
     {
         lock (_bindingGate)

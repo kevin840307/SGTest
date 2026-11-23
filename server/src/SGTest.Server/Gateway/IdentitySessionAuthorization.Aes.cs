@@ -283,6 +283,9 @@ public sealed partial class IdentitySessionAuthorization
             var skills = new SkillCommandHandler(
                 _identity, _world, _combat, _pickupWorldGeneration,
                 router, gameplayGate);
+            var profileProgression=_progressionRules is null
+                ?null:new CharacterProfileProgressionHandler(
+                    _identity,_progressionRules,router);
             return await AesWireConnection.RunServerAsync(client, settings,
                 Authorize, _world.TryPostMove, options, cancellationToken, Release,
                 portal is null ? null : portal.HandleAsync, router.TryRequestResync,
@@ -308,7 +311,8 @@ public sealed partial class IdentitySessionAuthorization
                 handleClan: _clans is null ? null : request => _clans.HandleAsync(request, router),
                 handleFriend: _friends is null ? null : request => _friends.HandleAsync(request, router),
                 handlePet: _pets is null ? null : request => _pets.HandleAsync(request, router),
-                handleMecha: _mechas is null ? null : request => _mechas.HandleAsync(request, router))
+                handleMecha: _mechas is null ? null : request => _mechas.HandleAsync(request, router),
+                handleAttribute: profileProgression is null ? null : profileProgression.HandleAttributeAsync)
                 .ConfigureAwait(false);
         }
         finally

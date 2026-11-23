@@ -62,6 +62,7 @@ public sealed partial class IdentitySessionAuthorization
     private readonly FriendCoordinator? _friends;
     private readonly PetCoordinator? _pets;
     private readonly MechaCoordinator? _mechas;
+    private readonly CharacterProgressionRules? _progressionRules;
     private readonly AuthenticationRateLimiter? _rateLimiter;
     private readonly AccountRegistrationRateLimiter? _registrationRateLimiter;
     private readonly HashSet<string> _gmAccounts;
@@ -90,6 +91,7 @@ public sealed partial class IdentitySessionAuthorization
                                      FriendCoordinator? friends = null,
                                      PetCoordinator? pets = null,
                                      MechaCoordinator? mechas = null,
+                                      CharacterProgressionRules? progressionRules = null,
                                      AuthenticationRateLimiter? rateLimiter = null,
                                      AccountRegistrationRateLimiter? registrationRateLimiter = null,
                                      IReadOnlySet<string>? gmAccounts = null)
@@ -127,6 +129,7 @@ public sealed partial class IdentitySessionAuthorization
         _friends=friends;
         _pets=pets;
         _mechas=mechas;
+        _progressionRules=progressionRules;
         _rateLimiter=rateLimiter;
         _registrationRateLimiter=registrationRateLimiter;
         if(_playerShops is not null&&_trades is null)

@@ -121,6 +121,7 @@ static class Checks
             if(args is ["--experience-only"])
             {
                 CharacterExperienceChecks.Verify(root);
+                CharacterProgressionChecks.Verify(root);
                 Console.WriteLine($"CHARACTER_EXPERIENCE_CHECKS PASS total={_passes}");
                 return 0;
             }
@@ -355,6 +356,7 @@ static class Checks
             PetChecks.Verify(root);
             MechaChecks.Verify();
             CharacterExperienceChecks.Verify(root);
+                CharacterProgressionChecks.Verify(root);
             TradeChecks.Verify(root);
             PlayerShopChecks.Verify(root);
             PlayerShopCoordinatorChecks.Verify(root);

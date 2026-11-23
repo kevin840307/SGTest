@@ -108,6 +108,7 @@ CREATE TABLE IF NOT EXISTS character_combat_profiles (
     dodge INTEGER NOT NULL CHECK(dodge BETWEEN 0 AND 100000000),
     attack_range REAL NOT NULL CHECK(attack_range >= 0 AND attack_range <= 4096),
     attack_cooldown_ticks INTEGER NOT NULL CHECK(attack_cooldown_ticks BETWEEN 0 AND 3600),
+    available_attribute_points INTEGER NOT NULL DEFAULT 0 CHECK(available_attribute_points BETWEEN 0 AND 1000000),
     updated_unix_ms INTEGER NOT NULL,
     CHECK(current_hp <= max_hp),
     CHECK(current_mp <= max_mp),
@@ -1263,6 +1264,15 @@ WHEN NEW.current_mp > NEW.max_mp
 BEGIN
     SELECT RAISE(ABORT,'current_mp exceeds max_mp');
 END;",tx);
+            }
+
+            // Schema v42: remaining character attribute points are durable server-owned state.
+            // Level-up and allocation mutate this column in the same transaction as profile data.
+            if(schemaVersion<42 && !ColumnExists(connection,"character_combat_profiles","available_attribute_points",tx))
+            {
+                Execute(connection,@"ALTER TABLE character_combat_profiles
+ADD COLUMN available_attribute_points INTEGER NOT NULL DEFAULT 0
+CHECK(available_attribute_points BETWEEN 0 AND 1000000);",tx);
             }
 
             // Schema v37: a player stall may contain multiple active ItemUid

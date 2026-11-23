@@ -39,8 +39,9 @@ public static partial class WireProtocol
     public const int PlayerDamageVisualFrameBytes = HeaderBytes + 8 + 8 + 8 + 8 + 4 + 8 + 8 + 4 + 1 + 1;
     public const int PlayerRespawnVisualFrameBytes = HeaderBytes + 8 + 8 + 8 + 8 + 4 + 1;
     public const int PlayerCombatStateFrameBytes = HeaderBytes + 8 + 4 + 4 + 4 + 4 + 1;
-    public const int PlayerProfileStateFrameBytes = HeaderBytes + 8 + 4 + 4 + 4 + 8 + 4*8 + 1;
+    public const int PlayerProfileStateFrameBytes = HeaderBytes + 8 + 4 + 4 + 4 + 8 + 4*9 + 1;
     public const int PlayerCreationProfileStateFrameBytes = HeaderBytes + 8 + 4*4;
+    public const int PlayerAttributeAllocateFrameBytes = HeaderBytes + 1;
     public const int PlayerDamageFrameBytes = HeaderBytes + 8 + 4 + 8 + 8 + 8 + 4 + 4 + 4 + 1;
     public const int PlayerRespawnFrameBytes = HeaderBytes + 8 + 4;
     public const int PlayerRespawnResultFrameBytes = HeaderBytes + 8 + 4 + 1 + 4 + 4;
@@ -695,6 +696,7 @@ public static partial class WireProtocol
             132 => WireOpcode.PetEquipmentSnapshot,
             133 => WireOpcode.PlayerProfileState,
             134 => WireOpcode.PlayerCreationProfileState,
+            135 => WireOpcode.PlayerAttributeAllocate,
             _ => 0
         };
         if (opcode == 0) return false;
@@ -709,6 +711,7 @@ public static partial class WireProtocol
             WireOpcode.PlayerCombatState => advertised == PlayerCombatStateFrameBytes,
             WireOpcode.PlayerProfileState => advertised == PlayerProfileStateFrameBytes,
             WireOpcode.PlayerCreationProfileState => advertised == PlayerCreationProfileStateFrameBytes,
+            WireOpcode.PlayerAttributeAllocate => advertised == PlayerAttributeAllocateFrameBytes,
             WireOpcode.PlayerDamage => advertised == PlayerDamageFrameBytes,
             WireOpcode.AuthRequest => advertised is >= 23 and <= MaxAuthRequestFrameBytes,
             WireOpcode.AuthResult => advertised == AuthResultFrameBytes,

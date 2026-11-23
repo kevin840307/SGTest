@@ -562,6 +562,25 @@ func _queue_pet_intent(action:int,pet_uid:int,current:Dictionary,item_uid:int=0)
 		"map_epoch":int(current.get("map_epoch",0))
 	})
 
+func allocate_attribute(attribute:int)->bool:
+	var current:=snapshot()
+	if (
+		attribute<1 or attribute>4 or
+		int(current.get("state",-1))!=WorldState.STATE_IN_WORLD or
+		not bool(current.get("world_ready",false)) or
+		bool(current.get("resync_pending",false)) or
+		bool(current.get("waiting_for_new_map",false)) or
+		int(current.get("pending_world_ready_ack_epoch",0))!=0 or
+		int(current.get("last_world_ready_ack_epoch",0))!=int(current.get("map_epoch",0)) or
+		int(current.get("player_available_attribute_points",0))<=0
+	):
+		return false
+	return _queue_intent({
+		"type":"attribute_allocate","attribute":attribute,
+		"actor_id":int(current.get("actor_id",0)),
+		"map_epoch":int(current.get("map_epoch",0))
+	})
+
 func mecha_mount(mecha_uid:int)->bool:
 	var current:=snapshot()
 	return _queue_mecha_intent(1,mecha_uid,current)
@@ -1499,6 +1518,8 @@ func _process_first_intent() -> void:
 		_process_pet_intent(intent)
 	elif kind=="mecha":
 		_process_mecha_intent(intent)
+	elif kind=="attribute_allocate":
+		_process_attribute_allocate_intent(intent)
 
 
 	elif kind == "gm_pvp_name":
@@ -1926,6 +1947,32 @@ func _process_pet_intent(intent:Dictionary)->void:
 	if _transport.send_frame(frame) and _world.mark_pet_sent(
 		sequence,action,pet_uid,item_uid
 	):
+		_pop_intent()
+		_publish()
+
+func _process_attribute_allocate_intent(intent:Dictionary)->void:
+	var current:Dictionary=_world.snapshot()
+	if (
+		int(intent.get("actor_id",0))!=int(current.get("actor_id",0)) or
+		int(intent.get("map_epoch",0))!=int(current.get("map_epoch",0))
+	):
+		_pop_intent()
+		return
+	if (
+		int(current.get("state",-1))!=WorldState.STATE_IN_WORLD or
+		not bool(current.get("world_ready",false)) or
+		bool(current.get("resync_pending",false)) or
+		bool(current.get("waiting_for_new_map",false)) or
+		int(current.get("pending_world_ready_ack_epoch",0))!=0 or
+		int(current.get("last_world_ready_ack_epoch",0))!=int(current.get("map_epoch",0)) or
+		int(current.get("player_available_attribute_points",0))<=0
+	):
+		return
+	var frame:=WireCodec.encode_player_attribute_allocate(int(intent.get("attribute",0)))
+	if frame.is_empty():
+		_pop_intent()
+		return
+	if _transport.send_frame(frame):
 		_pop_intent()
 		_publish()
 

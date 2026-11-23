@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using SGTest.Server.Identity;
 
 namespace SGTest.Server.Wire;
 
@@ -16,7 +17,7 @@ public static partial class WireProtocol
             value.Strength < 0 || value.Dexterity < 0 ||
             value.Constitution < 0 || value.Wisdom < 0 ||
             value.Attack < 0 || value.Defense < 0 ||
-            value.Hit < 0 || value.Dodge < 0)
+            value.Hit < 0 || value.Dodge < 0 || value.AvailableAttributePoints < 0)
             throw new ArgumentOutOfRangeException(nameof(value));
 
         var frame = NewFrame(WireOpcode.PlayerProfileState, PlayerProfileStateFrameBytes);
@@ -33,7 +34,8 @@ public static partial class WireProtocol
         BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(56,4), value.Defense);
         BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(60,4), value.Hit);
         BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(64,4), value.Dodge);
-        frame[68] = value.CombatStatsVerified ? (byte)1 : (byte)0;
+        BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(68,4), value.AvailableAttributePoints);
+        frame[72] = value.CombatStatsVerified ? (byte)1 : (byte)0;
         return frame;
     }
 
@@ -59,8 +61,9 @@ public static partial class WireProtocol
             BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(56,4)),
             BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(60,4)),
             BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(64,4)),
-            frame[68] == 1);
-        if (frame[68] > 1)
+            BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(68,4)),
+            frame[72] == 1);
+        if (frame[72] > 1)
             return false;
         try
         {
@@ -72,6 +75,30 @@ public static partial class WireProtocol
             value = default;
             return false;
         }
+    }
+
+    public static byte[] EncodePlayerAttributeAllocate(PlayerAttributeAllocateWire value)
+    {
+        if (!Enum.IsDefined(value.Attribute))
+            throw new ArgumentOutOfRangeException(nameof(value));
+        var frame=NewFrame(WireOpcode.PlayerAttributeAllocate,PlayerAttributeAllocateFrameBytes);
+        frame[8]=(byte)value.Attribute;
+        return frame;
+    }
+
+    public static bool TryDecodePlayerAttributeAllocate(
+        ReadOnlySpan<byte> frame,out PlayerAttributeAllocateWire value)
+    {
+        value=default;
+        if(!TryReadHeader(frame,out var header)||
+           header.Opcode!=WireOpcode.PlayerAttributeAllocate||
+           frame.Length!=PlayerAttributeAllocateFrameBytes)
+            return false;
+        var attribute=(CharacterAttributeKind)frame[8];
+        if(!Enum.IsDefined(attribute))
+            return false;
+        value=new(attribute);
+        return true;
     }
 
     public static byte[] EncodePlayerCreationProfileState(PlayerCreationProfileStateWire value)

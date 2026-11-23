@@ -99,6 +99,7 @@ var player_attack := 0
 var player_defense := 0
 var player_hit := 0
 var player_dodge := 0
+var player_available_attribute_points := 0
 var player_dead := false
 var player_damage_sequence := 0
 var last_player_damage_tick := -1
@@ -1451,6 +1452,7 @@ func snapshot() -> Dictionary:
 		"player_hit": player_hit,
 		"player_dodge": player_dodge,
 		"player_evasion": player_dodge,
+		"player_available_attribute_points": player_available_attribute_points,
 		"player_dead": player_dead,
 		"player_damage_sequence": player_damage_sequence,
 		"last_player_damage_tick": last_player_damage_tick,
@@ -1967,6 +1969,7 @@ func _reset_character_actions_and_combat() -> void:
 	player_defense = 0
 	player_hit = 0
 	player_dodge = 0
+	player_available_attribute_points = 0
 	player_dead = false
 	player_damage_sequence = 0
 	last_player_damage_tick = -1
@@ -2377,6 +2380,7 @@ func _apply_player_profile_state(frame: PackedByteArray) -> bool:
 	player_defense = int(value.defense)
 	player_hit = int(value.hit)
 	player_dodge = int(value.dodge)
+	player_available_attribute_points = int(value.available_attribute_points)
 	return true
 
 func _apply_player_damage(frame: PackedByteArray) -> bool:

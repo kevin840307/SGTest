@@ -445,6 +445,20 @@ public sealed partial class WorldResultRouter
                 connection.IsVisibleActor(target);
     }
 
+    public GatewaySendStatus QueuePlayerProfileState(
+        ConnectionBinding expected,PlayerProfileStateWire state)
+    {
+        lock(_gate)
+        {
+            if(!_connections.TryGetValue(expected.ActorId,out var connection)||
+               connection.IsClosed)
+                return GatewaySendStatus.Closed;
+            if(connection.Binding!=expected)
+                return GatewaySendStatus.GenerationMismatch;
+            return connection.QueuePlayerProfileState(expected,state);
+        }
+    }
+
     public bool TryGetCurrentBinding(long actorId,out ConnectionBinding binding)
     {
         lock(_gate)

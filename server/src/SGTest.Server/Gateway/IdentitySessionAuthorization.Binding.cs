@@ -505,15 +505,10 @@ public sealed partial class IdentitySessionAuthorization
             // combat handler admission is intentionally decided separately above.
             if (combat is not null)
             {
-                await WriteFrameAsync(tls, WireProtocol.EncodePlayerProfileState(new(
-                    snapshot.ActorId,
-                    combat.Data.Race, combat.Data.Career, combat.Data.Level,
-                    experience?.Experience ?? 0,
-                    combat.Data.Strength, combat.Data.Dexterity,
-                    combat.Data.Constitution, combat.Data.Wisdom,
-                    combat.Data.Attack, combat.Data.Defense,
-                    combat.Data.Hit, combat.Data.Dodge,
-                    combatEnabled)),
+                await WriteFrameAsync(tls, WireProtocol.EncodePlayerProfileState(
+                    CharacterProfileProgressionHandler.BuildState(
+                        combat.Data,snapshot.ActorId,experience?.Experience??0,
+                        _progressionRules)),
                     cancellationToken).ConfigureAwait(false);
             }
 

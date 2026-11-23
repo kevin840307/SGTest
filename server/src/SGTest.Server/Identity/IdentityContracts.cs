@@ -46,7 +46,8 @@ public sealed record CharacterCombatProfileData(
     double AttackRange,
     int AttackCooldownTicks,
     int CurrentMp = 0,
-    int MaxMp = 0);
+    int MaxMp = 0,
+    int AvailableAttributePoints = 0);
 
 public sealed record CharacterCombatProfile(
     long CharacterId,

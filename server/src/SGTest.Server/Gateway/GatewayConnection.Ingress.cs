@@ -11,6 +11,9 @@ using SGTest.Server.Identity;
 
 namespace SGTest.Server.Gateway;
 
+public readonly record struct TrustedPlayerAttributeAllocate(
+    long ActorId,long ConnectionEpoch,long MapEpoch,CharacterAttributeKind Attribute);
+
 /// <summary>
 /// Trusted inbound V1 command routing and WorldReady/resync ACK gate for the
 /// ONE GatewayConnection. Parser, binding and locks remain on the parent
@@ -54,7 +57,8 @@ public sealed partial class GatewayConnection
                                               Func<TrustedClanCommand, bool>? postClan = null,
                                               Func<TrustedFriendCommand, bool>? postFriend = null,
                                               Func<TrustedPetCommand, bool>? postPet = null,
-                                              Func<TrustedMechaCommand, bool>? postMecha = null)
+                                              Func<TrustedMechaCommand, bool>? postMecha = null,
+                                               Func<TrustedPlayerAttributeAllocate, bool>? postAttribute = null)
     {
         ArgumentNullException.ThrowIfNull(postMove);
         lock (_receiveGate)
@@ -67,7 +71,7 @@ public sealed partial class GatewayConnection
             return _parser.Feed(bytes,
                 frame => HandleClientFrame(
                     frame, postMove, postNpc, postResync, postAttack, postPetAttack, postPetSkill, postRespawn,
-                    postPickup, postRecovery, postDiscard, postSkill, postShop, postStorage, postEquipment, postBank, postRepair, postEnhancement, postTrade, postQuest, postPvp, postPvpAttack, postPvpSkill, postGmPvpName, postPlayerShop, postChat, postParty, postClan, postFriend, postPet, postMecha),
+                    postPickup, postRecovery, postDiscard, postSkill, postShop, postStorage, postEquipment, postBank, postRepair, postEnhancement, postTrade, postQuest, postPvp, postPvpAttack, postPvpSkill, postGmPvpName, postPlayerShop, postChat, postParty, postClan, postFriend, postPet, postMecha, postAttribute),
                 out commandsAccepted);
         }
     }
@@ -102,7 +106,8 @@ public sealed partial class GatewayConnection
                                               Func<TrustedClanCommand, bool>? postClan = null,
                                               Func<TrustedFriendCommand, bool>? postFriend = null,
                                               Func<TrustedPetCommand, bool>? postPet = null,
-                                              Func<TrustedMechaCommand, bool>? postMecha = null)
+                                              Func<TrustedMechaCommand, bool>? postMecha = null,
+                                               Func<TrustedPlayerAttributeAllocate, bool>? postAttribute = null)
     {
         ArgumentNullException.ThrowIfNull(postMove);
         lock (_receiveGate)
@@ -115,7 +120,7 @@ public sealed partial class GatewayConnection
             return _parser.Resume(
                 frame => HandleClientFrame(
                     frame, postMove, postNpc, postResync, postAttack, postPetAttack, postPetSkill, postRespawn,
-                    postPickup, postRecovery, postDiscard, postSkill, postShop, postStorage, postEquipment, postBank, postRepair, postEnhancement, postTrade, postQuest, postPvp, postPvpAttack, postPvpSkill, postGmPvpName, postPlayerShop, postChat, postParty, postClan, postFriend, postPet, postMecha),
+                    postPickup, postRecovery, postDiscard, postSkill, postShop, postStorage, postEquipment, postBank, postRepair, postEnhancement, postTrade, postQuest, postPvp, postPvpAttack, postPvpSkill, postGmPvpName, postPlayerShop, postChat, postParty, postClan, postFriend, postPet, postMecha, postAttribute),
                 out commandsAccepted);
         }
     }
@@ -151,12 +156,22 @@ public sealed partial class GatewayConnection
         Func<TrustedClanCommand, bool>? postClan,
         Func<TrustedFriendCommand, bool>? postFriend,
         Func<TrustedPetCommand, bool>? postPet,
-        Func<TrustedMechaCommand, bool>? postMecha)
+        Func<TrustedMechaCommand, bool>? postMecha,
+        Func<TrustedPlayerAttributeAllocate, bool>? postAttribute)
     {
         if (!WireProtocol.TryReadHeader(frame, out var header))
             return WireFrameDisposition.ProtocolViolation;
 
         var bound = Binding;
+        if(postAttribute is not null &&
+           header.Opcode==WireOpcode.PlayerAttributeAllocate &&
+           WireProtocol.TryDecodePlayerAttributeAllocate(frame,out var allocation))
+        {
+            if(!GameplayReady(bound))return WireFrameDisposition.ProtocolViolation;
+            return postAttribute(new(
+                bound.ActorId,bound.ConnectionEpoch,bound.MapEpoch,allocation.Attribute))
+                ?WireFrameDisposition.Accepted:WireFrameDisposition.Backpressured;
+        }
         if (header.Opcode == WireOpcode.WorldReadyAck &&
             WireProtocol.TryDecodeWorldReadyAck(frame, out var ack))
             return TryAcknowledgeWorldReady(bound, ack)

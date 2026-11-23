@@ -254,6 +254,7 @@ public sealed class CharacterExperienceSettlement
     private readonly SqliteIdentityStore _identity;
     private readonly PetCoordinator? _pets;
     private readonly WorldResultRouter _router;
+    private readonly CharacterProgressionRules? _progressionRules;
     private readonly long _generation;
     private sealed record DeathWork(
         MonsterSnapshot Death,long TotalDamage,
@@ -269,7 +270,7 @@ public sealed class CharacterExperienceSettlement
     public CharacterExperienceSettlement(
         SqliteIdentityStore identity,WorldResultRouter router,long generation,
         IEnumerable<CharacterExperienceRewardRule> rules,PetCoordinator? pets=null,
-        int capacity=256)
+        CharacterProgressionRules? progressionRules=null,int capacity=256)
     {
         _identity=identity??throw new ArgumentNullException(nameof(identity));
         _router=router??throw new ArgumentNullException(nameof(router));
@@ -279,6 +280,7 @@ public sealed class CharacterExperienceSettlement
             throw new ArgumentOutOfRangeException(nameof(capacity));
         _generation=generation;
         _pets=pets;
+        _progressionRules=progressionRules;
 
         var unique=new Dictionary<(int,int),CharacterExperienceRewardRule>();
         foreach(var rule in rules)
@@ -440,17 +442,53 @@ public sealed class CharacterExperienceSettlement
                                     maximumLevel);
                             string grantKey=
                                 $"monsterdeath:{deathId}:{work.Death.EntityId}:actor:{actorId}";
-                            var outcome=await _identity.ApplyCharacterExperienceAsync(
-                                actorId,settled,grantKey).ConfigureAwait(false);
+                            CharacterExperienceGrantStatus grantStatus;
+                            if(_progressionRules is not null)
+                            {
+                                var outcome=
+                                    await _identity.ApplyCharacterProgressionExperienceAsync(
+                                        actorId,settled,grantKey,_progressionRules)
+                                        .ConfigureAwait(false);
+                                grantStatus=outcome.Status;
+                                if(outcome.Profile is not null)
+                                {
+                                    var frame=CharacterProfileProgressionHandler.BuildState(
+                                        outcome.Profile.Data,actorId,outcome.TotalExperience,
+                                        _progressionRules);
+                                    var delivery=_router.QueuePlayerProfileState(
+                                        participant.Binding,frame);
+                                    if(delivery==GatewaySendStatus.Backpressured)
+                                        throw new CharacterExperienceSettlementException(
+                                            "Committed character progression profile queue full");
+                                    if(outcome.Leveled)
+                                    {
+                                        var vitals=_router.QueuePlayerCombatState(
+                                            participant.Binding,
+                                            outcome.Profile.Data.CurrentHp,
+                                            outcome.Profile.Data.MaxHp,
+                                            outcome.Profile.Data.CurrentMp,
+                                            outcome.Profile.Data.MaxMp);
+                                        if(vitals==GatewaySendStatus.Backpressured)
+                                            throw new CharacterExperienceSettlementException(
+                                                "Committed character level-up vitals queue full");
+                                    }
+                                }
+                            }
+                            else
+                            {
+                                var outcome=await _identity.ApplyCharacterExperienceAsync(
+                                    actorId,settled,grantKey).ConfigureAwait(false);
+                                grantStatus=outcome.Status;
+                            }
 
-                            if(outcome.Status==CharacterExperienceGrantStatus.Applied)
+                            if(grantStatus==CharacterExperienceGrantStatus.Applied)
                                 Interlocked.Increment(ref _applied);
-                            else if(outcome.Status==
+                            else if(grantStatus==
                                     CharacterExperienceGrantStatus.AlreadyProcessed)
                                 Interlocked.Increment(ref _replays);
                             else
                                 throw new CharacterExperienceSettlementException(
-                                    $"Trusted character EXP death grant failed: {outcome.Status}");
+                                    $"Trusted character EXP death grant failed: {grantStatus}");
 
                             if(settled==0)
                                 Interlocked.Increment(ref _zeroAwards);

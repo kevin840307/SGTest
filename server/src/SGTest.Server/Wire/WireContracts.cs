@@ -144,7 +144,8 @@ public enum WireOpcode : ushort
     PetSkillVisual = 131,
     PetEquipmentSnapshot = 132,
     PlayerProfileState = 133,
-    PlayerCreationProfileState = 134
+    PlayerCreationProfileState = 134,
+    PlayerAttributeAllocate = 135
 }
 
 public enum ChatChannel : byte { Nearby = 0, Faction = 1, Warband = 2, Party = 3, Whisper = 4 }
@@ -411,7 +412,9 @@ public readonly record struct PlayerProfileStateWire(
     long CharacterId, int Race, int Career, int Level, long Experience,
     int Strength, int Dexterity, int Constitution, int Wisdom,
     int Attack, int Defense, int Hit, int Dodge,
+    int AvailableAttributePoints,
     bool CombatStatsVerified = true);
+public readonly record struct PlayerAttributeAllocateWire(CharacterAttributeKind Attribute);
 public readonly record struct PlayerCreationProfileStateWire(
     long CharacterId, int Strength, int Dexterity, int Constitution, int Wisdom);
 public readonly record struct PlayerDamageWire(

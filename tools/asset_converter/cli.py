@@ -31,6 +31,7 @@ from asset_converter.content.build_pet_visual_evidence import publish_pet_visual
 from asset_converter.content.build_pet_runtime_catalog import publish_pet_runtime_catalog
 from asset_converter.content.build_pet_growth_curve import publish_pet_growth_curve
 from asset_converter.content.build_character_experience_rewards import publish_character_experience_rewards
+from asset_converter.content.build_character_progression_rules import publish_character_progression_rules
 from asset_converter.content.skill_evidence import compile_skill_evidence
 from asset_converter.content.current_client_skill_evidence import compile_current_client_skill_evidence
 
@@ -421,6 +422,17 @@ def main() -> int:
         '--source-reference',
         default='Old SGOEnemyDistSys LoadNewCSVData/AddAttr + Enemy_Data.csv + EN_AttXX.csv',
         help='non-private provenance label')
+    character_progression = sub.add_parser(
+        'character-progression-rules',
+        help='compile audited Old Server character level/attribute/profile rules')
+    character_progression.add_argument('--player-dat',type=Path,required=True,
+        help='Old Server Dat/Player root containing progression tables')
+    character_progression.add_argument('--output',type=Path,
+        default=REPO/'local-assets/asset_converter/player/character_progression_rules.json')
+    character_progression.add_argument(
+        '--source-reference',
+        default='Old SGOPlayerSys::LoadLvUpTable/SGOPlayer::LevelUp/UpdateParam + Dat/Player progression tables',
+        help='non-private provenance label')
     items = sub.add_parser('item-catalog',
                            help='compile source-derived item names from local converted Items/*.tres')
     items.add_argument('--items',type=Path,required=True,
@@ -522,6 +534,15 @@ def _execute(args):
         try:
             result = publish_character_experience_rewards(
                 args.server_dat,args.output,set(args.maps),
+                source_reference=args.source_reference)
+        except (OSError,ValueError,TypeError) as error:
+            result = {'status':'failed','error':str(error)}
+        print(json.dumps(result,ensure_ascii=False,indent=2),flush=True)
+        return 0 if result['status']=='pass' else 1
+    if args.command == 'character-progression-rules':
+        try:
+            result = publish_character_progression_rules(
+                args.player_dat,args.output,
                 source_reference=args.source_reference)
         except (OSError,ValueError,TypeError) as error:
             result = {'status':'failed','error':str(error)}

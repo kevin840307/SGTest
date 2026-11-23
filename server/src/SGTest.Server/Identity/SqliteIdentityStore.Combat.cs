@@ -58,9 +58,9 @@ AND (s.strength<>$str OR s.dexterity<>$dex OR s.constitution<>$con OR s.wisdom<>
 INSERT INTO character_combat_profiles(
     character_id,trust,source_ref,race,career,strength,dexterity,constitution,wisdom,
     level,current_hp,max_hp,current_mp,max_mp,attack,defense,hit,dodge,attack_range,
-    attack_cooldown_ticks,updated_unix_ms)
+    attack_cooldown_ticks,available_attribute_points,updated_unix_ms)
 VALUES($id,$trust,$source,$race,$career,$str,$dex,$con,$wis,$level,$hp,$maxhp,
-       $mp,$maxmp,$attack,$defense,$hit,$dodge,$range,$cooldown,$updated)
+       $mp,$maxmp,$attack,$defense,$hit,$dodge,$range,$cooldown,$points,$updated)
 ON CONFLICT(character_id) DO UPDATE SET
     trust=excluded.trust,source_ref=excluded.source_ref,race=excluded.race,
     career=excluded.career,strength=excluded.strength,dexterity=excluded.dexterity,
@@ -70,6 +70,7 @@ ON CONFLICT(character_id) DO UPDATE SET
     attack=excluded.attack,defense=excluded.defense,hit=excluded.hit,dodge=excluded.dodge,
     attack_range=excluded.attack_range,
     attack_cooldown_ticks=excluded.attack_cooldown_ticks,
+    available_attribute_points=excluded.available_attribute_points,
     updated_unix_ms=excluded.updated_unix_ms;";
             BindCombatProfile(command, characterId, profile,
                 DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
@@ -260,6 +261,7 @@ UPDATE character_combat_profiles
             !double.IsFinite(profile.AttackRange) ||
             profile.AttackRange is < 0 or > 4096 ||
             profile.AttackCooldownTicks is < 0 or > 3600 ||
+            profile.AvailableAttributePoints is < 0 or > 1_000_000 ||
             (profileOnly && (profile.AttackRange != 0 || profile.AttackCooldownTicks != 0)) ||
             (combatEnabled && (profile.AttackRange <= 0 || profile.AttackCooldownTicks < 1)))
             throw new ArgumentOutOfRangeException(nameof(profile));
@@ -278,9 +280,9 @@ UPDATE character_combat_profiles
         command.CommandText = @"INSERT INTO character_combat_profiles(
     character_id,trust,source_ref,race,career,strength,dexterity,constitution,wisdom,
     level,current_hp,max_hp,current_mp,max_mp,attack,defense,hit,dodge,attack_range,
-    attack_cooldown_ticks,updated_unix_ms)
+    attack_cooldown_ticks,available_attribute_points,updated_unix_ms)
 VALUES($id,$trust,$source,$race,$career,$str,$dex,$con,$wis,$level,$hp,$maxhp,
-       $mp,$maxmp,$attack,$defense,$hit,$dodge,$range,$cooldown,$updated);";
+       $mp,$maxmp,$attack,$defense,$hit,$dodge,$range,$cooldown,$points,$updated);";
         BindCombatProfile(command, characterId, profile, updated);
         if (command.ExecuteNonQuery() != 1)
             throw new InvalidOperationException("Initial combat profile creation failed");
@@ -309,6 +311,7 @@ VALUES($id,$trust,$source,$race,$career,$str,$dex,$con,$wis,$level,$hp,$maxhp,
         command.Parameters.AddWithValue("$dodge", profile.Dodge);
         command.Parameters.AddWithValue("$range", profile.AttackRange);
         command.Parameters.AddWithValue("$cooldown", profile.AttackCooldownTicks);
+        command.Parameters.AddWithValue("$points", profile.AvailableAttributePoints);
         command.Parameters.AddWithValue("$updated", updated);
     }
 
@@ -320,7 +323,7 @@ VALUES($id,$trust,$source,$race,$career,$str,$dex,$con,$wis,$level,$hp,$maxhp,
         command.CommandText = @"
 SELECT character_id,trust,source_ref,race,career,strength,dexterity,constitution,
        wisdom,level,current_hp,max_hp,current_mp,max_mp,attack,defense,hit,dodge,attack_range,
-       attack_cooldown_ticks,updated_unix_ms
+       attack_cooldown_ticks,available_attribute_points,updated_unix_ms
   FROM character_combat_profiles
  WHERE character_id=$id
  LIMIT 1;";
@@ -346,9 +349,10 @@ SELECT character_id,trust,source_ref,race,career,strength,dexterity,constitution
             reader.GetDouble(18),
             reader.GetInt32(19),
             reader.GetInt32(12),
-            reader.GetInt32(13));
+            reader.GetInt32(13),
+            reader.GetInt32(20));
         return new CharacterCombatProfile(
-            reader.GetInt64(0), data, reader.GetInt64(20));
+            reader.GetInt64(0), data, reader.GetInt64(21));
     }
 
 }

@@ -13,7 +13,7 @@ const CHARACTER_CHOOSE_HEX := "1000000001000D001600000000000000"
 const CHARACTER_CHOOSE_RESULT_HEX := "2D00000001000E000016000000000000000F0000000000000000C0BE40000000000010C6400300000000000000"
 const CHARACTER_CREATE_HEX := "1200000001000F000207004E65774865726F"
 const CHARACTER_CREATE_RESULT_HEX := "1B000000010010000021000000000000000207004E65774865726F"
-const PLAYER_PROFILE_STATE_HEX := "45000000010085000B0000000000000002000000030000000400000040E2010000000000050000000600000007000000080000005A00000050000000460000003C00000001"
+const PLAYER_PROFILE_STATE_HEX := "49000000010085000B0000000000000002000000030000000400000040E2010000000000050000000600000007000000080000005A00000050000000460000003C0000000200000001"
 
 func _fail(message: String) -> void:
 	push_error("WIRE_CODEC_FAIL " + message)
@@ -68,8 +68,16 @@ func _initialize() -> void:
 	var profile := WireCodec.decode_player_profile_state(PLAYER_PROFILE_STATE_HEX.hex_decode())
 	if profile != {"character_id":11,"race":2,"career":3,"level":4,"experience":123456,
 		"strength":5,"dexterity":6,"constitution":7,"wisdom":8,
-		"attack":90,"defense":80,"hit":70,"dodge":60,"combat_stats_verified":true}:
+		"attack":90,"defense":80,"hit":70,"dodge":60,"available_attribute_points":2,
+		"combat_stats_verified":true}:
 		_fail("PlayerProfileState decode "+str(profile))
+		return
+	var allocate:=WireCodec.encode_player_attribute_allocate(1)
+	if allocate.hex_encode().to_upper()!="090000000100870001":
+		_fail("PlayerAttributeAllocate golden "+allocate.hex_encode())
+		return
+	if not WireCodec.encode_player_attribute_allocate(0).is_empty():
+		_fail("PlayerAttributeAllocate accepted invalid attribute")
 		return
 	var auth := WireCodec.encode_auth_request("user_01", "Password-123456!")
 	if auth.hex_encode().to_upper() != AUTH_REQUEST_HEX:

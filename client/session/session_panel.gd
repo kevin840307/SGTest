@@ -547,6 +547,9 @@ func submit_pet_unequip(pet_uid: int,item_uid: int) -> bool:
 	return active and pet_uid > 0 and item_uid > 0 and session.pet_unequip(pet_uid,item_uid)
 
 
+func submit_attribute_allocate(attribute:int) -> bool:
+	return active and attribute>=1 and attribute<=4 and session.allocate_attribute(attribute)
+
 func submit_mecha_mount(mecha_uid: int) -> bool:
 	return active and mecha_uid > 0 and session.mecha_mount(mecha_uid)
 
