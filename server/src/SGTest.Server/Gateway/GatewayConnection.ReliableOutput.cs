@@ -598,7 +598,8 @@ public sealed partial class GatewayConnection
                request.PetSequence!=result.PetSequence||
                request.RequestMapEpoch!=result.MapEpoch||
                request.Action!=result.Action||
-               request.PetUid!=result.PetUid)
+               request.PetUid!=result.PetUid||
+               request.ItemUid!=result.ItemUid)
                 return GatewaySendStatus.GenerationMismatch;
             return _reliable.TryEnqueue(WireProtocol.EncodePetResult(result))
                 ?GatewaySendStatus.Enqueued:GatewaySendStatus.Backpressured;
@@ -614,6 +615,19 @@ public sealed partial class GatewayConnection
             if(_binding!=expected||snapshot.ReceiverMapEpoch!=expected.MapEpoch)
                 return GatewaySendStatus.GenerationMismatch;
             return _reliable.TryEnqueue(WireProtocol.EncodePetSnapshot(snapshot))
+                ?GatewaySendStatus.Enqueued:GatewaySendStatus.Backpressured;
+        }
+    }
+
+    public GatewaySendStatus QueuePetEquipmentSnapshot(
+        ConnectionBinding expected,PetEquipmentSnapshotWire snapshot)
+    {
+        lock(_bindingGate)
+        {
+            if(_closed)return GatewaySendStatus.Closed;
+            if(_binding!=expected||snapshot.ReceiverMapEpoch!=expected.MapEpoch)
+                return GatewaySendStatus.GenerationMismatch;
+            return _reliable.TryEnqueue(WireProtocol.EncodePetEquipmentSnapshot(snapshot))
                 ?GatewaySendStatus.Enqueued:GatewaySendStatus.Backpressured;
         }
     }

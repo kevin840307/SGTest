@@ -10,16 +10,23 @@ public enum PetActionStatus : byte
     PetNotOwned=2,
     AlreadyActive=3,
     NotActive=4,
-    SequenceConflict=5
+    SequenceConflict=5,
+    ItemNotOwned=6,
+    InvalidEquipment=7,
+    LevelTooLow=8,
+    NotEquipped=9,
+    RulesUnavailable=10
 }
 
-public enum PetActionKind : byte { Summon=1, Recall=2, Refresh=3 }
+public enum PetActionKind : byte { Summon=1, Recall=2, Refresh=3, Equip=4, Unequip=5 }
 
 public sealed record PetInstanceRecord(
     long PetUid,long CharacterId,int DefinitionId,int EvolutionId,int Level,long Experience,
     bool IsActive,byte[] StateBlob);
 
-public sealed record PetActionOutcome(PetActionStatus Status,long ActivePetUid);
+public sealed record PetActionOutcome(
+    PetActionStatus Status,long ActivePetUid,long ItemUid=0,int SlotId=0,
+    long ReplacedItemUid=0);
 
 public enum PetExperienceGrantStatus : byte
 {

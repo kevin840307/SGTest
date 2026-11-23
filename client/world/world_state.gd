@@ -292,9 +292,12 @@ var pet_sequence := 0
 var pending_pet_sequence := 0
 var pending_pet_action := 0
 var pending_pet_uid := 0
+var pending_pet_item_uid := 0
 var active_pet_uid := 0
 var pet_instances := {}
 var pet_snapshot_received := false
+var pet_equipment_items := {}
+var pet_equipment_snapshot_received := false
 var pet_entities := {}
 var stale_pet_entity_frames := 0
 var last_pet_result_sequence := 0
@@ -972,28 +975,38 @@ func _clear_pending_friend()->void:
 	pending_friend_target_name=""
 
 
-func mark_pet_sent(sequence:int,action:int,pet_uid:int)->bool:
+func mark_pet_sent(sequence:int,action:int,pet_uid:int,item_uid:int=0)->bool:
 	if (
 		state!=STATE_IN_WORLD or not world_ready or resync_pending or
 		waiting_for_new_map or pending_world_ready_ack_epoch!=0 or
 		last_world_ready_ack_epoch!=map_epoch or pending_pet_sequence!=0 or
-		sequence<=pet_sequence or sequence>0xffffffff or action<1 or action>3
+		sequence<=pet_sequence or sequence>0xffffffff or action<1 or action>5
 	):
 		return false
+	var equipment_action:=action==4 or action==5
 	if action==3:
-		if pet_uid!=0:
+		if pet_uid!=0 or item_uid!=0:
 			return false
 	else:
 		if pet_uid<=0 or not pet_instances.has(pet_uid):
+			return false
+		if equipment_action!=(item_uid>0):
 			return false
 		if action==1 and active_pet_uid==pet_uid:
 			return false
 		if action==2 and active_pet_uid!=pet_uid:
 			return false
+		if action==4 and not inventory_items.has(item_uid):
+			return false
+		if action==5:
+			var equipped:Dictionary=pet_equipment_items.get(item_uid,{})
+			if equipped.is_empty() or int(equipped.get("pet_uid",0))!=pet_uid:
+				return false
 	pet_sequence=sequence
 	pending_pet_sequence=sequence
 	pending_pet_action=action
 	pending_pet_uid=pet_uid
+	pending_pet_item_uid=item_uid
 	return true
 
 
@@ -1001,6 +1014,7 @@ func _clear_pending_pet()->void:
 	pending_pet_sequence=0
 	pending_pet_action=0
 	pending_pet_uid=0
+	pending_pet_item_uid=0
 
 
 func mark_mecha_sent(sequence:int,action:int,mecha_uid:int,item_uid:int=0)->bool:
@@ -1269,6 +1283,8 @@ func apply_frame(frame: PackedByteArray) -> bool:
 			return _apply_pet_result(frame)
 		WireCodec.OPCODE_PET_SNAPSHOT:
 			return _apply_pet_snapshot(frame)
+		WireCodec.OPCODE_PET_EQUIPMENT_SNAPSHOT:
+			return _apply_pet_equipment_snapshot(frame)
 		WireCodec.OPCODE_MECHA_RESULT:
 			return _apply_mecha_result(frame)
 		WireCodec.OPCODE_MECHA_SNAPSHOT:
@@ -1590,9 +1606,12 @@ func snapshot() -> Dictionary:
 		"pending_pet_sequence": pending_pet_sequence,
 		"pending_pet_action": pending_pet_action,
 		"pending_pet_uid": pending_pet_uid,
+		"pending_pet_item_uid": pending_pet_item_uid,
 		"active_pet_uid": active_pet_uid,
 		"pet_instances": pet_instances.duplicate(true),
 		"pet_snapshot_received": pet_snapshot_received,
+		"pet_equipment_items": pet_equipment_items.duplicate(true),
+		"pet_equipment_snapshot_received": pet_equipment_snapshot_received,
 		"pet_entities": pet_entities.duplicate(true),
 		"stale_pet_entity_frames": stale_pet_entity_frames,
 		"last_pet_result_sequence": last_pet_result_sequence,
@@ -1887,6 +1906,8 @@ func _reset_character_pet_state() -> void:
 	active_pet_uid=0
 	pet_instances.clear()
 	pet_snapshot_received=false
+	pet_equipment_items.clear()
+	pet_equipment_snapshot_received=false
 	pet_entities.clear()
 	stale_pet_entity_frames=0
 	last_pet_result_sequence=0
@@ -3036,7 +3057,10 @@ func _apply_inventory_snapshot(frame: PackedByteArray) -> bool:
 		var uid := int(item.item_uid)
 		if inventory_items.has(uid):
 			return fail("inventory_duplicate_item_uid")
-		if equipment_items.has(uid) or storage_items.has(uid) or mecha_equipment_items.has(uid):
+		if (
+			equipment_items.has(uid) or storage_items.has(uid) or
+			mecha_equipment_items.has(uid) or pet_equipment_items.has(uid)
+		):
 			return fail("inventory_item_uid_location_conflict")
 		inventory_items[uid] = item.duplicate(true)
 		inventory_next_index += 1
@@ -3383,7 +3407,11 @@ func _apply_storage_snapshot(frame: PackedByteArray) -> bool:
 		return fail("storage_empty_nonfinal_chunk")
 	for item in items:
 		var uid := int(item.item_uid)
-		if storage_items.has(uid) or inventory_items.has(uid):
+		if (
+			storage_items.has(uid) or inventory_items.has(uid) or
+			equipment_items.has(uid) or mecha_equipment_items.has(uid) or
+			pet_equipment_items.has(uid)
+		):
 			return fail("storage_uid_location_conflict")
 		storage_items[uid] = item.duplicate(true)
 		storage_next_index += 1
@@ -3475,7 +3503,11 @@ func _apply_equipment_snapshot(frame: PackedByteArray) -> bool:
 	for item in items:
 		var uid := int(item.item_uid)
 		var slot_id := int(item.slot_id)
-		if equipment_items.has(uid) or equipment_slots.has(slot_id) or inventory_items.has(uid) or storage_items.has(uid):
+		if (
+			equipment_items.has(uid) or equipment_slots.has(slot_id) or
+			inventory_items.has(uid) or storage_items.has(uid) or
+			mecha_equipment_items.has(uid) or pet_equipment_items.has(uid)
+		):
 			return fail("equipment_uid_or_slot_location_conflict")
 		equipment_items[uid] = item.duplicate(true)
 		equipment_slots[slot_id] = uid
@@ -4726,11 +4758,12 @@ func _apply_pet_result(frame:PackedByteArray)->bool:
 		return true
 	if (
 		sequence>pet_sequence or sequence!=pending_pet_sequence or
-		int(value.action)!=pending_pet_action or int(value.pet_uid)!=pending_pet_uid
+		int(value.action)!=pending_pet_action or int(value.pet_uid)!=pending_pet_uid or
+		int(value.item_uid)!=pending_pet_item_uid
 	):
 		return fail("pet_result_without_matching_request")
 	var status:=int(value.status)
-	if status<0 or status>5:
+	if status<0 or status>10:
 		return fail("pet_result_unknown_status")
 	last_pet_result_sequence=sequence
 	last_pet_result_status=status
@@ -4759,9 +4792,64 @@ func _apply_pet_snapshot(frame:PackedByteArray)->bool:
 	var incoming_active:=int(value.active_pet_uid)
 	if incoming_active>0 and not next_pets.has(incoming_active):
 		return fail("pet_snapshot_missing_active")
+	if pet_equipment_snapshot_received:
+		for raw in pet_equipment_items.values():
+			var equipped:Dictionary=raw
+			if not next_pets.has(int(equipped.get("pet_uid",0))):
+				return fail("pet_snapshot_missing_equipment_owner")
 	pet_instances=next_pets
 	active_pet_uid=incoming_active
 	pet_snapshot_received=true
+	return true
+
+
+func _apply_pet_equipment_snapshot(frame:PackedByteArray)->bool:
+	if state!=STATE_IN_WORLD:
+		return fail("pet_equipment_snapshot_out_of_state")
+	var value:=WireCodec.decode_pet_equipment_snapshot(frame)
+	if value.is_empty():
+		return fail("invalid_pet_equipment_snapshot")
+	var epoch:=int(value.receiver_map_epoch)
+	if epoch<map_epoch:
+		stale_pet_frames+=1
+		return true
+	if epoch>map_epoch:
+		return fail("future_pet_equipment_snapshot")
+	var next_items:={}
+	for raw in value.items:
+		var item:Dictionary=raw
+		var uid:=int(item.item_uid)
+		var pet_uid:=int(item.pet_uid)
+		if pet_snapshot_received and not pet_instances.has(pet_uid):
+			return fail("pet_equipment_unknown_pet")
+		if equipment_items.has(uid) or storage_items.has(uid) or mecha_equipment_items.has(uid):
+			return fail("pet_equipment_item_uid_location_conflict")
+		next_items[uid]=item.duplicate(true)
+	# Authoritative physical-location reconciliation mirrors Mecha equipment:
+	# newly equipped UIDs leave inventory; UIDs absent from the new snapshot
+	# return to inventory with their exact persistent metadata.
+	for uid_value in pet_equipment_items.keys():
+		var uid:=int(uid_value)
+		if next_items.has(uid):
+			continue
+		var old:Dictionary=pet_equipment_items[uid]
+		if equipment_items.has(uid) or storage_items.has(uid) or mecha_equipment_items.has(uid):
+			return fail("pet_unequip_item_uid_location_conflict")
+		inventory_items[uid]={
+			"item_uid":uid,
+			"item_definition_id":int(old.item_definition_id),
+			"quantity":1,
+			"drop_id":int(old.source_drop_id),
+			"enhancement_level":int(old.enhancement_level),
+			"durability_raw":int(old.durability_raw)
+		}
+	for uid_value in next_items.keys():
+		inventory_items.erase(int(uid_value))
+	var changed:=pet_equipment_items!=next_items
+	pet_equipment_items=next_items
+	pet_equipment_snapshot_received=true
+	if changed:
+		inventory_revision+=1
 	return true
 
 
@@ -4848,7 +4936,7 @@ func _apply_mecha_equipment_snapshot(frame:PackedByteArray)->bool:
 		var mecha_uid:=int(item.mecha_uid)
 		if mecha_snapshot_received and not mecha_instances.has(mecha_uid):
 			return fail("mecha_equipment_unknown_mecha")
-		if equipment_items.has(uid) or storage_items.has(uid):
+		if equipment_items.has(uid) or storage_items.has(uid) or pet_equipment_items.has(uid):
 			return fail("mecha_equipment_item_uid_location_conflict")
 		next_items[uid]=item.duplicate(true)
 	# Authoritative physical-location reconciliation. Items newly equipped leave
@@ -4858,7 +4946,7 @@ func _apply_mecha_equipment_snapshot(frame:PackedByteArray)->bool:
 		if next_items.has(uid):
 			continue
 		var old:Dictionary=mecha_equipment_items[uid]
-		if equipment_items.has(uid) or storage_items.has(uid):
+		if equipment_items.has(uid) or storage_items.has(uid) or pet_equipment_items.has(uid):
 			return fail("mecha_unequip_item_uid_location_conflict")
 		inventory_items[uid]={
 			"item_uid":uid,
@@ -5456,7 +5544,10 @@ func _apply_trade_snapshot(frame: PackedByteArray) -> bool:
 	for raw in value.other_items:
 		var item: Dictionary = raw
 		var uid := int(item.item_uid)
-		if inventory_items.has(uid) or storage_items.has(uid) or equipment_items.has(uid):
+		if (
+			inventory_items.has(uid) or storage_items.has(uid) or equipment_items.has(uid) or
+			mecha_equipment_items.has(uid) or pet_equipment_items.has(uid)
+		):
 			return fail("trade_snapshot_other_uid_location_conflict")
 		other_next[uid] = item.duplicate(true)
 	trade_id = incoming_id

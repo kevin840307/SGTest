@@ -141,7 +141,8 @@ public enum WireOpcode : ushort
     MechaEquipmentSnapshot = 128,
     PetSkill = 129,
     PetSkillResult = 130,
-    PetSkillVisual = 131
+    PetSkillVisual = 131,
+    PetEquipmentSnapshot = 132
 }
 
 public enum ChatChannel : byte { Nearby = 0, Faction = 1, Warband = 2, Party = 3, Whisper = 4 }
@@ -167,11 +168,13 @@ public enum FriendResultStatus : byte
     Success=0,TargetNotFound=1,CannotTargetSelf=2,
     AlreadyFriends=3,NotFriends=4,Conflict=5
 }
-public enum PetCommandAction : byte { Summon=1, Recall=2, Refresh=3 }
+public enum PetCommandAction : byte { Summon=1, Recall=2, Refresh=3, Equip=4, Unequip=5 }
 public enum PetResultStatus : byte
 {
     Applied=0,AlreadyProcessed=1,PetNotOwned=2,
-    AlreadyActive=3,NotActive=4,SequenceConflict=5
+    AlreadyActive=3,NotActive=4,SequenceConflict=5,
+    ItemNotOwned=6,InvalidEquipment=7,LevelTooLow=8,
+    NotEquipped=9,RulesUnavailable=10
 }
 public enum MechaCommandAction : byte
 {
@@ -709,14 +712,19 @@ public sealed record FriendSnapshotWire(
     long ReceiverMapEpoch,IReadOnlyList<FriendEntryWire> Friends);
 
 public readonly record struct PetCommandWire(
-    long MapEpoch,uint PetSequence,PetCommandAction Action,long PetUid);
+    long MapEpoch,uint PetSequence,PetCommandAction Action,long PetUid,long ItemUid=0);
 public readonly record struct PetResultWire(
     long MapEpoch,uint PetSequence,PetCommandAction Action,PetResultStatus Status,
-    long PetUid,long ActivePetUid);
+    long PetUid,long ActivePetUid,long ItemUid=0,int SlotId=0,long ReplacedItemUid=0);
 public readonly record struct PetSnapshotEntryWire(
     long PetUid,int DefinitionId,int EvolutionId,int Level,long Experience);
 public sealed record PetSnapshotWire(
     long ReceiverMapEpoch,long ActivePetUid,IReadOnlyList<PetSnapshotEntryWire> Pets);
+public readonly record struct PetEquipmentEntryWire(
+    long PetUid,long ItemUid,int SlotId,int ItemDefinitionId,long SourceDropId,
+    int EnhancementLevel,int DurabilityRaw);
+public sealed record PetEquipmentSnapshotWire(
+    long ReceiverMapEpoch,IReadOnlyList<PetEquipmentEntryWire> Items);
 public readonly record struct PetEntitySpawnWire(
     long ReceiverMapEpoch,long ServerTick,long OwnerActorId,long OwnerConnectionEpoch,
     long OwnerMapEpoch,long PetUid,int DefinitionId,int EvolutionId,int Level,float X,float Y);

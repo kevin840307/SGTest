@@ -18,20 +18,24 @@ public readonly record struct PetWorldStateUpdate(
     long PetUid,int DefinitionId,int EvolutionId,int Level,bool Present);
 
 /// <summary>
-/// Durable pet roster/summon boundary. SQLite owns pet instances and active state;
-/// the single AOI owner receives only committed active/inactive presentation state.
-/// Follow/pathing and combat rules remain separate owners; combat consumes this
-/// committed identity/position and only verified rule data.
+/// Durable Pet roster, summon lifecycle and physical equipment ownership. SQLite
+/// owns Pet instances/active state/ItemUid location. Equipment legality is
+/// fail-closed and must come from an operator-verified manifest; exact HK slot
+/// semantics and stat transforms remain source-gated rather than guessed here.
 /// </summary>
 public sealed class PetCoordinator
 {
     private readonly SqliteIdentityStore _identity;
     private readonly PetGrowthCurve? _growth;
+    private readonly IReadOnlyDictionary<int,PetEquipmentRule>? _equipmentRules;
 
-    public PetCoordinator(SqliteIdentityStore identity,PetGrowthCurve? growth=null)
+    public PetCoordinator(
+        SqliteIdentityStore identity,PetGrowthCurve? growth=null,
+        IReadOnlyDictionary<int,PetEquipmentRule>? equipmentRules=null)
     {
         _identity=identity??throw new ArgumentNullException(nameof(identity));
         _growth=growth;
+        _equipmentRules=equipmentRules;
     }
 
     public async Task AttachAsync(ConnectionBinding binding,WorldResultRouter router)
@@ -40,7 +44,11 @@ public sealed class PetCoordinator
         if(binding.ActorId<=0||binding.ConnectionEpoch<=0||binding.MapEpoch<=0)
             throw new ArgumentOutOfRangeException(nameof(binding));
         var pets=await _identity.GetPetsAsync(binding.ActorId).ConfigureAwait(false);
+        var equipment=await _identity.ListPetEquippedItemsAsync(
+            binding.ActorId).ConfigureAwait(false);
         EnsureQueued(router.QueuePetSnapshot(binding,ToSnapshot(binding.MapEpoch,pets)));
+        EnsureQueued(router.QueuePetEquipmentSnapshot(
+            binding,ToEquipmentSnapshot(binding.MapEpoch,equipment)));
         EnsureWorldPosted(router,ToWorldUpdate(binding,pets));
     }
 
@@ -104,37 +112,53 @@ public sealed class PetCoordinator
            binding.MapEpoch!=request.RequestMapEpoch)
             return;
 
-        PetResultStatus status;
-        long active;
+        PetActionOutcome outcome;
         if(request.Action==PetCommandAction.Refresh)
         {
             var before=await _identity.GetPetsAsync(request.ActorId).ConfigureAwait(false);
-            active=before.FirstOrDefault(x=>x.IsActive)?.PetUid??0;
-            status=PetResultStatus.Applied;
+            outcome=new(
+                PetActionStatus.Applied,
+                before.FirstOrDefault(x=>x.IsActive)?.PetUid??0);
+        }
+        else if(request.Action is PetCommandAction.Equip or PetCommandAction.Unequip)
+        {
+            outcome=await _identity.ApplyPetEquipmentActionAsync(
+                request.ActorId,request.ConnectionEpoch,request.RequestMapEpoch,
+                request.PetSequence,
+                request.Action==PetCommandAction.Equip
+                    ?PetActionKind.Equip:PetActionKind.Unequip,
+                request.PetUid,request.ItemUid,
+                request.Action==PetCommandAction.Equip?_equipmentRules:null)
+                .ConfigureAwait(false);
         }
         else
         {
-            var outcome=await _identity.ApplyPetActionAsync(
+            outcome=await _identity.ApplyPetActionAsync(
                 request.ActorId,request.ConnectionEpoch,request.RequestMapEpoch,
                 request.PetSequence,
                 request.Action==PetCommandAction.Summon
                     ?PetActionKind.Summon:PetActionKind.Recall,
                 request.PetUid).ConfigureAwait(false);
-            status=(PetResultStatus)outcome.Status;
-            active=outcome.ActivePetUid;
         }
 
         EnsureQueued(router.QueuePetResult(request,new(
-            request.RequestMapEpoch,request.PetSequence,request.Action,status,
-            request.PetUid,active)));
+            request.RequestMapEpoch,request.PetSequence,request.Action,
+            (PetResultStatus)outcome.Status,request.PetUid,outcome.ActivePetUid,
+            request.ItemUid,outcome.SlotId,outcome.ReplacedItemUid)));
 
         if(!router.TryGetCurrentBinding(request.ActorId,out var after)||
            after.ConnectionEpoch!=request.ConnectionEpoch||
            after.MapEpoch!=request.RequestMapEpoch)
             return;
         var pets=await _identity.GetPetsAsync(request.ActorId).ConfigureAwait(false);
+        var equipment=await _identity.ListPetEquippedItemsAsync(
+            request.ActorId).ConfigureAwait(false);
         EnsureQueued(router.QueuePetSnapshot(after,ToSnapshot(after.MapEpoch,pets)));
-        EnsureWorldPosted(router,ToWorldUpdate(after,pets));
+        EnsureQueued(router.QueuePetEquipmentSnapshot(
+            after,ToEquipmentSnapshot(after.MapEpoch,equipment)));
+        if(request.Action is PetCommandAction.Summon or
+           PetCommandAction.Recall or PetCommandAction.Refresh)
+            EnsureWorldPosted(router,ToWorldUpdate(after,pets));
     }
 
     public bool TryDetach(ConnectionBinding binding,WorldResultRouter router)
@@ -153,6 +177,12 @@ public sealed class PetCoordinator
         return new(mapEpoch,active,pets.Select(x=>new PetSnapshotEntryWire(
             x.PetUid,x.DefinitionId,x.EvolutionId,x.Level,x.Experience)).ToArray());
     }
+
+    private static PetEquipmentSnapshotWire ToEquipmentSnapshot(
+        long mapEpoch,IReadOnlyList<PetEquippedItem> equipment) =>
+        new(mapEpoch,equipment.Select(x=>new PetEquipmentEntryWire(
+            x.PetUid,x.ItemUid,x.SlotId,x.ItemDefinitionId,x.SourceDropId,
+            x.EnhancementLevel,x.DurabilityRaw??-1)).ToArray());
 
     private static PetWorldStateUpdate ToWorldUpdate(
         ConnectionBinding binding,IReadOnlyList<PetInstanceRecord> pets)

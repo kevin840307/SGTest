@@ -690,6 +690,7 @@ public static partial class WireProtocol
             129 => WireOpcode.PetSkill,
             130 => WireOpcode.PetSkillResult,
             131 => WireOpcode.PetSkillVisual,
+            132 => WireOpcode.PetEquipmentSnapshot,
             _ => 0
         };
         if (opcode == 0) return false;
@@ -746,6 +747,11 @@ public static partial class WireProtocol
             WireOpcode.PetSkill => advertised == PetSkillFrameBytes,
             WireOpcode.PetSkillResult => advertised == PetSkillResultFrameBytes,
             WireOpcode.PetSkillVisual => advertised == PetSkillVisualFrameBytes,
+            WireOpcode.PetEquipmentSnapshot =>
+                advertised >= PetEquipmentSnapshotHeaderBytes &&
+                advertised <= PetEquipmentSnapshotMaximumFrameBytes &&
+                (advertised-PetEquipmentSnapshotHeaderBytes)%
+                    PetEquipmentSnapshotEntryBytes==0,
             WireOpcode.CharacterCreate => advertised is >= 12 and <= MaxCharacterCreateFrameBytes,
             WireOpcode.CharacterCreateResult => advertised is >= 20 and <= MaxCharacterCreateResultFrameBytes,
             WireOpcode.WorldReady => advertised == WorldReadyFrameBytes,

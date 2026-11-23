@@ -140,6 +140,11 @@ internal static class AesGameHost
             string? petGrowthManifest=options.GetValueOrDefault("--pet-growth-rules");
             PetGrowthCurve? petGrowth=petGrowthManifest is null ? null :
                 PetGrowthRuleCatalog.LoadVerified(Path.GetFullPath(petGrowthManifest));
+            string? petEquipmentManifest=
+                options.GetValueOrDefault("--pet-equipment-rules");
+            IReadOnlyDictionary<int,PetEquipmentRule>? petEquipmentRules=
+                petEquipmentManifest is null ? null :
+                PetEquipmentCatalog.LoadVerified(Path.GetFullPath(petEquipmentManifest));
             MonsterWorldCoordinator? monsters = monsterRuntimes.Count == 0
                 ? null : new MonsterWorldCoordinator(
                     monsterRuntimes,skillRules,petCombatRules,petSkillRules);
@@ -305,7 +310,7 @@ internal static class AesGameHost
             var parties=new PartyCoordinator();
             var clans=new ClanCoordinator(identity);
             var friends=new FriendCoordinator(identity);
-            var pets=new PetCoordinator(identity,petGrowth);
+            var pets=new PetCoordinator(identity,petGrowth,petEquipmentRules);
             var mechas=new MechaCoordinator(identity,mechaEquipmentRules);
             CharacterExperienceSettlement? experience=experienceRules is null
                 ? null:new CharacterExperienceSettlement(
@@ -490,6 +495,7 @@ internal static class AesGameHost
                 "[--experience-rules <VERIFIED_JSON>] " +
                 "[--recovery-rules <VERIFIED_JSON>] [--skill-rules <VERIFIED_JSON>] " +
                 "[--pet-combat-rules <VERIFIED_JSON>] [--pet-skill-rules <VERIFIED_JSON>] [--pet-growth-rules <VERIFIED_JSON>] " +
+                "[--pet-equipment-rules <VERIFIED_JSON>] " +
                 "[--shop-rules <VERIFIED_JSON>] [--storage-rules <VERIFIED_JSON>] " +
                 "[--equipment-rules <VERIFIED_JSON>] [--mecha-equipment-rules <VERIFIED_JSON>] " +
                 "[--bank-rules <VERIFIED_JSON>] " +
@@ -529,6 +535,7 @@ internal static class AesGameHost
                           "--loot-rules", "--experience-rules",
                           "--recovery-rules", "--skill-rules",
                           "--pet-combat-rules", "--pet-skill-rules", "--pet-growth-rules",
+                          "--pet-equipment-rules",
                           "--shop-rules", "--storage-rules", "--equipment-rules",
                           "--mecha-equipment-rules", "--bank-rules",
                           "--repair-rules", "--repair-item-rules", "--quest-rules",

@@ -37,7 +37,26 @@ internal static class PetLoginFixture
                 characterId,5002,level:7,experience:1234,evolutionId:7)
                 .ConfigureAwait(false);
 
-            var pets=new PetCoordinator(store);
+            long lootGeneration=await store.AllocateLootWorldGenerationAsync()
+                .ConfigureAwait(false);
+            var equipmentDrop=(await store.CreateTrustedGroundDropsAsync([
+                new TrustedDropSpawn(
+                    15,24,24,1001900001,
+                    SqliteIdentityStore.ComposeLootDeathRevision(lootGeneration,1),
+                    0,8101,1,LootSourceTrust.SyntheticTest,
+                    "ci:godot-aes-pet-equipment")
+            ]).ConfigureAwait(false)).Single();
+            var equipmentGrant=await store.ClaimGroundDropAsync(
+                new TrustedPickupContext(characterId,29,1,1,15,24,24),
+                equipmentDrop.DropId).ConfigureAwait(false);
+            if(equipmentGrant.Status!=PickupStatus.Granted||
+               equipmentGrant.ItemUid<=0||equipmentGrant.Quantity!=1)
+                throw new InvalidOperationException(
+                    "pet fixture could not seed durable equipment inventory");
+            IReadOnlyDictionary<int,PetEquipmentRule> petEquipmentRules=
+                new Dictionary<int,PetEquipmentRule>{[8101]=new(8101,2,1)};
+
+            var pets=new PetCoordinator(store,null,petEquipmentRules);
             var router=new WorldResultRouter();
             var pump=new WorldAoiPump(router);
             var authorization=new IdentitySessionAuthorization(
@@ -54,7 +73,8 @@ internal static class PetLoginFixture
                 int port=((IPEndPoint)listener.LocalEndpoint).Port;
                 Console.WriteLine(
                     $"PET_FIXTURE_READY port={port} username={Program.Username} " +
-                    $"character={characterId} pet_a={petA} pet_b={petB}");
+                    $"character={characterId} pet_a={petA} pet_b={petB} " +
+                    $"item_uid={equipmentGrant.ItemUid} slot=2");
                 Console.Out.Flush();
 
                 AesWireConnectionResult firstEnded;
@@ -70,19 +90,30 @@ internal static class PetLoginFixture
                 var afterSummon=await store.GetPetsAsync(characterId)
                     .ConfigureAwait(false);
                 var activeAfterSummon=afterSummon.SingleOrDefault(x=>x.IsActive);
+                var equippedAfterFirst=await store.ListPetEquippedItemsAsync(characterId)
+                    .ConfigureAwait(false);
+                var inventoryAfterFirst=await store.ListInventoryItemsAsync(characterId)
+                    .ConfigureAwait(false);
                 if(activeAfterSummon?.PetUid!=petA||
                    activeAfterSummon.DefinitionId!=5001||
                    activeAfterSummon.EvolutionId!=2||
                    activeAfterSummon.Level!=4||
                    activeAfterSummon.Experience!=88||
-                   firstEnded.CommandsAccepted!=2||
+                   equippedAfterFirst.Count!=1||
+                   equippedAfterFirst[0].PetUid!=petA||
+                   equippedAfterFirst[0].ItemUid!=equipmentGrant.ItemUid||
+                   equippedAfterFirst[0].SlotId!=2||
+                   inventoryAfterFirst.Any(x=>x.ItemUid==equipmentGrant.ItemUid)||
+                   firstEnded.CommandsAccepted!=3||
                    router.Statistics.ActiveSessions!=0)
                     throw new InvalidOperationException(
-                        $"pet summon/reconnect baseline mismatch active={activeAfterSummon?.PetUid??0} " +
+                        $"pet summon/equipment/reconnect baseline mismatch active={activeAfterSummon?.PetUid??0} " +
+                        $"equipped={equippedAfterFirst.Count} inventory={inventoryAfterFirst.Count} " +
                         $"commands={firstEnded.CommandsAccepted} sessions={router.Statistics.ActiveSessions}");
 
                 Console.WriteLine(
-                    $"PET_FIXTURE_SUMMON_PERSISTED pet_uid={petA} commands={firstEnded.CommandsAccepted}");
+                    $"PET_FIXTURE_SUMMON_PERSISTED pet_uid={petA} item_uid={equipmentGrant.ItemUid} " +
+                    $"slot=2 commands={firstEnded.CommandsAccepted}");
                 Console.Out.Flush();
 
                 AesWireConnectionResult secondEnded;
@@ -98,21 +129,33 @@ internal static class PetLoginFixture
                 var final=await store.GetPetsAsync(characterId).ConfigureAwait(false);
                 var firstPet=final.Single(x=>x.PetUid==petA);
                 var secondPet=final.Single(x=>x.PetUid==petB);
+                var finalEquipment=await store.ListPetEquippedItemsAsync(characterId)
+                    .ConfigureAwait(false);
+                var finalInventory=await store.ListInventoryItemsAsync(characterId)
+                    .ConfigureAwait(false);
                 if(final.Count!=2||final.Any(x=>x.IsActive)||
                    firstPet.DefinitionId!=5001||firstPet.EvolutionId!=2||
                    firstPet.Level!=4||firstPet.Experience!=88||
                    secondPet.DefinitionId!=5002||secondPet.EvolutionId!=7||
                    secondPet.Level!=7||secondPet.Experience!=1234||
-                   secondEnded.CommandsAccepted!=2||
+                   finalEquipment.Count!=0||
+                   !finalInventory.Any(x=>
+                       x.ItemUid==equipmentGrant.ItemUid&&
+                       x.ItemDefinitionId==8101&&x.Quantity==1&&
+                       x.SourceDropId==equipmentDrop.DropId)||
+                   secondEnded.CommandsAccepted!=3||
                    router.Statistics.ActiveSessions!=0)
                     throw new InvalidOperationException(
-                        $"pet recall E2E mismatch pets={final.Count} " +
-                        $"active={final.Count(x=>x.IsActive)} commands={secondEnded.CommandsAccepted} " +
+                        $"pet recall/equipment E2E mismatch pets={final.Count} " +
+                        $"active={final.Count(x=>x.IsActive)} equipped={finalEquipment.Count} " +
+                        $"inventory={finalInventory.Count} commands={secondEnded.CommandsAccepted} " +
                         $"sessions={router.Statistics.ActiveSessions}");
 
                 Console.WriteLine(
                     $"PET_FIXTURE_PASS aes=true pet_a={petA} pet_b={petB} " +
-                    $"summon_persisted=true reconnect_restored=true recall_persisted=true " +
+                    $"item_uid={equipmentGrant.ItemUid} summon_persisted=true " +
+                    $"equip_persisted=true reconnect_equipment_restored=true " +
+                    $"unequip_persisted=true recall_persisted=true " +
                     $"commands={firstEnded.CommandsAccepted}/{secondEnded.CommandsAccepted}");
                 Console.Out.Flush();
                 return 0;

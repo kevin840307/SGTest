@@ -511,7 +511,17 @@ func pet_refresh()->bool:
 	return _queue_pet_intent(3,0,current)
 
 
-func _queue_pet_intent(action:int,pet_uid:int,current:Dictionary)->bool:
+func pet_equip(pet_uid:int,item_uid:int)->bool:
+	var current:=snapshot()
+	return _queue_pet_intent(4,pet_uid,current,item_uid)
+
+
+func pet_unequip(pet_uid:int,item_uid:int)->bool:
+	var current:=snapshot()
+	return _queue_pet_intent(5,pet_uid,current,item_uid)
+
+
+func _queue_pet_intent(action:int,pet_uid:int,current:Dictionary,item_uid:int=0)->bool:
 	if (
 		int(current.get("state",-1))!=WorldState.STATE_IN_WORLD or
 		not bool(current.get("world_ready",false)) or
@@ -525,18 +535,29 @@ func _queue_pet_intent(action:int,pet_uid:int,current:Dictionary)->bool:
 	var pets:Dictionary=current.get("pet_instances",{})
 	match action:
 		1:
-			if pet_uid<=0 or not pets.has(pet_uid) or int(current.get("active_pet_uid",0))==pet_uid:
+			if item_uid!=0 or pet_uid<=0 or not pets.has(pet_uid) or int(current.get("active_pet_uid",0))==pet_uid:
 				return false
 		2:
-			if pet_uid<=0 or int(current.get("active_pet_uid",0))!=pet_uid:
+			if item_uid!=0 or pet_uid<=0 or int(current.get("active_pet_uid",0))!=pet_uid:
 				return false
 		3:
-			if pet_uid!=0:
+			if pet_uid!=0 or item_uid!=0:
+				return false
+		4:
+			var inventory:Dictionary=current.get("inventory_items",{})
+			if pet_uid<=0 or not pets.has(pet_uid) or item_uid<=0 or not inventory.has(item_uid):
+				return false
+		5:
+			var equipped:Dictionary=current.get("pet_equipment_items",{}).get(item_uid,{})
+			if (
+				pet_uid<=0 or not pets.has(pet_uid) or item_uid<=0 or
+				equipped.is_empty() or int(equipped.get("pet_uid",0))!=pet_uid
+			):
 				return false
 		_:
 			return false
 	return _queue_intent({
-		"type":"pet","action":action,"pet_uid":pet_uid,
+		"type":"pet","action":action,"pet_uid":pet_uid,"item_uid":item_uid,
 		"actor_id":int(current.get("actor_id",0)),
 		"map_epoch":int(current.get("map_epoch",0))
 	})
@@ -1878,13 +1899,16 @@ func _process_pet_intent(intent:Dictionary)->void:
 		return
 	var action:=int(intent.get("action",0))
 	var pet_uid:=int(intent.get("pet_uid",0))
+	var item_uid:=int(intent.get("item_uid",0))
 	var sequence:=int(current.get("pet_sequence",0))+1
 	var frame:=WireCodec.encode_pet_command(
-		int(current.get("map_epoch",0)),sequence,action,pet_uid)
+		int(current.get("map_epoch",0)),sequence,action,pet_uid,item_uid)
 	if frame.is_empty():
 		_pop_intent()
 		return
-	if _transport.send_frame(frame) and _world.mark_pet_sent(sequence,action,pet_uid):
+	if _transport.send_frame(frame) and _world.mark_pet_sent(
+		sequence,action,pet_uid,item_uid
+	):
 		_pop_intent()
 		_publish()
 

@@ -33,6 +33,7 @@ internal static class PetChecks
             ()=>ExperienceDeathSettlement().GetAwaiter().GetResult());
         Checks.Run("schema v30 pet rows migrate to explicit evolution zero without data loss",
             ()=>MigrationV30().GetAwaiter().GetResult());
+        PetEquipmentChecks.Verify();
     }
 
     private static void Wire()

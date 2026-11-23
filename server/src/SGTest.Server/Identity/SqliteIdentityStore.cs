@@ -13,7 +13,7 @@ namespace SGTest.Server.Identity;
 /// </summary>
 public sealed partial class SqliteIdentityStore : IDisposable
 {
-    public const int SchemaVersion = 38;
+    public const int SchemaVersion = 39;
     private readonly string _databasePath;
     private readonly string _connectionString;
     private readonly IdentityStoreOptions _options;
@@ -360,7 +360,7 @@ WHERE account_id=$id AND password_hash=$old;";
         if (table is not ("character_combat_profiles" or
                 "item_instances" or "storage_items" or "equipped_items" or
                 "trade_commit_items" or "player_shop_listings" or "clans" or
-                "character_pvp_modes" or "character_appearances") ||
+                "character_pvp_modes" or "character_appearances" or "pet_actions") ||
             string.IsNullOrWhiteSpace(column))
             throw new ArgumentOutOfRangeException(nameof(table));
         using var command = connection.CreateCommand();

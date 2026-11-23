@@ -2,8 +2,11 @@ extends SceneTree
 const Codec = preload("res://network/wire_codec.gd")
 const State = preload("res://world/world_state.gd")
 
-const COMMAND_HEX := "1d00000001006f00070000000000000001000000016500000000000000"
-const RESULT_HEX := "2600000001007000070000000000000001000000010065000000000000006500000000000000"
+const COMMAND_HEX := "2500000001006f000700000000000000010000000165000000000000000000000000000000"
+const RESULT_HEX := "37000000010070000700000000000000010000000100650000000000000065000000000000000000000000000000000000000000000000"
+const PET_EQUIP_COMMAND_HEX := "2500000001006f000700000000000000020000000465000000000000002923000000000000"
+const PET_EQUIP_RESULT_HEX := "37000000010070000700000000000000020000000400650000000000000065000000000000002923000000000000020000000000000000"
+const PET_EQUIPMENT_SNAPSHOT_HEX := "3400000001008400070000000000000001006500000000000000292300000000000002a51f0000f5010000000000000450000000"
 const SNAPSHOT_HEX := "52000000010071000700000000000000660000000000000002006500000000000000891300000200000004000000580000000000000066000000000000008a1300000700000007000000d204000000000000"
 const PET_SPAWN_HEX := "4c0000000100720007000000000000002a00000000000000e9030000000000000b00000000000000040000000000000066000000000000008a13000007000000070000000000c04100001042"
 const PET_DELTA_HEX := "400000000100740007000000000000002b00000000000000e9030000000000000b00000000000000040000000000000066000000000000000000204200001042"
@@ -22,6 +25,30 @@ func _initialize() -> void:
 		return
 	if not Codec.encode_pet_command(7,1,3,101).is_empty():
 		_fail("refresh accepted nonzero pet uid")
+		return
+	var equip_command:=Codec.encode_pet_command(7,2,4,101,9001)
+	if equip_command.hex_encode()!=PET_EQUIP_COMMAND_HEX:
+		_fail("C# pet equip command golden mismatch")
+		return
+	if not Codec.encode_pet_command(7,2,4,101,0).is_empty():
+		_fail("pet equip accepted zero item uid")
+		return
+	var equip_result:=Codec.decode_pet_result(PET_EQUIP_RESULT_HEX.hex_decode())
+	if (
+		equip_result.is_empty() or int(equip_result.item_uid)!=9001 or
+		int(equip_result.slot_id)!=2 or int(equip_result.replaced_item_uid)!=0
+	):
+		_fail("pet equip result golden rejected")
+		return
+	var equipment_snapshot:=Codec.decode_pet_equipment_snapshot(
+		PET_EQUIPMENT_SNAPSHOT_HEX.hex_decode())
+	if (
+		equipment_snapshot.is_empty() or equipment_snapshot.items.size()!=1 or
+		int(equipment_snapshot.items[0].pet_uid)!=101 or
+		int(equipment_snapshot.items[0].item_uid)!=9001 or
+		int(equipment_snapshot.items[0].slot_id)!=2
+	):
+		_fail("pet equipment snapshot golden rejected")
 		return
 	var result := Codec.decode_pet_result(RESULT_HEX.hex_decode())
 	if result.is_empty() or result.pet_uid != 101 or result.active_pet_uid != 101 or result.status != 0:
@@ -216,13 +243,36 @@ func _initialize() -> void:
 		_fail("pet reducer state mismatch")
 		return
 
+	state.inventory_items[9001]={
+		"item_uid":9001,"item_definition_id":8101,"quantity":1,
+		"drop_id":501,"enhancement_level":4,"durability_raw":80
+	}
+	if not state.mark_pet_sent(2,4,101,9001):
+		_fail("valid pet equip request rejected")
+		return
+	if not state.apply_frame(PET_EQUIP_RESULT_HEX.hex_decode()):
+		_fail("pet equip result reducer failed")
+		return
+	if not state.apply_frame(PET_EQUIPMENT_SNAPSHOT_HEX.hex_decode()):
+		_fail("pet equipment snapshot reducer failed")
+		return
+	view=state.snapshot()
+	if (
+		int(view.pending_pet_sequence)!=0 or int(view.pending_pet_item_uid)!=0 or
+		not bool(view.pet_equipment_snapshot_received) or
+		not view.pet_equipment_items.has(9001) or view.inventory_items.has(9001) or
+		int(view.pet_equipment_items[9001].slot_id)!=2
+	):
+		_fail("pet equipment authority reconciliation mismatch")
+		return
+
 	var stale_snapshot := SNAPSHOT_HEX.hex_decode()
 	stale_snapshot.encode_s64(8,6)
 	if not state.apply_frame(stale_snapshot) or int(state.snapshot().active_pet_uid) != 101:
 		_fail("stale pet snapshot changed current state")
 		return
 
-	print("PET_WIRE_PASS csharp_golden=true reducer=true aoi_presence=true aoi_movement=true pet_combat=true pet_skill=true remote_attack_visual=true remote_skill_visual=true pets=2")
+	print("PET_WIRE_PASS csharp_golden=true reducer=true equipment=true aoi_presence=true aoi_movement=true pet_combat=true pet_skill=true remote_attack_visual=true remote_skill_visual=true pets=2")
 	quit(0)
 
 func _fail(message:String)->void:

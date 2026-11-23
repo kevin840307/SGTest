@@ -219,6 +219,18 @@ public sealed partial class WorldResultRouter
         }
     }
 
+    public GatewaySendStatus QueuePetEquipmentSnapshot(
+        ConnectionBinding recipient,PetEquipmentSnapshotWire snapshot)
+    {
+        lock(_gate)
+        {
+            if(!_connections.TryGetValue(recipient.ActorId,out var connection)||
+               connection.IsClosed||connection.Binding!=recipient)
+                return GatewaySendStatus.Closed;
+            return connection.QueuePetEquipmentSnapshot(recipient,snapshot);
+        }
+    }
+
     public GatewaySendStatus QueueMechaResult(
         TrustedMechaCommand request,MechaResultWire result)
     {

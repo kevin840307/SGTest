@@ -134,7 +134,7 @@ public readonly record struct TrustedFriendCommand(
     string TargetName = "");
 public readonly record struct TrustedPetCommand(
     long ActorId,long ConnectionEpoch,long RequestMapEpoch,
-    uint PetSequence,PetCommandAction Action,long PetUid);
+    uint PetSequence,PetCommandAction Action,long PetUid,long ItemUid=0);
 public readonly record struct TrustedMechaCommand(
     long ActorId,long ConnectionEpoch,long RequestMapEpoch,
     uint MechaSequence,MechaCommandAction Action,long MechaUid,long ItemUid=0);

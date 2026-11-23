@@ -841,16 +841,124 @@ ON pet_instances(character_id) WHERE is_active=1;",tx);
     connection_generation INTEGER NOT NULL CHECK(connection_generation > 0),
     map_epoch INTEGER NOT NULL CHECK(map_epoch > 0),
     action_sequence INTEGER NOT NULL CHECK(action_sequence BETWEEN 1 AND 4294967295),
-    action INTEGER NOT NULL CHECK(action IN (1,2)),
+    action INTEGER NOT NULL CHECK(action IN (1,2,4,5)),
     pet_uid INTEGER NOT NULL CHECK(pet_uid > 0),
-    result_status INTEGER NOT NULL CHECK(result_status BETWEEN 0 AND 5),
+    item_uid INTEGER NOT NULL DEFAULT 0 CHECK(item_uid >= 0),
+    result_status INTEGER NOT NULL CHECK(result_status BETWEEN 0 AND 10),
     resulting_active_uid INTEGER NOT NULL CHECK(resulting_active_uid >= 0),
+    resulting_slot_id INTEGER NOT NULL DEFAULT 0 CHECK(resulting_slot_id BETWEEN 0 AND 16),
+    replaced_item_uid INTEGER NOT NULL DEFAULT 0 CHECK(replaced_item_uid >= 0),
     created_unix_ms INTEGER NOT NULL,
+    CHECK(
+      (action IN (1,2) AND item_uid=0 AND resulting_slot_id=0 AND replaced_item_uid=0)
+      OR (action IN (4,5) AND item_uid>0)
+    ),
     PRIMARY KEY(character_id,connection_generation,map_epoch,action_sequence)
 );",tx);
             if(schemaVersion==30)
                 Execute(connection,@"ALTER TABLE pet_instances
 ADD COLUMN evolution_id INTEGER NOT NULL DEFAULT 0 CHECK(evolution_id BETWEEN 0 AND 65535);",tx);
+
+            // Schema v39: Pet equipment is a fifth physical ItemUid location.
+            // Old SGOPetSys confirms server-side Equip/GetAllEquip behavior, but
+            // exact HK slot semantics remain manifest-gated rather than guessed.
+            if(schemaVersion<39 && !ColumnExists(connection,"pet_actions","item_uid",tx))
+            {
+                Execute(connection,@"ALTER TABLE pet_actions RENAME TO pet_actions_v38;",tx);
+                Execute(connection,@"CREATE TABLE pet_actions (
+    character_id INTEGER NOT NULL REFERENCES characters(character_id) ON DELETE CASCADE,
+    connection_generation INTEGER NOT NULL CHECK(connection_generation > 0),
+    map_epoch INTEGER NOT NULL CHECK(map_epoch > 0),
+    action_sequence INTEGER NOT NULL CHECK(action_sequence BETWEEN 1 AND 4294967295),
+    action INTEGER NOT NULL CHECK(action IN (1,2,4,5)),
+    pet_uid INTEGER NOT NULL CHECK(pet_uid > 0),
+    item_uid INTEGER NOT NULL DEFAULT 0 CHECK(item_uid >= 0),
+    result_status INTEGER NOT NULL CHECK(result_status BETWEEN 0 AND 10),
+    resulting_active_uid INTEGER NOT NULL CHECK(resulting_active_uid >= 0),
+    resulting_slot_id INTEGER NOT NULL DEFAULT 0 CHECK(resulting_slot_id BETWEEN 0 AND 16),
+    replaced_item_uid INTEGER NOT NULL DEFAULT 0 CHECK(replaced_item_uid >= 0),
+    created_unix_ms INTEGER NOT NULL,
+    CHECK(
+      (action IN (1,2) AND item_uid=0 AND resulting_slot_id=0 AND replaced_item_uid=0)
+      OR (action IN (4,5) AND item_uid>0)
+    ),
+    PRIMARY KEY(character_id,connection_generation,map_epoch,action_sequence)
+);",tx);
+                Execute(connection,@"INSERT INTO pet_actions(
+character_id,connection_generation,map_epoch,action_sequence,action,pet_uid,item_uid,
+result_status,resulting_active_uid,resulting_slot_id,replaced_item_uid,created_unix_ms)
+SELECT character_id,connection_generation,map_epoch,action_sequence,action,pet_uid,0,
+result_status,resulting_active_uid,0,0,created_unix_ms
+FROM pet_actions_v38;",tx);
+                Execute(connection,@"DROP TABLE pet_actions_v38;",tx);
+            }
+
+            Execute(connection,@"CREATE TABLE IF NOT EXISTS pet_equipped_items (
+    item_uid INTEGER PRIMARY KEY,
+    character_id INTEGER NOT NULL REFERENCES characters(character_id) ON DELETE CASCADE,
+    pet_uid INTEGER NOT NULL REFERENCES pet_instances(pet_uid) ON DELETE CASCADE,
+    slot_id INTEGER NOT NULL CHECK(slot_id BETWEEN 1 AND 16),
+    item_definition_id INTEGER NOT NULL CHECK(item_definition_id BETWEEN 1 AND 100000000),
+    quantity INTEGER NOT NULL CHECK(quantity = 1),
+    source_drop_id INTEGER UNIQUE REFERENCES ground_drops(drop_id),
+    durability_raw INTEGER CHECK(durability_raw IS NULL OR durability_raw BETWEEN 0 AND 2147483647),
+    enhancement_level INTEGER NOT NULL DEFAULT 0 CHECK(enhancement_level BETWEEN 0 AND 255),
+    source_kind INTEGER NOT NULL CHECK(source_kind IN (1,2)),
+    source_reference TEXT NOT NULL,
+    created_unix_ms INTEGER NOT NULL,
+    UNIQUE(pet_uid,slot_id),
+    CHECK(
+      (source_kind=1 AND source_drop_id IS NOT NULL)
+      OR (source_kind=2 AND source_drop_id IS NULL)
+    )
+);",tx);
+            Execute(connection,@"CREATE INDEX IF NOT EXISTS ix_pet_equipped_owner
+ON pet_equipped_items(character_id,pet_uid,slot_id);",tx);
+            Execute(connection,@"CREATE TRIGGER IF NOT EXISTS trg_pet_equipped_owner_match
+BEFORE INSERT ON pet_equipped_items
+WHEN NOT EXISTS(
+  SELECT 1 FROM pet_instances
+  WHERE pet_uid=NEW.pet_uid AND character_id=NEW.character_id
+)
+BEGIN
+    SELECT RAISE(ABORT,'pet equipment owner mismatch');
+END;",tx);
+            Execute(connection,@"CREATE TRIGGER IF NOT EXISTS trg_pet_equipped_no_other_location
+BEFORE INSERT ON pet_equipped_items
+WHEN EXISTS(SELECT 1 FROM item_instances WHERE item_uid=NEW.item_uid)
+  OR EXISTS(SELECT 1 FROM storage_items WHERE item_uid=NEW.item_uid)
+  OR EXISTS(SELECT 1 FROM equipped_items WHERE item_uid=NEW.item_uid)
+  OR (NEW.source_drop_id IS NOT NULL AND (
+      EXISTS(SELECT 1 FROM item_instances WHERE source_drop_id=NEW.source_drop_id)
+      OR EXISTS(SELECT 1 FROM storage_items WHERE source_drop_id=NEW.source_drop_id)
+      OR EXISTS(SELECT 1 FROM equipped_items WHERE source_drop_id=NEW.source_drop_id)))
+BEGIN
+    SELECT RAISE(ABORT,'item already exists outside pet equipment');
+END;",tx);
+            Execute(connection,@"CREATE TRIGGER IF NOT EXISTS trg_inventory_no_pet_equipped_overlap
+BEFORE INSERT ON item_instances
+WHEN EXISTS(SELECT 1 FROM pet_equipped_items WHERE item_uid=NEW.item_uid)
+  OR (NEW.source_drop_id IS NOT NULL AND
+      EXISTS(SELECT 1 FROM pet_equipped_items WHERE source_drop_id=NEW.source_drop_id))
+BEGIN
+    SELECT RAISE(ABORT,'item already exists on pet');
+END;",tx);
+            Execute(connection,@"CREATE TRIGGER IF NOT EXISTS trg_storage_no_pet_equipped_overlap
+BEFORE INSERT ON storage_items
+WHEN EXISTS(SELECT 1 FROM pet_equipped_items WHERE item_uid=NEW.item_uid)
+  OR (NEW.source_drop_id IS NOT NULL AND
+      EXISTS(SELECT 1 FROM pet_equipped_items WHERE source_drop_id=NEW.source_drop_id))
+BEGIN
+    SELECT RAISE(ABORT,'item already exists on pet');
+END;",tx);
+            Execute(connection,@"CREATE TRIGGER IF NOT EXISTS trg_equipped_no_pet_equipped_overlap
+BEFORE INSERT ON equipped_items
+WHEN EXISTS(SELECT 1 FROM pet_equipped_items WHERE item_uid=NEW.item_uid)
+  OR (NEW.source_drop_id IS NOT NULL AND
+      EXISTS(SELECT 1 FROM pet_equipped_items WHERE source_drop_id=NEW.source_drop_id))
+BEGIN
+    SELECT RAISE(ABORT,'item already exists on pet');
+END;",tx);
             // Schema v32: trusted Pet EXP grants are durable and idempotent.
             // The grant key belongs to a server-side source event; clients never
             // submit EXP, levels or grant identities directly.
@@ -1000,6 +1108,22 @@ WHEN EXISTS(SELECT 1 FROM mecha_equipped_items WHERE item_uid=NEW.item_uid)
       EXISTS(SELECT 1 FROM mecha_equipped_items WHERE source_drop_id=NEW.source_drop_id))
 BEGIN
     SELECT RAISE(ABORT,'item already exists on mecha');
+END;",tx);
+            Execute(connection,@"CREATE TRIGGER IF NOT EXISTS trg_pet_equipped_no_mecha_overlap
+BEFORE INSERT ON pet_equipped_items
+WHEN EXISTS(SELECT 1 FROM mecha_equipped_items WHERE item_uid=NEW.item_uid)
+  OR (NEW.source_drop_id IS NOT NULL AND
+      EXISTS(SELECT 1 FROM mecha_equipped_items WHERE source_drop_id=NEW.source_drop_id))
+BEGIN
+    SELECT RAISE(ABORT,'item already exists on mecha');
+END;",tx);
+            Execute(connection,@"CREATE TRIGGER IF NOT EXISTS trg_mecha_no_pet_equipped_overlap
+BEFORE INSERT ON mecha_equipped_items
+WHEN EXISTS(SELECT 1 FROM pet_equipped_items WHERE item_uid=NEW.item_uid)
+  OR (NEW.source_drop_id IS NOT NULL AND
+      EXISTS(SELECT 1 FROM pet_equipped_items WHERE source_drop_id=NEW.source_drop_id))
+BEGIN
+    SELECT RAISE(ABORT,'item already exists on pet');
 END;",tx);
 
             // Existing v36/v37 databases had a narrower mecha_actions CHECK.

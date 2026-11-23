@@ -536,7 +536,7 @@ public sealed partial class GatewayConnection
                 return WireFrameDisposition.ProtocolViolation;
             var request=new TrustedPetCommand(
                 bound.ActorId,bound.ConnectionEpoch,pet.MapEpoch,
-                pet.PetSequence,pet.Action,pet.PetUid);
+                pet.PetSequence,pet.Action,pet.PetUid,pet.ItemUid);
             if(!postPet(request))
                 return WireFrameDisposition.Backpressured;
             _lastPetSequence=pet.PetSequence;
