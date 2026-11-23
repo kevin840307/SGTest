@@ -112,6 +112,16 @@ func _run() -> void:
 		"equipment_items":{
 			10005:{"item_uid":10005,"slot_id":4,"item_definition_id":30002,"quantity":1},
 		},
+		"mecha_snapshot_received":true,"mecha_equipment_snapshot_received":true,
+		"mecha_sequence":2,"pending_mecha_sequence":0,"mounted_mecha_uid":0,
+		"mecha_instances":{
+			70001:{"mecha_uid":70001,"definition_id":8801,"level":3,"experience":44},
+			70002:{"mecha_uid":70002,"definition_id":8802,"level":5,"experience":900},
+		},
+		"mecha_equipment_items":{
+			80001:{"mecha_uid":70001,"item_uid":80001,"slot_id":3,"item_definition_id":30002,"durability_raw":77},
+		},
+		"last_mecha_result":{},
 		"learned_skills":{99001:1,99002:2},
 		"party_id":77,"party_leader_actor_id":42,
 		"party_members":{
@@ -205,6 +215,16 @@ func _run() -> void:
 		return
 	if not directory.is_empty():
 		await _capture(directory.path_join("classic_equipment.png"))
+	world._change_inventory_tab(2)
+	var mecha_rows := ""
+	for row in world._inventory_rows.get_children():
+		if row is Button:
+			mecha_rows += (row as Button).text + "\n"
+	if world._classic_mecha_uid != 70001 or mecha_rows.find("機甲 8801 Lv.3") < 0 or mecha_rows.find("[強化卡 1]") < 0 or mecha_rows.find("騎乘選中機甲") < 0:
+		_fail("classic B_ITEM_ARMOR tab did not bind authoritative mecha roster/equipment/actions")
+		return
+	if not directory.is_empty():
+		await _capture(directory.path_join("classic_mecha.png"))
 	world._change_inventory_tab(0)
 	world.menu.get_node("Menu0").pressed.emit()
 	if not world.clan_window.visible or world._clan_rows.get_child_count() != 2:
@@ -246,5 +266,5 @@ func _run() -> void:
 	app._update_ui_stage(true)
 	app.queue_free()
 	await process_frame
-	print("CLASSIC_IE_UI_PASS 800x600_original_spr=true main_session_shared=true login_select_create_world=true inventory_equipment_storage_dialog=true lazy_large_windows=true runtime_switch=true")
+	print("CLASSIC_IE_UI_PASS 800x600_original_spr=true main_session_shared=true login_select_create_world=true inventory_equipment_mecha_storage_dialog=true lazy_large_windows=true runtime_switch=true")
 	quit(0)

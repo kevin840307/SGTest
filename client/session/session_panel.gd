@@ -24,6 +24,7 @@ const StoragePanel = preload("res://npc/storage_panel.gd")
 const RepairPanel = preload("res://npc/repair_panel.gd")
 const EnhancementPanel = preload("res://npc/enhancement_panel.gd")
 const PvpPanel = preload("res://pvp/pvp_panel.gd")
+const MechaPanel = preload("res://mecha/mecha_panel.gd")
 var session = Session.new()
 var creation_options := CreationOptions.new()
 var appearance_picker := AppearancePicker.new()
@@ -47,6 +48,7 @@ var storage_panel := StoragePanel.new()
 var repair_panel := RepairPanel.new()
 var enhancement_panel := EnhancementPanel.new()
 var pvp_panel := PvpPanel.new()
+var mecha_panel := MechaPanel.new()
 var active := false
 ## Deployment-only connection parameters; never Godot GUI widgets.
 var server_host := "localhost"
@@ -215,6 +217,10 @@ func _ready() -> void:
 	repair_panel.set_actions(Callable(self,"submit_repair_open"),Callable(self,"submit_repair_item"),item_catalog)
 
 	enhancement_panel.set_actions(Callable(self,"submit_enhancement_open"),Callable(self,"submit_enhancement_item"),item_catalog)
+	mecha_panel.set_actions(
+		Callable(self,"submit_mecha_mount"),Callable(self,"submit_mecha_dismount"),
+		Callable(self,"submit_mecha_refresh"),Callable(self,"submit_mecha_equip"),
+		Callable(self,"submit_mecha_unequip"),item_catalog)
 
 	login_button.pressed.connect(login)
 	register_button.pressed.connect(register_account)
@@ -238,7 +244,7 @@ func _ready() -> void:
 		Callable(skill_id_input,"get_value"),SKILL_RESULT_NAMES)
 	_layout.world_page.add_child(gameplay_hud)
 	_layout.world_page.move_child(gameplay_hud,1)
-	_layout.add_group("角色／背包",[inventory_panel,pickup_status])
+	_layout.add_group("角色／背包",[inventory_panel,mecha_panel,pickup_status])
 	_layout.add_group("戰鬥／技能",[respawn_button,skill_hint,skill_id_input,skill_target_mode,skill_area_button,skill_status,pvp_panel])
 	_layout.add_group("NPC 服務",[npc_shop_panel,storage_panel,bank_panel,repair_panel,enhancement_panel,quest_panel])
 	_layout.add_group("社交／交易",[chat_panel,party_panel,trade_panel,player_shop_panel])
@@ -515,6 +521,26 @@ func submit_enhancement_item(item_uid: int) -> bool:
 	return active and bool(_latest.get("enhancement_ready",false)) and int(_latest.get("active_enhancement_npc",0)) > 0 and int(_latest.get("pending_enhancement_sequence",0)) == 0 and int(_latest.get("pending_repair_sequence",0)) == 0 and item_uid > 0 and (_latest.get("enhancement_items",{}) as Dictionary).has(item_uid) and session.enhance_item(item_uid)
 
 
+func submit_mecha_mount(mecha_uid: int) -> bool:
+	return active and mecha_uid > 0 and session.mecha_mount(mecha_uid)
+
+
+func submit_mecha_dismount() -> bool:
+	return active and session.mecha_dismount()
+
+
+func submit_mecha_refresh() -> bool:
+	return active and session.mecha_refresh()
+
+
+func submit_mecha_equip(mecha_uid: int,item_uid: int) -> bool:
+	return active and mecha_uid > 0 and item_uid > 0 and session.mecha_equip(mecha_uid,item_uid)
+
+
+func submit_mecha_unequip(mecha_uid: int,item_uid: int) -> bool:
+	return active and mecha_uid > 0 and item_uid > 0 and session.mecha_unequip(mecha_uid,item_uid)
+
+
 func submit_pvp_attack(target_actor_id: int) -> bool:
 	if not active or int(_latest.get("state",-1)) != State.STATE_IN_WORLD or not bool(_latest.get("world_ready",false)) or not bool(_latest.get("combat_available",false)) or bool(_latest.get("player_dead",false)) or bool(_latest.get("reconnecting",false)) or bool(_latest.get("resync_pending",false)) or bool(_latest.get("waiting_for_new_map",false)) or not bool(_latest.get("pvp_known",false)) or not bool(_latest.get("pvp_map_allows",false)) or int(_latest.get("pending_pvp_attack_sequence",0)) != 0:
 		return false
@@ -648,6 +674,7 @@ func disconnect_session() -> void:
 	trade_panel.reset()
 	player_shop_panel.reset()
 	inventory_panel.reset()
+	mecha_panel.reset()
 	_characters = []
 	characters.clear()
 	character_name_input.clear()
@@ -816,6 +843,7 @@ func _process(delta: float) -> void:
 	_set_respawn_controls()
 	_set_skill_controls()
 	_refresh_inventory_panel()
+	mecha_panel.apply_snapshot(_latest, active)
 	npc_shop_panel.apply_snapshot(_latest, active)
 	storage_panel.apply_snapshot(_latest, active)
 	bank_panel.apply_snapshot(_latest, active)

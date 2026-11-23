@@ -48,6 +48,7 @@ var _equipment_rows:=VBoxContainer.new()
 var _inventory_item_bg:TextureRect
 var _inventory_equip_bg:TextureRect
 var _inventory_tab:=0
+var _classic_mecha_uid:=0
 var _inventory_tab_buttons:Array[TextureButton]=[]
 var _character_labels:Dictionary={}
 var _skill_rows:=VBoxContainer.new()
@@ -684,7 +685,7 @@ func _inventory_matches_tab(item:Dictionary,equipped:bool)->bool:
 	match _inventory_tab:
 		0:return category in ["general","recovery","booster",""]
 		1:return category in ["equip","weapon","horseequip"]
-		2:return category in ["mecha","armor","mechaequip"]
+		2:return category in ["mecha","armor","mechaequip","horseequip"]
 		3:return category in ["pet","elfin"]
 		4:return category in ["horse","horsebattery","ride"]
 	return false
@@ -694,6 +695,9 @@ func _refresh_inventory()->void:
 	_clear_rows(_equipment_rows)
 	var inventory_items:Dictionary=_stats.get("inventory_items",{})
 	var equipment_items:Dictionary=_stats.get("equipment_items",{})
+	if _inventory_tab==2:
+		_refresh_classic_mecha_inventory(inventory_items)
+		return
 	if _inventory_tab==1:
 		var equipped_uids:Array=equipment_items.keys();equipped_uids.sort()
 		for i in mini(10,equipped_uids.size()):
@@ -747,6 +751,78 @@ func _refresh_inventory()->void:
 		row.pressed.connect(_classic_item_action.bind(uid,id,false))
 	if entries.is_empty():
 		_classic_row(_inventory_rows,"此分頁目前沒有可用資料",24.4)
+
+func _select_classic_mecha(uid:int)->void:
+	_classic_mecha_uid=uid
+	_refresh_inventory()
+
+func _classic_mecha_slot_name(slot_id:int)->String:
+	match slot_id:
+		1:return "武裝"
+		2:return "引擎"
+		3,4,5:return "強化卡 %d"%(slot_id-2)
+		6:return "守護石"
+		_:return "槽位 %d"%slot_id
+
+func _submit_classic_mecha_equip(item_uid:int)->void:
+	if _panel!=null:_panel.submit_mecha_equip(_classic_mecha_uid,item_uid)
+
+func _submit_classic_mecha_unequip(item_uid:int)->void:
+	if _panel!=null:_panel.submit_mecha_unequip(_classic_mecha_uid,item_uid)
+
+func _refresh_classic_mecha_inventory(inventory_items:Dictionary)->void:
+	var mechas:Dictionary=_stats.get("mecha_instances",{})
+	var mounted:=int(_stats.get("mounted_mecha_uid",0))
+	if _classic_mecha_uid<=0 or not mechas.has(_classic_mecha_uid):
+		_classic_mecha_uid=mounted if mounted>0 and mechas.has(mounted) else 0
+		if _classic_mecha_uid==0 and not mechas.is_empty():
+			var ids:Array=mechas.keys();ids.sort();_classic_mecha_uid=int(ids[0])
+	_classic_row(_inventory_rows,"更新機甲資料",23.0,func():
+		if _panel!=null:_panel.submit_mecha_refresh())
+	if mounted>0:
+		_classic_row(_inventory_rows,"★ 離開目前機甲 UID %d"%mounted,23.0,func():
+			if _panel!=null:_panel.submit_mecha_dismount())
+	var ids:Array=mechas.keys();ids.sort()
+	for raw_uid in ids:
+		if _inventory_rows.get_child_count()>=ITEM_ROW_COUNT:break
+		var uid:=int(raw_uid);var mecha:Dictionary=mechas[raw_uid]
+		var selected:="▶ " if uid==_classic_mecha_uid else ""
+		var mounted_text:="★ " if uid==mounted else ""
+		_classic_row(_inventory_rows,"%s%s機甲 %d Lv.%d"%[
+			selected,mounted_text,int(mecha.get("definition_id",0)),int(mecha.get("level",0))
+		],23.0,_select_classic_mecha.bind(uid)).tooltip_text="UID %d｜EXP %d｜點擊選擇"%[uid,int(mecha.get("experience",0))]
+	if mechas.is_empty():
+		_classic_row(_inventory_rows,"尚無伺服器機甲資料",23.0)
+		return
+	if _classic_mecha_uid>0 and _classic_mecha_uid!=mounted and _inventory_rows.get_child_count()<ITEM_ROW_COUNT:
+		_classic_row(_inventory_rows,"騎乘選中機甲",23.0,func():
+			if _panel!=null:_panel.submit_mecha_mount(_classic_mecha_uid))
+	var mecha_equipment:Dictionary=_stats.get("mecha_equipment_items",{})
+	var equipped:Array=[]
+	for raw_item_uid in mecha_equipment:
+		var item:Dictionary=mecha_equipment[raw_item_uid]
+		if int(item.get("mecha_uid",0))==_classic_mecha_uid:
+			equipped.append(item)
+	equipped.sort_custom(func(a:Dictionary,b:Dictionary):return int(a.get("slot_id",0))<int(b.get("slot_id",0)))
+	for item in equipped:
+		if _inventory_rows.get_child_count()>=ITEM_ROW_COUNT:break
+		var item_uid:=int(item.get("item_uid",0));var definition:=int(item.get("item_definition_id",0))
+		var name:=str(_panel.item_catalog.name_for(definition)) if _panel!=null else "Item %d"%definition
+		var row:=_classic_row(_inventory_rows,"[%s] %s"%[_classic_mecha_slot_name(int(item.get("slot_id",0))),name],23.0,_submit_classic_mecha_unequip.bind(item_uid))
+		row.tooltip_text="機甲裝備 UID %d｜點擊要求卸下；核心部件等限制由伺服器判定"%item_uid
+	var candidates:Array=[]
+	for raw_uid in inventory_items:
+		var item:Dictionary=inventory_items[raw_uid]
+		if _inventory_matches_tab(item,false):
+			candidates.append({"uid":int(raw_uid),"item":item})
+	candidates.sort_custom(func(a:Dictionary,b:Dictionary):return int(a.uid)<int(b.uid))
+	for entry in candidates:
+		if _inventory_rows.get_child_count()>=ITEM_ROW_COUNT:break
+		var uid:=int(entry.uid);var item:Dictionary=entry.item;var definition:=int(item.get("item_definition_id",0))
+		var name:=str(_panel.item_catalog.name_for(definition)) if _panel!=null else "Item %d"%definition
+		var row:=_classic_row(_inventory_rows,"＋ %s ×%d"%[name,int(item.get("quantity",1))],23.0,_submit_classic_mecha_equip.bind(uid))
+		_apply_item_grade_color(row,definition)
+		row.tooltip_text="背包 UID %d｜點擊送交伺服器判定機甲槽位與相容性"%uid
 
 func _classic_item_action(uid:int,item_id:int,equipped:=false)->void:
 	if _panel==null:return
