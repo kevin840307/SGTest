@@ -27,6 +27,7 @@ from asset_converter.content.build_enemy_map_palette import read_enemy_catalog, 
 from asset_converter.content.build_population import compile_population, compile_spawn_evidence
 from asset_converter.content.asset_paths import source_sprite_manifest
 from asset_converter.content.build_item_catalog import publish_item_catalog
+from asset_converter.content.build_pet_visual_evidence import publish_pet_visual_evidence
 from asset_converter.content.skill_evidence import compile_skill_evidence
 from asset_converter.content.current_client_skill_evidence import compile_current_client_skill_evidence
 
@@ -371,6 +372,18 @@ def main() -> int:
                         default=REPO/'local-assets/asset_converter/skill/current_skill_evidence.json')
     current_skills.add_argument('--skill-id',type=int,action='append',
                         help='optional repeated SkillId; missing requested IDs make the result partial/fail-closed')
+    pets = sub.add_parser('pet-visual-evidence',
+                          help='compile HK PetID/EvolID world-visual evidence without replacing SGTest runtime IDs')
+    pets.add_argument('--hk-petcli-itd',type=Path,required=True,
+                      help='HK Item/petcli.ITD source')
+    pets.add_argument('--assets',type=Path,
+                      help='optional converted runtime assets root; validates normalized Enemy NS/FA views')
+    pets.add_argument('--extracted-source',type=Path,
+                      help='optional extracted HK source root; validates original Enemy SPR/ACT NS/FA semantics')
+    pets.add_argument('--output',type=Path,
+                      default=REPO/'local-assets/asset_converter/pet/hk_pet_visual_evidence.json')
+    pets.add_argument('--source-reference',default='HK SGO Item/petcli.ITD',
+                      help='non-private provenance label')
     items = sub.add_parser('item-catalog',
                            help='compile source-derived item names from local converted Items/*.tres')
     items.add_argument('--items',type=Path,required=True,
@@ -434,6 +447,16 @@ def _execute(args):
                 server_dat,set(args.skill_id) if args.skill_id else None)
             write_json(output,result)
             result['output'] = str(output)
+        except (OSError,ValueError,TypeError) as error:
+            result = {'status':'failed','error':str(error)}
+        print(json.dumps(result,ensure_ascii=False,indent=2),flush=True)
+        return 0 if result['status']=='pass' else 1
+    if args.command == 'pet-visual-evidence':
+        try:
+            result = publish_pet_visual_evidence(
+                args.hk_petcli_itd,args.output,args.assets,
+                extracted_source=args.extracted_source,
+                source_reference=args.source_reference)
         except (OSError,ValueError,TypeError) as error:
             result = {'status':'failed','error':str(error)}
         print(json.dumps(result,ensure_ascii=False,indent=2),flush=True)

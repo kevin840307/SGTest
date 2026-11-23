@@ -63,6 +63,26 @@ MVP001 也可透過**同一 CLI** 的 `world-content --include-map --map 13 --ma
 真實雙圖資源 smoke：`python tools/asset_converter/smoke_runtime_pack.py "Godot console exe" --assets client/assets --map 13 --map 15 --output .cache/client-release/assets/assets.pck --report reports/real_maps_pck_smoke.json`。驗證 ResourceLoader 與封裝 hash，不代表 Renderer／Y-sort／實機畫質或遊戲 E2E。未提供 --assets 仍測 synthetic Enemy＋UI。
 
 
+## HK Pet visual source evidence
+
+`pet-visual-evidence` 只建立可稽核的 HK source identity，不把原版 PetID
+直接當成 SGTest DefinitionId，也不輸出原版名稱／描述文字：
+
+~~~powershell
+python tools/asset_converter/cli.py pet-visual-evidence \
+  --hk-petcli-itd "C:\path\to\HK\Item\petcli.ITD" \
+  --extracted-source ".cache\asset_converter\source" \
+  --output "local-assets\asset_converter\pet\hk_pet_visual_evidence.json"
+~~~
+
+Parser 依 HK Client `sub_403B49` 的實際讀取順序 fail-closed 解析
+`PetID + EvolID + Enemy outlook`；`--extracted-source` 會再以正式
+animation compiler 驗證 outlook 對應的原始 Enemy SPR+ACT 是否具備
+normalized NS/FA 八方向與 timeline。可另傳 `--assets client/assets`
+做 production atlas gate；缺少任何 atlas/view 即失敗，不 fallback。
+目前 HK source identity 已可重建，但 **SGTest DefinitionId→HK source PetID
+bridge、完整 Pet runtime atlas publication 與 Pet action 動態 A/B 仍未完成**。
+
 ## 私有原版衍生道具名稱目錄（2026-11-17）
 
 只在已合法取得的本機 TestGoGo/client/Items 上執行；此處沒有將原版私有 .tres 或圖片加入 Git。正式唯一入口：
