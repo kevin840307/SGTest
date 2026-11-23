@@ -14,7 +14,7 @@ const EMPTY_LIST := "0900000001000C0000"
 const CREATE_RESULT := "1B000000010010000021000000000000000007004E65774865726F"
 const CREATED_LIST := "1B00000001000C000121000000000000000007004E65774865726F"
 const CREATION_PROFILE := "20000000010086000B0000000000000002000000020000000200000002000000"
-const PROFILE := "45000000010085000B0000000000000002000000030000000400000040E2010000000000050000000600000007000000080000005A00000050000000460000003C00000001"
+const PROFILE := "49000000010085000B0000000000000002000000030000000400000040E2010000000000050000000600000007000000080000005A00000050000000460000003C0000000200000001"
 const COMBAT := "210000000100070001000000000000003C000000640000001E0000002800000001"
 
 func _fail(message: String) -> void:
@@ -145,6 +145,13 @@ func _initialize() -> void:
 		_fail("WorldReady apply")
 		return
 	var ready_state := world.snapshot()
+	if (
+		not bool(ready_state.equipment_ready) or
+		not (ready_state.equipment_items as Dictionary).is_empty() or
+		int(ready_state.equipment_revision) != 1
+	):
+		_fail("WorldReady did not resolve an omitted zero-equipment baseline")
+		return
 	if int(ready_state.pending_world_ready_ack_epoch) != 1 or int(ready_state.pending_world_ready_ack_tick) != 42 or not world.mark_world_ready_ack_sent(1,42):
 		_fail("WorldReady ACK lifecycle")
 		return

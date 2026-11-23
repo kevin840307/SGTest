@@ -88,6 +88,8 @@ func _run() -> void:
 				return
 			if not bool(snapshot.get("player_profile_ready",false)) or \
 					int(snapshot.get("player_verified_stats_mask",-1))!=13 or \
+					not bool(snapshot.get("equipment_ready",false)) or \
+					not (snapshot.get("equipment_items",{}) as Dictionary).is_empty() or \
 					bool(snapshot.get("combat_available",true)) or \
 					int(snapshot.get("player_level",0))!=1 or \
 					int(snapshot.get("player_strength",0))!=3 or \
