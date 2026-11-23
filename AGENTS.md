@@ -8,12 +8,12 @@
 
 ## 開工前
 
-1. 先 `git fetch`，確認目前分支與遠端狀態，查看 `git status --short`，避免踩到其他 Session 未提交的工作。
+1. 先 `git fetch`，確認正式工作目錄目前位於 `main`，比較本機 `main` 與 `origin/main`，並查看 `git status --short`、`git branch`、`git worktree list`，避免踩到其他 Session 未提交的工作。
 2. 先讀 `README.md`、`docs/ARCHITECTURE.md`、`docs/CODE_ORGANIZATION.md`、`docs/CLIENT_ARCHITECTURE.md`、`docs/SERVER_ARCHITECTURE.md`、`docs/FEATURE_MATRIX.md`、`todo.txt`；依任務補讀相關素材／原版證據文件。
-3. 若與其他 Session 共用工作樹且有 WIP，**建立自己的 worktree/branch**，不要 stash、reset、clean、覆寫、刪除他人的未提交內容。
+3. **一般開發不得為了避開其他 Session 而另建 feature/fix/temp branch、Git worktree 或第二份 SGTest clone。** 若發現其他 Session／AI 遺留的 branch、worktree 或 detached worktree，先檢查其 HEAD、status、diff 與 `main` 是否已包含其成果；只要能安全確認有尚未進 `main` 的有效成果，必須先安全整合進正式 `main`，完成必要衝突處理與測試後才繼續新開發。對 dirty、來源不明或仍可能在使用中的 WIP，不得 reset、clean、覆寫或刪除；無法安全整合時保留並明確回報。
 4. 領取一項具體 TODO，先寫預期行為、指標、驗收測試，再動手；完成才勾選，未跑寫 NOT VERIFIED。
-5. 確保拆成小 commit，commit 僅包含自己變更的檔案；每次更新 TODO 與架構決策證據。
-6. **能在 GitHub 驗證就先用 GitHub。** Server-only／純公開 repo 工作優先以 branch/PR + GitHub Actions（目前 `.github/workflows/server-core.yml`）跑 build/checks，再考慮 Remote Desktop；只有 Godot Windows 實機、private assets、原版安裝檔、GPU/畫面或 GitHub 無法執行的測試才使用 Remote Desktop Commander。
+5. 確保拆成小 commit，commit 僅包含自己變更的檔案或已明確安全整合的既有成果；每次更新 TODO 與架構決策證據。
+6. **能在 GitHub 驗證就先用 GitHub。** Server-only／純公開 repo 工作直接以正式 `main` + GitHub Actions（目前 `.github/workflows/server-core.yml`）跑 build/checks，再考慮 Remote Desktop；只有 Godot Windows 實機、private assets、原版安裝檔、GPU/畫面或 GitHub 無法執行的測試才使用 Remote Desktop Commander。
 
 ## 雙地圖 Map15 + Map13、功能完整的 MVP（不是功能示範）
 
@@ -69,9 +69,17 @@
 - 每次完成記錄：任務 ID、行為 Before/After、檔案、測試命令與結果、Commit SHA、未解風險。
 - **文件同步**：修改協定、AFK、AOI、素材格式或測試 Gate 時，同步核對 SPEC／對應 ARCHITECTURE／TEST_PLAN／TODO；歷史研究彙編僅供證據，不為修正現行設計而改寫歷史原文。
 
-## 多 Session 安全
+## 多 Session 安全與殘留整合
 
-未提交檔案不屬於清理任務可隨意覆蓋的垃圾。若有任何其他 Session 尚未提交的修改，先確認檔案所有權；本次已整合的 Height-Dense/PCK 只從唯一 `main` 維護，不要另建需要長期同步的轉換器分支。
+未提交檔案不屬於清理任務可隨意覆蓋的垃圾。每次開始開發都要盤點正式 repo 的 local branches、`git worktree list`，以及可存取 worktree 的 `git status`。若發現其他 Session／AI 留下的 branch、worktree、detached HEAD 或暫存 clone：
+
+1. 先判斷 `main` 是否已包含其 Commit／Diff；已完全包含者才視為「可清理殘留」。
+2. 若存在 **尚未進 `main`、但可安全辨識且應保留的有效成果**，必須先把成果安全合併／整合進正式 `main`，解決衝突並跑受影響測試；不得直接刪掉後重做。
+3. 若殘留 worktree 是 dirty、仍有未提交檔案、來源不明、疑似仍被其他 Session 使用，或無法判定哪些內容應保留，禁止 `reset --hard`、`clean -fd`、強制覆蓋或刪除；保留現況並明確回報阻礙。
+4. 當且僅當已確認必要成果全部存在於正式 `main`、worktree/branch 已 clean 且不再使用，才移除該殘留 worktree／local branch／暫存 clone。
+5. 本 Session 自己若因工具限制而不得不建立一次性測試目錄，必須在本次工作結束前移除；一般情況不得建立 Git worktree 或長期 branch。
+
+本次已整合的 Height-Dense/PCK 只從唯一 `main` 維護，不要另建需要長期同步的轉換器分支。
 
 ## 高吞吐量完成模式（2026-11-23 使用者決策）
 
@@ -96,6 +104,17 @@ Keep quality gates, but do not repeat expensive validation without a reason.
 4. Batch repository reads/edits/tests where practical. Do not repeatedly fetch the same files or rerun a full suite after every small edit. A failed targeted test should be fixed and rerun at the narrowest scope first.
 5. Update TODO/spec/architecture/test evidence once per deliverable slice, immediately before final CI/merge. Never trade correctness, security, fail-closed behavior, concurrency safety, source fidelity, or reproducible tests for speed.
 
-## Git branch policy (2026-11-16 user decision)
+## Main-Only Git policy（2026-11-23 使用者決策，最高優先級）
 
-**Keep only `main` as the active delivery branch.** Do not create any new feature/work branches for ordinary GitHub-connected work. Prepare isolated Git objects, read current `main` immediately before updating, and publish with a non-force fast-forward `update_ref` guarded by the exact expected SHA. If `main` advanced, re-check overlapping changes and redo the affected checks; never overwrite concurrent work. Run the required GitHub Actions on `main` and fix failures. A branch deletion tool is not exposed by the current GitHub connector; do not claim old branches are gone or delete another Session's WIP. The legacy worktree/branch instructions above still apply when genuinely sharing a Windows worktree with uncommitted changes, but do not imply creating a remote branch.
+**SGTest 正式開發一律以 `C:\SGO\SRC\SGTest` 的本機 `main` 與 `origin/main` 為唯一開發／整合／交付主線。** 一般開發禁止建立新的 feature/fix/temp/release branch、Git worktree、第二份 clone 或其他長期正式工作目錄；不得把「避免衝突」當成另開 worktree/branch 的理由。
+
+每次開始工作時必須先 `git fetch origin`，檢查正式 `main`、local branches、`git worktree list` 及各可存取 worktree 的 status。若發現其他 Session／AI 的殘留，遵守以下順序：
+
+1. 先比較該 branch/worktree 的 HEAD、commit graph、diff 與正式 `main`，確認哪些成果尚未存在於 `main`。
+2. **只要存在可安全辨識且應保留的有效成果，先合併／整合回正式 `main`，再開始新的功能開發。** 依歷史關係採安全 fast-forward、merge 或 cherry-pick；禁止 force push、硬 reset 或以覆寫方式「整合」。
+3. 合併後必須解決衝突、跑受影響測試並確認 `main` 的結果完整；不得因合併麻煩而丟棄別人的有效成果或重新做一份。
+4. 若殘留是 dirty/uncommitted、來源不明、疑似仍在執行中的 Session，或無法判斷內容是否完整，先保護原狀，不得刪除；能安全完成並保存其成果時才整合，否則明確回報 blocker。
+5. **清理必須在整合之後。** 只有確認必要成果已全部存在於正式 `main`、branch/worktree clean 且不再使用，才移除該殘留 local branch、worktree 或暫存 clone。
+6. 本 Session 不得留下自己建立的 branch/worktree/tmp clone；一次性非 Git 測試目錄可使用，但任務結束前應移除。
+
+每次交付前執行 Git 清理 Gate：確認目前分支為 `main`、重新 fetch、`main...origin/main` ahead/behind 為 `0/0`、本機與遠端 SHA 相同、正式工作樹沒有本次任務遺留的未提交程式修改，且本次建立的暫存 Git branch/worktree 全部已清理。其他 Session 尚未安全整合的 dirty WIP 可以暫留，但必須明確列出，下一輪優先處理整合，不得把它永久當正常狀態。
