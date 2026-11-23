@@ -5,7 +5,7 @@ const ClientSession = preload("res://session/client_session.gd")
 
 const COMMAND_HEX := "2500000001007b000700000000000000010000000165000000000000000000000000000000"
 const RESULT_HEX := "3700000001007c000700000000000000010000000100650000000000000065000000000000000000000000000000000000000000000000"
-const SNAPSHOT_HEX := "4a00000001007d000700000000000000660000000000000002006500000000000000591b000004000000580000000000000066000000000000005a1b000007000000d204000000000000"
+const SNAPSHOT_HEX := "5a00000001007d000700000000000000660000000000000002006500000000000000591b0000040000005800000000000000280000006400000066000000000000005a1b000007000000d2040000000000006400000064000000"
 const EQUIPMENT_HEX := "5600000001008000070000000000000002006500000000000000292300000000000001bd1b0000f501000000000000055000000065000000000000002a2300000000000003851c0000f60100000000000002ffffffff"
 const EQUIPMENT_EMPTY_HEX := "120000000100800007000000000000000000"
 const PRESENTATION_HEX := "4100000001007e0007000000000000006300000000000000e9030000000000000b0000000000000007000000000000000166000000000000005a1b000007000000"
@@ -29,6 +29,13 @@ func _initialize() -> void:
 	if not Codec.encode_mecha_command(7,2,4,101,0).is_empty():
 		_fail("mecha equip accepted zero item uid")
 		return
+	var charge_command:=Codec.encode_mecha_command(7,3,6,101,9002)
+	if charge_command.is_empty() or Codec.frame_opcode(charge_command)!=Codec.OPCODE_MECHA_COMMAND:
+		_fail("valid mecha battery charge command rejected")
+		return
+	if not Codec.encode_mecha_command(7,3,6,101,0).is_empty():
+		_fail("mecha battery charge accepted zero item uid")
+		return
 
 	var result := Codec.decode_mecha_result(RESULT_HEX.hex_decode())
 	if (
@@ -46,9 +53,13 @@ func _initialize() -> void:
 		int(snapshot.mechas[0].definition_id) != 7001 or
 		int(snapshot.mechas[0].level) != 4 or
 		int(snapshot.mechas[0].experience) != 88 or
+		int(snapshot.mechas[0].battery_charge) != 40 or
+		int(snapshot.mechas[0].battery_capacity) != 100 or
 		int(snapshot.mechas[1].definition_id) != 7002 or
 		int(snapshot.mechas[1].level) != 7 or
-		int(snapshot.mechas[1].experience) != 1234
+		int(snapshot.mechas[1].experience) != 1234 or
+		int(snapshot.mechas[1].battery_charge) != 100 or
+		int(snapshot.mechas[1].battery_capacity) != 100
 	):
 		_fail("mecha snapshot golden rejected")
 		return
@@ -173,12 +184,13 @@ func _initialize() -> void:
 		not session.has_method("mecha_dismount") or
 		not session.has_method("mecha_refresh") or
 		not session.has_method("mecha_equip") or
-		not session.has_method("mecha_unequip")
+		not session.has_method("mecha_unequip") or
+		not session.has_method("mecha_charge")
 	):
 		_fail("ClientSession mecha command surface missing")
 		return
 
-	print("MECHA_WIRE_PASS csharp_golden=true reducer=true equipment=true presentation=true session_surface=true mechas=2")
+	print("MECHA_WIRE_PASS csharp_golden=true reducer=true equipment=true battery=true presentation=true session_surface=true mechas=2")
 	quit(0)
 
 func _fail(message:String)->void:

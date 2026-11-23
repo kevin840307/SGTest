@@ -1022,17 +1022,18 @@ func mark_mecha_sent(sequence:int,action:int,mecha_uid:int,item_uid:int=0)->bool
 		state!=STATE_IN_WORLD or not world_ready or resync_pending or
 		waiting_for_new_map or pending_world_ready_ack_epoch!=0 or
 		last_world_ready_ack_epoch!=map_epoch or pending_mecha_sequence!=0 or
-		sequence<=mecha_sequence or sequence>0xffffffff or action<1 or action>5
+		sequence<=mecha_sequence or sequence>0xffffffff or action<1 or action>6
 	):
 		return false
 	var equipment_action:=action==4 or action==5
+	var item_action:=equipment_action or action==6
 	if action==3:
 		if mecha_uid!=0 or item_uid!=0:
 			return false
 	else:
 		if mecha_uid<=0 or not mecha_instances.has(mecha_uid):
 			return false
-		if equipment_action!=(item_uid>0):
+		if item_action!=(item_uid>0):
 			return false
 		if action==1 and mounted_mecha_uid==mecha_uid:
 			return false
@@ -1040,7 +1041,7 @@ func mark_mecha_sent(sequence:int,action:int,mecha_uid:int,item_uid:int=0)->bool
 			return false
 		if equipment_action and mounted_mecha_uid==mecha_uid:
 			return false
-		if action==4 and not inventory_items.has(item_uid):
+		if (action==4 or action==6) and not inventory_items.has(item_uid):
 			return false
 		if action==5:
 			var equipped:Dictionary=mecha_equipment_items.get(item_uid,{})
@@ -4877,7 +4878,7 @@ func _apply_mecha_result(frame:PackedByteArray)->bool:
 	):
 		return fail("mecha_result_without_matching_request")
 	var status:=int(value.status)
-	if status<0 or status>13:
+	if status<0 or status>15:
 		return fail("mecha_result_unknown_status")
 	last_mecha_result_sequence=sequence
 	last_mecha_result_status=status

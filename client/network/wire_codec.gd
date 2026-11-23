@@ -178,9 +178,9 @@ const PET_EQUIPMENT_SNAPSHOT_ENTRY_BYTES := 34
 const PET_EQUIPMENT_MAX_ITEMS := 1024
 const PET_EQUIPMENT_SNAPSHOT_MAX_FRAME_BYTES := PET_EQUIPMENT_SNAPSHOT_HEADER_BYTES + PET_EQUIPMENT_MAX_ITEMS * PET_EQUIPMENT_SNAPSHOT_ENTRY_BYTES
 const MECHA_COMMAND_FRAME_BYTES := 37
-const MECHA_RESULT_FRAME_BYTES := 55
+const MECHA_RESULT_FRAME_BYTES := 59
 const MECHA_SNAPSHOT_HEADER_BYTES := 26
-const MECHA_SNAPSHOT_ENTRY_BYTES := 24
+const MECHA_SNAPSHOT_ENTRY_BYTES := 32
 const MECHA_MAX_INSTANCES := 64
 const MECHA_SNAPSHOT_MAX_FRAME_BYTES := MECHA_SNAPSHOT_HEADER_BYTES + MECHA_MAX_INSTANCES * MECHA_SNAPSHOT_ENTRY_BYTES
 const MECHA_EQUIPMENT_SNAPSHOT_HEADER_BYTES := 18
@@ -2842,13 +2842,13 @@ static func decode_pet_equipment_snapshot(frame:PackedByteArray)->Dictionary:
 
 
 static func encode_mecha_command(epoch:int,sequence:int,action:int,mecha_uid:int,item_uid:int=0)->PackedByteArray:
-	if epoch<=0 or sequence<=0 or sequence>0xffffffff or action<1 or action>5:
+	if epoch<=0 or sequence<=0 or sequence>0xffffffff or action<1 or action>6:
 		return PackedByteArray()
-	var equipment:=action==4 or action==5
+	var item_action:=action==4 or action==5 or action==6
 	if action==3:
 		if mecha_uid!=0 or item_uid!=0:
 			return PackedByteArray()
-	elif mecha_uid<=0 or equipment!=(item_uid>0):
+	elif mecha_uid<=0 or item_action!=(item_uid>0):
 		return PackedByteArray()
 	var writer:=_writer(MECHA_COMMAND_FRAME_BYTES,OPCODE_MECHA_COMMAND)
 	writer.put_64(epoch)
@@ -2873,16 +2873,17 @@ static func decode_mecha_result(frame:PackedByteArray)->Dictionary:
 	var slot_id:=reader.get_u8()
 	var replaced_item_uid:=reader.get_64()
 	var equipment:=action==4 or action==5
+	var item_action:=equipment or action==6
 	if (
-		epoch<=0 or sequence<=0 or action<1 or action>5 or
-		status<0 or status>13 or mounted_uid<0 or slot_id>6 or
+		epoch<=0 or sequence<=0 or action<1 or action>6 or
+		status<0 or status>15 or mounted_uid<0 or slot_id>6 or
 		replaced_item_uid<0 or reader.get_available_bytes()!=0
 	):
 		return {}
 	if action==3:
 		if mecha_uid!=0 or item_uid!=0 or slot_id!=0 or replaced_item_uid!=0:
 			return {}
-	elif mecha_uid<=0 or equipment!=(item_uid>0):
+	elif mecha_uid<=0 or item_action!=(item_uid>0):
 		return {}
 	elif not equipment and (slot_id!=0 or replaced_item_uid!=0):
 		return {}
@@ -2920,16 +2921,20 @@ static func decode_mecha_snapshot(frame:PackedByteArray)->Dictionary:
 		var definition_id:=reader.get_32()
 		var level:=reader.get_32()
 		var experience:=reader.get_64()
+		var battery_charge:=reader.get_32()
+		var battery_capacity:=reader.get_32()
 		if (
 			uid<=0 or definition_id<=0 or definition_id>100000000 or
 			level<=0 or level>1000000 or experience<0 or
-			experience>9000000000000000 or seen.has(uid)
+			experience>9000000000000000 or battery_charge<0 or battery_capacity<0 or
+			(battery_capacity>0 and battery_charge>battery_capacity) or seen.has(uid)
 		):
 			return {}
 		seen[uid]=true
 		mechas.append({
 			"mecha_uid":uid,"definition_id":definition_id,
-			"level":level,"experience":experience
+			"level":level,"experience":experience,
+			"battery_charge":battery_charge,"battery_capacity":battery_capacity
 		})
 	if reader.get_available_bytes()!=0 or (mounted_uid>0 and not seen.has(mounted_uid)):
 		return {}

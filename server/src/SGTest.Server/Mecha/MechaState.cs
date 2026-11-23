@@ -24,13 +24,16 @@ public sealed class MechaCoordinator
 {
     private readonly SqliteIdentityStore _identity;
     private readonly IReadOnlyDictionary<int,MechaEquipmentRule>? _equipmentRules;
+    private readonly MechaBatteryCatalog? _batteryRules;
 
     public MechaCoordinator(
         SqliteIdentityStore identity,
-        IReadOnlyDictionary<int,MechaEquipmentRule>? equipmentRules=null)
+        IReadOnlyDictionary<int,MechaEquipmentRule>? equipmentRules=null,
+        MechaBatteryCatalog? batteryRules=null)
     {
         _identity=identity??throw new ArgumentNullException(nameof(identity));
         _equipmentRules=equipmentRules;
+        _batteryRules=batteryRules;
     }
 
     public async Task AttachAsync(ConnectionBinding binding,WorldResultRouter router)
@@ -65,6 +68,13 @@ public sealed class MechaCoordinator
                 MechaActionStatus.Applied,
                 before.FirstOrDefault(x=>x.IsMounted)?.MechaUid??0);
         }
+        else if(request.Action==MechaCommandAction.ChargeBattery)
+        {
+            outcome=await _identity.ApplyMechaBatteryChargeAsync(
+                request.ActorId,request.ConnectionEpoch,request.RequestMapEpoch,
+                request.MechaSequence,request.MechaUid,request.ItemUid,_batteryRules)
+                .ConfigureAwait(false);
+        }
         else if(request.Action is MechaCommandAction.Equip or MechaCommandAction.Unequip)
         {
             outcome=await _identity.ApplyMechaEquipmentActionAsync(
@@ -89,7 +99,7 @@ public sealed class MechaCoordinator
         EnsureQueued(router.QueueMechaResult(request,new(
             request.RequestMapEpoch,request.MechaSequence,request.Action,
             (MechaResultStatus)outcome.Status,request.MechaUid,outcome.MountedMechaUid,
-            request.ItemUid,outcome.SlotId,outcome.ReplacedItemUid)));
+            request.ItemUid,outcome.SlotId,outcome.ReplacedItemUid,outcome.RemainingQuantity)));
 
         if(!router.TryGetCurrentBinding(request.ActorId,out var after)||
            after.ConnectionEpoch!=request.ConnectionEpoch||
@@ -117,12 +127,13 @@ public sealed class MechaCoordinator
             false,0,0,0));
     }
 
-    private static MechaSnapshotWire ToSnapshot(
+    private MechaSnapshotWire ToSnapshot(
         long mapEpoch,IReadOnlyList<MechaInstanceRecord> mechas)
     {
         long mounted=mechas.FirstOrDefault(x=>x.IsMounted)?.MechaUid??0;
         return new(mapEpoch,mounted,mechas.Select(x=>new MechaSnapshotEntryWire(
-            x.MechaUid,x.DefinitionId,x.Level,x.Experience)).ToArray());
+            x.MechaUid,x.DefinitionId,x.Level,x.Experience,x.BatteryCharge,
+            _batteryRules?.CapacityFor(x.DefinitionId)??0)).ToArray());
     }
 
     private static MechaEquipmentSnapshotWire ToEquipmentSnapshot(

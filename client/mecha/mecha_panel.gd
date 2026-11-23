@@ -17,7 +17,9 @@ const RESULT_NAMES := [
 	"該物品未裝在此機甲",
 	"核心部件不可直接卸下",
 	"強化卡槽已滿",
-	"伺服器尚無可信機甲裝備規則"
+	"伺服器尚無可信機甲規則",
+	"此電池物品與選中機甲不相容",
+	"機甲電量已滿"
 ]
 
 var active := false
@@ -27,6 +29,7 @@ var _dismount_action: Callable
 var _refresh_action: Callable
 var _equip_action: Callable
 var _unequip_action: Callable
+var _charge_action: Callable
 var _item_catalog
 
 var mecha_picker := OptionButton.new()
@@ -37,6 +40,7 @@ var equipment_picker := OptionButton.new()
 var inventory_picker := OptionButton.new()
 var equip_button := Button.new()
 var unequip_button := Button.new()
+var charge_button := Button.new()
 var status_label := Label.new()
 var _display_key := ""
 
@@ -49,10 +53,11 @@ func _ready() -> void:
 	inventory_picker.tooltip_text = "選擇背包 UID；最終相容性與槽位由伺服器判定"
 	equip_button.text = "將背包物品裝到選中機甲"
 	unequip_button.text = "卸下選中的機甲裝備"
+	charge_button.text = "使用選中背包物品為機甲充能"
 	status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	for control in [
 		mecha_picker,mount_button,dismount_button,refresh_button,
-		equipment_picker,inventory_picker,equip_button,unequip_button,status_label
+		equipment_picker,inventory_picker,equip_button,unequip_button,charge_button,status_label
 	]:
 		control.visible = false
 		add_child(control)
@@ -62,6 +67,7 @@ func _ready() -> void:
 	refresh_button.pressed.connect(_refresh_server)
 	equip_button.pressed.connect(_equip_selected)
 	unequip_button.pressed.connect(_unequip_selected)
+	charge_button.pressed.connect(_charge_selected)
 	reset()
 
 func set_actions(
@@ -70,6 +76,7 @@ func set_actions(
 	refresh_action: Callable,
 	equip_action: Callable,
 	unequip_action: Callable,
+	charge_action: Callable,
 	item_catalog
 ) -> void:
 	_mount_action = mount_action
@@ -77,6 +84,7 @@ func set_actions(
 	_refresh_action = refresh_action
 	_equip_action = equip_action
 	_unequip_action = unequip_action
+	_charge_action = charge_action
 	_item_catalog = item_catalog
 
 func reset() -> void:
@@ -137,6 +145,14 @@ func _unequip_selected() -> void:
 	if _unequip_action.is_valid() and bool(_unequip_action.call(mecha_uid,item_uid)):
 		status_label.text = "卸下請求已送出；等待伺服器原子移回背包…"
 
+func _charge_selected() -> void:
+	if charge_button.disabled or inventory_picker.selected < 0:
+		return
+	var mecha_uid := selected_mecha_uid()
+	var item_uid := int(inventory_picker.get_item_metadata(inventory_picker.selected))
+	if _charge_action.is_valid() and bool(_charge_action.call(mecha_uid,item_uid)):
+		status_label.text = "充能請求已送出；電池相容性與充能量由伺服器判定…"
+
 func _item_name(item: Dictionary) -> String:
 	var definition_id := int(item.get("item_definition_id",0))
 	if _item_catalog != null:
@@ -183,10 +199,13 @@ func _rebuild_pickers() -> void:
 	for raw_uid in ids:
 		var uid := int(raw_uid)
 		var mecha: Dictionary = mechas[raw_uid]
-		mecha_picker.add_item("%s機甲 UID %d｜型號 %d｜Lv.%d｜EXP %d" % [
+		var battery_charge := int(mecha.get("battery_charge",0))
+		var battery_capacity := int(mecha.get("battery_capacity",0))
+		var battery_text := "電量 %d/%d" % [battery_charge,battery_capacity] if battery_capacity > 0 else "電量 %d/未驗證" % battery_charge
+		mecha_picker.add_item("%s機甲 UID %d｜型號 %d｜Lv.%d｜EXP %d｜%s" % [
 			"★ " if uid == mounted else "",
 			uid,int(mecha.get("definition_id",0)),int(mecha.get("level",0)),
-			int(mecha.get("experience",0))
+			int(mecha.get("experience",0)),battery_text
 		])
 		mecha_picker.set_item_metadata(mecha_picker.item_count-1,uid)
 		if uid == previous:
@@ -226,7 +245,7 @@ func _update_controls() -> void:
 	var in_world := active and int(_latest.get("state",-1)) == State.STATE_IN_WORLD
 	for control in [
 		mecha_picker,mount_button,dismount_button,refresh_button,
-		equipment_picker,inventory_picker,equip_button,unequip_button,status_label
+		equipment_picker,inventory_picker,equip_button,unequip_button,charge_button,status_label
 	]:
 		control.visible = in_world
 	if not in_world:
@@ -250,10 +269,11 @@ func _update_controls() -> void:
 	mount_button.disabled = not ready or pending or selected <= 0 or selected == mounted
 	dismount_button.disabled = not ready or pending or mounted <= 0
 	var selected_locked := selected > 0 and selected == mounted
-	inventory_picker.disabled = not ready or pending or selected <= 0 or selected_locked or inventory_picker.item_count == 0
+	inventory_picker.disabled = not ready or pending or selected <= 0 or inventory_picker.item_count == 0
 	equipment_picker.disabled = not ready or pending or selected <= 0 or selected_locked or equipment_picker.item_count == 0
-	equip_button.disabled = inventory_picker.disabled
+	equip_button.disabled = inventory_picker.disabled or selected_locked
 	unequip_button.disabled = equipment_picker.disabled
+	charge_button.disabled = inventory_picker.disabled
 	if pending:
 		status_label.text = "等待伺服器機甲結果；不可重複送出"
 	else:

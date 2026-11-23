@@ -178,7 +178,7 @@ public enum PetResultStatus : byte
 }
 public enum MechaCommandAction : byte
 {
-    Mount=1,Dismount=2,Refresh=3,Equip=4,Unequip=5
+    Mount=1,Dismount=2,Refresh=3,Equip=4,Unequip=5,ChargeBattery=6
 }
 public enum MechaResultStatus : byte
 {
@@ -186,7 +186,8 @@ public enum MechaResultStatus : byte
     AlreadyMounted=3,NotMounted=4,SequenceConflict=5,
     ItemNotOwned=6,InvalidEquipment=7,LevelTooLow=8,
     MountedLocked=9,NotEquipped=10,CorePartCannotUnequip=11,
-    CardSlotsFull=12,RulesUnavailable=13
+    CardSlotsFull=12,RulesUnavailable=13,
+    BatteryIncompatible=14,BatteryAlreadyFull=15
 }
 
 public enum PartyCommandAction : byte
@@ -757,9 +758,11 @@ public readonly record struct MechaCommandWire(
     long MapEpoch,uint MechaSequence,MechaCommandAction Action,long MechaUid,long ItemUid=0);
 public readonly record struct MechaResultWire(
     long MapEpoch,uint MechaSequence,MechaCommandAction Action,MechaResultStatus Status,
-    long MechaUid,long MountedMechaUid,long ItemUid=0,int SlotId=0,long ReplacedItemUid=0);
+    long MechaUid,long MountedMechaUid,long ItemUid=0,int SlotId=0,long ReplacedItemUid=0,
+    int RemainingQuantity=-1);
 public readonly record struct MechaSnapshotEntryWire(
-    long MechaUid,int DefinitionId,int Level,long Experience);
+    long MechaUid,int DefinitionId,int Level,long Experience,
+    int BatteryCharge=0,int BatteryCapacity=0);
 public sealed record MechaSnapshotWire(
     long ReceiverMapEpoch,long MountedMechaUid,IReadOnlyList<MechaSnapshotEntryWire> Mechas);
 public readonly record struct MechaEquipmentEntryWire(

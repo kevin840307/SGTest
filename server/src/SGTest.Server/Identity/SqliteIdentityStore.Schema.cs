@@ -1011,6 +1011,7 @@ ON character_friendships(character_high_id,character_low_id);",tx);
     level INTEGER NOT NULL DEFAULT 1 CHECK(level BETWEEN 1 AND 1000000),
     experience INTEGER NOT NULL DEFAULT 0 CHECK(experience BETWEEN 0 AND 9000000000000000),
     is_mounted INTEGER NOT NULL DEFAULT 0 CHECK(is_mounted IN (0,1)),
+    battery_charge INTEGER NOT NULL DEFAULT 0 CHECK(battery_charge BETWEEN 0 AND 2147483647),
     parts_blob BLOB NOT NULL DEFAULT X'' CHECK(length(parts_blob) <= 4096),
     created_unix_ms INTEGER NOT NULL,
     updated_unix_ms INTEGER NOT NULL
@@ -1024,17 +1025,17 @@ ON mecha_instances(character_id) WHERE is_mounted=1;",tx);
     connection_generation INTEGER NOT NULL CHECK(connection_generation > 0),
     map_epoch INTEGER NOT NULL CHECK(map_epoch > 0),
     action_sequence INTEGER NOT NULL CHECK(action_sequence BETWEEN 1 AND 4294967295),
-    action INTEGER NOT NULL CHECK(action IN (1,2,4,5)),
+    action INTEGER NOT NULL CHECK(action IN (1,2,4,5,6)),
     mecha_uid INTEGER NOT NULL CHECK(mecha_uid > 0),
     item_uid INTEGER NOT NULL DEFAULT 0 CHECK(item_uid >= 0),
-    result_status INTEGER NOT NULL CHECK(result_status BETWEEN 0 AND 13),
+    result_status INTEGER NOT NULL CHECK(result_status BETWEEN 0 AND 15),
     resulting_mounted_uid INTEGER NOT NULL CHECK(resulting_mounted_uid >= 0),
     resulting_slot_id INTEGER NOT NULL DEFAULT 0 CHECK(resulting_slot_id BETWEEN 0 AND 6),
     replaced_item_uid INTEGER NOT NULL DEFAULT 0 CHECK(replaced_item_uid >= 0),
     created_unix_ms INTEGER NOT NULL,
     CHECK(
       (action IN (1,2) AND item_uid=0 AND resulting_slot_id=0 AND replaced_item_uid=0)
-      OR (action IN (4,5) AND item_uid>0)
+      OR (action IN (4,5,6) AND item_uid>0 AND (action!=6 OR (resulting_slot_id=0 AND replaced_item_uid=0)))
     ),
     PRIMARY KEY(character_id,connection_generation,map_epoch,action_sequence)
 );",tx);
@@ -1137,17 +1138,17 @@ END;",tx);
     connection_generation INTEGER NOT NULL CHECK(connection_generation > 0),
     map_epoch INTEGER NOT NULL CHECK(map_epoch > 0),
     action_sequence INTEGER NOT NULL CHECK(action_sequence BETWEEN 1 AND 4294967295),
-    action INTEGER NOT NULL CHECK(action IN (1,2,4,5)),
+    action INTEGER NOT NULL CHECK(action IN (1,2,4,5,6)),
     mecha_uid INTEGER NOT NULL CHECK(mecha_uid > 0),
     item_uid INTEGER NOT NULL DEFAULT 0 CHECK(item_uid >= 0),
-    result_status INTEGER NOT NULL CHECK(result_status BETWEEN 0 AND 13),
+    result_status INTEGER NOT NULL CHECK(result_status BETWEEN 0 AND 15),
     resulting_mounted_uid INTEGER NOT NULL CHECK(resulting_mounted_uid >= 0),
     resulting_slot_id INTEGER NOT NULL DEFAULT 0 CHECK(resulting_slot_id BETWEEN 0 AND 6),
     replaced_item_uid INTEGER NOT NULL DEFAULT 0 CHECK(replaced_item_uid >= 0),
     created_unix_ms INTEGER NOT NULL,
     CHECK(
       (action IN (1,2) AND item_uid=0 AND resulting_slot_id=0 AND replaced_item_uid=0)
-      OR (action IN (4,5) AND item_uid>0)
+      OR (action IN (4,5,6) AND item_uid>0 AND (action!=6 OR (resulting_slot_id=0 AND replaced_item_uid=0)))
     ),
     PRIMARY KEY(character_id,connection_generation,map_epoch,action_sequence)
 );",tx);
@@ -1158,6 +1159,45 @@ SELECT character_id,connection_generation,map_epoch,action_sequence,action,mecha
 0,result_status,resulting_mounted_uid,0,0,created_unix_ms
 FROM mecha_actions_v37;",tx);
                 Execute(connection,@"DROP TABLE mecha_actions_v37;",tx);
+            }
+
+            // Schema v40: Mecha battery charge is durable server-owned state.
+            // Charge rules remain external verified content; the schema only
+            // stores committed charge and extends the idempotent action journal.
+            if(schemaVersion<40)
+            {
+                if(!ColumnExists(connection,"mecha_instances","battery_charge",tx))
+                    Execute(connection,@"ALTER TABLE mecha_instances
+ADD COLUMN battery_charge INTEGER NOT NULL DEFAULT 0
+CHECK(battery_charge BETWEEN 0 AND 2147483647);",tx);
+                Execute(connection,@"ALTER TABLE mecha_actions RENAME TO mecha_actions_v39;",tx);
+                Execute(connection,@"CREATE TABLE mecha_actions (
+    character_id INTEGER NOT NULL REFERENCES characters(character_id) ON DELETE CASCADE,
+    connection_generation INTEGER NOT NULL CHECK(connection_generation > 0),
+    map_epoch INTEGER NOT NULL CHECK(map_epoch > 0),
+    action_sequence INTEGER NOT NULL CHECK(action_sequence BETWEEN 1 AND 4294967295),
+    action INTEGER NOT NULL CHECK(action IN (1,2,4,5,6)),
+    mecha_uid INTEGER NOT NULL CHECK(mecha_uid > 0),
+    item_uid INTEGER NOT NULL DEFAULT 0 CHECK(item_uid >= 0),
+    result_status INTEGER NOT NULL CHECK(result_status BETWEEN 0 AND 15),
+    resulting_mounted_uid INTEGER NOT NULL CHECK(resulting_mounted_uid >= 0),
+    resulting_slot_id INTEGER NOT NULL DEFAULT 0 CHECK(resulting_slot_id BETWEEN 0 AND 6),
+    replaced_item_uid INTEGER NOT NULL DEFAULT 0 CHECK(replaced_item_uid >= 0),
+    created_unix_ms INTEGER NOT NULL,
+    CHECK(
+      (action IN (1,2) AND item_uid=0 AND resulting_slot_id=0 AND replaced_item_uid=0)
+      OR (action IN (4,5,6) AND item_uid>0 AND
+          (action!=6 OR (resulting_slot_id=0 AND replaced_item_uid=0)))
+    ),
+    PRIMARY KEY(character_id,connection_generation,map_epoch,action_sequence)
+);",tx);
+                Execute(connection,@"INSERT INTO mecha_actions(
+character_id,connection_generation,map_epoch,action_sequence,action,mecha_uid,item_uid,
+result_status,resulting_mounted_uid,resulting_slot_id,replaced_item_uid,created_unix_ms)
+SELECT character_id,connection_generation,map_epoch,action_sequence,action,mecha_uid,item_uid,
+result_status,resulting_mounted_uid,resulting_slot_id,replaced_item_uid,created_unix_ms
+FROM mecha_actions_v39;",tx);
+                Execute(connection,@"DROP TABLE mecha_actions_v39;",tx);
             }
 
             // Schema v37: a player stall may contain multiple active ItemUid

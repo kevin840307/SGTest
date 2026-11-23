@@ -7,6 +7,9 @@ internal static class MechaChecks
     {
         Checks.Run("mecha wire roundtrips authoritative mount roster and equipment",Wire);
         Checks.Run("mecha verified equipment catalog fails closed",VerifiedCatalog);
+        Checks.Run("mecha verified battery catalog fails closed",VerifiedBatteryCatalog);
+        Checks.Run("mecha battery charge is atomic durable and replay-safe",
+            ()=>BatteryLifecycle().GetAwaiter().GetResult());
         Checks.Run("mecha mount dismount replay ownership and persistence are authoritative",
             ()=>Persistence().GetAwaiter().GetResult());
         Checks.Run("mecha equipment UID lifecycle is atomic durable and replay-safe",
@@ -151,6 +154,191 @@ internal static class MechaChecks
             try{MechaEquipmentCatalog.LoadVerified(path);}
             catch(InvalidDataException){rejected=true;}
             Checks.Require(rejected,"unsupported mecha equipment class was admitted");
+        }
+        finally { Directory.Delete(root,true); }
+    }
+
+    private static void VerifiedBatteryCatalog()
+    {
+        string root=Path.Combine(
+            Path.GetTempPath(),"sgtest_mecha_battery_rules_"+Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        string path=Path.Combine(root,"verified-mecha-battery.json");
+        try
+        {
+            File.WriteAllText(path,System.Text.Json.JsonSerializer.Serialize(new
+            {
+                kind="verified_mecha_battery_rules",version=1,
+                rules_verified=true,gameplay_ready=true,
+                source_reference="ci:synthetic-battery-rule-not-hk",
+                rules=new[]
+                {
+                    new{mecha_definition_id=7001,battery_item_definition_id=7701,
+                        capacity=100,charge_amount=40,allow_while_mounted=false},
+                    new{mecha_definition_id=7001,battery_item_definition_id=7702,
+                        capacity=100,charge_amount=100,allow_while_mounted=true}
+                }
+            }));
+            var rules=MechaBatteryCatalog.LoadVerified(path);
+            Checks.Require(rules.Count==2&&rules.CapacityFor(7001)==100&&
+                rules.TryGet(7001,7701,out var rule)&&rule.ChargeAmount==40&&
+                !rule.AllowWhileMounted,
+                "verified mecha battery catalog mismatch");
+
+            File.WriteAllText(path,System.Text.Json.JsonSerializer.Serialize(new
+            {
+                kind="verified_mecha_battery_rules",version=1,
+                rules_verified=false,gameplay_ready=true,
+                source_reference="ci:unverified",
+                rules=new[]{new{mecha_definition_id=7001,battery_item_definition_id=7701,
+                    capacity=100,charge_amount=40,allow_while_mounted=false}}
+            }));
+            bool rejected=false;
+            try{MechaBatteryCatalog.LoadVerified(path);}
+            catch(InvalidDataException){rejected=true;}
+            Checks.Require(rejected,"unverified mecha battery rules were admitted");
+
+            File.WriteAllText(path,System.Text.Json.JsonSerializer.Serialize(new
+            {
+                kind="verified_mecha_battery_rules",version=1,
+                rules_verified=true,gameplay_ready=true,
+                source_reference="ci:conflicting-capacity",
+                rules=new[]
+                {
+                    new{mecha_definition_id=7001,battery_item_definition_id=7701,
+                        capacity=100,charge_amount=40,allow_while_mounted=false},
+                    new{mecha_definition_id=7001,battery_item_definition_id=7702,
+                        capacity=120,charge_amount=40,allow_while_mounted=false}
+                }
+            }));
+            rejected=false;
+            try{MechaBatteryCatalog.LoadVerified(path);}
+            catch(InvalidDataException){rejected=true;}
+            Checks.Require(rejected,"conflicting mecha battery capacities were admitted");
+        }
+        finally { Directory.Delete(root,true); }
+    }
+
+    private static async Task BatteryLifecycle()
+    {
+        string root=Path.Combine(
+            Path.GetTempPath(),"sgtest_mecha_battery_"+Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        string db=Path.Combine(root,"identity.db");
+        string manifest=Path.Combine(root,"verified-mecha-battery.json");
+        try
+        {
+            File.WriteAllText(manifest,System.Text.Json.JsonSerializer.Serialize(new
+            {
+                kind="verified_mecha_battery_rules",version=1,
+                rules_verified=true,gameplay_ready=true,
+                source_reference="ci:synthetic-battery-rule-not-hk",
+                rules=new[]
+                {
+                    new{mecha_definition_id=7001,battery_item_definition_id=7701,
+                        capacity=100,charge_amount=40,allow_while_mounted=false},
+                    new{mecha_definition_id=7001,battery_item_definition_id=7702,
+                        capacity=100,charge_amount=100,allow_while_mounted=true}
+                }
+            }));
+            var rules=MechaBatteryCatalog.LoadVerified(manifest);
+            long character,mecha,batteryUid,incompatibleUid,mountedBatteryUid;
+            using(var store=new SqliteIdentityStore(db))
+            {
+                await store.InitializeAsync();
+                long account=(await store.CreateAccountAsync(
+                    "mecha_battery","Mecha-Battery-Secret-2026!")).AccountId;
+                character=(await store.CreateCharacterAsync(
+                    account,0,"MechaBattery",new(15,100,100))).Character!.CharacterId;
+                mecha=await store.ProvisionMechaAsync(character,7001,5,0);
+
+                long generation=await store.AllocateLootWorldGenerationAsync();
+                uint pickup=1;
+                async Task<long> Seed(int definition,int quantity,int revision)
+                {
+                    var drop=await store.CreateTrustedGroundDropAsync(new(
+                        15,100,100,9700+revision,
+                        SqliteIdentityStore.ComposeLootDeathRevision(generation,(uint)revision),
+                        0,definition,quantity,LootSourceTrust.SyntheticTest,
+                        "mecha-battery-"+definition));
+                    var grant=await store.ClaimGroundDropAsync(new TrustedPickupContext(
+                        character,
+                        SqliteIdentityStore.ComposePickupConnectionEpoch(generation,1),
+                        1,pickup++,15,100,100),drop.DropId);
+                    Checks.Require(grant.Status==PickupStatus.Granted&&grant.Quantity==quantity,
+                        "mecha battery seed failed for "+definition);
+                    return grant.ItemUid;
+                }
+
+                batteryUid=await Seed(7701,2,1);
+                incompatibleUid=await Seed(7799,1,2);
+                mountedBatteryUid=await Seed(7702,1,3);
+
+                var unavailable=await store.ApplyMechaBatteryChargeAsync(
+                    character,31,6,1,mecha,batteryUid,null);
+                Checks.Require(unavailable.Status==MechaActionStatus.RulesUnavailable&&
+                    (await store.ListInventoryItemsAsync(character))
+                        .Single(x=>x.ItemUid==batteryUid).Quantity==2,
+                    "missing battery rules did not fail closed");
+
+                var incompatible=await store.ApplyMechaBatteryChargeAsync(
+                    character,31,6,2,mecha,incompatibleUid,rules);
+                Checks.Require(incompatible.Status==MechaActionStatus.BatteryIncompatible&&
+                    (await store.ListInventoryItemsAsync(character)).Any(x=>x.ItemUid==incompatibleUid),
+                    "incompatible battery consumed inventory");
+
+                var first=await store.ApplyMechaBatteryChargeAsync(
+                    character,31,6,3,mecha,batteryUid,rules);
+                var roster=await store.GetMechasAsync(character);
+                var inventory=await store.ListInventoryItemsAsync(character);
+                Checks.Require(first.Status==MechaActionStatus.Applied&&
+                    roster.Single(x=>x.MechaUid==mecha).BatteryCharge==40&&
+                    inventory.Single(x=>x.ItemUid==batteryUid).Quantity==1,
+                    "first battery charge was not atomic");
+
+                var replay=await store.ApplyMechaBatteryChargeAsync(
+                    character,31,6,3,mecha,batteryUid,rules);
+                Checks.Require(replay.Status==MechaActionStatus.AlreadyProcessed&&
+                    (await store.GetMechasAsync(character))
+                        .Single(x=>x.MechaUid==mecha).BatteryCharge==40&&
+                    (await store.ListInventoryItemsAsync(character))
+                        .Single(x=>x.ItemUid==batteryUid).Quantity==1,
+                    "battery retransmit was not idempotent");
+
+                var second=await store.ApplyMechaBatteryChargeAsync(
+                    character,31,6,4,mecha,batteryUid,rules);
+                Checks.Require(second.Status==MechaActionStatus.Applied&&
+                    (await store.GetMechasAsync(character))
+                        .Single(x=>x.MechaUid==mecha).BatteryCharge==80&&
+                    !(await store.ListInventoryItemsAsync(character)).Any(x=>x.ItemUid==batteryUid),
+                    "second charge did not consume final stack unit");
+
+                var mount=await store.ApplyMechaActionAsync(
+                    character,31,6,5,MechaActionKind.Mount,mecha);
+                Checks.Require(mount.Status==MechaActionStatus.Applied,
+                    "battery test mount failed");
+                var mountedAllowed=await store.ApplyMechaBatteryChargeAsync(
+                    character,31,6,6,mecha,mountedBatteryUid,rules);
+                Checks.Require(mountedAllowed.Status==MechaActionStatus.Applied&&
+                    (await store.GetMechasAsync(character))
+                        .Single(x=>x.MechaUid==mecha).BatteryCharge==100,
+                    "verified mounted battery charge did not reach capacity");
+
+                var fullBattery=await Seed(7702,1,4);
+                var full=await store.ApplyMechaBatteryChargeAsync(
+                    character,31,6,7,mecha,fullBattery,rules);
+                Checks.Require(full.Status==MechaActionStatus.BatteryAlreadyFull&&
+                    (await store.ListInventoryItemsAsync(character)).Any(x=>x.ItemUid==fullBattery),
+                    "full battery attempt consumed inventory");
+            }
+
+            using(var reopened=new SqliteIdentityStore(db))
+            {
+                await reopened.InitializeAsync();
+                var persisted=await reopened.GetMechasAsync(character);
+                Checks.Require(persisted.Single(x=>x.MechaUid==mecha).BatteryCharge==100,
+                    "mecha battery charge did not survive reopen");
+            }
         }
         finally { Directory.Delete(root,true); }
     }

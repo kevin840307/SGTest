@@ -5,9 +5,9 @@ namespace SGTest.Server.Wire;
 public static partial class WireProtocol
 {
     public const int MechaCommandFrameBytes=37;
-    public const int MechaResultFrameBytes=55;
+    public const int MechaResultFrameBytes=59;
     public const int MechaSnapshotHeaderBytes=26;
-    public const int MechaSnapshotEntryBytes=24;
+    public const int MechaSnapshotEntryBytes=32;
     public const int MechaSnapshotMaximumMechas=64;
     public const int MechaSnapshotMaximumFrameBytes=
         MechaSnapshotHeaderBytes+MechaSnapshotMaximumMechas*MechaSnapshotEntryBytes;
@@ -22,12 +22,13 @@ public static partial class WireProtocol
     public static byte[] EncodeMechaCommand(MechaCommandWire value)
     {
         bool refresh=value.Action==MechaCommandAction.Refresh;
-        bool equipment=value.Action is MechaCommandAction.Equip or MechaCommandAction.Unequip;
+        bool itemAction=value.Action is MechaCommandAction.Equip or
+            MechaCommandAction.Unequip or MechaCommandAction.ChargeBattery;
         if(value.MapEpoch<=0||value.MechaSequence==0||
-           value.Action is <MechaCommandAction.Mount or >MechaCommandAction.Unequip||
+           value.Action is <MechaCommandAction.Mount or >MechaCommandAction.ChargeBattery||
            (refresh&&(value.MechaUid!=0||value.ItemUid!=0))||
            (!refresh&&value.MechaUid<=0)||
-           (equipment!=(value.ItemUid>0)))
+           (itemAction!=(value.ItemUid>0)))
             throw new ArgumentOutOfRangeException(nameof(value));
         var frame=NewFrame(WireOpcode.MechaCommand,MechaCommandFrameBytes);
         BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(8,8),value.MapEpoch);
@@ -58,15 +59,20 @@ public static partial class WireProtocol
     {
         bool refresh=value.Action==MechaCommandAction.Refresh;
         bool equipment=value.Action is MechaCommandAction.Equip or MechaCommandAction.Unequip;
+        bool itemAction=equipment||value.Action==MechaCommandAction.ChargeBattery;
         if(value.MapEpoch<=0||value.MechaSequence==0||
-           value.Action is <MechaCommandAction.Mount or >MechaCommandAction.Unequip||
-           value.Status is <MechaResultStatus.Applied or >MechaResultStatus.RulesUnavailable||
+           value.Action is <MechaCommandAction.Mount or >MechaCommandAction.ChargeBattery||
+           value.Status is <MechaResultStatus.Applied or >MechaResultStatus.BatteryAlreadyFull||
            value.MountedMechaUid<0||value.SlotId is <0 or >6||value.ReplacedItemUid<0||
+           value.RemainingQuantity is < -1 or >1000000000||
            (refresh&&(value.MechaUid!=0||value.ItemUid!=0||
-                     value.SlotId!=0||value.ReplacedItemUid!=0))||
+                     value.SlotId!=0||value.ReplacedItemUid!=0||value.RemainingQuantity!=-1))||
            (!refresh&&value.MechaUid<=0)||
-           (equipment!=(value.ItemUid>0))||
-           (!equipment&&(value.SlotId!=0||value.ReplacedItemUid!=0)))
+           (itemAction!=(value.ItemUid>0))||
+           (!equipment&&(value.SlotId!=0||value.ReplacedItemUid!=0))||
+           (value.Action!=MechaCommandAction.ChargeBattery&&value.RemainingQuantity!=-1)||
+           (value.Action==MechaCommandAction.ChargeBattery&&
+            value.Status==MechaResultStatus.Applied&&value.RemainingQuantity<0))
             throw new ArgumentOutOfRangeException(nameof(value));
         var frame=NewFrame(WireOpcode.MechaResult,MechaResultFrameBytes);
         BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(8,8),value.MapEpoch);
@@ -78,6 +84,7 @@ public static partial class WireProtocol
         BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(38,8),value.ItemUid);
         frame[46]=(byte)value.SlotId;
         BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(47,8),value.ReplacedItemUid);
+        BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(55,4),value.RemainingQuantity);
         return frame;
     }
 
@@ -95,7 +102,8 @@ public static partial class WireProtocol
             BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(30,8)),
             BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(38,8)),
             frame[46],
-            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(47,8)));
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(47,8)),
+            BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(55,4)));
         try{_=EncodeMechaResult(value);return true;}
         catch(ArgumentOutOfRangeException){value=default;return false;}
     }
@@ -112,6 +120,8 @@ public static partial class WireProtocol
             if(mecha.MechaUid<=0||mecha.DefinitionId is <=0 or >100000000||
                mecha.Level is <=0 or >1000000||
                mecha.Experience is <0 or >9000000000000000L||
+               mecha.BatteryCharge<0||mecha.BatteryCapacity<0||
+               (mecha.BatteryCapacity>0&&mecha.BatteryCharge>mecha.BatteryCapacity)||
                !ids.Add(mecha.MechaUid))
                 throw new ArgumentOutOfRangeException(nameof(value));
             if(mecha.MechaUid==value.MountedMechaUid)mountedFound=true;
@@ -130,6 +140,8 @@ public static partial class WireProtocol
             BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(offset+8,4),mecha.DefinitionId);
             BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(offset+12,4),mecha.Level);
             BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(offset+16,8),mecha.Experience);
+            BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(offset+24,4),mecha.BatteryCharge);
+            BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(offset+28,4),mecha.BatteryCapacity);
             offset+=MechaSnapshotEntryBytes;
         }
         return frame;
@@ -158,7 +170,9 @@ public static partial class WireProtocol
                 BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(offset,8)),
                 BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(offset+8,4)),
                 BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(offset+12,4)),
-                BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(offset+16,8))));
+                BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(offset+16,8)),
+                BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(offset+24,4)),
+                BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(offset+28,4))));
             offset+=MechaSnapshotEntryBytes;
         }
         value=new(epoch,mounted,mechas);

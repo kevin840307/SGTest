@@ -17,7 +17,9 @@ public enum MechaActionStatus : byte
     NotEquipped=10,
     CorePartCannotUnequip=11,
     CardSlotsFull=12,
-    RulesUnavailable=13
+    RulesUnavailable=13,
+    BatteryIncompatible=14,
+    BatteryAlreadyFull=15
 }
 
 public enum MechaActionKind : byte
@@ -26,16 +28,17 @@ public enum MechaActionKind : byte
     Dismount=2,
     Refresh=3,
     Equip=4,
-    Unequip=5
+    Unequip=5,
+    ChargeBattery=6
 }
 
 public sealed record MechaInstanceRecord(
     long MechaUid,long CharacterId,int DefinitionId,int Level,long Experience,
-    bool IsMounted,byte[] PartsBlob);
+    bool IsMounted,int BatteryCharge,byte[] PartsBlob);
 
 public sealed record MechaActionOutcome(
     MechaActionStatus Status,long MountedMechaUid,long ItemUid=0,
-    int SlotId=0,long ReplacedItemUid=0);
+    int SlotId=0,long ReplacedItemUid=0,int RemainingQuantity=-1);
 
 /// <summary>
 /// Durable mecha ownership and mounted-state authority. Client requests identify
@@ -109,7 +112,7 @@ SELECT last_insert_rowid();";
         {
             using var connection=Open();
             using var command=connection.CreateCommand();
-            command.CommandText=@"SELECT mecha_uid,character_id,definition_id,level,experience,is_mounted,parts_blob
+            command.CommandText=@"SELECT mecha_uid,character_id,definition_id,level,experience,is_mounted,battery_charge,parts_blob
 FROM mecha_instances WHERE character_id=$character ORDER BY mecha_uid;";
             command.Parameters.AddWithValue("$character",characterId);
             using var reader=command.ExecuteReader();
@@ -118,7 +121,7 @@ FROM mecha_instances WHERE character_id=$character ORDER BY mecha_uid;";
                 mechas.Add(new(
                     reader.GetInt64(0),reader.GetInt64(1),reader.GetInt32(2),
                     reader.GetInt32(3),reader.GetInt64(4),reader.GetInt64(5)!=0,
-                    (byte[])reader[6]));
+                    reader.GetInt32(6),(byte[])reader[7]));
             return (IReadOnlyList<MechaInstanceRecord>)mechas;
         },cancellationToken).ConfigureAwait(false);
     }

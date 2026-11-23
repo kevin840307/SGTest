@@ -226,7 +226,7 @@ func _ready() -> void:
 	mecha_panel.set_actions(
 		Callable(self,"submit_mecha_mount"),Callable(self,"submit_mecha_dismount"),
 		Callable(self,"submit_mecha_refresh"),Callable(self,"submit_mecha_equip"),
-		Callable(self,"submit_mecha_unequip"),item_catalog)
+		Callable(self,"submit_mecha_unequip"),Callable(self,"submit_mecha_charge"),item_catalog)
 
 	login_button.pressed.connect(login)
 	register_button.pressed.connect(register_account)
@@ -565,6 +565,10 @@ func submit_mecha_equip(mecha_uid: int,item_uid: int) -> bool:
 
 func submit_mecha_unequip(mecha_uid: int,item_uid: int) -> bool:
 	return active and mecha_uid > 0 and item_uid > 0 and session.mecha_unequip(mecha_uid,item_uid)
+
+
+func submit_mecha_charge(mecha_uid: int,item_uid: int) -> bool:
+	return active and mecha_uid > 0 and item_uid > 0 and session.mecha_charge(mecha_uid,item_uid)
 
 
 func submit_pvp_attack(target_actor_id: int) -> bool:

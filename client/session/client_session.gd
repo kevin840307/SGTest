@@ -587,6 +587,11 @@ func mecha_unequip(mecha_uid:int,item_uid:int)->bool:
 	return _queue_mecha_intent(5,mecha_uid,current,item_uid)
 
 
+func mecha_charge(mecha_uid:int,item_uid:int)->bool:
+	var current:=snapshot()
+	return _queue_mecha_intent(6,mecha_uid,current,item_uid)
+
+
 func _queue_mecha_intent(action:int,mecha_uid:int,current:Dictionary,item_uid:int=0)->bool:
 	if (
 		int(current.get("state",-1))!=WorldState.STATE_IN_WORLD or
@@ -624,6 +629,10 @@ func _queue_mecha_intent(action:int,mecha_uid:int,current:Dictionary,item_uid:in
 				item_uid<=0 or equipped.is_empty() or
 				int(equipped.get("mecha_uid",0))!=mecha_uid
 			):
+				return false
+		6:
+			var inventory:Dictionary=current.get("inventory_items",{})
+			if mecha_uid<=0 or not mechas.has(mecha_uid) or item_uid<=0 or not inventory.has(item_uid):
 				return false
 		_:
 			return false

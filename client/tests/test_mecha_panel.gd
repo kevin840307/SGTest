@@ -20,6 +20,7 @@ func _run() -> void:
 		func() -> bool: calls.append(["refresh"]); return true,
 		func(mecha_uid: int,item_uid: int) -> bool: calls.append(["equip",mecha_uid,item_uid]); return true,
 		func(mecha_uid: int,item_uid: int) -> bool: calls.append(["unequip",mecha_uid,item_uid]); return true,
+		func(mecha_uid: int,item_uid: int) -> bool: calls.append(["charge",mecha_uid,item_uid]); return true,
 		null
 	)
 	var snapshot := {
@@ -39,8 +40,8 @@ func _run() -> void:
 		"pending_mecha_sequence":0,
 		"mounted_mecha_uid":0,
 		"mecha_instances":{
-			1001:{"mecha_uid":1001,"definition_id":7001,"level":4,"experience":88},
-			1002:{"mecha_uid":1002,"definition_id":7002,"level":7,"experience":1234},
+			1001:{"mecha_uid":1001,"definition_id":7001,"level":4,"experience":88,"battery_charge":40,"battery_capacity":100},
+			1002:{"mecha_uid":1002,"definition_id":7002,"level":7,"experience":1234,"battery_charge":0,"battery_capacity":0},
 		},
 		"mecha_equipment_items":{
 			9001:{"mecha_uid":1001,"item_uid":9001,"slot_id":3,"item_definition_id":7301},
@@ -58,7 +59,7 @@ func _run() -> void:
 	if panel.equipment_picker.item_count != 1 or panel.inventory_picker.item_count != 1:
 		_fail("equipment/inventory UID views did not bind snapshots")
 		return
-	if panel.mount_button.disabled or not panel.dismount_button.disabled or panel.equip_button.disabled:
+	if panel.mount_button.disabled or not panel.dismount_button.disabled or panel.equip_button.disabled or panel.charge_button.disabled:
 		_fail("initial unmounted controls are not actionable")
 		return
 	panel.mount_button.pressed.emit()
@@ -70,8 +71,12 @@ func _run() -> void:
 	snapshot["mecha_sequence"] = 4
 	snapshot["mounted_mecha_uid"] = 1001
 	panel.apply_snapshot(snapshot,true)
-	if not panel.mount_button.disabled or panel.dismount_button.disabled or not panel.equip_button.disabled or not panel.unequip_button.disabled:
-		_fail("mounted mecha was not locked against equipment mutation")
+	if not panel.mount_button.disabled or panel.dismount_button.disabled or not panel.equip_button.disabled or not panel.unequip_button.disabled or panel.charge_button.disabled:
+		_fail("mounted mecha equipment lock or charge availability mismatch")
+		return
+	panel.charge_button.pressed.emit()
+	if calls.back() != ["charge",1001,9100]:
+		_fail("charge action did not preserve mounted mecha/item UIDs")
 		return
 
 	panel.mecha_picker.select(1)
@@ -127,5 +132,5 @@ func _run() -> void:
 
 	panel.queue_free()
 	await process_frame
-	print("MECHA_PANEL_PASS roster=true mount_dismount=true equipment_uid=true server_status=true pending_guard=true")
+	print("MECHA_PANEL_PASS roster=true mount_dismount=true equipment_uid=true battery=true server_status=true pending_guard=true")
 	quit(0)
