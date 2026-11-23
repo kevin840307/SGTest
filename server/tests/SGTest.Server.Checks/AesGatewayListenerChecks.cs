@@ -26,6 +26,8 @@ internal static class AesGatewayListenerChecks
             () => Admission(root, true).GetAwaiter().GetResult());
         Checks.Run("AES listener authenticates reconnect, WorldReady, MoveReceipt and cleans actors on shutdown",
             () => AuthenticatedReconnect(root).GetAwaiter().GetResult());
+        Checks.Run("AES peer observes clean disconnect Despawn and reconnect Spawn through real listener",
+            () => AuthenticatedPeerReconnectLifecycle(root).GetAwaiter().GetResult());
         Checks.Run("verified recovery AES request atomically changes HP and last stack, then relogin persists",
             () => AuthenticatedRecovery(root).GetAwaiter().GetResult());
         Checks.Run("inventory discard AES request atomically removes owned stack and relogin persists",
@@ -168,6 +170,161 @@ internal static class AesGatewayListenerChecks
             fixture.Host.Statistics.ActiveActors == 0 && fixture.Router.Statistics.ActiveSessions == 0,
             "shutdown left authenticated actor/socket/route or incorrect command accounting");
         await Task.WhenAll(listener.DisposeAsync().AsTask(), listener.DisposeAsync().AsTask());
+    }
+
+    private static async Task AuthenticatedPeerReconnectLifecycle(string root)
+    {
+        const string password = "Listener-Password-123!";
+        await using var fixture = await Fixture.Create(root);
+        long peerAccount = (await fixture.Store.CreateAccountAsync(
+            "listener_peer", password)).AccountId;
+        var peerCreated = await fixture.Store.CreateCharacterAsync(
+            peerAccount, 0, "ListenerPeer", new CharacterSpawn(115, 24, 8));
+        long peerCharacterId = peerCreated.Character?.CharacterId ??
+            throw new Exception("peer lifecycle character creation failed");
+
+        await using var listener = fixture.Listener(new(
+            MaxConnections: 3, MaxConnectionsPerAddress: 3));
+        using var stop = new CancellationTokenSource();
+        var run = listener.RunAsync(stop.Token);
+
+        async Task<(TcpClient Client, AesCbcFrameStream Aes, long Epoch)> Login(
+            string username, long characterId, int expectedInventory)
+        {
+            var client = new TcpClient();
+            await client.ConnectAsync(listener.LocalEndpoint);
+            var aes = new AesCbcFrameStream(client.GetStream(), fixture.Settings);
+            try
+            {
+                await aes.WriteAsync(WireProtocol.EncodeAuthRequest(
+                    new(username, password)));
+                Checks.Require(WireProtocol.TryDecodeAuthResult(
+                        await Read(aes), out var auth) &&
+                    auth.Status == AuthWireStatus.Success,
+                    "peer lifecycle Auth failed");
+                Checks.Require(WireProtocol.TryDecodeCharacterList(
+                        await Read(aes), out var characters) &&
+                    characters.Characters.Count == 1 &&
+                    characters.Characters[0].CharacterId == characterId,
+                    "peer lifecycle character ownership/list failed");
+                await CharacterChooseTestHarness.ChooseAsync(aes, characterId);
+                Checks.Require(WireProtocol.TryDecodeCharacterChooseResult(
+                        await Read(aes), out var selected) &&
+                    selected.Status == CharacterChooseWireStatus.Success &&
+                    selected.CharacterId == characterId,
+                    "peer lifecycle CharacterChoose failed");
+                Checks.Require(WireProtocol.TryDecodeInventorySnapshot(
+                        await Read(aes), out var inventory) &&
+                    inventory is not null && inventory.Complete &&
+                    inventory.CharacterId == characterId &&
+                    inventory.Items.Count == expectedInventory,
+                    "peer lifecycle inventory baseline mismatch");
+
+                var afterBaseline = await Read(aes);
+                if (WireProtocol.TryDecodePlayerProfileState(
+                        afterBaseline, out var profile))
+                {
+                    Checks.Require(profile.CharacterId == characterId,
+                        "peer lifecycle profile belonged to another actor");
+                    afterBaseline = await Read(aes);
+                }
+                Checks.Require(WireProtocol.TryDecodeWorldReady(
+                        afterBaseline, out var ready) &&
+                    ready.ActorId == characterId &&
+                    ready.ReceiverMapEpoch == selected.MapEpoch,
+                    "peer lifecycle WorldReady missing");
+                await aes.WriteAsync(WireProtocol.EncodeWorldReadyAck(
+                    new(ready.ReceiverMapEpoch, ready.ServerTick)));
+                await aes.FlushAsync();
+                return (client, aes, selected.MapEpoch);
+            }
+            catch
+            {
+                await aes.DisposeAsync();
+                client.Dispose();
+                throw;
+            }
+        }
+
+        static async Task<EntityStateWire> ReadSpawn(
+            AesCbcFrameStream aes, long actorId)
+        {
+            for (int i = 0; i < 64; i++)
+            {
+                var frame = await Read(aes);
+                if (WireProtocol.TryDecodeEntityState(
+                        frame, out var opcode, out var state) &&
+                    opcode == WireOpcode.EntitySpawn &&
+                    state.ActorId == actorId)
+                    return state;
+            }
+            throw new Exception("peer lifecycle Spawn did not arrive");
+        }
+
+        static async Task<EntityDespawnWire> ReadDespawn(
+            AesCbcFrameStream aes, long actorId)
+        {
+            for (int i = 0; i < 64; i++)
+            {
+                var frame = await Read(aes);
+                if (WireProtocol.TryDecodeEntityDespawn(frame, out var state) &&
+                    state.ActorId == actorId)
+                    return state;
+            }
+            throw new Exception("peer lifecycle Despawn did not arrive");
+        }
+
+        var a = await Login("listener_user", fixture.CharacterId, 2);
+        (TcpClient Client, AesCbcFrameStream Aes, long Epoch)? b = null;
+        (TcpClient Client, AesCbcFrameStream Aes, long Epoch)? bAgain = null;
+        try
+        {
+            b = await Login("listener_peer", peerCharacterId, 0);
+            var aSawB = await ReadSpawn(a.Aes, peerCharacterId);
+            var bSawA = await ReadSpawn(b.Value.Aes, fixture.CharacterId);
+            Checks.Require(aSawB.EntityMapEpoch == b.Value.Epoch &&
+                bSawA.ActorId == fixture.CharacterId,
+                "initial real-listener peer Spawn generation mismatch");
+
+            long oldPeerEpoch = b.Value.Epoch;
+            await b.Value.Aes.DisposeAsync();
+            b.Value.Client.Dispose();
+            b = null;
+            await Until(() => listener.Statistics.ActiveConnections == 1 &&
+                fixture.Host.Statistics.ActiveActors == 1);
+            var gone = await ReadDespawn(a.Aes, peerCharacterId);
+            Checks.Require(gone.ConnectionEpoch > 0,
+                "clean peer disconnect Despawn lost trusted generation");
+
+            bAgain = await Login("listener_peer", peerCharacterId, 0);
+            Checks.Require(bAgain.Value.Epoch > oldPeerEpoch,
+                "peer reconnect did not advance World generation");
+            var respawn = await ReadSpawn(a.Aes, peerCharacterId);
+            var peerSawA = await ReadSpawn(
+                bAgain.Value.Aes, fixture.CharacterId);
+            Checks.Require(respawn.EntityMapEpoch == bAgain.Value.Epoch &&
+                peerSawA.ActorId == fixture.CharacterId,
+                "peer reconnect did not rebuild reciprocal Spawn baseline");
+        }
+        finally
+        {
+            if (bAgain is { } current)
+            {
+                await current.Aes.DisposeAsync();
+                current.Client.Dispose();
+            }
+            if (b is { } old)
+            {
+                await old.Aes.DisposeAsync();
+                old.Client.Dispose();
+            }
+            await a.Aes.DisposeAsync();
+            a.Client.Dispose();
+            await Until(() => listener.Statistics.ActiveConnections == 0 &&
+                fixture.Host.Statistics.ActiveActors == 0);
+            stop.Cancel();
+            await run.WaitAsync(TimeSpan.FromSeconds(5));
+        }
     }
 
     private static async Task AuthenticatedRecovery(string root)
