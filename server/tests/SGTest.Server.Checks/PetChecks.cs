@@ -14,12 +14,16 @@ internal static class PetChecks
     public static void Verify(string root)
     {
         Checks.Run("pet wire roundtrips command roster AOI and server-owned combat",Wire);
+        Checks.Run("pet growth manifest requires audited cumulative total-EXP thresholds",
+            ()=>GrowthManifest(root));
         Checks.Run("pet combat manifest requires audited exact-level rules",
             ()=>CombatManifest(root));
         Checks.Run("pet attack authority owns active identity position range cooldown replay and damage",
             ()=>CombatAuthority(root));
         Checks.Run("pet summon recall replay and persistence are server authoritative",
             ()=>Persistence().GetAwaiter().GetResult());
+        Checks.Run("pet EXP grants cross levels atomically and replay exactly once",
+            ()=>GrowthPersistence().GetAwaiter().GetResult());
         Checks.Run("schema v30 pet rows migrate to explicit evolution zero without data loss",
             ()=>MigrationV30().GetAwaiter().GetResult());
     }
@@ -115,6 +119,40 @@ internal static class PetChecks
         }
         catch(ArgumentOutOfRangeException){rejected=true;}
         Checks.Require(rejected,"pet snapshot accepted active uid outside roster");
+    }
+
+    private static void GrowthManifest(string root)
+    {
+        string valid=Path.Combine(root,"pet-growth-rules.json");
+        File.WriteAllText(valid,JsonSerializer.Serialize(new
+        {
+            schema="sgtest.pet_growth_curve/v1",
+            source="unit-test Old Pet curve",
+            max_level=100,
+            level_up_total_experience=Enumerable.Range(1,100)
+                .Select(level=>(long)level*10).ToArray()
+        }));
+        var growth=PetGrowthRuleCatalog.LoadVerified(valid);
+        Checks.Require(growth.MaximumLevel==100&&
+            growth.LevelUpThreshold(1)==10&&growth.LevelUpThreshold(100)==1000&&
+            growth.AdvanceLevel(1,9)==1&&growth.AdvanceLevel(1,10)==2&&
+            growth.AdvanceLevel(1,25)==3&&growth.AdvanceLevel(99,5000)==100&&
+            growth.EvidenceSource=="unit-test Old Pet curve",
+            "verified Pet growth manifest did not preserve cumulative thresholds");
+
+        string invalid=Path.Combine(root,"pet-growth-rules-invalid.json");
+        File.WriteAllText(invalid,JsonSerializer.Serialize(new
+        {
+            schema="sgtest.pet_growth_curve/v1",
+            source="unit-test",
+            max_level=100,
+            level_up_total_experience=Enumerable.Repeat(10L,100).ToArray()
+        }));
+        bool rejected=false;
+        try { PetGrowthRuleCatalog.LoadVerified(invalid); }
+        catch(InvalidDataException){rejected=true;}
+        Checks.Require(rejected,
+            "Pet growth manifest accepted non-increasing total-EXP thresholds");
     }
 
     private static void CombatManifest(string root)
@@ -260,6 +298,92 @@ internal static class PetChecks
             captured.AttackSequence==1&&captured.PetUid==pet.PetUid&&
             captured.TargetEntityId==target.EntityId,
             "pet combat gateway did not stamp trusted actor generation");
+    }
+
+    private static async Task GrowthPersistence()
+    {
+        string root=Path.Combine(
+            Path.GetTempPath(),"sgtest_pet_growth_"+Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        string db=Path.Combine(root,"identity.db");
+        try
+        {
+            string manifest=Path.Combine(root,"pet-growth.json");
+            File.WriteAllText(manifest,JsonSerializer.Serialize(new
+            {
+                schema="sgtest.pet_growth_curve/v1",
+                source="unit-test Old Pet curve",
+                max_level=100,
+                level_up_total_experience=Enumerable.Range(1,100)
+                    .Select(level=>(long)level*10).ToArray()
+            }));
+            var growth=PetGrowthRuleCatalog.LoadVerified(manifest);
+
+            long character,otherCharacter,petUid,foreignPet;
+            using(var store=new SqliteIdentityStore(db))
+            {
+                await store.InitializeAsync();
+                long account=(await store.CreateAccountAsync(
+                    "pet_growth","Pet-Growth-Secret-2026!")).AccountId;
+                long other=(await store.CreateAccountAsync(
+                    "pet_growth_other","Pet-Growth-Other-2026!")).AccountId;
+                character=(await store.CreateCharacterAsync(
+                    account,0,"PetGrowth",new(15,100,100))).Character!.CharacterId;
+                otherCharacter=(await store.CreateCharacterAsync(
+                    other,0,"PetGrowthOther",new(15,120,100))).Character!.CharacterId;
+                petUid=await store.ProvisionPetAsync(character,5002,1,0,evolutionId:7);
+                foreignPet=await store.ProvisionPetAsync(otherCharacter,6001,1,0);
+
+                var first=await store.ApplyPetExperienceAsync(
+                    character,petUid,25,"monster:215:99:death:1",growth);
+                Checks.Require(first.Status==PetExperienceGrantStatus.Applied&&
+                    first.PetUid==petUid&&first.Level==3&&first.Experience==25,
+                    "Pet EXP grant did not cross multiple verified thresholds atomically");
+
+                var replay=await store.ApplyPetExperienceAsync(
+                    character,petUid,25,"monster:215:99:death:1",growth);
+                Checks.Require(replay.Status==PetExperienceGrantStatus.AlreadyProcessed&&
+                    replay.Level==3&&replay.Experience==25,
+                    "Pet EXP exact replay was not idempotent");
+
+                var conflict=await store.ApplyPetExperienceAsync(
+                    character,petUid,26,"monster:215:99:death:1",growth);
+                Checks.Require(conflict.Status==PetExperienceGrantStatus.GrantConflict&&
+                    conflict.Level==3&&conflict.Experience==25,
+                    "Pet EXP grant key accepted a changed payload");
+
+                var foreign=await store.ApplyPetExperienceAsync(
+                    character,foreignPet,10,"monster:215:100:death:1",growth);
+                Checks.Require(foreign.Status==PetExperienceGrantStatus.PetNotOwned&&
+                    foreign.Level==0&&foreign.Experience==0,
+                    "Pet EXP grant accepted a foreign Pet UID");
+
+                var second=await store.ApplyPetExperienceAsync(
+                    character,petUid,100,"monster:215:101:death:1",growth);
+                Checks.Require(second.Status==PetExperienceGrantStatus.Applied&&
+                    second.Level==13&&second.Experience==125,
+                    "Pet EXP second grant did not retain total EXP/cross-level semantics");
+            }
+
+            using(var reopened=new SqliteIdentityStore(db))
+            {
+                await reopened.InitializeAsync();
+                var pet=(await reopened.GetPetsAsync(character)).Single();
+                Checks.Require(pet.PetUid==petUid&&pet.Level==13&&
+                    pet.Experience==125,
+                    "Pet EXP/level did not survive SQLite reopen");
+                var replay=await reopened.ApplyPetExperienceAsync(
+                    character,petUid,100,"monster:215:101:death:1",growth);
+                Checks.Require(replay.Status==PetExperienceGrantStatus.AlreadyProcessed&&
+                    replay.Level==13&&replay.Experience==125,
+                    "Pet EXP grant replay identity did not survive SQLite reopen");
+            }
+        }
+        finally
+        {
+            SqliteConnection.ClearAllPools();
+            Directory.Delete(root,true);
+        }
     }
 
     private static async Task MigrationV30()

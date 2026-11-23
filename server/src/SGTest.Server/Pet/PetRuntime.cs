@@ -26,10 +26,12 @@ public readonly record struct PetWorldStateUpdate(
 public sealed class PetCoordinator
 {
     private readonly SqliteIdentityStore _identity;
+    private readonly PetGrowthCurve? _growth;
 
-    public PetCoordinator(SqliteIdentityStore identity)
+    public PetCoordinator(SqliteIdentityStore identity,PetGrowthCurve? growth=null)
     {
         _identity=identity??throw new ArgumentNullException(nameof(identity));
+        _growth=growth;
     }
 
     public async Task AttachAsync(ConnectionBinding binding,WorldResultRouter router)
@@ -40,6 +42,37 @@ public sealed class PetCoordinator
         var pets=await _identity.GetPetsAsync(binding.ActorId).ConfigureAwait(false);
         EnsureQueued(router.QueuePetSnapshot(binding,ToSnapshot(binding.MapEpoch,pets)));
         EnsureWorldPosted(router,ToWorldUpdate(binding,pets));
+    }
+
+    public async Task<PetExperienceGrantOutcome> GrantExperienceAsync(
+        ConnectionBinding binding,long petUid,long amount,string grantKey,
+        WorldResultRouter router)
+    {
+        ArgumentNullException.ThrowIfNull(router);
+        if(_growth is null)
+            throw new InvalidOperationException(
+                "Pet growth is unavailable without an audited growth manifest");
+        if(binding.ActorId<=0||binding.ConnectionEpoch<=0||binding.MapEpoch<=0||
+           !router.TryGetCurrentBinding(binding.ActorId,out var current)||
+           current.ConnectionEpoch!=binding.ConnectionEpoch||
+           current.MapEpoch!=binding.MapEpoch)
+            throw new InvalidOperationException(
+                "Pet EXP grant requires the current trusted actor generation");
+
+        var outcome=await _identity.ApplyPetExperienceAsync(
+            binding.ActorId,petUid,amount,grantKey,_growth).ConfigureAwait(false);
+        if(outcome.Status is not (PetExperienceGrantStatus.Applied or
+            PetExperienceGrantStatus.AlreadyProcessed))
+            return outcome;
+
+        if(!router.TryGetCurrentBinding(binding.ActorId,out var after)||
+           after.ConnectionEpoch!=binding.ConnectionEpoch||
+           after.MapEpoch!=binding.MapEpoch)
+            return outcome;
+        var pets=await _identity.GetPetsAsync(binding.ActorId).ConfigureAwait(false);
+        EnsureQueued(router.QueuePetSnapshot(after,ToSnapshot(after.MapEpoch,pets)));
+        EnsureWorldPosted(router,ToWorldUpdate(after,pets));
+        return outcome;
     }
 
     public async Task HandleAsync(TrustedPetCommand request,WorldResultRouter router)

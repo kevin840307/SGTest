@@ -840,6 +840,20 @@ ON pet_instances(character_id) WHERE is_active=1;",tx);
             if(schemaVersion==30)
                 Execute(connection,@"ALTER TABLE pet_instances
 ADD COLUMN evolution_id INTEGER NOT NULL DEFAULT 0 CHECK(evolution_id BETWEEN 0 AND 65535);",tx);
+            // Schema v32: trusted Pet EXP grants are durable and idempotent.
+            // The grant key belongs to a server-side source event; clients never
+            // submit EXP, levels or grant identities directly.
+            Execute(connection,@"CREATE TABLE IF NOT EXISTS pet_experience_grants (
+    character_id INTEGER NOT NULL REFERENCES characters(character_id) ON DELETE CASCADE,
+    grant_key TEXT NOT NULL CHECK(length(grant_key) BETWEEN 1 AND 128),
+    pet_uid INTEGER NOT NULL CHECK(pet_uid > 0),
+    amount INTEGER NOT NULL CHECK(amount BETWEEN 1 AND 9000000000000000),
+    result_status INTEGER NOT NULL CHECK(result_status BETWEEN 0 AND 3),
+    resulting_level INTEGER NOT NULL CHECK(resulting_level BETWEEN 0 AND 1000000),
+    resulting_experience INTEGER NOT NULL CHECK(resulting_experience BETWEEN 0 AND 9000000000000000),
+    created_unix_ms INTEGER NOT NULL,
+    PRIMARY KEY(character_id,grant_key)
+);",tx);
             if (schemaVersion < SchemaVersion)
                 Execute(connection,
                     $"UPDATE schema_version SET version={SchemaVersion};", tx);

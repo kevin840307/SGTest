@@ -131,6 +131,9 @@ internal static class AesGameHost
             IReadOnlyDictionary<PetCombatRuleKey,VerifiedPetCombatRule>? petCombatRules=
                 petCombatManifest is null ? null :
                 PetCombatRuleCatalog.LoadVerified(Path.GetFullPath(petCombatManifest));
+            string? petGrowthManifest=options.GetValueOrDefault("--pet-growth-rules");
+            PetGrowthCurve? petGrowth=petGrowthManifest is null ? null :
+                PetGrowthRuleCatalog.LoadVerified(Path.GetFullPath(petGrowthManifest));
             MonsterWorldCoordinator? monsters = monsterRuntimes.Count == 0
                 ? null : new MonsterWorldCoordinator(
                     monsterRuntimes,skillRules,petCombatRules);
@@ -283,7 +286,7 @@ internal static class AesGameHost
                     identity,world,tradeItemRules!,trades,combat);
             var parties=new PartyCoordinator();
             var clans=new ClanCoordinator(identity);
-            var pets=new PetCoordinator(identity);
+            var pets=new PetCoordinator(identity,petGrowth);
             var authRateLimiter=new AuthenticationRateLimiter(new(
                 MaxFailuresPerAddress:authAddressFailures,
                 MaxFailuresPerAccount:authAccountFailures,
@@ -417,6 +420,7 @@ internal static class AesGameHost
                 loot = loot?.Statistics,
                 verified_recovery_rule_count = recoveryRules?.Count ?? 0,
                 verified_skill_rule_count = skillRules?.Count ?? 0,
+                pet_growth_enabled = petGrowth is not null,
                 verified_shop_count = shops?.Count ?? 0,
                 verified_storage_count = storages?.Count ?? 0,
                 verified_equipment_rule_count = equipmentRules?.Count ?? 0,
@@ -440,6 +444,7 @@ internal static class AesGameHost
                 "[--registration-attempts-per-address 3] [--registration-window-seconds 600] " +
                 "[--position-checkpoint-ms 5000] [--loot-rules <VERIFIED_JSON>] " +
                 "[--recovery-rules <VERIFIED_JSON>] [--skill-rules <VERIFIED_JSON>] " +
+                "[--pet-combat-rules <VERIFIED_JSON>] [--pet-growth-rules <VERIFIED_JSON>] " +
                 "[--shop-rules <VERIFIED_JSON>] [--storage-rules <VERIFIED_JSON>] " +
                 "[--equipment-rules <VERIFIED_JSON>] [--bank-rules <VERIFIED_JSON>] " +
                 "[--repair-rules <VERIFIED_JSON> --repair-item-rules <VERIFIED_JSON>] " +
@@ -474,6 +479,7 @@ internal static class AesGameHost
                           "--registration-window-seconds",
                           "--position-checkpoint-ms",
                           "--loot-rules", "--recovery-rules", "--skill-rules",
+                          "--pet-combat-rules", "--pet-growth-rules",
                           "--shop-rules", "--storage-rules", "--equipment-rules", "--bank-rules",
                           "--repair-rules", "--repair-item-rules", "--quest-rules",
                           "--trade-item-rules", "--gm-accounts",

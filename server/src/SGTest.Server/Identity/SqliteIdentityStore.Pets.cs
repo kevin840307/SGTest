@@ -1,4 +1,5 @@
 using Microsoft.Data.Sqlite;
+using SGTest.Server.Pet;
 
 namespace SGTest.Server.Identity;
 
@@ -19,6 +20,17 @@ public sealed record PetInstanceRecord(
     bool IsActive,byte[] StateBlob);
 
 public sealed record PetActionOutcome(PetActionStatus Status,long ActivePetUid);
+
+public enum PetExperienceGrantStatus : byte
+{
+    Applied=0,
+    AlreadyProcessed=1,
+    PetNotOwned=2,
+    GrantConflict=3
+}
+
+public sealed record PetExperienceGrantOutcome(
+    PetExperienceGrantStatus Status,long PetUid,int Level,long Experience);
 
 /// <summary>
 /// Durable pet ownership and active-pet state. SQLite owns the truth; no client
@@ -222,6 +234,124 @@ VALUES($character,$generation,$epoch,$sequence,$action,$pet,$status,$active,$cre
             }
             tx.Commit();
             return new PetActionOutcome(status,active);
+        },cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<PetExperienceGrantOutcome> ApplyPetExperienceAsync(
+        long characterId,long petUid,long amount,string grantKey,
+        PetGrowthCurve growth,CancellationToken cancellationToken=default)
+    {
+        ThrowIfDisposed();
+        ArgumentNullException.ThrowIfNull(growth);
+        string key=(grantKey??"").Trim();
+        if(characterId<=0||petUid<=0||amount<=0||
+           amount>9_000_000_000_000_000L||
+           key.Length is <1 or >128||key.Any(char.IsControl))
+            throw new ArgumentOutOfRangeException();
+
+        return await Task.Run<PetExperienceGrantOutcome>(()=>
+        {
+            using var connection=Open();
+            using var tx=connection.BeginTransaction();
+
+            using(var replay=connection.CreateCommand())
+            {
+                replay.Transaction=tx;
+                replay.CommandText=@"SELECT pet_uid,amount,result_status,resulting_level,resulting_experience
+FROM pet_experience_grants
+WHERE character_id=$character AND grant_key=$key;";
+                replay.Parameters.AddWithValue("$character",characterId);
+                replay.Parameters.AddWithValue("$key",key);
+                using var reader=replay.ExecuteReader();
+                if(reader.Read())
+                {
+                    long oldPet=reader.GetInt64(0);
+                    long oldAmount=reader.GetInt64(1);
+                    int oldLevel=reader.GetInt32(3);
+                    long oldExperience=reader.GetInt64(4);
+                    if(oldPet!=petUid||oldAmount!=amount)
+                        return new(PetExperienceGrantStatus.GrantConflict,
+                            oldPet,oldLevel,oldExperience);
+                    return new(PetExperienceGrantStatus.AlreadyProcessed,
+                        oldPet,oldLevel,oldExperience);
+                }
+            }
+
+            int level=0;
+            long experience=0;
+            bool owned;
+            using(var pet=connection.CreateCommand())
+            {
+                pet.Transaction=tx;
+                pet.CommandText=@"SELECT level,experience FROM pet_instances
+WHERE pet_uid=$pet AND character_id=$character;";
+                pet.Parameters.AddWithValue("$pet",petUid);
+                pet.Parameters.AddWithValue("$character",characterId);
+                using var reader=pet.ExecuteReader();
+                owned=reader.Read();
+                if(owned)
+                {
+                    level=reader.GetInt32(0);
+                    experience=reader.GetInt64(1);
+                }
+            }
+
+            PetExperienceGrantStatus status;
+            if(!owned)
+                status=PetExperienceGrantStatus.PetNotOwned;
+            else
+            {
+                if(level>growth.MaximumLevel)
+                    throw new InvalidDataException(
+                        "Persisted pet level exceeds verified growth curve");
+                long nextExperience;
+                try { nextExperience=checked(experience+amount); }
+                catch(OverflowException error)
+                {
+                    throw new InvalidOperationException("Pet experience overflow",error);
+                }
+                if(nextExperience>9_000_000_000_000_000L)
+                    throw new InvalidOperationException("Pet experience exceeds durable cap");
+                int nextLevel=growth.AdvanceLevel(level,nextExperience);
+                long now=_timeProvider.GetUtcNow().ToUnixTimeMilliseconds();
+                using var update=connection.CreateCommand();
+                update.Transaction=tx;
+                update.CommandText=@"UPDATE pet_instances
+SET level=$level,experience=$experience,updated_unix_ms=$now
+WHERE pet_uid=$pet AND character_id=$character;";
+                update.Parameters.AddWithValue("$level",nextLevel);
+                update.Parameters.AddWithValue("$experience",nextExperience);
+                update.Parameters.AddWithValue("$now",now);
+                update.Parameters.AddWithValue("$pet",petUid);
+                update.Parameters.AddWithValue("$character",characterId);
+                if(update.ExecuteNonQuery()!=1)
+                    throw new InvalidOperationException(
+                        "Owned pet disappeared during experience grant");
+                level=nextLevel;
+                experience=nextExperience;
+                status=PetExperienceGrantStatus.Applied;
+            }
+
+            using(var audit=connection.CreateCommand())
+            {
+                audit.Transaction=tx;
+                audit.CommandText=@"INSERT INTO pet_experience_grants(
+character_id,grant_key,pet_uid,amount,result_status,resulting_level,
+resulting_experience,created_unix_ms)
+VALUES($character,$key,$pet,$amount,$status,$level,$experience,$created);";
+                audit.Parameters.AddWithValue("$character",characterId);
+                audit.Parameters.AddWithValue("$key",key);
+                audit.Parameters.AddWithValue("$pet",petUid);
+                audit.Parameters.AddWithValue("$amount",amount);
+                audit.Parameters.AddWithValue("$status",(int)status);
+                audit.Parameters.AddWithValue("$level",level);
+                audit.Parameters.AddWithValue("$experience",experience);
+                audit.Parameters.AddWithValue(
+                    "$created",_timeProvider.GetUtcNow().ToUnixTimeMilliseconds());
+                audit.ExecuteNonQuery();
+            }
+            tx.Commit();
+            return new(status,petUid,level,experience);
         },cancellationToken).ConfigureAwait(false);
     }
 
