@@ -122,7 +122,7 @@ class ArchitectureConventionsChecks(unittest.TestCase):
                 self.assertIn("namespace SGTest.Server.Gateway;", source)
         self.assertEqual(core.count("private readonly object _gate"), 1)
         self.assertEqual(core.count("new WorldResultRouterOptions()"), 1)
-        self.assertEqual(core.count("Channel.CreateBounded<"), 15)
+        self.assertEqual(core.count("Channel.CreateBounded<"), 16)
         for source in (ingress, replies, ticks):
             self.assertNotIn("Channel.CreateBounded", source)
             self.assertNotIn("new WorldResultRouter(", source)
@@ -156,6 +156,7 @@ class ArchitectureConventionsChecks(unittest.TestCase):
             "_preparedSkills", "_claimedGroundDrops", "_playerDamageVisuals",
             "_playerRespawnVisuals", "_playerIdentityUpdates",
             "_playerPvpCombatVisuals", "_playerPvpSkillVisuals", "_petWorldUpdates",
+            "_mechaWorldUpdates",
         ):
             with self.subTest(shutdown=channel):
                 self.assertEqual(ticks.count(channel + ".Writer.TryComplete(fault)"), 1)
@@ -165,6 +166,7 @@ class ArchitectureConventionsChecks(unittest.TestCase):
         self.assertIn("router.PlayerPvpCombatVisuals.Completion.IsCompletedSuccessfully", test)
         self.assertIn("router.PlayerPvpSkillVisuals.Completion.IsCompletedSuccessfully", test)
         self.assertIn("router.PetWorldUpdates.Completion.IsCompletedSuccessfully", test)
+        self.assertIn("router.MechaWorldUpdates.Completion.IsCompletedSuccessfully", test)
         self.assertIn("FaultedSourceCompletesAllChannels", test)
         self.assertIn("completed.All(task => task.IsFaulted)", test)
 

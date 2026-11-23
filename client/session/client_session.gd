@@ -1471,31 +1471,9 @@ func _process_first_intent() -> void:
 	elif kind == "character_manage":
 		_process_character_manage_intent(intent)
 	elif kind == "choose":
-		if int(_world.state) != WorldState.STATE_SELECTING_CHARACTER:
-			return
-		var character_id := int(intent.character_id)
-		var character_password := str(intent.get("character_password", ""))
-		var frame := WireCodec.encode_character_choose(character_id, character_password)
-		if not frame.is_empty() and _transport.send_frame(frame) and _world.mark_choose_sent(character_id):
-			var character_credential := character_password.to_utf8_buffer()
-			character_password = ""
-			intent.erase("character_password")
-			_mutex.lock()
-			_selected_character_id = character_id
-			_clear_character_credential_locked()
-			_character_credential_bytes = character_credential
-			_mutex.unlock()
-			_pop_intent()
-			_publish()
+		_process_character_choose_intent(intent)
 	elif kind == "npc":
-		var current: Dictionary = _world.snapshot()
-		if int(current.state) != WorldState.STATE_IN_WORLD or bool(current.player_dead) or not bool(current.world_ready) or bool(current.resync_pending) or int(current.pending_world_ready_ack_epoch) != 0 or int(current.last_world_ready_ack_epoch) != int(current.map_epoch) or bool(current.waiting_for_new_map) or int(current.pending_npc_sequence) != 0:
-			return
-		var sequence := int(current.npc_interaction_sequence) + 1
-		var frame := WireCodec.encode_npc_interact(int(current.map_epoch), sequence, int(intent.spawn_id))
-		if not frame.is_empty() and _transport.send_frame(frame) and _world.mark_npc_interact_sent(sequence):
-			_pop_intent()
-			_publish()
+		_process_npc_intent(intent)
 
 	elif kind=="player_shop":
 		_process_player_shop_intent(intent)
@@ -1673,6 +1651,36 @@ func _process_player_shop_intent(intent: Dictionary) -> void:
 		_world.mark_player_shop_sent(
 			sequence,action,seller,listing,uid,price)
 	):
+		_pop_intent()
+		_publish()
+
+
+func _process_character_choose_intent(intent: Dictionary) -> void:
+	if int(_world.state) != WorldState.STATE_SELECTING_CHARACTER:
+		return
+	var character_id := int(intent.character_id)
+	var character_password := str(intent.get("character_password", ""))
+	var frame := WireCodec.encode_character_choose(character_id, character_password)
+	if not frame.is_empty() and _transport.send_frame(frame) and _world.mark_choose_sent(character_id):
+		var character_credential := character_password.to_utf8_buffer()
+		character_password = ""
+		intent.erase("character_password")
+		_mutex.lock()
+		_selected_character_id = character_id
+		_clear_character_credential_locked()
+		_character_credential_bytes = character_credential
+		_mutex.unlock()
+		_pop_intent()
+		_publish()
+
+
+func _process_npc_intent(intent: Dictionary) -> void:
+	var current: Dictionary = _world.snapshot()
+	if int(current.state) != WorldState.STATE_IN_WORLD or bool(current.player_dead) or not bool(current.world_ready) or bool(current.resync_pending) or int(current.pending_world_ready_ack_epoch) != 0 or int(current.last_world_ready_ack_epoch) != int(current.map_epoch) or bool(current.waiting_for_new_map) or int(current.pending_npc_sequence) != 0:
+		return
+	var sequence := int(current.npc_interaction_sequence) + 1
+	var frame := WireCodec.encode_npc_interact(int(current.map_epoch), sequence, int(intent.spawn_id))
+	if not frame.is_empty() and _transport.send_frame(frame) and _world.mark_npc_interact_sent(sequence):
 		_pop_intent()
 		_publish()
 

@@ -180,6 +180,7 @@ internal static class WorldResultRouterChecks
                 router.PlayerPvpCombatVisuals.Completion.IsCompletedSuccessfully &&
                 router.PlayerPvpSkillVisuals.Completion.IsCompletedSuccessfully &&
                 router.PetWorldUpdates.Completion.IsCompletedSuccessfully &&
+                router.MechaWorldUpdates.Completion.IsCompletedSuccessfully &&
                 router.PetAttackRequests.Completion.IsCompletedSuccessfully &&
                 router.PetSkillRequests.Completion.IsCompletedSuccessfully,
                 "PvP/identity/pet channels remained open after router shutdown");
@@ -218,7 +219,8 @@ internal static class WorldResultRouterChecks
             router.PlayerIdentityUpdates.Completion,
             router.PlayerPvpCombatVisuals.Completion,
             router.PlayerPvpSkillVisuals.Completion,
-            router.PetWorldUpdates.Completion
+            router.PetWorldUpdates.Completion,
+            router.MechaWorldUpdates.Completion
         ];
         Require(completed.All(task => task.IsFaulted),
             "failed World source left a live or successfully completed dependent channel");
