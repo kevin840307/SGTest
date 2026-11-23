@@ -170,6 +170,13 @@ internal static class PartyChecks
             recipients.Any(x=>x.ActorId==11)&&
             recipients.Any(x=>x.ActorId==22&&x.MapEpoch==4),
             "party chat recipients did not cross map/AOI boundary");
+        var settlementParties=party.SnapshotSettlementPartyIds(
+            [a.Binding,b.Binding,c.Binding],router);
+        Checks.Require(settlementParties.Count==2&&
+            settlementParties[11]==partyId&&
+            settlementParties[22]==partyId&&
+            !settlementParties.ContainsKey(33),
+            "party settlement snapshot included a kicked/stale contributor");
 
         party.Disconnect(b.Binding,router);
         var aLeader=DrainSnapshot(a);

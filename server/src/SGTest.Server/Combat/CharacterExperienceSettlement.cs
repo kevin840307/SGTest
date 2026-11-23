@@ -2,6 +2,7 @@ using SGTest.Server.Gateway;
 using SGTest.Server.Identity;
 using SGTest.Server.Monster;
 using SGTest.Server.Pet;
+using System.Numerics;
 using System.Text.Json;
 using System.Threading.Channels;
 
@@ -120,27 +121,100 @@ public static class CharacterExperienceRewardCatalog
 }
 
 /// <summary>
-/// CONFIRMED solo branch of Old SGOBattleSys::CheckExpArrange. Party-specific
-/// distribution is deliberately excluded until its full source behavior is
-/// verified and tested.
+/// CONFIRMED Old SGOBattleSys::CheckExpArrange settlement. Damage is first
+/// partitioned by contributor group, then party contributors share their
+/// group's pool before the existing player-vs-enemy level penalty is applied.
+/// HK exact parity remains an A/B item because Old and HK are not guaranteed
+/// to be the same server build.
 /// </summary>
 public static class CharacterExperienceSettlementPolicy
 {
     public static long SettleSolo(
         int playerLevel,int enemyLevel,long baseExperience)
     {
-        if(playerLevel<=0||enemyLevel<=0||baseExperience<0||
-           baseExperience>SqliteIdentityStore.CharacterMaximumExperience)
-            throw new ArgumentOutOfRangeException();
+        ValidateBase(playerLevel,enemyLevel,baseExperience);
 
         int difference=playerLevel-enemyLevel;
         if(difference<=3)return baseExperience;
         if(difference>18)return 0;
         if(difference>15)return baseExperience/10;
         if(difference>12)return baseExperience/5;
-        if(difference>9)return checked(baseExperience*4)/10;
-        if(difference>6)return checked(baseExperience*6)/10;
-        return checked(baseExperience*8)/10;
+        if(difference>9)return MultiplyDivideFloor(baseExperience,4,10);
+        if(difference>6)return MultiplyDivideFloor(baseExperience,6,10);
+        return MultiplyDivideFloor(baseExperience,8,10);
+    }
+
+    public static long ProportionalPool(
+        long baseExperience,long groupDamage,long totalDamage)
+    {
+        if(baseExperience<0||
+           baseExperience>SqliteIdentityStore.CharacterMaximumExperience||
+           groupDamage<0||totalDamage<=0||groupDamage>totalDamage)
+            throw new ArgumentOutOfRangeException();
+        return MultiplyDivideFloor(baseExperience,groupDamage,totalDamage);
+    }
+
+    public static long SettlePartyMember(
+        int playerLevel,int enemyLevel,long groupExperience,
+        int participantCount,int maximumParticipantLevel)
+    {
+        ValidateBase(playerLevel,enemyLevel,groupExperience);
+        if(participantCount<1||participantCount>1024)
+            throw new ArgumentOutOfRangeException(nameof(participantCount));
+        if(participantCount==1)
+            return SettleSolo(playerLevel,enemyLevel,groupExperience);
+        if(maximumParticipantLevel<playerLevel)
+            throw new ArgumentOutOfRangeException(nameof(maximumParticipantLevel));
+
+        int gap=maximumParticipantLevel-playerLevel;
+        long shared;
+        if(gap>=10)
+            shared=0;
+        else if(gap>0)
+        {
+            int multiplier=participantCount switch
+            {
+                2=>14,
+                3=>18,
+                4=>22,
+                5=>26,
+                6=>30,
+                _=>10
+            };
+            BigInteger value=(BigInteger)groupExperience*multiplier;
+            value/=10;
+            value/=participantCount;
+            value*=100-gap*gap;
+            value/=100;
+            shared=CheckedExperience(value);
+        }
+        else
+            shared=groupExperience/participantCount;
+
+        return SettleSolo(playerLevel,enemyLevel,shared);
+    }
+
+    private static void ValidateBase(
+        int playerLevel,int enemyLevel,long experience)
+    {
+        if(playerLevel<=0||enemyLevel<=0||experience<0||
+           experience>SqliteIdentityStore.CharacterMaximumExperience)
+            throw new ArgumentOutOfRangeException();
+    }
+
+    private static long MultiplyDivideFloor(
+        long value,long multiplier,long divisor)
+    {
+        if(value<0||multiplier<0||divisor<=0)
+            throw new ArgumentOutOfRangeException();
+        return CheckedExperience((BigInteger)value*multiplier/divisor);
+    }
+
+    private static long CheckedExperience(BigInteger value)
+    {
+        if(value<0||value>SqliteIdentityStore.CharacterMaximumExperience)
+            throw new OverflowException("Character EXP settlement exceeded trusted bounds");
+        return (long)value;
     }
 }
 
@@ -154,6 +228,13 @@ public enum CharacterExperienceDeathPostStatus : byte
 public sealed record CharacterExperienceDeathStatistics(
     long DeathsQueued,long GrantsApplied,long Replays,long ZeroAwards,
     long PetGrantsApplied,long PetReplays,long Overflows,int Pending);
+
+public sealed record CharacterExperienceDeathParticipant(
+    ConnectionBinding Binding,long AppliedDamage,long ActivePetUid=0);
+
+public sealed record CharacterExperienceDeathGroup(
+    long AppliedDamage,
+    IReadOnlyList<CharacterExperienceDeathParticipant> Participants);
 
 public sealed class CharacterExperienceSettlementException : Exception
 {
@@ -174,9 +255,13 @@ public sealed class CharacterExperienceSettlement
     private readonly PetCoordinator? _pets;
     private readonly WorldResultRouter _router;
     private readonly long _generation;
+    private sealed record DeathWork(
+        MonsterSnapshot Death,long TotalDamage,
+        CharacterExperienceDeathGroup[] Groups,
+        CharacterExperienceRewardRule Rule);
+
     private readonly Dictionary<(int,int),CharacterExperienceRewardRule> _rules;
-    private readonly Channel<(ConnectionBinding Binding,MonsterSnapshot Death,
-        long ActivePetUid,CharacterExperienceRewardRule Rule)> _queue;
+    private readonly Channel<DeathWork> _queue;
     private long _queued,_applied,_replays,_zeroAwards,_petApplied,_petReplays,_overflows;
     private int _pending,_started;
     private Exception? _fault;
@@ -215,8 +300,8 @@ public sealed class CharacterExperienceSettlement
                 "Character EXP reward rules required",nameof(rules));
         _rules=unique;
 
-        _queue=Channel.CreateBounded<(ConnectionBinding,MonsterSnapshot,long,
-            CharacterExperienceRewardRule)>(new BoundedChannelOptions(capacity)
+        _queue=Channel.CreateBounded<DeathWork>(
+            new BoundedChannelOptions(capacity)
         {
             SingleReader=true,
             SingleWriter=true,
@@ -234,11 +319,27 @@ public sealed class CharacterExperienceSettlement
     public CharacterExperienceDeathPostStatus TryPostSoloDeath(
         ConnectionBinding binding,MonsterSnapshot monster,long activePetUid=0)
     {
-        if(binding.ActorId<=0||binding.ConnectionEpoch<=0||binding.MapEpoch<=0||
-           activePetUid<0||
-           monster.EntityId<=0||monster.EnemyId<=0||monster.MapId<=0||
-           monster.CurrentHp!=0||monster.State!=MonsterAiState.Dead||
-           monster.EntityRevision<=0||monster.MapId<=0)
+        long damage=Math.Max(1,monster.MaxHp);
+        return TryPostDeath(monster,damage,
+        [
+            new CharacterExperienceDeathGroup(damage,
+            [
+                new CharacterExperienceDeathParticipant(
+                    binding,damage,activePetUid)
+            ])
+        ]);
+    }
+
+    public CharacterExperienceDeathPostStatus TryPostDeath(
+        MonsterSnapshot monster,long totalDamage,
+        IReadOnlyList<CharacterExperienceDeathGroup> groups)
+    {
+        ArgumentNullException.ThrowIfNull(groups);
+        if(monster.EntityId<=0||monster.EnemyId<=0||monster.MapId<=0||
+           monster.MaxHp<=0||monster.CurrentHp!=0||
+           monster.State!=MonsterAiState.Dead||
+           monster.EntityRevision<=0||totalDamage<=0||
+           groups.Count is <1 or >1024)
             throw new ArgumentOutOfRangeException(nameof(monster));
         if(_fault is { } failure)
             throw new CharacterExperienceSettlementException(
@@ -246,9 +347,46 @@ public sealed class CharacterExperienceSettlement
         if(!_rules.TryGetValue((monster.MapId,monster.EnemyId),out var rule))
             return CharacterExperienceDeathPostStatus.NoRule;
 
+        var sealedGroups=new CharacterExperienceDeathGroup[groups.Count];
+        var seenActors=new HashSet<long>();
+        long representedDamage=0;
+        for(int i=0;i<groups.Count;i++)
+        {
+            var group=groups[i]??throw new ArgumentException(
+                "Character EXP death group cannot be null",nameof(groups));
+            if(group.AppliedDamage<=0||
+               group.Participants is null||
+               group.Participants.Count is <1 or >1024)
+                throw new ArgumentOutOfRangeException(nameof(groups));
+
+            var participants=group.Participants.ToArray();
+            long participantDamage=0;
+            foreach(var participant in participants)
+            {
+                var binding=participant.Binding;
+                if(binding.ActorId<=0||binding.ConnectionEpoch<=0||
+                   binding.MapEpoch<=0||participant.AppliedDamage<=0||
+                   participant.ActivePetUid<0||
+                   !seenActors.Add(binding.ActorId))
+                    throw new ArgumentOutOfRangeException(nameof(groups));
+                participantDamage=checked(
+                    participantDamage+participant.AppliedDamage);
+            }
+            if(participantDamage!=group.AppliedDamage)
+                throw new ArgumentException(
+                    "Character EXP group damage must equal participant damage",
+                    nameof(groups));
+            representedDamage=checked(representedDamage+group.AppliedDamage);
+            sealedGroups[i]=new CharacterExperienceDeathGroup(
+                group.AppliedDamage,participants);
+        }
+        if(representedDamage>totalDamage)
+            throw new ArgumentOutOfRangeException(nameof(totalDamage));
+
         _=SqliteIdentityStore.ComposeLootDeathRevision(
             _generation,monster.EntityRevision);
-        if(!_queue.Writer.TryWrite((binding,monster,activePetUid,rule)))
+        if(!_queue.Writer.TryWrite(
+               new DeathWork(monster,totalDamage,sealedGroups,rule)))
         {
             Interlocked.Increment(ref _overflows);
             return CharacterExperienceDeathPostStatus.Backpressured;
@@ -267,52 +405,78 @@ public sealed class CharacterExperienceSettlement
                 "Only one character EXP death worker allowed");
         try
         {
-            await foreach(var (binding,death,activePetUid,rule) in
-                _queue.Reader.ReadAllAsync())
+            await foreach(var work in _queue.Reader.ReadAllAsync())
             {
                 try
                 {
-                    var profile=await _identity.GetCharacterCombatProfileAsync(
-                        binding.ActorId).ConfigureAwait(false);
-                    if(profile is null)
-                        throw new CharacterExperienceSettlementException(
-                            "Accepted lethal attack has no trusted combat profile");
-
-                    long settled=CharacterExperienceSettlementPolicy.SettleSolo(
-                        profile.Data.Level,rule.EnemyLevel,rule.BaseExperience);
                     long deathId=SqliteIdentityStore.ComposeLootDeathRevision(
-                        _generation,death.EntityRevision);
-                    string grantKey=$"monsterdeath:{deathId}:{death.EntityId}";
-                    var outcome=await _identity.ApplyCharacterExperienceAsync(
-                        binding.ActorId,settled,grantKey).ConfigureAwait(false);
-
-                    if(outcome.Status==CharacterExperienceGrantStatus.Applied)
-                        Interlocked.Increment(ref _applied);
-                    else if(outcome.Status==CharacterExperienceGrantStatus.AlreadyProcessed)
-                        Interlocked.Increment(ref _replays);
-                    else
-                        throw new CharacterExperienceSettlementException(
-                            $"Trusted character EXP death grant failed: {outcome.Status}");
-
-                    if(settled==0)
-                        Interlocked.Increment(ref _zeroAwards);
-
-                    long petExperience=
-                        PetExperienceSettlementPolicy.FromSettledCharacterExperience(
-                            settled);
-                    if(_pets is not null&&activePetUid>0&&petExperience>0)
+                        _generation,work.Death.EntityRevision);
+                    foreach(var group in work.Groups)
                     {
-                        var petOutcome=await _pets.GrantCommittedExperienceAsync(
-                            binding,activePetUid,petExperience,
-                            "pet:"+grantKey,_router).ConfigureAwait(false);
-                        if(petOutcome.Status==PetExperienceGrantStatus.Applied)
-                            Interlocked.Increment(ref _petApplied);
-                        else if(petOutcome.Status==
-                                PetExperienceGrantStatus.AlreadyProcessed)
-                            Interlocked.Increment(ref _petReplays);
-                        else
-                            throw new CharacterExperienceSettlementException(
-                                $"Trusted Pet EXP follow-up failed: {petOutcome.Status}");
+                        long groupExperience=
+                            CharacterExperienceSettlementPolicy.ProportionalPool(
+                                work.Rule.BaseExperience,
+                                group.AppliedDamage,work.TotalDamage);
+                        var levels=new Dictionary<long,int>(
+                            group.Participants.Count);
+                        foreach(var participant in group.Participants)
+                        {
+                            var profile=await _identity.GetCharacterCombatProfileAsync(
+                                participant.Binding.ActorId).ConfigureAwait(false);
+                            if(profile is null)
+                                throw new CharacterExperienceSettlementException(
+                                    "Accepted lethal contributor has no trusted combat profile");
+                            levels.Add(participant.Binding.ActorId,profile.Data.Level);
+                        }
+
+                        int maximumLevel=levels.Values.Max();
+                        foreach(var participant in group.Participants)
+                        {
+                            long actorId=participant.Binding.ActorId;
+                            long settled=
+                                CharacterExperienceSettlementPolicy.SettlePartyMember(
+                                    levels[actorId],work.Rule.EnemyLevel,
+                                    groupExperience,group.Participants.Count,
+                                    maximumLevel);
+                            string grantKey=
+                                $"monsterdeath:{deathId}:{work.Death.EntityId}:actor:{actorId}";
+                            var outcome=await _identity.ApplyCharacterExperienceAsync(
+                                actorId,settled,grantKey).ConfigureAwait(false);
+
+                            if(outcome.Status==CharacterExperienceGrantStatus.Applied)
+                                Interlocked.Increment(ref _applied);
+                            else if(outcome.Status==
+                                    CharacterExperienceGrantStatus.AlreadyProcessed)
+                                Interlocked.Increment(ref _replays);
+                            else
+                                throw new CharacterExperienceSettlementException(
+                                    $"Trusted character EXP death grant failed: {outcome.Status}");
+
+                            if(settled==0)
+                                Interlocked.Increment(ref _zeroAwards);
+
+                            long petExperience=
+                                PetExperienceSettlementPolicy
+                                    .FromSettledCharacterExperience(settled);
+                            if(_pets is not null&&
+                               participant.ActivePetUid>0&&petExperience>0)
+                            {
+                                var petOutcome=
+                                    await _pets.GrantCommittedExperienceAsync(
+                                        participant.Binding,
+                                        participant.ActivePetUid,petExperience,
+                                        "pet:"+grantKey,_router).ConfigureAwait(false);
+                                if(petOutcome.Status==
+                                   PetExperienceGrantStatus.Applied)
+                                    Interlocked.Increment(ref _petApplied);
+                                else if(petOutcome.Status==
+                                        PetExperienceGrantStatus.AlreadyProcessed)
+                                    Interlocked.Increment(ref _petReplays);
+                                else
+                                    throw new CharacterExperienceSettlementException(
+                                        $"Trusted Pet EXP follow-up failed: {petOutcome.Status}");
+                            }
+                        }
                     }
                 }
                 finally

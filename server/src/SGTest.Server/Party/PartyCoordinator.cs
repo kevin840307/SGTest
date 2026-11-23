@@ -120,6 +120,28 @@ public sealed class PartyCoordinator
         }
     }
 
+    public IReadOnlyDictionary<long,long> SnapshotSettlementPartyIds(
+        IReadOnlyList<ConnectionBinding> contributors,WorldResultRouter router)
+    {
+        ArgumentNullException.ThrowIfNull(contributors);
+        ArgumentNullException.ThrowIfNull(router);
+        lock(_gate)
+        {
+            var result=new Dictionary<long,long>(contributors.Count);
+            foreach(var binding in contributors)
+            {
+                if(!router.IsCurrentBinding(binding)||
+                   !_partyByActor.TryGetValue(binding.ActorId,out long partyId)||
+                   !_parties.TryGetValue(partyId,out var party)||
+                   !party.Connections.TryGetValue(binding.ActorId,out long connection)||
+                   connection!=binding.ConnectionEpoch)
+                    continue;
+                result[binding.ActorId]=partyId;
+            }
+            return result;
+        }
+    }
+
     /// <summary>
     /// Session-scoped membership: stale old-socket cleanup cannot remove a newer
     /// generation because the party stores the exact connection generation.

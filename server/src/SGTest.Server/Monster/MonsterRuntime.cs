@@ -72,6 +72,10 @@ public readonly record struct MonsterDamageResult(
     int Damage,
     MonsterSnapshot Monster);
 
+public readonly record struct MonsterDamageContribution(
+    long ActorId,
+    long AppliedDamage);
+
 public readonly record struct AreaSkillTargetSelection(
     bool Overloaded,
     IReadOnlyList<MonsterSnapshot> Targets);
@@ -114,6 +118,7 @@ public sealed class MonsterRuntime
         public long RespawnAtTick = -1;
         public long NextWanderTick;
         public uint WanderSequence;
+        public readonly Dictionary<long,long> DamageByActor = [];
 
         public MonsterSnapshot Snapshot(int mapId) => new(
             EntityId, Definition.Id, Spawn.SourceIndex, mapId,
@@ -190,6 +195,16 @@ public sealed class MonsterRuntime
     public MonsterSnapshot? Find(long entityId) =>
         _monsters.TryGetValue(entityId, out var monster)
             ? monster.Snapshot(MapId) : null;
+
+    public IReadOnlyList<MonsterDamageContribution> DamageContributions(long entityId)
+    {
+        if(!_monsters.TryGetValue(entityId,out var monster))
+            return Array.Empty<MonsterDamageContribution>();
+        return monster.DamageByActor
+            .OrderBy(x=>x.Key)
+            .Select(x=>new MonsterDamageContribution(x.Key,x.Value))
+            .ToArray();
+    }
 
     public IReadOnlyList<MonsterWorldEvent> Tick(
         long worldTick,
@@ -291,6 +306,8 @@ public sealed class MonsterRuntime
 
         int applied = Math.Min(damage, monster.CurrentHp);
         monster.CurrentHp -= applied;
+        monster.DamageByActor[attackerActorId]=checked(
+            monster.DamageByActor.GetValueOrDefault(attackerActorId)+applied);
         monster.Revision = checked(monster.Revision + 1);
         bool killed = monster.CurrentHp == 0;
         if (killed)
@@ -323,6 +340,7 @@ public sealed class MonsterRuntime
                 monster.TargetActorId = 0;
                 monster.LastAttackTick = -1;
                 monster.RespawnAtTick = -1;
+                monster.DamageByActor.Clear();
                 monster.NextWanderTick = checked(tick + stats.WanderIntervalTicks);
                 Bump(monster);
                 events.Add(new(MonsterWorldEventKind.Respawn, tick,

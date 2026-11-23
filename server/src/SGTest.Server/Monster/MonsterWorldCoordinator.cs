@@ -183,6 +183,21 @@ public sealed class MonsterWorldCoordinator
     public bool TryGetActor(long actorId, out ActorSnapshot actor) =>
         _actors.TryGetValue(actorId, out actor);
 
+    public IReadOnlyList<MonsterDamageContribution> DamageContributions(
+        MonsterSnapshot death)
+    {
+        if(death.EntityId<=0||death.MapId<=0||death.EntityRevision<=0||
+           death.CurrentHp!=0||death.State!=MonsterAiState.Dead||
+           !_runtimes.TryGetValue(death.MapId,out var runtime))
+            return Array.Empty<MonsterDamageContribution>();
+        var current=runtime.Find(death.EntityId);
+        if(current is null||
+           current.Value.EntityRevision!=death.EntityRevision||
+           current.Value.State!=MonsterAiState.Dead)
+            return Array.Empty<MonsterDamageContribution>();
+        return runtime.DamageContributions(death.EntityId);
+    }
+
     public NormalAttackOutcome ResolveNormalAttack(TrustedNormalAttack request)
     {
         if (_lastTick <= 0 || !_actors.TryGetValue(request.ActorId, out var actor) ||

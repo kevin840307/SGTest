@@ -147,10 +147,15 @@ internal static class MonsterRuntimeChecks
         Checks.Require(hit.Applied && !hit.Killed && hit.Monster.CurrentHp==40 &&
                        hit.Monster.TargetActorId==99,
                        "trusted damage did not mutate authoritative HP/aggro");
-        var kill=runtime.ApplyTrustedDamage(first.EntityId,99,50,0);
+        var kill=runtime.ApplyTrustedDamage(first.EntityId,100,50,0);
         Checks.Require(kill.Killed && kill.Monster.State==MonsterAiState.Dead &&
                        kill.Monster.CurrentHp==0,
                        "monster death not authoritative");
+        var contributions=runtime.DamageContributions(first.EntityId);
+        Checks.Require(contributions.Count==2&&
+                       contributions[0]==new MonsterDamageContribution(99,60)&&
+                       contributions[1]==new MonsterDamageContribution(100,40),
+                       "monster damage contribution ledger did not keep actual capped damage");
 
         var target=new MonsterCombatTarget(99,213,200,200,1000);
         bool respawnObserved=false;
@@ -173,6 +178,8 @@ internal static class MonsterRuntimeChecks
         Checks.Require(respawnObserved && revived.State!=MonsterAiState.Dead &&
                        revived.CurrentHp==100,
                        "dead monster did not respawn when its bounded AI slot returned");
+        Checks.Require(runtime.DamageContributions(first.EntityId).Count==0,
+            "respawn did not clear prior-life damage contributors");
     }
 
     private static object Document(int mapId,bool verified,
