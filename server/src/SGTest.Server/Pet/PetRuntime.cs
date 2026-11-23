@@ -49,18 +49,37 @@ public sealed class PetCoordinator
         WorldResultRouter router)
     {
         ArgumentNullException.ThrowIfNull(router);
-        if(_growth is null)
-            throw new InvalidOperationException(
-                "Pet growth is unavailable without an audited growth manifest");
         if(binding.ActorId<=0||binding.ConnectionEpoch<=0||binding.MapEpoch<=0||
            !router.TryGetCurrentBinding(binding.ActorId,out var current)||
            current.ConnectionEpoch!=binding.ConnectionEpoch||
            current.MapEpoch!=binding.MapEpoch)
             throw new InvalidOperationException(
                 "Pet EXP grant requires the current trusted actor generation");
+        return await GrantCommittedExperienceAsync(
+            binding,petUid,amount,grantKey,router).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Trusted post-combat settlement. The caller has already captured an exact
+    /// authoritative Pet/owner generation at the lethal event, so disconnecting
+    /// before the SQLite worker drains must not erase the earned grant. A current
+    /// matching connection receives the refreshed roster; a superseded generation
+    /// simply observes the durable result on its next attach.
+    /// </summary>
+    internal async Task<PetExperienceGrantOutcome> GrantCommittedExperienceAsync(
+        ConnectionBinding binding,long petUid,long amount,string grantKey,
+        WorldResultRouter router,CancellationToken cancellationToken=default)
+    {
+        ArgumentNullException.ThrowIfNull(router);
+        if(_growth is null)
+            throw new InvalidOperationException(
+                "Pet growth is unavailable without an audited growth manifest");
+        if(binding.ActorId<=0||binding.ConnectionEpoch<=0||binding.MapEpoch<=0)
+            throw new ArgumentOutOfRangeException(nameof(binding));
 
         var outcome=await _identity.ApplyPetExperienceAsync(
-            binding.ActorId,petUid,amount,grantKey,_growth).ConfigureAwait(false);
+            binding.ActorId,petUid,amount,grantKey,_growth,cancellationToken)
+            .ConfigureAwait(false);
         if(outcome.Status is not (PetExperienceGrantStatus.Applied or
             PetExperienceGrantStatus.AlreadyProcessed))
             return outcome;
@@ -69,9 +88,10 @@ public sealed class PetCoordinator
            after.ConnectionEpoch!=binding.ConnectionEpoch||
            after.MapEpoch!=binding.MapEpoch)
             return outcome;
-        var pets=await _identity.GetPetsAsync(binding.ActorId).ConfigureAwait(false);
-        EnsureQueued(router.QueuePetSnapshot(after,ToSnapshot(after.MapEpoch,pets)));
-        EnsureWorldPosted(router,ToWorldUpdate(after,pets));
+        var roster=await _identity.GetPetsAsync(
+            binding.ActorId,cancellationToken).ConfigureAwait(false);
+        EnsureQueued(router.QueuePetSnapshot(after,ToSnapshot(after.MapEpoch,roster)));
+        EnsureWorldPosted(router,ToWorldUpdate(after,roster));
         return outcome;
     }
 

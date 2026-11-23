@@ -328,21 +328,36 @@ internal static class NormalAttackChecks
     {
         NormalAttackResultWire? result=null;
         MonsterStateWire? monster=null;
+        static bool Correlates(
+            NormalAttackResultWire? attack,MonsterStateWire? state)=>
+            attack is { } expected&&state is { } actual&&
+            actual.EntityId==expected.TargetEntityId&&
+            actual.Revision==expected.TargetRevision;
+
         using var timeout=new CancellationTokenSource(TimeSpan.FromSeconds(3));
-        while(result is null || monster is null)
+        while(!Correlates(result,monster))
         {
             timeout.Token.ThrowIfCancellationRequested();
             while(gateway.TryDequeueReliable(out var frame))
             {
                 if(WireProtocol.TryDecodeNormalAttackResult(frame,out var attack) &&
                     attack.AttackSequence==sequence)
+                {
                     result=attack;
+                    if(monster is { } prior&&
+                       (prior.EntityId!=attack.TargetEntityId||
+                        prior.Revision!=attack.TargetRevision))
+                        monster=null;
+                }
                 else if(WireProtocol.TryDecodeMonsterState(
                     frame,out var kind,out var state) &&
-                    kind==WireOpcode.MonsterDelta)
+                    kind==WireOpcode.MonsterDelta&&
+                    (result is not { } expected||
+                     (state.EntityId==expected.TargetEntityId&&
+                      state.Revision==expected.TargetRevision)))
                     monster=state;
             }
-            if(result is null || monster is null)
+            if(!Correlates(result,monster))
                 await Task.Delay(5,timeout.Token);
         }
         return new(result,monster);

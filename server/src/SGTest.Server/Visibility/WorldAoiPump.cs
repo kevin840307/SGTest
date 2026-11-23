@@ -4,6 +4,7 @@ using SGTest.Server.Combat;
 using SGTest.Server.Gateway;
 using SGTest.Server.World;
 using SGTest.Server.Identity;
+using SGTest.Server.Pet;
 
 namespace SGTest.Server.Visibility;
 
@@ -26,6 +27,7 @@ public sealed class WorldAoiPump
     private readonly MonsterWorldCoordinator? _monsters;
     private readonly PlayerCombatSettlement? _playerCombat;
     private readonly MonsterLootSettlement? _loot;
+    private readonly PetExperienceDeathSettlement? _petExperience;
     private int _started;
     private long _processedBatches, _framesQueued;
 
@@ -34,6 +36,7 @@ public sealed class WorldAoiPump
                         MonsterWorldCoordinator? monsters = null,
                         PlayerCombatSettlement? playerCombat = null,
                         MonsterLootSettlement? loot = null,
+                        PetExperienceDeathSettlement? petExperience = null,
                         IReadOnlyList<GroundDropRecord>? initialGroundDrops = null)
     {
         _router = router ?? throw new ArgumentNullException(nameof(router));
@@ -42,6 +45,7 @@ public sealed class WorldAoiPump
         _monsters = monsters;
         _playerCombat = playerCombat;
         _loot = loot;
+        _petExperience = petExperience;
         if (initialGroundDrops is { Count: > 0 })
             _aoi.SeedGroundDrops(initialGroundDrops);
         if (_options.FlushIntervalMilliseconds is < 1 or > 1000 ||
@@ -159,10 +163,11 @@ public sealed class WorldAoiPump
                         _monsters.TryGetActor(petAttack.ActorId,out var petOwner)&&
                         _playerCombat.CurrentHp(petOwner)<=0;
                     NormalAttackOutcome outcome;
+                    PetWorldPresence pet=default;
                     if(_monsters is null||attackerDead||
                        !_aoi.TryGetPet(
                            petAttack.ActorId,petAttack.ConnectionEpoch,
-                           petAttack.RequestMapEpoch,petAttack.PetUid,out var pet))
+                           petAttack.RequestMapEpoch,petAttack.PetUid,out pet))
                         outcome=new(
                             NormalAttackStatus.CombatUnavailable,
                             Math.Max(0,_aoi.LastTick),petAttack.TargetEntityId,
@@ -177,11 +182,18 @@ public sealed class WorldAoiPump
                        outcome.Monster is { } changed)
                     {
                         _aoi.ApplyMonsters(_aoi.LastTick,[changed]);
-                        if(_loot is not null&&changed.CurrentHp==0&&
-                           changed.State==MonsterAiState.Dead&&
-                           _loot.TryPostDeath(changed)==MonsterLootPostStatus.Backpressured)
-                            throw new AoiBackpressureException(
-                                "Loot settlement queue full; accepted pet death must not be dropped");
+                        if(changed.CurrentHp==0&&changed.State==MonsterAiState.Dead)
+                        {
+                            if(_loot is not null&&
+                               _loot.TryPostDeath(changed)==MonsterLootPostStatus.Backpressured)
+                                throw new AoiBackpressureException(
+                                    "Loot settlement queue full; accepted pet death must not be dropped");
+                            if(_petExperience is not null&&
+                               _petExperience.TryPostDeath(pet,changed)==
+                                   PetExperienceDeathPostStatus.Backpressured)
+                                throw new AoiBackpressureException(
+                                    "Pet EXP settlement queue full; accepted pet death must not be dropped");
+                        }
                     }
 
                     var sent=_router.QueuePetAttackResult(petAttack,outcome);

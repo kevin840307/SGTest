@@ -18,12 +18,16 @@ internal static class PetChecks
             ()=>GrowthManifest(root));
         Checks.Run("pet combat manifest requires audited exact-level rules",
             ()=>CombatManifest(root));
+        Checks.Run("pet EXP reward manifest requires audited existing map enemy rules",
+            ()=>ExperienceRewardManifest(root));
         Checks.Run("pet attack authority owns active identity position range cooldown replay and damage",
             ()=>CombatAuthority(root));
         Checks.Run("pet summon recall replay and persistence are server authoritative",
             ()=>Persistence().GetAwaiter().GetResult());
         Checks.Run("pet EXP grants cross levels atomically and replay exactly once",
             ()=>GrowthPersistence().GetAwaiter().GetResult());
+        Checks.Run("pet lethal death EXP settlement is bounded replay-safe and restart-safe",
+            ()=>ExperienceDeathSettlement().GetAwaiter().GetResult());
         Checks.Run("schema v30 pet rows migrate to explicit evolution zero without data loss",
             ()=>MigrationV30().GetAwaiter().GetResult());
     }
@@ -188,6 +192,71 @@ internal static class PetChecks
         catch(InvalidDataException){rejected=true;}
         Checks.Require(rejected,
             "pet combat manifest accepted rules without audited source");
+    }
+
+    private static void ExperienceRewardManifest(string root)
+    {
+        const int mapId=216;
+        string folder=Checks.Fixture(root,mapId,12,12,(_,_)=>0);
+        var grid=BlockingGrid.Load(folder,mapId);
+        string populationPath=Path.Combine(folder,"population-pet-exp.json");
+        File.WriteAllText(populationPath,JsonSerializer.Serialize(new
+        {
+            version=4,kind="verified_monster_runtime",map_id=mapId,
+            stats_verified=true,gameplay_ready=true,
+            definitions=new[]
+            {
+                new
+                {
+                    id=1,name="PetExpFixture",sprite="EN001A",
+                    atlas="Enemy/EN001A/atlas.json",
+                    stats=new
+                    {
+                        level=3,max_hp=100,attack_damage=1,move_step=8.0,
+                        aggro_radius=1.0,lose_target_radius=2.0,
+                        leash_radius=2.0,attack_range=1.0,
+                        attack_cooldown_ticks=30,respawn_ticks=30,
+                        wander_radius=0.0,wander_interval_ticks=100
+                    }
+                }
+            },
+            spawns=new[]
+            {
+                new { source_index=0,source_flags=7,definition=1,p=new[]{40,24} }
+            }
+        }));
+        var population=MonsterPopulationCatalog.LoadVerified(
+            populationPath,mapId,grid);
+        var runtime=new MonsterRuntime(grid,population);
+
+        string valid=Path.Combine(root,"pet-exp-rewards.json");
+        File.WriteAllText(valid,JsonSerializer.Serialize(new
+        {
+            kind="verified_pet_experience_reward_rules",
+            version=1,rules_verified=true,gameplay_ready=true,
+            source_reference="unit-test audited Pet EXP source",
+            rules=new[]{new { map_id=mapId,enemy_id=1,experience=25L }}
+        }));
+        var rules=PetExperienceRewardCatalog.LoadVerified(valid,[runtime]);
+        Checks.Require(rules.Count==1&&rules[0].MapId==mapId&&
+            rules[0].EnemyId==1&&rules[0].Experience==25&&
+            rules[0].Trust==PetExperienceRewardTrust.Verified&&
+            rules[0].SourceReference=="unit-test audited Pet EXP source",
+            "verified Pet EXP reward manifest did not retain source-backed rule");
+
+        string invalid=Path.Combine(root,"pet-exp-rewards-invalid.json");
+        File.WriteAllText(invalid,JsonSerializer.Serialize(new
+        {
+            kind="verified_pet_experience_reward_rules",
+            version=1,rules_verified=true,gameplay_ready=true,
+            source_reference="unit-test audited Pet EXP source",
+            rules=new[]{new { map_id=mapId,enemy_id=999,experience=25L }}
+        }));
+        bool rejected=false;
+        try { PetExperienceRewardCatalog.LoadVerified(invalid,[runtime]); }
+        catch(InvalidDataException){rejected=true;}
+        Checks.Require(rejected,
+            "Pet EXP reward manifest accepted an enemy absent from verified runtime");
     }
 
     private static void CombatAuthority(string root)
@@ -378,6 +447,118 @@ internal static class PetChecks
                     replay.Level==13&&replay.Experience==125,
                     "Pet EXP grant replay identity did not survive SQLite reopen");
             }
+        }
+        finally
+        {
+            SqliteConnection.ClearAllPools();
+            Directory.Delete(root,true);
+        }
+    }
+
+    private static async Task ExperienceDeathSettlement()
+    {
+        string root=Path.Combine(
+            Path.GetTempPath(),"sgtest_pet_death_exp_"+Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        string db=Path.Combine(root,"identity.db");
+        try
+        {
+            string manifest=Path.Combine(root,"pet-growth.json");
+            File.WriteAllText(manifest,JsonSerializer.Serialize(new
+            {
+                schema="sgtest.pet_growth_curve/v1",
+                source="unit-test Old Pet curve",
+                max_level=100,
+                level_up_total_experience=Enumerable.Range(1,100)
+                    .Select(level=>(long)level*10).ToArray()
+            }));
+            var growth=PetGrowthRuleCatalog.LoadVerified(manifest);
+
+            using var store=new SqliteIdentityStore(db);
+            await store.InitializeAsync();
+            long account=(await store.CreateAccountAsync(
+                "pet_death_exp","Pet-Death-Exp-Secret-2026!")).AccountId;
+            long character=(await store.CreateCharacterAsync(
+                account,0,"PetDeathExp",new(215,24,24))).Character!.CharacterId;
+            long petUid=await store.ProvisionPetAsync(
+                character,5002,1,0,evolutionId:7);
+            var summoned=await store.ApplyPetActionAsync(
+                character,11,4,1,PetActionKind.Summon,petUid);
+            Checks.Require(summoned.Status==PetActionStatus.Applied,
+                "Pet death EXP fixture could not activate owned pet");
+
+            var router=new WorldResultRouter();
+            var pets=new PetCoordinator(store,growth);
+            var reward=new PetExperienceRewardRule(
+                215,1,25,PetExperienceRewardTrust.SyntheticTest,
+                "unit-test synthetic Pet kill reward");
+            long generation=await store.AllocateLootWorldGenerationAsync();
+            var settlement=new PetExperienceDeathSettlement(
+                pets,router,generation,[reward],capacity:4);
+            var presence=new PetWorldPresence(
+                character,11,4,petUid,5002,7,1,24,24);
+            var dead=new MonsterSnapshot(
+                1_021_500_001,1,0,215,40,24,40,24,
+                0,100,MonsterAiState.Dead,character,7,1);
+
+            var running=settlement.RunAsync();
+            Checks.Require(
+                settlement.TryPostDeath(presence,dead)==
+                    PetExperienceDeathPostStatus.Enqueued&&
+                settlement.TryPostDeath(presence,dead)==
+                    PetExperienceDeathPostStatus.Enqueued&&
+                settlement.TryPostDeath(
+                    presence,dead with {EnemyId=2,EntityRevision=8})==
+                    PetExperienceDeathPostStatus.NoRule,
+                "Pet death EXP settlement did not gate/enqueue trusted deaths");
+            settlement.Complete();
+            await running;
+
+            var afterFirst=(await store.GetPetsAsync(character)).Single();
+            var firstStats=settlement.Statistics;
+            Checks.Require(afterFirst.Experience==25&&afterFirst.Level==3&&
+                firstStats.DeathsQueued==2&&firstStats.GrantsApplied==1&&
+                firstStats.Replays==1&&firstStats.Overflows==0&&firstStats.Pending==0,
+                "Pet death EXP replay was not exactly-once");
+
+            long restartedGeneration=await store.AllocateLootWorldGenerationAsync();
+            Checks.Require(restartedGeneration!=generation,
+                "Pet death EXP fixture did not allocate a new host generation");
+            var restarted=new PetExperienceDeathSettlement(
+                pets,router,restartedGeneration,[reward],capacity:4);
+            var restartedTask=restarted.RunAsync();
+            Checks.Require(restarted.TryPostDeath(presence,dead)==
+                PetExperienceDeathPostStatus.Enqueued,
+                "Pet death EXP restart generation rejected a legitimate death");
+            restarted.Complete();
+            await restartedTask;
+
+            var afterRestart=(await store.GetPetsAsync(character)).Single();
+            Checks.Require(afterRestart.Experience==50&&afterRestart.Level==6&&
+                restarted.Statistics.GrantsApplied==1&&
+                restarted.Statistics.Replays==0,
+                "Pet death EXP key reused a pre-restart monster revision");
+
+            long boundedGeneration=await store.AllocateLootWorldGenerationAsync();
+            var bounded=new PetExperienceDeathSettlement(
+                pets,router,boundedGeneration,[reward],capacity:1);
+            Checks.Require(
+                bounded.TryPostDeath(
+                    presence,dead with {EntityRevision=9})==
+                    PetExperienceDeathPostStatus.Enqueued&&
+                bounded.TryPostDeath(
+                    presence,dead with {EntityRevision=10})==
+                    PetExperienceDeathPostStatus.Backpressured&&
+                bounded.Statistics.Overflows==1&&bounded.Statistics.Pending==1,
+                "Pet death EXP bounded queue did not fail closed on overflow");
+            var boundedTask=bounded.RunAsync();
+            bounded.Complete();
+            await boundedTask;
+            var afterBounded=(await store.GetPetsAsync(character)).Single();
+            Checks.Require(afterBounded.Experience==75&&afterBounded.Level==8&&
+                bounded.Statistics.GrantsApplied==1&&
+                bounded.Statistics.Pending==0,
+                "Pet death EXP bounded queue did not drain accepted work");
         }
         finally
         {
