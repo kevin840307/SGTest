@@ -132,7 +132,10 @@ public enum WireOpcode : ushort
     PetAttackVisual = 119,
     FriendCommand = 120,
     FriendResult = 121,
-    FriendSnapshot = 122
+    FriendSnapshot = 122,
+    MechaCommand = 123,
+    MechaResult = 124,
+    MechaSnapshot = 125
 }
 
 public enum ChatChannel : byte { Nearby = 0, Faction = 1, Warband = 2, Party = 3, Whisper = 4 }
@@ -163,6 +166,12 @@ public enum PetResultStatus : byte
 {
     Applied=0,AlreadyProcessed=1,PetNotOwned=2,
     AlreadyActive=3,NotActive=4,SequenceConflict=5
+}
+public enum MechaCommandAction : byte { Mount=1, Dismount=2, Refresh=3 }
+public enum MechaResultStatus : byte
+{
+    Applied=0,AlreadyProcessed=1,MechaNotOwned=2,
+    AlreadyMounted=3,NotMounted=4,SequenceConflict=5
 }
 
 public enum PartyCommandAction : byte
@@ -707,6 +716,16 @@ public readonly record struct PetAttackVisualWire(
     long ReceiverMapEpoch,long ServerTick,long OwnerActorId,long OwnerConnectionEpoch,
     long OwnerMapEpoch,uint AttackSequence,long PetUid,long TargetEntityId,
     NormalAttackStatus Status,int Damage,long TargetRevision);
+
+public readonly record struct MechaCommandWire(
+    long MapEpoch,uint MechaSequence,MechaCommandAction Action,long MechaUid);
+public readonly record struct MechaResultWire(
+    long MapEpoch,uint MechaSequence,MechaCommandAction Action,MechaResultStatus Status,
+    long MechaUid,long MountedMechaUid);
+public readonly record struct MechaSnapshotEntryWire(
+    long MechaUid,int DefinitionId,int Level,long Experience);
+public sealed record MechaSnapshotWire(
+    long ReceiverMapEpoch,long MountedMechaUid,IReadOnlyList<MechaSnapshotEntryWire> Mechas);
 
 public readonly record struct QuestOpenWire(
     long MapEpoch,uint QuestSequence,int NpcSpawnId);

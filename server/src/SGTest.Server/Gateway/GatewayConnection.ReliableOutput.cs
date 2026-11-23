@@ -598,6 +598,39 @@ public sealed partial class GatewayConnection
         }
     }
 
+    public GatewaySendStatus QueueMechaResult(
+        TrustedMechaCommand request,MechaResultWire result)
+    {
+        lock(_bindingGate)
+        {
+            if(_closed)return GatewaySendStatus.Closed;
+            var bound=_binding;
+            if(request.ActorId!=bound.ActorId||
+               request.ConnectionEpoch!=bound.ConnectionEpoch||
+               request.RequestMapEpoch!=bound.MapEpoch||
+               request.MechaSequence!=result.MechaSequence||
+               request.RequestMapEpoch!=result.MapEpoch||
+               request.Action!=result.Action||
+               request.MechaUid!=result.MechaUid)
+                return GatewaySendStatus.GenerationMismatch;
+            return _reliable.TryEnqueue(WireProtocol.EncodeMechaResult(result))
+                ?GatewaySendStatus.Enqueued:GatewaySendStatus.Backpressured;
+        }
+    }
+
+    public GatewaySendStatus QueueMechaSnapshot(
+        ConnectionBinding expected,MechaSnapshotWire snapshot)
+    {
+        lock(_bindingGate)
+        {
+            if(_closed)return GatewaySendStatus.Closed;
+            if(_binding!=expected||snapshot.ReceiverMapEpoch!=expected.MapEpoch)
+                return GatewaySendStatus.GenerationMismatch;
+            return _reliable.TryEnqueue(WireProtocol.EncodeMechaSnapshot(snapshot))
+                ?GatewaySendStatus.Enqueued:GatewaySendStatus.Backpressured;
+        }
+    }
+
     public GatewaySendStatus QueueQuestView(
         TrustedQuestCommand request,QuestViewWireStatus status,QuestView? view)
     {

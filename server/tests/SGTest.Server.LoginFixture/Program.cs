@@ -48,6 +48,8 @@ internal static class Program
             return await RunStorageAsync().ConfigureAwait(false);
         if (args is ["--pet"])
             return await PetLoginFixture.RunAsync().ConfigureAwait(false);
+        if (args is ["--mecha"])
+            return await MechaLoginFixture.RunAsync().ConfigureAwait(false);
         if (args is ["--equipment"])
             return await EquipmentLoginFixture.RunAsync().ConfigureAwait(false);
         if (args is ["--bank"])

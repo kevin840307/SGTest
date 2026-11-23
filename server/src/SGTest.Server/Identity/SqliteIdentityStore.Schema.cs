@@ -888,6 +888,36 @@ ADD COLUMN evolution_id INTEGER NOT NULL DEFAULT 0 CHECK(evolution_id BETWEEN 0 
 );",tx);
             Execute(connection,@"CREATE INDEX IF NOT EXISTS ix_character_friendships_high
 ON character_friendships(character_high_id,character_low_id);",tx);
+            // Schema v36: durable Mecha roster and exactly one mounted instance per
+            // character. Exact HK parts/card/stat semantics remain source-gated;
+            // parts_blob is opaque server-owned state in this lifecycle baseline.
+            Execute(connection,@"CREATE TABLE IF NOT EXISTS mecha_instances (
+    mecha_uid INTEGER PRIMARY KEY AUTOINCREMENT,
+    character_id INTEGER NOT NULL REFERENCES characters(character_id) ON DELETE CASCADE,
+    definition_id INTEGER NOT NULL CHECK(definition_id BETWEEN 1 AND 100000000),
+    level INTEGER NOT NULL DEFAULT 1 CHECK(level BETWEEN 1 AND 1000000),
+    experience INTEGER NOT NULL DEFAULT 0 CHECK(experience BETWEEN 0 AND 9000000000000000),
+    is_mounted INTEGER NOT NULL DEFAULT 0 CHECK(is_mounted IN (0,1)),
+    parts_blob BLOB NOT NULL DEFAULT X'' CHECK(length(parts_blob) <= 4096),
+    created_unix_ms INTEGER NOT NULL,
+    updated_unix_ms INTEGER NOT NULL
+);",tx);
+            Execute(connection,@"CREATE INDEX IF NOT EXISTS ix_mecha_instances_character
+ON mecha_instances(character_id,mecha_uid);",tx);
+            Execute(connection,@"CREATE UNIQUE INDEX IF NOT EXISTS ux_mecha_instances_mounted
+ON mecha_instances(character_id) WHERE is_mounted=1;",tx);
+            Execute(connection,@"CREATE TABLE IF NOT EXISTS mecha_actions (
+    character_id INTEGER NOT NULL REFERENCES characters(character_id) ON DELETE CASCADE,
+    connection_generation INTEGER NOT NULL CHECK(connection_generation > 0),
+    map_epoch INTEGER NOT NULL CHECK(map_epoch > 0),
+    action_sequence INTEGER NOT NULL CHECK(action_sequence BETWEEN 1 AND 4294967295),
+    action INTEGER NOT NULL CHECK(action IN (1,2)),
+    mecha_uid INTEGER NOT NULL CHECK(mecha_uid > 0),
+    result_status INTEGER NOT NULL CHECK(result_status BETWEEN 0 AND 5),
+    resulting_mounted_uid INTEGER NOT NULL CHECK(resulting_mounted_uid >= 0),
+    created_unix_ms INTEGER NOT NULL,
+    PRIMARY KEY(character_id,connection_generation,map_epoch,action_sequence)
+);",tx);
             if (schemaVersion < SchemaVersion)
                 Execute(connection,
                     $"UPDATE schema_version SET version={SchemaVersion};", tx);

@@ -541,6 +541,51 @@ func _queue_pet_intent(action:int,pet_uid:int,current:Dictionary)->bool:
 		"map_epoch":int(current.get("map_epoch",0))
 	})
 
+func mecha_mount(mecha_uid:int)->bool:
+	var current:=snapshot()
+	return _queue_mecha_intent(1,mecha_uid,current)
+
+
+func mecha_dismount()->bool:
+	var current:=snapshot()
+	return _queue_mecha_intent(2,int(current.get("mounted_mecha_uid",0)),current)
+
+
+func mecha_refresh()->bool:
+	var current:=snapshot()
+	return _queue_mecha_intent(3,0,current)
+
+
+func _queue_mecha_intent(action:int,mecha_uid:int,current:Dictionary)->bool:
+	if (
+		int(current.get("state",-1))!=WorldState.STATE_IN_WORLD or
+		not bool(current.get("world_ready",false)) or
+		bool(current.get("resync_pending",false)) or
+		bool(current.get("waiting_for_new_map",false)) or
+		int(current.get("pending_world_ready_ack_epoch",0))!=0 or
+		int(current.get("last_world_ready_ack_epoch",0))!=int(current.get("map_epoch",0)) or
+		int(current.get("pending_mecha_sequence",0))!=0
+	):
+		return false
+	var mechas:Dictionary=current.get("mecha_instances",{})
+	match action:
+		1:
+			if mecha_uid<=0 or not mechas.has(mecha_uid) or int(current.get("mounted_mecha_uid",0))==mecha_uid:
+				return false
+		2:
+			if mecha_uid<=0 or int(current.get("mounted_mecha_uid",0))!=mecha_uid:
+				return false
+		3:
+			if mecha_uid!=0:
+				return false
+		_:
+			return false
+	return _queue_intent({
+		"type":"mecha","action":action,"mecha_uid":mecha_uid,
+		"actor_id":int(current.get("actor_id",0)),
+		"map_epoch":int(current.get("map_epoch",0))
+	})
+
 
 func _queue_clan_intent(action:int,request_clan_id:int,name:String,current:Dictionary,target_actor_id:int=0)->bool:
 	if (
@@ -1402,6 +1447,8 @@ func _process_first_intent() -> void:
 		_process_friend_intent(intent)
 	elif kind=="pet":
 		_process_pet_intent(intent)
+	elif kind=="mecha":
+		_process_mecha_intent(intent)
 
 
 	elif kind == "gm_pvp_name":
@@ -1794,6 +1841,36 @@ func _process_pet_intent(intent:Dictionary)->void:
 		_pop_intent()
 		return
 	if _transport.send_frame(frame) and _world.mark_pet_sent(sequence,action,pet_uid):
+		_pop_intent()
+		_publish()
+
+func _process_mecha_intent(intent:Dictionary)->void:
+	var current:Dictionary=_world.snapshot()
+	if (
+		int(intent.get("actor_id",0))!=int(current.get("actor_id",0)) or
+		int(intent.get("map_epoch",0))!=int(current.get("map_epoch",0))
+	):
+		_pop_intent()
+		return
+	if (
+		int(current.get("state",-1))!=WorldState.STATE_IN_WORLD or
+		not bool(current.get("world_ready",false)) or
+		bool(current.get("resync_pending",false)) or
+		bool(current.get("waiting_for_new_map",false)) or
+		int(current.get("pending_world_ready_ack_epoch",0))!=0 or
+		int(current.get("last_world_ready_ack_epoch",0))!=int(current.get("map_epoch",0)) or
+		int(current.get("pending_mecha_sequence",0))!=0
+	):
+		return
+	var action:=int(intent.get("action",0))
+	var mecha_uid:=int(intent.get("mecha_uid",0))
+	var sequence:=int(current.get("mecha_sequence",0))+1
+	var frame:=WireCodec.encode_mecha_command(
+		int(current.get("map_epoch",0)),sequence,action,mecha_uid)
+	if frame.is_empty():
+		_pop_intent()
+		return
+	if _transport.send_frame(frame) and _world.mark_mecha_sent(sequence,action,mecha_uid):
 		_pop_intent()
 		_publish()
 

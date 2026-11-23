@@ -112,6 +112,12 @@ static class Checks
                 Console.WriteLine($"PET_CHECKS PASS total={_passes}");
                 return 0;
             }
+            if (args is ["--mecha-only"])
+            {
+                MechaChecks.Verify();
+                Console.WriteLine($"MECHA_CHECKS PASS total={_passes}");
+                return 0;
+            }
             if(args is ["--experience-only"])
             {
                 CharacterExperienceChecks.Verify(root);
@@ -347,6 +353,7 @@ static class Checks
             ClanChecks.Verify();
             FriendChecks.Verify();
             PetChecks.Verify(root);
+            MechaChecks.Verify();
             CharacterExperienceChecks.Verify(root);
             TradeChecks.Verify(root);
             PlayerShopChecks.Verify(root);

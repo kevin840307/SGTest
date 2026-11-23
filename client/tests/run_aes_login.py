@@ -43,6 +43,8 @@ def main() -> int:
                         help="run real AES ClientSession personal storage deposit/withdraw E2E")
     parser.add_argument("--pet", action="store_true",
                         help="run real AES Pet summon, reconnect restoration and recall E2E")
+    parser.add_argument("--mecha", action="store_true",
+                        help="run real AES Mecha mount, reconnect restoration and dismount E2E")
     parser.add_argument("--equipment", action="store_true",
                         help="run real AES ClientSession durable equipment equip/unequip E2E")
     parser.add_argument("--bank", action="store_true",
@@ -64,7 +66,7 @@ def main() -> int:
     parser.add_argument("--appearance", action="store_true",
                         help="create with authoritative appearance choices and verify durable relogin")
     args = parser.parse_args()
-    if args.app_ui and (args.multi or args.crossmap or args.portal or args.reconnect or args.combat or args.combat_observer or args.skill_aoe or args.skill_aoe_observer or args.discard or args.storage or args.pet or args.equipment or args.bank or args.repair or args.enhancement or args.quest or args.trade or args.player_shop or args.pvp or args.auto_attack or args.register or args.appearance):
+    if args.app_ui and (args.multi or args.crossmap or args.portal or args.reconnect or args.combat or args.combat_observer or args.skill_aoe or args.skill_aoe_observer or args.discard or args.storage or args.pet or args.mecha or args.equipment or args.bank or args.repair or args.enhancement or args.quest or args.trade or args.player_shop or args.pvp or args.auto_attack or args.register or args.appearance):
         parser.error("--app-ui uses the single-client login fixture")
     if args.ui_screenshot and not args.app_ui:
         parser.error("--ui-screenshot requires --app-ui")
@@ -101,6 +103,8 @@ def main() -> int:
         return run_storage(args, repo, fixture, env)
     if args.pet:
         return run_pet(args, repo, fixture, env)
+    if args.mecha:
+        return run_mecha(args, repo, fixture, env)
     if args.equipment:
         return run_equipment(args, repo, fixture, env)
     if args.bank:
@@ -553,6 +557,80 @@ def run_pet(args, repo: Path, fixture: Path, env: dict[str, str]) -> int:
         return 0
     except Exception as error:
         print("AES_PET_RUNNER_FAIL", error, file=sys.stderr)
+        for line in lines[-30:]:
+            print(line, file=sys.stderr)
+        return 1
+    finally:
+        if server.poll() is None:
+            server.terminate()
+            try:
+                server.wait(timeout=3)
+            except subprocess.TimeoutExpired:
+                server.kill()
+
+
+def run_mecha(args, repo: Path, fixture: Path, env: dict[str, str]) -> int:
+    server = subprocess.Popen(
+        ["dotnet", "run", "--project", str(fixture), "-c", "Release",
+         "--no-build", "--", "--mecha"],
+        cwd=repo, env=env, text=True, stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT, bufsize=1)
+    lines: list[str] = []
+    notices: queue.Queue[str] = queue.Queue()
+
+    def capture() -> None:
+        assert server.stdout is not None
+        for line in server.stdout:
+            value = line.rstrip()
+            lines.append(value)
+            notices.put(value)
+
+    threading.Thread(target=capture, daemon=True).start()
+    deadline = time.monotonic() + args.timeout
+    try:
+        ready = None
+        while time.monotonic() < deadline:
+            if server.poll() is not None and notices.empty():
+                break
+            try:
+                line = notices.get(timeout=0.15)
+            except queue.Empty:
+                continue
+            if line.startswith("MECHA_FIXTURE_READY "):
+                ready = line
+                break
+        if ready is None:
+            raise RuntimeError("mecha fixture never became ready")
+        match = re.search(r"MECHA_FIXTURE_READY port=(\d+) username=", ready)
+        if match is None:
+            raise RuntimeError("malformed mecha fixture readiness: " + ready)
+        port = match.group(1)
+        client = subprocess.run(
+            [args.godot, "--headless", "--path", str(repo / "client"),
+             "--script", "res://tests/test_client_mecha_aes.gd", "--", port],
+            cwd=repo, env=env, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            timeout=max(1.0, deadline - time.monotonic()))
+        print(client.stdout, end="")
+        if client.returncode != 0 or "CLIENT_MECHA_AES_PASS" not in client.stdout:
+            raise RuntimeError("Godot mecha AES test failed")
+        server.wait(timeout=max(1.0, deadline - time.monotonic()))
+        output = "\n".join(lines)
+        if (
+            server.returncode != 0
+            or "MECHA_FIXTURE_MOUNT_PERSISTED" not in output
+            or "MECHA_FIXTURE_PASS" not in output
+        ):
+            raise RuntimeError("C# mecha fixture did not confirm durable lifecycle")
+        for line in lines:
+            if line.startswith("MECHA_FIXTURE_"):
+                print(line)
+        print(
+            "GODOT_CSHARP_AES_MECHA_E2E_PASS aes_cbc=true "
+            "mount_persisted=true reconnect_restored=true dismount_persisted=true "
+            "server_owned_roster=true")
+        return 0
+    except Exception as error:
+        print("AES_MECHA_RUNNER_FAIL", error, file=sys.stderr)
         for line in lines[-30:]:
             print(line, file=sys.stderr)
         return 1

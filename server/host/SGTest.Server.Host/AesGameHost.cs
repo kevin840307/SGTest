@@ -4,6 +4,7 @@ using SGTest.Server.Skill;
 using SGTest.Server.PlayerShop;
 using SGTest.Server.Party;
 using SGTest.Server.Pet;
+using SGTest.Server.Mecha;
 using SGTest.Server.Clan;
 using SGTest.Server.Friend;
 using SGTest.Server.Npc;
@@ -295,6 +296,7 @@ internal static class AesGameHost
             var clans=new ClanCoordinator(identity);
             var friends=new FriendCoordinator(identity);
             var pets=new PetCoordinator(identity,petGrowth);
+            var mechas=new MechaCoordinator(identity);
             CharacterExperienceSettlement? experience=experienceRules is null
                 ? null:new CharacterExperienceSettlement(
                     identity,router,lootGeneration,experienceRules,
@@ -334,6 +336,7 @@ internal static class AesGameHost
                 clans: clans,
                 friends: friends,
                 pets: pets,
+                mechas: mechas,
                 rateLimiter: authRateLimiter,
                 registrationRateLimiter: registrationRateLimiter,
                 gmAccounts: gmAccounts);

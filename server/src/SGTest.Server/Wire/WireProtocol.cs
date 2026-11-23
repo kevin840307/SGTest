@@ -676,6 +676,9 @@ public static partial class WireProtocol
             120 => WireOpcode.FriendCommand,
             121 => WireOpcode.FriendResult,
             122 => WireOpcode.FriendSnapshot,
+            123 => WireOpcode.MechaCommand,
+            124 => WireOpcode.MechaResult,
+            125 => WireOpcode.MechaSnapshot,
             _ => 0
         };
         if (opcode == 0) return false;
@@ -707,6 +710,11 @@ public static partial class WireProtocol
             WireOpcode.FriendCommand => advertised >= FriendCommandHeaderBytes && advertised <= FriendCommandMaximumFrameBytes,
             WireOpcode.FriendResult => advertised == FriendResultFrameBytes,
             WireOpcode.FriendSnapshot => advertised >= FriendSnapshotHeaderBytes && advertised <= MaximumFrameBytes,
+            WireOpcode.MechaCommand => advertised == MechaCommandFrameBytes,
+            WireOpcode.MechaResult => advertised == MechaResultFrameBytes,
+            WireOpcode.MechaSnapshot => advertised >= MechaSnapshotHeaderBytes &&
+                advertised <= MechaSnapshotMaximumFrameBytes &&
+                (advertised-MechaSnapshotHeaderBytes)%MechaSnapshotEntryBytes==0,
             WireOpcode.PetCommand => advertised == PetCommandFrameBytes,
             WireOpcode.PetResult => advertised == PetResultFrameBytes,
             WireOpcode.PetSnapshot => advertised >= PetSnapshotHeaderBytes &&

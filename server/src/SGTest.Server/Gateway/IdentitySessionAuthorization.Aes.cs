@@ -145,6 +145,24 @@ public sealed partial class IdentitySessionAuthorization
                     attached=false;
                 }
             }
+            if(attached&&_mechas is not null)
+            {
+                try
+                {
+                    await _mechas.AttachAsync(binding,router).ConfigureAwait(false);
+                }
+                catch
+                {
+                    lock(bindingGate)
+                    {
+                        if(ReferenceEquals(boundConnection,connection))
+                            boundConnection=null;
+                    }
+                    router.TryDetach(connection);
+                    _trades?.UnregisterGameplayGate(binding,gameplayGate);
+                    attached=false;
+                }
+            }
             if (!attached)
             {
                 if (_combat is not null)
@@ -288,7 +306,8 @@ public sealed partial class IdentitySessionAuthorization
                 handleParty: _parties is null ? null : request => _parties.HandleAsync(request, router),
                 handleClan: _clans is null ? null : request => _clans.HandleAsync(request, router),
                 handleFriend: _friends is null ? null : request => _friends.HandleAsync(request, router),
-                handlePet: _pets is null ? null : request => _pets.HandleAsync(request, router))
+                handlePet: _pets is null ? null : request => _pets.HandleAsync(request, router),
+                handleMecha: _mechas is null ? null : request => _mechas.HandleAsync(request, router))
                 .ConfigureAwait(false);
         }
         finally

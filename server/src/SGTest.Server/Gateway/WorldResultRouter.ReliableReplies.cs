@@ -219,6 +219,30 @@ public sealed partial class WorldResultRouter
         }
     }
 
+    public GatewaySendStatus QueueMechaResult(
+        TrustedMechaCommand request,MechaResultWire result)
+    {
+        lock(_gate)
+        {
+            if(!_connections.TryGetValue(request.ActorId,out var connection)||
+               connection.IsClosed)
+                return GatewaySendStatus.Closed;
+            return connection.QueueMechaResult(request,result);
+        }
+    }
+
+    public GatewaySendStatus QueueMechaSnapshot(
+        ConnectionBinding recipient,MechaSnapshotWire snapshot)
+    {
+        lock(_gate)
+        {
+            if(!_connections.TryGetValue(recipient.ActorId,out var connection)||
+               connection.IsClosed||connection.Binding!=recipient)
+                return GatewaySendStatus.Closed;
+            return connection.QueueMechaSnapshot(recipient,snapshot);
+        }
+    }
+
     public GatewaySendStatus QueuePlayerShopResult(
         TrustedPlayerShopCommand request,PlayerShopResultWire result)
     {

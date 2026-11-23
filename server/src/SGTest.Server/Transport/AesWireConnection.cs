@@ -73,7 +73,8 @@ public static class AesWireConnection
         Func<TrustedPartyCommand, Task>? handleParty = null,
         Func<TrustedClanCommand, Task>? handleClan = null,
         Func<TrustedFriendCommand, Task>? handleFriend = null,
-        Func<TrustedPetCommand, Task>? handlePet = null)
+        Func<TrustedPetCommand, Task>? handlePet = null,
+        Func<TrustedMechaCommand, Task>? handleMecha = null)
     {
         ArgumentNullException.ThrowIfNull(client);
         ArgumentNullException.ThrowIfNull(settings);
@@ -266,6 +267,10 @@ public static class AesWireConnection
                 16, handlePet, sessionCts);
             Func<TrustedPetCommand, bool>? postPet = petQueue.Post;
 
+            var mechaQueue = new SessionCommandWorker<TrustedMechaCommand>(
+                16, handleMecha, sessionCts);
+            Func<TrustedMechaCommand, bool>? postMecha = mechaQueue.Post;
+
             var skillCommands=Channel.CreateBounded<TrustedSkillUse>(
                 new BoundedChannelOptions(16)
                 {
@@ -313,7 +318,7 @@ public static class AesWireConnection
                     var status = gateway.FeedClientBytes(
                         rented.AsSpan(0, count), postMove, out int accepted,
                         postNpc, postResync, postAttack, postPetAttack, postRespawn, postPickup,
-                        postRecovery, postDiscard, postSkill, postShop, postStorage, postEquipment, postBank, postRepair, postEnhancement, postTrade, postQuest, postPvp, postPvpAttack, postPvpSkill, postGmPvpName, postPlayerShop, postChat, postParty, postClan, postFriend, postPet);
+                        postRecovery, postDiscard, postSkill, postShop, postStorage, postEquipment, postBank, postRepair, postEnhancement, postTrade, postQuest, postPvp, postPvpAttack, postPvpSkill, postGmPvpName, postPlayerShop, postChat, postParty, postClan, postFriend, postPet, postMecha);
                     commandsAccepted += accepted;
 
                     if (status == WireFeedStatus.Backpressured)
@@ -334,7 +339,7 @@ public static class AesWireConnection
                             status = gateway.ResumeClientIngress(
                                 postMove, out accepted, postNpc, postResync,
                                 postAttack, postPetAttack, postRespawn, postPickup, postRecovery,
-                                postDiscard, postSkill, postShop, postStorage, postEquipment, postBank, postRepair, postEnhancement, postTrade, postQuest, postPvp, postPvpAttack, postPvpSkill, postGmPvpName, postPlayerShop, postChat, postParty, postClan, postFriend, postPet);
+                                postDiscard, postSkill, postShop, postStorage, postEquipment, postBank, postRepair, postEnhancement, postTrade, postQuest, postPvp, postPvpAttack, postPvpSkill, postGmPvpName, postPlayerShop, postChat, postParty, postClan, postFriend, postPet, postMecha);
                             commandsAccepted += accepted;
                         }
                         while (status == WireFeedStatus.Backpressured);
@@ -399,6 +404,7 @@ public static class AesWireConnection
             clanQueue.Complete();
             friendQueue.Complete();
             petQueue.Complete();
+            mechaQueue.Complete();
             // In-flight authorized NPC/respawn/skill work may finish even after the
             // socket is closed; await both before final trusted release.
             await respawnQueue.Completion.ConfigureAwait(false);
@@ -428,6 +434,7 @@ public static class AesWireConnection
             await clanQueue.Completion.ConfigureAwait(false);
             await friendQueue.Completion.ConfigureAwait(false);
             await petQueue.Completion.ConfigureAwait(false);
+            await mechaQueue.Completion.ConfigureAwait(false);
             Exception? workerFault =
                 npcFault ?? respawnQueue.Fault ?? pickupQueue.Fault ?? recoveryQueue.Fault ??
                 discardQueue.Fault ?? skillFault ?? shopQueue.Fault ?? storageQueue.Fault ??
@@ -435,7 +442,7 @@ public static class AesWireConnection
                 tradeQueue.Fault ??
                 questQueue.Fault ?? pvpQueue.Fault ?? pvpAttackQueue.Fault ?? pvpSkillQueue.Fault ??
                 gmPvpNameQueue.Fault ?? playerShopQueue.Fault ?? chatQueue.Fault ?? partyQueue.Fault ??
-                clanQueue.Fault ?? friendQueue.Fault ?? petQueue.Fault;
+                clanQueue.Fault ?? friendQueue.Fault ?? petQueue.Fault ?? mechaQueue.Fault;
             if (workerFault is not null)
                 reason = AesWireEndReason.GatewayClosed;
             var finalBinding = gateway.Binding;

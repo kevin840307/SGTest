@@ -299,6 +299,17 @@ var last_pet_result_sequence := 0
 var last_pet_result_status := -1
 var last_pet_result := {}
 var stale_pet_frames := 0
+var mecha_sequence := 0
+var pending_mecha_sequence := 0
+var pending_mecha_action := 0
+var pending_mecha_uid := 0
+var mounted_mecha_uid := 0
+var mecha_instances := {}
+var mecha_snapshot_received := false
+var last_mecha_result_sequence := 0
+var last_mecha_result_status := -1
+var last_mecha_result := {}
+var stale_mecha_frames := 0
 var pet_attack_sequence := 0
 var pending_pet_attack_sequence := 0
 var pending_pet_attack_uid := 0
@@ -946,6 +957,37 @@ func _clear_pending_pet()->void:
 	pending_pet_uid=0
 
 
+func mark_mecha_sent(sequence:int,action:int,mecha_uid:int)->bool:
+	if (
+		state!=STATE_IN_WORLD or not world_ready or resync_pending or
+		waiting_for_new_map or pending_world_ready_ack_epoch!=0 or
+		last_world_ready_ack_epoch!=map_epoch or pending_mecha_sequence!=0 or
+		sequence<=mecha_sequence or sequence>0xffffffff or action<1 or action>3
+	):
+		return false
+	if action==3:
+		if mecha_uid!=0:
+			return false
+	else:
+		if mecha_uid<=0 or not mecha_instances.has(mecha_uid):
+			return false
+		if action==1 and mounted_mecha_uid==mecha_uid:
+			return false
+		if action==2 and mounted_mecha_uid!=mecha_uid:
+			return false
+	mecha_sequence=sequence
+	pending_mecha_sequence=sequence
+	pending_mecha_action=action
+	pending_mecha_uid=mecha_uid
+	return true
+
+
+func _clear_pending_mecha()->void:
+	pending_mecha_sequence=0
+	pending_mecha_action=0
+	pending_mecha_uid=0
+
+
 func mark_quest_sent(
 		sequence:int,kind:int,npc_spawn_id:int,quest_id:int=0,
 		choice_id:int=0)->bool:
@@ -1166,6 +1208,10 @@ func apply_frame(frame: PackedByteArray) -> bool:
 			return _apply_pet_result(frame)
 		WireCodec.OPCODE_PET_SNAPSHOT:
 			return _apply_pet_snapshot(frame)
+		WireCodec.OPCODE_MECHA_RESULT:
+			return _apply_mecha_result(frame)
+		WireCodec.OPCODE_MECHA_SNAPSHOT:
+			return _apply_mecha_snapshot(frame)
 		WireCodec.OPCODE_PET_ENTITY_SPAWN:
 			return _apply_pet_entity_spawn(frame)
 		WireCodec.OPCODE_PET_ENTITY_DELTA:
@@ -1482,6 +1528,17 @@ func snapshot() -> Dictionary:
 		"last_pet_result_status": last_pet_result_status,
 		"last_pet_result": last_pet_result.duplicate(true),
 		"stale_pet_frames": stale_pet_frames,
+		"mecha_sequence": mecha_sequence,
+		"pending_mecha_sequence": pending_mecha_sequence,
+		"pending_mecha_action": pending_mecha_action,
+		"pending_mecha_uid": pending_mecha_uid,
+		"mounted_mecha_uid": mounted_mecha_uid,
+		"mecha_instances": mecha_instances.duplicate(true),
+		"mecha_snapshot_received": mecha_snapshot_received,
+		"last_mecha_result_sequence": last_mecha_result_sequence,
+		"last_mecha_result_status": last_mecha_result_status,
+		"last_mecha_result": last_mecha_result.duplicate(true),
+		"stale_mecha_frames": stale_mecha_frames,
 		"pet_attack_sequence": pet_attack_sequence,
 		"pending_pet_attack_sequence": pending_pet_attack_sequence,
 		"pending_pet_attack_uid": pending_pet_attack_uid,
@@ -1684,6 +1741,7 @@ func _apply_choose(frame: PackedByteArray) -> bool:
 	_reset_character_actions_and_combat()
 	_reset_character_economy_state()
 	_reset_character_pet_state()
+	_reset_character_mecha_state()
 	_reset_character_world_state(decoded)
 	state = STATE_IN_WORLD
 	return true
@@ -1756,6 +1814,18 @@ func _reset_character_pet_state() -> void:
 	pet_attack_visual_events.clear()
 	pet_attack_visual_sequences.clear()
 	stale_pet_attack_visuals=0
+
+
+func _reset_character_mecha_state() -> void:
+	mecha_sequence=0
+	_clear_pending_mecha()
+	mounted_mecha_uid=0
+	mecha_instances.clear()
+	mecha_snapshot_received=false
+	last_mecha_result_sequence=0
+	last_mecha_result_status=-1
+	last_mecha_result.clear()
+	stale_mecha_frames=0
 
 
 func _reset_character_economy_state() -> void:
@@ -4438,6 +4508,63 @@ func _apply_pet_snapshot(frame:PackedByteArray)->bool:
 	pet_instances=next_pets
 	active_pet_uid=incoming_active
 	pet_snapshot_received=true
+	return true
+
+
+func _apply_mecha_result(frame:PackedByteArray)->bool:
+	if state!=STATE_IN_WORLD:
+		return fail("mecha_result_out_of_state")
+	var value:=WireCodec.decode_mecha_result(frame)
+	if value.is_empty():
+		return fail("invalid_mecha_result")
+	var epoch:=int(value.map_epoch)
+	var sequence:=int(value.mecha_sequence)
+	if epoch<map_epoch:
+		stale_mecha_frames+=1
+		return true
+	if epoch>map_epoch:
+		return fail("future_mecha_result")
+	if sequence<=last_mecha_result_sequence:
+		stale_mecha_frames+=1
+		return true
+	if (
+		sequence>mecha_sequence or sequence!=pending_mecha_sequence or
+		int(value.action)!=pending_mecha_action or int(value.mecha_uid)!=pending_mecha_uid
+	):
+		return fail("mecha_result_without_matching_request")
+	var status:=int(value.status)
+	if status<0 or status>5:
+		return fail("mecha_result_unknown_status")
+	last_mecha_result_sequence=sequence
+	last_mecha_result_status=status
+	last_mecha_result=value.duplicate(true)
+	mounted_mecha_uid=int(value.mounted_mecha_uid)
+	_clear_pending_mecha()
+	return true
+
+
+func _apply_mecha_snapshot(frame:PackedByteArray)->bool:
+	if state!=STATE_IN_WORLD:
+		return fail("mecha_snapshot_out_of_state")
+	var value:=WireCodec.decode_mecha_snapshot(frame)
+	if value.is_empty():
+		return fail("invalid_mecha_snapshot")
+	var epoch:=int(value.receiver_map_epoch)
+	if epoch<map_epoch:
+		stale_mecha_frames+=1
+		return true
+	if epoch>map_epoch:
+		return fail("future_mecha_snapshot")
+	var next_mechas:={}
+	for raw in value.mechas:
+		var mecha:Dictionary=raw
+		next_mechas[int(mecha.mecha_uid)]=mecha.duplicate(true)
+	var incoming_mounted:=int(value.mounted_mecha_uid)
+	if incoming_mounted>0 and not next_mechas.has(incoming_mounted):
+		return fail("mecha_snapshot_missing_mounted")
+	mecha_instances=next_mechas
+	mounted_mecha_uid=incoming_mounted
+	mecha_snapshot_received=true
 	return true
 
 

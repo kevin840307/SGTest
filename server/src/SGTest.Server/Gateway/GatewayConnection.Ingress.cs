@@ -52,7 +52,8 @@ public sealed partial class GatewayConnection
                                               Func<TrustedPartyCommand, bool>? postParty = null,
                                               Func<TrustedClanCommand, bool>? postClan = null,
                                               Func<TrustedFriendCommand, bool>? postFriend = null,
-                                              Func<TrustedPetCommand, bool>? postPet = null)
+                                              Func<TrustedPetCommand, bool>? postPet = null,
+                                              Func<TrustedMechaCommand, bool>? postMecha = null)
     {
         ArgumentNullException.ThrowIfNull(postMove);
         lock (_receiveGate)
@@ -65,7 +66,7 @@ public sealed partial class GatewayConnection
             return _parser.Feed(bytes,
                 frame => HandleClientFrame(
                     frame, postMove, postNpc, postResync, postAttack, postPetAttack, postRespawn,
-                    postPickup, postRecovery, postDiscard, postSkill, postShop, postStorage, postEquipment, postBank, postRepair, postEnhancement, postTrade, postQuest, postPvp, postPvpAttack, postPvpSkill, postGmPvpName, postPlayerShop, postChat, postParty, postClan, postFriend, postPet),
+                    postPickup, postRecovery, postDiscard, postSkill, postShop, postStorage, postEquipment, postBank, postRepair, postEnhancement, postTrade, postQuest, postPvp, postPvpAttack, postPvpSkill, postGmPvpName, postPlayerShop, postChat, postParty, postClan, postFriend, postPet, postMecha),
                 out commandsAccepted);
         }
     }
@@ -98,7 +99,8 @@ public sealed partial class GatewayConnection
                                               Func<TrustedPartyCommand, bool>? postParty = null,
                                               Func<TrustedClanCommand, bool>? postClan = null,
                                               Func<TrustedFriendCommand, bool>? postFriend = null,
-                                              Func<TrustedPetCommand, bool>? postPet = null)
+                                              Func<TrustedPetCommand, bool>? postPet = null,
+                                              Func<TrustedMechaCommand, bool>? postMecha = null)
     {
         ArgumentNullException.ThrowIfNull(postMove);
         lock (_receiveGate)
@@ -111,7 +113,7 @@ public sealed partial class GatewayConnection
             return _parser.Resume(
                 frame => HandleClientFrame(
                     frame, postMove, postNpc, postResync, postAttack, postPetAttack, postRespawn,
-                    postPickup, postRecovery, postDiscard, postSkill, postShop, postStorage, postEquipment, postBank, postRepair, postEnhancement, postTrade, postQuest, postPvp, postPvpAttack, postPvpSkill, postGmPvpName, postPlayerShop, postChat, postParty, postClan, postFriend, postPet),
+                    postPickup, postRecovery, postDiscard, postSkill, postShop, postStorage, postEquipment, postBank, postRepair, postEnhancement, postTrade, postQuest, postPvp, postPvpAttack, postPvpSkill, postGmPvpName, postPlayerShop, postChat, postParty, postClan, postFriend, postPet, postMecha),
                 out commandsAccepted);
         }
     }
@@ -145,7 +147,8 @@ public sealed partial class GatewayConnection
         Func<TrustedPartyCommand, bool>? postParty,
         Func<TrustedClanCommand, bool>? postClan,
         Func<TrustedFriendCommand, bool>? postFriend,
-        Func<TrustedPetCommand, bool>? postPet)
+        Func<TrustedPetCommand, bool>? postPet,
+        Func<TrustedMechaCommand, bool>? postMecha)
     {
         if (!WireProtocol.TryReadHeader(frame, out var header))
             return WireFrameDisposition.ProtocolViolation;
@@ -534,6 +537,22 @@ public sealed partial class GatewayConnection
             if(!postPet(request))
                 return WireFrameDisposition.Backpressured;
             _lastPetSequence=pet.PetSequence;
+            return WireFrameDisposition.Accepted;
+        }
+
+        if(header.Opcode==WireOpcode.MechaCommand &&
+            postMecha is not null &&
+            WireProtocol.TryDecodeMechaCommand(frame,out var mecha))
+        {
+            if(!GameplayReady(bound)||mecha.MapEpoch!=bound.MapEpoch||
+               mecha.MechaSequence<=_lastMechaSequence)
+                return WireFrameDisposition.ProtocolViolation;
+            var request=new TrustedMechaCommand(
+                bound.ActorId,bound.ConnectionEpoch,mecha.MapEpoch,
+                mecha.MechaSequence,mecha.Action,mecha.MechaUid);
+            if(!postMecha(request))
+                return WireFrameDisposition.Backpressured;
+            _lastMechaSequence=mecha.MechaSequence;
             return WireFrameDisposition.Accepted;
         }
 
