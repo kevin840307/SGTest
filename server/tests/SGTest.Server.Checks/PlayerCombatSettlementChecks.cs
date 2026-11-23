@@ -30,11 +30,20 @@ internal static class PlayerCombatSettlementChecks
     {
         var baseline = new PlayerCombatStateWire(3, 82, 100, 3, 5);
         var baselineBytes = WireProtocol.EncodePlayerCombatState(baseline);
-        Checks.Require(baselineBytes.Length == 32 &&
+        Checks.Require(baselineBytes.Length == 33 &&
                        WireProtocol.TryDecodePlayerCombatState(
                            baselineBytes, out var parsedBaseline) &&
-                       parsedBaseline == baseline,
+                       parsedBaseline == baseline &&
+                       parsedBaseline.CombatEnabled,
             "player combat baseline wire");
+        var vitalsOnly = baseline with { CombatEnabled = false };
+        var vitalsBytes = WireProtocol.EncodePlayerCombatState(vitalsOnly);
+        Checks.Require(vitalsBytes.Length == 33 &&
+                       WireProtocol.TryDecodePlayerCombatState(
+                           vitalsBytes, out var parsedVitals) &&
+                       parsedVitals == vitalsOnly &&
+                       !parsedVitals.CombatEnabled,
+            "profile-only vitals wire");
 
         var damage = new PlayerDamageWire(
             3, 2, 42, 1_000_000_001, 7,

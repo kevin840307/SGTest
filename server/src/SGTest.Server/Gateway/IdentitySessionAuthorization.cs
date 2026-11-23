@@ -23,7 +23,10 @@ using SGTest.Server.World;
 
 namespace SGTest.Server.Gateway;
 
-public sealed record CharacterCreationPolicy(CharacterSpawn Spawn, CharacterAppearanceRules? AppearanceRules = null);
+public sealed record CharacterCreationPolicy(
+    CharacterSpawn Spawn,
+    CharacterAppearanceRules? AppearanceRules = null,
+    CharacterInitialProfileRules? InitialProfileRules = null);
 
 /// <summary>
 /// authenticated transport-only registration/login/character-selection boundary. Public account

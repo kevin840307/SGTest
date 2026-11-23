@@ -86,9 +86,27 @@ func _run() -> void:
 			if not snapshot.get("world_ready",false) or not snapshot.character_creation_appearances.is_empty():
 				_fail("world transition retained creation menu or failed ready",session)
 				return
+			if not bool(snapshot.get("player_profile_ready",false)) or \
+					bool(snapshot.get("player_combat_stats_verified",true)) or \
+					bool(snapshot.get("combat_available",true)) or \
+					int(snapshot.get("player_level",0))!=1 or \
+					int(snapshot.get("player_strength",0))!=3 or \
+					int(snapshot.get("player_dexterity",0))!=2 or \
+					int(snapshot.get("player_constitution",0))!=2 or \
+					int(snapshot.get("player_wisdom",0))!=1 or \
+					int(snapshot.get("player_current_hp",0))!=149 or \
+					int(snapshot.get("player_max_hp",0))!=149 or \
+					int(snapshot.get("player_current_mp",0))!=122 or \
+					int(snapshot.get("player_max_mp",0))!=122 or \
+					int(snapshot.get("player_attack",0))!=10 or \
+					int(snapshot.get("player_defense",0))!=3 or \
+					int(snapshot.get("player_hit",0))!=8 or \
+					int(snapshot.get("player_dodge",0))!=9:
+				_fail("source-backed profile/vitals missing or changed "+str(snapshot),session)
+				return
 		session.stop()
 		if panel != null:
 			panel.queue_free()
 		await process_frame
-	print("CLIENT_CHARACTER_APPEARANCE_AES_PASS server_choices=true UI_picker_and_button=true exact_choice=true persisted_relogin=true wrong_password_retry=true choose_world=true menu_released=true")
+	print("CLIENT_CHARACTER_APPEARANCE_AES_PASS server_choices=true UI_picker_and_button=true exact_choice=true persisted_relogin=true wrong_password_retry=true choose_world=true source_profile=true hp_mp=true combat_locked=true menu_released=true")
 	quit(0)

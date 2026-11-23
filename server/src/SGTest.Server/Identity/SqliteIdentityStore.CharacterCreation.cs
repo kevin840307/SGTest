@@ -5,13 +5,17 @@ namespace SGTest.Server.Identity;
 /// <summary>Durable starting attributes and purpose-separated character credentials.</summary>
 public sealed partial class SqliteIdentityStore
 {
-    private sealed record PreparedCharacterCreation(CharacterCreationState State, string PasswordHash);
+    private sealed record PreparedCharacterCreation(
+        CharacterCreationState State,
+        string PasswordHash,
+        CharacterCombatProfileData? InitialProfile);
     private sealed record CharacterCredential(string? PasswordHash, int Failures, long LockedUntil, bool Override);
 
     public async Task<CharacterCreateResult> CreateCharacterWithSettingsAsync(
         long accountId, int slot, string name, CharacterSpawn spawn, CharacterCreationSettings settings,
         CharacterAppearance? appearance = null, CharacterAppearanceRules? appearanceRules = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        CharacterInitialProfileRules? initialProfileRules = null)
     {
         ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(settings);
@@ -22,9 +26,15 @@ public sealed partial class SqliteIdentityStore
         if (appearance.HasValue != (appearanceRules is not null))
             throw new ArgumentException("Appearance and verified rules must be provided together");
         var look = appearance is { } value ? appearanceRules!.Resolve(value) : null;
+        CharacterCombatProfileData? initialProfile = null;
+        if (initialProfileRules is not null && look is not null)
+            _ = initialProfileRules.TryBuild(
+                look.Value.Race, settings.Attributes, out initialProfile);
+
         // Reuse the existing bounded Argon2id engine without weakening account-password rules.
         string hash = await _passwords.HashAsync(settings.PasswordForHashing, cancellationToken).ConfigureAwait(false);
-        var prepared = new PreparedCharacterCreation(new(settings.Attributes,settings.SourceReference),hash);
+        var prepared = new PreparedCharacterCreation(
+            new(settings.Attributes,settings.SourceReference),hash,initialProfile);
         return await CreateCharacterCoreAsync(accountId,slot,name,spawn,look,cancellationToken,prepared)
             .ConfigureAwait(false);
     }

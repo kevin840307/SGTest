@@ -187,6 +187,7 @@ func _run() -> void:
 		"x":100.0,"y":200.0,"player_current_hp":75,"player_max_hp":100,
 		"player_current_mp":30,"player_max_mp":40,"player_level":22,
 		"character_name":"TestA","player_job":"聖靈使","player_profile_ready":true,
+		"player_combat_stats_verified":true,
 		"player_experience":1234,"player_wisdom":24,"player_dodge":35,
 		"player_strength":18,"player_dexterity":20,"player_constitution":16,
 		"player_intelligence":24,"player_attack":188,"player_defense":142,
@@ -287,7 +288,7 @@ func _run() -> void:
 		["FieldHP",Rect2(30,268,92,10),"75/100"],
 		["FieldMP",Rect2(30,285,92,10),"30/40"],
 		["FieldEXP",Rect2(166,285,92,10),"1234 EXP"],
-		["Field配點",Rect2(166,268,92,12),"—"],
+		["Field配點",Rect2(166,268,92,12),"0"],
 	]:
 		var cell = world.character.get_node_or_null(spec[0])
 		if cell == null or cell.get_rect() != spec[1] or cell.text != spec[2]:
@@ -296,6 +297,14 @@ func _run() -> void:
 	if world._character_hp_fill.get_rect() != Rect2(30,268,69,10) or world._character_mp_fill.get_rect() != Rect2(30,285,69,10):
 		_fail("013_Character_INFO.ITF HP and MP must fill from server ratios")
 		return
+	fixture["player_combat_stats_verified"]=false
+	world.apply_snapshot(fixture)
+	for field in ["攻擊","防禦","命中","迴避"]:
+		if str(world._character_labels[field].text)!="—":
+			_fail("profile-only source value leaked into unverified effective combat field "+field)
+			return
+	fixture["player_combat_stats_verified"]=true
+	world.apply_snapshot(fixture)
 	if not directory.is_empty():
 		await _capture(directory.path_join("classic_world.png"))
 		world.menu.get_node("Menu1").pressed.emit()

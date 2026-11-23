@@ -15,6 +15,10 @@ internal static class CharacterCreationSettingsChecks
         Checks.Run("creation rules enforce full eight-point allocation Unicode name width and redacted four-character secret",Rules);
         Checks.Run("creation settings persist atomically with look wallet and reject initial combat divergence",
             ()=>Persistence().GetAwaiter().GetResult());
+        Checks.Run("Old and Paradise level-one profile rules derive only source-backed player races",
+            InitialProfileRules);
+        Checks.Run("source-backed initial profile is atomic durable and cannot enable unverified combat",
+            ()=>InitialProfilePersistence().GetAwaiter().GetResult());
         Checks.Run("creation settings and wallet roll back together on failed creation",
             ()=>Rollback().GetAwaiter().GetResult());
         Checks.Run("creation slot races preserve winner settings and distinct salted credentials",
@@ -73,6 +77,104 @@ internal static class CharacterCreationSettingsChecks
         Require(!Settings().ToString().Contains(Password),"creation settings formatted plaintext credential");
         Reject<ArgumentException>(()=>new CharacterCreationSettings(Balanced,Password,""));
         Reject<ArgumentException>(()=>PasswordHasher.ValidateNewPassword(Password));
+    }
+
+    private static void InitialProfileRules()
+    {
+        var rules=CharacterInitialProfileRules.OldParadiseLevelOne;
+        Require(rules.TryBuild(0,new(5,1,1,1),out var paradise) &&
+            paradise is not null &&
+            paradise.Trust==CombatProfileTrust.ProfileOnlyVerified &&
+            paradise.Level==1 &&
+            paradise.CurrentHp==147 && paradise.MaxHp==147 &&
+            paradise.CurrentMp==122 && paradise.MaxMp==122 &&
+            paradise.Attack==14 && paradise.Defense==3 &&
+            paradise.Hit==7 && paradise.Dodge==7 &&
+            paradise.AttackRange==0 && paradise.AttackCooldownTicks==0,
+            "Boy level-one derivation disagrees with recovered tables");
+
+        var expected=new[]
+        {
+            (Race:0,Hp:153,Mp:122,Attack:8,Hit:8,Dodge:8),
+            (Race:1,Hp:149,Mp:122,Attack:8,Hit:8,Dodge:9),
+            (Race:2,Hp:143,Mp:124,Attack:8,Hit:9,Dodge:9),
+            (Race:3,Hp:143,Mp:122,Attack:9,Hit:8,Dodge:8)
+        };
+        foreach(var value in expected)
+        {
+            Require(rules.TryBuild(value.Race,Balanced,out var profile) && profile is not null,
+                $"race {value.Race} profile missing");
+            var derived=profile!;
+            Require(derived.MaxHp==value.Hp && derived.MaxMp==value.Mp &&
+                derived.Attack==value.Attack && derived.Defense==3 &&
+                derived.Hit==value.Hit && derived.Dodge==value.Dodge,
+                $"race {value.Race} profile formula drifted");
+        }
+        Require(!rules.TryBuild(4,Balanced,out var yas) && yas is null,
+            "Yas incorrectly inherited an unverified Pet/player race table");
+    }
+
+    private static async Task InitialProfilePersistence()
+    {
+        string root=Root(),db=Path.Combine(root,"identity.db");
+        try
+        {
+            using(var store=new SqliteIdentityStore(db))
+            {
+                await store.InitializeAsync();
+                long account=(await store.CreateAccountAsync(
+                    "profile_source_user","Creation-Account-123!")).AccountId;
+                var look=new CharacterAppearance(0,1,0);
+                var looks=new CharacterAppearanceRules("synthetic/profile-look",[look]);
+                var created=await store.CreateCharacterWithSettingsAsync(
+                    account,0,"SourceHero",Spawn,Settings(new(5,1,1,1)),
+                    look,looks,CancellationToken.None,
+                    CharacterInitialProfileRules.OldParadiseLevelOne);
+                Require(created.Status==CharacterCreateStatus.Created,
+                    "source-backed profile character create failed");
+                var profile=await store.GetCharacterCombatProfileAsync(created.Character!.CharacterId);
+                Require(profile is not null &&
+                    profile.Data.Trust==CombatProfileTrust.ProfileOnlyVerified &&
+                    profile.Data.MaxHp==147 && profile.Data.MaxMp==122 &&
+                    profile.Data.Attack==14 && profile.Data.Defense==3 &&
+                    profile.Data.Hit==7 && profile.Data.Dodge==7 &&
+                    profile.Data.AttackRange==0 && profile.Data.AttackCooldownTicks==0,
+                    "initial profile was not persisted atomically");
+                var persisted=profile!;
+
+                await RejectAsync<ArgumentOutOfRangeException>(()=>
+                    store.SetCharacterCombatProfileAsync(created.Character.CharacterId,
+                        persisted.Data with{AttackRange=1}));
+                await RejectAsync<ArgumentOutOfRangeException>(()=>
+                    store.SetCharacterCombatProfileAsync(created.Character.CharacterId,
+                        persisted.Data with{
+                            Trust=CombatProfileTrust.Verified,
+                            AttackRange=0,
+                            AttackCooldownTicks=0
+                        }));
+
+                var yasLook=new CharacterAppearance(4,1,0);
+                var yasLooks=new CharacterAppearanceRules("synthetic/yas-look",[yasLook]);
+                var yas=await store.CreateCharacterWithSettingsAsync(
+                    account,1,"YasUnknown",Spawn,Settings(),yasLook,yasLooks,
+                    CancellationToken.None,CharacterInitialProfileRules.OldParadiseLevelOne);
+                Require(yas.Status==CharacterCreateStatus.Created &&
+                    await store.GetCharacterCombatProfileAsync(yas.Character!.CharacterId) is null,
+                    "unverified Yas profile should fail closed without fabricated stats");
+            }
+            using(var reopened=new SqliteIdentityStore(db))
+            {
+                await reopened.InitializeAsync();
+                var account=await reopened.AuthenticateAsync(
+                    "profile_source_user","Creation-Account-123!");
+                var source=account.Account!.Characters.Single(x=>x.Name=="SourceHero");
+                var profile=await reopened.GetCharacterCombatProfileAsync(source.CharacterId);
+                Require(profile?.Data.Trust==CombatProfileTrust.ProfileOnlyVerified &&
+                    profile.Data.CurrentHp==147 && profile.Data.CurrentMp==122,
+                    "source-backed profile did not survive restart");
+            }
+        }
+        finally { Directory.Delete(root,true); }
     }
 
     private static async Task Persistence()

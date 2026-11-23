@@ -926,12 +926,25 @@ func _refresh_character()->void:
 			values[field]=str(_stats.get(creation_fields[field],"—"))
 	if profile_ready:
 		var fields: Dictionary = {
-			"等級":"player_level","職業":"player_job","攻擊":"player_attack",
-			"防禦":"player_defense","命中":"player_hit","迴避":"player_dodge"
+			"等級":"player_level","職業":"player_job"
 		}
+		if bool(_stats.get("player_combat_stats_verified",false)):
+			fields.merge({
+				"攻擊":"player_attack","防禦":"player_defense",
+				"命中":"player_hit","迴避":"player_dodge"
+			})
 		for field in fields:
 			values[field]=str(_stats.get(fields[field],"—"))
 		values["EXP"]="%s EXP"%str(_stats.get("player_experience","—"))
+		# Old SGOPlayer::LevelUp grants ExpUse +2 per level and
+		# SGOCareer::AddAttrib spends one point per main-attribute increment.
+		# Creation always starts with eight total main-attribute points.
+		var used_points:=maxi(0,
+			int(_stats.get("player_strength",0))+
+			int(_stats.get("player_dexterity",0))+
+			int(_stats.get("player_constitution",0))+
+			int(_stats.get("player_wisdom",0))-8)
+		values["配點"]=str(maxi(0,2*maxi(0,int(_stats.get("player_level",1))-1)-used_points))
 	for key in _character_labels:(_character_labels[key] as CharacterText).text=str(values.get(key,"—"))
 
 func _character_vital(stat:String)->String:

@@ -85,6 +85,7 @@ var player_max_hp := 0
 var player_current_mp := 0
 var player_max_mp := 0
 var player_profile_ready := false
+var player_combat_stats_verified := false
 var player_creation_profile_ready := false
 var player_race := 0
 var player_career := 0
@@ -1433,6 +1434,7 @@ func snapshot() -> Dictionary:
 		"player_current_mp": player_current_mp,
 		"player_max_mp": player_max_mp,
 		"player_profile_ready": player_profile_ready,
+		"player_combat_stats_verified": player_combat_stats_verified,
 		"player_creation_profile_ready": player_creation_profile_ready,
 		"player_race": player_race,
 		"player_career": player_career,
@@ -1951,6 +1953,7 @@ func _reset_character_actions_and_combat() -> void:
 	player_current_mp = 0
 	player_max_mp = 0
 	player_profile_ready = false
+	player_combat_stats_verified = false
 	player_creation_profile_ready = false
 	player_race = 0
 	player_career = 0
@@ -2312,17 +2315,20 @@ func _apply_player_combat_state(frame: PackedByteArray) -> bool:
 	var next_max_hp := int(value.max_hp)
 	var next_mp := int(value.current_mp)
 	var next_max_mp := int(value.max_mp)
+	var next_combat_enabled := bool(value.get("combat_enabled",false))
 	if combat_available:
 		# Mid-session Server resource refresh (for example durable skill MP).
 		# HP authority remains the ordered PlayerDamage/Respawn timeline; a
 		# combat baseline must not silently reset DamageSequence or heal/hurt.
+		if not next_combat_enabled:
+			return fail("player_combat_refresh_disabled")
 		if next_hp != player_current_hp or next_max_hp != player_max_hp:
 			return fail("player_combat_refresh_hp_changed")
 		player_current_mp = next_mp
 		player_max_mp = next_max_mp
 		return true
 
-	combat_available = true
+	combat_available = next_combat_enabled
 	player_current_hp = next_hp
 	player_max_hp = next_max_hp
 	player_current_mp = next_mp
@@ -2357,6 +2363,7 @@ func _apply_player_profile_state(frame: PackedByteArray) -> bool:
 	if int(value.character_id) != actor_id:
 		return fail("player_profile_state_wrong_character")
 	player_profile_ready = true
+	player_combat_stats_verified = bool(value.get("combat_stats_verified",false))
 	player_creation_profile_ready = true
 	player_race = int(value.race)
 	player_career = int(value.career)

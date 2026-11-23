@@ -38,8 +38,8 @@ public static partial class WireProtocol
     public const int PlayerAttackVisualFrameBytes = HeaderBytes + 8 + 8 + 8 + 8 + 4 + 8 + 1 + 4 + 8 + 1;
     public const int PlayerDamageVisualFrameBytes = HeaderBytes + 8 + 8 + 8 + 8 + 4 + 8 + 8 + 4 + 1 + 1;
     public const int PlayerRespawnVisualFrameBytes = HeaderBytes + 8 + 8 + 8 + 8 + 4 + 1;
-    public const int PlayerCombatStateFrameBytes = HeaderBytes + 8 + 4 + 4 + 4 + 4;
-    public const int PlayerProfileStateFrameBytes = HeaderBytes + 8 + 4 + 4 + 4 + 8 + 4*8;
+    public const int PlayerCombatStateFrameBytes = HeaderBytes + 8 + 4 + 4 + 4 + 4 + 1;
+    public const int PlayerProfileStateFrameBytes = HeaderBytes + 8 + 4 + 4 + 4 + 8 + 4*8 + 1;
     public const int PlayerCreationProfileStateFrameBytes = HeaderBytes + 8 + 4*4;
     public const int PlayerDamageFrameBytes = HeaderBytes + 8 + 4 + 8 + 8 + 8 + 4 + 4 + 4 + 1;
     public const int PlayerRespawnFrameBytes = HeaderBytes + 8 + 4;

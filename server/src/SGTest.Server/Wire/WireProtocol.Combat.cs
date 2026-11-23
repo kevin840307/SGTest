@@ -294,6 +294,7 @@ public static partial class WireProtocol
         BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(20, 4), value.MaxHp);
         BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(24, 4), value.CurrentMp);
         BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(28, 4), value.MaxMp);
+        frame[32] = value.CombatEnabled ? (byte)1 : (byte)0;
         return frame;
     }
 
@@ -308,8 +309,9 @@ public static partial class WireProtocol
             BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(16, 4)),
             BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(20, 4)),
             BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(24, 4)),
-            BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(28, 4)));
-        return ValidPlayerCombatState(value);
+            BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(28, 4)),
+            frame[32] == 1);
+        return frame[32] <= 1 && ValidPlayerCombatState(value);
     }
 
     public static byte[] EncodePlayerDamage(PlayerDamageWire value)

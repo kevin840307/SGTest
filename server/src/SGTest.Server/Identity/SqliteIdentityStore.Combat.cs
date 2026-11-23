@@ -236,7 +236,9 @@ UPDATE character_combat_profiles
     private static void ValidateCombatProfile(CharacterCombatProfileData profile)
     {
         ArgumentNullException.ThrowIfNull(profile);
-        if (profile.Trust is not (CombatProfileTrust.Verified or CombatProfileTrust.SyntheticTest) ||
+        bool profileOnly = profile.Trust == CombatProfileTrust.ProfileOnlyVerified;
+        bool combatEnabled = profile.Trust is CombatProfileTrust.Verified or CombatProfileTrust.SyntheticTest;
+        if ((!profileOnly && !combatEnabled) ||
             string.IsNullOrWhiteSpace(profile.SourceReference) ||
             profile.SourceReference.Length > 256 ||
             profile.SourceReference.Any(char.IsControl) ||
@@ -256,9 +258,32 @@ UPDATE character_combat_profiles
             profile.Hit is < 0 or > 100_000_000 ||
             profile.Dodge is < 0 or > 100_000_000 ||
             !double.IsFinite(profile.AttackRange) ||
-            profile.AttackRange is <= 0 or > 4096 ||
-            profile.AttackCooldownTicks is < 1 or > 3600)
+            profile.AttackRange is < 0 or > 4096 ||
+            profile.AttackCooldownTicks is < 0 or > 3600 ||
+            (profileOnly && (profile.AttackRange != 0 || profile.AttackCooldownTicks != 0)) ||
+            (combatEnabled && (profile.AttackRange <= 0 || profile.AttackCooldownTicks < 1)))
             throw new ArgumentOutOfRangeException(nameof(profile));
+    }
+
+    private static void InsertInitialCombatProfile(
+        SqliteConnection connection,
+        SqliteTransaction tx,
+        long characterId,
+        CharacterCombatProfileData profile,
+        long updated)
+    {
+        ValidateCombatProfile(profile);
+        using var command = connection.CreateCommand();
+        command.Transaction = tx;
+        command.CommandText = @"INSERT INTO character_combat_profiles(
+    character_id,trust,source_ref,race,career,strength,dexterity,constitution,wisdom,
+    level,current_hp,max_hp,current_mp,max_mp,attack,defense,hit,dodge,attack_range,
+    attack_cooldown_ticks,updated_unix_ms)
+VALUES($id,$trust,$source,$race,$career,$str,$dex,$con,$wis,$level,$hp,$maxhp,
+       $mp,$maxmp,$attack,$defense,$hit,$dodge,$range,$cooldown,$updated);";
+        BindCombatProfile(command, characterId, profile, updated);
+        if (command.ExecuteNonQuery() != 1)
+            throw new InvalidOperationException("Initial combat profile creation failed");
     }
 
     private static void BindCombatProfile(SqliteCommand command, long characterId,

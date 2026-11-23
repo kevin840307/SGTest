@@ -21,7 +21,10 @@ public sealed record CharacterAppearanceState(CharacterAppearance Value, string 
 public enum CombatProfileTrust : byte
 {
     Verified = 1,
-    SyntheticTest = 2
+    SyntheticTest = 2,
+    // Source-backed identity/vitals are safe to present and persist, but
+    // attack range/cadence are still unknown. Gateway must not enable combat.
+    ProfileOnlyVerified = 3
 }
 
 public sealed record CharacterCombatProfileData(

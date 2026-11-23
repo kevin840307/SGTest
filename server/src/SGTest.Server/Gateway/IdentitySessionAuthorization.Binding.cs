@@ -208,7 +208,8 @@ public sealed partial class IdentitySessionAuthorization
                                     account.AccountId,create.Slot,create.Name,
                                     _characterCreation.Spawn,creationSettings,
                                     create.Appearance,_characterCreation.AppearanceRules,
-                                    cancellationToken).ConfigureAwait(false);
+                                    cancellationToken,_characterCreation.InitialProfileRules)
+                                    .ConfigureAwait(false);
                             }
                             else
                             {
@@ -317,10 +318,25 @@ public sealed partial class IdentitySessionAuthorization
 
         CharacterCombatProfile? combat = await _identity.GetCharacterCombatProfileAsync(
             character.CharacterId, cancellationToken).ConfigureAwait(false);
+        if (combat is null &&
+            character.Creation is { } persistedCreation &&
+            character.Appearance is { } persistedAppearance &&
+            _characterCreation?.InitialProfileRules is { } initialRules &&
+            initialRules.TryBuild(
+                persistedAppearance.Value.Race, persistedCreation.Attributes, out var derived) &&
+            derived is not null)
+        {
+            await _identity.SetCharacterCombatProfileAsync(
+                character.CharacterId, derived, cancellationToken).ConfigureAwait(false);
+            combat = await _identity.GetCharacterCombatProfileAsync(
+                character.CharacterId, cancellationToken).ConfigureAwait(false);
+        }
         CharacterExperienceState? experience = await _identity.GetCharacterExperienceAsync(
             character.CharacterId, cancellationToken).ConfigureAwait(false);
-        TrustedCombatProfile? trustedCombat = combat is null ? null : new(
-            combat.Data.Attack, combat.Data.Defense, combat.Data.Hit, combat.Data.Dodge,
+        bool combatEnabled = combat?.Data.Trust is
+            CombatProfileTrust.Verified or CombatProfileTrust.SyntheticTest;
+        TrustedCombatProfile? trustedCombat = !combatEnabled ? null : new(
+            combat!.Data.Attack, combat.Data.Defense, combat.Data.Hit, combat.Data.Dodge,
             combat.Data.AttackRange, combat.Data.AttackCooldownTicks);
         CharacterPvpState pvpPresentation =
             await _identity.GetCharacterPvpStateAsync(
@@ -351,7 +367,7 @@ public sealed partial class IdentitySessionAuthorization
         bool completed = false;
         try
         {
-            if (combat is not null && _combat is not null)
+            if (combatEnabled && combat is not null && _combat is not null)
             {
                 combatAttached = _combat.TryAttach(snapshot, combat.Data);
                 if (!combatAttached)
@@ -407,7 +423,8 @@ public sealed partial class IdentitySessionAuthorization
                 await WriteFrameAsync(tls, WireProtocol.EncodePlayerCombatState(new(
                     snapshot.MapEpoch,
                     combat.Data.CurrentHp, combat.Data.MaxHp,
-                    combat.Data.CurrentMp, combat.Data.MaxMp)),
+                    combat.Data.CurrentMp, combat.Data.MaxMp,
+                    combatEnabled)),
                     cancellationToken).ConfigureAwait(false);
             }
 
@@ -476,16 +493,16 @@ public sealed partial class IdentitySessionAuthorization
             // a narrow self-only baseline instead of fabricating HP/MP/combat data.
             if (character.Creation is not null)
             {
-                var creation = character.Creation.Attributes;
+                var creationAttributes = character.Creation.Attributes;
                 await WriteFrameAsync(tls, WireProtocol.EncodePlayerCreationProfileState(new(
-                    snapshot.ActorId, creation.Strength, creation.Dexterity,
-                    creation.Constitution, creation.Wisdom)),
+                    snapshot.ActorId, creationAttributes.Strength, creationAttributes.Dexterity,
+                    creationAttributes.Constitution, creationAttributes.Wisdom)),
                     cancellationToken).ConfigureAwait(false);
             }
 
-            // Additive full profile baseline is emitted after the creation baseline.
-            // It remains restricted to trusted combat data and supersedes the same
-            // four attributes without inventing level/HP/MP/combat values.
+            // Full profile baseline follows the creation baseline. ProfileOnlyVerified
+            // is source-backed for identity/vitals but cannot admit attack range/cadence;
+            // combat handler admission is intentionally decided separately above.
             if (combat is not null)
             {
                 await WriteFrameAsync(tls, WireProtocol.EncodePlayerProfileState(new(
@@ -495,7 +512,8 @@ public sealed partial class IdentitySessionAuthorization
                     combat.Data.Strength, combat.Data.Dexterity,
                     combat.Data.Constitution, combat.Data.Wisdom,
                     combat.Data.Attack, combat.Data.Defense,
-                    combat.Data.Hit, combat.Data.Dodge)),
+                    combat.Data.Hit, combat.Data.Dodge,
+                    combatEnabled)),
                     cancellationToken).ConfigureAwait(false);
             }
 

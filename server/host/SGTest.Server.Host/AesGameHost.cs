@@ -100,7 +100,10 @@ internal static class AesGameHost
                         "Character creation spawn must be inside a walkable Blocking cell");
                 var appearanceRules=options.TryGetValue("--character-appearance-rules",out var appearancePath)
                     ? CharacterAppearanceRules.LoadVerified(Path.GetFullPath(appearancePath)) : null;
-                characterCreation = new(new CharacterSpawn(mapId, x, y),appearanceRules);
+                characterCreation = new(
+                    new CharacterSpawn(mapId, x, y),
+                    appearanceRules,
+                    CharacterInitialProfileRules.OldParadiseLevelOne);
             }
 
             var monsterRuntimes = new List<MonsterRuntime>();

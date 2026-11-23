@@ -405,11 +405,13 @@ public readonly record struct PlayerRespawnVisualWire(
     long ReceiverMapEpoch,long ServerTick,long ActorId,
     long ConnectionEpoch,uint RespawnSequence,byte Facing);
 public readonly record struct PlayerCombatStateWire(
-    long MapEpoch, int CurrentHp, int MaxHp, int CurrentMp, int MaxMp);
+    long MapEpoch, int CurrentHp, int MaxHp, int CurrentMp, int MaxMp,
+    bool CombatEnabled = true);
 public readonly record struct PlayerProfileStateWire(
     long CharacterId, int Race, int Career, int Level, long Experience,
     int Strength, int Dexterity, int Constitution, int Wisdom,
-    int Attack, int Defense, int Hit, int Dodge);
+    int Attack, int Defense, int Hit, int Dodge,
+    bool CombatStatsVerified = true);
 public readonly record struct PlayerCreationProfileStateWire(
     long CharacterId, int Strength, int Dexterity, int Constitution, int Wisdom);
 public readonly record struct PlayerDamageWire(

@@ -33,6 +33,7 @@ public static partial class WireProtocol
         BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(56,4), value.Defense);
         BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(60,4), value.Hit);
         BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(64,4), value.Dodge);
+        frame[68] = value.CombatStatsVerified ? (byte)1 : (byte)0;
         return frame;
     }
 
@@ -57,7 +58,10 @@ public static partial class WireProtocol
             BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(52,4)),
             BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(56,4)),
             BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(60,4)),
-            BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(64,4)));
+            BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(64,4)),
+            frame[68] == 1);
+        if (frame[68] > 1)
+            return false;
         try
         {
             _ = EncodePlayerProfileState(value);

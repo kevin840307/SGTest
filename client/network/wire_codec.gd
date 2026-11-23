@@ -146,8 +146,8 @@ const NORMAL_ATTACK_RESULT_FRAME_BYTES := 57
 const SKILL_USE_FRAME_BYTES := 32
 const SKILL_USE_RESULT_FRAME_BYTES := 61
 const PLAYER_SKILL_VISUAL_FRAME_BYTES := 70
-const PLAYER_COMBAT_STATE_FRAME_BYTES := 32
-const PLAYER_PROFILE_STATE_FRAME_BYTES := 68
+const PLAYER_COMBAT_STATE_FRAME_BYTES := 33
+const PLAYER_PROFILE_STATE_FRAME_BYTES := 69
 const PLAYER_CREATION_PROFILE_STATE_FRAME_BYTES := 32
 const PLAYER_DAMAGE_FRAME_BYTES := 57
 const PLAYER_RESPAWN_FRAME_BYTES := 20
@@ -610,10 +610,11 @@ static func decode_player_combat_state(frame: PackedByteArray) -> Dictionary:
 	var max_hp := reader.get_32()
 	var current_mp := reader.get_32()
 	var max_mp := reader.get_32()
-	if epoch <= 0 or current_hp < 0 or max_hp <= 0 or current_hp > max_hp or current_mp < 0 or max_mp < 0 or current_mp > max_mp:
+	var combat_enabled := reader.get_u8()
+	if epoch <= 0 or current_hp < 0 or max_hp <= 0 or current_hp > max_hp or current_mp < 0 or max_mp < 0 or current_mp > max_mp or combat_enabled > 1:
 		return {}
 	return {"map_epoch":epoch,"current_hp":current_hp,"max_hp":max_hp,
-		"current_mp":current_mp,"max_mp":max_mp}
+		"current_mp":current_mp,"max_mp":max_mp,"combat_enabled":combat_enabled==1}
 
 static func decode_player_profile_state(frame: PackedByteArray) -> Dictionary:
 	if not _valid_header(frame, OPCODE_PLAYER_PROFILE_STATE, PLAYER_PROFILE_STATE_FRAME_BYTES):
@@ -632,12 +633,14 @@ static func decode_player_profile_state(frame: PackedByteArray) -> Dictionary:
 	var defense := reader.get_32()
 	var hit := reader.get_32()
 	var dodge := reader.get_32()
-	if character_id <= 0 or race < 0 or career < 0 or level < 0 or experience < 0 or strength < 0 or dexterity < 0 or constitution < 0 or wisdom < 0 or attack < 0 or defense < 0 or hit < 0 or dodge < 0:
+	var combat_stats_verified := reader.get_u8()
+	if character_id <= 0 or race < 0 or career < 0 or level < 0 or experience < 0 or strength < 0 or dexterity < 0 or constitution < 0 or wisdom < 0 or attack < 0 or defense < 0 or hit < 0 or dodge < 0 or combat_stats_verified > 1:
 		return {}
 	return {"character_id":character_id,"race":race,"career":career,"level":level,
 		"experience":experience,"strength":strength,"dexterity":dexterity,
 		"constitution":constitution,"wisdom":wisdom,"attack":attack,
-		"defense":defense,"hit":hit,"dodge":dodge}
+		"defense":defense,"hit":hit,"dodge":dodge,
+		"combat_stats_verified":combat_stats_verified==1}
 
 static func decode_player_creation_profile_state(frame: PackedByteArray) -> Dictionary:
 	if not _valid_header(frame, OPCODE_PLAYER_CREATION_PROFILE_STATE, PLAYER_CREATION_PROFILE_STATE_FRAME_BYTES):

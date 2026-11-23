@@ -25,7 +25,9 @@ internal static class CharacterAppearanceLoginFixture
             var rules=new CharacterAppearanceRules("synthetic/godot-aes-appearance/v2",[
                 new(0,0,0,0,0),chosen]);
             var authorization=new IdentitySessionAuthorization(store,world,
-                characterCreation:new(new CharacterSpawn(15,8,8),rules));
+                characterCreation:new(
+                    new CharacterSpawn(15,8,8), rules,
+                    CharacterInitialProfileRules.OldParadiseLevelOne));
             var router=new WorldResultRouter();
             var pump=new WorldAoiPump(router);
             using var stop=new CancellationTokenSource();

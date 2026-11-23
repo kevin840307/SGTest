@@ -89,7 +89,7 @@ CREATE TABLE IF NOT EXISTS character_creation_settings (
             Execute(connection, @"
 CREATE TABLE IF NOT EXISTS character_combat_profiles (
     character_id INTEGER PRIMARY KEY REFERENCES characters(character_id) ON DELETE CASCADE,
-    trust INTEGER NOT NULL CHECK(trust IN (1,2)),
+    trust INTEGER NOT NULL CHECK(trust IN (1,2,3)),
     source_ref TEXT NOT NULL,
     race INTEGER NOT NULL CHECK(race BETWEEN 0 AND 255),
     career INTEGER NOT NULL CHECK(career BETWEEN 0 AND 65535),
@@ -106,11 +106,16 @@ CREATE TABLE IF NOT EXISTS character_combat_profiles (
     defense INTEGER NOT NULL CHECK(defense BETWEEN 0 AND 100000000),
     hit INTEGER NOT NULL CHECK(hit BETWEEN 0 AND 100000000),
     dodge INTEGER NOT NULL CHECK(dodge BETWEEN 0 AND 100000000),
-    attack_range REAL NOT NULL CHECK(attack_range > 0 AND attack_range <= 4096),
-    attack_cooldown_ticks INTEGER NOT NULL CHECK(attack_cooldown_ticks BETWEEN 1 AND 3600),
+    attack_range REAL NOT NULL CHECK(attack_range >= 0 AND attack_range <= 4096),
+    attack_cooldown_ticks INTEGER NOT NULL CHECK(attack_cooldown_ticks BETWEEN 0 AND 3600),
     updated_unix_ms INTEGER NOT NULL,
     CHECK(current_hp <= max_hp),
-    CHECK(current_mp <= max_mp)
+    CHECK(current_mp <= max_mp),
+    CHECK(
+      (trust=3 AND attack_range=0 AND attack_cooldown_ticks=0)
+      OR
+      (trust IN (1,2) AND attack_range>0 AND attack_cooldown_ticks>=1)
+    )
 );", tx);
 
             // Reserve a durable generation at each new authoritative server boot.
@@ -1198,6 +1203,66 @@ SELECT character_id,connection_generation,map_epoch,action_sequence,action,mecha
 result_status,resulting_mounted_uid,resulting_slot_id,replaced_item_uid,created_unix_ms
 FROM mecha_actions_v39;",tx);
                 Execute(connection,@"DROP TABLE mecha_actions_v39;",tx);
+            }
+
+            // Schema v41: source-backed profile/vitals may be persisted before
+            // original attack range/cadence is verified. Trust=3 is profile-only
+            // and is structurally unable to carry combat-enabling range/cooldown.
+            if(schemaVersion<41)
+            {
+                Execute(connection,@"ALTER TABLE character_combat_profiles
+RENAME TO character_combat_profiles_v40;",tx);
+                Execute(connection,@"CREATE TABLE character_combat_profiles (
+    character_id INTEGER PRIMARY KEY REFERENCES characters(character_id) ON DELETE CASCADE,
+    trust INTEGER NOT NULL CHECK(trust IN (1,2,3)),
+    source_ref TEXT NOT NULL,
+    race INTEGER NOT NULL CHECK(race BETWEEN 0 AND 255),
+    career INTEGER NOT NULL CHECK(career BETWEEN 0 AND 65535),
+    strength INTEGER NOT NULL CHECK(strength BETWEEN 0 AND 1000000),
+    dexterity INTEGER NOT NULL CHECK(dexterity BETWEEN 0 AND 1000000),
+    constitution INTEGER NOT NULL CHECK(constitution BETWEEN 0 AND 1000000),
+    wisdom INTEGER NOT NULL CHECK(wisdom BETWEEN 0 AND 1000000),
+    level INTEGER NOT NULL CHECK(level BETWEEN 1 AND 255),
+    current_hp INTEGER NOT NULL CHECK(current_hp BETWEEN 0 AND 2000000000),
+    max_hp INTEGER NOT NULL CHECK(max_hp BETWEEN 1 AND 2000000000),
+    current_mp INTEGER NOT NULL DEFAULT 0 CHECK(current_mp BETWEEN 0 AND 2000000000),
+    max_mp INTEGER NOT NULL DEFAULT 0 CHECK(max_mp BETWEEN 0 AND 2000000000),
+    attack INTEGER NOT NULL CHECK(attack BETWEEN 0 AND 100000000),
+    defense INTEGER NOT NULL CHECK(defense BETWEEN 0 AND 100000000),
+    hit INTEGER NOT NULL CHECK(hit BETWEEN 0 AND 100000000),
+    dodge INTEGER NOT NULL CHECK(dodge BETWEEN 0 AND 100000000),
+    attack_range REAL NOT NULL CHECK(attack_range >= 0 AND attack_range <= 4096),
+    attack_cooldown_ticks INTEGER NOT NULL CHECK(attack_cooldown_ticks BETWEEN 0 AND 3600),
+    updated_unix_ms INTEGER NOT NULL,
+    CHECK(current_hp <= max_hp),
+    CHECK(current_mp <= max_mp),
+    CHECK(
+      (trust=3 AND attack_range=0 AND attack_cooldown_ticks=0)
+      OR
+      (trust IN (1,2) AND attack_range>0 AND attack_cooldown_ticks>=1)
+    )
+);",tx);
+                Execute(connection,@"INSERT INTO character_combat_profiles(
+character_id,trust,source_ref,race,career,strength,dexterity,constitution,wisdom,
+level,current_hp,max_hp,current_mp,max_mp,attack,defense,hit,dodge,attack_range,
+attack_cooldown_ticks,updated_unix_ms)
+SELECT character_id,trust,source_ref,race,career,strength,dexterity,constitution,wisdom,
+level,current_hp,max_hp,current_mp,max_mp,attack,defense,hit,dodge,attack_range,
+attack_cooldown_ticks,updated_unix_ms
+FROM character_combat_profiles_v40;",tx);
+                Execute(connection,@"DROP TABLE character_combat_profiles_v40;",tx);
+                Execute(connection,@"CREATE TRIGGER IF NOT EXISTS trg_combat_mp_insert
+BEFORE INSERT ON character_combat_profiles
+WHEN NEW.current_mp > NEW.max_mp
+BEGIN
+    SELECT RAISE(ABORT,'current_mp exceeds max_mp');
+END;",tx);
+                Execute(connection,@"CREATE TRIGGER IF NOT EXISTS trg_combat_mp_update
+BEFORE UPDATE OF current_mp,max_mp ON character_combat_profiles
+WHEN NEW.current_mp > NEW.max_mp
+BEGIN
+    SELECT RAISE(ABORT,'current_mp exceeds max_mp');
+END;",tx);
             }
 
             // Schema v37: a player stall may contain multiple active ItemUid

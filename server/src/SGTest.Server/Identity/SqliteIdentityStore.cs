@@ -13,7 +13,7 @@ namespace SGTest.Server.Identity;
 /// </summary>
 public sealed partial class SqliteIdentityStore : IDisposable
 {
-    public const int SchemaVersion = 40;
+    public const int SchemaVersion = 41;
     private readonly string _databasePath;
     private readonly string _connectionString;
     private readonly IdentityStoreOptions _options;
@@ -258,7 +258,12 @@ VALUES($id,$race,$hair,$color,$body,$leg,$sleeve,$source);";
                 if (look.ExecuteNonQuery() != 1)
                     throw new InvalidOperationException("Character appearance creation failed");
             }
-            if (creation is not null) InsertCharacterCreation(connection, tx, characterId, creation);
+            if (creation is not null)
+            {
+                InsertCharacterCreation(connection, tx, characterId, creation);
+                if (creation.InitialProfile is not null)
+                    InsertInitialCombatProfile(connection, tx, characterId, creation.InitialProfile, now);
+            }
             using (var wallet = connection.CreateCommand())
             {
                 wallet.Transaction = tx;
