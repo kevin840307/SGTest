@@ -107,7 +107,7 @@ UI 不是「功能先做完，以後再換皮」。玩家從第一秒看到的�
 - 800×600 原版呈現
 - 寬螢幕延伸策略
 
-**功能正確但畫面明顯不是 HK，只能算功能 IMPLEMENTED，不能算 UI VERIFIED。**
+**目標是對 HK 可觀察結果做 1:1 忠實重製。只要原版證據存在，就不得以「大致相似」「同風格」「現代化替代」當完成。功能正確但畫面明顯不是 HK，只能算功能 IMPLEMENTED，不能算 UI VERIFIED。**
 
 登入畫面特別要求：
 
@@ -116,6 +116,119 @@ UI 不是「功能先做完，以後再換皮」。玩家從第一秒看到的�
 - 比較背景、Logo/Title、登入欄位、按鈕、版本／提示文字、焦點順序、錯誤提示、第二密碼流程（適用時）
 - SGTest 實機以相同視窗比例 A/B
 - 不允許以「先用現代 UI，最後再改」長期跳過
+
+### 1.3 原版 PNG／SPR 素材優先：能解析就禁止重畫
+
+Repository 已有原版 UI 解析管線：
+
+`C:\SGO\SRC\SGTest\tools\ui_art\sync_original_ie_ui.py`
+
+此工具會使用正式 asset-converter 的：
+
+- `tools.asset_converter.source.extract_client.read_index / lzss`
+- `tools.asset_converter.source.runtime_spr.decode_spr`
+
+從原版 `Interface/*.spr` 或 `Data1.dat` 解析 UI Sprite，輸出 PNG 到本機 private UI 目錄。現有清單已包含例如：
+
+- `ACCOUNT_LOGIN`
+- `SELECT_CHARACTER`
+- `CREATE_CHARACTER`
+- `COMMAND`
+- `HPBAR`
+- `BG_ITEM`
+- `BG_CHARACTER_INFO`
+- `BG_SKILL`
+- `BG_SHOP`
+- `BG_BANK`
+- `BG_REPAIR`
+- `BG_TRADE`
+- `BG_Equip`
+- `MINIMAP_*`
+- `HOTKEY_*`
+- 多組按鈕與 multi-frame SPR
+
+因此 UI 實作遵守以下素材優先級：
+
+1. **原版可解析素材**：直接從 HK 原版 `.spr` / `Data1.dat` 解析出 PNG／frame，保留原像素、尺寸、alpha、frame 次序；這是第一優先。
+2. **原版鬆散 PNG／已授權本機素材**：直接使用，不重新繪製。
+3. **原版只能從執行畫面觀察**：以截圖／錄影、`.lst`、座標與尺寸證據重建，並保留 A/B 證據。
+4. **完全沒有原版證據**：才允許暫時重建；必須標 `NOT VERIFIED`，不得宣稱與 HK 一樣。
+
+禁止：
+
+- 原版 PNG / SPR 可取得時自行畫一張「類似」素材。
+- 用 `build_retro_terminal.py` 這類 author-owned／自創 skin 取代已有 HK 原版 UI，然後宣稱 Original UI 完成。
+- 為了視覺統一而重新上色、改比例、改 border、改 icon、改 alpha、平滑放大原版素材，除非 HK 實機證據就是如此。
+- 將原版 private `.spr`、`Data1.dat` 或解析出的私人素材提交到 public Git。
+
+原版素材保持唯讀；解析輸出只存在授權的本機 private 路徑。公開 Git 只保存解析程式、manifest/metadata、可重現流程與不含私有素材的驗證碼。
+
+### 1.4 反編譯驅動的 UI／素材還原：先找邏輯，再找資源名
+
+HK Client 反編譯：
+
+`C:\SGO\Stargate Online IE HK\SGOClient.exe.lst`
+
+除了確認 gameplay 邏輯，也要主動把反編譯當成 **UI 與素材索引**。當某個功能／畫面要還原時，優先從 `.lst` 追：
+
+- 建立／開啟／關閉該視窗的函式
+- resource loader / sprite loader / texture loader 呼叫
+- 硬編碼或資料表中的 SPR／BMP／PNG／Interface resource 名稱
+- frame index / animation sequence
+- x/y、width/height、anchor、offset
+- button/control ID
+- hover / pressed / disabled state
+- click / double-click / right-click handler
+- keyboard / hotkey / Esc / Enter flow
+- tooltip / text ID / message ID
+- Server packet / event → UI state transition
+- loading / map change / logout / reconnect lifecycle
+- sound / animation trigger
+- 同一資源在其他畫面的共用關係
+
+找到資源名稱後，立即回查：
+
+1. `Interface/*.spr` loose files。
+2. `Data1.dat` index。
+3. 現有 `sync_original_ie_ui.py` / asset-converter 是否已能解析。
+4. 若工具清單未包含該 SPR，但 decoder 已支援，**擴充解析清單／manifest，而不是自行重畫。**
+5. 將解析出的 private PNG/frame 與 `.lst` 取得的尺寸／位置／狀態邏輯一起套入 SGTest。
+6. 最後用 Paradise/HK 可執行畫面做 A/B 驗證。
+
+因此每個 UI 功能的證據鏈應盡量形成：
+
+`HK .lst 邏輯/資源名 → Interface/Data1.dat 原素材 → decoder 解析 PNG/frame → Godot 使用 → Paradise/HK A/B`
+
+如果 `.lst` 明確指出載入某個原版資源，**不得因目前 SGTest 尚未匯入該檔，就改用自創圖替代**；先擴充工具把原資源解析出來。
+
+若反編譯與 Paradise 的可觀察行為有差異，以目標 HK 版本證據優先，並明確記錄版本差異；不得把較舊 Paradise 行為硬套成 HK。
+
+### 1.5 行為也要 1:1：不能只對齊圖片
+
+HK 忠實度同時包含 **外觀 + 行為 + 時序 + 狀態切換**。每個 UI／功能 A/B 必須比較：
+
+- 開啟／關閉條件
+- 左鍵／右鍵
+- double click（若原版有）
+- hover / pressed / disabled
+- focus / Tab order
+- Esc / Enter / Hotkey
+- drag / drop
+- modal / non-modal
+- window stacking / Z-order
+- 選取後的 highlight
+- tooltip 出現條件與內容
+- Server 回覆前／後的 UI state
+- loading / transition
+- success / error flow
+- map change / logout / reconnect 後狀態
+- animation frame / timing
+- sound trigger（可驗證時）
+- 同功能多人可觀察結果（適用時）
+
+**只有圖片對了但按鈕、流程、時序、狀態切換和 HK 不同，仍然不能標 UI/Behavior VERIFIED。**
+
+若 HK 行為可由 Paradise 實機觀察，優先實機 A/B；Paradise 無法驗證才使用 HK `.lst`、Old、原版資料交叉確認。無法確認時標 `NOT VERIFIED`，不得自行設計後當成原版行為。
 
 ---
 
