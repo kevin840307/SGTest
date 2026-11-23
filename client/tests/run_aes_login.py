@@ -1563,8 +1563,8 @@ def run_reconnect(args, repo: Path, fixture: Path, env: dict[str, str]) -> int:
             for line in lines:
                 if line.startswith(("CLIENT_RECONNECT_", "RECONNECT_FIXTURE_")):
                     print(line)
-        print("GODOT_CSHARP_AES_RECONNECT_E2E_PASS forced_drop=true account_reauth=true "
-              "fresh_secondary_proof=true same_character=true new_generation=true persisted_position=true "
+        print("GODOT_CSHARP_AES_RECONNECT_E2E_PASS forced_drop=true auto_reauth=true "
+              "same_character=true new_generation=true persisted_position=true "
               "world_ready_reack=true old_intents_not_replayed=true "
               "chat_generation_reset=true bounded_attempts=3")
         return 0

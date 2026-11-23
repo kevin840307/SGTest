@@ -69,19 +69,6 @@ func _initialize() -> void:
 		return
 	print("CLIENT_RECONNECT_FIRST_MOVE_DONE epoch=%d x=24 y=8" % first_epoch)
 
-	var proof_gate := _wait(session,func(v):
-		return (
-			int(v.state)==WorldState.STATE_SELECTING_CHARACTER
-			and int(v.choose_status)==3
-			and int(v.reconnect_attempt)==1
-			and not bool(v.reconnecting)
-		),12000)
-	if proof_gate.is_empty():
-		_fail("reconnect proof gate "+str(session.snapshot()),session)
-		return
-	if not session.choose_character(character_id,FixtureLogin.DEFAULT_PROOF):
-		_fail("fresh reconnect proof rejected",session)
-		return
 	var restored := _wait(session,func(v):
 		return (
 			_ready(v)
@@ -93,7 +80,7 @@ func _initialize() -> void:
 			and absf(float(v.y)-8.0)<0.001
 		),12000)
 	if restored.is_empty():
-		_fail("proofed reconnect "+str(session.snapshot()),session)
+		_fail("automatic reconnect "+str(session.snapshot()),session)
 		return
 	var second_epoch := int(restored.map_epoch)
 	print("CLIENT_RECONNECT_RESTORED old_epoch=%d new_epoch=%d count=%d" %
@@ -136,7 +123,7 @@ func _initialize() -> void:
 		_fail("post-reconnect gameplay "+str(session.snapshot()),session)
 		return
 	session.stop()
-	print("CLIENT_RECONNECT_PASS same_character=true fresh_secondary_proof=true generation_advanced=true persisted_spawn=true move_sequence_reset=true world_ready_reacked=true chat_generation_reset=true reconnect_count=1")
+	print("CLIENT_RECONNECT_PASS same_character=true generation_advanced=true persisted_spawn=true move_sequence_reset=true world_ready_reacked=true chat_generation_reset=true reconnect_count=1")
 	quit(0)
 
 func _has_self_chat(

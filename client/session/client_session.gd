@@ -37,7 +37,6 @@ var _has_entered_world := false
 var _reconnecting := false
 var _reconnect_attempt := 0
 var _reconnect_count := 0
-var _reconnect_proof_character_id := 0
 var _last_transport_error := OK
 var _intent_token := 0
 
@@ -75,7 +74,6 @@ func _connect_secure(
 	_reconnecting = false
 	_reconnect_attempt = 0
 	_reconnect_count = 0
-	_reconnect_proof_character_id = 0
 	_last_transport_error = OK
 	_intent_token = 0
 	_published = _decorate_snapshot(_world.snapshot())
@@ -1064,7 +1062,6 @@ func stop() -> void:
 	_mutex.lock()
 	_running = false
 	_reconnecting = false
-	_reconnect_proof_character_id = 0
 	_intents.clear()
 	_clear_credentials_locked()
 	_username = ""
@@ -1212,7 +1209,6 @@ func _start_reconnect_attempt() -> bool:
 		_mutex.unlock()
 		return false
 	_reconnecting = true
-	_reconnect_proof_character_id = 0
 	_reconnect_attempt += 1
 	var attempt := _reconnect_attempt
 	_intents.clear() # never replay old gameplay intents across a new connection generation
@@ -1239,14 +1235,8 @@ func _process_reconnect_choose() -> void:
 	# never published and is cleared with the account credential on stop/failure.
 	if int(_world.choose_status) in [3, 4, 5]:
 		_mutex.lock()
-		if _reconnecting:
-			_reconnect_proof_character_id = _selected_character_id
 		_reconnecting = false
 		_mutex.unlock()
-		# The UI must observe that automatic reconnect paused for a fresh
-		# secondary proof; otherwise it remains locked behind a stale
-		# reconnecting=true snapshot even though the logic thread is waiting.
-		_publish()
 		return
 	_mutex.lock()
 	var reconnecting := _reconnecting
@@ -1295,22 +1285,11 @@ func _maybe_finish_world_entry() -> void:
 	_mutex.lock()
 	var changed := not _has_entered_world
 	_has_entered_world = true
-	var resumed_same_character := (
-		_reconnect_proof_character_id > 0 and
-		_selected_character_id == _reconnect_proof_character_id
-	)
-	if _reconnecting or resumed_same_character:
+	if _reconnecting:
 		_reconnecting = false
 		_reconnect_attempt = 0
 		_reconnect_count += 1
-		_reconnect_proof_character_id = 0
 		changed = true
-	elif _reconnect_proof_character_id > 0:
-		# The user deliberately selected another character after the reconnect
-		# password gate. Finish the old reconnect lifecycle without counting it
-		# as a same-character restore.
-		_reconnect_attempt = 0
-		_reconnect_proof_character_id = 0
 	_mutex.unlock()
 	if changed:
 		_publish()
