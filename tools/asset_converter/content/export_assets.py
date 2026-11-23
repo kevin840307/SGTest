@@ -173,6 +173,15 @@ def publish(source: Path, archive: Path, assets: Path, asset_ids: set[str] | Non
     previous = json.loads(owned_path.read_text(encoding='utf-8')).get('files',{}) if owned_path.is_file() else {}
     files, entries, coverage, semantic_counts = {}, {}, {}, Counter()
     categories = {key:{} for key in ['maps','Enemy','npcs','players','equipment','pets','mecha','items','effects','ui','audio','data']}
+    act_sources = {}
+    for path in source.rglob('*'):
+        if not path.is_file() or path.suffix.casefold() != '.act':
+            continue
+        key = path.relative_to(source).with_suffix('').as_posix().casefold()
+        existing_act = act_sources.get(key)
+        if existing_act is not None and existing_act != path:
+            raise ValueError('case-insensitive ACT source collision: '+key)
+        act_sources[key] = path
 
     def target(relative):
         result = assets.joinpath(*safe_relative(relative).parts).resolve()
@@ -225,8 +234,8 @@ def publish(source: Path, archive: Path, assets: Path, asset_ids: set[str] | Non
         semantics = {'status':'source_clips_only','timing_verified':False,'direction_mapping_verified':False}
         views, act_timelines = {}, {}
         if group.startswith('enemy/'):
-            act = source/(group+'.act')
-            if act.is_file():
+            act = act_sources.get(group.casefold())
+            if act is not None:
                 paths = [source/item['path'] for item in raw['sources']]
                 try:
                     definition = compile_definition(asset_id,paths,source,'monster',act)
@@ -253,8 +262,8 @@ def publish(source: Path, archive: Path, assets: Path, asset_ids: set[str] | Non
                     except (ValueError,KeyError) as partial_error:
                         semantics['partial_normalization_error'] = str(partial_error)
         elif group.startswith('map/'):
-            act_path = source/(group+'.act')
-            if act_path.is_file():
+            act_path = act_sources.get(group.casefold())
+            if act_path is not None:
                 if len(clips) != 1:
                     raise ValueError('scenery ACT requires one source clip: '+group)
                 clip = next(iter(clips))
