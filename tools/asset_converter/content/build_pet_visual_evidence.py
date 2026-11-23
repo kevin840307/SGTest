@@ -38,8 +38,18 @@ def _validate_runtime_asset(assets: Path, sprite: str) -> tuple[str, str]:
     if manifest.get("version") != 9 or manifest.get("asset_id") != expected_id:
         raise ValueError(f"wrong runtime Pet Enemy atlas identity: {relative}")
     semantics = manifest.get("animation_semantics", {})
-    if not isinstance(semantics, dict) or not semantics.get("timing_verified") or not semantics.get("direction_mapping_verified"):
-        raise ValueError(f"Pet Enemy atlas lacks verified ACT semantics: {relative}")
+    full_verified = (
+        isinstance(semantics, dict)
+        and bool(semantics.get("timing_verified"))
+        and bool(semantics.get("direction_mapping_verified"))
+    )
+    partial_verified = (
+        isinstance(semantics, dict)
+        and semantics.get("status") == "normalized_enemy_partial"
+        and {"NS", "FA"}.issubset(set(semantics.get("verified_behaviors", [])))
+    )
+    if not full_verified and not partial_verified:
+        raise ValueError(f"Pet Enemy atlas lacks verified NS/FA ACT semantics: {relative}")
     views = manifest.get("logical_views", {})
     if not isinstance(views, dict):
         raise ValueError(f"Pet Enemy atlas lacks logical views: {relative}")

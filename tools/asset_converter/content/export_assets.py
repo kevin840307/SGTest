@@ -133,6 +133,20 @@ def digest(path):
     return hasher.hexdigest()
 
 
+def _runtime_source_file(path: Path, source: Path) -> bool:
+    """Return whether a source file belongs to the runtime publication scope.
+
+    Most original content lives below a category directory. Loose SPR/ACT/SIF
+    overlays can also live at the client root and must remain part of source
+    coverage; converter bookkeeping files such as extraction.json must not.
+    """
+    relative = path.relative_to(source)
+    if len(relative.parts) >= 2:
+        return True
+    suffix = path.suffix.casefold()
+    return suffix in ('.spr', '.act', '.sif') or path.name.casefold().endswith('draworder.dat')
+
+
 def safe_relative(value):
     path = PurePosixPath(value)
     if not value or '\\' in value or ':' in value or path.is_absolute() or any(part in ('.','..') for part in value.split('/')):
@@ -213,14 +227,31 @@ def publish(source: Path, archive: Path, assets: Path, asset_ids: set[str] | Non
         if group.startswith('enemy/'):
             act = source/(group+'.act')
             if act.is_file():
+                paths = [source/item['path'] for item in raw['sources']]
                 try:
-                    definition = compile_definition(asset_id,[source/item['path'] for item in raw['sources']],source,'monster',act)
+                    definition = compile_definition(asset_id,paths,source,'monster',act)
                     views = logical_views(definition)
                     document(asset_id+'/definition.json',definition)
                     semantics = {'status':'normalized_enemy','definition':asset_id+'/definition.json',
                                  'timing_verified':True,'direction_mapping_verified':True}
-                except (ValueError,KeyError) as error:
-                    semantics['reason'] = str(error)
+                except (ValueError,KeyError) as full_error:
+                    semantics['reason'] = str(full_error)
+                    try:
+                        definition = compile_definition(
+                            asset_id,paths,source,'monster',act,
+                            requested_behaviors=['NS','FA'])
+                        views = logical_views(definition)
+                        document(asset_id+'/definition_ns_fa.json',definition)
+                        semantics = {
+                            'status':'normalized_enemy_partial',
+                            'definition':asset_id+'/definition_ns_fa.json',
+                            'timing_verified':False,
+                            'direction_mapping_verified':False,
+                            'verified_behaviors':['NS','FA'],
+                            'full_normalization_error':str(full_error),
+                        }
+                    except (ValueError,KeyError) as partial_error:
+                        semantics['partial_normalization_error'] = str(partial_error)
         elif group.startswith('map/'):
             act_path = source/(group+'.act')
             if act_path.is_file():
@@ -285,7 +316,7 @@ def publish(source: Path, archive: Path, assets: Path, asset_ids: set[str] | Non
 
     audio, sidecars, opaque, errors = 0,0,0,[]
     for original in sorted(source.rglob('*')):
-        if not original.is_file() or len(original.relative_to(source).parts) < 2:continue
+        if not original.is_file() or not _runtime_source_file(original, source):continue
         relative = original.relative_to(source).as_posix()
         if relative in coverage:continue
         if asset_ids is not None:continue  # Scoped visuals include only selected SPR and compiled definitions.
@@ -335,7 +366,8 @@ def publish(source: Path, archive: Path, assets: Path, asset_ids: set[str] | Non
     source_files = ({item['path'] for row in groups
                      for item in json.loads((archive/'sprites'/row['group']/'atlas.json').read_text(encoding='utf-8'))['sources']}
                     if asset_ids is not None else
-                    {p.relative_to(source).as_posix() for p in source.rglob('*') if p.is_file() and len(p.relative_to(source).parts)>1})
+                    {p.relative_to(source).as_posix() for p in source.rglob('*')
+                     if p.is_file() and _runtime_source_file(p, source)})
     if source_files != set(coverage):raise ValueError('incomplete asset source coverage')
     catalog = {'schema':'sgtest.asset_catalog_root/v1','loading':'lazy_category_or_direct_id',
                'categories':{key:{'index':'catalog/'+key+'.json','assets':len(value)} for key,value in categories.items()},

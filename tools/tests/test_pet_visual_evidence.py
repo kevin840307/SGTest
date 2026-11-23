@@ -98,6 +98,26 @@ class PetVisualEvidenceTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "missing logical view EN050A_FA8"):
             compile_pet_visual_evidence(self.source, assets)
 
+    def test_runtime_asset_accepts_explicit_partial_ns_fa_verification_only(self):
+        assets = self.root / "assets"
+        atlas_fixture(assets)
+        atlas = assets / "Enemy" / "en050a" / "atlas.json"
+        payload = json.loads(atlas.read_text(encoding="utf-8"))
+        payload["animation_semantics"] = {
+            "status": "normalized_enemy_partial",
+            "timing_verified": False,
+            "direction_mapping_verified": False,
+            "verified_behaviors": ["NS", "FA"],
+        }
+        atlas.write_text(json.dumps(payload), encoding="utf-8")
+        result = compile_pet_visual_evidence(self.source, assets)
+        self.assertEqual(result["validated_runtime_assets"], 1)
+
+        payload["animation_semantics"]["verified_behaviors"] = ["NS"]
+        atlas.write_text(json.dumps(payload), encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, "lacks verified NS/FA ACT semantics"):
+            compile_pet_visual_evidence(self.source, assets)
+
     def test_extracted_source_validation_is_cached_by_unique_sprite(self):
         extracted = self.root / "extracted"
         extracted.mkdir()

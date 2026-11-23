@@ -183,6 +183,56 @@ class ScopedExportTests(unittest.TestCase):
             self.assertEqual(manifest['act']['ONE']['source_sha256'],hashlib.sha256(payload).hexdigest())
             self.assertEqual(json.loads((assets/'maps/visuals/two/atlas.json').read_text())['act'],{})
 
+    def test_root_level_loose_sprite_does_not_block_scoped_export(self):
+        with tempfile.TemporaryDirectory() as folder:
+            source, archive, assets = self.fixture(folder)
+            (source/'ROOT_ONLY.spr').write_bytes(tiny_spr())
+            archive_all(source, archive, Settings())
+
+            scoped = publish(source, archive, assets, {'maps/visuals/one'})
+            self.assertEqual(scoped['status'], 'pass')
+            self.assertTrue((assets/'maps/visuals/one/atlas.json').is_file())
+            self.assertFalse((assets/'data/legacy/root/root_only').exists())
+
+            full_assets = Path(folder)/'full-assets'
+            complete = publish(source, archive, full_assets)
+            self.assertEqual(complete['status'], 'pass')
+            self.assertTrue((full_assets/'data/legacy/root/root_only/atlas.json').is_file())
+
+    def test_enemy_partial_ns_fa_semantics_survive_unrelated_broken_action(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            source, archive, assets = root/'source', root/'archive', root/'assets'
+            enemy = source/'enemy'
+            enemy.mkdir(parents=True)
+            for clip in (
+                'en999a_ns1', 'en999a_ns3',
+                'en999a_fa1', 'en999a_fa2', 'en999a_fa3',
+                'en999a_nd1', 'en999a_nd3',
+            ):
+                (enemy/(clip+'.spr')).write_bytes(tiny_spr())
+            enemy.joinpath('en999a.act').write_bytes(
+                act(((0, 2),), True, key='S')[:-1]
+                + act(((0, 2),), False, key='A')[:-1]
+                + act(((1, 2),), False, key='D')
+            )
+            archive_all(source, archive, Settings())
+
+            report = publish(source, archive, assets, {'Enemy/en999a'})
+            self.assertEqual(report['status'], 'pass')
+            manifest = json.loads((assets/'Enemy/en999a/atlas.json').read_text())
+            semantics = manifest['animation_semantics']
+            self.assertEqual(semantics['status'], 'normalized_enemy_partial')
+            self.assertEqual(semantics['verified_behaviors'], ['NS', 'FA'])
+            self.assertFalse(semantics['timing_verified'])
+            self.assertIn('EN999A_ND1', semantics['full_normalization_error'])
+            self.assertEqual(
+                set(manifest['logical_views']),
+                {f'EN999A_{action}{facing}'
+                 for action in ('NS', 'FA') for facing in range(1, 9)},
+            )
+            self.assertTrue((assets/'Enemy/en999a/definition_ns_fa.json').is_file())
+
     def test_unknown_or_empty_selection_rejects_before_output(self):
         with tempfile.TemporaryDirectory() as folder:
             source, archive, assets = self.fixture(folder)

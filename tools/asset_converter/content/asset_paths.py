@@ -47,7 +47,10 @@ def sprite_asset_id(group: str) -> tuple[str, str]:
     category = parts[0]
     rest_parts = list(parts[1:])
     if not rest_parts:
-        raise ValueError("sprite group has no asset name: " + group)
+        # Loose overlay SPR files can legitimately live at the client root.
+        # Preserve their exact identity under data/legacy rather than making a
+        # gameplay classification guess or blocking unrelated scoped exports.
+        return f"data/legacy/root/{category}", "unverified_root_source"
     rest = "/".join(rest_parts)
 
     if category == "enemy":
