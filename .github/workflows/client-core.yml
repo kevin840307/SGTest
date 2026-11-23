@@ -142,6 +142,8 @@ jobs:
         run: timeout 20s .cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64 --headless --path client --script res://tests/test_ui_skin_layout.gd
       - name: Repeated offline and authentication UI teardown leaves no orphan nodes
         run: timeout 20s .cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64 --headless --path client --script res://tests/test_ui_lifecycle.gd
+      - name: Repeated main-scene UI assembly releases detached shell nodes
+        run: timeout 20s .cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64 --headless --path client --script res://tests/test_ui_lifetime.gd
       - name: Character preview shares paper doll animation and releases hidden scopes
         run: timeout 20s .cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64 --headless --path client --script res://tests/test_character_preview.gd
       - name: Multi-profile player presentation
