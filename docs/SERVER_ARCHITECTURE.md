@@ -52,6 +52,8 @@ MVP 的**Map15↔Map13 真實轉圖**必須由 Server authority 決定合法入�
 
 MVP 中物品 UID／倉庫銀行／技能／Pet/Mecha/卡片／升級／交易／商店／PvP／GM 等單圖可用功能依原版全部需要完整 Server Authority 與重送／競態／持久化測例；好友暫緩。Map13 同圖 20 玩家/300 Enemy/500 Drop，Map15 NPC／玩家商店多人操作與兩圖同時活躍，須測 Tick P95/P99、AOI fanout、Queue、CPU/GC/RSS 及可靠事件。MVP 後才全圖／全內容與 100/1000/5000 Gate。
 
+Pet 成長資料遵循相同的 fail-closed 內容邊界：正式 Server 不直接讀私有 Old CSV，而由 `asset_converter pet-growth-curve` 將 `Dat/Player/Player_Up_Lv.csv` 審核成 `sgtest.pet_growth_curve/v1`。Old `ReadLevelUpTable/GetLevelupExp/AddExp` 已確認前 100 列累加為 total EXP threshold、上限 Lv100 且單次 EXP 可跨多級；Server 只在載入該 audited manifest 後啟用 trusted growth grant。SQLite schema v32 以 `(character_id, grant_key)` 保存 exactly-once `pet_experience_grants`，把 level/total EXP 更新與 replay/conflict/ownership 驗證放在同一交易。怪物死亡應給 Pet 的實際 EXP 數量尚未由 HK/Old 證據確認，因此 Monster death settlement 暫不自動發放，也不得用猜測常數補齊。
+
 ## 內容格式
 
 Server 使用**原版 Blocking.dat byte grid** 或經可驗證的無損對應資料；只載入 Map world/population/collision 和必要規則，不解碼 PNG/Atlas。Enemy 外觀由 Server population logical ID 傳給 Client（其目錄為 Enemy/<id>）。
