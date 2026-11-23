@@ -1052,6 +1052,22 @@ func pet_attack_monster(entity_id:int)->bool:
 	})
 
 
+func pet_skill_monster(skill_id:int,entity_id:int)->bool:
+	var current:=snapshot()
+	if (
+		skill_id<=0 or skill_id>100000000 or entity_id<=0 or
+		bool(current.get("player_dead",false)) or
+		int(current.get("active_pet_uid",0))<=0 or
+		int(current.get("pending_pet_skill_sequence",0))!=0
+	):
+		return false
+	return _queue_intent({
+		"type":"pet_skill_monster","skill_id":skill_id,"entity_id":entity_id,
+		"actor_id":int(current.get("actor_id",0)),
+		"map_epoch":int(current.get("map_epoch",0))
+	})
+
+
 func npc_interact(spawn_id: int) -> bool:
 	# The client names only a map-local NPC; Server provides the destination.
 	if spawn_id <= 0 or spawn_id > 0x7fffffff or bool(snapshot().get("player_dead",false)):
@@ -1545,6 +1561,8 @@ func _process_first_intent() -> void:
 		_process_attack_monster_intent(intent)
 	elif kind == "pet_attack_monster":
 		_process_pet_attack_monster_intent(intent)
+	elif kind == "pet_skill_monster":
+		_process_pet_skill_monster_intent(intent)
 	elif kind == "stop_move":
 		_process_stop_movement_intent(intent)
 	elif kind == "move":
@@ -2353,6 +2371,55 @@ func _process_pet_attack_monster_intent(intent:Dictionary)->void:
 		return
 	if _transport.send_frame(frame) and _world.mark_pet_attack_sent(
 		sequence,pet_uid,target_id):
+		_pop_intent_token(token)
+		_publish()
+
+
+func _process_pet_skill_monster_intent(intent:Dictionary)->void:
+	var current:RefCounted=_world
+	var token:=int(intent.get("_token",0))
+	if token<=0 or not _first_intent_matches(token):
+		return
+	if (
+		int(intent.get("actor_id",0))!=int(current.actor_id) or
+		int(intent.get("map_epoch",0))!=int(current.map_epoch)
+	):
+		_pop_intent_token(token)
+		return
+	if int(current.state)!=WorldState.STATE_IN_WORLD or bool(current.player_dead):
+		_pop_intent_token(token)
+		return
+	if (
+		not bool(current.world_ready) or bool(current.resync_pending) or
+		int(current.pending_world_ready_ack_epoch)!=0 or
+		int(current.last_world_ready_ack_epoch)!=int(current.map_epoch) or
+		bool(current.waiting_for_new_map)
+	):
+		return
+	var target_id:=int(intent.get("entity_id",0))
+	var skill_id:=int(intent.get("skill_id",0))
+	var pet_uid:=int(current.active_pet_uid)
+	if target_id<=0 or skill_id<=0 or skill_id>100000000 or pet_uid<=0:
+		_pop_intent_token(token)
+		return
+	var monsters:Dictionary=current.monsters
+	if not monsters.has(target_id):
+		_pop_intent_token(token)
+		return
+	var target:Dictionary=monsters[target_id]
+	if int(target.get("current_hp",0))<=0 or int(target.get("state",0))==4:
+		_pop_intent_token(token)
+		return
+	if int(current.pending_pet_skill_sequence)!=0:
+		return
+	var sequence:=int(current.pet_skill_sequence)+1
+	var frame:=WireCodec.encode_pet_skill(
+		int(current.map_epoch),sequence,pet_uid,skill_id,target_id)
+	if frame.is_empty():
+		_pop_intent_token(token)
+		return
+	if _transport.send_frame(frame) and _world.mark_pet_skill_sent(
+		sequence,pet_uid,skill_id,target_id):
 		_pop_intent_token(token)
 		_publish()
 

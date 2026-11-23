@@ -51,6 +51,7 @@ public static class AesWireConnection
         Func<TrustedWorldResyncRequest, bool>? postResync = null,
         Func<TrustedNormalAttack, bool>? postAttack = null,
         Func<TrustedPetAttack, bool>? postPetAttack = null,
+        Func<TrustedPetSkill, bool>? postPetSkill = null,
         Func<TrustedPlayerRespawn, Task>? handleRespawn = null,
         Func<TrustedGroundPickup, Task>? handlePickup = null,
         Func<TrustedRecoveryUse, Task>? handleRecovery = null,
@@ -317,7 +318,7 @@ public static class AesWireConnection
 
                     var status = gateway.FeedClientBytes(
                         rented.AsSpan(0, count), postMove, out int accepted,
-                        postNpc, postResync, postAttack, postPetAttack, postRespawn, postPickup,
+                        postNpc, postResync, postAttack, postPetAttack, postPetSkill, postRespawn, postPickup,
                         postRecovery, postDiscard, postSkill, postShop, postStorage, postEquipment, postBank, postRepair, postEnhancement, postTrade, postQuest, postPvp, postPvpAttack, postPvpSkill, postGmPvpName, postPlayerShop, postChat, postParty, postClan, postFriend, postPet, postMecha);
                     commandsAccepted += accepted;
 
@@ -338,7 +339,7 @@ public static class AesWireConnection
                                 .ConfigureAwait(false);
                             status = gateway.ResumeClientIngress(
                                 postMove, out accepted, postNpc, postResync,
-                                postAttack, postPetAttack, postRespawn, postPickup, postRecovery,
+                                postAttack, postPetAttack, postPetSkill, postRespawn, postPickup, postRecovery,
                                 postDiscard, postSkill, postShop, postStorage, postEquipment, postBank, postRepair, postEnhancement, postTrade, postQuest, postPvp, postPvpAttack, postPvpSkill, postGmPvpName, postPlayerShop, postChat, postParty, postClan, postFriend, postPet, postMecha);
                             commandsAccepted += accepted;
                         }

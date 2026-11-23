@@ -141,6 +141,9 @@ public readonly record struct TrustedMechaCommand(
 public readonly record struct TrustedPetAttack(
     long ActorId,long ConnectionEpoch,long RequestMapEpoch,
     uint AttackSequence,long PetUid,long TargetEntityId);
+public readonly record struct TrustedPetSkill(
+    long ActorId,long ConnectionEpoch,long RequestMapEpoch,
+    uint SkillSequence,long PetUid,int SkillId,long TargetEntityId);
 public enum TrustedQuestCommandKind : byte { Open=1, Choose=2 }
 public readonly record struct TrustedQuestCommand(
     long ActorId,long ConnectionEpoch,long RequestMapEpoch,

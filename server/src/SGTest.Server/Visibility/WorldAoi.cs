@@ -27,7 +27,7 @@ public enum AoiEventKind : byte
     WorldReady, Spawn, Delta, Despawn, SelfState, PlayerIdentity, PlayerMovementIntent,
     MonsterSpawn, MonsterDelta, MonsterDespawn,
     GroundDropSpawn, GroundDropDespawn,
-    PetSpawn, PetDelta, PetDespawn, PetAttackVisual,
+    PetSpawn, PetDelta, PetDespawn, PetAttackVisual, PetSkillVisual,
     MechaState,
     PlayerAttackVisual, PlayerSkillVisual, PlayerDamageVisual, PlayerRespawnVisual,
     PvpCombatVisual, PvpSkillVisual
@@ -42,6 +42,10 @@ public readonly record struct PetAttackVisual(
     long OwnerActorId,long OwnerConnectionEpoch,long OwnerMapEpoch,
     uint AttackSequence,long PetUid,long TargetEntityId,
     NormalAttackStatus Status,int Damage,long TargetRevision);
+public readonly record struct PetSkillVisual(
+    long OwnerActorId,long OwnerConnectionEpoch,long OwnerMapEpoch,
+    uint SkillSequence,long PetUid,int SkillId,long TargetEntityId,
+    SkillUseStatus Status,int Damage,long TargetRevision);
 public readonly record struct PlayerAttackVisual(
     long AttackerActorId,long AttackerConnectionEpoch,uint AttackSequence,
     long TargetEntityId,NormalAttackStatus Status,int Damage,
@@ -79,6 +83,7 @@ public readonly record struct AoiEvent(
     PetWorldPresence? Pet = null,
     MechaWorldStateUpdate? Mecha = null,
     PetAttackVisual? PetAttack = null,
+    PetSkillVisual? PetSkill = null,
     PlayerAttackVisual? PlayerAttack = null,
     PlayerSkillVisual? PlayerSkill = null,
     PlayerDamageVisual? PlayerDamage = null,
@@ -512,6 +517,55 @@ public sealed class WorldAoi
                 continue;
             Enqueue(observer,new(AoiEventKind.PetAttackVisual,_lastTick,
                 observer.Self.MapEpoch,PetAttack:visual));
+            queued++;
+        }
+        return queued;
+    }
+
+    /// <summary>
+    /// Enqueue one source-gated Pet skill presentation event only to remote
+    /// observers that currently see the exact Pet generation and target.
+    /// </summary>
+    public int EnqueuePetSkillVisual(
+        TrustedPetSkill request,SkillUseOutcome outcome)
+    {
+        if(_lastTick<=0||outcome.ServerTick!=_lastTick||request.ActorId<=0||
+           request.ConnectionEpoch<=0||request.RequestMapEpoch<=0||
+           request.SkillSequence==0||request.PetUid<=0||request.SkillId<=0||
+           outcome.SkillId!=request.SkillId||
+           outcome.TargetEntityId!=request.TargetEntityId||outcome.TargetRevision<=0||
+           outcome.Status is not (SkillUseStatus.Applied or SkillUseStatus.Miss)||
+           (outcome.Status==SkillUseStatus.Applied&&outcome.Damage<=0)||
+           (outcome.Status==SkillUseStatus.Miss&&outcome.Damage!=0))
+            throw new InvalidOperationException("Invalid authoritative pet skill visual");
+
+        if(!TryGetPet(request.ActorId,request.ConnectionEpoch,request.RequestMapEpoch,
+                request.PetUid,out var pet)||
+           !_entities.TryGetValue(request.ActorId,out var owner)||
+           owner.ConnectionEpoch!=request.ConnectionEpoch||
+           owner.MapEpoch!=request.RequestMapEpoch||
+           !_monsters.TryGetValue(request.TargetEntityId,out var target)||
+           owner.MapId!=target.MapId)
+            return 0;
+
+        var visual=new PetSkillVisual(
+            pet.OwnerActorId,pet.OwnerConnectionEpoch,pet.OwnerMapEpoch,
+            request.SkillSequence,pet.PetUid,request.SkillId,request.TargetEntityId,
+            outcome.Status,outcome.Damage,outcome.TargetRevision);
+        int queued=0;
+        foreach(var observer in _observers.Values)
+        {
+            if(observer.Self.ActorId==owner.ActorId&&
+               observer.Self.ConnectionEpoch==owner.ConnectionEpoch&&
+               observer.Self.MapEpoch==owner.MapEpoch)
+                continue;
+            if(observer.Self.MapId!=owner.MapId||
+               !observer.VisibleMonsters.ContainsKey(request.TargetEntityId)||
+               !observer.VisiblePets.TryGetValue(owner.ActorId,out var seenPet)||
+               !SamePetIdentity(seenPet,pet))
+                continue;
+            Enqueue(observer,new(AoiEventKind.PetSkillVisual,_lastTick,
+                observer.Self.MapEpoch,PetSkill:visual));
             queued++;
         }
         return queued;

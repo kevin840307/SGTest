@@ -5,6 +5,7 @@ using SGTest.Server.Identity;
 using SGTest.Server.Map;
 using SGTest.Server.Monster;
 using SGTest.Server.Pet;
+using SGTest.Server.Skill;
 using SGTest.Server.Wire;
 using SGTest.Server.World;
 using SGTest.Server.Visibility;
@@ -18,6 +19,8 @@ internal static class PetChecks
             ()=>GrowthManifest(root));
         Checks.Run("pet combat manifest requires audited exact-level rules",
             ()=>CombatManifest(root));
+        Checks.Run("pet skill manifest requires audited exact pet-level-skill rules",
+            ()=>SkillManifest(root));
         Checks.Run("pet EXP settlement uses the source-backed half of settled character EXP",
             ExperienceSettlementPolicy);
         Checks.Run("pet attack authority owns active identity position range cooldown replay and damage",
@@ -109,6 +112,31 @@ internal static class PetChecks
             decodedAttackResult==attackResult,
             "pet attack result wire roundtrip failed");
 
+        var petSkill=new PetSkillWire(7,4,102,9001,1_001_300_001);
+        var petSkillFrame=WireProtocol.EncodePetSkill(petSkill);
+        Checks.Require(petSkillFrame.Length==WireProtocol.PetSkillFrameBytes&&
+            WireProtocol.TryDecodePetSkill(petSkillFrame,out var decodedPetSkill)&&
+            decodedPetSkill==petSkill,
+            "pet skill wire roundtrip failed");
+        var petSkillResult=new PetSkillResultWire(
+            7,4,SkillUseStatus.Applied,102,9001,1_001_300_001,
+            30,45,100,5,56);
+        var petSkillResultFrame=WireProtocol.EncodePetSkillResult(petSkillResult);
+        Checks.Require(petSkillResultFrame.Length==WireProtocol.PetSkillResultFrameBytes&&
+            WireProtocol.TryDecodePetSkillResult(
+                petSkillResultFrame,out var decodedPetSkillResult)&&
+            decodedPetSkillResult==petSkillResult,
+            "pet skill result wire roundtrip failed");
+        var petSkillVisual=new PetSkillVisualWire(
+            8,56,1001,11,7,4,102,9001,1_001_300_001,
+            SkillUseStatus.Applied,30,5);
+        var petSkillVisualFrame=WireProtocol.EncodePetSkillVisual(petSkillVisual);
+        Checks.Require(petSkillVisualFrame.Length==WireProtocol.PetSkillVisualFrameBytes&&
+            WireProtocol.TryDecodePetSkillVisual(
+                petSkillVisualFrame,out var decodedPetSkillVisual)&&
+            decodedPetSkillVisual==petSkillVisual,
+            "pet skill visual wire roundtrip failed");
+
         var malformed=WireProtocol.EncodePetCommand(summon);
         malformed[20]=9;
         Checks.Require(!WireProtocol.TryDecodePetCommand(malformed,out _),
@@ -194,6 +222,43 @@ internal static class PetChecks
             "pet combat manifest accepted rules without audited source");
     }
 
+    private static void SkillManifest(string root)
+    {
+        string valid=Path.Combine(root,"pet-skill-rules.json");
+        File.WriteAllText(valid,JsonSerializer.Serialize(new
+        {
+            schema=PetSkillRuleCatalog.Schema,
+            source="unit-test audited pet skill fixture",
+            rules=new[]
+            {
+                new
+                {
+                    definition_id=5002,evolution_id=7,level=7,skill_id=9001,
+                    fixed_damage=30,range=28.0,cooldown_ticks=5
+                }
+            }
+        }));
+        var rules=PetSkillRuleCatalog.LoadVerified(valid);
+        Checks.Require(rules.Count==1&&
+            rules.TryGetValue(new(5002,7,7,9001),out var rule)&&
+            rule.FixedDamage==30&&rule.Range==28&&rule.CooldownTicks==5&&
+            rule.EvidenceSource=="unit-test audited pet skill fixture",
+            "verified pet skill manifest did not retain exact audited rule");
+
+        string invalid=Path.Combine(root,"pet-skill-rules-invalid.json");
+        File.WriteAllText(invalid,JsonSerializer.Serialize(new
+        {
+            schema=PetSkillRuleCatalog.Schema,
+            source="",
+            rules=Array.Empty<object>()
+        }));
+        bool rejected=false;
+        try { PetSkillRuleCatalog.LoadVerified(invalid); }
+        catch(InvalidDataException){rejected=true;}
+        Checks.Require(rejected,
+            "pet skill manifest accepted rules without audited source");
+    }
+
     private static void ExperienceSettlementPolicy()
     {
         Checks.Require(
@@ -254,10 +319,17 @@ internal static class PetChecks
             new(AiIntervalTicks:1,MaxAiPerStep:4,MaxPathQueriesPerStep:1,
                 MaxPathExpandedCells:128));
         var key=new PetCombatRuleKey(5002,7,7);
+        var skillKey=new PetSkillRuleKey(5002,7,7,9001);
         var coordinator=new MonsterWorldCoordinator(
-            [runtime],petRules:new Dictionary<PetCombatRuleKey,VerifiedPetCombatRule>
+            [runtime],
+            petRules:new Dictionary<PetCombatRuleKey,VerifiedPetCombatRule>
             {
                 [key]=new(5002,7,7,25,24,3,"unit-test audited fixture")
+            },
+            petSkillRules:new Dictionary<PetSkillRuleKey,VerifiedPetSkillRule>
+            {
+                [skillKey]=new(
+                    5002,7,7,9001,30,28,5,"unit-test audited pet skill fixture")
             });
         var actor=new ActorSnapshot(
             1001,mapId,11,4,0,0,24,24,1,false);
@@ -297,6 +369,28 @@ internal static class PetChecks
             second.Damage==25&&second.CurrentHp==50,
             "pet attack did not resume after verified cooldown");
 
+        var petSkill=coordinator.ResolvePetSkill(
+            new(actor.ActorId,actor.ConnectionEpoch,actor.MapEpoch,
+                1,pet.PetUid,9001,target.EntityId),pet);
+        Checks.Require(petSkill.Status==SkillUseStatus.Applied&&
+            petSkill.Damage==30&&petSkill.CurrentHp==20,
+            "verified pet skill rule did not apply server-owned damage");
+        var skillReplay=coordinator.ResolvePetSkill(
+            new(actor.ActorId,actor.ConnectionEpoch,actor.MapEpoch,
+                1,pet.PetUid,9001,target.EntityId),pet);
+        Checks.Require(skillReplay.Status==SkillUseStatus.ReplayedSequence,
+            "pet skill replay was not rejected");
+        var skillCooldown=coordinator.ResolvePetSkill(
+            new(actor.ActorId,actor.ConnectionEpoch,actor.MapEpoch,
+                2,pet.PetUid,9001,target.EntityId),pet);
+        Checks.Require(skillCooldown.Status==SkillUseStatus.Cooldown,
+            "pet skill ignored independent server-owned cooldown");
+        var unknownSkill=coordinator.ResolvePetSkill(
+            new(actor.ActorId,actor.ConnectionEpoch,actor.MapEpoch,
+                3,pet.PetUid,9002,target.EntityId),pet);
+        Checks.Require(unknownSkill.Status==SkillUseStatus.NoRule,
+            "pet skill guessed an unverified skill rule");
+
         var noRule=pet with {Level=8};
         var blocked=coordinator.ResolvePetNormalAttack(
             new(actor.ActorId,actor.ConnectionEpoch,actor.MapEpoch,
@@ -325,6 +419,21 @@ internal static class PetChecks
             captured.AttackSequence==1&&captured.PetUid==pet.PetUid&&
             captured.TargetEntityId==target.EntityId,
             "pet combat gateway did not stamp trusted actor generation");
+
+        TrustedPetSkill capturedSkill=default;
+        byte[] skillFrame=WireProtocol.EncodePetSkill(
+            new(actor.MapEpoch,1,pet.PetUid,9001,target.EntityId));
+        Checks.Require(gateway.FeedClientBytes(
+                skillFrame,_=>true,out accepted,
+                postPetSkill:value=>{capturedSkill=value;return true;})==
+                WireFeedStatus.Accepted&&accepted==1&&
+            capturedSkill.ActorId==actor.ActorId&&
+            capturedSkill.ConnectionEpoch==actor.ConnectionEpoch&&
+            capturedSkill.RequestMapEpoch==actor.MapEpoch&&
+            capturedSkill.SkillSequence==1&&capturedSkill.PetUid==pet.PetUid&&
+            capturedSkill.SkillId==9001&&
+            capturedSkill.TargetEntityId==target.EntityId,
+            "pet skill gateway did not stamp trusted actor generation");
     }
 
     private static async Task GrowthPersistence()

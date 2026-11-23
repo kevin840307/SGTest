@@ -11,6 +11,9 @@ const PET_DESPAWN_HEX := "380000000100730007000000000000002c00000000000000e90300
 const PET_ATTACK_HEX := "2400000001007500070000000000000003000000660000000000000021a0ae3b00000000"
 const PET_ATTACK_RESULT_HEX := "410000000100760007000000000000000300000000660000000000000021a0ae3b00000000190000004b0000006400000004000000000000003700000000000000"
 const PET_ATTACK_VISUAL_HEX := "510000000100770007000000000000003700000000000000e9030000000000000b00000000000000040000000000000003000000660000000000000021a0ae3b0000000000190000000400000000000000"
+const PET_SKILL_HEX := "280000000100810007000000000000000400000066000000000000002923000021a0ae3b00000000"
+const PET_SKILL_RESULT_HEX := "45000000010082000700000000000000040000000066000000000000002923000021a0ae3b000000001e0000002d0000006400000005000000000000003800000000000000"
+const PET_SKILL_VISUAL_HEX := "550000000100830007000000000000003800000000000000e9030000000000000b0000000000000004000000000000000400000066000000000000002923000021a0ae3b00000000001e0000000500000000000000"
 
 func _initialize() -> void:
 	var command := Codec.encode_pet_command(7,1,1,101)
@@ -70,6 +73,30 @@ func _initialize() -> void:
 	):
 		_fail("pet remote attack visual golden rejected")
 		return
+	var pet_skill:=Codec.encode_pet_skill(7,4,102,9001,1001300001)
+	if pet_skill.hex_encode()!=PET_SKILL_HEX or Codec.frame_opcode(pet_skill)!=Codec.OPCODE_PET_SKILL:
+		_fail("C# pet skill golden mismatch")
+		return
+	var pet_skill_result:=Codec.decode_pet_skill_result(PET_SKILL_RESULT_HEX.hex_decode())
+	if (
+		pet_skill_result.is_empty() or int(pet_skill_result.pet_uid)!=102 or
+		int(pet_skill_result.skill_id)!=9001 or
+		int(pet_skill_result.target_entity_id)!=1001300001 or
+		int(pet_skill_result.damage)!=30 or int(pet_skill_result.current_hp)!=45 or
+		int(pet_skill_result.server_tick)!=56
+	):
+		_fail("pet skill result golden rejected")
+		return
+	var pet_skill_visual:=Codec.decode_pet_skill_visual(PET_SKILL_VISUAL_HEX.hex_decode())
+	if (
+		pet_skill_visual.is_empty() or
+		Codec.frame_opcode(PET_SKILL_VISUAL_HEX.hex_decode())!=Codec.OPCODE_PET_SKILL_VISUAL or
+		int(pet_skill_visual.owner_actor_id)!=1001 or int(pet_skill_visual.pet_uid)!=102 or
+		int(pet_skill_visual.skill_id)!=9001 or int(pet_skill_visual.skill_sequence)!=4 or
+		int(pet_skill_visual.damage)!=30
+	):
+		_fail("pet remote skill visual golden rejected")
+		return
 
 	var remote_state:=State.new()
 	remote_state.state=State.STATE_IN_WORLD
@@ -95,6 +122,20 @@ func _initialize() -> void:
 	remote_view=remote_state.snapshot()
 	if remote_view.pet_attack_visual_events.size()!=1 or int(remote_view.stale_pet_attack_visuals)!=1:
 		_fail("duplicate remote pet attack visual replayed instead of deduping")
+		return
+	if not remote_state.apply_frame(PET_SKILL_VISUAL_HEX.hex_decode()):
+		_fail("remote observer pet skill visual reducer failed")
+		return
+	remote_view=remote_state.snapshot()
+	if remote_view.pet_skill_visual_events.size()!=1 or int(remote_view.pet_skill_visual_events[0].skill_id)!=9001:
+		_fail("remote observer pet skill visual was not published")
+		return
+	if not remote_state.apply_frame(PET_SKILL_VISUAL_HEX.hex_decode()):
+		_fail("duplicate remote observer pet skill visual was not safely ignored")
+		return
+	remote_view=remote_state.snapshot()
+	if remote_view.pet_skill_visual_events.size()!=1 or int(remote_view.stale_pet_skill_visuals)!=1:
+		_fail("duplicate remote pet skill visual replayed instead of deduping")
 		return
 
 	var state := State.new()
@@ -140,6 +181,22 @@ func _initialize() -> void:
 	):
 		_fail("pet attack reducer authority state mismatch")
 		return
+	if not state.mark_pet_skill_sent(4,102,9001,1001300001):
+		_fail("valid pet skill request rejected")
+		return
+	if not state.apply_frame(PET_SKILL_RESULT_HEX.hex_decode()):
+		_fail("pet skill result reducer failed")
+		return
+	combat_view=state.snapshot()
+	if (
+		int(combat_view.pending_pet_skill_sequence)!=0 or
+		int(combat_view.last_pet_skill_result_sequence)!=4 or
+		int(combat_view.last_pet_skill_result_status)!=0 or
+		int(combat_view.last_pet_skill_result.skill_id)!=9001 or
+		int(combat_view.last_pet_skill_result.damage)!=30
+	):
+		_fail("pet skill reducer authority state mismatch")
+		return
 	if not state.apply_frame(PET_DESPAWN_HEX.hex_decode()) or not state.snapshot().pet_entities.is_empty():
 		_fail("pet AOI despawn reducer failed")
 		return
@@ -165,7 +222,7 @@ func _initialize() -> void:
 		_fail("stale pet snapshot changed current state")
 		return
 
-	print("PET_WIRE_PASS csharp_golden=true reducer=true aoi_presence=true aoi_movement=true pet_combat=true remote_attack_visual=true pets=2")
+	print("PET_WIRE_PASS csharp_golden=true reducer=true aoi_presence=true aoi_movement=true pet_combat=true pet_skill=true remote_attack_visual=true remote_skill_visual=true pets=2")
 	quit(0)
 
 func _fail(message:String)->void:

@@ -138,7 +138,10 @@ public enum WireOpcode : ushort
     MechaSnapshot = 125,
     MechaPresentation = 126,
     PlayerShopSnapshot = 127,
-    MechaEquipmentSnapshot = 128
+    MechaEquipmentSnapshot = 128,
+    PetSkill = 129,
+    PetSkillResult = 130,
+    PetSkillVisual = 131
 }
 
 public enum ChatChannel : byte { Nearby = 0, Faction = 1, Warband = 2, Party = 3, Whisper = 4 }
@@ -732,6 +735,15 @@ public readonly record struct PetAttackVisualWire(
     long ReceiverMapEpoch,long ServerTick,long OwnerActorId,long OwnerConnectionEpoch,
     long OwnerMapEpoch,uint AttackSequence,long PetUid,long TargetEntityId,
     NormalAttackStatus Status,int Damage,long TargetRevision);
+public readonly record struct PetSkillWire(
+    long MapEpoch,uint SkillSequence,long PetUid,int SkillId,long TargetEntityId);
+public readonly record struct PetSkillResultWire(
+    long MapEpoch,uint SkillSequence,SkillUseStatus Status,long PetUid,int SkillId,
+    long TargetEntityId,int Damage,int CurrentHp,int MaxHp,long TargetRevision,long ServerTick);
+public readonly record struct PetSkillVisualWire(
+    long ReceiverMapEpoch,long ServerTick,long OwnerActorId,long OwnerConnectionEpoch,
+    long OwnerMapEpoch,uint SkillSequence,long PetUid,int SkillId,long TargetEntityId,
+    SkillUseStatus Status,int Damage,long TargetRevision);
 
 public readonly record struct MechaCommandWire(
     long MapEpoch,uint MechaSequence,MechaCommandAction Action,long MechaUid,long ItemUid=0);

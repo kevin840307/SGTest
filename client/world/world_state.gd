@@ -329,6 +329,19 @@ var stale_pet_attack_results := 0
 var pet_attack_visual_events: Array[Dictionary] = []
 var pet_attack_visual_sequences := {}
 var stale_pet_attack_visuals := 0
+var pet_skill_sequence := 0
+var pending_pet_skill_sequence := 0
+var pending_pet_skill_uid := 0
+var pending_pet_skill_id := 0
+var pending_pet_skill_target := 0
+var last_pet_skill_result_sequence := 0
+var last_pet_skill_result_status := -1
+var last_pet_skill_server_tick := -1
+var last_pet_skill_result := {}
+var stale_pet_skill_results := 0
+var pet_skill_visual_events: Array[Dictionary] = []
+var pet_skill_visual_sequences := {}
+var stale_pet_skill_visuals := 0
 const CHAT_BACKLOG_MAX := 100
 var quest_sequence := 0
 var pending_quest_sequence := 0
@@ -478,6 +491,32 @@ func _clear_pending_pet_attack()->void:
 	pending_pet_attack_sequence=0
 	pending_pet_attack_uid=0
 	pending_pet_attack_target=0
+
+
+func mark_pet_skill_sent(
+		sequence:int,pet_uid:int,skill_id:int,target_entity_id:int)->bool:
+	if (
+		state!=STATE_IN_WORLD or player_dead or not world_ready or
+		resync_pending or waiting_for_new_map or pending_world_ready_ack_epoch!=0 or
+		last_world_ready_ack_epoch!=map_epoch or pending_pet_skill_sequence!=0 or
+		sequence<=pet_skill_sequence or sequence>0xffffffff or pet_uid<=0 or
+		skill_id<=0 or skill_id>100000000 or target_entity_id<=0 or
+		active_pet_uid!=pet_uid
+	):
+		return false
+	pet_skill_sequence=sequence
+	pending_pet_skill_sequence=sequence
+	pending_pet_skill_uid=pet_uid
+	pending_pet_skill_id=skill_id
+	pending_pet_skill_target=target_entity_id
+	return true
+
+
+func _clear_pending_pet_skill()->void:
+	pending_pet_skill_sequence=0
+	pending_pet_skill_uid=0
+	pending_pet_skill_id=0
+	pending_pet_skill_target=0
 
 
 func mark_skill_sent(sequence: int,target_kind: int = 0,target_id: int = 0) -> bool:
@@ -1248,6 +1287,10 @@ func apply_frame(frame: PackedByteArray) -> bool:
 			return _apply_pet_attack_result(frame)
 		WireCodec.OPCODE_PET_ATTACK_VISUAL:
 			return _apply_pet_attack_visual(frame)
+		WireCodec.OPCODE_PET_SKILL_RESULT:
+			return _apply_pet_skill_result(frame)
+		WireCodec.OPCODE_PET_SKILL_VISUAL:
+			return _apply_pet_skill_visual(frame)
 		WireCodec.OPCODE_QUEST_VIEW:
 			return _apply_quest_view(frame)
 		WireCodec.OPCODE_WORLD_READY:
@@ -1584,6 +1627,19 @@ func snapshot() -> Dictionary:
 		"pet_attack_visual_events": pet_attack_visual_events.duplicate(true),
 		"pet_attack_visual_sequences": pet_attack_visual_sequences.duplicate(true),
 		"stale_pet_attack_visuals": stale_pet_attack_visuals,
+		"pet_skill_sequence": pet_skill_sequence,
+		"pending_pet_skill_sequence": pending_pet_skill_sequence,
+		"pending_pet_skill_uid": pending_pet_skill_uid,
+		"pending_pet_skill_id": pending_pet_skill_id,
+		"pending_pet_skill_target": pending_pet_skill_target,
+		"last_pet_skill_result_sequence": last_pet_skill_result_sequence,
+		"last_pet_skill_result_status": last_pet_skill_result_status,
+		"last_pet_skill_server_tick": last_pet_skill_server_tick,
+		"last_pet_skill_result": last_pet_skill_result.duplicate(true),
+		"stale_pet_skill_results": stale_pet_skill_results,
+		"pet_skill_visual_events": pet_skill_visual_events.duplicate(true),
+		"pet_skill_visual_sequences": pet_skill_visual_sequences.duplicate(true),
+		"stale_pet_skill_visuals": stale_pet_skill_visuals,
 		"quest_sequence": quest_sequence,
 		"pending_quest_sequence": pending_quest_sequence,
 		"pending_quest_kind": pending_quest_kind,
@@ -1847,6 +1903,16 @@ func _reset_character_pet_state() -> void:
 	pet_attack_visual_events.clear()
 	pet_attack_visual_sequences.clear()
 	stale_pet_attack_visuals=0
+	pet_skill_sequence=0
+	_clear_pending_pet_skill()
+	last_pet_skill_result_sequence=0
+	last_pet_skill_result_status=-1
+	last_pet_skill_server_tick=-1
+	last_pet_skill_result.clear()
+	stale_pet_skill_results=0
+	pet_skill_visual_events.clear()
+	pet_skill_visual_sequences.clear()
+	stale_pet_skill_visuals=0
 
 
 func _reset_character_mecha_state() -> void:
@@ -2568,6 +2634,7 @@ func _apply_world_ready(frame: PackedByteArray) -> bool:
 	player_skill_events.clear()
 	player_attack_events.clear()
 	pet_attack_visual_events.clear()
+	pet_skill_visual_events.clear()
 	player_damage_visual_events.clear()
 	player_respawn_visual_events.clear()
 	pvp_combat_visual_events.clear()
@@ -2606,6 +2673,9 @@ func _reset_map_combat_and_item_commands() -> void:
 	pet_attack_visual_events.clear()
 	pet_attack_visual_sequences.clear()
 	stale_pet_attack_visuals = 0
+	pet_skill_visual_events.clear()
+	pet_skill_visual_sequences.clear()
+	stale_pet_skill_visuals = 0
 	player_damage_visual_events.clear()
 	player_damage_visual_sequences.clear()
 	stale_player_damage_visuals = 0
@@ -4516,6 +4586,61 @@ func _apply_pet_attack_visual(frame:PackedByteArray)->bool:
 	return true
 
 
+func _apply_pet_skill_visual(frame:PackedByteArray)->bool:
+	if state!=STATE_IN_WORLD or not world_ready:
+		return fail("pet_skill_visual_out_of_state")
+	var value:=WireCodec.decode_pet_skill_visual(frame)
+	if value.is_empty():
+		return fail("invalid_pet_skill_visual")
+	var disposition:=_check_aoi_generation(
+		int(value.receiver_map_epoch),int(value.server_tick))
+	if disposition<=0:
+		if disposition==0:
+			stale_pet_skill_visuals+=1
+		return disposition==0
+	var owner:=int(value.owner_actor_id)
+	if owner==actor_id:
+		return fail("pet_skill_visual_for_owner")
+	var pet:Dictionary=pet_entities.get(owner,{})
+	if pet.is_empty():
+		return _need_resync("pet_skill_visual_without_pet_spawn")
+	if (
+		int(pet.get("owner_connection_epoch",0))!=int(value.owner_connection_epoch) or
+		int(pet.get("owner_map_epoch",0))!=int(value.owner_map_epoch) or
+		int(pet.get("pet_uid",0))!=int(value.pet_uid)
+	):
+		return _need_resync("pet_skill_visual_pet_generation")
+	var target:=int(value.target_entity_id)
+	if not monsters.has(target):
+		return _need_resync("pet_skill_visual_target_without_spawn")
+	var current_revision:=int(monsters[target].get("revision",0))
+	if int(value.target_revision)<current_revision:
+		stale_pet_skill_visuals+=1
+		return true
+	var sequence:=int(value.skill_sequence)
+	var prior:Dictionary=pet_skill_visual_sequences.get(owner,{})
+	if not prior.is_empty():
+		if (
+			int(prior.get("connection_epoch",0))!=int(value.owner_connection_epoch) or
+			int(prior.get("map_epoch",0))!=int(value.owner_map_epoch)
+		):
+			return _need_resync("pet_skill_visual_sequence_generation")
+		if sequence<=int(prior.get("sequence",0)):
+			stale_pet_skill_visuals+=1
+			return true
+	pet_skill_visual_sequences[owner]={
+		"connection_epoch":int(value.owner_connection_epoch),
+		"map_epoch":int(value.owner_map_epoch),"sequence":sequence}
+	pet_skill_visual_events.append(value.duplicate(true))
+	var cutoff:=maxi(int(value.server_tick),last_aoi_tick)-PLAYER_ATTACK_EVENT_TTL_TICKS
+	while not pet_skill_visual_events.is_empty() and int(pet_skill_visual_events[0].get("server_tick",-1))<cutoff:
+		pet_skill_visual_events.pop_front()
+	if pet_skill_visual_events.size()>PLAYER_ATTACK_EVENT_MAX:
+		return fail("pet_skill_visual_backlog_overflow")
+	last_aoi_tick=maxi(last_aoi_tick,int(value.server_tick))
+	return true
+
+
 func _apply_pet_attack_result(frame:PackedByteArray)->bool:
 	if state!=STATE_IN_WORLD:
 		return fail("pet_attack_result_out_of_state")
@@ -4546,6 +4671,40 @@ func _apply_pet_attack_result(frame:PackedByteArray)->bool:
 	last_pet_attack_server_tick=tick
 	last_pet_attack_result=result.duplicate(true)
 	_clear_pending_pet_attack()
+	return true
+
+
+func _apply_pet_skill_result(frame:PackedByteArray)->bool:
+	if state!=STATE_IN_WORLD:
+		return fail("pet_skill_result_out_of_state")
+	var result:=WireCodec.decode_pet_skill_result(frame)
+	if result.is_empty():
+		return fail("invalid_pet_skill_result")
+	var epoch:=int(result.map_epoch)
+	var sequence:=int(result.skill_sequence)
+	var tick:=int(result.server_tick)
+	if epoch<map_epoch:
+		stale_pet_skill_results+=1
+		return true
+	if epoch>map_epoch:
+		return fail("future_pet_skill_result")
+	if sequence<=last_pet_skill_result_sequence:
+		stale_pet_skill_results+=1
+		return true
+	if (
+		sequence>pet_skill_sequence or sequence!=pending_pet_skill_sequence or
+		int(result.pet_uid)!=pending_pet_skill_uid or
+		int(result.skill_id)!=pending_pet_skill_id or
+		int(result.target_entity_id)!=pending_pet_skill_target
+	):
+		return fail("pet_skill_result_without_matching_request")
+	if last_pet_skill_server_tick>=0 and tick<last_pet_skill_server_tick:
+		return fail("pet_skill_server_tick_regressed")
+	last_pet_skill_result_sequence=sequence
+	last_pet_skill_result_status=int(result.status)
+	last_pet_skill_server_tick=tick
+	last_pet_skill_result=result.duplicate(true)
+	_clear_pending_pet_skill()
 	return true
 
 

@@ -287,7 +287,7 @@ public sealed partial class IdentitySessionAuthorization
                 Authorize, _world.TryPostMove, options, cancellationToken, Release,
                 portal is null ? null : portal.HandleAsync, router.TryRequestResync,
                 router.TryRequestNormalAttack,router.TryRequestPetAttack,
-                recovery.HandleRespawnAsync,
+                router.TryRequestPetSkill,recovery.HandleRespawnAsync,
                 inventory.HandlePickupAsync, recovery.HandleRecoveryItemAsync,
                 inventory.HandleDiscardAsync,
                 handleSkill:skills.HandleSkillAsync,handleShop:npcEconomy.HandleShopAsync,

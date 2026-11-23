@@ -107,6 +107,7 @@ public sealed partial class GatewayConnection
     private uint _lastPetSequence;
     private uint _lastMechaSequence;
     private uint _lastPetAttackSequence;
+    private uint _lastPetSkillSequence;
     private readonly string? _displayName;
     private readonly CharacterAppearance? _appearance;
     private CharacterPvpState? _pvpState;

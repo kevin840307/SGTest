@@ -53,6 +53,23 @@ public sealed partial class WorldResultRouter
         return _petAttacks.Writer.TryWrite(request);
     }
 
+    public bool TryRequestPetSkill(TrustedPetSkill request)
+    {
+        if(request.ActorId<=0||request.ConnectionEpoch<=0||
+           request.RequestMapEpoch<=0||request.SkillSequence==0||
+           request.PetUid<=0||request.SkillId<=0||request.TargetEntityId<=0)
+            return false;
+        lock(_gate)
+        {
+            if(!_connections.TryGetValue(request.ActorId,out var connection)||
+               connection.IsClosed||
+               connection.Binding.ActorId!=request.ActorId||
+               connection.Binding.ConnectionEpoch!=request.ConnectionEpoch)
+                return false;
+        }
+        return _petSkills.Writer.TryWrite(request);
+    }
+
     public bool TryRequestSkill(TrustedSkillUse request)
     {
         if(request.ActorId<=0 || request.ConnectionEpoch<=0 ||

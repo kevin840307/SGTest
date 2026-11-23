@@ -687,6 +687,9 @@ public static partial class WireProtocol
             126 => WireOpcode.MechaPresentation,
             127 => WireOpcode.PlayerShopSnapshot,
             128 => WireOpcode.MechaEquipmentSnapshot,
+            129 => WireOpcode.PetSkill,
+            130 => WireOpcode.PetSkillResult,
+            131 => WireOpcode.PetSkillVisual,
             _ => 0
         };
         if (opcode == 0) return false;
@@ -740,6 +743,9 @@ public static partial class WireProtocol
             WireOpcode.PetAttack => advertised == PetAttackFrameBytes,
             WireOpcode.PetAttackResult => advertised == PetAttackResultFrameBytes,
             WireOpcode.PetAttackVisual => advertised == PetAttackVisualFrameBytes,
+            WireOpcode.PetSkill => advertised == PetSkillFrameBytes,
+            WireOpcode.PetSkillResult => advertised == PetSkillResultFrameBytes,
+            WireOpcode.PetSkillVisual => advertised == PetSkillVisualFrameBytes,
             WireOpcode.CharacterCreate => advertised is >= 12 and <= MaxCharacterCreateFrameBytes,
             WireOpcode.CharacterCreateResult => advertised is >= 20 and <= MaxCharacterCreateResultFrameBytes,
             WireOpcode.WorldReady => advertised == WorldReadyFrameBytes,

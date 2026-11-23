@@ -111,6 +111,7 @@ public sealed partial class WorldResultRouter
             _resync.Writer.TryComplete(fault);
             _attacks.Writer.TryComplete(fault);
             _petAttacks.Writer.TryComplete(fault);
+            _petSkills.Writer.TryComplete(fault);
             _skills.Writer.TryComplete(fault);
             _skillPreflights.Writer.TryComplete(fault);
             _preparedSkills.Writer.TryComplete(fault);

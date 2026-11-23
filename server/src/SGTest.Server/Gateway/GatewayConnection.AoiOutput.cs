@@ -137,6 +137,14 @@ public sealed partial class GatewayConnection
                         petAttack.TargetEntityId,petAttack.Status,
                         petAttack.Damage,petAttack.TargetRevision));
                     break;
+                case AoiEventKind.PetSkillVisual when evt.PetSkill is { } petSkill:
+                    frame=WireProtocol.EncodePetSkillVisual(new(
+                        evt.ReceiverMapEpoch,evt.Tick,petSkill.OwnerActorId,
+                        petSkill.OwnerConnectionEpoch,petSkill.OwnerMapEpoch,
+                        petSkill.SkillSequence,petSkill.PetUid,petSkill.SkillId,
+                        petSkill.TargetEntityId,petSkill.Status,
+                        petSkill.Damage,petSkill.TargetRevision));
+                    break;
                 case AoiEventKind.MechaState when evt.Mecha is { } mecha:
                     frame=WireProtocol.EncodeMechaPresentation(new(
                         evt.ReceiverMapEpoch,evt.Tick,mecha.OwnerActorId,

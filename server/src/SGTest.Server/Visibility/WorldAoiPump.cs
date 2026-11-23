@@ -284,6 +284,54 @@ public sealed class WorldAoiPump
                     Interlocked.Increment(ref _framesQueued);
                 }
 
+                while(_router.PetSkillRequests.TryRead(out var petSkill))
+                {
+                    bool attackerDead=_playerCombat is not null&&
+                        _monsters is not null&&
+                        _monsters.TryGetActor(petSkill.ActorId,out var petOwner)&&
+                        _playerCombat.CurrentHp(petOwner)<=0;
+                    SkillUseOutcome outcome;
+                    PetWorldPresence pet=default;
+                    if(_monsters is null||attackerDead||
+                       !_aoi.TryGetPet(
+                           petSkill.ActorId,petSkill.ConnectionEpoch,
+                           petSkill.RequestMapEpoch,petSkill.PetUid,out pet))
+                        outcome=new(
+                            SkillUseStatus.CombatUnavailable,
+                            Math.Max(0,_aoi.LastTick),petSkill.SkillId,
+                            petSkill.TargetEntityId,0,0,0,0);
+                    else
+                        outcome=_monsters.ResolvePetSkill(petSkill,pet);
+
+                    if(outcome.Status is SkillUseStatus.Applied or SkillUseStatus.Miss)
+                        _aoi.EnqueuePetSkillVisual(petSkill,outcome);
+
+                    if(outcome.Status==SkillUseStatus.Applied&&
+                       outcome.Monster is { } changed)
+                    {
+                        _aoi.ApplyMonsters(_aoi.LastTick,[changed]);
+                        if(changed.CurrentHp==0&&changed.State==MonsterAiState.Dead)
+                        {
+                            if(_loot is not null&&
+                               _loot.TryPostDeath(changed)==MonsterLootPostStatus.Backpressured)
+                                throw new AoiBackpressureException(
+                                    "Loot settlement queue full; accepted pet skill death must not be dropped");
+                            TryPostExperienceDeath(changed);
+                        }
+                    }
+
+                    var sent=_router.QueuePetSkillResult(petSkill,outcome);
+                    if(sent is GatewaySendStatus.GenerationMismatch or GatewaySendStatus.Closed)
+                        continue;
+                    if(sent==GatewaySendStatus.Backpressured)
+                        throw new AoiBackpressureException(
+                            "Authenticated Gateway pet skill FIFO full; result cannot be dropped");
+                    if(sent!=GatewaySendStatus.Enqueued)
+                        throw new InvalidOperationException(
+                            "Pet skill delivery accounting diverged");
+                    Interlocked.Increment(ref _framesQueued);
+                }
+
                 while(_router.SkillPreflightRequests.TryRead(out var preflight))
                 {
                     MonsterWorldCoordinator.SkillPrepareResult result;

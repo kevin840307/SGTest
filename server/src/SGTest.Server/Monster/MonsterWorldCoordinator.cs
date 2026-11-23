@@ -60,9 +60,11 @@ public sealed class MonsterWorldCoordinator
 
     private readonly IReadOnlyDictionary<int,VerifiedSkillRule> _skillRules;
     private readonly IReadOnlyDictionary<PetCombatRuleKey,VerifiedPetCombatRule> _petRules;
+    private readonly IReadOnlyDictionary<PetSkillRuleKey,VerifiedPetSkillRule> _petSkillRules;
     private readonly Dictionary<long, ActorSnapshot> _actors = [];
     private readonly Dictionary<long, AttackCursor> _attack = [];
     private readonly Dictionary<long, AttackCursor> _petAttack = [];
+    private readonly Dictionary<long, SkillCursor> _petSkill = [];
     private readonly Dictionary<long, SkillCursor> _skill = [];
     private readonly HashSet<int> _seededMaps = [];
     private long _lastTick;
@@ -71,7 +73,8 @@ public sealed class MonsterWorldCoordinator
     public MonsterWorldCoordinator(
         IEnumerable<MonsterRuntime> runtimes,
         IReadOnlyDictionary<int,VerifiedSkillRule>? skillRules = null,
-        IReadOnlyDictionary<PetCombatRuleKey,VerifiedPetCombatRule>? petRules = null)
+        IReadOnlyDictionary<PetCombatRuleKey,VerifiedPetCombatRule>? petRules = null,
+        IReadOnlyDictionary<PetSkillRuleKey,VerifiedPetSkillRule>? petSkillRules = null)
     {
         ArgumentNullException.ThrowIfNull(runtimes);
         _skillRules=skillRules is null
@@ -80,6 +83,9 @@ public sealed class MonsterWorldCoordinator
         _petRules=petRules is null
             ? new Dictionary<PetCombatRuleKey,VerifiedPetCombatRule>()
             : new Dictionary<PetCombatRuleKey,VerifiedPetCombatRule>(petRules);
+        _petSkillRules=petSkillRules is null
+            ? new Dictionary<PetSkillRuleKey,VerifiedPetSkillRule>()
+            : new Dictionary<PetSkillRuleKey,VerifiedPetSkillRule>(petSkillRules);
         if(_petRules.Count>PetCombatRuleCatalog.MaximumRules ||
            _petRules.Any(pair=>pair.Key!=new PetCombatRuleKey(
                     pair.Value.DefinitionId,pair.Value.EvolutionId,pair.Value.Level) ||
@@ -89,6 +95,16 @@ public sealed class MonsterWorldCoordinator
                 pair.Value.CooldownTicks is <0 or >3_600 ||
                 string.IsNullOrWhiteSpace(pair.Value.EvidenceSource)))
             throw new ArgumentOutOfRangeException(nameof(petRules));
+        if(_petSkillRules.Count>PetSkillRuleCatalog.MaximumRules ||
+           _petSkillRules.Any(pair=>pair.Key!=new PetSkillRuleKey(
+                    pair.Value.DefinitionId,pair.Value.EvolutionId,
+                    pair.Value.Level,pair.Value.SkillId) ||
+                pair.Value.FixedDamage is <1 or >100_000_000 ||
+                !double.IsFinite(pair.Value.Range) ||
+                pair.Value.Range is <=0 or >500 ||
+                pair.Value.CooldownTicks is <0 or >3_600 ||
+                string.IsNullOrWhiteSpace(pair.Value.EvidenceSource)))
+            throw new ArgumentOutOfRangeException(nameof(petSkillRules));
         if(_skillRules.Count>64 ||
             _skillRules.Any(pair=>pair.Key!=pair.Value.SkillId ||
                 pair.Key is <1 or >100_000_000 ||
@@ -285,6 +301,55 @@ public sealed class MonsterWorldCoordinator
         var changed=applied.Monster;
         return new(NormalAttackStatus.Applied,_lastTick,request.TargetEntityId,
             applied.Damage,changed.CurrentHp,changed.MaxHp,
+            changed.EntityRevision,changed);
+    }
+
+    public SkillUseOutcome ResolvePetSkill(
+        TrustedPetSkill request,PetWorldPresence pet)
+    {
+        if(_lastTick<=0||!_actors.TryGetValue(request.ActorId,out var actor)||
+           !_petSkill.TryGetValue(request.ActorId,out var cursor)||
+           actor.ConnectionEpoch!=request.ConnectionEpoch||
+           cursor.ConnectionEpoch!=request.ConnectionEpoch)
+            return PetSkillEmpty(request,SkillUseStatus.OldMapEpoch);
+
+        if(request.RequestMapEpoch!=actor.MapEpoch||cursor.MapEpoch!=actor.MapEpoch)
+            return PetSkillEmpty(request,SkillUseStatus.OldMapEpoch);
+
+        if(pet.OwnerActorId!=request.ActorId||
+           pet.OwnerConnectionEpoch!=request.ConnectionEpoch||
+           pet.OwnerMapEpoch!=request.RequestMapEpoch||pet.PetUid!=request.PetUid)
+            return PetSkillEmpty(request,SkillUseStatus.CombatUnavailable);
+
+        if(request.SkillSequence<=cursor.LastSequence)
+            return PetSkillEmpty(request,SkillUseStatus.ReplayedSequence);
+        cursor.LastSequence=request.SkillSequence;
+
+        var key=new PetSkillRuleKey(
+            pet.DefinitionId,pet.EvolutionId,pet.Level,request.SkillId);
+        if(!_petSkillRules.TryGetValue(key,out var rule))
+            return PetSkillEmpty(request,SkillUseStatus.NoRule);
+        if(!_runtimes.TryGetValue(actor.MapId,out var runtime))
+            return PetSkillEmpty(request,SkillUseStatus.CombatUnavailable);
+
+        if(cursor.LastAppliedTick.TryGetValue(request.SkillId,out long lastApplied)&&
+           _lastTick-lastApplied<rule.CooldownTicks)
+            return PetSkillEmpty(request,SkillUseStatus.Cooldown);
+
+        var targetStatus=runtime.ValidateNormalAttackTarget(
+            request.TargetEntityId,pet.X,pet.Y,rule.Range,out var target);
+        if(targetStatus!=NormalAttackStatus.Applied)
+            return PetSkillFromTarget(request,MapSkillStatus(targetStatus),target);
+
+        cursor.LastAppliedTick[request.SkillId]=_lastTick;
+        var applied=runtime.ApplyTrustedDamage(
+            request.TargetEntityId,request.ActorId,rule.FixedDamage,_lastTick);
+        if(!applied.Applied)
+            return PetSkillFromTarget(request,SkillUseStatus.TargetDead,target);
+
+        var changed=applied.Monster;
+        return new(SkillUseStatus.Applied,_lastTick,request.SkillId,
+            request.TargetEntityId,applied.Damage,changed.CurrentHp,changed.MaxHp,
             changed.EntityRevision,changed);
     }
 
@@ -564,6 +629,21 @@ public sealed class MonsterWorldCoordinator
             target.CurrentHp,target.MaxHp,target.EntityRevision,target);
     }
 
+    private SkillUseOutcome PetSkillEmpty(
+        TrustedPetSkill request,SkillUseStatus status) =>
+        new(status,Math.Max(0,_lastTick),request.SkillId,
+            request.TargetEntityId,0,0,0,0);
+
+    private SkillUseOutcome PetSkillFromTarget(
+        TrustedPetSkill request,SkillUseStatus status,MonsterSnapshot target)
+    {
+        if(target.EntityId<=0)
+            return PetSkillEmpty(request,status);
+        return new(status,Math.Max(0,_lastTick),request.SkillId,
+            request.TargetEntityId,0,target.CurrentHp,target.MaxHp,
+            target.EntityRevision,target);
+    }
+
     private void Join(ActorSnapshot actor)
     {
         ValidateActor(actor);
@@ -577,6 +657,11 @@ public sealed class MonsterWorldCoordinator
             MapEpoch = actor.MapEpoch
         });
         _petAttack.Add(actor.ActorId,new AttackCursor
+        {
+            ConnectionEpoch=actor.ConnectionEpoch,
+            MapEpoch=actor.MapEpoch
+        });
+        _petSkill.Add(actor.ActorId,new SkillCursor
         {
             ConnectionEpoch=actor.ConnectionEpoch,
             MapEpoch=actor.MapEpoch
@@ -598,6 +683,7 @@ public sealed class MonsterWorldCoordinator
         _actors.Remove(actor.ActorId);
         _attack.Remove(actor.ActorId);
         _petAttack.Remove(actor.ActorId);
+        _petSkill.Remove(actor.ActorId);
         _skill.Remove(actor.ActorId);
     }
 

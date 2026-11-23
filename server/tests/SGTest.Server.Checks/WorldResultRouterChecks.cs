@@ -180,7 +180,8 @@ internal static class WorldResultRouterChecks
                 router.PlayerPvpCombatVisuals.Completion.IsCompletedSuccessfully &&
                 router.PlayerPvpSkillVisuals.Completion.IsCompletedSuccessfully &&
                 router.PetWorldUpdates.Completion.IsCompletedSuccessfully &&
-                router.PetAttackRequests.Completion.IsCompletedSuccessfully,
+                router.PetAttackRequests.Completion.IsCompletedSuccessfully &&
+                router.PetSkillRequests.Completion.IsCompletedSuccessfully,
                 "PvP/identity/pet channels remained open after router shutdown");
         bool doubleReaderRejected = false;
         try { await router.RunAsync(source.Reader); }
@@ -207,6 +208,7 @@ internal static class WorldResultRouterChecks
             router.ResyncRequests.Completion,
             router.AttackRequests.Completion,
             router.PetAttackRequests.Completion,
+            router.PetSkillRequests.Completion,
             router.SkillRequests.Completion,
             router.SkillPreflightRequests.Completion,
             router.PreparedSkillActions.Completion,

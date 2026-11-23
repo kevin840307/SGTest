@@ -49,7 +49,7 @@ internal static class WorldAoiChecks
             PetInterest);
         Checks.Run("mounted Mecha presentation follows player AOI and heals transfer generation",
             MechaInterest);
-        Checks.Run("pet attack visual reaches visible remote peers without duplicating owner result",
+        Checks.Run("pet attack and skill visuals reach visible remote peers without duplicating owner result",
             PetAttackVisualInterest);
         Checks.Run("player attack visual reaches only viewers seeing attacker and target",
             PlayerAttackVisualInterest);
@@ -256,6 +256,25 @@ internal static class WorldAoiChecks
             Drain(aoi,peer).Single().PetAttack?.Status==NormalAttackStatus.Miss&&
             Drain(aoi,owner).Length==0,
             "pet MISS visual was lost or duplicated to owner");
+
+        var skillRequest=new TrustedPetSkill(owner.ActorId,owner.ConnectionEpoch,
+            owner.MapEpoch,5,9101,9001,monster.EntityId);
+        var skillOutcome=new SkillUseOutcome(
+            SkillUseStatus.Applied,1,9001,monster.EntityId,30,70,100,2,changed);
+        Require(aoi.EnqueuePetSkillVisual(skillRequest,skillOutcome)==1,
+            "pet skill visual did not target exactly one visible remote peer");
+        Require(Drain(aoi,owner).Length==0,
+            "pet owner received duplicate observer skill visual");
+        var peerSkill=Drain(aoi,peer).Single();
+        Require(peerSkill.Kind==AoiEventKind.PetSkillVisual&&
+            peerSkill.PetSkill?.OwnerActorId==owner.ActorId&&
+            peerSkill.PetSkill?.OwnerConnectionEpoch==owner.ConnectionEpoch&&
+            peerSkill.PetSkill?.OwnerMapEpoch==owner.MapEpoch&&
+            peerSkill.PetSkill?.PetUid==9101&&
+            peerSkill.PetSkill?.SkillId==9001&&
+            peerSkill.PetSkill?.SkillSequence==5&&
+            peerSkill.PetSkill?.Damage==30&&Drain(aoi,far).Length==0,
+            "pet skill visual AOI scope/generation payload mismatch");
     }
 
     private static void PlayerAttackVisualInterest()
