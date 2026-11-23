@@ -577,6 +577,29 @@ func _build_clan_aux() -> void:
 	)
 	join_section.add_child(join)
 
+	var management := VBoxContainer.new()
+	management.name = "ClanManagementSection"
+	management.add_theme_constant_override("separation",6)
+	left.add_child(management)
+	var announcement_title := Label.new()
+	announcement_title.text = "團長公告"
+	announcement_title.theme_type_variation = &"ParadiseSecondaryText"
+	management.add_child(announcement_title)
+	var announcement_edit := LineEdit.new()
+	announcement_edit.name = "ClanAnnouncementEdit"
+	announcement_edit.placeholder_text = "輸入戰團公告"
+	announcement_edit.max_length = 1024
+	management.add_child(announcement_edit)
+	var announcement_update := Button.new()
+	announcement_update.name = "ClanAnnouncementUpdateButton"
+	announcement_update.text = "更新公告"
+	announcement_update.theme_type_variation = &"ParadisePrimaryButton"
+	announcement_update.pressed.connect(func():
+		if _panel != null:
+			_panel.submit_clan_set_announcement(announcement_edit.text)
+	)
+	management.add_child(announcement_update)
+
 	var spacer := Control.new()
 	spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	left.add_child(spacer)
@@ -1157,15 +1180,18 @@ func _refresh_aux_snapshot() -> void:
 			(members_node as Label).text = "\n".join(rows)
 	var clan_id := int(_stats.get("clan_id",0))
 	var clan_name := str(_stats.get("clan_name",""))
+	var clan_announcement := str(_stats.get("clan_announcement",""))
 	var clan_revision := int(_stats.get("clan_revision",0))
 	var clan_leader := int(_stats.get("clan_leader_actor_id",0))
+	var self_actor := int(_stats.get("actor_id",0))
 	var clan_members: Dictionary = _stats.get("clan_members",{})
 	clan_window.meta_label.text = "成員 %d / 100" % clan_members.size()
 	var clan_identity = clan_window.find_child("ClanIdentitySummary",true,false)
 	if clan_identity is Label:
 		(clan_identity as Label).text = (
-			"%s\n戰團 ID %d\nRevision %d\n團長 Actor %d" % [
-				clan_name,clan_id,clan_revision,clan_leader]
+			"%s\n戰團 ID %d　Revision %d\n團長 Actor %d\n公告：%s" % [
+				clan_name,clan_id,clan_revision,clan_leader,
+				clan_announcement if not clan_announcement.is_empty() else "（無）"]
 		) if clan_id>0 else "尚未加入戰團"
 	var clan_create = clan_window.find_child("ClanCreateSection",true,false)
 	var clan_join = clan_window.find_child("ClanJoinSection",true,false)
@@ -1176,6 +1202,12 @@ func _refresh_aux_snapshot() -> void:
 		(clan_join as Control).visible = clan_id==0
 	if clan_leave is Button:
 		(clan_leave as Button).disabled = clan_id<=0
+	var clan_management = clan_window.find_child("ClanManagementSection",true,false)
+	var clan_announcement_edit = clan_window.find_child("ClanAnnouncementEdit",true,false)
+	if clan_management is Control:
+		(clan_management as Control).visible = clan_id>0 and clan_leader==self_actor
+	if clan_announcement_edit is LineEdit and not (clan_announcement_edit as LineEdit).has_focus():
+		(clan_announcement_edit as LineEdit).text = clan_announcement
 	var clan_rows = clan_window.find_child("ClanMemberRows",true,false)
 	if clan_rows is VBoxContainer:
 		for child in (clan_rows as VBoxContainer).get_children():
@@ -1186,15 +1218,38 @@ func _refresh_aux_snapshot() -> void:
 		for raw_id in clan_ids:
 			var actor := int(raw_id)
 			var member: Dictionary = clan_members[raw_id]
+			var member_row := HBoxContainer.new()
+			member_row.name = "ClanMemberRow%d" % actor
+			member_row.custom_minimum_size.y = 30
+			(clan_rows as VBoxContainer).add_child(member_row)
 			var row := Label.new()
 			row.name = "ClanMember%d" % actor
 			row.text = "%s　%s　Actor %d" % [
 				"★ 團長" if actor==clan_leader else "・ 成員",
 				str(member.get("name","玩家")),actor]
-			row.custom_minimum_size.y = 30
+			row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 			row.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 			row.add_theme_font_size_override("font_size",14)
-			(clan_rows as VBoxContainer).add_child(row)
+			member_row.add_child(row)
+			if self_actor==clan_leader and actor!=self_actor:
+				var transfer := Button.new()
+				transfer.name = "ClanTransfer%d" % actor
+				transfer.text = "轉讓"
+				transfer.tooltip_text = "將團長轉讓給此成員"
+				transfer.pressed.connect(func():
+					if _panel != null:
+						_panel.submit_clan_transfer_leadership(actor)
+				)
+				member_row.add_child(transfer)
+				var kick := Button.new()
+				kick.name = "ClanKick%d" % actor
+				kick.text = "踢除"
+				kick.theme_type_variation = &"ParadiseDangerButton"
+				kick.pressed.connect(func():
+					if _panel != null:
+						_panel.submit_clan_kick(actor)
+				)
+				member_row.add_child(kick)
 		if clan_ids.is_empty():
 			var empty := Label.new()
 			empty.text = "尚未加入戰團" if clan_id==0 else "等待伺服器成員快照"
@@ -1211,7 +1266,8 @@ func _refresh_aux_snapshot() -> void:
 		if clan_result_status>=0:
 			var messages := [
 				"操作成功","已經加入戰團","目前沒有戰團","找不到戰團",
-				"戰團名稱已被使用","戰團名稱格式錯誤","戰團人數已滿","戰團資料已變更，請重新操作"]
+				"戰團名稱已被使用","戰團名稱格式錯誤","戰團人數已滿","戰團資料已變更，請重新操作",
+				"只有團長可以執行此操作","目標不是戰團成員","不能對自己執行此操作","公告格式錯誤"]
 			if clan_result_status<messages.size():
 				clan_result_text = messages[clan_result_status]
 		(clan_status as Label).text = clan_result_text

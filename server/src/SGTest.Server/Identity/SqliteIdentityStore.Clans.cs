@@ -6,18 +6,20 @@ namespace SGTest.Server.Identity;
 public enum ClanStoreStatus : byte
 {
     Success=0,AlreadyInClan=1,NotInClan=2,ClanNotFound=3,
-    NameTaken=4,InvalidName=5,ClanFull=6,Conflict=7
+    NameTaken=4,InvalidName=5,ClanFull=6,Conflict=7,
+    NotLeader=8,TargetNotMember=9,CannotTargetSelf=10,InvalidAnnouncement=11
 }
 public enum ClanMemberRole : byte { Member=0, Leader=1 }
 public sealed record ClanMemberRecord(long CharacterId,string Name,ClanMemberRole Role);
 public sealed record ClanRecord(
-    long ClanId,uint Revision,long LeaderCharacterId,string Name,
+    long ClanId,uint Revision,long LeaderCharacterId,string Name,string Announcement,
     IReadOnlyList<ClanMemberRecord> Members);
 
 public sealed partial class SqliteIdentityStore
 {
     public const int ClanMaximumMembers=100;
     public const int ClanMaximumNameBytes=72;
+    public const int ClanMaximumAnnouncementBytes=1024;
 
     private static (string Display,string Key) NormalizeClanName(string name)
     {
@@ -28,6 +30,17 @@ public sealed partial class SqliteIdentityStore
            display.Any(char.IsControl))
             throw new ArgumentException("Clan name must be 2-24 visible characters",nameof(name));
         return(display,display.ToUpperInvariant());
+    }
+
+    private static string NormalizeClanAnnouncement(string announcement)
+    {
+        if(announcement is null)throw new ArgumentNullException(nameof(announcement));
+        string display=announcement.Normalize(NormalizationForm.FormC).Trim();
+        if(Encoding.UTF8.GetByteCount(display)>ClanMaximumAnnouncementBytes||
+           display.Any(ch=>char.IsControl(ch)&&ch!='\n'))
+            throw new ArgumentException("Clan announcement exceeds the bounded UTF-8 contract",
+                nameof(announcement));
+        return display;
     }
 
     public async Task<(ClanStoreStatus Status,ClanRecord? Clan)> CreateClanAsync(
@@ -120,6 +133,113 @@ character_id,clan_id,role,joined_unix_ms) VALUES($character,$clan,0,$now);";
         },cancellationToken).ConfigureAwait(false);
     }
 
+    public async Task<(ClanStoreStatus Status,ClanRecord? Clan)> SetClanAnnouncementAsync(
+        long actorCharacterId,string announcement,CancellationToken cancellationToken=default)
+    {
+        ThrowIfDisposed();
+        string normalized;
+        try{normalized=NormalizeClanAnnouncement(announcement);}
+        catch(ArgumentException){return(ClanStoreStatus.InvalidAnnouncement,null);}
+        if(actorCharacterId<=0)return(ClanStoreStatus.NotInClan,null);
+        return await Task.Run(()=>
+        {
+            using var connection=Open();
+            using var tx=connection.BeginTransaction();
+            long clanId=CharacterClanId(connection,tx,actorCharacterId);
+            if(clanId<=0)return(ClanStoreStatus.NotInClan,(ClanRecord?)null);
+            var clan=ReadClan(connection,tx,clanId);
+            if(clan is null)return(ClanStoreStatus.Conflict,(ClanRecord?)null);
+            if(clan.LeaderCharacterId!=actorCharacterId)
+                return(ClanStoreStatus.NotLeader,clan);
+            using(var update=connection.CreateCommand())
+            {
+                update.Transaction=tx;
+                update.CommandText=@"UPDATE clans
+SET announcement=$announcement,revision=revision+1 WHERE clan_id=$clan;";
+                update.Parameters.AddWithValue("$announcement",normalized);
+                update.Parameters.AddWithValue("$clan",clanId);
+                if(update.ExecuteNonQuery()!=1)
+                    return(ClanStoreStatus.Conflict,(ClanRecord?)null);
+            }
+            var snapshot=ReadClan(connection,tx,clanId);
+            tx.Commit();
+            return(ClanStoreStatus.Success,snapshot);
+        },cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<(ClanStoreStatus Status,ClanRecord? Clan)> KickClanMemberAsync(
+        long actorCharacterId,long targetCharacterId,CancellationToken cancellationToken=default)
+    {
+        ThrowIfDisposed();
+        if(actorCharacterId<=0)return(ClanStoreStatus.NotInClan,null);
+        if(targetCharacterId<=0)return(ClanStoreStatus.TargetNotMember,null);
+        if(actorCharacterId==targetCharacterId)return(ClanStoreStatus.CannotTargetSelf,null);
+        return await Task.Run(()=>
+        {
+            using var connection=Open();
+            using var tx=connection.BeginTransaction();
+            long clanId=CharacterClanId(connection,tx,actorCharacterId);
+            if(clanId<=0)return(ClanStoreStatus.NotInClan,(ClanRecord?)null);
+            var clan=ReadClan(connection,tx,clanId);
+            if(clan is null)return(ClanStoreStatus.Conflict,(ClanRecord?)null);
+            if(clan.LeaderCharacterId!=actorCharacterId)
+                return(ClanStoreStatus.NotLeader,clan);
+            if(!clan.Members.Any(x=>x.CharacterId==targetCharacterId))
+                return(ClanStoreStatus.TargetNotMember,clan);
+            using(var remove=connection.CreateCommand())
+            {
+                remove.Transaction=tx;
+                remove.CommandText=@"DELETE FROM clan_members
+WHERE clan_id=$clan AND character_id=$target AND role=0;";
+                remove.Parameters.AddWithValue("$clan",clanId);
+                remove.Parameters.AddWithValue("$target",targetCharacterId);
+                if(remove.ExecuteNonQuery()!=1)
+                    return(ClanStoreStatus.TargetNotMember,clan);
+            }
+            BumpClanRevision(connection,tx,clanId);
+            var snapshot=ReadClan(connection,tx,clanId);
+            tx.Commit();
+            return(ClanStoreStatus.Success,snapshot);
+        },cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<(ClanStoreStatus Status,ClanRecord? Clan)> TransferClanLeadershipAsync(
+        long actorCharacterId,long targetCharacterId,CancellationToken cancellationToken=default)
+    {
+        ThrowIfDisposed();
+        if(actorCharacterId<=0)return(ClanStoreStatus.NotInClan,null);
+        if(targetCharacterId<=0)return(ClanStoreStatus.TargetNotMember,null);
+        if(actorCharacterId==targetCharacterId)return(ClanStoreStatus.CannotTargetSelf,null);
+        return await Task.Run(()=>
+        {
+            using var connection=Open();
+            using var tx=connection.BeginTransaction();
+            long clanId=CharacterClanId(connection,tx,actorCharacterId);
+            if(clanId<=0)return(ClanStoreStatus.NotInClan,(ClanRecord?)null);
+            var clan=ReadClan(connection,tx,clanId);
+            if(clan is null)return(ClanStoreStatus.Conflict,(ClanRecord?)null);
+            if(clan.LeaderCharacterId!=actorCharacterId)
+                return(ClanStoreStatus.NotLeader,clan);
+            if(!clan.Members.Any(x=>x.CharacterId==targetCharacterId))
+                return(ClanStoreStatus.TargetNotMember,clan);
+            using(var promote=connection.CreateCommand())
+            {
+                promote.Transaction=tx;
+                promote.CommandText=@"UPDATE clan_members SET role=CASE
+WHEN character_id=$target THEN 1 ELSE 0 END WHERE clan_id=$clan;
+UPDATE clans SET leader_character_id=$target,revision=revision+1 WHERE clan_id=$clan;";
+                promote.Parameters.AddWithValue("$target",targetCharacterId);
+                promote.Parameters.AddWithValue("$clan",clanId);
+                promote.ExecuteNonQuery();
+            }
+            var snapshot=ReadClan(connection,tx,clanId);
+            if(snapshot is null||snapshot.LeaderCharacterId!=targetCharacterId)
+                return(ClanStoreStatus.Conflict,(ClanRecord?)null);
+            tx.Commit();
+            return(ClanStoreStatus.Success,snapshot);
+        },cancellationToken).ConfigureAwait(false);
+    }
+
     public async Task<(ClanStoreStatus Status,ClanRecord? Clan,long PreviousClanId)>
         LeaveClanAsync(long characterId,CancellationToken cancellationToken=default)
     {
@@ -194,7 +314,8 @@ UPDATE clans SET leader_character_id=$next,revision=revision+1 WHERE clan_id=$cl
         },cancellationToken).ConfigureAwait(false);
     }
 
-    private static bool ClanCharacterExists(SqliteConnection connection,SqliteTransaction? tx,long characterId)
+    private static bool ClanCharacterExists(
+        SqliteConnection connection,SqliteTransaction? tx,long characterId)
     {
         using var command=connection.CreateCommand();
         command.Transaction=tx;
@@ -202,7 +323,9 @@ UPDATE clans SET leader_character_id=$next,revision=revision+1 WHERE clan_id=$cl
         command.Parameters.AddWithValue("$id",characterId);
         return command.ExecuteScalar() is not null;
     }
-    private static long CharacterClanId(SqliteConnection connection,SqliteTransaction? tx,long characterId)
+
+    private static long CharacterClanId(
+        SqliteConnection connection,SqliteTransaction? tx,long characterId)
     {
         using var command=connection.CreateCommand();
         command.Transaction=tx;
@@ -210,27 +333,34 @@ UPDATE clans SET leader_character_id=$next,revision=revision+1 WHERE clan_id=$cl
         command.Parameters.AddWithValue("$id",characterId);
         return command.ExecuteScalar() is long value?value:0;
     }
-    private static void BumpClanRevision(SqliteConnection connection,SqliteTransaction tx,long clanId)
+
+    private static void BumpClanRevision(
+        SqliteConnection connection,SqliteTransaction tx,long clanId)
     {
         using var command=connection.CreateCommand();
         command.Transaction=tx;
         command.CommandText="UPDATE clans SET revision=revision+1 WHERE clan_id=$clan;";
         command.Parameters.AddWithValue("$clan",clanId);
-        if(command.ExecuteNonQuery()!=1)throw new InvalidOperationException("Clan revision update failed");
+        if(command.ExecuteNonQuery()!=1)
+            throw new InvalidOperationException("Clan revision update failed");
     }
-    private static ClanRecord? ReadClan(SqliteConnection connection,SqliteTransaction? tx,long clanId)
+
+    private static ClanRecord? ReadClan(
+        SqliteConnection connection,SqliteTransaction? tx,long clanId)
     {
-        long leader;uint revision;string name;
+        long leader;uint revision;string name;string announcement;
         using(var command=connection.CreateCommand())
         {
             command.Transaction=tx;
-            command.CommandText=@"SELECT name,leader_character_id,revision
+            command.CommandText=@"SELECT name,leader_character_id,revision,announcement
 FROM clans WHERE clan_id=$clan;";
             command.Parameters.AddWithValue("$clan",clanId);
             using var reader=command.ExecuteReader();
             if(!reader.Read())return null;
-            name=reader.GetString(0);leader=reader.GetInt64(1);
+            name=reader.GetString(0);
+            leader=reader.GetInt64(1);
             revision=checked((uint)reader.GetInt64(2));
+            announcement=reader.GetString(3);
         }
         var members=new List<ClanMemberRecord>();
         using(var command=connection.CreateCommand())
@@ -246,6 +376,6 @@ ORDER BY m.role DESC,m.joined_unix_ms,m.character_id;";
                 members.Add(new(reader.GetInt64(0),reader.GetString(1),
                     (ClanMemberRole)reader.GetInt32(2)));
         }
-        return new(clanId,revision,leader,name,members);
+        return new(clanId,revision,leader,name,announcement,members);
     }
 }

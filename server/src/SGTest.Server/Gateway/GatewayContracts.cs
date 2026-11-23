@@ -126,7 +126,8 @@ public readonly record struct TrustedPartyCommand(
     string TargetName = "");
 public readonly record struct TrustedClanCommand(
     long ActorId,long ConnectionEpoch,long RequestMapEpoch,
-    uint ClanSequence,ClanCommandAction Action,long ClanId,string Name = "");
+    uint ClanSequence,ClanCommandAction Action,long ClanId,string Name = "",
+    long TargetActorId = 0);
 public readonly record struct TrustedPetCommand(
     long ActorId,long ConnectionEpoch,long RequestMapEpoch,
     uint PetSequence,PetCommandAction Action,long PetUid);

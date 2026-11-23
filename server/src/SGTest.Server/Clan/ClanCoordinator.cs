@@ -58,6 +58,21 @@ public sealed class ClanCoordinator
                 status=clan is null?ClanStoreStatus.NotInClan:ClanStoreStatus.Success;
                 resultClanId=clan?.ClanId??0;
                 break;
+            case ClanCommandAction.SetAnnouncement:
+                (status,clan)=await _identity.SetClanAnnouncementAsync(
+                    request.ActorId,request.Name).ConfigureAwait(false);
+                resultClanId=clan?.ClanId??0;
+                break;
+            case ClanCommandAction.Kick:
+                (status,clan)=await _identity.KickClanMemberAsync(
+                    request.ActorId,request.TargetActorId).ConfigureAwait(false);
+                resultClanId=clan?.ClanId??0;
+                break;
+            case ClanCommandAction.TransferLeadership:
+                (status,clan)=await _identity.TransferClanLeadershipAsync(
+                    request.ActorId,request.TargetActorId).ConfigureAwait(false);
+                resultClanId=clan?.ClanId??0;
+                break;
             default:
                 status=ClanStoreStatus.Conflict;
                 break;
@@ -80,8 +95,12 @@ public sealed class ClanCoordinator
             .ConfigureAwait(false);
         QueueSnapshot(binding,senderClan,router);
 
-        // Create/join/leave may change online member rows. Read the committed
-        // snapshot and fan it out only to current authenticated generations.
+        // Membership, leadership and announcement changes fan out only to
+        // current authenticated generations. A kicked online target receives an
+        // explicit clear snapshot before the remaining clan is broadcast.
+        if(request.Action==ClanCommandAction.Kick&&request.TargetActorId>0&&
+           router.TryGetCurrentBinding(request.TargetActorId,out var kicked))
+            QueueSnapshot(kicked,null,router);
         if(clan is not null)
             BroadcastSnapshot(clan,router,request.ActorId);
     }
@@ -105,7 +124,7 @@ public sealed class ClanCoordinator
             : new ClanSnapshotWire(
                 binding.MapEpoch,clan.ClanId,clan.Revision,clan.LeaderCharacterId,
                 clan.Name,clan.Members.Select(x=>new ClanMemberWire(
-                    x.CharacterId,(byte)x.Role,x.Name)).ToArray());
+                    x.CharacterId,(byte)x.Role,x.Name)).ToArray(),clan.Announcement);
         var status=router.QueueClanSnapshot(binding,snapshot);
         if(status==GatewaySendStatus.Backpressured)
             throw new InvalidOperationException("Clan snapshot queue backpressured");

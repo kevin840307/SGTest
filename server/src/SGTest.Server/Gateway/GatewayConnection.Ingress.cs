@@ -493,7 +493,8 @@ public sealed partial class GatewayConnection
                 return WireFrameDisposition.ProtocolViolation;
             var request=new TrustedClanCommand(
                 bound.ActorId,bound.ConnectionEpoch,clan.MapEpoch,
-                clan.ClanSequence,clan.Action,clan.ClanId,clan.Name);
+                clan.ClanSequence,clan.Action,clan.ClanId,clan.Name,
+                clan.TargetActorId);
             if(!postClan(request))
                 return WireFrameDisposition.Backpressured;
             _lastClanSequence=clan.ClanSequence;

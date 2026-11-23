@@ -461,6 +461,21 @@ func clan_refresh()->bool:
 	return _queue_clan_intent(4,0,"",current)
 
 
+func clan_set_announcement(text:String)->bool:
+	var current:=snapshot()
+	return _queue_clan_intent(5,0,text,current)
+
+
+func clan_kick(target_actor_id:int)->bool:
+	var current:=snapshot()
+	return _queue_clan_intent(6,0,"",current,target_actor_id)
+
+
+func clan_transfer_leadership(target_actor_id:int)->bool:
+	var current:=snapshot()
+	return _queue_clan_intent(7,0,"",current,target_actor_id)
+
+
 func pet_summon(pet_uid:int)->bool:
 	var current:=snapshot()
 	return _queue_pet_intent(1,pet_uid,current)
@@ -507,7 +522,7 @@ func _queue_pet_intent(action:int,pet_uid:int,current:Dictionary)->bool:
 	})
 
 
-func _queue_clan_intent(action:int,request_clan_id:int,name:String,current:Dictionary)->bool:
+func _queue_clan_intent(action:int,request_clan_id:int,name:String,current:Dictionary,target_actor_id:int=0)->bool:
 	if (
 		int(current.get("state",-1))!=WorldState.STATE_IN_WORLD or
 		not bool(current.get("world_ready",false)) or
@@ -519,27 +534,37 @@ func _queue_clan_intent(action:int,request_clan_id:int,name:String,current:Dicti
 	):
 		return false
 	var clean:=name.strip_edges()
-	if clean!=name or clean.to_utf8_buffer().size()>WireCodec.CLAN_MAX_NAME_BYTES:
+	if clean!=name:
 		return false
 	var current_clan:=int(current.get("clan_id",0))
+	var actor:=int(current.get("actor_id",0))
+	var leader:=int(current.get("clan_leader_actor_id",0))
+	var members:Dictionary=current.get("clan_members",{})
 	match action:
 		1:
-			if current_clan!=0 or request_clan_id!=0 or clean.length()<2 or clean.length()>24:
+			if current_clan!=0 or request_clan_id!=0 or target_actor_id!=0 or clean.length()<2 or clean.length()>24 or clean.to_utf8_buffer().size()>WireCodec.CLAN_MAX_NAME_BYTES:
 				return false
 		2:
-			if current_clan!=0 or request_clan_id<=0 or not clean.is_empty():
+			if current_clan!=0 or request_clan_id<=0 or target_actor_id!=0 or not clean.is_empty():
 				return false
 		3:
-			if current_clan<=0 or request_clan_id!=0 or not clean.is_empty():
+			if current_clan<=0 or request_clan_id!=0 or target_actor_id!=0 or not clean.is_empty():
 				return false
 		4:
-			if request_clan_id!=0 or not clean.is_empty():
+			if request_clan_id!=0 or target_actor_id!=0 or not clean.is_empty():
+				return false
+		5:
+			if current_clan<=0 or leader!=actor or request_clan_id!=0 or target_actor_id!=0 or clean.to_utf8_buffer().size()>WireCodec.CLAN_MAX_ANNOUNCEMENT_BYTES:
+				return false
+		6,7:
+			if current_clan<=0 or leader!=actor or request_clan_id!=0 or target_actor_id<=0 or target_actor_id==actor or not members.has(target_actor_id) or not clean.is_empty():
 				return false
 		_:
 			return false
 	return _queue_intent({
 		"type":"clan","action":action,"clan_id":request_clan_id,"name":clean,
-		"actor_id":int(current.get("actor_id",0)),
+		"target_actor_id":target_actor_id,
+		"actor_id":actor,
 		"map_epoch":int(current.get("map_epoch",0))
 	})
 
@@ -1635,15 +1660,16 @@ func _process_clan_intent(intent: Dictionary) -> void:
 	var action:=int(intent.get("action",0))
 	var request_clan_id:=int(intent.get("clan_id",0))
 	var clan_name:=str(intent.get("name",""))
+	var target_actor_id:=int(intent.get("target_actor_id",0))
 	var sequence:=int(current.get("clan_sequence",0))+1
 	var frame:=WireCodec.encode_clan_command(
-		int(current.get("map_epoch",0)),sequence,action,request_clan_id,clan_name)
+		int(current.get("map_epoch",0)),sequence,action,request_clan_id,clan_name,target_actor_id)
 	if frame.is_empty():
 		_pop_intent()
 		return
 	if (
 		_transport.send_frame(frame) and
-		_world.mark_clan_sent(sequence,action,request_clan_id,clan_name)
+		_world.mark_clan_sent(sequence,action,request_clan_id,clan_name,target_actor_id)
 	):
 		_pop_intent()
 		_publish()

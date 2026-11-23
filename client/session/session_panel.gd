@@ -588,6 +588,24 @@ func submit_clan_refresh()->bool:
 	return session.clan_refresh()
 
 
+func submit_clan_set_announcement(text:String)->bool:
+	if not active or int(_latest.get("state",-1))!=State.STATE_IN_WORLD or not bool(_latest.get("world_ready",false)) or int(_latest.get("clan_id",0))<=0 or int(_latest.get("clan_leader_actor_id",0))!=int(_latest.get("actor_id",0)) or int(_latest.get("pending_clan_sequence",0))!=0:
+		return false
+	return session.clan_set_announcement(text)
+
+
+func submit_clan_kick(target_actor_id:int)->bool:
+	if not active or target_actor_id<=0 or int(_latest.get("state",-1))!=State.STATE_IN_WORLD or not bool(_latest.get("world_ready",false)) or int(_latest.get("clan_id",0))<=0 or int(_latest.get("clan_leader_actor_id",0))!=int(_latest.get("actor_id",0)) or int(_latest.get("pending_clan_sequence",0))!=0:
+		return false
+	return session.clan_kick(target_actor_id)
+
+
+func submit_clan_transfer_leadership(target_actor_id:int)->bool:
+	if not active or target_actor_id<=0 or int(_latest.get("state",-1))!=State.STATE_IN_WORLD or not bool(_latest.get("world_ready",false)) or int(_latest.get("clan_id",0))<=0 or int(_latest.get("clan_leader_actor_id",0))!=int(_latest.get("actor_id",0)) or int(_latest.get("pending_clan_sequence",0))!=0:
+		return false
+	return session.clan_transfer_leadership(target_actor_id)
+
+
 func request_respawn() -> void:
 	if respawn_button.disabled or not respawn_button.visible or not active:
 		return

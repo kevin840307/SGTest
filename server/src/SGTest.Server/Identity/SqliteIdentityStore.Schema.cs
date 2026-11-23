@@ -795,6 +795,7 @@ CHECK(sleeve_color BETWEEN 0 AND 255);",tx);
     name_key TEXT NOT NULL UNIQUE,
     leader_character_id INTEGER NOT NULL UNIQUE REFERENCES characters(character_id) ON DELETE RESTRICT,
     revision INTEGER NOT NULL DEFAULT 1 CHECK(revision BETWEEN 1 AND 4294967295),
+    announcement TEXT NOT NULL DEFAULT '' CHECK(length(announcement) <= 1024),
     created_unix_ms INTEGER NOT NULL
 );",tx);
             Execute(connection,@"CREATE TABLE IF NOT EXISTS clan_members (
@@ -806,6 +807,11 @@ CHECK(sleeve_color BETWEEN 0 AND 255);",tx);
 );",tx);
             Execute(connection,@"CREATE INDEX IF NOT EXISTS ix_clan_members_clan
 ON clan_members(clan_id,role DESC,joined_unix_ms,character_id);",tx);
+            // Schema v34: durable clan announcement. The exact HK text limit is
+            // not yet verified; SGTest enforces its own bounded UTF-8 transport.
+            if(schemaVersion<34 && !ColumnExists(connection,"clans","announcement",tx))
+                Execute(connection,@"ALTER TABLE clans
+ADD COLUMN announcement TEXT NOT NULL DEFAULT '' CHECK(length(announcement) <= 1024);",tx);
             // Schema v30: durable pet ownership and exactly one active pet per
             // character. Schema v31 adds the server-owned evolution identity that
             // the original Pet table persisted separately from PETID.

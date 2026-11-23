@@ -119,7 +119,7 @@ func _run() -> void:
 			43:{"name":"隊友","level":21,"map_id":15},
 		},
 		"clan_id":501,"clan_revision":3,"clan_leader_actor_id":42,
-		"clan_name":"星門先遣隊","clan_members":{
+		"clan_name":"星門先遣隊","clan_announcement":"今晚九點集合","clan_members":{
 			42:{"actor_id":42,"role":1,"name":"TestA"},
 			44:{"actor_id":44,"role":0,"name":"社團隊友"},
 		},

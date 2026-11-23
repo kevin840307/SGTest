@@ -265,10 +265,12 @@ var pending_clan_sequence := 0
 var pending_clan_action := 0
 var pending_clan_id := 0
 var pending_clan_name := ""
+var pending_clan_target_actor_id := 0
 var clan_id := 0
 var clan_revision := 0
 var clan_leader_actor_id := 0
 var clan_name := ""
+var clan_announcement := ""
 var clan_members := {}
 var last_clan_result_sequence := 0
 var last_clan_result_status := -1
@@ -813,30 +815,36 @@ func _clear_pending_party()->void:
 	pending_party_target_name=""
 
 
-func mark_clan_sent(sequence:int,action:int,request_clan_id:int,name:String="")->bool:
+func mark_clan_sent(sequence:int,action:int,request_clan_id:int,name:String="",target_actor_id:int=0)->bool:
 	if (
 		state!=STATE_IN_WORLD or not world_ready or resync_pending or
 		waiting_for_new_map or pending_world_ready_ack_epoch!=0 or
 		last_world_ready_ack_epoch!=map_epoch or pending_clan_sequence!=0 or
-		sequence<=clan_sequence or sequence>0xffffffff or action<1 or action>4 or
-		request_clan_id<0
+		sequence<=clan_sequence or sequence>0xffffffff or action<1 or action>7 or
+		request_clan_id<0 or target_actor_id<0
 	):
 		return false
 	var clean:=name.strip_edges()
-	if clean!=name or clean.to_utf8_buffer().size()>WireCodec.CLAN_MAX_NAME_BYTES:
+	if clean!=name:
 		return false
 	match action:
 		1:
-			if clan_id!=0 or request_clan_id!=0 or clean.length()<2 or clean.length()>24:
+			if clan_id!=0 or request_clan_id!=0 or target_actor_id!=0 or clean.length()<2 or clean.length()>24 or clean.to_utf8_buffer().size()>WireCodec.CLAN_MAX_NAME_BYTES:
 				return false
 		2:
-			if clan_id!=0 or request_clan_id<=0 or not clean.is_empty():
+			if clan_id!=0 or request_clan_id<=0 or target_actor_id!=0 or not clean.is_empty():
 				return false
 		3:
-			if clan_id<=0 or request_clan_id!=0 or not clean.is_empty():
+			if clan_id<=0 or request_clan_id!=0 or target_actor_id!=0 or not clean.is_empty():
 				return false
 		4:
-			if request_clan_id!=0 or not clean.is_empty():
+			if request_clan_id!=0 or target_actor_id!=0 or not clean.is_empty():
+				return false
+		5:
+			if clan_id<=0 or clan_leader_actor_id!=actor_id or request_clan_id!=0 or target_actor_id!=0 or clean.to_utf8_buffer().size()>WireCodec.CLAN_MAX_ANNOUNCEMENT_BYTES:
+				return false
+		6,7:
+			if clan_id<=0 or clan_leader_actor_id!=actor_id or request_clan_id!=0 or target_actor_id<=0 or target_actor_id==actor_id or not clan_members.has(target_actor_id) or not clean.is_empty():
 				return false
 		_:
 			return false
@@ -845,6 +853,7 @@ func mark_clan_sent(sequence:int,action:int,request_clan_id:int,name:String="")-
 	pending_clan_action=action
 	pending_clan_id=request_clan_id
 	pending_clan_name=clean
+	pending_clan_target_actor_id=target_actor_id
 	return true
 
 
@@ -853,6 +862,7 @@ func _clear_pending_clan()->void:
 	pending_clan_action=0
 	pending_clan_id=0
 	pending_clan_name=""
+	pending_clan_target_actor_id=0
 
 
 func mark_pet_sent(sequence:int,action:int,pet_uid:int)->bool:
@@ -1384,10 +1394,12 @@ func snapshot() -> Dictionary:
 		"pending_clan_action": pending_clan_action,
 		"pending_clan_id": pending_clan_id,
 		"pending_clan_name": pending_clan_name,
+		"pending_clan_target_actor_id": pending_clan_target_actor_id,
 		"clan_id": clan_id,
 		"clan_revision": clan_revision,
 		"clan_leader_actor_id": clan_leader_actor_id,
 		"clan_name": clan_name,
+		"clan_announcement": clan_announcement,
 		"clan_members": clan_members.duplicate(true),
 		"last_clan_result_sequence": last_clan_result_sequence,
 		"last_clan_result_status": last_clan_result_status,
@@ -4086,13 +4098,15 @@ func _apply_clan_result(frame:PackedByteArray)->bool:
 	):
 		return fail("clan_result_without_matching_request")
 	var status:=int(value.status)
-	if status<0 or status>7:
+	if status<0 or status>11:
 		return fail("clan_result_unknown_status")
 	last_clan_result_sequence=sequence
 	last_clan_result_status=status
 	last_clan_result=value.duplicate(true)
-	if not pending_clan_name.is_empty():
+	if not pending_clan_name.is_empty() or pending_clan_action==5:
 		last_clan_result["requested_name"]=pending_clan_name
+	if pending_clan_target_actor_id>0:
+		last_clan_result["target_actor_id"]=pending_clan_target_actor_id
 	_clear_pending_clan()
 	return true
 
@@ -4116,6 +4130,7 @@ func _apply_clan_snapshot(frame:PackedByteArray)->bool:
 		clan_revision=0
 		clan_leader_actor_id=0
 		clan_name=""
+		clan_announcement=""
 		clan_members.clear()
 		return true
 	if clan_id==incoming and revision<=clan_revision:
@@ -4136,6 +4151,7 @@ func _apply_clan_snapshot(frame:PackedByteArray)->bool:
 	clan_revision=revision
 	clan_leader_actor_id=leader
 	clan_name=str(value.name)
+	clan_announcement=str(value.get("announcement",""))
 	clan_members=next_members
 	return true
 

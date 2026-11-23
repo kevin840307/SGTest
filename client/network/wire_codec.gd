@@ -141,13 +141,14 @@ const CHARACTER_CHOOSE_FRAME_BYTES := 16
 const CHARACTER_CHOOSE_RESULT_FRAME_BYTES := 45
 const CHARACTER_MANAGE_RESULT_FRAME_BYTES := 18
 const CLAN_MAX_NAME_BYTES := 72
-const CLAN_COMMAND_HEADER_BYTES := 31
-const CLAN_COMMAND_MAX_FRAME_BYTES := CLAN_COMMAND_HEADER_BYTES + CLAN_MAX_NAME_BYTES
+const CLAN_MAX_ANNOUNCEMENT_BYTES := 1024
+const CLAN_COMMAND_HEADER_BYTES := 39
+const CLAN_COMMAND_MAX_FRAME_BYTES := CLAN_COMMAND_HEADER_BYTES + CLAN_MAX_ANNOUNCEMENT_BYTES
 const CLAN_RESULT_FRAME_BYTES := 30
-const CLAN_SNAPSHOT_HEADER_BYTES := 39
+const CLAN_SNAPSHOT_HEADER_BYTES := 41
 const CLAN_MEMBER_HEADER_BYTES := 11
 const CLAN_MAX_MEMBERS := 100
-const CLAN_SNAPSHOT_MAX_FRAME_BYTES := CLAN_SNAPSHOT_HEADER_BYTES + CLAN_MAX_NAME_BYTES + CLAN_MAX_MEMBERS * (CLAN_MEMBER_HEADER_BYTES + PLAYER_IDENTITY_MAX_NAME_BYTES)
+const CLAN_SNAPSHOT_MAX_FRAME_BYTES := CLAN_SNAPSHOT_HEADER_BYTES + CLAN_MAX_NAME_BYTES + CLAN_MAX_ANNOUNCEMENT_BYTES + CLAN_MAX_MEMBERS * (CLAN_MEMBER_HEADER_BYTES + PLAYER_IDENTITY_MAX_NAME_BYTES)
 const PET_COMMAND_FRAME_BYTES := 29
 const PET_RESULT_FRAME_BYTES := 38
 const PET_SNAPSHOT_HEADER_BYTES := 26
@@ -2428,26 +2429,36 @@ static func decode_whisper_result(frame:PackedByteArray)->Dictionary:
 
 
 static func encode_clan_command(
-		epoch:int,sequence:int,action:int,clan_id:int,name:String="")->PackedByteArray:
-	var name_bytes:=name.to_utf8_buffer()
-	if epoch<=0 or sequence<=0 or sequence>0xffffffff or action<1 or action>4 or clan_id<0 or name_bytes.size()>CLAN_MAX_NAME_BYTES:
+		epoch:int,sequence:int,action:int,clan_id:int,name:String="",target_actor_id:int=0)->PackedByteArray:
+	var payload:=name.to_utf8_buffer()
+	if epoch<=0 or sequence<=0 or sequence>0xffffffff or action<1 or action>7 or clan_id<0 or target_actor_id<0:
 		return PackedByteArray()
-	if action==1:
-		if clan_id!=0 or name!=name.strip_edges() or name.length()<2 or name.length()>24 or name_bytes.is_empty():
+	match action:
+		1:
+			if clan_id!=0 or target_actor_id!=0 or name!=name.strip_edges() or name.length()<2 or name.length()>24 or payload.is_empty() or payload.size()>CLAN_MAX_NAME_BYTES:
+				return PackedByteArray()
+		2:
+			if clan_id<=0 or target_actor_id!=0 or not name.is_empty():
+				return PackedByteArray()
+		3,4:
+			if clan_id!=0 or target_actor_id!=0 or not name.is_empty():
+				return PackedByteArray()
+		5:
+			if clan_id!=0 or target_actor_id!=0 or name!=name.strip_edges() or payload.size()>CLAN_MAX_ANNOUNCEMENT_BYTES:
+				return PackedByteArray()
+		6,7:
+			if clan_id!=0 or target_actor_id<=0 or not name.is_empty():
+				return PackedByteArray()
+		_:
 			return PackedByteArray()
-	elif action==2:
-		if clan_id<=0 or not name.is_empty():
-			return PackedByteArray()
-	elif action in [3,4]:
-		if clan_id!=0 or not name.is_empty():
-			return PackedByteArray()
-	var writer:=_writer(CLAN_COMMAND_HEADER_BYTES+name_bytes.size(),OPCODE_CLAN_COMMAND)
+	var writer:=_writer(CLAN_COMMAND_HEADER_BYTES+payload.size(),OPCODE_CLAN_COMMAND)
 	writer.put_64(epoch)
 	writer.put_u32(sequence)
 	writer.put_u8(action)
 	writer.put_64(clan_id)
-	writer.put_u16(name_bytes.size())
-	writer.put_data(name_bytes)
+	writer.put_64(target_actor_id)
+	writer.put_u16(payload.size())
+	writer.put_data(payload)
 	return writer.data_array
 
 static func decode_clan_result(frame:PackedByteArray)->Dictionary:
@@ -2459,7 +2470,7 @@ static func decode_clan_result(frame:PackedByteArray)->Dictionary:
 	var action:=reader.get_u8()
 	var status:=reader.get_u8()
 	var clan_id:=reader.get_64()
-	if epoch<=0 or sequence<=0 or action<1 or action>4 or status<0 or status>7 or clan_id<0 or reader.get_available_bytes()!=0:
+	if epoch<=0 or sequence<=0 or action<1 or action>7 or status<0 or status>11 or clan_id<0 or reader.get_available_bytes()!=0:
 		return {}
 	return {"map_epoch":epoch,"clan_sequence":sequence,"action":action,"status":status,"clan_id":clan_id}
 
@@ -2472,13 +2483,14 @@ static func decode_clan_snapshot(frame:PackedByteArray)->Dictionary:
 	var revision:=reader.get_u32()
 	var leader:=reader.get_64()
 	var name_count:=reader.get_u16()
+	var announcement_count:=reader.get_u16()
 	var member_count:=reader.get_u8()
-	if epoch<=0 or clan_id<0 or name_count>CLAN_MAX_NAME_BYTES or member_count>CLAN_MAX_MEMBERS or reader.get_available_bytes()<name_count:
+	if epoch<=0 or clan_id<0 or name_count>CLAN_MAX_NAME_BYTES or announcement_count>CLAN_MAX_ANNOUNCEMENT_BYTES or member_count>CLAN_MAX_MEMBERS or reader.get_available_bytes()<name_count+announcement_count:
 		return {}
 	if clan_id==0:
-		if revision!=0 or leader!=0 or name_count!=0 or member_count!=0 or reader.get_available_bytes()!=0:
+		if revision!=0 or leader!=0 or name_count!=0 or announcement_count!=0 or member_count!=0 or reader.get_available_bytes()!=0:
 			return {}
-		return {"receiver_map_epoch":epoch,"clan_id":0,"revision":0,"leader_actor_id":0,"name":"","members":[]}
+		return {"receiver_map_epoch":epoch,"clan_id":0,"revision":0,"leader_actor_id":0,"name":"","announcement":"","members":[]}
 	if revision<=0 or leader<=0 or name_count<1:
 		return {}
 	var name_result:=reader.get_data(name_count)
@@ -2487,6 +2499,13 @@ static func decode_clan_snapshot(frame:PackedByteArray)->Dictionary:
 	var name_bytes:PackedByteArray=name_result[1]
 	var clan_name:=name_bytes.get_string_from_utf8()
 	if clan_name.to_utf8_buffer()!=name_bytes or clan_name.strip_edges().is_empty():
+		return {}
+	var announcement_result:=reader.get_data(announcement_count)
+	if announcement_result[0]!=OK:
+		return {}
+	var announcement_bytes:PackedByteArray=announcement_result[1]
+	var announcement:=announcement_bytes.get_string_from_utf8()
+	if announcement.to_utf8_buffer()!=announcement_bytes or announcement!=announcement.strip_edges():
 		return {}
 	var members:Array[Dictionary]=[]
 	var seen:={}
@@ -2512,7 +2531,7 @@ static func decode_clan_snapshot(frame:PackedByteArray)->Dictionary:
 		members.append({"actor_id":actor,"role":role,"name":member_name})
 	if reader.get_available_bytes()!=0 or not seen.has(leader) or leaders!=1:
 		return {}
-	return {"receiver_map_epoch":epoch,"clan_id":clan_id,"revision":revision,"leader_actor_id":leader,"name":clan_name,"members":members}
+	return {"receiver_map_epoch":epoch,"clan_id":clan_id,"revision":revision,"leader_actor_id":leader,"name":clan_name,"announcement":announcement,"members":members}
 
 static func encode_pet_command(epoch:int,sequence:int,action:int,pet_uid:int)->PackedByteArray:
 	if epoch<=0 or sequence<=0 or sequence>0xffffffff or action<1 or action>3:

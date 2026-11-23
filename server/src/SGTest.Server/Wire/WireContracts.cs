@@ -139,11 +139,15 @@ public enum WhisperResultStatus : byte
     TargetUnavailable = 1,
     SelfTarget = 2
 }
-public enum ClanCommandAction : byte { Create=1, Join=2, Leave=3, Refresh=4 }
+public enum ClanCommandAction : byte
+{
+    Create=1,Join=2,Leave=3,Refresh=4,SetAnnouncement=5,Kick=6,TransferLeadership=7
+}
 public enum ClanResultStatus : byte
 {
     Success=0,AlreadyInClan=1,NotInClan=2,ClanNotFound=3,
-    NameTaken=4,InvalidName=5,ClanFull=6,Conflict=7
+    NameTaken=4,InvalidName=5,ClanFull=6,Conflict=7,
+    NotLeader=8,TargetNotMember=9,CannotTargetSelf=10,InvalidAnnouncement=11
 }
 public enum PetCommandAction : byte { Summon=1, Recall=2, Refresh=3 }
 public enum PetResultStatus : byte
@@ -648,13 +652,14 @@ public sealed record PartySnapshotWire(
     IReadOnlyList<PartyMemberWire> Members);
 
 public readonly record struct ClanCommandWire(
-    long MapEpoch,uint ClanSequence,ClanCommandAction Action,long ClanId,string Name="");
+    long MapEpoch,uint ClanSequence,ClanCommandAction Action,long ClanId,string Name="",
+    long TargetActorId=0);
 public readonly record struct ClanResultWire(
     long MapEpoch,uint ClanSequence,ClanCommandAction Action,ClanResultStatus Status,long ClanId);
 public readonly record struct ClanMemberWire(long CharacterId,byte Role,string Name);
 public sealed record ClanSnapshotWire(
     long ReceiverMapEpoch,long ClanId,uint Revision,long LeaderCharacterId,string Name,
-    IReadOnlyList<ClanMemberWire> Members);
+    IReadOnlyList<ClanMemberWire> Members,string Announcement="");
 
 public readonly record struct PetCommandWire(
     long MapEpoch,uint PetSequence,PetCommandAction Action,long PetUid);

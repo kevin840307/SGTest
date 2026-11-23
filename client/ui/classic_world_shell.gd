@@ -777,7 +777,11 @@ func _refresh_party()->void:
 func _refresh_clan()->void:
 	var header=clan_window.get_node_or_null("ClanHeader")
 	if header is Label:
-		(header as Label).text=("%s\nID %d　團長 %d"%[str(_stats.get("clan_name","")),int(_stats.get("clan_id",0)),int(_stats.get("clan_leader_actor_id",0))]) if int(_stats.get("clan_id",0))>0 else "尚未加入戰團"
+		(header as Label).text=("%s\nID %d　團長 %d\n公告：%s"%[
+			str(_stats.get("clan_name","")),int(_stats.get("clan_id",0)),
+			int(_stats.get("clan_leader_actor_id",0)),
+			str(_stats.get("clan_announcement","")) if not str(_stats.get("clan_announcement","")).is_empty() else "（無）"
+		]) if int(_stats.get("clan_id",0))>0 else "尚未加入戰團"
 	_clear_rows(_clan_rows)
 	var members:Dictionary=_stats.get("clan_members",{})
 	var ids:Array=members.keys();ids.sort()

@@ -7,32 +7,57 @@ public static partial class WireProtocol
 {
     public static byte[] EncodeClanCommand(ClanCommandWire value)
     {
-        byte[] name;
-        try{name=StrictUtf8.GetBytes(value.Name??string.Empty);}
+        byte[] payload;
+        try{payload=StrictUtf8.GetBytes(value.Name??string.Empty);}
         catch(EncoderFallbackException){throw new ArgumentOutOfRangeException(nameof(value));}
         if(value.MapEpoch<=0||value.ClanSequence==0||
-           value.Action is <ClanCommandAction.Create or >ClanCommandAction.Refresh||
-           value.ClanId<0||name.Length>ClanMaxNameBytes)
+           value.Action is <ClanCommandAction.Create or >ClanCommandAction.TransferLeadership||
+           value.ClanId<0||value.TargetActorId<0)
             throw new ArgumentOutOfRangeException(nameof(value));
-        bool create=value.Action==ClanCommandAction.Create;
-        if(create)
+
+        switch(value.Action)
         {
-            if(value.ClanId!=0||name.Length<1||string.IsNullOrWhiteSpace(value.Name)||
-               value.Name!=value.Name.Normalize(NormalizationForm.FormC).Trim()||
-               value.Name.Any(char.IsControl))
+            case ClanCommandAction.Create:
+                if(value.ClanId!=0||value.TargetActorId!=0||
+                   payload.Length is <1 or >ClanMaxNameBytes||
+                   string.IsNullOrWhiteSpace(value.Name)||
+                   value.Name!=value.Name.Normalize(NormalizationForm.FormC).Trim()||
+                   value.Name.Length is <2 or >24||value.Name.Any(char.IsControl))
+                    throw new ArgumentOutOfRangeException(nameof(value));
+                break;
+            case ClanCommandAction.Join:
+                if(value.ClanId<=0||value.TargetActorId!=0||payload.Length!=0)
+                    throw new ArgumentOutOfRangeException(nameof(value));
+                break;
+            case ClanCommandAction.Leave:
+            case ClanCommandAction.Refresh:
+                if(value.ClanId!=0||value.TargetActorId!=0||payload.Length!=0)
+                    throw new ArgumentOutOfRangeException(nameof(value));
+                break;
+            case ClanCommandAction.SetAnnouncement:
+                if(value.ClanId!=0||value.TargetActorId!=0||
+                   payload.Length>ClanMaxAnnouncementBytes||
+                   (value.Name??string.Empty)!=(value.Name??string.Empty).Normalize(NormalizationForm.FormC).Trim()||
+                   (value.Name??string.Empty).Any(ch=>char.IsControl(ch)&&ch!='\n'))
+                    throw new ArgumentOutOfRangeException(nameof(value));
+                break;
+            case ClanCommandAction.Kick:
+            case ClanCommandAction.TransferLeadership:
+                if(value.ClanId!=0||value.TargetActorId<=0||payload.Length!=0)
+                    throw new ArgumentOutOfRangeException(nameof(value));
+                break;
+            default:
                 throw new ArgumentOutOfRangeException(nameof(value));
         }
-        else if(name.Length!=0||
-                (value.Action==ClanCommandAction.Join&&value.ClanId<=0)||
-                (value.Action is ClanCommandAction.Leave or ClanCommandAction.Refresh && value.ClanId!=0))
-            throw new ArgumentOutOfRangeException(nameof(value));
-        var frame=NewFrame(WireOpcode.ClanCommand,ClanCommandHeaderBytes+name.Length);
+
+        var frame=NewFrame(WireOpcode.ClanCommand,ClanCommandHeaderBytes+payload.Length);
         BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(8,8),value.MapEpoch);
         BinaryPrimitives.WriteUInt32LittleEndian(frame.AsSpan(16,4),value.ClanSequence);
         frame[20]=(byte)value.Action;
         BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(21,8),value.ClanId);
-        BinaryPrimitives.WriteUInt16LittleEndian(frame.AsSpan(29,2),(ushort)name.Length);
-        name.CopyTo(frame.AsSpan(ClanCommandHeaderBytes));
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(29,8),value.TargetActorId);
+        BinaryPrimitives.WriteUInt16LittleEndian(frame.AsSpan(37,2),(ushort)payload.Length);
+        payload.CopyTo(frame.AsSpan(ClanCommandHeaderBytes));
         return frame;
     }
 
@@ -46,14 +71,15 @@ public static partial class WireProtocol
         uint sequence=BinaryPrimitives.ReadUInt32LittleEndian(frame.Slice(16,4));
         var action=(ClanCommandAction)frame[20];
         long clanId=BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(21,8));
-        int nameLength=BinaryPrimitives.ReadUInt16LittleEndian(frame.Slice(29,2));
-        if(nameLength>ClanMaxNameBytes||frame.Length!=ClanCommandHeaderBytes+nameLength)
+        long targetActorId=BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(29,8));
+        int payloadLength=BinaryPrimitives.ReadUInt16LittleEndian(frame.Slice(37,2));
+        if(frame.Length!=ClanCommandHeaderBytes+payloadLength)
             return false;
         try
         {
-            string name=nameLength==0?string.Empty:
-                StrictUtf8.GetString(frame.Slice(ClanCommandHeaderBytes,nameLength));
-            value=new(epoch,sequence,action,clanId,name);
+            string payload=payloadLength==0?string.Empty:
+                StrictUtf8.GetString(frame.Slice(ClanCommandHeaderBytes,payloadLength));
+            value=new(epoch,sequence,action,clanId,payload,targetActorId);
             _=EncodeClanCommand(value);
             return true;
         }
@@ -64,14 +90,15 @@ public static partial class WireProtocol
     public static byte[] EncodeClanResult(ClanResultWire value)
     {
         if(value.MapEpoch<=0||value.ClanSequence==0||
-           value.Action is <ClanCommandAction.Create or >ClanCommandAction.Refresh||
-           value.Status is <ClanResultStatus.Success or >ClanResultStatus.Conflict||
+           value.Action is <ClanCommandAction.Create or >ClanCommandAction.TransferLeadership||
+           value.Status is <ClanResultStatus.Success or >ClanResultStatus.InvalidAnnouncement||
            value.ClanId<0)
             throw new ArgumentOutOfRangeException(nameof(value));
         var frame=NewFrame(WireOpcode.ClanResult,ClanResultFrameBytes);
         BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(8,8),value.MapEpoch);
         BinaryPrimitives.WriteUInt32LittleEndian(frame.AsSpan(16,4),value.ClanSequence);
-        frame[20]=(byte)value.Action; frame[21]=(byte)value.Status;
+        frame[20]=(byte)value.Action;
+        frame[21]=(byte)value.Status;
         BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(22,8),value.ClanId);
         return frame;
     }
@@ -95,23 +122,38 @@ public static partial class WireProtocol
         if(value.ReceiverMapEpoch<=0||value.ClanId<0||value.Members is null||
            value.Members.Count>ClanMaximumMembers)
             throw new ArgumentOutOfRangeException(nameof(value));
+
         if(value.ClanId==0)
         {
             if(value.Revision!=0||value.LeaderCharacterId!=0||
-               !string.IsNullOrEmpty(value.Name)||value.Members.Count!=0)
+               !string.IsNullOrEmpty(value.Name)||!string.IsNullOrEmpty(value.Announcement)||
+               value.Members.Count!=0)
                 throw new ArgumentOutOfRangeException(nameof(value));
             var empty=NewFrame(WireOpcode.ClanSnapshot,ClanSnapshotHeaderBytes);
             BinaryPrimitives.WriteInt64LittleEndian(empty.AsSpan(8,8),value.ReceiverMapEpoch);
             return empty;
         }
+
         byte[] clanName;
-        try{clanName=StrictUtf8.GetBytes(value.Name??string.Empty);}
+        byte[] announcement;
+        try
+        {
+            clanName=StrictUtf8.GetBytes(value.Name??string.Empty);
+            announcement=StrictUtf8.GetBytes(value.Announcement??string.Empty);
+        }
         catch(EncoderFallbackException){throw new ArgumentOutOfRangeException(nameof(value));}
+
         if(value.Revision==0||value.LeaderCharacterId<=0||
-           clanName.Length is <1 or >ClanMaxNameBytes)
+           clanName.Length is <1 or >ClanMaxNameBytes||
+           announcement.Length>ClanMaxAnnouncementBytes||
+           (value.Name??string.Empty)!=(value.Name??string.Empty).Normalize(NormalizationForm.FormC).Trim()||
+           (value.Announcement??string.Empty)!=(value.Announcement??string.Empty).Normalize(NormalizationForm.FormC).Trim()||
+           (value.Name??string.Empty).Any(char.IsControl)||
+           (value.Announcement??string.Empty).Any(ch=>char.IsControl(ch)&&ch!='\n'))
             throw new ArgumentOutOfRangeException(nameof(value));
+
         var encoded=new List<(ClanMemberWire Member,byte[] Name)>(value.Members.Count);
-        int bytes=ClanSnapshotHeaderBytes+clanName.Length;
+        int bytes=ClanSnapshotHeaderBytes+clanName.Length+announcement.Length;
         var ids=new HashSet<long>();
         foreach(var member in value.Members)
         {
@@ -128,15 +170,18 @@ public static partial class WireProtocol
            !ids.Contains(value.LeaderCharacterId)||
            encoded.Count(x=>x.Member.Role==1)!=1)
             throw new ArgumentOutOfRangeException(nameof(value));
+
         var frame=NewFrame(WireOpcode.ClanSnapshot,bytes);
         BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(8,8),value.ReceiverMapEpoch);
         BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(16,8),value.ClanId);
         BinaryPrimitives.WriteUInt32LittleEndian(frame.AsSpan(24,4),value.Revision);
         BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(28,8),value.LeaderCharacterId);
         BinaryPrimitives.WriteUInt16LittleEndian(frame.AsSpan(36,2),(ushort)clanName.Length);
-        frame[38]=(byte)encoded.Count;
+        BinaryPrimitives.WriteUInt16LittleEndian(frame.AsSpan(38,2),(ushort)announcement.Length);
+        frame[40]=(byte)encoded.Count;
         int offset=ClanSnapshotHeaderBytes;
-        clanName.CopyTo(frame.AsSpan(offset)); offset+=clanName.Length;
+        clanName.CopyTo(frame.AsSpan(offset));offset+=clanName.Length;
+        announcement.CopyTo(frame.AsSpan(offset));offset+=announcement.Length;
         foreach(var item in encoded)
         {
             BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(offset,8),item.Member.CharacterId);
@@ -154,29 +199,41 @@ public static partial class WireProtocol
         if(!TryReadHeader(frame,out var h)||h.Opcode!=WireOpcode.ClanSnapshot||
            frame.Length<ClanSnapshotHeaderBytes||frame.Length>ClanSnapshotMaximumFrameBytes)
             return false;
+
         long epoch=BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(8,8));
         long clanId=BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(16,8));
         uint revision=BinaryPrimitives.ReadUInt32LittleEndian(frame.Slice(24,4));
         long leader=BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(28,8));
         int clanNameLength=BinaryPrimitives.ReadUInt16LittleEndian(frame.Slice(36,2));
-        int count=frame[38];
-        if(epoch<=0||count>ClanMaximumMembers||clanNameLength>ClanMaxNameBytes)
+        int announcementLength=BinaryPrimitives.ReadUInt16LittleEndian(frame.Slice(38,2));
+        int count=frame[40];
+
+        if(epoch<=0||count>ClanMaximumMembers||
+           clanNameLength>ClanMaxNameBytes||announcementLength>ClanMaxAnnouncementBytes)
             return false;
+
         if(clanId==0)
         {
-            if(revision!=0||leader!=0||clanNameLength!=0||count!=0||
+            if(revision!=0||leader!=0||clanNameLength!=0||announcementLength!=0||count!=0||
                frame.Length!=ClanSnapshotHeaderBytes)return false;
-            value=new(epoch,0,0,0,string.Empty,Array.Empty<ClanMemberWire>());
+            value=new(epoch,0,0,0,string.Empty,Array.Empty<ClanMemberWire>(),string.Empty);
             return true;
         }
+
         if(clanId<0||revision==0||leader<=0||clanNameLength<1||
-           frame.Length<ClanSnapshotHeaderBytes+clanNameLength)return false;
+           frame.Length<ClanSnapshotHeaderBytes+clanNameLength+announcementLength)
+            return false;
+
         try
         {
             int offset=ClanSnapshotHeaderBytes;
             string name=StrictUtf8.GetString(frame.Slice(offset,clanNameLength));
             offset+=clanNameLength;
+            string announcement=announcementLength==0?string.Empty:
+                StrictUtf8.GetString(frame.Slice(offset,announcementLength));
+            offset+=announcementLength;
             var members=new List<ClanMemberWire>(count);
+            var ids=new HashSet<long>();
             for(int i=0;i<count;i++)
             {
                 if(offset+ClanMemberHeaderBytes>frame.Length)return false;
@@ -184,13 +241,17 @@ public static partial class WireProtocol
                 byte role=frame[offset+8];
                 int len=BinaryPrimitives.ReadUInt16LittleEndian(frame.Slice(offset+9,2));
                 if(character<=0||role>1||len is <1 or >PlayerIdentityMaxNameBytes||
-                   offset+ClanMemberHeaderBytes+len>frame.Length)return false;
-                string memberName=StrictUtf8.GetString(frame.Slice(offset+ClanMemberHeaderBytes,len));
+                   offset+ClanMemberHeaderBytes+len>frame.Length||!ids.Add(character))
+                    return false;
+                string memberName=StrictUtf8.GetString(
+                    frame.Slice(offset+ClanMemberHeaderBytes,len));
                 members.Add(new(character,role,memberName));
                 offset+=ClanMemberHeaderBytes+len;
             }
-            if(offset!=frame.Length)return false;
-            value=new(epoch,clanId,revision,leader,name,members);
+            if(offset!=frame.Length||!ids.Contains(leader)||
+               members.Count(x=>x.Role==1)!=1)
+                return false;
+            value=new(epoch,clanId,revision,leader,name,members,announcement);
             _=EncodeClanSnapshot(value);
             return true;
         }

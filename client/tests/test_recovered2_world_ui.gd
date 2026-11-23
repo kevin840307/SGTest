@@ -25,6 +25,9 @@ class IntentStub:
 	var clan_join_id := 0
 	var clan_left := 0
 	var clan_refreshed := 0
+	var clan_announcement := ""
+	var clan_kick_target := 0
+	var clan_transfer_target := 0
 	func use_recovery_item(uid: int) -> bool:
 		recovery_uid = uid
 		return true
@@ -78,6 +81,15 @@ class IntentStub:
 		return true
 	func clan_refresh() -> bool:
 		clan_refreshed += 1
+		return true
+	func clan_set_announcement(text: String) -> bool:
+		clan_announcement = text
+		return true
+	func clan_kick(actor_id: int) -> bool:
+		clan_kick_target = actor_id
+		return true
+	func clan_transfer_leadership(actor_id: int) -> bool:
+		clan_transfer_target = actor_id
 		return true
 	func stop() -> void:
 		pass
@@ -173,7 +185,7 @@ func _run() -> void:
 		"pending_party_sequence":0,"pending_whisper_sequence":0,
 		"pending_party_invite":{},
 		"clan_id":501,"clan_revision":3,"clan_leader_actor_id":101,
-		"clan_name":"星門先遣隊","pending_clan_sequence":0,
+		"clan_name":"星門先遣隊","clan_announcement":"今晚九點集合","pending_clan_sequence":0,
 		"last_clan_result_status":0,
 		"clan_members":{
 			101:{"actor_id":101,"role":1,"name":"測試玩家"},
@@ -382,17 +394,30 @@ func _run() -> void:
 	var clan_member = shell.clan_window.find_child("ClanMember103",true,false)
 	var clan_leave = shell.clan_window.find_child("ClanLeaveButton",true,false)
 	var clan_refresh = shell.clan_window.find_child("ClanRefreshButton",true,false)
+	var clan_management = shell.clan_window.find_child("ClanManagementSection",true,false)
+	var clan_announcement_edit = shell.clan_window.find_child("ClanAnnouncementEdit",true,false)
+	var clan_announcement_update = shell.clan_window.find_child("ClanAnnouncementUpdateButton",true,false)
+	var clan_kick = shell.clan_window.find_child("ClanKick103",true,false)
+	var clan_transfer = shell.clan_window.find_child("ClanTransfer103",true,false)
 	if (
 		not clan_identity is Label or not (clan_identity as Label).text.contains("星門先遣隊") or
+		not (clan_identity as Label).text.contains("今晚九點集合") or
 		not clan_member is Label or not (clan_member as Label).text.contains("社團隊友") or
-		not clan_leave is Button or not clan_refresh is Button
+		not clan_leave is Button or not clan_refresh is Button or
+		not clan_management is Control or not (clan_management as Control).visible or
+		not clan_announcement_edit is LineEdit or (clan_announcement_edit as LineEdit).text!="今晚九點集合" or
+		not clan_announcement_update is Button or not clan_kick is Button or not clan_transfer is Button
 	):
-		_fail("clan window did not render authoritative clan/member snapshot")
+		_fail("clan window did not render authoritative clan/member management snapshot")
 		return
+	(clan_announcement_edit as LineEdit).text = "明晚八點集合"
+	(clan_announcement_update as Button).pressed.emit()
+	(clan_kick as Button).pressed.emit()
+	(clan_transfer as Button).pressed.emit()
 	(clan_refresh as Button).pressed.emit()
 	(clan_leave as Button).pressed.emit()
-	if intents.clan_refreshed != 1 or intents.clan_left != 1:
-		_fail("clan refresh/leave did not delegate to authenticated session")
+	if intents.clan_announcement != "明晚八點集合" or intents.clan_kick_target != 103 or intents.clan_transfer_target != 103 or intents.clan_refreshed != 1 or intents.clan_left != 1:
+		_fail("clan management/refresh/leave did not delegate to authenticated session")
 		return
 
 	var no_clan := fixtures.duplicate(true)
@@ -400,6 +425,7 @@ func _run() -> void:
 	no_clan["clan_revision"] = 0
 	no_clan["clan_leader_actor_id"] = 0
 	no_clan["clan_name"] = ""
+	no_clan["clan_announcement"] = ""
 	no_clan["clan_members"] = {}
 	no_clan["last_clan_result_status"] = -1
 	app.session_panel._latest = no_clan.duplicate(true)
