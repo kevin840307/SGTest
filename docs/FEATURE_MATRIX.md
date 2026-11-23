@@ -28,6 +28,8 @@
 | RESOURCE-PERF | Godot 資源/記憶體/效能 | 換圖/登出/AFK/Unfocus 可釋放且恢復快，畫質不降 | `docs/TEST_PLAN.md` process baseline；`todo.txt` | 部分 | 部分 | N/A | N/A | 部分 | 部分 | 部分 | NOT VERIFIED（Windows 真 GPU） | N/A | RSS/VRAM/1-2-4 多開/長時間未達 Release Gate | —（歷史遷移） | IN PROGRESS |
 | RELEASE | 正式 Release Gate | Client+Server 全主要功能、測試、效能、HK 體驗及 Git 同步全達標 | 本矩陣 + `todo.txt` + TEST_PLAN | 未完成 | 未完成 | 未完成 | 未完成 | 未完成 | 未完成 | 未完成 | 未完成 | 未完成 | 上述多項仍 IN PROGRESS/NOT VERIFIED | — | NOT STARTED |
 
+> **PET-MECHA authority amendment — 2026-11-23:** Old `CDEnemyWORDStr` index 12=`RExp` 與 `SGOBattleSys::GetEnemyDefendAttrib` 對該欄位的讀取已 CONFIRMED；`SGOBattleSys::CheckExpArrange(...)` 亦 CONFIRMED 在 player/party/level EXP 調整完成後，將 settled character EXP `>>1` 傳給 active Pet，因此 Pet EXP=`floor(settled character EXP/2)`。本次已移除舊的 exact `(MapId, EnemyId)→固定 Pet EXP` production manifest/Host/AOI 路徑，避免把上游 `RExp` 誤當最終 Pet EXP。`PetExperienceDeathSettlement` 現只接受上游 settled character EXP 並保留 bounded/replay-safe/restart-generation/exactly-once persistence；由於正式 character EXP authority / party settlement 尚未完成，production Pet death EXP 維持 disabled/fail-closed。Pet-only 9/9、完整 Server 309/309、Python `test_pet*.py` 11/11 PASS；implementation commit `bdee17a`。此註記取代上方 PET-MECHA 列中較舊的 fixed reward manifest 敘述；整體狀態仍為 `IN PROGRESS`，HK 動態 A/B 仍 `NOT VERIFIED`。
+
 ## 維護規則
 
 1. 每次正式功能修改必須更新受影響列；新增獨立玩法時新增 Feature ID，不另建第二份 Feature Matrix。
