@@ -27,7 +27,6 @@ public sealed class WorldAoiPump
     private readonly MonsterWorldCoordinator? _monsters;
     private readonly PlayerCombatSettlement? _playerCombat;
     private readonly MonsterLootSettlement? _loot;
-    private readonly PetExperienceDeathSettlement? _petExperience;
     private int _started;
     private long _processedBatches, _framesQueued;
 
@@ -36,7 +35,6 @@ public sealed class WorldAoiPump
                         MonsterWorldCoordinator? monsters = null,
                         PlayerCombatSettlement? playerCombat = null,
                         MonsterLootSettlement? loot = null,
-                        PetExperienceDeathSettlement? petExperience = null,
                         IReadOnlyList<GroundDropRecord>? initialGroundDrops = null)
     {
         _router = router ?? throw new ArgumentNullException(nameof(router));
@@ -45,7 +43,6 @@ public sealed class WorldAoiPump
         _monsters = monsters;
         _playerCombat = playerCombat;
         _loot = loot;
-        _petExperience = petExperience;
         if (initialGroundDrops is { Count: > 0 })
             _aoi.SeedGroundDrops(initialGroundDrops);
         if (_options.FlushIntervalMilliseconds is < 1 or > 1000 ||
@@ -188,11 +185,12 @@ public sealed class WorldAoiPump
                                _loot.TryPostDeath(changed)==MonsterLootPostStatus.Backpressured)
                                 throw new AoiBackpressureException(
                                     "Loot settlement queue full; accepted pet death must not be dropped");
-                            if(_petExperience is not null&&
-                               _petExperience.TryPostDeath(pet,changed)==
-                                   PetExperienceDeathPostStatus.Backpressured)
-                                throw new AoiBackpressureException(
-                                    "Pet EXP settlement queue full; accepted pet death must not be dropped");
+                            // Do not mint Pet EXP from EnemyId/level/RExp here.
+                            // Old battle code awards the Pet only AFTER character
+                            // EXP has passed its player/party settlement, then takes
+                            // floor(settledCharacterExp / 2). This AOI path does not
+                            // own that settled value, so production remains fail-closed
+                            // until the character reward authority supplies it.
                         }
                     }
 

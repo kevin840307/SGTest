@@ -134,15 +134,6 @@ internal static class AesGameHost
             string? petGrowthManifest=options.GetValueOrDefault("--pet-growth-rules");
             PetGrowthCurve? petGrowth=petGrowthManifest is null ? null :
                 PetGrowthRuleCatalog.LoadVerified(Path.GetFullPath(petGrowthManifest));
-            string? petExperienceRewardManifest=
-                options.GetValueOrDefault("--pet-exp-reward-rules");
-            if(petExperienceRewardManifest is not null&&petGrowth is null)
-                throw new ArgumentException(
-                    "--pet-exp-reward-rules requires --pet-growth-rules");
-            IReadOnlyList<PetExperienceRewardRule>? petExperienceRewardRules=
-                petExperienceRewardManifest is null ? null :
-                PetExperienceRewardCatalog.LoadVerified(
-                    Path.GetFullPath(petExperienceRewardManifest),monsterRuntimes);
             MonsterWorldCoordinator? monsters = monsterRuntimes.Count == 0
                 ? null : new MonsterWorldCoordinator(
                     monsterRuntimes,skillRules,petCombatRules);
@@ -296,10 +287,6 @@ internal static class AesGameHost
             var parties=new PartyCoordinator();
             var clans=new ClanCoordinator(identity);
             var pets=new PetCoordinator(identity,petGrowth);
-            PetExperienceDeathSettlement? petExperience=
-                petExperienceRewardRules is null ? null :
-                    new PetExperienceDeathSettlement(
-                        pets,router,lootGeneration,petExperienceRewardRules);
             var authRateLimiter=new AuthenticationRateLimiter(new(
                 MaxFailuresPerAddress:authAddressFailures,
                 MaxFailuresPerAccount:authAccountFailures,
@@ -313,7 +300,7 @@ internal static class AesGameHost
                     :null;
             var aoi = new WorldAoiPump(
                 router, monsters: monsters, playerCombat: combat, loot: loot,
-                petExperience: petExperience,initialGroundDrops: activeDrops);
+                initialGroundDrops: activeDrops);
             var authorization = new IdentitySessionAuthorization(
                 identity, world, portals, positions, combat,
                 pickupWorldGeneration: lootGeneration,
@@ -348,8 +335,6 @@ internal static class AesGameHost
             // controlled shutdown before releasing the shared SQLite store.
             var lootSettlement = loot?.RunAsync() ??
                 Task.Delay(Timeout.Infinite,pumps.Token);
-            var petExperienceSettlement = petExperience?.RunAsync() ??
-                Task.Delay(Timeout.Infinite,pumps.Token);
             try
             {
                 var accepting = listener.RunAsync(stop.Token);
@@ -369,8 +354,7 @@ internal static class AesGameHost
                     monsters = monsterRuntimes.Sum(m => m.Count),
                     position_checkpoint_ms = checkpointMs,
                     loot_rule_count = dropRules?.Count ?? 0,
-                    verified_pet_exp_reward_rule_count =
-                        petExperienceRewardRules?.Count ?? 0,
+                    pet_experience_settlement_enabled = false,
                     verified_recovery_rule_count = recoveryRules?.Count ?? 0,
                     verified_skill_rule_count = skillRules?.Count ?? 0,
                     verified_shop_count = shops?.Count ?? 0,
@@ -395,7 +379,7 @@ internal static class AesGameHost
                 var stopping = Task.Delay(Timeout.Infinite, stop.Token);
                 var completed = await Task.WhenAny(
                     accepting, routing, visibility, checkpointing, combatSettlement,
-                    lootSettlement,petExperienceSettlement,stopping);
+                    lootSettlement,stopping);
                 if (completed != stopping && !stop.IsCancellationRequested)
                 {
                     await completed; // propagate faults; never serve after a result/AOI pump failed
@@ -421,9 +405,7 @@ internal static class AesGameHost
                     finally
                     {
                         loot?.Complete();
-                        petExperience?.Complete();
                         if(loot is not null)await lootSettlement;
-                        if(petExperience is not null)await petExperienceSettlement;
                     }
                 }
             }
@@ -437,7 +419,7 @@ internal static class AesGameHost
                 positions = positions.Statistics,
                 combat = combat.Statistics,
                 loot = loot?.Statistics,
-                pet_experience = petExperience?.Statistics,
+                pet_experience_settlement_enabled = false,
                 verified_recovery_rule_count = recoveryRules?.Count ?? 0,
                 verified_skill_rule_count = skillRules?.Count ?? 0,
                 pet_growth_enabled = petGrowth is not null,
@@ -465,7 +447,6 @@ internal static class AesGameHost
                 "[--position-checkpoint-ms 5000] [--loot-rules <VERIFIED_JSON>] " +
                 "[--recovery-rules <VERIFIED_JSON>] [--skill-rules <VERIFIED_JSON>] " +
                 "[--pet-combat-rules <VERIFIED_JSON>] [--pet-growth-rules <VERIFIED_JSON>] " +
-                "[--pet-exp-reward-rules <VERIFIED_JSON>] " +
                 "[--shop-rules <VERIFIED_JSON>] [--storage-rules <VERIFIED_JSON>] " +
                 "[--equipment-rules <VERIFIED_JSON>] [--bank-rules <VERIFIED_JSON>] " +
                 "[--repair-rules <VERIFIED_JSON> --repair-item-rules <VERIFIED_JSON>] " +
@@ -502,7 +483,6 @@ internal static class AesGameHost
                           "--position-checkpoint-ms",
                           "--loot-rules", "--recovery-rules", "--skill-rules",
                           "--pet-combat-rules", "--pet-growth-rules",
-                          "--pet-exp-reward-rules",
                           "--shop-rules", "--storage-rules", "--equipment-rules", "--bank-rules",
                           "--repair-rules", "--repair-item-rules", "--quest-rules",
                           "--trade-item-rules", "--gm-accounts",
