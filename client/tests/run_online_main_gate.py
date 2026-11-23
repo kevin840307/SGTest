@@ -76,7 +76,10 @@ def main() -> int:
     all_started = time.monotonic()
     synthetic_pack_info: dict[str, str | int] = {}
     try:
-        with tempfile.TemporaryDirectory(prefix="sgtest-online-main-") as temp_text:
+        # On Windows an exception can occur while the private dotnet Host still
+        # has published DLLs open. Do not let TemporaryDirectory cleanup mask
+        # the real gate failure; the outer finally terminates every process.
+        with tempfile.TemporaryDirectory(prefix="sgtest-online-main-", ignore_cleanup_errors=True) as temp_text:
             temp = Path(temp_text)
             source_assets = temp / "source_assets"
             pack = temp / "assets.pck"
