@@ -916,7 +916,7 @@ func _process(delta: float) -> void:
 			choose_button.disabled = false
 			match choose_code:
 				3:
-					status.text = "此角色需要 4 位角色密碼"
+					status.text = "請先設定或輸入 4 位角色密碼"
 				4:
 					status.text = "角色密碼錯誤"
 				5:
@@ -949,7 +949,7 @@ func _process(delta: float) -> void:
 		if create_code >= 0:
 			character_create_status.text = _character_create_status_text(
 				create_code,str(_latest.get("last_created_name","")))
-		if not _chosen and int(_latest.get("character_manage_result_revision",0)) == 0:
+		if not _chosen and int(_latest.get("choose_status",-1)) < 0 and int(_latest.get("character_manage_result_revision",0)) == 0:
 			status.text = "請選擇角色或建立新角色"
 		var manage_revision := int(_latest.get("character_manage_result_revision",0))
 		if manage_revision > 0 and manage_revision > _last_manage_revision:

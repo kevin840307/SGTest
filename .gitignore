@@ -20,6 +20,8 @@ server/data/
 .cache/
 .godot/
 client/.godot/
+# Godot-generated importer sidecars for source PNGs are local cache metadata.
+*.import
 __pycache__/
 *.pyc
 .pytest_cache/

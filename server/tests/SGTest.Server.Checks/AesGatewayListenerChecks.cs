@@ -126,7 +126,17 @@ internal static class AesGatewayListenerChecks
                 loaded.Items.Select(x=>x.ItemUid).OrderBy(x=>x)
                     .SequenceEqual(fixture.InventoryUids.OrderBy(x=>x)),
                 "AES reconnect did not reload the same two persistent inventory UIDs");
-            Checks.Require(WireProtocol.TryDecodeWorldReady(await Read(tls), out var ready) &&
+            // Legacy/test characters without a trusted combat profile legitimately
+            // have no profile baseline. When present, it must belong to this actor;
+            // otherwise the next frame remains the historical WorldReady.
+            var afterBaseline=await Read(tls);
+            if(WireProtocol.TryDecodePlayerProfileState(afterBaseline,out var profile))
+            {
+                Checks.Require(profile.CharacterId==fixture.CharacterId,
+                    "listener player profile baseline belonged to another actor");
+                afterBaseline=await Read(tls);
+            }
+            Checks.Require(WireProtocol.TryDecodeWorldReady(afterBaseline, out var ready) &&
                 ready.ActorId == fixture.CharacterId && ready.ReceiverMapEpoch == choose.MapEpoch,
                 "listener did not deliver authoritative WorldReady");
             await tls.WriteAsync(WireProtocol.EncodeWorldReadyAck(
@@ -200,6 +210,10 @@ internal static class AesGatewayListenerChecks
                 await Read(tls),out var inventory) &&
                 inventory is not null && inventory.Complete,
                 "recovery inventory baseline missing");
+            Checks.Require(WireProtocol.TryDecodePlayerProfileState(
+                await Read(tls),out var profile) &&
+                profile.CharacterId==fixture.CharacterId,
+                "recovery player profile baseline missing");
             Checks.Require(WireProtocol.TryDecodeWorldReady(
                 await Read(tls),out var ready) &&
                 ready.ReceiverMapEpoch==selected.MapEpoch,

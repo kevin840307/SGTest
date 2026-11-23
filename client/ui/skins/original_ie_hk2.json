@@ -11,6 +11,6 @@
   "button": "#896020",
   "hover": "#b58a36",
   "accent": "#ffe4a7",
-  "source_theme": "res://ui/private_ie_hk2/ACCOUNT_LOGIN.png",
+  "source_theme": "res://ui/private_ie_hk2/ACCOUNT_LOGIN_HK.png",
   "requires_local_assets": true
 }

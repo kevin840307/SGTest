@@ -30,6 +30,8 @@ var last_created_name := ""
 var last_created_appearance: Dictionary = {}
 var character_creation_appearances: Array = []
 var _pending_character_appearance: Dictionary = {}
+var selected_character_name := ""
+var selected_character_appearance: Dictionary = {}
 var characters: Array[Dictionary] = []
 var actor_id := 0
 var map_id := 0
@@ -82,6 +84,19 @@ var player_current_hp := 0
 var player_max_hp := 0
 var player_current_mp := 0
 var player_max_mp := 0
+var player_profile_ready := false
+var player_race := 0
+var player_career := 0
+var player_level := 0
+var player_experience := 0
+var player_strength := 0
+var player_dexterity := 0
+var player_constitution := 0
+var player_wisdom := 0
+var player_attack := 0
+var player_defense := 0
+var player_hit := 0
+var player_dodge := 0
 var player_dead := false
 var player_damage_sequence := 0
 var last_player_damage_tick := -1
@@ -456,8 +471,18 @@ func mark_character_create_sent(slot: int, character_name: String, appearance: D
 func mark_choose_sent(character_id: int) -> bool:
 	if state != STATE_SELECTING_CHARACTER or character_id <= 0:
 		return false
-	if not characters.any(func(entry: Dictionary) -> bool: return int(entry.character_id) == character_id):
+	var selected: Dictionary = {}
+	for entry in characters:
+		if int(entry.character_id) == character_id:
+			selected = entry
+			break
+	if selected.is_empty():
 		return false
+	# CharacterList is already authenticated Server state. Keep the selected
+	# presentation baseline so the first WorldReady can preload/render the
+	# correct paper doll before the later AOI PlayerIdentity arrives.
+	selected_character_name = str(selected.get("name",""))
+	selected_character_appearance = selected.get("appearance",{}).duplicate(true)
 	state = STATE_CHOOSING_CHARACTER
 	choose_status = -1
 	return true
@@ -1196,6 +1221,8 @@ func apply_frame(frame: PackedByteArray) -> bool:
 			return _apply_player_respawn_visual(frame)
 		WireCodec.OPCODE_PLAYER_COMBAT_STATE:
 			return _apply_player_combat_state(frame)
+		WireCodec.OPCODE_PLAYER_PROFILE_STATE:
+			return _apply_player_profile_state(frame)
 		WireCodec.OPCODE_PLAYER_DAMAGE:
 			return _apply_player_damage(frame)
 		WireCodec.OPCODE_PLAYER_RESPAWN_RESULT:
@@ -1354,6 +1381,8 @@ func snapshot() -> Dictionary:
 		"last_created_appearance": last_created_appearance.duplicate(true),
 		"character_creation_appearances": character_creation_appearances.duplicate(true),
 		"characters": characters.duplicate(true),
+		"character_name": selected_character_name,
+		"selected_character_appearance": selected_character_appearance.duplicate(true),
 		"actor_id": actor_id,
 		"map_id": map_id,
 		"x": x,
@@ -1400,6 +1429,22 @@ func snapshot() -> Dictionary:
 		"player_max_hp": player_max_hp,
 		"player_current_mp": player_current_mp,
 		"player_max_mp": player_max_mp,
+		"player_profile_ready": player_profile_ready,
+		"player_race": player_race,
+		"player_career": player_career,
+		"player_job": player_career,
+		"player_level": player_level,
+		"player_experience": player_experience,
+		"player_strength": player_strength,
+		"player_dexterity": player_dexterity,
+		"player_constitution": player_constitution,
+		"player_wisdom": player_wisdom,
+		"player_intelligence": player_wisdom,
+		"player_attack": player_attack,
+		"player_defense": player_defense,
+		"player_hit": player_hit,
+		"player_dodge": player_dodge,
+		"player_evasion": player_dodge,
 		"player_dead": player_dead,
 		"player_damage_sequence": player_damage_sequence,
 		"last_player_damage_tick": last_player_damage_tick,
@@ -1837,9 +1882,13 @@ func _apply_choose(frame: PackedByteArray) -> bool:
 		return fail("invalid_choose_result")
 	choose_status = int(decoded.status)
 	if choose_status in [1, 3, 4, 5]:
+		selected_character_name = ""
+		selected_character_appearance.clear()
 		state = STATE_SELECTING_CHARACTER
 		return true
 	if choose_status != 0:
+		selected_character_name = ""
+		selected_character_appearance.clear()
 		state = STATE_FAILED
 		return true
 	actor_id = int(decoded.character_id)
@@ -1895,6 +1944,21 @@ func _reset_character_actions_and_combat() -> void:
 	combat_available = false
 	player_current_hp = 0
 	player_max_hp = 0
+	player_current_mp = 0
+	player_max_mp = 0
+	player_profile_ready = false
+	player_race = 0
+	player_career = 0
+	player_level = 0
+	player_experience = 0
+	player_strength = 0
+	player_dexterity = 0
+	player_constitution = 0
+	player_wisdom = 0
+	player_attack = 0
+	player_defense = 0
+	player_hit = 0
+	player_dodge = 0
 	player_dead = false
 	player_damage_sequence = 0
 	last_player_damage_tick = -1
@@ -2262,6 +2326,29 @@ func _apply_player_combat_state(frame: PackedByteArray) -> bool:
 	player_damage_sequence = 0
 	last_player_damage_tick = -1
 	last_player_damage.clear()
+	return true
+
+func _apply_player_profile_state(frame: PackedByteArray) -> bool:
+	if state != STATE_IN_WORLD:
+		return fail("player_profile_state_out_of_state")
+	var value := WireCodec.decode_player_profile_state(frame)
+	if value.is_empty():
+		return fail("invalid_player_profile_state")
+	if int(value.character_id) != actor_id:
+		return fail("player_profile_state_wrong_character")
+	player_profile_ready = true
+	player_race = int(value.race)
+	player_career = int(value.career)
+	player_level = int(value.level)
+	player_experience = int(value.experience)
+	player_strength = int(value.strength)
+	player_dexterity = int(value.dexterity)
+	player_constitution = int(value.constitution)
+	player_wisdom = int(value.wisdom)
+	player_attack = int(value.attack)
+	player_defense = int(value.defense)
+	player_hit = int(value.hit)
+	player_dodge = int(value.dodge)
 	return true
 
 func _apply_player_damage(frame: PackedByteArray) -> bool:

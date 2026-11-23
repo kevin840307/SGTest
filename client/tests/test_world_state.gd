@@ -13,6 +13,8 @@ const READY := "2D0000000100140001000000000000002A000000000000000B00000000000000
 const EMPTY_LIST := "0900000001000C0000"
 const CREATE_RESULT := "1B000000010010000021000000000000000007004E65774865726F"
 const CREATED_LIST := "1B00000001000C000121000000000000000007004E65774865726F"
+const PROFILE := "44000000010085000B0000000000000002000000030000000400000040E2010000000000050000000600000007000000080000005A00000050000000460000003C000000"
+const COMBAT := "200000000100070001000000000000003C000000640000001E00000028000000"
 
 func _fail(message: String) -> void:
 	push_error("WORLD_STATE_FAIL " + message)
@@ -117,6 +119,18 @@ func _initialize() -> void:
 	if world.mark_move_sent(1):
 		_fail("move escaped WorldReady gate")
 		return
+	if not world.apply_frame(PROFILE.hex_decode()):
+		_fail("authoritative player profile baseline rejected")
+		return
+	var profile_snapshot:=world.snapshot()
+	if not bool(profile_snapshot.player_profile_ready) or int(profile_snapshot.player_level)!=4 or \
+		int(profile_snapshot.player_experience)!=123456 or int(profile_snapshot.player_strength)!=5 or \
+		int(profile_snapshot.player_dexterity)!=6 or int(profile_snapshot.player_constitution)!=7 or \
+		int(profile_snapshot.player_wisdom)!=8 or int(profile_snapshot.player_attack)!=90 or \
+		int(profile_snapshot.player_defense)!=80 or int(profile_snapshot.player_hit)!=70 or \
+		int(profile_snapshot.player_evasion)!=60 or str(profile_snapshot.character_name)!="Hero":
+		_fail("player profile snapshot did not expose authoritative values: "+str(profile_snapshot))
+		return
 	if not world.apply_frame(READY.hex_decode()):
 		_fail("WorldReady apply")
 		return
@@ -150,6 +164,9 @@ func _verify_cross_map_reset() -> bool:
 	var transfer = WorldState.new()
 	if not transfer.mark_auth_sent() or not transfer.apply_frame(AUTH_OK.hex_decode()) or not transfer.apply_frame(LIST.hex_decode()) or not transfer.mark_choose_sent(11) or not transfer.apply_frame(CHOOSE.hex_decode()) or not transfer.apply_frame(READY.hex_decode()):
 		_fail("crossmap fixture login failed")
+		return false
+	if not transfer.apply_frame(PROFILE.hex_decode()) or not transfer.apply_frame(COMBAT.hex_decode()):
+		_fail("crossmap fixture could not initialize player stats")
 		return false
 	# Authenticated owned item locations persist; map-scoped command intent,
 	# NPC sessions, world AOI and combat visuals must never follow the actor.
@@ -198,6 +215,10 @@ func _verify_cross_map_reset() -> bool:
 	if (
 		int(changed.map_epoch) != 2 or int(changed.map_id) != 13 or
 		not bool(changed.world_ready) or bool(changed.waiting_for_new_map) or
+		not changed.player_profile_ready or changed.player_level != 4 or
+		changed.player_experience != 123456 or changed.player_wisdom != 8 or
+		not changed.combat_available or changed.player_current_hp != 60 or changed.player_max_hp != 100 or
+		changed.player_current_mp != 30 or changed.player_max_mp != 40 or
 		not changed.inventory_items.has(301) or
 		not changed.equipment_items.has(302) or
 		int(changed.equipment_slots.get(3, 0)) != 302 or

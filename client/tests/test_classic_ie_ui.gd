@@ -24,6 +24,9 @@ func _capture(path: String) -> void:
 func _run() -> void:
 	var args := OS.get_cmdline_user_args()
 	var directory := str(args[0]) if args.size() > 0 else ""
+	if Skins.DEFAULT_SKIN != "original_ie_hk2" or Skins.SKIN_SCHEMA < 4:
+		_fail("decoded HK source UI is not the product default/migration baseline")
+		return
 	if not Skins.valid("original_ie_hk2"):
 		print("CLASSIC_IE_UI_SKIP original IE HK2 local assets unavailable")
 		quit(0)
@@ -46,6 +49,34 @@ func _run() -> void:
 	if shell.login_page.get_child(0).texture == null:
 		_fail("original 800x600 ACCOUNT_LOGIN.spr source was not imported")
 		return
+	var native_captions := shell.login_page.get_node_or_null("ACCOUNT_LOGIN_HK_CAPTIONS") as TextureRect
+	if FileAccess.file_exists("res://ui/private_ie_hk2/ACCOUNT_LOGIN_HK_CAPTIONS.png") and (
+		native_captions == null or native_captions.texture == null or
+		native_captions.texture.get_size() != Vector2(800,600) or
+		native_captions.mouse_filter != Control.MOUSE_FILTER_IGNORE or
+		shell._login_confirm_label.visible or shell._login_exit_label.visible or
+		shell._login_account_label.visible or shell._login_password_label.visible
+	):
+		_fail("original-rendered HK login captions must share the 800×600 canvas and allow input through")
+		return
+	if (
+		shell._username.position != Vector2(373,256) or shell._username.size != Vector2(170,16) or
+		shell._password.position != Vector2(373,280) or shell._password.size != Vector2(170,16) or
+		shell._login_confirm.position != Vector2(368,314) or shell._login_confirm.size != Vector2(85,21) or
+		shell._login_exit.position != Vector2(463,314) or shell._login_exit.size != Vector2(85,21) or
+		shell._login_account_label.position != Vector2(281,257) or shell._login_account_label.size != Vector2(48,12) or shell._login_account_label.text != "帳戶名稱" or
+		shell._login_password_label.position != Vector2(281,281) or shell._login_password_label.size != Vector2(48,12) or shell._login_password_label.text != "帳戶密碼" or
+		shell._login_confirm_label.position != Vector2(399,318) or shell._login_confirm_label.size != Vector2(24,12) or shell._login_confirm_label.text != "確定" or
+		shell._login_exit_label.position != Vector2(494,318) or shell._login_exit_label.size != Vector2(24,12) or shell._login_exit_label.text != "離開" or
+		not shell._username.placeholder_text.is_empty() or not shell._password.placeholder_text.is_empty() or
+		not shell._password.secret or shell._password.secret_character != "*"
+	):
+		_fail("001_ACCOUNT_LOGIN.ITF geometry/labels drifted from HK source user=%s/%s min=%s pass=%s/%s min=%s ok=%s/%s exit=%s/%s labels=%s,%s,%s,%s" % [
+			str(shell._username.position),str(shell._username.size),str(shell._username.get_combined_minimum_size()),str(shell._password.position),str(shell._password.size),str(shell._password.get_combined_minimum_size()),
+			str(shell._login_confirm.position),str(shell._login_confirm.size),str(shell._login_exit.position),str(shell._login_exit.size),
+			str(shell._login_account_label.position),str(shell._login_password_label.position),
+			str(shell._login_confirm_label.position),str(shell._login_exit_label.position)])
+		return
 	if not directory.is_empty():
 		await _capture(directory.path_join("classic_login.png"))
 	app.session_panel._layout.show_page(Layout.Page.CHARACTER_SELECT)
@@ -54,12 +85,70 @@ func _run() -> void:
 	if not shell.select_page.visible or shell._slots[0].text.find("TestA") < 0:
 		_fail("original 3-slot chooser did not reflect source names")
 		return
+	app.session_panel._characters = [{"character_id":43,"name":"TestB","slot":2}]
+	shell._update_characters()
+	if not shell._slots[0].disabled or shell._slots[2].disabled or shell._slot_names[2].text != "TestB":
+		_fail("the HK chooser shifted a character into an empty slot")
+		return
+	if (
+		shell._password_modal_input.position != Vector2(358,308) or
+		shell._change_old_password.position != Vector2(373,271) or
+		not shell._password_modal_input.secret or shell._password_modal_input.max_length != 4
+	):
+		_fail("the HK character password fields drifted from 081/082 ITF")
+		return
 	if not directory.is_empty():
 		await _capture(directory.path_join("classic_select.png"))
 	app.session_panel._layout.show_page(Layout.Page.CHARACTER_CREATE)
 	app._update_ui_stage(true)
-	if not shell.create_page.visible or shell._name.placeholder_text != "角色名稱":
-		_fail("original creation source layout missing")
+	var create_labels := {}
+	for child in shell.create_page.get_children():
+		if child is Label and not child.text.is_empty():
+			create_labels[child.text] = child.position
+	var required_create_labels := {
+		"名稱":Vector2(169,261),"種族":Vector2(169,285),"頭部":Vector2(169,309),
+		"頭部顏色":Vector2(157,333),"上身顏色":Vector2(157,357),
+		"手袖顏色":Vector2(157,381),"下身顏色":Vector2(157,405),
+		"力量":Vector2(510,261),"速度":Vector2(510,285),"體質":Vector2(510,309),
+		"智慧":Vector2(510,333),"剩餘點數":Vector2(498,357),
+		"角色密碼":Vector2(498,391),"確認密碼":Vector2(498,415),
+		"建立角色":Vector2(497,475),"上一頁":Vector2(608,475),
+	}
+	if (
+		not shell.create_page.visible or
+		shell._name.position != Vector2(233,260) or shell._name.size != Vector2(125,15) or
+		not shell._name.placeholder_text.is_empty() or
+		shell._create_password.position != Vector2(596,391) or shell._create_password.size != Vector2(43,16) or
+		shell._create_password_confirm.position != Vector2(596,415) or shell._create_password_confirm.size != Vector2(43,16) or
+		not shell._create_password.secret or not shell._create_password_confirm.secret or
+		shell._create_password.max_length != 4 or shell._create_password_confirm.max_length != 4 or
+		shell._create_button.position != Vector2(478,471) or shell._create_button.size != Vector2(85,21) or
+		shell._create_back_button.position != Vector2(583,471) or shell._create_back_button.size != Vector2(85,21)
+	):
+		_fail("005_CREATE_CHARACTER.ITF edit/button geometry drifted from HK source")
+		return
+	for text in required_create_labels:
+		if not create_labels.has(text) or create_labels[text] != required_create_labels[text]:
+			_fail("005_CREATE_CHARACTER.ITF label missing/drifted: %s" % text)
+			return
+	var stat_positions := {
+		"strength":Vector2(596,261),"dexterity":Vector2(596,285),
+		"constitution":Vector2(596,309),"wisdom":Vector2(596,333),
+	}
+	for field in stat_positions:
+		if not shell._create_stat_values.has(field) or shell._create_stat_values[field].position != stat_positions[field]:
+			_fail("005_CREATE_CHARACTER.ITF stat value missing/drifted: %s" % field)
+			return
+	if shell._create_remaining.position != Vector2(596,357) or shell._create_remaining.text != "4":
+		_fail("HK creation remaining-points control missing")
+		return
+	shell._change_creation_stat("strength",1)
+	if int(app.session_panel.character_strength_input.value) != 2 or shell._create_remaining.text != "3":
+		_fail("HK creation stat arrows do not update shared authoritative request state")
+		return
+	shell._change_creation_stat("strength",-1)
+	if int(app.session_panel.character_strength_input.value) != 1 or shell._create_remaining.text != "4":
+		_fail("HK creation stat decrement did not restore shared request state")
 		return
 	if not directory.is_empty():
 		await _capture(directory.path_join("classic_create.png"))
@@ -97,7 +186,8 @@ func _run() -> void:
 		"world_ready":true,"actor_id":42,"map_id":15,"map_epoch":1,
 		"x":100.0,"y":200.0,"player_current_hp":75,"player_max_hp":100,
 		"player_current_mp":30,"player_max_mp":40,"player_level":22,
-		"character_name":"TestA","player_job":"聖靈使",
+		"character_name":"TestA","player_job":"聖靈使","player_profile_ready":true,
+		"player_experience":1234,"player_wisdom":24,"player_dodge":35,
 		"player_strength":18,"player_dexterity":20,"player_constitution":16,
 		"player_intelligence":24,"player_attack":188,"player_defense":142,
 		"player_hit":96,"player_evasion":35,"player_move_speed":240,
@@ -188,8 +278,29 @@ func _run() -> void:
 	if world._hp_label.text != "75 / 100" or world._mp_label.text != "30 / 40" or world._level_label.text != "22":
 		_fail("classic HPBAR did not bind authoritative Server values")
 		return
+	for spec in [
+		["Caption名　稱",Rect2(11,37,36,12),"名　稱"],
+		["Field名稱",Rect2(50,37,118,12),"TestA"],
+		["Field等級",Rect2(223,31,33,12),"22"],
+		["Field智慧",Rect2(40,162,47,10),"24"],
+		["Field迴避",Rect2(189,188,62,10),"35"],
+		["FieldHP",Rect2(30,268,92,10),"75/100"],
+		["FieldMP",Rect2(30,285,92,10),"30/40"],
+		["FieldEXP",Rect2(166,285,92,10),"1234 EXP"],
+		["Field配點",Rect2(166,268,92,12),"—"],
+	]:
+		var cell = world.character.get_node_or_null(spec[0])
+		if cell == null or cell.get_rect() != spec[1] or cell.text != spec[2]:
+			_fail("013_Character_INFO.ITF character row drift: %s"%str(spec[0]))
+			return
+	if world._character_hp_fill.get_rect() != Rect2(30,268,69,10) or world._character_mp_fill.get_rect() != Rect2(30,285,69,10):
+		_fail("013_Character_INFO.ITF HP and MP must fill from server ratios")
+		return
 	if not directory.is_empty():
 		await _capture(directory.path_join("classic_world.png"))
+		world.menu.get_node("Menu1").pressed.emit()
+		await _capture(directory.path_join("classic_character_info.png"))
+		world.menu.get_node("Menu1").pressed.emit()
 	if (
 		world._chat_history.text.find("你好") < 0 or
 		world._friend_rows.get_child_count() != 2 or

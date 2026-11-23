@@ -6,8 +6,12 @@ extends RefCounted
 const SkinArtwork = preload("res://ui/skin_artwork.gd")
 const CONFIG_PATH := "user://ui_skin.cfg"
 const SKIN_DIRECTORY := "res://ui/skins"
-const DEFAULT_SKIN := "recovered2_local"
+# HK is the product baseline whenever the locally decoded original assets exist.
+# Alternative skins remain developer/user options, but must never silently win
+# over the verified HK presentation on a fresh or pre-v4 installation.
+const DEFAULT_SKIN := "original_ie_hk2"
 const FALLBACK_SKIN := "retro_terminal"
+const SKIN_SCHEMA := 4
 const COLOR_FIELDS := ["bg","border","text","field","button","hover","accent"]
 
 static func _profiles() -> Array[Dictionary]:
@@ -54,9 +58,10 @@ static func load_selected() -> String:
 	var config := ConfigFile.new()
 	if config.load(CONFIG_PATH) != OK:
 		return default_id
-	# Migrate older palette-only selections to the new pictured UI baseline.
-	# After the user selects a skin in the new version, persist it normally.
-	if int(config.get_value("ui","skin_schema",0)) < 3:
+	# v4 promotes the decoded HK source UI to the official product baseline.
+	# Older saved R2/experimental choices came from the pre-HK-default era and
+	# must migrate once; choices made after this migration persist normally.
+	if int(config.get_value("ui","skin_schema",0)) < SKIN_SCHEMA:
 		return default_id
 	var chosen := str(config.get_value("ui","skin",default_id))
 	return chosen if valid(chosen) else default_id
@@ -66,7 +71,7 @@ static func save_selected(id: String) -> Error:
 		return ERR_INVALID_PARAMETER
 	var config := ConfigFile.new()
 	config.set_value("ui","skin",id)
-	config.set_value("ui","skin_schema",3)
+	config.set_value("ui","skin_schema",SKIN_SCHEMA)
 	return config.save(CONFIG_PATH)
 
 static func _palette(id: String) -> Dictionary:

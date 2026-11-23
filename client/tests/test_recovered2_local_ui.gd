@@ -133,6 +133,7 @@ func _run() -> void:
 	var app = Main.new()
 	app.auto_start = false
 	app.preview_auth_offline = true
+	app.persist_ui_preferences = false
 	root.add_child(app)
 	var shell = app.recovered2_auth
 	if not pack_path.is_empty() and app.world_view.open_pack(pack_path) != OK:

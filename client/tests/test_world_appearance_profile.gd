@@ -57,9 +57,14 @@ func _run() -> void:
 		"race":1,"hair_index":0,"hair_color":2,
 		"body_index":2,"leg_index":1,"sleeve_color":1}
 	var own := actor_state(1,7872.0,own_app,1)
+	# Regression: first WorldReady may arrive before AOI PlayerIdentity/self_state
+	# carries appearance. The authenticated selected-character baseline must be
+	# sufficient to preload and render the exact paper doll without a default flash.
+	own.erase("appearance")
 	var remote := actor_state(2,7952.0,remote_app,1)
 	var snapshot := {
 		"world_ready":true,
+		"selected_character_appearance":own_app.duplicate(true),
 		"map_epoch":15,
 		"map_id":15,
 		"actor_id":1,

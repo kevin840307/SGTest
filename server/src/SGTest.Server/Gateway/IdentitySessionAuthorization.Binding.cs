@@ -317,6 +317,8 @@ public sealed partial class IdentitySessionAuthorization
 
         CharacterCombatProfile? combat = await _identity.GetCharacterCombatProfileAsync(
             character.CharacterId, cancellationToken).ConfigureAwait(false);
+        CharacterExperienceState? experience = await _identity.GetCharacterExperienceAsync(
+            character.CharacterId, cancellationToken).ConfigureAwait(false);
         TrustedCombatProfile? trustedCombat = combat is null ? null : new(
             combat.Data.Attack, combat.Data.Defense, combat.Data.Hit, combat.Data.Dodge,
             combat.Data.AttackRange, combat.Data.AttackCooldownTicks);
@@ -467,6 +469,22 @@ public sealed partial class IdentitySessionAuthorization
                     await WriteFrameAsync(tls,WireProtocol.EncodeEquipmentSnapshot(
                         new(snapshot.ActorId,0,true,Array.Empty<EquipmentItemWire>())),
                         cancellationToken).ConfigureAwait(false);
+            }
+
+            // Additive self-only profile baseline is emitted after all legacy
+            // inventory/skill/equipment baselines, preserving their historical
+            // ordering while still arriving before WorldReady/AOI publication.
+            if (combat is not null)
+            {
+                await WriteFrameAsync(tls, WireProtocol.EncodePlayerProfileState(new(
+                    snapshot.ActorId,
+                    combat.Data.Race, combat.Data.Career, combat.Data.Level,
+                    experience?.Experience ?? 0,
+                    combat.Data.Strength, combat.Data.Dexterity,
+                    combat.Data.Constitution, combat.Data.Wisdom,
+                    combat.Data.Attack, combat.Data.Defense,
+                    combat.Data.Hit, combat.Data.Dodge)),
+                    cancellationToken).ConfigureAwait(false);
             }
 
             cancellationToken.ThrowIfCancellationRequested();

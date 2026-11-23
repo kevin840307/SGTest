@@ -9,7 +9,18 @@ const UiTextures = preload("res://ui/ui_texture_loader.gd")
 
 const SOURCE := Vector2(800,600)
 const ART := "res://ui/private_ie_hk2"
-const CREATE_FIELDS := ["race","hair_index","hair_color","body_index","leg_index","sleeve_color"]
+const CREATE_FIELDS := ["race","hair_index","hair_color","body_index","sleeve_color","leg_index"]
+const CREATE_ATTRIBUTE_FIELDS := ["strength","dexterity","constitution","wisdom"]
+const CREATE_ATTRIBUTE_TOTAL := 8
+
+class LoginCaption extends Control:
+	var text := ""
+	var font: Font
+
+	func _draw() -> void:
+		# ITF positions identify the top-left of a 12px text cell. Canvas
+		# drawing keeps the same origin as the background and input hitboxes.
+		draw_string(font,Vector2(1,10),text,HORIZONTAL_ALIGNMENT_LEFT,-1,12,Color.WHITE)
 
 var stage := Control.new()
 var login_page := Control.new()
@@ -20,12 +31,40 @@ var _asset_store
 var _username := LineEdit.new()
 var _password := LineEdit.new()
 var _name := LineEdit.new()
+var _login_confirm: Button
+var _login_exit: Button
+var _login_account_label: LoginCaption
+var _login_password_label: LoginCaption
+var _login_confirm_label: LoginCaption
+var _login_exit_label: LoginCaption
+var _login_font := SystemFont.new()
 var _status: Label
 var _create_note: Label
+var _create_password := LineEdit.new()
+var _create_password_confirm := LineEdit.new()
+var _create_stat_values: Dictionary = {}
+var _create_remaining: Label
+var _create_button: Button
+var _create_back_button: Button
 var _slots: Array[Button] = []
 var _slot_names: Array[Label] = []
 var _slot_empty_art: Array[TextureRect] = []
-var _slot_play_art: Array[TextureRect] = []
+var _slot_password_buttons: Array[Button] = []
+var _slot_enter_buttons: Array[Button] = []
+var _slot_delete_buttons: Array[Button] = []
+var _select_back_button: Button
+var _password_modal := Control.new()
+var _password_modal_input := LineEdit.new()
+var _password_modal_confirm: Button
+var _password_modal_cancel: Button
+var _change_password_modal := Control.new()
+var _change_old_password := LineEdit.new()
+var _change_new_password := LineEdit.new()
+var _change_confirm_password := LineEdit.new()
+var _password_prompt: Label
+var _select_status: Label
+var _delete_step := 0
+var _modal_character_id := 0
 var _previews: Array = []
 var _values: Dictionary = {}
 var _current_page := -1
@@ -46,6 +85,15 @@ func _init() -> void:
 	_build_create()
 	set_process(false)
 	resize_view(Vector2(1152,620))
+
+func _ready() -> void:
+	# Once inherited theme metrics are final, remove the unparented fallback
+	# minimum retained by LineEdit and restore the exact HK ITF edit boxes.
+	_username.size = Vector2(170,16)
+	_password.size = Vector2(170,16)
+	_name.size = Vector2(125,15)
+	_create_password.size = Vector2(43,16)
+	_create_password_confirm.size = Vector2(43,16)
 
 func _tex(name: String) -> Texture2D:
 	return UiTextures.get_texture(ART.path_join(name + ".png"))
@@ -92,6 +140,18 @@ func _style_hit(button: Button,visible_text:=true) -> void:
 	button.add_theme_constant_override("shadow_offset_y",1)
 	button.add_theme_font_size_override("font_size",12)
 
+func _sprite_at(parent: Control,name: String,x: float,y: float,w: float,h: float) -> TextureRect:
+	var art := TextureRect.new()
+	art.name = name + "Art"
+	art.texture = _tex(name)
+	art.position = Vector2(x,y)
+	art.size = Vector2(w,h)
+	art.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	art.stretch_mode = TextureRect.STRETCH_SCALE
+	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	parent.add_child(art)
+	return art
+
 func _button(parent: Control,text: String,x: float,y: float,w: float,h: float,callback: Callable,art_name: String="") -> Button:
 	if not art_name.is_empty():
 		var art := TextureRect.new()
@@ -123,88 +183,349 @@ func _label(parent: Control,text: String,x: float,y: float,w: float,h: float) ->
 	_input_at(parent,l,x,y,w,h)
 	return l
 
+func _login_caption(text: String,x: int,y: int,width: int) -> LoginCaption:
+	var caption := LoginCaption.new()
+	caption.text = text
+	caption.font = _login_font
+	caption.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_input_at(login_page,caption,x,y,width,12)
+	return caption
+
+func _login_button(x: int,callback: Callable) -> Button:
+	var button := _button(login_page,"",x,314,85,21,callback)
+	button.flat = false
+	var states := ["normal","hover","pressed","disabled"]
+	for frame in states.size():
+		var texture := _tex("YELLOW_BUTTON_%d" % frame)
+		if texture != null:
+			var style := StyleBoxTexture.new()
+			style.texture = texture
+			button.add_theme_stylebox_override(states[frame],style)
+			if states[frame] == "pressed":
+				button.add_theme_stylebox_override("hover_pressed",style)
+	return button
+
 func _build_login() -> void:
-	_art(login_page,"ACCOUNT_LOGIN.png")
-	_username.placeholder_text = "帳號"
+	_art(login_page,"ACCOUNT_LOGIN_HK.png")
+	# OH01 in 001_ACCOUNT_LOGIN.ITF. The local HK test did not open a
+	# help window when clicked, so its action remains unverified.
+	_sprite_at(login_page,"B_ONLINEHELP_0",537,228,16,16)
+	# The HK executable uses GDI. Arial with the local CJK fallback gave
+	# the closest caption geometry in the build 119 comparison.
+	_login_font.font_names = PackedStringArray(["Arial"])
+	# 001_ACCOUNT_LOGIN.ITF is the geometry/label authority for the HK login.
+	# Keep the text controls separate from the decoded background/button SPRs,
+	# exactly as the original ITF does; do not replace them with placeholders.
+	_login_account_label = _login_caption("帳戶名稱",281,257,48)
+	_login_password_label = _login_caption("帳戶密碼",281,281,48)
+	_username.placeholder_text = ""
 	_username.max_length = 32
 	_password.secret = true
+	_password.secret_character = "*"
 	_password.max_length = 256
-	_password.placeholder_text = "密碼"
+	_password.placeholder_text = ""
 	_style_line_edit(_username)
 	_style_line_edit(_password)
-	_input_at(login_page,_username,368,251,181,22)
-	_input_at(login_page,_password,368,277,181,22)
+	_username.add_theme_font_size_override("font_size",11)
+	_username.add_theme_font_override("font",_login_font)
+	# Match the build 119 star and its caret advance in the 16px edit cell.
+	var mask_face := SystemFont.new()
+	mask_face.font_names = PackedStringArray(["Consolas","Liberation Mono"])
+	var mask_font := FontVariation.new()
+	mask_font.base_font = mask_face
+	mask_font.spacing_glyph = -1
+	_password.add_theme_font_override("font",mask_font)
+	_password.add_theme_font_size_override("font_size",12)
+	for state in ["normal","focus","read_only"]:
+		_password.get_theme_stylebox(state).content_margin_bottom = 2.0
+	_input_at(login_page,_username,373,256,170,16)
+	_input_at(login_page,_password,373,280,170,16)
+	# _input_at sizes before parenting; LineEdit otherwise retains the fallback
+	# unparented theme's 31px minimum instead of the zero-style HK height.
+	_username.size = Vector2(170,16)
+	_password.size = Vector2(170,16)
 	_password.text_submitted.connect(func(_unused): _login())
-	_button(login_page,"登入",365,314,85,21,_login,"YELLOW_BUTTON")
-	_button(login_page,"註冊",465,314,85,21,_register,"YELLOW_BUTTON")
+	_login_confirm = _login_button(368,_login)
+	_login_confirm.name = "LoginConfirm"
+	_login_exit = _login_button(463,_exit_login)
+	_login_exit.name = "LoginExit"
+	_login_confirm_label = _login_caption("確定",399,318,24)
+	_login_exit_label = _login_caption("離開",494,318,24)
+	var native_captions := _art(login_page,"ACCOUNT_LOGIN_HK_CAPTIONS.png")
+	for caption in [_login_account_label,_login_password_label,_login_confirm_label,_login_exit_label]:
+		caption.visible = native_captions.texture == null
 	_status = _label(login_page,"",237,343,326,32)
 	_status.add_theme_color_override("font_color",Color("#7a3517"))
 
 func _build_select() -> void:
 	_art(select_page,"SELECT_CHARACTER.png")
+	# 004_SELECT_CHARACTER.ITF: each of the three HK slots owns three distinct
+	# actions. The HK .lst maps 密碼設定/進入遊戲/刪除角色 to states 9/6/7.
+	var name_x := [150.0,338.0,525.0]
+	var preview_x := [169.0,358.0,544.0]
+	var action_x := [168.0,358.0,544.0]
+	var label_x := [187.0,377.0,563.0]
 	for i in 3:
-		var x := 170.0 + float(i)*188.0
-		var name_label := _label(select_page,"",x-25,256,136,22)
-		name_label.add_theme_color_override("font_color",Color("#fff0bd"))
-		name_label.add_theme_color_override("font_shadow_color",Color.BLACK)
+		var name_label := _label(select_page,"",name_x[i],260,124,16)
+		name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		name_label.add_theme_color_override("font_color",Color.WHITE)
+		name_label.add_theme_color_override("font_shadow_color",Color.TRANSPARENT)
 		_slot_names.append(name_label)
+
 		var preview := PlayerPreview.new()
-		_input_at(select_page,preview,x,286,85,128)
+		_input_at(select_page,preview,preview_x[i],284,84,130)
 		preview.bind_store(_asset_store)
 		_previews.append(preview)
+
 		var empty_art := TextureRect.new()
 		empty_art.texture = _tex("NEW_CHARACTER_0")
-		empty_art.position = Vector2(x,284)
-		empty_art.size = Vector2(85,132)
+		empty_art.position = Vector2(preview_x[i],284)
+		empty_art.size = Vector2(84,130)
 		empty_art.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		empty_art.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 		empty_art.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		select_page.add_child(empty_art)
 		_slot_empty_art.append(empty_art)
-		var play_art := TextureRect.new()
-		play_art.texture = _tex("PLAY_GAME_0")
-		play_art.position = Vector2(x+9,418)
-		play_art.size = Vector2(67,23)
-		play_art.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-		play_art.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-		play_art.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		play_art.hide()
-		select_page.add_child(play_art)
-		_slot_play_art.append(play_art)
-		var button := Button.new()
-		button.name = "CharacterSlot%d" % i
-		button.text = ""
-		_style_hit(button,false)
-		button.pressed.connect(_select_slot.bind(i))
-		_input_at(select_page,button,x-4,280,94,164)
-		_slots.append(button)
-	_button(select_page,"登出",357,482,85,21,func(): _panel.disconnect_session(),"YELLOW_BUTTON")
+
+		var password := _button(select_page,"",action_x[i],420,85,21,_open_change_password.bind(i),"YELLOW_BUTTON")
+		var enter := _button(select_page,"",action_x[i],444,85,21,_enter_slot.bind(i),"YELLOW_BUTTON")
+		_style_hit(enter,false)
+		var remove := _button(select_page,"",action_x[i],468,85,21,_open_delete.bind(i),"YELLOW_BUTTON")
+		_slot_password_buttons.append(password)
+		_slot_enter_buttons.append(enter)
+		_slot_delete_buttons.append(remove)
+		_slots.append(enter)
+		var create_hit := _button(select_page,"",preview_x[i],284,84,130,_select_slot.bind(i))
+		create_hit.name = "CreateCharacterSlot%d" % i
+
+		for spec in [
+			["密碼設定",label_x[i],424,48,12],
+			["進入遊戲",label_x[i],448,48,12],
+			["刪除角色",label_x[i],472,48,12],
+		]:
+			var label := _label(select_page,str(spec[0]),float(spec[1]),float(spec[2]),float(spec[3]),float(spec[4]))
+			label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			label.add_theme_color_override("font_color",Color.WHITE)
+			label.add_theme_color_override("font_shadow_color",Color.TRANSPARENT)
+
+	_select_back_button = _button(select_page,"",544,499,85,21,func(): _panel.disconnect_session(),"YELLOW_BUTTON")
+	var back_label := _label(select_page,"上一頁",569,504,36,12)
+	back_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	back_label.add_theme_color_override("font_color",Color.WHITE)
+	back_label.add_theme_color_override("font_shadow_color",Color.TRANSPARENT)
+
+	_select_status = _label(select_page,"",237,532,326,24)
+	_build_select_password_modal()
+	_build_change_password_modal()
+
+func _modal_background(modal: Control, image: String, size: Vector2) -> void:
+	modal.size = SOURCE
+	modal.mouse_filter = Control.MOUSE_FILTER_STOP
+	select_page.add_child(modal)
+	var origin := (SOURCE-size)/2
+	_sprite_at(modal,image,origin.x,origin.y,size.x,size.y)
+	modal.hide()
+
+func _modal_password(modal: Control, input: LineEdit, origin: Vector2, x: int, y: int) -> void:
+	input.secret = true
+	input.max_length = 4
+	_style_line_edit(input)
+	input.add_theme_font_size_override("font_size",11)
+	_input_at(modal,input,origin.x+x,origin.y+y,170,12)
+	input.size = Vector2(170,12)
+
+func _modal_label(modal: Control, origin: Vector2, value: String, x: int, y: int, width: int) -> Label:
+	var label := _label(modal,value,origin.x+x,origin.y+y,width,12)
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	label.add_theme_color_override("font_color",Color.WHITE)
+	label.add_theme_color_override("font_shadow_color",Color.TRANSPARENT)
+	return label
+
+func _build_select_password_modal() -> void:
+	# 082_LOGIN_PASSWORD.ITF uses coordinates local to the 352×102 SPR.
+	var origin := Vector2(224,249)
+	_modal_background(_password_modal,"LOGIN_PASSWORD",Vector2(352,102))
+	_password_prompt = _modal_label(_password_modal,origin,"角色密碼",50,59,48)
+	_modal_password(_password_modal,_password_modal_input,origin,134,59)
+	_password_modal_input.text_submitted.connect(func(_text): _submit_slot_password())
+	_password_modal_confirm = _button(_password_modal,"",origin.x+164,origin.y+78,85,21,_submit_slot_password,"YELLOW_BUTTON")
+	_password_modal_cancel = _button(_password_modal,"",origin.x+259,origin.y+78,85,21,_close_slot_modals,"YELLOW_BUTTON")
+	_modal_label(_password_modal,origin,"確認",194,82,24)
+	_modal_label(_password_modal,origin,"取消",289,82,24)
+
+func _build_change_password_modal() -> void:
+	# 081_LOGIN_CHANGE_PASSWORD.ITF uses coordinates local to the 352×142 SPR.
+	var origin := Vector2(224,229)
+	_modal_background(_change_password_modal,"LOGIN_CHANGE_PASSWORD",Vector2(352,142))
+	_modal_password(_change_password_modal,_change_old_password,origin,149,42)
+	_modal_password(_change_password_modal,_change_new_password,origin,149,66)
+	_modal_password(_change_password_modal,_change_confirm_password,origin,149,90)
+	_modal_label(_change_password_modal,origin,"原有密碼",60,43,48)
+	_modal_label(_change_password_modal,origin,"新的密碼",60,67,48)
+	_modal_label(_change_password_modal,origin,"確認密碼",59,91,48)
+	_button(_change_password_modal,"",origin.x+147,origin.y+116,85,21,_submit_change_password,"YELLOW_BUTTON")
+	_button(_change_password_modal,"",origin.x+240,origin.y+116,85,21,_close_slot_modals,"YELLOW_BUTTON")
+	_modal_label(_change_password_modal,origin,"確認",178,120,24)
+	_modal_label(_change_password_modal,origin,"取消",270,120,24)
+
+func _character_index_at_slot(slot: int) -> int:
+	for index in _panel._characters.size():
+		if int(_panel._characters[index].get("slot",-1)) == slot:
+			return index
+	return -1
+
+func _close_slot_modals() -> void:
+	_password_modal.hide()
+	_change_password_modal.hide()
+	for input in [_password_modal_input,_change_old_password,_change_new_password,_change_confirm_password]:
+		input.clear()
+	_modal_character_id = 0
+	_delete_step = 0
+
+func _enter_slot(slot: int) -> void:
+	_open_slot_password(slot,false)
+
+func _open_delete(slot: int) -> void:
+	_open_slot_password(slot,true)
+
+func _open_slot_password(slot: int, deleting: bool) -> void:
+	if _panel == null or not _panel.active or _panel._chosen:
+		return
+	var index := _character_index_at_slot(slot)
+	if index < 0:
+		return
+	_close_slot_modals()
+	_modal_character_id = int(_panel._characters[index].character_id)
+	_delete_step = 1 if deleting else 0
+	_password_prompt.text = "刪除角色" if deleting else "角色密碼"
+	_password_modal.show()
+	_password_modal_input.grab_focus()
+
+func _submit_slot_password() -> void:
+	if _modal_character_id <= 0:
+		return
+	var password := _password_modal_input.text
+	if password.length() != 4:
+		_panel.status.text = "請先設定或輸入 4 位角色密碼"
+		return
+	if _delete_step == 1:
+		_delete_step = 2
+		_password_prompt.text = "確認刪除"
+		return
+	if _delete_step == 2:
+		if _panel.delete_character(_modal_character_id,password):
+			_close_slot_modals()
+		return
+	for index in _panel._characters.size():
+		if int(_panel._characters[index].character_id) == _modal_character_id:
+			_panel.characters.select(index)
+			_panel.choose(password)
+			if _panel._chosen:
+				_close_slot_modals()
+			return
+	_close_slot_modals()
+
+func _open_change_password(slot: int) -> void:
+	if _panel == null or not _panel.active or _panel._chosen:
+		return
+	var index := _character_index_at_slot(slot)
+	if index < 0:
+		return
+	_close_slot_modals()
+	_modal_character_id = int(_panel._characters[index].character_id)
+	_change_password_modal.show()
+	_change_old_password.grab_focus()
+
+func _submit_change_password() -> void:
+	var old_password := _change_old_password.text
+	var new_password := _change_new_password.text
+	if _modal_character_id <= 0 or new_password.length() != 4 or new_password != _change_confirm_password.text:
+		return
+	if not old_password.is_empty() and old_password.length() != 4:
+		return
+	if _panel.change_character_password(_modal_character_id,old_password,new_password):
+		_close_slot_modals()
 
 func _build_create() -> void:
 	_art(create_page,"CREATE_CHARACTER.png")
-	_name.placeholder_text = "角色名稱"
+	# 005_CREATE_CHARACTER.ITF is the source of truth for labels/hitboxes.
+	var static_labels := [
+		["名稱",169,261,24,12],["種族",169,285,24,12],
+		["頭部",169,309,24,12],["頭部顏色",157,333,48,12],
+		["上身顏色",157,357,48,12],["手袖顏色",157,381,48,12],
+		["下身顏色",157,405,48,12],["剩餘點數",498,357,48,12],
+		["力量",510,261,24,12],["體質",510,309,24,12],
+		["速度",510,285,24,12],["智慧",510,333,24,12],
+		["角色密碼",498,391,48,12],["確認密碼",498,415,48,12],
+	]
+	for spec in static_labels:
+		var label := _label(create_page,str(spec[0]),float(spec[1]),float(spec[2]),float(spec[3]),float(spec[4]))
+		label.add_theme_color_override("font_color",Color.WHITE)
+		label.add_theme_color_override("font_shadow_color",Color.TRANSPARENT)
+
+	_name.placeholder_text = ""
 	_name.max_length = 24
 	_style_line_edit(_name)
-	_input_at(create_page,_name,228,255,134,22)
+	_name.add_theme_font_size_override("font_size",10)
+	_input_at(create_page,_name,233,260,125,15)
+
+	var appearance_y := [281.0,304.0,328.0,352.0,376.0,400.0]
 	for i in CREATE_FIELDS.size():
 		var field: String = CREATE_FIELDS[i]
-		var y := 282.0 + float(i)*24.0
-		_button(create_page,"",158,y,24,21,_cycle.bind(field,-1),"LEFT_BUTTON")
-		var value := _label(create_page,"尚未開放",184,y-1,111,22)
-		value.add_theme_color_override("font_color",Color("#fff2c7"))
-		value.add_theme_color_override("font_shadow_color",Color.BLACK)
-		_values[field] = value
-		_button(create_page,"",299,y,24,21,_cycle.bind(field,1),"RIGHT_BUTTON")
+		_button(create_page,"",228,appearance_y[i],24,21,_cycle.bind(field,-1),"LEFT_BUTTON")
+		_button(create_page,"",257,appearance_y[i],24,21,_cycle.bind(field,1),"RIGHT_BUTTON")
+
+	var stat_y := {
+		"strength":256.0,
+		"dexterity":280.0,
+		"constitution":304.0,
+		"wisdom":328.0,
+	}
+	var value_y := {
+		"strength":261.0,
+		"dexterity":285.0,
+		"constitution":309.0,
+		"wisdom":333.0,
+	}
+	for field in CREATE_ATTRIBUTE_FIELDS:
+		_button(create_page,"",566,stat_y[field],24,21,_change_creation_stat.bind(field,-1),"LEFT_BUTTON")
+		var value := _label(create_page,"1",596,value_y[field],43,16)
+		value.add_theme_color_override("font_color",Color.WHITE)
+		value.add_theme_color_override("font_shadow_color",Color.TRANSPARENT)
+		_create_stat_values[field] = value
+		_button(create_page,"",646,stat_y[field],24,21,_change_creation_stat.bind(field,1),"RIGHT_BUTTON")
+	_create_remaining = _label(create_page,str(CREATE_ATTRIBUTE_TOTAL-4),596,357,43,16)
+	_create_remaining.add_theme_color_override("font_color",Color.WHITE)
+	_create_remaining.add_theme_color_override("font_shadow_color",Color.TRANSPARENT)
+
+	for input in [_create_password,_create_password_confirm]:
+		input.secret = true
+		input.max_length = 4
+		input.placeholder_text = ""
+		_style_line_edit(input)
+		input.add_theme_font_size_override("font_size",11)
+	_input_at(create_page,_create_password,596,391,43,16)
+	_input_at(create_page,_create_password_confirm,596,415,43,16)
+
 	var doll := PlayerPreview.new()
 	_input_at(create_page,doll,346,291,76,126)
 	doll.bind_store(_asset_store)
 	_previews.append(doll)
-	var note := _label(create_page,"",147,435,267,52)
+
+	# The original lower-left region is retained as a temporary error fallback;
+	# neutral SGTest prose is never painted over the HK creation screen.
+	var note := _label(create_page,"",140,434,277,55)
 	note.add_theme_color_override("font_color",Color("#5a3212"))
 	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_create_note = note
-	_button(create_page,"建立",510,442,85,21,_create,"YELLOW_BUTTON")
-	_button(create_page,"返回",600,442,85,21,func(): _panel.back_to_character_button.pressed.emit(),"YELLOW_BUTTON")
+
+	_create_button = _button(create_page,"",478,471,85,21,_create,"YELLOW_BUTTON")
+	_create_back_button = _button(create_page,"",583,471,85,21,func(): _panel.back_to_character_button.pressed.emit(),"YELLOW_BUTTON")
+	for spec in [["建立角色",497,475,48,12],["上一頁",608,475,36,12]]:
+		var label := _label(create_page,str(spec[0]),float(spec[1]),float(spec[2]),float(spec[3]),float(spec[4]))
+		label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		label.add_theme_color_override("font_color",Color.WHITE)
+		label.add_theme_color_override("font_shadow_color",Color.TRANSPARENT)
 
 func bind_session(panel, store) -> void:
 	_panel = panel
@@ -221,20 +542,14 @@ func _login() -> void:
 	_password.clear()
 	_panel.login()
 
-func _register() -> void:
-	if _panel == null:
-		return
-	_panel.username_input.text = _username.text
-	_panel.password_input.text = _password.text
-	_password.clear()
-	_panel.register_account()
+func _exit_login() -> void:
+	get_tree().quit()
 
 func _select_slot(index: int) -> void:
 	if _panel == null or not _panel.active:
 		return
-	if index < _panel._characters.size():
-		_panel.characters.select(index)
-		_panel.choose()
+	if _character_index_at_slot(index) >= 0:
+		_enter_slot(index)
 	else:
 		_panel.character_slot_input.value = index
 		_panel.new_character_button.pressed.emit()
@@ -243,15 +558,65 @@ func _cycle(field: String,delta: int) -> void:
 	if _panel != null:
 		_panel.creation_options.cycle(field,delta)
 
+func _creation_stat_input(field: String):
+	if _panel == null:
+		return null
+	match field:
+		"strength": return _panel.character_strength_input
+		"dexterity": return _panel.character_dexterity_input
+		"constitution": return _panel.character_constitution_input
+		"wisdom": return _panel.character_wisdom_input
+	return null
+
+func _creation_attribute_sum() -> int:
+	var total := 0
+	for field in CREATE_ATTRIBUTE_FIELDS:
+		var input = _creation_stat_input(field)
+		if input != null:
+			total += int(input.value)
+	return total
+
+func _sync_create_stats() -> void:
+	if _panel == null:
+		return
+	for field in CREATE_ATTRIBUTE_FIELDS:
+		var input = _creation_stat_input(field)
+		if input != null and _create_stat_values.has(field):
+			_create_stat_values[field].text = str(int(input.value))
+	if _create_remaining != null:
+		_create_remaining.text = str(maxi(0,CREATE_ATTRIBUTE_TOTAL-_creation_attribute_sum()))
+
+func _change_creation_stat(field: String,delta: int) -> void:
+	var input = _creation_stat_input(field)
+	if input == null or delta == 0:
+		return
+	var current := int(input.value)
+	if delta > 0 and _creation_attribute_sum() >= CREATE_ATTRIBUTE_TOTAL:
+		return
+	var next := current + delta
+	if next < int(input.min_value) or next > int(input.max_value):
+		return
+	input.value = next
+	_sync_create_stats()
+
 func _create() -> void:
 	if _panel == null:
 		return
 	_panel.character_name_input.text = _name.text
+	_panel.character_password_input.text = _create_password.text
+	_panel.character_password_confirm_input.text = _create_password_confirm.text
 	_panel.create_character()
+	# SessionPanel clears secrets only after an accepted request. Mirror that
+	# lifecycle here instead of creating a second state owner.
+	_create_password.text = _panel.character_password_input.text
+	_create_password_confirm.text = _panel.character_password_confirm_input.text
 
 func enable_for_page(page: int,on: bool) -> void:
+	var entering_login := on and page == Layout.Page.LOGIN and (not visible or _current_page != page)
 	visible = on and _panel != null
 	set_process(visible)
+	if not visible or page != Layout.Page.CHARACTER_SELECT:
+		_close_slot_modals()
 	if not visible:
 		return
 	_current_page = page
@@ -260,12 +625,17 @@ func enable_for_page(page: int,on: bool) -> void:
 	create_page.visible = page == Layout.Page.CHARACTER_CREATE
 	if create_page.visible:
 		_name.text = _panel.character_name_input.text
+		_create_password.text = _panel.character_password_input.text
+		_create_password_confirm.text = _panel.character_password_confirm_input.text
+		_sync_create_stats()
 		_update_appearance()
 	if select_page.visible:
 		_character_key = ""
 		_update_characters()
 	if login_page.visible:
 		_username.text = _panel.username_input.text
+		if entering_login:
+			_username.grab_focus()
 
 func _process(_delta: float) -> void:
 	if _panel == null:
@@ -273,10 +643,17 @@ func _process(_delta: float) -> void:
 	if _current_page != _panel._layout.current_page:
 		enable_for_page(_panel._layout.current_page,true)
 	if login_page.visible:
-		_status.text = _panel.status.text
+		var login_status := str(_panel.status.text)
+		# 001_ACCOUNT_LOGIN.ITF has no neutral instructional status label.
+		# Keep actual failures visible as a temporary usability fallback until
+		# the HK message-modal path is mapped, but do not paint SGTest-only idle
+		# or connection-progress prose over the original login artwork.
+		_status.text = "" if login_status in ["請登入伺服器","安全連線中…"] else login_status
 	if create_page.visible:
 		_create_note.text = _panel.character_create_status.text
 	if select_page.visible:
+		var status := str(_panel.status.text)
+		_select_status.text = "" if status == "請選擇角色或建立新角色" else status
 		_update_characters()
 
 func _update_characters() -> void:
@@ -285,13 +662,14 @@ func _update_characters() -> void:
 		return
 	_character_key = key
 	for i in _slots.size():
-		var occupied: bool = i < _panel._characters.size()
-		var c: Dictionary = _panel._characters[i] if occupied else {}
+		var index := _character_index_at_slot(i)
+		var occupied := index >= 0
+		var c: Dictionary = _panel._characters[index] if occupied else {}
 		_slots[i].text = str(c.get("name","")) if occupied else ""
-		_slots[i].disabled = _panel._chosen
-		_slot_names[i].text = str(c.get("name","")) if occupied else "建立角色"
+		for button in [_slot_enter_buttons[i],_slot_password_buttons[i],_slot_delete_buttons[i]]:
+			button.disabled = not occupied or _panel._chosen
+		_slot_names[i].text = str(c.get("name","")) if occupied else ""
 		_slot_empty_art[i].visible = not occupied
-		_slot_play_art[i].visible = occupied
 		_previews[i].visible = occupied
 		_previews[i].set_occupied(occupied)
 		_previews[i].set_appearance(c.get("appearance",{}) if occupied else {})
@@ -304,7 +682,6 @@ func _update_appearance() -> void:
 		_values[field].text = AppearanceLabels.value_label(field,int(selected.get(field,-1))) if not selected.is_empty() else "未開放"
 	_previews[3].set_occupied(not selected.is_empty())
 	_previews[3].set_appearance(selected)
-	_create_note.text = "外觀選項直接使用伺服器允許清單；切換 UI 不改角色資料。"
 
 func resize_view(view: Vector2) -> void:
 	size = view

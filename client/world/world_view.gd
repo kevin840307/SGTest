@@ -225,6 +225,12 @@ func _snapshot_profile_definitions(snapshot: Dictionary) -> Dictionary:
 	var own: Variant = snapshot.get("self_state",{})
 	if own is Dictionary and not own.is_empty():
 		candidates.append(own)
+	# The authenticated CharacterList already carries the selected character's
+	# appearance. Use it during map palette loading so the local paper doll is
+	# ready before the first AOI PlayerIdentity frame arrives.
+	var selected_appearance: Variant = snapshot.get("selected_character_appearance",{})
+	if selected_appearance is Dictionary and not selected_appearance.is_empty():
+		candidates.append({"appearance":selected_appearance})
 	var entities_value: Variant = snapshot.get("entities",{})
 	if entities_value is Dictionary:
 		for entity in entities_value.values():

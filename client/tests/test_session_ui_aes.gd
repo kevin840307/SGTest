@@ -621,6 +621,13 @@ func run() -> void:
 	if int(panel._latest.get("character_manage_status",-1)) != 0:
 		fail("UI secondary password migration failed")
 		return
+	panel.character_choose_password_input.text = "1357"
+	panel.choose_button.pressed.emit()
+	while panel._chosen and Time.get_ticks_msec()<deadline and panel.active:
+		await process_frame
+	if not panel.active or panel._chosen or panel.status.text != "角色密碼錯誤":
+		fail("Wrong secondary password must stay visible and allow a retry")
+		return
 	panel.character_choose_password_input.text = "2468"
 	panel.choose_button.pressed.emit()
 	while not bool(panel._latest.get("world_ready",false)) and Time.get_ticks_msec()<deadline and panel.active:

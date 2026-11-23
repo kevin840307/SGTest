@@ -44,6 +44,9 @@ var _recovered2_local_ready := false
 var preview_auth_offline := false
 var offline_map_only := false
 var dev_overlay_enabled := false
+# Tests and ephemeral previews may exercise alternate UI presentations without
+# mutating the player's persisted product preference.
+var persist_ui_preferences := true
 var skin_picker: OptionButton
 var _map_buttons: Array[Button] = []
 var _last_snapshot: Dictionary = {}
@@ -188,7 +191,11 @@ func _ready() -> void:
 			elif args[i] == "--port" and args[i+1].is_valid_int():
 				session_panel.server_port = int(args[i+1])
 		if world_view.open_pack(pack) == OK:
-			world_view.request_map(15)
+			# Online authentication must not start decoding/rendering an arbitrary
+			# Map15 behind the login screen. The authoritative map is requested
+			# only after WorldReady; offline map preview keeps its explicit Map15.
+			if offline_map_only:
+				world_view.request_map(15)
 		else:
 			_status.text = "素材包未就緒，請先依 Client README 建置"
 
@@ -226,7 +233,8 @@ func _select_recovered2_skin(id: String) -> void:
 func _skin_selected(index: int) -> void:
 	var skin := str(skin_picker.get_item_metadata(index))
 	if UiSkinCatalog.apply(skin,toolbar,session_panel):
-		UiSkinCatalog.save_selected(skin)
+		if persist_ui_preferences:
+			UiSkinCatalog.save_selected(skin)
 		_current_skin = skin
 		terminal_hud.set_ui_theme(UiSkinCatalog.build_theme(skin))
 		skin_picker.select(index)

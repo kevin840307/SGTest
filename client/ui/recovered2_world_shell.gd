@@ -1037,6 +1037,7 @@ func _build_character_source_layout(window: PanelContainer,close_texture: Textur
 	for entry in [
 		["HP",Rect2(28,494,32,20),Rect2(64,494,210,20)],
 		["MP",Rect2(28,519,32,20),Rect2(64,519,210,20)],
+		["EXP",Rect2(28,544,32,20),Rect2(64,544,210,20)],
 		["背包",Rect2(304,494,70,20),Rect2(390,494,138,20)],
 		["裝備",Rect2(304,519,70,20),Rect2(390,519,138,20)],
 		["金錢",Rect2(304,544,70,20),Rect2(390,544,138,20)],
@@ -1051,7 +1052,7 @@ func _build_character_sections(container: VBoxContainer) -> void:
 		{"heading":"角色資料","fields":["名稱","等級","職業","種族"]},
 		{"heading":"基本屬性","fields":["力量","體質","敏捷","智力"]},
 		{"heading":"戰鬥能力","fields":["攻擊","防禦","命中","迴避","移動速度","攻擊速度"]},
-		{"heading":"角色狀態","fields":["HP","MP","背包","裝備","金錢","地圖"]},
+		{"heading":"角色狀態","fields":["HP","MP","EXP","背包","裝備","金錢","地圖"]},
 	]:
 		var box := PanelContainer.new()
 		box.name = "CharacterSection"+str(_character_fields.size())
@@ -1117,6 +1118,7 @@ func _refresh_character_info(snapshot: Dictionary) -> void:
 	_set_character_field("MP","%d / %d" % [
 		int(snapshot.get("player_current_mp",0)),
 		int(snapshot.get("player_max_mp",0))])
+	_set_character_field("EXP",str(int(snapshot.get("player_experience",0))))
 	_set_character_field("背包",str((snapshot.get("inventory_items",{}) as Dictionary).size()))
 	_set_character_field("裝備",str((snapshot.get("equipment_items",{}) as Dictionary).size()))
 	_set_character_field("金錢",str(snapshot.get("player_money",snapshot.get("wallet","—"))))

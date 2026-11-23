@@ -12,6 +12,19 @@ const BASE_SIZE := Vector2(800,600)
 const ITEM_ROW_COUNT := 17
 const SKILL_ROW_COUNT := 16
 
+class CharacterText extends Control:
+	var centered := false
+	var font_size := 12
+	var text := "":
+		set(value):
+			if text != value:
+				text = value
+				queue_redraw()
+
+	func _draw() -> void:
+		var alignment := HORIZONTAL_ALIGNMENT_CENTER if centered else HORIZONTAL_ALIGNMENT_LEFT
+		draw_string(get_theme_default_font(),Vector2(0,size.y-2),text,alignment,int(size.x),font_size,Color.WHITE)
+
 var _panel
 var _stats:Dictionary={}
 var _active:=false
@@ -51,6 +64,8 @@ var _inventory_tab:=0
 var _classic_mecha_uid:=0
 var _inventory_tab_buttons:Array[TextureButton]=[]
 var _character_labels:Dictionary={}
+var _character_hp_fill:Control
+var _character_mp_fill:Control
 var _skill_rows:=VBoxContainer.new()
 var _party_rows:=VBoxContainer.new()
 var _clan_rows:=VBoxContainer.new()
@@ -391,18 +406,75 @@ func _build_inventory()->void:
 
 func _build_character()->void:
 	character=_window("CharacterWindow","BG_CHARACTER_INFO",Vector2(263,397),Vector2(269,95))
+	# 013_Character_INFO.itf coordinates are local to the 263×397 sprite.
+	# The type 1 captions and type 0/3 value cells are different controls.
+	var close:=character.get_node("CloseWindow") as TextureButton
+	close.position=Vector2(244,1)
+	close.size=Vector2(16,16)
+	_character_hp_fill=_character_vital_fill("HP",Vector2(30,268))
+	_character_mp_fill=_character_vital_fill("MP",Vector2(30,285))
+	for y in [99,119,139,159]:
+		var plus:=TextureRect.new()
+		plus.texture=_tex("ADD_POINT_3")
+		plus.position=Vector2(93,y)
+		plus.mouse_filter=Control.MOUSE_FILTER_IGNORE
+		character.add_child(plus)
 	for pair in [
-		["名稱",Rect2(52,34,116,19)],["等級",Rect2(52,55,116,19)],
-		["職業",Rect2(52,76,116,19)],["力量",Rect2(45,104,57,17)],
-		["敏捷",Rect2(45,122,57,17)],["體質",Rect2(45,140,57,17)],
-		["智力",Rect2(45,158,57,17)],["攻擊",Rect2(161,103,91,17)],
-		["防禦",Rect2(161,122,91,17)],["命中",Rect2(161,141,91,17)],
-		["迴避",Rect2(161,160,91,17)],["移動速度",Rect2(161,179,91,17)],
-		["攻擊速度",Rect2(161,198,91,17)],["HP",Rect2(9,235,115,17)],
-		["MP",Rect2(9,255,115,17)],["金錢",Rect2(137,235,119,17)],
-		["地圖",Rect2(137,255,119,17)]
+		["名　稱",Rect2(11,37,36,12)],["稱　號",Rect2(11,53,36,12)],
+		["職　業",Rect2(11,69,36,12)],["等級",Rect2(196,32,24,12)],
+		["力量",Rect2(14,102,24,12)],["速度",Rect2(13,122,24,12)],
+		["體質",Rect2(13,142,24,12)],["智慧",Rect2(13,162,24,12)],
+		["神級",Rect2(13,191,24,12)],["GExp",Rect2(12,208,27,12)],
+		["向性",Rect2(5,232,24,12)],["金錢",Rect2(5,249,24,12)],
+		["生命",Rect2(5,268,24,12)],["魔力",Rect2(5,285,24,12)],["意志",Rect2(5,302,24,12)],
+		["攻　擊",Rect2(148,102,36,12)],["防　御",Rect2(148,119,36,12)],
+		["魔　攻",Rect2(148,136,36,12)],["魔　防",Rect2(148,153,36,12)],
+		["命　中",Rect2(148,170,36,12)],["回　避",Rect2(148,187,36,12)],
+		["幸　運",Rect2(148,204,36,12)],["總攻擊",Rect2(148,226,36,12)],["總防禦",Rect2(148,243,36,12)],
+		["配點",Rect2(140,268,24,12)],["升級",Rect2(140,285,24,12)],["死亡",Rect2(140,302,24,12)],
 	]:
-		_character_labels[pair[0]]=_classic_label(character,"Field"+str(pair[0]),pair[1],10,false)
+		_character_text("Caption"+pair[0],pair[1],pair[0],false)
+	for pair in [
+		["名稱",Rect2(50,37,118,12)],["稱號",Rect2(50,53,118,12)],
+		["職業",Rect2(50,69,118,12)],["等級",Rect2(223,31,33,12)],
+		["力量",Rect2(40,102,47,10)],["速度",Rect2(40,122,47,10)],
+		["體質",Rect2(40,142,47,10)],["智慧",Rect2(40,162,47,10)],
+		["神級",Rect2(42,190,74,11)],["GExp",Rect2(42,208,75,10)],
+		["向性",Rect2(30,232,92,12)],["金錢",Rect2(30,249,92,12)],
+		["HP",Rect2(30,268,92,10)],["MP",Rect2(30,285,92,10)],["意志",Rect2(30,302,92,10)],
+		["攻擊",Rect2(189,103,62,10)],["防禦",Rect2(189,120,62,10)],
+		["魔攻",Rect2(189,137,62,10)],["魔防",Rect2(189,154,62,10)],
+		["命中",Rect2(189,171,62,10)],["迴避",Rect2(189,188,62,10)],["幸運",Rect2(189,205,62,10)],
+		["總攻擊",Rect2(189,227,62,10)],["總防禦",Rect2(189,244,62,10)],
+		["配點",Rect2(166,268,92,12)],["EXP",Rect2(166,285,92,10)],["死亡",Rect2(165,302,94,12)],
+	]:
+		_character_labels[pair[0]]=_character_text("Field"+pair[0],pair[1],"—",true)
+
+func _character_text(node_name:String,rect:Rect2,value:String,centered:bool)->CharacterText:
+	var label:=CharacterText.new()
+	label.name=node_name
+	label.position=rect.position
+	label.size=rect.size
+	label.clip_contents=true
+	label.mouse_filter=Control.MOUSE_FILTER_IGNORE
+	label.centered=centered
+	label.font_size=int(rect.size.y)
+	label.text=value
+	character.add_child(label)
+	return label
+
+func _character_vital_fill(art:String,origin:Vector2)->Control:
+	var viewport:=Control.new()
+	viewport.position=origin
+	viewport.size=Vector2(0,10)
+	viewport.clip_contents=true
+	viewport.mouse_filter=Control.MOUSE_FILTER_IGNORE
+	var strip:=TextureRect.new()
+	strip.texture=_tex(art+"_0")
+	strip.mouse_filter=Control.MOUSE_FILTER_IGNORE
+	viewport.add_child(strip)
+	character.add_child(viewport)
+	return viewport
 
 func _build_skill()->void:
 	skill_window=_window("SkillWindow","BG_SKILL",Vector2(223,506),Vector2(542,63))
@@ -835,19 +907,36 @@ func _classic_item_action(uid:int,item_id:int,equipped:=false)->void:
 		_panel.inventory_panel.submit_equipment_equip(uid)
 
 func _refresh_character()->void:
+	var profile_ready:=bool(_stats.get("player_profile_ready",false))
+	_refresh_character_vital_fill(_character_hp_fill,"hp")
+	_refresh_character_vital_fill(_character_mp_fill,"mp")
 	var values={
 		"名稱":str(_stats.get("character_name",_stats.get("player_name",""))),
-		"等級":str(int(_stats.get("player_level",0))),"職業":str(_stats.get("player_job","—")),
-		"力量":str(int(_stats.get("player_strength",0))),"敏捷":str(int(_stats.get("player_dexterity",0))),
-		"體質":str(int(_stats.get("player_constitution",0))),"智力":str(int(_stats.get("player_intelligence",0))),
-		"攻擊":str(int(_stats.get("player_attack",0))),"防禦":str(int(_stats.get("player_defense",0))),
-		"命中":str(int(_stats.get("player_hit",0))),"迴避":str(int(_stats.get("player_evasion",0))),
-		"移動速度":str(int(_stats.get("player_move_speed",0))),"攻擊速度":str(int(_stats.get("player_attack_speed",0))),
-		"HP":"%d/%d"%[int(_stats.get("player_current_hp",0)),int(_stats.get("player_max_hp",0))],
-		"MP":"%d/%d"%[int(_stats.get("player_current_mp",0)),int(_stats.get("player_max_mp",0))],
-		"金錢":str(int(_stats.get("wallet",_stats.get("player_money",0)))),"地圖":str(int(_stats.get("map_id",0)))
+		"HP":_character_vital("hp"),"MP":_character_vital("mp"),
+		"金錢":str(_stats.get("wallet",_stats.get("player_money","—"))),
 	}
-	for key in _character_labels:(_character_labels[key] as Label).text=str(values.get(key,"—"))
+	if profile_ready:
+		var fields: Dictionary = {
+			"等級":"player_level","職業":"player_job","力量":"player_strength","速度":"player_dexterity",
+			"體質":"player_constitution","智慧":"player_wisdom","攻擊":"player_attack",
+			"防禦":"player_defense","命中":"player_hit","迴避":"player_dodge"
+		}
+		for field in fields:
+			values[field]=str(_stats.get(fields[field],"—"))
+		values["EXP"]="%s EXP"%str(_stats.get("player_experience","—"))
+	for key in _character_labels:(_character_labels[key] as CharacterText).text=str(values.get(key,"—"))
+
+func _character_vital(stat:String)->String:
+	var maximum:=int(_stats.get("player_max_"+stat,0))
+	if maximum <= 0:
+		return "—"
+	return "%d/%d"%[int(_stats.get("player_current_"+stat,0)),maximum]
+
+func _refresh_character_vital_fill(fill:Control,stat:String)->void:
+	var maximum:=int(_stats.get("player_max_"+stat,0))
+	var current:=int(_stats.get("player_current_"+stat,0))
+	var fraction:=clampf(float(current)/maximum,0.0,1.0) if maximum>0 else 0.0
+	fill.size.x=floorf(92.0*fraction)
 
 func _refresh_skill()->void:
 	_clear_rows(_skill_rows)

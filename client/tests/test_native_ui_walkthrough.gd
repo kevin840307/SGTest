@@ -67,6 +67,7 @@ func _run() -> void:
 	DirAccess.make_dir_recursive_absolute(output)
 	root.size = Vector2i(1152,620)
 	app = MainScene.instantiate()
+	app.persist_ui_preferences = false
 	root.add_child(app)
 	app._select_recovered2_skin("recovered2_local")
 	var panel = app.session_panel

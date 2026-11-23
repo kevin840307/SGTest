@@ -216,6 +216,9 @@ func apply_snapshot(snapshot: Dictionary, now_usec: int) -> void:
 		own = {"actor_id":snapshot.actor_id,"connection_epoch":0,"entity_map_epoch":epoch,
 			"x":snapshot.x,"y":snapshot.y,"facing":snapshot.facing,"moving":false,
 			"movement_action_sequence":0,"server_tick":int(snapshot.get("last_aoi_tick",0))}
+	var selected_appearance: Variant = snapshot.get("selected_character_appearance",{})
+	if not own.has("appearance") and selected_appearance is Dictionary and not selected_appearance.is_empty():
+		own["appearance"] = selected_appearance.duplicate(true)
 	# Apply the immediate local NR state AFTER constructing WorldReady fallback.
 	# Previously each SelfState-less snapshot forced NS and reset the walk
 	# clock every ~50ms, so the actor appeared to slide on its first steps.
@@ -250,9 +253,10 @@ func apply_snapshot(snapshot: Dictionary, now_usec: int) -> void:
 					int(retained.value.connection_epoch)==int(value.connection_epoch) and \
 					int(retained.value.entity_map_epoch)==int(value.entity_map_epoch):
 				profile = retained.profile
-			if profile == null and int(id)==_own_actor_id:
-				# A temporary default visible body is preferable to an invisible
-				# local player; replace it when the requested profile loads.
+			if profile == null and int(id)==_own_actor_id and not value.has("appearance"):
+				# Legacy characters without an authoritative appearance may use the
+				# default body. An explicit appearance must never flash the default
+				# paper doll while its exact profile is still loading.
 				profile = _profiles.get(_default_profile_key)
 			if profile == null:
 				_actors.erase(id)
