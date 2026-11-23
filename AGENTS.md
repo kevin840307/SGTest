@@ -230,6 +230,25 @@ HK 忠實度同時包含 **外觀 + 行為 + 時序 + 狀態切換**。每個 UI
 
 若 HK 行為可由 Paradise 實機觀察，優先實機 A/B；Paradise 無法驗證才使用 HK `.lst`、Old、原版資料交叉確認。無法確認時標 `NOT VERIFIED`，不得自行設計後當成原版行為。
 
+### 1.6 原版圖片與文字位置必須同步 1:1（P1 強制 Gate）
+
+**原版 SPR／PNG 貼對，不等於 HK UI 對齊。禁止只套背景圖、再疊一批 Godot Label「補文字」而不修文字實際位置。** 文字、數字、輸入欄位、圖片、按鈕、hitbox 與動態狀態是同一個 UI 交付物；任一錯位都不得宣稱 HK UI 完成。
+
+**立即優先清理已使用原版圖但文字仍偏移的核心 UI**：登入 → 選角／創角 → 主 HUD → 個人資料／STR 等屬性 → 背包／裝備 → 本輪玩家功能。不得以「有用原圖」跳過已知文字錯位，或先新增其他 UI 功能。
+
+逐畫面按以下順序實作、驗收：
+
+1. **有證據才定位**：從 HK `.lst` 追視窗、sprite/frame、文字控制 ID、原始 x/y/width/height、font/繪字函式；可執行原版／Paradise 以 800×600 相同狀態截圖，區分版本差異。
+2. **確認文字來源**：檢查 PNG／SPR 是否已有烘焙文字，已有則不可重複疊 Label；只有原版實際動態文字（角色名、HP/MP、屬性、數字、輸入等）才新增對應動態繪字。
+3. **共同座標系**：以原版面板的 800×600 local origin 統一圖片、文字、控制項與可點擊區域。核對 SPR 透明邊、trim/origin/pivot、frame 尺寸、TextureRect stretch、父子節點 transform、anchor/offset、Control min-size、Container、StyleBox margin、viewport stretch、DPI；修根因，不能每個 Label 獨立塞幾個 pixel magic offset。
+4. **文字排版全還原**：核對字型／fallback、字級、字重、字距、line-height、baseline、左右／上下對齊、顏色、outline/shadow、換行、裁切、placeholder、cursor/focus。字體缺失要標差異，不得用單純移動文字掩蓋。
+5. **動態與互動對齊**：姓名長短、HP/MP 數值更新、選角、輸入、hover、pressed、disabled、selection、tooltip、focus、關閉重開、換圖／重登後位置仍一致；顯示位置與 hitbox 不得錯開。
+6. **真正 Windows A/B**：非 headless Godot 與原版在相同 800×600、相同 UI state 比較截圖；逐控制項記錄 ref/actual bounding rect、文字 baseline、Δx/Δy，利用 crop／透明疊圖／差分定位偏移。確認後再測 4:3／16:9／16:10 與縮放，不准 UI 文字相對原底圖漂移。
+7. **硬性判定**：原版座標有確證時，800×600 靜態文字錨點、控制項以原始像素 ±1 為目標；字型光柵化差異要註記。任何明顯文字偏移、遮擋、重疊、裁切、點擊錯位皆是 `TEST FAILED` / `IN PROGRESS`，不能標 `VERIFIED` / `COMPLETE`。缺原版證據則標 `NOT VERIFIED`，不得假報 A/B PASS。
+8. **保留證據與回歸**：記錄原版 resource/frame、HK 來源或對照圖、各 rect／baseline／diff、Godot 實機截圖、測試結果；加 visual regression/geometry tests（不代替實機）。私人原圖、私人截圖／反編譯資料不得提交 public Git。
+
+**優先修原圖與文字共用的布局／縮放／座標根因，之後才做特例微調。只補字、不修位置、只用自動測試判 PASS，均屬未完成。**
+
 ---
 
 ## 2. 唯一正式程式碼與 Main-Only Git
