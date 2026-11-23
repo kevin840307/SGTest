@@ -6,6 +6,8 @@ const ClientSession = preload("res://session/client_session.gd")
 const COMMAND_HEX := "1d00000001007b00070000000000000001000000016500000000000000"
 const RESULT_HEX := "2600000001007c00070000000000000001000000010065000000000000006500000000000000"
 const SNAPSHOT_HEX := "4a00000001007d000700000000000000660000000000000002006500000000000000591b000004000000580000000000000066000000000000005a1b000007000000d204000000000000"
+const PRESENTATION_HEX := "4100000001007e0007000000000000006300000000000000e9030000000000000b0000000000000007000000000000000166000000000000005a1b000007000000"
+const PRESENTATION_CLEAR_HEX := "4100000001007e0007000000000000006400000000000000e9030000000000000b0000000000000007000000000000000000000000000000000000000000000000"
 
 func _initialize() -> void:
 	var command := Codec.encode_mecha_command(7,1,1,101)
@@ -42,6 +44,17 @@ func _initialize() -> void:
 		_fail("mecha snapshot golden rejected")
 		return
 
+	var presentation:=Codec.decode_mecha_presentation(PRESENTATION_HEX.hex_decode())
+	if (
+		presentation.is_empty() or not bool(presentation.mounted) or
+		int(presentation.owner_actor_id)!=1001 or int(presentation.owner_connection_epoch)!=11 or
+		int(presentation.owner_map_epoch)!=7 or int(presentation.mecha_uid)!=102 or
+		int(presentation.definition_id)!=7002 or int(presentation.level)!=7 or
+		Codec.frame_opcode(PRESENTATION_HEX.hex_decode())!=Codec.OPCODE_MECHA_PRESENTATION
+	):
+		_fail("mecha presentation golden rejected")
+		return
+
 	var state := State.new()
 	state.state = State.STATE_IN_WORLD
 	state.world_ready = true
@@ -57,6 +70,16 @@ func _initialize() -> void:
 		not bool(initial.mecha_snapshot_received)
 	):
 		_fail("mecha authoritative roster was not published")
+		return
+	if not state.apply_frame(PRESENTATION_HEX.hex_decode()):
+		_fail("mecha presentation reducer mount failed")
+		return
+	var presented:Dictionary=state.snapshot().mecha_presentations.get(1001,{})
+	if presented.is_empty() or int(presented.get("mecha_uid",0))!=102 or not bool(presented.get("mounted",false)):
+		_fail("mecha presentation reducer did not publish mounted state")
+		return
+	if not state.apply_frame(PRESENTATION_CLEAR_HEX.hex_decode()) or not state.snapshot().mecha_presentations.is_empty():
+		_fail("mecha presentation reducer did not clear dismount")
 		return
 
 	if not state.mark_mecha_sent(1,1,101):
@@ -98,7 +121,7 @@ func _initialize() -> void:
 		_fail("ClientSession mecha command surface missing")
 		return
 
-	print("MECHA_WIRE_PASS csharp_golden=true reducer=true session_surface=true mechas=2")
+	print("MECHA_WIRE_PASS csharp_golden=true reducer=true presentation=true session_surface=true mechas=2")
 	quit(0)
 
 func _fail(message:String)->void:

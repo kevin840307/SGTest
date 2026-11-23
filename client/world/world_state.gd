@@ -306,6 +306,8 @@ var pending_mecha_uid := 0
 var mounted_mecha_uid := 0
 var mecha_instances := {}
 var mecha_snapshot_received := false
+var mecha_presentations := {}
+var stale_mecha_presentation_frames := 0
 var last_mecha_result_sequence := 0
 var last_mecha_result_status := -1
 var last_mecha_result := {}
@@ -1212,6 +1214,8 @@ func apply_frame(frame: PackedByteArray) -> bool:
 			return _apply_mecha_result(frame)
 		WireCodec.OPCODE_MECHA_SNAPSHOT:
 			return _apply_mecha_snapshot(frame)
+		WireCodec.OPCODE_MECHA_PRESENTATION:
+			return _apply_mecha_presentation(frame)
 		WireCodec.OPCODE_PET_ENTITY_SPAWN:
 			return _apply_pet_entity_spawn(frame)
 		WireCodec.OPCODE_PET_ENTITY_DELTA:
@@ -1535,6 +1539,8 @@ func snapshot() -> Dictionary:
 		"mounted_mecha_uid": mounted_mecha_uid,
 		"mecha_instances": mecha_instances.duplicate(true),
 		"mecha_snapshot_received": mecha_snapshot_received,
+		"mecha_presentations": mecha_presentations.duplicate(true),
+		"stale_mecha_presentation_frames": stale_mecha_presentation_frames,
 		"last_mecha_result_sequence": last_mecha_result_sequence,
 		"last_mecha_result_status": last_mecha_result_status,
 		"last_mecha_result": last_mecha_result.duplicate(true),
@@ -1822,6 +1828,8 @@ func _reset_character_mecha_state() -> void:
 	mounted_mecha_uid=0
 	mecha_instances.clear()
 	mecha_snapshot_received=false
+	mecha_presentations.clear()
+	stale_mecha_presentation_frames=0
 	last_mecha_result_sequence=0
 	last_mecha_result_status=-1
 	last_mecha_result.clear()
@@ -1973,6 +1981,7 @@ func _reset_character_world_state(decoded: Dictionary) -> void:
 	monsters.clear()
 	ground_drops.clear()
 	pet_entities.clear()
+	mecha_presentations.clear()
 	last_aoi_tick = -1
 	stale_aoi_events = 0
 	pending_world_ready_ack_epoch = 0
@@ -2523,6 +2532,7 @@ func _apply_world_ready(frame: PackedByteArray) -> bool:
 	monsters.clear()
 	ground_drops.clear()
 	pet_entities.clear()
+	mecha_presentations.clear()
 	# One-shot presentation events are never replayed through a replacement
 	# WorldReady baseline. Sequence memory is retained for same-epoch resync so
 	# a delayed pre-resync visual cannot replay.
@@ -2866,6 +2876,7 @@ func _apply_entity_despawn(frame: PackedByteArray) -> bool:
 	entities.erase(id)
 	remote_movement_intents.erase(id)
 	player_identities.erase(id)
+	mecha_presentations.erase(id)
 	if (
 		not player_shop_inspected.is_empty() and
 		int(player_shop_inspected.get("seller_actor_id",0))==id
@@ -4565,6 +4576,86 @@ func _apply_mecha_snapshot(frame:PackedByteArray)->bool:
 	mecha_instances=next_mechas
 	mounted_mecha_uid=incoming_mounted
 	mecha_snapshot_received=true
+	return true
+
+
+func _apply_mecha_presentation(frame:PackedByteArray)->bool:
+	if state!=STATE_IN_WORLD or not world_ready:
+		return fail("mecha_presentation_out_of_state")
+	var value:=WireCodec.decode_mecha_presentation(frame)
+	if value.is_empty():
+		return fail("invalid_mecha_presentation")
+	var disposition:=_check_aoi_generation(
+		int(value.receiver_map_epoch),int(value.server_tick))
+	if disposition<=0:
+		if disposition==0:
+			stale_mecha_presentation_frames+=1
+		return disposition==0
+	var owner:=int(value.owner_actor_id)
+	var owner_connection:=int(value.owner_connection_epoch)
+	var owner_map_epoch:=int(value.owner_map_epoch)
+	if owner==actor_id:
+		if owner_map_epoch!=map_epoch:
+			return _need_resync("mecha_presentation_self_map_generation")
+		if not self_state.is_empty() and (
+			int(self_state.get("connection_epoch",0))!=owner_connection or
+			int(self_state.get("entity_map_epoch",0))!=owner_map_epoch
+		):
+			return _need_resync("mecha_presentation_self_generation")
+		if self_state.is_empty():
+			var own_identity:Dictionary=player_identities.get(actor_id,{})
+			if (
+				not own_identity.is_empty() and
+				int(own_identity.get("connection_epoch",0))!=owner_connection
+			):
+				return _need_resync("mecha_presentation_self_identity_generation")
+	else:
+		var remote:Dictionary=entities.get(owner,{})
+		if remote.is_empty():
+			return _need_resync("mecha_presentation_owner_without_spawn")
+		if (
+			int(remote.get("connection_epoch",0))!=owner_connection or
+			int(remote.get("entity_map_epoch",0))!=owner_map_epoch
+		):
+			return _need_resync("mecha_presentation_owner_generation")
+	var previous:Dictionary=mecha_presentations.get(owner,{})
+	if not bool(value.mounted):
+		if previous.is_empty():
+			stale_mecha_presentation_frames+=1
+			last_aoi_tick=maxi(last_aoi_tick,int(value.server_tick))
+			return true
+		var previous_connection:=int(previous.get("owner_connection_epoch",0))
+		if owner_connection<previous_connection:
+			stale_mecha_presentation_frames+=1
+			return true
+		if (
+			owner_connection!=previous_connection or
+			owner_map_epoch!=int(previous.get("owner_map_epoch",0))
+		):
+			return _need_resync("mecha_presentation_unmount_generation")
+		mecha_presentations.erase(owner)
+		last_aoi_tick=maxi(last_aoi_tick,int(value.server_tick))
+		return true
+	if not previous.is_empty():
+		var previous_connection:=int(previous.get("owner_connection_epoch",0))
+		if owner_connection<previous_connection:
+			stale_mecha_presentation_frames+=1
+			return true
+		if (
+			owner_connection!=previous_connection or
+			owner_map_epoch!=int(previous.get("owner_map_epoch",0))
+		):
+			return _need_resync("mecha_presentation_mount_generation")
+		if (
+			int(previous.get("mecha_uid",0))==int(value.mecha_uid) and
+			int(previous.get("definition_id",0))==int(value.definition_id) and
+			int(previous.get("level",0))==int(value.level)
+		):
+			stale_mecha_presentation_frames+=1
+			last_aoi_tick=maxi(last_aoi_tick,int(value.server_tick))
+			return true
+	mecha_presentations[owner]=value.duplicate(true)
+	last_aoi_tick=maxi(last_aoi_tick,int(value.server_tick))
 	return true
 
 

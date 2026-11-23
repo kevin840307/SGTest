@@ -5,6 +5,16 @@ using SGTest.Server.Wire;
 namespace SGTest.Server.Mecha;
 
 /// <summary>
+/// Player-attached authoritative Mecha presentation state. Recovered2 evidence
+/// keeps the driven Mecha on the player model (type/body/weapon/engine) rather
+/// than as an independently positioned world entity, so AOI carries only the
+/// committed mounted identity. Exact HK visual parts remain a separate source gate.
+/// </summary>
+public readonly record struct MechaWorldStateUpdate(
+    long OwnerActorId,long OwnerConnectionEpoch,long OwnerMapEpoch,
+    bool Mounted,long MechaUid,int DefinitionId,int Level);
+
+/// <summary>
 /// Server-authoritative Mecha roster and mount lifecycle. This first vertical
 /// slice deliberately owns only durable identity/mounted state. Movement speed,
 /// stat transforms, parts/cards and visual outlook stay disabled until backed by
@@ -27,6 +37,7 @@ public sealed class MechaCoordinator
         var mechas=await _identity.GetMechasAsync(binding.ActorId).ConfigureAwait(false);
         EnsureQueued(router.QueueMechaSnapshot(
             binding,ToSnapshot(binding.MapEpoch,mechas)));
+        EnsureWorldPosted(router,ToWorldUpdate(binding,mechas));
     }
 
     public async Task HandleAsync(TrustedMechaCommand request,WorldResultRouter router)
@@ -69,6 +80,17 @@ public sealed class MechaCoordinator
         var mechas=await _identity.GetMechasAsync(request.ActorId).ConfigureAwait(false);
         EnsureQueued(router.QueueMechaSnapshot(
             after,ToSnapshot(after.MapEpoch,mechas)));
+        EnsureWorldPosted(router,ToWorldUpdate(after,mechas));
+    }
+
+    public bool TryDetach(ConnectionBinding binding,WorldResultRouter router)
+    {
+        ArgumentNullException.ThrowIfNull(router);
+        if(binding.ActorId<=0||binding.ConnectionEpoch<=0||binding.MapEpoch<=0)
+            return false;
+        return router.TryPostMechaWorldState(new(
+            binding.ActorId,binding.ConnectionEpoch,binding.MapEpoch,
+            false,0,0,0));
     }
 
     private static MechaSnapshotWire ToSnapshot(
@@ -77,6 +99,24 @@ public sealed class MechaCoordinator
         long mounted=mechas.FirstOrDefault(x=>x.IsMounted)?.MechaUid??0;
         return new(mapEpoch,mounted,mechas.Select(x=>new MechaSnapshotEntryWire(
             x.MechaUid,x.DefinitionId,x.Level,x.Experience)).ToArray());
+    }
+
+    private static MechaWorldStateUpdate ToWorldUpdate(
+        ConnectionBinding binding,IReadOnlyList<MechaInstanceRecord> mechas)
+    {
+        var mounted=mechas.SingleOrDefault(x=>x.IsMounted);
+        return mounted is null
+            ?new(binding.ActorId,binding.ConnectionEpoch,binding.MapEpoch,
+                false,0,0,0)
+            :new(binding.ActorId,binding.ConnectionEpoch,binding.MapEpoch,
+                true,mounted.MechaUid,mounted.DefinitionId,mounted.Level);
+    }
+
+    private static void EnsureWorldPosted(
+        WorldResultRouter router,MechaWorldStateUpdate update)
+    {
+        if(!router.TryPostMechaWorldState(update))
+            throw new InvalidOperationException("Mecha AOI presentation queue is full");
     }
 
     private static void EnsureQueued(GatewaySendStatus status)

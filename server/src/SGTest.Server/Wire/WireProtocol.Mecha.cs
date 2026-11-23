@@ -11,6 +11,7 @@ public static partial class WireProtocol
     public const int MechaSnapshotMaximumMechas=64;
     public const int MechaSnapshotMaximumFrameBytes=
         MechaSnapshotHeaderBytes+MechaSnapshotMaximumMechas*MechaSnapshotEntryBytes;
+    public const int MechaPresentationFrameBytes=65;
 
     public static byte[] EncodeMechaCommand(MechaCommandWire value)
     {
@@ -141,5 +142,56 @@ public static partial class WireProtocol
         value=new(epoch,mounted,mechas);
         try{_=EncodeMechaSnapshot(value);return true;}
         catch(ArgumentOutOfRangeException){value=null;return false;}
+    }
+
+    public static byte[] EncodeMechaPresentation(MechaPresentationWire value)
+    {
+        if(!ValidMechaPresentation(value))
+            throw new ArgumentOutOfRangeException(nameof(value));
+        var frame=NewFrame(WireOpcode.MechaPresentation,MechaPresentationFrameBytes);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(8,8),value.ReceiverMapEpoch);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(16,8),value.ServerTick);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(24,8),value.OwnerActorId);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(32,8),value.OwnerConnectionEpoch);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(40,8),value.OwnerMapEpoch);
+        frame[48]=value.Mounted?(byte)1:(byte)0;
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(49,8),value.MechaUid);
+        BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(57,4),value.DefinitionId);
+        BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(61,4),value.Level);
+        return frame;
+    }
+
+    public static bool TryDecodeMechaPresentation(
+        ReadOnlySpan<byte> frame,out MechaPresentationWire value)
+    {
+        value=default;
+        if(!TryReadHeader(frame,out var header)||
+           header.Opcode!=WireOpcode.MechaPresentation||
+           frame.Length!=MechaPresentationFrameBytes)
+            return false;
+        byte mounted=frame[48];
+        if(mounted>1)return false;
+        value=new(
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(8,8)),
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(16,8)),
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(24,8)),
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(32,8)),
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(40,8)),
+            mounted==1,
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(49,8)),
+            BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(57,4)),
+            BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(61,4)));
+        return ValidMechaPresentation(value);
+    }
+
+    private static bool ValidMechaPresentation(MechaPresentationWire value)
+    {
+        if(value.ReceiverMapEpoch<=0||value.ServerTick<0||value.OwnerActorId<=0||
+           value.OwnerConnectionEpoch<=0||value.OwnerMapEpoch<=0)
+            return false;
+        return value.Mounted
+            ?value.MechaUid>0&&value.DefinitionId is >0 and <=100000000&&
+                value.Level is >0 and <=1000000
+            :value.MechaUid==0&&value.DefinitionId==0&&value.Level==0;
     }
 }

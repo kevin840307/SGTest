@@ -4,6 +4,7 @@ using SGTest.Server.Pvp;
 using SGTest.Server.Npc;
 using SGTest.Server.Monster;
 using SGTest.Server.Pet;
+using SGTest.Server.Mecha;
 using SGTest.Server.Combat;
 using System.Threading.Channels;
 using SGTest.Server.World;
@@ -79,6 +80,7 @@ public sealed partial class WorldResultRouter
     private readonly Channel<PlayerDamageSettlement> _playerPvpCombatVisuals;
     private readonly Channel<PlayerDamageSettlement> _playerPvpSkillVisuals;
     private readonly Channel<PetWorldStateUpdate> _petWorldUpdates;
+    private readonly Channel<MechaWorldStateUpdate> _mechaWorldUpdates;
     private readonly WorldResultRouterOptions _options;
     private readonly Action<WorldChangedBatch>? _changedObserver;
     private long _queued, _stale, _changedQueued, _backpressure;
@@ -206,6 +208,14 @@ public sealed partial class WorldResultRouter
                 FullMode=BoundedChannelFullMode.Wait,
                 AllowSynchronousContinuations=false
             });
+        _mechaWorldUpdates = Channel.CreateBounded<MechaWorldStateUpdate>(
+            new BoundedChannelOptions(_options.MaxSessions)
+            {
+                SingleReader=true,
+                SingleWriter=false,
+                FullMode=BoundedChannelFullMode.Wait,
+                AllowSynchronousContinuations=false
+            });
     }
 
     public ChannelReader<WorldChangedBatch> ChangedBatches => _changed.Reader;
@@ -230,6 +240,8 @@ public sealed partial class WorldResultRouter
         _playerPvpSkillVisuals.Reader;
     public ChannelReader<PetWorldStateUpdate> PetWorldUpdates =>
         _petWorldUpdates.Reader;
+    public ChannelReader<MechaWorldStateUpdate> MechaWorldUpdates =>
+        _mechaWorldUpdates.Reader;
 
     public WorldResultRouterStatistics Statistics
     {

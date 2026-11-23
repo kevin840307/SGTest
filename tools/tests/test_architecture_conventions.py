@@ -122,7 +122,7 @@ class ArchitectureConventionsChecks(unittest.TestCase):
                 self.assertIn("namespace SGTest.Server.Gateway;", source)
         self.assertEqual(core.count("private readonly object _gate"), 1)
         self.assertEqual(core.count("new WorldResultRouterOptions()"), 1)
-        self.assertEqual(core.count("Channel.CreateBounded<"), 14)
+        self.assertEqual(core.count("Channel.CreateBounded<"), 15)
         for source in (ingress, replies, ticks):
             self.assertNotIn("Channel.CreateBounded", source)
             self.assertNotIn("new WorldResultRouter(", source)
@@ -131,7 +131,7 @@ class ArchitectureConventionsChecks(unittest.TestCase):
             self.assertNotIn("new SemaphoreSlim(", source)
         for name in ("TryRequestNormalAttack", "TryRequestPetAttack", "TryRequestSkill",
                      "PrepareSkillAsync", "FinishPreparedSkillAsync",
-                     "TryPostPlayerDamageVisual", "TryRequestResync"):
+                     "TryPostPlayerDamageVisual", "TryPostMechaWorldState", "TryRequestResync"):
             with self.subTest(request=name):
                 self.assertIn(" " + name + "(", ingress)
                 self.assertNotIn(" " + name + "(", replies)

@@ -2,6 +2,7 @@ using SGTest.Server.Visibility;
 using SGTest.Server.Skill;
 using SGTest.Server.Monster;
 using SGTest.Server.Pet;
+using SGTest.Server.Mecha;
 using SGTest.Server.Map;
 using SGTest.Server.Combat;
 using SGTest.Server.Gateway;
@@ -46,6 +47,8 @@ internal static class WorldAoiChecks
             MonsterInterest);
         Checks.Run("pet AOI follows owner visibility and one-tick authoritative trail with safe transfer generation",
             PetInterest);
+        Checks.Run("mounted Mecha presentation follows player AOI and heals transfer generation",
+            MechaInterest);
         Checks.Run("pet attack visual reaches visible remote peers without duplicating owner result",
             PetAttackVisualInterest);
         Checks.Run("player attack visual reaches only viewers seeing attacker and target",
@@ -141,6 +144,75 @@ internal static class WorldAoiChecks
                 x.Pet?.PetUid==9002&&x.Pet?.OwnerMapEpoch==transferred.MapEpoch&&
                 x.Pet?.X==transferred.X&&x.Pet?.Y==transferred.Y),
             "active pet did not heal owner generation/spawn position after transfer");
+    }
+
+    private static void MechaInterest()
+    {
+        var aoi=new WorldAoi(new WorldAoiOptions(
+            EnterHalfWidth:200,EnterHalfHeight:150,ExitMargin:60,BucketSize:64));
+        var owner=Actor(77,15,24,24,connection:11,mapEpoch:7);
+        var peer=Actor(78,15,48,24,connection:12,mapEpoch:8);
+        var far=Actor(79,15,1200,24,connection:13,mapEpoch:9);
+        Life(aoi,1,Join(owner),Join(peer),Join(far));
+        Drain(aoi,owner);Drain(aoi,peer);Drain(aoi,far);
+
+        aoi.ApplyMechaState(new MechaWorldStateUpdate(
+            owner.ActorId,owner.ConnectionEpoch,owner.MapEpoch,
+            true,9201,7002,7));
+        var ownerMount=Drain(aoi,owner);
+        var peerMount=Drain(aoi,peer);
+        Require(ownerMount is [var own]&&own.Kind==AoiEventKind.MechaState&&
+            own.Mecha is {Mounted:true,MechaUid:9201,DefinitionId:7002,Level:7}&&
+            peerMount is [var seen]&&seen.Mecha==own.Mecha&&Drain(aoi,far).Length==0,
+            "mounted Mecha presentation was not scoped to player visibility");
+
+        var movedPeer=peer with {X=600,EntityRevision=2};
+        Move(aoi,2,movedPeer);
+        var peerExit=Drain(aoi,movedPeer);
+        Require(peerExit.Any(x=>x.Kind==AoiEventKind.MechaState&&
+                x.Mecha is {Mounted:false,MechaUid:0})&&
+            Drain(aoi,far).Length==0,
+            "Mecha presentation did not clear when observer lost owner visibility");
+
+        var returnedPeer=movedPeer with {X=48,EntityRevision=3};
+        Move(aoi,3,returnedPeer);
+        var peerReturn=Drain(aoi,returnedPeer);
+        Require(peerReturn.Any(x=>x.Kind==AoiEventKind.MechaState&&
+                x.Mecha is {Mounted:true,MechaUid:9201}),
+            "Mecha presentation did not rebuild after owner re-entered AOI");
+
+        aoi.ApplyMechaState(new MechaWorldStateUpdate(
+            owner.ActorId,owner.ConnectionEpoch,owner.MapEpoch,
+            true,9202,7003,9));
+        Require(Drain(aoi,owner).Single(x=>x.Kind==AoiEventKind.MechaState) is {Mecha.MechaUid:9202}&&
+            Drain(aoi,returnedPeer).Single(x=>x.Kind==AoiEventKind.MechaState) is {Mecha.MechaUid:9202},
+            "atomic mounted Mecha replacement did not reach visible players");
+
+        aoi.ApplyMechaState(new MechaWorldStateUpdate(
+            owner.ActorId,owner.ConnectionEpoch,owner.MapEpoch,
+            false,0,0,0));
+        Require(Drain(aoi,owner).Single() is {Kind:AoiEventKind.MechaState,Mecha.Mounted:false}&&
+            Drain(aoi,returnedPeer).Single() is {Kind:AoiEventKind.MechaState,Mecha.Mounted:false},
+            "dismount did not reliably clear visible Mecha presentation");
+
+        aoi.ApplyMechaState(new MechaWorldStateUpdate(
+            owner.ActorId,owner.ConnectionEpoch,owner.MapEpoch,
+            true,9203,7004,10));
+        Drain(aoi,owner);Drain(aoi,returnedPeer);
+        Life(aoi,4,Leave(owner));
+        var peerLeave=Drain(aoi,returnedPeer);
+        Require(peerLeave.Any(x=>x.Kind==AoiEventKind.MechaState&&
+                x.Mecha is {Mounted:false})&&
+            peerLeave.Any(x=>x.Kind==AoiEventKind.Despawn&&x.EntityActorId==owner.ActorId),
+            "old-map Mecha presentation survived owner leave");
+
+        var transferred=owner with {MapId=13,MapEpoch=owner.MapEpoch+1,EntityRevision=1};
+        Life(aoi,5,Join(transferred));
+        var transferEvents=Drain(aoi,transferred);
+        Require(transferEvents.Any(x=>x.Kind==AoiEventKind.MechaState&&
+                x.Mecha is {Mounted:true,MechaUid:9203}&&
+                x.Mecha?.OwnerMapEpoch==transferred.MapEpoch),
+            "mounted Mecha presentation did not heal owner map generation after transfer");
     }
 
     private static void PetAttackVisualInterest()

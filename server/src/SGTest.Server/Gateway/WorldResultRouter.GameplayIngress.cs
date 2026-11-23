@@ -4,6 +4,7 @@ using SGTest.Server.Pvp;
 using SGTest.Server.Npc;
 using SGTest.Server.Monster;
 using SGTest.Server.Pet;
+using SGTest.Server.Mecha;
 using SGTest.Server.Combat;
 using System.Threading.Channels;
 using SGTest.Server.World;
@@ -183,6 +184,20 @@ public sealed partial class WorldResultRouter
         else if(update.PetUid!=0||update.DefinitionId!=0||update.Level!=0)
             return false;
         return _petWorldUpdates.Writer.TryWrite(update);
+    }
+
+    public bool TryPostMechaWorldState(MechaWorldStateUpdate update)
+    {
+        if(update.OwnerActorId<=0||update.OwnerConnectionEpoch<=0||
+           update.OwnerMapEpoch<=0)return false;
+        if(update.Mounted)
+        {
+            if(update.MechaUid<=0||update.DefinitionId is <=0 or >100000000||
+               update.Level is <=0 or >1000000)return false;
+        }
+        else if(update.MechaUid!=0||update.DefinitionId!=0||update.Level!=0)
+            return false;
+        return _mechaWorldUpdates.Writer.TryWrite(update);
     }
 
     public bool TryRequestResync(TrustedWorldResyncRequest request)

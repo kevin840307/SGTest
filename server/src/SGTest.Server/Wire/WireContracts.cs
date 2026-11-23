@@ -135,7 +135,8 @@ public enum WireOpcode : ushort
     FriendSnapshot = 122,
     MechaCommand = 123,
     MechaResult = 124,
-    MechaSnapshot = 125
+    MechaSnapshot = 125,
+    MechaPresentation = 126
 }
 
 public enum ChatChannel : byte { Nearby = 0, Faction = 1, Warband = 2, Party = 3, Whisper = 4 }
@@ -726,6 +727,9 @@ public readonly record struct MechaSnapshotEntryWire(
     long MechaUid,int DefinitionId,int Level,long Experience);
 public sealed record MechaSnapshotWire(
     long ReceiverMapEpoch,long MountedMechaUid,IReadOnlyList<MechaSnapshotEntryWire> Mechas);
+public readonly record struct MechaPresentationWire(
+    long ReceiverMapEpoch,long ServerTick,long OwnerActorId,long OwnerConnectionEpoch,
+    long OwnerMapEpoch,bool Mounted,long MechaUid,int DefinitionId,int Level);
 
 public readonly record struct QuestOpenWire(
     long MapEpoch,uint QuestSequence,int NpcSpawnId);

@@ -121,6 +121,7 @@ public sealed partial class WorldResultRouter
             _playerPvpCombatVisuals.Writer.TryComplete(fault);
             _playerPvpSkillVisuals.Writer.TryComplete(fault);
             _petWorldUpdates.Writer.TryComplete(fault);
+            _mechaWorldUpdates.Writer.TryComplete(fault);
         }
     }
 

@@ -273,6 +273,21 @@ SQLite schema v30 新增 `pet_instances` 與 `pet_actions`；同一角色以 par
 
 `5b8bba7` 將 Pet presentation 往前推一個可重跑切片：`WorldState` 已驗證的 `PetAttackResult` 會隨 snapshot 進入 `PetPresentation`，只有 Applied/Miss 且該 `(DefinitionId,EvolutionId)` binding 明確指定 source-backed `attack_view` 時才啟動 one-shot；renderer 直接使用 converter `logical_views.timeline_ticks` 的 50Hz normalized source timing，完成後回到既有 fallback visual。相同 sequence 不重播，Cooldown/OutOfRange 等 rejected result 不產生假攻擊；沒有 `attack_view` 也維持既有 fail-closed 行為。本機 Godot 4.7.2 `PET_PRESENTATION_PASS ... attack_event=true source_timing=true`、`PET_WIRE_PASS ... pet_combat=true`、WorldState、0/30/60/90 FPS independence 與 architecture 26/26 均 PASS。後續新增 opcode119 `PetAttackVisual` 作為遠端 presentation-only reliable AOI 事件：只有同時看得到 exact-generation Pet 與目標怪的 peer 會收到，Pet owner 不收此事件而沿用 `PetAttackResult`，避免 duplicate local animation。Payload 保留 owner Actor/ConnectionEpoch/MapEpoch、PetUid、AttackSequence、TargetEntityId、Applied/Miss、Damage、TargetRevision；Godot `WorldState` 對 generation、target presence/revision 與 sequence fail-closed/去重，`PetPresentation` 再共用既有 source-backed `attack_view` timeline。C#/Godot fixed golden、AOI scope、Gateway reliable FIFO、Godot reducer duplicate gate 與 remote one-shot presentation 均有可重跑 PASS。這不代表 HK Pet 動畫 A/B 已完成：`petcli.ITD` 已 CONFIRMED source PetID+EvolID→Enemy outlook，且 46 組原始 outlook SPR+ACT 均通過 NS/FA normalized source gate；production SGTest DefinitionId bridge、runtime catalog/lazy loading 與完整 46 組 runtime atlas publication 已建立並通過 production gate；但 NS/FA 在 Pet runtime 的精確行為 A/B、攻速/命中與自動 AI 仍是 NOT VERIFIED。
 
+### 2026-11-23 Authoritative mounted-Mecha presentation
+
+Mecha lifecycle authority remains rooted in durable `mecha_instances`/`mecha_actions`; the Client never supplies DefinitionId/Level/EXP/parts or world position. Recovered2 is used only as secondary structural evidence: driven Mecha fields (`mecha_type/MechaBody/MechaWeapon/MechaEngine`) live on the player model and drive the player's redraw/transform state, so SGTest models the mounted Mecha as **player-attached presentation state**, not a second independently positioned AOI entity.
+
+| Opcode | Direction | Bytes | Payload |
+|---|---|---:|---|
+| 123 `MechaCommand` | Client→Server | 29 | `int64 MapEpoch, uint32 MechaSequence, uint8 Action, int64 MechaUid` |
+| 124 `MechaResult` | Server→Client | 38 | authoritative command result and mounted MechaUid |
+| 125 `MechaSnapshot` | Server→Client | bounded | authoritative roster + mounted MechaUid |
+| 126 `MechaPresentation` | Server→Client | 65 | `int64 ReceiverMapEpoch, int64 ServerTick, int64 OwnerActorId, int64 OwnerConnectionEpoch, int64 OwnerMapEpoch, uint8 Mounted, int64 MechaUid, int32 DefinitionId, int32 Level` |
+
+After durable attach/action commit, `MechaCoordinator` posts a bounded `MechaWorldStateUpdate` into `WorldResultRouter`; the sole `WorldAoiPump/WorldAoi` owner fans it only to the owner and observers that can see the exact player generation. Enter/relogin rebuilds presentation; dismount/visibility exit/disconnect clears it; trusted map transfer re-anchors OwnerMapEpoch. A mounted identity replacement inside the same player generation is atomic and emits the new mounted state directly, avoiding an artificial dismount frame. Godot stores only generation-validated `WorldState.mecha_presentations`; a remote Mecha presentation without the corresponding player Spawn, or with mismatched ConnectionEpoch/MapEpoch, triggers fail-closed resync. WorldReady/resync/player Despawn remove stale state.
+
+Verification on Windows Godot 4.7.2: full Server Checks **320/320 PASS** including AOI scope/re-enter/replacement/dismount/leave/map-transfer generation; `test_mecha_wire.gd` reports `MECHA_WIRE_PASS ... presentation=true`; the existing real AES lifecycle reports `GODOT_CSHARP_AES_MECHA_E2E_PASS`. These prove authority/transport/reducer behavior only. Exact HK Body/Weapon/Engine mapping, paper-doll/transform animation, movement/stat conversion, parts/cards, combat/skills and Paradise/HK dynamic A/B remain **NOT VERIFIED**.
+
 ### 2026-11-23 Authoritative friend relationship and live presence
 
 Friend V1 reuses the authenticated Gateway/reliable FIFO and adds three Compact Binary opcodes. The Client never supplies sender identity; Gateway injects the current ActorId/ConnectionEpoch/MapEpoch and rejects repeated or decreasing FriendSequence values.

@@ -190,6 +190,8 @@ public sealed class WorldAoiPump
 
                 while(_router.PetWorldUpdates.TryRead(out var petUpdate))
                     _aoi.ApplyPetState(petUpdate);
+                while(_router.MechaWorldUpdates.TryRead(out var mechaUpdate))
+                    _aoi.ApplyMechaState(mechaUpdate);
 
                 while (_router.AttackRequests.TryRead(out var attack))
                 {

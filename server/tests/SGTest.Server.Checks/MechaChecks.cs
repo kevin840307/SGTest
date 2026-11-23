@@ -41,6 +41,18 @@ internal static class MechaChecks
             decodedSnapshot.Mechas[1].Experience==1234,
             "mecha snapshot wire roundtrip failed");
 
+        var presentation=new MechaPresentationWire(
+            7,99,44,8,7,true,102,7002,7);
+        Checks.Require(WireProtocol.TryDecodeMechaPresentation(
+            WireProtocol.EncodeMechaPresentation(presentation),out var decodedPresentation)&&
+            decodedPresentation==presentation,
+            "mounted mecha presentation wire roundtrip failed");
+        var cleared=presentation with {Mounted=false,MechaUid=0,DefinitionId=0,Level=0};
+        Checks.Require(WireProtocol.TryDecodeMechaPresentation(
+            WireProtocol.EncodeMechaPresentation(cleared),out decodedPresentation)&&
+            decodedPresentation==cleared,
+            "dismounted mecha presentation wire roundtrip failed");
+
         var malformed=WireProtocol.EncodeMechaCommand(mount);
         malformed[20]=9;
         Checks.Require(!WireProtocol.TryDecodeMechaCommand(malformed,out _),

@@ -679,6 +679,7 @@ public static partial class WireProtocol
             123 => WireOpcode.MechaCommand,
             124 => WireOpcode.MechaResult,
             125 => WireOpcode.MechaSnapshot,
+            126 => WireOpcode.MechaPresentation,
             _ => 0
         };
         if (opcode == 0) return false;
@@ -715,6 +716,7 @@ public static partial class WireProtocol
             WireOpcode.MechaSnapshot => advertised >= MechaSnapshotHeaderBytes &&
                 advertised <= MechaSnapshotMaximumFrameBytes &&
                 (advertised-MechaSnapshotHeaderBytes)%MechaSnapshotEntryBytes==0,
+            WireOpcode.MechaPresentation => advertised == MechaPresentationFrameBytes,
             WireOpcode.PetCommand => advertised == PetCommandFrameBytes,
             WireOpcode.PetResult => advertised == PetResultFrameBytes,
             WireOpcode.PetSnapshot => advertised >= PetSnapshotHeaderBytes &&

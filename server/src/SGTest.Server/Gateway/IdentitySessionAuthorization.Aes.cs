@@ -209,8 +209,9 @@ public sealed partial class IdentitySessionAuthorization
             if(_friends is not null)
                 await _friends.DetachAsync(binding,router).ConfigureAwait(false);
             // Presentation cleanup is best-effort during shutdown/backpressure;
-            // World Leave still hides the pet and a later attach heals durable state.
+            // World Leave still hides attached Pet/Mecha state and a later attach heals durable state.
             _pets?.TryDetach(binding,router);
+            _mechas?.TryDetach(binding,router);
             if (connection is not null) router.TryDetach(connection);
 
             // Keep the character registered while its final authoritative
