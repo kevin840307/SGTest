@@ -94,9 +94,11 @@ python tools/asset_converter/cli.py pet-runtime-catalog `
   --output "client/assets/catalog/pet_visuals.json"
 ~~~
 
-**完整 46 組 private runtime atlas publication 與 Pet action 動態 A/B 仍未完成。**
-目前 NS/FA 在 Pet runtime 的 idle/attack 語意只標 `INFERRED`；本輪實際 publication
-曾被另一個 converter operation 的正式 lock 阻擋，因此不得把 runtime atlas 宣稱 PASS。
+**46 組 Pet private runtime atlas publication 已完成並通過 production atlas gate；Pet action 動態 A/B 仍未完成。**
+正式 evidence 同時驗證 24 family／87 evolution、46/46 source NS/FA animations 與 46/46 runtime atlases；
+363 組既有 runtime + Pet 聯集 publication PASS。`EN115A` 的全動作 normalization 仍因 `ND1` ACT frame 超界失敗，
+因此只明確標記 NS/FA 為 `normalized_enemy_partial`，不冒充全動作 verified。NS/FA 作為 Pet runtime idle/attack
+的玩法語意仍標 `INFERRED`，直到 HK/Paradise 動態 A/B 完成。
 
 ## 私有原版衍生道具名稱目錄（2026-11-17）
 
