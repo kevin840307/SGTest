@@ -936,35 +936,62 @@ func _inspect_player_shop(actor_id:int)->void:
 	if _panel!=null and _panel.session!=null:
 		_panel.session.inspect_player_shop(actor_id)
 
+func _close_player_shop_listing(listing_id:int)->void:
+	if _panel!=null and _panel.session!=null and listing_id>0:
+		_panel.session.close_player_shop(listing_id)
+
+func _buy_player_shop_listing(seller_actor_id:int,listing_id:int)->void:
+	if _panel!=null and _panel.session!=null and seller_actor_id>0 and listing_id>0:
+		_panel.session.buy_player_shop(seller_actor_id,listing_id)
+
 func _buy_inspected_player_shop()->void:
 	if _panel==null or _panel.session==null:
 		return
 	var listing:Dictionary=_stats.get("player_shop_inspected",{})
 	if listing.is_empty():
 		return
-	_panel.session.buy_player_shop(int(listing.get("seller_actor_id",0)),int(listing.get("listing_id",0)))
+	_buy_player_shop_listing(
+		int(listing.get("seller_actor_id",0)),int(listing.get("listing_id",0)))
 
 func _refresh_player_shop()->void:
 	_clear_rows(_player_shop_rows)
 	var own:Dictionary=_stats.get("player_shop_own_listing",{})
+	var own_listings:Dictionary=_stats.get("player_shop_own_listings",{})
+	if own_listings.is_empty() and not own.is_empty():
+		own_listings[int(own.get("listing_id",0))]=own
 	var inspected:Dictionary=_stats.get("player_shop_inspected",{})
-	if not own.is_empty():
-		var own_id:=int(own.get("item_definition_id",0))
+	var inspected_listings:Dictionary=_stats.get("player_shop_inspected_listings",{})
+	if inspected_listings.is_empty() and not inspected.is_empty():
+		inspected_listings[int(inspected.get("listing_id",0))]=inspected
+
+	var listed_uids:={}
+	var own_ids:Array=own_listings.keys();own_ids.sort()
+	for raw_listing_id in own_ids:
+		var own_listing_id:=int(raw_listing_id)
+		var own_listing:Dictionary=own_listings[raw_listing_id]
+		listed_uids[int(own_listing.get("item_uid",0))]=true
+		var own_id:=int(own_listing.get("item_definition_id",0))
 		var own_name:=str(_panel.item_catalog.name_for(own_id)) if _panel!=null else "道具 %d"%own_id
 		_classic_row(_player_shop_rows,"我的商店：%s ×%d　$%d"%[
-			own_name,int(own.get("quantity",0)),int(own.get("price",0))],24.0,func():
-				if _panel!=null and _panel.session!=null:_panel.session.close_player_shop(int(own.get("listing_id",0))))
-	else:
+			own_name,int(own_listing.get("quantity",0)),int(own_listing.get("price",0))],
+			24.0,_close_player_shop_listing.bind(own_listing_id))
+
+	if own_listings.size()<16:
 		var inventory:Dictionary=_stats.get("inventory_items",{})
 		var uids:Array=inventory.keys();uids.sort()
-		var count:=0
+		var offer_count:=0
 		for raw_uid in uids:
-			if count>=8:break
-			var uid:=int(raw_uid);var item:Dictionary=inventory[raw_uid]
+			if offer_count>=8:break
+			var uid:=int(raw_uid)
+			if listed_uids.has(uid):
+				continue
+			var item:Dictionary=inventory[raw_uid]
 			var item_id:=int(item.get("item_definition_id",0))
 			var item_name:=str(_panel.item_catalog.name_for(item_id)) if _panel!=null else "道具 %d"%item_id
-			_classic_row(_player_shop_rows,"開店：%s ×%d"%[item_name,int(item.get("quantity",0))],22.0,_open_player_shop_item.bind(uid))
-			count+=1
+			_classic_row(_player_shop_rows,"上架：%s ×%d"%[
+				item_name,int(item.get("quantity",0))],22.0,_open_player_shop_item.bind(uid))
+			offer_count+=1
+
 	var entities:Dictionary=_stats.get("entities",{})
 	var entity_ids:Array=entities.keys();entity_ids.sort()
 	for raw_actor in entity_ids:
@@ -972,12 +999,19 @@ func _refresh_player_shop()->void:
 		if actor_id<=0 or actor_id==int(_stats.get("actor_id",0)):
 			continue
 		_classic_row(_player_shop_rows,"查看 %s 的小商店"%_entity_name(actor_id,entities[raw_actor]),20.0,_inspect_player_shop.bind(actor_id))
-	if not inspected.is_empty():
-		var item_id:=int(inspected.get("item_definition_id",0))
-		var item_name:=str(_panel.item_catalog.name_for(item_id)) if _panel!=null else "道具 %d"%item_id
+
+	var inspected_ids:Array=inspected_listings.keys();inspected_ids.sort()
+	for raw_listing_id in inspected_ids:
+		var inspected_listing_id:=int(raw_listing_id)
+		var inspected_listing:Dictionary=inspected_listings[raw_listing_id]
+		var inspected_item_id:=int(inspected_listing.get("item_definition_id",0))
+		var inspected_name:=str(_panel.item_catalog.name_for(inspected_item_id)) if _panel!=null else "道具 %d"%inspected_item_id
 		_classic_row(_player_shop_rows,"查看中：%s ×%d　$%d"%[
-			item_name,int(inspected.get("quantity",0)),int(inspected.get("price",0))],24.0)
-	_player_shop_buy.disabled=inspected.is_empty() or int(_stats.get("pending_player_shop_sequence",0))!=0
+			inspected_name,int(inspected_listing.get("quantity",0)),
+			int(inspected_listing.get("price",0))],24.0,
+			_buy_player_shop_listing.bind(
+				int(inspected_listing.get("seller_actor_id",0)),inspected_listing_id))
+	_player_shop_buy.disabled=inspected_listings.is_empty() or int(_stats.get("pending_player_shop_sequence",0))!=0
 
 func _refresh_storage()->void:
 	_clear_rows(_storage_rows)

@@ -404,6 +404,26 @@ public sealed partial class GatewayConnection
         }
     }
 
+    public GatewaySendStatus QueuePlayerShopSnapshot(
+        TrustedPlayerShopCommand request,PlayerShopSnapshotWire snapshot)
+    {
+        lock(_bindingGate)
+        {
+            if(_closed)return GatewaySendStatus.Closed;
+            var bound=_binding;
+            if(request.ActorId!=bound.ActorId||
+               request.ConnectionEpoch!=bound.ConnectionEpoch||
+               request.RequestMapEpoch!=bound.MapEpoch||
+               request.Action!=PlayerShopCommandAction.Inspect||
+               snapshot.MapEpoch!=request.RequestMapEpoch||
+               snapshot.ShopSequence!=request.ShopSequence||
+               snapshot.SellerActorId!=request.SellerActorId)
+                return GatewaySendStatus.GenerationMismatch;
+            return _reliable.TryEnqueue(WireProtocol.EncodePlayerShopSnapshot(snapshot))
+                ?GatewaySendStatus.Enqueued:GatewaySendStatus.Backpressured;
+        }
+    }
+
     public GatewaySendStatus QueuePlayerShopSold(
         ConnectionBinding expected,PlayerShopSoldWire sold)
     {

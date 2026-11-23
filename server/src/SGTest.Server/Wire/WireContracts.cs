@@ -136,7 +136,8 @@ public enum WireOpcode : ushort
     MechaCommand = 123,
     MechaResult = 124,
     MechaSnapshot = 125,
-    MechaPresentation = 126
+    MechaPresentation = 126,
+    PlayerShopSnapshot = 127
 }
 
 public enum ChatChannel : byte { Nearby = 0, Faction = 1, Warband = 2, Party = 3, Whisper = 4 }
@@ -332,7 +333,8 @@ public enum PlayerShopResultStatus : byte
     Sold = 12,
     Closed = 13,
     StaleListing = 14,
-    StaleSequence = 15
+    StaleSequence = 15,
+    CapacityReached = 16
 }
 
 public enum QuestViewWireStatus : byte
@@ -640,6 +642,12 @@ public readonly record struct PlayerShopResultWire(
     long ItemUid,int ItemDefinitionId,int Quantity,long SourceDropId,
     int DurabilityRaw,long Price,long SellerWallet,long BuyerWallet,
     int EnhancementLevel = 0);
+public readonly record struct PlayerShopListingWire(
+    long ListingId,long ItemUid,int ItemDefinitionId,int Quantity,
+    long SourceDropId,int DurabilityRaw,long Price,int EnhancementLevel);
+public sealed record PlayerShopSnapshotWire(
+    long MapEpoch,uint ShopSequence,long SellerActorId,long BuyerWallet,
+    IReadOnlyList<PlayerShopListingWire> Listings);
 public readonly record struct PlayerShopSoldWire(
     long ReceiverMapEpoch,long ListingId,long BuyerActorId,long ItemUid,
     long SellerWallet);

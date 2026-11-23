@@ -15,7 +15,8 @@ public enum PlayerShopCreateStatus : byte
     Created=0,
     AlreadyOpen=1,
     NotOwned=2,
-    NotTradeable=3
+    NotTradeable=3,
+    CapacityReached=4
 }
 
 public enum PlayerShopCloseStatus : byte
@@ -63,6 +64,9 @@ public sealed record PlayerShopBuyResult(
 /// </summary>
 public sealed partial class SqliteIdentityStore
 {
+    // SGTest safety bound only. HK's exact stall slot count remains NOT VERIFIED.
+    public const int PlayerShopMaximumActiveListings=16;
+
     public async Task<PlayerShopCreateResult> CreatePlayerShopListingAsync(
         long sellerCharacterId,long itemUid,long price,
         IReadOnlyDictionary<int,TradeItemRule> itemRules,
@@ -85,10 +89,16 @@ public sealed partial class SqliteIdentityStore
                 if(lockSeller.ExecuteNonQuery()!=1)
                     throw new KeyNotFoundException("Unknown player-shop seller");
             }
-            if(ReadActivePlayerShopListing(connection,tx,sellerCharacterId) is not null)
+            var existing=ReadActivePlayerShopListings(connection,tx,sellerCharacterId);
+            if(existing.Any(x=>x.ItemUid==itemUid))
             {
                 tx.Commit();
                 return new PlayerShopCreateResult(PlayerShopCreateStatus.AlreadyOpen);
+            }
+            if(existing.Count>=PlayerShopMaximumActiveListings)
+            {
+                tx.Commit();
+                return new PlayerShopCreateResult(PlayerShopCreateStatus.CapacityReached);
             }
 
             var item=ReadPlayerShopOwnedItem(connection,tx,sellerCharacterId,itemUid);
@@ -137,7 +147,48 @@ SELECT last_insert_rowid();";
         },cancellationToken).ConfigureAwait(false);
     }
 
+    public async Task<IReadOnlyList<PlayerShopListing>> GetActivePlayerShopListingsAsync(
+        long sellerCharacterId,CancellationToken cancellationToken=default)
+    {
+        ThrowIfDisposed();
+        if(sellerCharacterId<=0)
+            throw new ArgumentOutOfRangeException(nameof(sellerCharacterId));
+        return await Task.Run<IReadOnlyList<PlayerShopListing>>(() =>
+        {
+            using var connection=Open();
+            using var tx=connection.BeginTransaction();
+            var listings=ReadActivePlayerShopListings(connection,tx,sellerCharacterId);
+            tx.Commit();
+            return listings;
+        },cancellationToken).ConfigureAwait(false);
+    }
+
+    // Compatibility helper for older single-listing call sites. New stall code
+    // must use GetActivePlayerShopListingsAsync when the complete catalog matters.
     public async Task<PlayerShopListing?> GetActivePlayerShopListingAsync(
+        long sellerCharacterId,CancellationToken cancellationToken=default)
+    {
+        var listings=await GetActivePlayerShopListingsAsync(
+            sellerCharacterId,cancellationToken).ConfigureAwait(false);
+        return listings.Count==0?null:listings[0];
+    }
+
+    public async Task<PlayerShopListing?> GetPlayerShopListingAsync(
+        long listingId,CancellationToken cancellationToken=default)
+    {
+        ThrowIfDisposed();
+        if(listingId<=0)throw new ArgumentOutOfRangeException(nameof(listingId));
+        return await Task.Run(() =>
+        {
+            using var connection=Open();
+            using var tx=connection.BeginTransaction();
+            var listing=ReadPlayerShopListing(connection,tx,listingId);
+            tx.Commit();
+            return listing;
+        },cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<int> CloseAllPlayerShopListingsAsync(
         long sellerCharacterId,CancellationToken cancellationToken=default)
     {
         ThrowIfDisposed();
@@ -147,9 +198,16 @@ SELECT last_insert_rowid();";
         {
             using var connection=Open();
             using var tx=connection.BeginTransaction();
-            var listing=ReadActivePlayerShopListing(connection,tx,sellerCharacterId);
+            using var update=connection.CreateCommand();
+            update.Transaction=tx;
+            update.CommandText=@"UPDATE player_shop_listings
+SET state=2,updated_unix_ms=$now
+WHERE seller_character_id=$seller AND state=0;";
+            update.Parameters.AddWithValue("$now",DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
+            update.Parameters.AddWithValue("$seller",sellerCharacterId);
+            int count=update.ExecuteNonQuery();
             tx.Commit();
-            return listing;
+            return count;
         },cancellationToken).ConfigureAwait(false);
     }
 
@@ -365,7 +423,7 @@ WHERE listing_id=$listing AND state=0;";
             throw new InvalidDataException("Player shop stale transition lost listing");
     }
 
-    private static PlayerShopListing? ReadActivePlayerShopListing(
+    private static List<PlayerShopListing> ReadActivePlayerShopListings(
         SqliteConnection connection,SqliteTransaction tx,long sellerCharacterId)
     {
         using var command=connection.CreateCommand();
@@ -377,10 +435,14 @@ SELECT listing_id,seller_character_id,item_uid,item_definition_id,quantity,
        COALESCE(buyer_wallet_after,0),enhancement_level
 FROM player_shop_listings
 WHERE seller_character_id=$seller AND state=0
-ORDER BY listing_id DESC LIMIT 1;";
+ORDER BY listing_id ASC
+LIMIT $limit;";
         command.Parameters.AddWithValue("$seller",sellerCharacterId);
+        command.Parameters.AddWithValue("$limit",PlayerShopMaximumActiveListings);
         using var reader=command.ExecuteReader();
-        return reader.Read()?ReadPlayerShopListing(reader):null;
+        var result=new List<PlayerShopListing>();
+        while(reader.Read())result.Add(ReadPlayerShopListing(reader));
+        return result;
     }
 
     private static PlayerShopListing? ReadPlayerShopListing(

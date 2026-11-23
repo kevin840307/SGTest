@@ -178,6 +178,11 @@ public static partial class WireProtocol
     public const int PlayerShopResultFrameBytes =
         HeaderBytes + 8 + 4 + 1 + 1 + 8 + 8 + 8 + 4 + 4 + 8 + 4 + 8 + 8 + 8 + 1;
     public const int PlayerShopSoldFrameBytes = HeaderBytes + 8 + 8 + 8 + 8 + 8;
+    public const int PlayerShopSnapshotHeaderBytes = HeaderBytes + 8 + 4 + 8 + 8 + 1;
+    public const int PlayerShopListingBytes = 45;
+    public const int PlayerShopSnapshotMaximumFrameBytes =
+        PlayerShopSnapshotHeaderBytes +
+        SqliteIdentityStore.PlayerShopMaximumActiveListings*PlayerShopListingBytes;
     public const int ChatCommandHeaderBytes = HeaderBytes + 8 + 4 + 1 + 1 + 2;
     public const int ChatDeliveryHeaderBytes = HeaderBytes + 8 + 8 + 8 + 4 + 1 + 1 + 2 + 2;
     public const int ChatMaxMessageBytes = 256;
@@ -680,6 +685,7 @@ public static partial class WireProtocol
             124 => WireOpcode.MechaResult,
             125 => WireOpcode.MechaSnapshot,
             126 => WireOpcode.MechaPresentation,
+            127 => WireOpcode.PlayerShopSnapshot,
             _ => 0
         };
         if (opcode == 0) return false;
@@ -828,6 +834,10 @@ public static partial class WireProtocol
             WireOpcode.PlayerShopCommand => advertised == PlayerShopCommandFrameBytes,
             WireOpcode.PlayerShopResult => advertised == PlayerShopResultFrameBytes,
             WireOpcode.PlayerShopSold => advertised == PlayerShopSoldFrameBytes,
+            WireOpcode.PlayerShopSnapshot =>
+                advertised >= PlayerShopSnapshotHeaderBytes &&
+                advertised <= PlayerShopSnapshotMaximumFrameBytes &&
+                (advertised-PlayerShopSnapshotHeaderBytes)%PlayerShopListingBytes==0,
             WireOpcode.ChatCommand => advertised >= ChatCommandHeaderBytes + 1 && advertised <= ChatCommandMaximumFrameBytes,
             WireOpcode.ChatDelivery => advertised >= ChatDeliveryHeaderBytes + 2 && advertised <= ChatDeliveryMaximumFrameBytes,
             WireOpcode.WhisperCommand =>

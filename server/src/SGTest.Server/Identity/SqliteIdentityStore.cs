@@ -13,7 +13,7 @@ namespace SGTest.Server.Identity;
 /// </summary>
 public sealed partial class SqliteIdentityStore : IDisposable
 {
-    public const int SchemaVersion = 36;
+    public const int SchemaVersion = 37;
     private readonly string _databasePath;
     private readonly string _connectionString;
     private readonly IdentityStoreOptions _options;

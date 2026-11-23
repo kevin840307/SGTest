@@ -38,11 +38,13 @@ internal static class PlayerShopChecks
             long generation=await store.AllocateLootWorldGenerationAsync();
             var first=await SeedItem(store,generation,seller,5101,2,1);
             var second=await SeedItem(store,generation,seller,5102,1,2);
+            var blockedItem=await SeedItem(store,generation,seller,5103,1,3);
             SeedEnhancementLevel(db,first.ItemUid,5);
             var rules=new Dictionary<int,TradeItemRule>
             {
                 [5101]=new(5101,true,"synthetic:player-shop-5101"),
-                [5102]=new(5102,false,"synthetic:player-shop-5102")
+                [5102]=new(5102,true,"synthetic:player-shop-5102"),
+                [5103]=new(5103,false,"synthetic:player-shop-5103")
             };
 
             var created=await store.CreatePlayerShopListingAsync(
@@ -61,13 +63,23 @@ internal static class PlayerShopChecks
                 ??throw new InvalidOperationException("player-shop listing missing");
 
             var duplicate=await store.CreatePlayerShopListingAsync(
-                seller,second.ItemUid,1,rules);
+                seller,first.ItemUid,1,rules);
             Checks.Require(duplicate.Status==PlayerShopCreateStatus.AlreadyOpen,
-                "seller opened two simultaneous player-shop listings");
+                "same ItemUid was listed twice");
 
-            var active=await store.GetActivePlayerShopListingAsync(seller);
-            Checks.Require(active?.ListingId==listing.ListingId,
-                "active player-shop listing lookup mismatch");
+            var secondCreated=await store.CreatePlayerShopListingAsync(
+                seller,second.ItemUid,125,rules);
+            Checks.Require(secondCreated.Status==PlayerShopCreateStatus.Created&&
+                secondCreated.Listing is not null&&
+                secondCreated.Listing.ItemUid==second.ItemUid,
+                "seller could not open a second simultaneous player-shop listing");
+            var secondListing=secondCreated.Listing
+                ??throw new InvalidOperationException("second player-shop listing missing");
+            var active=await store.GetActivePlayerShopListingsAsync(seller);
+            Checks.Require(active.Count==2&&
+                active[0].ListingId==listing.ListingId&&
+                active[1].ListingId==secondListing.ListingId,
+                "multi-listing player-shop lookup mismatch");
 
             var applied=await store.BuyPlayerShopListingAsync(
                 buyer,listing.ListingId,rules);
@@ -86,6 +98,11 @@ internal static class PlayerShopChecks
             Checks.Require((await store.ListInventoryItemsAsync(seller))
                 .All(x=>x.ItemUid!=first.ItemUid),
                 "sold player-shop UID remained with seller");
+            var remaining=await store.GetActivePlayerShopListingsAsync(seller);
+            Checks.Require(remaining.Count==1&&
+                remaining[0].ListingId==secondListing.ListingId&&
+                remaining[0].ItemUid==second.ItemUid,
+                "buying one player-shop product closed or changed the remaining stall");
 
             var replay=await store.BuyPlayerShopListingAsync(
                 buyer,listing.ListingId,rules);
@@ -106,11 +123,17 @@ internal static class PlayerShopChecks
             Checks.Require(closedSold.Status==PlayerShopCloseStatus.AlreadyClosed,
                 "sold player-shop listing was closed as active");
 
+            var closedSecond=await store.ClosePlayerShopListingAsync(
+                seller,secondListing.ListingId);
+            Checks.Require(closedSecond.Status==PlayerShopCloseStatus.Closed&&
+                (await store.GetActivePlayerShopListingsAsync(seller)).Count==0,
+                "closing one remaining stall product did not empty the seller stall");
+
             var blocked=await store.CreatePlayerShopListingAsync(
-                seller,second.ItemUid,100,rules);
+                seller,blockedItem.ItemUid,100,rules);
             Checks.Require(blocked.Status==PlayerShopCreateStatus.NotTradeable&&
                 (await store.ListInventoryItemsAsync(seller))
-                    .Any(x=>x.ItemUid==second.ItemUid),
+                    .Any(x=>x.ItemUid==blockedItem.ItemUid),
                 "unverified/non-tradeable player-shop item was admitted or lost");
         }
         finally{Directory.Delete(dir,true);}

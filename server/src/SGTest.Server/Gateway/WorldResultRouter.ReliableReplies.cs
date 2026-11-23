@@ -255,6 +255,18 @@ public sealed partial class WorldResultRouter
         }
     }
 
+    public GatewaySendStatus QueuePlayerShopSnapshot(
+        TrustedPlayerShopCommand request,PlayerShopSnapshotWire snapshot)
+    {
+        lock(_gate)
+        {
+            if(!_connections.TryGetValue(request.ActorId,out var connection)||
+               connection.IsClosed)
+                return GatewaySendStatus.Closed;
+            return connection.QueuePlayerShopSnapshot(request,snapshot);
+        }
+    }
+
     public GatewaySendStatus QueuePlayerShopSold(
         ConnectionBinding seller,PlayerShopSoldWire sold)
     {

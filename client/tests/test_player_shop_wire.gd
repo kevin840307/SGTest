@@ -33,6 +33,33 @@ func _result(
 	writer.put_u8(enhancement)
 	return writer.data_array
 
+func _snapshot(
+		epoch:int,sequence:int,seller:int,wallet:int,
+		rows:Array[Dictionary])->PackedByteArray:
+	var writer:=StreamPeerBuffer.new()
+	writer.big_endian=false
+	writer.put_u32(
+		WireCodec.PLAYER_SHOP_SNAPSHOT_HEADER_BYTES+
+		rows.size()*WireCodec.PLAYER_SHOP_LISTING_BYTES)
+	writer.put_u16(WireCodec.VERSION)
+	writer.put_u16(WireCodec.OPCODE_PLAYER_SHOP_SNAPSHOT)
+	writer.put_64(epoch)
+	writer.put_u32(sequence)
+	writer.put_64(seller)
+	writer.put_64(wallet)
+	writer.put_u8(rows.size())
+	for row in rows:
+		writer.put_64(int(row.listing_id))
+		writer.put_64(int(row.item_uid))
+		writer.put_32(int(row.item_definition_id))
+		writer.put_32(int(row.quantity))
+		writer.put_64(int(row.source_drop_id))
+		writer.put_32(int(row.durability_raw))
+		writer.put_64(int(row.price))
+		writer.put_u8(int(row.enhancement_level))
+	return writer.data_array
+
+
 func _sold(epoch:int,listing:int,buyer:int,uid:int,wallet:int)->PackedByteArray:
 	var writer:=StreamPeerBuffer.new()
 	writer.big_endian=false
@@ -99,6 +126,10 @@ func _initialize()->void:
 		"item_uid":7001,"item_definition_id":6101,
 		"quantity":2,"drop_id":5001,"durability_raw":80,
 		"enhancement_level":5}
+	seller.inventory_items[7002]={
+		"item_uid":7002,"item_definition_id":6102,
+		"quantity":1,"drop_id":5002,"durability_raw":-1,
+		"enhancement_level":0}
 	if not seller.mark_player_shop_sent(1,1,0,0,7001,300):
 		_fail("seller open admission")
 		return
@@ -117,17 +148,35 @@ func _initialize()->void:
 	):
 		_fail("seller open state")
 		return
+	if not seller.mark_player_shop_sent(2,1,0,0,7002,125):
+		_fail("seller second open admission")
+		return
+	if not seller.apply_frame(
+		_result(3,2,1,0,22,92,7002,6102,1,5002,-1,125,100,100,0)):
+		_fail("seller second open receipt "+seller.protocol_error)
+		return
+	seller_snap=seller.snapshot()
+	if (
+		(seller_snap.player_shop_own_listings as Dictionary).size()!=2 or
+		not (seller_snap.player_shop_own_listings as Dictionary).has(91) or
+		not (seller_snap.player_shop_own_listings as Dictionary).has(92)
+	):
+		_fail("seller multi-listing state")
+		return
 	if not seller.apply_frame(_sold(3,91,11,7001,400)):
 		_fail("seller sold reducer "+seller.protocol_error)
 		return
 	seller_snap=seller.snapshot()
 	if (
 		(seller_snap.inventory_items as Dictionary).has(7001) or
-		not (seller_snap.player_shop_own_listing as Dictionary).is_empty() or
+		not (seller_snap.inventory_items as Dictionary).has(7002) or
+		int(seller_snap.player_shop_own_listing.get("listing_id",0))!=92 or
+		(seller_snap.player_shop_own_listings as Dictionary).size()!=1 or
+		not (seller_snap.player_shop_own_listings as Dictionary).has(92) or
 		int(seller_snap.player_shop_wallet)!=400 or
 		int(seller_snap.last_player_shop_sold.get("buyer_actor_id",0))!=11
 	):
-		_fail("seller sale did not converge UID/wallet")
+		_fail("seller sale did not preserve remaining multi-listing stall")
 		return
 	if (
 		not seller.apply_frame(_sold(3,91,11,7001,400)) or
@@ -142,6 +191,30 @@ func _initialize()->void:
 	if not buyer_world.mark_player_shop_sent(1,3,22,0,0,0):
 		_fail("buyer inspect admission")
 		return
+	var inspect_rows:Array[Dictionary]=[
+		{
+			"listing_id":91,"item_uid":7001,"item_definition_id":6101,
+			"quantity":2,"source_drop_id":5001,"durability_raw":80,
+			"price":300,"enhancement_level":5
+		},
+		{
+			"listing_id":92,"item_uid":7002,"item_definition_id":6102,
+			"quantity":1,"source_drop_id":5002,"durability_raw":-1,
+			"price":125,"enhancement_level":0
+		}
+	]
+	var snapshot_frame:=_snapshot(3,1,22,1000,inspect_rows)
+	var decoded_snapshot:=WireCodec.decode_player_shop_snapshot(snapshot_frame)
+	if (
+		decoded_snapshot.is_empty() or
+		(decoded_snapshot.listings as Array).size()!=2 or
+		int((decoded_snapshot.listings as Array)[1].listing_id)!=92
+	):
+		_fail("multi-listing snapshot codec")
+		return
+	if not buyer_world.apply_frame(snapshot_frame):
+		_fail("inspect snapshot reducer "+buyer_world.protocol_error)
+		return
 	if not buyer_world.apply_frame(
 		_result(3,1,3,0,22,91,7001,6101,2,5001,80,300,0,1000,5)):
 		_fail("inspect reducer "+buyer_world.protocol_error)
@@ -149,12 +222,41 @@ func _initialize()->void:
 	var buyer_snap:=buyer_world.snapshot()
 	if (
 		int(buyer_snap.player_shop_inspected.get("listing_id",0))!=91 or
+		(buyer_snap.player_shop_inspected_listings as Dictionary).size()!=2 or
+		not (buyer_snap.player_shop_inspected_listings as Dictionary).has(92) or
 		int(buyer_snap.player_shop_wallet)!=1000 or
 		int(buyer_snap.player_shop_inspected.get("enhancement_level",-1))!=5 or
 		(buyer_snap.inventory_items as Dictionary).has(7001)
 	):
-		_fail("inspect mutated inventory or lost listing")
+		_fail("inspect mutated inventory or lost multi-listing catalog")
 		return
+
+	# If another buyer wins one listing after our inspect, only that listing is
+	# removed; the rest of the inspected stall remains usable.
+	var race_world:=_base_world(33,22)
+	if not race_world.mark_player_shop_sent(1,3,22,0,0,0):
+		_fail("race inspect admission")
+		return
+	if not race_world.apply_frame(snapshot_frame) or not race_world.apply_frame(
+		_result(3,1,3,0,22,91,7001,6101,2,5001,80,300,0,1000,5)):
+		_fail("race inspect setup "+race_world.protocol_error)
+		return
+	if not race_world.mark_player_shop_sent(2,4,22,91,0,0):
+		_fail("race buy admission")
+		return
+	if not race_world.apply_frame(
+		_result(3,2,4,12,22,91,7001,6101,2,5001,80,300,400,1000,5)):
+		_fail("race sold reducer "+race_world.protocol_error)
+		return
+	var race_snap:=race_world.snapshot()
+	if (
+		int(race_snap.player_shop_inspected.get("listing_id",0))!=92 or
+		(race_snap.player_shop_inspected_listings as Dictionary).size()!=1 or
+		not (race_snap.player_shop_inspected_listings as Dictionary).has(92)
+	):
+		_fail("sold competitor listing cleared remaining inspected stall")
+		return
+
 	if not buyer_world.mark_player_shop_sent(2,4,22,91,0,0):
 		_fail("buyer buy admission")
 		return
@@ -172,9 +274,11 @@ func _initialize()->void:
 		int(purchased.quantity)!=2 or int(purchased.drop_id)!=5001 or
 		int(purchased.durability_raw)!=80 or int(purchased.enhancement_level)!=5 or
 		int(buyer_snap.player_shop_wallet)!=700 or
-		not (buyer_snap.player_shop_inspected as Dictionary).is_empty()
+		int(buyer_snap.player_shop_inspected.get("listing_id",0))!=92 or
+		(buyer_snap.player_shop_inspected_listings as Dictionary).size()!=1 or
+		not (buyer_snap.player_shop_inspected_listings as Dictionary).has(92)
 	):
-		_fail("buy lost UID quantity provenance durability or wallet")
+		_fail("buy lost UID metadata/wallet or closed remaining inspected product")
 		return
 	if (
 		not buyer_world.apply_frame(
@@ -206,5 +310,5 @@ func _initialize()->void:
 		_fail("future map player-shop result did not fail closed")
 		return
 
-	print("PLAYER_SHOP_WIRE_PASS command=53 result=91 sold=48 action_shape=true server_auth_uid=true inspect_no_inventory_mutation=true buy_uid_provenance=true durability=80 enhancement=5 seller_sold_push=true duplicate_stale=true future_failclosed=true")
+	print("PLAYER_SHOP_WIRE_PASS command=53 result=91 sold=48 snapshot_opcode=127 multi_listing=true action_shape=true server_auth_uid=true inspect_no_inventory_mutation=true buy_uid_provenance=true durability=80 enhancement=5 seller_sold_push=true preserves_remaining_listing=true duplicate_stale=true future_failclosed=true")
 	quit(0)

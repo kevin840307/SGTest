@@ -37,14 +37,11 @@ public sealed class PlayerShopCoordinator
 
     public async Task AttachAsync(ConnectionBinding binding)
     {
-        // Shops are explicitly online-only in this first slice. A process/socket
-        // death can leave an active durable row; a new authenticated session
-        // closes that stale row instead of silently reviving an old stall.
-        var active=await _store.GetActivePlayerShopListingAsync(binding.ActorId)
+        // Shops are explicitly online-only. A process/socket death can leave
+        // durable active rows; a new authenticated session closes the complete
+        // stale stall instead of silently reviving any old listing.
+        await _store.CloseAllPlayerShopListingsAsync(binding.ActorId)
             .ConfigureAwait(false);
-        if(active is not null)
-            await _store.ClosePlayerShopListingAsync(
-                binding.ActorId,active.ListingId).ConfigureAwait(false);
     }
 
     public async Task CloseForBindingAsync(
@@ -52,11 +49,8 @@ public sealed class PlayerShopCoordinator
     {
         ArgumentNullException.ThrowIfNull(router);
         if(!router.IsCurrentBinding(binding))return;
-        var active=await _store.GetActivePlayerShopListingAsync(binding.ActorId)
+        await _store.CloseAllPlayerShopListingsAsync(binding.ActorId)
             .ConfigureAwait(false);
-        if(active is not null)
-            await _store.ClosePlayerShopListingAsync(
-                binding.ActorId,active.ListingId).ConfigureAwait(false);
     }
 
     public async Task<PlayerShopResultWire> HandleNewAsync(
@@ -107,6 +101,7 @@ public sealed class PlayerShopCoordinator
                         PlayerShopCreateStatus.AlreadyOpen=>PlayerShopResultStatus.AlreadyOpen,
                         PlayerShopCreateStatus.NotOwned=>PlayerShopResultStatus.NotOwned,
                         PlayerShopCreateStatus.NotTradeable=>PlayerShopResultStatus.NotTradeable,
+                        PlayerShopCreateStatus.CapacityReached=>PlayerShopResultStatus.CapacityReached,
                         _=>throw new InvalidOperationException("Unknown player-shop create result")
                     };
                     long wallet=await _store.GetCharacterMoneyAsync(command.ActorId)
@@ -142,15 +137,27 @@ public sealed class PlayerShopCoordinator
                         return Queue(command,router,Result(
                             command,PlayerShopResultStatus.NotVisible,
                             sellerActorId:command.SellerActorId));
-                    var listing=await _store.GetActivePlayerShopListingAsync(
+                    var listings=await _store.GetActivePlayerShopListingsAsync(
                         command.SellerActorId).ConfigureAwait(false);
                     long buyerWallet=await _store.GetCharacterMoneyAsync(command.ActorId)
                         .ConfigureAwait(false);
+                    if(listings.Count>0)
+                    {
+                        var snapshot=new PlayerShopSnapshotWire(
+                            command.RequestMapEpoch,command.ShopSequence,
+                            command.SellerActorId,buyerWallet,
+                            listings.Select(ToWireListing).ToArray());
+                        var snapshotStatus=router.QueuePlayerShopSnapshot(command,snapshot);
+                        if(snapshotStatus!=GatewaySendStatus.Enqueued)
+                            throw new IOException(
+                                "Reliable player-shop snapshot could not be queued: "+snapshotStatus);
+                    }
+                    var first=listings.Count==0?null:listings[0];
                     return Queue(command,router,Result(
-                        command,listing is null
+                        command,first is null
                             ?PlayerShopResultStatus.NoShop
                             :PlayerShopResultStatus.Applied,
-                        listing,command.SellerActorId,0,buyerWallet));
+                        first,command.SellerActorId,0,buyerWallet));
                 }
                 default:
                     throw new InvalidOperationException(
@@ -231,16 +238,20 @@ public sealed class PlayerShopCoordinator
                     command,PlayerShopResultStatus.StaleGeneration,
                     sellerActorId:command.SellerActorId));
 
-            var active=await _store.GetActivePlayerShopListingAsync(
-                sellerBinding.ActorId).ConfigureAwait(false);
-            if(active is null)
+            var active=await _store.GetPlayerShopListingAsync(command.ListingId)
+                .ConfigureAwait(false);
+            if(active is null||active.SellerCharacterId!=sellerBinding.ActorId)
                 return Queue(command,router,Result(
                     command,PlayerShopResultStatus.NoShop,
                     sellerActorId:command.SellerActorId));
-            if(active.ListingId!=command.ListingId)
+            if(active.State!=PlayerShopListingState.Active)
                 return Queue(command,router,Result(
-                    command,PlayerShopResultStatus.StaleListing,active,
-                    command.SellerActorId));
+                    command,active.State switch
+                    {
+                        PlayerShopListingState.Sold=>PlayerShopResultStatus.Sold,
+                        PlayerShopListingState.Closed=>PlayerShopResultStatus.Closed,
+                        _=>PlayerShopResultStatus.StaleListing
+                    },active,command.SellerActorId));
 
             var bought=await _store.BuyPlayerShopListingAsync(
                 command.ActorId,command.ListingId,_itemRules).ConfigureAwait(false);
@@ -311,6 +322,11 @@ public sealed class PlayerShopCoordinator
                     "Player-shop participant combat generation could not resume");
         }
     }
+
+    private static PlayerShopListingWire ToWireListing(PlayerShopListing listing)=>
+        new(listing.ListingId,listing.ItemUid,listing.ItemDefinitionId,
+            listing.Quantity,listing.SourceDropId,listing.DurabilityRaw??-1,
+            listing.Price,listing.EnhancementLevel);
 
     private static PlayerShopResultWire Result(
         TrustedPlayerShopCommand command,PlayerShopResultStatus status,

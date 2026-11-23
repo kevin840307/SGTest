@@ -74,6 +74,8 @@ internal static class PlayerShopCoordinatorChecks
             SeedWallet(db,buyer,1000);
             long generation=await store.AllocateLootWorldGenerationAsync();
             var item=await SeedItem(store,generation,seller,6101,2,98,24,24);
+            long generation2=await store.AllocateLootWorldGenerationAsync();
+            var item2=await SeedItem(store,generation2,seller,6101,1,98,24,24,2);
             var rules=new Dictionary<int,TradeItemRule>
             { [6101]=new(6101,true,"synthetic:player-shop-coord") };
 
@@ -117,6 +119,13 @@ internal static class PlayerShopCoordinatorChecks
                 opened.SourceDropId==item.DropId&&opened.Price==300,
                 "player-shop open receipt mismatch");
             long listingId=opened.ListingId;
+            var openSecond=open with{ShopSequence=2,ItemUid=item2.ItemUid,Price=125};
+            var openedSecond=await shops.HandleNewAsync(openSecond,router);
+            Checks.Require(openedSecond.Status==PlayerShopResultStatus.Applied&&
+                openedSecond.ListingId>listingId&&
+                openedSecond.ItemUid==item2.ItemUid&&
+                DrainResult(sellerGateway)==openedSecond,
+                "second player-shop product open receipt mismatch");
 
             var inspectHidden=new TrustedPlayerShopCommand(
                 buyer,buyerActor.ConnectionEpoch,buyerActor.MapEpoch,1,
@@ -133,10 +142,18 @@ internal static class PlayerShopCoordinatorChecks
             DrainAny(buyerGateway,WireOpcode.EntitySpawn);
             var inspect=inspectHidden with{ShopSequence=2};
             var inspected=await shops.HandleNewAsync(inspect,router);
+            var inspectedSnapshot=DrainSnapshot(buyerGateway);
             Checks.Require(inspected.Status==PlayerShopResultStatus.Applied&&
                 inspected.ListingId==listingId&&inspected.ItemUid==item.ItemUid&&
-                inspected.BuyerWallet==1000&&DrainResult(buyerGateway)==inspected,
-                "visible player-shop inspect mismatch");
+                inspected.BuyerWallet==1000&&
+                inspectedSnapshot.ShopSequence==inspect.ShopSequence&&
+                inspectedSnapshot.SellerActorId==seller&&
+                inspectedSnapshot.BuyerWallet==1000&&
+                inspectedSnapshot.Listings.Count==2&&
+                inspectedSnapshot.Listings.Any(x=>x.ListingId==listingId&&x.ItemUid==item.ItemUid)&&
+                inspectedSnapshot.Listings.Any(x=>x.ListingId==openedSecond.ListingId&&x.ItemUid==item2.ItemUid)&&
+                DrainResult(buyerGateway)==inspected,
+                "visible multi-product player-shop inspect mismatch");
 
             var buy=new TrustedPlayerShopCommand(
                 buyer,buyerActor.ConnectionEpoch,buyerActor.MapEpoch,3,
@@ -156,14 +173,19 @@ internal static class PlayerShopCoordinatorChecks
                 (await store.ListInventoryItemsAsync(buyer))
                     .Single(x=>x.ItemUid==item.ItemUid).SourceDropId==item.DropId,
                 "player-shop coordinator durable settlement mismatch");
+            var remainingListings=await store.GetActivePlayerShopListingsAsync(seller);
+            Checks.Require(remainingListings.Count==1&&
+                remainingListings[0].ListingId==openedSecond.ListingId&&
+                remainingListings[0].ItemUid==item2.ItemUid,
+                "buying one coordinator listing closed the remaining stall");
 
             // New semantic sequence against the same sold listing converges on
             // durable AlreadyApplied and may re-notify seller idempotently.
             var replay=buy with{ShopSequence=4};
             var replayed=await shops.HandleNewAsync(replay,router);
-            Checks.Require(replayed.Status==PlayerShopResultStatus.NoShop&&
+            Checks.Require(replayed.Status==PlayerShopResultStatus.Sold&&
                 DrainResult(buyerGateway)==replayed,
-                "sold online listing remained active for a new buy sequence");
+                "sold online listing did not converge on durable Sold state");
             Checks.Require(!buyerGateway.TryDequeueReliable(out _),
                 "unexpected duplicate buyer frame after sold listing");
 
@@ -276,8 +298,8 @@ internal static class PlayerShopCoordinatorChecks
                     .WaitAsync(TimeSpan.FromSeconds(5));
                 Checks.Require(
                     results.Count(x=>x.Status==PlayerShopResultStatus.Applied)==1&&
-                    results.Count(x=>x.Status==PlayerShopResultStatus.NoShop)==buyerCount-1,
-                    "concurrent player-shop did not converge to one sale and nine closed listings");
+                    results.Count(x=>x.Status==PlayerShopResultStatus.Sold)==buyerCount-1,
+                    "concurrent player-shop did not converge to one sale and nine durable Sold receipts");
 
                 int winnerIndex=Array.FindIndex(
                     results,x=>x.Status==PlayerShopResultStatus.Applied);
@@ -431,6 +453,16 @@ internal static class PlayerShopCoordinatorChecks
         }
     }
 
+    private static PlayerShopSnapshotWire DrainSnapshot(GatewayConnection gateway)
+    {
+        PlayerShopSnapshotWire? snapshot=null;
+        Checks.Require(gateway.TryDequeueReliable(out var frame)&&
+            WireProtocol.TryDecodePlayerShopSnapshot(frame,out snapshot)&&
+            snapshot is not null,
+            "missing player-shop multi-listing snapshot");
+        return snapshot!;
+    }
+
     private static PlayerShopResultWire DrainResult(GatewayConnection gateway)
     {
         PlayerShopResultWire result=default;
@@ -449,15 +481,15 @@ internal static class PlayerShopCoordinatorChecks
 
     private static async Task<(long ItemUid,long DropId)> SeedItem(
         SqliteIdentityStore store,long generation,long characterId,
-        int definition,int quantity,int mapId,int x,int y)
+        int definition,int quantity,int mapId,int x,int y,int seed=1)
     {
         var drop=await store.CreateTrustedGroundDropAsync(new(
-            mapId,x,y,970001,
-            SqliteIdentityStore.ComposeLootDeathRevision(generation,1),
+            mapId,x,y,970000+seed,
+            SqliteIdentityStore.ComposeLootDeathRevision(generation,seed),
             0,definition,quantity,LootSourceTrust.SyntheticTest,
             "synthetic:player-shop-coordinator"));
         var grant=await store.ClaimGroundDropAsync(
-            new TrustedPickupContext(characterId,700,1,1,mapId,x,y),drop.DropId);
+            new TrustedPickupContext(characterId,700+seed,1,1,mapId,x,y),drop.DropId);
         Checks.Require(grant.Status==PickupStatus.Granted,
             "player-shop coordinator seed pickup failed");
         return(grant.ItemUid,drop.DropId);

@@ -224,7 +224,9 @@ var pending_player_shop_listing_id := 0
 var pending_player_shop_item_uid := 0
 var pending_player_shop_price := 0
 var player_shop_own_listing := {}
+var player_shop_own_listings := {}
 var player_shop_inspected := {}
+var player_shop_inspected_listings := {}
 var player_shop_wallet := 0
 var last_player_shop_result_sequence := 0
 var last_player_shop_result_status := -1
@@ -1188,6 +1190,8 @@ func apply_frame(frame: PackedByteArray) -> bool:
 			return _apply_player_shop_result(frame)
 		WireCodec.OPCODE_PLAYER_SHOP_SOLD:
 			return _apply_player_shop_sold(frame)
+		WireCodec.OPCODE_PLAYER_SHOP_SNAPSHOT:
+			return _apply_player_shop_snapshot(frame)
 		WireCodec.OPCODE_CHAT_DELIVERY:
 			return _apply_chat_delivery(frame)
 		WireCodec.OPCODE_WHISPER_RESULT:
@@ -1460,7 +1464,9 @@ func snapshot() -> Dictionary:
 		"pending_player_shop_item_uid": pending_player_shop_item_uid,
 		"pending_player_shop_price": pending_player_shop_price,
 		"player_shop_own_listing": player_shop_own_listing.duplicate(true),
+		"player_shop_own_listings": player_shop_own_listings.duplicate(true),
 		"player_shop_inspected": player_shop_inspected.duplicate(true),
+		"player_shop_inspected_listings": player_shop_inspected_listings.duplicate(true),
 		"player_shop_wallet": player_shop_wallet,
 		"last_player_shop_result_sequence": last_player_shop_result_sequence,
 		"last_player_shop_result_status": last_player_shop_result_status,
@@ -2882,6 +2888,7 @@ func _apply_entity_despawn(frame: PackedByteArray) -> bool:
 		int(player_shop_inspected.get("seller_actor_id",0))==id
 	):
 		player_shop_inspected.clear()
+		player_shop_inspected_listings.clear()
 	last_aoi_tick = maxi(last_aoi_tick, int(value.server_tick))
 	return true
 
@@ -3815,7 +3822,9 @@ func _clear_player_shop_map()->void:
 	player_shop_sequence=0
 	_clear_player_shop_pending()
 	player_shop_own_listing.clear()
+	player_shop_own_listings.clear()
 	player_shop_inspected.clear()
+	player_shop_inspected_listings.clear()
 	player_shop_wallet=0
 	last_player_shop_result_sequence=0
 	last_player_shop_result_status=-1
@@ -3834,6 +3843,49 @@ func _player_shop_item_from_result(value:Dictionary)->Dictionary:
 		"durability_raw":int(value.durability_raw),
 		"enhancement_level":int(value.enhancement_level)
 	}
+
+
+func _player_shop_first(listings:Dictionary)->Dictionary:
+	if listings.is_empty():
+		return {}
+	var ids:Array=listings.keys()
+	ids.sort()
+	return (listings[ids[0]] as Dictionary).duplicate(true)
+
+
+func _apply_player_shop_snapshot(frame:PackedByteArray)->bool:
+	if state!=STATE_IN_WORLD:
+		return fail("player_shop_snapshot_out_of_state")
+	var value:=WireCodec.decode_player_shop_snapshot(frame)
+	if value.is_empty():
+		return fail("invalid_player_shop_snapshot")
+	var epoch:=int(value.map_epoch)
+	var sequence:=int(value.shop_sequence)
+	var seller:=int(value.seller_actor_id)
+	if epoch<map_epoch:
+		stale_player_shop_frames+=1
+		return true
+	if epoch>map_epoch:
+		return fail("future_player_shop_snapshot")
+	if (
+		pending_player_shop_action!=3 or sequence!=pending_player_shop_sequence or
+		seller!=pending_player_shop_seller_actor_id
+	):
+		return fail("player_shop_snapshot_without_matching_inspect")
+	var next_listings:={}
+	var seen_uids:={}
+	for raw in value.listings:
+		var listing:Dictionary=raw
+		var listing_id:=int(listing.listing_id)
+		var uid:=int(listing.item_uid)
+		if next_listings.has(listing_id) or seen_uids.has(uid):
+			return fail("player_shop_snapshot_duplicate_listing")
+		next_listings[listing_id]=listing.duplicate(true)
+		seen_uids[uid]=true
+	player_shop_inspected_listings=next_listings
+	player_shop_inspected=_player_shop_first(player_shop_inspected_listings)
+	player_shop_wallet=int(value.buyer_wallet)
+	return true
 
 
 func _apply_player_shop_result(frame:PackedByteArray)->bool:
@@ -3890,13 +3942,15 @@ func _apply_player_shop_result(frame:PackedByteArray)->bool:
 				int(owned.get("enhancement_level",0))!=int(value.enhancement_level)
 			):
 				return fail("player_shop_open_item_snapshot_mismatch")
-			player_shop_own_listing=value.duplicate(true)
+			player_shop_own_listings[int(value.listing_id)]=value.duplicate(true)
+			player_shop_own_listing=_player_shop_first(player_shop_own_listings)
 			player_shop_wallet=int(value.seller_wallet)
-		elif status not in [6,7,8]:
+		elif status not in [6,7,8,16]:
 			return fail("player_shop_open_unhandled_status")
 	elif action==2:
 		if status in [0,1,2,13]:
-			player_shop_own_listing.clear()
+			player_shop_own_listings.erase(pending_player_shop_listing_id)
+			player_shop_own_listing=_player_shop_first(player_shop_own_listings)
 		elif status not in [4,5,15]:
 			return fail("player_shop_close_unhandled_status")
 	elif action==3:
@@ -3909,8 +3963,11 @@ func _apply_player_shop_result(frame:PackedByteArray)->bool:
 			):
 				return fail("player_shop_inspect_empty_listing")
 			player_shop_inspected=value.duplicate(true)
+			if player_shop_inspected_listings.is_empty():
+				player_shop_inspected_listings[int(value.listing_id)]=value.duplicate(true)
 		elif status in [2,3,12,13,14]:
 			player_shop_inspected.clear()
+			player_shop_inspected_listings.clear()
 		elif status not in [4,5,15]:
 			return fail("player_shop_inspect_unhandled_status")
 	else:
@@ -3937,9 +3994,14 @@ func _apply_player_shop_result(frame:PackedByteArray)->bool:
 				):
 					return fail("player_shop_buy_replay_uid_conflict")
 			player_shop_wallet=int(value.buyer_wallet)
+			player_shop_inspected_listings.erase(int(value.listing_id))
+			player_shop_inspected=_player_shop_first(player_shop_inspected_listings)
+		elif status in [2,12,13,14]:
+			player_shop_inspected_listings.erase(pending_player_shop_listing_id)
+			player_shop_inspected=_player_shop_first(player_shop_inspected_listings)
+		elif status==3:
 			player_shop_inspected.clear()
-		elif status in [2,3,12,13,14]:
-			player_shop_inspected.clear()
+			player_shop_inspected_listings.clear()
 		elif status not in [4,5,8,9,10,11,15]:
 			return fail("player_shop_buy_unhandled_status")
 
@@ -3966,15 +4028,13 @@ func _apply_player_shop_sold(frame:PackedByteArray)->bool:
 	if listing==last_player_shop_sold_listing_id:
 		stale_player_shop_frames+=1
 		return true
-	if (
-		player_shop_own_listing.is_empty() or
-		int(player_shop_own_listing.get("listing_id",0))!=listing
-	):
+	if not player_shop_own_listings.has(listing):
 		stale_player_shop_frames+=1
 		return true
+	var own:Dictionary=player_shop_own_listings[listing]
 	var uid:=int(value.item_uid)
 	if (
-		uid!=int(player_shop_own_listing.get("item_uid",0)) or
+		uid!=int(own.get("item_uid",0)) or
 		not inventory_ready or not inventory_items.has(uid)
 	):
 		return fail("player_shop_sold_inventory_mismatch")
@@ -3983,7 +4043,8 @@ func _apply_player_shop_sold(frame:PackedByteArray)->bool:
 	player_shop_wallet=int(value.seller_wallet)
 	last_player_shop_sold=value.duplicate(true)
 	last_player_shop_sold_listing_id=listing
-	player_shop_own_listing.clear()
+	player_shop_own_listings.erase(listing)
+	player_shop_own_listing=_player_shop_first(player_shop_own_listings)
 	return true
 
 

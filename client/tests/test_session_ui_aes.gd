@@ -1283,7 +1283,9 @@ func run() -> void:
 	panel._latest.player_shop_sequence = 0
 	panel._latest.pending_player_shop_sequence = 0
 	panel._latest.player_shop_own_listing = {}
+	panel._latest.player_shop_own_listings = {}
 	panel._latest.player_shop_inspected = {}
+	panel._latest.player_shop_inspected_listings = {}
 	panel._latest.player_shop_wallet = 100
 	panel._latest.last_player_shop_result_sequence = 0
 	panel._latest.last_player_shop_result_status = -1
@@ -1315,11 +1317,19 @@ func run() -> void:
 		"item_uid":10000,"item_definition_id":4001,"quantity":3,
 		"source_drop_id":501,"durability_raw":80,"price":300,
 		"enhancement_level":5}
+	panel._latest.player_shop_own_listings = {
+		91:(panel._latest.player_shop_own_listing as Dictionary).duplicate(true)}
 	panel._latest.player_shop_wallet = 100
 	panel._latest.last_player_shop_result = {"action":1,"status":0}
 	panel._update_player_shop_ui()
-	if panel.player_shop_panel.close_button.disabled or not panel.player_shop_panel.own_listing_label.text.contains("UID 10000") or not panel.player_shop_panel.own_listing_label.text.contains("+5") or not panel.player_shop_panel.open_button.disabled:
-		fail("Authoritative own player-shop listing/enhancement was not rendered")
+	if (
+		panel.player_shop_panel.close_button.disabled or
+		panel.player_shop_panel.own_listing_picker.item_count != 1 or
+		int(panel.player_shop_panel.own_listing_picker.get_item_metadata(0)) != 91 or
+		not panel.player_shop_panel.own_listing_picker.get_item_text(0).contains("+5") or
+		not panel.player_shop_panel.own_listing_label.text.contains("1 / 16")
+	):
+		fail("Authoritative multi-product own player-shop listing/enhancement was not rendered")
 		return
 	panel.player_shop_panel.close_button.pressed.emit()
 	if stub.player_shop_closes != 1 or stub.last_player_shop_listing != 91:
@@ -1327,6 +1337,7 @@ func run() -> void:
 		return
 
 	panel._latest.player_shop_own_listing = {}
+	panel._latest.player_shop_own_listings = {}
 	panel._latest.player_shop_sequence = 2
 	panel._latest.last_player_shop_result_sequence = 2
 	panel._latest.last_player_shop_result = {"action":2,"status":0}
@@ -1342,11 +1353,19 @@ func run() -> void:
 		"seller_actor_id":22,"listing_id":92,"item_uid":20000,
 		"item_definition_id":4002,"quantity":1,"source_drop_id":502,
 		"durability_raw":70,"price":300,"enhancement_level":7}
+	panel._latest.player_shop_inspected_listings = {
+		92:(panel._latest.player_shop_inspected as Dictionary).duplicate(true)}
 	panel._latest.player_shop_wallet = 700
 	panel._latest.last_player_shop_result = {"action":3,"status":0}
 	panel._update_player_shop_ui()
-	if panel.player_shop_panel.buy_button.disabled or not panel.player_shop_panel.inspected_listing_label.text.contains("UID 20000") or not panel.player_shop_panel.inspected_listing_label.text.contains("300") or not panel.player_shop_panel.inspected_listing_label.text.contains("+7"):
-		fail("Authoritative inspected player-shop listing/enhancement was not rendered")
+	if (
+		panel.player_shop_panel.buy_button.disabled or
+		panel.player_shop_panel.inspected_listing_picker.item_count != 1 or
+		int(panel.player_shop_panel.inspected_listing_picker.get_item_metadata(0)) != 92 or
+		not panel.player_shop_panel.inspected_listing_picker.get_item_text(0).contains("+7") or
+		not panel.player_shop_panel.inspected_listing_label.text.contains("1 件")
+	):
+		fail("Authoritative inspected multi-product player-shop listing/enhancement was not rendered")
 		return
 	panel.player_shop_panel.buy_button.pressed.emit()
 	if stub.player_shop_buys != 1 or stub.last_player_shop_seller != 22 or stub.last_player_shop_listing != 92:
@@ -1354,14 +1373,20 @@ func run() -> void:
 		return
 
 	panel._latest.player_shop_inspected = {}
+	panel._latest.player_shop_inspected_listings = {}
 	panel._latest.player_shop_own_listing = {}
+	panel._latest.player_shop_own_listings = {}
 	panel._latest.inventory_items.erase(10000)
 	panel._latest.player_shop_wallet = 400
 	panel._latest.last_player_shop_sold_listing_id = 91
 	panel._latest.last_player_shop_sold = {"buyer_actor_id":22,"item_uid":10000,"seller_wallet":400}
 	panel._update_player_shop_ui()
-	if not panel.player_shop_panel.status_label.text.contains("已由伺服器售出") or not panel.player_shop_panel.own_listing_label.text.ends_with("—") or int(panel._latest.player_shop_wallet) != 400:
-		fail("Player-shop sold push did not converge UI to authoritative wallet/listing")
+	if (
+		not panel.player_shop_panel.status_label.text.contains("已由伺服器售出") or
+		not panel.player_shop_panel.own_listing_label.text.contains("0 / 16") or
+		int(panel._latest.player_shop_wallet) != 400
+	):
+		fail("Player-shop sold push did not converge multi-product UI to authoritative wallet/listing")
 		return
 	# Nearby chat UI never locally echoes; only authoritative Server delivery
 	# populates the visible history.

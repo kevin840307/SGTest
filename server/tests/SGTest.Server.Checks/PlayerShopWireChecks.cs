@@ -44,6 +44,30 @@ internal static class PlayerShopWireChecks
             WireProtocol.TryDecodePlayerShopResult(resultFrame,out var decodedResult)&&
             decodedResult==result,"player-shop result wire mismatch");
 
+        var snapshot=new PlayerShopSnapshotWire(
+            3,3,77,750,
+            [
+                new(91,7001,5101,2,501,80,250,6),
+                new(92,7002,5102,1,502,-1,125,0)
+            ]);
+        var snapshotFrame=WireProtocol.EncodePlayerShopSnapshot(snapshot);
+        Checks.Require(
+            snapshotFrame.Length==
+                WireProtocol.PlayerShopSnapshotHeaderBytes+
+                2*WireProtocol.PlayerShopListingBytes&&
+            WireProtocol.TryDecodePlayerShopSnapshot(snapshotFrame,out var decodedSnapshot)&&
+            decodedSnapshot is not null&&
+            decodedSnapshot.MapEpoch==3&&decodedSnapshot.ShopSequence==3&&
+            decodedSnapshot.SellerActorId==77&&decodedSnapshot.BuyerWallet==750&&
+            decodedSnapshot.Listings.Count==2&&
+            decodedSnapshot.Listings[0]==snapshot.Listings[0]&&
+            decodedSnapshot.Listings[1]==snapshot.Listings[1],
+            "player-shop multi-listing snapshot wire mismatch");
+        var corruptSnapshot=(byte[])snapshotFrame.Clone();
+        corruptSnapshot[36]=3;
+        Checks.Require(!WireProtocol.TryDecodePlayerShopSnapshot(corruptSnapshot,out _),
+            "player-shop snapshot admitted mismatched listing count");
+
         var sold=new PlayerShopSoldWire(3,91,77,7001,1250);
         var soldFrame=WireProtocol.EncodePlayerShopSold(sold);
         Checks.Require(soldFrame.Length==WireProtocol.PlayerShopSoldFrameBytes&&

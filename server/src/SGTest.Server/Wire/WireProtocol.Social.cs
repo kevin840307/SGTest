@@ -307,7 +307,7 @@ public static partial class WireProtocol
     private static bool ValidPlayerShopResult(PlayerShopResultWire value)=>
         value.MapEpoch>0&&value.ShopSequence>0&&
         value.Action is >=PlayerShopCommandAction.Open and <=PlayerShopCommandAction.Buy&&
-        (byte)value.Status<=15&&
+        (byte)value.Status<=16&&
         value.SellerActorId>=0&&value.ListingId>=0&&value.ItemUid>=0&&
         value.ItemDefinitionId is >=0 and <=100_000_000&&
         value.Quantity is >=0 and <=1_000_000&&value.SourceDropId>=0&&
@@ -315,6 +315,85 @@ public static partial class WireProtocol
         value.Price>=0&&value.Price<=SqliteIdentityStore.MaximumMoney&&
         value.SellerWallet>=0&&value.SellerWallet<=SqliteIdentityStore.MaximumMoney&&
         value.BuyerWallet>=0&&value.BuyerWallet<=SqliteIdentityStore.MaximumMoney;
+
+    public static byte[] EncodePlayerShopSnapshot(PlayerShopSnapshotWire value)
+    {
+        ArgumentNullException.ThrowIfNull(value);
+        if(value.MapEpoch<=0||value.ShopSequence==0||value.SellerActorId<=0||
+           value.BuyerWallet<0||value.BuyerWallet>SqliteIdentityStore.MaximumMoney||
+           value.Listings is null||
+           value.Listings.Count>SqliteIdentityStore.PlayerShopMaximumActiveListings)
+            throw new ArgumentOutOfRangeException(nameof(value));
+        int size=PlayerShopSnapshotHeaderBytes+value.Listings.Count*PlayerShopListingBytes;
+        var frame=NewFrame(WireOpcode.PlayerShopSnapshot,size);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(8,8),value.MapEpoch);
+        BinaryPrimitives.WriteUInt32LittleEndian(frame.AsSpan(16,4),value.ShopSequence);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(20,8),value.SellerActorId);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(28,8),value.BuyerWallet);
+        frame[36]=checked((byte)value.Listings.Count);
+        int offset=37;
+        foreach(var listing in value.Listings)
+        {
+            if(!ValidPlayerShopListing(listing))
+                throw new ArgumentOutOfRangeException(nameof(value));
+            BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(offset,8),listing.ListingId);
+            BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(offset+8,8),listing.ItemUid);
+            BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(offset+16,4),listing.ItemDefinitionId);
+            BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(offset+20,4),listing.Quantity);
+            BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(offset+24,8),listing.SourceDropId);
+            BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(offset+32,4),listing.DurabilityRaw);
+            BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(offset+36,8),listing.Price);
+            frame[offset+44]=checked((byte)listing.EnhancementLevel);
+            offset+=PlayerShopListingBytes;
+        }
+        return frame;
+    }
+
+    public static bool TryDecodePlayerShopSnapshot(
+        ReadOnlySpan<byte> frame,out PlayerShopSnapshotWire? value)
+    {
+        value=null;
+        if(!TryReadHeader(frame,out var h)||h.Opcode!=WireOpcode.PlayerShopSnapshot||
+           frame.Length<PlayerShopSnapshotHeaderBytes||
+           (frame.Length-PlayerShopSnapshotHeaderBytes)%PlayerShopListingBytes!=0)
+            return false;
+        long epoch=BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(8,8));
+        uint sequence=BinaryPrimitives.ReadUInt32LittleEndian(frame.Slice(16,4));
+        long seller=BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(20,8));
+        long wallet=BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(28,8));
+        int count=frame[36];
+        if(epoch<=0||sequence==0||seller<=0||wallet<0||
+           wallet>SqliteIdentityStore.MaximumMoney||
+           count>SqliteIdentityStore.PlayerShopMaximumActiveListings||
+           frame.Length!=PlayerShopSnapshotHeaderBytes+count*PlayerShopListingBytes)
+            return false;
+        var listings=new List<PlayerShopListingWire>(count);
+        int offset=37;
+        for(int i=0;i<count;i++,offset+=PlayerShopListingBytes)
+        {
+            var listing=new PlayerShopListingWire(
+                BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(offset,8)),
+                BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(offset+8,8)),
+                BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(offset+16,4)),
+                BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(offset+20,4)),
+                BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(offset+24,8)),
+                BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(offset+32,4)),
+                BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(offset+36,8)),
+                frame[offset+44]);
+            if(!ValidPlayerShopListing(listing))return false;
+            listings.Add(listing);
+        }
+        value=new(epoch,sequence,seller,wallet,listings);
+        return true;
+    }
+
+    private static bool ValidPlayerShopListing(PlayerShopListingWire value)=>
+        value.ListingId>0&&value.ItemUid>0&&
+        value.ItemDefinitionId is >=1 and <=100_000_000&&
+        value.Quantity is >=1 and <=1_000_000&&
+        value.SourceDropId>=0&&value.DurabilityRaw>=-1&&
+        value.Price is >=1 and <=SqliteIdentityStore.MaximumMoney&&
+        value.EnhancementLevel is >=0 and <=255;
 
     public static byte[] EncodePlayerShopSold(PlayerShopSoldWire value)
     {

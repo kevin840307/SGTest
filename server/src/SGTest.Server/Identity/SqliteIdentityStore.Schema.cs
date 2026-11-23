@@ -638,9 +638,14 @@ CREATE TABLE IF NOT EXISTS player_shop_listings (
     created_unix_ms INTEGER NOT NULL,
     updated_unix_ms INTEGER NOT NULL
 );",tx);
-            Execute(connection,@"
+            if(schemaVersion<37)
+                Execute(connection,@"
 CREATE UNIQUE INDEX IF NOT EXISTS ux_player_shop_active_seller
 ON player_shop_listings(seller_character_id) WHERE state=0;",tx);
+            else
+                Execute(connection,@"
+CREATE INDEX IF NOT EXISTS ix_player_shop_active_seller
+ON player_shop_listings(seller_character_id,listing_id) WHERE state=0;",tx);
             Execute(connection,@"
 CREATE UNIQUE INDEX IF NOT EXISTS ux_player_shop_active_item
 ON player_shop_listings(item_uid) WHERE state=0;",tx);
@@ -918,6 +923,16 @@ ON mecha_instances(character_id) WHERE is_mounted=1;",tx);
     created_unix_ms INTEGER NOT NULL,
     PRIMARY KEY(character_id,connection_generation,map_epoch,action_sequence)
 );",tx);
+            // Schema v37: a player stall may contain multiple active ItemUid
+            // listings. The 16-row runtime bound is an SGTest safety limit, not
+            // a claim about the HK original capacity. Item UID uniqueness stays
+            // enforced so one physical instance cannot be offered twice.
+            if(schemaVersion<37)
+            {
+                Execute(connection,@"DROP INDEX IF EXISTS ux_player_shop_active_seller;",tx);
+                Execute(connection,@"CREATE INDEX IF NOT EXISTS ix_player_shop_active_seller
+ON player_shop_listings(seller_character_id,listing_id) WHERE state=0;",tx);
+            }
             if (schemaVersion < SchemaVersion)
                 Execute(connection,
                     $"UPDATE schema_version SET version={SchemaVersion};", tx);
