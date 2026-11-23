@@ -4880,6 +4880,18 @@ func _apply_mecha_result(frame:PackedByteArray)->bool:
 	var status:=int(value.status)
 	if status<0 or status>15:
 		return fail("mecha_result_unknown_status")
+	if int(value.action)==6 and status==0:
+		var item_uid:=int(value.item_uid)
+		var remaining:=int(value.remaining_quantity)
+		if item_uid<=0 or remaining<0 or not inventory_items.has(item_uid):
+			return fail("mecha_charge_inventory_result_invalid")
+		if remaining==0:
+			inventory_items.erase(item_uid)
+		else:
+			var updated:Dictionary=inventory_items[item_uid].duplicate(true)
+			updated["quantity"]=remaining
+			inventory_items[item_uid]=updated
+		inventory_revision+=1
 	last_mecha_result_sequence=sequence
 	last_mecha_result_status=status
 	last_mecha_result=value.duplicate(true)

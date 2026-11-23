@@ -37,7 +37,30 @@ internal static class MechaLoginFixture
                 characterId,7002,level:7,experience:1234)
                 .ConfigureAwait(false);
 
-            var mechas=new MechaCoordinator(store);
+            string batteryManifest=Path.Combine(root,"verified-mecha-battery.json");
+            File.WriteAllText(batteryManifest,System.Text.Json.JsonSerializer.Serialize(new
+            {
+                kind="verified_mecha_battery_rules",version=1,
+                rules_verified=true,gameplay_ready=true,
+                source_reference="ci:synthetic-battery-rule-not-hk",
+                rules=new[]{new{mecha_definition_id=7001,battery_item_definition_id=7701,
+                    capacity=100,charge_amount=40,allow_while_mounted=false}}
+            }));
+            var batteryRules=MechaBatteryCatalog.LoadVerified(batteryManifest);
+            long generation=await store.AllocateLootWorldGenerationAsync().ConfigureAwait(false);
+            var batteryDrop=await store.CreateTrustedGroundDropAsync(new(
+                15,24,24,9701,
+                SqliteIdentityStore.ComposeLootDeathRevision(generation,1),
+                0,7701,1,LootSourceTrust.SyntheticTest,"mecha-battery-e2e"))
+                .ConfigureAwait(false);
+            var batteryGrant=await store.ClaimGroundDropAsync(new TrustedPickupContext(
+                characterId,SqliteIdentityStore.ComposePickupConnectionEpoch(generation,1),
+                1,1,15,24,24),batteryDrop.DropId).ConfigureAwait(false);
+            if(batteryGrant.Status!=PickupStatus.Granted||batteryGrant.ItemUid<=0)
+                throw new InvalidOperationException("mecha battery fixture seed failed");
+            long batteryUid=batteryGrant.ItemUid;
+
+            var mechas=new MechaCoordinator(store,null,batteryRules);
             var router=new WorldResultRouter();
             var pump=new WorldAoiPump(router);
             var authorization=new IdentitySessionAuthorization(
@@ -54,7 +77,7 @@ internal static class MechaLoginFixture
                 int port=((IPEndPoint)listener.LocalEndpoint).Port;
                 Console.WriteLine(
                     $"MECHA_FIXTURE_READY port={port} username={Program.Username} " +
-                    $"character={characterId} mecha_a={mechaA} mecha_b={mechaB}");
+                    $"character={characterId} mecha_a={mechaA} mecha_b={mechaB} battery_uid={batteryUid}");
                 Console.Out.Flush();
 
                 AesWireConnectionResult firstEnded;
@@ -70,12 +93,15 @@ internal static class MechaLoginFixture
                 var afterMount=await store.GetMechasAsync(characterId)
                     .ConfigureAwait(false);
                 var mountedAfter=afterMount.SingleOrDefault(x=>x.IsMounted);
+                var inventoryAfterFirst=await store.ListInventoryItemsAsync(characterId)
+                    .ConfigureAwait(false);
                 if(mountedAfter?.MechaUid!=mechaA||
                    mountedAfter.DefinitionId!=7001||
                    mountedAfter.Level!=4||
-                   mountedAfter.Experience!=88||
+                   mountedAfter.Experience!=88||mountedAfter.BatteryCharge!=40||
                    !mountedAfter.PartsBlob.SequenceEqual(new byte[]{1,2,3})||
-                   firstEnded.CommandsAccepted!=2||
+                   inventoryAfterFirst.Any(x=>x.ItemUid==batteryUid)||
+                   firstEnded.CommandsAccepted!=3||
                    router.Statistics.ActiveSessions!=0)
                     throw new InvalidOperationException(
                         $"mecha mount/reconnect baseline mismatch mounted={mountedAfter?.MechaUid??0} " +
@@ -100,7 +126,7 @@ internal static class MechaLoginFixture
                 var secondMecha=final.Single(x=>x.MechaUid==mechaB);
                 if(final.Count!=2||final.Any(x=>x.IsMounted)||
                    firstMecha.DefinitionId!=7001||firstMecha.Level!=4||
-                   firstMecha.Experience!=88||
+                   firstMecha.Experience!=88||firstMecha.BatteryCharge!=40||
                    !firstMecha.PartsBlob.SequenceEqual(new byte[]{1,2,3})||
                    secondMecha.DefinitionId!=7002||secondMecha.Level!=7||
                    secondMecha.Experience!=1234||
@@ -113,7 +139,8 @@ internal static class MechaLoginFixture
 
                 Console.WriteLine(
                     $"MECHA_FIXTURE_PASS aes=true mecha_a={mechaA} mecha_b={mechaB} " +
-                    $"mount_persisted=true reconnect_restored=true dismount_persisted=true " +
+                    $"battery_charge=40 inventory_consumed=true mount_persisted=true " +
+                    $"reconnect_restored=true dismount_persisted=true " +
                     $"commands={firstEnded.CommandsAccepted}/{secondEnded.CommandsAccepted}");
                 Console.Out.Flush();
                 return 0;

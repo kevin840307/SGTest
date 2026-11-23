@@ -32,6 +32,25 @@ func _initialize() -> void:
 	if mecha_a<=0 or mecha_b<=0 or mecha_a==mecha_b or int(baseline.mounted_mecha_uid)!=0:
 		_fail("unexpected mecha roster "+str(baseline.get("mecha_instances",{})),first)
 		return
+	var battery_uid:=_find_inventory_item(baseline,7701)
+	if battery_uid<=0:
+		_fail("battery item missing from authoritative inventory",first)
+		return
+	if not first.mecha_charge(mecha_a,battery_uid):
+		_fail("charge intent refused",first)
+		return
+	var charged:=_wait(first,func(v):
+		var mechas:Dictionary=v.get("mecha_instances",{})
+		return (
+			int(v.get("pending_mecha_sequence",0))==0 and
+			int(v.get("last_mecha_result_sequence",0))==1 and
+			int(v.get("last_mecha_result_status",-1))==0 and
+			not v.get("inventory_items",{}).has(battery_uid) and
+			mechas.has(mecha_a) and int(mechas[mecha_a].get("battery_charge",0))==40
+		),7000)
+	if charged.is_empty():
+		_fail("charge settlement "+str(first.snapshot()),first)
+		return
 
 	if not first.mecha_mount(mecha_a):
 		_fail("mount intent refused",first)
@@ -39,7 +58,7 @@ func _initialize() -> void:
 	var mounted:=_wait(first,func(v):
 		return (
 			int(v.get("pending_mecha_sequence",0))==0 and
-			int(v.get("last_mecha_result_sequence",0))==1 and
+			int(v.get("last_mecha_result_sequence",0))==2 and
 			int(v.get("last_mecha_result_status",-1))==0 and
 			int(v.get("mounted_mecha_uid",0))==mecha_a
 		),7000)
@@ -61,6 +80,9 @@ func _initialize() -> void:
 	if _find_mecha(restored,7001,4,88)!=mecha_a or _find_mecha(restored,7002,7,1234)!=mecha_b:
 		_fail("relogin roster identity changed "+str(restored.get("mecha_instances",{})),second)
 		return
+	if int(restored.mecha_instances[mecha_a].get("battery_charge",0))!=40 or _find_inventory_item(restored,7701)!=0:
+		_fail("battery state or consumed inventory did not persist across reconnect",second)
+		return
 
 	if not second.mecha_dismount():
 		_fail("dismount intent refused",second)
@@ -77,7 +99,7 @@ func _initialize() -> void:
 		return
 
 	second.stop()
-	print("CLIENT_MECHA_AES_PASS mecha_a=%d mecha_b=%d mount=true reconnect_mounted=true dismount=true roster_identity=true" % [mecha_a,mecha_b])
+	print("CLIENT_MECHA_AES_PASS mecha_a=%d mecha_b=%d battery=true inventory_consumed=true mount=true reconnect_mounted=true dismount=true roster_identity=true" % [mecha_a,mecha_b])
 	quit(0)
 
 func _connect_world(port:int):
@@ -103,6 +125,7 @@ func _connect_world(port:int):
 			int(v.get("state",-1))==WorldState.STATE_IN_WORLD and
 			bool(v.get("world_ready",false)) and
 			bool(v.get("mecha_snapshot_received",false)) and
+			bool(v.get("inventory_ready",false)) and
 			int(v.get("pending_world_ready_ack_epoch",0))==0 and
 			int(v.get("last_world_ready_ack_epoch",0))==int(v.get("map_epoch",0)) and
 			v.get("mecha_instances",{}).size()==2
@@ -112,6 +135,14 @@ func _connect_world(port:int):
 		session.stop()
 		return null
 	return session
+
+func _find_inventory_item(snapshot:Dictionary, definition_id:int)->int:
+	var items:Dictionary=snapshot.get("inventory_items",{})
+	for raw_uid in items:
+		var item:Dictionary=items[raw_uid]
+		if int(item.get("item_definition_id",0))==definition_id:
+			return int(raw_uid)
+	return 0
 
 func _find_mecha(snapshot:Dictionary, definition_id:int, level:int, experience:int)->int:
 	var mechas:Dictionary=snapshot.get("mecha_instances",{})

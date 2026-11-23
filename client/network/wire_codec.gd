@@ -2872,25 +2872,32 @@ static func decode_mecha_result(frame:PackedByteArray)->Dictionary:
 	var item_uid:=reader.get_64()
 	var slot_id:=reader.get_u8()
 	var replaced_item_uid:=reader.get_64()
+	var remaining_quantity:=reader.get_32()
 	var equipment:=action==4 or action==5
 	var item_action:=equipment or action==6
 	if (
 		epoch<=0 or sequence<=0 or action<1 or action>6 or
 		status<0 or status>15 or mounted_uid<0 or slot_id>6 or
-		replaced_item_uid<0 or reader.get_available_bytes()!=0
+		replaced_item_uid<0 or remaining_quantity < -1 or remaining_quantity > 1000000000 or
+		reader.get_available_bytes()!=0
 	):
 		return {}
 	if action==3:
-		if mecha_uid!=0 or item_uid!=0 or slot_id!=0 or replaced_item_uid!=0:
+		if mecha_uid!=0 or item_uid!=0 or slot_id!=0 or replaced_item_uid!=0 or remaining_quantity!=-1:
 			return {}
 	elif mecha_uid<=0 or item_action!=(item_uid>0):
 		return {}
 	elif not equipment and (slot_id!=0 or replaced_item_uid!=0):
 		return {}
+	if action!=6 and remaining_quantity!=-1:
+		return {}
+	if action==6 and status==0 and remaining_quantity<0:
+		return {}
 	return {
 		"map_epoch":epoch,"mecha_sequence":sequence,"action":action,
 		"status":status,"mecha_uid":mecha_uid,"mounted_mecha_uid":mounted_uid,
-		"item_uid":item_uid,"slot_id":slot_id,"replaced_item_uid":replaced_item_uid
+		"item_uid":item_uid,"slot_id":slot_id,"replaced_item_uid":replaced_item_uid,
+		"remaining_quantity":remaining_quantity
 	}
 
 
