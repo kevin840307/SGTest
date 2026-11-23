@@ -30,6 +30,7 @@ from asset_converter.content.build_item_catalog import publish_item_catalog
 from asset_converter.content.build_pet_visual_evidence import publish_pet_visual_evidence
 from asset_converter.content.build_pet_runtime_catalog import publish_pet_runtime_catalog
 from asset_converter.content.build_pet_growth_curve import publish_pet_growth_curve
+from asset_converter.content.build_character_experience_rewards import publish_character_experience_rewards
 from asset_converter.content.skill_evidence import compile_skill_evidence
 from asset_converter.content.current_client_skill_evidence import compile_current_client_skill_evidence
 
@@ -407,6 +408,19 @@ def main() -> int:
     pet_growth.add_argument(
         '--source-reference',default='Old Server Dat/Player/Player_Up_Lv.csv',
         help='non-private provenance label')
+    character_exp = sub.add_parser(
+        'character-experience-rules',
+        help='compile audited Old Server per-map character EXP reward rules')
+    character_exp.add_argument('--server-dat',type=Path,required=True,
+                      help='Old Server Dat root containing Enemy and Map')
+    character_exp.add_argument('--map',dest='maps',action='append',type=int,required=True,
+                      help='map id to include; repeatable')
+    character_exp.add_argument('--output',type=Path,
+                      default=REPO/'local-assets/asset_converter/combat/character_experience_reward_rules.json')
+    character_exp.add_argument(
+        '--source-reference',
+        default='Old SGOEnemyDistSys LoadNewCSVData/AddAttr + Enemy_Data.csv + EN_AttXX.csv',
+        help='non-private provenance label')
     items = sub.add_parser('item-catalog',
                            help='compile source-derived item names from local converted Items/*.tres')
     items.add_argument('--items',type=Path,required=True,
@@ -435,6 +449,9 @@ def main() -> int:
         args.map_ids = sorted(selected_maps)
     if args.command == 'world-content' and args.output and (args.all_maps or len(args.map_ids) > 1 or args.include_map or args.include_population):
         ap.error('multiple maps, include-map and include-population use output-root, not a single output file')
+    if args.command == 'character-experience-rules':
+        if len(set(args.maps)) != len(args.maps) or any(not 1 <= n <= 65535 for n in args.maps):
+            ap.error('character EXP map IDs must be unique integers between 1 and 65535')
     try:
         with converter_operation(REPO/'.cache/asset_converter/operation.lock'):
             return _execute(args)
@@ -496,6 +513,15 @@ def _execute(args):
         try:
             result = publish_pet_growth_curve(
                 args.old_level_csv,args.output,
+                source_reference=args.source_reference)
+        except (OSError,ValueError,TypeError) as error:
+            result = {'status':'failed','error':str(error)}
+        print(json.dumps(result,ensure_ascii=False,indent=2),flush=True)
+        return 0 if result['status']=='pass' else 1
+    if args.command == 'character-experience-rules':
+        try:
+            result = publish_character_experience_rewards(
+                args.server_dat,args.output,set(args.maps),
                 source_reference=args.source_reference)
         except (OSError,ValueError,TypeError) as error:
             result = {'status':'failed','error':str(error)}
