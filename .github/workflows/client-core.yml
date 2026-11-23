@@ -64,6 +64,8 @@ jobs:
         run: .cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64 --headless --path client --script res://tests/test_pet_wire.gd
       - name: Godot Pet authoritative position presentation and generation reset
         run: .cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64 --headless --path client --script res://tests/test_pet_presentation.gd
+      - name: Godot Pet runtime visual catalog identity and fail-closed gate
+        run: .cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64 --headless --path client --script res://tests/test_pet_visual_catalog.gd
       - name: Godot authoritative pickup golden and one-time item UID reducer
         run: .cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64 --headless --path client --script res://tests/test_ground_pickup_wire.gd
       - name: Godot durable inventory login chunks and pickup UID merge

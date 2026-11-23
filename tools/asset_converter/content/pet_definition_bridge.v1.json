@@ -1,0 +1,103 @@
+{
+  "schema": "sgtest.pet_definition_bridge/v1",
+  "assignment": "sgtest_owned",
+  "source_reference": "HK Pet family identity bridge; SGTest DefinitionIds are independently assigned",
+  "mappings": [
+    {
+      "definition_id": 100001,
+      "source_pet_id": 5100
+    },
+    {
+      "definition_id": 100002,
+      "source_pet_id": 5101
+    },
+    {
+      "definition_id": 100003,
+      "source_pet_id": 5102
+    },
+    {
+      "definition_id": 100004,
+      "source_pet_id": 5103
+    },
+    {
+      "definition_id": 100005,
+      "source_pet_id": 5104
+    },
+    {
+      "definition_id": 100006,
+      "source_pet_id": 5105
+    },
+    {
+      "definition_id": 100007,
+      "source_pet_id": 5106
+    },
+    {
+      "definition_id": 100008,
+      "source_pet_id": 5107
+    },
+    {
+      "definition_id": 100009,
+      "source_pet_id": 5108
+    },
+    {
+      "definition_id": 100010,
+      "source_pet_id": 5109
+    },
+    {
+      "definition_id": 100011,
+      "source_pet_id": 5110
+    },
+    {
+      "definition_id": 100012,
+      "source_pet_id": 5111
+    },
+    {
+      "definition_id": 100013,
+      "source_pet_id": 5112
+    },
+    {
+      "definition_id": 100014,
+      "source_pet_id": 5113
+    },
+    {
+      "definition_id": 100015,
+      "source_pet_id": 5114
+    },
+    {
+      "definition_id": 100016,
+      "source_pet_id": 5115
+    },
+    {
+      "definition_id": 100017,
+      "source_pet_id": 5116
+    },
+    {
+      "definition_id": 100018,
+      "source_pet_id": 5117
+    },
+    {
+      "definition_id": 100019,
+      "source_pet_id": 5118
+    },
+    {
+      "definition_id": 100020,
+      "source_pet_id": 5119
+    },
+    {
+      "definition_id": 100021,
+      "source_pet_id": 5120
+    },
+    {
+      "definition_id": 100022,
+      "source_pet_id": 5121
+    },
+    {
+      "definition_id": 100023,
+      "source_pet_id": 5122
+    },
+    {
+      "definition_id": 100024,
+      "source_pet_id": 5123
+    }
+  ]
+}

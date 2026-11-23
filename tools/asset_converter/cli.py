@@ -28,6 +28,7 @@ from asset_converter.content.build_population import compile_population, compile
 from asset_converter.content.asset_paths import source_sprite_manifest
 from asset_converter.content.build_item_catalog import publish_item_catalog
 from asset_converter.content.build_pet_visual_evidence import publish_pet_visual_evidence
+from asset_converter.content.build_pet_runtime_catalog import publish_pet_runtime_catalog
 from asset_converter.content.skill_evidence import compile_skill_evidence
 from asset_converter.content.current_client_skill_evidence import compile_current_client_skill_evidence
 
@@ -384,6 +385,17 @@ def main() -> int:
                       default=REPO/'local-assets/asset_converter/pet/hk_pet_visual_evidence.json')
     pets.add_argument('--source-reference',default='HK SGO Item/petcli.ITD',
                       help='non-private provenance label')
+    pet_runtime = sub.add_parser('pet-runtime-catalog',
+                          help='bind SGTest Pet DefinitionIds to audited HK visual evidence and runtime atlases')
+    pet_runtime.add_argument('--evidence',type=Path,required=True,
+                      help='pet-visual-evidence JSON generated from HK petcli.ITD')
+    pet_runtime.add_argument('--bridge',type=Path,
+                      default=REPO/'tools/asset_converter/content/pet_definition_bridge.v1.json',
+                      help='explicit SGTest-owned DefinitionId to source PetID bridge')
+    pet_runtime.add_argument('--assets',type=Path,default=REPO/'client/assets',
+                      help='converted runtime assets root; all mapped Pet atlases must exist')
+    pet_runtime.add_argument('--output',type=Path,
+                      default=REPO/'client/assets/catalog/pet_visuals.json')
     items = sub.add_parser('item-catalog',
                            help='compile source-derived item names from local converted Items/*.tres')
     items.add_argument('--items',type=Path,required=True,
@@ -457,6 +469,14 @@ def _execute(args):
                 args.hk_petcli_itd,args.output,args.assets,
                 extracted_source=args.extracted_source,
                 source_reference=args.source_reference)
+        except (OSError,ValueError,TypeError) as error:
+            result = {'status':'failed','error':str(error)}
+        print(json.dumps(result,ensure_ascii=False,indent=2),flush=True)
+        return 0 if result['status']=='pass' else 1
+    if args.command == 'pet-runtime-catalog':
+        try:
+            result = publish_pet_runtime_catalog(
+                args.evidence,args.bridge,args.assets,args.output)
         except (OSError,ValueError,TypeError) as error:
             result = {'status':'failed','error':str(error)}
         print(json.dumps(result,ensure_ascii=False,indent=2),flush=True)

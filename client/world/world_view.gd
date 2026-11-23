@@ -12,6 +12,7 @@ const LocalMovement = preload("res://movement/local_movement.gd")
 const AppearanceProfile = preload("res://player/character_appearance_profile.gd")
 const Monsters = preload("res://monster/monster_presentation.gd")
 const Pets = preload("res://pet/pet_presentation.gd")
+const PetVisualCatalog = preload("res://pet/pet_visual_catalog.gd")
 const Npcs = preload("res://npc/npc_presentation.gd")
 const PvpNames = preload("res://pvp/pvp_name_presentation.gd")
 const Canvas = preload("res://world/world_canvas.gd")
@@ -35,6 +36,9 @@ var local_movement := LocalMovement.new()
 var _prediction_applied := false
 var monsters := Monsters.new()
 var pets := Pets.new()
+var pet_visual_catalog := PetVisualCatalog.new()
+var _pending_pet_assets: Dictionary = {}
+var _loaded_pet_assets: Dictionary = {}
 var npcs := Npcs.new()
 var pvp_names := PvpNames.new()
 var _player_snapshot := {}
@@ -67,9 +71,13 @@ func _ready() -> void:
 
 func open_pack(path: String) -> Error:
 	var error := store.open_pack(path)
-	if error == OK:
-		phase = "empty"
-	return error
+	if error != OK:
+		return error
+	var catalog_error := pet_visual_catalog.load_path("res://assets/catalog/pet_visuals.json")
+	if catalog_error not in [OK,ERR_FILE_NOT_FOUND]:
+		return catalog_error
+	phase = "empty"
+	return OK
 
 
 func request_map(id: int) -> Error:
@@ -136,7 +144,9 @@ func clear_map(retain_cache: bool = false) -> void:
 	local_movement.clear()
 	_prediction_applied = false
 	monsters.clear()
-	pets.clear_entities()
+	pets.clear()
+	_pending_pet_assets.clear()
+	_loaded_pet_assets.clear()
 	npcs.clear()
 	pvp_names.clear()
 	_player_snapshot = {}
@@ -305,10 +315,59 @@ func _pump_pending_player_profiles() -> Error:
 	return OK
 
 
+func _request_snapshot_pet_visuals(snapshot: Dictionary) -> Error:
+	if phase != "ready" or epoch <= 0 or pet_visual_catalog.definitions.is_empty():
+		return OK
+	for asset_id in pet_visual_catalog.asset_ids_for_snapshot(snapshot):
+		var id := str(asset_id)
+		if _loaded_pet_assets.has(id) or _pending_pet_assets.has(id):
+			continue
+		var error := store.acquire(&"world_view",epoch,id)
+		if error != OK:
+			return error
+		_pending_pet_assets[id] = true
+	return OK
+
+
+func _pump_pending_pet_visuals() -> Error:
+	if _pending_pet_assets.is_empty():
+		return OK
+	var additions := {}
+	for raw_id in _pending_pet_assets.keys():
+		var id := str(raw_id)
+		var asset: Dictionary = store.get_asset(&"world_view",epoch,id)
+		if asset.is_empty():
+			continue
+		additions[id] = asset
+	if additions.is_empty():
+		return OK
+	if draw_list.add_actor_assets(additions) != OK:
+		return ERR_INVALID_DATA
+	for id in additions:
+		_pending_pet_assets.erase(id)
+		_loaded_pet_assets[id] = true
+	var all_assets := {}
+	for raw_id in _loaded_pet_assets:
+		var id := str(raw_id)
+		var asset: Dictionary = store.get_asset(&"world_view",epoch,id)
+		if asset.is_empty():
+			return ERR_INVALID_DATA
+		all_assets[id] = asset
+	var definitions := pet_visual_catalog.definitions_for_assets(_loaded_pet_assets)
+	if pets.configure_visuals(definitions,all_assets) != OK:
+		return ERR_INVALID_DATA
+	_players_dirty = true
+	return OK
+
+
 func _process(_delta: float) -> void:
 	# Only presentation resource work runs here. Future network/reducer must
 	# have a separate owner/scheduler; this is never a world simulation tick.
 	store.pump(2)
+	if phase == "ready" and not _pending_pet_assets.is_empty():
+		if _pump_pending_pet_visuals() != OK:
+			_fail("寵物外觀素材資料無法顯示")
+			return
 	if phase == "ready" and not _pending_player_profiles.is_empty():
 		if _pump_pending_player_profiles() != OK:
 			_fail("角色外觀素材資料無法顯示")
@@ -405,6 +464,9 @@ func _process(_delta: float) -> void:
 				local_movement.observe(_player_snapshot)
 		_started_at = Time.get_ticks_msec()
 		phase = "ready"
+		if not _player_snapshot.is_empty() and _request_snapshot_pet_visuals(_player_snapshot) != OK:
+			_fail("寵物外觀素材載入失敗")
+			return
 		status_changed.emit("地圖 " + str(map_id) + "｜地圖檢視・尚未連線")
 	if phase == "ready":
 		_advance_local_visual(_delta)
@@ -569,6 +631,9 @@ func set_player_snapshot(snapshot: Dictionary) -> void:
 	if phase == "ready":
 		if _request_snapshot_profiles(snapshot) != OK:
 			_fail("角色外觀素材載入失敗")
+			return
+		if _request_snapshot_pet_visuals(snapshot) != OK:
+			_fail("寵物外觀素材載入失敗")
 			return
 		var now_usec := Time.get_ticks_usec()
 		if local_movement.ready:
