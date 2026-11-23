@@ -10,16 +10,50 @@ SGTest 的成功標準不是「程式很多、測試很多」，而是目前正�
 
 1. **Playable Main**：登入、人物外觀、移動、換圖、HP/MP、個人資料、核心 UI、戰鬥、基本多人必須真的可玩。
 2. **玩家 5 分鐘內能遇到的 P0/P1 問題**。
-3. **HK 核心 UI 忠實度**：登入、選角／創角、主 HUD、個人資料等玩家最先看到的 UI 不得長期停留在臨時／自創畫面。
-4. 資料一致性、Server Authority、持久化、重大同步問題。
-5. 新的大型玩法系統。
-6. HK 其餘 UI／數值／動畫／手感忠實度。
-7. 效能、記憶體、資源與長時間穩定性。
-8. 文件與研究整理。
+3. **目前正在做的單一玩家功能完整收斂**：功能邏輯 + Server Authority + Persistence + Client + HK UI + native 實機 + 原版 A/B（適用時）一起完成。
+4. **HK 核心 UI 忠實度**：登入、選角／創角、主 HUD、個人資料等玩家最先看到的 UI 不得長期停留在臨時／自創畫面。
+5. 資料一致性、Server Authority、持久化、重大同步問題。
+6. **只有目前功能完成閉環後，才能開始下一個功能。**
+7. HK 其餘 UI／數值／動畫／手感忠實度。
+8. 效能、記憶體、資源與長時間穩定性。
+9. 文件與研究整理。
 
 不得把 Server checks、protocol coverage、schema/class/file/commit 數量、headless/fixture/synthetic E2E PASS，或尚未真正可玩的 Pet／Mecha／Guild 等功能單獨當成玩家成果。
 
 **若使用者正常玩 5 分鐘就能發現明顯基礎問題，代表上一輪驗收失敗。核心玩家 Smoke 有失敗時，先修核心可玩性，不得優先擴新功能。**
+
+### 0.1 Single-Feature Closure Loop：功能 + UI 同步收斂，禁止發散
+
+**每次只鎖定一個玩家可觀察功能，完整做完後才進下一個。功能與 UI 是同一個交付物，不能拆成「先做功能、以後再補 HK UI」。**
+
+「單一功能」以玩家操作結果定義，不以程式模組大小定義。例如：Login、Character Select、Character Create、Character Profile / Attribute Allocation、Movement、Map Transition、Normal Attack、Skill Cast、Inventory、Equipment、NPC Shop、Pet Summon、Pet Equipment、Mecha Equip、Trade、Party、Friend、Stall、Quest、PvP。
+
+Pet、Mecha、Guild 這種大系統可以拆成多個玩家可觀察功能，但**不能同時開很多未收斂切片**。
+
+每個功能固定走完整閉環：
+
+1. **先看原版**：用 Paradise／HK `.lst`／Old／原版資料確認功能行為與 UI；能實機就先取得 800×600 截圖／錄影與操作流程。
+2. **定義完成條件**：列出正常流程、錯誤流程、Server Authority、Persistence、Multiplayer（適用時）、HK UI、A/B 要求。
+3. **Server / Data**：完成權威規則、資料、Persistence、交易／競態安全（適用時）。
+4. **Client / State**：完成 protocol、reducer、state ownership、錯誤處理。
+5. **HK UI 同輪完成**：同一功能的 Window／Panel／Button／Icon／文字／交互必須同步對齊 HK；不得先放 generic/debug/placeholder UI 就跳下一功能。
+6. **Targeted automated tests**：驗規則、protocol、persistence、edge cases。
+7. **Native Windows 真操作**：真 Server + 非 headless Godot，用滑鼠鍵盤完整操作該功能。
+8. **多人實測**：功能涉及其他玩家時，以至少兩個真 Client 實測。
+9. **原版 A/B**：可驗證項目做 Paradise/HK A/B；無法確認的精確原版差異才標 `NOT VERIFIED`。
+10. **回歸核心 Smoke**：確認本功能沒有破壞登入、人物、HP/MP、移動、換圖、個人資料與基本多人。
+11. **Feature Matrix / TODO / Commit / Push**：證據寫完、狀態正確、main 同步後才算本功能結束。
+12. **再選下一個功能**。
+
+禁止下列發散模式：
+
+- Login 還是臨時 UI，就跑去做 Pet／Guild。
+- Pet 裝備只有 Server/Protocol PASS、UI 還是 generic，就宣稱完成並開始 Mecha。
+- 同時開 Character Profile、Trade、Quest、PvP 四個半成品。
+- 因為某功能 UI 難做，就先建立另一套功能逃避收斂。
+- 用「之後統一做 Original UI」把每個功能的 HK UI 債務累積到最後。
+
+若只剩**目前確實無法取得的原版精確數值／素材證據**，可明確標 `NOT VERIFIED` 後繼續；但可實作的功能、UI、操作、持久化與多人部分不得藉此留半成品。
 
 ---
 
@@ -155,15 +189,18 @@ UI 不是「功能先做完，以後再換皮」。玩家從第一秒看到的�
 3. 判斷目前 `main` 的核心玩家 Smoke 是否可信。
 4. 有核心可玩 bug：先重現 → 找根因 → 修正 → targeted tests → native Windows 重驗。
 5. 有核心 HK UI 明顯偏離：依第 1 節優先修正，不得長期用 placeholder 當正式 UI。
-6. 核心 Smoke 全綠後，才選下一個最高價值的大型功能群。
-7. 開發中先跑 narrow targeted tests。
-8. 功能群完成後跑必要 integration / multiplayer / regression。
-9. 玩家可見 Client 變更強制跑 native Windows 實機。
-10. 需要時做 Paradise / HK / Old / SGOAuto A/B。
-11. 更新 TODO / Feature Matrix / 必要文件。
-12. Review diff。
-13. Commit / fetch / 安全整合 / push `main`。
-14. 驗證本機與 GitHub `main` 完全同步。
+6. 核心 Smoke 全綠後，只選 **一個玩家可觀察功能**，依 Single-Feature Closure Loop 鎖定範圍。
+7. 先取得該功能的原版行為 + HK UI 證據，再同輪完成 Server / Client / Persistence / UI。
+8. 開發中先跑 narrow targeted tests。
+9. 該功能完成後跑必要 integration / multiplayer / regression。
+10. 強制跑 native Windows 真操作；多人功能強制雙 Client。
+11. 做 Paradise / HK / Old / SGOAuto A/B；無法確認的精確原版差異標 `NOT VERIFIED`。
+12. 回歸核心 Smoke，確認沒有破壞既有可玩流程。
+13. 更新 TODO / Feature Matrix / 必要文件。
+14. Review diff。
+15. Commit / fetch / 安全整合 / push `main`。
+16. 驗證本機與 GitHub `main` 完全同步。
+17. **只有以上全部完成，才選下一個功能。**
 
 原版研究時間盒化。找不到可信規則／數值時：
 
