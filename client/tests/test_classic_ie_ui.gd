@@ -294,6 +294,16 @@ func _run() -> void:
 		if cell == null or cell.get_rect() != spec[1] or cell.text != spec[2]:
 			_fail("013_Character_INFO.ITF character row drift: %s"%str(spec[0]))
 			return
+	var profile_font = world._character_labels["智慧"].text_font as SystemFont
+	if (
+		world._character_labels["智慧"].font_size != 12 or
+		world._character_labels["智慧"].baseline != 10.0 or
+		profile_font == null or
+		profile_font.font_names != PackedStringArray(["新細明體"]) or
+		profile_font.font_weight != 500
+	):
+		_fail("HK character profile must use SGOClient GDI font geometry")
+		return
 	if world._character_hp_fill.get_rect() != Rect2(30,268,69,10) or world._character_mp_fill.get_rect() != Rect2(30,285,69,10):
 		_fail("013_Character_INFO.ITF HP and MP must fill from server ratios")
 		return

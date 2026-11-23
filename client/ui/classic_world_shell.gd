@@ -15,6 +15,8 @@ const SKILL_ROW_COUNT := 16
 class CharacterText extends Control:
 	var centered := false
 	var font_size := 12
+	var baseline := 10.0
+	var text_font: Font
 	var text := "":
 		set(value):
 			if text != value:
@@ -23,13 +25,15 @@ class CharacterText extends Control:
 
 	func _draw() -> void:
 		var alignment := HORIZONTAL_ALIGNMENT_CENTER if centered else HORIZONTAL_ALIGNMENT_LEFT
-		draw_string(get_theme_default_font(),Vector2(0,size.y-2),text,alignment,int(size.x),font_size,Color.WHITE)
+		var draw_font := text_font if text_font != null else get_theme_default_font()
+		draw_string(draw_font,Vector2(0,baseline),text,alignment,int(size.x),font_size,Color.WHITE)
 
 var _panel
 var _stats:Dictionary={}
 var _active:=false
 var _last_view:=Vector2.ZERO
 var _photos:=Photos.new()
+var _character_font:=SystemFont.new()
 
 var stage:=Control.new()
 var hud:=Control.new()
@@ -109,6 +113,10 @@ func _init()->void:
 	hud.name="ClassicHud"
 	hud.size=BASE_SIZE
 	hud.mouse_filter=Control.MOUSE_FILTER_PASS
+	# HK SGOClient.exe creates the shared GDI UI font as 新細明體,
+	# lfHeight=12 and lfWeight=500. Local GDI metrics resolve to a 10px ascent.
+	_character_font.font_names=PackedStringArray(["新細明體"])
+	_character_font.font_weight=500
 	_build_hud()
 	_build_inventory()
 	_build_character()
@@ -467,7 +475,9 @@ func _character_text(node_name:String,rect:Rect2,value:String,centered:bool)->Ch
 	label.clip_contents=true
 	label.mouse_filter=Control.MOUSE_FILTER_IGNORE
 	label.centered=centered
-	label.font_size=int(rect.size.y)
+	label.text_font=_character_font
+	label.font_size=12
+	label.baseline=10.0
 	label.text=value
 	character.add_child(label)
 	return label
