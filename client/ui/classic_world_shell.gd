@@ -704,11 +704,12 @@ func apply_snapshot(snapshot:Dictionary)->void:
 	_refresh_dialog()
 
 func _refresh_hud()->void:
-	var hp:=int(_stats.get("player_current_hp",0));var hpmax:=maxi(1,int(_stats.get("player_max_hp",0)))
-	var mp:=int(_stats.get("player_current_mp",0));var mpmax:=maxi(1,int(_stats.get("player_max_mp",0)))
-	_level_label.text=str(int(_stats.get("player_level",0)))
-	_hp_label.text="%d / %d"%[hp,hpmax]
-	_mp_label.text="%d / %d"%[mp,mpmax]
+	var profile_ready:=bool(_stats.get("player_profile_ready",false))
+	var hp:=int(_stats.get("player_current_hp",0));var hpmax:=int(_stats.get("player_max_hp",0))
+	var mp:=int(_stats.get("player_current_mp",0));var mpmax:=int(_stats.get("player_max_mp",0))
+	_level_label.text=str(int(_stats.get("player_level",0))) if profile_ready else "—"
+	_hp_label.text="%d / %d"%[hp,hpmax] if hpmax>0 else "—"
+	_mp_label.text="%d / %d"%[mp,mpmax] if hpmax>0 else "—"
 
 func _clear_rows(box:Container)->void:
 	for child in box.get_children():
@@ -908,6 +909,7 @@ func _classic_item_action(uid:int,item_id:int,equipped:=false)->void:
 
 func _refresh_character()->void:
 	var profile_ready:=bool(_stats.get("player_profile_ready",false))
+	var creation_profile_ready:=bool(_stats.get("player_creation_profile_ready",profile_ready))
 	_refresh_character_vital_fill(_character_hp_fill,"hp")
 	_refresh_character_vital_fill(_character_mp_fill,"mp")
 	var values={
@@ -915,10 +917,16 @@ func _refresh_character()->void:
 		"HP":_character_vital("hp"),"MP":_character_vital("mp"),
 		"金錢":str(_stats.get("wallet",_stats.get("player_money","—"))),
 	}
+	if creation_profile_ready:
+		var creation_fields: Dictionary = {
+			"力量":"player_strength","速度":"player_dexterity",
+			"體質":"player_constitution","智慧":"player_wisdom"
+		}
+		for field in creation_fields:
+			values[field]=str(_stats.get(creation_fields[field],"—"))
 	if profile_ready:
 		var fields: Dictionary = {
-			"等級":"player_level","職業":"player_job","力量":"player_strength","速度":"player_dexterity",
-			"體質":"player_constitution","智慧":"player_wisdom","攻擊":"player_attack",
+			"等級":"player_level","職業":"player_job","攻擊":"player_attack",
 			"防禦":"player_defense","命中":"player_hit","迴避":"player_dodge"
 		}
 		for field in fields:

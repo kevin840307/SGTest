@@ -416,6 +416,49 @@ internal static class IdentitySessionAuthorizationChecks
                 choose.MapId==80 && choose.X==8 && choose.Y==8,
                 "correct secondary password did not enter configured spawn");
 
+            bool sawCreationProfile=false;
+            var seenBaselineOpcodes=new List<ushort>();
+            using var baselineTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+            try
+            {
+                for(int i=0;i<16 && !sawCreationProfile;i++)
+                {
+                    var frame=await ReadFrameAsync(tls,baselineTimeout.Token);
+                    ushort rawOpcode=BinaryPrimitives.ReadUInt16LittleEndian(frame.AsSpan(6,2));
+                    seenBaselineOpcodes.Add(rawOpcode);
+                    if(!WireProtocol.TryDecodePlayerCreationProfileState(
+                        frame,out var creationProfile))
+                    {
+                        if(rawOpcode==(ushort)WireOpcode.PlayerCreationProfileState)
+                        {
+                            bool headerOk=WireProtocol.TryReadHeader(frame,out var decodedHeader);
+                            throw new InvalidOperationException(
+                                "creation profile decoder rejected wire frame: len="+frame.Length+
+                                " advertised="+BinaryPrimitives.ReadInt32LittleEndian(frame.AsSpan(0,4))+
+                                " headerOk="+headerOk+
+                                " headerOpcode="+(headerOk ? ((ushort)decodedHeader.Opcode).ToString() : "n/a")+
+                                " hex="+Convert.ToHexString(frame));
+                        }
+                        continue;
+                    }
+                    Checks.Require(creationProfile.CharacterId==created.CharacterId &&
+                        creationProfile.Strength==3 &&
+                        creationProfile.Dexterity==2 &&
+                        creationProfile.Constitution==2 &&
+                        creationProfile.Wisdom==1,
+                        "fresh character creation profile baseline did not match persisted authority");
+                    sawCreationProfile=true;
+                }
+            }
+            catch(OperationCanceledException)
+            {
+                throw new InvalidOperationException(
+                    "fresh character creation profile baseline timed out; opcodes="+
+                    string.Join(",",seenBaselineOpcodes));
+            }
+            Checks.Require(sawCreationProfile,
+                "fresh character did not receive creation profile baseline during authorization");
+
             await tls.DisposeAsync();
             client.Dispose();
             await serverTask.WaitAsync(TimeSpan.FromSeconds(2));
@@ -1105,16 +1148,18 @@ internal static class IdentitySessionAuthorizationChecks
         return (tls, serverTask, client);
     }
 
-    private static async Task<byte[]> ReadFrameAsync(AesCbcFrameStream tls)
+    private static async Task<byte[]> ReadFrameAsync(
+        AesCbcFrameStream tls, CancellationToken cancellationToken = default)
     {
         byte[] header = new byte[WireProtocol.HeaderBytes];
-        await tls.ReadExactlyAsync(header);
+        await tls.ReadExactlyAsync(header, cancellationToken);
         int length = BinaryPrimitives.ReadInt32LittleEndian(header.AsSpan(0, 4));
         Checks.Require(length >= WireProtocol.HeaderBytes && length <= WireProtocol.MaximumFrameBytes,
             "test client received invalid frame length");
         byte[] frame = new byte[length];
         header.CopyTo(frame, 0);
-        if (length > header.Length) await tls.ReadExactlyAsync(frame.AsMemory(header.Length));
+        if (length > header.Length)
+            await tls.ReadExactlyAsync(frame.AsMemory(header.Length), cancellationToken);
         return frame;
     }
 

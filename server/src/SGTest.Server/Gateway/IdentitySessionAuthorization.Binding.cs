@@ -471,9 +471,21 @@ public sealed partial class IdentitySessionAuthorization
                         cancellationToken).ConfigureAwait(false);
             }
 
-            // Additive self-only profile baseline is emitted after all legacy
-            // inventory/skill/equipment baselines, preserving their historical
-            // ordering while still arriving before WorldReady/AOI publication.
+            // Creation attributes are independently authoritative and persisted
+            // even before source-verified combat derivation exists. Emit them as
+            // a narrow self-only baseline instead of fabricating HP/MP/combat data.
+            if (character.Creation is not null)
+            {
+                var creation = character.Creation.Attributes;
+                await WriteFrameAsync(tls, WireProtocol.EncodePlayerCreationProfileState(new(
+                    snapshot.ActorId, creation.Strength, creation.Dexterity,
+                    creation.Constitution, creation.Wisdom)),
+                    cancellationToken).ConfigureAwait(false);
+            }
+
+            // Additive full profile baseline is emitted after the creation baseline.
+            // It remains restricted to trusted combat data and supersedes the same
+            // four attributes without inventing level/HP/MP/combat values.
             if (combat is not null)
             {
                 await WriteFrameAsync(tls, WireProtocol.EncodePlayerProfileState(new(

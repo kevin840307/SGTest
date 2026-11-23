@@ -85,6 +85,7 @@ var player_max_hp := 0
 var player_current_mp := 0
 var player_max_mp := 0
 var player_profile_ready := false
+var player_creation_profile_ready := false
 var player_race := 0
 var player_career := 0
 var player_level := 0
@@ -1223,6 +1224,8 @@ func apply_frame(frame: PackedByteArray) -> bool:
 			return _apply_player_combat_state(frame)
 		WireCodec.OPCODE_PLAYER_PROFILE_STATE:
 			return _apply_player_profile_state(frame)
+		WireCodec.OPCODE_PLAYER_CREATION_PROFILE_STATE:
+			return _apply_player_creation_profile_state(frame)
 		WireCodec.OPCODE_PLAYER_DAMAGE:
 			return _apply_player_damage(frame)
 		WireCodec.OPCODE_PLAYER_RESPAWN_RESULT:
@@ -1430,6 +1433,7 @@ func snapshot() -> Dictionary:
 		"player_current_mp": player_current_mp,
 		"player_max_mp": player_max_mp,
 		"player_profile_ready": player_profile_ready,
+		"player_creation_profile_ready": player_creation_profile_ready,
 		"player_race": player_race,
 		"player_career": player_career,
 		"player_job": player_career,
@@ -1947,6 +1951,7 @@ func _reset_character_actions_and_combat() -> void:
 	player_current_mp = 0
 	player_max_mp = 0
 	player_profile_ready = false
+	player_creation_profile_ready = false
 	player_race = 0
 	player_career = 0
 	player_level = 0
@@ -2328,6 +2333,21 @@ func _apply_player_combat_state(frame: PackedByteArray) -> bool:
 	last_player_damage.clear()
 	return true
 
+func _apply_player_creation_profile_state(frame: PackedByteArray) -> bool:
+	if state != STATE_IN_WORLD:
+		return fail("player_creation_profile_state_out_of_state")
+	var value := WireCodec.decode_player_creation_profile_state(frame)
+	if value.is_empty():
+		return fail("invalid_player_creation_profile_state")
+	if int(value.character_id) != actor_id:
+		return fail("player_creation_profile_state_wrong_character")
+	player_creation_profile_ready = true
+	player_strength = int(value.strength)
+	player_dexterity = int(value.dexterity)
+	player_constitution = int(value.constitution)
+	player_wisdom = int(value.wisdom)
+	return true
+
 func _apply_player_profile_state(frame: PackedByteArray) -> bool:
 	if state != STATE_IN_WORLD:
 		return fail("player_profile_state_out_of_state")
@@ -2337,6 +2357,7 @@ func _apply_player_profile_state(frame: PackedByteArray) -> bool:
 	if int(value.character_id) != actor_id:
 		return fail("player_profile_state_wrong_character")
 	player_profile_ready = true
+	player_creation_profile_ready = true
 	player_race = int(value.race)
 	player_career = int(value.career)
 	player_level = int(value.level)

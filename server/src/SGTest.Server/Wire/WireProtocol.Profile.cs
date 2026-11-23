@@ -69,4 +69,46 @@ public static partial class WireProtocol
             return false;
         }
     }
+
+    public static byte[] EncodePlayerCreationProfileState(PlayerCreationProfileStateWire value)
+    {
+        if (value.CharacterId <= 0 || value.Strength < 1 || value.Dexterity < 1 ||
+            value.Constitution < 1 || value.Wisdom < 1)
+            throw new ArgumentOutOfRangeException(nameof(value));
+
+        var frame = NewFrame(
+            WireOpcode.PlayerCreationProfileState, PlayerCreationProfileStateFrameBytes);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(8,8), value.CharacterId);
+        BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(16,4), value.Strength);
+        BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(20,4), value.Dexterity);
+        BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(24,4), value.Constitution);
+        BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(28,4), value.Wisdom);
+        return frame;
+    }
+
+    public static bool TryDecodePlayerCreationProfileState(
+        ReadOnlySpan<byte> frame, out PlayerCreationProfileStateWire value)
+    {
+        value = default;
+        if (!TryReadHeader(frame, out var header) ||
+            header.Opcode != WireOpcode.PlayerCreationProfileState ||
+            frame.Length != PlayerCreationProfileStateFrameBytes)
+            return false;
+        value = new(
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(8,8)),
+            BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(16,4)),
+            BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(20,4)),
+            BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(24,4)),
+            BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(28,4)));
+        try
+        {
+            _ = EncodePlayerCreationProfileState(value);
+            return true;
+        }
+        catch (ArgumentOutOfRangeException)
+        {
+            value = default;
+            return false;
+        }
+    }
 }

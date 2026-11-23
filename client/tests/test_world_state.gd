@@ -13,6 +13,7 @@ const READY := "2D0000000100140001000000000000002A000000000000000B00000000000000
 const EMPTY_LIST := "0900000001000C0000"
 const CREATE_RESULT := "1B000000010010000021000000000000000007004E65774865726F"
 const CREATED_LIST := "1B00000001000C000121000000000000000007004E65774865726F"
+const CREATION_PROFILE := "20000000010086000B0000000000000002000000020000000200000002000000"
 const PROFILE := "44000000010085000B0000000000000002000000030000000400000040E2010000000000050000000600000007000000080000005A00000050000000460000003C000000"
 const COMBAT := "200000000100070001000000000000003C000000640000001E00000028000000"
 
@@ -118,6 +119,15 @@ func _initialize() -> void:
 		return
 	if world.mark_move_sent(1):
 		_fail("move escaped WorldReady gate")
+		return
+	if not world.apply_frame(CREATION_PROFILE.hex_decode()):
+		_fail("authoritative creation profile baseline rejected")
+		return
+	var creation_profile_snapshot:=world.snapshot()
+	if not bool(creation_profile_snapshot.player_creation_profile_ready) or bool(creation_profile_snapshot.player_profile_ready) or \
+		int(creation_profile_snapshot.player_strength)!=2 or int(creation_profile_snapshot.player_dexterity)!=2 or \
+		int(creation_profile_snapshot.player_constitution)!=2 or int(creation_profile_snapshot.player_wisdom)!=2:
+		_fail("creation profile did not expose only persisted starting attributes: "+str(creation_profile_snapshot))
 		return
 	if not world.apply_frame(PROFILE.hex_decode()):
 		_fail("authoritative player profile baseline rejected")
