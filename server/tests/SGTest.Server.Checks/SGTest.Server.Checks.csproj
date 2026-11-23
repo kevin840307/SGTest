@@ -9,4 +9,13 @@
   <ItemGroup>
     <ProjectReference Include="../../src/SGTest.Server/SGTest.Server.csproj" />
   </ItemGroup>
+  <!-- IdentityAdminChecks launches a Host child process. Build a fresh test-only
+       Host beside the checks output so a running production/local Host cannot lock
+       or stale the binary used by this suite. -->
+  <Target Name="BuildChecksHostFixture" BeforeTargets="Build">
+    <MSBuild Projects="../../host/SGTest.Server.Host/SGTest.Server.Host.csproj"
+             Targets="Build"
+             BuildInParallel="false"
+             Properties="Configuration=$(Configuration);OutputPath=$(MSBuildProjectDirectory)\bin\$(Configuration)\$(TargetFramework)\host-fixture\" />
+  </Target>
 </Project>

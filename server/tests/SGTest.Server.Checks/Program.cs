@@ -13,10 +13,9 @@ static class Checks
     {
         string? custom = Environment.GetEnvironmentVariable("SGTEST_CHECKS_HOST_DLL");
         if (!string.IsNullOrWhiteSpace(custom)) return Path.GetFullPath(custom);
-        string repository = AppContext.BaseDirectory;
-        while (!Directory.Exists(Path.Combine(repository, "server", "host")))
-            repository = Directory.GetParent(repository)?.FullName ?? throw new Exception("Host build not found");
-        return Path.Combine(repository,"server/host/SGTest.Server.Host/bin/Release/net8.0/SGTest.Server.Host.dll");
+        string fixture = Path.Combine(AppContext.BaseDirectory, "host-fixture", "SGTest.Server.Host.dll");
+        if (File.Exists(fixture)) return fixture;
+        throw new Exception("Checks Host fixture was not built: " + fixture);
     }
 
     internal static void Require(bool condition, string name)
