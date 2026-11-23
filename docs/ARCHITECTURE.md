@@ -125,6 +125,7 @@ client/
   map/                      # 地形、建物、遮擋
   player/                   # 角色呈現
   monster/                  # 怪物呈現
+  mecha/                    # 機甲 roster／裝備／電池的權威狀態操作面板；世界 visual 仍待原版證據
   pvp/                      # PvP 名稱呈現、選人攻擊、GM 名稱操作面板
   inventory/                # 背包與裝備面板
   npc/                      # NPC 服務：銀行、商店、倉庫、修理、強化的獨立 UI 面板
@@ -150,6 +151,7 @@ server/
     Inventory/              # 已驗證的掉落撿取／裝備穿脫／UID 丟棄命令
     Npc/                    # NPC 互動與經濟／裝備修改命令結算入口
     Monster/                # 怪物模擬與戰利品協調
+    Mecha/                  # 機甲 roster/mount/equipment/battery coordinator；Identity 擁有 durable SQLite 交易
     Combat/                 # 傷害／HP、復活與恢復道具可靠結算
     Skill/                  # 技能規則、MP 驗證及施放命令
     Pvp/                    # PvP 政策／模式、GM 名稱狀態及玩家戰鬥命令
