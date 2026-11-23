@@ -251,6 +251,69 @@ HK 忠實度同時包含 **外觀 + 行為 + 時序 + 狀態切換**。每個 UI
 
 **優先修原圖與文字共用的布局／縮放／座標根因，之後才做特例微調。只補字、不修位置、只用自動測試判 PASS，均屬未完成。**
 
+#### 1.6.1 字型 + 文字幾何必須與原版一致（P1 硬性 Gate）
+
+**「字有出現」不算完成；「位置差不多」也不算完成。只要原版證據存在，字型外觀與文字幾何都必須以 HK／可驗證原版為準，不能自行選一個相似字體或靠肉眼大概移到附近。**
+
+每個玩家可見文字元件都要視為正式 UI 元件，至少核對並記錄：
+
+- font family / face / 原始字型來源
+- font size
+- weight / bold 狀態
+- glyph fallback 與繁中 glyph 實際來源
+- letter spacing / tracking
+- line height
+- baseline
+- ascent / descent（需要時）
+- text rect 的 `x / y / width / height`
+- horizontal / vertical alignment
+- outline / shadow 的寬度、offset、alpha
+- 顏色與 disabled / selected / hover 等狀態色
+- clipping / ellipsis / wrap
+- input placeholder
+- caret 位置與高度
+- selection highlight
+- password mask glyph
+- 數字欄位與動態文字更新後的 anchor / alignment
+
+原版字型／文字證據的優先來源：
+
+1. **HK `.lst`**：追 font 建立／選取、文字繪製函式、control/text ID、draw rect、x/y、baseline、format flag、color、shadow/outline 等。
+2. **Paradise 既有截圖**：`C:\\SGO\\SGO Paradise\\program\\ScreenShot`。先搜尋是否已有相同畫面／狀態可直接量測；這是原版 UI、字型外觀、文字框、baseline、欄位間距的重要 A/B 證據。
+3. **Paradise 真實 Client**：`C:\\SGO\\SGO Paradise\\program\\client.exe`。既有 ScreenShot 沒有需要的狀態時，Agent 已獲准自行啟動原版 Client、登入、操作到等價 UI 狀態，以 **800×600** 擷取新的參考畫面；不得因缺截圖就跳過字體／文字位置驗收。
+4. HK `Data1_PNG2` / `Data1_PNG` / `Data1.dat` / SPR：確認底圖是否已烘焙文字、文字槽位、透明邊、frame origin 與實際可用區域。
+5. Paradise 與 HK 有版本差異時，以 HK `.lst` / Data1 / HK 素材證據為最高權威，Paradise 只作可操作參照並註明差異。
+
+**字型不可猜。** 若目前只能確認「看起來像某字體」而沒有可信 font family/face 或 glyph raster 證據：
+
+- 狀態必須是 `NOT VERIFIED`
+- 不得因字寬近似就標 HK 1:1
+- 不得用 Arial、Noto、Microsoft JhengHei、系統預設字體或其他「相似字體」直接替代後宣稱完成
+- 若原版字型檔只能作本機授權研究，可在本機驗證／載入，但不得把 private/proprietary font 檔提交 public Git，也不得將字型檔作為交付物散布
+- 若最終必須 fallback，Feature Matrix / TODO 必須記錄「原版 font 未確認／fallback 使用中」及可見差異
+
+**文字位置不可猜。** 所有位置都以原版 **800×600 原始像素座標** 為基準，先修共同座標系，再調文字。禁止：
+
+- 每個 Label 個別加 `+2/-3 px` 之類無證據 magic offset 來掩蓋父節點／Container／DPI／trim 問題
+- 用 Godot Container 自動排版後只看「差不多」
+- 底圖換成原版 PNG，但保留舊自創 UI 的 Label 座標
+- 只校準左上角，不校準 baseline、文字框寬高與右／中對齊
+- 靜態文字對了，但 HP/MP、EXP、角色名、數字變長後就漂移
+- screenshot 看起來接近，但 hitbox／input field／caret 與文字槽不同步
+
+**驗收方法固定：**
+
+1. 先從 `ScreenShot` 搜現有原版參考；不足時自行啟動 Paradise `client.exe` 補取相同 UI state。
+2. 固定原版與 SGTest 都使用 800×600。
+3. 對每個文字元件記錄原版 `rect(x,y,w,h)`、baseline、font evidence，以及 SGTest 實際 rect。
+4. 做 crop / 透明疊圖 / pixel diff；必要時以字框、baseline guide 線輔助。
+5. 靜態、hover、pressed、disabled、focus、輸入、數值變更、長短字串、關閉重開都要驗。
+6. 800×600 有可信原版座標時，以 **文字 anchor / baseline / control rect 原始像素 ±1 px** 為目標；超出或肉眼可見偏移直接 `TEST FAILED / IN PROGRESS`。
+7. 字型 family/face/size/weight 或 raster 明顯不同，即使 x/y 正確也不能 `VERIFIED / COMPLETE`。
+8. 800×600 PASS 後再測 4:3 / 16:9 / 16:10 / DPI，文字相對原版面板不可因 anchor、stretch、Container 而漂移。
+
+**核心 UI 特別嚴格**：登入、選角／創角、主 HUD、人物資料／屬性、背包／裝備只要有字體不符或文字錯位，就列為 P1 UI regression；不得以「功能可用」跳到下一功能。
+
 ---
 
 ## 2. 唯一正式程式碼與 Main-Only Git
@@ -559,9 +622,17 @@ Old 與 HK 不一定同版。結論分 `CONFIRMED` / `INFERRED` / `UNKNOWN`，�
 
 ### Paradise 舊版實機 — 原版遊戲實機測試第一優先
 
+原版可執行 Client：
+
 `C:\SGO\SGO Paradise\program\client.exe`
 
-**需要測原版遊戲時，優先直接啟動這個 client.exe，以真滑鼠鍵盤操作；不要先以其他版本、Recovered2、靜態圖片或 headless 模擬取代。** 原版 Client 用來取得畫面、流程、座標、文字與行為 A/B；SGTest 仍須獨立以正式 Godot Client／Server 真實操作驗收。Paradise 無法驗的版本差異改從 HK `.lst` / Data1 素材與其他可信資料補證，不得以 Paradise 為 HK 版本唯一權威。
+原版既有截圖目錄：
+
+`C:\SGO\SGO Paradise\program\ScreenShot`
+
+**做 UI／字型／文字位置／行為 A/B 時，先主動搜尋 `ScreenShot` 是否已有目標畫面；已有就直接作為字型外觀、文字 rect、baseline、欄位間距、按鈕與面板位置的參考證據。既有截圖缺少所需 UI state 時，不要停在「沒有參考圖」：Agent 已獲准自行啟動 `client.exe`，用真滑鼠鍵盤登入並操作到等價狀態，在 800×600 補取截圖／錄影，再與 SGTest 做 overlay/diff。**
+
+**需要測原版遊戲時，優先直接啟動這個 client.exe，以真滑鼠鍵盤操作；不要先以其他版本、Recovered2、headless 模擬或憑印象重建取代。** 原版 Client 用來取得畫面、流程、座標、字型、文字 baseline/rect 與行為 A/B；SGTest 仍須獨立以正式 Godot Client／Server 真實操作驗收。Paradise 無法驗的版本差異改從 HK `.lst` / Data1 素材與其他可信資料補證，不得以 Paradise 為 HK 版本唯一權威。
 
 **帳號／密碼／第二密碼已於下方提供，直接使用已知測試資料；不要再向使用者重複詢問。** 只在經授權的本機測試環境輸入，不輸出到 log、報告或 Git 提交。
 
@@ -981,22 +1052,24 @@ Server 負責權威數值與交易一致性。
 
 1. 核心 Smoke 無已知失敗。
 2. 核心登入／選角／HUD／人物資料的 HK UI 狀態沒有被錯標完成。
-3. Targeted tests PASS。
-4. 必要 integration / multiplayer / regression PASS。
-5. 玩家可見變更已跑 native Windows Client。
-6. 多人相關已用雙 Client。
-7. 動態 UI／動畫／移動有連續觀察。
-8. 可比原版的功能已 A/B，否則明確 `NOT VERIFIED`。
-9. Godot / Server 無本輪新增重大 error。
-10. TODO / Feature Matrix / 必要文件更新。
-11. Diff review 完成。
-12. branch = `main`。
-13. fetch 後安全整合其他新成果。
-14. push `origin/main`。
-15. 本機 HEAD = `origin/main`。
-16. `main...origin/main` = `0 0`。
-17. 本 Session 暫存 Git branch/worktree/clone 已清。
-18. 其他 Session dirty WIP 未被破壞。
+3. 玩家可見文字已完成 **font + text geometry Gate**：有原版證據時 font family/face/size/weight、baseline、text rect、alignment、outline/shadow 與 800×600 原始座標均已 A/B；任何字體不符或文字錯位仍是 `TEST FAILED / IN PROGRESS`，不能交付成 `VERIFIED / COMPLETE`。
+4. UI／文字 A/B 已先查 `C:\SGO\SGO Paradise\program\ScreenShot`；缺少所需畫面時已自行啟動 `C:\SGO\SGO Paradise\program\client.exe` 取得相同狀態的 800×600 原版參考，或明確標 `NOT VERIFIED`。
+5. Targeted tests PASS。
+6. 必要 integration / multiplayer / regression PASS。
+7. 玩家可見變更已跑 native Windows Client。
+8. 多人相關已用雙 Client。
+9. 動態 UI／動畫／移動有連續觀察。
+10. 可比原版的功能已 A/B，否則明確 `NOT VERIFIED`。
+11. Godot / Server 無本輪新增重大 error。
+12. TODO / Feature Matrix / 必要文件更新。
+13. Diff review 完成。
+14. branch = `main`。
+15. fetch 後安全整合其他新成果。
+16. push `origin/main`。
+17. 本機 HEAD = `origin/main`。
+18. `main...origin/main` = `0 0`。
+19. 本 Session 暫存 Git branch/worktree/clone 已清。
+20. 其他 Session dirty WIP 未被破壞。
 
 ---
 
