@@ -49,9 +49,8 @@ public sealed class MonsterPopulation
 }
 
 /// <summary>
-/// Runtime monster content gate. The existing converter v3 population intentionally
-/// says stats_verified=false/gameplay_ready=false and MUST NOT become combat input.
-/// Only an explicitly verified v4 runtime document can cross this boundary.
+/// Runtime monster content gate. Converter v3 visual data can share the map
+/// directory, but only explicitly verified v4 data can create monster actors.
 /// </summary>
 public static class MonsterPopulationCatalog
 {
@@ -61,7 +60,16 @@ public static class MonsterPopulationCatalog
         string path,
         int expectedMapId,
         BlockingGrid blocking,
-        int maxSpawns = 10_000)
+        int maxSpawns = 10_000) =>
+        Load(path, expectedMapId, blocking, maxSpawns, allowVisualOnly: false)!;
+
+    public static MonsterPopulation? LoadForWorld(
+        string path, int expectedMapId, BlockingGrid blocking) =>
+        Load(path, expectedMapId, blocking, 10_000, allowVisualOnly: true);
+
+    private static MonsterPopulation? Load(
+        string path, int expectedMapId, BlockingGrid blocking, int maxSpawns,
+        bool allowVisualOnly)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
         ArgumentNullException.ThrowIfNull(blocking);
@@ -84,6 +92,23 @@ public static class MonsterPopulationCatalog
             AllowTrailingCommas = false
         });
         var root = document.RootElement;
+        if (allowVisualOnly && root.ValueKind == JsonValueKind.Object &&
+            ReadInt(root, "version") == 3 &&
+            ReadInt(root, "map_id") == expectedMapId &&
+            ReadString(root, "kind") == "visual_spawn_content")
+        {
+            Require(root, "stats_verified", JsonValueKind.False);
+            Require(root, "gameplay_ready", JsonValueKind.False);
+            Require(root, "spawns", JsonValueKind.Array);
+            foreach (var definition in Require(root, "definitions", JsonValueKind.Array).EnumerateArray())
+            {
+                if (definition.ValueKind != JsonValueKind.Object)
+                    throw new InvalidDataException("Visual monster definition must be an object");
+                Require(definition, "stats_verified", JsonValueKind.False);
+                Require(definition, "stats", JsonValueKind.Null);
+            }
+            return null;
+        }
         if (root.ValueKind != JsonValueKind.Object ||
             ReadInt(root, "version") != 4 ||
             ReadInt(root, "map_id") != expectedMapId ||

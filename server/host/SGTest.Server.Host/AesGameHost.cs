@@ -113,10 +113,10 @@ internal static class AesGameHost
                     root, "maps", map.MapId.ToString(), "population.json");
                 if (!File.Exists(populationPath))
                     continue;
-                MonsterPopulation population;
+                MonsterPopulation? population;
                 try
                 {
-                    population = MonsterPopulationCatalog.LoadVerified(
+                    population = MonsterPopulationCatalog.LoadForWorld(
                         populationPath, map.MapId, map);
                 }
                 catch (InvalidDataException error)
@@ -125,7 +125,7 @@ internal static class AesGameHost
                         $"Map {map.MapId} monster population is not verified gameplay content: {error.Message}",
                         error);
                 }
-                if (population.Spawns.Count > 0)
+                if (population is not null && population.Spawns.Count > 0)
                     monsterRuntimes.Add(new MonsterRuntime(map, population));
             }
             string? skillManifest=options.GetValueOrDefault("--skill-rules");

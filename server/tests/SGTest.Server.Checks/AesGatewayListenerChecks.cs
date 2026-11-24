@@ -620,7 +620,7 @@ internal static class AesGatewayListenerChecks
                 npcs = Array.Empty<object>()
             }));
         }
-                string hostDll = Checks.HostAssemblyPath();
+        string hostDll = Checks.HostAssemblyPath();
         async Task<(int Exit, string Out, string Error)> Run(params string[] args)
         {
             var start = new ProcessStartInfo("dotnet") { RedirectStandardOutput = true,
@@ -651,6 +651,33 @@ internal static class AesGatewayListenerChecks
             valid.Out.Contains("\"auth_lockout_seconds\":19") &&
             valid.Out.Contains("\"ActiveConnections\":0"),
             "serve startup/configurable auth policy failed: " + valid.Error);
+
+        string populationPath = Path.Combine(content, "maps", "13", "population.json");
+        var visualPopulation = new
+        {
+            version = 3, map_id = 13, kind = "visual_spawn_content",
+            stats_verified = false, gameplay_ready = false,
+            definitions = new[] { new { id = 1, stats_verified = false, stats = (object?)null } },
+            spawns = new[] { new { source_index = 0, definition = 1, p = new[] { 24, 24 } } }
+        };
+        File.WriteAllText(populationPath, JsonSerializer.Serialize(visualPopulation));
+        var visualOnly = await Run("serve", "--content", content, "--identity",
+            Path.Combine(content, "identity.db"), "--port", "0", "--seconds", "1");
+        Checks.Require(visualOnly.Exit == 0 && visualOnly.Out.Contains("AES_HOST_READY") &&
+            visualOnly.Out.Contains("\"monster_maps\":[]") && visualOnly.Out.Contains("\"monsters\":0"),
+            "converter visual population must permit startup without spawning monsters: " + visualOnly.Error);
+
+        File.WriteAllText(populationPath, JsonSerializer.Serialize(visualPopulation with
+        {
+            version = 4, kind = "verified_monster_runtime"
+        }));
+        var unverifiedPopulation = await Run("serve", "--content", content, "--identity",
+            Path.Combine(content, "identity.db"), "--port", "0", "--seconds", "1");
+        Checks.Require(unverifiedPopulation.Exit != 0 && !unverifiedPopulation.Out.Contains("AES_HOST_READY") &&
+            unverifiedPopulation.Error.Contains("Map 13 monster population is not verified"),
+            "unverified gameplay population must fail startup");
+        File.Delete(populationPath);
+
         // Runtime startup must explicitly opt into manually audited recovery
         // data. A client-derived name or unverified .tres never enables heals.
         string rules=Path.Combine(content,"recovery-verified.json");
