@@ -11,12 +11,18 @@ const PRIVATE := "res://ui/private_ie_hk2"
 const BASE_SIZE := Vector2(800,600)
 const ITEM_ROW_COUNT := 17
 const SKILL_ROW_COUNT := 16
+const HK_SHARED_FONT_FACE := "新細明體"
+const HK_SHARED_FONT_HEIGHT := 12
+const HK_SHARED_FONT_WEIGHT := 500
+const HK_SHARED_FONT_BASELINE := 10.0
+const HK_SHARED_FONT_BITMAP := PRIVATE + "/HK_SHARED_UI_FONT.fnt"
 
 class CharacterText extends Control:
 	var centered := false
 	var font_size := 12
 	var baseline := 10.0
 	var text_font: Font
+	var raster_font: Font
 	var text := "":
 		set(value):
 			if text != value:
@@ -25,7 +31,7 @@ class CharacterText extends Control:
 
 	func _draw() -> void:
 		var alignment := HORIZONTAL_ALIGNMENT_CENTER if centered else HORIZONTAL_ALIGNMENT_LEFT
-		var draw_font := text_font if text_font != null else get_theme_default_font()
+		var draw_font := raster_font if raster_font != null else (text_font if text_font != null else get_theme_default_font())
 		draw_string(draw_font,Vector2(0,baseline),text,alignment,int(size.x),font_size,Color.WHITE)
 
 var _panel
@@ -34,6 +40,7 @@ var _active:=false
 var _last_view:=Vector2.ZERO
 var _photos:=Photos.new()
 var _character_font:=SystemFont.new()
+var _character_raster_font:Font
 
 var stage:=Control.new()
 var hud:=Control.new()
@@ -100,6 +107,17 @@ var _dialog_choices:=VBoxContainer.new()
 var _dialog_key:=""
 var _settings_picker:=OptionButton.new()
 
+func _make_character_raster_font()->Font:
+	# Target-HK shared text renderer: sub_4E92A9 passes the CP950 face bytes
+	# for 新細明體 with height 12 / weight 500 into sub_561330, which creates
+	# the GDI font and DIB used by the original text path. The ignored private
+	# BMFont is generated locally from that renderer and is never committed.
+	if FileAccess.file_exists(HK_SHARED_FONT_BITMAP):
+		var bitmap:=FontFile.new()
+		if bitmap.load_bitmap_font(HK_SHARED_FONT_BITMAP)==OK:
+			return bitmap
+	return _character_font
+
 func _init()->void:
 	name="ClassicWorldShell"
 	mouse_filter=Control.MOUSE_FILTER_IGNORE
@@ -114,9 +132,11 @@ func _init()->void:
 	hud.size=BASE_SIZE
 	hud.mouse_filter=Control.MOUSE_FILTER_PASS
 	# HK SGOClient.exe creates the shared GDI UI font as 新細明體,
-	# lfHeight=12 and lfWeight=500. Local GDI metrics resolve to a 10px ascent.
-	_character_font.font_names=PackedStringArray(["新細明體"])
-	_character_font.font_weight=500
+	# lfHeight=12 and lfWeight=500. Keep the SystemFont metadata as a safe
+	# fallback, but render through the local GDI-generated BMFont when present.
+	_character_font.font_names=PackedStringArray([HK_SHARED_FONT_FACE])
+	_character_font.font_weight=HK_SHARED_FONT_WEIGHT
+	_character_raster_font=_make_character_raster_font()
 	_build_hud()
 	_build_inventory()
 	_build_character()
@@ -476,8 +496,9 @@ func _character_text(node_name:String,rect:Rect2,value:String,centered:bool)->Ch
 	label.mouse_filter=Control.MOUSE_FILTER_IGNORE
 	label.centered=centered
 	label.text_font=_character_font
-	label.font_size=12
-	label.baseline=10.0
+	label.raster_font=_character_raster_font
+	label.font_size=HK_SHARED_FONT_HEIGHT
+	label.baseline=HK_SHARED_FONT_BASELINE
 	label.text=value
 	character.add_child(label)
 	return label

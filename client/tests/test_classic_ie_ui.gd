@@ -92,6 +92,23 @@ func _run() -> void:
 			str(shell._login_account_label.position),str(shell._login_password_label.position),
 			str(shell._login_confirm_label.position),str(shell._login_exit_label.position)])
 		return
+	shell._username.grab_focus()
+	await process_frame
+	var login_tab := InputEventKey.new()
+	login_tab.keycode = KEY_TAB
+	login_tab.physical_keycode = KEY_TAB
+	login_tab.pressed = true
+	Input.parse_input_event(login_tab)
+	await process_frame
+	login_tab.pressed = false
+	Input.parse_input_event(login_tab)
+	await process_frame
+	if root.gui_get_focus_owner() != shell._password:
+		_fail("HK login forward Tab focus drifted from L01 account -> L02 password")
+		return
+	# Restore the original login-entry focus before any optional visual capture.
+	shell._username.grab_focus()
+	await process_frame
 	if not directory.is_empty():
 		await _capture(directory.path_join("classic_login.png"))
 	app.session_panel._layout.show_page(Layout.Page.CHARACTER_SELECT)
