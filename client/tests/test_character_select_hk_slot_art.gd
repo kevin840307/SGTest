@@ -168,6 +168,26 @@ func _run() -> void:
 		if not value.centered or value.text_font != shell._shared_ui_font or value.font_size != 12 or value.baseline != 10.0:
 			_fail("Create Character numeric text no longer shares the fixed baseline")
 			return
+	var create_inputs := [
+		[shell._name,Rect2(233,260,125,15),false],
+		[shell._create_password,Rect2(596,391,43,16),true],
+		[shell._create_password_confirm,Rect2(596,415,43,16),true],
+	]
+	if shell._login_input_font is FontFile and not shell._login_input_font.get_fallbacks().has(shell._shared_ui_font):
+		_fail("Create Character input lost its CP950 glyph fallback")
+		return
+	for spec in create_inputs:
+		var input: LineEdit = spec[0]
+		var rect: Rect2 = spec[1]
+		if input.get_rect() != rect or input.get_theme_font("font") != shell._login_input_font:
+			_fail("Create Character input rect/font drifted: %s expected %s, shared font %s" % [input.get_rect(),rect,input.get_theme_font("font") == shell._login_input_font])
+			return
+		if input.get_theme_font_size("font_size") != 12 or input.get_theme_stylebox("normal").content_margin_bottom != rect.size.y-12:
+			_fail("Create Character input text origin drifted")
+			return
+		if input.secret != spec[2] or (input.secret and input.secret_character != "*"):
+			_fail("Create Character input mask drifted")
+			return
 
 	for i in 3:
 		var empty_art: TextureRect = shell._slot_empty_art[i]

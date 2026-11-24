@@ -106,6 +106,7 @@ func _init() -> void:
 		page.size = SOURCE
 		stage.add_child(page)
 		page.hide()
+	_shared_ui_font = _make_hk_shared_ui_font()
 	_build_login()
 	_build_select()
 	_build_create()
@@ -159,6 +160,10 @@ func _make_login_input_font() -> Font:
 	if FileAccess.file_exists(bitmap_path):
 		var bitmap := FontFile.new()
 		if bitmap.load_bitmap_font(bitmap_path) == OK:
+			# The login bitmap covers ASCII. Reuse the shared 12px CP950
+			# glyphs for character names when the private font is available.
+			if _shared_ui_font is FontFile:
+				bitmap.fallbacks = [_shared_ui_font]
 			return bitmap
 	var fallback := SystemFont.new()
 	fallback.font_names = PackedStringArray(["PMingLiU"])
@@ -216,6 +221,20 @@ func _style_line_edit(input: LineEdit) -> void:
 	input.add_theme_color_override("caret_color",Color("#ffffff"))
 	input.add_theme_font_size_override("font_size",13)
 	input.select_all_on_focus = false
+
+func _style_hk_input(input: LineEdit, height: float) -> void:
+	_style_line_edit(input)
+	# Login and Create use the same CELInputArea type. Keep its text at the
+	# source top-left instead of letting LineEdit center a fallback font.
+	input.add_theme_font_override("font",_login_input_font)
+	input.add_theme_font_size_override("font_size",HK_SHARED_FONT_HEIGHT)
+	input.add_theme_color_override("font_color",Color8(241,245,241))
+	# The ITF owns the width, including the narrow character password fields.
+	input.add_theme_constant_override("minimum_character_width",1)
+	for state in ["normal","focus","read_only"]:
+		var style: StyleBox = input.get_theme_stylebox(state)
+		style.content_margin_left = 0.0
+		style.content_margin_bottom = height-HK_SHARED_FONT_HEIGHT
 
 func _style_hit(button: Button,visible_text:=true) -> void:
 	button.flat = true
@@ -319,27 +338,15 @@ func _build_login() -> void:
 	_password.secret_character = "*"
 	_password.max_length = 256
 	_password.placeholder_text = ""
-	_style_line_edit(_username)
-	_style_line_edit(_password)
-	_username.add_theme_font_override("font",_login_input_font)
-	_username.add_theme_font_size_override("font_size",12)
 	# L01/L02 are the same HK line-edit control type; L02 only enables secret
 	# mode. Its six-star client-DC mask also matches PMingLiU height 12 exactly.
-	_password.add_theme_font_override("font",_login_input_font)
-	_password.add_theme_font_size_override("font_size",12)
 	for input in [_username,_password]:
+		_style_hk_input(input,16)
 		# Fresh Paradise native A/B confirms the original login cycles Tab only
 		# between its two edit controls: account -> password -> account. The login
 		# buttons are intentionally FOCUS_NONE, so Godot's native FOCUS_ALL
 		# traversal reproduces that two-edit loop without a custom Tab handler.
 		input.focus_mode = Control.FOCUS_ALL
-		input.add_theme_color_override("font_color",Color8(241,245,241))
-		for state in ["normal","focus","read_only"]:
-			var style: StyleBox = input.get_theme_stylebox(state)
-			# The BMFont preserves GDI's own +1 glyph x/y offset. Keep the edit
-			# control at the ITF rect and only remove LineEdit's extra centering.
-			style.content_margin_left = 0.0
-			style.content_margin_bottom = 4.0
 	_input_at(login_page,_username,373,256,170,16)
 	_input_at(login_page,_password,373,280,170,16)
 	# _input_at sizes before parenting; LineEdit otherwise retains the fallback
@@ -361,7 +368,6 @@ func _build_login() -> void:
 
 func _build_select() -> void:
 	_art(select_page,"SELECT_CHARACTER.png")
-	_shared_ui_font = _make_hk_shared_ui_font()
 	# 004_SELECT_CHARACTER.ITF: each of the three HK slots owns three distinct
 	# actions. The HK .lst maps 密碼設定/進入遊戲/刪除角色 to states 9/6/7.
 	var name_x := [150.0,338.0,525.0]
@@ -582,8 +588,7 @@ func _build_create() -> void:
 
 	_name.placeholder_text = ""
 	_name.max_length = 24
-	_style_line_edit(_name)
-	_name.add_theme_font_size_override("font_size",10)
+	_style_hk_input(_name,15)
 	_input_at(create_page,_name,233,260,125,15)
 
 	var appearance_y := [281.0,304.0,328.0,352.0,376.0,400.0]
@@ -614,10 +619,10 @@ func _build_create() -> void:
 
 	for input in [_create_password,_create_password_confirm]:
 		input.secret = true
+		input.secret_character = "*"
 		input.max_length = 4
 		input.placeholder_text = ""
-		_style_line_edit(input)
-		input.add_theme_font_size_override("font_size",11)
+		_style_hk_input(input,16)
 	_input_at(create_page,_create_password,596,391,43,16)
 	_input_at(create_page,_create_password_confirm,596,415,43,16)
 
