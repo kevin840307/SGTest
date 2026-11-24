@@ -4,7 +4,7 @@
 
 - COMBAT-PVE-FORMAL-ENTRY [ ] 2026-11-24，v13 下一玩法切片。正式角色 `ProfileOnlyVerified`、Map13／15 缺可信 v4 gameplay population，各自阻擋實際戰鬥。先在 Old `SGOBattleSys.dll.lst` 追 `OnPlayerAttack` (0x1000461B)、`GetPlayerAttackAttrib` (0x100192B0)、`IsHit_PerHit` (0x1000B238)、`CalWeaponDamage_PerHit` (0x1000F7F9) 與 HK 普攻行為交叉核對。並用既有 Converter 的 Enemy.dat→Enemy_Data／EN_Att／AI 來源鏈確認至少一個 Map13 開場怪的正式數值與時序，再用真人操作驗結算。未知欄位保持封鎖。
 
-  本輪相容性回歸命令（上述 P0）：`python client/tests/run_online_main_gate.py C:/SGO/Godot/Godot_v4.7.2-stable_win64_console.exe --timeout 85` PASS（正式 Host、雙 headless Main、測試 v4 怪物、AOI、移動、往返傳點與資源卸載）。
+  本輪相容性回歸命令（上述 P0）：`python client/tests/run_online_main_gate.py C:/SGO/Godot/Godot_v4.7.2-stable_win64_console.exe --timeout 85` PASS（正式 Host、雙 headless Main、測試 v4 怪物、AOI、移動、往返傳點與資源卸載）。最終相關 CI 全數 PASS：[Server](https://github.com/kevin840307/SGTest/actions/runs/45389720321)、[Client](https://github.com/kevin840307/SGTest/actions/runs/45390204296)、[Converter](https://github.com/kevin840307/SGTest/actions/runs/45389720368)。
 
 - CI-ARCHITECTURE-AUTH-ATTRIBUTE [x] 2026-11-24，`008ba48`。前一推送的 [Server CI](https://github.com/kevin840307/SGTest/actions/runs/45389482385) 與 [Client CI](https://github.com/kevin840307/SGTest/actions/runs/45389482360) 都在既有架構檢查失敗。斷言現涵蓋配點的 bounded worker，登入 public overload 僅轉接至唯一 private 綁定實作。`python -m unittest tools.tests.test_architecture_conventions` 26/26 PASS。
 
