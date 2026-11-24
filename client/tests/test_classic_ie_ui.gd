@@ -24,6 +24,9 @@ func _capture(path: String) -> void:
 func _run() -> void:
 	var args := OS.get_cmdline_user_args()
 	var directory := str(args[0]) if args.size() > 0 else ""
+	if Main.HK_WINDOW_TITLE != "Stargate Online IE HK":
+		_fail("native HK WindowName drifted from SGOClient.exe sub_5237F0")
+		return
 	if Skins.DEFAULT_SKIN != "original_ie_hk2" or Skins.SKIN_SCHEMA < 4:
 		_fail("decoded HK source UI is not the product default/migration baseline")
 		return

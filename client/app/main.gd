@@ -14,6 +14,10 @@ const Recovered2WorldShell = preload("res://ui/recovered2_world_shell.gd")
 const ClassicAuthShell = preload("res://ui/classic_auth_shell.gd")
 const ClassicWorldShell = preload("res://ui/classic_world_shell.gd")
 const WorldLoadingOverlay = preload("res://ui/world_loading_overlay.gd")
+# HK SGOClient.exe sub_5237F0 passes this exact WindowName to FindWindowA,
+# RegisterClassA/CreateWindowExA. Keep the internal project name as SGTest,
+# but make the player-visible native window identity match the target client.
+const HK_WINDOW_TITLE := "Stargate Online IE HK"
 var auto_start := true
 var world_view := WorldView.new()
 var _held := {}
@@ -88,8 +92,17 @@ func _fit_initial_window_to_desktop() -> void:
 	window.position = usable.position + (usable.size - window.size) / 2
 
 
+func _apply_hk_window_title() -> void:
+	# Godot writes its default debug caption after Node._ready() starts.
+	# Apply the HK title on the first settled process frame so the native
+	# Windows caption is the same WindowName used by the original client.
+	DisplayServer.window_set_title(HK_WINDOW_TITLE)
+
+
 func _ready() -> void:
 	get_tree().auto_accept_quit = false
+	if DisplayServer.get_name() != "headless":
+		get_tree().process_frame.connect(_apply_hk_window_title,CONNECT_ONE_SHOT)
 	dev_overlay_enabled = OS.get_cmdline_user_args().has("--dev-ui")
 	if auto_start:
 		_fit_initial_window_to_desktop()
