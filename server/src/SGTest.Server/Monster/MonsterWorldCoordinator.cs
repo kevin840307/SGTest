@@ -21,6 +21,36 @@ public sealed record MonsterWorldCoordinatorStatistics(
     int Monsters);
 
 /// <summary>
+/// Exact Old SGOBattleSys::IsHit_PerHit gate (0x1000BA26..0x1000BA82).
+/// Player GetPlayerAttackAttrib maps sAttacker+0x10/+0x18 to Level/Hit;
+/// enemy GetEnemyDefendAttrib maps sTarget+0x16/+0x1C to enemy Level/
+/// CDEnemyWORDStr[12]. The latter is the same audited word consumed as RExp;
+/// keep that source name instead of inventing a synthetic enemy Dodge stat.
+/// </summary>
+public static class NormalAttackHitRules
+{
+    public static int HitThreshold(
+        int attackerLevel,int attackerHit,int enemyLevel,int enemyAttribute12)
+    {
+        if(attackerLevel is <1 or >ushort.MaxValue||
+           attackerHit is <0 or >ushort.MaxValue||
+           enemyLevel is <1 or >ushort.MaxValue||
+           enemyAttribute12 is <0 or >ushort.MaxValue)
+            throw new ArgumentOutOfRangeException(nameof(attackerLevel));
+        return Math.Max(30,checked(
+            attackerHit-enemyAttribute12+2*(attackerLevel-enemyLevel)+60));
+    }
+
+    public static bool IsHit(
+        int attackerLevel,int attackerHit,int enemyLevel,int enemyAttribute12,int roll)
+    {
+        if(roll is <0 or >99)
+            throw new ArgumentOutOfRangeException(nameof(roll));
+        return HitThreshold(attackerLevel,attackerHit,enemyLevel,enemyAttribute12)>=roll;
+    }
+}
+
+/// <summary>
 /// Single-consumer bridge from authoritative World batches to map-local MonsterRuntime.
 /// It keeps only player position/generation snapshots, performs no DB/socket work,
 /// and coalesces multiple same-tick AI events for one monster to one final snapshot.
@@ -61,6 +91,8 @@ public sealed class MonsterWorldCoordinator
     private readonly IReadOnlyDictionary<int,VerifiedSkillRule> _skillRules;
     private readonly IReadOnlyDictionary<PetCombatRuleKey,VerifiedPetCombatRule> _petRules;
     private readonly IReadOnlyDictionary<PetSkillRuleKey,VerifiedPetSkillRule> _petSkillRules;
+    private readonly IReadOnlyDictionary<(int MapId,int EnemyId),CharacterExperienceRewardRule> _normalAttackHitRules;
+    private readonly Func<int> _normalAttackRoll;
     private readonly Dictionary<long, ActorSnapshot> _actors = [];
     private readonly Dictionary<long, AttackCursor> _attack = [];
     private readonly Dictionary<long, AttackCursor> _petAttack = [];
@@ -74,7 +106,9 @@ public sealed class MonsterWorldCoordinator
         IEnumerable<MonsterRuntime> runtimes,
         IReadOnlyDictionary<int,VerifiedSkillRule>? skillRules = null,
         IReadOnlyDictionary<PetCombatRuleKey,VerifiedPetCombatRule>? petRules = null,
-        IReadOnlyDictionary<PetSkillRuleKey,VerifiedPetSkillRule>? petSkillRules = null)
+        IReadOnlyDictionary<PetSkillRuleKey,VerifiedPetSkillRule>? petSkillRules = null,
+        IEnumerable<CharacterExperienceRewardRule>? normalAttackHitRules = null,
+        Func<int>? normalAttackRoll = null)
     {
         ArgumentNullException.ThrowIfNull(runtimes);
         _skillRules=skillRules is null
@@ -123,6 +157,24 @@ public sealed class MonsterWorldCoordinator
         }
         if (_runtimes.Count == 0)
             throw new ArgumentException("At least one MonsterRuntime is required", nameof(runtimes));
+
+        var known=_runtimes.Values.SelectMany(runtime=>runtime.SnapshotAll())
+            .Select(monster=>(monster.MapId,monster.EnemyId)).ToHashSet();
+        var hitRules=new Dictionary<(int MapId,int EnemyId),CharacterExperienceRewardRule>();
+        foreach(var rule in normalAttackHitRules ?? [])
+        {
+            if(rule.Trust is not (CharacterExperienceRewardTrust.Verified or
+                    CharacterExperienceRewardTrust.SyntheticTest)||
+               rule.MapId<=0||rule.EnemyId<=0||
+               rule.EnemyLevel is <1 or >ushort.MaxValue||
+               rule.BaseExperience is <0 or >ushort.MaxValue||
+               string.IsNullOrWhiteSpace(rule.SourceReference)||
+               !known.Contains((rule.MapId,rule.EnemyId))||
+               !hitRules.TryAdd((rule.MapId,rule.EnemyId),rule))
+                throw new ArgumentOutOfRangeException(nameof(normalAttackHitRules));
+        }
+        _normalAttackHitRules=hitRules;
+        _normalAttackRoll=normalAttackRoll ?? (()=>Random.Shared.Next(100));
     }
 
     public long LastTick => _lastTick;
@@ -244,7 +296,20 @@ public sealed class MonsterWorldCoordinator
         if (status != NormalAttackStatus.Applied)
             return FromTarget(request, status, target);
 
+        if(profile.Level is <1 or >ushort.MaxValue||
+           profile.Hit is <0 or >ushort.MaxValue||
+           !_normalAttackHitRules.TryGetValue((actor.MapId,target.EnemyId),out var hitRule))
+            return FromTarget(request,NormalAttackStatus.CombatUnavailable,target);
+
+        int roll=_normalAttackRoll();
+        if(roll is <0 or >99)
+            throw new InvalidOperationException("Normal attack hit roll must be 0..99");
         cursor.LastAppliedTick = _lastTick;
+        if(!NormalAttackHitRules.IsHit(
+               profile.Level,profile.Hit,hitRule.EnemyLevel,
+               checked((int)hitRule.BaseExperience),roll))
+            return FromTarget(request,NormalAttackStatus.Miss,target);
+
         int damage = Math.Max(1, profile.Attack);
         var applied = runtime.ApplyTrustedDamage(
             request.TargetEntityId, request.ActorId, damage, _lastTick);

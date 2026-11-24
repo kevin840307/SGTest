@@ -42,7 +42,7 @@ public readonly record struct TrustedWorldResyncRequest(
 
 public readonly record struct TrustedCombatProfile(
     int Attack, int Defense, int Hit, int Dodge,
-    double AttackRange, int AttackCooldownTicks);
+    double AttackRange, int AttackCooldownTicks, int Level);
 
 public readonly record struct TrustedNormalAttack(
     long ActorId, long ConnectionEpoch, long RequestMapEpoch,

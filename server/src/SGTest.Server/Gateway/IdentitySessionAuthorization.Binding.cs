@@ -351,7 +351,7 @@ public sealed partial class IdentitySessionAuthorization
             CombatProfileTrust.Verified or CombatProfileTrust.SyntheticTest;
         TrustedCombatProfile? trustedCombat = !combatEnabled ? null : new(
             combat!.Data.Attack, combat.Data.Defense, combat.Data.Hit, combat.Data.Dodge,
-            combat.Data.AttackRange, combat.Data.AttackCooldownTicks);
+            combat.Data.AttackRange, combat.Data.AttackCooldownTicks, combat.Data.Level);
         CharacterPvpState pvpPresentation =
             await _identity.GetCharacterPvpStateAsync(
                 character.CharacterId,cancellationToken).ConfigureAwait(false);

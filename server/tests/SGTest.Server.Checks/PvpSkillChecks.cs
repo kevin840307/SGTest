@@ -70,7 +70,7 @@ internal static class PvpSkillChecks
             "PvP skill visual wire mismatch");
 
         var actor=new ActorSnapshot(88,13,5,3,0,0,8,8,1,false,3,false);
-        var profile=new TrustedCombatProfile(30,10,10,3,48,15);
+        var profile=new TrustedCombatProfile(30,10,10,3,48,15,3);
         var gateway=new GatewayConnection(actor,combatProfile:profile);
         TrustedPvpSkill captured=default;
         Checks.Require(gateway.FeedClientBytes(
@@ -122,7 +122,7 @@ internal static class PvpSkillChecks
         coordinator.Process(new WorldChangedBatch(1,[],[
             new(ActorLifecycleKind.Joined,attacker),
             new(ActorLifecycleKind.Joined,victim)]));
-        var profile=new TrustedCombatProfile(1,1,1,1,48,15);
+        var profile=new TrustedCombatProfile(1,1,1,1,48,15,1);
 
         var p1=new TrustedSkillUse(
             attacker.ActorId,attacker.ConnectionEpoch,attacker.MapEpoch,

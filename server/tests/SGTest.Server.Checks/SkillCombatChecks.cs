@@ -109,7 +109,7 @@ internal static class SkillCombatChecks
         var actor=new ActorSnapshot(11,13,9,3,0,0,24,24,1,false);
         var profile=new TrustedCombatProfile(
             Attack:30,Defense:4,Hit:10,Dodge:3,
-            AttackRange:48,AttackCooldownTicks:15);
+            AttackRange:48,AttackCooldownTicks:15,Level:3);
         var gateway=new GatewayConnection(actor,combatProfile:profile);
         Require(gateway.QueueAoi(new(AoiEventKind.WorldReady,10,
                     actor.MapEpoch,actor))==GatewaySendStatus.Enqueued &&
@@ -170,7 +170,7 @@ internal static class SkillCombatChecks
         var request=new TrustedSkillUse(
             actor.ActorId,actor.ConnectionEpoch,actor.MapEpoch,
             1,23103,target.EntityId,
-            new(1,1,1,1,48,15));
+            new(1,1,1,1,48,15,1));
 
         var prepared=coordinator.PrepareSkill(request);
         Require(prepared.Ready &&
@@ -236,7 +236,7 @@ internal static class SkillCombatChecks
         var actor=new ActorSnapshot(99,mapId,2,1,0,0,24,24,1,false);
         coordinator.Process(new WorldChangedBatch(1,[],
             [new(ActorLifecycleKind.Joined,actor)]));
-        var profile=new TrustedCombatProfile(1,1,1,1,48,15);
+        var profile=new TrustedCombatProfile(1,1,1,1,48,15,1);
         var request=new TrustedSkillUse(
             actor.ActorId,actor.ConnectionEpoch,actor.MapEpoch,
             1,99001,0,profile);
@@ -302,7 +302,7 @@ internal static class SkillCombatChecks
         var target=runtime.SnapshotAll().Single();
         var profile=new TrustedCombatProfile(
             Attack:1,Defense:1,Hit:1,Dodge:1,
-            AttackRange:1,AttackCooldownTicks:100);
+            AttackRange:1,AttackCooldownTicks:100,Level:1);
 
         var first=coordinator.ResolveSkill(new(
             actor.ActorId,actor.ConnectionEpoch,actor.MapEpoch,

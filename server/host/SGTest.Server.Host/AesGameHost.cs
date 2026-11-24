@@ -148,20 +148,21 @@ internal static class AesGameHost
             IReadOnlyDictionary<int,PetEquipmentRule>? petEquipmentRules=
                 petEquipmentManifest is null ? null :
                 PetEquipmentCatalog.LoadVerified(Path.GetFullPath(petEquipmentManifest));
-            MonsterWorldCoordinator? monsters = monsterRuntimes.Count == 0
-                ? null : new MonsterWorldCoordinator(
-                    monsterRuntimes,skillRules,petCombatRules,petSkillRules);
-            // No original source-verified manifest means no fabricated drops.
-            string? lootManifest = options.GetValueOrDefault("--loot-rules");
-            IReadOnlyList<MonsterDropRule>? dropRules = lootManifest is null
-                ? null : MonsterDropCatalog.LoadVerified(
-                    Path.GetFullPath(lootManifest),monsterRuntimes);
             string? experienceManifest=
                 options.GetValueOrDefault("--experience-rules");
             IReadOnlyList<CharacterExperienceRewardRule>? experienceRules=
                 experienceManifest is null ? null :
                 CharacterExperienceRewardCatalog.LoadVerified(
                     Path.GetFullPath(experienceManifest),monsterRuntimes);
+            MonsterWorldCoordinator? monsters = monsterRuntimes.Count == 0
+                ? null : new MonsterWorldCoordinator(
+                    monsterRuntimes,skillRules,petCombatRules,petSkillRules,
+                    normalAttackHitRules:experienceRules);
+            // No original source-verified manifest means no fabricated drops.
+            string? lootManifest = options.GetValueOrDefault("--loot-rules");
+            IReadOnlyList<MonsterDropRule>? dropRules = lootManifest is null
+                ? null : MonsterDropCatalog.LoadVerified(
+                    Path.GetFullPath(lootManifest),monsterRuntimes);
             // Explicit audited content only. If omitted, no HP recovery item
             // can be used; client-side names or .tres never grant authority.
             string? progressionManifest=

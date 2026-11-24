@@ -34,7 +34,7 @@ internal static class PvpAttackChecks
             "PvP victim damage wire mismatch");
 
         var actor=new ActorSnapshot(88,13,5,3,0,0,8,8,1,false);
-        var profile=new TrustedCombatProfile(30,10,10,3,48,15);
+        var profile=new TrustedCombatProfile(30,10,10,3,48,15,3);
         var gateway=new GatewayConnection(actor,combatProfile:profile);
         TrustedPvpAttack captured=default;
         Checks.Require(gateway.FeedClientBytes(
@@ -130,7 +130,7 @@ internal static class PvpAttackChecks
         var worker=combat.RunAsync(stop.Token);
         var gate=new PvpAttackSequenceGate();
         var request=new TrustedPvpAttack(a.ActorId,a.ConnectionEpoch,a.MapEpoch,1,t.ActorId,
-            new TrustedCombatProfile(30,0,10,3,48,15));
+            new TrustedCombatProfile(30,0,10,3,48,15,3));
         Checks.Require(gate.Inspect(request)==PvpAttackSequenceDecision.New,"sequence");
         Checks.Require(combat.TryPostPvpHit(t,a,1,30,100,true,out var c1)==
             CombatPostStatus.Accepted&&c1 is not null,"first PvP post");

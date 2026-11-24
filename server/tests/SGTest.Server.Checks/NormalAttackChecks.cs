@@ -4,6 +4,7 @@ using SGTest.Server.Map;
 using System.Text.Json;
 using SGTest.Server.Gateway;
 using SGTest.Server.Identity;
+using SGTest.Server.Combat;
 using SGTest.Server.Wire;
 using SGTest.Server.World;
 
@@ -15,6 +16,8 @@ internal static class NormalAttackChecks
     {
         Checks.Run("normal attack wire has no client actor damage or range fields", WireRoundTrip);
         Checks.Run("normal attack gateway injects trusted actor and combat profile after Ready ACK", GatewayBoundary);
+        Checks.Run("normal attack hit gate reproduces Old IsHit_PerHit",HitFormula);
+        Checks.Run("normal attack MISS consumes cadence and preserves monster HP",()=>MissAuthority(root));
         Checks.Run("normal attack authority owns range cooldown replay HP death and shared AOI",
             () => LivePipeline(root).GetAwaiter().GetResult());
     }
@@ -40,7 +43,7 @@ internal static class NormalAttackChecks
         var actor = new ActorSnapshot(11, 13, 9, 3, 0, 0, 24, 24, 1, false);
         var profile = new TrustedCombatProfile(
             Attack:30, Defense:4, Hit:10, Dodge:3,
-            AttackRange:48, AttackCooldownTicks:15);
+            AttackRange:48, AttackCooldownTicks:15, Level:3);
         var attack = WireProtocol.EncodeNormalAttack(
             new(actor.MapEpoch, 1, 1_001_300_001));
 
@@ -70,6 +73,69 @@ internal static class NormalAttackChecks
                 captured.TargetEntityId==1_001_300_001 &&
                 captured.Profile==profile,
             "Gateway did not inject server combat identity/profile");
+    }
+
+    private static void HitFormula()
+    {
+        Require(NormalAttackHitRules.HitThreshold(3,10,3,5)==65,
+            "Old hit threshold arithmetic drifted");
+        Require(NormalAttackHitRules.HitThreshold(1,0,20,100)==30,
+            "Old minimum hit threshold drifted");
+        Require(NormalAttackHitRules.IsHit(1,0,20,100,30) &&
+                !NormalAttackHitRules.IsHit(1,0,20,100,31),
+            "Old inclusive >= rand()%100 boundary drifted");
+    }
+
+    private static void MissAuthority(string root)
+    {
+        const int mapId=215;
+        string folder=Checks.Fixture(root,mapId,12,12,(_,_)=>0);
+        var grid=BlockingGrid.Load(folder,mapId);
+        string populationPath=Path.Combine(folder,"population-miss.json");
+        File.WriteAllText(populationPath,JsonSerializer.Serialize(new
+        {
+            version=4,kind="verified_monster_runtime",map_id=mapId,
+            stats_verified=true,gameplay_ready=true,
+            definitions=new[] { new {
+                id=1,name="MissFixture",sprite="EN001A",
+                atlas="Enemy/EN001A/atlas.json",
+                stats=new {
+                    level=3,max_hp=100,attack_damage=6,move_step=8.0,
+                    aggro_radius=1.0,lose_target_radius=2.0,
+                    leash_radius=2.0,attack_range=1.0,
+                    attack_cooldown_ticks=30,respawn_ticks=30,
+                    wander_radius=0.0,wander_interval_ticks=100
+                }}},
+            spawns=new[]{new{source_index=0,source_flags=7,
+                definition=1,p=new[]{40,24}}}
+        }));
+        var runtime=new MonsterRuntime(
+            grid,MonsterPopulationCatalog.LoadVerified(populationPath,mapId,grid));
+        var hitRule=new CharacterExperienceRewardRule(
+            mapId,1,3,100,CharacterExperienceRewardTrust.SyntheticTest,
+            "ci:enemy-attribute12");
+        var coordinator=new MonsterWorldCoordinator([runtime],
+            normalAttackHitRules:[hitRule],normalAttackRoll:()=>99);
+        var actor=new ActorSnapshot(88,mapId,2,1,0,0,24,24,1,false);
+        coordinator.Process(new WorldChangedBatch(1,[],
+            [new(ActorLifecycleKind.Joined,actor)]));
+        var before=runtime.SnapshotAll().Single();
+        var profile=new TrustedCombatProfile(
+            Attack:60,Defense:4,Hit:10,Dodge:3,
+            AttackRange:48,AttackCooldownTicks:3,Level:3);
+        var miss=coordinator.ResolveNormalAttack(new(
+            actor.ActorId,actor.ConnectionEpoch,actor.MapEpoch,
+            1,before.EntityId,profile));
+        var after=runtime.SnapshotAll().Single();
+        Require(miss.Status==NormalAttackStatus.Miss&&miss.Damage==0&&
+                miss.CurrentHp==100&&miss.TargetRevision==before.EntityRevision&&
+                after.CurrentHp==100&&after.EntityRevision==before.EntityRevision,
+            "MISS mutated authoritative monster state");
+        var cooldown=coordinator.ResolveNormalAttack(new(
+            actor.ActorId,actor.ConnectionEpoch,actor.MapEpoch,
+            2,before.EntityId,profile));
+        Require(cooldown.Status==NormalAttackStatus.Cooldown,
+            "MISS did not consume normal attack cadence");
     }
 
     private static async Task LivePipeline(string root)
@@ -107,7 +173,11 @@ internal static class NormalAttackChecks
         var runtime=new MonsterRuntime(grid,population,
             new(AiIntervalTicks:1,MaxAiPerStep:4,MaxPathQueriesPerStep:1,
                 MaxPathExpandedCells:128));
-        var coordinator=new MonsterWorldCoordinator([runtime]);
+        var hitRule=new CharacterExperienceRewardRule(
+            mapId,1,3,5,CharacterExperienceRewardTrust.SyntheticTest,
+            "ci:enemy-attribute12");
+        var coordinator=new MonsterWorldCoordinator([runtime],
+            normalAttackHitRules:[hitRule],normalAttackRoll:()=>0);
         using var lootStore=new SqliteIdentityStore(Path.Combine(root,
             "normal-attack-loot-"+Guid.NewGuid().ToString("N")+".db"));
         await lootStore.InitializeAsync();
@@ -127,7 +197,7 @@ internal static class NormalAttackChecks
             ?? throw new Exception("combat actor register");
         var profile=new TrustedCombatProfile(
             Attack:60,Defense:4,Hit:10,Dodge:3,
-            AttackRange:48,AttackCooldownTicks:3);
+            AttackRange:48,AttackCooldownTicks:3,Level:3);
         var gateway=new GatewayConnection(actor,combatProfile:profile);
         var router=new WorldResultRouter(
             new WorldResultRouterOptions(AttackRequestCapacity:8));
