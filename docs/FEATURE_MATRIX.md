@@ -73,3 +73,5 @@
 5. Commit SHA 欄只填已存在的 commit；本檔後續每次更新應優先填實作 commit，而不是文件 commit。
 
 AUTH-CHARACTER / UI-ORIGINAL（2026-11-24，d438cf2）：Classic Login 調整視窗尺寸時保留帳密與焦點。800×600 回復後兩欄各 0 px 差，真 Host 登入失敗重試至選角 PASS。HK 同狀態完整像素與 caret／selection 仍 NOT VERIFIED，整體 IN PROGRESS。
+
+AUTH-CHARACTER / UI-ORIGINAL（2026-11-24，7dc75f8）：Classic 創角四項數值與剩餘點數共用 ITF rect 及固定 baseline，真 Host 可配點並在 resize 後送出原草稿。HK target 同狀態 native A/B 仍 NOT VERIFIED，整體 IN PROGRESS。
