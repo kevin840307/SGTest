@@ -26,12 +26,11 @@ class LoginCaption extends Control:
 		# drawing keeps the same origin as the background and input hitboxes.
 		draw_string(font,Vector2(1,10),text,HORIZONTAL_ALIGNMENT_LEFT,-1,12,Color.WHITE)
 
-class HkSharedText extends Control:
-	var text := "":
-		set(value):
-			if text != value:
-				text = value
-				queue_redraw()
+class HkSharedText extends Label:
+	# Keep Label identity for the existing UI/test surface, but render the
+	# original GDI baseline ourselves. The inherited Label text property still
+	# owns change notification; its built-in glyph pass is made transparent in
+	# _shared_text so this custom draw is the only visible raster.
 	var text_font: Font
 	var centered := true
 	var color := Color.WHITE
@@ -72,6 +71,8 @@ var _create_back_button: Button
 var _slots: Array[Button] = []
 var _slot_names: Array[HkSharedText] = []
 var _select_fixed_texts: Array[HkSharedText] = []
+var _modal_fixed_texts: Array[HkSharedText] = []
+var _create_fixed_texts: Array[HkSharedText] = []
 var _slot_empty_art: Array[TextureRect] = []
 var _slot_play_art: Array[TextureRect] = []
 var _slot_password_buttons: Array[Button] = []
@@ -86,7 +87,7 @@ var _change_password_modal := Control.new()
 var _change_old_password := LineEdit.new()
 var _change_new_password := LineEdit.new()
 var _change_confirm_password := LineEdit.new()
-var _password_prompt: Label
+var _password_prompt: HkSharedText
 var _select_status: Label
 var _delete_step := 0
 var _modal_character_id := 0
@@ -187,9 +188,23 @@ func _shared_text(parent: Control,text: String,x: float,y: float,w: float,h: flo
 	label.centered = centered
 	label.font_size = HK_SHARED_FONT_HEIGHT
 	label.baseline = HK_SHARED_FONT_BASELINE
+	# HkSharedText subclasses Label only for control identity/compatibility.
+	# Suppress Label's own raster so _draw() remains the single HK GDI-like pass.
+	label.add_theme_font_override("font",_shared_ui_font)
+	label.add_theme_font_size_override("font_size",HK_SHARED_FONT_HEIGHT)
+	label.add_theme_color_override("font_color",Color.TRANSPARENT)
+	label.clip_text = true
 	label.clip_contents = true
 	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_input_at(parent,label,x,y,w,h)
+	# Label computes an unparented fallback minimum during _input_at; after the
+	# HK bitmap font/theme is inherited, restore the exact ITF rect just like the
+	# exact-height LineEdit controls do in _ready().
+	label.size = Vector2(w,h)
+	# Label may re-apply its pre-tree theme minimum once during enter-tree; restore
+	# the same source rect after that one layout pass. This is a single shared
+	# geometry correction for the renderer class, not per-caption pixel offsets.
+	label.set_deferred("size",Vector2(w,h))
 	return label
 
 func _style_line_edit(input: LineEdit) -> void:
@@ -433,11 +448,13 @@ func _modal_password(modal: Control, input: LineEdit, origin: Vector2, x: int, y
 	_input_at(modal,input,origin.x+x,origin.y+y,170,12)
 	input.size = Vector2(170,12)
 
-func _modal_label(modal: Control, origin: Vector2, value: String, x: int, y: int, width: int) -> Label:
-	var label := _label(modal,value,origin.x+x,origin.y+y,width,12)
-	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	label.add_theme_color_override("font_color",Color.WHITE)
-	label.add_theme_color_override("font_shadow_color",Color.TRANSPARENT)
+func _modal_label(modal: Control, origin: Vector2, value: String, x: int, y: int, width: int) -> HkSharedText:
+	# 004/005/081/082 HK ITFs encode their fixed white captions with the same
+	# type=1, control-id=2000, scale=1000 text record. Character Select already
+	# proves that record is rendered by the process-wide shared GDI font, so the
+	# password modals must not fall back to Godot Label vertical centering.
+	var label := _shared_text(modal,value,origin.x+x,origin.y+y,width,12)
+	_modal_fixed_texts.append(label)
 	return label
 
 func _build_select_password_modal() -> void:
@@ -558,9 +575,10 @@ func _build_create() -> void:
 		["角色密碼",498,391,48,12],["確認密碼",498,415,48,12],
 	]
 	for spec in static_labels:
-		var label := _label(create_page,str(spec[0]),float(spec[1]),float(spec[2]),float(spec[3]),float(spec[4]))
-		label.add_theme_color_override("font_color",Color.WHITE)
-		label.add_theme_color_override("font_shadow_color",Color.TRANSPARENT)
+		# These are HK ITF type=1 fixed text controls, identical to the Select
+		# captions already confirmed against the shared 12px GDI renderer.
+		_create_fixed_texts.append(_shared_text(
+			create_page,str(spec[0]),float(spec[1]),float(spec[2]),float(spec[3]),float(spec[4])))
 
 	_name.placeholder_text = ""
 	_name.max_length = 24
@@ -621,10 +639,8 @@ func _build_create() -> void:
 	_create_button = _button(create_page,"",478,471,85,21,_create,"YELLOW_BUTTON")
 	_create_back_button = _button(create_page,"",583,471,85,21,func(): _panel.back_to_character_button.pressed.emit(),"YELLOW_BUTTON")
 	for spec in [["建立角色",497,475,48,12],["上一頁",608,475,36,12]]:
-		var label := _label(create_page,str(spec[0]),float(spec[1]),float(spec[2]),float(spec[3]),float(spec[4]))
-		label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		label.add_theme_color_override("font_color",Color.WHITE)
-		label.add_theme_color_override("font_shadow_color",Color.TRANSPARENT)
+		_create_fixed_texts.append(_shared_text(
+			create_page,str(spec[0]),float(spec[1]),float(spec[2]),float(spec[3]),float(spec[4])))
 
 func bind_session(panel, store) -> void:
 	_panel = panel

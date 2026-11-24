@@ -100,6 +100,60 @@ func _run() -> void:
 			_fail("Character Select fixed text font/baseline drifted at index %d" % i)
 			return
 
+	var expected_modal_fixed := [
+		["角色密碼",Vector2(274,308),Vector2(48,12)],
+		["確認",Vector2(418,331),Vector2(24,12)],
+		["取消",Vector2(513,331),Vector2(24,12)],
+		["原有密碼",Vector2(284,272),Vector2(48,12)],
+		["新的密碼",Vector2(284,296),Vector2(48,12)],
+		["確認密碼",Vector2(283,320),Vector2(48,12)],
+		["確認",Vector2(402,349),Vector2(24,12)],
+		["取消",Vector2(494,349),Vector2(24,12)],
+	]
+	if shell._modal_fixed_texts.size() != expected_modal_fixed.size():
+		_fail("password modal HK fixed text control count drifted")
+		return
+	for i in expected_modal_fixed.size():
+		var label = shell._modal_fixed_texts[i]
+		var expected = expected_modal_fixed[i]
+		if label.text != expected[0] or label.position != expected[1] or label.size != expected[2]:
+			_fail("password modal fixed text rect drifted at index %d" % i)
+			return
+		if label.text_font != shell._shared_ui_font or label.font_size != 12 or label.baseline != 10.0:
+			_fail("password modal fixed text shared font/baseline drifted at index %d" % i)
+			return
+
+	var expected_create_fixed := [
+		["名稱",Vector2(169,261),Vector2(24,12)],
+		["種族",Vector2(169,285),Vector2(24,12)],
+		["頭部",Vector2(169,309),Vector2(24,12)],
+		["頭部顏色",Vector2(157,333),Vector2(48,12)],
+		["上身顏色",Vector2(157,357),Vector2(48,12)],
+		["手袖顏色",Vector2(157,381),Vector2(48,12)],
+		["下身顏色",Vector2(157,405),Vector2(48,12)],
+		["剩餘點數",Vector2(498,357),Vector2(48,12)],
+		["力量",Vector2(510,261),Vector2(24,12)],
+		["體質",Vector2(510,309),Vector2(24,12)],
+		["速度",Vector2(510,285),Vector2(24,12)],
+		["智慧",Vector2(510,333),Vector2(24,12)],
+		["角色密碼",Vector2(498,391),Vector2(48,12)],
+		["確認密碼",Vector2(498,415),Vector2(48,12)],
+		["建立角色",Vector2(497,475),Vector2(48,12)],
+		["上一頁",Vector2(608,475),Vector2(36,12)],
+	]
+	if shell._create_fixed_texts.size() != expected_create_fixed.size():
+		_fail("Create Character HK fixed text control count drifted")
+		return
+	for i in expected_create_fixed.size():
+		var label = shell._create_fixed_texts[i]
+		var expected = expected_create_fixed[i]
+		if label.text != expected[0] or label.position != expected[1] or label.size != expected[2]:
+			_fail("Create Character fixed text rect drifted at index %d" % i)
+			return
+		if label.text_font != shell._shared_ui_font or label.font_size != 12 or label.baseline != 10.0:
+			_fail("Create Character fixed text shared font/baseline drifted at index %d" % i)
+			return
+
 	for i in 3:
 		var empty_art: TextureRect = shell._slot_empty_art[i]
 		var play_art: TextureRect = shell._slot_play_art[i]
@@ -127,5 +181,5 @@ func _run() -> void:
 		if root.get_texture().get_image().save_png(capture_path) != OK:
 			_fail("800x600 capture write failed: "+capture_path)
 			return
-	print("CHARACTER_SELECT_HK_SLOT_ART_PASS itf_hitbox=84x130 new_character=85x132 play_game=67x23 origin=-8,-101 font=新細明體 height=12 weight=500 baseline=10")
+	print("CHARACTER_SELECT_HK_SLOT_ART_PASS itf_hitbox=84x130 new_character=85x132 play_game=67x23 origin=-8,-101 font=新細明體 height=12 weight=500 baseline=10 modal_create_fixed_text=true")
 	quit(0)
