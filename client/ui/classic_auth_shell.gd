@@ -262,12 +262,11 @@ func _build_login() -> void:
 	_password.add_theme_font_override("font",_login_input_font)
 	_password.add_theme_font_size_override("font_size",12)
 	for input in [_username,_password]:
-		# Paradise native A/B keeps keyboard focus on the active login edit when
-		# Tab is pressed. HK CAccount login uses the inherited base input path and
-		# has no login-specific Tab override in build 128, so do not introduce
-		# Godot's modern keyboard focus traversal here. Mouse/explicit focus still
-		# works through FOCUS_CLICK.
-		input.focus_mode = Control.FOCUS_CLICK
+		# Fresh Paradise native A/B confirms the original login cycles Tab only
+		# between its two edit controls: account -> password -> account. The login
+		# buttons are intentionally FOCUS_NONE, so Godot's native FOCUS_ALL
+		# traversal reproduces that two-edit loop without a custom Tab handler.
+		input.focus_mode = Control.FOCUS_ALL
 		input.add_theme_color_override("font_color",Color8(241,245,241))
 		for state in ["normal","focus","read_only"]:
 			var style: StyleBox = input.get_theme_stylebox(state)
