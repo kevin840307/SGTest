@@ -1,27 +1,27 @@
-# SGTest AGENTS.md — v12 UI Recovery / Fast Closure
+# SGTest AGENTS.md — v13 Playable Gameplay / UI Parity
 
-適用於整個 C:\SGO\SRC\SGTest。此檔是唯一常駐執行規範；舊 v11 Prompt 與詳細參考中的全量流程不得覆蓋本檔。docs/SCHEDULER_PROMPT.md 是排程入口。詳細架構、原版研究、完整 Smoke 清單保留在 docs/AGENT_REFERENCE.md，依工作需要查閱，不要求每輪讀全文。
+適用於整個 C:\SGO\SRC\SGTest。此檔是唯一常駐執行規範；舊 v11/v12 Prompt 與詳細參考中的全量流程或 UI-only 優先順序不得覆蓋本檔。docs/SCHEDULER_PROMPT.md 是排程入口。詳細架構、原版研究、完整 Smoke 清單保留在 docs/AGENT_REFERENCE.md，依工作需要查閱，不要求每輪讀全文。
 
 ## 1. 目標與工作選擇
 
-**玩家可見、可操作、可量測的改善才是成果。HK 原版 1:1 是目標，不是同風格。**
+**先讓玩家真的能玩完整遊戲循環，同時逐步達到 HK 1:1；禁止登入像素級細節長期阻塞其他玩法。**
 
-- P0：無法登入／移動／換圖、崩潰、資料損毀、權威或重大多人錯誤，先修。
-- 預設啟用 **UI Recovery Mode**：優先使用者指出的 UI 與最明顯的 P1 差異；預設順序 Login → Select/Create → HUD → Profile/配點 → Inventory/Equipment → NPC/Shop/Bank/Storage/Repair → Combat → 其餘既有 UI。
-- 先修整體構圖、原圖/尺寸、共用座標/縮放、字型、可見錯位、缺漏控制、hitbox，再處理細微 raster/AA 差異。共用根因可以同輪修多個受影響畫面。
-- 核心 UI 仍有可修的明顯落差時，不開 Pet/Mecha/Guild/Quest/PvP/Stall 等新玩法、不重構無關 Server/DB/Protocol。
-- 一輪聚焦一個完整畫面／玩家操作或一個共用根因；同畫面已知差異應成批修，不把每個字或按鈕拆成不同排程。若遇證據 blocker，先修該畫面其餘已確認問題；記錄缺證據項與下一步，可接續其他高優先已知差距，不可假報整個畫面完成或藉此逃去新玩法。
-- UI Recovery 解除需核心畫面逐一有可信原版證據及實機 A/B、沒有已知可見差異；缺證據維持 NOT VERIFIED。解除後回到單一玩家功能完整閉環（Server Authority + Client + Persistence + HK UI + native + 適用多人／A/B），功能與 UI 不拆成永久半成品。
-- 使用者明確指定工作優先；不得因例外把未驗畫面標完成。內部可現代化，玩家外觀、操作、流程、時序、數值與動畫依 HK 可驗證證據。
+- P0：無法登入／移動／換圖、崩潰、資料損毀、權威或重大多人錯誤，先修；只修阻塞本輪可玩流程的問題。字型 AA、caret、Tab 細節等非阻塞差異留 UI backlog，不冒充已驗。
+- 預設 **Gameplay-first + UI Parity 雙軌**。每三個非緊急有效交付切片至少兩個推進未完成的核心玩法，一個集中改善遊戲內 UI；沒有可做的 UI 差距可改為玩法。跨 Session 以最近 TODO/Matrix/commit 的實際成果判斷，不以啟動次數計算。已可登入進世界的 AUTH 不得自動成為下一輪主題，除非阻塞玩法、使用者指定或排到 UI 輪。
+- 玩法按可玩鏈選最早尚未可玩的環節，先檢查現有實作，補缺而非重寫：① Map15→Map13 正式新角色可戰鬥（優先 source-backed combat profile、資料、權威規則，解除真正 blocker，不用 SyntheticTest、假數值或關閉 fail-closed）→ ② 選怪/靠近/普攻/MISS/受擊/擊殺/EXP/掉落/重生 → ③ 技能/MP/冷卻/動畫/單體與範圍 → ④ 撿取/背包/使用藥水/裝卸/屬性與重登 → ⑤ NPC 商店/金錢/銀行/倉庫/修理/強化 → ⑥ 多人 AOI/組隊/交易 → ⑦ Pet/Mecha/其他玩法。可依實際依賴調整，例如背包是戰鬥前置就先做。
+- 每輪一個有玩家意義的垂直切片，可同批修相互依賴的 Server/Client/UI/資料/測試；有餘力且前一切片驗收完成可接續下一個，不為湊輪次停工。切片要真的能正常操作、權威結果正確、適用持久化及多人一致；不要求整個大型系統或全遊戲像素完美才切換。
+- UI 軌優先世界 HUD、人物資料、戰鬥/技能、背包/裝備、NPC；按最大可見差異與共同根因批次修復。同畫面原圖、字型、文字位置、hitbox、交互均保留 HK 1:1 最終 Gate；非阻塞未對齊差異記入明確 backlog，仍 IN PROGRESS/NOT VERIFIED，**不阻止其他核心玩法交付**。同一非阻塞 UI 切片最多連續一輪；除非使用者指定，不連續耗在登入/選角/創角。
+- 證據不足或其他 Session 正在處理同切片，記錄具體 blocker/下一步，改做獨立的最高優先未完成切片。禁止以缺精確 glyph/AA 證據為理由停住所有遊戲開發。未知正式數值不得猜，仍 fail-closed；不得弱化權威、安全或持久化。
+- 使用者明確指定工作優先。內部可現代化，玩家外觀、操作、流程、時序、數值與動畫依 HK 可驗證證據。完整功能與 UI 的 COMPLETE 標準不變；階段性可玩交付與最終 1:1 是不同 gate。
 
 ## 2. 每輪快速閉環
 
 1. 合併一次 Git/Session 檢查：status、branch/HEAD、fetch、ahead/behind、branch/worktree；只讀相關 TODO、Feature Matrix、上一輪有效證據及受影響程式。先確認沒有其他 Session 正在處理相同切片或操作同一桌面/DB/輸出。
-2. 有 P0 就重現；否則選定畫面，先開正式 SGTest 可見 Client 取得 Before，取得同 UI state 的原版 reference。固定實際 client area 800×600、同狀態及 DPI；先並排、overlay、差分，列出整張畫面的最大可見錯誤。
-3. 建立簡短 pixel spec：資源名/frame、panel rect、child rect、font/基準線、hitbox、state，標明來源與版本。已有有效證據直接沿用；缺什麼才查什麼。先修最大共同根因，再批次修同畫面可確認的差異。
+2. 選定玩法或 UI 切片。玩法先真實重現正常玩家流程的阻塞、檢查既有 authority/資料/Client，訂出可玩驗收條件；UI 先取得同狀態原版與正式 SGTest Before（800×600、同 DPI），並排/overlay/diff。
+3. 玩法先釐清 HK 行為/必要資料與 Server→Client→UI 的最短完整鏈；UI 建立簡短 pixel spec（資源/frame、rect、font/baseline、hitbox、state）。已有有效證據直接沿用；缺什麼才查什麼。先修最大共同根因，再批次修可確認的差異。
 4. 儘快實作，不要先跑無關全量測試。開發中用 targeted parse/test、現有安全隔離 Host/Client 與工具快速迭代；可一次修改一批相關控件，之後立即取得 After 比對，不等整個大系統完成才看 UI。
-5. 以實際修改後的可見 Windows Godot + 真 Server + 真滑鼠/鍵盤重新操作目標狀態，做 Reference/Before/After。確認控件真的可操作、動態資料和 hitbox 正確。依第 5 節驗受影響範圍。
-6. 留精簡證據、更新 TODO/Matrix（若涉及功能狀態）、review diff、commit/push main、fetch 驗 0/0。下輪直接接續仍失敗的主要差距。
+5. 以修改後的可見 Windows Godot + 真 Server + 真滑鼠/鍵盤驗實際玩家操作與權威結果，適用持久化/多人及原版行為 A/B；UI 變更做 Reference/Before/After 並驗 hitbox/動態資料。非 UI 修改不用重新取得登入逐像素對照。依第 5 節驗受影響範圍。
+6. 留精簡證據、更新 TODO/Matrix（含玩法/UI 軌與下一個可玩阻塞）、review diff、commit/push main、fetch 驗 0/0。依 §1 選下一輪，不因 AUTH/其他 UI 尚 IN PROGRESS 而自動重複。
 
 ### 效率與中斷規則
 - 建議前 5 分鐘完成安全檢查與選定差距、約 10 分鐘取得可比較畫面；大部分時間用於修正與實機迭代。時間盒是停止重複研究的提醒，不是降低品質的理由。
@@ -42,8 +42,8 @@
 - 所有固定 HK UI 使用同一面板 local pixel coordinate system；背景、sprite、文字、輸入、按鈕、tooltip、hitbox 共用 origin。保留透明 padding/trim/pivot；避免 Container/minimum-size/theme margin/anchor/stretch/DPI 二次偏移。禁止逐 Label 無證據 magic offset、拉伸、重新上色、generic/retro/modern skin。
 - 先辨別原圖已烘焙文字與動態文字，不重疊 Label。每個可見元件核對 x/y/w/h、原始 frame/層級、font face/family/size/weight、繁中 glyph/fallback、tracking/line height、baseline/ascent/descent、alignment、color、outline/shadow、clip/wrap、caret/selection/password mask；長短字與動態數值不可跑位。已知原版幾何目標 **±1 原始像素**，不能用相似字型宣稱一致。
 - normal/hover/pressed/disabled/selected、focus/Tab、Esc/Enter/hotkey、drag/drop、scroll、tooltip、modal/Z-order、開關與重開、Server response、錯誤流程、換圖/重登及動畫/音效（適用時）必須對齊可驗證原版行為；圖像正確但點擊/流程錯仍 FAIL。
-- 每輪保存完整 reference、Before、After；做對應 ROI crop、50% overlay、pixel diff、rect/baseline/hitbox guide；同狀態同 client area 800×600，排除不可控動態區但保留未遮罩原圖，不得 mask 掉錯位或以全畫面高相似度掩蓋局部錯誤。不能只用 PNG、headless/test scene 或測試斷言當實機證據；不得用整張截圖當假 UI。
-- 靜態 ROI 以原版像素一致為目標；記錄可解釋版本/光柵化差異。字型、位置、素材、hitbox 明顯不符就是 TEST FAILED/IN PROGRESS；缺精確 HK 證據 NOT VERIFIED。只有改善不代表已 1:1；不得把未驗視覺標 VERIFIED/COMPLETE。800×600 收斂後驗適用 4:3/16:9/16:10、DPI；寬螢幕擴世界視野，不拉伸 UI/角色/地圖。
+- 每輪涉及 UI 視覺改動時保存完整 reference、Before、After；做對應 ROI crop、50% overlay、pixel diff、rect/baseline/hitbox guide；同狀態同 client area 800×600，排除不可控動態區但保留未遮罩原圖，不得 mask 掉錯位或以全畫面高相似度掩蓋局部錯誤。不能只用 PNG、headless/test scene 或測試斷言當實機證據；不得用整張截圖當假 UI。
+- 靜態 ROI 以原版像素一致為目標；記錄可解釋版本/光柵化差異。字型、位置、素材、hitbox 明顯不符就是 TEST FAILED/IN PROGRESS；缺精確 HK 證據 NOT VERIFIED。只有改善不代表已 1:1；不得把未驗視覺標 VERIFIED/COMPLETE。非阻塞 UI 差異不擋獨立玩法切片。800×600 收斂後驗適用 4:3/16:9/16:10、DPI；寬螢幕擴世界視野，不拉伸 UI/角色/地圖。
 
 ## 4. Git / Session / 資源安全（不可降低）
 
@@ -62,7 +62,7 @@
 | T2 | 共用 UI/renderer/input/auth/session/lifecycle | T1 + 所有直接受影響畫面與代表性核心 smoke；多人受影響才雙 Client |
 | T3 | Server Authority/Protocol/Persistence/AOI/跨圖/高風險共享核心/里程碑或可信 baseline 失效 | 相關全量自動化、完整核心 native smoke、必要雙 Client、原版 A/B 與持久化驗收 |
 
-完整核心 Smoke（詳見 docs/AGENT_REFERENCE.md §4、§7）：Login/Create/Select→角色初始外觀原地 10 秒→移動/Stop/Retarget/障礙→Map15↔Map13 真傳點、WorldReady 後立即走→HUD/Profile HP/MP 真值與動態變更/配點→背包/裝備/Pet/Mecha 等面板→普攻/技能/MISS/受擊/死亡/掉落/EXP→登出重登持久化→必要雙 Client Spawn/Despawn/AOI/跨圖/互動；觀察錯誤、卡死、黑畫面、超長 loading/reconnect/resource leak。已知 P0/P1 不得用既有 PASS 遮掩。只重用同版本且依賴未變的有效證據；不確定就驗受影響範圍。
+完整核心 Smoke（詳見 docs/AGENT_REFERENCE.md §4、§7）：Login/Create/Select→角色初始外觀原地 10 秒→移動/Stop/Retarget/障礙→Map15↔Map13 真傳點、WorldReady 後立即走→HUD/Profile HP/MP 真值與動態變更/配點→背包/裝備/Pet/Mecha 等面板→普攻/技能/MISS/受擊/死亡/掉落/EXP→登出重登持久化→必要雙 Client Spawn/Despawn/AOI/跨圖/互動；觀察錯誤、卡死、黑畫面、超長 loading/reconnect/resource leak。已知 P0/P1 不得用既有 PASS 遮掩；非阻塞 UI P1 依雙軌排程修正。只重用同版本且依賴未變的有效證據；不確定就驗受影響範圍。
 
 Native：C:\SGO\Godot\Godot_v4.7.2-stable_win64.exe，正式 client/ + server/，安全隔離測試資料；Console/headless：C:\SGO\Godot\Godot_v4.7.2-stable_win64_console.exe。headless/mock/fixture/pressed.emit/直接 handler/改 node property 都不能代替真玩家操作。動態項要連續影格/錄影，涉及多人同步/戰鬥/互動要第二個非 headless Client 實際觀察；桌面不可用則如實 NOT VERIFIED，不宣稱已驗。純 UI 不強制每輪跑 334+ Server checks；Server/shared core 高風險才擴到完整相關 suite。
 
