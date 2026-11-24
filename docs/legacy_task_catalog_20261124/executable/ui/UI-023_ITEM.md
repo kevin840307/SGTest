@@ -1,6 +1,6 @@
 # UI-023_ITEM — 背包視窗（獨立執行規格）
 
-狀態：NOT VERIFIED；建議優先度：P1。這是可直接指派的實作任務，不代表 SGTest 現況缺少全部功能。
+狀態：IN PROGRESS；建議優先度：P1。2026-11-24 v14 已完成 HK 023_ITEM 的頁籤／一般物品列／上下捲動幾何與操作切片，並以 Godot 4.7.2 headless + 可見 Windows 真滑鼠驗證；完整字型 baseline、所有 item use/tooltip/drag 狀態與 HK live same-state 仍未全部驗證，故不得標 COMPLETE。這是可直接指派的實作任務，不代表 SGTest 現況缺少全部功能。
 正式工作目錄：C:/SGO/SRC/SGTest；main。先遵守 [AGENTS.md](../../../../AGENTS.md)，讀 [既有任務證據](../../ui/UI-023_ITEM.md) 及相關 TODO/FEATURE_MATRIX。只改本任務的最小垂直切片。
 
 
@@ -8,6 +8,15 @@
 物品分類、格位、圖示/數量、拖曳、提示與物品使用入口。
 
 驗收情境：拾取進包、堆疊、滿包、移動、使用、重登；失敗不複製物品。
+
+## 2026-11-24 v14 實際證據
+- 依 `UI_CONTROL_METADATA.json`／023_ITEM.itf 修正五個類別 hitbox：ITEM (0,21,35×37)、EQUIP (0,58,35×37)、PET (0,95,35×37)、RIDE (0,132,35×37)、ARMOR (0,169,35×37)。保留 SGTest logical tab 映射，但畫面順序回到 HK 原版。
+- 一般物品區改為原版 16 列，row hit area 起點 (42,62)、寬 152、高 27、步距 27；ICON 以 24×24 對齊 row 內 (44,62) 起點。舊版 17 列／24.4px 近似布局已移除。
+- 補回原版 `SCROLLUP_BUTTON` (204,60,17×36) 與 `SCROLLDOWN_BUTTON` (204,459,17×36)，超過 16 筆可實際瀏覽；offset 會 clamp，切頁籤重置，頂／底按鈕會 disabled。
+- Godot 4.7.2 focused gate：`CLASSIC_INVENTORY_HK_LAYOUT_PASS tabs=5 rows=16 row_step=27 scroll_range=0..2 rects=023_ITEM.itf`。
+- 800×600 同正式專案／同 HK 私有素材 A/B：Inventory ROI 259×506，RGB diff bbox=(0,22)-(118,484)，14964 pixels（11.4182%）變動；證據在 `C:\SGO\_v14_evidence\inventory_before_valid.png`、`inventory_after.png`、`inventory_diff_rgb.png`、`inventory_overlay_rgb.png`。
+- 可見 Windows Godot 真滑鼠：正式 logical viewport 800×600 因 Windows DPI 對應 533×400 client；以 ClientToScreen + SetCursorPos + mouse_event 點擊同一 Godot HWND，console 觀察到 offset `0→1→2→1`，列內容 `Item 1..16 → 2..17 → 3..18 → 2..17`，證明 scroll hitbox/操作鏈實際可點。
+- UI Gate（本切片）：tab/row/scroll rect + >16 筆捲動 = PASS；完整 HK 字型／文字 baseline、所有 item use/tooltip/drag state、與 HK 原 client 同資料 live Reference 仍 `NOT VERIFIED`，因此 UI-023 保持 IN PROGRESS。
 
 ## 原版 UI 控制規格
 來源：HK/output/Interface/023_ITEM.itf；C.D.E. 解包：非封裝或未解；解析狀態：COUNT_MATCH；宣告控制項 95，取得 95。

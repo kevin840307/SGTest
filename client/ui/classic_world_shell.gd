@@ -9,7 +9,7 @@ const Photos = preload("res://ui/local_item_photo_cache.gd")
 
 const PRIVATE := "res://ui/private_ie_hk2"
 const BASE_SIZE := Vector2(800,600)
-const ITEM_ROW_COUNT := 17
+const ITEM_ROW_COUNT := 16
 const SKILL_ROW_COUNT := 16
 const HK_SHARED_FONT_FACE := "新細明體"
 const HK_SHARED_FONT_HEIGHT := 12
@@ -407,23 +407,33 @@ func _build_inventory()->void:
 	_inventory_item_bg=inventory.get_node_or_null("BG_ITEMBackground") as TextureRect
 	_inventory_equip_bg=_deferred_background(inventory,"BG_Equip",inventory.size)
 	_inventory_equip_bg.hide()
+	# 023_ITEM.itf: the five category controls are fixed 35×37 hitboxes at
+	# y=21/58/95/132/169. Keep the original visual order while binding to the
+	# existing SGTest logical categories (mecha/armor is logical tab 2).
 	var tab_specs=[
-		["B_ITEM_ITEM","道具"],
-		["B_ITEM_EQUIP","裝備"],
-		["B_ITEM_ARMOR","機甲／裝甲"],
-		["B_ITEM_PET","寵物"],
-		["B_ITEM_RIDE","騎乘"],
+		["B_ITEM_ITEM","道具",0,21],
+		["B_ITEM_EQUIP","裝備",1,58],
+		["B_ITEM_PET","寵物",3,95],
+		["B_ITEM_RIDE","騎乘",4,132],
+		["B_ITEM_ARMOR","機甲／裝甲",2,169],
 	]
 	for i in tab_specs.size():
 		var spec:Array=tab_specs[i]
 		var button:=_texture_button(
-			inventory,"InventoryTab%d"%i,str(spec[0]),Vector2(1,43+float(i)*39.0),
-			Vector2(36,37),_change_inventory_tab.bind(i),str(spec[1]))
+			inventory,"InventoryTab%d"%i,str(spec[0]),Vector2(0,float(spec[3])),
+			Vector2(35,37),_change_inventory_tab.bind(int(spec[2])),str(spec[1]))
 		_inventory_tab_buttons.append(button)
-	# The original art exposes 17 visible rows beginning around y=61.
+	_texture_button(
+		inventory,"InventoryScrollUp","SCROLLUP_BUTTON",Vector2(204,60),
+		Vector2(17,36),_scroll_inventory.bind(-1),"向上捲動")
+	_texture_button(
+		inventory,"InventoryScrollDown","SCROLLDOWN_BUTTON",Vector2(204,459),
+		Vector2(17,36),_scroll_inventory.bind(1),"向下捲動")
+	inventory.set_meta("item_scroll",0)
+	# 023_ITEM.itf exposes 16 row hit areas at y=62..467, exactly 27 px apart.
 	_inventory_rows.name="InventoryRows"
-	_inventory_rows.position=Vector2(39,59)
-	_inventory_rows.size=Vector2(166,425)
+	_inventory_rows.position=Vector2(42,62)
+	_inventory_rows.size=Vector2(152,432)
 	_inventory_rows.add_theme_constant_override("separation",0)
 	inventory.add_child(_inventory_rows)
 	_equipment_rows.name="EquippedRows"
@@ -778,6 +788,7 @@ func _apply_item_grade_color(button:Button,item_id:int)->void:
 
 func _change_inventory_tab(index:int)->void:
 	_inventory_tab=clampi(index,0,4)
+	inventory.set_meta("item_scroll",0)
 	var equip_view:=_inventory_tab==1
 	if _inventory_item_bg!=null:_inventory_item_bg.visible=not equip_view
 	if _inventory_equip_bg!=null:
@@ -785,9 +796,25 @@ func _change_inventory_tab(index:int)->void:
 		if equip_view and _inventory_equip_bg.texture==null:
 			_inventory_equip_bg.texture=_tex("BG_Equip")
 	_equipment_rows.visible=equip_view
-	_inventory_rows.position=Vector2(39,325) if equip_view else Vector2(39,59)
-	_inventory_rows.size=Vector2(166,165) if equip_view else Vector2(166,425)
+	_inventory_rows.position=Vector2(39,325) if equip_view else Vector2(42,62)
+	_inventory_rows.size=Vector2(166,165) if equip_view else Vector2(152,432)
 	_refresh_inventory()
+
+func _scroll_inventory(delta:int)->void:
+	if inventory==null or _inventory_tab in [1,2]:
+		return
+	inventory.set_meta("item_scroll",int(inventory.get_meta("item_scroll",0))+delta)
+	_refresh_inventory()
+
+func _set_inventory_scroll_buttons(total:int)->int:
+	var max_offset:=maxi(0,total-ITEM_ROW_COUNT)
+	var offset:=clampi(int(inventory.get_meta("item_scroll",0)),0,max_offset)
+	inventory.set_meta("item_scroll",offset)
+	var up:=inventory.get_node_or_null("InventoryScrollUp") as TextureButton
+	var down:=inventory.get_node_or_null("InventoryScrollDown") as TextureButton
+	if up!=null:up.disabled=offset<=0
+	if down!=null:down.disabled=offset>=max_offset
+	return offset
 
 func _inventory_matches_tab(item:Dictionary,equipped:bool)->bool:
 	if equipped:
@@ -809,9 +836,11 @@ func _refresh_inventory()->void:
 	var inventory_items:Dictionary=_stats.get("inventory_items",{})
 	var equipment_items:Dictionary=_stats.get("equipment_items",{})
 	if _inventory_tab==2:
+		_set_inventory_scroll_buttons(0)
 		_refresh_classic_mecha_inventory(inventory_items)
 		return
 	if _inventory_tab==1:
+		_set_inventory_scroll_buttons(0)
 		var equipped_uids:Array=equipment_items.keys();equipped_uids.sort()
 		for i in mini(10,equipped_uids.size()):
 			var uid:=int(equipped_uids[i]);var item:Dictionary=equipment_items[equipped_uids[i]]
@@ -849,21 +878,22 @@ func _refresh_inventory()->void:
 		if _inventory_matches_tab(item,false):
 			entries.append({"uid":int(raw_uid),"item":item})
 	entries.sort_custom(func(a:Dictionary,b:Dictionary):return int(a.uid)<int(b.uid))
-	for i in mini(ITEM_ROW_COUNT,entries.size()):
+	var scroll_offset:=_set_inventory_scroll_buttons(entries.size())
+	for i in range(scroll_offset,mini(scroll_offset+ITEM_ROW_COUNT,entries.size())):
 		var entry:Dictionary=entries[i]
 		var uid:=int(entry.uid);var item:Dictionary=entry.item;var id:=int(item.get("item_definition_id",0))
 		var name:=str(_panel.item_catalog.name_for(id)) if _panel!=null else "Item %d"%id
-		var row:=_classic_row(_inventory_rows,"     %s  ×%d"%[name,int(item.get("quantity",1))],24.4)
+		var row:=_classic_row(_inventory_rows,"     %s  ×%d"%[name,int(item.get("quantity",1))],27.0)
 		_apply_item_grade_color(row,id)
 		row.tooltip_text=_panel.item_catalog.tooltip_text_for(item,equipment_items) if _panel!=null else "UID %d · ID %d"%[uid,id]
 		if _panel!=null:
 			var photo:=TextureRect.new();photo.name="ItemPhoto";photo.texture=_photos.photo_for_item(id,_panel.item_catalog)
-			photo.position=Vector2(1,1);photo.size=Vector2(22,22);photo.expand_mode=TextureRect.EXPAND_IGNORE_SIZE
+			photo.position=Vector2(2,0);photo.size=Vector2(24,24);photo.expand_mode=TextureRect.EXPAND_IGNORE_SIZE
 			photo.stretch_mode=TextureRect.STRETCH_KEEP_ASPECT_CENTERED;photo.mouse_filter=Control.MOUSE_FILTER_IGNORE
 			row.add_child(photo)
 		row.pressed.connect(_classic_item_action.bind(uid,id,false))
 	if entries.is_empty():
-		_classic_row(_inventory_rows,"此分頁目前沒有可用資料",24.4)
+		_classic_row(_inventory_rows,"此分頁目前沒有可用資料",27.0)
 
 func _select_classic_mecha(uid:int)->void:
 	_classic_mecha_uid=uid
