@@ -1,4 +1,4 @@
-"""Audit Old Server Enemy_Data/EN_Att tables into exact monster EXP facts."""
+"""Resolve audited fields from the Old Server Enemy_Data/EN_Att join."""
 
 from __future__ import annotations
 
@@ -42,9 +42,15 @@ def parse_enemy_attribute_table(text: str, *, table_id: int) -> dict[int, int]:
     CDEnemyAttr. Column 7 (zero-based) becomes +0x22, and AddAttr copies that
     field into CDEnemyWORDStr[12] (RExp).
     """
+    return _parse_attribute_column(text, table_id, 7, "RExp", 0)
+
+
+def _parse_attribute_column(
+    text: str, table_id: int, column: int, label: str, minimum: int,
+) -> dict[int, int]:
     if table_id < 1 or table_id > 255:
         raise ValueError("invalid EN_Att table id")
-    rewards: dict[int, int] = {}
+    values: dict[int, int] = {}
     reader = csv.reader(text.splitlines())
     for row_number, row in enumerate(reader, 1):
         if not row or all(not value.strip() for value in row):
@@ -55,22 +61,21 @@ def parse_enemy_attribute_table(text: str, *, table_id: int) -> dict[int, int]:
         level_key = _parse_int(
             row[0], label=f"EN_Att level key row {row_number}",
             minimum=1, maximum=MAX_LEVEL)
-        reward = _parse_int(
-            row[7], label=f"EN_Att RExp row {row_number}",
-            minimum=0, maximum=MAX_REWARD)
-        if level_key in rewards:
-            if rewards[level_key] != reward:
+        value = _parse_int(
+            row[column], label=f"EN_Att {label} row {row_number}",
+            minimum=minimum, maximum=MAX_REWARD)
+        if level_key in values:
+            if values[level_key] != value:
                 raise ValueError(
-                    f"ambiguous EN_Att{table_id:02d}.csv RExp for level "
+                    f"ambiguous EN_Att{table_id:02d}.csv {label} for level "
                     f"key {level_key}")
             # Old FindAttr ultimately uses CRT bsearch, whose duplicate-key
-            # selection is unspecified. A duplicate is safe for this EXP-only
-            # projection only when every candidate has the same RExp.
+            # selection is unspecified. The projected field must agree.
             continue
-        rewards[level_key] = reward
-    if not rewards:
+        values[level_key] = value
+    if not values:
         raise ValueError(f"EN_Att{table_id:02d}.csv has no rows")
-    return rewards
+    return values
 
 
 def parse_enemy_catalog(text: str) -> dict[int, tuple[int, int]]:
@@ -111,6 +116,28 @@ def read_old_enemy_reward_catalog(
     required_enemy_ids: set[int],
 ) -> tuple[dict[int, dict], dict]:
     """Resolve only requested enemies, failing closed on any missing mapping."""
+    return _read_old_enemy_attribute_catalog(
+        enemy_data_csv, required_enemy_ids, 7, "RExp", 0, "r_exp",
+        "excluded_no_attribute_reward")
+
+
+def read_old_enemy_hp_catalog(
+    enemy_data_csv: Path, *, required_enemy_ids: set[int],
+) -> tuple[dict[int, dict], dict]:
+    """EN_Att[1] -> CDEnemyAttr+0x0C -> WORD[4] -> initial HP WORD[6].
+
+    Old LoadEnAttData 0x10071307, AddAttr 0x10078451, and
+    CDEnemyMgr::CloneChild 0x10081552–0x10081570 establish the chain.
+    """
+    return _read_old_enemy_attribute_catalog(
+        enemy_data_csv, required_enemy_ids, 1, "HPMAX", 1, "max_hp",
+        "excluded_no_attribute_hp")
+
+
+def _read_old_enemy_attribute_catalog(
+    enemy_data_csv: Path, required_enemy_ids: set[int], column: int,
+    label: str, minimum: int, value_key: str, exclusion_key: str,
+) -> tuple[dict[int, dict], dict]:
     if not required_enemy_ids:
         raise ValueError("at least one required EnemyId is needed")
     if any(enemy_id < 1 or enemy_id > MAX_ENEMY_ID
@@ -144,8 +171,8 @@ def read_old_enemy_reward_catalog(
         except UnicodeDecodeError as exc:
             raise ValueError(
                 f"EN_Att{selector:02d}.csv must be ASCII") from exc
-        tables[selector] = parse_enemy_attribute_table(
-            table_text, table_id=selector)
+        tables[selector] = _parse_attribute_column(
+            table_text, selector, column, label, minimum)
         table_audit.append({
             "table": selector,
             "sha256": hashlib.sha256(table_payload).hexdigest(),
@@ -159,7 +186,7 @@ def read_old_enemy_reward_catalog(
         if level_key == 0xFFFF:
             # Old AddAttr passes this key to FindAttr. EN_Att tables have no
             # 0xffff entry, so FindAttr fails and AddAttr returns false before
-            # RExp is populated. Preserve that no-reward result explicitly.
+            # the audited field is populated. Preserve that miss explicitly.
             excluded.append({
                 "enemy_id": enemy_id,
                 "level_key": level_key,
@@ -179,12 +206,12 @@ def read_old_enemy_reward_catalog(
             "enemy_id": enemy_id,
             "enemy_level": level_key,
             "attribute_table": selector,
-            "r_exp": table[level_key],
+            value_key: table[level_key],
         }
 
     return resolved, {
         "enemy_data_sha256": hashlib.sha256(payload).hexdigest(),
         "enemy_data_bytes": len(payload),
         "attribute_tables": table_audit,
-        "excluded_no_attribute_reward": excluded,
+        exclusion_key: excluded,
     }

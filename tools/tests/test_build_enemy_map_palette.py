@@ -36,8 +36,9 @@ class MapPaletteTests(unittest.TestCase):
                 {"sprite": "EN002A", "spawn_count": 1},
             ])
             self.assertEqual(
-                [(d["enemy_id"], d["level"], d["max_hp"]) for d in row["definitions"]],
-                [(1, 5, 120), (2, 6, 240)])
+                [(d["enemy_id"], d["level"]) for d in row["definitions"]],
+                [(1, 5), (2, 6)])
+            self.assertTrue(all("max_hp" not in d for d in row["definitions"]))
             self.assertTrue(row["complete"])
 
     def test_rejects_trailing_bytes(self):

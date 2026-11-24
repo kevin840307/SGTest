@@ -602,7 +602,7 @@ def _execute(args):
                          'content/build_enemy_map_palette.py','content/asset_paths.py',
                          'content/audit_character_layers.py','source/inspect_act.py',
                          'source/legacy_direction.py','source/legacy_npc.py',
-                         'source/runtime_spr.py','source/scenery.py']]
+                         'source/runtime_spr.py','source/scenery.py','source/old_enemy_rewards.py']]
         modules = {name:hashlib.sha256((REPO/name).read_bytes()).hexdigest() for name in module_paths}
         try:
             original = args.original.resolve()

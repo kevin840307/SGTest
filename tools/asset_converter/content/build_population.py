@@ -7,6 +7,7 @@ from .build_enemy_map_palette import read_enemy_catalog, read_enemy_dat
 from .asset_paths import monster_manifest
 from .build_maps import server_map_directory
 from .animation_definition import compile_definition
+from ..source.old_enemy_rewards import read_old_enemy_hp_catalog
 
 def compile_spawn_evidence(source: Path, server_dat: Path, map_id: int) -> dict:
     """Original Enemy.dat + ACT evidence, without invented combat stats or live assets.
@@ -21,8 +22,9 @@ def compile_spawn_evidence(source: Path, server_dat: Path, map_id: int) -> dict:
     catalog_path = server_dat / 'Enemy' / 'Enemy_Data.csv'
     spawns = read_enemy_dat(enemy_dat)
     catalog = read_enemy_catalog(catalog_path)
+    enemy_ids = sorted({row['enemy_id'] for row in spawns})
     definitions = []
-    for enemy_id in sorted({row['enemy_id'] for row in spawns}):
+    for enemy_id in enemy_ids:
         if enemy_id not in catalog:
             raise ValueError(f'unresolved original Enemy_Data.csv definition {enemy_id}')
         entry = catalog[enemy_id]
@@ -42,15 +44,35 @@ def compile_spawn_evidence(source: Path, server_dat: Path, map_id: int) -> dict:
             'animation_behaviors': sorted(animation['behaviors']),
             'logical_facings': 8, 'frame_count': len(animation['frames']),
             'source_files_sha256': animation['source_sha256'],
-            # Direct source evidence only. Level and MaxHP have known CSV
-            # columns, but Damage/AI/range/cooldown are still unresolved.
             'source_combat_evidence': {
                 'level': entry.get('level'),
-                'max_hp': entry.get('max_hp'),
-                'source_columns': {'level': 3, 'max_hp': 9},
+                'source_columns': {'level': 3},
             },
             'combat_stats_verified': False,
         })
+    sources = {
+        p.relative_to(server_dat).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
+        for p in (enemy_dat, catalog_path)
+    }
+    if enemy_ids:
+        hp_by_enemy, audit = read_old_enemy_hp_catalog(
+            catalog_path, required_enemy_ids=set(enemy_ids))
+        if sources['Enemy/Enemy_Data.csv'] != audit['enemy_data_sha256']:
+            raise ValueError('Enemy_Data.csv changed during HP evidence compilation')
+        for table in audit['attribute_tables']:
+            sources[f"Enemy/EN_Att{table['table']:02d}.csv"] = table['sha256']
+        excluded = {row['enemy_id']: row['reason'] for row in audit['excluded_no_attribute_hp']}
+        for definition in definitions:
+            enemy_id = definition['enemy_id']
+            evidence = definition['source_combat_evidence']
+            if enemy_id in hp_by_enemy:
+                hp = hp_by_enemy[enemy_id]
+                evidence.update(max_hp=hp['max_hp'], max_hp_column=1,
+                                max_hp_source=f"Enemy/EN_Att{hp['attribute_table']:02d}.csv")
+            else:
+                evidence['level_key'] = evidence.pop('level')
+                evidence['source_columns'] = {'level_key': 3}
+                evidence['max_hp_unavailable'] = excluded[enemy_id]
     return {
         'version': 1, 'kind': 'original_spawn_evidence_not_runtime',
         'map_id': map_id,
@@ -58,10 +80,7 @@ def compile_spawn_evidence(source: Path, server_dat: Path, map_id: int) -> dict:
         'spawns': [{'source_index': row['source_index'], 'definition': row['enemy_id'],
                     'p': [row['x'], row['y']], 'source_flags': row['flags']}
                    for row in spawns],
-        'sources': {
-            p.relative_to(server_dat).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
-            for p in (enemy_dat, catalog_path)
-        },
+        'sources': sources,
         'stats_verified': False, 'runtime_implemented': False,
     }
 
@@ -89,8 +108,7 @@ def compile_population(spawns, catalog, assets, map_id):
             'id':enemy_id,'sprite':sprite,'atlas':relative,
             'source_combat_evidence': {
                 'level': definition.get('level'),
-                'max_hp': definition.get('max_hp'),
-                'source_columns': {'level': 3, 'max_hp': 9},
+                'source_columns': {'level': 3},
             },
             'stats':None,'stats_verified':False})
     return {'version':3,'map_id':map_id,'definitions':definitions,

@@ -44,6 +44,8 @@ MVP001 也可透過**同一 CLI** 的 `world-content --include-map --map 13 --ma
 
 `world-content` 可加 `--include-population`，讀取原版 `Enemy.dat` + `Enemy_Data.csv` 與真實 SPR/ACT，在每張地圖輸出 `population_evidence.json`；只驗證 Spawn/定義/動畫來源，不發明 HP/ATK/AI，也不偽裝成 Server Runtime population。2026-11-15 原版 Map13／Map15 合計 82 Spawn、10 種 Enemy、557 原始動畫 Frame 驗證 PASS；正式 Height-Dense Builder 獨立預覽 10/10 Atlas PASS。相關回歸在 `test_population_evidence.py`。
 
+HP 證據由 Old Server `Enemy_Data.csv[3:5]` 選擇 `EN_AttNN.csv` 與列鍵，再讀該列第 2 欄。輸出記錄屬性表 SHA-256。找不到 `0xffff` 列鍵時保留原始鍵並標記 HP 缺失。Client v3 視覺清單只保留來源層級欄位，仍以 `stats=null` 發布。
+
 `build --runtime-only` 同樣接受多次 `--map`，但要先有正式 `client/assets/catalog/assets.json` 和完整獨立 Atlas；完整 7,890 素材 Archive audit 與雙圖定向 Catalog（242 Asset／2,269 Frame）已 PASS，雙圖 Runtime content／空白 Godot external PCK 資源 Gate 已 PASS（244 Texture）；**可執行 Client/Server E2E 仍 NOT VERIFIED**。多圖輸出拒絕重複 ID，隔離及重跑 SHA 回歸見 `tools/tests/test_npc_content.py`。
 
 ## 輸出（均可刪除後重新建置）

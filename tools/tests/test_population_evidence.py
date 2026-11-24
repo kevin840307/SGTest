@@ -26,7 +26,8 @@ class PopulationEvidenceTests(unittest.TestCase):
         (source/'enemy/en010a_ns1.spr').write_bytes(b'spr fixture')
         (server/'Enemy').mkdir(parents=True)
         (server/'Enemy/Enemy_Data.csv').write_bytes(
-            b'1,,Enemy One,3,,,EN010A,,,120\n')
+            b'1,,Enemy One,3,1,,EN010A,,,120\n')
+        (server/'Enemy/EN_Att01.csv').write_bytes(b'3,222,17,0,15,0,30,18,41\n')
         (server/'Map/Map13').mkdir(parents=True)
         spawn = (struct.pack('<i', 2) + enemy_row(1,100,200,9)
                  + enemy_row(1,300,400,17))
@@ -54,8 +55,9 @@ class PopulationEvidenceTests(unittest.TestCase):
             self.assertEqual(definition['atlas'],'Enemy/en010a/atlas.json')
             self.assertEqual(definition['animation_behaviors'],['FA','ND','NH','NS','NW'])
             self.assertEqual(definition['source_combat_evidence'], {
-                'level':3, 'max_hp':120,
-                'source_columns':{'level':3,'max_hp':9},
+                'level':3, 'max_hp':222, 'max_hp_column':1,
+                'max_hp_source':'Enemy/EN_Att01.csv',
+                'source_columns':{'level':3},
             })
             self.assertFalse(definition['combat_stats_verified'])
             self.assertFalse(result['stats_verified'])
@@ -63,6 +65,30 @@ class PopulationEvidenceTests(unittest.TestCase):
             self.assertNotIn('stats',definition)
             self.assertEqual(result['sources']['Map/Map13/Enemy.dat'],
                              hashlib.sha256((server/'Map/Map13/Enemy.dat').read_bytes()).hexdigest())
+            self.assertEqual(result['sources']['Enemy/EN_Att01.csv'],
+                             hashlib.sha256((server/'Enemy/EN_Att01.csv').read_bytes()).hexdigest())
+
+    def test_conflicting_hp_rows_do_not_publish_combat_evidence(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source, server = self.fixture(Path(directory))
+            (server/'Enemy/EN_Att01.csv').write_bytes(
+                b'3,222,17,0,15,0,30,18,41\n3,223,17,0,15,0,30,18,41\n')
+            with patch('asset_converter.content.build_population.compile_definition',
+                       side_effect=self.fake_animation), self.assertRaisesRegex(ValueError, 'ambiguous.*HPMAX'):
+                compile_spawn_evidence(source, server, 13)
+
+    def test_lookup_miss_preserves_raw_key_without_publishing_hp(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source, server = self.fixture(Path(directory))
+            (server/'Enemy/Enemy_Data.csv').write_bytes(
+                b'1,,Enemy One,65535,1,,EN010A,,,120\n')
+            with patch('asset_converter.content.build_population.compile_definition',
+                       side_effect=self.fake_animation):
+                result = compile_spawn_evidence(source, server, 13)
+            self.assertEqual(result['definitions'][0]['source_combat_evidence'], {
+                'level_key':65535, 'source_columns':{'level_key':3},
+                'max_hp_unavailable':'old_add_attr_find_attr_miss',
+            })
 
     def test_missing_original_act_and_unknown_definition_fail_closed(self):
         with tempfile.TemporaryDirectory() as directory:

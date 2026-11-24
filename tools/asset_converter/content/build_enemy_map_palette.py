@@ -69,11 +69,6 @@ def read_enemy_catalog(path: Path) -> dict[int, dict]:
                 "name": row[2].strip() if len(row) > 2 else "",
                 "level": int(row[3]) if len(row) > 3 and row[3].strip().lstrip("-").isdigit() else None,
                 "sprite": sprite.upper(),
-                # Cross-checked against the prior .NET EnemyCatalog reader:
-                # Enemy_Data.csv col[9] is the source MaxHP field. Preserve it
-                # as evidence only; it is not enough to make combat gameplay-ready.
-                "max_hp": int(row[9]) if len(row) > 9 and row[9].strip().isdigit()
-                          and int(row[9]) > 0 else None,
                 "source_row": row_number,
             }
     return items
@@ -97,7 +92,6 @@ def build_map_palette(map_id: int, enemy_dat: Path, catalog: dict[int, dict]) ->
             "sprite": sprite,
             "spawn_count": count,
             "level": definition["level"],
-            "max_hp": definition["max_hp"],
             "name": definition["name"],
         })
     visual_rows = [{"sprite": sprite, "spawn_count": count}

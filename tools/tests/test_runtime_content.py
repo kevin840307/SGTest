@@ -65,7 +65,7 @@ class RuntimeContentTests(unittest.TestCase):
                 {1:{'sprite':'EN001A','level':7,'max_hp':456,'stats':{'hp':999}}},
                 assets, 13)
             self.assertEqual(result['definitions'][0]['source_combat_evidence'], {
-                'level':7,'max_hp':456,'source_columns':{'level':3,'max_hp':9}})
+                'level':7,'source_columns':{'level':3}})
             self.assertIsNone(result['definitions'][0]['stats'])
             self.assertFalse(result['definitions'][0]['stats_verified'])
             self.assertEqual(result['spawns'], [{'definition':1,'p':[100,200],'source_index':7,'source_flags':9}])
