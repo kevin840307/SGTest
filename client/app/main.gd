@@ -445,10 +445,7 @@ func _physics_process(_delta: float) -> void:
 	if not _mouse_autorun.active():
 		return
 	var now := Time.get_ticks_msec()
-	# _input normally sees release first; this is a fallback for cases where
-	# another interaction consumes the release later in the input pipeline.
-	if _mouse_autorun.holding and not Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
-		_mouse_autorun.terrain_release(now)
+	_advance_mouse_autorun_state(now,Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT))
 	if not _mouse_autorun.active() or not session_panel.active or _last_snapshot.is_empty():
 		return
 	if bool(_last_snapshot.get("player_dead",false)) or bool(_last_snapshot.get("reconnecting",false)) or bool(_last_snapshot.get("waiting_for_new_map",false)):
@@ -497,6 +494,17 @@ func _physics_process(_delta: float) -> void:
 			action_sequence,controller):
 		return
 	_submit_autorun_target(cursor_position,now,not moving)
+
+
+func _advance_mouse_autorun_state(now_msec: int,left_pressed: bool) -> void:
+	# Long-hold becomes latched at the 1000ms threshold while the button is
+	# still down. Waiting for release delayed the lock cursor and skipped the
+	# latched blocked-route retry pacing during the remainder of the hold.
+	_mouse_autorun.poll_long_hold(now_msec)
+	# _input normally sees release first; this is a fallback for cases where
+	# another interaction consumes the release later in the input pipeline.
+	if _mouse_autorun.holding and not left_pressed:
+		_mouse_autorun.terrain_release(now_msec)
 
 
 func _autorun_retarget_server_safe(movement_sequence: int, receipt_sequence: int,

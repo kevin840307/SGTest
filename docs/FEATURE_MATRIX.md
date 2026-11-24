@@ -8,7 +8,9 @@
 
 `COMPLETE` 必須同時滿足該功能適用的 Client、Server、UI、Persistence、Unit/Integration/Multiplayer/Visual/A-B/Regression Gate；沒有執行的 Gate 一律不得視為 PASS。此矩陣自 2026-11-22 建立，既有歷史功能先採保守遷移，不因「已有程式碼」自動升級為 COMPLETE。
 
-**2026-11-24 v13 戰鬥資料／COMBAT-PVE**（`b7ed92d`，`IN PROGRESS`）。重建 Map13／15 原版生成證據。Map13 的 EN010A Lv1 Old 初始 HP 由 EN_Att 初始化鏈確認為 51，v3 視覺資料已移除原本錯標的 MaxHP。Map15 Enemy245 查無對應屬性列。正式 v4、普攻資格、傷害與 AI、HK 原版 A/B 均待驗。
+**2026-11-24 v13 戰鬥資料／COMBAT-PVE**（`b7ed92d`，`IN PROGRESS`）。重建 Map13／15 原版生成證據。Map13 的 EN010A Lv1 Old 初始 HP 由 EN_Att 初始化鏈確認為 51，v3 視覺資料已移除原本錯標的 MaxHP。Map15 Enemy245 查無對應屬性列。此次再確認正式 v4 每隻怪必須完整具備 12 個可信 runtime stat 且 `stats_verified/gameplay_ready=true`；目前仍缺 attack/move/aggro/range/cooldown/respawn/wander 等完整閉合，因此維持零權威怪物 fail-closed。普攻資格、傷害與 AI、HK 原版 A/B 均待驗。
+
+**2026-11-24 v13 核心玩法／MOVE-LOCAL**（`IN PROGRESS`）。修正正式 Main scene 未在按住左鍵期間呼叫 1000ms long-hold poll 的 wiring 缺口；現在達門檻當幀即 latch，再執行 release fallback，不改 Server authority。targeted Godot gates PASS；正式 Host＋雙 Main-scene synthetic movement gate 為 9 次 retarget／0 correction、Map15→13→15/AOI PASS。另以乾淨 HEAD 隔離 Host＋正式 maps 13/15 啟動確認 `monsters=0`，可見 current-worktree Godot＋formal real PCK 成功啟動；Computer Use 對 Godot 視窗 2 秒 timeout，故本輪真 Win32 長按仍 `NOT VERIFIED (tooling)`，不宣稱 MOVE-LOCAL COMPLETE。
 
 **2026-11-24 v13 核心玩法／ECON-NPC**（`cfe2fb8`，`IN PROGRESS`）。從原版 `Bank.txt` 解析出兩名 Map15 物品倉庫管理員。正式 Host、可見 Godot、真鍵鼠驗點管理員開倉、存入整組、重登及取回，SQLite 保留同一 ItemUid／數量。可見雙 Client、HK 同狀態 A/B 及所有其他 NPC 經濟功能仍各按現有 gate 驗收。下一玩法阻塞為正式角色的普攻規則與可信 Map13 怪物資料。
 
@@ -16,7 +18,7 @@
 
 | Feature ID | 功能名稱 | HK 預期行為 | 證據來源 | Client | Server | UI | Persistence | Unit Test | Integration Test | Multiplayer Test | Visual Test | A/B Test | BUG / 限制 | Commit SHA | 狀態 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| MOVE-LOCAL | 本地玩家移動 / Prediction | 點擊、長按、繞障、固定速度、Server 權威校正，操作感接近 HK | `todo.txt` PLAYER-LOCAL-MOVEMENT-PREDICTION / PLAYER-WALK-FACING-BOUNDARY；`docs/CLIENT_ARCHITECTURE.md` | 有 | 有 | 有 | N/A | PASS（含 8-way facing boundary） | PASS（合成；2026-11-23 Server 305/305） | 部分 | NOT VERIFIED（私有真 GPU） | NOT VERIFIED | facing boundary regression 已關閉；真 Map13/15 長時間、WAN/多人畫面仍缺 | —（歷史遷移） | IN PROGRESS |
+| MOVE-LOCAL | 本地玩家移動 / Prediction | 點擊、長按、繞障、固定速度、Server 權威校正，操作感接近 HK | `todo.txt` PLAYER-LOCAL-MOVEMENT-PREDICTION / PLAYER-WALK-FACING-BOUNDARY / PLAYER-AUTORUN-LATCH-WIRING；`docs/CLIENT_ARCHITECTURE.md` | 有 | 有 | 有 | N/A | PASS（含 1000ms Main-scene latch wiring、8-way facing boundary） | PASS（2026-11-24 formal Host＋雙 Main synthetic movement gate；9 retarget／0 correction） | 部分 | NOT VERIFIED（real PCK 可見 Client 已啟動；本輪 OCU 2 秒 timeout 未完成真 Win32 長按） | NOT VERIFIED | 1000ms latch wiring 已關閉；正式 combat 仍 fail-closed；真 Map13/15 真人長按、WAN/多人畫面仍缺 | —（歷史遷移） | IN PROGRESS |
 | MOVE-REMOTE-INTENT | 遠端玩家 route intent / 平滑同步 | 其他玩家由合法移動意圖連續走，Stop/Retarget/傳點/戰鬥狀態正確，不忽快忽慢 | `docs/RUNTIME_PROTOCOL.md`；`docs/TEST_PLAN.md`；`todo.txt` PLAYER-REMOTE-MOVE-INTENT-AOI | reducer + route presentation 已有 | 已有 | Blocking route 已接 | N/A | PASS | PASS | PASS（20 AES synthetic） | NOT VERIFIED（private PCK/source metadata mismatch） | protocol A/B PASS；原版動態 A/B 未做 | 96px bounded re-anchor 為暫定策略；Windows 真雙 Client、障礙實機、WAN/soak 未驗 | `ec043cf` | IN PROGRESS |
 | AOI-PLAYER | 玩家 AOI Spawn/Delta/Despawn/Resync | 只看到視野內正確玩家，換圖/重連不殘影，可靠事件不丟 | `docs/RUNTIME_PROTOCOL.md`；`docs/TEST_PLAN.md` | 有 | 有 | 有 | N/A | PASS | PASS | PASS | 部分 | NOT VERIFIED（HK 實機） | Windows 真視覺與長時間 soak 未完整驗 | `3aa00d8`（最新移動切片） | VERIFIED |
 | AOI-MONSTER-DROP | 怪物與地上物 AOI | 可見範圍內 Spawn/Delta/Despawn，無重複 UID/跨區污染 | `docs/TEST_PLAN.md` MVP008 load gates | 有 | 有 | 有 | 部分 | PASS | PASS | PASS（20/300/500 synthetic） | NOT VERIFIED（Windows 真素材） | NOT VERIFIED | synthetic load 不等於完整戰鬥/DB 掉落結算 | —（歷史遷移） | VERIFIED |

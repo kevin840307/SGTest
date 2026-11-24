@@ -128,6 +128,8 @@ jobs:
         run: timeout 20s .cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64 --headless --path client --script res://tests/test_client_auto_approach_attack.gd
       - name: Recovered-compatible 1000ms cursor-follow autorun policy
         run: .cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64 --headless --path client --script res://tests/test_mouse_autorun_state.gd
+      - name: Main scene latches autorun at 1000ms while left button stays pressed
+        run: .cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64 --headless --path client --script res://tests/test_main_autorun_latch.gd
       - name: ClientSession ordered movement stop barrier
         run: .cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64 --headless --path client --script res://tests/test_client_stop_barrier.gd
       - name: ClientSession pure FIFO admission conflict and pending-policy matrix
