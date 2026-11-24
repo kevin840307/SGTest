@@ -230,6 +230,8 @@ python tools/asset_converter/smoke_runtime_pack.py "C:\SGO\Godot\Godot_v4.7.2-st
 
 唯一 Converter 的 `item-catalog` 會唯讀既有 Godot `Items/*.tres`，輸出名稱、類別、`icon_id`、來源 SHA256 與 bounded presentation metadata 到 Git 忽略的 `client/content/item_catalog.json`；Runtime 不可用這些欄位決定 Item 使用、攻防結算、價格、裝備合法性或任何 Server 規則。另可加 `--hk-item-itd` 指向 HK `Item/item.itd`；`source/hk_item_itd.py` 重用既有 C.D.E. `unwrap_cde`，不建立第二套解密器，按 `SGOClient.exe.lst` 已確認的六種 record 邊界完整解析並以唯一 exact-name crosswalk 疊加 `hk_original_tooltip` 證據，永不改寫 SGTest runtime Item ID。2026-11-22 真實私有資料：5000 件 catalog + HK 9,096 records，3,030 unique-name matches、914 HK tooltip matches；輸出 2,838,031 bytes，CLI 約 1.119s，Godot 4.7.2 驗證載入約 282.979ms，catalog SHA256 `bf9d52e0b0e055ad6d3d55cf9e93178e62c5b14384dd52337b928dae121d8fe6`。Python 9 targeted tests PASS，兩套 UI headless regressions PASS。HK 裝備中無法直接 CP950 解碼的動態數值 formatter、真 Windows GUI/GPU/RSS 與完整 Release 仍 NOT VERIFIED。
 
+2026-11-25 新增 gameplay-only `weapon-definition-ranges`，**不讀 presentation catalog 當權威**：每次重新讀 SGTest converted `Items/*.tres`、HK `Item/item.itd` 與 Old Server `Dat/Item/Weapon.itd`，僅在 runtime unique exact-name→HK ID、HK ID→Old `ItemIndex`、converted `attack_range == Old AttDistance` 三項同時成立時輸出規則；歧義、不一致、重複 identity 全部 fail-closed。真實 `C:/SGO/Recovered/client/Items` 5,003 件 + HK 9,096 records + Old 73 weapons publication PASS，73/73 都得到可信 DefinitionId→ItemIndex→AttDistance、unresolved=0，距離集合 `{60,90,100,120,140,350}`。輸出預設位於 Git 忽略的 `local-assets/asset_converter/combat/weapon_definition_ranges.json`，公開 repo 只保留 builder/schema/test；Server `WeaponAttackRangeCatalog` 另要求 complete manifest 才能載入。這只關閉 GP-013-02 的武器距離 identity bridge，普通攻擊 cadence/v4 monster runtime 與正式真戰鬥仍 NOT VERIFIED。
+
 
 ### 指定額外角色素材（2026-11-22）
 

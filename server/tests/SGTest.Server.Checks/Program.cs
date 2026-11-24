@@ -125,6 +125,12 @@ static class Checks
                 Console.WriteLine($"CHARACTER_EXPERIENCE_CHECKS PASS total={_passes}");
                 return 0;
             }
+            if(args is ["--weapon-range-only"])
+            {
+                WeaponAttackRangeCatalogChecks.Verify(root);
+                Console.WriteLine($"WEAPON_RANGE_CHECKS PASS total={_passes}");
+                return 0;
+            }
             if (args is ["--identity-admin-only", "--aes"])
             {
                 IdentityAdminChecks.Verify(root, tlsOnly: true);
@@ -357,6 +363,7 @@ static class Checks
             MechaChecks.Verify();
             CharacterExperienceChecks.Verify(root);
                 CharacterProgressionChecks.Verify(root);
+            WeaponAttackRangeCatalogChecks.Verify(root);
             TradeChecks.Verify(root);
             PlayerShopChecks.Verify(root);
             PlayerShopCoordinatorChecks.Verify(root);

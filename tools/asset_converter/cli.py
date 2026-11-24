@@ -33,6 +33,7 @@ from asset_converter.content.build_pet_growth_curve import publish_pet_growth_cu
 from asset_converter.content.build_character_experience_rewards import publish_character_experience_rewards
 from asset_converter.content.build_character_progression_rules import publish_character_progression_rules
 from asset_converter.content.build_weapon_attack_ranges import publish_weapon_attack_ranges
+from asset_converter.content.build_weapon_definition_ranges import publish_weapon_definition_ranges
 from asset_converter.content.skill_evidence import compile_skill_evidence
 from asset_converter.content.current_client_skill_evidence import compile_current_client_skill_evidence
 
@@ -434,6 +435,27 @@ def main() -> int:
         '--source-reference',
         default='Old SGOEquip::ReadWeaponData/SearchIndex + Dat/Item/Weapon.itd',
         help='non-private provenance label')
+    weapon_definition_ranges = sub.add_parser(
+        'weapon-definition-ranges',
+        help='compile verified SGTest definition -> Old weapon attack-distance bridge')
+    weapon_definition_ranges.add_argument('--items',type=Path,required=True,
+        help='converted SGTest Items root')
+    weapon_definition_ranges.add_argument('--hk-item-itd',type=Path,required=True,
+        help='HK Item/item.itd used for unique exact-name identity evidence')
+    weapon_definition_ranges.add_argument('--weapon-itd',type=Path,required=True,
+        help='Old Server Dat/Item/Weapon.itd source')
+    weapon_definition_ranges.add_argument('--output',type=Path,
+        default=REPO/'local-assets/asset_converter/combat/weapon_definition_ranges.json')
+    weapon_definition_ranges.add_argument(
+        '--item-source-reference',default='converted SGTest Items/*.tres',
+        help='non-private provenance label for converted runtime item definitions')
+    weapon_definition_ranges.add_argument(
+        '--hk-source-reference',default='HK SGO Item/item.itd',
+        help='non-private provenance label for HK item identity evidence')
+    weapon_definition_ranges.add_argument(
+        '--old-source-reference',
+        default='Old SGOEquip::ReadWeaponData/SearchIndex + Dat/Item/Weapon.itd',
+        help='non-private provenance label for Old weapon evidence')
     character_progression = sub.add_parser(
         'character-progression-rules',
         help='compile audited Old Server character level/attribute/profile rules')
@@ -556,6 +578,17 @@ def _execute(args):
             result = publish_weapon_attack_ranges(
                 args.weapon_itd,args.output,
                 source_reference=args.source_reference)
+        except (OSError,ValueError,TypeError) as error:
+            result = {'status':'failed','error':str(error)}
+        print(json.dumps(result,ensure_ascii=False,indent=2),flush=True)
+        return 0 if result['status']=='pass' else 1
+    if args.command == 'weapon-definition-ranges':
+        try:
+            result = publish_weapon_definition_ranges(
+                args.items,args.hk_item_itd,args.weapon_itd,args.output,
+                item_source_reference=args.item_source_reference,
+                hk_source_reference=args.hk_source_reference,
+                old_source_reference=args.old_source_reference)
         except (OSError,ValueError,TypeError) as error:
             result = {'status':'failed','error':str(error)}
         print(json.dumps(result,ensure_ascii=False,indent=2),flush=True)
