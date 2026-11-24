@@ -49,6 +49,8 @@ dotnet run --project server/tests/SGTest.Server.Checks -c Release -- --listener-
 
 ## 怪物死亡後的 SQLite 掉落（MVP006 部分完成）
 
+正式 `serve --content client/assets` 可直接使用 Converter 的 Map13／15 地圖輸出。符合 `visual_spawn_content` v3 契約的 `population.json` 只供 client 素材使用，Host 會讓該圖以零隻權威怪物啟動。權威怪物仍須提供明確驗證的 `verified_monster_runtime` v4，無效的 gameplay 清單會拒絕啟動。以 `AES_HOST_READY` 的 `monster_maps` 和 `monsters` 確認實際載入範圍。
+
 正式 `serve` 未帶 `--loot-rules` 時不會自行創造物品。只有已明確核對原版表格／規則的操作者，才可指定私人掉落規則文件：
 
 ```powershell

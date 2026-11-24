@@ -6,6 +6,8 @@
 
 `COMPLETE` 必須同時滿足該功能適用的 Client、Server、UI、Persistence、Unit/Integration/Multiplayer/Visual/A-B/Regression Gate；沒有執行的 Gate 一律不得視為 PASS。此矩陣自 2026-11-22 建立，既有歷史功能先採保守遷移，不因「已有程式碼」自動升級為 COMPLETE。
 
+**2026-11-24 v13 P0／玩法前置**（`c66e725`）。正式 Host 可使用 Converter 的 Map13／15 原樣輸出啟動。真鍵鼠完成創角、選角、Map15↔Map13 雙向傳點與兩圖移動。Server 334/334 PASS，含正式 Host v3 零怪啟動與無效 v4 拒絕啟動。COMBAT-PVE 仍為 `IN PROGRESS`，正式角色的有效戰鬥資格與 Map13 怪物 v4 權威內容待驗。實機雙 Client、重登、原版 A/B 為 `NOT VERIFIED`。本輪為 P0，無 UI 軌交付。
+
 | Feature ID | 功能名稱 | HK 預期行為 | 證據來源 | Client | Server | UI | Persistence | Unit Test | Integration Test | Multiplayer Test | Visual Test | A/B Test | BUG / 限制 | Commit SHA | 狀態 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | MOVE-LOCAL | 本地玩家移動 / Prediction | 點擊、長按、繞障、固定速度、Server 權威校正，操作感接近 HK | `todo.txt` PLAYER-LOCAL-MOVEMENT-PREDICTION / PLAYER-WALK-FACING-BOUNDARY；`docs/CLIENT_ARCHITECTURE.md` | 有 | 有 | 有 | N/A | PASS（含 8-way facing boundary） | PASS（合成；2026-11-23 Server 305/305） | 部分 | NOT VERIFIED（私有真 GPU） | NOT VERIFIED | facing boundary regression 已關閉；真 Map13/15 長時間、WAN/多人畫面仍缺 | —（歷史遷移） | IN PROGRESS |
