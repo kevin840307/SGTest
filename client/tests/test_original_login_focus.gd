@@ -56,5 +56,18 @@ func _run() -> void:
 	if root.gui_get_focus_owner() != shell._username:
 		_fail("second Tab must move password -> account")
 		return
+	app.session_panel.username_input.text = "remembered"
+	shell._username.text = "typing"
+	shell._password.text = "in progress"
+	shell._password.grab_focus()
+	app._resize()
+	if shell._username.text != "typing" or shell._password.text != "in progress" or root.gui_get_focus_owner() != shell._password:
+		_fail("a layout refresh must preserve both edits and their focus")
+		return
+	shell.enable_for_page(Layout.Page.CHARACTER_SELECT,true)
+	shell.enable_for_page(Layout.Page.LOGIN,true)
+	if shell._username.text != "remembered" or root.gui_get_focus_owner() != shell._username:
+		_fail("entering Login must restore the remembered account and focus")
+		return
 	print("ORIGINAL_LOGIN_FOCUS_PASS")
 	quit(0)

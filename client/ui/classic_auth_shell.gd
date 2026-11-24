@@ -747,10 +747,11 @@ func enable_for_page(page: int,on: bool) -> void:
 	if select_page.visible:
 		_character_key = ""
 		_update_characters()
-	if login_page.visible:
+	# A layout refresh can re-enable the current page while the player is typing.
+	# Only restore the remembered account when entering Login.
+	if entering_login:
 		_username.text = _panel.username_input.text
-		if entering_login:
-			_username.grab_focus()
+		_username.grab_focus()
 
 func _process(_delta: float) -> void:
 	if _panel == null:
