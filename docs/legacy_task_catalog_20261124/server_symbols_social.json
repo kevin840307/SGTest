@@ -1,0 +1,419 @@
+{
+  "SGOCareerSys": [
+    {
+      "line": 2274,
+      "address": "100025B3",
+      "method": "FindJobID",
+      "owner": "CCareer"
+    },
+    {
+      "line": 5738,
+      "address": "100048DA",
+      "method": "SetCareer",
+      "owner": "CCareer"
+    },
+    {
+      "line": 8805,
+      "address": "100064DA",
+      "method": "FindJobData",
+      "owner": "CCareerData"
+    },
+    {
+      "line": 16698,
+      "address": "1000B015",
+      "method": "LoadCareerData",
+      "owner": "SGOCareerSys"
+    },
+    {
+      "line": 27182,
+      "address": "10011B9A",
+      "method": "OnChangeJob",
+      "owner": "SGOCareerSys"
+    },
+    {
+      "line": 28199,
+      "address": "100124EA",
+      "method": "ChangeJob",
+      "owner": "SGOCareerSys"
+    },
+    {
+      "line": 34842,
+      "address": "100167E7",
+      "method": "GetJobFlag",
+      "owner": "SGOCareerSys"
+    },
+    {
+      "line": 42993,
+      "address": "1001BAA4",
+      "method": "FindCareer",
+      "owner": "SGOCareerSys"
+    },
+    {
+      "line": 44268,
+      "address": "1001C786",
+      "method": "GetCareer",
+      "owner": "SGOCareerSys"
+    },
+    {
+      "line": 45551,
+      "address": "1001D484",
+      "method": "AddJobA",
+      "owner": "SGOCareerSys"
+    },
+    {
+      "line": 47336,
+      "address": "1001E690",
+      "method": "DelAllJob",
+      "owner": "SGOCareerSys"
+    },
+    {
+      "line": 48708,
+      "address": "1001F45B",
+      "method": "DelJob",
+      "owner": "SGOCareerSys"
+    },
+    {
+      "line": 51738,
+      "address": "10021319",
+      "method": "GetJobList",
+      "owner": "SGOCareerSys"
+    },
+    {
+      "line": 53808,
+      "address": "100227B9",
+      "method": "SetCareer",
+      "owner": "SGOCareerSys"
+    }
+  ],
+  "SGOStatus": [
+    {
+      "line": 16318,
+      "address": "1000AF06",
+      "method": "SetStatus",
+      "owner": "SGOStatusMgr"
+    },
+    {
+      "line": 19940,
+      "address": "1000D341",
+      "method": "GetStatus",
+      "owner": "SGOStatusMgr"
+    },
+    {
+      "line": 36098,
+      "address": "100176E4",
+      "method": "SendPlayerStatus",
+      "owner": "SGOStatusMgr"
+    },
+    {
+      "line": 112395,
+      "address": "10045045",
+      "method": "SetStatus",
+      "owner": "CDMapEntity"
+    },
+    {
+      "line": 113200,
+      "address": "1004583C",
+      "method": "GetStatus",
+      "owner": "CDMapEntity"
+    },
+    {
+      "line": 130096,
+      "address": "1004FBF6",
+      "method": "GetScriptBuffer",
+      "owner": "CDEntity"
+    }
+  ],
+  "CDQuest": [],
+  "SGORepair": [
+    {
+      "line": 3749,
+      "address": "1000337A",
+      "method": "DoRepair",
+      "owner": "SGORepair"
+    },
+    {
+      "line": 6229,
+      "address": "10004CE7",
+      "method": "OnRepair",
+      "owner": "SGORepair"
+    },
+    {
+      "line": 8366,
+      "address": "100062AC",
+      "method": "OnHorseEquipRepair",
+      "owner": "SGORepair"
+    },
+    {
+      "line": 11653,
+      "address": "1000841F",
+      "method": "OnRepairClose",
+      "owner": "SGORepair"
+    }
+  ],
+  "SGOMix": [
+    {
+      "line": 2900,
+      "address": "10002AD9",
+      "method": "OnItemMix",
+      "owner": "SGOMix"
+    }
+  ],
+  "CDTeam": [
+    {
+      "line": 12938,
+      "address": "100090F3",
+      "method": "GetTeamSize",
+      "owner": "CDTeam"
+    },
+    {
+      "line": 18444,
+      "address": "1000C2B4",
+      "method": "RemoveTeam",
+      "owner": "CDTeamMgr"
+    },
+    {
+      "line": 36232,
+      "address": "10017291",
+      "method": "OnInvite",
+      "owner": "CDTeamSys"
+    },
+    {
+      "line": 37703,
+      "address": "100181AA",
+      "method": "OnInviteReply",
+      "owner": "CDTeamSys"
+    },
+    {
+      "line": 51685,
+      "address": "10020DFA",
+      "method": "GetTeamMembersPtr",
+      "owner": "CDTeamSys"
+    },
+    {
+      "line": 52707,
+      "address": "10021747",
+      "method": "GetTeamMembers",
+      "owner": "CDTeamSys"
+    },
+    {
+      "line": 53584,
+      "address": "10022003",
+      "method": "GetTeamMembers_ByLeaderUID",
+      "owner": "CDTeamSys"
+    },
+    {
+      "line": 54461,
+      "address": "100228C0",
+      "method": "GetTeamList_First",
+      "owner": "CDTeamSys"
+    },
+    {
+      "line": 56113,
+      "address": "10023997",
+      "method": "GetTeamList_Next",
+      "owner": "CDTeamSys"
+    }
+  ],
+  "CDChat": [],
+  "CDHotKey": [],
+  "CDEmotion": [
+    {
+      "line": 2501,
+      "address": "1000253E",
+      "method": "OnSetEmotion",
+      "owner": "CDEmotion"
+    },
+    {
+      "line": 3860,
+      "address": "100032DA",
+      "method": "OnSetPKEmotion",
+      "owner": "CDEmotion"
+    },
+    {
+      "line": 5203,
+      "address": "10004057",
+      "method": "SendEmotionPacket",
+      "owner": "CDEmotion"
+    },
+    {
+      "line": 6071,
+      "address": "10004900",
+      "method": "SendPKEmotionPacket",
+      "owner": "CDEmotion"
+    },
+    {
+      "line": 7803,
+      "address": "100059FF",
+      "method": "GetEmotion",
+      "owner": "CDEmotion"
+    }
+  ],
+  "CDRankDLL": [
+    {
+      "line": 8461,
+      "address": "100064C0",
+      "method": "OnRankChamp",
+      "owner": "CDRank"
+    },
+    {
+      "line": 10158,
+      "address": "10007603",
+      "method": "OnRankClose",
+      "owner": "CDRank"
+    }
+  ],
+  "SGOTitleSys": [
+    {
+      "line": 10173,
+      "address": "100073DF",
+      "method": "OnChangeTitle",
+      "owner": "SGOTitleSys"
+    },
+    {
+      "line": 20277,
+      "address": "1000D94D",
+      "method": "FindTitle",
+      "owner": "SGOTitleSys"
+    },
+    {
+      "line": 21552,
+      "address": "1000E634",
+      "method": "GetTitle",
+      "owner": "SGOTitleSys"
+    },
+    {
+      "line": 22835,
+      "address": "1000F335",
+      "method": "AddTitle",
+      "owner": "SGOTitleSys"
+    },
+    {
+      "line": 24916,
+      "address": "10010864",
+      "method": "DelTitle",
+      "owner": "SGOTitleSys"
+    },
+    {
+      "line": 28192,
+      "address": "100129BC",
+      "method": "GetTitleList",
+      "owner": "SGOTitleSys"
+    },
+    {
+      "line": 34303,
+      "address": "10015CD0",
+      "method": "FindTitleID",
+      "owner": "CTitle"
+    }
+  ],
+  "SGOPetSys": [
+    {
+      "line": 12428,
+      "address": "10008B67",
+      "method": "GetPetObj",
+      "owner": "CSGOPet"
+    },
+    {
+      "line": 13188,
+      "address": "100092BA",
+      "method": "SetPetObj",
+      "owner": "CSGOPet"
+    },
+    {
+      "line": 14002,
+      "address": "10009ABB",
+      "method": "GetPetData",
+      "owner": "CSGOPet"
+    },
+    {
+      "line": 14760,
+      "address": "1000A20E",
+      "method": "SetPetData",
+      "owner": "CSGOPet"
+    },
+    {
+      "line": 68601,
+      "address": "1002B645",
+      "method": "SetPet",
+      "owner": "CSGOPetObj"
+    },
+    {
+      "line": 69562,
+      "address": "1002BFCD",
+      "method": "UpdatePet",
+      "owner": "CSGOPetObj"
+    },
+    {
+      "line": 70435,
+      "address": "1002C86A",
+      "method": "GetPet",
+      "owner": "CSGOPetObj"
+    },
+    {
+      "line": 75143,
+      "address": "1002F7E5",
+      "method": "SetPetSys",
+      "owner": "CSGOPetObj"
+    },
+    {
+      "line": 110026,
+      "address": "10045A7B",
+      "method": "OnSummon",
+      "owner": "CSGOPetSys"
+    },
+    {
+      "line": 113885,
+      "address": "10048341",
+      "method": "OnUnsummon",
+      "owner": "CSGOPetSys"
+    },
+    {
+      "line": 121934,
+      "address": "1004D564",
+      "method": "OnFeed",
+      "owner": "CSGOPetSys"
+    },
+    {
+      "line": 124255,
+      "address": "1004EDBA",
+      "method": "OnDestoryPet",
+      "owner": "CSGOPetSys"
+    },
+    {
+      "line": 127767,
+      "address": "100511C8",
+      "method": "RemovePetObj",
+      "owner": "CSGOPetSys"
+    },
+    {
+      "line": 131893,
+      "address": "10053C84",
+      "method": "GetPetObj",
+      "owner": "CSGOPetSys"
+    },
+    {
+      "line": 133122,
+      "address": "100548F9",
+      "method": "GetPetObjByMID",
+      "owner": "CSGOPetSys"
+    },
+    {
+      "line": 159897,
+      "address": "100644DB",
+      "method": "GetActivePet",
+      "owner": "CSGOPetSys"
+    },
+    {
+      "line": 166702,
+      "address": "100687FE",
+      "method": "GetActivePet",
+      "owner": "CSGOPetSysPlayerItemList"
+    },
+    {
+      "line": 167508,
+      "address": "10069009",
+      "method": "SetActivePet",
+      "owner": "CSGOPetSysPlayerItemList"
+    }
+  ]
+}

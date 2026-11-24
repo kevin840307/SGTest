@@ -1,0 +1,4053 @@
+{
+  "ui": [
+    {
+      "itf": "001_ACCOUNT_LOGIN.ITF",
+      "spr": [
+        "ACCOUNT_LOGIN.spr",
+        "B_ONLINEHELP.spr",
+        "YELLOW_BUTTON.spr"
+      ],
+      "size": 654,
+      "cde": false,
+      "hk": [
+        [
+          68392,
+          "004299B0"
+        ]
+      ],
+      "old": [
+        {
+          "name": "001_Account_Login.itf",
+          "line": 71336,
+          "address": "0042B6EA",
+          "owner": {
+            "name": "CLoginItf",
+            "line": 71286,
+            "address": "0042B6AD"
+          }
+        }
+      ]
+    },
+    {
+      "itf": "002_CONNECTING.ITF",
+      "spr": [
+        "ACCOUNT_LOGIN.spr",
+        "B_ONLINEHELP.spr",
+        "CN_SGO_LOGO.spr"
+      ],
+      "size": 243,
+      "cde": false,
+      "hk": [],
+      "old": []
+    },
+    {
+      "itf": "003_SELECT_SERVER.ITF",
+      "spr": [
+        "B_ONLINEHELP.spr",
+        "LOGIN_Light.spr",
+        "SCROLLDOWN_BUTTON.spr",
+        "SCROLLDOWN_S.spr",
+        "SCROLLUP_BUTTON.spr",
+        "SCROLLUP_S.spr",
+        "SELECT_SERVER.spr",
+        "YELLOW_BUTTON.spr"
+      ],
+      "size": 1512,
+      "cde": false,
+      "hk": [
+        [
+          72096,
+          "0042BEEE"
+        ]
+      ],
+      "old": [
+        {
+          "name": "003_Select_Server.itf",
+          "line": 74580,
+          "address": "0042D5C4",
+          "owner": {
+            "name": "CSelectServerItf",
+            "line": 74538,
+            "address": "0042D5A2"
+          }
+        }
+      ]
+    },
+    {
+      "itf": "004_SELECT_CHARACTER.ITF",
+      "spr": [
+        "B_ONLINEHELP.spr",
+        "NEW_CHARACTER.spr",
+        "PLAY_GAME.spr",
+        "SELECT_CHARACTER.spr",
+        "YELLOW_BUTTON.spr"
+      ],
+      "size": 1943,
+      "cde": false,
+      "hk": [
+        [
+          70323,
+          "0042AD9E"
+        ]
+      ],
+      "old": [
+        {
+          "name": "004_Select_Character.itf",
+          "line": 73016,
+          "address": "0042C68B",
+          "owner": {
+            "name": "CSelectCharacterItf",
+            "line": 72983,
+            "address": "0042C669"
+          }
+        }
+      ]
+    },
+    {
+      "itf": "005_CREATE_CHARACTER.ITF",
+      "spr": [
+        "B_ONLINEHELP.spr",
+        "CREATE_CHARACTER.spr",
+        "LEFT_BUTTON.spr",
+        "RIGHT_BUTTON.spr",
+        "YELLOW_BUTTON.spr"
+      ],
+      "size": 2699,
+      "cde": false,
+      "hk": [
+        [
+          61408,
+          "004252EE"
+        ]
+      ],
+      "old": [
+        {
+          "name": "005_Create_Character.itf",
+          "line": 63529,
+          "address": "00426D2B",
+          "owner": {
+            "name": "CCreateCharacterItf",
+            "line": 63455,
+            "address": "00426D06"
+          }
+        }
+      ]
+    },
+    {
+      "itf": "006_StatusLite.itf",
+      "spr": [
+        "EXP.spr",
+        "HP.spr",
+        "HPBAR.spr",
+        "MP.spr",
+        "WP.spr"
+      ],
+      "size": 451,
+      "cde": false,
+      "hk": [
+        [
+          114776,
+          "00445F83"
+        ]
+      ],
+      "old": [
+        {
+          "name": "006_StatusLite.itf",
+          "line": 117088,
+          "address": "00446B7A",
+          "owner": {
+            "name": "CCharInfoLiteItf",
+            "line": 117035,
+            "address": "00446B14"
+          }
+        }
+      ]
+    },
+    {
+      "itf": "006_StatusLite_G.itf",
+      "spr": [],
+      "size": 242,
+      "cde": true,
+      "hk": [],
+      "old": []
+    },
+    {
+      "itf": "007_HOTKEY_Yl.itf",
+      "spr": [
+        "HOTKEY_LY.spr",
+        "HOTKEY_YS_B.spr",
+        "OFFON.spr"
+      ],
+      "size": 2519,
+      "cde": false,
+      "hk": [
+        [
+          125757,
+          "0044D0E8"
+        ]
+      ],
+      "old": [
+        {
+          "name": "007_HOTKEY_yl.itf",
+          "line": 126826,
+          "address": "0044CFC7",
+          "owner": {
+            "name": "CHotKeyItf",
+            "line": 126803,
+            "address": "0044CF9E"
+          }
+        }
+      ]
+    },
+    {
+      "itf": "007_HOTKEY_YS.itf",
+      "spr": [
+        "HOTKEY_SY.spr",
+        "HOTKEY_YL_B.spr",
+        "ICON.spr",
+        "OFFON.spr"
+      ],
+      "size": 1226,
+      "cde": false,
+      "hk": [],
+      "old": []
+    },
+    {
+      "itf": "008_MINIMAP_L.itf",
+      "spr": [
+        "BG_MINIMAP_POINT.spr",
+        "B_ONLINEHELP.spr",
+        "MINIMAP_L.spr",
+        "MINISCREEN.spr"
+      ],
+      "size": 355,
+      "cde": false,
+      "hk": [
+        [
+          128165,
+          "0044E602"
+        ]
+      ],
+      "old": [
+        {
+          "name": "008_MINIMAP_L.itf",
+          "line": 130828,
+          "address": "0044F04E",
+          "owner": {
+            "name": "CMiniMapLItf",
+            "line": 130773,
+            "address": "0044F022"
+          }
+        }
+      ]
+    },
+    {
+      "itf": "008_MINIMAP_S.itf",
+      "spr": [
+        "B_ONLINEHELP.spr",
+        "MINIMAP_S.spr",
+        "ZONESCREEN.spr"
+      ],
+      "size": 215,
+      "cde": false,
+      "hk": [
+        [
+          130133,
+          "0044FB3A"
+        ]
+      ],
+      "old": [
+        {
+          "name": "008_MINIMAP_S.itf",
+          "line": 132946,
+          "address": "0045048B",
+          "owner": {
+            "name": "CMiniMapSItf",
+            "line": 132931,
+            "address": "0045047A"
+          }
+        }
+      ]
+    },
+    {
+      "itf": "009_STATUS.itf",
+      "spr": [
+        "EFFECT_ICON.spr",
+        "STATUS.spr"
+      ],
+      "size": 475,
+      "cde": false,
+      "hk": [],
+      "old": [
+        {
+          "name": "009_STATUS.itf",
+          "line": 134965,
+          "address": "00451622",
+          "owner": {
+            "name": "CStatusIconBarItf",
+            "line": 134955,
+            "address": "00451617"
+          }
+        }
+      ]
+    },
+    {
+      "itf": "010_MESSAGE01.itf",
+      "spr": [
+        "BG_MESSAGE.spr",
+        "YELLOW_BUTTON.spr"
+      ],
+      "size": 297,
+      "cde": false,
+      "hk": [
+        [
+          92238,
+          "00437FBB"
+        ]
+      ],
+      "old": [
+        {
+          "name": "010_MESSAGE01.itf",
+          "line": 92856,
+          "address": "0043857A",
+          "owner": null
+        }
+      ]
+    },
+    {
+      "itf": "010_MESSAGE02.itf",
+      "spr": [
+        "BG_MESSAGE.spr",
+        "YELLOW_BUTTON.spr"
+      ],
+      "size": 190,
+      "cde": false,
+      "hk": [
+        [
+          87952,
+          "004355FD"
+        ],
+        [
+          88353,
+          "00435900"
+        ]
+      ],
+      "old": [
+        {
+          "name": "010_MESSAGE02.itf",
+          "line": 89209,
+          "address": "0043620C",
+          "owner": null
+        }
+      ]
+    },
+    {
+      "itf": "011_LOGIN_LOADING.itf",
+      "spr": [
+        "BG_LOGIN_LOADING.spr",
+        "EXP.spr"
+      ],
+      "size": 185,
+      "cde": false,
+      "hk": [
+        [
+          59746,
+          "0042428A"
+        ]
+      ],
+      "old": [
+        {
+          "name": "011_LOGIN_LOADING.itf",
+          "line": 61549,
+          "address": "00425ABE",
+          "owner": {
+            "name": "CConnectingItf",
+            "line": 61518,
+            "address": "00425A98"
+          }
+        }
+      ]
+    },
+    {
+      "itf": "012_DEL_EMAIL.itf",
+      "spr": [
+        "BG_DEL_EMAIL.spr",
+        "B_ONLINEHELP.spr",
+        "YELLOW_BUTTON.spr"
+      ],
+      "size": 555,
+      "cde": false,
+      "hk": [
+        [
+          439633,
+          "005125BE"
+        ]
+      ],
+      "old": [
+        {
+          "name": "012_DEL_EMAIL.itf",
+          "line": 406508,
+          "address": "004F6123",
+          "owner": null
+        }
+      ]
+    },
+    {
+      "itf": "013_Character_INFO.itf",
+      "spr": [],
+      "size": 1106,
+      "cde": true,
+      "hk": [
+        [
+          108264,
+          "00441A2D"
+        ]
+      ],
+      "old": [
+        {
+          "name": "013_Character_info.itf",
+          "line": 110418,
+          "address": "0044254A",
+          "owner": {
+            "name": "CCharInfoFullItf",
+            "line": 110377,
+            "address": "00442524"
+          }
+        }
+      ]
+    },
+    {
+      "itf": "014_Character_NICK.itf",
+      "spr": [
+        "BG_CHARACTER_NICK.spr",
+        "B_ONLINEHELP.spr",
+        "CLOSESCREEN.spr",
+        "SCROLLDOWN_BUTTON.spr",
+        "SCROLLUP_BUTTON.spr"
+      ],
+      "size": 1323,
+      "cde": false,
+      "hk": [
+        [
+          116684,
+          "00447432"
+        ]
+      ],
+      "old": [
+        {
+          "name": "014_Character_NICK.itf",
+          "line": 119007,
+          "address": "00447FDC",
+          "owner": {
+            "name": "CCharInfoTitleItf",
+            "line": 118977,
+            "address": "00447FBA"
+          }
+        }
+      ]
+    },
+    {
+      "itf": "015_Character_JOB.itf",
+      "spr": [
+        "BG_CHARACTER_JOB.spr",
+        "B_ONLINEHELP.spr",
+        "CLOSESCREEN.spr",
+        "SCROLLDOWN_BUTTON.spr",
+        "SCROLLUP_BUTTON.spr"
+      ],
+      "size": 1330,
+      "cde": false,
+      "hk": [
+        [
+          113855,
+          "004457D9"
+        ]
+      ],
+      "old": [
+        {
+          "name": "015_Character_JOB.itf",
+          "line": 116016,
+          "address": "004461F1",
+          "owner": {
+            "name": "CCharInfoJobItf",
+            "line": 115985,
+            "address": "004461CF"
+          }
+        }
+      ]
+    },
+    {
+      "itf": "016_CHANNEL.itf",
+      "spr": [
+        "B_CHANNEL_CA.spr",
+        "B_CHANNEL_CB.spr",
+        "B_CHANNEL_CC.spr",
+        "B_CHANNEL_CD.spr",
+        "B_CHANNEL_CE.spr",
+        "B_EMOTETION.spr",
+        "CHANNEL.spr",
+        "ICON_BUBBLE.spr",
+        "ICON_CHANNEL.spr",
+        "SCROLLDOWN_S.spr",
+        "SCROLLUP_S.spr",
+        "ZONESCREEN.spr"
+      ],
+      "size": 970,
+      "cde": false,
+      "hk": [
+        [
+          104558,
+          "0043FA8A"
+        ]
+      ],
+      "old": [
+        {
+          "name": "016_CHANNEL.itf",
+          "line": 105288,
+          "address": "0043F906",
+          "owner": {
+            "name": "CChatSItf",
+            "line": 105273,
+            "address": "0043F8F5"
+          }
+        }
+      ]
+    },
+    {
+      "itf": "017_CHANNEL_BIG.itf",
+      "spr": [
+        "BG_CHANNEL_BIG.spr",
+        "B_CHANNEL_CA.spr",
+        "B_CHANNEL_CB.spr",
+        "B_CHANNEL_CC.spr",
+        "B_CHANNEL_CD.spr",
+        "B_CHANNEL_CE.spr",
+        "B_EMOTETION.spr",
+        "B_ONLINEHELP.spr",
+        "CLOSESCREEN.spr",
+        "ICON_BUBBLE.spr",
+        "ICON_CHANNEL.spr",
+        "SCROLLDOWN_BUTTON.spr",
+        "SCROLLUP_BUTTON.spr"
+      ],
+      "size": 991,
+      "cde": false,
+      "hk": [
+        [
+          103475,
+          "0043F101"
+        ]
+      ],
+      "old": [
+        {
+          "name": "017_CHANNEL_BIG.itf",
+          "line": 104149,
+          "address": "0043EF04",
+          "owner": {
+            "name": "CChatLItf",
+            "line": 104123,
+            "address": "0043EEDF"
+          }
+        }
+      ]
+    },
+    {
+      "itf": "018_EMOTION_BIG.itf",
+      "spr": [
+        "BG_EMOTION.spr",
+        "B_BACK.spr",
+        "B_NEXT.spr",
+        "CLOSESCREEN.spr",
+        "EMOTIONAL_ICON.spr"
+      ],
+      "size": 912,
+      "cde": false,
+      "hk": [
+        [
+          132584,
+          "00451219"
+        ]
+      ],
+      "old": [
+        {
+          "name": "018_EMOTION_BIG.itf",
+          "line": 135537,
+          "address": "00451A51",
+          "owner": {
+            "name": "CEmotionMenuItf",
+            "line": 135509,
+            "address": "00451A2F"
+          }
+        }
+      ]
+    },
+    {
+      "itf": "019_TALKBUBBLE_BIG.itf",
+      "spr": [
+        "BG_TALKBUBBLE.spr",
+        "B_BACK.spr",
+        "B_NEXT.spr",
+        "CLOSESCREEN.spr",
+        "ICON_BUBBLE.spr"
+      ],
+      "size": 553,
+      "cde": false,
+      "hk": [
+        [
+          139285,
+          "00455053"
+        ]
+      ],
+      "old": [
+        {
+          "name": "019_TALKBUBBLE_BIG.itf",
+          "line": 142230,
+          "address": "004556FA",
+          "owner": {
+            "name": "CBalloonMenuItf",
+            "line": 142219,
+            "address": "004556ED"
+          }
+        }
+      ]
+    },
+    {
+      "itf": "020_FRIENDlIST.itf",
+      "spr": [
+        "BG_FRIENDLIST_SMALL.spr",
+        "B_GET_MAIL.spr",
+        "B_LIST_ADD.spr",
+        "B_LIST_DEL.spr",
+        "B_LIST_EDIT.spr",
+        "B_LIST_FRIENDLIST.spr",
+        "B_LIST_IGNORELIST.spr",
+        "B_LIST_TO_INGORE.spr",
+        "SCROLLDOWN_S.spr",
+        "SCROLLUP_S.spr",
+        "ZONESCREEN.spr"
+      ],
+      "size": 998,
+      "cde": false,
+      "hk": [
+        [
+          169246,
+          "0046827D"
+        ]
+      ],
+      "old": [
+        {
+          "name": "020_FRIENDlIST.itf",
+          "line": 173747,
+          "address": "004686BE",
+          "owner": {
+            "name": "CFriendSItf",
+            "line": 173721,
+            "address": "00468696"
+          }
+        }
+      ]
+    },
+    {
+      "itf": "021_COMMAND.itf",
+      "spr": [],
+      "size": 338,
+      "cde": true,
+      "hk": [
+        [
+          169928,
+          "00468851"
+        ]
+      ],
+      "old": [
+        {
+          "name": "021_COMMAND.itf",
+          "line": 174537,
+          "address": "00468D67",
+          "owner": {
+            "name": "CToolBarItf",
+            "line": 174522,
+            "address": "00468D56"
+          }
+        }
+      ]
+    },
+    {
+      "itf": "022_equip.itf",
+      "spr": [
+        "BG_Equip.spr",
+        "B_ITEM_ARMOR.spr",
+        "B_ITEM_EQUIP.spr",
+        "B_ITEM_ITEM.spr",
+        "B_ITEM_PET.spr",
+        "B_ITEM_RIDE.spr",
+        "B_ONLINEHELP.spr",
+        "B_RADIO_B.spr",
+        "CLOSESCREEN.spr",
+        "ICON.spr",
+        "SCROLLDOWN_BUTTON.spr",
+        "SCROLLUP_BUTTON.spr"
+      ],
+      "size": 3371,
+      "cde": false,
+      "hk": [
+        [
+          144507,
+          "0045821E"
+        ]
+      ],
+      "old": [
+        {
+          "name": "022_equip.itf",
+          "line": 147375,
+          "address": "0045871C",
+          "owner": {
+            "name": "CEquipItf",
+            "line": 147312,
+            "address": "004586F3"
+          }
+        }
+      ]
+    },
+    {
+      "itf": "023_ITEM.itf",
+      "spr": [
+        "BG_ITEM.spr",
+        "B_ITEM_ARMOR.spr",
+        "B_ITEM_EQUIP.spr",
+        "B_ITEM_ITEM.spr",
+        "B_ITEM_PET.spr",
+        "B_ITEM_RIDE.spr",
+        "B_ONLINEHELP.spr",
+        "CLOSESCREEN.spr",
+        "ICON.spr",
+        "SCROLLDOWN_BUTTON.spr",
+        "SCROLLUP_BUTTON.spr"
+      ],
+      "size": 4015,
+      "cde": false,
+      "hk": [
+        [
+          150725,
+          "0045C6C1"
+        ]
+      ],
+      "old": [
+        {
+          "name": "023_ITEM.itf",
+          "line": 154181,
+          "address": "0045CE0E",
+          "owner": {
+            "name": "CItemItf",
+            "line": 154114,
+            "address": "0045CDD7"
+          }
+        }
+      ]
+    },
+    {
+      "itf": "024_Pet.itf",
+      "spr": [
+        "BG_ELFIN.spr",
+        "B_ITEM_ARMOR.spr",
+        "B_ITEM_EQUIP.spr",
+        "B_ITEM_ITEM.spr",
+        "B_ITEM_PET.spr",
+        "B_ITEM_RIDE.spr",
+        "B_ONLINEHELP.spr",
+        "CLOSESCREEN.spr",
+        "ICON.spr",
+        "SCROLLDOWN_BUTTON.spr",
+        "SCROLLUP_BUTTON.spr"
+      ],
+      "size": 4586,
+      "cde": false,
+      "hk": [
+        [
+          157810,
+          "004610A3"
+        ]
+      ],
+      "old": [
+        {
+          "name": "024_Pet.itf",
+          "line": 160766,
+          "address": "00460DAB",
+          "owner": {
+            "name": "CPetItf",
+            "line": 160751,
+            "address": "00460D9A"
+          }
+        }
+      ]
+    },
+    {
+      "itf": "024_RANK.itf",
+      "spr": [
+        "BG_RANK03.spr",
+        "B_ONLINEHELP.spr",
+        "CLOSESCREEN.spr",
+        "SCROLLDOWN_BUTTON.spr",
+        "SCROLLUP_BUTTON.spr",
+        "YELLOW_BUTTON.spr"
+      ],
+      "size": 1919,
+      "cde": false,
+      "hk": [
+        [
+          133523,
+          "00451A10"
+        ]
+      ],
+      "old": [
+        {
+          "name": "024_RANK.itf",
+          "line": 136818,
+          "address": "004524E9",
+          "owner": {
+            "name": "CRankMainItf",
+            "line": 136776,
+            "address": "004524C7"
+          }
+        }
+      ]
+    },
+    {
+      "itf": "024b_RANK.itf",
+      "spr": [
+        "BG_RANK03.spr",
+        "B_ONLINEHELP.spr",
+        "CLOSESCREEN.spr",
+        "SCROLLDOWN_BUTTON.spr",
+        "SCROLLUP_BUTTON.spr",
+        "YELLOW_BUTTON.spr"
+      ],
+      "size": 1796,
+      "cde": false,
+      "hk": [],
+      "old": []
+    },
+    {
+      "itf": "025_RANK_02.itf",
+      "spr": [
+        "BG_RANK_01.spr",
+        "B_ONLINEHELP.spr",
+        "CLOSESCREEN.spr",
+        "YELLOW_BUTTON.spr"
+      ],
+      "size": 392,
+      "cde": false,
+      "hk": [
+        [
+          136552,
+          "0045365B"
+        ],
+        [
+          267991,
+          "004A684D"
+        ]
+      ],
+      "old": [
+        {
+          "name": "025_RANK_02.itf",
+          "line": 139718,
+          "address": "00453F09",
+          "owner": {
+            "name": "CRankSayItf",
+            "line": 139689,
+            "address": "00453EE7"
+          }
+        }
+      ]
+    },
+    {
+      "itf": "026_TEAM.itf",
+      "spr": [
+        "BG_TEAM.spr",
+        "B_COMPLEX_TEAM.spr",
+        "B_ONLINEHELP.spr",
+        "B_TEAM_BUILDUP.spr",
+        "B_TEAM_GOOUT.spr",
+        "CLOSESCREEN.spr",
+        "HP.spr",
+        "MP.spr"
+      ],
+      "size": 1480,
+      "cde": false,
+      "hk": [
+        [
+          140898,
+          "00455E25"
+        ]
+      ],
+      "old": [
+        {
+          "name": "026_TEAM.itf",
+          "line": 143876,
+          "address": "00456590",
+          "owner": {
+            "name": "CTeamItf",
+            "line": 143834,
+            "address": "0045656A"
+          }
+        }
+      ]
+    },
+    {
+      "itf": "027_Skill.itf",
+      "spr": [
+        "BG_SKILL_S.spr",
+        "B_ONLINEHELP.spr",
+        "CLOSESCREEN.spr",
+        "EXP.spr",
+        "ICON.spr",
+        "SCROLLDOWN_BUTTON.spr",
+        "SCROLLUP_BUTTON.spr"
+      ],
+      "size": 2306,
+      "cde": false,
+      "hk": [
+        [
+          173173,
+          "0046A6C0"
+        ]
+      ],
+      "old": [
+        {
+          "name": "027_Skill.itf",
+          "line": 178384,
+          "address": "0046AE5C",
+          "owner": {
+            "name": "CSkillItf",
+            "line": 178370,
+            "address": "0046AE4D"
+          }
+        }
+      ]
+    },
+    {
+      "itf": "028_Mix_item.itf",
+      "spr": [
+        "BG_MIX_ITEM.spr",
+        "B_MIX_ITEM_BUTTON.spr",
+        "B_ONLINEHELP.spr",
+        "CLOSESCREEN.spr",
+        "ICON.spr",
+        "SCROLLDOWN_BUTTON.spr",
+        "SCROLLUP_BUTTON.spr"
+      ],
+      "size": 3499,
+      "cde": false,
+      "hk": [
+        [
+          180659,
+          "0046F38B"
+        ]
+      ],
+      "old": [
+        {
+          "name": "028_Mix_item.itf",
+          "line": 186295,
+          "address": "0046FD0A",
+          "owner": {
+            "name": "CItemMixItf",
+            "line": 186265,
+            "address": "0046FCD7"
+          }
+        }
+      ]
+    },
+    {
+      "itf": "029_SYSTEM.itf",
+      "spr": [
+        "ADD_POINT.spr",
+        "BG_SYSTEM.spr",
+        "B_ONLINEHELP.spr",
+        "B_PVP_LEFT.spr",
+        "B_PVP_RIGHT.spr",
+        "CLOSESCREEN.spr",
+        "MINISCREEN.spr",
+        "YELLOW_BUTTON.spr"
+      ],
+      "size": 1222,
+      "cde": false,
+      "hk": [
+        [
+          137091,
+          "00453AAD"
+        ]
+      ],
+      "old": [
+        {
+          "name": "029_SYSTEM.itf",
+          "line": 140249,
+          "address": "00454363",
+          "owner": {
+            "name": "CSystemMenuItf",
+            "line": 140235,
+            "address": "00454356"
+          }
+        }
+      ]
+    },
+    {
+      "itf": "030_REPAIR.itf",
+      "spr": [
+        "BG_REPAIR.spr",
+        "B_ONLINEHELP.spr",
+        "B_RADIO_B.spr",
+        "CLOSESCREEN.spr",
+        "ICON.spr",
+        "SCROLLDOWN_BUTTON.spr",
+        "SCROLLUP_BUTTON.spr"
+      ],
+      "size": 3846,
+      "cde": false,
+      "hk": [
+        [
+          183393,
+          "00470FCD"
+        ]
+      ],
+      "old": [
+        {
+          "name": "030_REPAIR.itf",
+          "line": 188836,
+          "address": "00471689",
+          "owner": {
+            "name": "CItemRepairItf",
+            "line": 188799,
+            "address": "00471663"
+          }
+        }
+      ]
+    },
+    {
+      "itf": "031_SHOP.itf",
+      "spr": [
+        "BG_SHOP.spr",
+        "B_ITEM_ARMOR.spr",
+        "B_ITEM_EQUIP.spr",
+        "B_ITEM_ITEM.spr",
+        "B_ITEM_PET.spr",
+        "B_ITEM_RIDE.spr",
+        "B_ONLINEHELP.spr",
+        "CLOSESCREEN.spr",
+        "ICON.spr",
+        "SCROLLDOWN_BUTTON.spr",
+        "SCROLLUP_BUTTON.spr"
+      ],
+      "size": 11682,
+      "cde": false,
+      "hk": [
+        [
+          196576,
+          "00479C10"
+        ]
+      ],
+      "old": [
+        {
+          "name": "031_Shop.itf",
+          "line": 201364,
+          "address": "0047993E",
+          "owner": {
+            "name": "CShopItf",
+            "line": 201353,
+            "address": "00479931"
+          }
+        }
+      ]
+    },
+    {
+      "itf": "032_SHOP_02.itf",
+      "spr": [
+        "BG_SHOP_02.spr",
+        "B_ONLINEHELP.spr",
+        "CLOSESCREEN.spr",
+        "ICON.spr",
+        "YELLOW_BUTTON.spr"
+      ],
+      "size": 466,
+      "cde": false,
+      "hk": [
+        [
+          178526,
+          "0046DE7A"
+        ],
+        [
+          178787,
+          "0046E116"
+        ],
+        [
+          198104,
+          "0047AADC"
+        ],
+        [
+          198472,
+          "0047AE71"
+        ],
+        [
+          204912,
+          "0047ED4A"
+        ]
+      ],
+      "old": [
+        {
+          "name": "032_SHOP_02.itf",
+          "line": 183434,
+          "address": "0046E1D6",
+          "owner": null
+        },
+        {
+          "name": "032_SHOP_02.itf",
+          "line": 183681,
+          "address": "0046E466",
+          "owner": null
+        },
+        {
+          "name": "032_SHOP_02.itf",
+          "line": 202673,
+          "address": "0047A5C4",
+          "owner": null
+        },
+        {
+          "name": "032_SHOP_02.itf",
+          "line": 203041,
+          "address": "0047A973",
+          "owner": null
+        },
+        {
+          "name": "032_SHOP_02.itf",
+          "line": 209374,
+          "address": "0047E573",
+          "owner": null
+        }
+      ]
+    },
+    {
+      "itf": "033_MESSAGE_INGAME.itf",
+      "spr": [
+        "BG_MESSAGE_INGAME.spr",
+        "B_ONLINEHELP.spr",
+        "CLOSESCREEN.spr"
+      ],
+      "size": 389,
+      "cde": false,
+      "hk": [],
+      "old": []
+    },
+    {
+      "itf": "033_MESSAGE_NAME.itf",
+      "spr": [
+        "BG_MESSAGE_NAME.spr",
+        "YELLOW_BUTTON.spr"
+      ],
+      "size": 456,
+      "cde": false,
+      "hk": [],
+      "old": [
+        {
+          "name": "033_MESSAGE_NAME.itf",
+          "line": 69688,
+          "address": "0042A86F",
+          "owner": {
+            "name": "CChangeNameItf",
+            "line": 69643,
+            "address": "0042A832"
+          }
+        }
+      ]
+    },
+    {
+      "itf": "034_BANK.itf",
+      "spr": [
+        "BG_BANK.spr",
+        "B_ITEM_ARMOR.spr",
+        "B_ITEM_EQUIP.spr",
+        "B_ITEM_ITEM.spr",
+        "B_ITEM_PET.spr",
+        "B_ITEM_RIDE.spr",
+        "B_ONLINEHELP.spr",
+        "CLOSESCREEN.spr",
+        "ICON.spr",
+        "SCROLLDOWN_BUTTON.spr",
+        "SCROLLUP_BUTTON.spr"
+      ],
+      "size": 6160,
+      "cde": false,
+      "hk": [
+        [
+          177161,
+          "0046CF8A"
+        ]
+      ],
+      "old": [
+        {
+          "name": "034_Bank.itf",
+          "line": 182137,
+          "address": "0046D449",
+          "owner": {
+            "name": "CBankSysItf",
+            "line": 182126,
+            "address": "0046D43C"
+          }
+        }
+      ]
+    },
+    {
+      "itf": "035_TRADE.itf",
+      "spr": [
+        "BG_TRADE.spr",
+        "B_ITEM_ARMOR.spr",
+        "B_ITEM_EQUIP.spr",
+        "B_ITEM_ITEM.spr",
+        "B_ITEM_PET.spr",
+        "B_ITEM_RIDE.spr",
+        "B_ONLINEHELP.spr",
+        "B_PVP_FRIEND.spr",
+        "B_TRADE_READY.spr",
+        "CLOSESCREEN.spr",
+        "ICON.spr",
+        "SCROLLDOWN_BUTTON.spr",
+        "SCROLLUP_BUTTON.spr",
+        "YELLOW_BUTTON.spr"
+      ],
+      "size": 6604,
+      "cde": false,
+      "hk": [
+        [
+          202488,
+          "0047D634"
+        ]
+      ],
+      "old": [
+        {
+          "name": "035_Trade.itf",
+          "line": 207141,
+          "address": "0047D048",
+          "owner": {
+            "name": "CTradeItf",
+            "line": 207121,
+            "address": "0047D029"
+          }
+        }
+      ]
+    },
+    {
+      "itf": "035_TRADE_02.itf",
+      "spr": [
+        "BG_TRADE_02.spr",
+        "B_ONLINEHELP.spr",
+        "CLOSESCREEN.spr",
+        "YELLOW_BUTTON.spr"
+      ],
+      "size": 422,
+      "cde": false,
+      "hk": [
+        [
+          200957,
+          "0047C747"
+        ]
+      ],
+      "old": [
+        {
+          "name": "035_TRADE_02.itf",
+          "line": 205924,
+          "address": "0047C4ED",
+          "owner": {
+            "name": "CTradeInputMoney",
+            "line": 205876,
+            "address": "0047C49F"
+          }
+        }
+      ]
+    },
+    {
+      "itf": "036_PetItem.itf",
+      "spr": [
+        "BG_ELFIN_ITEM.spr",
+        "B_ONLINEHELP.spr",
+        "CLOSESCREEN.spr",
+        "EXP.spr",
+        "ICON.spr",
+        "SCROLLDOWN_BUTTON.spr",
+        "SCROLLUP_BUTTON.spr"
+      ],
+      "size": 3042,
+      "cde": false,
+      "hk": [
+        [
+          228866,
+          "0048E3B2"
+        ]
+      ],
+      "old": [
+        {
+          "name": "036_PetItem.itf",
+          "line": 233105,
+          "address": "0048D0A2",
+          "owner": {
+            "name": "CPetItemItf",
+            "line": 233071,
+            "address": "0048D080"
+          }
+        }
+      ]
+    },
+    {
+      "itf": "037_PetEquip.itf",
+      "spr": [
+        "BG_ELFIN_EQUIP.spr",
+        "B_ONLINEHELP.spr",
+        "B_RADIO_B.spr",
+        "CLOSESCREEN.spr",
+        "ICON.spr",
+        "SCROLLDOWN_BUTTON.spr",
+        "SCROLLUP_BUTTON.spr"
+      ],
+      "size": 2714,
+      "cde": false,
+      "hk": [
+        [
+          218067,
+          "00486F74"
+        ]
+      ],
+      "old": [
+        {
+          "name": "037_PetEquip.itf",
+          "line": 223076,
+          "address": "00486BDA",
+          "owner": {
+            "name": "CPetEquipItf",
+            "line": 223024,
+            "address": "00486BB4"
+          }
+        }
+      ]
+    },
+    {
+      "itf": "038_WAITINGBOX.itf",
+      "spr": [
+        "BG_WAITINGBOX.spr"
+      ],
+      "size": 89,
+      "cde": false,
+      "hk": [
+        [
+          91741,
+          "00437C3E"
+        ]
+      ],
+      "old": [
+        {
+          "name": "038_waitingbox.itf",
+          "line": 92138,
+          "address": "00438002",
+          "owner": null
+        }
+      ]
+    },
+    {
+      "itf": "039_PetInfo.itf",
+      "spr": [
+        "ADD_POINT.spr",
+        "BG_ELFIN_INFO.spr",
+        "B_ELFIN_EQUIP.spr",
+        "B_ELFIN_FEED.spr",
+        "B_ELFIN_NAME.spr",
+        "B_ELFIN_SUMMON.spr",
+        "B_ELFIN_UNSUMMON.spr",
+        "B_ONLINEHELP.spr",
+        "CLOSESCREEN.spr",
+        "EXP.spr",
+        "HP.spr",
+        "MP.spr",
+        "SCROLLDOWN_BUTTON.spr",
+        "SCROLLDOWN_S.spr",
+        "SCROLLUP_BUTTON.spr",
+        "SCROLLUP_S.spr"
+      ],
+      "size": 3714,
+      "cde": false,
+      "hk": [
+        [
+          227682,
+          "0048D7E0"
+        ]
+      ],
+      "old": [
+        {
+          "name": "039_PetInfo.itf",
+          "line": 231958,
+          "address": "0048C650",
+          "owner": {
+            "name": "CPetInfoItf",
+            "line": 231947,
+            "address": "0048C643"
+          }
+        }
+      ]
+    },
+    {
+      "itf": "040_Rightbox.itf",
+      "spr": [
+        "BG_RIGHTBOX.spr",
+        "B_RIGHTBOX_BUTTON.spr"
+      ],
+      "size": 883,
+      "cde": false,
+      "hk": [
+        [
+          130657,
+          "0044FF43"
+        ]
+      ],
+      "old": [
+        {
+          "name": "040_Rightbox.itf",
+          "line": 133627,
+          "address": "004509C3",
+          "owner": {
+            "name": "CReqMenuItf",
+            "line": 133565,
+            "address": "00450938"
+          }
+        }
+      ]
+    },
+    {
+      "itf": "040_Rightbox_02.itf",
+      "spr": [
+        "BG_RIGHTBOX_02.spr",
+        "B_RIGHTBOX_BUTTON.spr"
+      ],
+      "size": 225,
+      "cde": false,
+      "hk": [],
+      "old": []
+    },
+    {
+      "itf": "040_Rightbox_Ext.itf",
+      "spr": [
+        "BG_RIGHTBOX_EXT.spr",
+        "B_RIGHTBOX_BUTTON.spr"
+      ],
+      "size": 1023,
+      "cde": false,
+      "hk": [
+        [
+          130653,
+          "0044FF3A"
+        ]
+      ],
+      "old": [
+        {
+          "name": "040_Rightbox_Ext.itf",
+          "line": 133623,
+          "address": "004509BA",
+          "owner": {
+            "name": "CReqMenuItf",
+            "line": 133565,
+            "address": "00450938"
+          }
+        }
+      ]
+    },
+    {
+      "itf": "041_balloon_01.itf",
+      "spr": [
+        "BG_BUBBLE_01.spr"
+      ],
+      "size": 87,
+      "cde": false,
+      "hk": [
+        [
+          215821,
+          "00485942"
+        ],
+        [
+          215889,
+          "004859C8"
+        ],
+        [
+          216008,
+          "00485AFA"
+        ],
+        [
+          216075,
+          "00485B82"
+        ]
+      ],
+      "old": [
+        {
+          "name": "041_balloon_01.itf",
+          "line": 220850,
+          "address": "00485643",
+          "owner": null
+        },
+        {
+          "name": "041_balloon_01.itf",
+          "line": 220920,
+          "address": "004856B1",
+          "owner": null
+        },
+        {
+          "name": "041_balloon_01.itf",
+          "line": 221067,
+          "address": "00485810",
+          "owner": null
+        },
+        {
+          "name": "041_balloon_01.itf",
+          "line": 221146,
+          "address": "004858C8",
+          "owner": {
+            "name": "CQuestItf",
+            "line": 221100,
+            "address": "00485856"
+          }
+        }
+      ]
+    },
+    {
+      "itf": "041_balloon_02.itf",
+      "spr": [
+        "BG_BUBBLE_02.spr"
+      ],
+      "size": 87,
+      "cde": false,
+      "hk": [
+        [
+          215906,
+          "004859F5"
+        ]
+      ],
+      "old": [
+        {
+          "name": "041_balloon_02.itf",
+          "line": 220941,
+          "address": "004856E4",
+          "owner": null
+        }
+      ]
+    },
+    {
+      "itf": "041_balloon_03.itf",
+      "spr": [
+        "BG_BUBBLE_03.spr"
+      ],
+      "size": 87,
+      "cde": false,
+      "hk": [
+        [
+          215923,
+          "00485A22"
+        ]
+      ],
+      "old": [
+        {
+          "name": "041_balloon_03.itf",
+          "line": 220962,
+          "address": "00485717",
+          "owner": null
+        }
+      ]
+    },
+    {
+      "itf": "041_balloon_04.itf",
+      "spr": [
+        "BG_BUBBLE_04.spr"
+      ],
+      "size": 87,
+      "cde": false,
+      "hk": [
+        [
+          215940,
+          "00485A4F"
+        ]
+      ],
+      "old": [
+        {
+          "name": "041_balloon_04.itf",
+          "line": 220983,
+          "address": "0048574A",
+          "owner": null
+        }
+      ]
+    },
+    {
+      "itf": "041_balloon_05.itf",
+      "spr": [
+        "BG_BUBBLE_05.spr"
+      ],
+      "size": 87,
+      "cde": false,
+      "hk": [
+        [
+          215957,
+          "00485A7C"
+        ]
+      ],
+      "old": [
+        {
+          "name": "041_balloon_05.itf",
+          "line": 221004,
+          "address": "0048577D",
+          "owner": null
+        }
+      ]
+    },
+    {
+      "itf": "041_balloon_06.itf",
+      "spr": [
+        "BG_BUBBLE_06.spr"
+      ],
+      "size": 87,
+      "cde": false,
+      "hk": [
+        [
+          215974,
+          "00485AA6"
+        ]
+      ],
+      "old": [
+        {
+          "name": "041_balloon_06.itf",
+          "line": 221025,
+          "address": "004857B0",
+          "owner": null
+        }
+      ]
+    },
+    {
+      "itf": "041_balloon_07.itf",
+      "spr": [
+        "BG_BUBBLE_07.spr"
+      ],
+      "size": 87,
+      "cde": false,
+      "hk": [
+        [
+          215991,
+          "00485AD0"
+        ]
+      ],
+      "old": [
+        {
+          "name": "041_balloon_07.itf",
+          "line": 221046,
+          "address": "004857E0",
+          "owner": null
+        }
+      ]
+    },
+    {
+      "itf": "041_balloon_s01.itf",
+      "spr": [
+        "BG_BUBBLE_S01.spr"
+      ],
+      "size": 89,
+      "cde": false,
+      "hk": [],
+      "old": []
+    },
+    {
+      "itf": "041_balloon_s02.itf",
+      "spr": [
+        "BG_BUBBLE_S02.spr"
+      ],
+      "size": 89,
+      "cde": false,
+      "hk": [],
+      "old": []
+    },
+    {
+      "itf": "041_balloon_s03.itf",
+      "spr": [
+        "BG_BUBBLE_S03.spr"
+      ],
+      "size": 89,
+      "cde": false,
+      "hk": [],
+      "old": []
+    },
+    {
+      "itf": "041_balloon_s04.itf",
+      "spr": [
+        "BG_BUBBLE_S04.spr"
+      ],
+      "size": 89,
+      "cde": false,
+      "hk": [],
+      "old": []
+    },
+    {
+      "itf": "041_balloon_s05.itf",
+      "spr": [
+        "BG_BUBBLE_S05.spr"
+      ],
+      "size": 89,
+      "cde": false,
+      "hk": [],
+      "old": []
+    },
+    {
+      "itf": "041_balloon_s06.itf",
+      "spr": [
+        "BG_BUBBLE_S06.spr"
+      ],
+      "size": 89,
+      "cde": false,
+      "hk": [],
+      "old": []
+    },
+    {
+      "itf": "041_balloon_s07.itf",
+      "spr": [
+        "BG_BUBBLE_S07.spr"
+      ],
+      "size": 89,
+      "cde": false,
+      "hk": [],
+      "old": []
+    },
+    {
+      "itf": "042_FRIENDlIST_B.itf",
+      "spr": [
+        "BG_FRIENDLIST_BIG.spr",
+        "B_GET_MAIL.spr",
+        "B_LIST_ADD.spr",
+        "B_LIST_DEL.spr",
+        "B_LIST_EDIT.spr",
+        "B_LIST_FRIENDLIST.spr",
+        "B_LIST_IGNORELIST.spr",
+        "B_LIST_TO_INGORE.spr",
+        "MINISCREEN.spr",
+        "SCROLLDOWN_BUTTON.spr",
+        "SCROLLUP_BUTTON.spr"
+      ],
+      "size": 3932,
+      "cde": false,
+      "hk": [
+        [
+          165356,
+          "00465A78"
+        ]
+      ],
+      "old": [
+        {
+          "name": "042_FRIENDlIST_B.itf",
+          "line": 169745,
+          "address": "004660B4",
+          "owner": {
+            "name": "CFriendLItf",
+            "line": 169715,
+            "address": "0046608E"
+          }
+        }
+      ]
+    },
+    {
+      "itf": "043_FRIEND_MSG.itf",
+      "spr": [
+        "BG_FRIENDMSG_BOX.spr",
+        "B_ONLINEHELP.spr",
+        "CLOSESCREEN.spr",
+        "SCROLLDOWN_BUTTON.spr",
+        "SCROLLUP_BUTTON.spr"
+      ],
+      "size": 619,
+      "cde": false,
+      "hk": [
+        [
+          166475,
+          "00466587"
+        ]
+      ],
+      "old": [
+        {
+          "name": "043_FRIEND_MSG.itf",
+          "line": 171183,
+          "address": "00466E24",
+          "owner": {
+            "name": "CFriendMsgItf",
+            "line": 171128,
+            "address": "00466DFF"
+          }
+        }
+      ]
+    },
+    {
+      "itf": "044_QUESTION_BOX.itf",
+      "spr": [
+        "BG_QUESTION_BOX.spr",
+        "B_OK_BUTTON.spr",
+        "CLOSESCREEN.spr"
+      ],
+      "size": 256,
+      "cde": false,
+      "hk": [
+        [
+          105839,
+          "00440560"
+        ]
+      ],
+      "old": [
+        {
+          "name": "044_QUESTION_BOX.itf",
+          "line": 108222,
+          "address": "004411A9",
+          "owner": {
+            "name": "CReplierItf",
+            "line": 108188,
+            "address": "00441178"
+          }
+        }
+      ]
+    },
+    {
+      "itf": "044_QUESTION_BOXB.itf",
+      "spr": [
+        "BG_QUESTION_BOXB.spr",
+        "B_OK_BUTTON.spr",
+        "CLOSESCREEN.spr"
+      ],
+      "size": 258,
+      "cde": false,
+      "hk": [
+        [
+          105843,
+          "00440569"
+        ]
+      ],
+      "old": [
+        {
+          "name": "044_QUESTION_BOXB.itf",
+          "line": 108226,
+          "address": "004411B2",
+          "owner": {
+            "name": "CReplierItf",
+            "line": 108188,
+            "address": "00441178"
+          }
+        }
+      ]
+    },
+    {
+      "itf": "045_Mapname_Display.itf",
+      "spr": [
+        "BG_MAPNAME_DISPLAY.spr"
+      ],
+      "size": 99,
+      "cde": false,
+      "hk": [],
+      "old": [
+        {
+          "name": "045_Mapname_Display.itf",
+          "line": 133211,
+          "address": "004506A9",
+          "owner": {
+            "name": "CPlaceNameItf",
+            "line": 133196,
+            "address": "00450698"
+          }
+        }
+      ]
+    },
+    {
+      "itf": "046_Rename.itf",
+      "spr": [
+        "BG_RANK_01.spr",
+        "B_ONLINEHELP.spr",
+        "CLOSESCREEN.spr",
+        "YELLOW_BUTTON.spr"
+      ],
+      "size": 380,
+      "cde": false,
+      "hk": [
+        [
+          160861,
+          "004631B2"
+        ],
+        [
+          227876,
+          "0048D9E7"
+        ],
+        [
+          302822,
+          "004BD827"
+        ],
+        [
+          306939,
+          "004BFF41"
+        ]
+      ],
+      "old": [
+        {
+          "name": "046_Rename.itf",
+          "line": 163647,
+          "address": "00462B72",
+          "owner": null
+        },
+        {
+          "name": "046_Rename.itf",
+          "line": 232127,
+          "address": "0048C808",
+          "owner": {
+            "name": "CPetInfoItf",
+            "line": 231947,
+            "address": "0048C643"
+          }
+        },
+        {
+          "name": "046_Rename.itf",
+          "line": 256286,
+          "address": "0049C5C6",
+          "owner": null
+        },
+        {
+          "name": "046_Rename.itf",
+          "line": 260540,
+          "address": "0049ECFF",
+          "owner": null
+        }
+      ]
+    },
+    {
+      "itf": "047_NPC_message.itf",
+      "spr": [
+        "BG_NPC_MESSAGE.spr"
+      ],
+      "size": 255,
+      "cde": false,
+      "hk": [
+        [
+          215844,
+          "00485960"
+        ],
+        [
+          216098,
+          "00485BBE"
+        ],
+        [
+          216128,
+          "00485C0B"
+        ]
+      ],
+      "old": [
+        {
+          "name": "047_NPC_message.itf",
+          "line": 220878,
+          "address": "00485665",
+          "owner": null
+        },
+        {
+          "name": "047_NPC_message.itf",
+          "line": 221174,
+          "address": "0048590B",
+          "owner": {
+            "name": "CQuestItf",
+            "line": 221100,
+            "address": "00485856"
+          }
+        },
+        {
+          "name": "047_NPC_message.itf",
+          "line": 221211,
+          "address": "00485961",
+          "owner": {
+            "name": "CQuestItf",
+            "line": 221100,
+            "address": "00485856"
+          }
+        }
+      ]
+    },
+    {
+      "itf": "047_NPC_message_b.itf",
+      "spr": [
+        "BG_NPC_MESSAGE_B.spr"
+      ],
+      "size": 95,
+      "cde": false,
+      "hk": [],
+      "old": []
+    },
+    {
+      "itf": "048_PetTrade.itf",
+      "spr": [
+        "BG_TRADE_ELFININFO.spr",
+        "CLOSESCREEN.spr",
+        "EXP.spr",
+        "HP.spr",
+        "MP.spr",
+        "SCROLLDOWN_BUTTON.spr",
+        "SCROLLDOWN_S.spr",
+        "SCROLLUP_BUTTON.spr",
+        "SCROLLUP_S.spr"
+      ],
+      "size": 3359,
+      "cde": false,
+      "hk": [],
+      "old": []
+    },
+    {
+      "itf": "049_NPC_message02.itf",
+      "spr": [
+        "BG_NPC_MESSAGE02.spr"
+      ],
+      "size": 423,
+      "cde": false,
+      "hk": [
+        [
+          216150,
+          "00485C42"
+        ]
+      ],
+      "old": [
+        {
+          "name": "049_NPC_message02.itf",
+          "line": 221237,
+          "address": "0048599E",
+          "owner": {
+            "name": "CQuestItf",
+            "line": 221100,
+            "address": "00485856"
+          }
+        }
+      ]
+    },
+    {
+      "itf": "049_NPC_message02B.itf",
+      "spr": [
+        "BG_NPC_MESSAGE02B.spr"
+      ],
+      "size": 261,
+      "cde": false,
+      "hk": [
+        [
+          216174,
+          "00485C81"
+        ]
+      ],
+      "old": [
+        {
+          "name": "049_NPC_message02B.itf",
+          "line": 221265,
+          "address": "004859E3",
+          "owner": {
+            "name": "CQuestItf",
+            "line": 221100,
+            "address": "00485856"
+          }
+        }
+      ]
+    },
+    {
+      "itf": "050_NPC_message03a.itf",
+      "spr": [
+        "BG_NPC_MESSAGE_03A.spr"
+      ],
+      "size": 263,
+      "cde": false,
+      "hk": [],
+      "old": []
+    },
+    {
+      "itf": "051_NPC_message03b.itf",
+      "spr": [
+        "BG_NPC_MESSAGE_03B.spr"
+      ],
+      "size": 99,
+      "cde": false,
+      "hk": [],
+      "old": []
+    },
+    {
+      "itf": "051_NPC_message04.itf",
+      "spr": [
+        "BG_NPC_MESSAGE_04.spr"
+      ],
+      "size": 261,
+      "cde": false,
+      "hk": [
+        [
+          216196,
+          "00485CB8"
+        ]
+      ],
+      "old": [
+        {
+          "name": "051_NPC_message04.itf",
+          "line": 221291,
+          "address": "00485A20",
+          "owner": {
+            "name": "CQuestItf",
+            "line": 221100,
+            "address": "00485856"
+          }
+        }
+      ]
+    },
+    {
+      "itf": "051_NPC_message05.itf",
+      "spr": [
+        "BG_NPC_MESSAGE_05.spr"
+      ],
+      "size": 933,
+      "cde": false,
+      "hk": [
+        [
+          216218,
+          "00485CEF"
+        ]
+      ],
+      "old": [
+        {
+          "name": "051_NPC_message05.itf",
+          "line": 221317,
+          "address": "00485A5A",
+          "owner": {
+            "name": "CQuestItf",
+            "line": 221100,
+            "address": "00485856"
+          }
+        }
+      ]
+    },
+    {
+      "itf": "051_NPC_message06.itf",
+      "spr": [
+        "BG_NPC_MESSAGE_06.spr"
+      ],
+      "size": 589,
+      "cde": false,
+      "hk": [
+        [
+          216243,
+          "00485D2D"
+        ]
+      ],
+      "old": []
+    },
+    {
+      "itf": "052_INPUT_TYPE.itf",
+      "spr": [
+        "BG_INPUTAREA.spr",
+        "B_PAGEDOWN.spr",
+        "B_PAGEUP.spr"
+      ],
+      "size": 271,
+      "cde": false,
+      "hk": [],
+      "old": [
+        {
+          "name": "052_INPUT_TYPE.itf",
+          "line": 106266,
+          "address": "004401B9",
+          "owner": {
+            "name": "CIMEItf",
+            "line": 106212,
+            "address": "00440193"
+          }
+        }
+      ]
+    },
+    {
+      "itf": "052_INPUT_TYPE_02.itf",
+      "spr": [
+        "BG_INPUTAREA_02.spr",
+        "B_PAGEDOWN.spr",
+        "B_PAGEUP.spr"
+      ],
+      "size": 277,
+      "cde": false,
+      "hk": [],
+      "old": []
+    },
+    {
+      "itf": "053_SCROLLMESSAGE.itf",
+      "spr": [
+        "BG_SCROLLMESSAGE.spr"
+      ],
+      "size": 136,
+      "cde": false,
+      "hk": [
+        [
+          230392,
+          "0048F425"
+        ]
+      ],
+      "old": [
+        {
+          "name": "053_SCROLLMESSAGE.itf",
+          "line": 234649,
+          "address": "0048E175",
+          "owner": {
+            "name": "CRollingMessageItf",
+            "line": 234604,
+            "address": "0048E153"
+          }
+        }
+      ]
+    },
+    {
+      "itf": "054_PETHP.itf",
+      "spr": [
+        "BG_PETHP.spr",
+        "HP.spr"
+      ],
+      "size": 110,
+      "cde": false,
+      "hk": [],
+      "old": []
+    },
+    {
+      "itf": "055_TRADE_MONEY.itf",
+      "spr": [
+        "BG_TRADE_MONEY.spr",
+        "CLOSESCREEN.spr",
+        "YELLOW_BUTTON.spr"
+      ],
+      "size": 532,
+      "cde": false,
+      "hk": [
+        [
+          212330,
+          "00483510"
+        ]
+      ],
+      "old": [
+        {
+          "name": "055_TRADE_MONEY.itf",
+          "line": 217655,
+          "address": "00483470",
+          "owner": {
+            "name": "CTradeMoneyItf",
+            "line": 217619,
+            "address": "00483441"
+          }
+        }
+      ]
+    },
+    {
+      "itf": "056_Driver_INFO.itf",
+      "spr": [
+        "BG_DRIVER.spr",
+        "B_CHANGE_NAME.spr",
+        "B_DRIVER01.spr",
+        "B_DRIVER02.spr",
+        "B_ONLINEHELP.spr",
+        "B_RADIO_B.spr",
+        "CLOSESCREEN.spr",
+        "DRIVER_SHOW_BUTTON.spr",
+        "EXP.spr",
+        "HP.spr",
+        "Icon.spr",
+        "MP.spr",
+        "SCROLLDOWN_BUTTON.spr",
+        "SCROLLDOWN_S.spr",
+        "SCROLLUP_BUTTON.spr",
+        "SCROLLUP_S.spr",
+        "WP.spr"
+      ],
+      "size": 5600,
+      "cde": false,
+      "hk": [
+        [
+          295918,
+          "004B8757"
+        ]
+      ],
+      "old": [
+        {
+          "name": "056_Driver_INFO.itf",
+          "line": 250616,
+          "address": "004983E9",
+          "owner": {
+            "name": "CRidingInfoItf",
+            "line": 250605,
+            "address": "004983DC"
+          }
+        }
+      ]
+    },
+    {
+      "itf": "056_Driver_INFO_01.itf",
+      "spr": [
+        "BG_DRIVER_01.spr",
+        "B_CHANGE_NAME.spr",
+        "B_DRIVER01.spr",
+        "B_DRIVER02.spr",
+        "B_ONLINEHELP.spr",
+        "B_RADIO_B.spr",
+        "CLOSESCREEN.spr",
+        "DRIVER_SHOW_BUTTON.spr",
+        "EXP.spr",
+        "HP.spr",
+        "Icon.spr",
+        "MP.spr",
+        "SCROLLDOWN_BUTTON.spr",
+        "SCROLLDOWN_S.spr",
+        "SCROLLUP_BUTTON.spr",
+        "SCROLLUP_S.spr",
+        "WP.spr"
+      ],
+      "size": 5660,
+      "cde": false,
+      "hk": [
+        [
+          304793,
+          "004BEAD9"
+        ]
+      ],
+      "old": []
+    },
+    {
+      "itf": "056_Driver_item.itf",
+      "spr": [
+        "BG_DRIVE_ITEM.spr",
+        "B_ITEM_ARMOR.spr",
+        "B_ITEM_EQUIP.spr",
+        "B_ITEM_ITEM.spr",
+        "B_ITEM_PET.spr",
+        "B_ITEM_RIDE.spr",
+        "B_ONLINEHELP.spr",
+        "CLOSESCREEN.spr",
+        "ICON.spr",
+        "SCROLLDOWN_BUTTON.spr",
+        "SCROLLUP_BUTTON.spr"
+      ],
+      "size": 3092,
+      "cde": false,
+      "hk": [
+        [
+          286468,
+          "004B1F6A"
+        ]
+      ],
+      "old": [
+        {
+          "name": "056_Driver_item.itf",
+          "line": 242076,
+          "address": "004928AC",
+          "owner": {
+            "name": "CRidingEquipItf",
+            "line": 242033,
+            "address": "0049288A"
+          }
+        }
+      ]
+    },
+    {
+      "itf": "057_CLUB_Menu.itf",
+      "spr": [
+        "BG_CLUB_MENU.spr",
+        "B_CLUB_B01.spr",
+        "B_CLUB_B03.spr",
+        "B_ONLINEHELP.spr",
+        "CLOSESCREEN.spr"
+      ],
+      "size": 2506,
+      "cde": false,
+      "hk": [
+        [
+          258017,
+          "004A04E0"
+        ]
+      ],
+      "old": []
+    },
+    {
+      "itf": "058_CLUB_Ext.itf",
+      "spr": [
+        "BG_CLUB_EXT.spr",
+        "B_CLUB_B02.spr",
+        "B_ONLINEHELP.spr",
+        "CLOSESCREEN.spr"
+      ],
+      "size": 1059,
+      "cde": false,
+      "hk": [
+        [
+          248813,
+          "0049AF87"
+        ]
+      ],
+      "old": []
+    },
+    {
+      "itf": "059_Driver_Repair.itf",
+      "spr": [
+        "BG_DRIVE_REPAIR.spr",
+        "B_ONLINEHELP.spr",
+        "CLOSESCREEN.spr",
+        "ICON.spr",
+        "SCROLLDOWN_BUTTON.spr",
+        "SCROLLUP_BUTTON.spr"
+      ],
+      "size": 3109,
+      "cde": false,
+      "hk": [
+        [
+          291550,
+          "004B55D1"
+        ]
+      ],
+      "old": [
+        {
+          "name": "059_Driver_Repair.itf",
+          "line": 246849,
+          "address": "00495A10",
+          "owner": {
+            "name": "CRidingEquipRepairItf",
+            "line": 246838,
+            "address": "00495A03"
+          }
+        }
+      ]
+    },
+    {
+      "itf": "060_CLUB_MemList.itf",
+      "spr": [
+        "BG_CLUB_MEMLIST.spr",
+        "SCROLLDOWN_BUTTON.spr",
+        "SCROLLUP_BUTTON.spr"
+      ],
+      "size": 2004,
+      "cde": false,
+      "hk": [
+        [
+          255779,
+          "0049EF00"
+        ]
+      ],
+      "old": []
+    },
+    {
+      "itf": "060_CLUB_MemList02.itf",
+      "spr": [
+        "BG_CLUB_MEMLIST02.spr",
+        "B_CLUE_B05.spr",
+        "SCROLLDOWN_BUTTON.spr",
+        "SCROLLUP_BUTTON.spr"
+      ],
+      "size": 1986,
+      "cde": false,
+      "hk": [
+        [
+          257593,
+          "004A0204"
+        ]
+      ],
+      "old": []
+    },
+    {
+      "itf": "061_CLUB_Name.itf",
+      "spr": [
+        "BG_RANK_01.spr",
+        "B_ONLINEHELP.spr",
+        "CLOSESCREEN.spr",
+        "YELLOW_BUTTON.spr"
+      ],
+      "size": 392,
+      "cde": false,
+      "hk": [
+        [
+          277217,
+          "004AC27F"
+        ]
+      ],
+      "old": []
+    },
+    {
+      "itf": "062_CLUB_ALLYList.itf",
+      "spr": [
+        "BG_CLUB_ALLYLIST.spr",
+        "SCROLLDOWN_BUTTON.spr",
+        "SCROLLUP_BUTTON.spr"
+      ],
+      "size": 488,
+      "cde": false,
+      "hk": [
+        [
+          251066,
+          "0049C59C"
+        ]
+      ],
+      "old": []
+    },
+    {
+      "itf": "063_CLUB_GoldList.itf",
+      "spr": [
+        "BG_CLUB_MEMLIST.spr",
+        "SCROLLDOWN_BUTTON.spr",
+        "SCROLLUP_BUTTON.spr"
+      ],
+      "size": 2010,
+      "cde": false,
+      "hk": [
+        [
+          246263,
+          "0049987C"
+        ]
+      ],
+      "old": []
+    },
+    {
+      "itf": "064_CLUB_TechList.itf",
+      "spr": [
+        "BG_CLUB_TECHLIST.spr",
+        "SCROLLDOWN_BUTTON.spr",
+        "SCROLLUP_BUTTON.spr"
+      ],
+      "size": 2107,
+      "cde": false,
+      "hk": [
+        [
+          269821,
+          "004A7993"
+        ]
+      ],
+      "old": []
+    },
+    {
+      "itf": "065_CLUB_BookMark.itf",
+      "spr": [
+        "BG_CLUB_BOOKMARK.spr",
+        "B_CLUB_B04.spr",
+        "SCROLLDOWN_BUTTON.spr",
+        "SCROLLUP_BUTTON.spr"
+      ],
+      "size": 912,
+      "cde": false,
+      "hk": [
+        [
+          246978,
+          "00499DA2"
+        ]
+      ],
+      "old": []
+    },
+    {
+      "itf": "066_CLUB_Intro.itf",
+      "spr": [
+        "BG_CLUB_MARKLIST.spr",
+        "SCROLLDOWN_BUTTON.spr",
+        "SCROLLUP_BUTTON.spr"
+      ],
+      "size": 406,
+      "cde": false,
+      "hk": [
+        [
+          255111,
+          "0049E94C"
+        ]
+      ],
+      "old": []
+    },
+    {
+      "itf": "067_CLUB_News.itf",
+      "spr": [
+        "BG_CLUB_MARKLIST.spr",
+        "SCROLLDOWN_BUTTON.spr",
+        "SCROLLUP_BUTTON.spr"
+      ],
+      "size": 406,
+      "cde": false,
+      "hk": [
+        [
+          253519,
+          "0049DB44"
+        ]
+      ],
+      "old": []
+    },
+    {
+      "itf": "068_CLUB_OKBox.itf",
+      "spr": [
+        "BG_CLUB_OKBOX.spr",
+        "B_CLUE_B05.spr",
+        "SCROLLDOWN_S.spr",
+        "SCROLLUP_S.spr"
+      ],
+      "size": 312,
+      "cde": false,
+      "hk": [
+        [
+          244777,
+          "00498A15"
+        ],
+        [
+          244865,
+          "00498B30"
+        ],
+        [
+          268939,
+          "004A712F"
+        ],
+        [
+          269027,
+          "004A7268"
+        ],
+        [
+          269115,
+          "004A73A1"
+        ],
+        [
+          272218,
+          "004A9243"
+        ],
+        [
+          274636,
+          "004AA75D"
+        ],
+        [
+          274724,
+          "004AA878"
+        ]
+      ],
+      "old": []
+    },
+    {
+      "itf": "068_CLUB_YesNoBox.itf",
+      "spr": [
+        "BG_CLUB_MESSAGE.spr",
+        "B_CLUE_B05.spr",
+        "SCROLLDOWN_S.spr",
+        "SCROLLUP_S.spr"
+      ],
+      "size": 417,
+      "cde": false,
+      "hk": [
+        [
+          272067,
+          "004A9102"
+        ]
+      ],
+      "old": []
+    },
+    {
+      "itf": "069_CLUB_INTRO_EDIT.itf",
+      "spr": [
+        "BG_CLUB_INTRO_EDIT.spr",
+        "B_CLUE_B05.spr",
+        "SCROLLDOWN_BUTTON.spr",
+        "SCROLLUP_BUTTON.spr"
+      ],
+      "size": 866,
+      "cde": false,
+      "hk": [
+        [
+          254116,
+          "0049E018"
+        ],
+        [
+          263070,
+          "004A3B30"
+        ]
+      ],
+      "old": []
+    },
+    {
+      "itf": "070_CLUB_News_EDIT.itf",
+      "spr": [
+        "BG_CLUB_INTRO_EDIT.spr",
+        "B_CLUE_B05.spr",
+        "SCROLLDOWN_BUTTON.spr",
+        "SCROLLUP_BUTTON.spr"
+      ],
+      "size": 872,
+      "cde": false,
+      "hk": [
+        [
+          252603,
+          "0049D2F6"
+        ]
+      ],
+      "old": []
+    },
+    {
+      "itf": "071_CLUB_ALLY.itf",
+      "spr": [
+        "BG_CLUB_ALLY.spr",
+        "B_CLUE_B05.spr",
+        "B_RADIO_B.spr",
+        "SCROLLDOWN_BUTTON.spr",
+        "SCROLLUP_BUTTON.spr"
+      ],
+      "size": 1364,
+      "cde": false,
+      "hk": [],
+      "old": []
+    },
+    {
+      "itf": "072_CLUB_DonateInput.itf",
+      "spr": [
+        "BG_CLUB_DonateInput.spr",
+        "B_CLUE_B05.spr"
+      ],
+      "size": 638,
+      "cde": false,
+      "hk": [
+        [
+          263836,
+          "004A41E0"
+        ]
+      ],
+      "old": []
+    },
+    {
+      "itf": "073_CLUB_ResourceInput.itf",
+      "spr": [
+        "BG_CLUB_DonateInput.spr",
+        "B_CLUE_B05.spr"
+      ],
+      "size": 644,
+      "cde": false,
+      "hk": [
+        [
+          262914,
+          "004A39C8"
+        ]
+      ],
+      "old": []
+    },
+    {
+      "itf": "074_CLUB_TechDevelop.itf",
+      "spr": [
+        "BG_CLUB_TECHDEVELOP.spr",
+        "B_CLUE_B05.spr",
+        "SCROLLDOWN_BUTTON.spr",
+        "SCROLLUP_BUTTON.spr"
+      ],
+      "size": 1598,
+      "cde": false,
+      "hk": [
+        [
+          265421,
+          "004A4F9B"
+        ]
+      ],
+      "old": []
+    },
+    {
+      "itf": "075_CLUB_TechDevelop02.itf",
+      "spr": [
+        "BG_CLUB_TECHDEVELOP02.spr",
+        "B_CLUE_B05.spr",
+        "SCROLLDOWN_BUTTON.spr",
+        "SCROLLUP_BUTTON.spr"
+      ],
+      "size": 3332,
+      "cde": false,
+      "hk": [
+        [
+          237644,
+          "0049412B"
+        ]
+      ],
+      "old": []
+    },
+    {
+      "itf": "076_CLUB_TechUPGRADE.itf",
+      "spr": [
+        "BG_CLUB_TECHUPGRADE.spr",
+        "B_CLUE_B05.spr",
+        "SCROLLDOWN_BUTTON.spr",
+        "SCROLLUP_BUTTON.spr"
+      ],
+      "size": 2091,
+      "cde": false,
+      "hk": [
+        [
+          276977,
+          "004AC081"
+        ]
+      ],
+      "old": []
+    },
+    {
+      "itf": "077_CLUB_Takemoney.itf",
+      "spr": [
+        "BG_CLUB_DonateInput.spr",
+        "B_CLUE_B05.spr"
+      ],
+      "size": 642,
+      "cde": false,
+      "hk": [
+        [
+          262780,
+          "004A38A8"
+        ]
+      ],
+      "old": []
+    },
+    {
+      "itf": "078_CLUB_DisAlly.itf",
+      "spr": [
+        "BG_CLUB_DISALLY.spr",
+        "B_CLUE_B05.spr",
+        "SCROLLDOWN_BUTTON.spr",
+        "SCROLLUP_BUTTON.spr"
+      ],
+      "size": 599,
+      "cde": false,
+      "hk": [
+        [
+          252172,
+          "0049CFE3"
+        ]
+      ],
+      "old": []
+    },
+    {
+      "itf": "079_MainQuest.itf",
+      "spr": [
+        "BG_NPC_MESSAGE.spr",
+        "STORY_NAME_00A.spr",
+        "STORY_NAME_00B.spr"
+      ],
+      "size": 170,
+      "cde": false,
+      "hk": [
+        [
+          214210,
+          "0048479F"
+        ]
+      ],
+      "old": [
+        {
+          "name": "079_MainQuest.itf",
+          "line": 219267,
+          "address": "004844A0",
+          "owner": {
+            "name": "CMainQuestItf",
+            "line": 219251,
+            "address": "00484489"
+          }
+        },
+        {
+          "name": "079_MainQuest.itf",
+          "line": 266956,
+          "address": "004A2F1A",
+          "owner": null
+        }
+      ]
+    },
+    {
+      "itf": "080_CLUB_RANK.itf",
+      "spr": [
+        "A_BG_CLUB_RANK.spr",
+        "A_BN_RANK_001.spr",
+        "B_ONLINEHELP.spr",
+        "CLOSESCREEN.spr",
+        "SCROLLDOWN_BUTTON.spr",
+        "SCROLLUP_BUTTON.spr",
+        "YELLOW_BUTTON.spr"
+      ],
+      "size": 3177,
+      "cde": false,
+      "hk": [
+        [
+          239758,
+          "00495760"
+        ]
+      ],
+      "old": []
+    },
+    {
+      "itf": "081_LOGIN_CHANGE_PASSWORD.itf",
+      "spr": [
+        "LOGIN_CHANGE_PASSWORD.spr",
+        "YELLOW_BUTTON.spr"
+      ],
+      "size": 563,
+      "cde": false,
+      "hk": [
+        [
+          440062,
+          "00512C80"
+        ]
+      ],
+      "old": [
+        {
+          "name": "081_LOGIN_CHANGE_PASSWORD.itf",
+          "line": 406859,
+          "address": "004F667E",
+          "owner": null
+        }
+      ]
+    },
+    {
+      "itf": "082_LOGIN_PASSWORD.itf",
+      "spr": [
+        "LOGIN_PASSWORD.spr",
+        "YELLOW_BUTTON.spr"
+      ],
+      "size": 435,
+      "cde": false,
+      "hk": [
+        [
+          439349,
+          "0051218A"
+        ]
+      ],
+      "old": [
+        {
+          "name": "082_LOGIN_PASSWORD.itf",
+          "line": 406033,
+          "address": "004F5A7C",
+          "owner": null
+        }
+      ]
+    },
+    {
+      "itf": "083_PET_CARD.itf",
+      "spr": [
+        "CARD_004.spr"
+      ],
+      "size": 120,
+      "cde": false,
+      "hk": [
+        [
+          304308,
+          "004BE669"
+        ]
+      ],
+      "old": [
+        {
+          "name": "083_PET_CARD.itf",
+          "line": 258108,
+          "address": "0049D54A",
+          "owner": {
+            "name": "CRidingCardItf",
+            "line": 258097,
+            "address": "0049D53D"
+          }
+        }
+      ]
+    },
+    {
+      "itf": "084_ENEMY_HP.itf",
+      "spr": [
+        "BG_ENEMY_HP.spr",
+        "B_ENEMY_HP.spr",
+        "HP.spr"
+      ],
+      "size": 166,
+      "cde": false,
+      "hk": [
+        [
+          305942,
+          "004BF58A"
+        ]
+      ],
+      "old": [
+        {
+          "name": "084_ENEMY_HP.itf",
+          "line": 259651,
+          "address": "0049E3E3",
+          "owner": {
+            "name": "CSGOEnemHPItf",
+            "line": 259624,
+            "address": "0049E3C1"
+          }
+        }
+      ]
+    },
+    {
+      "itf": "085_COMPLEX_INFO.itf",
+      "spr": [
+        "BG_COMPLEX_INFO.spr",
+        "B_CLUE_B05.spr",
+        "B_COMPLEX.spr",
+        "B_ELFIN_NAME.spr",
+        "B_ONLINEHELP.spr",
+        "B_PVP_VOTE.spr",
+        "CLOSESCREEN.spr",
+        "EXP.spr",
+        "Icon.spr",
+        "SCROLLDOWN_S.spr",
+        "SCROLLUP_S.spr"
+      ],
+      "size": 2896,
+      "cde": false,
+      "hk": [
+        [
+          306464,
+          "004BF9F8"
+        ]
+      ],
+      "old": [
+        {
+          "name": "085_COMPLEX_INFO.itf",
+          "line": 260135,
+          "address": "0049E8AE",
+          "owner": {
+            "name": "CRobotComplexInfoItf",
+            "line": 260124,
+            "address": "0049E8A1"
+          }
+        }
+      ]
+    },
+    {
+      "itf": "086_COMPLEX_INFO_01.itf",
+      "spr": [
+        "BG_COMPLEX_INFO_01.spr",
+        "B_ELFIN_NAME.spr",
+        "B_ONLINEHELP.spr",
+        "B_PVP_VOTE.spr",
+        "CLOSESCREEN.spr",
+        "EXP.spr",
+        "Icon.spr",
+        "SCROLLDOWN_S.spr",
+        "SCROLLUP_S.spr"
+      ],
+      "size": 2517,
+      "cde": false,
+      "hk": [],
+      "old": []
+    },
+    {
+      "itf": "087_DRIVE_COMPLEX_BAR.itf",
+      "spr": [
+        "BG_DRIVE_COMPLEX_BAR.spr",
+        "WP.spr"
+      ],
+      "size": 131,
+      "cde": false,
+      "hk": [
+        [
+          304985,
+          "004BEC28"
+        ]
+      ],
+      "old": [
+        {
+          "name": "087_DRIVE_COMPLEX_BAR.itf",
+          "line": 258749,
+          "address": "0049DB41",
+          "owner": {
+            "name": "CRidingTPItf",
+            "line": 258706,
+            "address": "0049DB1F"
+          }
+        }
+      ]
+    },
+    {
+      "itf": "088_COMPLEX_HP.itf",
+      "spr": [
+        "BG_COMPLEX_HP.spr",
+        "EXP.spr",
+        "HP.spr",
+        "MP.spr"
+      ],
+      "size": 298,
+      "cde": false,
+      "hk": [
+        [
+          309850,
+          "004C2052"
+        ]
+      ],
+      "old": [
+        {
+          "name": "088_COMPLEX_HP.itf",
+          "line": 262996,
+          "address": "004A088E",
+          "owner": {
+            "name": "CRobotComplexTPItf",
+            "line": 262985,
+            "address": "004A0881"
+          }
+        }
+      ]
+    },
+    {
+      "itf": "089_PCMEMO_TRADE.itf",
+      "spr": [
+        "BG_PCMEMO_TRADE.spr",
+        "YELLOW_BUTTON.spr"
+      ],
+      "size": 331,
+      "cde": false,
+      "hk": [],
+      "old": []
+    },
+    {
+      "itf": "089_PCMEMO_TRADE_READ.itf",
+      "spr": [
+        "BG_PCMEMO_TRADE.spr",
+        "YELLOW_BUTTON.spr"
+      ],
+      "size": 282,
+      "cde": false,
+      "hk": [],
+      "old": []
+    },
+    {
+      "itf": "090_PCMEMO.itf",
+      "spr": [
+        "ADD_POINT.spr",
+        "BG_PCMEMO.spr",
+        "B_ONLINEHELP.spr",
+        "B_PAGEDOWN.spr",
+        "B_PAGEUP.spr",
+        "B_PCMEMO_SHOW.spr",
+        "CLOSESCREEN.spr",
+        "MINISCREEN.spr",
+        "YELLOW_BUTTON.spr"
+      ],
+      "size": 3026,
+      "cde": false,
+      "hk": [],
+      "old": []
+    },
+    {
+      "itf": "091_PVP_MAIN.itf",
+      "spr": [
+        "BG_PVP_01.spr",
+        "HP.spr",
+        "MP.spr"
+      ],
+      "size": 1145,
+      "cde": false,
+      "hk": [],
+      "old": [
+        {
+          "name": "091_PVP_MAIN.itf",
+          "line": 267517,
+          "address": "004A33F1",
+          "owner": null
+        }
+      ]
+    },
+    {
+      "itf": "092_PShop.itf",
+      "spr": [
+        "BG_PSHOP_01.spr",
+        "B_ITEM_ARMOR.spr",
+        "B_ITEM_EQUIP.spr",
+        "B_ITEM_ITEM.spr",
+        "B_ITEM_PET.spr",
+        "B_ITEM_RIDE.spr",
+        "B_ONLINEHELP.spr",
+        "B_PVP_VOTE.spr",
+        "CLOSESCREEN.spr",
+        "ICON.spr",
+        "SCROLLDOWN_BUTTON.spr",
+        "SCROLLUP_BUTTON.spr",
+        "YELLOW_BUTTON.spr"
+      ],
+      "size": 6439,
+      "cde": false,
+      "hk": [
+        [
+          318471,
+          "004C70CF"
+        ]
+      ],
+      "old": [
+        {
+          "name": "092_pshop.itf",
+          "line": 288361,
+          "address": "004AFA58",
+          "owner": {
+            "name": "SellingOpenItf",
+            "line": 288332,
+            "address": "004AFA3A"
+          }
+        }
+      ]
+    },
+    {
+      "itf": "092_PShop_Buy.itf",
+      "spr": [
+        "BG_PSHOP_02.spr",
+        "B_ITEM_ARMOR.spr",
+        "B_ITEM_EQUIP.spr",
+        "B_ITEM_ITEM.spr",
+        "B_ITEM_PET.spr",
+        "B_ITEM_RIDE.spr",
+        "B_ONLINEHELP.spr",
+        "CLOSESCREEN.spr",
+        "ICON.spr",
+        "SCROLLDOWN_BUTTON.spr",
+        "SCROLLUP_BUTTON.spr",
+        "YELLOW_BUTTON.spr"
+      ],
+      "size": 6703,
+      "cde": false,
+      "hk": [
+        [
+          316150,
+          "004C5BA1"
+        ]
+      ],
+      "old": [
+        {
+          "name": "092_PShop_Buy.itf",
+          "line": 285353,
+          "address": "004AE117",
+          "owner": {
+            "name": "SellingCloseItf",
+            "line": 285329,
+            "address": "004AE0F9"
+          }
+        }
+      ]
+    },
+    {
+      "itf": "092_PShop_Buy_Item_01.itf",
+      "spr": [
+        "BG_PSHOP_BUY_01.spr",
+        "B_ONLINEHELP.spr",
+        "CLOSESCREEN.spr",
+        "Icon.spr",
+        "YELLOW_BUTTON.spr"
+      ],
+      "size": 745,
+      "cde": false,
+      "hk": [],
+      "old": []
+    },
+    {
+      "itf": "092_PShop_Buy_Item_02.itf",
+      "spr": [
+        "BG_PSHOP_BUY_02.spr",
+        "B_ONLINEHELP.spr",
+        "CLOSESCREEN.spr",
+        "Icon.spr",
+        "YELLOW_BUTTON.spr"
+      ],
+      "size": 804,
+      "cde": false,
+      "hk": [
+        [
+          316876,
+          "004C637C"
+        ]
+      ],
+      "old": [
+        {
+          "name": "092_PShop_Buy_Item_02.itf",
+          "line": 285991,
+          "address": "004AE7B4",
+          "owner": null
+        }
+      ]
+    },
+    {
+      "itf": "092_PShop_head.itf",
+      "spr": [
+        "BG_PSHOP_03.spr",
+        "B_PSHOP_HEAD.spr"
+      ],
+      "size": 305,
+      "cde": false,
+      "hk": [
+        [
+          311932,
+          "004C3251"
+        ]
+      ],
+      "old": [
+        {
+          "name": "092_PShop_head.itf",
+          "line": 281199,
+          "address": "004AB9A2",
+          "owner": {
+            "name": "SellingBalloonItf",
+            "line": 281158,
+            "address": "004AB96E"
+          }
+        }
+      ]
+    },
+    {
+      "itf": "092_PShop_Name.itf",
+      "spr": [
+        "BG_RANK_01.spr",
+        "B_ONLINEHELP.spr",
+        "CLOSESCREEN.spr",
+        "YELLOW_BUTTON.spr"
+      ],
+      "size": 396,
+      "cde": false,
+      "hk": [
+        [
+          317662,
+          "004C69B0"
+        ]
+      ],
+      "old": [
+        {
+          "name": "092_pshop_name.itf",
+          "line": 287339,
+          "address": "004AF233",
+          "owner": {
+            "name": "SellingNameItf",
+            "line": 287309,
+            "address": "004AF211"
+          }
+        }
+      ]
+    },
+    {
+      "itf": "092_PShop_Sell.itf",
+      "spr": [
+        "BG_PSHOP_01.spr",
+        "B_ITEM_ARMOR.spr",
+        "B_ITEM_EQUIP.spr",
+        "B_ITEM_ITEM.spr",
+        "B_ITEM_PET.spr",
+        "B_ITEM_RIDE.spr",
+        "B_ONLINEHELP.spr",
+        "B_PVP_VOTE.spr",
+        "CLOSESCREEN.spr",
+        "ICON.spr",
+        "SCROLLDOWN_BUTTON.spr",
+        "SCROLLUP_BUTTON.spr",
+        "YELLOW_BUTTON.spr"
+      ],
+      "size": 6399,
+      "cde": false,
+      "hk": [],
+      "old": []
+    },
+    {
+      "itf": "092_PShop_Sell_Item_01.itf",
+      "spr": [
+        "BG_PSHOP_ITEM_01.spr",
+        "B_ONLINEHELP.spr",
+        "CLOSESCREEN.spr",
+        "Icon.spr",
+        "YELLOW_BUTTON.spr"
+      ],
+      "size": 645,
+      "cde": false,
+      "hk": [
+        [
+          321342,
+          "004C9155"
+        ]
+      ],
+      "old": [
+        {
+          "name": "092_PShop_Sell_Item_01.itf",
+          "line": 290778,
+          "address": "004B1585",
+          "owner": null
+        }
+      ]
+    },
+    {
+      "itf": "092_PShop_Sell_Item_02.itf",
+      "spr": [
+        "BG_PSHOP_ITEM_02.spr",
+        "B_ONLINEHELP.spr",
+        "CLOSESCREEN.spr",
+        "Icon.spr",
+        "YELLOW_BUTTON.spr"
+      ],
+      "size": 645,
+      "cde": false,
+      "hk": [
+        [
+          321144,
+          "004C8F8D"
+        ]
+      ],
+      "old": [
+        {
+          "name": "092_PShop_Sell_Item_02.itf",
+          "line": 290648,
+          "address": "004B1436",
+          "owner": null
+        }
+      ]
+    },
+    {
+      "itf": "093_Pvp_List_01.itf",
+      "spr": [
+        "BG_PVP_LIST_01.spr",
+        "B_ONLINEHELP.spr",
+        "B_PVP_FRIEND.spr",
+        "B_PVP_VOTE.spr",
+        "CLOSESCREEN.spr",
+        "SCROLLDOWN_BUTTON.spr",
+        "SCROLLUP_BUTTON.spr"
+      ],
+      "size": 3643,
+      "cde": false,
+      "hk": [],
+      "old": [
+        {
+          "name": "093_Pvp_List_01.itf",
+          "line": 270137,
+          "address": "004A4DBC",
+          "owner": null
+        }
+      ]
+    },
+    {
+      "itf": "093_Pvp_List_02.itf",
+      "spr": [
+        "BG_PVP_LIST_02.spr",
+        "B_ONLINEHELP.spr",
+        "B_PVP_FRIEND.spr",
+        "B_PVP_VOTE.spr",
+        "CLOSESCREEN.spr",
+        "SCROLLDOWN_BUTTON.spr",
+        "SCROLLUP_BUTTON.spr",
+        "YELLOW_BUTTON.spr"
+      ],
+      "size": 4414,
+      "cde": false,
+      "hk": [],
+      "old": [
+        {
+          "name": "093_Pvp_List_02.itf",
+          "line": 272381,
+          "address": "004A6626",
+          "owner": null
+        }
+      ]
+    },
+    {
+      "itf": "093_Pvp_List_Item.itf",
+      "spr": [
+        "BG_PVP_LIST_ITEM.spr",
+        "B_ONLINEHELP.spr",
+        "CLOSESCREEN.spr",
+        "SCROLLDOWN_S.spr",
+        "SCROLLUP_S.spr"
+      ],
+      "size": 598,
+      "cde": false,
+      "hk": [],
+      "old": [
+        {
+          "name": "093_Pvp_List_Item.itf",
+          "line": 278039,
+          "address": "004A9DA9",
+          "owner": null
+        }
+      ]
+    },
+    {
+      "itf": "093_Pvp_Rank_01.itf",
+      "spr": [
+        "BG_PVP_RANK_01.spr",
+        "B_ONLINEHELP.spr",
+        "B_PVP_RANK.spr",
+        "B_PVP_VOTE.spr",
+        "CLOSESCREEN.spr",
+        "SCROLLDOWN_BUTTON.spr",
+        "SCROLLUP_BUTTON.spr"
+      ],
+      "size": 4406,
+      "cde": false,
+      "hk": [],
+      "old": [
+        {
+          "name": "093_Pvp_Rank_01.itf",
+          "line": 276044,
+          "address": "004A8B25",
+          "owner": null
+        },
+        {
+          "name": "093_Pvp_Rank_01.itf",
+          "line": 276583,
+          "address": "004A8F2D",
+          "owner": null
+        }
+      ]
+    },
+    {
+      "itf": "093_Pvp_Rank_02.itf",
+      "spr": [
+        "BG_PVP_RANK_02.spr",
+        "B_ONLINEHELP.spr",
+        "B_PVP_RANK.spr",
+        "B_PVP_VOTE.spr",
+        "CLOSESCREEN.spr",
+        "SCROLLDOWN_BUTTON.spr",
+        "SCROLLUP_BUTTON.spr",
+        "YELLOW_BUTTON.spr"
+      ],
+      "size": 4604,
+      "cde": false,
+      "hk": [],
+      "old": [
+        {
+          "name": "093_Pvp_Rank_02.itf",
+          "line": 279325,
+          "address": "004AA9D5",
+          "owner": null
+        }
+      ]
+    },
+    {
+      "itf": "094_CLUB.itf",
+      "spr": [
+        "BG_CLUB.spr",
+        "B_ONLINEHELP.spr",
+        "CLOSESCREEN.spr",
+        "SCROLLDOWN_BUTTON.spr",
+        "SCROLLUP_BUTTON.spr",
+        "YELLOW_BUTTON.spr"
+      ],
+      "size": 2578,
+      "cde": false,
+      "hk": [
+        [
+          233580,
+          "00491225"
+        ]
+      ],
+      "old": []
+    },
+    {
+      "itf": "094_Hair_Shop.itf",
+      "spr": [
+        "BG_HAIR_SHOP.spr",
+        "B_ONLINEHELP.spr",
+        "CLOSESCREEN.spr",
+        "LEFT_BUTTON.spr",
+        "RIGHT_BUTTON.spr",
+        "YELLOW_BUTTON.spr"
+      ],
+      "size": 1325,
+      "cde": false,
+      "hk": [
+        [
+          328407,
+          "004CDB64"
+        ]
+      ],
+      "old": []
+    },
+    {
+      "itf": "095_Collection.itf",
+      "spr": [
+        "BG_COLLECTION.spr",
+        "B_ONLINEHELP.spr",
+        "CLOSESCREEN.spr",
+        "Icon.spr",
+        "SCROLLDOWN_BUTTON.spr",
+        "SCROLLUP_BUTTON.spr",
+        "YELLOW_BUTTON.spr"
+      ],
+      "size": 2001,
+      "cde": false,
+      "hk": [
+        [
+          330798,
+          "004CF344"
+        ]
+      ],
+      "old": []
+    },
+    {
+      "itf": "095_Collection_01.itf",
+      "spr": [
+        "BG_COLLECTION_01.spr",
+        "B_COLLECTION_ICON.spr",
+        "B_ONLINEHELP.spr",
+        "CLOSESCREEN.spr",
+        "SCROLLDOWN_S.spr",
+        "SCROLLUP_S.spr"
+      ],
+      "size": 2173,
+      "cde": false,
+      "hk": [],
+      "old": []
+    },
+    {
+      "itf": "095_Collection_02.itf",
+      "spr": [
+        "BG_COLLECTION_02.spr",
+        "B_COLLECTION_ICON.spr",
+        "B_ONLINEHELP.spr",
+        "CLOSESCREEN.spr",
+        "SCROLLDOWN_S.spr",
+        "SCROLLUP_S.spr"
+      ],
+      "size": 2173,
+      "cde": false,
+      "hk": [],
+      "old": []
+    },
+    {
+      "itf": "095_Collection_03.itf",
+      "spr": [
+        "BG_COLLECTION_03.spr",
+        "B_COLLECTION_ICON.spr",
+        "B_ONLINEHELP.spr",
+        "CLOSESCREEN.spr",
+        "SCROLLDOWN_S.spr",
+        "SCROLLUP_S.spr"
+      ],
+      "size": 2173,
+      "cde": false,
+      "hk": [],
+      "old": []
+    },
+    {
+      "itf": "095_Collection_04.itf",
+      "spr": [
+        "BG_COLLECTION_04.spr",
+        "B_COLLECTION_ICON.spr",
+        "B_ONLINEHELP.spr",
+        "CLOSESCREEN.spr",
+        "SCROLLDOWN_S.spr",
+        "SCROLLUP_S.spr"
+      ],
+      "size": 2173,
+      "cde": false,
+      "hk": [],
+      "old": []
+    },
+    {
+      "itf": "095_Collection_05.itf",
+      "spr": [
+        "BG_COLLECTION_05.spr",
+        "B_COLLECTION_ICON.spr",
+        "B_ONLINEHELP.spr",
+        "CLOSESCREEN.spr",
+        "SCROLLDOWN_S.spr",
+        "SCROLLUP_S.spr"
+      ],
+      "size": 2173,
+      "cde": false,
+      "hk": [],
+      "old": []
+    },
+    {
+      "itf": "095_Collection_06.itf",
+      "spr": [
+        "BG_COLLECTION_06.spr",
+        "B_COLLECTION_ICON.spr",
+        "B_ONLINEHELP.spr",
+        "CLOSESCREEN.spr",
+        "SCROLLDOWN_S.spr",
+        "SCROLLUP_S.spr"
+      ],
+      "size": 2173,
+      "cde": false,
+      "hk": [],
+      "old": []
+    },
+    {
+      "itf": "096_Dissolve.itf",
+      "spr": [
+        "BG_DISSOLVE.spr",
+        "B_MIX_ITEM_BUTTON.spr",
+        "B_ONLINEHELP.spr",
+        "CLOSESCREEN.spr",
+        "ICON.spr",
+        "SCROLLDOWN_BUTTON.spr",
+        "SCROLLUP_BUTTON.spr"
+      ],
+      "size": 3499,
+      "cde": false,
+      "hk": [
+        [
+          180671,
+          "0046F3AA"
+        ]
+      ],
+      "old": []
+    },
+    {
+      "itf": "097_Quest_List.itf",
+      "spr": [],
+      "size": 866,
+      "cde": true,
+      "hk": [],
+      "old": []
+    },
+    {
+      "itf": "098_Refund.itf",
+      "spr": [],
+      "size": 1394,
+      "cde": true,
+      "hk": [],
+      "old": []
+    }
+  ],
+  "assets": [
+    "A_BG_CLUB_RANK.spr",
+    "A_BN_RANK_001.spr",
+    "ACCOUNT_LOGIN.spr",
+    "ADD_POINT.spr",
+    "ADV_00.spr",
+    "B_BACK.spr",
+    "B_BASIC_GM.spr",
+    "B_BASIC_GUILD.spr",
+    "B_BASIC_ITEM.spr",
+    "B_BASIC_MAIL.spr",
+    "B_BASIC_PCMEMO.spr",
+    "B_BASIC_PLAYER.spr",
+    "B_BASIC_PSHOP.spr",
+    "B_BASIC_QUEST.spr",
+    "B_BASIC_SKILL.spr",
+    "B_BASIC_STATUS.spr",
+    "B_BASIC_SYSTEM.spr",
+    "B_CHANGE_JOB.spr",
+    "B_CHANGE_NAME.spr",
+    "B_CHANNEL_CA.spr",
+    "B_CHANNEL_CB.spr",
+    "B_CHANNEL_CC.spr",
+    "B_CHANNEL_CD.spr",
+    "B_CHANNEL_CE.spr",
+    "B_CLUB_B01.spr",
+    "B_CLUB_B02.spr",
+    "B_CLUB_B03.spr",
+    "B_CLUB_B04.spr",
+    "B_CLUE_B05.spr",
+    "B_COLLECTION_ICON.spr",
+    "B_Command_ALLY.spr",
+    "B_COMMAND_TEAM.spr",
+    "B_COMPLEX.spr",
+    "B_COMPLEX_TEAM.spr",
+    "B_DRIVER01.spr",
+    "B_DRIVER02.spr",
+    "B_ELFIN_EQUIP.spr",
+    "B_ELFIN_FEED.spr",
+    "B_ELFIN_NAME.spr",
+    "B_ELFIN_SUMMON.spr",
+    "B_ELFIN_UNSUMMON.spr",
+    "B_EMOTETION.spr",
+    "B_EMOTION.spr",
+    "B_ENEMY_HP.spr",
+    "B_GET_MAIL.spr",
+    "B_ITEM_ARMOR.spr",
+    "B_ITEM_EQUIP.spr",
+    "B_ITEM_ITEM.spr",
+    "B_ITEM_PET.spr",
+    "B_ITEM_RIDE.spr",
+    "B_LIST_ADD.spr",
+    "B_LIST_DEL.spr",
+    "B_LIST_EDIT.spr",
+    "B_LIST_FRIENDLIST.spr",
+    "B_LIST_IGNORE.spr",
+    "B_LIST_IGNORELIST.spr",
+    "B_LIST_INGORE.spr",
+    "B_LIST_INGORELIST.spr",
+    "B_LIST_MAIL.spr",
+    "B_LIST_TO_INGORE.spr",
+    "B_MIX_ITEM_BUTTON.spr",
+    "B_NEXT.spr",
+    "B_OK_BUTTON.spr",
+    "B_ONLINEHELP.spr",
+    "B_PAGEDOWN.spr",
+    "B_PAGEUP.spr",
+    "B_PCMEMO_FRIEND_F.spr",
+    "B_PCMEMO_FRIEND_FF.spr",
+    "B_PCMEMO_FRIEND_FM.spr",
+    "B_PCMEMO_FRIEND_FRI.spr",
+    "B_PCMEMO_FRIEND_M.spr",
+    "B_PCMEMO_PC_AWAY.spr",
+    "B_PCMEMO_PC_LV_RANK1.spr",
+    "B_PCMEMO_PC_LV_RANK2.spr",
+    "B_PCMEMO_PC_LV_RANK3.spr",
+    "B_PCMEMO_PC_LV_RANK4.spr",
+    "B_PCMEMO_PC_LV_RANK5.spr",
+    "B_PCMEMO_PC_LV_RANK6.spr",
+    "B_PCMEMO_PC_LV_RANK7.spr",
+    "B_PCMEMO_PC_NA.spr",
+    "B_PCMEMO_SELL_B.spr",
+    "B_PCMEMO_SELL_S.spr",
+    "B_PCMEMO_SELL_X.spr",
+    "B_PCMEMO_SHOW.spr",
+    "B_PCMEMO_TEAM_ADD.spr",
+    "B_PCMEMO_TEAM_L.spr",
+    "B_PCMEMO_TEAM_X.spr",
+    "B_PSHOP_HEAD.spr",
+    "B_PSHOP_SELL.spr",
+    "B_PVP_FRIEND.spr",
+    "B_PVP_KING.spr",
+    "B_PVP_LEFT.spr",
+    "B_PVP_RANK.spr",
+    "B_PVP_RIGHT.spr",
+    "B_PVP_VOTE.spr",
+    "B_QUEST.spr",
+    "B_RADIO_B.spr",
+    "B_RADIO_BS.spr",
+    "B_RIGHTBOX_BUTTON.spr",
+    "B_STATUS_FRIEND_F.spr",
+    "B_STATUS_FRIEND_FF.spr",
+    "B_STATUS_FRIEND_FM.spr",
+    "B_STATUS_FRIEND_FRI.spr",
+    "B_STATUS_FRIEND_M.spr",
+    "B_STATUS_PC_AWAY.spr",
+    "B_STATUS_PC_LV_RANK1.spr",
+    "B_STATUS_PC_LV_RANK2.spr",
+    "B_STATUS_PC_LV_RANK3.spr",
+    "B_STATUS_PC_LV_RANK4.spr",
+    "B_STATUS_PC_LV_RANK5.spr",
+    "B_STATUS_PC_LV_RANK6.spr",
+    "B_STATUS_PC_LV_RANK7.spr",
+    "B_STATUS_PC_NA.spr",
+    "B_STATUS_SELL_B.spr",
+    "B_STATUS_SELL_S.spr",
+    "B_STATUS_SELL_X.spr",
+    "B_STATUS_SHOW.spr",
+    "B_STATUS_TEAM_ADD.spr",
+    "B_STATUS_TEAM_L.spr",
+    "B_STATUS_TEAM_X.spr",
+    "B_TALKBUBBLE.spr",
+    "B_TEAM_BUILDUP.spr",
+    "B_TEAM_GOOUT.spr",
+    "B_TEAM_GUILD.spr",
+    "B_TEAM_LOC_A01.spr",
+    "B_TEAM_LOC_B01.spr",
+    "B_TEAM_LOC_C01.spr",
+    "B_TEAM_LOC_D01.spr",
+    "B_TEAM_LOC_E01.spr",
+    "B_TEAM_LOC_F01.spr",
+    "B_TEAM_OUT.spr",
+    "B_TRADE_GOLD.spr",
+    "B_TRADE_READY.spr",
+    "B_TRADE_REDAY.spr",
+    "BG_BANK.spr",
+    "BG_BUBBLE_01.spr",
+    "BG_BUBBLE_02.spr",
+    "BG_BUBBLE_03.spr",
+    "BG_BUBBLE_04.spr",
+    "BG_BUBBLE_05.spr",
+    "BG_BUBBLE_06.spr",
+    "BG_BUBBLE_07.spr",
+    "BG_BUBBLE_S01.spr",
+    "BG_BUBBLE_S02.spr",
+    "BG_BUBBLE_S03.spr",
+    "BG_BUBBLE_S04.spr",
+    "BG_BUBBLE_S05.spr",
+    "BG_BUBBLE_S06.spr",
+    "BG_BUBBLE_S07.spr",
+    "BG_CHANNEL_BIG.spr",
+    "BG_CHARACTER_INFO.spr",
+    "BG_CHARACTER_JOB.spr",
+    "BG_CHARACTER_NICK.spr",
+    "BG_CLUB.spr",
+    "BG_CLUB_ALLY.spr",
+    "BG_CLUB_ALLYLIST.spr",
+    "BG_CLUB_BENEFICENCE.spr",
+    "BG_CLUB_BOOKMARK.spr",
+    "BG_CLUB_DISALLY.spr",
+    "BG_CLUB_DonateInput.spr",
+    "BG_CLUB_EXT.spr",
+    "BG_CLUB_INFO.spr",
+    "BG_CLUB_INTRO_EDIT.spr",
+    "BG_CLUB_MARKLIST.spr",
+    "BG_CLUB_MEMBER.spr",
+    "BG_CLUB_MEMLIST.spr",
+    "BG_CLUB_MEMLIST02.spr",
+    "BG_CLUB_MENU.spr",
+    "BG_CLUB_MESS_EDIT.spr",
+    "BG_CLUB_MESSAGE.spr",
+    "BG_CLUB_OKBOX.spr",
+    "BG_CLUB_TECHDEVELOP.spr",
+    "BG_CLUB_TECHDEVELOP02.spr",
+    "BG_CLUB_TECHLIST.spr",
+    "BG_CLUB_TECHUPGRADE.spr",
+    "BG_COLLECTION.spr",
+    "BG_COLLECTION_01.spr",
+    "BG_COLLECTION_02.spr",
+    "BG_COLLECTION_03.spr",
+    "BG_COLLECTION_04.spr",
+    "BG_COLLECTION_05.spr",
+    "BG_COLLECTION_06.spr",
+    "BG_COMPLEX_HP.spr",
+    "BG_COMPLEX_INFO.spr",
+    "BG_COMPLEX_INFO_01.spr",
+    "BG_COMPLXE_MAP.spr",
+    "BG_DEL_EMAIL.spr",
+    "BG_DISSOLVE.spr",
+    "BG_DRIVE_COMPLEX_BAR.spr",
+    "BG_DRIVE_ITEM.spr",
+    "BG_DRIVE_REPAIR.spr",
+    "BG_DRIVER.spr",
+    "BG_DRIVER_01.spr",
+    "BG_ELFIN.spr",
+    "BG_ELFIN_EQUIP.spr",
+    "BG_ELFIN_INFO.spr",
+    "BG_ELFIN_ITEM.spr",
+    "BG_EMOETION.spr",
+    "BG_EMOTETION.spr",
+    "BG_EMOTION.spr",
+    "BG_ENEMY_HP.spr",
+    "BG_Equip.spr",
+    "BG_FRIEENDLIST_BIG.spr",
+    "BG_FRIENDLIST_BIG.spr",
+    "BG_FRIENDLIST_SMALL.spr",
+    "BG_FRIENDMSG_BOX.spr",
+    "BG_GEXP.spr",
+    "BG_HAIR_SHOP.spr",
+    "BG_ICQ_BOX.spr",
+    "BG_INPUTAREA.spr",
+    "BG_INPUTAREA_02.spr",
+    "BG_ITEM.spr",
+    "BG_LOGIN_LOADING.spr",
+    "BG_MAP_BIG_01.spr",
+    "BG_MAP_BIG_02.spr",
+    "BG_MAP_BIG_03.spr",
+    "BG_MAP_BIG_04.spr",
+    "BG_MAP_BIG_05.spr",
+    "BG_MAP_BIG_06.spr",
+    "BG_MAP_BIG_07.spr",
+    "BG_MAPNAME_DISPLAY.spr",
+    "BG_MESSAGE.spr",
+    "BG_MESSAGE_INGAME.spr",
+    "BG_MESSAGE_NAME.spr",
+    "BG_MINIMAP_POINT.spr",
+    "BG_MIX_ITEM.spr",
+    "BG_NPC_MESSAGE.spr",
+    "BG_NPC_MESSAGE02.spr",
+    "BG_NPC_MESSAGE02B.spr",
+    "BG_NPC_MESSAGE_03A.spr",
+    "BG_NPC_MESSAGE_03B.spr",
+    "BG_NPC_MESSAGE_04.spr",
+    "BG_NPC_MESSAGE_05.spr",
+    "BG_NPC_MESSAGE_06.spr",
+    "BG_NPC_MESSAGE_B.spr",
+    "BG_PCMEMO.spr",
+    "BG_PCMEMO_TRADE.spr",
+    "BG_PETHP.spr",
+    "BG_PSHOP_01.spr",
+    "BG_PSHOP_02.spr",
+    "BG_PSHOP_03.spr",
+    "BG_PSHOP_BUY_01.spr",
+    "BG_PSHOP_BUY_02.spr",
+    "BG_PSHOP_ITEM_01.spr",
+    "BG_PSHOP_ITEM_02.spr",
+    "BG_PVP_01.spr",
+    "BG_PVP_321_FIGHT.spr",
+    "BG_PVP_LIST_01.spr",
+    "BG_PVP_LIST_02.spr",
+    "BG_PVP_LIST_ITEM.spr",
+    "BG_PVP_RANK_01.spr",
+    "BG_PVP_RANK_02.spr",
+    "BG_PVP_WIN_LOST.spr",
+    "BG_QUEST_LIST.spr",
+    "BG_QUESTION_BOX.spr",
+    "BG_QUESTION_BOXB.spr",
+    "BG_RANK.spr",
+    "BG_RANK03.spr",
+    "BG_RANK_01.spr",
+    "BG_REFUND.spr",
+    "BG_REPAIR.spr",
+    "BG_RIGHTBOX.spr",
+    "BG_RIGHTBOX_02.spr",
+    "BG_RIGHTBOX_EXT.spr",
+    "BG_SCROLLMESSAGE.spr",
+    "BG_SHOP.spr",
+    "BG_SHOP_02.spr",
+    "BG_SKILL.spr",
+    "BG_SKILL_S.spr",
+    "BG_STATION_01.spr",
+    "BG_STATION_02.spr",
+    "BG_STATION_03.spr",
+    "BG_STATION_04.spr",
+    "BG_STATION_05_KING.spr",
+    "BG_STATION_06_MAGIC.spr",
+    "BG_STATION_07_KNIGHT.spr",
+    "BG_STATION_08_ROBOT.spr",
+    "BG_SYSTEM.spr",
+    "BG_TALKBUBBLE.spr",
+    "BG_TEAM.spr",
+    "BG_TRADE.spr",
+    "BG_TRADE_02.spr",
+    "BG_TRADE_ELFININFO.spr",
+    "BG_TRADE_MONEY.spr",
+    "BG_TRADE_TEMP.spr",
+    "BG_WAITINGBOX.spr",
+    "CARD_004.spr",
+    "CHANNEL.spr",
+    "CLOSESCREEN.spr",
+    "CN_SGO_LOGO.spr",
+    "COMMAND.spr",
+    "CREATE_CHARACTER.spr",
+    "DRIVER_SHOW_BUTTON.spr",
+    "EFFECT_ICON.spr",
+    "EMOTIONAL_ICON.spr",
+    "EXP.spr",
+    "ground.spr",
+    "ground1.spr",
+    "HOTKEY_LX.spr",
+    "HOTKEY_LY.spr",
+    "HOTKEY_SX.spr",
+    "HOTKEY_SY.spr",
+    "HOTKEY_XL_B.spr",
+    "HOTKEY_XS_B.spr",
+    "HOTKEY_YL_B.spr",
+    "HOTKEY_YS_B.spr",
+    "HP.spr",
+    "HPBAR.spr",
+    "Icon.spr",
+    "Icon1.spr",
+    "ICON_BUBBLE.spr",
+    "ICON_CHANNEL.spr",
+    "ICON_STATUS.spr",
+    "ICON_STATUS_TEMP.spr",
+    "ICON_TALKBUBBLE.spr",
+    "ICON_TEMP.spr",
+    "IE_SGO_LOGO.spr",
+    "itemIcon.spr",
+    "LEFT_BUTTON.spr",
+    "LOGIN_CHANGE_PASSWORD.spr",
+    "LOGIN_Light.spr",
+    "LOGIN_PASSWORD.spr",
+    "MAIL.spr",
+    "MINIMAP_L.spr",
+    "MINIMAP_S.spr",
+    "MINISCREEN.spr",
+    "MP.spr",
+    "NEW_CHARACTER.spr",
+    "NIGHTMASK.spr",
+    "NPC_TALK_018.spr",
+    "NPC_TALK_018_EYE.spr",
+    "OFFON.spr",
+    "PET_CARD.spr",
+    "PET_ICON.spr",
+    "Photo.spr",
+    "Photo1.spr",
+    "PLAY_GAME.spr",
+    "RIGHT_BUTTON.spr",
+    "Robot_Icon.spr",
+    "Robot_Photo.spr",
+    "SCROLLDOWN_BUTTON.spr",
+    "SCROLLDOWN_S.spr",
+    "SCROLLUP_BUTTON.spr",
+    "SCROLLUP_S.spr",
+    "SELECT_CHARACTER.spr",
+    "SELECT_SERVER.spr",
+    "SELECT_SEVER GOURP.spr",
+    "SGO_LOGO_M_00.spr",
+    "SKILL_ICON.spr",
+    "STATUS.spr",
+    "STORY_NAME_00A.spr",
+    "STORY_NAME_00B.spr",
+    "STORY_NAME_01A.spr",
+    "STORY_NAME_01B.spr",
+    "STORY_NAME_02A.spr",
+    "STORY_NAME_02B.spr",
+    "STORY_NAME_03A.spr",
+    "STORY_NAME_03B.spr",
+    "STORY_NAME_04A.spr",
+    "STORY_NAME_04B.spr",
+    "STORY_NAME_05A.spr",
+    "STORY_NAME_05B.spr",
+    "STORY_NAME_06A.spr",
+    "STORY_NAME_06B.spr",
+    "TW_SGO_LOGO.spr",
+    "WP.spr",
+    "YELLOW_BUTTON.spr",
+    "ZONESCREEN.spr"
+  ]
+}

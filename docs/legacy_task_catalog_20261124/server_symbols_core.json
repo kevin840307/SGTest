@@ -1,0 +1,1118 @@
+{
+  "SGOSkillSys": [
+    {
+      "line": 10206,
+      "address": "100074FC",
+      "method": "GetSkillPlayer",
+      "owner": "SGOSkill"
+    },
+    {
+      "line": 12480,
+      "address": "10008AB0",
+      "method": "GetSkillCount",
+      "owner": "CSkill"
+    },
+    {
+      "line": 25992,
+      "address": "10011017",
+      "method": "LoadSkillData",
+      "owner": "SGOSkillSys"
+    },
+    {
+      "line": 29831,
+      "address": "10013805",
+      "method": "CreateSkill",
+      "owner": "SGOSkillSys"
+    },
+    {
+      "line": 30723,
+      "address": "100140AF",
+      "method": "FindSkillData",
+      "owner": "SGOSkillSys"
+    },
+    {
+      "line": 49959,
+      "address": "10020580",
+      "method": "GetSkillHitCount",
+      "owner": "SGOSkillSys"
+    },
+    {
+      "line": 60793,
+      "address": "10027539",
+      "method": "SetSkillTimer",
+      "owner": "SGOSkillSys"
+    },
+    {
+      "line": 61091,
+      "address": "100276F0",
+      "method": "GetCurrentSkillInfo",
+      "owner": "CDSkillSys"
+    },
+    {
+      "line": 61118,
+      "address": "10027710",
+      "method": "GetTmpSkillInfo",
+      "owner": "CDSkillSys"
+    },
+    {
+      "line": 61145,
+      "address": "10027730",
+      "method": "GetCurrentSkillData",
+      "owner": "SGOSkillSys"
+    },
+    {
+      "line": 74597,
+      "address": "1002F7AE",
+      "method": "GetSkill",
+      "owner": "CSkill"
+    },
+    {
+      "line": 75843,
+      "address": "10030441",
+      "method": "GetSkillPlayer",
+      "owner": "CSkill"
+    },
+    {
+      "line": 76648,
+      "address": "10030C3E",
+      "method": "AddSkill",
+      "owner": "CSkill"
+    },
+    {
+      "line": 77534,
+      "address": "1003150A",
+      "method": "DelSkill",
+      "owner": "CSkill"
+    },
+    {
+      "line": 78372,
+      "address": "10031D5D",
+      "method": "SaveSkill",
+      "owner": "CSkill"
+    },
+    {
+      "line": 80098,
+      "address": "10032E5A",
+      "method": "AddSkill",
+      "owner": "CSkill"
+    },
+    {
+      "line": 81347,
+      "address": "10033AF2",
+      "method": "AddSkillDB",
+      "owner": "CSkill"
+    },
+    {
+      "line": 82280,
+      "address": "10034427",
+      "method": "DelAllSkillDB",
+      "owner": "CSkill"
+    },
+    {
+      "line": 83140,
+      "address": "10034CAF",
+      "method": "AddSkillDB",
+      "owner": "CSkill"
+    },
+    {
+      "line": 84043,
+      "address": "1003559A",
+      "method": "DelAllSkillDB",
+      "owner": "CSkill"
+    },
+    {
+      "line": 85759,
+      "address": "10036625",
+      "method": "SendSkillList",
+      "owner": "CSkill"
+    },
+    {
+      "line": 104924,
+      "address": "100420F1",
+      "method": "FindSkill",
+      "owner": "CDSkillSys"
+    },
+    {
+      "line": 106143,
+      "address": "10042D4E",
+      "method": "GetSkill",
+      "owner": "CDSkillSys"
+    },
+    {
+      "line": 114237,
+      "address": "10047EF7",
+      "method": "AddSkill",
+      "owner": "CDSkillSys"
+    }
+  ],
+  "SGOEnemyDistSys": [
+    {
+      "line": 19741,
+      "address": "1000D7B1",
+      "method": "CheckDead",
+      "owner": "SGOEnemy"
+    },
+    {
+      "line": 25150,
+      "address": "10010D84",
+      "method": "CheckDropItem",
+      "owner": "SGOEnemy"
+    },
+    {
+      "line": 27602,
+      "address": "10012720",
+      "method": "OnDropItem",
+      "owner": "SGOEnemy"
+    },
+    {
+      "line": 47933,
+      "address": "1001F2AA",
+      "method": "AddDeadItselfCount",
+      "owner": "SGOEnemy"
+    },
+    {
+      "line": 49584,
+      "address": "100202F2",
+      "method": "CalHurt_ForDropItem",
+      "owner": "SGOEnemy"
+    },
+    {
+      "line": 50556,
+      "address": "10020C90",
+      "method": "GetDropItemOwner",
+      "owner": "SGOEnemy"
+    },
+    {
+      "line": 54235,
+      "address": "10022FB0",
+      "method": "GetDeadTimeout",
+      "owner": "SGOEnemyDistSys"
+    },
+    {
+      "line": 54262,
+      "address": "10022FD0",
+      "method": "GetDeadItselfTimeout",
+      "owner": "SGOEnemyDistSys"
+    },
+    {
+      "line": 54342,
+      "address": "10023030",
+      "method": "GetDropRateBase",
+      "owner": "SGOEnemyDistSys"
+    },
+    {
+      "line": 54394,
+      "address": "10023070",
+      "method": "GetLvDeltaForDropItemRateDrop",
+      "owner": "SGOEnemyDistSys"
+    },
+    {
+      "line": 54420,
+      "address": "10023090",
+      "method": "GetOwnedDropItemTimeout",
+      "owner": "SGOEnemyDistSys"
+    },
+    {
+      "line": 57748,
+      "address": "10024842",
+      "method": "OnEnemyDestory",
+      "owner": "SGOEnemyDistSys"
+    },
+    {
+      "line": 63283,
+      "address": "100280CE",
+      "method": "CreateEnemyMgr",
+      "owner": "SGOEnemyDistSys"
+    },
+    {
+      "line": 66085,
+      "address": "10029980",
+      "method": "GetMaxDropRateForCheckLuckItem",
+      "owner": "CDEnemyDistSys"
+    },
+    {
+      "line": 67728,
+      "address": "1002A6C8",
+      "method": "CreateEnemy",
+      "owner": "SGOEnemyMgr"
+    },
+    {
+      "line": 86591,
+      "address": "10035DF5",
+      "method": "SendMove",
+      "owner": "CDEnemy"
+    },
+    {
+      "line": 88705,
+      "address": "100372B9",
+      "method": "CheckDead",
+      "owner": "CDEnemy"
+    },
+    {
+      "line": 89130,
+      "address": "100376BB",
+      "method": "AddDeadItselfCount",
+      "owner": "CDEnemy"
+    },
+    {
+      "line": 106043,
+      "address": "1004114A",
+      "method": "SendRemoveEntity",
+      "owner": "CDMapEntity"
+    },
+    {
+      "line": 164684,
+      "address": "10064D9A",
+      "method": "LoadEnemyMgrSetting",
+      "owner": "CDEnemyDistSys"
+    },
+    {
+      "line": 171543,
+      "address": "10069B70",
+      "method": "LoadEnemySysSetting",
+      "owner": "CDEnemyDistSys"
+    },
+    {
+      "line": 174483,
+      "address": "1006B8CE",
+      "method": "UpdateDead",
+      "owner": "CDEnemyDistSys"
+    },
+    {
+      "line": 175359,
+      "address": "1006C186",
+      "method": "OnEnemyDestory",
+      "owner": "CDEnemyDistSys"
+    },
+    {
+      "line": 179416,
+      "address": "1006EA0F",
+      "method": "GetEnemy",
+      "owner": "CDEnemyDistSys"
+    }
+  ],
+  "SGOBattleSys": [
+    {
+      "line": 5304,
+      "address": "1000461B",
+      "method": "OnPlayerAttack",
+      "owner": "SGOBattleSys"
+    },
+    {
+      "line": 9244,
+      "address": "10006F07",
+      "method": "OnPetAttack",
+      "owner": "SGOBattleSys"
+    },
+    {
+      "line": 13092,
+      "address": "100096E4",
+      "method": "OnEnemyAttack",
+      "owner": "SGOBattleSys"
+    },
+    {
+      "line": 14842,
+      "address": "1000A8D1",
+      "method": "OnPlayerAutoAttack",
+      "owner": "SGOBattleSys"
+    },
+    {
+      "line": 14898,
+      "address": "1000A91B",
+      "method": "OnAttack",
+      "owner": "SGOBattleSys"
+    },
+    {
+      "line": 15825,
+      "address": "1000B238",
+      "method": "IsHit_PerHit",
+      "owner": "SGOBattleSys"
+    },
+    {
+      "line": 17882,
+      "address": "1000C6D7",
+      "method": "CalHit",
+      "owner": "SGOBattleSys"
+    },
+    {
+      "line": 19131,
+      "address": "1000D2AA",
+      "method": "CalHit_PerHit",
+      "owner": "SGOBattleSys"
+    },
+    {
+      "line": 20143,
+      "address": "1000DC4D",
+      "method": "CalStatus_PerHit",
+      "owner": "SGOBattleSys"
+    },
+    {
+      "line": 22108,
+      "address": "1000EFEB",
+      "method": "CalMiss_PerHit",
+      "owner": "SGOBattleSys"
+    },
+    {
+      "line": 22917,
+      "address": "1000F7F9",
+      "method": "CalWeaponDamage_PerHit",
+      "owner": "SGOBattleSys"
+    },
+    {
+      "line": 25439,
+      "address": "100110EA",
+      "method": "CalExp_Final",
+      "owner": "SGOBattleSys"
+    },
+    {
+      "line": 25461,
+      "address": "100110F7",
+      "method": "CalHP_Final",
+      "owner": "SGOBattleSys"
+    },
+    {
+      "line": 27976,
+      "address": "100129B2",
+      "method": "GetAttackAttrib",
+      "owner": "SGOBattleSys"
+    },
+    {
+      "line": 37064,
+      "address": "100187A9",
+      "method": "GetComplexAttackAttrib",
+      "owner": "SGOBattleSys"
+    },
+    {
+      "line": 38181,
+      "address": "100192B0",
+      "method": "GetPlayerAttackAttrib",
+      "owner": "SGOBattleSys"
+    },
+    {
+      "line": 39961,
+      "address": "1001A471",
+      "method": "GetEnemyAttackAttrib",
+      "owner": "SGOBattleSys"
+    },
+    {
+      "line": 45538,
+      "address": "1001DC1E",
+      "method": "GetPetAttackAttrib",
+      "owner": "SGOBattleSys"
+    },
+    {
+      "line": 48026,
+      "address": "1001F52B",
+      "method": "SendAttackFailPac",
+      "owner": "SGOBattleSys"
+    },
+    {
+      "line": 58880,
+      "address": "1002606F",
+      "method": "CheckExpArrange",
+      "owner": "SGOBattleSys"
+    },
+    {
+      "line": 59146,
+      "address": "10026271",
+      "method": "CheckExpArrange",
+      "owner": "SGOBattleSys"
+    },
+    {
+      "line": 59593,
+      "address": "1002660E",
+      "method": "CheckPKAttack",
+      "owner": "SGOBattleSys"
+    },
+    {
+      "line": 59820,
+      "address": "100267BB",
+      "method": "CheckPKAttack",
+      "owner": "SGOBattleSys"
+    },
+    {
+      "line": 69664,
+      "address": "1002B5CF",
+      "method": "FindAttack",
+      "owner": "CDBattleSys"
+    }
+  ],
+  "SGOMapService": [
+    {
+      "line": 19011,
+      "address": "1000BB63",
+      "method": "GetMapCount",
+      "owner": "CDMapService"
+    },
+    {
+      "line": 19890,
+      "address": "1000C3BE",
+      "method": "OnPlayerMove",
+      "owner": "CDMapService"
+    },
+    {
+      "line": 26326,
+      "address": "100103CE",
+      "method": "OnNPCMove",
+      "owner": "CDMapService"
+    },
+    {
+      "line": 27492,
+      "address": "10010CAD",
+      "method": "GetMove",
+      "owner": "CDMapService"
+    },
+    {
+      "line": 59189,
+      "address": "10024597",
+      "method": "GetMapCount",
+      "owner": "CDMapService2D"
+    },
+    {
+      "line": 59618,
+      "address": "100249AC",
+      "method": "GetMapCount_Real",
+      "owner": "CDMapService2D"
+    },
+    {
+      "line": 90364,
+      "address": "10038104",
+      "method": "OnPlayerMove",
+      "owner": "CDMapService2D"
+    },
+    {
+      "line": 95950,
+      "address": "1003BAA0",
+      "method": "OnPetMove",
+      "owner": "CDMapService2D"
+    },
+    {
+      "line": 98545,
+      "address": "1003D5B6",
+      "method": "OnPetMove",
+      "owner": "CDMapService2D"
+    },
+    {
+      "line": 112273,
+      "address": "10046254",
+      "method": "OnNPCMove",
+      "owner": "CDMapService2D"
+    },
+    {
+      "line": 118618,
+      "address": "1004A36C",
+      "method": "LoadMaps",
+      "owner": "CDMapService2D"
+    },
+    {
+      "line": 144076,
+      "address": "1005A612",
+      "method": "SendMapChangePac",
+      "owner": "CDMapService2D"
+    },
+    {
+      "line": 145386,
+      "address": "1005B358",
+      "method": "SendCharMapChangePac",
+      "owner": "CDMapService2D"
+    },
+    {
+      "line": 149691,
+      "address": "1005DDC8",
+      "method": "SendMovePathFailPac",
+      "owner": "CDMapService2D"
+    },
+    {
+      "line": 178606,
+      "address": "10070408",
+      "method": "GetMove",
+      "owner": "CDMapService2D"
+    },
+    {
+      "line": 191384,
+      "address": "10078529",
+      "method": "GetMapPlayerCount",
+      "owner": "CDMapService2D"
+    },
+    {
+      "line": 200406,
+      "address": "1007CAEE",
+      "method": "GetMapID",
+      "owner": "CDMove"
+    },
+    {
+      "line": 201272,
+      "address": "1007D315",
+      "method": "SetMapID",
+      "owner": "CDMove"
+    },
+    {
+      "line": 205028,
+      "address": "1007F8E1",
+      "method": "GetMoveType",
+      "owner": "CDMove"
+    },
+    {
+      "line": 208370,
+      "address": "10081990",
+      "method": "OnAddMovePath",
+      "owner": "CDMove"
+    },
+    {
+      "line": 211640,
+      "address": "10083BDA",
+      "method": "IsTotalMoveCountFull",
+      "owner": "CDMove"
+    },
+    {
+      "line": 212840,
+      "address": "100847E0",
+      "method": "OnMove",
+      "owner": "CDMove"
+    },
+    {
+      "line": 214628,
+      "address": "10085973",
+      "method": "IsOnMovementPath",
+      "owner": "CDMove"
+    },
+    {
+      "line": 228289,
+      "address": "1008D7EB",
+      "method": "GetMoveType",
+      "owner": "CDPlayerMove"
+    }
+  ],
+  "SGOLogin": [
+    {
+      "line": 7726,
+      "address": "10005B2C",
+      "method": "GetLoginInfoIndexBySocketID",
+      "owner": "SGOLogin"
+    },
+    {
+      "line": 18541,
+      "address": "1000C8DE",
+      "method": "OnSelectChar",
+      "owner": "SGOLogin"
+    },
+    {
+      "line": 21503,
+      "address": "1000E5B3",
+      "method": "OnCreateChar",
+      "owner": "SGOLogin"
+    },
+    {
+      "line": 26099,
+      "address": "1001138E",
+      "method": "OnDelChar",
+      "owner": "SGOLogin"
+    },
+    {
+      "line": 29879,
+      "address": "10013A48",
+      "method": "OnLoginSuccess",
+      "owner": "SGOLogin"
+    },
+    {
+      "line": 35661,
+      "address": "10017597",
+      "method": "CheckPwdCharacter",
+      "owner": "SGOLogin"
+    },
+    {
+      "line": 44934,
+      "address": "1001C9CC",
+      "method": "OnLogin",
+      "owner": "CDLogin"
+    },
+    {
+      "line": 47637,
+      "address": "1001E5A4",
+      "method": "SendLogoutToLoginMon",
+      "owner": "CDLogin"
+    },
+    {
+      "line": 53326,
+      "address": "10021F18",
+      "method": "OnLoginFail",
+      "owner": "CDLogin"
+    },
+    {
+      "line": 54587,
+      "address": "10022BE8",
+      "method": "OnDoubleLoginFromACDB",
+      "owner": "CDLogin"
+    },
+    {
+      "line": 56426,
+      "address": "10023EDB",
+      "method": "FindLoginInfoByAccID",
+      "owner": "CDLogin"
+    },
+    {
+      "line": 56458,
+      "address": "10023EF2",
+      "method": "FindLoginInfoBySockID",
+      "owner": "CDLogin"
+    },
+    {
+      "line": 56488,
+      "address": "10023F09",
+      "method": "FindWaitLoginBySockID",
+      "owner": "CDLogin"
+    },
+    {
+      "line": 61863,
+      "address": "1002753A",
+      "method": "FindLogin_AccID",
+      "owner": "CDLogin"
+    },
+    {
+      "line": 63218,
+      "address": "10028217",
+      "method": "FindLogin_SockID",
+      "owner": "CDLogin"
+    },
+    {
+      "line": 64432,
+      "address": "10028E4D",
+      "method": "FindLoginIndex_SockID",
+      "owner": "CDLogin"
+    },
+    {
+      "line": 65254,
+      "address": "10029689",
+      "method": "FindLoginIndex_AccID",
+      "owner": "CDLogin"
+    },
+    {
+      "line": 68958,
+      "address": "1002BC3E",
+      "method": "GetLoginMonStatus",
+      "owner": "CDLogin"
+    },
+    {
+      "line": 69779,
+      "address": "1002C47B",
+      "method": "SetLoginMonStatus",
+      "owner": "CDLogin"
+    },
+    {
+      "line": 85937,
+      "address": "10035775",
+      "method": "OnPlayerLogin",
+      "owner": "CDService"
+    },
+    {
+      "line": 86743,
+      "address": "10035F70",
+      "method": "OnPlayerPostLogin",
+      "owner": "CDService"
+    }
+  ],
+  "SGOPlayer": [
+    {
+      "line": 33293,
+      "address": "100156E6",
+      "method": "CreateAddPlayerStream",
+      "owner": "SGOPlayer"
+    },
+    {
+      "line": 34288,
+      "address": "100160FF",
+      "method": "CreateSyncPlayerStream",
+      "owner": "SGOPlayer"
+    },
+    {
+      "line": 41655,
+      "address": "1001AD59",
+      "method": "CheckAttrib",
+      "owner": "SGOPlayer"
+    },
+    {
+      "line": 44702,
+      "address": "1001CC42",
+      "method": "DoReborn",
+      "owner": "SGOPlayer"
+    },
+    {
+      "line": 51126,
+      "address": "10020C89",
+      "method": "SetPlayerSys",
+      "owner": "SGOPlayer"
+    },
+    {
+      "line": 57812,
+      "address": "10024D47",
+      "method": "AddExp",
+      "owner": "SGOPlayer"
+    },
+    {
+      "line": 77338,
+      "address": "1003081E",
+      "method": "OnSavePlayer",
+      "owner": "SGOPlayerSys"
+    },
+    {
+      "line": 78155,
+      "address": "10031041",
+      "method": "SavePlayerData",
+      "owner": "SGOPlayerSys"
+    },
+    {
+      "line": 79794,
+      "address": "10032099",
+      "method": "SavePlayer",
+      "owner": "SGOPlayerSys"
+    },
+    {
+      "line": 81390,
+      "address": "10033083",
+      "method": "GetFullPlayerSaveData",
+      "owner": "SGOPlayerSys"
+    },
+    {
+      "line": 86076,
+      "address": "10035FB2",
+      "method": "AddPlayer",
+      "owner": "SGOPlayerSys"
+    },
+    {
+      "line": 94566,
+      "address": "1003B1E5",
+      "method": "CreateComplexPlayer",
+      "owner": "SGOPlayerSys"
+    },
+    {
+      "line": 96465,
+      "address": "1003C4B0",
+      "method": "GetPlayerDieScript",
+      "owner": "SGOPlayerSys"
+    },
+    {
+      "line": 108526,
+      "address": "10043BAB",
+      "method": "AddPlayer",
+      "owner": "CDPlayerSys"
+    },
+    {
+      "line": 109834,
+      "address": "100448A5",
+      "method": "OnDoPlayerReborn",
+      "owner": "CDPlayerSys"
+    },
+    {
+      "line": 110666,
+      "address": "100450E3",
+      "method": "OnPlayerReborn",
+      "owner": "CDPlayerSys"
+    },
+    {
+      "line": 115336,
+      "address": "10047E80",
+      "method": "SavePlayerData",
+      "owner": "CDService"
+    },
+    {
+      "line": 115361,
+      "address": "10047E90",
+      "method": "GetFullPlayerSaveData",
+      "owner": "CDService"
+    },
+    {
+      "line": 117090,
+      "address": "10048EE0",
+      "method": "OnSavePlayer",
+      "owner": "CDPlayerSys"
+    },
+    {
+      "line": 117517,
+      "address": "100492F0",
+      "method": "SavePlayer",
+      "owner": "CDPlayerSys"
+    },
+    {
+      "line": 132263,
+      "address": "10051F78",
+      "method": "DoReborn",
+      "owner": "CDPlayer"
+    },
+    {
+      "line": 132686,
+      "address": "10052376",
+      "method": "AddExp",
+      "owner": "CDPlayer"
+    },
+    {
+      "line": 132830,
+      "address": "100523D0",
+      "method": "CreateSyncPlayerStream",
+      "owner": "CDMapEntity"
+    },
+    {
+      "line": 132855,
+      "address": "100523E0",
+      "method": "CreateAddPlayerStream",
+      "owner": "CDMapEntity"
+    }
+  ],
+  "SGOEquip": [
+    {
+      "line": 66373,
+      "address": "1002A1DA",
+      "method": "OnEquipItem",
+      "owner": "SGOEquipMgr"
+    },
+    {
+      "line": 67620,
+      "address": "1002AE76",
+      "method": "OnUnEquipItem",
+      "owner": "SGOEquipMgr"
+    }
+  ],
+  "CDItem": [
+    {
+      "line": 3237,
+      "address": "10002ED8",
+      "method": "AddItem",
+      "owner": "CDItemSys"
+    },
+    {
+      "line": 4484,
+      "address": "10003B67",
+      "method": "RemoveItem",
+      "owner": "CDItemSys"
+    },
+    {
+      "line": 10832,
+      "address": "10007B48",
+      "method": "AddItemTest",
+      "owner": "CDItemSys"
+    },
+    {
+      "line": 13786,
+      "address": "100098CB",
+      "method": "GetItem",
+      "owner": "CDItemSys"
+    },
+    {
+      "line": 14648,
+      "address": "1000A143",
+      "method": "GetItemByIndex",
+      "owner": "CDItemSys"
+    },
+    {
+      "line": 18399,
+      "address": "1000C565",
+      "method": "RemoveItemByIndex",
+      "owner": "CDItemSys"
+    },
+    {
+      "line": 19647,
+      "address": "1000D1F3",
+      "method": "CheckItemByIndex",
+      "owner": "CDItemSys"
+    }
+  ],
+  "SGOGeneralItem": [
+    {
+      "line": 29206,
+      "address": "1001334A",
+      "method": "CreateItem",
+      "owner": "SGOCountItemMgr"
+    },
+    {
+      "line": 30180,
+      "address": "10013CB5",
+      "method": "SavePlayerItemList",
+      "owner": "SGOCountItemMgr"
+    },
+    {
+      "line": 31509,
+      "address": "10014A56",
+      "method": "GetFullPlayerSaveItemList",
+      "owner": "SGOCountItemMgr"
+    },
+    {
+      "line": 36997,
+      "address": "100181F5",
+      "method": "AddItem",
+      "owner": "SGOCountItemMgr"
+    },
+    {
+      "line": 39060,
+      "address": "10019679",
+      "method": "AddItemTest",
+      "owner": "SGOCountItemMgr"
+    },
+    {
+      "line": 39977,
+      "address": "10019FC7",
+      "method": "RemoveItem",
+      "owner": "SGOCountItemMgr"
+    },
+    {
+      "line": 41868,
+      "address": "1001B344",
+      "method": "RemoveItemByIndex",
+      "owner": "SGOCountItemMgr"
+    },
+    {
+      "line": 51513,
+      "address": "10021563",
+      "method": "OnUseItem",
+      "owner": "SGOCountItemMgr"
+    },
+    {
+      "line": 56681,
+      "address": "10024A0D",
+      "method": "GetCountItemCount",
+      "owner": "SGOCountItemMgr"
+    },
+    {
+      "line": 60270,
+      "address": "10026D50",
+      "method": "SetMaxCountItemCount",
+      "owner": "SGOItemList"
+    },
+    {
+      "line": 60701,
+      "address": "10027170",
+      "method": "GetMaxCountItemCount",
+      "owner": "SGOItemList"
+    },
+    {
+      "line": 92499,
+      "address": "1003A4A1",
+      "method": "AddItem",
+      "owner": "SGOItemList"
+    },
+    {
+      "line": 96480,
+      "address": "1003CCF4",
+      "method": "RemoveItem",
+      "owner": "SGOItemList"
+    },
+    {
+      "line": 98032,
+      "address": "1003DCCA",
+      "method": "RemoveItemComplete",
+      "owner": "SGOItemList"
+    },
+    {
+      "line": 156326,
+      "address": "100610A4",
+      "method": "RemoveItem",
+      "owner": "CDItemMgr"
+    },
+    {
+      "line": 163809,
+      "address": "10065CD4",
+      "method": "GetItem",
+      "owner": "CDItemMgr"
+    },
+    {
+      "line": 168386,
+      "address": "10068B30",
+      "method": "OnDropItem",
+      "owner": "CDItemMgr"
+    },
+    {
+      "line": 169932,
+      "address": "10069B48",
+      "method": "OnPickItem",
+      "owner": "CDItemMgr"
+    },
+    {
+      "line": 173971,
+      "address": "1006C4D6",
+      "method": "GetItemByIndex",
+      "owner": "CDItemMgr"
+    },
+    {
+      "line": 175752,
+      "address": "1006D5FD",
+      "method": "GetItemListIndex",
+      "owner": "CDItemMgr"
+    },
+    {
+      "line": 178799,
+      "address": "1006F4F1",
+      "method": "CreateItem",
+      "owner": "CDItemMgr"
+    },
+    {
+      "line": 181215,
+      "address": "10070CF6",
+      "method": "SavePlayerItemList",
+      "owner": "CDItemMgr"
+    },
+    {
+      "line": 182020,
+      "address": "100714F7",
+      "method": "GetFullPlayerSavePlayerItemList",
+      "owner": "CDItemMgr"
+    },
+    {
+      "line": 186998,
+      "address": "1007463C",
+      "method": "AddItem",
+      "owner": "CDItemMgr"
+    }
+  ],
+  "SGOTrade": [
+    {
+      "line": 18904,
+      "address": "1000CE12",
+      "method": "ProcessTrade",
+      "owner": "SGOTradeAgent"
+    },
+    {
+      "line": 31807,
+      "address": "10014B17",
+      "method": "OnConfirm",
+      "owner": "SGOTradeSys"
+    }
+  ],
+  "SGOShop": [
+    {
+      "line": 12538,
+      "address": "1000895B",
+      "method": "OnBuy",
+      "owner": "CDShop"
+    },
+    {
+      "line": 13446,
+      "address": "100092A0",
+      "method": "OnSell",
+      "owner": "CDShop"
+    },
+    {
+      "line": 14274,
+      "address": "10009AD9",
+      "method": "OnShopClose",
+      "owner": "CDShop"
+    },
+    {
+      "line": 16904,
+      "address": "1000B5BE",
+      "method": "GetShoppingIndex",
+      "owner": "CDShop"
+    },
+    {
+      "line": 17723,
+      "address": "1000BDE7",
+      "method": "GetShopIndex",
+      "owner": "CDShop"
+    }
+  ],
+  "CDBank": [
+    {
+      "line": 3005,
+      "address": "10002BCD",
+      "method": "OnCloseBank",
+      "owner": "CDBank"
+    }
+  ]
+}

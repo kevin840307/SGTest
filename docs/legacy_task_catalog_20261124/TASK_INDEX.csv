@@ -1,0 +1,232 @@
+﻿id,track,priority,title,path,evidence
+UI-001_ACCOUNT_LOGIN,UI,P1,登入畫面,ui/UI-001_ACCOUNT_LOGIN.md,Old+HK 直接引用
+UI-002_CONNECTING,UI,P2,連線等待畫面,ui/UI-002_CONNECTING.md,僅 ITF 存在；可達性待證
+UI-003_SELECT_SERVER,UI,P1,選擇伺服器,ui/UI-003_SELECT_SERVER.md,Old+HK 直接引用
+UI-004_SELECT_CHARACTER,UI,P1,選擇角色,ui/UI-004_SELECT_CHARACTER.md,Old+HK 直接引用
+UI-005_CREATE_CHARACTER,UI,P1,建立角色,ui/UI-005_CREATE_CHARACTER.md,Old+HK 直接引用
+UI-006_StatusLite,UI,P1,角色簡易狀態 HUD（006_StatusLite）,ui/UI-006_StatusLite.md,Old+HK 直接引用
+UI-006_StatusLite_G,UI,P1,角色簡易狀態 HUD（006_StatusLite_G）,ui/UI-006_StatusLite_G.md,僅 ITF 存在；可達性待證；C.D.E. 待解
+UI-007_HOTKEY_Yl,UI,P1,快捷鍵列（007_HOTKEY_Yl）,ui/UI-007_HOTKEY_Yl.md,Old+HK 直接引用
+UI-007_HOTKEY_YS,UI,P1,快捷鍵列（007_HOTKEY_YS）,ui/UI-007_HOTKEY_YS.md,僅 ITF 存在；可達性待證
+UI-008_MINIMAP_L,UI,P1,小地圖（008_MINIMAP_L）,ui/UI-008_MINIMAP_L.md,Old+HK 直接引用
+UI-008_MINIMAP_S,UI,P1,小地圖（008_MINIMAP_S）,ui/UI-008_MINIMAP_S.md,Old+HK 直接引用
+UI-009_STATUS,UI,P1,狀態效果列,ui/UI-009_STATUS.md,Old 直接引用
+UI-010_MESSAGE01,UI,P2,通用訊息對話框（010_MESSAGE01）,ui/UI-010_MESSAGE01.md,Old+HK 直接引用
+UI-010_MESSAGE02,UI,P2,通用訊息對話框（010_MESSAGE02）,ui/UI-010_MESSAGE02.md,Old+HK 直接引用
+UI-011_LOGIN_LOADING,UI,P1,登入載入進度,ui/UI-011_LOGIN_LOADING.md,Old+HK 直接引用
+UI-012_DEL_EMAIL,UI,P3,刪除郵件/驗證輸入畫面,ui/UI-012_DEL_EMAIL.md,Old+HK 直接引用
+UI-013_Character_INFO,UI,P1,人物詳細資料與配點,ui/UI-013_Character_INFO.md,Old+HK 直接引用；C.D.E. 待解
+UI-014_Character_NICK,UI,P2,稱號/暱稱清單,ui/UI-014_Character_NICK.md,Old+HK 直接引用
+UI-015_Character_JOB,UI,P2,職業清單與轉職,ui/UI-015_Character_JOB.md,Old+HK 直接引用
+UI-016_CHANNEL,UI,P1,聊天小視窗,ui/UI-016_CHANNEL.md,Old+HK 直接引用
+UI-017_CHANNEL_BIG,UI,P2,聊天大視窗,ui/UI-017_CHANNEL_BIG.md,Old+HK 直接引用
+UI-018_EMOTION_BIG,UI,P2,表情選單,ui/UI-018_EMOTION_BIG.md,Old+HK 直接引用
+UI-019_TALKBUBBLE_BIG,UI,P2,對話泡泡樣式選單,ui/UI-019_TALKBUBBLE_BIG.md,Old+HK 直接引用
+UI-020_FRIENDlIST,UI,P2,好友小視窗,ui/UI-020_FRIENDlIST.md,Old+HK 直接引用
+UI-021_COMMAND,UI,P1,主功能工具列,ui/UI-021_COMMAND.md,Old+HK 直接引用；C.D.E. 待解
+UI-022_equip,UI,P1,裝備視窗,ui/UI-022_equip.md,Old+HK 直接引用
+UI-023_ITEM,UI,P1,背包視窗,ui/UI-023_ITEM.md,Old+HK 直接引用
+UI-024_Pet,UI,P2,寵物背包入口（024_Pet）,ui/UI-024_Pet.md,Old+HK 直接引用
+UI-024_RANK,UI,P2,排行榜主視窗（024_RANK）,ui/UI-024_RANK.md,Old+HK 直接引用
+UI-024b_RANK,UI,P2,排行榜主視窗（024b_RANK）,ui/UI-024b_RANK.md,僅 ITF 存在；可達性待證
+UI-025_RANK_02,UI,P2,排行榜詳細/第二頁,ui/UI-025_RANK_02.md,Old+HK 直接引用
+UI-026_TEAM,UI,P2,組隊視窗,ui/UI-026_TEAM.md,Old+HK 直接引用
+UI-027_Skill,UI,P1,技能視窗,ui/UI-027_Skill.md,Old+HK 直接引用
+UI-028_Mix_item,UI,P2,物品合成/強化視窗,ui/UI-028_Mix_item.md,Old+HK 直接引用
+UI-029_SYSTEM,UI,P2,系統設定視窗,ui/UI-029_SYSTEM.md,Old+HK 直接引用
+UI-030_REPAIR,UI,P2,裝備修理視窗,ui/UI-030_REPAIR.md,Old+HK 直接引用
+UI-031_SHOP,UI,P1,NPC 商店主視窗,ui/UI-031_SHOP.md,Old+HK 直接引用
+UI-032_SHOP_02,UI,P1,NPC 商店數量確認,ui/UI-032_SHOP_02.md,Old+HK 直接引用
+UI-033_MESSAGE_INGAME,UI,P2,遊戲內訊息,ui/UI-033_MESSAGE_INGAME.md,僅 ITF 存在；可達性待證
+UI-033_MESSAGE_NAME,UI,P2,名稱輸入提示,ui/UI-033_MESSAGE_NAME.md,Old 直接引用
+UI-034_BANK,UI,P2,銀行與倉庫視窗,ui/UI-034_BANK.md,Old+HK 直接引用
+UI-035_TRADE,UI,P2,玩家交易視窗（035_TRADE）,ui/UI-035_TRADE.md,Old+HK 直接引用
+UI-035_TRADE_02,UI,P2,玩家交易視窗（035_TRADE_02）,ui/UI-035_TRADE_02.md,Old+HK 直接引用
+UI-036_PetItem,UI,P2,寵物物品視窗,ui/UI-036_PetItem.md,Old+HK 直接引用
+UI-037_PetEquip,UI,P2,寵物裝備視窗,ui/UI-037_PetEquip.md,Old+HK 直接引用
+UI-038_WAITINGBOX,UI,P2,等待提示框,ui/UI-038_WAITINGBOX.md,Old+HK 直接引用
+UI-039_PetInfo,UI,P2,寵物詳細資訊,ui/UI-039_PetInfo.md,Old+HK 直接引用
+UI-040_Rightbox,UI,P1,右側快捷面板（040_Rightbox）,ui/UI-040_Rightbox.md,Old+HK 直接引用
+UI-040_Rightbox_02,UI,P1,右側快捷面板（040_Rightbox_02）,ui/UI-040_Rightbox_02.md,僅 ITF 存在；可達性待證
+UI-040_Rightbox_Ext,UI,P1,右側快捷面板（040_Rightbox_Ext）,ui/UI-040_Rightbox_Ext.md,Old+HK 直接引用
+UI-041_balloon_01,UI,P2,聊天/NPC 對話泡泡（041_balloon_01）,ui/UI-041_balloon_01.md,Old+HK 直接引用
+UI-041_balloon_02,UI,P2,聊天/NPC 對話泡泡（041_balloon_02）,ui/UI-041_balloon_02.md,Old+HK 直接引用
+UI-041_balloon_03,UI,P2,聊天/NPC 對話泡泡（041_balloon_03）,ui/UI-041_balloon_03.md,Old+HK 直接引用
+UI-041_balloon_04,UI,P2,聊天/NPC 對話泡泡（041_balloon_04）,ui/UI-041_balloon_04.md,Old+HK 直接引用
+UI-041_balloon_05,UI,P2,聊天/NPC 對話泡泡（041_balloon_05）,ui/UI-041_balloon_05.md,Old+HK 直接引用
+UI-041_balloon_06,UI,P2,聊天/NPC 對話泡泡（041_balloon_06）,ui/UI-041_balloon_06.md,Old+HK 直接引用
+UI-041_balloon_07,UI,P2,聊天/NPC 對話泡泡（041_balloon_07）,ui/UI-041_balloon_07.md,Old+HK 直接引用
+UI-041_balloon_s01,UI,P2,聊天/NPC 對話泡泡（041_balloon_s01）,ui/UI-041_balloon_s01.md,僅 ITF 存在；可達性待證
+UI-041_balloon_s02,UI,P2,聊天/NPC 對話泡泡（041_balloon_s02）,ui/UI-041_balloon_s02.md,僅 ITF 存在；可達性待證
+UI-041_balloon_s03,UI,P2,聊天/NPC 對話泡泡（041_balloon_s03）,ui/UI-041_balloon_s03.md,僅 ITF 存在；可達性待證
+UI-041_balloon_s04,UI,P2,聊天/NPC 對話泡泡（041_balloon_s04）,ui/UI-041_balloon_s04.md,僅 ITF 存在；可達性待證
+UI-041_balloon_s05,UI,P2,聊天/NPC 對話泡泡（041_balloon_s05）,ui/UI-041_balloon_s05.md,僅 ITF 存在；可達性待證
+UI-041_balloon_s06,UI,P2,聊天/NPC 對話泡泡（041_balloon_s06）,ui/UI-041_balloon_s06.md,僅 ITF 存在；可達性待證
+UI-041_balloon_s07,UI,P2,聊天/NPC 對話泡泡（041_balloon_s07）,ui/UI-041_balloon_s07.md,僅 ITF 存在；可達性待證
+UI-042_FRIENDlIST_B,UI,P2,好友大型清單,ui/UI-042_FRIENDlIST_B.md,Old+HK 直接引用
+UI-043_FRIEND_MSG,UI,P2,好友訊息視窗,ui/UI-043_FRIEND_MSG.md,Old+HK 直接引用
+UI-044_QUESTION_BOX,UI,P2,問答/確認框（044_QUESTION_BOX）,ui/UI-044_QUESTION_BOX.md,Old+HK 直接引用
+UI-044_QUESTION_BOXB,UI,P2,問答/確認框（044_QUESTION_BOXB）,ui/UI-044_QUESTION_BOXB.md,Old+HK 直接引用
+UI-045_Mapname_Display,UI,P1,地圖名稱提示,ui/UI-045_Mapname_Display.md,Old 直接引用
+UI-046_Rename,UI,P2,改名對話框,ui/UI-046_Rename.md,Old+HK 直接引用
+UI-047_NPC_message,UI,P1,NPC 對話主框（047_NPC_message）,ui/UI-047_NPC_message.md,Old+HK 直接引用
+UI-047_NPC_message_b,UI,P1,NPC 對話主框（047_NPC_message_b）,ui/UI-047_NPC_message_b.md,僅 ITF 存在；可達性待證
+UI-048_PetTrade,UI,P2,寵物交易資訊,ui/UI-048_PetTrade.md,僅 ITF 存在；可達性待證
+UI-049_NPC_message02,UI,P2,NPC 對話第二樣式（049_NPC_message02）,ui/UI-049_NPC_message02.md,Old+HK 直接引用
+UI-049_NPC_message02B,UI,P2,NPC 對話第二樣式（049_NPC_message02B）,ui/UI-049_NPC_message02B.md,Old+HK 直接引用
+UI-050_NPC_message03a,UI,P2,NPC 對話第三樣式 A,ui/UI-050_NPC_message03a.md,僅 ITF 存在；可達性待證
+UI-051_NPC_message03b,UI,P2,NPC 對話其他樣式（051_NPC_message03b）,ui/UI-051_NPC_message03b.md,僅 ITF 存在；可達性待證
+UI-051_NPC_message04,UI,P2,NPC 對話其他樣式（051_NPC_message04）,ui/UI-051_NPC_message04.md,Old+HK 直接引用
+UI-051_NPC_message05,UI,P2,NPC 對話其他樣式（051_NPC_message05）,ui/UI-051_NPC_message05.md,Old+HK 直接引用
+UI-051_NPC_message06,UI,P2,NPC 對話其他樣式（051_NPC_message06）,ui/UI-051_NPC_message06.md,HK 直接引用
+UI-052_INPUT_TYPE,UI,P2,文字輸入類型面板（052_INPUT_TYPE）,ui/UI-052_INPUT_TYPE.md,Old 直接引用
+UI-052_INPUT_TYPE_02,UI,P2,文字輸入類型面板（052_INPUT_TYPE_02）,ui/UI-052_INPUT_TYPE_02.md,僅 ITF 存在；可達性待證
+UI-053_SCROLLMESSAGE,UI,P2,跑馬燈公告,ui/UI-053_SCROLLMESSAGE.md,Old+HK 直接引用
+UI-054_PETHP,UI,P2,寵物 HP 條,ui/UI-054_PETHP.md,僅 ITF 存在；可達性待證
+UI-055_TRADE_MONEY,UI,P2,交易金錢輸入,ui/UI-055_TRADE_MONEY.md,Old+HK 直接引用
+UI-056_Driver_INFO,UI,P2,機甲詳細資訊（056_Driver_INFO）,ui/UI-056_Driver_INFO.md,Old+HK 直接引用
+UI-056_Driver_INFO_01,UI,P2,機甲詳細資訊（056_Driver_INFO_01）,ui/UI-056_Driver_INFO_01.md,HK 直接引用
+UI-056_Driver_item,UI,P2,機甲物品/裝備列表（056_Driver_item）,ui/UI-056_Driver_item.md,Old+HK 直接引用
+UI-057_CLUB_Menu,UI,P3,社團主選單,ui/UI-057_CLUB_Menu.md,HK 直接引用
+UI-058_CLUB_Ext,UI,P3,社團延伸面板,ui/UI-058_CLUB_Ext.md,HK 直接引用
+UI-059_Driver_Repair,UI,P2,機甲修理視窗,ui/UI-059_Driver_Repair.md,Old+HK 直接引用
+UI-060_CLUB_MemList,UI,P3,社團成員清單（060_CLUB_MemList）,ui/UI-060_CLUB_MemList.md,HK 直接引用
+UI-060_CLUB_MemList02,UI,P3,社團成員清單（060_CLUB_MemList02）,ui/UI-060_CLUB_MemList02.md,HK 直接引用
+UI-061_CLUB_Name,UI,P3,社團名稱輸入,ui/UI-061_CLUB_Name.md,HK 直接引用
+UI-062_CLUB_ALLYList,UI,P3,社團盟友清單,ui/UI-062_CLUB_ALLYList.md,HK 直接引用
+UI-063_CLUB_GoldList,UI,P3,社團金錢紀錄,ui/UI-063_CLUB_GoldList.md,HK 直接引用
+UI-064_CLUB_TechList,UI,P3,社團科技清單,ui/UI-064_CLUB_TechList.md,HK 直接引用
+UI-065_CLUB_BookMark,UI,P3,社團書籤/標記,ui/UI-065_CLUB_BookMark.md,HK 直接引用
+UI-066_CLUB_Intro,UI,P3,社團介紹,ui/UI-066_CLUB_Intro.md,HK 直接引用
+UI-067_CLUB_News,UI,P3,社團公告,ui/UI-067_CLUB_News.md,HK 直接引用
+UI-068_CLUB_OKBox,UI,P3,社團確認框（068_CLUB_OKBox）,ui/UI-068_CLUB_OKBox.md,HK 直接引用
+UI-068_CLUB_YesNoBox,UI,P3,社團確認框（068_CLUB_YesNoBox）,ui/UI-068_CLUB_YesNoBox.md,HK 直接引用
+UI-069_CLUB_INTRO_EDIT,UI,P3,社團介紹編輯,ui/UI-069_CLUB_INTRO_EDIT.md,HK 直接引用
+UI-070_CLUB_News_EDIT,UI,P3,社團公告編輯,ui/UI-070_CLUB_News_EDIT.md,HK 直接引用
+UI-071_CLUB_ALLY,UI,P3,社團結盟,ui/UI-071_CLUB_ALLY.md,僅 ITF 存在；可達性待證
+UI-072_CLUB_DonateInput,UI,P3,社團捐獻金額,ui/UI-072_CLUB_DonateInput.md,HK 直接引用
+UI-073_CLUB_ResourceInput,UI,P3,社團資源輸入,ui/UI-073_CLUB_ResourceInput.md,HK 直接引用
+UI-074_CLUB_TechDevelop,UI,P3,社團科技開發,ui/UI-074_CLUB_TechDevelop.md,HK 直接引用
+UI-075_CLUB_TechDevelop02,UI,P3,社團科技開發明細,ui/UI-075_CLUB_TechDevelop02.md,HK 直接引用
+UI-076_CLUB_TechUPGRADE,UI,P3,社團科技升級,ui/UI-076_CLUB_TechUPGRADE.md,HK 直接引用
+UI-077_CLUB_Takemoney,UI,P3,社團金庫提款,ui/UI-077_CLUB_Takemoney.md,HK 直接引用
+UI-078_CLUB_DisAlly,UI,P3,解除社團同盟,ui/UI-078_CLUB_DisAlly.md,HK 直接引用
+UI-079_MainQuest,UI,P2,主線任務敘事畫面,ui/UI-079_MainQuest.md,Old+HK 直接引用
+UI-080_CLUB_RANK,UI,P3,社團排行榜,ui/UI-080_CLUB_RANK.md,HK 直接引用
+UI-081_LOGIN_CHANGE_PASSWORD,UI,P1,變更角色第二密碼,ui/UI-081_LOGIN_CHANGE_PASSWORD.md,Old+HK 直接引用
+UI-082_LOGIN_PASSWORD,UI,P1,角色第二密碼驗證,ui/UI-082_LOGIN_PASSWORD.md,Old+HK 直接引用
+UI-083_PET_CARD,UI,P2,機甲/寵物卡片預覽,ui/UI-083_PET_CARD.md,Old+HK 直接引用
+UI-084_ENEMY_HP,UI,P1,怪物目標 HP 視窗,ui/UI-084_ENEMY_HP.md,Old+HK 直接引用
+UI-085_COMPLEX_INFO,UI,P2,合體機甲資訊,ui/UI-085_COMPLEX_INFO.md,Old+HK 直接引用
+UI-086_COMPLEX_INFO_01,UI,P3,合體機甲資訊變體,ui/UI-086_COMPLEX_INFO_01.md,僅 ITF 存在；可達性待證
+UI-087_DRIVE_COMPLEX_BAR,UI,P2,駕駛/合體能源條,ui/UI-087_DRIVE_COMPLEX_BAR.md,Old+HK 直接引用
+UI-088_COMPLEX_HP,UI,P2,合體 HP/MP/EXP 條,ui/UI-088_COMPLEX_HP.md,Old+HK 直接引用
+UI-089_PCMEMO_TRADE,UI,P3,玩家備忘錄交易文字（089_PCMEMO_TRADE）,ui/UI-089_PCMEMO_TRADE.md,僅 ITF 存在；可達性待證
+UI-089_PCMEMO_TRADE_READ,UI,P3,玩家備忘錄交易文字（089_PCMEMO_TRADE_READ）,ui/UI-089_PCMEMO_TRADE_READ.md,僅 ITF 存在；可達性待證
+UI-090_PCMEMO,UI,P3,玩家備忘錄/個人狀態,ui/UI-090_PCMEMO.md,僅 ITF 存在；可達性待證
+UI-091_PVP_MAIN,UI,P2,PvP 主戰鬥 HUD,ui/UI-091_PVP_MAIN.md,Old 直接引用
+UI-092_PShop,UI,P2,玩家商店主畫面,ui/UI-092_PShop.md,Old+HK 直接引用
+UI-092_PShop_Buy,UI,P2,玩家商店買家清單,ui/UI-092_PShop_Buy.md,Old+HK 直接引用
+UI-092_PShop_Buy_Item_01,UI,P2,玩家商店購買商品確認 01,ui/UI-092_PShop_Buy_Item_01.md,僅 ITF 存在；可達性待證
+UI-092_PShop_Buy_Item_02,UI,P2,玩家商店購買商品確認 02,ui/UI-092_PShop_Buy_Item_02.md,Old+HK 直接引用
+UI-092_PShop_head,UI,P2,擺攤招牌,ui/UI-092_PShop_head.md,Old+HK 直接引用
+UI-092_PShop_Name,UI,P2,擺攤命名,ui/UI-092_PShop_Name.md,Old+HK 直接引用
+UI-092_PShop_Sell,UI,P2,玩家商店賣家清單,ui/UI-092_PShop_Sell.md,僅 ITF 存在；可達性待證
+UI-092_PShop_Sell_Item_01,UI,P2,擺攤商品設定 01,ui/UI-092_PShop_Sell_Item_01.md,Old+HK 直接引用
+UI-092_PShop_Sell_Item_02,UI,P2,擺攤商品設定 02,ui/UI-092_PShop_Sell_Item_02.md,Old+HK 直接引用
+UI-093_Pvp_List_01,UI,P3,PvP 列表 093_Pvp_List_01,ui/UI-093_Pvp_List_01.md,Old 直接引用
+UI-093_Pvp_List_02,UI,P3,PvP 列表 093_Pvp_List_02,ui/UI-093_Pvp_List_02.md,Old 直接引用
+UI-093_Pvp_List_Item,UI,P3,PvP 列表 093_Pvp_List_Item,ui/UI-093_Pvp_List_Item.md,Old 直接引用
+UI-093_Pvp_Rank_01,UI,P3,PvP 排行 093_Pvp_Rank_01,ui/UI-093_Pvp_Rank_01.md,Old 直接引用
+UI-093_Pvp_Rank_02,UI,P3,PvP 排行 093_Pvp_Rank_02,ui/UI-093_Pvp_Rank_02.md,Old 直接引用
+UI-094_CLUB,UI,P2,社團總覽,ui/UI-094_CLUB.md,HK 直接引用
+UI-094_Hair_Shop,UI,P2,髮型商店,ui/UI-094_Hair_Shop.md,HK 直接引用
+UI-095_Collection,UI,P3,收藏圖鑑,ui/UI-095_Collection.md,HK 直接引用
+UI-095_Collection_01,UI,P3,收藏圖鑑子頁 01,ui/UI-095_Collection_01.md,僅 ITF 存在；可達性待證
+UI-095_Collection_02,UI,P3,收藏圖鑑子頁 02,ui/UI-095_Collection_02.md,僅 ITF 存在；可達性待證
+UI-095_Collection_03,UI,P3,收藏圖鑑子頁 03,ui/UI-095_Collection_03.md,僅 ITF 存在；可達性待證
+UI-095_Collection_04,UI,P3,收藏圖鑑子頁 04,ui/UI-095_Collection_04.md,僅 ITF 存在；可達性待證
+UI-095_Collection_05,UI,P3,收藏圖鑑子頁 05,ui/UI-095_Collection_05.md,僅 ITF 存在；可達性待證
+UI-095_Collection_06,UI,P3,收藏圖鑑子頁 06,ui/UI-095_Collection_06.md,僅 ITF 存在；可達性待證
+UI-096_Dissolve,UI,P2,物品分解,ui/UI-096_Dissolve.md,HK 直接引用
+UI-097_Quest_List,UI,P1,任務清單,ui/UI-097_Quest_List.md,僅 ITF 存在；可達性待證；C.D.E. 待解
+UI-098_Refund,UI,P3,回收/退款視窗,ui/UI-098_Refund.md,僅 ITF 存在；可達性待證；C.D.E. 待解
+GP-001,Gameplay,P1,登入與帳號 session,gameplay/GP-001.md,Old 插件/資料定位；部分 handler 已定位，規則待驗
+GP-002,Gameplay,P1,角色列表與進入世界,gameplay/GP-002.md,Old 插件/資料定位；部分 handler 已定位，規則待驗
+GP-003,Gameplay,P1,角色建立,gameplay/GP-003.md,Old 插件/資料定位；部分 handler 已定位，規則待驗
+GP-004,Gameplay,P2,角色刪除與第二密碼,gameplay/GP-004.md,Old 插件/資料定位；部分 handler 已定位，規則待驗
+GP-005,Gameplay,P1,人物初始外觀與 paper doll,gameplay/GP-005.md,Old 插件/資料定位；部分 handler 已定位，規則待驗
+GP-006,Gameplay,P1,點地面移動與停止,gameplay/GP-006.md,Old 插件/資料定位；部分 handler 已定位，規則待驗
+GP-007,Gameplay,P1,地圖碰撞與尋路,gameplay/GP-007.md,Old 插件/資料定位；部分 handler 已定位，規則待驗
+GP-008,Gameplay,P1,傳點與跨圖 lifecycle,gameplay/GP-008.md,Old 插件/資料定位；部分 handler 已定位，規則待驗
+GP-009,Gameplay,P1,玩家 AOI 進出與同步,gameplay/GP-009.md,Old 插件/資料定位；部分 handler 已定位，規則待驗
+GP-010,Gameplay,P1,怪物生成與重生,gameplay/GP-010.md,Old 插件/資料定位；部分 handler 已定位，規則待驗
+GP-011,Gameplay,P1,怪物巡邏與追擊/回位,gameplay/GP-011.md,Old 插件/資料定位；部分 handler 已定位，規則待驗
+GP-012,Gameplay,P1,正式角色戰鬥屬性解鎖,gameplay/GP-012.md,Old 插件/資料定位；部分 handler 已定位，規則待驗
+GP-013,Gameplay,P1,選怪與接近攻擊距離,gameplay/GP-013.md,Old 插件/資料定位；部分 handler 已定位，規則待驗
+GP-014,Gameplay,P1,普通攻擊與命中/MISS,gameplay/GP-014.md,Old 插件/資料定位；部分 handler 已定位，規則待驗
+GP-015,Gameplay,P1,傷害結算、受擊與動畫,gameplay/GP-015.md,Old 插件/資料定位；部分 handler 已定位，規則待驗
+GP-016,Gameplay,P1,擊殺、EXP、金錢與升級,gameplay/GP-016.md,Old 插件/資料定位；部分 handler 已定位，規則待驗
+GP-017,Gameplay,P1,怪物死亡與掉落生成,gameplay/GP-017.md,Old 插件/資料定位；部分 handler 已定位，規則待驗
+GP-018,Gameplay,P1,地上物拾取,gameplay/GP-018.md,Old 插件/資料定位；部分 handler 已定位，規則待驗
+GP-019,Gameplay,P1,玩家死亡與復活,gameplay/GP-019.md,Old 插件/資料定位；部分 handler 已定位，規則待驗
+GP-020,Gameplay,P1,技能學習與職業限制,gameplay/GP-020.md,Old 插件/資料定位；部分 handler 已定位，規則待驗
+GP-021,Gameplay,P1,單體技能與 MP/冷卻,gameplay/GP-021.md,Old 插件/資料定位；部分 handler 已定位，規則待驗
+GP-022,Gameplay,P1,範圍技能與多目標,gameplay/GP-022.md,Old 插件/資料定位；部分 handler 已定位，規則待驗
+GP-023,Gameplay,P1,Buff/Debuff 與治療,gameplay/GP-023.md,Old 插件/資料定位；部分 handler 已定位，規則待驗
+GP-024,Gameplay,P1,背包格位與堆疊,gameplay/GP-024.md,Old 插件/資料定位；部分 handler 已定位，規則待驗
+GP-025,Gameplay,P1,消耗品使用與恢復,gameplay/GP-025.md,Old 插件/資料定位；部分 handler 已定位，規則待驗
+GP-026,Gameplay,P1,裝備裝卸與屬性,gameplay/GP-026.md,Old 插件/資料定位；部分 handler 已定位，規則待驗
+GP-027,Gameplay,P1,屬性配點與重算,gameplay/GP-027.md,Old 插件/資料定位；部分 handler 已定位，規則待驗
+GP-028,Gameplay,P1,快捷鍵綁定及執行,gameplay/GP-028.md,Old 插件/資料定位；部分 handler 已定位，規則待驗
+GP-029,Gameplay,P1,NPC 互動與腳本分支,gameplay/GP-029.md,Old 插件/資料定位；部分 handler 已定位，規則待驗
+GP-030,Gameplay,P1,NPC 商店購買,gameplay/GP-030.md,Old 插件/資料定位；部分 handler 已定位，規則待驗
+GP-031,Gameplay,P1,NPC 商店出售,gameplay/GP-031.md,Old 插件/資料定位；部分 handler 已定位，規則待驗
+GP-032,Gameplay,P2,銀行存取金錢,gameplay/GP-032.md,Old 插件/資料定位；部分 handler 已定位，規則待驗
+GP-033,Gameplay,P2,倉庫存取物品,gameplay/GP-033.md,Old 插件/資料定位；部分 handler 已定位，規則待驗
+GP-034,Gameplay,P2,裝備耐久與修理,gameplay/GP-034.md,Old 插件/資料定位；部分 handler 已定位，規則待驗
+GP-035,Gameplay,P2,裝備強化,gameplay/GP-035.md,Old 插件/資料定位；部分 handler 已定位，規則待驗
+GP-036,Gameplay,P2,物品合成,gameplay/GP-036.md,Old 插件/資料定位；部分 handler 已定位，規則待驗
+GP-037,Gameplay,P2,物品分解,gameplay/GP-037.md,Old 插件/資料定位；部分 handler 已定位，規則待驗
+GP-038,Gameplay,P2,玩家雙方交易,gameplay/GP-038.md,Old 插件/資料定位；部分 handler 已定位，規則待驗
+GP-039,Gameplay,P2,玩家商店開攤與管理,gameplay/GP-039.md,Old 插件/資料定位；部分 handler 已定位，規則待驗
+GP-040,Gameplay,P2,玩家商店購買與競購,gameplay/GP-040.md,Old 插件/資料定位；部分 handler 已定位，規則待驗
+GP-041,Gameplay,P2,組隊邀請與隊長,gameplay/GP-041.md,Old 插件/資料定位；部分 handler 已定位，規則待驗
+GP-042,Gameplay,P2,組隊戰鬥共享與狀態,gameplay/GP-042.md,Old 插件/資料定位；部分 handler 已定位，規則待驗
+GP-043,Gameplay,P2,聊天頻道與私訊,gameplay/GP-043.md,Old 插件/資料定位；部分 handler 已定位，規則待驗
+GP-044,Gameplay,P2,好友與黑名單,gameplay/GP-044.md,Old 插件/資料定位；部分 handler 已定位，規則待驗
+GP-045,Gameplay,P2,郵件與留言,gameplay/GP-045.md,Old 插件/資料定位；部分 handler 已定位，規則待驗
+GP-046,Gameplay,P2,表情與泡泡樣式,gameplay/GP-046.md,Old 插件/資料定位；部分 handler 已定位，規則待驗
+GP-047,Gameplay,P2,稱號變更,gameplay/GP-047.md,Old 插件/資料定位；部分 handler 已定位，規則待驗
+GP-048,Gameplay,P2,轉職與職業條件,gameplay/GP-048.md,Old 插件/資料定位；部分 handler 已定位，規則待驗
+GP-049,Gameplay,P2,任務接取與進度,gameplay/GP-049.md,Old 插件/資料定位；部分 handler 已定位，規則待驗
+GP-050,Gameplay,P2,任務完成與獎勵,gameplay/GP-050.md,Old 插件/資料定位；部分 handler 已定位，規則待驗
+GP-051,Gameplay,P2,寵物召喚與收回,gameplay/GP-051.md,Old 插件/資料定位；部分 handler 已定位，規則待驗
+GP-052,Gameplay,P2,寵物 AI 與戰鬥,gameplay/GP-052.md,Old 插件/資料定位；部分 handler 已定位，規則待驗
+GP-053,Gameplay,P2,寵物餵食、配點與裝備,gameplay/GP-053.md,Old 插件/資料定位；部分 handler 已定位，規則待驗
+GP-054,Gameplay,P2,寵物交易,gameplay/GP-054.md,Old 插件/資料定位；部分 handler 已定位，規則待驗
+GP-055,Gameplay,P2,機甲搭乘與解除,gameplay/GP-055.md,Old 插件/資料定位；部分 handler 已定位，規則待驗
+GP-056,Gameplay,P2,機甲裝備與能源,gameplay/GP-056.md,Old 插件/資料定位；部分 handler 已定位，規則待驗
+GP-057,Gameplay,P2,機甲修理與升級,gameplay/GP-057.md,Old 插件/資料定位；部分 handler 已定位，規則待驗
+GP-058,Gameplay,P2,機甲卡片與合體,gameplay/GP-058.md,Old 插件/資料定位；部分 handler 已定位，規則待驗
+GP-059,Gameplay,P2,PvP 地圖與名稱狀態,gameplay/GP-059.md,Old 插件/資料定位；部分 handler 已定位，規則待驗
+GP-060,Gameplay,P3,PvP 對戰與排行,gameplay/GP-060.md,Old 插件/資料定位；部分 handler 已定位，規則待驗
+GP-061,Gameplay,P3,排行榜,gameplay/GP-061.md,Old 插件/資料定位；部分 handler 已定位，規則待驗
+GP-062,Gameplay,P3,社團建立與成員,gameplay/GP-062.md,Old 插件/資料定位；部分 handler 已定位，規則待驗
+GP-063,Gameplay,P3,社團同盟與公告,gameplay/GP-063.md,Old 插件/資料定位；部分 handler 已定位，規則待驗
+GP-064,Gameplay,P3,社團資源、金庫與科技,gameplay/GP-064.md,Old 插件/資料定位；部分 handler 已定位，規則待驗
+GP-065,Gameplay,P3,髮型商店,gameplay/GP-065.md,Old 插件/資料定位；部分 handler 已定位，規則待驗
+GP-066,Gameplay,P3,收藏與獎勵,gameplay/GP-066.md,Old 插件/資料定位；部分 handler 已定位，規則待驗
+GP-067,Gameplay,P3,退款/回購功能證據與實作,gameplay/GP-067.md,Old 插件/資料定位；部分 handler 已定位，規則待驗
+GP-068,Gameplay,P3,系統設定與登出,gameplay/GP-068.md,Old 插件/資料定位；部分 handler 已定位，規則待驗
+GP-069,Gameplay,P3,全域公告與跑馬燈,gameplay/GP-069.md,Old 插件/資料定位；部分 handler 已定位，規則待驗
+GP-070,Gameplay,P3,禮物/邀請獎勵,gameplay/GP-070.md,Old 插件/資料定位；部分 handler 已定位，規則待驗
+GP-071,Gameplay,P3,GM 管理功能,gameplay/GP-071.md,Old 插件/資料定位；部分 handler 已定位，規則待驗
+GP-072,Gameplay,P1,原版游標與地面選取,gameplay/GP-072.md,Old 插件/資料定位；部分 handler 已定位，規則待驗
+GP-073,Gameplay,P1,戰鬥數字與 MISS/防禦特效,gameplay/GP-073.md,Old 插件/資料定位；部分 handler 已定位，規則待驗
+GP-074,Gameplay,P1,技能與武器特效,gameplay/GP-074.md,Old 插件/資料定位；部分 handler 已定位，規則待驗
+GP-075,Gameplay,P2,世界地圖與傳送地圖介面,gameplay/GP-075.md,Old 插件/資料定位；部分 handler 已定位，規則待驗
+GP-076,Gameplay,P1,原版 UI 素材共用載入與字型,gameplay/GP-076.md,Old 插件/資料定位；部分 handler 已定位，規則待驗
+GP-077,Gameplay,P3,五個 C.D.E. ITF 解密與控件驗證,gameplay/GP-077.md,Old 插件/資料定位；部分 handler 已定位，規則待驗
+GP-078,Gameplay,P3,未直接引用 ITF 與剩餘 SPR 可達性調查,gameplay/GP-078.md,Old 插件/資料定位；部分 handler 已定位，規則待驗
+GP-079,Gameplay,P2,遊戲內資源生命週期與效能,gameplay/GP-079.md,Old 插件/資料定位；部分 handler 已定位，規則待驗

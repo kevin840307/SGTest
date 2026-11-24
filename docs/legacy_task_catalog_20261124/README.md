@@ -1,0 +1,271 @@
+# 星夢 SGTest：原版反編譯 UI / 功能獨立任務庫（2026-11-24）
+
+## 使用方式
+這是可執行工作拆分與來源定位，不是完成度報告。共 **152 個獨立 UI 任務 + 79 個獨立功能任務 = 231 個 Markdown 任務**。每一個 ITF 包含變體，均有一份文件；每個核心功能也獨立一份。UI 文件包含 SPR 對照、Old/HK 反編譯地址、資料/插件、步驟與驗收；Gameplay 文件提供權威/資料/實機驗收與對應 UI 連結。
+
+來源路徑（只讀）：
+- Old = C:/SGO/Recovered/Old；客戶端 ClientData/Paradise.exe.lst；服務端 服務端/plugins/*.dll.lst、*.cfg、Dat、資料庫。
+- HK = C:/SGO/Stargate Online IE HK；SGOClient.exe.lst；output/Interface；Data1_PNG2/Data1_PNG；HK 版佈局優先，Old 版行為與 Server 作參考。
+- SGTest = C:/SGO/SRC/SGTest；遵從現有 AGENTS.md、docs/SCHEDULER_PROMPT.md、TODO 與 FEATURE_MATRIX；本目錄不替代唯一正式矩陣。
+
+## 盤點範圍與可信度
+- HK/output/Interface 直接子檔：152 ITF、368 SPR（不含遞迴子目錄/全遊戲世界素材）。
+- 147 ITF 能抽取明文 SPR 名稱；5 個 C.D.E. ITF 未解密，僅列已存在候選素材，需 GP-077。
+- Old 反編譯定位 89 個不同 ITF；HK .text 字串定位 108 個。未找到直接引用 ≠ 不存在或未使用，可能透過動態載入/版本差異/同家族變體。GP-078 負責補齊可達性。
+- 219/368 個 top-level SPR 名稱出現在可讀 ITF；其餘保留反向清單，需查動態引用，不強行分配。
+- Old Server 已確認插件名稱及部分 symbol 入口；未逐函式還原完整 opcode/公式/控制 ID/rect/frame/font。UI 精確映射僅限 ITF 明文 SPR 字串，不代表每個 SPR 的使用角色、幀、原版實機操作已驗證。
+- 所有任務初始 NOT VERIFIED，優先度為建議，不是當前程式完成度，也不要求重做已驗證功能。原版程式與圖檔不納入本文件庫。
+
+## Scheduler 選擇順序（建議；不得覆蓋 AGENTS.md）
+1. 真 P0 優先，已可用登入不反覆微調：先 [正式戰鬥 profile](gameplay/GP-012.md) → [選怪距離](gameplay/GP-013.md) → [普攻命中](gameplay/GP-014.md) → [受擊傷害](gameplay/GP-015.md) → [擊殺 EXP](gameplay/GP-016.md) → [掉落](gameplay/GP-017.md) → [拾取](gameplay/GP-018.md)。
+2. 技能 GP-020～023、物品 GP-024～028、商店/倉庫 GP-029～037、多人 GP-038～044，依現有矩陣挑未完成切片。每三個有效非緊急交付至少兩個 gameplay、一個遊戲內 UI。
+3. UI 優先 HUD、人物資料、技能、背包、裝備、NPC；登入、選角、創角只有真 blocker/使用者指定/合理 UI 輪才修。
+4. 任務文件個別使用：讀所選文件 → 查對應反編譯/ITF → 最短可玩閉環 → 實機驗收 → 更新既有矩陣。未知/不可達 UI 標證據待補，不阻塞其他玩法。
+
+## 快速入口
+- [登入畫面](ui/UI-001_ACCOUNT_LOGIN.md)
+- [選擇角色](ui/UI-004_SELECT_CHARACTER.md)
+- [建立角色](ui/UI-005_CREATE_CHARACTER.md)
+- [角色詳細資料](ui/UI-013_Character_INFO.md)
+- [背包](ui/UI-023_ITEM.md)
+- [裝備](ui/UI-022_equip.md)
+- [技能](ui/UI-027_Skill.md)
+- [商店](ui/UI-031_SHOP.md)
+- [任務清單](ui/UI-097_Quest_List.md)
+- [完整 ITF→SPR 對照](UI_SPR_MAPPING.csv) · [全部 SPR 反向清單](SPR_INVENTORY.csv) · [任務索引 CSV](TASK_INDEX.csv)
+- [來源盤點 JSON](source_inventory.json)（直接 ITF 字串、行號/地址、原名）
+
+## Gameplay 任務（獨立文件）
+- [GP-001 登入與帳號 session](gameplay/GP-001.md) — P1
+- [GP-002 角色列表與進入世界](gameplay/GP-002.md) — P1
+- [GP-003 角色建立](gameplay/GP-003.md) — P1
+- [GP-004 角色刪除與第二密碼](gameplay/GP-004.md) — P2
+- [GP-005 人物初始外觀與 paper doll](gameplay/GP-005.md) — P1
+- [GP-006 點地面移動與停止](gameplay/GP-006.md) — P1
+- [GP-007 地圖碰撞與尋路](gameplay/GP-007.md) — P1
+- [GP-008 傳點與跨圖 lifecycle](gameplay/GP-008.md) — P1
+- [GP-009 玩家 AOI 進出與同步](gameplay/GP-009.md) — P1
+- [GP-010 怪物生成與重生](gameplay/GP-010.md) — P1
+- [GP-011 怪物巡邏與追擊/回位](gameplay/GP-011.md) — P1
+- [GP-012 正式角色戰鬥屬性解鎖](gameplay/GP-012.md) — P1
+- [GP-013 選怪與接近攻擊距離](gameplay/GP-013.md) — P1
+- [GP-014 普通攻擊與命中/MISS](gameplay/GP-014.md) — P1
+- [GP-015 傷害結算、受擊與動畫](gameplay/GP-015.md) — P1
+- [GP-016 擊殺、EXP、金錢與升級](gameplay/GP-016.md) — P1
+- [GP-017 怪物死亡與掉落生成](gameplay/GP-017.md) — P1
+- [GP-018 地上物拾取](gameplay/GP-018.md) — P1
+- [GP-019 玩家死亡與復活](gameplay/GP-019.md) — P1
+- [GP-020 技能學習與職業限制](gameplay/GP-020.md) — P1
+- [GP-021 單體技能與 MP/冷卻](gameplay/GP-021.md) — P1
+- [GP-022 範圍技能與多目標](gameplay/GP-022.md) — P1
+- [GP-023 Buff/Debuff 與治療](gameplay/GP-023.md) — P1
+- [GP-024 背包格位與堆疊](gameplay/GP-024.md) — P1
+- [GP-025 消耗品使用與恢復](gameplay/GP-025.md) — P1
+- [GP-026 裝備裝卸與屬性](gameplay/GP-026.md) — P1
+- [GP-027 屬性配點與重算](gameplay/GP-027.md) — P1
+- [GP-028 快捷鍵綁定及執行](gameplay/GP-028.md) — P1
+- [GP-029 NPC 互動與腳本分支](gameplay/GP-029.md) — P1
+- [GP-030 NPC 商店購買](gameplay/GP-030.md) — P1
+- [GP-031 NPC 商店出售](gameplay/GP-031.md) — P1
+- [GP-032 銀行存取金錢](gameplay/GP-032.md) — P2
+- [GP-033 倉庫存取物品](gameplay/GP-033.md) — P2
+- [GP-034 裝備耐久與修理](gameplay/GP-034.md) — P2
+- [GP-035 裝備強化](gameplay/GP-035.md) — P2
+- [GP-036 物品合成](gameplay/GP-036.md) — P2
+- [GP-037 物品分解](gameplay/GP-037.md) — P2
+- [GP-038 玩家雙方交易](gameplay/GP-038.md) — P2
+- [GP-039 玩家商店開攤與管理](gameplay/GP-039.md) — P2
+- [GP-040 玩家商店購買與競購](gameplay/GP-040.md) — P2
+- [GP-041 組隊邀請與隊長](gameplay/GP-041.md) — P2
+- [GP-042 組隊戰鬥共享與狀態](gameplay/GP-042.md) — P2
+- [GP-043 聊天頻道與私訊](gameplay/GP-043.md) — P2
+- [GP-044 好友與黑名單](gameplay/GP-044.md) — P2
+- [GP-045 郵件與留言](gameplay/GP-045.md) — P2
+- [GP-046 表情與泡泡樣式](gameplay/GP-046.md) — P2
+- [GP-047 稱號變更](gameplay/GP-047.md) — P2
+- [GP-048 轉職與職業條件](gameplay/GP-048.md) — P2
+- [GP-049 任務接取與進度](gameplay/GP-049.md) — P2
+- [GP-050 任務完成與獎勵](gameplay/GP-050.md) — P2
+- [GP-051 寵物召喚與收回](gameplay/GP-051.md) — P2
+- [GP-052 寵物 AI 與戰鬥](gameplay/GP-052.md) — P2
+- [GP-053 寵物餵食、配點與裝備](gameplay/GP-053.md) — P2
+- [GP-054 寵物交易](gameplay/GP-054.md) — P2
+- [GP-055 機甲搭乘與解除](gameplay/GP-055.md) — P2
+- [GP-056 機甲裝備與能源](gameplay/GP-056.md) — P2
+- [GP-057 機甲修理與升級](gameplay/GP-057.md) — P2
+- [GP-058 機甲卡片與合體](gameplay/GP-058.md) — P2
+- [GP-059 PvP 地圖與名稱狀態](gameplay/GP-059.md) — P2
+- [GP-060 PvP 對戰與排行](gameplay/GP-060.md) — P3
+- [GP-061 排行榜](gameplay/GP-061.md) — P3
+- [GP-062 社團建立與成員](gameplay/GP-062.md) — P3
+- [GP-063 社團同盟與公告](gameplay/GP-063.md) — P3
+- [GP-064 社團資源、金庫與科技](gameplay/GP-064.md) — P3
+- [GP-065 髮型商店](gameplay/GP-065.md) — P3
+- [GP-066 收藏與獎勵](gameplay/GP-066.md) — P3
+- [GP-067 退款/回購功能證據與實作](gameplay/GP-067.md) — P3
+- [GP-068 系統設定與登出](gameplay/GP-068.md) — P3
+- [GP-069 全域公告與跑馬燈](gameplay/GP-069.md) — P3
+- [GP-070 禮物/邀請獎勵](gameplay/GP-070.md) — P3
+- [GP-071 GM 管理功能](gameplay/GP-071.md) — P3
+- [GP-072 原版游標與地面選取](gameplay/GP-072.md) — P1
+- [GP-073 戰鬥數字與 MISS/防禦特效](gameplay/GP-073.md) — P1
+- [GP-074 技能與武器特效](gameplay/GP-074.md) — P1
+- [GP-075 世界地圖與傳送地圖介面](gameplay/GP-075.md) — P2
+- [GP-076 原版 UI 素材共用載入與字型](gameplay/GP-076.md) — P1
+- [GP-077 五個 C.D.E. ITF 解密與控件驗證](gameplay/GP-077.md) — P3
+- [GP-078 未直接引用 ITF 與剩餘 SPR 可達性調查](gameplay/GP-078.md) — P3
+- [GP-079 遊戲內資源生命週期與效能](gameplay/GP-079.md) — P2
+
+## UI 任務（每個 ITF 各一份）
+- [UI-001_ACCOUNT_LOGIN 登入畫面](ui/UI-001_ACCOUNT_LOGIN.md) — P1 / Old+HK 直接引用
+- [UI-002_CONNECTING 連線等待畫面](ui/UI-002_CONNECTING.md) — P2 / 僅 ITF 存在；可達性待證
+- [UI-003_SELECT_SERVER 選擇伺服器](ui/UI-003_SELECT_SERVER.md) — P1 / Old+HK 直接引用
+- [UI-004_SELECT_CHARACTER 選擇角色](ui/UI-004_SELECT_CHARACTER.md) — P1 / Old+HK 直接引用
+- [UI-005_CREATE_CHARACTER 建立角色](ui/UI-005_CREATE_CHARACTER.md) — P1 / Old+HK 直接引用
+- [UI-006_StatusLite 角色簡易狀態 HUD（006_StatusLite）](ui/UI-006_StatusLite.md) — P1 / Old+HK 直接引用
+- [UI-006_StatusLite_G 角色簡易狀態 HUD（006_StatusLite_G）](ui/UI-006_StatusLite_G.md) — P1 / 僅 ITF 存在；可達性待證；C.D.E. 待解
+- [UI-007_HOTKEY_Yl 快捷鍵列（007_HOTKEY_Yl）](ui/UI-007_HOTKEY_Yl.md) — P1 / Old+HK 直接引用
+- [UI-007_HOTKEY_YS 快捷鍵列（007_HOTKEY_YS）](ui/UI-007_HOTKEY_YS.md) — P1 / 僅 ITF 存在；可達性待證
+- [UI-008_MINIMAP_L 小地圖（008_MINIMAP_L）](ui/UI-008_MINIMAP_L.md) — P1 / Old+HK 直接引用
+- [UI-008_MINIMAP_S 小地圖（008_MINIMAP_S）](ui/UI-008_MINIMAP_S.md) — P1 / Old+HK 直接引用
+- [UI-009_STATUS 狀態效果列](ui/UI-009_STATUS.md) — P1 / Old 直接引用
+- [UI-010_MESSAGE01 通用訊息對話框（010_MESSAGE01）](ui/UI-010_MESSAGE01.md) — P2 / Old+HK 直接引用
+- [UI-010_MESSAGE02 通用訊息對話框（010_MESSAGE02）](ui/UI-010_MESSAGE02.md) — P2 / Old+HK 直接引用
+- [UI-011_LOGIN_LOADING 登入載入進度](ui/UI-011_LOGIN_LOADING.md) — P1 / Old+HK 直接引用
+- [UI-012_DEL_EMAIL 刪除郵件/驗證輸入畫面](ui/UI-012_DEL_EMAIL.md) — P3 / Old+HK 直接引用
+- [UI-013_Character_INFO 人物詳細資料與配點](ui/UI-013_Character_INFO.md) — P1 / Old+HK 直接引用；C.D.E. 待解
+- [UI-014_Character_NICK 稱號/暱稱清單](ui/UI-014_Character_NICK.md) — P2 / Old+HK 直接引用
+- [UI-015_Character_JOB 職業清單與轉職](ui/UI-015_Character_JOB.md) — P2 / Old+HK 直接引用
+- [UI-016_CHANNEL 聊天小視窗](ui/UI-016_CHANNEL.md) — P1 / Old+HK 直接引用
+- [UI-017_CHANNEL_BIG 聊天大視窗](ui/UI-017_CHANNEL_BIG.md) — P2 / Old+HK 直接引用
+- [UI-018_EMOTION_BIG 表情選單](ui/UI-018_EMOTION_BIG.md) — P2 / Old+HK 直接引用
+- [UI-019_TALKBUBBLE_BIG 對話泡泡樣式選單](ui/UI-019_TALKBUBBLE_BIG.md) — P2 / Old+HK 直接引用
+- [UI-020_FRIENDlIST 好友小視窗](ui/UI-020_FRIENDlIST.md) — P2 / Old+HK 直接引用
+- [UI-021_COMMAND 主功能工具列](ui/UI-021_COMMAND.md) — P1 / Old+HK 直接引用；C.D.E. 待解
+- [UI-022_equip 裝備視窗](ui/UI-022_equip.md) — P1 / Old+HK 直接引用
+- [UI-023_ITEM 背包視窗](ui/UI-023_ITEM.md) — P1 / Old+HK 直接引用
+- [UI-024_Pet 寵物背包入口（024_Pet）](ui/UI-024_Pet.md) — P2 / Old+HK 直接引用
+- [UI-024_RANK 排行榜主視窗（024_RANK）](ui/UI-024_RANK.md) — P2 / Old+HK 直接引用
+- [UI-024b_RANK 排行榜主視窗（024b_RANK）](ui/UI-024b_RANK.md) — P2 / 僅 ITF 存在；可達性待證
+- [UI-025_RANK_02 排行榜詳細/第二頁](ui/UI-025_RANK_02.md) — P2 / Old+HK 直接引用
+- [UI-026_TEAM 組隊視窗](ui/UI-026_TEAM.md) — P2 / Old+HK 直接引用
+- [UI-027_Skill 技能視窗](ui/UI-027_Skill.md) — P1 / Old+HK 直接引用
+- [UI-028_Mix_item 物品合成/強化視窗](ui/UI-028_Mix_item.md) — P2 / Old+HK 直接引用
+- [UI-029_SYSTEM 系統設定視窗](ui/UI-029_SYSTEM.md) — P2 / Old+HK 直接引用
+- [UI-030_REPAIR 裝備修理視窗](ui/UI-030_REPAIR.md) — P2 / Old+HK 直接引用
+- [UI-031_SHOP NPC 商店主視窗](ui/UI-031_SHOP.md) — P1 / Old+HK 直接引用
+- [UI-032_SHOP_02 NPC 商店數量確認](ui/UI-032_SHOP_02.md) — P1 / Old+HK 直接引用
+- [UI-033_MESSAGE_INGAME 遊戲內訊息](ui/UI-033_MESSAGE_INGAME.md) — P2 / 僅 ITF 存在；可達性待證
+- [UI-033_MESSAGE_NAME 名稱輸入提示](ui/UI-033_MESSAGE_NAME.md) — P2 / Old 直接引用
+- [UI-034_BANK 銀行與倉庫視窗](ui/UI-034_BANK.md) — P2 / Old+HK 直接引用
+- [UI-035_TRADE 玩家交易視窗（035_TRADE）](ui/UI-035_TRADE.md) — P2 / Old+HK 直接引用
+- [UI-035_TRADE_02 玩家交易視窗（035_TRADE_02）](ui/UI-035_TRADE_02.md) — P2 / Old+HK 直接引用
+- [UI-036_PetItem 寵物物品視窗](ui/UI-036_PetItem.md) — P2 / Old+HK 直接引用
+- [UI-037_PetEquip 寵物裝備視窗](ui/UI-037_PetEquip.md) — P2 / Old+HK 直接引用
+- [UI-038_WAITINGBOX 等待提示框](ui/UI-038_WAITINGBOX.md) — P2 / Old+HK 直接引用
+- [UI-039_PetInfo 寵物詳細資訊](ui/UI-039_PetInfo.md) — P2 / Old+HK 直接引用
+- [UI-040_Rightbox 右側快捷面板（040_Rightbox）](ui/UI-040_Rightbox.md) — P1 / Old+HK 直接引用
+- [UI-040_Rightbox_02 右側快捷面板（040_Rightbox_02）](ui/UI-040_Rightbox_02.md) — P1 / 僅 ITF 存在；可達性待證
+- [UI-040_Rightbox_Ext 右側快捷面板（040_Rightbox_Ext）](ui/UI-040_Rightbox_Ext.md) — P1 / Old+HK 直接引用
+- [UI-041_balloon_01 聊天/NPC 對話泡泡（041_balloon_01）](ui/UI-041_balloon_01.md) — P2 / Old+HK 直接引用
+- [UI-041_balloon_02 聊天/NPC 對話泡泡（041_balloon_02）](ui/UI-041_balloon_02.md) — P2 / Old+HK 直接引用
+- [UI-041_balloon_03 聊天/NPC 對話泡泡（041_balloon_03）](ui/UI-041_balloon_03.md) — P2 / Old+HK 直接引用
+- [UI-041_balloon_04 聊天/NPC 對話泡泡（041_balloon_04）](ui/UI-041_balloon_04.md) — P2 / Old+HK 直接引用
+- [UI-041_balloon_05 聊天/NPC 對話泡泡（041_balloon_05）](ui/UI-041_balloon_05.md) — P2 / Old+HK 直接引用
+- [UI-041_balloon_06 聊天/NPC 對話泡泡（041_balloon_06）](ui/UI-041_balloon_06.md) — P2 / Old+HK 直接引用
+- [UI-041_balloon_07 聊天/NPC 對話泡泡（041_balloon_07）](ui/UI-041_balloon_07.md) — P2 / Old+HK 直接引用
+- [UI-041_balloon_s01 聊天/NPC 對話泡泡（041_balloon_s01）](ui/UI-041_balloon_s01.md) — P2 / 僅 ITF 存在；可達性待證
+- [UI-041_balloon_s02 聊天/NPC 對話泡泡（041_balloon_s02）](ui/UI-041_balloon_s02.md) — P2 / 僅 ITF 存在；可達性待證
+- [UI-041_balloon_s03 聊天/NPC 對話泡泡（041_balloon_s03）](ui/UI-041_balloon_s03.md) — P2 / 僅 ITF 存在；可達性待證
+- [UI-041_balloon_s04 聊天/NPC 對話泡泡（041_balloon_s04）](ui/UI-041_balloon_s04.md) — P2 / 僅 ITF 存在；可達性待證
+- [UI-041_balloon_s05 聊天/NPC 對話泡泡（041_balloon_s05）](ui/UI-041_balloon_s05.md) — P2 / 僅 ITF 存在；可達性待證
+- [UI-041_balloon_s06 聊天/NPC 對話泡泡（041_balloon_s06）](ui/UI-041_balloon_s06.md) — P2 / 僅 ITF 存在；可達性待證
+- [UI-041_balloon_s07 聊天/NPC 對話泡泡（041_balloon_s07）](ui/UI-041_balloon_s07.md) — P2 / 僅 ITF 存在；可達性待證
+- [UI-042_FRIENDlIST_B 好友大型清單](ui/UI-042_FRIENDlIST_B.md) — P2 / Old+HK 直接引用
+- [UI-043_FRIEND_MSG 好友訊息視窗](ui/UI-043_FRIEND_MSG.md) — P2 / Old+HK 直接引用
+- [UI-044_QUESTION_BOX 問答/確認框（044_QUESTION_BOX）](ui/UI-044_QUESTION_BOX.md) — P2 / Old+HK 直接引用
+- [UI-044_QUESTION_BOXB 問答/確認框（044_QUESTION_BOXB）](ui/UI-044_QUESTION_BOXB.md) — P2 / Old+HK 直接引用
+- [UI-045_Mapname_Display 地圖名稱提示](ui/UI-045_Mapname_Display.md) — P1 / Old 直接引用
+- [UI-046_Rename 改名對話框](ui/UI-046_Rename.md) — P2 / Old+HK 直接引用
+- [UI-047_NPC_message NPC 對話主框（047_NPC_message）](ui/UI-047_NPC_message.md) — P1 / Old+HK 直接引用
+- [UI-047_NPC_message_b NPC 對話主框（047_NPC_message_b）](ui/UI-047_NPC_message_b.md) — P1 / 僅 ITF 存在；可達性待證
+- [UI-048_PetTrade 寵物交易資訊](ui/UI-048_PetTrade.md) — P2 / 僅 ITF 存在；可達性待證
+- [UI-049_NPC_message02 NPC 對話第二樣式（049_NPC_message02）](ui/UI-049_NPC_message02.md) — P2 / Old+HK 直接引用
+- [UI-049_NPC_message02B NPC 對話第二樣式（049_NPC_message02B）](ui/UI-049_NPC_message02B.md) — P2 / Old+HK 直接引用
+- [UI-050_NPC_message03a NPC 對話第三樣式 A](ui/UI-050_NPC_message03a.md) — P2 / 僅 ITF 存在；可達性待證
+- [UI-051_NPC_message03b NPC 對話其他樣式（051_NPC_message03b）](ui/UI-051_NPC_message03b.md) — P2 / 僅 ITF 存在；可達性待證
+- [UI-051_NPC_message04 NPC 對話其他樣式（051_NPC_message04）](ui/UI-051_NPC_message04.md) — P2 / Old+HK 直接引用
+- [UI-051_NPC_message05 NPC 對話其他樣式（051_NPC_message05）](ui/UI-051_NPC_message05.md) — P2 / Old+HK 直接引用
+- [UI-051_NPC_message06 NPC 對話其他樣式（051_NPC_message06）](ui/UI-051_NPC_message06.md) — P2 / HK 直接引用
+- [UI-052_INPUT_TYPE 文字輸入類型面板（052_INPUT_TYPE）](ui/UI-052_INPUT_TYPE.md) — P2 / Old 直接引用
+- [UI-052_INPUT_TYPE_02 文字輸入類型面板（052_INPUT_TYPE_02）](ui/UI-052_INPUT_TYPE_02.md) — P2 / 僅 ITF 存在；可達性待證
+- [UI-053_SCROLLMESSAGE 跑馬燈公告](ui/UI-053_SCROLLMESSAGE.md) — P2 / Old+HK 直接引用
+- [UI-054_PETHP 寵物 HP 條](ui/UI-054_PETHP.md) — P2 / 僅 ITF 存在；可達性待證
+- [UI-055_TRADE_MONEY 交易金錢輸入](ui/UI-055_TRADE_MONEY.md) — P2 / Old+HK 直接引用
+- [UI-056_Driver_INFO 機甲詳細資訊（056_Driver_INFO）](ui/UI-056_Driver_INFO.md) — P2 / Old+HK 直接引用
+- [UI-056_Driver_INFO_01 機甲詳細資訊（056_Driver_INFO_01）](ui/UI-056_Driver_INFO_01.md) — P2 / HK 直接引用
+- [UI-056_Driver_item 機甲物品/裝備列表（056_Driver_item）](ui/UI-056_Driver_item.md) — P2 / Old+HK 直接引用
+- [UI-057_CLUB_Menu 社團主選單](ui/UI-057_CLUB_Menu.md) — P3 / HK 直接引用
+- [UI-058_CLUB_Ext 社團延伸面板](ui/UI-058_CLUB_Ext.md) — P3 / HK 直接引用
+- [UI-059_Driver_Repair 機甲修理視窗](ui/UI-059_Driver_Repair.md) — P2 / Old+HK 直接引用
+- [UI-060_CLUB_MemList 社團成員清單（060_CLUB_MemList）](ui/UI-060_CLUB_MemList.md) — P3 / HK 直接引用
+- [UI-060_CLUB_MemList02 社團成員清單（060_CLUB_MemList02）](ui/UI-060_CLUB_MemList02.md) — P3 / HK 直接引用
+- [UI-061_CLUB_Name 社團名稱輸入](ui/UI-061_CLUB_Name.md) — P3 / HK 直接引用
+- [UI-062_CLUB_ALLYList 社團盟友清單](ui/UI-062_CLUB_ALLYList.md) — P3 / HK 直接引用
+- [UI-063_CLUB_GoldList 社團金錢紀錄](ui/UI-063_CLUB_GoldList.md) — P3 / HK 直接引用
+- [UI-064_CLUB_TechList 社團科技清單](ui/UI-064_CLUB_TechList.md) — P3 / HK 直接引用
+- [UI-065_CLUB_BookMark 社團書籤/標記](ui/UI-065_CLUB_BookMark.md) — P3 / HK 直接引用
+- [UI-066_CLUB_Intro 社團介紹](ui/UI-066_CLUB_Intro.md) — P3 / HK 直接引用
+- [UI-067_CLUB_News 社團公告](ui/UI-067_CLUB_News.md) — P3 / HK 直接引用
+- [UI-068_CLUB_OKBox 社團確認框（068_CLUB_OKBox）](ui/UI-068_CLUB_OKBox.md) — P3 / HK 直接引用
+- [UI-068_CLUB_YesNoBox 社團確認框（068_CLUB_YesNoBox）](ui/UI-068_CLUB_YesNoBox.md) — P3 / HK 直接引用
+- [UI-069_CLUB_INTRO_EDIT 社團介紹編輯](ui/UI-069_CLUB_INTRO_EDIT.md) — P3 / HK 直接引用
+- [UI-070_CLUB_News_EDIT 社團公告編輯](ui/UI-070_CLUB_News_EDIT.md) — P3 / HK 直接引用
+- [UI-071_CLUB_ALLY 社團結盟](ui/UI-071_CLUB_ALLY.md) — P3 / 僅 ITF 存在；可達性待證
+- [UI-072_CLUB_DonateInput 社團捐獻金額](ui/UI-072_CLUB_DonateInput.md) — P3 / HK 直接引用
+- [UI-073_CLUB_ResourceInput 社團資源輸入](ui/UI-073_CLUB_ResourceInput.md) — P3 / HK 直接引用
+- [UI-074_CLUB_TechDevelop 社團科技開發](ui/UI-074_CLUB_TechDevelop.md) — P3 / HK 直接引用
+- [UI-075_CLUB_TechDevelop02 社團科技開發明細](ui/UI-075_CLUB_TechDevelop02.md) — P3 / HK 直接引用
+- [UI-076_CLUB_TechUPGRADE 社團科技升級](ui/UI-076_CLUB_TechUPGRADE.md) — P3 / HK 直接引用
+- [UI-077_CLUB_Takemoney 社團金庫提款](ui/UI-077_CLUB_Takemoney.md) — P3 / HK 直接引用
+- [UI-078_CLUB_DisAlly 解除社團同盟](ui/UI-078_CLUB_DisAlly.md) — P3 / HK 直接引用
+- [UI-079_MainQuest 主線任務敘事畫面](ui/UI-079_MainQuest.md) — P2 / Old+HK 直接引用
+- [UI-080_CLUB_RANK 社團排行榜](ui/UI-080_CLUB_RANK.md) — P3 / HK 直接引用
+- [UI-081_LOGIN_CHANGE_PASSWORD 變更角色第二密碼](ui/UI-081_LOGIN_CHANGE_PASSWORD.md) — P1 / Old+HK 直接引用
+- [UI-082_LOGIN_PASSWORD 角色第二密碼驗證](ui/UI-082_LOGIN_PASSWORD.md) — P1 / Old+HK 直接引用
+- [UI-083_PET_CARD 機甲/寵物卡片預覽](ui/UI-083_PET_CARD.md) — P2 / Old+HK 直接引用
+- [UI-084_ENEMY_HP 怪物目標 HP 視窗](ui/UI-084_ENEMY_HP.md) — P1 / Old+HK 直接引用
+- [UI-085_COMPLEX_INFO 合體機甲資訊](ui/UI-085_COMPLEX_INFO.md) — P2 / Old+HK 直接引用
+- [UI-086_COMPLEX_INFO_01 合體機甲資訊變體](ui/UI-086_COMPLEX_INFO_01.md) — P3 / 僅 ITF 存在；可達性待證
+- [UI-087_DRIVE_COMPLEX_BAR 駕駛/合體能源條](ui/UI-087_DRIVE_COMPLEX_BAR.md) — P2 / Old+HK 直接引用
+- [UI-088_COMPLEX_HP 合體 HP/MP/EXP 條](ui/UI-088_COMPLEX_HP.md) — P2 / Old+HK 直接引用
+- [UI-089_PCMEMO_TRADE 玩家備忘錄交易文字（089_PCMEMO_TRADE）](ui/UI-089_PCMEMO_TRADE.md) — P3 / 僅 ITF 存在；可達性待證
+- [UI-089_PCMEMO_TRADE_READ 玩家備忘錄交易文字（089_PCMEMO_TRADE_READ）](ui/UI-089_PCMEMO_TRADE_READ.md) — P3 / 僅 ITF 存在；可達性待證
+- [UI-090_PCMEMO 玩家備忘錄/個人狀態](ui/UI-090_PCMEMO.md) — P3 / 僅 ITF 存在；可達性待證
+- [UI-091_PVP_MAIN PvP 主戰鬥 HUD](ui/UI-091_PVP_MAIN.md) — P2 / Old 直接引用
+- [UI-092_PShop 玩家商店主畫面](ui/UI-092_PShop.md) — P2 / Old+HK 直接引用
+- [UI-092_PShop_Buy 玩家商店買家清單](ui/UI-092_PShop_Buy.md) — P2 / Old+HK 直接引用
+- [UI-092_PShop_Buy_Item_01 玩家商店購買商品確認 01](ui/UI-092_PShop_Buy_Item_01.md) — P2 / 僅 ITF 存在；可達性待證
+- [UI-092_PShop_Buy_Item_02 玩家商店購買商品確認 02](ui/UI-092_PShop_Buy_Item_02.md) — P2 / Old+HK 直接引用
+- [UI-092_PShop_head 擺攤招牌](ui/UI-092_PShop_head.md) — P2 / Old+HK 直接引用
+- [UI-092_PShop_Name 擺攤命名](ui/UI-092_PShop_Name.md) — P2 / Old+HK 直接引用
+- [UI-092_PShop_Sell 玩家商店賣家清單](ui/UI-092_PShop_Sell.md) — P2 / 僅 ITF 存在；可達性待證
+- [UI-092_PShop_Sell_Item_01 擺攤商品設定 01](ui/UI-092_PShop_Sell_Item_01.md) — P2 / Old+HK 直接引用
+- [UI-092_PShop_Sell_Item_02 擺攤商品設定 02](ui/UI-092_PShop_Sell_Item_02.md) — P2 / Old+HK 直接引用
+- [UI-093_Pvp_List_01 PvP 列表 093_Pvp_List_01](ui/UI-093_Pvp_List_01.md) — P3 / Old 直接引用
+- [UI-093_Pvp_List_02 PvP 列表 093_Pvp_List_02](ui/UI-093_Pvp_List_02.md) — P3 / Old 直接引用
+- [UI-093_Pvp_List_Item PvP 列表 093_Pvp_List_Item](ui/UI-093_Pvp_List_Item.md) — P3 / Old 直接引用
+- [UI-093_Pvp_Rank_01 PvP 排行 093_Pvp_Rank_01](ui/UI-093_Pvp_Rank_01.md) — P3 / Old 直接引用
+- [UI-093_Pvp_Rank_02 PvP 排行 093_Pvp_Rank_02](ui/UI-093_Pvp_Rank_02.md) — P3 / Old 直接引用
+- [UI-094_CLUB 社團總覽](ui/UI-094_CLUB.md) — P2 / HK 直接引用
+- [UI-094_Hair_Shop 髮型商店](ui/UI-094_Hair_Shop.md) — P2 / HK 直接引用
+- [UI-095_Collection 收藏圖鑑](ui/UI-095_Collection.md) — P3 / HK 直接引用
+- [UI-095_Collection_01 收藏圖鑑子頁 01](ui/UI-095_Collection_01.md) — P3 / 僅 ITF 存在；可達性待證
+- [UI-095_Collection_02 收藏圖鑑子頁 02](ui/UI-095_Collection_02.md) — P3 / 僅 ITF 存在；可達性待證
+- [UI-095_Collection_03 收藏圖鑑子頁 03](ui/UI-095_Collection_03.md) — P3 / 僅 ITF 存在；可達性待證
+- [UI-095_Collection_04 收藏圖鑑子頁 04](ui/UI-095_Collection_04.md) — P3 / 僅 ITF 存在；可達性待證
+- [UI-095_Collection_05 收藏圖鑑子頁 05](ui/UI-095_Collection_05.md) — P3 / 僅 ITF 存在；可達性待證
+- [UI-095_Collection_06 收藏圖鑑子頁 06](ui/UI-095_Collection_06.md) — P3 / 僅 ITF 存在；可達性待證
+- [UI-096_Dissolve 物品分解](ui/UI-096_Dissolve.md) — P2 / HK 直接引用
+- [UI-097_Quest_List 任務清單](ui/UI-097_Quest_List.md) — P1 / 僅 ITF 存在；可達性待證；C.D.E. 待解
+- [UI-098_Refund 回收/退款視窗](ui/UI-098_Refund.md) — P3 / 僅 ITF 存在；可達性待證；C.D.E. 待解
