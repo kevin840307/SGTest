@@ -50,6 +50,7 @@ var _create_back_button: Button
 var _slots: Array[Button] = []
 var _slot_names: Array[Label] = []
 var _slot_empty_art: Array[TextureRect] = []
+var _slot_play_art: Array[TextureRect] = []
 var _slot_password_buttons: Array[Button] = []
 var _slot_enter_buttons: Array[Button] = []
 var _slot_delete_buttons: Array[Button] = []
@@ -307,15 +308,32 @@ func _build_select() -> void:
 		preview.bind_store(_asset_store)
 		_previews.append(preview)
 
+		# 004_Select_Character.itf keeps the slot control/hitbox at 84x130, but
+		# NEW_CHARACTER.spr itself is 85x132 with origin (0,0). Preserve the
+		# original frame pixels instead of scaling the SPR down to the hitbox.
 		var empty_art := TextureRect.new()
 		empty_art.texture = _tex("NEW_CHARACTER_0")
 		empty_art.position = Vector2(preview_x[i],284)
-		empty_art.size = Vector2(84,130)
+		empty_art.size = Vector2(85,132)
 		empty_art.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-		empty_art.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		empty_art.stretch_mode = TextureRect.STRETCH_SCALE
 		empty_art.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		select_page.add_child(empty_art)
 		_slot_empty_art.append(empty_art)
+
+		# PLAY_GAME.spr is anchored to the same 84x130 character control. HK
+		# source metadata records a 67x23 frame with origin (-8,-101); the
+		# renderer convention is draw_at = control - origin, hence +8,+101.
+		var play_art := TextureRect.new()
+		play_art.texture = _tex("PLAY_GAME_0")
+		play_art.position = Vector2(preview_x[i]+8,385)
+		play_art.size = Vector2(67,23)
+		play_art.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		play_art.stretch_mode = TextureRect.STRETCH_SCALE
+		play_art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		play_art.visible = false
+		select_page.add_child(play_art)
+		_slot_play_art.append(play_art)
 
 		var password := _button(select_page,"",action_x[i],420,85,21,_open_change_password.bind(i),"YELLOW_BUTTON")
 		var enter := _button(select_page,"",action_x[i],444,85,21,_enter_slot.bind(i),"YELLOW_BUTTON")
@@ -700,6 +718,7 @@ func _update_characters() -> void:
 			button.disabled = not occupied or _panel._chosen
 		_slot_names[i].text = str(c.get("name","")) if occupied else ""
 		_slot_empty_art[i].visible = not occupied
+		_slot_play_art[i].visible = occupied
 		_previews[i].visible = occupied
 		_previews[i].set_occupied(occupied)
 		_previews[i].set_appearance(c.get("appearance",{}) if occupied else {})
