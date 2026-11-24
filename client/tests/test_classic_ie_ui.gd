@@ -62,6 +62,18 @@ func _run() -> void:
 	):
 		_fail("original-rendered HK login captions must share the 800×600 canvas and allow input through")
 		return
+	if FileAccess.file_exists("res://ui/private_ie_hk2/ACCOUNT_LOGIN_HK_INPUT_FONT.fnt") and (
+		not (shell._login_input_font is FontFile) or
+		absf(shell._login_input_font.get_string_size("TEST01",HORIZONTAL_ALIGNMENT_LEFT,-1,12).x - 39.0) > 0.01 or
+		shell._username.get_theme_color("font_color") != Color8(241,245,241) or
+		shell._password.get_theme_color("font_color") != Color8(241,245,241) or
+		shell._username.get_theme_stylebox("normal").content_margin_left != 0.0 or
+		shell._username.get_theme_stylebox("normal").content_margin_bottom != 4.0 or
+		shell._password.get_theme_stylebox("normal").content_margin_left != 0.0 or
+		shell._password.get_theme_stylebox("normal").content_margin_bottom != 4.0
+	):
+		_fail("HK login private PMingLiU bitmap-font metrics/color/margins drifted")
+		return
 	if (
 		shell._username.position != Vector2(373,256) or shell._username.size != Vector2(170,16) or
 		shell._password.position != Vector2(373,280) or shell._password.size != Vector2(170,16) or
@@ -71,7 +83,7 @@ func _run() -> void:
 		shell._login_password_label.position != Vector2(281,281) or shell._login_password_label.size != Vector2(48,12) or shell._login_password_label.text != "帳戶密碼" or
 		shell._login_confirm_label.position != Vector2(399,318) or shell._login_confirm_label.size != Vector2(24,12) or shell._login_confirm_label.text != "確定" or
 		shell._login_exit_label.position != Vector2(494,318) or shell._login_exit_label.size != Vector2(24,12) or shell._login_exit_label.text != "離開" or
-		not shell._username.placeholder_text.is_empty() or not shell._password.placeholder_text.is_empty() or
+		not shell._username.placeholder_text.is_empty() or shell._username.max_length != 12 or not shell._password.placeholder_text.is_empty() or
 		not shell._password.secret or shell._password.secret_character != "*"
 	):
 		_fail("001_ACCOUNT_LOGIN.ITF geometry/labels drifted from HK source user=%s/%s min=%s pass=%s/%s min=%s ok=%s/%s exit=%s/%s labels=%s,%s,%s,%s" % [

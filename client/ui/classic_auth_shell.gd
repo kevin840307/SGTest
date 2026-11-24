@@ -38,6 +38,7 @@ var _login_password_label: LoginCaption
 var _login_confirm_label: LoginCaption
 var _login_exit_label: LoginCaption
 var _login_font := SystemFont.new()
+var _login_input_font: Font
 var _status: Label
 var _create_note: Label
 var _create_password := LineEdit.new()
@@ -116,6 +117,28 @@ func _input_at(parent: Control,node: Control,x: float,y: float,w: float,h: float
 
 func _empty_style() -> StyleBoxEmpty:
 	return StyleBoxEmpty.new()
+
+func _configure_hk_gdi_raster(font: Resource) -> void:
+	font.set("antialiasing",TextServer.FONT_ANTIALIASING_NONE)
+	font.set("hinting",TextServer.HINTING_NORMAL)
+	font.set("subpixel_positioning",TextServer.SUBPIXEL_POSITIONING_DISABLED)
+	font.set("disable_embedded_bitmaps",false)
+	font.set("keep_rounding_remainders",false)
+
+func _make_login_input_font() -> Font:
+	# Godot 4.7.2 resolves all mingliu.ttc face indexes to the same MingLiU
+	# raster on this Windows build. Use the local private GDI-generated BMFont
+	# when available so PMingLiU pixels/advances stay identical to HK without
+	# shipping the proprietary Windows font file.
+	var bitmap_path := "res://ui/private_ie_hk2/ACCOUNT_LOGIN_HK_INPUT_FONT.fnt"
+	if FileAccess.file_exists(bitmap_path):
+		var bitmap := FontFile.new()
+		if bitmap.load_bitmap_font(bitmap_path) == OK:
+			return bitmap
+	var fallback := SystemFont.new()
+	fallback.font_names = PackedStringArray(["PMingLiU"])
+	_configure_hk_gdi_raster(fallback)
+	return fallback
 
 func _style_line_edit(input: LineEdit) -> void:
 	input.add_theme_stylebox_override("normal",_empty_style())
@@ -210,34 +233,41 @@ func _build_login() -> void:
 	# OH01 in 001_ACCOUNT_LOGIN.ITF. The local HK test did not open a
 	# help window when clicked, so its action remains unverified.
 	_sprite_at(login_page,"B_ONLINEHELP_0",537,228,16,16)
-	# The HK executable uses GDI. Arial with the local CJK fallback gave
-	# the closest caption geometry in the build 119 comparison.
-	_login_font.font_names = PackedStringArray(["Arial"])
+	# Fixed captions use the separately rendered HK caption layer when available.
+	# The fallback stays isolated from the dynamic edit-control font below.
+	_login_font.font_names = PackedStringArray(["MingLiU"])
+	# HK build 128 client-DC glyph evidence: TEST01 is a 36x9 / 111-pixel
+	# binary mask. Replaying sub_561330's 16-bit GDI path matches PMingLiU
+	# height 12 exactly (0-pixel XOR); Arial/MingLiU/MS Sans do not.
+	_login_input_font = _make_login_input_font()
 	# 001_ACCOUNT_LOGIN.ITF is the geometry/label authority for the HK login.
 	# Keep the text controls separate from the decoded background/button SPRs,
 	# exactly as the original ITF does; do not replace them with placeholders.
 	_login_account_label = _login_caption("帳戶名稱",281,257,48)
 	_login_password_label = _login_caption("帳戶密碼",281,281,48)
 	_username.placeholder_text = ""
-	_username.max_length = 32
+	# HK sub_42997A configures control 0x7D1 with a 0x0C character limit.
+	_username.max_length = 12
 	_password.secret = true
 	_password.secret_character = "*"
 	_password.max_length = 256
 	_password.placeholder_text = ""
 	_style_line_edit(_username)
 	_style_line_edit(_password)
-	_username.add_theme_font_size_override("font_size",11)
-	_username.add_theme_font_override("font",_login_font)
-	# Match the build 119 star and its caret advance in the 16px edit cell.
-	var mask_face := SystemFont.new()
-	mask_face.font_names = PackedStringArray(["Consolas","Liberation Mono"])
-	var mask_font := FontVariation.new()
-	mask_font.base_font = mask_face
-	mask_font.spacing_glyph = -1
-	_password.add_theme_font_override("font",mask_font)
+	_username.add_theme_font_override("font",_login_input_font)
+	_username.add_theme_font_size_override("font_size",12)
+	# L01/L02 are the same HK line-edit control type; L02 only enables secret
+	# mode. Its six-star client-DC mask also matches PMingLiU height 12 exactly.
+	_password.add_theme_font_override("font",_login_input_font)
 	_password.add_theme_font_size_override("font_size",12)
-	for state in ["normal","focus","read_only"]:
-		_password.get_theme_stylebox(state).content_margin_bottom = 2.0
+	for input in [_username,_password]:
+		input.add_theme_color_override("font_color",Color8(241,245,241))
+		for state in ["normal","focus","read_only"]:
+			var style: StyleBox = input.get_theme_stylebox(state)
+			# The BMFont preserves GDI's own +1 glyph x/y offset. Keep the edit
+			# control at the ITF rect and only remove LineEdit's extra centering.
+			style.content_margin_left = 0.0
+			style.content_margin_bottom = 4.0
 	_input_at(login_page,_username,373,256,170,16)
 	_input_at(login_page,_password,373,280,170,16)
 	# _input_at sizes before parenting; LineEdit otherwise retains the fallback

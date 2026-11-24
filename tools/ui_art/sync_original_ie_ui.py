@@ -22,6 +22,7 @@ sys.path.insert(0, str(REPO))
 from tools.asset_converter.source.extract_client import lzss, read_index
 from tools.asset_converter.source.runtime_spr import decode_spr
 from tools.ui_art.render_hk_login_captions import render_hk_login_captions
+from tools.ui_art.render_hk_login_input_font import write_hk_login_input_font
 
 DEFAULT = Path(r"C:\SGO\Stargate Online IE HK\Interface")
 OUTPUT = REPO / "client/ui/private_ie_hk2"
@@ -144,6 +145,7 @@ def main() -> int:
             if sys.platform == "win32":
                 captions = render_hk_login_captions()
                 _save_if_changed(OUTPUT / LOGIN_CAPTIONS_OUTPUT, captions)
+                write_hk_login_input_font(OUTPUT)
 
     for name in MULTI_NAMES:
         frames, origin = _read_frames(args.source, name, archive, entries, single=False)
