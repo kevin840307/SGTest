@@ -17,9 +17,9 @@ func fail(message: String) -> void:
 	push_error("EQUIPMENT_WIRE_FAIL "+message)
 	quit(1)
 
-func new_world():
+func character_with_inventory():
 	var world = World.new()
-	if not world.mark_auth_sent() or not world.apply_frame(AUTH.hex_decode()) or not world.apply_frame(LIST.hex_decode()) or not world.mark_choose_sent(11) or not world.apply_frame(CHOOSE.hex_decode()) or not world.apply_frame(READY.hex_decode()) or not world.mark_world_ready_ack_sent(1,42):
+	if not world.mark_auth_sent() or not world.apply_frame(AUTH.hex_decode()) or not world.apply_frame(LIST.hex_decode()) or not world.mark_choose_sent(11) or not world.apply_frame(CHOOSE.hex_decode()):
 		return null
 	var bag := INVENTORY.hex_decode()
 	bag.resize(52)
@@ -35,6 +35,12 @@ func new_world():
 		return null
 	return world
 
+func new_world():
+	var world = character_with_inventory()
+	if world == null or not world.apply_frame(EMPTY_EQUIPMENT.hex_decode()) or not world.apply_frame(READY.hex_decode()) or not world.mark_world_ready_ack_sent(1,42):
+		return null
+	return world
+
 func _initialize() -> void:
 	if Wire.encode_equipment_equip(9,7,7001).hex_encode().to_upper() != EQUIP or Wire.encode_equipment_unequip(9,7,7001).hex_encode().to_upper() != UNEQUIP:
 		fail("UID-only request golden mismatch")
@@ -47,7 +53,7 @@ func _initialize() -> void:
 		return
 
 	var world = new_world()
-	if world == null or not world.apply_frame(EMPTY_EQUIPMENT.hex_decode()) or not bool(world.snapshot().equipment_ready):
+	if world == null or not bool(world.snapshot().equipment_ready):
 		fail("empty equipment login baseline")
 		return
 	if not world.mark_equipment_sent(1,1,7001):
@@ -90,7 +96,7 @@ func _initialize() -> void:
 		return
 
 	world = new_world()
-	if world == null or not world.apply_frame(EMPTY_EQUIPMENT.hex_decode()) or not world.mark_equipment_sent(1,1,7001):
+	if world == null or not world.mark_equipment_sent(1,1,7001):
 		fail("AlreadyApplied fixture")
 		return
 	var replay_recovery := RESULT.hex_decode()
@@ -99,16 +105,16 @@ func _initialize() -> void:
 		fail("AlreadyApplied did not converge committed equip")
 		return
 
-	world = new_world()
+	world = character_with_inventory()
 	if world == null:
 		fail("conflict fixture")
 		return
-	if world.apply_frame(ONE_EQUIPMENT.hex_decode()) or int(world.state) != World.STATE_FAILED:
+	if world.apply_frame(ONE_EQUIPMENT.hex_decode()) or int(world.state) != World.STATE_FAILED or world.protocol_error != "equipment_uid_or_slot_location_conflict":
 		fail("same UID admitted in inventory and equipment")
 		return
 
 	world = new_world()
-	if world == null or not world.apply_frame(EMPTY_EQUIPMENT.hex_decode()) or not world.mark_equipment_sent(1,1,7001):
+	if world == null or not world.mark_equipment_sent(1,1,7001):
 		fail("wrong UID fixture")
 		return
 	var wrong := RESULT.hex_decode()
