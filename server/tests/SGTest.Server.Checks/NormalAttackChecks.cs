@@ -112,10 +112,10 @@ internal static class NormalAttackChecks
         var runtime=new MonsterRuntime(
             grid,MonsterPopulationCatalog.LoadVerified(populationPath,mapId,grid));
         var hitRule=new CharacterExperienceRewardRule(
-            mapId,1,3,100,CharacterExperienceRewardTrust.SyntheticTest,
-            "ci:enemy-attribute12");
+            mapId,1,3,5,CharacterExperienceRewardTrust.SyntheticTest,
+            "ci:enemy-dr-distinct-from-r-exp",EnemyDodge:100);
         var coordinator=new MonsterWorldCoordinator([runtime],
-            normalAttackHitRules:[hitRule],normalAttackRoll:()=>99);
+            normalAttackHitRules:[hitRule],normalAttackRoll:()=>31);
         var actor=new ActorSnapshot(88,mapId,2,1,0,0,24,24,1,false);
         coordinator.Process(new WorldChangedBatch(1,[],
             [new(ActorLifecycleKind.Joined,actor)]));
@@ -174,8 +174,8 @@ internal static class NormalAttackChecks
             new(AiIntervalTicks:1,MaxAiPerStep:4,MaxPathQueriesPerStep:1,
                 MaxPathExpandedCells:128));
         var hitRule=new CharacterExperienceRewardRule(
-            mapId,1,3,5,CharacterExperienceRewardTrust.SyntheticTest,
-            "ci:enemy-attribute12");
+            mapId,1,3,99,CharacterExperienceRewardTrust.SyntheticTest,
+            "ci:enemy-dr-distinct-from-r-exp",EnemyDodge:5);
         var coordinator=new MonsterWorldCoordinator([runtime],
             normalAttackHitRules:[hitRule],normalAttackRoll:()=>0);
         using var lootStore=new SqliteIdentityStore(Path.Combine(root,

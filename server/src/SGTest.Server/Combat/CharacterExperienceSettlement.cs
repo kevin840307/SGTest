@@ -16,13 +16,15 @@ public enum CharacterExperienceRewardTrust : byte
 
 public sealed record CharacterExperienceRewardRule(
     int MapId,int EnemyId,int EnemyLevel,long BaseExperience,
-    CharacterExperienceRewardTrust Trust,string SourceReference);
+    CharacterExperienceRewardTrust Trust,string SourceReference,
+    int EnemyDodge=0);
 
 /// <summary>
-/// Loads only explicitly source-audited monster EXP inputs. Old
-/// CDEnemyWORDStr index 12 is RExp and SGOBattleSys::CheckExpArrange consumes
-/// that value before applying player/party/level settlement. This manifest is
-/// intentionally separate from visual population evidence.
+/// Loads only explicitly source-audited monster EXP/hit inputs. Old AddAttr
+/// maps EN_Att column 7 to internal WORD property 12 (DR), which
+/// GetEnemyDefendAttrib supplies to IsHit_PerHit, while column 8 maps to
+/// internal WORD property 16 (RExp) consumed by CheckExpArrange. This manifest
+/// is intentionally separate from visual population evidence.
 /// </summary>
 public static class CharacterExperienceRewardCatalog
 {
@@ -48,7 +50,7 @@ public static class CharacterExperienceRewardCatalog
         var root=document.RootElement;
         if(root.ValueKind!=JsonValueKind.Object||
            Text(root,"kind")!="verified_character_experience_reward_rules"||
-           Number(root,"version")!=1||
+           Number(root,"version")!=2||
            !Bool(root,"rules_verified")||!Bool(root,"gameplay_ready"))
             throw new InvalidDataException(
                 "Character EXP reward manifest is not verified gameplay content");
@@ -75,15 +77,17 @@ public static class CharacterExperienceRewardCatalog
             int map=Number(row,"map_id");
             int enemy=Number(row,"enemy_id");
             int level=Number(row,"enemy_level");
+            int dodge=Number(row,"enemy_dr");
             long rExp=LongNumber(row,"r_exp");
             if(!known.Contains((map,enemy))||
-               level is <1 or >1_000_000||
+               level is <1 or >ushort.MaxValue||
+               dodge is <0 or >ushort.MaxValue||
                rExp is <0 or >SqliteIdentityStore.CharacterMaximumExperience||
                !seen.Add((map,enemy)))
                 throw new InvalidDataException(
                     "Unknown, duplicate or invalid character EXP reward rule");
             rules.Add(new(map,enemy,level,rExp,
-                CharacterExperienceRewardTrust.Verified,source));
+                CharacterExperienceRewardTrust.Verified,source,dodge));
         }
         return rules;
     }

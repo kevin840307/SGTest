@@ -9,7 +9,8 @@ from pathlib import Path
 MAX_SOURCE_BYTES = 16_777_216
 MAX_ENEMY_ID = 10_000_000
 MAX_LEVEL = 255
-MAX_REWARD = 0xFFFF
+MAX_WORD = 0xFFFF
+MAX_DWORD = 0x7FFFFFFF
 
 
 def _read_bytes(path: Path) -> bytes:
@@ -36,17 +37,20 @@ def _parse_int(value: str, *, label: str, minimum: int, maximum: int) -> int:
 
 
 def parse_enemy_attribute_table(text: str, *, table_id: int) -> dict[int, int]:
-    """Return level-key -> RExp.
+    """Return level-key -> RExp from the ninth EN_Att field.
 
     Old CDEnemyDistSys::LoadEnAttData reads nine integer columns into
-    CDEnemyAttr. Column 7 (zero-based) becomes +0x22, and AddAttr copies that
-    field into CDEnemyWORDStr[12] (RExp).
+    CDEnemyAttr. Column 8 (zero-based) becomes +0x24, and AddAttr copies that
+    field into internal WORD property index 16 (RExp). Column 7 becomes +0x22
+    and internal WORD property index 12 (DR), which combat hit checks consume.
     """
-    return _parse_attribute_column(text, table_id, 7, "RExp", 0)
+    return _parse_attribute_column(
+        text, table_id, 8, "RExp", 0, maximum=MAX_WORD)
 
 
 def _parse_attribute_column(
     text: str, table_id: int, column: int, label: str, minimum: int,
+    *, maximum: int = MAX_DWORD,
 ) -> dict[int, int]:
     if table_id < 1 or table_id > 255:
         raise ValueError("invalid EN_Att table id")
@@ -63,7 +67,7 @@ def _parse_attribute_column(
             minimum=1, maximum=MAX_LEVEL)
         value = _parse_int(
             row[column], label=f"EN_Att {label} row {row_number}",
-            minimum=minimum, maximum=MAX_REWARD)
+            minimum=minimum, maximum=maximum)
         if level_key in values:
             if values[level_key] != value:
                 raise ValueError(
@@ -117,8 +121,8 @@ def read_old_enemy_reward_catalog(
 ) -> tuple[dict[int, dict], dict]:
     """Resolve only requested enemies, failing closed on any missing mapping."""
     return _read_old_enemy_attribute_catalog(
-        enemy_data_csv, required_enemy_ids, 7, "RExp", 0, "r_exp",
-        "excluded_no_attribute_reward")
+        enemy_data_csv, required_enemy_ids, 8, "RExp", 0, "r_exp",
+        "excluded_no_attribute_reward", maximum=MAX_WORD)
 
 
 def read_old_enemy_hp_catalog(
@@ -134,9 +138,142 @@ def read_old_enemy_hp_catalog(
         "excluded_no_attribute_hp")
 
 
+def read_old_enemy_dr_catalog(
+    enemy_data_csv: Path, *, required_enemy_ids: set[int],
+) -> tuple[dict[int, dict], dict]:
+    """Resolve the Old enemy DR word consumed by GetEnemyDefendAttrib.
+
+    LoadEnAttData column 7 -> CDEnemyAttr+0x22; AddAttr maps that value to
+    internal WORD property index 12 (DR), and GetEnemyDefendAttrib copies
+    property 12 to sTarget+0x1C for IsHit_PerHit.
+    """
+    return _read_old_enemy_attribute_catalog(
+        enemy_data_csv, required_enemy_ids, 7, "DR", 0, "dodge_rate",
+        "excluded_no_attribute_dr", maximum=MAX_WORD)
+
+
+def read_old_enemy_combat_catalog(
+    enemy_data_csv: Path, *, required_enemy_ids: set[int],
+) -> tuple[dict[int, dict], dict]:
+    """Resolve the full audited nine-column EN_Att combat row in one pass."""
+    if not required_enemy_ids:
+        raise ValueError("at least one required EnemyId is needed")
+    if any(enemy_id < 1 or enemy_id > MAX_ENEMY_ID
+           for enemy_id in required_enemy_ids):
+        raise ValueError("required EnemyId outside bounds")
+
+    enemy_path = Path(enemy_data_csv).resolve()
+    payload = _read_bytes(enemy_path)
+    try:
+        catalog_text = payload.decode("cp950")
+    except UnicodeDecodeError as exc:
+        raise ValueError("Enemy_Data.csv is not valid cp950") from exc
+    definitions = parse_enemy_catalog(catalog_text)
+    missing = sorted(required_enemy_ids.difference(definitions))
+    if missing:
+        raise ValueError(f"Enemy_Data.csv missing required EnemyIds: {missing}")
+
+    selectors = sorted({
+        definitions[enemy_id][1]
+        for enemy_id in required_enemy_ids
+        if definitions[enemy_id][0] != 0xFFFF
+    })
+    tables: dict[int, dict[int, dict]] = {}
+    table_audit = []
+    for selector in selectors:
+        table_path = enemy_path.parent / f"EN_Att{selector:02d}.csv"
+        table_payload = _read_bytes(table_path)
+        try:
+            table_text = table_payload.decode("ascii")
+        except UnicodeDecodeError as exc:
+            raise ValueError(
+                f"EN_Att{selector:02d}.csv must be ASCII") from exc
+        rows: dict[int, dict[str, int | None]] = {}
+        for row_number, row in enumerate(csv.reader(table_text.splitlines()), 1):
+            if not row or all(not value.strip() for value in row):
+                continue
+            if len(row) != 9:
+                raise ValueError(
+                    f"EN_Att{selector:02d}.csv row {row_number} must contain 9 columns")
+            level_key = _parse_int(
+                row[0], label=f"EN_Att level key row {row_number}",
+                minimum=1, maximum=MAX_LEVEL)
+            values = {
+                "max_hp": _parse_int(row[1], label="HPMAX", minimum=1,
+                                     maximum=MAX_DWORD),
+                "attack_power": _parse_int(row[2], label="AP", minimum=0,
+                                            maximum=MAX_DWORD),
+                "defense_power": _parse_int(row[3], label="DP", minimum=0,
+                                             maximum=MAX_DWORD),
+                "magic_attack_power": _parse_int(row[4], label="MAP", minimum=0,
+                                                  maximum=MAX_DWORD),
+                "magic_defense_power": _parse_int(row[5], label="MDP", minimum=0,
+                                                   maximum=MAX_DWORD),
+                "hit_rate": _parse_int(row[6], label="HR", minimum=0,
+                                       maximum=MAX_WORD),
+                "dodge_rate": _parse_int(row[7], label="DR", minimum=0,
+                                         maximum=MAX_WORD),
+                "r_exp": _parse_int(row[8], label="RExp", minimum=0,
+                                    maximum=MAX_WORD),
+            }
+            if level_key in rows:
+                current = rows[level_key]
+                for field, value in values.items():
+                    if current[field] is not None and current[field] != value:
+                        current[field] = None
+                continue
+            rows[level_key] = values
+        if not rows:
+            raise ValueError(f"EN_Att{selector:02d}.csv has no rows")
+        tables[selector] = rows
+        table_audit.append({
+            "table": selector,
+            "sha256": hashlib.sha256(table_payload).hexdigest(),
+            "bytes": len(table_payload),
+        })
+
+    resolved: dict[int, dict] = {}
+    excluded = []
+    for enemy_id in sorted(required_enemy_ids):
+        level_key, selector = definitions[enemy_id]
+        if level_key == 0xFFFF:
+            excluded.append({
+                "enemy_id": enemy_id,
+                "level_key": level_key,
+                "attribute_table": selector,
+                "reason": "old_add_attr_find_attr_miss",
+            })
+            continue
+        if level_key > MAX_LEVEL or level_key not in tables[selector]:
+            raise ValueError(
+                f"EnemyId {enemy_id} level {level_key} missing from "
+                f"EN_Att{selector:02d}.csv")
+        row = tables[selector][level_key]
+        stable = {field: value for field, value in row.items()
+                  if value is not None}
+        ambiguous = sorted(field for field, value in row.items()
+                           if value is None)
+        resolved[enemy_id] = {
+            "enemy_id": enemy_id,
+            "enemy_level": level_key,
+            "attribute_table": selector,
+            **stable,
+        }
+        if ambiguous:
+            resolved[enemy_id]["ambiguous_fields"] = ambiguous
+
+    return resolved, {
+        "enemy_data_sha256": hashlib.sha256(payload).hexdigest(),
+        "enemy_data_bytes": len(payload),
+        "attribute_tables": table_audit,
+        "excluded_no_attributes": excluded,
+    }
+
+
 def _read_old_enemy_attribute_catalog(
     enemy_data_csv: Path, required_enemy_ids: set[int], column: int,
     label: str, minimum: int, value_key: str, exclusion_key: str,
+    *, maximum: int = MAX_DWORD,
 ) -> tuple[dict[int, dict], dict]:
     if not required_enemy_ids:
         raise ValueError("at least one required EnemyId is needed")
@@ -172,7 +309,7 @@ def _read_old_enemy_attribute_catalog(
             raise ValueError(
                 f"EN_Att{selector:02d}.csv must be ASCII") from exc
         tables[selector] = _parse_attribute_column(
-            table_text, selector, column, label, minimum)
+            table_text, selector, column, label, minimum, maximum=maximum)
         table_audit.append({
             "table": selector,
             "sha256": hashlib.sha256(table_payload).hexdigest(),

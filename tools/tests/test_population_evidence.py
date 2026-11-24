@@ -55,9 +55,17 @@ class PopulationEvidenceTests(unittest.TestCase):
             self.assertEqual(definition['atlas'],'Enemy/en010a/atlas.json')
             self.assertEqual(definition['animation_behaviors'],['FA','ND','NH','NS','NW'])
             self.assertEqual(definition['source_combat_evidence'], {
-                'level':3, 'max_hp':222, 'max_hp_column':1,
-                'max_hp_source':'Enemy/EN_Att01.csv',
-                'source_columns':{'level':3},
+                'level':3, 'max_hp':222, 'attack_power':17,
+                'defense_power':0, 'magic_attack_power':15,
+                'magic_defense_power':0, 'hit_rate':30, 'dodge_rate':18,
+                'r_exp':41, 'attribute_table':1,
+                'attribute_source':'Enemy/EN_Att01.csv',
+                'source_columns':{
+                    'level':3, 'max_hp':1, 'attack_power':2,
+                    'defense_power':3, 'magic_attack_power':4,
+                    'magic_defense_power':5, 'hit_rate':6,
+                    'dodge_rate':7, 'r_exp':8,
+                },
             })
             self.assertFalse(definition['combat_stats_verified'])
             self.assertFalse(result['stats_verified'])
@@ -68,16 +76,21 @@ class PopulationEvidenceTests(unittest.TestCase):
             self.assertEqual(result['sources']['Enemy/EN_Att01.csv'],
                              hashlib.sha256((server/'Enemy/EN_Att01.csv').read_bytes()).hexdigest())
 
-    def test_conflicting_hp_rows_do_not_publish_combat_evidence(self):
+    def test_conflicting_combat_field_is_marked_ambiguous_without_guessing(self):
         with tempfile.TemporaryDirectory() as directory:
             source, server = self.fixture(Path(directory))
             (server/'Enemy/EN_Att01.csv').write_bytes(
                 b'3,222,17,0,15,0,30,18,41\n3,223,17,0,15,0,30,18,41\n')
             with patch('asset_converter.content.build_population.compile_definition',
-                       side_effect=self.fake_animation), self.assertRaisesRegex(ValueError, 'ambiguous.*HPMAX'):
-                compile_spawn_evidence(source, server, 13)
+                       side_effect=self.fake_animation):
+                result = compile_spawn_evidence(source, server, 13)
+            evidence = result['definitions'][0]['source_combat_evidence']
+            self.assertNotIn('max_hp', evidence)
+            self.assertEqual(['max_hp'], evidence['ambiguous_fields'])
+            self.assertEqual(18, evidence['dodge_rate'])
+            self.assertEqual(41, evidence['r_exp'])
 
-    def test_lookup_miss_preserves_raw_key_without_publishing_hp(self):
+    def test_lookup_miss_preserves_raw_key_without_publishing_combat_attributes(self):
         with tempfile.TemporaryDirectory() as directory:
             source, server = self.fixture(Path(directory))
             (server/'Enemy/Enemy_Data.csv').write_bytes(
@@ -87,7 +100,7 @@ class PopulationEvidenceTests(unittest.TestCase):
                 result = compile_spawn_evidence(source, server, 13)
             self.assertEqual(result['definitions'][0]['source_combat_evidence'], {
                 'level_key':65535, 'source_columns':{'level_key':3},
-                'max_hp_unavailable':'old_add_attr_find_attr_miss',
+                'combat_attributes_unavailable':'old_add_attr_find_attr_miss',
             })
 
     def test_missing_original_act_and_unknown_definition_fail_closed(self):

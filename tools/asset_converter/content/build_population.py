@@ -7,7 +7,7 @@ from .build_enemy_map_palette import read_enemy_catalog, read_enemy_dat
 from .asset_paths import monster_manifest
 from .build_maps import server_map_directory
 from .animation_definition import compile_definition
-from ..source.old_enemy_rewards import read_old_enemy_hp_catalog
+from ..source.old_enemy_rewards import read_old_enemy_combat_catalog
 
 def compile_spawn_evidence(source: Path, server_dat: Path, map_id: int) -> dict:
     """Original Enemy.dat + ACT evidence, without invented combat stats or live assets.
@@ -55,24 +55,38 @@ def compile_spawn_evidence(source: Path, server_dat: Path, map_id: int) -> dict:
         for p in (enemy_dat, catalog_path)
     }
     if enemy_ids:
-        hp_by_enemy, audit = read_old_enemy_hp_catalog(
+        combat_by_enemy, audit = read_old_enemy_combat_catalog(
             catalog_path, required_enemy_ids=set(enemy_ids))
         if sources['Enemy/Enemy_Data.csv'] != audit['enemy_data_sha256']:
-            raise ValueError('Enemy_Data.csv changed during HP evidence compilation')
+            raise ValueError('Enemy_Data.csv changed during combat evidence compilation')
         for table in audit['attribute_tables']:
             sources[f"Enemy/EN_Att{table['table']:02d}.csv"] = table['sha256']
-        excluded = {row['enemy_id']: row['reason'] for row in audit['excluded_no_attribute_hp']}
+        excluded = {row['enemy_id']: row['reason']
+                    for row in audit['excluded_no_attributes']}
         for definition in definitions:
             enemy_id = definition['enemy_id']
             evidence = definition['source_combat_evidence']
-            if enemy_id in hp_by_enemy:
-                hp = hp_by_enemy[enemy_id]
-                evidence.update(max_hp=hp['max_hp'], max_hp_column=1,
-                                max_hp_source=f"Enemy/EN_Att{hp['attribute_table']:02d}.csv")
+            if enemy_id in combat_by_enemy:
+                row = combat_by_enemy[enemy_id]
+                columns = {
+                    'max_hp': 1, 'attack_power': 2, 'defense_power': 3,
+                    'magic_attack_power': 4, 'magic_defense_power': 5,
+                    'hit_rate': 6, 'dodge_rate': 7, 'r_exp': 8,
+                }
+                evidence.update(
+                    attribute_table=row['attribute_table'],
+                    attribute_source=f"Enemy/EN_Att{row['attribute_table']:02d}.csv")
+                evidence['source_columns'] = {'level': 3}
+                for field, column in columns.items():
+                    if field in row:
+                        evidence[field] = row[field]
+                        evidence['source_columns'][field] = column
+                if row.get('ambiguous_fields'):
+                    evidence['ambiguous_fields'] = row['ambiguous_fields']
             else:
                 evidence['level_key'] = evidence.pop('level')
                 evidence['source_columns'] = {'level_key': 3}
-                evidence['max_hp_unavailable'] = excluded[enemy_id]
+                evidence['combat_attributes_unavailable'] = excluded[enemy_id]
     return {
         'version': 1, 'kind': 'original_spawn_evidence_not_runtime',
         'map_id': map_id,

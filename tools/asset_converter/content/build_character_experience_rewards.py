@@ -8,10 +8,10 @@ from pathlib import Path
 from asset_converter.content.build_enemy_map_palette import read_enemy_dat
 from asset_converter.content.build_maps import server_map_directory
 from asset_converter.json_files import write_json
-from asset_converter.source.old_enemy_rewards import read_old_enemy_reward_catalog
+from asset_converter.source.old_enemy_rewards import read_old_enemy_combat_catalog
 
 KIND = "verified_character_experience_reward_rules"
-VERSION = 1
+VERSION = 2
 
 
 def compile_character_experience_rewards(
@@ -53,7 +53,7 @@ def compile_character_experience_rewards(
             "unique_enemy_ids": len({row["enemy_id"] for row in spawns}),
         })
 
-    rewards, source_audit = read_old_enemy_reward_catalog(
+    rewards, source_audit = read_old_enemy_combat_catalog(
         root / "Enemy" / "Enemy_Data.csv",
         required_enemy_ids=required_enemy_ids)
 
@@ -63,10 +63,14 @@ def compile_character_experience_rewards(
             reward = rewards.get(enemy_id)
             if reward is None:
                 continue
+            if "dodge_rate" not in reward or "r_exp" not in reward:
+                raise ValueError(
+                    f"EnemyId {enemy_id} has ambiguous DR/RExp source rows")
             rules.append({
                 "map_id": map_id,
                 "enemy_id": enemy_id,
                 "enemy_level": reward["enemy_level"],
+                "enemy_dr": reward["dodge_rate"],
                 "r_exp": reward["r_exp"],
             })
 
@@ -83,14 +87,14 @@ def compile_character_experience_rewards(
             "semantics": (
                 "Enemy_Data.csv col[3] -> WORD[5] level/FindAttr key; "
                 "col[4] -> BYTE[0x23] EN_Att selector; "
-                "EN_AttXX col[7] -> CDEnemyAttr+0x22 -> "
-                "CDEnemyWORDStr[12] RExp; 0xffff level key -> "
-                "FindAttr miss -> AddAttr false -> no reward rule"),
+                "EN_AttXX col[7] -> CDEnemyAttr+0x22 -> internal WORD[12] DR; "
+                "col[8] -> CDEnemyAttr+0x24 -> internal WORD[16] RExp; "
+                "0xffff level key -> FindAttr miss -> AddAttr false -> no rule"),
             "enemy_data_sha256": source_audit["enemy_data_sha256"],
             "enemy_data_bytes": source_audit["enemy_data_bytes"],
             "attribute_tables": source_audit["attribute_tables"],
             "excluded_no_attribute_reward": (
-                source_audit["excluded_no_attribute_reward"]),
+                source_audit["excluded_no_attributes"]),
             "maps": map_audit,
         },
         "status": "pass",

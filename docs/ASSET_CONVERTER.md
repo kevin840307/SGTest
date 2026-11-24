@@ -18,7 +18,7 @@ Converter **不應依賴**可執行的 client/project.godot 或 server/*.csproj�
 
 ### 角色 EXP reward manifest（Old Server audited source）
 
-`character-experience-rules` 只讀 Old Server Dat，依指定地圖的 `Map/MapXX/Enemy.dat` 收斂實際 Enemy ID，再重現原版 `LoadNewCSVData` → `FindAttrTbl/FindAttr` → `LoadEnAttData` → `AddAttr` 的 RExp 鏈。CONFIRMED schema：`Enemy_Data.csv` col[3] 是 WORD[5] level/FindAttr key、col[4] 是 BYTE[0x23] `EN_AttXX` selector，`EN_AttXX.csv` col[7] 最終成為 `CDEnemyWORDStr[12]=RExp`。輸出符合 Server `--experience-rules` 所需 `verified_character_experience_reward_rules/v1`；私有原始 CSV/Enemy.dat 不進 Git，manifest 可留在 ignored `local-assets`。
+`character-experience-rules` 只讀 Old Server Dat，依指定地圖的 `Map/MapXX/Enemy.dat` 收斂實際 Enemy ID，再重現原版 `LoadNewCSVData` → `FindAttrTbl/FindAttr` → `LoadEnAttData` → `AddAttr` 的戰鬥欄位鏈。CONFIRMED schema：`Enemy_Data.csv` col[3] 是 WORD[5] level/FindAttr key、col[4] 是 BYTE[0x23] `EN_AttXX` selector；`EN_AttXX.csv` col[7] → `CDEnemyAttr+0x22` → internal WORD property 12=`DR`，由 `GetEnemyDefendAttrib` 提供給 `IsHit_PerHit`；col[8] → `CDEnemyAttr+0x24` → internal WORD property 16=`RExp`，由擊殺 EXP settlement 使用。輸出符合 Server `--experience-rules` 所需 `verified_character_experience_reward_rules/v2`，每條規則分開保存 `enemy_dr` 與 `r_exp`；私有原始 CSV/Enemy.dat 不進 Git，manifest 可留在 ignored `local-assets`。
 
 ~~~powershell
 python tools/asset_converter/cli.py character-experience-rules `
@@ -26,7 +26,7 @@ python tools/asset_converter/cli.py character-experience-rules `
   --output local-assets/asset_converter/combat/character_experience_reward_rules.json
 ~~~
 
-規則為 fail-closed：指定 Enemy 缺 definition、attr table 缺列、同 key 卻有不同 RExp 都拒絕；0xffff level key 會依 Old `FindAttr` miss / `AddAttr` false 記錄 `excluded_no_attribute_reward`，不得降成 Lv255 或猜測 reward。2026-11-23 真 Old Map13/15 驗證：Map13 78 spawn／9 unique Enemy 產出 9 個 exact rules；Map15 4 spawn 的 Enemy245 全數命中 0xffff no-reward audit。實作 commit `e27ee9a`，新增 synthetic source/manifest tests 後 Python converter 全套 157/157 PASS。
+規則為 fail-closed：指定 Enemy 缺 definition／attr table 缺列直接拒絕；Old `EN_Att` 允許同 level key 重複，因此 converter 逐欄比較，只有重複列完全一致的欄位才可發布，歧義欄位會標記 `ambiguous_fields` 而不猜選哪列；`DR` 或 `RExp` 若本身歧義，v2 EXP/hit manifest 直接拒絕。0xffff level key 仍依 Old `FindAttr` miss / `AddAttr` false 記錄 exclusion，不得降成 Lv255。2026-11-24 真 Old Map13/15 重跑：Map13 78 spawn／9 unique Enemy 產出 9 個 exact `enemy_dr+r_exp` rules（例如 Enemy1 DR=6/RExp=8、Enemy80 DR=300/RExp=800）；Map15 4 spawn 的 Enemy245 全數命中 0xffff exclusion。Python converter 全套 160/160 PASS、完整 Server regression 337/337 PASS。
 
 ## MVP Map15 + Map13 定向素材與資料轉換
 

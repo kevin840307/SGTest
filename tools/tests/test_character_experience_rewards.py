@@ -48,13 +48,13 @@ class CharacterExperienceRewardEvidenceTests(unittest.TestCase):
         write_enemy_dat(dat / "Map" / "Map15" / "Enemy.dat", [999, 999])
         return dat
 
-    def test_old_loader_schema_resolves_r_exp_from_column_seven(self):
+    def test_old_loader_schema_resolves_dr_and_r_exp_from_distinct_columns(self):
         catalog = parse_enemy_catalog(
             "101,101,Blob,5,2,,EN001A\n")
         self.assertEqual((5, 2), catalog[101])
         table = parse_enemy_attribute_table(
             "5,100,2,3,4,5,6,77,8\n", table_id=2)
-        self.assertEqual(77, table[5])
+        self.assertEqual(8, table[5])
 
     def test_manifest_is_exact_server_contract_and_ignores_unused_sentinel(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -67,9 +67,9 @@ class CharacterExperienceRewardEvidenceTests(unittest.TestCase):
             self.assertEqual(
                 [
                     {"map_id": 13, "enemy_id": 101,
-                     "enemy_level": 5, "r_exp": 77},
+                     "enemy_level": 5, "enemy_dr": 77, "r_exp": 8},
                     {"map_id": 13, "enemy_id": 102,
-                     "enemy_level": 7, "r_exp": 99},
+                     "enemy_level": 7, "enemy_dr": 99, "r_exp": 8},
                 ],
                 result["rules"])
             self.assertEqual(3, result["audit"]["maps"][0]["spawn_count"])
@@ -94,12 +94,12 @@ class CharacterExperienceRewardEvidenceTests(unittest.TestCase):
 
         duplicate_same = parse_enemy_attribute_table(
             "5,1,2,3,4,5,6,7,8\n"
-            "5,9,9,9,9,9,9,7,9\n", table_id=1)
-        self.assertEqual(7, duplicate_same[5])
+            "5,9,9,9,9,9,9,99,8\n", table_id=1)
+        self.assertEqual(8, duplicate_same[5])
         with self.assertRaises(ValueError):
             parse_enemy_attribute_table(
                 "5,1,2,3,4,5,6,7,8\n"
-                "5,1,2,3,4,5,6,9,8\n", table_id=1)
+                "5,1,2,3,4,5,6,7,9\n", table_id=1)
 
     def test_publication_writes_audited_manifest_outside_source(self):
         with tempfile.TemporaryDirectory() as temporary:

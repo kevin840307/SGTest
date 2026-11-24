@@ -23,9 +23,9 @@ public sealed record MonsterWorldCoordinatorStatistics(
 /// <summary>
 /// Exact Old SGOBattleSys::IsHit_PerHit gate (0x1000BA26..0x1000BA82).
 /// Player GetPlayerAttackAttrib maps sAttacker+0x10/+0x18 to Level/Hit;
-/// enemy GetEnemyDefendAttrib maps sTarget+0x16/+0x1C to enemy Level/
-/// CDEnemyWORDStr[12]. The latter is the same audited word consumed as RExp;
-/// keep that source name instead of inventing a synthetic enemy Dodge stat.
+/// enemy GetEnemyDefendAttrib maps sTarget+0x16/+0x1C to enemy Level/DR.
+/// CDEnemyDistSys LoadEnAttData/AddAttr proves EN_Att col[7] -> +0x22 ->
+/// internal WORD property 12 (DR); RExp is instead col[8] -> property 16.
 /// </summary>
 public static class NormalAttackHitRules
 {
@@ -167,6 +167,7 @@ public sealed class MonsterWorldCoordinator
                     CharacterExperienceRewardTrust.SyntheticTest)||
                rule.MapId<=0||rule.EnemyId<=0||
                rule.EnemyLevel is <1 or >ushort.MaxValue||
+               rule.EnemyDodge is <0 or >ushort.MaxValue||
                rule.BaseExperience is <0 or >ushort.MaxValue||
                string.IsNullOrWhiteSpace(rule.SourceReference)||
                !known.Contains((rule.MapId,rule.EnemyId))||
@@ -307,7 +308,7 @@ public sealed class MonsterWorldCoordinator
         cursor.LastAppliedTick = _lastTick;
         if(!NormalAttackHitRules.IsHit(
                profile.Level,profile.Hit,hitRule.EnemyLevel,
-               checked((int)hitRule.BaseExperience),roll))
+               hitRule.EnemyDodge,roll))
             return FromTarget(request,NormalAttackStatus.Miss,target);
 
         int damage = Math.Max(1, profile.Attack);
