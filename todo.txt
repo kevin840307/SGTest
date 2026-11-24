@@ -8,7 +8,9 @@
 
 - COMBAT-PVE-FORMAL-ENTRY [ ] 2026-11-24，v13 下一玩法切片。正式角色 `ProfileOnlyVerified`、Map13／15 缺可信 v4 gameplay population，各自阻擋實際戰鬥。先在 Old `SGOBattleSys.dll.lst` 追 `OnPlayerAttack` (0x1000461B)、`GetPlayerAttackAttrib` (0x100192B0)、`IsHit_PerHit` (0x1000B238)、`CalWeaponDamage_PerHit` (0x1000F7F9) 與 HK 普攻行為交叉核對。並用既有 Converter 的 Enemy.dat→Enemy_Data／EN_Att／AI 來源鏈確認至少一個 Map13 開場怪的正式數值與時序，再用真人操作驗結算。未知欄位保持封鎖。
 
-  怪物欄位待釐清。Old `SGOEnemyDistSys.dll.lst` 的 `LoadNewCSVData` 0x1007259D 將 EN010A 的 `Enemy_Data.csv[9]`（40）寫入 WORD[0x16]，`AddAttr` 0x10078451–0x10078467 則從 EN_Att 選中列的 +0x0C 填 WORD[4]（Lv1 的候選值 51）。`SGOEnemy::OnRecover` 0x10008B6D–0x10008B80 讀 WORD[6]/[4]。下一步核對 definition → instance 的初始化映射和 HK 同怪起始 HP，現有視覺 evidence 中的 col[9] MaxHP 標記不可用於 v4。
+  HP 來源已更正（`b7ed92d`）。Old `LoadEnAttData` 0x10071307 將 EN_Att[1] 寫入 +0x0C；`AddAttr` 0x10078451–0x10078467 寫 WORD[4]；`CDEnemyMgr::CloneChild` 0x10081552–0x10081570 將 WORD[4] 複製到當前 HP 的 WORD[6]。EN010A Lv1 的 Old 初始 HP 是 51。原 Converter 的 `Enemy_Data.csv[9]`（40）寫入的是 WORD[0x16]（`LoadNewCSVData` 0x1007259D）。重跑 `world-content --map 13 --map 15 --include-population`，Map13 78 spawn／9 種皆取得 Old HP 證據，Map15 4 spawn 同屬 Enemy245，`0xffff` 查無列，明確留空。證據 `.cache/v13-monster-hp/`。`python -m unittest discover -s tools/tests` 160/160 PASS。正式角色戰鬥、HK 實機初始 HP 與 A/B 均 NOT VERIFIED。
+
+  玩家普攻下一步：Old `GetPlayerAttackAttrib` 0x10019DBC／0x10019E8C 對無武器先寫入 `sAttacker+0x1A=45`，武器分支 0x10019E20–0x10019E38 從武器 WORD[0x1A] 讀值。仍須追 0x10019F35 的覆寫分支與最終距離檢查、攻擊時序、傷害命中，以及首隻怪的 AI 行為，才可發布 runtime v4。
 
   本輪相容性回歸命令（上述 P0）：`python client/tests/run_online_main_gate.py C:/SGO/Godot/Godot_v4.7.2-stable_win64_console.exe --timeout 85` PASS（正式 Host、雙 headless Main、測試 v4 怪物、AOI、移動、往返傳點與資源卸載）。最終相關 CI 全數 PASS：[Server](https://github.com/kevin840307/SGTest/actions/runs/45389720321)、[Client](https://github.com/kevin840307/SGTest/actions/runs/45390204296)、[Converter](https://github.com/kevin840307/SGTest/actions/runs/45389720368)。
 
