@@ -71,7 +71,7 @@ class ArchitectureConventionsChecks(unittest.TestCase):
         tests = (ROOT / "server" / "tests" / "SGTest.Server.Checks" /
                  "SessionCommandWorkerChecks.cs").read_text(encoding="utf-8-sig")
         project = (SERVER / "SGTest.Server.csproj").read_text(encoding="utf-8-sig")
-        self.assertEqual(tls.count("new SessionCommandWorker<"), 23)
+        self.assertEqual(tls.count("new SessionCommandWorker<"), 24)
         self.assertEqual(tls.count("Channel.CreateBounded<"), 2,
                          "NPC and skill are the only special command workers")
         self.assertEqual(worker.count("Channel.CreateBounded<T>"), 1)
@@ -86,6 +86,7 @@ class ArchitectureConventionsChecks(unittest.TestCase):
         self.assertIn("new SessionCommandWorker<TrustedFriendCommand>(\n                16,", tls)
         self.assertIn("new SessionCommandWorker<TrustedPetCommand>(\n                16,", tls)
         self.assertIn("new SessionCommandWorker<TrustedMechaCommand>(\n                16,", tls)
+        self.assertEqual(tls.count("new SessionCommandWorker<TrustedPlayerAttributeAllocate>("), 1)
         self.assertIn("var npcCommands = Channel.CreateBounded<TrustedNpcInteraction>", tls)
         self.assertIn("var skillCommands=Channel.CreateBounded<TrustedSkillUse>", tls)
         self.assertIn("skillCommands.Reader.ReadAllAsync()", tls,
@@ -96,7 +97,8 @@ class ArchitectureConventionsChecks(unittest.TestCase):
         for feature in ("Respawn", "Pickup", "Recovery", "Discard", "Shop",
                         "Storage", "Equipment", "Bank", "Repair", "Enhancement",
                         "Trade", "Quest", "Pvp", "PvpAttack", "PvpSkill",
-                        "GmPvpName", "PlayerShop", "Chat", "Party", "Clan", "Friend", "Pet", "Mecha"):
+                        "GmPvpName", "PlayerShop", "Chat", "Party", "Clan", "Friend", "Pet", "Mecha",
+                        "Attribute"):
             with self.subTest(feature=feature):
                 self.assertNotIn("Process" + feature + "Async()", tls)
         self.assertIn('<InternalsVisibleTo Include="SGTest.Server.Checks" />', project)
@@ -637,8 +639,14 @@ class ArchitectureConventionsChecks(unittest.TestCase):
         binding = (gateway / "IdentitySessionAuthorization.Binding.cs").read_text(encoding="utf-8-sig")
         self.assertIn("public sealed partial class IdentitySessionAuthorization", core)
         self.assertIn("public sealed partial class IdentitySessionAuthorization", binding)
-        self.assertNotIn("public async ValueTask<GatewayConnection?> AuthorizeAndBindAsync(", core)
-        self.assertEqual(binding.count("AuthorizeAndBindAsync("), 1)
+        declaration = r"\b(?:async\s+)?ValueTask<GatewayConnection\?>\s+AuthorizeAndBindAsync\s*\("
+        for path in gateway.glob("IdentitySessionAuthorization*.cs"):
+            with self.subTest(file=path.name):
+                expected = 2 if path.name == "IdentitySessionAuthorization.Binding.cs" else 0
+                self.assertEqual(len(re.findall(declaration, path.read_text(encoding="utf-8-sig"))), expected)
+        self.assertRegex(binding, r"=>\s*AuthorizeAndBindAsync\(\s*"
+                         r"tls, cancellationToken, cancellationToken, remoteAddress\);")
+        self.assertEqual(binding.count("private async ValueTask<GatewayConnection?> AuthorizeAndBindAsync("), 1)
 
     def test_shared_opcode_numbers_match_across_languages(self) -> None:
         # WireOpcode declarations are the durable public API; no display name,
