@@ -180,7 +180,10 @@ func set_skill_book(skills: Dictionary) -> void:
 	_skills = skills.duplicate(true)
 	_ids = _skills.keys()
 	_ids.sort()
-	_page_start = mini(_page_start, maxi(0, _ids.size() - PAGE_SIZE))
+	var last_page_start := 0
+	if not _ids.is_empty():
+		last_page_start = floori(float(_ids.size() - 1) / float(PAGE_SIZE)) * PAGE_SIZE
+	_page_start = mini(_page_start, last_page_start)
 	_refresh()
 
 
@@ -209,10 +212,12 @@ func _refresh() -> void:
 
 
 func _scroll_page(direction: int) -> void:
+	# Old CSkillItf::OnScrollUp/OnScrollDown changes the list offset by
+	# exactly eight entries (the visible row count), not one row.
 	if direction < 0:
-		_page_start = maxi(0, _page_start - 1)
-	elif direction > 0:
-		_page_start = mini(maxi(0, _ids.size() - PAGE_SIZE), _page_start + 1)
+		_page_start = maxi(0, _page_start - PAGE_SIZE)
+	elif direction > 0 and _page_start < _ids.size() - PAGE_SIZE:
+		_page_start += PAGE_SIZE
 	_refresh()
 
 
