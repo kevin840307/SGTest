@@ -1,0 +1,520 @@
+﻿id,track,title,priority,path,parent,evidence
+UI-001_ACCOUNT_LOGIN,UI,登入畫面,P1,ui/UI-001_ACCOUNT_LOGIN.md,,COUNT_MATCH
+UI-002_CONNECTING,UI,連線等待畫面,P2,ui/UI-002_CONNECTING.md,,COUNT_MATCH
+UI-003_SELECT_SERVER,UI,選擇伺服器,P1,ui/UI-003_SELECT_SERVER.md,,COUNT_MATCH
+UI-004_SELECT_CHARACTER,UI,選擇角色,P1,ui/UI-004_SELECT_CHARACTER.md,,COUNT_MATCH
+UI-005_CREATE_CHARACTER,UI,建立角色,P1,ui/UI-005_CREATE_CHARACTER.md,,COUNT_MATCH
+UI-006_StatusLite,UI,角色簡易狀態 HUD（006_StatusLite）,P1,ui/UI-006_StatusLite.md,,COUNT_MATCH
+UI-006_StatusLite_G,UI,角色簡易狀態 HUD（006_StatusLite_G）,P1,ui/UI-006_StatusLite_G.md,,COUNT_MATCH
+UI-007_HOTKEY_Yl,UI,快捷鍵列（007_HOTKEY_Yl）,P1,ui/UI-007_HOTKEY_Yl.md,,COUNT_MATCH
+UI-007_HOTKEY_YS,UI,快捷鍵列（007_HOTKEY_YS）,P1,ui/UI-007_HOTKEY_YS.md,,COUNT_MATCH
+UI-008_MINIMAP_L,UI,小地圖（008_MINIMAP_L）,P1,ui/UI-008_MINIMAP_L.md,,COUNT_MATCH
+UI-008_MINIMAP_S,UI,小地圖（008_MINIMAP_S）,P1,ui/UI-008_MINIMAP_S.md,,COUNT_MATCH
+UI-009_STATUS,UI,狀態效果列,P1,ui/UI-009_STATUS.md,,COUNT_MATCH
+UI-010_MESSAGE01,UI,通用訊息對話框（010_MESSAGE01）,P2,ui/UI-010_MESSAGE01.md,,COUNT_MATCH
+UI-010_MESSAGE02,UI,通用訊息對話框（010_MESSAGE02）,P2,ui/UI-010_MESSAGE02.md,,COUNT_MATCH
+UI-011_LOGIN_LOADING,UI,登入載入進度,P1,ui/UI-011_LOGIN_LOADING.md,,COUNT_MATCH
+UI-012_DEL_EMAIL,UI,刪除郵件/驗證輸入畫面,P3,ui/UI-012_DEL_EMAIL.md,,COUNT_MATCH
+UI-013_Character_INFO,UI,人物詳細資料與配點,P1,ui/UI-013_Character_INFO.md,,COUNT_MATCH
+UI-014_Character_NICK,UI,稱號/暱稱清單,P2,ui/UI-014_Character_NICK.md,,COUNT_MATCH
+UI-015_Character_JOB,UI,職業清單與轉職,P2,ui/UI-015_Character_JOB.md,,COUNT_MATCH
+UI-016_CHANNEL,UI,聊天小視窗,P1,ui/UI-016_CHANNEL.md,,COUNT_MATCH
+UI-017_CHANNEL_BIG,UI,聊天大視窗,P2,ui/UI-017_CHANNEL_BIG.md,,COUNT_MATCH
+UI-018_EMOTION_BIG,UI,表情選單,P2,ui/UI-018_EMOTION_BIG.md,,COUNT_MATCH
+UI-019_TALKBUBBLE_BIG,UI,對話泡泡樣式選單,P2,ui/UI-019_TALKBUBBLE_BIG.md,,COUNT_MATCH
+UI-020_FRIENDlIST,UI,好友小視窗,P2,ui/UI-020_FRIENDlIST.md,,COUNT_MATCH
+UI-021_COMMAND,UI,主功能工具列,P1,ui/UI-021_COMMAND.md,,COUNT_MATCH
+UI-022_equip,UI,裝備視窗,P1,ui/UI-022_equip.md,,COUNT_MATCH
+UI-023_ITEM,UI,背包視窗,P1,ui/UI-023_ITEM.md,,COUNT_MATCH
+UI-024_Pet,UI,寵物背包入口（024_Pet）,P2,ui/UI-024_Pet.md,,COUNT_MATCH
+UI-024_RANK,UI,排行榜主視窗（024_RANK）,P2,ui/UI-024_RANK.md,,COUNT_MATCH
+UI-024b_RANK,UI,排行榜主視窗（024b_RANK）,P2,ui/UI-024b_RANK.md,,COUNT_MATCH
+UI-025_RANK_02,UI,排行榜詳細/第二頁,P2,ui/UI-025_RANK_02.md,,COUNT_MATCH
+UI-026_TEAM,UI,組隊視窗,P2,ui/UI-026_TEAM.md,,COUNT_MATCH
+UI-027_Skill,UI,技能視窗,P1,ui/UI-027_Skill.md,,COUNT_MATCH
+UI-028_Mix_item,UI,物品合成/強化視窗,P2,ui/UI-028_Mix_item.md,,COUNT_MATCH
+UI-029_SYSTEM,UI,系統設定視窗,P2,ui/UI-029_SYSTEM.md,,COUNT_MATCH
+UI-030_REPAIR,UI,裝備修理視窗,P2,ui/UI-030_REPAIR.md,,COUNT_MATCH
+UI-031_SHOP,UI,NPC 商店主視窗,P1,ui/UI-031_SHOP.md,,COUNT_MATCH
+UI-032_SHOP_02,UI,NPC 商店數量確認,P1,ui/UI-032_SHOP_02.md,,COUNT_MATCH
+UI-033_MESSAGE_INGAME,UI,遊戲內訊息,P2,ui/UI-033_MESSAGE_INGAME.md,,COUNT_MATCH
+UI-033_MESSAGE_NAME,UI,名稱輸入提示,P2,ui/UI-033_MESSAGE_NAME.md,,COUNT_MATCH
+UI-034_BANK,UI,銀行與倉庫視窗,P2,ui/UI-034_BANK.md,,COUNT_MATCH
+UI-035_TRADE,UI,玩家交易視窗（035_TRADE）,P2,ui/UI-035_TRADE.md,,COUNT_MATCH
+UI-035_TRADE_02,UI,玩家交易視窗（035_TRADE_02）,P2,ui/UI-035_TRADE_02.md,,COUNT_MATCH
+UI-036_PetItem,UI,寵物物品視窗,P2,ui/UI-036_PetItem.md,,COUNT_MATCH
+UI-037_PetEquip,UI,寵物裝備視窗,P2,ui/UI-037_PetEquip.md,,COUNT_MATCH
+UI-038_WAITINGBOX,UI,等待提示框,P2,ui/UI-038_WAITINGBOX.md,,COUNT_MATCH
+UI-039_PetInfo,UI,寵物詳細資訊,P2,ui/UI-039_PetInfo.md,,COUNT_MATCH
+UI-040_Rightbox,UI,右側快捷面板（040_Rightbox）,P1,ui/UI-040_Rightbox.md,,COUNT_MATCH
+UI-040_Rightbox_02,UI,右側快捷面板（040_Rightbox_02）,P1,ui/UI-040_Rightbox_02.md,,COUNT_MATCH
+UI-040_Rightbox_Ext,UI,右側快捷面板（040_Rightbox_Ext）,P1,ui/UI-040_Rightbox_Ext.md,,COUNT_MATCH
+UI-041_balloon_01,UI,聊天/NPC 對話泡泡（041_balloon_01）,P2,ui/UI-041_balloon_01.md,,COUNT_MATCH
+UI-041_balloon_02,UI,聊天/NPC 對話泡泡（041_balloon_02）,P2,ui/UI-041_balloon_02.md,,COUNT_MATCH
+UI-041_balloon_03,UI,聊天/NPC 對話泡泡（041_balloon_03）,P2,ui/UI-041_balloon_03.md,,COUNT_MATCH
+UI-041_balloon_04,UI,聊天/NPC 對話泡泡（041_balloon_04）,P2,ui/UI-041_balloon_04.md,,COUNT_MATCH
+UI-041_balloon_05,UI,聊天/NPC 對話泡泡（041_balloon_05）,P2,ui/UI-041_balloon_05.md,,COUNT_MATCH
+UI-041_balloon_06,UI,聊天/NPC 對話泡泡（041_balloon_06）,P2,ui/UI-041_balloon_06.md,,COUNT_MATCH
+UI-041_balloon_07,UI,聊天/NPC 對話泡泡（041_balloon_07）,P2,ui/UI-041_balloon_07.md,,COUNT_MATCH
+UI-041_balloon_s01,UI,聊天/NPC 對話泡泡（041_balloon_s01）,P2,ui/UI-041_balloon_s01.md,,COUNT_MATCH
+UI-041_balloon_s02,UI,聊天/NPC 對話泡泡（041_balloon_s02）,P2,ui/UI-041_balloon_s02.md,,COUNT_MATCH
+UI-041_balloon_s03,UI,聊天/NPC 對話泡泡（041_balloon_s03）,P2,ui/UI-041_balloon_s03.md,,COUNT_MATCH
+UI-041_balloon_s04,UI,聊天/NPC 對話泡泡（041_balloon_s04）,P2,ui/UI-041_balloon_s04.md,,COUNT_MATCH
+UI-041_balloon_s05,UI,聊天/NPC 對話泡泡（041_balloon_s05）,P2,ui/UI-041_balloon_s05.md,,COUNT_MATCH
+UI-041_balloon_s06,UI,聊天/NPC 對話泡泡（041_balloon_s06）,P2,ui/UI-041_balloon_s06.md,,COUNT_MATCH
+UI-041_balloon_s07,UI,聊天/NPC 對話泡泡（041_balloon_s07）,P2,ui/UI-041_balloon_s07.md,,COUNT_MATCH
+UI-042_FRIENDlIST_B,UI,好友大型清單,P2,ui/UI-042_FRIENDlIST_B.md,,COUNT_MATCH
+UI-043_FRIEND_MSG,UI,好友訊息視窗,P2,ui/UI-043_FRIEND_MSG.md,,COUNT_MATCH
+UI-044_QUESTION_BOX,UI,問答/確認框（044_QUESTION_BOX）,P2,ui/UI-044_QUESTION_BOX.md,,COUNT_MATCH
+UI-044_QUESTION_BOXB,UI,問答/確認框（044_QUESTION_BOXB）,P2,ui/UI-044_QUESTION_BOXB.md,,COUNT_MATCH
+UI-045_Mapname_Display,UI,地圖名稱提示,P1,ui/UI-045_Mapname_Display.md,,COUNT_MATCH
+UI-046_Rename,UI,改名對話框,P2,ui/UI-046_Rename.md,,COUNT_MATCH
+UI-047_NPC_message,UI,NPC 對話主框（047_NPC_message）,P1,ui/UI-047_NPC_message.md,,COUNT_MATCH
+UI-047_NPC_message_b,UI,NPC 對話主框（047_NPC_message_b）,P1,ui/UI-047_NPC_message_b.md,,COUNT_MATCH
+UI-048_PetTrade,UI,寵物交易資訊,P2,ui/UI-048_PetTrade.md,,COUNT_MATCH
+UI-049_NPC_message02,UI,NPC 對話第二樣式（049_NPC_message02）,P2,ui/UI-049_NPC_message02.md,,COUNT_MATCH
+UI-049_NPC_message02B,UI,NPC 對話第二樣式（049_NPC_message02B）,P2,ui/UI-049_NPC_message02B.md,,COUNT_MATCH
+UI-050_NPC_message03a,UI,NPC 對話第三樣式 A,P2,ui/UI-050_NPC_message03a.md,,COUNT_MATCH
+UI-051_NPC_message03b,UI,NPC 對話其他樣式（051_NPC_message03b）,P2,ui/UI-051_NPC_message03b.md,,COUNT_MATCH
+UI-051_NPC_message04,UI,NPC 對話其他樣式（051_NPC_message04）,P2,ui/UI-051_NPC_message04.md,,COUNT_MATCH
+UI-051_NPC_message05,UI,NPC 對話其他樣式（051_NPC_message05）,P2,ui/UI-051_NPC_message05.md,,COUNT_MATCH
+UI-051_NPC_message06,UI,NPC 對話其他樣式（051_NPC_message06）,P2,ui/UI-051_NPC_message06.md,,COUNT_MATCH
+UI-052_INPUT_TYPE,UI,文字輸入類型面板（052_INPUT_TYPE）,P2,ui/UI-052_INPUT_TYPE.md,,COUNT_MATCH
+UI-052_INPUT_TYPE_02,UI,文字輸入類型面板（052_INPUT_TYPE_02）,P2,ui/UI-052_INPUT_TYPE_02.md,,COUNT_MATCH
+UI-053_SCROLLMESSAGE,UI,跑馬燈公告,P2,ui/UI-053_SCROLLMESSAGE.md,,COUNT_MATCH
+UI-054_PETHP,UI,寵物 HP 條,P2,ui/UI-054_PETHP.md,,COUNT_MATCH
+UI-055_TRADE_MONEY,UI,交易金錢輸入,P2,ui/UI-055_TRADE_MONEY.md,,COUNT_MATCH
+UI-056_Driver_INFO,UI,機甲詳細資訊（056_Driver_INFO）,P2,ui/UI-056_Driver_INFO.md,,COUNT_MATCH
+UI-056_Driver_INFO_01,UI,機甲詳細資訊（056_Driver_INFO_01）,P2,ui/UI-056_Driver_INFO_01.md,,COUNT_MATCH
+UI-056_Driver_item,UI,機甲物品/裝備列表（056_Driver_item）,P2,ui/UI-056_Driver_item.md,,COUNT_MATCH
+UI-057_CLUB_Menu,UI,社團主選單,P3,ui/UI-057_CLUB_Menu.md,,COUNT_MATCH
+UI-058_CLUB_Ext,UI,社團延伸面板,P3,ui/UI-058_CLUB_Ext.md,,COUNT_MATCH
+UI-059_Driver_Repair,UI,機甲修理視窗,P2,ui/UI-059_Driver_Repair.md,,COUNT_MATCH
+UI-060_CLUB_MemList,UI,社團成員清單（060_CLUB_MemList）,P3,ui/UI-060_CLUB_MemList.md,,COUNT_MATCH
+UI-060_CLUB_MemList02,UI,社團成員清單（060_CLUB_MemList02）,P3,ui/UI-060_CLUB_MemList02.md,,COUNT_MATCH
+UI-061_CLUB_Name,UI,社團名稱輸入,P3,ui/UI-061_CLUB_Name.md,,COUNT_MATCH
+UI-062_CLUB_ALLYList,UI,社團盟友清單,P3,ui/UI-062_CLUB_ALLYList.md,,COUNT_MATCH
+UI-063_CLUB_GoldList,UI,社團金錢紀錄,P3,ui/UI-063_CLUB_GoldList.md,,COUNT_MATCH
+UI-064_CLUB_TechList,UI,社團科技清單,P3,ui/UI-064_CLUB_TechList.md,,COUNT_MATCH
+UI-065_CLUB_BookMark,UI,社團書籤/標記,P3,ui/UI-065_CLUB_BookMark.md,,COUNT_MATCH
+UI-066_CLUB_Intro,UI,社團介紹,P3,ui/UI-066_CLUB_Intro.md,,COUNT_MATCH
+UI-067_CLUB_News,UI,社團公告,P3,ui/UI-067_CLUB_News.md,,COUNT_MATCH
+UI-068_CLUB_OKBox,UI,社團確認框（068_CLUB_OKBox）,P3,ui/UI-068_CLUB_OKBox.md,,COUNT_MATCH
+UI-068_CLUB_YesNoBox,UI,社團確認框（068_CLUB_YesNoBox）,P3,ui/UI-068_CLUB_YesNoBox.md,,COUNT_MATCH
+UI-069_CLUB_INTRO_EDIT,UI,社團介紹編輯,P3,ui/UI-069_CLUB_INTRO_EDIT.md,,COUNT_MATCH
+UI-070_CLUB_News_EDIT,UI,社團公告編輯,P3,ui/UI-070_CLUB_News_EDIT.md,,COUNT_MATCH
+UI-071_CLUB_ALLY,UI,社團結盟,P3,ui/UI-071_CLUB_ALLY.md,,COUNT_MATCH
+UI-072_CLUB_DonateInput,UI,社團捐獻金額,P3,ui/UI-072_CLUB_DonateInput.md,,COUNT_MATCH
+UI-073_CLUB_ResourceInput,UI,社團資源輸入,P3,ui/UI-073_CLUB_ResourceInput.md,,COUNT_MATCH
+UI-074_CLUB_TechDevelop,UI,社團科技開發,P3,ui/UI-074_CLUB_TechDevelop.md,,COUNT_MATCH
+UI-075_CLUB_TechDevelop02,UI,社團科技開發明細,P3,ui/UI-075_CLUB_TechDevelop02.md,,COUNT_MATCH
+UI-076_CLUB_TechUPGRADE,UI,社團科技升級,P3,ui/UI-076_CLUB_TechUPGRADE.md,,COUNT_MATCH
+UI-077_CLUB_Takemoney,UI,社團金庫提款,P3,ui/UI-077_CLUB_Takemoney.md,,COUNT_MATCH
+UI-078_CLUB_DisAlly,UI,解除社團同盟,P3,ui/UI-078_CLUB_DisAlly.md,,COUNT_MATCH
+UI-079_MainQuest,UI,主線任務敘事畫面,P2,ui/UI-079_MainQuest.md,,COUNT_MATCH
+UI-080_CLUB_RANK,UI,社團排行榜,P3,ui/UI-080_CLUB_RANK.md,,COUNT_MATCH
+UI-081_LOGIN_CHANGE_PASSWORD,UI,變更角色第二密碼,P1,ui/UI-081_LOGIN_CHANGE_PASSWORD.md,,COUNT_MATCH
+UI-082_LOGIN_PASSWORD,UI,角色第二密碼驗證,P1,ui/UI-082_LOGIN_PASSWORD.md,,COUNT_MATCH
+UI-083_PET_CARD,UI,機甲/寵物卡片預覽,P2,ui/UI-083_PET_CARD.md,,COUNT_MATCH
+UI-084_ENEMY_HP,UI,怪物目標 HP 視窗,P1,ui/UI-084_ENEMY_HP.md,,COUNT_MATCH
+UI-085_COMPLEX_INFO,UI,合體機甲資訊,P2,ui/UI-085_COMPLEX_INFO.md,,COUNT_MATCH
+UI-086_COMPLEX_INFO_01,UI,合體機甲資訊變體,P3,ui/UI-086_COMPLEX_INFO_01.md,,COUNT_MATCH
+UI-087_DRIVE_COMPLEX_BAR,UI,駕駛/合體能源條,P2,ui/UI-087_DRIVE_COMPLEX_BAR.md,,COUNT_MATCH
+UI-088_COMPLEX_HP,UI,合體 HP/MP/EXP 條,P2,ui/UI-088_COMPLEX_HP.md,,COUNT_MATCH
+UI-089_PCMEMO_TRADE,UI,玩家備忘錄交易文字（089_PCMEMO_TRADE）,P3,ui/UI-089_PCMEMO_TRADE.md,,COUNT_MATCH
+UI-089_PCMEMO_TRADE_READ,UI,玩家備忘錄交易文字（089_PCMEMO_TRADE_READ）,P3,ui/UI-089_PCMEMO_TRADE_READ.md,,COUNT_MATCH
+UI-090_PCMEMO,UI,玩家備忘錄/個人狀態,P3,ui/UI-090_PCMEMO.md,,COUNT_MATCH
+UI-091_PVP_MAIN,UI,PvP 主戰鬥 HUD,P2,ui/UI-091_PVP_MAIN.md,,COUNT_MATCH
+UI-092_PShop,UI,玩家商店主畫面,P2,ui/UI-092_PShop.md,,COUNT_MATCH
+UI-092_PShop_Buy,UI,玩家商店買家清單,P2,ui/UI-092_PShop_Buy.md,,COUNT_MATCH
+UI-092_PShop_Buy_Item_01,UI,玩家商店購買商品確認 01,P2,ui/UI-092_PShop_Buy_Item_01.md,,COUNT_MATCH
+UI-092_PShop_Buy_Item_02,UI,玩家商店購買商品確認 02,P2,ui/UI-092_PShop_Buy_Item_02.md,,COUNT_MATCH
+UI-092_PShop_head,UI,擺攤招牌,P2,ui/UI-092_PShop_head.md,,COUNT_MATCH
+UI-092_PShop_Name,UI,擺攤命名,P2,ui/UI-092_PShop_Name.md,,COUNT_MATCH
+UI-092_PShop_Sell,UI,玩家商店賣家清單,P2,ui/UI-092_PShop_Sell.md,,COUNT_MATCH
+UI-092_PShop_Sell_Item_01,UI,擺攤商品設定 01,P2,ui/UI-092_PShop_Sell_Item_01.md,,COUNT_MATCH
+UI-092_PShop_Sell_Item_02,UI,擺攤商品設定 02,P2,ui/UI-092_PShop_Sell_Item_02.md,,COUNT_MATCH
+UI-093_Pvp_List_01,UI,PvP 列表 093_Pvp_List_01,P3,ui/UI-093_Pvp_List_01.md,,COUNT_MATCH
+UI-093_Pvp_List_02,UI,PvP 列表 093_Pvp_List_02,P3,ui/UI-093_Pvp_List_02.md,,COUNT_MATCH
+UI-093_Pvp_List_Item,UI,PvP 列表 093_Pvp_List_Item,P3,ui/UI-093_Pvp_List_Item.md,,COUNT_MATCH
+UI-093_Pvp_Rank_01,UI,PvP 排行 093_Pvp_Rank_01,P3,ui/UI-093_Pvp_Rank_01.md,,COUNT_MATCH
+UI-093_Pvp_Rank_02,UI,PvP 排行 093_Pvp_Rank_02,P3,ui/UI-093_Pvp_Rank_02.md,,COUNT_MATCH
+UI-094_CLUB,UI,社團總覽,P2,ui/UI-094_CLUB.md,,COUNT_MATCH
+UI-094_Hair_Shop,UI,髮型商店,P2,ui/UI-094_Hair_Shop.md,,COUNT_MATCH
+UI-095_Collection,UI,收藏圖鑑,P3,ui/UI-095_Collection.md,,COUNT_MATCH
+UI-095_Collection_01,UI,收藏圖鑑子頁 01,P3,ui/UI-095_Collection_01.md,,COUNT_MATCH
+UI-095_Collection_02,UI,收藏圖鑑子頁 02,P3,ui/UI-095_Collection_02.md,,COUNT_MATCH
+UI-095_Collection_03,UI,收藏圖鑑子頁 03,P3,ui/UI-095_Collection_03.md,,COUNT_MATCH
+UI-095_Collection_04,UI,收藏圖鑑子頁 04,P3,ui/UI-095_Collection_04.md,,COUNT_MATCH
+UI-095_Collection_05,UI,收藏圖鑑子頁 05,P3,ui/UI-095_Collection_05.md,,COUNT_MATCH
+UI-095_Collection_06,UI,收藏圖鑑子頁 06,P3,ui/UI-095_Collection_06.md,,COUNT_MATCH
+UI-096_Dissolve,UI,物品分解,P2,ui/UI-096_Dissolve.md,,COUNT_MATCH
+UI-097_Quest_List,UI,任務清單,P1,ui/UI-097_Quest_List.md,,COUNT_MATCH
+UI-098_Refund,UI,回收/退款視窗,P3,ui/UI-098_Refund.md,,COUNT_MATCH
+GP-001-01,Gameplay leaf,登入成功,P1,gameplay/GP-001-01.md,GP-001,Old source anchors; scenario not runtime verified
+GP-001-02,Gameplay leaf,登入拒絕,P1,gameplay/GP-001-02.md,GP-001,Old source anchors; scenario not runtime verified
+GP-001,Gameplay integration,登入與帳號 session,P1,gameplay/GP-001.md,,Old source anchors; scenario not runtime verified
+GP-002-01,Gameplay leaf,角色列表,P1,gameplay/GP-002-01.md,GP-002,Old source anchors; scenario not runtime verified
+GP-002-02,Gameplay leaf,進入世界,P1,gameplay/GP-002-02.md,GP-002,Old source anchors; scenario not runtime verified
+GP-002,Gameplay integration,角色列表與進入世界,P1,gameplay/GP-002.md,,Old source anchors; scenario not runtime verified
+GP-003-01,Gameplay leaf,角色外觀草稿,P1,gameplay/GP-003-01.md,GP-003,Old source anchors; scenario not runtime verified
+GP-003-02,Gameplay leaf,建立提交,P1,gameplay/GP-003-02.md,GP-003,Old source anchors; scenario not runtime verified
+GP-003,Gameplay integration,角色建立,P1,gameplay/GP-003.md,,Old source anchors; scenario not runtime verified
+GP-004-01,Gameplay leaf,刪除角色,P2,gameplay/GP-004-01.md,GP-004,Old source anchors; scenario not runtime verified
+GP-004-02,Gameplay leaf,第二密碼驗證,P2,gameplay/GP-004-02.md,GP-004,Old source anchors; scenario not runtime verified
+GP-004-03,Gameplay leaf,變更第二密碼,P2,gameplay/GP-004-03.md,GP-004,Old source anchors; scenario not runtime verified
+GP-004,Gameplay integration,角色刪除與第二密碼,P2,gameplay/GP-004.md,,Old source anchors; scenario not runtime verified
+GP-005-01,Gameplay leaf,初始外觀,P1,gameplay/GP-005-01.md,GP-005,Old source anchors; scenario not runtime verified
+GP-005-02,Gameplay leaf,裝備外觀,P1,gameplay/GP-005-02.md,GP-005,Old source anchors; scenario not runtime verified
+GP-005,Gameplay integration,人物初始外觀與 paper doll,P1,gameplay/GP-005.md,,Old source anchors; scenario not runtime verified
+GP-006-01,Gameplay leaf,移動,P1,gameplay/GP-006-01.md,GP-006,Old source anchors; scenario not runtime verified
+GP-006-02,Gameplay leaf,停止改點,P1,gameplay/GP-006-02.md,GP-006,Old source anchors; scenario not runtime verified
+GP-006,Gameplay integration,點地面移動與停止,P1,gameplay/GP-006.md,,Old source anchors; scenario not runtime verified
+GP-007-01,Gameplay leaf,合法尋路,P1,gameplay/GP-007-01.md,GP-007,Old source anchors; scenario not runtime verified
+GP-007-02,Gameplay leaf,不可走目標,P1,gameplay/GP-007-02.md,GP-007,Old source anchors; scenario not runtime verified
+GP-007,Gameplay integration,地圖碰撞與尋路,P1,gameplay/GP-007.md,,Old source anchors; scenario not runtime verified
+GP-008-01,Gameplay leaf,跨圖,P1,gameplay/GP-008-01.md,GP-008,Old source anchors; scenario not runtime verified
+GP-008-02,Gameplay leaf,返程,P1,gameplay/GP-008-02.md,GP-008,Old source anchors; scenario not runtime verified
+GP-008,Gameplay integration,傳點與跨圖 lifecycle,P1,gameplay/GP-008.md,,Old source anchors; scenario not runtime verified
+GP-009-01,Gameplay leaf,AOI 進入,P1,gameplay/GP-009-01.md,GP-009,Old source anchors; scenario not runtime verified
+GP-009-02,Gameplay leaf,AOI 離開重入,P1,gameplay/GP-009-02.md,GP-009,Old source anchors; scenario not runtime verified
+GP-009,Gameplay integration,玩家 AOI 進出與同步,P1,gameplay/GP-009.md,,Old source anchors; scenario not runtime verified
+GP-010-01,Gameplay leaf,怪物生成,P1,gameplay/GP-010-01.md,GP-010,Old source anchors; scenario not runtime verified
+GP-010-02,Gameplay leaf,怪物重生,P1,gameplay/GP-010-02.md,GP-010,Old source anchors; scenario not runtime verified
+GP-010,Gameplay integration,怪物生成與重生,P1,gameplay/GP-010.md,,Old source anchors; scenario not runtime verified
+GP-011-01,Gameplay leaf,巡邏,P1,gameplay/GP-011-01.md,GP-011,Old source anchors; scenario not runtime verified
+GP-011-02,Gameplay leaf,追擊與脫戰,P1,gameplay/GP-011-02.md,GP-011,Old source anchors; scenario not runtime verified
+GP-011,Gameplay integration,怪物巡邏與追擊/回位,P1,gameplay/GP-011.md,,Old source anchors; scenario not runtime verified
+GP-012-01,Gameplay leaf,正式新角戰鬥,P1,gameplay/GP-012-01.md,GP-012,Old source anchors; scenario not runtime verified
+GP-012-02,Gameplay leaf,未知 profile,P1,gameplay/GP-012-02.md,GP-012,Old source anchors; scenario not runtime verified
+GP-012,Gameplay integration,正式角色戰鬥屬性解鎖,P1,gameplay/GP-012.md,,Old source anchors; scenario not runtime verified
+GP-013-01,Gameplay leaf,選怪與取消,P1,gameplay/GP-013-01.md,GP-013,Old source anchors; scenario not runtime verified
+GP-013-02,Gameplay leaf,近遠攻距,P1,gameplay/GP-013-02.md,GP-013,Old source anchors; scenario not runtime verified
+GP-013,Gameplay integration,選怪與接近攻擊距離,P1,gameplay/GP-013.md,,Old source anchors; scenario not runtime verified
+GP-014-01,Gameplay leaf,普通攻擊,P1,gameplay/GP-014-01.md,GP-014,Old source anchors; scenario not runtime verified
+GP-014-02,Gameplay leaf,MISS,P1,gameplay/GP-014-02.md,GP-014,Old source anchors; scenario not runtime verified
+GP-014-03,Gameplay leaf,非法攻擊,P1,gameplay/GP-014-03.md,GP-014,Old source anchors; scenario not runtime verified
+GP-014,Gameplay integration,普通攻擊與命中/MISS,P1,gameplay/GP-014.md,,Old source anchors; scenario not runtime verified
+GP-015-01,Gameplay leaf,傷害結算,P1,gameplay/GP-015-01.md,GP-015,Old source anchors; scenario not runtime verified
+GP-015-02,Gameplay leaf,受擊動畫,P1,gameplay/GP-015-02.md,GP-015,Old source anchors; scenario not runtime verified
+GP-015,Gameplay integration,傷害結算、受擊與動畫,P1,gameplay/GP-015.md,,Old source anchors; scenario not runtime verified
+GP-016-01,Gameplay leaf,擊殺 EXP,P1,gameplay/GP-016-01.md,GP-016,Old source anchors; scenario not runtime verified
+GP-016-02,Gameplay leaf,升級,P1,gameplay/GP-016-02.md,GP-016,Old source anchors; scenario not runtime verified
+GP-016-03,Gameplay leaf,金錢,P1,gameplay/GP-016-03.md,GP-016,Old source anchors; scenario not runtime verified
+GP-016,Gameplay integration,擊殺、EXP、金錢與升級,P1,gameplay/GP-016.md,,Old source anchors; scenario not runtime verified
+GP-017-01,Gameplay leaf,掉落生成,P1,gameplay/GP-017-01.md,GP-017,Old source anchors; scenario not runtime verified
+GP-017-02,Gameplay leaf,掉落生命周期,P1,gameplay/GP-017-02.md,GP-017,Old source anchors; scenario not runtime verified
+GP-017,Gameplay integration,怪物死亡與掉落生成,P1,gameplay/GP-017.md,,Old source anchors; scenario not runtime verified
+GP-018-01,Gameplay leaf,撿取成功,P1,gameplay/GP-018-01.md,GP-018,Old source anchors; scenario not runtime verified
+GP-018-02,Gameplay leaf,競拾/滿包,P1,gameplay/GP-018-02.md,GP-018,Old source anchors; scenario not runtime verified
+GP-018,Gameplay integration,地上物拾取,P1,gameplay/GP-018.md,,Old source anchors; scenario not runtime verified
+GP-019-01,Gameplay leaf,死亡,P1,gameplay/GP-019-01.md,GP-019,Old source anchors; scenario not runtime verified
+GP-019-02,Gameplay leaf,復活,P1,gameplay/GP-019-02.md,GP-019,Old source anchors; scenario not runtime verified
+GP-019,Gameplay integration,玩家死亡與復活,P1,gameplay/GP-019.md,,Old source anchors; scenario not runtime verified
+GP-020-01,Gameplay leaf,技能學習,P1,gameplay/GP-020-01.md,GP-020,Old source anchors; scenario not runtime verified
+GP-020-02,Gameplay leaf,技能升級,P1,gameplay/GP-020-02.md,GP-020,Old source anchors; scenario not runtime verified
+GP-020,Gameplay integration,技能學習與職業限制,P1,gameplay/GP-020.md,,Old source anchors; scenario not runtime verified
+GP-021-01,Gameplay leaf,單體施法,P1,gameplay/GP-021-01.md,GP-021,Old source anchors; scenario not runtime verified
+GP-021-02,Gameplay leaf,施法拒絕,P1,gameplay/GP-021-02.md,GP-021,Old source anchors; scenario not runtime verified
+GP-021,Gameplay integration,單體技能與 MP/冷卻,P1,gameplay/GP-021.md,,Old source anchors; scenario not runtime verified
+GP-022-01,Gameplay leaf,範圍選取,P1,gameplay/GP-022-01.md,GP-022,Old source anchors; scenario not runtime verified
+GP-022-02,Gameplay leaf,範圍結算,P1,gameplay/GP-022-02.md,GP-022,Old source anchors; scenario not runtime verified
+GP-022,Gameplay integration,範圍技能與多目標,P1,gameplay/GP-022.md,,Old source anchors; scenario not runtime verified
+GP-023-01,Gameplay leaf,Buff,P1,gameplay/GP-023-01.md,GP-023,Old source anchors; scenario not runtime verified
+GP-023-02,Gameplay leaf,Debuff,P1,gameplay/GP-023-02.md,GP-023,Old source anchors; scenario not runtime verified
+GP-023-03,Gameplay leaf,治療,P1,gameplay/GP-023-03.md,GP-023,Old source anchors; scenario not runtime verified
+GP-023,Gameplay integration,Buff/Debuff 與治療,P1,gameplay/GP-023.md,,Old source anchors; scenario not runtime verified
+GP-024-01,Gameplay leaf,背包格位,P1,gameplay/GP-024-01.md,GP-024,Old source anchors; scenario not runtime verified
+GP-024-02,Gameplay leaf,堆疊與分堆,P1,gameplay/GP-024-02.md,GP-024,Old source anchors; scenario not runtime verified
+GP-024,Gameplay integration,背包格位與堆疊,P1,gameplay/GP-024.md,,Old source anchors; scenario not runtime verified
+GP-025-01,Gameplay leaf,使用藥水,P1,gameplay/GP-025-01.md,GP-025,Old source anchors; scenario not runtime verified
+GP-025-02,Gameplay leaf,消耗品拒絕,P1,gameplay/GP-025-02.md,GP-025,Old source anchors; scenario not runtime verified
+GP-025,Gameplay integration,消耗品使用與恢復,P1,gameplay/GP-025.md,,Old source anchors; scenario not runtime verified
+GP-026-01,Gameplay leaf,裝備穿戴,P1,gameplay/GP-026-01.md,GP-026,Old source anchors; scenario not runtime verified
+GP-026-02,Gameplay leaf,卸下與替換,P1,gameplay/GP-026-02.md,GP-026,Old source anchors; scenario not runtime verified
+GP-026-03,Gameplay leaf,裝備限制,P1,gameplay/GP-026-03.md,GP-026,Old source anchors; scenario not runtime verified
+GP-026,Gameplay integration,裝備裝卸與屬性,P1,gameplay/GP-026.md,,Old source anchors; scenario not runtime verified
+GP-027-01,Gameplay leaf,屬性配點,P1,gameplay/GP-027-01.md,GP-027,Old source anchors; scenario not runtime verified
+GP-027-02,Gameplay leaf,非法配點,P1,gameplay/GP-027-02.md,GP-027,Old source anchors; scenario not runtime verified
+GP-027,Gameplay integration,屬性配點與重算,P1,gameplay/GP-027.md,,Old source anchors; scenario not runtime verified
+GP-028-01,Gameplay leaf,快捷鍵配置,P1,gameplay/GP-028-01.md,GP-028,Old source anchors; scenario not runtime verified
+GP-028-02,Gameplay leaf,快捷鍵使用,P1,gameplay/GP-028-02.md,GP-028,Old source anchors; scenario not runtime verified
+GP-028,Gameplay integration,快捷鍵綁定及執行,P1,gameplay/GP-028.md,,Old source anchors; scenario not runtime verified
+GP-029-01,Gameplay leaf,NPC 開啟,P1,gameplay/GP-029-01.md,GP-029,Old source anchors; scenario not runtime verified
+GP-029-02,Gameplay leaf,NPC 分支,P1,gameplay/GP-029-02.md,GP-029,Old source anchors; scenario not runtime verified
+GP-029,Gameplay integration,NPC 互動與腳本分支,P1,gameplay/GP-029.md,,Old source anchors; scenario not runtime verified
+GP-030-01,Gameplay leaf,購買,P1,gameplay/GP-030-01.md,GP-030,Old source anchors; scenario not runtime verified
+GP-030-02,Gameplay leaf,購買拒絕,P1,gameplay/GP-030-02.md,GP-030,Old source anchors; scenario not runtime verified
+GP-030,Gameplay integration,NPC 商店購買,P1,gameplay/GP-030.md,,Old source anchors; scenario not runtime verified
+GP-031-01,Gameplay leaf,出售,P1,gameplay/GP-031-01.md,GP-031,Old source anchors; scenario not runtime verified
+GP-031-02,Gameplay leaf,出售拒絕,P1,gameplay/GP-031-02.md,GP-031,Old source anchors; scenario not runtime verified
+GP-031,Gameplay integration,NPC 商店出售,P1,gameplay/GP-031.md,,Old source anchors; scenario not runtime verified
+GP-032-01,Gameplay leaf,存款,P2,gameplay/GP-032-01.md,GP-032,Old source anchors; scenario not runtime verified
+GP-032-02,Gameplay leaf,提款,P2,gameplay/GP-032-02.md,GP-032,Old source anchors; scenario not runtime verified
+GP-032,Gameplay integration,銀行存取金錢,P2,gameplay/GP-032.md,,Old source anchors; scenario not runtime verified
+GP-033-01,Gameplay leaf,倉庫存物,P2,gameplay/GP-033-01.md,GP-033,Old source anchors; scenario not runtime verified
+GP-033-02,Gameplay leaf,倉庫取物,P2,gameplay/GP-033-02.md,GP-033,Old source anchors; scenario not runtime verified
+GP-033,Gameplay integration,倉庫存取物品,P2,gameplay/GP-033.md,,Old source anchors; scenario not runtime verified
+GP-034-01,Gameplay leaf,耐久消耗,P2,gameplay/GP-034-01.md,GP-034,Old source anchors; scenario not runtime verified
+GP-034-02,Gameplay leaf,修理,P2,gameplay/GP-034-02.md,GP-034,Old source anchors; scenario not runtime verified
+GP-034,Gameplay integration,裝備耐久與修理,P2,gameplay/GP-034.md,,Old source anchors; scenario not runtime verified
+GP-035-01,Gameplay leaf,強化成功,P2,gameplay/GP-035-01.md,GP-035,Old source anchors; scenario not runtime verified
+GP-035-02,Gameplay leaf,強化失敗,P2,gameplay/GP-035-02.md,GP-035,Old source anchors; scenario not runtime verified
+GP-035,Gameplay integration,裝備強化,P2,gameplay/GP-035.md,,Old source anchors; scenario not runtime verified
+GP-036-01,Gameplay leaf,物品合成,P2,gameplay/GP-036-01.md,GP-036,Old source anchors; scenario not runtime verified
+GP-036-02,Gameplay leaf,合成拒絕,P2,gameplay/GP-036-02.md,GP-036,Old source anchors; scenario not runtime verified
+GP-036,Gameplay integration,物品合成,P2,gameplay/GP-036.md,,Old source anchors; scenario not runtime verified
+GP-037-01,Gameplay leaf,物品分解,P2,gameplay/GP-037-01.md,GP-037,Old source anchors; scenario not runtime verified
+GP-037-02,Gameplay leaf,分解拒絕,P2,gameplay/GP-037-02.md,GP-037,Old source anchors; scenario not runtime verified
+GP-037,Gameplay integration,物品分解,P2,gameplay/GP-037.md,,Old source anchors; scenario not runtime verified
+GP-038-01,Gameplay leaf,交易邀請,P2,gameplay/GP-038-01.md,GP-038,Old source anchors; scenario not runtime verified
+GP-038-02,Gameplay leaf,交易內容,P2,gameplay/GP-038-02.md,GP-038,Old source anchors; scenario not runtime verified
+GP-038-03,Gameplay leaf,交易確認,P2,gameplay/GP-038-03.md,GP-038,Old source anchors; scenario not runtime verified
+GP-038,Gameplay integration,玩家雙方交易,P2,gameplay/GP-038.md,,Old source anchors; scenario not runtime verified
+GP-039-01,Gameplay leaf,開攤命名,P2,gameplay/GP-039-01.md,GP-039,Old source anchors; scenario not runtime verified
+GP-039-02,Gameplay leaf,商品上架,P2,gameplay/GP-039-02.md,GP-039,Old source anchors; scenario not runtime verified
+GP-039-03,Gameplay leaf,關攤,P2,gameplay/GP-039-03.md,GP-039,Old source anchors; scenario not runtime verified
+GP-039,Gameplay integration,玩家商店開攤與管理,P2,gameplay/GP-039.md,,Old source anchors; scenario not runtime verified
+GP-040-01,Gameplay leaf,擺攤購買,P2,gameplay/GP-040-01.md,GP-040,Old source anchors; scenario not runtime verified
+GP-040-02,Gameplay leaf,多人競購,P2,gameplay/GP-040-02.md,GP-040,Old source anchors; scenario not runtime verified
+GP-040,Gameplay integration,玩家商店購買與競購,P2,gameplay/GP-040.md,,Old source anchors; scenario not runtime verified
+GP-041-01,Gameplay leaf,隊伍邀請,P2,gameplay/GP-041-01.md,GP-041,Old source anchors; scenario not runtime verified
+GP-041-02,Gameplay leaf,隊伍管理,P2,gameplay/GP-041-02.md,GP-041,Old source anchors; scenario not runtime verified
+GP-041,Gameplay integration,組隊邀請與隊長,P2,gameplay/GP-041.md,,Old source anchors; scenario not runtime verified
+GP-042-01,Gameplay leaf,隊友狀態,P2,gameplay/GP-042-01.md,GP-042,Old source anchors; scenario not runtime verified
+GP-042-02,Gameplay leaf,共享結算,P2,gameplay/GP-042-02.md,GP-042,Old source anchors; scenario not runtime verified
+GP-042,Gameplay integration,組隊戰鬥共享與狀態,P2,gameplay/GP-042.md,,Old source anchors; scenario not runtime verified
+GP-043-01,Gameplay leaf,公開聊天,P2,gameplay/GP-043-01.md,GP-043,Old source anchors; scenario not runtime verified
+GP-043-02,Gameplay leaf,私訊/隊伍聊天,P2,gameplay/GP-043-02.md,GP-043,Old source anchors; scenario not runtime verified
+GP-043,Gameplay integration,聊天頻道與私訊,P2,gameplay/GP-043.md,,Old source anchors; scenario not runtime verified
+GP-044-01,Gameplay leaf,好友,P2,gameplay/GP-044-01.md,GP-044,Old source anchors; scenario not runtime verified
+GP-044-02,Gameplay leaf,黑名單,P2,gameplay/GP-044-02.md,GP-044,Old source anchors; scenario not runtime verified
+GP-044,Gameplay integration,好友與黑名單,P2,gameplay/GP-044.md,,Old source anchors; scenario not runtime verified
+GP-045-01,Gameplay leaf,留言寄送,P2,gameplay/GP-045-01.md,GP-045,Old source anchors; scenario not runtime verified
+GP-045-02,Gameplay leaf,留言讀取,P2,gameplay/GP-045-02.md,GP-045,Old source anchors; scenario not runtime verified
+GP-045,Gameplay integration,郵件與留言,P2,gameplay/GP-045.md,,Old source anchors; scenario not runtime verified
+GP-046-01,Gameplay leaf,表情,P2,gameplay/GP-046-01.md,GP-046,Old source anchors; scenario not runtime verified
+GP-046-02,Gameplay leaf,泡泡樣式,P2,gameplay/GP-046-02.md,GP-046,Old source anchors; scenario not runtime verified
+GP-046,Gameplay integration,表情與泡泡樣式,P2,gameplay/GP-046.md,,Old source anchors; scenario not runtime verified
+GP-047,Gameplay leaf,稱號變更,P2,gameplay/GP-047.md,,Old source anchors; scenario not runtime verified
+GP-048-01,Gameplay leaf,轉職,P2,gameplay/GP-048-01.md,GP-048,Old source anchors; scenario not runtime verified
+GP-048-02,Gameplay leaf,不符前置,P2,gameplay/GP-048-02.md,GP-048,Old source anchors; scenario not runtime verified
+GP-048,Gameplay integration,轉職與職業條件,P2,gameplay/GP-048.md,,Old source anchors; scenario not runtime verified
+GP-049-01,Gameplay leaf,任務接取,P2,gameplay/GP-049-01.md,GP-049,Old source anchors; scenario not runtime verified
+GP-049-02,Gameplay leaf,進度,P2,gameplay/GP-049-02.md,GP-049,Old source anchors; scenario not runtime verified
+GP-049,Gameplay integration,任務接取與進度,P2,gameplay/GP-049.md,,Old source anchors; scenario not runtime verified
+GP-050-01,Gameplay leaf,任務完成,P2,gameplay/GP-050-01.md,GP-050,Old source anchors; scenario not runtime verified
+GP-050-02,Gameplay leaf,獎勵拒絕,P2,gameplay/GP-050-02.md,GP-050,Old source anchors; scenario not runtime verified
+GP-050,Gameplay integration,任務完成與獎勵,P2,gameplay/GP-050.md,,Old source anchors; scenario not runtime verified
+GP-051-01,Gameplay leaf,寵物召喚,P2,gameplay/GP-051-01.md,GP-051,Old source anchors; scenario not runtime verified
+GP-051-02,Gameplay leaf,寵物收回,P2,gameplay/GP-051-02.md,GP-051,Old source anchors; scenario not runtime verified
+GP-051,Gameplay integration,寵物召喚與收回,P2,gameplay/GP-051.md,,Old source anchors; scenario not runtime verified
+GP-052-01,Gameplay leaf,寵物跟隨,P2,gameplay/GP-052-01.md,GP-052,Old source anchors; scenario not runtime verified
+GP-052-02,Gameplay leaf,寵物攻擊,P2,gameplay/GP-052-02.md,GP-052,Old source anchors; scenario not runtime verified
+GP-052,Gameplay integration,寵物 AI 與戰鬥,P2,gameplay/GP-052.md,,Old source anchors; scenario not runtime verified
+GP-053-01,Gameplay leaf,餵食,P2,gameplay/GP-053-01.md,GP-053,Old source anchors; scenario not runtime verified
+GP-053-02,Gameplay leaf,寵物配點,P2,gameplay/GP-053-02.md,GP-053,Old source anchors; scenario not runtime verified
+GP-053-03,Gameplay leaf,寵物裝卸,P2,gameplay/GP-053-03.md,GP-053,Old source anchors; scenario not runtime verified
+GP-053,Gameplay integration,寵物餵食、配點與裝備,P2,gameplay/GP-053.md,,Old source anchors; scenario not runtime verified
+GP-054,Gameplay leaf,寵物交易,P2,gameplay/GP-054.md,,Old source anchors; scenario not runtime verified
+GP-055-01,Gameplay leaf,機甲搭乘,P2,gameplay/GP-055-01.md,GP-055,Old source anchors; scenario not runtime verified
+GP-055-02,Gameplay leaf,機甲解除,P2,gameplay/GP-055-02.md,GP-055,Old source anchors; scenario not runtime verified
+GP-055,Gameplay integration,機甲搭乘與解除,P2,gameplay/GP-055.md,,Old source anchors; scenario not runtime verified
+GP-056-01,Gameplay leaf,機甲裝卸,P2,gameplay/GP-056-01.md,GP-056,Old source anchors; scenario not runtime verified
+GP-056-02,Gameplay leaf,能源消耗,P2,gameplay/GP-056-02.md,GP-056,Old source anchors; scenario not runtime verified
+GP-056-03,Gameplay leaf,能源補充,P2,gameplay/GP-056-03.md,GP-056,Old source anchors; scenario not runtime verified
+GP-056,Gameplay integration,機甲裝備與能源,P2,gameplay/GP-056.md,,Old source anchors; scenario not runtime verified
+GP-057-01,Gameplay leaf,機甲修理,P2,gameplay/GP-057-01.md,GP-057,Old source anchors; scenario not runtime verified
+GP-057-02,Gameplay leaf,機甲升級,P2,gameplay/GP-057-02.md,GP-057,Old source anchors; scenario not runtime verified
+GP-057,Gameplay integration,機甲修理與升級,P2,gameplay/GP-057.md,,Old source anchors; scenario not runtime verified
+GP-058-01,Gameplay leaf,機甲卡片,P2,gameplay/GP-058-01.md,GP-058,Old source anchors; scenario not runtime verified
+GP-058-02,Gameplay leaf,合體,P2,gameplay/GP-058-02.md,GP-058,Old source anchors; scenario not runtime verified
+GP-058-03,Gameplay leaf,解除合體,P2,gameplay/GP-058-03.md,GP-058,Old source anchors; scenario not runtime verified
+GP-058,Gameplay integration,機甲卡片與合體,P2,gameplay/GP-058.md,,Old source anchors; scenario not runtime verified
+GP-059-01,Gameplay leaf,PvP 地圖,P2,gameplay/GP-059-01.md,GP-059,Old source anchors; scenario not runtime verified
+GP-059-02,Gameplay leaf,PK 名稱,P2,gameplay/GP-059-02.md,GP-059,Old source anchors; scenario not runtime verified
+GP-059,Gameplay integration,PvP 地圖與名稱狀態,P2,gameplay/GP-059.md,,Old source anchors; scenario not runtime verified
+GP-060-01,Gameplay leaf,PvP 對戰入口,P3,gameplay/GP-060-01.md,GP-060,Old source anchors; scenario not runtime verified
+GP-060-02,Gameplay leaf,PvP 結算排行,P3,gameplay/GP-060-02.md,GP-060,Old source anchors; scenario not runtime verified
+GP-060,Gameplay integration,PvP 對戰與排行,P3,gameplay/GP-060.md,,Old source anchors; scenario not runtime verified
+GP-061,Gameplay leaf,排行榜,P3,gameplay/GP-061.md,,Old source anchors; scenario not runtime verified
+GP-062-01,Gameplay leaf,社團建立,P3,gameplay/GP-062-01.md,GP-062,Old source anchors; scenario not runtime verified
+GP-062-02,Gameplay leaf,成員管理,P3,gameplay/GP-062-02.md,GP-062,Old source anchors; scenario not runtime verified
+GP-062,Gameplay integration,社團建立與成員,P3,gameplay/GP-062.md,,Old source anchors; scenario not runtime verified
+GP-063-01,Gameplay leaf,結盟,P3,gameplay/GP-063-01.md,GP-063,Old source anchors; scenario not runtime verified
+GP-063-02,Gameplay leaf,社團公告,P3,gameplay/GP-063-02.md,GP-063,Old source anchors; scenario not runtime verified
+GP-063,Gameplay integration,社團同盟與公告,P3,gameplay/GP-063.md,,Old source anchors; scenario not runtime verified
+GP-064-01,Gameplay leaf,社團金庫捐獻,P3,gameplay/GP-064-01.md,GP-064,Old source anchors; scenario not runtime verified
+GP-064-02,Gameplay leaf,社團金庫提款,P3,gameplay/GP-064-02.md,GP-064,Old source anchors; scenario not runtime verified
+GP-064-03,Gameplay leaf,社團資源,P3,gameplay/GP-064-03.md,GP-064,Old source anchors; scenario not runtime verified
+GP-064-04,Gameplay leaf,社團科技開發,P3,gameplay/GP-064-04.md,GP-064,Old source anchors; scenario not runtime verified
+GP-064-05,Gameplay leaf,社團科技升級,P3,gameplay/GP-064-05.md,GP-064,Old source anchors; scenario not runtime verified
+GP-064,Gameplay integration,社團資源、金庫與科技,P3,gameplay/GP-064.md,,Old source anchors; scenario not runtime verified
+GP-065-01,Gameplay leaf,髮型預覽,P3,gameplay/GP-065-01.md,GP-065,Old source anchors; scenario not runtime verified
+GP-065-02,Gameplay leaf,髮型購買,P3,gameplay/GP-065-02.md,GP-065,Old source anchors; scenario not runtime verified
+GP-065,Gameplay integration,髮型商店,P3,gameplay/GP-065.md,,Old source anchors; scenario not runtime verified
+GP-066-01,Gameplay leaf,收藏,P3,gameplay/GP-066-01.md,GP-066,Old source anchors; scenario not runtime verified
+GP-066-02,Gameplay leaf,收藏獎勵,P3,gameplay/GP-066-02.md,GP-066,Old source anchors; scenario not runtime verified
+GP-066,Gameplay integration,收藏與獎勵,P3,gameplay/GP-066.md,,Old source anchors; scenario not runtime verified
+GP-067-01,Gameplay leaf,Refund 原版語意,P3,gameplay/GP-067-01.md,GP-067,Old source anchors; scenario not runtime verified
+GP-067-02,Gameplay leaf,Refund 交易,P3,gameplay/GP-067-02.md,GP-067,Old source anchors; scenario not runtime verified
+GP-067,Gameplay integration,退款/回購功能證據與實作,P3,gameplay/GP-067.md,,Old source anchors; scenario not runtime verified
+GP-068-01,Gameplay leaf,系統設定,P3,gameplay/GP-068-01.md,GP-068,Old source anchors; scenario not runtime verified
+GP-068-02,Gameplay leaf,登出,P3,gameplay/GP-068-02.md,GP-068,Old source anchors; scenario not runtime verified
+GP-068,Gameplay integration,系統設定與登出,P3,gameplay/GP-068.md,,Old source anchors; scenario not runtime verified
+GP-069,Gameplay leaf,全域公告與跑馬燈,P3,gameplay/GP-069.md,,Old source anchors; scenario not runtime verified
+GP-070,Gameplay leaf,禮物/邀請獎勵,P3,gameplay/GP-070.md,,Old source anchors; scenario not runtime verified
+GP-071,Gameplay leaf,GM 管理功能,P3,gameplay/GP-071.md,,Old source anchors; scenario not runtime verified
+GP-072,Gameplay leaf,原版游標與地面選取,P1,gameplay/GP-072.md,,Old source anchors; scenario not runtime verified
+GP-073-01,Gameplay leaf,傷害數字,P1,gameplay/GP-073-01.md,GP-073,Old source anchors; scenario not runtime verified
+GP-073-02,Gameplay leaf,MISS/Guard,P1,gameplay/GP-073-02.md,GP-073,Old source anchors; scenario not runtime verified
+GP-073,Gameplay integration,戰鬥數字與 MISS/防禦特效,P1,gameplay/GP-073.md,,Old source anchors; scenario not runtime verified
+GP-074-01,Gameplay leaf,武器/命中特效,P1,gameplay/GP-074-01.md,GP-074,Old source anchors; scenario not runtime verified
+GP-074-02,Gameplay leaf,技能特效,P1,gameplay/GP-074-02.md,GP-074,Old source anchors; scenario not runtime verified
+GP-074,Gameplay integration,技能與武器特效,P1,gameplay/GP-074.md,,Old source anchors; scenario not runtime verified
+GP-075-01,Gameplay leaf,地圖介面,P2,gameplay/GP-075-01.md,GP-075,Old source anchors; scenario not runtime verified
+GP-075-02,Gameplay leaf,傳送地圖,P2,gameplay/GP-075-02.md,GP-075,Old source anchors; scenario not runtime verified
+GP-075,Gameplay integration,世界地圖與傳送地圖介面,P2,gameplay/GP-075.md,,Old source anchors; scenario not runtime verified
+GP-076-01,Gameplay leaf,共用圖像,P1,gameplay/GP-076-01.md,GP-076,Old source anchors; scenario not runtime verified
+GP-076-02,Gameplay leaf,共用文字,P1,gameplay/GP-076-02.md,GP-076,Old source anchors; scenario not runtime verified
+GP-076,Gameplay integration,原版 UI 素材共用載入與字型,P1,gameplay/GP-076.md,,Old source anchors; scenario not runtime verified
+GP-077,Gameplay leaf,五個 C.D.E. ITF 解密與控件驗證,P3,gameplay/GP-077.md,,Old source anchors; scenario not runtime verified
+GP-078-01,Gameplay leaf,未直接引用 ITF,P3,gameplay/GP-078-01.md,GP-078,Old source anchors; scenario not runtime verified
+GP-078-02,Gameplay leaf,未配對 SPR,P3,gameplay/GP-078-02.md,GP-078,Old source anchors; scenario not runtime verified
+GP-078,Gameplay integration,未直接引用 ITF 與剩餘 SPR 可達性調查,P3,gameplay/GP-078.md,,Old source anchors; scenario not runtime verified
+GP-079-01,Gameplay leaf,換圖與登出資源,P2,gameplay/GP-079-01.md,GP-079,Old source anchors; scenario not runtime verified
+GP-079-02,Gameplay leaf,AFK/Unfocus,P2,gameplay/GP-079-02.md,GP-079,Old source anchors; scenario not runtime verified
+GP-079,Gameplay integration,遊戲內資源生命週期與效能,P2,gameplay/GP-079.md,,Old source anchors; scenario not runtime verified
+ASSET-ADV_00,Asset evidence,ADV_00.spr 素材可達性,P3,assets/ASSET-ADV_00.md,GP-078-02,LST_LITERAL
+ASSET-B_BASIC_MAIL,Asset evidence,B_BASIC_MAIL.spr 素材可達性,P3,assets/ASSET-B_BASIC_MAIL.md,GP-078-02,DYNAMIC_OR_UNKNOWN
+ASSET-B_BASIC_PCMEMO,Asset evidence,B_BASIC_PCMEMO.spr 素材可達性,P3,assets/ASSET-B_BASIC_PCMEMO.md,GP-078-02,DYNAMIC_OR_UNKNOWN
+ASSET-B_BASIC_STATUS,Asset evidence,B_BASIC_STATUS.spr 素材可達性,P3,assets/ASSET-B_BASIC_STATUS.md,GP-078-02,DYNAMIC_OR_UNKNOWN
+ASSET-B_Command_ALLY,Asset evidence,B_Command_ALLY.spr 素材可達性,P3,assets/ASSET-B_Command_ALLY.md,GP-078-02,DYNAMIC_OR_UNKNOWN
+ASSET-B_EMOTION,Asset evidence,B_EMOTION.spr 素材可達性,P3,assets/ASSET-B_EMOTION.md,GP-078-02,DYNAMIC_OR_UNKNOWN
+ASSET-B_LIST_IGNORE,Asset evidence,B_LIST_IGNORE.spr 素材可達性,P3,assets/ASSET-B_LIST_IGNORE.md,GP-078-02,DYNAMIC_OR_UNKNOWN
+ASSET-B_LIST_INGORE,Asset evidence,B_LIST_INGORE.spr 素材可達性,P3,assets/ASSET-B_LIST_INGORE.md,GP-078-02,DYNAMIC_OR_UNKNOWN
+ASSET-B_LIST_INGORELIST,Asset evidence,B_LIST_INGORELIST.spr 素材可達性,P3,assets/ASSET-B_LIST_INGORELIST.md,GP-078-02,DYNAMIC_OR_UNKNOWN
+ASSET-B_LIST_MAIL,Asset evidence,B_LIST_MAIL.spr 素材可達性,P3,assets/ASSET-B_LIST_MAIL.md,GP-078-02,DYNAMIC_OR_UNKNOWN
+ASSET-B_PCMEMO_FRIEND_F,Asset evidence,B_PCMEMO_FRIEND_F.spr 素材可達性,P3,assets/ASSET-B_PCMEMO_FRIEND_F.md,GP-078-02,DYNAMIC_OR_UNKNOWN
+ASSET-B_PCMEMO_FRIEND_FF,Asset evidence,B_PCMEMO_FRIEND_FF.spr 素材可達性,P3,assets/ASSET-B_PCMEMO_FRIEND_FF.md,GP-078-02,DYNAMIC_OR_UNKNOWN
+ASSET-B_PCMEMO_FRIEND_FM,Asset evidence,B_PCMEMO_FRIEND_FM.spr 素材可達性,P3,assets/ASSET-B_PCMEMO_FRIEND_FM.md,GP-078-02,DYNAMIC_OR_UNKNOWN
+ASSET-B_PCMEMO_FRIEND_FRI,Asset evidence,B_PCMEMO_FRIEND_FRI.spr 素材可達性,P3,assets/ASSET-B_PCMEMO_FRIEND_FRI.md,GP-078-02,DYNAMIC_OR_UNKNOWN
+ASSET-B_PCMEMO_FRIEND_M,Asset evidence,B_PCMEMO_FRIEND_M.spr 素材可達性,P3,assets/ASSET-B_PCMEMO_FRIEND_M.md,GP-078-02,DYNAMIC_OR_UNKNOWN
+ASSET-B_PCMEMO_PC_AWAY,Asset evidence,B_PCMEMO_PC_AWAY.spr 素材可達性,P3,assets/ASSET-B_PCMEMO_PC_AWAY.md,GP-078-02,DYNAMIC_OR_UNKNOWN
+ASSET-B_PCMEMO_PC_LV_RANK1,Asset evidence,B_PCMEMO_PC_LV_RANK1.spr 素材可達性,P3,assets/ASSET-B_PCMEMO_PC_LV_RANK1.md,GP-078-02,DYNAMIC_OR_UNKNOWN
+ASSET-B_PCMEMO_PC_LV_RANK2,Asset evidence,B_PCMEMO_PC_LV_RANK2.spr 素材可達性,P3,assets/ASSET-B_PCMEMO_PC_LV_RANK2.md,GP-078-02,DYNAMIC_OR_UNKNOWN
+ASSET-B_PCMEMO_PC_LV_RANK3,Asset evidence,B_PCMEMO_PC_LV_RANK3.spr 素材可達性,P3,assets/ASSET-B_PCMEMO_PC_LV_RANK3.md,GP-078-02,DYNAMIC_OR_UNKNOWN
+ASSET-B_PCMEMO_PC_LV_RANK4,Asset evidence,B_PCMEMO_PC_LV_RANK4.spr 素材可達性,P3,assets/ASSET-B_PCMEMO_PC_LV_RANK4.md,GP-078-02,DYNAMIC_OR_UNKNOWN
+ASSET-B_PCMEMO_PC_LV_RANK5,Asset evidence,B_PCMEMO_PC_LV_RANK5.spr 素材可達性,P3,assets/ASSET-B_PCMEMO_PC_LV_RANK5.md,GP-078-02,DYNAMIC_OR_UNKNOWN
+ASSET-B_PCMEMO_PC_LV_RANK6,Asset evidence,B_PCMEMO_PC_LV_RANK6.spr 素材可達性,P3,assets/ASSET-B_PCMEMO_PC_LV_RANK6.md,GP-078-02,DYNAMIC_OR_UNKNOWN
+ASSET-B_PCMEMO_PC_LV_RANK7,Asset evidence,B_PCMEMO_PC_LV_RANK7.spr 素材可達性,P3,assets/ASSET-B_PCMEMO_PC_LV_RANK7.md,GP-078-02,DYNAMIC_OR_UNKNOWN
+ASSET-B_PCMEMO_PC_NA,Asset evidence,B_PCMEMO_PC_NA.spr 素材可達性,P3,assets/ASSET-B_PCMEMO_PC_NA.md,GP-078-02,DYNAMIC_OR_UNKNOWN
+ASSET-B_PCMEMO_SELL_B,Asset evidence,B_PCMEMO_SELL_B.spr 素材可達性,P3,assets/ASSET-B_PCMEMO_SELL_B.md,GP-078-02,DYNAMIC_OR_UNKNOWN
+ASSET-B_PCMEMO_SELL_S,Asset evidence,B_PCMEMO_SELL_S.spr 素材可達性,P3,assets/ASSET-B_PCMEMO_SELL_S.md,GP-078-02,DYNAMIC_OR_UNKNOWN
+ASSET-B_PCMEMO_SELL_X,Asset evidence,B_PCMEMO_SELL_X.spr 素材可達性,P3,assets/ASSET-B_PCMEMO_SELL_X.md,GP-078-02,DYNAMIC_OR_UNKNOWN
+ASSET-B_PCMEMO_TEAM_ADD,Asset evidence,B_PCMEMO_TEAM_ADD.spr 素材可達性,P3,assets/ASSET-B_PCMEMO_TEAM_ADD.md,GP-078-02,DYNAMIC_OR_UNKNOWN
+ASSET-B_PCMEMO_TEAM_L,Asset evidence,B_PCMEMO_TEAM_L.spr 素材可達性,P3,assets/ASSET-B_PCMEMO_TEAM_L.md,GP-078-02,DYNAMIC_OR_UNKNOWN
+ASSET-B_PCMEMO_TEAM_X,Asset evidence,B_PCMEMO_TEAM_X.spr 素材可達性,P3,assets/ASSET-B_PCMEMO_TEAM_X.md,GP-078-02,DYNAMIC_OR_UNKNOWN
+ASSET-B_PSHOP_SELL,Asset evidence,B_PSHOP_SELL.spr 素材可達性,P3,assets/ASSET-B_PSHOP_SELL.md,GP-078-02,DYNAMIC_OR_UNKNOWN
+ASSET-B_PVP_KING,Asset evidence,B_PVP_KING.spr 素材可達性,P3,assets/ASSET-B_PVP_KING.md,GP-078-02,LST_LITERAL
+ASSET-B_RADIO_BS,Asset evidence,B_RADIO_BS.spr 素材可達性,P3,assets/ASSET-B_RADIO_BS.md,GP-078-02,DYNAMIC_OR_UNKNOWN
+ASSET-B_STATUS_FRIEND_F,Asset evidence,B_STATUS_FRIEND_F.spr 素材可達性,P3,assets/ASSET-B_STATUS_FRIEND_F.md,GP-078-02,DYNAMIC_OR_UNKNOWN
+ASSET-B_STATUS_FRIEND_FF,Asset evidence,B_STATUS_FRIEND_FF.spr 素材可達性,P3,assets/ASSET-B_STATUS_FRIEND_FF.md,GP-078-02,DYNAMIC_OR_UNKNOWN
+ASSET-B_STATUS_FRIEND_FM,Asset evidence,B_STATUS_FRIEND_FM.spr 素材可達性,P3,assets/ASSET-B_STATUS_FRIEND_FM.md,GP-078-02,DYNAMIC_OR_UNKNOWN
+ASSET-B_STATUS_FRIEND_FRI,Asset evidence,B_STATUS_FRIEND_FRI.spr 素材可達性,P3,assets/ASSET-B_STATUS_FRIEND_FRI.md,GP-078-02,DYNAMIC_OR_UNKNOWN
+ASSET-B_STATUS_FRIEND_M,Asset evidence,B_STATUS_FRIEND_M.spr 素材可達性,P3,assets/ASSET-B_STATUS_FRIEND_M.md,GP-078-02,DYNAMIC_OR_UNKNOWN
+ASSET-B_STATUS_PC_AWAY,Asset evidence,B_STATUS_PC_AWAY.spr 素材可達性,P3,assets/ASSET-B_STATUS_PC_AWAY.md,GP-078-02,DYNAMIC_OR_UNKNOWN
+ASSET-B_STATUS_PC_LV_RANK1,Asset evidence,B_STATUS_PC_LV_RANK1.spr 素材可達性,P3,assets/ASSET-B_STATUS_PC_LV_RANK1.md,GP-078-02,DYNAMIC_OR_UNKNOWN
+ASSET-B_STATUS_PC_LV_RANK2,Asset evidence,B_STATUS_PC_LV_RANK2.spr 素材可達性,P3,assets/ASSET-B_STATUS_PC_LV_RANK2.md,GP-078-02,DYNAMIC_OR_UNKNOWN
+ASSET-B_STATUS_PC_LV_RANK3,Asset evidence,B_STATUS_PC_LV_RANK3.spr 素材可達性,P3,assets/ASSET-B_STATUS_PC_LV_RANK3.md,GP-078-02,DYNAMIC_OR_UNKNOWN
+ASSET-B_STATUS_PC_LV_RANK4,Asset evidence,B_STATUS_PC_LV_RANK4.spr 素材可達性,P3,assets/ASSET-B_STATUS_PC_LV_RANK4.md,GP-078-02,DYNAMIC_OR_UNKNOWN
+ASSET-B_STATUS_PC_LV_RANK5,Asset evidence,B_STATUS_PC_LV_RANK5.spr 素材可達性,P3,assets/ASSET-B_STATUS_PC_LV_RANK5.md,GP-078-02,DYNAMIC_OR_UNKNOWN
+ASSET-B_STATUS_PC_LV_RANK6,Asset evidence,B_STATUS_PC_LV_RANK6.spr 素材可達性,P3,assets/ASSET-B_STATUS_PC_LV_RANK6.md,GP-078-02,DYNAMIC_OR_UNKNOWN
+ASSET-B_STATUS_PC_LV_RANK7,Asset evidence,B_STATUS_PC_LV_RANK7.spr 素材可達性,P3,assets/ASSET-B_STATUS_PC_LV_RANK7.md,GP-078-02,DYNAMIC_OR_UNKNOWN
+ASSET-B_STATUS_PC_NA,Asset evidence,B_STATUS_PC_NA.spr 素材可達性,P3,assets/ASSET-B_STATUS_PC_NA.md,GP-078-02,DYNAMIC_OR_UNKNOWN
+ASSET-B_STATUS_SELL_B,Asset evidence,B_STATUS_SELL_B.spr 素材可達性,P3,assets/ASSET-B_STATUS_SELL_B.md,GP-078-02,DYNAMIC_OR_UNKNOWN
+ASSET-B_STATUS_SELL_S,Asset evidence,B_STATUS_SELL_S.spr 素材可達性,P3,assets/ASSET-B_STATUS_SELL_S.md,GP-078-02,DYNAMIC_OR_UNKNOWN
+ASSET-B_STATUS_SELL_X,Asset evidence,B_STATUS_SELL_X.spr 素材可達性,P3,assets/ASSET-B_STATUS_SELL_X.md,GP-078-02,DYNAMIC_OR_UNKNOWN
+ASSET-B_STATUS_SHOW,Asset evidence,B_STATUS_SHOW.spr 素材可達性,P3,assets/ASSET-B_STATUS_SHOW.md,GP-078-02,DYNAMIC_OR_UNKNOWN
+ASSET-B_STATUS_TEAM_ADD,Asset evidence,B_STATUS_TEAM_ADD.spr 素材可達性,P3,assets/ASSET-B_STATUS_TEAM_ADD.md,GP-078-02,DYNAMIC_OR_UNKNOWN
+ASSET-B_STATUS_TEAM_L,Asset evidence,B_STATUS_TEAM_L.spr 素材可達性,P3,assets/ASSET-B_STATUS_TEAM_L.md,GP-078-02,DYNAMIC_OR_UNKNOWN
+ASSET-B_STATUS_TEAM_X,Asset evidence,B_STATUS_TEAM_X.spr 素材可達性,P3,assets/ASSET-B_STATUS_TEAM_X.md,GP-078-02,DYNAMIC_OR_UNKNOWN
+ASSET-B_TALKBUBBLE,Asset evidence,B_TALKBUBBLE.spr 素材可達性,P3,assets/ASSET-B_TALKBUBBLE.md,GP-078-02,DYNAMIC_OR_UNKNOWN
+ASSET-B_TEAM_GUILD,Asset evidence,B_TEAM_GUILD.spr 素材可達性,P3,assets/ASSET-B_TEAM_GUILD.md,GP-078-02,DYNAMIC_OR_UNKNOWN
+ASSET-B_TEAM_LOC_A01,Asset evidence,B_TEAM_LOC_A01.spr 素材可達性,P3,assets/ASSET-B_TEAM_LOC_A01.md,GP-078-02,DYNAMIC_OR_UNKNOWN
+ASSET-B_TEAM_LOC_B01,Asset evidence,B_TEAM_LOC_B01.spr 素材可達性,P3,assets/ASSET-B_TEAM_LOC_B01.md,GP-078-02,DYNAMIC_OR_UNKNOWN
+ASSET-B_TEAM_LOC_C01,Asset evidence,B_TEAM_LOC_C01.spr 素材可達性,P3,assets/ASSET-B_TEAM_LOC_C01.md,GP-078-02,DYNAMIC_OR_UNKNOWN
+ASSET-B_TEAM_LOC_D01,Asset evidence,B_TEAM_LOC_D01.spr 素材可達性,P3,assets/ASSET-B_TEAM_LOC_D01.md,GP-078-02,DYNAMIC_OR_UNKNOWN
+ASSET-B_TEAM_LOC_E01,Asset evidence,B_TEAM_LOC_E01.spr 素材可達性,P3,assets/ASSET-B_TEAM_LOC_E01.md,GP-078-02,DYNAMIC_OR_UNKNOWN
+ASSET-B_TEAM_LOC_F01,Asset evidence,B_TEAM_LOC_F01.spr 素材可達性,P3,assets/ASSET-B_TEAM_LOC_F01.md,GP-078-02,DYNAMIC_OR_UNKNOWN
+ASSET-B_TEAM_OUT,Asset evidence,B_TEAM_OUT.spr 素材可達性,P3,assets/ASSET-B_TEAM_OUT.md,GP-078-02,DYNAMIC_OR_UNKNOWN
+ASSET-B_TRADE_GOLD,Asset evidence,B_TRADE_GOLD.spr 素材可達性,P3,assets/ASSET-B_TRADE_GOLD.md,GP-078-02,DYNAMIC_OR_UNKNOWN
+ASSET-B_TRADE_REDAY,Asset evidence,B_TRADE_REDAY.spr 素材可達性,P3,assets/ASSET-B_TRADE_REDAY.md,GP-078-02,DYNAMIC_OR_UNKNOWN
+ASSET-BG_CLUB_BENEFICENCE,Asset evidence,BG_CLUB_BENEFICENCE.spr 素材可達性,P3,assets/ASSET-BG_CLUB_BENEFICENCE.md,GP-078-02,DYNAMIC_OR_UNKNOWN
+ASSET-BG_CLUB_INFO,Asset evidence,BG_CLUB_INFO.spr 素材可達性,P3,assets/ASSET-BG_CLUB_INFO.md,GP-078-02,DYNAMIC_OR_UNKNOWN
+ASSET-BG_CLUB_MEMBER,Asset evidence,BG_CLUB_MEMBER.spr 素材可達性,P3,assets/ASSET-BG_CLUB_MEMBER.md,GP-078-02,DYNAMIC_OR_UNKNOWN
+ASSET-BG_CLUB_MESS_EDIT,Asset evidence,BG_CLUB_MESS_EDIT.spr 素材可達性,P3,assets/ASSET-BG_CLUB_MESS_EDIT.md,GP-078-02,DYNAMIC_OR_UNKNOWN
+ASSET-BG_COMPLXE_MAP,Asset evidence,BG_COMPLXE_MAP.spr 素材可達性,P3,assets/ASSET-BG_COMPLXE_MAP.md,GP-078-02,DYNAMIC_OR_UNKNOWN
+ASSET-BG_EMOETION,Asset evidence,BG_EMOETION.spr 素材可達性,P3,assets/ASSET-BG_EMOETION.md,GP-078-02,DYNAMIC_OR_UNKNOWN
+ASSET-BG_EMOTETION,Asset evidence,BG_EMOTETION.spr 素材可達性,P3,assets/ASSET-BG_EMOTETION.md,GP-078-02,DYNAMIC_OR_UNKNOWN
+ASSET-BG_FRIEENDLIST_BIG,Asset evidence,BG_FRIEENDLIST_BIG.spr 素材可達性,P3,assets/ASSET-BG_FRIEENDLIST_BIG.md,GP-078-02,DYNAMIC_OR_UNKNOWN
+ASSET-BG_ICQ_BOX,Asset evidence,BG_ICQ_BOX.spr 素材可達性,P3,assets/ASSET-BG_ICQ_BOX.md,GP-078-02,DYNAMIC_OR_UNKNOWN
+ASSET-BG_MAP_BIG_01,Asset evidence,BG_MAP_BIG_01.spr 素材可達性,P3,assets/ASSET-BG_MAP_BIG_01.md,GP-078-02,DYNAMIC_OR_UNKNOWN
+ASSET-BG_MAP_BIG_02,Asset evidence,BG_MAP_BIG_02.spr 素材可達性,P3,assets/ASSET-BG_MAP_BIG_02.md,GP-078-02,DYNAMIC_OR_UNKNOWN
+ASSET-BG_MAP_BIG_03,Asset evidence,BG_MAP_BIG_03.spr 素材可達性,P3,assets/ASSET-BG_MAP_BIG_03.md,GP-078-02,DYNAMIC_OR_UNKNOWN
+ASSET-BG_MAP_BIG_04,Asset evidence,BG_MAP_BIG_04.spr 素材可達性,P3,assets/ASSET-BG_MAP_BIG_04.md,GP-078-02,DYNAMIC_OR_UNKNOWN
+ASSET-BG_MAP_BIG_05,Asset evidence,BG_MAP_BIG_05.spr 素材可達性,P3,assets/ASSET-BG_MAP_BIG_05.md,GP-078-02,DYNAMIC_OR_UNKNOWN
+ASSET-BG_MAP_BIG_06,Asset evidence,BG_MAP_BIG_06.spr 素材可達性,P3,assets/ASSET-BG_MAP_BIG_06.md,GP-078-02,DYNAMIC_OR_UNKNOWN
+ASSET-BG_MAP_BIG_07,Asset evidence,BG_MAP_BIG_07.spr 素材可達性,P3,assets/ASSET-BG_MAP_BIG_07.md,GP-078-02,DYNAMIC_OR_UNKNOWN
+ASSET-BG_PVP_321_FIGHT,Asset evidence,BG_PVP_321_FIGHT.spr 素材可達性,P3,assets/ASSET-BG_PVP_321_FIGHT.md,GP-078-02,DYNAMIC_OR_UNKNOWN
+ASSET-BG_PVP_WIN_LOST,Asset evidence,BG_PVP_WIN_LOST.spr 素材可達性,P3,assets/ASSET-BG_PVP_WIN_LOST.md,GP-078-02,DYNAMIC_OR_UNKNOWN
+ASSET-BG_RANK,Asset evidence,BG_RANK.spr 素材可達性,P3,assets/ASSET-BG_RANK.md,GP-078-02,DYNAMIC_OR_UNKNOWN
+ASSET-BG_SKILL,Asset evidence,BG_SKILL.spr 素材可達性,P3,assets/ASSET-BG_SKILL.md,GP-078-02,DYNAMIC_OR_UNKNOWN
+ASSET-BG_STATION_01,Asset evidence,BG_STATION_01.spr 素材可達性,P3,assets/ASSET-BG_STATION_01.md,GP-078-02,DYNAMIC_OR_UNKNOWN
+ASSET-BG_STATION_02,Asset evidence,BG_STATION_02.spr 素材可達性,P3,assets/ASSET-BG_STATION_02.md,GP-078-02,DYNAMIC_OR_UNKNOWN
+ASSET-BG_STATION_03,Asset evidence,BG_STATION_03.spr 素材可達性,P3,assets/ASSET-BG_STATION_03.md,GP-078-02,DYNAMIC_OR_UNKNOWN
+ASSET-BG_STATION_04,Asset evidence,BG_STATION_04.spr 素材可達性,P3,assets/ASSET-BG_STATION_04.md,GP-078-02,DYNAMIC_OR_UNKNOWN
+ASSET-BG_STATION_05_KING,Asset evidence,BG_STATION_05_KING.spr 素材可達性,P3,assets/ASSET-BG_STATION_05_KING.md,GP-078-02,DYNAMIC_OR_UNKNOWN
+ASSET-BG_STATION_06_MAGIC,Asset evidence,BG_STATION_06_MAGIC.spr 素材可達性,P3,assets/ASSET-BG_STATION_06_MAGIC.md,GP-078-02,DYNAMIC_OR_UNKNOWN
+ASSET-BG_STATION_07_KNIGHT,Asset evidence,BG_STATION_07_KNIGHT.spr 素材可達性,P3,assets/ASSET-BG_STATION_07_KNIGHT.md,GP-078-02,DYNAMIC_OR_UNKNOWN
+ASSET-BG_STATION_08_ROBOT,Asset evidence,BG_STATION_08_ROBOT.spr 素材可達性,P3,assets/ASSET-BG_STATION_08_ROBOT.md,GP-078-02,DYNAMIC_OR_UNKNOWN
+ASSET-BG_TRADE_TEMP,Asset evidence,BG_TRADE_TEMP.spr 素材可達性,P3,assets/ASSET-BG_TRADE_TEMP.md,GP-078-02,DYNAMIC_OR_UNKNOWN
+ASSET-ground,Asset evidence,ground.spr 素材可達性,P3,assets/ASSET-ground.md,GP-078-02,LST_LITERAL
+ASSET-ground1,Asset evidence,ground1.spr 素材可達性,P3,assets/ASSET-ground1.md,GP-078-02,DYNAMIC_OR_UNKNOWN
+ASSET-HOTKEY_LX,Asset evidence,HOTKEY_LX.spr 素材可達性,P3,assets/ASSET-HOTKEY_LX.md,GP-078-02,DYNAMIC_OR_UNKNOWN
+ASSET-HOTKEY_SX,Asset evidence,HOTKEY_SX.spr 素材可達性,P3,assets/ASSET-HOTKEY_SX.md,GP-078-02,DYNAMIC_OR_UNKNOWN
+ASSET-HOTKEY_XL_B,Asset evidence,HOTKEY_XL_B.spr 素材可達性,P3,assets/ASSET-HOTKEY_XL_B.md,GP-078-02,DYNAMIC_OR_UNKNOWN
+ASSET-HOTKEY_XS_B,Asset evidence,HOTKEY_XS_B.spr 素材可達性,P3,assets/ASSET-HOTKEY_XS_B.md,GP-078-02,DYNAMIC_OR_UNKNOWN
+ASSET-Icon1,Asset evidence,Icon1.spr 素材可達性,P3,assets/ASSET-Icon1.md,GP-078-02,DYNAMIC_OR_UNKNOWN
+ASSET-ICON_STATUS,Asset evidence,ICON_STATUS.spr 素材可達性,P3,assets/ASSET-ICON_STATUS.md,GP-078-02,DYNAMIC_OR_UNKNOWN
+ASSET-ICON_STATUS_TEMP,Asset evidence,ICON_STATUS_TEMP.spr 素材可達性,P3,assets/ASSET-ICON_STATUS_TEMP.md,GP-078-02,DYNAMIC_OR_UNKNOWN
+ASSET-ICON_TALKBUBBLE,Asset evidence,ICON_TALKBUBBLE.spr 素材可達性,P3,assets/ASSET-ICON_TALKBUBBLE.md,GP-078-02,DYNAMIC_OR_UNKNOWN
+ASSET-ICON_TEMP,Asset evidence,ICON_TEMP.spr 素材可達性,P3,assets/ASSET-ICON_TEMP.md,GP-078-02,DYNAMIC_OR_UNKNOWN
+ASSET-IE_SGO_LOGO,Asset evidence,IE_SGO_LOGO.spr 素材可達性,P3,assets/ASSET-IE_SGO_LOGO.md,GP-078-02,DYNAMIC_OR_UNKNOWN
+ASSET-itemIcon,Asset evidence,itemIcon.spr 素材可達性,P3,assets/ASSET-itemIcon.md,GP-078-02,DYNAMIC_OR_UNKNOWN
+ASSET-MAIL,Asset evidence,MAIL.spr 素材可達性,P3,assets/ASSET-MAIL.md,GP-078-02,DYNAMIC_OR_UNKNOWN
+ASSET-NIGHTMASK,Asset evidence,NIGHTMASK.spr 素材可達性,P3,assets/ASSET-NIGHTMASK.md,GP-078-02,DYNAMIC_OR_UNKNOWN
+ASSET-NPC_TALK_018,Asset evidence,NPC_TALK_018.spr 素材可達性,P3,assets/ASSET-NPC_TALK_018.md,GP-078-02,LST_LITERAL
+ASSET-NPC_TALK_018_EYE,Asset evidence,NPC_TALK_018_EYE.spr 素材可達性,P3,assets/ASSET-NPC_TALK_018_EYE.md,GP-078-02,LST_LITERAL
+ASSET-PET_CARD,Asset evidence,PET_CARD.spr 素材可達性,P3,assets/ASSET-PET_CARD.md,GP-078-02,DYNAMIC_OR_UNKNOWN
+ASSET-PET_ICON,Asset evidence,PET_ICON.spr 素材可達性,P3,assets/ASSET-PET_ICON.md,GP-078-02,DYNAMIC_OR_UNKNOWN
+ASSET-Photo,Asset evidence,Photo.spr 素材可達性,P3,assets/ASSET-Photo.md,GP-078-02,LST_LITERAL
+ASSET-Photo1,Asset evidence,Photo1.spr 素材可達性,P3,assets/ASSET-Photo1.md,GP-078-02,DYNAMIC_OR_UNKNOWN
+ASSET-Robot_Icon,Asset evidence,Robot_Icon.spr 素材可達性,P3,assets/ASSET-Robot_Icon.md,GP-078-02,DYNAMIC_OR_UNKNOWN
+ASSET-Robot_Photo,Asset evidence,Robot_Photo.spr 素材可達性,P3,assets/ASSET-Robot_Photo.md,GP-078-02,DYNAMIC_OR_UNKNOWN
+ASSET-SELECT_SEVER GOURP,Asset evidence,SELECT_SEVER GOURP.spr 素材可達性,P3,assets/ASSET-SELECT_SEVER GOURP.md,GP-078-02,DYNAMIC_OR_UNKNOWN
+ASSET-SGO_LOGO_M_00,Asset evidence,SGO_LOGO_M_00.spr 素材可達性,P3,assets/ASSET-SGO_LOGO_M_00.md,GP-078-02,DYNAMIC_OR_UNKNOWN
+ASSET-SKILL_ICON,Asset evidence,SKILL_ICON.spr 素材可達性,P3,assets/ASSET-SKILL_ICON.md,GP-078-02,LST_LITERAL
+ASSET-STORY_NAME_01A,Asset evidence,STORY_NAME_01A.spr 素材可達性,P3,assets/ASSET-STORY_NAME_01A.md,GP-078-02,DYNAMIC_OR_UNKNOWN
+ASSET-STORY_NAME_01B,Asset evidence,STORY_NAME_01B.spr 素材可達性,P3,assets/ASSET-STORY_NAME_01B.md,GP-078-02,DYNAMIC_OR_UNKNOWN
+ASSET-STORY_NAME_02A,Asset evidence,STORY_NAME_02A.spr 素材可達性,P3,assets/ASSET-STORY_NAME_02A.md,GP-078-02,DYNAMIC_OR_UNKNOWN
+ASSET-STORY_NAME_02B,Asset evidence,STORY_NAME_02B.spr 素材可達性,P3,assets/ASSET-STORY_NAME_02B.md,GP-078-02,DYNAMIC_OR_UNKNOWN
+ASSET-STORY_NAME_03A,Asset evidence,STORY_NAME_03A.spr 素材可達性,P3,assets/ASSET-STORY_NAME_03A.md,GP-078-02,DYNAMIC_OR_UNKNOWN
+ASSET-STORY_NAME_03B,Asset evidence,STORY_NAME_03B.spr 素材可達性,P3,assets/ASSET-STORY_NAME_03B.md,GP-078-02,DYNAMIC_OR_UNKNOWN
+ASSET-STORY_NAME_04A,Asset evidence,STORY_NAME_04A.spr 素材可達性,P3,assets/ASSET-STORY_NAME_04A.md,GP-078-02,DYNAMIC_OR_UNKNOWN
+ASSET-STORY_NAME_04B,Asset evidence,STORY_NAME_04B.spr 素材可達性,P3,assets/ASSET-STORY_NAME_04B.md,GP-078-02,DYNAMIC_OR_UNKNOWN
+ASSET-STORY_NAME_05A,Asset evidence,STORY_NAME_05A.spr 素材可達性,P3,assets/ASSET-STORY_NAME_05A.md,GP-078-02,DYNAMIC_OR_UNKNOWN
+ASSET-STORY_NAME_05B,Asset evidence,STORY_NAME_05B.spr 素材可達性,P3,assets/ASSET-STORY_NAME_05B.md,GP-078-02,DYNAMIC_OR_UNKNOWN
+ASSET-STORY_NAME_06A,Asset evidence,STORY_NAME_06A.spr 素材可達性,P3,assets/ASSET-STORY_NAME_06A.md,GP-078-02,DYNAMIC_OR_UNKNOWN
+ASSET-STORY_NAME_06B,Asset evidence,STORY_NAME_06B.spr 素材可達性,P3,assets/ASSET-STORY_NAME_06B.md,GP-078-02,DYNAMIC_OR_UNKNOWN
+ASSET-TW_SGO_LOGO,Asset evidence,TW_SGO_LOGO.spr 素材可達性,P3,assets/ASSET-TW_SGO_LOGO.md,GP-078-02,DYNAMIC_OR_UNKNOWN
