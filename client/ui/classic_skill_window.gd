@@ -31,7 +31,6 @@ var _skills: Dictionary = {}
 var _ids: Array = []
 var _page_start := 0
 var _dragging := false
-var _drag_offset := Vector2.ZERO
 var _name_labels: Array[ItfText] = []
 var _level_labels: Array[ItfText] = []
 var _row_buttons: Array[Button] = []
@@ -235,18 +234,29 @@ func _show_help() -> void:
 
 
 func _on_window_input(event: InputEvent) -> void:
-	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
-		if event.pressed:
-			_dragging = true
-			_drag_offset = event.position
-			var parent := get_parent()
-			if parent != null:
-				parent.move_child(self, parent.get_child_count() - 1)
-			accept_event()
-		elif _dragging:
-			_dragging = false
-			accept_event()
-	elif event is InputEventMouseMotion and _dragging:
+	# Begin only on the panel background. Interactive children consume their own
+	# presses and must never start a window drag.
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
+		_dragging = true
+		var parent := get_parent()
+		if parent != null:
+			parent.move_child(self, parent.get_child_count() - 1)
+		accept_event()
+
+
+func _input(event: InputEvent) -> void:
+	if not _dragging:
+		return
+	# Once started, dragging must continue across buttons and rows, where
+	# gui_input stops reaching the panel background. Consume release globally
+	# so the row under the cursor is not accidentally activated.
+	if not is_visible_in_tree():
+		_dragging = false
+		return
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and not event.pressed:
+		_dragging = false
+		get_viewport().set_input_as_handled()
+	elif event is InputEventMouseMotion:
 		var parent_control := get_parent() as Control
 		var target: Vector2 = global_position + (event as InputEventMouseMotion).relative
 		if parent_control != null:
@@ -256,4 +266,4 @@ func _on_window_input(event: InputEvent) -> void:
 			target.y = clampf(target.y, bounds.position.y - size.y + 24.0,
 				bounds.end.y - 24.0)
 		global_position = target
-		accept_event()
+		get_viewport().set_input_as_handled()

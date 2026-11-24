@@ -6,6 +6,10 @@ var selected := 0
 
 
 func _init() -> void:
+	call_deferred("_run")
+
+
+func _run() -> void:
 	var window := SkillWindow.new()
 	root.add_child(window)
 
@@ -47,8 +51,30 @@ func _init() -> void:
 	_expect(window.get_node("SkillName0").text == "技能 1103", "scroll up returns one HK page")
 	_expect(window.get_node("ScrollUp").disabled, "scroll up disabled on first page")
 
+	# A background drag must continue across child button/row hitboxes and stop
+	# on mouse release, even if the release lands over a different child.
+	var down := InputEventMouseButton.new()
+	down.button_index = MOUSE_BUTTON_LEFT
+	down.pressed = true
+	down.position = Vector2(90, 20)
+	window._on_window_input(down)
+	_expect(window._dragging, "background press starts drag")
+	var move := InputEventMouseMotion.new()
+	move.relative = Vector2(43, 68)
+	window._input(move)
+	_expect(window.position == Vector2(43, 68), "drag continues over interactive rows")
+	var up := InputEventMouseButton.new()
+	up.button_index = MOUSE_BUTTON_LEFT
+	up.pressed = false
+	window._input(up)
+	_expect(not window._dragging, "release over child stops drag")
+	window._input(move)
+	_expect(window.position == Vector2(43, 68), "movement after release ignored")
+	window.get_node("SkillRow0").pressed.emit()
+	_expect(selected == 1103, "row button stays interactive after dragging")
+
 	window.queue_free()
-	print("CLASSIC_SKILL_WINDOW_PASS exact_rects=PASS rows=8 skill_book=server_owned no_fake_icon=true no_fake_progress=true")
+	print("CLASSIC_SKILL_WINDOW_PASS exact_rects=PASS rows=8 skill_book=server_owned drag_release=PASS no_fake_icon=true no_fake_progress=true")
 	quit(1 if failed else 0)
 
 
