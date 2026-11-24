@@ -71,3 +71,5 @@
 3. 測試若失敗，狀態至少降為 `TEST FAILED` 或 `IN PROGRESS`，不得只在文字備註中隱藏。
 4. Paradise 無法驗證的好友/社團/擺攤等功能，必須用 HK client 反編譯、Old Server、正式資料或其他可信證據建立規格；不可虛構 A/B PASS。
 5. Commit SHA 欄只填已存在的 commit；本檔後續每次更新應優先填實作 commit，而不是文件 commit。
+
+AUTH-CHARACTER / UI-ORIGINAL（2026-11-24，d438cf2）：Classic Login 調整視窗尺寸時保留帳密與焦點。800×600 回復後兩欄各 0 px 差，真 Host 登入失敗重試至選角 PASS。HK 同狀態完整像素與 caret／selection 仍 NOT VERIFIED，整體 IN PROGRESS。
