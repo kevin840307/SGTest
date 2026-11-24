@@ -43,6 +43,8 @@ dotnet run --project server/tests/SGTest.Server.Checks -c Release -- --listener-
 
 正式 Serve 需要 `SGTEST_AES_KEY_HEX`（32 bytes，64 hex）及 `SGTEST_AES_IV_HEX`（16 bytes，32 hex）兩個環境變數，Client／Server 必須使用相同設定。Host讀取唯一 Converter 產出的兩圖 world／blocking 及 `npcs.json`，缺失／無效內容拒絕啟動；不讀貼圖。Identity DB 不會自動建立帳號；帳號仍由下節管理命令 provision。若要允許登入後遊戲內創角，啟動時必須同時提供 `--character-spawn-map/--character-spawn-x/--character-spawn-y`；Host 會先確認該點屬於目前服務地圖且 authoritative Blocking 可走。未提供時 CharacterCreate 明確回 `Unavailable`。Godot 登入面板只需要設定 host／port；通訊金鑰由部署環境設定，不再接受 TLS 憑證參數。
 
+Map15 物品倉庫使用新產出的 `npcs.json`。以 Converter 的 `world-content --map 13 --map 15` 更新 Server 內容與 Client PCK 裡的同一批 NPC 文件。Host 預設採用經驗證的靜態 `Bank.txt` 入口，可用 `AES_HOST_READY.verified_storage_count` 確認載入數量。顯式 `--storage-rules` 仍以營運者清單為準。
+
 預設只監聽127.0.0.1，Ctrl+C或期限到期停止；總連線上限包含握手、登入與清理中的Socket，每IP另有限額。Socket讀寫與KDF沿用既有有界實作，不在World鎖或Tick內執行。關閉順序為停止接入／排空授權Socket與可信Disconnect→停止World→停止Router/AOI，pump故障不會繼續提供半套服務。`AES_HOST_READY`／`AES_HOST_STOPPED`輸出實際endpoint與統計，無帳密。
 
 本機7項targeted checks與受影響Release build PASS；main CI結果見todo。此為持續登入服務切片，不代表公開網際網路安全／壓測／Release完成；時間型登入速率限制、WorldReady ACK/resync與持久座標仍待驗證。下方限時無網路Host命令保留作smoke，並非serve模式。

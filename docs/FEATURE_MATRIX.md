@@ -6,6 +6,8 @@
 
 `COMPLETE` 必須同時滿足該功能適用的 Client、Server、UI、Persistence、Unit/Integration/Multiplayer/Visual/A-B/Regression Gate；沒有執行的 Gate 一律不得視為 PASS。此矩陣自 2026-11-22 建立，既有歷史功能先採保守遷移，不因「已有程式碼」自動升級為 COMPLETE。
 
+**2026-11-24 v13 核心玩法／ECON-NPC**（`cfe2fb8`，`IN PROGRESS`）。從原版 `Bank.txt` 解析出兩名 Map15 物品倉庫管理員。正式 Host、可見 Godot、真鍵鼠驗點管理員開倉、存入整組、重登及取回，SQLite 保留同一 ItemUid／數量。可見雙 Client、HK 同狀態 A/B 及所有其他 NPC 經濟功能仍各按現有 gate 驗收。下一玩法阻塞為正式角色的普攻規則與可信 Map13 怪物資料。
+
 **2026-11-24 v13 P0／玩法前置**（`c66e725`）。正式 Host 可使用 Converter 的 Map13／15 原樣輸出啟動。真鍵鼠完成創角、選角、Map15↔Map13 雙向傳點與兩圖移動。Server 334/334 PASS，含正式 Host v3 零怪啟動與無效 v4 拒絕啟動。COMBAT-PVE 仍為 `IN PROGRESS`，正式角色的有效戰鬥資格與 Map13 怪物 v4 權威內容待驗。實機雙 Client、重登、原版 A/B 為 `NOT VERIFIED`。本輪為 P0，無 UI 軌交付。
 
 | Feature ID | 功能名稱 | HK 預期行為 | 證據來源 | Client | Server | UI | Persistence | Unit Test | Integration Test | Multiplayer Test | Visual Test | A/B Test | BUG / 限制 | Commit SHA | 狀態 |
