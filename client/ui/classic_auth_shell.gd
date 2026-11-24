@@ -65,7 +65,7 @@ var _create_note: Label
 var _create_password := LineEdit.new()
 var _create_password_confirm := LineEdit.new()
 var _create_stat_values: Dictionary = {}
-var _create_remaining: Label
+var _create_remaining: HkSharedText
 var _create_button: Button
 var _create_back_button: Button
 var _slots: Array[Button] = []
@@ -606,14 +606,11 @@ func _build_create() -> void:
 	}
 	for field in CREATE_ATTRIBUTE_FIELDS:
 		_button(create_page,"",566,stat_y[field],24,21,_change_creation_stat.bind(field,-1),"LEFT_BUTTON")
-		var value := _label(create_page,"1",596,value_y[field],43,16)
-		value.add_theme_color_override("font_color",Color.WHITE)
-		value.add_theme_color_override("font_shadow_color",Color.TRANSPARENT)
-		_create_stat_values[field] = value
+		# ITF type-0 controls 2045–2048 share a text origin with the row
+		# captions. Use a fixed baseline inside the 16px numeric control.
+		_create_stat_values[field] = _shared_text(create_page,"1",596,value_y[field],43,16)
 		_button(create_page,"",646,stat_y[field],24,21,_change_creation_stat.bind(field,1),"RIGHT_BUTTON")
-	_create_remaining = _label(create_page,str(CREATE_ATTRIBUTE_TOTAL-4),596,357,43,16)
-	_create_remaining.add_theme_color_override("font_color",Color.WHITE)
-	_create_remaining.add_theme_color_override("font_shadow_color",Color.TRANSPARENT)
+	_create_remaining = _shared_text(create_page,str(CREATE_ATTRIBUTE_TOTAL-4),596,357,43,16)
 
 	for input in [_create_password,_create_password_confirm]:
 		input.secret = true
@@ -727,7 +724,7 @@ func _create() -> void:
 	_create_password_confirm.text = _panel.character_password_confirm_input.text
 
 func enable_for_page(page: int,on: bool) -> void:
-	var entering_login := on and page == Layout.Page.LOGIN and (not visible or _current_page != page)
+	var entering_page := not visible or _current_page != page
 	visible = on and _panel != null
 	set_process(visible)
 	if not visible or page != Layout.Page.CHARACTER_SELECT:
@@ -738,18 +735,19 @@ func enable_for_page(page: int,on: bool) -> void:
 	login_page.visible = page == Layout.Page.LOGIN
 	select_page.visible = page == Layout.Page.CHARACTER_SELECT
 	create_page.visible = page == Layout.Page.CHARACTER_CREATE
+	# Layout updates re-enable the current page. Seed editable fields only
+	# on entry so a resize cannot replace a draft with the last submitted data.
 	if create_page.visible:
-		_name.text = _panel.character_name_input.text
-		_create_password.text = _panel.character_password_input.text
-		_create_password_confirm.text = _panel.character_password_confirm_input.text
+		if entering_page:
+			_name.text = _panel.character_name_input.text
+			_create_password.text = _panel.character_password_input.text
+			_create_password_confirm.text = _panel.character_password_confirm_input.text
 		_sync_create_stats()
 		_update_appearance()
 	if select_page.visible:
 		_character_key = ""
 		_update_characters()
-	# A layout refresh can re-enable the current page while the player is typing.
-	# Only restore the remembered account when entering Login.
-	if entering_login:
+	if entering_page and login_page.visible:
 		_username.text = _panel.username_input.text
 		_username.grab_focus()
 

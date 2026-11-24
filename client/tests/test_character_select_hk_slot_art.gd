@@ -153,6 +153,21 @@ func _run() -> void:
 		if label.text_font != shell._shared_ui_font or label.font_size != 12 or label.baseline != 10.0:
 			_fail("Create Character fixed text shared font/baseline drifted at index %d" % i)
 			return
+	var create_values := [
+		[shell._create_stat_values["strength"],261],
+		[shell._create_stat_values["dexterity"],285],
+		[shell._create_stat_values["constitution"],309],
+		[shell._create_stat_values["wisdom"],333],
+		[shell._create_remaining,357],
+	]
+	for spec in create_values:
+		var value = spec[0]
+		if value.position != Vector2(596,spec[1]) or value.size != Vector2(43,16):
+			_fail("Create Character numeric ITF rect drifted at y=%d" % spec[1])
+			return
+		if not value.centered or value.text_font != shell._shared_ui_font or value.font_size != 12 or value.baseline != 10.0:
+			_fail("Create Character numeric text no longer shares the fixed baseline")
+			return
 
 	for i in 3:
 		var empty_art: TextureRect = shell._slot_empty_art[i]

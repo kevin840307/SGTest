@@ -1,5 +1,5 @@
 extends SceneTree
-## Original login keyboard-focus regression.
+## Classic auth keyboard focus and edit lifecycle regression.
 ## Fresh Paradise native A/B confirms Tab cycles account -> password -> account.
 ## HK build 128 has no login-specific Tab override, so keep the original two-edit
 ## traversal and prevent buttons from entering the keyboard focus loop.
@@ -68,6 +68,24 @@ func _run() -> void:
 	shell.enable_for_page(Layout.Page.LOGIN,true)
 	if shell._username.text != "remembered" or root.gui_get_focus_owner() != shell._username:
 		_fail("entering Login must restore the remembered account and focus")
+		return
+	app.session_panel._layout.show_page(Layout.Page.CHARACTER_CREATE)
+	app._update_ui_stage(true)
+	shell._name.text = "Draft"
+	shell._create_password.text = "abcd"
+	shell._create_password_confirm.text = "abcd"
+	shell._create_password_confirm.grab_focus()
+	app._resize()
+	if shell._name.text != "Draft" or shell._create_password.text != "abcd" or shell._create_password_confirm.text != "abcd":
+		_fail("a layout refresh must preserve all three creation edits")
+		return
+	if root.gui_get_focus_owner() != shell._create_password_confirm:
+		_fail("a layout refresh must preserve creation edit focus")
+		return
+	shell.enable_for_page(Layout.Page.CHARACTER_SELECT,true)
+	shell.enable_for_page(Layout.Page.CHARACTER_CREATE,true)
+	if not shell._name.text.is_empty() or not shell._create_password.text.is_empty() or not shell._create_password_confirm.text.is_empty():
+		_fail("re-entering Create must load the session fields")
 		return
 	print("ORIGINAL_LOGIN_FOCUS_PASS")
 	quit(0)
