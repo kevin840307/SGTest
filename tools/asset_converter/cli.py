@@ -32,6 +32,7 @@ from asset_converter.content.build_pet_runtime_catalog import publish_pet_runtim
 from asset_converter.content.build_pet_growth_curve import publish_pet_growth_curve
 from asset_converter.content.build_character_experience_rewards import publish_character_experience_rewards
 from asset_converter.content.build_character_progression_rules import publish_character_progression_rules
+from asset_converter.content.build_weapon_attack_ranges import publish_weapon_attack_ranges
 from asset_converter.content.skill_evidence import compile_skill_evidence
 from asset_converter.content.current_client_skill_evidence import compile_current_client_skill_evidence
 
@@ -422,6 +423,17 @@ def main() -> int:
         '--source-reference',
         default='Old SGOEnemyDistSys LoadNewCSVData/AddAttr + Enemy_Data.csv + EN_AttXX.csv',
         help='non-private provenance label')
+    weapon_ranges = sub.add_parser(
+        'weapon-attack-ranges',
+        help='compile audited Old Server Weapon.itd item attack distances')
+    weapon_ranges.add_argument('--weapon-itd',type=Path,required=True,
+        help='Old Server Dat/Item/Weapon.itd source')
+    weapon_ranges.add_argument('--output',type=Path,
+        default=REPO/'local-assets/asset_converter/combat/weapon_attack_ranges.json')
+    weapon_ranges.add_argument(
+        '--source-reference',
+        default='Old SGOEquip::ReadWeaponData/SearchIndex + Dat/Item/Weapon.itd',
+        help='non-private provenance label')
     character_progression = sub.add_parser(
         'character-progression-rules',
         help='compile audited Old Server character level/attribute/profile rules')
@@ -534,6 +546,15 @@ def _execute(args):
         try:
             result = publish_character_experience_rewards(
                 args.server_dat,args.output,set(args.maps),
+                source_reference=args.source_reference)
+        except (OSError,ValueError,TypeError) as error:
+            result = {'status':'failed','error':str(error)}
+        print(json.dumps(result,ensure_ascii=False,indent=2),flush=True)
+        return 0 if result['status']=='pass' else 1
+    if args.command == 'weapon-attack-ranges':
+        try:
+            result = publish_weapon_attack_ranges(
+                args.weapon_itd,args.output,
                 source_reference=args.source_reference)
         except (OSError,ValueError,TypeError) as error:
             result = {'status':'failed','error':str(error)}

@@ -26,7 +26,19 @@ python tools/asset_converter/cli.py character-experience-rules `
   --output local-assets/asset_converter/combat/character_experience_reward_rules.json
 ~~~
 
-規則為 fail-closed：指定 Enemy 缺 definition／attr table 缺列直接拒絕；Old `EN_Att` 允許同 level key 重複，因此 converter 逐欄比較，只有重複列完全一致的欄位才可發布，歧義欄位會標記 `ambiguous_fields` 而不猜選哪列；`DR` 或 `RExp` 若本身歧義，v2 EXP/hit manifest 直接拒絕。0xffff level key 仍依 Old `FindAttr` miss / `AddAttr` false 記錄 exclusion，不得降成 Lv255。2026-11-24 真 Old Map13/15 重跑：Map13 78 spawn／9 unique Enemy 產出 9 個 exact `enemy_dr+r_exp` rules（例如 Enemy1 DR=6/RExp=8、Enemy80 DR=300/RExp=800）；Map15 4 spawn 的 Enemy245 全數命中 0xffff exclusion。Python converter 全套 160/160 PASS、完整 Server regression 337/337 PASS。
+規則為 fail-closed：指定 Enemy 缺 definition／attr table 缺列直接拒絕；Old `EN_Att` 允許同 level key 重複，因此 converter 逐欄比較，只有重複列完全一致的欄位才可發布，歧義欄位會標記 `ambiguous_fields` 而不猜選哪列；`DR` 或 `RExp` 若本身歧義，v2 EXP/hit manifest 直接拒絕。0xffff level key 仍依 Old `FindAttr` miss / `AddAttr` false 記錄 exclusion，不得降成 Lv255。2026-11-24 真 Old Map13/15 重跑：Map13 78 spawn／9 unique Enemy 產出 9 個 exact `enemy_dr+r_exp` rules（例如 Enemy1 DR=6/RExp=8、Enemy80 DR=300/RExp=800）；Map15 4 spawn 的 Enemy245 全數命中 0xffff exclusion。Python converter 全套 163/163 PASS、完整 Server regression 337/337 PASS。
+
+### 武器普攻距離 manifest（Old Server audited source）
+
+`weapon-attack-ranges` 只讀 Old Server `Dat/Item/Weapon.itd`。`SGOEquip::ReadWeaponData` 已直接確認每筆 layout 為 `1 + 0x2A + 0x34 + 8 + 0x478 = 1247` bytes；`SGOItemData::SearchIndex` 確認 internal WORD[1]=`ItemIndex`，`SGOWeaponData::SearchIndex` 確認繼承後 WORD[25]/WORD[26] 分別為 `UseItem`/`AttDistance`。因此 parser 不以數值外觀猜 offset，而是依反編譯 loader + inheritance index 直接解析 record word block。
+
+~~~powershell
+python tools/asset_converter/cli.py weapon-attack-ranges `
+  --weapon-itd "<Old Server Dat>/Item/Weapon.itd" `
+  --output local-assets/asset_converter/combat/weapon_attack_ranges.json
+~~~
+
+規則同樣 fail-closed：檔案必須完整由 1247-byte records 組成、每筆 leading type 必須為 1、`ItemIndex` 必須非 0 且唯一、`AttDistance` 不得為 0。2026-11-24 真 Old `Weapon.itd` 重跑 PASS：91,031 bytes = 73 records，SHA256 `b9d2fb0a366ae7b656b72547f7908d8787208160df0220df82b95a6cfb73e2ca`，來源距離集合為 `{60,90,100,120,140,350}`；例如 ItemIndex 31225=60、31229=140、31234=350、1643=120、1645=100、10012=90。這只證明「武器定義→原版 AttDistance」；角色目前裝備哪個 `ItemIndex` 的 authoritative bridge 與普通攻擊 cadence 仍須另行 source-audit，不能因此把正式角色 `AttackRange/AttackCooldownTicks` 標 verified。
 
 ## MVP Map15 + Map13 定向素材與資料轉換
 
