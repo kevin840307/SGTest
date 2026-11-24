@@ -1,5 +1,7 @@
 # SGTest Feature Matrix
 
+**2026-11-24 v13 人物資料 UI／UI-ORIGINAL**（`a4f7bb3`，`IN PROGRESS`）。依使用者要求提交既有 WIP，Profile 改優先本機 HK GDI bitmap renderer，缺檔保留 SystemFont fallback；兩個 targeted Godot tests PASS。真 Server／可見同狀態 A/B、動態文字及完整 HK raster 仍 `NOT VERIFIED`。COMBAT-PVE 仍鎖定，ASP 表 FPS 換算已確認，最終距離／時序／完整怪物權威資料待證；不計本輪為有效玩法/UI 交付。
+
 本檔是 SGTest 唯一正式 Feature Matrix。功能完成度以此檔、`todo.txt`、對應 SPEC/Architecture/Test Plan 與實際測試證據共同判定；若彼此衝突，以較保守狀態為準。
 
 狀態只允許：`NOT STARTED`、`IN PROGRESS`、`IMPLEMENTED`、`TEST FAILED`、`NOT VERIFIED`、`VERIFIED`、`COMPLETE`。
