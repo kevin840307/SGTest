@@ -132,6 +132,25 @@ class NpcContentTests(unittest.TestCase):
             report = build(source,server,1,output)  # fixture template is not the audited original
             self.assertEqual(report['interactions'],{'script_required':1})
 
+    def test_storage_requires_the_audited_named_static_script(self):
+        with tempfile.TemporaryDirectory() as folder:
+            source, server, output = self.fixture(folder)
+            script = b'-- storage fixture\nfunction start() OpenBank() end\n'
+            (server/'Map/Map01/NPC.dat').write_bytes(placement('Bank.txt'))
+            bank = server/'Quest/Bank.txt'
+            bank.write_bytes(script)
+            report, _ = self.compile(source, server, output)
+            self.assertEqual(report['interactions'], {'script_required': 1})
+            with patch('asset_converter.content.npc_content.STORAGE_SCRIPT_SHA256',
+                       hashlib.sha256(script).hexdigest()):
+                report, data = self.compile(source, server, output)
+                self.assertEqual(report['interactions'], {'open_storage': 1})
+                self.assertEqual(data['npcs'][0]['interaction']['adapter'],
+                                 'audited_OpenBank_v1')
+                bank.write_bytes(script + b'OtherAction()\n')
+                report, _ = self.compile(source, server, output)
+                self.assertEqual(report['interactions'], {'script_required': 1})
+
     def test_missing_and_unsafe_scripts_do_not_become_portals(self):
         with tempfile.TemporaryDirectory() as folder:
             source, server, output = self.fixture(folder)

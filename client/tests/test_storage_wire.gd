@@ -59,7 +59,7 @@ func _initialize() -> void:
 		fail("empty open reducer")
 		return
 	var state: Dictionary = world.snapshot()
-	if int(state.active_storage_npc) != 99 or not bool(state.storage_ready) or not (state.storage_items as Dictionary).is_empty():
+	if int(state.active_storage_npc) != 99 or not bool(state.storage_ready) or int(state.last_storage_open_sequence) != 1 or not (state.storage_items as Dictionary).is_empty():
 		fail("empty storage baseline")
 		return
 
@@ -93,7 +93,7 @@ func _initialize() -> void:
 		fail("withdraw settlement")
 		return
 	state = world.snapshot()
-	if not (state.inventory_items as Dictionary).has(7001) or (state.storage_items as Dictionary).has(7001) or int(state.inventory_items[7001].quantity) != 2 or int(state.inventory_items[7001].drop_id) != 501 or int(state.inventory_items[7001].enhancement_level) != 5 or int(state.inventory_items[7001].durability_raw) != 80:
+	if not (state.inventory_items as Dictionary).has(7001) or (state.storage_items as Dictionary).has(7001) or int(state.last_storage_open_sequence) != 1 or int(state.inventory_items[7001].quantity) != 2 or int(state.inventory_items[7001].drop_id) != 501 or int(state.inventory_items[7001].enhancement_level) != 5 or int(state.inventory_items[7001].durability_raw) != 80:
 		fail("withdraw did not restore exact inventory UID")
 		return
 
@@ -121,7 +121,7 @@ func _initialize() -> void:
 		fail("final storage chunk rejected")
 		return
 	state = world.snapshot()
-	if not bool(state.storage_ready) or (state.storage_items as Dictionary).size() != 2 or int(state.active_storage_npc) != 99:
+	if not bool(state.storage_ready) or (state.storage_items as Dictionary).size() != 2 or int(state.active_storage_npc) != 99 or int(state.last_storage_open_sequence) != 4:
 		fail("chunked storage baseline incomplete")
 		return
 
@@ -129,7 +129,7 @@ func _initialize() -> void:
 		fail("map transfer rejected")
 		return
 	state = world.snapshot()
-	if bool(state.storage_ready) or int(state.active_storage_npc) != 0 or not (state.storage_items as Dictionary).is_empty() or int(state.storage_sequence) != 0:
+	if bool(state.storage_ready) or int(state.active_storage_npc) != 0 or not (state.storage_items as Dictionary).is_empty() or int(state.storage_sequence) != 0 or int(state.last_storage_open_sequence) != 0:
 		fail("map transfer did not close storage")
 		return
 

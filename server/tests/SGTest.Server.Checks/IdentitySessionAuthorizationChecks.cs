@@ -3,6 +3,7 @@ using SGTest.Server.Map;
 using System.Buffers.Binary;
 using System.Net;
 using System.Net.Sockets;
+using SGTest.Server.Combat;
 using SGTest.Server.Gateway;
 using SGTest.Server.Transport;
 using SGTest.Server.Identity;
@@ -818,12 +819,23 @@ internal static class IdentitySessionAuthorizationChecks
                 "storage AES seed inventory grant failed");
             long itemUid = grant.ItemUid;
 
-            var storageCatalog = new NpcStorageCatalog([
-                new NpcStorageCatalog.StoragePoint(
-                    77, 88, 8, 8, "synthetic-storage-tls")
-            ]);
+            string storageDocument = Path.Combine(identityRoot, "npcs.json");
+            File.WriteAllText(storageDocument, """
+                {
+                  "schema":"sgtest.npcs/v1", "coordinate_space":"world_pixels", "map_id":77,
+                  "source_sha256":{
+                    "server/Quest/Bank.txt":"0a3cf356e59fc12cae0e87d4ada81be2ae9cbddbb0dea9a8eb16fe1859a44ab8"
+                  },
+                  "npcs":[{
+                    "spawn_id":88, "p":[8,8], "script":"Bank.txt",
+                    "interaction":{"mode":"open_storage","adapter":"audited_OpenBank_v1","dependencies_complete":true}
+                  }]
+                }
+                """);
+            var storageCatalog = NpcStorageCatalog.LoadAudited([storageDocument]);
             var authorization = new IdentitySessionAuthorization(
                 store, world, pickupWorldGeneration: generation,
+                combat: new PlayerCombatSettlement(store),
                 storages: storageCatalog);
             var router = new WorldResultRouter();
 

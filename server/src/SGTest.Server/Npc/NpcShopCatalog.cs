@@ -131,7 +131,8 @@ public sealed class NpcShopCatalog
     }
 
     internal static Dictionary<(int,int),(double X,double Y)> LoadNpcPositions(
-        IEnumerable<string> paths)
+        IEnumerable<string> paths,
+        Action<JsonElement, JsonElement, int, int, double, double>? visit = null)
     {
         ArgumentNullException.ThrowIfNull(paths);
         var result=new Dictionary<(int,int),(double,double)>();
@@ -162,6 +163,7 @@ public sealed class NpcShopCatalog
                    !p[1].TryGetDouble(out double y)||!ValidPosition(x,y)||
                    !result.TryAdd((map,spawn),(x,y)))
                     throw new InvalidDataException("Invalid/duplicate NPC source position");
+                visit?.Invoke(root, npc, map, spawn, x, y);
             }
         }
         return result;

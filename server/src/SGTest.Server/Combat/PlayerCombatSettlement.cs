@@ -191,6 +191,20 @@ public sealed class PlayerCombatSettlement
         }
     }
 
+    internal bool IsIncapacitated(ActorSnapshot actor)
+    {
+        lock (_gate)
+        {
+            // A profile-only actor has no settlement slot. A tracked actor
+            // still uses projected HP so a lethal reservation blocks immediately.
+            return actor.CombatDead ||
+                (_states.TryGetValue(actor.ActorId, out var state) &&
+                 (state.ConnectionEpoch != actor.ConnectionEpoch ||
+                  state.MapEpoch != actor.MapEpoch || state.Suspended ||
+                  state.Closing || state.ProjectedHp <= 0));
+        }
+    }
+
     /// <summary>Read committed HP/MaxHP only while the exact generation is
     /// suspended and every authoritative damage reservation has drained.
     /// Resource settlement uses this immutable HP baseline while SQLite owns MP.</summary>

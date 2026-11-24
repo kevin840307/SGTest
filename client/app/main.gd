@@ -417,7 +417,10 @@ func _unhandled_input(event: InputEvent) -> void:
 			# Rendered NPCs use the original NPC.dat spawn ID. Client never
 			# executes source scripts or decides a teleport destination.
 			var interaction := world_view.npc_interaction_for(npc_id)
-			if str(interaction.get("mode","")) != "confirm_transfer" or not bool(interaction.get("dependencies_complete",false)):
+			var mode := str(interaction.get("mode","")) if bool(interaction.get("dependencies_complete",false)) else ""
+			if mode == "open_storage":
+				session_panel.submit_storage_open(npc_id)
+			elif mode != "confirm_transfer":
 				_status.text = "NPC %d：對話／功能尚未完成" % npc_id
 			elif session_panel.submit_npc_interact(npc_id):
 				_status.text = "NPC %d：等待伺服器確認傳點" % npc_id
@@ -631,6 +634,18 @@ func _server_snapshot(snapshot: Dictionary) -> void:
 	terminal_hud.apply_snapshot(snapshot)
 	recovered2_world.apply_snapshot(snapshot)
 	classic_world.apply_snapshot(snapshot)
+	var storage_open_sequence := int(snapshot.get("last_storage_open_sequence",0))
+	if bool(snapshot.get("storage_ready",false)) and storage_open_sequence > 0 and (
+			int(snapshot.get("map_epoch",0)) != int(previous.get("map_epoch",0)) or
+			storage_open_sequence > int(previous.get("last_storage_open_sequence",0))):
+		if classic_world.visible:
+			if not classic_world.storage_window.visible:
+				classic_world._toggle(classic_world.storage_window)
+		elif recovered2_world.visible:
+			if _r2_legacy_group != 2:
+				_show_r2_legacy_group(2)
+		else:
+			_open_terminal_section(2)
 	world_view.set_player_snapshot(snapshot)
 
 

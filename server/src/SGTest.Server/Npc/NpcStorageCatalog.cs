@@ -14,6 +14,9 @@ public enum StorageAccessStatus : byte
 
 public sealed class NpcStorageCatalog
 {
+    private const string AuditedBankScriptSha256 =
+        "0a3cf356e59fc12cae0e87d4ada81be2ae9cbddbb0dea9a8eb16fe1859a44ab8";
+
     public sealed record StoragePoint(
         int MapId,int NpcSpawnId,double NpcX,double NpcY,string SourceReference);
 
@@ -54,6 +57,27 @@ public sealed class NpcStorageCatalog
         double distance=MaximumInteractionDistance;
         return dx*dx+dy*dy<=distance*distance
             ? StorageAccessStatus.Allowed:StorageAccessStatus.TooFar;
+    }
+
+    public static NpcStorageCatalog LoadAudited(IEnumerable<string> npcJsonPaths)
+    {
+        var points = new List<StoragePoint>();
+        NpcShopCatalog.LoadNpcPositions(npcJsonPaths, (root, npc, map, spawn, x, y) =>
+        {
+            if (!npc.TryGetProperty("interaction", out var interaction) ||
+                interaction.ValueKind != JsonValueKind.Object ||
+                ReadString(interaction, "mode") != "open_storage")
+                return;
+            if (ReadString(interaction, "adapter") != "audited_OpenBank_v1" ||
+                !ReadTrue(interaction, "dependencies_complete") ||
+                !ReadString(npc, "script").Equals("Bank.txt", StringComparison.OrdinalIgnoreCase) ||
+                !root.TryGetProperty("source_sha256", out var sources) ||
+                sources.ValueKind != JsonValueKind.Object ||
+                ReadString(sources, "server/Quest/Bank.txt") != AuditedBankScriptSha256)
+                throw new InvalidDataException("Unverified static item storage cannot be enabled");
+            points.Add(new(map, spawn, x, y, $"Old Quest/Bank.txt#map={map};npc={spawn}"));
+        });
+        return new(points);
     }
 
     public static NpcStorageCatalog LoadVerified(

@@ -191,8 +191,8 @@ internal sealed class NpcEconomyHandler
                 return;
             }
 
-            bool dead=_combat is not null&&_combat.CurrentHp(actor)<=0;
-            StorageAccessStatus access=dead
+            bool incapacitated = _combat?.IsIncapacitated(actor) ?? actor.CombatDead;
+            StorageAccessStatus access=incapacitated
                 ? StorageAccessStatus.PlayerDead
                 : _storages is null
                     ? StorageAccessStatus.UnknownStorage

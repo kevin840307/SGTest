@@ -161,6 +161,7 @@ var storage_ready := false
 var storage_next_index := 0
 var storage_revision := 0
 var last_storage_open_status := -1
+var last_storage_open_sequence := 0
 var last_storage_response_sequence := 0
 var last_storage_result := {}
 var stale_storage_results := 0
@@ -1514,6 +1515,7 @@ func snapshot() -> Dictionary:
 		"storage_next_index": storage_next_index,
 		"storage_revision": storage_revision,
 		"last_storage_open_status": last_storage_open_status,
+		"last_storage_open_sequence": last_storage_open_sequence,
 		"last_storage_response_sequence": last_storage_response_sequence,
 		"last_storage_result": last_storage_result.duplicate(true),
 		"stale_storage_results": stale_storage_results,
@@ -2085,6 +2087,7 @@ func _reset_character_economy_state() -> void:
 	storage_next_index = 0
 	storage_revision = 0
 	last_storage_open_status = -1
+	last_storage_open_sequence = 0
 	last_storage_response_sequence = 0
 	last_storage_result.clear()
 	stale_storage_results = 0
@@ -2878,6 +2881,7 @@ func _reset_map_npc_services() -> void:
 	storage_next_index = 0
 	storage_revision = 0
 	last_storage_open_status = -1
+	last_storage_open_sequence = 0
 	last_storage_response_sequence = 0
 	last_storage_result.clear()
 	stale_storage_results = 0
@@ -3545,6 +3549,7 @@ func _apply_storage_snapshot(frame: PackedByteArray) -> bool:
 		active_storage_npc = int(value.npc_spawn_id)
 		storage_ready = true
 		storage_revision += 1
+		last_storage_open_sequence = sequence
 		last_storage_response_sequence = sequence
 		_clear_pending_storage()
 	return true

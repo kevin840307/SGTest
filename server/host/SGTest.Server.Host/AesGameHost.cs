@@ -181,7 +181,8 @@ internal static class AesGameHost
                 NpcShopCatalog.LoadVerified(
                     Path.GetFullPath(shopManifest),npcDocuments);
             string? storageManifest=options.GetValueOrDefault("--storage-rules");
-            NpcStorageCatalog? storages=storageManifest is null ? null :
+            NpcStorageCatalog storages=storageManifest is null
+                ? NpcStorageCatalog.LoadAudited(npcDocuments) :
                 NpcStorageCatalog.LoadVerified(
                     Path.GetFullPath(storageManifest),npcDocuments);
             string? equipmentManifest=options.GetValueOrDefault("--equipment-rules");

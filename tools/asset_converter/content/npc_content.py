@@ -1,7 +1,7 @@
-"""Compile private NPC/transfer evidence without executing legacy Lua.
+"""Compile private NPC interaction evidence without executing legacy Lua.
 
 Only the audited TS_Common template and an exact static entry shape become a
-confirmed transfer. Other scripts remain explicit script_required records.
+confirmed transfer. The audited static Bank entry opens item storage.
 """
 import configparser
 import hashlib
@@ -15,6 +15,7 @@ from .build_maps import dimensions, resolve, server_map_directory as map_directo
 from .asset_paths import source_sprite_manifest
 
 TRANSFER_TEMPLATE_SHA256 = '8c972667f520ef00441f2b12c5a16fa1475a2e0a5ce1dd20e16bb79e37697562'
+STORAGE_SCRIPT_SHA256 = '0a3cf356e59fc12cae0e87d4ada81be2ae9cbddbb0dea9a8eb16fe1859a44ab8'
 _SHORT_STRING = r'"(?:[^"\\\r\n]|\\[^\r\n])*"'
 _LONG_COMMENT = re.compile(r'--\[(=*)\[')
 _STATIC = re.compile(
@@ -22,6 +23,7 @@ _STATIC = re.compile(
     r'function\s+GetLocName\s*\(\s*\)\s*return\s+'+_SHORT_STRING+r'\s*end\s*'
     r'function\s+GetLoc\s*\(\s*\)\s*return\s+(?P<x>-?\d{1,10})\s*,\s*(?P<y>-?\d{1,10})\s*,\s*(?P<map>\d{1,5})\s*end\s*'
     r'#include\s+"TS_Common\.txt"\s*', re.ASCII)
+_STORAGE = re.compile(r'\s*function\s+start\s*\(\s*\)\s*OpenBank\s*\(\s*\)\s*end\s*', re.ASCII)
 
 
 def _basename(value: str) -> str:
@@ -131,9 +133,14 @@ def build(source: Path, server_dat: Path, map_id: int, output: Path) -> dict:
             return {'mode': 'unavailable', 'reason': 'script_missing'}
         raw = read(path, server_dat, 'server')
         try:
-            match = _STATIC.fullmatch(_without_comments(_script_text(raw)))
+            body = _without_comments(_script_text(raw))
         except ValueError:
-            match = None
+            body = ''
+        if (script.casefold() == 'bank.txt' and hashlib.sha256(raw).hexdigest() == STORAGE_SCRIPT_SHA256
+                and _STORAGE.fullmatch(body)):
+            return {'mode': 'open_storage', 'dependencies_complete': True,
+                    'adapter': 'audited_OpenBank_v1'}
+        match = _STATIC.fullmatch(body)
         if not match:
             return {'mode': 'script_required', 'reason': 'not_a_static_TS_entry', 'dependencies_complete': False}
         common = scripts.get('ts_common.txt')

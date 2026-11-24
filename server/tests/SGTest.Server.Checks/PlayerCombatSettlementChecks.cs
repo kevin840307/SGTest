@@ -162,6 +162,7 @@ internal static class PlayerCombatSettlementChecks
                        settlement.TryPostMonsterHit(actor,Attack(actor,20,15,3))==
                        CombatPostStatus.Accepted &&
                        settlement.CurrentHp(actor)==0 &&
+                       settlement.IsIncapacitated(actor) &&
                        settlement.TryPostMonsterHit(actor,Attack(actor,20,15,4))==
                        CombatPostStatus.TargetUnavailable,
             "projected HP did not stop post-lethal attack reservation");
