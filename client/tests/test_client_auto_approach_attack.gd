@@ -17,9 +17,13 @@ func _initialize() -> void:
 		return
 	if not _resync_gap_preserves_chase():
 		return
+	if not _target_invalidation_stops_chase(true):
+		return
+	if not _target_invalidation_stops_chase(false):
+		return
 	if not _manual_move_cancels_chase():
 		return
-	print("CLIENT_AUTO_APPROACH_ATTACK_PASS server_range_authoritative=true out_of_range_triggers_existing_move=true route_stop_retries_attack=true bounded_chase=true resync_baseline_gap=true manual_move_cancels=true target_switch_replaces_navigation=true")
+	print("CLIENT_AUTO_APPROACH_ATTACK_PASS server_range_authoritative=true out_of_range_triggers_existing_move=true route_stop_retries_attack=true bounded_chase=true resync_baseline_gap=true target_despawn_stop=true target_death_stop=true manual_move_cancels=true target_switch_replaces_navigation=true")
 	quit(0)
 
 func _auto_approach_then_attack() -> bool:
@@ -86,6 +90,56 @@ func _resync_gap_preserves_chase() -> bool:
 		_fail("resync baseline gap cancelled chase "+str(session.snapshot()),session)
 		return false
 	session.stop()
+	return true
+
+
+func _target_invalidation_stops_chase(despawn: bool) -> bool:
+	var fake = FakeAutoAttackTransport.new(false,false,true)
+	var session = Session.new(fake)
+	var label := "despawn" if despawn else "death"
+	if session.connect_secure("fixture",443,"user_01","Password-123456!") != OK:
+		_fail(label+" connect",session)
+		return false
+	var ready := _enter_world(session)
+	if ready.is_empty():
+		_fail(label+" world/monster baseline "+str(session.snapshot()),session)
+		return false
+	if not session.attack_monster(MONSTER_ID):
+		_fail(label+" attack intent refused",session)
+		return false
+	var chasing := _wait(session,func(v):
+		return (
+			int(v.attack_sequence)==1
+			and int(v.last_attack_result_status)==4
+			and int(v.movement_sequence)==1
+			and int(v.last_receipt_sequence)==1
+			and not v.self_state.is_empty()
+			and bool(v.self_state.moving)
+		),1800)
+	if chasing.is_empty():
+		_fail(label+" chase did not start "+str(session.snapshot()),session)
+		return false
+	if despawn:
+		fake.despawn_monster()
+	else:
+		fake.kill_monster()
+	var stopped := _wait(session,func(v):
+		return (
+			int(v.movement_sequence)==2
+			and int(v.last_receipt_sequence)==2
+			and not v.self_state.is_empty()
+			and not bool(v.self_state.moving)
+			and (not v.monsters.has(MONSTER_ID) if despawn else int(v.monsters[MONSTER_ID].current_hp)==0)
+		),2200)
+	if stopped.is_empty():
+		_fail(label+" did not issue authoritative stop "+str(session.snapshot()),session)
+		return false
+	var attacks := fake.attack_count()
+	var moves := fake.move_targets()
+	session.stop()
+	if attacks!=1 or moves.size()!=2 or moves[0]!=Vector2i(40,8) or moves[1]!=Vector2i(40,8):
+		_fail(label+" invalidation did not end chase attacks=%d moves=%s" % [attacks,str(moves)])
+		return false
 	return true
 
 

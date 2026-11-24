@@ -1,5 +1,7 @@
 # SGTest Feature Matrix
 
+**2026-11-24 v14 GP-013-01／追怪失效取消**（`IN PROGRESS`）。修正 Client auto-approach 已開始後，目標死亡或真正離開 AOI 只清掉 attack intent、角色仍走向舊座標的缺口；現在沿用同一 FIFO 與既有 Server-authoritative `stop_move` barrier 停止，不新增 Client 距離判定或第二套移動 owner。Godot 4.7.2 targeted gates：`CLIENT_AUTO_APPROACH_ATTACK_PASS`（新增 `target_despawn_stop=true`、`target_death_stop=true`，並保留 resync grace／手動移動取消／Server range authority）、`CLIENT_STOP_BARRIER_PASS`、`CLIENT_IDLE_PUBLICATION_PASS`。Gameplay 子缺口已 IMPLEMENTED/targeted VERIFIED；正式 Map13 trusted combat profile 仍阻塞真 Server/真角色戰鬥，HK `UI-084_ENEMY_HP` 目標 HUD 與 800×600 A/B 仍 `NOT VERIFIED`，因此 GP-013-01／COMBAT-PVE 不升 COMPLETE。
+
 **2026-11-24 v13 人物資料 UI／UI-ORIGINAL**（`a4f7bb3`，`IN PROGRESS`）。依使用者要求提交既有 WIP，Profile 改優先本機 HK GDI bitmap renderer，缺檔保留 SystemFont fallback；兩個 targeted Godot tests PASS。真 Server／可見同狀態 A/B、動態文字及完整 HK raster 仍 `NOT VERIFIED`。COMBAT-PVE 仍鎖定，ASP 表 FPS 換算已確認，最終距離／時序／完整怪物權威資料待證；不計本輪為有效玩法/UI 交付。
 
 本檔是 SGTest 唯一正式 Feature Matrix。功能完成度以此檔、`todo.txt`、對應 SPEC/Architecture/Test Plan 與實際測試證據共同判定；若彼此衝突，以較保守狀態為準。

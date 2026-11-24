@@ -2512,6 +2512,17 @@ func _process_pet_skill_monster_intent(intent:Dictionary)->void:
 		_publish()
 
 
+func _cancel_attack_chase(token: int, intent: Dictionary) -> void:
+	# If this attack intent already started an authoritative approach route, do
+	# not merely forget the chase when its target dies or leaves AOI. Replace the
+	# same FIFO slot with the existing Server-authoritative stop barrier so the
+	# player does not keep walking toward a stale monster position.
+	if str(intent.get("phase","")) == "await_move" and int(intent.get("move_sequence",0)) > 0:
+		if _replace_first_intent(token,{"type":"stop_move","phase":"send_stop"}):
+			return
+	_pop_intent_token(token)
+
+
 func _process_attack_monster_intent(intent: Dictionary) -> void:
 	# Called on the sole WorldState logic thread: no cross-thread snapshot needed.
 	var current: RefCounted = _world
@@ -2544,7 +2555,7 @@ func _process_attack_monster_intent(intent: Dictionary) -> void:
 			return
 		if Time.get_ticks_msec()-missing_since < AUTO_TARGET_MISSING_GRACE_MS:
 			return
-		_pop_intent_token(token)
+		_cancel_attack_chase(token,intent)
 		return
 	if intent.has("target_missing_since_ms"):
 		var restored := intent.duplicate(true)
@@ -2554,7 +2565,7 @@ func _process_attack_monster_intent(intent: Dictionary) -> void:
 		intent = restored
 	var target: Dictionary = monsters[target_id]
 	if int(target.get("current_hp",0)) <= 0 or int(target.get("state",0)) == 4:
-		_pop_intent_token(token)
+		_cancel_attack_chase(token,intent)
 		return
 
 	var phase := str(intent.get("phase","send_attack"))

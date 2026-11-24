@@ -18,16 +18,19 @@ var _sent: Array[PackedByteArray] = []
 var _error := OK
 var _hold_first_attack := false
 var _simulate_resync_gap := false
+var _hold_first_move_stop := false
 var _pending_first_attack := {}
 var _monster_seeded := false
 var _resync_requested := false
 var _ready_ack_count := 0
 var _attack_count := 0
+var _move_count := 0
 var _move_targets: Array[Vector2i] = []
 
-func _init(hold_first_attack: bool = false, simulate_resync_gap: bool = false) -> void:
+func _init(hold_first_attack: bool = false, simulate_resync_gap: bool = false, hold_first_move_stop: bool = false) -> void:
 	_hold_first_attack = hold_first_attack
 	_simulate_resync_gap = simulate_resync_gap
+	_hold_first_move_stop = hold_first_move_stop
 
 func start_encrypted(_host: String, _port: int, ) -> Error:
 	_mutex.lock()
@@ -40,6 +43,7 @@ func start_encrypted(_host: String, _port: int, ) -> Error:
 	_resync_requested = false
 	_ready_ack_count = 0
 	_attack_count = 0
+	_move_count = 0
 	_move_targets.clear()
 	_mutex.unlock()
 	return OK
@@ -97,17 +101,21 @@ func send_frame(frame: PackedByteArray) -> bool:
 			if move.is_empty():
 				_fail_locked()
 			else:
+				_move_count += 1
 				var seq := int(move.movement_sequence)
 				var target := Vector2i(int(move.target_x),int(move.target_y))
 				_move_targets.append(target)
-				_push(_move_receipt(seq,43))
-				if _simulate_resync_gap:
+				_push(_move_receipt(seq,43 + _move_count))
+				if _hold_first_move_stop and _move_count == 1:
+					_push(_self_state(44,2,target,true,seq))
+				elif _simulate_resync_gap:
 					# Revision 1 was seeded. Jumping to 3 forces the real reducer
 					# through its same-connection AOI resync path.
 					_push(_self_state(44,3,target,true,seq))
 				else:
-					_push(_self_state(44,2,target,true,seq))
-					_push(_self_state(45,3,target,false,seq))
+					var base_revision := 1 + _move_count
+					_push(_self_state(44 + _move_count,base_revision,target,true,seq))
+					_push(_self_state(45 + _move_count,base_revision + 1,target,false,seq))
 		WireCodec.OPCODE_WORLD_RESYNC_REQUEST:
 			if _simulate_resync_gap:
 				_resync_requested = true
@@ -123,6 +131,16 @@ func release_first_attack_result() -> void:
 	if not _pending_first_attack.is_empty():
 		_push(_attack_result(int(_pending_first_attack.attack_sequence),4,42,0,100,1))
 		_pending_first_attack.clear()
+	_mutex.unlock()
+
+func despawn_monster() -> void:
+	_mutex.lock()
+	_push(_monster_despawn(46,2))
+	_mutex.unlock()
+
+func kill_monster() -> void:
+	_mutex.lock()
+	_push(_monster_state(WireCodec.OPCODE_MONSTER_DELTA,46,2,0,4))
 	_mutex.unlock()
 
 func drain_events(max_frames: int = 64) -> Array[Dictionary]:
@@ -207,6 +225,15 @@ func _monster_state(opcode: int,tick: int,revision: int,hp: int,state: int) -> P
 	writer.put_u8(state)
 	writer.put_u8(1)
 	writer.put_64(0)
+	return writer.data_array
+
+func _monster_despawn(tick: int,revision: int) -> PackedByteArray:
+	var writer := StreamPeerBuffer.new()
+	_header(writer,40,WireCodec.OPCODE_MONSTER_DESPAWN)
+	writer.put_64(1)
+	writer.put_64(tick)
+	writer.put_64(MONSTER_ID)
+	writer.put_64(revision)
 	return writer.data_array
 
 func _attack_result(sequence: int,status: int,tick: int,damage: int,hp: int,revision: int) -> PackedByteArray:
