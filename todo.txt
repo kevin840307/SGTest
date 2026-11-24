@@ -10,6 +10,8 @@
 
   HP 來源已更正（`b7ed92d`）。Old `LoadEnAttData` 0x10071307 將 EN_Att[1] 寫入 +0x0C；`AddAttr` 0x10078451–0x10078467 寫 WORD[4]；`CDEnemyMgr::CloneChild` 0x10081552–0x10081570 將 WORD[4] 複製到當前 HP 的 WORD[6]。EN010A Lv1 的 Old 初始 HP 是 51。原 Converter 的 `Enemy_Data.csv[9]`（40）寫入的是 WORD[0x16]（`LoadNewCSVData` 0x1007259D）。重跑 `world-content --map 13 --map 15 --include-population`，Map13 78 spawn／9 種皆取得 Old HP 證據，Map15 4 spawn 同屬 Enemy245，`0xffff` 查無列，明確留空。證據 `.cache/v13-monster-hp/`。`python -m unittest discover -s tools/tests` 160/160 PASS。正式角色戰鬥、HK 實機初始 HP 與 A/B 均 NOT VERIFIED。
 
+  雙圖原始素材 v3 相容性檢查 PASS，保留生成位置與視覺清單，v3 每筆 `stats=null`。 [Converter CI PASS](https://github.com/kevin840307/SGTest/actions/runs/45394973090)
+
   玩家普攻下一步：Old `GetPlayerAttackAttrib` 0x10019DBC／0x10019E8C 對無武器先寫入 `sAttacker+0x1A=45`，武器分支 0x10019E20–0x10019E38 從武器 WORD[0x1A] 讀值。仍須追 0x10019F35 的覆寫分支與最終距離檢查、攻擊時序、傷害命中，以及首隻怪的 AI 行為，才可發布 runtime v4。
 
   本輪相容性回歸命令（上述 P0）：`python client/tests/run_online_main_gate.py C:/SGO/Godot/Godot_v4.7.2-stable_win64_console.exe --timeout 85` PASS（正式 Host、雙 headless Main、測試 v4 怪物、AOI、移動、往返傳點與資源卸載）。最終相關 CI 全數 PASS：[Server](https://github.com/kevin840307/SGTest/actions/runs/45389720321)、[Client](https://github.com/kevin840307/SGTest/actions/runs/45390204296)、[Converter](https://github.com/kevin840307/SGTest/actions/runs/45389720368)。
