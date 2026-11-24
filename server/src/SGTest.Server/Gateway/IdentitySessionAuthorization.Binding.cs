@@ -20,11 +20,19 @@ namespace SGTest.Server.Gateway;
 /// <summary>Authenticated account/character binding to the trusted gateway and world lifecycle.</summary>
 public sealed partial class IdentitySessionAuthorization
 {
-    public async ValueTask<GatewayConnection?> AuthorizeAndBindAsync(
+    public ValueTask<GatewayConnection?> AuthorizeAndBindAsync(
         Stream tls, CancellationToken cancellationToken,
-        IPAddress? remoteAddress = null)
+        IPAddress? remoteAddress = null) =>
+        AuthorizeAndBindAsync(
+            tls, cancellationToken, cancellationToken, remoteAddress);
+
+    private async ValueTask<GatewayConnection?> AuthorizeAndBindAsync(
+        Stream tls, CancellationToken authenticationCancellationToken,
+        CancellationToken postAuthenticationCancellationToken,
+        IPAddress? remoteAddress)
     {
         ArgumentNullException.ThrowIfNull(tls);
+        var cancellationToken = authenticationCancellationToken;
         IPAddress source=remoteAddress??IPAddress.None;
         if(source.IsIPv4MappedToIPv6)source=source.MapToIPv4();
 
@@ -108,6 +116,12 @@ public sealed partial class IdentitySessionAuthorization
             .ConfigureAwait(false);
         if (authentication.Status != AuthenticationStatus.Success || authentication.Account is null)
             return null;
+
+        // Credential authentication is complete. Character selection/creation is
+        // an authenticated player interaction and must not inherit the short
+        // pre-authentication timeout. From this point onward only the socket/
+        // server lifetime cancellation token may end the selection phase.
+        cancellationToken = postAuthenticationCancellationToken;
 
         var account = authentication.Account;
         string? gmOperatorId=_gmAccounts.Contains(account.Username)

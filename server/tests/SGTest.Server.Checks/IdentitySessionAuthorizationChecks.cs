@@ -15,6 +15,10 @@ internal static class IdentitySessionAuthorizationChecks
     {
         Checks.Run("AES Auth CharacterChoose binds owned persistent character into World",
             () => OwnedCharacterEntersWorld(root).GetAwaiter().GetResult());
+        Checks.Run("AES authenticated character selection may outlive credential authorization timeout",
+            () => AuthenticatedSelectionOutlivesCredentialTimeout(root).GetAwaiter().GetResult());
+        Checks.Run("AES credential authorization timeout still rejects idle unauthenticated socket",
+            () => CredentialAuthorizationTimeoutStillApplies(root).GetAwaiter().GetResult());
         Checks.Run("AES empty account creates character, refreshes list and enters World without reconnect",
             () => CreateCharacterAndEnterWorld(root).GetAwaiter().GetResult());
         Checks.Run("AES character creation is unavailable without server-authorized spawn policy",
@@ -187,6 +191,92 @@ internal static class IdentitySessionAuthorizationChecks
             var ended = await serverTask.WaitAsync(TimeSpan.FromSeconds(2));
             Checks.Require(ended.CommandsAccepted == 1,
                 "AES authenticated gameplay command count mismatch");
+            await world.StopAsync();
+        }
+        finally { Directory.Delete(identityRoot, true); }
+    }
+
+
+    private static async Task AuthenticatedSelectionOutlivesCredentialTimeout(string root)
+    {
+        string identityRoot = TempRoot();
+        try
+        {
+            string mapDir = Checks.Fixture(root, 119, 5, 5, (_, _) => 0);
+            var grid = BlockingGrid.Load(mapDir, 119);
+            await using var world = new ServerWorldHost([grid]);
+            await world.StartAsync();
+            using var store = new SqliteIdentityStore(Path.Combine(identityRoot, "identity.db"));
+            await store.InitializeAsync();
+            const string accountName = "slow_selector";
+            const string password = "Slow-Selection-123!";
+            long accountId = (await store.CreateAccountAsync(accountName, password)).AccountId;
+            long characterId = (await store.CreateCharacterAsync(
+                accountId, 0, "SlowHero", new CharacterSpawn(119, 8, 8)))
+                .Character?.CharacterId ?? throw new Exception("slow-selection fixture character missing");
+            var authorization = new IdentitySessionAuthorization(store, world);
+            var router = new WorldResultRouter();
+            var session = await StartRoutedSession(
+                authorization, world, router,
+                new AesWireConnectionOptions(AuthorizationTimeoutMilliseconds: 1000));
+
+            await session.Stream.WriteAsync(WireProtocol.EncodeAuthRequest(new(accountName, password)));
+            await session.Stream.FlushAsync();
+            Checks.Require(WireProtocol.TryDecodeAuthResult(
+                    await ReadFrameAsync(session.Stream), out var auth) &&
+                auth.Status == AuthWireStatus.Success,
+                "slow-selection credential authentication failed");
+            Checks.Require(WireProtocol.TryDecodeCharacterList(
+                    await ReadFrameAsync(session.Stream), out var list) &&
+                list.Characters.Single().CharacterId == characterId,
+                "slow-selection character list mismatch");
+
+            await Task.Delay(1300);
+            Checks.Require(!session.ServerTask.IsCompleted,
+                "authenticated character selection inherited credential authorization timeout");
+
+            await CharacterChooseTestHarness.ChooseAsync(session.Stream, characterId);
+            await session.Stream.FlushAsync();
+            Checks.Require(WireProtocol.TryDecodeCharacterChooseResult(
+                    await ReadFrameAsync(session.Stream), out var choose) &&
+                choose.Status == CharacterChooseWireStatus.Success &&
+                choose.CharacterId == characterId,
+                "character choose failed after credential timeout window elapsed");
+
+            await session.Stream.DisposeAsync();
+            session.Client.Dispose();
+            var ended = await session.ServerTask.WaitAsync(TimeSpan.FromSeconds(2));
+            Checks.Require(ended.Reason != AesWireEndReason.AuthorizationTimeout,
+                "successful slow selection was later misclassified as authorization timeout");
+            await world.StopAsync();
+        }
+        finally { Directory.Delete(identityRoot, true); }
+    }
+
+
+    private static async Task CredentialAuthorizationTimeoutStillApplies(string root)
+    {
+        string identityRoot = TempRoot();
+        try
+        {
+            string mapDir = Checks.Fixture(root, 120, 5, 5, (_, _) => 0);
+            var grid = BlockingGrid.Load(mapDir, 120);
+            await using var world = new ServerWorldHost([grid]);
+            await world.StartAsync();
+            using var store = new SqliteIdentityStore(Path.Combine(identityRoot, "identity.db"));
+            await store.InitializeAsync();
+            var authorization = new IdentitySessionAuthorization(store, world);
+            var router = new WorldResultRouter();
+            var session = await StartRoutedSession(
+                authorization, world, router,
+                new AesWireConnectionOptions(AuthorizationTimeoutMilliseconds: 1000));
+
+            var ended = await session.ServerTask.WaitAsync(TimeSpan.FromSeconds(2));
+            Checks.Require(ended.Reason == AesWireEndReason.AuthorizationTimeout &&
+                world.Statistics.ActiveActors == 0,
+                "idle unauthenticated identity socket escaped credential authorization timeout");
+            await session.Stream.DisposeAsync();
+            session.Client.Dispose();
             await world.StopAsync();
         }
         finally { Directory.Delete(identityRoot, true); }
@@ -1104,7 +1194,7 @@ internal static class IdentitySessionAuthorizationChecks
     private static async Task<(AesCbcFrameStream Stream, Task<AesWireConnectionResult> ServerTask, TcpClient Client)>
         StartRoutedSession(
             IdentitySessionAuthorization authorization, ServerWorldHost world,
-            WorldResultRouter router)
+            WorldResultRouter router, AesWireConnectionOptions? options = null)
     {
         var settings = AesSocketChecks.CreateSettings();
         var listener = new TcpListener(IPAddress.Loopback, 0);
@@ -1115,7 +1205,7 @@ internal static class IdentitySessionAuthorizationChecks
         await client.ConnectAsync(IPAddress.Loopback, port);
         var serverClient = await accepted;
         var serverTask = authorization.RunAuthenticatedAesSocketAsync(
-            serverClient, settings, router).ContinueWith(t =>
+            serverClient, settings, router, options).ContinueWith(t =>
             {
 
                 listener.Stop();

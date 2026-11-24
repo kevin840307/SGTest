@@ -33,6 +33,7 @@ public sealed partial class IdentitySessionAuthorization
         ArgumentNullException.ThrowIfNull(client);
         ArgumentNullException.ThrowIfNull(settings);
         ArgumentNullException.ThrowIfNull(router);
+        var configuredOptions = options ?? new AesWireConnectionOptions();
         var bindingGate = new object();
         bool sessionFinished = false;
         GatewayConnection? boundConnection = null;
@@ -46,16 +47,19 @@ public sealed partial class IdentitySessionAuthorization
 
         async ValueTask<GatewayConnection?> Authorize(Stream stream, CancellationToken token)
         {
+            using var credentialCts =
+                CancellationTokenSource.CreateLinkedTokenSource(token);
+            credentialCts.CancelAfter(configuredOptions.AuthorizationTimeoutMilliseconds);
             var connection = await AuthorizeAndBindAsync(
-                stream, token, remoteAddress).ConfigureAwait(false);
+                stream, credentialCts.Token, token, remoteAddress).ConfigureAwait(false);
             if (connection is null) return null;
             var binding = connection.Binding;
             bool attached;
             lock (bindingGate)
             {
-                // The transport authorization timeout may win its WaitAsync race
-                // just before this callback returns. Never attach after the
-                // socket runner's finally has already released the session.
+                // Connection cancellation may win just before this callback returns.
+                // Never attach after the socket runner's finally has already
+                // released the session.
                 attached = !sessionFinished && !token.IsCancellationRequested &&
                     router.TryAttach(connection);
                 if (attached && _combat is not null &&
@@ -287,7 +291,9 @@ public sealed partial class IdentitySessionAuthorization
                 ?null:new CharacterProfileProgressionHandler(
                     _identity,_progressionRules,router);
             return await AesWireConnection.RunServerAsync(client, settings,
-                Authorize, _world.TryPostMove, options, cancellationToken, Release,
+                Authorize, _world.TryPostMove,
+                configuredOptions with { EnforceAuthorizationTimeout = false },
+                cancellationToken, Release,
                 portal is null ? null : portal.HandleAsync, router.TryRequestResync,
                 router.TryRequestNormalAttack,router.TryRequestPetAttack,
                 router.TryRequestPetSkill,recovery.HandleRespawnAsync,

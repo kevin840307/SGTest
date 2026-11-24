@@ -12,7 +12,8 @@ public sealed record AesWireConnectionOptions(
     int AuthorizationTimeoutMilliseconds = 120000,
     int ReadBufferBytes = 16 * 1024,
     int BackpressureRetryMilliseconds = 2,
-    int MaxBackpressureMilliseconds = 2000);
+    int MaxBackpressureMilliseconds = 2000,
+    bool EnforceAuthorizationTimeout = true);
 
 public enum AesWireEndReason
 {
@@ -91,11 +92,19 @@ public static class AesWireConnection
             GatewayConnection? gateway;
             try
             {
-                using var authCts =
-                    CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-                authCts.CancelAfter(configured.AuthorizationTimeoutMilliseconds);
-                gateway = await authorizeAndBind(tls, authCts.Token)
-                    .AsTask().WaitAsync(authCts.Token).ConfigureAwait(false);
+                if (configured.EnforceAuthorizationTimeout)
+                {
+                    using var authCts =
+                        CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                    authCts.CancelAfter(configured.AuthorizationTimeoutMilliseconds);
+                    gateway = await authorizeAndBind(tls, authCts.Token)
+                        .AsTask().WaitAsync(authCts.Token).ConfigureAwait(false);
+                }
+                else
+                {
+                    gateway = await authorizeAndBind(tls, cancellationToken)
+                        .AsTask().WaitAsync(cancellationToken).ConfigureAwait(false);
+                }
             }
             catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
             {
