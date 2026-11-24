@@ -1,6 +1,16 @@
-# SGTest AGENTS.md — v13 Playable Gameplay / UI Parity
+# SGTest AGENTS.md — v14 Task-driven Delivery / HK Full-screen Parity
 
-適用於整個 C:\SGO\SRC\SGTest。此檔是唯一常駐執行規範；舊 v11/v12 Prompt 與詳細參考中的全量流程或 UI-only 優先順序不得覆蓋本檔。docs/SCHEDULER_PROMPT.md 是排程入口。詳細架構、原版研究、完整 Smoke 清單保留在 docs/AGENT_REFERENCE.md，依工作需要查閱，不要求每輪讀全文。
+適用於整個 C:\SGO\SRC\SGTest。此檔是唯一常駐執行規範；舊 v11–v13 Prompt 或詳細參考中的衝突規則不得覆蓋本檔。docs/SCHEDULER_PROMPT.md 是排程入口。詳細架構、原版研究、完整 Smoke 清單保留在 docs/AGENT_REFERENCE.md，依工作需要查閱，不要求每輪讀全文。
+
+## 0. 每輪必須讀取的執行規格（先用已整理證據，禁止從零猜測）
+
+正式任務庫：`docs/legacy_task_catalog_20261124/executable/`。其上層保留原始盤點。每輪用索引定位工作，只讀選中任務與直接相依檔，不全文讀 519 份：
+- `README.md` / `EXECUTION_INDEX.csv`：152 UI、163 Gameplay leaf、71 Gameplay integration、133 Asset evidence。任務庫是工作規格，不是完成度；不能將初始 NOT VERIFIED 解讀成每項都要重做。
+- `ui/UI-*.md`：每個 ITF 的原始控制項 offset/type/ID/group/local rect、文字候選、SPR、幀數、origin 與反編譯函式、逐控件驗收。優先使用 `UI_CONTROL_METADATA.json` / `SPR_FRAME_METADATA.json` 取同畫面精確資料，禁止目測猜位置或直接取 screenshot 當整張 UI。
+- `gameplay/GP-*.md`：以最小可玩 leaf 為開發單位；父整合任務在子項驗收後關閉，不重複實作。玩法引用的 UI MD 一併讀取。無專屬 ITF 的世界動畫/游標/效果也必須驗可見呈現。
+- `assets/ASSET-*.md`：只在當前功能需要或排到素材證據時查；未證明可達的素材不可被當成新玩法。
+- 來源不足依序定向補查：既有任務與有效證據 → HK ITF/SPR/.lst 與現有正式 converter → `C:\SGO\Recovered\Old`（ClientData/Paradise.exe.lst、服務端/plugins/*.dll.lst、Dat、cfg、資料庫；追 control handler、動畫/效果、數值、時序、條件、資料與封包）→ `C:\SGO\Recovered`（圖檔名稱、素材路徑、場景/原有實作交叉參考）及既有 Paradise 截圖/授權原版操作。HK 版 UI 最終優先，Old/Recovered 版本差異須標記；所有參考來源唯讀。不得因找到相似名稱就認定正確素材。
+- ITF COUNT_MATCH 是結構數量吻合，不代表控件語意或畫面已驗；原始 group、sentinel、自動尺寸、重複 ID、動態 SPR、frame-state、font/handler 要按實際 loader 或原版交互核對。數值與行為無證據不猜，已有確認資料不反覆研究。
 
 ## 1. 目標與工作選擇
 
@@ -9,19 +19,26 @@
 - P0：無法登入／移動／換圖、崩潰、資料損毀、權威或重大多人錯誤，先修；只修阻塞本輪可玩流程的問題。字型 AA、caret、Tab 細節等非阻塞差異留 UI backlog，不冒充已驗。
 - 預設 **Gameplay-first + UI Parity 雙軌**。每三個非緊急有效交付切片至少兩個推進未完成的核心玩法，一個集中改善遊戲內 UI；沒有可做的 UI 差距可改為玩法。跨 Session 以最近 TODO/Matrix/commit 的實際成果判斷，不以啟動次數計算。已可登入進世界的 AUTH 不得自動成為下一輪主題，除非阻塞玩法、使用者指定或排到 UI 輪。
 - 玩法按可玩鏈選最早尚未可玩的環節，先檢查現有實作，補缺而非重寫：① Map15→Map13 正式新角色可戰鬥（優先 source-backed combat profile、資料、權威規則，解除真正 blocker，不用 SyntheticTest、假數值或關閉 fail-closed）→ ② 選怪/靠近/普攻/MISS/受擊/擊殺/EXP/掉落/重生 → ③ 技能/MP/冷卻/動畫/單體與範圍 → ④ 撿取/背包/使用藥水/裝卸/屬性與重登 → ⑤ NPC 商店/金錢/銀行/倉庫/修理/強化 → ⑥ 多人 AOI/組隊/交易 → ⑦ Pet/Mecha/其他玩法。可依實際依賴調整，例如背包是戰鬥前置就先做。
-- 每輪一個有玩家意義的垂直切片，可同批修相互依賴的 Server/Client/UI/資料/測試；有餘力且前一切片驗收完成可接續下一個，不為湊輪次停工。切片要真的能正常操作、權威結果正確、適用持久化及多人一致；不要求整個大型系統或全遊戲像素完美才切換。
-- UI 軌優先世界 HUD、人物資料、戰鬥/技能、背包/裝備、NPC；按最大可見差異與共同根因批次修復。同畫面原圖、字型、文字位置、hitbox、交互均保留 HK 1:1 最終 Gate；非阻塞未對齊差異記入明確 backlog，仍 IN PROGRESS/NOT VERIFIED，**不阻止其他核心玩法交付**。同一非阻塞 UI 切片最多連續一輪；除非使用者指定，不連續耗在登入/選角/創角。
+- 每輪以一個可完成的 Gameplay leaf 或整個 UI 畫面為首要交付；同一功能的相關 leaf、同屏多個控件或共同根因應批次實作與驗收。完成首項立即接續相依或獨立下一項，有安全時間與資源就繼續，不以只改一個 Label、加一個測試、建立空殼、寫規劃或湊 commit 當交付。不要為追數量縮水測試；若僅部分可驗，保留明確未完成項。切片要真的能正常操作、權威結果正確、適用持久化及多人一致。
+- 不得把 UI 與功能拆成互不相連的假交付：玩法 leaf 的最小真實入口、狀態顯示、成功/失敗回饋是該玩法驗收必要項；UI 任務必須可從正式遊戲觸發，所有適用按鈕/輸入/拖曳/資料更新能運作。可玩但視覺未對齊只能記可玩 gate 通過、UI 未通過；不能標整體 COMPLETE。
+- UI 軌優先整個世界 HUD（含地圖、角色、NPC 可見性、HP/MP、快捷鍵、底部/右側功能入口）、背包/裝備、人物資料、技能、NPC 對話；按最大可見差異與共同根因批次修復。同畫面原圖、字型、文字位置、hitbox、交互均保留 HK 1:1 最終 Gate；非阻塞未對齊差異記入明確 backlog，仍 IN PROGRESS/NOT VERIFIED，**不阻止其他核心玩法交付**。同一非阻塞 UI 切片最多連續一輪；除非使用者指定，不連續耗在登入/選角/創角。
 - 證據不足或其他 Session 正在處理同切片，記錄具體 blocker/下一步，改做獨立的最高優先未完成切片。禁止以缺精確 glyph/AA 證據為理由停住所有遊戲開發。未知正式數值不得猜，仍 fail-closed；不得弱化權威、安全或持久化。
 - 使用者明確指定工作優先。內部可現代化，玩家外觀、操作、流程、時序、數值與動畫依 HK 可驗證證據。完整功能與 UI 的 COMPLETE 標準不變；階段性可玩交付與最終 1:1 是不同 gate。
 
 ## 2. 每輪快速閉環
 
 1. 合併一次 Git/Session 檢查：status、branch/HEAD、fetch、ahead/behind、branch/worktree；只讀相關 TODO、Feature Matrix、上一輪有效證據及受影響程式。先確認沒有其他 Session 正在處理相同切片或操作同一桌面/DB/輸出。
-2. 選定玩法或 UI 切片。玩法先真實重現正常玩家流程的阻塞、檢查既有 authority/資料/Client，訂出可玩驗收條件；UI 先取得同狀態原版與正式 SGTest Before（800×600、同 DPI），並排/overlay/diff。
-3. 玩法先釐清 HK 行為/必要資料與 Server→Client→UI 的最短完整鏈；UI 建立簡短 pixel spec（資源/frame、rect、font/baseline、hitbox、state）。已有有效證據直接沿用；缺什麼才查什麼。先修最大共同根因，再批次修可確認的差異。
+2. 從 EXECUTION_INDEX 選具體 Task ID；讀 MD、metadata、既有程式與 TODO/Matrix，列出未完成核取項目、相依性與本輪可驗收輸出。玩法先真實重現玩家流程；UI 先取得同狀態原版與正式 SGTest Before（800×600、同 DPI），並排/overlay/diff；整屏盤點差異，非只看本次想修的單一控件。
+3. 玩法先對照原版 handler、輸入/前置/合法性、Server 權威變更、封包/reducer、UI 及適用存檔和多人。UI 由任務庫直接形成 control inventory（ID+offset、資源/frame、rect、font/baseline、hitbox、state），逐項比對 scene/node 實際屬性與畫面，找出共同根因。已有有效證據直接沿用；缺什麼才定向反編譯。
 4. 儘快實作，不要先跑無關全量測試。開發中用 targeted parse/test、現有安全隔離 Host/Client 與工具快速迭代；可一次修改一批相關控件，之後立即取得 After 比對，不等整個大系統完成才看 UI。
 5. 以修改後的可見 Windows Godot + 真 Server + 真滑鼠/鍵盤驗實際玩家操作與權威結果，適用持久化/多人及原版行為 A/B；UI 變更做 Reference/Before/After 並驗 hitbox/動態資料。非 UI 修改不用重新取得登入逐像素對照。依第 5 節驗受影響範圍。
-6. 留精簡證據、更新 TODO/Matrix（含玩法/UI 軌與下一個可玩阻塞）、review diff、commit/push main、fetch 驗 0/0。依 §1 選下一輪，不因 AUTH/其他 UI 尚 IN PROGRESS 而自動重複。
+6. 留精簡 Task ID 級交接（每個本輪 leaf/UI 的已實作、可玩 gate、UI gate、未驗/阻塞、證據、下一項），更新 TODO/Matrix，review diff、commit/push main、fetch 驗 0/0。父整合待所有相依 leaf 完成才關閉；依 §1 選下一輪，不因 AUTH 尚 IN PROGRESS 而自動重複。
+
+### Godot MCP（優先使用實際可用工具，不假定能力）
+- 使用者已安裝 Godot MCP。每輪需要 Godot 時先發現已連線工具、確認 Godot executable/version 與 project.godot 路徑指向正式 `C:\SGO\SRC\SGTest\client`；若工具提供 get_project_info / run_project / get_debug_output / stop_project / scene 操作等，按實際工具契約使用，不臆造工具或能力。
+- 優先利用可用 MCP 查 scene/tree、Control 的實際 rect/anchor/offset/minimum size、theme/font、scale、clip、mouse_filter、z-index、Texture/Animation、runtime error；若 MCP 不提供這類檢查，使用正式 Godot script、Remote scene/debugger、OpenChatX 或 Windows 可見 Client，不能因 MCP 功能缺失卡住。
+- MCP 啟動/停止限本輪隔離 Client；不得搶占其他 Session editor/process/port/DB。MCP 的編輯與測試必須反映到正式 repository；不要建平行 demo scene 冒充主遊戲。若無法連線或連續兩次失敗，記錄原因立即 fallback，不重複安裝或無限重試。
+- MCP/headless、debug tree、直接觸發 signal/handler 只屬診斷或自動測試；可見 Windows Client + 真 Server + 玩家實際鍵鼠 + 原版畫面/行為 A/B 仍為正式驗收。不得宣稱工具能看到未實際取得的畫面。
 
 ### 效率與中斷規則
 - 建議前 5 分鐘完成安全檢查與選定差距、約 10 分鐘取得可比較畫面；大部分時間用於修正與實機迭代。時間盒是停止重複研究的提醒，不是降低品質的理由。
@@ -37,6 +54,14 @@
 - 唯一正式 converter：tools/asset_converter/；UI 解析入口 tools/ui_art/sync_original_ie_ui.py。以現有工具/manifest 補缺，不建第二套正式產線。
 - **截圖先查** C:\SGO\SGO Paradise\program\ScreenShot。缺同狀態則可直接啟動 C:\SGO\SGO Paradise\program\client.exe，以既有授權測試帳號實際操作，不重問已提供的資料。只在安全本機測試環境輸入憑證；不記錄到公開 Git/log/報告。Paradise 是舊版；版本衝突以 HK ITF/.lst/Data1 為準，不把舊版 screenshot 當 HK 像素真相。
 - HK .lst 只追當前視窗、資源 loader、frame/control ID、字型建立/繪字、狀態和 handler；不足時才深入。Old Server/data：C:\SGO\Recovered\Old；二創參考：C:\SGO\Recovered、C:\SGO\NewVersion\Recovered2；SGOAuto：C:\SGO\SGOAuto（原版狀態觀察、導航、重現操作；必要時唯讀研究，優先正常輸入，正式 Runtime 不依賴原版 process memory/地址）。來源全部唯讀。
+
+### 整屏 HK 還原與目前使用者指定驗收
+- 正式玩家畫面預設只顯示 HK UI，其他 skin/切換功能保留但不在 HK 模式同時疊加；不要為了移除錯誤 HUD 而移除地圖、人物、怪物、NPC、地上物、原本可用功能或權威狀態。驗進圖/換圖/登出重登。
+- 優先清整個世界畫面的偏差：HUD HP/MP/EXP 原始素材與動畫/更新節奏、數值文字 baseline，F1…等快捷鍵文字與槽位、右側功能按鈕（包含背包）位置/大小/hitbox、聊天、地圖、人物/NPC。面板逐個開啟核對背景、關閉/返回、各 tab、文字、資料及操作。
+- NPC 對話框、彈窗及按鈕優先由對應原版 SPR/幀組合，不得以自行繪製的通用 Panel/StyleBox 代替能取得的原始圖。HP/MP 等動態項需連續影格驗證消耗、恢復與動畫，不能只比一張靜態圖。
+- HK 遊戲內 HUD/可移動面板（包含呼叫出的 UI）按已指定拖曳契約：按住非互動區可拖動，真正可點擊按鈕、物品槽、文字輸入、scroll/hotkey 互動不被拖曳吞掉；拖動不得觸發地面移動、點擊穿透或按鈕誤觸。核對開關、重開、疊層與 resize，依原版或使用者指定行為；不把右側可點擊按鈕本身做成拖曳區。
+- 每份 UI MD 以整畫面為單位：對所有可見控件逐列核對來源、實際 rect/字體/幀、狀態、資料、hitbox；先對齊背景 origin/座標轉換及共用 font，再修個別差異。對尚未解析語意的項目標明缺證據；禁止為了對齊一個按鈕造成其他 UI 移位。
+- 驗收至少：完整未裁切的 HK reference/Before/After、每個異常區 ROI、幾何/文字/hitbox 結果與正常互動、最小/最大或空值/滿值（適用）、開關/拖曳與原狀態。明顯未對齊不可用高全圖相似度、遮罩、headless 或測試通過掩蓋。已知可修差距未改完，UI gate 仍 FAIL/IN PROGRESS，後續排程應明確續作而非無期限留 backlog。
 
 ### 幾何、字型、渲染與交互
 - 所有固定 HK UI 使用同一面板 local pixel coordinate system；背景、sprite、文字、輸入、按鈕、tooltip、hitbox 共用 origin。保留透明 padding/trim/pivot；避免 Container/minimum-size/theme margin/anchor/stretch/DPI 二次偏移。禁止逐 Label 無證據 magic offset、拉伸、重新上色、generic/retro/modern skin。
@@ -80,4 +105,4 @@ Native：C:\SGO\Godot\Godot_v4.7.2-stable_win64.exe，正式 client/ + server/�
 
 todo.txt 是工作優先順序，docs/FEATURE_MATRIX.md 是唯一正式功能矩陣。NOT STARTED / IN PROGRESS / IMPLEMENTED / TEST FAILED / NOT VERIFIED / VERIFIED / COMPLETE。IMPLEMENTED 不等於玩家可玩；VERIFIED 需真實適用證據；COMPLETE 要所有適用 Client/Server/UI/數值/Persistence/Single/Multiplayer/Edge/Regression/native/Original A/B。已知差異或缺證據不得錯標；TODO/Matrix 與實機衝突以保守狀態為準。
 
-每輪只需一份精簡交接紀錄（TODO/Matrix 或既有 evidence）：畫面/state、reference 版本/來源、private Before/After 路徑、主要 ROI/rect/font/diff 變化、實際操作/測試、未解項及下一個具體動作、commit。不要每次寫長篇文件或重跑有效測試。報告用玩家角度：修前/修後、原版對照、實機驗了什麼、仍有何問題、哪些 NOT VERIFIED、main SHA；未驗雙 Client 就明示不適用/未驗。不能以新增 class/schema/commit/test 數量充當玩家成果。
+每輪只需一份精簡交接紀錄（TODO/Matrix 或既有 evidence，包含實際 UI-/GP-/ASSET- Task ID、子項已完成/未完成、Gameplay Gate 與 UI Gate 各自結果；不另造第二份正式矩陣）：畫面/state、reference 版本/來源、private Before/After 路徑、主要 ROI/rect/font/diff 變化、實際操作/測試、未解項及下一個具體動作、commit。不要每次寫長篇文件或重跑有效測試。報告用玩家角度：修前/修後、原版對照、實機驗了什麼、仍有何問題、哪些 NOT VERIFIED、main SHA；未驗雙 Client 就明示不適用/未驗。不能以新增 class/schema/commit/test 數量充當玩家成果。
