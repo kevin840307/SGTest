@@ -1,4 +1,6 @@
 using SGTest.Server.Gateway;
+using SGTest.Server.Identity;
+using SGTest.Server.Visibility;
 using SGTest.Server.Wire;
 using SGTest.Server.World;
 
@@ -95,6 +97,87 @@ internal static class GatewayConnectionChecks
                     new byte[WireProtocol.MaximumFrameBytes + 1], _ => true, out _) ==
                     WireFeedStatus.BufferOverflow,
                 "fixed receive buffer overflow was not fail-closed");
+        });
+
+        Checks.Run("gateway attribute allocation rejects replay without losing backpressured command", () =>
+        {
+            static void OpenGameplay(GatewayConnection gateway, ActorSnapshot actor)
+            {
+                Require(gateway.QueueAoi(new(
+                        AoiEventKind.WorldReady,42,actor.MapEpoch,actor)) ==
+                        GatewaySendStatus.Enqueued,
+                    "attribute replay gate WorldReady enqueue failed");
+                Require(gateway.FeedClientBytes(
+                        WireProtocol.EncodeWorldReadyAck(new(actor.MapEpoch,42)),
+                        _ => true,out int controls) == WireFeedStatus.Accepted &&
+                        controls == 0 && gateway.WorldReadyAcknowledged,
+                    "attribute replay gate WorldReady ACK failed");
+            }
+
+            var actor=Actor();
+            var acceptedGateway=new GatewayConnection(actor);
+            OpenGameplay(acceptedGateway,actor);
+            byte[] allocation=WireProtocol.EncodePlayerAttributeAllocate(
+                new(7,CharacterAttributeKind.Strength));
+            int dispatched=0;
+            TrustedPlayerAttributeAllocate observed=default;
+            var accepted=acceptedGateway.FeedClientBytes(
+                allocation,_ => true,out int acceptedCount,
+                postAttribute: command =>
+                {
+                    dispatched++;
+                    observed=command;
+                    return true;
+                });
+            Require(accepted==WireFeedStatus.Accepted && acceptedCount==1 &&
+                    dispatched==1 && observed.ActorId==actor.ActorId &&
+                    observed.ConnectionEpoch==actor.ConnectionEpoch &&
+                    observed.MapEpoch==actor.MapEpoch &&
+                    observed.AttributeSequence==7 &&
+                    observed.Attribute==CharacterAttributeKind.Strength,
+                "attribute allocation did not preserve trusted binding/sequence");
+
+            var replay=acceptedGateway.FeedClientBytes(
+                allocation,_ => true,out int replayCount,
+                postAttribute: _ =>
+                {
+                    dispatched++;
+                    return true;
+                });
+            Require(replay==WireFeedStatus.ProtocolViolation && replayCount==0 &&
+                    dispatched==1,
+                "duplicate attribute sequence was dispatched twice");
+
+            var blockedGateway=new GatewayConnection(actor);
+            OpenGameplay(blockedGateway,actor);
+            byte[] retained=WireProtocol.EncodePlayerAttributeAllocate(
+                new(8,CharacterAttributeKind.Constitution));
+            int attempts=0;
+            var blocked=blockedGateway.FeedClientBytes(
+                retained,_ => true,out int blockedCount,
+                postAttribute: _ =>
+                {
+                    attempts++;
+                    return false;
+                });
+            Require(blocked==WireFeedStatus.Backpressured && blockedCount==0 &&
+                    attempts==1 && blockedGateway.BufferedInputBytes==retained.Length,
+                "backpressured attribute command was consumed");
+
+            TrustedPlayerAttributeAllocate resumed=default;
+            var resumedStatus=blockedGateway.ResumeClientIngress(
+                _ => true,out int resumedCount,
+                postAttribute: command =>
+                {
+                    attempts++;
+                    resumed=command;
+                    return true;
+                });
+            Require(resumedStatus==WireFeedStatus.Accepted && resumedCount==1 &&
+                    attempts==2 && resumed.AttributeSequence==8 &&
+                    resumed.Attribute==CharacterAttributeKind.Constitution &&
+                    blockedGateway.BufferedInputBytes==0,
+                "backpressured attribute command did not resume exactly once");
         });
 
         Checks.Run("gateway reliable queue is bounded FIFO and generation routed", () =>

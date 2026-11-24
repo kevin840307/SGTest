@@ -82,11 +82,14 @@ func _initialize() -> void:
 	if not WireCodec.decode_player_profile_state(invalid_profile).is_empty():
 		_fail("PlayerProfileState accepted unknown verification encoding")
 		return
-	var allocate:=WireCodec.encode_player_attribute_allocate(1)
-	if allocate.hex_encode().to_upper()!="090000000100870001":
+	var allocate:=WireCodec.encode_player_attribute_allocate(7,1)
+	if allocate.hex_encode().to_upper()!="0D000000010087000700000001":
 		_fail("PlayerAttributeAllocate golden "+allocate.hex_encode())
 		return
-	if not WireCodec.encode_player_attribute_allocate(0).is_empty():
+	if not WireCodec.encode_player_attribute_allocate(0,1).is_empty():
+		_fail("PlayerAttributeAllocate accepted zero sequence")
+		return
+	if not WireCodec.encode_player_attribute_allocate(1,0).is_empty():
 		_fail("PlayerAttributeAllocate accepted invalid attribute")
 		return
 	var auth := WireCodec.encode_auth_request("user_01", "Password-123456!")

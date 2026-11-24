@@ -96,10 +96,11 @@ public static partial class WireProtocol
 
     public static byte[] EncodePlayerAttributeAllocate(PlayerAttributeAllocateWire value)
     {
-        if (!Enum.IsDefined(value.Attribute))
+        if (value.AttributeSequence == 0 || !Enum.IsDefined(value.Attribute))
             throw new ArgumentOutOfRangeException(nameof(value));
         var frame=NewFrame(WireOpcode.PlayerAttributeAllocate,PlayerAttributeAllocateFrameBytes);
-        frame[8]=(byte)value.Attribute;
+        BinaryPrimitives.WriteUInt32LittleEndian(frame.AsSpan(8,4),value.AttributeSequence);
+        frame[12]=(byte)value.Attribute;
         return frame;
     }
 
@@ -111,10 +112,11 @@ public static partial class WireProtocol
            header.Opcode!=WireOpcode.PlayerAttributeAllocate||
            frame.Length!=PlayerAttributeAllocateFrameBytes)
             return false;
-        var attribute=(CharacterAttributeKind)frame[8];
-        if(!Enum.IsDefined(attribute))
+        uint sequence=BinaryPrimitives.ReadUInt32LittleEndian(frame.Slice(8,4));
+        var attribute=(CharacterAttributeKind)frame[12];
+        if(sequence==0 || !Enum.IsDefined(attribute))
             return false;
-        value=new(attribute);
+        value=new(sequence,attribute);
         return true;
     }
 

@@ -39,6 +39,7 @@ var _reconnect_attempt := 0
 var _reconnect_count := 0
 var _last_transport_error := OK
 var _intent_token := 0
+var _attribute_sequence := 0
 
 func _init(transport_override: RefCounted = null) -> void:
 	_transport = transport_override if transport_override != null else Transport.new()
@@ -76,6 +77,7 @@ func _connect_secure(
 	_reconnect_count = 0
 	_last_transport_error = OK
 	_intent_token = 0
+	_attribute_sequence = 0
 	_published = _decorate_snapshot(_world.snapshot())
 	_published_revision += 1
 	_running = true
@@ -1968,11 +1970,16 @@ func _process_attribute_allocate_intent(intent:Dictionary)->void:
 		int(current.get("player_available_attribute_points",0))<=0
 	):
 		return
-	var frame:=WireCodec.encode_player_attribute_allocate(int(intent.get("attribute",0)))
+	var next_sequence:=_attribute_sequence+1
+	if next_sequence<=0:
+		next_sequence=1
+	var frame:=WireCodec.encode_player_attribute_allocate(
+		next_sequence,int(intent.get("attribute",0)))
 	if frame.is_empty():
 		_pop_intent()
 		return
 	if _transport.send_frame(frame):
+		_attribute_sequence=next_sequence
 		_pop_intent()
 		_publish()
 

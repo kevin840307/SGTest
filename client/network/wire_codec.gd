@@ -150,7 +150,7 @@ const PLAYER_SKILL_VISUAL_FRAME_BYTES := 70
 const PLAYER_COMBAT_STATE_FRAME_BYTES := 33
 const PLAYER_PROFILE_STATE_FRAME_BYTES := 73
 const PLAYER_CREATION_PROFILE_STATE_FRAME_BYTES := 32
-const PLAYER_ATTRIBUTE_ALLOCATE_FRAME_BYTES := 9
+const PLAYER_ATTRIBUTE_ALLOCATE_FRAME_BYTES := 13
 const PLAYER_DAMAGE_FRAME_BYTES := 57
 const PLAYER_RESPAWN_FRAME_BYTES := 20
 const PLAYER_RESPAWN_RESULT_FRAME_BYTES := 29
@@ -655,10 +655,11 @@ static func decode_player_profile_state(frame: PackedByteArray) -> Dictionary:
 		"available_attribute_points":available_attribute_points,
 		"verified_stats_mask":verified_stats_mask}
 
-static func encode_player_attribute_allocate(attribute: int) -> PackedByteArray:
-	if attribute < 1 or attribute > 4:
+static func encode_player_attribute_allocate(sequence: int, attribute: int) -> PackedByteArray:
+	if sequence <= 0 or sequence > 0xFFFFFFFF or attribute < 1 or attribute > 4:
 		return PackedByteArray()
 	var writer := _writer(PLAYER_ATTRIBUTE_ALLOCATE_FRAME_BYTES, OPCODE_PLAYER_ATTRIBUTE_ALLOCATE)
+	writer.put_u32(sequence)
 	writer.put_u8(attribute)
 	return writer.data_array
 

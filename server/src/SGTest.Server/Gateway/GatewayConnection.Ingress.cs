@@ -12,7 +12,8 @@ using SGTest.Server.Identity;
 namespace SGTest.Server.Gateway;
 
 public readonly record struct TrustedPlayerAttributeAllocate(
-    long ActorId,long ConnectionEpoch,long MapEpoch,CharacterAttributeKind Attribute);
+    long ActorId,long ConnectionEpoch,long MapEpoch,uint AttributeSequence,
+    CharacterAttributeKind Attribute);
 
 /// <summary>
 /// Trusted inbound V1 command routing and WorldReady/resync ACK gate for the
@@ -167,10 +168,15 @@ public sealed partial class GatewayConnection
            header.Opcode==WireOpcode.PlayerAttributeAllocate &&
            WireProtocol.TryDecodePlayerAttributeAllocate(frame,out var allocation))
         {
-            if(!GameplayReady(bound))return WireFrameDisposition.ProtocolViolation;
-            return postAttribute(new(
-                bound.ActorId,bound.ConnectionEpoch,bound.MapEpoch,allocation.Attribute))
-                ?WireFrameDisposition.Accepted:WireFrameDisposition.Backpressured;
+            if(!GameplayReady(bound) ||
+               allocation.AttributeSequence<=_lastAttributeSequence)
+                return WireFrameDisposition.ProtocolViolation;
+            if(!postAttribute(new(
+                bound.ActorId,bound.ConnectionEpoch,bound.MapEpoch,
+                allocation.AttributeSequence,allocation.Attribute)))
+                return WireFrameDisposition.Backpressured;
+            _lastAttributeSequence=allocation.AttributeSequence;
+            return WireFrameDisposition.Accepted;
         }
         if (header.Opcode == WireOpcode.WorldReadyAck &&
             WireProtocol.TryDecodeWorldReadyAck(frame, out var ack))

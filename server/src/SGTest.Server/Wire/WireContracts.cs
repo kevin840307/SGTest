@@ -426,7 +426,8 @@ public readonly record struct PlayerProfileStateWire(
     int Attack, int Defense, int Hit, int Dodge,
     int AvailableAttributePoints,
     PlayerProfileStatVerification VerifiedStats = PlayerProfileStatVerification.All);
-public readonly record struct PlayerAttributeAllocateWire(CharacterAttributeKind Attribute);
+public readonly record struct PlayerAttributeAllocateWire(
+    uint AttributeSequence, CharacterAttributeKind Attribute);
 public readonly record struct PlayerCreationProfileStateWire(
     long CharacterId, int Strength, int Dexterity, int Constitution, int Wisdom);
 public readonly record struct PlayerDamageWire(
