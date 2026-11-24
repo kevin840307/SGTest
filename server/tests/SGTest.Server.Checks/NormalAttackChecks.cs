@@ -18,6 +18,8 @@ internal static class NormalAttackChecks
         Checks.Run("normal attack gateway injects trusted actor and combat profile after Ready ACK", GatewayBoundary);
         Checks.Run("normal attack hit gate reproduces Old IsHit_PerHit",HitFormula);
         Checks.Run("normal attack MISS consumes cadence and preserves monster HP",()=>MissAuthority(root));
+        Checks.Run("normal attack rejects range cadence dead and cross-map targets without damage",
+            ()=>InvalidAttackAuthority(root));
         Checks.Run("normal attack authority owns range cooldown replay HP death and shared AOI",
             () => LivePipeline(root).GetAwaiter().GetResult());
     }
@@ -136,6 +138,114 @@ internal static class NormalAttackChecks
             2,before.EntityId,profile));
         Require(cooldown.Status==NormalAttackStatus.Cooldown,
             "MISS did not consume normal attack cadence");
+    }
+
+    private static void InvalidAttackAuthority(string root)
+    {
+        const int mapA=216;
+        const int mapB=217;
+        string folderA=Checks.Fixture(root,mapA,16,16,(_,_)=>0);
+        string folderB=Checks.Fixture(root,mapB,16,16,(_,_)=>0);
+        var gridA=BlockingGrid.Load(folderA,mapA);
+        var gridB=BlockingGrid.Load(folderB,mapB);
+        string popA=Path.Combine(folderA,"population-invalid-a.json");
+        string popB=Path.Combine(folderB,"population-invalid-b.json");
+        static object Population(int mapId,int x)=>new
+        {
+            version=4,kind="verified_monster_runtime",map_id=mapId,
+            stats_verified=true,gameplay_ready=true,
+            definitions=new[] { new {
+                id=1,name="InvalidAttackFixture",sprite="EN001A",
+                atlas="Enemy/EN001A/atlas.json",
+                stats=new {
+                    level=3,max_hp=100,attack_damage=6,move_step=8.0,
+                    aggro_radius=1.0,lose_target_radius=2.0,
+                    leash_radius=2.0,attack_range=1.0,
+                    attack_cooldown_ticks=300,respawn_ticks=300,
+                    wander_radius=0.0,wander_interval_ticks=100
+                }}},
+            spawns=new[]{new{source_index=0,source_flags=7,
+                definition=1,p=new[]{x,24}}}
+        };
+        File.WriteAllText(popA,JsonSerializer.Serialize(Population(mapA,40)));
+        File.WriteAllText(popB,JsonSerializer.Serialize(Population(mapB,40)));
+        var runtimeA=new MonsterRuntime(
+            gridA,MonsterPopulationCatalog.LoadVerified(popA,mapA,gridA));
+        var runtimeB=new MonsterRuntime(
+            gridB,MonsterPopulationCatalog.LoadVerified(popB,mapB,gridB));
+        var hitRules=new[]
+        {
+            new CharacterExperienceRewardRule(
+                mapA,1,3,99,CharacterExperienceRewardTrust.SyntheticTest,
+                "ci:invalid-attack-a",EnemyDodge:0),
+            new CharacterExperienceRewardRule(
+                mapB,1,3,99,CharacterExperienceRewardTrust.SyntheticTest,
+                "ci:invalid-attack-b",EnemyDodge:0)
+        };
+        var coordinator=new MonsterWorldCoordinator(
+            [runtimeA,runtimeB],normalAttackHitRules:hitRules,
+            normalAttackRoll:()=>0);
+        var actor=new ActorSnapshot(91,mapA,5,1,0,0,24,24,1,false);
+        coordinator.Process(new WorldChangedBatch(1,[],
+            [new(ActorLifecycleKind.Joined,actor)]));
+        var targetA=runtimeA.SnapshotAll().Single();
+        var targetB=runtimeB.SnapshotAll().Single();
+
+        var shortRange=new TrustedCombatProfile(
+            Attack:10,Defense:4,Hit:10,Dodge:3,
+            AttackRange:10,AttackCooldownTicks:3,Level:3);
+        var before=runtimeA.SnapshotAll().Single();
+        var far=coordinator.ResolveNormalAttack(new(
+            actor.ActorId,actor.ConnectionEpoch,actor.MapEpoch,
+            1,targetA.EntityId,shortRange));
+        var afterFar=runtimeA.SnapshotAll().Single();
+        Require(far.Status==NormalAttackStatus.OutOfRange &&
+                far.Damage==0 &&
+                afterFar.CurrentHp==before.CurrentHp &&
+                afterFar.EntityRevision==before.EntityRevision,
+            "out-of-range attack mutated authoritative target");
+
+        var profile=shortRange with {AttackRange=48};
+        var wrongMap=coordinator.ResolveNormalAttack(new(
+            actor.ActorId,actor.ConnectionEpoch,actor.MapEpoch,
+            2,targetB.EntityId,profile));
+        var afterWrongMap=runtimeB.SnapshotAll().Single();
+        Require(wrongMap.Status==NormalAttackStatus.TargetMissing &&
+                wrongMap.Damage==0 &&
+                afterWrongMap.CurrentHp==targetB.CurrentHp &&
+                afterWrongMap.EntityRevision==targetB.EntityRevision,
+            "cross-map target changed authoritative state");
+
+        var first=coordinator.ResolveNormalAttack(new(
+            actor.ActorId,actor.ConnectionEpoch,actor.MapEpoch,
+            3,targetA.EntityId,profile));
+        Require(first.Status==NormalAttackStatus.Applied && first.Damage==10 &&
+                first.CurrentHp==90,"valid control attack did not apply");
+        var afterFirst=runtimeA.SnapshotAll().Single();
+        var tooFast=coordinator.ResolveNormalAttack(new(
+            actor.ActorId,actor.ConnectionEpoch,actor.MapEpoch,
+            4,targetA.EntityId,profile));
+        var afterFast=runtimeA.SnapshotAll().Single();
+        Require(tooFast.Status==NormalAttackStatus.Cooldown &&
+                tooFast.Damage==0 &&
+                afterFast.CurrentHp==afterFirst.CurrentHp &&
+                afterFast.EntityRevision==afterFirst.EntityRevision,
+            "too-fast attack mutated authoritative target");
+
+        var killed=runtimeA.ApplyTrustedDamage(
+            targetA.EntityId,actor.ActorId,100,coordinator.LastTick);
+        Require(killed.Applied&&killed.Killed,"dead-target fixture kill");
+        coordinator.Process(new WorldChangedBatch(4,[],[]));
+        var deadBefore=runtimeA.SnapshotAll().Single();
+        var dead=coordinator.ResolveNormalAttack(new(
+            actor.ActorId,actor.ConnectionEpoch,actor.MapEpoch,
+            5,targetA.EntityId,profile));
+        var deadAfter=runtimeA.SnapshotAll().Single();
+        Require(dead.Status==NormalAttackStatus.TargetDead &&
+                dead.Damage==0 &&
+                deadAfter.CurrentHp==0 &&
+                deadAfter.EntityRevision==deadBefore.EntityRevision,
+            "dead-target attack mutated authoritative target");
     }
 
     private static async Task LivePipeline(string root)

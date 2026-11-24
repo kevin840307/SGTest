@@ -131,6 +131,12 @@ static class Checks
                 Console.WriteLine($"WEAPON_RANGE_CHECKS PASS total={_passes}");
                 return 0;
             }
+            if(args is ["--normal-attack-only"])
+            {
+                NormalAttackChecks.Verify(root);
+                Console.WriteLine($"NORMAL_ATTACK_CHECKS PASS total={_passes}");
+                return 0;
+            }
             if (args is ["--identity-admin-only", "--aes"])
             {
                 IdentityAdminChecks.Verify(root, tlsOnly: true);
