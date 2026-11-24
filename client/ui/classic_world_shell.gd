@@ -527,12 +527,15 @@ func _character_vital_fill(art:String,origin:Vector2)->Control:
 	return viewport
 
 func _build_skill()->void:
-	skill_window=_window("SkillWindow","BG_SKILL",Vector2(223,506),Vector2(542,63))
-	_skill_rows.name="SkillRows"
-	_skill_rows.position=Vector2(34,37)
-	_skill_rows.size=Vector2(165,442)
-	_skill_rows.add_theme_constant_override("separation",1)
-	skill_window.add_child(_skill_rows)
+	var skill_script:=load("res://ui/classic_skill_window.gd")
+	skill_window=skill_script.new()
+	skill_window.position=Vector2(542,63)
+	skill_window.connect("skill_selected",func(skill_id:int):
+		if _panel==null:return
+		_panel.skill_id_input.value=skill_id
+		_panel.skill_target_mode.button_pressed=true)
+	stage.add_child(skill_window)
+	skill_window.visible=false
 
 func _build_party()->void:
 	party_window=_window("PartyWindow","BG_TEAM",Vector2(139,144),Vector2(626,424))
@@ -1039,15 +1042,13 @@ func _refresh_character_vital_fill(fill:Control,stat:String)->void:
 	fill.size.x=floorf(92.0*fraction)
 
 func _refresh_skill()->void:
-	_clear_rows(_skill_rows)
-	var skills:Dictionary=_stats.get("learned_skills",{}) if _stats.get("learned_skills",{}) is Dictionary else {}
-	var ids:Array=skills.keys()
-	ids.sort()
-	for i in mini(SKILL_ROW_COUNT,ids.size()):
-		var id:=int(ids[i]);var level:=int(skills[ids[i]])
-		_classic_row(_skill_rows,"技能 %d　Lv.%d"%[id,level],26.5,func():
-			if _panel!=null:_panel.skill_input.value=id;_panel.use_skill_button.pressed.emit())
-	if ids.is_empty():_classic_row(_skill_rows,"尚無已學技能",26.5)
+	if skill_window==null or not skill_window.has_method("set_skill_book"):return
+	var raw_skills:Variant=_stats.get("skill_book",{})
+	var skills:Dictionary=raw_skills if raw_skills is Dictionary else {}
+	if bool(_stats.get("skill_book_ready",true)):
+		skill_window.call("set_skill_book",skills)
+	else:
+		skill_window.call("set_skill_book",{})
 
 func _refresh_party()->void:
 	_clear_rows(_party_rows)

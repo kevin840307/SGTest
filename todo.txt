@@ -516,6 +516,9 @@
 
 - REB024 [ ] NPC 商店／倉庫／銀行／修理／傳點／任務；金錢、ItemInstance UID、持久化與冪等交易驗收。
 - REB025 [ ] Equipment 強化（不另編 +1/+2 Definition ID）、單體／範圍技能、Buff/Debuff、寵物、機甲／卡片／升級；依原版資料與動畫驗證。
+  - UI-027 [ ] 2026-11-24 HK 技能視窗已由錯誤的 223×506／16 generic rows 改為 027_Skill.itf 的 223×288／8 rows；BG/close/help/scroll 均由 HK 原始 SPR 唯讀解碼，所有 header/name/level/icon/progress/row hitbox rect 依 metadata/ITF，並直接讀正式 opcode104 SkillBookSnapshot 的 Server-owned SkillID/Level。Godot 4.7.2 component + shell integration gates PASS；未知的 localized skill name、ICON frame、EXP/proficiency 不猜，維持數字 fallback／空 icon／hidden progress。尚缺可見 Windows 800×600 HK Reference/Before/After、ROI overlay/diff、真滑鼠拖曳/scroll/hitbox 與動態 A/B，故保持 NOT VERIFIED。
+  - GP-020-01/02 [ ] 2026-11-24 Old `Dat/Quest/Learn_Skill_*.txt` 已直接證明技能學習的 Career/Job/Level/前置技能/道具 gate（例如 7201：Lv50、career7/job2、pre7104、item10615；10101：career10、Lv10、item10352），成功後才 RemoveItem + AddSkill + SetFlag。SGTest 已有 durable SkillBook store，但尚未閉合 Learn_Skill script→正式 NPC/spawn/quest action 的 source-backed mapping；因此不把任意 AddSkill API 暴露給玩家，保持 fail-closed。下一步先閉合 NPC entry/action mapping，再做合法/非法學習、重登持久化。
+  - GP-021-01/02 [ ] 2026-11-24 既有正式 skill authority 已重新驗證：authenticated Gateway intent→SkillCommandHandler→non-mutating preflight→Server rule/range/cooldown/target/replay→SQLite idempotent MP settlement→commit/cancel→reliable result；完整 Server checks 337/337 PASS，包含 skill rule/wire/gateway/damage/range/cooldown/replay/area selection/visual scope 與 MP/SkillBook persistence。仍缺正式角色可見 Windows 真技能施放、HK 精確 skill data/動畫/數值 A/B；不得因 synthetic authority PASS 宣稱 GP-021 COMPLETE。
 - REB026 [ ] 玩家交易／玩家商店 AOI、聊天／社交（好友 authority baseline 已有，HK 精確規則仍待驗）及 PvP 地圖規則、藍白粉紅紅名、GM 指令；須含多人競態／權限測試。
 - REB027 [ ] 遊戲功能回歸與持久化 Gate：NPC/交易/強化/技能/寵物/機甲/PvP 的 Server authority、Client 畫面及重連一致性。
 
