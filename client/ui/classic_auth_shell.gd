@@ -12,6 +12,10 @@ const ART := "res://ui/private_ie_hk2"
 const CREATE_FIELDS := ["race","hair_index","hair_color","body_index","sleeve_color","leg_index"]
 const CREATE_ATTRIBUTE_FIELDS := ["strength","dexterity","constitution","wisdom"]
 const CREATE_ATTRIBUTE_TOTAL := 8
+const HK_SHARED_FONT_FACE := "新細明體"
+const HK_SHARED_FONT_HEIGHT := 12
+const HK_SHARED_FONT_WEIGHT := 500
+const HK_SHARED_FONT_BASELINE := 10.0
 
 class LoginCaption extends Control:
 	var text := ""
@@ -21,6 +25,23 @@ class LoginCaption extends Control:
 		# ITF positions identify the top-left of a 12px text cell. Canvas
 		# drawing keeps the same origin as the background and input hitboxes.
 		draw_string(font,Vector2(1,10),text,HORIZONTAL_ALIGNMENT_LEFT,-1,12,Color.WHITE)
+
+class HkSharedText extends Control:
+	var text := "":
+		set(value):
+			if text != value:
+				text = value
+				queue_redraw()
+	var text_font: Font
+	var centered := true
+	var color := Color.WHITE
+	var font_size := HK_SHARED_FONT_HEIGHT
+	var baseline := HK_SHARED_FONT_BASELINE
+
+	func _draw() -> void:
+		var alignment := HORIZONTAL_ALIGNMENT_CENTER if centered else HORIZONTAL_ALIGNMENT_LEFT
+		var draw_font := text_font if text_font != null else get_theme_default_font()
+		draw_string(draw_font,Vector2(0,baseline),text,alignment,int(size.x),font_size,color)
 
 var stage := Control.new()
 var login_page := Control.new()
@@ -39,6 +60,7 @@ var _login_confirm_label: LoginCaption
 var _login_exit_label: LoginCaption
 var _login_font := SystemFont.new()
 var _login_input_font: Font
+var _shared_ui_font: Font
 var _status: Label
 var _create_note: Label
 var _create_password := LineEdit.new()
@@ -48,7 +70,8 @@ var _create_remaining: Label
 var _create_button: Button
 var _create_back_button: Button
 var _slots: Array[Button] = []
-var _slot_names: Array[Label] = []
+var _slot_names: Array[HkSharedText] = []
+var _select_fixed_texts: Array[HkSharedText] = []
 var _slot_empty_art: Array[TextureRect] = []
 var _slot_play_art: Array[TextureRect] = []
 var _slot_password_buttons: Array[Button] = []
@@ -140,6 +163,34 @@ func _make_login_input_font() -> Font:
 	fallback.font_names = PackedStringArray(["PMingLiU"])
 	_configure_hk_gdi_raster(fallback)
 	return fallback
+
+func _make_hk_shared_ui_font() -> Font:
+	# HK sub_4E92A9 -> sub_561330 creates the shared UI GDI font as
+	# 新細明體, lfHeight=12, lfWeight=500, charset=1, quality=4. Character
+	# Select obtains this same renderer through sub_490774. Prefer the private
+	# Windows-GDI BMFont so Godot does not silently substitute a TTC face.
+	var bitmap_path := "res://ui/private_ie_hk2/HK_SHARED_UI_FONT.fnt"
+	if FileAccess.file_exists(bitmap_path):
+		var bitmap := FontFile.new()
+		if bitmap.load_bitmap_font(bitmap_path) == OK:
+			return bitmap
+	var fallback := SystemFont.new()
+	fallback.font_names = PackedStringArray([HK_SHARED_FONT_FACE])
+	fallback.font_weight = HK_SHARED_FONT_WEIGHT
+	_configure_hk_gdi_raster(fallback)
+	return fallback
+
+func _shared_text(parent: Control,text: String,x: float,y: float,w: float,h: float,centered:=true) -> HkSharedText:
+	var label := HkSharedText.new()
+	label.text = text
+	label.text_font = _shared_ui_font
+	label.centered = centered
+	label.font_size = HK_SHARED_FONT_HEIGHT
+	label.baseline = HK_SHARED_FONT_BASELINE
+	label.clip_contents = true
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_input_at(parent,label,x,y,w,h)
+	return label
 
 func _style_line_edit(input: LineEdit) -> void:
 	input.add_theme_stylebox_override("normal",_empty_style())
@@ -295,6 +346,7 @@ func _build_login() -> void:
 
 func _build_select() -> void:
 	_art(select_page,"SELECT_CHARACTER.png")
+	_shared_ui_font = _make_hk_shared_ui_font()
 	# 004_SELECT_CHARACTER.ITF: each of the three HK slots owns three distinct
 	# actions. The HK .lst maps 密碼設定/進入遊戲/刪除角色 to states 9/6/7.
 	var name_x := [150.0,338.0,525.0]
@@ -302,10 +354,9 @@ func _build_select() -> void:
 	var action_x := [168.0,358.0,544.0]
 	var label_x := [187.0,377.0,563.0]
 	for i in 3:
-		var name_label := _label(select_page,"",name_x[i],260,124,16)
-		name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		name_label.add_theme_color_override("font_color",Color.WHITE)
-		name_label.add_theme_color_override("font_shadow_color",Color.TRANSPARENT)
+		# HK Select uses the process-wide shared GDI font. Keep the ITF rect
+		# and draw at the original 10px baseline instead of Label vertical-center.
+		var name_label := _shared_text(select_page,"",name_x[i],260,124,16)
 		_slot_names.append(name_label)
 
 		var preview := PlayerPreview.new()
@@ -356,16 +407,11 @@ func _build_select() -> void:
 			["進入遊戲",label_x[i],448,48,12],
 			["刪除角色",label_x[i],472,48,12],
 		]:
-			var label := _label(select_page,str(spec[0]),float(spec[1]),float(spec[2]),float(spec[3]),float(spec[4]))
-			label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-			label.add_theme_color_override("font_color",Color.WHITE)
-			label.add_theme_color_override("font_shadow_color",Color.TRANSPARENT)
+			_select_fixed_texts.append(_shared_text(
+				select_page,str(spec[0]),float(spec[1]),float(spec[2]),float(spec[3]),float(spec[4])))
 
 	_select_back_button = _button(select_page,"",544,499,85,21,func(): _panel.disconnect_session(),"YELLOW_BUTTON")
-	var back_label := _label(select_page,"上一頁",569,504,36,12)
-	back_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	back_label.add_theme_color_override("font_color",Color.WHITE)
-	back_label.add_theme_color_override("font_shadow_color",Color.TRANSPARENT)
+	_select_fixed_texts.append(_shared_text(select_page,"上一頁",569,504,36,12))
 
 	_select_status = _label(select_page,"",237,532,326,24)
 	_build_select_password_modal()

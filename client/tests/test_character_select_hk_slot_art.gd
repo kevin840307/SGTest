@@ -29,6 +29,18 @@ func _run() -> void:
 	await process_frame
 	app._resize()
 	var shell = app.classic_auth
+	if not FileAccess.file_exists("res://ui/private_ie_hk2/HK_SHARED_UI_FONT.fnt"):
+		_fail("private HK shared GDI bitmap font was not generated")
+		return
+	if shell._shared_ui_font == null:
+		_fail("Character Select did not load the HK shared font")
+		return
+	if abs(shell._shared_ui_font.get_height(12)-12.0) > 0.01 or abs(shell._shared_ui_font.get_ascent(12)-10.0) > 0.01:
+		_fail("HK shared font metrics drifted from height=12/ascent=10")
+		return
+	if not shell._shared_ui_font.has_char("密".unicode_at(0)):
+		_fail("HK shared font lost CP950 Chinese glyph coverage")
+		return
 	app.session_panel.set_process(false)
 	app.session_panel.active = true
 	app.session_panel.show()
@@ -50,6 +62,44 @@ func _run() -> void:
 		return
 
 	var slot_x := [169.0,358.0,544.0]
+	var name_x := [150.0,338.0,525.0]
+	if shell._slot_names.size() != 3:
+		_fail("three Character Select name text controls were not built")
+		return
+	for i in 3:
+		var name_text = shell._slot_names[i]
+		if name_text.position != Vector2(name_x[i],260) or name_text.size != Vector2(124,16):
+			_fail("character-name ITF rect drifted at slot %d" % i)
+			return
+		if name_text.text_font != shell._shared_ui_font or name_text.font_size != 12 or name_text.baseline != 10.0:
+			_fail("character-name shared font/baseline drifted at slot %d" % i)
+			return
+
+	var expected_fixed := [
+		["密碼設定",Vector2(187,424),Vector2(48,12)],
+		["進入遊戲",Vector2(187,448),Vector2(48,12)],
+		["刪除角色",Vector2(187,472),Vector2(48,12)],
+		["密碼設定",Vector2(377,424),Vector2(48,12)],
+		["進入遊戲",Vector2(377,448),Vector2(48,12)],
+		["刪除角色",Vector2(377,472),Vector2(48,12)],
+		["密碼設定",Vector2(563,424),Vector2(48,12)],
+		["進入遊戲",Vector2(563,448),Vector2(48,12)],
+		["刪除角色",Vector2(563,472),Vector2(48,12)],
+		["上一頁",Vector2(569,504),Vector2(36,12)],
+	]
+	if shell._select_fixed_texts.size() != expected_fixed.size():
+		_fail("Character Select fixed text control count drifted")
+		return
+	for i in expected_fixed.size():
+		var label = shell._select_fixed_texts[i]
+		var expected = expected_fixed[i]
+		if label.text != expected[0] or label.position != expected[1] or label.size != expected[2]:
+			_fail("Character Select fixed text rect drifted at index %d" % i)
+			return
+		if label.text_font != shell._shared_ui_font or label.font_size != 12 or label.baseline != 10.0:
+			_fail("Character Select fixed text font/baseline drifted at index %d" % i)
+			return
+
 	for i in 3:
 		var empty_art: TextureRect = shell._slot_empty_art[i]
 		var play_art: TextureRect = shell._slot_play_art[i]
@@ -77,5 +127,5 @@ func _run() -> void:
 		if root.get_texture().get_image().save_png(capture_path) != OK:
 			_fail("800x600 capture write failed: "+capture_path)
 			return
-	print("CHARACTER_SELECT_HK_SLOT_ART_PASS itf_hitbox=84x130 new_character=85x132 play_game=67x23 origin=-8,-101")
+	print("CHARACTER_SELECT_HK_SLOT_ART_PASS itf_hitbox=84x130 new_character=85x132 play_game=67x23 origin=-8,-101 font=新細明體 height=12 weight=500 baseline=10")
 	quit(0)

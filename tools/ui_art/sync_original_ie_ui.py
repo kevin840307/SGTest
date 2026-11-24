@@ -23,6 +23,7 @@ from tools.asset_converter.source.extract_client import lzss, read_index
 from tools.asset_converter.source.runtime_spr import decode_spr
 from tools.ui_art.render_hk_login_captions import render_hk_login_captions
 from tools.ui_art.render_hk_login_input_font import write_hk_login_input_font
+from tools.ui_art.render_hk_shared_ui_font import write_hk_shared_ui_font
 
 DEFAULT = Path(r"C:\SGO\Stargate Online IE HK\Interface")
 OUTPUT = REPO / "client/ui/private_ie_hk2"
@@ -146,6 +147,10 @@ def main() -> int:
                 captions = render_hk_login_captions()
                 _save_if_changed(OUTPUT / LOGIN_CAPTIONS_OUTPUT, captions)
                 write_hk_login_input_font(OUTPUT)
+                # The same HK build creates a shared 新細明體 12/500 GDI font
+                # used by Character Select/Profile and other classic UI text.
+                # Keep the generated raster private exactly like the login font.
+                write_hk_shared_ui_font(OUTPUT)
 
     for name in MULTI_NAMES:
         frames, origin = _read_frames(args.source, name, archive, entries, single=False)
