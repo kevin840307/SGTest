@@ -728,7 +728,7 @@ func _refresh_hud()->void:
 	var mp:=int(_stats.get("player_current_mp",0));var mpmax:=int(_stats.get("player_max_mp",0))
 	_level_label.text=str(int(_stats.get("player_level",0))) if profile_ready else "—"
 	_hp_label.text="%d / %d"%[hp,hpmax] if hpmax>0 else "—"
-	_mp_label.text="%d / %d"%[mp,mpmax] if hpmax>0 else "—"
+	_mp_label.text="%d / %d"%[mp,mpmax] if mpmax>0 else "—"
 
 func _clear_rows(box:Container)->void:
 	for child in box.get_children():
