@@ -284,6 +284,20 @@ func run() -> void:
 	remote_dead=players.actors_at(2000000).filter(func(v): return str(v.id)=="2")[0]
 	check(not bool(remote_dead.parts[0].flip_h),
 		"death animation incorrectly returned to live movement without respawn")
+	# A reliable pre-death attack visual may still be present/arrive after the
+	# lethal damage visual. Once ND is latched, no transient attack may revive
+	# the paper doll; only PlayerRespawnVisual is allowed to clear death.
+	snapshot.player_damage_visual_events=[]
+	snapshot.player_attack_events=[{
+		"receiver_map_epoch":1,"server_tick":5,
+		"attacker_actor_id":2,"attacker_connection_epoch":1,
+		"attack_sequence":2,"target_entity_id":1001500001,
+		"status":0,"damage":30,"target_revision":5,"facing":6}]
+	players.apply_snapshot(snapshot,2050000)
+	remote_dead=players.actors_at(2050000).filter(func(v): return str(v.id)=="2")[0]
+	check(str(remote_dead.parts[0].clip)=="ND",
+		"reliable attack visual overrode latched death before respawn")
+	snapshot.player_attack_events=[]
 	snapshot.player_respawn_visual_events=[{
 		"receiver_map_epoch":1,"server_tick":5,
 		"actor_id":2,"connection_epoch":1,"respawn_sequence":1,"facing":6}]
@@ -398,6 +412,35 @@ func run() -> void:
 		"PvP attacker AA ignored authoritative facing")
 	check(not bool(pvp_victim.parts[0].flip_h),
 		"PvP victim NH ignored authoritative facing")
+	# Death dominance applies to every transient combat visual namespace. A
+	# queued PvP attack/skill from the same actor must not resurrect AA before
+	# the authoritative respawn visual arrives.
+	pvp_snapshot.pvp_combat_visual_events=[{
+		"receiver_map_epoch":3,"server_tick":12,
+		"attacker_actor_id":2,"attacker_connection_epoch":2,"attack_sequence":2,
+		"victim_actor_id":1,"victim_connection_epoch":1,"damage_sequence":2,
+		"damage":100,"died":true,"attacker_facing":6,"victim_facing":3}]
+	pvp_players.apply_snapshot(pvp_snapshot,3020000)
+	pvp_snapshot.pvp_combat_visual_events=[{
+		"receiver_map_epoch":3,"server_tick":13,
+		"attacker_actor_id":1,"attacker_connection_epoch":1,"attack_sequence":3,
+		"victim_actor_id":2,"victim_connection_epoch":2,"damage_sequence":3,
+		"damage":1,"died":false,"attacker_facing":6,"victim_facing":6}]
+	pvp_players.apply_snapshot(pvp_snapshot,3030000)
+	pvp_attacker=pvp_players.actors_at(3030000).filter(func(v): return str(v.id)=="1")[0]
+	check(str(pvp_attacker.parts[0].clip)=="ND",
+		"PvP attack visual overrode latched death before respawn")
+	pvp_snapshot.pvp_combat_visual_events=[]
+	pvp_snapshot.pvp_skill_visual_events=[{
+		"receiver_map_epoch":3,"server_tick":14,
+		"attacker_actor_id":1,"attacker_connection_epoch":1,"skill_sequence":1,
+		"skill_id":99001,"victim_actor_id":2,"victim_connection_epoch":2,
+		"damage_sequence":4,"damage":1,"died":false,
+		"attacker_facing":6,"victim_facing":6}]
+	pvp_players.apply_snapshot(pvp_snapshot,3040000)
+	pvp_attacker=pvp_players.actors_at(3040000).filter(func(v): return str(v.id)=="1")[0]
+	check(str(pvp_attacker.parts[0].clip)=="ND",
+		"PvP skill visual overrode latched death before respawn")
 	pvp_players.clear()
 	view.clear_map()
 	check(borrowed.has("x") and int(borrowed.map_id)==13,"view clear mutated caller snapshot")

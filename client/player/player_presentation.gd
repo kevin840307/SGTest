@@ -311,7 +311,8 @@ func apply_snapshot(snapshot: Dictionary, now_usec: int) -> void:
 			if _seen_attack_events.has(key):
 				continue
 			_seen_attack_events[key] = true
-			if not _actors.has(attacker) or not _actors[attacker].profile.attack_available:
+			if not _actors.has(attacker) or not _actors[attacker].profile.attack_available or \
+					bool(_actors[attacker].get("dead_visual",false)):
 				continue
 			var actor: Dictionary = _actors[attacker]
 			var actor_connection := int(actor.value.connection_epoch)
@@ -369,7 +370,8 @@ func apply_snapshot(snapshot: Dictionary, now_usec: int) -> void:
 			var attack_key:="pvp:%d:%d:%d" % [attacker,attacker_connection,attack_sequence]
 			if not _seen_attack_events.has(attack_key):
 				_seen_attack_events[attack_key]=true
-				if _actors.has(attacker) and _actors[attacker].profile.attack_available:
+				if _actors.has(attacker) and _actors[attacker].profile.attack_available and \
+						not bool(_actors[attacker].get("dead_visual",false)):
 					var attacker_actor:Dictionary=_actors[attacker]
 					var current_connection:=int(attacker_actor.value.connection_epoch)
 					var own_without_self_state:=attacker==int(snapshot.actor_id) and current_connection==0
@@ -412,7 +414,8 @@ func apply_snapshot(snapshot: Dictionary, now_usec: int) -> void:
 			var attack_key:="pvpskill:%d:%d:%d" % [attacker,ac,skill_sequence]
 			if not _seen_attack_events.has(attack_key):
 				_seen_attack_events[attack_key]=true
-				if _actors.has(attacker) and _actors[attacker].profile.attack_available:
+				if _actors.has(attacker) and _actors[attacker].profile.attack_available and \
+						not bool(_actors[attacker].get("dead_visual",false)):
 					var actor:Dictionary=_actors[attacker]
 					var current_connection:=int(actor.value.connection_epoch)
 					var own_without_self_state:=attacker==int(snapshot.actor_id) and current_connection==0
