@@ -26,6 +26,8 @@ internal static class AesGatewayListenerChecks
             () => Admission(root, true).GetAwaiter().GetResult());
         Checks.Run("AES listener authenticates reconnect, WorldReady, MoveReceipt and cleans actors on shutdown",
             () => AuthenticatedReconnect(root).GetAwaiter().GetResult());
+        Checks.Run("AES attribute allocation updates authoritative profile/vitals and persists relogin",
+            () => AuthenticatedAttributeProgression(root).GetAwaiter().GetResult());
         Checks.Run("AES peer observes clean disconnect Despawn and reconnect Spawn through real listener",
             () => AuthenticatedPeerReconnectLifecycle(root).GetAwaiter().GetResult());
         Checks.Run("verified recovery AES request atomically changes HP and last stack, then relogin persists",
@@ -170,6 +172,152 @@ internal static class AesGatewayListenerChecks
             fixture.Host.Statistics.ActiveActors == 0 && fixture.Router.Statistics.ActiveSessions == 0,
             "shutdown left authenticated actor/socket/route or incorrect command accounting");
         await Task.WhenAll(listener.DisposeAsync().AsTask(), listener.DisposeAsync().AsTask());
+    }
+
+    private static async Task AuthenticatedAttributeProgression(string root)
+    {
+        await using var fixture=await Fixture.Create(root,withProgression:true);
+        await using var listener=fixture.Listener(new(
+            MaxConnections:2,MaxConnectionsPerAddress:2));
+        using var stop=new CancellationTokenSource();
+        var run=listener.RunAsync(stop.Token);
+
+        async Task<(TcpClient Client,AesCbcFrameStream Aes,long Epoch,
+                    PlayerProfileStateWire Profile,PlayerCombatStateWire Vitals)> Login()
+        {
+            var client=new TcpClient();
+            await client.ConnectAsync(listener.LocalEndpoint);
+            var aes=new AesCbcFrameStream(client.GetStream(),fixture.Settings);
+            try
+            {
+                await aes.WriteAsync(WireProtocol.EncodeAuthRequest(new(
+                    "listener_user","Listener-Password-123!")));
+                Checks.Require(WireProtocol.TryDecodeAuthResult(
+                        await Read(aes),out var auth) &&
+                    auth.Status==AuthWireStatus.Success,
+                    "attribute progression Auth failed");
+                Checks.Require(WireProtocol.TryDecodeCharacterList(
+                        await Read(aes),out var characters) &&
+                    characters.Characters.Count==1 &&
+                    characters.Characters[0].CharacterId==fixture.CharacterId,
+                    "attribute progression character list missing");
+                await CharacterChooseTestHarness.ChooseAsync(aes,fixture.CharacterId);
+                Checks.Require(WireProtocol.TryDecodeCharacterChooseResult(
+                        await Read(aes),out var selected) &&
+                    selected.Status==CharacterChooseWireStatus.Success,
+                    "attribute progression choose failed");
+
+                Checks.Require(WireProtocol.TryDecodePlayerCombatState(
+                        await Read(aes),out var vitals) &&
+                    vitals.MapEpoch==selected.MapEpoch,
+                    "attribute progression vitals baseline missing");
+                Checks.Require(WireProtocol.TryDecodeInventorySnapshot(
+                        await Read(aes),out var inventory) &&
+                    inventory is not null && inventory.Complete,
+                    "attribute progression inventory baseline missing");
+                Checks.Require(WireProtocol.TryDecodePlayerProfileState(
+                        await Read(aes),out var profile) &&
+                    profile.CharacterId==fixture.CharacterId,
+                    "attribute progression profile baseline missing");
+                Checks.Require(WireProtocol.TryDecodeWorldReady(
+                        await Read(aes),out var ready) &&
+                    ready.ReceiverMapEpoch==selected.MapEpoch,
+                    "attribute progression WorldReady missing");
+                await aes.WriteAsync(WireProtocol.EncodeWorldReadyAck(new(
+                    ready.ReceiverMapEpoch,ready.ServerTick)));
+                await aes.FlushAsync();
+                return (client,aes,selected.MapEpoch,profile,vitals);
+            }
+            catch
+            {
+                await aes.DisposeAsync();
+                client.Dispose();
+                throw;
+            }
+        }
+
+        static async Task<(PlayerProfileStateWire Profile,
+                           PlayerCombatStateWire Vitals)> ReadAllocation(
+            AesCbcFrameStream aes,long characterId,long mapEpoch)
+        {
+            PlayerProfileStateWire profile=default;
+            PlayerCombatStateWire vitals=default;
+            bool sawProfile=false,sawVitals=false;
+            for(int i=0;i<32 && (!sawProfile||!sawVitals);i++)
+            {
+                var frame=await Read(aes);
+                if(WireProtocol.TryDecodePlayerProfileState(frame,out var p) &&
+                   p.CharacterId==characterId)
+                {
+                    profile=p;
+                    sawProfile=true;
+                }
+                else if(WireProtocol.TryDecodePlayerCombatState(frame,out var v) &&
+                        v.MapEpoch==mapEpoch)
+                {
+                    vitals=v;
+                    sawVitals=true;
+                }
+            }
+            Checks.Require(sawProfile&&sawVitals,
+                "attribute allocation did not publish profile and vitals");
+            return (profile,vitals);
+        }
+
+        var first=await Login();
+        int initialAttack=first.Profile.Attack;
+        int initialMaxHp=first.Vitals.MaxHp;
+        Checks.Require(first.Profile.Strength==2 &&
+                       first.Profile.Constitution==2 &&
+                       first.Profile.AvailableAttributePoints==2,
+            "attribute progression seed profile mismatch");
+        try
+        {
+            await first.Aes.WriteAsync(WireProtocol.EncodePlayerAttributeAllocate(
+                new(1,CharacterAttributeKind.Strength)));
+            var strength=await ReadAllocation(
+                first.Aes,fixture.CharacterId,first.Epoch);
+            Checks.Require(strength.Profile.Strength==3 &&
+                           strength.Profile.Constitution==2 &&
+                           strength.Profile.AvailableAttributePoints==1 &&
+                           strength.Profile.Attack>initialAttack &&
+                           strength.Vitals.MaxHp==initialMaxHp,
+                "AES strength allocation did not update authoritative profile");
+
+            await first.Aes.WriteAsync(WireProtocol.EncodePlayerAttributeAllocate(
+                new(2,CharacterAttributeKind.Constitution)));
+            var constitution=await ReadAllocation(
+                first.Aes,fixture.CharacterId,first.Epoch);
+            Checks.Require(constitution.Profile.Strength==3 &&
+                           constitution.Profile.Constitution==3 &&
+                           constitution.Profile.AvailableAttributePoints==0 &&
+                           constitution.Vitals.MaxHp>initialMaxHp,
+                "AES constitution allocation did not update authoritative vitals");
+        }
+        finally
+        {
+            await first.Aes.DisposeAsync();
+            first.Client.Dispose();
+        }
+        await Until(()=>listener.Statistics.ActiveConnections==0);
+
+        var relogin=await Login();
+        try
+        {
+            Checks.Require(relogin.Profile.Strength==3 &&
+                           relogin.Profile.Constitution==3 &&
+                           relogin.Profile.AvailableAttributePoints==0 &&
+                           relogin.Vitals.MaxHp>initialMaxHp,
+                "AES relogin lost durable attribute allocation");
+        }
+        finally
+        {
+            await relogin.Aes.DisposeAsync();
+            relogin.Client.Dispose();
+        }
+        await Until(()=>listener.Statistics.ActiveConnections==0);
+        stop.Cancel();
+        await run.WaitAsync(TimeSpan.FromSeconds(5));
     }
 
     private static async Task AuthenticatedPeerReconnectLifecycle(string root)
@@ -1279,10 +1427,12 @@ AuthorizationTimeoutMilliseconds: 30000)));
 
         public static async Task<Fixture> Create(
             string root, bool withRecovery = false, bool mixedLoad = false,
-            bool denseLoad = false)
+            bool denseLoad = false, bool withProgression = false)
         {
             if (denseLoad && !mixedLoad)
                 throw new ArgumentException("Dense AOI requires mixed load");
+            if (withRecovery && withProgression)
+                throw new ArgumentException("Recovery and progression fixtures are isolated");
             string path = Checks.Fixture(root, 115,
                 mixedLoad ? 420 : 4, mixedLoad ? 240 : 4, (_, _) => 0);
             var grid = BlockingGrid.Load(path, 115);
@@ -1297,6 +1447,23 @@ AuthorizationTimeoutMilliseconds: 30000)));
                 account, 0, "ListenerHero",
                 new CharacterSpawn(115, firstCenter.X, firstCenter.Y));
             long characterId=character.Character!.CharacterId;
+            CharacterProgressionRules? progressionRules=null;
+            if(withProgression)
+            {
+                string manifest=Path.Combine(root,
+                    "listener-progression-"+Guid.NewGuid().ToString("N")+".json");
+                CharacterProgressionChecks.WriteManifest(manifest);
+                progressionRules=CharacterProgressionRules.LoadVerified(manifest);
+                var seed=new CharacterCombatProfileData(
+                    CombatProfileTrust.ProfileOnlyVerified,progressionRules.EvidenceSource,
+                    Race:0,Career:0,Strength:2,Dexterity:2,Constitution:2,Wisdom:2,
+                    Level:2,CurrentHp:1,MaxHp:1,Attack:1,Defense:1,Hit:1,Dodge:1,
+                    AttackRange:0,AttackCooldownTicks:0,CurrentMp:0,MaxMp:0,
+                    AvailableAttributePoints:2);
+                await store.SetCharacterCombatProfileAsync(characterId,
+                    progressionRules.BuildProfile(
+                        seed,2,2,2,2,2,2,refillVitals:true));
+            }
             long generation=await store.AllocateLootWorldGenerationAsync();
             if(withRecovery)
             {
@@ -1421,7 +1588,8 @@ AuthorizationTimeoutMilliseconds: 30000)));
                 Host=host,Store=store,Settings=AesSocketChecks.CreateSettings(),
                 Router=router,
                 Authorization=new(store,host,combat:combat,
-                    pickupWorldGeneration:generation,recoveryRules:rules),
+                    pickupWorldGeneration:generation,recoveryRules:rules,
+                    progressionRules:progressionRules),
                 CharacterId=characterId,
                 InventoryUids=saved.Select(x=>x.ItemUid).ToArray(),
                 Routing=router.RunAsync(host.Results),Visibility=aoi.RunAsync(),

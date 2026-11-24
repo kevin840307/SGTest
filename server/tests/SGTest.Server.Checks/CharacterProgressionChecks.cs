@@ -121,7 +121,7 @@ internal static class CharacterProgressionChecks
         }
     }
 
-    private static void WriteManifest(string path)
+    internal static void WriteManifest(string path)
     {
         var levels=Enumerable.Range(1,100).Select(level=>new
         {
