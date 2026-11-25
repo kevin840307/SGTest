@@ -21,6 +21,8 @@ def main() -> int:
                         help="with --app-ui, render the UI natively and save a private screenshot")
     parser.add_argument("--multi", action="store_true",
                         help="run two concurrent real Godot AES clients against the same 30Hz World")
+    parser.add_argument("--multi-reconnect", action="store_true",
+                        help="run observer + actor disconnect + same-character rejoin AOI lifecycle E2E")
     parser.add_argument("--crossmap", action="store_true",
                         help="run two-client Map15 -> Map13 -> Map15 trusted transfer AES E2E")
     parser.add_argument("--portal", action="store_true",
@@ -66,7 +68,7 @@ def main() -> int:
     parser.add_argument("--appearance", action="store_true",
                         help="create with authoritative appearance choices and verify durable relogin")
     args = parser.parse_args()
-    if args.app_ui and (args.multi or args.crossmap or args.portal or args.reconnect or args.combat or args.combat_observer or args.skill_aoe or args.skill_aoe_observer or args.discard or args.storage or args.pet or args.mecha or args.equipment or args.bank or args.repair or args.enhancement or args.quest or args.trade or args.player_shop or args.pvp or args.auto_attack or args.register or args.appearance):
+    if args.app_ui and (args.multi or args.multi_reconnect or args.crossmap or args.portal or args.reconnect or args.combat or args.combat_observer or args.skill_aoe or args.skill_aoe_observer or args.discard or args.storage or args.pet or args.mecha or args.equipment or args.bank or args.repair or args.enhancement or args.quest or args.trade or args.player_shop or args.pvp or args.auto_attack or args.register or args.appearance):
         parser.error("--app-ui uses the single-client login fixture")
     if args.ui_screenshot and not args.app_ui:
         parser.error("--ui-screenshot requires --app-ui")
@@ -133,6 +135,8 @@ def main() -> int:
         return run_crossmap(args, repo, fixture, env)
     if args.portal:
         return run_multiplayer(args, repo, fixture, env, portal=True)
+    if args.multi_reconnect:
+        return run_multiplayer(args, repo, fixture, env, reconnect=True)
     if args.multi:
         return run_multiplayer(args, repo, fixture, env)
 
@@ -1688,14 +1692,15 @@ def run_trade(args, repo: Path, fixture: Path, env: dict[str, str]) -> int:
 
 
 def run_multiplayer(args, repo: Path, fixture: Path, env: dict[str, str],
-                    portal: bool = False) -> int:
-    """Real AES AOI with optional audited NPC action, no test-only teleport RPC."""
-    label = "PORTAL" if portal else "MULTI"
+                    portal: bool = False, reconnect: bool = False) -> int:
+    """Real AES AOI with optional audited portal or same-character reconnect lifecycle."""
+    label = "MULTI_RECONNECT" if reconnect else "PORTAL" if portal else "MULTI"
+    fixture_mode = "--multi-reconnect" if reconnect else "--portal" if portal else "--multi"
     server = subprocess.Popen(
         ["dotnet", "run", "--project", str(fixture), "-c", "Release",
-         "--no-build", "--", "--portal" if portal else "--multi"],
-        cwd=repo, env=env, text=True, stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT, bufsize=1)
+         "--no-build", "--", fixture_mode],
+        cwd=repo, env=env, text=True, encoding="utf-8", errors="replace",
+        stdout=subprocess.PIPE, stderr=subprocess.STDOUT, bufsize=1)
     server_lines: list[str] = []
     server_notices: queue.Queue[str] = queue.Queue()
     observer_lines: list[str] = []
@@ -1735,9 +1740,10 @@ def run_multiplayer(args, repo: Path, fixture: Path, env: dict[str, str],
                 "--script", "res://tests/test_client_multiplayer_aes.gd", "--",
                 port]
 
-        extra = ["portal"] if portal else []
+        extra = ["reconnect"] if reconnect else ["portal"] if portal else []
         observer = subprocess.Popen(
-            [*base, "observer", *extra], cwd=repo, text=True, stdout=subprocess.PIPE,
+            [*base, "observer", *extra], cwd=repo, text=True,
+            encoding="utf-8", errors="replace", stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT, bufsize=1)
         threading.Thread(target=capture, args=(observer.stdout, observer_lines,
                                                observer_notices), daemon=True).start()
@@ -1745,10 +1751,22 @@ def run_multiplayer(args, repo: Path, fixture: Path, env: dict[str, str],
 
         remaining = max(1.0, deadline - time.monotonic())
         actor = subprocess.run([*base, "actor", *extra], cwd=repo, text=True,
+                               encoding="utf-8", errors="replace",
                                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                                timeout=remaining)
-        if actor.returncode != 0 or "CLIENT_" + label + "_PASS role=actor" not in actor.stdout:
+        actor_expected = "CLIENT_MULTI_PASS role=actor" if reconnect else "CLIENT_" + label + "_PASS role=actor"
+        if actor.returncode != 0 or actor_expected not in actor.stdout:
             raise RuntimeError("active Godot client failed:\n" + actor.stdout)
+
+        rejoin = None
+        if reconnect:
+            remaining = max(1.0, deadline - time.monotonic())
+            rejoin = subprocess.run([*base, "rejoin", "reconnect"], cwd=repo,
+                                    text=True, encoding="utf-8", errors="replace",
+                                    stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                    timeout=remaining)
+            if rejoin.returncode != 0 or "CLIENT_MULTI_RECONNECT_PASS role=rejoin" not in rejoin.stdout:
+                raise RuntimeError("rejoined Godot client failed:\n" + rejoin.stdout)
 
         observer.wait(timeout=max(1.0, deadline - time.monotonic()))
         if observer.returncode != 0 or not any(
@@ -1763,13 +1781,20 @@ def run_multiplayer(args, repo: Path, fixture: Path, env: dict[str, str],
                                "\n".join(server_lines))
 
         print(actor.stdout, end="")
+        if reconnect and rejoin is not None:
+            print(rejoin.stdout, end="")
         for line in observer_lines:
             if line.startswith("CLIENT_" + label + "_"):
                 print(line)
         for line in server_lines:
             if line.startswith(label + "_FIXTURE_"):
                 print(line)
-        if portal:
+        if reconnect:
+            print("GODOT_CSHARP_THREE_SESSION_AOI_RECONNECT_E2E_PASS "
+                  "aes_cbc=true observer_alive=true actor_disconnect=true "
+                  "despawn=true same_actor_rejoin=true new_connection_epoch=true "
+                  "persisted_position=true post_rejoin_delta=true zero_ghost_actors=true")
+        elif portal:
             print("GODOT_CSHARP_TWO_CLIENT_NPC_PORTAL_E2E_PASS "
                   "aes_cbc=true concurrent_clients=2 audited_clicks=true "
                   "unknown_npc_denied=true map15_to_map13_to_map15=true "
@@ -1782,7 +1807,8 @@ def run_multiplayer(args, repo: Path, fixture: Path, env: dict[str, str],
                   "same_30hz_world=true")
         return 0
     except Exception as error:
-        print("AES_NPC_PORTAL_RUNNER_FAIL" if portal else
+        print("AES_MULTI_RECONNECT_RUNNER_FAIL" if reconnect else
+              "AES_NPC_PORTAL_RUNNER_FAIL" if portal else
               "AES_MULTIPLAYER_RUNNER_FAIL", error, file=sys.stderr)
         for line in server_lines[-20:]:
             print(line, file=sys.stderr)

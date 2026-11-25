@@ -27,12 +27,14 @@ def run_checked(command: list[str], cwd: Path, env: dict[str, str], timeout: flo
         raise RuntimeError("command failed: " + " ".join(command[:4]) + "\n" + result.stdout)
     return result.stdout
 
-def capture(process: subprocess.Popen[str], lines: list[str], notices: queue.Queue[str]) -> None:
+def capture(process: subprocess.Popen[str], lines: list[str], notices: queue.Queue[str], echo: bool = False) -> None:
     assert process.stdout is not None
     for line in process.stdout:
         clean = line.rstrip()
         lines.append(clean)
         notices.put(clean)
+        if echo and clean.startswith("ONLINE_MAIN_GATE_"):
+            print(clean, flush=True)
 
 def wait_for(notices: queue.Queue[str], token: str, process: subprocess.Popen[str],
              deadline: float) -> str:
@@ -51,9 +53,15 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Formal Host + two actual Godot main scenes online gate")
     parser.add_argument("godot")
     parser.add_argument("--timeout", type=float, default=55.0)
+    parser.add_argument("--native", action="store_true",
+                        help="run the two main-scene clients as visible Windows renderer processes")
+    parser.add_argument("--manual-input", action="store_true",
+                        help="in native mode require an OS mouse-driven observer movement before continuing")
     parser.add_argument("--metrics-report", type=Path,
                         help="write opt-in headless Host/2-Godot CPU and RSS telemetry JSON")
     args = parser.parse_args()
+    if args.manual_input and not args.native:
+        parser.error("--manual-input requires --native")
     if args.metrics_report and os.name == "nt" and args.godot.lower().endswith("_console.exe"):
         # Godot console executable launches a sibling real engine on Windows.
         # Never report the lightweight wrapper as the measured game process.
@@ -115,9 +123,10 @@ def main() -> int:
 
             provision_env = base_env.copy()
             provision_env["SGTEST_ACCOUNT_PASSWORD"] = PASSWORD
+            actor_spawn_x = "840" if args.manual_input else "760"
             for username, character, x, y in [
                 ("gate_observer", "GateObserver", "880", "800"),
-                ("gate_actor", "GateActor", "760", "800"),
+                ("gate_actor", "GateActor", actor_spawn_x, "800"),
             ]:
                 out = run_checked(
                     ["dotnet", str(host_dll), "account-create", "--identity", str(database),
@@ -137,7 +146,7 @@ def main() -> int:
                 ["dotnet", str(host_dll), "serve", "--content", str(content),
                  "--identity", str(database),
                  "--bind", "127.0.0.1", "--port", "0", "--max-connections", "8",
-                 "--max-per-address", "4", "--seconds", "30"],
+                 "--max-per-address", "4", "--seconds", str(45 if args.manual_input else 30)],
                 cwd=repo, env=host_env, text=True, encoding="utf-8", errors="replace",
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT, bufsize=1)
@@ -159,8 +168,13 @@ def main() -> int:
                 env = base_env.copy()
                 env["SGTEST_E2E_USERNAME"] = username
                 env["SGTEST_E2E_PASSWORD"] = PASSWORD
-                command = [
-                    args.godot, "--headless", "--path", str(repo / "client"),
+                if args.manual_input and role == "observer":
+                    env["SGTEST_E2E_REQUIRE_MANUAL_INPUT"] = "1"
+                command = [args.godot]
+                if not args.native:
+                    command.append("--headless")
+                command += [
+                    "--path", str(repo / "client"),
                     "--script", "res://tests/test_online_main_gate.gd", "--",
                     "--pack", str(pack), "--host", "127.0.0.1", "--port", str(port),
                     "--e2e-role", role,
@@ -174,12 +188,15 @@ def main() -> int:
                     telemetry.register(role, process)
                 logs[role] = []
                 events: queue.Queue[str] = queue.Queue()
-                threading.Thread(target=capture, args=(process, logs[role], events),
+                threading.Thread(target=capture,
+                                 args=(process, logs[role], events, args.manual_input and role == "observer"),
                                  daemon=True).start()
                 return process, events
 
             observer, observer_events = start_client("observer", "gate_observer")
             wait_for(observer_events, "ONLINE_MAIN_GATE_READY role=observer", observer, deadline)
+            if args.manual_input:
+                wait_for(observer_events, "ONLINE_MAIN_GATE_MANUAL_INPUT_PASS role=observer", observer, deadline)
             actor, actor_events = start_client("actor", "gate_actor")
 
             wait_for(actor_events, MARKER + "actor", actor, deadline)
@@ -232,7 +249,8 @@ def main() -> int:
             print("ONLINE_MAIN_SCENE_FORMAL_HOST_GATE_PASS "
                   "formal_host=true main_scenes=2 aes_cbc=true provision_cli=true "
                   "move=true aoi=true monster_state=true camera_follow=true map15_map13_return=true "
-                  "resource_release=true synthetic_content=true private_original_content=false")
+                  "resource_release=true synthetic_content=true private_original_content=false "
+                  f"native_visible={str(args.native).lower()} manual_input={str(args.manual_input).lower()}")
             successful = True
             return 0
     except Exception as error:

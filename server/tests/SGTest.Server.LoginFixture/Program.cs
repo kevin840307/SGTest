@@ -26,6 +26,8 @@ internal static class Program
     {
         if (args is ["--multi"])
             return await RunMultiplayerAsync(false).ConfigureAwait(false);
+        if (args is ["--multi-reconnect"])
+            return await RunMultiplayerAsync(false, reconnect: true).ConfigureAwait(false);
         if (args is ["--crossmap"])
             return await RunMultiplayerAsync(true).ConfigureAwait(false);
         if (args is ["--portal"])
@@ -1492,7 +1494,7 @@ internal static class Program
         }
     }
 
-    private static async Task<int> RunMultiplayerAsync(bool crossmap, bool portals = false)
+    private static async Task<int> RunMultiplayerAsync(bool crossmap, bool portals = false, bool reconnect = false)
     {
         string root = Path.Combine(Path.GetTempPath(),
             "sgtest_multi_login_" + Guid.NewGuid().ToString("N"));
@@ -1532,11 +1534,11 @@ internal static class Program
             var settings = AesCbcSettings.FromEnvironment();
 
             var listener = new TcpListener(IPAddress.Loopback, 0);
-            listener.Start(2);
+            listener.Start(reconnect ? 3 : 2);
             try
             {
                 int port = ((IPEndPoint)listener.LocalEndpoint).Port;
-                var prefix = portals ? "PORTAL" : crossmap ? "CROSSMAP" : "MULTI";
+                var prefix = reconnect ? "MULTI_RECONNECT" : portals ? "PORTAL" : crossmap ? "CROSSMAP" : "MULTI";
                 Console.WriteLine($"{prefix}_FIXTURE_READY port={port} actor_a={aId} actor_b={bId}");
                 Console.Out.Flush();
 
@@ -1550,6 +1552,52 @@ internal static class Program
                 var secondTask = authorization.RunAuthenticatedAesSocketAsync(
                     second, settings, router,
                     new AesWireConnectionOptions(AuthorizationTimeoutMilliseconds: 15000));
+                if (reconnect)
+                {
+                    var firstActorSession = await secondTask
+                        .WaitAsync(TimeSpan.FromSeconds(20)).ConfigureAwait(false);
+                    if (firstActorSession.Reason != AesWireEndReason.CleanEof ||
+                        firstActorSession.CommandsAccepted != 3)
+                        throw new InvalidOperationException(
+                            $"multi reconnect first actor session mismatch reason={firstActorSession.Reason} commands={firstActorSession.CommandsAccepted}");
+
+                    using var third = await listener.AcceptTcpClientAsync()
+                        .WaitAsync(TimeSpan.FromSeconds(15)).ConfigureAwait(false);
+                    var thirdTask = authorization.RunAuthenticatedAesSocketAsync(
+                        third, settings, router,
+                        new AesWireConnectionOptions(AuthorizationTimeoutMilliseconds: 15000));
+                    var reconnectResults = await Task.WhenAll(firstTask, thirdTask)
+                        .WaitAsync(TimeSpan.FromSeconds(20)).ConfigureAwait(false);
+                    var reconnectDeadline = DateTime.UtcNow.AddSeconds(3);
+                    while (world.Statistics.ActiveActors != 0)
+                    {
+                        if (DateTime.UtcNow >= reconnectDeadline)
+                            throw new InvalidOperationException("multi reconnect fixture left ghost World actors");
+                        await Task.Delay(5).ConfigureAwait(false);
+                    }
+                    var finalCharacters = await store.ListCharactersAsync(bAccount)
+                        .ConfigureAwait(false);
+                    if (reconnectResults[0].Reason != AesWireEndReason.CleanEof ||
+                        reconnectResults[1].Reason != AesWireEndReason.CleanEof ||
+                        reconnectResults[1].CommandsAccepted != 2 ||
+                        finalCharacters.Count != 1 || finalCharacters[0].MapId != 15 ||
+                        Math.Abs(finalCharacters[0].X - 24) > 0.001 ||
+                        Math.Abs(finalCharacters[0].Y - 8) > 0.001 ||
+                        router.Statistics.ActiveSessions != 0 ||
+                        router.Statistics.ReceiptsQueued < 2 ||
+                        aoiPump.FramesQueued < 10)
+                        throw new InvalidOperationException(
+                            $"multi reconnect incomplete observer={reconnectResults[0].Reason} first={firstActorSession.Reason} rejoin={reconnectResults[1].Reason} " +
+                            $"first_commands={firstActorSession.CommandsAccepted} rejoin_commands={reconnectResults[1].CommandsAccepted} " +
+                            $"routes={router.Statistics.ActiveSessions} receipts={router.Statistics.ReceiptsQueued} aoi_frames={aoiPump.FramesQueued} " +
+                            $"final={(finalCharacters.Count == 1 ? $"{finalCharacters[0].MapId}:{finalCharacters[0].X},{finalCharacters[0].Y}" : "missing")}");
+                    await world.StopAsync().ConfigureAwait(false);
+                    await routerTask.WaitAsync(TimeSpan.FromSeconds(3)).ConfigureAwait(false);
+                    Console.WriteLine(
+                        $"MULTI_RECONNECT_FIXTURE_PASS actor_a={aId} actor_b={bId} first_commands={firstActorSession.CommandsAccepted} rejoin_commands={reconnectResults[1].CommandsAccepted} persisted_final=24,8 receipts={router.Statistics.ReceiptsQueued} aoi_frames={aoiPump.FramesQueued} active=0");
+                    Console.Out.Flush();
+                    return 0;
+                }
                 if (crossmap)
                 {
                     // Test-only coordination: Python waits for real Godot's

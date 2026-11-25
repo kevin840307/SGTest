@@ -15,13 +15,15 @@ func _fail(message: String, session = null) -> void:
 
 func _initialize() -> void:
 	var args := OS.get_cmdline_user_args()
-	if args.size() not in [2, 3] or not str(args[0]).is_valid_int() or str(args[1]) not in ["observer", "actor"] or (args.size() == 3 and str(args[2]) not in ["crossmap", "portal"]):
-		_fail("expected AES port, certificate path, observer|actor")
+	if args.size() not in [2, 3] or not str(args[0]).is_valid_int() or str(args[1]) not in ["observer", "actor", "rejoin"] or (args.size() == 3 and str(args[2]) not in ["crossmap", "portal", "reconnect"]):
+		_fail("expected AES port, observer|actor|rejoin, optional crossmap|portal|reconnect")
 		return
 	var role := str(args[1])
-	var crossmap := args.size() == 3
-	var portal := args.size() == 3 and str(args[2]) == "portal"
-	var prefix := "PORTAL" if portal else "CROSSMAP" if crossmap else "MULTI"
+	var mode := str(args[2]) if args.size() == 3 else ""
+	var crossmap := mode in ["crossmap", "portal"]
+	var portal := mode == "portal"
+	var reconnect := mode == "reconnect"
+	var prefix := "MULTI_RECONNECT" if reconnect else "PORTAL" if portal else "CROSSMAP" if crossmap else "MULTI"
 	var username := "fixture_one" if role == "observer" else "fixture_two"
 	var session = Session.new()
 	var started := session.connect_secure("127.0.0.1", int(args[0]), username,
@@ -44,11 +46,13 @@ func _initialize() -> void:
 		return
 	if role == "observer":
 		print("CLIENT_%s_READY role=observer actor=%d epoch=%d" % [prefix, self_id, int(ready.map_epoch)])
-		_observe(session, self_id, crossmap, portal)
+		_observe(session, self_id, crossmap, portal, reconnect)
+	elif role == "rejoin":
+		_rejoin(session, self_id)
 	else:
 		_move(session, self_id, crossmap, portal)
 
-func _observe(session, self_id: int, crossmap: bool = false, portal: bool = false) -> void:
+func _observe(session, self_id: int, crossmap: bool = false, portal: bool = false, reconnect: bool = false) -> void:
 	var first := _wait_remote(session, 7000)
 	if first.is_empty():
 		_fail("observer never received another player's Spawn %s" % session.snapshot(), session)
@@ -119,6 +123,39 @@ func _observe(session, self_id: int, crossmap: bool = false, portal: bool = fals
 		OS.delay_msec(2)
 	if not gone:
 		_fail("observer still sees disconnected player / missing Despawn %s" % session.snapshot(), session)
+		return
+	if reconnect:
+		var prior_connection := int(first.entities[remote_id].connection_epoch)
+		var respawn := {}
+		deadline = Time.get_ticks_msec() + 7000
+		while Time.get_ticks_msec() < deadline:
+			var value: Dictionary = session.snapshot()
+			if int(value.state) == WorldState.STATE_FAILED:
+				break
+			if value.entities.has(remote_id) and int(value.entities[remote_id].connection_epoch) > prior_connection:
+				respawn = value
+				break
+			OS.delay_msec(2)
+		if respawn.is_empty():
+			_fail("same actor did not respawn with a new connection generation %s" % session.snapshot(), session)
+			return
+		var new_connection := int(respawn.entities[remote_id].connection_epoch)
+		var moved_again := {}
+		deadline = Time.get_ticks_msec() + 7000
+		while Time.get_ticks_msec() < deadline:
+			var value: Dictionary = session.snapshot()
+			if int(value.state) == WorldState.STATE_FAILED:
+				break
+			if value.entities.has(remote_id) and int(value.entities[remote_id].connection_epoch) == new_connection and float(value.entities[remote_id].x) <= 24.0:
+				moved_again = value
+				break
+			OS.delay_msec(2)
+		if moved_again.is_empty():
+			_fail("rejoined actor did not publish authoritative movement on new generation %s" % session.snapshot(), session)
+			return
+		session.stop()
+		print("CLIENT_MULTI_RECONNECT_PASS role=observer despawn=PASS same_actor_respawn=PASS new_connection_epoch=PASS post_rejoin_delta=PASS remote=%d old_connection=%d new_connection=%d" % [remote_id, prior_connection, new_connection])
+		quit(0)
 		return
 	if crossmap:
 		print("CLIENT_%s_DESPAWN_SEEN role=observer remote=%d" % ["PORTAL" if portal else "CROSSMAP", remote_id])
@@ -407,6 +444,38 @@ func _move(session, self_id: int, crossmap: bool = false, portal: bool = false) 
 	session.stop()
 	print("CLIENT_MULTI_PASS role=actor world_ready=PASS spawn=PASS nearby_chat=PASS move_ack=PASS")
 	quit(0)
+
+
+func _rejoin(session, self_id: int) -> void:
+	var ready: Dictionary = session.snapshot()
+	if absf(float(ready.x) - 40.0) > 0.001 or absf(float(ready.y) - 8.0) > 0.001:
+		_fail("rejoined actor did not restore persisted disconnect position %s" % ready, session)
+		return
+	var peer := _wait_remote(session, 7000)
+	if peer.is_empty() or int(peer.entities.keys()[0]) == self_id:
+		_fail("rejoined actor did not receive observer Spawn %s" % session.snapshot(), session)
+		return
+	if not session.move_target(24, 8):
+		_fail("rejoined actor MoveTarget intent rejected", session)
+		return
+	var acknowledged := {}
+	var deadline := Time.get_ticks_msec() + 7000
+	while Time.get_ticks_msec() < deadline:
+		var value: Dictionary = session.snapshot()
+		if int(value.state) == WorldState.STATE_FAILED:
+			break
+		if int(value.last_receipt_sequence) == 1 and int(value.last_receipt_status) == 0 and not value.self_state.is_empty() and not bool(value.self_state.moving) and absf(float(value.x) - 24.0) <= 0.001 and absf(float(value.y) - 8.0) <= 0.001:
+			acknowledged = value
+			break
+		OS.delay_msec(2)
+	if acknowledged.is_empty():
+		_fail("rejoined actor did not complete authoritative movement %s" % session.snapshot(), session)
+		return
+	OS.delay_msec(180)
+	session.stop()
+	print("CLIENT_MULTI_RECONNECT_PASS role=rejoin persisted_spawn=40,8 move=24,8 peer_spawn=PASS authority=PASS")
+	quit(0)
+
 
 func _wait_nearby_chat(
 		session,sender_id:int,sender_name:String,message:String,

@@ -2,6 +2,7 @@ extends SceneTree
 ## Drives a regular main.tscn instance using the formal Host and synthetic assets.
 const Main = preload("res://app/main.gd")
 const MainScene = preload("res://app/main.tscn")
+const UiSkinCatalog = preload("res://ui/ui_skin_catalog.gd")
 
 var _app: Main
 var _online_gate_role := ""
@@ -28,6 +29,10 @@ var _hold_targets: Array[Vector2] = [
 var _hold_index := 0
 var _hold_next_msec := 0
 var _hold_large_corrections_before := 0
+var _manual_input_required := false
+var _manual_click_seen := false
+var _manual_click_screen := Vector2.ZERO
+var _manual_click_world_start := Vector2.ZERO
 
 
 func _initialize() -> void:
@@ -54,6 +59,7 @@ func _start_online_gate() -> void:
 	if not _online_gate_role in ["observer","actor"]:
 		_online_gate_fail("invalid_role")
 		return
+	_manual_input_required = OS.get_environment("SGTEST_E2E_REQUIRE_MANUAL_INPUT") == "1"
 	var username := OS.get_environment("SGTEST_E2E_USERNAME")
 	var password := OS.get_environment("SGTEST_E2E_PASSWORD")
 	OS.set_environment("SGTEST_E2E_PASSWORD","")
@@ -64,10 +70,31 @@ func _start_online_gate() -> void:
 	_app.session_panel.username_input.text = username
 	_app.session_panel.password_input.text = password
 	password = ""
-	_online_gate_deadline = Time.get_ticks_msec() + 25000
+	_online_gate_deadline = Time.get_ticks_msec() + (60000 if _manual_input_required else 25000)
 	_online_gate_phase = 0
 	print("ONLINE_MAIN_GATE_START role=",_online_gate_role)
 	_app.session_panel.login()
+
+
+func _world_surface_ready(map: int) -> bool:
+	if not _app.world_view.visible or _app.world_view.phase != "ready" or _app.world_view.map_id != map:
+		return false
+	var own_id := int(_app._last_snapshot.get("actor_id",0))
+	if own_id <= 0:
+		return false
+	var commands: Array = _app.world_view._canvas._commands
+	if not commands.any(func(c): return str(c.get("actor_id","")) == str(own_id)):
+		return false
+	# Map15 in this formal gate contains a rendered source NPC. Requiring its
+	# draw command prevents a full-screen HK shell regression from hiding the
+	# actual map/character/NPC world while protocol state still looks healthy.
+	if map == 15 and not commands.any(func(c): return str(c.get("actor_id","")) == "npc:46"):
+		return false
+	if _app._screen_backdrop.visible or _app._photo_backdrop.visible:
+		return false
+	if UiSkinCatalog.valid(UiSkinCatalog.DEFAULT_SKIN) and not _app.classic_world.visible:
+		return false
+	return true
 
 
 func _online_gate_ready(map: int) -> bool:
@@ -76,7 +103,7 @@ func _online_gate_ready(map: int) -> bool:
 	if int(_app._last_snapshot.get("map_id",0)) != map or _app.world_view.phase != "ready" or _app.world_view.map_id != map:
 		return false
 	var expected := Vector2(float(_app._last_snapshot.get("x",0.0)),float(_app._last_snapshot.get("y",0.0)))
-	return _app.world_view.camera.snapshot().focus.distance_to(expected) <= 0.5
+	return _app.world_view.camera.snapshot().focus.distance_to(expected) <= 0.5 and _world_surface_ready(map)
 
 
 func _online_gate_tick() -> void:
@@ -142,7 +169,26 @@ func _online_gate_tick() -> void:
 func _online_gate_observer() -> void:
 	if _online_gate_phase == 0:
 		if _online_gate_ready(15):
+			print("ONLINE_MAIN_GATE_WORLD_SURFACE role=observer map=15 own=PASS npc=PASS hk_ui=",UiSkinCatalog.valid(UiSkinCatalog.DEFAULT_SKIN))
 			print("ONLINE_MAIN_GATE_READY role=observer")
+			if _manual_input_required:
+				var manual_target_world := Vector2(952,808)
+				var manual_target_screen := _app.world_view.camera.world_to_screen(manual_target_world)
+				print("ONLINE_MAIN_GATE_MANUAL_INPUT_REQUIRED role=observer start=",Vector2(float(_app._last_snapshot.get("x",0.0)),float(_app._last_snapshot.get("y",0.0))))
+				print("ONLINE_MAIN_GATE_MANUAL_TARGET role=observer screen=",manual_target_screen," world=",manual_target_world)
+				_online_gate_phase = 10
+			else:
+				_online_gate_phase = 1
+		return
+	if _online_gate_phase == 10:
+		var manual_at := Vector2(float(_app._last_snapshot.get("x",0.0)),float(_app._last_snapshot.get("y",0.0)))
+		if not _manual_click_seen and Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
+			_manual_click_seen = true
+			_manual_click_screen = root.get_mouse_position()
+			_manual_click_world_start = manual_at
+			print("ONLINE_MAIN_GATE_MANUAL_CLICK_SEEN role=observer screen=",_manual_click_screen," world_start=",_manual_click_world_start)
+		if _manual_click_seen and manual_at.distance_to(_manual_click_world_start) >= 8.0:
+			print("ONLINE_MAIN_GATE_MANUAL_INPUT_PASS role=observer screen=",_manual_click_screen," start=",_manual_click_world_start," end=",manual_at)
 			_online_gate_phase = 1
 		return
 	var entities: Dictionary = _app._last_snapshot.get("entities",{})
@@ -151,9 +197,12 @@ func _online_gate_observer() -> void:
 			var id := int(raw_id)
 			if id == int(_app._last_snapshot.get("actor_id",0)):
 				continue
+			if not _app.world_view._canvas._commands.any(func(c): return str(c.get("actor_id","")) == str(id)):
+				continue
 			var remote: Dictionary = entities[raw_id]
 			_online_gate_remote_id = id
 			_online_gate_remote_start = Vector2(float(remote.x),float(remote.y))
+			print("ONLINE_MAIN_GATE_REMOTE_PRESENTED role=observer actor=",id)
 			print("ONLINE_MAIN_GATE_SPAWN role=observer actor=",id)
 			_online_gate_phase = 2
 			return
@@ -227,6 +276,7 @@ func _online_gate_watch_walk() -> void:
 func _online_gate_actor() -> void:
 	if _online_gate_phase == 0:
 		if _online_gate_ready(15):
+			print("ONLINE_MAIN_GATE_WORLD_SURFACE role=actor map=15 own=PASS npc=PASS hk_ui=",UiSkinCatalog.valid(UiSkinCatalog.DEFAULT_SKIN))
 			print("ONLINE_MAIN_GATE_READY role=actor")
 			# Drive the same terrain-click path as gameplay: start prediction
 			# synchronously and leave the Server authoritative MoveTarget queued.
