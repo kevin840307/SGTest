@@ -486,7 +486,13 @@ public sealed class MonsterRuntime
         }
 
         if (tick < monster.NextWanderTick || stats.WanderRadius <= 0)
+        {
+            // Wander is a one-step presentation state, not an idle animation
+            // between patrol attempts.
+            if (monster.State == MonsterAiState.Wander)
+                SetState(monster, MonsterAiState.Idle, tick, events);
             return;
+        }
 
         monster.NextWanderTick = checked(tick + stats.WanderIntervalTicks);
         monster.WanderSequence++;
@@ -496,12 +502,21 @@ public sealed class MonsterRuntime
         double desiredY = monster.Spawn.Y + Math.Sin(angle) * radius;
         if (!_grid.TryWorldCell(desiredX, desiredY, out var desiredCell) ||
             !_grid.IsWalkable(desiredCell))
+        {
+            if (monster.State == MonsterAiState.Wander)
+                SetState(monster, MonsterAiState.Idle, tick, events);
             return;
+        }
 
-        SetState(monster, MonsterAiState.Wander, tick, events);
+        // Never announce a walk if Blocking or path budget prevented movement.
         if (TryStep(monster, desiredX, desiredY, stats.MoveStep,
                     ref pathBudget, out var wanderX, out var wanderY))
+        {
+            SetState(monster, MonsterAiState.Wander, tick, events);
             Move(monster, wanderX, wanderY, tick, events);
+        }
+        else if (monster.State == MonsterAiState.Wander)
+            SetState(monster, MonsterAiState.Idle, tick, events);
     }
 
     private bool TryStep(Monster monster, double targetX, double targetY, double step,

@@ -15,6 +15,8 @@ internal static class MonsterRuntimeChecks
             () => CrossMapTargetLost(root));
         Checks.Run("monster returns to spawn before reacquiring a nearby player after target loss",
             () => TargetLostReturnsHome(root));
+        Checks.Run("monster only publishes wandering animation when actually moving",
+            () => WanderOnlyWhenMoving(root));
         Checks.Run("monster trusted damage owns death/respawn and AI budget is fair across 300 entities",
             () => DamageRespawnAndBudget(root));
         Checks.Run("monster respawn deadline is independent of AI cadence and budget",
@@ -190,6 +192,64 @@ internal static class MonsterRuntimeChecks
         Checks.Require(reacquire.Any(e => e.Kind == MonsterWorldEventKind.TargetAcquired &&
                                           e.TargetActorId == lure.ActorId),
             "monster did not resume normal aggro after reaching spawn");
+    }
+
+    private static void WanderOnlyWhenMoving(string root)
+    {
+        // An isolated spawn surrounded by blocked cells may select a distant
+        // walkable waypoint, but cannot make a legal step through the ring.
+        string trappedDir = Checks.Fixture(root, 218, 12, 12,
+            (x, y) => Math.Abs(x - 5) <= 1 && Math.Abs(y - 5) <= 1 &&
+                      (x != 5 || y != 5) ? (byte)7 : (byte)0);
+        var trappedGrid = BlockingGrid.Load(trappedDir, 218);
+        string trappedPath = Path.Combine(trappedDir, "population.json");
+        File.WriteAllText(trappedPath, JsonSerializer.Serialize(Document(
+            218, true, [Spawn(0, 1, 88, 88)],
+            [Definition(1, wanderRadius: 64, wanderInterval: 1,
+                moveStep: 16)])));
+        var trapped = new MonsterRuntime(trappedGrid,
+            MonsterPopulationCatalog.LoadVerified(trappedPath, 218, trappedGrid),
+            new(AiIntervalTicks: 1, MaxAiPerStep: 8,
+                MaxPathQueriesPerStep: 0));
+        for (long tick = 1; tick <= 10; tick++)
+        {
+            var events = trapped.Tick(tick, []);
+            var snapshot = trapped.SnapshotAll()[0];
+            Checks.Require(snapshot.X == 88 && snapshot.Y == 88 &&
+                           snapshot.State == MonsterAiState.Idle &&
+                           events.All(e => e.Kind != MonsterWorldEventKind.Move &&
+                                           !(e.Kind == MonsterWorldEventKind.State &&
+                                             e.Monster.State == MonsterAiState.Wander)),
+                "blocked patrol waypoint made a stationary monster appear to walk");
+        }
+
+        string openDir = Checks.Fixture(root, 219, 12, 12, (_, _) => 0);
+        var openGrid = BlockingGrid.Load(openDir, 219);
+        string openPath = Path.Combine(openDir, "population.json");
+        File.WriteAllText(openPath, JsonSerializer.Serialize(Document(
+            219, true, [Spawn(0, 1, 88, 88)],
+            [Definition(1, wanderRadius: 64, wanderInterval: 6,
+                moveStep: 16)])));
+        var open = new MonsterRuntime(openGrid,
+            MonsterPopulationCatalog.LoadVerified(openPath, 219, openGrid),
+            new(AiIntervalTicks: 1, MaxAiPerStep: 8));
+        long firstMoveTick = -1;
+        for (long tick = 1; tick <= 10; tick++)
+        {
+            var events = open.Tick(tick, []);
+            if (events.Any(e => e.Kind == MonsterWorldEventKind.Move))
+            {
+                firstMoveTick = tick;
+                Checks.Require(open.SnapshotAll()[0].State == MonsterAiState.Wander,
+                    "successful patrol move had no wandering state");
+                break;
+            }
+        }
+        Checks.Require(firstMoveTick > 0, "open map never produced a patrol step");
+        var paused = open.Tick(firstMoveTick + 1, []);
+        Checks.Require(open.SnapshotAll()[0].State == MonsterAiState.Idle &&
+                       paused.All(e => e.Kind != MonsterWorldEventKind.Move),
+            "wandering animation remained active after the patrol step stopped");
     }
 
     private static void DamageRespawnAndBudget(string root)
