@@ -380,7 +380,27 @@ func _online_gate_actor() -> void:
 		_online_gate_phase = 7
 	elif _online_gate_phase == 7 and _online_gate_ready(15):
 		print("ONLINE_MAIN_GATE_RETURN_MAP15 role=actor")
-		_online_gate_finish(true,"")
+		# Leaving a map clears the old LocalMovement predictor. Verify a cached
+		# return still owns intact Blocking.dat and can bind the new generation by
+		# walking again and requiring the authoritative Server ACK.
+		var return_target := Vector2(840,808)
+		_app._begin_ground_navigation(return_target,Time.get_ticks_msec())
+		if not _app.world_view.local_movement.active:
+			var controller = _app.world_view.local_movement
+			_online_gate_fail("return_map15_local_prediction_not_started ready_%s epoch_%d actor_%d pos_%s" % [
+				str(controller.ready),controller.map_epoch,controller.actor_id,str(controller.position)
+			])
+			return
+		_online_gate_phase = 8
+	elif _online_gate_phase == 8:
+		var return_target := Vector2(840,808)
+		var at := Vector2(float(_app._last_snapshot.get("x",0.0)),float(_app._last_snapshot.get("y",0.0)))
+		var movement_sequence := int(_app._last_snapshot.get("movement_sequence",0))
+		if at.distance_to(return_target) <= 1.0 and _online_gate_ready(15) and movement_sequence > 0 \
+				and int(_app._last_snapshot.get("last_receipt_sequence",0)) == movement_sequence \
+				and int(_app._last_snapshot.get("last_receipt_status",-1)) == 0:
+			print("ONLINE_MAIN_GATE_RETURN_MOVE_ACK role=actor")
+			_online_gate_finish(true,"")
 
 
 func _online_gate_finish(success: bool, reason: String) -> void:

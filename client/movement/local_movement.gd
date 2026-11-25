@@ -85,7 +85,9 @@ func configure(blocking: PackedByteArray, manifest: Dictionary, epoch: int, own_
 		return false
 	width = w
 	height = h
-	_bytes = blocking
+	# PackedByteArray is shared on assignment. Keep predictor ownership
+	# independent from the cached map asset because clear() mutates _bytes.
+	_bytes = blocking.duplicate()
 	map_epoch = epoch
 	actor_id = own_actor
 	ready = true

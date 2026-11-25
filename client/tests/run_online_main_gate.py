@@ -226,6 +226,7 @@ def main() -> int:
                 "ONLINE_MAIN_GATE_LONG_HOLD_PASS role=actor",
                 "ONLINE_MAIN_GATE_MAP13 role=actor",
                 "ONLINE_MAIN_GATE_RETURN_MAP15 role=actor",
+                "ONLINE_MAIN_GATE_RETURN_MOVE_ACK role=actor",
             ]
             required_observer = [
                 "ONLINE_MAIN_GATE_MONSTER role=observer",
