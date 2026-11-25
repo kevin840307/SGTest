@@ -132,6 +132,13 @@ func _ready() -> void:
 	_name.size = Vector2(125,15)
 	_create_password.size = Vector2(43,16)
 	_create_password_confirm.size = Vector2(43,16)
+	# 081/082 password edits are only 12px high. LineEdit can re-apply its
+	# inherited theme minimum after enter-tree, which visually drops the caret
+	# below the ITF row unless the source rect is restored here as well.
+	_password_modal_input.size = Vector2(170,12)
+	_change_old_password.size = Vector2(170,12)
+	_change_new_password.size = Vector2(170,12)
+	_change_confirm_password.size = Vector2(170,12)
 
 func _tex(name: String) -> Texture2D:
 	return UiTextures.get_texture(ART.path_join(name + ".png"))
@@ -525,8 +532,10 @@ func _modal_background(modal: Control, image: String, size: Vector2) -> void:
 func _modal_password(modal: Control, input: LineEdit, origin: Vector2, x: int, y: int) -> void:
 	input.secret = true
 	input.max_length = 4
-	_style_line_edit(input)
-	input.add_theme_font_size_override("font_size",11)
+	# 081/082 use the same HK edit-control renderer as login/create. Using the
+	# generic Godot LineEdit theme here lets its fallback font/minimum height
+	# re-center the text and caret below the source 12px ITF row.
+	_style_hk_input(input,12)
 	_input_at(modal,input,origin.x+x,origin.y+y,170,12)
 	input.size = Vector2(170,12)
 

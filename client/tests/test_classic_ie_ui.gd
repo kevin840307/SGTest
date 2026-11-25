@@ -130,8 +130,14 @@ func _run() -> void:
 		return
 	if (
 		shell._password_modal_input.position != Vector2(358,308) or
+		shell._password_modal_input.size != Vector2(170,12) or
 		shell._change_old_password.position != Vector2(373,271) or
-		not shell._password_modal_input.secret or shell._password_modal_input.max_length != 4
+		shell._change_old_password.size != Vector2(170,12) or
+		shell._change_new_password.size != Vector2(170,12) or
+		shell._change_confirm_password.size != Vector2(170,12) or
+		not shell._password_modal_input.secret or shell._password_modal_input.max_length != 4 or
+		shell._password_modal_input.get_theme_font_size("font_size") != 12 or
+		abs(shell._password_modal_input.get_theme_stylebox("normal").content_margin_bottom) > 0.01
 	):
 		_fail("the HK character password fields drifted from 081/082 ITF")
 		return
