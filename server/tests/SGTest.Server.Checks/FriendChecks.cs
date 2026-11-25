@@ -9,7 +9,7 @@ internal static class FriendChecks
 {
     public static void Verify()
     {
-        Checks.Run("friend wire roundtrips add remove refresh result and presence snapshot",Wire);
+        Checks.Run("friend wire roundtrips invite accept reject remove refresh and presence",Wire);
         Checks.Run("friend gateway binds authenticated sender and rejects replay",GatewayAdmission);
         Checks.Run("friend persistence is bilateral durable and deletion is symmetric",
             ()=>Persistence().GetAwaiter().GetResult());
@@ -35,6 +35,14 @@ internal static class FriendChecks
         Checks.Require(WireProtocol.TryDecodeFriendCommand(
             WireProtocol.EncodeFriendCommand(refresh),out parsed)&&parsed==refresh,
             "friend refresh wire roundtrip failed");
+        var accept=new FriendCommandWire(7,4,FriendCommandAction.Accept,42);
+        Checks.Require(WireProtocol.TryDecodeFriendCommand(
+            WireProtocol.EncodeFriendCommand(accept),out parsed)&&parsed==accept,
+            "friend accept wire roundtrip failed");
+        var reject=new FriendCommandWire(7,5,FriendCommandAction.Reject,42);
+        Checks.Require(WireProtocol.TryDecodeFriendCommand(
+            WireProtocol.EncodeFriendCommand(reject),out parsed)&&parsed==reject,
+            "friend reject wire roundtrip failed");
 
         var result=new FriendResultWire(
             7,2,FriendCommandAction.Remove,FriendResultStatus.Success,42);
@@ -51,6 +59,14 @@ internal static class FriendChecks
             decoded.Friends.Count==2&&decoded.Friends[0].IsOnline&&
             !decoded.Friends[1].IsOnline,
             "friend presence snapshot roundtrip failed");
+
+        var invite=new FriendInviteWire(7,42,9,FriendInviteState.Request,"Buddy");
+        var inviteBytes=WireProtocol.EncodeFriendInvite(invite);
+        Checks.Require(WireProtocol.TryDecodeFriendInvite(inviteBytes,out var decodedInvite)&&
+            decodedInvite==invite,"friend invite roundtrip failed");
+        Checks.Require(Convert.ToHexString(inviteBytes).ToLowerInvariant()==
+            "280000000100880007000000000000002a0000000000000009000000000000000005004275646479",
+            "friend invite wire changed from Godot golden contract");
 
         var malformed=WireProtocol.EncodeFriendCommand(add);
         malformed[20]=9;
@@ -162,18 +178,33 @@ internal static class FriendChecks
             Checks.Require(!a.TryDequeueReliable(out _)&&!b.TryDequeueReliable(out _),
                 "friend attach emitted unnecessary empty pre-WorldReady snapshot");
 
-            await coordinator.HandleAsync(new TrustedFriendCommand(
-                aId,11,2,1,FriendCommandAction.Add,0,"PresenceBeta"),router);
+            FeedFriend(a,new FriendCommandWire(
+                2,1,FriendCommandAction.Add,0,"PresenceBeta"),coordinator,router);
             var addResult=DrainResult(a);
-            var aAdded=DrainSnapshot(a);
-            var bAdded=DrainSnapshot(b);
+            var invite=DrainInvite(b);
             Checks.Require(addResult.Status==FriendResultStatus.Success&&
                 addResult.TargetActorId==bId&&
+                invite.State==FriendInviteState.Request&&invite.ActorId==aId&&
+                invite.ActorConnectionEpoch==11&&invite.Name=="PresenceAlpha"&&
+                (await store.GetFriendsAsync(aId)).Count==0&&
+                (await store.GetFriendsAsync(bId)).Count==0,
+                "friend invite was not delivered before persistence");
+
+            FeedFriend(b,new FriendCommandWire(
+                5,1,FriendCommandAction.Accept,aId),coordinator,router);
+            var acceptResult=DrainResult(b);
+            var accepted=DrainInvite(a);
+            var bAdded=DrainSnapshot(b);
+            var aAdded=DrainSnapshot(a);
+            Checks.Require(acceptResult.Status==FriendResultStatus.Success&&
+                acceptResult.TargetActorId==aId&&
+                accepted.State==FriendInviteState.Accepted&&accepted.ActorId==bId&&
+                accepted.Name=="PresenceBeta"&&
                 aAdded.Friends.Count==1&&aAdded.Friends[0].CharacterId==bId&&
                 aAdded.Friends[0].IsOnline&&
                 bAdded.Friends.Count==1&&bAdded.Friends[0].CharacterId==aId&&
                 bAdded.Friends[0].IsOnline,
-                "friend add did not broadcast bilateral online presence");
+                "friend accept did not persist and broadcast bilateral presence");
 
             await coordinator.DetachAsync(b.Binding,router);
             var offline=DrainSnapshot(a);
@@ -191,8 +222,8 @@ internal static class FriendChecks
                 aRelog.Friends.Count==1&&aRelog.Friends[0].IsOnline,
                 "friend relog did not restore live presence");
 
-            await coordinator.HandleAsync(new TrustedFriendCommand(
-                bId,23,6,1,FriendCommandAction.Remove,aId),router);
+            FeedFriend(b2,new FriendCommandWire(
+                6,1,FriendCommandAction.Remove,aId),coordinator,router);
             Checks.Require(DrainResult(b2).Status==FriendResultStatus.Success&&
                 DrainSnapshot(b2).Friends.Count==0&&
                 DrainSnapshot(a).Friends.Count==0,
@@ -205,6 +236,21 @@ internal static class FriendChecks
         {
             try{Directory.Delete(root,true);}catch{}
         }
+    }
+
+    private static void FeedFriend(
+        GatewayConnection gateway,FriendCommandWire command,
+        FriendCoordinator coordinator,WorldResultRouter router)
+    {
+        var status=gateway.FeedClientBytes(
+            WireProtocol.EncodeFriendCommand(command),_=>true,out int accepted,
+            postFriend:value=>
+            {
+                coordinator.HandleAsync(value,router).GetAwaiter().GetResult();
+                return true;
+            });
+        Checks.Require(status==WireFeedStatus.Accepted&&accepted==1,
+            "friend encoded client frame was not admitted through Gateway");
     }
 
     private static GatewayConnection Gateway(ActorSnapshot actor,string name)
@@ -222,6 +268,14 @@ internal static class FriendChecks
         if(!gateway.TryDequeueReliable(out var frame)||
            !WireProtocol.TryDecodeFriendResult(frame,out var value))
             throw new Exception("friend result missing");
+        return value;
+    }
+
+    private static FriendInviteWire DrainInvite(GatewayConnection gateway)
+    {
+        if(!gateway.TryDequeueReliable(out var frame)||
+           !WireProtocol.TryDecodeFriendInvite(frame,out var value))
+            throw new Exception("friend invite missing");
         return value;
     }
 

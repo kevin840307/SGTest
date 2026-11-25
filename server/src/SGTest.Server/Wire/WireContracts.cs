@@ -145,7 +145,8 @@ public enum WireOpcode : ushort
     PetEquipmentSnapshot = 132,
     PlayerProfileState = 133,
     PlayerCreationProfileState = 134,
-    PlayerAttributeAllocate = 135
+    PlayerAttributeAllocate = 135,
+    FriendInvite = 136
 }
 
 public enum ChatChannel : byte { Nearby = 0, World = 1, Warband = 2, Party = 3, Whisper = 4 }
@@ -165,12 +166,14 @@ public enum ClanResultStatus : byte
     NameTaken=4,InvalidName=5,ClanFull=6,Conflict=7,
     NotLeader=8,TargetNotMember=9,CannotTargetSelf=10,InvalidAnnouncement=11
 }
-public enum FriendCommandAction : byte { Add=1, Remove=2, Refresh=3 }
+public enum FriendCommandAction : byte { Add=1, Remove=2, Refresh=3, Accept=4, Reject=5 }
 public enum FriendResultStatus : byte
 {
     Success=0,TargetNotFound=1,CannotTargetSelf=2,
-    AlreadyFriends=3,NotFriends=4,Conflict=5
+    AlreadyFriends=3,NotFriends=4,Conflict=5,
+    TargetUnavailable=6,InviteMissing=7,TargetHasPendingInvite=8
 }
+public enum FriendInviteState : byte { Request=0, Accepted=1, Rejected=2, Cancelled=3 }
 public enum PetCommandAction : byte { Summon=1, Recall=2, Refresh=3, Equip=4, Unequip=5 }
 public enum PetResultStatus : byte
 {
@@ -737,6 +740,9 @@ public readonly record struct FriendResultWire(
 public readonly record struct FriendEntryWire(long CharacterId,string Name,bool IsOnline);
 public sealed record FriendSnapshotWire(
     long ReceiverMapEpoch,IReadOnlyList<FriendEntryWire> Friends);
+public readonly record struct FriendInviteWire(
+    long ReceiverMapEpoch,long ActorId,long ActorConnectionEpoch,
+    FriendInviteState State,string Name);
 
 public readonly record struct PetCommandWire(
     long MapEpoch,uint PetSequence,PetCommandAction Action,long PetUid,long ItemUid=0);

@@ -5,13 +5,15 @@ const State = preload("res://world/world_state.gd")
 const ADD_HEX := "240000000100780007000000000000000100000001000000000000000005004275646479"
 const REMOVE_HEX := "1f00000001007800070000000000000002000000022a000000000000000000"
 const REFRESH_HEX := "1f000000010078000700000000000000030000000300000000000000000000"
-const RESULT_HEX := "1e0000000100790007000000000000000100000001002a00000000000000"
-const REMOVE_RESULT_HEX := "1e0000000100790007000000000000000200000002002a00000000000000"
+const ACCEPT_HEX := "1f00000001007800070000000000000002000000042a000000000000000000"
+const REJECT_HEX := "1f00000001007800070000000000000003000000052a000000000000000000"
+const INVITE_HEX := "280000000100880007000000000000002a0000000000000009000000000000000005004275646479"
+const ACCEPT_RESULT_HEX := "1e0000000100790007000000000000000200000004002a00000000000000"
+const REMOVE_RESULT_HEX := "1e0000000100790007000000000000000300000002002a00000000000000"
 const SNAPSHOT_HEX := "3400000001007a00070000000000000002002a0000000000000001050042756464792b000000000000000007004f66666c696e65"
 
 func _initialize() -> void:
-	var add := Codec.encode_friend_command(7,1,1,0,"Buddy")
-	if add.hex_encode() != ADD_HEX:
+	if Codec.encode_friend_command(7,1,1,0,"Buddy").hex_encode() != ADD_HEX:
 		_fail("C# add-by-name golden mismatch")
 		return
 	if Codec.encode_friend_command(7,2,2,42).hex_encode() != REMOVE_HEX:
@@ -20,12 +22,19 @@ func _initialize() -> void:
 	if Codec.encode_friend_command(7,3,3).hex_encode() != REFRESH_HEX:
 		_fail("C# refresh golden mismatch")
 		return
+	if Codec.encode_friend_command(7,2,4,42).hex_encode() != ACCEPT_HEX:
+		_fail("C# accept golden mismatch")
+		return
+	if Codec.encode_friend_command(7,3,5,42).hex_encode() != REJECT_HEX:
+		_fail("C# reject golden mismatch")
+		return
 	if not Codec.encode_friend_command(7,1,1,0," Buddy ").is_empty():
 		_fail("friend add accepted trim-changing name")
 		return
-	var result := Codec.decode_friend_result(RESULT_HEX.hex_decode())
-	if result.is_empty() or result.target_actor_id != 42 or result.action != 1 or result.status != 0:
-		_fail("friend result golden rejected")
+
+	var invite := Codec.decode_friend_invite(INVITE_HEX.hex_decode())
+	if invite.is_empty() or invite.actor_id != 42 or invite.actor_connection_epoch != 9 or invite.state != 0 or invite.name != "Buddy":
+		_fail("C# friend invite golden rejected")
 		return
 	var snapshot := Codec.decode_friend_snapshot(SNAPSHOT_HEX.hex_decode())
 	if snapshot.is_empty() or snapshot.friends.size() != 2 or not bool(snapshot.friends[0].online) or bool(snapshot.friends[1].online):
@@ -38,20 +47,30 @@ func _initialize() -> void:
 	state.map_epoch = 7
 	state.actor_id = 1001
 	state.last_world_ready_ack_epoch = 7
-	if not state.mark_friend_sent(1,1,0,"Buddy"):
-		_fail("valid friend add request rejected")
+	if not state.apply_frame(INVITE_HEX.hex_decode()):
+		_fail("friend invite reducer failed")
 		return
-	if not state.apply_frame(RESULT_HEX.hex_decode()):
-		_fail("friend result reducer failed")
+	var invited := state.snapshot()
+	if int(invited.pending_friend_invite.get("actor_id",0)) != 42 or str(invited.pending_friend_invite.get("name","")) != "Buddy":
+		_fail("friend invite was not exposed to UI state")
+		return
+	if not state.mark_friend_sent(2,4,42):
+		_fail("valid friend accept request rejected")
+		return
+	if not state.apply_frame(ACCEPT_RESULT_HEX.hex_decode()):
+		_fail("friend accept result reducer failed")
+		return
+	if not state.snapshot().pending_friend_invite.is_empty() or state.snapshot().pending_friend_sequence != 0:
+		_fail("friend accept did not clear pending invite/request")
 		return
 	if not state.apply_frame(SNAPSHOT_HEX.hex_decode()):
 		_fail("friend snapshot reducer failed")
 		return
 	var view := state.snapshot()
-	if view.friends.size() != 2 or not bool(view.friends[42].online) or bool(view.friends[43].online) or view.pending_friend_sequence != 0:
-		_fail("friend reducer state mismatch")
+	if view.friends.size() != 2 or not bool(view.friends[42].online) or bool(view.friends[43].online):
+		_fail("friend reducer presence mismatch")
 		return
-	if not state.mark_friend_sent(2,2,42):
+	if not state.mark_friend_sent(3,2,42):
 		_fail("valid friend remove request rejected")
 		return
 	if not state.apply_frame(REMOVE_RESULT_HEX.hex_decode()):
@@ -60,7 +79,7 @@ func _initialize() -> void:
 	if state.snapshot().pending_friend_sequence != 0:
 		_fail("friend remove result did not clear pending request")
 		return
-	print("FRIEND_WIRE_PASS csharp_golden=true reducer=true presence=true friends=2")
+	print("FRIEND_WIRE_PASS csharp_golden=true invite=true accept=true reducer=true presence=true")
 	quit(0)
 
 func _fail(message: String) -> void:

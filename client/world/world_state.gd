@@ -302,10 +302,12 @@ var pending_friend_sequence := 0
 var pending_friend_action := 0
 var pending_friend_target_actor_id := 0
 var pending_friend_target_name := ""
+var pending_friend_invite := {}
 var friends := {}
 var last_friend_result_sequence := 0
 var last_friend_result_status := -1
 var last_friend_result := {}
+var last_friend_invite_notice := {}
 var stale_friend_frames := 0
 var pet_sequence := 0
 var pending_pet_sequence := 0
@@ -970,7 +972,7 @@ func mark_friend_sent(
 		state!=STATE_IN_WORLD or not world_ready or resync_pending or
 		waiting_for_new_map or pending_world_ready_ack_epoch!=0 or
 		last_world_ready_ack_epoch!=map_epoch or pending_friend_sequence!=0 or
-		sequence<=friend_sequence or sequence>0xffffffff or action<1 or action>3 or
+		sequence<=friend_sequence or sequence>0xffffffff or action<1 or action>5 or
 		target_actor_id<0
 	):
 		return false
@@ -986,6 +988,9 @@ func mark_friend_sent(
 				return false
 		3:
 			if target_actor_id!=0 or not clean.is_empty():
+				return false
+		4,5:
+			if target_actor_id<=0 or target_actor_id==actor_id or not clean.is_empty() or pending_friend_invite.is_empty() or int(pending_friend_invite.get("actor_id",0))!=target_actor_id:
 				return false
 		_:
 			return false
@@ -1313,6 +1318,8 @@ func apply_frame(frame: PackedByteArray) -> bool:
 			return _apply_friend_result(frame)
 		WireCodec.OPCODE_FRIEND_SNAPSHOT:
 			return _apply_friend_snapshot(frame)
+		WireCodec.OPCODE_FRIEND_INVITE:
+			return _apply_friend_invite(frame)
 		WireCodec.OPCODE_PET_RESULT:
 			return _apply_pet_result(frame)
 		WireCodec.OPCODE_PET_SNAPSHOT:
@@ -1653,10 +1660,12 @@ func snapshot() -> Dictionary:
 		"pending_friend_action": pending_friend_action,
 		"pending_friend_target_actor_id": pending_friend_target_actor_id,
 		"pending_friend_target_name": pending_friend_target_name,
+		"pending_friend_invite": pending_friend_invite.duplicate(true),
 		"friends": friends.duplicate(true),
 		"last_friend_result_sequence": last_friend_result_sequence,
 		"last_friend_result_status": last_friend_result_status,
 		"last_friend_result": last_friend_result.duplicate(true),
+		"last_friend_invite_notice": last_friend_invite_notice.duplicate(true),
 		"stale_friend_frames": stale_friend_frames,
 		"pet_sequence": pet_sequence,
 		"pending_pet_sequence": pending_pet_sequence,
@@ -4640,8 +4649,9 @@ func _apply_friend_result(frame:PackedByteArray)->bool:
 	):
 		return fail("friend_result_without_matching_request")
 	var status:=int(value.status)
-	if status<0 or status>5:
+	if status<0 or status>8:
 		return fail("friend_result_unknown_status")
+	var completed_action:=pending_friend_action
 	last_friend_result_sequence=sequence
 	last_friend_result_status=status
 	last_friend_result=value.duplicate(true)
@@ -4650,6 +4660,8 @@ func _apply_friend_result(frame:PackedByteArray)->bool:
 	if pending_friend_target_actor_id>0:
 		last_friend_result["requested_target_actor_id"]=pending_friend_target_actor_id
 	_clear_pending_friend()
+	if completed_action==4 or completed_action==5:
+		pending_friend_invite.clear()
 	return true
 
 
@@ -4673,6 +4685,35 @@ func _apply_friend_snapshot(frame:PackedByteArray)->bool:
 			return fail("invalid_friend_snapshot_entry")
 		next_friends[friend_actor]=entry.duplicate(true)
 	friends=next_friends
+	return true
+
+
+func _apply_friend_invite(frame:PackedByteArray)->bool:
+	if state!=STATE_IN_WORLD:
+		return fail("friend_invite_out_of_state")
+	var value:=WireCodec.decode_friend_invite(frame)
+	if value.is_empty():
+		return fail("invalid_friend_invite")
+	var epoch:=int(value.receiver_map_epoch)
+	if epoch<map_epoch:
+		stale_friend_frames+=1
+		return true
+	if epoch>map_epoch:
+		return fail("future_friend_invite")
+	var peer_actor:=int(value.actor_id)
+	if peer_actor<=0 or peer_actor==actor_id:
+		return fail("invalid_friend_invite_actor")
+	var invite_state:=int(value.state)
+	last_friend_invite_notice=value.duplicate(true)
+	if invite_state==0:
+		if not pending_friend_invite.is_empty():
+			var same_peer:=int(pending_friend_invite.get("actor_id",0))==peer_actor
+			var same_connection:=int(pending_friend_invite.get("actor_connection_epoch",0))==int(value.actor_connection_epoch)
+			if not same_peer or not same_connection:
+				return fail("multiple_pending_friend_invites")
+		pending_friend_invite=value.duplicate(true)
+	elif not pending_friend_invite.is_empty() and int(pending_friend_invite.get("actor_id",0))==peer_actor:
+		pending_friend_invite.clear()
 	return true
 
 

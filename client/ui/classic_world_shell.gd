@@ -161,6 +161,9 @@ var _friend_delete:TextureButton
 var _friend_rows:=VBoxContainer.new()
 var _friend_name_input:=LineEdit.new()
 var _friend_action:Button
+var _friend_question:=Control.new()
+var _friend_question_text:=Label.new()
+var _friend_question_actor:=0
 var _player_shop_rows:=VBoxContainer.new()
 var _player_shop_price:=SpinBox.new()
 var _player_shop_buy:=Button.new()
@@ -355,6 +358,14 @@ func _animate_status_bars()->void:
 
 func _process(_delta:float)->void:
 	_animate_status_bars()
+
+
+func _unhandled_key_input(event:InputEvent)->void:
+	if not _friend_question.visible or not event.is_action_pressed("ui_cancel"):
+		return
+	_reject_friend_invite()
+	get_viewport().set_input_as_handled()
+
 
 func _transparent_line_edit(edit:LineEdit)->void:
 	var empty:=StyleBoxEmpty.new()
@@ -858,6 +869,27 @@ func _build_friend_panel()->void:
 	_friend_editor.add_child(action)
 	_friend_action=action
 	_update_friend_action()
+
+	# Original 044_QUESTION_BOX geometry used by CFriendItf::OnInviteFriendRequest.
+	# The original client routes YES/NO through ONUIQuestion; keep the exact
+	# source-backed background/button rects instead of a Godot-native dialog.
+	_friend_question.name="FriendInviteQuestion"
+	_friend_question.position=Vector2(166,290)
+	_friend_question.size=Vector2(469,19)
+	_friend_question.visible=false
+	_friend_question.mouse_filter=Control.MOUSE_FILTER_STOP
+	hud.add_child(_friend_question)
+	_background(_friend_question,"BG_QUESTION_BOX",_friend_question.size)
+	_friend_question_text.name="QuestionText"
+	_friend_question_text.position=Vector2(9,3)
+	_friend_question_text.size=Vector2(382,12)
+	_friend_question_text.add_theme_font_override("font",_character_raster_font)
+	_friend_question_text.add_theme_font_size_override("font_size",12)
+	_friend_question_text.vertical_alignment=VERTICAL_ALIGNMENT_CENTER
+	_friend_question_text.clip_text=true
+	_friend_question.add_child(_friend_question_text)
+	_texture_button(_friend_question,"QuestionYes","B_OK_BUTTON",Vector2(424,1),Vector2(16,16),_accept_friend_invite,"接受")
+	_texture_button(_friend_question,"QuestionNo","CLOSESCREEN",Vector2(444,1),Vector2(16,16),_reject_friend_invite,"拒絕")
 
 func _update_friend_scroll_buttons()->void:
 	if _friend_up==null or _friend_down==null:return
@@ -1420,7 +1452,7 @@ func apply_snapshot(snapshot:Dictionary)->void:
 	_refresh_quest()
 	if _social_snapshot_changed("chat",["chat_messages"]):
 		_refresh_chat_history()
-	if _social_snapshot_changed("friends",["friends","pending_friend_sequence"]):
+	if _social_snapshot_changed("friends",["friends","pending_friend_sequence","pending_friend_invite"]):
 		_refresh_friends()
 	_refresh_player_shop()
 	_refresh_storage()
@@ -1898,7 +1930,43 @@ func _refresh_friends()->void:
 	if ordered.is_empty():
 		_style_friend_row(_classic_row(_friend_rows,"尚無好友",15.0))
 	_update_friend_action()
+	_sync_friend_question()
 	_update_friend_scroll_buttons.call_deferred()
+
+
+func _sync_friend_question()->void:
+	var invite:Dictionary=_stats.get("pending_friend_invite",{})
+	if invite.is_empty():
+		_friend_question_actor=0
+		_friend_question.visible=false
+		return
+	if int(_stats.get("pending_friend_sequence",0))!=0:
+		_friend_question.visible=false
+		return
+	var peer_actor:=int(invite.get("actor_id",0))
+	if peer_actor<=0:
+		_friend_question.visible=false
+		return
+	var peer_name:=str(invite.get("name",""))
+	if peer_actor!=_friend_question_actor or not _friend_question.visible:
+		_friend_question_actor=peer_actor
+		# The Old binary proves the question contains the inviter identity but its
+		# encoded localized sentence has not been recovered. Do not invent that copy.
+		_friend_question_text.text=peer_name
+		_friend_question.visible=true
+		_friend_question.move_to_front()
+
+
+func _accept_friend_invite()->void:
+	if _panel==null or _panel.session==null:return
+	if _panel.session.friend_accept():
+		_friend_question.visible=false
+
+
+func _reject_friend_invite()->void:
+	if _panel==null or _panel.session==null:return
+	if _panel.session.friend_reject():
+		_friend_question.visible=false
 
 
 func _friend_actor_for_name(target_name:String)->int:

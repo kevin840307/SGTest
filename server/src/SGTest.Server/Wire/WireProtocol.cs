@@ -66,6 +66,8 @@ public static partial class WireProtocol
     public const int FriendCommandMaximumFrameBytes = FriendCommandHeaderBytes + PlayerIdentityMaxNameBytes;
     public const int FriendResultFrameBytes = HeaderBytes + 8 + 4 + 1 + 1 + 8;
     public const int FriendSnapshotHeaderBytes = HeaderBytes + 8 + 2;
+    public const int FriendInviteHeaderBytes = HeaderBytes + 8 + 8 + 8 + 1 + 2;
+    public const int FriendInviteMaximumFrameBytes = FriendInviteHeaderBytes + PlayerIdentityMaxNameBytes;
     public const int FriendEntryHeaderBytes = 8 + 1 + 2;
     public const int LegacyCharacterAppearanceBytes = 4;
     public const int BodyLegCharacterAppearanceBytes = 6;
@@ -697,6 +699,7 @@ public static partial class WireProtocol
             133 => WireOpcode.PlayerProfileState,
             134 => WireOpcode.PlayerCreationProfileState,
             135 => WireOpcode.PlayerAttributeAllocate,
+            136 => WireOpcode.FriendInvite,
             _ => 0
         };
         if (opcode == 0) return false;
@@ -731,6 +734,7 @@ public static partial class WireProtocol
             WireOpcode.FriendCommand => advertised >= FriendCommandHeaderBytes && advertised <= FriendCommandMaximumFrameBytes,
             WireOpcode.FriendResult => advertised == FriendResultFrameBytes,
             WireOpcode.FriendSnapshot => advertised >= FriendSnapshotHeaderBytes && advertised <= MaximumFrameBytes,
+            WireOpcode.FriendInvite => advertised >= FriendInviteHeaderBytes && advertised <= FriendInviteMaximumFrameBytes,
             WireOpcode.MechaCommand => advertised == MechaCommandFrameBytes,
             WireOpcode.MechaResult => advertised == MechaResultFrameBytes,
             WireOpcode.MechaSnapshot => advertised >= MechaSnapshotHeaderBytes &&

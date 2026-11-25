@@ -522,6 +522,22 @@ func friend_refresh()->bool:
 	return _queue_friend_intent(3,0,"",current)
 
 
+func friend_accept()->bool:
+	var current:=snapshot()
+	var invite:Dictionary=current.get("pending_friend_invite",{})
+	if invite.is_empty():
+		return false
+	return _queue_friend_intent(4,int(invite.get("actor_id",0)),"",current)
+
+
+func friend_reject()->bool:
+	var current:=snapshot()
+	var invite:Dictionary=current.get("pending_friend_invite",{})
+	if invite.is_empty():
+		return false
+	return _queue_friend_intent(5,int(invite.get("actor_id",0)),"",current)
+
+
 func pet_summon(pet_uid:int)->bool:
 	var current:=snapshot()
 	return _queue_pet_intent(1,pet_uid,current)
@@ -761,6 +777,10 @@ func _queue_friend_intent(
 				return false
 		3:
 			if target_actor_id!=0 or not clean.is_empty():
+				return false
+		4,5:
+			var invite:Dictionary=current.get("pending_friend_invite",{})
+			if target_actor_id<=0 or target_actor_id==actor or not clean.is_empty() or invite.is_empty() or int(invite.get("actor_id",0))!=target_actor_id:
 				return false
 		_:
 			return false

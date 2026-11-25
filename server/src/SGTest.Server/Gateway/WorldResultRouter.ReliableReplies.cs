@@ -195,6 +195,18 @@ public sealed partial class WorldResultRouter
         }
     }
 
+    public GatewaySendStatus QueueFriendInvite(
+        ConnectionBinding recipient,FriendInviteWire invite)
+    {
+        lock(_gate)
+        {
+            if(!_connections.TryGetValue(recipient.ActorId,out var connection)||
+               connection.IsClosed||connection.Binding!=recipient)
+                return GatewaySendStatus.Closed;
+            return connection.QueueFriendInvite(recipient,invite);
+        }
+    }
+
     public GatewaySendStatus QueuePetResult(
         TrustedPetCommand request,PetResultWire result)
     {

@@ -11,7 +11,7 @@ public static partial class WireProtocol
         try{name=StrictUtf8.GetBytes(value.TargetName??string.Empty);}
         catch(EncoderFallbackException){throw new ArgumentOutOfRangeException(nameof(value));}
         if(value.MapEpoch<=0||value.FriendSequence==0||
-           value.Action is <FriendCommandAction.Add or >FriendCommandAction.Refresh||
+           value.Action is <FriendCommandAction.Add or >FriendCommandAction.Reject||
            value.TargetActorId<0||name.Length>PlayerIdentityMaxNameBytes)
             throw new ArgumentOutOfRangeException(nameof(value));
         switch(value.Action)
@@ -26,6 +26,8 @@ public static partial class WireProtocol
                     throw new ArgumentOutOfRangeException(nameof(value));
                 break;
             case FriendCommandAction.Remove:
+            case FriendCommandAction.Accept:
+            case FriendCommandAction.Reject:
                 if(value.TargetActorId<=0||name.Length!=0)
                     throw new ArgumentOutOfRangeException(nameof(value));
                 break;
@@ -71,8 +73,8 @@ public static partial class WireProtocol
     public static byte[] EncodeFriendResult(FriendResultWire value)
     {
         if(value.MapEpoch<=0||value.FriendSequence==0||
-           value.Action is <FriendCommandAction.Add or >FriendCommandAction.Refresh||
-           value.Status is <FriendResultStatus.Success or >FriendResultStatus.Conflict||
+           value.Action is <FriendCommandAction.Add or >FriendCommandAction.Reject||
+           value.Status is <FriendResultStatus.Success or >FriendResultStatus.TargetHasPendingInvite||
            value.TargetActorId<0)
             throw new ArgumentOutOfRangeException(nameof(value));
         var frame=NewFrame(WireOpcode.FriendResult,FriendResultFrameBytes);
@@ -175,5 +177,47 @@ public static partial class WireProtocol
         }
         catch(DecoderFallbackException){value=null;return false;}
         catch(ArgumentOutOfRangeException){value=null;return false;}
+    }
+
+    public static byte[] EncodeFriendInvite(FriendInviteWire value)
+    {
+        byte[] name;
+        try{name=StrictUtf8.GetBytes(value.Name??string.Empty);}
+        catch(EncoderFallbackException){throw new ArgumentOutOfRangeException(nameof(value));}
+        if(value.ReceiverMapEpoch<=0||value.ActorId<=0||value.ActorConnectionEpoch<=0||
+           value.State is <FriendInviteState.Request or >FriendInviteState.Cancelled||
+           name.Length is <1 or >PlayerIdentityMaxNameBytes)
+            throw new ArgumentOutOfRangeException(nameof(value));
+        var frame=NewFrame(WireOpcode.FriendInvite,FriendInviteHeaderBytes+name.Length);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(8,8),value.ReceiverMapEpoch);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(16,8),value.ActorId);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(24,8),value.ActorConnectionEpoch);
+        frame[32]=(byte)value.State;
+        BinaryPrimitives.WriteUInt16LittleEndian(frame.AsSpan(33,2),(ushort)name.Length);
+        name.CopyTo(frame.AsSpan(FriendInviteHeaderBytes));
+        return frame;
+    }
+
+    public static bool TryDecodeFriendInvite(ReadOnlySpan<byte> frame,out FriendInviteWire value)
+    {
+        value=default;
+        if(!TryReadHeader(frame,out var header)||header.Opcode!=WireOpcode.FriendInvite||
+           frame.Length<FriendInviteHeaderBytes||frame.Length>FriendInviteMaximumFrameBytes)
+            return false;
+        long epoch=BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(8,8));
+        long actor=BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(16,8));
+        long connection=BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(24,8));
+        var state=(FriendInviteState)frame[32];
+        int nameLength=BinaryPrimitives.ReadUInt16LittleEndian(frame.Slice(33,2));
+        if(frame.Length!=FriendInviteHeaderBytes+nameLength)return false;
+        try
+        {
+            string name=StrictUtf8.GetString(frame.Slice(FriendInviteHeaderBytes,nameLength));
+            value=new(epoch,actor,connection,state,name);
+            _=EncodeFriendInvite(value);
+            return true;
+        }
+        catch(DecoderFallbackException){value=default;return false;}
+        catch(ArgumentOutOfRangeException){value=default;return false;}
     }
 }

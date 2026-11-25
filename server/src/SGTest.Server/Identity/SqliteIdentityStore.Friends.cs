@@ -38,6 +38,44 @@ ORDER BY c.name,friend_id;";
         },cancellationToken).ConfigureAwait(false);
     }
 
+    public async Task<(FriendStoreStatus Status,long TargetCharacterId,string TargetName)> ResolveFriendInviteAsync(
+        long characterId,long targetCharacterId,string targetName="",
+        CancellationToken cancellationToken=default)
+    {
+        ThrowIfDisposed();
+        if(characterId<=0)return(FriendStoreStatus.Conflict,0,string.Empty);
+        return await Task.Run(()=>
+        {
+            using var connection=Open();
+            using var tx=connection.BeginTransaction();
+            long target=ResolveFriendTarget(connection,tx,targetCharacterId,targetName);
+            if(target<=0)return(FriendStoreStatus.TargetNotFound,0,string.Empty);
+            if(target==characterId)return(FriendStoreStatus.CannotTargetSelf,target,string.Empty);
+            if(!FriendCharacterExists(connection,tx,characterId))
+                return(FriendStoreStatus.Conflict,0,string.Empty);
+            long low=Math.Min(characterId,target);
+            long high=Math.Max(characterId,target);
+            using(var exists=connection.CreateCommand())
+            {
+                exists.Transaction=tx;
+                exists.CommandText=@"SELECT 1 FROM character_friendships
+WHERE character_low_id=$low AND character_high_id=$high LIMIT 1;";
+                exists.Parameters.AddWithValue("$low",low);
+                exists.Parameters.AddWithValue("$high",high);
+                if(exists.ExecuteScalar() is not null)
+                    return(FriendStoreStatus.AlreadyFriends,target,string.Empty);
+            }
+            using var name=connection.CreateCommand();
+            name.Transaction=tx;
+            name.CommandText="SELECT name FROM characters WHERE character_id=$id LIMIT 1;";
+            name.Parameters.AddWithValue("$id",target);
+            string display=Convert.ToString(name.ExecuteScalar())??string.Empty;
+            return string.IsNullOrEmpty(display)
+                ?(FriendStoreStatus.TargetNotFound,0,string.Empty)
+                :(FriendStoreStatus.Success,target,display);
+        },cancellationToken).ConfigureAwait(false);
+    }
+
     public async Task<(FriendStoreStatus Status,long TargetCharacterId)> AddFriendAsync(
         long characterId,long targetCharacterId,string targetName="",
         CancellationToken cancellationToken=default)

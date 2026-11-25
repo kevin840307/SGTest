@@ -598,6 +598,19 @@ public sealed partial class GatewayConnection
         }
     }
 
+    public GatewaySendStatus QueueFriendInvite(
+        ConnectionBinding expected,FriendInviteWire invite)
+    {
+        lock(_bindingGate)
+        {
+            if(_closed)return GatewaySendStatus.Closed;
+            if(_binding!=expected||invite.ReceiverMapEpoch!=expected.MapEpoch)
+                return GatewaySendStatus.GenerationMismatch;
+            return _reliable.TryEnqueue(WireProtocol.EncodeFriendInvite(invite))
+                ?GatewaySendStatus.Enqueued:GatewaySendStatus.Backpressured;
+        }
+    }
+
     public GatewaySendStatus QueuePetResult(
         TrustedPetCommand request,PetResultWire result)
     {
