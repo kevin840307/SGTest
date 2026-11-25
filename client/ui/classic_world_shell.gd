@@ -191,6 +191,7 @@ var _quest_text: Label
 var _quest_choices:=VBoxContainer.new()
 var _chat_history:=TextEdit.new()
 var _chat_input:=LineEdit.new()
+var _chat_input_normalizing:=false
 var _chat_input_clip:=Control.new()
 var _chat_bg:TextureRect
 var _chat_up:TextureButton
@@ -676,8 +677,13 @@ func _build_chat_panel()->void:
 	_chat_history.get_v_scroll_bar().mouse_filter=Control.MOUSE_FILTER_IGNORE
 	_chat_history.get_v_scroll_bar().value_changed.connect(func(_value):_update_chat_scroll_buttons())
 	_chat_input.name="ChatInput"
-	_chat_input.max_length=256
+	# The authoritative SGTest chat wire is capped in UTF-8 bytes, not Unicode
+	# codepoints. Keep the original single-line editor geometry while preventing
+	# multibyte Traditional Chinese input from looking valid and then being
+	# rejected only when Enter reaches ClientSession.
+	_chat_input.max_length=WireCodec.CHAT_MAX_MESSAGE_BYTES
 	_transparent_line_edit(_chat_input)
+	_chat_input.text_changed.connect(_limit_chat_input_bytes)
 	_chat_input.text_submitted.connect(func(_value):_send_chat())
 	# Godot LineEdit's intrinsic font minimum can exceed the 11px ITF
 	# slot (31px before theme inheritance). Constrain rendering and hitbox
@@ -724,6 +730,18 @@ func _fit_chat_editor()->void:
 	var height:=maxf(_chat_input_clip.size.y,_chat_input.get_combined_minimum_size().y)
 	_chat_input.size=Vector2(_chat_input_clip.size.x,height)
 	_chat_input.position=Vector2(0,floorf((_chat_input_clip.size.y-height)/2.0))
+
+func _limit_chat_input_bytes(value:String)->void:
+	if _chat_input_normalizing or value.to_utf8_buffer().size()<=WireCodec.CHAT_MAX_MESSAGE_BYTES:
+		return
+	var trimmed:=value
+	while not trimmed.is_empty() and trimmed.to_utf8_buffer().size()>WireCodec.CHAT_MAX_MESSAGE_BYTES:
+		trimmed=trimmed.left(trimmed.length()-1)
+	var caret:=mini(_chat_input.caret_column,trimmed.length())
+	_chat_input_normalizing=true
+	_chat_input.text=trimmed
+	_chat_input.caret_column=caret
+	_chat_input_normalizing=false
 
 func _set_chat_button_art(button:TextureButton,art:String)->void:
 	button.texture_normal=_tex(art+"_0")

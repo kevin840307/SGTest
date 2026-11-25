@@ -6,6 +6,8 @@ const Session = preload("res://session/client_session.gd")
 const WorldState = preload("res://world/world_state.gd")
 const FixtureLogin = preload("res://tests/aes_character_fixture.gd")
 const PASSWORD := "Fixture-Password-123!"
+# 85 CJK codepoints = 255 UTF-8 bytes: one byte below the authoritative chat cap.
+var MAX_BOUNDARY_ZH_CHAT := "繁".repeat(85)
 
 func _fail(message: String, session = null) -> void:
 	if session != null:
@@ -63,7 +65,7 @@ func _observe(session, self_id: int, crossmap: bool = false, portal: bool = fals
 		return
 	if not crossmap:
 		var chat := _wait_nearby_chat(
-			session,remote_id,"MultiHeroTwo","附近 E2E 測試",7000)
+			session,remote_id,"MultiHeroTwo",MAX_BOUNDARY_ZH_CHAT,7000)
 		if chat.is_empty() or int(chat.get("chat_sequence",0))!=1 or \
 				int(chat.get("channel",-1))!=0 or int(chat.get("bubble_type",-1))!=2:
 			_fail("observer did not receive authenticated nearby chat %s" %
@@ -254,11 +256,11 @@ func _move(session, self_id: int, crossmap: bool = false, portal: bool = false) 
 		if not (seen.get("chat_messages",[]) as Array).is_empty():
 			_fail("actor had unexpected chat before sending",session)
 			return
-		if not session.send_nearby_chat("附近 E2E 測試",2):
+		if not session.send_nearby_chat(MAX_BOUNDARY_ZH_CHAT,2):
 			_fail("actor nearby chat intent rejected",session)
 			return
 		var echoed := _wait_nearby_chat(
-			session,self_id,"MultiHeroTwo","附近 E2E 測試",7000)
+			session,self_id,"MultiHeroTwo",MAX_BOUNDARY_ZH_CHAT,7000)
 		if echoed.is_empty() or int(echoed.get("chat_sequence",0))!=1 or \
 				int(echoed.get("channel",-1))!=0 or int(echoed.get("bubble_type",-1))!=2:
 			_fail("actor did not receive authoritative nearby chat echo %s" %

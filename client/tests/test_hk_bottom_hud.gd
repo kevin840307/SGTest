@@ -1,6 +1,7 @@
 extends SceneTree
 ## Source geometry and rendering contract of the three bottom HK HUD groups.
 const Shell = preload("res://ui/classic_world_shell.gd")
+const WireCodec = preload("res://network/wire_codec.gd")
 var failed := false
 
 class ChatSessionStub:
@@ -83,6 +84,12 @@ func _run()->void:
 	_expect(shell._friend_up.disabled and shell._friend_down.disabled,"empty friend list must show disabled arrows")
 	_expect(shell._chat_input_clip.clip_contents,"chat input must clip to the 11px ITF slot")
 	_expect(shell._chat_input.size.x==253 and shell._chat_input.size.y<=maxf(11,shell._chat_input.get_combined_minimum_size().y),"editor must settle after theme inheritance")
+	var oversized_zh:="繁".repeat(100)
+	shell._chat_input.text=oversized_zh
+	shell._chat_input.caret_column=oversized_zh.length()
+	shell._chat_input.text_changed.emit(oversized_zh)
+	_expect(shell._chat_input.text.to_utf8_buffer().size()<=WireCodec.CHAT_MAX_MESSAGE_BYTES,"Traditional Chinese input must respect authoritative UTF-8 byte cap")
+	_expect(shell._chat_input.text.length()==85 and shell._chat_input.text.to_utf8_buffer().size()==255,"UTF-8 clamp must keep complete Chinese codepoints")
 	var messages:Array=[]
 	for index in 20:
 		messages.append({"channel":0,"sender_name":"玩家","message":"附近訊息 %d"%index})
@@ -173,5 +180,5 @@ func _run()->void:
 		await RenderingServer.frame_post_draw
 		_expect(root.get_texture().get_image().save_png(args[0])==OK,"native capture")
 	shell.free()
-	if not failed:print("HK_BOTTOM_HUD_PASS status=128x90 chat=469x90 friend=203x90 original_controls=true expanded=289x578 preserve_draft=true filters=private/world/warband/party/nearby channel_cycle=0-2-3-4-0 send_routes=true")
+	if not failed:print("HK_BOTTOM_HUD_PASS status=128x90 chat=469x90 friend=203x90 original_controls=true expanded=289x578 preserve_draft=true filters=private/world/warband/party/nearby channel_cycle=0-2-3-4-0 send_routes=true utf8_byte_cap=true")
 	quit(1 if failed else 0)
