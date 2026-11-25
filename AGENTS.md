@@ -1,6 +1,6 @@
-# SGTest AGENTS.md — v15 HK Full Parity / End-to-End Gameplay / Multiplayer Performance
+# SGTest AGENTS.md — v16 Playable First / HK Full Parity / Multiplayer
 
-適用 C:\SGO\SRC\SGTest；唯一常駐執行規範，v15 取代 v11–v14 衝突規剄。排程入口 docs/SCHEDULER_PROMPT.md；詳細架構/原版研究/Smoke 按需查 docs/AGENT_REFERENCE.md。
+適用 C:\SGO\SRC\SGTest；唯一正式執行規範，v16 取代 v11–v15 衝突規則。docs/SCHEDULER_PROMPT.md 與 Scheduler prompt.txt 只是啟動入口，不另定優先序。詳細架構/原版研究/Smoke 按需查 docs/AGENT_REFERENCE.md。
 
 ## 0. 每輪必須讀取的執行規格（先用已整理證據，禁止從零猜測）
 
@@ -12,23 +12,46 @@
 - 來源不足依序定向補查：既有任務與有效證據 → HK ITF/SPR/.lst 與現有正式 converter → `C:\SGO\Recovered\Old`（ClientData/Paradise.exe.lst、服務端/plugins/*.dll.lst、Dat、cfg、資料庫；追 control handler、動畫/效果、數值、時序、條件、資料與封包）→ `C:\SGO\Recovered`（圖檔名稱、素材路徑、場景/原有實作交叉參考）及既有 Paradise 截圖/授權原版操作。HK 版 UI 最終優先，Old/Recovered 版本差異須標記；所有參考來源唯讀。不得因找到相似名稱就認定正確素材。
 - ITF COUNT_MATCH 是結構數量吻合，不代表控件語意或畫面已驗；原始 group、sentinel、自動尺寸、重複 ID、動態 SPR、frame-state、font/handler 要按實際 loader 或原版交互核對。數值與行為無證據不猜，已有確認資料不反覆研究。
 
-## 1. 產品目標與優先順序
+## 1. 產品目標與強制里程碑（Playable First）
 
-**HK 原版畫面、操作、功能、數值、動畫與手感一致；多人同步正確、流暢、低資源。內部可現代化，玩家體驗不可有非預期差異。**
+**交付真正可玩的正式 Godot Client + .NET Server；HK 原版畫面、操作、功能、數值、動畫與手感一致，多人正確流暢低資源。** 使用者實測優先於過期 PASS；已知 FAIL 不得用測試數、commit 數、fixture 截圖或其他功能 PASS 遮掩。
 
-- 使用者指定及真 P0 優先：無法登入/移動/換圖、崩潰、資料損毀、權威或重大同步錯誤。其他工作長期三軌 UI 35%、玩法 35%、多人效能 30%；每三個非緊急交付主題涵蓋三軌，同一完整流程可跨軌。以玩家成果計，不以 commit 數；無安全項才記理由調整。
-- 先實測正式角色是否 combat-locked，已通即推進：Map15→Map13→選怪/普攻/MISS/受擊/死亡/EXP/掉落/重生→技能/MP/冷卻/動畫→拾取/背包/藥水/裝卸/配點/重登→NPC/商店/銀行/倉庫/修理/強化→多人/組隊/交易/PvP/Pet/Mecha。按真依賴補缺，不重寫、不用 SyntheticTest/假資料/弱化 fail-closed。
-- UI 優先完整世界 HUD、背包/裝備、人物資料、技能、NPC；共同根因批次修。非阻塞視覺差異留 FAIL/NOT VERIFIED，不阻擋獨立玩法；不長期耗在登入/選角/caret/AA/Tab。
-- 多人優先玩家移動與動畫、AOI、戰鬥/傷害/掉落/跨圖/重連一致性及實測瓶頸。同類非 P0 局部修補連續兩輪無實質玩家成果，先重現完整流程、找共同根因或換軌；不一直堆防禦測試。
-- 每輪目標一個完整主題、2～4 候選 Task ID、3～5 實質相關 leaf 或完整大型玩法/UI/多人流程、25～40 分鐘有效工作；非硬配額。父整合待子項驗收才關閉，不拆假任務、湊時間或降品質。
+- 2026-11-25 玩家驗收：登入/創角/選角已完成，凍結主動開發（僅回歸修復）；第二次密碼輸入框仍錯位。換圖兩次會卡住、無怪物/普攻/技能、聊天沒有氣泡、頻道/好友操作未通、快捷鍵/背包文字錯位、無測試物品/裝備動態外觀/機甲。以上保留為 OPEN/FAIL，直到同一流程重新實測通過，不得因局部修改關閉。
+- P0：崩潰、卡圖、資料損毀、安全/權威及重大同步錯誤立即處理；最新使用者指定優先。其他工作固定按下列最早未通里程碑及其依賴前進，不從數百 Task 隨意挑容易完成的小修。任務庫只是證據/驗收索引。
+- 基礎可玩鏈未完成前，長期投入方向玩法 60% / UI 30% / 多人 10%，非每輪配額；核心同步/可靠事件必須隨玩法正確實作，不延後高風險缺陷。M1–M5 適用驗收通過後恢復 UI 35% / 玩法 35% / 多人效能 30%；M6 與剩餘完整產品契約持續推進。M1–M6 不是縮減最終產品範圍。
 
-## 2. 每輪閉環
+| 里程碑 | 必須達成的玩家流程（以 TODO/Matrix 實測狀態為準） |
+|---|---|
+| M0 登入基線 | 登入/創角/選角已獲玩家確認；只做必要 smoke 和回歸，不再研究已完成 UI。第二次密碼保留未修，按共用 input renderer 修正。 |
+| M1 統一正式測試環境 | 建立單一可重複啟動入口、來源驗證/manifest/capability preflight、獨立穩定測試 DB/帳號/角色；可觀察載入的怪物、技能、EXP/loot、item/equipment/pet/mecha 等功能及缺口；接續 M2 的必要資料必須真正載入。 |
+| M2 地圖＋戰鬥 | Map15↔Map13 真傳點至少連續 10 次、每次 WorldReady 後立即正常移動/操作，無卡死；正式可見怪物、選怪/追擊、普攻/MISS/受擊/死亡/EXP/掉落/重生、學習/施放技能/MP/冷卻/動畫。優先 GP-012-01 combat profile / verified population/runtime 接續與 GP-008 跨圖卡死。 |
+| M3 背包＋裝備＋快捷鍵 | Server 真實物品/UID/圖示/文字、拾取/藥水/拖移/裝卸、裝備在人物身上的方向與動態 paper doll、快捷鍵配置/移除/頁面/F1–F12 真使用、配點/重登持久化。 |
+| M4 基礎 UI 與社交 | 第二密碼輸入、HUD、快捷鍵/包包及人物文字共用 renderer；聊天輸入→Server→本人及對方歷史/頭頂氣泡，頻道/原版大小視窗切換、好友新增/刪除/頁籤/黑名單/線上狀態、拖移/捲動。NPC 及基本 UI 正常操作；不能把背景/圖示/空 callback 當功能。 |
+| M5 寵物＋機甲 | 正式角色可取得、召喚/搭乘、裝卸/卡片/升級、移動、方向/動作、攻擊技能、屬性/HP 等 UI 與 Server 權威、重登；NPC 商店/銀行/倉庫/修理/強化等直接依賴一併打通。 |
+| M6 多人同步與效能 | 雙可見 Client 在同一正式測試環境互看、戰鬥/掉落/跨圖/交易/組隊/重連一致，依 §5 做混合密度基準與 soak，後續完整 §6 全玩法（社團/任務/PvP 等）及 Release Gate。 |
 
-1. 依 §4 安全同步，查 EXECUTION_INDEX、相關 MD/metadata、todo.txt、docs/FEATURE_MATRIX.md、既有證據與程式，選具體未完成 Task ID/相依/玩家驗收。
-2. 正式隔離 Client/Server 重現玩家流程；UI 取 HK 同狀態 Reference/Before（800×600 同 DPI）及 control inventory；玩法查原版 handler/數值/時序/前置；多人取雙 Client 與效能 baseline。已有有效證據直接用，缺什麼才定向查。
-3. 批次實作並驗正常輸入→Client intent→Server 權威/交易→封包/reducer→畫面/動畫/成敗回饋→適用重登/雙 Client；先 targeted test，依 §5 驗受影響項。不得以單元測試代替實機。
-4. 每個切片驗收、更新 TODO/Matrix、review diff、commit/push 後立即續作；commit 是檢查點。遇 WIP/證據/工具 blocker 記錄並切換安全獨立項；工具兩次無進展即 fallback。禁止無目的 .lst 全掃、重解包、重建未變 Server、重跑無關 suite。
-5. 結束前重查候選、相依、WIP、資源；有安全高優先項且資源足夠就繼續。只有主題及合理工作量完成且無適合續作、實際資源限制需交接、或剩餘項均具體阻塞才結束。不要 sleep、湊時間/測試/commit，依 §7 簡短交接。
+### 強制接續與禁止逃避
+- 開局讀最新 TODO/Matrix 首個未完成里程碑、上輪 OPEN/FAIL/NOT VERIFIED、使用者回報，選其中最早阻塞的玩家流程；在原 Task ID 找直接依賴與驗收證據。完成的登入等只做必要回歸；不能以微調 caret/AA/Tab、無關封包防禦或增加測試作主題。
+- 同一核心阻塞跨輪保留，直到真玩家可操作且適用 Gate 達標。若缺來源，定向追 原版→converter→verified manifest→正式 loader/runtime→Server 啟動→Client 畫面，使用已驗證規則先打通最小完整可玩切片；不能停在「抽出欄位」或「已 fail-closed」。禁止猜數值、繞過權威或把測試資料升為正式玩法。
+- M1 是持續支援的測試環境，不要求先完成所有尚未開發玩法才能進 M2；只要當前切片的必要能力可驗就立即推進，之後逐步補 capability。使用者指定缺陷與獨立直接依賴可並行，尤其共用 input/font/rect、聊天/好友、跨圖；不得以「目前不是這個里程碑」拒絕高優先使用者問題。真阻塞改做同一里程碑或相鄰核心依賴，列明原因、缺證據、下一具體動作；工具兩次失敗用 §2 fallback，不無限重試。
+- UI 必須有畫面、文字、座標、狀態、命中、實際操作、資料/動畫/成敗回饋。原圖與 ITF 不符或按鈕 no-op、未連 Server、假測試物品都不算完成。第二次密碼/快捷鍵/背包等共同錯位先查實際 rect、anchor、theme minimum、glyph baseline/clip、共用 renderer，避免每輪加魔術偏移。
+- 每輪至少交付一個可觀察的新玩家成果（或重現並實質解除最早核心 blocker），完成後立即續作。目標 25～40 分鐘有效開發、完整垂直切片優先，非硬配額；不以 task/leaf/commit 數計量，不 sleep 湊時間。若客觀限制無法交付，照實標未完成，留下可重現失敗、已安全提交進度與下一個可執行步驟；下一輪優先恢復，不將技術前置稱為玩家成果。
+
+## 2. 每輪閉環與統一測試環境
+
+### M1 啟動與資料契約（每輪開局先查）
+- 唯一正式 repo/main。建立/沿用單一可重複的本機 playtest 啟動入口（正式 Server build + Windows Godot client + HK preflight），記錄 SHA/build、source manifests 及 hash、content/PCK、map、DB、port、PID、角色與功能設定；重啟預設保留使用者測試帳號/角色/資料，先備份。開發測試用相同 capability/內容設定的隔離 DB/port，不搶占使用者當前手動測試環境；不同 profile 必須清楚標記。
+- 已知 2026-11-25 使用者環境 127.0.0.1:17877 的 AES_HOST_READY 顯示 monster_maps=[]、monsters=0、verified_skill/equipment/mecha/loot/shop rules=0、EXP 未啟用；這只證明程序 listening，不是可玩。開局讀最新 Server ready/log、實際載入 population/manifest schema、gameplay_ready、可信角色 combat slot、item/skill/loot/equipment/appearance/mecha 規則；不要盲目沿用舊 EXE 或隨意手寫啟動參數。
+- 啟動入口要提供明確的 capability 摘要與當前里程碑必要項檢查；缺必要玩法回報 FAIL/NOT READY，列缺失檔案/規則/程式及下一步，不把空白 Server 稱為完整。允許標示 limited profile 供獨立 UI 診斷，但不得用於整體 gameplay PASS。先把 M2 必要資料與正式 gameplay-ready runtime 接起來，再逐步補 M3–M5；不要求一開始全部非零，也不為了數量虛造資料。
+- 使用可重複、隔離且明確標示的本機測試帳號/角色與 Server 權威 provision/GM/seed 流程，提供已驗證真實物品 ID、instance/UID、技能、裝備、寵物、機甲及可測目標，遵守交易/持久化與權限；可測發放不等於正式掉落規則，不把測試資料混入產品預設或公開憑證/DB。禁止 client fixture 冒充玩家包包，不因測試環境缺資料而反覆改 UI 空殼。
+- 目前使用者測試程序（含 port 17877、既有 DB）視為受保護；不得自動停止、改 DB 或重啟，除非使用者要求或明確交接已閒置。測試時先用同設定的隔離埠，交付再告知如何切換。
+
+### 執行順序
+1. 依 §4 安全同步、清理確認閒置舊測試資源、接續安全 WIP。從 TODO/Matrix 及玩家回報選當前里程碑、最早 OPEN blocker、直接 Task ID，建立一條明確玩家驗收路徑；讀必要 MD/metadata/證據，不遍讀 catalog。
+2. 依 M1 核對正式 runtime capability，重現失敗。原版 UI 先查既有同狀態圖與 ITF/SPR；玩法查真正阻塞的 handler/數值/時序/資料鏈。取得 Before、Server/Client log 與實際症狀；重用有效證據。
+3. 修改正式程式/資料產線並做 targeted regression，再走 正常輸入→Client intent→Server 權威/交易→封包/reducer→可見畫面/動畫/成敗回饋→適用重登/雙 Client。跨圖追 WorldReady/MapEpoch/ACK/lifecycle，聊天追輸入/focus→send→權威 routing→history/bubble。不得僅觸發 pressed.emit 或載入假 snapshot 宣稱功能成功。
+4. 按 §5 風險分級驗收；更新既有 TODO/Matrix、實際玩家成果/未驗、review diff，明確 commit/push main 後立即續作。來源/manifest/防禦性修正只算前置，不得用來取代 player acceptance。禁止無目的 .lst 全掃、重解包、重建未變 Server、重跑無關 suite。已知同類錯位批次修共用根因，不需逐控件反覆開新任務。
+5. 結束前重查當前里程碑與依賴、資源/安全 WIP，能繼續就繼續。只有真實資源限制、主題合理完成或剩餘均具體阻塞才結束。無實機證據的項目如實 NOT VERIFIED，標明下一輪首項；不將 HEADLESS/fixture PASS 轉成玩家 PASS。依 §7 交接。
 
 ### Godot MCP（優先使用實際可用工具，不假定能力）
 - 使用者已安裝 Godot MCP。每輪需要 Godot 時先發現已連線工具、確認 Godot executable/version 與 project.godot 路徑指向正式 `C:\SGO\SRC\SGTest\client`；若工具提供 get_project_info / run_project / get_debug_output / stop_project / scene 操作等，按實際工具契約使用，不臆造工具或能力。
@@ -78,12 +101,12 @@
 | T2 | 共用 UI/renderer/input/auth/session/lifecycle | T1 + 所有直接受影響畫面與代表性核心 smoke；多人受影響才雙 Client |
 | T3 | Server Authority/Protocol/Persistence/AOI/跨圖/高風險共享核心/里程碑或可信 baseline 失效 | 相關全量自動化、完整核心 native smoke、必要雙 Client、原版 A/B 與持久化驗收 |
 
-完整核心 Smoke（詳見 docs/AGENT_REFERENCE.md §4、§7）：Login/Create/Select→角色初始外觀原地 10 秒→移動/Stop/Retarget/障礙→Map15↔Map13 真傳點、WorldReady 後立即走→HUD/Profile HP/MP 真值與動態變更/配點→背包/裝備/Pet/Mecha 等面板→普攻/技能/MISS/受擊/死亡/掉落/EXP→登出重登持久化→必要雙 Client Spawn/Despawn/AOI/跨圖/互動；觀察錯誤、卡死、黑畫面、超長 loading/reconnect/resource leak。已知 P0/P1 不得用既有 PASS 遮掩；非阻塞 UI P1 依三軌排程修正。只重用同版本且依賴未變的有效證據；不確定就驗受影響範圍。
+完整核心 Smoke（詳見 docs/AGENT_REFERENCE.md §4、§7）：Login/Create/Select→角色初始外觀原地 10 秒→移動/Stop/Retarget/障礙→Map15↔Map13 真傳點、WorldReady 後立即走→HUD/Profile HP/MP 真值與動態變更/配點→背包/裝備/Pet/Mecha 等面板→普攻/技能/MISS/受擊/死亡/掉落/EXP→登出重登持久化→必要雙 Client Spawn/Despawn/AOI/跨圖/互動；觀察錯誤、卡死、黑畫面、超長 loading/reconnect/resource leak。已知 P0/P1 不得用既有 PASS 遮掩；非阻塞 UI P1 依 §1 里程碑與當前投入方向修正；玩家已回報的 FAIL 必須重新開啟。只重用同版本且依賴未變的有效證據；不確定就驗受影響範圍。
 
 Native：C:\SGO\Godot\Godot_v4.7.2-stable_win64.exe，正式 client/ + server/，安全隔離測試資料；Console/headless：C:\SGO\Godot\Godot_v4.7.2-stable_win64_console.exe。headless/mock/fixture/pressed.emit/直接 handler/改 node property 都不能代替真玩家操作。動態項要連續影格/錄影，涉及多人同步/戰鬥/互動要第二個非 headless Client 實際觀察；桌面不可用則如實 NOT VERIFIED，不宣稱已驗。純 UI 不強制每輪跑 334+ Server checks；Server/shared core 高風險才擴到完整相關 suite。
 
 ### 多人與效能 Gate
-- 依 docs/TEST_PLAN.md「v15 三軌 Release Gate」；移動、戰鬥、AOI、跨圖、交易、網路或共用渲染/生命週期變更驗雙可見 Client 及受影響指標。每三個非緊急交付主題至少一次主動混合 20 人/300 怪/500 Drop 基準；資源被占用標 NOT VERIFIED，安排下一可用輪；重大變更/里程碑升階與長測，不搶其他 Session。
+- 依 docs/TEST_PLAN.md「v15 三軌 Release Gate」；移動、戰鬥、AOI、跨圖、交易、網路或共用渲染/生命週期變更驗雙可見 Client 及受影響指標。M1–M5 基礎可玩鏈未通時，優先當前流程的雙 Client/同步正確性與受影響性能；混合 20 人/300 怪/500 Drop 正式基準在可信玩法具備後立即建立，不用空白或合成負載代替。M6 起每三個非緊急交付主題至少一次主動混合基準；資源被占用標 NOT VERIFIED，安排下一可用輪；重大變更/里程碑升階與長測，不搶其他 Session。
 - 雙 Client 互看位置、動畫、HP/傷害/MISS/EXP/掉落/物品；AOI 不閃爍/殘影/重複，正常移動不順移、不忽快忽慢，合法傳送/重同步例外留 trace。權威 tick、插值/prediction、動畫解耦，可靠事件不丟不亂序；效能不能犧牲正確性。
 - 同硬體/畫質/解析度/場景/密度/網路比較 Before/After，保留原始 trace/錄影與 SHA；超預算定位 CPU/GPU/GC/DB/AI/AOI/queue/網路。不猜測、不用測試數冒充流暢或容量達標。
 
@@ -101,4 +124,4 @@ Native：C:\SGO\Godot\Godot_v4.7.2-stable_win64.exe，正式 client/ + server/�
 
 todo.txt 是工作優先序，docs/FEATURE_MATRIX.md 是唯一正式功能矩陣；沿用 NOT STARTED / IN PROGRESS / IMPLEMENTED / TEST FAILED / NOT VERIFIED / VERIFIED / COMPLETE。五 Gate 分列 PASS/FAIL/NOT VERIFIED/N/A（N/A 說理由）：UI（HK A/B）、Gameplay（正常操作/權威/數值）、Multiplayer（雙 Client/可靠事件）、Performance（量測）、Persistence（重登/交易）。COMPLETE 須所有適用 Gate、Client/Server、Edge/Regression、原版行為及功能一致；未測不可標 PASS，TODO/Matrix 與實機衝突取保守狀態。
 
-一份精簡 Task ID 級交接（TODO/Matrix 或既有 evidence）：玩家成果、已驗子項/五 Gate、reference 來源/版本、private Before/After/trace 路徑與差距、未驗/blocker、下一 Task ID、main SHA、停止原因。不另造矩陣、不寫流水帳、不以 class/schema/test/commit 數代替成果。
+在 todo.txt 最前面維護一份短 ACTIVE MILESTONE（沿用既有 TODO，不另造矩陣）：目前 M 編號/玩家路徑、最近一次真實結果、最早 OPEN/FAIL blocker、下一個具體可執行 Task ID/動作、依賴及 main SHA。每輪開局接續，禁止只加歷史流水帳或遺失未驗項。FEATURE_MATRIX 保存各功能與 Gate 狀態；里程碑只有適用的完整玩家路徑通過才前移。交接只報玩家成果、已驗/未驗、五 Gate、reference/private Before/After/trace、環境 capability、下一步、main SHA、停止原因；不以 class/schema/test/commit 數代替成果。
