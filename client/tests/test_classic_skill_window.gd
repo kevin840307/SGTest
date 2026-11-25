@@ -43,7 +43,12 @@ func _run() -> void:
 	_expect(selected == 1103, "row selection")
 	window.get_node("ScrollDown").pressed.emit()
 	_expect(window.get_node("SkillName0").text == "技能 10101", "scroll jumps by one HK page")
-	_expect(window.get_node("SkillName1").text == "技能 28101", "last HK page keeps only remainder")
+	var hk_label_loaded: bool = window._labels.has("28101")
+	_expect(window.get_node("SkillName1").text == ("治療術" if hk_label_loaded else "技能 28101"),
+		"last HK page shows source-backed name when present, numeric fallback otherwise")
+	_expect(window.get_node("SkillRow1").tooltip_text != "" if hk_label_loaded else
+		window.get_node("SkillRow1").tooltip_text == "",
+		"only original HK text supplies skill description tooltip")
 	_expect(window.get_node("SkillName2").text == "", "last HK page does not overlap prior rows")
 	_expect(not window.get_node("ScrollUp").disabled, "scroll up enabled")
 	_expect(window.get_node("ScrollDown").disabled, "scroll down disabled on last page")
@@ -73,8 +78,38 @@ func _run() -> void:
 	window.get_node("SkillRow0").pressed.emit()
 	_expect(selected == 1103, "row button stays interactive after dragging")
 
+	# The HK name source must never grant an unlearned skill. A book refresh
+	# removes stale names/tooltip from the eight real clickable rows.
+	window.set_skill_book({28101: 3})
+	_expect(window.get_node("SkillLevel0").text == "3" and
+		window.get_node("SkillName1").text == "" and
+		window.get_node("SkillRow1").disabled and
+		window.get_node("SkillRow1").tooltip_text == "",
+		"client labels cannot fabricate skills missing from Server SkillBook")
+	if hk_label_loaded:
+		_expect(window.get_node("SkillName0").text == "治療術",
+			"HK skill.dat source provides localized display without changing level")
+
+	# Malformed local display data must be rejected as a whole.
+	var invalid_path := "user://sgtest_skill_labels_invalid_%d.json" % OS.get_process_id()
+	var invalid := FileAccess.open(invalid_path, FileAccess.WRITE)
+	invalid.store_string('{"kind":"hk_skill_labels","version":1,"source_sha256":"' +
+		"0".repeat(64) + '","entries":{"28101":{"name":"","description":"unverified"}}}')
+	invalid.close()
+	_expect(window._read_skill_labels(invalid_path).is_empty(),
+		"invalid private label manifest failed open")
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(invalid_path))
+
+	window._on_window_input(down)
+	_expect(window._dragging, "background drag restarts")
+	window.hide()
+	window.show()
+	window._input(move)
+	_expect(not window._dragging and window.position == Vector2(43, 68),
+		"close and reopen must cancel an unfinished drag")
+
 	window.queue_free()
-	print("CLASSIC_SKILL_WINDOW_PASS exact_rects=PASS rows=8 skill_book=server_owned drag_release=PASS no_fake_icon=true no_fake_progress=true")
+	print("CLASSIC_SKILL_WINDOW_PASS exact_rects=PASS rows=8 skill_book=server_owned source_labels=%d drag_release=PASS no_fake_icon=true no_fake_progress=true" % window._labels.size())
 	quit(1 if failed else 0)
 
 

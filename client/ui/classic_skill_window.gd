@@ -12,6 +12,7 @@ const ROW_STEP := 27.0
 const ROW_Y := 54.0
 const TEXT_BASELINE := 10.0
 const HK_FONT_BITMAP := PRIVATE + "/HK_SHARED_UI_FONT.fnt"
+const HK_SKILL_LABELS := PRIVATE + "/HK_SKILL_LABELS.json"
 
 class ItfText extends Control:
 	var text_font: Font
@@ -28,6 +29,7 @@ class ItfText extends Control:
 
 var _font: Font
 var _skills: Dictionary = {}
+var _labels: Dictionary = {}
 var _ids: Array = []
 var _page_start := 0
 var _dragging := false
@@ -45,6 +47,7 @@ func _init() -> void:
 	size = WINDOW_SIZE
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	_font = _load_hk_font()
+	_labels = _read_skill_labels(HK_SKILL_LABELS)
 	_build()
 
 
@@ -57,6 +60,44 @@ func _load_hk_font() -> Font:
 	fallback.font_names = PackedStringArray(["新細明體"])
 	fallback.font_weight = 500
 	return fallback
+
+
+# The decrypted HK skill.dat supplies display labels only. A missing or
+# malformed private manifest cannot grant a skill, change its level/MP/cooldown,
+# or introduce an unlearned row. SkillBook remains the sole roster authority.
+func _read_skill_labels(path: String) -> Dictionary:
+	var file := FileAccess.open(path, FileAccess.READ)
+	if file == null or file.get_length() < 2 or file.get_length() > 1048576:
+		return {}
+	var parsed: Variant = JSON.parse_string(file.get_as_text())
+	if not parsed is Dictionary:
+		return {}
+	if parsed.get("kind") != "hk_skill_labels" or parsed.get("version") != 1:
+		return {}
+	var sha: Variant = parsed.get("source_sha256")
+	var entries: Variant = parsed.get("entries")
+	if not sha is String or sha.length() != 64 or not entries is Dictionary:
+		return {}
+	if entries.is_empty() or entries.size() > 4096:
+		return {}
+	var result: Dictionary = {}
+	for key in entries:
+		if not key is String or not key.is_valid_int():
+			return {}
+		var skill_id := int(key)
+		if skill_id <= 0 or skill_id > 65535 or str(skill_id) != key:
+			return {}
+		var entry: Variant = entries[key]
+		if not entry is Dictionary:
+			return {}
+		var skill_name: Variant = entry.get("name")
+		var description: Variant = entry.get("description")
+		if not skill_name is String or not description is String:
+			return {}
+		if skill_name.is_empty() or skill_name.length() > 32 or description.length() > 512:
+			return {}
+		result[key] = {"name": skill_name, "description": description}
+	return result
 
 
 func _texture(name: String) -> Texture2D:
@@ -196,13 +237,16 @@ func _refresh() -> void:
 		if not has_skill:
 			_name_labels[row].text = ""
 			_level_labels[row].text = ""
+			_row_buttons[row].tooltip_text = ""
 			continue
 		var skill_id := int(_ids[source_index])
 		var level := int(_skills.get(_ids[source_index], 0))
-		# Current authoritative snapshot has IDs/levels only. Keep the source
-		# list usable without inventing localized names, icon frame IDs, or EXP.
-		_name_labels[row].text = "技能 %d" % skill_id
+		# Only Server-learned SkillIDs appear. HK skill.dat provides localized
+		# presentation text; unknown IDs retain their numeric fallback.
+		var label: Dictionary = _labels.get(str(skill_id), {})
+		_name_labels[row].text = str(label.get("name", "技能 %d" % skill_id))
 		_level_labels[row].text = str(level)
+		_row_buttons[row].tooltip_text = str(label.get("description", ""))
 
 	if _scroll_up != null:
 		_scroll_up.disabled = _page_start <= 0
@@ -231,6 +275,11 @@ func _show_help() -> void:
 	# The original OH01 control opens contextual help. No authoritative current
 	# help payload is wired yet, so this remains a no-op rather than fake text.
 	pass
+
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_VISIBILITY_CHANGED and not is_visible_in_tree():
+		_dragging = false
 
 
 func _on_window_input(event: InputEvent) -> void:
