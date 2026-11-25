@@ -21,5 +21,8 @@ static func get_texture(path: String) -> Texture2D:
 		var err := bitmap.load(path)
 		if err == OK:
 			texture = ImageTexture.create_from_image(bitmap)
-	_textures[path] = texture
+	# A missing HK source may be synchronized after this lookup. Do not
+	# cache null forever: a later control redraw must retry the real PNG.
+	if texture != null:
+		_textures[path] = texture
 	return texture
