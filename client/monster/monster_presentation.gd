@@ -112,7 +112,12 @@ func apply_snapshot(snapshot: Dictionary, now_usec: int) -> Error:
 			return ERR_INVALID_DATA
 		var max_hp := int(candidate.max_hp)
 		var hp := int(candidate.current_hp)
-		if int(candidate.source_index) < 0 or max_hp <= 0 or hp < 0 or hp > max_hp or not is_finite(float(candidate.x)) or not is_finite(float(candidate.y)):
+		if int(candidate.source_index) < 0 or max_hp <= 0 or hp < 0 or hp > max_hp \
+				or not is_finite(float(candidate.x)) or not is_finite(float(candidate.y)) \
+				or float(candidate.x) < 0.0 or float(candidate.y) < 0.0 \
+				or (state == STATE_DEAD) != (hp == 0):
+			# Server death is authoritative: HP zero and the Dead state must
+			# agree. Reject the entire AOI frame before any actor changes.
 			return ERR_INVALID_DATA
 		var previous: Dictionary = _monsters.get(candidate_id,{}) if epoch == _epoch else {}
 		if not previous.is_empty():

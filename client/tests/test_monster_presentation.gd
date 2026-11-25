@@ -174,6 +174,28 @@ func run() -> void:
 	check(monsters.apply_snapshot(snapshot,1580000)==ERR_INVALID_DATA and
 		monsters.count()==2 and monsters.pick_living_at(Vector2(90,20),1580000)==1002,
 		"monster HP exceeding its authoritative max was accepted")
+	# A malformed later actor must not invalidate, despawn, or silently turn
+	# the earlier live target into a corpse in the same AOI batch.
+	var negative_position := another.duplicate(true)
+	negative_position.x = -1.0
+	snapshot.monsters = {1001:revived,1002:negative_position}
+	check(monsters.apply_snapshot(snapshot,1581000)==ERR_INVALID_DATA and
+		monsters.count()==2 and monsters.pick_living_at(Vector2(90,20),1581000)==1002,
+		"negative monster coordinate was admitted or partially changed the AOI")
+	var alive_at_zero := another.duplicate(true)
+	alive_at_zero.current_hp = 0
+	alive_at_zero.state = 2
+	snapshot.monsters = {1001:revived,1002:alive_at_zero}
+	check(monsters.apply_snapshot(snapshot,1582000)==ERR_INVALID_DATA and
+		monsters.pick_living_at(Vector2(90,20),1582000)==1002,
+		"zero-HP monster with living state was admitted")
+	var dead_with_hp := another.duplicate(true)
+	dead_with_hp.current_hp = 50
+	dead_with_hp.state = 4
+	snapshot.monsters = {1001:revived,1002:dead_with_hp}
+	check(monsters.apply_snapshot(snapshot,1583000)==ERR_INVALID_DATA and
+		monsters.pick_living_at(Vector2(90,20),1583000)==1002,
+		"positive-HP monster in dead state was admitted")
 	var killed := revived.duplicate(true)
 	killed.server_tick = 10
 	killed.revision = 9
