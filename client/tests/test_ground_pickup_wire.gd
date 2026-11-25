@@ -36,10 +36,28 @@ func _initialize() -> void:
 	if not WireCodec.decode_ground_pickup_result(malformed).is_empty():
 		fail("unknown pickup result status was accepted")
 		return
+	var full := RESULT.hex_decode()
+	full[20] = 10
+	full.encode_s64(29,0)
+	full.encode_s32(37,0)
+	full.encode_s32(41,0)
+	if int(WireCodec.decode_ground_pickup_result(full).get("status",-1)) != 10:
+		fail("inventory-full response rejected by client")
+		return
 	malformed = RESULT.hex_decode()
 	malformed.encode_s64(29,0)
 	if not WireCodec.decode_ground_pickup_result(malformed).is_empty():
 		fail("granted pickup without item UID accepted")
+		return
+	var full_world = new_world()
+	if full_world == null or not full_world.apply_frame(DROP.hex_decode()) or not full_world.mark_pickup_sent(1,501):
+		fail("inventory-full state fixture failed")
+		return
+	var full_reply := full.duplicate()
+	full_reply.encode_s64(8,1)
+	full_reply.encode_u32(16,1)
+	if not full_world.apply_frame(full_reply) or int(full_world.snapshot().last_pickup_result_status) != 10 or int(full_world.snapshot().pending_pickup_sequence) != 0 or not full_world.snapshot().ground_drops.has(501) or not full_world.snapshot().received_item_grants.is_empty():
+		fail("inventory-full rejection removed ground item or manufactured a grant")
 		return
 	var world = new_world()
 	if world == null:

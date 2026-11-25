@@ -344,7 +344,7 @@ public static partial class WireProtocol
     private static bool ValidPickupResult(GroundPickupResultWire value)
     {
         if (value.MapEpoch<=0 || value.PickupSequence==0 || value.DropId<=0 ||
-            (byte)value.Status>(byte)PickupStatus.PlayerDead ||
+            (byte)value.Status>(byte)PickupStatus.InventoryFull ||
             value.ItemUid<0 || value.ItemDefinitionId<0 || value.Quantity<0)
             return false;
         return value.Status is PickupStatus.Granted or PickupStatus.AlreadyGranted

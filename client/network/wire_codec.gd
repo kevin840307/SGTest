@@ -1374,7 +1374,7 @@ static func decode_ground_pickup_result(frame: PackedByteArray) -> Dictionary:
 	var uid := reader.get_64()
 	var item_id := reader.get_32()
 	var quantity := reader.get_32()
-	if epoch <= 0 or sequence == 0 or status > 9 or drop_id <= 0 or uid < 0 or item_id < 0 or quantity < 0:
+	if epoch <= 0 or sequence == 0 or status > 10 or drop_id <= 0 or uid < 0 or item_id < 0 or quantity < 0:
 		return {}
 	if status in [0,1]:
 		if uid <= 0 or item_id < 1 or item_id > 100000000 or quantity < 1 or quantity > 1000000:

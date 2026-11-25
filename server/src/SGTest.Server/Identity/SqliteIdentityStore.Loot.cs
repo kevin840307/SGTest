@@ -1,4 +1,5 @@
 using SGTest.Server.Monster;
+using SGTest.Server.Wire;
 using Microsoft.Data.Sqlite;
 
 namespace SGTest.Server.Identity;
@@ -26,7 +27,8 @@ public readonly record struct TrustedPickupContext(
 public enum PickupStatus : byte
 {
     Granted, AlreadyGranted, Missing, AlreadyTaken, WrongMap, TooFar,
-    StaleSequence, UnknownCharacter, StaleGeneration, PlayerDead
+    StaleSequence, UnknownCharacter, StaleGeneration, PlayerDead,
+    InventoryFull
 }
 
 public sealed record PickupResult(PickupStatus Status, long DropId,
@@ -266,6 +268,14 @@ WHERE d.picked_by_character_id=$actor AND d.pickup_connection_epoch=$conn
             double dx = drop.X - actor.X, dy = drop.Y - actor.Y;
             if (dx * dx + dy * dy > PickupRange * PickupRange)
                 return new PickupResult(PickupStatus.TooFar, dropId);
+            // Prevent a successful pickup from making the character's next
+            // WorldReady inventory snapshot unrepresentable. This is the
+            // SGTest wire bound, not a claim about HK's original bag capacity.
+            // Check inside the same transaction as the UID claim/grant.
+            if (ScalarLong(connection,
+                "SELECT COUNT(*) FROM item_instances WHERE character_id=$actor;", tx,
+                ("$actor", actor.CharacterId)) >= WireProtocol.InventorySnapshotMaxItems)
+                return new PickupResult(PickupStatus.InventoryFull, dropId);
             using (var update = connection.CreateCommand())
             {
                 update.Transaction = tx;

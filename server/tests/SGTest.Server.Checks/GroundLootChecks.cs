@@ -1,4 +1,6 @@
 using SGTest.Server.Identity;
+using SGTest.Server.Wire;
+using Microsoft.Data.Sqlite;
 
 internal static class GroundLootChecks
 {
@@ -10,6 +12,8 @@ internal static class GroundLootChecks
             () => PickupGuards(root).GetAwaiter().GetResult());
         Checks.Run("loot simultaneous claimers atomically grant only one item UID across reopen",
             () => ConcurrentClaims(root).GetAwaiter().GetResult());
+        Checks.Run("loot full inventory rejects pickup without consuming ground UID, then recovers",
+            () => FullInventory(root).GetAwaiter().GetResult());
         Checks.Run("new Server boot avoids recycled pickup session epochs and action sequences",
             () => RestartConnectionGeneration(root).GetAwaiter().GetResult());
     }
@@ -139,6 +143,82 @@ internal static class GroundLootChecks
                 (await store.ListActiveGroundDropsAsync(13)).Count==0,
                 "grant duplicated inventory or left picked loot on ground");
         }
+    }
+
+    private static async Task FullInventory(string root)
+    {
+        var (store,db,a,b)=await Setup(root,"full");
+        long firstDropId;
+        long secondDropId;
+        using(store)
+        {
+            long generation=await store.AllocateLootWorldGenerationAsync();
+            firstDropId=(await store.CreateTrustedGroundDropAsync(
+                Drop(generation))).DropId;
+            secondDropId=(await store.CreateTrustedGroundDropAsync(
+                Drop(generation,slot:1))).DropId;
+
+            // Fill precisely the already-enforced WorldReady wire snapshot
+            // boundary. Synthetic direct-shop rows are fixture-only; no
+            // claimed HK bag-size or provisional gameplay value is involved.
+            using(var connection=new SqliteConnection($"Data Source={db}"))
+            {
+                await connection.OpenAsync();
+                using var tx=connection.BeginTransaction();
+                using var insert=connection.CreateCommand();
+                insert.Transaction=tx;
+                insert.CommandText=@"INSERT INTO item_instances(
+character_id,item_definition_id,quantity,source_kind,source_reference,created_unix_ms)
+VALUES($actor,2701,1,2,'ci:capacity',0);";
+                insert.Parameters.AddWithValue("$actor",a);
+                for(int i=0;i<WireProtocol.InventorySnapshotMaxItems;i++)
+                    insert.ExecuteNonQuery();
+                tx.Commit();
+            }
+
+            var rejected=await store.ClaimGroundDropAsync(Actor(a),firstDropId);
+            Checks.Require(rejected.Status==PickupStatus.InventoryFull &&
+                rejected.ItemUid==0 &&
+                (await store.ListActiveGroundDropsAsync(13)).Count==2 &&
+                (await store.ListInventoryItemsAsync(a,WireProtocol.InventorySnapshotMaxItems+1)).Count==
+                    WireProtocol.InventorySnapshotMaxItems,
+                "full inventory consumed a drop, minted UID, or exceeded snapshot bound");
+
+            var other=await store.ClaimGroundDropAsync(Actor(b),firstDropId);
+            Checks.Require(other.Status==PickupStatus.Granted && other.ItemUid>0,
+                "rejected ground UID could not be picked by another eligible player");
+
+            using(var connection=new SqliteConnection($"Data Source={db}"))
+            {
+                await connection.OpenAsync();
+                using var command=connection.CreateCommand();
+                command.CommandText=@"DELETE FROM item_instances
+WHERE item_uid=(SELECT MIN(item_uid) FROM item_instances WHERE character_id=$actor);";
+                command.Parameters.AddWithValue("$actor",a);
+                Checks.Require(command.ExecuteNonQuery()==1,
+                    "could not free one synthetic fixture slot");
+            }
+
+            // Rejected actions are not durable claims; retrying the same
+            // authenticated sequence after capacity is freed may now succeed.
+            var recovered=await store.ClaimGroundDropAsync(Actor(a),secondDropId);
+            Checks.Require(recovered.Status==PickupStatus.Granted &&
+                recovered.ItemUid>0 &&
+                (await store.ClaimGroundDropAsync(Actor(a),secondDropId)).Status==
+                    PickupStatus.AlreadyGranted &&
+                (await store.ListActiveGroundDropsAsync(13)).Count==0,
+                "capacity recovery failed to grant exactly once after freeing a slot");
+        }
+
+        using var reopened=new SqliteIdentityStore(db);
+        await reopened.InitializeAsync();
+        var recoveredItems=await reopened.ListInventoryItemsAsync(
+            a,WireProtocol.InventorySnapshotMaxItems+1);
+        Checks.Require(recoveredItems.Count==WireProtocol.InventorySnapshotMaxItems &&
+            recoveredItems.Count(x=>x.SourceDropId==secondDropId)==1 &&
+            (await reopened.ListInventoryItemsAsync(b)).Single().SourceDropId==firstDropId &&
+            (await reopened.ListActiveGroundDropsAsync(13)).Count==0,
+            "restart lost the recovered pickup, exceeded baseline, or duplicated loot");
     }
 
     private static async Task RestartConnectionGeneration(string root)

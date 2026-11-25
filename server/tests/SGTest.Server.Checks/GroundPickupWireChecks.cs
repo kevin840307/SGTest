@@ -49,6 +49,11 @@ internal static class GroundPickupWireChecks
         Checks.Require(WireProtocol.TryDecodeGroundPickupResult(
             rejected,out var miss) && miss.Status==PickupStatus.AlreadyTaken,
             "rejected pickup wire did not roundtrip");
+        byte[] full=WireProtocol.EncodeGroundPickupResult(
+            new(9,9,PickupStatus.InventoryFull,501,0,0,0));
+        Checks.Require(WireProtocol.TryDecodeGroundPickupResult(
+            full,out var rejectedFull) && rejectedFull.Status==PickupStatus.InventoryFull,
+            "inventory-capacity pickup rejection did not roundtrip");
     }
 
     private static void AuthenticatedGateway()

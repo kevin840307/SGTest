@@ -893,6 +893,8 @@ func _process(delta: float) -> void:
 	if not pickup_result.is_empty():
 		if int(pickup_result.status) in [0,1]:
 			pickup_status.text = "本次拾取：道具 %d ×%d（UID %d）" % [int(pickup_result.item_definition_id),int(pickup_result.quantity),int(pickup_result.item_uid)]
+		elif int(pickup_result.status) == 10:
+			pickup_status.text = "拾取失敗：背包資料已達伺服器可同步上限"
 		else:
 			pickup_status.text = "拾取失敗，代碼 %d" % int(pickup_result.status)
 	if bool(_latest.get("reconnecting",false)):
