@@ -34,6 +34,12 @@ func _initialize() -> void:
 	if Codec.encode_friend_command(7,4,6,42).is_empty() or Codec.encode_friend_command(7,5,7,42).is_empty():
 		_fail("ignore/restore command encoding rejected")
 		return
+	if Codec.encode_friend_command(7,6,8,42,"補師").is_empty():
+		_fail("friend rename command encoding rejected")
+		return
+	if not Codec.encode_friend_command(7,7,8,42,"12345678901").is_empty():
+		_fail("friend rename accepted alias longer than original 10-character editor")
+		return
 	if not Codec.encode_friend_command(7,1,1,0," Buddy ").is_empty():
 		_fail("friend add accepted trim-changing name")
 		return
@@ -105,7 +111,10 @@ func _initialize() -> void:
 	if state.snapshot().pending_friend_sequence != 0:
 		_fail("friend remove result did not clear pending request")
 		return
-	print("FRIEND_WIRE_PASS csharp_golden=true invite=true accept=true ignore=true restore=true reducer=true")
+	if not state.mark_friend_sent(6,8,42,"補師"):
+		_fail("valid friend rename request rejected")
+		return
+	print("FRIEND_WIRE_PASS csharp_golden=true invite=true accept=true ignore=true restore=true rename=true reducer=true")
 	quit(0)
 
 func _fail(message: String) -> void:

@@ -10,9 +10,9 @@ internal static class FriendChecks
 {
     public static void Verify()
     {
-        Checks.Run("friend wire roundtrips invite accept reject ignore restore remove refresh",Wire);
+        Checks.Run("friend wire roundtrips invite accept reject ignore restore rename remove refresh",Wire);
         Checks.Run("friend gateway binds authenticated sender and rejects replay",GatewayAdmission);
-        Checks.Run("friend persistence keeps unilateral ignore durable across relog and v43 migration",
+        Checks.Run("friend persistence keeps unilateral ignore/rename durable across relog and v44 migration",
             ()=>Persistence().GetAwaiter().GetResult());
         Checks.Run("friend coordinator broadcasts presence ignore restore and removal",
             ()=>PresenceLifecycle().GetAwaiter().GetResult());
@@ -52,6 +52,16 @@ internal static class FriendChecks
         Checks.Require(WireProtocol.TryDecodeFriendCommand(
             WireProtocol.EncodeFriendCommand(restore),out parsed)&&parsed==restore,
             "friend restore wire roundtrip failed");
+        var rename=new FriendCommandWire(7,8,FriendCommandAction.Rename,42,"補師");
+        Checks.Require(WireProtocol.TryDecodeFriendCommand(
+            WireProtocol.EncodeFriendCommand(rename),out parsed)&&parsed==rename,
+            "friend rename wire roundtrip failed");
+        bool rejectedLongAlias=false;
+        try{_=WireProtocol.EncodeFriendCommand(new(
+            7,9,FriendCommandAction.Rename,42,"12345678901"));}
+        catch(ArgumentOutOfRangeException){rejectedLongAlias=true;}
+        Checks.Require(rejectedLongAlias,
+            "friend rename accepted alias longer than original editor limit");
 
         var result=new FriendResultWire(
             7,2,FriendCommandAction.Remove,FriendResultStatus.Success,42);
@@ -137,7 +147,12 @@ internal static class FriendChecks
                 Checks.Require((await store.AddFriendAsync(a,b)).Status==
                     FriendStoreStatus.AlreadyFriends,
                     "duplicate friend relation was not rejected");
+                Checks.Require(await store.RenameFriendAsync(a,b,"補師")==FriendStoreStatus.Success&&
+                    (await store.GetFriendsAsync(a))[0].Name=="補師"&&
+                    (await store.GetFriendsAsync(b))[0].Name=="FriendAlpha",
+                    "friend rename was not owner-scoped");
                 Checks.Require(await store.IgnoreFriendAsync(a,b)==FriendStoreStatus.Success&&
+                    (await store.GetIgnoredFriendsAsync(a))[0].Name=="補師"&&
                     (await store.GetFriendsAsync(a)).Count==0&&
                     (await store.GetIgnoredFriendsAsync(a)).Count==1&&
                     (await store.GetFriendsAsync(b)).Count==1&&
@@ -150,9 +165,11 @@ internal static class FriendChecks
                 await reopened.InitializeAsync();
                 var persistedIgnore=await reopened.GetIgnoredFriendsAsync(a);
                 Checks.Require(persistedIgnore.Count==1&&persistedIgnore[0].CharacterId==b&&
+                    persistedIgnore[0].Name=="補師"&&
                     (await reopened.GetFriendsAsync(a)).Count==0&&
-                    (await reopened.GetFriendsAsync(b)).Count==1,
-                    "ignore did not survive reopen without destroying peer friendship");
+                    (await reopened.GetFriendsAsync(b)).Count==1&&
+                    (await reopened.GetFriendsAsync(b))[0].Name=="FriendAlpha",
+                    "ignore/owner-scoped rename did not survive reopen");
                 Checks.Require(await reopened.RestoreIgnoredFriendAsync(a,b)==
                     FriendStoreStatus.Success&&
                     (await reopened.GetFriendsAsync(a)).Count==1&&
@@ -168,21 +185,30 @@ internal static class FriendChecks
                     (await reopened.GetIgnoredFriendsAsync(a)).Count==0&&
                     (await reopened.GetIgnoredFriendsAsync(b)).Count==0,
                     "friend remove was not symmetric or left stale ignore state");
+                Checks.Require((await reopened.AddFriendAsync(a,b)).Status==FriendStoreStatus.Success&&
+                    (await reopened.GetFriendsAsync(a))[0].Name=="FriendBeta",
+                    "friend removal left a stale owner alias after re-add");
             }
 
             using(var downgrade=new SqliteConnection($"Data Source={db}"))
             {
                 downgrade.Open();
                 using var command=downgrade.CreateCommand();
-                command.CommandText=@"DROP TABLE character_ignores;
-UPDATE schema_version SET version=42;";
+                command.CommandText=@"DROP TABLE character_friend_aliases;
+UPDATE schema_version SET version=43;";
                 command.ExecuteNonQuery();
             }
             using(var migrated=new SqliteIdentityStore(db))
             {
                 await migrated.InitializeAsync();
-                Checks.Require((await migrated.GetIgnoredFriendsAsync(a)).Count==0,
-                    "v42 to v43 migration did not create the ignore table");
+            }
+            using(var verifyMigration=new SqliteConnection($"Data Source={db}"))
+            {
+                verifyMigration.Open();
+                using var command=verifyMigration.CreateCommand();
+                command.CommandText="SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='character_friend_aliases';";
+                Checks.Require(Convert.ToInt32(command.ExecuteScalar())==1,
+                    "v43 to v44 migration did not create the contact alias table");
             }
         }
         finally
@@ -249,11 +275,21 @@ UPDATE schema_version SET version=42;";
                 bAdded.Friends[0].IsOnline,
                 "friend accept did not persist and broadcast bilateral presence");
 
+            FeedFriend(a,new FriendCommandWire(
+                2,2,FriendCommandAction.Rename,bId,"補師"),coordinator,router);
+            var renameResult=DrainResult(a);
+            var aRenamed=DrainSnapshot(a);
+            Checks.Require(renameResult.Status==FriendResultStatus.Success&&
+                aRenamed.Friends.Count==1&&aRenamed.Friends[0].Name=="補師"&&
+                !b.TryDequeueReliable(out _),
+                "friend rename did not update only the owner's authoritative snapshot");
+
             await coordinator.DetachAsync(b.Binding,router);
             var offline=DrainSnapshot(a);
             Checks.Require(offline.Friends.Count==1&&
-                offline.Friends[0].CharacterId==bId&&!offline.Friends[0].IsOnline,
-                "friend disconnect did not notify peer offline");
+                offline.Friends[0].CharacterId==bId&&!offline.Friends[0].IsOnline&&
+                offline.Friends[0].Name=="補師",
+                "friend disconnect did not preserve owner alias while notifying offline");
             Checks.Require(router.TryDetach(b),"friend old binding detach failed");
 
             var b2=Gateway(Actor(bId,23,6),"PresenceBeta");
@@ -262,8 +298,10 @@ UPDATE schema_version SET version=42;";
             var bRelog=DrainSnapshot(b2);
             var aRelog=DrainSnapshot(a);
             Checks.Require(bRelog.Friends.Count==1&&bRelog.Friends[0].IsOnline&&
-                aRelog.Friends.Count==1&&aRelog.Friends[0].IsOnline,
-                "friend relog did not restore live presence");
+                bRelog.Friends[0].Name=="PresenceAlpha"&&
+                aRelog.Friends.Count==1&&aRelog.Friends[0].IsOnline&&
+                aRelog.Friends[0].Name=="補師",
+                "friend relog did not restore owner-scoped alias/live presence");
 
             FeedFriend(b2,new FriendCommandWire(
                 6,1,FriendCommandAction.Ignore,aId),coordinator,router);

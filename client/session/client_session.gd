@@ -563,6 +563,11 @@ func friend_refresh()->bool:
 	return _queue_friend_intent(3,0,"",current)
 
 
+func friend_rename(target_actor_id:int,alias:String)->bool:
+	var current:=snapshot()
+	return _queue_friend_intent(8,target_actor_id,alias,current)
+
+
 func friend_accept()->bool:
 	var current:=snapshot()
 	var invite:Dictionary=current.get("pending_friend_invite",{})
@@ -829,6 +834,9 @@ func _queue_friend_intent(
 				return false
 		7:
 			if target_actor_id<=0 or target_actor_id==actor or not clean.is_empty() or not ignored_friends.has(target_actor_id):
+				return false
+		8:
+			if target_actor_id<=0 or target_actor_id==actor or clean.is_empty() or clean.length()>WireCodec.FRIEND_ALIAS_MAX_CHARS or (not friends.has(target_actor_id) and not ignored_friends.has(target_actor_id)):
 				return false
 		_:
 			return false

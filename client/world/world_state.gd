@@ -974,7 +974,7 @@ func mark_friend_sent(
 		state!=STATE_IN_WORLD or not world_ready or resync_pending or
 		waiting_for_new_map or pending_world_ready_ack_epoch!=0 or
 		last_world_ready_ack_epoch!=map_epoch or pending_friend_sequence!=0 or
-		sequence<=friend_sequence or sequence>0xffffffff or action<1 or action>7 or
+		sequence<=friend_sequence or sequence>0xffffffff or action<1 or action>8 or
 		target_actor_id<0
 	):
 		return false
@@ -999,6 +999,9 @@ func mark_friend_sent(
 				return false
 		7:
 			if target_actor_id<=0 or target_actor_id==actor_id or not clean.is_empty() or not ignored_friends.has(target_actor_id):
+				return false
+		8:
+			if target_actor_id<=0 or target_actor_id==actor_id or clean.is_empty() or clean.length()>WireCodec.FRIEND_ALIAS_MAX_CHARS or (not friends.has(target_actor_id) and not ignored_friends.has(target_actor_id)):
 				return false
 		_:
 			return false

@@ -132,6 +132,15 @@ public sealed class FriendCoordinator
                         await QueueSnapshotAsync(sender,router).ConfigureAwait(false);
                     return;
                 }
+                case FriendCommandAction.Rename:
+                {
+                    var status=await _identity.RenameFriendAsync(
+                        request.ActorId,request.TargetActorId,request.TargetName).ConfigureAwait(false);
+                    QueueResult(request,(FriendResultStatus)status,request.TargetActorId,router);
+                    if(status==FriendStoreStatus.Success)
+                        await QueueSnapshotAsync(sender,router).ConfigureAwait(false);
+                    return;
+                }
                 default:
                     QueueResult(request,FriendResultStatus.Conflict,request.TargetActorId,router);
                     return;

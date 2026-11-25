@@ -6,6 +6,7 @@ signal skin_requested(id:String)
 const UiTextures = preload("res://ui/ui_texture_loader.gd")
 const UiSkins = preload("res://ui/ui_skin_catalog.gd")
 const Photos = preload("res://ui/local_item_photo_cache.gd")
+const WireCodec = preload("res://network/wire_codec.gd")
 
 const PRIVATE := "res://ui/private_ie_hk2"
 const BASE_SIZE := Vector2(800,600)
@@ -17,6 +18,63 @@ const HK_SHARED_FONT_WEIGHT := 500
 const HK_SHARED_FONT_BASELINE := 10.0
 const HK_SHARED_FONT_BITMAP := PRIVATE + "/HK_SHARED_UI_FONT.fnt"
 const LOCAL_SETTINGS_PATH := "user://sgtest_world_settings.cfg"
+
+class SourceLineEdit extends Control:
+	signal text_changed(value:String)
+	signal text_submitted(value:String)
+	var _editor:=LineEdit.new()
+	var _max_length:=0
+	var display_font:Font
+	var display_font_size:=12
+	var baseline:=10.0
+	var max_length:int:
+		get:return _max_length
+		set(value):
+			_max_length=value
+			_editor.max_length=value
+	var text:String:
+		get:return _editor.text
+		set(value):
+			_editor.text=value
+			queue_redraw()
+	var caret_column:int:
+		get:return _editor.caret_column
+		set(value):_editor.caret_column=value
+
+	func _ready()->void:
+		clip_contents=true
+		mouse_filter=Control.MOUSE_FILTER_STOP
+		_editor.name="_Editor"
+		_editor.modulate=Color(1,1,1,0)
+		_editor.mouse_filter=Control.MOUSE_FILTER_IGNORE
+		_editor.focus_mode=Control.FOCUS_ALL
+		_editor.position=Vector2.ZERO
+		add_child(_editor)
+		_editor.text_changed.connect(_on_text_changed)
+		_editor.text_submitted.connect(func(value:String):text_submitted.emit(value))
+		_editor.focus_entered.connect(queue_redraw)
+		_editor.focus_exited.connect(queue_redraw)
+
+	func _on_text_changed(value:String)->void:
+		text_changed.emit(value)
+		queue_redraw()
+
+	func focus_editor()->void:
+		_editor.grab_focus()
+
+	func _gui_input(event:InputEvent)->void:
+		if event is InputEventMouseButton and event.button_index==MOUSE_BUTTON_LEFT and event.pressed:
+			_editor.grab_focus()
+			accept_event()
+
+	func _draw()->void:
+		var font:=display_font if display_font!=null else get_theme_default_font()
+		var color:=get_theme_color("font_color","LineEdit")
+		draw_string(font,Vector2(0,baseline),text,HORIZONTAL_ALIGNMENT_LEFT,-1,display_font_size,color)
+		if _editor.has_focus():
+			var prefix:=text.substr(0,caret_column)
+			var x:=font.get_string_size(prefix,HORIZONTAL_ALIGNMENT_LEFT,-1,display_font_size).x
+			draw_line(Vector2(x,0),Vector2(x,size.y),color,1.0)
 
 class CharacterText extends Control:
 	var centered := false
@@ -160,6 +218,11 @@ var _friend_down:TextureButton
 var _friend_editor:=PopupPanel.new()
 var _friend_delete:TextureButton
 var _friend_ignore:TextureButton
+var _friend_edit:TextureButton
+var _friend_rename:=Control.new()
+var _friend_rename_input:=SourceLineEdit.new()
+var _friend_rename_confirm:TextureButton
+var _friend_rename_target_actor:=0
 var _friend_list_button:TextureButton
 var _friend_ignore_list_button:TextureButton
 var _friend_show_ignored:=false
@@ -831,9 +894,7 @@ func _build_friend_panel()->void:
 	_texture_button(friend_panel,"FriendAdd","B_LIST_ADD",Vector2(5,7),Vector2(24,24),_open_friend_editor,"新增好友")
 	_friend_ignore=_texture_button(friend_panel,"FriendIgnore","B_LIST_TO_INGORE",Vector2(31,7),Vector2(24,24),_toggle_selected_friend_ignore,"移至黑名單")
 	_friend_delete=_texture_button(friend_panel,"FriendDelete","B_LIST_DEL",Vector2(71,7),Vector2(24,24),_delete_selected_friend,"移除選取的好友")
-	var friend_edit:=_texture_button(friend_panel,"FriendEdit","B_LIST_EDIT",Vector2(97,7),Vector2(24,24),Callable(),"好友備註尚未接通")
-	friend_edit.disabled=true
-	friend_edit.texture_disabled=_tex("B_LIST_EDIT_0")
+	_friend_edit=_texture_button(friend_panel,"FriendEdit","B_LIST_EDIT",Vector2(97,7),Vector2(24,24),_open_friend_rename,"好友備註")
 	_friend_list_button=_texture_button(friend_panel,"FriendList","B_LIST_FRIENDLIST",Vector2(128,7),Vector2(24,24),_show_friend_list,"好友清單")
 	_friend_ignore_list_button=_texture_button(friend_panel,"IgnoreList","B_LIST_IGNORELIST",Vector2(154,7),Vector2(24,24),_show_ignore_list,"黑名單")
 	var friend_expand:=_texture_button(friend_panel,"FriendExpand","ZONESCREEN",Vector2(183,6),Vector2(17,17),Callable(),"大型好友清單尚未接通")
@@ -879,6 +940,54 @@ func _build_friend_panel()->void:
 	_friend_action=action
 	_update_friend_action()
 
+	# Old CFriendItf::OnRenamePlayer loads 046_Rename.itf, seeds the selected
+	# contact name, caps the editor at 10 and sends only after confirm.
+	_friend_rename.name="FriendRename"
+	_friend_rename.position=Vector2(272,250)
+	_friend_rename.size=Vector2(256,100)
+	_friend_rename.visible=false
+	_friend_rename.mouse_filter=Control.MOUSE_FILTER_STOP
+	hud.add_child(_friend_rename)
+	_background(_friend_rename,"BG_RANK_01",_friend_rename.size)
+	_texture_button(
+		_friend_rename,"FriendRenameClose","CLOSESCREEN",Vector2(235,4),Vector2(16,16),
+		_close_friend_rename,"取消")
+	_texture_button(
+		_friend_rename,"FriendRenameHelp","B_ONLINEHELP",Vector2(217,4),Vector2(16,16),
+		Callable(),"說明")
+	var rename_prompt:=Label.new()
+	rename_prompt.name="FriendRenamePrompt"
+	rename_prompt.position=Vector2(10,29)
+	rename_prompt.size=Vector2(96,12)
+	rename_prompt.text="請輸入最新的名字"
+	rename_prompt.mouse_filter=Control.MOUSE_FILTER_IGNORE
+	rename_prompt.add_theme_font_override("font",_character_raster_font)
+	rename_prompt.add_theme_font_size_override("font_size",12)
+	_friend_rename.add_child(rename_prompt)
+	_friend_rename_input.name="FriendRenameInput"
+	_friend_rename_input.position=Vector2(14,53)
+	_friend_rename_input.size=Vector2(236,12)
+	_friend_rename_input.max_length=WireCodec.FRIEND_ALIAS_MAX_CHARS
+	_friend_rename_input.display_font=_character_raster_font
+	_friend_rename_input.display_font_size=12
+	_friend_rename_input.baseline=10.0
+	_friend_rename_input.text_changed.connect(func(_value):_update_friend_rename_action())
+	_friend_rename_input.text_submitted.connect(func(_value):_submit_friend_rename())
+	_friend_rename.add_child(_friend_rename_input)
+	_friend_rename_confirm=_texture_button(
+		_friend_rename,"FriendRenameConfirm","YELLOW_BUTTON",Vector2(163,73),Vector2(85,21),
+		_submit_friend_rename,"確定")
+	var rename_confirm_text:=Label.new()
+	rename_confirm_text.name="FriendRenameConfirmText"
+	rename_confirm_text.position=Vector2(194,77)
+	rename_confirm_text.size=Vector2(24,12)
+	rename_confirm_text.text="確定"
+	rename_confirm_text.mouse_filter=Control.MOUSE_FILTER_IGNORE
+	rename_confirm_text.add_theme_font_override("font",_character_raster_font)
+	rename_confirm_text.add_theme_font_size_override("font_size",12)
+	_friend_rename.add_child(rename_confirm_text)
+	_update_friend_rename_action()
+
 	# Original 044_QUESTION_BOX geometry used by CFriendItf::OnInviteFriendRequest.
 	# The original client routes YES/NO through ONUIQuestion; keep the exact
 	# source-backed background/button rects instead of a Godot-native dialog.
@@ -915,6 +1024,45 @@ func _open_friend_editor()->void:
 func _refresh_friend_server()->void:
 	if _panel!=null and _panel.session!=null:
 		_panel.session.friend_refresh()
+
+func _open_friend_rename()->void:
+	if _friend_selected_actor<=0:
+		return
+	var entries:Dictionary=_stats.get("ignored_friends",{}) if _friend_show_ignored else _stats.get("friends",{})
+	if not entries.has(_friend_selected_actor):
+		return
+	var entry:Dictionary=entries[_friend_selected_actor]
+	_friend_rename_target_actor=_friend_selected_actor
+	_friend_rename_input.text=str(entry.get("name",""))
+	_friend_rename_input.caret_column=_friend_rename_input.text.length()
+	_update_friend_rename_action()
+	_friend_rename.show()
+	_friend_rename.move_to_front()
+	_friend_rename_input.focus_editor()
+
+func _close_friend_rename()->void:
+	_friend_rename.hide()
+	_friend_rename_target_actor=0
+
+func _update_friend_rename_action()->void:
+	if _friend_rename_confirm==null:
+		return
+	var clean:=_friend_rename_input.text.strip_edges()
+	var pending:=int(_stats.get("pending_friend_sequence",0))!=0
+	_friend_rename_confirm.disabled=(
+		_friend_rename_target_actor<=0 or clean.is_empty() or
+		clean!=_friend_rename_input.text or clean.length()>WireCodec.FRIEND_ALIAS_MAX_CHARS or
+		clean.to_utf8_buffer().size()>WireCodec.PLAYER_IDENTITY_MAX_NAME_BYTES or pending)
+
+func _submit_friend_rename()->void:
+	if _panel==null or _panel.session==null or _friend_rename_target_actor<=0:
+		return
+	var clean:=_friend_rename_input.text.strip_edges()
+	if clean!=_friend_rename_input.text or clean.is_empty():
+		return
+	if _panel.session.friend_rename(_friend_rename_target_actor,clean):
+		_close_friend_rename()
+		_update_friend_action()
 
 func _show_friend_list()->void:
 	_friend_show_ignored=false
@@ -2043,7 +2191,9 @@ func _update_friend_action()->void:
 	if _friend_ignore!=null:
 		_friend_ignore.disabled=_friend_selected_actor<=0 or pending
 		_friend_ignore.tooltip_text="解除黑名單" if _friend_show_ignored else "移至黑名單"
-
+	if _friend_edit!=null:
+		_friend_edit.disabled=_friend_selected_actor<=0 or pending
+	_update_friend_rename_action()
 
 func _friend_action_pressed()->void:
 	if _panel==null or _panel.session==null:return

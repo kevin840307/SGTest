@@ -515,6 +515,25 @@ func _run() -> void:
 	if world._friend_rows.get_child_count()!=2 or ignore_button.tooltip_text!="移至黑名單":
 		_fail("020_FRIENDLIST friend-list view did not restore source-backed contact view")
 		return
+	var edit_button:=world.friend_panel.get_node("FriendEdit") as TextureButton
+	(world._friend_rows.get_child(0) as Button).pressed.emit()
+	if edit_button==null or edit_button.get_rect()!=Rect2(97,7,24,24) or edit_button.disabled:
+		_fail("020_FRIENDLIST 2269 rename control is not live at source rect")
+		return
+	edit_button.pressed.emit()
+	if (
+		not world._friend_rename.visible or world._friend_rename.size!=Vector2(256,100) or
+		world._friend_rename_input.get_rect()!=Rect2(14,53,236,12) or
+		world._friend_rename_input.max_length!=10 or
+		str(world._friend_rename.get_node("FriendRenamePrompt").text)!="請輸入最新的名字" or
+		(world._friend_rename.get_node("FriendRenameConfirm") as TextureButton).get_rect()!=Rect2(163,73,85,21)
+	):
+		_fail("046_Rename source geometry/text was not opened from 020_FRIENDLIST")
+		return
+	world._friend_rename.get_node("FriendRenameClose").pressed.emit()
+	if world._friend_rename.visible:
+		_fail("046_Rename cancel did not close without submitting")
+		return
 	world.secondary_menu.get_node("ItemCommand").pressed.emit()
 	if (
 		not world.inventory.visible or

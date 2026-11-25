@@ -11,7 +11,7 @@ public static partial class WireProtocol
         try{name=StrictUtf8.GetBytes(value.TargetName??string.Empty);}
         catch(EncoderFallbackException){throw new ArgumentOutOfRangeException(nameof(value));}
         if(value.MapEpoch<=0||value.FriendSequence==0||
-           value.Action is <FriendCommandAction.Add or >FriendCommandAction.Restore||
+           value.Action is <FriendCommandAction.Add or >FriendCommandAction.Rename||
            value.TargetActorId<0||name.Length>PlayerIdentityMaxNameBytes)
             throw new ArgumentOutOfRangeException(nameof(value));
         switch(value.Action)
@@ -35,6 +35,14 @@ public static partial class WireProtocol
                 break;
             case FriendCommandAction.Refresh:
                 if(value.TargetActorId!=0||name.Length!=0)
+                    throw new ArgumentOutOfRangeException(nameof(value));
+                break;
+            case FriendCommandAction.Rename:
+                if(value.TargetActorId<=0||name.Length==0||
+                   (value.TargetName??string.Empty).Length>10||
+                   (value.TargetName??string.Empty)!=(value.TargetName??string.Empty)
+                       .Normalize(NormalizationForm.FormC).Trim()||
+                   (value.TargetName??string.Empty).Any(char.IsControl))
                     throw new ArgumentOutOfRangeException(nameof(value));
                 break;
         }
@@ -75,7 +83,7 @@ public static partial class WireProtocol
     public static byte[] EncodeFriendResult(FriendResultWire value)
     {
         if(value.MapEpoch<=0||value.FriendSequence==0||
-           value.Action is <FriendCommandAction.Add or >FriendCommandAction.Restore||
+           value.Action is <FriendCommandAction.Add or >FriendCommandAction.Rename||
            value.Status is <FriendResultStatus.Success or >FriendResultStatus.TargetHasPendingInvite||
            value.TargetActorId<0)
             throw new ArgumentOutOfRangeException(nameof(value));

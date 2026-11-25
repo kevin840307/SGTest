@@ -1019,6 +1019,19 @@ ON character_friendships(character_high_id,character_low_id);",tx);
 );",tx);
             Execute(connection,@"CREATE INDEX IF NOT EXISTS ix_character_ignores_target
 ON character_ignores(target_character_id,owner_character_id);",tx);
+            // Schema v44: original CFriendItf::OnRenamePlayer opens 046_Rename.itf
+            // and sends a rename packet for one selected contact. Keep that display
+            // name owner-scoped; it must never mutate the target character's true name.
+            Execute(connection,@"CREATE TABLE IF NOT EXISTS character_friend_aliases (
+    owner_character_id INTEGER NOT NULL REFERENCES characters(character_id) ON DELETE CASCADE,
+    target_character_id INTEGER NOT NULL REFERENCES characters(character_id) ON DELETE CASCADE,
+    alias TEXT NOT NULL CHECK(length(alias) BETWEEN 1 AND 10),
+    updated_unix_ms INTEGER NOT NULL,
+    PRIMARY KEY(owner_character_id,target_character_id),
+    CHECK(owner_character_id <> target_character_id)
+);",tx);
+            Execute(connection,@"CREATE INDEX IF NOT EXISTS ix_character_friend_aliases_target
+ON character_friend_aliases(target_character_id,owner_character_id);",tx);
             // Schema v36: durable Mecha roster and exactly one mounted instance per
             // character. Exact HK parts/card/stat semantics remain source-gated;
             // parts_blob is opaque server-owned state in this lifecycle baseline.

@@ -174,6 +174,7 @@ const FRIEND_COMMAND_MAX_FRAME_BYTES := FRIEND_COMMAND_HEADER_BYTES + PLAYER_IDE
 const FRIEND_RESULT_FRAME_BYTES := 30
 const FRIEND_SNAPSHOT_HEADER_BYTES := 18
 const FRIEND_ENTRY_HEADER_BYTES := 11
+const FRIEND_ALIAS_MAX_CHARS := 10
 const FRIEND_INVITE_HEADER_BYTES := 35
 const FRIEND_INVITE_MAX_FRAME_BYTES := FRIEND_INVITE_HEADER_BYTES + PLAYER_IDENTITY_MAX_NAME_BYTES
 const PET_COMMAND_FRAME_BYTES := 37
@@ -2691,7 +2692,7 @@ static func decode_clan_snapshot(frame:PackedByteArray)->Dictionary:
 static func encode_friend_command(
 		epoch:int,sequence:int,action:int,target_actor_id:int=0,target_name:String="")->PackedByteArray:
 	var payload:=target_name.to_utf8_buffer()
-	if epoch<=0 or sequence<=0 or sequence>0xffffffff or action<1 or action>7 or target_actor_id<0 or payload.size()>PLAYER_IDENTITY_MAX_NAME_BYTES:
+	if epoch<=0 or sequence<=0 or sequence>0xffffffff or action<1 or action>8 or target_actor_id<0 or payload.size()>PLAYER_IDENTITY_MAX_NAME_BYTES:
 		return PackedByteArray()
 	match action:
 		1:
@@ -2702,6 +2703,9 @@ static func encode_friend_command(
 				return PackedByteArray()
 		3:
 			if target_actor_id!=0 or not target_name.is_empty():
+				return PackedByteArray()
+		8:
+			if target_actor_id<=0 or target_name.is_empty() or target_name!=target_name.strip_edges() or target_name.length()>FRIEND_ALIAS_MAX_CHARS:
 				return PackedByteArray()
 		_:
 			return PackedByteArray()
@@ -2724,7 +2728,7 @@ static func decode_friend_result(frame:PackedByteArray)->Dictionary:
 	var action:=reader.get_u8()
 	var status:=reader.get_u8()
 	var target:=reader.get_64()
-	if epoch<=0 or sequence<=0 or action<1 or action>7 or status<0 or status>8 or target<0 or reader.get_available_bytes()!=0:
+	if epoch<=0 or sequence<=0 or action<1 or action>8 or status<0 or status>8 or target<0 or reader.get_available_bytes()!=0:
 		return {}
 	return {"map_epoch":epoch,"friend_sequence":sequence,"action":action,"status":status,"target_actor_id":target}
 

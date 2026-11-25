@@ -1,3 +1,4 @@
+using System.Text;
 using Microsoft.Data.Sqlite;
 
 namespace SGTest.Server.Identity;
@@ -23,17 +24,19 @@ public sealed partial class SqliteIdentityStore
             using var command=connection.CreateCommand();
             command.CommandText=@"SELECT
 CASE WHEN f.character_low_id=$id THEN f.character_high_id ELSE f.character_low_id END AS friend_id,
-c.name
+COALESCE(a.alias,c.name)
 FROM character_friendships f
 JOIN characters c ON c.character_id=
     CASE WHEN f.character_low_id=$id THEN f.character_high_id ELSE f.character_low_id END
+LEFT JOIN character_friend_aliases a
+    ON a.owner_character_id=$id AND a.target_character_id=c.character_id
 WHERE (f.character_low_id=$id OR f.character_high_id=$id)
 AND NOT EXISTS (
     SELECT 1 FROM character_ignores i
     WHERE i.owner_character_id=$id AND i.target_character_id=
         CASE WHEN f.character_low_id=$id THEN f.character_high_id ELSE f.character_low_id END
 )
-ORDER BY c.name,friend_id;";
+ORDER BY COALESCE(a.alias,c.name),friend_id;";
             command.Parameters.AddWithValue("$id",characterId);
             using var reader=command.ExecuteReader();
             var result=new List<FriendRecord>();
@@ -185,6 +188,53 @@ WHERE (owner_character_id=$a AND target_character_id=$b)
                 clearIgnore.Parameters.AddWithValue("$b",targetCharacterId);
                 clearIgnore.ExecuteNonQuery();
             }
+            using(var clearAliases=connection.CreateCommand())
+            {
+                clearAliases.Transaction=tx;
+                clearAliases.CommandText=@"DELETE FROM character_friend_aliases
+WHERE (owner_character_id=$a AND target_character_id=$b)
+   OR (owner_character_id=$b AND target_character_id=$a);";
+                clearAliases.Parameters.AddWithValue("$a",characterId);
+                clearAliases.Parameters.AddWithValue("$b",targetCharacterId);
+                clearAliases.ExecuteNonQuery();
+            }
+            tx.Commit();
+            return FriendStoreStatus.Success;
+        },cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<FriendStoreStatus> RenameFriendAsync(
+        long characterId,long targetCharacterId,string alias,
+        CancellationToken cancellationToken=default)
+    {
+        ThrowIfDisposed();
+        if(characterId<=0||targetCharacterId<=0)
+            return FriendStoreStatus.TargetNotFound;
+        if(characterId==targetCharacterId)
+            return FriendStoreStatus.CannotTargetSelf;
+        string clean=(alias??string.Empty).Normalize(NormalizationForm.FormC);
+        if(clean!=alias||clean!=clean.Trim()||clean.Length is <1 or >10||clean.Any(char.IsControl))
+            return FriendStoreStatus.Conflict;
+        return await Task.Run(()=>
+        {
+            using var connection=Open();
+            using var tx=connection.BeginTransaction();
+            if(!FriendshipExists(connection,tx,characterId,targetCharacterId))
+                return FriendStoreStatus.NotFriends;
+            using var command=connection.CreateCommand();
+            command.Transaction=tx;
+            command.CommandText=@"INSERT INTO character_friend_aliases(
+owner_character_id,target_character_id,alias,updated_unix_ms)
+VALUES($owner,$target,$alias,$now)
+ON CONFLICT(owner_character_id,target_character_id)
+DO UPDATE SET alias=excluded.alias,updated_unix_ms=excluded.updated_unix_ms;";
+            command.Parameters.AddWithValue("$owner",characterId);
+            command.Parameters.AddWithValue("$target",targetCharacterId);
+            command.Parameters.AddWithValue("$alias",clean);
+            command.Parameters.AddWithValue(
+                "$now",_timeProvider.GetUtcNow().ToUnixTimeMilliseconds());
+            if(command.ExecuteNonQuery()!=1)
+                return FriendStoreStatus.Conflict;
             tx.Commit();
             return FriendStoreStatus.Success;
         },cancellationToken).ConfigureAwait(false);
@@ -199,11 +249,13 @@ WHERE (owner_character_id=$a AND target_character_id=$b)
         {
             using var connection=Open();
             using var command=connection.CreateCommand();
-            command.CommandText=@"SELECT i.target_character_id,c.name
+            command.CommandText=@"SELECT i.target_character_id,COALESCE(a.alias,c.name)
 FROM character_ignores i
 JOIN characters c ON c.character_id=i.target_character_id
+LEFT JOIN character_friend_aliases a
+    ON a.owner_character_id=$id AND a.target_character_id=c.character_id
 WHERE i.owner_character_id=$id
-ORDER BY c.name,i.target_character_id;";
+ORDER BY COALESCE(a.alias,c.name),i.target_character_id;";
             command.Parameters.AddWithValue("$id",characterId);
             using var reader=command.ExecuteReader();
             var result=new List<FriendRecord>();
