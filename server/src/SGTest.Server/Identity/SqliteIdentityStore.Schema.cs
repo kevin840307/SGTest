@@ -1310,6 +1310,17 @@ CHECK(available_attribute_points BETWEEN 0 AND 1000000);",tx);
                 Execute(connection,@"CREATE INDEX IF NOT EXISTS ix_player_shop_active_seller
 ON player_shop_listings(seller_character_id,listing_id) WHERE state=0;",tx);
             }
+            // Schema v45: original CHotKeyItf persists exactly 12 character-owned
+            // hotkey slots. Data type 0 is item UID and 1 is learned SkillID.
+            Execute(connection,@"
+CREATE TABLE IF NOT EXISTS character_hotkeys (
+    character_id INTEGER NOT NULL REFERENCES characters(character_id) ON DELETE CASCADE,
+    slot INTEGER NOT NULL CHECK(slot BETWEEN 0 AND 11),
+    data_type INTEGER NOT NULL CHECK(data_type IN (0,1)),
+    data_id INTEGER NOT NULL CHECK(data_id > 0),
+    updated_unix_ms INTEGER NOT NULL,
+    PRIMARY KEY(character_id,slot)
+);",tx);
             if (schemaVersion < SchemaVersion)
                 Execute(connection,
                     $"UPDATE schema_version SET version={SchemaVersion};", tx);

@@ -465,6 +465,18 @@ func _cast_area_skill() -> void:
 			skill_status.text = "技能未送出；請檢查角色狀態或佇列"
 
 
+func submit_hotkey_refresh() -> bool:
+	return active and bool(_latest.get("world_ready",false)) and not bool(_latest.get("reconnecting",false)) and int(_latest.get("pending_hotkey_sequence",0))==0 and session.hotkey_refresh()
+
+
+func submit_hotkey_bind(slot:int,data_type:int,data_id:int) -> bool:
+	return active and bool(_latest.get("world_ready",false)) and not bool(_latest.get("reconnecting",false)) and int(_latest.get("pending_hotkey_sequence",0))==0 and session.hotkey_bind(slot,data_type,data_id)
+
+
+func submit_hotkey_remove(slot:int) -> bool:
+	return active and bool(_latest.get("world_ready",false)) and not bool(_latest.get("reconnecting",false)) and int(_latest.get("pending_hotkey_sequence",0))==0 and session.hotkey_remove(slot)
+
+
 func submit_pickup_drop(drop_id: int) -> bool:
 	return active and not bool(_latest.get("reconnecting",false)) and bool(_latest.get("world_ready",false)) and not bool(_latest.get("player_dead",false)) and not bool(_latest.get("resync_pending",false)) and int(_latest.get("pending_pickup_sequence",0)) == 0 and drop_id > 0 and session.pickup_ground_drop(drop_id)
 

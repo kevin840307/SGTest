@@ -5,6 +5,7 @@ extends Control
 signal skill_selected(skill_id: int)
 
 const UiTextures = preload("res://ui/ui_texture_loader.gd")
+const HotkeyDragButton = preload("res://ui/hotkey_drag_button.gd")
 const PRIVATE := "res://ui/private_ie_hk2"
 const WINDOW_SIZE := Vector2(223, 288)
 const PAGE_SIZE := 8
@@ -121,7 +122,7 @@ func _build() -> void:
 	for row in PAGE_SIZE:
 		var y := ROW_Y + ROW_STEP * row
 
-		var hit := Button.new()
+		var hit := HotkeyDragButton.new()
 		hit.name = "SkillRow%d" % row
 		hit.position = Vector2(5, y)
 		hit.size = Vector2(195, 27)
@@ -247,6 +248,7 @@ func _refresh() -> void:
 			_name_labels[row].text = ""
 			_level_labels[row].text = ""
 			_row_buttons[row].tooltip_text = ""
+			_row_buttons[row].hotkey_drag_payload = {}
 			continue
 		var skill_id := int(_ids[source_index])
 		var level := int(_skills.get(_ids[source_index], 0))
@@ -256,6 +258,10 @@ func _refresh() -> void:
 		_name_labels[row].text = str(label.get("name", "技能 %d" % skill_id))
 		_level_labels[row].text = str(level)
 		_row_buttons[row].tooltip_text = str(label.get("description", ""))
+		_row_buttons[row].hotkey_drag_payload = {
+			"hotkey_kind": "skill",
+			"data_id": skill_id
+		}
 
 	if _scroll_up != null:
 		_scroll_up.disabled = _page_start <= 0

@@ -112,6 +112,12 @@ static class Checks
                 Console.WriteLine($"FRIEND_CHECKS PASS total={_passes}");
                 return 0;
             }
+            if (args is ["--hotkey-only"])
+            {
+                HotkeyChecks.Verify();
+                Console.WriteLine($"HOTKEY_CHECKS PASS total={_passes}");
+                return 0;
+            }
             if (args is ["--pet-only"])
             {
                 PetChecks.Verify(root);
@@ -377,6 +383,7 @@ static class Checks
             PartyChecks.Verify(root);
             ClanChecks.Verify();
             FriendChecks.Verify();
+            HotkeyChecks.Verify();
             PetChecks.Verify(root);
             MechaChecks.Verify();
             CharacterExperienceChecks.Verify(root);

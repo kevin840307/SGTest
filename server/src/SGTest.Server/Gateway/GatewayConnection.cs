@@ -104,6 +104,7 @@ public sealed partial class GatewayConnection
     private uint _lastPartySequence;
     private uint _lastClanSequence;
     private uint _lastFriendSequence;
+    private uint _lastHotkeySequence;
     private uint _lastPetSequence;
     private uint _lastMechaSequence;
     private uint _lastPetAttackSequence;

@@ -149,7 +149,9 @@ public enum WireOpcode : ushort
     FriendInvite = 136,
     EmotionCommand = 137,
     EmotionVisual = 138,
-    FriendMessageCommand = 139
+    FriendMessageCommand = 139,
+    HotkeyCommand = 140,
+    HotkeySnapshot = 141
 }
 
 public enum ChatChannel : byte { Nearby = 0, World = 1, Warband = 2, Party = 3, Whisper = 4, Emotion = 5, FriendMessage = 6 }
@@ -177,6 +179,9 @@ public enum FriendResultStatus : byte
     TargetUnavailable=6,InviteMissing=7,TargetHasPendingInvite=8
 }
 public enum FriendInviteState : byte { Request=0, Accepted=1, Rejected=2, Cancelled=3 }
+public enum HotkeyCommandAction : byte { Save=1, Remove=2, Refresh=3 }
+public enum HotkeyDataType : byte { Item=0, Skill=1 }
+public enum HotkeyResultStatus : byte { Applied=0, InvalidBinding=1 }
 public enum PetCommandAction : byte { Summon=1, Recall=2, Refresh=3, Equip=4, Unequip=5 }
 public enum PetResultStatus : byte
 {
@@ -755,6 +760,15 @@ public sealed record FriendSnapshotWire(
 public readonly record struct FriendInviteWire(
     long ReceiverMapEpoch,long ActorId,long ActorConnectionEpoch,
     FriendInviteState State,string Name);
+
+public readonly record struct HotkeyCommandWire(
+    long MapEpoch,uint HotkeySequence,HotkeyCommandAction Action,byte Slot,
+    HotkeyDataType DataType,long DataId);
+public readonly record struct HotkeyEntryWire(
+    byte Slot,HotkeyDataType DataType,long DataId);
+public sealed record HotkeySnapshotWire(
+    long ReceiverMapEpoch,uint HotkeySequence,HotkeyResultStatus Status,
+    IReadOnlyList<HotkeyEntryWire> Entries);
 
 public readonly record struct PetCommandWire(
     long MapEpoch,uint PetSequence,PetCommandAction Action,long PetUid,long ItemUid=0);

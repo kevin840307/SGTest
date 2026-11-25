@@ -57,6 +57,7 @@ public sealed partial class GatewayConnection
                                               Func<TrustedPartyCommand, bool>? postParty = null,
                                               Func<TrustedClanCommand, bool>? postClan = null,
                                               Func<TrustedFriendCommand, bool>? postFriend = null,
+                                              Func<TrustedHotkeyCommand, bool>? postHotkey = null,
                                               Func<TrustedPetCommand, bool>? postPet = null,
                                               Func<TrustedMechaCommand, bool>? postMecha = null,
                                                Func<TrustedPlayerAttributeAllocate, bool>? postAttribute = null)
@@ -72,7 +73,7 @@ public sealed partial class GatewayConnection
             return _parser.Feed(bytes,
                 frame => HandleClientFrame(
                     frame, postMove, postNpc, postResync, postAttack, postPetAttack, postPetSkill, postRespawn,
-                    postPickup, postRecovery, postDiscard, postSkill, postShop, postStorage, postEquipment, postBank, postRepair, postEnhancement, postTrade, postQuest, postPvp, postPvpAttack, postPvpSkill, postGmPvpName, postPlayerShop, postChat, postParty, postClan, postFriend, postPet, postMecha, postAttribute),
+                    postPickup, postRecovery, postDiscard, postSkill, postShop, postStorage, postEquipment, postBank, postRepair, postEnhancement, postTrade, postQuest, postPvp, postPvpAttack, postPvpSkill, postGmPvpName, postPlayerShop, postChat, postParty, postClan, postFriend, postHotkey, postPet, postMecha, postAttribute),
                 out commandsAccepted);
         }
     }
@@ -106,6 +107,7 @@ public sealed partial class GatewayConnection
                                               Func<TrustedPartyCommand, bool>? postParty = null,
                                               Func<TrustedClanCommand, bool>? postClan = null,
                                               Func<TrustedFriendCommand, bool>? postFriend = null,
+                                              Func<TrustedHotkeyCommand, bool>? postHotkey = null,
                                               Func<TrustedPetCommand, bool>? postPet = null,
                                               Func<TrustedMechaCommand, bool>? postMecha = null,
                                                Func<TrustedPlayerAttributeAllocate, bool>? postAttribute = null)
@@ -121,7 +123,7 @@ public sealed partial class GatewayConnection
             return _parser.Resume(
                 frame => HandleClientFrame(
                     frame, postMove, postNpc, postResync, postAttack, postPetAttack, postPetSkill, postRespawn,
-                    postPickup, postRecovery, postDiscard, postSkill, postShop, postStorage, postEquipment, postBank, postRepair, postEnhancement, postTrade, postQuest, postPvp, postPvpAttack, postPvpSkill, postGmPvpName, postPlayerShop, postChat, postParty, postClan, postFriend, postPet, postMecha, postAttribute),
+                    postPickup, postRecovery, postDiscard, postSkill, postShop, postStorage, postEquipment, postBank, postRepair, postEnhancement, postTrade, postQuest, postPvp, postPvpAttack, postPvpSkill, postGmPvpName, postPlayerShop, postChat, postParty, postClan, postFriend, postHotkey, postPet, postMecha, postAttribute),
                 out commandsAccepted);
         }
     }
@@ -156,6 +158,7 @@ public sealed partial class GatewayConnection
         Func<TrustedPartyCommand, bool>? postParty,
         Func<TrustedClanCommand, bool>? postClan,
         Func<TrustedFriendCommand, bool>? postFriend,
+        Func<TrustedHotkeyCommand, bool>? postHotkey,
         Func<TrustedPetCommand, bool>? postPet,
         Func<TrustedMechaCommand, bool>? postMecha,
         Func<TrustedPlayerAttributeAllocate, bool>? postAttribute)
@@ -580,6 +583,23 @@ public sealed partial class GatewayConnection
             if(!postFriend(request))
                 return WireFrameDisposition.Backpressured;
             _lastFriendSequence=friend.FriendSequence;
+            return WireFrameDisposition.Accepted;
+        }
+
+        if(header.Opcode==WireOpcode.HotkeyCommand &&
+            postHotkey is not null &&
+            WireProtocol.TryDecodeHotkeyCommand(frame,out var hotkey))
+        {
+            if(!GameplayReady(bound)||hotkey.MapEpoch!=bound.MapEpoch||
+               hotkey.HotkeySequence<=_lastHotkeySequence)
+                return WireFrameDisposition.ProtocolViolation;
+            var request=new TrustedHotkeyCommand(
+                bound.ActorId,bound.ConnectionEpoch,hotkey.MapEpoch,
+                hotkey.HotkeySequence,hotkey.Action,hotkey.Slot,
+                hotkey.DataType,hotkey.DataId);
+            if(!postHotkey(request))
+                return WireFrameDisposition.Backpressured;
+            _lastHotkeySequence=hotkey.HotkeySequence;
             return WireFrameDisposition.Accepted;
         }
 

@@ -627,6 +627,20 @@ public sealed partial class GatewayConnection
         }
     }
 
+    public GatewaySendStatus QueueHotkeySnapshot(
+        ConnectionBinding expected,HotkeySnapshotWire snapshot)
+    {
+        lock(_bindingGate)
+        {
+            if(_closed)return GatewaySendStatus.Closed;
+            if(_binding!=expected||
+               snapshot.ReceiverMapEpoch!=expected.MapEpoch)
+                return GatewaySendStatus.GenerationMismatch;
+            return _reliable.TryEnqueue(WireProtocol.EncodeHotkeySnapshot(snapshot))
+                ?GatewaySendStatus.Enqueued:GatewaySendStatus.Backpressured;
+        }
+    }
+
     public GatewaySendStatus QueuePetResult(
         TrustedPetCommand request,PetResultWire result)
     {

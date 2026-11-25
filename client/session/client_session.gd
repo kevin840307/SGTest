@@ -628,6 +628,18 @@ func friend_accept()->bool:
 	return _queue_friend_intent(4,int(invite.get("actor_id",0)),"",current)
 
 
+func hotkey_refresh()->bool:
+	return _queue_hotkey_intent(3,0,0,0,snapshot())
+
+
+func hotkey_bind(slot:int,data_type:int,data_id:int)->bool:
+	return _queue_hotkey_intent(1,slot,data_type,data_id,snapshot())
+
+
+func hotkey_remove(slot:int)->bool:
+	return _queue_hotkey_intent(2,slot,0,0,snapshot())
+
+
 func friend_reject()->bool:
 	var current:=snapshot()
 	var invite:Dictionary=current.get("pending_friend_invite",{})
@@ -845,6 +857,32 @@ func _queue_clan_intent(action:int,request_clan_id:int,name:String,current:Dicti
 		"type":"clan","action":action,"clan_id":request_clan_id,"name":clean,
 		"target_actor_id":target_actor_id,
 		"actor_id":actor,
+		"map_epoch":int(current.get("map_epoch",0))
+	})
+
+
+func _queue_hotkey_intent(
+		action:int,slot:int,data_type:int,data_id:int,current:Dictionary)->bool:
+	if (
+		int(current.get("state",-1))!=WorldState.STATE_IN_WORLD or
+		not bool(current.get("world_ready",false)) or
+		bool(current.get("resync_pending",false)) or
+		bool(current.get("waiting_for_new_map",false)) or
+		int(current.get("pending_world_ready_ack_epoch",0))!=0 or
+		int(current.get("last_world_ready_ack_epoch",0))!=int(current.get("map_epoch",0)) or
+		int(current.get("pending_hotkey_sequence",0))!=0 or
+		action<1 or action>3 or slot<0 or slot>=WireCodec.HOTKEY_MAX_SLOTS
+	):
+		return false
+	if action==1:
+		if data_type<0 or data_type>1 or data_id<=0:
+			return false
+	elif data_type!=0 or data_id!=0:
+		return false
+	return _queue_intent({
+		"type":"hotkey","action":action,"slot":slot,
+		"data_type":data_type,"data_id":data_id,
+		"actor_id":int(current.get("actor_id",0)),
 		"map_epoch":int(current.get("map_epoch",0))
 	})
 
@@ -1680,6 +1718,8 @@ func _process_first_intent() -> void:
 		_process_clan_intent(intent)
 	elif kind=="friend":
 		_process_friend_intent(intent)
+	elif kind=="hotkey":
+		_process_hotkey_intent(intent)
 	elif kind=="pet":
 		_process_pet_intent(intent)
 	elif kind=="mecha":
@@ -2135,6 +2175,42 @@ func _process_friend_intent(intent:Dictionary)->void:
 	if (
 		_transport.send_frame(frame) and
 		_world.mark_friend_sent(sequence,action,target_actor_id,target_name)
+	):
+		_pop_intent()
+		_publish()
+
+
+func _process_hotkey_intent(intent:Dictionary)->void:
+	var current:Dictionary=_world.snapshot()
+	if (
+		int(intent.get("actor_id",0))!=int(current.get("actor_id",0)) or
+		int(intent.get("map_epoch",0))!=int(current.get("map_epoch",0))
+	):
+		_pop_intent()
+		return
+	if (
+		int(current.get("state",-1))!=WorldState.STATE_IN_WORLD or
+		not bool(current.get("world_ready",false)) or
+		bool(current.get("resync_pending",false)) or
+		bool(current.get("waiting_for_new_map",false)) or
+		int(current.get("pending_world_ready_ack_epoch",0))!=0 or
+		int(current.get("last_world_ready_ack_epoch",0))!=int(current.get("map_epoch",0)) or
+		int(current.get("pending_hotkey_sequence",0))!=0
+	):
+		return
+	var action:=int(intent.get("action",0))
+	var slot:=int(intent.get("slot",0))
+	var data_type:=int(intent.get("data_type",0))
+	var data_id:=int(intent.get("data_id",0))
+	var sequence:=int(current.get("hotkey_sequence",0))+1
+	var frame:=WireCodec.encode_hotkey_command(
+		int(current.get("map_epoch",0)),sequence,action,slot,data_type,data_id)
+	if frame.is_empty():
+		_pop_intent()
+		return
+	if (
+		_transport.send_frame(frame) and
+		_world.mark_hotkey_sent(sequence,action,slot,data_type,data_id)
 	):
 		_pop_intent()
 		_publish()

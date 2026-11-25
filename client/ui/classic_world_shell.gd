@@ -7,6 +7,8 @@ const UiTextures = preload("res://ui/ui_texture_loader.gd")
 const UiSkins = preload("res://ui/ui_skin_catalog.gd")
 const Photos = preload("res://ui/local_item_photo_cache.gd")
 const WireCodec = preload("res://network/wire_codec.gd")
+const HotkeyDragButton = preload("res://ui/hotkey_drag_button.gd")
+const HotkeySlot = preload("res://ui/hotkey_slot.gd")
 
 const PRIVATE := "res://ui/private_ie_hk2"
 const BASE_SIZE := Vector2(800,600)
@@ -110,6 +112,8 @@ var minimap_panel:=Control.new()
 var _minimap_compact:=false
 var hotkey_panel:=Control.new()
 var _hotkey_page:=0
+var _hotkey_slots:Array=[]
+var _hotkey_refresh_requested:=false
 var command_panel:=Control.new()
 var menu:=Control.new() # retained as a non-visible compatibility handle
 var secondary_menu:=Control.new()
@@ -467,6 +471,7 @@ func _process(_delta:float)->void:
 
 func _unhandled_key_input(event:InputEvent)->void:
 	if not event.is_action_pressed("ui_cancel"):
+		_handle_hotkey_key(event)
 		return
 	if _party_question.visible:
 		_reject_party_invite()
@@ -632,6 +637,23 @@ func _build_hud()->void:
 	for i in 12:
 		var hotkey_label:=_itf_text(hotkey_panel,"Hotkey%d"%i,hotkey_rects[i],9,false)
 		hotkey_label.text="F%d"%(i+1)
+		var slot:=HotkeySlot.new()
+		slot.name="HotkeySlot%d"%i
+		slot.slot_index=i
+		slot.position=Vector2(4,18+27*i)
+		slot.size=Vector2(24,26)
+		slot.mouse_filter=Control.MOUSE_FILTER_STOP
+		slot.binding_dropped.connect(_on_hotkey_binding_dropped)
+		var icon:=TextureRect.new()
+		icon.name="Icon"
+		icon.position=Vector2(1,1)
+		icon.size=Vector2(22,22)
+		icon.expand_mode=TextureRect.EXPAND_IGNORE_SIZE
+		icon.stretch_mode=TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		icon.mouse_filter=Control.MOUSE_FILTER_IGNORE
+		slot.add_child(icon)
+		hotkey_panel.add_child(slot)
+		_hotkey_slots.append(slot)
 	var size_button:=_texture_button(hotkey_panel,"HotkeySizeToggle","HOTKEY_YS_B",Vector2(3,342),Vector2(24,13),_toggle_hotkey_size,"切換快捷列大小")
 	# The HK expand/collapse SPR has two frames: normal and highlighted.
 	# Never request non-existent pressed/disabled frames 2 and 3.
@@ -1550,6 +1572,7 @@ func _select_hotkey_page(index:int)->void:
 		button.texture_hover=_tex("OFFON_1")
 		button.texture_pressed=_tex("OFFON_1")
 		button.texture_disabled=_tex("OFFON_0")
+	_refresh_hotkeys()
 
 # The two HK ITFs are distinct complete layouts, not a scaled copy of the
 # long rail. Switch the original background, control rects and collapse icon
@@ -1577,6 +1600,100 @@ func _toggle_hotkey_size()->void:
 		elif not compact:
 			label.position=Vector2(4,long_ys[i])
 			label.size=Vector2(18 if i>=9 else 12,12)
+	_refresh_hotkeys()
+
+func _on_hotkey_binding_dropped(slot_index:int,payload:Dictionary)->void:
+	if _panel==null or int(_stats.get("pending_hotkey_sequence",0))!=0:
+		return
+	var kind:=str(payload.get("hotkey_kind",""))
+	var data_id:=int(payload.get("data_id",0))
+	if data_id<=0:
+		return
+	var data_type:=0 if kind=="item" else 1
+	if _panel.submit_hotkey_bind(slot_index,data_type,data_id):
+		_hotkey_refresh_requested=true
+
+func _refresh_hotkeys()->void:
+	if _hotkey_slots.is_empty():
+		return
+	var compact:=hotkey_panel.size.y<300.0
+	var bindings:Dictionary=_stats.get("hotkeys",{})
+	var inventory_items:Dictionary=_stats.get("inventory_items",{})
+	var long_ys:=[18,45,72,99,126,153,180,207,234,261,288,315]
+	for i in 12:
+		var slot=_hotkey_slots[i]
+		var visible_slot:=not compact or i<6
+		slot.visible=visible_slot
+		if not visible_slot:
+			continue
+		var actual_slot:=i+_hotkey_page*6 if compact else i
+		slot.slot_index=actual_slot
+		slot.position=Vector2(4,17+27*i) if compact else Vector2(4,long_ys[i])
+		slot.size=Vector2(24,26)
+		var icon:=slot.get_node("Icon") as TextureRect
+		icon.texture=null
+		slot.tooltip_text="F%d"%(i+1)
+		if not bindings.has(actual_slot):
+			continue
+		var binding:Dictionary=bindings[actual_slot]
+		var data_type:=int(binding.get("data_type",-1))
+		var data_id:=int(binding.get("data_id",0))
+		if data_type==0 and inventory_items.has(data_id) and _panel!=null:
+			var item:Dictionary=inventory_items[data_id]
+			var definition:=int(item.get("item_definition_id",0))
+			icon.texture=_photos.photo_for_item(definition,_panel.item_catalog)
+			slot.tooltip_text="F%d｜%s"%[i+1,str(_panel.item_catalog.name_for(definition))]
+		elif data_type==1:
+			slot.tooltip_text="F%d｜技能 %d"%[i+1,data_id]
+
+func _handle_hotkey_key(event:InputEvent)->void:
+	if not _active or not (event is InputEventKey) or not event.pressed or event.echo:
+		return
+	var keys:=[KEY_F1,KEY_F2,KEY_F3,KEY_F4,KEY_F5,KEY_F6,KEY_F7,KEY_F8,KEY_F9,KEY_F10,KEY_F11,KEY_F12]
+	var index:=keys.find(event.keycode)
+	if index<0:
+		index=keys.find(event.physical_keycode)
+	if index<0:
+		return
+	var compact:=hotkey_panel.size.y<300.0
+	if compact and index>=6:
+		return
+	var actual_slot:=index+_hotkey_page*6 if compact else index
+	if _activate_hotkey(actual_slot):
+		get_viewport().set_input_as_handled()
+
+func _activate_hotkey(slot_index:int)->bool:
+	if _panel==null:
+		return false
+	var bindings:Dictionary=_stats.get("hotkeys",{})
+	if not bindings.has(slot_index):
+		return false
+	var binding:Dictionary=bindings[slot_index]
+	var data_type:=int(binding.get("data_type",-1))
+	var data_id:=int(binding.get("data_id",0))
+	if data_type==0 and data_id>0:
+		return _panel.inventory_panel.submit_recovery_use(data_id)
+	if data_type==1 and data_id>0:
+		var learned:Dictionary=_stats.get("skill_book",{})
+		if int(learned.get(data_id,learned.get(str(data_id),0)))<=0:
+			return false
+		# Original CHotKeyItf::OnUseSkill selects the learned skill first; for
+		# non-self skills it then enters target-selection mode. Current SGTest
+		# snapshots do not expose the original skill target-type byte, so do
+		# not invent an immediate self/area cast classification here.
+		_panel.skill_id_input.value=data_id
+		_panel.skill_target_mode.button_pressed=true
+		return true
+	return false
+
+func _make_item_hotkey_draggable(row:Button,item_uid:int,item_definition_id:int)->void:
+	if _panel==null or item_uid<=0:
+		return
+	if str(_panel.item_catalog.category_for(item_definition_id))!="recovery":
+		return
+	row.set_script(HotkeyDragButton)
+	row.set("hotkey_drag_payload",{"hotkey_kind":"item","data_id":item_uid})
+	row.tooltip_text+="\n拖曳到快捷列可綁定 F 鍵"
 
 func _build_inventory()->void:
 	inventory=_window("InventoryWindow","BG_ITEM",Vector2(259,506),Vector2(531,71))
@@ -2077,6 +2194,7 @@ func set_world_active(active:bool)->void:
 	visible=active
 	set_process(active)
 	if not active:
+		_hotkey_refresh_requested=false
 		_inventory_render_initialized=false
 		_inventory_render_signature.clear()
 		_social_render_signatures.clear()
@@ -2096,7 +2214,16 @@ func set_world_active(active:bool)->void:
 func apply_snapshot(snapshot:Dictionary)->void:
 	_stats=snapshot.duplicate(true)
 	if not _active:return
+	if bool(_stats.get("hotkeys_ready",false)):
+		_hotkey_refresh_requested=false
+	elif (
+		bool(_stats.get("world_ready",false)) and
+		int(_stats.get("pending_hotkey_sequence",0))==0 and
+		not _hotkey_refresh_requested and _panel!=null
+	):
+		_hotkey_refresh_requested=_panel.submit_hotkey_refresh()
 	_refresh_hud()
+	_refresh_hotkeys()
 	if _inventory_snapshot_changed():
 		_refresh_inventory()
 	_refresh_character()
@@ -2306,6 +2433,7 @@ func _refresh_inventory()->void:
 		var row:=_classic_row(_inventory_rows,"     %s  ×%d"%[name,int(item.get("quantity",1))],27.0)
 		_apply_item_grade_color(row,id)
 		row.tooltip_text=_panel.item_catalog.tooltip_text_for(item,equipment_items) if _panel!=null else "UID %d · ID %d"%[uid,id]
+		_make_item_hotkey_draggable(row,uid,id)
 		if _panel!=null:
 			var photo:=TextureRect.new();photo.name="ItemPhoto";photo.texture=_photos.photo_for_item(id,_panel.item_catalog)
 			photo.position=Vector2(2,0);photo.size=Vector2(24,24);photo.expand_mode=TextureRect.EXPAND_IGNORE_SIZE

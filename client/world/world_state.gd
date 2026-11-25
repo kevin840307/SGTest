@@ -136,6 +136,12 @@ var skill_book := {}
 var skill_book_ready := false
 var skill_book_revision := 0
 var skill_book_next_index := 0
+var hotkeys := {}
+var hotkeys_ready := false
+var hotkey_sequence := 0
+var pending_hotkey_sequence := 0
+var last_hotkey_status := -1
+var stale_hotkey_frames := 0
 var shop_sequence := 0
 var pending_shop_sequence := 0
 var pending_shop_kind := 0
@@ -1069,6 +1075,26 @@ func _clear_pending_friend()->void:
 	pending_friend_target_name=""
 
 
+func mark_hotkey_sent(
+		sequence:int,action:int,slot:int=0,data_type:int=0,data_id:int=0)->bool:
+	if (
+		state!=STATE_IN_WORLD or not world_ready or resync_pending or
+		waiting_for_new_map or pending_world_ready_ack_epoch!=0 or
+		last_world_ready_ack_epoch!=map_epoch or pending_hotkey_sequence!=0 or
+		sequence<=hotkey_sequence or sequence>0xffffffff or action<1 or action>3 or
+		slot<0 or slot>=WireCodec.HOTKEY_MAX_SLOTS
+	):
+		return false
+	if action==1:
+		if data_type<0 or data_type>1 or data_id<=0:
+			return false
+	elif data_type!=0 or data_id!=0:
+		return false
+	hotkey_sequence=sequence
+	pending_hotkey_sequence=sequence
+	return true
+
+
 func mark_pet_sent(sequence:int,action:int,pet_uid:int,item_uid:int=0)->bool:
 	if (
 		state!=STATE_IN_WORLD or not world_ready or resync_pending or
@@ -1382,6 +1408,8 @@ func apply_frame(frame: PackedByteArray) -> bool:
 			return _apply_friend_snapshot(frame)
 		WireCodec.OPCODE_FRIEND_INVITE:
 			return _apply_friend_invite(frame)
+		WireCodec.OPCODE_HOTKEY_SNAPSHOT:
+			return _apply_hotkey_snapshot(frame)
 		WireCodec.OPCODE_PET_RESULT:
 			return _apply_pet_result(frame)
 		WireCodec.OPCODE_PET_SNAPSHOT:
@@ -1559,6 +1587,12 @@ func snapshot() -> Dictionary:
 		"skill_book_ready": skill_book_ready,
 		"skill_book_revision": skill_book_revision,
 		"skill_book_next_index": skill_book_next_index,
+		"hotkeys": hotkeys.duplicate(true),
+		"hotkeys_ready": hotkeys_ready,
+		"hotkey_sequence": hotkey_sequence,
+		"pending_hotkey_sequence": pending_hotkey_sequence,
+		"last_hotkey_status": last_hotkey_status,
+		"stale_hotkey_frames": stale_hotkey_frames,
 		"shop_sequence": shop_sequence,
 		"pending_shop_sequence": pending_shop_sequence,
 		"pending_shop_kind": pending_shop_kind,
@@ -2141,6 +2175,12 @@ func _reset_character_economy_state() -> void:
 	skill_book_ready = false
 	skill_book_revision = 0
 	skill_book_next_index = 0
+	hotkeys.clear()
+	hotkeys_ready = false
+	hotkey_sequence = 0
+	pending_hotkey_sequence = 0
+	last_hotkey_status = -1
+	stale_hotkey_frames = 0
 	shop_sequence = 0
 	pending_shop_sequence = 0
 	pending_shop_kind = 0
@@ -4890,6 +4930,41 @@ func _apply_friend_snapshot(frame:PackedByteArray)->bool:
 			next_friends[friend_actor]=entry.duplicate(true)
 	friends=next_friends
 	ignored_friends=next_ignored
+	return true
+
+
+func _apply_hotkey_snapshot(frame:PackedByteArray)->bool:
+	if state!=STATE_IN_WORLD:
+		return fail("hotkey_snapshot_out_of_state")
+	var value:=WireCodec.decode_hotkey_snapshot(frame)
+	if value.is_empty():
+		return fail("invalid_hotkey_snapshot")
+	var epoch:=int(value.receiver_map_epoch)
+	var sequence:=int(value.hotkey_sequence)
+	if epoch<map_epoch:
+		stale_hotkey_frames+=1
+		return true
+	if epoch>map_epoch:
+		return fail("future_hotkey_snapshot")
+	if sequence<hotkey_sequence:
+		stale_hotkey_frames+=1
+		return true
+	if pending_hotkey_sequence!=0 and sequence!=pending_hotkey_sequence:
+		return fail("hotkey_snapshot_without_matching_request")
+	if pending_hotkey_sequence==0 and hotkeys_ready and sequence!=hotkey_sequence:
+		return fail("unexpected_hotkey_snapshot")
+	var next_hotkeys:={}
+	for raw in value.entries:
+		var entry:Dictionary=raw
+		var slot:=int(entry.slot)
+		if slot<0 or slot>=WireCodec.HOTKEY_MAX_SLOTS or next_hotkeys.has(slot):
+			return fail("invalid_hotkey_snapshot_entry")
+		next_hotkeys[slot]=entry.duplicate(true)
+	hotkeys=next_hotkeys
+	hotkeys_ready=true
+	hotkey_sequence=sequence
+	pending_hotkey_sequence=0
+	last_hotkey_status=int(value.status)
 	return true
 
 

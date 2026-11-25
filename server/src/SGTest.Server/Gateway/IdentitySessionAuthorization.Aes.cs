@@ -7,6 +7,7 @@ using SGTest.Server.Party;
 using SGTest.Server.Npc;
 using SGTest.Server.Combat;
 using SGTest.Server.Chat;
+using SGTest.Server.Hotkey;
 using System.Buffers.Binary;
 using System.Net;
 
@@ -287,6 +288,7 @@ public sealed partial class IdentitySessionAuthorization
             var skills = new SkillCommandHandler(
                 _identity, _world, _combat, _pickupWorldGeneration,
                 router, gameplayGate);
+            var hotkeys = new HotkeyCoordinator(_identity);
             var profileProgression=_progressionRules is null
                 ?null:new CharacterProfileProgressionHandler(
                     _identity,_progressionRules,router);
@@ -319,6 +321,7 @@ public sealed partial class IdentitySessionAuthorization
                 handleParty: _parties is null ? null : request => _parties.HandleAsync(request, router),
                 handleClan: _clans is null ? null : request => _clans.HandleAsync(request, router),
                 handleFriend: _friends is null ? null : request => _friends.HandleAsync(request, router),
+                handleHotkey: request => hotkeys.HandleAsync(request,router),
                 handlePet: _pets is null ? null : request => _pets.HandleAsync(request, router),
                 handleMecha: _mechas is null ? null : request => _mechas.HandleAsync(request, router),
                 handleAttribute: profileProgression is null ? null : profileProgression.HandleAttributeAsync)

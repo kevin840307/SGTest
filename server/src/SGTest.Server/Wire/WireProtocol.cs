@@ -717,6 +717,8 @@ public static partial class WireProtocol
             137 => WireOpcode.EmotionCommand,
             138 => WireOpcode.EmotionVisual,
             139 => WireOpcode.FriendMessageCommand,
+            140 => WireOpcode.HotkeyCommand,
+            141 => WireOpcode.HotkeySnapshot,
             _ => 0
         };
         if (opcode == 0) return false;
@@ -899,6 +901,11 @@ public static partial class WireProtocol
             WireOpcode.FriendMessageCommand =>
                 advertised >= FriendMessageCommandHeaderBytes+1 &&
                 advertised <= FriendMessageCommandMaximumFrameBytes,
+            WireOpcode.HotkeyCommand => advertised == HotkeyCommandFrameBytes,
+            WireOpcode.HotkeySnapshot =>
+                advertised >= HotkeySnapshotHeaderBytes &&
+                advertised <= HotkeySnapshotMaximumFrameBytes &&
+                (advertised-HotkeySnapshotHeaderBytes)%HotkeyEntryBytes==0,
             WireOpcode.PartyCommand =>
                 advertised >= PartyCommandFrameBytes &&
                 advertised <= PartyCommandMaximumFrameBytes,

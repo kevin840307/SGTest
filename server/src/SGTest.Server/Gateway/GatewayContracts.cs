@@ -132,6 +132,10 @@ public readonly record struct TrustedFriendCommand(
     long ActorId,long ConnectionEpoch,long RequestMapEpoch,
     uint FriendSequence,FriendCommandAction Action,long TargetActorId,
     string TargetName = "");
+public readonly record struct TrustedHotkeyCommand(
+    long ActorId,long ConnectionEpoch,long RequestMapEpoch,
+    uint HotkeySequence,HotkeyCommandAction Action,byte Slot,
+    HotkeyDataType DataType,long DataId);
 public readonly record struct TrustedPetCommand(
     long ActorId,long ConnectionEpoch,long RequestMapEpoch,
     uint PetSequence,PetCommandAction Action,long PetUid,long ItemUid=0);
