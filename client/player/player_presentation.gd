@@ -17,13 +17,16 @@ const REMOTE_MAX_PREDICTION_PIXELS := 32.0
 # reconstruct the same Blocking.dat route continuously. Only a large mismatch
 # abandons that visual route and re-anchors to Server state.
 const REMOTE_ROUTE_RECONCILE_PIXELS := 96.0
+# Presentation replay memory is bounded like WorldView's combat overlay ring.
+# This changes neither Server authority nor network reliability semantics.
+const COMBAT_VISUAL_DEDUPE_MAX := 32768
 var _views: Dictionary = {}
 var _profiles: Dictionary = {}
 var _default_profile_key := "0:0:0:0:0:0"
 var _actors := {}
-var _seen_attack_events := {}
-var _seen_damage_events := {}
-var _seen_respawn_events := {}
+var _seen_visual_events := {}
+var _seen_visual_ring: Array[String] = []
+var _seen_visual_ring_head := 0
 var _epoch := 0
 var _map := 0
 var _local_visual: Dictionary = {} # own actor presentation only; never authoritative
@@ -37,9 +40,7 @@ func clear() -> void:
 	_profiles.clear()
 	_default_profile_key = "0:0:0:0:0:0"
 	_actors.clear()
-	_seen_attack_events.clear()
-	_seen_damage_events.clear()
-	_seen_respawn_events.clear()
+	_clear_visual_event_history()
 	_epoch = 0
 	_map = 0
 	_local_visual.clear()
@@ -47,6 +48,28 @@ func clear() -> void:
 	_remote_blocking.clear()
 	_remote_manifest.clear()
 	_remote_routes.clear()
+
+
+func _clear_visual_event_history() -> void:
+	_seen_visual_events.clear()
+	_seen_visual_ring.clear()
+	_seen_visual_ring_head = 0
+
+func _remember_visual_event(domain: String, event_key: String) -> bool:
+	# Keep the three animation namespaces independent, and evict in O(1).
+	# Old keys may eventually be evicted during a very long session; within
+	# the bounded reliable-replay window duplicates cannot restart an animation.
+	var scoped_key := domain + "|" + event_key
+	if _seen_visual_events.has(scoped_key):
+		return false
+	if _seen_visual_ring.size() == COMBAT_VISUAL_DEDUPE_MAX:
+		_seen_visual_events.erase(_seen_visual_ring[_seen_visual_ring_head])
+		_seen_visual_ring[_seen_visual_ring_head] = scoped_key
+		_seen_visual_ring_head = (_seen_visual_ring_head + 1) % COMBAT_VISUAL_DEDUPE_MAX
+	else:
+		_seen_visual_ring.append(scoped_key)
+	_seen_visual_events[scoped_key] = true
+	return true
 
 
 func configure(assets: Dictionary, appearance: Dictionary = {}) -> Error:
@@ -206,9 +229,7 @@ func apply_snapshot(snapshot: Dictionary, now_usec: int) -> void:
 	if epoch != _epoch or map != _map:
 		_actors.clear()
 		_remote_routes.clear()
-		_seen_attack_events.clear()
-		_seen_damage_events.clear()
-		_seen_respawn_events.clear()
+		_clear_visual_event_history()
 		_epoch = epoch
 		_map = map
 	var own: Dictionary = snapshot.self_state.duplicate()
@@ -308,9 +329,8 @@ func apply_snapshot(snapshot: Dictionary, now_usec: int) -> void:
 			var connection := int(event.get("attacker_connection_epoch",0))
 			var sequence := int(event.get("attack_sequence",0))
 			var key := "%d:%d:%d" % [attacker,connection,sequence]
-			if _seen_attack_events.has(key):
+			if not _remember_visual_event("attack",key):
 				continue
-			_seen_attack_events[key] = true
 			if not _actors.has(attacker) or not _actors[attacker].profile.attack_available or \
 					bool(_actors[attacker].get("dead_visual",false)):
 				continue
@@ -333,9 +353,8 @@ func apply_snapshot(snapshot: Dictionary, now_usec: int) -> void:
 			var connection := int(event.get("victim_connection_epoch",0))
 			var sequence := int(event.get("damage_sequence",0))
 			var key := "%d:%d:%d" % [victim,connection,sequence]
-			if _seen_damage_events.has(key):
+			if not _remember_visual_event("damage",key):
 				continue
-			_seen_damage_events[key] = true
 			if not _actors.has(victim):
 				continue
 			var actor: Dictionary = _actors[victim]
@@ -368,8 +387,7 @@ func apply_snapshot(snapshot: Dictionary, now_usec: int) -> void:
 			var victim_connection:=int(event.get("victim_connection_epoch",0))
 			var damage_sequence:=int(event.get("damage_sequence",0))
 			var attack_key:="pvp:%d:%d:%d" % [attacker,attacker_connection,attack_sequence]
-			if not _seen_attack_events.has(attack_key):
-				_seen_attack_events[attack_key]=true
+			if _remember_visual_event("attack",attack_key):
 				if _actors.has(attacker) and _actors[attacker].profile.attack_available and \
 						not bool(_actors[attacker].get("dead_visual",false)):
 					var attacker_actor:Dictionary=_actors[attacker]
@@ -381,8 +399,7 @@ func apply_snapshot(snapshot: Dictionary, now_usec: int) -> void:
 						attacker_actor.started=now_usec
 						_actors[attacker]=attacker_actor
 			var damage_key:="pvp:%d:%d:%d" % [victim,victim_connection,damage_sequence]
-			if not _seen_damage_events.has(damage_key):
-				_seen_damage_events[damage_key]=true
+			if _remember_visual_event("damage",damage_key):
 				if _actors.has(victim):
 					var victim_actor:Dictionary=_actors[victim]
 					var current_connection:=int(victim_actor.value.connection_epoch)
@@ -412,8 +429,7 @@ func apply_snapshot(snapshot: Dictionary, now_usec: int) -> void:
 			var vc:=int(event.get("victim_connection_epoch",0))
 			var damage_sequence:=int(event.get("damage_sequence",0))
 			var attack_key:="pvpskill:%d:%d:%d" % [attacker,ac,skill_sequence]
-			if not _seen_attack_events.has(attack_key):
-				_seen_attack_events[attack_key]=true
+			if _remember_visual_event("attack",attack_key):
 				if _actors.has(attacker) and _actors[attacker].profile.attack_available and \
 						not bool(_actors[attacker].get("dead_visual",false)):
 					var actor:Dictionary=_actors[attacker]
@@ -425,8 +441,7 @@ func apply_snapshot(snapshot: Dictionary, now_usec: int) -> void:
 						actor.started=now_usec
 						_actors[attacker]=actor
 			var damage_key:="pvpskill:%d:%d:%d" % [victim,vc,damage_sequence]
-			if not _seen_damage_events.has(damage_key):
-				_seen_damage_events[damage_key]=true
+			if _remember_visual_event("damage",damage_key):
 				if _actors.has(victim):
 					var actor:Dictionary=_actors[victim]
 					var current_connection:=int(actor.value.connection_epoch)
@@ -453,9 +468,8 @@ func apply_snapshot(snapshot: Dictionary, now_usec: int) -> void:
 			var connection := int(event.get("connection_epoch",0))
 			var sequence := int(event.get("respawn_sequence",0))
 			var key := "%d:%d:%d" % [revived,connection,sequence]
-			if _seen_respawn_events.has(key):
+			if not _remember_visual_event("respawn",key):
 				continue
-			_seen_respawn_events[key] = true
 			if not _actors.has(revived):
 				continue
 			var actor: Dictionary = _actors[revived]
