@@ -9,6 +9,14 @@ extends CanvasLayer
 const UiTextureLoader = preload("res://ui/ui_texture_loader.gd")
 const RECOVERED_ROOT := "res://ui/private_recovered2/cursor"
 const FALLBACK_ROOT := "res://ui/cursors"
+# Local HK C_ITEM.spr frames are kept outside Git in the existing private UI pack.
+const HK_ITEM_CURSOR_ROOT := "res://ui/private_ie_hk2/cursor"
+const HK_ITEM_FRAME_COUNT := 6
+const HK_ITEM_ORIGIN := Vector2(-1, -1)
+const HK_ITEM_FRAME_DIMS := [
+	Vector2i(33, 34), Vector2i(32, 33), Vector2i(32, 32),
+	Vector2i(32, 32), Vector2i(32, 33), Vector2i(34, 34),
+]
 const ANIMATION_SPECS := {
 	"normal": {"prefix":"C_NORMAL.spr.", "count":10, "fps":8.0},
 	"attack": {"prefix":"C_ATTACK.spr.", "count":6, "fps":8.0},
@@ -117,6 +125,23 @@ func _build_recovered_frames() -> SpriteFrames:
 			Vector2(AUTORUN_FRAME_SIZE))
 		frames.add_frame("autorun",frame_texture)
 		_loaded["autorun/%d" % frame_index] = frame_texture
+	# Old Paradise.exe.lst explicitly references C_ITEM.SPR. Only expose the
+	# original six HK frames when the complete, source-backed private pack exists;
+	# an incomplete local extraction must not replace normal/attack/take cursors.
+	var hk_item_frames: Array[Texture2D] = []
+	for frame_index in HK_ITEM_FRAME_COUNT:
+		var path := "%s/C_ITEM.%04d.png" % [HK_ITEM_CURSOR_ROOT, frame_index]
+		var texture := UiTextureLoader.get_texture(path)
+		if texture == null or texture.get_size() != Vector2(HK_ITEM_FRAME_DIMS[frame_index]):
+			hk_item_frames.clear()
+			break
+		hk_item_frames.append(texture)
+	if hk_item_frames.size() == HK_ITEM_FRAME_COUNT:
+		frames.add_animation("item")
+		frames.set_animation_loop("item", true)
+		frames.set_animation_speed("item", 8.0)
+		for texture in hk_item_frames:
+			frames.add_frame("item", texture)
 	return frames
 
 func _install_native_popup_fallback(normal_texture: Texture2D) -> void:
@@ -174,7 +199,7 @@ func _on_node_added(node: Node) -> void:
 		node.popup_hide.connect(_on_popup_closed)
 
 func set_mode(value: String) -> void:
-	if value not in ["normal","attack","inspect","pickup","move","wait","forbidden","player","skill"]:
+	if value not in ["normal","attack","inspect","pickup","move","wait","forbidden","player","skill","item"]:
 		value = "normal"
 	_mode = value
 	_apply_mode()
@@ -193,6 +218,8 @@ func _animation_for_mode() -> String:
 			return "player"
 		"skill":
 			return "skill"
+		"item":
+			return "item"
 		_:
 			return "normal"
 
@@ -202,7 +229,7 @@ func _native_shape_for_mode() -> int:
 	match _mode:
 		"attack": return Input.CURSOR_CROSS
 		"inspect": return Input.CURSOR_HELP
-		"pickup": return Input.CURSOR_POINTING_HAND
+		"pickup", "item": return Input.CURSOR_POINTING_HAND
 		"move": return Input.CURSOR_MOVE
 		"wait": return Input.CURSOR_WAIT
 		"forbidden": return Input.CURSOR_FORBIDDEN
@@ -222,6 +249,9 @@ func _apply_mode() -> void:
 	var animation_name := _animation_for_mode()
 	if not _cursor_visual.sprite_frames.has_animation(animation_name):
 		animation_name = "normal"
+	# C_ITEM frame metadata from HK Data1_PNG/Interface/Cursor declares
+	# (-1,-1) for every frame, relative to the click hotspot.
+	_cursor_visual.offset = HK_ITEM_ORIGIN if animation_name == "item" else Vector2.ZERO
 	if _cursor_visual.animation != animation_name or not _cursor_visual.is_playing():
 		_cursor_visual.play(animation_name)
 

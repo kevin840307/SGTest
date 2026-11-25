@@ -39,6 +39,7 @@ func _run() -> void:
 			"forbidden":Input.CURSOR_FORBIDDEN,
 			"player":Input.CURSOR_ARROW,
 			"skill":Input.CURSOR_ARROW,
+			"item":Input.CURSOR_POINTING_HAND,
 		}
 		for mode in shapes:
 			cursor.set_mode(mode)
@@ -78,6 +79,29 @@ func _run() -> void:
 		if frames.get_frame_count(animation_name) != int(expected_counts[animation_name]):
 			_fail(cursor,"Recovered cursor frame mismatch: "+animation_name)
 			return
+	# HK C_ITEM has six source-backed frames with (-1,-1) hotspot. A partial
+	# private extraction cannot replace normal/attack/pick cursor rendering.
+	var has_hk_item := FileAccess.file_exists("res://ui/private_ie_hk2/cursor/C_ITEM.0000.png")
+	if has_hk_item:
+		if not frames.has_animation("item") or frames.get_frame_count("item") != 6:
+			_fail(cursor, "HK C_ITEM source frames not loaded as complete six-frame animation")
+			return
+		cursor.set_mode("item")
+		if cursor._cursor_visual.animation != "item" or cursor._cursor_visual.offset != Vector2(-1, -1):
+			_fail(cursor, "HK C_ITEM hotspot/animation parity")
+			return
+	else:
+		if frames.has_animation("item"):
+			_fail(cursor, "item animation fabricated without HK source")
+			return
+		cursor.set_mode("item")
+		if cursor._cursor_visual.animation != "normal" or cursor._cursor_visual.offset != Vector2.ZERO:
+			_fail(cursor, "missing HK C_ITEM failed to restore exact normal fallback")
+			return
+	cursor.set_mode("normal")
+	if cursor._cursor_visual.offset != Vector2.ZERO:
+		_fail(cursor, "HK C_ITEM offset leaked into normal cursor")
+		return
 	cursor.set_mode("attack")
 	if cursor._mode != "attack" or cursor._cursor_visual.animation != "attack":
 		_fail(cursor,"monster hover did not select C_ATTACK")
@@ -111,5 +135,5 @@ func _run() -> void:
 	cursor.restore_pointer()
 	cursor.queue_free()
 	await process_frame
-	print("SHARED_GAME_CURSOR_PASS recovered_exact=true normal=10 attack=6 check=6 take=5 player=6 skill=6 autorun=10")
+	print("SHARED_GAME_CURSOR_PASS recovered_exact=true normal=10 attack=6 check=6 take=5 player=6 skill=6 autorun=10 hk_item_6_frames=%s item_hotspot_verified=%s" % [str(has_hk_item), str(has_hk_item)])
 	quit(0)
