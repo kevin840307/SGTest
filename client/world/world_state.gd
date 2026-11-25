@@ -561,7 +561,7 @@ func mark_skill_sent(sequence: int,target_kind: int = 0,target_id: int = 0) -> b
 	return true
 
 func mark_recovery_use_sent(sequence: int,item_uid: int) -> bool:
-	if state != STATE_IN_WORLD or player_dead or not combat_available or not inventory_ready or not world_ready or resync_pending or waiting_for_new_map or pending_world_ready_ack_epoch != 0 or last_world_ready_ack_epoch != map_epoch or pending_recovery_sequence != 0 or pending_discard_sequence != 0 or pending_shop_sequence != 0 or pending_storage_sequence != 0 or pending_equipment_sequence != 0 or pending_bank_sequence != 0 or pending_repair_sequence != 0 or pending_enhancement_sequence != 0 or trade_id != 0 or sequence <= recovery_sequence or sequence > 0xffffffff or item_uid <= 0 or not inventory_items.has(item_uid):
+	if state != STATE_IN_WORLD or player_dead or not combat_available or not inventory_ready or not world_ready or resync_pending or waiting_for_new_map or pending_world_ready_ack_epoch != 0 or last_world_ready_ack_epoch != map_epoch or pending_recovery_sequence != 0 or pending_discard_sequence != 0 or pending_shop_sequence != 0 or pending_storage_sequence != 0 or pending_equipment_sequence != 0 or pending_bank_sequence != 0 or pending_repair_sequence != 0 or pending_enhancement_sequence != 0 or trade_id != 0 or sequence <= recovery_sequence or sequence > 0xffffffff or item_uid <= 0 or not inventory_items.has(item_uid) or int((inventory_items[item_uid] as Dictionary).get("quantity",0)) <= 0:
 		return false
 	recovery_sequence = sequence
 	pending_recovery_sequence = sequence

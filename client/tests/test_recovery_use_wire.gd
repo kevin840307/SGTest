@@ -1,6 +1,23 @@
 extends SceneTree
 const Wire = preload("res://network/wire_codec.gd")
 const World = preload("res://world/world_state.gd")
+const Session = preload("res://session/client_session.gd")
+const InventoryPanel = preload("res://inventory/inventory_panel.gd")
+
+class RecoverySink:
+	extends RefCounted
+	var calls := 0
+	func use_recovery_item(_uid: int) -> bool:
+		calls += 1
+		return true
+
+class CatalogStub:
+	extends RefCounted
+	func name_for(item_id: int) -> String:
+		return "Item %d" % item_id
+	func category_for(_item_id: int) -> String:
+		return "recovery"
+
 const AUTH := "0900000001000B0000"
 const LIST := "1800000001000C00010B000000000000000004004865726F"
 const CHOOSE := "2D00000001000E00000B000000000000000F000000000000000000204000000000000020400100000000000000"
@@ -54,6 +71,64 @@ func _initialize() -> void:
 	if world == null or not world.snapshot().inventory_ready or int(world.snapshot().player_current_hp) != 60:
 		fail("fixture did not load authenticated inventory and HP")
 		return
+	# GP-025-02: even if a stale/invalid local inventory view still contains
+	# the UID, an empty stack must not reserve a sequence or claim an item use.
+	var stack: Dictionary = world.inventory_items[7001]
+	var original_quantity := int(stack.quantity)
+	stack.quantity = 0
+	world.inventory_items[7001] = stack
+	if world.mark_recovery_use_sent(1,7001) or int(world.recovery_sequence) != 0 or \
+		int(world.snapshot().player_current_hp) != 60:
+		fail("zero-quantity recovery stack reserved a use action")
+		return
+	stack.quantity = original_quantity
+	world.inventory_items[7001] = stack
+	# The real ClientSession input gate must also reject the same invalid
+	# published stack *before* it can append an intent to the queue.
+	var session = Session.new()
+	session._running = true # No network thread; diagnostic of the queue gate only.
+	session._published = world.snapshot().duplicate(true)
+	var published_items: Dictionary = session._published.inventory_items
+	var published_item: Dictionary = published_items[7001]
+	published_item.quantity = 0
+	published_items[7001] = published_item
+	session._published.inventory_items = published_items
+	if session.use_recovery_item(7001) or not session._intents.is_empty():
+		fail("ClientSession queued a recovery intent for an empty stack")
+		return
+	published_item.quantity = original_quantity
+	published_items[7001] = published_item
+	session._published.inventory_items = published_items
+	if not session.use_recovery_item(7001) or session._intents.size() != 1 or \
+		int(session._intents[0].item_uid) != 7001:
+		fail("ClientSession rejected a valid owned recovery stack")
+		return
+	session._running = false
+	session._intents.clear()
+	# The on-screen inventory action must not call the session with a
+	# previously selected but now exhausted UID. A live stack remains usable.
+	var panel = InventoryPanel.new()
+	root.add_child(panel)
+	var sink := RecoverySink.new()
+	var panel_snapshot: Dictionary = world.snapshot().duplicate(true)
+	var panel_items: Dictionary = panel_snapshot.inventory_items
+	var panel_item: Dictionary = panel_items[7001]
+	panel_item.quantity = 0
+	panel_items[7001] = panel_item
+	panel_snapshot.inventory_items = panel_items
+	panel.apply_snapshot(panel_snapshot,true,true,sink,CatalogStub.new())
+	if panel.submit_recovery_use(7001) or sink.calls != 0:
+		fail("inventory UI sent an empty-stack recovery request")
+		return
+	panel_item.quantity = original_quantity
+	panel_items[7001] = panel_item
+	panel_snapshot.inventory_items = panel_items
+	panel_snapshot.inventory_revision = int(panel_snapshot.get("inventory_revision",0))+1
+	panel.apply_snapshot(panel_snapshot,true,true,sink,CatalogStub.new())
+	if not panel.submit_recovery_use(7001) or sink.calls != 1:
+		fail("inventory UI blocked an available recovery stack")
+		return
+	panel.queue_free()
 	if not world.mark_recovery_use_sent(1,7001) or world.mark_recovery_use_sent(2,7001):
 		fail("one outstanding item action requirement failed")
 		return
@@ -97,5 +172,5 @@ func _initialize() -> void:
 	if world.apply_frame(bad) or int(world.state) != World.STATE_FAILED:
 		fail("server recovery response for wrong ItemUID accepted")
 		return
-	print("RECOVERY_USE_WIRE_PASS golden=28/45 auth=PASS once=PASS quantity=PASS hp=PASS map_epoch=PASS spoof=FAIL_CLOSED")
+	print("RECOVERY_USE_WIRE_PASS golden=28/45 auth=PASS once=PASS quantity=PASS hp=PASS map_epoch=PASS spoof=FAIL_CLOSED empty_stack=FAIL_CLOSED session_and_ui=PASS")
 	quit(0)

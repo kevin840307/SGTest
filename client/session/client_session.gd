@@ -155,7 +155,7 @@ func stop_movement() -> bool:
 
 func use_recovery_item(item_uid: int) -> bool:
 	var current := snapshot()
-	if item_uid <= 0 or not bool(current.get("inventory_ready",false)) or not bool(current.get("combat_available",false)) or bool(current.get("player_dead",false)) or int(current.get("pending_recovery_sequence",0)) != 0 or int(current.get("pending_discard_sequence",0)) != 0 or not (current.get("inventory_items",{}) as Dictionary).has(item_uid):
+	if item_uid <= 0 or not bool(current.get("inventory_ready",false)) or not bool(current.get("combat_available",false)) or bool(current.get("player_dead",false)) or int(current.get("pending_recovery_sequence",0)) != 0 or int(current.get("pending_discard_sequence",0)) != 0 or not (current.get("inventory_items",{}) as Dictionary).has(item_uid) or int(((current.get("inventory_items",{}) as Dictionary)[item_uid] as Dictionary).get("quantity",0)) <= 0:
 		return false
 	return _queue_intent({"type":"use_recovery_item","item_uid":item_uid})
 
