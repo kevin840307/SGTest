@@ -53,11 +53,16 @@
 
 ## 4. Git / Session / 資源安全（不可降低）
 
-唯一正式路徑 C:\SGO\SRC\SGTest，遠端 https://github.com/kevin840307/SGTest，branch main。開始前快速確認狀態；有真正差異才深入其他 worktree/commit graph/diff。已知、有效且安全的其他成果依歷史 fast-forward/merge/cherry-pick；dirty、來源不明或仍使用中 WIP 保護，不覆寫、不提交為自己成果、不刪除。衝突影響本輪就避開或安全整合，不能自作主張破壞。
+唯一正式路徑 C:\SGO\SRC\SGTest，遠端 https://github.com/kevin840307/SGTest，branch main。開始前快速確認狀態；有真正差異才深入其他 worktree/commit graph/diff。已知、有效且安全的其他成果依歷史 fast-forward/merge/cherry-pick；來源不明或仍使用中 WIP 保護，不覆寫、不刪除；已停止的 SGTest WIP 依下列授權接續及安全整合，不冒認作者。衝突影響本輪就避開或安全整合，不能自作主張破壞。
 
 禁止 reset --hard、clean -fd、force push、覆寫未知 WIP、另建長期 branch 或第二份正式 clone/worktree；測試使用普通 temp、獨立 DB/port/build output。保護其他 Session 程序及使用中的資料；高風險/不可逆另需授權。原圖、SPR/Data1、解包輸出、原版字型/光柵、截圖、反編譯全文、音效、帳密皆不提交 public Git；可提交解析程式、非私有 metadata 與證據摘要。private evidence 放 git-ignored 本機路徑（例如 .cache/ui-parity/），不無故清除仍可重用的證據。
 
-交付前 diff review，僅 commit 本輪及明確安全整合成果，fetch、非 force push main；確認 branch main、HEAD=origin/main、git rev-list --left-right --count main...origin/main 為 0 0；依下列授權清理本輪及已確認的舊輪次測試資源。工作樹有受保護 WIP 可保留並回報。
+交付前 diff review，僅 commit 本輪及明確安全整合成果，fetch、非 force push main；確認 branch main、HEAD=origin/main、git rev-list --left-right --count main...origin/main 為 0 0；依下列授權清理本輪及已確認的舊輪次測試資源。既有 WIP 依下列規則收斂；僅具體阻塞或活躍部分可保留並回報。
+
+### WIP 接續與收斂 main（使用者已授權）
+- 開局必查 git status/diff、未追蹤檔、相關 Task ID、歷史 commit/交接、檔案及 Session 活動；不可把全部 dirty/untracked 一律永久標受保護 WIP。若為上一輪或已結束 Session 的 SGTest 成果，確認無活躍編輯/測試衝突後優先接續；使用者指定既有 WIP 收斂優先於新增非 P0 任務。
+- 依功能與相依拆成可驗收切片（如 HUD/技能/素材、NPC/背包/交易、對應測試），審查完整 diff 與新增檔；保留原成果，補缺、修衝突、跑適用測試/實機 Gate。必要時先做本機私有備份（含 untracked，不公開私有素材/憑證）；不得 reset/clean/stash 覆蓋或盲目 git add -A。確認安全且通過適用驗收的切片，以明確檔案或 hunk commit 到 main、push、fetch 驗 0/0；如僅部分驗收，按真實 Gate 保守標記，安全可提交的程式仍可階段性交付，不宣稱 COMPLETE。
+- 每輪至少處理一個可安全接續的既有 WIP 切片，直至收斂；只在確實活躍、來源/用途不明、依賴未解或驗收失敗時保留對應檔案，逐組記錄具體原因、下一動作。不能只回報「受保護 WIP」就結束或反覆避開。不得把未審核程式、生成物、私有資產、帳密或測試 DB 提交；其他 Session 正在修改的部分不搶占，先處理獨立切片。
 
 ### 每輪測試資源清理（使用者已授權）
 - 開局必查上一輪/更舊 SGTest 測試 EXE、Godot 測試視窗、dotnet Host、Bot/Probe、PID/啟動時間/命令列/專案路徑/port/連線與 Session 使用狀態。確認是已結束輪次的閒置測試程序後，直接正常關閉；必要時僅停止已核對 PID 與身分的程序，確認視窗及 port 釋放，不把歷史殘留當作實機 blocker。使用中或身分不明者保護，不能只憑名稱或時間殺程序。
