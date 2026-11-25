@@ -450,7 +450,7 @@ func _build_hud()->void:
 	for i in 12:
 		var hotkey_label:=_itf_text(hotkey_panel,"Hotkey%d"%i,hotkey_rects[i],9,false)
 		hotkey_label.text="F%d"%(i+1)
-	_texture_button(hotkey_panel,"HotkeySizeToggle","HOTKEY_YS_B",Vector2(3,342),Vector2(24,13),func():pass,"切換快捷列大小")
+	_texture_button(hotkey_panel,"HotkeySizeToggle","HOTKEY_YS_B",Vector2(3,342),Vector2(24,13),_toggle_hotkey_size,"切換快捷列大小")
 
 	# 021_COMMAND.itf: the right-side command strip is fixed/clickable, not draggable.
 	# Local control rects come from the decoded HK ITF; in particular the bag is
@@ -560,6 +560,33 @@ func _build_hud()->void:
 	_texture_button(menu,"Menu2","B_BASIC_ITEM",Vector2(58,2),Vector2(24,23),_menu_action.bind(2),"包包")
 	_texture_button(menu,"Menu3","B_BASIC_PSHOP",Vector2(88,4),Vector2(24,23),_menu_action.bind(3),"小商店")
 	_texture_button(menu,"Menu4","B_BASIC_SYSTEM",Vector2(117,2),Vector2(24,23),_menu_action.bind(4),"系統")
+
+# The two HK ITFs are distinct complete layouts, not a scaled copy of the
+# long rail. Switch the original background, control rects and collapse icon
+# together; the six hidden keys cannot receive input in compact mode.
+func _toggle_hotkey_size()->void:
+	var compact:=hotkey_panel.size.y>196.0
+	hotkey_panel.size=Vector2(30,196 if compact else 358)
+	var art:=hotkey_panel.get_node("HotkeyArt") as TextureRect
+	art.texture=_tex("HOTKEY_SY" if compact else "HOTKEY_LY")
+	art.size=hotkey_panel.size
+	var toggle:=hotkey_panel.get_node("HotkeySizeToggle") as TextureButton
+	toggle.position=Vector2(3,179 if compact else 342)
+	var toggle_art:="HOTKEY_YL_B" if compact else "HOTKEY_YS_B"
+	toggle.texture_normal=_tex(toggle_art+"_0")
+	toggle.texture_hover=_tex(toggle_art+"_1")
+	toggle.texture_pressed=_tex(toggle_art+"_2")
+	toggle.texture_disabled=_tex(toggle_art+"_3")
+	var long_ys:=[18,47,72,99,126,153,180,207,234,261,288,315]
+	for i in 12:
+		var label:=hotkey_panel.get_node("Hotkey%d"%i) as Control
+		label.visible=not compact or i<6
+		if compact and i<6:
+			label.position=Vector2(10,17+27*i)
+			label.size=Vector2(12,12)
+		elif not compact:
+			label.position=Vector2(4,long_ys[i])
+			label.size=Vector2(18 if i>=9 else 12,12)
 
 func _build_inventory()->void:
 	inventory=_window("InventoryWindow","BG_ITEM",Vector2(259,506),Vector2(531,71))
