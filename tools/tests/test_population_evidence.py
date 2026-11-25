@@ -86,9 +86,12 @@ class PopulationEvidenceTests(unittest.TestCase):
                 result = compile_spawn_evidence(source, server, 13)
                 definition = result['definitions'][0]
                 self.assertEqual(definition['source_behavior_evidence'], {
-                    'attack_length': 150, 'reborn_time_ms': 15000,
+                    'size': 40, 'attack_length': 150, 'visibility_area': 400,
+                    'ai_type_code': 'B', 'ai_attack_level': 0, 'reborn_time_ms': 15000,
                     'source': 'Enemy/Enemy_Data.csv',
-                    'source_columns': {'attack_length': 10, 'reborn_time_ms': 19},
+                    'source_columns': {'size': 9, 'attack_length': 10,
+                                       'visibility_area': 13, 'ai_type_code': 14,
+                                       'ai_attack_level': 15, 'reborn_time_ms': 19},
                 })
                 self.assertFalse(result['runtime_implemented'])
                 self.assertFalse(definition['combat_stats_verified'])
@@ -98,6 +101,17 @@ class PopulationEvidenceTests(unittest.TestCase):
                 path.write_bytes(b'1,1,Enemy One,3,1,,EN010A,0,1,40,150,4,0,400,B,0,2,1,800,-1\n')
                 with self.assertRaisesRegex(ValueError, 'unsafe EnemyId 1 reborn_time_ms'):
                     compile_spawn_evidence(source, server, 13)
+                path.write_bytes(b'1,1,Enemy One,3,1,,EN010A,0,1,40,150,4,0,400,AB,0,2,1,800,15\n')
+                with self.assertRaisesRegex(ValueError, 'invalid EnemyId 1 ai_type_code'):
+                    compile_spawn_evidence(source, server, 13)
+                path.write_bytes(b'1,1,Enemy One,3,1,,EN010A,0,1,40,150,4,0,65536,B,0,2,1,800,15\n')
+                with self.assertRaisesRegex(ValueError, 'unsafe EnemyId 1 visibility_area'):
+                    compile_spawn_evidence(source, server, 13)
+                path.write_bytes(b'1,1,Enemy One,3,1,,EN010A,0,1,40,150,4,0,,B,,2,1,800,15\n')
+                partial = compile_spawn_evidence(source, server, 13)['definitions'][0]['source_behavior_evidence']
+                self.assertNotIn('visibility_area', partial)
+                self.assertNotIn('ai_attack_level', partial)
+                self.assertNotIn('visibility_area', partial['source_columns'])
 
     def test_conflicting_combat_field_is_marked_ambiguous_without_guessing(self):
         with tempfile.TemporaryDirectory() as directory:

@@ -12,6 +12,12 @@ MAX_LEVEL = 255
 MAX_WORD = 0xFFFF
 MAX_DWORD = 0x7FFFFFFF
 
+# Zero-based Enemy_Data columns, shared by the parser and evidence exporter.
+ENEMY_BEHAVIOR_COLUMNS = {
+    'size': 9, 'attack_length': 10, 'visibility_area': 13,
+    'ai_type_code': 14, 'ai_attack_level': 15, 'reborn_time_ms': 19,
+}
+
 
 def _read_bytes(path: Path) -> bytes:
     source = Path(path).resolve()
@@ -117,11 +123,14 @@ def parse_enemy_catalog(text: str) -> dict[int, tuple[int, int]]:
 def parse_enemy_behavior_evidence(text: str, *, required_enemy_ids: set[int]) -> dict[int, dict]:
     """Read only confirmed definition fields, not an executable AI profile.
 
-    LoadNewCSVData 0x100725C0..0x100725DA writes column 10 to WORD
-    property 13 (AttLen). 0x10072722..0x10072748 multiplies column 19
-    by 1000 before writing DWORD property 3 (RebornTime). The property
-    names are confirmed by CDEnemyWORDStr/CDEnemyDWORDStr at 0x100ADF24
-    and 0x100ADF78. Neither field alone proves SGTest runtime scheduling.
+    LoadNewCSVData writes column 9 to WORD[22] (Size, 0x1007259D),
+    10 to WORD[13] (AttLen, 0x100725C0), 13 to WORD[19] (VisArea,
+    0x10072629), the first byte of column 14 to WORD[14] (AIType,
+    0x1007264C..0x1007266F), and 15 to WORD[15] (AIAttLv, 0x10072678).
+    0x10072722..0x10072748 multiplies column 19 by 1000 before writing
+    DWORD[3] (RebornTime). Property names: CDEnemyWORDStr/CDEnemyDWORDStr
+    at 0x100ADF24/0x100ADF78. These are source parameters, not executable
+    SGTest AI rules or a proof of runtime scheduling.
     """
     result: dict[int, dict] = {}
     for row in csv.reader(text.splitlines()):
@@ -134,14 +143,22 @@ def parse_enemy_behavior_evidence(text: str, *, required_enemy_ids: set[int]) ->
         if enemy_id in result:
             raise ValueError(f"duplicate Enemy_Data.csv EnemyId {enemy_id}")
         fields = {}
-        for column, name, maximum, multiplier in (
-            (10, "attack_length", MAX_WORD, 1),
-            (19, "reborn_time_ms", MAX_DWORD // 1000, 1000),
-        ):
-            if len(row) > column and row[column].strip():
-                fields[name] = _parse_int(
-                    row[column], label=f"EnemyId {enemy_id} {name}",
-                    minimum=0, maximum=maximum) * multiplier
+        for name, column in ENEMY_BEHAVIOR_COLUMNS.items():
+            if len(row) <= column or not row[column].strip():
+                continue
+            value = row[column]
+            if name == 'ai_type_code':
+                # The old loader consumes the first byte. Refuse ambiguous
+                # tokens rather than silently truncating or recoding them.
+                if len(value) != 1 or not value.isascii() or not value.isprintable():
+                    raise ValueError(f"invalid EnemyId {enemy_id} {name}")
+                fields[name] = value
+                continue
+            multiplier = 1000 if name == 'reborn_time_ms' else 1
+            maximum = MAX_DWORD // multiplier if multiplier != 1 else MAX_WORD
+            fields[name] = _parse_int(
+                value, label=f"EnemyId {enemy_id} {name}",
+                minimum=0, maximum=maximum) * multiplier
         result[enemy_id] = fields
     if required_enemy_ids.difference(result):
         raise ValueError("missing Enemy_Data.csv behavior evidence definition")

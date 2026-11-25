@@ -7,7 +7,9 @@ from .build_enemy_map_palette import read_enemy_catalog, read_enemy_dat
 from .asset_paths import monster_manifest
 from .build_maps import server_map_directory
 from .animation_definition import compile_definition
-from ..source.old_enemy_rewards import read_old_enemy_combat_catalog
+from ..source.old_enemy_rewards import (
+    ENEMY_BEHAVIOR_COLUMNS, read_old_enemy_combat_catalog,
+)
 
 def compile_spawn_evidence(source: Path, server_dat: Path, map_id: int) -> dict:
     """Original Enemy.dat + ACT evidence, without invented combat stats or live assets.
@@ -90,7 +92,7 @@ def compile_spawn_evidence(source: Path, server_dat: Path, map_id: int) -> dict:
                         'source': 'Enemy/Enemy_Data.csv',
                         'source_columns': {
                             field: column for field, column in
-                            (('attack_length', 10), ('reborn_time_ms', 19))
+                            ENEMY_BEHAVIOR_COLUMNS.items()
                             if field in behavior
                         },
                     }
