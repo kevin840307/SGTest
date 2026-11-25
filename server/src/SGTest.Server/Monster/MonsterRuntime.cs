@@ -64,7 +64,9 @@ public readonly record struct MonsterWorldEvent(
     long Tick,
     MonsterSnapshot Monster,
     long TargetActorId = 0,
-    int Damage = 0);
+    int Damage = 0,
+    int AttackerLevel = 0,
+    int AttackerHit = 0);
 
 public readonly record struct MonsterDamageResult(
     bool Applied,
@@ -347,12 +349,14 @@ public sealed class MonsterRuntime
             _respawns.Enqueue((monster.EntityId, monster.RespawnAtTick),
                 (monster.RespawnAtTick, monster.EntityId));
         }
-        else if (monster.TargetActorId == 0 && monster.Definition.Stats.AiEnabled)
+        else if (monster.TargetActorId == 0 &&
+                 (monster.Definition.Stats.AiEnabled ||
+                  monster.Definition.Stats.RetaliationEnabled))
         {
             monster.TargetActorId = attackerActorId;
             monster.ReturningHome = false;
-            // Damage can acquire aggro immediately, but only a successful
-            // movement step may publish the Chase/run animation.
+            // Source-backed retaliation may remember the attacker immediately,
+            // but only full AI is allowed to invent a movement/chase step.
             monster.State = MonsterAiState.Idle;
         }
         return new(true, killed, applied, monster.Snapshot(MapId));
@@ -397,8 +401,9 @@ public sealed class MonsterRuntime
             monster.LastRespawnTick == tick)
             return;
         var stats = monster.Definition.Stats;
-        if (!stats.AiEnabled)
+        if (!stats.AiEnabled && !stats.RetaliationEnabled)
             return;
+        bool retaliationOnly = stats.RetaliationEnabled && !stats.AiEnabled;
 
         MonsterCombatTarget target = default;
         bool hasTarget = monster.TargetActorId > 0 &&
@@ -411,11 +416,11 @@ public sealed class MonsterRuntime
         {
             double targetDistance = Distance(monster.X, monster.Y, target.X, target.Y);
             if (targetDistance > stats.LoseTargetRadius ||
-                leashDistance > stats.LeashRadius)
+                (stats.AiEnabled && leashDistance > stats.LeashRadius))
             {
                 long old = monster.TargetActorId;
                 monster.TargetActorId = 0;
-                monster.ReturningHome = true;
+                monster.ReturningHome = stats.AiEnabled;
                 monster.State = MonsterAiState.Idle;
                 Bump(monster);
                 events.Add(new(MonsterWorldEventKind.TargetLost, tick,
@@ -427,7 +432,7 @@ public sealed class MonsterRuntime
         {
             long old = monster.TargetActorId;
             monster.TargetActorId = 0;
-            monster.ReturningHome = true;
+            monster.ReturningHome = stats.AiEnabled;
             monster.State = MonsterAiState.Idle;
             Bump(monster);
             events.Add(new(MonsterWorldEventKind.TargetLost, tick,
@@ -439,7 +444,7 @@ public sealed class MonsterRuntime
         // reacquire the monster before it ever got home.
         leashDistance = Distance(
             monster.Spawn.X, monster.Spawn.Y, monster.X, monster.Y);
-        if (!hasTarget && (monster.ReturningHome ||
+        if (stats.AiEnabled && !hasTarget && (monster.ReturningHome ||
                            leashDistance > stats.LeashRadius))
         {
             monster.ReturningHome = true;
@@ -463,7 +468,7 @@ public sealed class MonsterRuntime
             return;
         }
 
-        if (!hasTarget)
+        if (!hasTarget && stats.AiEnabled)
         {
             var acquired = NearestTarget(monster, targets.Values, stats.AggroRadius);
             if (acquired is { } value)
@@ -496,8 +501,16 @@ public sealed class MonsterRuntime
                     Bump(monster);
                     _attacks++;
                     events.Add(new(MonsterWorldEventKind.Attack, tick,
-                        monster.Snapshot(MapId), target.ActorId, stats.AttackDamage));
+                        monster.Snapshot(MapId), target.ActorId, stats.AttackDamage,
+                        stats.TargetCombatVerified ? stats.Level : 0,
+                        stats.TargetCombatVerified ? stats.HitRate : 0));
                 }
+                return;
+            }
+
+            if (retaliationOnly)
+            {
+                SetState(monster, MonsterAiState.Idle, tick, events);
                 return;
             }
 

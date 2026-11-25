@@ -427,11 +427,12 @@ internal static class Program
             string populationPath = Path.Combine(root, "target-combat-population.json");
             File.WriteAllText(populationPath, JsonSerializer.Serialize(new
             {
-                version = 5,
-                kind = "verified_monster_target_runtime",
+                version = 6,
+                kind = "verified_monster_retaliation_runtime",
                 map_id = 15,
                 stats_verified = true,
                 target_combat_ready = true,
+                retaliation_ready = true,
                 ai_ready = false,
                 definitions = new[]
                 {
@@ -444,9 +445,14 @@ internal static class Program
                         {
                             level = 3,
                             max_hp = 100,
+                            attack_damage = 17,
+                            hit_rate = 30,
                             defense_power = 20,
                             magic_defense_power = 15,
                             dodge_rate = 5,
+                            attack_range = 150,
+                            lose_target_radius = 400,
+                            attack_cooldown_ticks = 50,
                             respawn_ticks = 300
                         }
                     }
@@ -477,7 +483,7 @@ internal static class Program
             await store.SetCharacterCombatProfileAsync(characterId,
                 new CharacterCombatProfileData(
                     CombatProfileTrust.SyntheticTest,
-                    "ci:v5-target-combat-aes",
+                    "ci:v6-retaliation-combat-aes",
                     Race: 0, Career: 0, Strength: 5, Dexterity: 5,
                     Constitution: 5, Wisdom: 5, Level: 3,
                     CurrentHp: 100, MaxHp: 100,
@@ -489,7 +495,15 @@ internal static class Program
             var router = new WorldResultRouter(
                 new WorldResultRouterOptions(AttackRequestCapacity: 8));
             var settlement = new PlayerCombatSettlement(
-                store, new(Capacity: 8), router.QueuePlayerDamage);
+                store, new(Capacity: 8), router.QueuePlayerDamage,
+                committedLifecycle: result =>
+                {
+                    if (!router.TryPostPlayerDamageVisual(result))
+                        throw new PlayerCombatSettlementException(
+                            "target combat fixture damage visual queue full");
+                    return Task.CompletedTask;
+                },
+                monsterDamageRoll: _ => 0);
             var pump = new WorldAoiPump(
                 router, monsters: coordinator, playerCombat: settlement);
             var authorization = new IdentitySessionAuthorization(
@@ -521,20 +535,22 @@ internal static class Program
                 var player = await store.GetCharacterCombatProfileAsync(characterId)
                     .ConfigureAwait(false);
                 if (monster.CurrentHp != 60 || monster.MaxHp != 100 ||
-                    player?.Data.CurrentHp != 100 || player.Data.MaxHp != 100 ||
+                    player?.Data.CurrentHp != 92 || player.Data.MaxHp != 100 ||
                     ended.CommandsAccepted < 1 ||
-                    settlement.Statistics.HitsCommitted != 0 ||
-                    settlement.Statistics.DamageCommitted != 0)
+                    settlement.Statistics.HitsCommitted != 1 ||
+                    settlement.Statistics.DamageCommitted != 8)
                     throw new InvalidOperationException(
                         $"target combat E2E mismatch monster={monster.CurrentHp}/{monster.MaxHp} " +
                         $"player={player?.Data.CurrentHp}/{player?.Data.MaxHp} " +
                         $"commands={ended.CommandsAccepted} " +
-                        $"player_hits={settlement.Statistics.HitsCommitted}");
+                        $"player_hits={settlement.Statistics.HitsCommitted} " +
+                        $"player_damage={settlement.Statistics.DamageCommitted}");
 
                 Console.WriteLine(
                     $"TARGET_COMBAT_FIXTURE_PASS aes=true target={monster.EntityId} " +
                     $"monster_hp={monster.CurrentHp}/{monster.MaxHp} damage=40 " +
-                    "v5_target_combat=true experience_manifest=false ai=false " +
+                    $"player_hp={player.Data.CurrentHp}/{player.Data.MaxHp} retaliation_damage=8 " +
+                    "v6_retaliation=true experience_manifest=false ai=false chase=false " +
                     $"commands={ended.CommandsAccepted}");
                 Console.Out.Flush();
                 return 0;

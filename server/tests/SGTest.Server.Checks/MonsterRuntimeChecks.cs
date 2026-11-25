@@ -13,6 +13,8 @@ internal static class MonsterRuntimeChecks
             () => PopulationGate(root));
         Checks.Run("source-backed target-only monsters can be damaged and respawn without invented AI",
             () => TargetOnlyRuntime(root));
+        Checks.Run("source-backed retaliation attacks only the hitter in range without invented chase",
+            () => RetaliationOnlyRuntime(root));
         Checks.Run("monster single-map authority chases around Blocking and attacks on bounded cadence",
             () => ChaseAndAttack(root));
         Checks.Run("monster loses live target when actor transfers to another map",
@@ -108,6 +110,83 @@ internal static class MonsterRuntimeChecks
         Checks.Require(respawn.Count==1&&respawn[0].Kind==MonsterWorldEventKind.Respawn&&
                        respawn[0].Monster.CurrentHp==120,
             "target-only monster did not respawn on source-backed deadline");
+    }
+
+    private static void RetaliationOnlyRuntime(string root)
+    {
+        string dir=Checks.Fixture(root,223,40,12,(_,_)=>0);
+        var grid=BlockingGrid.Load(dir,223);
+        string path=Path.Combine(dir,"population-retaliation.json");
+        File.WriteAllText(path,JsonSerializer.Serialize(new
+        {
+            version=6,kind="verified_monster_retaliation_runtime",map_id=223,
+            stats_verified=true,target_combat_ready=true,retaliation_ready=true,
+            ai_ready=false,
+            definitions=new[]
+            {
+                new
+                {
+                    id=8,sprite="EN008A",atlas="Enemy/EN008A/atlas.json",
+                    stats=new
+                    {
+                        level=3,max_hp=120,attack_damage=17,hit_rate=30,
+                        defense_power=20,magic_defense_power=15,dodge_rate=5,
+                        attack_range=150,lose_target_radius=400,
+                        attack_cooldown_ticks=50,respawn_ticks=450
+                    }
+                }
+            },
+            spawns=new[]{Spawn(0,8,24,24)}
+        }));
+        var population=MonsterPopulationCatalog.LoadVerified(path,223,grid);
+        var stats=population.Definitions[8].Stats;
+        Checks.Require(!stats.AiEnabled&&stats.RetaliationEnabled&&
+                       stats.TargetCombatVerified&&stats.AttackDamage==17&&
+                       stats.HitRate==30&&stats.AttackRange==150&&
+                       stats.LoseTargetRadius==400&&stats.AttackCooldownTicks==50&&
+                       stats.MoveStep==0&&stats.AggroRadius==0&&stats.LeashRadius==0,
+            "retaliation-only source stats were not gated exactly");
+
+        var runtime=new MonsterRuntime(grid,population,
+            new(AiIntervalTicks:1,MaxAiPerStep:8,MaxPathQueriesPerStep:2));
+        var entity=runtime.SnapshotAll().Single();
+        var close=new MonsterCombatTarget(9,223,40,24,100);
+        Checks.Require(runtime.Tick(1,[close]).Count==0&&
+                       runtime.SnapshotAll().Single().TargetActorId==0,
+            "retaliation monster proactively acquired an untouched player");
+
+        var hit=runtime.ApplyTrustedDamage(entity.EntityId,9,10,1);
+        Checks.Require(hit.Applied&&!hit.Killed&&hit.Monster.TargetActorId==9&&
+                       hit.Monster.State==MonsterAiState.Idle,
+            "trusted player hit did not arm retaliation target");
+
+        var before=runtime.SnapshotAll().Single();
+        var farButVisible=close with { X=200 };
+        Checks.Require(runtime.Tick(2,[farButVisible]).Count==0,
+            "retaliation-only monster invented a chase event");
+        var after=runtime.SnapshotAll().Single();
+        Checks.Require(after.X==before.X&&after.Y==before.Y&&
+                       after.State==MonsterAiState.Idle&&after.TargetActorId==9,
+            "retaliation-only monster moved while target was outside AttLen");
+
+        var first=runtime.Tick(3,[close]);
+        Checks.Require(first.Any(e=>e.Kind==MonsterWorldEventKind.Attack&&
+                                    e.TargetActorId==9&&e.Damage==17&&
+                                    e.AttackerLevel==3&&e.AttackerHit==30),
+            "retaliation did not publish source-backed AP/Level/HR attack");
+        Checks.Require(!runtime.Tick(4,[close]).Any(
+                           e=>e.Kind==MonsterWorldEventKind.Attack),
+            "retaliation ignored source-backed AttackIdle cooldown");
+        Checks.Require(runtime.Tick(53,[close]).Any(
+                           e=>e.Kind==MonsterWorldEventKind.Attack),
+            "retaliation did not attack again after AttackIdle cooldown");
+
+        var lost=runtime.Tick(54,[close with { X=500 }]);
+        var final=runtime.SnapshotAll().Single();
+        Checks.Require(lost.Any(e=>e.Kind==MonsterWorldEventKind.TargetLost)&&
+                       final.TargetActorId==0&&final.X==24&&final.Y==24&&
+                       final.State==MonsterAiState.Idle,
+            "retaliation target did not clear at source-backed VisArea without chase");
     }
 
     private static void ChaseAndAttack(string root)

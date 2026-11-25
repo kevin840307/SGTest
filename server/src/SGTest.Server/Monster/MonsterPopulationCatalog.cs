@@ -21,7 +21,9 @@ public sealed record MonsterCombatStats(
     int DefensePower = 0,
     int MagicDefensePower = 0,
     int DodgeRate = 0,
-    bool TargetCombatVerified = false);
+    bool TargetCombatVerified = false,
+    bool RetaliationEnabled = false,
+    int HitRate = 0);
 
 public sealed record MonsterDefinition(
     int Id,
@@ -125,6 +127,17 @@ public static class MonsterPopulationCatalog
                 JsonValueKind.False &&
             string.Equals(ReadString(root, "kind"),
                 "verified_monster_target_runtime", StringComparison.Ordinal);
+        bool retaliationOnly =
+            root.ValueKind == JsonValueKind.Object &&
+            ReadInt(root, "version") == 6 &&
+            ReadInt(root, "map_id") == expectedMapId &&
+            ReadBool(root, "stats_verified") &&
+            ReadBool(root, "target_combat_ready") &&
+            ReadBool(root, "retaliation_ready") &&
+            Require(root, "ai_ready", JsonValueKind.False).ValueKind ==
+                JsonValueKind.False &&
+            string.Equals(ReadString(root, "kind"),
+                "verified_monster_retaliation_runtime", StringComparison.Ordinal);
         bool fullRuntime =
             root.ValueKind == JsonValueKind.Object &&
             ReadInt(root, "version") == 4 &&
@@ -133,9 +146,9 @@ public static class MonsterPopulationCatalog
             ReadBool(root, "gameplay_ready") &&
             string.Equals(ReadString(root, "kind"), "verified_monster_runtime",
                 StringComparison.Ordinal);
-        if (!targetOnly && !fullRuntime)
+        if (!targetOnly && !retaliationOnly && !fullRuntime)
             throw new InvalidDataException(
-                "Monster population is neither verified full AI nor verified target-combat content");
+                "Monster population is neither verified full AI, retaliation, nor target-combat content");
 
         var definitionsElement = Require(root, "definitions", JsonValueKind.Array);
         if (definitionsElement.GetArrayLength() is < 1 or > 4096)
@@ -148,7 +161,9 @@ public static class MonsterPopulationCatalog
                 throw new InvalidDataException("Monster definition must be an object");
             int id = ReadInt(item, "id");
             string sprite = ReadString(item, "sprite").Trim().ToUpperInvariant();
-            string name = targetOnly ? sprite : ReadString(item, "name").Trim();
+            string name = targetOnly || retaliationOnly
+                ? sprite
+                : ReadString(item, "name").Trim();
             string atlas = ReadString(item, "atlas").Trim().Replace('\\', '/');
             if (id <= 0 || id > 10_000_000 || string.IsNullOrWhiteSpace(name) ||
                 name.Length > 128 || !SafeSprite(sprite) || !SafeRelativePath(atlas))
@@ -166,19 +181,37 @@ public static class MonsterPopulationCatalog
                     MagicDefensePower: ReadInt(statsElement, "magic_defense_power"),
                     DodgeRate: ReadInt(statsElement, "dodge_rate"),
                     TargetCombatVerified: true)
-                : new MonsterCombatStats(
-                    ReadInt(statsElement, "level"),
-                    ReadInt(statsElement, "max_hp"),
-                    ReadInt(statsElement, "attack_damage"),
-                    ReadDouble(statsElement, "move_step"),
-                    ReadDouble(statsElement, "aggro_radius"),
-                    ReadDouble(statsElement, "lose_target_radius"),
-                    ReadDouble(statsElement, "leash_radius"),
-                    ReadDouble(statsElement, "attack_range"),
-                    ReadInt(statsElement, "attack_cooldown_ticks"),
-                    ReadInt(statsElement, "respawn_ticks"),
-                    ReadDouble(statsElement, "wander_radius"),
-                    ReadInt(statsElement, "wander_interval_ticks"));
+                : retaliationOnly
+                    ? new MonsterCombatStats(
+                        ReadInt(statsElement, "level"),
+                        ReadInt(statsElement, "max_hp"),
+                        ReadInt(statsElement, "attack_damage"),
+                        0, 0,
+                        ReadDouble(statsElement, "lose_target_radius"),
+                        0,
+                        ReadDouble(statsElement, "attack_range"),
+                        ReadInt(statsElement, "attack_cooldown_ticks"),
+                        ReadInt(statsElement, "respawn_ticks"),
+                        0, 0, AiEnabled: false,
+                        DefensePower: ReadInt(statsElement, "defense_power"),
+                        MagicDefensePower: ReadInt(statsElement, "magic_defense_power"),
+                        DodgeRate: ReadInt(statsElement, "dodge_rate"),
+                        TargetCombatVerified: true,
+                        RetaliationEnabled: true,
+                        HitRate: ReadInt(statsElement, "hit_rate"))
+                    : new MonsterCombatStats(
+                        ReadInt(statsElement, "level"),
+                        ReadInt(statsElement, "max_hp"),
+                        ReadInt(statsElement, "attack_damage"),
+                        ReadDouble(statsElement, "move_step"),
+                        ReadDouble(statsElement, "aggro_radius"),
+                        ReadDouble(statsElement, "lose_target_radius"),
+                        ReadDouble(statsElement, "leash_radius"),
+                        ReadDouble(statsElement, "attack_range"),
+                        ReadInt(statsElement, "attack_cooldown_ticks"),
+                        ReadInt(statsElement, "respawn_ticks"),
+                        ReadDouble(statsElement, "wander_radius"),
+                        ReadInt(statsElement, "wander_interval_ticks"));
             ValidateStats(stats, id);
 
             if (!definitions.TryAdd(id, new(id, name, sprite, atlas, stats)))
@@ -227,11 +260,26 @@ public static class MonsterPopulationCatalog
 
         if (!stats.AiEnabled)
         {
-            if (stats.AttackDamage != 0 || stats.MoveStep != 0 ||
-                stats.AggroRadius != 0 || stats.LoseTargetRadius != 0 ||
-                stats.LeashRadius != 0 || stats.AttackRange != 0 ||
-                stats.AttackCooldownTicks != 0 || stats.WanderRadius != 0 ||
-                stats.WanderIntervalTicks != 0)
+            if (stats.RetaliationEnabled)
+            {
+                if (stats.AttackDamage is < 1 or > 100_000_000 ||
+                    stats.HitRate is < 0 or > ushort.MaxValue ||
+                    !FiniteRange(stats.LoseTargetRadius, 1, 4000) ||
+                    !FiniteRange(stats.AttackRange, 1, 500) ||
+                    stats.AttackRange > stats.LoseTargetRadius ||
+                    stats.AttackCooldownTicks is < 1 or > 3600 ||
+                    stats.MoveStep != 0 || stats.AggroRadius != 0 ||
+                    stats.LeashRadius != 0 || stats.WanderRadius != 0 ||
+                    stats.WanderIntervalTicks != 0)
+                    throw new InvalidDataException(
+                        $"Unsafe source-backed retaliation stats for definition {id}");
+                return;
+            }
+            if (stats.AttackDamage != 0 || stats.HitRate != 0 ||
+                stats.MoveStep != 0 || stats.AggroRadius != 0 ||
+                stats.LoseTargetRadius != 0 || stats.LeashRadius != 0 ||
+                stats.AttackRange != 0 || stats.AttackCooldownTicks != 0 ||
+                stats.WanderRadius != 0 || stats.WanderIntervalTicks != 0)
                 throw new InvalidDataException(
                     $"Target-only monster {id} contains unverified AI values");
             return;

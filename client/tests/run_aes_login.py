@@ -32,7 +32,7 @@ def main() -> int:
     parser.add_argument("--combat", action="store_true",
                         help="run real AES ClientSession normal-attack authority E2E")
     parser.add_argument("--target-combat", action="store_true",
-                        help="run v5 target-combat normal attack without EXP manifest")
+                        help="run v6 source-backed close retaliation without EXP manifest")
     parser.add_argument("--combat-observer", action="store_true",
                         help="run two real AES clients and verify remote player attack visuals")
     parser.add_argument("--skill-aoe", action="store_true",
@@ -1490,9 +1490,10 @@ def run_target_combat(args, repo: Path, fixture: Path, env: dict[str, str]) -> i
             if line.startswith("TARGET_COMBAT_FIXTURE_"):
                 print(line)
         print("GODOT_CSHARP_AES_TARGET_COMBAT_E2E_PASS "
-              "aes_cbc=true v5_target_combat=true experience_manifest=false "
+              "aes_cbc=true v6_retaliation=true experience_manifest=false "
               "trusted_input=true authoritative_damage=40 authoritative_monster_hp=60 "
-              "monster_delta=true own_attack_visual=true ai=false")
+              "retaliation_damage=8 authoritative_player_hp=92 player_damage_visual=true "
+              "monster_delta=true own_attack_visual=true ai=false chase=false")
         return 0
     except Exception as error:
         print("AES_TARGET_COMBAT_RUNNER_FAIL", error, file=sys.stderr)

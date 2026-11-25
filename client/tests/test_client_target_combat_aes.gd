@@ -72,12 +72,22 @@ func _initialize() -> void:
 			and int(v.monsters[target].revision)>=int(result.get("target_revision",0))
 			and int(attack_sequence.get("sequence",0))==1
 			and int(attack_visual.get("target_entity_id",0))==target
+			and int(v.player_damage_sequence)==1
+			and int(v.last_player_damage.get("damage",-1))==8
+			and int(v.player_current_hp)==92
+			and int(v.player_max_hp)==100
+			and not bool(v.player_dead)
+			and v.player_damage_visual_events.size()>=1
+			and int(v.player_damage_visual_events[-1].victim_actor_id)==character_id
+			and int(v.player_damage_visual_events[-1].damage_sequence)==1
+			and int(v.player_damage_visual_events[-1].damage)==8
+			and not bool(v.player_damage_visual_events[-1].died)
 		),7000)
 	if settled.is_empty():
 		_fail("authoritative target combat settlement "+str(session.snapshot()),session)
 		return
 	session.stop()
-	print("CLIENT_TARGET_COMBAT_AES_PASS actor=%d target=%d damage=40 monster_hp=60 own_attack_visual=true monster_delta_authority=true" % [character_id,target])
+	print("CLIENT_TARGET_COMBAT_AES_PASS actor=%d target=%d damage=40 monster_hp=60 retaliation_damage=8 player_hp=92 player_damage_visual=true own_attack_visual=true monster_delta_authority=true" % [character_id,target])
 	quit(0)
 
 func _wait(session, predicate: Callable, timeout_ms: int) -> Dictionary:

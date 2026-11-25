@@ -1,9 +1,9 @@
-"""Build private source-backed targetable monster runtime documents.
+"""Build private source-backed target/retaliation monster runtime documents.
 
-This deliberately does not invent AI movement/attack rules. It publishes only
-identity/visuals/spawns plus Old Server level, HPMAX, DP, MDP, DR and RebornTime,
-allowing players/skills to use source-backed target defense/evasion, damage, kill
-and observe respawn while unverified AI remains disabled.
+This deliberately does not invent chase/wander movement. It publishes audited
+Old Server target stats plus the close-range retaliation subset whose inputs are
+source-backed: AP/HR from EN_Att, AttLen/VisArea/RebornTime from Enemy_Data, and
+AttackIdle=50 frames from Old server enemy.cfg. Full autonomous AI remains off.
 """
 
 from __future__ import annotations
@@ -16,9 +16,11 @@ from pathlib import Path
 from asset_converter.json_files import write_json
 from asset_converter.source.old_enemy_rewards import read_old_enemy_combat_catalog
 
-KIND = "verified_monster_target_runtime"
-VERSION = 5
+KIND = "verified_monster_retaliation_runtime"
+VERSION = 6
 TICK_RATE = 30
+# Old 服務端/enemy.cfg [AttackIdle] Time=50, explicitly documented in frame rate.
+ATTACK_IDLE_TICKS = 50
 
 
 def compile_target_runtime(
@@ -74,13 +76,23 @@ def compile_target_runtime(
         source = combat[enemy_id]
         behavior = source.get("definition_behavior", {})
         reborn_ms = int(behavior.get("reborn_time_ms", 0))
+        attack_range = int(behavior.get("attack_length", 0))
+        visibility_area = int(behavior.get("visibility_area", 0))
         if reborn_ms <= 0:
             raise ValueError(f"EnemyId {enemy_id} has no verified RebornTime")
+        if attack_range <= 0:
+            raise ValueError(f"EnemyId {enemy_id} has no verified AttLen")
+        if visibility_area < attack_range:
+            raise ValueError(f"EnemyId {enemy_id} has invalid verified VisArea")
         level = int(source["enemy_level"])
         max_hp = int(source["max_hp"])
+        attack_power = int(source["attack_power"])
         defense_power = int(source["defense_power"])
+        hit_rate = int(source["hit_rate"])
         magic_defense_power = int(source["magic_defense_power"])
         dodge_rate = int(source["dodge_rate"])
+        if attack_power <= 0:
+            raise ValueError(f"EnemyId {enemy_id} has no verified AP")
         respawn_ticks = math.ceil(reborn_ms * TICK_RATE / 1000)
         base = definitions_by_id[enemy_id]
         definitions.append({
@@ -88,13 +100,21 @@ def compile_target_runtime(
             "stats": {
                 "level": level,
                 "max_hp": max_hp,
+                "attack_damage": attack_power,
+                "hit_rate": hit_rate,
                 "defense_power": defense_power,
                 "magic_defense_power": magic_defense_power,
                 "dodge_rate": dodge_rate,
+                "attack_range": attack_range,
+                "lose_target_radius": visibility_area,
+                "attack_cooldown_ticks": ATTACK_IDLE_TICKS,
                 "respawn_ticks": respawn_ticks,
             },
             "source_evidence": {
                 "attribute_table": int(source["attribute_table"]),
+                "attack_length": attack_range,
+                "visibility_area": visibility_area,
+                "attack_idle_frames": ATTACK_IDLE_TICKS,
                 "reborn_time_ms": reborn_ms,
             },
         })
@@ -127,14 +147,16 @@ def compile_target_runtime(
         "map_id": map_id,
         "stats_verified": True,
         "target_combat_ready": True,
+        "retaliation_ready": True,
         "ai_ready": False,
         "definitions": definitions,
         "spawns": runtime_spawns,
         "audit": {
             "semantics": (
-                "Old Enemy_Data/EN_Att source owns enemy level/HPMAX/DP/MDP/DR; "
-                "Enemy_Data RebornTime is converted ms->30Hz ticks. "
-                "AI attack/movement/range/cadence remain disabled and zero."
+                "Old Enemy_Data/EN_Att source owns level/HPMAX/AP/HR/DP/MDP/DR, "
+                "AttLen/VisArea and RebornTime; Old enemy.cfg owns AttackIdle=50 frames. "
+                "Only retaliatory in-range attack is enabled; chase/wander/proactive aggro "
+                "remain disabled until separately proven."
             ),
             "enemy_data_sha256": audit["enemy_data_sha256"],
             "enemy_data_bytes": audit["enemy_data_bytes"],

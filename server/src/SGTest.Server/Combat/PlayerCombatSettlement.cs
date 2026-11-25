@@ -73,6 +73,7 @@ public sealed class PlayerCombatSettlement
     {
         public required long ConnectionEpoch;
         public required long MapEpoch;
+        public required int Level;
         public required int Defense;
         public required int MaxHp;
         public required int CommittedHp;
@@ -102,6 +103,7 @@ public sealed class PlayerCombatSettlement
     private readonly Channel<PlayerDamageSettlement> _results;
     private readonly Func<PlayerDamageSettlement, GatewaySendStatus>? _delivery;
     private readonly Func<PlayerDamageSettlement, Task>? _committedLifecycle;
+    private readonly Func<int,int> _monsterDamageRoll;
     private readonly object _gate = new();
     private readonly Dictionary<long, State> _states = [];
     private Exception? _fault;
@@ -112,11 +114,13 @@ public sealed class PlayerCombatSettlement
         SqliteIdentityStore store,
         PlayerCombatSettlementOptions? options = null,
         Func<PlayerDamageSettlement, GatewaySendStatus>? delivery = null,
-        Func<PlayerDamageSettlement, Task>? committedLifecycle = null)
+        Func<PlayerDamageSettlement, Task>? committedLifecycle = null,
+        Func<int,int>? monsterDamageRoll = null)
     {
         _store = store ?? throw new ArgumentNullException(nameof(store));
         _delivery = delivery;
         _committedLifecycle = committedLifecycle;
+        _monsterDamageRoll = monsterDamageRoll ?? (max => Random.Shared.Next(max));
         var configured = options ?? new();
         if (configured.Capacity is < 1 or > 65536)
             throw new ArgumentOutOfRangeException(nameof(options));
@@ -158,7 +162,8 @@ public sealed class PlayerCombatSettlement
         ValidateActor(actor);
         ArgumentNullException.ThrowIfNull(profile);
         if (profile.CurrentHp < 0 || profile.MaxHp < 1 ||
-            profile.CurrentHp > profile.MaxHp || profile.Defense < 0)
+            profile.CurrentHp > profile.MaxHp || profile.Level is < 1 or > ushort.MaxValue ||
+            profile.Defense is < 0 or > ushort.MaxValue)
             return false;
         lock (_gate)
         {
@@ -168,6 +173,7 @@ public sealed class PlayerCombatSettlement
             {
                 ConnectionEpoch = actor.ConnectionEpoch,
                 MapEpoch = actor.MapEpoch,
+                Level = profile.Level,
                 Defense = profile.Defense,
                 MaxHp = profile.MaxHp,
                 CommittedHp = profile.CurrentHp,
@@ -308,7 +314,11 @@ public sealed class PlayerCombatSettlement
                 state.Suspended || state.Closing || state.ProjectedHp <= 0)
                 return CombatPostStatus.TargetUnavailable;
 
-            int computed = Math.Max(1, attack.Damage - state.Defense / 5);
+            int computed = attack.AttackerLevel > 0
+                ? NormalAttackDamageRules.CalculatePhysicalHit(
+                    attack.Damage, attack.AttackerLevel, state.Defense, state.Level,
+                    _monsterDamageRoll)
+                : Math.Max(1, attack.Damage - state.Defense / 5);
             int applied = Math.Min(computed, state.ProjectedHp);
             if (state.DamageSequence == uint.MaxValue)
                 throw new InvalidOperationException("Player damage sequence exhausted");

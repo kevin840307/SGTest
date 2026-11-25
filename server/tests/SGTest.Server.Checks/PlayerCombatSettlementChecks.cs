@@ -19,6 +19,8 @@ internal static class PlayerCombatSettlementChecks
             () => ReliableDelivery(root).GetAwaiter().GetResult());
         Checks.Run("monster hit reservation is nonblocking and emits only after SQLite commit",
             () => CommitBoundary(root).GetAwaiter().GetResult());
+        Checks.Run("source-backed monster retaliation uses Old physical hit reduction before durable HP commit",
+            () => SourceBackedMonsterDamage(root).GetAwaiter().GetResult());
         Checks.Run("projected HP prevents same-tick overkill and death is committed exactly once",
             () => LethalReservation(root).GetAwaiter().GetResult());
         Checks.Run("combat suspend drains before transfer and resumes only on trusted generation",
@@ -168,6 +170,46 @@ internal static class PlayerCombatSettlementChecks
                        settlement.Statistics.HitsCommitted==1 &&
                        settlement.Statistics.DamageCommitted==18,
             "damage was not durable before result completion");
+        stop.Cancel();
+        await worker.WaitAsync(TimeSpan.FromSeconds(2));
+    }
+
+    private static async Task SourceBackedMonsterDamage(string root)
+    {
+        string db=Path.Combine(root,"combat-source-monster-"+Guid.NewGuid().ToString("N")+".db");
+        using var store=new SqliteIdentityStore(db);
+        await store.InitializeAsync();
+        var created=await Create(store,"settle_source","Settle-Source-Password-123!",100,10);
+        var actor=Actor(created.CharacterId,13,1,1);
+        var settlement=new PlayerCombatSettlement(
+            store,new(Capacity:8),monsterDamageRoll:_=>0);
+        Checks.Require(settlement.TryAttach(actor,created.Profile)&&
+                       settlement.TryResume(actor),
+            "source-backed settlement attach/activate");
+
+        var sourceAttack=Attack(actor,12,17,2) with
+        {
+            AttackerLevel=3,
+            AttackerHit=30
+        };
+        Checks.Require(settlement.TryPostMonsterHit(actor,sourceAttack)==
+                       CombatPostStatus.Accepted,
+            "source-backed retaliation enqueue");
+        int expected=NormalAttackDamageRules.CalculatePhysicalHit(
+            17,3,10,1,_=>0);
+        Checks.Require(expected==8&&settlement.CurrentHp(actor)==100-expected,
+            "source-backed retaliation did not reserve Old physical damage");
+
+        using var stop=new CancellationTokenSource();
+        var worker=settlement.RunAsync(stop.Token);
+        using var timeout=new CancellationTokenSource(TimeSpan.FromSeconds(3));
+        var result=await settlement.Results.ReadAsync(timeout.Token);
+        await settlement.SuspendAndDrainAsync(
+            actor.ActorId,actor.ConnectionEpoch,actor.MapEpoch);
+        var persisted=await store.GetCharacterCombatProfileAsync(actor.ActorId);
+        Checks.Require(result.Damage==expected&&result.CurrentHp==100-expected&&
+                       persisted?.Data.CurrentHp==100-expected,
+            "source-backed retaliation was not durably committed with Old damage");
         stop.Cancel();
         await worker.WaitAsync(TimeSpan.FromSeconds(2));
     }
