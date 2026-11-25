@@ -21,6 +21,8 @@ internal static class PlayerCombatSettlementChecks
             () => CommitBoundary(root).GetAwaiter().GetResult());
         Checks.Run("source-backed monster retaliation uses Old physical hit reduction before durable HP commit",
             () => SourceBackedMonsterDamage(root).GetAwaiter().GetResult());
+        Checks.Run("source-backed monster MISS keeps HP durable and does not gap the next damage sequence",
+            () => SourceBackedMonsterMiss(root).GetAwaiter().GetResult());
         Checks.Run("projected HP prevents same-tick overkill and death is committed exactly once",
             () => LethalReservation(root).GetAwaiter().GetResult());
         Checks.Run("combat suspend drains before transfer and resumes only on trusted generation",
@@ -182,7 +184,7 @@ internal static class PlayerCombatSettlementChecks
         var created=await Create(store,"settle_source","Settle-Source-Password-123!",100,10);
         var actor=Actor(created.CharacterId,13,1,1);
         var settlement=new PlayerCombatSettlement(
-            store,new(Capacity:8),monsterDamageRoll:_=>0);
+            store,new(Capacity:8),monsterDamageRoll:_=>0,monsterHitRoll:_=>0);
         Checks.Require(settlement.TryAttach(actor,created.Profile)&&
                        settlement.TryResume(actor),
             "source-backed settlement attach/activate");
@@ -210,6 +212,64 @@ internal static class PlayerCombatSettlementChecks
         Checks.Require(result.Damage==expected&&result.CurrentHp==100-expected&&
                        persisted?.Data.CurrentHp==100-expected,
             "source-backed retaliation was not durably committed with Old damage");
+        stop.Cancel();
+        await worker.WaitAsync(TimeSpan.FromSeconds(2));
+    }
+
+    private static async Task SourceBackedMonsterMiss(string root)
+    {
+        string db=Path.Combine(root,"combat-source-monster-miss-"+Guid.NewGuid().ToString("N")+".db");
+        using var store=new SqliteIdentityStore(db);
+        await store.InitializeAsync();
+        var created=await Create(store,"settle_source_miss",
+            "Settle-Source-Miss-Password-123!",100,10);
+        var actor=Actor(created.CharacterId,13,1,1);
+        int hitRollIndex=0;
+        int[] hitRolls=[99,0];
+        var settlement=new PlayerCombatSettlement(
+            store,new(Capacity:8),monsterDamageRoll:_=>0,
+            monsterHitRoll:_=>hitRolls[Math.Min(hitRollIndex++,hitRolls.Length-1)]);
+        Checks.Require(settlement.TryAttach(actor,created.Profile)&&
+                       settlement.TryResume(actor),
+            "source-backed MISS settlement attach/activate");
+
+        var sourceAttack=Attack(actor,13,17,2) with
+        {
+            AttackerLevel=1,
+            AttackerHit=0
+        };
+        Checks.Require(settlement.TryPostMonsterHit(actor,sourceAttack)==
+                       CombatPostStatus.Accepted &&
+                       settlement.CurrentHp(actor)==100,
+            "MISS changed projected HP");
+        Checks.Require(settlement.TryPostMonsterHit(actor,sourceAttack with
+                       { Monster=sourceAttack.Monster with { EntityRevision=3 } })==
+                       CombatPostStatus.Accepted &&
+                       settlement.CurrentHp(actor)==92,
+            "post-MISS hit did not reserve source-backed damage");
+
+        using var stop=new CancellationTokenSource();
+        var worker=settlement.RunAsync(stop.Token);
+        using var timeout=new CancellationTokenSource(TimeSpan.FromSeconds(3));
+        var miss=await settlement.Results.ReadAsync(timeout.Token);
+        var hit=await settlement.Results.ReadAsync(timeout.Token);
+        await settlement.SuspendAndDrainAsync(
+            actor.ActorId,actor.ConnectionEpoch,actor.MapEpoch);
+        var persisted=await store.GetCharacterCombatProfileAsync(actor.ActorId);
+        Checks.Require(miss.Status==NormalAttackStatus.Miss &&
+                       miss.Damage==0 && miss.DamageSequence==0 &&
+                       miss.VisualSequence==1 && miss.CurrentHp==100 &&
+                       !miss.Died,
+            "source-backed monster MISS result mismatch");
+        Checks.Require(hit.Status==NormalAttackStatus.Applied &&
+                       hit.Damage==8 && hit.DamageSequence==1 &&
+                       hit.VisualSequence==2 && hit.CurrentHp==92 &&
+                       persisted?.Data.CurrentHp==92,
+            "MISS created a durable sequence gap or mutated HP");
+        Checks.Require(settlement.Statistics.HitsAccepted==2 &&
+                       settlement.Statistics.HitsCommitted==1 &&
+                       settlement.Statistics.DamageCommitted==8,
+            "MISS was incorrectly counted as committed damage");
         stop.Cancel();
         await worker.WaitAsync(TimeSpan.FromSeconds(2));
     }

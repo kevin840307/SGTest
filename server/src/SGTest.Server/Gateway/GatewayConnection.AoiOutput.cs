@@ -173,7 +173,7 @@ public sealed partial class GatewayConnection
                         damage.VictimActorId,damage.VictimConnectionEpoch,
                         damage.DamageSequence,damage.AttackerMonsterEntityId,
                         damage.AttackerMonsterRevision,damage.Damage,
-                        damage.Died,damage.Facing));
+                        damage.Died,damage.Facing,damage.Status));
                     break;
                 case AoiEventKind.PlayerRespawnVisual when evt.PlayerRespawn is { } respawn:
                     frame=WireProtocol.EncodePlayerRespawnVisual(new(

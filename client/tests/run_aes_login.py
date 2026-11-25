@@ -33,6 +33,8 @@ def main() -> int:
                         help="run real AES ClientSession normal-attack authority E2E")
     parser.add_argument("--target-combat", action="store_true",
                         help="run v6 source-backed close retaliation without EXP manifest")
+    parser.add_argument("--target-combat-miss", action="store_true",
+                        help="run source-backed retaliation MISS through AES and WorldView")
     parser.add_argument("--combat-observer", action="store_true",
                         help="run two real AES clients and verify remote player attack visuals")
     parser.add_argument("--skill-aoe", action="store_true",
@@ -70,7 +72,7 @@ def main() -> int:
     parser.add_argument("--appearance", action="store_true",
                         help="create with authoritative appearance choices and verify durable relogin")
     args = parser.parse_args()
-    if args.app_ui and (args.multi or args.multi_reconnect or args.crossmap or args.portal or args.reconnect or args.combat or args.target_combat or args.combat_observer or args.skill_aoe or args.skill_aoe_observer or args.discard or args.storage or args.pet or args.mecha or args.equipment or args.bank or args.repair or args.enhancement or args.quest or args.trade or args.player_shop or args.pvp or args.auto_attack or args.register or args.appearance):
+    if args.app_ui and (args.multi or args.multi_reconnect or args.crossmap or args.portal or args.reconnect or args.combat or args.target_combat or args.target_combat_miss or args.combat_observer or args.skill_aoe or args.skill_aoe_observer or args.discard or args.storage or args.pet or args.mecha or args.equipment or args.bank or args.repair or args.enhancement or args.quest or args.trade or args.player_shop or args.pvp or args.auto_attack or args.register or args.appearance):
         parser.error("--app-ui uses the single-client login fixture")
     if args.ui_screenshot and not args.app_ui:
         parser.error("--ui-screenshot requires --app-ui")
@@ -129,6 +131,8 @@ def main() -> int:
         return run_identity_creation(args, repo, fixture, env)
     if args.appearance:
         return run_identity_creation(args, repo, fixture, env, appearance=True)
+    if args.target_combat_miss:
+        return run_target_combat(args, repo, fixture, env, force_miss=True)
     if args.target_combat:
         return run_target_combat(args, repo, fixture, env)
     if args.combat:
@@ -1437,10 +1441,12 @@ def run_skill_aoe(args, repo: Path, fixture: Path, env: dict[str, str]) -> int:
                 server.kill()
 
 
-def run_target_combat(args, repo: Path, fixture: Path, env: dict[str, str]) -> int:
+def run_target_combat(args, repo: Path, fixture: Path, env: dict[str, str],
+                      force_miss: bool = False) -> int:
+    fixture_mode = "--target-combat-miss" if force_miss else "--target-combat"
     server = subprocess.Popen(
         ["dotnet", "run", "--project", str(fixture), "-c", "Release",
-         "--no-build", "--", "--target-combat"],
+         "--no-build", "--", fixture_mode],
         cwd=repo, env=env, text=True, stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT, bufsize=1)
     lines: list[str] = []
@@ -1473,9 +1479,13 @@ def run_target_combat(args, repo: Path, fixture: Path, env: dict[str, str]) -> i
         if match is None:
             raise RuntimeError("malformed target-combat fixture readiness: " + ready)
         port = match.group(1)
+        client_args = [
+            args.godot, "--headless", "--path", str(repo / "client"),
+            "--script", "res://tests/test_client_target_combat_aes.gd", "--", port]
+        if force_miss:
+            client_args.append("miss")
         client = subprocess.run(
-            [args.godot, "--headless", "--path", str(repo / "client"),
-             "--script", "res://tests/test_client_target_combat_aes.gd", "--", port],
+            client_args,
             cwd=repo, env=env, text=True, stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             timeout=max(1.0, deadline - time.monotonic()))
@@ -1489,11 +1499,18 @@ def run_target_combat(args, repo: Path, fixture: Path, env: dict[str, str]) -> i
         for line in lines:
             if line.startswith("TARGET_COMBAT_FIXTURE_"):
                 print(line)
-        print("GODOT_CSHARP_AES_TARGET_COMBAT_E2E_PASS "
-              "aes_cbc=true v6_retaliation=true experience_manifest=false "
-              "trusted_input=true authoritative_damage=40 authoritative_monster_hp=60 "
-              "retaliation_damage=8 authoritative_player_hp=92 player_damage_visual=true "
-              "monster_delta=true own_attack_visual=true ai=false chase=false")
+        if force_miss:
+            print("GODOT_CSHARP_AES_TARGET_COMBAT_MISS_E2E_PASS "
+                  "aes_cbc=true v6_retaliation=true trusted_input=true "
+                  "authoritative_damage=40 authoritative_monster_hp=60 "
+                  "retaliation=MISS authoritative_player_hp=100 durable_hp_unchanged=true "
+                  "player_damage_visual=true world_view_miss=true original_miss_overlay=true")
+        else:
+            print("GODOT_CSHARP_AES_TARGET_COMBAT_E2E_PASS "
+                  "aes_cbc=true v6_retaliation=true experience_manifest=false "
+                  "trusted_input=true authoritative_damage=40 authoritative_monster_hp=60 "
+                  "retaliation_damage=8 authoritative_player_hp=92 player_damage_visual=true "
+                  "monster_delta=true own_attack_visual=true ai=false chase=false")
         return 0
     except Exception as error:
         print("AES_TARGET_COMBAT_RUNNER_FAIL", error, file=sys.stderr)

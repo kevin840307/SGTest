@@ -36,7 +36,7 @@ public static partial class WireProtocol
     public const int SkillUseResultFrameBytes = HeaderBytes + 8 + 4 + 1 + 8 + 4 + 8 + 4 + 4 + 4 + 8;
     public const int PlayerSkillVisualFrameBytes = HeaderBytes + 8 + 8 + 8 + 8 + 4 + 4 + 8 + 1 + 4 + 8 + 1;
     public const int PlayerAttackVisualFrameBytes = HeaderBytes + 8 + 8 + 8 + 8 + 4 + 8 + 1 + 4 + 8 + 1;
-    public const int PlayerDamageVisualFrameBytes = HeaderBytes + 8 + 8 + 8 + 8 + 4 + 8 + 8 + 4 + 1 + 1;
+    public const int PlayerDamageVisualFrameBytes = HeaderBytes + 8 + 8 + 8 + 8 + 4 + 8 + 8 + 4 + 1 + 1 + 1;
     public const int PlayerRespawnVisualFrameBytes = HeaderBytes + 8 + 8 + 8 + 8 + 4 + 1;
     public const int PlayerCombatStateFrameBytes = HeaderBytes + 8 + 4 + 4 + 4 + 4 + 1;
     public const int PlayerProfileStateFrameBytes = HeaderBytes + 8 + 4 + 4 + 4 + 8 + 4*9 + 1;
@@ -503,12 +503,19 @@ public static partial class WireProtocol
         return false;
     }
 
-    private static bool ValidPlayerDamageVisual(PlayerDamageVisualWire value) =>
-        value.ReceiverMapEpoch>0 && value.ServerTick>=0 &&
-        value.VictimActorId>0 && value.VictimConnectionEpoch>0 &&
-        value.DamageSequence!=0 && value.AttackerMonsterEntityId>0 &&
-        value.AttackerMonsterRevision>0 && value.Damage>0 &&
-        value.Facing is >=1 and <=8;
+    private static bool ValidPlayerDamageVisual(PlayerDamageVisualWire value)
+    {
+        if(value.ReceiverMapEpoch<=0 || value.ServerTick<0 ||
+           value.VictimActorId<=0 || value.VictimConnectionEpoch<=0 ||
+           value.DamageSequence==0 || value.AttackerMonsterEntityId<=0 ||
+           value.AttackerMonsterRevision<=0 || value.Facing is <1 or >8)
+            return false;
+        if(value.Status==NormalAttackStatus.Applied)
+            return value.Damage>0;
+        if(value.Status==NormalAttackStatus.Miss)
+            return value.Damage==0 && !value.Died;
+        return false;
+    }
 
     private static bool ValidPlayerRespawnVisual(PlayerRespawnVisualWire value) =>
         value.ReceiverMapEpoch>0 && value.ServerTick>=0 &&

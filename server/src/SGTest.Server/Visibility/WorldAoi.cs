@@ -57,7 +57,7 @@ public readonly record struct PlayerSkillVisual(
 public readonly record struct PlayerDamageVisual(
     long VictimActorId,long VictimConnectionEpoch,uint DamageSequence,
     long AttackerMonsterEntityId,long AttackerMonsterRevision,
-    int Damage,bool Died,byte Facing);
+    int Damage,bool Died,byte Facing,NormalAttackStatus Status);
 public readonly record struct PlayerRespawnVisual(
     long ActorId,long ConnectionEpoch,uint RespawnSequence,byte Facing);
 public readonly record struct PlayerIdentityPresentation(
@@ -826,14 +826,24 @@ public sealed class WorldAoi
 
     public int EnqueuePlayerDamageVisual(PlayerDamageSettlement result)
     {
+        uint visualSequence=result.VisualSequence!=0
+            ? result.VisualSequence
+            : result.DamageSequence;
+        bool applied=result.Status==NormalAttackStatus.Applied;
+        bool missed=result.Status==NormalAttackStatus.Miss;
         if(_lastTick<=0 || result.ActorId<=0 || result.ConnectionEpoch<=0 ||
-            result.MapEpoch<=0 || result.DamageSequence==0 ||
+            result.MapEpoch<=0 || visualSequence==0 ||
             result.ServerTick<0 || result.ServerTick>_lastTick ||
+            result.SourceKind!=PlayerDamageSourceKind.Monster ||
             result.AttackerMonsterEntityId<=0 ||
-            result.AttackerMonsterRevision<=0 || result.Damage<=0 ||
+            result.AttackerMonsterRevision<=0 ||
             result.MaxHp<=0 || result.CurrentHp<0 ||
             result.CurrentHp>result.MaxHp ||
-            result.Died!=(result.CurrentHp==0))
+            (!applied&&!missed) ||
+            (applied&&(result.Damage<=0 ||
+                result.Died!=(result.CurrentHp==0))) ||
+            (missed&&(result.Damage!=0 || result.Died ||
+                result.CurrentHp<=0)))
             throw new InvalidOperationException(
                 "Invalid authoritative player damage visual");
 
@@ -843,9 +853,9 @@ public sealed class WorldAoi
             return 0;
 
         var visual=new PlayerDamageVisual(
-            victim.ActorId,victim.ConnectionEpoch,result.DamageSequence,
+            victim.ActorId,victim.ConnectionEpoch,visualSequence,
             result.AttackerMonsterEntityId,result.AttackerMonsterRevision,
-            result.Damage,result.Died,victim.Facing);
+            result.Damage,result.Died,victim.Facing,result.Status);
         int queued=0;
         foreach(var observer in _observers.Values)
         {

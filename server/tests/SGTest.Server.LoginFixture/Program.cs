@@ -39,6 +39,8 @@ internal static class Program
             return await RunCombatAsync().ConfigureAwait(false);
         if (args is ["--target-combat"])
             return await RunTargetCombatAsync().ConfigureAwait(false);
+        if (args is ["--target-combat-miss"])
+            return await RunTargetCombatAsync(forceMonsterMiss:true).ConfigureAwait(false);
         if (args is ["--combat-observer"])
             return await RunCombatObserverAsync().ConfigureAwait(false);
         if (args is ["--skill-aoe"])
@@ -416,7 +418,7 @@ internal static class Program
     }
 
 
-    private static async Task<int> RunTargetCombatAsync()
+    private static async Task<int> RunTargetCombatAsync(bool forceMonsterMiss=false)
     {
         string root = Path.Combine(Path.GetTempPath(),
             "sgtest_target_combat_" + Guid.NewGuid().ToString("N"));
@@ -503,7 +505,8 @@ internal static class Program
                             "target combat fixture damage visual queue full");
                     return Task.CompletedTask;
                 },
-                monsterDamageRoll: _ => 0);
+                monsterDamageRoll: _ => 0,
+                monsterHitRoll: _ => forceMonsterMiss ? 99 : 0);
             var pump = new WorldAoiPump(
                 router, monsters: coordinator, playerCombat: settlement);
             var authorization = new IdentitySessionAuthorization(
@@ -534,22 +537,28 @@ internal static class Program
                 var monster = runtime.SnapshotAll().Single();
                 var player = await store.GetCharacterCombatProfileAsync(characterId)
                     .ConfigureAwait(false);
+                int expectedPlayerHp=forceMonsterMiss?100:92;
+                long expectedCommittedHits=forceMonsterMiss?0:1;
+                long expectedCommittedDamage=forceMonsterMiss?0:8;
                 if (monster.CurrentHp != 60 || monster.MaxHp != 100 ||
-                    player?.Data.CurrentHp != 92 || player.Data.MaxHp != 100 ||
+                    player?.Data.CurrentHp != expectedPlayerHp || player.Data.MaxHp != 100 ||
                     ended.CommandsAccepted < 1 ||
-                    settlement.Statistics.HitsCommitted != 1 ||
-                    settlement.Statistics.DamageCommitted != 8)
+                    settlement.Statistics.HitsAccepted != 1 ||
+                    settlement.Statistics.HitsCommitted != expectedCommittedHits ||
+                    settlement.Statistics.DamageCommitted != expectedCommittedDamage)
                     throw new InvalidOperationException(
                         $"target combat E2E mismatch monster={monster.CurrentHp}/{monster.MaxHp} " +
                         $"player={player?.Data.CurrentHp}/{player?.Data.MaxHp} " +
                         $"commands={ended.CommandsAccepted} " +
+                        $"player_accepted={settlement.Statistics.HitsAccepted} " +
                         $"player_hits={settlement.Statistics.HitsCommitted} " +
                         $"player_damage={settlement.Statistics.DamageCommitted}");
 
                 Console.WriteLine(
                     $"TARGET_COMBAT_FIXTURE_PASS aes=true target={monster.EntityId} " +
                     $"monster_hp={monster.CurrentHp}/{monster.MaxHp} damage=40 " +
-                    $"player_hp={player.Data.CurrentHp}/{player.Data.MaxHp} retaliation_damage=8 " +
+                    $"player_hp={player.Data.CurrentHp}/{player.Data.MaxHp} " +
+                    $"retaliation={(forceMonsterMiss?"MISS":"8")} " +
                     "v6_retaliation=true experience_manifest=false ai=false chase=false " +
                     $"commands={ended.CommandsAccepted}");
                 Console.Out.Flush();

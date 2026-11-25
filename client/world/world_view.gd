@@ -900,19 +900,20 @@ func _consume_player_damage_visual_events(snapshot: Dictionary,now_usec: int) ->
 		var victim := int(event.get("victim_actor_id",0))
 		var connection := int(event.get("victim_connection_epoch",0))
 		var sequence := int(event.get("damage_sequence",0))
-		var damage := int(event.get("damage",0))
-		if victim <= 0 or connection <= 0 or sequence <= 0 or damage <= 0:
+		var status := int(event.get("status",0))
+		var damage := int(event.get("damage",-1))
+		if victim <= 0 or connection <= 0 or sequence <= 0 or status not in [0,1] \
+				or (status == 0 and damage <= 0) or (status == 1 and damage != 0):
 			continue
-		var key := "hit:%d:%d:%d" % [victim,connection,sequence]
+		var key := "monster_attack:%d:%d:%d" % [victim,connection,sequence]
 		if not _remember_combat_visual(key):
 			continue
-		# Presentation-only: use only the committed damage amount from opcode42.
-		# Do not inspect or infer remote HP; actor position comes from the normal
-		# authoritative player snapshot/interpolation path.
+		# Presentation-only. Applied events show the committed amount; MISS is
+		# authoritative hit-resolution metadata and deliberately carries no HP mutation.
 		var overlay: Dictionary = {
 			"target_actor_id":victim,
-			"text":str(damage),
-			"miss":false,
+			"text":"MISS" if status==1 else str(damage),
+			"miss":status==1,
 			"started_usec":now_usec
 		}
 		var last_point := players.position_at(victim,now_usec)

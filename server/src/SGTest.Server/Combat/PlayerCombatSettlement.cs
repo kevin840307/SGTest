@@ -43,7 +43,9 @@ public readonly record struct PlayerDamageSettlement(
     uint AttackerAttackSequence = 0,bool VictimWasNormalWhite = false,
     byte AttackerFacing = 0,byte VictimFacing = 0,
     int AttackerSkillId = 0,uint AttackerSkillSequence = 0,
-    long AttackerMapEpoch = 0);
+    long AttackerMapEpoch = 0,
+    NormalAttackStatus Status = NormalAttackStatus.Applied,
+    uint VisualSequence = 0);
 
 public sealed record PlayerCombatSettlementOptions(int Capacity = 256);
 
@@ -63,9 +65,10 @@ public sealed class PlayerCombatSettlementException : Exception
 }
 
 /// <summary>
-/// Bounded single-writer durability boundary for Monster→Player damage.
-/// AI/AOI only reserve projected HP and enqueue. SQLite is committed off the
-/// 30Hz World/AOI path; a reliable result exists only after that transaction.
+/// Bounded single-writer authority boundary for Monster→Player combat.
+/// AI/AOI only reserve projected HP and enqueue. Applied damage commits SQLite
+/// off the 30Hz path before delivery; authoritative MISS emits only its reliable
+/// visual result and deliberately performs no HP transaction.
 /// </summary>
 public sealed class PlayerCombatSettlement
 {
@@ -75,10 +78,12 @@ public sealed class PlayerCombatSettlement
         public required long MapEpoch;
         public required int Level;
         public required int Defense;
+        public required int Dodge;
         public required int MaxHp;
         public required int CommittedHp;
         public required int ProjectedHp;
         public uint DamageSequence;
+        public uint CombatVisualSequence;
         public uint LastRespawnSequence;
         public int Pending;
         public bool Suspended;
@@ -96,7 +101,10 @@ public sealed class PlayerCombatSettlement
         byte AttackerFacing = 0,byte VictimFacing = 0,
         int AttackerSkillId = 0,uint AttackerSkillSequence = 0,
         TaskCompletionSource<PlayerDamageSettlement>? Completion = null,
-        long AttackerMapEpoch = 0);
+        long AttackerMapEpoch = 0,
+        NormalAttackStatus Status = NormalAttackStatus.Applied,
+        uint VisualSequence = 0,
+        int ExpectedMaxHp = 0);
 
     private readonly SqliteIdentityStore _store;
     private readonly Channel<QueuedHit> _input;
@@ -104,6 +112,7 @@ public sealed class PlayerCombatSettlement
     private readonly Func<PlayerDamageSettlement, GatewaySendStatus>? _delivery;
     private readonly Func<PlayerDamageSettlement, Task>? _committedLifecycle;
     private readonly Func<int,int> _monsterDamageRoll;
+    private readonly Func<int,int> _monsterHitRoll;
     private readonly object _gate = new();
     private readonly Dictionary<long, State> _states = [];
     private Exception? _fault;
@@ -115,12 +124,14 @@ public sealed class PlayerCombatSettlement
         PlayerCombatSettlementOptions? options = null,
         Func<PlayerDamageSettlement, GatewaySendStatus>? delivery = null,
         Func<PlayerDamageSettlement, Task>? committedLifecycle = null,
-        Func<int,int>? monsterDamageRoll = null)
+        Func<int,int>? monsterDamageRoll = null,
+        Func<int,int>? monsterHitRoll = null)
     {
         _store = store ?? throw new ArgumentNullException(nameof(store));
         _delivery = delivery;
         _committedLifecycle = committedLifecycle;
         _monsterDamageRoll = monsterDamageRoll ?? (max => Random.Shared.Next(max));
+        _monsterHitRoll = monsterHitRoll ?? (max => Random.Shared.Next(max));
         var configured = options ?? new();
         if (configured.Capacity is < 1 or > 65536)
             throw new ArgumentOutOfRangeException(nameof(options));
@@ -163,7 +174,8 @@ public sealed class PlayerCombatSettlement
         ArgumentNullException.ThrowIfNull(profile);
         if (profile.CurrentHp < 0 || profile.MaxHp < 1 ||
             profile.CurrentHp > profile.MaxHp || profile.Level is < 1 or > ushort.MaxValue ||
-            profile.Defense is < 0 or > ushort.MaxValue)
+            profile.Defense is < 0 or > ushort.MaxValue ||
+            profile.Dodge is < 0 or > ushort.MaxValue)
             return false;
         lock (_gate)
         {
@@ -175,6 +187,7 @@ public sealed class PlayerCombatSettlement
                 MapEpoch = actor.MapEpoch,
                 Level = profile.Level,
                 Defense = profile.Defense,
+                Dodge = profile.Dodge,
                 MaxHp = profile.MaxHp,
                 CommittedHp = profile.CurrentHp,
                 ProjectedHp = profile.CurrentHp,
@@ -314,30 +327,56 @@ public sealed class PlayerCombatSettlement
                 state.Suspended || state.Closing || state.ProjectedHp <= 0)
                 return CombatPostStatus.TargetUnavailable;
 
-            int computed = attack.AttackerLevel > 0
-                ? NormalAttackDamageRules.CalculatePhysicalHit(
-                    attack.Damage, attack.AttackerLevel, state.Defense, state.Level,
-                    _monsterDamageRoll)
-                : Math.Max(1, attack.Damage - state.Defense / 5);
-            int applied = Math.Min(computed, state.ProjectedHp);
-            if (state.DamageSequence == uint.MaxValue)
-                throw new InvalidOperationException("Player damage sequence exhausted");
-            uint sequence = state.DamageSequence + 1;
-            int hpAfter = state.ProjectedHp - applied;
+            bool sourceBacked = attack.AttackerLevel > 0;
+            bool hit = !sourceBacked || NormalAttackHitRules.IsHit(
+                attack.AttackerLevel, attack.AttackerHit,
+                state.Level, state.Dodge, _monsterHitRoll(100));
+            var status = hit ? NormalAttackStatus.Applied : NormalAttackStatus.Miss;
+
+            int applied = 0;
+            int hpAfter = state.ProjectedHp;
+            uint damageSequence = 0;
+            if (hit)
+            {
+                int computed = sourceBacked
+                    ? NormalAttackDamageRules.CalculatePhysicalHit(
+                        attack.Damage, attack.AttackerLevel, state.Defense, state.Level,
+                        _monsterDamageRoll)
+                    : Math.Max(1, attack.Damage - state.Defense / 5);
+                applied = Math.Min(computed, state.ProjectedHp);
+                if (state.DamageSequence == uint.MaxValue)
+                    throw new InvalidOperationException("Player damage sequence exhausted");
+                damageSequence = state.DamageSequence + 1;
+                hpAfter -= applied;
+            }
+
+            if (state.CombatVisualSequence == uint.MaxValue)
+                throw new InvalidOperationException("Player combat visual sequence exhausted");
+            uint visualSequence = state.CombatVisualSequence + 1;
             if (state.Pending == 0)
                 state.Drain = new(TaskCreationOptions.RunContinuationsAsynchronously);
-            state.DamageSequence = sequence;
-            state.ProjectedHp = hpAfter;
+            if (hit)
+            {
+                state.DamageSequence = damageSequence;
+                state.ProjectedHp = hpAfter;
+            }
+            state.CombatVisualSequence = visualSequence;
             state.Pending++;
             var queued = new QueuedHit(
                 target.ActorId, target.ConnectionEpoch, target.MapEpoch,
-                sequence, attack.Tick, attack.Monster.EntityId,
-                attack.Monster.EntityRevision, applied, hpAfter);
+                damageSequence, attack.Tick, attack.Monster.EntityId,
+                attack.Monster.EntityRevision, applied, hpAfter,
+                Status: status, VisualSequence: visualSequence,
+                ExpectedMaxHp: state.MaxHp);
             if (!_input.Writer.TryWrite(queued))
             {
                 state.Pending--;
-                state.ProjectedHp += applied;
-                state.DamageSequence--;
+                state.CombatVisualSequence--;
+                if (hit)
+                {
+                    state.ProjectedHp += applied;
+                    state.DamageSequence--;
+                }
                 if (state.Pending == 0)
                 {
                     state.Drain?.TrySetResult(true);
@@ -642,25 +681,44 @@ public sealed class PlayerCombatSettlement
             {
                 try
                 {
-                var committed = await _store.ApplyCharacterDamageSettlementAsync(
-                    hit.ActorId, hit.Damage, cancellationToken).ConfigureAwait(false);
-                if (committed is null ||
-                    committed.DamageApplied != hit.Damage ||
-                    committed.Profile.Data.CurrentHp != hit.ExpectedHpAfter)
-                    throw new PlayerCombatSettlementException(
-                        "SQLite combat HP diverged from reserved authoritative timeline");
+                PlayerDamageSettlement result;
+                if (hit.SourceKind==PlayerDamageSourceKind.Monster &&
+                    hit.Status==NormalAttackStatus.Miss)
+                {
+                    if(hit.Damage!=0 || hit.DamageSequence!=0 ||
+                       hit.VisualSequence==0 || hit.ExpectedMaxHp<=0)
+                        throw new PlayerCombatSettlementException(
+                            "Invalid authoritative monster MISS reservation");
+                    result = new PlayerDamageSettlement(
+                        hit.ActorId,hit.ConnectionEpoch,hit.MapEpoch,
+                        0,hit.ServerTick,
+                        hit.AttackerMonsterEntityId,hit.AttackerMonsterRevision,
+                        0,hit.ExpectedHpAfter,hit.ExpectedMaxHp,false,
+                        hit.SourceKind,Status:NormalAttackStatus.Miss,
+                        VisualSequence:hit.VisualSequence);
+                }
+                else
+                {
+                    var committed = await _store.ApplyCharacterDamageSettlementAsync(
+                        hit.ActorId, hit.Damage, cancellationToken).ConfigureAwait(false);
+                    if (committed is null ||
+                        committed.DamageApplied != hit.Damage ||
+                        committed.Profile.Data.CurrentHp != hit.ExpectedHpAfter)
+                        throw new PlayerCombatSettlementException(
+                            "SQLite combat HP diverged from reserved authoritative timeline");
 
-                var result = new PlayerDamageSettlement(
-                    hit.ActorId, hit.ConnectionEpoch, hit.MapEpoch,
-                    hit.DamageSequence, hit.ServerTick,
-                    hit.AttackerMonsterEntityId, hit.AttackerMonsterRevision,
-                    hit.Damage, committed.Profile.Data.CurrentHp,
-                    committed.Profile.Data.MaxHp, committed.Died,
-                    hit.SourceKind,hit.AttackerActorId,hit.AttackerConnectionEpoch,
-                    hit.AttackerAttackSequence,hit.VictimWasNormalWhite,
-                    hit.AttackerFacing,hit.VictimFacing,
-                    hit.AttackerSkillId,hit.AttackerSkillSequence,
-                    hit.AttackerMapEpoch);
+                    result = new PlayerDamageSettlement(
+                        hit.ActorId, hit.ConnectionEpoch, hit.MapEpoch,
+                        hit.DamageSequence, hit.ServerTick,
+                        hit.AttackerMonsterEntityId, hit.AttackerMonsterRevision,
+                        hit.Damage, committed.Profile.Data.CurrentHp,
+                        committed.Profile.Data.MaxHp, committed.Died,
+                        hit.SourceKind,hit.AttackerActorId,hit.AttackerConnectionEpoch,
+                        hit.AttackerAttackSequence,hit.VictimWasNormalWhite,
+                        hit.AttackerFacing,hit.VictimFacing,
+                        hit.AttackerSkillId,hit.AttackerSkillSequence,
+                        hit.AttackerMapEpoch,hit.Status,hit.VisualSequence);
+                }
 
                 if (_committedLifecycle is not null)
                     await _committedLifecycle(result).ConfigureAwait(false);
@@ -669,9 +727,9 @@ public sealed class PlayerCombatSettlement
                 {
                     if (!_results.Writer.TryWrite(result))
                         throw new PlayerCombatSettlementException(
-                            "Combat result queue full; committed reliable damage cannot be dropped");
+                            "Combat result queue full; authoritative combat event cannot be dropped");
                 }
-                else
+                else if (result.Status==NormalAttackStatus.Applied)
                 {
                     var delivered = _delivery(result);
                     if (delivered != GatewaySendStatus.Enqueued)
@@ -697,7 +755,8 @@ public sealed class PlayerCombatSettlement
                         state.Drain = null;
                     }
                 }
-                Interlocked.Increment(ref _committed);
+                if (result.Status==NormalAttackStatus.Applied)
+                    Interlocked.Increment(ref _committed);
                 Interlocked.Add(ref _damage, result.Damage);
                 if (result.Died) Interlocked.Increment(ref _deaths);
                 hit.Completion?.TrySetResult(result);

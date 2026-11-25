@@ -404,7 +404,7 @@ public readonly record struct PlayerDamageVisualWire(
     long ReceiverMapEpoch,long ServerTick,long VictimActorId,
     long VictimConnectionEpoch,uint DamageSequence,
     long AttackerMonsterEntityId,long AttackerMonsterRevision,
-    int Damage,bool Died,byte Facing);
+    int Damage,bool Died,byte Facing,NormalAttackStatus Status);
 public readonly record struct PlayerRespawnVisualWire(
     long ReceiverMapEpoch,long ServerTick,long ActorId,
     long ConnectionEpoch,uint RespawnSequence,byte Facing);

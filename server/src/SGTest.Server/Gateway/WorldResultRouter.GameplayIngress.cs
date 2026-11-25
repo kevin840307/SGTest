@@ -145,8 +145,16 @@ public sealed partial class WorldResultRouter
 
     public bool TryPostPlayerDamageVisual(PlayerDamageSettlement result)
     {
-        if(result.ActorId<=0 || result.ConnectionEpoch<=0 || result.MapEpoch<=0 ||
-            result.DamageSequence==0 || result.Damage<=0)
+        uint visualSequence=result.VisualSequence!=0
+            ? result.VisualSequence
+            : result.DamageSequence;
+        bool applied=result.Status==NormalAttackStatus.Applied;
+        bool missed=result.Status==NormalAttackStatus.Miss;
+        if(result.SourceKind!=PlayerDamageSourceKind.Monster ||
+           result.ActorId<=0 || result.ConnectionEpoch<=0 || result.MapEpoch<=0 ||
+           visualSequence==0 || (!applied&&!missed) ||
+           (applied&&(result.DamageSequence==0||result.Damage<=0)) ||
+           (missed&&(result.DamageSequence!=0||result.Damage!=0||result.Died)))
             return false;
         return _playerDamageVisuals.Writer.TryWrite(result);
     }

@@ -3,7 +3,7 @@ const WireCodec = preload("res://network/wire_codec.gd")
 const WorldState = preload("res://world/world_state.gd")
 
 const MONSTER_ID := 1001500001
-const DAMAGE_VISUAL_GOLDEN := "4200000001002A0001000000000000003C000000000000000B0000000000000003000000000000000100000061ADB13B000000000700000000000000120000000006"
+const DAMAGE_VISUAL_GOLDEN := "4300000001002A0001000000000000003C000000000000000B0000000000000003000000000000000100000061ADB13B00000000070000000000000012000000000600"
 const RESPAWN_VISUAL_GOLDEN := "2D00000001002B0001000000000000003D000000000000000B0000000000000003000000000000000200000006"
 
 func _fail(message: String) -> void:
@@ -51,7 +51,7 @@ func _initialize() -> void:
 		_fail("damage visual CSharp/Godot golden")
 		return
 	var parsed_visual := WireCodec.decode_player_damage_visual(damage_visual)
-	if parsed_visual.is_empty() or int(parsed_visual.victim_actor_id)!=11 or int(parsed_visual.damage)!=18 or bool(parsed_visual.died):
+	if parsed_visual.is_empty() or int(parsed_visual.victim_actor_id)!=11 or int(parsed_visual.damage)!=18 or bool(parsed_visual.died) or int(parsed_visual.status)!=0:
 		_fail("damage visual codec")
 		return
 	if not world.apply_frame(damage_visual):
@@ -64,7 +64,19 @@ func _initialize() -> void:
 	if not world.apply_frame(damage_visual) or int(world.snapshot().stale_player_damage_visuals)!=1:
 		_fail("damage visual replay not stale")
 		return
+	var miss_visual := _damage_visual(
+		1,61,11,3,2,MONSTER_ID,8,0,false,6,1)
+	var parsed_miss := WireCodec.decode_player_damage_visual(miss_visual)
+	if parsed_miss.is_empty() or int(parsed_miss.status)!=1 or int(parsed_miss.damage)!=0 or bool(parsed_miss.died):
+		_fail("MISS visual codec")
+		return
+	if not world.apply_frame(miss_visual):
+		_fail("MISS visual apply")
+		return
 	snap=world.snapshot()
+	if snap.player_damage_visual_events.size()!=2 or int(snap.player_current_hp)!=82 or int(snap.player_damage_sequence)!=1 or int(snap.player_damage_visual_events[-1].status)!=1:
+		_fail("MISS visual mutated HP authority or sequence")
+		return
 	if int(snap.player_current_hp)!=82 or int(snap.player_damage_sequence)!=1 or bool(snap.player_dead) or int(snap.last_player_damage.damage)!=18:
 		_fail("first damage state")
 		return
@@ -88,12 +100,12 @@ func _initialize() -> void:
 		_fail("lethal damage apply")
 		return
 	var lethal_visual := _damage_visual(
-		1,61,11,3,2,MONSTER_ID,8,82,true,6)
+		1,62,11,3,3,MONSTER_ID,9,82,true,6)
 	if not world.apply_frame(lethal_visual):
 		_fail("lethal damage visual apply")
 		return
 	snap=world.snapshot()
-	if snap.player_damage_visual_events.size()!=2 or not bool(snap.player_damage_visual_events[-1].died):
+	if snap.player_damage_visual_events.size()!=3 or not bool(snap.player_damage_visual_events[-1].died):
 		_fail("lethal presentation event missing")
 		return
 	if int(snap.player_current_hp)!=0 or not bool(snap.player_dead) or int(snap.player_damage_sequence)!=2:
@@ -147,7 +159,7 @@ func _initialize() -> void:
 		_fail("accepted partial-HP respawn decoded")
 		return
 	var malformed_visual := _damage_visual(
-		1,62,11,3,3,MONSTER_ID,9,1,false,6)
+		1,63,11,3,4,MONSTER_ID,10,1,false,6)
 	malformed_visual[64]=2
 	if not WireCodec.decode_player_damage_visual(malformed_visual).is_empty():
 		_fail("invalid damage visual death flag accepted")
@@ -236,7 +248,7 @@ func _initialize() -> void:
 	if mixed_gap.apply_frame(_damage(1,3,51,MONSTER_ID,2,12,60,100,false)) or int(mixed_gap.state)!=WorldState.STATE_FAILED:
 		_fail("monster gap after PvP hit did not fail closed")
 		return
-	print("PLAYER_DAMAGE_GODOT_PASS mixed_sources_single_hp_sequence=PASS PvP_source_transition=PASS baseline_bytes=33 profile_only_vitals_no_combat=true mp_baseline=true mid_session_mp_refresh_preserves_damage_sequence=true damage_bytes=57 damage_visual_bytes=66 respawn_request_bytes=20 respawn_result_bytes=29 respawn_visual_bytes=45 durable_event=true presentation_only=true no_observer_hp_authority=true duplicate_stale=true visual_replay_stale=true sequence_gap_fail_closed=true death_gates_intents=true respawn_reopens_intents=true damage_sequence_continuous=true combat_dead_statuses=true old_map_stale=true")
+	print("PLAYER_DAMAGE_GODOT_PASS mixed_sources_single_hp_sequence=PASS PvP_source_transition=PASS baseline_bytes=33 profile_only_vitals_no_combat=true mp_baseline=true mid_session_mp_refresh_preserves_damage_sequence=true damage_bytes=57 damage_visual_bytes=67 respawn_request_bytes=20 respawn_result_bytes=29 respawn_visual_bytes=45 durable_event=true presentation_only=true no_observer_hp_authority=true duplicate_stale=true visual_replay_stale=true sequence_gap_fail_closed=true death_gates_intents=true respawn_reopens_intents=true damage_sequence_continuous=true combat_dead_statuses=true old_map_stale=true")
 	quit(0)
 
 func _world(epoch: int) -> RefCounted:
@@ -317,10 +329,10 @@ func _respawn_result(epoch: int,sequence: int,status: int,current_hp: int,max_hp
 
 func _damage_visual(receiver_epoch: int,tick: int,victim: int,connection: int,
 		sequence: int,attacker: int,attacker_revision: int,damage: int,
-		died: bool,visual_facing: int) -> PackedByteArray:
+		died: bool,visual_facing: int,status: int=0) -> PackedByteArray:
 	var writer := StreamPeerBuffer.new()
 	writer.big_endian=false
-	writer.put_u32(66)
+	writer.put_u32(67)
 	writer.put_u16(1)
 	writer.put_u16(WireCodec.OPCODE_PLAYER_DAMAGE_VISUAL)
 	writer.put_64(receiver_epoch)
@@ -333,6 +345,7 @@ func _damage_visual(receiver_epoch: int,tick: int,victim: int,connection: int,
 	writer.put_32(damage)
 	writer.put_u8(1 if died else 0)
 	writer.put_u8(visual_facing)
+	writer.put_u8(status)
 	return writer.data_array
 
 func _respawn_visual(receiver_epoch: int,tick: int,actor: int,connection: int,

@@ -24,7 +24,7 @@ internal static class AoiWireChecks
     private const string GroundDespawn = "200000000100210001000000000000003800000000000000F501000000000000";
     private const string PlayerAttack = "4200000001002900010000000000000032000000000000000B0000000000000002000000000000000700000021A0AE3B00000000001E000000030000000000000006";
     private const string PetAttackVisualHex = "510000000100770007000000000000003700000000000000E9030000000000000B00000000000000040000000000000003000000660000000000000021A0AE3B0000000000190000000400000000000000";
-    private const string PlayerDamageVisual = "4200000001002A0001000000000000003C00000000000000160000000000000003000000000000000400000021A0AE3B000000000700000000000000120000000006";
+    private const string PlayerDamageVisual = "4300000001002A0001000000000000003C00000000000000160000000000000003000000000000000400000021A0AE3B00000000070000000000000012000000000600";
     private const string PlayerRespawnVisual = "2D00000001002B0001000000000000003D00000000000000160000000000000003000000000000000200000006";
 
     public static void Verify()
@@ -129,13 +129,21 @@ internal static class AoiWireChecks
             parsedPetAttack==petAttackVisual,
             "PetAttackVisual C# roundtrip");
         var playerDamageVisual=new PlayerDamageVisualWire(
-            1,60,22,3,4,1001300001,7,18,false,6);
+            1,60,22,3,4,1001300001,7,18,false,6,NormalAttackStatus.Applied);
         byte[] playerDamageVisualBytes=WireProtocol.EncodePlayerDamageVisual(playerDamageVisual);
         Require(Convert.ToHexString(playerDamageVisualBytes)==PlayerDamageVisual &&
             WireProtocol.TryDecodePlayerDamageVisual(
                 playerDamageVisualBytes,out var parsedDamageVisual) &&
             parsedDamageVisual==playerDamageVisual,
             "PlayerDamageVisual C#/Godot golden binary");
+        var playerMissVisual=playerDamageVisual with {
+            DamageSequence=5,Damage=0,Died=false,Status=NormalAttackStatus.Miss};
+        byte[] playerMissVisualBytes=WireProtocol.EncodePlayerDamageVisual(playerMissVisual);
+        Require(playerMissVisualBytes.Length==67 &&
+            WireProtocol.TryDecodePlayerDamageVisual(
+                playerMissVisualBytes,out var parsedMissVisual) &&
+            parsedMissVisual==playerMissVisual,
+            "PlayerDamageVisual MISS C# roundtrip");
         var playerRespawnVisual=new PlayerRespawnVisualWire(1,61,22,3,2,6);
         byte[] playerRespawnVisualBytes=
             WireProtocol.EncodePlayerRespawnVisual(playerRespawnVisual);
@@ -316,7 +324,7 @@ internal static class AoiWireChecks
                 "pet attack visual did not use shared reliable Gateway FIFO");
         var damageVisual=new PlayerDamageVisual(
             owner.ActorId,owner.ConnectionEpoch,4,monster.EntityId,
-            monster.EntityRevision,18,false,6);
+            monster.EntityRevision,18,false,6,NormalAttackStatus.Applied);
         Require(gateway.QueueAoi(new(AoiEventKind.PlayerDamageVisual,51,1,
                     PlayerDamage:damageVisual))==GatewaySendStatus.Enqueued &&
                 gateway.TryDequeueReliable(out visualFrame) &&
@@ -325,8 +333,20 @@ internal static class AoiWireChecks
                 damageVisualWire.VictimActorId==owner.ActorId &&
                 damageVisualWire.DamageSequence==4 &&
                 damageVisualWire.Damage==18 && !damageVisualWire.Died &&
+                damageVisualWire.Status==NormalAttackStatus.Applied &&
                 damageVisualWire.Facing==6,
                 "player damage visual did not use shared reliable Gateway FIFO");
+        var missDamageVisual=damageVisual with {
+            DamageSequence=5,Damage=0,Died=false,Status=NormalAttackStatus.Miss};
+        Require(gateway.QueueAoi(new(AoiEventKind.PlayerDamageVisual,52,1,
+                    PlayerDamage:missDamageVisual))==GatewaySendStatus.Enqueued &&
+                gateway.TryDequeueReliable(out visualFrame) &&
+                WireProtocol.TryDecodePlayerDamageVisual(
+                    visualFrame,out var missDamageVisualWire) &&
+                missDamageVisualWire.DamageSequence==5 &&
+                missDamageVisualWire.Damage==0 &&
+                missDamageVisualWire.Status==NormalAttackStatus.Miss,
+                "player MISS visual did not use shared reliable Gateway FIFO");
         var respawnVisual=new PlayerRespawnVisual(
             owner.ActorId,owner.ConnectionEpoch,2,6);
         Require(gateway.QueueAoi(new(AoiEventKind.PlayerRespawnVisual,52,1,

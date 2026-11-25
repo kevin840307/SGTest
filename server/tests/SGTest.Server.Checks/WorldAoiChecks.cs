@@ -435,15 +435,29 @@ internal static class WorldAoiChecks
             own.PlayerDamage?.VictimActorId==victim.ActorId &&
             own.PlayerDamage?.DamageSequence==1 &&
             own.PlayerDamage?.Damage==18 &&
+            own.PlayerDamage?.Status==NormalAttackStatus.Applied &&
             own.PlayerDamage?.Facing==victim.Facing &&
             peer is [var remote] &&
             remote.PlayerDamage==own.PlayerDamage &&
             Drain(aoi,far).Length==0,
             "damage visual AOI scope/payload mismatch");
 
+        var miss=damage with {
+            DamageSequence=0,VisualSequence=2,ServerTick=1,
+            AttackerMonsterRevision=4,Damage=0,CurrentHp=82,Died=false,
+            Status=NormalAttackStatus.Miss
+        };
+        Require(aoi.EnqueuePlayerDamageVisual(miss)==2 &&
+            Drain(aoi,victim).Single().PlayerDamage is {
+                DamageSequence:2,Damage:0,Status:NormalAttackStatus.Miss } &&
+            Drain(aoi,observer).Single().PlayerDamage is {
+                DamageSequence:2,Damage:0,Status:NormalAttackStatus.Miss } &&
+            Drain(aoi,far).Length==0,
+            "MISS visual did not fan out without HP mutation");
+
         var lethal=damage with {
-            DamageSequence=2,ServerTick=1,
-            AttackerMonsterRevision=4,Damage=82,CurrentHp=0,Died=true
+            DamageSequence=2,VisualSequence=3,ServerTick=1,
+            AttackerMonsterRevision=5,Damage=82,CurrentHp=0,Died=true
         };
         Require(aoi.EnqueuePlayerDamageVisual(lethal)==2 &&
             Drain(aoi,victim).Single().PlayerDamage?.Died==true &&

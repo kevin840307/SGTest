@@ -231,6 +231,7 @@ public static partial class WireProtocol
         BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(60,4),value.Damage);
         frame[64]=value.Died?(byte)1:(byte)0;
         frame[65]=value.Facing;
+        frame[66]=(byte)value.Status;
         return frame;
     }
 
@@ -250,7 +251,7 @@ public static partial class WireProtocol
             BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(44,8)),
             BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(52,8)),
             BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(60,4)),
-            died==1,frame[65]);
+            died==1,frame[65],(NormalAttackStatus)frame[66]);
         return died<=1 && ValidPlayerDamageVisual(value);
     }
 

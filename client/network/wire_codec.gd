@@ -235,7 +235,7 @@ const RECOVERY_USE_RESULT_FRAME_BYTES := 45
 const INVENTORY_DISCARD_FRAME_BYTES := 32
 const INVENTORY_DISCARD_RESULT_FRAME_BYTES := 41
 const PLAYER_ATTACK_VISUAL_FRAME_BYTES := 66
-const PLAYER_DAMAGE_VISUAL_FRAME_BYTES := 66
+const PLAYER_DAMAGE_VISUAL_FRAME_BYTES := 67
 const PLAYER_RESPAWN_VISUAL_FRAME_BYTES := 45
 const INVENTORY_SNAPSHOT_HEADER_BYTES := 23
 const INVENTORY_ITEM_BYTES := 29
@@ -581,13 +581,18 @@ static func decode_player_damage_visual(frame: PackedByteArray) -> Dictionary:
 	var damage := reader.get_32()
 	var died := reader.get_u8()
 	var hit_facing := reader.get_u8()
-	if epoch <= 0 or tick < 0 or victim <= 0 or connection <= 0 or sequence == 0 or attacker <= 0 or attacker_revision <= 0 or damage <= 0 or died > 1 or hit_facing < 1 or hit_facing > 8:
+	var status := reader.get_u8()
+	if epoch <= 0 or tick < 0 or victim <= 0 or connection <= 0 or sequence == 0 or attacker <= 0 or attacker_revision <= 0 or damage < 0 or died > 1 or hit_facing < 1 or hit_facing > 8 or status not in [0,1]:
+		return {}
+	if status == 0 and damage <= 0:
+		return {}
+	if status == 1 and (damage != 0 or died != 0):
 		return {}
 	return {"receiver_map_epoch":epoch,"server_tick":tick,
 		"victim_actor_id":victim,"victim_connection_epoch":connection,
 		"damage_sequence":sequence,"attacker_monster_entity_id":attacker,
 		"attacker_monster_revision":attacker_revision,"damage":damage,
-		"died":died==1,"facing":hit_facing}
+		"died":died==1,"facing":hit_facing,"status":status}
 
 
 static func decode_player_respawn_visual(frame: PackedByteArray) -> Dictionary:

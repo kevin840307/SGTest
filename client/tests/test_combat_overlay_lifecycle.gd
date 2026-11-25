@@ -107,6 +107,17 @@ func run() -> void:
 		{"target_entity_id":9999},200000).is_finite(),
 		"fabricated a combat number location for unseen target")
 
+	var before_miss := view.combat_overlay_count()
+	view._consume_player_damage_visual_events({"player_damage_visual_events":[{
+		"victim_actor_id":5,"victim_connection_epoch":6,
+		"damage_sequence":8,"status":1,"damage":0}]},205000)
+	require(view.combat_overlay_count()==before_miss+1,
+		"authoritative monster MISS overlay was not created")
+	var monster_miss: Dictionary=view._combat_overlays[-1]
+	require(bool(monster_miss.get("miss",false)) and
+		str(monster_miss.get("text",""))=="MISS",
+		"authoritative monster MISS did not use MISS presentation")
+
 	# WorldState's five bounded combat visual event windows are each <=4096.
 	# Presentation must not accumulate every attack for hours of gameplay.
 	for i in range(view.COMBAT_DEDUP_MAX+50):

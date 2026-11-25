@@ -2,6 +2,7 @@ extends SceneTree
 
 const Session = preload("res://session/client_session.gd")
 const WorldState = preload("res://world/world_state.gd")
+const WorldView = preload("res://world/world_view.gd")
 const FixtureLogin = preload("res://tests/aes_character_fixture.gd")
 
 const USERNAME := "fixture_user"
@@ -15,8 +16,9 @@ func _fail(message: String, session = null) -> void:
 
 func _initialize() -> void:
 	var args := OS.get_cmdline_user_args()
-	if args.size()!=1 or not str(args[0]).is_valid_int():
-		_fail("expected port")
+	var force_miss := args.size()==2 and str(args[1])=="miss"
+	if args.size() not in [1,2] or not str(args[0]).is_valid_int() or (args.size()==2 and not force_miss):
+		_fail("expected port [miss]")
 		return
 	var session = Session.new()
 	if session.connect_secure("127.0.0.1",int(args[0]),USERNAME,PASSWORD) != OK:
@@ -72,22 +74,37 @@ func _initialize() -> void:
 			and int(v.monsters[target].revision)>=int(result.get("target_revision",0))
 			and int(attack_sequence.get("sequence",0))==1
 			and int(attack_visual.get("target_entity_id",0))==target
-			and int(v.player_damage_sequence)==1
-			and int(v.last_player_damage.get("damage",-1))==8
-			and int(v.player_current_hp)==92
+			and int(v.player_damage_sequence)==(0 if force_miss else 1)
+			and (force_miss or int(v.last_player_damage.get("damage",-1))==8)
+			and int(v.player_current_hp)==(100 if force_miss else 92)
 			and int(v.player_max_hp)==100
 			and not bool(v.player_dead)
 			and v.player_damage_visual_events.size()>=1
 			and int(v.player_damage_visual_events[-1].victim_actor_id)==character_id
 			and int(v.player_damage_visual_events[-1].damage_sequence)==1
-			and int(v.player_damage_visual_events[-1].damage)==8
+			and int(v.player_damage_visual_events[-1].status)==(1 if force_miss else 0)
+			and int(v.player_damage_visual_events[-1].damage)==(0 if force_miss else 8)
 			and not bool(v.player_damage_visual_events[-1].died)
 		),7000)
 	if settled.is_empty():
 		_fail("authoritative target combat settlement "+str(session.snapshot()),session)
 		return
+	if force_miss:
+		var view := WorldView.new()
+		root.add_child(view)
+		view._consume_player_damage_visual_events(settled,Time.get_ticks_usec())
+		if view.combat_overlay_count()!=1:
+			view.free()
+			_fail("MISS visual did not reach WorldView",session)
+			return
+		var overlay: Dictionary=view._combat_overlays[-1]
+		if not bool(overlay.get("miss",false)) or str(overlay.get("text",""))!="MISS":
+			view.free()
+			_fail("MISS visual did not select original MISS overlay",session)
+			return
+		view.free()
 	session.stop()
-	print("CLIENT_TARGET_COMBAT_AES_PASS actor=%d target=%d damage=40 monster_hp=60 retaliation_damage=8 player_hp=92 player_damage_visual=true own_attack_visual=true monster_delta_authority=true" % [character_id,target])
+	print("CLIENT_TARGET_COMBAT_AES_PASS actor=%d target=%d damage=40 monster_hp=60 retaliation=%s player_hp=%d player_damage_visual=true own_attack_visual=true monster_delta_authority=true world_view_miss=%s" % [character_id,target,"MISS" if force_miss else "8",100 if force_miss else 92,str(force_miss)])
 	quit(0)
 
 func _wait(session, predicate: Callable, timeout_ms: int) -> Dictionary:
