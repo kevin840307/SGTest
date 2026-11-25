@@ -1,3 +1,4 @@
+using Microsoft.Data.Sqlite;
 using SGTest.Server.Monster;
 using SGTest.Server.Combat;
 using System.Text.Json;
@@ -16,6 +17,8 @@ internal static class RecoveryItemChecks
             ()=>DurableUse(root).GetAwaiter().GetResult());
         Checks.Run("recovery rejecting full HP, wrong owner, unknown item and fake rule never consumes",
             ()=>Rejections(root).GetAwaiter().GetResult());
+        Checks.Run("recovery rejects corrupt empty or negative item stacks without healing or receipt",
+            ()=>CorruptStackRejection(root).GetAwaiter().GetResult());
         Checks.Run("recovery queues damage before item heal, then resumes one consistent combat timeline",
             ()=>DamageDrainRecovery(root).GetAwaiter().GetResult());
     }
@@ -193,6 +196,68 @@ internal static class RecoveryItemChecks
                 "damage/HP restoration diverged after suspend/resume");
             stop.Cancel();
             await worker.WaitAsync(TimeSpan.FromSeconds(2));
+        }
+    }
+
+    private static async Task CorruptStackRejection(string root)
+    {
+        var (store,db,character,_,uid,generation)=await Setup(root,"corruptstack");
+        using(store)
+        {
+            // An authoritative SQLite CHECK normally forbids these values.
+            // Import/corruption recovery must still fail closed without an
+            // unhandled constraint exception, a free heal, or a replay receipt.
+            // Bypass the CHECK only in this isolated test database.
+            using var raw=new SqliteConnection(new SqliteConnectionStringBuilder
+            {
+                DataSource=db,Pooling=false
+            }.ToString());
+            raw.Open();
+            using(var pragma=raw.CreateCommand())
+            {
+                pragma.CommandText="PRAGMA ignore_check_constraints=ON;";
+                pragma.ExecuteNonQuery();
+            }
+            foreach(int quantity in new[]{0,-2,1_000_001})
+            {
+                using(var corrupt=raw.CreateCommand())
+                {
+                    corrupt.CommandText="UPDATE item_instances SET quantity=$quantity WHERE item_uid=$uid;";
+                    corrupt.Parameters.AddWithValue("$quantity",quantity);
+                    corrupt.Parameters.AddWithValue("$uid",uid);
+                    Checks.Require(corrupt.ExecuteNonQuery()==1,
+                        "corrupt-stack fixture did not update isolated SQLite");
+                }
+                var result=await store.UseVerifiedRecoveryItemAsync(
+                    Context(character,generation,1),uid,Rule);
+                Checks.Require(result.Status==RecoveryUseStatus.Missing,
+                    "invalid stack returned success or raised a SQLite constraint exception");
+                using var inspect=raw.CreateCommand();
+                inspect.CommandText="SELECT quantity FROM item_instances WHERE item_uid=$uid;";
+                inspect.Parameters.AddWithValue("$uid",uid);
+                Checks.Require(Convert.ToInt32(inspect.ExecuteScalar())==quantity &&
+                    (await store.GetCharacterCombatProfileAsync(character))?.Data.CurrentHp==60,
+                    "rejected invalid stack changed inventory or HP");
+            }
+            using(var receipts=raw.CreateCommand())
+            {
+                receipts.CommandText="SELECT COUNT(*) FROM recovery_use_actions WHERE character_id=$actor;";
+                receipts.Parameters.AddWithValue("$actor",character);
+                Checks.Require(Convert.ToInt64(receipts.ExecuteScalar())==0,
+                    "rejected corrupt stack wrote a durable recovery receipt");
+            }
+            using(var repaired=raw.CreateCommand())
+            {
+                repaired.CommandText="UPDATE item_instances SET quantity=2 WHERE item_uid=$uid;";
+                repaired.Parameters.AddWithValue("$uid",uid);
+                Checks.Require(repaired.ExecuteNonQuery()==1,
+                    "isolated stack could not be repaired to valid quantity");
+            }
+            var valid=await store.UseVerifiedRecoveryItemAsync(
+                Context(character,generation,1),uid,Rule);
+            Checks.Require(valid.Status==RecoveryUseStatus.Granted &&
+                valid.CurrentHp==90 && valid.RemainingQuantity==1,
+                "failed corrupt attempts consumed sequence or blocked valid recovery");
         }
     }
 

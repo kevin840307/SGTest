@@ -142,6 +142,12 @@ FROM item_instances WHERE item_uid=$uid;";
             }
             if(owner!=actor.CharacterId)
                 return new(RecoveryUseStatus.NotOwned,itemUid);
+            // Old/imported/corrupt rows can violate the schema's quantity
+            // CHECK. Never let a missing or invalid stack reach the debit and
+            // heal transaction: it would throw rather than return a reliable
+            // rejection to the player, or produce an invalid item count.
+            if(quantity is <1 or >1_000_000)
+                return new(RecoveryUseStatus.Missing,itemUid);
             if(!rules.TryGetValue(itemId,out var rule) ||
                 rule.ItemDefinitionId!=itemId ||
                 rule.RestoreHp is <1 or >100_000_000 ||
