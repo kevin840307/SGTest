@@ -112,6 +112,8 @@ public sealed class MonsterRuntime
         public int CurrentHp;
         public MonsterAiState State;
         public long TargetActorId;
+        // Once aggro is lost, finish the return path before passive reacquisition.
+        public bool ReturningHome;
         public long Revision = 1;
         public byte Facing = 1;
         public long LastAttackTick = -1;
@@ -325,6 +327,7 @@ public sealed class MonsterRuntime
         {
             monster.State = MonsterAiState.Dead;
             monster.TargetActorId = 0;
+            monster.ReturningHome = false;
             monster.RespawnAtTick = checked(worldTick + monster.Definition.Stats.RespawnTicks);
             _respawns.Enqueue((monster.EntityId, monster.RespawnAtTick),
                 (monster.RespawnAtTick, monster.EntityId));
@@ -332,6 +335,7 @@ public sealed class MonsterRuntime
         else if (monster.TargetActorId == 0)
         {
             monster.TargetActorId = attackerActorId;
+            monster.ReturningHome = false;
             monster.State = MonsterAiState.Chase;
         }
         return new(true, killed, applied, monster.Snapshot(MapId));
@@ -354,6 +358,7 @@ public sealed class MonsterRuntime
             monster.Y = monster.Spawn.Y;
             monster.State = MonsterAiState.Idle;
             monster.TargetActorId = 0;
+            monster.ReturningHome = false;
             monster.LastAttackTick = -1;
             monster.RespawnAtTick = -1;
             monster.LastRespawnTick = tick;
@@ -391,6 +396,7 @@ public sealed class MonsterRuntime
             {
                 long old = monster.TargetActorId;
                 monster.TargetActorId = 0;
+                monster.ReturningHome = true;
                 monster.State = MonsterAiState.Idle;
                 Bump(monster);
                 events.Add(new(MonsterWorldEventKind.TargetLost, tick,
@@ -402,24 +408,35 @@ public sealed class MonsterRuntime
         {
             long old = monster.TargetActorId;
             monster.TargetActorId = 0;
+            monster.ReturningHome = true;
             monster.State = MonsterAiState.Idle;
             Bump(monster);
             events.Add(new(MonsterWorldEventKind.TargetLost, tick,
                 monster.Snapshot(MapId), old));
         }
 
-        // Leash is a hard combat boundary. Once outside it, return toward the
-        // original verified spawn before considering another nearby target;
-        // otherwise a player standing beside the monster could re-aggro it in
-        // the same Tick and drag it indefinitely across the map.
+        // Target loss latches a full return-to-spawn, even inside the leash.
+        // Merely stepping back within the leash allowed nearby players to
+        // reacquire the monster before it ever got home.
         leashDistance = Distance(
             monster.Spawn.X, monster.Spawn.Y, monster.X, monster.Y);
-        if (!hasTarget && leashDistance > stats.LeashRadius)
+        if (!hasTarget && (monster.ReturningHome ||
+                           leashDistance > stats.LeashRadius))
         {
-            SetState(monster, MonsterAiState.Chase, tick, events);
-            if (TryStep(monster, monster.Spawn.X, monster.Spawn.Y, stats.MoveStep,
-                        ref pathBudget, out var homeX, out var homeY))
-                Move(monster, homeX, homeY, tick, events);
+            monster.ReturningHome = true;
+            if (leashDistance > 1e-6)
+            {
+                SetState(monster, MonsterAiState.Chase, tick, events);
+                if (TryStep(monster, monster.Spawn.X, monster.Spawn.Y, stats.MoveStep,
+                            ref pathBudget, out var homeX, out var homeY))
+                    Move(monster, homeX, homeY, tick, events);
+            }
+            if (Distance(monster.Spawn.X, monster.Spawn.Y,
+                         monster.X, monster.Y) <= 1e-6)
+            {
+                monster.ReturningHome = false;
+                SetState(monster, MonsterAiState.Idle, tick, events);
+            }
             return;
         }
 

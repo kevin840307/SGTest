@@ -156,6 +156,12 @@ static class Checks
                 Console.WriteLine($"IDENTITY_SESSION_AES_CHECKS PASS total={_passes}");
                 return 0;
             }
+            if (args is ["--monster-only"])
+            {
+                MonsterRuntimeChecks.Verify(root);
+                Console.WriteLine($"SERVER_MONSTER_CHECKS PASS total={_passes}");
+                return 0;
+            }
             if (args is ["--movement-only"])
             {
                 WorldSimulationChecks.Verify(root);

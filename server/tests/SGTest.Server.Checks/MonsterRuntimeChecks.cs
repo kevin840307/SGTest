@@ -13,6 +13,8 @@ internal static class MonsterRuntimeChecks
             () => ChaseAndAttack(root));
         Checks.Run("monster loses live target when actor transfers to another map",
             () => CrossMapTargetLost(root));
+        Checks.Run("monster returns to spawn before reacquiring a nearby player after target loss",
+            () => TargetLostReturnsHome(root));
         Checks.Run("monster trusted damage owns death/respawn and AI budget is fair across 300 entities",
             () => DamageRespawnAndBudget(root));
         Checks.Run("monster respawn deadline is independent of AI cadence and budget",
@@ -123,6 +125,71 @@ internal static class MonsterRuntimeChecks
         Checks.Require(returned.Any(e => e.Kind == MonsterWorldEventKind.TargetAcquired) &&
                        runtime.SnapshotAll()[0].TargetActorId == nearbyPlayer.ActorId,
             "returning to the same map did not acquire a fresh target");
+    }
+
+    private static void TargetLostReturnsHome(string root)
+    {
+        string dir = Checks.Fixture(root, 217, 12, 12,
+            (x, y) => x == 4 && y != 6 ? (byte)7 : (byte)0);
+        var grid = BlockingGrid.Load(dir, 217);
+        string path = Path.Combine(dir, "population.json");
+        File.WriteAllText(path, JsonSerializer.Serialize(Document(
+            217, true, [Spawn(0, 1, 24, 24)], [Definition(1,
+                moveStep: 16, aggro: 300, lose: 500, leash: 500,
+                attackRange: 28, attackCooldown: 3,
+                wanderRadius: 0, wanderInterval: 100)])));
+        var runtime = new MonsterRuntime(grid,
+            MonsterPopulationCatalog.LoadVerified(path, 217, grid),
+            new(AiIntervalTicks: 1, MaxAiPerStep: 8,
+                MaxPathQueriesPerStep: 2, MaxPathExpandedCells: 512));
+        var initialTarget = new MonsterCombatTarget(10, 217, 136, 24, 1000);
+        long tick = 0;
+        bool attacked = false;
+        for (; tick < 100 && !attacked;)
+        {
+            var events = runtime.Tick(++tick, [initialTarget]);
+            attacked = events.Any(e => e.Kind == MonsterWorldEventKind.Attack &&
+                                       e.TargetActorId == initialTarget.ActorId);
+        }
+        var pulled = runtime.SnapshotAll()[0];
+        Checks.Require(attacked && Math.Sqrt(Math.Pow(pulled.X - pulled.SpawnX, 2) +
+                                            Math.Pow(pulled.Y - pulled.SpawnY, 2)) > 64,
+            "monster did not leave spawn and attack past the obstacle");
+
+        // A different nearby player must not cancel the retreat just because
+        // the returning monster has reentered its leash boundary.
+        var lure = new MonsterCombatTarget(20, 217, 136, 80, 1000);
+        var lost = runtime.Tick(++tick,
+            [initialTarget with { X = 900, Y = 900 }, lure]);
+        Checks.Require(lost.Any(e => e.Kind == MonsterWorldEventKind.TargetLost &&
+                                     e.TargetActorId == initialTarget.ActorId) &&
+                       lost.All(e => e.Kind != MonsterWorldEventKind.TargetAcquired &&
+                                     e.Kind != MonsterWorldEventKind.Attack),
+            "lost target was immediately replaced instead of returning home");
+        var previous = runtime.SnapshotAll()[0];
+        bool reachedHome = false;
+        for (int i = 0; i < 100 && !reachedHome; i++)
+        {
+            var events = runtime.Tick(++tick, [lure]);
+            var current = runtime.SnapshotAll()[0];
+            Checks.Require(current.TargetActorId == 0 &&
+                           events.All(e => e.Kind != MonsterWorldEventKind.TargetAcquired &&
+                                           e.Kind != MonsterWorldEventKind.Attack),
+                "monster reacquired or attacked a player during its return");
+            Checks.Require(grid.IsDirectClear(previous.X, previous.Y, current.X, current.Y),
+                "return-to-spawn movement clipped through Blocking");
+            reachedHome = Math.Sqrt(Math.Pow(current.X - current.SpawnX, 2) +
+                                    Math.Pow(current.Y - current.SpawnY, 2)) < 0.001;
+            if (reachedHome)
+                Checks.Require(current.State == MonsterAiState.Idle,
+                    "monster failed to enter idle state at its original spawn");
+            previous = current;
+        }
+        Checks.Require(reachedHome, "lost monster never returned to its original spawn");
+        var reacquire = runtime.Tick(++tick, [lure]);
+        Checks.Require(reacquire.Any(e => e.Kind == MonsterWorldEventKind.TargetAcquired &&
+                                          e.TargetActorId == lure.ActorId),
+            "monster did not resume normal aggro after reaching spawn");
     }
 
     private static void DamageRespawnAndBudget(string root)
