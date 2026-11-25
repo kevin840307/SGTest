@@ -50,6 +50,14 @@ func _initialize()->void:
 		_fail("red update not persistent")
 		return
 
+	# A delayed snapshot from before the authoritative kill must not restore
+	# pink after the newest server PvP update turned that name red.
+	snapshot.player_identities[3]=_identity(3,1,false,1000000,1030000,3,"OldPink")
+	names.apply_snapshot(snapshot,now+10500000)
+	if str(names.label_for(3,now+10500000).name_state)!="red":
+		_fail("late same-generation PvP snapshot rolled red name back to pink")
+		return
+
 	snapshot.map_epoch=2
 	snapshot.map_id=15
 	snapshot.player_identities={}
@@ -57,8 +65,29 @@ func _initialize()->void:
 	if names.count()!=0:
 		_fail("map generation retained names")
 		return
+	var stale_map={"world_ready":true,"map_epoch":1,"map_id":13,"player_identities":{3:_identity(3,1,true,1000010,0,10,"StaleMap")}}
+	names.apply_snapshot(stale_map,now+12000000)
+	if names.count()!=0:
+		_fail("late old-map snapshot repopulated departed players")
+		return
 
-	print("PVP_NAME_PRESENTATION_PASS blue=true white=true pink=true final3_flash=true pink_expiry=true red=true no_timer_slide=true generation_clear=true batched_canvas=true")
+	var joined:=_identity(3,0,false,1000020,0,1,"Rejoined")
+	joined.connection_epoch=100
+	joined.entity_map_epoch=2
+	snapshot.player_identities={3:joined}
+	names.apply_snapshot(snapshot,now+13000000)
+	if str(names.label_for(3,now+13000000).name_state)!="blue":
+		_fail("new connection could not rejoin with fresh PvP state")
+		return
+	var stale_connection:=_identity(3,1,true,1000030,0,90,"OldConnection")
+	stale_connection.entity_map_epoch=2
+	snapshot.player_identities={3:stale_connection}
+	names.apply_snapshot(snapshot,now+14000000)
+	if str(names.label_for(3,now+14000000).name_state)!="blue":
+		_fail("old connection snapshot replaced the new player PvP name")
+		return
+
+	print("PVP_NAME_PRESENTATION_PASS blue=true white=true pink=true final3_flash=true pink_expiry=true red=true no_timer_slide=true generation_clear=true stale_pvp_update=true stale_map=true old_connection=true batched_canvas=true")
 	quit(0)
 
 func _identity(actor:int,mode:int,red:bool,server_ms:int,pink_ms:int,updated:int,name:String)->Dictionary:

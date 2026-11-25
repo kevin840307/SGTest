@@ -21,6 +21,10 @@ func apply_snapshot(snapshot:Dictionary,now_usec:int)->void:
 		return
 	var epoch:=int(snapshot.map_epoch)
 	var map:=int(snapshot.map_id)
+	# A delayed render snapshot must not roll the visible name layer back to
+	# the previous map after the AOI owner has advanced generations.
+	if epoch < _epoch:
+		return
 	if epoch!=_epoch or map!=_map:
 		_states.clear()
 		_epoch=epoch
@@ -45,6 +49,17 @@ func apply_snapshot(snapshot:Dictionary,now_usec:int)->void:
 		if id<=0 or connection<=0 or entity_epoch<=0 or server_ms<=0 or pink_ms<0 or updated<0 or mode not in [0,1] or name.is_empty():
 			continue
 		var prior:Dictionary=_states.get(id,{})
+		if not prior.is_empty():
+			var prior_connection:=int(prior.get("connection_epoch",0))
+			var prior_entity_epoch:=int(prior.get("entity_map_epoch",0))
+			if connection<prior_connection or (connection==prior_connection and entity_epoch<prior_entity_epoch):
+				continue
+			if connection==prior_connection and entity_epoch==prior_entity_epoch:
+				# PvpUpdated is server-owned. Never let an older identity revision
+				# override authoritative pink/red/blue, even if rendered later.
+				var prior_updated:=int(prior.get("pvp_updated_unix_ms",0))
+				if updated<prior_updated or (updated==prior_updated and server_ms<int(prior.get("source_server_unix_ms",0))):
+					continue
 		var changed:=prior.is_empty() or int(prior.get("connection_epoch",0))!=connection or int(prior.get("entity_map_epoch",0))!=entity_epoch or int(prior.get("source_server_unix_ms",0))!=server_ms or int(prior.get("pink_until_unix_ms",0))!=pink_ms or int(prior.get("pvp_updated_unix_ms",0))!=updated or int(prior.get("mode",-1))!=mode or bool(prior.get("red_man",false))!=red or str(prior.get("display_name",""))!=name
 		if not changed:
 			continue
