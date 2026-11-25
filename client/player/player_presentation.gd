@@ -280,6 +280,18 @@ func apply_snapshot(snapshot: Dictionary, now_usec: int) -> void:
 		# Presentation may use authoritative intent state without ever mutating
 		# the reducer snapshot shared with gameplay/UI consumers.
 		var value: Dictionary = (visible[id] as Dictionary).duplicate(true)
+		var tick := int(value.get("server_tick",snapshot.get("last_aoi_tick",-1)))
+		var previous: Dictionary = _actors.get(id,{})
+		if not previous.is_empty():
+			var accepted: Dictionary = previous.value
+			# An AOI set can have a fresh set tick but still carry an older
+			# entity record. Reject the stale peer *before* applying movement
+			# intent; PositionHistory.push alone rejects only coordinates and
+			# cannot undo a reversed/erased visual route.
+			if tick >= 0 and int(accepted.get("server_tick",-1)) > tick and \
+					int(accepted.get("connection_epoch",-1)) == int(value.get("connection_epoch",-2)) and \
+					int(accepted.get("entity_map_epoch",-1)) == int(value.get("entity_map_epoch",-2)):
+				continue
 		var intent := _remote_intent_for(snapshot,int(id),value)
 		_sync_remote_route(int(id),value,intent)
 		var route: Dictionary = _remote_routes.get(int(id),{})
@@ -337,7 +349,6 @@ func apply_snapshot(snapshot: Dictionary, now_usec: int) -> void:
 				# restart the NR clip at its first frame.
 				started = now_usec
 		var history = PositionHistory.new() if generation_changed else old.history
-		var tick := int(value.get("server_tick",snapshot.get("last_aoi_tick",-1)))
 		if tick < 0 or not history.push(tick,Vector2(float(value.x),float(value.y)),now_usec,bool(value.moving)):
 			continue
 		_actors[id] = {"value":value,"action":action,"action_facing":action_facing,

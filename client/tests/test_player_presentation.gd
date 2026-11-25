@@ -157,6 +157,47 @@ func run() -> void:
 	route_probe.apply_snapshot(route_snapshot,333333)
 	check(route_probe.position_at(2,333333)==routed_before_checkpoint,
 		"sparse authoritative checkpoint rewound healthy remote route")
+	# GP-009-02: AOI can publish a newer *set* tick while a peer entry
+	# still contains an older entity tick. PositionHistory correctly rejects
+	# it; its stale route/stop intent must not modify that peer's visual path
+	# before the position high-water check happens.
+	var stale_peer: Dictionary = route_snapshot.duplicate(true)
+	stale_peer.last_aoi_tick = 9
+	stale_peer.entities[2].server_tick = 3
+	stale_peer.entities[2].x = 28.0
+	stale_peer.entities[2].movement_action_sequence = 2
+	stale_peer.remote_movement_intents[2].server_tick = 3
+	stale_peer.remote_movement_intents[2].movement_action_sequence = 2
+	stale_peer.remote_movement_intents[2].target_x = 40.0
+	route_probe.apply_snapshot(stale_peer,340000)
+	check(int(route_probe._remote_routes[2].sequence) == 1 and
+		Vector2(route_probe._remote_routes[2].target) == Vector2(152,24),
+		"stale peer tick reversed an accepted remote route")
+	var stale_no_intent: Dictionary = stale_peer.duplicate(true)
+	stale_no_intent.last_aoi_tick = 10
+	stale_no_intent.entities[2].server_tick = 4
+	stale_no_intent.remote_movement_intents.clear()
+	route_probe.apply_snapshot(stale_no_intent,350000)
+	check(route_probe._remote_routes.has(2),
+		"stale peer without intent erased an accepted remote route")
+	# A legitimately replaced actor generation *may* start with an earlier
+	# server tick. The stale-entry fence must not reject its new baseline.
+	var new_generation_probe := Players.new()
+	check(new_generation_probe.configure(assets)==OK,"new generation profile configure")
+	var old_generation: Dictionary = route_snapshot.duplicate(true)
+	old_generation.last_aoi_tick = 8
+	new_generation_probe.apply_snapshot(old_generation,300000)
+	var new_generation: Dictionary = old_generation.duplicate(true)
+	new_generation.last_aoi_tick = 9
+	new_generation.entities[2].connection_epoch = 2
+	new_generation.entities[2].server_tick = 1
+	new_generation.entities[2].x = 96.0
+	new_generation.remote_movement_intents.clear()
+	new_generation_probe.apply_snapshot(new_generation,340000)
+	check(int(new_generation_probe._actors[2].value.connection_epoch) == 2 and
+		new_generation_probe.position_at(2,340000) == Vector2(96,24),
+		"new generation with lower server tick did not establish its baseline")
+	route_snapshot.last_aoi_tick = 11
 	for _frame in range(20):
 		route_probe.advance_remote_visual(1.0/60.0)
 	check(route_probe.position_at(2,666666).distance_to(Vector2(152,24))<0.01,
