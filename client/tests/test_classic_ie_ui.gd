@@ -225,7 +225,7 @@ func _run() -> void:
 		if label==null or label.position!=hotkey_expected[i].position or label.size!=hotkey_expected[i].size or label.text!="F%d"%(i+1):
 			_fail("HK 007_HOTKEY_Yl F-key text rect drifted at F%d"%(i+1))
 			return
-	if world.status_panel.position!=Vector2(1,518) or world.status_panel.size!=Vector2(128,90) or \
+	if world.status_panel.position!=Vector2(0,510) or world.status_panel.size!=Vector2(128,90) or \
 		world._hud_hp_clip.position!=Vector2(24,20) or world._hud_hp_clip.size.y!=10 or \
 		world._hud_mp_clip.position!=Vector2(24,34) or world._hud_wp_clip.position!=Vector2(24,48) or \
 		world._hud_exp_clip.position!=Vector2(24,80):

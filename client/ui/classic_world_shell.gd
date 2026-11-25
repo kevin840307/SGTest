@@ -124,6 +124,28 @@ var _quest_text: Label
 var _quest_choices:=VBoxContainer.new()
 var _chat_history:=TextEdit.new()
 var _chat_input:=LineEdit.new()
+var _chat_input_clip:=Control.new()
+var _chat_bg:TextureRect
+var _chat_up:TextureButton
+var _chat_down:TextureButton
+var _chat_expand:TextureButton
+var _chat_channel:TextureButton
+var _chat_bubble:TextureButton
+var _chat_tabs:Array[TextureButton]=[]
+var _chat_calendar:RichTextLabel
+var _chat_system:RichTextLabel
+var _chat_emotion:TextureButton
+var _chat_big:=false
+var _chat_small_position:=Vector2(128,510)
+var _chat_send_party:=false
+var _chat_bubble_type:=0
+var _chat_show_party:=true
+var _chat_show_private:=true
+var _friend_scroll:ScrollContainer
+var _friend_up:TextureButton
+var _friend_down:TextureButton
+var _friend_editor:=PopupPanel.new()
+var _friend_delete:TextureButton
 var _friend_rows:=VBoxContainer.new()
 var _friend_name_input:=LineEdit.new()
 var _friend_action:Button
@@ -275,7 +297,7 @@ func _texture_button(parent:Control,node_name:String,art:String,position:Vector2
 	button.texture_hover=_tex(art+"_1")
 	button.texture_pressed=_tex(art+"_2")
 	button.texture_disabled=_tex(art+"_3")
-	button.pressed.connect(callback)
+	if callback.is_valid():button.pressed.connect(callback)
 	parent.add_child(button)
 	return button
 
@@ -399,7 +421,7 @@ func _window(name:String,background:String,size:Vector2,position:Vector2)->Contr
 func _build_hud()->void:
 	# 006_StatusLite.itf: keep every component in ITF-local coordinates.
 	status_panel.name="ClassicStatusLite"
-	status_panel.position=Vector2(1,518)
+	status_panel.position=Vector2(0,510)
 	status_panel.size=Vector2(128,90)
 	hud.add_child(status_panel)
 	_make_movable(status_panel)
@@ -509,71 +531,8 @@ func _build_hud()->void:
 	_texture_button(secondary_menu,"GmCommand","B_BASIC_GM",Vector2(2,196),Vector2(25,22),func():pass,"GM")
 	_texture_button(secondary_menu,"SystemCommand","B_BASIC_SYSTEM",Vector2(2,222),Vector2(24,23),func():_toggle(settings_window),"系統")
 
-	chat_panel.name="ClassicChatPanel"
-	chat_panel.position=Vector2(130,484)
-	chat_panel.size=Vector2(478,116)
-	chat_panel.mouse_filter=Control.MOUSE_FILTER_STOP
-	hud.add_child(chat_panel)
-	var chat_bg:=NinePatchRect.new()
-	chat_bg.name="BG_MESSAGE_INGAMEBackground"
-	chat_bg.texture=_tex("BG_MESSAGE_INGAME")
-	chat_bg.size=chat_panel.size
-	chat_bg.patch_margin_left=6
-	chat_bg.patch_margin_top=22
-	chat_bg.patch_margin_right=6
-	chat_bg.patch_margin_bottom=8
-	chat_bg.mouse_filter=Control.MOUSE_FILTER_IGNORE
-	chat_panel.add_child(chat_bg)
-	_chat_history.name="ChatHistory"
-	_chat_history.position=Vector2(6,8)
-	_chat_history.size=Vector2(466,78)
-	_chat_history.editable=false
-	_chat_history.wrap_mode=TextEdit.LINE_WRAPPING_BOUNDARY
-	_chat_history.mouse_filter=Control.MOUSE_FILTER_IGNORE
-	_chat_history.add_theme_stylebox_override("normal",StyleBoxEmpty.new())
-	_chat_history.add_theme_color_override("font_color",Color("#f9f2d6"))
-	_chat_history.add_theme_font_size_override("font_size",10)
-	chat_panel.add_child(_chat_history)
-	_chat_input.name="ChatInput"
-	_chat_input.position=Vector2(7,89)
-	_chat_input.size=Vector2(410,19)
-	_chat_input.placeholder_text="輸入附近聊天"
-	_chat_input.max_length=256
-	_transparent_line_edit(_chat_input)
-	_chat_input.text_submitted.connect(func(_value):_send_chat())
-	chat_panel.add_child(_chat_input)
-	var send:=_hit(chat_panel,"SendChat",Rect2(421,88,50,20),_send_chat,"送出聊天")
-	send.text="送出"
-	send.add_theme_font_size_override("font_size",9)
-
-	friend_panel.name="ClassicFriendPanel"
-	friend_panel.position=Vector2(714,501)
-	friend_panel.size=Vector2(86,99)
-	friend_panel.mouse_filter=Control.MOUSE_FILTER_STOP
-	hud.add_child(friend_panel)
-	_background(friend_panel,"BG_RIGHTBOX",friend_panel.size)
-	_friend_name_input.name="FriendNameInput"
-	_friend_name_input.position=Vector2(3,18)
-	_friend_name_input.size=Vector2(57,16)
-	_friend_name_input.placeholder_text="好友名稱"
-	_friend_name_input.max_length=32
-	_transparent_line_edit(_friend_name_input)
-	_friend_name_input.add_theme_font_size_override("font_size",9)
-	_friend_name_input.text_changed.connect(func(_value):_update_friend_action())
-	_friend_name_input.text_submitted.connect(func(_value):_friend_action_pressed())
-	friend_panel.add_child(_friend_name_input)
-	_friend_action=_hit(friend_panel,"FriendAction",Rect2(61,18,21,16),_friend_action_pressed,"新增好友")
-	_friend_action.text="+"
-	_friend_action.add_theme_font_size_override("font_size",9)
-	var friend_scroll:=ScrollContainer.new()
-	friend_scroll.name="FriendScroll"
-	friend_scroll.position=Vector2(3,35)
-	friend_scroll.size=Vector2(80,60)
-	friend_panel.add_child(friend_scroll)
-	_friend_rows.name="FriendRows"
-	_friend_rows.custom_minimum_size.x=76
-	_friend_rows.add_theme_constant_override("separation",0)
-	friend_scroll.add_child(_friend_rows)
+	_build_chat_panel()
+	_build_friend_panel()
 
 	# Compatibility handle for older tests/callers. The temporary bottom command
 	# bar is no longer player-visible; HK uses the fixed right-side 021_COMMAND.
@@ -587,6 +546,261 @@ func _build_hud()->void:
 	_texture_button(menu,"Menu2","B_BASIC_ITEM",Vector2(58,2),Vector2(24,23),_menu_action.bind(2),"包包")
 	_texture_button(menu,"Menu3","B_BASIC_PSHOP",Vector2(88,4),Vector2(24,23),_menu_action.bind(3),"小商店")
 	_texture_button(menu,"Menu4","B_BASIC_SYSTEM",Vector2(117,2),Vector2(24,23),_menu_action.bind(4),"系統")
+
+# 016_CHANNEL / 017_CHANNEL_BIG: use the actual HK backgrounds, not the
+# unrelated 033_MESSAGE_INGAME dialog. Both layouts share one history/input.
+func _build_chat_panel()->void:
+	chat_panel.name="ClassicChatPanel"
+	chat_panel.position=_chat_small_position
+	chat_panel.size=Vector2(469,90)
+	hud.add_child(chat_panel)
+	_make_movable(chat_panel)
+	_chat_bg=_background(chat_panel,"CHANNEL",chat_panel.size)
+	_chat_history.name="ChatHistory"
+	_chat_history.editable=false
+	_chat_history.wrap_mode=TextEdit.LINE_WRAPPING_BOUNDARY
+	_chat_history.focus_mode=Control.FOCUS_NONE
+	_chat_history.mouse_filter=Control.MOUSE_FILTER_IGNORE
+	for state in ["normal","read_only","focus"]:
+		_chat_history.add_theme_stylebox_override(state,StyleBoxEmpty.new())
+	for color_name in ["font_color","font_readonly_color"]:
+		_chat_history.add_theme_color_override(color_name,Color.WHITE)
+	_chat_history.add_theme_color_override("background_color",Color.TRANSPARENT)
+	_chat_history.add_theme_font_override("font",_character_raster_font)
+	_chat_history.add_theme_font_size_override("font_size",12)
+	_chat_history.add_theme_constant_override("line_spacing",0)
+	chat_panel.add_child(_chat_history)
+	_chat_history.get_v_scroll_bar().modulate=Color.TRANSPARENT
+	_chat_history.get_v_scroll_bar().mouse_filter=Control.MOUSE_FILTER_IGNORE
+	_chat_history.get_v_scroll_bar().value_changed.connect(func(_value):_update_chat_scroll_buttons())
+	_chat_input.name="ChatInput"
+	_chat_input.max_length=256
+	_transparent_line_edit(_chat_input)
+	_chat_input.text_submitted.connect(func(_value):_send_chat())
+	# Godot LineEdit's intrinsic font minimum can exceed the 11px ITF
+	# slot (31px before theme inheritance). Constrain rendering and hitbox
+	# with the source rect, and center the actual editor after theme setup.
+	_chat_input_clip.name="ChatInputSlot"
+	_chat_input_clip.clip_contents=true
+	_chat_input_clip.mouse_filter=Control.MOUSE_FILTER_IGNORE
+	chat_panel.add_child(_chat_input_clip)
+	_chat_input_clip.add_child(_chat_input)
+	_chat_input.minimum_size_changed.connect(_fit_chat_editor)
+	_fit_chat_editor.call_deferred()
+	# ID 2213 is the in-game calendar (Old CChatItf::UpdateCalendar).
+	# Do not substitute wall-clock time when the server has not sent a calendar.
+	_chat_calendar=_itf_text(chat_panel,"GameCalendar",Rect2(52,74,106,12),12)
+	_chat_system=_itf_text(chat_panel,"SystemMessage",Rect2(53,4,360,11),11)
+	var arts:=["B_CHANNEL_CB","B_CHANNEL_CA","B_CHANNEL_CC","B_CHANNEL_CD","B_CHANNEL_CE"]
+	for index in arts.size():
+		var button:=_texture_button(chat_panel,"ChatFilter"+str(index),arts[index],Vector2.ZERO,Vector2(43,15),_toggle_chat_filter.bind(index))
+		# Source/reference default checked artwork is frame 2.
+		button.texture_normal=_tex(arts[index]+"_2")
+		button.texture_pressed=_tex(arts[index]+"_0")
+		button.tooltip_text=["私訊顯示","原版世界頻道（尚未接通）","戰團頻道（尚未接通）","隊伍顯示","系統頻道（尚未接通）"][index]
+		if index not in [0,3]:
+			button.disabled=true
+			button.texture_disabled=button.texture_normal
+		_chat_tabs.append(button)
+	_chat_up=_texture_button(chat_panel,"ChatScrollUp","SCROLLUP_S",Vector2.ZERO,Vector2(17,25),_scroll_chat.bind(-1),"往上捲動")
+	_chat_down=_texture_button(chat_panel,"ChatScrollDown","SCROLLDOWN_S",Vector2.ZERO,Vector2(17,25),_scroll_chat.bind(1),"往下捲動")
+	_chat_expand=_texture_button(chat_panel,"ChatExpand","ZONESCREEN",Vector2.ZERO,Vector2(17,17),_toggle_chat_size,"展開聊天")
+	_chat_channel=_texture_button(chat_panel,"ChatChannel","ICON_CHANNEL",Vector2.ZERO,Vector2(24,24),_toggle_chat_send_channel,"附近聊天；點擊切換隊伍")
+	_chat_channel.texture_normal=_tex("ICON_CHANNEL_3")
+	_chat_channel.texture_hover=_chat_channel.texture_normal
+	_chat_channel.texture_pressed=_chat_channel.texture_normal
+	_chat_emotion=_texture_button(chat_panel,"ChatEmotion","B_EMOTETION",Vector2.ZERO,Vector2(24,24),Callable(),"表情選單尚未接通")
+	_chat_emotion.disabled=true
+	_chat_emotion.texture_disabled=_tex("B_EMOTETION_0")
+	_chat_bubble=_texture_button(chat_panel,"ChatBubble","ICON_BUBBLE",Vector2.ZERO,Vector2(24,24),_toggle_chat_bubble,"切換聊天氣泡")
+	_chat_bubble.texture_hover=_chat_bubble.texture_normal
+	_chat_bubble.texture_pressed=_chat_bubble.texture_normal
+	_layout_chat_panel()
+	_update_chat_scroll_buttons()
+
+func _set_chat_rect(control:Control,rect:Rect2)->void:
+	control.position=rect.position
+	control.size=rect.size
+
+func _fit_chat_editor()->void:
+	var height:=maxf(_chat_input_clip.size.y,_chat_input.get_combined_minimum_size().y)
+	_chat_input.size=Vector2(_chat_input_clip.size.x,height)
+	_chat_input.position=Vector2(0,floorf((_chat_input_clip.size.y-height)/2.0))
+
+func _set_chat_button_art(button:TextureButton,art:String)->void:
+	button.texture_normal=_tex(art+"_0")
+	button.texture_hover=_tex(art+"_1")
+	button.texture_pressed=_tex(art+"_2")
+	button.texture_disabled=_tex(art+"_3")
+
+func _layout_chat_panel()->void:
+	chat_panel.size=Vector2(289,578) if _chat_big else Vector2(469,90)
+	_chat_bg.texture=_tex("BG_CHANNEL_BIG" if _chat_big else "CHANNEL")
+	_chat_bg.size=chat_panel.size
+	_chat_bg.name="BG_CHANNEL_BIGBackground" if _chat_big else "CHANNELBackground"
+	var tab_positions:Array[Vector2]
+	if _chat_big:
+		tab_positions=[Vector2(195,5),Vector2(7,5),Vector2(54,5),Vector2(101,5),Vector2(148,5)]
+		_set_chat_rect(_chat_history,Rect2(7,42,255,480))
+		_set_chat_rect(_chat_input_clip,Rect2(7,531,253,11))
+		_set_chat_rect(_chat_calendar,Rect2(8,548,106,11))
+		_set_chat_rect(_chat_system,Rect2(8,26,255,11))
+		_set_chat_rect(_chat_up,Rect2(268,25,17,36))
+		_set_chat_rect(_chat_down,Rect2(268,491,17,36))
+		_set_chat_rect(_chat_expand,Rect2(268,2,16,16))
+		_set_chat_rect(_chat_channel,Rect2(186,549,24,24))
+		_set_chat_rect(_chat_emotion,Rect2(213,549,24,24))
+		_set_chat_rect(_chat_bubble,Rect2(239,549,24,24))
+	else:
+		tab_positions=[Vector2(3,4),Vector2(3,21),Vector2(3,38),Vector2(3,55),Vector2(3,72)]
+		_set_chat_rect(_chat_history,Rect2(53,19,360,48))
+		_set_chat_rect(_chat_input_clip,Rect2(179,74,253,11))
+		_set_chat_rect(_chat_calendar,Rect2(52,74,106,12))
+		_set_chat_rect(_chat_system,Rect2(53,4,360,11))
+		_set_chat_rect(_chat_up,Rect2(418,20,17,25))
+		_set_chat_rect(_chat_down,Rect2(418,45,17,25))
+		_set_chat_rect(_chat_expand,Rect2(418,3,17,17))
+		_set_chat_rect(_chat_channel,Rect2(440,7,24,24))
+		_set_chat_rect(_chat_emotion,Rect2(440,35,24,24))
+		_set_chat_rect(_chat_bubble,Rect2(440,61,24,24))
+	_fit_chat_editor.call_deferred()
+	for index in tab_positions.size():
+		_chat_tabs[index].position=tab_positions[index]
+	_set_chat_button_art(_chat_up,"SCROLLUP_BUTTON" if _chat_big else "SCROLLUP_S")
+	_set_chat_button_art(_chat_down,"SCROLLDOWN_BUTTON" if _chat_big else "SCROLLDOWN_S")
+	_set_chat_button_art(_chat_expand,"CLOSESCREEN" if _chat_big else "ZONESCREEN")
+	_chat_expand.tooltip_text="收合聊天" if _chat_big else "展開聊天"
+
+func _toggle_chat_size()->void:
+	if not _chat_big:
+		_chat_small_position=chat_panel.position
+		_chat_big=true
+		_layout_chat_panel()
+		chat_panel.position=Vector2(clampf(_chat_small_position.x,0,BASE_SIZE.x-289),22)
+	else:
+		_chat_big=false
+		_layout_chat_panel()
+		chat_panel.position=_chat_small_position
+	_update_chat_scroll_buttons.call_deferred()
+
+func _scroll_chat(direction:int)->void:
+	_chat_history.set_v_scroll(_chat_history.get_v_scroll()+direction)
+	_update_chat_scroll_buttons()
+
+func _update_chat_scroll_buttons()->void:
+	if _chat_up==null or _chat_down==null:return
+	var scroll:=_chat_history.get_v_scroll_bar()
+	_chat_up.disabled=scroll.value<=scroll.min_value
+	_chat_down.disabled=scroll.value>=maxf(scroll.min_value,scroll.max_value-scroll.page)-0.01
+
+func _toggle_chat_filter(index:int)->void:
+	if index==0:
+		_chat_show_private=not _chat_show_private
+		_chat_tabs[0].texture_normal=_tex("B_CHANNEL_CB_2" if _chat_show_private else "B_CHANNEL_CB_0")
+	elif index==3:
+		_chat_show_party=not _chat_show_party
+		_chat_tabs[3].texture_normal=_tex("B_CHANNEL_CD_2" if _chat_show_party else "B_CHANNEL_CD_0")
+	_refresh_chat_history()
+
+func _toggle_chat_send_channel()->void:
+	# Only switch between channels implemented by the authoritative session.
+	_chat_send_party=not _chat_send_party
+	_chat_channel.texture_normal=_tex("ICON_CHANNEL_2" if _chat_send_party else "ICON_CHANNEL_3")
+	_chat_channel.texture_hover=_chat_channel.texture_normal
+	_chat_channel.texture_pressed=_chat_channel.texture_normal
+	_chat_channel.tooltip_text="隊伍聊天；點擊切換附近" if _chat_send_party else "附近聊天；點擊切換隊伍"
+
+func _toggle_chat_bubble()->void:
+	_chat_bubble_type=(_chat_bubble_type+1)%6
+	_chat_bubble.texture_normal=_tex("ICON_BUBBLE_%d"%(_chat_bubble_type*2))
+	_chat_bubble.texture_hover=_chat_bubble.texture_normal
+	_chat_bubble.texture_pressed=_chat_bubble.texture_normal
+
+# 020_FRIENDLIST: independent movable 203x90 interface, not Rightbox
+# (which is the context menu for player requests).
+func _build_friend_panel()->void:
+	friend_panel.name="ClassicFriendPanel"
+	friend_panel.position=Vector2(597,510)
+	friend_panel.size=Vector2(203,90)
+	hud.add_child(friend_panel)
+	_make_movable(friend_panel)
+	_background(friend_panel,"BG_FRIENDLIST_SMALL",friend_panel.size)
+	_texture_button(friend_panel,"FriendAdd","B_LIST_ADD",Vector2(5,7),Vector2(24,24),_open_friend_editor,"新增好友")
+	_friend_delete=_texture_button(friend_panel,"FriendDelete","B_LIST_DEL",Vector2(71,7),Vector2(24,24),_delete_selected_friend,"移除選取的好友")
+	for item in [
+		["FriendIgnore","B_LIST_TO_INGORE",Vector2(31,7),"黑名單尚未接通"],
+		["FriendEdit","B_LIST_EDIT",Vector2(97,7),"好友備註尚未接通"],
+		["FriendList","B_LIST_FRIENDLIST",Vector2(128,7),"好友清單"],
+		["IgnoreList","B_LIST_IGNORELIST",Vector2(154,7),"黑名單尚未接通"],
+		["FriendExpand","ZONESCREEN",Vector2(183,6),"大型好友清單尚未接通"]]:
+		var button:=_texture_button(friend_panel,item[0],item[1],item[2],Vector2(17,17) if item[0]=="FriendExpand" else Vector2(24,24),Callable(),item[3])
+		button.disabled=true
+		button.texture_disabled=_tex(item[1]+"_0")
+	_friend_scroll=ScrollContainer.new()
+	_friend_scroll.name="FriendScroll"
+	_friend_scroll.position=Vector2(9,36)
+	_friend_scroll.size=Vector2(168,49)
+	_friend_scroll.horizontal_scroll_mode=ScrollContainer.SCROLL_MODE_DISABLED
+	_friend_scroll.vertical_scroll_mode=ScrollContainer.SCROLL_MODE_SHOW_NEVER
+	_friend_scroll.add_theme_stylebox_override("panel",StyleBoxEmpty.new())
+	friend_panel.add_child(_friend_scroll)
+	_friend_rows.name="FriendRows"
+	_friend_rows.custom_minimum_size.x=150
+	_friend_rows.add_theme_constant_override("separation",2)
+	_friend_scroll.add_child(_friend_rows)
+	_friend_up=_texture_button(friend_panel,"FriendScrollUp","SCROLLUP_S",Vector2(180,36),Vector2(17,25),func():_friend_scroll.scroll_vertical-=17,"往上捲動")
+	_friend_down=_texture_button(friend_panel,"FriendScrollDown","SCROLLDOWN_S",Vector2(180,61),Vector2(17,25),func():_friend_scroll.scroll_vertical+=17,"往下捲動")
+	var scrollbar:=_friend_scroll.get_v_scroll_bar()
+	scrollbar.value_changed.connect(func(_value):_update_friend_scroll_buttons())
+	scrollbar.changed.connect(_update_friend_scroll_buttons)
+	_update_friend_scroll_buttons.call_deferred()
+	# Keep real add/remove requests available without covering the original
+	# three contact rows with a fabricated inline edit box.
+	_friend_editor.name="FriendNameEditor"
+	_friend_editor.size=Vector2i(230,40)
+	add_child(_friend_editor)
+	_friend_name_input.name="FriendNameInput"
+	_friend_name_input.position=Vector2(5,8)
+	_friend_name_input.size=Vector2(165,24)
+	_friend_name_input.placeholder_text="好友名稱"
+	_friend_name_input.max_length=32
+	_friend_name_input.text_changed.connect(func(_value):_update_friend_action())
+	_friend_name_input.text_submitted.connect(func(_value):_friend_action_pressed())
+	_friend_editor.add_child(_friend_name_input)
+	var action:=Button.new()
+	action.name="FriendAction"
+	action.position=Vector2(174,8)
+	action.size=Vector2(50,24)
+	action.pressed.connect(_friend_action_pressed)
+	_friend_editor.add_child(action)
+	_friend_action=action
+	_update_friend_action()
+
+func _update_friend_scroll_buttons()->void:
+	if _friend_up==null or _friend_down==null:return
+	var scrollbar:=_friend_scroll.get_v_scroll_bar()
+	_friend_up.disabled=scrollbar.value<=scrollbar.min_value
+	_friend_down.disabled=scrollbar.value>=maxf(scrollbar.min_value,scrollbar.max_value-scrollbar.page)-0.01
+
+func _open_friend_editor()->void:
+	_friend_name_input.clear()
+	_update_friend_action()
+	_friend_editor.popup_centered(Vector2i(230,40))
+	_friend_name_input.grab_focus()
+
+func _delete_selected_friend()->void:
+	if _friend_actor_for_name(_friend_name_input.text)>0:
+		_friend_action_pressed()
+
+func _style_friend_row(button:Button)->void:
+	button.custom_minimum_size=Vector2(150,15)
+	button.clip_text=true
+	button.add_theme_font_override("font",_character_raster_font)
+	button.add_theme_font_size_override("font_size",12)
+	button.add_theme_stylebox_override("normal",StyleBoxEmpty.new())
+	button.add_theme_stylebox_override("hover",StyleBoxEmpty.new())
+	button.add_theme_stylebox_override("pressed",StyleBoxEmpty.new())
+	button.add_theme_stylebox_override("focus",StyleBoxEmpty.new())
 
 # Original 008_MINIMAP_L/S ITFs switch between complete 133x122 and
 # 133x20 backgrounds; never shrink the map artwork into a 20px row.
@@ -1006,6 +1220,7 @@ func set_world_active(active:bool)->void:
 		_inventory_render_initialized=false
 		_inventory_render_signature.clear()
 		_social_render_signatures.clear()
+		_friend_editor.hide()
 		_hide_windows()
 		_photos.clear()
 
@@ -1022,8 +1237,10 @@ func apply_snapshot(snapshot:Dictionary)->void:
 	_refresh_clan()
 	_refresh_shop()
 	_refresh_quest()
-	if _social_snapshot_changed("chat_friends",["chat_messages","friends","pending_friend_sequence"]):
-		_refresh_chat_and_friends()
+	if _social_snapshot_changed("chat",["chat_messages"]):
+		_refresh_chat_history()
+	if _social_snapshot_changed("friends",["friends","pending_friend_sequence"]):
+		_refresh_friends()
 	_refresh_player_shop()
 	_refresh_storage()
 	_refresh_bank()
@@ -1435,7 +1652,8 @@ func _send_chat()->void:
 	var message:=_chat_input.text.strip_edges()
 	if message.is_empty():
 		return
-	if _panel.session.send_nearby_chat(message,0):
+	var queued:bool=_panel.session.send_party_chat(message,_chat_bubble_type) if _chat_send_party else _panel.session.send_nearby_chat(message,_chat_bubble_type)
+	if queued:
 		_chat_input.clear()
 
 func _entity_name(actor_id:int,value:Dictionary)->String:
@@ -1443,6 +1661,10 @@ func _entity_name(actor_id:int,value:Dictionary)->String:
 	return name if not name.is_empty() else "玩家 %d"%actor_id
 
 func _refresh_chat_and_friends()->void:
+	_refresh_chat_history()
+	_refresh_friends()
+
+func _refresh_chat_history()->void:
 	var messages:Array=_stats.get("chat_messages",[])
 	var rows:=PackedStringArray()
 	var start:=maxi(0,messages.size()-30)
@@ -1452,15 +1674,24 @@ func _refresh_chat_and_friends()->void:
 		var sender:=str(entry.get("sender_name","玩家 %d"%int(entry.get("sender_actor_id",0))))
 		match channel:
 			0: rows.append("[附近] %s：%s"%[sender,str(entry.get("message",""))])
-			3: rows.append("[隊伍] %s：%s"%[sender,str(entry.get("message",""))])
+			3:
+				if _chat_show_party:rows.append("[隊伍] %s：%s"%[sender,str(entry.get("message",""))])
 			4:
+				if not _chat_show_private:continue
 				if str(entry.get("direction",""))=="outgoing":
 					rows.append("[私訊] 你 → %s：%s"%[str(entry.get("target_name","")),str(entry.get("message",""))])
 				else:
 					rows.append("[私訊] %s → 你：%s"%[sender,str(entry.get("message",""))])
-	_chat_history.text="\n".join(rows)
-	if not rows.is_empty():
-		_chat_history.set_v_scroll(_chat_history.get_line_count())
+	var text:="\n".join(rows)
+	if text!=_chat_history.text:
+		var scroll:=_chat_history.get_v_scroll_bar()
+		var at_end:=scroll.value>=maxf(scroll.min_value,scroll.max_value-scroll.page)-0.01
+		var previous:=_chat_history.get_v_scroll()
+		_chat_history.text=text
+		_chat_history.set_v_scroll(_chat_history.get_line_count() if at_end else previous)
+	_update_chat_scroll_buttons.call_deferred()
+
+func _refresh_friends()->void:
 	_clear_rows(_friend_rows)
 	var friends:Dictionary=_stats.get("friends",{})
 	var ordered:Array=friends.keys()
@@ -1476,10 +1707,11 @@ func _refresh_chat_and_friends()->void:
 		var entry:Dictionary=friends[raw_actor]
 		var friend_name:=str(entry.get("name","玩家 %d"%actor_id))
 		var prefix:="● " if bool(entry.get("online",false)) else "○ "
-		_classic_row(_friend_rows,prefix+friend_name,16.0,_select_friend.bind(friend_name))
+		_style_friend_row(_classic_row(_friend_rows,prefix+friend_name,15.0,_select_friend.bind(friend_name)))
 	if ordered.is_empty():
-		_classic_row(_friend_rows,"尚無好友",16.0)
+		_style_friend_row(_classic_row(_friend_rows,"尚無好友",15.0))
 	_update_friend_action()
+	_update_friend_scroll_buttons.call_deferred()
 
 
 func _friend_actor_for_name(target_name:String)->int:
@@ -1502,9 +1734,10 @@ func _select_friend(friend_name:String)->void:
 func _update_friend_action()->void:
 	var clean:=_friend_name_input.text.strip_edges()
 	var actor:=_friend_actor_for_name(clean)
-	_friend_action.text="-" if actor>0 else "+"
+	_friend_action.text="移除" if actor>0 else "新增"
 	_friend_action.tooltip_text="移除好友" if actor>0 else "新增好友"
 	_friend_action.disabled=clean.is_empty() or int(_stats.get("pending_friend_sequence",0))!=0
+	if _friend_delete!=null:_friend_delete.disabled=actor<=0 or int(_stats.get("pending_friend_sequence",0))!=0
 
 
 func _friend_action_pressed()->void:
@@ -1515,6 +1748,7 @@ func _friend_action_pressed()->void:
 	var queued:bool=_panel.session.friend_remove(actor) if actor>0 else _panel.session.friend_add_name(clean)
 	if queued:
 		_friend_name_input.clear()
+		_friend_editor.hide()
 		_update_friend_action()
 
 

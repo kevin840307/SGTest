@@ -37,6 +37,27 @@ $required = [ordered]@{
     'CREATE_CHARACTER.png' = @(800, 600)
     'YELLOW_BUTTON_0.png' = @(85, 21)
     'B_ONLINEHELP_0.png' = @(16, 16)
+    'CHANNEL.png' = @(469, 90)
+    'BG_CHANNEL_BIG.png' = @(289, 578)
+    'BG_FRIENDLIST_SMALL.png' = @(203, 90)
+    'B_CHANNEL_CA_2.png' = @(43, 15)
+    'B_CHANNEL_CB_2.png' = @(43, 15)
+    'B_CHANNEL_CC_2.png' = @(43, 15)
+    'B_CHANNEL_CD_2.png' = @(43, 15)
+    'B_CHANNEL_CE_2.png' = @(43, 15)
+    'ICON_CHANNEL_3.png' = @(24, 24)
+    'ICON_BUBBLE_0.png' = @(24, 24)
+    'B_EMOTETION_0.png' = @(24, 24)
+    'SCROLLUP_S_3.png' = @(17, 25)
+    'SCROLLDOWN_S_3.png' = @(17, 25)
+    'SCROLLUP_BUTTON_0.png' = @(17, 36)
+    'SCROLLDOWN_BUTTON_0.png' = @(17, 36)
+    'B_LIST_ADD_0.png' = @(24, 24)
+    'B_LIST_DEL_0.png' = @(24, 24)
+    'B_LIST_EDIT_0.png' = @(24, 24)
+    'B_LIST_TO_INGORE_0.png' = @(24, 24)
+    'B_LIST_FRIENDLIST_0.png' = @(24, 24)
+    'B_LIST_IGNORELIST_0.png' = @(24, 24)
 }
 $fonts = @('ACCOUNT_LOGIN_HK_INPUT_FONT.fnt', 'HK_SHARED_UI_FONT.fnt')
 
@@ -68,7 +89,7 @@ function Test-OriginalHkArt {
 
 if (-not (Test-OriginalHkArt)) {
     if ($NoImport) {
-        throw 'HK original account/select/create artwork is missing or has wrong dimensions; -NoImport refused the developer-skin fallback.'
+        throw 'HK original account/select/create/bottom HUD artwork is missing or has wrong dimensions; -NoImport refused the developer-skin fallback.'
     }
     if (-not (Test-Path -LiteralPath $SourceInterface -PathType Container)) {
         throw "HK source Interface not found: $SourceInterface. Supply -SourceInterface; do not substitute synthetic art."
@@ -82,7 +103,7 @@ if (-not (Test-OriginalHkArt)) {
         if ($_ -match '^CLASSIC_ASSETS_READY') { Write-Output $_ }
     }
     if ($LASTEXITCODE -ne 0 -or -not (Test-OriginalHkArt)) {
-        throw 'HK source conversion did not produce the original 800x600 account/select/create artwork.'
+        throw 'HK source conversion did not produce the required original account/select/create/bottom HUD artwork.'
     }
 }
 
