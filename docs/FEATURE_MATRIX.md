@@ -161,3 +161,6 @@ AUTH-CHARACTER / UI-ORIGINAL（2026-11-24，d438cf2）：Classic Login 調整視
 AUTH-CHARACTER / UI-ORIGINAL（2026-11-24，7dc75f8）：Classic 創角四項數值與剩餘點數共用 ITF rect 及固定 baseline，真 Host 可配點並在 resize 後送出原草稿。HK target 同狀態 native A/B 仍 NOT VERIFIED，整體 IN PROGRESS。
 
 AUTH-CHARACTER / UI-ORIGINAL（2026-11-24，1831a27）：Classic 創角名稱與兩個密碼欄共用登入輸入樣式及原始 hitbox。實機 Tab、密碼不符提示、校正並建立角色 PASS；目標 HK 創角 native 字形及 IME 仍 NOT VERIFIED，整體 IN PROGRESS。
+
+
+**2026-11-25 v15 GP-012-01 — Old battle.cfg SP source audit（IN PROGRESS，非戰鬥驗收）**。Old SGOBattleSys::LoadCfg 0x10003722–0x10003B15 得 SP Count/Multiple/10 buckets、4 RaceDelta，WillDamage_ForSP／HPLostChange_ForSP 使用 RaceDelta 做傷害／HP 計算，不能把 SP 猜成正式新角攻擊 cooldown。正式 tools/asset_converter 新增 fail-closed cfg 解析與唯讀 JSON 稽核，輸出 combat_profile_verified=false、combat_cooldown_verified=false；真 Old battle.cfg SHA256 e3b54d875f504b1fa0679d633501c5ded24a11a132dba5c943bf7ba12e0b2a32，私有證據 .cache/v15-gp01201-battle-20261125/source.json，Python 6/6 targeted PASS、git diff --check PASS；其他 Session 程序與 WIP 未動。**五 Gate：UI N/A（無 UI）；Gameplay NOT VERIFIED（正式角色仍 combat-locked）；Multiplayer NOT VERIFIED（未雙 Client）；Performance NOT VERIFIED（未實測）；Persistence N/A（未改 SQLite）**。未升 COMPLETE；下一 GP-012-01 真武器／角色／時序證據與 GP-012 monster v4，完整 source-backed 後做正式雙可見 Windows Client、真 Server、HK A/B/重登。
