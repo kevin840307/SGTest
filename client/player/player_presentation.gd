@@ -29,6 +29,7 @@ var _seen_visual_ring: Array[String] = []
 var _seen_visual_ring_head := 0
 var _epoch := 0
 var _map := 0
+var _last_snapshot_tick := -1
 var _local_visual: Dictionary = {} # own actor presentation only; never authoritative
 var _own_actor_id := 0
 var _remote_blocking := PackedByteArray()
@@ -43,6 +44,7 @@ func clear() -> void:
 	_clear_visual_event_history()
 	_epoch = 0
 	_map = 0
+	_last_snapshot_tick = -1
 	_local_visual.clear()
 	_own_actor_id = 0
 	_remote_blocking.clear()
@@ -238,6 +240,12 @@ func apply_snapshot(snapshot: Dictionary, now_usec: int) -> void:
 	if _epoch > 0 and epoch < _epoch:
 		return
 	var map := int(snapshot.map_id)
+	var snapshot_tick := int(snapshot.get("last_aoi_tick",-1))
+	# The reducer's accepted AOI tick is the ordering fence for the whole
+	# visible set, including peers removed by a newer Despawn. Individual
+	# actor history cannot protect an actor that was already erased.
+	if epoch == _epoch and map == _map and snapshot_tick >= 0 and _last_snapshot_tick >= 0 and snapshot_tick < _last_snapshot_tick:
+		return
 	_own_actor_id = int(snapshot.actor_id)
 	if epoch != _epoch or map != _map:
 		_actors.clear()
@@ -245,6 +253,9 @@ func apply_snapshot(snapshot: Dictionary, now_usec: int) -> void:
 		_clear_visual_event_history()
 		_epoch = epoch
 		_map = map
+		_last_snapshot_tick = -1
+	if snapshot_tick >= 0:
+		_last_snapshot_tick = maxi(_last_snapshot_tick,snapshot_tick)
 	var own: Dictionary = snapshot.self_state.duplicate()
 	if own.is_empty():
 		own = {"actor_id":snapshot.actor_id,"connection_epoch":0,"entity_map_epoch":epoch,

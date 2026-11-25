@@ -87,6 +87,22 @@ func run() -> void:
 	stale_map_probe.apply_snapshot(old_map,300000)
 	check(stale_map_probe._epoch==1 and stale_map_probe._map==15 and stale_map_probe._actors.has(2),
 		"new session could not accept its own lower map epoch")
+	# Despawn at a newer AOI tick must not be reversed by an older same-map
+	# snapshot that still lists the peer. A later valid new Spawn is allowed.
+	var departed: Dictionary = old_map.duplicate(true)
+	departed.entities.clear()
+	departed.last_aoi_tick = 3
+	departed.self_state.server_tick = 3
+	stale_map_probe.apply_snapshot(departed,400000)
+	check(not stale_map_probe._actors.has(2),"newer AOI despawn did not hide peer")
+	stale_map_probe.apply_snapshot(old_map,500000)
+	check(not stale_map_probe._actors.has(2),"old same-map AOI resurrected despawned peer")
+	var returned: Dictionary = old_map.duplicate(true)
+	returned.last_aoi_tick = 4
+	returned.self_state.server_tick = 4
+	returned.entities[2].server_tick = 4
+	stale_map_probe.apply_snapshot(returned,600000)
+	check(stale_map_probe._actors.has(2),"fresh AOI spawn was blocked after despawn")
 	# The local avatar is presented from locally predicted position; remote
 	# avatars independently continue walking on their last known velocity.
 	var prediction_probe := Players.new()
