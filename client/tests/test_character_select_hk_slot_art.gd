@@ -102,8 +102,9 @@ func _run() -> void:
 
 	var expected_modal_fixed := [
 		["角色密碼",Vector2(274,308),Vector2(48,12)],
-		["確認",Vector2(418,331),Vector2(24,12)],
+		["確定",Vector2(418,331),Vector2(24,12)],
 		["取消",Vector2(513,331),Vector2(24,12)],
+		["如沒有進行修改，角色密碼預設為 0000",Vector2(358,287),Vector2(207,12)],
 		["原有密碼",Vector2(284,272),Vector2(48,12)],
 		["新的密碼",Vector2(284,296),Vector2(48,12)],
 		["確認密碼",Vector2(283,320),Vector2(48,12)],

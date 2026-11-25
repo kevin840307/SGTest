@@ -548,8 +548,10 @@ func _build_select_password_modal() -> void:
 	_password_modal_input.text_submitted.connect(func(_text): _submit_slot_password())
 	_password_modal_confirm = _button(_password_modal,"",origin.x+164,origin.y+78,85,21,_submit_slot_password,"YELLOW_BUTTON")
 	_password_modal_cancel = _button(_password_modal,"",origin.x+259,origin.y+78,85,21,_close_slot_modals,"YELLOW_BUTTON")
-	_modal_label(_password_modal,origin,"確認",194,82,24)
+	_modal_label(_password_modal,origin,"確定",194,82,24)
 	_modal_label(_password_modal,origin,"取消",289,82,24)
+	# 082_LOGIN_PASSWORD.ITF offset 0x016A: fixed default-password hint, not another input.
+	_modal_label(_password_modal,origin,"如沒有進行修改，角色密碼預設為 0000",134,38,207)
 
 func _build_change_password_modal() -> void:
 	# 081_LOGIN_CHANGE_PASSWORD.ITF uses coordinates local to the 352×142 SPR.
