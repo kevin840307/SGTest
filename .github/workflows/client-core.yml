@@ -122,6 +122,10 @@ jobs:
         run: .cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64 --headless --path client --script res://tests/test_normal_attack_wire.gd
       - name: Godot verified single-target skill wire and reducer gate
         run: .cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64 --headless --path client --script res://tests/test_skill_combat_wire.gd
+      - name: HK inventory rows stable across unchanged authoritative snapshots
+        run: timeout 20s .cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64 --headless --path client --script res://tests/test_classic_inventory_snapshot_stability.gd
+      - name: HK party and friend rows stable across unrelated World snapshots
+        run: timeout 20s .cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64 --headless --path client --script res://tests/test_hk_social_list_snapshot_stability.gd
       - name: ClientSession idle-loop snapshot allocation regression
         run: timeout 20s .cache/godot-4.7.2/Godot_v4.7.2-stable_linux.x86_64 --headless --path client --script res://tests/test_client_idle_publication.gd
       - name: ClientSession server-authoritative out-of-range auto approach attack

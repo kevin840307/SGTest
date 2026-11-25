@@ -217,6 +217,10 @@ func _texture_button(
 
 
 func set_skill_book(skills: Dictionary) -> void:
+	# AOI and status snapshots are frequent; an unchanged authoritative skill
+	# roster must not repaint all eight HK controls or disturb the active page.
+	if _skills == skills:
+		return
 	_skills = skills.duplicate(true)
 	_ids.clear()
 	for skill_id in _skills:

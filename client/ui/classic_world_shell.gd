@@ -100,13 +100,21 @@ var _equipment_rows:=VBoxContainer.new()
 var _inventory_item_bg:TextureRect
 var _inventory_equip_bg:TextureRect
 var _inventory_tab:=0
+# Preserve interactive inventory rows across unchanged AOI/status snapshots.
+# Rebuilding every presentation tick invalidates active item click targets.
+var _inventory_render_signature:Dictionary={}
+var _inventory_render_initialized:=false
+# Party and social lists are player-facing UI: unrelated 30Hz World updates
+# should not destroy their buttons or force the chat viewport to scroll.
+var _social_render_signatures:Dictionary={}
 var _classic_mecha_uid:=0
 var _inventory_tab_buttons:Array[TextureButton]=[]
 var _character_labels:Dictionary={}
 var _character_point_buttons:Array[TextureButton]=[]
 var _character_hp_fill:Control
 var _character_mp_fill:Control
-var _skill_rows:=VBoxContainer.new()
+# Skill rows are owned by classic_skill_window.gd; do not allocate an
+# unparented legacy VBoxContainer (orphaned on every UI teardown).
 var _party_rows:=VBoxContainer.new()
 var _clan_rows:=VBoxContainer.new()
 var _shop_buy_rows:=VBoxContainer.new()
@@ -969,6 +977,8 @@ func set_skin_switch_visible(enabled:bool)->void:
 
 func bind_session(panel)->void:
 	_panel=panel
+	_inventory_render_initialized=false
+	_social_render_signatures.clear()
 	_refresh_profiles()
 
 func _refresh_profiles()->void:
@@ -993,6 +1003,9 @@ func set_world_active(active:bool)->void:
 	visible=active
 	set_process(active)
 	if not active:
+		_inventory_render_initialized=false
+		_inventory_render_signature.clear()
+		_social_render_signatures.clear()
 		_hide_windows()
 		_photos.clear()
 
@@ -1000,14 +1013,17 @@ func apply_snapshot(snapshot:Dictionary)->void:
 	_stats=snapshot.duplicate(true)
 	if not _active:return
 	_refresh_hud()
-	_refresh_inventory()
+	if _inventory_snapshot_changed():
+		_refresh_inventory()
 	_refresh_character()
 	_refresh_skill()
-	_refresh_party()
+	if _social_snapshot_changed("party",["party_members","party_leader_actor_id"]):
+		_refresh_party()
 	_refresh_clan()
 	_refresh_shop()
 	_refresh_quest()
-	_refresh_chat_and_friends()
+	if _social_snapshot_changed("chat_friends",["chat_messages","friends","pending_friend_sequence"]):
+		_refresh_chat_and_friends()
 	_refresh_player_shop()
 	_refresh_storage()
 	_refresh_bank()
@@ -1115,6 +1131,31 @@ func _inventory_matches_tab(item:Dictionary,equipped:bool)->bool:
 		3:return category in ["pet","elfin"]
 		4:return category in ["horse","horsebattery","ride"]
 	return false
+
+func _social_snapshot_changed(section:String,keys:Array)->bool:
+	var signature:Dictionary={}
+	for key in keys:
+		signature[key]=_stats.get(key,null)
+	if _social_render_signatures.has(section) and _social_render_signatures[section]==signature:
+		return false
+	_social_render_signatures[section]=signature.duplicate(true)
+	return true
+
+func _inventory_snapshot_changed()->bool:
+	# Only Server-owned item/equipment/mecha data determine this panel's rows.
+	# Page, tab and scroll controls still call _refresh_inventory directly.
+	var signature:Dictionary={
+		"inventory_items":_stats.get("inventory_items",{}),
+		"equipment_items":_stats.get("equipment_items",{}),
+		"mecha_instances":_stats.get("mecha_instances",{}),
+		"mecha_equipment_items":_stats.get("mecha_equipment_items",{}),
+		"mounted_mecha_uid":_stats.get("mounted_mecha_uid",0)
+	}
+	if _inventory_render_initialized and signature==_inventory_render_signature:
+		return false
+	_inventory_render_signature=signature.duplicate(true)
+	_inventory_render_initialized=true
+	return true
 
 func _refresh_inventory()->void:
 	_clear_rows(_inventory_rows)
