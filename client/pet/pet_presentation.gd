@@ -177,12 +177,12 @@ func _apply_attack_result(snapshot: Dictionary, now_usec: int) -> void:
 	var sequence := int(snapshot.get("last_pet_attack_result_sequence",0))
 	if sequence <= 0 or sequence <= _last_attack_sequence:
 		return
-	_last_attack_sequence = sequence
 	var status := int(snapshot.get("last_pet_attack_result_status",-1))
 	var result = snapshot.get("last_pet_attack_result",{})
 	# Only a committed Applied/Miss result represents an actual attack event.
 	# Rejections/cooldowns are UI feedback, not animation triggers.
 	if status not in [0,1] or not result is Dictionary:
+		_last_attack_sequence = sequence
 		return
 	if int(result.get("map_epoch",0)) != _epoch or int(result.get("attack_sequence",0)) != sequence:
 		return
@@ -193,6 +193,12 @@ func _apply_attack_result(snapshot: Dictionary, now_usec: int) -> void:
 		var pet: Dictionary = _pets[owner]
 		if int(pet.value.pet_uid) != pet_uid:
 			continue
+		# Do not burn a committed result before its source-backed PetEntity
+		# exists. AOI may spawn after the reliable result; its replay must still
+		# start the one-shot attack, without re-running an already newer event.
+		_last_attack_sequence = sequence
+		if sequence <= int(pet.get("attack_sequence",0)):
+			return
 		pet["attack_started"] = now_usec
 		pet["attack_sequence"] = sequence
 		_pets[owner] = pet

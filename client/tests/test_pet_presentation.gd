@@ -137,7 +137,30 @@ func _initialize() -> void:
 		_fail("duplicate remote pet attack visual restarted animation")
 		return
 
-	if pets.apply_snapshot(_snapshot(7,{}),530000)!=OK or pets.count()!=0:
+	# A committed attack result can arrive while AOI has not spawned the
+	# pet. Reusing the reliable sequence after spawn must start the real
+	# source-backed attack clip, not be consumed by the missing visual.
+	var delayed := _snapshot(7,{})
+	delayed["last_pet_attack_result_sequence"] = 6
+	delayed["last_pet_attack_result_status"] = 0
+	delayed["last_pet_attack_result"] = {
+		"map_epoch":7,"attack_sequence":6,"status":0,"pet_uid":102,
+		"target_entity_id":1001300001,"damage":19,"current_hp":56,
+		"max_hp":100,"target_revision":6,"server_tick":58
+	}
+	if pets.apply_snapshot(delayed,530000)!=OK or pets.count()!=0:
+		_fail("absent pet attack result must not create an AOI ghost")
+		return
+	var delayed_replay := delayed.duplicate(true)
+	delayed_replay.pet_entities={1001:_entity(1001,4,102,5002,7,49,48.0,36.0)}
+	if pets.apply_snapshot(delayed_replay,540000)!=OK:
+		_fail("delayed pet attack result blocked the later real AOI spawn")
+		return
+	var recovered_attack := pets.actors_at(540000)
+	if recovered_attack.size()!=1 or str(recovered_attack[0].clip)!="attack" or int(recovered_attack[0].frame)!=0:
+		_fail("pet result sequence consumed before source-backed actor was visible")
+		return
+	if pets.apply_snapshot(_snapshot(7,{}),545000)!=OK or pets.count()!=0:
 		_fail("despawn snapshot retained pet presentation")
 		return
 
@@ -182,7 +205,7 @@ func _initialize() -> void:
 		_fail("duplicate numeric/string owner aliases replaced authoritative pet")
 		return
 
-	print("PET_PRESENTATION_PASS interpolation=true no_extrapolation=true generation=true visual_bridge=true attack_event=true remote_attack_visual=true source_timing=true stale_epoch_rejected=true atomic_aoi=true")
+	print("PET_PRESENTATION_PASS interpolation=true no_extrapolation=true generation=true visual_bridge=true attack_event=true remote_attack_visual=true source_timing=true delayed_result_after_spawn=true stale_epoch_rejected=true atomic_aoi=true")
 	quit(0)
 
 func _snapshot(map_epoch:int,entities:Dictionary)->Dictionary:
