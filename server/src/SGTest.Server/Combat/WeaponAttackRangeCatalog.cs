@@ -13,10 +13,15 @@ public sealed record VerifiedWeaponAttackRangeRule(
 /// </summary>
 public static class WeaponAttackRangeCatalog
 {
+    // The HK/Old weapon source contains exactly 73 fixed-size records. A
+    // 'complete' manifest must not silently admit a truncated source subset.
+    // Tests using smaller audited fixtures pass their explicit source count.
     public static IReadOnlyDictionary<int,VerifiedWeaponAttackRangeRule>
-        LoadVerified(string path)
+        LoadVerified(string path,int expectedOldWeaponCount=73)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
+        if(expectedOldWeaponCount is <1 or >4096)
+            throw new ArgumentOutOfRangeException(nameof(expectedOldWeaponCount));
         var file=new FileInfo(path);
         if(!file.Exists)
             throw new FileNotFoundException("Verified weapon range manifest missing",path);
@@ -79,13 +84,25 @@ public static class WeaponAttackRangeCatalog
         }
 
         var audit=Read(root,"audit",JsonValueKind.Object);
-        if(Number(audit,"verified_rule_count")!=byDefinition.Count||
-           Number(audit,"old_weapon_count")!=byDefinition.Count)
-            throw new InvalidDataException("Weapon attack-range audit count mismatch");
+        if(Number(audit,"verified_rule_count")!=expectedOldWeaponCount||
+           Number(audit,"old_weapon_count")!=expectedOldWeaponCount||
+           byDefinition.Count!=expectedOldWeaponCount||
+           Number(audit,"old_record_bytes")!=1247||
+           !Sha256(Text(audit,"old_source_sha256"))||
+           !Sha256(Text(audit,"hk_source_sha256")))
+            throw new InvalidDataException("Weapon attack-range audit provenance/count mismatch");
         var unresolved=Read(audit,"unresolved_old_item_indices",JsonValueKind.Array);
         if(unresolved.GetArrayLength()!=0)
             throw new InvalidDataException(
                 "Weapon attack-range manifest still has unresolved Old weapons");
+        var declaredDistances=Read(audit,"matched_attack_distance_values",JsonValueKind.Array);
+        var actualDistances=byDefinition.Values.Select(rule=>rule.AttackRange)
+            .Distinct().OrderBy(value=>value).ToArray();
+        if(declaredDistances.GetArrayLength()!=actualDistances.Length||
+           !declaredDistances.EnumerateArray().Select(value=>
+               value.ValueKind==JsonValueKind.Number&&value.TryGetDouble(out var distance)
+                   ?distance:double.NaN).SequenceEqual(actualDistances))
+            throw new InvalidDataException("Weapon attack-range audit distance set mismatch");
 
         return byDefinition;
     }

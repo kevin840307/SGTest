@@ -8,7 +8,7 @@ static class WeaponAttackRangeCatalogChecks
         Checks.Run("weapon range manifest accepts complete three-way verified rules", () =>
         {
             string path=Fixture(root,partial:false,unresolved:Array.Empty<int>());
-            var rules=WeaponAttackRangeCatalog.LoadVerified(path);
+            var rules=WeaponAttackRangeCatalog.LoadVerified(path,2);
             Checks.Require(rules.Count==2,"weapon range count");
             Checks.Require(rules[31548].OldItemIndex==1587 &&
                            rules[31548].AttackRange==140,
@@ -22,7 +22,7 @@ static class WeaponAttackRangeCatalogChecks
         {
             string path=Fixture(root,partial:true,unresolved:new[]{1587});
             bool rejected=false;
-            try { WeaponAttackRangeCatalog.LoadVerified(path); }
+            try { WeaponAttackRangeCatalog.LoadVerified(path,2); }
             catch(InvalidDataException) { rejected=true; }
             Checks.Require(rejected,"partial weapon range accepted");
         });
@@ -32,14 +32,34 @@ static class WeaponAttackRangeCatalogChecks
             string path=Fixture(root,partial:false,unresolved:Array.Empty<int>(),
                 duplicateOld:true);
             bool rejected=false;
-            try { WeaponAttackRangeCatalog.LoadVerified(path); }
+            try { WeaponAttackRangeCatalog.LoadVerified(path,2); }
             catch(InvalidDataException) { rejected=true; }
             Checks.Require(rejected,"duplicate Old weapon identity accepted");
+        });
+
+        Checks.Run("weapon range manifest rejects truncated official Old corpus", () =>
+        {
+            string path=Fixture(root,partial:false,unresolved:Array.Empty<int>());
+            bool rejected=false;
+            try { WeaponAttackRangeCatalog.LoadVerified(path); }
+            catch(InvalidDataException) { rejected=true; }
+            Checks.Require(rejected,"two-rule manifest misrepresented complete 73-rule corpus");
+        });
+
+        Checks.Run("weapon range manifest rejects inconsistent attack-distance audit", () =>
+        {
+            string path=Fixture(root,partial:false,unresolved:Array.Empty<int>(),
+                corruptDistances:true);
+            bool rejected=false;
+            try { WeaponAttackRangeCatalog.LoadVerified(path,2); }
+            catch(InvalidDataException) { rejected=true; }
+            Checks.Require(rejected,"corrupt attack-distance audit accepted");
         });
     }
 
     private static string Fixture(
-        string root,bool partial,int[] unresolved,bool duplicateOld=false)
+        string root,bool partial,int[] unresolved,bool duplicateOld=false,
+        bool corruptDistances=false)
     {
         string path=Path.Combine(root,"weapon_definition_ranges_"+
             Guid.NewGuid().ToString("N")+".json");
@@ -84,7 +104,8 @@ static class WeaponAttackRangeCatalogChecks
                 old_weapon_count=2,
                 verified_rule_count=2,
                 unresolved_old_item_indices=unresolved,
-                matched_attack_distance_values=new[]{60,140},
+                matched_attack_distance_values=corruptDistances
+                    ?new[]{60,120}:new[]{60,140},
                 hk_source_sha256=new string('c',64),
                 old_source_sha256=new string('d',64),
                 old_record_bytes=1247
