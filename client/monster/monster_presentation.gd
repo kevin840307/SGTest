@@ -139,6 +139,12 @@ func apply_snapshot(snapshot: Dictionary, now_usec: int) -> Error:
 			var previous_value: Dictionary = previous.value
 			if int(previous_value.enemy_id) != enemy_id or int(previous_value.source_index) != int(candidate.source_index) or int(previous_value.max_hp) != int(candidate.max_hp):
 				return ERR_INVALID_DATA
+			# MonsterRuntime.ApplyTrustedDamage always advances EntityRevision
+			# with committed HP. A different HP at the same revision is not a
+			# new hit, even if it arrives in a higher-tick AOI full snapshot.
+			# Reject the batch before modifying any other monster or high-water.
+			if revision == int(previous_value.revision) and hp != int(previous_value.current_hp):
+				return ERR_INVALID_DATA
 	if epoch != _epoch:
 		_monsters.clear()
 		_epoch = epoch

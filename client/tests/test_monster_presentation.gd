@@ -60,6 +60,18 @@ func run() -> void:
 	check(monsters.pick_living_at(Vector2(500,500),0)==0 and
 		monsters.pick_living_at(Vector2.INF,0)==0,
 		"off-screen/invalid click selected a target")
+	# Server MonsterRuntime bumps EntityRevision on every HP settlement.
+	# A newer AOI tick with the same revision but different HP must fail
+	# atomically, not forge a changed target HUD / hit animation.
+	var same_revision_changed_hp := idle.duplicate(true)
+	same_revision_changed_hp.server_tick = 2
+	same_revision_changed_hp.current_hp = 99
+	snapshot.monsters = {1001:same_revision_changed_hp}
+	check(monsters.apply_snapshot(snapshot,10000)==ERR_INVALID_DATA and
+		monsters.focused_health(1001).get("current_hp",0)==100,
+		"same revision with conflicting HP changed live target")
+	snapshot.monsters = {1001:idle}
+
 	var actors := monsters.actors_at(0)
 	check(actors.size()==1 and actors[0].clip=="NS" and actors[0].asset=="Enemy/en001a",
 		"idle did not use verified S/NS visual mapping")
